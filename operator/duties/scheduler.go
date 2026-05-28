@@ -12,7 +12,6 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/prysmaticlabs/prysm/v4/async/event"
-	"github.com/sourcegraph/conc/pool"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -27,7 +26,6 @@ import (
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
-	"github.com/ssvlabs/ssv/utils"
 )
 
 //go:generate go tool -modfile=../../tool.mod mockgen -package=duties -destination=./scheduler_mock.go -source=./scheduler.go
@@ -36,12 +34,15 @@ const (
 	// blockPropagationDelay time to propagate around the nodes
 	// before kicking off duties for the block's slot.
 	blockPropagationDelay = 300 * time.Millisecond
+	// reorgChannelBuffer allows HandleHeadEvent to emit a reorg notification without blocking on
+	// downstream fanout startup or temporary consumer lag.
+	reorgChannelBuffer = 1
 )
 
 // DutiesExecutor is an interface for executing duties.
 type DutiesExecutor interface {
-	ExecuteDuties(ctx context.Context, duties []*spectypes.ValidatorDuty)
-	ExecuteCommitteeDuties(ctx context.Context, duties committeeDutiesMap)
+	ExecuteDuties(ctx context.Context, duties []*spectypes.ValidatorDuty, dutyDeadline time.Time)
+	ExecuteCommitteeDuties(ctx context.Context, duties committeeDutiesMap, dutyDeadline time.Time)
 }
 
 // DutyExecutor is an interface for executing duty.
@@ -84,7 +85,7 @@ type SchedulerOptions struct {
 	ValidatorProvider       ValidatorProvider
 	ValidatorController     ValidatorController
 	DutyExecutor            DutyExecutor
-	IndicesChg              chan struct{}
+	IndicesChgCh            chan struct{}
 	ValidatorRegistrationCh <-chan RegistrationDescriptor
 	ValidatorExitCh         <-chan ExitDescriptor
 	SlotTickerProvider      slotticker.Provider
@@ -97,7 +98,13 @@ type SchedulerOptions struct {
 }
 
 type Scheduler struct {
-	logger              *zap.Logger
+	logger *zap.Logger
+
+	// ctx controls the lifetime of all go-routines spawned by Scheduler.
+	ctx context.Context
+	// backgroundTasks tracks all go-routines spawned by Scheduler for graceful shutdown.
+	backgroundTasks sync.WaitGroup
+
 	beaconNode          BeaconNode
 	executionClient     ExecutionClient
 	beaconConfig        *networkconfig.Beacon
@@ -106,20 +113,26 @@ type Scheduler struct {
 	slotTickerProvider  slotticker.Provider
 	dutyExecutor        DutyExecutor
 
-	handlers            []dutyHandler
+	dutyHandlers        []dutyHandler
 	blockPropagateDelay time.Duration
 
-	reorg      chan ReorgEvent
-	indicesChg chan struct{}
-	ticker     slotticker.SlotTicker
-	pool       *pool.ContextPool
+	reorgCh      chan ReorgEvent
+	indicesChgCh chan struct{}
+	ticker       slotticker.SlotTicker
 
-	// waitCond coordinates access to headSlot for different go-routines
+	// waitCond coordinates access to headSlot for different go-routines.
 	waitCond *sync.Cond
 	headSlot phase0.Slot
 
-	lastBlockEpoch            phase0.Epoch
-	currentDutyDependentRoot  phase0.Root
+	// lastEpoch records the epoch of the last observed block.
+	lastEpoch phase0.Epoch
+	// lastBlockRoot records the root of the last observed block, with the intent to end up with
+	// the value for the canonical root of epoch N that can be consulted during transition from
+	// epoch N to epoch N+1.
+	lastBlockRoot phase0.Root
+	// currentDutyDependentRoot records the canonical root of epoch CURRENT-1.
+	currentDutyDependentRoot phase0.Root
+	// previousDutyDependentRoot records the canonical root of epoch CURRENT-2.
 	previousDutyDependentRoot phase0.Root
 
 	exporterMode bool
@@ -140,13 +153,13 @@ func NewScheduler(logger *zap.Logger, opts *SchedulerOptions) *Scheduler {
 		dutyExecutor:        opts.DutyExecutor,
 		validatorProvider:   opts.ValidatorProvider,
 		validatorController: opts.ValidatorController,
-		indicesChg:          opts.IndicesChg,
+		indicesChgCh:        opts.IndicesChgCh,
 		blockPropagateDelay: blockPropagationDelay,
 
-		handlers: []dutyHandler{},
+		dutyHandlers: []dutyHandler{},
 
 		ticker:   opts.SlotTickerProvider(),
-		reorg:    make(chan ReorgEvent),
+		reorgCh:  make(chan ReorgEvent, reorgChannelBuffer),
 		waitCond: sync.NewCond(&sync.Mutex{}),
 	}
 
@@ -154,14 +167,14 @@ func NewScheduler(logger *zap.Logger, opts *SchedulerOptions) *Scheduler {
 
 	// These handlers fetch & record duties from the beacon node and are needed in both operator & exporter modes.
 	// When adding a new handler here, ensure it supports both modes.
-	s.handlers = append(s.handlers,
+	s.dutyHandlers = append(s.dutyHandlers,
 		NewAttesterHandler(dutyStore.Attester, opts.ExporterMode),
 		NewProposerHandler(dutyStore.Proposer, opts.ExporterMode),
 		NewSyncCommitteeHandler(dutyStore.SyncCommittee, opts.ExporterMode),
 	)
 	// These handlers only execute duties and are not needed in exporter mode.
 	if !opts.ExporterMode {
-		s.handlers = append(s.handlers,
+		s.dutyHandlers = append(s.dutyHandlers,
 			NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee),
 			NewValidatorRegistrationHandler(opts.ValidatorRegistrationCh),
 			NewVoluntaryExitHandler(dutyStore.VoluntaryExit, opts.ValidatorExitCh),
@@ -171,60 +184,79 @@ func NewScheduler(logger *zap.Logger, opts *SchedulerOptions) *Scheduler {
 }
 
 type ReorgEvent struct {
-	Slot     phase0.Slot
-	Previous bool
-	Current  bool
+	// CurrentDutyDependentRootChanged indicates if the current duty dependent root change has been detected.
+	CurrentDutyDependentRootChanged bool
+	// PreviousDutyDependentRootChanged indicates if the previous duty dependent root change has been detected.
+	PreviousDutyDependentRootChanged bool
 }
 
 // Start initializes the Scheduler and begins its operation.
 // Note: This function includes blocking operations, especially within the handler's HandleInitialDuties call,
 // which will block until initial duties are fully handled.
 func (s *Scheduler) Start(ctx context.Context) error {
-	s.logger.Info("duty scheduler started")
+	s.logger.Info("starting duty scheduler")
+
+	s.ctx = ctx
 
 	s.logger.Info("subscribing to head events")
-	if err := s.listenToHeadEvents(ctx); err != nil {
+	if err := s.listenToHeadEvents(s.ctx); err != nil {
 		return fmt.Errorf("failed to listen to head events: %w", err)
 	}
 
-	s.pool = pool.New().WithContext(ctx).WithCancelOnError()
-
 	indicesChangeFeed := NewEventFeed[struct{}]()
-	reorgFeed := NewEventFeed[ReorgEvent]()
+	reorgEventsFeed := NewEventFeed[ReorgEvent]()
 
-	for _, handler := range s.handlers {
-		indicesChangeCh := make(chan struct{})
+	for _, handler := range s.dutyHandlers {
+		// indicesChangeCh is buffered as a temporary work-around to mitigate https://github.com/ssvlabs/ssv-node-board/issues/992
+		indicesChangeCh := make(chan struct{}, 1)
 		indicesChangeFeed.Subscribe(indicesChangeCh)
-		reorgCh := make(chan ReorgEvent)
-		reorgFeed.Subscribe(reorgCh)
+		// reorgEventsCh is buffered as a temporary work-around to mitigate https://github.com/ssvlabs/ssv-node-board/issues/992
+		reorgEventsCh := make(chan ReorgEvent, 1)
+		reorgEventsFeed.Subscribe(reorgEventsCh)
 
-		handler.Setup(
-			handler.Name(),
-			s.logger,
-			s.beaconNode,
-			s.executionClient,
-			s.beaconConfig,
-			s.validatorProvider,
-			s.validatorController,
-			s,
-			s.slotTickerProvider,
-			reorgCh,
-			indicesChangeCh,
-		)
+		handler.Setup(ctx, SetupOptions{
+			Name:                handler.Name(),
+			Logger:              s.logger,
+			BeaconNode:          s.beaconNode,
+			ExecutionClient:     s.executionClient,
+			BeaconConfig:        s.beaconConfig,
+			ValidatorProvider:   s.validatorProvider,
+			ValidatorController: s.validatorController,
+			DutiesExecutor:      s,
+			SlotTickerProvider:  s.slotTickerProvider,
+			ReorgEventsCh:       reorgEventsCh,
+			IndicesChangeCh:     indicesChangeCh,
+		})
 
 		// This call is blocking.
-		handler.HandleInitialDuties(ctx)
+		handler.HandleInitialDuties(s.ctx)
 
-		s.pool.Go(func(ctx context.Context) error {
-			handler.HandleDuties(ctx)
-			return nil
-		})
+		s.backgroundTasks.Add(1)
+		go func() {
+			defer s.backgroundTasks.Done()
+			handler.HandleDuties(s.ctx)
+		}()
 	}
 
-	go s.SlotTicker(ctx)
+	s.backgroundTasks.Add(1)
+	go func() {
+		defer s.backgroundTasks.Done()
+		indicesChangeFeed.FanOut(s.ctx, s.indicesChgCh)
+	}()
 
-	go indicesChangeFeed.FanOut(ctx, s.indicesChg)
-	go reorgFeed.FanOut(ctx, s.reorg)
+	s.backgroundTasks.Add(1)
+	go func() {
+		defer s.backgroundTasks.Done()
+		reorgEventsFeed.FanOut(s.ctx, s.reorgCh)
+	}()
+
+	s.backgroundTasks.Add(1)
+	go func() {
+		defer s.backgroundTasks.Done()
+		s.SlotTicker(s.ctx)
+	}()
+
+	s.logger.Info("duty scheduler has started")
 
 	return nil
 }
@@ -240,7 +272,9 @@ func (s *Scheduler) listenToHeadEvents(ctx context.Context) error {
 		return fmt.Errorf("failed to subscribe to head events: %w", err)
 	}
 
+	s.backgroundTasks.Add(1)
 	go func() {
+		defer s.backgroundTasks.Done()
 		for {
 			select {
 			case <-ctx.Done():
@@ -263,8 +297,16 @@ func (s *Scheduler) listenToHeadEvents(ctx context.Context) error {
 	return nil
 }
 
+// Wait blocks until the Scheduler is finished with all it's tasks, also ensuring all the
+// handlers terminate before this func returns.
 func (s *Scheduler) Wait() error {
-	return s.pool.Wait()
+	s.backgroundTasks.Wait()
+
+	for _, handler := range s.dutyHandlers {
+		handler.WaitShutdown()
+	}
+
+	return nil
 }
 
 type EventFeed[T any] struct {
@@ -331,63 +373,65 @@ func (s *Scheduler) SlotTicker(ctx context.Context) {
 // HandleHeadEvent handles the "head" events from the beacon node.
 func (s *Scheduler) HandleHeadEvent() func(ctx context.Context, event *eth2apiv1.HeadEvent) {
 	return func(ctx context.Context, event *eth2apiv1.HeadEvent) {
-		var zeroRoot phase0.Root
+		currentSlot := event.Slot
+		currentEpoch := s.beaconConfig.EstimatedEpochAtSlot(currentSlot)
+		slotNumber := uint64(currentSlot)%s.beaconConfig.SlotsPerEpoch + 1
 
-		if event.Slot != s.beaconConfig.EstimatedCurrentSlot() {
+		buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, currentSlot, slotNumber)
+		logger := s.logger.With(zap.String("epoch_slot_pos", buildStr))
+
+		if event.Slot < s.beaconConfig.EstimatedCurrentSlot() {
 			// No need to process outdated events here.
 			return
 		}
+		if event.Slot > s.beaconConfig.EstimatedCurrentSlot() {
+			// We don't handle future events to keep things simple.
+			logger.Warn("got future head event from EL, most likely cause is clock-skew between SSV node and EL")
+			return
+		}
 
-		// check for reorg
-		epoch := s.beaconConfig.EstimatedEpochAtSlot(event.Slot)
-		buildStr := fmt.Sprintf("e%v-s%v-#%v", epoch, event.Slot, event.Slot%32+1)
-		logger := s.logger.With(zap.String("epoch_slot_pos", buildStr))
-		if s.lastBlockEpoch != 0 {
-			if epoch > s.lastBlockEpoch {
-				// Change of epoch.
-				// Ensure that the new previous dependent root is the same as the old current root.
-				if !bytes.Equal(s.previousDutyDependentRoot[:], zeroRoot[:]) &&
-					!bytes.Equal(s.currentDutyDependentRoot[:], event.PreviousDutyDependentRoot[:]) {
-					logger.Debug("🔀 Previous duty dependent root has changed on epoch transition",
-						zap.String("old_current_dependent_root", fmt.Sprintf("%#x", s.currentDutyDependentRoot[:])),
-						zap.String("new_previous_dependent_root", fmt.Sprintf("%#x", event.PreviousDutyDependentRoot[:])))
+		// Check for reorg & fire corresponding ReorgEvent if needed.
+		if s.lastEpoch != 0 {
+			var zeroRoot phase0.Root
 
-					s.reorg <- ReorgEvent{
-						Slot:     event.Slot,
-						Previous: true,
-					}
-				}
-			} else {
-				// Same epoch
-				// Ensure that the previous dependent roots are the same.
-				if !bytes.Equal(s.previousDutyDependentRoot[:], zeroRoot[:]) &&
-					!bytes.Equal(s.previousDutyDependentRoot[:], event.PreviousDutyDependentRoot[:]) {
-					logger.Debug("🔀 Previous duty dependent root has changed",
-						zap.String("old_previous_dependent_root", fmt.Sprintf("%#x", s.previousDutyDependentRoot[:])),
-						zap.String("new_previous_dependent_root", fmt.Sprintf("%#x", event.PreviousDutyDependentRoot[:])))
+			epochTransition := currentEpoch > s.lastEpoch
 
-					s.reorg <- ReorgEvent{
-						Slot:     event.Slot,
-						Previous: true,
-					}
-				}
+			expectedCurrentDutyDependentRoot := s.currentDutyDependentRoot[:]
+			expectedPreviousDutyDependentRoot := s.previousDutyDependentRoot[:]
+			if epochTransition {
+				// Epoch transition case:
+				// - the root tracked in s.currentDutyDependentRoot now describes the previous epoch, hence becomes
+				//   the expected previous dependent root
+				// - we use the latest observed block-root from the previous epoch as the expected current dependent
+				//   root since it's the only thing we can compare the current dependent root we got with. This might
+				//   produce a spurious (false-positive) reorg in case when another event overrode the canonical root
+				//   observed (and recorded as lastBlockRoot) during prior event(s) - but it works OK for us regardless.
+				expectedCurrentDutyDependentRoot = s.lastBlockRoot[:]
+				expectedPreviousDutyDependentRoot = s.currentDutyDependentRoot[:]
+			}
 
-				// Ensure that the current dependent roots are the same.
-				if !bytes.Equal(s.currentDutyDependentRoot[:], zeroRoot[:]) &&
-					!bytes.Equal(s.currentDutyDependentRoot[:], event.CurrentDutyDependentRoot[:]) {
-					logger.Debug("🔀 Current duty dependent root has changed",
-						zap.String("old_current_dependent_root", fmt.Sprintf("%#x", s.currentDutyDependentRoot[:])),
-						zap.String("new_current_dependent_root", fmt.Sprintf("%#x", event.CurrentDutyDependentRoot[:])))
+			currentDutyDependentRootChanged := !bytes.Equal(expectedCurrentDutyDependentRoot, zeroRoot[:]) &&
+				!bytes.Equal(expectedCurrentDutyDependentRoot, event.CurrentDutyDependentRoot[:])
+			previousDutyDependentRootChanged := !bytes.Equal(expectedPreviousDutyDependentRoot, zeroRoot[:]) &&
+				!bytes.Equal(expectedPreviousDutyDependentRoot, event.PreviousDutyDependentRoot[:])
 
-					s.reorg <- ReorgEvent{
-						Slot:    event.Slot,
-						Current: true,
-					}
+			if currentDutyDependentRootChanged || previousDutyDependentRootChanged {
+				logger.Debug("🔀 reorg detected: dependent root(s) changed",
+					zap.Bool("epoch_transition", epochTransition),
+					zap.String("expected_previous_dependent_root", fmt.Sprintf("%#x", expectedPreviousDutyDependentRoot)),
+					zap.String("got_previous_dependent_root", fmt.Sprintf("%#x", event.PreviousDutyDependentRoot[:])),
+					zap.String("expected_current_dependent_root", fmt.Sprintf("%#x", expectedCurrentDutyDependentRoot)),
+					zap.String("got_current_dependent_root", fmt.Sprintf("%#x", event.CurrentDutyDependentRoot[:])),
+				)
+				s.reorgCh <- ReorgEvent{
+					CurrentDutyDependentRootChanged:  currentDutyDependentRootChanged,
+					PreviousDutyDependentRootChanged: previousDutyDependentRootChanged,
 				}
 			}
 		}
 
-		s.lastBlockEpoch = epoch
+		s.lastEpoch = currentEpoch
+		s.lastBlockRoot = event.Block
 		s.previousDutyDependentRoot = event.PreviousDutyDependentRoot
 		s.currentDutyDependentRoot = event.CurrentDutyDependentRoot
 
@@ -411,7 +455,7 @@ func (s *Scheduler) HandleHeadEvent() func(ctx context.Context, event *eth2apiv1
 }
 
 // ExecuteDuties tries to execute the provided validator duties
-func (s *Scheduler) ExecuteDuties(ctx context.Context, duties []*spectypes.ValidatorDuty) {
+func (s *Scheduler) ExecuteDuties(ctx context.Context, duties []*spectypes.ValidatorDuty, dutyDeadline time.Time) {
 	if s.exporterMode {
 		// We never execute duties in exporter mode. The handler should skip calling this method.
 		// Keeping check here to detect programming mistakes.
@@ -432,26 +476,30 @@ func (s *Scheduler) ExecuteDuties(ctx context.Context, duties []*spectypes.Valid
 		logger.Debug(eventMsg)
 		span.AddEvent(eventMsg)
 
+		role := duty.RunnerRole()
 		slotDelay := time.Since(s.beaconConfig.SlotStartTime(duty.Slot))
-		if slotDelay >= 100*time.Millisecond {
+
+		// For roles where duty.Slot is a shared coordination point rather
+		// than the execution target (see dutySlotIsExecutionSlot), slotDelay
+		// against it is meaningless.
+		if dutySlotIsExecutionSlot(role) && slotDelay >= 100*time.Millisecond {
 			const eventMsg = "⚠️ late duty execution"
 			logger.Warn(eventMsg, zap.Duration("slot_delay", slotDelay))
 			span.AddEvent(eventMsg, trace.WithAttributes(
 				attribute.Int64("ssv.beacon.slot_delay_ms", slotDelay.Milliseconds()),
 				observability.BeaconRoleAttribute(duty.Type),
-				observability.RunnerRoleAttribute(duty.RunnerRole())))
+				observability.RunnerRoleAttribute(role)))
 		}
+		recordDutyScheduled(ctx, role, slotDelay)
 
-		recordDutyScheduled(ctx, duty.RunnerRole(), slotDelay)
-
+		s.backgroundTasks.Add(1)
 		go func() {
+			defer s.backgroundTasks.Done()
+
 			// Cannot use parent-context itself here, have to create independent instance
 			// to be able to continue working in background.
-			dutyCtx, cancel, withDeadline := utils.CtxWithParentDeadline(ctx)
+			dutyCtx, cancel := context.WithDeadline(s.ctx, dutyDeadline)
 			defer cancel()
-			if !withDeadline {
-				logger.Warn("parent-context has no deadline set")
-			}
 
 			s.dutyExecutor.ExecuteDuty(dutyCtx, logger, duty)
 		}()
@@ -461,7 +509,7 @@ func (s *Scheduler) ExecuteDuties(ctx context.Context, duties []*spectypes.Valid
 }
 
 // ExecuteCommitteeDuties tries to execute the provided committee duties
-func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, duties committeeDutiesMap) {
+func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, duties committeeDutiesMap, dutyDeadline time.Time) {
 	if s.exporterMode {
 		// We never execute duties in exporter mode. The handler should skip calling this method.
 		// Keeping check here to detect programming mistakes.
@@ -496,14 +544,14 @@ func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, duties committee
 
 		recordDutyScheduled(ctx, duty.RunnerRole(), slotDelay)
 
+		s.backgroundTasks.Add(1)
 		go func() {
+			defer s.backgroundTasks.Done()
+
 			// Cannot use parent-context itself here, have to create independent instance
 			// to be able to continue working in background.
-			dutyCtx, cancel, withDeadline := utils.CtxWithParentDeadline(ctx)
+			dutyCtx, cancel := context.WithDeadline(s.ctx, dutyDeadline)
 			defer cancel()
-			if !withDeadline {
-				logger.Warn("parent-context has no deadline set")
-			}
 
 			s.waitOneThirdIntoSlotOrValidBlock(duty.Slot)
 			s.dutyExecutor.ExecuteCommitteeDuty(dutyCtx, logger, committee.id, duty)

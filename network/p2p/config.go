@@ -3,6 +3,7 @@ package p2pv1
 import (
 	"context"
 	"crypto/ecdsa"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -13,10 +14,7 @@ import (
 	"github.com/libp2p/go-libp2p/p2p/security/noise"
 	libp2ptcp "github.com/libp2p/go-libp2p/p2p/transport/tcp"
 	ma "github.com/multiformats/go-multiaddr"
-	"github.com/pkg/errors"
 	"go.uber.org/zap"
-
-	"github.com/ssvlabs/ssv/ssvsigner/keys"
 
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/network"
@@ -62,10 +60,6 @@ type Config struct {
 	DiscoveryTrace bool `yaml:"DiscoveryTrace" env:"DISCOVERY_TRACE" env-description:"Enable discovery debug tracing in logs"`
 	// NetworkPrivateKey is used for network identity, MUST be injected
 	NetworkPrivateKey *ecdsa.PrivateKey
-	// OperatorSigner is used for signing with operator private key, MUST be injected
-	OperatorSigner keys.OperatorSigner
-	// OperatorPubKeyHash is hash of operator public key, used for identity, optional
-	OperatorPubKeyHash string
 	// OperatorDataStore contains own operator data including its ID
 	OperatorDataStore operatordatastore.OperatorDataStore
 	// Router propagate incoming network messages to the responsive components
@@ -108,7 +102,7 @@ func (c *Config) Libp2pOptions(logger *zap.Logger) ([]libp2p.Option, error) {
 	}
 	sk, err := commons.ECDSAPrivToInterface(c.NetworkPrivateKey)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not convert to interface priv key")
+		return nil, fmt.Errorf("could not convert to interface priv key: %w", err)
 	}
 
 	opts := make([]libp2p.Option, 0, 7)
@@ -120,7 +114,7 @@ func (c *Config) Libp2pOptions(logger *zap.Logger) ([]libp2p.Option, error) {
 
 	opts, err = c.configureAddrs(logger, opts)
 	if err != nil {
-		return opts, errors.Wrap(err, "could not setup addresses")
+		return opts, fmt.Errorf("could not setup addresses: %w", err)
 	}
 
 	opts = append(opts, libp2p.Security(noise.ID, noise.New))
@@ -135,18 +129,18 @@ func (c *Config) configureAddrs(logger *zap.Logger, opts []libp2p.Option) ([]lib
 	addrs := make([]ma.Multiaddr, 0)
 	maZero, err := commons.BuildMultiAddress("0.0.0.0", "tcp", uint(c.TCPPort), "")
 	if err != nil {
-		return opts, errors.Wrap(err, "could not build multi address for zero address")
+		return opts, fmt.Errorf("could not build multi address for zero address: %w", err)
 	}
 	addrs = append(addrs, maZero)
 	ipAddr, err := commons.IPAddr()
 	if err != nil {
-		return opts, errors.Wrap(err, "could not get ip addr")
+		return opts, fmt.Errorf("could not get ip addr: %w", err)
 	}
 
 	if c.Discovery != localDiscvery {
 		maIP, err := commons.BuildMultiAddress(ipAddr.String(), "tcp", uint(c.TCPPort), "")
 		if err != nil {
-			return opts, errors.Wrap(err, "could not build multi address for zero address")
+			return opts, fmt.Errorf("could not build multi address for zero address: %w", err)
 		}
 		addrs = append(addrs, maIP)
 	}

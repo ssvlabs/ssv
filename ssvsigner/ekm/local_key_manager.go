@@ -30,9 +30,6 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/storage/basedb"
-
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 )
 
@@ -63,8 +60,8 @@ type LocalKeyManager struct {
 // NewLocalKeyManager returns a new LocalKeyManager.
 func NewLocalKeyManager(
 	logger *zap.Logger,
-	db basedb.Database,
-	beaconConfig *networkconfig.Beacon,
+	db Database,
+	beacon BeaconNetwork,
 	operatorPrivKey keys.OperatorPrivateKey,
 ) (*LocalKeyManager, error) {
 	encryptionKey, err := operatorPrivKey.EKMEncryptionKey()
@@ -72,7 +69,7 @@ func NewLocalKeyManager(
 		return nil, fmt.Errorf("get encryption key: %w", err)
 	}
 
-	signerStore := NewSignerStorage(db, beaconConfig, logger)
+	signerStore := NewSignerStorage(db, beacon.NetworkName(), logger)
 	signerStore.SetEncryptionKey(encryptionKey)
 
 	protection := slashingprotection.NewNormalProtection(signerStore)
@@ -96,14 +93,14 @@ func NewLocalKeyManager(
 		}
 	}
 
-	beaconSigner := signer.NewSimpleSigner(wallet, protection, beaconConfig)
+	beaconSigner := signer.NewSimpleSigner(wallet, protection, beacon)
 
 	return &LocalKeyManager{
 		logger:            logger,
 		wallet:            wallet,
 		walletLock:        &sync.RWMutex{},
 		signer:            beaconSigner,
-		slashingProtector: NewSlashingProtector(logger, beaconConfig, signerStore, protection),
+		slashingProtector: NewSlashingProtector(logger, beacon, signerStore, protection),
 		operatorDecrypter: operatorPrivKey,
 	}, nil
 }
@@ -260,7 +257,7 @@ func (km *LocalKeyManager) IsBeaconBlockSlashable(pubKey phase0.BLSPubKey, slot 
 	return km.slashingProtector.IsBeaconBlockSlashable(pubKey, slot)
 }
 
-func (km *LocalKeyManager) BumpSlashingProtection(txn basedb.Txn, pubKey phase0.BLSPubKey) error {
+func (km *LocalKeyManager) BumpSlashingProtection(txn ReadWriteTxn, pubKey phase0.BLSPubKey) error {
 	return km.slashingProtector.BumpSlashingProtectionTxn(txn, pubKey)
 }
 
@@ -282,7 +279,7 @@ func (km *LocalKeyManager) ListAccounts() ([]core.ValidatorAccount, error) {
 // ensure slashing records for this share are up to date.
 func (km *LocalKeyManager) AddShare(
 	_ context.Context,
-	txn basedb.Txn,
+	txn ReadWriteTxn,
 	encryptedPrivKey []byte,
 	pubKey phase0.BLSPubKey,
 ) error {
@@ -327,7 +324,7 @@ func (km *LocalKeyManager) AddShare(
 // RemoveShare removes the share from the local wallet, clears the associated
 // slashing-protection records (highest attestation/proposal) for the given
 // public key, and returns an error on any storage issue.
-func (km *LocalKeyManager) RemoveShare(_ context.Context, txn basedb.Txn, pubKey phase0.BLSPubKey) error {
+func (km *LocalKeyManager) RemoveShare(_ context.Context, txn ReadWriteTxn, pubKey phase0.BLSPubKey) error {
 	km.walletLock.Lock()
 	defer km.walletLock.Unlock()
 

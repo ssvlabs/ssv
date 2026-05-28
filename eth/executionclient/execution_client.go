@@ -3,6 +3,7 @@ package executionclient
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/big"
 	"sync/atomic"
@@ -54,10 +55,6 @@ type ExecutionClient struct {
 	reqTimeout    time.Duration
 	reqRetryDelay time.Duration
 
-	// followDistance defines an offset into the past from the head block such that the block
-	// at this offset will be considered as very likely finalized.
-	followDistance uint64 // TODO: consider reading the finalized checkpoint from consensus layer
-
 	syncDistanceTolerance uint64
 	// syncProgressFn is a struct-field so it can be overwritten for testing
 	syncProgressFn func(context.Context) (*ethereum.SyncProgress, error)
@@ -78,7 +75,6 @@ func New(ctx context.Context, nodeAddr string, contractAddr ethcommon.Address, o
 		logger:                     zap.NewNop(),
 		reqTimeout:                 DefaultReqTimeout,
 		reqRetryDelay:              DefaultReqRetryDelay,
-		followDistance:             DefaultFollowDistance,
 		healthInvalidationInterval: DefaultHealthInvalidationInterval,
 		syncDistanceTolerance:      DefaultSyncDistanceTolerance,
 		closed:                     make(chan struct{}),
@@ -136,22 +132,22 @@ func (ec *ExecutionClient) FetchHistoricalLogs(ctx context.Context, fromBlock ui
 	if err != nil {
 		return nil, nil, ec.errSingleClient(fmt.Errorf("get current block: %w", err), "eth_blockNumber")
 	}
-	if currentBlock < ec.followDistance {
+	if currentBlock < FollowDistance {
 		return nil, nil, ErrNothingToSync
 	}
-	toBlock := currentBlock - ec.followDistance
+	toBlock := currentBlock - FollowDistance
 	if toBlock < fromBlock {
 		return nil, nil, ErrNothingToSync
 	}
 
-	logsCh, errsCh = ec.fetchLogsInBatches(ctx, fromBlock, toBlock)
+	logsCh, errsCh = ec.fetchLogsInBatches(ctx, fromBlock, toBlock, false)
 	return
 }
 
 // Calls FilterLogs multiple times (in batches) gradually sending the results on logCh to avoid fetching
 // an enormous number of events. If an error is encountered, the fetching terminates and the error is sent
 // on errCh. Both logCh and errCh are closed upon this function termination.
-func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, endBlock uint64) (logCh chan BlockLogs, errCh chan error) {
+func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, endBlock uint64, verifyBloom bool) (logCh chan BlockLogs, errCh chan error) {
 	// All errors are buffered so we don't block the execution of this func (waiting on the caller to
 	// handle the error before we can continue further) + it provides more flexibility for the caller
 	// allowing him to process logCh before continuing to checking the errCh channel.
@@ -185,9 +181,23 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, e
 				ToBlock:   new(big.Int).SetUint64(toBlock),
 			}
 			results, err := ec.subdivideLogFetch(ctx, query)
+			if errors.Is(err, context.Canceled) {
+				return
+			}
 			if err != nil {
 				errCh <- err
 				return
+			}
+
+			// Verify each block's logs against its bloom filter.
+			// Only enabled for streaming (near chain tip) where the Geth bug is most impactful.
+			// Skipped during historical sync to avoid ~200 extra header RPCs per batch.
+			if verifyBloom {
+				results, err = ec.verifyLogsWithBloom(ctx, results, fromBlock, toBlock)
+				if err != nil {
+					errCh <- err
+					return
+				}
 			}
 
 			ec.logger.Info("fetched registry events",
@@ -201,7 +211,6 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, e
 
 			select {
 			case <-ctx.Done():
-				errCh <- ctx.Err()
 				return
 
 			case <-ec.closed:
@@ -486,15 +495,15 @@ func (ec *ExecutionClient) streamLogsToChan(
 			return lastBlock, progressed, fmt.Errorf("subscription error: %w", err)
 
 		case header := <-heads:
-			if header.Number.Uint64() < ec.followDistance {
+			if header.Number.Uint64() < FollowDistance {
 				continue
 			}
-			toBlock := header.Number.Uint64() - ec.followDistance
+			toBlock := header.Number.Uint64() - FollowDistance
 			if toBlock < fromBlock {
 				continue
 			}
 
-			logStream, fetchErrors := ec.fetchLogsInBatches(ctx, fromBlock, toBlock)
+			logStream, fetchErrors := ec.fetchLogsInBatches(ctx, fromBlock, toBlock, true)
 			for block := range logStream {
 				logCh <- block
 				progressed = true

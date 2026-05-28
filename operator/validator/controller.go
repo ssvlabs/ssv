@@ -52,13 +52,6 @@ import (
 
 //go:generate go tool -modfile=../../tool.mod mockgen -package=mocks -destination=./mocks/controller.go -source=./controller.go
 
-const (
-	networkRouterConcurrency = 2048
-)
-
-// ShareEventHandlerFunc is a function that handles event in an extended mode
-type ShareEventHandlerFunc func(share *ssvtypes.SSVShare)
-
 // ControllerOptions for creating a validator controller
 type ControllerOptions struct {
 	Context                        context.Context
@@ -89,12 +82,13 @@ type ControllerOptions struct {
 	ProposerDelay                  time.Duration
 
 	// worker flags
-	WorkersCount    int    `yaml:"MsgWorkersCount" env:"MSG_WORKERS_COUNT" env-default:"256" env-description:"Number of message processing workers"`
-	QueueBufferSize int    `yaml:"MsgWorkerBufferSize" env:"MSG_WORKER_BUFFER_SIZE" env-default:"65536" env-description:"Size of message worker queue buffer"`
-	GasLimit        uint64 `yaml:"ExperimentalGasLimit" env:"EXPERIMENTAL_GAS_LIMIT" env-description:"Gas limit for MEV block proposals (must match across committee, otherwise MEV fails). Do not change unless you know what you're doing"`
+	WorkersCount    int `yaml:"MsgWorkersCount" env:"MSG_WORKERS_COUNT" env-default:"256" env-description:"Number of message processing workers"`
+	QueueBufferSize int `yaml:"MsgWorkerBufferSize" env:"MSG_WORKER_BUFFER_SIZE" env-default:"65536" env-description:"Size of message worker queue buffer"`
+	// Chosen from BenchmarkRouterFanout for the current pod shape, where the
+	// 3.6 CPU cgroup quota rounds to GOMAXPROCS=4.
+	MsgRouterConcurrency int    `yaml:"MsgRouterConcurrency" env:"MSG_ROUTER_CONCURRENCY" env-default:"16" env-description:"Number of goroutines draining the network message router; 16 is tuned for ~4 vCPU pods, override on larger hosts"`
+	GasLimit             uint64 `yaml:"ExperimentalGasLimit" env:"EXPERIMENTAL_GAS_LIMIT" env-description:"Gas limit for MEV block proposals (must match across committee, otherwise MEV fails). Do not change unless you know what you're doing"`
 }
-
-type Nonce uint16
 
 type SharesStorage interface {
 	Get(txn basedb.Reader, pubKey []byte) (*ssvtypes.SSVShare, bool)
@@ -146,6 +140,7 @@ type Controller struct {
 	operatorsIDs         *sync.Map
 	network              P2PNetwork
 	messageRouter        *messageRouter
+	msgRouterConcurrency int
 	messageWorker        *worker.Worker
 	historySyncBatchSize int
 	messageValidator     validation.MessageValidator
@@ -180,7 +175,6 @@ func NewController(logger *zap.Logger, options ControllerOptions, exporterOption
 		WorkersCount: options.WorkersCount,
 		Buffer:       options.QueueBufferSize,
 	}
-
 	validatorCommonOpts := validator.NewCommonOptions(
 		options.NetworkConfig,
 		options.Network,
@@ -225,6 +219,7 @@ func NewController(logger *zap.Logger, options ControllerOptions, exporterOption
 		operatorsIDs: operatorsIDs,
 
 		messageRouter:        newMessageRouter(logger),
+		msgRouterConcurrency: options.MsgRouterConcurrency,
 		messageWorker:        worker.NewWorker(logger, workerCfg),
 		historySyncBatchSize: options.HistorySyncBatchSize,
 
@@ -304,44 +299,40 @@ func (c *Controller) GetValidatorStats() (uint64, uint64, uint64, error) {
 }
 
 func (c *Controller) handleRouterMessages() {
-	ctx, cancel := context.WithCancel(c.ctx)
-	defer cancel()
-	ch := c.messageRouter.GetMessageChan()
 	for {
-		select {
-		case <-ctx.Done():
+		msg, ok := c.messageRouter.Receive(c.ctx)
+		if !ok {
 			c.logger.Debug("router message handler stopped")
 			return
+		}
 
-		case msg := <-ch:
-			switch m := msg.(type) {
-			case *queue.SSVMessage:
-				if m.MsgType == message.SSVEventMsgType {
+		switch m := msg.(type) {
+		case *queue.SSVMessage:
+			if m.MsgType == message.SSVEventMsgType {
+				continue
+			}
+
+			// TODO: only try copying clusterid if validator failed
+			dutyExecutorID := m.GetID().GetDutyExecutorID()
+			var cid spectypes.CommitteeID
+			copy(cid[:], dutyExecutorID[16:])
+
+			if v, ok := c.validatorsMap.GetValidator(spectypes.ValidatorPK(dutyExecutorID)); ok {
+				v.EnqueueMessage(c.ctx, m)
+			} else if vc, ok := c.validatorsMap.GetCommittee(cid); ok {
+				vc.EnqueueMessage(c.ctx, m)
+			} else if c.validatorCommonOpts.ExporterOptions.Enabled {
+				if m.MsgType != spectypes.SSVConsensusMsgType && m.MsgType != spectypes.SSVPartialSignatureMsgType {
 					continue
 				}
-
-				// TODO: only try copying clusterid if validator failed
-				dutyExecutorID := m.GetID().GetDutyExecutorID()
-				var cid spectypes.CommitteeID
-				copy(cid[:], dutyExecutorID[16:])
-
-				if v, ok := c.validatorsMap.GetValidator(spectypes.ValidatorPK(dutyExecutorID)); ok {
-					v.EnqueueMessage(ctx, m)
-				} else if vc, ok := c.validatorsMap.GetCommittee(cid); ok {
-					vc.EnqueueMessage(ctx, m)
-				} else if c.validatorCommonOpts.ExporterOptions.Enabled {
-					if m.MsgType != spectypes.SSVConsensusMsgType && m.MsgType != spectypes.SSVPartialSignatureMsgType {
-						continue
-					}
-					if !c.messageWorker.TryEnqueue(m) {
-						c.logger.Warn("Failed to enqueue post consensus message: buffer is full")
-					}
+				if !c.messageWorker.TryEnqueue(m) {
+					c.logger.Warn("Failed to enqueue post consensus message: buffer is full")
 				}
-
-			default:
-				// This should be impossible because the channel is typed.
-				c.logger.Fatal("unknown message type from router", zap.Any("message", m))
 			}
+
+		default:
+			// This should be impossible because the channel is typed.
+			c.logger.Fatal("unknown message type from router", zap.Any("message", m))
 		}
 	}
 }
@@ -410,7 +401,7 @@ func (c *Controller) handleNonCommitteeMessages(
 		}
 
 		subMsg, ok := msg.Body.(*specqbft.Message)
-		if !ok || subMsg.MsgType != specqbft.ProposalMsgType {
+		if !ok || subMsg == nil || subMsg.MsgType != specqbft.ProposalMsgType {
 			return nil
 		}
 
@@ -524,8 +515,11 @@ func (c *Controller) InitValidators() ([]*validator.Validator, error) {
 
 // StartNetworkHandlers init msg worker that handles network messages
 func (c *Controller) StartNetworkHandlers() {
+	if c.msgRouterConcurrency <= 0 {
+		c.logger.Fatal("msgRouterConcurrency must be > 0")
+	}
 	c.network.UseMessageRouter(c.messageRouter)
-	for i := 0; i < networkRouterConcurrency; i++ {
+	for i := 0; i < c.msgRouterConcurrency; i++ {
 		go c.handleRouterMessages()
 	}
 	c.messageWorker.UseHandler(c.handleWorkerMessages)
@@ -740,7 +734,7 @@ func (c *Controller) onShareInit(share *ssvtypes.SSVShare) (v *validator.Validat
 		// so that when the validator is stopped, the runners are stopped as well.
 		validatorCtx, validatorCancel := context.WithCancel(c.ctx)
 
-		dutyRunners, err := SetupRunners(validatorCtx, c.logger, share, operator, c.validatorRegistrationSubmitter, c.validatorStore, c.validatorCommonOpts)
+		dutyRunners, err := SetupRunners(validatorCtx, share, operator, c.validatorRegistrationSubmitter, c.validatorStore, c.validatorCommonOpts)
 		if err != nil {
 			validatorCancel()
 			return nil, true, fmt.Errorf("could not setup runners: %w", err)
@@ -1015,6 +1009,17 @@ func SetupCommitteeRunners(
 	ctx context.Context,
 	options *validator.Options,
 ) validator.CommitteeRunnerFunc {
+	if options.ExporterOptions.Enabled {
+		return func(
+			phase0.Slot,
+			map[phase0.ValidatorIndex]*spectypes.Share,
+			[]phase0.BLSPubKey,
+			runner.CommitteeDutyGuard,
+		) (*runner.CommitteeRunner, error) {
+			return nil, fmt.Errorf("cannot set up committee runners in exporter mode")
+		}
+	}
+
 	buildController := func(role spectypes.RunnerRole) *qbftcontroller.Controller {
 		config := &qbft.Config{
 			BeaconSigner: options.Signer,
@@ -1024,7 +1029,6 @@ func SetupCommitteeRunners(
 				return leader
 			},
 			Network:     options.Network,
-			Timer:       roundtimer.New(ctx, options.NetworkConfig.Beacon, role, nil),
 			CutOffRound: roundtimer.CutOffRound,
 		}
 
@@ -1039,18 +1043,20 @@ func SetupCommitteeRunners(
 		attestingValidators []phase0.BLSPubKey,
 		dutyGuard runner.CommitteeDutyGuard,
 	) (*runner.CommitteeRunner, error) {
-		crunner, err := runner.NewCommitteeRunner(
-			options.NetworkConfig,
-			shares,
-			attestingValidators,
-			buildController(spectypes.RoleCommittee),
-			options.Beacon,
-			options.Network,
-			options.Signer,
-			options.OperatorSigner,
-			dutyGuard,
-			options.DoppelgangerHandler,
-		)
+		crunner, err := runner.NewCommitteeRunner(runner.CommitteeRunnerOptions{
+			BaseRunnerOptions: runner.BaseRunnerOptions{
+				NetworkConfig:  options.NetworkConfig,
+				Share:          shares,
+				Beacon:         options.Beacon,
+				Network:        options.Network,
+				Signer:         options.Signer,
+				OperatorSigner: options.OperatorSigner,
+			},
+			AttestingValidators: attestingValidators,
+			QBFTController:      buildController(spectypes.RoleCommittee),
+			DutyGuard:           dutyGuard,
+			DoppelgangerHandler: options.DoppelgangerHandler,
+		})
 		if err != nil {
 			return nil, err
 		}
@@ -1061,13 +1067,16 @@ func SetupCommitteeRunners(
 // SetupRunners initializes duty runners for the given validator
 func SetupRunners(
 	ctx context.Context,
-	logger *zap.Logger,
 	share *ssvtypes.SSVShare,
 	operator *spectypes.CommitteeMember,
 	validatorRegistrationSubmitter runner.ValidatorRegistrationSubmitter,
 	validatorStore registrystorage.ValidatorStore,
 	options *validator.CommonOptions,
 ) (runner.ValidatorDutyRunners, error) {
+	if options.ExporterOptions.Enabled {
+		return nil, fmt.Errorf("cannot set up duty runners in exporter mode")
+	}
+
 	runnersType := []spectypes.RunnerRole{
 		spectypes.RoleProposer,
 		spectypes.RoleAggregator,
@@ -1085,7 +1094,6 @@ func SetupRunners(
 				return leader
 			},
 			Network:     options.Network,
-			Timer:       roundtimer.New(ctx, options.NetworkConfig.Beacon, role, nil),
 			CutOffRound: roundtimer.CutOffRound,
 		}
 
@@ -1097,26 +1105,57 @@ func SetupRunners(
 	shareMap := make(map[phase0.ValidatorIndex]*spectypes.Share)
 	shareMap[share.ValidatorIndex] = &share.Share
 
+	baseOpts := runner.BaseRunnerOptions{
+		NetworkConfig:  options.NetworkConfig,
+		Share:          shareMap,
+		Beacon:         options.Beacon,
+		Network:        options.Network,
+		Signer:         options.Signer,
+		OperatorSigner: options.OperatorSigner,
+	}
+
 	runners := runner.ValidatorDutyRunners{}
 	var err error
 	for _, role := range runnersType {
 		switch role {
 		case spectypes.RoleProposer:
 			proposedValueCheck := ssv.NewProposerChecker(options.Signer, options.NetworkConfig.Beacon, share.ValidatorPubKey, share.ValidatorIndex, phase0.BLSPubKey(share.SharePubKey))
-			qbftCtrl := buildController(spectypes.RoleProposer)
-			runners[role], err = runner.NewProposerRunner(logger, options.NetworkConfig, shareMap, qbftCtrl, options.Beacon, options.Network, options.Signer, options.OperatorSigner, options.DoppelgangerHandler, proposedValueCheck, 0, options.Graffiti, options.ProposerDelay)
+			runners[role], err = runner.NewProposerRunner(runner.ProposerRunnerOptions{
+				BaseRunnerOptions:   baseOpts,
+				QBFTController:      buildController(spectypes.RoleProposer),
+				DoppelgangerHandler: options.DoppelgangerHandler,
+				ValCheck:            proposedValueCheck,
+				HighestDecidedSlot:  0,
+				Graffiti:            options.Graffiti,
+				ProposerDelay:       options.ProposerDelay,
+			})
 		case spectypes.RoleAggregator:
 			aggregatorValueChecker := ssv.NewAggregatorChecker(options.NetworkConfig.Beacon, share.ValidatorPubKey, share.ValidatorIndex)
-			qbftCtrl := buildController(spectypes.RoleAggregator)
-			runners[role], err = runner.NewAggregatorRunner(options.NetworkConfig, shareMap, qbftCtrl, options.Beacon, options.Network, options.Signer, options.OperatorSigner, aggregatorValueChecker, 0)
+			runners[role], err = runner.NewAggregatorRunner(runner.AggregatorRunnerOptions{
+				BaseRunnerOptions:  baseOpts,
+				QBFTController:     buildController(spectypes.RoleAggregator),
+				ValCheck:           aggregatorValueChecker,
+				HighestDecidedSlot: 0,
+			})
 		case spectypes.RoleSyncCommitteeContribution:
 			syncCommitteeContributionValueChecker := ssv.NewSyncCommitteeContributionChecker(options.NetworkConfig.Beacon, share.ValidatorPubKey, share.ValidatorIndex)
-			qbftCtrl := buildController(spectypes.RoleSyncCommitteeContribution)
-			runners[role], err = runner.NewSyncCommitteeAggregatorRunner(options.NetworkConfig, shareMap, qbftCtrl, options.Beacon, options.Network, options.Signer, options.OperatorSigner, syncCommitteeContributionValueChecker, 0)
+			runners[role], err = runner.NewSyncCommitteeAggregatorRunner(runner.SyncCommitteeAggregatorRunnerOptions{
+				BaseRunnerOptions:  baseOpts,
+				QBFTController:     buildController(spectypes.RoleSyncCommitteeContribution),
+				ValCheck:           syncCommitteeContributionValueChecker,
+				HighestDecidedSlot: 0,
+			})
 		case spectypes.RoleValidatorRegistration:
-			runners[role], err = runner.NewValidatorRegistrationRunner(options.NetworkConfig, shareMap, options.Beacon, options.Network, options.Signer, options.OperatorSigner, validatorRegistrationSubmitter, validatorStore, options.GasLimit)
+			runners[role], err = runner.NewValidatorRegistrationRunner(runner.ValidatorRegistrationRunnerOptions{
+				BaseRunnerOptions:              baseOpts,
+				ValidatorRegistrationSubmitter: validatorRegistrationSubmitter,
+				FeeRecipientProvider:           validatorStore,
+				GasLimit:                       options.GasLimit,
+			})
 		case spectypes.RoleVoluntaryExit:
-			runners[role], err = runner.NewVoluntaryExitRunner(options.NetworkConfig, shareMap, options.Beacon, options.Network, options.Signer, options.OperatorSigner)
+			runners[role], err = runner.NewVoluntaryExitRunner(runner.VoluntaryExitRunnerOptions{
+				BaseRunnerOptions: baseOpts,
+			})
 		default:
 			return nil, fmt.Errorf("unexpected duty runner type: %s", role)
 		}

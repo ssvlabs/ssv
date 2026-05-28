@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"testing"
+	"testing/synctest"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -49,214 +50,222 @@ func (v *validatorStoreStub) ValidatorPubkey(index phase0.ValidatorIndex) (spect
 }
 
 func TestPrefetchingBeaconCommitteesCaching(t *testing.T) {
-	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
 
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
+		committees := []*eth2apiv1.BeaconCommittee{{Slot: 64, Index: 1}}
+		node := &committeeAwareMock{
+			MockBeaconNode: beaconmock.NewMockBeaconNode(ctrl),
+			committees:     committees,
+		}
 
-	committees := []*eth2apiv1.BeaconCommittee{{Slot: 64, Index: 1}}
-	node := &committeeAwareMock{
-		MockBeaconNode: beaconmock.NewMockBeaconNode(ctrl),
-		committees:     committees,
-	}
+		cfg := *networkconfig.TestNetwork.Beacon
+		pb := NewPrefetchingBeacon(zap.NewNop(), node, &cfg, nil)
+		t.Cleanup(pb.committees.Stop)
 
-	cfg := *networkconfig.TestNetwork.Beacon
-	pb := NewPrefetchingBeacon(zap.NewNop(), node, &cfg, nil)
+		epoch := cfg.EstimatedEpochAtSlot(committees[0].Slot)
 
-	epoch := cfg.EstimatedEpochAtSlot(committees[0].Slot)
+		first, err := pb.committeesForEpoch(context.Background(), epoch)
+		require.NoError(t, err)
+		require.Equal(t, committees, first)
+		require.Equal(t, 1, node.committeesCalls)
 
-	first, err := pb.committeesForEpoch(context.Background(), epoch)
-	require.NoError(t, err)
-	require.Equal(t, committees, first)
-	require.Equal(t, 1, node.committeesCalls)
-
-	second, err := pb.committeesForEpoch(context.Background(), epoch)
-	require.NoError(t, err)
-	require.Equal(t, committees, second)
-	assert.Equal(t, 1, node.committeesCalls, "cached result should avoid additional upstream calls")
+		second, err := pb.committeesForEpoch(context.Background(), epoch)
+		require.NoError(t, err)
+		require.Equal(t, committees, second)
+		assert.Equal(t, 1, node.committeesCalls, "cached result should avoid additional upstream calls")
+	})
 }
 
 func TestPrefetchingBeaconEnsureAttesterEpoch(t *testing.T) {
-	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
 
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
+		slot := phase0.Slot(96)
+		cfg := *networkconfig.TestNetwork.Beacon
+		epoch := cfg.EstimatedEpochAtSlot(slot)
+		committees := []*eth2apiv1.BeaconCommittee{{Slot: slot, Index: 2, Validators: []phase0.ValidatorIndex{1, 2}}}
 
-	slot := phase0.Slot(96)
-	cfg := *networkconfig.TestNetwork.Beacon
-	epoch := cfg.EstimatedEpochAtSlot(slot)
-	committees := []*eth2apiv1.BeaconCommittee{{Slot: slot, Index: 2, Validators: []phase0.ValidatorIndex{1, 2}}}
+		node := &committeeAwareMock{
+			MockBeaconNode: beaconmock.NewMockBeaconNode(ctrl),
+			committees:     committees,
+		}
 
-	node := &committeeAwareMock{
-		MockBeaconNode: beaconmock.NewMockBeaconNode(ctrl),
-		committees:     committees,
-	}
+		var pk spectypes.ValidatorPK
+		copy(pk[:], bytes.Repeat([]byte{0x01}, len(pk)))
+		vstore := newValidatorStoreStub(map[phase0.ValidatorIndex]spectypes.ValidatorPK{1: pk})
 
-	var pk spectypes.ValidatorPK
-	copy(pk[:], bytes.Repeat([]byte{0x01}, len(pk)))
-	vstore := newValidatorStoreStub(map[phase0.ValidatorIndex]spectypes.ValidatorPK{1: pk})
+		pb := NewPrefetchingBeacon(zap.NewNop(), node, &cfg, vstore)
+		t.Cleanup(pb.committees.Stop)
 
-	pb := NewPrefetchingBeacon(zap.NewNop(), node, &cfg, vstore)
+		require.NoError(t, pb.ensureAttesterEpoch(context.Background(), epoch))
 
-	require.NoError(t, pb.ensureAttesterEpoch(context.Background(), epoch))
+		pb.muAtt.RLock()
+		duties := pb.attester[epoch]
+		pb.muAtt.RUnlock()
 
-	pb.muAtt.RLock()
-	duties := pb.attester[epoch]
-	pb.muAtt.RUnlock()
-
-	require.NotNil(t, duties)
-	duty, ok := duties[1]
-	require.True(t, ok)
-	assert.Equal(t, slot, duty.Slot)
-	var got spectypes.ValidatorPK
-	copy(got[:], duty.PubKey[:])
-	assert.Equal(t, pk, got)
-	assert.EqualValues(t, 2, duty.CommitteeIndex)
-	assert.EqualValues(t, len(committees[0].Validators), int(duty.CommitteeLength))
+		require.NotNil(t, duties)
+		duty, ok := duties[1]
+		require.True(t, ok)
+		assert.Equal(t, slot, duty.Slot)
+		var got spectypes.ValidatorPK
+		copy(got[:], duty.PubKey[:])
+		assert.Equal(t, pk, got)
+		assert.EqualValues(t, 2, duty.CommitteeIndex)
+		assert.EqualValues(t, len(committees[0].Validators), int(duty.CommitteeLength))
+	})
 }
 
 func TestPrefetchingBeaconEnsureProposerEpochBatchesIndices(t *testing.T) {
-	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
 
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
+		node := beaconmock.NewMockBeaconNode(ctrl)
 
-	node := beaconmock.NewMockBeaconNode(ctrl)
+		var requested []phase0.ValidatorIndex
+		node.EXPECT().ProposerDuties(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, _ phase0.Epoch, indices []phase0.ValidatorIndex) ([]*eth2apiv1.ProposerDuty, error) {
+			requested = append([]phase0.ValidatorIndex(nil), indices...)
+			return []*eth2apiv1.ProposerDuty{{ValidatorIndex: 5}}, nil
+		}).Times(1)
 
-	var requested []phase0.ValidatorIndex
-	node.EXPECT().ProposerDuties(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, _ phase0.Epoch, indices []phase0.ValidatorIndex) ([]*eth2apiv1.ProposerDuty, error) {
-		requested = append([]phase0.ValidatorIndex(nil), indices...)
-		return []*eth2apiv1.ProposerDuty{{ValidatorIndex: 5}}, nil
-	}).Times(1)
+		cfg := *networkconfig.TestNetwork.Beacon
+		pb := NewPrefetchingBeacon(zap.NewNop(), &committeeAwareMock{MockBeaconNode: node}, &cfg, nil)
+		t.Cleanup(pb.committees.Stop)
 
-	cfg := *networkconfig.TestNetwork.Beacon
-	pb := NewPrefetchingBeacon(zap.NewNop(), &committeeAwareMock{MockBeaconNode: node}, &cfg, nil)
+		indices := []phase0.ValidatorIndex{1, 2, 3}
+		require.NoError(t, pb.ensureProposerEpoch(context.Background(), 0, indices))
+		assert.ElementsMatch(t, indices, requested)
 
-	indices := []phase0.ValidatorIndex{1, 2, 3}
-	require.NoError(t, pb.ensureProposerEpoch(context.Background(), 0, indices))
-	assert.ElementsMatch(t, indices, requested)
-
-	pb.muProp.RLock()
-	defer pb.muProp.RUnlock()
-	assert.NotNil(t, pb.proposer[0])
+		pb.muProp.RLock()
+		defer pb.muProp.RUnlock()
+		assert.NotNil(t, pb.proposer[0])
+	})
 }
 
 func TestPrefetchingBeaconEnsureSyncPeriod(t *testing.T) {
-	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
 
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
+		node := beaconmock.NewMockBeaconNode(ctrl)
+		node.EXPECT().SyncCommitteeDuties(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, _ phase0.Epoch, _ []phase0.ValidatorIndex) ([]*eth2apiv1.SyncCommitteeDuty, error) {
+			return []*eth2apiv1.SyncCommitteeDuty{{ValidatorIndex: 7}}, nil
+		}).Times(1)
 
-	node := beaconmock.NewMockBeaconNode(ctrl)
-	node.EXPECT().SyncCommitteeDuties(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, _ phase0.Epoch, _ []phase0.ValidatorIndex) ([]*eth2apiv1.SyncCommitteeDuty, error) {
-		return []*eth2apiv1.SyncCommitteeDuty{{ValidatorIndex: 7}}, nil
-	}).Times(1)
+		cfg := *networkconfig.TestNetwork.Beacon
+		pb := NewPrefetchingBeacon(zap.NewNop(), &committeeAwareMock{MockBeaconNode: node}, &cfg, nil)
+		t.Cleanup(pb.committees.Stop)
 
-	cfg := *networkconfig.TestNetwork.Beacon
-	pb := NewPrefetchingBeacon(zap.NewNop(), &committeeAwareMock{MockBeaconNode: node}, &cfg, nil)
+		indices := []phase0.ValidatorIndex{7}
+		require.NoError(t, pb.ensureSyncPeriod(context.Background(), 0, indices))
 
-	indices := []phase0.ValidatorIndex{7}
-	require.NoError(t, pb.ensureSyncPeriod(context.Background(), 0, indices))
-
-	pb.muSync.RLock()
-	defer pb.muSync.RUnlock()
-	period := cfg.EstimatedSyncCommitteePeriodAtEpoch(0)
-	duties := pb.sync[period]
-	require.NotNil(t, duties)
-	require.NotNil(t, duties[7])
+		pb.muSync.RLock()
+		defer pb.muSync.RUnlock()
+		period := cfg.EstimatedSyncCommitteePeriodAtEpoch(0)
+		duties := pb.sync[period]
+		require.NotNil(t, duties)
+		require.NotNil(t, duties[7])
+	})
 }
 
 func TestPrefetchingBeaconCommitteesUnsupported(t *testing.T) {
-	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
 
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
+		node := beaconmock.NewMockBeaconNode(ctrl)
+		cfg := *networkconfig.TestNetwork.Beacon
+		pb := NewPrefetchingBeacon(zap.NewNop(), node, &cfg, nil)
+		t.Cleanup(pb.committees.Stop)
 
-	node := beaconmock.NewMockBeaconNode(ctrl)
-	cfg := *networkconfig.TestNetwork.Beacon
-	pb := NewPrefetchingBeacon(zap.NewNop(), node, &cfg, nil)
-
-	_, err := pb.committeesForEpoch(context.Background(), 0)
-	assert.ErrorIs(t, err, ErrCommitteesUnsupported)
+		_, err := pb.committeesForEpoch(context.Background(), 0)
+		assert.ErrorIs(t, err, ErrCommitteesUnsupported)
+	})
 }
 
 func TestPrefetchingBeaconEvictOldAttester(t *testing.T) {
-	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		cfg := *networkconfig.TestNetwork.Beacon
+		pb := NewPrefetchingBeacon(zap.NewNop(), nil, &cfg, nil)
+		t.Cleanup(pb.committees.Stop)
 
-	cfg := *networkconfig.TestNetwork.Beacon
-	pb := NewPrefetchingBeacon(zap.NewNop(), nil, &cfg, nil)
+		// Seed epochs: 4 (old-old), 5 (previous), 6 (anchor), 7 (future)
+		pb.muAtt.Lock()
+		pb.attester[4] = map[phase0.ValidatorIndex]*eth2apiv1.AttesterDuty{0: nil}
+		pb.attester[5] = map[phase0.ValidatorIndex]*eth2apiv1.AttesterDuty{0: nil}
+		pb.attester[6] = map[phase0.ValidatorIndex]*eth2apiv1.AttesterDuty{0: nil}
+		pb.attester[7] = map[phase0.ValidatorIndex]*eth2apiv1.AttesterDuty{0: nil}
+		pb.muAtt.Unlock()
 
-	// Seed epochs: 4 (old-old), 5 (previous), 6 (anchor), 7 (future)
-	pb.muAtt.Lock()
-	pb.attester[4] = map[phase0.ValidatorIndex]*eth2apiv1.AttesterDuty{0: nil}
-	pb.attester[5] = map[phase0.ValidatorIndex]*eth2apiv1.AttesterDuty{0: nil}
-	pb.attester[6] = map[phase0.ValidatorIndex]*eth2apiv1.AttesterDuty{0: nil}
-	pb.attester[7] = map[phase0.ValidatorIndex]*eth2apiv1.AttesterDuty{0: nil}
-	pb.muAtt.Unlock()
+		pb.evictOldAttesterCaches(6)
 
-	pb.evictOldAttesterCaches(6)
-
-	pb.muAtt.RLock()
-	defer pb.muAtt.RUnlock()
-	_, hasOldOld := pb.attester[4]
-	_, hasAnchor := pb.attester[6]
-	_, hasFuture := pb.attester[7]
-	_, hasPrev := pb.attester[5]
-	assert.False(t, hasOldOld, "epochs < anchor-1 must be evicted")
-	assert.True(t, hasPrev, "previous epoch must be kept")
-	assert.True(t, hasAnchor, "anchor must be kept")
-	assert.True(t, hasFuture, "future must be kept")
+		pb.muAtt.RLock()
+		defer pb.muAtt.RUnlock()
+		_, hasOldOld := pb.attester[4]
+		_, hasAnchor := pb.attester[6]
+		_, hasFuture := pb.attester[7]
+		_, hasPrev := pb.attester[5]
+		assert.False(t, hasOldOld, "epochs < anchor-1 must be evicted")
+		assert.True(t, hasPrev, "previous epoch must be kept")
+		assert.True(t, hasAnchor, "anchor must be kept")
+		assert.True(t, hasFuture, "future must be kept")
+	})
 }
 
 func TestPrefetchingBeaconEvictOldProposer(t *testing.T) {
-	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		cfg := *networkconfig.TestNetwork.Beacon
+		pb := NewPrefetchingBeacon(zap.NewNop(), nil, &cfg, nil)
+		t.Cleanup(pb.committees.Stop)
 
-	cfg := *networkconfig.TestNetwork.Beacon
-	pb := NewPrefetchingBeacon(zap.NewNop(), nil, &cfg, nil)
+		// Seed epochs: 9 (old-old), 10 (previous), 11 (anchor), 12 (future)
+		pb.muProp.Lock()
+		pb.proposer[9] = map[phase0.ValidatorIndex]*eth2apiv1.ProposerDuty{0: nil}
+		pb.proposer[10] = map[phase0.ValidatorIndex]*eth2apiv1.ProposerDuty{0: nil}
+		pb.proposer[11] = map[phase0.ValidatorIndex]*eth2apiv1.ProposerDuty{0: nil}
+		pb.proposer[12] = map[phase0.ValidatorIndex]*eth2apiv1.ProposerDuty{0: nil}
+		pb.muProp.Unlock()
 
-	// Seed epochs: 9 (old-old), 10 (previous), 11 (anchor), 12 (future)
-	pb.muProp.Lock()
-	pb.proposer[9] = map[phase0.ValidatorIndex]*eth2apiv1.ProposerDuty{0: nil}
-	pb.proposer[10] = map[phase0.ValidatorIndex]*eth2apiv1.ProposerDuty{0: nil}
-	pb.proposer[11] = map[phase0.ValidatorIndex]*eth2apiv1.ProposerDuty{0: nil}
-	pb.proposer[12] = map[phase0.ValidatorIndex]*eth2apiv1.ProposerDuty{0: nil}
-	pb.muProp.Unlock()
+		pb.evictOldProposerCaches(11)
 
-	pb.evictOldProposerCaches(11)
-
-	pb.muProp.RLock()
-	defer pb.muProp.RUnlock()
-	_, hasOldOld := pb.proposer[9]
-	_, hasAnchor := pb.proposer[11]
-	_, hasFuture := pb.proposer[12]
-	_, hasPrev := pb.proposer[10]
-	assert.False(t, hasOldOld, "epochs < anchor-1 must be evicted")
-	assert.True(t, hasPrev, "previous epoch must be kept")
-	assert.True(t, hasAnchor, "anchor must be kept")
-	assert.True(t, hasFuture, "future must be kept")
+		pb.muProp.RLock()
+		defer pb.muProp.RUnlock()
+		_, hasOldOld := pb.proposer[9]
+		_, hasAnchor := pb.proposer[11]
+		_, hasFuture := pb.proposer[12]
+		_, hasPrev := pb.proposer[10]
+		assert.False(t, hasOldOld, "epochs < anchor-1 must be evicted")
+		assert.True(t, hasPrev, "previous epoch must be kept")
+		assert.True(t, hasAnchor, "anchor must be kept")
+		assert.True(t, hasFuture, "future must be kept")
+	})
 }
 
 func TestPrefetchingBeaconEvictOldSyncCommittee(t *testing.T) {
-	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		cfg := *networkconfig.TestNetwork.Beacon
+		pb := NewPrefetchingBeacon(zap.NewNop(), nil, &cfg, nil)
+		t.Cleanup(pb.committees.Stop)
 
-	cfg := *networkconfig.TestNetwork.Beacon
-	pb := NewPrefetchingBeacon(zap.NewNop(), nil, &cfg, nil)
+		// Seed periods: 1 (old), 2 (anchor), 3 (future)
+		pb.muSync.Lock()
+		pb.sync[1] = map[phase0.ValidatorIndex]*eth2apiv1.SyncCommitteeDuty{0: nil}
+		pb.sync[2] = map[phase0.ValidatorIndex]*eth2apiv1.SyncCommitteeDuty{0: nil}
+		pb.sync[3] = map[phase0.ValidatorIndex]*eth2apiv1.SyncCommitteeDuty{0: nil}
+		pb.muSync.Unlock()
 
-	// Seed periods: 1 (old), 2 (anchor), 3 (future)
-	pb.muSync.Lock()
-	pb.sync[1] = map[phase0.ValidatorIndex]*eth2apiv1.SyncCommitteeDuty{0: nil}
-	pb.sync[2] = map[phase0.ValidatorIndex]*eth2apiv1.SyncCommitteeDuty{0: nil}
-	pb.sync[3] = map[phase0.ValidatorIndex]*eth2apiv1.SyncCommitteeDuty{0: nil}
-	pb.muSync.Unlock()
+		pb.evictOldSyncCommitteePeriods(2)
 
-	pb.evictOldSyncCommitteePeriods(2)
-
-	pb.muSync.RLock()
-	defer pb.muSync.RUnlock()
-	_, hasOld := pb.sync[1]
-	_, hasAnchor := pb.sync[2]
-	_, hasFuture := pb.sync[3]
-	assert.False(t, hasOld, "older than anchor period must be evicted")
-	assert.True(t, hasAnchor, "anchor period must be kept")
-	assert.True(t, hasFuture, "future period must be kept")
+		pb.muSync.RLock()
+		defer pb.muSync.RUnlock()
+		_, hasOld := pb.sync[1]
+		_, hasAnchor := pb.sync[2]
+		_, hasFuture := pb.sync[3]
+		assert.False(t, hasOld, "older than anchor period must be evicted")
+		assert.True(t, hasAnchor, "anchor period must be kept")
+		assert.True(t, hasFuture, "future period must be kept")
+	})
 }

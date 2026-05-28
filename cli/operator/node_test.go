@@ -1,6 +1,13 @@
 package operator
 
 import (
+	"bytes"
+	"context"
+	"io"
+	"net"
+	"net/http"
+	"net/http/httptest"
+	"strconv"
 	"testing"
 	"time"
 
@@ -11,9 +18,158 @@ import (
 
 	"github.com/ssvlabs/ssv/networkconfig"
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
+	"github.com/ssvlabs/ssv/ssvsigner"
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
+
+func newTestSSVSignerClient(t *testing.T, register func(mux *http.ServeMux)) *ssvsigner.Client {
+	mux := http.NewServeMux()
+	if register != nil {
+		register(mux)
+	}
+
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+
+	return ssvsigner.NewClient(server.URL, ssvsigner.WithLogger(zap.NewNop()))
+}
+
+func Test_warnIfSSVAPIAddressUnset(t *testing.T) {
+	t.Parallel()
+
+	t.Run("warns when address is empty", func(t *testing.T) {
+		core, recorded := observer.New(zapcore.WarnLevel)
+		logger := zap.New(core)
+
+		warnIfSSVAPIAddressUnset(logger, "", 16000)
+
+		logs := recorded.All()
+		require.Len(t, logs, 1)
+		require.Equal(t, zapcore.WarnLevel, logs[0].Level)
+		require.Equal(t, "SSV API address not configured; listening on all interfaces", logs[0].Message)
+		require.EqualValues(t, 16000, logs[0].ContextMap()["port"])
+		require.Equal(t, "SSVAPIAddress", logs[0].ContextMap()["config_key"])
+		require.Equal(t, "127.0.0.1", logs[0].ContextMap()["recommended_address"])
+	})
+
+	t.Run("does not warn when address is set", func(t *testing.T) {
+		core, recorded := observer.New(zapcore.WarnLevel)
+		logger := zap.New(core)
+
+		warnIfSSVAPIAddressUnset(logger, "127.0.0.1", 16000)
+
+		require.Len(t, recorded.All(), 0)
+	})
+}
+
+func TestDecideNetworkKeyProtectors(t *testing.T) {
+	t.Run("exporter ignores operator key", func(t *testing.T) {
+		operatorPrivKey, err := keys.GeneratePrivateKey()
+		require.NoError(t, err)
+
+		protectFn, unprotectFn, err := decideNetworkKeyProtectors(context.Background(), zap.NewNop(), nil, true, operatorPrivKey, nil)
+		require.NoError(t, err)
+		require.Nil(t, protectFn)
+		require.Nil(t, unprotectFn)
+	})
+
+	t.Run("exporter ignores ssv-signer config", func(t *testing.T) {
+		client := newTestSSVSignerClient(t, nil)
+
+		protectFn, unprotectFn, err := decideNetworkKeyProtectors(context.Background(), zap.NewNop(), nil, true, nil, client)
+		require.NoError(t, err)
+		require.Nil(t, protectFn)
+		require.Nil(t, unprotectFn)
+	})
+
+	t.Run("non-exporter keeps local operator key", func(t *testing.T) {
+		operatorPrivKey, err := keys.GeneratePrivateKey()
+		require.NoError(t, err)
+
+		protectFn, unprotectFn, err := decideNetworkKeyProtectors(context.Background(), zap.NewNop(), nil, false, operatorPrivKey, nil)
+		require.NoError(t, err)
+		require.NotNil(t, protectFn)
+		require.NotNil(t, unprotectFn)
+
+		plaintext := []byte("local-protected-payload")
+		protectedValue, err := protectFn(context.Background(), plaintext)
+		require.NoError(t, err)
+		require.NotEqual(t, plaintext, protectedValue)
+
+		decryptedValue, err := unprotectFn(context.Background(), protectedValue)
+		require.NoError(t, err)
+		require.Equal(t, plaintext, decryptedValue)
+	})
+
+	t.Run("non-exporter keeps ssv-signer client", func(t *testing.T) {
+		probeClient := newTestSSVSignerClient(t, func(mux *http.ServeMux) {
+			mux.HandleFunc(ssvsigner.PathOperatorEncrypt, func(w http.ResponseWriter, r *http.Request) {
+				payload, err := io.ReadAll(r.Body)
+				require.NoError(t, err)
+				_, err = w.Write(append([]byte("encrypted:"), payload...))
+				require.NoError(t, err)
+			})
+			mux.HandleFunc(ssvsigner.PathOperatorDecrypt, func(w http.ResponseWriter, r *http.Request) {
+				payload, err := io.ReadAll(r.Body)
+				require.NoError(t, err)
+				_, err = w.Write(bytes.TrimPrefix(payload, []byte("encrypted:")))
+				require.NoError(t, err)
+			})
+		})
+
+		protectFn, unprotectFn, err := decideNetworkKeyProtectors(context.Background(), zap.NewNop(), nil, false, nil, probeClient)
+		require.NoError(t, err)
+		require.NotNil(t, protectFn)
+		require.NotNil(t, unprotectFn)
+
+		plaintext := []byte("remote-protected-payload")
+		protectedValue, err := protectFn(context.Background(), plaintext)
+		require.NoError(t, err)
+		require.Equal(t, []byte("encrypted:"+string(plaintext)), protectedValue)
+
+		decryptedValue, err := unprotectFn(context.Background(), protectedValue)
+		require.NoError(t, err)
+		require.Equal(t, plaintext, decryptedValue)
+	})
+}
+
+func Test_ssvAPIListenAddress(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name    string
+		address string
+		port    int
+		want    string
+	}{
+		{
+			name: "empty address listens on all interfaces",
+			port: 16000,
+			want: ":16000",
+		},
+		{
+			name:    "ipv4 loopback",
+			address: "127.0.0.1",
+			port:    16000,
+			want:    "127.0.0.1:16000",
+		},
+		{
+			name:    "ipv6 loopback",
+			address: "::1",
+			port:    16000,
+			want:    "[::1]:16000",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := net.JoinHostPort(tc.address, strconv.Itoa(tc.port))
+			require.Equal(t, tc.want, got)
+		})
+	}
+}
 
 func Test_verifyConfig(t *testing.T) {
 	logger := zap.New(zapcore.NewNopCore(), zap.WithFatalHook(zapcore.WriteThenPanic))
@@ -33,7 +189,7 @@ func Test_verifyConfig(t *testing.T) {
 			UsingLocalEvents: true,
 			UsingSSVSigner:   true,
 		}
-		require.NoError(t, validateConfig(nodeStorage, c.NetworkName, c.UsingLocalEvents, c.UsingSSVSigner))
+		require.NoError(t, validateConfig(nodeStorage, c.NetworkName, c.UsingLocalEvents, c.UsingSSVSigner, false))
 
 		storedConfig, found, err := nodeStorage.GetConfig(nil)
 		require.NoError(t, err)
@@ -50,7 +206,7 @@ func Test_verifyConfig(t *testing.T) {
 			UsingSSVSigner:   true,
 		}
 		require.NoError(t, nodeStorage.SaveConfig(nil, c))
-		require.NoError(t, validateConfig(nodeStorage, c.NetworkName, c.UsingLocalEvents, c.UsingSSVSigner))
+		require.NoError(t, validateConfig(nodeStorage, c.NetworkName, c.UsingLocalEvents, c.UsingSSVSigner, false))
 
 		storedConfig, found, err := nodeStorage.GetConfig(nil)
 		require.NoError(t, err)
@@ -68,7 +224,7 @@ func Test_verifyConfig(t *testing.T) {
 		}
 		require.NoError(t, nodeStorage.SaveConfig(nil, c))
 		require.ErrorContains(t,
-			validateConfig(nodeStorage, testNetworkName, true, true),
+			validateConfig(nodeStorage, testNetworkName, true, true, false),
 			"incompatible config change: network mismatch. Stored network testnet:alan1 does not match current network testnet:alan. The database must be removed or reinitialized",
 		)
 
@@ -88,7 +244,7 @@ func Test_verifyConfig(t *testing.T) {
 		}
 		require.NoError(t, nodeStorage.SaveConfig(nil, c))
 		require.ErrorContains(t,
-			validateConfig(nodeStorage, testNetworkName, c.UsingLocalEvents, c.UsingSSVSigner),
+			validateConfig(nodeStorage, testNetworkName, c.UsingLocalEvents, c.UsingSSVSigner, false),
 			"incompatible config change: network mismatch. Stored network testnet:alan1 does not match current network testnet:alan. The database must be removed or reinitialized",
 		)
 
@@ -108,7 +264,7 @@ func Test_verifyConfig(t *testing.T) {
 		}
 		require.NoError(t, nodeStorage.SaveConfig(nil, c))
 		require.ErrorContains(t,
-			validateConfig(nodeStorage, c.NetworkName, true, true),
+			validateConfig(nodeStorage, c.NetworkName, true, true, false),
 			"incompatible config change: enabling local events is not allowed. The database must be removed or reinitialized",
 		)
 
@@ -128,7 +284,7 @@ func Test_verifyConfig(t *testing.T) {
 		}
 		require.NoError(t, nodeStorage.SaveConfig(nil, c))
 		require.ErrorContains(t,
-			validateConfig(nodeStorage, c.NetworkName, false, true),
+			validateConfig(nodeStorage, c.NetworkName, false, true, false),
 			"incompatible config change: disabling local events is not allowed. The database must be removed or reinitialized",
 		)
 
@@ -148,7 +304,7 @@ func Test_verifyConfig(t *testing.T) {
 		}
 		require.NoError(t, nodeStorage.SaveConfig(nil, c))
 		require.ErrorContains(t,
-			validateConfig(nodeStorage, c.NetworkName, true, false),
+			validateConfig(nodeStorage, c.NetworkName, true, false, false),
 			"incompatible config change: disabling ssv-signer is not allowed. The database must be removed or reinitialized",
 		)
 
@@ -168,9 +324,26 @@ func Test_verifyConfig(t *testing.T) {
 		}
 		require.NoError(t, nodeStorage.SaveConfig(nil, c))
 		require.ErrorContains(t,
-			validateConfig(nodeStorage, c.NetworkName, true, true),
+			validateConfig(nodeStorage, c.NetworkName, true, true, false),
 			"incompatible config change: enabling ssv-signer is not allowed. The database must be removed or reinitialized",
 		)
+
+		storedConfig, found, err := nodeStorage.GetConfig(nil)
+		require.NoError(t, err)
+		require.True(t, found)
+		require.Equal(t, c, storedConfig)
+
+		require.NoError(t, nodeStorage.DeleteConfig(nil))
+	})
+
+	t.Run("exporter ignores stored signer mode", func(t *testing.T) {
+		c := &operatorstorage.ConfigLock{
+			NetworkName:      testNetworkName,
+			UsingLocalEvents: true,
+			UsingSSVSigner:   true,
+		}
+		require.NoError(t, nodeStorage.SaveConfig(nil, c))
+		require.NoError(t, validateConfig(nodeStorage, c.NetworkName, true, false, true))
 
 		storedConfig, found, err := nodeStorage.GetConfig(nil)
 		require.NoError(t, err)
@@ -292,5 +465,48 @@ func Test_validateProposerDelayConfig(t *testing.T) {
 				require.Equal(t, 1000*time.Millisecond, fields["max_safe_proposer_delay"])
 			})
 		}
+	})
+}
+
+func Test_probeRemoteNetworkKeyProtector(t *testing.T) {
+	t.Run("uses remote signer encrypt and decrypt endpoints when supported", func(t *testing.T) {
+		client := newTestSSVSignerClient(t, func(mux *http.ServeMux) {
+			mux.HandleFunc(ssvsigner.PathOperatorEncrypt, func(w http.ResponseWriter, r *http.Request) {
+				require.Equal(t, http.MethodPost, r.Method)
+				payload, err := io.ReadAll(r.Body)
+				require.NoError(t, err)
+				_, err = w.Write(append([]byte("encrypted:"), payload...))
+				require.NoError(t, err)
+			})
+			mux.HandleFunc(ssvsigner.PathOperatorDecrypt, func(w http.ResponseWriter, r *http.Request) {
+				require.Equal(t, http.MethodPost, r.Method)
+				payload, err := io.ReadAll(r.Body)
+				require.NoError(t, err)
+				_, err = w.Write(bytes.TrimPrefix(payload, []byte("encrypted:")))
+				require.NoError(t, err)
+			})
+		})
+
+		err := probeRemoteNetworkKeyProtector(context.Background(), client)
+		require.NoError(t, err)
+	})
+
+	t.Run("returns unsupported when remote signer does not support remote data protection", func(t *testing.T) {
+		client := newTestSSVSignerClient(t, nil)
+
+		err := probeRemoteNetworkKeyProtector(context.Background(), client)
+		require.ErrorIs(t, err, ssvsigner.ErrOperatorDataProtectionUnsupported)
+	})
+
+	t.Run("fails instead of downgrading on transient remote signer fetch error", func(t *testing.T) {
+		client := newTestSSVSignerClient(t, func(mux *http.ServeMux) {
+			mux.HandleFunc(ssvsigner.PathOperatorEncrypt, func(w http.ResponseWriter, r *http.Request) {
+				http.Error(w, "temporary upstream failure", http.StatusInternalServerError)
+			})
+		})
+
+		err := probeRemoteNetworkKeyProtector(context.Background(), client)
+		require.ErrorContains(t, err, "probe remote data protector encrypt")
+		require.ErrorContains(t, err, "unexpected status: 500")
 	})
 }

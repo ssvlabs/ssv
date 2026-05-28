@@ -77,15 +77,16 @@ func NewValidator(ctx context.Context, cancel func(), logger *zap.Logger, option
 	}
 
 	// some additional steps to prepare duty runners for handling duties
-	for _, dutyRunner := range options.DutyRunners {
-		dutyRunner.SetTimeoutFunc(v.onTimeout)
-		v.Queues[dutyRunner.GetRole()] = queue.New(
+	for role, dutyRunner := range options.DutyRunners {
+		runnerIdentifier := spectypes.NewMsgID(v.NetworkConfig.DomainType, v.Share.ValidatorPubKey[:], role)
+		dutyRunner.SetQBFTRoundTimerF(v.newQBFTRoundTimerF(runnerIdentifier))
+		v.Queues[role] = queue.New(
 			logger,
 			options.QueueSize,
-			queue.WithInboxSizeMetric(
+			queue.WithQueueMetrics(
 				queue.InboxSizeMetric,
 				queue.ValidatorQueueMetricType,
-				queue.ValidatorMetricID(dutyRunner.GetRole()),
+				queue.ValidatorMetricID(role),
 			),
 		)
 	}
@@ -160,8 +161,8 @@ func (v *Validator) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 		span.AddEvent("process validator message = consensus message")
 
 		qbftMsg, ok := msg.Body.(*specqbft.Message)
-		if !ok {
-			return fmt.Errorf("could not decode consensus message from network message")
+		if !ok || qbftMsg == nil {
+			return fmt.Errorf("could not decode consensus message body from network message, type: %T", msg.Body)
 		}
 		if err := qbftMsg.Validate(); err != nil {
 			return fmt.Errorf("invalid QBFT Message: %w", err)
@@ -174,8 +175,8 @@ func (v *Validator) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 		return nil
 	case spectypes.SSVPartialSignatureMsgType:
 		signedMsg, ok := msg.Body.(*spectypes.PartialSignatureMessages)
-		if !ok {
-			return fmt.Errorf("could not decode post consensus message from network message")
+		if !ok || signedMsg == nil {
+			return fmt.Errorf("could not decode partial-sig message body from network message, type: %T", msg.Body)
 		}
 
 		if len(msg.SignedSSVMessage.OperatorIDs) != 1 {
@@ -202,8 +203,8 @@ func (v *Validator) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 		return nil
 	case message.SSVEventMsgType:
 		eventMsg, ok := msg.Body.(*ssvtypes.EventMsg)
-		if !ok {
-			return fmt.Errorf("could not decode event message")
+		if !ok || eventMsg == nil {
+			return fmt.Errorf("could not decode event message body, type: %T", msg.Body)
 		}
 
 		switch eventMsg.Type {
@@ -212,11 +213,11 @@ func (v *Validator) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 
 			timeoutData, err := eventMsg.GetTimeoutData()
 			if err != nil {
-				return fmt.Errorf("get timeout data: %w", err)
+				return fmt.Errorf("event message: get timeout data: %w", err)
 			}
 
-			if err := dutyRunner.OnTimeoutQBFT(ctx, logger, timeoutData); err != nil {
-				return fmt.Errorf("timeout event: %w", err)
+			if err := dutyRunner.OnQBFTRoundTimeout(ctx, logger, timeoutData); err != nil {
+				return fmt.Errorf("process event message qbft-timeout: %w", err)
 			}
 
 			return nil
@@ -224,7 +225,7 @@ func (v *Validator) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 			span.AddEvent("process validator message = event(execute duty)")
 
 			if err := v.OnExecuteDuty(ctx, logger, eventMsg); err != nil {
-				return fmt.Errorf("execute duty event: %w", err)
+				return fmt.Errorf("process event message execute-duty: %w", err)
 			}
 
 			return nil

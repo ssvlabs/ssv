@@ -5,9 +5,9 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel/codes"
@@ -27,12 +27,19 @@ import (
 // it will be called in a new goroutine to avoid concurrency issues
 type NewDecidedHandler func(msg qbftstorage.Participation)
 
-// Controller is a QBFT coordinator responsible for starting and following the entire life cycle of multiple QBFT InstanceContainer
+// Controller is a QBFT coordinator responsible for starting and following the entire life cycle of multiple QBFT Instances
 type Controller struct {
 	Identifier []byte
-	Height     specqbft.Height // incremental Height for InstanceContainer
-	// StoredInstances stores the last HistoricalInstanceCapacity in an array for message processing purposes.
-	StoredInstances   InstanceContainer
+
+	// LatestInstanceHeight is the height of the latest Instance Controller spun up. That latest instance
+	// is the "relevant" one currently driving consensus.
+	// JSON-tagged as "Height" to preserve compatibility with existing spec-test fixtures.
+	LatestInstanceHeight specqbft.Height `json:"Height"`
+	// RecentInstances keeps track of N latest instances Controller has worked with, so late messages can still be
+	// matched to their respective instance.
+	// JSON-tagged as "StoredInstances" to preserve compatibility with existing spec-test fixtures.
+	RecentInstances Instances `json:"StoredInstances"`
+
 	CommitteeMember   *spectypes.CommitteeMember
 	OperatorSigner    ssvtypes.OperatorSigner `json:"-"`
 	NewDecidedHandler NewDecidedHandler       `json:"-"`
@@ -48,13 +55,13 @@ func NewController(
 	fullNode bool,
 ) *Controller {
 	return &Controller{
-		Identifier:      identifier,
-		Height:          specqbft.FirstHeight,
-		CommitteeMember: committeeMember,
-		StoredInstances: make(InstanceContainer, 0, InstanceContainerDefaultCapacity),
-		config:          config,
-		OperatorSigner:  signer,
-		fullNode:        fullNode,
+		Identifier:           identifier,
+		LatestInstanceHeight: specqbft.FirstHeight,
+		CommitteeMember:      committeeMember,
+		RecentInstances:      make(Instances, 0, InstancesDefaultCapacity),
+		config:               config,
+		OperatorSigner:       signer,
+		fullNode:             fullNode,
 	}
 }
 
@@ -65,6 +72,7 @@ func (c *Controller) StartNewInstance(
 	height specqbft.Height,
 	value []byte,
 	valueChecker ssv.ValueChecker,
+	roundTimerF ssv.QBFTRoundTimerF,
 ) (*instance.Instance, error) {
 	ctx, span := tracer.Start(ctx,
 		observability.InstrumentName(observabilityNamespace, "qbft.controller.start"),
@@ -75,58 +83,75 @@ func (c *Controller) StartNewInstance(
 		return nil, traces.Errorf(span, "value invalid: %w", err)
 	}
 
-	if height < c.Height {
-		return nil, spectypes.WrapError(spectypes.StartInstanceErrorCode, traces.Errorf(span, "attempting to start an instance with a past height"))
+	if height < c.LatestInstanceHeight {
+		return nil, spectypes.WrapError(spectypes.StartInstanceErrorCode, traces.Errorf(
+			span,
+			"attempting to start an instance with a past height %d, current instance height %d",
+			height,
+			c.LatestInstanceHeight,
+		),
+		)
 	}
 
-	if c.StoredInstances.FindInstance(height) != nil {
-		return nil, spectypes.WrapError(spectypes.InstanceAlreadyRunningErrorCode, traces.Errorf(span, "instance already running"))
+	if c.RecentInstances.FindInstance(height) != nil {
+		return nil, spectypes.WrapError(spectypes.InstanceAlreadyRunningErrorCode, traces.Errorf(
+			span,
+			"instance with height %d already running",
+			height,
+		))
 	}
 
-	c.Height = height
-
-	newInstance := instance.NewInstance(logger, c.GetConfig(), c.CommitteeMember, c.Identifier, c.Height, c.OperatorSigner)
-	c.StoredInstances.addNewInstance(newInstance)
-	newInstance.Start(ctx, value, height, valueChecker)
-	c.forceStopAllInstanceExceptCurrent()
+	// Create & start a new instance, and also terminate all the older instances after that as "no longer relevant".
+	// NOTE: the c.markRecentInstancesIrrelevant() call comes first because `addNewInstance` might evict an instance
+	//       from c.RecentInstances, meaning c.markRecentInstancesIrrelevant() will miss it if called after.
+	c.markRecentInstancesIrrelevant()
+	newInstance := instance.NewInstance(
+		ctx,
+		logger,
+		c.GetConfig(),
+		c.CommitteeMember,
+		c.Identifier,
+		height,
+		c.OperatorSigner,
+		roundTimerF,
+	)
+	newInstance.Start(ctx, value, valueChecker)
+	c.RecentInstances.addNewInstance(newInstance)
+	c.LatestInstanceHeight = height
 
 	span.SetStatus(codes.Ok, "")
 
 	return newInstance, nil
 }
 
-func (c *Controller) forceStopAllInstanceExceptCurrent() {
-	for _, i := range c.StoredInstances {
-		if i.State.Height != c.Height {
-			i.ForceStop()
-		}
+// markRecentInstancesIrrelevant marks all recent instances as irrelevant.
+func (c *Controller) markRecentInstancesIrrelevant() {
+	for _, i := range c.RecentInstances {
+		i.MarkIrrelevant()
 	}
 }
 
 // ProcessMsg processes a new msg, returns decided message or error
-func (c *Controller) ProcessMsg(ctx context.Context, logger *zap.Logger, signedMessage *spectypes.SignedSSVMessage) (*spectypes.SignedSSVMessage, error) {
+func (c *Controller) ProcessMsg(
+	ctx context.Context,
+	logger *zap.Logger,
+	signedMessage *spectypes.SignedSSVMessage,
+	roundTimerF ssv.QBFTRoundTimerF,
+) (*spectypes.SignedSSVMessage, error) {
 	msg, err := specqbft.NewProcessingMessage(signedMessage)
 	if err != nil {
-		return nil, errors.New("could not create ProcessingMessage from signed message")
+		return nil, fmt.Errorf("could not create ProcessingMessage from signed message: %w", err)
 	}
 
-	if err := c.BaseMsgValidation(msg); err != nil {
-		return nil, errors.Wrap(err, "invalid msg")
+	if !bytes.Equal(c.Identifier, msg.QBFTMessage.Identifier) {
+		return nil, spectypes.NewError(spectypes.MessageIdentifierInvalidErrorCode, "message doesn't belong to Identifier")
 	}
 
-	/**
-	Main controller processing flow
-	_______________________________
-	All decided msgs are processed the same, out of instance.
-	All valid future msgs are saved in a container and might be referenced later if/when a not-future message arrives.
-	All other msgs (not future or decided) are processed normally by an existing instance (if found).
-	*/
 	if c.isDecidedMsg(msg) {
-		return c.UponDecided(msg)
+		return c.UponDecided(logger, msg, roundTimerF)
 	}
 
-	isFutureMsg := c.isFutureMessage(msg)
-	if isFutureMsg {
+	if c.isFutureMessage(msg) {
 		return nil, NewRetryableError(spectypes.WrapError(spectypes.FutureMessageErrorCode, ErrFutureConsensusMsg))
 	}
 
@@ -134,14 +159,12 @@ func (c *Controller) ProcessMsg(ctx context.Context, logger *zap.Logger, signedM
 }
 
 func (c *Controller) UponExistingInstanceMsg(ctx context.Context, logger *zap.Logger, msg *specqbft.ProcessingMessage) (*spectypes.SignedSSVMessage, error) {
-	inst := c.StoredInstances.FindInstance(msg.QBFTMessage.Height)
+	inst := c.RecentInstances.FindInstance(msg.QBFTMessage.Height)
 	if inst == nil {
 		return nil, NewRetryableError(ErrInstanceNotFound)
 	}
 
 	prevDecided, _ := inst.IsDecided()
-
-	// if previously decided, we don't process more messages
 	if prevDecided {
 		return nil, spectypes.NewError(spectypes.SkipConsensusMessageAsInstanceIsDecidedErrorCode, "not processing consensus message since instance is already decided")
 	}
@@ -151,9 +174,8 @@ func (c *Controller) UponExistingInstanceMsg(ctx context.Context, logger *zap.Lo
 		return nil, NewRetryableError(err)
 	}
 	if err != nil {
-		return nil, errors.Wrap(err, "could not process msg")
+		return nil, fmt.Errorf("could not process msg: %w", err)
 	}
-
 	if !decided {
 		return nil, nil
 	}
@@ -166,16 +188,6 @@ func (c *Controller) UponExistingInstanceMsg(ctx context.Context, logger *zap.Lo
 	return decidedMsg, nil
 }
 
-// BaseMsgValidation returns error if msg is invalid (base validation)
-func (c *Controller) BaseMsgValidation(msg *specqbft.ProcessingMessage) error {
-	// verify msg belongs to controller
-	if !bytes.Equal(c.Identifier, msg.QBFTMessage.Identifier) {
-		return spectypes.NewError(spectypes.MessageIdentifierInvalidErrorCode, "message doesn't belong to Identifier")
-	}
-
-	return nil
-}
-
 // GetIdentifier returns QBFT Identifier, used to identify messages
 func (c *Controller) GetIdentifier() []byte {
 	return c.Identifier
@@ -183,12 +195,12 @@ func (c *Controller) GetIdentifier() []byte {
 
 // isFutureMessage tells whether the provided message height is from a future instance.
 // It takes into consideration a special case where FirstHeight instance didn't start yet
-// but c.Height == FirstHeight.
+// but c.CurrentInstanceHeight == FirstHeight.
 func (c *Controller) isFutureMessage(msg *specqbft.ProcessingMessage) bool {
-	if c.Height == specqbft.FirstHeight && c.StoredInstances.FindInstance(c.Height) == nil {
+	if c.LatestInstanceHeight == specqbft.FirstHeight && c.RecentInstances.FindInstance(c.LatestInstanceHeight) == nil {
 		return true
 	}
-	if msg.QBFTMessage.Height > c.Height {
+	if msg.QBFTMessage.Height > c.LatestInstanceHeight {
 		return true
 	}
 	return false
@@ -198,7 +210,7 @@ func (c *Controller) isFutureMessage(msg *specqbft.ProcessingMessage) bool {
 func (c *Controller) GetRoot() ([32]byte, error) {
 	marshaledRoot, err := json.Marshal(c)
 	if err != nil {
-		return [32]byte{}, errors.Wrap(err, "could not encode controller")
+		return [32]byte{}, fmt.Errorf("could not encode controller: %w", err)
 	}
 	ret := sha256.Sum256(marshaledRoot)
 	return ret, nil
@@ -213,15 +225,7 @@ func (c *Controller) Encode() ([]byte, error) {
 func (c *Controller) Decode(data []byte) error {
 	err := json.Unmarshal(data, &c)
 	if err != nil {
-		return errors.Wrap(err, "could not decode controller")
-	}
-
-	config := c.GetConfig()
-	for _, i := range c.StoredInstances {
-		if i != nil {
-			// TODO-spec-align changed due to instance and controller are not in same package as in spec, do we still need it for test?
-			i.SetConfig(config)
-		}
+		return fmt.Errorf("could not decode controller: %w", err)
 	}
 	return nil
 }
@@ -229,7 +233,7 @@ func (c *Controller) Decode(data []byte) error {
 func (c *Controller) broadcastDecided(aggregatedCommit *spectypes.SignedSSVMessage) error {
 	if err := c.GetConfig().GetNetwork().Broadcast(aggregatedCommit.SSVMessage.GetID(), aggregatedCommit); err != nil {
 		// We do not return error here, just Log broadcasting error.
-		return errors.Wrap(err, "could not broadcast decided")
+		return fmt.Errorf("could not broadcast decided: %w", err)
 	}
 	return nil
 }

@@ -1,12 +1,11 @@
 module github.com/ssvlabs/ssv/scripts/differ
 
-go 1.24
+go 1.26
 
 require (
 	github.com/alecthomas/kong v0.7.1
 	github.com/aquasecurity/table v1.8.0
 	github.com/cespare/xxhash/v2 v2.2.0
-	github.com/pkg/errors v0.9.1
 	github.com/stretchr/testify v1.8.0
 	gopkg.in/yaml.v3 v3.0.1
 )

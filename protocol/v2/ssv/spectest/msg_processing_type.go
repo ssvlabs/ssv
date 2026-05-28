@@ -4,12 +4,12 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectests "github.com/ssvlabs/ssv-spec/qbft/spectest/tests"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -20,8 +20,9 @@ import (
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
 	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	ssvprotocoltesting "github.com/ssvlabs/ssv/protocol/v2/ssv/testing"
@@ -54,7 +55,7 @@ func (test *MsgProcessingSpecTest) FullName() string {
 }
 
 func RunMsgProcessing(t *testing.T, test *MsgProcessingSpecTest) {
-	logger := log.TestLogger(t)
+	logger := protocoltesting.SpectestLogger(t)
 	test.overrideStateComparison(t)
 	test.RunAsPartOfMultiTest(t, logger)
 }
@@ -77,30 +78,34 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 	valCheck := createValueChecker(test.Runner)
 	switch test.Runner.(type) {
 	case *runner.CommitteeRunner:
-		for _, inst := range test.Runner.(*runner.CommitteeRunner).BaseRunner.QBFTController.StoredInstances {
+		for _, inst := range test.Runner.(*runner.CommitteeRunner).QBFTController.RecentInstances {
 			if inst.ValueChecker == nil {
 				inst.ValueChecker = valCheck
 			}
 		}
 	case *runner.AggregatorRunner:
-		for _, inst := range test.Runner.(*runner.AggregatorRunner).BaseRunner.QBFTController.StoredInstances {
+		for _, inst := range test.Runner.(*runner.AggregatorRunner).QBFTController.RecentInstances {
 			if inst.ValueChecker == nil {
 				inst.ValueChecker = valCheck
 			}
 		}
 	case *runner.ProposerRunner:
-		for _, inst := range test.Runner.(*runner.ProposerRunner).BaseRunner.QBFTController.StoredInstances {
+		for _, inst := range test.Runner.(*runner.ProposerRunner).QBFTController.RecentInstances {
 			if inst.ValueChecker == nil {
 				inst.ValueChecker = valCheck
 			}
 		}
 	case *runner.SyncCommitteeAggregatorRunner:
-		for _, inst := range test.Runner.(*runner.SyncCommitteeAggregatorRunner).BaseRunner.QBFTController.StoredInstances {
+		for _, inst := range test.Runner.(*runner.SyncCommitteeAggregatorRunner).QBFTController.RecentInstances {
 			if inst.ValueChecker == nil {
 				inst.ValueChecker = valCheck
 			}
 		}
 	}
+
+	test.Runner.SetQBFTRoundTimerF(func(_ context.Context, _ *zap.Logger, _ phase0.Slot) ssv.QBFTRoundTimer {
+		return roundtimer.NewTestingTimer()
+	})
 
 	var v *validator.Validator
 	var c *validator.Committee
@@ -117,8 +122,8 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 			c.Runners[test.Duty.DutySlot()] = r
 
 			// Inform the duty guard of the running duty, if any, so that it won't reject it.
-			if r.BaseRunner.State != nil && r.BaseRunner.State.CurrentDuty != nil {
-				duty, ok := r.BaseRunner.State.CurrentDuty.(*spectypes.CommitteeDuty)
+			if r.State != nil && r.State.CurrentDuty != nil {
+				duty, ok := r.State.CurrentDuty.(*spectypes.CommitteeDuty)
 				if !ok {
 					panic("starting duty not found")
 				}
@@ -148,8 +153,13 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 				lastErr = err
 			}
 			if test.DecidedSlashable && IsQBFTProposalMessage(msg) {
+				consensusMsg, err := specqbft.DecodeMessage(msg.SSVMessage.Data)
+				if err != nil {
+					panic(err)
+				}
+				slot := phase0.Slot(consensusMsg.Height)
 				for _, validatorShare := range test.Runner.GetShares() {
-					test.Runner.GetSigner().(*ekm.TestingKeyManagerAdapter).AddSlashableSlot(validatorShare.SharePubKey, spectestingutils.TestingDutySlot)
+					test.Runner.GetSigner().(*ekm.TestingKeyManagerAdapter).AddSlashableSlot(validatorShare.SharePubKey, slot)
 				}
 			}
 		}
@@ -185,6 +195,7 @@ func (test *MsgProcessingSpecTest) RunAsPartOfMultiTest(t *testing.T, logger *za
 	network := &spectestingutils.TestingNetwork{}
 	var beaconNetwork *protocoltesting.BeaconNodeWrapped
 	var committee []*spectypes.Operator
+	actualRunner := test.Runner
 
 	switch test.Runner.(type) {
 	case *runner.CommitteeRunner:
@@ -193,6 +204,7 @@ func (test *MsgProcessingSpecTest) RunAsPartOfMultiTest(t *testing.T, logger *za
 			runnerInstance = runner
 			break
 		}
+		actualRunner = runnerInstance
 		network = runnerInstance.GetNetwork().(*spectestingutils.TestingNetwork)
 		beaconNetwork = runnerInstance.GetBeaconNode().(*protocoltesting.BeaconNodeWrapped)
 		committee = c.CommitteeMember.Committee
@@ -215,23 +227,34 @@ func (test *MsgProcessingSpecTest) RunAsPartOfMultiTest(t *testing.T, logger *za
 	assertRootsRelaxed(t, test.BeaconBroadcastedRoots, beaconNetwork.GetBroadcastedRoots())
 
 	// post root
-	postRoot, err := test.Runner.GetRoot()
+	if !test.DontStartDuty {
+		if proposerRunner, ok := actualRunner.(*runner.ProposerRunner); ok {
+			normalizeExpectedProposerStartValues(proposerRunner)
+		}
+	}
+	postRoot, err := actualRunner.GetRoot()
 	require.NoError(t, err)
 
-	if test.PostDutyRunnerStateRoot != hex.EncodeToString(postRoot[:]) {
-		diff := dumpState(t, test.Name, test.Runner, test.PostDutyRunnerState)
-		logger.Error("post runner state not equal", zap.String("state", diff))
+	actualPostRoot := hex.EncodeToString(postRoot[:])
+	if test.PostDutyRunnerStateRoot != actualPostRoot {
+		diff := dumpState(t, test.Name, actualRunner, test.PostDutyRunnerState)
+		require.EqualValues(t, test.PostDutyRunnerStateRoot, actualPostRoot, "post runner state not equal\n%s\n", diff)
 	}
 }
 
 func (test *MsgProcessingSpecTest) overrideStateComparison(t *testing.T) {
-	testType := reflect.TypeOf(test).String()
+	testType := reflect.TypeFor[*MsgProcessingSpecTest]().String()
 	testType = strings.Replace(testType, "spectest.", "tests.", 1)
 	overrideStateComparison(t, test, test.Name, testType)
 }
 
 func overrideStateComparison(t *testing.T, test *MsgProcessingSpecTest, name string, testType string) {
 	r := runnerForTest(t, test.Runner, name, testType)
+	if !test.DontStartDuty {
+		if proposerRunner, ok := r.(*runner.ProposerRunner); ok {
+			normalizeExpectedProposerStartValues(proposerRunner)
+		}
+	}
 
 	test.PostDutyRunnerState = r
 
@@ -264,30 +287,32 @@ var baseCommitteeWithRunnerSample = func(
 		attestingValidators []phase0.BLSPubKey,
 		_ runner.CommitteeDutyGuard,
 	) (*runner.CommitteeRunner, error) {
-		r, err := runner.NewCommitteeRunner(
-			networkconfig.TestNetwork,
-			shareMap,
-			attestingValidators,
-			controller.NewController(
-				runnerSample.BaseRunner.QBFTController.Identifier,
-				runnerSample.BaseRunner.QBFTController.CommitteeMember,
-				runnerSample.BaseRunner.QBFTController.GetConfig(),
+		r, err := runner.NewCommitteeRunner(runner.CommitteeRunnerOptions{
+			BaseRunnerOptions: runner.BaseRunnerOptions{
+				NetworkConfig:  networkconfig.TestNetwork,
+				Share:          shareMap,
+				Beacon:         runnerSample.GetBeaconNode(),
+				Network:        runnerSample.GetNetwork(),
+				Signer:         runnerSample.GetSigner(),
+				OperatorSigner: runnerSample.GetOperatorSigner(),
+			},
+			AttestingValidators: attestingValidators,
+			QBFTController: controller.NewController(
+				runnerSample.QBFTController.Identifier,
+				runnerSample.QBFTController.CommitteeMember,
+				runnerSample.QBFTController.GetConfig(),
 				spectestingutils.TestingOperatorSigner(keySetSample),
 				false,
 			),
-			runnerSample.GetBeaconNode(),
-			runnerSample.GetNetwork(),
-			runnerSample.GetSigner(),
-			runnerSample.GetOperatorSigner(),
-			committeeDutyGuard,
-			runnerSample.GetDoppelgangerHandler(),
-		)
+			DutyGuard:           committeeDutyGuard,
+			DoppelgangerHandler: runnerSample.GetDoppelgangerHandler(),
+		})
 		return r.(*runner.CommitteeRunner), err
 	}
 
 	c := validator.NewCommittee(
 		logger,
-		runnerSample.BaseRunner.NetworkConfig,
+		runnerSample.NetworkConfig,
 		spectestingutils.TestingCommitteeMember(keySetSample),
 		createRunnerF,
 		shareMap,

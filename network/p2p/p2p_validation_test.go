@@ -65,7 +65,7 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 			Ignored:  make([]int, nodeCount),
 			Rejected: make([]int, nodeCount),
 		}
-		messageValidators[i].ValidateFunc = func(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
+		messageValidators[i].ValidateFunc = func(ctx context.Context, peerID peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
 			signedSSVMessage := &spectypes.SignedSSVMessage{}
 			if err := signedSSVMessage.Decode(pmsg.GetData()); err != nil {
 				return pubsub.ValidationReject
@@ -101,22 +101,26 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 				Body:             body,
 			}
 
-			peer := vNet.NodeByPeerID(p)
+			p := vNet.NodeByPeerID(peerID)
+			if p == nil {
+				panic(fmt.Sprintf("unknown peer: %s", peerID))
+			}
 
 			mtx.Lock()
+
 			// Validation according to role.
 			var validation pubsub.ValidationResult
 			switch ssvMessage.MsgID.GetRoleType() {
 			case acceptedRole:
-				messageValidators[i].Accepted[peer.Index]++
+				messageValidators[i].Accepted[p.Index]++
 				messageValidators[i].TotalAccepted++
 				validation = pubsub.ValidationAccept
 			case ignoredRole:
-				messageValidators[i].Ignored[peer.Index]++
+				messageValidators[i].Ignored[p.Index]++
 				messageValidators[i].TotalIgnored++
 				validation = pubsub.ValidationIgnore
 			case rejectedRole:
-				messageValidators[i].Rejected[peer.Index]++
+				messageValidators[i].Rejected[p.Index]++
 				messageValidators[i].TotalRejected++
 				validation = pubsub.ValidationReject
 			default:
@@ -126,7 +130,7 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 
 			// Always accept messages from self to make libp2p propagate them,
 			// while still counting them by their role.
-			if p == vNet.Nodes[i].Network.Host().ID() {
+			if peerID == vNet.Nodes[i].Network.Host().ID() {
 				return pubsub.ValidationAccept
 			}
 
@@ -135,7 +139,7 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 	}
 
 	// Create a VirtualNet with 4 nodes.
-	vNet = CreateVirtualNet(t, ctx, 4, shares, func(nodeIndex uint64) validation.MessageValidator {
+	vNet = createVirtualNet(t, ctx, 4, shares, func(nodeIndex uint64) validation.MessageValidator {
 		return messageValidators[nodeIndex]
 	})
 
@@ -190,31 +194,27 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 	require.NoError(t, err)
 
 	// Assert that the messages were distributed as expected.
-	time.Sleep(8 * time.Second)
-
-	interval := 100 * time.Millisecond
-	for i := 0; i < nodeCount; i++ {
-		// Messages from nodes broadcasting rejected role become rejected once score threshold is reached
-		if slices.Contains(messageTypesByNodeIndex[i], rejectedRole) {
-			continue
-		}
-
-		// better lock inside loop than wait interval locked
+	require.Eventually(t, func() bool {
 		mtx.Lock()
-		var errors []error
-		if roleBroadcasts[acceptedRole] != messageValidators[i].TotalAccepted {
-			errors = append(errors, fmt.Errorf("node %d accepted %d messages (expected %d)", i, messageValidators[i].TotalAccepted, roleBroadcasts[acceptedRole]))
+		defer mtx.Unlock()
+
+		for i := 0; i < nodeCount; i++ {
+			// Messages from nodes broadcasting rejected role become rejected once score threshold is reached.
+			if slices.Contains(messageTypesByNodeIndex[i], rejectedRole) {
+				continue
+			}
+			if roleBroadcasts[acceptedRole] != messageValidators[i].TotalAccepted {
+				return false
+			}
+			if roleBroadcasts[ignoredRole] != messageValidators[i].TotalIgnored {
+				return false
+			}
+			if roleBroadcasts[rejectedRole] != messageValidators[i].TotalRejected {
+				return false
+			}
 		}
-		if roleBroadcasts[ignoredRole] != messageValidators[i].TotalIgnored {
-			errors = append(errors, fmt.Errorf("node %d ignored %d messages (expected %d)", i, messageValidators[i].TotalIgnored, roleBroadcasts[ignoredRole]))
-		}
-		if roleBroadcasts[rejectedRole] != messageValidators[i].TotalRejected {
-			errors = append(errors, fmt.Errorf("node %d rejected %d messages (expected %d)", i, messageValidators[i].TotalRejected, roleBroadcasts[rejectedRole]))
-		}
-		mtx.Unlock()
-		require.Empty(t, errors)
-		time.Sleep(interval)
-	}
+		return true
+	}, 15*time.Second, 100*time.Millisecond)
 
 	// Assert that each node scores it's peers according to the following order:
 	// - node 0, (node 1 OR 3), (node 1 OR 3), node 2
@@ -234,19 +234,15 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 			}
 		}
 
-		// Sort peers by their scores.
-		type peerScore struct {
-			index NodeIndex
-			score float64
-		}
-		peerScores := *node.PeerScores.Load()
-		peers := make([]peerScore, 0, len(peerScores))
-		for index, snapshot := range peerScores {
-			peers = append(peers, peerScore{index, snapshot.Score})
-		}
-		sort.Slice(peers, func(i, j int) bool {
-			return peers[i].score > peers[j].score
-		})
+		var peers []peerScore
+		require.Eventually(t, func() bool {
+			snapshot, ok := sortedPeerScores(node)
+			if ok && peerScoresMatchAnyOrder(snapshot, validOrders) {
+				peers = snapshot
+				return true
+			}
+			return false
+		}, 15*time.Second, 100*time.Millisecond, "node %d", node.Index)
 
 		// Print a pretty table of each node's peers and their scores.
 		defer func() {
@@ -268,26 +264,52 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 			tbl.Render()
 		}()
 
-		// Assert that the peers are in one of the valid orders.
-		require.Equal(t, len(vNet.Nodes)-1, len(peers), "node %d", node.Index)
-		for i, validOrder := range validOrders {
-			valid := true
-			for j, peer := range peers {
-				if peer.index != validOrder[j] {
-					valid = false
-					break
-				}
-			}
-			if valid {
+		require.NotEmpty(t, peers)
+		require.True(t, peerScoresMatchAnyOrder(peers, validOrders), "node %d, peers %v", node.Index, peers)
+	}
+}
+
+type peerScore struct {
+	index NodeIndex
+	score float64
+}
+
+func sortedPeerScores(node *VirtualNode) ([]peerScore, bool) {
+	peerScores := node.PeerScores.Load()
+	if peerScores == nil {
+		return nil, false
+	}
+
+	peers := make([]peerScore, 0, len(*peerScores))
+	for index, snapshot := range *peerScores {
+		peers = append(peers, peerScore{index, snapshot.Score})
+	}
+	sort.Slice(peers, func(i, j int) bool {
+		return peers[i].score > peers[j].score
+	})
+
+	return peers, len(peers) > 0
+}
+
+func peerScoresMatchAnyOrder(peers []peerScore, validOrders [][]NodeIndex) bool {
+	for _, validOrder := range validOrders {
+		if len(peers) != len(validOrder) {
+			continue
+		}
+
+		valid := true
+		for i, peer := range peers {
+			if peer.index != validOrder[i] {
+				valid = false
 				break
 			}
-			if i == len(validOrders)-1 {
-				require.Fail(t, "invalid order", "node %d, peers %v", node.Index, peers)
-			}
+		}
+		if valid {
+			return true
 		}
 	}
 
-	defer fmt.Println()
+	return false
 }
 
 type MockMessageValidator struct {
@@ -326,7 +348,7 @@ type VirtualNet struct {
 	Nodes []*VirtualNode
 }
 
-func CreateVirtualNet(
+func createVirtualNet(
 	t *testing.T,
 	ctx context.Context,
 	nodes int,

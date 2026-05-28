@@ -41,7 +41,7 @@ func (i *Instance) UponRoundTimeout(ctx context.Context, logger *zap.Logger) err
 	defer func() {
 		i.bumpToRound(newRound)
 		i.State.ProposalAcceptedForCurrentRound = nil
-		i.config.GetTimer().TimeoutForRound(i.State.Height, newRound)
+		i.roundTimer.TimeoutForRound(newRound)
 	}()
 
 	roundChange, err := i.CreateRoundChange(newRound)

@@ -1,10 +1,13 @@
 package p2p
 
 import (
+	"bytes"
+	"context"
 	"crypto/ecdsa"
+	"errors"
+	"fmt"
 
 	gcrypto "github.com/ethereum/go-ethereum/crypto"
-	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/observability/log"
@@ -22,72 +25,125 @@ var (
 	// netKeyPrefix = []byte("network-key/")
 	// operatorKeyPrefix is the prefix for operator key
 	// operatorKeyPrefix = []byte("operator-key/")
+	encryptedPrefix = []byte("enc:")
 )
 
 // Store represents the interface for accessing the node's keys (operator and network keys)
 type Store interface {
-	GetNetworkKey() (*ecdsa.PrivateKey, bool, error)
-	SetupNetworkKey(skEncoded string) (*ecdsa.PrivateKey, error)
+	GetNetworkKey(ctx context.Context) (*ecdsa.PrivateKey, bool, error)
+	SetupNetworkKey(ctx context.Context, skEncoded string) (*ecdsa.PrivateKey, error)
 }
 
 type identityStore struct {
-	logger *zap.Logger
-	db     basedb.Database
+	logger      *zap.Logger
+	db          basedb.Database
+	unprotectFn func(ctx context.Context, protectedValue []byte) ([]byte, error)
 }
 
 // NewIdentityStore creates a new identity store
-func NewIdentityStore(logger *zap.Logger, db basedb.Database) Store {
+func NewIdentityStore(
+	logger *zap.Logger,
+	db basedb.Database,
+	unprotectFn func(ctx context.Context, protectedValue []byte) ([]byte, error),
+) Store {
 	es := identityStore{
-		logger: logger.Named(log.NameP2PStorage),
-		db:     db,
+		logger:      logger.Named(log.NameP2PStorage),
+		db:          db,
+		unprotectFn: unprotectFn,
 	}
 	return &es
 }
 
-func (s identityStore) GetNetworkKey() (*ecdsa.PrivateKey, bool, error) {
+func (s identityStore) GetNetworkKey(ctx context.Context) (*ecdsa.PrivateKey, bool, error) {
 	obj, found, err := s.db.Get(prefix, netKeyPrefix)
-	if !found {
-		return nil, false, nil
-	}
 	if err != nil {
 		return nil, found, err
 	}
-	pk, err := decode(obj.Value)
-	pk.Curve = gcrypto.S256() // temporary hack, so libp2p Secp256k1 is recognized as geth Secp256k1 in disc v5.1
-	if err != nil {
-		return nil, found, errors.WithMessage(err, "failed to decode private key")
+	if !found {
+		return nil, false, nil
 	}
+	pk, _, err := decodeNetworkKey(ctx, obj.Value, s.unprotectFn)
+	if err != nil {
+		return nil, found, fmt.Errorf("failed to decode private key: %w", err)
+	}
+	pk.Curve = gcrypto.S256() // temporary hack, so libp2p Secp256k1 is recognized as geth Secp256k1 in disc v5.1
 	return pk, found, nil
 }
 
-func (s identityStore) SetupNetworkKey(skEncoded string) (*ecdsa.PrivateKey, error) {
-	privateKey, found, err := s.GetNetworkKey()
-	if err != nil {
-		return nil, errors.WithMessage(err, "failed to get privateKey")
+func (s identityStore) SetupNetworkKey(ctx context.Context, skEncoded string) (*ecdsa.PrivateKey, error) {
+	var (
+		privateKey *ecdsa.PrivateKey
+		found      bool
+		encrypted  bool
+		err        error
+	)
+	if skEncoded == "" {
+		obj, keyFound, err := s.db.Get(prefix, netKeyPrefix)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get privateKey: %w", err)
+		}
+		if keyFound {
+			privateKey, encrypted, err = decodeNetworkKey(ctx, obj.Value, s.unprotectFn)
+			if err != nil {
+				return nil, fmt.Errorf("decode network key: %w", err)
+			}
+			privateKey.Curve = gcrypto.S256() // temporary hack, so libp2p Secp256k1 is recognized as geth Secp256k1 in disc v5.1
+			found = true
+		}
 	}
 	if skEncoded == "" && found && privateKey != nil {
+		if encrypted {
+			s.logger.Info("migrating encrypted p2p network private key back to plaintext storage for rollback compatibility")
+			if err := s.saveNetworkKeyPlaintext(privateKey); err != nil {
+				return nil, err
+			}
+		}
 		s.logger.Debug("using p2p network privateKey from storage")
 		return privateKey, nil
 	}
 	privateKey, err = utils.ECDSAPrivateKey(s.logger, skEncoded)
 	if err != nil {
-		return nil, errors.WithMessage(err, "failed to generate private key")
+		return nil, fmt.Errorf("failed to generate private key: %w", err)
 	}
 
-	return privateKey, s.saveNetworkKey(privateKey)
+	return privateKey, s.saveNetworkKeyPlaintext(privateKey)
 }
 
-func (s identityStore) saveNetworkKey(privateKey *ecdsa.PrivateKey) error {
-	if err := s.db.Set(prefix, netKeyPrefix, encode(privateKey)); err != nil {
-		return errors.WithMessage(err, "failed to save to db")
+func (s identityStore) saveNetworkKeyPlaintext(privateKey *ecdsa.PrivateKey) error {
+	if err := s.db.Set(prefix, netKeyPrefix, gcrypto.FromECDSA(privateKey)); err != nil {
+		return fmt.Errorf("failed to save to db: %w", err)
 	}
 	return nil
 }
 
-func encode(privateKey *ecdsa.PrivateKey) []byte {
-	return gcrypto.FromECDSA(privateKey)
+// HasEncryptedNetworkKey reports whether the stored network key already uses the
+// encrypted-at-rest storage format.
+func HasEncryptedNetworkKey(db basedb.Database) (bool, error) {
+	obj, found, err := db.Get(prefix, netKeyPrefix)
+	if err != nil || !found {
+		return false, err
+	}
+
+	return bytes.HasPrefix(obj.Value, encryptedPrefix), nil
 }
 
-func decode(b []byte) (*ecdsa.PrivateKey, error) {
-	return gcrypto.ToECDSA(b)
+func decodeNetworkKey(
+	ctx context.Context,
+	storedValue []byte,
+	unprotectFn func(ctx context.Context, protectedValue []byte) ([]byte, error),
+) (*ecdsa.PrivateKey, bool, error) {
+	if bytes.HasPrefix(storedValue, encryptedPrefix) {
+		if unprotectFn == nil {
+			return nil, true, errors.New("network key is encrypted but no compatible network key protector is configured")
+		}
+		decrypted, err := unprotectFn(ctx, storedValue[len(encryptedPrefix):])
+		if err != nil {
+			return nil, true, err
+		}
+		pk, err := gcrypto.ToECDSA(decrypted)
+		return pk, true, err
+	}
+
+	pk, err := gcrypto.ToECDSA(storedValue)
+	return pk, false, err
 }

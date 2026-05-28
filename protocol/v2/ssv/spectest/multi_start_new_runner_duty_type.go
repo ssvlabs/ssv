@@ -9,12 +9,15 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectests "github.com/ssvlabs/ssv-spec/qbft/spectest/tests"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 )
@@ -36,7 +39,7 @@ func (test *StartNewRunnerDutySpecTest) TestName() string {
 
 // overrideStateComparison overrides the state comparison to compare the runner state
 func (test *StartNewRunnerDutySpecTest) overrideStateComparison(t *testing.T) {
-	testType := reflect.TypeOf(test).String()
+	testType := reflect.TypeFor[*StartNewRunnerDutySpecTest]().String()
 	testType = strings.Replace(testType, "spectest.", "newduty.", 1)
 	overrideStateComparisonForStartNewRunnerDutySpecTest(t, test, test.Name, testType)
 }
@@ -93,32 +96,32 @@ func (test *StartNewRunnerDutySpecTest) RunAsPartOfMultiTest(t *testing.T, logge
 
 	switch r := test.Runner.(type) {
 	case *runner.CommitteeRunner:
-		for _, inst := range r.BaseRunner.QBFTController.StoredInstances {
+		for _, inst := range r.QBFTController.RecentInstances {
 			inst.ValueChecker = protocoltesting.TestingValueChecker{}
 		}
-		if r.BaseRunner.State.RunningInstance != nil {
-			r.BaseRunner.State.RunningInstance.ValueChecker = protocoltesting.TestingValueChecker{}
+		if r.HasStartedQBFTInstance() {
+			r.State.RunningInstance.ValueChecker = protocoltesting.TestingValueChecker{}
 		}
 	case *runner.AggregatorRunner:
-		for _, inst := range r.BaseRunner.QBFTController.StoredInstances {
+		for _, inst := range r.QBFTController.RecentInstances {
 			inst.ValueChecker = protocoltesting.TestingValueChecker{}
 		}
-		if r.BaseRunner.State.RunningInstance != nil {
-			r.BaseRunner.State.RunningInstance.ValueChecker = protocoltesting.TestingValueChecker{}
+		if r.HasStartedQBFTInstance() {
+			r.State.RunningInstance.ValueChecker = protocoltesting.TestingValueChecker{}
 		}
 	case *runner.ProposerRunner:
-		for _, inst := range r.BaseRunner.QBFTController.StoredInstances {
+		for _, inst := range r.QBFTController.RecentInstances {
 			inst.ValueChecker = protocoltesting.TestingValueChecker{}
 		}
-		if r.BaseRunner.State.RunningInstance != nil {
-			r.BaseRunner.State.RunningInstance.ValueChecker = protocoltesting.TestingValueChecker{}
+		if r.HasStartedQBFTInstance() {
+			r.State.RunningInstance.ValueChecker = protocoltesting.TestingValueChecker{}
 		}
 	case *runner.SyncCommitteeAggregatorRunner:
-		for _, inst := range r.BaseRunner.QBFTController.StoredInstances {
+		for _, inst := range r.QBFTController.RecentInstances {
 			inst.ValueChecker = protocoltesting.TestingValueChecker{}
 		}
-		if r.BaseRunner.State.RunningInstance != nil {
-			r.BaseRunner.State.RunningInstance.ValueChecker = protocoltesting.TestingValueChecker{}
+		if r.HasStartedQBFTInstance() {
+			r.State.RunningInstance.ValueChecker = protocoltesting.TestingValueChecker{}
 		}
 	}
 
@@ -161,7 +164,7 @@ func (tests *MultiStartNewRunnerDutySpecTest) overrideStateComparison(t *testing
 	testsName := strings.ReplaceAll(tests.TestName(), " ", "_")
 	for _, test := range tests.Tests {
 		path := filepath.Join(testsName, test.TestName())
-		testType := reflect.TypeOf(tests).String()
+		testType := reflect.TypeFor[*MultiStartNewRunnerDutySpecTest]().String()
 		testType = strings.Replace(testType, "spectest.", "newduty.", 1)
 		overrideStateComparisonForStartNewRunnerDutySpecTest(t, test, path, testType)
 	}
@@ -179,6 +182,8 @@ func overrideStateComparisonForStartNewRunnerDutySpecTest(t *testing.T, test *St
 }
 
 func (test *StartNewRunnerDutySpecTest) runPreTesting(logger *zap.Logger) error {
-	err := test.Runner.StartNewDuty(context.TODO(), logger, test.Duty, test.Threshold)
-	return err
+	test.Runner.SetQBFTRoundTimerF(func(_ context.Context, _ *zap.Logger, _ phase0.Slot) ssv.QBFTRoundTimer {
+		return roundtimer.NewTestingTimer()
+	})
+	return test.Runner.StartNewDuty(context.TODO(), logger, test.Duty, test.Threshold)
 }

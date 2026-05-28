@@ -32,7 +32,7 @@ func TestMessageValidator_maxRound(t *testing.T) {
 		{
 			name: "Proposer role",
 			role: spectypes.RoleProposer,
-			want: 6,
+			want: 2,
 			err:  nil,
 		},
 		{

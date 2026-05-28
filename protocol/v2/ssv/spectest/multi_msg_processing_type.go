@@ -8,7 +8,7 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/observability/log"
+	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 )
 
 type MultiMsgProcessingSpecTest struct {
@@ -23,7 +23,7 @@ func (tests *MultiMsgProcessingSpecTest) TestName() string {
 }
 
 func (tests *MultiMsgProcessingSpecTest) Run(t *testing.T) {
-	tests.logger = log.TestLogger(t)
+	tests.logger = protocoltesting.SpectestLogger(t)
 	tests.overrideStateComparison(t)
 
 	for _, test := range tests.Tests {
@@ -39,7 +39,7 @@ func (tests *MultiMsgProcessingSpecTest) overrideStateComparison(t *testing.T) {
 	testsName := strings.ReplaceAll(tests.TestName(), " ", "_")
 	for _, test := range tests.Tests {
 		path := filepath.Join(testsName, test.TestName())
-		testType := reflect.TypeOf(tests).String()
+		testType := reflect.TypeFor[*MultiMsgProcessingSpecTest]().String()
 		testType = strings.Replace(testType, "spectest.", "tests.", 1)
 		overrideStateComparison(t, test, path, testType)
 	}

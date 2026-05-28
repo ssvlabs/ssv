@@ -2,6 +2,7 @@ package mock
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/libp2p/go-libp2p/core/crypto"
@@ -9,7 +10,6 @@ import (
 	"github.com/libp2p/go-libp2p/core/peerstore"
 	libp2p_protocol "github.com/libp2p/go-libp2p/core/protocol"
 	ma "github.com/multiformats/go-multiaddr"
-	"github.com/pkg/errors"
 )
 
 var _ peerstore.Peerstore = Peerstore{}
@@ -17,6 +17,11 @@ var _ peerstore.Peerstore = Peerstore{}
 type Peerstore struct {
 	ExistingPIDs               []peer.ID
 	MockFirstSupportedProtocol libp2p_protocol.ID
+	// MockValues lets tests configure specific key/value pairs returned by Get
+	// for given peers — e.g. `{"AgentVersion": "ssv/v2.4.2"}`. When unset or
+	// missing for the requested (pid, key), Get falls back to the legacy
+	// behavior of returning the peer ID itself for known PIDs.
+	MockValues map[peer.ID]map[string]any
 }
 
 func (p Peerstore) Close() error {
@@ -95,6 +100,13 @@ func (p Peerstore) PeersWithKeys() peer.IDSlice {
 }
 
 func (p Peerstore) Get(pid peer.ID, key string) (any, error) {
+	if vals, ok := p.MockValues[pid]; ok {
+		if v, ok := vals[key]; ok {
+			return v, nil
+		}
+	}
+	// Legacy behavior preserved for existing tests: return the peer ID itself
+	// as the value for any key, for any peer in ExistingPIDs.
 	for _, epid := range p.ExistingPIDs {
 		if epid == pid {
 			return epid, nil

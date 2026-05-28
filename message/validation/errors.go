@@ -40,6 +40,11 @@ func (e Error) Error() string {
 	return sb.String()
 }
 
+const (
+	validationTimeoutReason  = "validation_timeout"
+	validationCanceledReason = "validation_canceled"
+)
+
 func (e Error) Reject() bool {
 	return e.reject
 }
@@ -145,6 +150,17 @@ func (mv *messageValidator) handleValidationError(ctx context.Context, peerID pe
 		With(loggerFields.AsZapFields()...).
 		With(fields.PeerID(peerID))
 
+	switch {
+	case errors.Is(err, context.DeadlineExceeded):
+		recordIgnoredMessage(ctx, loggerFields.Role, validationTimeoutReason)
+		logger.Debug("ignoring message due to validation timeout", zap.Error(err))
+		return pubsub.ValidationIgnore
+	case errors.Is(err, context.Canceled):
+		recordIgnoredMessage(ctx, loggerFields.Role, validationCanceledReason)
+		logger.Debug("ignoring message due to validation cancellation", zap.Error(err))
+		return pubsub.ValidationIgnore
+	}
+
 	var valErr Error
 	if !errors.As(err, &valErr) {
 		recordIgnoredMessage(ctx, loggerFields.Role, err.Error())
@@ -169,6 +185,6 @@ func (mv *messageValidator) handleValidationError(ctx context.Context, peerID pe
 }
 
 func (mv *messageValidator) handleValidationSuccess(ctx context.Context, decodedMessage *queue.SSVMessage) pubsub.ValidationResult {
-	recordAcceptedMessage(ctx, decodedMessage.GetID().GetRoleType())
+	recordAcceptedMessage(ctx, messageRole(decodedMessage))
 	return pubsub.ValidationAccept
 }

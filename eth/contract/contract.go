@@ -38,9 +38,21 @@ type ISSVNetworkCoreCluster struct {
 	Balance         *big.Int
 }
 
+// ISSVNetworkNetworkInitParams is an auto generated low-level Go binding around an user-defined struct.
+type ISSVNetworkNetworkInitParams struct {
+	MinimumBlocksBeforeLiquidation uint64
+	MinimumLiquidationCollateral   *big.Int
+	ValidatorsPerOperatorLimit     uint32
+	DeclareOperatorFeePeriod       uint64
+	ExecuteOperatorFeePeriod       uint64
+	OperatorMaxFeeIncrease         uint64
+	DefaultOracleIds               [4]uint32
+	QuorumBps                      uint16
+}
+
 // ContractMetaData contains all meta data concerning the Contract contract.
 var ContractMetaData = &bind.MetaData{
-	ABI: "[{\"inputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"constructor\"},{\"inputs\":[],\"name\":\"ApprovalNotWithinTimeframe\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"CallerNotOwner\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"CallerNotWhitelisted\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"ClusterAlreadyEnabled\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"ClusterDoesNotExists\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"ClusterIsLiquidated\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"ClusterNotLiquidatable\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"ExceedValidatorLimit\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"FeeExceedsIncreaseLimit\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"FeeIncreaseNotAllowed\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"FeeTooHigh\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"FeeTooLow\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"IncorrectClusterState\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"IncorrectValidatorState\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"InsufficientBalance\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"InvalidOperatorIdsLength\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"InvalidPublicKeyLength\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"MaxValueExceeded\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"NewBlockPeriodIsBelowMinimum\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"NoFeeDeclared\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"NotAuthorized\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"OperatorAlreadyExists\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"OperatorDoesNotExist\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"OperatorsListNotUnique\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"PublicKeysSharesLengthMismatch\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"SameFeeChangeNotAllowed\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"TargetModuleDoesNotExist\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"TokenTransferFailed\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"UnsortedOperatorsList\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"ValidatorAlreadyExists\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"ValidatorDoesNotExist\",\"type\":\"error\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"address\",\"name\":\"previousAdmin\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"address\",\"name\":\"newAdmin\",\"type\":\"address\"}],\"name\":\"AdminChanged\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"beacon\",\"type\":\"address\"}],\"name\":\"BeaconUpgraded\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint64[]\",\"name\":\"operatorIds\",\"type\":\"uint64[]\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"value\",\"type\":\"uint256\"},{\"components\":[{\"internalType\":\"uint32\",\"name\":\"validatorCount\",\"type\":\"uint32\"},{\"internalType\":\"uint64\",\"name\":\"networkFeeIndex\",\"type\":\"uint64\"},{\"internalType\":\"uint64\",\"name\":\"index\",\"type\":\"uint64\"},{\"internalType\":\"bool\",\"name\":\"active\",\"type\":\"bool\"},{\"internalType\":\"uint256\",\"name\":\"balance\",\"type\":\"uint256\"}],\"indexed\":false,\"internalType\":\"structISSVNetworkCore.Cluster\",\"name\":\"cluster\",\"type\":\"tuple\"}],\"name\":\"ClusterDeposited\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint64[]\",\"name\":\"operatorIds\",\"type\":\"uint64[]\"},{\"components\":[{\"internalType\":\"uint32\",\"name\":\"validatorCount\",\"type\":\"uint32\"},{\"internalType\":\"uint64\",\"name\":\"networkFeeIndex\",\"type\":\"uint64\"},{\"internalType\":\"uint64\",\"name\":\"index\",\"type\":\"uint64\"},{\"internalType\":\"bool\",\"name\":\"active\",\"type\":\"bool\"},{\"internalType\":\"uint256\",\"name\":\"balance\",\"type\":\"uint256\"}],\"indexed\":false,\"internalType\":\"structISSVNetworkCore.Cluster\",\"name\":\"cluster\",\"type\":\"tuple\"}],\"name\":\"ClusterLiquidated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint64[]\",\"name\":\"operatorIds\",\"type\":\"uint64[]\"},{\"components\":[{\"internalType\":\"uint32\",\"name\":\"validatorCount\",\"type\":\"uint32\"},{\"internalType\":\"uint64\",\"name\":\"networkFeeIndex\",\"type\":\"uint64\"},{\"internalType\":\"uint64\",\"name\":\"index\",\"type\":\"uint64\"},{\"internalType\":\"bool\",\"name\":\"active\",\"type\":\"bool\"},{\"internalType\":\"uint256\",\"name\":\"balance\",\"type\":\"uint256\"}],\"indexed\":false,\"internalType\":\"structISSVNetworkCore.Cluster\",\"name\":\"cluster\",\"type\":\"tuple\"}],\"name\":\"ClusterReactivated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint64[]\",\"name\":\"operatorIds\",\"type\":\"uint64[]\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"value\",\"type\":\"uint256\"},{\"components\":[{\"internalType\":\"uint32\",\"name\":\"validatorCount\",\"type\":\"uint32\"},{\"internalType\":\"uint64\",\"name\":\"networkFeeIndex\",\"type\":\"uint64\"},{\"internalType\":\"uint64\",\"name\":\"index\",\"type\":\"uint64\"},{\"internalType\":\"bool\",\"name\":\"active\",\"type\":\"bool\"},{\"internalType\":\"uint256\",\"name\":\"balance\",\"type\":\"uint256\"}],\"indexed\":false,\"internalType\":\"structISSVNetworkCore.Cluster\",\"name\":\"cluster\",\"type\":\"tuple\"}],\"name\":\"ClusterWithdrawn\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint64\",\"name\":\"value\",\"type\":\"uint64\"}],\"name\":\"DeclareOperatorFeePeriodUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint64\",\"name\":\"value\",\"type\":\"uint64\"}],\"name\":\"ExecuteOperatorFeePeriodUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"address\",\"name\":\"recipientAddress\",\"type\":\"address\"}],\"name\":\"FeeRecipientAddressUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint8\",\"name\":\"version\",\"type\":\"uint8\"}],\"name\":\"Initialized\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint64\",\"name\":\"value\",\"type\":\"uint64\"}],\"name\":\"LiquidationThresholdPeriodUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"value\",\"type\":\"uint256\"}],\"name\":\"MinimumLiquidationCollateralUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"value\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"address\",\"name\":\"recipient\",\"type\":\"address\"}],\"name\":\"NetworkEarningsWithdrawn\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"oldFee\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"newFee\",\"type\":\"uint256\"}],\"name\":\"NetworkFeeUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint64\",\"name\":\"operatorId\",\"type\":\"uint64\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"bytes\",\"name\":\"publicKey\",\"type\":\"bytes\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"fee\",\"type\":\"uint256\"}],\"name\":\"OperatorAdded\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"uint64\",\"name\":\"operatorId\",\"type\":\"uint64\"}],\"name\":\"OperatorFeeDeclarationCancelled\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"uint64\",\"name\":\"operatorId\",\"type\":\"uint64\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"blockNumber\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"fee\",\"type\":\"uint256\"}],\"name\":\"OperatorFeeDeclared\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"uint64\",\"name\":\"operatorId\",\"type\":\"uint64\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"blockNumber\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"fee\",\"type\":\"uint256\"}],\"name\":\"OperatorFeeExecuted\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint64\",\"name\":\"value\",\"type\":\"uint64\"}],\"name\":\"OperatorFeeIncreaseLimitUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint64\",\"name\":\"maxFee\",\"type\":\"uint64\"}],\"name\":\"OperatorMaximumFeeUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint64\",\"name\":\"operatorId\",\"type\":\"uint64\"}],\"name\":\"OperatorRemoved\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint64\",\"name\":\"operatorId\",\"type\":\"uint64\"},{\"indexed\":false,\"internalType\":\"address\",\"name\":\"whitelisted\",\"type\":\"address\"}],\"name\":\"OperatorWhitelistUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"uint64\",\"name\":\"operatorId\",\"type\":\"uint64\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"value\",\"type\":\"uint256\"}],\"name\":\"OperatorWithdrawn\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"previousOwner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"OwnershipTransferStarted\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"previousOwner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"OwnershipTransferred\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"implementation\",\"type\":\"address\"}],\"name\":\"Upgraded\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint64[]\",\"name\":\"operatorIds\",\"type\":\"uint64[]\"},{\"indexed\":false,\"internalType\":\"bytes\",\"name\":\"publicKey\",\"type\":\"bytes\"},{\"indexed\":false,\"internalType\":\"bytes\",\"name\":\"shares\",\"type\":\"bytes\"},{\"components\":[{\"internalType\":\"uint32\",\"name\":\"validatorCount\",\"type\":\"uint32\"},{\"internalType\":\"uint64\",\"name\":\"networkFeeIndex\",\"type\":\"uint64\"},{\"internalType\":\"uint64\",\"name\":\"index\",\"type\":\"uint64\"},{\"internalType\":\"bool\",\"name\":\"active\",\"type\":\"bool\"},{\"internalType\":\"uint256\",\"name\":\"balance\",\"type\":\"uint256\"}],\"indexed\":false,\"internalType\":\"structISSVNetworkCore.Cluster\",\"name\":\"cluster\",\"type\":\"tuple\"}],\"name\":\"ValidatorAdded\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint64[]\",\"name\":\"operatorIds\",\"type\":\"uint64[]\"},{\"indexed\":false,\"internalType\":\"bytes\",\"name\":\"publicKey\",\"type\":\"bytes\"}],\"name\":\"ValidatorExited\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint64[]\",\"name\":\"operatorIds\",\"type\":\"uint64[]\"},{\"indexed\":false,\"internalType\":\"bytes\",\"name\":\"publicKey\",\"type\":\"bytes\"},{\"components\":[{\"internalType\":\"uint32\",\"name\":\"validatorCount\",\"type\":\"uint32\"},{\"internalType\":\"uint64\",\"name\":\"networkFeeIndex\",\"type\":\"uint64\"},{\"internalType\":\"uint64\",\"name\":\"index\",\"type\":\"uint64\"},{\"internalType\":\"bool\",\"name\":\"active\",\"type\":\"bool\"},{\"internalType\":\"uint256\",\"name\":\"balance\",\"type\":\"uint256\"}],\"indexed\":false,\"internalType\":\"structISSVNetworkCore.Cluster\",\"name\":\"cluster\",\"type\":\"tuple\"}],\"name\":\"ValidatorRemoved\",\"type\":\"event\"},{\"stateMutability\":\"nonpayable\",\"type\":\"fallback\"},{\"inputs\":[],\"name\":\"acceptOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes[]\",\"name\":\"publicKeys\",\"type\":\"bytes[]\"},{\"internalType\":\"uint64[]\",\"name\":\"operatorIds\",\"type\":\"uint64[]\"},{\"internalType\":\"bytes[]\",\"name\":\"sharesData\",\"type\":\"bytes[]\"},{\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"},{\"components\":[{\"internalType\":\"uint32\",\"name\":\"validatorCount\",\"type\":\"uint32\"},{\"internalType\":\"uint64\",\"name\":\"networkFeeIndex\",\"type\":\"uint64\"},{\"internalType\":\"uint64\",\"name\":\"index\",\"type\":\"uint64\"},{\"internalType\":\"bool\",\"name\":\"active\",\"type\":\"bool\"},{\"internalType\":\"uint256\",\"name\":\"balance\",\"type\":\"uint256\"}],\"internalType\":\"structISSVNetworkCore.Cluster\",\"name\":\"cluster\",\"type\":\"tuple\"}],\"name\":\"bulkRegisterValidator\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint64\",\"name\":\"operatorId\",\"type\":\"uint64\"}],\"name\":\"cancelDeclaredOperatorFee\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint64\",\"name\":\"operatorId\",\"type\":\"uint64\"},{\"internalType\":\"uint256\",\"name\":\"fee\",\"type\":\"uint256\"}],\"name\":\"declareOperatorFee\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"clusterOwner\",\"type\":\"address\"},{\"internalType\":\"uint64[]\",\"name\":\"operatorIds\",\"type\":\"uint64[]\"},{\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"},{\"components\":[{\"internalType\":\"uint32\",\"name\":\"validatorCount\",\"type\":\"uint32\"},{\"internalType\":\"uint64\",\"name\":\"networkFeeIndex\",\"type\":\"uint64\"},{\"internalType\":\"uint64\",\"name\":\"index\",\"type\":\"uint64\"},{\"internalType\":\"bool\",\"name\":\"active\",\"type\":\"bool\"},{\"internalType\":\"uint256\",\"name\":\"balance\",\"type\":\"uint256\"}],\"internalType\":\"structISSVNetworkCore.Cluster\",\"name\":\"cluster\",\"type\":\"tuple\"}],\"name\":\"deposit\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint64\",\"name\":\"operatorId\",\"type\":\"uint64\"}],\"name\":\"executeOperatorFee\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes\",\"name\":\"publicKey\",\"type\":\"bytes\"},{\"internalType\":\"uint64[]\",\"name\":\"operatorIds\",\"type\":\"uint64[]\"}],\"name\":\"exitValidator\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"getVersion\",\"outputs\":[{\"internalType\":\"string\",\"name\":\"version\",\"type\":\"string\"}],\"stateMutability\":\"pure\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"contractIERC20\",\"name\":\"token_\",\"type\":\"address\"},{\"internalType\":\"contractISSVOperators\",\"name\":\"ssvOperators_\",\"type\":\"address\"},{\"internalType\":\"contractISSVClusters\",\"name\":\"ssvClusters_\",\"type\":\"address\"},{\"internalType\":\"contractISSVDAO\",\"name\":\"ssvDAO_\",\"type\":\"address\"},{\"internalType\":\"contractISSVViews\",\"name\":\"ssvViews_\",\"type\":\"address\"},{\"internalType\":\"uint64\",\"name\":\"minimumBlocksBeforeLiquidation_\",\"type\":\"uint64\"},{\"internalType\":\"uint256\",\"name\":\"minimumLiquidationCollateral_\",\"type\":\"uint256\"},{\"internalType\":\"uint32\",\"name\":\"validatorsPerOperatorLimit_\",\"type\":\"uint32\"},{\"internalType\":\"uint64\",\"name\":\"declareOperatorFeePeriod_\",\"type\":\"uint64\"},{\"internalType\":\"uint64\",\"name\":\"executeOperatorFeePeriod_\",\"type\":\"uint64\"},{\"internalType\":\"uint64\",\"name\":\"operatorMaxFeeIncrease_\",\"type\":\"uint64\"}],\"name\":\"initialize\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"clusterOwner\",\"type\":\"address\"},{\"internalType\":\"uint64[]\",\"name\":\"operatorIds\",\"type\":\"uint64[]\"},{\"components\":[{\"internalType\":\"uint32\",\"name\":\"validatorCount\",\"type\":\"uint32\"},{\"internalType\":\"uint64\",\"name\":\"networkFeeIndex\",\"type\":\"uint64\"},{\"internalType\":\"uint64\",\"name\":\"index\",\"type\":\"uint64\"},{\"internalType\":\"bool\",\"name\":\"active\",\"type\":\"bool\"},{\"internalType\":\"uint256\",\"name\":\"balance\",\"type\":\"uint256\"}],\"internalType\":\"structISSVNetworkCore.Cluster\",\"name\":\"cluster\",\"type\":\"tuple\"}],\"name\":\"liquidate\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"owner\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"pendingOwner\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"proxiableUUID\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint64[]\",\"name\":\"operatorIds\",\"type\":\"uint64[]\"},{\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"},{\"components\":[{\"internalType\":\"uint32\",\"name\":\"validatorCount\",\"type\":\"uint32\"},{\"internalType\":\"uint64\",\"name\":\"networkFeeIndex\",\"type\":\"uint64\"},{\"internalType\":\"uint64\",\"name\":\"index\",\"type\":\"uint64\"},{\"internalType\":\"bool\",\"name\":\"active\",\"type\":\"bool\"},{\"internalType\":\"uint256\",\"name\":\"balance\",\"type\":\"uint256\"}],\"internalType\":\"structISSVNetworkCore.Cluster\",\"name\":\"cluster\",\"type\":\"tuple\"}],\"name\":\"reactivate\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint64\",\"name\":\"operatorId\",\"type\":\"uint64\"},{\"internalType\":\"uint256\",\"name\":\"fee\",\"type\":\"uint256\"}],\"name\":\"reduceOperatorFee\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes\",\"name\":\"publicKey\",\"type\":\"bytes\"},{\"internalType\":\"uint256\",\"name\":\"fee\",\"type\":\"uint256\"}],\"name\":\"registerOperator\",\"outputs\":[{\"internalType\":\"uint64\",\"name\":\"id\",\"type\":\"uint64\"}],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes\",\"name\":\"publicKey\",\"type\":\"bytes\"},{\"internalType\":\"uint64[]\",\"name\":\"operatorIds\",\"type\":\"uint64[]\"},{\"internalType\":\"bytes\",\"name\":\"shares\",\"type\":\"bytes\"},{\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"},{\"components\":[{\"internalType\":\"uint32\",\"name\":\"validatorCount\",\"type\":\"uint32\"},{\"internalType\":\"uint64\",\"name\":\"networkFeeIndex\",\"type\":\"uint64\"},{\"internalType\":\"uint64\",\"name\":\"index\",\"type\":\"uint64\"},{\"internalType\":\"bool\",\"name\":\"active\",\"type\":\"bool\"},{\"internalType\":\"uint256\",\"name\":\"balance\",\"type\":\"uint256\"}],\"internalType\":\"structISSVNetworkCore.Cluster\",\"name\":\"cluster\",\"type\":\"tuple\"}],\"name\":\"registerValidator\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint64\",\"name\":\"operatorId\",\"type\":\"uint64\"}],\"name\":\"removeOperator\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes\",\"name\":\"publicKey\",\"type\":\"bytes\"},{\"internalType\":\"uint64[]\",\"name\":\"operatorIds\",\"type\":\"uint64[]\"},{\"components\":[{\"internalType\":\"uint32\",\"name\":\"validatorCount\",\"type\":\"uint32\"},{\"internalType\":\"uint64\",\"name\":\"networkFeeIndex\",\"type\":\"uint64\"},{\"internalType\":\"uint64\",\"name\":\"index\",\"type\":\"uint64\"},{\"internalType\":\"bool\",\"name\":\"active\",\"type\":\"bool\"},{\"internalType\":\"uint256\",\"name\":\"balance\",\"type\":\"uint256\"}],\"internalType\":\"structISSVNetworkCore.Cluster\",\"name\":\"cluster\",\"type\":\"tuple\"}],\"name\":\"removeValidator\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"renounceOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"recipientAddress\",\"type\":\"address\"}],\"name\":\"setFeeRecipientAddress\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint64\",\"name\":\"operatorId\",\"type\":\"uint64\"},{\"internalType\":\"address\",\"name\":\"whitelisted\",\"type\":\"address\"}],\"name\":\"setOperatorWhitelist\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"transferOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint64\",\"name\":\"timeInSeconds\",\"type\":\"uint64\"}],\"name\":\"updateDeclareOperatorFeePeriod\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint64\",\"name\":\"timeInSeconds\",\"type\":\"uint64\"}],\"name\":\"updateExecuteOperatorFeePeriod\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint64\",\"name\":\"blocks\",\"type\":\"uint64\"}],\"name\":\"updateLiquidationThresholdPeriod\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint64\",\"name\":\"maxFee\",\"type\":\"uint64\"}],\"name\":\"updateMaximumOperatorFee\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"}],\"name\":\"updateMinimumLiquidationCollateral\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"enumSSVModules\",\"name\":\"moduleId\",\"type\":\"uint8\"},{\"internalType\":\"address\",\"name\":\"moduleAddress\",\"type\":\"address\"}],\"name\":\"updateModule\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"fee\",\"type\":\"uint256\"}],\"name\":\"updateNetworkFee\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint64\",\"name\":\"percentage\",\"type\":\"uint64\"}],\"name\":\"updateOperatorFeeIncreaseLimit\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"newImplementation\",\"type\":\"address\"}],\"name\":\"upgradeTo\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"newImplementation\",\"type\":\"address\"},{\"internalType\":\"bytes\",\"name\":\"data\",\"type\":\"bytes\"}],\"name\":\"upgradeToAndCall\",\"outputs\":[],\"stateMutability\":\"payable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint64[]\",\"name\":\"operatorIds\",\"type\":\"uint64[]\"},{\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"},{\"components\":[{\"internalType\":\"uint32\",\"name\":\"validatorCount\",\"type\":\"uint32\"},{\"internalType\":\"uint64\",\"name\":\"networkFeeIndex\",\"type\":\"uint64\"},{\"internalType\":\"uint64\",\"name\":\"index\",\"type\":\"uint64\"},{\"internalType\":\"bool\",\"name\":\"active\",\"type\":\"bool\"},{\"internalType\":\"uint256\",\"name\":\"balance\",\"type\":\"uint256\"}],\"internalType\":\"structISSVNetworkCore.Cluster\",\"name\":\"cluster\",\"type\":\"tuple\"}],\"name\":\"withdraw\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint64\",\"name\":\"operatorId\",\"type\":\"uint64\"}],\"name\":\"withdrawAllOperatorEarnings\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"}],\"name\":\"withdrawNetworkEarnings\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint64\",\"name\":\"operatorId\",\"type\":\"uint64\"},{\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"}],\"name\":\"withdrawOperatorEarnings\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}]",
+	ABI: "[{\"inputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"constructor\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"contractAddress\",\"type\":\"address\"}],\"name\":\"AddressIsWhitelistingContract\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"AlreadyVoted\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"ApprovalNotWithinTimeframe\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"CallerNotOwner\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"caller\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"}],\"name\":\"CallerNotOwnerWithData\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"CallerNotWhitelisted\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"uint64\",\"name\":\"operatorId\",\"type\":\"uint64\"}],\"name\":\"CallerNotWhitelistedWithData\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"ClusterAlreadyEnabled\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"ClusterDoesNotExist\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"ClusterIsLiquidated\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"ClusterNotLiquidatable\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"EBBelowMinimum\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"EBExceedsMaximum\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"ETHTransferFailed\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"EmptyPublicKeysList\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"uint64\",\"name\":\"operatorId\",\"type\":\"uint64\"}],\"name\":\"ExceedValidatorLimit\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"uint64\",\"name\":\"operatorId\",\"type\":\"uint64\"}],\"name\":\"ExceedValidatorLimitWithData\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"FeeExceedsIncreaseLimit\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"FeeIncreaseNotAllowed\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"FeeTooHigh\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"FeeTooLow\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"FutureBlockNumber\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"IncorrectClusterState\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"IncorrectClusterVersion\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"uint8\",\"name\":\"operatorVersion\",\"type\":\"uint8\"}],\"name\":\"IncorrectOperatorVersion\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"IncorrectValidatorState\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"bytes\",\"name\":\"publicKey\",\"type\":\"bytes\"}],\"name\":\"IncorrectValidatorStateWithData\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"InsufficientBalance\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"InsufficientCSSVSupply\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"InvalidOperatorFeeIncreaseLimit\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"InvalidOperatorFeeRange\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"InvalidOperatorIdsLength\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"InvalidOracleId\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"InvalidProof\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"InvalidPublicKeyLength\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"InvalidQuorum\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"InvalidToken\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"InvalidWhitelistAddressesLength\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"contractAddress\",\"type\":\"address\"}],\"name\":\"InvalidWhitelistingContract\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"LegacyOperatorFeeDeclarationInvalid\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"MaxPrecisionExceeded\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"MaxRequestsAmountReached\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"MaxValueExceeded\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"MustUseLatestRoot\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"NewBlockPeriodIsBelowMinimum\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"NoFeeDeclared\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"NotCSSV\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"NotOracle\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"NothingToClaim\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"NothingToWithdraw\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"OperatorAlreadyExists\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"OperatorDoesNotExist\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"OperatorsListNotUnique\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"OracleAlreadyAssigned\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"PublicKeysSharesLengthMismatch\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"RootNotFound\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"SameFeeChangeNotAllowed\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"SameOracleAddressNotAllowed\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"StakeTooLow\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"StaleBlockNumber\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"StaleUpdate\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"TargetModuleDoesNotExist\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"uint8\",\"name\":\"moduleId\",\"type\":\"uint8\"}],\"name\":\"TargetModuleDoesNotExistWithData\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"TokenTransferFailed\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"UnsortedOperatorsList\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"UnstakeAmountExceedsBalance\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"UpdateTooFrequent\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"ValidatorAlreadyExists\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"bytes\",\"name\":\"publicKey\",\"type\":\"bytes\"}],\"name\":\"ValidatorAlreadyExistsWithData\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"bytes\",\"name\":\"publicKey\",\"type\":\"bytes\"},{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"}],\"name\":\"ValidatorAlreadyRegistered\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"ValidatorDoesNotExist\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"ZeroAddress\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"ZeroAddressNotAllowed\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"ZeroAmount\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"ZeroCSSVSupply\",\"type\":\"error\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"address\",\"name\":\"previousAdmin\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"address\",\"name\":\"newAdmin\",\"type\":\"address\"}],\"name\":\"AdminChanged\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"beacon\",\"type\":\"address\"}],\"name\":\"BeaconUpgraded\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint64[]\",\"name\":\"operatorIds\",\"type\":\"uint64[]\"},{\"indexed\":true,\"internalType\":\"uint64\",\"name\":\"blockNum\",\"type\":\"uint64\"},{\"indexed\":false,\"internalType\":\"uint32\",\"name\":\"effectiveBalance\",\"type\":\"uint32\"},{\"components\":[{\"internalType\":\"uint32\",\"name\":\"validatorCount\",\"type\":\"uint32\"},{\"internalType\":\"uint64\",\"name\":\"networkFeeIndex\",\"type\":\"uint64\"},{\"internalType\":\"uint64\",\"name\":\"index\",\"type\":\"uint64\"},{\"internalType\":\"bool\",\"name\":\"active\",\"type\":\"bool\"},{\"internalType\":\"uint256\",\"name\":\"balance\",\"type\":\"uint256\"}],\"indexed\":false,\"internalType\":\"structISSVNetworkCore.Cluster\",\"name\":\"cluster\",\"type\":\"tuple\"}],\"name\":\"ClusterBalanceUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint64[]\",\"name\":\"operatorIds\",\"type\":\"uint64[]\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"value\",\"type\":\"uint256\"},{\"components\":[{\"internalType\":\"uint32\",\"name\":\"validatorCount\",\"type\":\"uint32\"},{\"internalType\":\"uint64\",\"name\":\"networkFeeIndex\",\"type\":\"uint64\"},{\"internalType\":\"uint64\",\"name\":\"index\",\"type\":\"uint64\"},{\"internalType\":\"bool\",\"name\":\"active\",\"type\":\"bool\"},{\"internalType\":\"uint256\",\"name\":\"balance\",\"type\":\"uint256\"}],\"indexed\":false,\"internalType\":\"structISSVNetworkCore.Cluster\",\"name\":\"cluster\",\"type\":\"tuple\"}],\"name\":\"ClusterDeposited\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint64[]\",\"name\":\"operatorIds\",\"type\":\"uint64[]\"},{\"components\":[{\"internalType\":\"uint32\",\"name\":\"validatorCount\",\"type\":\"uint32\"},{\"internalType\":\"uint64\",\"name\":\"networkFeeIndex\",\"type\":\"uint64\"},{\"internalType\":\"uint64\",\"name\":\"index\",\"type\":\"uint64\"},{\"internalType\":\"bool\",\"name\":\"active\",\"type\":\"bool\"},{\"internalType\":\"uint256\",\"name\":\"balance\",\"type\":\"uint256\"}],\"indexed\":false,\"internalType\":\"structISSVNetworkCore.Cluster\",\"name\":\"cluster\",\"type\":\"tuple\"}],\"name\":\"ClusterLiquidated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint64[]\",\"name\":\"operatorIds\",\"type\":\"uint64[]\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"ethDeposited\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"ssvRefunded\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint32\",\"name\":\"effectiveBalance\",\"type\":\"uint32\"},{\"components\":[{\"internalType\":\"uint32\",\"name\":\"validatorCount\",\"type\":\"uint32\"},{\"internalType\":\"uint64\",\"name\":\"networkFeeIndex\",\"type\":\"uint64\"},{\"internalType\":\"uint64\",\"name\":\"index\",\"type\":\"uint64\"},{\"internalType\":\"bool\",\"name\":\"active\",\"type\":\"bool\"},{\"internalType\":\"uint256\",\"name\":\"balance\",\"type\":\"uint256\"}],\"indexed\":false,\"internalType\":\"structISSVNetworkCore.Cluster\",\"name\":\"cluster\",\"type\":\"tuple\"}],\"name\":\"ClusterMigratedToETH\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint64[]\",\"name\":\"operatorIds\",\"type\":\"uint64[]\"},{\"components\":[{\"internalType\":\"uint32\",\"name\":\"validatorCount\",\"type\":\"uint32\"},{\"internalType\":\"uint64\",\"name\":\"networkFeeIndex\",\"type\":\"uint64\"},{\"internalType\":\"uint64\",\"name\":\"index\",\"type\":\"uint64\"},{\"internalType\":\"bool\",\"name\":\"active\",\"type\":\"bool\"},{\"internalType\":\"uint256\",\"name\":\"balance\",\"type\":\"uint256\"}],\"indexed\":false,\"internalType\":\"structISSVNetworkCore.Cluster\",\"name\":\"cluster\",\"type\":\"tuple\"}],\"name\":\"ClusterReactivated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint64[]\",\"name\":\"operatorIds\",\"type\":\"uint64[]\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"value\",\"type\":\"uint256\"},{\"components\":[{\"internalType\":\"uint32\",\"name\":\"validatorCount\",\"type\":\"uint32\"},{\"internalType\":\"uint64\",\"name\":\"networkFeeIndex\",\"type\":\"uint64\"},{\"internalType\":\"uint64\",\"name\":\"index\",\"type\":\"uint64\"},{\"internalType\":\"bool\",\"name\":\"active\",\"type\":\"bool\"},{\"internalType\":\"uint256\",\"name\":\"balance\",\"type\":\"uint256\"}],\"indexed\":false,\"internalType\":\"structISSVNetworkCore.Cluster\",\"name\":\"cluster\",\"type\":\"tuple\"}],\"name\":\"ClusterWithdrawn\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint64\",\"name\":\"newCooldownDuration\",\"type\":\"uint64\"}],\"name\":\"CooldownDurationUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint64\",\"name\":\"value\",\"type\":\"uint64\"}],\"name\":\"DeclareOperatorFeePeriodUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"token\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"to\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"}],\"name\":\"ERC20Rescued\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint64\",\"name\":\"value\",\"type\":\"uint64\"}],\"name\":\"ExecuteOperatorFeePeriodUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"address\",\"name\":\"recipientAddress\",\"type\":\"address\"}],\"name\":\"FeeRecipientAddressUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"newFeesWei\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"accEthPerShare\",\"type\":\"uint256\"}],\"name\":\"FeesSynced\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint8\",\"name\":\"version\",\"type\":\"uint8\"}],\"name\":\"Initialized\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint64\",\"name\":\"value\",\"type\":\"uint64\"}],\"name\":\"LiquidationThresholdPeriodSSVUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint64\",\"name\":\"value\",\"type\":\"uint64\"}],\"name\":\"LiquidationThresholdPeriodUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint32\",\"name\":\"newMinBlocksBetweenUpdates\",\"type\":\"uint32\"}],\"name\":\"MinBlocksBetweenUpdatesUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"value\",\"type\":\"uint256\"}],\"name\":\"MinimumLiquidationCollateralSSVUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"value\",\"type\":\"uint256\"}],\"name\":\"MinimumLiquidationCollateralUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"minFee\",\"type\":\"uint256\"}],\"name\":\"MinimumOperatorEthFeeUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"enumSSVModules\",\"name\":\"moduleId\",\"type\":\"uint8\"},{\"indexed\":false,\"internalType\":\"address\",\"name\":\"moduleAddress\",\"type\":\"address\"}],\"name\":\"ModuleUpgraded\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"value\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"address\",\"name\":\"recipient\",\"type\":\"address\"}],\"name\":\"NetworkEarningsWithdrawn\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"oldFee\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"newFee\",\"type\":\"uint256\"}],\"name\":\"NetworkFeeUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"oldFee\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"newFee\",\"type\":\"uint256\"}],\"name\":\"NetworkFeeUpdatedSSV\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint64\",\"name\":\"operatorId\",\"type\":\"uint64\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"bytes\",\"name\":\"publicKey\",\"type\":\"bytes\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"fee\",\"type\":\"uint256\"}],\"name\":\"OperatorAdded\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"uint64\",\"name\":\"operatorId\",\"type\":\"uint64\"}],\"name\":\"OperatorFeeDeclarationCancelled\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"uint64\",\"name\":\"operatorId\",\"type\":\"uint64\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"blockNumber\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"fee\",\"type\":\"uint256\"}],\"name\":\"OperatorFeeDeclared\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"uint64\",\"name\":\"operatorId\",\"type\":\"uint64\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"blockNumber\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"fee\",\"type\":\"uint256\"}],\"name\":\"OperatorFeeExecuted\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint64\",\"name\":\"value\",\"type\":\"uint64\"}],\"name\":\"OperatorFeeIncreaseLimitUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"maxFee\",\"type\":\"uint256\"}],\"name\":\"OperatorMaximumFeeUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint64[]\",\"name\":\"operatorIds\",\"type\":\"uint64[]\"},{\"indexed\":false,\"internalType\":\"address[]\",\"name\":\"whitelistAddresses\",\"type\":\"address[]\"}],\"name\":\"OperatorMultipleWhitelistRemoved\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint64[]\",\"name\":\"operatorIds\",\"type\":\"uint64[]\"},{\"indexed\":false,\"internalType\":\"address[]\",\"name\":\"whitelistAddresses\",\"type\":\"address[]\"}],\"name\":\"OperatorMultipleWhitelistUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint64[]\",\"name\":\"operatorIds\",\"type\":\"uint64[]\"},{\"indexed\":false,\"internalType\":\"bool\",\"name\":\"toPrivate\",\"type\":\"bool\"}],\"name\":\"OperatorPrivacyStatusUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint64\",\"name\":\"operatorId\",\"type\":\"uint64\"}],\"name\":\"OperatorRemoved\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint64\",\"name\":\"operatorId\",\"type\":\"uint64\"},{\"indexed\":false,\"internalType\":\"address\",\"name\":\"whitelisted\",\"type\":\"address\"}],\"name\":\"OperatorWhitelistUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint64[]\",\"name\":\"operatorIds\",\"type\":\"uint64[]\"},{\"indexed\":false,\"internalType\":\"address\",\"name\":\"whitelistingContract\",\"type\":\"address\"}],\"name\":\"OperatorWhitelistingContractUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"uint64\",\"name\":\"operatorId\",\"type\":\"uint64\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"value\",\"type\":\"uint256\"}],\"name\":\"OperatorWithdrawn\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"uint64\",\"name\":\"operatorId\",\"type\":\"uint64\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"value\",\"type\":\"uint256\"}],\"name\":\"OperatorWithdrawnSSV\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint32\",\"name\":\"oracleId\",\"type\":\"uint32\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"oldOracle\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"newOracle\",\"type\":\"address\"}],\"name\":\"OracleReplaced\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"previousOwner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"OwnershipTransferStarted\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"previousOwner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"OwnershipTransferred\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint16\",\"name\":\"newQuorum\",\"type\":\"uint16\"}],\"name\":\"QuorumUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"user\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"}],\"name\":\"RewardsClaimed\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"user\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"pending\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"accrued\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"userIndex\",\"type\":\"uint256\"}],\"name\":\"RewardsSettled\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"merkleRoot\",\"type\":\"bytes32\"},{\"indexed\":true,\"internalType\":\"uint64\",\"name\":\"blockNum\",\"type\":\"uint64\"}],\"name\":\"RootCommitted\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"string\",\"name\":\"version\",\"type\":\"string\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"blockNumber\",\"type\":\"uint256\"}],\"name\":\"SSVNetworkUpgradeBlock\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"user\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"}],\"name\":\"Staked\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"user\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"unlockTime\",\"type\":\"uint256\"}],\"name\":\"UnstakeRequested\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"user\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"}],\"name\":\"UnstakedWithdrawn\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"implementation\",\"type\":\"address\"}],\"name\":\"Upgraded\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint64[]\",\"name\":\"operatorIds\",\"type\":\"uint64[]\"},{\"indexed\":false,\"internalType\":\"bytes\",\"name\":\"publicKey\",\"type\":\"bytes\"},{\"indexed\":false,\"internalType\":\"bytes\",\"name\":\"shares\",\"type\":\"bytes\"},{\"components\":[{\"internalType\":\"uint32\",\"name\":\"validatorCount\",\"type\":\"uint32\"},{\"internalType\":\"uint64\",\"name\":\"networkFeeIndex\",\"type\":\"uint64\"},{\"internalType\":\"uint64\",\"name\":\"index\",\"type\":\"uint64\"},{\"internalType\":\"bool\",\"name\":\"active\",\"type\":\"bool\"},{\"internalType\":\"uint256\",\"name\":\"balance\",\"type\":\"uint256\"}],\"indexed\":false,\"internalType\":\"structISSVNetworkCore.Cluster\",\"name\":\"cluster\",\"type\":\"tuple\"}],\"name\":\"ValidatorAdded\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint64[]\",\"name\":\"operatorIds\",\"type\":\"uint64[]\"},{\"indexed\":false,\"internalType\":\"bytes\",\"name\":\"publicKey\",\"type\":\"bytes\"}],\"name\":\"ValidatorExited\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint64[]\",\"name\":\"operatorIds\",\"type\":\"uint64[]\"},{\"indexed\":false,\"internalType\":\"bytes\",\"name\":\"publicKey\",\"type\":\"bytes\"},{\"components\":[{\"internalType\":\"uint32\",\"name\":\"validatorCount\",\"type\":\"uint32\"},{\"internalType\":\"uint64\",\"name\":\"networkFeeIndex\",\"type\":\"uint64\"},{\"internalType\":\"uint64\",\"name\":\"index\",\"type\":\"uint64\"},{\"internalType\":\"bool\",\"name\":\"active\",\"type\":\"bool\"},{\"internalType\":\"uint256\",\"name\":\"balance\",\"type\":\"uint256\"}],\"indexed\":false,\"internalType\":\"structISSVNetworkCore.Cluster\",\"name\":\"cluster\",\"type\":\"tuple\"}],\"name\":\"ValidatorRemoved\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"merkleRoot\",\"type\":\"bytes32\"},{\"indexed\":true,\"internalType\":\"uint64\",\"name\":\"blockNum\",\"type\":\"uint64\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"accumulatedWeight\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"quorum\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint32\",\"name\":\"oracleId\",\"type\":\"uint32\"},{\"indexed\":false,\"internalType\":\"address\",\"name\":\"oracle\",\"type\":\"address\"}],\"name\":\"WeightedRootProposed\",\"type\":\"event\"},{\"stateMutability\":\"nonpayable\",\"type\":\"fallback\"},{\"inputs\":[],\"name\":\"acceptOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes[]\",\"name\":\"publicKeys\",\"type\":\"bytes[]\"},{\"internalType\":\"uint64[]\",\"name\":\"operatorIds\",\"type\":\"uint64[]\"}],\"name\":\"bulkExitValidator\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes[]\",\"name\":\"publicKeys\",\"type\":\"bytes[]\"},{\"internalType\":\"uint64[]\",\"name\":\"operatorIds\",\"type\":\"uint64[]\"},{\"internalType\":\"bytes[]\",\"name\":\"sharesData\",\"type\":\"bytes[]\"},{\"components\":[{\"internalType\":\"uint32\",\"name\":\"validatorCount\",\"type\":\"uint32\"},{\"internalType\":\"uint64\",\"name\":\"networkFeeIndex\",\"type\":\"uint64\"},{\"internalType\":\"uint64\",\"name\":\"index\",\"type\":\"uint64\"},{\"internalType\":\"bool\",\"name\":\"active\",\"type\":\"bool\"},{\"internalType\":\"uint256\",\"name\":\"balance\",\"type\":\"uint256\"}],\"internalType\":\"structISSVNetworkCore.Cluster\",\"name\":\"cluster\",\"type\":\"tuple\"}],\"name\":\"bulkRegisterValidator\",\"outputs\":[],\"stateMutability\":\"payable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes[]\",\"name\":\"publicKeys\",\"type\":\"bytes[]\"},{\"internalType\":\"uint64[]\",\"name\":\"operatorIds\",\"type\":\"uint64[]\"},{\"components\":[{\"internalType\":\"uint32\",\"name\":\"validatorCount\",\"type\":\"uint32\"},{\"internalType\":\"uint64\",\"name\":\"networkFeeIndex\",\"type\":\"uint64\"},{\"internalType\":\"uint64\",\"name\":\"index\",\"type\":\"uint64\"},{\"internalType\":\"bool\",\"name\":\"active\",\"type\":\"bool\"},{\"internalType\":\"uint256\",\"name\":\"balance\",\"type\":\"uint256\"}],\"internalType\":\"structISSVNetworkCore.Cluster\",\"name\":\"cluster\",\"type\":\"tuple\"}],\"name\":\"bulkRemoveValidator\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint64\",\"name\":\"operatorId\",\"type\":\"uint64\"}],\"name\":\"cancelDeclaredOperatorFee\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"claimEthRewards\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"merkleRoot\",\"type\":\"bytes32\"},{\"internalType\":\"uint64\",\"name\":\"blockNum\",\"type\":\"uint64\"}],\"name\":\"commitRoot\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint64\",\"name\":\"operatorId\",\"type\":\"uint64\"},{\"internalType\":\"uint256\",\"name\":\"fee\",\"type\":\"uint256\"}],\"name\":\"declareOperatorFee\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"clusterOwner\",\"type\":\"address\"},{\"internalType\":\"uint64[]\",\"name\":\"operatorIds\",\"type\":\"uint64[]\"},{\"components\":[{\"internalType\":\"uint32\",\"name\":\"validatorCount\",\"type\":\"uint32\"},{\"internalType\":\"uint64\",\"name\":\"networkFeeIndex\",\"type\":\"uint64\"},{\"internalType\":\"uint64\",\"name\":\"index\",\"type\":\"uint64\"},{\"internalType\":\"bool\",\"name\":\"active\",\"type\":\"bool\"},{\"internalType\":\"uint256\",\"name\":\"balance\",\"type\":\"uint256\"}],\"internalType\":\"structISSVNetworkCore.Cluster\",\"name\":\"cluster\",\"type\":\"tuple\"}],\"name\":\"deposit\",\"outputs\":[],\"stateMutability\":\"payable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint64\",\"name\":\"operatorId\",\"type\":\"uint64\"}],\"name\":\"executeOperatorFee\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes\",\"name\":\"publicKey\",\"type\":\"bytes\"},{\"internalType\":\"uint64[]\",\"name\":\"operatorIds\",\"type\":\"uint64[]\"}],\"name\":\"exitValidator\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"getVersion\",\"outputs\":[{\"internalType\":\"string\",\"name\":\"version\",\"type\":\"string\"}],\"stateMutability\":\"pure\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"contractIERC20\",\"name\":\"token_\",\"type\":\"address\"},{\"internalType\":\"contractISSVOperators\",\"name\":\"ssvOperators_\",\"type\":\"address\"},{\"internalType\":\"contractISSVClusters\",\"name\":\"ssvClusters_\",\"type\":\"address\"},{\"internalType\":\"contractISSVDAO\",\"name\":\"ssvDAO_\",\"type\":\"address\"},{\"internalType\":\"contractISSVViews\",\"name\":\"ssvViews_\",\"type\":\"address\"},{\"components\":[{\"internalType\":\"uint64\",\"name\":\"minimumBlocksBeforeLiquidation\",\"type\":\"uint64\"},{\"internalType\":\"uint256\",\"name\":\"minimumLiquidationCollateral\",\"type\":\"uint256\"},{\"internalType\":\"uint32\",\"name\":\"validatorsPerOperatorLimit\",\"type\":\"uint32\"},{\"internalType\":\"uint64\",\"name\":\"declareOperatorFeePeriod\",\"type\":\"uint64\"},{\"internalType\":\"uint64\",\"name\":\"executeOperatorFeePeriod\",\"type\":\"uint64\"},{\"internalType\":\"uint64\",\"name\":\"operatorMaxFeeIncrease\",\"type\":\"uint64\"},{\"internalType\":\"uint32[4]\",\"name\":\"defaultOracleIds\",\"type\":\"uint32[4]\"},{\"internalType\":\"uint16\",\"name\":\"quorumBps\",\"type\":\"uint16\"}],\"internalType\":\"structISSVNetwork.NetworkInitParams\",\"name\":\"params\",\"type\":\"tuple\"}],\"name\":\"initialize\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"clusterOwner\",\"type\":\"address\"},{\"internalType\":\"uint64[]\",\"name\":\"operatorIds\",\"type\":\"uint64[]\"},{\"components\":[{\"internalType\":\"uint32\",\"name\":\"validatorCount\",\"type\":\"uint32\"},{\"internalType\":\"uint64\",\"name\":\"networkFeeIndex\",\"type\":\"uint64\"},{\"internalType\":\"uint64\",\"name\":\"index\",\"type\":\"uint64\"},{\"internalType\":\"bool\",\"name\":\"active\",\"type\":\"bool\"},{\"internalType\":\"uint256\",\"name\":\"balance\",\"type\":\"uint256\"}],\"internalType\":\"structISSVNetworkCore.Cluster\",\"name\":\"cluster\",\"type\":\"tuple\"}],\"name\":\"liquidate\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"clusterOwner\",\"type\":\"address\"},{\"internalType\":\"uint64[]\",\"name\":\"operatorIds\",\"type\":\"uint64[]\"},{\"components\":[{\"internalType\":\"uint32\",\"name\":\"validatorCount\",\"type\":\"uint32\"},{\"internalType\":\"uint64\",\"name\":\"networkFeeIndex\",\"type\":\"uint64\"},{\"internalType\":\"uint64\",\"name\":\"index\",\"type\":\"uint64\"},{\"internalType\":\"bool\",\"name\":\"active\",\"type\":\"bool\"},{\"internalType\":\"uint256\",\"name\":\"balance\",\"type\":\"uint256\"}],\"internalType\":\"structISSVNetworkCore.Cluster\",\"name\":\"cluster\",\"type\":\"tuple\"}],\"name\":\"liquidateSSV\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint64[]\",\"name\":\"operatorIds\",\"type\":\"uint64[]\"},{\"components\":[{\"internalType\":\"uint32\",\"name\":\"validatorCount\",\"type\":\"uint32\"},{\"internalType\":\"uint64\",\"name\":\"networkFeeIndex\",\"type\":\"uint64\"},{\"internalType\":\"uint64\",\"name\":\"index\",\"type\":\"uint64\"},{\"internalType\":\"bool\",\"name\":\"active\",\"type\":\"bool\"},{\"internalType\":\"uint256\",\"name\":\"balance\",\"type\":\"uint256\"}],\"internalType\":\"structISSVNetworkCore.Cluster\",\"name\":\"cluster\",\"type\":\"tuple\"}],\"name\":\"migrateClusterToETH\",\"outputs\":[],\"stateMutability\":\"payable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"from\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"to\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"}],\"name\":\"onCSSVTransfer\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"owner\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"pendingOwner\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"proxiableUUID\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint64[]\",\"name\":\"operatorIds\",\"type\":\"uint64[]\"},{\"components\":[{\"internalType\":\"uint32\",\"name\":\"validatorCount\",\"type\":\"uint32\"},{\"internalType\":\"uint64\",\"name\":\"networkFeeIndex\",\"type\":\"uint64\"},{\"internalType\":\"uint64\",\"name\":\"index\",\"type\":\"uint64\"},{\"internalType\":\"bool\",\"name\":\"active\",\"type\":\"bool\"},{\"internalType\":\"uint256\",\"name\":\"balance\",\"type\":\"uint256\"}],\"internalType\":\"structISSVNetworkCore.Cluster\",\"name\":\"cluster\",\"type\":\"tuple\"}],\"name\":\"reactivate\",\"outputs\":[],\"stateMutability\":\"payable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint64\",\"name\":\"operatorId\",\"type\":\"uint64\"},{\"internalType\":\"uint256\",\"name\":\"fee\",\"type\":\"uint256\"}],\"name\":\"reduceOperatorFee\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes\",\"name\":\"publicKey\",\"type\":\"bytes\"},{\"internalType\":\"uint256\",\"name\":\"fee\",\"type\":\"uint256\"},{\"internalType\":\"bool\",\"name\":\"setPrivate\",\"type\":\"bool\"}],\"name\":\"registerOperator\",\"outputs\":[{\"internalType\":\"uint64\",\"name\":\"id\",\"type\":\"uint64\"}],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes\",\"name\":\"publicKey\",\"type\":\"bytes\"},{\"internalType\":\"uint64[]\",\"name\":\"operatorIds\",\"type\":\"uint64[]\"},{\"internalType\":\"bytes\",\"name\":\"sharesData\",\"type\":\"bytes\"},{\"components\":[{\"internalType\":\"uint32\",\"name\":\"validatorCount\",\"type\":\"uint32\"},{\"internalType\":\"uint64\",\"name\":\"networkFeeIndex\",\"type\":\"uint64\"},{\"internalType\":\"uint64\",\"name\":\"index\",\"type\":\"uint64\"},{\"internalType\":\"bool\",\"name\":\"active\",\"type\":\"bool\"},{\"internalType\":\"uint256\",\"name\":\"balance\",\"type\":\"uint256\"}],\"internalType\":\"structISSVNetworkCore.Cluster\",\"name\":\"cluster\",\"type\":\"tuple\"}],\"name\":\"registerValidator\",\"outputs\":[],\"stateMutability\":\"payable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint64\",\"name\":\"operatorId\",\"type\":\"uint64\"}],\"name\":\"removeOperator\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint64[]\",\"name\":\"operatorIds\",\"type\":\"uint64[]\"}],\"name\":\"removeOperatorsWhitelistingContract\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint64[]\",\"name\":\"operatorIds\",\"type\":\"uint64[]\"},{\"internalType\":\"address[]\",\"name\":\"whitelistAddresses\",\"type\":\"address[]\"}],\"name\":\"removeOperatorsWhitelists\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes\",\"name\":\"publicKey\",\"type\":\"bytes\"},{\"internalType\":\"uint64[]\",\"name\":\"operatorIds\",\"type\":\"uint64[]\"},{\"components\":[{\"internalType\":\"uint32\",\"name\":\"validatorCount\",\"type\":\"uint32\"},{\"internalType\":\"uint64\",\"name\":\"networkFeeIndex\",\"type\":\"uint64\"},{\"internalType\":\"uint64\",\"name\":\"index\",\"type\":\"uint64\"},{\"internalType\":\"bool\",\"name\":\"active\",\"type\":\"bool\"},{\"internalType\":\"uint256\",\"name\":\"balance\",\"type\":\"uint256\"}],\"internalType\":\"structISSVNetworkCore.Cluster\",\"name\":\"cluster\",\"type\":\"tuple\"}],\"name\":\"removeValidator\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"renounceOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint32\",\"name\":\"oracleId\",\"type\":\"uint32\"},{\"internalType\":\"address\",\"name\":\"newOracle\",\"type\":\"address\"}],\"name\":\"replaceOracle\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"}],\"name\":\"requestUnstake\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"token\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"to\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"}],\"name\":\"rescueERC20\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"recipientAddress\",\"type\":\"address\"}],\"name\":\"setFeeRecipientAddress\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint64[]\",\"name\":\"operatorIds\",\"type\":\"uint64[]\"}],\"name\":\"setOperatorsPrivateUnchecked\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint64[]\",\"name\":\"operatorIds\",\"type\":\"uint64[]\"}],\"name\":\"setOperatorsPublicUnchecked\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint64[]\",\"name\":\"operatorIds\",\"type\":\"uint64[]\"},{\"internalType\":\"contractISSVWhitelistingContract\",\"name\":\"whitelistingContract\",\"type\":\"address\"}],\"name\":\"setOperatorsWhitelistingContract\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint64[]\",\"name\":\"operatorIds\",\"type\":\"uint64[]\"},{\"internalType\":\"address[]\",\"name\":\"whitelistAddresses\",\"type\":\"address[]\"}],\"name\":\"setOperatorsWhitelists\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"}],\"name\":\"stake\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"syncFees\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"transferOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint64\",\"name\":\"blockNum\",\"type\":\"uint64\"},{\"internalType\":\"address\",\"name\":\"clusterOwner\",\"type\":\"address\"},{\"internalType\":\"uint64[]\",\"name\":\"operatorIds\",\"type\":\"uint64[]\"},{\"components\":[{\"internalType\":\"uint32\",\"name\":\"validatorCount\",\"type\":\"uint32\"},{\"internalType\":\"uint64\",\"name\":\"networkFeeIndex\",\"type\":\"uint64\"},{\"internalType\":\"uint64\",\"name\":\"index\",\"type\":\"uint64\"},{\"internalType\":\"bool\",\"name\":\"active\",\"type\":\"bool\"},{\"internalType\":\"uint256\",\"name\":\"balance\",\"type\":\"uint256\"}],\"internalType\":\"structISSVNetworkCore.Cluster\",\"name\":\"cluster\",\"type\":\"tuple\"},{\"internalType\":\"uint32\",\"name\":\"effectiveBalance\",\"type\":\"uint32\"},{\"internalType\":\"bytes32[]\",\"name\":\"merkleProof\",\"type\":\"bytes32[]\"}],\"name\":\"updateClusterBalance\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint64\",\"name\":\"timeInSeconds\",\"type\":\"uint64\"}],\"name\":\"updateDeclareOperatorFeePeriod\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint64\",\"name\":\"timeInSeconds\",\"type\":\"uint64\"}],\"name\":\"updateExecuteOperatorFeePeriod\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint64\",\"name\":\"blocks\",\"type\":\"uint64\"}],\"name\":\"updateLiquidationThresholdPeriod\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint64\",\"name\":\"blocks\",\"type\":\"uint64\"}],\"name\":\"updateLiquidationThresholdPeriodSSV\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"maxFee\",\"type\":\"uint256\"}],\"name\":\"updateMaximumOperatorFee\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint32\",\"name\":\"blocks\",\"type\":\"uint32\"}],\"name\":\"updateMinBlocksBetweenUpdates\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"}],\"name\":\"updateMinimumLiquidationCollateral\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"}],\"name\":\"updateMinimumLiquidationCollateralSSV\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"minFee\",\"type\":\"uint256\"}],\"name\":\"updateMinimumOperatorEthFee\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"enumSSVModules\",\"name\":\"moduleId\",\"type\":\"uint8\"},{\"internalType\":\"address\",\"name\":\"moduleAddress\",\"type\":\"address\"}],\"name\":\"updateModule\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"fee\",\"type\":\"uint256\"}],\"name\":\"updateNetworkFee\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"fee\",\"type\":\"uint256\"}],\"name\":\"updateNetworkFeeSSV\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint64\",\"name\":\"percentage\",\"type\":\"uint64\"}],\"name\":\"updateOperatorFeeIncreaseLimit\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint16\",\"name\":\"quorum\",\"type\":\"uint16\"}],\"name\":\"updateQuorumBps\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint64\",\"name\":\"duration\",\"type\":\"uint64\"}],\"name\":\"updateUnstakeCooldownDuration\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"newImplementation\",\"type\":\"address\"}],\"name\":\"upgradeTo\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"newImplementation\",\"type\":\"address\"},{\"internalType\":\"bytes\",\"name\":\"data\",\"type\":\"bytes\"}],\"name\":\"upgradeToAndCall\",\"outputs\":[],\"stateMutability\":\"payable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint64[]\",\"name\":\"operatorIds\",\"type\":\"uint64[]\"},{\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"},{\"components\":[{\"internalType\":\"uint32\",\"name\":\"validatorCount\",\"type\":\"uint32\"},{\"internalType\":\"uint64\",\"name\":\"networkFeeIndex\",\"type\":\"uint64\"},{\"internalType\":\"uint64\",\"name\":\"index\",\"type\":\"uint64\"},{\"internalType\":\"bool\",\"name\":\"active\",\"type\":\"bool\"},{\"internalType\":\"uint256\",\"name\":\"balance\",\"type\":\"uint256\"}],\"internalType\":\"structISSVNetworkCore.Cluster\",\"name\":\"cluster\",\"type\":\"tuple\"}],\"name\":\"withdraw\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint64\",\"name\":\"operatorId\",\"type\":\"uint64\"}],\"name\":\"withdrawAllOperatorEarnings\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint64\",\"name\":\"operatorId\",\"type\":\"uint64\"}],\"name\":\"withdrawAllOperatorEarningsSSV\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint64\",\"name\":\"operatorId\",\"type\":\"uint64\"}],\"name\":\"withdrawAllVersionOperatorEarnings\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"}],\"name\":\"withdrawNetworkSSVEarnings\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint64\",\"name\":\"operatorId\",\"type\":\"uint64\"},{\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"}],\"name\":\"withdrawOperatorEarnings\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint64\",\"name\":\"operatorId\",\"type\":\"uint64\"},{\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"}],\"name\":\"withdrawOperatorEarningsSSV\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"withdrawUnlocked\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}]",
 }
 
 // ContractABI is the input ABI used to generate the binding from.
@@ -334,25 +346,67 @@ func (_Contract *ContractTransactorSession) AcceptOwnership() (*types.Transactio
 	return _Contract.Contract.AcceptOwnership(&_Contract.TransactOpts)
 }
 
-// BulkRegisterValidator is a paid mutator transaction binding the contract method 0x22f18bf5.
+// BulkExitValidator is a paid mutator transaction binding the contract method 0x32afd02f.
 //
-// Solidity: function bulkRegisterValidator(bytes[] publicKeys, uint64[] operatorIds, bytes[] sharesData, uint256 amount, (uint32,uint64,uint64,bool,uint256) cluster) returns()
-func (_Contract *ContractTransactor) BulkRegisterValidator(opts *bind.TransactOpts, publicKeys [][]byte, operatorIds []uint64, sharesData [][]byte, amount *big.Int, cluster ISSVNetworkCoreCluster) (*types.Transaction, error) {
-	return _Contract.contract.Transact(opts, "bulkRegisterValidator", publicKeys, operatorIds, sharesData, amount, cluster)
+// Solidity: function bulkExitValidator(bytes[] publicKeys, uint64[] operatorIds) returns()
+func (_Contract *ContractTransactor) BulkExitValidator(opts *bind.TransactOpts, publicKeys [][]byte, operatorIds []uint64) (*types.Transaction, error) {
+	return _Contract.contract.Transact(opts, "bulkExitValidator", publicKeys, operatorIds)
 }
 
-// BulkRegisterValidator is a paid mutator transaction binding the contract method 0x22f18bf5.
+// BulkExitValidator is a paid mutator transaction binding the contract method 0x32afd02f.
 //
-// Solidity: function bulkRegisterValidator(bytes[] publicKeys, uint64[] operatorIds, bytes[] sharesData, uint256 amount, (uint32,uint64,uint64,bool,uint256) cluster) returns()
-func (_Contract *ContractSession) BulkRegisterValidator(publicKeys [][]byte, operatorIds []uint64, sharesData [][]byte, amount *big.Int, cluster ISSVNetworkCoreCluster) (*types.Transaction, error) {
-	return _Contract.Contract.BulkRegisterValidator(&_Contract.TransactOpts, publicKeys, operatorIds, sharesData, amount, cluster)
+// Solidity: function bulkExitValidator(bytes[] publicKeys, uint64[] operatorIds) returns()
+func (_Contract *ContractSession) BulkExitValidator(publicKeys [][]byte, operatorIds []uint64) (*types.Transaction, error) {
+	return _Contract.Contract.BulkExitValidator(&_Contract.TransactOpts, publicKeys, operatorIds)
 }
 
-// BulkRegisterValidator is a paid mutator transaction binding the contract method 0x22f18bf5.
+// BulkExitValidator is a paid mutator transaction binding the contract method 0x32afd02f.
 //
-// Solidity: function bulkRegisterValidator(bytes[] publicKeys, uint64[] operatorIds, bytes[] sharesData, uint256 amount, (uint32,uint64,uint64,bool,uint256) cluster) returns()
-func (_Contract *ContractTransactorSession) BulkRegisterValidator(publicKeys [][]byte, operatorIds []uint64, sharesData [][]byte, amount *big.Int, cluster ISSVNetworkCoreCluster) (*types.Transaction, error) {
-	return _Contract.Contract.BulkRegisterValidator(&_Contract.TransactOpts, publicKeys, operatorIds, sharesData, amount, cluster)
+// Solidity: function bulkExitValidator(bytes[] publicKeys, uint64[] operatorIds) returns()
+func (_Contract *ContractTransactorSession) BulkExitValidator(publicKeys [][]byte, operatorIds []uint64) (*types.Transaction, error) {
+	return _Contract.Contract.BulkExitValidator(&_Contract.TransactOpts, publicKeys, operatorIds)
+}
+
+// BulkRegisterValidator is a paid mutator transaction binding the contract method 0xa1b483ca.
+//
+// Solidity: function bulkRegisterValidator(bytes[] publicKeys, uint64[] operatorIds, bytes[] sharesData, (uint32,uint64,uint64,bool,uint256) cluster) payable returns()
+func (_Contract *ContractTransactor) BulkRegisterValidator(opts *bind.TransactOpts, publicKeys [][]byte, operatorIds []uint64, sharesData [][]byte, cluster ISSVNetworkCoreCluster) (*types.Transaction, error) {
+	return _Contract.contract.Transact(opts, "bulkRegisterValidator", publicKeys, operatorIds, sharesData, cluster)
+}
+
+// BulkRegisterValidator is a paid mutator transaction binding the contract method 0xa1b483ca.
+//
+// Solidity: function bulkRegisterValidator(bytes[] publicKeys, uint64[] operatorIds, bytes[] sharesData, (uint32,uint64,uint64,bool,uint256) cluster) payable returns()
+func (_Contract *ContractSession) BulkRegisterValidator(publicKeys [][]byte, operatorIds []uint64, sharesData [][]byte, cluster ISSVNetworkCoreCluster) (*types.Transaction, error) {
+	return _Contract.Contract.BulkRegisterValidator(&_Contract.TransactOpts, publicKeys, operatorIds, sharesData, cluster)
+}
+
+// BulkRegisterValidator is a paid mutator transaction binding the contract method 0xa1b483ca.
+//
+// Solidity: function bulkRegisterValidator(bytes[] publicKeys, uint64[] operatorIds, bytes[] sharesData, (uint32,uint64,uint64,bool,uint256) cluster) payable returns()
+func (_Contract *ContractTransactorSession) BulkRegisterValidator(publicKeys [][]byte, operatorIds []uint64, sharesData [][]byte, cluster ISSVNetworkCoreCluster) (*types.Transaction, error) {
+	return _Contract.Contract.BulkRegisterValidator(&_Contract.TransactOpts, publicKeys, operatorIds, sharesData, cluster)
+}
+
+// BulkRemoveValidator is a paid mutator transaction binding the contract method 0x5aed1142.
+//
+// Solidity: function bulkRemoveValidator(bytes[] publicKeys, uint64[] operatorIds, (uint32,uint64,uint64,bool,uint256) cluster) returns()
+func (_Contract *ContractTransactor) BulkRemoveValidator(opts *bind.TransactOpts, publicKeys [][]byte, operatorIds []uint64, cluster ISSVNetworkCoreCluster) (*types.Transaction, error) {
+	return _Contract.contract.Transact(opts, "bulkRemoveValidator", publicKeys, operatorIds, cluster)
+}
+
+// BulkRemoveValidator is a paid mutator transaction binding the contract method 0x5aed1142.
+//
+// Solidity: function bulkRemoveValidator(bytes[] publicKeys, uint64[] operatorIds, (uint32,uint64,uint64,bool,uint256) cluster) returns()
+func (_Contract *ContractSession) BulkRemoveValidator(publicKeys [][]byte, operatorIds []uint64, cluster ISSVNetworkCoreCluster) (*types.Transaction, error) {
+	return _Contract.Contract.BulkRemoveValidator(&_Contract.TransactOpts, publicKeys, operatorIds, cluster)
+}
+
+// BulkRemoveValidator is a paid mutator transaction binding the contract method 0x5aed1142.
+//
+// Solidity: function bulkRemoveValidator(bytes[] publicKeys, uint64[] operatorIds, (uint32,uint64,uint64,bool,uint256) cluster) returns()
+func (_Contract *ContractTransactorSession) BulkRemoveValidator(publicKeys [][]byte, operatorIds []uint64, cluster ISSVNetworkCoreCluster) (*types.Transaction, error) {
+	return _Contract.Contract.BulkRemoveValidator(&_Contract.TransactOpts, publicKeys, operatorIds, cluster)
 }
 
 // CancelDeclaredOperatorFee is a paid mutator transaction binding the contract method 0x23d68a6d.
@@ -376,6 +430,48 @@ func (_Contract *ContractTransactorSession) CancelDeclaredOperatorFee(operatorId
 	return _Contract.Contract.CancelDeclaredOperatorFee(&_Contract.TransactOpts, operatorId)
 }
 
+// ClaimEthRewards is a paid mutator transaction binding the contract method 0x27596fce.
+//
+// Solidity: function claimEthRewards() returns()
+func (_Contract *ContractTransactor) ClaimEthRewards(opts *bind.TransactOpts) (*types.Transaction, error) {
+	return _Contract.contract.Transact(opts, "claimEthRewards")
+}
+
+// ClaimEthRewards is a paid mutator transaction binding the contract method 0x27596fce.
+//
+// Solidity: function claimEthRewards() returns()
+func (_Contract *ContractSession) ClaimEthRewards() (*types.Transaction, error) {
+	return _Contract.Contract.ClaimEthRewards(&_Contract.TransactOpts)
+}
+
+// ClaimEthRewards is a paid mutator transaction binding the contract method 0x27596fce.
+//
+// Solidity: function claimEthRewards() returns()
+func (_Contract *ContractTransactorSession) ClaimEthRewards() (*types.Transaction, error) {
+	return _Contract.Contract.ClaimEthRewards(&_Contract.TransactOpts)
+}
+
+// CommitRoot is a paid mutator transaction binding the contract method 0x00ebb5f0.
+//
+// Solidity: function commitRoot(bytes32 merkleRoot, uint64 blockNum) returns()
+func (_Contract *ContractTransactor) CommitRoot(opts *bind.TransactOpts, merkleRoot [32]byte, blockNum uint64) (*types.Transaction, error) {
+	return _Contract.contract.Transact(opts, "commitRoot", merkleRoot, blockNum)
+}
+
+// CommitRoot is a paid mutator transaction binding the contract method 0x00ebb5f0.
+//
+// Solidity: function commitRoot(bytes32 merkleRoot, uint64 blockNum) returns()
+func (_Contract *ContractSession) CommitRoot(merkleRoot [32]byte, blockNum uint64) (*types.Transaction, error) {
+	return _Contract.Contract.CommitRoot(&_Contract.TransactOpts, merkleRoot, blockNum)
+}
+
+// CommitRoot is a paid mutator transaction binding the contract method 0x00ebb5f0.
+//
+// Solidity: function commitRoot(bytes32 merkleRoot, uint64 blockNum) returns()
+func (_Contract *ContractTransactorSession) CommitRoot(merkleRoot [32]byte, blockNum uint64) (*types.Transaction, error) {
+	return _Contract.Contract.CommitRoot(&_Contract.TransactOpts, merkleRoot, blockNum)
+}
+
 // DeclareOperatorFee is a paid mutator transaction binding the contract method 0xb317c35f.
 //
 // Solidity: function declareOperatorFee(uint64 operatorId, uint256 fee) returns()
@@ -397,25 +493,25 @@ func (_Contract *ContractTransactorSession) DeclareOperatorFee(operatorId uint64
 	return _Contract.Contract.DeclareOperatorFee(&_Contract.TransactOpts, operatorId, fee)
 }
 
-// Deposit is a paid mutator transaction binding the contract method 0xbc26e7e5.
+// Deposit is a paid mutator transaction binding the contract method 0x45f47188.
 //
-// Solidity: function deposit(address clusterOwner, uint64[] operatorIds, uint256 amount, (uint32,uint64,uint64,bool,uint256) cluster) returns()
-func (_Contract *ContractTransactor) Deposit(opts *bind.TransactOpts, clusterOwner common.Address, operatorIds []uint64, amount *big.Int, cluster ISSVNetworkCoreCluster) (*types.Transaction, error) {
-	return _Contract.contract.Transact(opts, "deposit", clusterOwner, operatorIds, amount, cluster)
+// Solidity: function deposit(address clusterOwner, uint64[] operatorIds, (uint32,uint64,uint64,bool,uint256) cluster) payable returns()
+func (_Contract *ContractTransactor) Deposit(opts *bind.TransactOpts, clusterOwner common.Address, operatorIds []uint64, cluster ISSVNetworkCoreCluster) (*types.Transaction, error) {
+	return _Contract.contract.Transact(opts, "deposit", clusterOwner, operatorIds, cluster)
 }
 
-// Deposit is a paid mutator transaction binding the contract method 0xbc26e7e5.
+// Deposit is a paid mutator transaction binding the contract method 0x45f47188.
 //
-// Solidity: function deposit(address clusterOwner, uint64[] operatorIds, uint256 amount, (uint32,uint64,uint64,bool,uint256) cluster) returns()
-func (_Contract *ContractSession) Deposit(clusterOwner common.Address, operatorIds []uint64, amount *big.Int, cluster ISSVNetworkCoreCluster) (*types.Transaction, error) {
-	return _Contract.Contract.Deposit(&_Contract.TransactOpts, clusterOwner, operatorIds, amount, cluster)
+// Solidity: function deposit(address clusterOwner, uint64[] operatorIds, (uint32,uint64,uint64,bool,uint256) cluster) payable returns()
+func (_Contract *ContractSession) Deposit(clusterOwner common.Address, operatorIds []uint64, cluster ISSVNetworkCoreCluster) (*types.Transaction, error) {
+	return _Contract.Contract.Deposit(&_Contract.TransactOpts, clusterOwner, operatorIds, cluster)
 }
 
-// Deposit is a paid mutator transaction binding the contract method 0xbc26e7e5.
+// Deposit is a paid mutator transaction binding the contract method 0x45f47188.
 //
-// Solidity: function deposit(address clusterOwner, uint64[] operatorIds, uint256 amount, (uint32,uint64,uint64,bool,uint256) cluster) returns()
-func (_Contract *ContractTransactorSession) Deposit(clusterOwner common.Address, operatorIds []uint64, amount *big.Int, cluster ISSVNetworkCoreCluster) (*types.Transaction, error) {
-	return _Contract.Contract.Deposit(&_Contract.TransactOpts, clusterOwner, operatorIds, amount, cluster)
+// Solidity: function deposit(address clusterOwner, uint64[] operatorIds, (uint32,uint64,uint64,bool,uint256) cluster) payable returns()
+func (_Contract *ContractTransactorSession) Deposit(clusterOwner common.Address, operatorIds []uint64, cluster ISSVNetworkCoreCluster) (*types.Transaction, error) {
+	return _Contract.Contract.Deposit(&_Contract.TransactOpts, clusterOwner, operatorIds, cluster)
 }
 
 // ExecuteOperatorFee is a paid mutator transaction binding the contract method 0x8932cee0.
@@ -460,25 +556,25 @@ func (_Contract *ContractTransactorSession) ExitValidator(publicKey []byte, oper
 	return _Contract.Contract.ExitValidator(&_Contract.TransactOpts, publicKey, operatorIds)
 }
 
-// Initialize is a paid mutator transaction binding the contract method 0xc626c3c6.
+// Initialize is a paid mutator transaction binding the contract method 0x33dcc58a.
 //
-// Solidity: function initialize(address token_, address ssvOperators_, address ssvClusters_, address ssvDAO_, address ssvViews_, uint64 minimumBlocksBeforeLiquidation_, uint256 minimumLiquidationCollateral_, uint32 validatorsPerOperatorLimit_, uint64 declareOperatorFeePeriod_, uint64 executeOperatorFeePeriod_, uint64 operatorMaxFeeIncrease_) returns()
-func (_Contract *ContractTransactor) Initialize(opts *bind.TransactOpts, token_ common.Address, ssvOperators_ common.Address, ssvClusters_ common.Address, ssvDAO_ common.Address, ssvViews_ common.Address, minimumBlocksBeforeLiquidation_ uint64, minimumLiquidationCollateral_ *big.Int, validatorsPerOperatorLimit_ uint32, declareOperatorFeePeriod_ uint64, executeOperatorFeePeriod_ uint64, operatorMaxFeeIncrease_ uint64) (*types.Transaction, error) {
-	return _Contract.contract.Transact(opts, "initialize", token_, ssvOperators_, ssvClusters_, ssvDAO_, ssvViews_, minimumBlocksBeforeLiquidation_, minimumLiquidationCollateral_, validatorsPerOperatorLimit_, declareOperatorFeePeriod_, executeOperatorFeePeriod_, operatorMaxFeeIncrease_)
+// Solidity: function initialize(address token_, address ssvOperators_, address ssvClusters_, address ssvDAO_, address ssvViews_, (uint64,uint256,uint32,uint64,uint64,uint64,uint32[4],uint16) params) returns()
+func (_Contract *ContractTransactor) Initialize(opts *bind.TransactOpts, token_ common.Address, ssvOperators_ common.Address, ssvClusters_ common.Address, ssvDAO_ common.Address, ssvViews_ common.Address, params ISSVNetworkNetworkInitParams) (*types.Transaction, error) {
+	return _Contract.contract.Transact(opts, "initialize", token_, ssvOperators_, ssvClusters_, ssvDAO_, ssvViews_, params)
 }
 
-// Initialize is a paid mutator transaction binding the contract method 0xc626c3c6.
+// Initialize is a paid mutator transaction binding the contract method 0x33dcc58a.
 //
-// Solidity: function initialize(address token_, address ssvOperators_, address ssvClusters_, address ssvDAO_, address ssvViews_, uint64 minimumBlocksBeforeLiquidation_, uint256 minimumLiquidationCollateral_, uint32 validatorsPerOperatorLimit_, uint64 declareOperatorFeePeriod_, uint64 executeOperatorFeePeriod_, uint64 operatorMaxFeeIncrease_) returns()
-func (_Contract *ContractSession) Initialize(token_ common.Address, ssvOperators_ common.Address, ssvClusters_ common.Address, ssvDAO_ common.Address, ssvViews_ common.Address, minimumBlocksBeforeLiquidation_ uint64, minimumLiquidationCollateral_ *big.Int, validatorsPerOperatorLimit_ uint32, declareOperatorFeePeriod_ uint64, executeOperatorFeePeriod_ uint64, operatorMaxFeeIncrease_ uint64) (*types.Transaction, error) {
-	return _Contract.Contract.Initialize(&_Contract.TransactOpts, token_, ssvOperators_, ssvClusters_, ssvDAO_, ssvViews_, minimumBlocksBeforeLiquidation_, minimumLiquidationCollateral_, validatorsPerOperatorLimit_, declareOperatorFeePeriod_, executeOperatorFeePeriod_, operatorMaxFeeIncrease_)
+// Solidity: function initialize(address token_, address ssvOperators_, address ssvClusters_, address ssvDAO_, address ssvViews_, (uint64,uint256,uint32,uint64,uint64,uint64,uint32[4],uint16) params) returns()
+func (_Contract *ContractSession) Initialize(token_ common.Address, ssvOperators_ common.Address, ssvClusters_ common.Address, ssvDAO_ common.Address, ssvViews_ common.Address, params ISSVNetworkNetworkInitParams) (*types.Transaction, error) {
+	return _Contract.Contract.Initialize(&_Contract.TransactOpts, token_, ssvOperators_, ssvClusters_, ssvDAO_, ssvViews_, params)
 }
 
-// Initialize is a paid mutator transaction binding the contract method 0xc626c3c6.
+// Initialize is a paid mutator transaction binding the contract method 0x33dcc58a.
 //
-// Solidity: function initialize(address token_, address ssvOperators_, address ssvClusters_, address ssvDAO_, address ssvViews_, uint64 minimumBlocksBeforeLiquidation_, uint256 minimumLiquidationCollateral_, uint32 validatorsPerOperatorLimit_, uint64 declareOperatorFeePeriod_, uint64 executeOperatorFeePeriod_, uint64 operatorMaxFeeIncrease_) returns()
-func (_Contract *ContractTransactorSession) Initialize(token_ common.Address, ssvOperators_ common.Address, ssvClusters_ common.Address, ssvDAO_ common.Address, ssvViews_ common.Address, minimumBlocksBeforeLiquidation_ uint64, minimumLiquidationCollateral_ *big.Int, validatorsPerOperatorLimit_ uint32, declareOperatorFeePeriod_ uint64, executeOperatorFeePeriod_ uint64, operatorMaxFeeIncrease_ uint64) (*types.Transaction, error) {
-	return _Contract.Contract.Initialize(&_Contract.TransactOpts, token_, ssvOperators_, ssvClusters_, ssvDAO_, ssvViews_, minimumBlocksBeforeLiquidation_, minimumLiquidationCollateral_, validatorsPerOperatorLimit_, declareOperatorFeePeriod_, executeOperatorFeePeriod_, operatorMaxFeeIncrease_)
+// Solidity: function initialize(address token_, address ssvOperators_, address ssvClusters_, address ssvDAO_, address ssvViews_, (uint64,uint256,uint32,uint64,uint64,uint64,uint32[4],uint16) params) returns()
+func (_Contract *ContractTransactorSession) Initialize(token_ common.Address, ssvOperators_ common.Address, ssvClusters_ common.Address, ssvDAO_ common.Address, ssvViews_ common.Address, params ISSVNetworkNetworkInitParams) (*types.Transaction, error) {
+	return _Contract.Contract.Initialize(&_Contract.TransactOpts, token_, ssvOperators_, ssvClusters_, ssvDAO_, ssvViews_, params)
 }
 
 // Liquidate is a paid mutator transaction binding the contract method 0xbf0f2fb2.
@@ -502,25 +598,88 @@ func (_Contract *ContractTransactorSession) Liquidate(clusterOwner common.Addres
 	return _Contract.Contract.Liquidate(&_Contract.TransactOpts, clusterOwner, operatorIds, cluster)
 }
 
-// Reactivate is a paid mutator transaction binding the contract method 0x5fec6dd0.
+// LiquidateSSV is a paid mutator transaction binding the contract method 0x8c1d3d03.
 //
-// Solidity: function reactivate(uint64[] operatorIds, uint256 amount, (uint32,uint64,uint64,bool,uint256) cluster) returns()
-func (_Contract *ContractTransactor) Reactivate(opts *bind.TransactOpts, operatorIds []uint64, amount *big.Int, cluster ISSVNetworkCoreCluster) (*types.Transaction, error) {
-	return _Contract.contract.Transact(opts, "reactivate", operatorIds, amount, cluster)
+// Solidity: function liquidateSSV(address clusterOwner, uint64[] operatorIds, (uint32,uint64,uint64,bool,uint256) cluster) returns()
+func (_Contract *ContractTransactor) LiquidateSSV(opts *bind.TransactOpts, clusterOwner common.Address, operatorIds []uint64, cluster ISSVNetworkCoreCluster) (*types.Transaction, error) {
+	return _Contract.contract.Transact(opts, "liquidateSSV", clusterOwner, operatorIds, cluster)
 }
 
-// Reactivate is a paid mutator transaction binding the contract method 0x5fec6dd0.
+// LiquidateSSV is a paid mutator transaction binding the contract method 0x8c1d3d03.
 //
-// Solidity: function reactivate(uint64[] operatorIds, uint256 amount, (uint32,uint64,uint64,bool,uint256) cluster) returns()
-func (_Contract *ContractSession) Reactivate(operatorIds []uint64, amount *big.Int, cluster ISSVNetworkCoreCluster) (*types.Transaction, error) {
-	return _Contract.Contract.Reactivate(&_Contract.TransactOpts, operatorIds, amount, cluster)
+// Solidity: function liquidateSSV(address clusterOwner, uint64[] operatorIds, (uint32,uint64,uint64,bool,uint256) cluster) returns()
+func (_Contract *ContractSession) LiquidateSSV(clusterOwner common.Address, operatorIds []uint64, cluster ISSVNetworkCoreCluster) (*types.Transaction, error) {
+	return _Contract.Contract.LiquidateSSV(&_Contract.TransactOpts, clusterOwner, operatorIds, cluster)
 }
 
-// Reactivate is a paid mutator transaction binding the contract method 0x5fec6dd0.
+// LiquidateSSV is a paid mutator transaction binding the contract method 0x8c1d3d03.
 //
-// Solidity: function reactivate(uint64[] operatorIds, uint256 amount, (uint32,uint64,uint64,bool,uint256) cluster) returns()
-func (_Contract *ContractTransactorSession) Reactivate(operatorIds []uint64, amount *big.Int, cluster ISSVNetworkCoreCluster) (*types.Transaction, error) {
-	return _Contract.Contract.Reactivate(&_Contract.TransactOpts, operatorIds, amount, cluster)
+// Solidity: function liquidateSSV(address clusterOwner, uint64[] operatorIds, (uint32,uint64,uint64,bool,uint256) cluster) returns()
+func (_Contract *ContractTransactorSession) LiquidateSSV(clusterOwner common.Address, operatorIds []uint64, cluster ISSVNetworkCoreCluster) (*types.Transaction, error) {
+	return _Contract.Contract.LiquidateSSV(&_Contract.TransactOpts, clusterOwner, operatorIds, cluster)
+}
+
+// MigrateClusterToETH is a paid mutator transaction binding the contract method 0x36e87b12.
+//
+// Solidity: function migrateClusterToETH(uint64[] operatorIds, (uint32,uint64,uint64,bool,uint256) cluster) payable returns()
+func (_Contract *ContractTransactor) MigrateClusterToETH(opts *bind.TransactOpts, operatorIds []uint64, cluster ISSVNetworkCoreCluster) (*types.Transaction, error) {
+	return _Contract.contract.Transact(opts, "migrateClusterToETH", operatorIds, cluster)
+}
+
+// MigrateClusterToETH is a paid mutator transaction binding the contract method 0x36e87b12.
+//
+// Solidity: function migrateClusterToETH(uint64[] operatorIds, (uint32,uint64,uint64,bool,uint256) cluster) payable returns()
+func (_Contract *ContractSession) MigrateClusterToETH(operatorIds []uint64, cluster ISSVNetworkCoreCluster) (*types.Transaction, error) {
+	return _Contract.Contract.MigrateClusterToETH(&_Contract.TransactOpts, operatorIds, cluster)
+}
+
+// MigrateClusterToETH is a paid mutator transaction binding the contract method 0x36e87b12.
+//
+// Solidity: function migrateClusterToETH(uint64[] operatorIds, (uint32,uint64,uint64,bool,uint256) cluster) payable returns()
+func (_Contract *ContractTransactorSession) MigrateClusterToETH(operatorIds []uint64, cluster ISSVNetworkCoreCluster) (*types.Transaction, error) {
+	return _Contract.Contract.MigrateClusterToETH(&_Contract.TransactOpts, operatorIds, cluster)
+}
+
+// OnCSSVTransfer is a paid mutator transaction binding the contract method 0x3dd704f0.
+//
+// Solidity: function onCSSVTransfer(address from, address to, uint256 amount) returns()
+func (_Contract *ContractTransactor) OnCSSVTransfer(opts *bind.TransactOpts, from common.Address, to common.Address, amount *big.Int) (*types.Transaction, error) {
+	return _Contract.contract.Transact(opts, "onCSSVTransfer", from, to, amount)
+}
+
+// OnCSSVTransfer is a paid mutator transaction binding the contract method 0x3dd704f0.
+//
+// Solidity: function onCSSVTransfer(address from, address to, uint256 amount) returns()
+func (_Contract *ContractSession) OnCSSVTransfer(from common.Address, to common.Address, amount *big.Int) (*types.Transaction, error) {
+	return _Contract.Contract.OnCSSVTransfer(&_Contract.TransactOpts, from, to, amount)
+}
+
+// OnCSSVTransfer is a paid mutator transaction binding the contract method 0x3dd704f0.
+//
+// Solidity: function onCSSVTransfer(address from, address to, uint256 amount) returns()
+func (_Contract *ContractTransactorSession) OnCSSVTransfer(from common.Address, to common.Address, amount *big.Int) (*types.Transaction, error) {
+	return _Contract.Contract.OnCSSVTransfer(&_Contract.TransactOpts, from, to, amount)
+}
+
+// Reactivate is a paid mutator transaction binding the contract method 0xea7844ff.
+//
+// Solidity: function reactivate(uint64[] operatorIds, (uint32,uint64,uint64,bool,uint256) cluster) payable returns()
+func (_Contract *ContractTransactor) Reactivate(opts *bind.TransactOpts, operatorIds []uint64, cluster ISSVNetworkCoreCluster) (*types.Transaction, error) {
+	return _Contract.contract.Transact(opts, "reactivate", operatorIds, cluster)
+}
+
+// Reactivate is a paid mutator transaction binding the contract method 0xea7844ff.
+//
+// Solidity: function reactivate(uint64[] operatorIds, (uint32,uint64,uint64,bool,uint256) cluster) payable returns()
+func (_Contract *ContractSession) Reactivate(operatorIds []uint64, cluster ISSVNetworkCoreCluster) (*types.Transaction, error) {
+	return _Contract.Contract.Reactivate(&_Contract.TransactOpts, operatorIds, cluster)
+}
+
+// Reactivate is a paid mutator transaction binding the contract method 0xea7844ff.
+//
+// Solidity: function reactivate(uint64[] operatorIds, (uint32,uint64,uint64,bool,uint256) cluster) payable returns()
+func (_Contract *ContractTransactorSession) Reactivate(operatorIds []uint64, cluster ISSVNetworkCoreCluster) (*types.Transaction, error) {
+	return _Contract.Contract.Reactivate(&_Contract.TransactOpts, operatorIds, cluster)
 }
 
 // ReduceOperatorFee is a paid mutator transaction binding the contract method 0x190d82e4.
@@ -544,46 +703,46 @@ func (_Contract *ContractTransactorSession) ReduceOperatorFee(operatorId uint64,
 	return _Contract.Contract.ReduceOperatorFee(&_Contract.TransactOpts, operatorId, fee)
 }
 
-// RegisterOperator is a paid mutator transaction binding the contract method 0xff212c5c.
+// RegisterOperator is a paid mutator transaction binding the contract method 0xc9bbc9fa.
 //
-// Solidity: function registerOperator(bytes publicKey, uint256 fee) returns(uint64 id)
-func (_Contract *ContractTransactor) RegisterOperator(opts *bind.TransactOpts, publicKey []byte, fee *big.Int) (*types.Transaction, error) {
-	return _Contract.contract.Transact(opts, "registerOperator", publicKey, fee)
+// Solidity: function registerOperator(bytes publicKey, uint256 fee, bool setPrivate) returns(uint64 id)
+func (_Contract *ContractTransactor) RegisterOperator(opts *bind.TransactOpts, publicKey []byte, fee *big.Int, setPrivate bool) (*types.Transaction, error) {
+	return _Contract.contract.Transact(opts, "registerOperator", publicKey, fee, setPrivate)
 }
 
-// RegisterOperator is a paid mutator transaction binding the contract method 0xff212c5c.
+// RegisterOperator is a paid mutator transaction binding the contract method 0xc9bbc9fa.
 //
-// Solidity: function registerOperator(bytes publicKey, uint256 fee) returns(uint64 id)
-func (_Contract *ContractSession) RegisterOperator(publicKey []byte, fee *big.Int) (*types.Transaction, error) {
-	return _Contract.Contract.RegisterOperator(&_Contract.TransactOpts, publicKey, fee)
+// Solidity: function registerOperator(bytes publicKey, uint256 fee, bool setPrivate) returns(uint64 id)
+func (_Contract *ContractSession) RegisterOperator(publicKey []byte, fee *big.Int, setPrivate bool) (*types.Transaction, error) {
+	return _Contract.Contract.RegisterOperator(&_Contract.TransactOpts, publicKey, fee, setPrivate)
 }
 
-// RegisterOperator is a paid mutator transaction binding the contract method 0xff212c5c.
+// RegisterOperator is a paid mutator transaction binding the contract method 0xc9bbc9fa.
 //
-// Solidity: function registerOperator(bytes publicKey, uint256 fee) returns(uint64 id)
-func (_Contract *ContractTransactorSession) RegisterOperator(publicKey []byte, fee *big.Int) (*types.Transaction, error) {
-	return _Contract.Contract.RegisterOperator(&_Contract.TransactOpts, publicKey, fee)
+// Solidity: function registerOperator(bytes publicKey, uint256 fee, bool setPrivate) returns(uint64 id)
+func (_Contract *ContractTransactorSession) RegisterOperator(publicKey []byte, fee *big.Int, setPrivate bool) (*types.Transaction, error) {
+	return _Contract.Contract.RegisterOperator(&_Contract.TransactOpts, publicKey, fee, setPrivate)
 }
 
-// RegisterValidator is a paid mutator transaction binding the contract method 0x06e8fb9c.
+// RegisterValidator is a paid mutator transaction binding the contract method 0xb84319fd.
 //
-// Solidity: function registerValidator(bytes publicKey, uint64[] operatorIds, bytes shares, uint256 amount, (uint32,uint64,uint64,bool,uint256) cluster) returns()
-func (_Contract *ContractTransactor) RegisterValidator(opts *bind.TransactOpts, publicKey []byte, operatorIds []uint64, shares []byte, amount *big.Int, cluster ISSVNetworkCoreCluster) (*types.Transaction, error) {
-	return _Contract.contract.Transact(opts, "registerValidator", publicKey, operatorIds, shares, amount, cluster)
+// Solidity: function registerValidator(bytes publicKey, uint64[] operatorIds, bytes sharesData, (uint32,uint64,uint64,bool,uint256) cluster) payable returns()
+func (_Contract *ContractTransactor) RegisterValidator(opts *bind.TransactOpts, publicKey []byte, operatorIds []uint64, sharesData []byte, cluster ISSVNetworkCoreCluster) (*types.Transaction, error) {
+	return _Contract.contract.Transact(opts, "registerValidator", publicKey, operatorIds, sharesData, cluster)
 }
 
-// RegisterValidator is a paid mutator transaction binding the contract method 0x06e8fb9c.
+// RegisterValidator is a paid mutator transaction binding the contract method 0xb84319fd.
 //
-// Solidity: function registerValidator(bytes publicKey, uint64[] operatorIds, bytes shares, uint256 amount, (uint32,uint64,uint64,bool,uint256) cluster) returns()
-func (_Contract *ContractSession) RegisterValidator(publicKey []byte, operatorIds []uint64, shares []byte, amount *big.Int, cluster ISSVNetworkCoreCluster) (*types.Transaction, error) {
-	return _Contract.Contract.RegisterValidator(&_Contract.TransactOpts, publicKey, operatorIds, shares, amount, cluster)
+// Solidity: function registerValidator(bytes publicKey, uint64[] operatorIds, bytes sharesData, (uint32,uint64,uint64,bool,uint256) cluster) payable returns()
+func (_Contract *ContractSession) RegisterValidator(publicKey []byte, operatorIds []uint64, sharesData []byte, cluster ISSVNetworkCoreCluster) (*types.Transaction, error) {
+	return _Contract.Contract.RegisterValidator(&_Contract.TransactOpts, publicKey, operatorIds, sharesData, cluster)
 }
 
-// RegisterValidator is a paid mutator transaction binding the contract method 0x06e8fb9c.
+// RegisterValidator is a paid mutator transaction binding the contract method 0xb84319fd.
 //
-// Solidity: function registerValidator(bytes publicKey, uint64[] operatorIds, bytes shares, uint256 amount, (uint32,uint64,uint64,bool,uint256) cluster) returns()
-func (_Contract *ContractTransactorSession) RegisterValidator(publicKey []byte, operatorIds []uint64, shares []byte, amount *big.Int, cluster ISSVNetworkCoreCluster) (*types.Transaction, error) {
-	return _Contract.Contract.RegisterValidator(&_Contract.TransactOpts, publicKey, operatorIds, shares, amount, cluster)
+// Solidity: function registerValidator(bytes publicKey, uint64[] operatorIds, bytes sharesData, (uint32,uint64,uint64,bool,uint256) cluster) payable returns()
+func (_Contract *ContractTransactorSession) RegisterValidator(publicKey []byte, operatorIds []uint64, sharesData []byte, cluster ISSVNetworkCoreCluster) (*types.Transaction, error) {
+	return _Contract.Contract.RegisterValidator(&_Contract.TransactOpts, publicKey, operatorIds, sharesData, cluster)
 }
 
 // RemoveOperator is a paid mutator transaction binding the contract method 0x2e168e0e.
@@ -605,6 +764,48 @@ func (_Contract *ContractSession) RemoveOperator(operatorId uint64) (*types.Tran
 // Solidity: function removeOperator(uint64 operatorId) returns()
 func (_Contract *ContractTransactorSession) RemoveOperator(operatorId uint64) (*types.Transaction, error) {
 	return _Contract.Contract.RemoveOperator(&_Contract.TransactOpts, operatorId)
+}
+
+// RemoveOperatorsWhitelistingContract is a paid mutator transaction binding the contract method 0x6a31cf1d.
+//
+// Solidity: function removeOperatorsWhitelistingContract(uint64[] operatorIds) returns()
+func (_Contract *ContractTransactor) RemoveOperatorsWhitelistingContract(opts *bind.TransactOpts, operatorIds []uint64) (*types.Transaction, error) {
+	return _Contract.contract.Transact(opts, "removeOperatorsWhitelistingContract", operatorIds)
+}
+
+// RemoveOperatorsWhitelistingContract is a paid mutator transaction binding the contract method 0x6a31cf1d.
+//
+// Solidity: function removeOperatorsWhitelistingContract(uint64[] operatorIds) returns()
+func (_Contract *ContractSession) RemoveOperatorsWhitelistingContract(operatorIds []uint64) (*types.Transaction, error) {
+	return _Contract.Contract.RemoveOperatorsWhitelistingContract(&_Contract.TransactOpts, operatorIds)
+}
+
+// RemoveOperatorsWhitelistingContract is a paid mutator transaction binding the contract method 0x6a31cf1d.
+//
+// Solidity: function removeOperatorsWhitelistingContract(uint64[] operatorIds) returns()
+func (_Contract *ContractTransactorSession) RemoveOperatorsWhitelistingContract(operatorIds []uint64) (*types.Transaction, error) {
+	return _Contract.Contract.RemoveOperatorsWhitelistingContract(&_Contract.TransactOpts, operatorIds)
+}
+
+// RemoveOperatorsWhitelists is a paid mutator transaction binding the contract method 0x4b2fd45e.
+//
+// Solidity: function removeOperatorsWhitelists(uint64[] operatorIds, address[] whitelistAddresses) returns()
+func (_Contract *ContractTransactor) RemoveOperatorsWhitelists(opts *bind.TransactOpts, operatorIds []uint64, whitelistAddresses []common.Address) (*types.Transaction, error) {
+	return _Contract.contract.Transact(opts, "removeOperatorsWhitelists", operatorIds, whitelistAddresses)
+}
+
+// RemoveOperatorsWhitelists is a paid mutator transaction binding the contract method 0x4b2fd45e.
+//
+// Solidity: function removeOperatorsWhitelists(uint64[] operatorIds, address[] whitelistAddresses) returns()
+func (_Contract *ContractSession) RemoveOperatorsWhitelists(operatorIds []uint64, whitelistAddresses []common.Address) (*types.Transaction, error) {
+	return _Contract.Contract.RemoveOperatorsWhitelists(&_Contract.TransactOpts, operatorIds, whitelistAddresses)
+}
+
+// RemoveOperatorsWhitelists is a paid mutator transaction binding the contract method 0x4b2fd45e.
+//
+// Solidity: function removeOperatorsWhitelists(uint64[] operatorIds, address[] whitelistAddresses) returns()
+func (_Contract *ContractTransactorSession) RemoveOperatorsWhitelists(operatorIds []uint64, whitelistAddresses []common.Address) (*types.Transaction, error) {
+	return _Contract.Contract.RemoveOperatorsWhitelists(&_Contract.TransactOpts, operatorIds, whitelistAddresses)
 }
 
 // RemoveValidator is a paid mutator transaction binding the contract method 0x12b3fc19.
@@ -649,6 +850,69 @@ func (_Contract *ContractTransactorSession) RenounceOwnership() (*types.Transact
 	return _Contract.Contract.RenounceOwnership(&_Contract.TransactOpts)
 }
 
+// ReplaceOracle is a paid mutator transaction binding the contract method 0x5d756b1d.
+//
+// Solidity: function replaceOracle(uint32 oracleId, address newOracle) returns()
+func (_Contract *ContractTransactor) ReplaceOracle(opts *bind.TransactOpts, oracleId uint32, newOracle common.Address) (*types.Transaction, error) {
+	return _Contract.contract.Transact(opts, "replaceOracle", oracleId, newOracle)
+}
+
+// ReplaceOracle is a paid mutator transaction binding the contract method 0x5d756b1d.
+//
+// Solidity: function replaceOracle(uint32 oracleId, address newOracle) returns()
+func (_Contract *ContractSession) ReplaceOracle(oracleId uint32, newOracle common.Address) (*types.Transaction, error) {
+	return _Contract.Contract.ReplaceOracle(&_Contract.TransactOpts, oracleId, newOracle)
+}
+
+// ReplaceOracle is a paid mutator transaction binding the contract method 0x5d756b1d.
+//
+// Solidity: function replaceOracle(uint32 oracleId, address newOracle) returns()
+func (_Contract *ContractTransactorSession) ReplaceOracle(oracleId uint32, newOracle common.Address) (*types.Transaction, error) {
+	return _Contract.Contract.ReplaceOracle(&_Contract.TransactOpts, oracleId, newOracle)
+}
+
+// RequestUnstake is a paid mutator transaction binding the contract method 0x23095721.
+//
+// Solidity: function requestUnstake(uint256 amount) returns()
+func (_Contract *ContractTransactor) RequestUnstake(opts *bind.TransactOpts, amount *big.Int) (*types.Transaction, error) {
+	return _Contract.contract.Transact(opts, "requestUnstake", amount)
+}
+
+// RequestUnstake is a paid mutator transaction binding the contract method 0x23095721.
+//
+// Solidity: function requestUnstake(uint256 amount) returns()
+func (_Contract *ContractSession) RequestUnstake(amount *big.Int) (*types.Transaction, error) {
+	return _Contract.Contract.RequestUnstake(&_Contract.TransactOpts, amount)
+}
+
+// RequestUnstake is a paid mutator transaction binding the contract method 0x23095721.
+//
+// Solidity: function requestUnstake(uint256 amount) returns()
+func (_Contract *ContractTransactorSession) RequestUnstake(amount *big.Int) (*types.Transaction, error) {
+	return _Contract.Contract.RequestUnstake(&_Contract.TransactOpts, amount)
+}
+
+// RescueERC20 is a paid mutator transaction binding the contract method 0xb2118a8d.
+//
+// Solidity: function rescueERC20(address token, address to, uint256 amount) returns()
+func (_Contract *ContractTransactor) RescueERC20(opts *bind.TransactOpts, token common.Address, to common.Address, amount *big.Int) (*types.Transaction, error) {
+	return _Contract.contract.Transact(opts, "rescueERC20", token, to, amount)
+}
+
+// RescueERC20 is a paid mutator transaction binding the contract method 0xb2118a8d.
+//
+// Solidity: function rescueERC20(address token, address to, uint256 amount) returns()
+func (_Contract *ContractSession) RescueERC20(token common.Address, to common.Address, amount *big.Int) (*types.Transaction, error) {
+	return _Contract.Contract.RescueERC20(&_Contract.TransactOpts, token, to, amount)
+}
+
+// RescueERC20 is a paid mutator transaction binding the contract method 0xb2118a8d.
+//
+// Solidity: function rescueERC20(address token, address to, uint256 amount) returns()
+func (_Contract *ContractTransactorSession) RescueERC20(token common.Address, to common.Address, amount *big.Int) (*types.Transaction, error) {
+	return _Contract.Contract.RescueERC20(&_Contract.TransactOpts, token, to, amount)
+}
+
 // SetFeeRecipientAddress is a paid mutator transaction binding the contract method 0xdbcdc2cc.
 //
 // Solidity: function setFeeRecipientAddress(address recipientAddress) returns()
@@ -670,25 +934,130 @@ func (_Contract *ContractTransactorSession) SetFeeRecipientAddress(recipientAddr
 	return _Contract.Contract.SetFeeRecipientAddress(&_Contract.TransactOpts, recipientAddress)
 }
 
-// SetOperatorWhitelist is a paid mutator transaction binding the contract method 0xc90a7eab.
+// SetOperatorsPrivateUnchecked is a paid mutator transaction binding the contract method 0x822124c1.
 //
-// Solidity: function setOperatorWhitelist(uint64 operatorId, address whitelisted) returns()
-func (_Contract *ContractTransactor) SetOperatorWhitelist(opts *bind.TransactOpts, operatorId uint64, whitelisted common.Address) (*types.Transaction, error) {
-	return _Contract.contract.Transact(opts, "setOperatorWhitelist", operatorId, whitelisted)
+// Solidity: function setOperatorsPrivateUnchecked(uint64[] operatorIds) returns()
+func (_Contract *ContractTransactor) SetOperatorsPrivateUnchecked(opts *bind.TransactOpts, operatorIds []uint64) (*types.Transaction, error) {
+	return _Contract.contract.Transact(opts, "setOperatorsPrivateUnchecked", operatorIds)
 }
 
-// SetOperatorWhitelist is a paid mutator transaction binding the contract method 0xc90a7eab.
+// SetOperatorsPrivateUnchecked is a paid mutator transaction binding the contract method 0x822124c1.
 //
-// Solidity: function setOperatorWhitelist(uint64 operatorId, address whitelisted) returns()
-func (_Contract *ContractSession) SetOperatorWhitelist(operatorId uint64, whitelisted common.Address) (*types.Transaction, error) {
-	return _Contract.Contract.SetOperatorWhitelist(&_Contract.TransactOpts, operatorId, whitelisted)
+// Solidity: function setOperatorsPrivateUnchecked(uint64[] operatorIds) returns()
+func (_Contract *ContractSession) SetOperatorsPrivateUnchecked(operatorIds []uint64) (*types.Transaction, error) {
+	return _Contract.Contract.SetOperatorsPrivateUnchecked(&_Contract.TransactOpts, operatorIds)
 }
 
-// SetOperatorWhitelist is a paid mutator transaction binding the contract method 0xc90a7eab.
+// SetOperatorsPrivateUnchecked is a paid mutator transaction binding the contract method 0x822124c1.
 //
-// Solidity: function setOperatorWhitelist(uint64 operatorId, address whitelisted) returns()
-func (_Contract *ContractTransactorSession) SetOperatorWhitelist(operatorId uint64, whitelisted common.Address) (*types.Transaction, error) {
-	return _Contract.Contract.SetOperatorWhitelist(&_Contract.TransactOpts, operatorId, whitelisted)
+// Solidity: function setOperatorsPrivateUnchecked(uint64[] operatorIds) returns()
+func (_Contract *ContractTransactorSession) SetOperatorsPrivateUnchecked(operatorIds []uint64) (*types.Transaction, error) {
+	return _Contract.Contract.SetOperatorsPrivateUnchecked(&_Contract.TransactOpts, operatorIds)
+}
+
+// SetOperatorsPublicUnchecked is a paid mutator transaction binding the contract method 0x4ad00e54.
+//
+// Solidity: function setOperatorsPublicUnchecked(uint64[] operatorIds) returns()
+func (_Contract *ContractTransactor) SetOperatorsPublicUnchecked(opts *bind.TransactOpts, operatorIds []uint64) (*types.Transaction, error) {
+	return _Contract.contract.Transact(opts, "setOperatorsPublicUnchecked", operatorIds)
+}
+
+// SetOperatorsPublicUnchecked is a paid mutator transaction binding the contract method 0x4ad00e54.
+//
+// Solidity: function setOperatorsPublicUnchecked(uint64[] operatorIds) returns()
+func (_Contract *ContractSession) SetOperatorsPublicUnchecked(operatorIds []uint64) (*types.Transaction, error) {
+	return _Contract.Contract.SetOperatorsPublicUnchecked(&_Contract.TransactOpts, operatorIds)
+}
+
+// SetOperatorsPublicUnchecked is a paid mutator transaction binding the contract method 0x4ad00e54.
+//
+// Solidity: function setOperatorsPublicUnchecked(uint64[] operatorIds) returns()
+func (_Contract *ContractTransactorSession) SetOperatorsPublicUnchecked(operatorIds []uint64) (*types.Transaction, error) {
+	return _Contract.Contract.SetOperatorsPublicUnchecked(&_Contract.TransactOpts, operatorIds)
+}
+
+// SetOperatorsWhitelistingContract is a paid mutator transaction binding the contract method 0x7dc24d52.
+//
+// Solidity: function setOperatorsWhitelistingContract(uint64[] operatorIds, address whitelistingContract) returns()
+func (_Contract *ContractTransactor) SetOperatorsWhitelistingContract(opts *bind.TransactOpts, operatorIds []uint64, whitelistingContract common.Address) (*types.Transaction, error) {
+	return _Contract.contract.Transact(opts, "setOperatorsWhitelistingContract", operatorIds, whitelistingContract)
+}
+
+// SetOperatorsWhitelistingContract is a paid mutator transaction binding the contract method 0x7dc24d52.
+//
+// Solidity: function setOperatorsWhitelistingContract(uint64[] operatorIds, address whitelistingContract) returns()
+func (_Contract *ContractSession) SetOperatorsWhitelistingContract(operatorIds []uint64, whitelistingContract common.Address) (*types.Transaction, error) {
+	return _Contract.Contract.SetOperatorsWhitelistingContract(&_Contract.TransactOpts, operatorIds, whitelistingContract)
+}
+
+// SetOperatorsWhitelistingContract is a paid mutator transaction binding the contract method 0x7dc24d52.
+//
+// Solidity: function setOperatorsWhitelistingContract(uint64[] operatorIds, address whitelistingContract) returns()
+func (_Contract *ContractTransactorSession) SetOperatorsWhitelistingContract(operatorIds []uint64, whitelistingContract common.Address) (*types.Transaction, error) {
+	return _Contract.Contract.SetOperatorsWhitelistingContract(&_Contract.TransactOpts, operatorIds, whitelistingContract)
+}
+
+// SetOperatorsWhitelists is a paid mutator transaction binding the contract method 0x5d06ecb4.
+//
+// Solidity: function setOperatorsWhitelists(uint64[] operatorIds, address[] whitelistAddresses) returns()
+func (_Contract *ContractTransactor) SetOperatorsWhitelists(opts *bind.TransactOpts, operatorIds []uint64, whitelistAddresses []common.Address) (*types.Transaction, error) {
+	return _Contract.contract.Transact(opts, "setOperatorsWhitelists", operatorIds, whitelistAddresses)
+}
+
+// SetOperatorsWhitelists is a paid mutator transaction binding the contract method 0x5d06ecb4.
+//
+// Solidity: function setOperatorsWhitelists(uint64[] operatorIds, address[] whitelistAddresses) returns()
+func (_Contract *ContractSession) SetOperatorsWhitelists(operatorIds []uint64, whitelistAddresses []common.Address) (*types.Transaction, error) {
+	return _Contract.Contract.SetOperatorsWhitelists(&_Contract.TransactOpts, operatorIds, whitelistAddresses)
+}
+
+// SetOperatorsWhitelists is a paid mutator transaction binding the contract method 0x5d06ecb4.
+//
+// Solidity: function setOperatorsWhitelists(uint64[] operatorIds, address[] whitelistAddresses) returns()
+func (_Contract *ContractTransactorSession) SetOperatorsWhitelists(operatorIds []uint64, whitelistAddresses []common.Address) (*types.Transaction, error) {
+	return _Contract.Contract.SetOperatorsWhitelists(&_Contract.TransactOpts, operatorIds, whitelistAddresses)
+}
+
+// Stake is a paid mutator transaction binding the contract method 0xa694fc3a.
+//
+// Solidity: function stake(uint256 amount) returns()
+func (_Contract *ContractTransactor) Stake(opts *bind.TransactOpts, amount *big.Int) (*types.Transaction, error) {
+	return _Contract.contract.Transact(opts, "stake", amount)
+}
+
+// Stake is a paid mutator transaction binding the contract method 0xa694fc3a.
+//
+// Solidity: function stake(uint256 amount) returns()
+func (_Contract *ContractSession) Stake(amount *big.Int) (*types.Transaction, error) {
+	return _Contract.Contract.Stake(&_Contract.TransactOpts, amount)
+}
+
+// Stake is a paid mutator transaction binding the contract method 0xa694fc3a.
+//
+// Solidity: function stake(uint256 amount) returns()
+func (_Contract *ContractTransactorSession) Stake(amount *big.Int) (*types.Transaction, error) {
+	return _Contract.Contract.Stake(&_Contract.TransactOpts, amount)
+}
+
+// SyncFees is a paid mutator transaction binding the contract method 0xc54f0916.
+//
+// Solidity: function syncFees() returns()
+func (_Contract *ContractTransactor) SyncFees(opts *bind.TransactOpts) (*types.Transaction, error) {
+	return _Contract.contract.Transact(opts, "syncFees")
+}
+
+// SyncFees is a paid mutator transaction binding the contract method 0xc54f0916.
+//
+// Solidity: function syncFees() returns()
+func (_Contract *ContractSession) SyncFees() (*types.Transaction, error) {
+	return _Contract.Contract.SyncFees(&_Contract.TransactOpts)
+}
+
+// SyncFees is a paid mutator transaction binding the contract method 0xc54f0916.
+//
+// Solidity: function syncFees() returns()
+func (_Contract *ContractTransactorSession) SyncFees() (*types.Transaction, error) {
+	return _Contract.Contract.SyncFees(&_Contract.TransactOpts)
 }
 
 // TransferOwnership is a paid mutator transaction binding the contract method 0xf2fde38b.
@@ -710,6 +1079,27 @@ func (_Contract *ContractSession) TransferOwnership(newOwner common.Address) (*t
 // Solidity: function transferOwnership(address newOwner) returns()
 func (_Contract *ContractTransactorSession) TransferOwnership(newOwner common.Address) (*types.Transaction, error) {
 	return _Contract.Contract.TransferOwnership(&_Contract.TransactOpts, newOwner)
+}
+
+// UpdateClusterBalance is a paid mutator transaction binding the contract method 0x4f4d1209.
+//
+// Solidity: function updateClusterBalance(uint64 blockNum, address clusterOwner, uint64[] operatorIds, (uint32,uint64,uint64,bool,uint256) cluster, uint32 effectiveBalance, bytes32[] merkleProof) returns()
+func (_Contract *ContractTransactor) UpdateClusterBalance(opts *bind.TransactOpts, blockNum uint64, clusterOwner common.Address, operatorIds []uint64, cluster ISSVNetworkCoreCluster, effectiveBalance uint32, merkleProof [][32]byte) (*types.Transaction, error) {
+	return _Contract.contract.Transact(opts, "updateClusterBalance", blockNum, clusterOwner, operatorIds, cluster, effectiveBalance, merkleProof)
+}
+
+// UpdateClusterBalance is a paid mutator transaction binding the contract method 0x4f4d1209.
+//
+// Solidity: function updateClusterBalance(uint64 blockNum, address clusterOwner, uint64[] operatorIds, (uint32,uint64,uint64,bool,uint256) cluster, uint32 effectiveBalance, bytes32[] merkleProof) returns()
+func (_Contract *ContractSession) UpdateClusterBalance(blockNum uint64, clusterOwner common.Address, operatorIds []uint64, cluster ISSVNetworkCoreCluster, effectiveBalance uint32, merkleProof [][32]byte) (*types.Transaction, error) {
+	return _Contract.Contract.UpdateClusterBalance(&_Contract.TransactOpts, blockNum, clusterOwner, operatorIds, cluster, effectiveBalance, merkleProof)
+}
+
+// UpdateClusterBalance is a paid mutator transaction binding the contract method 0x4f4d1209.
+//
+// Solidity: function updateClusterBalance(uint64 blockNum, address clusterOwner, uint64[] operatorIds, (uint32,uint64,uint64,bool,uint256) cluster, uint32 effectiveBalance, bytes32[] merkleProof) returns()
+func (_Contract *ContractTransactorSession) UpdateClusterBalance(blockNum uint64, clusterOwner common.Address, operatorIds []uint64, cluster ISSVNetworkCoreCluster, effectiveBalance uint32, merkleProof [][32]byte) (*types.Transaction, error) {
+	return _Contract.Contract.UpdateClusterBalance(&_Contract.TransactOpts, blockNum, clusterOwner, operatorIds, cluster, effectiveBalance, merkleProof)
 }
 
 // UpdateDeclareOperatorFeePeriod is a paid mutator transaction binding the contract method 0x79e3e4e4.
@@ -775,25 +1165,67 @@ func (_Contract *ContractTransactorSession) UpdateLiquidationThresholdPeriod(blo
 	return _Contract.Contract.UpdateLiquidationThresholdPeriod(&_Contract.TransactOpts, blocks)
 }
 
-// UpdateMaximumOperatorFee is a paid mutator transaction binding the contract method 0xe39c6744.
+// UpdateLiquidationThresholdPeriodSSV is a paid mutator transaction binding the contract method 0xe567ed58.
 //
-// Solidity: function updateMaximumOperatorFee(uint64 maxFee) returns()
-func (_Contract *ContractTransactor) UpdateMaximumOperatorFee(opts *bind.TransactOpts, maxFee uint64) (*types.Transaction, error) {
+// Solidity: function updateLiquidationThresholdPeriodSSV(uint64 blocks) returns()
+func (_Contract *ContractTransactor) UpdateLiquidationThresholdPeriodSSV(opts *bind.TransactOpts, blocks uint64) (*types.Transaction, error) {
+	return _Contract.contract.Transact(opts, "updateLiquidationThresholdPeriodSSV", blocks)
+}
+
+// UpdateLiquidationThresholdPeriodSSV is a paid mutator transaction binding the contract method 0xe567ed58.
+//
+// Solidity: function updateLiquidationThresholdPeriodSSV(uint64 blocks) returns()
+func (_Contract *ContractSession) UpdateLiquidationThresholdPeriodSSV(blocks uint64) (*types.Transaction, error) {
+	return _Contract.Contract.UpdateLiquidationThresholdPeriodSSV(&_Contract.TransactOpts, blocks)
+}
+
+// UpdateLiquidationThresholdPeriodSSV is a paid mutator transaction binding the contract method 0xe567ed58.
+//
+// Solidity: function updateLiquidationThresholdPeriodSSV(uint64 blocks) returns()
+func (_Contract *ContractTransactorSession) UpdateLiquidationThresholdPeriodSSV(blocks uint64) (*types.Transaction, error) {
+	return _Contract.Contract.UpdateLiquidationThresholdPeriodSSV(&_Contract.TransactOpts, blocks)
+}
+
+// UpdateMaximumOperatorFee is a paid mutator transaction binding the contract method 0x6f4b158d.
+//
+// Solidity: function updateMaximumOperatorFee(uint256 maxFee) returns()
+func (_Contract *ContractTransactor) UpdateMaximumOperatorFee(opts *bind.TransactOpts, maxFee *big.Int) (*types.Transaction, error) {
 	return _Contract.contract.Transact(opts, "updateMaximumOperatorFee", maxFee)
 }
 
-// UpdateMaximumOperatorFee is a paid mutator transaction binding the contract method 0xe39c6744.
+// UpdateMaximumOperatorFee is a paid mutator transaction binding the contract method 0x6f4b158d.
 //
-// Solidity: function updateMaximumOperatorFee(uint64 maxFee) returns()
-func (_Contract *ContractSession) UpdateMaximumOperatorFee(maxFee uint64) (*types.Transaction, error) {
+// Solidity: function updateMaximumOperatorFee(uint256 maxFee) returns()
+func (_Contract *ContractSession) UpdateMaximumOperatorFee(maxFee *big.Int) (*types.Transaction, error) {
 	return _Contract.Contract.UpdateMaximumOperatorFee(&_Contract.TransactOpts, maxFee)
 }
 
-// UpdateMaximumOperatorFee is a paid mutator transaction binding the contract method 0xe39c6744.
+// UpdateMaximumOperatorFee is a paid mutator transaction binding the contract method 0x6f4b158d.
 //
-// Solidity: function updateMaximumOperatorFee(uint64 maxFee) returns()
-func (_Contract *ContractTransactorSession) UpdateMaximumOperatorFee(maxFee uint64) (*types.Transaction, error) {
+// Solidity: function updateMaximumOperatorFee(uint256 maxFee) returns()
+func (_Contract *ContractTransactorSession) UpdateMaximumOperatorFee(maxFee *big.Int) (*types.Transaction, error) {
 	return _Contract.Contract.UpdateMaximumOperatorFee(&_Contract.TransactOpts, maxFee)
+}
+
+// UpdateMinBlocksBetweenUpdates is a paid mutator transaction binding the contract method 0x11dff249.
+//
+// Solidity: function updateMinBlocksBetweenUpdates(uint32 blocks) returns()
+func (_Contract *ContractTransactor) UpdateMinBlocksBetweenUpdates(opts *bind.TransactOpts, blocks uint32) (*types.Transaction, error) {
+	return _Contract.contract.Transact(opts, "updateMinBlocksBetweenUpdates", blocks)
+}
+
+// UpdateMinBlocksBetweenUpdates is a paid mutator transaction binding the contract method 0x11dff249.
+//
+// Solidity: function updateMinBlocksBetweenUpdates(uint32 blocks) returns()
+func (_Contract *ContractSession) UpdateMinBlocksBetweenUpdates(blocks uint32) (*types.Transaction, error) {
+	return _Contract.Contract.UpdateMinBlocksBetweenUpdates(&_Contract.TransactOpts, blocks)
+}
+
+// UpdateMinBlocksBetweenUpdates is a paid mutator transaction binding the contract method 0x11dff249.
+//
+// Solidity: function updateMinBlocksBetweenUpdates(uint32 blocks) returns()
+func (_Contract *ContractTransactorSession) UpdateMinBlocksBetweenUpdates(blocks uint32) (*types.Transaction, error) {
+	return _Contract.Contract.UpdateMinBlocksBetweenUpdates(&_Contract.TransactOpts, blocks)
 }
 
 // UpdateMinimumLiquidationCollateral is a paid mutator transaction binding the contract method 0xb4c9c408.
@@ -815,6 +1247,48 @@ func (_Contract *ContractSession) UpdateMinimumLiquidationCollateral(amount *big
 // Solidity: function updateMinimumLiquidationCollateral(uint256 amount) returns()
 func (_Contract *ContractTransactorSession) UpdateMinimumLiquidationCollateral(amount *big.Int) (*types.Transaction, error) {
 	return _Contract.Contract.UpdateMinimumLiquidationCollateral(&_Contract.TransactOpts, amount)
+}
+
+// UpdateMinimumLiquidationCollateralSSV is a paid mutator transaction binding the contract method 0x9f5c1307.
+//
+// Solidity: function updateMinimumLiquidationCollateralSSV(uint256 amount) returns()
+func (_Contract *ContractTransactor) UpdateMinimumLiquidationCollateralSSV(opts *bind.TransactOpts, amount *big.Int) (*types.Transaction, error) {
+	return _Contract.contract.Transact(opts, "updateMinimumLiquidationCollateralSSV", amount)
+}
+
+// UpdateMinimumLiquidationCollateralSSV is a paid mutator transaction binding the contract method 0x9f5c1307.
+//
+// Solidity: function updateMinimumLiquidationCollateralSSV(uint256 amount) returns()
+func (_Contract *ContractSession) UpdateMinimumLiquidationCollateralSSV(amount *big.Int) (*types.Transaction, error) {
+	return _Contract.Contract.UpdateMinimumLiquidationCollateralSSV(&_Contract.TransactOpts, amount)
+}
+
+// UpdateMinimumLiquidationCollateralSSV is a paid mutator transaction binding the contract method 0x9f5c1307.
+//
+// Solidity: function updateMinimumLiquidationCollateralSSV(uint256 amount) returns()
+func (_Contract *ContractTransactorSession) UpdateMinimumLiquidationCollateralSSV(amount *big.Int) (*types.Transaction, error) {
+	return _Contract.Contract.UpdateMinimumLiquidationCollateralSSV(&_Contract.TransactOpts, amount)
+}
+
+// UpdateMinimumOperatorEthFee is a paid mutator transaction binding the contract method 0xe9d232cd.
+//
+// Solidity: function updateMinimumOperatorEthFee(uint256 minFee) returns()
+func (_Contract *ContractTransactor) UpdateMinimumOperatorEthFee(opts *bind.TransactOpts, minFee *big.Int) (*types.Transaction, error) {
+	return _Contract.contract.Transact(opts, "updateMinimumOperatorEthFee", minFee)
+}
+
+// UpdateMinimumOperatorEthFee is a paid mutator transaction binding the contract method 0xe9d232cd.
+//
+// Solidity: function updateMinimumOperatorEthFee(uint256 minFee) returns()
+func (_Contract *ContractSession) UpdateMinimumOperatorEthFee(minFee *big.Int) (*types.Transaction, error) {
+	return _Contract.Contract.UpdateMinimumOperatorEthFee(&_Contract.TransactOpts, minFee)
+}
+
+// UpdateMinimumOperatorEthFee is a paid mutator transaction binding the contract method 0xe9d232cd.
+//
+// Solidity: function updateMinimumOperatorEthFee(uint256 minFee) returns()
+func (_Contract *ContractTransactorSession) UpdateMinimumOperatorEthFee(minFee *big.Int) (*types.Transaction, error) {
+	return _Contract.Contract.UpdateMinimumOperatorEthFee(&_Contract.TransactOpts, minFee)
 }
 
 // UpdateModule is a paid mutator transaction binding the contract method 0xe3e324b0.
@@ -859,6 +1333,27 @@ func (_Contract *ContractTransactorSession) UpdateNetworkFee(fee *big.Int) (*typ
 	return _Contract.Contract.UpdateNetworkFee(&_Contract.TransactOpts, fee)
 }
 
+// UpdateNetworkFeeSSV is a paid mutator transaction binding the contract method 0x71513214.
+//
+// Solidity: function updateNetworkFeeSSV(uint256 fee) returns()
+func (_Contract *ContractTransactor) UpdateNetworkFeeSSV(opts *bind.TransactOpts, fee *big.Int) (*types.Transaction, error) {
+	return _Contract.contract.Transact(opts, "updateNetworkFeeSSV", fee)
+}
+
+// UpdateNetworkFeeSSV is a paid mutator transaction binding the contract method 0x71513214.
+//
+// Solidity: function updateNetworkFeeSSV(uint256 fee) returns()
+func (_Contract *ContractSession) UpdateNetworkFeeSSV(fee *big.Int) (*types.Transaction, error) {
+	return _Contract.Contract.UpdateNetworkFeeSSV(&_Contract.TransactOpts, fee)
+}
+
+// UpdateNetworkFeeSSV is a paid mutator transaction binding the contract method 0x71513214.
+//
+// Solidity: function updateNetworkFeeSSV(uint256 fee) returns()
+func (_Contract *ContractTransactorSession) UpdateNetworkFeeSSV(fee *big.Int) (*types.Transaction, error) {
+	return _Contract.Contract.UpdateNetworkFeeSSV(&_Contract.TransactOpts, fee)
+}
+
 // UpdateOperatorFeeIncreaseLimit is a paid mutator transaction binding the contract method 0x3631983f.
 //
 // Solidity: function updateOperatorFeeIncreaseLimit(uint64 percentage) returns()
@@ -878,6 +1373,48 @@ func (_Contract *ContractSession) UpdateOperatorFeeIncreaseLimit(percentage uint
 // Solidity: function updateOperatorFeeIncreaseLimit(uint64 percentage) returns()
 func (_Contract *ContractTransactorSession) UpdateOperatorFeeIncreaseLimit(percentage uint64) (*types.Transaction, error) {
 	return _Contract.Contract.UpdateOperatorFeeIncreaseLimit(&_Contract.TransactOpts, percentage)
+}
+
+// UpdateQuorumBps is a paid mutator transaction binding the contract method 0x9ba0e700.
+//
+// Solidity: function updateQuorumBps(uint16 quorum) returns()
+func (_Contract *ContractTransactor) UpdateQuorumBps(opts *bind.TransactOpts, quorum uint16) (*types.Transaction, error) {
+	return _Contract.contract.Transact(opts, "updateQuorumBps", quorum)
+}
+
+// UpdateQuorumBps is a paid mutator transaction binding the contract method 0x9ba0e700.
+//
+// Solidity: function updateQuorumBps(uint16 quorum) returns()
+func (_Contract *ContractSession) UpdateQuorumBps(quorum uint16) (*types.Transaction, error) {
+	return _Contract.Contract.UpdateQuorumBps(&_Contract.TransactOpts, quorum)
+}
+
+// UpdateQuorumBps is a paid mutator transaction binding the contract method 0x9ba0e700.
+//
+// Solidity: function updateQuorumBps(uint16 quorum) returns()
+func (_Contract *ContractTransactorSession) UpdateQuorumBps(quorum uint16) (*types.Transaction, error) {
+	return _Contract.Contract.UpdateQuorumBps(&_Contract.TransactOpts, quorum)
+}
+
+// UpdateUnstakeCooldownDuration is a paid mutator transaction binding the contract method 0xbe2270dd.
+//
+// Solidity: function updateUnstakeCooldownDuration(uint64 duration) returns()
+func (_Contract *ContractTransactor) UpdateUnstakeCooldownDuration(opts *bind.TransactOpts, duration uint64) (*types.Transaction, error) {
+	return _Contract.contract.Transact(opts, "updateUnstakeCooldownDuration", duration)
+}
+
+// UpdateUnstakeCooldownDuration is a paid mutator transaction binding the contract method 0xbe2270dd.
+//
+// Solidity: function updateUnstakeCooldownDuration(uint64 duration) returns()
+func (_Contract *ContractSession) UpdateUnstakeCooldownDuration(duration uint64) (*types.Transaction, error) {
+	return _Contract.Contract.UpdateUnstakeCooldownDuration(&_Contract.TransactOpts, duration)
+}
+
+// UpdateUnstakeCooldownDuration is a paid mutator transaction binding the contract method 0xbe2270dd.
+//
+// Solidity: function updateUnstakeCooldownDuration(uint64 duration) returns()
+func (_Contract *ContractTransactorSession) UpdateUnstakeCooldownDuration(duration uint64) (*types.Transaction, error) {
+	return _Contract.Contract.UpdateUnstakeCooldownDuration(&_Contract.TransactOpts, duration)
 }
 
 // UpgradeTo is a paid mutator transaction binding the contract method 0x3659cfe6.
@@ -964,25 +1501,67 @@ func (_Contract *ContractTransactorSession) WithdrawAllOperatorEarnings(operator
 	return _Contract.Contract.WithdrawAllOperatorEarnings(&_Contract.TransactOpts, operatorId)
 }
 
-// WithdrawNetworkEarnings is a paid mutator transaction binding the contract method 0xd2231741.
+// WithdrawAllOperatorEarningsSSV is a paid mutator transaction binding the contract method 0x909b1aaa.
 //
-// Solidity: function withdrawNetworkEarnings(uint256 amount) returns()
-func (_Contract *ContractTransactor) WithdrawNetworkEarnings(opts *bind.TransactOpts, amount *big.Int) (*types.Transaction, error) {
-	return _Contract.contract.Transact(opts, "withdrawNetworkEarnings", amount)
+// Solidity: function withdrawAllOperatorEarningsSSV(uint64 operatorId) returns()
+func (_Contract *ContractTransactor) WithdrawAllOperatorEarningsSSV(opts *bind.TransactOpts, operatorId uint64) (*types.Transaction, error) {
+	return _Contract.contract.Transact(opts, "withdrawAllOperatorEarningsSSV", operatorId)
 }
 
-// WithdrawNetworkEarnings is a paid mutator transaction binding the contract method 0xd2231741.
+// WithdrawAllOperatorEarningsSSV is a paid mutator transaction binding the contract method 0x909b1aaa.
 //
-// Solidity: function withdrawNetworkEarnings(uint256 amount) returns()
-func (_Contract *ContractSession) WithdrawNetworkEarnings(amount *big.Int) (*types.Transaction, error) {
-	return _Contract.Contract.WithdrawNetworkEarnings(&_Contract.TransactOpts, amount)
+// Solidity: function withdrawAllOperatorEarningsSSV(uint64 operatorId) returns()
+func (_Contract *ContractSession) WithdrawAllOperatorEarningsSSV(operatorId uint64) (*types.Transaction, error) {
+	return _Contract.Contract.WithdrawAllOperatorEarningsSSV(&_Contract.TransactOpts, operatorId)
 }
 
-// WithdrawNetworkEarnings is a paid mutator transaction binding the contract method 0xd2231741.
+// WithdrawAllOperatorEarningsSSV is a paid mutator transaction binding the contract method 0x909b1aaa.
 //
-// Solidity: function withdrawNetworkEarnings(uint256 amount) returns()
-func (_Contract *ContractTransactorSession) WithdrawNetworkEarnings(amount *big.Int) (*types.Transaction, error) {
-	return _Contract.Contract.WithdrawNetworkEarnings(&_Contract.TransactOpts, amount)
+// Solidity: function withdrawAllOperatorEarningsSSV(uint64 operatorId) returns()
+func (_Contract *ContractTransactorSession) WithdrawAllOperatorEarningsSSV(operatorId uint64) (*types.Transaction, error) {
+	return _Contract.Contract.WithdrawAllOperatorEarningsSSV(&_Contract.TransactOpts, operatorId)
+}
+
+// WithdrawAllVersionOperatorEarnings is a paid mutator transaction binding the contract method 0x008108d5.
+//
+// Solidity: function withdrawAllVersionOperatorEarnings(uint64 operatorId) returns()
+func (_Contract *ContractTransactor) WithdrawAllVersionOperatorEarnings(opts *bind.TransactOpts, operatorId uint64) (*types.Transaction, error) {
+	return _Contract.contract.Transact(opts, "withdrawAllVersionOperatorEarnings", operatorId)
+}
+
+// WithdrawAllVersionOperatorEarnings is a paid mutator transaction binding the contract method 0x008108d5.
+//
+// Solidity: function withdrawAllVersionOperatorEarnings(uint64 operatorId) returns()
+func (_Contract *ContractSession) WithdrawAllVersionOperatorEarnings(operatorId uint64) (*types.Transaction, error) {
+	return _Contract.Contract.WithdrawAllVersionOperatorEarnings(&_Contract.TransactOpts, operatorId)
+}
+
+// WithdrawAllVersionOperatorEarnings is a paid mutator transaction binding the contract method 0x008108d5.
+//
+// Solidity: function withdrawAllVersionOperatorEarnings(uint64 operatorId) returns()
+func (_Contract *ContractTransactorSession) WithdrawAllVersionOperatorEarnings(operatorId uint64) (*types.Transaction, error) {
+	return _Contract.Contract.WithdrawAllVersionOperatorEarnings(&_Contract.TransactOpts, operatorId)
+}
+
+// WithdrawNetworkSSVEarnings is a paid mutator transaction binding the contract method 0x6535f740.
+//
+// Solidity: function withdrawNetworkSSVEarnings(uint256 amount) returns()
+func (_Contract *ContractTransactor) WithdrawNetworkSSVEarnings(opts *bind.TransactOpts, amount *big.Int) (*types.Transaction, error) {
+	return _Contract.contract.Transact(opts, "withdrawNetworkSSVEarnings", amount)
+}
+
+// WithdrawNetworkSSVEarnings is a paid mutator transaction binding the contract method 0x6535f740.
+//
+// Solidity: function withdrawNetworkSSVEarnings(uint256 amount) returns()
+func (_Contract *ContractSession) WithdrawNetworkSSVEarnings(amount *big.Int) (*types.Transaction, error) {
+	return _Contract.Contract.WithdrawNetworkSSVEarnings(&_Contract.TransactOpts, amount)
+}
+
+// WithdrawNetworkSSVEarnings is a paid mutator transaction binding the contract method 0x6535f740.
+//
+// Solidity: function withdrawNetworkSSVEarnings(uint256 amount) returns()
+func (_Contract *ContractTransactorSession) WithdrawNetworkSSVEarnings(amount *big.Int) (*types.Transaction, error) {
+	return _Contract.Contract.WithdrawNetworkSSVEarnings(&_Contract.TransactOpts, amount)
 }
 
 // WithdrawOperatorEarnings is a paid mutator transaction binding the contract method 0x35f63767.
@@ -1004,6 +1583,48 @@ func (_Contract *ContractSession) WithdrawOperatorEarnings(operatorId uint64, am
 // Solidity: function withdrawOperatorEarnings(uint64 operatorId, uint256 amount) returns()
 func (_Contract *ContractTransactorSession) WithdrawOperatorEarnings(operatorId uint64, amount *big.Int) (*types.Transaction, error) {
 	return _Contract.Contract.WithdrawOperatorEarnings(&_Contract.TransactOpts, operatorId, amount)
+}
+
+// WithdrawOperatorEarningsSSV is a paid mutator transaction binding the contract method 0x6bf5c92e.
+//
+// Solidity: function withdrawOperatorEarningsSSV(uint64 operatorId, uint256 amount) returns()
+func (_Contract *ContractTransactor) WithdrawOperatorEarningsSSV(opts *bind.TransactOpts, operatorId uint64, amount *big.Int) (*types.Transaction, error) {
+	return _Contract.contract.Transact(opts, "withdrawOperatorEarningsSSV", operatorId, amount)
+}
+
+// WithdrawOperatorEarningsSSV is a paid mutator transaction binding the contract method 0x6bf5c92e.
+//
+// Solidity: function withdrawOperatorEarningsSSV(uint64 operatorId, uint256 amount) returns()
+func (_Contract *ContractSession) WithdrawOperatorEarningsSSV(operatorId uint64, amount *big.Int) (*types.Transaction, error) {
+	return _Contract.Contract.WithdrawOperatorEarningsSSV(&_Contract.TransactOpts, operatorId, amount)
+}
+
+// WithdrawOperatorEarningsSSV is a paid mutator transaction binding the contract method 0x6bf5c92e.
+//
+// Solidity: function withdrawOperatorEarningsSSV(uint64 operatorId, uint256 amount) returns()
+func (_Contract *ContractTransactorSession) WithdrawOperatorEarningsSSV(operatorId uint64, amount *big.Int) (*types.Transaction, error) {
+	return _Contract.Contract.WithdrawOperatorEarningsSSV(&_Contract.TransactOpts, operatorId, amount)
+}
+
+// WithdrawUnlocked is a paid mutator transaction binding the contract method 0x6fcd112b.
+//
+// Solidity: function withdrawUnlocked() returns()
+func (_Contract *ContractTransactor) WithdrawUnlocked(opts *bind.TransactOpts) (*types.Transaction, error) {
+	return _Contract.contract.Transact(opts, "withdrawUnlocked")
+}
+
+// WithdrawUnlocked is a paid mutator transaction binding the contract method 0x6fcd112b.
+//
+// Solidity: function withdrawUnlocked() returns()
+func (_Contract *ContractSession) WithdrawUnlocked() (*types.Transaction, error) {
+	return _Contract.Contract.WithdrawUnlocked(&_Contract.TransactOpts)
+}
+
+// WithdrawUnlocked is a paid mutator transaction binding the contract method 0x6fcd112b.
+//
+// Solidity: function withdrawUnlocked() returns()
+func (_Contract *ContractTransactorSession) WithdrawUnlocked() (*types.Transaction, error) {
+	return _Contract.Contract.WithdrawUnlocked(&_Contract.TransactOpts)
 }
 
 // Fallback is a paid mutator transaction binding the contract fallback function.
@@ -1306,6 +1927,164 @@ func (_Contract *ContractFilterer) ParseBeaconUpgraded(log types.Log) (*Contract
 	return event, nil
 }
 
+// ContractClusterBalanceUpdatedIterator is returned from FilterClusterBalanceUpdated and is used to iterate over the raw logs and unpacked data for ClusterBalanceUpdated events raised by the Contract contract.
+type ContractClusterBalanceUpdatedIterator struct {
+	Event *ContractClusterBalanceUpdated // Event containing the contract specifics and raw log
+
+	contract *bind.BoundContract // Generic contract to use for unpacking event data
+	event    string              // Event name to use for unpacking event data
+
+	logs chan types.Log        // Log channel receiving the found contract events
+	sub  ethereum.Subscription // Subscription for errors, completion and termination
+	done bool                  // Whether the subscription completed delivering logs
+	fail error                 // Occurred error to stop iteration
+}
+
+// Next advances the iterator to the subsequent event, returning whether there
+// are any more events found. In case of a retrieval or parsing error, false is
+// returned and Error() can be queried for the exact failure.
+func (it *ContractClusterBalanceUpdatedIterator) Next() bool {
+	// If the iterator failed, stop iterating
+	if it.fail != nil {
+		return false
+	}
+	// If the iterator completed, deliver directly whatever's available
+	if it.done {
+		select {
+		case log := <-it.logs:
+			it.Event = new(ContractClusterBalanceUpdated)
+			if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+				it.fail = err
+				return false
+			}
+			it.Event.Raw = log
+			return true
+
+		default:
+			return false
+		}
+	}
+	// Iterator still in progress, wait for either a data or an error event
+	select {
+	case log := <-it.logs:
+		it.Event = new(ContractClusterBalanceUpdated)
+		if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+			it.fail = err
+			return false
+		}
+		it.Event.Raw = log
+		return true
+
+	case err := <-it.sub.Err():
+		it.done = true
+		it.fail = err
+		return it.Next()
+	}
+}
+
+// Error returns any retrieval or parsing error occurred during filtering.
+func (it *ContractClusterBalanceUpdatedIterator) Error() error {
+	return it.fail
+}
+
+// Close terminates the iteration process, releasing any pending underlying
+// resources.
+func (it *ContractClusterBalanceUpdatedIterator) Close() error {
+	it.sub.Unsubscribe()
+	return nil
+}
+
+// ContractClusterBalanceUpdated represents a ClusterBalanceUpdated event raised by the Contract contract.
+type ContractClusterBalanceUpdated struct {
+	Owner            common.Address
+	OperatorIds      []uint64
+	BlockNum         uint64
+	EffectiveBalance uint32
+	Cluster          ISSVNetworkCoreCluster
+	Raw              types.Log // Blockchain specific contextual infos
+}
+
+// FilterClusterBalanceUpdated is a free log retrieval operation binding the contract event 0x0cc301d13799ab915796eed462da724756a969f8e05d69ad2405eb3da7036b55.
+//
+// Solidity: event ClusterBalanceUpdated(address indexed owner, uint64[] operatorIds, uint64 indexed blockNum, uint32 effectiveBalance, (uint32,uint64,uint64,bool,uint256) cluster)
+func (_Contract *ContractFilterer) FilterClusterBalanceUpdated(opts *bind.FilterOpts, owner []common.Address, blockNum []uint64) (*ContractClusterBalanceUpdatedIterator, error) {
+
+	var ownerRule []interface{}
+	for _, ownerItem := range owner {
+		ownerRule = append(ownerRule, ownerItem)
+	}
+
+	var blockNumRule []interface{}
+	for _, blockNumItem := range blockNum {
+		blockNumRule = append(blockNumRule, blockNumItem)
+	}
+
+	logs, sub, err := _Contract.contract.FilterLogs(opts, "ClusterBalanceUpdated", ownerRule, blockNumRule)
+	if err != nil {
+		return nil, err
+	}
+	return &ContractClusterBalanceUpdatedIterator{contract: _Contract.contract, event: "ClusterBalanceUpdated", logs: logs, sub: sub}, nil
+}
+
+// WatchClusterBalanceUpdated is a free log subscription operation binding the contract event 0x0cc301d13799ab915796eed462da724756a969f8e05d69ad2405eb3da7036b55.
+//
+// Solidity: event ClusterBalanceUpdated(address indexed owner, uint64[] operatorIds, uint64 indexed blockNum, uint32 effectiveBalance, (uint32,uint64,uint64,bool,uint256) cluster)
+func (_Contract *ContractFilterer) WatchClusterBalanceUpdated(opts *bind.WatchOpts, sink chan<- *ContractClusterBalanceUpdated, owner []common.Address, blockNum []uint64) (event.Subscription, error) {
+
+	var ownerRule []interface{}
+	for _, ownerItem := range owner {
+		ownerRule = append(ownerRule, ownerItem)
+	}
+
+	var blockNumRule []interface{}
+	for _, blockNumItem := range blockNum {
+		blockNumRule = append(blockNumRule, blockNumItem)
+	}
+
+	logs, sub, err := _Contract.contract.WatchLogs(opts, "ClusterBalanceUpdated", ownerRule, blockNumRule)
+	if err != nil {
+		return nil, err
+	}
+	return event.NewSubscription(func(quit <-chan struct{}) error {
+		defer sub.Unsubscribe()
+		for {
+			select {
+			case log := <-logs:
+				// New log arrived, parse the event and forward to the user
+				event := new(ContractClusterBalanceUpdated)
+				if err := _Contract.contract.UnpackLog(event, "ClusterBalanceUpdated", log); err != nil {
+					return err
+				}
+				event.Raw = log
+
+				select {
+				case sink <- event:
+				case err := <-sub.Err():
+					return err
+				case <-quit:
+					return nil
+				}
+			case err := <-sub.Err():
+				return err
+			case <-quit:
+				return nil
+			}
+		}
+	}), nil
+}
+
+// ParseClusterBalanceUpdated is a log parse operation binding the contract event 0x0cc301d13799ab915796eed462da724756a969f8e05d69ad2405eb3da7036b55.
+//
+// Solidity: event ClusterBalanceUpdated(address indexed owner, uint64[] operatorIds, uint64 indexed blockNum, uint32 effectiveBalance, (uint32,uint64,uint64,bool,uint256) cluster)
+func (_Contract *ContractFilterer) ParseClusterBalanceUpdated(log types.Log) (*ContractClusterBalanceUpdated, error) {
+	event := new(ContractClusterBalanceUpdated)
+	if err := _Contract.contract.UnpackLog(event, "ClusterBalanceUpdated", log); err != nil {
+		return nil, err
+	}
+	event.Raw = log
+	return event, nil
+}
+
 // ContractClusterDepositedIterator is returned from FilterClusterDeposited and is used to iterate over the raw logs and unpacked data for ClusterDeposited events raised by the Contract contract.
 type ContractClusterDepositedIterator struct {
 	Event *ContractClusterDeposited // Event containing the contract specifics and raw log
@@ -1593,6 +2372,155 @@ func (_Contract *ContractFilterer) WatchClusterLiquidated(opts *bind.WatchOpts, 
 func (_Contract *ContractFilterer) ParseClusterLiquidated(log types.Log) (*ContractClusterLiquidated, error) {
 	event := new(ContractClusterLiquidated)
 	if err := _Contract.contract.UnpackLog(event, "ClusterLiquidated", log); err != nil {
+		return nil, err
+	}
+	event.Raw = log
+	return event, nil
+}
+
+// ContractClusterMigratedToETHIterator is returned from FilterClusterMigratedToETH and is used to iterate over the raw logs and unpacked data for ClusterMigratedToETH events raised by the Contract contract.
+type ContractClusterMigratedToETHIterator struct {
+	Event *ContractClusterMigratedToETH // Event containing the contract specifics and raw log
+
+	contract *bind.BoundContract // Generic contract to use for unpacking event data
+	event    string              // Event name to use for unpacking event data
+
+	logs chan types.Log        // Log channel receiving the found contract events
+	sub  ethereum.Subscription // Subscription for errors, completion and termination
+	done bool                  // Whether the subscription completed delivering logs
+	fail error                 // Occurred error to stop iteration
+}
+
+// Next advances the iterator to the subsequent event, returning whether there
+// are any more events found. In case of a retrieval or parsing error, false is
+// returned and Error() can be queried for the exact failure.
+func (it *ContractClusterMigratedToETHIterator) Next() bool {
+	// If the iterator failed, stop iterating
+	if it.fail != nil {
+		return false
+	}
+	// If the iterator completed, deliver directly whatever's available
+	if it.done {
+		select {
+		case log := <-it.logs:
+			it.Event = new(ContractClusterMigratedToETH)
+			if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+				it.fail = err
+				return false
+			}
+			it.Event.Raw = log
+			return true
+
+		default:
+			return false
+		}
+	}
+	// Iterator still in progress, wait for either a data or an error event
+	select {
+	case log := <-it.logs:
+		it.Event = new(ContractClusterMigratedToETH)
+		if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+			it.fail = err
+			return false
+		}
+		it.Event.Raw = log
+		return true
+
+	case err := <-it.sub.Err():
+		it.done = true
+		it.fail = err
+		return it.Next()
+	}
+}
+
+// Error returns any retrieval or parsing error occurred during filtering.
+func (it *ContractClusterMigratedToETHIterator) Error() error {
+	return it.fail
+}
+
+// Close terminates the iteration process, releasing any pending underlying
+// resources.
+func (it *ContractClusterMigratedToETHIterator) Close() error {
+	it.sub.Unsubscribe()
+	return nil
+}
+
+// ContractClusterMigratedToETH represents a ClusterMigratedToETH event raised by the Contract contract.
+type ContractClusterMigratedToETH struct {
+	Owner            common.Address
+	OperatorIds      []uint64
+	EthDeposited     *big.Int
+	SsvRefunded      *big.Int
+	EffectiveBalance uint32
+	Cluster          ISSVNetworkCoreCluster
+	Raw              types.Log // Blockchain specific contextual infos
+}
+
+// FilterClusterMigratedToETH is a free log retrieval operation binding the contract event 0x6dc71e7231318932a8a7f99bac76f94ffe24cac147843e0c285ce4cf290c803a.
+//
+// Solidity: event ClusterMigratedToETH(address indexed owner, uint64[] operatorIds, uint256 ethDeposited, uint256 ssvRefunded, uint32 effectiveBalance, (uint32,uint64,uint64,bool,uint256) cluster)
+func (_Contract *ContractFilterer) FilterClusterMigratedToETH(opts *bind.FilterOpts, owner []common.Address) (*ContractClusterMigratedToETHIterator, error) {
+
+	var ownerRule []interface{}
+	for _, ownerItem := range owner {
+		ownerRule = append(ownerRule, ownerItem)
+	}
+
+	logs, sub, err := _Contract.contract.FilterLogs(opts, "ClusterMigratedToETH", ownerRule)
+	if err != nil {
+		return nil, err
+	}
+	return &ContractClusterMigratedToETHIterator{contract: _Contract.contract, event: "ClusterMigratedToETH", logs: logs, sub: sub}, nil
+}
+
+// WatchClusterMigratedToETH is a free log subscription operation binding the contract event 0x6dc71e7231318932a8a7f99bac76f94ffe24cac147843e0c285ce4cf290c803a.
+//
+// Solidity: event ClusterMigratedToETH(address indexed owner, uint64[] operatorIds, uint256 ethDeposited, uint256 ssvRefunded, uint32 effectiveBalance, (uint32,uint64,uint64,bool,uint256) cluster)
+func (_Contract *ContractFilterer) WatchClusterMigratedToETH(opts *bind.WatchOpts, sink chan<- *ContractClusterMigratedToETH, owner []common.Address) (event.Subscription, error) {
+
+	var ownerRule []interface{}
+	for _, ownerItem := range owner {
+		ownerRule = append(ownerRule, ownerItem)
+	}
+
+	logs, sub, err := _Contract.contract.WatchLogs(opts, "ClusterMigratedToETH", ownerRule)
+	if err != nil {
+		return nil, err
+	}
+	return event.NewSubscription(func(quit <-chan struct{}) error {
+		defer sub.Unsubscribe()
+		for {
+			select {
+			case log := <-logs:
+				// New log arrived, parse the event and forward to the user
+				event := new(ContractClusterMigratedToETH)
+				if err := _Contract.contract.UnpackLog(event, "ClusterMigratedToETH", log); err != nil {
+					return err
+				}
+				event.Raw = log
+
+				select {
+				case sink <- event:
+				case err := <-sub.Err():
+					return err
+				case <-quit:
+					return nil
+				}
+			case err := <-sub.Err():
+				return err
+			case <-quit:
+				return nil
+			}
+		}
+	}), nil
+}
+
+// ParseClusterMigratedToETH is a log parse operation binding the contract event 0x6dc71e7231318932a8a7f99bac76f94ffe24cac147843e0c285ce4cf290c803a.
+//
+// Solidity: event ClusterMigratedToETH(address indexed owner, uint64[] operatorIds, uint256 ethDeposited, uint256 ssvRefunded, uint32 effectiveBalance, (uint32,uint64,uint64,bool,uint256) cluster)
+func (_Contract *ContractFilterer) ParseClusterMigratedToETH(log types.Log) (*ContractClusterMigratedToETH, error) {
+	event := new(ContractClusterMigratedToETH)
+	if err := _Contract.contract.UnpackLog(event, "ClusterMigratedToETH", log); err != nil {
 		return nil, err
 	}
 	event.Raw = log
@@ -1892,6 +2820,140 @@ func (_Contract *ContractFilterer) ParseClusterWithdrawn(log types.Log) (*Contra
 	return event, nil
 }
 
+// ContractCooldownDurationUpdatedIterator is returned from FilterCooldownDurationUpdated and is used to iterate over the raw logs and unpacked data for CooldownDurationUpdated events raised by the Contract contract.
+type ContractCooldownDurationUpdatedIterator struct {
+	Event *ContractCooldownDurationUpdated // Event containing the contract specifics and raw log
+
+	contract *bind.BoundContract // Generic contract to use for unpacking event data
+	event    string              // Event name to use for unpacking event data
+
+	logs chan types.Log        // Log channel receiving the found contract events
+	sub  ethereum.Subscription // Subscription for errors, completion and termination
+	done bool                  // Whether the subscription completed delivering logs
+	fail error                 // Occurred error to stop iteration
+}
+
+// Next advances the iterator to the subsequent event, returning whether there
+// are any more events found. In case of a retrieval or parsing error, false is
+// returned and Error() can be queried for the exact failure.
+func (it *ContractCooldownDurationUpdatedIterator) Next() bool {
+	// If the iterator failed, stop iterating
+	if it.fail != nil {
+		return false
+	}
+	// If the iterator completed, deliver directly whatever's available
+	if it.done {
+		select {
+		case log := <-it.logs:
+			it.Event = new(ContractCooldownDurationUpdated)
+			if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+				it.fail = err
+				return false
+			}
+			it.Event.Raw = log
+			return true
+
+		default:
+			return false
+		}
+	}
+	// Iterator still in progress, wait for either a data or an error event
+	select {
+	case log := <-it.logs:
+		it.Event = new(ContractCooldownDurationUpdated)
+		if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+			it.fail = err
+			return false
+		}
+		it.Event.Raw = log
+		return true
+
+	case err := <-it.sub.Err():
+		it.done = true
+		it.fail = err
+		return it.Next()
+	}
+}
+
+// Error returns any retrieval or parsing error occurred during filtering.
+func (it *ContractCooldownDurationUpdatedIterator) Error() error {
+	return it.fail
+}
+
+// Close terminates the iteration process, releasing any pending underlying
+// resources.
+func (it *ContractCooldownDurationUpdatedIterator) Close() error {
+	it.sub.Unsubscribe()
+	return nil
+}
+
+// ContractCooldownDurationUpdated represents a CooldownDurationUpdated event raised by the Contract contract.
+type ContractCooldownDurationUpdated struct {
+	NewCooldownDuration uint64
+	Raw                 types.Log // Blockchain specific contextual infos
+}
+
+// FilterCooldownDurationUpdated is a free log retrieval operation binding the contract event 0xe865acf13176ceb6a83a16f925f9f67fd03c94ca1af6160d78a7f8a2914253e2.
+//
+// Solidity: event CooldownDurationUpdated(uint64 newCooldownDuration)
+func (_Contract *ContractFilterer) FilterCooldownDurationUpdated(opts *bind.FilterOpts) (*ContractCooldownDurationUpdatedIterator, error) {
+
+	logs, sub, err := _Contract.contract.FilterLogs(opts, "CooldownDurationUpdated")
+	if err != nil {
+		return nil, err
+	}
+	return &ContractCooldownDurationUpdatedIterator{contract: _Contract.contract, event: "CooldownDurationUpdated", logs: logs, sub: sub}, nil
+}
+
+// WatchCooldownDurationUpdated is a free log subscription operation binding the contract event 0xe865acf13176ceb6a83a16f925f9f67fd03c94ca1af6160d78a7f8a2914253e2.
+//
+// Solidity: event CooldownDurationUpdated(uint64 newCooldownDuration)
+func (_Contract *ContractFilterer) WatchCooldownDurationUpdated(opts *bind.WatchOpts, sink chan<- *ContractCooldownDurationUpdated) (event.Subscription, error) {
+
+	logs, sub, err := _Contract.contract.WatchLogs(opts, "CooldownDurationUpdated")
+	if err != nil {
+		return nil, err
+	}
+	return event.NewSubscription(func(quit <-chan struct{}) error {
+		defer sub.Unsubscribe()
+		for {
+			select {
+			case log := <-logs:
+				// New log arrived, parse the event and forward to the user
+				event := new(ContractCooldownDurationUpdated)
+				if err := _Contract.contract.UnpackLog(event, "CooldownDurationUpdated", log); err != nil {
+					return err
+				}
+				event.Raw = log
+
+				select {
+				case sink <- event:
+				case err := <-sub.Err():
+					return err
+				case <-quit:
+					return nil
+				}
+			case err := <-sub.Err():
+				return err
+			case <-quit:
+				return nil
+			}
+		}
+	}), nil
+}
+
+// ParseCooldownDurationUpdated is a log parse operation binding the contract event 0xe865acf13176ceb6a83a16f925f9f67fd03c94ca1af6160d78a7f8a2914253e2.
+//
+// Solidity: event CooldownDurationUpdated(uint64 newCooldownDuration)
+func (_Contract *ContractFilterer) ParseCooldownDurationUpdated(log types.Log) (*ContractCooldownDurationUpdated, error) {
+	event := new(ContractCooldownDurationUpdated)
+	if err := _Contract.contract.UnpackLog(event, "CooldownDurationUpdated", log); err != nil {
+		return nil, err
+	}
+	event.Raw = log
+	return event, nil
+}
+
 // ContractDeclareOperatorFeePeriodUpdatedIterator is returned from FilterDeclareOperatorFeePeriodUpdated and is used to iterate over the raw logs and unpacked data for DeclareOperatorFeePeriodUpdated events raised by the Contract contract.
 type ContractDeclareOperatorFeePeriodUpdatedIterator struct {
 	Event *ContractDeclareOperatorFeePeriodUpdated // Event containing the contract specifics and raw log
@@ -2020,6 +3082,160 @@ func (_Contract *ContractFilterer) WatchDeclareOperatorFeePeriodUpdated(opts *bi
 func (_Contract *ContractFilterer) ParseDeclareOperatorFeePeriodUpdated(log types.Log) (*ContractDeclareOperatorFeePeriodUpdated, error) {
 	event := new(ContractDeclareOperatorFeePeriodUpdated)
 	if err := _Contract.contract.UnpackLog(event, "DeclareOperatorFeePeriodUpdated", log); err != nil {
+		return nil, err
+	}
+	event.Raw = log
+	return event, nil
+}
+
+// ContractERC20RescuedIterator is returned from FilterERC20Rescued and is used to iterate over the raw logs and unpacked data for ERC20Rescued events raised by the Contract contract.
+type ContractERC20RescuedIterator struct {
+	Event *ContractERC20Rescued // Event containing the contract specifics and raw log
+
+	contract *bind.BoundContract // Generic contract to use for unpacking event data
+	event    string              // Event name to use for unpacking event data
+
+	logs chan types.Log        // Log channel receiving the found contract events
+	sub  ethereum.Subscription // Subscription for errors, completion and termination
+	done bool                  // Whether the subscription completed delivering logs
+	fail error                 // Occurred error to stop iteration
+}
+
+// Next advances the iterator to the subsequent event, returning whether there
+// are any more events found. In case of a retrieval or parsing error, false is
+// returned and Error() can be queried for the exact failure.
+func (it *ContractERC20RescuedIterator) Next() bool {
+	// If the iterator failed, stop iterating
+	if it.fail != nil {
+		return false
+	}
+	// If the iterator completed, deliver directly whatever's available
+	if it.done {
+		select {
+		case log := <-it.logs:
+			it.Event = new(ContractERC20Rescued)
+			if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+				it.fail = err
+				return false
+			}
+			it.Event.Raw = log
+			return true
+
+		default:
+			return false
+		}
+	}
+	// Iterator still in progress, wait for either a data or an error event
+	select {
+	case log := <-it.logs:
+		it.Event = new(ContractERC20Rescued)
+		if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+			it.fail = err
+			return false
+		}
+		it.Event.Raw = log
+		return true
+
+	case err := <-it.sub.Err():
+		it.done = true
+		it.fail = err
+		return it.Next()
+	}
+}
+
+// Error returns any retrieval or parsing error occurred during filtering.
+func (it *ContractERC20RescuedIterator) Error() error {
+	return it.fail
+}
+
+// Close terminates the iteration process, releasing any pending underlying
+// resources.
+func (it *ContractERC20RescuedIterator) Close() error {
+	it.sub.Unsubscribe()
+	return nil
+}
+
+// ContractERC20Rescued represents a ERC20Rescued event raised by the Contract contract.
+type ContractERC20Rescued struct {
+	Token  common.Address
+	To     common.Address
+	Amount *big.Int
+	Raw    types.Log // Blockchain specific contextual infos
+}
+
+// FilterERC20Rescued is a free log retrieval operation binding the contract event 0x8bbfbb5d7fcacf6fc74005cdede0635561638507f576c95f7f294c22141be2e5.
+//
+// Solidity: event ERC20Rescued(address indexed token, address indexed to, uint256 amount)
+func (_Contract *ContractFilterer) FilterERC20Rescued(opts *bind.FilterOpts, token []common.Address, to []common.Address) (*ContractERC20RescuedIterator, error) {
+
+	var tokenRule []interface{}
+	for _, tokenItem := range token {
+		tokenRule = append(tokenRule, tokenItem)
+	}
+	var toRule []interface{}
+	for _, toItem := range to {
+		toRule = append(toRule, toItem)
+	}
+
+	logs, sub, err := _Contract.contract.FilterLogs(opts, "ERC20Rescued", tokenRule, toRule)
+	if err != nil {
+		return nil, err
+	}
+	return &ContractERC20RescuedIterator{contract: _Contract.contract, event: "ERC20Rescued", logs: logs, sub: sub}, nil
+}
+
+// WatchERC20Rescued is a free log subscription operation binding the contract event 0x8bbfbb5d7fcacf6fc74005cdede0635561638507f576c95f7f294c22141be2e5.
+//
+// Solidity: event ERC20Rescued(address indexed token, address indexed to, uint256 amount)
+func (_Contract *ContractFilterer) WatchERC20Rescued(opts *bind.WatchOpts, sink chan<- *ContractERC20Rescued, token []common.Address, to []common.Address) (event.Subscription, error) {
+
+	var tokenRule []interface{}
+	for _, tokenItem := range token {
+		tokenRule = append(tokenRule, tokenItem)
+	}
+	var toRule []interface{}
+	for _, toItem := range to {
+		toRule = append(toRule, toItem)
+	}
+
+	logs, sub, err := _Contract.contract.WatchLogs(opts, "ERC20Rescued", tokenRule, toRule)
+	if err != nil {
+		return nil, err
+	}
+	return event.NewSubscription(func(quit <-chan struct{}) error {
+		defer sub.Unsubscribe()
+		for {
+			select {
+			case log := <-logs:
+				// New log arrived, parse the event and forward to the user
+				event := new(ContractERC20Rescued)
+				if err := _Contract.contract.UnpackLog(event, "ERC20Rescued", log); err != nil {
+					return err
+				}
+				event.Raw = log
+
+				select {
+				case sink <- event:
+				case err := <-sub.Err():
+					return err
+				case <-quit:
+					return nil
+				}
+			case err := <-sub.Err():
+				return err
+			case <-quit:
+				return nil
+			}
+		}
+	}), nil
+}
+
+// ParseERC20Rescued is a log parse operation binding the contract event 0x8bbfbb5d7fcacf6fc74005cdede0635561638507f576c95f7f294c22141be2e5.
+//
+// Solidity: event ERC20Rescued(address indexed token, address indexed to, uint256 amount)
+func (_Contract *ContractFilterer) ParseERC20Rescued(log types.Log) (*ContractERC20Rescued, error) {
+	event := new(ContractERC20Rescued)
+	if err := _Contract.contract.UnpackLog(event, "ERC20Rescued", log); err != nil {
 		return nil, err
 	}
 	event.Raw = log
@@ -2305,6 +3521,141 @@ func (_Contract *ContractFilterer) ParseFeeRecipientAddressUpdated(log types.Log
 	return event, nil
 }
 
+// ContractFeesSyncedIterator is returned from FilterFeesSynced and is used to iterate over the raw logs and unpacked data for FeesSynced events raised by the Contract contract.
+type ContractFeesSyncedIterator struct {
+	Event *ContractFeesSynced // Event containing the contract specifics and raw log
+
+	contract *bind.BoundContract // Generic contract to use for unpacking event data
+	event    string              // Event name to use for unpacking event data
+
+	logs chan types.Log        // Log channel receiving the found contract events
+	sub  ethereum.Subscription // Subscription for errors, completion and termination
+	done bool                  // Whether the subscription completed delivering logs
+	fail error                 // Occurred error to stop iteration
+}
+
+// Next advances the iterator to the subsequent event, returning whether there
+// are any more events found. In case of a retrieval or parsing error, false is
+// returned and Error() can be queried for the exact failure.
+func (it *ContractFeesSyncedIterator) Next() bool {
+	// If the iterator failed, stop iterating
+	if it.fail != nil {
+		return false
+	}
+	// If the iterator completed, deliver directly whatever's available
+	if it.done {
+		select {
+		case log := <-it.logs:
+			it.Event = new(ContractFeesSynced)
+			if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+				it.fail = err
+				return false
+			}
+			it.Event.Raw = log
+			return true
+
+		default:
+			return false
+		}
+	}
+	// Iterator still in progress, wait for either a data or an error event
+	select {
+	case log := <-it.logs:
+		it.Event = new(ContractFeesSynced)
+		if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+			it.fail = err
+			return false
+		}
+		it.Event.Raw = log
+		return true
+
+	case err := <-it.sub.Err():
+		it.done = true
+		it.fail = err
+		return it.Next()
+	}
+}
+
+// Error returns any retrieval or parsing error occurred during filtering.
+func (it *ContractFeesSyncedIterator) Error() error {
+	return it.fail
+}
+
+// Close terminates the iteration process, releasing any pending underlying
+// resources.
+func (it *ContractFeesSyncedIterator) Close() error {
+	it.sub.Unsubscribe()
+	return nil
+}
+
+// ContractFeesSynced represents a FeesSynced event raised by the Contract contract.
+type ContractFeesSynced struct {
+	NewFeesWei     *big.Int
+	AccEthPerShare *big.Int
+	Raw            types.Log // Blockchain specific contextual infos
+}
+
+// FilterFeesSynced is a free log retrieval operation binding the contract event 0x9386d77e0bcb586105f5c2bee7cabc987f85e7c518f34e580fab935df5d3a9c6.
+//
+// Solidity: event FeesSynced(uint256 newFeesWei, uint256 accEthPerShare)
+func (_Contract *ContractFilterer) FilterFeesSynced(opts *bind.FilterOpts) (*ContractFeesSyncedIterator, error) {
+
+	logs, sub, err := _Contract.contract.FilterLogs(opts, "FeesSynced")
+	if err != nil {
+		return nil, err
+	}
+	return &ContractFeesSyncedIterator{contract: _Contract.contract, event: "FeesSynced", logs: logs, sub: sub}, nil
+}
+
+// WatchFeesSynced is a free log subscription operation binding the contract event 0x9386d77e0bcb586105f5c2bee7cabc987f85e7c518f34e580fab935df5d3a9c6.
+//
+// Solidity: event FeesSynced(uint256 newFeesWei, uint256 accEthPerShare)
+func (_Contract *ContractFilterer) WatchFeesSynced(opts *bind.WatchOpts, sink chan<- *ContractFeesSynced) (event.Subscription, error) {
+
+	logs, sub, err := _Contract.contract.WatchLogs(opts, "FeesSynced")
+	if err != nil {
+		return nil, err
+	}
+	return event.NewSubscription(func(quit <-chan struct{}) error {
+		defer sub.Unsubscribe()
+		for {
+			select {
+			case log := <-logs:
+				// New log arrived, parse the event and forward to the user
+				event := new(ContractFeesSynced)
+				if err := _Contract.contract.UnpackLog(event, "FeesSynced", log); err != nil {
+					return err
+				}
+				event.Raw = log
+
+				select {
+				case sink <- event:
+				case err := <-sub.Err():
+					return err
+				case <-quit:
+					return nil
+				}
+			case err := <-sub.Err():
+				return err
+			case <-quit:
+				return nil
+			}
+		}
+	}), nil
+}
+
+// ParseFeesSynced is a log parse operation binding the contract event 0x9386d77e0bcb586105f5c2bee7cabc987f85e7c518f34e580fab935df5d3a9c6.
+//
+// Solidity: event FeesSynced(uint256 newFeesWei, uint256 accEthPerShare)
+func (_Contract *ContractFilterer) ParseFeesSynced(log types.Log) (*ContractFeesSynced, error) {
+	event := new(ContractFeesSynced)
+	if err := _Contract.contract.UnpackLog(event, "FeesSynced", log); err != nil {
+		return nil, err
+	}
+	event.Raw = log
+	return event, nil
+}
+
 // ContractInitializedIterator is returned from FilterInitialized and is used to iterate over the raw logs and unpacked data for Initialized events raised by the Contract contract.
 type ContractInitializedIterator struct {
 	Event *ContractInitialized // Event containing the contract specifics and raw log
@@ -2433,6 +3784,140 @@ func (_Contract *ContractFilterer) WatchInitialized(opts *bind.WatchOpts, sink c
 func (_Contract *ContractFilterer) ParseInitialized(log types.Log) (*ContractInitialized, error) {
 	event := new(ContractInitialized)
 	if err := _Contract.contract.UnpackLog(event, "Initialized", log); err != nil {
+		return nil, err
+	}
+	event.Raw = log
+	return event, nil
+}
+
+// ContractLiquidationThresholdPeriodSSVUpdatedIterator is returned from FilterLiquidationThresholdPeriodSSVUpdated and is used to iterate over the raw logs and unpacked data for LiquidationThresholdPeriodSSVUpdated events raised by the Contract contract.
+type ContractLiquidationThresholdPeriodSSVUpdatedIterator struct {
+	Event *ContractLiquidationThresholdPeriodSSVUpdated // Event containing the contract specifics and raw log
+
+	contract *bind.BoundContract // Generic contract to use for unpacking event data
+	event    string              // Event name to use for unpacking event data
+
+	logs chan types.Log        // Log channel receiving the found contract events
+	sub  ethereum.Subscription // Subscription for errors, completion and termination
+	done bool                  // Whether the subscription completed delivering logs
+	fail error                 // Occurred error to stop iteration
+}
+
+// Next advances the iterator to the subsequent event, returning whether there
+// are any more events found. In case of a retrieval or parsing error, false is
+// returned and Error() can be queried for the exact failure.
+func (it *ContractLiquidationThresholdPeriodSSVUpdatedIterator) Next() bool {
+	// If the iterator failed, stop iterating
+	if it.fail != nil {
+		return false
+	}
+	// If the iterator completed, deliver directly whatever's available
+	if it.done {
+		select {
+		case log := <-it.logs:
+			it.Event = new(ContractLiquidationThresholdPeriodSSVUpdated)
+			if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+				it.fail = err
+				return false
+			}
+			it.Event.Raw = log
+			return true
+
+		default:
+			return false
+		}
+	}
+	// Iterator still in progress, wait for either a data or an error event
+	select {
+	case log := <-it.logs:
+		it.Event = new(ContractLiquidationThresholdPeriodSSVUpdated)
+		if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+			it.fail = err
+			return false
+		}
+		it.Event.Raw = log
+		return true
+
+	case err := <-it.sub.Err():
+		it.done = true
+		it.fail = err
+		return it.Next()
+	}
+}
+
+// Error returns any retrieval or parsing error occurred during filtering.
+func (it *ContractLiquidationThresholdPeriodSSVUpdatedIterator) Error() error {
+	return it.fail
+}
+
+// Close terminates the iteration process, releasing any pending underlying
+// resources.
+func (it *ContractLiquidationThresholdPeriodSSVUpdatedIterator) Close() error {
+	it.sub.Unsubscribe()
+	return nil
+}
+
+// ContractLiquidationThresholdPeriodSSVUpdated represents a LiquidationThresholdPeriodSSVUpdated event raised by the Contract contract.
+type ContractLiquidationThresholdPeriodSSVUpdated struct {
+	Value uint64
+	Raw   types.Log // Blockchain specific contextual infos
+}
+
+// FilterLiquidationThresholdPeriodSSVUpdated is a free log retrieval operation binding the contract event 0xc968a767c53be943fe324987597efaba682968c894cab4291313662c8b99691d.
+//
+// Solidity: event LiquidationThresholdPeriodSSVUpdated(uint64 value)
+func (_Contract *ContractFilterer) FilterLiquidationThresholdPeriodSSVUpdated(opts *bind.FilterOpts) (*ContractLiquidationThresholdPeriodSSVUpdatedIterator, error) {
+
+	logs, sub, err := _Contract.contract.FilterLogs(opts, "LiquidationThresholdPeriodSSVUpdated")
+	if err != nil {
+		return nil, err
+	}
+	return &ContractLiquidationThresholdPeriodSSVUpdatedIterator{contract: _Contract.contract, event: "LiquidationThresholdPeriodSSVUpdated", logs: logs, sub: sub}, nil
+}
+
+// WatchLiquidationThresholdPeriodSSVUpdated is a free log subscription operation binding the contract event 0xc968a767c53be943fe324987597efaba682968c894cab4291313662c8b99691d.
+//
+// Solidity: event LiquidationThresholdPeriodSSVUpdated(uint64 value)
+func (_Contract *ContractFilterer) WatchLiquidationThresholdPeriodSSVUpdated(opts *bind.WatchOpts, sink chan<- *ContractLiquidationThresholdPeriodSSVUpdated) (event.Subscription, error) {
+
+	logs, sub, err := _Contract.contract.WatchLogs(opts, "LiquidationThresholdPeriodSSVUpdated")
+	if err != nil {
+		return nil, err
+	}
+	return event.NewSubscription(func(quit <-chan struct{}) error {
+		defer sub.Unsubscribe()
+		for {
+			select {
+			case log := <-logs:
+				// New log arrived, parse the event and forward to the user
+				event := new(ContractLiquidationThresholdPeriodSSVUpdated)
+				if err := _Contract.contract.UnpackLog(event, "LiquidationThresholdPeriodSSVUpdated", log); err != nil {
+					return err
+				}
+				event.Raw = log
+
+				select {
+				case sink <- event:
+				case err := <-sub.Err():
+					return err
+				case <-quit:
+					return nil
+				}
+			case err := <-sub.Err():
+				return err
+			case <-quit:
+				return nil
+			}
+		}
+	}), nil
+}
+
+// ParseLiquidationThresholdPeriodSSVUpdated is a log parse operation binding the contract event 0xc968a767c53be943fe324987597efaba682968c894cab4291313662c8b99691d.
+//
+// Solidity: event LiquidationThresholdPeriodSSVUpdated(uint64 value)
+func (_Contract *ContractFilterer) ParseLiquidationThresholdPeriodSSVUpdated(log types.Log) (*ContractLiquidationThresholdPeriodSSVUpdated, error) {
+	event := new(ContractLiquidationThresholdPeriodSSVUpdated)
+	if err := _Contract.contract.UnpackLog(event, "LiquidationThresholdPeriodSSVUpdated", log); err != nil {
 		return nil, err
 	}
 	event.Raw = log
@@ -2573,6 +4058,274 @@ func (_Contract *ContractFilterer) ParseLiquidationThresholdPeriodUpdated(log ty
 	return event, nil
 }
 
+// ContractMinBlocksBetweenUpdatesUpdatedIterator is returned from FilterMinBlocksBetweenUpdatesUpdated and is used to iterate over the raw logs and unpacked data for MinBlocksBetweenUpdatesUpdated events raised by the Contract contract.
+type ContractMinBlocksBetweenUpdatesUpdatedIterator struct {
+	Event *ContractMinBlocksBetweenUpdatesUpdated // Event containing the contract specifics and raw log
+
+	contract *bind.BoundContract // Generic contract to use for unpacking event data
+	event    string              // Event name to use for unpacking event data
+
+	logs chan types.Log        // Log channel receiving the found contract events
+	sub  ethereum.Subscription // Subscription for errors, completion and termination
+	done bool                  // Whether the subscription completed delivering logs
+	fail error                 // Occurred error to stop iteration
+}
+
+// Next advances the iterator to the subsequent event, returning whether there
+// are any more events found. In case of a retrieval or parsing error, false is
+// returned and Error() can be queried for the exact failure.
+func (it *ContractMinBlocksBetweenUpdatesUpdatedIterator) Next() bool {
+	// If the iterator failed, stop iterating
+	if it.fail != nil {
+		return false
+	}
+	// If the iterator completed, deliver directly whatever's available
+	if it.done {
+		select {
+		case log := <-it.logs:
+			it.Event = new(ContractMinBlocksBetweenUpdatesUpdated)
+			if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+				it.fail = err
+				return false
+			}
+			it.Event.Raw = log
+			return true
+
+		default:
+			return false
+		}
+	}
+	// Iterator still in progress, wait for either a data or an error event
+	select {
+	case log := <-it.logs:
+		it.Event = new(ContractMinBlocksBetweenUpdatesUpdated)
+		if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+			it.fail = err
+			return false
+		}
+		it.Event.Raw = log
+		return true
+
+	case err := <-it.sub.Err():
+		it.done = true
+		it.fail = err
+		return it.Next()
+	}
+}
+
+// Error returns any retrieval or parsing error occurred during filtering.
+func (it *ContractMinBlocksBetweenUpdatesUpdatedIterator) Error() error {
+	return it.fail
+}
+
+// Close terminates the iteration process, releasing any pending underlying
+// resources.
+func (it *ContractMinBlocksBetweenUpdatesUpdatedIterator) Close() error {
+	it.sub.Unsubscribe()
+	return nil
+}
+
+// ContractMinBlocksBetweenUpdatesUpdated represents a MinBlocksBetweenUpdatesUpdated event raised by the Contract contract.
+type ContractMinBlocksBetweenUpdatesUpdated struct {
+	NewMinBlocksBetweenUpdates uint32
+	Raw                        types.Log // Blockchain specific contextual infos
+}
+
+// FilterMinBlocksBetweenUpdatesUpdated is a free log retrieval operation binding the contract event 0x8794fa1a5292ace029a96ff5db5c03006669acdf358814c3f716ac098b99092e.
+//
+// Solidity: event MinBlocksBetweenUpdatesUpdated(uint32 newMinBlocksBetweenUpdates)
+func (_Contract *ContractFilterer) FilterMinBlocksBetweenUpdatesUpdated(opts *bind.FilterOpts) (*ContractMinBlocksBetweenUpdatesUpdatedIterator, error) {
+
+	logs, sub, err := _Contract.contract.FilterLogs(opts, "MinBlocksBetweenUpdatesUpdated")
+	if err != nil {
+		return nil, err
+	}
+	return &ContractMinBlocksBetweenUpdatesUpdatedIterator{contract: _Contract.contract, event: "MinBlocksBetweenUpdatesUpdated", logs: logs, sub: sub}, nil
+}
+
+// WatchMinBlocksBetweenUpdatesUpdated is a free log subscription operation binding the contract event 0x8794fa1a5292ace029a96ff5db5c03006669acdf358814c3f716ac098b99092e.
+//
+// Solidity: event MinBlocksBetweenUpdatesUpdated(uint32 newMinBlocksBetweenUpdates)
+func (_Contract *ContractFilterer) WatchMinBlocksBetweenUpdatesUpdated(opts *bind.WatchOpts, sink chan<- *ContractMinBlocksBetweenUpdatesUpdated) (event.Subscription, error) {
+
+	logs, sub, err := _Contract.contract.WatchLogs(opts, "MinBlocksBetweenUpdatesUpdated")
+	if err != nil {
+		return nil, err
+	}
+	return event.NewSubscription(func(quit <-chan struct{}) error {
+		defer sub.Unsubscribe()
+		for {
+			select {
+			case log := <-logs:
+				// New log arrived, parse the event and forward to the user
+				event := new(ContractMinBlocksBetweenUpdatesUpdated)
+				if err := _Contract.contract.UnpackLog(event, "MinBlocksBetweenUpdatesUpdated", log); err != nil {
+					return err
+				}
+				event.Raw = log
+
+				select {
+				case sink <- event:
+				case err := <-sub.Err():
+					return err
+				case <-quit:
+					return nil
+				}
+			case err := <-sub.Err():
+				return err
+			case <-quit:
+				return nil
+			}
+		}
+	}), nil
+}
+
+// ParseMinBlocksBetweenUpdatesUpdated is a log parse operation binding the contract event 0x8794fa1a5292ace029a96ff5db5c03006669acdf358814c3f716ac098b99092e.
+//
+// Solidity: event MinBlocksBetweenUpdatesUpdated(uint32 newMinBlocksBetweenUpdates)
+func (_Contract *ContractFilterer) ParseMinBlocksBetweenUpdatesUpdated(log types.Log) (*ContractMinBlocksBetweenUpdatesUpdated, error) {
+	event := new(ContractMinBlocksBetweenUpdatesUpdated)
+	if err := _Contract.contract.UnpackLog(event, "MinBlocksBetweenUpdatesUpdated", log); err != nil {
+		return nil, err
+	}
+	event.Raw = log
+	return event, nil
+}
+
+// ContractMinimumLiquidationCollateralSSVUpdatedIterator is returned from FilterMinimumLiquidationCollateralSSVUpdated and is used to iterate over the raw logs and unpacked data for MinimumLiquidationCollateralSSVUpdated events raised by the Contract contract.
+type ContractMinimumLiquidationCollateralSSVUpdatedIterator struct {
+	Event *ContractMinimumLiquidationCollateralSSVUpdated // Event containing the contract specifics and raw log
+
+	contract *bind.BoundContract // Generic contract to use for unpacking event data
+	event    string              // Event name to use for unpacking event data
+
+	logs chan types.Log        // Log channel receiving the found contract events
+	sub  ethereum.Subscription // Subscription for errors, completion and termination
+	done bool                  // Whether the subscription completed delivering logs
+	fail error                 // Occurred error to stop iteration
+}
+
+// Next advances the iterator to the subsequent event, returning whether there
+// are any more events found. In case of a retrieval or parsing error, false is
+// returned and Error() can be queried for the exact failure.
+func (it *ContractMinimumLiquidationCollateralSSVUpdatedIterator) Next() bool {
+	// If the iterator failed, stop iterating
+	if it.fail != nil {
+		return false
+	}
+	// If the iterator completed, deliver directly whatever's available
+	if it.done {
+		select {
+		case log := <-it.logs:
+			it.Event = new(ContractMinimumLiquidationCollateralSSVUpdated)
+			if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+				it.fail = err
+				return false
+			}
+			it.Event.Raw = log
+			return true
+
+		default:
+			return false
+		}
+	}
+	// Iterator still in progress, wait for either a data or an error event
+	select {
+	case log := <-it.logs:
+		it.Event = new(ContractMinimumLiquidationCollateralSSVUpdated)
+		if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+			it.fail = err
+			return false
+		}
+		it.Event.Raw = log
+		return true
+
+	case err := <-it.sub.Err():
+		it.done = true
+		it.fail = err
+		return it.Next()
+	}
+}
+
+// Error returns any retrieval or parsing error occurred during filtering.
+func (it *ContractMinimumLiquidationCollateralSSVUpdatedIterator) Error() error {
+	return it.fail
+}
+
+// Close terminates the iteration process, releasing any pending underlying
+// resources.
+func (it *ContractMinimumLiquidationCollateralSSVUpdatedIterator) Close() error {
+	it.sub.Unsubscribe()
+	return nil
+}
+
+// ContractMinimumLiquidationCollateralSSVUpdated represents a MinimumLiquidationCollateralSSVUpdated event raised by the Contract contract.
+type ContractMinimumLiquidationCollateralSSVUpdated struct {
+	Value *big.Int
+	Raw   types.Log // Blockchain specific contextual infos
+}
+
+// FilterMinimumLiquidationCollateralSSVUpdated is a free log retrieval operation binding the contract event 0xc6e0ba7aedc5595dfb313cf8e5bc03109e9f71dc644c019f9acb86fc054ed454.
+//
+// Solidity: event MinimumLiquidationCollateralSSVUpdated(uint256 value)
+func (_Contract *ContractFilterer) FilterMinimumLiquidationCollateralSSVUpdated(opts *bind.FilterOpts) (*ContractMinimumLiquidationCollateralSSVUpdatedIterator, error) {
+
+	logs, sub, err := _Contract.contract.FilterLogs(opts, "MinimumLiquidationCollateralSSVUpdated")
+	if err != nil {
+		return nil, err
+	}
+	return &ContractMinimumLiquidationCollateralSSVUpdatedIterator{contract: _Contract.contract, event: "MinimumLiquidationCollateralSSVUpdated", logs: logs, sub: sub}, nil
+}
+
+// WatchMinimumLiquidationCollateralSSVUpdated is a free log subscription operation binding the contract event 0xc6e0ba7aedc5595dfb313cf8e5bc03109e9f71dc644c019f9acb86fc054ed454.
+//
+// Solidity: event MinimumLiquidationCollateralSSVUpdated(uint256 value)
+func (_Contract *ContractFilterer) WatchMinimumLiquidationCollateralSSVUpdated(opts *bind.WatchOpts, sink chan<- *ContractMinimumLiquidationCollateralSSVUpdated) (event.Subscription, error) {
+
+	logs, sub, err := _Contract.contract.WatchLogs(opts, "MinimumLiquidationCollateralSSVUpdated")
+	if err != nil {
+		return nil, err
+	}
+	return event.NewSubscription(func(quit <-chan struct{}) error {
+		defer sub.Unsubscribe()
+		for {
+			select {
+			case log := <-logs:
+				// New log arrived, parse the event and forward to the user
+				event := new(ContractMinimumLiquidationCollateralSSVUpdated)
+				if err := _Contract.contract.UnpackLog(event, "MinimumLiquidationCollateralSSVUpdated", log); err != nil {
+					return err
+				}
+				event.Raw = log
+
+				select {
+				case sink <- event:
+				case err := <-sub.Err():
+					return err
+				case <-quit:
+					return nil
+				}
+			case err := <-sub.Err():
+				return err
+			case <-quit:
+				return nil
+			}
+		}
+	}), nil
+}
+
+// ParseMinimumLiquidationCollateralSSVUpdated is a log parse operation binding the contract event 0xc6e0ba7aedc5595dfb313cf8e5bc03109e9f71dc644c019f9acb86fc054ed454.
+//
+// Solidity: event MinimumLiquidationCollateralSSVUpdated(uint256 value)
+func (_Contract *ContractFilterer) ParseMinimumLiquidationCollateralSSVUpdated(log types.Log) (*ContractMinimumLiquidationCollateralSSVUpdated, error) {
+	event := new(ContractMinimumLiquidationCollateralSSVUpdated)
+	if err := _Contract.contract.UnpackLog(event, "MinimumLiquidationCollateralSSVUpdated", log); err != nil {
+		return nil, err
+	}
+	event.Raw = log
+	return event, nil
+}
+
 // ContractMinimumLiquidationCollateralUpdatedIterator is returned from FilterMinimumLiquidationCollateralUpdated and is used to iterate over the raw logs and unpacked data for MinimumLiquidationCollateralUpdated events raised by the Contract contract.
 type ContractMinimumLiquidationCollateralUpdatedIterator struct {
 	Event *ContractMinimumLiquidationCollateralUpdated // Event containing the contract specifics and raw log
@@ -2701,6 +4454,285 @@ func (_Contract *ContractFilterer) WatchMinimumLiquidationCollateralUpdated(opts
 func (_Contract *ContractFilterer) ParseMinimumLiquidationCollateralUpdated(log types.Log) (*ContractMinimumLiquidationCollateralUpdated, error) {
 	event := new(ContractMinimumLiquidationCollateralUpdated)
 	if err := _Contract.contract.UnpackLog(event, "MinimumLiquidationCollateralUpdated", log); err != nil {
+		return nil, err
+	}
+	event.Raw = log
+	return event, nil
+}
+
+// ContractMinimumOperatorEthFeeUpdatedIterator is returned from FilterMinimumOperatorEthFeeUpdated and is used to iterate over the raw logs and unpacked data for MinimumOperatorEthFeeUpdated events raised by the Contract contract.
+type ContractMinimumOperatorEthFeeUpdatedIterator struct {
+	Event *ContractMinimumOperatorEthFeeUpdated // Event containing the contract specifics and raw log
+
+	contract *bind.BoundContract // Generic contract to use for unpacking event data
+	event    string              // Event name to use for unpacking event data
+
+	logs chan types.Log        // Log channel receiving the found contract events
+	sub  ethereum.Subscription // Subscription for errors, completion and termination
+	done bool                  // Whether the subscription completed delivering logs
+	fail error                 // Occurred error to stop iteration
+}
+
+// Next advances the iterator to the subsequent event, returning whether there
+// are any more events found. In case of a retrieval or parsing error, false is
+// returned and Error() can be queried for the exact failure.
+func (it *ContractMinimumOperatorEthFeeUpdatedIterator) Next() bool {
+	// If the iterator failed, stop iterating
+	if it.fail != nil {
+		return false
+	}
+	// If the iterator completed, deliver directly whatever's available
+	if it.done {
+		select {
+		case log := <-it.logs:
+			it.Event = new(ContractMinimumOperatorEthFeeUpdated)
+			if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+				it.fail = err
+				return false
+			}
+			it.Event.Raw = log
+			return true
+
+		default:
+			return false
+		}
+	}
+	// Iterator still in progress, wait for either a data or an error event
+	select {
+	case log := <-it.logs:
+		it.Event = new(ContractMinimumOperatorEthFeeUpdated)
+		if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+			it.fail = err
+			return false
+		}
+		it.Event.Raw = log
+		return true
+
+	case err := <-it.sub.Err():
+		it.done = true
+		it.fail = err
+		return it.Next()
+	}
+}
+
+// Error returns any retrieval or parsing error occurred during filtering.
+func (it *ContractMinimumOperatorEthFeeUpdatedIterator) Error() error {
+	return it.fail
+}
+
+// Close terminates the iteration process, releasing any pending underlying
+// resources.
+func (it *ContractMinimumOperatorEthFeeUpdatedIterator) Close() error {
+	it.sub.Unsubscribe()
+	return nil
+}
+
+// ContractMinimumOperatorEthFeeUpdated represents a MinimumOperatorEthFeeUpdated event raised by the Contract contract.
+type ContractMinimumOperatorEthFeeUpdated struct {
+	MinFee *big.Int
+	Raw    types.Log // Blockchain specific contextual infos
+}
+
+// FilterMinimumOperatorEthFeeUpdated is a free log retrieval operation binding the contract event 0x18d44c1ee4bcb1ecb7d57ca44a74ede64c7c9accda084b97d466e6a0998329b3.
+//
+// Solidity: event MinimumOperatorEthFeeUpdated(uint256 minFee)
+func (_Contract *ContractFilterer) FilterMinimumOperatorEthFeeUpdated(opts *bind.FilterOpts) (*ContractMinimumOperatorEthFeeUpdatedIterator, error) {
+
+	logs, sub, err := _Contract.contract.FilterLogs(opts, "MinimumOperatorEthFeeUpdated")
+	if err != nil {
+		return nil, err
+	}
+	return &ContractMinimumOperatorEthFeeUpdatedIterator{contract: _Contract.contract, event: "MinimumOperatorEthFeeUpdated", logs: logs, sub: sub}, nil
+}
+
+// WatchMinimumOperatorEthFeeUpdated is a free log subscription operation binding the contract event 0x18d44c1ee4bcb1ecb7d57ca44a74ede64c7c9accda084b97d466e6a0998329b3.
+//
+// Solidity: event MinimumOperatorEthFeeUpdated(uint256 minFee)
+func (_Contract *ContractFilterer) WatchMinimumOperatorEthFeeUpdated(opts *bind.WatchOpts, sink chan<- *ContractMinimumOperatorEthFeeUpdated) (event.Subscription, error) {
+
+	logs, sub, err := _Contract.contract.WatchLogs(opts, "MinimumOperatorEthFeeUpdated")
+	if err != nil {
+		return nil, err
+	}
+	return event.NewSubscription(func(quit <-chan struct{}) error {
+		defer sub.Unsubscribe()
+		for {
+			select {
+			case log := <-logs:
+				// New log arrived, parse the event and forward to the user
+				event := new(ContractMinimumOperatorEthFeeUpdated)
+				if err := _Contract.contract.UnpackLog(event, "MinimumOperatorEthFeeUpdated", log); err != nil {
+					return err
+				}
+				event.Raw = log
+
+				select {
+				case sink <- event:
+				case err := <-sub.Err():
+					return err
+				case <-quit:
+					return nil
+				}
+			case err := <-sub.Err():
+				return err
+			case <-quit:
+				return nil
+			}
+		}
+	}), nil
+}
+
+// ParseMinimumOperatorEthFeeUpdated is a log parse operation binding the contract event 0x18d44c1ee4bcb1ecb7d57ca44a74ede64c7c9accda084b97d466e6a0998329b3.
+//
+// Solidity: event MinimumOperatorEthFeeUpdated(uint256 minFee)
+func (_Contract *ContractFilterer) ParseMinimumOperatorEthFeeUpdated(log types.Log) (*ContractMinimumOperatorEthFeeUpdated, error) {
+	event := new(ContractMinimumOperatorEthFeeUpdated)
+	if err := _Contract.contract.UnpackLog(event, "MinimumOperatorEthFeeUpdated", log); err != nil {
+		return nil, err
+	}
+	event.Raw = log
+	return event, nil
+}
+
+// ContractModuleUpgradedIterator is returned from FilterModuleUpgraded and is used to iterate over the raw logs and unpacked data for ModuleUpgraded events raised by the Contract contract.
+type ContractModuleUpgradedIterator struct {
+	Event *ContractModuleUpgraded // Event containing the contract specifics and raw log
+
+	contract *bind.BoundContract // Generic contract to use for unpacking event data
+	event    string              // Event name to use for unpacking event data
+
+	logs chan types.Log        // Log channel receiving the found contract events
+	sub  ethereum.Subscription // Subscription for errors, completion and termination
+	done bool                  // Whether the subscription completed delivering logs
+	fail error                 // Occurred error to stop iteration
+}
+
+// Next advances the iterator to the subsequent event, returning whether there
+// are any more events found. In case of a retrieval or parsing error, false is
+// returned and Error() can be queried for the exact failure.
+func (it *ContractModuleUpgradedIterator) Next() bool {
+	// If the iterator failed, stop iterating
+	if it.fail != nil {
+		return false
+	}
+	// If the iterator completed, deliver directly whatever's available
+	if it.done {
+		select {
+		case log := <-it.logs:
+			it.Event = new(ContractModuleUpgraded)
+			if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+				it.fail = err
+				return false
+			}
+			it.Event.Raw = log
+			return true
+
+		default:
+			return false
+		}
+	}
+	// Iterator still in progress, wait for either a data or an error event
+	select {
+	case log := <-it.logs:
+		it.Event = new(ContractModuleUpgraded)
+		if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+			it.fail = err
+			return false
+		}
+		it.Event.Raw = log
+		return true
+
+	case err := <-it.sub.Err():
+		it.done = true
+		it.fail = err
+		return it.Next()
+	}
+}
+
+// Error returns any retrieval or parsing error occurred during filtering.
+func (it *ContractModuleUpgradedIterator) Error() error {
+	return it.fail
+}
+
+// Close terminates the iteration process, releasing any pending underlying
+// resources.
+func (it *ContractModuleUpgradedIterator) Close() error {
+	it.sub.Unsubscribe()
+	return nil
+}
+
+// ContractModuleUpgraded represents a ModuleUpgraded event raised by the Contract contract.
+type ContractModuleUpgraded struct {
+	ModuleId      uint8
+	ModuleAddress common.Address
+	Raw           types.Log // Blockchain specific contextual infos
+}
+
+// FilterModuleUpgraded is a free log retrieval operation binding the contract event 0xfdf54bf052398eb41c923eb1bd596351c5e72b99959d1ca529a7f13c0a2503d7.
+//
+// Solidity: event ModuleUpgraded(uint8 indexed moduleId, address moduleAddress)
+func (_Contract *ContractFilterer) FilterModuleUpgraded(opts *bind.FilterOpts, moduleId []uint8) (*ContractModuleUpgradedIterator, error) {
+
+	var moduleIdRule []interface{}
+	for _, moduleIdItem := range moduleId {
+		moduleIdRule = append(moduleIdRule, moduleIdItem)
+	}
+
+	logs, sub, err := _Contract.contract.FilterLogs(opts, "ModuleUpgraded", moduleIdRule)
+	if err != nil {
+		return nil, err
+	}
+	return &ContractModuleUpgradedIterator{contract: _Contract.contract, event: "ModuleUpgraded", logs: logs, sub: sub}, nil
+}
+
+// WatchModuleUpgraded is a free log subscription operation binding the contract event 0xfdf54bf052398eb41c923eb1bd596351c5e72b99959d1ca529a7f13c0a2503d7.
+//
+// Solidity: event ModuleUpgraded(uint8 indexed moduleId, address moduleAddress)
+func (_Contract *ContractFilterer) WatchModuleUpgraded(opts *bind.WatchOpts, sink chan<- *ContractModuleUpgraded, moduleId []uint8) (event.Subscription, error) {
+
+	var moduleIdRule []interface{}
+	for _, moduleIdItem := range moduleId {
+		moduleIdRule = append(moduleIdRule, moduleIdItem)
+	}
+
+	logs, sub, err := _Contract.contract.WatchLogs(opts, "ModuleUpgraded", moduleIdRule)
+	if err != nil {
+		return nil, err
+	}
+	return event.NewSubscription(func(quit <-chan struct{}) error {
+		defer sub.Unsubscribe()
+		for {
+			select {
+			case log := <-logs:
+				// New log arrived, parse the event and forward to the user
+				event := new(ContractModuleUpgraded)
+				if err := _Contract.contract.UnpackLog(event, "ModuleUpgraded", log); err != nil {
+					return err
+				}
+				event.Raw = log
+
+				select {
+				case sink <- event:
+				case err := <-sub.Err():
+					return err
+				case <-quit:
+					return nil
+				}
+			case err := <-sub.Err():
+				return err
+			case <-quit:
+				return nil
+			}
+		}
+	}), nil
+}
+
+// ParseModuleUpgraded is a log parse operation binding the contract event 0xfdf54bf052398eb41c923eb1bd596351c5e72b99959d1ca529a7f13c0a2503d7.
+//
+// Solidity: event ModuleUpgraded(uint8 indexed moduleId, address moduleAddress)
+func (_Contract *ContractFilterer) ParseModuleUpgraded(log types.Log) (*ContractModuleUpgraded, error) {
+	event := new(ContractModuleUpgraded)
+	if err := _Contract.contract.UnpackLog(event, "ModuleUpgraded", log); err != nil {
 		return nil, err
 	}
 	event.Raw = log
@@ -2971,6 +5003,141 @@ func (_Contract *ContractFilterer) WatchNetworkFeeUpdated(opts *bind.WatchOpts, 
 func (_Contract *ContractFilterer) ParseNetworkFeeUpdated(log types.Log) (*ContractNetworkFeeUpdated, error) {
 	event := new(ContractNetworkFeeUpdated)
 	if err := _Contract.contract.UnpackLog(event, "NetworkFeeUpdated", log); err != nil {
+		return nil, err
+	}
+	event.Raw = log
+	return event, nil
+}
+
+// ContractNetworkFeeUpdatedSSVIterator is returned from FilterNetworkFeeUpdatedSSV and is used to iterate over the raw logs and unpacked data for NetworkFeeUpdatedSSV events raised by the Contract contract.
+type ContractNetworkFeeUpdatedSSVIterator struct {
+	Event *ContractNetworkFeeUpdatedSSV // Event containing the contract specifics and raw log
+
+	contract *bind.BoundContract // Generic contract to use for unpacking event data
+	event    string              // Event name to use for unpacking event data
+
+	logs chan types.Log        // Log channel receiving the found contract events
+	sub  ethereum.Subscription // Subscription for errors, completion and termination
+	done bool                  // Whether the subscription completed delivering logs
+	fail error                 // Occurred error to stop iteration
+}
+
+// Next advances the iterator to the subsequent event, returning whether there
+// are any more events found. In case of a retrieval or parsing error, false is
+// returned and Error() can be queried for the exact failure.
+func (it *ContractNetworkFeeUpdatedSSVIterator) Next() bool {
+	// If the iterator failed, stop iterating
+	if it.fail != nil {
+		return false
+	}
+	// If the iterator completed, deliver directly whatever's available
+	if it.done {
+		select {
+		case log := <-it.logs:
+			it.Event = new(ContractNetworkFeeUpdatedSSV)
+			if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+				it.fail = err
+				return false
+			}
+			it.Event.Raw = log
+			return true
+
+		default:
+			return false
+		}
+	}
+	// Iterator still in progress, wait for either a data or an error event
+	select {
+	case log := <-it.logs:
+		it.Event = new(ContractNetworkFeeUpdatedSSV)
+		if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+			it.fail = err
+			return false
+		}
+		it.Event.Raw = log
+		return true
+
+	case err := <-it.sub.Err():
+		it.done = true
+		it.fail = err
+		return it.Next()
+	}
+}
+
+// Error returns any retrieval or parsing error occurred during filtering.
+func (it *ContractNetworkFeeUpdatedSSVIterator) Error() error {
+	return it.fail
+}
+
+// Close terminates the iteration process, releasing any pending underlying
+// resources.
+func (it *ContractNetworkFeeUpdatedSSVIterator) Close() error {
+	it.sub.Unsubscribe()
+	return nil
+}
+
+// ContractNetworkFeeUpdatedSSV represents a NetworkFeeUpdatedSSV event raised by the Contract contract.
+type ContractNetworkFeeUpdatedSSV struct {
+	OldFee *big.Int
+	NewFee *big.Int
+	Raw    types.Log // Blockchain specific contextual infos
+}
+
+// FilterNetworkFeeUpdatedSSV is a free log retrieval operation binding the contract event 0x67b4581d242b51c956246a35859809bc259dfd07d622b4bc0a9858641a6297fb.
+//
+// Solidity: event NetworkFeeUpdatedSSV(uint256 oldFee, uint256 newFee)
+func (_Contract *ContractFilterer) FilterNetworkFeeUpdatedSSV(opts *bind.FilterOpts) (*ContractNetworkFeeUpdatedSSVIterator, error) {
+
+	logs, sub, err := _Contract.contract.FilterLogs(opts, "NetworkFeeUpdatedSSV")
+	if err != nil {
+		return nil, err
+	}
+	return &ContractNetworkFeeUpdatedSSVIterator{contract: _Contract.contract, event: "NetworkFeeUpdatedSSV", logs: logs, sub: sub}, nil
+}
+
+// WatchNetworkFeeUpdatedSSV is a free log subscription operation binding the contract event 0x67b4581d242b51c956246a35859809bc259dfd07d622b4bc0a9858641a6297fb.
+//
+// Solidity: event NetworkFeeUpdatedSSV(uint256 oldFee, uint256 newFee)
+func (_Contract *ContractFilterer) WatchNetworkFeeUpdatedSSV(opts *bind.WatchOpts, sink chan<- *ContractNetworkFeeUpdatedSSV) (event.Subscription, error) {
+
+	logs, sub, err := _Contract.contract.WatchLogs(opts, "NetworkFeeUpdatedSSV")
+	if err != nil {
+		return nil, err
+	}
+	return event.NewSubscription(func(quit <-chan struct{}) error {
+		defer sub.Unsubscribe()
+		for {
+			select {
+			case log := <-logs:
+				// New log arrived, parse the event and forward to the user
+				event := new(ContractNetworkFeeUpdatedSSV)
+				if err := _Contract.contract.UnpackLog(event, "NetworkFeeUpdatedSSV", log); err != nil {
+					return err
+				}
+				event.Raw = log
+
+				select {
+				case sink <- event:
+				case err := <-sub.Err():
+					return err
+				case <-quit:
+					return nil
+				}
+			case err := <-sub.Err():
+				return err
+			case <-quit:
+				return nil
+			}
+		}
+	}), nil
+}
+
+// ParseNetworkFeeUpdatedSSV is a log parse operation binding the contract event 0x67b4581d242b51c956246a35859809bc259dfd07d622b4bc0a9858641a6297fb.
+//
+// Solidity: event NetworkFeeUpdatedSSV(uint256 oldFee, uint256 newFee)
+func (_Contract *ContractFilterer) ParseNetworkFeeUpdatedSSV(log types.Log) (*ContractNetworkFeeUpdatedSSV, error) {
+	event := new(ContractNetworkFeeUpdatedSSV)
+	if err := _Contract.contract.UnpackLog(event, "NetworkFeeUpdatedSSV", log); err != nil {
 		return nil, err
 	}
 	event.Raw = log
@@ -3798,13 +5965,13 @@ func (it *ContractOperatorMaximumFeeUpdatedIterator) Close() error {
 
 // ContractOperatorMaximumFeeUpdated represents a OperatorMaximumFeeUpdated event raised by the Contract contract.
 type ContractOperatorMaximumFeeUpdated struct {
-	MaxFee uint64
+	MaxFee *big.Int
 	Raw    types.Log // Blockchain specific contextual infos
 }
 
-// FilterOperatorMaximumFeeUpdated is a free log retrieval operation binding the contract event 0x38552bed8df52ac76c5de6da688eafcda7d7b070f6c987f391a07dd69986d783.
+// FilterOperatorMaximumFeeUpdated is a free log retrieval operation binding the contract event 0xbb018dc682e13c04ee4a5608c89a9f287c402c1aec96588d6dd85478179b4bba.
 //
-// Solidity: event OperatorMaximumFeeUpdated(uint64 maxFee)
+// Solidity: event OperatorMaximumFeeUpdated(uint256 maxFee)
 func (_Contract *ContractFilterer) FilterOperatorMaximumFeeUpdated(opts *bind.FilterOpts) (*ContractOperatorMaximumFeeUpdatedIterator, error) {
 
 	logs, sub, err := _Contract.contract.FilterLogs(opts, "OperatorMaximumFeeUpdated")
@@ -3814,9 +5981,9 @@ func (_Contract *ContractFilterer) FilterOperatorMaximumFeeUpdated(opts *bind.Fi
 	return &ContractOperatorMaximumFeeUpdatedIterator{contract: _Contract.contract, event: "OperatorMaximumFeeUpdated", logs: logs, sub: sub}, nil
 }
 
-// WatchOperatorMaximumFeeUpdated is a free log subscription operation binding the contract event 0x38552bed8df52ac76c5de6da688eafcda7d7b070f6c987f391a07dd69986d783.
+// WatchOperatorMaximumFeeUpdated is a free log subscription operation binding the contract event 0xbb018dc682e13c04ee4a5608c89a9f287c402c1aec96588d6dd85478179b4bba.
 //
-// Solidity: event OperatorMaximumFeeUpdated(uint64 maxFee)
+// Solidity: event OperatorMaximumFeeUpdated(uint256 maxFee)
 func (_Contract *ContractFilterer) WatchOperatorMaximumFeeUpdated(opts *bind.WatchOpts, sink chan<- *ContractOperatorMaximumFeeUpdated) (event.Subscription, error) {
 
 	logs, sub, err := _Contract.contract.WatchLogs(opts, "OperatorMaximumFeeUpdated")
@@ -3851,12 +6018,417 @@ func (_Contract *ContractFilterer) WatchOperatorMaximumFeeUpdated(opts *bind.Wat
 	}), nil
 }
 
-// ParseOperatorMaximumFeeUpdated is a log parse operation binding the contract event 0x38552bed8df52ac76c5de6da688eafcda7d7b070f6c987f391a07dd69986d783.
+// ParseOperatorMaximumFeeUpdated is a log parse operation binding the contract event 0xbb018dc682e13c04ee4a5608c89a9f287c402c1aec96588d6dd85478179b4bba.
 //
-// Solidity: event OperatorMaximumFeeUpdated(uint64 maxFee)
+// Solidity: event OperatorMaximumFeeUpdated(uint256 maxFee)
 func (_Contract *ContractFilterer) ParseOperatorMaximumFeeUpdated(log types.Log) (*ContractOperatorMaximumFeeUpdated, error) {
 	event := new(ContractOperatorMaximumFeeUpdated)
 	if err := _Contract.contract.UnpackLog(event, "OperatorMaximumFeeUpdated", log); err != nil {
+		return nil, err
+	}
+	event.Raw = log
+	return event, nil
+}
+
+// ContractOperatorMultipleWhitelistRemovedIterator is returned from FilterOperatorMultipleWhitelistRemoved and is used to iterate over the raw logs and unpacked data for OperatorMultipleWhitelistRemoved events raised by the Contract contract.
+type ContractOperatorMultipleWhitelistRemovedIterator struct {
+	Event *ContractOperatorMultipleWhitelistRemoved // Event containing the contract specifics and raw log
+
+	contract *bind.BoundContract // Generic contract to use for unpacking event data
+	event    string              // Event name to use for unpacking event data
+
+	logs chan types.Log        // Log channel receiving the found contract events
+	sub  ethereum.Subscription // Subscription for errors, completion and termination
+	done bool                  // Whether the subscription completed delivering logs
+	fail error                 // Occurred error to stop iteration
+}
+
+// Next advances the iterator to the subsequent event, returning whether there
+// are any more events found. In case of a retrieval or parsing error, false is
+// returned and Error() can be queried for the exact failure.
+func (it *ContractOperatorMultipleWhitelistRemovedIterator) Next() bool {
+	// If the iterator failed, stop iterating
+	if it.fail != nil {
+		return false
+	}
+	// If the iterator completed, deliver directly whatever's available
+	if it.done {
+		select {
+		case log := <-it.logs:
+			it.Event = new(ContractOperatorMultipleWhitelistRemoved)
+			if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+				it.fail = err
+				return false
+			}
+			it.Event.Raw = log
+			return true
+
+		default:
+			return false
+		}
+	}
+	// Iterator still in progress, wait for either a data or an error event
+	select {
+	case log := <-it.logs:
+		it.Event = new(ContractOperatorMultipleWhitelistRemoved)
+		if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+			it.fail = err
+			return false
+		}
+		it.Event.Raw = log
+		return true
+
+	case err := <-it.sub.Err():
+		it.done = true
+		it.fail = err
+		return it.Next()
+	}
+}
+
+// Error returns any retrieval or parsing error occurred during filtering.
+func (it *ContractOperatorMultipleWhitelistRemovedIterator) Error() error {
+	return it.fail
+}
+
+// Close terminates the iteration process, releasing any pending underlying
+// resources.
+func (it *ContractOperatorMultipleWhitelistRemovedIterator) Close() error {
+	it.sub.Unsubscribe()
+	return nil
+}
+
+// ContractOperatorMultipleWhitelistRemoved represents a OperatorMultipleWhitelistRemoved event raised by the Contract contract.
+type ContractOperatorMultipleWhitelistRemoved struct {
+	OperatorIds        []uint64
+	WhitelistAddresses []common.Address
+	Raw                types.Log // Blockchain specific contextual infos
+}
+
+// FilterOperatorMultipleWhitelistRemoved is a free log retrieval operation binding the contract event 0x589a71ef5bb37432c8ce279a4afc32783592f1764c6fcb07e3c437e80c80ab2e.
+//
+// Solidity: event OperatorMultipleWhitelistRemoved(uint64[] operatorIds, address[] whitelistAddresses)
+func (_Contract *ContractFilterer) FilterOperatorMultipleWhitelistRemoved(opts *bind.FilterOpts) (*ContractOperatorMultipleWhitelistRemovedIterator, error) {
+
+	logs, sub, err := _Contract.contract.FilterLogs(opts, "OperatorMultipleWhitelistRemoved")
+	if err != nil {
+		return nil, err
+	}
+	return &ContractOperatorMultipleWhitelistRemovedIterator{contract: _Contract.contract, event: "OperatorMultipleWhitelistRemoved", logs: logs, sub: sub}, nil
+}
+
+// WatchOperatorMultipleWhitelistRemoved is a free log subscription operation binding the contract event 0x589a71ef5bb37432c8ce279a4afc32783592f1764c6fcb07e3c437e80c80ab2e.
+//
+// Solidity: event OperatorMultipleWhitelistRemoved(uint64[] operatorIds, address[] whitelistAddresses)
+func (_Contract *ContractFilterer) WatchOperatorMultipleWhitelistRemoved(opts *bind.WatchOpts, sink chan<- *ContractOperatorMultipleWhitelistRemoved) (event.Subscription, error) {
+
+	logs, sub, err := _Contract.contract.WatchLogs(opts, "OperatorMultipleWhitelistRemoved")
+	if err != nil {
+		return nil, err
+	}
+	return event.NewSubscription(func(quit <-chan struct{}) error {
+		defer sub.Unsubscribe()
+		for {
+			select {
+			case log := <-logs:
+				// New log arrived, parse the event and forward to the user
+				event := new(ContractOperatorMultipleWhitelistRemoved)
+				if err := _Contract.contract.UnpackLog(event, "OperatorMultipleWhitelistRemoved", log); err != nil {
+					return err
+				}
+				event.Raw = log
+
+				select {
+				case sink <- event:
+				case err := <-sub.Err():
+					return err
+				case <-quit:
+					return nil
+				}
+			case err := <-sub.Err():
+				return err
+			case <-quit:
+				return nil
+			}
+		}
+	}), nil
+}
+
+// ParseOperatorMultipleWhitelistRemoved is a log parse operation binding the contract event 0x589a71ef5bb37432c8ce279a4afc32783592f1764c6fcb07e3c437e80c80ab2e.
+//
+// Solidity: event OperatorMultipleWhitelistRemoved(uint64[] operatorIds, address[] whitelistAddresses)
+func (_Contract *ContractFilterer) ParseOperatorMultipleWhitelistRemoved(log types.Log) (*ContractOperatorMultipleWhitelistRemoved, error) {
+	event := new(ContractOperatorMultipleWhitelistRemoved)
+	if err := _Contract.contract.UnpackLog(event, "OperatorMultipleWhitelistRemoved", log); err != nil {
+		return nil, err
+	}
+	event.Raw = log
+	return event, nil
+}
+
+// ContractOperatorMultipleWhitelistUpdatedIterator is returned from FilterOperatorMultipleWhitelistUpdated and is used to iterate over the raw logs and unpacked data for OperatorMultipleWhitelistUpdated events raised by the Contract contract.
+type ContractOperatorMultipleWhitelistUpdatedIterator struct {
+	Event *ContractOperatorMultipleWhitelistUpdated // Event containing the contract specifics and raw log
+
+	contract *bind.BoundContract // Generic contract to use for unpacking event data
+	event    string              // Event name to use for unpacking event data
+
+	logs chan types.Log        // Log channel receiving the found contract events
+	sub  ethereum.Subscription // Subscription for errors, completion and termination
+	done bool                  // Whether the subscription completed delivering logs
+	fail error                 // Occurred error to stop iteration
+}
+
+// Next advances the iterator to the subsequent event, returning whether there
+// are any more events found. In case of a retrieval or parsing error, false is
+// returned and Error() can be queried for the exact failure.
+func (it *ContractOperatorMultipleWhitelistUpdatedIterator) Next() bool {
+	// If the iterator failed, stop iterating
+	if it.fail != nil {
+		return false
+	}
+	// If the iterator completed, deliver directly whatever's available
+	if it.done {
+		select {
+		case log := <-it.logs:
+			it.Event = new(ContractOperatorMultipleWhitelistUpdated)
+			if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+				it.fail = err
+				return false
+			}
+			it.Event.Raw = log
+			return true
+
+		default:
+			return false
+		}
+	}
+	// Iterator still in progress, wait for either a data or an error event
+	select {
+	case log := <-it.logs:
+		it.Event = new(ContractOperatorMultipleWhitelistUpdated)
+		if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+			it.fail = err
+			return false
+		}
+		it.Event.Raw = log
+		return true
+
+	case err := <-it.sub.Err():
+		it.done = true
+		it.fail = err
+		return it.Next()
+	}
+}
+
+// Error returns any retrieval or parsing error occurred during filtering.
+func (it *ContractOperatorMultipleWhitelistUpdatedIterator) Error() error {
+	return it.fail
+}
+
+// Close terminates the iteration process, releasing any pending underlying
+// resources.
+func (it *ContractOperatorMultipleWhitelistUpdatedIterator) Close() error {
+	it.sub.Unsubscribe()
+	return nil
+}
+
+// ContractOperatorMultipleWhitelistUpdated represents a OperatorMultipleWhitelistUpdated event raised by the Contract contract.
+type ContractOperatorMultipleWhitelistUpdated struct {
+	OperatorIds        []uint64
+	WhitelistAddresses []common.Address
+	Raw                types.Log // Blockchain specific contextual infos
+}
+
+// FilterOperatorMultipleWhitelistUpdated is a free log retrieval operation binding the contract event 0x3d5869fa1ed68d6b7b5e2a1f44df8e1e7edd8ea7a6cc240e45c72e2eb3523962.
+//
+// Solidity: event OperatorMultipleWhitelistUpdated(uint64[] operatorIds, address[] whitelistAddresses)
+func (_Contract *ContractFilterer) FilterOperatorMultipleWhitelistUpdated(opts *bind.FilterOpts) (*ContractOperatorMultipleWhitelistUpdatedIterator, error) {
+
+	logs, sub, err := _Contract.contract.FilterLogs(opts, "OperatorMultipleWhitelistUpdated")
+	if err != nil {
+		return nil, err
+	}
+	return &ContractOperatorMultipleWhitelistUpdatedIterator{contract: _Contract.contract, event: "OperatorMultipleWhitelistUpdated", logs: logs, sub: sub}, nil
+}
+
+// WatchOperatorMultipleWhitelistUpdated is a free log subscription operation binding the contract event 0x3d5869fa1ed68d6b7b5e2a1f44df8e1e7edd8ea7a6cc240e45c72e2eb3523962.
+//
+// Solidity: event OperatorMultipleWhitelistUpdated(uint64[] operatorIds, address[] whitelistAddresses)
+func (_Contract *ContractFilterer) WatchOperatorMultipleWhitelistUpdated(opts *bind.WatchOpts, sink chan<- *ContractOperatorMultipleWhitelistUpdated) (event.Subscription, error) {
+
+	logs, sub, err := _Contract.contract.WatchLogs(opts, "OperatorMultipleWhitelistUpdated")
+	if err != nil {
+		return nil, err
+	}
+	return event.NewSubscription(func(quit <-chan struct{}) error {
+		defer sub.Unsubscribe()
+		for {
+			select {
+			case log := <-logs:
+				// New log arrived, parse the event and forward to the user
+				event := new(ContractOperatorMultipleWhitelistUpdated)
+				if err := _Contract.contract.UnpackLog(event, "OperatorMultipleWhitelistUpdated", log); err != nil {
+					return err
+				}
+				event.Raw = log
+
+				select {
+				case sink <- event:
+				case err := <-sub.Err():
+					return err
+				case <-quit:
+					return nil
+				}
+			case err := <-sub.Err():
+				return err
+			case <-quit:
+				return nil
+			}
+		}
+	}), nil
+}
+
+// ParseOperatorMultipleWhitelistUpdated is a log parse operation binding the contract event 0x3d5869fa1ed68d6b7b5e2a1f44df8e1e7edd8ea7a6cc240e45c72e2eb3523962.
+//
+// Solidity: event OperatorMultipleWhitelistUpdated(uint64[] operatorIds, address[] whitelistAddresses)
+func (_Contract *ContractFilterer) ParseOperatorMultipleWhitelistUpdated(log types.Log) (*ContractOperatorMultipleWhitelistUpdated, error) {
+	event := new(ContractOperatorMultipleWhitelistUpdated)
+	if err := _Contract.contract.UnpackLog(event, "OperatorMultipleWhitelistUpdated", log); err != nil {
+		return nil, err
+	}
+	event.Raw = log
+	return event, nil
+}
+
+// ContractOperatorPrivacyStatusUpdatedIterator is returned from FilterOperatorPrivacyStatusUpdated and is used to iterate over the raw logs and unpacked data for OperatorPrivacyStatusUpdated events raised by the Contract contract.
+type ContractOperatorPrivacyStatusUpdatedIterator struct {
+	Event *ContractOperatorPrivacyStatusUpdated // Event containing the contract specifics and raw log
+
+	contract *bind.BoundContract // Generic contract to use for unpacking event data
+	event    string              // Event name to use for unpacking event data
+
+	logs chan types.Log        // Log channel receiving the found contract events
+	sub  ethereum.Subscription // Subscription for errors, completion and termination
+	done bool                  // Whether the subscription completed delivering logs
+	fail error                 // Occurred error to stop iteration
+}
+
+// Next advances the iterator to the subsequent event, returning whether there
+// are any more events found. In case of a retrieval or parsing error, false is
+// returned and Error() can be queried for the exact failure.
+func (it *ContractOperatorPrivacyStatusUpdatedIterator) Next() bool {
+	// If the iterator failed, stop iterating
+	if it.fail != nil {
+		return false
+	}
+	// If the iterator completed, deliver directly whatever's available
+	if it.done {
+		select {
+		case log := <-it.logs:
+			it.Event = new(ContractOperatorPrivacyStatusUpdated)
+			if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+				it.fail = err
+				return false
+			}
+			it.Event.Raw = log
+			return true
+
+		default:
+			return false
+		}
+	}
+	// Iterator still in progress, wait for either a data or an error event
+	select {
+	case log := <-it.logs:
+		it.Event = new(ContractOperatorPrivacyStatusUpdated)
+		if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+			it.fail = err
+			return false
+		}
+		it.Event.Raw = log
+		return true
+
+	case err := <-it.sub.Err():
+		it.done = true
+		it.fail = err
+		return it.Next()
+	}
+}
+
+// Error returns any retrieval or parsing error occurred during filtering.
+func (it *ContractOperatorPrivacyStatusUpdatedIterator) Error() error {
+	return it.fail
+}
+
+// Close terminates the iteration process, releasing any pending underlying
+// resources.
+func (it *ContractOperatorPrivacyStatusUpdatedIterator) Close() error {
+	it.sub.Unsubscribe()
+	return nil
+}
+
+// ContractOperatorPrivacyStatusUpdated represents a OperatorPrivacyStatusUpdated event raised by the Contract contract.
+type ContractOperatorPrivacyStatusUpdated struct {
+	OperatorIds []uint64
+	ToPrivate   bool
+	Raw         types.Log // Blockchain specific contextual infos
+}
+
+// FilterOperatorPrivacyStatusUpdated is a free log retrieval operation binding the contract event 0x7cae2703330c3f53308fb0fe3a9143f335997ba7e059b9ac8e4417ed8fbddbd3.
+//
+// Solidity: event OperatorPrivacyStatusUpdated(uint64[] operatorIds, bool toPrivate)
+func (_Contract *ContractFilterer) FilterOperatorPrivacyStatusUpdated(opts *bind.FilterOpts) (*ContractOperatorPrivacyStatusUpdatedIterator, error) {
+
+	logs, sub, err := _Contract.contract.FilterLogs(opts, "OperatorPrivacyStatusUpdated")
+	if err != nil {
+		return nil, err
+	}
+	return &ContractOperatorPrivacyStatusUpdatedIterator{contract: _Contract.contract, event: "OperatorPrivacyStatusUpdated", logs: logs, sub: sub}, nil
+}
+
+// WatchOperatorPrivacyStatusUpdated is a free log subscription operation binding the contract event 0x7cae2703330c3f53308fb0fe3a9143f335997ba7e059b9ac8e4417ed8fbddbd3.
+//
+// Solidity: event OperatorPrivacyStatusUpdated(uint64[] operatorIds, bool toPrivate)
+func (_Contract *ContractFilterer) WatchOperatorPrivacyStatusUpdated(opts *bind.WatchOpts, sink chan<- *ContractOperatorPrivacyStatusUpdated) (event.Subscription, error) {
+
+	logs, sub, err := _Contract.contract.WatchLogs(opts, "OperatorPrivacyStatusUpdated")
+	if err != nil {
+		return nil, err
+	}
+	return event.NewSubscription(func(quit <-chan struct{}) error {
+		defer sub.Unsubscribe()
+		for {
+			select {
+			case log := <-logs:
+				// New log arrived, parse the event and forward to the user
+				event := new(ContractOperatorPrivacyStatusUpdated)
+				if err := _Contract.contract.UnpackLog(event, "OperatorPrivacyStatusUpdated", log); err != nil {
+					return err
+				}
+				event.Raw = log
+
+				select {
+				case sink <- event:
+				case err := <-sub.Err():
+					return err
+				case <-quit:
+					return nil
+				}
+			case err := <-sub.Err():
+				return err
+			case <-quit:
+				return nil
+			}
+		}
+	}), nil
+}
+
+// ParseOperatorPrivacyStatusUpdated is a log parse operation binding the contract event 0x7cae2703330c3f53308fb0fe3a9143f335997ba7e059b9ac8e4417ed8fbddbd3.
+//
+// Solidity: event OperatorPrivacyStatusUpdated(uint64[] operatorIds, bool toPrivate)
+func (_Contract *ContractFilterer) ParseOperatorPrivacyStatusUpdated(log types.Log) (*ContractOperatorPrivacyStatusUpdated, error) {
+	event := new(ContractOperatorPrivacyStatusUpdated)
+	if err := _Contract.contract.UnpackLog(event, "OperatorPrivacyStatusUpdated", log); err != nil {
 		return nil, err
 	}
 	event.Raw = log
@@ -4152,6 +6724,141 @@ func (_Contract *ContractFilterer) ParseOperatorWhitelistUpdated(log types.Log) 
 	return event, nil
 }
 
+// ContractOperatorWhitelistingContractUpdatedIterator is returned from FilterOperatorWhitelistingContractUpdated and is used to iterate over the raw logs and unpacked data for OperatorWhitelistingContractUpdated events raised by the Contract contract.
+type ContractOperatorWhitelistingContractUpdatedIterator struct {
+	Event *ContractOperatorWhitelistingContractUpdated // Event containing the contract specifics and raw log
+
+	contract *bind.BoundContract // Generic contract to use for unpacking event data
+	event    string              // Event name to use for unpacking event data
+
+	logs chan types.Log        // Log channel receiving the found contract events
+	sub  ethereum.Subscription // Subscription for errors, completion and termination
+	done bool                  // Whether the subscription completed delivering logs
+	fail error                 // Occurred error to stop iteration
+}
+
+// Next advances the iterator to the subsequent event, returning whether there
+// are any more events found. In case of a retrieval or parsing error, false is
+// returned and Error() can be queried for the exact failure.
+func (it *ContractOperatorWhitelistingContractUpdatedIterator) Next() bool {
+	// If the iterator failed, stop iterating
+	if it.fail != nil {
+		return false
+	}
+	// If the iterator completed, deliver directly whatever's available
+	if it.done {
+		select {
+		case log := <-it.logs:
+			it.Event = new(ContractOperatorWhitelistingContractUpdated)
+			if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+				it.fail = err
+				return false
+			}
+			it.Event.Raw = log
+			return true
+
+		default:
+			return false
+		}
+	}
+	// Iterator still in progress, wait for either a data or an error event
+	select {
+	case log := <-it.logs:
+		it.Event = new(ContractOperatorWhitelistingContractUpdated)
+		if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+			it.fail = err
+			return false
+		}
+		it.Event.Raw = log
+		return true
+
+	case err := <-it.sub.Err():
+		it.done = true
+		it.fail = err
+		return it.Next()
+	}
+}
+
+// Error returns any retrieval or parsing error occurred during filtering.
+func (it *ContractOperatorWhitelistingContractUpdatedIterator) Error() error {
+	return it.fail
+}
+
+// Close terminates the iteration process, releasing any pending underlying
+// resources.
+func (it *ContractOperatorWhitelistingContractUpdatedIterator) Close() error {
+	it.sub.Unsubscribe()
+	return nil
+}
+
+// ContractOperatorWhitelistingContractUpdated represents a OperatorWhitelistingContractUpdated event raised by the Contract contract.
+type ContractOperatorWhitelistingContractUpdated struct {
+	OperatorIds          []uint64
+	WhitelistingContract common.Address
+	Raw                  types.Log // Blockchain specific contextual infos
+}
+
+// FilterOperatorWhitelistingContractUpdated is a free log retrieval operation binding the contract event 0xf41d8ca981ff900f6db7f71d7e2ae866eae8e4327d23e5c692c13a6c43b39c3d.
+//
+// Solidity: event OperatorWhitelistingContractUpdated(uint64[] operatorIds, address whitelistingContract)
+func (_Contract *ContractFilterer) FilterOperatorWhitelistingContractUpdated(opts *bind.FilterOpts) (*ContractOperatorWhitelistingContractUpdatedIterator, error) {
+
+	logs, sub, err := _Contract.contract.FilterLogs(opts, "OperatorWhitelistingContractUpdated")
+	if err != nil {
+		return nil, err
+	}
+	return &ContractOperatorWhitelistingContractUpdatedIterator{contract: _Contract.contract, event: "OperatorWhitelistingContractUpdated", logs: logs, sub: sub}, nil
+}
+
+// WatchOperatorWhitelistingContractUpdated is a free log subscription operation binding the contract event 0xf41d8ca981ff900f6db7f71d7e2ae866eae8e4327d23e5c692c13a6c43b39c3d.
+//
+// Solidity: event OperatorWhitelistingContractUpdated(uint64[] operatorIds, address whitelistingContract)
+func (_Contract *ContractFilterer) WatchOperatorWhitelistingContractUpdated(opts *bind.WatchOpts, sink chan<- *ContractOperatorWhitelistingContractUpdated) (event.Subscription, error) {
+
+	logs, sub, err := _Contract.contract.WatchLogs(opts, "OperatorWhitelistingContractUpdated")
+	if err != nil {
+		return nil, err
+	}
+	return event.NewSubscription(func(quit <-chan struct{}) error {
+		defer sub.Unsubscribe()
+		for {
+			select {
+			case log := <-logs:
+				// New log arrived, parse the event and forward to the user
+				event := new(ContractOperatorWhitelistingContractUpdated)
+				if err := _Contract.contract.UnpackLog(event, "OperatorWhitelistingContractUpdated", log); err != nil {
+					return err
+				}
+				event.Raw = log
+
+				select {
+				case sink <- event:
+				case err := <-sub.Err():
+					return err
+				case <-quit:
+					return nil
+				}
+			case err := <-sub.Err():
+				return err
+			case <-quit:
+				return nil
+			}
+		}
+	}), nil
+}
+
+// ParseOperatorWhitelistingContractUpdated is a log parse operation binding the contract event 0xf41d8ca981ff900f6db7f71d7e2ae866eae8e4327d23e5c692c13a6c43b39c3d.
+//
+// Solidity: event OperatorWhitelistingContractUpdated(uint64[] operatorIds, address whitelistingContract)
+func (_Contract *ContractFilterer) ParseOperatorWhitelistingContractUpdated(log types.Log) (*ContractOperatorWhitelistingContractUpdated, error) {
+	event := new(ContractOperatorWhitelistingContractUpdated)
+	if err := _Contract.contract.UnpackLog(event, "OperatorWhitelistingContractUpdated", log); err != nil {
+		return nil, err
+	}
+	event.Raw = log
+	return event, nil
+}
+
 // ContractOperatorWithdrawnIterator is returned from FilterOperatorWithdrawn and is used to iterate over the raw logs and unpacked data for OperatorWithdrawn events raised by the Contract contract.
 type ContractOperatorWithdrawnIterator struct {
 	Event *ContractOperatorWithdrawn // Event containing the contract specifics and raw log
@@ -4300,6 +7007,322 @@ func (_Contract *ContractFilterer) WatchOperatorWithdrawn(opts *bind.WatchOpts, 
 func (_Contract *ContractFilterer) ParseOperatorWithdrawn(log types.Log) (*ContractOperatorWithdrawn, error) {
 	event := new(ContractOperatorWithdrawn)
 	if err := _Contract.contract.UnpackLog(event, "OperatorWithdrawn", log); err != nil {
+		return nil, err
+	}
+	event.Raw = log
+	return event, nil
+}
+
+// ContractOperatorWithdrawnSSVIterator is returned from FilterOperatorWithdrawnSSV and is used to iterate over the raw logs and unpacked data for OperatorWithdrawnSSV events raised by the Contract contract.
+type ContractOperatorWithdrawnSSVIterator struct {
+	Event *ContractOperatorWithdrawnSSV // Event containing the contract specifics and raw log
+
+	contract *bind.BoundContract // Generic contract to use for unpacking event data
+	event    string              // Event name to use for unpacking event data
+
+	logs chan types.Log        // Log channel receiving the found contract events
+	sub  ethereum.Subscription // Subscription for errors, completion and termination
+	done bool                  // Whether the subscription completed delivering logs
+	fail error                 // Occurred error to stop iteration
+}
+
+// Next advances the iterator to the subsequent event, returning whether there
+// are any more events found. In case of a retrieval or parsing error, false is
+// returned and Error() can be queried for the exact failure.
+func (it *ContractOperatorWithdrawnSSVIterator) Next() bool {
+	// If the iterator failed, stop iterating
+	if it.fail != nil {
+		return false
+	}
+	// If the iterator completed, deliver directly whatever's available
+	if it.done {
+		select {
+		case log := <-it.logs:
+			it.Event = new(ContractOperatorWithdrawnSSV)
+			if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+				it.fail = err
+				return false
+			}
+			it.Event.Raw = log
+			return true
+
+		default:
+			return false
+		}
+	}
+	// Iterator still in progress, wait for either a data or an error event
+	select {
+	case log := <-it.logs:
+		it.Event = new(ContractOperatorWithdrawnSSV)
+		if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+			it.fail = err
+			return false
+		}
+		it.Event.Raw = log
+		return true
+
+	case err := <-it.sub.Err():
+		it.done = true
+		it.fail = err
+		return it.Next()
+	}
+}
+
+// Error returns any retrieval or parsing error occurred during filtering.
+func (it *ContractOperatorWithdrawnSSVIterator) Error() error {
+	return it.fail
+}
+
+// Close terminates the iteration process, releasing any pending underlying
+// resources.
+func (it *ContractOperatorWithdrawnSSVIterator) Close() error {
+	it.sub.Unsubscribe()
+	return nil
+}
+
+// ContractOperatorWithdrawnSSV represents a OperatorWithdrawnSSV event raised by the Contract contract.
+type ContractOperatorWithdrawnSSV struct {
+	Owner      common.Address
+	OperatorId uint64
+	Value      *big.Int
+	Raw        types.Log // Blockchain specific contextual infos
+}
+
+// FilterOperatorWithdrawnSSV is a free log retrieval operation binding the contract event 0x8ce3fab60deb285381bb700bc8406adc165eba737126273b52f7dd5280576f91.
+//
+// Solidity: event OperatorWithdrawnSSV(address indexed owner, uint64 indexed operatorId, uint256 value)
+func (_Contract *ContractFilterer) FilterOperatorWithdrawnSSV(opts *bind.FilterOpts, owner []common.Address, operatorId []uint64) (*ContractOperatorWithdrawnSSVIterator, error) {
+
+	var ownerRule []interface{}
+	for _, ownerItem := range owner {
+		ownerRule = append(ownerRule, ownerItem)
+	}
+	var operatorIdRule []interface{}
+	for _, operatorIdItem := range operatorId {
+		operatorIdRule = append(operatorIdRule, operatorIdItem)
+	}
+
+	logs, sub, err := _Contract.contract.FilterLogs(opts, "OperatorWithdrawnSSV", ownerRule, operatorIdRule)
+	if err != nil {
+		return nil, err
+	}
+	return &ContractOperatorWithdrawnSSVIterator{contract: _Contract.contract, event: "OperatorWithdrawnSSV", logs: logs, sub: sub}, nil
+}
+
+// WatchOperatorWithdrawnSSV is a free log subscription operation binding the contract event 0x8ce3fab60deb285381bb700bc8406adc165eba737126273b52f7dd5280576f91.
+//
+// Solidity: event OperatorWithdrawnSSV(address indexed owner, uint64 indexed operatorId, uint256 value)
+func (_Contract *ContractFilterer) WatchOperatorWithdrawnSSV(opts *bind.WatchOpts, sink chan<- *ContractOperatorWithdrawnSSV, owner []common.Address, operatorId []uint64) (event.Subscription, error) {
+
+	var ownerRule []interface{}
+	for _, ownerItem := range owner {
+		ownerRule = append(ownerRule, ownerItem)
+	}
+	var operatorIdRule []interface{}
+	for _, operatorIdItem := range operatorId {
+		operatorIdRule = append(operatorIdRule, operatorIdItem)
+	}
+
+	logs, sub, err := _Contract.contract.WatchLogs(opts, "OperatorWithdrawnSSV", ownerRule, operatorIdRule)
+	if err != nil {
+		return nil, err
+	}
+	return event.NewSubscription(func(quit <-chan struct{}) error {
+		defer sub.Unsubscribe()
+		for {
+			select {
+			case log := <-logs:
+				// New log arrived, parse the event and forward to the user
+				event := new(ContractOperatorWithdrawnSSV)
+				if err := _Contract.contract.UnpackLog(event, "OperatorWithdrawnSSV", log); err != nil {
+					return err
+				}
+				event.Raw = log
+
+				select {
+				case sink <- event:
+				case err := <-sub.Err():
+					return err
+				case <-quit:
+					return nil
+				}
+			case err := <-sub.Err():
+				return err
+			case <-quit:
+				return nil
+			}
+		}
+	}), nil
+}
+
+// ParseOperatorWithdrawnSSV is a log parse operation binding the contract event 0x8ce3fab60deb285381bb700bc8406adc165eba737126273b52f7dd5280576f91.
+//
+// Solidity: event OperatorWithdrawnSSV(address indexed owner, uint64 indexed operatorId, uint256 value)
+func (_Contract *ContractFilterer) ParseOperatorWithdrawnSSV(log types.Log) (*ContractOperatorWithdrawnSSV, error) {
+	event := new(ContractOperatorWithdrawnSSV)
+	if err := _Contract.contract.UnpackLog(event, "OperatorWithdrawnSSV", log); err != nil {
+		return nil, err
+	}
+	event.Raw = log
+	return event, nil
+}
+
+// ContractOracleReplacedIterator is returned from FilterOracleReplaced and is used to iterate over the raw logs and unpacked data for OracleReplaced events raised by the Contract contract.
+type ContractOracleReplacedIterator struct {
+	Event *ContractOracleReplaced // Event containing the contract specifics and raw log
+
+	contract *bind.BoundContract // Generic contract to use for unpacking event data
+	event    string              // Event name to use for unpacking event data
+
+	logs chan types.Log        // Log channel receiving the found contract events
+	sub  ethereum.Subscription // Subscription for errors, completion and termination
+	done bool                  // Whether the subscription completed delivering logs
+	fail error                 // Occurred error to stop iteration
+}
+
+// Next advances the iterator to the subsequent event, returning whether there
+// are any more events found. In case of a retrieval or parsing error, false is
+// returned and Error() can be queried for the exact failure.
+func (it *ContractOracleReplacedIterator) Next() bool {
+	// If the iterator failed, stop iterating
+	if it.fail != nil {
+		return false
+	}
+	// If the iterator completed, deliver directly whatever's available
+	if it.done {
+		select {
+		case log := <-it.logs:
+			it.Event = new(ContractOracleReplaced)
+			if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+				it.fail = err
+				return false
+			}
+			it.Event.Raw = log
+			return true
+
+		default:
+			return false
+		}
+	}
+	// Iterator still in progress, wait for either a data or an error event
+	select {
+	case log := <-it.logs:
+		it.Event = new(ContractOracleReplaced)
+		if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+			it.fail = err
+			return false
+		}
+		it.Event.Raw = log
+		return true
+
+	case err := <-it.sub.Err():
+		it.done = true
+		it.fail = err
+		return it.Next()
+	}
+}
+
+// Error returns any retrieval or parsing error occurred during filtering.
+func (it *ContractOracleReplacedIterator) Error() error {
+	return it.fail
+}
+
+// Close terminates the iteration process, releasing any pending underlying
+// resources.
+func (it *ContractOracleReplacedIterator) Close() error {
+	it.sub.Unsubscribe()
+	return nil
+}
+
+// ContractOracleReplaced represents a OracleReplaced event raised by the Contract contract.
+type ContractOracleReplaced struct {
+	OracleId  uint32
+	OldOracle common.Address
+	NewOracle common.Address
+	Raw       types.Log // Blockchain specific contextual infos
+}
+
+// FilterOracleReplaced is a free log retrieval operation binding the contract event 0x6113130a2400e4e0980410314b8d41a250e526ca56d039ffd91278aeac44c468.
+//
+// Solidity: event OracleReplaced(uint32 indexed oracleId, address indexed oldOracle, address indexed newOracle)
+func (_Contract *ContractFilterer) FilterOracleReplaced(opts *bind.FilterOpts, oracleId []uint32, oldOracle []common.Address, newOracle []common.Address) (*ContractOracleReplacedIterator, error) {
+
+	var oracleIdRule []interface{}
+	for _, oracleIdItem := range oracleId {
+		oracleIdRule = append(oracleIdRule, oracleIdItem)
+	}
+	var oldOracleRule []interface{}
+	for _, oldOracleItem := range oldOracle {
+		oldOracleRule = append(oldOracleRule, oldOracleItem)
+	}
+	var newOracleRule []interface{}
+	for _, newOracleItem := range newOracle {
+		newOracleRule = append(newOracleRule, newOracleItem)
+	}
+
+	logs, sub, err := _Contract.contract.FilterLogs(opts, "OracleReplaced", oracleIdRule, oldOracleRule, newOracleRule)
+	if err != nil {
+		return nil, err
+	}
+	return &ContractOracleReplacedIterator{contract: _Contract.contract, event: "OracleReplaced", logs: logs, sub: sub}, nil
+}
+
+// WatchOracleReplaced is a free log subscription operation binding the contract event 0x6113130a2400e4e0980410314b8d41a250e526ca56d039ffd91278aeac44c468.
+//
+// Solidity: event OracleReplaced(uint32 indexed oracleId, address indexed oldOracle, address indexed newOracle)
+func (_Contract *ContractFilterer) WatchOracleReplaced(opts *bind.WatchOpts, sink chan<- *ContractOracleReplaced, oracleId []uint32, oldOracle []common.Address, newOracle []common.Address) (event.Subscription, error) {
+
+	var oracleIdRule []interface{}
+	for _, oracleIdItem := range oracleId {
+		oracleIdRule = append(oracleIdRule, oracleIdItem)
+	}
+	var oldOracleRule []interface{}
+	for _, oldOracleItem := range oldOracle {
+		oldOracleRule = append(oldOracleRule, oldOracleItem)
+	}
+	var newOracleRule []interface{}
+	for _, newOracleItem := range newOracle {
+		newOracleRule = append(newOracleRule, newOracleItem)
+	}
+
+	logs, sub, err := _Contract.contract.WatchLogs(opts, "OracleReplaced", oracleIdRule, oldOracleRule, newOracleRule)
+	if err != nil {
+		return nil, err
+	}
+	return event.NewSubscription(func(quit <-chan struct{}) error {
+		defer sub.Unsubscribe()
+		for {
+			select {
+			case log := <-logs:
+				// New log arrived, parse the event and forward to the user
+				event := new(ContractOracleReplaced)
+				if err := _Contract.contract.UnpackLog(event, "OracleReplaced", log); err != nil {
+					return err
+				}
+				event.Raw = log
+
+				select {
+				case sink <- event:
+				case err := <-sub.Err():
+					return err
+				case <-quit:
+					return nil
+				}
+			case err := <-sub.Err():
+				return err
+			case <-quit:
+				return nil
+			}
+		}
+	}), nil
+}
+
+// ParseOracleReplaced is a log parse operation binding the contract event 0x6113130a2400e4e0980410314b8d41a250e526ca56d039ffd91278aeac44c468.
+//
+// Solidity: event OracleReplaced(uint32 indexed oracleId, address indexed oldOracle, address indexed newOracle)
+func (_Contract *ContractFilterer) ParseOracleReplaced(log types.Log) (*ContractOracleReplaced, error) {
+	event := new(ContractOracleReplaced)
+	if err := _Contract.contract.UnpackLog(event, "OracleReplaced", log); err != nil {
 		return nil, err
 	}
 	event.Raw = log
@@ -4606,6 +7629,1156 @@ func (_Contract *ContractFilterer) WatchOwnershipTransferred(opts *bind.WatchOpt
 func (_Contract *ContractFilterer) ParseOwnershipTransferred(log types.Log) (*ContractOwnershipTransferred, error) {
 	event := new(ContractOwnershipTransferred)
 	if err := _Contract.contract.UnpackLog(event, "OwnershipTransferred", log); err != nil {
+		return nil, err
+	}
+	event.Raw = log
+	return event, nil
+}
+
+// ContractQuorumUpdatedIterator is returned from FilterQuorumUpdated and is used to iterate over the raw logs and unpacked data for QuorumUpdated events raised by the Contract contract.
+type ContractQuorumUpdatedIterator struct {
+	Event *ContractQuorumUpdated // Event containing the contract specifics and raw log
+
+	contract *bind.BoundContract // Generic contract to use for unpacking event data
+	event    string              // Event name to use for unpacking event data
+
+	logs chan types.Log        // Log channel receiving the found contract events
+	sub  ethereum.Subscription // Subscription for errors, completion and termination
+	done bool                  // Whether the subscription completed delivering logs
+	fail error                 // Occurred error to stop iteration
+}
+
+// Next advances the iterator to the subsequent event, returning whether there
+// are any more events found. In case of a retrieval or parsing error, false is
+// returned and Error() can be queried for the exact failure.
+func (it *ContractQuorumUpdatedIterator) Next() bool {
+	// If the iterator failed, stop iterating
+	if it.fail != nil {
+		return false
+	}
+	// If the iterator completed, deliver directly whatever's available
+	if it.done {
+		select {
+		case log := <-it.logs:
+			it.Event = new(ContractQuorumUpdated)
+			if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+				it.fail = err
+				return false
+			}
+			it.Event.Raw = log
+			return true
+
+		default:
+			return false
+		}
+	}
+	// Iterator still in progress, wait for either a data or an error event
+	select {
+	case log := <-it.logs:
+		it.Event = new(ContractQuorumUpdated)
+		if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+			it.fail = err
+			return false
+		}
+		it.Event.Raw = log
+		return true
+
+	case err := <-it.sub.Err():
+		it.done = true
+		it.fail = err
+		return it.Next()
+	}
+}
+
+// Error returns any retrieval or parsing error occurred during filtering.
+func (it *ContractQuorumUpdatedIterator) Error() error {
+	return it.fail
+}
+
+// Close terminates the iteration process, releasing any pending underlying
+// resources.
+func (it *ContractQuorumUpdatedIterator) Close() error {
+	it.sub.Unsubscribe()
+	return nil
+}
+
+// ContractQuorumUpdated represents a QuorumUpdated event raised by the Contract contract.
+type ContractQuorumUpdated struct {
+	NewQuorum uint16
+	Raw       types.Log // Blockchain specific contextual infos
+}
+
+// FilterQuorumUpdated is a free log retrieval operation binding the contract event 0x791dc99be5109fa13cd62186968189a4f65235f0a4aea35cdf15c585bbcbfdaf.
+//
+// Solidity: event QuorumUpdated(uint16 newQuorum)
+func (_Contract *ContractFilterer) FilterQuorumUpdated(opts *bind.FilterOpts) (*ContractQuorumUpdatedIterator, error) {
+
+	logs, sub, err := _Contract.contract.FilterLogs(opts, "QuorumUpdated")
+	if err != nil {
+		return nil, err
+	}
+	return &ContractQuorumUpdatedIterator{contract: _Contract.contract, event: "QuorumUpdated", logs: logs, sub: sub}, nil
+}
+
+// WatchQuorumUpdated is a free log subscription operation binding the contract event 0x791dc99be5109fa13cd62186968189a4f65235f0a4aea35cdf15c585bbcbfdaf.
+//
+// Solidity: event QuorumUpdated(uint16 newQuorum)
+func (_Contract *ContractFilterer) WatchQuorumUpdated(opts *bind.WatchOpts, sink chan<- *ContractQuorumUpdated) (event.Subscription, error) {
+
+	logs, sub, err := _Contract.contract.WatchLogs(opts, "QuorumUpdated")
+	if err != nil {
+		return nil, err
+	}
+	return event.NewSubscription(func(quit <-chan struct{}) error {
+		defer sub.Unsubscribe()
+		for {
+			select {
+			case log := <-logs:
+				// New log arrived, parse the event and forward to the user
+				event := new(ContractQuorumUpdated)
+				if err := _Contract.contract.UnpackLog(event, "QuorumUpdated", log); err != nil {
+					return err
+				}
+				event.Raw = log
+
+				select {
+				case sink <- event:
+				case err := <-sub.Err():
+					return err
+				case <-quit:
+					return nil
+				}
+			case err := <-sub.Err():
+				return err
+			case <-quit:
+				return nil
+			}
+		}
+	}), nil
+}
+
+// ParseQuorumUpdated is a log parse operation binding the contract event 0x791dc99be5109fa13cd62186968189a4f65235f0a4aea35cdf15c585bbcbfdaf.
+//
+// Solidity: event QuorumUpdated(uint16 newQuorum)
+func (_Contract *ContractFilterer) ParseQuorumUpdated(log types.Log) (*ContractQuorumUpdated, error) {
+	event := new(ContractQuorumUpdated)
+	if err := _Contract.contract.UnpackLog(event, "QuorumUpdated", log); err != nil {
+		return nil, err
+	}
+	event.Raw = log
+	return event, nil
+}
+
+// ContractRewardsClaimedIterator is returned from FilterRewardsClaimed and is used to iterate over the raw logs and unpacked data for RewardsClaimed events raised by the Contract contract.
+type ContractRewardsClaimedIterator struct {
+	Event *ContractRewardsClaimed // Event containing the contract specifics and raw log
+
+	contract *bind.BoundContract // Generic contract to use for unpacking event data
+	event    string              // Event name to use for unpacking event data
+
+	logs chan types.Log        // Log channel receiving the found contract events
+	sub  ethereum.Subscription // Subscription for errors, completion and termination
+	done bool                  // Whether the subscription completed delivering logs
+	fail error                 // Occurred error to stop iteration
+}
+
+// Next advances the iterator to the subsequent event, returning whether there
+// are any more events found. In case of a retrieval or parsing error, false is
+// returned and Error() can be queried for the exact failure.
+func (it *ContractRewardsClaimedIterator) Next() bool {
+	// If the iterator failed, stop iterating
+	if it.fail != nil {
+		return false
+	}
+	// If the iterator completed, deliver directly whatever's available
+	if it.done {
+		select {
+		case log := <-it.logs:
+			it.Event = new(ContractRewardsClaimed)
+			if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+				it.fail = err
+				return false
+			}
+			it.Event.Raw = log
+			return true
+
+		default:
+			return false
+		}
+	}
+	// Iterator still in progress, wait for either a data or an error event
+	select {
+	case log := <-it.logs:
+		it.Event = new(ContractRewardsClaimed)
+		if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+			it.fail = err
+			return false
+		}
+		it.Event.Raw = log
+		return true
+
+	case err := <-it.sub.Err():
+		it.done = true
+		it.fail = err
+		return it.Next()
+	}
+}
+
+// Error returns any retrieval or parsing error occurred during filtering.
+func (it *ContractRewardsClaimedIterator) Error() error {
+	return it.fail
+}
+
+// Close terminates the iteration process, releasing any pending underlying
+// resources.
+func (it *ContractRewardsClaimedIterator) Close() error {
+	it.sub.Unsubscribe()
+	return nil
+}
+
+// ContractRewardsClaimed represents a RewardsClaimed event raised by the Contract contract.
+type ContractRewardsClaimed struct {
+	User   common.Address
+	Amount *big.Int
+	Raw    types.Log // Blockchain specific contextual infos
+}
+
+// FilterRewardsClaimed is a free log retrieval operation binding the contract event 0xfc30cddea38e2bf4d6ea7d3f9ed3b6ad7f176419f4963bd81318067a4aee73fe.
+//
+// Solidity: event RewardsClaimed(address indexed user, uint256 amount)
+func (_Contract *ContractFilterer) FilterRewardsClaimed(opts *bind.FilterOpts, user []common.Address) (*ContractRewardsClaimedIterator, error) {
+
+	var userRule []interface{}
+	for _, userItem := range user {
+		userRule = append(userRule, userItem)
+	}
+
+	logs, sub, err := _Contract.contract.FilterLogs(opts, "RewardsClaimed", userRule)
+	if err != nil {
+		return nil, err
+	}
+	return &ContractRewardsClaimedIterator{contract: _Contract.contract, event: "RewardsClaimed", logs: logs, sub: sub}, nil
+}
+
+// WatchRewardsClaimed is a free log subscription operation binding the contract event 0xfc30cddea38e2bf4d6ea7d3f9ed3b6ad7f176419f4963bd81318067a4aee73fe.
+//
+// Solidity: event RewardsClaimed(address indexed user, uint256 amount)
+func (_Contract *ContractFilterer) WatchRewardsClaimed(opts *bind.WatchOpts, sink chan<- *ContractRewardsClaimed, user []common.Address) (event.Subscription, error) {
+
+	var userRule []interface{}
+	for _, userItem := range user {
+		userRule = append(userRule, userItem)
+	}
+
+	logs, sub, err := _Contract.contract.WatchLogs(opts, "RewardsClaimed", userRule)
+	if err != nil {
+		return nil, err
+	}
+	return event.NewSubscription(func(quit <-chan struct{}) error {
+		defer sub.Unsubscribe()
+		for {
+			select {
+			case log := <-logs:
+				// New log arrived, parse the event and forward to the user
+				event := new(ContractRewardsClaimed)
+				if err := _Contract.contract.UnpackLog(event, "RewardsClaimed", log); err != nil {
+					return err
+				}
+				event.Raw = log
+
+				select {
+				case sink <- event:
+				case err := <-sub.Err():
+					return err
+				case <-quit:
+					return nil
+				}
+			case err := <-sub.Err():
+				return err
+			case <-quit:
+				return nil
+			}
+		}
+	}), nil
+}
+
+// ParseRewardsClaimed is a log parse operation binding the contract event 0xfc30cddea38e2bf4d6ea7d3f9ed3b6ad7f176419f4963bd81318067a4aee73fe.
+//
+// Solidity: event RewardsClaimed(address indexed user, uint256 amount)
+func (_Contract *ContractFilterer) ParseRewardsClaimed(log types.Log) (*ContractRewardsClaimed, error) {
+	event := new(ContractRewardsClaimed)
+	if err := _Contract.contract.UnpackLog(event, "RewardsClaimed", log); err != nil {
+		return nil, err
+	}
+	event.Raw = log
+	return event, nil
+}
+
+// ContractRewardsSettledIterator is returned from FilterRewardsSettled and is used to iterate over the raw logs and unpacked data for RewardsSettled events raised by the Contract contract.
+type ContractRewardsSettledIterator struct {
+	Event *ContractRewardsSettled // Event containing the contract specifics and raw log
+
+	contract *bind.BoundContract // Generic contract to use for unpacking event data
+	event    string              // Event name to use for unpacking event data
+
+	logs chan types.Log        // Log channel receiving the found contract events
+	sub  ethereum.Subscription // Subscription for errors, completion and termination
+	done bool                  // Whether the subscription completed delivering logs
+	fail error                 // Occurred error to stop iteration
+}
+
+// Next advances the iterator to the subsequent event, returning whether there
+// are any more events found. In case of a retrieval or parsing error, false is
+// returned and Error() can be queried for the exact failure.
+func (it *ContractRewardsSettledIterator) Next() bool {
+	// If the iterator failed, stop iterating
+	if it.fail != nil {
+		return false
+	}
+	// If the iterator completed, deliver directly whatever's available
+	if it.done {
+		select {
+		case log := <-it.logs:
+			it.Event = new(ContractRewardsSettled)
+			if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+				it.fail = err
+				return false
+			}
+			it.Event.Raw = log
+			return true
+
+		default:
+			return false
+		}
+	}
+	// Iterator still in progress, wait for either a data or an error event
+	select {
+	case log := <-it.logs:
+		it.Event = new(ContractRewardsSettled)
+		if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+			it.fail = err
+			return false
+		}
+		it.Event.Raw = log
+		return true
+
+	case err := <-it.sub.Err():
+		it.done = true
+		it.fail = err
+		return it.Next()
+	}
+}
+
+// Error returns any retrieval or parsing error occurred during filtering.
+func (it *ContractRewardsSettledIterator) Error() error {
+	return it.fail
+}
+
+// Close terminates the iteration process, releasing any pending underlying
+// resources.
+func (it *ContractRewardsSettledIterator) Close() error {
+	it.sub.Unsubscribe()
+	return nil
+}
+
+// ContractRewardsSettled represents a RewardsSettled event raised by the Contract contract.
+type ContractRewardsSettled struct {
+	User      common.Address
+	Pending   *big.Int
+	Accrued   *big.Int
+	UserIndex *big.Int
+	Raw       types.Log // Blockchain specific contextual infos
+}
+
+// FilterRewardsSettled is a free log retrieval operation binding the contract event 0x4e38a3eebabe29eaad79f76c94599208a54f204cbd7d3907ac066df5afcb5057.
+//
+// Solidity: event RewardsSettled(address indexed user, uint256 pending, uint256 accrued, uint256 userIndex)
+func (_Contract *ContractFilterer) FilterRewardsSettled(opts *bind.FilterOpts, user []common.Address) (*ContractRewardsSettledIterator, error) {
+
+	var userRule []interface{}
+	for _, userItem := range user {
+		userRule = append(userRule, userItem)
+	}
+
+	logs, sub, err := _Contract.contract.FilterLogs(opts, "RewardsSettled", userRule)
+	if err != nil {
+		return nil, err
+	}
+	return &ContractRewardsSettledIterator{contract: _Contract.contract, event: "RewardsSettled", logs: logs, sub: sub}, nil
+}
+
+// WatchRewardsSettled is a free log subscription operation binding the contract event 0x4e38a3eebabe29eaad79f76c94599208a54f204cbd7d3907ac066df5afcb5057.
+//
+// Solidity: event RewardsSettled(address indexed user, uint256 pending, uint256 accrued, uint256 userIndex)
+func (_Contract *ContractFilterer) WatchRewardsSettled(opts *bind.WatchOpts, sink chan<- *ContractRewardsSettled, user []common.Address) (event.Subscription, error) {
+
+	var userRule []interface{}
+	for _, userItem := range user {
+		userRule = append(userRule, userItem)
+	}
+
+	logs, sub, err := _Contract.contract.WatchLogs(opts, "RewardsSettled", userRule)
+	if err != nil {
+		return nil, err
+	}
+	return event.NewSubscription(func(quit <-chan struct{}) error {
+		defer sub.Unsubscribe()
+		for {
+			select {
+			case log := <-logs:
+				// New log arrived, parse the event and forward to the user
+				event := new(ContractRewardsSettled)
+				if err := _Contract.contract.UnpackLog(event, "RewardsSettled", log); err != nil {
+					return err
+				}
+				event.Raw = log
+
+				select {
+				case sink <- event:
+				case err := <-sub.Err():
+					return err
+				case <-quit:
+					return nil
+				}
+			case err := <-sub.Err():
+				return err
+			case <-quit:
+				return nil
+			}
+		}
+	}), nil
+}
+
+// ParseRewardsSettled is a log parse operation binding the contract event 0x4e38a3eebabe29eaad79f76c94599208a54f204cbd7d3907ac066df5afcb5057.
+//
+// Solidity: event RewardsSettled(address indexed user, uint256 pending, uint256 accrued, uint256 userIndex)
+func (_Contract *ContractFilterer) ParseRewardsSettled(log types.Log) (*ContractRewardsSettled, error) {
+	event := new(ContractRewardsSettled)
+	if err := _Contract.contract.UnpackLog(event, "RewardsSettled", log); err != nil {
+		return nil, err
+	}
+	event.Raw = log
+	return event, nil
+}
+
+// ContractRootCommittedIterator is returned from FilterRootCommitted and is used to iterate over the raw logs and unpacked data for RootCommitted events raised by the Contract contract.
+type ContractRootCommittedIterator struct {
+	Event *ContractRootCommitted // Event containing the contract specifics and raw log
+
+	contract *bind.BoundContract // Generic contract to use for unpacking event data
+	event    string              // Event name to use for unpacking event data
+
+	logs chan types.Log        // Log channel receiving the found contract events
+	sub  ethereum.Subscription // Subscription for errors, completion and termination
+	done bool                  // Whether the subscription completed delivering logs
+	fail error                 // Occurred error to stop iteration
+}
+
+// Next advances the iterator to the subsequent event, returning whether there
+// are any more events found. In case of a retrieval or parsing error, false is
+// returned and Error() can be queried for the exact failure.
+func (it *ContractRootCommittedIterator) Next() bool {
+	// If the iterator failed, stop iterating
+	if it.fail != nil {
+		return false
+	}
+	// If the iterator completed, deliver directly whatever's available
+	if it.done {
+		select {
+		case log := <-it.logs:
+			it.Event = new(ContractRootCommitted)
+			if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+				it.fail = err
+				return false
+			}
+			it.Event.Raw = log
+			return true
+
+		default:
+			return false
+		}
+	}
+	// Iterator still in progress, wait for either a data or an error event
+	select {
+	case log := <-it.logs:
+		it.Event = new(ContractRootCommitted)
+		if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+			it.fail = err
+			return false
+		}
+		it.Event.Raw = log
+		return true
+
+	case err := <-it.sub.Err():
+		it.done = true
+		it.fail = err
+		return it.Next()
+	}
+}
+
+// Error returns any retrieval or parsing error occurred during filtering.
+func (it *ContractRootCommittedIterator) Error() error {
+	return it.fail
+}
+
+// Close terminates the iteration process, releasing any pending underlying
+// resources.
+func (it *ContractRootCommittedIterator) Close() error {
+	it.sub.Unsubscribe()
+	return nil
+}
+
+// ContractRootCommitted represents a RootCommitted event raised by the Contract contract.
+type ContractRootCommitted struct {
+	MerkleRoot [32]byte
+	BlockNum   uint64
+	Raw        types.Log // Blockchain specific contextual infos
+}
+
+// FilterRootCommitted is a free log retrieval operation binding the contract event 0x6965b9c8509097ad68ba0eb17fcb9436f4a72a057fe5ac556737580bce80d840.
+//
+// Solidity: event RootCommitted(bytes32 indexed merkleRoot, uint64 indexed blockNum)
+func (_Contract *ContractFilterer) FilterRootCommitted(opts *bind.FilterOpts, merkleRoot [][32]byte, blockNum []uint64) (*ContractRootCommittedIterator, error) {
+
+	var merkleRootRule []interface{}
+	for _, merkleRootItem := range merkleRoot {
+		merkleRootRule = append(merkleRootRule, merkleRootItem)
+	}
+	var blockNumRule []interface{}
+	for _, blockNumItem := range blockNum {
+		blockNumRule = append(blockNumRule, blockNumItem)
+	}
+
+	logs, sub, err := _Contract.contract.FilterLogs(opts, "RootCommitted", merkleRootRule, blockNumRule)
+	if err != nil {
+		return nil, err
+	}
+	return &ContractRootCommittedIterator{contract: _Contract.contract, event: "RootCommitted", logs: logs, sub: sub}, nil
+}
+
+// WatchRootCommitted is a free log subscription operation binding the contract event 0x6965b9c8509097ad68ba0eb17fcb9436f4a72a057fe5ac556737580bce80d840.
+//
+// Solidity: event RootCommitted(bytes32 indexed merkleRoot, uint64 indexed blockNum)
+func (_Contract *ContractFilterer) WatchRootCommitted(opts *bind.WatchOpts, sink chan<- *ContractRootCommitted, merkleRoot [][32]byte, blockNum []uint64) (event.Subscription, error) {
+
+	var merkleRootRule []interface{}
+	for _, merkleRootItem := range merkleRoot {
+		merkleRootRule = append(merkleRootRule, merkleRootItem)
+	}
+	var blockNumRule []interface{}
+	for _, blockNumItem := range blockNum {
+		blockNumRule = append(blockNumRule, blockNumItem)
+	}
+
+	logs, sub, err := _Contract.contract.WatchLogs(opts, "RootCommitted", merkleRootRule, blockNumRule)
+	if err != nil {
+		return nil, err
+	}
+	return event.NewSubscription(func(quit <-chan struct{}) error {
+		defer sub.Unsubscribe()
+		for {
+			select {
+			case log := <-logs:
+				// New log arrived, parse the event and forward to the user
+				event := new(ContractRootCommitted)
+				if err := _Contract.contract.UnpackLog(event, "RootCommitted", log); err != nil {
+					return err
+				}
+				event.Raw = log
+
+				select {
+				case sink <- event:
+				case err := <-sub.Err():
+					return err
+				case <-quit:
+					return nil
+				}
+			case err := <-sub.Err():
+				return err
+			case <-quit:
+				return nil
+			}
+		}
+	}), nil
+}
+
+// ParseRootCommitted is a log parse operation binding the contract event 0x6965b9c8509097ad68ba0eb17fcb9436f4a72a057fe5ac556737580bce80d840.
+//
+// Solidity: event RootCommitted(bytes32 indexed merkleRoot, uint64 indexed blockNum)
+func (_Contract *ContractFilterer) ParseRootCommitted(log types.Log) (*ContractRootCommitted, error) {
+	event := new(ContractRootCommitted)
+	if err := _Contract.contract.UnpackLog(event, "RootCommitted", log); err != nil {
+		return nil, err
+	}
+	event.Raw = log
+	return event, nil
+}
+
+// ContractSSVNetworkUpgradeBlockIterator is returned from FilterSSVNetworkUpgradeBlock and is used to iterate over the raw logs and unpacked data for SSVNetworkUpgradeBlock events raised by the Contract contract.
+type ContractSSVNetworkUpgradeBlockIterator struct {
+	Event *ContractSSVNetworkUpgradeBlock // Event containing the contract specifics and raw log
+
+	contract *bind.BoundContract // Generic contract to use for unpacking event data
+	event    string              // Event name to use for unpacking event data
+
+	logs chan types.Log        // Log channel receiving the found contract events
+	sub  ethereum.Subscription // Subscription for errors, completion and termination
+	done bool                  // Whether the subscription completed delivering logs
+	fail error                 // Occurred error to stop iteration
+}
+
+// Next advances the iterator to the subsequent event, returning whether there
+// are any more events found. In case of a retrieval or parsing error, false is
+// returned and Error() can be queried for the exact failure.
+func (it *ContractSSVNetworkUpgradeBlockIterator) Next() bool {
+	// If the iterator failed, stop iterating
+	if it.fail != nil {
+		return false
+	}
+	// If the iterator completed, deliver directly whatever's available
+	if it.done {
+		select {
+		case log := <-it.logs:
+			it.Event = new(ContractSSVNetworkUpgradeBlock)
+			if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+				it.fail = err
+				return false
+			}
+			it.Event.Raw = log
+			return true
+
+		default:
+			return false
+		}
+	}
+	// Iterator still in progress, wait for either a data or an error event
+	select {
+	case log := <-it.logs:
+		it.Event = new(ContractSSVNetworkUpgradeBlock)
+		if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+			it.fail = err
+			return false
+		}
+		it.Event.Raw = log
+		return true
+
+	case err := <-it.sub.Err():
+		it.done = true
+		it.fail = err
+		return it.Next()
+	}
+}
+
+// Error returns any retrieval or parsing error occurred during filtering.
+func (it *ContractSSVNetworkUpgradeBlockIterator) Error() error {
+	return it.fail
+}
+
+// Close terminates the iteration process, releasing any pending underlying
+// resources.
+func (it *ContractSSVNetworkUpgradeBlockIterator) Close() error {
+	it.sub.Unsubscribe()
+	return nil
+}
+
+// ContractSSVNetworkUpgradeBlock represents a SSVNetworkUpgradeBlock event raised by the Contract contract.
+type ContractSSVNetworkUpgradeBlock struct {
+	Version     string
+	BlockNumber *big.Int
+	Raw         types.Log // Blockchain specific contextual infos
+}
+
+// FilterSSVNetworkUpgradeBlock is a free log retrieval operation binding the contract event 0xe733b31bc9141b87ce3fb540e27a03b4711c1214ec06490c8e68daf82bc33911.
+//
+// Solidity: event SSVNetworkUpgradeBlock(string version, uint256 blockNumber)
+func (_Contract *ContractFilterer) FilterSSVNetworkUpgradeBlock(opts *bind.FilterOpts) (*ContractSSVNetworkUpgradeBlockIterator, error) {
+
+	logs, sub, err := _Contract.contract.FilterLogs(opts, "SSVNetworkUpgradeBlock")
+	if err != nil {
+		return nil, err
+	}
+	return &ContractSSVNetworkUpgradeBlockIterator{contract: _Contract.contract, event: "SSVNetworkUpgradeBlock", logs: logs, sub: sub}, nil
+}
+
+// WatchSSVNetworkUpgradeBlock is a free log subscription operation binding the contract event 0xe733b31bc9141b87ce3fb540e27a03b4711c1214ec06490c8e68daf82bc33911.
+//
+// Solidity: event SSVNetworkUpgradeBlock(string version, uint256 blockNumber)
+func (_Contract *ContractFilterer) WatchSSVNetworkUpgradeBlock(opts *bind.WatchOpts, sink chan<- *ContractSSVNetworkUpgradeBlock) (event.Subscription, error) {
+
+	logs, sub, err := _Contract.contract.WatchLogs(opts, "SSVNetworkUpgradeBlock")
+	if err != nil {
+		return nil, err
+	}
+	return event.NewSubscription(func(quit <-chan struct{}) error {
+		defer sub.Unsubscribe()
+		for {
+			select {
+			case log := <-logs:
+				// New log arrived, parse the event and forward to the user
+				event := new(ContractSSVNetworkUpgradeBlock)
+				if err := _Contract.contract.UnpackLog(event, "SSVNetworkUpgradeBlock", log); err != nil {
+					return err
+				}
+				event.Raw = log
+
+				select {
+				case sink <- event:
+				case err := <-sub.Err():
+					return err
+				case <-quit:
+					return nil
+				}
+			case err := <-sub.Err():
+				return err
+			case <-quit:
+				return nil
+			}
+		}
+	}), nil
+}
+
+// ParseSSVNetworkUpgradeBlock is a log parse operation binding the contract event 0xe733b31bc9141b87ce3fb540e27a03b4711c1214ec06490c8e68daf82bc33911.
+//
+// Solidity: event SSVNetworkUpgradeBlock(string version, uint256 blockNumber)
+func (_Contract *ContractFilterer) ParseSSVNetworkUpgradeBlock(log types.Log) (*ContractSSVNetworkUpgradeBlock, error) {
+	event := new(ContractSSVNetworkUpgradeBlock)
+	if err := _Contract.contract.UnpackLog(event, "SSVNetworkUpgradeBlock", log); err != nil {
+		return nil, err
+	}
+	event.Raw = log
+	return event, nil
+}
+
+// ContractStakedIterator is returned from FilterStaked and is used to iterate over the raw logs and unpacked data for Staked events raised by the Contract contract.
+type ContractStakedIterator struct {
+	Event *ContractStaked // Event containing the contract specifics and raw log
+
+	contract *bind.BoundContract // Generic contract to use for unpacking event data
+	event    string              // Event name to use for unpacking event data
+
+	logs chan types.Log        // Log channel receiving the found contract events
+	sub  ethereum.Subscription // Subscription for errors, completion and termination
+	done bool                  // Whether the subscription completed delivering logs
+	fail error                 // Occurred error to stop iteration
+}
+
+// Next advances the iterator to the subsequent event, returning whether there
+// are any more events found. In case of a retrieval or parsing error, false is
+// returned and Error() can be queried for the exact failure.
+func (it *ContractStakedIterator) Next() bool {
+	// If the iterator failed, stop iterating
+	if it.fail != nil {
+		return false
+	}
+	// If the iterator completed, deliver directly whatever's available
+	if it.done {
+		select {
+		case log := <-it.logs:
+			it.Event = new(ContractStaked)
+			if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+				it.fail = err
+				return false
+			}
+			it.Event.Raw = log
+			return true
+
+		default:
+			return false
+		}
+	}
+	// Iterator still in progress, wait for either a data or an error event
+	select {
+	case log := <-it.logs:
+		it.Event = new(ContractStaked)
+		if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+			it.fail = err
+			return false
+		}
+		it.Event.Raw = log
+		return true
+
+	case err := <-it.sub.Err():
+		it.done = true
+		it.fail = err
+		return it.Next()
+	}
+}
+
+// Error returns any retrieval or parsing error occurred during filtering.
+func (it *ContractStakedIterator) Error() error {
+	return it.fail
+}
+
+// Close terminates the iteration process, releasing any pending underlying
+// resources.
+func (it *ContractStakedIterator) Close() error {
+	it.sub.Unsubscribe()
+	return nil
+}
+
+// ContractStaked represents a Staked event raised by the Contract contract.
+type ContractStaked struct {
+	User   common.Address
+	Amount *big.Int
+	Raw    types.Log // Blockchain specific contextual infos
+}
+
+// FilterStaked is a free log retrieval operation binding the contract event 0x9e71bc8eea02a63969f509818f2dafb9254532904319f9dbda79b67bd34a5f3d.
+//
+// Solidity: event Staked(address indexed user, uint256 amount)
+func (_Contract *ContractFilterer) FilterStaked(opts *bind.FilterOpts, user []common.Address) (*ContractStakedIterator, error) {
+
+	var userRule []interface{}
+	for _, userItem := range user {
+		userRule = append(userRule, userItem)
+	}
+
+	logs, sub, err := _Contract.contract.FilterLogs(opts, "Staked", userRule)
+	if err != nil {
+		return nil, err
+	}
+	return &ContractStakedIterator{contract: _Contract.contract, event: "Staked", logs: logs, sub: sub}, nil
+}
+
+// WatchStaked is a free log subscription operation binding the contract event 0x9e71bc8eea02a63969f509818f2dafb9254532904319f9dbda79b67bd34a5f3d.
+//
+// Solidity: event Staked(address indexed user, uint256 amount)
+func (_Contract *ContractFilterer) WatchStaked(opts *bind.WatchOpts, sink chan<- *ContractStaked, user []common.Address) (event.Subscription, error) {
+
+	var userRule []interface{}
+	for _, userItem := range user {
+		userRule = append(userRule, userItem)
+	}
+
+	logs, sub, err := _Contract.contract.WatchLogs(opts, "Staked", userRule)
+	if err != nil {
+		return nil, err
+	}
+	return event.NewSubscription(func(quit <-chan struct{}) error {
+		defer sub.Unsubscribe()
+		for {
+			select {
+			case log := <-logs:
+				// New log arrived, parse the event and forward to the user
+				event := new(ContractStaked)
+				if err := _Contract.contract.UnpackLog(event, "Staked", log); err != nil {
+					return err
+				}
+				event.Raw = log
+
+				select {
+				case sink <- event:
+				case err := <-sub.Err():
+					return err
+				case <-quit:
+					return nil
+				}
+			case err := <-sub.Err():
+				return err
+			case <-quit:
+				return nil
+			}
+		}
+	}), nil
+}
+
+// ParseStaked is a log parse operation binding the contract event 0x9e71bc8eea02a63969f509818f2dafb9254532904319f9dbda79b67bd34a5f3d.
+//
+// Solidity: event Staked(address indexed user, uint256 amount)
+func (_Contract *ContractFilterer) ParseStaked(log types.Log) (*ContractStaked, error) {
+	event := new(ContractStaked)
+	if err := _Contract.contract.UnpackLog(event, "Staked", log); err != nil {
+		return nil, err
+	}
+	event.Raw = log
+	return event, nil
+}
+
+// ContractUnstakeRequestedIterator is returned from FilterUnstakeRequested and is used to iterate over the raw logs and unpacked data for UnstakeRequested events raised by the Contract contract.
+type ContractUnstakeRequestedIterator struct {
+	Event *ContractUnstakeRequested // Event containing the contract specifics and raw log
+
+	contract *bind.BoundContract // Generic contract to use for unpacking event data
+	event    string              // Event name to use for unpacking event data
+
+	logs chan types.Log        // Log channel receiving the found contract events
+	sub  ethereum.Subscription // Subscription for errors, completion and termination
+	done bool                  // Whether the subscription completed delivering logs
+	fail error                 // Occurred error to stop iteration
+}
+
+// Next advances the iterator to the subsequent event, returning whether there
+// are any more events found. In case of a retrieval or parsing error, false is
+// returned and Error() can be queried for the exact failure.
+func (it *ContractUnstakeRequestedIterator) Next() bool {
+	// If the iterator failed, stop iterating
+	if it.fail != nil {
+		return false
+	}
+	// If the iterator completed, deliver directly whatever's available
+	if it.done {
+		select {
+		case log := <-it.logs:
+			it.Event = new(ContractUnstakeRequested)
+			if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+				it.fail = err
+				return false
+			}
+			it.Event.Raw = log
+			return true
+
+		default:
+			return false
+		}
+	}
+	// Iterator still in progress, wait for either a data or an error event
+	select {
+	case log := <-it.logs:
+		it.Event = new(ContractUnstakeRequested)
+		if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+			it.fail = err
+			return false
+		}
+		it.Event.Raw = log
+		return true
+
+	case err := <-it.sub.Err():
+		it.done = true
+		it.fail = err
+		return it.Next()
+	}
+}
+
+// Error returns any retrieval or parsing error occurred during filtering.
+func (it *ContractUnstakeRequestedIterator) Error() error {
+	return it.fail
+}
+
+// Close terminates the iteration process, releasing any pending underlying
+// resources.
+func (it *ContractUnstakeRequestedIterator) Close() error {
+	it.sub.Unsubscribe()
+	return nil
+}
+
+// ContractUnstakeRequested represents a UnstakeRequested event raised by the Contract contract.
+type ContractUnstakeRequested struct {
+	User       common.Address
+	Amount     *big.Int
+	UnlockTime *big.Int
+	Raw        types.Log // Blockchain specific contextual infos
+}
+
+// FilterUnstakeRequested is a free log retrieval operation binding the contract event 0x57e41df54512c76148b5ba9b643d149752b0d35e493b969bd017d0a3fe5228cf.
+//
+// Solidity: event UnstakeRequested(address indexed user, uint256 amount, uint256 unlockTime)
+func (_Contract *ContractFilterer) FilterUnstakeRequested(opts *bind.FilterOpts, user []common.Address) (*ContractUnstakeRequestedIterator, error) {
+
+	var userRule []interface{}
+	for _, userItem := range user {
+		userRule = append(userRule, userItem)
+	}
+
+	logs, sub, err := _Contract.contract.FilterLogs(opts, "UnstakeRequested", userRule)
+	if err != nil {
+		return nil, err
+	}
+	return &ContractUnstakeRequestedIterator{contract: _Contract.contract, event: "UnstakeRequested", logs: logs, sub: sub}, nil
+}
+
+// WatchUnstakeRequested is a free log subscription operation binding the contract event 0x57e41df54512c76148b5ba9b643d149752b0d35e493b969bd017d0a3fe5228cf.
+//
+// Solidity: event UnstakeRequested(address indexed user, uint256 amount, uint256 unlockTime)
+func (_Contract *ContractFilterer) WatchUnstakeRequested(opts *bind.WatchOpts, sink chan<- *ContractUnstakeRequested, user []common.Address) (event.Subscription, error) {
+
+	var userRule []interface{}
+	for _, userItem := range user {
+		userRule = append(userRule, userItem)
+	}
+
+	logs, sub, err := _Contract.contract.WatchLogs(opts, "UnstakeRequested", userRule)
+	if err != nil {
+		return nil, err
+	}
+	return event.NewSubscription(func(quit <-chan struct{}) error {
+		defer sub.Unsubscribe()
+		for {
+			select {
+			case log := <-logs:
+				// New log arrived, parse the event and forward to the user
+				event := new(ContractUnstakeRequested)
+				if err := _Contract.contract.UnpackLog(event, "UnstakeRequested", log); err != nil {
+					return err
+				}
+				event.Raw = log
+
+				select {
+				case sink <- event:
+				case err := <-sub.Err():
+					return err
+				case <-quit:
+					return nil
+				}
+			case err := <-sub.Err():
+				return err
+			case <-quit:
+				return nil
+			}
+		}
+	}), nil
+}
+
+// ParseUnstakeRequested is a log parse operation binding the contract event 0x57e41df54512c76148b5ba9b643d149752b0d35e493b969bd017d0a3fe5228cf.
+//
+// Solidity: event UnstakeRequested(address indexed user, uint256 amount, uint256 unlockTime)
+func (_Contract *ContractFilterer) ParseUnstakeRequested(log types.Log) (*ContractUnstakeRequested, error) {
+	event := new(ContractUnstakeRequested)
+	if err := _Contract.contract.UnpackLog(event, "UnstakeRequested", log); err != nil {
+		return nil, err
+	}
+	event.Raw = log
+	return event, nil
+}
+
+// ContractUnstakedWithdrawnIterator is returned from FilterUnstakedWithdrawn and is used to iterate over the raw logs and unpacked data for UnstakedWithdrawn events raised by the Contract contract.
+type ContractUnstakedWithdrawnIterator struct {
+	Event *ContractUnstakedWithdrawn // Event containing the contract specifics and raw log
+
+	contract *bind.BoundContract // Generic contract to use for unpacking event data
+	event    string              // Event name to use for unpacking event data
+
+	logs chan types.Log        // Log channel receiving the found contract events
+	sub  ethereum.Subscription // Subscription for errors, completion and termination
+	done bool                  // Whether the subscription completed delivering logs
+	fail error                 // Occurred error to stop iteration
+}
+
+// Next advances the iterator to the subsequent event, returning whether there
+// are any more events found. In case of a retrieval or parsing error, false is
+// returned and Error() can be queried for the exact failure.
+func (it *ContractUnstakedWithdrawnIterator) Next() bool {
+	// If the iterator failed, stop iterating
+	if it.fail != nil {
+		return false
+	}
+	// If the iterator completed, deliver directly whatever's available
+	if it.done {
+		select {
+		case log := <-it.logs:
+			it.Event = new(ContractUnstakedWithdrawn)
+			if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+				it.fail = err
+				return false
+			}
+			it.Event.Raw = log
+			return true
+
+		default:
+			return false
+		}
+	}
+	// Iterator still in progress, wait for either a data or an error event
+	select {
+	case log := <-it.logs:
+		it.Event = new(ContractUnstakedWithdrawn)
+		if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+			it.fail = err
+			return false
+		}
+		it.Event.Raw = log
+		return true
+
+	case err := <-it.sub.Err():
+		it.done = true
+		it.fail = err
+		return it.Next()
+	}
+}
+
+// Error returns any retrieval or parsing error occurred during filtering.
+func (it *ContractUnstakedWithdrawnIterator) Error() error {
+	return it.fail
+}
+
+// Close terminates the iteration process, releasing any pending underlying
+// resources.
+func (it *ContractUnstakedWithdrawnIterator) Close() error {
+	it.sub.Unsubscribe()
+	return nil
+}
+
+// ContractUnstakedWithdrawn represents a UnstakedWithdrawn event raised by the Contract contract.
+type ContractUnstakedWithdrawn struct {
+	User   common.Address
+	Amount *big.Int
+	Raw    types.Log // Blockchain specific contextual infos
+}
+
+// FilterUnstakedWithdrawn is a free log retrieval operation binding the contract event 0x8fe9b0a74e05eaabda056a095be40fb09405d83f5b2c07d7823d1eb655b927b8.
+//
+// Solidity: event UnstakedWithdrawn(address indexed user, uint256 amount)
+func (_Contract *ContractFilterer) FilterUnstakedWithdrawn(opts *bind.FilterOpts, user []common.Address) (*ContractUnstakedWithdrawnIterator, error) {
+
+	var userRule []interface{}
+	for _, userItem := range user {
+		userRule = append(userRule, userItem)
+	}
+
+	logs, sub, err := _Contract.contract.FilterLogs(opts, "UnstakedWithdrawn", userRule)
+	if err != nil {
+		return nil, err
+	}
+	return &ContractUnstakedWithdrawnIterator{contract: _Contract.contract, event: "UnstakedWithdrawn", logs: logs, sub: sub}, nil
+}
+
+// WatchUnstakedWithdrawn is a free log subscription operation binding the contract event 0x8fe9b0a74e05eaabda056a095be40fb09405d83f5b2c07d7823d1eb655b927b8.
+//
+// Solidity: event UnstakedWithdrawn(address indexed user, uint256 amount)
+func (_Contract *ContractFilterer) WatchUnstakedWithdrawn(opts *bind.WatchOpts, sink chan<- *ContractUnstakedWithdrawn, user []common.Address) (event.Subscription, error) {
+
+	var userRule []interface{}
+	for _, userItem := range user {
+		userRule = append(userRule, userItem)
+	}
+
+	logs, sub, err := _Contract.contract.WatchLogs(opts, "UnstakedWithdrawn", userRule)
+	if err != nil {
+		return nil, err
+	}
+	return event.NewSubscription(func(quit <-chan struct{}) error {
+		defer sub.Unsubscribe()
+		for {
+			select {
+			case log := <-logs:
+				// New log arrived, parse the event and forward to the user
+				event := new(ContractUnstakedWithdrawn)
+				if err := _Contract.contract.UnpackLog(event, "UnstakedWithdrawn", log); err != nil {
+					return err
+				}
+				event.Raw = log
+
+				select {
+				case sink <- event:
+				case err := <-sub.Err():
+					return err
+				case <-quit:
+					return nil
+				}
+			case err := <-sub.Err():
+				return err
+			case <-quit:
+				return nil
+			}
+		}
+	}), nil
+}
+
+// ParseUnstakedWithdrawn is a log parse operation binding the contract event 0x8fe9b0a74e05eaabda056a095be40fb09405d83f5b2c07d7823d1eb655b927b8.
+//
+// Solidity: event UnstakedWithdrawn(address indexed user, uint256 amount)
+func (_Contract *ContractFilterer) ParseUnstakedWithdrawn(log types.Log) (*ContractUnstakedWithdrawn, error) {
+	event := new(ContractUnstakedWithdrawn)
+	if err := _Contract.contract.UnpackLog(event, "UnstakedWithdrawn", log); err != nil {
 		return nil, err
 	}
 	event.Raw = log
@@ -5191,6 +9364,163 @@ func (_Contract *ContractFilterer) WatchValidatorRemoved(opts *bind.WatchOpts, s
 func (_Contract *ContractFilterer) ParseValidatorRemoved(log types.Log) (*ContractValidatorRemoved, error) {
 	event := new(ContractValidatorRemoved)
 	if err := _Contract.contract.UnpackLog(event, "ValidatorRemoved", log); err != nil {
+		return nil, err
+	}
+	event.Raw = log
+	return event, nil
+}
+
+// ContractWeightedRootProposedIterator is returned from FilterWeightedRootProposed and is used to iterate over the raw logs and unpacked data for WeightedRootProposed events raised by the Contract contract.
+type ContractWeightedRootProposedIterator struct {
+	Event *ContractWeightedRootProposed // Event containing the contract specifics and raw log
+
+	contract *bind.BoundContract // Generic contract to use for unpacking event data
+	event    string              // Event name to use for unpacking event data
+
+	logs chan types.Log        // Log channel receiving the found contract events
+	sub  ethereum.Subscription // Subscription for errors, completion and termination
+	done bool                  // Whether the subscription completed delivering logs
+	fail error                 // Occurred error to stop iteration
+}
+
+// Next advances the iterator to the subsequent event, returning whether there
+// are any more events found. In case of a retrieval or parsing error, false is
+// returned and Error() can be queried for the exact failure.
+func (it *ContractWeightedRootProposedIterator) Next() bool {
+	// If the iterator failed, stop iterating
+	if it.fail != nil {
+		return false
+	}
+	// If the iterator completed, deliver directly whatever's available
+	if it.done {
+		select {
+		case log := <-it.logs:
+			it.Event = new(ContractWeightedRootProposed)
+			if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+				it.fail = err
+				return false
+			}
+			it.Event.Raw = log
+			return true
+
+		default:
+			return false
+		}
+	}
+	// Iterator still in progress, wait for either a data or an error event
+	select {
+	case log := <-it.logs:
+		it.Event = new(ContractWeightedRootProposed)
+		if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+			it.fail = err
+			return false
+		}
+		it.Event.Raw = log
+		return true
+
+	case err := <-it.sub.Err():
+		it.done = true
+		it.fail = err
+		return it.Next()
+	}
+}
+
+// Error returns any retrieval or parsing error occurred during filtering.
+func (it *ContractWeightedRootProposedIterator) Error() error {
+	return it.fail
+}
+
+// Close terminates the iteration process, releasing any pending underlying
+// resources.
+func (it *ContractWeightedRootProposedIterator) Close() error {
+	it.sub.Unsubscribe()
+	return nil
+}
+
+// ContractWeightedRootProposed represents a WeightedRootProposed event raised by the Contract contract.
+type ContractWeightedRootProposed struct {
+	MerkleRoot        [32]byte
+	BlockNum          uint64
+	AccumulatedWeight *big.Int
+	Quorum            *big.Int
+	OracleId          uint32
+	Oracle            common.Address
+	Raw               types.Log // Blockchain specific contextual infos
+}
+
+// FilterWeightedRootProposed is a free log retrieval operation binding the contract event 0xc0516bad4be527b56ad33b7087029ffee230e390e2f2d1076597820c9e170b67.
+//
+// Solidity: event WeightedRootProposed(bytes32 indexed merkleRoot, uint64 indexed blockNum, uint256 accumulatedWeight, uint256 quorum, uint32 oracleId, address oracle)
+func (_Contract *ContractFilterer) FilterWeightedRootProposed(opts *bind.FilterOpts, merkleRoot [][32]byte, blockNum []uint64) (*ContractWeightedRootProposedIterator, error) {
+
+	var merkleRootRule []interface{}
+	for _, merkleRootItem := range merkleRoot {
+		merkleRootRule = append(merkleRootRule, merkleRootItem)
+	}
+	var blockNumRule []interface{}
+	for _, blockNumItem := range blockNum {
+		blockNumRule = append(blockNumRule, blockNumItem)
+	}
+
+	logs, sub, err := _Contract.contract.FilterLogs(opts, "WeightedRootProposed", merkleRootRule, blockNumRule)
+	if err != nil {
+		return nil, err
+	}
+	return &ContractWeightedRootProposedIterator{contract: _Contract.contract, event: "WeightedRootProposed", logs: logs, sub: sub}, nil
+}
+
+// WatchWeightedRootProposed is a free log subscription operation binding the contract event 0xc0516bad4be527b56ad33b7087029ffee230e390e2f2d1076597820c9e170b67.
+//
+// Solidity: event WeightedRootProposed(bytes32 indexed merkleRoot, uint64 indexed blockNum, uint256 accumulatedWeight, uint256 quorum, uint32 oracleId, address oracle)
+func (_Contract *ContractFilterer) WatchWeightedRootProposed(opts *bind.WatchOpts, sink chan<- *ContractWeightedRootProposed, merkleRoot [][32]byte, blockNum []uint64) (event.Subscription, error) {
+
+	var merkleRootRule []interface{}
+	for _, merkleRootItem := range merkleRoot {
+		merkleRootRule = append(merkleRootRule, merkleRootItem)
+	}
+	var blockNumRule []interface{}
+	for _, blockNumItem := range blockNum {
+		blockNumRule = append(blockNumRule, blockNumItem)
+	}
+
+	logs, sub, err := _Contract.contract.WatchLogs(opts, "WeightedRootProposed", merkleRootRule, blockNumRule)
+	if err != nil {
+		return nil, err
+	}
+	return event.NewSubscription(func(quit <-chan struct{}) error {
+		defer sub.Unsubscribe()
+		for {
+			select {
+			case log := <-logs:
+				// New log arrived, parse the event and forward to the user
+				event := new(ContractWeightedRootProposed)
+				if err := _Contract.contract.UnpackLog(event, "WeightedRootProposed", log); err != nil {
+					return err
+				}
+				event.Raw = log
+
+				select {
+				case sink <- event:
+				case err := <-sub.Err():
+					return err
+				case <-quit:
+					return nil
+				}
+			case err := <-sub.Err():
+				return err
+			case <-quit:
+				return nil
+			}
+		}
+	}), nil
+}
+
+// ParseWeightedRootProposed is a log parse operation binding the contract event 0xc0516bad4be527b56ad33b7087029ffee230e390e2f2d1076597820c9e170b67.
+//
+// Solidity: event WeightedRootProposed(bytes32 indexed merkleRoot, uint64 indexed blockNum, uint256 accumulatedWeight, uint256 quorum, uint32 oracleId, address oracle)
+func (_Contract *ContractFilterer) ParseWeightedRootProposed(log types.Log) (*ContractWeightedRootProposed, error) {
+	event := new(ContractWeightedRootProposed)
+	if err := _Contract.contract.UnpackLog(event, "WeightedRootProposed", log); err != nil {
 		return nil, err
 	}
 	event.Raw = log

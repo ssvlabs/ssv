@@ -3,9 +3,9 @@ package validator
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
@@ -13,60 +13,58 @@ import (
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
-func (v *Validator) onTimeout(ctx context.Context, logger *zap.Logger, identifier spectypes.MessageID, height specqbft.Height) roundtimer.OnRoundTimeoutF {
-	return func(round specqbft.Round) {
-		v.mtx.RLock() // read-lock for v.Queues
-		defer v.mtx.RUnlock()
+// newQBFTRoundTimerF returns a QBFTRoundTimerF that builds a RoundTimer for a QBFT instance and wires
+// round-timeouts back into the validator's per-role message queue as event messages. The returned factory
+// closes over identifier so each DutyRunner gets a factory bound to its own msg ID.
+func (v *Validator) newQBFTRoundTimerF(runnerIdentifier spectypes.MessageID) ssv.QBFTRoundTimerF {
+	return func(ctx context.Context, logger *zap.Logger, slot phase0.Slot) ssv.QBFTRoundTimer {
+		callback := func(round specqbft.Round) {
+			v.mtx.RLock() // read-lock for v.Queues
+			defer v.mtx.RUnlock()
 
-		// The relevant queue might not have been initialized yet, hence we need to check for nil here
-		q := v.Queues[identifier.GetRoleType()]
-		if q == nil {
-			return
-		}
+			// If the relevant queue hasn't been initialized yet, there isn't a running duty we can issue a
+			// timeout for, in practice this should never happen - but we need to handle this just in case.
+			// A map miss on v.Queues returns the zero value of the queue.Queue interface (nil), so the
+			// nil-check below covers both "key absent" and "stored value is nil" cases in one go.
+			q := v.Queues[runnerIdentifier.GetRoleType()]
+			if q == nil {
+				logger.Error("❗ couldn't schedule timeout event due to missing queue")
+				return
+			}
 
-		dr := v.DutyRunners[identifier.GetRoleType()]
-		if dr == nil {
-			// runner can be nil: expired committee runners are removed, but timeout event can still be. in this case we should just skip it
-			logger.Warn("❗no duty runner found for role", fields.RunnerRole(identifier.GetRoleType()))
-			return
-		}
-		hasDuty := dr.HasRunningDuty()
-		if !hasDuty {
-			return
-		}
+			msg, err := v.createTimerMessage(runnerIdentifier, slot, round)
+			if err != nil {
+				logger.Error("❌ failed to create timer msg", zap.Error(err))
+				return
+			}
+			dec, err := queue.DecodeSSVMessage(msg)
+			if err != nil {
+				logger.Error("❌ failed to decode timer msg", zap.Error(err))
+				return
+			}
 
-		msg, err := v.createTimerMessage(identifier, height, round)
-		if err != nil {
-			logger.Debug("❗ failed to create timer msg", zap.Error(err))
-			return
+			if pushed := q.TryPush(dec); !pushed {
+				logger.Error("❗️ dropping timeout message because the queue is full", fields.RunnerRole(runnerIdentifier.GetRoleType()))
+				return
+			}
 		}
-		dec, err := queue.DecodeSSVMessage(msg)
-		if err != nil {
-			logger.Debug("❌ failed to decode timer msg", zap.Error(err))
-			return
-		}
-
-		if pushed := q.TryPush(dec); !pushed {
-			logger.Warn("❗️ dropping timeout message because the queue is full",
-				fields.RunnerRole(identifier.GetRoleType()),
-			)
-			return
-		}
+		return roundtimer.New(ctx, v.NetworkConfig.Beacon, runnerIdentifier.GetRoleType(), slot, callback)
 	}
 }
 
-func (v *Validator) createTimerMessage(identifier spectypes.MessageID, height specqbft.Height, round specqbft.Round) (*spectypes.SSVMessage, error) {
+func (v *Validator) createTimerMessage(identifier spectypes.MessageID, slot phase0.Slot, round specqbft.Round) (*spectypes.SSVMessage, error) {
 	td := types.TimeoutData{
-		Height: height,
-		Round:  round,
+		Slot:  slot,
+		Round: round,
 	}
 	data, err := json.Marshal(td)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to marshal timeout data")
+		return nil, fmt.Errorf("failed to marshal timeout data: %w", err)
 	}
 	eventMsg := &types.EventMsg{
 		Type: types.Timeout,
@@ -75,7 +73,7 @@ func (v *Validator) createTimerMessage(identifier spectypes.MessageID, height sp
 
 	eventMsgData, err := eventMsg.Encode()
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to encode timeout signed msg")
+		return nil, fmt.Errorf("failed to encode timeout signed msg: %w", err)
 	}
 	return &spectypes.SSVMessage{
 		MsgType: message.SSVEventMsgType,
@@ -84,47 +82,53 @@ func (v *Validator) createTimerMessage(identifier spectypes.MessageID, height sp
 	}, nil
 }
 
-func (c *Committee) onTimeout(ctx context.Context, logger *zap.Logger, identifier spectypes.MessageID, height specqbft.Height) roundtimer.OnRoundTimeoutF {
-	return func(round specqbft.Round) {
-		c.mtx.RLock() // read-lock for c.Queues, c.Runners
-		defer c.mtx.RUnlock()
+// newQBFTRoundTimerF returns a QBFTRoundTimerF that builds a RoundTimer for a Committee QBFT instance and
+// wires round-timeouts back into the slot-keyed queue as event messages. The returned factory closes over
+// identifier so each runner gets a factory bound to the committee's msg ID.
+func (c *Committee) newQBFTRoundTimerF(runnerIdentifier spectypes.MessageID) ssv.QBFTRoundTimerF {
+	return func(ctx context.Context, logger *zap.Logger, slot phase0.Slot) ssv.QBFTRoundTimer {
+		callback := func(round specqbft.Round) {
+			c.mtx.RLock() // read-lock for c.Queues
+			defer c.mtx.RUnlock()
 
-		dr := c.Runners[phase0.Slot(height)]
-		if dr == nil { // only happens when we prune expired runners
-			logger.Debug("❗no committee runner found for slot")
-			return
-		}
+			// If the relevant queue hasn't been initialized yet, there isn't a running duty we can issue a
+			// timeout for, in practice this should never happen - but we need to handle this just in case.
+			// This is also possible if the queue got pruned already (due to becoming old and irrelevant).
+			// A map miss on c.Queues returns the zero value of the queue.Queue interface (nil), so the
+			// nil-check below covers both "slot absent" and "stored value is nil" cases in one go.
+			q := c.Queues[slot]
+			if q == nil {
+				logger.Debug("couldn't schedule timeout event due to missing queue (likely was pruned)")
+				return
+			}
 
-		hasDuty := dr.HasRunningDuty()
-		if !hasDuty {
-			return
-		}
+			msg, err := c.createTimerMessage(runnerIdentifier, slot, round)
+			if err != nil {
+				logger.Error("❌ failed to create timer msg", zap.Error(err))
+				return
+			}
+			dec, err := queue.DecodeSSVMessage(msg)
+			if err != nil {
+				logger.Error("❌ failed to decode timer msg", zap.Error(err))
+				return
+			}
 
-		msg, err := c.createTimerMessage(identifier, height, round)
-		if err != nil {
-			logger.Debug("❗ failed to create timer msg", zap.Error(err))
-			return
+			if pushed := q.TryPush(dec); !pushed {
+				logger.Error("❗️ dropping timeout message because the queue is full", fields.RunnerRole(runnerIdentifier.GetRoleType()))
+			}
 		}
-		dec, err := queue.DecodeSSVMessage(msg)
-		if err != nil {
-			logger.Debug("❌ failed to decode timer msg", zap.Error(err))
-			return
-		}
-
-		if pushed := c.Queues[phase0.Slot(height)].Q.TryPush(dec); !pushed {
-			logger.Warn("❗️ dropping timeout message because the queue is full", fields.RunnerRole(identifier.GetRoleType()))
-		}
+		return roundtimer.New(ctx, c.networkConfig.Beacon, runnerIdentifier.GetRoleType(), slot, callback)
 	}
 }
 
-func (c *Committee) createTimerMessage(identifier spectypes.MessageID, height specqbft.Height, round specqbft.Round) (*spectypes.SSVMessage, error) {
+func (c *Committee) createTimerMessage(identifier spectypes.MessageID, slot phase0.Slot, round specqbft.Round) (*spectypes.SSVMessage, error) {
 	td := types.TimeoutData{
-		Height: height,
-		Round:  round,
+		Slot:  slot,
+		Round: round,
 	}
 	data, err := json.Marshal(td)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to marshal timeout data")
+		return nil, fmt.Errorf("failed to marshal timeout data: %w", err)
 	}
 	eventMsg := &types.EventMsg{
 		Type: types.Timeout,
@@ -133,7 +137,7 @@ func (c *Committee) createTimerMessage(identifier spectypes.MessageID, height sp
 
 	eventMsgData, err := eventMsg.Encode()
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to encode timeout signed msg")
+		return nil, fmt.Errorf("failed to encode timeout signed msg: %w", err)
 	}
 	return &spectypes.SSVMessage{
 		MsgType: message.SSVEventMsgType,

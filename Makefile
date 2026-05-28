@@ -29,7 +29,7 @@ RUN_TOOL=go tool -modfile=tool.mod
 SSVSIGNER_RUN_TOOL=go tool -modfile=../tool.mod
 
 .PHONY: lint
-lint: golangci-lint deadcode-lint openapi-lint
+lint: golangci-lint deadcode-lint openapi-lint ssvsigner-boundary-lint
 
 .PHONY: golangci-lint
 golangci-lint:
@@ -44,37 +44,33 @@ ssvsigner-golangci-lint:
 deadcode-lint:
 	./scripts/deadcode.sh
 
-.PHONY: full-test
-full-test:
-	@echo "Running all tests"
-	@go test -tags blst_enabled -timeout 20m ${COV_CMD} -p 1 -v ./...
-	@cd ssvsigner && go test -tags blst_enabled -timeout 20m ${COV_CMD} -p 1 -v ./...
+.PHONY: ssvsigner-boundary-lint
+ssvsigner-boundary-lint:
+	./scripts/ssvsigner_boundary.sh
 
 .PHONY: unit-test
 unit-test:
 	@echo "Running unit tests"
-	@go test -tags "blst_enabled lfs" -timeout 20m -race -covermode=atomic -coverprofile=coverage.out -p 1 `go list ./... | grep -ve "spectest\|ssv/scripts/"`
+	@go test -tags "blst_enabled lfs" -timeout 10m -race -covermode=atomic -coverprofile=coverage1.out -p 16 -parallel 256 `go list ./... | grep -ve "spectest\|ssv/scripts/\|/network/p2p"`
+	# running tests in `./network/p2p` separately because they get flaky when run concurrently with others for some reason
+	@go test -tags "blst_enabled lfs" -timeout 10m -race -covermode=atomic -coverprofile=coverage2.out -p 16 -parallel 256 ./network/p2p
+	@cat coverage1.out > coverage.out && tail -n +2 coverage2.out >> coverage.out
+
+.PHONY: unit-test-all
+unit-test-all:
+	@$(MAKE) unit-test
 	@$(MAKE) ssvsigner-test
 
 .PHONY: ssvsigner-test
 ssvsigner-test:
 	@echo "Running ssv-signer unit tests"
-	@cd ssvsigner && go test -tags blst_enabled -timeout 20m -race -covermode=atomic -coverprofile=coverage.out -p 1 `go list ./... | grep -ve "ssvsigner/e2e"`
+	@cd ssvsigner && go test -tags blst_enabled -timeout 10m -race -covermode=atomic -coverprofile=coverage.out -p 16 -parallel 256 `go list ./... | grep -ve "ssvsigner/e2e"`
 
 .PHONY: spec-test
 spec-test:
 	@echo "Running spec tests"
-	@go test -tags blst_enabled -timeout 90m ${COV_CMD} -race -count=1 -p 1 -v `go list ./... | grep spectest`
-
-.PHONY: all-spec-test-raceless
-all-spec-test-raceless:
-	@echo "Running spec tests"
-	@go test -tags blst_enabled -timeout 90m ${COV_CMD} -p 1 -v ./protocol/...
-
-.PHONY: spec-test-raceless
-spec-test-raceless:
-	@echo "Running spec tests without race flag"
-	@go test -tags blst_enabled -timeout 20m -count=1 -p 1 -v `go list ./... | grep spectest`
+	@go test -tags blst_enabled -timeout 10m ${COV_CMD} -race -p 16 -parallel 256 ./protocol/v2/qbft/spectest
+	@go test -tags blst_enabled -timeout 10m ${COV_CMD} -race -p 16 -parallel 256 ./protocol/v2/ssv/spectest
 
 .PHONY: benchmark
 benchmark:

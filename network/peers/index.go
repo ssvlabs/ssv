@@ -1,12 +1,12 @@
 package peers
 
 import (
+	"errors"
 	"io"
 
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	ma "github.com/multiformats/go-multiaddr"
-	"github.com/pkg/errors"
 
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/records"
@@ -96,7 +96,8 @@ type SubnetsStats struct {
 }
 
 // SubnetsIndex stores information on subnets.
-// it keeps track of subnets but doesn't mind regards actual connections that we have.
+// It keeps track of subnets based on what peers advertise, but the actual subnets these peers have
+// might change by the time we directly connect with them.
 type SubnetsIndex interface {
 	// UpdatePeerSubnets updates the given peer's subnets
 	UpdatePeerSubnets(id peer.ID, subnets commons.Subnets) bool

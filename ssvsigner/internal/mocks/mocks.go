@@ -17,12 +17,24 @@ var (
 
 // TestOperatorPublicKey implements a mock operator public key for testing.
 type TestOperatorPublicKey struct {
-	PubKeyBase64 string
-	Base64Error  error
+	PubKeyBase64  string
+	Base64Error   error
+	EncryptResult []byte
+	EncryptError  error
+	EncryptFunc   func([]byte) ([]byte, error)
 }
 
 // Encrypt mocks encryption with the public key.
 func (t *TestOperatorPublicKey) Encrypt(data []byte) ([]byte, error) {
+	if t.EncryptFunc != nil {
+		return t.EncryptFunc(data)
+	}
+	if t.EncryptError != nil {
+		return nil, t.EncryptError
+	}
+	if t.EncryptResult != nil {
+		return t.EncryptResult, nil
+	}
 	return data, nil
 }
 
@@ -43,8 +55,11 @@ type TestOperatorPrivateKey struct {
 	StorageHashValue      []byte
 	EkmHashValue          []byte
 	EkmEncryptionKeyValue []byte
+	EKMEncryptionKeyFunc  func() ([]byte, error)
+	EKMEncryptionKeyError error
 	DecryptResult         []byte
 	DecryptError          error
+	DecryptFunc           func([]byte) ([]byte, error)
 	SignResult            []byte
 	SignError             error
 	PublicKey             keys.OperatorPublicKey
@@ -65,7 +80,10 @@ func (t *TestOperatorPrivateKey) Public() keys.OperatorPublicKey {
 }
 
 // Decrypt mocks decryption of encrypted data.
-func (t *TestOperatorPrivateKey) Decrypt([]byte) ([]byte, error) {
+func (t *TestOperatorPrivateKey) Decrypt(data []byte) ([]byte, error) {
+	if t.DecryptFunc != nil {
+		return t.DecryptFunc(data)
+	}
 	if t.DecryptError != nil {
 		return nil, t.DecryptError
 	}
@@ -85,6 +103,12 @@ func (t *TestOperatorPrivateKey) EKMHash() []byte {
 
 // EKMEncryptionKey returns a mock EKM encryption key.
 func (t *TestOperatorPrivateKey) EKMEncryptionKey() ([]byte, error) {
+	if t.EKMEncryptionKeyFunc != nil {
+		return t.EKMEncryptionKeyFunc()
+	}
+	if t.EKMEncryptionKeyError != nil {
+		return nil, t.EKMEncryptionKeyError
+	}
 	return t.EkmEncryptionKeyValue, nil
 }
 

@@ -47,7 +47,6 @@ func TestNewMulti(t *testing.T) {
 		require.Equal(t, zap.NewNop(), mc.logger)
 		require.EqualValues(t, DefaultReqTimeout, mc.reqTimeout)
 		require.EqualValues(t, DefaultReqRetryDelay, mc.reqRetryDelay)
-		require.EqualValues(t, DefaultFollowDistance, mc.followDistance)
 		require.EqualValues(t, DefaultHealthInvalidationInterval, mc.healthInvalidationInterval)
 		require.EqualValues(t, DefaultSyncDistanceTolerance, mc.syncDistanceTolerance)
 	})
@@ -66,7 +65,7 @@ func TestNewMulti(t *testing.T) {
 		contractAddr := ethcommon.HexToAddress("0x1234")
 
 		customLogger := zap.NewExample()
-		const customTimeout = 100 * time.Millisecond
+		const customTimeout = 400 * time.Millisecond
 		const customSyncDistanceTolerance = 12
 
 		mc, err := NewMulti(

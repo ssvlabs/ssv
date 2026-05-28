@@ -16,11 +16,6 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 )
 
-var (
-	// ErrTopicNotReady happens when trying to access a topic which is not ready yet
-	ErrTopicNotReady = errors.New("topic is not ready")
-)
-
 // Controller is an interface for managing pubsub topics
 type Controller interface {
 	// Subscribe subscribes to the given topic
@@ -46,6 +41,11 @@ type PubsubMessageHandler func(context.Context, string, *pubsub.Message) error
 type messageValidator interface {
 	ValidatorForTopic(topic string) func(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult
 }
+
+// topicValidatorTimeout bounds how long a single message validation may occupy a pubsub
+// validation worker. It should leave enough budget for committee checks, lock waiting,
+// and signature verification without leaving the DoS window effectively unbounded.
+const topicValidatorTimeout = 5 * time.Second
 
 // topicsCtrl implements Controller
 type topicsCtrl struct {
@@ -115,18 +115,18 @@ func (ctrl *topicsCtrl) UpdateScoreParams() error {
 	var errs error
 	topics := ctrl.ps.GetTopics()
 	for _, topicName := range topics {
-		topic := ctrl.container.Get(topicName)
+		topic := ctrl.container.Lookup(topicName)
 		if topic == nil {
-			errs = errors.Join(errs, fmt.Errorf("topic %s is not ready; ", topicName))
+			errs = errors.Join(errs, fmt.Errorf("topic %s not found in cache", topicName))
 			continue
 		}
 		p := ctrl.scoreParamsFactory(topicName)
 		if p == nil {
-			errs = errors.Join(errs, fmt.Errorf("score params for topic %s is nil; ", topicName))
+			errs = errors.Join(errs, fmt.Errorf("score params for topic %s is nil", topicName))
 			continue
 		}
 		if err := topic.SetScoreParams(p); err != nil {
-			errs = errors.Join(errs, fmt.Errorf("could not set score params for topic %s: %w; ", topicName, err))
+			errs = errors.Join(errs, fmt.Errorf("set score params for topic %s: %w", topicName, err))
 			continue
 		}
 	}
@@ -149,7 +149,7 @@ func (ctrl *topicsCtrl) Peers(name string) ([]peer.ID, error) {
 		return ctrl.ps.ListPeers(""), nil
 	}
 	name = commons.GetTopicFullName(name)
-	topic := ctrl.container.Get(name)
+	topic := ctrl.container.Lookup(name)
 	if topic == nil {
 		return nil, nil
 	}
@@ -306,9 +306,7 @@ func (ctrl *topicsCtrl) setupTopicValidator(name string) error {
 			ctrl.logger.Debug("failed to unregister topic validator", zap.String("topic", name), zap.Error(err))
 		}
 
-		var opts []pubsub.ValidatorOpt
-		// Optional: set a timeout for message validation
-		// opts = append(opts, pubsub.WithValidatorTimeout(time.Second))
+		opts := []pubsub.ValidatorOpt{pubsub.WithValidatorTimeout(topicValidatorTimeout)}
 
 		err = ctrl.ps.RegisterTopicValidator(name, ctrl.msgValidator.ValidatorForTopic(name), opts...)
 		if err != nil {

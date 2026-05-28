@@ -36,7 +36,7 @@ const (
 )
 
 type ValidatorRegistrationRunner struct {
-	BaseRunner *BaseRunner
+	*BaseRunner
 
 	beacon                         beacon.BeaconNode
 	network                        specqbft.Network
@@ -48,53 +48,52 @@ type ValidatorRegistrationRunner struct {
 	gasLimit uint64
 }
 
-func NewValidatorRegistrationRunner(
-	networkConfig *networkconfig.Network,
-	share map[phase0.ValidatorIndex]*spectypes.Share,
-	beacon beacon.BeaconNode,
-	network specqbft.Network,
-	signer ekm.BeaconSigner,
-	operatorSigner ssvtypes.OperatorSigner,
-	validatorRegistrationSubmitter ValidatorRegistrationSubmitter,
-	feeRecipientProvider feeRecipientProvider,
-	gasLimit uint64,
-) (Runner, error) {
-	if len(share) != 1 {
+// ValidatorRegistrationRunnerOptions bundles all dependencies required by NewValidatorRegistrationRunner.
+type ValidatorRegistrationRunnerOptions struct {
+	BaseRunnerOptions
+
+	ValidatorRegistrationSubmitter ValidatorRegistrationSubmitter
+	FeeRecipientProvider           feeRecipientProvider
+	GasLimit                       uint64
+}
+
+func NewValidatorRegistrationRunner(opts ValidatorRegistrationRunnerOptions) (Runner, error) {
+	if len(opts.Share) != 1 {
 		return nil, fmt.Errorf("must have one share")
 	}
 
 	return &ValidatorRegistrationRunner{
 		BaseRunner: &BaseRunner{
 			RunnerRoleType: spectypes.RoleValidatorRegistration,
-			NetworkConfig:  networkConfig,
-			Share:          share,
+			NetworkConfig:  opts.NetworkConfig,
+			Share:          opts.Share,
 		},
 
-		beacon:                         beacon,
-		network:                        network,
-		signer:                         signer,
-		operatorSigner:                 operatorSigner,
-		validatorRegistrationSubmitter: validatorRegistrationSubmitter,
-		feeRecipientProvider:           feeRecipientProvider,
+		beacon:                         opts.Beacon,
+		network:                        opts.Network,
+		signer:                         opts.Signer,
+		operatorSigner:                 opts.OperatorSigner,
+		validatorRegistrationSubmitter: opts.ValidatorRegistrationSubmitter,
+		feeRecipientProvider:           opts.FeeRecipientProvider,
 
-		gasLimit: gasLimit,
+		gasLimit: opts.GasLimit,
 	}, nil
 }
 
 func (r *ValidatorRegistrationRunner) StartNewDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty, quorum uint64) error {
-	return r.BaseRunner.baseStartNewNonBeaconDuty(ctx, logger, r, duty.(*spectypes.ValidatorDuty), quorum)
-}
+	validatorDuty, err := validatorDutyFromDuty(duty)
+	if err != nil {
+		return err
+	}
 
-// HasRunningDuty returns true if a duty is already running (StartNewDuty called and returned nil)
-func (r *ValidatorRegistrationRunner) HasRunningDuty() bool {
-	return r.BaseRunner.hasRunningDuty()
+	return r.baseStartNewNonBeaconDuty(ctx, logger, r, validatorDuty, quorum)
 }
 
 func (r *ValidatorRegistrationRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
 	// Reuse the existing span instead of generating new one to keep tracing-data lightweight.
 	span := trace.SpanFromContext(ctx)
 
-	hasQuorum, roots, err := r.BaseRunner.basePreConsensusMsgProcessing(ctx, logger, r, signedMsg)
+	hasQuorum, roots, err := r.basePreConsensusMsgProcessing(ctx, logger, r, signedMsg)
 	if errors.Is(err, ErrNoDutyAssigned) || errors.Is(err, ErrRunningDutyFinished) {
 		// Since we are re-using the same runner for different duties, ErrRunningDutyFinished error
 		// also needs to be retried.
@@ -113,16 +112,21 @@ func (r *ValidatorRegistrationRunner) ProcessPreConsensus(ctx context.Context, l
 	root := roots[0]
 
 	span.AddEvent("reconstructing beacon signature", trace.WithAttributes(observability.BeaconBlockRootAttribute(root)))
-	fullSig, err := r.state().ReconstructBeaconSig(r.state().PreConsensusContainer, root, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
+	fullSig, err := r.State.ReconstructBeaconSig(r.State.PreConsensusContainer, root, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
 	if err != nil {
 		// If the reconstructed signature verification failed, fall back to verifying each partial signature
-		r.BaseRunner.FallBackAndVerifyEachSignature(r.state().PreConsensusContainer, root, r.GetShare().Committee, r.GetShare().ValidatorIndex)
+		r.FallBackAndVerifyEachSignature(r.State.PreConsensusContainer, root, r.GetShare().Committee, r.GetShare().ValidatorIndex)
 		return fmt.Errorf("got pre-consensus quorum but it has invalid signatures: %w", err)
 	}
 	specSig := phase0.BLSSignature{}
 	copy(specSig[:], fullSig)
 
-	registration, err := r.buildValidatorRegistration(r.BaseRunner.State.CurrentDuty.DutySlot())
+	validatorDuty, err := r.currentValidatorDuty()
+	if err != nil {
+		return fmt.Errorf("current validator duty: %w", err)
+	}
+
+	registration, err := r.buildValidatorRegistration(validatorDuty.DutySlot())
 	if err != nil {
 		return fmt.Errorf("could not calculate validator registration: %w", err)
 	}
@@ -147,7 +151,7 @@ func (r *ValidatorRegistrationRunner) ProcessPreConsensus(ctx context.Context, l
 		zap.String("signature", hex.EncodeToString(specSig[:])),
 	)
 
-	r.state().Finished = true
+	r.markDutyFinished()
 	const dutyFinishedEvent = "✔️successfully finished duty processing"
 	logger.Info(dutyFinishedEvent)
 	span.AddEvent(dutyFinishedEvent)
@@ -159,19 +163,16 @@ func (r *ValidatorRegistrationRunner) ProcessConsensus(ctx context.Context, logg
 	return spectypes.NewError(spectypes.ValidatorRegistrationNoConsensusPhaseErrorCode, "no consensus phase for validator registration")
 }
 
-func (r *ValidatorRegistrationRunner) OnTimeoutQBFT(ctx context.Context, logger *zap.Logger, timeoutData *ssvtypes.TimeoutData) error {
-	return r.BaseRunner.OnTimeoutQBFT(ctx, logger, timeoutData)
-}
-
 func (r *ValidatorRegistrationRunner) ProcessPostConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
 	return spectypes.NewError(spectypes.ValidatorRegistrationNoPostConsensusPhaseErrorCode, "no post consensus phase for validator registration")
 }
 
 func (r *ValidatorRegistrationRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
-	if r.BaseRunner.State == nil || r.BaseRunner.State.CurrentDuty == nil {
-		return nil, spectypes.DomainError, fmt.Errorf("no running duty to compute preconsensus roots and domain")
+	currentDutySlot, err := r.currentDutySlot()
+	if err != nil {
+		return nil, spectypes.DomainError, fmt.Errorf("current duty slot: %w", err)
 	}
-	vr, err := r.buildValidatorRegistration(r.BaseRunner.State.CurrentDuty.DutySlot())
+	vr, err := r.buildValidatorRegistration(currentDutySlot)
 	if err != nil {
 		return nil, spectypes.DomainError, fmt.Errorf("could not calculate validator registration: %w", err)
 	}
@@ -187,7 +188,12 @@ func (r *ValidatorRegistrationRunner) executeDuty(ctx context.Context, logger *z
 	// Reuse the existing span instead of generating new one to keep tracing-data lightweight.
 	span := trace.SpanFromContext(ctx)
 
-	vr, err := r.buildValidatorRegistration(duty.DutySlot())
+	validatorDuty, err := validatorDutyFromDuty(duty)
+	if err != nil {
+		return err
+	}
+
+	vr, err := r.buildValidatorRegistration(validatorDuty.DutySlot())
 	if err != nil {
 		return fmt.Errorf("could not calculate validator registration: %w", err)
 	}
@@ -197,9 +203,10 @@ func (r *ValidatorRegistrationRunner) executeDuty(ctx context.Context, logger *z
 	msg, err := signBeaconObject(
 		ctx,
 		r,
-		duty.(*spectypes.ValidatorDuty),
+		r.NetworkConfig,
+		validatorDuty,
 		vr,
-		duty.DutySlot(),
+		validatorDuty.DutySlot(),
 		spectypes.DomainApplicationBuilder,
 	)
 	if err != nil {
@@ -208,38 +215,14 @@ func (r *ValidatorRegistrationRunner) executeDuty(ctx context.Context, logger *z
 
 	msgs := &spectypes.PartialSignatureMessages{
 		Type:     spectypes.ValidatorRegistrationPartialSig,
-		Slot:     duty.DutySlot(),
+		Slot:     validatorDuty.DutySlot(),
 		Messages: []*spectypes.PartialSignatureMessage{msg},
 	}
 
-	msgID := spectypes.NewMsgID(r.BaseRunner.NetworkConfig.DomainType, r.GetShare().ValidatorPubKey[:], r.BaseRunner.RunnerRoleType)
-	encodedMsg, err := msgs.Encode()
-	if err != nil {
-		return fmt.Errorf("could not encode validator registration partial sig message: %w", err)
-	}
+	logger.Debug("signing and broadcasting validator registration partial sig", zap.Any("validator_registration", vr))
 
-	ssvMsg := &spectypes.SSVMessage{
-		MsgType: spectypes.SSVPartialSignatureMsgType,
-		MsgID:   msgID,
-		Data:    encodedMsg,
-	}
-
-	span.AddEvent("signing SSV message")
-	sig, err := r.operatorSigner.SignSSVMessage(ssvMsg)
-	if err != nil {
-		return fmt.Errorf("could not sign SSVMessage: %w", err)
-	}
-
-	msgToBroadcast := &spectypes.SignedSSVMessage{
-		Signatures:  [][]byte{sig},
-		OperatorIDs: []spectypes.OperatorID{r.operatorSigner.GetOperatorID()},
-		SSVMessage:  ssvMsg,
-	}
-
-	logger.Debug("broadcasting validator registration partial sig", zap.Any("validator_registration", vr))
-
-	if err := r.GetNetwork().Broadcast(msgID, msgToBroadcast); err != nil {
-		return fmt.Errorf("can't broadcast partial randao sig: %w", err)
+	if err := r.signAndBroadcastPartialSigMsgs(ctx, r.network, r.operatorSigner, r.GetShare().ValidatorPubKey[:], msgs); err != nil {
+		return fmt.Errorf("could not sign/broadcast validator registration partial sig: %w", err)
 	}
 
 	return nil
@@ -260,75 +243,57 @@ func (r *ValidatorRegistrationRunner) buildValidatorRegistration(slot phase0.Slo
 		gasLimit = DefaultGasLimit
 	}
 
-	epoch := r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(slot)
+	epoch := r.NetworkConfig.EstimatedEpochAtSlot(slot)
 	return &v1.ValidatorRegistration{
 		FeeRecipient: feeRecipient,
 		GasLimit:     gasLimit,
-		Timestamp:    r.BaseRunner.NetworkConfig.EpochStartTime(epoch),
+		Timestamp:    r.NetworkConfig.EpochStartTime(epoch),
 		Pubkey:       phase0.BLSPubKey(validatorPubKey),
 	}, nil
-}
-
-func (r *ValidatorRegistrationRunner) HasRunningQBFTInstance() bool {
-	return r.BaseRunner.HasRunningQBFTInstance()
-}
-
-func (r *ValidatorRegistrationRunner) HasAcceptedProposalForCurrentRound() bool {
-	return r.BaseRunner.HasAcceptedProposalForCurrentRound()
-}
-
-func (r *ValidatorRegistrationRunner) GetShares() map[phase0.ValidatorIndex]*spectypes.Share {
-	return r.BaseRunner.GetShares()
-}
-
-func (r *ValidatorRegistrationRunner) GetRole() spectypes.RunnerRole {
-	return r.BaseRunner.GetRole()
-}
-
-func (r *ValidatorRegistrationRunner) GetLastHeight() specqbft.Height {
-	return r.BaseRunner.GetLastHeight()
-}
-
-func (r *ValidatorRegistrationRunner) GetLastRound() specqbft.Round {
-	return r.BaseRunner.GetLastRound()
-}
-
-func (r *ValidatorRegistrationRunner) GetStateRoot() ([32]byte, error) {
-	return r.BaseRunner.GetStateRoot()
-}
-
-func (r *ValidatorRegistrationRunner) SetTimeoutFunc(fn TimeoutF) {
-	r.BaseRunner.SetTimeoutFunc(fn)
 }
 
 func (r *ValidatorRegistrationRunner) GetNetwork() specqbft.Network {
 	return r.network
 }
 
-func (r *ValidatorRegistrationRunner) GetNetworkConfig() *networkconfig.Network {
-	return r.BaseRunner.NetworkConfig
-}
-
 func (r *ValidatorRegistrationRunner) GetBeaconNode() beacon.BeaconNode {
 	return r.beacon
-}
-
-func (r *ValidatorRegistrationRunner) GetShare() *spectypes.Share {
-	for _, share := range r.BaseRunner.Share {
-		return share
-	}
-	return nil
-}
-
-func (r *ValidatorRegistrationRunner) state() *State {
-	return r.BaseRunner.State
 }
 
 func (r *ValidatorRegistrationRunner) GetSigner() ekm.BeaconSigner {
 	return r.signer
 }
+
 func (r *ValidatorRegistrationRunner) GetOperatorSigner() ssvtypes.OperatorSigner {
 	return r.operatorSigner
+}
+
+func (r *ValidatorRegistrationRunner) MarshalJSON() ([]byte, error) {
+	type validatorRegistrationRunnerJSON struct {
+		BaseRunner *BaseRunner `json:"BaseRunner"`
+	}
+
+	return json.Marshal(&validatorRegistrationRunnerJSON{
+		BaseRunner: r.BaseRunner,
+	})
+}
+
+func (r *ValidatorRegistrationRunner) UnmarshalJSON(data []byte) error {
+	type validatorRegistrationRunnerJSON struct {
+		BaseRunner *BaseRunner `json:"BaseRunner"`
+	}
+
+	aux := &validatorRegistrationRunnerJSON{}
+	if err := json.Unmarshal(data, aux); err != nil {
+		return err
+	}
+
+	if aux.BaseRunner == nil {
+		return fmt.Errorf("missing BaseRunner")
+	}
+
+	r.BaseRunner = aux.BaseRunner
+	return nil
 }
 
 // Encode returns the encoded struct in bytes or error
@@ -338,7 +303,7 @@ func (r *ValidatorRegistrationRunner) Encode() ([]byte, error) {
 
 // Decode returns error if decoding failed
 func (r *ValidatorRegistrationRunner) Decode(data []byte) error {
-	return json.Unmarshal(data, &r)
+	return json.Unmarshal(data, r)
 }
 
 // GetRoot returns the root used for signing and verification

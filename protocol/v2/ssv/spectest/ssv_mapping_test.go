@@ -1,6 +1,7 @@
 package spectest
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -9,9 +10,6 @@ import (
 	"testing"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
-
 	specssv "github.com/ssvlabs/ssv-spec/ssv"
 	"github.com/ssvlabs/ssv-spec/ssv/spectest/tests"
 	"github.com/ssvlabs/ssv-spec/ssv/spectest/tests/committee"
@@ -22,12 +20,15 @@ import (
 	"github.com/ssvlabs/ssv-spec/ssv/spectest/tests/valcheck"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	ssvtesting "github.com/ssvlabs/ssv/protocol/v2/ssv/testing"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
@@ -40,7 +41,7 @@ func TestSSVMapping(t *testing.T) {
 	jsonTests, err := storage.GenerateSpecTestJSON(path, "ssv")
 	require.NoError(t, err)
 
-	logger := log.TestLogger(t)
+	logger := protocoltesting.SpectestLogger(t)
 
 	untypedTests := map[string]any{}
 	if err := json.Unmarshal(jsonTests, &untypedTests); err != nil {
@@ -74,7 +75,7 @@ func prepareTest(t *testing.T, logger *zap.Logger, name string, test any) *runna
 	testType := strings.Split(name, "_")[0]
 
 	switch testType {
-	case reflect.TypeOf(&tests.MsgProcessingSpecTest{}).String():
+	case reflect.TypeFor[*tests.MsgProcessingSpecTest]().String():
 		typedTest := msgProcessingSpecTestFromMap(t, test.(map[string]any))
 
 		return &runnable{
@@ -83,7 +84,7 @@ func prepareTest(t *testing.T, logger *zap.Logger, name string, test any) *runna
 				RunMsgProcessing(t, typedTest)
 			},
 		}
-	case reflect.TypeOf(&tests.MultiMsgProcessingSpecTest{}).String():
+	case reflect.TypeFor[*tests.MultiMsgProcessingSpecTest]().String():
 		typedTest := &MultiMsgProcessingSpecTest{
 			Name: test.(map[string]any)["Name"].(string),
 		}
@@ -98,7 +99,7 @@ func prepareTest(t *testing.T, logger *zap.Logger, name string, test any) *runna
 				typedTest.Run(t)
 			},
 		}
-	case reflect.TypeOf(&valcheck.SpecTest{}).String():
+	case reflect.TypeFor[*valcheck.SpecTest]().String():
 		byts, err := json.Marshal(test)
 		require.NoError(t, err)
 		specTest := &valcheck.SpecTest{}
@@ -112,7 +113,7 @@ func prepareTest(t *testing.T, logger *zap.Logger, name string, test any) *runna
 				typedTest.Run(t)
 			},
 		}
-	case reflect.TypeOf(&valcheck.MultiSpecTest{}).String():
+	case reflect.TypeFor[*valcheck.MultiSpecTest]().String():
 		byts, err := json.Marshal(test)
 		require.NoError(t, err)
 		specTest := &valcheck.MultiSpecTest{}
@@ -130,7 +131,7 @@ func prepareTest(t *testing.T, logger *zap.Logger, name string, test any) *runna
 				typedTest.Run(t)
 			},
 		}
-	case reflect.TypeOf(&synccommitteeaggregator.SyncCommitteeAggregatorProofSpecTest{}).String(): // no use of internal structs so can run as spec test runs TODO: need to use internal signer
+	case reflect.TypeFor[*synccommitteeaggregator.SyncCommitteeAggregatorProofSpecTest]().String(): // no use of internal structs so can run as spec test runs TODO: need to use internal signer
 		byts, err := json.Marshal(test)
 		require.NoError(t, err)
 		typedTest := &synccommitteeaggregator.SyncCommitteeAggregatorProofSpecTest{}
@@ -142,7 +143,7 @@ func prepareTest(t *testing.T, logger *zap.Logger, name string, test any) *runna
 				RunSyncCommitteeAggProof(t, typedTest)
 			},
 		}
-	case reflect.TypeOf(&newduty.MultiStartNewRunnerDutySpecTest{}).String():
+	case reflect.TypeFor[*newduty.MultiStartNewRunnerDutySpecTest]().String():
 		typedTest := &MultiStartNewRunnerDutySpecTest{
 			Name: test.(map[string]any)["Name"].(string),
 		}
@@ -157,7 +158,7 @@ func prepareTest(t *testing.T, logger *zap.Logger, name string, test any) *runna
 				typedTest.Run(t, logger)
 			},
 		}
-	case reflect.TypeOf(&partialsigcontainer.PartialSigContainerTest{}).String():
+	case reflect.TypeFor[*partialsigcontainer.PartialSigContainerTest]().String():
 		byts, err := json.Marshal(test)
 		require.NoError(t, err)
 		typedTest := &partialsigcontainer.PartialSigContainerTest{}
@@ -169,7 +170,7 @@ func prepareTest(t *testing.T, logger *zap.Logger, name string, test any) *runna
 				typedTest.Run(t)
 			},
 		}
-	case reflect.TypeOf(&committee.CommitteeSpecTest{}).String():
+	case reflect.TypeFor[*committee.CommitteeSpecTest]().String():
 		typedTest := committeeSpecTestFromMap(t, logger, test.(map[string]any))
 		return &runnable{
 			name: typedTest.TestName(),
@@ -177,7 +178,7 @@ func prepareTest(t *testing.T, logger *zap.Logger, name string, test any) *runna
 				typedTest.Run(t)
 			},
 		}
-	case reflect.TypeOf(&committee.MultiCommitteeSpecTest{}).String():
+	case reflect.TypeFor[*committee.MultiCommitteeSpecTest]().String():
 		subtests := test.(map[string]any)["Tests"].([]any)
 		typedTests := make([]*CommitteeSpecTest, 0)
 		for _, subtest := range subtests {
@@ -196,7 +197,7 @@ func prepareTest(t *testing.T, logger *zap.Logger, name string, test any) *runna
 			},
 		}
 
-	case reflect.TypeOf(&runnerconstruction.RunnerConstructionSpecTest{}).String():
+	case reflect.TypeFor[*runnerconstruction.RunnerConstructionSpecTest]().String():
 		byts, err := json.Marshal(test)
 		require.NoError(t, err)
 		typedTest := &RunnerConstructionSpecTest{}
@@ -376,7 +377,7 @@ func msgProcessingSpecTestFromMap(t *testing.T, m map[string]any) *MsgProcessing
 }
 
 func fixRunnerForRun(t *testing.T, runnerMap map[string]any, ks *spectestingutils.TestKeySet) runner.Runner {
-	logger := log.TestLogger(t)
+	logger := protocoltesting.SpectestLogger(t)
 
 	baseRunnerMap := runnerMap["BaseRunner"].(map[string]any)
 
@@ -390,11 +391,9 @@ func fixRunnerForRun(t *testing.T, runnerMap map[string]any, ks *spectestingutil
 
 	if baseRunner.QBFTController != nil {
 		baseRunner.QBFTController = fixControllerForRun(logger, baseRunner.QBFTController, ks)
-		if baseRunner.State != nil {
-			if baseRunner.State.RunningInstance != nil {
-				operator := spectestingutils.TestingCommitteeMember(ks)
-				baseRunner.State.RunningInstance = fixInstanceForRun(logger, ks, baseRunner.State.RunningInstance, baseRunner.QBFTController, operator)
-			}
+		if baseRunner.HasStartedQBFTInstance() {
+			operator := spectestingutils.TestingCommitteeMember(ks)
+			baseRunner.State.RunningInstance = fixInstanceForRun(logger, ks, baseRunner.State.RunningInstance, baseRunner.QBFTController, operator)
 		}
 	}
 
@@ -410,15 +409,15 @@ func fixControllerForRun(logger *zap.Logger, contr *controller.Controller, ks *s
 		spectestingutils.NewOperatorSigner(ks, 1),
 		false,
 	)
-	newContr.Height = contr.Height
-	newContr.StoredInstances = contr.StoredInstances
+	newContr.LatestInstanceHeight = contr.LatestInstanceHeight
+	newContr.RecentInstances = contr.RecentInstances
 
-	for i, inst := range newContr.StoredInstances {
+	for i, inst := range newContr.RecentInstances {
 		if inst == nil {
 			continue
 		}
 		operator := spectestingutils.TestingCommitteeMember(ks)
-		newContr.StoredInstances[i] = fixInstanceForRun(logger, ks, inst, newContr, operator)
+		newContr.RecentInstances[i] = fixInstanceForRun(logger, ks, inst, newContr, operator)
 	}
 	return newContr
 }
@@ -432,12 +431,16 @@ func fixInstanceForRun(
 ) *instance.Instance {
 	signer := spectestingutils.NewOperatorSigner(ks, 1)
 	newInst := instance.NewInstance(
+		context.Background(),
 		logger,
 		contr.GetConfig(),
 		share,
 		contr.Identifier,
-		contr.Height,
+		contr.LatestInstanceHeight,
 		signer,
+		func(ctx context.Context, logger *zap.Logger, slot phase0.Slot) ssv.QBFTRoundTimer {
+			return roundtimer.NewTestingTimer()
+		},
 	)
 
 	newInst.State.DecidedValue = inst.State.DecidedValue
@@ -588,7 +591,7 @@ func fixCommitteeForRun(t *testing.T, logger *zap.Logger, committeeMap map[strin
 
 	for slot := range c.Runners {
 		var shareInstance *spectypes.Share
-		for _, share := range c.Runners[slot].BaseRunner.Share {
+		for _, share := range c.Runners[slot].Share {
 			shareInstance = share
 			break
 		}

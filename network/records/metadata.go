@@ -42,6 +42,9 @@ func (nm *NodeMetadata) Decode(data []byte) error {
 }
 
 func (nm *NodeMetadata) Clone() *NodeMetadata {
+	if nm == nil {
+		return nil
+	}
 	cpy := *nm
 	return &cpy
 }

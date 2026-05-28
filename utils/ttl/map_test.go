@@ -1,6 +1,7 @@
 package ttl
 
 import (
+	"context"
 	"encoding/hex"
 	"fmt"
 	"math/rand"
@@ -20,14 +21,14 @@ import (
 func TestNew(t *testing.T) {
 	t.Parallel()
 
-	m := New[uintptr, uintptr](1*time.Hour, 1*time.Hour)
+	m := New[uintptr, uintptr](t.Context(), 1*time.Hour, 1*time.Hour)
 	assert.Equal(t, 0, m.SlowLen())
 }
 
 func TestSetString(t *testing.T) {
 	t.Parallel()
 
-	m := New[int, string](1*time.Hour, 1*time.Hour)
+	m := New[int, string](t.Context(), 1*time.Hour, 1*time.Hour)
 	elephant := "elephant"
 	monkey := "monkey"
 
@@ -53,7 +54,7 @@ func TestSetString(t *testing.T) {
 func TestSetUint8(t *testing.T) {
 	t.Parallel()
 
-	m := New[uint8, int](1*time.Hour, 1*time.Hour)
+	m := New[uint8, int](t.Context(), 1*time.Hour, 1*time.Hour)
 
 	m.Set(1, 128) // insert
 	value, ok := m.Get(1)
@@ -70,7 +71,7 @@ func TestSetUint8(t *testing.T) {
 func TestSetInt16(t *testing.T) {
 	t.Parallel()
 
-	m := New[int16, int](1*time.Hour, 1*time.Hour)
+	m := New[int16, int](t.Context(), 1*time.Hour, 1*time.Hour)
 
 	m.Set(1, 128) // insert
 	value, ok := m.Get(1)
@@ -87,7 +88,7 @@ func TestSetInt16(t *testing.T) {
 func TestSetFloat32(t *testing.T) {
 	t.Parallel()
 
-	m := New[float32, int](1*time.Hour, 1*time.Hour)
+	m := New[float32, int](t.Context(), 1*time.Hour, 1*time.Hour)
 
 	m.Set(1.1, 128) // insert
 	value, ok := m.Get(1.1)
@@ -104,7 +105,7 @@ func TestSetFloat32(t *testing.T) {
 func TestSetFloat64(t *testing.T) {
 	t.Parallel()
 
-	m := New[float64, int](1*time.Hour, 1*time.Hour)
+	m := New[float64, int](t.Context(), 1*time.Hour, 1*time.Hour)
 
 	m.Set(1.1, 128) // insert
 	value, ok := m.Get(1.1)
@@ -121,7 +122,7 @@ func TestSetFloat64(t *testing.T) {
 func TestSetInt64(t *testing.T) {
 	t.Parallel()
 
-	m := New[int64, int](1*time.Hour, 1*time.Hour)
+	m := New[int64, int](t.Context(), 1*time.Hour, 1*time.Hour)
 
 	m.Set(1, 128) // insert
 	value, ok := m.Get(1)
@@ -138,7 +139,7 @@ func TestSetInt64(t *testing.T) {
 func TestByteArray(t *testing.T) {
 	t.Parallel()
 
-	m := New[[4]byte, int](1*time.Hour, 1*time.Hour)
+	m := New[[4]byte, int](t.Context(), 1*time.Hour, 1*time.Hour)
 
 	m.Set([4]byte{1, 2, 3, 4}, 128) // insert
 	value, ok := m.Get([4]byte{1, 2, 3, 4})
@@ -155,7 +156,7 @@ func TestByteArray(t *testing.T) {
 func TestGetNonExistingItem(t *testing.T) {
 	t.Parallel()
 
-	m := New[int, string](1*time.Hour, 1*time.Hour)
+	m := New[int, string](t.Context(), 1*time.Hour, 1*time.Hour)
 	value, ok := m.Get(1)
 	assert.False(t, ok)
 	assert.Equal(t, "", value)
@@ -164,7 +165,7 @@ func TestGetNonExistingItem(t *testing.T) {
 func TestStringer(t *testing.T) {
 	t.Parallel()
 
-	m := New[int, string](1*time.Hour, 1*time.Hour)
+	m := New[int, string](t.Context(), 1*time.Hour, 1*time.Hour)
 
 	// Test with zero items
 	assert.Equal(t, "[]", m.String())
@@ -183,7 +184,7 @@ func TestStringer(t *testing.T) {
 func TestDelete(t *testing.T) {
 	t.Parallel()
 
-	m := New[int, string](1*time.Hour, 1*time.Hour)
+	m := New[int, string](t.Context(), 1*time.Hour, 1*time.Hour)
 	elephant := "elephant"
 	monkey := "monkey"
 
@@ -211,7 +212,7 @@ func TestDelete(t *testing.T) {
 func TestGetAndDelete(t *testing.T) {
 	t.Parallel()
 
-	m := New[int, string](1*time.Hour, 1*time.Hour)
+	m := New[int, string](t.Context(), 1*time.Hour, 1*time.Hour)
 	value, ok := m.GetAndDelete(1)
 	assert.False(t, ok)
 	assert.Equal(t, "", value)
@@ -229,7 +230,7 @@ func TestGetAndDelete(t *testing.T) {
 func TestRange(t *testing.T) {
 	t.Parallel()
 
-	m := New[int, string](1*time.Hour, 1*time.Hour)
+	m := New[int, string](t.Context(), 1*time.Hour, 1*time.Hour)
 
 	items := map[int]string{}
 	m.Range(func(key int, value string) bool {
@@ -269,7 +270,7 @@ func TestRange(t *testing.T) {
 func TestHashMap_parallel(t *testing.T) {
 	t.Parallel()
 
-	m := New[int, int](1*time.Hour, 1*time.Hour)
+	m := New[int, int](t.Context(), 1*time.Hour, 1*time.Hour)
 
 	maxCount := 10
 	dur := 2 * time.Second
@@ -347,7 +348,7 @@ func TestHashMap_parallel(t *testing.T) {
 func TestHashMap_SetConcurrent(t *testing.T) {
 	t.Parallel()
 
-	m := New[string, int](1*time.Hour, 1*time.Hour)
+	m := New[string, int](t.Context(), 1*time.Hour, 1*time.Hour)
 
 	var wg sync.WaitGroup
 	for i := 0; i < 100; i++ {
@@ -374,7 +375,7 @@ func TestConcurrentInsertDelete(t *testing.T) {
 	t.Parallel()
 
 	for i := 0; i < 200; i++ {
-		l := New[int, int](1*time.Hour, 1*time.Hour)
+		l := New[int, int](t.Context(), 1*time.Hour, 1*time.Hour)
 		l.Set(111, 111)
 		l.Set(222, 222)
 		l.Set(333, 333)
@@ -402,7 +403,7 @@ func TestConcurrentInsertDelete(t *testing.T) {
 func TestGetOrSet(t *testing.T) {
 	t.Parallel()
 
-	m := New[int, string](1*time.Hour, 1*time.Hour)
+	m := New[int, string](t.Context(), 1*time.Hour, 1*time.Hour)
 
 	value, ok := m.GetOrSet(1, "1")
 	assert.False(t, ok)
@@ -416,7 +417,7 @@ func TestGetOrSet(t *testing.T) {
 func TestCompareAndSwap(t *testing.T) {
 	t.Parallel()
 
-	m := New[int, string](1*time.Hour, 1*time.Hour)
+	m := New[int, string](t.Context(), 1*time.Hour, 1*time.Hour)
 
 	ok := m.CompareAndSwap(1, "", "replacing zero value doesn't count as swap, and doesn't even succeed")
 	assert.False(t, ok)
@@ -435,7 +436,7 @@ func TestCompareAndSwap(t *testing.T) {
 func TestGetOrInsertHangIssue67(t *testing.T) {
 	t.Parallel()
 
-	m := New[string, int](1*time.Hour, 1*time.Hour)
+	m := New[string, int](t.Context(), 1*time.Hour, 1*time.Hour)
 
 	var wg sync.WaitGroup
 	key := "key"
@@ -488,7 +489,7 @@ func TestIssue1682(t *testing.T) {
 		go func() {
 			defer wwg.Done()
 
-			m := New[string, validatorStatus](1*time.Hour, 1*time.Hour)
+			m := New[string, validatorStatus](t.Context(), 1*time.Hour, 1*time.Hour)
 			var wg sync.WaitGroup
 			for _, cmtID := range cmtIDs {
 				n := 50 + randSeed().Intn(200)
@@ -548,6 +549,63 @@ func TestIssue1682(t *testing.T) {
 	}
 	wwg.Wait()
 	require.Empty(t, errs)
+}
+
+func TestDeleteCleansTimestampIndex(t *testing.T) {
+	t.Parallel()
+
+	m := New[int, string](t.Context(), time.Hour, time.Hour)
+	m.Set(1, "a")
+	m.Set(2, "b")
+
+	// Delete should clean both the data and the timestamp index.
+	m.Delete(1)
+	assert.Equal(t, 1, m.SlowLen())
+	_, hasTimestamp := m.idxLastUpdatedAt.Get(1)
+	assert.False(t, hasTimestamp, "timestamp should be cleaned on Delete")
+
+	// GetAndDelete should also clean the timestamp index.
+	val, ok := m.GetAndDelete(2)
+	assert.True(t, ok)
+	assert.Equal(t, "b", val)
+	_, hasTimestamp = m.idxLastUpdatedAt.Get(2)
+	assert.False(t, hasTimestamp, "timestamp should be cleaned on GetAndDelete")
+}
+
+func TestCleanupStopsOnCancel(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(t.Context())
+	m := New[int, string](ctx, 50*time.Millisecond, 10*time.Millisecond)
+	m.Set(1, "a")
+	m.Set(2, "b")
+
+	// Verify cleanup is running — entries should expire.
+	require.Eventually(t, func() bool {
+		return m.SlowLen() == 0
+	}, time.Second, 10*time.Millisecond, "entries should be cleaned up")
+
+	// Add new entries to verify cleanup still works.
+	m.Set(3, "c")
+	require.Eventually(t, func() bool {
+		return m.SlowLen() == 0
+	}, time.Second, 10*time.Millisecond, "new entries should also be cleaned up")
+
+	// Cancel and verify no panic — cleanup goroutine should exit cleanly.
+	cancel()
+	select {
+	case <-time.After(400 * time.Millisecond):
+	case <-t.Context().Done():
+	}
+
+	// After cancel, new entries should NOT be cleaned up (goroutine exited).
+	m.Set(4, "d")
+	select {
+	case <-time.After(400 * time.Millisecond):
+	case <-t.Context().Done():
+	}
+	_, ok := m.Get(4)
+	assert.True(t, ok, "entry should persist after context is canceled — cleanup stopped")
 }
 
 func randSeed() *rand.Rand {

@@ -6,52 +6,62 @@ import (
 
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/libp2p/go-libp2p/core/peerstore"
+	ma "github.com/multiformats/go-multiaddr"
 
 	"github.com/ssvlabs/ssv/api"
-	networkpeers "github.com/ssvlabs/ssv/network/peers"
-	"github.com/ssvlabs/ssv/nodeprobe"
+	"github.com/ssvlabs/ssv/hprobe"
+	"github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/network/records"
 )
 
 type Node struct {
 	listenAddresses []string
-	peersIndex      networkpeers.Index
-	topicIndex      TopicIndex
-	network         network.Network
 
-	nodeProber          *nodeprobe.Prober
-	clNodeName          string
-	elNodeName          string
-	eventSyncerNodeName string
+	network    p2pNetwork
+	peersIndex peersIndex
+	topicIndex topicIndex
+
+	healthProber             *hprobe.HealthProber
+	clComponentName          string
+	elComponentName          string
+	eventSyncerComponentName string
 }
 
 func NewNode(
 	listenAddresses []string,
-	peersIndex networkpeers.Index,
-	network network.Network,
-	topicIndex TopicIndex,
-	nodeProber *nodeprobe.Prober,
-	clNodeName string,
-	elNodeName string,
-	eventSyncerNodeName string,
+	peersIndex peersIndex,
+	network p2pNetwork,
+	topicIndex topicIndex,
+	healthProber *hprobe.HealthProber,
+	clComponentName string,
+	elComponentName string,
+	eventSyncerComponentName string,
 ) *Node {
 	return &Node{
-		listenAddresses:     listenAddresses,
-		peersIndex:          peersIndex,
-		topicIndex:          topicIndex,
-		network:             network,
-		nodeProber:          nodeProber,
-		clNodeName:          clNodeName,
-		elNodeName:          elNodeName,
-		eventSyncerNodeName: eventSyncerNodeName,
+		listenAddresses:          listenAddresses,
+		peersIndex:               peersIndex,
+		topicIndex:               topicIndex,
+		network:                  network,
+		healthProber:             healthProber,
+		clComponentName:          clComponentName,
+		elComponentName:          elComponentName,
+		eventSyncerComponentName: eventSyncerComponentName,
 	}
 }
 
 func (h *Node) Identity(w http.ResponseWriter, r *http.Request) error {
 	nodeInfo := h.peersIndex.Self()
 	resp := identityJSON{
-		PeerID:  h.network.LocalPeer(),
-		Subnets: nodeInfo.Metadata.Subnets,
-		Version: nodeInfo.Metadata.NodeVersion,
+		PeerID: h.network.LocalPeer(),
+	}
+	// invariant: setupPeerServices initializes self.Metadata at startup, so on
+	// the live path nodeInfo.Metadata is always non-nil. The guard defends
+	// against a future UpdateSelfRecord caller that returns a NodeInfo without
+	// a Metadata block — cheap insurance and mirrors the peers-handler shape.
+	if nodeInfo != nil && nodeInfo.Metadata != nil {
+		resp.Subnets = nodeInfo.Metadata.Subnets
+		resp.Version = nodeInfo.Metadata.NodeVersion
 	}
 	for _, addr := range h.network.ListenAddresses() {
 		resp.Addresses = append(resp.Addresses, addr.String())
@@ -111,9 +121,9 @@ func (h *Node) Health(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	// Check the health of Ethereum nodes and EventSyncer.
-	resp.BeaconNode = healthStatus{h.nodeProber.Probe(ctx, h.clNodeName)}
-	resp.ExecutionNode = healthStatus{h.nodeProber.Probe(ctx, h.elNodeName)}
-	resp.EventSyncer = healthStatus{h.nodeProber.Probe(ctx, h.eventSyncerNodeName)}
+	resp.BeaconNode = healthStatus{h.healthProber.Probe(ctx, h.clComponentName)}
+	resp.ExecutionNode = healthStatus{h.healthProber.Probe(ctx, h.elComponentName)}
+	resp.EventSyncer = healthStatus{h.healthProber.Probe(ctx, h.eventSyncerComponentName)}
 
 	return api.Render(w, r, resp)
 }
@@ -142,10 +152,51 @@ func (h *Node) peers(peers []peer.ID) []peerJSON {
 		}
 
 		nodeInfo := h.peersIndex.NodeInfo(id)
-		if nodeInfo == nil {
+		if nodeInfo == nil || nodeInfo.Metadata == nil {
+			// Metadata can be nil if the peer sent a NodeInfo envelope without a
+			// metadata block; we reject such peers at handshake time
+			// (verifyTheirNodeInfo), but historical entries from before that fix
+			// — or from a future reader path — should not crash this endpoint.
 			continue
 		}
 		resp[i].Version = nodeInfo.Metadata.NodeVersion
 	}
 	return resp
+}
+
+type p2pNetwork interface {
+	// LocalPeer returns the local peer associated with this network
+	LocalPeer() peer.ID
+
+	// ListenAddresses returns a list of addresses at which this network listens.
+	ListenAddresses() []ma.Multiaddr
+
+	// Peers returns the peers connected
+	Peers() []peer.ID
+
+	// Connectedness returns a state signaling connection capabilities
+	Connectedness(peer.ID) network.Connectedness
+
+	// Peerstore returns the internal peerstore
+	// This is useful to tell the dialer about a new address for a peer.
+	// Or use one of the public keys found out over the network.
+	Peerstore() peerstore.Peerstore
+
+	// ConnsToPeer returns the connections in this Network for given peer.
+	ConnsToPeer(p peer.ID) []network.Conn
+}
+
+type peersIndex interface {
+	// Self returns the current node info
+	Self() *records.NodeInfo
+
+	// NodeInfo returns the NodeInfo of the given peers, or nil if not found.
+	NodeInfo(id peer.ID) *records.NodeInfo
+
+	// GetPeerSubnets returns subnets of the given peer and whether it was found
+	GetPeerSubnets(id peer.ID) (subnets commons.Subnets, ok bool)
+}
+
+type topicIndex interface {
+	PeersByTopic() map[string][]peer.ID
 }

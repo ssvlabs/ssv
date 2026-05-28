@@ -3,11 +3,12 @@ package migrations
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"time"
 
-	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/ekmadapter"
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 
@@ -71,7 +72,7 @@ func (o Options) nodeStorage(logger *zap.Logger) (operatorstorage.Storage, error
 
 // nolint
 func (o Options) signerStorage(logger *zap.Logger) ekm.Storage {
-	return ekm.NewSignerStorage(o.Db, o.BeaconConfig, logger)
+	return ekm.NewSignerStorage(ekmadapter.NewDatabaseAdapter(o.Db), o.BeaconConfig.Name, logger)
 }
 
 // Run executes the migrations.
@@ -100,7 +101,7 @@ func (m Migrations) Run(ctx context.Context, logger *zap.Logger, opt Options) (a
 			},
 		)
 		if err != nil {
-			return applied, errors.Wrapf(err, "migration %q failed", migration.Name)
+			return applied, fmt.Errorf("migration %q failed: %w", migration.Name, err)
 		}
 		applied++
 

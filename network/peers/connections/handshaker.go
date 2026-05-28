@@ -3,17 +3,16 @@ package connections
 import (
 	"context"
 	"encoding/hex"
+	"errors"
+	"fmt"
 	"time"
 
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/p2p/protocol/identify"
-	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-
-	"github.com/ssvlabs/ssv/ssvsigner/keys"
 
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/peers"
@@ -71,7 +70,6 @@ type HandshakerCfg struct {
 	ConnIdx         peers.ConnectionIndex
 	SubnetsIdx      peers.SubnetsIndex
 	IDService       identify.IDService
-	OperatorSigner  keys.OperatorSigner
 	DomainType      spectypes.DomainType
 	SubnetsProvider SubnetsProvider
 }
@@ -109,22 +107,22 @@ func (h *handshaker) Handler() libp2pnetwork.StreamHandler {
 		nodeInfo := &records.NodeInfo{}
 		err = nodeInfo.Consume(request)
 		if err != nil {
-			return errors.Wrap(err, "could not consume node info request")
+			return fmt.Errorf("could not consume node info request: %w", err)
 		}
 
 		// Respond with our own NodeInfo.
 		self, err := h.sealedNodeRecord()
 		if err != nil {
-			return errors.Wrap(err, "could not seal self node info")
+			return fmt.Errorf("could not seal self node info: %w", err)
 		}
 
 		if err := respond(self); err != nil {
-			return errors.Wrap(err, "could not send self node info")
+			return fmt.Errorf("could not send self node info: %w", err)
 		}
 
 		err = h.verifyTheirNodeInfo(logger, pid, nodeInfo)
 		if err != nil {
-			return errors.Wrap(err, "failed verifying their node info")
+			return fmt.Errorf("failed verifying their node info: %w", err)
 		}
 		return nil
 	}
@@ -137,7 +135,7 @@ func (h *handshaker) Handler() libp2pnetwork.StreamHandler {
 		var err error
 		defer func() {
 			if r := recover(); r != nil {
-				err = errors.Errorf("panic: %v", r)
+				err = fmt.Errorf("panic: %v", r)
 			}
 			h.updatePeerInfo(pid, err)
 		}()
@@ -148,6 +146,25 @@ func (h *handshaker) Handler() libp2pnetwork.StreamHandler {
 }
 
 func (h *handshaker) verifyTheirNodeInfo(logger *zap.Logger, sender peer.ID, ni *records.NodeInfo) error {
+	// Resolve the peer's libp2p identify-protocol AgentVersion up front so we
+	// can attach it to both the success and rejection logs below — it's the
+	// single most useful diagnostic for identifying misbehaving clients.
+	agentVersion := peerAgentVersion(h.net, sender)
+
+	if ni.Metadata == nil {
+		// Peers must advertise NodeMetadata in their NodeInfo envelope; without
+		// it the rest of the codebase has no node-version/subnets/etc. to work
+		// with, and downstream readers (e.g. the /v1/node/peers API) can panic
+		// on the missing pointer. Rejecting here keeps such records out of the
+		// peers index entirely.
+		logger.Warn("rejecting handshake: nodeinfo is missing metadata",
+			fields.PeerID(sender),
+			zap.String("networkID", ni.GetNodeInfo().NetworkID),
+			zap.String("agent_version", agentVersion),
+		)
+		return errors.New("nodeinfo is missing metadata")
+	}
+
 	h.updateNodeSubnets(logger, sender, ni.GetNodeInfo())
 
 	if err := h.applyFilters(sender, ni); err != nil {
@@ -160,9 +177,34 @@ func (h *handshaker) verifyTheirNodeInfo(logger *zap.Logger, sender peer.ID, ni 
 		fields.PeerID(sender),
 		zap.Any("metadata", ni.GetNodeInfo().Metadata),
 		zap.String("networkID", ni.GetNodeInfo().NetworkID),
+		zap.String("agent_version", agentVersion),
 	)
 
 	return nil
+}
+
+// peerAgentVersion returns the AgentVersion advertised by the peer through
+// libp2p's identify protocol, or empty string if unavailable. It's looked up
+// from the libp2p peerstore under the well-known "AgentVersion" key (set by
+// the identify protocol on the inbound side automatically).
+//
+// The lookup is best-effort: identify may not have completed yet when we land
+// here, in which case the peerstore returns an error and we yield "" — that's
+// fine for log diagnostics.
+func peerAgentVersion(net libp2pnetwork.Network, pid peer.ID) string {
+	if net == nil {
+		return ""
+	}
+	ps := net.Peerstore()
+	if ps == nil {
+		return ""
+	}
+	val, err := ps.Get(pid, "AgentVersion")
+	if err != nil {
+		return ""
+	}
+	av, _ := val.(string)
+	return av
 }
 
 // Handshake initiates handshake with the given conn
@@ -173,20 +215,20 @@ func (h *handshaker) Handshake(logger *zap.Logger, conn libp2pnetwork.Conn) (err
 	// Update PeerInfo with the result of this handshake.
 	defer func() {
 		if r := recover(); r != nil {
-			err = errors.Errorf("panic: %v", r)
+			err = fmt.Errorf("panic: %v", r)
 		}
 		h.updatePeerInfo(pid, err)
 	}()
 
 	nodeInfo, err = h.requestNodeInfo(logger, conn)
 	if err != nil {
-		err = errors.Wrap(err, "failed requesting node info")
+		err = fmt.Errorf("failed requesting node info: %w", err)
 		return
 	}
 
 	err = h.verifyTheirNodeInfo(logger, pid, nodeInfo)
 	if err != nil {
-		err = errors.Wrap(err, "failed verifying their node info")
+		err = fmt.Errorf("failed verifying their node info: %w", err)
 		return
 	}
 	return
@@ -201,6 +243,10 @@ func (h *handshaker) updatePeerInfo(pid peer.ID, handshakeErr error) {
 
 // updateNodeSubnets tries to update the subnets of the given peer
 func (h *handshaker) updateNodeSubnets(logger *zap.Logger, pid peer.ID, ni *records.NodeInfo) {
+	// invariant: verifyTheirNodeInfo rejects nil-Metadata before calling this,
+	// so ni.Metadata is non-nil on the live handshake path. Kept as
+	// belt-and-suspenders in case the invariant is weakened or this helper is
+	// reused from another call site.
 	if ni.Metadata != nil {
 		subnets, err := commons.SubnetsFromString(ni.Metadata.Subnets)
 		if err == nil {
@@ -230,7 +276,7 @@ func (h *handshaker) requestNodeInfo(logger *zap.Logger, conn libp2pnetwork.Conn
 	nodeInfo := &records.NodeInfo{}
 
 	if err := nodeInfo.Consume(resBytes); err != nil {
-		return nil, errors.Wrap(errConsumingMessage, err.Error())
+		return nil, fmt.Errorf("%w: %s", errConsumingMessage, err.Error())
 	}
 	return nodeInfo, nil
 }
@@ -240,7 +286,7 @@ func (h *handshaker) applyFilters(sender peer.ID, ni *records.NodeInfo) error {
 	for i := range fltrs {
 		err := fltrs[i](sender, ni)
 		if err != nil {
-			return errors.Wrap(errPeerWasFiltered, err.Error())
+			return fmt.Errorf("%w: %s", errPeerWasFiltered, err.Error())
 		}
 	}
 
