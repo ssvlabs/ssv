@@ -40,7 +40,9 @@ type ProgressTracker struct {
 	// rewind alone doesn't help there. The structural fix is to route every
 	// in-renderer-lifetime write through Log, which acquires outMu and performs
 	// a clear + write + redraw triple — so the cursor stays where prevLines
-	// says it is. Writes that bypass Log (anything else on the same FD) can
+	// says it is. Writes that bypass Log (anything else on the same FD), or
+	// writes the test runner relays back to the terminal from a captured FD
+	// (which is why Log is single-destination — see Log's doc-comment), can
 	// still corrupt the display; the load-bearing invariant is "every write to
 	// p.w goes through outMu, and outMu callers leave prevLines accurate".
 	//
@@ -93,16 +95,10 @@ const (
 	minBarCells = 8
 )
 
-// stderr is the writer Log mirrors to when stderr is a captured (non-TTY) FD
-// different from the tracker's writer (e.g. on `... 2>&1 | tee out.log`).
-// Package-level for test substitution; production callers leave it at
-// os.Stderr.
+// stderr is Log's fallback destination before StartRenderer has set p.w.
+// Held in a package var (not a hard-coded os.Stderr reference) so
+// TestLog_BeforeStart can swap in a buffer; production leaves it at os.Stderr.
 var stderr io.Writer = os.Stderr
-
-// isCharDeviceFn is the char-device check Log uses to decide whether to mirror
-// to stderr; package-level so tests can drive either branch without relying on
-// the test environment having a real TTY on a known FD.
-var isCharDeviceFn = isCharDevice
 
 // NewProgressTracker builds a tracker with one bar per protocol, in `names`
 // order, each sized to totals[name] (a name absent from totals gets total 0).
@@ -139,11 +135,18 @@ func (p *ProgressTracker) Add(name string, n int64) {
 // stays accurate. Anything that writes to the same FD without going through
 // Log can still corrupt the display.
 //
-// On `... 2>&1 | tee out.log` style invocations the tracker's writer is
-// /dev/tty (not captured by tee), so Log also mirrors the line to stderr
-// when stderr is a captured (non-TTY) FD different from the tracker's writer.
-// In plain interactive runs (stderr is the terminal) and in CI (writer is
-// stderr) the mirror is skipped, so the line writes exactly once.
+// Single-destination by design: Log writes only to the tracker's writer
+// (typically /dev/tty in interactive runs, os.Stderr in CI). It does NOT
+// mirror to os.Stderr. Under `go test -v` the test binary's os.Stderr is
+// always a pipe to the test runner — regardless of whether the user is in
+// an interactive session or piping to tee — so a mirror would cause the test
+// runner to re-emit the same line back onto the terminal, after the /dev/tty
+// write that already showed it. The relayed write also lands at an
+// unpredictable position (the runner buffers and bulk-flushes), bypassing
+// outMu and corrupting prevLines on the next redraw. Consequence: in
+// `make stresstest 2>&1 | tee out.log` runs the tee'd file does not
+// capture mid-run lifecycle lines (setup + final summary still flow through
+// t.Logf, which the test runner captures normally); the live terminal does.
 //
 // Safe for concurrent use; nil receiver is a no-op (matches Add). A bad
 // format string panics in fmt.Sprintf — caller error; the deferred Unlock
@@ -171,14 +174,6 @@ func (p *ProgressTracker) Log(format string, args ...any) {
 		p.prevLines = 0
 	}
 	fmt.Fprintln(p.w, msg)
-	// Mirror to stderr when stderr is a captured (non-TTY) FD different from
-	// our writer — recovers the tee / shell-redirected capture path that a
-	// /dev/tty-only write would lose. Skipped when w == stderr (would double-
-	// write to the same FD) and when stderr is the user's terminal (would
-	// double-print visibly).
-	if p.w != stderr && !isCharDeviceFn(stderr) {
-		fmt.Fprintln(stderr, msg)
-	}
 	if p.active {
 		p.emitLocked(p.w, p.tty) // redraw the block beneath the new log line
 	}

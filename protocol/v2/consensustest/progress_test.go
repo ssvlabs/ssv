@@ -1,7 +1,6 @@
 package consensustest
 
 import (
-	"io"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -366,9 +365,9 @@ func TestLog_BeforeStart(t *testing.T) {
 	)
 
 	var captured strings.Builder
-	origStderr, origCharFn := stderr, isCharDeviceFn
+	origStderr := stderr
 	stderr = &captured
-	defer func() { stderr = origStderr; isCharDeviceFn = origCharFn }()
+	defer func() { stderr = origStderr }()
 
 	p.Log("before start")
 
@@ -390,59 +389,36 @@ func TestLog_NilReceiver(t *testing.T) {
 	p.Log("nothing to log") // must not panic
 }
 
-// TestLog_MirrorsToStderr exercises the mirror-to-stderr branch's three paths:
-//
-//   - mirror fires when w != stderr AND stderr is non-char-device — captures
-//     the `... 2>&1 | tee out.log` case the routing would otherwise drop;
-//   - no mirror when w == stderr (would double-write to the same FD);
-//   - no mirror when stderr is a char device (would double-print on the user's
-//     terminal in an interactive run).
-func TestLog_MirrorsToStderr(t *testing.T) {
-	origStderr, origCharFn := stderr, isCharDeviceFn
-	defer func() { stderr = origStderr; isCharDeviceFn = origCharFn }()
+// TestLog_SingleDestination is the regression test for the
+// duplicate-output-via-test-runner-relay bug: when the renderer is active, Log
+// must write the message exactly once to p.w and nothing else. Mirroring to
+// os.Stderr — as a previous implementation attempted, to capture progress
+// lines in `... 2>&1 | tee out.log` runs — caused `go test`'s stderr relay to
+// re-emit the line back onto the user's terminal at a position not under
+// outMu, corrupting the in-place block's cursor math. See Log's doc-comment
+// for the resolution rationale.
+func TestLog_SingleDestination(t *testing.T) {
+	origStderr := stderr
+	defer func() { stderr = origStderr }()
 
 	p := NewProgressTracker(
 		[]string{"OBFT-700"},
 		map[string]int64{"OBFT-700": 100},
 	)
-	p.tty = false // non-tty path: no clear/redraw, just plain write — keeps the
-	// assertions focused on the mirror branch.
+	p.tty = false // non-tty path: plain write, no clear/redraw — keeps the
+	// assertion focused on the destination set rather than terminal escape
+	// sequences.
 	p.active = true
 
-	// Case 1: captured stderr (non-char-device), distinct from w → mirror fires.
-	var w1, err1 strings.Builder
-	stderr = &err1
-	isCharDeviceFn = func(io.Writer) bool { return false }
-	p.w = &w1
-	p.Log("captured")
-	if !strings.Contains(w1.String(), "captured") {
-		t.Errorf("case 1: primary write to w missing: %q", w1.String())
-	}
-	if !strings.Contains(err1.String(), "captured") {
-		t.Errorf("case 1: mirror to stderr missing: %q", err1.String())
-	}
+	var primary, sink strings.Builder
+	stderr = &sink // would catch a mirror if one were emitted
+	p.w = &primary
+	p.Log("once")
 
-	// Case 2: p.w is the same writer as stderr → no mirror, single write.
-	var shared strings.Builder
-	stderr = &shared
-	isCharDeviceFn = func(io.Writer) bool { return false }
-	p.w = &shared
-	p.Log("same-fd")
-	// Exactly one occurrence in the buffer — Log fired once.
-	if got, want := strings.Count(shared.String(), "same-fd"), 1; got != want {
-		t.Errorf("case 2: want %d write of 'same-fd', got %d (buffer=%q)", want, got, shared.String())
+	if !strings.Contains(primary.String(), "once") {
+		t.Errorf("primary write to p.w missing: %q", primary.String())
 	}
-
-	// Case 3: stderr is a char device → no mirror.
-	var w3, err3 strings.Builder
-	stderr = &err3
-	isCharDeviceFn = func(io.Writer) bool { return true }
-	p.w = &w3
-	p.Log("char-dev")
-	if !strings.Contains(w3.String(), "char-dev") {
-		t.Errorf("case 3: primary write to w missing: %q", w3.String())
-	}
-	if got := err3.String(); got != "" {
-		t.Errorf("case 3: mirror should be skipped on char-device stderr, got %q", got)
+	if got := sink.String(); got != "" {
+		t.Errorf("Log must not mirror to stderr while active (would round-trip through go test's stderr relay and stack on the in-place block), got %q", got)
 	}
 }
