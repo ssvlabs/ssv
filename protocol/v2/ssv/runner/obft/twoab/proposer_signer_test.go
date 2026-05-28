@@ -20,15 +20,23 @@ import (
 // of protocol/v2/ssv/runner/obft/proposer_signer_test.go. See
 // docs/OBFT-F4-IMPLEMENTATION-PLAN.md §proposerSigner wrapper.
 
-// makeTestV builds a minimal-attCount [version | SSZ blinded block] candidate
-// that the twoab proposerSigner's signingRootFor can decode. Tests in this
+// makeTestV builds a minimal [version | SSZ blinded block] candidate that
+// the twoab proposerSigner's signingRootFor can decode. Tests in this
 // package only need one small valid candidate to exercise the wrapper-
 // translate logic; the full attestation-count range is benchmarked in the
 // base package (proposer_signer_bench_test.go).
 func makeTestV(t *testing.T) []byte {
+	return makeTestVForSlot(t, 12345)
+}
+
+// makeTestVForSlot is the slot-parameterised twin of makeTestV. Used by F2
+// cache tests that need two distinct V's with different sha256 fingerprints.
+// Distinct slots produce distinct SSZ byte sequences (the slot field is in
+// the marshaled bytes) and therefore distinct cache keys.
+func makeTestVForSlot(t *testing.T, slot uint64) []byte {
 	t.Helper()
 	bb := &apiv1deneb.BlindedBeaconBlock{
-		Slot:          12345,
+		Slot:          phase0.Slot(slot),
 		ProposerIndex: 42,
 		ParentRoot:    phase0.Root{8},
 		StateRoot:     phase0.Root{9},

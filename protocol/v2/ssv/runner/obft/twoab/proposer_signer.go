@@ -1,8 +1,10 @@
 package twoab
 
 import (
+	"crypto/sha256"
 	"errors"
 	"fmt"
+	"sync"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -23,6 +25,13 @@ import (
 type proposerSigner struct {
 	inner  twoabcore.Signer
 	beacon *networkconfig.Beacon
+
+	// srMu / srCache memoise signingRootFor results keyed by sha256(V).
+	// Mirror of the bare-OBFT proposerSigner's srCache — see that one's
+	// field doc (protocol/v2/ssv/runner/obft/proposer_signer.go) for the
+	// fork-safety / concurrency / lifetime argument. Audit F2.
+	srMu    sync.RWMutex
+	srCache map[[32]byte][]byte
 }
 
 // NewProposerSigner wraps `inner` so partial sigs are computed over the
@@ -35,10 +44,42 @@ func NewProposerSigner(inner twoabcore.Signer, beacon *networkconfig.Beacon) (tw
 	if beacon == nil {
 		return nil, errors.New("twoab proposer signer: nil beacon config")
 	}
-	return &proposerSigner{inner: inner, beacon: beacon}, nil
+	return &proposerSigner{
+		inner:   inner,
+		beacon:  beacon,
+		srCache: make(map[[32]byte][]byte),
+	}, nil
 }
 
+// signingRootFor returns the proposer-domain signing root for `value`,
+// memoised in srCache. See the base proposerSigner's signingRootFor doc
+// for the F2 design notes; this is a 1:1 mirror.
 func (s *proposerSigner) signingRootFor(value []byte) ([]byte, error) {
+	if len(value) == 0 {
+		return s.signingRootForUncached(value)
+	}
+	key := sha256.Sum256(value)
+	s.srMu.RLock()
+	sr, ok := s.srCache[key]
+	s.srMu.RUnlock()
+	if ok {
+		return sr, nil
+	}
+	sr, err := s.signingRootForUncached(value)
+	if err != nil {
+		return nil, err
+	}
+	s.srMu.Lock()
+	if existing, ok := s.srCache[key]; ok {
+		s.srMu.Unlock()
+		return existing, nil
+	}
+	s.srCache[key] = sr
+	s.srMu.Unlock()
+	return sr, nil
+}
+
+func (s *proposerSigner) signingRootForUncached(value []byte) ([]byte, error) {
 	version, blindedSSZ, err := DecodeCandidate(value)
 	if err != nil {
 		return nil, err
@@ -99,9 +140,10 @@ func (s *proposerSigner) VerifyAggregate(clusterPubKey []byte, msg []byte, sig t
 
 // VerifyPartialBatch translates each msg (V bytes) to its proposer-domain
 // signing root then delegates the batch to the inner signer. Mirror of the
-// base-OBFT proposerSigner — see that one's doc-comment for the F4 / F2
-// signing-root redundancy note (twoab's σ-walk batches share V the same
-// way, so the same redundancy applies).
+// base-OBFT proposerSigner — F2's srCache collapses the per-msg translations
+// to one real signing-root compute per distinct V, so the σ-walk's "same V
+// across N tuples" pattern pays one ~100 µs translate + N-1 sub-µs lookups
+// rather than N × ~100 µs.
 func (s *proposerSigner) VerifyPartialBatch(pubKeyShares [][]byte, msgs [][]byte, sigs []twoabcore.Signature) bool {
 	n := len(sigs)
 	if n == 0 || len(pubKeyShares) != n || len(msgs) != n {
