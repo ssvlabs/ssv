@@ -136,6 +136,21 @@ type Config struct {
 	// B_1..B_{K-1} = T_commit backups). Concrete sizing at Config A:
 	// P99 = 150ms, δ = 50ms, BTT = 200ms.
 	BTT time.Duration
+
+	// SkipNRPartialReverify, when true, suppresses Instance.verifyCommitNRPartials
+	// in ObserveCommit. The verify is defense-in-depth — the runner-layer
+	// Verifier.VerifyCommitNRPartials already runs the same BLS verifies
+	// before dispatch hands the Commit to Instance (see the docstring at
+	// phase2.go:321 over the call site, and docs/OBFT-PERFORMANCE-AUDIT-PLAN.md
+	// §F5). Skipping the in-Instance repeat saves ~18 ms/slot at n=7, K=4.
+	//
+	// SAFE TO SET true ONLY when every code path reaching ObserveCommit has
+	// already done that upstream BLS verify on every NR partial in the Commit.
+	// The production SSV runner satisfies this; the consensustest framework
+	// drives Instance directly without the runner-layer Verifier and MUST
+	// leave this false (see Q-Open-1 in the audit plan). Default false is
+	// the safe choice for every code path that hasn't been audited.
+	SkipNRPartialReverify bool
 }
 
 // K returns the number of layers (= len(Layers)).

@@ -321,8 +321,17 @@ func (i *Instance) ObserveCommit(c *Commit) error {
 	// In production the validation layer's Verifier.VerifyCommitNRPartials
 	// rejects malformed NR before reaching this path; this is defense-in-
 	// depth for any path that bypasses validation (tests, future plumbing).
-	if err := i.verifyCommitNRPartials(c); err != nil {
-		return err
+	//
+	// Config.SkipNRPartialReverify gates the in-Instance repeat so the
+	// production runner — which always runs the upstream Verifier before
+	// dispatch — skips ~18 ms/slot of redundant BLS verifies. Callers that
+	// can't guarantee the upstream verify (consensustest, ad-hoc test
+	// harnesses) leave it at the default false. See the field's doc-comment
+	// in types.go for the safety contract.
+	if !i.cfg.SkipNRPartialReverify {
+		if err := i.verifyCommitNRPartials(c); err != nil {
+			return err
+		}
 	}
 
 	// σ-side per layer.
