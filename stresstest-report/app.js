@@ -46,6 +46,12 @@ const PROTOCOL_COLORS = {
   'QBFT-700': '#e85a71', // lightest pink-red — 700 cushion
   QBFT:       '#e85a71', // generic (tests/legacy)
   'QBFT-SSV': '#8b5cf6', // purple (production-RT variant)
+  // QBFT-NR family: slate shades — distinct from the QBFT pink-red cushion
+  // ladder, signalling NR is a structurally different sub-family (round-cap
+  // ladder, not cushion ladder). Darkest (2R, fewest rounds) → lightest
+  // (3R, more rounds), mirroring the cushion ladder's darkest=0 convention.
+  'QBFT-2R': '#475569', // darker slate — 2 rounds
+  'QBFT-3R': '#94a3b8', // lighter slate — 3 rounds
   PSigs:      '#10b981', // green (baseline partial-sig-only reference)
 };
 
@@ -66,6 +72,8 @@ const PROTOCOL_NOTES = {
   'QBFT-500': 'QBFT round timer 4·BTT+500ms.',
   'QBFT-700': 'QBFT round timer 4·BTT+700ms.',
   'QBFT-SSV': 'QBFT, SSV production flat 2s round timeout.',
+  'QBFT-2R': 'QBFT, round-change ladder capped at 2 rounds with R2 unbounded; R1 = 3·BTT matches QBFT-0.',
+  'QBFT-3R': 'QBFT, round-change ladder capped at 3 rounds with R3 unbounded; R1 = 3·BTT, R2 = 4·BTT match QBFT-0.',
 };
 
 // SLOT_END_MS is the spec's relay cutoff (the 4 s proposer-duty
@@ -196,7 +204,7 @@ const LS_KEY_PROTOCOLS = 'stresstest-active-protocols';
 const LS_KEY_BTT = 'stresstest-selected-btt';
 
 function loadActiveProtocols(allProtocols) {
-  const DEFAULT_ACTIVE = new Set(['OBFT-0', 'OBFT-700', '2abOBFT-0', '2abOBFT-700', 'QBFT-0', 'QBFT-700', 'QBFT-SSV', 'PSigs']);
+  const DEFAULT_ACTIVE = new Set(['OBFT-0', 'OBFT-700', '2abOBFT-0', '2abOBFT-700', 'QBFT-0', 'QBFT-700', 'QBFT-SSV', 'QBFT-2R', 'QBFT-3R', 'PSigs']);
   const stored = localStorage.getItem(LS_KEY_PROTOCOLS);
   if (stored) {
     try {
@@ -1231,6 +1239,9 @@ function rebuildFailureBreakdown(data) {
     grouped.families.forEach((fam) => {
       grouped.cushions.forEach((c, i) => tr.appendChild(failCell(fam.byCushion[c] || null, reason, i === 0)));
     });
+    grouped.nrFamilies.forEach((fam) => {
+      grouped.nrNs.forEach((n, i) => tr.appendChild(failCell(fam.byN[n] || null, reason, i === 0)));
+    });
     grouped.solos.forEach((name) => tr.appendChild(failCell(name, reason, true)));
     tbody.appendChild(tr);
   }
@@ -1392,6 +1403,9 @@ function rebuildLayerBreakdown(data) {
     tr.appendChild(h('td', { class: 'rowhead' }, bucket.label));
     grouped.families.forEach((fam) => {
       grouped.cushions.forEach((c, i) => tr.appendChild(layerCell(fam.byCushion[c] || null, idx, bucket.key, i === 0)));
+    });
+    grouped.nrFamilies.forEach((fam) => {
+      grouped.nrNs.forEach((n, i) => tr.appendChild(layerCell(fam.byN[n] || null, idx, bucket.key, i === 0)));
     });
     grouped.solos.forEach((name) => tr.appendChild(layerCell(name, idx, bucket.key, true)));
     tbody.appendChild(tr);
@@ -1694,17 +1708,21 @@ function renderHeatmap(data) {
   const grouped = groupProtocolsByFamily(activeProtos);
   // --hcols drives the shared grid template (both column-header rows +
   // every .hrow) so columns align across groups. Counts the grouped layout:
-  // each family contributes cushions.length columns (empty slots included)
-  // plus one column per ladder-less solo.
-  const colCount = grouped.families.length * grouped.cushions.length + grouped.solos.length;
+  // each cushion family contributes cushions.length columns (empty slots
+  // included); each NR family contributes nrNs.length columns; one column
+  // per ladder-less solo.
+  const colCount = grouped.families.length * grouped.cushions.length
+    + grouped.nrFamilies.length * grouped.nrNs.length
+    + grouped.solos.length;
   section.style.setProperty('--hcols', String(colCount));
 
   section.appendChild(h('h3', { class: 'heatmap-section-title' }, 'Scenario comparison'));
 
   // Column header — one two-row grid: the "scenario" corner and ladder-less
-  // solos span both rows; each family super-header spans its cushion columns
-  // over the cushion (ms) sub-header. Explicit grid placement keeps it
-  // aligned with the data rows' shared --hcols column template.
+  // solos span both rows; cushion families' super-headers span their cushion
+  // ms sub-headers; NR families' super-headers span their "{N}R" sub-headers.
+  // Explicit grid placement keeps it aligned with the data rows' shared
+  // --hcols column template.
   const header = h('div', { class: 'heatmap-cols heatmap-header' });
   const corner = h('div', { class: 'col-head scen span2' }, 'scenario');
   corner.style.gridArea = '1 / 1 / 3 / 2';
@@ -1720,6 +1738,17 @@ function renderHeatmap(data) {
       header.appendChild(ccell);
     });
     col += grouped.cushions.length;
+  });
+  grouped.nrFamilies.forEach((fam) => {
+    const fcell = h('div', { class: 'col-head col-fam grp' }, fam.family);
+    fcell.style.gridArea = `1 / ${col} / 2 / ${col + grouped.nrNs.length}`;
+    header.appendChild(fcell);
+    grouped.nrNs.forEach((n, i) => {
+      const ccell = h('div', { class: i === 0 ? 'col-head col-cush grp' : 'col-head col-cush' }, n + 'R');
+      ccell.style.gridArea = `2 / ${col + i} / 3 / ${col + i + 1}`;
+      header.appendChild(ccell);
+    });
+    col += grouped.nrNs.length;
   });
   grouped.solos.forEach((name) => {
     const scell = h('div', { class: 'col-head col-fam span2 grp' }, name);
@@ -1773,6 +1802,9 @@ function renderHeatmap(data) {
       };
       grouped.families.forEach((fam) => {
         grouped.cushions.forEach((c) => addCell(fam.byCushion[c] || null));
+      });
+      grouped.nrFamilies.forEach((fam) => {
+        grouped.nrNs.forEach((n) => addCell(fam.byN[n] || null));
       });
       grouped.solos.forEach((name) => addCell(name));
       // Row-level click handler: clicking a row sets the Conditions
@@ -2225,43 +2257,76 @@ function buildSweepLegend(sweep, scenario, protocols, cellLookup) {
   });
 }
 
-// parseProtocolVariant splits a cushion-ladder protocol name into
-// { family, cushion } (e.g. "OBFT-700" → OBFT / 700). Ladder-less
-// protocols (QBFT-SSV, PSigs — no trailing numeric cushion) return
-// cushion: null and render as their own single-cell row.
+// parseProtocolVariant classifies a protocol name into one of three
+// shapes:
+//   - cushion-ladder variant ("OBFT-700") → { family: "OBFT", kind: "cushion", cushion: 700 }
+//   - NR-ladder variant ("QBFT-2R")       → { family: "QBFT-NR", kind: "nr", n: 2 }
+//   - ladder-less solo ("QBFT-SSV")       → { family: name, kind: "solo", cushion: null }
+// The cushion-ladder family runs the round-timer cushion axis (0/300/500/700 ms);
+// the NR-ladder family runs the round-count axis (2R / 3R). Solos (QBFT-SSV,
+// PSigs) have no sibling axis and render as their own single-cell row /
+// column. `cushion: null` on the solo branch is preserved for back-compat
+// with callers that test that field; new callers should use `kind`.
 function parseProtocolVariant(name) {
-  const m = /^(.+)-(\d+)$/.exec(name);
-  if (m) return { family: m[1], cushion: parseInt(m[2], 10) };
-  return { family: name, cushion: null };
+  const nrM = /^(.+)-(\d+)R$/.exec(name);
+  if (nrM) return { family: nrM[1] + '-NR', kind: 'nr', n: parseInt(nrM[2], 10) };
+  const cushionM = /^(.+)-(\d+)$/.exec(name);
+  if (cushionM) return { family: cushionM[1], kind: 'cushion', cushion: parseInt(cushionM[2], 10) };
+  return { family: name, kind: 'solo', cushion: null };
 }
 
-// groupProtocolsByFamily buckets protocol names into cushion families
-// (first-seen order, each with a cushion→name map) and ladder-less solos
-// (QBFT-SSV, PSigs), plus the sorted union of cushion values seen. Shared
-// by the conditions legend grid and the grouped breakdown tables.
+// groupProtocolsByFamily buckets protocol names into:
+//   - families: cushion-ladder families (each with a cushion→name map)
+//   - nrFamilies: NR-ladder families (each with an n→name map)
+//   - solos: ladder-less names (QBFT-SSV, PSigs)
+// Plus the sorted union of cushion values and the sorted union of N values
+// seen across the input. First-seen insertion order within each list.
+// Shared by the conditions legend grid, the grouped breakdown tables, and
+// the big scenario heatmap so column / row layouts stay aligned.
 function groupProtocolsByFamily(protocols) {
   const families = [];
   const familyIndex = {};
+  const nrFamilies = [];
+  const nrFamilyIndex = {};
   const solos = [];
   const cushionSet = new Set();
+  const nrSet = new Set();
   protocols.forEach((name) => {
-    const { family, cushion } = parseProtocolVariant(name);
-    if (cushion === null) { solos.push(name); return; }
-    cushionSet.add(cushion);
-    let fam = familyIndex[family];
-    if (!fam) { fam = { family, byCushion: {} }; familyIndex[family] = fam; families.push(fam); }
-    fam.byCushion[cushion] = name;
+    const v = parseProtocolVariant(name);
+    if (v.kind === 'cushion') {
+      cushionSet.add(v.cushion);
+      let fam = familyIndex[v.family];
+      if (!fam) { fam = { family: v.family, byCushion: {} }; familyIndex[v.family] = fam; families.push(fam); }
+      fam.byCushion[v.cushion] = name;
+    } else if (v.kind === 'nr') {
+      nrSet.add(v.n);
+      let fam = nrFamilyIndex[v.family];
+      if (!fam) { fam = { family: v.family, byN: {} }; nrFamilyIndex[v.family] = fam; nrFamilies.push(fam); }
+      fam.byN[v.n] = name;
+    } else {
+      solos.push(name);
+    }
   });
-  return { families, solos, cushions: [...cushionSet].sort((a, b) => a - b) };
+  return {
+    families,
+    nrFamilies,
+    solos,
+    cushions: [...cushionSet].sort((a, b) => a - b),
+    nrNs: [...nrSet].sort((a, b) => a - b),
+  };
 }
 
 // buildGroupedTableHeader builds the shared two-level <thead> for the
 // breakdown tables: a corner cell (rowheadLabel) spanning both header rows,
-// a family super-header spanning each family's cushion columns, ladder-less
-// solos as single rowspan-2 columns, then a cushion sub-header row. The
-// first column of each family group carries .grp for the separator line.
+// a family super-header spanning each family's cushion / NR columns,
+// ladder-less solos as single rowspan-2 columns, then a sub-header row
+// (cushion ms for cushion families, "{N}R" for NR families). The first
+// column of each family group carries .grp for the separator line. Render
+// order is cushion families → NR families → solos, matching the order in
+// groupProtocolsByFamily and the row-level cell-iteration order in each
+// caller.
 function buildGroupedTableHeader(rowheadLabel, grouped) {
-  const { families, solos, cushions } = grouped;
+  const { families, nrFamilies, solos, cushions, nrNs } = grouped;
   const frag = document.createDocumentFragment();
   // Explicit per-column widths via <col>: under table-layout:fixed this gives
   // every data column an identical width regardless of cell content. A width
@@ -2272,7 +2337,7 @@ function buildGroupedTableHeader(rowheadLabel, grouped) {
   // remainder evenly.
   const colgroup = h('colgroup');
   colgroup.appendChild(h('col', { class: 'col-rowhead' }));
-  const nData = families.length * cushions.length + solos.length;
+  const nData = families.length * cushions.length + nrFamilies.length * nrNs.length + solos.length;
   for (let i = 0; i < nData; i += 1) colgroup.appendChild(h('col', { class: 'col-data' }));
   frag.appendChild(colgroup);
   const thead = h('thead');
@@ -2281,6 +2346,9 @@ function buildGroupedTableHeader(rowheadLabel, grouped) {
   families.forEach((fam) => {
     r1.appendChild(h('th', { class: 'grp', colspan: String(cushions.length) }, fam.family));
   });
+  nrFamilies.forEach((fam) => {
+    r1.appendChild(h('th', { class: 'grp', colspan: String(nrNs.length) }, fam.family));
+  });
   solos.forEach((name) => {
     r1.appendChild(h('th', { class: 'grp', rowspan: '2' }, name));
   });
@@ -2288,6 +2356,9 @@ function buildGroupedTableHeader(rowheadLabel, grouped) {
   const r2 = h('tr');
   families.forEach((fam) => {
     cushions.forEach((c, i) => r2.appendChild(h('th', i === 0 ? { class: 'grp' } : {}, c + ' ms')));
+  });
+  nrFamilies.forEach((fam) => {
+    nrNs.forEach((n, i) => r2.appendChild(h('th', i === 0 ? { class: 'grp' } : {}, n + 'R')));
   });
   thead.appendChild(r2);
   frag.appendChild(thead);
@@ -2302,7 +2373,7 @@ function buildGroupedTableHeader(rowheadLabel, grouped) {
 // legend passes a toggleable pill; the collapsible sweep legends pass a
 // passive range pill.
 function buildFamilyCushionGrid(protocols, cellFn) {
-  const { families, solos, cushions } = groupProtocolsByFamily(protocols);
+  const { families, nrFamilies, solos, cushions, nrNs } = groupProtocolsByFamily(protocols);
   const span = Math.max(cushions.length, 1);
 
   const cell = (name, colspan) => {
@@ -2339,6 +2410,24 @@ function buildFamilyCushionGrid(protocols, cellFn) {
     // Family swatch = the highest-cushion variant's shade (any present one).
     const swatch = fam.byCushion[cushions[cushions.length - 1]] || Object.values(fam.byCushion)[0];
     tbody.appendChild(famRow(fam.family, swatch, cushions.map((c) => cell(fam.byCushion[c] || null))));
+  });
+  // NR families render on a single row, with one cell per variant
+  // (e.g. "QBFT-2R" + "QBFT-3R" side-by-side). Each cell spans
+  // floor(span / nrNs.length) cushion columns so the row fills the
+  // cushion area evenly. Swatch = the highest-N variant's color (matches
+  // the cushion family's "highest-rung" swatch convention).
+  //
+  // Row label lists the variant names joined by " / " (e.g.
+  // "QBFT-2R / QBFT-3R") so the user can identify each pill inline; the
+  // pill positions match the label's left-to-right order. The family
+  // name (e.g. "QBFT-NR") is implicit from the variant names and still
+  // shows as the super-header in column-axed widgets.
+  nrFamilies.forEach((fam) => {
+    const swatch = fam.byN[nrNs[nrNs.length - 1]] || Object.values(fam.byN)[0];
+    const perCellSpan = Math.max(1, Math.floor(span / nrNs.length));
+    const cells = nrNs.map((n) => cell(fam.byN[n] || null, perCellSpan));
+    const label = nrNs.map((n) => fam.byN[n]).filter((s) => s).join(' / ');
+    tbody.appendChild(famRow(label, swatch, cells));
   });
   solos.forEach((name) => {
     const c = cell(name, span);
