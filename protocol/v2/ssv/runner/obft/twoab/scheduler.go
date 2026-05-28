@@ -221,6 +221,18 @@ func (s *Scheduler) FirePhase2a(slot phase0.Slot) error {
 // emissionMarks tracks which of the op's own emissions have already been
 // broadcast this slot. Owned by the resolve loop (the sole broadcaster); not
 // safe for concurrent use.
+//
+// Set-once contract: each Own{ValueMsg,NoValueMsg,Commit} accessor returns
+// exactly one envelope per slot. The mark-to-true-on-first-broadcast pattern
+// in broadcastNewEmissions relies on this — see `MaybeBuildAndBroadcastCommit`
+// at phase2b.go for the `ownCommit != nil → return nil, nil` idempotency
+// guard that enforces it on the Instance side. A future "rebuild on state
+// change" path that reassigns `ownCommit` to a different envelope would
+// under-broadcast (the rebuild would never reach the wire because
+// `marks.commit` is already true). If that pattern is ever needed, marks
+// would have to track the envelope identity (content hash, generation
+// counter, etc.) rather than a flat bool — adjust both this struct and the
+// Instance-side guard at the same time.
 type emissionMarks struct {
 	value   bool
 	noValue bool

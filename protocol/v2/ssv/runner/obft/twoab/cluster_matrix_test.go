@@ -272,6 +272,17 @@ func lateValueDelayPredicate(n int, victim spectypes.OperatorID, delay time.Dura
 	// kinds at the same delay, the two arrivals would race at slot+~delay and
 	// produce nondeterministic decision paths; doubling certDelay gives
 	// opportunistic-resolve a clear ~delay window of clean runway.
+	//
+	// Race-margin math: cert arrives at victim at ~`firstDeciderTime + certDelay`
+	// (T_decide + delivery, where T_decide ≈ TPhase2a ≈ 150ms in the compressed
+	// fixture). Late values arrive at `lateValueBroadcastTime + delay` ≈
+	// `TPhase2a + delay`. With certDelay = 2·delay, the margin is
+	// `(TPhase2a + 2·delay) − (TPhase2a + delay) = delay`. At the current
+	// delay=300ms that's a ~300ms window — comfortable under `-race × cpu=32`
+	// even with the test's typical 25-50× crypto balloon. The 2× factor is
+	// the smallest integer multiple that gives a margin ≥ delay; future
+	// timing changes (BTT bump, faster decide path, smaller delay) erode the
+	// margin proportionally — re-check this formula before tuning either knob.
 	certDelay := 2 * delay
 	return func(from, to spectypes.OperatorID, kind byte) time.Duration {
 		if kind == byte(wire.KindCertificate) {
@@ -357,6 +368,19 @@ func runRealBLSLateCommitAtCell(t *testing.T, cell matrixCell) {
 	}
 	wg.Wait()
 
+	// LateCommit asserts strict cross-op Layer equality + ref.Layer==0 —
+	// unlike Healthy and SilentL0Leader which use
+	// assertClusterSubmittedAtCanonicalOrCert and accept cert-fast-path
+	// submissions. This works here because lateValueDelayPredicate also
+	// delays KindCertificate by 2× the late-value delay (see its docstring's
+	// race-margin formula), forcing every op onto the local-resolve path:
+	// non-victims decide on initial Resolve, the victim decides on
+	// opportunistic-resolve when its late KindValues arrive. The strict
+	// assertions are coupled to that cert-delay margin — if the predicate's
+	// 2× factor is ever tuned down or the late-value delay shrinks, these
+	// assertions will start race-failing as the cert-fast-path begins
+	// winning at some ops. Re-tune both together or relax to the
+	// canonical-or-cert helper.
 	var ref *twoabcore.Output
 	for _, n := range cl.nodes {
 		require.NoErrorf(t, n.runErr, "op %d RunProposerSlot at n=%d K=%d", n.op, cell.n, cell.K)

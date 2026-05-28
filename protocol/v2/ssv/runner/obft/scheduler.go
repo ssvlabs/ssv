@@ -399,6 +399,18 @@ func (s *Scheduler) tryCertFastPath(ctx context.Context, slot phase0.Slot) bool 
 // This is the production reconstruction path. RoundEndOffset (= T_commit +
 // Δ_2 + ε_3) is a SOFT per-operator target — not a hard deadline; the hard
 // wall is ctx (the relay-submission deadline).
+//
+// Contrast with twoab: this loop body has no `broadcastNewEmissions` step —
+// bare-OBFT's commit is built+broadcast once synchronously in
+// `BuildAndBroadcastCommit` at T_commit (Phase 2), with no cascade-fired
+// re-emission path. The twoab counterpart, by contrast, uses a "dynamic
+// Phase-2b" pattern where commits can be cascade-fired from
+// `afterStateDelta` during the resolve loop and broadcast lazily by
+// `broadcastNewEmissions` — opening a race window that the twoab scheduler
+// closes with a pre-submit re-broadcast (see
+// protocol/v2/ssv/runner/obft/twoab/scheduler.go's
+// `ResolveAndSubmitOpportunistically` docstring). Bare-OBFT is structurally
+// immune: no cascade, no re-broadcast race, no equivalent fix needed here.
 func (s *Scheduler) ResolveAndSubmitOpportunistically(ctx context.Context, slot phase0.Slot) error {
 	// Acquire the state-delta channel BEFORE the optimistic attempt — any
 	// arrival between the optimistic Resolve and the channel acquisition
