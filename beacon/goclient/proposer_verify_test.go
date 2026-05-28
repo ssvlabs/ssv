@@ -38,10 +38,16 @@ func TestVerifyProposalParent_Slot0_ShortCircuitsWithoutLog(t *testing.T) {
 	assert.Zero(t, observed.Len(), "slot==0 path must short-circuit before any log emission")
 }
 
+// The remaining tests use whatever default slot is set in the spec-testing fixture
+// (TestingBlockContentsElectra.Block.Slot, currently ForkEpochPraterElectra). Tests do
+// not mutate the fixture — TestingBeaconBlockV returns a fresh wrapper but its .Electra
+// field points at a shared package-level singleton, so any field assignment would leak
+// across the test binary. We accept whatever Slot the fixture provides and derive
+// downstream values (parent slot, expected parent root) from it.
+
 func TestVerifyProposalParent_CacheMissIsSilent(t *testing.T) {
 	gc, observed := newGoClientForVerifyTest(t)
 	proposal := spectestingutils.TestingBeaconBlockV(spec.DataVersionElectra)
-	proposal.Electra.Block.Slot = 100
 
 	// headCache is empty, so the parent slot lookup misses. Cache miss is metric-only,
 	// no log entry should be emitted.
@@ -53,7 +59,6 @@ func TestVerifyProposalParent_CacheMissIsSilent(t *testing.T) {
 func TestVerifyProposalParent_MatchIsSilent(t *testing.T) {
 	gc, observed := newGoClientForVerifyTest(t)
 	proposal := spectestingutils.TestingBeaconBlockV(spec.DataVersionElectra)
-	proposal.Electra.Block.Slot = 100
 
 	// Pre-seed the cache with the parent root that the proposal carries — this is the
 	// match path which is also metric-only.
@@ -67,7 +72,6 @@ func TestVerifyProposalParent_MatchIsSilent(t *testing.T) {
 func TestVerifyProposalParent_MismatchLogsBeaconClientField(t *testing.T) {
 	gc, observed := newGoClientForVerifyTest(t)
 	proposal := spectestingutils.TestingBeaconBlockV(spec.DataVersionElectra)
-	proposal.Electra.Block.Slot = 100
 
 	// Cache holds a different root for slot-1 than what the proposal references —
 	// triggers the mismatch path which logs at Info with the beacon_client field.

@@ -17,18 +17,15 @@ import (
 )
 
 // installSentinelMetricsLogger swaps metrics.logger to a sentinel observed logger and
-// arranges restoration on test completion. Returns the observed logs handle so the test
-// can assert what (if anything) was emitted through metrics.logger during the test.
-//
-// We snapshot only by re-installing a no-op on cleanup — the metrics package doesn't
-// expose its current logger, but tests that need restoration are themselves the ones
-// installing a sentinel, so resetting to no-op is sufficient for isolation. If this
-// becomes a pattern, expose a public metrics.Logger() getter.
+// arranges restoration to the originally-installed logger on test completion. Returns
+// the observed logs handle so the test can assert what (if anything) was emitted through
+// metrics.logger during the test.
 func installSentinelMetricsLogger(t *testing.T) *observer.ObservedLogs {
 	t.Helper()
+	original := metrics.Logger()
 	core, observed := observer.New(zapcore.DebugLevel)
 	metrics.InitLogger(zap.New(core))
-	t.Cleanup(func() { metrics.InitLogger(zap.NewNop()) })
+	t.Cleanup(func() { metrics.InitLogger(original) })
 	return observed
 }
 
@@ -40,9 +37,18 @@ func restoreGlobalLogger(t *testing.T) {
 	t.Cleanup(func() { zap.ReplaceGlobals(original) })
 }
 
+// restoreMetricsLogger captures metrics.Logger() before mutations and restores it on
+// cleanup. Use this alongside restoreGlobalLogger in any test that calls InitializeLogger
+// (which mutates metrics.logger as a side effect).
+func restoreMetricsLogger(t *testing.T) {
+	t.Helper()
+	original := metrics.Logger()
+	t.Cleanup(func() { metrics.InitLogger(original) })
+}
+
 func TestInitializeLogger_Succeeds(t *testing.T) {
 	restoreGlobalLogger(t)
-	t.Cleanup(func() { metrics.InitLogger(zap.NewNop()) })
+	restoreMetricsLogger(t)
 
 	err := observability.InitializeLogger("info", "lowercase", "console", "", 0, 0)
 	require.NoError(t, err)
@@ -53,7 +59,8 @@ func TestInitializeLogger_Succeeds(t *testing.T) {
 
 func TestInitializeLogger_PropagatesToMetricsPackage(t *testing.T) {
 	restoreGlobalLogger(t)
-	t.Cleanup(func() { metrics.InitLogger(zap.NewNop()) })
+	// restoreMetricsLogger is implicit in installSentinelMetricsLogger's cleanup, which
+	// captures-and-restores the original logger.
 
 	// Pre-condition: install a sentinel into metrics so we can detect propagation
 	// overwriting it. After InitializeLogger runs, the sentinel will be replaced with the

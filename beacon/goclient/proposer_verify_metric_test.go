@@ -81,11 +81,13 @@ func TestVerifyProposalParent_EmitsLabeledMetric(t *testing.T) {
 		}
 	}
 
+	// Subtests do not mutate proposal.Electra.Block.Slot — see proposer_verify_test.go
+	// for the rationale (spec-testing fixture is a shared singleton).
+
 	t.Run("cache miss labels verify and cache_miss counters", func(t *testing.T) {
 		before := collect()
 		gc := newGC()
 		proposal := spectestingutils.TestingBeaconBlockV(spec.DataVersionElectra)
-		proposal.Electra.Block.Slot = 100
 
 		gc.verifyProposalParent(t.Context(), gc.log, proposal.Electra.Block.Slot, proposal, testBeaconClientAddr)
 
@@ -100,7 +102,6 @@ func TestVerifyProposalParent_EmitsLabeledMetric(t *testing.T) {
 		before := collect()
 		gc := newGC()
 		proposal := spectestingutils.TestingBeaconBlockV(spec.DataVersionElectra)
-		proposal.Electra.Block.Slot = 100
 		gc.headCache.Set(proposal.Electra.Block.Slot-1, proposal.Electra.Block.ParentRoot, ttlcache.NoTTL)
 
 		gc.verifyProposalParent(t.Context(), gc.log, proposal.Electra.Block.Slot, proposal, testBeaconClientAddr)
@@ -116,7 +117,6 @@ func TestVerifyProposalParent_EmitsLabeledMetric(t *testing.T) {
 		before := collect()
 		gc := newGC()
 		proposal := spectestingutils.TestingBeaconBlockV(spec.DataVersionElectra)
-		proposal.Electra.Block.Slot = 100
 		cachedRoot := phase0.Root{0xAA}
 		require.NotEqual(t, cachedRoot, proposal.Electra.Block.ParentRoot)
 		gc.headCache.Set(proposal.Electra.Block.Slot-1, cachedRoot, ttlcache.NoTTL)

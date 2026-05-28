@@ -25,6 +25,12 @@ func InitLogger(l *zap.Logger) {
 	logger = l
 }
 
+// Logger returns the package-level logger. Symmetric with InitLogger; primarily useful
+// for tests that need to save and restore the logger around mutations.
+func Logger() *zap.Logger {
+	return logger
+}
+
 // DutyIDFromContext retrieves the duty ID string from the context if present.
 func DutyIDFromContext(ctx context.Context) (string, bool) {
 	dutyID, ok := ctx.Value(dutyIDKey{}).(string)

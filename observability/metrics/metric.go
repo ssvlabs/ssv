@@ -21,6 +21,12 @@ func InitLogger(l *zap.Logger) {
 	logger = l
 }
 
+// Logger returns the package-level logger. Symmetric with InitLogger; primarily useful
+// for tests that need to save and restore the logger around mutations.
+func Logger() *zap.Logger {
+	return logger
+}
+
 func New[T any](metric T, err error) T {
 	if err != nil {
 		logger.Error("failed to instantiate metric", zap.Error(err))
