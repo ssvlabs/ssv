@@ -55,9 +55,11 @@ const PROTOCOL_COLORS = {
   PSigs:      '#10b981', // green (baseline partial-sig-only reference)
 };
 
-// PROTOCOL_NOTES are hover tooltips shown on each legend row, documenting
-// the cushion variants. The QBFT ladder is deliberately uneven (no-reflood
-// also drops a structural 1·BTT), so its note spells out the per-round timers.
+// PROTOCOL_NOTES are hover tooltips shown on each legend pill, documenting
+// every protocol variant in the report. The QBFT cushion ladder is
+// deliberately uneven (no-reflood also drops a structural 1·BTT), so its
+// note spells out the per-round timers; the QBFT-NR family notes spell
+// out the round caps and the unbounded final round.
 const PROTOCOL_NOTES = {
   'OBFT-0': 'OBFT, SafetyBuffer=0 — no lazy-push cushion in B_0.',
   'OBFT-300': 'OBFT, SafetyBuffer=300ms (B_0 = 2·BTT + 300).',
@@ -2366,12 +2368,14 @@ function buildGroupedTableHeader(rowheadLabel, grouped) {
 }
 
 // buildFamilyCushionGrid renders the shared family × cushion legend grid:
-// header (protocol | cushion 0/300/500/700 ms), one row per family (dot +
-// name) with a cell per cushion, plus a single-cell row per ladder-less
-// solo (QBFT-SSV, PSigs). cellFn(name) returns the pill node for a real
-// variant; empty family/cushion slots get a placeholder. The conditions
-// legend passes a toggleable pill; the collapsible sweep legends pass a
-// passive range pill.
+// header (protocol | cushion 0/300/500/700 ms), one row per cushion-ladder
+// family (dot + name) with a cell per cushion, one row per NR-ladder
+// family (e.g. QBFT-2R / QBFT-3R) with N cells side-by-side sharing the
+// cushion area, plus a single-cell row per ladder-less solo (QBFT-SSV,
+// PSigs). cellFn(name) returns the pill node for a real variant; empty
+// family/cushion slots get a placeholder. The conditions legend passes
+// a toggleable pill; the collapsible sweep legends pass a passive range
+// pill.
 function buildFamilyCushionGrid(protocols, cellFn) {
   const { families, nrFamilies, solos, cushions, nrNs } = groupProtocolsByFamily(protocols);
   const span = Math.max(cushions.length, 1);
@@ -2437,8 +2441,9 @@ function buildFamilyCushionGrid(protocols, cellFn) {
 }
 
 // buildConditionsLegendCard renders the conditions-section protocol filter
-// as a compact family × cushion grid: one row per protocol family with the
-// cushion ladder (0/300/500/700) as columns, plus a single-cell row per
+// as a compact family × cushion grid: one row per cushion-ladder family
+// with the cushion ladder (0/300/500/700) as columns, one row per NR-ladder
+// family (QBFT-2R / QBFT-3R side-by-side), plus a single-cell row per
 // ladder-less protocol (QBFT-SSV, PSigs). Each cell is a click-to-toggle
 // pill showing that variant's success rate, tinted green→amber by rate
 // (same ramp as the heatmap); active variants are filled, inactive ones
