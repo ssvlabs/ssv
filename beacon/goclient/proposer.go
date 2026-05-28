@@ -99,7 +99,9 @@ func (gc *GoClient) GetBeaconBlock(
 	copy(graffiti[:], graffitiBytes[:])
 
 	var beaconBlock *api.VersionedProposal
-	var beaconClient string // address of the BN that produced the selected proposal — used for metric labeling
+	// beaconClient is the address of the BN that produced the selected proposal — used
+	// for metric labeling so per-client staleness rates can be measured.
+	var beaconClient string
 	var err error
 
 	// For single client, use direct call to avoid multi-client overhead
@@ -345,7 +347,10 @@ func (gc *GoClient) verifyProposalParent(
 	beaconClient string,
 ) {
 	if slot == 0 {
-		// Genesis has no parent to verify; also guards against uint64 underflow below.
+		// Guards against the slot-1 uint64 underflow below. In production this branch
+		// never fires (the slot ticker is well past 0 by the time GetBeaconBlock runs),
+		// but tests with synthetic zero slots can reach here. Genesis has no parent root
+		// to verify in any case.
 		return
 	}
 

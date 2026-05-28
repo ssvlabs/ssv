@@ -69,7 +69,7 @@ var (
 			observability.InstrumentName(observabilityNamespace, "multi_client.method_calls"),
 			metric.WithDescription("number of method calls to the multi client")))
 
-	// Sparse-ish: tracks RPC error rate which is typically low.
+	// Sparse: tracks RPC error rate which is typically low.
 	multiClientMethodErrorsCounter = metrics.RegisterSparseCounter(metrics.New(
 		meter.Int64Counter(
 			observability.InstrumentName(observabilityNamespace, "multi_client.method_errors"),

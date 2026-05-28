@@ -32,10 +32,13 @@ func init() {
 	model.NameValidationScheme = model.LegacyValidation // nolint: staticcheck
 }
 
-// InitializeLogger configures the global zap logger. It must be called before Initialize,
-// and is split from Initialize so the logger is available during early startup (before
+// InitializeLogger configures the global zap logger and propagates it to the
+// observability sub-packages (metrics, traces). It must be called before Initialize, and
+// is split from Initialize so the logger is available during early startup (before
 // process-global facts like operator_id are known, which delays metric/trace provider
-// initialization — see Initialize and WithResourceAttributes).
+// initialization — see Initialize and WithResourceAttributes). Initialize intentionally
+// does not re-propagate the logger so that calling it again mid-startup does not have the
+// surprising side effect of replacing the metrics/traces internal loggers.
 func InitializeLogger(level, levelFormat, format, filePath string, fileSize, fileBackups int) error {
 	err := log.SetGlobal(
 		level,
@@ -51,7 +54,8 @@ func InitializeLogger(level, levelFormat, format, filePath string, fileSize, fil
 		return fmt.Errorf("could not setup global logger: %w", err)
 	}
 	// Propagate the configured logger to observability sub-packages so they can log.
-	_ = initLogger(zap.L())
+	// initLogger returns the named logger but we don't need it here.
+	initLogger(zap.L())
 	return nil
 }
 
@@ -72,6 +76,9 @@ func Initialize(ctx context.Context, appName, appVersion string, options ...Opti
 	// Derive a named logger for Initialize's own log messages. metrics/traces internal
 	// loggers are propagated by InitializeLogger (which must be called first); we don't
 	// repeat that here to avoid the surprising side effect of replacing them mid-startup.
+	// If InitializeLogger was never called, zap.L() returns the no-op global and these
+	// messages are silently discarded — that's fine for tests but operators should always
+	// have called InitializeLogger before Initialize.
 	localLogger := zap.L().Named(log.NameObservability)
 
 	shutdown = func(ctx context.Context) error {

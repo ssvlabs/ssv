@@ -166,25 +166,13 @@ var StartNodeCmd = &cobra.Command{
 		// OTel resource attributes — every emitted metric/trace is then automatically
 		// labeled with the operator. Metrics emitted before that point are dropped, which
 		// is an acceptable trade-off for accurate per-operator labeling.
-		observabilityOptions := []observability.Option{}
+		var observabilityOptions []observability.Option
 		if cfg.MetricsAPIPort > 0 {
 			observabilityOptions = append(observabilityOptions, observability.WithMetrics())
 		}
 		if cfg.EnableTraces {
 			observabilityOptions = append(observabilityOptions, observability.WithTraces())
 		}
-
-		var observabilityShutdown func(context.Context) error
-		defer func() {
-			if observabilityShutdown == nil {
-				return // Initialize never ran (e.g. fatal before reaching it)
-			}
-			shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-			defer cancel()
-			if err := observabilityShutdown(shutdownCtx); err != nil {
-				logger.Error("could not shutdown observability stack", zap.Error(err))
-			}
-		}()
 
 		logger.Info(fmt.Sprintf("starting %v", commons.GetBuildData()))
 
@@ -366,7 +354,9 @@ var StartNodeCmd = &cobra.Command{
 		// operator_id baked into the OTel resource attributes (only if the ID is ready —
 		// new operators not yet registered on-chain will have ID=0 and we skip the label
 		// rather than emit misleading metrics; the operator will need to restart after
-		// registration to pick up the correct ID in metric labels).
+		// registration to pick up the correct ID in metric labels). Note: in exporter
+		// mode OperatorIDReady() always returns false because exporters have no operator
+		// identity — that's intentional, do not "fix" by emitting a zero-valued label.
 		if operatorDataStore.OperatorIDReady() {
 			observabilityOptions = append(observabilityOptions,
 				observability.WithResourceAttributes(
@@ -374,7 +364,7 @@ var StartNodeCmd = &cobra.Command{
 				),
 			)
 		}
-		observabilityShutdown, err = observability.Initialize(
+		observabilityShutdown, err := observability.Initialize(
 			cmd.Context(),
 			cmd.Parent().Short,
 			cmd.Parent().Version,
@@ -383,6 +373,20 @@ var StartNodeCmd = &cobra.Command{
 		if err != nil {
 			logger.Fatal("could not initialize observability metrics/traces", zap.Error(err))
 		}
+		// Register the shutdown defer only after a successful Initialize. Any earlier
+		// Fatal short-circuits via os.Exit before this point and has nothing to shut down.
+		defer func() {
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			if err := observabilityShutdown(shutdownCtx); err != nil {
+				logger.Error("could not shutdown observability stack", zap.Error(err))
+			}
+		}()
+		logger.Info("observability stack initialized",
+			zap.Bool("metrics_enabled", cfg.MetricsAPIPort > 0),
+			zap.Bool("traces_enabled", cfg.EnableTraces),
+			zap.Bool("operator_id_label", operatorDataStore.OperatorIDReady()),
+		)
 
 		// Emit baseline (zero) samples for sparse counters so PromQL increase()/rate()
 		// returns correct values across process restarts. See observability/metrics/baseline.go.

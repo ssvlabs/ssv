@@ -24,6 +24,14 @@ import (
 //
 // High-volume counters (per-message, per-attestation, per-slot, etc.) do not need this
 // treatment — they always have recent samples for Prometheus to work from.
+//
+// The registry is process-global and append-only: counters and labeled-baseline closures
+// stay registered for the lifetime of the process. RegisterSparseCounter is typically
+// called from package-level var initializers (once per process) so this is a non-issue in
+// production; in tests that construct many objects whose constructors register baselines
+// (e.g. goclient.New calling registerProposalParentBaselines), the registries grow
+// unboundedly. This is harmless as long as tests do not call EmitBaselines — if a future
+// test needs to, add a per-test reset hook here rather than working around it externally.
 
 var (
 	sparseCountersMu sync.Mutex
@@ -76,6 +84,10 @@ func RegisterLabeledBaseline(fn func(context.Context)) {
 // (the unlabeled series), then invokes every function registered via
 // RegisterLabeledBaseline (which handle per-attribute-set baselines). Call once at startup
 // after the OTel MeterProvider is installed (i.e. after observability.Initialize completes).
+//
+// Calling EmitBaselines more than once is harmless — each extra invocation just emits
+// another Add(ctx, 0), which does not change any counter's value — but it is wasted work
+// and produces extra samples in the scrape window. Prefer the once-at-startup pattern.
 func EmitBaselines(ctx context.Context) {
 	sparseCountersMu.Lock()
 	for _, c := range sparseCounters {
