@@ -2430,9 +2430,7 @@ function buildFamilyCushionGrid(protocols, cellFn) {
     tbody.appendChild(famRow(label, swatch, cells));
   });
   solos.forEach((name) => {
-    const c = cell(name, span);
-    c.classList.add('solo');
-    tbody.appendChild(famRow(name, name, [c]));
+    tbody.appendChild(famRow(name, name, [cell(name, span)]));
   });
   table.appendChild(tbody);
   return table;

@@ -545,11 +545,6 @@ section.conditions .conditions-legend {
   text-align: center;
   padding: 0.28em 0.4em;
 }
-/* Ladder-less protocols (QBFT-SSV, PSigs) span the cushion columns; float
- * their single success pill to the right edge instead of centering it. */
-.sm-legend-grid td.cell.solo {
-  text-align: right;
-}
 .sm-legend-grid .fam {
   text-align: left;
   font-weight: 600;
