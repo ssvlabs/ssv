@@ -132,23 +132,9 @@ func runRealBLSHealthyAtCell(t *testing.T, cell matrixCell) {
 	}
 	wg.Wait()
 
-	var ref *twoabcore.Output
-	for _, n := range cl.nodes {
-		require.NoErrorf(t, n.runErr, "op %d RunProposerSlot at n=%d K=%d", n.op, cell.n, cell.K)
-		out := n.submittedOutput()
-		require.NotNilf(t, out, "op %d submitted no output at n=%d K=%d", n.op, cell.n, cell.K)
-		if ref == nil {
-			ref = out
-			continue
-		}
-		require.Truef(t, bytes.Equal(ref.Value, out.Value),
-			"op %d decided a different Value at n=%d K=%d", n.op, cell.n, cell.K)
-		require.Truef(t, bytes.Equal(ref.Signature, out.Signature),
-			"op %d reconstructed a different Signature at n=%d K=%d", n.op, cell.n, cell.K)
-		require.Equalf(t, ref.Layer, out.Layer,
-			"op %d decided a different layer at n=%d K=%d", n.op, cell.n, cell.K)
-	}
-	require.Equalf(t, 0, ref.Layer, "healthy case decides at L_0 (n=%d K=%d)", cell.n, cell.K)
+	// See assertClusterSubmittedAtCanonicalOrCert for the cert-fast-path
+	// rationale (per-op Layer may be the canonical local-decode layer or -1).
+	ref := assertClusterSubmittedAtCanonicalOrCert(t, cl.nodes, 0)
 	require.Truef(t, cl.verifier.VerifyAggregate(cl.masterPub, ref.Value, ref.Signature),
 		"reconstructed signature must verify against master pubkey at n=%d K=%d", cell.n, cell.K)
 }
@@ -226,24 +212,9 @@ func runRealBLSSilentL0LeaderAtCell(t *testing.T, cell matrixCell) {
 	}
 	wg.Wait()
 
-	var ref *twoabcore.Output
-	for _, n := range cl.nodes {
-		require.NoErrorf(t, n.runErr, "op %d RunProposerSlot at n=%d K=%d", n.op, cell.n, cell.K)
-		out := n.submittedOutput()
-		require.NotNilf(t, out, "op %d submitted no output (NR fall-through failed) at n=%d K=%d", n.op, cell.n, cell.K)
-		if ref == nil {
-			ref = out
-			continue
-		}
-		require.Truef(t, bytes.Equal(ref.Value, out.Value),
-			"op %d decided a different Value at n=%d K=%d", n.op, cell.n, cell.K)
-		require.Truef(t, bytes.Equal(ref.Signature, out.Signature),
-			"op %d reconstructed a different Signature at n=%d K=%d", n.op, cell.n, cell.K)
-		require.Equalf(t, ref.Layer, out.Layer,
-			"op %d decided a different layer at n=%d K=%d", n.op, cell.n, cell.K)
-	}
-	require.Equalf(t, 1, ref.Layer,
-		"silent L_0 leader → cluster decides at L_1 (n=%d K=%d)", cell.n, cell.K)
+	// See assertClusterSubmittedAtCanonicalOrCert for the cert-fast-path
+	// rationale (per-op Layer may be the canonical local-decode layer or -1).
+	ref := assertClusterSubmittedAtCanonicalOrCert(t, cl.nodes, 1)
 	require.Truef(t, cl.verifier.VerifyAggregate(cl.masterPub, ref.Value, ref.Signature),
 		"reconstructed L_1 signature must verify against master pubkey at n=%d K=%d", cell.n, cell.K)
 }
@@ -266,6 +237,20 @@ func runRealBLSSilentL0LeaderAtCell(t *testing.T, cell matrixCell) {
 // differs by protocol. See protocol/v2/obft/twoab/messages.go for the
 // ValueMsg.L0Partial spec.
 //
+// KindCertificate is delayed cluster-wide too: with `BroadcastCertificate`
+// wired in the BLS test fixture (mirroring production), the first op to
+// decide gossips a certificate immediately, and any peer that hasn't yet
+// finished its own local Resolve picks the cert up via `tryCertFastPath`
+// and submits with `layer=-1` — short-circuiting both the non-victim
+// peers' local L_0 σ-quorum decisions and the victim's opportunistic-
+// resolve recovery on late-arriving values. Delaying certs by 2× the
+// late-value delay (see `certDelay` below for the race-margin rationale)
+// keeps every op on its local recovery path: non-victims decide at L_0 via
+// initial Resolve, the victim decides at L_0 via opportunistic-resolve
+// when its late KindValues arrive. The cert-fast-path is exercised
+// separately by SafetyBridge_SilentL0Leader (where no local recovery is
+// possible without the cert).
+//
 // At n=4 / qV=3: delays ops 3, 4 (2 peers); leaves op2 timely + own
 // self-observation = 2 partials, < qV=3 — opportunistic resolve must
 // salvage the victim when the delayed values arrive.
@@ -280,7 +265,18 @@ func lateValueDelayPredicate(n int, victim spectypes.OperatorID, delay time.Dura
 	qV := 2*f + 1
 	delayCount := n - qV + 1
 	firstDelayedOp := spectypes.OperatorID(n - delayCount + 1)
+	// Certs are delayed by 2× the late-value delay so opportunistic-resolve
+	// (which fires off the victim's late KindValue arrivals at slot+delay)
+	// reliably wins the race against tryCertFastPath (which would fire off a
+	// non-victim op's cert broadcast at slot+~150ms + certDelay). With both
+	// kinds at the same delay, the two arrivals would race at slot+~delay and
+	// produce nondeterministic decision paths; doubling certDelay gives
+	// opportunistic-resolve a clear ~delay window of clean runway.
+	certDelay := 2 * delay
 	return func(from, to spectypes.OperatorID, kind byte) time.Duration {
+		if kind == byte(wire.KindCertificate) {
+			return certDelay
+		}
 		if kind == byte(wire.KindValue) && to == victim && from >= firstDelayedOp && int(from) <= n {
 			return delay
 		}

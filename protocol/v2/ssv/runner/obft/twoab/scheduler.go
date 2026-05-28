@@ -382,6 +382,23 @@ func (s *Scheduler) RunHostValidationDrain(ctx context.Context, slot phase0.Slot
 // peer-certificate fast path, and (3) re-runs Resolve. Exits on σ-quorum (local
 // reconstruction submitted), a peer certificate, or ctx cancellation (the
 // relay-submission deadline → slot misses).
+//
+// Pre-submit re-broadcast (see the two `broadcastNewEmissions` calls immediately
+// before `submitAndBroadcastCert`): the iteration body releases `instanceMu`
+// between `broadcastNewEmissions`, `tryCertFastPath`, and `Resolve` (each
+// acquires the lock separately via the Controller helpers). Under heavy
+// concurrency (`-race` × heavy GOMAXPROCS) a peer dispatch can squeeze a
+// cascade-fired Phase-2b NR-Commit into the gap: the iteration's first
+// `broadcastNewEmissions` reads `OwnCommit == nil`, then between that read and
+// `Resolve`'s lock acquisition the cascade sets `ownCommit` + grows
+// `nrTagPool`, and subsequent peer Commit observations push the pool to qEnc.
+// `Resolve` then decides without ever broadcasting our own Commit, peers
+// stall one NR-partial short, and the slot misses. Re-running
+// `broadcastNewEmissions` immediately before `submitAndBroadcastCert` closes
+// the window: if the cascade fired during the iteration body, `ownCommit` is
+// set and the re-broadcast emits it before submission; on decision paths that
+// never set `ownCommit` (e.g. L_0 σ-quorum), the re-broadcast is a harmless
+// no-op.
 func (s *Scheduler) ResolveAndSubmitOpportunistically(ctx context.Context, slot phase0.Slot) error {
 	marks := &emissionMarks{}
 	// Acquire the delta channel before the optimistic attempt so no arrival is
@@ -394,6 +411,9 @@ func (s *Scheduler) ResolveAndSubmitOpportunistically(ctx context.Context, slot 
 		return err
 	}
 	if out, err := s.controller.Resolve(slot); err == nil {
+		if err := s.broadcastNewEmissions(ctx, slot, marks); err != nil {
+			return err
+		}
 		return s.submitAndBroadcastCert(ctx, slot, out)
 	} else if !errors.Is(err, twoabcore.ErrNoQuorum) {
 		if s.hooks.OnMissedSlot != nil {
@@ -427,6 +447,9 @@ func (s *Scheduler) ResolveAndSubmitOpportunistically(ctx context.Context, slot 
 			}
 			out, err := s.controller.Resolve(slot)
 			if err == nil {
+				if err := s.broadcastNewEmissions(ctx, slot, marks); err != nil {
+					return err
+				}
 				return s.submitAndBroadcastCert(ctx, slot, out)
 			}
 			if !errors.Is(err, twoabcore.ErrNoQuorum) {

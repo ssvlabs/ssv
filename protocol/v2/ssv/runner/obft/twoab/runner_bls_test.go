@@ -69,6 +69,56 @@ func (n *blsNode) submittedOutput() *twoabcore.Output {
 	return n.submitted[0]
 }
 
+// assertClusterSubmittedAtCanonicalOrCert is the shared cross-op submission
+// invariant for buildBLSCluster-based tests. It asserts:
+//   - every op has runErr == nil and a non-nil submitted output,
+//   - every output's Layer is either `canonicalLayer` (the test's expected
+//     local-decode layer) or -1 (the cert-fast-path sentinel from
+//     scheduler.go's `submitAndBroadcastCert`-bypass via `tryCertFastPath`),
+//   - at least one op took the canonical local path — otherwise no cert
+//     exists for the rest to fast-path on,
+//   - all outputs share the same Value and Signature bytes.
+//
+// Rationale: with BroadcastCertificate wired in buildBLSCluster (mirroring
+// production), ops race between completing their own local Resolve and
+// short-circuiting via tryCertFastPath on a faster peer's broadcast cert.
+// Both paths produce the same Value + reconstructed Signature (the cert
+// wraps the σ-aggregated output of the locally-deciding op), so value/
+// signature equality is the strict cluster invariant. Per-op Layer cannot
+// be: strict cross-op Layer equality would race-fail any test where one op
+// races ahead and its cert reaches a peer before that peer's local Resolve
+// completes — the rescued op then submits with Layer=-1 while the
+// fast-deciding peer has Layer=`canonicalLayer`.
+//
+// Returns the first submitted output (`ref`) so callers can assert
+// per-scenario specifics (V prefix, master-pubkey signature verify).
+func assertClusterSubmittedAtCanonicalOrCert(t *testing.T, nodes []*blsNode, canonicalLayer int) *twoabcore.Output {
+	t.Helper()
+	var ref *twoabcore.Output
+	canonicalCount := 0
+	for _, n := range nodes {
+		require.NoErrorf(t, n.runErr, "op %d RunProposerSlot", n.op)
+		out := n.submittedOutput()
+		require.NotNilf(t, out, "op %d submitted no output", n.op)
+		require.Truef(t, out.Layer == canonicalLayer || out.Layer == -1,
+			"op %d decided at unexpected layer %d (want %d or -1 cert-fast-path)",
+			n.op, out.Layer, canonicalLayer)
+		if out.Layer == canonicalLayer {
+			canonicalCount++
+		}
+		if ref == nil {
+			ref = out
+			continue
+		}
+		require.Truef(t, bytes.Equal(ref.Value, out.Value), "op %d decided a different Value", n.op)
+		require.Truef(t, bytes.Equal(ref.Signature, out.Signature), "op %d reconstructed a different Signature", n.op)
+	}
+	require.GreaterOrEqualf(t, canonicalCount, 1,
+		"at least one op must decide locally at layer %d to seed the cert-fast-path for any others",
+		canonicalLayer)
+	return ref
+}
+
 // blsCluster bundles the real-BLS nodes with the cluster-wide verification
 // material (master pubkey + a verify-only signer) for end-state assertions.
 type blsCluster struct {
@@ -128,6 +178,19 @@ func buildBLSCluster(t *testing.T, n int, overrides *ConfigOverrides) *blsCluste
 			},
 			HostValidate: func(context.Context, phase0.Slot, int, []byte) (bool, error) { return true, nil },
 			Broadcast: func(_ context.Context, _ phase0.Slot, data []byte) error {
+				if node.broadcastFn != nil {
+					node.broadcastFn(data)
+				}
+				return nil
+			},
+			// BroadcastCertificate routes through the same broadcastFn as
+			// Broadcast: certificates are wire emissions like any other from
+			// the cluster bus's perspective. Production wires this hook (the
+			// peer-cert fast path is the protocol's intended rescue mechanism
+			// when a single op decides and others stall); leaving it nil here
+			// would mask the SilentL0Leader recovery path that depends on the
+			// decider gossiping its certificate to wake the cluster.
+			BroadcastCertificate: func(_ context.Context, _ phase0.Slot, data []byte) error {
 				if node.broadcastFn != nil {
 					node.broadcastFn(data)
 				}
@@ -267,20 +330,7 @@ func TestRunProposerSlot_RealBLS_Healthy_n4(t *testing.T) {
 	}
 	wg.Wait()
 
-	var ref *twoabcore.Output
-	for _, n := range cl.nodes {
-		require.NoErrorf(t, n.runErr, "op %d RunProposerSlot", n.op)
-		out := n.submittedOutput()
-		require.NotNilf(t, out, "op %d submitted no output", n.op)
-		if ref == nil {
-			ref = out
-			continue
-		}
-		require.Truef(t, bytes.Equal(ref.Value, out.Value), "op %d decided a different Value", n.op)
-		require.Truef(t, bytes.Equal(ref.Signature, out.Signature), "op %d reconstructed a different Signature", n.op)
-		require.Equalf(t, ref.Layer, out.Layer, "op %d decided a different layer", n.op)
-	}
-	require.Equal(t, 0, ref.Layer, "healthy case decides at L_0")
+	ref := assertClusterSubmittedAtCanonicalOrCert(t, cl.nodes, 0)
 	require.Equal(t, []byte("slot-7-layer-0-block"), []byte(ref.Value), "cluster decides the L_0 leader's candidate")
 
 	// The core thing real BLS proves over stubs: the reconstructed σ-aggregate
@@ -336,20 +386,7 @@ func TestRunProposerSlot_RealBLS_SilentL0Leader_NRFallThrough(t *testing.T) {
 	}
 	wg.Wait()
 
-	var ref *twoabcore.Output
-	for _, n := range cl.nodes {
-		require.NoErrorf(t, n.runErr, "op %d RunProposerSlot", n.op)
-		out := n.submittedOutput()
-		require.NotNilf(t, out, "op %d submitted no output (NR fall-through failed)", n.op)
-		if ref == nil {
-			ref = out
-			continue
-		}
-		require.Truef(t, bytes.Equal(ref.Value, out.Value), "op %d decided a different Value", n.op)
-		require.Truef(t, bytes.Equal(ref.Signature, out.Signature), "op %d reconstructed a different Signature", n.op)
-		require.Equalf(t, ref.Layer, out.Layer, "op %d decided a different layer", n.op)
-	}
-	require.Equal(t, 1, ref.Layer, "silent L_0 leader → cluster decides at L_1")
+	ref := assertClusterSubmittedAtCanonicalOrCert(t, cl.nodes, 1)
 	require.Equal(t, []byte("slot-7-layer-1-block"), []byte(ref.Value), "decided value is the L_1 leader's candidate")
 	require.Truef(t, cl.verifier.VerifyAggregate(cl.masterPub, ref.Value, ref.Signature),
 		"reconstructed L_1 signature must verify against the cluster master pubkey")
