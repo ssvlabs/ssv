@@ -39,7 +39,7 @@ func TestRun_PostConsensusQuorumMiss(t *testing.T) {
 			ct.OperatorID(3): 600 * time.Millisecond,
 		},
 	}
-	out, err := run(cfg, 1200*time.Millisecond, 0)
+	out, err := run(cfg, runOpts{rt: 1200 * time.Millisecond})
 	require.NoError(t, err)
 	require.False(t, out.Decided, "cluster should miss without 2f+1 partial sigs")
 	require.Equal(t, DiagNoPostConsensusQuorum, out.PerOp[1].Err, "op1 consensus-decided locally but lacked partial-sig quorum")

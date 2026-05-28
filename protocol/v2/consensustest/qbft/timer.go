@@ -10,7 +10,9 @@ import (
 // queue at `now + RT` for round 1, or `now + RT + RTRecoveryExtra` for
 // rounds ≥ 2 (the recovery-round round-change hop); later TimeoutForRound
 // calls invalidate prior timers via the seq counter (callbacks no-op on
-// seq mismatch).
+// seq mismatch). When the desConfig is configured with LastRoundUnbounded
+// (QBFT-NR family), TimeoutForRound skips the schedule for the final
+// round so the instance sits in it until decision or sim-end.
 //
 // Cluster construction wires one virtualRoundTimer per (operator, instance);
 // each instance's Stop is invoked when the instance terminates (decided or
@@ -29,6 +31,17 @@ func newVirtualRoundTimer(s *sim, op spectypes.OperatorID) *virtualRoundTimer {
 func (t *virtualRoundTimer) TimeoutForRound(round specqbft.Round) {
 	t.seq++
 	mySeq := t.seq
+	if t.sim.cfg.LastRoundUnbounded && int(round) >= t.sim.cfg.MaxRounds {
+		// QBFT-NR: round == MaxRounds is configured unbounded. Don't arm
+		// a timer — the instance stays in this round until decision or
+		// until the DES's RunUntil cap fires (RelayCutoff + RT +
+		// RTRecoveryExtra, see des.go); ClipLateDecision in adapter.go
+		// then converts unfinished sims to MISS at RelayCutoff. The seq
+		// bump above is preserved so any future code path that armed a
+		// timer for a prior round is invalidated, even though no such
+		// path exists in practice today.
+		return
+	}
 	// Round 1 = base RT; rounds ≥ 2 add RTRecoveryExtra (the ROUND_CHANGE
 	// hop before the new leader can PROPOSE). See adapter.go for the floor.
 	timeout := t.sim.cfg.RT

@@ -47,7 +47,7 @@ func (QBFT) Name() string { return "QBFT" }
 func (QBFT) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 	// R1 = 3·BTT + (SafetyBuffer + 1·BTT cushion) = 4·BTT + SafetyBuffer;
 	// rtRecoveryExtra = 1·BTT (the ROUND_CHANGE hop) → R≥2 = 5·BTT + SafetyBuffer.
-	return run(cfg, 4*cfg.BTT+cfg.SafetyBuffer, cfg.BTT)
+	return run(cfg, runOpts{rt: 4*cfg.BTT + cfg.SafetyBuffer, rtRecoveryExtra: cfg.BTT})
 }
 
 // QBFT0 is the pristine structural-floor variant, reported as
@@ -68,7 +68,7 @@ type QBFT0 struct{}
 func (QBFT0) Name() string { return "QBFT-0" }
 
 func (QBFT0) Run(cfg ct.SimConfig) (ct.Outcome, error) {
-	return run(cfg, 3*cfg.BTT, cfg.BTT)
+	return run(cfg, runOpts{rt: 3 * cfg.BTT, rtRecoveryExtra: cfg.BTT})
 }
 
 // QBFT300 is the 300ms-cushion rung, reported as "QBFT-300": the
@@ -80,7 +80,7 @@ type QBFT300 struct{}
 func (QBFT300) Name() string { return "QBFT-300" }
 
 func (QBFT300) Run(cfg ct.SimConfig) (ct.Outcome, error) {
-	return run(cfg, 4*cfg.BTT+300*time.Millisecond, cfg.BTT)
+	return run(cfg, runOpts{rt: 4*cfg.BTT + 300*time.Millisecond, rtRecoveryExtra: cfg.BTT})
 }
 
 // QBFT500 / QBFT700 are the 500ms / 700ms cushion rungs ("QBFT-500" /
@@ -94,7 +94,7 @@ type QBFT500 struct{}
 func (QBFT500) Name() string { return "QBFT-500" }
 
 func (QBFT500) Run(cfg ct.SimConfig) (ct.Outcome, error) {
-	return run(cfg, 4*cfg.BTT+500*time.Millisecond, cfg.BTT)
+	return run(cfg, runOpts{rt: 4*cfg.BTT + 500*time.Millisecond, rtRecoveryExtra: cfg.BTT})
 }
 
 type QBFT700 struct{}
@@ -102,7 +102,7 @@ type QBFT700 struct{}
 func (QBFT700) Name() string { return "QBFT-700" }
 
 func (QBFT700) Run(cfg ct.SimConfig) (ct.Outcome, error) {
-	return run(cfg, 4*cfg.BTT+700*time.Millisecond, cfg.BTT)
+	return run(cfg, runOpts{rt: 4*cfg.BTT + 700*time.Millisecond, rtRecoveryExtra: cfg.BTT})
 }
 
 // QBFTSSV is the production variant (Name "QBFT-SSV"): a flat 2s round
@@ -114,14 +114,68 @@ type QBFTSSV struct{}
 func (QBFTSSV) Name() string { return "QBFT-SSV" }
 
 func (QBFTSSV) Run(cfg ct.SimConfig) (ct.Outcome, error) {
-	return run(cfg, defaultFixedRT, 0)
+	return run(cfg, runOpts{rt: defaultFixedRT})
 }
 
-// run is the shared QBFT DES driver. rt is the round-1 timeout (and, for the
-// flat-RT variant, every round's timeout); rtRecoveryExtra is added by
-// timer.go for rounds > FirstRound (the ROUND_CHANGE preamble) and is 0 for
-// the flat-RT variant.
-func run(cfg ct.SimConfig, rt, rtRecoveryExtra time.Duration) (ct.Outcome, error) {
+// QBFT2R caps the round-change ladder at 2 rounds with R2 unbounded.
+// R1 = 3·BTT (matching QBFT-0); R2's timer is never armed, so the
+// instance stays in round 2 until decision or until the DES's RunUntil
+// cap fires (ClipLateDecision then converts unfinished sims to MISS at
+// RelayCutoff). Round 3+ is unreachable (CutOffRound = MaxRounds + 1 = 3).
+//
+// QBFT2R is one half of the QBFT-NR family (alongside QBFT3R): a
+// deliberately capped ladder with the last round running unbounded. R1
+// and rtRecoveryExtra both match QBFT-0's pristine floor, so each
+// variant tests two knobs at once vs the QBFT-0..700 / QBFT-SSV ladder:
+// (a) the marginal value of round-changes beyond N in adversarial cells
+// where the first N leaders are byz/crashed, and (b) the cost of running
+// pristine R1 = 3·BTT when the unbounded final round absorbs whatever
+// R1 missed (no R1 cushion, only a fallback round). The differential
+// QBFT-3R − QBFT-2R isolates the value of one additional round-change
+// attempt.
+type QBFT2R struct{}
+
+func (QBFT2R) Name() string { return "QBFT-2R" }
+
+func (QBFT2R) Run(cfg ct.SimConfig) (ct.Outcome, error) {
+	return run(cfg, runOpts{
+		rt:                 3 * cfg.BTT,
+		rtRecoveryExtra:    cfg.BTT, // unused (R2 timer never arms); kept for parity with QBFT-0
+		maxRounds:          2,
+		lastRoundUnbounded: true,
+	})
+}
+
+// QBFT3R caps the ladder at 3 rounds with R3 unbounded. Same shape as
+// QBFT-2R but with one more bounded round before the fallback: R1 = 3·BTT,
+// R2 = 4·BTT (= R1 + rtRecoveryExtra, matching QBFT-0's R≥2), R3's timer
+// never arms. Round 4+ is unreachable.
+type QBFT3R struct{}
+
+func (QBFT3R) Name() string { return "QBFT-3R" }
+
+func (QBFT3R) Run(cfg ct.SimConfig) (ct.Outcome, error) {
+	return run(cfg, runOpts{
+		rt:                 3 * cfg.BTT,
+		rtRecoveryExtra:    cfg.BTT,
+		maxRounds:          3,
+		lastRoundUnbounded: true,
+	})
+}
+
+// runOpts collects the per-variant knobs passed to the shared QBFT DES
+// driver. Zero values reproduce the default reflood-aware shape — variants
+// set only the fields that differ from QBFT-0 / QBFT. maxRounds = 0 falls
+// back to defaultMaxRounds.
+type runOpts struct {
+	rt                 time.Duration // R1 (and, for fixed-RT variants, every round's) timeout
+	rtRecoveryExtra    time.Duration // added to RT for rounds ≥ 2 (ROUND_CHANGE preamble); 0 for fixed-RT
+	maxRounds          int           // 0 → defaultMaxRounds
+	lastRoundUnbounded bool          // QBFT-NR: skip arming the timer for round == maxRounds
+}
+
+// run is the shared QBFT DES driver. See runOpts for the per-variant knobs.
+func run(cfg ct.SimConfig, opts runOpts) (ct.Outcome, error) {
 	if err := cfg.Validate(); err != nil {
 		// Mirror the OBFT / 2abOBFT adapters: SimConfig.Validate failures
 		// at this point mean the operating point is incompatible with
@@ -151,23 +205,29 @@ func run(cfg ct.SimConfig, rt, rtRecoveryExtra time.Duration) (ct.Outcome, error
 	// runs at BFT_start=0 and the report UI shifts decision times post-hoc
 	// to model later BFT_start values.
 
+	maxRounds := opts.maxRounds
+	if maxRounds == 0 {
+		maxRounds = defaultMaxRounds
+	}
+
 	bw := ct.NewBandwidthReport()
 	desCfg := desConfig{
-		N:               cfg.N,
-		Operators:       cfg.Operators,
-		Crashed:         cfg.Byz.Crashed,
-		BTT:             cfg.BTT,
-		RT:              rt,
-		RTRecoveryExtra: rtRecoveryExtra,
-		MaxRounds:       defaultMaxRounds,
-		Network:         cfg.Network,
-		Host:            cfg.Host,
-		Byz:             internal,
-		Seed:            cfg.Seed,
-		TraceEnabled:    cfg.TraceEnabled,
-		Bandwidth:       &bw,
-		Mesh:            cfg.MakeMeshTopology(),
-		RelayCutoff:     cfg.RelayCutoff,
+		N:                  cfg.N,
+		Operators:          cfg.Operators,
+		Crashed:            cfg.Byz.Crashed,
+		BTT:                cfg.BTT,
+		RT:                 opts.rt,
+		RTRecoveryExtra:    opts.rtRecoveryExtra,
+		MaxRounds:          maxRounds,
+		LastRoundUnbounded: opts.lastRoundUnbounded,
+		Network:            cfg.Network,
+		Host:               cfg.Host,
+		Byz:                internal,
+		Seed:               cfg.Seed,
+		TraceEnabled:       cfg.TraceEnabled,
+		Bandwidth:          &bw,
+		Mesh:               cfg.MakeMeshTopology(),
+		RelayCutoff:        cfg.RelayCutoff,
 	}
 
 	rawOut, err := runDES(desCfg)
@@ -278,13 +338,19 @@ type desConfig struct {
 	RT              time.Duration // round-1 (base) round timeout
 	RTRecoveryExtra time.Duration // added for rounds ≥ 2 (round-change hop); 0 for fixed-RT
 	MaxRounds       int
-	Network         ct.NetworkModel
-	Host            ct.HostPattern
-	Byz             internalByz
-	Seed            int64
-	TraceEnabled    bool
-	Bandwidth       *ct.BandwidthReport
-	Mesh            *ct.MeshTopology // nil when DeliveryDirect
+	// LastRoundUnbounded, when true, makes the round timer (timer.go) skip
+	// arming for round == MaxRounds. The instance stays in that round until
+	// decision or until the DES's RunUntil cap fires; ClipLateDecision then
+	// converts unfinished sims to MISS at RelayCutoff. Used by the QBFT-NR
+	// family (QBFT-2R / QBFT-3R) — see adapter.go.
+	LastRoundUnbounded bool
+	Network            ct.NetworkModel
+	Host               ct.HostPattern
+	Byz                internalByz
+	Seed               int64
+	TraceEnabled       bool
+	Bandwidth          *ct.BandwidthReport
+	Mesh               *ct.MeshTopology // nil when DeliveryDirect
 	// RelayCutoff is the slot's hard submit deadline (carried over
 	// from SimConfig). Used to bound the gossip-heartbeat sequence.
 	RelayCutoff time.Duration

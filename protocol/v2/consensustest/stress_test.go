@@ -293,13 +293,24 @@ func TestStress(t *testing.T) {
 		twoabadapter.Protocol{VariantName: "2abOBFT-500", SafetyBufferOverride: durPtr(500 * time.Millisecond), BaselineOnly: true},
 		twoabadapter.Protocol{VariantName: "2abOBFT-700", SafetyBufferOverride: durPtr(700 * time.Millisecond)},
 		// QBFT cushion ladder — round-timer cushion = 0 / 300 / 500 / 700ms,
-		// plus the fixed-2s production variant. NB uneven: QBFT-0 (the
-		// no-reflood floor) is 3·BTT — it drops a structural 1·BTT that the
-		// cushioned rungs carry — while QBFT-{300,500,700} are 4·BTT+cushion.
+		// plus the fixed-2s production variant and the QBFT-NR family
+		// (QBFT-2R / QBFT-3R). NB uneven: QBFT-0 (the no-reflood floor)
+		// is 3·BTT — it drops a structural 1·BTT that the cushioned rungs
+		// carry — while QBFT-{300,500,700} are 4·BTT+cushion. QBFT-NR
+		// re-uses QBFT-0's 3·BTT R1 and caps the ladder at N rounds with
+		// the final round unbounded — see qbft/adapter.go for the family
+		// rationale.
 		baselineOnly(qbftadapter.QBFT0{}),   // "QBFT-0" (Baseline-only)
 		baselineOnly(qbftadapter.QBFT300{}), // "QBFT-300" (Baseline-only)
 		baselineOnly(qbftadapter.QBFT500{}), // "QBFT-500" (Baseline-only)
 		qbftadapter.QBFT700{},               // "QBFT-700"
+		// QBFT-NR: round-change ladder capped at N rounds, last round
+		// unbounded. Tests both "ladder value beyond N attempts" and
+		// "tight-R1 + absorbent-final-round" simultaneously vs the
+		// cushion ladder above. First-class (not baseline-only) — the
+		// adversarial cells are where the round-cap differential matters.
+		qbftadapter.QBFT2R{}, // "QBFT-2R": R1=3·BTT, R2=∞, no R3+
+		qbftadapter.QBFT3R{}, // "QBFT-3R": R1=3·BTT, R2=4·BTT, R3=∞, no R4+
 		qbftadapter.QBFTSSV{},
 		// PSigs is a baseline-cost reference: every honest op signs the
 		// pre-agreed V at slot start and broadcasts; the cluster decides at
