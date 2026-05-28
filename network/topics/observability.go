@@ -38,7 +38,7 @@ var (
 		meter.Int64Counter(
 			observability.InstrumentName(pubsubObservabilityNamespace, "received"),
 			metric.WithUnit("{message}"),
-			metric.WithDescription("total number of messages received by the pubsub topic validator")))
+			metric.WithDescription("total number of messages delivered to the pubsub topic validator, before SSV validation runs (compare with ssv_p2p_messages_in_total for the post-validation rate)")))
 
 	msgIDHandlerBufferFallbackCounter = metrics.New(
 		meter.Int64Counter(
@@ -62,6 +62,9 @@ func messageTypeAttribute(value uint64) attribute.KeyValue {
 	}
 }
 
+// recordPubsubMessageReceived is called from the topic validator wrapper before the inner SSV
+// validator runs, so the counter increments for every message libp2p hands to the validator
+// regardless of validation outcome (accept/ignore/reject/timeout).
 func recordPubsubMessageReceived(ctx context.Context, topic string) {
 	pubsubMessagesReceivedCounter.Add(ctx, 1, metric.WithAttributes(pubsubTopicAttribute(topic)))
 }
