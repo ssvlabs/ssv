@@ -355,7 +355,7 @@ Tests mirror base 1:1 (same scenarios, same assertions, twoab Resolve harness).
 - **Existing `consensustest` stress suite must continue to pass** end-to-end. The batch path is a refactor of the σ-walk; behaviour-equivalent. Run `make stresstest` after commit 3 to confirm.
 - **Existing protocol tests under `-race`**: skip the new BLSSigner-batch tests under `-race` (herumi `checkptr` issue), but the σ-walk batch wiring tests in commits 2 & 3 use a custom signer that doesn't go through `bls.MultiVerify` — they run under `-race` freely.
 - **B4 re-run**: confirm batch vs sequential numbers are unchanged for raw `bls.MultiVerify`.
-- **New benchmark `BenchmarkResolve_LkGreaterThanZero_BatchVsSequential`**: end-to-end σ-walk timing comparing pre-F4 (sequential) and post-F4 (batch). Should show the ~1.5-1.8× speedup predicted by B4 at typical N.
+- **New benchmark `BenchmarkResolve_LkGreaterThanZero_BatchVsSequential`** (planned, NOT landed — see §Status): end-to-end σ-walk timing comparing pre-F4 (sequential) and post-F4 (batch). Should show the ~1.5-1.8× speedup predicted by B4 at typical N.
 - **Race-stress runner test** ([protocol/v2/ssv/runner/obft/race_safety_bridge_test.go](protocol/v2/ssv/runner/obft/race_safety_bridge_test.go) and twoab counterpart) — confirms no data races introduced. The L_k > 0 batch path triggers only under specific protocol states (L_0 quorum fail); the stress test exercises both happy and degraded paths.
 
 ## Race-detector issue with `bls.MultiVerify`
@@ -407,7 +407,7 @@ Three commits, all CI-green standalone:
 
 3. **Commit 3 — twoab mirror.** Same refactor at [twoab/phase3.go](protocol/v2/obft/twoab/phase3.go). Same test set, twoab-flavored. ~200 lines net.
 
-Each commit CI-green on its own. After commit 3, re-run the full consensustest stress matrix (`make stresstest`) to confirm the safety invariant holds across cluster sizes + attack modes. Re-run B4 (raw `bls.MultiVerify`) and the new `BenchmarkResolve_LkGreaterThanZero_BatchVsSequential` to confirm the predicted ~1.5-1.8× σ-walk speedup at typical N.
+Each commit CI-green on its own. After commit 3, re-run the full consensustest stress matrix (`make stresstest`) to confirm the safety invariant holds across cluster sizes + attack modes. Re-run B4 (raw `bls.MultiVerify`) to confirm the per-call numbers; the planned end-to-end `BenchmarkResolve_LkGreaterThanZero_BatchVsSequential` was descoped (§Status).
 
 ## Open questions
 
@@ -424,5 +424,32 @@ None of the above blocks implementation.
 ## Status
 
 - Plan: this document.
-- Implementation: not started — next step.
-- Benchmarks: B4 already landed in [9644c8a12](https://github.com/ssvlabs/ssv/commit/9644c8a12); a new `BenchmarkResolve_LkGreaterThanZero_BatchVsSequential` lands alongside commit 2.
+- Implementation: **complete**, landed across three CI-green commits:
+  - `0e9481412` — Signer interface extension + 4 backend implementations
+    (BLSSigner via herumi `MultiVerify`; KyberSigner / StubSigner / both
+    proposerSigner wrappers as sequential / translate-then-delegate);
+    `countingSigner` test mock picked up the pass-through; `skipIfRace`
+    helper + build-tag pair gated the BLSSigner-batch tests AND was
+    applied retroactively to the existing `TestMultiVerify_Fixture`.
+  - `6b32dfef1` — base/phase3.go σ-walk wired to collect cache-miss
+    tuples into a single batch with sequential fallback for Rule-4
+    attribution. 5 helper-level tests in `phase3_batch_test.go`.
+  - `ad3b0eb42` — twoab/phase3.go mirror, splitting
+    `extractSigmaFromEntries` into a classify helper that pushes pending
+    tuples to the batch entry-point in `aggregatePeerLayerEntries`.
+    5 mirror tests in `twoab/phase3_batch_test.go`.
+- Follow-up cleanup commit lifts `proposer_signer_bench_test.go::makeBenchV`
+  to `testing.TB` so it's reusable, adds 4 direct unit tests for each of
+  the two `proposerSigner.VerifyPartialBatch` wrappers covering happy-path
+  delegation, bad-V short-circuit, length mismatch, and empty batch. The
+  tests use a recording mock inner signer so the wrapper-translate logic
+  is exercised without touching `bls.MultiVerify` (no `-race` skip needed
+  for the wrapper paths).
+- Benchmarks: B4 already landed in [9644c8a12](https://github.com/ssvlabs/ssv/commit/9644c8a12).
+  The planned `BenchmarkResolve_LkGreaterThanZero_BatchVsSequential` was
+  not added — direct benching would require manually staging an L_k>0
+  Resolve walk against a control signer, which adds substantial test
+  infrastructure for a marginal signal beyond B4's raw `MultiVerify`
+  speedup. The end-to-end win is observable instead via `make stresstest`
+  variance against the F1+F3+F5 baseline. Out of F4 scope; revisit if
+  profile data shows the σ-walk dominating a hot slot.

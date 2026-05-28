@@ -26,8 +26,13 @@ import (
 // driver in real Beacon blocks. 0 = minimal block (~1 KB), 64 = mid-range
 // (~10 KB), 128 = MAX_ATTESTATIONS pre-Electra (~20 KB realistic upper
 // bound for production blinded blocks per Q-Open-3).
-func makeBenchV(b *testing.B, attCount int) []byte {
-	b.Helper()
+//
+// Accepts testing.TB so unit tests can reuse it (e.g. proposer_signer_test.go
+// for the F4 VerifyPartialBatch wrapper coverage). The Helper / Fatalf
+// methods used here are on the testing.TB interface so the signature change
+// is purely additive.
+func makeBenchV(tb testing.TB, attCount int) []byte {
+	tb.Helper()
 
 	atts := make([]*phase0.Attestation, attCount)
 	for i := range atts {
@@ -86,7 +91,7 @@ func makeBenchV(b *testing.B, attCount int) []byte {
 
 	ssz, err := bb.MarshalSSZ()
 	if err != nil {
-		b.Fatalf("MarshalSSZ: %v", err)
+		tb.Fatalf("MarshalSSZ: %v", err)
 	}
 	return EncodeCandidate(spec.DataVersionDeneb, ssz)
 }
