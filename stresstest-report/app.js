@@ -2715,6 +2715,17 @@ function protocolColor(name) {
   return PROTOCOL_COLORS[name] || '#888';
 }
 
+// FAMILY_RENDER_ORDER pins the cross-family render order in legend grids,
+// heatmaps, and breakdown tables. mergeProtocols (reporting/data.go)
+// preserves first-occurrence order across partial regens, so a run that
+// adds QBFT-NR variants before the cushion ladder would otherwise pin
+// QBFT first in every widget. Mirrors stress_test.go's Go-side order:
+// BFT families OBFT → 2abOBFT → QBFT (so all QBFT variants — cushion
+// ladder, QBFT-NR, QBFT-SSV — group together at the bottom), then PSigs
+// as the partial-sig baseline floor. Unknown families (future additions)
+// fall back to first-occurrence order, appended after the canonical ones.
+const FAMILY_RENDER_ORDER = ['OBFT', '2abOBFT', 'QBFT', 'PSigs'];
+
 // sortProtocolsByFamily reorders the protocol list so variants sit next
 // to their canonical base, preserving Go-side registration order
 // WITHIN each family. E.g.
@@ -2723,8 +2734,8 @@ function protocolColor(name) {
 //   ["OBFT-0","OBFT-700","QBFT-0","QBFT-700"]
 // Family identity is the canonical name minus an optional "-<suffix>"
 // (variant flavor like QBFT-SSV or a cushion rung like OBFT-300). Family
-// order in the output is first-occurrence in the input; within each
-// family, variants appear in input order.
+// order in the output is FAMILY_RENDER_ORDER, then first-occurrence for
+// any unranked family; within each family, variants appear in input order.
 //
 // Trusting Go-side registration order matters: variant placement
 // communicates intent. E.g. the cushion rungs are registered least → most
@@ -2738,7 +2749,11 @@ function sortProtocolsByFamily(protocols) {
     const i = name.indexOf('-');
     return i < 0 ? name : name.slice(0, i);
   };
-  const families = []; // first-occurrence order
+  const familyRank = (fam) => {
+    const idx = FAMILY_RENDER_ORDER.indexOf(fam);
+    return idx === -1 ? FAMILY_RENDER_ORDER.length : idx;
+  };
+  const families = []; // first-occurrence order; resorted by rank below
   const byFamily = new Map();
   protocols.forEach((p) => {
     const fam = familyOf(p);
@@ -2748,6 +2763,10 @@ function sortProtocolsByFamily(protocols) {
     }
     byFamily.get(fam).push(p); // input order preserved within family
   });
+  // Stable sort by canonical rank — ties (= unranked families, all at
+  // rank = FAMILY_RENDER_ORDER.length) keep first-occurrence order.
+  // Array.prototype.sort has been stable since ES2019.
+  families.sort((a, b) => familyRank(a) - familyRank(b));
   const out = [];
   families.forEach((fam) => out.push(...byFamily.get(fam)));
   return out;
