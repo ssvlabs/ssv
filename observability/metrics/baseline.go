@@ -89,14 +89,20 @@ func RegisterLabeledBaseline(fn func(context.Context)) {
 // another Add(ctx, 0), which does not change any counter's value — but it is wasted work
 // and produces extra samples in the scrape window. Prefer the once-at-startup pattern.
 func EmitBaselines(ctx context.Context) {
+	// The sparse-counters loop holds the lock during Add(ctx, 0). This is safe because
+	// metric.Int64Counter.Add is a leaf operation in the OTel SDK — it does not call back
+	// into user code and so cannot re-enter RegisterSparseCounter. If a future counter
+	// implementation grows callbacks (e.g. observable instruments with user callbacks),
+	// switch to the snapshot-then-invoke pattern used for labeled baselines below.
 	sparseCountersMu.Lock()
 	for _, c := range sparseCounters {
 		c.Add(ctx, 0)
 	}
 	sparseCountersMu.Unlock()
 
-	// Copy the slice under lock, then invoke without the lock — defensive in case any
-	// registered function indirectly triggers another registration.
+	// Copy the slice under lock, then invoke without the lock — defensive because the
+	// registered functions are user-provided and may indirectly trigger another
+	// RegisterLabeledBaseline (which would deadlock if we held the lock while invoking).
 	labeledBaselinesMu.Lock()
 	fns := make([]func(context.Context), len(labeledBaselineFns))
 	copy(fns, labeledBaselineFns)

@@ -147,6 +147,11 @@ var (
 // first real increment with no prior sample, and Prometheus has nothing to compute a
 // delta from. Configured beacon addresses are passed in because they're only known after
 // GoClient construction.
+//
+// Invariant: `clients` must be final at call time. The closure captures the slice header,
+// so any later append to the same backing array (or a re-slice via append-that-reallocates)
+// would not be visible here. Today this is satisfied because the caller in goclient.New
+// finishes all addSingleClient calls before invoking registerProposalParentBaselines.
 func registerProposalParentBaselines(clients []Client) {
 	metrics.RegisterLabeledBaseline(func(ctx context.Context) {
 		for _, c := range clients {

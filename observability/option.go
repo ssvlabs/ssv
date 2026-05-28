@@ -33,4 +33,3 @@ func WithTraces() Option {
 		cfg.traces.enabled = true
 	}
 }
-

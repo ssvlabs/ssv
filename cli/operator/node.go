@@ -383,8 +383,8 @@ var StartNodeCmd = &cobra.Command{
 			}
 		}()
 		logger.Info("observability stack initialized",
-			zap.Bool("metrics_enabled", cfg.MetricsAPIPort > 0),
-			zap.Bool("traces_enabled", cfg.EnableTraces),
+			zap.Bool("metrics_configured", cfg.MetricsAPIPort > 0),
+			zap.Bool("traces_configured", cfg.EnableTraces),
 			zap.Bool("operator_id_label", operatorDataStore.OperatorIDReady()),
 		)
 
@@ -393,7 +393,11 @@ var StartNodeCmd = &cobra.Command{
 		// Caveat: this only baselines the unlabeled time series; counters that emit with
 		// per-call attributes still produce one un-baselined series per attribute set on
 		// first increment — improving that is future work (per-attribute-set baselines).
-		metrics.EmitBaselines(cmd.Context())
+		// Gated on metrics being configured: when disabled the meter provider is no-op and
+		// the registered Add(0)/closures would just iterate to produce no-op work.
+		if cfg.MetricsAPIPort > 0 {
+			metrics.EmitBaselines(cmd.Context())
+		}
 
 		validatorProvider := nodeStorage.ValidatorStore().WithOperatorID(operatorDataStore.GetOperatorID)
 		var validatorRegistrationSubmitter runner.ValidatorRegistrationSubmitter

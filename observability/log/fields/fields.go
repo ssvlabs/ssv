@@ -67,6 +67,7 @@ const (
 	FieldPrivKey               = "privkey"
 	FieldProtocolID            = "protocol_id"
 	FieldPubKey                = "pubkey"
+	FieldBeaconClient          = "beacon_client"
 	FieldBeaconRole            = "beacon_role"
 	FieldRunnerRole            = "runner_role"
 	FieldSlot                  = "slot"
@@ -115,6 +116,13 @@ func DutyExecutorID(senderID []byte) zapcore.Field {
 
 func Address(val string) zapcore.Field {
 	return zap.String(FieldAddress, val)
+}
+
+// BeaconClient is the address of a configured beacon client. Mirrors the metric attribute
+// observability.BeaconClientAttribute (which uses the OTel-conventional dotted key
+// `ssv.beacon.client`); this helper provides the equivalent snake-case key for log fields.
+func BeaconClient(addr string) zapcore.Field {
+	return zap.String(FieldBeaconClient, addr)
 }
 
 func Addresses(vals []string) zapcore.Field {

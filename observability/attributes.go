@@ -30,7 +30,7 @@ const (
 func OperatorIDAttribute(id spectypes.OperatorID) attribute.KeyValue {
 	return attribute.KeyValue{
 		Key:   "ssv.operator_id",
-		Value: Uint64AttributeValue(uint64(id)),
+		Value: Uint64AttributeValue(id),
 	}
 }
 

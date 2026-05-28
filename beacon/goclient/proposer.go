@@ -387,7 +387,7 @@ func (gc *GoClient) verifyProposalParent(
 		zap.Uint64("parent_slot", uint64(parentSlot)),
 		zap.Stringer("expected_root", expectedRoot),
 		zap.Stringer("got_root", parentRoot),
-		zap.String("beacon_client", beaconClient),
+		fields.BeaconClient(beaconClient),
 	)
 }
 

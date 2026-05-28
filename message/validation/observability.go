@@ -27,13 +27,16 @@ var (
 			metric.WithUnit("{message_validation}"),
 			metric.WithDescription("total number of messages successfully validated and accepted")))
 
-	// Possibly sparse (UNKNOWN from audit): depends on validation failure rate.
+	// TODO(audit): classification uncertain — depends on validation failure rate which
+	// in turn depends on network health and version skew. Re-evaluate against production
+	// data. Mis-classifying as sparse is harmless for PromQL but should reflect intent.
 	messageValidationsIgnoredCounter = metrics.RegisterSparseCounter(metrics.New(
 		meter.Int64Counter(
 			observability.InstrumentName(observabilityNamespace, "ignored"),
 			metric.WithUnit("{message_validation}"),
 			metric.WithDescription("total number of messages that failed validation and were ignored"))))
 
+	// TODO(audit): see note on messageValidationsIgnoredCounter — same caveat applies.
 	messageValidationsRejectedCounter = metrics.RegisterSparseCounter(metrics.New(
 		meter.Int64Counter(
 			observability.InstrumentName(observabilityNamespace, "rejected"),

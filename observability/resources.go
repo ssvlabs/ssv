@@ -23,11 +23,13 @@ func buildResources(appName, appVersion string, extraAttrs []attribute.KeyValue,
 
 	// Build the base attribute set, then append any caller-supplied extras (e.g. operator_id
 	// which is only known after the operator data store is initialized).
-	baseAttrs := []attribute.KeyValue{
+	const baseAttrCount = 3
+	baseAttrs := make([]attribute.KeyValue, 0, baseAttrCount+len(extraAttrs))
+	baseAttrs = append(baseAttrs,
 		semconv.ServiceName(appName),
 		semconv.ServiceVersion(appVersion),
 		semconv.HostName(hostName),
-	}
+	)
 	baseAttrs = append(baseAttrs, extraAttrs...)
 
 	const errMsg = "failed to merge OTeL Resources"
