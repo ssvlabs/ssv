@@ -178,7 +178,11 @@ func (i *Instance) tryReconstructLayer(layer int, chainedKeys [][]byte) (*Output
 	// NewInstance ensures every layer's leader has a registered pub-share.
 	pubShare := i.pubKeyShares[leaderID]
 	for _, b := range i.bundles[layer][leaderID] {
-		if i.signer.VerifyPartial(pubShare, b.Value, b.LeaderSigma) {
+		// F1: verifyOrCached hits the verify-cache populated at retention
+		// (phase1.go ObservePhase1Bundle) for the common path; falls through
+		// to a fresh signer.VerifyPartial on miss. Equivalent semantics to
+		// the previous unconditional signer.VerifyPartial call.
+		if i.verifyOrCached(leaderID, layer, pubShare, b.Value, b.LeaderSigma) {
 			addToGroup(&groups, b.Value, leaderID, b.LeaderSigma)
 		}
 	}
@@ -244,7 +248,13 @@ func (i *Instance) tryReconstructLayer(layer int, chainedKeys [][]byte) (*Output
 			if pubShare == nil {
 				continue
 			}
-			if !i.signer.VerifyPartial(pubShare, el.Value, partial) {
+			// F1: verifyOrCached hits the verify-cache populated at L_0
+			// observation (phase2.go peerSigmaAtL0Verdict) for the L_0 case;
+			// falls through to a fresh verify at L_k > 0, where the partial
+			// bytes were chained-encrypted at observation and this is the
+			// first opportunity to verify. On L_k > 0 success it populates
+			// the cache so subsequent Resolve calls skip the decrypt+verify.
+			if !i.verifyOrCached(opID, layer, pubShare, el.Value, partial) {
 				if layer > 0 {
 					// Decrypted bytes are not a valid σ partial on the
 					// claimed V — Rule 4 (post-decryption garbage). Same

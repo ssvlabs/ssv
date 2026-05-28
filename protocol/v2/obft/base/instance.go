@@ -2,6 +2,7 @@ package base
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"time"
@@ -352,6 +353,48 @@ type Instance struct {
 	// struct append per layer per Resolve call. Negligible against the
 	// crypto cost of σ-pool reconstruction at each layer.
 	lastResolveTrace []LayerAttempt
+
+	// verifiedPartials caches the "σ partial X was BLS-verified successfully
+	// at insertion time" relation so Resolve can skip the redundant re-
+	// verify in its σ-walk (audit finding F1, ~70 ms/slot saved at n=7, K=4).
+	//
+	// Populated by every site where signer.VerifyPartial returned true on a
+	// partial that will later contribute to Resolve's σ-pool:
+	//   - phase1.go retainPhase1Bundle (leader bundle σ_V on retention)
+	//   - phase2.go peerSigmaAtL0Verdict (peer L_0 σ-onion entry)
+	//   - phase2.go harvestWitness (witnessed leader σ from peer commits)
+	//   - phase3.go tryReconstructLayer for L_k > 0 onion entries — these
+	//     entries are chained-encrypted at observation, so Resolve's post-
+	//     decrypt verify is the first opportunity; caching on first success
+	//     means subsequent Resolve calls skip it too.
+	//
+	// Read in phase3.go tryReconstructLayer via alreadyVerified /
+	// verifyOrCached. Cache HIT means a prior code path already BLS-verified
+	// this exact partial-bytes for this (op, layer); MISS falls through to
+	// the full verify path (which on success populates the cache).
+	//
+	// Safety: cache populate is gated EXCLUSIVELY by "signer.VerifyPartial
+	// just returned true on this partial". A miss never weakens safety
+	// (full verify still runs); a hit is provably equivalent to a fresh
+	// verify because sha256(partial-bytes) keys uniquely identify the
+	// (verified, by-op, at-layer) tuple. See docs/OBFT-F1-F5-IMPLEMENTATION-PLAN.md
+	// for the full safety-invariant argument.
+	//
+	// Single-threaded by the controller's r.instanceMu — Resolve and every
+	// insertion-time observer run under the same lock (audit Q-Open-2), so
+	// the map needs no internal synchronisation.
+	verifiedPartials map[verifyCacheKey]struct{}
+}
+
+// verifyCacheKey identifies a unique (op, layer, partial) tuple for the
+// verifiedPartials cache. partialRoot = sha256(partial-sig-bytes) so that
+// under byzantine equivocation — same (op, layer) emitting distinct
+// partials — each partial is cached independently and a cache hit cannot
+// pass an unverified-distinct partial as verified.
+type verifyCacheKey struct {
+	op          OperatorID
+	layer       int
+	partialRoot [32]byte
 }
 
 // NewInstance creates a new OBFT instance bound to `ownOperatorID`.
@@ -455,9 +498,67 @@ func NewInstance(
 		rule2Fired:           make(map[int]map[OperatorID]bool, K),
 		witnessedLeaderSigma: make(map[int]map[[32]byte]witnessedSigma, K),
 		evidenceObserved:     make(map[evidenceObservedKey]bool),
-		l0ReadyCh:            make(chan struct{}),
-		host:                 obft.NewHostValidationGate(K),
+		// Verify-cache capacity: every op may emit at every layer (n × K),
+		// plus a slack of 2× for byzantine equivocation under the retention
+		// bounds. Generous upper bound — bounded above by the per-slot
+		// admission caps, so the map can't grow unbounded under attack.
+		verifiedPartials: make(map[verifyCacheKey]struct{}, 2*K*len(cfg.Operators)),
+		l0ReadyCh:        make(chan struct{}),
+		host:             obft.NewHostValidationGate(K),
 	}, nil
+}
+
+// markVerified records that (op, layer, partial) has been BLS-verified
+// successfully, so subsequent re-verifies in Resolve can skip the call. The
+// partialRoot key (sha256 of the partial sig bytes) makes the cache safe
+// under byzantine equivocation — distinct partials at the same (op, layer)
+// cache independently and can't shadow each other. See verifiedPartials's
+// doc-comment for the safety contract.
+//
+// MUST be called only from sites that just observed signer.VerifyPartial
+// return true on the same (pub-share-for-op, sign-target, partial) tuple
+// Resolve will see later. The four legitimate caller sites are listed in
+// the verifiedPartials field doc; adding a fifth requires updating the
+// audit / implementation plan.
+func (i *Instance) markVerified(op OperatorID, layer int, partial []byte) {
+	i.verifiedPartials[verifyCacheKey{
+		op:          op,
+		layer:       layer,
+		partialRoot: sha256.Sum256(partial),
+	}] = struct{}{}
+}
+
+// alreadyVerified reports whether (op, layer, partial) has been BLS-verified
+// before via markVerified. Cache HIT lets Resolve skip a redundant
+// signer.VerifyPartial call; MISS falls through to the full verify.
+func (i *Instance) alreadyVerified(op OperatorID, layer int, partial []byte) bool {
+	_, ok := i.verifiedPartials[verifyCacheKey{
+		op:          op,
+		layer:       layer,
+		partialRoot: sha256.Sum256(partial),
+	}]
+	return ok
+}
+
+// verifyOrCached returns true if (op, layer, partial) is known-verified —
+// either a cache hit (a prior code path already BLS-verified this exact
+// partial), or a fresh signer.VerifyPartial that just succeeded (in which
+// case the cache is populated for next time). Returns false ONLY when a
+// fresh BLS verify ran and rejected the partial.
+//
+// Sole Resolve-side helper for the F1 cache; phase3.go tryReconstructLayer
+// calls this in place of i.signer.VerifyPartial. The false-return path
+// preserves the existing Rule-4 (and any other) evidence handling at the
+// call site — verifyOrCached doesn't touch evidence.
+func (i *Instance) verifyOrCached(op OperatorID, layer int, pubShare, value, partial []byte) bool {
+	if i.alreadyVerified(op, layer, partial) {
+		return true
+	}
+	if !i.signer.VerifyPartial(pubShare, value, partial) {
+		return false
+	}
+	i.markVerified(op, layer, partial)
+	return true
 }
 
 // WantsHostValidationCh returns the channel on which the Instance delivers

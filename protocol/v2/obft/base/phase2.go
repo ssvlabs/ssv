@@ -701,6 +701,12 @@ func (i *Instance) harvestWitness(w LeaderSigmaWitness) {
 	if !i.signer.VerifyPartial(pubShare, v, w.Sigma) {
 		return // drop category 3 — peer forwarded a fabricated witness
 	}
+	// F1: cache the verified result. Witnesses contribute to Resolve's σ-pool
+	// via i.witnessedLeaderSigma — although today Resolve doesn't re-verify
+	// witnesses (it trusts the harvest-time verify), caching here keeps the
+	// invariant uniform and protects against a future Resolve change that
+	// adds a verify on the witness path. See verifiedPartials field doc.
+	i.markVerified(w.Leader, w.Layer, w.Sigma)
 
 	// Rule 2 (LeaderEquivocation) detection: if a distinct V is already
 	// known for this (layer, leader) — either via a retained bundle or via
@@ -868,6 +874,9 @@ func (i *Instance) peerSigmaAtL0Verdict(op OperatorID, el EncryptedLayer) l0Sigm
 	if !i.signer.VerifyPartial(pubShare, el.Value, el.Ciphertext) {
 		return l0SigmaCryptoFake
 	}
+	// F1: cache the verified result so Resolve's peer-onion σ-walk skips the
+	// redundant re-verify at L_0. See verifiedPartials field doc-comment.
+	i.markVerified(op, 0, el.Ciphertext)
 	leaderMap := i.bundles[0]
 	if len(leaderMap) == 0 {
 		// Verify passed but no V retained yet — can't decide between

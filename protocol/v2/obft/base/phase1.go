@@ -168,6 +168,9 @@ func (i *Instance) ObservePhase1Bundle(b *Phase1Bundle, observedOffset time.Dura
 		return fmt.Errorf("obft: phase-1 bundle σ_V does not verify against leader %d's share",
 			b.OperatorID)
 	}
+	// F1: cache the verified result so Resolve's leader-bundle σ-walk skips
+	// the redundant re-verify. See verifiedPartials field doc-comment.
+	i.markVerified(b.OperatorID, b.Layer, b.LeaderSigma)
 
 	// Distinct value_root. Cap retention per the shared retention bound.
 	if len(retained) >= MaxRetainedPerOpLayer {
