@@ -33,6 +33,21 @@ import (
 //
 // raceEnabled is set via the build-tag pair multiverify_race_test.go (race)
 // and multiverify_norace_test.go (!race), following the stdlib pattern.
+//
+// TODO(herumi#70): once https://github.com/herumi/bls-eth-go-binary/issues/70
+// ships in an upstream release and ssvlabs/ssv bumps to it, this whole
+// workaround can be removed. Cleanup steps:
+//  1. Delete this skipIfRace helper.
+//  2. Delete the build-tag pair multiverify_race_test.go and
+//     multiverify_norace_test.go.
+//  3. Remove the skipIfRace(t) call at the top of TestMultiVerify_Fixture in
+//     multiverify_bench_test.go.
+//  4. Remove the skipIfRace(t) call at the top of each
+//     TestBLSSigner_VerifyPartialBatch_* test below.
+//  5. Run `go test -race ./protocol/v2/obft/blsbackend/...` to confirm the
+//     tests pass under -race without the skip.
+//  6. Drop the §race-detector section from docs/OBFT-F4-IMPLEMENTATION-PLAN.md
+//     (or mark it resolved).
 func skipIfRace(t *testing.T) {
 	t.Helper()
 	if raceEnabled {
