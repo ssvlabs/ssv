@@ -231,6 +231,32 @@ func (k *KyberSigner) VerifyAggregate(clusterPubKey []byte, msg []byte, sig obft
 	return k.VerifyPartial(clusterPubKey, msg, sig)
 }
 
+// VerifyPartialBatch on the kyber backend is a sequential fallback —
+// drand/kyber-bls12381 doesn't expose an equivalent of herumi's MultiVerify
+// (its sign/bls.BatchVerify verifies a single aggregated sig against many
+// (pub, msg) pairs, not many individual sigs as a batch). Each call goes
+// through the existing F3 pub-cache, so warm calls benefit from
+// cachedPubkeyPoint; the per-call cost matches sequential VerifyPartial.
+//
+// The method exists to keep the Signer interface uniform — F4's σ-walk
+// caller path delegates batch-or-sequential to the underlying signer, and
+// kyber transparently picks sequential.
+func (k *KyberSigner) VerifyPartialBatch(pubKeyShares [][]byte, msgs [][]byte, sigs []obft.Signature) bool {
+	n := len(sigs)
+	if n == 0 || len(pubKeyShares) != n || len(msgs) != n {
+		return false
+	}
+	for i := 0; i < n; i++ {
+		if len(msgs[i]) != 32 {
+			return false
+		}
+		if !k.VerifyPartial(pubKeyShares[i], msgs[i], sigs[i]) {
+			return false
+		}
+	}
+	return true
+}
+
 // lagrangeCoeffAtZero computes ℓ_j(0) = ∏_{m≠j} (-x_m) / (x_j - x_m) over
 // the kyber scalar field. `xj` is the x-coordinate of the share whose
 // coefficient we're computing; `pts` is all the (x, point) pairs in the

@@ -176,3 +176,44 @@ func (s *BLSSigner) VerifyAggregate(clusterPubKey []byte, msg []byte, sig obft.S
 	}
 	return s2.VerifyByte(&pk, msg)
 }
+
+// VerifyPartialBatch batch-verifies N (pubKeyShare, msg, sig) tuples in one
+// pairing equation via herumi's bls.MultiVerify (random-linear-combination).
+// Returns true iff EVERY tuple would individually verify under VerifyPartial.
+//
+// Each msgs[i] MUST be exactly 32 bytes — herumi concatenates them into one
+// buffer of N*32 bytes. OBFT signs over 32-byte signing roots (NR tags and
+// the proposer-domain signing root translated by proposerSigner) so this is
+// the natural contract.
+//
+// A false return does NOT identify which tuple failed; callers that need
+// per-tuple attribution (Rule-4 evidence at the σ-walk) MUST fall back to a
+// per-tuple VerifyPartial loop. Audit F4 (docs/OBFT-F4-IMPLEMENTATION-PLAN.md).
+//
+// Tests that exercise this path MUST skip under `-race` because herumi's
+// MultiVerify stores slice pointers in uintptr (eth.go:32-33) which Go's
+// checkptr (enabled with -race) flags as unsafe pointer arithmetic. Production
+// builds run without checkptr and are unaffected. See multiverify_batch_test.go's
+// skipIfRace helper.
+func (s *BLSSigner) VerifyPartialBatch(pubKeyShares [][]byte, msgs [][]byte, sigs []obft.Signature) bool {
+	n := len(sigs)
+	if n == 0 || len(pubKeyShares) != n || len(msgs) != n {
+		return false
+	}
+	concat := make([]byte, 0, n*32)
+	sigVec := make([]bls.Sign, n)
+	pubVec := make([]bls.PublicKey, n)
+	for i := 0; i < n; i++ {
+		if len(msgs[i]) != 32 || len(pubKeyShares[i]) == 0 || len(sigs[i]) == 0 {
+			return false
+		}
+		if err := pubVec[i].Deserialize(pubKeyShares[i]); err != nil {
+			return false
+		}
+		if err := sigVec[i].Deserialize(sigs[i]); err != nil {
+			return false
+		}
+		concat = append(concat, msgs[i]...)
+	}
+	return bls.MultiVerify(sigVec, pubVec, concat)
+}

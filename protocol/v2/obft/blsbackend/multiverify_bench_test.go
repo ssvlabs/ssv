@@ -132,7 +132,13 @@ func BenchmarkVerify_MultiVerify_DistinctMsgs(b *testing.B) {
 
 // Sanity: confirm the bench fixture verifies both individually and as a batch.
 // Catches accidental fixture corruption before reading the bench numbers.
+//
+// Skips under -race because bls.MultiVerify stores slice pointers in uintptr
+// (eth.go:32-33, reconverted at eth.go:83) — a pattern Go's checkptr flags
+// as invalid pointer arithmetic. Production builds run without checkptr and
+// are unaffected. See docs/OBFT-F4-IMPLEMENTATION-PLAN.md §race-detector.
 func TestMultiVerify_Fixture(t *testing.T) {
+	skipIfRace(t)
 	tCases := []struct {
 		name      string
 		commonMsg bool

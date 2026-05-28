@@ -96,3 +96,24 @@ func (s *proposerSigner) VerifyAggregate(clusterPubKey []byte, msg []byte, sig t
 	}
 	return s.inner.VerifyAggregate(clusterPubKey, sr, sig)
 }
+
+// VerifyPartialBatch translates each msg (V bytes) to its proposer-domain
+// signing root then delegates the batch to the inner signer. Mirror of the
+// base-OBFT proposerSigner — see that one's doc-comment for the F4 / F2
+// signing-root redundancy note (twoab's σ-walk batches share V the same
+// way, so the same redundancy applies).
+func (s *proposerSigner) VerifyPartialBatch(pubKeyShares [][]byte, msgs [][]byte, sigs []twoabcore.Signature) bool {
+	n := len(sigs)
+	if n == 0 || len(pubKeyShares) != n || len(msgs) != n {
+		return false
+	}
+	srs := make([][]byte, n)
+	for i, m := range msgs {
+		sr, err := s.signingRootFor(m)
+		if err != nil {
+			return false
+		}
+		srs[i] = sr
+	}
+	return s.inner.VerifyPartialBatch(pubKeyShares, srs, sigs)
+}

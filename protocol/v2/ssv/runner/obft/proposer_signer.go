@@ -99,3 +99,31 @@ func (s *proposerSigner) VerifyAggregate(clusterPubKey []byte, msg []byte, sig o
 	}
 	return s.inner.VerifyAggregate(clusterPubKey, sr, sig)
 }
+
+// VerifyPartialBatch translates each msg (V bytes) to its proposer-domain
+// signing root then delegates the batch to the inner signer. Each msg is
+// translated independently — if any translation fails the whole batch
+// returns false, matching the per-tuple short-circuit semantics of the
+// inner backends.
+//
+// In F4's σ-walk caller, every tuple in a batch shares the same V (the
+// per-layer "many ops sign one V" pattern), so the per-msg signingRootFor
+// call is redundant work — N translations of the same V cost ~N × ~100 µs.
+// F2 (cache signingRoot per V) closes this gap. For F4 alone we accept the
+// redundancy since the BLS verify cost still dominates and the wrapper is
+// only correctness-preserving here.
+func (s *proposerSigner) VerifyPartialBatch(pubKeyShares [][]byte, msgs [][]byte, sigs []obftcore.Signature) bool {
+	n := len(sigs)
+	if n == 0 || len(pubKeyShares) != n || len(msgs) != n {
+		return false
+	}
+	srs := make([][]byte, n)
+	for i, m := range msgs {
+		sr, err := s.signingRootFor(m)
+		if err != nil {
+			return false
+		}
+		srs[i] = sr
+	}
+	return s.inner.VerifyPartialBatch(pubKeyShares, srs, sigs)
+}

@@ -48,6 +48,30 @@ type Signer interface {
 	// VerifyAggregate checks that `sig` is a valid full signature on `msg`
 	// under `clusterPubKey` (the aggregate / master public key).
 	VerifyAggregate(clusterPubKey []byte, msg []byte, sig Signature) bool
+
+	// VerifyPartialBatch is the batch form of VerifyPartial: it returns true
+	// iff EVERY (pubKeyShares[i], msgs[i], sigs[i]) tuple would individually
+	// verify. All three input slices MUST have the same length N ≥ 1.
+	//
+	// msgs[i] follows the same shape rules as VerifyPartial's msg argument
+	// for the receiver type: inner backends (BLSSigner, KyberSigner) require
+	// each msgs[i] to be the 32-byte raw signing target; wrapper signers
+	// (proposerSigner) accept V bytes and translate each msg internally
+	// before delegating to the inner backend.
+	//
+	// Returns false if N is zero, any length mismatches, any inner msg isn't
+	// 32 bytes, or any tuple fails to verify under the same security argument
+	// as VerifyPartial. A false return does NOT identify which tuple failed —
+	// callers that need per-tuple attribution (Rule-4 evidence at the σ-walk)
+	// MUST fall back to a per-tuple verify loop on failure.
+	//
+	// Backed by herumi's MultiVerify (random-linear-combination) in BLSSigner;
+	// KyberSigner and StubSigner fall back to sequential VerifyPartial loops
+	// because kyber-bls12381 doesn't expose an equivalent batch primitive and
+	// the stub is for protocol-level tests where realism isn't a concern.
+	//
+	// Audit F4 (docs/OBFT-PERFORMANCE-AUDIT-PLAN.md, docs/OBFT-F4-IMPLEMENTATION-PLAN.md).
+	VerifyPartialBatch(pubKeyShares [][]byte, msgs [][]byte, sigs []Signature) bool
 }
 
 // StubSigner is a non-cryptographic Signer for protocol-level testing,
@@ -195,4 +219,22 @@ func (s *StubSigner) VerifyAggregate(_ []byte, msg []byte, sig Signature) bool {
 	}
 	gotQ := binary.BigEndian.Uint32(sig[9:13])
 	return int(gotQ) == s.Quorum
+}
+
+// VerifyPartialBatch on the stub is a sequential loop over VerifyPartial:
+// the stub doesn't model real-BLS cost so there's no point implementing a
+// batch primitive. Matches the Signer interface contract — same input
+// validation, same false-on-first-failure semantics as the real backends'
+// sequential fallback.
+func (s *StubSigner) VerifyPartialBatch(pubKeyShares [][]byte, msgs [][]byte, sigs []Signature) bool {
+	n := len(sigs)
+	if n == 0 || len(pubKeyShares) != n || len(msgs) != n {
+		return false
+	}
+	for i := 0; i < n; i++ {
+		if !s.VerifyPartial(pubKeyShares[i], msgs[i], sigs[i]) {
+			return false
+		}
+	}
+	return true
 }

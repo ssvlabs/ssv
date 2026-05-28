@@ -528,6 +528,10 @@ func (c *countingSigner) VerifyAggregate(clusterPubKey []byte, msg []byte, sig S
 	return c.inner.VerifyAggregate(clusterPubKey, msg, sig)
 }
 
+func (c *countingSigner) VerifyPartialBatch(pubKeyShares [][]byte, msgs [][]byte, sigs []Signature) bool {
+	return c.inner.VerifyPartialBatch(pubKeyShares, msgs, sigs)
+}
+
 // TestObserveValueMsg_HarvestCacheDedupsVerify locks in the harvest
 // verify-cost dedup: when multiple peers forward the same V (with the
 // same leader L_0 witness inside their KindValues), the receiver verifies
