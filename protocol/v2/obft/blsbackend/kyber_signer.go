@@ -3,6 +3,7 @@ package blsbackend
 import (
 	"errors"
 	"fmt"
+	"sync"
 
 	"github.com/drand/kyber"
 	bls12381 "github.com/drand/kyber-bls12381"
@@ -45,17 +46,76 @@ type KyberSigner struct {
 	// May be empty for verify-only / aggregate-only use cases (SignPartial
 	// then returns an error).
 	share []byte
+
+	// pubMu / pubCache caches HerumiPubkeyToKyberG1Point results, keyed by
+	// string(pubBytes). The conversion involves a G1 decompression + subgroup
+	// check costing ~100-300 µs (see B3 in docs/OBFT-PERFORMANCE-AUDIT-PLAN.md),
+	// and the same handful of operator pub-shares + cluster master pubkey
+	// is reused for every Verify call across a cluster's lifetime — so
+	// caching saves the parse on every call after the first. Audit F3:
+	// ~12 ms/slot at n=7, K=4 plus a substantial reduction in alloc
+	// pressure (each parse allocates ~54 times / ~7.7 KB).
+	//
+	// A KyberSigner is shared across verify goroutines (a single Verifier
+	// is constructed per inbound envelope and called from the message-
+	// validation pool); the RWMutex serialises map writes while letting
+	// reads run concurrently. Cluster cardinality is small (n ≤ ~13 +
+	// master) so the cache stays tiny and entries are long-lived.
+	pubMu    sync.RWMutex
+	pubCache map[string]kyber.Point
 }
 
 // NewKyberSigner constructs a KyberSigner bound to `share`, using
 // kyber-bls12381's default suite (with default DSTs — drand's NUL DST for
 // G2). `share` may be nil/empty for verify-only / aggregate-only use cases.
 func NewKyberSigner(share []byte) *KyberSigner {
-	out := &KyberSigner{suite: bls12381.NewBLS12381Suite()}
+	out := &KyberSigner{
+		suite:    bls12381.NewBLS12381Suite(),
+		pubCache: make(map[string]kyber.Point),
+	}
 	if len(share) > 0 {
 		out.share = append([]byte(nil), share...)
 	}
 	return out
+}
+
+// cachedPubkeyPoint returns a kyber.Point for the given herumi-format pubkey
+// bytes, hitting the per-signer cache on warm calls. Cluster pub-shares
+// + cluster master pubkey are stable across a cluster's lifetime so cache
+// hits dominate after warmup. The returned point is shared across callers
+// — it MUST NOT be mutated (kyber's Point methods that return a new Point
+// such as Mul / Add are safe; in-place mutators on a returned cache entry
+// would corrupt other concurrent verifies).
+//
+// On miss, holds the write lock for the duration of UnmarshalBinary +
+// populate; on hit, only the read lock is taken so concurrent verifies
+// stay parallel. See HerumiPubkeyToKyberG1Point for the underlying parse.
+func (k *KyberSigner) cachedPubkeyPoint(pubBytes []byte) (kyber.Point, error) {
+	if len(pubBytes) == 0 {
+		return nil, errors.New("blsbackend: cachedPubkeyPoint: empty pubkey bytes")
+	}
+	key := string(pubBytes)
+	k.pubMu.RLock()
+	pt, ok := k.pubCache[key]
+	k.pubMu.RUnlock()
+	if ok {
+		return pt, nil
+	}
+	parsed, err := HerumiPubkeyToKyberG1Point(pubBytes)
+	if err != nil {
+		return nil, err
+	}
+	k.pubMu.Lock()
+	// Re-check under the write lock: a concurrent miss may have already
+	// populated. Keep whichever was stored first (kyber.Point equality is
+	// by mathematical value; either entry is correct).
+	if existing, ok := k.pubCache[key]; ok {
+		k.pubMu.Unlock()
+		return existing, nil
+	}
+	k.pubCache[key] = parsed
+	k.pubMu.Unlock()
+	return parsed, nil
 }
 
 // SignPartial computes `share · H_G2(msg)` using kyber's hash-to-G2 with
@@ -141,7 +201,11 @@ func (k *KyberSigner) VerifyPartial(pubKeyShare []byte, msg []byte, partial obft
 	if len(msg) == 0 || len(partial) == 0 {
 		return false
 	}
-	pubPoint, err := HerumiPubkeyToKyberG1Point(pubKeyShare)
+	// F3: per-signer cache amortises HerumiPubkeyToKyberG1Point — the
+	// ~100-300 µs G1 decompression + subgroup check — across cluster-
+	// lifetime-stable pub-shares. First call parses + populates; warm
+	// calls take only an RLock + map read. See cachedPubkeyPoint.
+	pubPoint, err := k.cachedPubkeyPoint(pubKeyShare)
 	if err != nil {
 		return false
 	}
