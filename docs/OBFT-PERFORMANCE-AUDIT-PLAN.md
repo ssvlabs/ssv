@@ -1318,4 +1318,9 @@ After these answers, the plan stands as written with three refinements:
 - Self-review: complete (summary-table magnitudes reconciled with investigations; pending source-locate placeholders filled in; F18 file-path corrected; combined-impact arithmetic re-summed).
 - Open questions: complete (Q-Open-1..4 answered against code; F5/F9 updated to reflect findings).
 - Benchmarks: **complete** (B1-B4 in `*_bench_test.go` files; baseline numbers captured; magnitudes for F2/F3/F4/F6 revised downward after measurement).
-- Implementation: not started. Sequencing revised — F1+F5 first since they dominate the saving.
+- Implementation: in progress. Landed so far:
+  - **F5 base** — `Config.SkipNRPartialReverify` gate on `verifyCommitNRPartials` (commit `0686b8028`; cross-ref tightening `a8075cb0e`); production runner opts in. ~18 ms/slot saved on production path.
+  - **F1 base** — per-Instance verify cache with `(op, layer, valueRoot, partialRoot)` key (commit `534f60ec9`; cross-V safety fix `3c26dd664`). The self-review caught and fixed a cross-V leakage hole in the initial 3-field key. ~70 ms/slot saved.
+  - **F1 + F5 mirror to 2abOBFT** — same gate inside `verifyNRTagPartial`, same value-bound cache on twoab Instance, wired at the L_k>0 σ-walk (commits `1b03f45e6` + test-split `b9b7013bb`). Twoab's L_0 σ pool is pre-verified at observation so the cache only buys L_k>0.
+  - **F3** — `KyberSigner.pubCache` (commit `8189c7768`). Per-signer `map[string]kyber.Point` guarded by `sync.RWMutex`; warm calls take only an RLock + map read; allocs/op drop from 209 → 156 (the 54-alloc pubkey-parse path eliminated). Per-call ~85 µs steady-state saving; wall-clock improvement masked by system noise on the local M3 Pro bench but the alloc reduction is a real ~5K-allocs/slot GC pressure cut.
+- Remaining Tier-1 work: **F4** (BLS batch-verify via herumi `MultiVerify`) — touches the `Signer` interface; needs a focused plan doc analogous to F1+F5's. Pre-existing `bls.MultiVerify` + Go `-race`/`checkptr` interaction surfaced in B4 fixture will be addressed alongside.
