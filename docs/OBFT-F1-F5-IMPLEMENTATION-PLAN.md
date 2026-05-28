@@ -54,11 +54,17 @@ A `map[verifyCacheKey]struct{}` lives on `*Instance`. Populated at every inserti
 type verifyCacheKey struct {
     op          OperatorID
     layer       int
+    valueRoot   [32]byte // sha256(value)
     partialRoot [32]byte // sha256(partial sig bytes)
 }
 ```
 
-`partialRoot` is the load-bearing disambiguator: under byzantine equivocation, the same (op, layer) can produce multiple distinct partials, and each needs its own cache entry. Using sha256 avoids any wire-format coupling — the partial bytes themselves are the canonical identifier.
+Both `valueRoot` and `partialRoot` are load-bearing disambiguators:
+
+- `partialRoot` makes byzantine equivocation safe: under the same (op, layer) emitting distinct partial-byte sequences, each caches independently.
+- `valueRoot` makes the cache safe against the cross-V leakage attack: byzantine emits two L_k>0 onion entries from the same (op, layer) — entry A claims `V_a` and decrypts to σ_a (the leader's real σ on V_a), entry B claims `V_b` but its ciphertext decrypts to the same σ_a bytes (IBE allows distinct ciphertexts that decrypt to the same plaintext). Without `valueRoot` in the key, walking entry A first populates `(op, layer, sha256(σ_a))`; walking entry B then cache-hits and skips verify, admitting σ_a to V_b's σ-pool incorrectly. BLS partials bind to a single (msg, share) pair mathematically, so a cache hit on `(op, layer, v, σ)` is the only safe disambiguator that doesn't admit cross-V leakage. Caught during F1's post-commit self-review; the original plan had only `partialRoot`.
+
+Using sha256 of value+partial avoids any wire-format coupling — the bytes themselves are the canonical identifiers.
 
 **Cache populate sites** — every line where a BLS verify currently returns true:
 
@@ -167,24 +173,27 @@ i.verifiedPartials = make(map[verifyCacheKey]struct{}, 4*cfg.K()*len(cfg.Operato
 Helper methods:
 
 ```go
-// markVerified records that (op, layer, partial) passed BLS verify, so
-// Resolve can skip the re-verify next time it walks this entry.
-func (i *Instance) markVerified(op OperatorID, layer int, partial []byte) {
+// markVerified records that (op, layer, value, partial) passed BLS verify,
+// so Resolve can skip the re-verify next time it walks this entry. Value-
+// binding is load-bearing — see verifyCacheKey doc for the safety argument.
+func (i *Instance) markVerified(op OperatorID, layer int, value, partial []byte) {
     i.verifiedPartials[verifyCacheKey{
         op:          op,
         layer:       layer,
+        valueRoot:   sha256.Sum256(value),
         partialRoot: sha256.Sum256(partial),
     }] = struct{}{}
 }
 
-// alreadyVerified reports whether (op, layer, partial) has been BLS-verified
-// before. Cache HIT lets Resolve skip a redundant signer.VerifyPartial call;
-// cache MISS falls through to the full verify (and the caller populates on
-// success via markVerified).
-func (i *Instance) alreadyVerified(op OperatorID, layer int, partial []byte) bool {
+// alreadyVerified reports whether (op, layer, value, partial) has been
+// BLS-verified before. Cache HIT lets Resolve skip a redundant
+// signer.VerifyPartial call; cache MISS falls through to the full verify
+// (and the caller populates on success via markVerified).
+func (i *Instance) alreadyVerified(op OperatorID, layer int, value, partial []byte) bool {
     _, ok := i.verifiedPartials[verifyCacheKey{
         op:          op,
         layer:       layer,
+        valueRoot:   sha256.Sum256(value),
         partialRoot: sha256.Sum256(partial),
     }]
     return ok
@@ -199,7 +208,7 @@ func (i *Instance) alreadyVerified(op OperatorID, layer int, partial []byte) boo
 if !i.signer.VerifyPartial(leaderShare, b.Value, b.LeaderSigma) {
     // ... existing error / evidence path ...
 }
-i.markVerified(b.OperatorID, layer, b.LeaderSigma)
+i.markVerified(b.OperatorID, b.Layer, b.Value, b.LeaderSigma)
 ```
 
 [base/phase2.go:859](protocol/v2/obft/base/phase2.go:859) — `peerSigmaAtL0Verdict`. After the L_0 verify success path:
@@ -208,7 +217,7 @@ i.markVerified(b.OperatorID, layer, b.LeaderSigma)
 if !i.signer.VerifyPartial(pubShare, el.Value, el.Ciphertext) {
     return l0SigmaCryptoFake
 }
-i.markVerified(op, 0, el.Ciphertext)
+i.markVerified(op, 0, el.Value, el.Ciphertext)
 ```
 
 [base/phase2.go:692](protocol/v2/obft/base/phase2.go:692) — `harvestWitness`. After the witness verify success:
@@ -217,7 +226,7 @@ i.markVerified(op, 0, el.Ciphertext)
 if !i.signer.VerifyPartial(pubShare, v, w.Sigma) {
     return
 }
-i.markVerified(w.Leader, w.Layer, w.Sigma)
+i.markVerified(w.Leader, w.Layer, v, w.Sigma)
 ```
 
 **Cache check sites:**
@@ -226,10 +235,10 @@ i.markVerified(w.Leader, w.Layer, w.Sigma)
 
 ```go
 for _, b := range i.bundles[layer][leaderID] {
-    if i.alreadyVerified(leaderID, layer, b.LeaderSigma) ||
+    if i.alreadyVerified(leaderID, layer, b.Value, b.LeaderSigma) ||
         i.signer.VerifyPartial(pubShare, b.Value, b.LeaderSigma) {
-        if !i.alreadyVerified(leaderID, layer, b.LeaderSigma) {
-            i.markVerified(leaderID, layer, b.LeaderSigma)
+        if !i.alreadyVerified(leaderID, layer, b.Value, b.LeaderSigma) {
+            i.markVerified(leaderID, layer, b.Value, b.LeaderSigma)
         }
         addToGroup(&groups, b.Value, leaderID, b.LeaderSigma)
     }
@@ -241,17 +250,17 @@ for _, b := range i.bundles[layer][leaderID] {
 A cleaner helper:
 
 ```go
-// verifyOrCached returns true if (op, layer, partial) is known-verified
-// (either cache hit, or fresh BLS verify succeeds and cache populated).
-// Returns false only if a fresh verify failed.
+// verifyOrCached returns true if (op, layer, value, partial) is known-
+// verified (either cache hit, or fresh BLS verify succeeds and cache
+// populated). Returns false only if a fresh verify failed.
 func (i *Instance) verifyOrCached(op OperatorID, layer int, pubShare, value, partial []byte) bool {
-    if i.alreadyVerified(op, layer, partial) {
+    if i.alreadyVerified(op, layer, value, partial) {
         return true
     }
     if !i.signer.VerifyPartial(pubShare, value, partial) {
         return false
     }
-    i.markVerified(op, layer, partial)
+    i.markVerified(op, layer, value, partial)
     return true
 }
 ```
@@ -275,11 +284,12 @@ addToGroup(&groups, el.Value, opID, partial)
 - `TestResolve_CachedVerifyOnSecondCall` — observe a Phase-1 bundle (forces a cache populate at retention); spy on the Signer's `VerifyPartial` call count; call `Resolve()` once and confirm zero VerifyPartial calls for that bundle's σ_V (cache hit on the leader-bundle path). Call Resolve again, still zero.
 - `TestResolve_LayerKGreaterThanZero_VerifiesOnceCachesAfter` — set up an Instance with a peer-onion entry at L_k>0 that decrypts to a valid partial. First Resolve: 1 VerifyPartial call. Second Resolve: 0 (cache hit).
 - `TestResolve_FailedVerifyNotCached` — feed an entry that decrypts to garbage; first Resolve: verify fails, Rule 4 evidence fires. Second Resolve: another verify fails (cache should NOT have populated on failure).
-- `TestResolve_EquivocationDistinctPartialsCachedIndependently` — same (op, layer), two distinct partials. Both verify independently; cache distinguishes by `sha256(partial)`. Verifies the disambiguator is load-bearing.
+- `TestResolve_EquivocationDistinctPartialsCachedIndependently` — same (op, layer, value), two distinct partial-byte sequences. Both verify independently; cache distinguishes by `sha256(partial)`. Verifies the partialRoot disambiguator is load-bearing.
+- `TestResolve_ValueBoundCacheKey_NoCrossVLeak` — populate cache for `(op, layer, V_a, σ)`; assert a lookup for `(op, layer, V_b, σ)` MISSES. Verifies the `valueRoot` disambiguator blocks the cross-V leakage attack (entry A claims V_a with σ_a, entry B claims V_b with bytes that decrypt to the same σ_a). Without this, a byzantine could admit σ_a to V_b's σ-pool via a phantom cache hit.
 
 **Sanity test for the safety invariant** — `TestResolve_TamperedPartialDoesNotPassViaCache`:
 - Observe a Commit, populate cache for one of the partials.
-- Subsequent Resolve sees a malformed partial (different bytes, same op+layer) — confirm it goes through the full verify path (cache miss because partialRoot differs) and is rejected.
+- Subsequent Resolve sees a malformed partial (different bytes, same op+layer+value) — confirm it goes through the full verify path (cache miss because partialRoot differs) and is rejected.
 
 ### Mirroring into 2abOBFT
 

@@ -169,8 +169,9 @@ func (i *Instance) ObservePhase1Bundle(b *Phase1Bundle, observedOffset time.Dura
 			b.OperatorID)
 	}
 	// F1: cache the verified result so Resolve's leader-bundle σ-walk skips
-	// the redundant re-verify. See verifiedPartials field doc-comment.
-	i.markVerified(b.OperatorID, b.Layer, b.LeaderSigma)
+	// the redundant re-verify. Value-binding is load-bearing — see
+	// verifyCacheKey's doc-comment for why valueRoot disambiguates the key.
+	i.markVerified(b.OperatorID, b.Layer, b.Value, b.LeaderSigma)
 
 	// Distinct value_root. Cap retention per the shared retention bound.
 	if len(retained) >= MaxRetainedPerOpLayer {

@@ -386,14 +386,24 @@ type Instance struct {
 	verifiedPartials map[verifyCacheKey]struct{}
 }
 
-// verifyCacheKey identifies a unique (op, layer, partial) tuple for the
-// verifiedPartials cache. partialRoot = sha256(partial-sig-bytes) so that
-// under byzantine equivocation — same (op, layer) emitting distinct
-// partials — each partial is cached independently and a cache hit cannot
-// pass an unverified-distinct partial as verified.
+// verifyCacheKey identifies a unique (op, layer, value, partial) tuple for
+// the verifiedPartials cache. Both valueRoot = sha256(value) and partialRoot
+// = sha256(partial-sig-bytes) are load-bearing disambiguators:
+//
+//   - partialRoot makes byzantine equivocation safe: same (op, layer)
+//     emitting distinct partials cache independently.
+//   - valueRoot makes the cache safe against a byzantine emitting one
+//     onion entry with (Value=V_a, Ciphertext=enc(σ_a)) (verifies — caches)
+//     and another with (Value=V_b, Ciphertext=enc(σ_a)) (must always re-
+//     verify — σ_a doesn't sign V_b). Without valueRoot in the key, the
+//     first entry's cache hit would let the second entry's σ_a contribute
+//     to V_b's σ-pool incorrectly. BLS partials bind to a single (msg,
+//     share) pair mathematically, so a hit on (op, layer, v, σ) is the
+//     only safe disambiguator that doesn't admit any cross-V leakage.
 type verifyCacheKey struct {
 	op          OperatorID
 	layer       int
+	valueRoot   [32]byte
 	partialRoot [32]byte
 }
 
@@ -508,56 +518,59 @@ func NewInstance(
 	}, nil
 }
 
-// markVerified records that (op, layer, partial) has been BLS-verified
-// successfully, so subsequent re-verifies in Resolve can skip the call. The
-// partialRoot key (sha256 of the partial sig bytes) makes the cache safe
-// under byzantine equivocation — distinct partials at the same (op, layer)
-// cache independently and can't shadow each other. See verifiedPartials's
-// doc-comment for the safety contract.
+// markVerified records that (op, layer, value, partial) has been BLS-
+// verified successfully, so subsequent re-verifies in Resolve can skip the
+// call. Both value and partial participate in the cache key — value-binding
+// is load-bearing safety: a partial that verifies against V_a must NEVER
+// pass via cache hit when paired with a different V_b at Resolve time.
+// See verifyCacheKey / verifiedPartials doc-comments for the full contract.
 //
 // MUST be called only from sites that just observed signer.VerifyPartial
-// return true on the same (pub-share-for-op, sign-target, partial) tuple
-// Resolve will see later. The four legitimate caller sites are listed in
-// the verifiedPartials field doc; adding a fifth requires updating the
-// audit / implementation plan.
-func (i *Instance) markVerified(op OperatorID, layer int, partial []byte) {
+// return true on the same (pub-share-for-op, value, partial) tuple Resolve
+// will see later. The four legitimate caller sites are listed in the
+// verifiedPartials field doc; adding a fifth requires updating the audit /
+// implementation plan.
+func (i *Instance) markVerified(op OperatorID, layer int, value, partial []byte) {
 	i.verifiedPartials[verifyCacheKey{
 		op:          op,
 		layer:       layer,
+		valueRoot:   sha256.Sum256(value),
 		partialRoot: sha256.Sum256(partial),
 	}] = struct{}{}
 }
 
-// alreadyVerified reports whether (op, layer, partial) has been BLS-verified
-// before via markVerified. Cache HIT lets Resolve skip a redundant
-// signer.VerifyPartial call; MISS falls through to the full verify.
-func (i *Instance) alreadyVerified(op OperatorID, layer int, partial []byte) bool {
+// alreadyVerified reports whether (op, layer, value, partial) has been BLS-
+// verified before via markVerified. Cache HIT lets Resolve skip a redundant
+// signer.VerifyPartial call; MISS falls through to the full verify. Both
+// value and partial are part of the cache key — see verifyCacheKey's doc.
+func (i *Instance) alreadyVerified(op OperatorID, layer int, value, partial []byte) bool {
 	_, ok := i.verifiedPartials[verifyCacheKey{
 		op:          op,
 		layer:       layer,
+		valueRoot:   sha256.Sum256(value),
 		partialRoot: sha256.Sum256(partial),
 	}]
 	return ok
 }
 
-// verifyOrCached returns true if (op, layer, partial) is known-verified —
-// either a cache hit (a prior code path already BLS-verified this exact
-// partial), or a fresh signer.VerifyPartial that just succeeded (in which
-// case the cache is populated for next time). Returns false ONLY when a
-// fresh BLS verify ran and rejected the partial.
+// verifyOrCached returns true if (op, layer, value, partial) is known-
+// verified — either a cache hit (a prior code path already BLS-verified
+// this exact (value, partial) pair), or a fresh signer.VerifyPartial that
+// just succeeded (in which case the cache is populated for next time).
+// Returns false ONLY when a fresh BLS verify ran and rejected the partial.
 //
 // Sole Resolve-side helper for the F1 cache; phase3.go tryReconstructLayer
 // calls this in place of i.signer.VerifyPartial. The false-return path
 // preserves the existing Rule-4 (and any other) evidence handling at the
 // call site — verifyOrCached doesn't touch evidence.
 func (i *Instance) verifyOrCached(op OperatorID, layer int, pubShare, value, partial []byte) bool {
-	if i.alreadyVerified(op, layer, partial) {
+	if i.alreadyVerified(op, layer, value, partial) {
 		return true
 	}
 	if !i.signer.VerifyPartial(pubShare, value, partial) {
 		return false
 	}
-	i.markVerified(op, layer, partial)
+	i.markVerified(op, layer, value, partial)
 	return true
 }
 
