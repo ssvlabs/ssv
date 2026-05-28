@@ -187,6 +187,25 @@ type Config struct {
 	// §Setting: BTT = P99 + δ. Used as the unit for time-budget formulas.
 	// Concrete sizing at Config A: P99 = 150ms, δ = 50ms, BTT = 200ms.
 	BTT time.Duration
+
+	// SkipNRPartialReverify, when true, suppresses Instance.verifyNRTagPartial's
+	// internal BLS verify. The verify is defense-in-depth — the validation-
+	// layer Verifier.VerifyCommit / VerifyValueMsg / VerifyNoValueMsg
+	// (invoked from message/validation/twoab_validation.go on every inbound
+	// envelope) already runs the same BLS verifies on every NR-side partial
+	// before the envelope is dispatched to Instance. Skipping the in-Instance
+	// repeat saves redundant BLS work on the consensus-critical path. Mirrors
+	// base.Config.SkipNRPartialReverify; see docs/OBFT-PERFORMANCE-AUDIT-PLAN.md
+	// §F5 and docs/OBFT-F1-F5-IMPLEMENTATION-PLAN.md for the full safety
+	// contract.
+	//
+	// SAFE TO SET true ONLY when every code path reaching Observe* / verify
+	// gates has already done that upstream BLS verify on every NR partial
+	// in the inbound envelope. The production SSV runner satisfies this;
+	// the consensustest framework drives Instance directly without the
+	// validation-layer Verifier and MUST leave this false. Default false is
+	// the safe choice for every code path that hasn't been audited.
+	SkipNRPartialReverify bool
 }
 
 // K returns the number of layers (= len(Layers)).

@@ -257,6 +257,15 @@ func ConfigForCluster(
 		TPhase2a:     tPhase2a,
 		SafetyBuffer: overrides.safetyBuffer(),
 		BTT:          btt,
+		// The validation-layer Verifier.VerifyCommit / VerifyValueMsg /
+		// VerifyNoValueMsg (invoked from message/validation/twoab_validation.go
+		// on every inbound twoab envelope; Verifier constructed via the
+		// helper in runner/obft/twoab/verifier.go) runs the BLS verify on
+		// every NR-side partial before the envelope is dispatched to Instance,
+		// so the in-Instance repeat is pure waste on the production path.
+		// See the field's doc-comment in twoabcore config.go and
+		// docs/OBFT-PERFORMANCE-AUDIT-PLAN.md §F5 for the safety contract.
+		SkipNRPartialReverify: true,
 	}
 	return cfg, nil
 }

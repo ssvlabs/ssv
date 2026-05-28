@@ -2,6 +2,7 @@ package twoab
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"time"
@@ -276,6 +277,50 @@ type Instance struct {
 	// for the semantics; consumed by consensustest's bucket-3
 	// walk-consistency invariant.
 	lastResolveTrace []LayerAttempt
+
+	// verifiedPartials caches "σ partial X was BLS-verified successfully" so
+	// Resolve can skip the redundant re-verify in its L_k>0 σ-walk (audit
+	// finding F1; mirrors obft/base/Instance.verifiedPartials). twoab's
+	// Resolve at L_0 reads from sigmaPool (already verified at observation),
+	// so the cache only helps at L_k>0 where the chained-encrypted partial
+	// is first decrypted and verified inside Resolve. On opportunistic re-
+	// Resolve calls walking the same L_k>0 entries, cache hits skip the
+	// BLS verify.
+	//
+	// Populate sites:
+	//   - phase3.go aggregatePeerLayerEntries / similar L_k>0 walk — populate
+	//     on first-time successful post-decrypt verify (via verifyOrCached).
+	//
+	// Safety contract identical to base: cache populate is gated EXCLUSIVELY
+	// by "signer.VerifyPartial just returned true on this (value, partial)
+	// pair". Cache key is (op, layer, sha256(value), sha256(partial)) — both
+	// roots are load-bearing; partialRoot disambiguates byzantine
+	// equivocation, valueRoot blocks the cross-V leakage attack where a
+	// byzantine emits two entries with the same decrypted partial bytes but
+	// different claimed V's. See verifyCacheKey doc-comment and
+	// docs/OBFT-F1-F5-IMPLEMENTATION-PLAN.md for the full argument.
+	//
+	// Single-threaded by the controller's r.instanceMu (audit Q-Open-2), so
+	// the map needs no internal synchronisation.
+	verifiedPartials map[verifyCacheKey]struct{}
+}
+
+// verifyCacheKey identifies a unique (op, layer, value, partial) tuple for
+// the verifiedPartials cache. Mirrors obft/base.verifyCacheKey exactly —
+// see that type's doc-comment for the safety argument. Both valueRoot and
+// partialRoot are load-bearing:
+//
+//   - partialRoot makes byzantine equivocation safe (distinct partials at
+//     the same (op, layer, value) cache independently).
+//   - valueRoot blocks cross-V leakage: byzantine emits entry A
+//     (Value=V_a, Ciphertext=enc(σ_a)) and entry B (Value=V_b, Ciphertext'
+//     also decrypts to σ_a). Without valueRoot, A's cache populate would
+//     let B cache-hit and σ_a would incorrectly contribute to V_b's pool.
+type verifyCacheKey struct {
+	op          OperatorID
+	layer       int
+	valueRoot   [32]byte
+	partialRoot [32]byte
 }
 
 // RetentionSource discriminates how a retained Phase-1 bundle reached
@@ -415,7 +460,62 @@ func NewInstance(
 		host:              obft.NewHostValidationGate(K),
 		verifiedWitnesses: make(map[int]map[[32]byte]bool, K),
 		l0ReadyCh:         make(chan struct{}),
+		// Verify-cache capacity: bounded by n ops × K layers × small slack
+		// for byzantine equivocation. Cheap upper bound; map is GC'd at
+		// slot end so unbounded growth under attack isn't a concern.
+		verifiedPartials: make(map[verifyCacheKey]struct{}, 2*K*len(cfg.Operators)),
 	}, nil
+}
+
+// markVerified records that (op, layer, value, partial) has been BLS-verified
+// successfully, so subsequent re-verifies in Resolve can skip the call. Both
+// value and partial participate in the cache key — value-binding is load-
+// bearing safety. See verifyCacheKey doc-comment for the full contract.
+//
+// MUST be called only from sites that just observed signer.VerifyPartial
+// return true on the same (pub-share-for-op, value, partial) tuple Resolve
+// will see later. Mirrors obft/base.Instance.markVerified.
+func (i *Instance) markVerified(op OperatorID, layer int, value, partial []byte) {
+	i.verifiedPartials[verifyCacheKey{
+		op:          op,
+		layer:       layer,
+		valueRoot:   sha256.Sum256(value),
+		partialRoot: sha256.Sum256(partial),
+	}] = struct{}{}
+}
+
+// alreadyVerified reports whether (op, layer, value, partial) has been BLS-
+// verified before via markVerified. Cache HIT lets Resolve skip a redundant
+// signer.VerifyPartial call; MISS falls through to the full verify.
+func (i *Instance) alreadyVerified(op OperatorID, layer int, value, partial []byte) bool {
+	_, ok := i.verifiedPartials[verifyCacheKey{
+		op:          op,
+		layer:       layer,
+		valueRoot:   sha256.Sum256(value),
+		partialRoot: sha256.Sum256(partial),
+	}]
+	return ok
+}
+
+// verifyOrCached returns true if (op, layer, value, partial) is known-
+// verified — either a cache hit (a prior code path already BLS-verified
+// this exact (value, partial) pair), or a fresh signer.VerifyPartial that
+// just succeeded (in which case the cache is populated for next time).
+// Returns false ONLY when a fresh BLS verify ran and rejected the partial.
+//
+// Sole Resolve-side helper for the F1 cache; phase3.go's L_k>0 walk calls
+// this in place of i.signer.VerifyPartial. The false-return path preserves
+// existing Rule-4 / Rule-5 evidence handling — verifyOrCached doesn't touch
+// evidence.
+func (i *Instance) verifyOrCached(op OperatorID, layer int, pubShare, value, partial []byte) bool {
+	if i.alreadyVerified(op, layer, value, partial) {
+		return true
+	}
+	if !i.signer.VerifyPartial(pubShare, value, partial) {
+		return false
+	}
+	i.markVerified(op, layer, value, partial)
+	return true
 }
 
 // WantsHostValidationCh returns the channel on which the Instance delivers
@@ -781,6 +881,16 @@ func (i *Instance) verifyNRTagPartial(op OperatorID, layer int, partial Signatur
 	pubShare, ok := nrShares[op]
 	if !ok || len(pubShare) == 0 {
 		return false
+	}
+	// Config.SkipNRPartialReverify gates the in-Instance repeat so the
+	// production path — where message/validation/twoab_validation.go runs
+	// Verifier.VerifyCommit/VerifyValueMsg/VerifyNoValueMsg before dispatch
+	// — skips ~18 ms/slot of redundant BLS verifies. Callers that can't
+	// guarantee the upstream verify (consensustest, ad-hoc test harnesses)
+	// leave the flag at the default false. See the field's doc-comment in
+	// config.go for the safety contract.
+	if i.cfg.SkipNRPartialReverify {
+		return true
 	}
 	tag := NoQuorumTag(i.cfg.ClusterID, i.cfg.Height, layer)
 	return i.tagSigner.VerifyPartial(pubShare, tag, partial)

@@ -259,11 +259,16 @@ func (i *Instance) extractSigmaFromEntries(op OperatorID, layer int, entries []L
 			continue
 		}
 		// Verify the decrypted partial against op's pubshare on V.
+		// F1: verifyOrCached hits the cache populated by a prior Resolve walk's
+		// post-decrypt verify on the same entry; on miss it runs a fresh BLS
+		// verify and populates on success so opportunistic re-Resolves at the
+		// same layer skip the cost. Value-binding in the cache key is load-
+		// bearing — see verifyCacheKey doc in instance.go.
 		opPub, ok := i.pubKeyShares[op]
 		if !ok || len(opPub) == 0 {
 			continue
 		}
-		if !i.signer.VerifyPartial(opPub, e.V, Signature(pt)) {
+		if !i.verifyOrCached(op, layer, opPub, e.V, Signature(pt)) {
 			if i.recordRule4(op, layer) {
 				i.recordEvidence(Evidence{
 					Rule:       EvidenceFakeEncryptedPresence,
