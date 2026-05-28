@@ -171,18 +171,22 @@ func recordCommitWire(agg *ct.OfflineAggregator, emitter spectypes.OperatorID, c
 	}
 }
 
-// extractInstanceTrace pulls Instance.LastResolveLayerAttempts via
-// internal Controller access. Holds both the Controller's mu (for the
-// instances-map lookup) and the RunningInstance's instanceMu (so the
-// LastResolveLayerAttempts read is serialized against any in-progress
-// Resolve goroutine — defensive under -race even after wg.Wait()).
-// Returns nil if no Instance was ever created for this slot (e.g.,
-// non-leader op in a scenario that never received Phase-1).
-func extractInstanceTrace(node *runnerNode, slot phase0.Slot) []obftcore.LayerAttempt {
-	node.ctrl.mu.Lock()
-	ri, ok := node.ctrl.instances[slot]
-	node.ctrl.mu.Unlock()
-	if !ok || ri == nil {
+// extractInstanceTrace pulls Instance.LastResolveLayerAttempts via the
+// *RunningInstance pointer captured by runScenarioWithSafetyCheck's per-node
+// capture goroutine. The captured pointer survives EndInstance (the
+// Controller deletes its instances-map entry, but the RunningInstance and
+// its Instance live on, and LastResolveLayerAttempts is preserved across
+// Finalize — see the 2abOBFT mirror's PreservedAcrossEndedInstance test).
+//
+// Holds RunningInstance.instanceMu so the read is serialized against any
+// in-progress Resolve goroutine — defensive under -race even after wg.Wait().
+// Returns nil if the capture goroutine never observed a live instance for
+// this slot (e.g., RunProposerSlot returned before StartNewInstance completed).
+func extractInstanceTrace(node *runnerNode) []obftcore.LayerAttempt {
+	node.captureMu.Lock()
+	ri := node.capturedRI
+	node.captureMu.Unlock()
+	if ri == nil {
 		return nil
 	}
 	ri.instanceMu.Lock()
@@ -207,7 +211,7 @@ func extractInstanceTrace(node *runnerNode, slot phase0.Slot) []obftcore.LayerAt
 // Byz is intentionally zero-valued: production has no byz-pattern
 // injection, so every op is treated as honest by the per-op invariant
 // checks (B1/B2/D1/C3).
-func reconstructOutcome(nodes []*runnerNode, slot phase0.Slot, captured []capturedEmission) ct.Outcome {
+func reconstructOutcome(nodes []*runnerNode, captured []capturedEmission) ct.Outcome {
 	n := len(nodes)
 	agg := ct.NewOfflineAggregator(n)
 	for _, em := range captured {
@@ -232,7 +236,7 @@ func reconstructOutcome(nodes []*runnerNode, slot phase0.Slot, captured []captur
 			oo.Value = append([]byte(nil), out.Value...)
 			oo.Round = out.Layer
 		}
-		if trace := extractInstanceTrace(node, slot); len(trace) > 0 {
+		if trace := extractInstanceTrace(node); len(trace) > 0 {
 			oo.ResolveLayerAttempts = convertLayerAttempts(trace)
 			// If local Resolve never produced a Decided layer but the op
 			// still submitted, the submit came via the cert-gossip path.
@@ -536,8 +540,48 @@ func runScenarioWithSafetyCheck(t *testing.T, cell matrixCell, cfg scenarioConfi
 		}
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), cfg.timeout)
+	// sleepAwareTimeoutCtx (see sleepctx_test.go): consumes budget by ACTIVE
+	// wall time only, so the test survives laptop-sleep cycles regardless of
+	// how the host platform's monotonic clock behaves during suspend. A
+	// failure at the cfg.timeout boundary is therefore strictly about
+	// active-running time — much sharper signal of a real bug.
+	ctx, cancel := sleepAwareTimeoutCtx(context.Background(), cfg.timeout)
 	defer cancel()
+
+	// Capture goroutines: poll each node's Controller for the slot's
+	// RunningInstance and stash the pointer on n.capturedRI. The pointer
+	// survives RunProposerSlot's deferred EndInstance (which only deletes
+	// the controller's instances-map entry — the Instance object itself
+	// remains reachable via the captured pointer, and the resolve trace is
+	// preserved across Finalize). Without this capture, extractInstanceTrace
+	// always returns nil post-slot because EndInstance has cleared the map
+	// by the time wg.Wait() returns, which would feed empty
+	// ResolveLayerAttempts into the safety report via reconstructOutcome.
+	captureCtx, captureCancel := context.WithCancel(context.Background())
+	defer captureCancel()
+	var captureWg sync.WaitGroup
+	for _, n := range nodes {
+		n := n
+		captureWg.Add(1)
+		go func() {
+			defer captureWg.Done()
+			ticker := time.NewTicker(100 * time.Microsecond)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-captureCtx.Done():
+					return
+				case <-ticker.C:
+					if ri, ok := n.ctrl.GetInstance(slot); ok && ri != nil {
+						n.captureMu.Lock()
+						n.capturedRI = ri
+						n.captureMu.Unlock()
+						return
+					}
+				}
+			}
+		}()
+	}
 
 	var wg sync.WaitGroup
 	for _, n := range nodes {
@@ -550,13 +594,15 @@ func runScenarioWithSafetyCheck(t *testing.T, cell matrixCell, cfg scenarioConfi
 		}()
 	}
 	wg.Wait()
+	captureCancel()
+	captureWg.Wait()
 
 	for _, n := range nodes {
 		require.NotNilf(t, n.submittedOutput(),
 			"op %d submitted no output at %s n=%d K=%d", n.op, cfg.name, cell.n, cell.K)
 	}
 
-	outcome := reconstructOutcome(nodes, slot, recordingBus.snapshot())
+	outcome := reconstructOutcome(nodes, recordingBus.snapshot())
 	rep := ct.ComputeSafetyReport(outcome)
 	require.Falsef(t, rep.IsViolation(),
 		"safety violation at %s n=%d K=%d: %s", cfg.name, cell.n, cell.K, rep)

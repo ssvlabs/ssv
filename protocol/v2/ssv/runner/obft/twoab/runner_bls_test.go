@@ -42,6 +42,14 @@ type blsNode struct {
 	mu        sync.Mutex
 	submitted []*twoabcore.Output
 	runErr    error // written by this node's RunProposerSlot goroutine; read after wg.Wait()
+	// capturedRI holds the *RunningInstance pointer captured during the slot
+	// by the safety-bridge's per-node capture goroutine. Survives
+	// RunProposerSlot's deferred EndInstance — the controller's instances-map
+	// entry is deleted, but the Instance object itself remains reachable via
+	// this pointer (and LastResolveLayerAttempts is preserved across
+	// Finalize). Used by the safety-bridge's post-slot diagnostic dump and
+	// reconstructOutcome.
+	capturedRI *RunningInstance
 }
 
 func (n *blsNode) submittedOutput() *twoabcore.Output {

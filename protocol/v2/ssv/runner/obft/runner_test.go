@@ -55,6 +55,15 @@ type runnerNode struct {
 	ctrl  *Controller
 	sched *Scheduler
 	hooks *runnerHooks
+
+	// capturedRI holds the *RunningInstance pointer captured during the slot
+	// by the safety-bridge's per-node capture goroutine. Survives the deferred
+	// EndInstance — the controller's instances-map entry is deleted, but the
+	// Instance object itself remains reachable via this pointer (and
+	// LastResolveLayerAttempts is preserved across Finalize). Used by the
+	// post-slot reconstruction path in reconstructOutcome.
+	captureMu  sync.Mutex
+	capturedRI *RunningInstance
 }
 
 func (n *runnerNode) submittedOutput() *obftcore.Output {
