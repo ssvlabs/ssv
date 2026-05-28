@@ -69,37 +69,80 @@ import (
 //
 // Mirror of OBFT base's recordingBroadcastBus.
 type recordingBlsBus struct {
-	inner    *blsBus
-	mu       sync.Mutex
-	captured []capturedEmission
+	inner      *blsBus
+	mu         sync.Mutex
+	captured   []capturedEmission
+	deliveries []deliveryEvent
 }
 
 // capturedEmission records one wire emission. The envelope's Kind
 // discriminates which of the typed body fields is populated.
+//
+// broadcastAt is the slot-relative time at which the inner bus accepted
+// the emission for fan-out (close enough to the source-side send time
+// for diagnostic purposes). Matches the broadcastAt threaded into each
+// resulting deliveryEvent so the dump can group (emission, deliveries)
+// by exact equality.
 type capturedEmission struct {
-	from     spectypes.OperatorID
-	envelope *wire.Envelope
+	from        spectypes.OperatorID
+	envelope    *wire.Envelope
+	broadcastAt time.Duration
+}
+
+// deliveryEvent records one per-recipient delivery completion: when the
+// recipient's DispatchBytes returned (i.e., when the message had been
+// parsed, verified, and pooled into the recipient's Instance state).
+// Emitted by blsBus.deliveryHook. broadcastAt matches the originating
+// capturedEmission's broadcastAt for grouping.
+type deliveryEvent struct {
+	from        spectypes.OperatorID
+	to          spectypes.OperatorID
+	kind        wire.MessageKind
+	broadcastAt time.Duration
+	deliveredAt time.Duration
 }
 
 func newRecordingBlsBus(inner *blsBus) *recordingBlsBus {
-	return &recordingBlsBus{inner: inner}
+	rb := &recordingBlsBus{inner: inner}
+	inner.deliveryHook = rb.recordDelivery
+	return rb
 }
 
 // broadcast intercepts every emission: decode via wire.Unwrap, append
-// (from, envelope) to captured, then delegate to the inner bus
-// unchanged. Decode failures (malformed envelope) are silently
-// skipped — the inner bus's DispatchBytes path will reject malformed
-// envelopes on its own.
+// (from, envelope, broadcastAt) to captured, then delegate to the inner
+// bus via broadcastAt with the SAME broadcastAt value so capturedEmission
+// and every resulting deliveryEvent share one exact-equal timestamp (the
+// dump groups deliveries to emissions by (from, kind, broadcastAt) exact
+// match — using two independent time.Since calls would diverge by µs).
+// Decode failures (malformed envelope) are silently skipped — the inner
+// bus's DispatchBytes path will reject malformed envelopes on its own.
 func (rb *recordingBlsBus) broadcast(from spectypes.OperatorID, data []byte) {
+	broadcastAt := time.Since(rb.inner.slotStart)
 	if env, err := wire.Unwrap(data); err == nil && env != nil {
 		rb.mu.Lock()
 		rb.captured = append(rb.captured, capturedEmission{
-			from:     from,
-			envelope: env,
+			from:        from,
+			envelope:    env,
+			broadcastAt: broadcastAt,
 		})
 		rb.mu.Unlock()
 	}
-	rb.inner.broadcast(from, data)
+	rb.inner.broadcastAt(from, data, broadcastAt)
+}
+
+// recordDelivery is wired into blsBus.deliveryHook by newRecordingBlsBus.
+// Called by each per-recipient delivery goroutine after DispatchBytes
+// returns. Thread-safe via rb.mu.
+func (rb *recordingBlsBus) recordDelivery(from, to spectypes.OperatorID, kind byte, broadcastAt, deliveredAt time.Duration) {
+	rb.mu.Lock()
+	rb.deliveries = append(rb.deliveries, deliveryEvent{
+		from:        from,
+		to:          to,
+		kind:        wire.MessageKind(kind),
+		broadcastAt: broadcastAt,
+		deliveredAt: deliveredAt,
+	})
+	rb.mu.Unlock()
 }
 
 // snapshot returns a copy of the captured emissions. Safe to call
@@ -112,6 +155,17 @@ func (rb *recordingBlsBus) snapshot() []capturedEmission {
 	defer rb.mu.Unlock()
 	out := make([]capturedEmission, len(rb.captured))
 	copy(out, rb.captured)
+	return out
+}
+
+// deliveriesSnapshot returns a copy of recorded deliveries. Safe to call
+// post-slot after the inner bus's stop() drains in-flight delivery
+// goroutines (all deliveryHook callbacks have fired by then).
+func (rb *recordingBlsBus) deliveriesSnapshot() []deliveryEvent {
+	rb.mu.Lock()
+	defer rb.mu.Unlock()
+	out := make([]deliveryEvent, len(rb.deliveries))
+	copy(out, rb.deliveries)
 	return out
 }
 
@@ -548,7 +602,24 @@ func runScenarioWithSafetyCheck(t *testing.T, cell matrixCell, cfg scenarioConfi
 
 	for _, n := range cl.nodes {
 		n := n
-		n.broadcastFn = func(data []byte) { recordingBus.broadcast(n.op, data) }
+		n.broadcastFn = func(data []byte) {
+			// Detect Phase-2a fire: the first non-Phase1Bundle emission
+			// from this op corresponds to the FirePhase2a moment (the
+			// runner's Phase-1 bundles are KindPhase1Bundle and are not
+			// LayerEntries-bearing; the Phase-2a fire emits exactly one
+			// of KindValue / KindNoValue / KindCommit-NRDirect with the
+			// full K-1 LayerEntries committed). Capturing this time per
+			// op lets the diagnostic dump correlate against per-emission
+			// delivery times to localize bundle-delivery races.
+			if env, err := wire.Unwrap(data); err == nil && env != nil && env.Kind != wire.KindPhase1Bundle {
+				n.mu.Lock()
+				if n.phase2aFireAt == 0 {
+					n.phase2aFireAt = time.Since(slotStart)
+				}
+				n.mu.Unlock()
+			}
+			recordingBus.broadcast(n.op, data)
+		}
 	}
 
 	// sleepAwareTimeoutCtx (see sleepctx_test.go): consumes budget by ACTIVE
@@ -608,13 +679,20 @@ func runScenarioWithSafetyCheck(t *testing.T, cell matrixCell, cfg scenarioConfi
 	captureCancel()
 	captureWg.Wait()
 
+	// Drain the bus BEFORE the dump (vs the post-function defer): ensures
+	// every delivery goroutine's deliveryHook has fired so deliveriesSnapshot
+	// reflects the complete wire-timing picture. Idempotent via sync.Once,
+	// so the deferred bus.stop above is harmless.
+	bus.stop()
+
 	// If any op failed (runErr or no submitted output), dump full cluster
 	// state BEFORE the assertions t.Fatalf bail out. The dump captures the
 	// per-op resolve-trace pool sizes (σ-pool, NR-pool) at each layer +
-	// captured-emission count — load-bearing diagnostics for understanding
+	// per-op Phase-2a fire time + per-emission wire timing (broadcast →
+	// per-recipient delivery) — load-bearing diagnostics for understanding
 	// rare race-stress failures where convergence stalls.
 	if anyOpFailed(cl.nodes) {
-		dumpClusterDiagnostic(t, cl.nodes, slot, recordingBus.snapshot(), cfg.name, cell)
+		dumpClusterDiagnostic(t, cl.nodes, slot, recordingBus.snapshot(), recordingBus.deliveriesSnapshot(), cfg.name, cell)
 	}
 
 	for _, n := range cl.nodes {
@@ -658,8 +736,10 @@ func anyOpFailed(nodes []*blsNode) bool {
 // dumpClusterDiagnostic emits a per-op state dump for failing scenarios:
 // runErr, submittedOutput, and the per-layer resolve-trace pool sizes
 // (σ-pool / NR-pool against qV / qEnc). Plus the captured-wire-emission
-// count for sanity (a stalled bus would show 0 or very few emissions
-// here). Called only on failure to keep passing-test logs quiet.
+// count, per-op Phase-2a fire time, and per-emission wire timing
+// (broadcast → per-recipient delivery, with each recipient's deliveredAt
+// compared against the recipient's Phase-2a fire time). Called only on
+// failure to keep passing-test logs quiet.
 //
 // Interpreting the dump when investigating a failure:
 //   - All ops decided except one + the failing op's σ-pool sizes are
@@ -670,10 +750,25 @@ func anyOpFailed(nodes []*blsNode) bool {
 //   - No op decided + low captured-emission count → bus delivery stuck.
 //   - No op decided + high captured-emission count → protocol-level
 //     non-convergence (would also surface as repro-able outside -race).
-func dumpClusterDiagnostic(t *testing.T, nodes []*blsNode, slot phase0.Slot, captured []capturedEmission, scenarioName string, cell matrixCell) {
+//   - Cluster stuck at L_k with mixed σ/NR distribution (σ < qV AND
+//     NR < qEnc) → look at the wire-timing block: did the L_k leader's
+//     KindPhase1Bundle arrive at each recipient BEFORE that recipient's
+//     phase2aFireAt? A "late" marker on the bundle's deliveries means
+//     the recipient committed NRPlaintext at L_k irrevocably because
+//     the bundle hadn't been pooled by the Phase-2a fire instant.
+func dumpClusterDiagnostic(t *testing.T, nodes []*blsNode, slot phase0.Slot, captured []capturedEmission, deliveries []deliveryEvent, scenarioName string, cell matrixCell) {
 	t.Helper()
 	t.Logf("=== DIAGNOSTIC DUMP: scenario=%s n=%d K=%d slot=%d ===", scenarioName, cell.n, cell.K, slot)
-	t.Logf("Captured wire emissions: %d", len(captured))
+	t.Logf("Captured wire emissions: %d, delivery events: %d", len(captured), len(deliveries))
+
+	// Per-op Phase-2a fire times, snapshot under each node's mu.
+	fireAt := make(map[spectypes.OperatorID]time.Duration, len(nodes))
+	for _, n := range nodes {
+		n.mu.Lock()
+		fireAt[n.op] = n.phase2aFireAt
+		n.mu.Unlock()
+	}
+
 	for _, n := range nodes {
 		var runErrStr string
 		if n.runErr != nil {
@@ -688,7 +783,13 @@ func dumpClusterDiagnostic(t *testing.T, nodes []*blsNode, slot phase0.Slot, cap
 		} else {
 			outStr = fmt.Sprintf("Layer=%d Value=%x", out.Layer, out.Value)
 		}
-		t.Logf("  op %d: runErr=%s submittedOutput=%s", n.op, runErrStr, outStr)
+		var fireAtStr string
+		if fireAt[n.op] == 0 {
+			fireAtStr = "<not-fired>"
+		} else {
+			fireAtStr = fireAt[n.op].String()
+		}
+		t.Logf("  op %d: runErr=%s submittedOutput=%s phase2aFireAt=%s", n.op, runErrStr, outStr, fireAtStr)
 		trace := extractInstanceTrace(n)
 		if trace == nil {
 			t.Logf("    resolveTrace: <none — capture goroutine never observed a live Instance, or LastResolveLayerAttempts returned nil>")
@@ -699,6 +800,30 @@ func dumpClusterDiagnostic(t *testing.T, nodes []*blsNode, slot phase0.Slot, cap
 			t.Logf("      L_%d: σ-pool=%d/qV=%d σ-reached=%v decided=%v | NR-pool=%d/qEnc=%d NR-reached=%v",
 				la.Layer, la.SigmaPoolSize, la.QV, la.SigmaReached, la.Decided,
 				la.NRPoolSize, la.QEnc, la.NRReached)
+		}
+	}
+
+	// Wire-timing block: for each captured emission (in capture order),
+	// list its per-recipient delivery times alongside each recipient's
+	// Phase-2a fire time. A '*' marks deliveredAt ≤ fireAt (in time for
+	// the recipient's Phase-2a LayerEntries choice); a '!' marks late.
+	t.Logf("Wire timing (broadcast → per-recipient delivery, * = before recipient phase2aFire, ! = after):")
+	for i, em := range captured {
+		t.Logf("  #%d from=op%d kind=%s broadcastAt=%s", i, em.from, em.envelope.Kind, em.broadcastAt)
+		// Find deliveries that match this emission by (from, kind, broadcastAt-exact).
+		for _, d := range deliveries {
+			if d.from != em.from || d.kind != em.envelope.Kind || d.broadcastAt != em.broadcastAt {
+				continue
+			}
+			marker := "*"
+			recipFire := fireAt[d.to]
+			if recipFire != 0 && d.deliveredAt > recipFire {
+				marker = "!"
+			} else if recipFire == 0 {
+				marker = "?" // recipient never fired; can't classify
+			}
+			t.Logf("    %s op%d deliveredAt=%s (delay=%s, recipient.phase2aFireAt=%s)",
+				marker, d.to, d.deliveredAt, d.deliveredAt-d.broadcastAt, recipFire)
 		}
 	}
 	t.Logf("=== END DIAGNOSTIC DUMP ===")

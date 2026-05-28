@@ -50,6 +50,14 @@ type blsNode struct {
 	// Finalize). Used by the safety-bridge's post-slot diagnostic dump and
 	// reconstructOutcome.
 	capturedRI *RunningInstance
+	// phase2aFireAt is the slot-relative time of this op's first
+	// non-Phase1Bundle Broadcast call — a proxy for the Phase-2a fire
+	// instant. The diagnostic dump compares this against per-emission
+	// receive times to localize stuck-at-L_k races (a peer that fired
+	// Phase-2a before the L_k leader's bundle landed in its state will
+	// have committed NRPlaintext at L_k, an irrevocable choice).
+	// Zero until the first non-bundle broadcast fires.
+	phase2aFireAt time.Duration
 }
 
 func (n *blsNode) submittedOutput() *twoabcore.Output {
@@ -163,6 +171,12 @@ type blsBus struct {
 	delay     delayFn                       // nil → deliver every message immediately
 	wg        sync.WaitGroup
 	once      sync.Once
+
+	// deliveryHook, if non-nil, is invoked by each per-recipient delivery
+	// goroutine after DispatchBytes returns. Records (from, to, kind,
+	// broadcastAt, deliveredAt) for the safety-bridge's diagnostic dump.
+	// Test-only — production runner has no equivalent observation point.
+	deliveryHook func(from, to spectypes.OperatorID, kind byte, broadcastAt, deliveredAt time.Duration)
 }
 
 // newBlsBusWithDelay returns a blsBus that defers delivery per the supplied
@@ -173,17 +187,24 @@ func newBlsBusWithDelay(nodes []*blsNode, slotStart time.Time, delay delayFn) *b
 }
 
 func (b *blsBus) broadcast(from spectypes.OperatorID, data []byte) {
+	b.broadcastAt(from, data, time.Since(b.slotStart))
+}
+
+// broadcastAt is broadcast with the slot-relative broadcast time supplied
+// by the caller — used by recordingBlsBus to thread one shared broadcastAt
+// through to both the captured emission and every per-recipient
+// deliveryHook callback, so the diagnostic dump can group deliveries to
+// emissions by exact-match (avoiding microsecond-drift mismatches between
+// independent time.Since calls).
+func (b *blsBus) broadcastAt(from spectypes.OperatorID, data []byte, broadcastAt time.Duration) {
 	if b.silent[from] {
 		return // send-silent op: all outbound dropped, inbound still works
 	}
-	observedOffset := time.Since(b.slotStart)
-	// Peek at the envelope kind so the delay rule can dispatch on it without
-	// each delivery goroutine reparsing. Matches OBFT base's broadcastBus.
+	// Peek at the envelope kind so the delay rule + delivery hook can
+	// dispatch on it without each delivery goroutine reparsing.
 	var kind byte
-	if b.delay != nil {
-		if env, err := wire.Unwrap(data); err == nil && env != nil {
-			kind = byte(env.Kind)
-		}
+	if env, err := wire.Unwrap(data); err == nil && env != nil {
+		kind = byte(env.Kind)
 	}
 	for _, n := range b.nodes {
 		if n.op == from {
@@ -201,7 +222,10 @@ func (b *blsBus) broadcast(from spectypes.OperatorID, data []byte) {
 			if d > 0 {
 				time.Sleep(d)
 			}
-			_ = DispatchBytes(context.Background(), n.sched, dataCopy, observedOffset)
+			_ = DispatchBytes(context.Background(), n.sched, dataCopy, broadcastAt)
+			if b.deliveryHook != nil {
+				b.deliveryHook(from, n.op, kind, broadcastAt, time.Since(b.slotStart))
+			}
 		}()
 	}
 }
