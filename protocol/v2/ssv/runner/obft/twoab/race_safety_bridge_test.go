@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -287,6 +288,55 @@ func extractInstanceTrace(node *blsNode) []twoabcore.LayerAttempt {
 		return nil
 	}
 	return ri.instance.LastResolveLayerAttempts()
+}
+
+// formatBroadcastCounts renders a per-op `broadcastCounts[op]` map as a
+// stable, compact one-liner for the diagnostic dump: keys are sorted by
+// MessageKind so the same scenario always logs the same column order
+// regardless of map iteration order, and the all-zero case (op had no
+// captured emissions at all — e.g. an op that returned before its Phase-2a
+// fire completed) prints as `none` to distinguish it from a missing-from-
+// map miss.
+func formatBroadcastCounts(counts map[wire.MessageKind]int) string {
+	if len(counts) == 0 {
+		return "none"
+	}
+	kinds := make([]wire.MessageKind, 0, len(counts))
+	for k := range counts {
+		kinds = append(kinds, k)
+	}
+	sort.Slice(kinds, func(i, j int) bool { return kinds[i] < kinds[j] })
+	parts := make([]string, 0, len(kinds))
+	for _, k := range kinds {
+		parts = append(parts, fmt.Sprintf("%s=%d", k, counts[k]))
+	}
+	return strings.Join(parts, " ")
+}
+
+// extractInstanceCascadeErrors pulls Instance.CascadeErrors() via the same
+// captured-pointer path as extractInstanceTrace. CascadeErrors is the
+// accumulator of silent failures from afterStateDelta's cascade
+// (MaybeBuildAndBroadcastUpgrade / MaybeBuildAndBroadcastCommit). Typically
+// empty; non-empty in a failing scenario indicates a signer/EKM hiccup
+// swallowed by recordCascadeError — the kind of bug that's invisible on the
+// wire (no emission to point at) and would otherwise take an instrumentation
+// session to find. Surfacing it in the diagnostic dump lets a future
+// "missing emission" investigation start from the right hypothesis.
+//
+// Returns nil if the capture goroutine never observed a live Instance.
+func extractInstanceCascadeErrors(node *blsNode) []error {
+	node.mu.Lock()
+	ri := node.capturedRI
+	node.mu.Unlock()
+	if ri == nil {
+		return nil
+	}
+	ri.instanceMu.Lock()
+	defer ri.instanceMu.Unlock()
+	if ri.instance == nil {
+		return nil
+	}
+	return ri.instance.CascadeErrors()
 }
 
 // reconstructOutcome translates the captured wire trace + per-Instance
@@ -769,6 +819,26 @@ func dumpClusterDiagnostic(t *testing.T, nodes []*blsNode, slot phase0.Slot, cap
 		n.mu.Unlock()
 	}
 
+	// Per-op broadcast counts by wire.MessageKind, derived from `captured`.
+	// Cheap "did op X actually call Broadcast for kind Y?" check that
+	// short-circuits wire-vs-state mystery investigations: e.g. trace says
+	// op 2 set ownCommit but no commit emission appears in the wire dump →
+	// broadcastCounts[op2][KindCommit] == 0 confirms the gap is between
+	// in-memory state and the scheduler's broadcastNewEmissions poll, not
+	// elsewhere in the broadcast pipeline. broadcastCounts[op][kind] counts
+	// only emissions captured by recordingBlsBus, which is every emission
+	// the test fixture's Broadcast / BroadcastCertificate hooks route — a
+	// proxy for hook-entry counts that's sufficient for diagnostic intent.
+	broadcastCounts := make(map[spectypes.OperatorID]map[wire.MessageKind]int, len(nodes))
+	for _, em := range captured {
+		opCounts, ok := broadcastCounts[em.from]
+		if !ok {
+			opCounts = make(map[wire.MessageKind]int)
+			broadcastCounts[em.from] = opCounts
+		}
+		opCounts[em.envelope.Kind]++
+	}
+
 	for _, n := range nodes {
 		var runErrStr string
 		if n.runErr != nil {
@@ -789,17 +859,28 @@ func dumpClusterDiagnostic(t *testing.T, nodes []*blsNode, slot phase0.Slot, cap
 		} else {
 			fireAtStr = fireAt[n.op].String()
 		}
-		t.Logf("  op %d: runErr=%s submittedOutput=%s phase2aFireAt=%s", n.op, runErrStr, outStr, fireAtStr)
+		t.Logf("  op %d: runErr=%s submittedOutput=%s phase2aFireAt=%s broadcasts=%s",
+			n.op, runErrStr, outStr, fireAtStr, formatBroadcastCounts(broadcastCounts[n.op]))
 		trace := extractInstanceTrace(n)
 		if trace == nil {
 			t.Logf("    resolveTrace: <none — capture goroutine never observed a live Instance, or LastResolveLayerAttempts returned nil>")
-			continue
+		} else {
+			t.Logf("    resolveTrace (%d layers):", len(trace))
+			for _, la := range trace {
+				t.Logf("      L_%d: σ-pool=%d/qV=%d σ-reached=%v decided=%v | NR-pool=%d/qEnc=%d NR-reached=%v",
+					la.Layer, la.SigmaPoolSize, la.QV, la.SigmaReached, la.Decided,
+					la.NRPoolSize, la.QEnc, la.NRReached)
+			}
 		}
-		t.Logf("    resolveTrace (%d layers):", len(trace))
-		for _, la := range trace {
-			t.Logf("      L_%d: σ-pool=%d/qV=%d σ-reached=%v decided=%v | NR-pool=%d/qEnc=%d NR-reached=%v",
-				la.Layer, la.SigmaPoolSize, la.QV, la.SigmaReached, la.Decided,
-				la.NRPoolSize, la.QEnc, la.NRReached)
+		// CascadeErrors: silent failures of afterStateDelta's cascade. Empty
+		// in the healthy case; non-empty fingerprint a signer/EKM hiccup that
+		// swallowed a Phase-2a-late upgrade or Phase-2b NR-Commit and would
+		// otherwise be invisible on the wire.
+		if cascadeErrs := extractInstanceCascadeErrors(n); len(cascadeErrs) > 0 {
+			t.Logf("    cascadeErrors (%d):", len(cascadeErrs))
+			for j, err := range cascadeErrs {
+				t.Logf("      [%d] %s", j, err)
+			}
 		}
 	}
 

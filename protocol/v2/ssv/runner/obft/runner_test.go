@@ -119,19 +119,33 @@ func TestRunProposerSlot_Healthy_n4_K4(t *testing.T) {
 	}
 	wg.Wait()
 
+	// With BroadcastCertificate wired (production-shaped), ops race between
+	// completing their own local Resolve and short-circuiting via
+	// tryCertFastPath on a faster peer's broadcast certificate. Both paths
+	// produce the same Value + reconstructed Signature (the cert wraps the
+	// σ-aggregated output), so value/signature equality is the strict
+	// invariant. Per-op Layer can legitimately be 0 (local L_0 σ-quorum) or
+	// -1 (cert-fast-path); at least one op must have taken the canonical
+	// path or no cert would exist for the rest to fast-path on.
 	var ref *obftcore.Output
+	canonicalCount := 0
 	for _, n := range nodes {
 		out := n.submittedOutput()
 		require.NotNilf(t, out, "op %d submitted no output", n.op)
+		require.Truef(t, out.Layer == 0 || out.Layer == -1,
+			"op %d decided at unexpected layer %d (want 0 or -1 cert-fast-path)", n.op, out.Layer)
+		if out.Layer == 0 {
+			canonicalCount++
+		}
 		if ref == nil {
 			ref = out
 			continue
 		}
 		require.True(t, bytes.Equal(ref.Value, out.Value), "op %d value differs", n.op)
 		require.True(t, bytes.Equal(ref.Signature, out.Signature), "op %d signature differs", n.op)
-		require.Equal(t, ref.Layer, out.Layer)
 	}
-	require.Equal(t, 0, ref.Layer, "healthy case should decide at L_0")
+	require.GreaterOrEqual(t, canonicalCount, 1,
+		"at least one op must decide locally at L_0 to seed the cert-fast-path for any others")
 }
 
 // TestRunProposerSlot_OpportunisticTiming_NoDelta2Wait verifies that with
@@ -232,9 +246,22 @@ func TestRunProposerSlot_LateCommit_OpportunisticResolve(t *testing.T) {
 	// Late-Commit-targeted bus: KindCommit messages to victim op (op 1) from
 	// senders 3 and 4 are delayed by lateCommitDelay (well past
 	// RoundEndOffset = 320ms but well within the ctx 2s timeout).
+	//
+	// KindCertificate is delayed cluster-wide by 2× lateCommitDelay: with
+	// BroadcastCertificate wired (mirroring production), the first non-
+	// victim op to decide would otherwise gossip a certificate that reaches
+	// the victim via tryCertFastPath before the late KindCommits arrive,
+	// short-circuiting the opportunistic-resolve path this scenario
+	// specifically validates. Doubling the cert delay gives opportunistic-
+	// resolve a clear runway to fire on the late-Commit arrival before the
+	// cert lands.
 	const lateCommitDelay = 500 * time.Millisecond
+	const certDelay = 2 * lateCommitDelay
 	const victim spectypes.OperatorID = 1
 	bus := newBroadcastBusWithDelay(nodes, slotStart, func(from, to spectypes.OperatorID, kind byte) time.Duration {
+		if kind == byte(wire.KindCertificate) {
+			return certDelay
+		}
 		if kind == byte(wire.KindCommit) && to == victim && (from == 3 || from == 4) {
 			return lateCommitDelay
 		}
@@ -530,6 +557,23 @@ func (h *runnerHooks) LifecycleHooks() *LifecycleHooks {
 			return fn(ctx, slot, layer, value)
 		},
 		Broadcast: func(ctx context.Context, slot phase0.Slot, data []byte) error {
+			h.mu.Lock()
+			fn := h.broadcastFn
+			h.mu.Unlock()
+			if fn == nil {
+				return nil
+			}
+			return fn(ctx, slot, data)
+		},
+		// BroadcastCertificate routes through the same broadcastFn as
+		// Broadcast — certificates are wire emissions like any other from
+		// the cluster bus's perspective. Production wires this hook (see
+		// proposer.go's `BroadcastCertificate: r.obftBroadcastCertificate`);
+		// leaving it nil here would skip the peer-cert fast-path that
+		// rescues stuck ops in production. Mirrors the BLS test fixture in
+		// the sibling twoab package — see the parity commit landing the
+		// twoab-side wiring + the assertion-relaxation rationale.
+		BroadcastCertificate: func(ctx context.Context, slot phase0.Slot, data []byte) error {
 			h.mu.Lock()
 			fn := h.broadcastFn
 			h.mu.Unlock()
