@@ -2,6 +2,7 @@ package consensustest
 
 import (
 	"strings"
+	"sync"
 	"testing"
 	"unicode/utf8"
 )
@@ -421,4 +422,57 @@ func TestLog_SingleDestination(t *testing.T) {
 	if got := sink.String(); got != "" {
 		t.Errorf("Log must not mirror to stderr while active (would round-trip through go test's stderr relay and stack on the in-place block), got %q", got)
 	}
+}
+
+// TestLog_ConcurrentSafe exercises Log's outMu serialisation: N goroutines
+// fire Log concurrently and the resulting buffer must contain exactly N
+// lines (no dropped or partially-interleaved writes). Run under `-race` this
+// also asserts no data race on outMu / prevLines / w. Non-tty path keeps the
+// assertion focused on serialisation rather than redraw-mixed-with-writes
+// output ordering, which is intentionally non-deterministic across runs.
+func TestLog_ConcurrentSafe(t *testing.T) {
+	p := NewProgressTracker(
+		[]string{"OBFT-700"},
+		map[string]int64{"OBFT-700": 100},
+	)
+	var buf concurrentBuffer
+	p.w = &buf
+	p.tty = false
+	p.active = true
+
+	const n = 100
+	var wg sync.WaitGroup
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			p.Log("concurrent %d", i)
+		}(i)
+	}
+	wg.Wait()
+
+	if got := strings.Count(buf.String(), "concurrent "); got != n {
+		t.Errorf("want %d concurrent writes, got %d (some dropped or torn)", n, got)
+	}
+}
+
+// concurrentBuffer is a strings.Builder protected by a mutex, used only as a
+// test sink for goroutine-shared writes. strings.Builder itself isn't
+// goroutine-safe; the wrapper makes the buffer side safe so the assertion
+// targets ProgressTracker's outMu rather than the test's sink.
+type concurrentBuffer struct {
+	mu  sync.Mutex
+	buf strings.Builder
+}
+
+func (b *concurrentBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *concurrentBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
 }

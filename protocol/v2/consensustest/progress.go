@@ -149,8 +149,9 @@ func (p *ProgressTracker) Add(name string, n int64) {
 // t.Logf, which the test runner captures normally); the live terminal does.
 //
 // Safe for concurrent use; nil receiver is a no-op (matches Add). A bad
-// format string panics in fmt.Sprintf — caller error; the deferred Unlock
-// releases outMu either way.
+// format string panics in fmt.Sprintf — caller error; the panic
+// propagates before any lock is taken (Sprintf runs above the Lock), so
+// the lock state stays consistent.
 func (p *ProgressTracker) Log(format string, args ...any) {
 	if p == nil {
 		return
