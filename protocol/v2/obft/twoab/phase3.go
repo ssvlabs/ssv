@@ -215,34 +215,60 @@ type sigGroup struct {
 // extracts σ partials at `layer` (decrypting via chainedKeys), adding
 // them to `groups` keyed by V_root. Fires Rule 4 evidence on decryption
 // failure or post-decryption verification failure.
+//
+// F4: cache-miss σ partials are collected into a single batch and verified
+// via one VerifyPartialBatch call after the three peer-store loops finish.
+// L_0 entries are pre-verified at observation and always cache-hit so they
+// take the inline addToGroup path; the batch fires only on L_k>0 first-walk
+// cache misses. On batch failure we fall back to per-tuple verify to
+// preserve Rule-4 attribution per (op, layer).
 func (i *Instance) aggregatePeerLayerEntries(layer int, chainedKeys [][]byte, groups map[[32]byte]*sigGroup) {
+	var pending []pendingVerify
 	// Iterate peer ValueMsgs.
 	for op, vm := range i.peerValueMsg {
-		i.extractSigmaFromEntries(op, layer, vm.LayerEntries, chainedKeys, groups)
+		i.classifySigmaFromEntries(op, layer, vm.LayerEntries, chainedKeys, groups, &pending)
 	}
 	// Iterate peer NoValueMsgs.
 	for op, nv := range i.peerNoValueMsg {
-		i.extractSigmaFromEntries(op, layer, nv.LayerEntries, chainedKeys, groups)
+		i.classifySigmaFromEntries(op, layer, nv.LayerEntries, chainedKeys, groups, &pending)
 	}
 	// Iterate peer Commits with Side=NRDirect (they carry LayerEntries).
 	for op, c := range i.peerCommit {
 		if c.Side != CommitSideNRDirect {
 			continue
 		}
-		i.extractSigmaFromEntries(op, layer, c.LayerEntries, chainedKeys, groups)
+		i.classifySigmaFromEntries(op, layer, c.LayerEntries, chainedKeys, groups, &pending)
+	}
+
+	// F4: batch-verify all collected cache-miss tuples in one MultiVerify
+	// call. On batch success: cache-populate + add-to-group for every tuple
+	// in one pass. On batch failure: fall back to per-tuple verify to
+	// attribute Rule-4 evidence per failing (op, layer). Empty pending list
+	// = no batch call (the L_0-only cache-hit common path).
+	if len(pending) > 0 {
+		if !i.batchVerifyAndPopulate(layer, pending, groups) {
+			i.sequentialVerifyAndAttribute(layer, pending, groups)
+		}
 	}
 }
 
-// extractSigmaFromEntries decrypts the SigmaChained entry at `layer` (if
-// present) in `entries` and adds the resulting partial to `groups` (if
-// it verifies).
-func (i *Instance) extractSigmaFromEntries(op OperatorID, layer int, entries []LayerEntry,
-	chainedKeys [][]byte, groups map[[32]byte]*sigGroup) {
+// classifySigmaFromEntries decrypts the SigmaChained entry at `layer` (if
+// present) in `entries`, fires Rule-4 evidence on decryption failure, and
+// either adds the decrypted partial to `groups` directly (F1 cache hit) or
+// pushes it to `pending` for the F4 batch verify (cache miss). Returns
+// without invoking the BLS verify itself — that's the batch's job.
+//
+// Only one SigmaChained entry per (op, layer) is expected by construction;
+// the loop returns on the first match.
+func (i *Instance) classifySigmaFromEntries(op OperatorID, layer int, entries []LayerEntry,
+	chainedKeys [][]byte, groups map[[32]byte]*sigGroup, pending *[]pendingVerify) {
 	for _, e := range entries {
 		if e.Layer != layer || e.Kind != LayerEntrySigmaChained {
 			continue
 		}
-		// Decrypt the chained payload.
+		// Decrypt the chained payload. Decryption failure at k > 0 is Rule 4
+		// evidence (post-NR-quorum the chain key is wrong → decrypted bytes
+		// would be garbage). Same per-(op, layer) recordRule4 dedup as base.
 		pt, err := i.chainDecryptForLayer(layer, e.Payload, chainedKeys)
 		if err != nil {
 			if i.recordRule4(op, layer) {
@@ -256,41 +282,37 @@ func (i *Instance) extractSigmaFromEntries(op OperatorID, layer int, entries []L
 					},
 				})
 			}
-			continue
+			return
 		}
-		// Verify the decrypted partial against op's pubshare on V.
-		// F1: verifyOrCached hits the cache populated by a prior Resolve walk's
-		// post-decrypt verify on the same entry; on miss it runs a fresh BLS
-		// verify and populates on success so opportunistic re-Resolves at the
-		// same layer skip the cost. Value-binding in the cache key is load-
-		// bearing — see verifyCacheKey doc in instance.go.
 		opPub, ok := i.pubKeyShares[op]
 		if !ok || len(opPub) == 0 {
-			continue
+			return
 		}
-		if !i.verifyOrCached(op, layer, opPub, e.V, Signature(pt)) {
-			if i.recordRule4(op, layer) {
-				i.recordEvidence(Evidence{
-					Rule:       EvidenceFakeEncryptedPresence,
-					OperatorID: op,
-					Layer:      layer,
-					FakeEncryptedPresence: &FakeEncryptedPresenceEvidence{
-						Ciphertext:     append([]byte{}, e.Payload...),
-						DecryptedBytes: append([]byte{}, pt...),
-					},
-				})
+		// F1: cache hit → add directly, skip the batch. At L_0 this is the
+		// common case (the cache was populated at observe time, see twoab's
+		// L_0 σ-pool ingestion in phase2a.go); at L_k>0 it's the warm path
+		// after the first Resolve walk. Value-binding in the cache key is
+		// load-bearing — see verifyCacheKey doc in instance.go.
+		if i.alreadyVerified(op, layer, e.V, Signature(pt)) {
+			vRoot := ValueRoot(e.V)
+			g := groups[vRoot]
+			if g == nil {
+				g = &sigGroup{value: append(Value{}, e.V...), partials: map[OperatorID]Signature{}}
+				groups[vRoot] = g
 			}
-			continue
+			g.partials[op] = append(Signature{}, pt...)
+			return
 		}
-		// Add to groups.
-		vRoot := ValueRoot(e.V)
-		g := groups[vRoot]
-		if g == nil {
-			g = &sigGroup{value: append(Value{}, e.V...), partials: map[OperatorID]Signature{}}
-			groups[vRoot] = g
-		}
-		g.partials[op] = append(Signature{}, pt...)
-		return // only one SigmaChained entry per (op, layer) by construction
+		// F4: cache miss — collect for the batch. ciphertext is captured for
+		// the Rule-4 evidence path in the sequential fallback.
+		*pending = append(*pending, pendingVerify{
+			op:         op,
+			pubShare:   opPub,
+			value:      e.V,
+			partial:    Signature(pt),
+			ciphertext: e.Payload,
+		})
+		return
 	}
 }
 
@@ -511,5 +533,99 @@ func (i *Instance) RetainedCertificate() *Certificate {
 		Height:    src.Height,
 		Value:     append(Value{}, src.Value...),
 		Signature: append(Signature{}, src.Signature...),
+	}
+}
+
+// pendingVerify carries a σ-walk entry that missed F1's verify cache and
+// needs a fresh BLS verify. aggregatePeerLayerEntries collects these into
+// a batch (F4) and either approves the whole set via VerifyPartialBatch +
+// cache-populate, or falls back to per-tuple verify to attribute Rule-4
+// evidence on the byzantine entries.
+//
+// ciphertext is captured for the Rule-4 evidence path in the sequential
+// fallback (same FakeEncryptedPresenceEvidence shape as the pre-F4 inline
+// code path in extractSigmaFromEntries). value and partial are the
+// post-decryption tuple the F1 cache key binds.
+//
+// Mirror of base.pendingVerify — see docs/OBFT-F4-IMPLEMENTATION-PLAN.md.
+type pendingVerify struct {
+	op         OperatorID
+	pubShare   []byte
+	value      Value
+	partial    Signature
+	ciphertext []byte
+}
+
+// batchVerifyAndPopulate runs one VerifyPartialBatch over the pending
+// tuples. On success: every tuple is F1-cache-populated and added to its
+// sigGroup (keyed by V_root); returns true. On failure: returns false
+// without touching the cache or groups — the caller runs the sequential
+// fallback to identify the bad tuple(s) and attribute Rule-4 evidence.
+//
+// Twoab mirror of base.batchVerifyAndPopulate. The only shape difference
+// is the addToGroup convention: twoab keys groups by V_root in a map, base
+// uses an addToGroup helper over a slice.
+func (i *Instance) batchVerifyAndPopulate(layer int, pending []pendingVerify, groups map[[32]byte]*sigGroup) bool {
+	pubs := make([][]byte, len(pending))
+	msgs := make([][]byte, len(pending))
+	sigs := make([]Signature, len(pending))
+	for k, pv := range pending {
+		pubs[k] = pv.pubShare
+		msgs[k] = pv.value
+		sigs[k] = pv.partial
+	}
+	if !i.signer.VerifyPartialBatch(pubs, msgs, sigs) {
+		return false
+	}
+	for _, pv := range pending {
+		i.markVerified(pv.op, layer, pv.value, pv.partial)
+		vRoot := ValueRoot(pv.value)
+		g := groups[vRoot]
+		if g == nil {
+			g = &sigGroup{value: append(Value{}, pv.value...), partials: map[OperatorID]Signature{}}
+			groups[vRoot] = g
+		}
+		g.partials[pv.op] = append(Signature{}, pv.partial...)
+	}
+	return true
+}
+
+// sequentialVerifyAndAttribute is the per-tuple fallback after a batch
+// verify failed. For each tuple that verifies individually: F1-cache-
+// populate + addToGroup. For each tuple that fails individually at L_k>0:
+// record Rule-4 evidence (same EvidenceFakeEncryptedPresence shape and
+// recordRule4 per-(op, layer) dedup as the inline pre-F4 code path; at
+// L_0 the fallback is unreachable in practice since L_0 entries always
+// cache-hit and never enter pending, but the L_0-guard matches base for
+// defense-in-depth).
+//
+// Twoab mirror of base.sequentialVerifyAndAttribute. Preserves the
+// per-(op, layer) Rule-4 attribution exactly as the pre-F4 code did.
+func (i *Instance) sequentialVerifyAndAttribute(layer int, pending []pendingVerify, groups map[[32]byte]*sigGroup) {
+	for _, pv := range pending {
+		if i.signer.VerifyPartial(pv.pubShare, pv.value, pv.partial) {
+			i.markVerified(pv.op, layer, pv.value, pv.partial)
+			vRoot := ValueRoot(pv.value)
+			g := groups[vRoot]
+			if g == nil {
+				g = &sigGroup{value: append(Value{}, pv.value...), partials: map[OperatorID]Signature{}}
+				groups[vRoot] = g
+			}
+			g.partials[pv.op] = append(Signature{}, pv.partial...)
+			continue
+		}
+		if layer > 0 {
+			if i.recordRule4(pv.op, layer) {
+				i.recordEvidence(Evidence{
+					Rule:       EvidenceFakeEncryptedPresence,
+					OperatorID: pv.op,
+					Layer:      layer,
+					FakeEncryptedPresence: &FakeEncryptedPresenceEvidence{
+						Ciphertext:     append([]byte{}, pv.ciphertext...),
+						DecryptedBytes: append([]byte{}, pv.partial...),
+					},
+				})
+			}
+		}
 	}
 }
