@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/api"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/stretchr/testify/assert"
@@ -16,6 +17,11 @@ import (
 
 // Tests for the block-fetch path dispatch (BlockFetchPathSafe / Legacy / MEVOptimized).
 // See docs/MEV_CONSIDERATIONS.md for path semantics.
+//
+// These tests gate BN responses on Release channels rather than time.Sleep delays,
+// so the assertions are identity/ordering-based rather than wall-clock-based.
+// A 2s safety timeout on the result channel catches the "GetBeaconBlock never returns"
+// failure mode without depending on tight CI-sensitive elapsed-time bounds.
 
 // TestNew_StoresBlockFetchPath verifies that the selected path and its associated
 // timing field (proposalSoftDeadline / proposalSoftTimeout) get propagated from
@@ -58,57 +64,59 @@ func TestNew_StoresBlockFetchPath(t *testing.T) {
 }
 
 // TestGetBeaconBlock_MultiBN_SafePath_EarlyExitOnBlinded verifies the safe path's
-// early-exit-on-first-blinded behavior. With one fast and one slow BN both returning
-// blinded proposals, the safe path should return quickly after the fast BN responds,
-// without waiting for the slow one.
+// early-exit-on-first-blinded behavior. With BN1 released and BN2 left blocked,
+// the safe path must return on BN1's blinded response without waiting for BN2.
 func TestGetBeaconBlock_MultiBN_SafePath_EarlyExitOnBlinded(t *testing.T) {
+	release1 := make(chan struct{})
+	release2 := make(chan struct{}) // intentionally never closed
+
 	bn1, _ := createProposalBeaconServer(t, beaconProposalServerOptions{
-		ProposalResponseDuration: 10 * time.Millisecond,
-		BlindedProposal:          true,
-		FeeRecipient:             feeRecipientAllOnes(),
+		Release:         release1,
+		BlindedProposal: true,
+		FeeRecipient:    feeRecipientAllOnes(),
 	})
 	defer bn1.Close()
 	bn2, _ := createProposalBeaconServer(t, beaconProposalServerOptions{
-		ProposalResponseDuration: 500 * time.Millisecond,
-		BlindedProposal:          true,
-		FeeRecipient:             feeRecipientAllTwos(),
+		Release:         release2,
+		BlindedProposal: true,
+		FeeRecipient:    feeRecipientAllTwos(),
 	})
 	defer bn2.Close()
 
 	client := setupMultiBNClient(t, bn1.URL, bn2.URL, BlockFetchPathSafe, 1500*time.Millisecond)
 
-	// Use a slot starting in the near future so the slot-relative deadline lands
-	// well after both BN responses (we want to observe the early-exit on blinded,
-	// not the deadline firing).
+	// Future slot so the slot-relative deadline lands after both BN responses —
+	// we want to observe early-exit, not the deadline firing.
 	slot := client.getBeaconConfig().EstimatedCurrentSlot() + 2
 
-	start := time.Now()
-	_, _, err := client.GetBeaconBlock(context.Background(), slot, []byte("test"), getTestRANDAO())
-	elapsed := time.Since(start)
-	require.NoError(t, err)
+	resultCh, cancel := launchGetBeaconBlock(t, client, slot)
+	defer cancel() // unblocks BN2's still-pending request when test returns
 
-	// Safe path should early-exit on BN1's blinded response (~10ms) and NOT wait for
-	// BN2 (~500ms). The 350ms ceiling sits well below BN2's response time while
-	// tolerating HTTP / goroutine / loaded-CI overhead.
-	assert.Less(t, elapsed, 350*time.Millisecond,
-		"safe path should early-exit on first blinded; took %v", elapsed)
+	close(release1)
+
+	proposal := requireBeaconBlockResult(t, resultCh, "safe path should early-exit on first blinded")
+	assertProposalFeeRecipient(t, proposal, feeRecipientAllOnes(),
+		"safe path should return BN1's blinded (early-exit), not BN2's")
 }
 
-// TestGetBeaconBlock_MultiBN_MEVOptimizedPath_NoEarlyExit verifies that the MEV-optimized
-// path does NOT early-exit on the first blinded response — it keeps collecting until all
-// BNs respond (or the soft deadline fires). With the same setup as the safe-path test,
-// the MEV-optimized path should wait for the slow BN.
+// TestGetBeaconBlock_MultiBN_MEVOptimizedPath_NoEarlyExit verifies that the
+// MEV-optimized path does NOT early-exit on the first blinded response. After
+// releasing BN1, GetBeaconBlock must still be waiting; only after releasing BN2
+// does it return.
 func TestGetBeaconBlock_MultiBN_MEVOptimizedPath_NoEarlyExit(t *testing.T) {
+	release1 := make(chan struct{})
+	release2 := make(chan struct{})
+
 	bn1, _ := createProposalBeaconServer(t, beaconProposalServerOptions{
-		ProposalResponseDuration: 10 * time.Millisecond,
-		BlindedProposal:          true,
-		FeeRecipient:             feeRecipientAllOnes(),
+		Release:         release1,
+		BlindedProposal: true,
+		FeeRecipient:    feeRecipientAllOnes(),
 	})
 	defer bn1.Close()
 	bn2, _ := createProposalBeaconServer(t, beaconProposalServerOptions{
-		ProposalResponseDuration: 500 * time.Millisecond,
-		BlindedProposal:          true,
-		FeeRecipient:             feeRecipientAllTwos(),
+		Release:         release2,
+		BlindedProposal: true,
+		FeeRecipient:    feeRecipientAllTwos(),
 	})
 	defer bn2.Close()
 
@@ -116,36 +124,43 @@ func TestGetBeaconBlock_MultiBN_MEVOptimizedPath_NoEarlyExit(t *testing.T) {
 
 	slot := client.getBeaconConfig().EstimatedCurrentSlot() + 2
 
-	start := time.Now()
-	_, _, err := client.GetBeaconBlock(context.Background(), slot, []byte("test"), getTestRANDAO())
-	elapsed := time.Since(start)
-	require.NoError(t, err)
+	resultCh, cancel := launchGetBeaconBlock(t, client, slot)
+	defer cancel()
 
-	// MEV-optimized path should NOT early-exit; it waits for BN2's response at ~500ms
-	// before returning the best-scored proposal. The 400ms floor tolerates clock jitter.
-	assert.GreaterOrEqual(t, elapsed, 400*time.Millisecond,
-		"MEV-optimized path should wait for the slower BN; took %v", elapsed)
+	close(release1)
+
+	// MEV-optimized path keeps collecting after blinded. A short non-return check
+	// (100ms) is enough to detect a regression to early-exit behavior; we're
+	// asserting "no event for a brief window" rather than the much weaker
+	// "wall-clock bound around 500ms".
+	assertNoReturnWithin(t, resultCh, 100*time.Millisecond,
+		"MEV-optimized path returned after BN1 alone — should not early-exit on blinded")
+
+	close(release2)
+
+	requireBeaconBlockResult(t, resultCh, "MEV-optimized path should return after both BNs respond")
 }
 
-// TestGetBeaconBlock_MultiBN_MEVOptimizedPath_HighestScoringBlindedWins verifies that
-// when multiple BNs return blinded proposals within the collection window, the
-// MEV-optimized path selects the one with the highest scoreProposal value (sum of
-// ConsensusValue and ExecutionValue) rather than the first-arriving one. BN1 returns
-// a fast low-value blinded; BN2 returns a slow high-value blinded — the function must
-// return BN2's proposal.
+// TestGetBeaconBlock_MultiBN_MEVOptimizedPath_HighestScoringBlindedWins verifies
+// that when multiple BNs return blinded proposals within the collection window,
+// the MEV-optimized path selects the one with the highest scoreProposal value
+// (sum of ConsensusValue and ExecutionValue) rather than the first-arriving one.
 func TestGetBeaconBlock_MultiBN_MEVOptimizedPath_HighestScoringBlindedWins(t *testing.T) {
+	release1 := make(chan struct{})
+	release2 := make(chan struct{})
+
 	bn1, _ := createProposalBeaconServer(t, beaconProposalServerOptions{
-		ProposalResponseDuration: 10 * time.Millisecond,
-		BlindedProposal:          true,
-		FeeRecipient:             feeRecipientAllOnes(),
-		ExecutionValue:           big.NewInt(1_000_000), // low bid
+		Release:         release1,
+		BlindedProposal: true,
+		FeeRecipient:    feeRecipientAllOnes(),
+		ExecutionValue:  big.NewInt(1_000_000), // low bid
 	})
 	defer bn1.Close()
 	bn2, _ := createProposalBeaconServer(t, beaconProposalServerOptions{
-		ProposalResponseDuration: 300 * time.Millisecond,
-		BlindedProposal:          true,
-		FeeRecipient:             feeRecipientAllTwos(),
-		ExecutionValue:           big.NewInt(5_000_000), // high bid (must win)
+		Release:         release2,
+		BlindedProposal: true,
+		FeeRecipient:    feeRecipientAllTwos(),
+		ExecutionValue:  big.NewInt(5_000_000), // high bid (must win)
 	})
 	defer bn2.Close()
 
@@ -153,13 +168,16 @@ func TestGetBeaconBlock_MultiBN_MEVOptimizedPath_HighestScoringBlindedWins(t *te
 
 	slot := client.getBeaconConfig().EstimatedCurrentSlot() + 2
 
-	versionedProposal, _, err := client.GetBeaconBlock(context.Background(), slot, []byte("test"), getTestRANDAO())
-	require.NoError(t, err)
-	require.NotNil(t, versionedProposal)
+	resultCh, cancel := launchGetBeaconBlock(t, client, slot)
+	defer cancel()
 
-	actualFeeRecipient, err := versionedProposal.FeeRecipient()
-	require.NoError(t, err)
-	assert.Equal(t, feeRecipientAllTwos(), actualFeeRecipient,
+	// Release BN1 first so it arrives first (lower bid). MEV-optimized must keep
+	// collecting until BN2 (higher bid) arrives, then prefer BN2 by score.
+	close(release1)
+	close(release2)
+
+	proposal := requireBeaconBlockResult(t, resultCh, "MEV-optimized path should select highest-scoring proposal")
+	assertProposalFeeRecipient(t, proposal, feeRecipientAllTwos(),
 		"MEV-optimized path should select the higher-value blinded (BN2's), not the first-arriving (BN1's)")
 }
 
@@ -168,16 +186,19 @@ func TestGetBeaconBlock_MultiBN_MEVOptimizedPath_HighestScoringBlindedWins(t *te
 // the parallel-fetch path falls through to waitForFirstValidProposal and returns
 // the first valid BN response. Uses a slot in the past so the deadline is past.
 func TestGetBeaconBlock_MultiBN_SoftDeadlineFires_FallsBackToFirstValid(t *testing.T) {
+	release1 := make(chan struct{})
+	release2 := make(chan struct{}) // intentionally never closed
+
 	bn1, _ := createProposalBeaconServer(t, beaconProposalServerOptions{
-		ProposalResponseDuration: 200 * time.Millisecond,
-		BlindedProposal:          true,
-		FeeRecipient:             feeRecipientAllOnes(),
+		Release:         release1,
+		BlindedProposal: true,
+		FeeRecipient:    feeRecipientAllOnes(),
 	})
 	defer bn1.Close()
 	bn2, _ := createProposalBeaconServer(t, beaconProposalServerOptions{
-		ProposalResponseDuration: 500 * time.Millisecond,
-		BlindedProposal:          true,
-		FeeRecipient:             feeRecipientAllTwos(),
+		Release:         release2,
+		BlindedProposal: true,
+		FeeRecipient:    feeRecipientAllTwos(),
 	})
 	defer bn2.Close()
 
@@ -188,27 +209,74 @@ func TestGetBeaconBlock_MultiBN_SoftDeadlineFires_FallsBackToFirstValid(t *testi
 	// done when the collection loop starts.
 	pastSlot := phase0.Slot(1)
 
-	start := time.Now()
-	versionedProposal, _, err := client.GetBeaconBlock(context.Background(), pastSlot, []byte("test"), getTestRANDAO())
-	elapsed := time.Since(start)
-	require.NoError(t, err, "fallback to first-valid should return successfully")
-	require.NotNil(t, versionedProposal)
+	resultCh, cancel := launchGetBeaconBlock(t, client, pastSlot)
+	defer cancel()
 
-	// Primary assertion: BN1's fee recipient confirms we returned with the first
-	// valid response (BN1 at ~200ms), not the slower BN2 (~500ms). This is robust
-	// against timing jitter on busy CI runners.
-	actualFeeRecipient, err := versionedProposal.FeeRecipient()
+	close(release1)
+
+	proposal := requireBeaconBlockResult(t, resultCh, "waitForFirstValidProposal should return the first BN response")
+	assertProposalFeeRecipient(t, proposal, feeRecipientAllOnes(),
+		"waitForFirstValidProposal should return BN1's response (first released), not BN2's")
+}
+
+// beaconBlockResult bundles the values returned by client.GetBeaconBlock for
+// transmission over a channel from the background goroutine spawned by
+// launchGetBeaconBlock.
+type beaconBlockResult struct {
+	proposal *api.VersionedProposal
+	err      error
+}
+
+// launchGetBeaconBlock runs client.GetBeaconBlock in a background goroutine and
+// returns a channel that receives the result when it returns, plus a cancel
+// function that aborts any in-flight BN requests (used to unblock test-server
+// handlers whose Release channels weren't closed).
+func launchGetBeaconBlock(t *testing.T, client *GoClient, slot phase0.Slot) (<-chan beaconBlockResult, context.CancelFunc) {
+	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
+	resultCh := make(chan beaconBlockResult, 1)
+	go func() {
+		p, _, e := client.GetBeaconBlock(ctx, slot, []byte("test"), getTestRANDAO())
+		resultCh <- beaconBlockResult{proposal: p, err: e}
+	}()
+	return resultCh, cancel
+}
+
+// requireBeaconBlockResult waits for the result channel with a 2s safety timeout,
+// failing the test if no result arrives. Returns the proposal on success.
+func requireBeaconBlockResult(t *testing.T, resultCh <-chan beaconBlockResult, msg string) *api.VersionedProposal {
+	t.Helper()
+	select {
+	case r := <-resultCh:
+		require.NoError(t, r.err, msg)
+		require.NotNil(t, r.proposal, msg)
+		return r.proposal
+	case <-time.After(2 * time.Second):
+		t.Fatalf("GetBeaconBlock did not return within 2s: %s", msg)
+		return nil
+	}
+}
+
+// assertNoReturnWithin fails the test if a result arrives on the channel within
+// the given window. Used to verify that the MEV-optimized path does NOT
+// early-exit after one BN responds.
+func assertNoReturnWithin(t *testing.T, resultCh <-chan beaconBlockResult, window time.Duration, msg string) {
+	t.Helper()
+	select {
+	case <-resultCh:
+		t.Fatalf("unexpected early return within %v: %s", window, msg)
+	case <-time.After(window):
+		// Expected: still waiting.
+	}
+}
+
+// assertProposalFeeRecipient extracts the fee recipient from a VersionedProposal
+// and asserts equality with the expected value.
+func assertProposalFeeRecipient(t *testing.T, proposal *api.VersionedProposal, expected bellatrix.ExecutionAddress, msg string) {
+	t.Helper()
+	actual, err := proposal.FeeRecipient()
 	require.NoError(t, err)
-	assert.Equal(t, feeRecipientAllOnes(), actualFeeRecipient,
-		"waitForFirstValidProposal should return BN1's response (first valid), not BN2's")
-
-	// Sanity check on elapsed: must be at least BN1's response time, and the upper
-	// bound just confirms we didn't end up waiting for BN2. Margins kept generous
-	// for CI scheduling overhead.
-	assert.GreaterOrEqual(t, elapsed, 150*time.Millisecond,
-		"should have waited for first BN response (~200ms); took %v", elapsed)
-	assert.Less(t, elapsed, 450*time.Millisecond,
-		"should NOT have waited for the slowest BN (~500ms); took %v", elapsed)
+	assert.Equal(t, expected, actual, msg)
 }
 
 // setupMultiBNClient builds a GoClient connected to two test BN servers via

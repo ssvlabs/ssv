@@ -58,6 +58,16 @@ type beaconProposalServerOptions struct {
 	// (go-eth2-client defaults ExecutionValue to 0). Used by tests that need to
 	// influence scoreProposal across multiple BN responses.
 	ExecutionValue *big.Int
+	// Release, if non-nil, gates the proposal-endpoint handler: the response is
+	// withheld until the channel receives a value or is closed (whichever first).
+	// Use this in tests that need deterministic response ordering instead of
+	// wall-clock delays via ProposalResponseDuration. The handler also unblocks
+	// on request context cancellation (e.g., when the parent test ends), so a
+	// never-released channel does not stall server shutdown.
+	//
+	// Mutually exclusive with ProposalResponseDuration: when Release is non-nil,
+	// the duration is ignored.
+	Release <-chan struct{}
 }
 
 // Creates a mock beacon server for proposal testing
@@ -90,8 +100,19 @@ func createProposalBeaconServer(t *testing.T, options beaconProposalServerOption
 			require.NoError(t, err)
 			require.NotZero(t, slot)
 
-			// Add delay if specified
-			time.Sleep(options.ProposalResponseDuration)
+			// Gate the response: either wait for the Release signal (deterministic
+			// ordering) or sleep for the configured duration. The request context
+			// also unblocks the handler so an unreleased channel doesn't stall
+			// server shutdown.
+			if options.Release != nil {
+				select {
+				case <-options.Release:
+				case <-r.Context().Done():
+					return
+				}
+			} else if options.ProposalResponseDuration > 0 {
+				time.Sleep(options.ProposalResponseDuration)
+			}
 
 			// Return custom response if provided
 			if len(options.ProposalResponse) > 0 {
