@@ -106,7 +106,13 @@ func (c *config) resolveAndValidate(logger *zap.Logger) (resolved, error) {
 	} else {
 		var err error
 		if res, err = c.resolveSigning(); err != nil {
-			return resolved{}, err
+			// Surface the configured signing sources alongside the error — the pre-refactor
+			// assertSigningConfig attached these as structured log fields before its Fatal;
+			// keeping them preserves misconfiguration-triage context (the private key itself
+			// is never logged, only whether it is set).
+			return resolved{}, fmt.Errorf("%w "+
+				"[SSVSigner.Endpoint=%q KeyStore.PrivateKeyFile=%q KeyStore.PasswordFile=%q OperatorPrivateKey set=%t]",
+				err, c.SSVSigner.Endpoint, c.KeyStore.PrivateKeyFile, c.KeyStore.PasswordFile, c.OperatorPrivateKey != "")
 		}
 	}
 

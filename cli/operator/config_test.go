@@ -10,6 +10,11 @@ import (
 	"go.uber.org/zap/zaptest/observer"
 )
 
+const (
+	testSignerEndpoint = "http://signer:9000"
+	testOperatorKey    = "super-secret-operator-key"
+)
+
 func TestValidateProposerDelay(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -110,24 +115,29 @@ func Test_resolveSigning(t *testing.T) {
 		wantPK  bool
 	}{
 		{name: "nothing set -> no flags", mutate: func(c *config) {}},
-		{name: "ssv-signer only", mutate: func(c *config) { c.SSVSigner.Endpoint = "http://signer:9000" }, wantSSV: true},
+		{name: "ssv-signer only", mutate: func(c *config) { c.SSVSigner.Endpoint = testSignerEndpoint }, wantSSV: true},
 		{name: "keystore (both files)", mutate: func(c *config) {
 			c.KeyStore.PrivateKeyFile = "pk"
 			c.KeyStore.PasswordFile = "pw"
 		}, wantKS: true},
-		{name: "operator private key", mutate: func(c *config) { c.OperatorPrivateKey = "key" }, wantPK: true},
+		{name: "operator private key", mutate: func(c *config) { c.OperatorPrivateKey = testOperatorKey }, wantPK: true},
 		{name: "keystore missing password -> error", mutate: func(c *config) { c.KeyStore.PrivateKeyFile = "pk" },
 			wantErr: "both keystore and password files"},
 		{name: "keystore missing key -> error", mutate: func(c *config) { c.KeyStore.PasswordFile = "pw" },
 			wantErr: "both keystore and password files"},
 		{name: "ssv-signer + private key -> error", mutate: func(c *config) {
-			c.SSVSigner.Endpoint = "http://signer:9000"
-			c.OperatorPrivateKey = "key"
+			c.SSVSigner.Endpoint = testSignerEndpoint
+			c.OperatorPrivateKey = testOperatorKey
+		}, wantErr: "cannot enable both remote signing"},
+		{name: "ssv-signer + keystore -> error", mutate: func(c *config) {
+			c.SSVSigner.Endpoint = testSignerEndpoint
+			c.KeyStore.PrivateKeyFile = "pk"
+			c.KeyStore.PasswordFile = "pw"
 		}, wantErr: "cannot enable both remote signing"},
 		{name: "keystore + private key -> error", mutate: func(c *config) {
 			c.KeyStore.PrivateKeyFile = "pk"
 			c.KeyStore.PasswordFile = "pw"
-			c.OperatorPrivateKey = "key"
+			c.OperatorPrivateKey = testOperatorKey
 		}, wantErr: "cannot enable both OperatorPrivateKey and PrivateKeyFile"},
 	}
 
@@ -148,4 +158,20 @@ func Test_resolveSigning(t *testing.T) {
 			require.Equal(t, tt.wantPK, res.usingPrivKey)
 		})
 	}
+}
+
+// Test_resolveAndValidate_signingErrorContext verifies resolveAndValidate enriches a signing
+// error with the configured-source context (restored from the pre-refactor structured log
+// fields), without exposing the private key value.
+func Test_resolveAndValidate_signingErrorContext(t *testing.T) {
+	c := config{}
+	c.SSVSigner.Endpoint = testSignerEndpoint
+	c.OperatorPrivateKey = testOperatorKey
+
+	_, err := c.resolveAndValidate(zap.NewNop())
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "cannot enable both remote signing") // original message preserved
+	require.Contains(t, err.Error(), testSignerEndpoint)                  // restored configured-source context
+	require.Contains(t, err.Error(), "OperatorPrivateKey set=true")
+	require.NotContains(t, err.Error(), testOperatorKey) // private key value never logged
 }
