@@ -91,7 +91,7 @@ var StartNodeCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		commons.SetBuildData(cmd.Parent().Short, cmd.Parent().Version)
 
-		if err := cfg.load(); err != nil {
+		if err := cfg.load(globalArgs.ConfigPath, globalArgs.ShareConfigPath); err != nil {
 			log.Fatal(err)
 		}
 
@@ -167,7 +167,7 @@ var StartNodeCmd = &cobra.Command{
 
 		res, err := cfg.resolveAndValidate(logger)
 		if err != nil {
-			logger.Fatal("invalid configuration", zap.Error(err))
+			logger.Fatal("invalid configuration", configErrorLogFields(err)...)
 		}
 		usingSSVSigner, usingKeystore, usingPrivKey := res.usingSSVSigner, res.usingKeystore, res.usingPrivKey
 

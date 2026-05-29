@@ -1,6 +1,7 @@
 package operator
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -78,16 +79,17 @@ type resolved struct {
 	usingPrivKey   bool
 }
 
-// load reads the operator config (and optional share config) from the paths in globalArgs.
+// load reads the operator config (and optional share config) from the given paths. Paths are
+// passed in (rather than read from the globalArgs global) so it can be tested in isolation.
 // Called before the zap logger exists, so the caller handles failures via the std logger.
-func (c *config) load() error {
-	if globalArgs.ConfigPath != "" {
-		if err := cleanenv.ReadConfig(globalArgs.ConfigPath, c); err != nil {
+func (c *config) load(configPath, shareConfigPath string) error {
+	if configPath != "" {
+		if err := cleanenv.ReadConfig(configPath, c); err != nil {
 			return fmt.Errorf("could not read config needed for logger initialization: %w", err)
 		}
 	}
-	if globalArgs.ShareConfigPath != "" {
-		if err := cleanenv.ReadConfig(globalArgs.ShareConfigPath, c); err != nil {
+	if shareConfigPath != "" {
+		if err := cleanenv.ReadConfig(shareConfigPath, c); err != nil {
 			return fmt.Errorf("could not read share config needed for logger initialization: %w", err)
 		}
 	}
@@ -106,13 +108,10 @@ func (c *config) resolveAndValidate(logger *zap.Logger) (resolved, error) {
 	} else {
 		var err error
 		if res, err = c.resolveSigning(); err != nil {
-			// Surface the configured signing sources alongside the error — the pre-refactor
-			// assertSigningConfig attached these as structured log fields before its Fatal;
-			// keeping them preserves misconfiguration-triage context (the private key itself
-			// is never logged, only whether it is set).
-			return resolved{}, fmt.Errorf("%w "+
-				"[SSVSigner.Endpoint=%q KeyStore.PrivateKeyFile=%q KeyStore.PasswordFile=%q OperatorPrivateKey set=%t]",
-				err, c.SSVSigner.Endpoint, c.KeyStore.PrivateKeyFile, c.KeyStore.PasswordFile, c.OperatorPrivateKey != "")
+			// Carry the configured signing-source context so the caller can attach it as
+			// structured fields on the fatal log line — matching the pre-refactor
+			// assertSigningConfig observability (the private key value is never logged).
+			return resolved{}, signingConfigError{err: err, fields: c.signingLogFields()}
 		}
 	}
 
@@ -191,4 +190,38 @@ func (c *config) warnExporterSigning(logger *zap.Logger) {
 		zap.String("operator_private_key_password_file", c.KeyStore.PasswordFile),
 		zap.Int("operator_private_key_len", len(c.OperatorPrivateKey)), // not exposing the private key
 	)
+}
+
+// signingLogFields returns the configured signing-source fields for diagnostics, matching the
+// pre-refactor assertSigningConfig fields. The private key value is never included — only its
+// length.
+func (c *config) signingLogFields() []zap.Field {
+	return []zap.Field{
+		zap.String("ssv_signer_endpoint", c.SSVSigner.Endpoint),
+		zap.String("private_key_file", c.KeyStore.PrivateKeyFile),
+		zap.String("password_file", c.KeyStore.PasswordFile),
+		zap.Int("operator_private_key_len", len(c.OperatorPrivateKey)),
+	}
+}
+
+// signingConfigError wraps a signing-configuration error with the configured signing-source
+// log fields, so the caller can attach them as structured fields on the fatal log line.
+type signingConfigError struct {
+	err    error
+	fields []zap.Field
+}
+
+func (e signingConfigError) Error() string { return e.err.Error() }
+func (e signingConfigError) Unwrap() error { return e.err }
+
+// configErrorLogFields returns the structured log fields for an error returned by
+// resolveAndValidate: the error itself, plus any signing-source context carried by a
+// signingConfigError (so the consolidated fatal preserves the pre-refactor structured fields).
+func configErrorLogFields(err error) []zap.Field {
+	fields := []zap.Field{zap.Error(err)}
+	var sce signingConfigError
+	if errors.As(err, &sce) {
+		fields = append(fields, sce.fields...)
+	}
+	return fields
 }

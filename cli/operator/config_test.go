@@ -170,8 +170,30 @@ func Test_resolveAndValidate_signingErrorContext(t *testing.T) {
 
 	_, err := c.resolveAndValidate(zap.NewNop())
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "cannot enable both remote signing") // original message preserved
-	require.Contains(t, err.Error(), testSignerEndpoint)                  // restored configured-source context
-	require.Contains(t, err.Error(), "OperatorPrivateKey set=true")
-	require.NotContains(t, err.Error(), testOperatorKey) // private key value never logged
+	require.Contains(t, err.Error(), "cannot enable both remote signing")
+
+	// node.go logs the error via configErrorLogFields — the configured signing-source context
+	// must be preserved as queryable structured fields, without exposing the key value.
+	core, recorded := observer.New(zapcore.ErrorLevel)
+	zap.New(core).Error("invalid configuration", configErrorLogFields(err)...)
+	require.Len(t, recorded.All(), 1)
+
+	m := recorded.All()[0].ContextMap()
+	require.Equal(t, testSignerEndpoint, m["ssv_signer_endpoint"])
+	require.Contains(t, m, "private_key_file")
+	require.Contains(t, m, "password_file")
+	require.EqualValues(t, len(testOperatorKey), m["operator_private_key_len"])
+	for _, v := range m {
+		require.NotEqual(t, testOperatorKey, v) // the private key value itself is never logged
+	}
+}
+
+func Test_config_load(t *testing.T) {
+	var c config
+	require.NoError(t, c.load("", "")) // both paths unset -> no-op
+
+	require.ErrorContains(t, c.load("/nonexistent/config.yaml", ""),
+		"could not read config needed for logger initialization")
+	require.ErrorContains(t, c.load("", "/nonexistent/share.yaml"),
+		"could not read share config needed for logger initialization")
 }
