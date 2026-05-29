@@ -72,6 +72,51 @@ func TestController_Lifecycle(t *testing.T) {
 	require.ErrorIs(t, err, ErrNoActiveInstance)
 }
 
+// TestController_OnInstanceEnd_Contract pins the production observation hook's
+// ordering contract — the only behavior the deterministic-trace-capture fix
+// added to production. EndInstance must fire onInstanceEnd exactly once per
+// teardown, after the instance is detached from the map and after c.mu is
+// released, with the instance Finalized (Ended()==true), passing the same
+// RunningInstance StartNewInstance returned. A future EndInstance refactor that
+// fired the hook under c.mu, before the map delete, or before Finalize would
+// break the race-safety bridge's capture determinism; this fails it locally
+// instead, without the full stress harness.
+func TestController_OnInstanceEnd_Contract(t *testing.T) {
+	ctrl := newMinimalControllerForStartTest(t)
+	const slot = phase0.Slot(0)
+
+	var (
+		fires            int
+		capturedSlot     phase0.Slot
+		capturedR        *RunningInstance
+		capturedEnded    bool
+		capturedDetached bool
+	)
+	ctrl.onInstanceEnd = func(s phase0.Slot, r *RunningInstance) {
+		fires++
+		capturedSlot = s
+		capturedR = r
+		capturedEnded = r.instance.Ended()
+		// A c.mu-taking accessor here neither deadlocks (the hook fires after
+		// c.mu is released) nor finds the slot (it fires after the map delete).
+		capturedDetached = len(ctrl.ActiveSlots()) == 0
+	}
+
+	started, err := ctrl.StartNewInstance(slot)
+	require.NoError(t, err)
+
+	ctrl.EndInstance(slot)
+	require.Equal(t, 1, fires, "hook fires exactly once per teardown")
+	require.Same(t, started, capturedR, "hook receives the RunningInstance StartNewInstance returned")
+	require.Equal(t, slot, capturedSlot)
+	require.True(t, capturedEnded, "instance must be Finalized (Ended) when the hook runs")
+	require.True(t, capturedDetached, "hook must fire after the map delete and after c.mu is released")
+
+	// Idempotent EndInstance must not re-fire the hook.
+	ctrl.EndInstance(slot)
+	require.Equal(t, 1, fires, "second EndInstance is a no-op — the hook does not re-fire")
+}
+
 // TestController_DelegateRouting_NoInstance asserts every state-touching
 // delegate returns ErrNoActiveInstance for a slot that was never started — the
 // signal the dispatcher uses to buffer-and-replay rather than drop. (The
