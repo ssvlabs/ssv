@@ -51,22 +51,28 @@ func (p BlockFetchPath) String() string {
 
 // ProposalSoftDeadline bounds and defaults. Values are slot-relative (measured from slot start).
 const (
-	// SafeMaxProposalSoftDeadline is the threshold above which the worst-case 2-round QBFT
-	// scenario may no longer fit within the slot deadline for clusters with typical
-	// latencies (round 1 effectively has to succeed). Derived from the typical values in
-	// docs/MEV_CONSIDERATIONS.md:
-	//   deadline + 50ms (BN→SSV transport) + 2350ms (QBFT worst-case 2-round) +
-	//   50ms (PostConsensusSigning) + 100ms (BlockSubmission) <= 4000ms
-	//   => deadline <= 1450ms
-	// Values above this trigger a startup warning but are still permitted — the operator
-	// is accepting that round 1 must succeed (Example B is such a setup). Clusters with
-	// measurably faster QBFT + submission may still leave room for round 2.
+	// SafeMaxProposalSoftDeadline is the startup-warning threshold for the SSV-side
+	// ProposalSoftDeadline. Above this value, the worst-case 2-round QBFT scenario
+	// has no safety margin for latency variance — round 1 effectively has to succeed
+	// in setups with typical latencies.
+	//
+	// Strict math from the typical values in docs/MEV_CONSIDERATIONS.md gives a hard
+	// upper bound of ProposalSoftDeadline <= 1500ms:
+	//   ProposalSoftDeadline + 2350ms (QBFT worst-case 2-round) +
+	//   50ms (PostConsensusSigning) + 100ms (BlockSubmission) <= 4000ms (slot deadline)
+	//   => ProposalSoftDeadline <= 1500ms
+	//
+	// We set the warning threshold 50ms tighter (1450ms) to preserve a buffer for
+	// latency variance. Operators following docs/MEV_CONSIDERATIONS.md's recommended
+	// "PBS cutoff + 50ms BN→SSV transport" formula stay within this threshold when
+	// their PBS cutoff sits at the recommended ~1400ms ceiling; pushing PBS cutoff
+	// up to the strict ~1450ms still works in clusters with measurably faster QBFT +
+	// submission, but consumes the variance buffer (and trips this warning).
 	SafeMaxProposalSoftDeadline = 1450 * time.Millisecond
 
-	// DefaultProposalSoftDeadline is the default deadline used by the safe path when the
-	// operator hasn't set ProposalSoftDeadline. It equals SafeMaxProposalSoftDeadline —
-	// the largest value that still fits the worst-case 2-round QBFT scenario within the
-	// 4000ms slot deadline for clusters with typical latencies.
+	// DefaultProposalSoftDeadline is the default deadline used by the safe path when
+	// the operator hasn't set ProposalSoftDeadline. Equal to SafeMaxProposalSoftDeadline
+	// — the largest value that keeps the 50ms latency-variance buffer described above.
 	DefaultProposalSoftDeadline = SafeMaxProposalSoftDeadline
 
 	// MinProposalSoftDeadline is the lower bound for operator-set ProposalSoftDeadline
@@ -230,6 +236,13 @@ func NewOptions(base Options, proposerDelay time.Duration, path BlockFetchPath) 
 		// responsibility — cli/operator/node.go runs it for production startup, but
 		// NewOptions does not enforce it. Tests that bypass the CLI should call
 		// ValidateProposalSoftDeadline themselves if they want the bounds check.
+
+	default:
+		// Defense-in-depth: DetermineBlockFetchPath returns only the three values
+		// above, but callers that construct Options directly (notably tests) can
+		// reach here. Reject at startup rather than at per-slot dispatch in
+		// proposer.go.
+		return Options{}, fmt.Errorf("unknown block-fetch path %d", path)
 	}
 
 	// Note: There is no hard timeout for proposals. The parent context from the

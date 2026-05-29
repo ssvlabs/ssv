@@ -197,6 +197,16 @@ func TestNewOptions_PathDefaulting(t *testing.T) {
 		// ProposalSoftTimeout should not be touched.
 		assert.Equal(t, time.Duration(0), opts.ProposalSoftTimeout)
 	})
+
+	t.Run("unknown path -> error at startup", func(t *testing.T) {
+		// Defense-in-depth: callers that bypass DetermineBlockFetchPath and pass an
+		// invalid BlockFetchPath value should fail at NewOptions rather than at the
+		// per-slot dispatch in proposer.go.
+		base := Options{BeaconNodeAddr: "http://localhost:5052"}
+		_, err := NewOptions(base, 0, BlockFetchPath(99))
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "unknown block-fetch path")
+	})
 }
 
 func TestBlockFetchPath_String(t *testing.T) {
