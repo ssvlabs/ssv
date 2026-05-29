@@ -12,6 +12,7 @@ import (
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
 
+	"github.com/ssvlabs/ssv/beacon/goclient"
 	"github.com/ssvlabs/ssv/exporter"
 	"github.com/ssvlabs/ssv/networkconfig"
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
@@ -42,7 +43,7 @@ func Test_config_load(t *testing.T) {
 // resolveAndValidate (validation itself is covered by Test_validateProposerDelay). A minimal
 // operator signing source is set so resolveSigning passes and these cases isolate proposer-delay.
 func Test_resolveAndValidate_proposerDelay(t *testing.T) {
-	t.Run("dangerous delay with flag - warns with duration fields", func(t *testing.T) {
+	t.Run("dangerous delay with flag - warns with ms fields", func(t *testing.T) {
 		for _, delay := range []time.Duration{1001 * time.Millisecond, 2000 * time.Millisecond, 5000 * time.Millisecond} {
 			t.Run(delay.String(), func(t *testing.T) {
 				core, recorded := observer.New(zapcore.WarnLevel)
@@ -61,8 +62,8 @@ func Test_resolveAndValidate_proposerDelay(t *testing.T) {
 				require.Contains(t, logs[0].Message, "may cause missed block proposals")
 
 				fields := logs[0].ContextMap()
-				require.Equal(t, delay, fields["proposer_delay"])
-				require.Equal(t, 1000*time.Millisecond, fields["max_safe_proposer_delay"])
+				require.Equal(t, delay.Milliseconds(), fields["proposer_delay_ms"])
+				require.Equal(t, int64(1000), fields["max_safe_proposer_delay_ms"])
 			})
 		}
 	})
@@ -184,6 +185,103 @@ func Test_validateProposerDelay(t *testing.T) {
 			require.NoError(t, err)
 		})
 	}
+}
+
+func TestDetermineBlockFetchPath(t *testing.T) {
+	tests := []struct {
+		name          string
+		opts          goclient.Options
+		proposerDelay time.Duration
+		want          goclient.BlockFetchPath
+		wantErr       string
+	}{
+		{name: "nothing set -> safe", want: goclient.BlockFetchPathSafe},
+		{name: "ProposerDelay -> legacy", proposerDelay: 300 * time.Millisecond, want: goclient.BlockFetchPathLegacy},
+		{name: "ProposalSoftTimeout -> legacy", opts: goclient.Options{ProposalSoftTimeout: 1500 * time.Millisecond}, want: goclient.BlockFetchPathLegacy},
+		{name: "ProposalSoftDeadline -> mev-optimized", opts: goclient.Options{ProposalSoftDeadline: 1100 * time.Millisecond}, want: goclient.BlockFetchPathMEVOptimized},
+		{name: "legacy + deadline -> conflict", opts: goclient.Options{ProposalSoftDeadline: 1100 * time.Millisecond}, proposerDelay: 300 * time.Millisecond, wantErr: "conflicts with legacy"},
+		{name: "negative ProposerDelay -> error", proposerDelay: -1, wantErr: "ProposerDelay must be non-negative"},
+		{name: "negative ProposalSoftTimeout -> error", opts: goclient.Options{ProposalSoftTimeout: -1}, wantErr: "ProposalSoftTimeout must be non-negative"},
+		{name: "negative ProposalSoftDeadline -> error", opts: goclient.Options{ProposalSoftDeadline: -1}, wantErr: "ProposalSoftDeadline must be non-negative"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := determineBlockFetchPath(tt.opts, tt.proposerDelay)
+			if tt.wantErr != "" {
+				require.Error(t, err)
+				require.Contains(t, err.Error(), tt.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestValidateProposalSoftDeadline(t *testing.T) {
+	tests := []struct {
+		name    string
+		value   time.Duration
+		wantErr bool
+	}{
+		{"at min 1000ms -> ok", 1000 * time.Millisecond, false},
+		{"below min 999ms -> error", 999 * time.Millisecond, true},
+		{"at safe-max 1450ms -> ok", 1450 * time.Millisecond, false},
+		{"above safe-max 2500ms -> ok", 2500 * time.Millisecond, false},
+		{"at max 3600ms -> ok", 3600 * time.Millisecond, false},
+		{"above max 3601ms -> error", 3601 * time.Millisecond, true},
+		{"zero -> error", 0, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateProposalSoftDeadline(tt.value)
+			if tt.wantErr {
+				require.Error(t, err)
+				require.Contains(t, err.Error(), "out of range")
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
+}
+
+func Test_resolveBlockFetch_defaults(t *testing.T) {
+	t.Run("safe path defaults deadline to 1450ms and sets path", func(t *testing.T) {
+		c := config{}
+		require.NoError(t, c.resolveBlockFetch(zap.NewNop()))
+		require.Equal(t, goclient.BlockFetchPathSafe, c.ConsensusClient.BlockFetchPath)
+		require.Equal(t, 1450*time.Millisecond, c.ConsensusClient.ProposalSoftDeadline)
+	})
+
+	t.Run("legacy path defaults soft timeout to 1800ms - delay", func(t *testing.T) {
+		c := config{}
+		c.ProposerDelay = 300 * time.Millisecond
+		require.NoError(t, c.resolveBlockFetch(zap.NewNop()))
+		require.Equal(t, goclient.BlockFetchPathLegacy, c.ConsensusClient.BlockFetchPath)
+		require.Equal(t, 1500*time.Millisecond, c.ConsensusClient.ProposalSoftTimeout)
+	})
+
+	t.Run("legacy path floors soft timeout at 500ms", func(t *testing.T) {
+		c := config{}
+		c.ProposerDelay = 1500 * time.Millisecond // 1800-1500=300, floored to 500
+		c.AllowDangerousProposerDelay = true      // 1500ms > maxSafe, must be acknowledged
+		require.NoError(t, c.resolveBlockFetch(zap.NewNop()))
+		require.Equal(t, 500*time.Millisecond, c.ConsensusClient.ProposalSoftTimeout)
+	})
+
+	t.Run("mev-optimized path keeps operator deadline and sets path", func(t *testing.T) {
+		c := config{}
+		c.ConsensusClient.ProposalSoftDeadline = 1850 * time.Millisecond
+		require.NoError(t, c.resolveBlockFetch(zap.NewNop()))
+		require.Equal(t, goclient.BlockFetchPathMEVOptimized, c.ConsensusClient.BlockFetchPath)
+		require.Equal(t, 1850*time.Millisecond, c.ConsensusClient.ProposalSoftDeadline)
+	})
+
+	t.Run("mev-optimized out-of-range deadline -> error", func(t *testing.T) {
+		c := config{}
+		c.ConsensusClient.ProposalSoftDeadline = 5000 * time.Millisecond
+		require.ErrorContains(t, c.resolveBlockFetch(zap.NewNop()), "out of range")
+	})
 }
 
 func Test_validateConfig(t *testing.T) {

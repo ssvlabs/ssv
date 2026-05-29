@@ -251,10 +251,10 @@ func TestNewEventHandler(t *testing.T) {
 }
 
 func eventsTestClient(t *testing.T, serverURL string) *GoClient {
-	opt, err := NewOptions(Options{BeaconNodeAddr: serverURL}, 0)
-	require.NoError(t, err)
-
-	server, err := New(t.Context(), zap.NewNop(), opt)
+	server, err := New(t.Context(), zap.NewNop(), Options{
+		BeaconNodeAddr: serverURL,
+		BlockFetchPath: BlockFetchPathSafe,
+	})
 	require.NoError(t, err)
 
 	return server

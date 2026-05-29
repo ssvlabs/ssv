@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -53,6 +54,10 @@ type beaconProposalServerOptions struct {
 	FeeRecipient bellatrix.ExecutionAddress
 	// Use blinded proposal
 	BlindedProposal bool
+	// Optional Eth-Execution-Payload-Value header value; left nil ⇒ header not set
+	// (go-eth2-client defaults ExecutionValue to 0). Used by tests that need to
+	// influence scoreProposal across multiple BN responses.
+	ExecutionValue *big.Int
 }
 
 // Creates a mock beacon server for proposal testing
@@ -90,11 +95,7 @@ func createProposalBeaconServer(t *testing.T, options beaconProposalServerOption
 
 			// Return custom response if provided
 			if len(options.ProposalResponse) > 0 {
-				w.Header().Set("Content-Type", "application/json")
-				w.Header().Set("Eth-Consensus-Version", "electra")
-				if options.BlindedProposal {
-					w.Header().Set("Eth-Execution-Payload-Blinded", "true")
-				}
+				writeProposalHeaders(w, options)
 				if _, err := w.Write(options.ProposalResponse); err != nil {
 					w.WriteHeader(http.StatusInternalServerError)
 				}
@@ -103,11 +104,7 @@ func createProposalBeaconServer(t *testing.T, options beaconProposalServerOption
 
 			// Generate response dynamically (this should not cause races since each server has its own goroutine)
 			proposalResp := createProposalResponseSafe(phase0.Slot(slot), options.FeeRecipient, options.BlindedProposal)
-			w.Header().Set("Content-Type", "application/json")
-			w.Header().Set("Eth-Consensus-Version", "electra")
-			if options.BlindedProposal {
-				w.Header().Set("Eth-Execution-Payload-Blinded", "true")
-			}
+			writeProposalHeaders(w, options)
 			if _, err := w.Write(proposalResp); err != nil {
 				w.WriteHeader(http.StatusInternalServerError)
 			}
@@ -128,8 +125,34 @@ func createProposalBeaconServer(t *testing.T, options beaconProposalServerOption
 	return server, serverGotRequests
 }
 
-// Create a safe proposal response using ssv-spec utilities (called once during server setup)
+// writeProposalHeaders sets the response headers that go-eth2-client parses to
+// reconstruct VersionedProposal — Eth-Consensus-Version, the blinded flag, and
+// optionally Eth-Execution-Payload-Value when the test wants to influence
+// scoreProposal across multiple BN responses.
+func writeProposalHeaders(w http.ResponseWriter, options beaconProposalServerOptions) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Eth-Consensus-Version", "electra")
+	if options.BlindedProposal {
+		w.Header().Set("Eth-Execution-Payload-Blinded", "true")
+	}
+	if options.ExecutionValue != nil {
+		w.Header().Set("Eth-Execution-Payload-Value", options.ExecutionValue.String())
+	}
+}
+
+// spectestingMu serializes mutations on the shared ssv-spec testing fixtures.
+// TestingBlindedBeaconBlockV / TestingBeaconBlockV return wrappers that point at
+// cached block structs; without this lock, concurrent test-server goroutines
+// (e.g., the multi-BN tests) racially mutate the same struct on `block.Slot` and
+// `block.Body.*.FeeRecipient`. The JSON marshaling happens inside the lock so
+// each call captures its own intended state before the next mutation begins.
+var spectestingMu sync.Mutex
+
+// Create a safe proposal response using ssv-spec utilities.
 func createProposalResponseSafe(slot phase0.Slot, feeRecipient bellatrix.ExecutionAddress, blinded bool) []byte {
+	spectestingMu.Lock()
+	defer spectestingMu.Unlock()
+
 	if blinded {
 		// Get a blinded block from ssv-spec testing utilities
 		versionedBlinded := spectestingutils.TestingBlindedBeaconBlockV(spec.DataVersionElectra)
@@ -388,26 +411,25 @@ func TestGetProposalParallel_MultiClient(t *testing.T) {
 		feeRecipient2 := bellatrix.ExecutionAddress{0x22}
 		feeRecipient3 := bellatrix.ExecutionAddress{0x33}
 
-		// Pre-generate block responses to avoid race conditions
-		blockResponse1 := createProposalResponseSafe(testSlot, feeRecipient1, false)
-		blockResponse2 := createProposalResponseSafe(testSlot, feeRecipient2, false)
-		blockResponse3 := createProposalResponseSafe(testSlot, feeRecipient3, false)
-
+		// Responses are generated per-request from the URL slot (rather than
+		// pre-generated) so the safe path's slot-relative deadline can be set against
+		// a future slot below — pre-baking a fixed slot would trip go-eth2-client's
+		// "expected slot N" response check.
 		server1, _ := createProposalBeaconServer(t, beaconProposalServerOptions{
 			ProposalResponseDuration: 500 * time.Millisecond,
-			ProposalResponse:         blockResponse1,
+			FeeRecipient:             feeRecipient1,
 		})
 		defer server1.Close()
 
 		server2, _ := createProposalBeaconServer(t, beaconProposalServerOptions{
 			ProposalResponseDuration: 50 * time.Millisecond, // Fastest
-			ProposalResponse:         blockResponse2,
+			FeeRecipient:             feeRecipient2,
 		})
 		defer server2.Close()
 
 		server3, _ := createProposalBeaconServer(t, beaconProposalServerOptions{
 			ProposalResponseDuration: 1000 * time.Millisecond,
-			ProposalResponse:         blockResponse3,
+			FeeRecipient:             feeRecipient3,
 		})
 		defer server3.Close()
 
@@ -418,8 +440,13 @@ func TestGetProposalParallel_MultiClient(t *testing.T) {
 		graffiti := []byte(testGraffiti)
 		randao := getTestRANDAO()
 
+		// Use a future slot so the safe path's slot-relative ProposalSoftDeadline doesn't
+		// fire before the collection loop starts — otherwise this test would exercise
+		// waitForFirstValidProposal instead of the multi-BN scoring/racing logic.
+		slot := client.getBeaconConfig().EstimatedCurrentSlot() + 2
+
 		startTime := time.Now()
-		versionedProposal, marshaledBlk, err := client.GetBeaconBlock(t.Context(), testSlot, graffiti, randao)
+		versionedProposal, marshaledBlk, err := client.GetBeaconBlock(t.Context(), slot, graffiti, randao)
 		elapsed := time.Since(startTime)
 
 		require.NoError(t, err)
@@ -679,15 +706,12 @@ func TestProposalPreparationReconnectLogic_SkipsOnNilProvider(t *testing.T) {
 }
 
 func createClientForProposerTest(t *testing.T, serverURL string) (*GoClient, error) {
-	opt, err := NewOptions(
-		Options{
-			BeaconNodeAddr: serverURL,
-			CommonTimeout:  time.Second * 2,
-			LongTimeout:    time.Second * 5,
-		}, 0)
-	if err != nil {
-		return nil, err
-	}
-
-	return New(t.Context(), log.TestLogger(t), opt)
+	return New(t.Context(), log.TestLogger(t), Options{
+		BeaconNodeAddr: serverURL,
+		CommonTimeout:  time.Second * 2,
+		LongTimeout:    time.Second * 5,
+		BlockFetchPath: BlockFetchPathSafe,
+		// safe-path slot-relative deadline (config resolution defaults this in production).
+		ProposalSoftDeadline: 1450 * time.Millisecond,
+	})
 }

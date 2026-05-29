@@ -45,9 +45,7 @@ type ProposerRunner struct {
 	// ValCheck is used to validate the qbft-value(s) proposed by other Operators.
 	ValCheck ssv.ValueChecker
 
-	// proposerDelay allows Operator to configure a delay to wait out before requesting Ethereum
-	// block to propose if this Operator is proposer-duty Leader. This allows Operator to extract
-	// higher MEV.
+	// proposerDelay; see ProposerRunnerOptions.ProposerDelay.
 	proposerDelay time.Duration
 
 	// cachedFullBlock holds the initially fetched full (non-blinded) block
@@ -69,9 +67,10 @@ type ProposerRunnerOptions struct {
 	ValCheck            ssv.ValueChecker
 	HighestDecidedSlot  phase0.Slot
 	Graffiti            []byte
-	// ProposerDelay allows Operator to configure a delay to wait out before requesting Ethereum
-	// block to propose if this Operator is proposer-duty Leader. This allows Operator to extract
-	// higher MEV.
+	// ProposerDelay is the legacy SSV-side MEV-extraction lever — a delay before requesting
+	// the Ethereum block to capture later (higher-value) bids. The recommended approach is
+	// PBS-side timing games (mev-boost v1.11+ with -config, or commit-boost), in which case
+	// this stays at 0. See docs/MEV_CONSIDERATIONS.md.
 	ProposerDelay time.Duration
 }
 

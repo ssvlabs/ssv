@@ -106,8 +106,19 @@ func (gc *GoClient) GetBeaconBlock(
 			return nil, nil, err
 		}
 	} else {
-		// For multiple clients, race them in parallel for the fastest response
-		beaconBlock, err = gc.getProposalParallel(ctx, logger, slot, sig, graffiti)
+		// For multiple clients, dispatch to the selected block-fetch path.
+		// Safe and MEV-optimized share an implementation differing only in whether
+		// to early-exit on the first blinded response. See docs/MEV_CONSIDERATIONS.md.
+		switch gc.blockFetchPath {
+		case BlockFetchPathSafe:
+			beaconBlock, err = gc.getProposalParallelByDeadline(ctx, logger, slot, sig, graffiti, true /* earlyExitOnBlinded */)
+		case BlockFetchPathLegacy:
+			beaconBlock, err = gc.getProposalParallelLegacy(ctx, logger, slot, sig, graffiti)
+		case BlockFetchPathMEVOptimized:
+			beaconBlock, err = gc.getProposalParallelByDeadline(ctx, logger, slot, sig, graffiti, false /* earlyExitOnBlinded */)
+		default:
+			return nil, nil, fmt.Errorf("unknown block-fetch path %d", gc.blockFetchPath)
+		}
 		if err != nil {
 			return nil, nil, err
 		}
@@ -155,25 +166,18 @@ func (gc *GoClient) GetBeaconBlock(
 	}
 }
 
-// getProposalParallel races all beacon nodes and collects proposals for a short time
-// and returns the best one according to our score function.
-// If no valid proposals are collected in this time it returns the first valid one
-// it sees.
+// getProposalParallelLegacy implements the legacy block-fetch path — preserved
+// bit-for-bit from the pre-path-split code for backward-compat with operators using
+// ProposerDelay / ProposalSoftTimeout.
 //
-// This minimizes latency for time-critical block proposals, while still affording
-// some time for selecting maximally profitable proposals. Remaining requests are
-// canceled immediately to reduce load.
-//
-// Note: We used to prioritize speed over fee recipient validation - returning
-// the first response rather than waiting to compare fee recipients, as missing
-// a proposal slot is worse than a nil fee recipient.
-// However, it has been observed that the first proposal is usually not the most
-// profitable, so we added a little slack time to collect proposals.
+// Races all beacon nodes, collects proposals for a short relative-duration timeout
+// (gc.proposalSoftTimeout), and returns the best one according to our score function.
+// Early-exits on the first blinded response (assumes blinded == MEV). If no valid
+// proposals are collected by the soft timeout, returns the first valid one received.
 //
 // The parent context (from duty runner, bounded by slot timing) serves as the hard
-// deadline. We never give up early on getting a block proposal - missing a proposal
-// is catastrophic, so we wait as long as the slot allows.
-func (gc *GoClient) getProposalParallel(
+// deadline.
+func (gc *GoClient) getProposalParallelLegacy(
 	ctx context.Context,
 	logger *zap.Logger,
 	slot phase0.Slot,
@@ -313,6 +317,183 @@ collect:
 	}
 
 	return nil, fmt.Errorf("all %d clients failed to get proposal for slot %d, encountered errors: %w", len(gc.clients), slot, errs)
+}
+
+// proposalFetchResult bundles the outcome of a single per-BN fetch goroutine.
+type proposalFetchResult struct {
+	proposal *api.VersionedProposal
+	err      error
+	client   string
+}
+
+// spawnProposalFetchers starts a goroutine per beacon-node client; each goroutine
+// fetches a proposal and writes its result to the returned channel. Used by the
+// safe and MEV-optimized block-fetch implementations.
+//
+// The channel is buffered to `len(gc.clients)` so each goroutine can write without
+// blocking even if the consumer has already returned.
+func (gc *GoClient) spawnProposalFetchers(
+	ctx context.Context,
+	slot phase0.Slot,
+	sig phase0.BLSSignature,
+	graffiti [32]byte,
+) <-chan proposalFetchResult {
+	resultCh := make(chan proposalFetchResult, len(gc.clients))
+	for _, client := range gc.clients {
+		go func(c Client) {
+			proposal, err := gc.fetchProposal(ctx, c, slot, sig, graffiti)
+			select {
+			case resultCh <- proposalFetchResult{proposal: proposal, err: err, client: c.Address()}:
+			case <-ctx.Done():
+				// Context canceled, exit without blocking.
+			}
+		}(client)
+	}
+	return resultCh
+}
+
+// waitForFirstValidProposal returns the first valid proposal received from the
+// remaining in-flight fetchers. Used by the safe and MEV-optimized paths as the
+// fallback after the soft-deadline collection window has elapsed without producing
+// a usable best proposal. Bounded by the parent context's slot deadline.
+func (gc *GoClient) waitForFirstValidProposal(
+	ctx context.Context,
+	logger *zap.Logger,
+	slot phase0.Slot,
+	startCollect time.Time,
+	resultCh <-chan proposalFetchResult,
+	pendingClients int,
+	errs error,
+) (*api.VersionedProposal, error) {
+	for pendingClients > 0 {
+		select {
+		case res := <-resultCh:
+			pendingClients--
+			if res.err != nil {
+				errs = errors.Join(errs, res.err)
+				continue
+			}
+			proposalScore := gc.scoreProposal(res.proposal)
+			logger.Debug("received proposal; selected first proposal",
+				zap.String("client", res.client),
+				zap.Float64("score", proposalScore),
+				zap.Duration("latency", time.Since(startCollect)),
+				zap.Int("pending", pendingClients),
+				zap.Bool("blinded", res.proposal.Blinded),
+				fields.Slot(slot),
+			)
+			return res.proposal, nil
+		case <-ctx.Done():
+			// Preserve any accumulated BN failure context alongside the parent
+			// deadline error — operators need both to diagnose missed slots.
+			return nil, errors.Join(ctx.Err(), errs)
+		}
+	}
+	return nil, fmt.Errorf("all %d clients failed to get proposal for slot %d, encountered errors: %w", len(gc.clients), slot, errs)
+}
+
+// getProposalParallelByDeadline implements the slot-relative-deadline parallel
+// block-fetch shared by the safe and MEV-optimized paths.
+//
+// Spawns a per-BN fetch in parallel; collects responses until the slot-relative
+// ProposalSoftDeadline (slot_start + gc.proposalSoftDeadline) fires. The
+// earlyExitOnBlinded flag distinguishes the two paths:
+//   - true  (safe path): stops collecting on the first blinded response and
+//     returns the best seen so far (treats blinded == MEV).
+//   - false (MEV-optimized path): keeps collecting after blinded so the
+//     highest-value bid across BNs can be selected.
+//
+// After the deadline (or early-exit), returns the best-scored proposal collected
+// so far, or falls through to waitForFirstValidProposal if nothing usable arrived.
+// The parent ctx serves as the hard deadline.
+//
+// Note: in-flight BN fetches are spawned with the parent ctx (not softCtx), so a
+// slow BN's HTTP call may keep running after we return — until the duty's slot
+// deadline cancels ctx. Matches legacy behavior; the fetchProposal call's own
+// HTTP timeouts bound the worst case.
+func (gc *GoClient) getProposalParallelByDeadline(
+	ctx context.Context,
+	logger *zap.Logger,
+	slot phase0.Slot,
+	sig phase0.BLSSignature,
+	graffiti [32]byte,
+	earlyExitOnBlinded bool,
+) (*api.VersionedProposal, error) {
+	// Slot-relative deadline: fires at slot_start + ProposalSoftDeadline regardless
+	// of when this function is invoked.
+	slotStart := gc.getBeaconConfig().SlotStartTime(slot)
+	softCtx, cancelSoft := context.WithDeadline(ctx, slotStart.Add(gc.proposalSoftDeadline))
+	defer cancelSoft()
+
+	resultCh := gc.spawnProposalFetchers(ctx, slot, sig, graffiti)
+
+	var errs error
+	var bestProposal *api.VersionedProposal
+	var bestScore float64
+	var bestClient string
+
+	startCollect := time.Now()
+	pendingClients := len(gc.clients)
+collect:
+	for pendingClients > 0 {
+		select {
+		case res := <-resultCh:
+			pendingClients--
+
+			if res.err != nil {
+				errs = errors.Join(errs, res.err)
+				continue
+			}
+
+			proposalScore := gc.scoreProposal(res.proposal)
+			logger.Debug("received proposal",
+				zap.String("client", res.client),
+				zap.Float64("score", proposalScore),
+				zap.Duration("latency", time.Since(startCollect)),
+				zap.Int("pending", pendingClients),
+				zap.Bool("blinded", res.proposal.Blinded),
+				fields.Slot(slot),
+			)
+
+			if bestProposal == nil ||
+				proposalScore > bestScore ||
+				// prefer the blinded proposal even if same score as the best so far
+				(res.proposal.Blinded && proposalScore == bestScore) {
+				bestProposal = res.proposal
+				bestScore = proposalScore
+				bestClient = res.client
+			}
+
+			if earlyExitOnBlinded && res.proposal.Blinded {
+				// Safe path: treat blinded == MEV and stop collecting. We return the
+				// best seen so far — usually this blinded one, but a higher-scored
+				// proposal that already arrived wins.
+				// MEV-optimized path keeps collecting to compare bids across BNs.
+				break collect
+			}
+
+		case <-softCtx.Done():
+			break collect
+		}
+	}
+
+	if bestProposal != nil {
+		logger.Debug("selected best proposal",
+			zap.String("client", bestClient),
+			zap.Float64("score", bestScore),
+			zap.Bool("blinded", bestProposal.Blinded),
+			fields.Slot(slot),
+		)
+		return bestProposal, nil
+	}
+
+	logger.Debug("did not receive any valid proposals during the collection period",
+		zap.Int("clients", len(gc.clients)),
+		zap.Int("pending", pendingClients),
+		fields.Slot(slot),
+	)
+
+	return gc.waitForFirstValidProposal(ctx, logger, slot, startCollect, resultCh, pendingClients, errs)
 }
 
 // scoreProposal computes a score for a beacon proposal.

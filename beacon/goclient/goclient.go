@@ -135,11 +135,19 @@ type GoClient struct {
 	weightedAttestationDataSoftTimeout time.Duration
 	weightedAttestationDataHardTimeout time.Duration
 
-	// proposalSoftTimeout is the collection period during which we gather proposals
-	// from multiple beacon nodes to select the best one. After this timeout, we return
-	// the best proposal seen so far, or wait for the first valid proposal if none
-	// received yet. The parent context (duty deadline) serves as the hard timeout.
+	// proposalSoftTimeout is the legacy collection-period timeout used by
+	// getProposalParallelLegacy. Other paths use proposalSoftDeadline instead.
 	proposalSoftTimeout time.Duration
+
+	// proposalSoftDeadline is the slot-relative deadline (ms into slot) for the safe
+	// and MEV-optimized paths. See docs/MEV_CONSIDERATIONS.md.
+	proposalSoftDeadline time.Duration
+
+	// blockFetchPath selects the multi-BN block-fetch strategy GetBeaconBlock
+	// dispatches to: getProposalParallelLegacy for BlockFetchPathLegacy, or
+	// getProposalParallelByDeadline (with earlyExitOnBlinded set per path) for
+	// BlockFetchPathSafe and BlockFetchPathMEVOptimized.
+	blockFetchPath BlockFetchPath
 
 	// blockRootToSlotCache is used for attestation data scoring. When multiple Consensus clients are used,
 	// the cache helps reduce the number of Consensus Client calls by `n-1`, where `n` is the number of Consensus clients
@@ -188,6 +196,16 @@ func New(ctx context.Context, logger *zap.Logger, opt Options) (*GoClient, error
 		return nil, fmt.Errorf("no beacon node address provided")
 	}
 
+	// Apply mechanical network-timeout defaults (previously done by NewOptions, now removed).
+	// Block-fetch values (ProposalSoftTimeout / ProposalSoftDeadline / BlockFetchPath) arrive
+	// pre-resolved from cli/operator config resolution.
+	if opt.CommonTimeout == 0 {
+		opt.CommonTimeout = defaultCommonTimeout
+	}
+	if opt.LongTimeout == 0 {
+		opt.LongTimeout = defaultLongTimeout
+	}
+
 	beaconAddrList := strings.Split(opt.BeaconNodeAddr, ";")
 
 	client := &GoClient{
@@ -201,6 +219,8 @@ func New(ctx context.Context, logger *zap.Logger, opt Options) (*GoClient, error
 		weightedAttestationDataSoftTimeout: time.Duration(float64(opt.CommonTimeout) / 2.5),
 		weightedAttestationDataHardTimeout: opt.CommonTimeout,
 		proposalSoftTimeout:                opt.ProposalSoftTimeout,
+		proposalSoftDeadline:               opt.ProposalSoftDeadline,
+		blockFetchPath:                     opt.BlockFetchPath,
 		supportedTopics:                    []eventTopic{eventTopicHead, eventTopicBlock},
 		activatedClients:                   hashmap.New[string, struct{}](),
 	}

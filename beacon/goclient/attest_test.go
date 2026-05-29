@@ -506,18 +506,13 @@ func createClient(
 	ctx context.Context,
 	beaconServerURL string,
 	withWeightedAttestationData bool) (*GoClient, error) {
-	opt, err := NewOptions(
-		Options{
-			BeaconNodeAddr:              beaconServerURL,
-			CommonTimeout:               defaultHardTimeout,
-			LongTimeout:                 time.Second,
-			WithWeightedAttestationData: withWeightedAttestationData,
-		}, 0)
-	if err != nil {
-		return nil, err
-	}
-
-	return New(ctx, zap.NewNop(), opt)
+	return New(ctx, zap.NewNop(), Options{
+		BeaconNodeAddr:              beaconServerURL,
+		CommonTimeout:               defaultHardTimeout,
+		LongTimeout:                 time.Second,
+		WithWeightedAttestationData: withWeightedAttestationData,
+		BlockFetchPath:              BlockFetchPathSafe,
+	})
 }
 
 type beaconServerResponseOptions struct {
