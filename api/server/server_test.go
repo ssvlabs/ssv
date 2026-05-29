@@ -14,7 +14,10 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest"
+	"go.uber.org/zap/zaptest/observer"
 
 	"github.com/ssvlabs/ssv/api"
 	hexporter "github.com/ssvlabs/ssv/api/handlers/exporter"
@@ -27,7 +30,7 @@ import (
 func setupTestServer(t *testing.T) *httptest.Server {
 	router := chi.NewRouter()
 
-	router.Use(middleware.Recoverer)
+	router.Use(middlewareRecover(zaptest.NewLogger(t)))
 	router.Use(middleware.Throttle(runtime.NumCPU() * 4))
 	router.Use(middleware.Compress(5, "application/json"))
 	router.Use(middlewareLogger(zaptest.NewLogger(t)))
@@ -241,6 +244,76 @@ func TestMiddlewareLogger(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, w.Code)
 	require.Equal(t, "test", w.Body.String())
+}
+
+// TestMiddlewareRecover verifies that middlewareRecover catches panics from a
+// downstream handler, logs them with structured fields at ERROR level, and
+// returns a 500 to the client. The companion sub-test confirms that
+// http.ErrAbortHandler propagates unchanged (matching chi's behavior).
+func TestMiddlewareRecover(t *testing.T) {
+	t.Parallel()
+
+	t.Run("captures panic and returns 500", func(t *testing.T) {
+		core, observed := observer.New(zapcore.ErrorLevel)
+		logger := zap.New(core)
+
+		handler := middlewareRecover(logger)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			panic("boom")
+		}))
+
+		req := httptest.NewRequest("GET", "/v1/node/peers", nil)
+		req.RemoteAddr = "1.2.3.4:5678"
+		rr := httptest.NewRecorder()
+
+		require.NotPanics(t, func() {
+			handler.ServeHTTP(rr, req)
+		})
+		require.Equal(t, http.StatusInternalServerError, rr.Code)
+
+		require.Equal(t, 1, observed.Len())
+		entry := observed.All()[0]
+		require.Equal(t, "panic serving SSV API request", entry.Message)
+
+		fields := entry.ContextMap()
+		require.Equal(t, "GET", fields["method"])
+		require.Equal(t, "/v1/node/peers", fields["path"])
+		require.Equal(t, "1.2.3.4:5678", fields["remote_addr"])
+		require.Equal(t, "boom", fields["panic"])
+		require.Contains(t, fields, "stack")
+	})
+
+	t.Run("rethrows http.ErrAbortHandler", func(t *testing.T) {
+		logger := zap.NewNop()
+
+		handler := middlewareRecover(logger)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			panic(http.ErrAbortHandler)
+		}))
+
+		req := httptest.NewRequest("GET", "/test", nil)
+		rr := httptest.NewRecorder()
+
+		require.PanicsWithValue(t, http.ErrAbortHandler, func() {
+			handler.ServeHTTP(rr, req)
+		})
+	})
+
+	t.Run("passthrough on no panic", func(t *testing.T) {
+		core, observed := observer.New(zapcore.ErrorLevel)
+		logger := zap.New(core)
+
+		handler := middlewareRecover(logger)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("ok"))
+		}))
+
+		req := httptest.NewRequest("GET", "/test", nil)
+		rr := httptest.NewRecorder()
+
+		handler.ServeHTTP(rr, req)
+		require.Equal(t, http.StatusOK, rr.Code)
+		require.Equal(t, "ok", rr.Body.String())
+		require.Equal(t, 0, observed.Len(), "no panic should produce no log")
+	})
 }
 
 // TestMiddlewareNodeVersion tests the node version middleware.

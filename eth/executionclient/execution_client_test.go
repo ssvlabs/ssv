@@ -168,10 +168,8 @@ func TestFetchHistoricalLogs(t *testing.T) {
 		require.NoError(t, err)
 
 		// Create a client and connect to the simulator
-		const followDistance = 8
 		err = env.createClient(
 			WithLogger(logger),
-			WithFollowDistance(followDistance),
 			WithReqTimeout(2*time.Second),
 		)
 		require.NoError(t, err)
@@ -190,7 +188,7 @@ func TestFetchHistoricalLogs(t *testing.T) {
 		}
 		require.NotEmpty(t, fetchedLogs)
 
-		expectedSeenLogs := blocksWithLogsLength - followDistance
+		expectedSeenLogs := blocksWithLogsLength - FollowDistance
 		require.Equal(t, expectedSeenLogs, len(fetchedLogs))
 
 		select {
@@ -201,21 +199,20 @@ func TestFetchHistoricalLogs(t *testing.T) {
 		}
 	})
 
-	t.Run("error when currentBlock < followDistance", func(t *testing.T) {
+	t.Run("error when currentBlock < FollowDistance", func(t *testing.T) {
 		env := setupTestEnv(t, 5*time.Second)
 		_, err := env.deployCallableContract()
 		require.NoError(t, err)
 
-		// Create a client with a large followDistance
-		const followDistance = 100 // Much larger than the current block number
+		// Create a client. The simulator is at block 1 after deployCallableContract,
+		// which is below FollowDistance (=8) so FetchHistoricalLogs should bail out
+		// with ErrNothingToSync.
 		err = env.createClient(
 			WithLogger(logger),
-			WithFollowDistance(followDistance),
 			WithReqTimeout(2*time.Second),
 		)
 		require.NoError(t, err)
 
-		// Fetch logs - should fail because the currentBlock < followDistance
 		logs, fetchErrCh, err := env.client.FetchHistoricalLogs(env.ctx, 0)
 		require.ErrorIs(t, err, ErrNothingToSync)
 		require.Nil(t, logs)
@@ -228,10 +225,8 @@ func TestFetchHistoricalLogs(t *testing.T) {
 		require.NoError(t, err)
 
 		// Create a client
-		const followDistance = 8
 		err = env.createClient(
 			WithLogger(logger),
-			WithFollowDistance(followDistance),
 			WithReqTimeout(2*time.Second),
 		)
 		require.NoError(t, err)
@@ -244,8 +239,8 @@ func TestFetchHistoricalLogs(t *testing.T) {
 		currentBlock, err := env.client.client.BlockNumber(env.ctx)
 		require.NoError(t, err)
 
-		// Set fromBlock to a value greater than the currentBlock - followDistance
-		fromBlock := currentBlock - followDistance + 10
+		// Set fromBlock to a value greater than the currentBlock - FollowDistance
+		fromBlock := currentBlock - FollowDistance + 10
 
 		logs, fetchErrCh, err := env.client.FetchHistoricalLogs(env.ctx, fromBlock)
 		require.ErrorIs(t, err, ErrNothingToSync)
@@ -261,7 +256,6 @@ func TestFetchHistoricalLogs(t *testing.T) {
 		// Create a client - connection should succeed initially
 		err = env.createClient(
 			WithLogger(logger),
-			WithFollowDistance(8),
 			WithReqTimeout(200*time.Millisecond),
 		)
 		require.NoError(t, err) // Connection is established initially
@@ -379,19 +373,20 @@ func TestFetchHistoricalLogs_Subdivide(t *testing.T) {
 			srv := httptest.NewServer(wrapped)
 			t.Cleanup(srv.Close)
 
-			opts := []Option{WithFollowDistance(0)}
-
 			client, err := New(t.Context(),
 				srv.URL,
 				env.contractAddr,
-				opts...,
 			)
 			require.NoError(t, err)
 
 			t.Cleanup(func() { require.NoError(t, client.Close()) })
 
-			logsCh, errCh, err := client.FetchHistoricalLogs(t.Context(), 0)
+			// Bypass the FetchHistoricalLogs follow-distance window so the
+			// subdivision algorithm operates on the full mined range and the
+			// per-case eth_getLogs call counts remain meaningful.
+			currentBlock, err := client.client.BlockNumber(t.Context())
 			require.NoError(t, err)
+			logsCh, errCh := client.fetchLogsInBatches(t.Context(), 0, currentBlock, false)
 
 			all := make([]ethtypes.Log, 0, tc.wantLogs)
 			for blk := range logsCh {
@@ -425,8 +420,7 @@ func TestStreamLogs(t *testing.T) {
 		require.NoError(t, err)
 
 		// Create a client and connect to the simulator
-		const followDistance = 2
-		err = env.createClient(WithLogger(logger), WithFollowDistance(followDistance))
+		err = env.createClient(WithLogger(logger))
 		require.NoError(t, err)
 
 		logs := env.client.StreamLogs(env.ctx, 0)
@@ -445,22 +439,22 @@ func TestStreamLogs(t *testing.T) {
 		err = env.createBlocksWithLogs(contract, blocksWithLogsLength, delay)
 		require.NoError(t, err)
 
-		// Wait for blocksWithLogsLength-followDistance blocks to be streamed.
+		// Wait for blocksWithLogsLength-FollowDistance blocks to be streamed.
 	Wait1:
 		for {
 			select {
 			case <-env.ctx.Done():
 				require.Failf(t, "timed out", "err: %v, streamedLogsCount: %d", env.ctx.Err(), streamedLogsCount.Load())
 			case <-time.After(time.Millisecond * 5):
-				if streamedLogsCount.Load() == int64(blocksWithLogsLength-followDistance) {
+				if streamedLogsCount.Load() == int64(blocksWithLogsLength-FollowDistance) {
 					break Wait1
 				}
 			}
 		}
 
 		// Create empty blocks with no transactions to advance the chain
-		// followDistance blocks ahead.
-		for i := 0; i < followDistance; i++ {
+		// FollowDistance blocks ahead.
+		for i := 0; i < FollowDistance; i++ {
 			env.sim.Commit()
 			time.Sleep(delay)
 		}
@@ -723,7 +717,7 @@ func TestChainReorganizationLogs(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client, err := New(ctx, srv.URL, contractAddr, WithLogger(zaptest.NewLogger(t)), WithFollowDistance(0))
+	client, err := New(ctx, srv.URL, contractAddr, WithLogger(zaptest.NewLogger(t)))
 	require.NoError(t, err)
 	defer func() { require.NoError(t, client.Close()) }()
 
@@ -783,35 +777,50 @@ func TestSimSSV(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create a client and connect to the simulator
-	err = env.createClient(WithLogger(logger), WithFollowDistance(0))
+	err = env.createClient(WithLogger(logger))
 	require.NoError(t, err)
 
 	logs := env.client.StreamLogs(env.ctx, 0)
 
+	// commitAndAdvance commits the supplied transaction and then mines FollowDistance
+	// empty blocks so the tx block clears the EL log stream's follow-distance window.
+	commitAndAdvance := func(t *testing.T, tx *ethtypes.Transaction) {
+		env.sim.Commit()
+		receipt, err := env.sim.Client().TransactionReceipt(env.ctx, tx.Hash())
+		require.NoError(t, err, "get receipt")
+		require.Equal(t, uint64(0x1), receipt.Status)
+		for i := 0; i < FollowDistance; i++ {
+			env.sim.Commit()
+		}
+	}
+	// nextEventBlock drains empty progression markers and returns the next block
+	// carrying actual logs from the stream.
+	nextEventBlock := func(t *testing.T) BlockLogs {
+		for {
+			select {
+			case block, ok := <-logs:
+				require.True(t, ok, "logs channel closed unexpectedly")
+				if len(block.Logs) > 0 {
+					return block
+				}
+			case <-env.ctx.Done():
+				t.Fatalf("timed out waiting for event: %v", env.ctx.Err())
+			}
+		}
+	}
+
 	// Emit event OperatorAdded
 	tx, err := boundContract.RegisterOperator(env.auth, ethcommon.Hex2Bytes("0xb24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1"), big.NewInt(100_000_000))
 	require.NoError(t, err)
-	env.sim.Commit()
-	receipt, err := env.sim.Client().TransactionReceipt(env.ctx, tx.Hash())
-	if err != nil {
-		t.Errorf("get receipt: %v", err)
-	}
-	require.Equal(t, uint64(0x1), receipt.Status)
-	block := <-logs
-	require.NotEmpty(t, block.Logs)
+	commitAndAdvance(t, tx)
+	block := nextEventBlock(t)
 	require.Equal(t, ethcommon.HexToHash("0xd839f31c14bd632f424e307b36abff63ca33684f77f28e35dc13718ef338f7f4"), block.Logs[0].Topics[0])
 
 	// Emit event OperatorRemoved
 	tx, err = boundContract.RemoveOperator(env.auth, 1)
 	require.NoError(t, err)
-	env.sim.Commit()
-	receipt, err = env.sim.Client().TransactionReceipt(env.ctx, tx.Hash())
-	if err != nil {
-		t.Errorf("get receipt: %v", err)
-	}
-	require.Equal(t, uint64(0x1), receipt.Status)
-	block = <-logs
-	require.NotEmpty(t, block.Logs)
+	commitAndAdvance(t, tx)
+	block = nextEventBlock(t)
 	require.Equal(t, ethcommon.HexToHash("0x0e0ba6c2b04de36d6d509ec5bd155c43a9fe862f8052096dd54f3902a74cca3e"), block.Logs[0].Topics[0])
 
 	// Emit event ValidatorAdded
@@ -828,14 +837,8 @@ func TestSimSSV(t *testing.T) {
 			Balance:         big.NewInt(100_000_000),
 		})
 	require.NoError(t, err)
-	env.sim.Commit()
-	receipt, err = env.sim.Client().TransactionReceipt(env.ctx, tx.Hash())
-	if err != nil {
-		t.Errorf("get receipt: %v", err)
-	}
-	require.Equal(t, uint64(0x1), receipt.Status)
-	block = <-logs
-	require.NotEmpty(t, block.Logs)
+	commitAndAdvance(t, tx)
+	block = nextEventBlock(t)
 	require.Equal(t, ethcommon.HexToHash("0x48a3ea0796746043948f6341d17ff8200937b99262a0b48c2663b951ed7114e5"), block.Logs[0].Topics[0])
 
 	// Emit event ValidatorRemoved
@@ -851,14 +854,8 @@ func TestSimSSV(t *testing.T) {
 			Balance:         big.NewInt(100_000_000),
 		})
 	require.NoError(t, err)
-	env.sim.Commit()
-	receipt, err = env.sim.Client().TransactionReceipt(env.ctx, tx.Hash())
-	if err != nil {
-		t.Errorf("get receipt: %v", err)
-	}
-	require.Equal(t, uint64(0x1), receipt.Status)
-	block = <-logs
-	require.NotEmpty(t, block.Logs)
+	commitAndAdvance(t, tx)
+	block = nextEventBlock(t)
 	require.Equal(t, ethcommon.HexToHash("0xccf4370403e5fbbde0cd3f13426479dcd8a5916b05db424b7a2c04978cf8ce6e"), block.Logs[0].Topics[0])
 
 	// Emit event ClusterLiquidated
@@ -874,14 +871,8 @@ func TestSimSSV(t *testing.T) {
 			Balance:         big.NewInt(100_000_000),
 		})
 	require.NoError(t, err)
-	env.sim.Commit()
-	receipt, err = env.sim.Client().TransactionReceipt(env.ctx, tx.Hash())
-	if err != nil {
-		t.Errorf("get receipt: %v", err)
-	}
-	require.Equal(t, uint64(0x1), receipt.Status)
-	block = <-logs
-	require.NotEmpty(t, block.Logs)
+	commitAndAdvance(t, tx)
+	block = nextEventBlock(t)
 	require.Equal(t, ethcommon.HexToHash("0x1fce24c373e07f89214e9187598635036111dbb363e99f4ce498488cdc66e688"), block.Logs[0].Topics[0])
 
 	// Emit event ClusterReactivated
@@ -897,14 +888,8 @@ func TestSimSSV(t *testing.T) {
 			Balance:         big.NewInt(100_000_000),
 		})
 	require.NoError(t, err)
-	env.sim.Commit()
-	receipt, err = env.sim.Client().TransactionReceipt(env.ctx, tx.Hash())
-	if err != nil {
-		t.Errorf("get receipt: %v", err)
-	}
-	require.Equal(t, uint64(0x1), receipt.Status)
-	block = <-logs
-	require.NotEmpty(t, block.Logs)
+	commitAndAdvance(t, tx)
+	block = nextEventBlock(t)
 	require.Equal(t, ethcommon.HexToHash("0xc803f8c01343fcdaf32068f4c283951623ef2b3fa0c547551931356f456b6859"), block.Logs[0].Topics[0])
 
 	// Emit event FeeRecipientAddressUpdated
@@ -913,14 +898,8 @@ func TestSimSSV(t *testing.T) {
 		ethcommon.HexToAddress("0x1"),
 	)
 	require.NoError(t, err)
-	env.sim.Commit()
-	receipt, err = env.sim.Client().TransactionReceipt(env.ctx, tx.Hash())
-	if err != nil {
-		t.Errorf("get receipt: %v", err)
-	}
-	require.Equal(t, uint64(0x1), receipt.Status)
-	block = <-logs
-	require.NotEmpty(t, block.Logs)
+	commitAndAdvance(t, tx)
+	block = nextEventBlock(t)
 	require.Equal(t, ethcommon.HexToHash("0x259235c230d57def1521657e7c7951d3b385e76193378bc87ef6b56bc2ec3548"), block.Logs[0].Topics[0])
 }
 

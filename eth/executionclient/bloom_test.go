@@ -97,7 +97,6 @@ func TestBloomCrossCheck_RecoversMissingLogs(t *testing.T) {
 
 	client, err := New(t.Context(), srv.URL, env.contractAddr,
 		WithLogger(logger),
-		WithFollowDistance(0),
 	)
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, client.Close()) })
@@ -139,7 +138,6 @@ func TestBloomCrossCheck_NoFalseRecovery(t *testing.T) {
 	// No proxy tricks — use the real backend directly.
 	err = env.createClient(
 		WithLogger(logger),
-		WithFollowDistance(0),
 	)
 	require.NoError(t, err)
 
@@ -174,7 +172,6 @@ func TestVerifyLogsWithBloom_EmptyRange(t *testing.T) {
 
 	err = env.createClient(
 		WithLogger(logger),
-		WithFollowDistance(0),
 	)
 	require.NoError(t, err)
 
@@ -269,7 +266,6 @@ func TestBloomCrossCheck_RetryExhausted(t *testing.T) {
 
 	client, err := New(t.Context(), srv.URL, contractAddr,
 		WithLogger(logger),
-		WithFollowDistance(0),
 	)
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, client.Close()) })
@@ -324,7 +320,6 @@ func TestVerifyLogsWithBloom_BlocksWithExistingLogs(t *testing.T) {
 
 	client, err := New(t.Context(), srv.URL, env.contractAddr,
 		WithLogger(logger),
-		WithFollowDistance(0),
 	)
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, client.Close()) })

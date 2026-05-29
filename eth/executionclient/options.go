@@ -28,14 +28,6 @@ func WithLoggerMulti(logger *zap.Logger) OptionMulti {
 	}
 }
 
-// WithFollowDistance sets finalization offset (a block at this offset into the past
-// from the head block will be considered as very likely finalized).
-func WithFollowDistance(offset uint64) Option {
-	return func(s *ExecutionClient) {
-		s.followDistance = offset
-	}
-}
-
 // WithReqTimeout sets timeout for RPC requests to eth1 node.
 // The timeout must be positive, otherwise the default value will be used.
 func WithReqTimeout(timeout time.Duration) Option {

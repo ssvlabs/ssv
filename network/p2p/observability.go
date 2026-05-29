@@ -130,6 +130,10 @@ func recordPeerIdentities(ctx context.Context, host host.Host, index peers.Index
 			nodeVersion := "unknown"
 			ni := index.NodeInfo(pid)
 			if ni != nil {
+				// invariant: handshaker.verifyTheirNodeInfo rejects nil-Metadata
+				// before storing in peersIndex, so this nested check guards only
+				// against stale historical entries and any future reader path
+				// that bypasses the handshake.
 				if ni.Metadata != nil {
 					nodeVersion = ni.Metadata.NodeVersion
 				}

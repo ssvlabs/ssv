@@ -14,6 +14,7 @@ import (
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	ethcommon "github.com/ethereum/go-ethereum/common"
@@ -118,7 +119,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	require.NotEmpty(t, contractCode)
 
 	// Create a client and connect to the simulator
-	client, err := executionclient.New(ctx, addr, contractAddr, executionclient.WithLogger(logger), executionclient.WithFollowDistance(0))
+	client, err := executionclient.New(ctx, addr, contractAddr, executionclient.WithLogger(logger))
 	require.NoError(t, err)
 
 	contractFilterer, err := client.Filterer()
@@ -127,7 +128,28 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	err = client.Healthy(ctx)
 	require.NoError(t, err)
 
-	logs := client.StreamLogs(ctx, 0)
+	// nextEventBlock returns the logs from the most recently committed block as
+	// a BlockLogs ready to feed into HandleBlockEventsStream. It bypasses the EL
+	// log stream (FollowDistance lag, websocket round-trips) — this test
+	// exercises the handler, not streaming, and the original WithFollowDistance(0)
+	// shortcut had the same effect. Going direct also keeps the test
+	// wall-clock tight so the slot-equality assertions further down don't race
+	// past slot boundaries.
+	nextEventBlock := func() executionclient.BlockLogs {
+		header, err := client.HeaderByNumber(ctx, nil)
+		require.NoError(t, err)
+		blockNumber := header.Number.Uint64()
+		blockLogs, err := client.FilterLogs(ctx, ethereum.FilterQuery{
+			Addresses: []ethcommon.Address{contractAddr},
+			FromBlock: new(big.Int).SetUint64(blockNumber),
+			ToBlock:   new(big.Int).SetUint64(blockNumber),
+		})
+		require.NoError(t, err)
+		return executionclient.BlockLogs{
+			BlockNumber: blockNumber,
+			Logs:        blockLogs,
+		}
+	}
 
 	boundContract, err := simcontract.NewSimcontract(contractAddr, sim.Client())
 	require.NoError(t, err)
@@ -163,8 +185,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		}
 		sim.Commit()
 
-		block := <-logs
-		require.NotEmpty(t, block.Logs)
+		block := nextEventBlock()
 		require.Equal(t, ethcommon.HexToHash("0xd839f31c14bd632f424e307b36abff63ca33684f77f28e35dc13718ef338f7f4"), block.Logs[0].Topics[0])
 
 		eventsCh := make(chan executionclient.BlockLogs)
@@ -285,8 +306,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.NoError(t, err)
 		sim.Commit()
 
-		block := <-logs
-		require.NotEmpty(t, block.Logs)
+		block := nextEventBlock()
 		require.Equal(t, ethcommon.HexToHash("0x48a3ea0796746043948f6341d17ff8200937b99262a0b48c2663b951ed7114e5"), block.Logs[0].Topics[0])
 
 		eventsCh := make(chan executionclient.BlockLogs)
@@ -336,8 +356,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.NoError(t, err)
 			sim.Commit()
 
-			block = <-logs
-			require.NotEmpty(t, block.Logs)
+			block = nextEventBlock()
 			require.Equal(t, ethcommon.HexToHash("0x48a3ea0796746043948f6341d17ff8200937b99262a0b48c2663b951ed7114e5"), block.Logs[0].Topics[0])
 
 			eventsCh = make(chan executionclient.BlockLogs)
@@ -386,8 +405,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.NoError(t, err)
 			sim.Commit()
 
-			block = <-logs
-			require.NotEmpty(t, block.Logs)
+			block = nextEventBlock()
 			require.Equal(t, ethcommon.HexToHash("0x48a3ea0796746043948f6341d17ff8200937b99262a0b48c2663b951ed7114e5"), block.Logs[0].Topics[0])
 
 			eventsCh = make(chan executionclient.BlockLogs)
@@ -441,8 +459,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.NoError(t, err)
 			sim.Commit()
 
-			block = <-logs
-			require.NotEmpty(t, block.Logs)
+			block = nextEventBlock()
 			require.Equal(t, ethcommon.HexToHash("0x48a3ea0796746043948f6341d17ff8200937b99262a0b48c2663b951ed7114e5"), block.Logs[0].Topics[0])
 
 			eventsCh = make(chan executionclient.BlockLogs)
@@ -490,8 +507,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.NoError(t, err)
 			sim.Commit()
 
-			block = <-logs
-			require.NotEmpty(t, block.Logs)
+			block = nextEventBlock()
 			require.Equal(t, ethcommon.HexToHash("0x48a3ea0796746043948f6341d17ff8200937b99262a0b48c2663b951ed7114e5"), block.Logs[0].Topics[0])
 
 			eventsCh = make(chan executionclient.BlockLogs)
@@ -540,8 +556,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.NoError(t, err)
 			sim.Commit()
 
-			block = <-logs
-			require.NotEmpty(t, block.Logs)
+			block = nextEventBlock()
 			require.Equal(t, ethcommon.HexToHash("0x48a3ea0796746043948f6341d17ff8200937b99262a0b48c2663b951ed7114e5"), block.Logs[0].Topics[0])
 
 			eventsCh = make(chan executionclient.BlockLogs)
@@ -583,8 +598,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.NoError(t, err)
 			sim.Commit()
 
-			block := <-logs
-			require.NotEmpty(t, block.Logs)
+			block := nextEventBlock()
 			require.Equal(t, ethcommon.HexToHash("0xb4b20ffb2eb1f020be3df600b2287914f50c07003526d3a9d89a9dd12351828c"), block.Logs[0].Topics[0])
 
 			eventsCh := make(chan executionclient.BlockLogs)
@@ -610,8 +624,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.NoError(t, err)
 			sim.Commit()
 
-			block := <-logs
-			require.NotEmpty(t, block.Logs)
+			block := nextEventBlock()
 			require.Equal(t, ethcommon.HexToHash("0xb4b20ffb2eb1f020be3df600b2287914f50c07003526d3a9d89a9dd12351828c"), block.Logs[0].Topics[0])
 
 			eventsCh := make(chan executionclient.BlockLogs)
@@ -650,8 +663,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.NoError(t, err)
 			sim.Commit()
 
-			block := <-logs
-			require.NotEmpty(t, block.Logs)
+			block := nextEventBlock()
 			require.Equal(t, ethcommon.HexToHash("0xb4b20ffb2eb1f020be3df600b2287914f50c07003526d3a9d89a9dd12351828c"), block.Logs[0].Topics[0])
 
 			eventsCh := make(chan executionclient.BlockLogs)
@@ -695,8 +707,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.NoError(t, err)
 			sim.Commit()
 
-			block := <-logs
-			require.NotEmpty(t, block.Logs)
+			block := nextEventBlock()
 			require.Equal(t, ethcommon.HexToHash("0xccf4370403e5fbbde0cd3f13426479dcd8a5916b05db424b7a2c04978cf8ce6e"), block.Logs[0].Topics[0])
 
 			eventsCh := make(chan executionclient.BlockLogs)
@@ -733,8 +744,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.NoError(t, err)
 			sim.Commit()
 
-			block := <-logs
-			require.NotEmpty(t, block.Logs)
+			block := nextEventBlock()
 			require.Equal(t, ethcommon.HexToHash("0xccf4370403e5fbbde0cd3f13426479dcd8a5916b05db424b7a2c04978cf8ce6e"), block.Logs[0].Topics[0])
 
 			eventsCh := make(chan executionclient.BlockLogs)
@@ -779,8 +789,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.NoError(t, err)
 			sim.Commit()
 
-			block := <-logs
-			require.NotEmpty(t, block.Logs)
+			block := nextEventBlock()
 			require.Equal(t, ethcommon.HexToHash("0xccf4370403e5fbbde0cd3f13426479dcd8a5916b05db424b7a2c04978cf8ce6e"), block.Logs[0].Topics[0])
 
 			eventsCh := make(chan executionclient.BlockLogs)
@@ -821,8 +830,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.NoError(t, err)
 		sim.Commit()
 
-		block := <-logs
-		require.NotEmpty(t, block.Logs)
+		block := nextEventBlock()
 		require.Equal(t, ethcommon.HexToHash("0x1fce24c373e07f89214e9187598635036111dbb363e99f4ce498488cdc66e688"), block.Logs[0].Topics[0])
 
 		eventsCh := make(chan executionclient.BlockLogs)
@@ -882,8 +890,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.NoError(t, err)
 		sim.Commit()
 
-		block := <-logs
-		require.NotEmpty(t, block.Logs)
+		block := nextEventBlock()
 		require.Equal(t, ethcommon.HexToHash("0xc803f8c01343fcdaf32068f4c283951623ef2b3fa0c547551931356f456b6859"), block.Logs[0].Topics[0])
 
 		eventsCh := make(chan executionclient.BlockLogs)
@@ -932,8 +939,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.NoError(t, err)
 		sim.Commit()
 
-		block := <-logs
-		require.NotEmpty(t, block.Logs)
+		block := nextEventBlock()
 		require.Equal(t, ethcommon.HexToHash("0x1fce24c373e07f89214e9187598635036111dbb363e99f4ce498488cdc66e688"), block.Logs[0].Topics[0])
 
 		eventsCh := make(chan executionclient.BlockLogs)
@@ -966,8 +972,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.NoError(t, err)
 		sim.Commit()
 
-		block := <-logs
-		require.NotEmpty(t, block.Logs)
+		block := nextEventBlock()
 		require.Equal(t, ethcommon.HexToHash("0xc803f8c01343fcdaf32068f4c283951623ef2b3fa0c547551931356f456b6859"), block.Logs[0].Topics[0])
 
 		eventsCh := make(chan executionclient.BlockLogs)
@@ -1020,8 +1025,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.NoError(t, err)
 		sim.Commit()
 
-		block := <-logs
-		require.NotEmpty(t, block.Logs)
+		block := nextEventBlock()
 		require.Equal(t, ethcommon.HexToHash("0x259235c230d57def1521657e7c7951d3b385e76193378bc87ef6b56bc2ec3548"), block.Logs[0].Topics[0])
 
 		eventsCh := make(chan executionclient.BlockLogs)
@@ -1069,8 +1073,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 
 			sim.Commit()
 
-			block := <-logs
-			require.NotEmpty(t, block.Logs)
+			block := nextEventBlock()
 			require.Equal(t, ethcommon.HexToHash("0xd839f31c14bd632f424e307b36abff63ca33684f77f28e35dc13718ef338f7f4"), block.Logs[0].Topics[0])
 			require.Equal(t, ethcommon.HexToHash("0x0e0ba6c2b04de36d6d509ec5bd155c43a9fe862f8052096dd54f3902a74cca3e"), block.Logs[1].Topics[0])
 
@@ -1147,8 +1150,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 
 			sim.Commit()
 
-			block := <-logs
-			require.NotEmpty(t, block.Logs)
+			block := nextEventBlock()
 			require.Equal(t, ethcommon.HexToHash("0x48a3ea0796746043948f6341d17ff8200937b99262a0b48c2663b951ed7114e5"), block.Logs[0].Topics[0])
 			require.Equal(t, ethcommon.HexToHash("0xccf4370403e5fbbde0cd3f13426479dcd8a5916b05db424b7a2c04978cf8ce6e"), block.Logs[1].Topics[0])
 
@@ -1211,8 +1213,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 
 			sim.Commit()
 
-			block := <-logs
-			require.NotEmpty(t, block.Logs)
+			block := nextEventBlock()
 			require.Equal(t, ethcommon.HexToHash("0x1fce24c373e07f89214e9187598635036111dbb363e99f4ce498488cdc66e688"), block.Logs[0].Topics[0])
 			require.Equal(t, ethcommon.HexToHash("0xc803f8c01343fcdaf32068f4c283951623ef2b3fa0c547551931356f456b6859"), block.Logs[1].Topics[0])
 
@@ -1242,8 +1243,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.NoError(t, err)
 			sim.Commit()
 
-			block := <-logs
-			require.NotEmpty(t, block.Logs)
+			block := nextEventBlock()
 			require.Equal(t, ethcommon.HexToHash("0x0e0ba6c2b04de36d6d509ec5bd155c43a9fe862f8052096dd54f3902a74cca3e"), block.Logs[0].Topics[0])
 
 			eventsCh := make(chan executionclient.BlockLogs)
@@ -1287,8 +1287,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 
 			sim.Commit()
 
-			block := <-logs
-			require.NotEmpty(t, block.Logs)
+			block := nextEventBlock()
 			require.Equal(t, ethcommon.HexToHash("0xd839f31c14bd632f424e307b36abff63ca33684f77f28e35dc13718ef338f7f4"), block.Logs[0].Topics[0])
 
 			eventsCh := make(chan executionclient.BlockLogs)
@@ -1318,8 +1317,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.NoError(t, err)
 			sim.Commit()
 
-			block = <-logs
-			require.NotEmpty(t, block.Logs)
+			block = nextEventBlock()
 			require.Equal(t, ethcommon.HexToHash("0x0e0ba6c2b04de36d6d509ec5bd155c43a9fe862f8052096dd54f3902a74cca3e"), block.Logs[0].Topics[0])
 
 			eventsCh = make(chan executionclient.BlockLogs)
