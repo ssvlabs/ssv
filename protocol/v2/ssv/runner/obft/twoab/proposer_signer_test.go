@@ -154,6 +154,12 @@ func TestProposerSigner_VerifyPartialBatch_TranslatesEachMsg_DelegatesOnce(t *te
 		require.Equal(t, inner.lastMsgs[0], inner.lastMsgs[i],
 			"same V at every tuple → identical translated signing root (F4 σ-walk invariant)")
 	}
+	// Cache-wiring check: N tuples sharing one V collapse to a single shared
+	// proposersig.Cache entry (twoab-side confirmation that signingRootFor
+	// delegates to the cache — the mechanism itself is tested in the base
+	// adapter's proposer_signer_cache_test.go).
+	require.Equal(t, 1, ps.sr.Len(),
+		"N tuples sharing one V must produce exactly one cache entry")
 }
 
 // TestProposerSigner_VerifyPartialBatch_BadV_FailsWithoutDelegating —

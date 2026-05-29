@@ -9,8 +9,9 @@ import (
 	obftcore "github.com/ssvlabs/ssv/protocol/v2/obft/base"
 )
 
-// Tests for the proposerSigner srCache (audit finding F2). See
-// docs/OBFT-PERFORMANCE-AUDIT-PLAN.md §F2.
+// Tests for the proposerSigner's signing-root cache (audit finding F2),
+// which delegates to the shared proposersig.Cache. See
+// docs/OBFT-PERFORMANCE-AUDIT-PLAN.md §F2 and the proposersig package.
 //
 // The cache amortises signingRootFor — the SSZ-unmarshal + tree-root +
 // domain compute step costing ~100 µs / ~336 allocs per call on a 17 KB
@@ -19,30 +20,35 @@ import (
 // SSZ-marshaled bytes carry the block's slot field so distinct (slot,
 // fork) pairs produce distinct keys — fork-safe in practice.
 //
-// These tests exercise the cache state directly via srCache map inspection
-// (unexported package access). End-to-end correctness with the cache in
-// place is covered by the existing runner integration + consensustest
-// stress suites.
+// These tests drive the proposerSigner (which delegates to the shared
+// proposersig.Cache) and observe cache size via the exported Cache.Len().
+// They live here, in the base adapter, as the single home for the shared
+// mechanism's tests — the 2abOBFT proposerSigner delegates to the same
+// proposersig.Cache, so its caching behaviour is covered transitively
+// (its own wiring is smoke-checked in twoab/proposer_signer_test.go). The
+// twoab copy of these tests was removed when the cache was extracted.
+// End-to-end correctness is also covered by the runner integration +
+// consensustest stress suites.
 
 // TestProposerSigner_F2_SigningRootCache_MissThenHit — first signingRootFor
-// call populates srCache; a second call with the same V finds the existing
+// call populates the cache; a second call with the same V finds the existing
 // entry. The signing root returned is byte-identical between calls.
 func TestProposerSigner_F2_SigningRootCache_MissThenHit(t *testing.T) {
 	v := makeBenchV(t, 0)
 	ps := newTestProposerSigner(t, &recordingBatchSigner{batchReturns: true})
 
-	require.Empty(t, ps.srCache, "cache must start empty")
+	require.Equal(t, 0, ps.sr.Len(), "cache must start empty")
 	sr1, err := ps.signingRootFor(v)
 	require.NoError(t, err)
-	require.Len(t, ps.srCache, 1, "first call must populate exactly one entry")
+	require.Equal(t, 1, ps.sr.Len(), "first call must populate exactly one entry")
 	sr2, err := ps.signingRootFor(v)
 	require.NoError(t, err)
-	require.Len(t, ps.srCache, 1, "second call with same V must hit cache, no new entry")
+	require.Equal(t, 1, ps.sr.Len(), "second call with same V must hit cache, no new entry")
 	require.Equal(t, sr1, sr2, "cached signing root must equal the fresh-compute result")
 }
 
-// TestProposerSigner_F2_SigningRootCache_FailureNotCached — when
-// signingRootForUncached fails (bad V bytes that don't decode), the cache
+// TestProposerSigner_F2_SigningRootCache_FailureNotCached — when the
+// uncached translation fails (bad V bytes that don't decode), the cache
 // stays empty. Future calls re-attempt the decode rather than serving a
 // poisoned cache entry.
 func TestProposerSigner_F2_SigningRootCache_FailureNotCached(t *testing.T) {
@@ -51,19 +57,19 @@ func TestProposerSigner_F2_SigningRootCache_FailureNotCached(t *testing.T) {
 
 	_, err := ps.signingRootFor(badV)
 	require.Error(t, err, "bad V must produce an error")
-	require.Empty(t, ps.srCache, "failed signingRootFor MUST NOT populate the cache")
+	require.Equal(t, 0, ps.sr.Len(), "failed signingRootFor MUST NOT populate the cache")
 }
 
 // TestProposerSigner_F2_SigningRootCache_EmptyValueNotCached — the empty
-// V bytes branch falls through to signingRootForUncached (which then
-// errors via DecodeCandidate). The cache is intentionally bypassed so the
-// 32-byte zero-key entry doesn't pollute future lookups.
+// V bytes branch bypasses the cache and falls through to the uncached
+// translation (which then errors via DecodeCandidate), so the all-zero
+// key never pollutes future lookups.
 func TestProposerSigner_F2_SigningRootCache_EmptyValueNotCached(t *testing.T) {
 	ps := newTestProposerSigner(t, &recordingBatchSigner{batchReturns: true})
 
 	_, err := ps.signingRootFor(nil)
 	require.Error(t, err, "empty V must error via the underlying DecodeCandidate")
-	require.Empty(t, ps.srCache, "empty V MUST NOT populate the cache")
+	require.Equal(t, 0, ps.sr.Len(), "empty V MUST NOT populate the cache")
 }
 
 // TestProposerSigner_F2_SigningRootCache_DistinctVSeparateEntries — two
@@ -78,7 +84,7 @@ func TestProposerSigner_F2_SigningRootCache_DistinctVSeparateEntries(t *testing.
 	require.NoError(t, err)
 	_, err = ps.signingRootFor(vLarge)
 	require.NoError(t, err)
-	require.Len(t, ps.srCache, 2, "distinct V's must produce distinct cache entries")
+	require.Equal(t, 2, ps.sr.Len(), "distinct V's must produce distinct cache entries")
 }
 
 // TestProposerSigner_F2_VerifyPartialBatch_SameV_OneCacheEntry — F4's
@@ -103,7 +109,7 @@ func TestProposerSigner_F2_VerifyPartialBatch_SameV_OneCacheEntry(t *testing.T) 
 
 	require.True(t, ps.VerifyPartialBatch(pubs, msgs, sigs))
 	require.Equal(t, 1, inner.batchCalls)
-	require.Len(t, ps.srCache, 1,
+	require.Equal(t, 1, ps.sr.Len(),
 		"N tuples sharing one V must produce exactly ONE cache entry (F2 collapses the translates)")
 }
 
@@ -131,7 +137,7 @@ func TestProposerSigner_F2_SigningRootCache_ConcurrentSameV_RaceClean(t *testing
 		}()
 	}
 	wg.Wait()
-	require.Len(t, ps.srCache, 1,
+	require.Equal(t, 1, ps.sr.Len(),
 		"concurrent populates for the same V must converge to one entry")
 }
 
@@ -149,20 +155,20 @@ func TestProposerSigner_F2_SigningRootCache_SignAndVerifyShareCache(t *testing.T
 
 	// SignPartial → populates.
 	_, _ = ps.SignPartial(v)
-	require.Len(t, ps.srCache, 1, "SignPartial must populate srCache")
+	require.Equal(t, 1, ps.sr.Len(), "SignPartial must populate the cache")
 
 	// VerifyPartial → hits cache, no new entry.
 	require.True(t, ps.VerifyPartial([]byte{1}, v, obftcore.Signature{0xa}))
-	require.Len(t, ps.srCache, 1, "VerifyPartial must hit cache, not add")
+	require.Equal(t, 1, ps.sr.Len(), "VerifyPartial must hit cache, not add")
 
 	// VerifyAggregate → hits cache, no new entry.
 	require.True(t, ps.VerifyAggregate([]byte{2}, v, obftcore.Signature{0xb}))
-	require.Len(t, ps.srCache, 1, "VerifyAggregate must hit cache, not add")
+	require.Equal(t, 1, ps.sr.Len(), "VerifyAggregate must hit cache, not add")
 
 	// VerifyPartialBatch with single V → hits cache, no new entry.
 	require.True(t, ps.VerifyPartialBatch(
 		[][]byte{{1}, {2}}, [][]byte{v, v}, []obftcore.Signature{{0xc}, {0xd}}))
-	require.Len(t, ps.srCache, 1, "VerifyPartialBatch must hit cache, not add")
+	require.Equal(t, 1, ps.sr.Len(), "VerifyPartialBatch must hit cache, not add")
 }
 
 // recordingMockAllOps is a fuller mock than recordingBatchSigner — it also
