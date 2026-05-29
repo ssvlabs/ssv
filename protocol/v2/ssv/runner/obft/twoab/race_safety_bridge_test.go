@@ -1,8 +1,8 @@
 package twoab
 
 import (
-	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -465,6 +465,41 @@ func l0Leader(committee []spectypes.OperatorID, slot phase0.Slot) spectypes.Oper
 	return committee[uint64(slot)%uint64(len(committee))]
 }
 
+// pickStarvedSurvivors selects the survivors to deny V_1 so the L_1 fall-through
+// deadlocks in a (qV-1)σ / (rest)NR split (used by BundleAtFireSplit). It starves
+// the lowest-id survivors — excluding the silent L_0 leader (contributes nothing
+// anyway) and the L_1 leader (must stay σ so V_1 exists) — until exactly
+// (#survivors - (qV-1)) are starved. The result: σ-pool[1] caps at qV-1 < qV and
+// NR-pool[1] = #starved < qEnc, a permanent quorum-short stop at L_1. `committee`
+// is ascending-sorted (committeeFromBLSNodes).
+func pickStarvedSurvivors(committee []spectypes.OperatorID, slot phase0.Slot, cell matrixCell, l1Leader spectypes.OperatorID) map[spectypes.OperatorID]bool {
+	f := (cell.n - 1) / 3
+	qV := 2*f + 1
+	l0 := l0Leader(committee, slot)
+	// Deny V_1 to (n - (qV-1)) ops so exactly qV-1 σ-emitters remain — one short
+	// of σ-quorum at L_1 for EVERY op's local view. This INCLUDES the silent L_0
+	// leader: it is only outbound-silenced (it still receives inbound), so if it
+	// kept V_1 it would self-σ at L_1 and reach σ-quorum locally (its own partial
+	// + the qV-1 it receives), deciding on its own — a timing-dependent wildcard
+	// that reintroduces flakiness. The L_1 leader is excluded (it self-feeds V_1,
+	// which must exist for the σ side).
+	toStarve := cell.n - (qV - 1)
+	starved := make(map[spectypes.OperatorID]bool, toStarve)
+	starved[l0] = true // silent L_0 leader → deterministically NRs at L_1
+	toStarve--
+	for _, op := range committee {
+		if toStarve <= 0 {
+			break
+		}
+		if op == l0 || op == l1Leader {
+			continue
+		}
+		starved[op] = true
+		toStarve--
+	}
+	return starved
+}
+
 // scenarioConfig parameterizes a runner scenario for the bridge:
 // per-cell ConfigOverrides, bus shape (with or without delay), silent
 // set (for SilentL0Leader), and ctx timeout. The bridge's
@@ -480,15 +515,36 @@ type scenarioConfig struct {
 	name      string
 	timeout   time.Duration
 	overrides func(t *testing.T, cell matrixCell) *ConfigOverrides
-	// delayFor returns the bus's delayFn for the given cell; nil → no
-	// delay (use plain blsBus instead of newBlsBusWithDelay).
-	delayFor func(cell matrixCell) delayFn
+	// delayFor returns the bus's delayFn for the given cell. Slot + the
+	// ascending-sorted committee are passed so a predicate can target a
+	// specific layer leader (e.g. the L_1 leader's bundle). nil → no delay
+	// (use a plain blsBus instead of newBlsBusWithDelay).
+	delayFor func(cell matrixCell, slot phase0.Slot, committee []spectypes.OperatorID) delayFn
 	// silentFor returns the set of ops whose outbound is dropped at the
 	// bus layer (crashed-sender sim). nil → no silent ops. Used by
 	// SilentL0Leader to suppress the L_0 leader's outbound. Per-cell
 	// context (which op is L_0 leader for the cell's slot) is captured
 	// via closure.
 	silentFor func(cell matrixCell, slot phase0.Slot, committee []spectypes.OperatorID) map[spectypes.OperatorID]bool
+	// outcome controls how the bridge judges per-op decide/miss results
+	// (liveness). Safety (ComputeSafetyReport) is asserted separately and
+	// always. nil → must converge (Healthy, LateCommit).
+	outcome *outcomePolicy
+}
+
+// outcomePolicy is the per-scenario liveness verdict for the safety bridge.
+// A within-spec clean miss (the silent-leader fall-through losing its timing
+// race under -race, or a deliberately-forced σ/NR split) is NOT a bug — safety
+// still holds — so some scenarios tolerate or require it instead of demanding
+// convergence.
+type outcomePolicy struct {
+	// mustMiss: convergence is itself a failure; the scenario MUST end in a
+	// clean miss (the deterministic forced-split scenario). When false, a
+	// clean miss is *tolerated* alongside convergence (SilentL0Leader).
+	mustMiss bool
+	// missLayer: the resolve-trace layer a clean miss must stop at. < 0 means
+	// "any fall-through layer (>= 1)".
+	missLayer int
 }
 
 // healthyScenarioConfig: nominal-conditions cluster. All ops receive
@@ -530,7 +586,7 @@ func lateCommitScenarioConfig() scenarioConfig {
 		overrides: func(_ *testing.T, cell matrixCell) *ConfigOverrides {
 			return compressedTestOverridesForK(cell.K)
 		},
-		delayFor: func(cell matrixCell) delayFn {
+		delayFor: func(cell matrixCell, _ phase0.Slot, _ []spectypes.OperatorID) delayFn {
 			const lateValueDelay = 300 * time.Millisecond
 			const victim spectypes.OperatorID = 1
 			return lateValueDelayPredicate(cell.n, victim, lateValueDelay)
@@ -578,6 +634,65 @@ func silentL0LeaderScenarioConfig() scenarioConfig {
 			leader := l0Leader(committee, slot)
 			return map[spectypes.OperatorID]bool{leader: true}
 		},
+		// Approach C: a silent L_0 leader makes the fall-through-to-L_1 decision
+		// race V_1's arrival against the Phase-2a fire. Under -race that race can
+		// land on a σ/NR split → a clean, within-spec ErrNoQuorum miss (safety
+		// holds; nobody decides). Tolerate it at any fall-through layer; a real
+		// wedge (non-ctx error or a non-quorum-short trace) still fails. The
+		// fall-through *convergence* itself is asserted deterministically by the
+		// DES (TestCrash_L0LeaderDirect and the matrix-cell crash coverage).
+		outcome: &outcomePolicy{missLayer: -1},
+	}
+}
+
+// bundleAtFireSplitScenarioConfig deterministically reproduces the no-man's-land
+// σ/NR split that SilentL0Leader hits only flakily under -race: a silent L_0
+// leader (fall-through to L_1) plus selective starvation of V_1 (the L_1 leader's
+// Phase-1 bundle) at (n - (qV-1)) ops — including the silent leader itself, which
+// still receives inbound — so exactly qV-1 σ-emitters remain and σ-pool[1] is one
+// short of quorum for every op's local view, with NR-pool[1] also short: a
+// permanent quorum-short stop at L_1. The bridge asserts safety holds in this
+// split (the whole point) and that the miss is a clean deadlock at L_1.
+//
+// Determinism comes from *which* survivors receive V_1 (bus-injected, per
+// recipient), not fire-timing jitter — so it holds under -race. Denying the L_1
+// leader's KindPhase1Bundle alone suffices: every survivor is NoValue at L_0 (no
+// KindValue is emitted), and NoValueMsg carries no forwarded witnesses, so the
+// direct bundle is the only V_1 vector.
+func bundleAtFireSplitScenarioConfig() scenarioConfig {
+	return scenarioConfig{
+		name: "BundleAtFireSplit",
+		// Short timeout: the run is engineered to deadlock at L_1, so it always
+		// waits this out (nothing to converge to). 5s clears the time to reach
+		// the stable deadlock under -race (~1s) with margin, and is kept small
+		// because it is paid on every run.
+		timeout: 5 * time.Second,
+		overrides: func(_ *testing.T, cell matrixCell) *ConfigOverrides {
+			return compressedTestOverridesForK(cell.K)
+		},
+		silentFor: func(_ matrixCell, slot phase0.Slot, committee []spectypes.OperatorID) map[spectypes.OperatorID]bool {
+			return map[spectypes.OperatorID]bool{l0Leader(committee, slot): true}
+		},
+		delayFor: func(cell matrixCell, slot phase0.Slot, committee []spectypes.OperatorID) delayFn {
+			l1Leader := spectypes.OperatorID(leaderForLayer(committee, twoabcore.Height(slot), 1))
+			starved := pickStarvedSurvivors(committee, slot, cell, l1Leader)
+			return func(from, to spectypes.OperatorID, kind byte) time.Duration {
+				if from == l1Leader && kind == byte(wire.KindPhase1Bundle) && starved[to] {
+					// Withhold V_1 from the starved ops until ~run-end: long enough
+					// that they NR-lock at L_1 first (the Phase-2a fire is ≤ ~1s
+					// even under -race), but below the 5s timeout so the bus
+					// delivery goroutine finishes before bus.stop()'s wg.Wait().
+					// (A time.Hour delay would hang stop() for an hour.) By the time
+					// V_1 lands the split is locked; the late arrival can't upgrade
+					// the NR-side (no upgrade above L_0), so the deadlock holds.
+					return 4 * time.Second
+				}
+				return 0
+			}
+		},
+		// Forced clean miss at L_1: convergence here would mean the starvation
+		// didn't take (a test-setup bug). Safety must still hold in the split.
+		outcome: &outcomePolicy{mustMiss: true, missLayer: 1},
 	}
 }
 
@@ -597,14 +712,15 @@ func runScenarioWithSafetyCheck(t *testing.T, cell matrixCell, cfg scenarioConfi
 	slot := phase0.Slot(500 + cell.n*10 + cell.K)
 	slotStart := time.Now()
 
+	committee := committeeFromBLSNodes(cl.nodes)
+
 	var bus *blsBus
 	if cfg.delayFor != nil {
-		bus = newBlsBusWithDelay(cl.nodes, slotStart, cfg.delayFor(cell))
+		bus = newBlsBusWithDelay(cl.nodes, slotStart, cfg.delayFor(cell, slot, committee))
 	} else {
 		bus = &blsBus{nodes: cl.nodes, slotStart: slotStart}
 	}
 	if cfg.silentFor != nil {
-		committee := committeeFromBLSNodes(cl.nodes)
 		bus.silent = cfg.silentFor(cell, slot, committee)
 	}
 	recordingBus := newRecordingBlsBus(bus)
@@ -613,18 +729,18 @@ func runScenarioWithSafetyCheck(t *testing.T, cell matrixCell, cfg scenarioConfi
 	for _, n := range cl.nodes {
 		n := n
 		n.broadcastFn = func(data []byte) {
-			// Detect Phase-2a fire: the first non-Phase1Bundle emission
-			// from this op corresponds to the FirePhase2a moment (the
-			// runner's Phase-1 bundles are KindPhase1Bundle and are not
-			// LayerEntries-bearing; the Phase-2a fire emits exactly one
-			// of KindValue / KindNoValue / KindCommit-NRDirect with the
-			// full K-1 LayerEntries committed). Capturing this time per
-			// op lets the diagnostic dump correlate against per-emission
-			// delivery times to localize bundle-delivery races.
+			// Capture first-emit time: the first non-Phase1Bundle emission
+			// is this op's Phase-2a emission being *broadcast* (the runner's
+			// Phase-1 bundles are KindPhase1Bundle and not LayerEntries-bearing;
+			// the Phase-2a emission is exactly one of KindValue / KindNoValue /
+			// KindCommit-NRDirect with the full K-1 LayerEntries). This is the
+			// emit instant, NOT the backstop-select or MaybeFirePhase2a commit
+			// instant — see phase2aFirstEmitAt's doc. Capturing it lets the
+			// diagnostic dump correlate against per-emission delivery times.
 			if env, err := wire.Unwrap(data); err == nil && env != nil && env.Kind != wire.KindPhase1Bundle {
 				n.mu.Lock()
-				if n.phase2aFireAt == 0 {
-					n.phase2aFireAt = time.Since(slotStart)
+				if n.phase2aFirstEmitAt == 0 {
+					n.phase2aFirstEmitAt = time.Since(slotStart)
 				}
 				n.mu.Unlock()
 			}
@@ -663,35 +779,28 @@ func runScenarioWithSafetyCheck(t *testing.T, cell matrixCell, cfg scenarioConfi
 	// so the deferred bus.stop above is harmless.
 	bus.stop()
 
-	// If any op failed (runErr or no submitted output), dump full cluster
-	// state BEFORE the assertions t.Fatalf bail out. The dump captures the
-	// per-op resolve-trace pool sizes (σ-pool, NR-pool) at each layer +
-	// per-op Phase-2a fire time + per-emission wire timing (broadcast →
-	// per-recipient delivery) — load-bearing diagnostics for understanding
-	// rare race-stress failures where convergence stalls.
-	if anyOpFailed(cl.nodes) {
-		dumpClusterDiagnostic(t, cl.nodes, slot, recordingBus.snapshot(), recordingBus.deliveriesSnapshot(), cfg.name, cell)
-	}
-
-	for _, n := range cl.nodes {
-		require.NoErrorf(t, n.runErr, "op %d RunProposerSlot at %s n=%d K=%d", n.op, cfg.name, cell.n, cell.K)
-		require.NotNilf(t, n.submittedOutput(),
-			"op %d submitted no output at %s n=%d K=%d", n.op, cfg.name, cell.n, cell.K)
-	}
-
-	// Cluster-wide value-agreement sanity check (cheap to keep — would
-	// fail fast on a clear regression before the safety invariants
-	// catch it).
-	var ref *twoabcore.Output
-	for _, n := range cl.nodes {
-		out := n.submittedOutput()
-		if ref == nil {
-			ref = out
-			continue
+	// Dump full cluster state only if the test actually FAILS: on any assertion
+	// failure below, require.* calls FailNow → runtime.Goexit, which runs this
+	// deferred check (t.Failed() is then true). A tolerated/forced clean miss is
+	// a PASS, so it produces no dump — and the dump's formatting work is skipped
+	// on the happy path. The dump captures per-op resolve-trace pool sizes (σ/NR
+	// vs qV/qEnc), first-emit times, and per-emission wire timing — the
+	// load-bearing diagnostics for rare race-stress failures.
+	defer func() {
+		if t.Failed() {
+			dumpClusterDiagnostic(t, cl.nodes, slot, overrides.tPhase2a(), recordingBus.snapshot(), recordingBus.deliveriesSnapshot(), cfg.name, cell)
 		}
-		require.Truef(t, bytes.Equal(ref.Value, out.Value),
-			"op %d decided a different Value at %s n=%d K=%d", n.op, cfg.name, cell.n, cell.K)
-	}
+	}()
+
+	// Safety is the bridge's core assertion — always computed, regardless of
+	// whether the cluster converged or cleanly missed. A clean miss is safe by
+	// construction: nobody decided, so no two ops can disagree (ComputeSafetyReport
+	// excludes Terminated from IsViolation). Compute it before the liveness verdict
+	// so a real violation surfaces even on a failing-convergence path.
+	outcome := reconstructOutcome(cl.nodes, recordingBus.snapshot())
+	rep := ct.ComputeSafetyReport(outcome)
+	require.Falsef(t, rep.IsViolation(),
+		"safety violation at %s n=%d K=%d: %s", cfg.name, cell.n, cell.K, rep)
 
 	// Deterministic-capture guard — gives the onInstanceEnd refactor teeth.
 	//
@@ -727,22 +836,103 @@ func runScenarioWithSafetyCheck(t *testing.T, cell matrixCell, cfg scenarioConfi
 			n.op, out.Layer, last.Layer, last.Decided, last.SigmaReached, cfg.name, cell.n, cell.K)
 	}
 
-	outcome := reconstructOutcome(cl.nodes, recordingBus.snapshot())
-	rep := ct.ComputeSafetyReport(outcome)
-	require.Falsef(t, rep.IsViolation(),
-		"safety violation at %s n=%d K=%d: %s", cfg.name, cell.n, cell.K, rep)
+	// Liveness verdict, gated by the scenario's outcome policy (safety above is
+	// already asserted). Must-converge (default), tolerant (SilentL0Leader), or
+	// forced-miss (BundleAtFireSplit) — see assertOutcome.
+	assertOutcome(t, cl.nodes, cfg, cell)
 }
 
-// anyOpFailed reports whether any op had a runErr or failed to submit
-// an Output. Used by runScenarioWithSafetyCheck to decide whether to
-// emit a diagnostic dump before the test's failing assertions bail out.
-func anyOpFailed(nodes []*blsNode) bool {
+// assertOutcome judges the per-op decide/miss results against the scenario's
+// outcome policy. Safety (ComputeSafetyReport) and the deterministic-capture
+// guard are asserted by the caller; this is the liveness verdict.
+//
+//   - nil policy (Healthy, LateCommit): every op must decide and agree.
+//   - tolerant (SilentL0Leader): full convergence is fine; otherwise every op
+//     that did NOT decide must be a clean within-spec miss. Deciders are allowed
+//     even on the miss path — e.g. the outbound-silenced L_0 leader still
+//     receives inbound, so it can self-σ a local quorum at L_1 and decide alone
+//     while peers stay quorum-short; that is safe (a lone decider can't disagree,
+//     and the safety report + capture guard already vetted it).
+//   - forced-miss (BundleAtFireSplit): NObody may decide — the V_1 starvation
+//     (incl. the silent leader) is engineered so no op can reconstruct.
+//
+// Every non-deciding op's resolve trace must end in a real quorum-short stop —
+// an empty / never-fired / wrong-state trace fails loudly, so a genuine runner
+// wedge under -race is still caught.
+func assertOutcome(t *testing.T, nodes []*blsNode, cfg scenarioConfig, cell matrixCell) {
+	t.Helper()
+
+	if cfg.outcome == nil {
+		requireConverged(t, nodes, cfg, cell)
+		return
+	}
+
+	decided := 0
 	for _, n := range nodes {
-		if n.runErr != nil || n.submittedOutput() == nil {
-			return true
+		if n.submittedOutput() != nil {
+			decided++
 		}
 	}
-	return false
+
+	switch {
+	case cfg.outcome.mustMiss:
+		// Engineered so no op can reconstruct; any decider means the setup
+		// (V_1 starvation, incl. the silent leader) didn't take.
+		require.Zerof(t, decided,
+			"%s n=%d K=%d: %d op(s) decided but the scenario forces an all-ops clean miss",
+			cfg.name, cell.n, cell.K, decided)
+	case decided == len(nodes):
+		// Tolerant policy, common case: full convergence.
+		requireConverged(t, nodes, cfg, cell)
+		return
+	}
+
+	// Forced-miss, or tolerant-with-misses: every op that did NOT decide must be
+	// a clean quorum-short miss. Deciders (possible under tolerant) are already
+	// vetted by ComputeSafetyReport (agreement) + the deterministic-capture guard.
+	missed := 0
+	for _, n := range nodes {
+		if n.submittedOutput() != nil {
+			continue
+		}
+		missed++
+		require.Truef(t, errors.Is(n.runErr, context.Canceled) || errors.Is(n.runErr, context.DeadlineExceeded),
+			"op %d clean-miss expected a ctx error, got %v at %s n=%d K=%d", n.op, n.runErr, cfg.name, cell.n, cell.K)
+		trace := extractInstanceTrace(n)
+		require.NotEmptyf(t, trace,
+			"op %d clean-miss but empty resolve trace (a wedge, not a within-spec miss) at %s n=%d K=%d", n.op, cfg.name, cell.n, cell.K)
+		last := trace[len(trace)-1]
+		// A genuine quorum-short stop: didn't decide, σ-pool < qV, and either
+		// NR-pool < qEnc (deadlock) or the deepest layer (exhaustion).
+		deepest := last.Layer == cell.K-1
+		require.Truef(t, !last.Decided && !last.SigmaReached && (deepest || !last.NRReached),
+			"op %d clean-miss trace not quorum-short: L_%d decided=%v σ-reached=%v NR-reached=%v at %s n=%d K=%d",
+			n.op, last.Layer, last.Decided, last.SigmaReached, last.NRReached, cfg.name, cell.n, cell.K)
+		if cfg.outcome.missLayer >= 0 {
+			require.Equalf(t, cfg.outcome.missLayer, last.Layer,
+				"op %d clean-miss at L_%d, expected L_%d at %s n=%d K=%d", n.op, last.Layer, cfg.outcome.missLayer, cfg.name, cell.n, cell.K)
+		} else {
+			require.GreaterOrEqualf(t, last.Layer, 1,
+				"op %d clean-miss at L_%d, expected a fall-through layer (>= 1) at %s n=%d K=%d", n.op, last.Layer, cfg.name, cell.n, cell.K)
+		}
+	}
+	require.NotZerof(t, missed,
+		"%s n=%d K=%d: expected at least one clean miss but every op decided", cfg.name, cell.n, cell.K)
+	t.Logf("%s n=%d K=%d: %d of %d ops cleanly missed (quorum-short at a fall-through layer; within-spec, safety verified)",
+		cfg.name, cell.n, cell.K, missed, len(nodes))
+}
+
+// requireConverged asserts every op decided without error. Value agreement is
+// NOT re-checked here: the caller runs ComputeSafetyReport first, whose SingleV /
+// HonestAgreement invariants already fail if any two ops decide distinct values
+// (reconstructOutcome records each decider's Value).
+func requireConverged(t *testing.T, nodes []*blsNode, cfg scenarioConfig, cell matrixCell) {
+	t.Helper()
+	for _, n := range nodes {
+		require.NoErrorf(t, n.runErr, "op %d RunProposerSlot at %s n=%d K=%d", n.op, cfg.name, cell.n, cell.K)
+		require.NotNilf(t, n.submittedOutput(),
+			"op %d submitted no output at %s n=%d K=%d", n.op, cfg.name, cell.n, cell.K)
+	}
 }
 
 // dumpClusterDiagnostic emits a per-op state dump for failing scenarios:
@@ -765,19 +955,21 @@ func anyOpFailed(nodes []*blsNode) bool {
 //   - Cluster stuck at L_k with mixed σ/NR distribution (σ < qV AND
 //     NR < qEnc) → look at the wire-timing block: did the L_k leader's
 //     KindPhase1Bundle arrive at each recipient BEFORE that recipient's
-//     phase2aFireAt? A "late" marker on the bundle's deliveries means
-//     the recipient committed NRPlaintext at L_k irrevocably because
-//     the bundle hadn't been pooled by the Phase-2a fire instant.
-func dumpClusterDiagnostic(t *testing.T, nodes []*blsNode, slot phase0.Slot, captured []capturedEmission, deliveries []deliveryEvent, scenarioName string, cell matrixCell) {
+//     firstEmitAt? A "late" marker on the bundle's deliveries means
+//     the recipient likely committed NRPlaintext at L_k irrevocably because
+//     the bundle hadn't been pooled by its Phase-2a commit. (firstEmitAt is
+//     the emit, not the commit — a proxy; see phase2aFirstEmitAt's doc.)
+func dumpClusterDiagnostic(t *testing.T, nodes []*blsNode, slot phase0.Slot, backstop time.Duration, captured []capturedEmission, deliveries []deliveryEvent, scenarioName string, cell matrixCell) {
 	t.Helper()
 	t.Logf("=== DIAGNOSTIC DUMP: scenario=%s n=%d K=%d slot=%d ===", scenarioName, cell.n, cell.K, slot)
 	t.Logf("Captured wire emissions: %d, delivery events: %d", len(captured), len(deliveries))
+	t.Logf("TPhase2a backstop=%s (Phase-2a fires at the earlier of L0Ready or this; firstEmitAt below is when the *emission was broadcast* — lock contention can push it well past the backstop, so do not read it as the fire/commit instant)", backstop)
 
-	// Per-op Phase-2a fire times, snapshot under each node's mu.
-	fireAt := make(map[spectypes.OperatorID]time.Duration, len(nodes))
+	// Per-op first-emit times (first non-Phase1Bundle broadcast), snapshot under mu.
+	firstEmitAt := make(map[spectypes.OperatorID]time.Duration, len(nodes))
 	for _, n := range nodes {
 		n.mu.Lock()
-		fireAt[n.op] = n.phase2aFireAt
+		firstEmitAt[n.op] = n.phase2aFirstEmitAt
 		n.mu.Unlock()
 	}
 
@@ -815,14 +1007,14 @@ func dumpClusterDiagnostic(t *testing.T, nodes []*blsNode, slot phase0.Slot, cap
 		} else {
 			outStr = fmt.Sprintf("Layer=%d Value=%x", out.Layer, out.Value)
 		}
-		var fireAtStr string
-		if fireAt[n.op] == 0 {
-			fireAtStr = "<not-fired>"
+		var firstEmitStr string
+		if firstEmitAt[n.op] == 0 {
+			firstEmitStr = "<not-emitted>"
 		} else {
-			fireAtStr = fireAt[n.op].String()
+			firstEmitStr = firstEmitAt[n.op].String()
 		}
-		t.Logf("  op %d: runErr=%s submittedOutput=%s phase2aFireAt=%s broadcasts=%s",
-			n.op, runErrStr, outStr, fireAtStr, formatBroadcastCounts(broadcastCounts[n.op]))
+		t.Logf("  op %d: runErr=%s submittedOutput=%s firstEmitAt=%s broadcasts=%s",
+			n.op, runErrStr, outStr, firstEmitStr, formatBroadcastCounts(broadcastCounts[n.op]))
 		trace := extractInstanceTrace(n)
 		if trace == nil {
 			t.Logf("    resolveTrace: <none — no instance ran for this slot, or it resolved no layer>")
@@ -848,9 +1040,11 @@ func dumpClusterDiagnostic(t *testing.T, nodes []*blsNode, slot phase0.Slot, cap
 
 	// Wire-timing block: for each captured emission (in capture order),
 	// list its per-recipient delivery times alongside each recipient's
-	// Phase-2a fire time. A '*' marks deliveredAt ≤ fireAt (in time for
-	// the recipient's Phase-2a LayerEntries choice); a '!' marks late.
-	t.Logf("Wire timing (broadcast → per-recipient delivery, * = before recipient phase2aFire, ! = after):")
+	// first-emit time. A '*' marks deliveredAt ≤ firstEmitAt (the emission
+	// likely landed before the recipient broadcast its own Phase-2a choice);
+	// a '!' marks late. firstEmitAt is the emit, not the commit, so this is a
+	// heuristic — see phase2aFirstEmitAt's doc.
+	t.Logf("Wire timing (broadcast → per-recipient delivery, * = before recipient firstEmitAt, ! = after):")
 	for i, em := range captured {
 		t.Logf("  #%d from=op%d kind=%s broadcastAt=%s", i, em.from, em.envelope.Kind, em.broadcastAt)
 		// Find deliveries that match this emission by (from, kind, broadcastAt-exact).
@@ -859,14 +1053,14 @@ func dumpClusterDiagnostic(t *testing.T, nodes []*blsNode, slot phase0.Slot, cap
 				continue
 			}
 			marker := "*"
-			recipFire := fireAt[d.to]
-			if recipFire != 0 && d.deliveredAt > recipFire {
+			recipEmit := firstEmitAt[d.to]
+			if recipEmit != 0 && d.deliveredAt > recipEmit {
 				marker = "!"
-			} else if recipFire == 0 {
-				marker = "?" // recipient never fired; can't classify
+			} else if recipEmit == 0 {
+				marker = "?" // recipient never emitted; can't classify
 			}
-			t.Logf("    %s op%d deliveredAt=%s (delay=%s, recipient.phase2aFireAt=%s)",
-				marker, d.to, d.deliveredAt, d.deliveredAt-d.broadcastAt, recipFire)
+			t.Logf("    %s op%d deliveredAt=%s (delay=%s, recipient.firstEmitAt=%s)",
+				marker, d.to, d.deliveredAt, d.deliveredAt-d.broadcastAt, recipEmit)
 		}
 	}
 	t.Logf("=== END DIAGNOSTIC DUMP ===")
@@ -914,6 +1108,33 @@ func TestSafetyBridge_2abOBFT_LateCommit(t *testing.T) {
 func TestSafetyBridge_2abOBFT_SilentL0Leader(t *testing.T) {
 	cfg := silentL0LeaderScenarioConfig()
 	for _, cell := range twoabMatrixCells() {
+		cell := cell
+		t.Run(fmt.Sprintf("n%d_K%d", cell.n, cell.K), func(t *testing.T) {
+			runScenarioWithSafetyCheck(t, cell, cfg)
+		})
+	}
+}
+
+// TestForcedSplitSafety_2abOBFT deterministically forces the no-man's-land σ/NR
+// split at the L_1 fall-through layer (silent L_0 leader + selective V_1
+// starvation) and asserts safety holds in it — the "Phase-1-during-Phase-2a
+// (bundle at backstop-fire instant)" race window the Makefile flags as
+// known-but-untested, now covered on purpose rather than incidentally (and
+// flakily) via SilentL0Leader under -race.
+//
+// Named OUTSIDE the `^TestSafetyBridge_` pattern on purpose: the stress target
+// amplifies that pattern (-race × count=320 × cpu={1,4,8,16,32}), but this
+// scenario is deterministic (the split is bus-injected, not timing-raced) and
+// *always* waits out its timeout (it can never decide). Amplifying it would add
+// nothing but hours of timeout-waiting. It runs once per cell in `make unit-test`
+// (which is -race), which is sufficient.
+//
+// A small representative set, not the full matrix: the split is the same shape
+// everywhere, so we cover only the two distinct trace shapes — {4,2} stops at
+// the deepest layer (exhaustion), {7,7} stops mid-walk (deadlock).
+func TestForcedSplitSafety_2abOBFT(t *testing.T) {
+	cfg := bundleAtFireSplitScenarioConfig()
+	for _, cell := range []matrixCell{{4, 2}, {7, 7}} {
 		cell := cell
 		t.Run(fmt.Sprintf("n%d_K%d", cell.n, cell.K), func(t *testing.T) {
 			runScenarioWithSafetyCheck(t, cell, cfg)

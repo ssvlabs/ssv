@@ -33,7 +33,7 @@ var ErrLayerOutOfRange = errors.New("twoab: layer out of range")
 
 // ErrSigmaLocked is returned when the EKM detects an attempt to σ-commit
 // on a different V than the one already locked at this (slot, layer), or
-// to σ-commit at a layer where NR is already locked. Single-σ-V + σ-XOR-NR
+// to NR-commit at a layer where σ is already locked. Single-σ-V + σ-XOR-NR
 // invariants per spec §EKM coordination.
 var ErrSigmaLocked = errors.New("twoab: σ already locked at this layer (single-σ-V or σ-XOR-NR violation)")
 

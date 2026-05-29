@@ -55,14 +55,16 @@ type blsNode struct {
 	// StartNewInstance) or the instance resolved no layer.
 	capturedTrace       []twoabcore.LayerAttempt
 	capturedCascadeErrs []error
-	// phase2aFireAt is the slot-relative time of this op's first
-	// non-Phase1Bundle Broadcast call — a proxy for the Phase-2a fire
-	// instant. The diagnostic dump compares this against per-emission
-	// receive times to localize stuck-at-L_k races (a peer that fired
-	// Phase-2a before the L_k leader's bundle landed in its state will
-	// have committed NRPlaintext at L_k, an irrevocable choice).
-	// Zero until the first non-bundle broadcast fires.
-	phase2aFireAt time.Duration
+	// phase2aFirstEmitAt is the slot-relative time of this op's first
+	// non-Phase1Bundle Broadcast call — i.e. when the resolve loop *broadcast*
+	// the Phase-2a emission. This is NOT the backstop-select instant nor the
+	// MaybeFirePhase2a commit instant: under instanceMu contention those can
+	// diverge from it by >100ms, so do not read it as the fire/commit time. The
+	// diagnostic dump compares it against per-emission receive times to localize
+	// stuck-at-L_k races (a peer that committed before the L_k leader's bundle
+	// landed will have NRPlaintext at L_k, an irrevocable choice).
+	// Zero until the first non-bundle broadcast.
+	phase2aFirstEmitAt time.Duration
 }
 
 func (n *blsNode) submittedOutput() *twoabcore.Output {

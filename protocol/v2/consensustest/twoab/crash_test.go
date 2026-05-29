@@ -1,6 +1,7 @@
 package twoab_test
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -22,6 +23,38 @@ func TestCrash_L0LeaderDirect(t *testing.T) {
 	require.GreaterOrEqual(t, out.DecidedRound, 1, "L_0 leader crashed → decision falls through to a backup layer")
 	require.False(t, out.PerOp[1].Decided, "crashed op must not be a decider")
 	require.Equal(t, "offline", out.PerOp[1].Err)
+}
+
+// TestCrash_L0Leader_MatrixCells extends TestCrash_L0LeaderDirect (n=4 only)
+// across the (n, K) cells the race-bridge SilentL0Leader scenario uses. This is
+// the deterministic, virtual-time home for the crashed-L0-leader fall-through
+// *convergence* signal: the race-bridge (TestSafetyBridge_2abOBFT_SilentL0Leader)
+// now only asserts safety for that scenario — a within-spec timing miss under
+// -race is tolerated there — so convergence is verified here instead, immune to
+// the -race balloon and laptop sleep.
+//
+// The DES makes operators[0] (op1) the L_0 leader at every cell (leader =
+// operators[k % N]), so crashing op1 always targets the L_0 leader.
+func TestCrash_L0Leader_MatrixCells(t *testing.T) {
+	for _, c := range []struct{ n, k int }{
+		{4, 2}, {4, 3}, {4, 4},
+		{7, 3}, {7, 4}, {7, 5}, {7, 6}, {7, 7},
+	} {
+		c := c
+		t.Run(fmt.Sprintf("n%d_K%d", c.n, c.k), func(t *testing.T) {
+			cfg := ct.DefaultProposerDutyConfig(200 * time.Millisecond)
+			cfg.N = c.n
+			cfg.Operators = ct.MakeOperators(c.n)
+			cfg.K = c.k
+			cfg.Byz = ct.ByzPattern{Crashed: []ct.OperatorID{1}} // op1 = L_0 leader
+			out, err := twoabadapter.Protocol{}.Run(cfg)
+			require.NoError(t, err)
+			require.True(t, out.Decided, "L_0 leader crashed → survivors fall through and decide")
+			require.GreaterOrEqual(t, out.DecidedRound, 1, "decision must fall through past the crashed L_0 leader")
+			require.False(t, out.PerOp[1].Decided, "crashed L_0 leader must not be a decider")
+			require.Equal(t, "offline", out.PerOp[1].Err)
+		})
+	}
 }
 
 // TestCrash_NonLeaderDirect crashes a non-leader (op4); the healthy L_0 path
