@@ -131,7 +131,9 @@ func (s *BLSSigner) AggregatePartials(partials map[obft.OperatorID]obft.Signatur
 		// the little-endian bytes of opID — equivalent to the prior
 		// SetDecString(fmt.Sprintf("%d", opID)) round-trip for these small
 		// integer IDs, but without the per-call string allocation + decimal
-		// parse (audit F18). Verified equivalent in TestBLSSigner_AggregateID_*.
+		// parse (audit F18). Equivalence with the old decimal-string encoding
+		// + an end-to-end reconstruction round-trip are pinned in
+		// aggregate_id_test.go.
 		var idBuf [8]byte
 		binary.LittleEndian.PutUint64(idBuf[:], uint64(opID))
 		if err := blsID.SetLittleEndian(idBuf[:]); err != nil {
