@@ -58,8 +58,12 @@ func CreateAndStartLocalNet(pCtx context.Context, logger *zap.Logger, options Lo
 		}
 
 		eg, ctx := errgroup.WithContext(pCtx)
+		// errgroup, not bare goroutines: eg.Wait() aggregates node failures so
+		// a failed attempt returns an error and the loop below retries, and the
+		// shared ctx cancels the siblings on the first failure so they don't
+		// each block the full 15s peer-wait first.
 		for i, node := range ln.Nodes {
-			eg.Go(func() error { //if replace EG to regular goroutines round don't change to second in test
+			eg.Go(func() error {
 				if err := node.Start(); err != nil {
 					return fmt.Errorf("could not start node %d: %w", i, err)
 				}
@@ -87,15 +91,25 @@ func CreateAndStartLocalNet(pCtx context.Context, logger *zap.Logger, options Lo
 		return ln, eg.Wait()
 	}
 
+	var lastErr error
 	for {
 		select {
 		case <-pCtx.Done():
+			if lastErr != nil {
+				return nil, fmt.Errorf("network didn't start on time: %w", lastErr)
+			}
 			return nil, fmt.Errorf("context is done, network didn't start on time")
 		default:
 			ln, err := attempt(pCtx)
 			if err != nil {
-				for _, node := range ln.Nodes {
-					_ = node.Close()
+				lastErr = err
+				// attempt returns a nil ln when NewLocalNet itself fails
+				// (e.g. CreateKeys or a node factory error), so guard before
+				// ranging to avoid a nil-pointer panic that would mask err.
+				if ln != nil {
+					for _, node := range ln.Nodes {
+						_ = node.Close()
+					}
 				}
 
 				logger.Debug("trying to relaunch local network", zap.Error(err))
@@ -235,13 +249,12 @@ type LocalNetOptions struct {
 func NewLocalNet(ctx context.Context, logger *zap.Logger, options LocalNetOptions) (*LocalNet, error) {
 	ln := &LocalNet{}
 	ln.mdnsTag = randomMdnsTag()
-	nodes, keys, err := testing.NewLocalTestnet(ctx, options.Nodes, func(pctx context.Context, nodeIndex uint64, keys testing.NodeKeys) network.P2PNetwork {
+	nodes, keys, err := testing.NewLocalTestnet(ctx, options.Nodes, func(pctx context.Context, nodeIndex uint64, keys testing.NodeKeys) (network.P2PNetwork, error) {
 		logger := logger.Named(fmt.Sprintf("node-%d", nodeIndex))
-		p, err := ln.NewTestP2pNetwork(pctx, nodeIndex, keys, logger, options)
-		if err != nil {
-			logger.Error("could not setup network", zap.Error(err))
-		}
-		return p
+		// The error propagates: NewLocalTestnet wraps it with the node index
+		// and CreateAndStartLocalNet logs it before retrying, so there's no
+		// separate error log here.
+		return ln.NewTestP2pNetwork(pctx, nodeIndex, keys, logger, options)
 	})
 	if err != nil {
 		return nil, err

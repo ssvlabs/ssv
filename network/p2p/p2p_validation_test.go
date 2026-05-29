@@ -269,9 +269,11 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 	// Coverage gap: when the observer is the ignored-only node, both checks
 	// skip (observer is the "lower" side of the accepted/ignored check and
 	// the "higher" side of the ignored/rejected one), so that observer gets
-	// no bucket coverage at all. The rate invariant still applies there; the
-	// three other observers each still run at least one bucket check, which
-	// is enough to catch a real regression.
+	// no bucket coverage at all. The rate invariant still applies there, as
+	// does strictSeparationViolation below (accepted-only vs rejected-only are
+	// both visible to the ignored-only observer); the three other observers
+	// each still run at least one bucket check too, which is enough to catch a
+	// real regression.
 	bucketInvariantViolation := func(peers []peerScore, observer NodeIndex) string {
 		scoreByIdx := map[NodeIndex]float64{}
 		for _, p := range peers {
@@ -294,15 +296,61 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 		return check(ignoredOnlyIdx, rejectedOnlyIdx)
 	}
 
+	// strictSeparationViolation upgrades the maximal-gap pair to a strict
+	// check: on any observer that sees both the accepted-only and rejected-
+	// only peers, accepted-only's score must be strictly greater than
+	// rejected-only's. The ≥-based rate and bucket invariants above all hold
+	// on an all-equal (e.g. all-zero) snapshot — the exact signature of
+	// scoring having become a no-op — so without one strict check the test
+	// could pass in the very failure mode it exists to catch. accepted vs
+	// rejected is the maximal rejected-rate gap (0 vs 1) and gossipsub
+	// graylists the rejected peer, so the margin is large and this won't
+	// reflake the way same-rate strict ordering would. Returns "" when the
+	// invariant holds — including when the observer doesn't see both peers
+	// (e.g. the accepted-only or rejected-only node observing itself).
+	strictSeparationViolation := func(peers []peerScore, observer NodeIndex) string {
+		var accScore, rejScore float64
+		var accFound, rejFound bool
+		for _, p := range peers {
+			switch p.index {
+			case acceptedOnlyIdx:
+				accScore, accFound = p.score, true
+			case rejectedOnlyIdx:
+				rejScore, rejFound = p.score, true
+			}
+		}
+		if !accFound || !rejFound {
+			return ""
+		}
+		if accScore <= rejScore {
+			return fmt.Sprintf(
+				"observer %d: accepted-only peer %d (score=%.2f) not strictly above rejected-only peer %d (score=%.2f)",
+				observer, acceptedOnlyIdx, accScore, rejectedOnlyIdx, rejScore)
+		}
+		return ""
+	}
+
 	// settled is the snapshot Eventually verified; falls back to the latest
 	// snapshot if Eventually times out so the diagnostic asserts and the
 	// table-printing cleanup still have something useful to show.
-	var settled map[NodeIndex][]peerScore
+	//
+	// It's an atomic.Pointer because on the Eventually-timeout path testify
+	// leaves the last predicate goroutine running (it spawns the predicate
+	// with `go` and returns on the timer without waiting for it); if that
+	// goroutine succeeds at the boundary it writes settled concurrently with
+	// the main-goroutine fallback rebuild below. The happy path is already
+	// synchronized by Eventually's channel receive, but that sad-path write
+	// would otherwise be a data race -race can flag, burying the real
+	// diagnostics.
+	var settled atomic.Pointer[map[NodeIndex][]peerScore]
 
 	// Print a pretty table of each node's peers and their scores. Registered
 	// before the wait so it fires on failure too.
 	t.Cleanup(func() {
-		snapshots := settled
+		var snapshots map[NodeIndex][]peerScore
+		if ptr := settled.Load(); ptr != nil {
+			snapshots = *ptr
+		}
 		if snapshots == nil {
 			snapshots = make(map[NodeIndex][]peerScore, len(vNet.Nodes))
 			for _, node := range vNet.Nodes {
@@ -330,9 +378,9 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 		}
 	})
 
-	// Wait for the rate + bucket invariants to hold on every observer in one
-	// consistent snapshot. Returns quickly on a fast machine; times out at
-	// 15s if scores never settle.
+	// Wait for the rate + bucket + strict-separation invariants to hold on
+	// every observer in one consistent snapshot. Returns quickly on a fast
+	// machine; times out at 15s if scores never settle.
 	ok := assert.Eventually(t, func() bool {
 		snapshot := make(map[NodeIndex][]peerScore, len(vNet.Nodes))
 		for _, node := range vNet.Nodes {
@@ -346,30 +394,36 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 				return false
 			}
 			if rateInvariantViolation(peers, node.Index) != "" ||
-				bucketInvariantViolation(peers, node.Index) != "" {
+				bucketInvariantViolation(peers, node.Index) != "" ||
+				strictSeparationViolation(peers, node.Index) != "" {
 				return false
 			}
 			snapshot[node.Index] = peers
 		}
-		settled = snapshot
+		settled.Store(&snapshot)
 		return true
-	}, 15*time.Second, 100*time.Millisecond, "peer scores never satisfied rate + bucket invariants")
+	}, 15*time.Second, 100*time.Millisecond, "peer scores never satisfied rate + bucket + strict-separation invariants")
 
 	if !ok {
 		// Eventually marked the test as failed but didn't FailNow (assert.*
 		// not require.*). Grab the latest snapshot so the diagnostic asserts
 		// below can surface which invariant on which observer failed.
-		settled = make(map[NodeIndex][]peerScore, len(vNet.Nodes))
+		fresh := make(map[NodeIndex][]peerScore, len(vNet.Nodes))
 		for _, node := range vNet.Nodes {
-			settled[node.Index] = snapshotForNode(node)
+			fresh[node.Index] = snapshotForNode(node)
 		}
+		settled.Store(&fresh)
 	}
 
 	// settled was either verified by Eventually (happy path — these are
 	// redundant) or freshly grabbed (sad path — they surface specifics on
 	// top of Eventually's generic message).
+	var settledSnap map[NodeIndex][]peerScore
+	if ptr := settled.Load(); ptr != nil {
+		settledSnap = *ptr
+	}
 	for _, node := range vNet.Nodes {
-		peers := settled[node.Index]
+		peers := settledSnap[node.Index]
 		require.NotNilf(t, peers, "node %d: PeerScoreInspector never ran", node.Index)
 		require.Equalf(t, len(vNet.Nodes)-1, len(peers), "node %d", node.Index)
 		if msg := rateInvariantViolation(peers, node.Index); msg != "" {
@@ -377,6 +431,9 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 		}
 		if msg := bucketInvariantViolation(peers, node.Index); msg != "" {
 			require.Failf(t, "invalid bucket ordering", "%s", msg)
+		}
+		if msg := strictSeparationViolation(peers, node.Index); msg != "" {
+			require.Failf(t, "invalid strict separation", "%s", msg)
 		}
 	}
 }

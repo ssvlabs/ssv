@@ -2,12 +2,13 @@ package testing
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/ssvlabs/ssv/network"
 )
 
 // NetworkFactory is a generic factory for network instances
-type NetworkFactory func(pctx context.Context, nodeIndex uint64, keys NodeKeys) network.P2PNetwork
+type NetworkFactory func(pctx context.Context, nodeIndex uint64, keys NodeKeys) (network.P2PNetwork, error)
 
 // NewLocalTestnet creates a new local network
 func NewLocalTestnet(ctx context.Context, n int, factory NetworkFactory) ([]network.P2PNetwork, []NodeKeys, error) {
@@ -17,10 +18,19 @@ func NewLocalTestnet(ctx context.Context, n int, factory NetworkFactory) ([]netw
 		return nil, nil, err
 	}
 
-	i := uint64(0)
-	for _, k := range keys {
-		nodes[i] = factory(ctx, i, k)
-		i++
+	for i, k := range keys {
+		node, err := factory(ctx, uint64(i), k)
+		if err != nil {
+			// Close nodes already created so a factory failure (which makes
+			// CreateAndStartLocalNet retry) doesn't leak them.
+			for _, created := range nodes[:i] {
+				if created != nil {
+					_ = created.Close()
+				}
+			}
+			return nil, nil, fmt.Errorf("create node %d: %w", i, err)
+		}
+		nodes[i] = node
 	}
 
 	return nodes, keys, nil
