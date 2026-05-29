@@ -225,3 +225,125 @@ func TestController_ClosedChanOnMiss(t *testing.T) {
 		t.Fatal("WantsHostValidationCh on missing slot must return a pre-closed channel")
 	}
 }
+
+// TestController_LRUEvictsOldestSlot — when MaxPendingSlots is exceeded, the
+// oldest slot (FIFO insertion order) is evicted, NOT the slot being inserted
+// into, so a flood of envelopes at distinct slot numbers can't grow memory
+// unbounded. Also asserts the pending buffer's three internal structures
+// (bySlot, elem, order) stay cardinality-synced across fill/evict/drain/forget.
+func TestController_LRUEvictsOldestSlot(t *testing.T) {
+	ctrl := newTestController(t, 1)
+
+	checkInvariant := func(stage string) {
+		require.Equal(t, len(ctrl.pending.bySlot), len(ctrl.pending.elem),
+			"%s: bySlot and elem must have equal cardinality", stage)
+		require.Equal(t, len(ctrl.pending.bySlot), ctrl.pending.order.Len(),
+			"%s: bySlot and order must have equal cardinality", stage)
+		for s := range ctrl.pending.bySlot {
+			elem, ok := ctrl.pending.elem[s]
+			require.Truef(t, ok, "%s: slot %d in bySlot but not elem", stage, s)
+			require.Equal(t, s, elem.Value.(phase0.Slot),
+				"%s: elem[%d] points to wrong slot", stage, s)
+		}
+	}
+
+	// Buffer envelopes for slots 0..MaxPendingSlots-1.
+	for s := phase0.Slot(0); s < phase0.Slot(MaxPendingSlots); s++ {
+		ctrl.BufferEnvelope(s, PendingEnvelope{Commit: &twoabcore.Commit{Height: twoabcore.Height(s)}})
+	}
+	require.Len(t, ctrl.pending.bySlot, MaxPendingSlots)
+	checkInvariant("after fill")
+
+	// One more (slot MaxPendingSlots) → should evict slot 0 (oldest).
+	ctrl.BufferEnvelope(phase0.Slot(MaxPendingSlots), PendingEnvelope{
+		Commit: &twoabcore.Commit{Height: twoabcore.Height(MaxPendingSlots)},
+	})
+	require.Len(t, ctrl.pending.bySlot, MaxPendingSlots)
+	_, hasSlot0 := ctrl.pending.bySlot[phase0.Slot(0)]
+	require.False(t, hasSlot0, "slot 0 (oldest) should have been evicted")
+	_, hasNewSlot := ctrl.pending.bySlot[phase0.Slot(MaxPendingSlots)]
+	require.True(t, hasNewSlot, "newest slot should be present")
+	checkInvariant("after eviction")
+
+	// Drain a slot mid-list — invariant must hold.
+	ctrl.DrainPending(phase0.Slot(50))
+	require.Len(t, ctrl.pending.bySlot, MaxPendingSlots-1)
+	checkInvariant("after drain")
+
+	// Forget another slot.
+	ctrl.ForgetPending(phase0.Slot(100))
+	require.Len(t, ctrl.pending.bySlot, MaxPendingSlots-2)
+	checkInvariant("after forget")
+}
+
+// TestController_EndedSlotsRing_Bounded — the ended-slots ring is FIFO-bounded
+// at MaxEndedSlots; old slots age out, after which they re-accept pending
+// entries (which then sit until LRU eviction, same as a slot that never ended).
+// Guards the ring against unbounded growth on a long-running node.
+func TestController_EndedSlotsRing_Bounded(t *testing.T) {
+	ctrl := newTestController(t, 1)
+
+	// Fill the ring with MaxEndedSlots+1 ended slots; the first must fall out.
+	for s := phase0.Slot(0); s < phase0.Slot(MaxEndedSlots+1); s++ {
+		_, err := ctrl.StartNewInstance(s)
+		require.NoError(t, err)
+		ctrl.EndInstance(s)
+	}
+	ctrl.mu.Lock()
+	require.Equal(t, MaxEndedSlots, ctrl.ended.order.Len(),
+		"ended ring must be capped at MaxEndedSlots")
+	_, slot0Still := ctrl.ended.set[0]
+	ctrl.mu.Unlock()
+	require.False(t, slot0Still, "slot 0 must have aged out of the ring")
+
+	// slot 0 is no longer fenced — re-buffering allowed again.
+	ctrl.BufferEnvelope(phase0.Slot(0), PendingEnvelope{Commit: &twoabcore.Commit{Height: 0}})
+	require.Len(t, ctrl.DrainPending(phase0.Slot(0)), 1,
+		"slot that aged out of the ring must accept buffering again")
+}
+
+// TestController_PostEndInstance_RejectsMutations — state-mutating delegates on
+// a Controller whose instance has ended must return ErrNoActiveInstance instead
+// of silently mutating an orphaned instance. Covers both fences:
+//  1. Post-finalize, pre-delete: lookup succeeds (instance still mapped) but
+//     Instance.Ended() is true, so the withLiveInstance Ended() gate refuses
+//     the mutation. This is the real race window — a goroutine that captured r
+//     via lookup before EndInstance ran is fenced here. Simulated by calling
+//     Finalize directly, without going through EndInstance.
+//  2. Post-delete: EndInstance removed the instance from the map, so lookup
+//     itself misses. (Easy case.)
+//
+// The value/no-value mutators are 2ab-specific; asserting the gate fences them
+// alongside Commit / Phase1Bundle covers the distinctive twoab surface.
+func TestController_PostEndInstance_RejectsMutations(t *testing.T) {
+	ctrl := newTestController(t, 1)
+	const slot = phase0.Slot(0)
+	r, err := ctrl.StartNewInstance(slot)
+	require.NoError(t, err)
+
+	// Bare-Height stubs suffice: the Ended() gate (path 1) and the lookup miss
+	// (path 2) both fire before any message-body validation.
+	commit := &twoabcore.Commit{Height: twoabcore.Height(slot)}
+	valueMsg := &twoabcore.ValueMsg{Height: twoabcore.Height(slot)}
+	noValueMsg := &twoabcore.NoValueMsg{Height: twoabcore.Height(slot)}
+	bundle := &twoabcore.Phase1Bundle{Height: twoabcore.Height(slot)}
+
+	// Path 1: simulate the race window — finalize while keeping the instance
+	// mapped. Mutators must hit the Ended() gate (not the lookup-miss path).
+	r.instanceMu.Lock()
+	r.instance.Finalize()
+	r.instanceMu.Unlock()
+	require.ErrorIs(t, ctrl.ProcessCommit(commit), ErrNoActiveInstance,
+		"post-Finalize ProcessCommit must hit the Ended() gate")
+	require.ErrorIs(t, ctrl.ProcessValueMsg(valueMsg), ErrNoActiveInstance,
+		"post-Finalize ProcessValueMsg must hit the Ended() gate")
+	require.ErrorIs(t, ctrl.ProcessNoValueMsg(noValueMsg), ErrNoActiveInstance,
+		"post-Finalize ProcessNoValueMsg must hit the Ended() gate")
+	require.ErrorIs(t, ctrl.ObservePhase1Bundle(bundle, 0), ErrNoActiveInstance,
+		"post-Finalize ObservePhase1Bundle must hit the Ended() gate")
+
+	// Path 2: full EndInstance (delete from map). Lookup itself fails now.
+	ctrl.EndInstance(slot)
+	require.ErrorIs(t, ctrl.ProcessCommit(commit), ErrNoActiveInstance)
+	require.ErrorIs(t, ctrl.ObservePhase1Bundle(bundle, 0), ErrNoActiveInstance)
+}
