@@ -19,7 +19,7 @@ func NewLocalTestnet(ctx context.Context, n int, factory NetworkFactory) ([]netw
 	}
 
 	for i, k := range keys {
-		node, err := factory(ctx, uint64(i), k)
+		node, err := factory(ctx, uint64(i), k) //nolint: gosec // G115: i is a bounded range index (0 ≤ i < len(keys)), conversion can't overflow
 		if err != nil {
 			// Close nodes already created so a factory failure (which makes
 			// CreateAndStartLocalNet retry) doesn't leak them.
