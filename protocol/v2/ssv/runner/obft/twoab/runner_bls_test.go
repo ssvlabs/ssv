@@ -42,14 +42,19 @@ type blsNode struct {
 	mu        sync.Mutex
 	submitted []*twoabcore.Output
 	runErr    error // written by this node's RunProposerSlot goroutine; read after wg.Wait()
-	// capturedRI holds the *RunningInstance pointer captured during the slot
-	// by the safety-bridge's per-node capture goroutine. Survives
-	// RunProposerSlot's deferred EndInstance — the controller's instances-map
-	// entry is deleted, but the Instance object itself remains reachable via
-	// this pointer (and LastResolveLayerAttempts is preserved across
-	// Finalize). Used by the safety-bridge's post-slot diagnostic dump and
-	// reconstructOutcome.
-	capturedRI *RunningInstance
+	// capturedTrace / capturedCascadeErrs hold the instance's final resolve
+	// trace + cascade errors, snapshot deterministically at teardown by the
+	// Controller.onInstanceEnd hook the safety bridge wires in buildBLSCluster.
+	// This replaces a former 100µs polling capture goroutine that could miss
+	// instances whose RunProposerSlot completed between ticks — a miss that
+	// misclassified fast local-deciders as cert-gossip deciders in
+	// reconstructOutcome. Written once from the RunProposerSlot goroutine (the
+	// deferred EndInstance → hook), so the write happens-before the
+	// post-wg.Wait() read by the diagnostic dump + reconstructOutcome. Nil when
+	// no instance ran for the slot (RunProposerSlot returned before
+	// StartNewInstance) or the instance resolved no layer.
+	capturedTrace       []twoabcore.LayerAttempt
+	capturedCascadeErrs []error
 	// phase2aFireAt is the slot-relative time of this op's first
 	// non-Phase1Bundle Broadcast call — a proxy for the Phase-2a fire
 	// instant. The diagnostic dump compares this against per-emission
@@ -171,6 +176,25 @@ func buildBLSCluster(t *testing.T, n int, overrides *ConfigOverrides) *blsCluste
 		})
 		require.NoError(t, err)
 		node.ctrl = ctrl
+
+		// Deterministic trace capture: snapshot the instance's final resolve
+		// trace + cascade errors at EndInstance (teardown), under r.instanceMu.
+		// Fires exactly once per slot from the RunProposerSlot goroutine (the
+		// deferred EndInstance), so the write happens-before the post-wg.Wait()
+		// read in reconstructOutcome / dumpClusterDiagnostic. Replaces the old
+		// polling capture goroutine (see blsNode.capturedTrace docstring).
+		// LayerAttempt is an all-scalar value struct, so a slice copy is a deep
+		// copy; CascadeErrors already returns a fresh slice.
+		ctrl.onInstanceEnd = func(_ phase0.Slot, ri *RunningInstance) {
+			ri.instanceMu.Lock()
+			trace := append([]twoabcore.LayerAttempt(nil), ri.instance.LastResolveLayerAttempts()...)
+			cascade := ri.instance.CascadeErrors()
+			ri.instanceMu.Unlock()
+			node.mu.Lock()
+			node.capturedTrace = trace
+			node.capturedCascadeErrs = cascade
+			node.mu.Unlock()
+		}
 
 		hooks := &LifecycleHooks{
 			FetchCandidate: func(_ context.Context, slot phase0.Slot, layer int) ([]byte, error) {

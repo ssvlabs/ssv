@@ -65,6 +65,17 @@ type Controller struct {
 	// slotbuffers.go.
 	pending *pendingBuffer
 	ended   *endedRing
+
+	// onInstanceEnd, if non-nil, is invoked by EndInstance after the instance
+	// has been sealed (Finalize) and detached from the map, with the now-final
+	// RunningInstance. Test-only observation seam — nil in production, so it
+	// carries zero overhead. The race-safety bridge sets it to deterministically
+	// snapshot each instance's final resolve trace + cascade errors at teardown,
+	// replacing a former 100µs polling capture goroutine that could miss
+	// instances whose RunProposerSlot completed between ticks (a miss that
+	// misclassified fast local-deciders as cert-gossip deciders — see the
+	// bridge's reconstructOutcome).
+	onInstanceEnd func(slot phase0.Slot, r *RunningInstance)
 }
 
 // ErrNoActiveInstance is returned by Controller.lookup when no instance exists
@@ -245,7 +256,8 @@ func (c *Controller) OperatorID() spectypes.OperatorID {
 }
 
 // EndInstance seals the running instance (Finalize sets the ended flag), then
-// removes it from the controller's tracking map. Idempotent.
+// removes it from the controller's tracking map. Idempotent. Finally fires the
+// onInstanceEnd observation hook (if set) with the detached instance.
 //
 // Race-fence: a goroutine that captured the instance via lookup() but had not
 // yet acquired r.instanceMu can still race past EndInstance. Finalize sets the
@@ -254,9 +266,9 @@ func (c *Controller) OperatorID() spectypes.OperatorID {
 // set, so no state mutation runs after Finalize.
 func (c *Controller) EndInstance(slot phase0.Slot) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	r, ok := c.instances[slot]
 	if !ok {
+		c.mu.Unlock()
 		return
 	}
 	r.instanceMu.Lock()
@@ -268,6 +280,20 @@ func (c *Controller) EndInstance(slot phase0.Slot) {
 	delete(c.instances, slot)
 	c.pending.forget(slot)
 	c.ended.mark(slot)
+	hook := c.onInstanceEnd
+	c.mu.Unlock()
+
+	// Fire the observation hook AFTER releasing c.mu so it may re-lock
+	// r.instanceMu to snapshot now-final state without holding the controller
+	// lock (lookup→instanceMu is the only lock order in this type, so a hook
+	// taking instanceMu under c.mu wouldn't deadlock either — firing it outside
+	// just keeps the teardown lock-hold minimal). r is detached from the map so
+	// no other caller can reach it, but the pointer stays valid for the read;
+	// Finalize has set the ended flag, so any still-draining mutator is now a
+	// no-op and the hook reads a consistent final trace. Nil in production.
+	if hook != nil {
+		hook(slot, r)
+	}
 }
 
 // ActiveSlots returns the slots with currently-running instances, sorted.

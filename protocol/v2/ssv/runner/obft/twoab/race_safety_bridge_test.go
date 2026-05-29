@@ -262,32 +262,18 @@ func recordCommitWire(agg *ct.OfflineAggregator, emitter spectypes.OperatorID, c
 	}
 }
 
-// extractInstanceTrace pulls Instance.LastResolveLayerAttempts via the
-// *RunningInstance pointer captured by runScenarioWithSafetyCheck's
-// per-node capture goroutine. The captured pointer survives EndInstance
-// (the Controller deletes its instances-map entry, but the RunningInstance
-// and its Instance live on, and LastResolveLayerAttempts is preserved
-// across Finalize — see TestLastResolveLayerAttempts_PreservedAcrossEndedInstance).
+// extractInstanceTrace returns the instance's final resolve trace, snapshot
+// deterministically at teardown by the Controller.onInstanceEnd hook wired in
+// buildBLSCluster (see blsNode.capturedTrace). Read after wg.Wait(), so the
+// node.mu lock only guards against the data race the race detector would
+// otherwise flag — the value is already final.
 //
-// Holds RunningInstance.instanceMu so the read is serialized against any
-// in-progress Resolve goroutine — defensive under -race even after wg.Wait().
-// Returns nil if the capture goroutine never observed a live instance for
-// this slot (e.g., RunProposerSlot returned before StartNewInstance completed).
-//
-// Mirror of OBFT base's extractInstanceTrace.
+// Returns nil if no instance ran for the slot (RunProposerSlot returned before
+// StartNewInstance) or the instance resolved no layer.
 func extractInstanceTrace(node *blsNode) []twoabcore.LayerAttempt {
 	node.mu.Lock()
-	ri := node.capturedRI
-	node.mu.Unlock()
-	if ri == nil {
-		return nil
-	}
-	ri.instanceMu.Lock()
-	defer ri.instanceMu.Unlock()
-	if ri.instance == nil {
-		return nil
-	}
-	return ri.instance.LastResolveLayerAttempts()
+	defer node.mu.Unlock()
+	return node.capturedTrace
 }
 
 // formatBroadcastCounts renders a per-op `broadcastCounts[op]` map as a
@@ -313,8 +299,9 @@ func formatBroadcastCounts(counts map[wire.MessageKind]int) string {
 	return strings.Join(parts, " ")
 }
 
-// extractInstanceCascadeErrors pulls Instance.CascadeErrors() via the same
-// captured-pointer path as extractInstanceTrace. CascadeErrors is the
+// extractInstanceCascadeErrors returns the instance's CascadeErrors, snapshot
+// alongside the resolve trace by the same Controller.onInstanceEnd hook (see
+// blsNode.capturedCascadeErrs / extractInstanceTrace). CascadeErrors is the
 // accumulator of silent failures from afterStateDelta's cascade
 // (MaybeBuildAndBroadcastUpgrade / MaybeBuildAndBroadcastCommit). Typically
 // empty; non-empty in a failing scenario indicates a signer/EKM hiccup
@@ -323,20 +310,11 @@ func formatBroadcastCounts(counts map[wire.MessageKind]int) string {
 // session to find. Surfacing it in the diagnostic dump lets a future
 // "missing emission" investigation start from the right hypothesis.
 //
-// Returns nil if the capture goroutine never observed a live Instance.
+// Returns nil if no instance ran for the slot.
 func extractInstanceCascadeErrors(node *blsNode) []error {
 	node.mu.Lock()
-	ri := node.capturedRI
-	node.mu.Unlock()
-	if ri == nil {
-		return nil
-	}
-	ri.instanceMu.Lock()
-	defer ri.instanceMu.Unlock()
-	if ri.instance == nil {
-		return nil
-	}
-	return ri.instance.CascadeErrors()
+	defer node.mu.Unlock()
+	return node.capturedCascadeErrs
 }
 
 // reconstructOutcome translates the captured wire trace + per-Instance
@@ -353,12 +331,19 @@ func extractInstanceCascadeErrors(node *blsNode) []error {
 //     consensustest/twoab/events.go's recorders (no
 //     recordPhase1BundleToAggregator function exists there for the
 //     same reason).
-//   - Per-op: read submittedOutput() and LastResolveLayerAttempts().
-//   - Distinguish cert-gossip-decide (oo.Round = -1) from local-decide
-//     by checking the trace — if local Resolve never reached a Decided
-//     layer but the op still submitted, it was a cert-driven submission
+//   - Per-op: the submitted Output's Layer is the authoritative
+//     local-vs-cert signal — a local σ-quorum decode submits
+//     Output{Layer: k>=0}, the cert fast-path submits Output{Layer: -1}
 //     (matches the DES adapter's Layer=-1 convention; see
-//     consensustest/twoab/events.go evtCertArrival).
+//     consensustest/twoab/events.go evtCertArrival). oo.Round is taken
+//     straight from out.Layer; the resolve trace (snapshot
+//     deterministically at teardown — see extractInstanceTrace) is
+//     attached as ResolveLayerAttempts purely as enrichment for D1's
+//     per-op walk-consistency check. We deliberately do NOT reconcile
+//     Round against the trace here: D1 already asserts their consistency
+//     (a local-decide with no σ-reached trace entry, or one whose σ
+//     layer disagrees with Round, is a violation), so silently coercing
+//     a mismatch would mask exactly the kind of bug D1 exists to catch.
 //
 // Byz is intentionally zero-valued: production has no byz-pattern
 // injection, so every op is treated as honest by the per-op invariant
@@ -391,18 +376,6 @@ func reconstructOutcome(nodes []*blsNode, captured []capturedEmission) ct.Outcom
 		}
 		if trace := extractInstanceTrace(node); len(trace) > 0 {
 			oo.ResolveLayerAttempts = convertLayerAttempts(trace)
-			// If local Resolve never produced a Decided layer but the op
-			// still submitted, the submit came via the cert-gossip path.
-			// Mirror the DES adapter's Round=-1 convention so D1's
-			// case-(a) cert-gossip branch + clusterLocalDecidedOn fires
-			// correctly.
-			if oo.Decided && !traceHasDecided(trace) {
-				oo.Round = -1
-			}
-		} else if oo.Decided {
-			// No trace at all but submitted = cert-gossip-decide before
-			// any local Resolve ran. Same Round=-1 convention.
-			oo.Round = -1
 		}
 		perOp[ct.OperatorID(node.op)] = oo
 	}
@@ -415,19 +388,6 @@ func reconstructOutcome(nodes []*blsNode, captured []capturedEmission) ct.Outcom
 		OfflineAgg:   agg.AttemptAll(),
 		Byz:          ct.ByzPattern{},
 	}
-}
-
-// traceHasDecided reports whether any LayerAttempt in the resolve trace
-// reached the Decided state. Used by reconstructOutcome to distinguish
-// local-decide (trace has a Decided layer) from cert-gossip-decide
-// (submit happened but no local decision).
-func traceHasDecided(trace []twoabcore.LayerAttempt) bool {
-	for _, la := range trace {
-		if la.Decided {
-			return true
-		}
-	}
-	return false
 }
 
 func convertLayerAttempts(in []twoabcore.LayerAttempt) []ct.LayerAttempt {
@@ -680,42 +640,12 @@ func runScenarioWithSafetyCheck(t *testing.T, cell matrixCell, cfg scenarioConfi
 	ctx, cancel := sleepAwareTimeoutCtx(context.Background(), cfg.timeout)
 	defer cancel()
 
-	// Capture goroutines: poll each node's Controller for the slot's
-	// RunningInstance and stash the pointer on n.capturedRI. The pointer
-	// survives RunProposerSlot's deferred EndInstance (which only deletes
-	// the controller's instances-map entry — the Instance object itself
-	// remains reachable via the captured pointer, and the resolve trace is
-	// preserved across Finalize). Without this capture, extractInstanceTrace
-	// always returns nil post-slot because EndInstance has cleared the map
-	// by the time wg.Wait() returns, which would (a) blank the diagnostic
-	// dump on failures and (b) feed empty ResolveLayerAttempts into the
-	// safety report via reconstructOutcome.
-	captureCtx, captureCancel := context.WithCancel(context.Background())
-	defer captureCancel()
-	var captureWg sync.WaitGroup
-	for _, n := range cl.nodes {
-		n := n
-		captureWg.Add(1)
-		go func() {
-			defer captureWg.Done()
-			ticker := time.NewTicker(100 * time.Microsecond)
-			defer ticker.Stop()
-			for {
-				select {
-				case <-captureCtx.Done():
-					return
-				case <-ticker.C:
-					if ri, ok := n.ctrl.GetInstance(slot); ok && ri != nil {
-						n.mu.Lock()
-						n.capturedRI = ri
-						n.mu.Unlock()
-						return
-					}
-				}
-			}
-		}()
-	}
-
+	// Per-op resolve trace + cascade errors are captured deterministically at
+	// instance teardown via the Controller.onInstanceEnd hook wired in
+	// buildBLSCluster — no polling, no race. Each node runs its slot to
+	// completion on its own goroutine; the deferred EndInstance fires the hook
+	// (writing n.capturedTrace / n.capturedCascadeErrs) before that goroutine
+	// returns, so the snapshot is published happens-before the wg.Wait() below.
 	var wg sync.WaitGroup
 	for _, n := range cl.nodes {
 		n := n
@@ -726,8 +656,6 @@ func runScenarioWithSafetyCheck(t *testing.T, cell matrixCell, cfg scenarioConfi
 		}()
 	}
 	wg.Wait()
-	captureCancel()
-	captureWg.Wait()
 
 	// Drain the bus BEFORE the dump (vs the post-function defer): ensures
 	// every delivery goroutine's deliveryHook has fired so deliveriesSnapshot
@@ -763,6 +691,40 @@ func runScenarioWithSafetyCheck(t *testing.T, cell matrixCell, cfg scenarioConfi
 		}
 		require.Truef(t, bytes.Equal(ref.Value, out.Value),
 			"op %d decided a different Value at %s n=%d K=%d", n.op, cfg.name, cell.n, cell.K)
+	}
+
+	// Deterministic-capture guard — gives the onInstanceEnd refactor teeth.
+	//
+	// Every local-decide submit (Output{Layer >= 0}) MUST have a captured
+	// resolve trace whose final entry is exactly that deciding layer, σ-reached
+	// and decided. This is deterministically guaranteed: the only Resolve caller
+	// is the synchronous ResolveAndSubmitOpportunistically on the RunProposerSlot
+	// goroutine, a deciding Resolve appends its σ-reached layer as the LAST trace
+	// entry then returns, and EndInstance's hook snapshots the trace on that same
+	// goroutine after it returns — no concurrent Resolve can reset it.
+	//
+	// The guard exists because D1 (HonestWalkConsistent) *gracefully skips* ops
+	// with an empty trace (safety.go's ResolveLayerAttempts default). So a future
+	// capture regression that silently reintroduced empty traces — exactly the
+	// pre-refactor polling-miss bug — would make D1 pass vacuously for fast local
+	// deciders. This assertion fails loudly instead, keeping the capture honest.
+	//
+	// Cert-gossip submits (Layer == -1) are exempt: a peer certificate can arrive
+	// before this op's first local Resolve, so an empty/non-deciding trace is
+	// legitimate there.
+	for _, n := range cl.nodes {
+		out := n.submittedOutput()
+		if out == nil || out.Layer < 0 {
+			continue
+		}
+		trace := extractInstanceTrace(n)
+		require.NotEmptyf(t, trace,
+			"op %d submitted local Output{Layer:%d} but captured no resolve trace (deterministic-capture regression?) at %s n=%d K=%d",
+			n.op, out.Layer, cfg.name, cell.n, cell.K)
+		last := trace[len(trace)-1]
+		require.Truef(t, last.Decided && last.SigmaReached && last.Layer == out.Layer,
+			"op %d local Output{Layer:%d} but final trace entry is L_%d decided=%v σ-reached=%v at %s n=%d K=%d",
+			n.op, out.Layer, last.Layer, last.Decided, last.SigmaReached, cfg.name, cell.n, cell.K)
 	}
 
 	outcome := reconstructOutcome(cl.nodes, recordingBus.snapshot())
@@ -863,7 +825,7 @@ func dumpClusterDiagnostic(t *testing.T, nodes []*blsNode, slot phase0.Slot, cap
 			n.op, runErrStr, outStr, fireAtStr, formatBroadcastCounts(broadcastCounts[n.op]))
 		trace := extractInstanceTrace(n)
 		if trace == nil {
-			t.Logf("    resolveTrace: <none — capture goroutine never observed a live Instance, or LastResolveLayerAttempts returned nil>")
+			t.Logf("    resolveTrace: <none — no instance ran for this slot, or it resolved no layer>")
 		} else {
 			t.Logf("    resolveTrace (%d layers):", len(trace))
 			for _, la := range trace {

@@ -56,14 +56,19 @@ type runnerNode struct {
 	sched *Scheduler
 	hooks *runnerHooks
 
-	// capturedRI holds the *RunningInstance pointer captured during the slot
-	// by the safety-bridge's per-node capture goroutine. Survives the deferred
-	// EndInstance — the controller's instances-map entry is deleted, but the
-	// Instance object itself remains reachable via this pointer (and
-	// LastResolveLayerAttempts is preserved across Finalize). Used by the
-	// post-slot reconstruction path in reconstructOutcome.
-	captureMu  sync.Mutex
-	capturedRI *RunningInstance
+	// capturedTrace holds the instance's final resolve trace, snapshot
+	// deterministically at teardown by the Controller.onInstanceEnd hook the
+	// safety bridge wires in buildCluster. This replaces a former 100µs polling
+	// capture goroutine that could miss instances whose RunProposerSlot
+	// completed between ticks — a miss that misclassified fast local-deciders as
+	// cert-gossip deciders in reconstructOutcome. Written once from the
+	// RunProposerSlot goroutine (the deferred EndInstance → hook), so the write
+	// happens-before the post-wg.Wait() read by reconstructOutcome and the
+	// deterministic-capture guard. Nil when no instance ran for the slot
+	// (RunProposerSlot returned before StartNewInstance) or the instance
+	// resolved no layer.
+	captureMu     sync.Mutex
+	capturedTrace []obftcore.LayerAttempt
 }
 
 func (n *runnerNode) submittedOutput() *obftcore.Output {
@@ -449,7 +454,25 @@ func buildCluster(t *testing.T, n int, overrides *ConfigOverrides) []*runnerNode
 		s, err := NewScheduler(ctrl, hooks.LifecycleHooks())
 		require.NoError(t, err)
 
-		nodes = append(nodes, &runnerNode{op: op, ctrl: ctrl, sched: s, hooks: hooks})
+		node := &runnerNode{op: op, ctrl: ctrl, sched: s, hooks: hooks}
+
+		// Deterministic trace capture: snapshot the instance's final resolve
+		// trace at EndInstance (teardown), under r.instanceMu. Fires exactly
+		// once per slot from the RunProposerSlot goroutine (the deferred
+		// EndInstance), so the write happens-before the post-wg.Wait() read in
+		// reconstructOutcome and the deterministic-capture guard. Replaces the
+		// old polling capture goroutine (see runnerNode.capturedTrace docstring).
+		// LayerAttempt is an all-scalar value struct, so a slice copy is deep.
+		ctrl.onInstanceEnd = func(_ phase0.Slot, ri *RunningInstance) {
+			ri.instanceMu.Lock()
+			trace := append([]obftcore.LayerAttempt(nil), ri.instance.LastResolveLayerAttempts()...)
+			ri.instanceMu.Unlock()
+			node.captureMu.Lock()
+			node.capturedTrace = trace
+			node.captureMu.Unlock()
+		}
+
+		nodes = append(nodes, node)
 	}
 	return nodes
 }
