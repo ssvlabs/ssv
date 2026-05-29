@@ -395,7 +395,7 @@ func (c *Controller) StateDeltaChan(slot phase0.Slot) <-chan struct{} {
 	defer c.mu.Unlock()
 	r, ok := c.instances[slot]
 	if !ok {
-		return closedChan[struct{}]()
+		return closedStructChan
 	}
 	return r.stateDelta
 }
@@ -419,7 +419,7 @@ func (c *Controller) BuildOwnCommit(slot phase0.Slot) (*obftcore.Commit, error) 
 func (c *Controller) L0ReadyCh(slot phase0.Slot) <-chan struct{} {
 	return liveInstanceChan(c, slot, func(r *RunningInstance) <-chan struct{} {
 		return r.instance.L0ReadyCh()
-	})
+	}, closedStructChan)
 }
 
 // WantsHostValidationCh returns the slot's instance host-validation
@@ -435,7 +435,7 @@ func (c *Controller) L0ReadyCh(slot phase0.Slot) <-chan struct{} {
 func (c *Controller) WantsHostValidationCh(slot phase0.Slot) <-chan obftcore.ValidationRequest {
 	return liveInstanceChan(c, slot, func(r *RunningInstance) <-chan obftcore.ValidationRequest {
 		return r.instance.WantsHostValidationCh()
-	})
+	}, closedValidationReqChan)
 }
 
 // Resolve runs the Phase-3 reconstruction walk and returns the decided
@@ -532,28 +532,43 @@ func withInstanceForRead[T any](c *Controller, slot phase0.Slot, fn func(r *Runn
 }
 
 // liveInstanceChan returns the channel fn produces for slot's live instance,
-// or a pre-closed channel if the slot has no active (non-ended) instance — so
-// callers select/range without blocking on a stale slot.
-func liveInstanceChan[T any](c *Controller, slot phase0.Slot, fn func(r *RunningInstance) <-chan T) <-chan T {
+// or `closedFallback` (a caller-supplied pre-closed channel) if the slot has
+// no active (non-ended) instance — so callers select/range without blocking
+// on a stale slot. The fallback is passed in (rather than built here via
+// closedChan[T]) so callers reuse a package-level pre-closed channel instead
+// of allocating one per dead-instance lookup (audit F14).
+func liveInstanceChan[T any](c *Controller, slot phase0.Slot, fn func(r *RunningInstance) <-chan T, closedFallback <-chan T) <-chan T {
 	r, err := c.lookup(slot)
 	if err != nil {
-		return closedChan[T]()
+		return closedFallback
 	}
 	r.instanceMu.Lock()
 	defer r.instanceMu.Unlock()
 	if r.instance.Ended() {
-		return closedChan[T]()
+		return closedFallback
 	}
 	return fn(r)
 }
 
 // closedChan returns an already-closed channel of T (a receive returns the
-// zero value immediately).
+// zero value immediately). Used only to build the package-level pre-closed
+// channels below — not per-call (audit F14).
 func closedChan[T any]() <-chan T {
 	ch := make(chan T)
 	close(ch)
 	return ch
 }
+
+// Pre-built closed channels for the dead-instance accessor fallback paths.
+// Building them once (rather than make+close per call in closedChan) avoids
+// a channel allocation every time an accessor hits a slot whose instance has
+// gone away (teardown / late peer messages). Receiving on a closed channel
+// is idempotent, so a single shared instance per concrete T is safe to hand
+// out repeatedly. Audit F14.
+var (
+	closedStructChan        = closedChan[struct{}]()
+	closedValidationReqChan = closedChan[obftcore.ValidationRequest]()
+)
 
 func computeLeaderLayers(cfg *obftcore.Config, operatorID spectypes.OperatorID) []int {
 	var layers []int

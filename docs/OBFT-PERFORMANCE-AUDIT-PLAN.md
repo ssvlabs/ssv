@@ -239,6 +239,8 @@ Tier 3 wins are mostly GC pressure rather than wall-clock; valuable as a bundle 
 
 **Risks:** none — well-known idiom.
 
+**Verdict (2026-05-29): DROPPED — obsolete.** go.mod is `go 1.26`; Go 1.23+ GCs unreferenced `time.After` timers before they fire, so the leak this describes doesn't exist on this runtime. See Status.
+
 ### F14: `closedChan[T]()` allocates a new channel per dead-slot accessor
 
 **Claim:** `L0ReadyCh`, `WantsHostValidationCh`, `StateDeltaChan` return `closedChan[T]()` whenever a peer routes to a slot whose Instance went away. Each call does `make(chan T) + close`.
@@ -251,6 +253,8 @@ Tier 3 wins are mostly GC pressure rather than wall-clock; valuable as a bundle 
 **Fix sketch:** package-level pre-built closed channels per concrete `T` used. The generic `closedChan[T]` prevents single-instance reuse — replace with named vars (`closedStructChan`, `closedValidationRequestChan`).
 
 **Risks:** none — channel-of-closed is idempotent on send/receive.
+
+**Verdict (2026-05-29): DONE.** Both controllers use package-level `closedStructChan` / `closedValidationReqChan`; `liveInstanceChan` takes a `closedFallback` param. See Status.
 
 ### F15: Channel accessors re-acquire global mutex per call
 
@@ -265,6 +269,8 @@ Tier 3 wins are mostly GC pressure rather than wall-clock; valuable as a bundle 
 
 **Risks:** instance lifecycle — must ensure the channels are valid for the runner's hold time on the pointer.
 
+**Verdict (2026-05-29): DROPPED — no benefit.** The three accessors are each called once per slot and the channel is stashed → ~3 mutex acquires/slot. The fix is a controller API change with lifecycle risk for ≈0 gain. See Status.
+
 ### F16: `Forget(slot)` does full O(n) map scans
 
 **Claim:** [runner/obft/ratelimit.go:200](protocol/v2/ssv/runner/obft/ratelimit.go:200) and [twoab/ratelimit.go:217](protocol/v2/ssv/runner/obft/twoab/ratelimit.go:217) scan every map (3 in base, 5 in twoab) to evict a single slot's entries. At `DefaultMaxAge`-many slots × cluster-size × MaxDistinctPerOpSlot, the maps hold thousands of entries.
@@ -277,6 +283,8 @@ Tier 3 wins are mostly GC pressure rather than wall-clock; valuable as a bundle 
 **Fix sketch:** add `bySlot map[phase0.Slot][]bundleKey` populated on `Allow*`, consulted in `Forget`. Adds one insertion per admitted message; Forget becomes O(entries-for-this-slot).
 
 **Risks:** index must stay in sync.
+
+**Verdict (2026-05-29): DEFERRED.** `Forget` runs once/slot on a non-correctness-critical eager-release path (TTL already bounds memory). The `bySlot` index needs syncing across `Allow*` + `Forget` + `evictExpiredLocked` (3 sites — the sketch missed the TTL-reap one) → better bundled with the Tier-2 index-on-ingest cluster than treated as zero-risk hygiene. See Status.
 
 ### F17: Scratch maps allocated per `Resolve` walk
 
@@ -291,6 +299,8 @@ Tier 3 wins are mostly GC pressure rather than wall-clock; valuable as a bundle 
 
 **Risks:** thread safety — verify Resolve isn't called concurrently across goroutines for the same Instance.
 
+**Verdict (2026-05-29): DEFERRED.** ~30-50 small allocs/slot is modest GC pressure on the consensus-critical Resolve path (both base + twoab have the pattern); scratch reuse needs careful escape analysis. Profiling-gated, not zero-risk. See Status.
+
 ### F18: `KyberSigner.AggregatePartials` uses `fmt.Sprintf` for IDs
 
 **Claim:** [blsbackend/signer.go:131](protocol/v2/obft/blsbackend/signer.go:131) (the herumi-backed `BLSSigner.AggregatePartials`, not Kyber) calls `fmt.Sprintf("%d", opID)` then `blsID.SetDecString(...)` for every partial. Both allocate. Aggregation fires K times per slot.
@@ -303,6 +313,8 @@ Tier 3 wins are mostly GC pressure rather than wall-clock; valuable as a bundle 
 **Fix sketch:** `binary.LittleEndian.PutUint64` into an 8-byte stack buffer + `blsID.SetLittleEndian` (or `SetInt64` if exposed).
 
 **Risks:** none.
+
+**Verdict (2026-05-29): DONE.** `BLSSigner.AggregatePartials` now uses `SetLittleEndian(uint64(opID))`; equivalence with the old `SetDecString` path + reconstruction round-trip pinned by `aggregate_id_test.go`. (The title's "KyberSigner" is a misnomer — the call is in the herumi `BLSSigner`, as the Claim notes.) See Status.
 
 ---
 
@@ -1328,6 +1340,14 @@ After these answers, the plan stands as written with three refinements:
   - **F4** — `Signer.VerifyPartialBatch` extension + herumi `MultiVerify` in BLSSigner (kyber + stub fall back to sequential); σ-walk in `base/phase3.go` and `twoab/phase3.go` collects L_k>0 cache-miss tuples into one batch with a per-tuple sequential fallback to preserve Rule-4 attribution (commits `0e9481412` interface + 4 backends, `6b32dfef1` base wiring, `ad3b0eb42` twoab mirror). The herumi `bls.MultiVerify` + Go `-race`/`checkptr` interaction is closed via a `skipIfRace` helper on the BLSSigner-batch tests (production builds are unaffected; the existing B4 fixture was retroactively gated too). See [OBFT-F4-IMPLEMENTATION-PLAN.md](OBFT-F4-IMPLEMENTATION-PLAN.md) for the design. Upstream fix tracked as [herumi/bls-eth-go-binary#70](https://github.com/herumi/bls-eth-go-binary/issues/70); cleanup TODO in `protocol/v2/obft/blsbackend/multiverify_batch_test.go`.
   - **F2** — signing-root cache (`map[[32]byte][]byte` keyed by sha256(V)) + double-checked `sync.RWMutex`, mirror of F3's pattern. Initially landed as a per-package `proposerSigner.srCache` in both `runner/obft` and `runner/obft/twoab`; subsequently extracted to a single shared `runner/obft/proposersig.Cache` (the two adapters were byte-identical mirrors and the cache mechanism changes for the same reason → over-DRY litmus passed), each injecting only its package-local candidate decoders + error prefix. B2 re-bench at 17 KB block shows the cache-hit path at **~5.6 µs / 0 allocs** vs the cold path at ~101 µs / 336 allocs — ~18× faster and full alloc elimination. Per-slot saving on the runner-side path (where the same signer persists across slot calls): **~7-8 ms/slot wall-clock + ~26K allocs/slot avoided**, close to the original audit estimate. The validation-layer side — where the `Verifier` (and thus its proposer signer + this cache) was originally rebuilt per inbound envelope, defeating F2 — is now covered by the **Validation-layer Verifier caching** item below, which persists the Verifier per validator so F2's win extends to the validation hot path too.
   - **Validation-layer Verifier caching** (separate from the F-list; surfaced by F2's lifetime survey) — **landed.** The per-envelope `NewVerifierFromShare` construction at [obft_validation.go](message/validation/obft_validation.go) / [twoab_validation.go](message/validation/twoab_validation.go) rebuilt a cold Verifier on every inbound message, discarding the F2 + F3 sub-caches. Now memoised per validator on `messageValidator` via a `ttlcache` (TTL = `maxStoredSlots`, mirroring `states`), keyed by validator pubkey with a **content fingerprint** (sorted committee `(Signer, SharePubKey)` ‖ `ValidatorPubKey`) re-checked every lookup so a committee/reshare change forces a rebuild — no stale-Verifier safety hole. See [OBFT-VALIDATION-VERIFIER-CACHE-PLAN.md](OBFT-VALIDATION-VERIFIER-CACHE-PLAN.md). B6: cold→cached per-envelope allocs **105 → 4** (96% cut); BLS pairing unchanged. Unlocks F2 (signing-root) + F3 (kyber pubkey-parse) on the validation hot path, paid on every gossiped envelope.
+  - **F14 + F18** (Tier-3) — **landed.** After investigating the whole Tier-3 "hygiene bundle" against current code, only these two held up as genuine, safe wins:
+    - **F18** — `BLSSigner.AggregatePartials` now sets the Shamir-x `bls.ID` via `SetLittleEndian(uint64(opID))` instead of `SetDecString(fmt.Sprintf("%d", opID))`, dropping a string alloc + decimal parse per partial (~28/slot). Equivalence + reconstruction round-trip pinned by `aggregate_id_test.go`.
+    - **F14** — both controllers (base + twoab) return package-level pre-closed channels from the dead-instance accessor paths instead of `make`+`close` per call. Threaded a `closedFallback` param through `liveInstanceChan`.
 - Remaining:
   - **Tier-2 work**: F7 (twoab `aggregatePeerLayerEntries` triple-scan → ingest-time index), F8 (`findVByRoot` per-witness scan → `vByRoot` index), F9 (`ValueRoot` memoization), F10 (host-validity verdict cache).
-  - **Tier-3 cleanup cluster** (F11-F18 + F6) — independent, lower-risk, lower-impact. Bundle as area-by-area cleanup commits when convenient.
+  - **Tier-3 — investigated + triaged (2026-05-29):**
+    - **F13 — DROPPED (obsolete).** go.mod is `go 1.26`; Go 1.23+ garbage-collects unreferenced `time.After` timers before they fire, so the "timer leaks until it fires on ctx-cancel" premise no longer holds. The fix would address a non-bug.
+    - **F15 — DROPPED (no benefit).** The three channel accessors (`StateDeltaChan` / `L0ReadyCh` / `WantsHostValidationCh`) are each called once per slot and the channel is stashed (`scheduler.go`, `runner.go`) → ~3 mutex acquires/slot, negligible. The proposed fix is a controller API change with lifecycle risk for ≈0 gain.
+    - **F16 — DEFERRED.** `Forget(slot)`'s O(all-entries) scan is real but runs once/slot on a *non-correctness-critical* eager-release path (TTL already bounds memory). A `bySlot` index would need syncing across `Allow*` + `Forget` + `evictExpiredLocked` (3 sites) → index-sync surface better bundled with the Tier-2 index-on-ingest cluster (F7/F8) than treated as zero-risk hygiene.
+    - **F17 — DEFERRED.** Per-`Resolve` scratch allocations (~30-50 small/slot) are modest GC pressure on the **consensus-critical** Resolve path; reuse needs careful escape analysis in both base + twoab. Profiling-gated, not zero-risk.
+  - **F6, F11, F12** (remaining Tier-3) — not yet addressed; F6 is negligible (~0.2 ms/slot), F11 carries a caller-contract change, F12 is tiny.

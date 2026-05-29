@@ -16,6 +16,7 @@
 package blsbackend
 
 import (
+	"encoding/binary"
 	"fmt"
 	"sync"
 
@@ -125,10 +126,15 @@ func (s *BLSSigner) AggregatePartials(partials map[obft.OperatorID]obft.Signatur
 		sigVec = append(sigVec, sig)
 
 		var blsID bls.ID
-		// herumi's bls.ID.SetDecString takes a decimal string of the
-		// integer x-coordinate. SSV's existing share infrastructure uses
-		// operator IDs directly as the x-coordinates, so we mirror that.
-		if err := blsID.SetDecString(fmt.Sprintf("%d", opID)); err != nil {
+		// SSV's share infrastructure uses operator IDs directly as the Shamir
+		// x-coordinates. SetLittleEndian sets the bls.ID (an Fr element) from
+		// the little-endian bytes of opID — equivalent to the prior
+		// SetDecString(fmt.Sprintf("%d", opID)) round-trip for these small
+		// integer IDs, but without the per-call string allocation + decimal
+		// parse (audit F18). Verified equivalent in TestBLSSigner_AggregateID_*.
+		var idBuf [8]byte
+		binary.LittleEndian.PutUint64(idBuf[:], uint64(opID))
+		if err := blsID.SetLittleEndian(idBuf[:]); err != nil {
 			return nil, fmt.Errorf("blsbackend: set bls.ID for op %d: %w", opID, err)
 		}
 		idVec = append(idVec, blsID)

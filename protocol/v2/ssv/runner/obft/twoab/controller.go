@@ -482,7 +482,7 @@ func (c *Controller) StateDeltaChan(slot phase0.Slot) <-chan struct{} {
 	defer c.mu.Unlock()
 	r, ok := c.instances[slot]
 	if !ok {
-		return closedChan[struct{}]()
+		return closedStructChan
 	}
 	return r.stateDelta
 }
@@ -493,7 +493,7 @@ func (c *Controller) StateDeltaChan(slot phase0.Slot) <-chan struct{} {
 func (c *Controller) L0ReadyCh(slot phase0.Slot) <-chan struct{} {
 	return liveInstanceChan(c, slot, func(r *RunningInstance) <-chan struct{} {
 		return r.instance.L0ReadyCh()
-	})
+	}, closedStructChan)
 }
 
 // WantsHostValidationCh returns the slot's instance host-validation request
@@ -502,7 +502,7 @@ func (c *Controller) L0ReadyCh(slot phase0.Slot) <-chan struct{} {
 func (c *Controller) WantsHostValidationCh(slot phase0.Slot) <-chan twoabcore.ValidationRequest {
 	return liveInstanceChan(c, slot, func(r *RunningInstance) <-chan twoabcore.ValidationRequest {
 		return r.instance.WantsHostValidationCh()
-	})
+	}, closedValidationReqChan)
 }
 
 // Resolve runs the Phase-3 reconstruction walk (observer-mode; called
@@ -591,25 +591,35 @@ func withInstanceForRead[T any](c *Controller, slot phase0.Slot, fn func(r *Runn
 
 // liveInstanceChan returns the channel fn produces for slot's live instance,
 // or a pre-closed channel if the slot has no active (non-ended) instance.
-func liveInstanceChan[T any](c *Controller, slot phase0.Slot, fn func(r *RunningInstance) <-chan T) <-chan T {
+func liveInstanceChan[T any](c *Controller, slot phase0.Slot, fn func(r *RunningInstance) <-chan T, closedFallback <-chan T) <-chan T {
 	r, err := c.lookup(slot)
 	if err != nil {
-		return closedChan[T]()
+		return closedFallback
 	}
 	r.instanceMu.Lock()
 	defer r.instanceMu.Unlock()
 	if r.instance.Ended() {
-		return closedChan[T]()
+		return closedFallback
 	}
 	return fn(r)
 }
 
-// closedChan returns an already-closed channel of T.
+// closedChan returns an already-closed channel of T. Used only to build the
+// package-level pre-closed channels below — not per-call (audit F14).
 func closedChan[T any]() <-chan T {
 	ch := make(chan T)
 	close(ch)
 	return ch
 }
+
+// Pre-built closed channels for the dead-instance accessor fallback paths —
+// built once instead of make+close per call. Mirror of the bare-OBFT
+// controller's vars (audit F14); receiving on a closed channel is idempotent
+// so a single shared instance per concrete T is safe to reuse.
+var (
+	closedStructChan        = closedChan[struct{}]()
+	closedValidationReqChan = closedChan[twoabcore.ValidationRequest]()
+)
 
 func computeLeaderLayers(cfg *twoabcore.Config, operatorID spectypes.OperatorID) []int {
 	var layers []int
