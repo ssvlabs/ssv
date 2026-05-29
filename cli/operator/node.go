@@ -22,7 +22,6 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	cockroachdb "github.com/cockroachdb/pebble"
-	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 
@@ -42,7 +41,6 @@ import (
 	hvalidators "github.com/ssvlabs/ssv/api/handlers/validators"
 	apiserver "github.com/ssvlabs/ssv/api/server"
 	"github.com/ssvlabs/ssv/beacon/goclient"
-	global_config "github.com/ssvlabs/ssv/cli/config"
 	"github.com/ssvlabs/ssv/doppelganger"
 	"github.com/ssvlabs/ssv/eth/eventhandler"
 	"github.com/ssvlabs/ssv/eth/eventparser"
@@ -86,49 +84,6 @@ import (
 	"github.com/ssvlabs/ssv/utils/commons"
 )
 
-type KeyStore struct {
-	PrivateKeyFile string `yaml:"PrivateKeyFile" env:"PRIVATE_KEY_FILE" env-description:"Path to operator private key file"`
-	PasswordFile   string `yaml:"PasswordFile" env:"PASSWORD_FILE" env-description:"Path to password file for private key decryption"`
-}
-
-type SSVSignerConfig struct {
-	Endpoint             string        `yaml:"Endpoint" env:"ENDPOINT" env-description:"Endpoint of ssv-signer. It must be a correct URL"`
-	RequestTimeout       time.Duration `yaml:"RequestTimeout" env:"REQUEST_TIMEOUT" env-description:"Request timeout for ssv-signer" env-default:"10s"`
-	KeystoreFile         string        `yaml:"KeystoreFile" env:"KEYSTORE_FILE" env-description:"Path to ssv-signer client keystore file"`
-	KeystorePasswordFile string        `yaml:"KeystorePasswordFile" env:"KEYSTORE_PASSWORD_FILE" env-description:"Path to file containing the password for client keystore file"`
-	ServerCertFile       string        `yaml:"ServerCertFile" env:"SERVER_CERT_FILE" env-description:"Path to trusted server certificate file for ssv-signer"`
-}
-
-type config struct {
-	global_config.Global         `yaml:"global"`
-	DBOptions                    basedb.Options          `yaml:"db"`
-	SSVOptions                   operator.Options        `yaml:"ssv"`
-	ExporterOptions              exporter.Options        `yaml:"exporter"`
-	ExecutionClient              executionclient.Options `yaml:"eth1"` // TODO: execution_client in yaml
-	ConsensusClient              goclient.Options        `yaml:"eth2"` // TODO: consensus_client in yaml
-	P2pNetworkConfig             p2pv1.Config            `yaml:"p2p"`
-	KeyStore                     KeyStore                `yaml:"KeyStore"`
-	SSVSigner                    SSVSignerConfig         `yaml:"SSVSigner" env-prefix:"SSV_SIGNER_"`
-	Graffiti                     string                  `yaml:"Graffiti" env:"GRAFFITI" env-description:"Custom graffiti for block proposals" env-default:"ssv.network"`
-	ProposerDelay                time.Duration           `yaml:"ProposerDelay" env:"PROPOSER_DELAY" env-description:"Duration to wait out before requesting Ethereum block to propose if this Operator is proposer-duty Leader (eg. 300ms). See https://github.com/ssvlabs/ssv/blob/main/docs/MEV_CONSIDERATIONS.md#getting-started-with-mev-configuration for detailed instructions on how to use it."`
-	AllowDangerousProposerDelay  bool                    `yaml:"AllowDangerousProposerDelay" env:"ALLOW_DANGEROUS_PROPOSER_DELAY" env-description:"Allow ProposerDelay values higher than 1s (dangerous, may cause missed block proposals)"`
-	OperatorPrivateKey           string                  `yaml:"OperatorPrivateKey" env:"OPERATOR_KEY" env-description:"Operator private key for contract event decryption"`
-	MetricsAPIPort               int                     `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"Port for metrics API server"`
-	EnableTraces                 bool                    `yaml:"EnableTraces" env:"ENABLE_TRACES" env-description:"Enable Open Telemetry traces"`
-	EnableProfile                bool                    `yaml:"EnableProfile" env:"ENABLE_PROFILE" env-description:"Enable Go profiling tools"`
-	NetworkPrivateKey            string                  `yaml:"NetworkPrivateKey" env:"NETWORK_PRIVATE_KEY" env-description:"Private key for P2P network identity"`
-	WsAPIPort                    int                     `yaml:"WebSocketAPIPort" env:"WS_API_PORT" env-description:"Port for WebSocket API server"`
-	WithPing                     bool                    `yaml:"WithPing" env:"WITH_PING" env-description:"Enable WebSocket ping messages"`
-	SSVAPIAddress                string                  `yaml:"SSVAPIAddress" env:"SSV_API_ADDRESS" env-description:"Listen address for SSV API server. Leave empty to listen on all interfaces; use 127.0.0.1 to keep it local-only"`
-	SSVAPIPort                   int                     `yaml:"SSVAPIPort" env:"SSV_API_PORT" env-description:"Port for SSV API server"`
-	LocalEventsPath              string                  `yaml:"LocalEventsPath" env:"EVENTS_PATH" env-description:"Path to local events file"`
-	EnableDoppelgangerProtection bool                    `yaml:"EnableDoppelgangerProtection" env:"ENABLE_DOPPELGANGER_PROTECTION" env-description:"Enable doppelganger protection for validators"`
-}
-
-var cfg config
-
-var globalArgs global_config.Args
-
 // StartNodeCmd is the command to start SSV node
 var StartNodeCmd = &cobra.Command{
 	Use:   "start-node",
@@ -136,15 +91,8 @@ var StartNodeCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		commons.SetBuildData(cmd.Parent().Short, cmd.Parent().Version)
 
-		if globalArgs.ConfigPath != "" {
-			if err := cleanenv.ReadConfig(globalArgs.ConfigPath, &cfg); err != nil {
-				log.Fatal("could not read config needed for logger initialization: %w", err)
-			}
-		}
-		if globalArgs.ShareConfigPath != "" {
-			if err := cleanenv.ReadConfig(globalArgs.ShareConfigPath, &cfg); err != nil {
-				log.Fatal("could not read share config needed for logger initialization: %w", err)
-			}
+		if err := cfg.load(); err != nil {
+			log.Fatal(err)
 		}
 
 		observabilityOptions := []observability.Option{
@@ -217,16 +165,11 @@ var StartNodeCmd = &cobra.Command{
 			Beacon: consensusClient.BeaconConfig(),
 		}
 
-		usingSSVSigner, usingKeystore, usingPrivKey := false, false, false
-		if cfg.ExporterOptions.Enabled {
-			warnIfExporterSigningConfigProvided(logger)
-		} else {
-			usingSSVSigner, usingKeystore, usingPrivKey = assertSigningConfig(logger)
+		res, err := cfg.resolveAndValidate(logger)
+		if err != nil {
+			logger.Fatal("invalid configuration", zap.Error(err))
 		}
-
-		if err := validateProposerDelayConfig(logger); err != nil {
-			logger.Fatal("invalid ProposerDelay configuration", zap.Error(err))
-		}
+		usingSSVSigner, usingKeystore, usingPrivKey := res.usingSSVSigner, res.usingKeystore, res.usingPrivKey
 
 		var operatorPrivKey keys.OperatorPrivateKey
 		var operatorPrivKeyPEM string
@@ -785,77 +728,6 @@ func privateKeyFromKeystore(privKeyFile, passwordFile string) (keys.OperatorPriv
 	return operatorPrivKey, operatorPrivKeyBytes, nil
 }
 
-func assertSigningConfig(logger *zap.Logger) (usingSSVSigner, usingKeystore, usingPrivKey bool) {
-	if cfg.SSVSigner.Endpoint != "" {
-		usingSSVSigner = true
-	}
-	if cfg.KeyStore.PrivateKeyFile != "" || cfg.KeyStore.PasswordFile != "" {
-		if cfg.KeyStore.PrivateKeyFile == "" || cfg.KeyStore.PasswordFile == "" {
-			logger.Fatal("both keystore and password files must be provided if using keystore")
-		}
-		usingKeystore = true
-	}
-	if cfg.OperatorPrivateKey != "" {
-		usingPrivKey = true
-	}
-
-	logger = logger.
-		With(zap.String("ssv_signer_endpoint", cfg.SSVSigner.Endpoint),
-			zap.String("private_key_file", cfg.KeyStore.PrivateKeyFile),
-			zap.String("password_file", cfg.KeyStore.PasswordFile),
-			zap.Int("operator_private_key_len", len(cfg.OperatorPrivateKey)), // not exposing the private key
-		)
-
-	if usingSSVSigner && (usingKeystore || usingPrivKey) {
-		logger.Fatal("cannot enable both remote signing (SSVSigner.Endpoint) and local signing (PrivateKeyFile/OperatorPrivateKey)")
-	} else if usingKeystore && usingPrivKey {
-		logger.Fatal("cannot enable both OperatorPrivateKey and PrivateKeyFile")
-	}
-
-	return usingSSVSigner, usingKeystore, usingPrivKey
-}
-
-func warnIfExporterSigningConfigProvided(logger *zap.Logger) {
-	if cfg.SSVSigner.Endpoint == "" &&
-		cfg.SSVSigner.KeystoreFile == "" &&
-		cfg.SSVSigner.KeystorePasswordFile == "" &&
-		cfg.SSVSigner.ServerCertFile == "" &&
-		cfg.KeyStore.PrivateKeyFile == "" &&
-		cfg.KeyStore.PasswordFile == "" &&
-		cfg.OperatorPrivateKey == "" {
-		return
-	}
-
-	logger.Warn(
-		"exporter mode ignores operator signing configuration",
-		zap.String("ssv_signer_endpoint", cfg.SSVSigner.Endpoint),
-		zap.String("ssv_signer_keystore_file", cfg.SSVSigner.KeystoreFile),
-		zap.String("ssv_signer_keystore_password_file", cfg.SSVSigner.KeystorePasswordFile),
-		zap.String("ssv_signer_server_cert_file", cfg.SSVSigner.ServerCertFile),
-		zap.String("operator_private_key_file", cfg.KeyStore.PrivateKeyFile),
-		zap.String("operator_private_key_password_file", cfg.KeyStore.PasswordFile),
-		zap.Int("operator_private_key_len", len(cfg.OperatorPrivateKey)), // not exposing the private key
-	)
-}
-
-func validateProposerDelayConfig(logger *zap.Logger) error {
-	const maxSafeProposerDelay = 1000 * time.Millisecond
-
-	if cfg.ProposerDelay > maxSafeProposerDelay {
-		if !cfg.AllowDangerousProposerDelay {
-			return fmt.Errorf("ProposerDelay value %v exceeds maximum safe delay of %v. "+
-				"This may cause missed block proposals. "+
-				"If you understand the risks and want to proceed, set AllowDangerousProposerDelay to true or use the ALLOW_DANGEROUS_PROPOSER_DELAY environment variable",
-				cfg.ProposerDelay, maxSafeProposerDelay)
-		}
-		logger.Warn("Using dangerous ProposerDelay value that may cause missed block proposals",
-			zap.Duration("proposer_delay", cfg.ProposerDelay),
-			zap.Duration("max_safe_proposer_delay", maxSafeProposerDelay))
-	}
-
-	return nil
-}
-
 func validateConfig(
 	nodeStorage operatorstorage.Storage,
 	networkName string,
@@ -883,10 +755,6 @@ func validateConfig(
 	}
 
 	return nil
-}
-
-func init() {
-	global_config.ProcessArgs(&cfg, &globalArgs, StartNodeCmd)
 }
 
 func setupBadgerDB(
