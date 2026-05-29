@@ -899,33 +899,44 @@ func assertOutcome(t *testing.T, nodes []*blsNode, cfg scenarioConfig, cell matr
 			continue
 		}
 		missed++
-		require.Truef(t, errors.Is(n.runErr, context.Canceled) || errors.Is(n.runErr, context.DeadlineExceeded),
-			"op %d clean-miss expected a ctx error, got %v at %s n=%d K=%d", n.op, n.runErr, cfg.name, cell.n, cell.K)
-		trace := extractInstanceTrace(n)
-		require.NotEmptyf(t, trace,
-			"op %d clean-miss but empty resolve trace (a wedge, not a within-spec miss) at %s n=%d K=%d", n.op, cfg.name, cell.n, cell.K)
-		last := trace[len(trace)-1]
-		// A genuine quorum-short stop: didn't decide, σ-pool < qV, and either the
-		// deepest layer (exhaustion — no NR tag there) or NR-pool < qEnc (deadlock).
-		// The !NRReached term is deliberate, not redundant: it rejects the rare case
-		// where NR-quorum WAS reached but no decryption key was derived (phase3.go's
-		// NRReached=true, nextKey=nil deadlock) — a crypto fault, not a clean miss.
-		deepest := last.Layer == cell.K-1
-		require.Truef(t, !last.Decided && !last.SigmaReached && (deepest || !last.NRReached),
-			"op %d clean-miss trace not quorum-short: L_%d decided=%v σ-reached=%v NR-reached=%v at %s n=%d K=%d",
-			n.op, last.Layer, last.Decided, last.SigmaReached, last.NRReached, cfg.name, cell.n, cell.K)
-		if cfg.outcome.missLayer >= 0 {
-			require.Equalf(t, cfg.outcome.missLayer, last.Layer,
-				"op %d clean-miss at L_%d, expected L_%d at %s n=%d K=%d", n.op, last.Layer, cfg.outcome.missLayer, cfg.name, cell.n, cell.K)
-		} else {
-			require.GreaterOrEqualf(t, last.Layer, 1,
-				"op %d clean-miss at L_%d, expected a fall-through layer (>= 1) at %s n=%d K=%d", n.op, last.Layer, cfg.name, cell.n, cell.K)
-		}
+		requireCleanMiss(t, n, cell, cfg.outcome.missLayer, cfg.name)
 	}
 	require.NotZerof(t, missed,
 		"%s n=%d K=%d: expected at least one clean miss but every op decided", cfg.name, cell.n, cell.K)
 	t.Logf("%s n=%d K=%d: %d of %d ops cleanly missed (quorum-short at a fall-through layer; within-spec, safety verified)",
 		cfg.name, cell.n, cell.K, missed, len(nodes))
+}
+
+// requireCleanMiss asserts a non-deciding node ended in a within-spec quorum-short
+// fall-through miss, not a runner wedge: a ctx error, a non-empty resolve trace,
+// and a last trace entry that didn't decide, is σ-short, and is either the deepest
+// layer (exhaustion — no NR tag there) or NR-short (deadlock). The !NRReached term
+// is deliberate, not redundant: it rejects the rare case where NR-quorum WAS
+// reached but no decryption key was derived (phase3.go's NRReached=true,
+// nextKey=nil deadlock) — a crypto fault, not a clean miss. wantLayer >= 0 pins the
+// stop layer; wantLayer < 0 accepts any fall-through layer (>= 1). `label` tags
+// failure messages with the calling scenario. Shared by the safety-bridge
+// tolerant / forced-miss policy (assertOutcome) and the real-BLS SilentL0Leader
+// fall-through tests (assertSilentFallThroughOutcome).
+func requireCleanMiss(t *testing.T, n *blsNode, cell matrixCell, wantLayer int, label string) {
+	t.Helper()
+	require.Truef(t, errors.Is(n.runErr, context.Canceled) || errors.Is(n.runErr, context.DeadlineExceeded),
+		"op %d clean-miss expected a ctx error, got %v at %s n=%d K=%d", n.op, n.runErr, label, cell.n, cell.K)
+	trace := extractInstanceTrace(n)
+	require.NotEmptyf(t, trace,
+		"op %d clean-miss but empty resolve trace (a wedge, not a within-spec miss) at %s n=%d K=%d", n.op, label, cell.n, cell.K)
+	last := trace[len(trace)-1]
+	deepest := last.Layer == cell.K-1
+	require.Truef(t, !last.Decided && !last.SigmaReached && (deepest || !last.NRReached),
+		"op %d clean-miss trace not quorum-short: L_%d decided=%v σ-reached=%v NR-reached=%v at %s n=%d K=%d",
+		n.op, last.Layer, last.Decided, last.SigmaReached, last.NRReached, label, cell.n, cell.K)
+	if wantLayer >= 0 {
+		require.Equalf(t, wantLayer, last.Layer,
+			"op %d clean-miss at L_%d, expected L_%d at %s n=%d K=%d", n.op, last.Layer, wantLayer, label, cell.n, cell.K)
+	} else {
+		require.GreaterOrEqualf(t, last.Layer, 1,
+			"op %d clean-miss at L_%d, expected a fall-through layer (>= 1) at %s n=%d K=%d", n.op, last.Layer, label, cell.n, cell.K)
+	}
 }
 
 // requireConverged asserts every op decided without error. Value agreement is

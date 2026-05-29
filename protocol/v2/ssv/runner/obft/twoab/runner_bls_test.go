@@ -126,6 +126,52 @@ func assertClusterSubmittedAtCanonicalOrCert(t *testing.T, nodes []*blsNode, can
 	return ref
 }
 
+// assertSilentFallThroughOutcome is the tolerant liveness verdict for the real-BLS
+// silent-L0-leader fall-through tests (the matrix cells + the single-cell smoke
+// test). The fall-through normally converges at L_1 — then it asserts the cross-op
+// submission invariant and verifies the reconstructed L_1 aggregate against the
+// master pubkey — but under -race it can lose the V_1-vs-Phase-2a-fire timing race
+// and land in a within-spec σ/NR split that misses cleanly (ErrNoQuorum), exactly
+// like the safety-bridge SilentL0Leader scenario. That miss is tolerated here:
+// nobody decided, so it is safe, and deterministic fall-through *convergence* is
+// covered separately, in virtual time, by the DES (TestCrash_L0Leader_MatrixCells).
+// On a tolerated miss, any lone decider (the outbound-silenced leader self-σ'ing a
+// local L_1 quorum while peers stay quorum-short) must still produce a
+// master-pubkey-valid L_1 reconstruction.
+//
+// Returns the cluster-wide decided Output on full convergence (so callers can
+// assert value specifics), or nil when the cluster cleanly missed.
+func assertSilentFallThroughOutcome(t *testing.T, cl *blsCluster, cell matrixCell) *twoabcore.Output {
+	t.Helper()
+	missed := 0
+	for _, n := range cl.nodes {
+		if n.submittedOutput() == nil {
+			missed++
+		}
+	}
+	if missed == 0 {
+		ref := assertClusterSubmittedAtCanonicalOrCert(t, cl.nodes, 1)
+		require.Truef(t, cl.verifier.VerifyAggregate(cl.masterPub, ref.Value, ref.Signature),
+			"reconstructed L_1 signature must verify against master pubkey at n=%d K=%d", cell.n, cell.K)
+		return ref
+	}
+	const label = "RealBLS_SilentL0Leader"
+	for _, n := range cl.nodes {
+		out := n.submittedOutput()
+		if out == nil {
+			requireCleanMiss(t, n, cell, -1, label)
+			continue
+		}
+		require.Truef(t, out.Layer == 1 || out.Layer == -1,
+			"op %d decided at unexpected layer %d (want 1 or -1 cert) at n=%d K=%d", n.op, out.Layer, cell.n, cell.K)
+		require.Truef(t, cl.verifier.VerifyAggregate(cl.masterPub, out.Value, out.Signature),
+			"op %d decider's L_1 reconstruction must verify against master pubkey at n=%d K=%d", n.op, cell.n, cell.K)
+	}
+	t.Logf("RealBLS_SilentL0Leader n=%d K=%d: %d of %d ops cleanly missed (within-spec σ/NR split; safety preserved, convergence covered by the DES)",
+		cell.n, cell.K, missed, len(cl.nodes))
+	return nil
+}
+
 // blsCluster bundles the real-BLS nodes with the cluster-wide verification
 // material (master pubkey + a verify-only signer) for end-state assertions.
 type blsCluster struct {
@@ -412,8 +458,10 @@ func TestRunProposerSlot_RealBLS_SilentL0Leader_NRFallThrough(t *testing.T) {
 	}
 	wg.Wait()
 
-	ref := assertClusterSubmittedAtCanonicalOrCert(t, cl.nodes, 1)
-	require.Equal(t, []byte("slot-7-layer-1-block"), []byte(ref.Value), "decided value is the L_1 leader's candidate")
-	require.Truef(t, cl.verifier.VerifyAggregate(cl.masterPub, ref.Value, ref.Signature),
-		"reconstructed L_1 signature must verify against the cluster master pubkey")
+	// Tolerant: the silent fall-through can cleanly miss under -race (within-spec,
+	// same as the safety-bridge scenario); deterministic convergence is covered by
+	// the DES. Assert the decided value only when the cluster fully converged.
+	if ref := assertSilentFallThroughOutcome(t, cl, matrixCell{n: 4, K: 4}); ref != nil {
+		require.Equal(t, []byte("slot-7-layer-1-block"), []byte(ref.Value), "decided value is the L_1 leader's candidate")
+	}
 }
