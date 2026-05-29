@@ -88,8 +88,9 @@ func TestGetBeaconBlock_MultiBN_SafePath_EarlyExitOnBlinded(t *testing.T) {
 	require.NoError(t, err)
 
 	// Safe path should early-exit on BN1's blinded response (~10ms) and NOT wait for
-	// BN2 (~500ms). A generous 250ms ceiling tolerates HTTP / goroutine overhead.
-	assert.Less(t, elapsed, 250*time.Millisecond,
+	// BN2 (~500ms). The 350ms ceiling sits well below BN2's response time while
+	// tolerating HTTP / goroutine / loaded-CI overhead.
+	assert.Less(t, elapsed, 350*time.Millisecond,
 		"safe path should early-exit on first blinded; took %v", elapsed)
 }
 
@@ -188,16 +189,25 @@ func TestGetBeaconBlock_MultiBN_SoftDeadlineFires_FallsBackToFirstValid(t *testi
 	pastSlot := phase0.Slot(1)
 
 	start := time.Now()
-	_, _, err := client.GetBeaconBlock(context.Background(), pastSlot, []byte("test"), getTestRANDAO())
+	versionedProposal, _, err := client.GetBeaconBlock(context.Background(), pastSlot, []byte("test"), getTestRANDAO())
 	elapsed := time.Since(start)
 	require.NoError(t, err, "fallback to first-valid should return successfully")
+	require.NotNil(t, versionedProposal)
 
-	// Should return after BN1 responds (~200ms), not wait for BN2 (~500ms). This
-	// confirms waitForFirstValidProposal is invoked (returning the first valid
-	// response, bounded by the parent context's slot deadline).
+	// Primary assertion: BN1's fee recipient confirms we returned with the first
+	// valid response (BN1 at ~200ms), not the slower BN2 (~500ms). This is robust
+	// against timing jitter on busy CI runners.
+	actualFeeRecipient, err := versionedProposal.FeeRecipient()
+	require.NoError(t, err)
+	assert.Equal(t, feeRecipientAllOnes(), actualFeeRecipient,
+		"waitForFirstValidProposal should return BN1's response (first valid), not BN2's")
+
+	// Sanity check on elapsed: must be at least BN1's response time, and the upper
+	// bound just confirms we didn't end up waiting for BN2. Margins kept generous
+	// for CI scheduling overhead.
 	assert.GreaterOrEqual(t, elapsed, 150*time.Millisecond,
 		"should have waited for first BN response (~200ms); took %v", elapsed)
-	assert.Less(t, elapsed, 400*time.Millisecond,
+	assert.Less(t, elapsed, 450*time.Millisecond,
 		"should NOT have waited for the slowest BN (~500ms); took %v", elapsed)
 }
 

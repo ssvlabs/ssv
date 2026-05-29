@@ -211,6 +211,9 @@ var StartNodeCmd = &cobra.Command{
 			if err := goclient.ValidateProposalSoftDeadline(cfg.ConsensusClient.ProposalSoftDeadline); err != nil {
 				logger.Fatal("invalid ProposalSoftDeadline configuration", zap.Error(err))
 			}
+			// Strict `>` (not `>=`) is intentional: DefaultProposalSoftDeadline equals
+			// SafeMaxProposalSoftDeadline, so the safe-path default sits exactly at the
+			// threshold and should not trip the warning.
 			if cfg.ConsensusClient.ProposalSoftDeadline > goclient.SafeMaxProposalSoftDeadline {
 				logger.Warn(
 					"ProposalSoftDeadline exceeds the safe-max threshold: "+

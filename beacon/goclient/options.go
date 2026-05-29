@@ -23,7 +23,8 @@ type BlockFetchPath int
 
 const (
 	// BlockFetchPathSafe is the default. Multi-BN parallel fetch with early-exit on
-	// first blinded response; fallback at slot-relative ProposalSoftDeadline (default 1000ms).
+	// first blinded response; fallback at slot-relative ProposalSoftDeadline
+	// (defaults to DefaultProposalSoftDeadline when the operator hasn't set it).
 	BlockFetchPathSafe BlockFetchPath = iota
 	// BlockFetchPathLegacy preserves the original ProposerDelay / ProposalSoftTimeout
 	// behavior bit-for-bit; selected when an operator has set either of those legacy knobs.
@@ -109,8 +110,9 @@ type Options struct {
 
 	// ProposalSoftDeadline is the slot-relative deadline (in ms-into-slot) for the
 	// multi-BN proposal-collection window used by the safe and MEV-optimized paths.
-	//   - Unset (zero) -> safe path, default deadline 1000ms.
-	//   - Set explicitly -> MEV-optimized path, value must be in [1000ms, 3600ms].
+	//   - Unset (zero) -> safe path, defaults to DefaultProposalSoftDeadline.
+	//   - Set explicitly -> MEV-optimized path, value must be in
+	//     [MinProposalSoftDeadline, MaxProposalSoftDeadline].
 	// Cannot be combined with ProposerDelay or ProposalSoftTimeout (which select the
 	// legacy path).
 	ProposalSoftDeadline time.Duration `yaml:"ProposalSoftDeadline" env:"WITH_PROPOSAL_SOFT_DEADLINE" env-description:"Slot-relative deadline (ms into slot) for the multi-BN proposal-collection window. Leave unset for the default safe path; set explicitly to opt into the MEV-optimized path (value must be in [1000ms, 3600ms]). Cannot be combined with ProposerDelay or ProposalSoftTimeout. See https://github.com/ssvlabs/ssv/blob/main/docs/MEV_CONSIDERATIONS.md for details."`
@@ -128,13 +130,13 @@ type Options struct {
 //
 // Returns an error when:
 //   - any of the MEV-related duration knobs is negative; or
-//   - the config combines path-0 (legacy) knobs with the path-2 (MEV-optimized)
-//     ProposalSoftDeadline — operators must pick one.
+//   - the config combines legacy knobs (ProposerDelay / ProposalSoftTimeout) with
+//     the MEV-optimized ProposalSoftDeadline — operators must pick one.
 func DetermineBlockFetchPath(base Options, proposerDelay time.Duration) (BlockFetchPath, error) {
 	// Negative values are nonsensical for any of these and would silently be
 	// treated as "unset" by the `> 0` checks below — reject them upfront so the
 	// operator gets a clear startup error instead of a confusing late-firing
-	// soft-deadline or skipped path-0 selection.
+	// soft-deadline or skipped legacy-path selection.
 	if proposerDelay < 0 {
 		return 0, fmt.Errorf("ProposerDelay must be non-negative, got %v", proposerDelay)
 	}
@@ -210,14 +212,24 @@ func NewOptions(base Options, proposerDelay time.Duration, path BlockFetchPath) 
 		}
 
 	case BlockFetchPathSafe:
-		// Safe path: slot-relative deadline, default 1000ms.
+		// Safe path: slot-relative deadline, default DefaultProposalSoftDeadline.
+		//
+		// The == 0 check is defensive: in production, DetermineBlockFetchPath only
+		// routes ProposalSoftDeadline == 0 to the safe path (a non-zero value selects
+		// MEV-optimized), so this branch is always taken when path == safe. The check
+		// guards tests that construct Options directly and bypass DetermineBlockFetchPath.
 		if options.ProposalSoftDeadline == 0 {
 			options.ProposalSoftDeadline = DefaultProposalSoftDeadline
 		}
 
 	case BlockFetchPathMEVOptimized:
-		// MEV-optimized path: ProposalSoftDeadline must be set by the operator and
-		// validated upstream (ValidateProposalSoftDeadline). No defaults to apply.
+		// MEV-optimized path: ProposalSoftDeadline is set by the operator. No defaults
+		// to apply.
+		//
+		// Note: range validation via ValidateProposalSoftDeadline is the *caller's*
+		// responsibility — cli/operator/node.go runs it for production startup, but
+		// NewOptions does not enforce it. Tests that bypass the CLI should call
+		// ValidateProposalSoftDeadline themselves if they want the bounds check.
 	}
 
 	// Note: There is no hard timeout for proposals. The parent context from the

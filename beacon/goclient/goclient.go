@@ -143,8 +143,10 @@ type GoClient struct {
 	// and MEV-optimized paths. See docs/MEV_CONSIDERATIONS.md.
 	proposalSoftDeadline time.Duration
 
-	// blockFetchPath selects which getProposalParallel* variant GetBeaconBlock
-	// dispatches to in the multi-BN case.
+	// blockFetchPath selects the multi-BN block-fetch strategy GetBeaconBlock
+	// dispatches to: getProposalParallelLegacy for BlockFetchPathLegacy, or
+	// getProposalParallelByDeadline (with earlyExitOnBlinded set per path) for
+	// BlockFetchPathSafe and BlockFetchPathMEVOptimized.
 	blockFetchPath BlockFetchPath
 
 	// blockRootToSlotCache is used for attestation data scoring. When multiple Consensus clients are used,

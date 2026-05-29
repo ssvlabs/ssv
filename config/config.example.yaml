@@ -30,9 +30,10 @@ eth2:
   # 3600ms]; values above 1450ms emit a startup warning (round-2 QBFT fallback may not
   # fit within the slot for typical clusters). Cannot be combined with ProposerDelay or
   # ProposalSoftTimeout.
-  # Leave unset to use the default safe path (early-exit on first MEV block, deadline 1000ms).
-  # Note: setting ProposalSoftDeadline = 1000ms is *not* a no-op — it opts into the
-  # MEV-optimized path at the same numeric deadline the safe path uses by default.
+  # Leave unset to use the default safe path (early-exit on first MEV block, deadline 1450ms).
+  # Note: setting ProposalSoftDeadline = 1450ms is *not* a no-op — it opts into the
+  # MEV-optimized path at the same numeric deadline the safe path uses by default
+  # (the difference is behavioral: no early-exit on first blinded, best-bid wins).
   # ProposalSoftDeadline: 1100ms
 
   # ProposalSoftTimeout (legacy): collection-period timeout for multi-BN proposal scoring
