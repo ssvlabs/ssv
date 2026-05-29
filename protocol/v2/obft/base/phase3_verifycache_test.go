@@ -8,10 +8,10 @@ import (
 
 // Tests for the per-Instance verify-cache used to skip redundant
 // signer.VerifyPartial calls in Resolve (audit finding F1). The safety
-// invariant in short form is "cache populate is gated EXCLUSIVELY by signer.VerifyPartial
-// just returning true on that exact (op, layer, value, partial-bytes)
-// tuple, and value-binding means a cache hit can never let a partial
-// contribute to a V it doesn't sign".
+// invariant in short form is "cache populate is gated EXCLUSIVELY by
+// signer.VerifyPartial just returning true on that exact (op, layer,
+// value, partial-bytes) tuple, and value-binding means a cache hit can
+// never let a partial contribute to a V it doesn't sign".
 //
 // These tests directly exercise the cache helpers + each populate site
 // (phase1 retention, phase2 peerSigmaAtL0Verdict, phase2 harvestWitness).

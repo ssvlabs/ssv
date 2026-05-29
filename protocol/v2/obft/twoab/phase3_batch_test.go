@@ -7,10 +7,10 @@ import (
 )
 
 // Tests for the σ-walk batch-verify in twoab (audit finding F4). Mirrors
-// obft/base/phase3_batch_test.go. The safety contract in short form is "batch returning true is at
-// the same security level as N successful VerifyPartial calls, and batch
-// returning false MUST fall back to per-tuple verify to preserve Rule-4
-// attribution per (op, layer)".
+// obft/base/phase3_batch_test.go. The safety contract in short form is
+// "batch returning true is at the same security level as N successful
+// VerifyPartial calls, and batch returning false MUST fall back to
+// per-tuple verify to preserve Rule-4 attribution per (op, layer)".
 //
 // twoab's σ-walk batches across three peer-message stores (peerValueMsg,
 // peerNoValueMsg, peerCommit-NRDirect) per aggregatePeerLayerEntries; the

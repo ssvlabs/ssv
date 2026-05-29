@@ -8,10 +8,10 @@ import (
 
 // Tests for the per-Instance verify-cache (audit finding F1). Mirrors
 // obft/base/phase3_verifycache_test.go. The safety invariant in short form
-// is "cache populate is gated
-// EXCLUSIVELY by signer.VerifyPartial just returning true on that exact
-// (op, layer, value, partial-bytes) tuple, and value-binding means a cache
-// hit can never let a partial contribute to a V it doesn't sign".
+// is "cache populate is gated EXCLUSIVELY by signer.VerifyPartial just
+// returning true on that exact (op, layer, value, partial-bytes) tuple,
+// and value-binding means a cache hit can never let a partial contribute
+// to a V it doesn't sign".
 //
 // twoab's only Resolve-side verify is at phase3.go's L_k>0 σ-walk —
 // L_0 σ partials are pre-verified at observation (verifyAndPoolL0Partial)
