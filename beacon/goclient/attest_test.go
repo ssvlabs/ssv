@@ -344,7 +344,26 @@ func TestGoClient_GetAttestationData_Weighted(t *testing.T) {
 		require.Nil(t, response)
 		require.Equal(t, DataVersionNil, dataVersion)
 		require.Error(t, err)
-		require.Equal(t, err.Error(), "no attestations received")
+		require.ErrorContains(t, err, "failed to get attestation data for slot 100")
+	})
+
+	t.Run("multiple beacon clients: returns aggregated error when all servers respond with error", func(t *testing.T) {
+		const numberOfBeaconServers = 3
+		var beaconServersURLs []string
+		for i := 0; i < numberOfBeaconServers; i++ {
+			server, _ := createBeaconServer(t, beaconServerResponseOptions{WithAttestationDataEndpointError: true})
+			beaconServersURLs = append(beaconServersURLs, server.URL)
+		}
+		client, err := createClient(ctx, strings.Join(beaconServersURLs, ";"), withWeightedAttestationData)
+		require.NoError(t, err)
+
+		response, dataVersion, err := client.GetAttestationData(t.Context(), phase0.Slot(100))
+
+		require.Nil(t, response)
+		require.Equal(t, DataVersionNil, dataVersion)
+		require.Error(t, err)
+		require.ErrorContains(t, err, "all 3 clients failed to get attestation data for slot 100")
+		require.ErrorContains(t, err, "encountered errors:")
 	})
 
 	t.Run("single beacon client: should not return error when Slot via Block Root Header returns error", func(t *testing.T) {
@@ -428,7 +447,7 @@ func TestGoClient_GetAttestationData_Weighted(t *testing.T) {
 		response, version, err := client.GetAttestationData(t.Context(), phase0.Slot(100))
 
 		require.Error(t, err)
-		require.Equal(t, err.Error(), "no attestations received")
+		require.ErrorContains(t, err, "failed to get attestation data for slot 100")
 		require.Nil(t, response)
 		require.Equal(t, DataVersionNil, version)
 		timeElapsed := time.Since(startTime)
