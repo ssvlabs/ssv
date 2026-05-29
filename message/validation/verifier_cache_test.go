@@ -139,9 +139,9 @@ func TestVerifierCache_OBFT_NilCacheFallback(t *testing.T) {
 // single Verifier across goroutines to be sound.
 //
 // The bundle carries a real V (so signingRootFor actually runs and hits the
-// shared srCache) with a placeholder σ_V; the verify is expected to FAIL
-// (garbage sig), so we don't assert its result — only that the concurrent
-// access is race-clean and never panics.
+// shared F2 signing-root cache, proposersig.Cache) with a placeholder σ_V;
+// the verify is expected to FAIL (garbage sig), so we don't assert its
+// result — only that the concurrent access is race-clean and never panics.
 func TestVerifierCache_OBFT_ConcurrentLookupsAndVerifies(t *testing.T) {
 	mv, _, share, _, clusterID := obftTestSetup(t)
 	withVerifierCaches(t, mv)
@@ -170,8 +170,8 @@ func TestVerifierCache_OBFT_ConcurrentLookupsAndVerifies(t *testing.T) {
 					return
 				}
 				// Exercise the shared Verifier's verify path concurrently —
-				// drives the F2 srCache + read-only PubKeyShares map. Result
-				// is ignored (placeholder sig); we only care about safety.
+				// drives the F2 signing-root cache + read-only PubKeyShares
+				// map. Result is ignored (placeholder sig); only safety matters.
 				_ = v.VerifyPhase1Bundle(bundle)
 			}
 		}()

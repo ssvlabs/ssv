@@ -16,7 +16,7 @@ Both validation entry points build a Verifier per envelope:
 Each `NewVerifierFromShare` ([runner/obft/verifier.go:29](protocol/v2/ssv/runner/obft/verifier.go:29), twoab mirror) builds:
 
 - A `PubKeyShares map[OperatorID][]byte` — copied from `share.Committee` (n entries, ~48 B each).
-- A V-side `proposerSigner` wrapping `blsbackend.New(nil)` — with a **fresh, empty F2 srCache**.
+- A V-side `proposerSigner` wrapping `blsbackend.New(nil)` — with a **fresh, empty F2 signing-root cache** (the shared `proposersig.Cache`).
 - A tag-side `blsbackend.NewKyberSigner(nil)` — with a **fresh, empty F3 pubCache**.
 - `ClusterPubKey` copy + (obft only) a `LeaderForLayer` closure over the committee.
 
@@ -110,7 +110,7 @@ func (mv *messageValidator) obftVerifierFor(share *ssvtypes.SSVShare) (*obftcore
 
 The validation pool calls `Validate` concurrently across goroutines. `jellydator/ttlcache` Get/Set are mutex-safe. The get→fingerprint-check→maybe-rebuild→set sequence is a benign read-modify-write: two goroutines that both miss will both build an equivalent Verifier and the last `Set` wins — wasteful but correct (identical Verifiers; the F2/F3 sub-caches inside each are independently valid). No extra locking needed; matches F2/F3's double-checked-but-racy-tolerant pattern.
 
-One subtlety: once a Verifier is shared from the cache, **multiple validation goroutines call its methods concurrently**. That is already required to be safe — the production path shares a single Verifier per envelope today only because each envelope gets its own, but the *runner* already shares one signer across goroutines (Q-Open-2 / F3's concurrency note). F2 made `proposerSigner.srCache` RWMutex-safe and F3 made `KyberSigner.pubCache` RWMutex-safe precisely for shared concurrent use, so the cached Verifier is concurrency-ready. This must be explicitly re-confirmed in review (it's the load-bearing reason this is safe to share).
+One subtlety: once a Verifier is shared from the cache, **multiple validation goroutines call its methods concurrently**. That is already required to be safe — the production path shares a single Verifier per envelope today only because each envelope gets its own, but the *runner* already shares one signer across goroutines (Q-Open-2 / F3's concurrency note). F2 made the proposer signing-root cache (`proposersig.Cache`) RWMutex-safe and F3 made `KyberSigner.pubCache` RWMutex-safe precisely for shared concurrent use, so the cached Verifier is concurrency-ready. This must be explicitly re-confirmed in review (it's the load-bearing reason this is safe to share).
 
 ## Alternatives considered
 
@@ -143,7 +143,7 @@ No change to `NewVerifierFromShare`, the `Verifier` types, or any protocol-layer
 | Risk | Mitigation |
 |---|---|
 | **Stale Verifier accepts wrong-committee sigs** (the core safety risk). | Content fingerprint re-derived from the live share every lookup; mismatch forces rebuild. Locally correct, independent of eventhandler behavior. Dedicated test: committee-change → rebuild. |
-| Cached Verifier shared across goroutines isn't concurrency-safe. | F2 (srCache) + F3 (pubCache) already RWMutex-guarded for shared use; `PubKeyShares`/`ClusterPubKey` are read-only after construction. Re-confirmed in review; `-race` test on concurrent lookups + verifies. |
+| Cached Verifier shared across goroutines isn't concurrency-safe. | F2 (signing-root cache, `proposersig.Cache`) + F3 (pubCache) already RWMutex-guarded for shared use; `PubKeyShares`/`ClusterPubKey` are read-only after construction. Re-confirmed in review; `-race` test on concurrent lookups + verifies. |
 | Unbounded memory over node lifetime. | `ttlcache` with `maxStoredSlots` TTL + background expiry, identical to the existing `states` cache. Bounded by active-validator count. |
 | Fingerprint collision admits a stale Verifier. | sha256 over the committee + cluster key — 2^128 collision resistance, standard cryptographic identifier (same argument as F1's cache key). |
 | Fingerprint omits a Verifier-relevant field (e.g. a future Option-B `NRPubKeyShares`). | The validation layer constructs with `ibePubKeyShares = nil` (Option A) at both call sites today, so NR shares are derived from the committee already covered by the fingerprint. If Option B is wired into validation later, the fingerprint MUST add the IBE shares — flagged in a code comment on `shareVerifierFingerprint`. |

@@ -48,9 +48,17 @@ type DecodeBlindedFunc func(version spec.DataVersion, blindedSSZ []byte) (*api.V
 // distinct V bytes and distinct keys. The static sha256(V) key is fork-safe.
 //
 // Concurrency: a Cache is shared between the runner Instance (called under
-// r.instanceMu) and the validation-layer Verifier path (per-envelope, on the
-// message-validation pool's goroutines). The RWMutex serialises map writes
-// while letting reads run concurrently.
+// r.instanceMu) and the validation-layer Verifier path (on the message-
+// validation pool's goroutines). The RWMutex serialises map writes while
+// letting reads run concurrently.
+//
+// Lifetime: the Cache has no eviction — it grows by one entry per distinct V
+// it observes. Memory is bounded by the owning signer's lifetime, and both
+// owners are bounded: the runner-side proposer signer is per validator-share
+// (a few V's per slot, GC'd when the runner retires), and the validation-layer
+// proposer signer lives inside a per-validator Verifier that the message-
+// validation layer TTL-evicts (see message/validation/verifier_cache.go). So
+// no in-Cache eviction is needed.
 type Cache struct {
 	beacon          *networkconfig.Beacon
 	decodeCandidate DecodeCandidateFunc
