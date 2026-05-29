@@ -8,8 +8,8 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/obft"
 )
 
-// Tests for the Config.SkipNRPartialReverify gate (audit finding F5). See
-// docs/OBFT-F1-F5-IMPLEMENTATION-PLAN.md for the safety contract.
+// Tests for the Config.SkipNRPartialReverify gate (audit finding F5). The
+// safety contract is documented on the SkipNRPartialReverify field.
 //
 // The flag exists because the validation layer
 // (message/validation/obft_validation.go) runs the runner's

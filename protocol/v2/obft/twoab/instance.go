@@ -297,8 +297,8 @@ type Instance struct {
 	// roots are load-bearing; partialRoot disambiguates byzantine
 	// equivocation, valueRoot blocks the cross-V leakage attack where a
 	// byzantine emits two entries with the same decrypted partial bytes but
-	// different claimed V's. See verifyCacheKey doc-comment and
-	// docs/OBFT-F1-F5-IMPLEMENTATION-PLAN.md for the full argument.
+	// different claimed V's. See the verifyCacheKey doc-comment for the full
+	// argument.
 	//
 	// Single-threaded by the controller's r.instanceMu (audit Q-Open-2), so
 	// the map needs no internal synchronisation.

@@ -13,7 +13,7 @@ import (
 )
 
 // Tests for F4 — Signer.VerifyPartialBatch on the three concrete backends
-// (BLSSigner / KyberSigner / StubSigner). See docs/OBFT-F4-IMPLEMENTATION-PLAN.md.
+// (BLSSigner / KyberSigner / StubSigner).
 //
 // The BLSSigner path goes through herumi's bls.MultiVerify, which stores
 // slice pointers as uintptr (eth.go:32-33) reconverted at eth.go:83 — a
@@ -46,15 +46,12 @@ import (
 //     TestBLSSigner_VerifyPartialBatch_* test below.
 //  5. Run `go test -race ./protocol/v2/obft/blsbackend/...` to confirm the
 //     tests pass under -race without the skip.
-//  6. Drop the §race-detector section from docs/OBFT-F4-IMPLEMENTATION-PLAN.md
-//     (or mark it resolved).
 func skipIfRace(t *testing.T) {
 	t.Helper()
 	if raceEnabled {
 		t.Skip("skipped under -race: herumi/bls.MultiVerify trips Go's checkptr " +
 			"due to uintptr storage of slice pointers in eth.go:32-33. " +
-			"Production builds run without checkptr and are unaffected. " +
-			"See docs/OBFT-F4-IMPLEMENTATION-PLAN.md §race-detector.")
+			"Production builds run without checkptr and are unaffected.")
 	}
 }
 
@@ -308,4 +305,3 @@ func TestStubSigner_VerifyPartialBatch_LengthMismatch(t *testing.T) {
 	require.False(t, verifier.VerifyPartialBatch(nil, nil, nil))
 	require.False(t, verifier.VerifyPartialBatch([][]byte{nil}, [][]byte{nil, nil}, []obft.Signature{nil}))
 }
-

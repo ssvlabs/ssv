@@ -10,8 +10,7 @@ import (
 )
 
 // Tests for the proposerSigner's signing-root cache (audit finding F2),
-// which delegates to the shared proposersig.Cache. See
-// docs/OBFT-PERFORMANCE-AUDIT-PLAN.md §F2 and the proposersig package.
+// which delegates to the shared proposersig.Cache.
 //
 // The cache amortises signingRootFor — the SSZ-unmarshal + tree-root +
 // domain compute step costing ~100 µs / ~336 allocs per call on a 17 KB

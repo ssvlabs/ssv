@@ -7,8 +7,7 @@ import (
 )
 
 // Tests for the Config.SkipNRPartialReverify gate (audit finding F5). Mirrors
-// obft/base/phase2_skipverify_test.go. See docs/OBFT-F1-F5-IMPLEMENTATION-PLAN.md
-// for the safety contract.
+// obft/base/phase2_skipverify_test.go, which documents the safety contract.
 //
 // twoab's F5 gate lives inside Instance.verifyNRTagPartial (instance.go), the
 // single chokepoint for all 5 NR-tag verify call sites (phase2a / phase2b).

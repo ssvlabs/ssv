@@ -548,7 +548,7 @@ func (i *Instance) RetainedCertificate() *Certificate {
 // code path in extractSigmaFromEntries). value and partial are the
 // post-decryption tuple the F1 cache key binds.
 //
-// Mirror of base.pendingVerify — see docs/OBFT-F4-IMPLEMENTATION-PLAN.md.
+// Mirror of base.pendingVerify.
 type pendingVerify struct {
 	op         OperatorID
 	pubShare   []byte

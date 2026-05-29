@@ -12,7 +12,6 @@ import (
 )
 
 // Tests for the KyberSigner per-signer pub-key parse cache (audit finding F3).
-// See docs/OBFT-PERFORMANCE-AUDIT-PLAN.md §F3.
 //
 // The cache amortises HerumiPubkeyToKyberG1Point — a ~100-300 µs G1
 // decompression + subgroup check — across cluster-lifetime-stable pub-shares.

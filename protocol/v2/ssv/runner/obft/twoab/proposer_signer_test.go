@@ -17,8 +17,7 @@ import (
 )
 
 // Tests for the F4 proposerSigner.VerifyPartialBatch wrapper — twoab mirror
-// of protocol/v2/ssv/runner/obft/proposer_signer_test.go. See
-// docs/OBFT-F4-IMPLEMENTATION-PLAN.md §proposerSigner wrapper.
+// of protocol/v2/ssv/runner/obft/proposer_signer_test.go.
 
 // makeTestV builds a minimal [version | SSZ blinded block] candidate that
 // the twoab proposerSigner's signingRootFor can decode. Tests in this

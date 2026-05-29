@@ -8,7 +8,7 @@ import (
 	"github.com/ssvlabs/ssv/utils/threshold"
 )
 
-// Benchmarks B1 from docs/OBFT-PERFORMANCE-AUDIT-PLAN.md: baseline BLS partial
+// Benchmark B1: baseline BLS partial
 // verify cost. Grounds the "~1 ms per verify" assumption underpinning F1, F3,
 // F4, F5. Two variants — herumi (BLSSigner) and kyber (KyberSigner) — since
 // the codebase uses both and the latter is noticeably slower per verify.

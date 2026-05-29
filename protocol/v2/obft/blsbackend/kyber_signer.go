@@ -49,7 +49,7 @@ type KyberSigner struct {
 
 	// pubMu / pubCache caches HerumiPubkeyToKyberG1Point results, keyed by
 	// string(pubBytes). The conversion involves a G1 decompression + subgroup
-	// check costing ~100-300 µs (see B3 in docs/OBFT-PERFORMANCE-AUDIT-PLAN.md),
+	// check costing ~100-300 µs (see benchmark B3),
 	// and the same handful of operator pub-shares + cluster master pubkey
 	// is reused for every Verify call across a cluster's lifetime — so
 	// caching saves the parse on every call after the first. Audit F3:

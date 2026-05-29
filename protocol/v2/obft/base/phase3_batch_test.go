@@ -6,9 +6,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Tests for the σ-walk batch-verify (audit finding F4). See
-// docs/OBFT-F4-IMPLEMENTATION-PLAN.md for the safety contract; the short
-// form is "batch returning true is at the same security level as N
+// Tests for the σ-walk batch-verify (audit finding F4). The safety
+// contract in short form is "batch returning true is at the same security level as N
 // successful VerifyPartial calls, and batch returning false MUST fall back
 // to per-tuple verify to preserve Rule-4 attribution per (op, layer)".
 //

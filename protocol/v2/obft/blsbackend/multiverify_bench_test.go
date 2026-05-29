@@ -11,7 +11,7 @@ import (
 	"github.com/ssvlabs/ssv/utils/threshold"
 )
 
-// Benchmark B4 from docs/OBFT-PERFORMANCE-AUDIT-PLAN.md: quantify the win
+// Benchmark B4: quantify the win
 // from herumi's bls.MultiVerify vs sequential VerifyByte at realistic N's.
 // Grounds F4 (batch-verify for NR partials and σ-walk loops).
 //
@@ -136,7 +136,7 @@ func BenchmarkVerify_MultiVerify_DistinctMsgs(b *testing.B) {
 // Skips under -race because bls.MultiVerify stores slice pointers in uintptr
 // (eth.go:32-33, reconverted at eth.go:83) — a pattern Go's checkptr flags
 // as invalid pointer arithmetic. Production builds run without checkptr and
-// are unaffected. See docs/OBFT-F4-IMPLEMENTATION-PLAN.md §race-detector.
+// are unaffected.
 func TestMultiVerify_Fixture(t *testing.T) {
 	skipIfRace(t)
 	tCases := []struct {

@@ -7,9 +7,8 @@ import (
 )
 
 // Tests for the per-Instance verify-cache used to skip redundant
-// signer.VerifyPartial calls in Resolve (audit finding F1). See
-// docs/OBFT-F1-F5-IMPLEMENTATION-PLAN.md for the safety invariant; the
-// short form is "cache populate is gated EXCLUSIVELY by signer.VerifyPartial
+// signer.VerifyPartial calls in Resolve (audit finding F1). The safety
+// invariant in short form is "cache populate is gated EXCLUSIVELY by signer.VerifyPartial
 // just returning true on that exact (op, layer, value, partial-bytes)
 // tuple, and value-binding means a cache hit can never let a partial
 // contribute to a V it doesn't sign".

@@ -196,7 +196,7 @@ func (s *BLSSigner) VerifyAggregate(clusterPubKey []byte, msg []byte, sig obft.S
 //
 // A false return does NOT identify which tuple failed; callers that need
 // per-tuple attribution (Rule-4 evidence at the σ-walk) MUST fall back to a
-// per-tuple VerifyPartial loop. Audit F4 (docs/OBFT-F4-IMPLEMENTATION-PLAN.md).
+// per-tuple VerifyPartial loop. Audit finding F4.
 //
 // Tests that exercise this path MUST skip under `-race` because herumi's
 // MultiVerify stores slice pointers in uintptr (eth.go:32-33) which Go's

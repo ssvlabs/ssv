@@ -442,8 +442,7 @@ func ConfigForCluster(
 		// runner/obft/verifier.go) runs the BLS verify on every NR partial
 		// before the envelope is dispatched to Instance, so the in-Instance
 		// repeat is pure waste on the production path. See the field's
-		// doc-comment in obftcore types.go and docs/OBFT-PERFORMANCE-AUDIT-PLAN.md
-		// §F5 for the safety contract.
+		// doc-comment in obftcore types.go for the safety contract.
 		SkipNRPartialReverify: true,
 	}
 	return cfg, nil

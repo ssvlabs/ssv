@@ -143,8 +143,7 @@ type Config struct {
 	// message/validation/obft_validation.go on every inbound KindCommit
 	// envelope) already runs the same BLS verifies before the envelope is
 	// dispatched to Instance. Skipping the in-Instance repeat saves ~18 ms/slot
-	// at n=7, K=4. See the docstring at phase2.go:321 over the call site, and
-	// docs/OBFT-PERFORMANCE-AUDIT-PLAN.md §F5.
+	// at n=7, K=4. See the docstring at phase2.go:321 over the call site.
 	//
 	// SAFE TO SET true ONLY when every code path reaching ObserveCommit has
 	// already done that upstream BLS verify on every NR partial in the Commit.

@@ -70,7 +70,7 @@ type Signer interface {
 	// because kyber-bls12381 doesn't expose an equivalent batch primitive and
 	// the stub is for protocol-level tests where realism isn't a concern.
 	//
-	// Audit F4 (docs/OBFT-PERFORMANCE-AUDIT-PLAN.md, docs/OBFT-F4-IMPLEMENTATION-PLAN.md).
+	// Audit finding F4.
 	VerifyPartialBatch(pubKeyShares [][]byte, msgs [][]byte, sigs []Signature) bool
 }
 

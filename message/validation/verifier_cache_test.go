@@ -14,7 +14,7 @@ import (
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
-// Tests for the per-validator Verifier cache (docs/OBFT-VALIDATION-VERIFIER-CACHE-PLAN.md).
+// Tests for the per-validator Verifier cache.
 //
 // The cache is a validation-layer optimisation guarded by a content
 // fingerprint: a committee/pub-share change flips the fingerprint and forces

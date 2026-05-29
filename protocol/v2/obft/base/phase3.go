@@ -443,7 +443,7 @@ type pendingVerify struct {
 // cache or groups — the caller (tryReconstructLayer) then runs
 // sequentialVerifyAndAttribute to identify the bad tuple(s).
 //
-// F4 (docs/OBFT-F4-IMPLEMENTATION-PLAN.md). The batch returns false only
+// F4. The batch returns false only
 // if at least one tuple would have failed individually; the
 // random-linear-combination security argument is at the same level as
 // N independent VerifyPartial calls. On success the cache-populate is

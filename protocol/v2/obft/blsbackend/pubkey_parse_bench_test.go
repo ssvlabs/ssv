@@ -6,7 +6,7 @@ import (
 	"github.com/herumi/bls-eth-go-binary/bls"
 )
 
-// Benchmark B3 from docs/OBFT-PERFORMANCE-AUDIT-PLAN.md: quantify the pubkey
+// Benchmark B3: quantify the pubkey
 // re-parse cost. Grounds F3 (KyberSigner.VerifyPartial re-parses pubkey)
 // and F6 (BLSSigner.SignPartial re-deserializes share).
 //

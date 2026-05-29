@@ -16,7 +16,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/obft/blsbackend"
 )
 
-// Benchmark B2 from docs/OBFT-PERFORMANCE-AUDIT-PLAN.md: quantify the cost
+// Benchmark B2: quantify the cost
 // of signingRootFor — the SSZ-unmarshal + tree-root + domain compute path
 // that fires on every BLS sign / verify / aggregate-verify of an OBFT
 // V-side partial. Grounds F2's per-slot-cost estimate.

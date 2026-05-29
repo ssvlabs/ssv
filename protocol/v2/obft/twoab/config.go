@@ -195,8 +195,7 @@ type Config struct {
 	// envelope) already runs the same BLS verifies on every NR-side partial
 	// before the envelope is dispatched to Instance. Skipping the in-Instance
 	// repeat saves redundant BLS work on the consensus-critical path. Mirrors
-	// base.Config.SkipNRPartialReverify; see docs/OBFT-PERFORMANCE-AUDIT-PLAN.md
-	// §F5 and docs/OBFT-F1-F5-IMPLEMENTATION-PLAN.md for the full safety
+	// base.Config.SkipNRPartialReverify, whose doc-comment has the full safety
 	// contract.
 	//
 	// SAFE TO SET true ONLY when every code path reaching Observe* / verify

@@ -11,7 +11,7 @@ import (
 	obftadapter "github.com/ssvlabs/ssv/protocol/v2/ssv/runner/obft"
 )
 
-// Benchmark B6 (docs/OBFT-VALIDATION-VERIFIER-CACHE-PLAN.md): quantify the
+// Benchmark B6: quantify the
 // per-envelope cost the validation-layer Verifier cache removes.
 //
 // Both paths run the same herumi BLS pairing inside VerifyPhase1Bundle, so
@@ -22,9 +22,9 @@ import (
 // allocs on the B2 fixture) runs once per validator instead of per envelope.
 //
 //   - cold:   NewVerifierFromShare + VerifyPhase1Bundle  (status quo — fresh
-//             cold Verifier per envelope)
+//     cold Verifier per envelope)
 //   - cached: obftVerifierFor (cache hit) + VerifyPhase1Bundle  (post-change —
-//             reused Verifier, warm F2 cache)
+//     reused Verifier, warm F2 cache)
 //
 // The Commit path would additionally show the F3 (kyber pubkey-parse) unlock
 // on NR partials, but Phase1Bundle is the cleanest single-verify shape; the

@@ -377,8 +377,7 @@ type Instance struct {
 	// just returned true on this partial". A miss never weakens safety
 	// (full verify still runs); a hit is provably equivalent to a fresh
 	// verify because sha256(partial-bytes) keys uniquely identify the
-	// (verified, by-op, at-layer) tuple. See docs/OBFT-F1-F5-IMPLEMENTATION-PLAN.md
-	// for the full safety-invariant argument.
+	// (verified, by-op, at-layer) tuple.
 	//
 	// Single-threaded by the controller's r.instanceMu — Resolve and every
 	// insertion-time observer run under the same lock (audit Q-Open-2), so

@@ -9,8 +9,7 @@ import (
 	obftcore "github.com/ssvlabs/ssv/protocol/v2/obft/base"
 )
 
-// Tests for the F4 proposerSigner.VerifyPartialBatch wrapper — see
-// docs/OBFT-F4-IMPLEMENTATION-PLAN.md §proposerSigner wrapper.
+// Tests for the F4 proposerSigner.VerifyPartialBatch wrapper.
 //
 // The wrapper takes V bytes per msg and translates each through
 // signingRootFor before delegating to the inner signer's batch. The

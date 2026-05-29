@@ -25,7 +25,7 @@ import (
 // per-envelope Verifier throws them away each time. The validation layer
 // sees every gossiped envelope for every tracked validator, so re-paying
 // those cold caches per envelope is the dominant redundant cost on the
-// validation hot path. See docs/OBFT-VALIDATION-VERIFIER-CACHE-PLAN.md.
+// validation hot path.
 //
 // SECURITY: the Verifier snapshots the validator's committee pub-shares +
 // cluster pubkey. A stale entry would verify inbound consensus messages
