@@ -654,9 +654,12 @@ func silentL0LeaderScenarioConfig() scenarioConfig {
 // permanent quorum-short stop at L_1. The bridge asserts safety holds in this
 // split (the whole point) and that the miss is a clean deadlock at L_1.
 //
-// Determinism comes from *which* survivors receive V_1 (bus-injected, per
-// recipient), not fire-timing jitter — so it holds under -race. Denying the L_1
-// leader's KindPhase1Bundle alone suffices: every survivor is NoValue at L_0 (no
+// The split *membership* is bus-pinned (the starved set NRs at L_1) rather than
+// emergent from the fire-vs-V_1 jitter that makes SilentL0Leader's split
+// nondeterministic. The one residual timing assumption — starved ops NR-lock
+// before V_1's withheld arrival — holds with a wide margin (Phase-2a fire is
+// ≤~1s even under -race, vs the 4s withhold below). Denying the L_1 leader's
+// KindPhase1Bundle alone suffices: every survivor is NoValue at L_0 (no
 // KindValue is emitted), and NoValueMsg carries no forwarded witnesses, so the
 // direct bundle is the only V_1 vector.
 func bundleAtFireSplitScenarioConfig() scenarioConfig {
@@ -853,7 +856,7 @@ func runScenarioWithSafetyCheck(t *testing.T, cell matrixCell, cfg scenarioConfi
 //     receives inbound, so it can self-σ a local quorum at L_1 and decide alone
 //     while peers stay quorum-short; that is safe (a lone decider can't disagree,
 //     and the safety report + capture guard already vetted it).
-//   - forced-miss (BundleAtFireSplit): NObody may decide — the V_1 starvation
+//   - forced-miss (BundleAtFireSplit): no op may decide — the V_1 starvation
 //     (incl. the silent leader) is engineered so no op can reconstruct.
 //
 // Every non-deciding op's resolve trace must end in a real quorum-short stop —
@@ -902,8 +905,11 @@ func assertOutcome(t *testing.T, nodes []*blsNode, cfg scenarioConfig, cell matr
 		require.NotEmptyf(t, trace,
 			"op %d clean-miss but empty resolve trace (a wedge, not a within-spec miss) at %s n=%d K=%d", n.op, cfg.name, cell.n, cell.K)
 		last := trace[len(trace)-1]
-		// A genuine quorum-short stop: didn't decide, σ-pool < qV, and either
-		// NR-pool < qEnc (deadlock) or the deepest layer (exhaustion).
+		// A genuine quorum-short stop: didn't decide, σ-pool < qV, and either the
+		// deepest layer (exhaustion — no NR tag there) or NR-pool < qEnc (deadlock).
+		// The !NRReached term is deliberate, not redundant: it rejects the rare case
+		// where NR-quorum WAS reached but no decryption key was derived (phase3.go's
+		// NRReached=true, nextKey=nil deadlock) — a crypto fault, not a clean miss.
 		deepest := last.Layer == cell.K-1
 		require.Truef(t, !last.Decided && !last.SigmaReached && (deepest || !last.NRReached),
 			"op %d clean-miss trace not quorum-short: L_%d decided=%v σ-reached=%v NR-reached=%v at %s n=%d K=%d",
