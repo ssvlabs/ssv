@@ -339,6 +339,19 @@ func (i *Instance) tryDeriveNextLayerKey(layer int) ([]byte, int, error) {
 	return []byte(full), poolSize, nil
 }
 
+// findSigmaChainedV returns the V bytes of the SigmaChained LayerEntry at
+// `layer` whose ValueRoot matches `root`, or (nil, false) if none. Collapses
+// the per-store scan that recoverV (and phase2a's witness-harvest) repeat
+// across every peer/own message container. Pure read; no state mutation.
+func findSigmaChainedV(entries []LayerEntry, layer int, root [32]byte) (Value, bool) {
+	for _, e := range entries {
+		if e.Layer == layer && e.Kind == LayerEntrySigmaChained && ValueRoot(e.V) == root {
+			return e.V, true
+		}
+	}
+	return nil, false
+}
+
 // recoverV locates the V bytes corresponding to a given (layer, vRoot).
 // Used by tryReconstructLayer to populate sigGroup.value from sigmaPool
 // entries (which key by vRoot, not V bytes).
@@ -383,48 +396,36 @@ func (i *Instance) recoverV(layer int, vRoot [32]byte) (Value, bool) {
 	// ownCommit(NRDirect)} — all three can carry LayerEntries; check
 	// whichever is set.
 	if i.ownValueMsg != nil {
-		for _, e := range i.ownValueMsg.LayerEntries {
-			if e.Layer == layer && e.Kind == LayerEntrySigmaChained && ValueRoot(e.V) == vRoot {
-				return e.V, true
-			}
+		if v, ok := findSigmaChainedV(i.ownValueMsg.LayerEntries, layer, vRoot); ok {
+			return v, true
 		}
 	}
 	if i.ownNoValueMsg != nil {
-		for _, e := range i.ownNoValueMsg.LayerEntries {
-			if e.Layer == layer && e.Kind == LayerEntrySigmaChained && ValueRoot(e.V) == vRoot {
-				return e.V, true
-			}
+		if v, ok := findSigmaChainedV(i.ownNoValueMsg.LayerEntries, layer, vRoot); ok {
+			return v, true
 		}
 	}
 	if i.ownCommit != nil && i.ownCommit.Side == CommitSideNRDirect {
-		for _, e := range i.ownCommit.LayerEntries {
-			if e.Layer == layer && e.Kind == LayerEntrySigmaChained && ValueRoot(e.V) == vRoot {
-				return e.V, true
-			}
+		if v, ok := findSigmaChainedV(i.ownCommit.LayerEntries, layer, vRoot); ok {
+			return v, true
 		}
 	}
 	for _, vm := range i.peerValueMsg {
-		for _, e := range vm.LayerEntries {
-			if e.Layer == layer && e.Kind == LayerEntrySigmaChained && ValueRoot(e.V) == vRoot {
-				return e.V, true
-			}
+		if v, ok := findSigmaChainedV(vm.LayerEntries, layer, vRoot); ok {
+			return v, true
 		}
 	}
 	for _, nv := range i.peerNoValueMsg {
-		for _, e := range nv.LayerEntries {
-			if e.Layer == layer && e.Kind == LayerEntrySigmaChained && ValueRoot(e.V) == vRoot {
-				return e.V, true
-			}
+		if v, ok := findSigmaChainedV(nv.LayerEntries, layer, vRoot); ok {
+			return v, true
 		}
 	}
 	for _, c := range i.peerCommit {
 		if c.Side != CommitSideNRDirect {
 			continue
 		}
-		for _, e := range c.LayerEntries {
-			if e.Layer == layer && e.Kind == LayerEntrySigmaChained && ValueRoot(e.V) == vRoot {
-				return e.V, true
-			}
+		if v, ok := findSigmaChainedV(c.LayerEntries, layer, vRoot); ok {
+			return v, true
 		}
 	}
 	// Fall back to retained bundles at this layer — the leader's LeaderSigma

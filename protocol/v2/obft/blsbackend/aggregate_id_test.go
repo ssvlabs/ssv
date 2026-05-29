@@ -48,33 +48,22 @@ func TestBLSSigner_AggregateID_LittleEndianEqualsDecString(t *testing.T) {
 func TestBLSSigner_AggregatePartials_RoundTrips(t *testing.T) {
 	threshold.Init()
 
-	const n, k = 4, 3 // 4 operators, threshold 3 (= 2f+1 at f=1)
-	// Build a (k-of-n) threshold key with operator IDs 1..n as x-coordinates.
-	var master bls.SecretKey
+	const n, q = 4, 3 // 4 operators, threshold 3 (= 2f+1 at f=1)
+	master := &bls.SecretKey{}
 	master.SetByCSPRNG()
 	masterPub := master.GetPublicKey()
 
-	// Shamir-split: a degree-(k-1) polynomial with master as the constant term.
-	poly := make([]bls.SecretKey, k)
-	poly[0] = master
-	for i := 1; i < k; i++ {
-		poly[i].SetByCSPRNG()
-	}
-
-	shares := make(map[uint64]*bls.SecretKey, n)
-	for op := uint64(1); op <= n; op++ {
-		var id bls.ID
-		require.NoError(t, id.SetDecString(fmt.Sprintf("%d", op)))
-		var sk bls.SecretKey
-		require.NoError(t, sk.Set(poly, &id))
-		shares[op] = &sk
-	}
+	// threshold.Create Shamir-splits the master into n shares keyed by
+	// operator ID (1..n), recoverable from any q of them — the same helper
+	// the rest of the blsbackend tests use (e.g. kyber_conversion_test.go).
+	shares, err := threshold.Create(master.Serialize(), q, n)
+	require.NoError(t, err)
 
 	msg := []byte("the-message-the-cluster-signs--padded-to-32b!!!!")[:32]
 
 	signer := New(nil) // verify/aggregate-only is all we need here
-	partials := make(map[obft.OperatorID]obft.Signature, k)
-	chosen := []uint64{1, 3, 4} // any k-of-n subset
+	partials := make(map[obft.OperatorID]obft.Signature, q)
+	chosen := []uint64{1, 3, 4} // any q-of-n subset
 	for _, op := range chosen {
 		sig := shares[op].SignByte(msg)
 		partials[obft.OperatorID(op)] = obft.Signature(sig.Serialize())

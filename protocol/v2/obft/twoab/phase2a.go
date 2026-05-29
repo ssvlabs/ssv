@@ -1090,13 +1090,9 @@ func (i *Instance) harvestOneWitness(v *ValueMsg, w LayerWitness) {
 		}
 		vK = v.V
 	} else {
-		for _, e := range v.LayerEntries {
-			if e.Layer == w.Layer && e.Kind == LayerEntrySigmaChained && ValueRoot(e.V) == w.ValueRoot {
-				vK = e.V
-				break
-			}
-		}
-		if len(vK) == 0 {
+		var found bool
+		vK, found = findSigmaChainedV(v.LayerEntries, w.Layer, w.ValueRoot)
+		if !found {
 			return // no colocated V → can't verify/harvest this witness
 		}
 	}
