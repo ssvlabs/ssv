@@ -12,7 +12,6 @@ import (
 
 	obftcore "github.com/ssvlabs/ssv/protocol/v2/obft/base"
 	"github.com/ssvlabs/ssv/protocol/v2/obft/base/wire"
-	obftadapter "github.com/ssvlabs/ssv/protocol/v2/ssv/runner/obft"
 )
 
 // OBFT-specific slot-window bounds. OBFT's protocol completes within one
@@ -125,7 +124,11 @@ func (mv *messageValidator) validateOBFTMessage(
 		return nil, fmt.Errorf("OBFT envelope: unknown validator %x",
 			signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID())
 	}
-	verifier, err := obftadapter.NewVerifierFromShare(&share.Share, nil /* IBE shares: Option A fallback */, mv.netCfg.Beacon)
+	// Cached per-validator Verifier: persists the F2 (signing-root) + F3
+	// (kyber pubkey) sub-caches across this validator's envelopes instead of
+	// rebuilding cold each time. A committee change flips the content
+	// fingerprint and forces a rebuild — see verifier_cache.go.
+	verifier, err := mv.obftVerifierFor(share)
 	if err != nil {
 		return nil, fmt.Errorf("construct OBFT verifier: %w", err)
 	}

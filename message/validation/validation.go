@@ -77,6 +77,15 @@ type messageValidator struct {
 	// consensusAdmissionMaxAge.
 	consensusAdmissions *consensusAdmissionTracker
 
+	// obftVerifiers / twoabVerifiers cache the per-validator inner-message
+	// Verifier so the F2 (signing-root) + F3 (kyber pubkey) caches inside it
+	// survive across a validator's envelopes instead of being thrown away per
+	// envelope. Keyed by validator pubkey; correctness gated by a content
+	// fingerprint re-checked every lookup (see verifier_cache.go). TTL'd to
+	// maxStoredSlots like `states`, bounding memory to active-validator count.
+	obftVerifiers  *ttlcache.Cache[string, *cachedOBFTVerifier]
+	twoabVerifiers *ttlcache.Cache[string, *cachedTwoabVerifier]
+
 	selfPID    peer.ID
 	selfAccept bool
 }
@@ -106,6 +115,15 @@ func New(
 	mv.states = ttlcache.New(
 		ttlcache.WithTTL[spectypes.MessageID, *ValidatorState](ttl),
 	)
+	// Per-validator OBFT/2abOBFT Verifier caches (see verifier_cache.go).
+	// Same TTL as `states` — a validator that stops gossiping has its Verifier
+	// evicted within ~one epoch, bounding memory to active-validator count.
+	mv.obftVerifiers = ttlcache.New(
+		ttlcache.WithTTL[string, *cachedOBFTVerifier](ttl),
+	)
+	mv.twoabVerifiers = ttlcache.New(
+		ttlcache.WithTTL[string, *cachedTwoabVerifier](ttl),
+	)
 
 	for _, opt := range opts {
 		opt(mv)
@@ -115,6 +133,9 @@ func New(
 	go mv.validationLockCache.Start()
 	// Start automatic expired item deletion for states.
 	go mv.states.Start()
+	// Start automatic expired item deletion for the Verifier caches.
+	go mv.obftVerifiers.Start()
+	go mv.twoabVerifiers.Start()
 
 	return mv
 }

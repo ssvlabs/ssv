@@ -12,7 +12,6 @@ import (
 
 	twoabcore "github.com/ssvlabs/ssv/protocol/v2/obft/twoab"
 	twoabwire "github.com/ssvlabs/ssv/protocol/v2/obft/twoab/wire"
-	twoabadapter "github.com/ssvlabs/ssv/protocol/v2/ssv/runner/obft/twoab"
 )
 
 // validateTwoabMessage is the 2abOBFT sibling of validateOBFTMessage: it
@@ -90,7 +89,9 @@ func (mv *messageValidator) validateTwoabMessage(
 		return nil, fmt.Errorf("2abOBFT envelope: unknown validator %x",
 			signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID())
 	}
-	verifier, err := twoabadapter.NewVerifierFromShare(&share.Share, nil /* IBE shares: Option A fallback */, mv.netCfg.Beacon)
+	// Cached per-validator Verifier — same rationale + invalidation as the
+	// OBFT path (see verifier_cache.go).
+	verifier, err := mv.twoabVerifierFor(share)
 	if err != nil {
 		return nil, fmt.Errorf("construct 2abOBFT verifier: %w", err)
 	}
