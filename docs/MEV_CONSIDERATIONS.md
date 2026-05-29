@@ -2,13 +2,15 @@
 
 ## TL;DR
 
-To get the most out of MEV opportunities, configure **timing games on the PBS layer** — either mev-boost v1.11+ launched with `-config <path>` (and optionally `-watch-config` for hot reload), or commit-boost. With PBS-side timing games configured, SSV's `ProposerDelay` should stay at its default value of `0` — operators relying on `ProposerDelay` can't also use the multi-BN bid scoring described in [Multi-BN setup](#multi-bn-setup).
+To get the most out of MEV opportunities, configure `timing games on the PBS layer` — either mev-boost v1.11+ launched with `-config <path>` (and optionally `-watch-config` for hot reload), or commit-boost. With PBS-side timing games configured, SSV's `ProposerDelay` should stay at its default value of `0` — operators relying on `ProposerDelay` can't also use the multi-BN bid scoring described in [Multi-BN setup](#multi-bn-setup).
 
 If your PBS does not support timing games (mev-boost < v1.11, mev-boost without `-config <path>`, or any other PBS lacking the feature), SSV's `ProposerDelay` is still available — see [Appendix A](#appendix-a--legacy-proposerdelay-approach). PBS-side timing games are preferred because the PBS polls each relay multiple times within a precise slot-relative auction window — yielding higher-value bids than a single `getHeader` call after an SSV-side `ProposerDelay` sleep.
 
-If you run **multiple Beacon nodes**, set `ProposalSoftDeadline` = your PBS `late_in_slot_time_ms` + ~50ms BN→SSV transport. See [Multi-BN setup](#multi-bn-setup) for details. Single-BN operators can skip that section entirely.
-
-`ProposalSoftDeadline` and the legacy `ProposerDelay` / `ProposalSoftTimeout` select mutually-exclusive SSV-side block-fetch paths — combining them is rejected at startup.
+**Do NOT apply both**: `timing games on the PBS layer` configuration + SSV's `ProposerDelay / ProposalSoftTimeout` - only one of these is supposed to run at any given time. Here are the recommended configuration steps, to avoid any sort of undesirable downtime during transition:
+- configure SSV node first to remove/unset any of `ProposerDelay / ProposalSoftTimeout`
+- if you run multiple Beacon nodes, set `ProposalSoftDeadline = your PBS late_in_slot_time_ms + ~50ms BN→SSV transport` - see [Multi-BN setup](#multi-bn-setup) for details, single-BN operators can skip that section entirely
+- restart SSV node to apply
+- set/update mev/commit-boost configuration settings to enable `timing games on the PBS layer` - see [PBS configuration settings](#configuration-knobs) for details
 
 ## Definitions and typical values
 
