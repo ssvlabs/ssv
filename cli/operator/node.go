@@ -601,18 +601,24 @@ var StartNodeCmd = &cobra.Command{
 				)
 				cfg.P2pNetworkConfig.MaxPeers = idealMaxPeers
 			}
-
-			cfg.P2pNetworkConfig.GetValidatorStats = func() (uint64, uint64, uint64, error) {
-				return validatorCtrl.GetValidatorStats()
-			}
-			if err := p2pNetwork.Setup(); err != nil {
-				logger.Fatal("failed to setup network", zap.Error(err))
-			}
-			if err := p2pNetwork.Start(); err != nil {
-				logger.Fatal("failed to start network", zap.Error(err))
-			}
-			healthProber.AddComponent(p2pComponentName, p2pNetwork.(p2pv1.HealthChecker), proberHealthcheckTimeout, proberRetriesMax, proberRetryDelay)
 		}
+
+		// Wire validator stats into pubsub peer scoring, then set up and start the p2p network.
+		// These run unconditionally: gating them on DynamicMaxPeers (a long-standing bug) left
+		// DynamicMaxPeers=false nodes with a network that was never Setup/Start'd — operator.Node.Start
+		// then failed Subscribe* with ErrNetworkIsNotReady — and with a nil GetValidatorStats, which
+		// makes pubsub peer scoring silently fall back to fake hard-coded stats. GetValidatorStats
+		// must be set before Setup(), which reads it via setupPubsub.
+		cfg.P2pNetworkConfig.GetValidatorStats = func() (uint64, uint64, uint64, error) {
+			return validatorCtrl.GetValidatorStats()
+		}
+		if err := p2pNetwork.Setup(); err != nil {
+			logger.Fatal("failed to setup network", zap.Error(err))
+		}
+		if err := p2pNetwork.Start(); err != nil {
+			logger.Fatal("failed to start network", zap.Error(err))
+		}
+		healthProber.AddComponent(p2pComponentName, p2pNetwork.(p2pv1.HealthChecker), proberHealthcheckTimeout, proberRetriesMax, proberRetryDelay)
 
 		if cfg.SSVAPIPort > 0 {
 			warnIfSSVAPIAddressUnset(logger, cfg.SSVAPIAddress, cfg.SSVAPIPort)
