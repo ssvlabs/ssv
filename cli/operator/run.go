@@ -332,7 +332,10 @@ func run(ctx context.Context, cfg *config, logger *zap.Logger) error {
 	cfg.P2pNetworkConfig.MessageValidator = messageValidator
 	cfg.SSVOptions.ValidatorOptions.MessageValidator = messageValidator
 
-	p2pNetwork := setupP2P(ctx, logger, db, cfg.ExporterOptions.Enabled, operatorPrivKey, ssvSignerClient)
+	p2pNetwork, err := setupP2P(ctx, logger, db, cfg.ExporterOptions.Enabled, operatorPrivKey, ssvSignerClient)
+	if err != nil {
+		return err
+	}
 	// The CLI owns the p2p network's lifecycle (setupP2P created it), so it also closes it
 	// (operator.Node.Start no longer does). Close() is robust on partial states, so deferring
 	// it right after construction is safe even if startup aborts before Setup/Start.
@@ -408,7 +411,7 @@ func run(ctx context.Context, cfg *config, logger *zap.Logger) error {
 
 	fixedSubnets, err := networkcommons.SubnetsFromString(cfg.P2pNetworkConfig.Subnets)
 	if err != nil {
-		logger.Fatal("failed to parse fixed subnets", zap.Error(err))
+		return fmt.Errorf("failed to parse fixed subnets: %w", err)
 	}
 
 	if cfg.ExporterOptions.Enabled && fixedSubnets == networkcommons.ZeroSubnets {
@@ -553,10 +556,10 @@ func run(ctx context.Context, cfg *config, logger *zap.Logger) error {
 		return validatorCtrl.GetValidatorStats()
 	}
 	if err := p2pNetwork.Setup(); err != nil {
-		logger.Fatal("failed to setup network", zap.Error(err))
+		return fmt.Errorf("failed to setup network: %w", err)
 	}
 	if err := p2pNetwork.Start(); err != nil {
-		logger.Fatal("failed to start network", zap.Error(err))
+		return fmt.Errorf("failed to start network: %w", err)
 	}
 	healthProber.AddComponent(p2pComponentName, p2pNetwork.(p2pv1.HealthChecker), proberHealthcheckTimeout, proberRetriesMax, proberRetryDelay)
 

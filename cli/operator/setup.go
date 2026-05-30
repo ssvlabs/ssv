@@ -384,24 +384,24 @@ func setupSSVNetwork(logger *zap.Logger) (*networkconfig.SSV, error) {
 	return ssvConfig, nil
 }
 
-func setupP2P(ctx context.Context, logger *zap.Logger, db basedb.Database, exporterEnabled bool, operatorPrivKey keys.OperatorPrivateKey, signerClient *ssvsigner.Client) network.P2PNetwork {
+func setupP2P(ctx context.Context, logger *zap.Logger, db basedb.Database, exporterEnabled bool, operatorPrivKey keys.OperatorPrivateKey, signerClient *ssvsigner.Client) (network.P2PNetwork, error) {
 	_, unprotectFn, err := decideNetworkKeyProtectors(ctx, logger, db, exporterEnabled, operatorPrivKey, signerClient)
 	if err != nil {
-		logger.Fatal("failed to decide p2p network key protection", zap.Error(err))
+		return nil, fmt.Errorf("failed to decide p2p network key protection: %w", err)
 	}
 
 	istore := ssv_identity.NewIdentityStore(logger, db, unprotectFn)
 	netPrivKey, err := istore.SetupNetworkKey(ctx, cfg.NetworkPrivateKey)
 	if err != nil {
-		logger.Fatal("failed to setup network private key", zap.Error(err))
+		return nil, fmt.Errorf("failed to setup network private key: %w", err)
 	}
 	cfg.P2pNetworkConfig.NetworkPrivateKey = netPrivKey
 
 	n, err := p2pv1.New(logger, &cfg.P2pNetworkConfig)
 	if err != nil {
-		logger.Fatal("failed to setup p2p network", zap.Error(err))
+		return nil, fmt.Errorf("failed to setup p2p network: %w", err)
 	}
-	return n
+	return n, nil
 }
 
 func decideNetworkKeyProtectors(
