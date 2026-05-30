@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/doppelganger"
 	"github.com/ssvlabs/ssv/eth/executionclient"
 	"github.com/ssvlabs/ssv/exporter"
 	"github.com/ssvlabs/ssv/hprobe"
@@ -41,43 +42,60 @@ type stubExecutionClient struct {
 // stubbed beacon/EL clients and a minimal operator-mode config, the full wiring graph
 // (db → storage → keys → p2p → validator controller → operator node) must construct without
 // error. It exercises everything up to — but not including — start()'s network bring-up, which
-// performs real socket I/O.
+// performs real socket I/O. The doppelganger dimension covers buildDoppelganger's real-handler
+// path (enabled) alongside the no-op path (disabled).
 func Test_assemble_wiresOperatorNode(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	for _, tc := range []struct {
+		name           string
+		doppelgangerOn bool
+	}{
+		{name: "doppelganger disabled", doppelgangerOn: false},
+		{name: "doppelganger enabled", doppelgangerOn: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
 
-	logger := zap.NewNop()
+			logger := zap.NewNop()
 
-	operatorPrivKey, err := keys.GeneratePrivateKey()
-	require.NoError(t, err)
+			operatorPrivKey, err := keys.GeneratePrivateKey()
+			require.NoError(t, err)
 
-	netCfg := *networkconfig.TestNetwork
-	networkConfig := &netCfg
+			netCfg := *networkconfig.TestNetwork
+			networkConfig := &netCfg
 
-	cfg := &config{}
-	cfg.OperatorPrivateKey = operatorPrivKey.Base64()
-	cfg.DBOptions.Path = t.TempDir()
-	// Keep all long-lived servers off; they only matter in start().
-	cfg.MetricsAPIPort = 0
-	cfg.SSVAPIPort = 0
-	cfg.WsAPIPort = 0
-	cfg.EnableDoppelgangerProtection = false
+			cfg := &config{}
+			cfg.OperatorPrivateKey = operatorPrivKey.Base64()
+			cfg.DBOptions.Path = t.TempDir()
+			// Keep all long-lived servers off; they only matter in start().
+			cfg.MetricsAPIPort = 0
+			cfg.SSVAPIPort = 0
+			cfg.WsAPIPort = 0
+			cfg.EnableDoppelgangerProtection = tc.doppelgangerOn
 
-	res := resolved{mode: modeOperator, usingPrivKey: true}
+			res := resolved{mode: modeOperator, usingPrivKey: true}
 
-	a, err := assemble(ctx, cfg, logger, res, networkConfig, stubBeaconClient{}, stubExecutionClient{})
-	require.NoError(t, err)
-	require.NotNil(t, a)
-	require.NotNil(t, a.db)
-	require.NotNil(t, a.nodeStorage)
-	require.NotNil(t, a.p2pNetwork)
-	require.NotNil(t, a.validatorCtrl)
-	require.NotNil(t, a.operatorNode)
+			a, err := assemble(ctx, cfg, logger, res, networkConfig, stubBeaconClient{}, stubExecutionClient{})
+			require.NoError(t, err)
+			require.NotNil(t, a)
+			require.NotNil(t, a.db)
+			require.NotNil(t, a.nodeStorage)
+			require.NotNil(t, a.p2pNetwork)
+			require.NotNil(t, a.validatorCtrl)
+			require.NotNil(t, a.operatorNode)
 
-	// Stop the VRSubmitter goroutine (started in assemble) before tearing down, then ensure the
-	// CLI-owned resources close cleanly — the p2p network was constructed but never Setup/Start'd.
-	cancel()
-	require.NoError(t, a.Close())
+			// buildDoppelganger returns the no-op handler when protection is disabled and a real
+			// handler when enabled.
+			_, isNoOp := a.doppelgangerHandler.(doppelganger.NoOpHandler)
+			require.Equal(t, !tc.doppelgangerOn, isNoOp, "doppelganger handler must match the configured protection")
+
+			// Stop the VRSubmitter goroutine (started in assemble) before tearing down, then ensure
+			// the CLI-owned resources close cleanly — the p2p network was constructed but never
+			// Setup/Start'd.
+			cancel()
+			require.NoError(t, a.Close())
+		})
+	}
 }
 
 // Test_assemble_wiresExporterNode mirrors the operator smoke test for the exporter paths: with no
