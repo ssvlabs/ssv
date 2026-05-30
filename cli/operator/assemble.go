@@ -246,7 +246,7 @@ func assemble(ctx context.Context, cfg *config, logger *zap.Logger, res resolved
 
 	if res.mode == modeExporterStandard {
 		retain := cfg.ExporterOptions.RetainSlots
-		threshold := cfg.SSVOptions.NetworkConfig.EstimatedCurrentSlot()
+		threshold := networkConfig.EstimatedCurrentSlot()
 		initSlotPruning(ctx, storageMap, slotTickerProvider, threshold, retain)
 	}
 
@@ -290,22 +290,7 @@ func assemble(ctx context.Context, cfg *config, logger *zap.Logger, res resolved
 		// not an exporter: no duty-trace collector
 	}
 
-	var doppelgangerHandler doppelganger.Provider
-	if cfg.ExporterOptions.Enabled {
-		doppelgangerHandler = doppelganger.NoOpHandler{}
-	} else if cfg.EnableDoppelgangerProtection {
-		doppelgangerHandler = doppelganger.NewHandler(&doppelganger.Options{
-			BeaconConfig:       networkConfig.Beacon,
-			BeaconNode:         consensusClient,
-			ValidatorProvider:  validatorProvider,
-			SlotTickerProvider: slotTickerProvider,
-			Logger:             logger,
-		})
-		logger.Info("Doppelganger protection enabled.")
-	} else {
-		doppelgangerHandler = doppelganger.NoOpHandler{}
-		logger.Info("Doppelganger protection disabled.")
-	}
+	doppelgangerHandler := buildDoppelganger(logger, cfg, networkConfig.Beacon, consensusClient, validatorProvider, slotTickerProvider)
 	// Assemble the validator controller options in one place: start from the YAML-loaded base and
 	// fill in the resolved runtime dependencies, rather than mutating the struct field-by-field
 	// across the function.
@@ -683,4 +668,32 @@ func buildKeyManager(
 	}
 
 	return localKeyManager, types.NewSsvOperatorSigner(operatorPrivKey, operatorDataStore.GetOperatorID), nil
+}
+
+// buildDoppelganger returns the node's doppelganger-protection provider: a no-op for exporter nodes
+// (and for operator nodes with protection disabled), or a real handler when protection is enabled.
+func buildDoppelganger(
+	logger *zap.Logger,
+	cfg *config,
+	beaconConfig *networkconfig.Beacon,
+	beaconNode doppelganger.BeaconNode,
+	validatorProvider doppelganger.ValidatorProvider,
+	slotTickerProvider slotticker.Provider,
+) doppelganger.Provider {
+	if cfg.ExporterOptions.Enabled {
+		return doppelganger.NoOpHandler{}
+	}
+	if cfg.EnableDoppelgangerProtection {
+		handler := doppelganger.NewHandler(&doppelganger.Options{
+			BeaconConfig:       beaconConfig,
+			BeaconNode:         beaconNode,
+			ValidatorProvider:  validatorProvider,
+			SlotTickerProvider: slotTickerProvider,
+			Logger:             logger,
+		})
+		logger.Info("Doppelganger protection enabled.")
+		return handler
+	}
+	logger.Info("Doppelganger protection disabled.")
+	return doppelganger.NoOpHandler{}
 }
