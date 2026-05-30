@@ -66,7 +66,7 @@ func run(ctx context.Context, cfg *config, logger *zap.Logger) error {
 	}
 	usingSSVSigner, usingKeystore, usingPrivKey := res.usingSSVSigner, res.usingKeystore, res.usingPrivKey
 
-	ssvNetworkConfig, err := setupSSVNetwork(logger)
+	ssvNetworkConfig, err := setupSSVNetwork(logger, cfg)
 	if err != nil {
 		return fmt.Errorf("could not setup network: %w", err)
 	}
@@ -188,10 +188,10 @@ func run(ctx context.Context, cfg *config, logger *zap.Logger) error {
 	var db basedb.Database
 	if cfg.ExporterOptions.Enabled {
 		logger.Info("using pebble db")
-		db, err = setupPebbleDB(logger, networkConfig.Beacon, operatorPrivKey)
+		db, err = setupPebbleDB(logger, cfg, networkConfig.Beacon, operatorPrivKey)
 	} else {
 		logger.Info("using badger db")
-		db, err = setupBadgerDB(logger, networkConfig.Beacon, operatorPrivKey)
+		db, err = setupBadgerDB(logger, cfg, networkConfig.Beacon, operatorPrivKey)
 	}
 	if err != nil {
 		return fmt.Errorf("could not setup db: %w", err)
@@ -332,7 +332,7 @@ func run(ctx context.Context, cfg *config, logger *zap.Logger) error {
 	cfg.P2pNetworkConfig.MessageValidator = messageValidator
 	cfg.SSVOptions.ValidatorOptions.MessageValidator = messageValidator
 
-	p2pNetwork, err := setupP2P(ctx, logger, db, cfg.ExporterOptions.Enabled, operatorPrivKey, ssvSignerClient)
+	p2pNetwork, err := setupP2P(ctx, logger, cfg, db, cfg.ExporterOptions.Enabled, operatorPrivKey, ssvSignerClient)
 	if err != nil {
 		return err
 	}
@@ -494,6 +494,7 @@ func run(ctx context.Context, cfg *config, logger *zap.Logger) error {
 	eventSyncer, err := syncContractEvents(
 		ctx,
 		logger,
+		cfg,
 		executionClient,
 		validatorCtrl,
 		networkConfig,

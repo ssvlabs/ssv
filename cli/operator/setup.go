@@ -158,6 +158,7 @@ func validateConfig(
 
 func setupBadgerDB(
 	logger *zap.Logger,
+	cfg *config,
 	beaconConfig *networkconfig.Beacon,
 	operatorPrivKey keys.OperatorPrivateKey,
 ) (*badger.DB, error) {
@@ -166,7 +167,7 @@ func setupBadgerDB(
 		return nil, fmt.Errorf("failed to open db: %w", err)
 	}
 
-	if err := applyMigrations(logger, beaconConfig, operatorPrivKey, db, cfg.DBOptions.Path); err != nil {
+	if err := applyMigrations(logger, cfg, beaconConfig, operatorPrivKey, db, cfg.DBOptions.Path); err != nil {
 		return nil, fmt.Errorf("apply migrations: %w", err)
 	}
 
@@ -175,6 +176,7 @@ func setupBadgerDB(
 
 func setupPebbleDB(
 	logger *zap.Logger,
+	cfg *config,
 	beaconConfig *networkconfig.Beacon,
 	operatorPrivKey keys.OperatorPrivateKey,
 ) (*pebble.DB, error) {
@@ -185,7 +187,7 @@ func setupPebbleDB(
 		return nil, fmt.Errorf("failed to open db: %w", err)
 	}
 
-	if err := applyMigrations(logger, beaconConfig, operatorPrivKey, db, dbPath); err != nil {
+	if err := applyMigrations(logger, cfg, beaconConfig, operatorPrivKey, db, dbPath); err != nil {
 		return nil, fmt.Errorf("apply migrations: %w", err)
 	}
 
@@ -194,6 +196,7 @@ func setupPebbleDB(
 
 func applyMigrations(
 	logger *zap.Logger,
+	cfg *config,
 	beaconConfig *networkconfig.Beacon,
 	operatorPrivKey keys.OperatorPrivateKey,
 	db basedb.Database,
@@ -332,7 +335,7 @@ func ensureOperatorPubKey(nodeStorage operatorstorage.Storage, operatorPubKeyBas
 	return nil
 }
 
-func setupSSVNetwork(logger *zap.Logger) (*networkconfig.SSV, error) {
+func setupSSVNetwork(logger *zap.Logger, cfg *config) (*networkconfig.SSV, error) {
 	var ssvConfig *networkconfig.SSV
 
 	if cfg.SSVOptions.CustomNetwork != nil {
@@ -384,7 +387,7 @@ func setupSSVNetwork(logger *zap.Logger) (*networkconfig.SSV, error) {
 	return ssvConfig, nil
 }
 
-func setupP2P(ctx context.Context, logger *zap.Logger, db basedb.Database, exporterEnabled bool, operatorPrivKey keys.OperatorPrivateKey, signerClient *ssvsigner.Client) (network.P2PNetwork, error) {
+func setupP2P(ctx context.Context, logger *zap.Logger, cfg *config, db basedb.Database, exporterEnabled bool, operatorPrivKey keys.OperatorPrivateKey, signerClient *ssvsigner.Client) (network.P2PNetwork, error) {
 	_, unprotectFn, err := decideNetworkKeyProtectors(ctx, logger, db, exporterEnabled, operatorPrivKey, signerClient)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decide p2p network key protection: %w", err)
@@ -485,6 +488,7 @@ func probeRemoteNetworkKeyProtector(
 func syncContractEvents(
 	ctx context.Context,
 	logger *zap.Logger,
+	cfg *config,
 	executionClient executionclient.Provider,
 	validatorCtrl *validator.Controller,
 	networkConfig *networkconfig.Network,
