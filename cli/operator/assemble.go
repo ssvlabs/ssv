@@ -114,14 +114,7 @@ func assemble(ctx context.Context, cfg *config, logger *zap.Logger, res resolved
 	operatorPubKeyBase64 := identity.pubKeyB64
 
 	cfg.DBOptions.Ctx = ctx
-	var db basedb.Database
-	if cfg.ExporterOptions.Enabled {
-		logger.Info("using pebble db")
-		db, err = setupPebbleDB(logger, cfg, networkConfig.Beacon, operatorPrivKey)
-	} else {
-		logger.Info("using badger db")
-		db, err = setupBadgerDB(logger, cfg, networkConfig.Beacon, operatorPrivKey)
-	}
+	db, err := openNodeDB(logger, cfg, networkConfig.Beacon, operatorPrivKey)
 	if err != nil {
 		return nil, fmt.Errorf("could not setup db: %w", err)
 	}
@@ -170,32 +163,9 @@ func assemble(ctx context.Context, cfg *config, logger *zap.Logger, res resolved
 		validatorRegistrationSubmitter = runner.NewVRSubmitter(ctx, logger, networkConfig.Beacon, consensusClient, validatorProvider)
 	}
 
-	var keyManager ekm.KeyManager
-	var operatorSigner types.OperatorSigner
-	ekmDB := ekmadapter.NewDatabaseAdapter(db)
-	if !cfg.ExporterOptions.Enabled && usingSSVSigner {
-		remoteKeyManager, err := ekm.NewRemoteKeyManager(
-			ctx,
-			logger,
-			networkConfig.Beacon,
-			ssvSignerClient,
-			ekmDB,
-			operatorDataStore.GetOperatorID,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("could not create remote key manager: %w", err)
-		}
-
-		keyManager = remoteKeyManager
-		operatorSigner = remoteKeyManager
-	} else if !cfg.ExporterOptions.Enabled {
-		localKeyManager, err := ekm.NewLocalKeyManager(logger, ekmDB, networkConfig.Beacon, operatorPrivKey)
-		if err != nil {
-			return nil, fmt.Errorf("could not create new eth-key-manager signer: %w", err)
-		}
-
-		keyManager = localKeyManager
-		operatorSigner = types.NewSsvOperatorSigner(operatorPrivKey, operatorDataStore.GetOperatorID)
+	keyManager, operatorSigner, err := buildKeyManager(ctx, logger, cfg, res, networkConfig.Beacon, db, ssvSignerClient, operatorPrivKey, operatorDataStore)
+	if err != nil {
+		return nil, err
 	}
 
 	cfg.P2pNetworkConfig.NodeStorage = nodeStorage
@@ -660,4 +630,57 @@ func resolveOperatorIdentity(ctx context.Context, logger *zap.Logger, cfg *confi
 	}
 
 	return operatorIdentity{privKey: operatorPrivKey, privKeyPEM: operatorPrivKeyPEM, pubKeyB64: operatorPubKeyBase64}, nil
+}
+
+// openNodeDB opens the node's database, picking the backend by mode: exporter nodes use pebble,
+// operator nodes use badger.
+func openNodeDB(logger *zap.Logger, cfg *config, beaconConfig *networkconfig.Beacon, operatorPrivKey keys.OperatorPrivateKey) (basedb.Database, error) {
+	if cfg.ExporterOptions.Enabled {
+		logger.Info("using pebble db")
+		return setupPebbleDB(logger, cfg, beaconConfig, operatorPrivKey)
+	}
+	logger.Info("using badger db")
+	return setupBadgerDB(logger, cfg, beaconConfig, operatorPrivKey)
+}
+
+// buildKeyManager constructs the operator's key manager and signer. Exporter nodes don't sign, so
+// it returns (nil, nil); operator nodes get a remote key manager (ssv-signer) or a local one.
+func buildKeyManager(
+	ctx context.Context,
+	logger *zap.Logger,
+	cfg *config,
+	res resolved,
+	beaconConfig *networkconfig.Beacon,
+	db basedb.Database,
+	ssvSignerClient *ssvsigner.Client,
+	operatorPrivKey keys.OperatorPrivateKey,
+	operatorDataStore operatordatastore.OperatorDataStore,
+) (ekm.KeyManager, types.OperatorSigner, error) {
+	if cfg.ExporterOptions.Enabled {
+		return nil, nil, nil
+	}
+
+	ekmDB := ekmadapter.NewDatabaseAdapter(db)
+	if res.usingSSVSigner {
+		remoteKeyManager, err := ekm.NewRemoteKeyManager(
+			ctx,
+			logger,
+			beaconConfig,
+			ssvSignerClient,
+			ekmDB,
+			operatorDataStore.GetOperatorID,
+		)
+		if err != nil {
+			return nil, nil, fmt.Errorf("could not create remote key manager: %w", err)
+		}
+
+		return remoteKeyManager, remoteKeyManager, nil
+	}
+
+	localKeyManager, err := ekm.NewLocalKeyManager(logger, ekmDB, beaconConfig, operatorPrivKey)
+	if err != nil {
+		return nil, nil, fmt.Errorf("could not create new eth-key-manager signer: %w", err)
+	}
+
+	return localKeyManager, types.NewSsvOperatorSigner(operatorPrivKey, operatorDataStore.GetOperatorID), nil
 }
