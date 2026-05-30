@@ -570,22 +570,9 @@ func (a *assembled) start(ctx context.Context) error {
 		}
 	}
 
-	// Wire validator stats into pubsub peer scoring, then set up and start the p2p network.
-	// These run unconditionally: gating them on DynamicMaxPeers (a long-standing bug) left
-	// DynamicMaxPeers=false nodes with a network that was never Setup/Start'd — operator.Node.Start
-	// then failed Subscribe* with ErrNetworkIsNotReady — and with a nil GetValidatorStats, which
-	// makes pubsub peer scoring silently fall back to fake hard-coded stats. GetValidatorStats
-	// must be set before Setup(), which reads it via setupPubsub.
-	a.cfg.P2pNetworkConfig.GetValidatorStats = func() (uint64, uint64, uint64, error) {
-		return a.validatorCtrl.GetValidatorStats()
+	if err := a.startNetwork(healthProber); err != nil {
+		return err
 	}
-	if err := a.p2pNetwork.Setup(); err != nil {
-		return fmt.Errorf("failed to setup network: %w", err)
-	}
-	if err := a.p2pNetwork.Start(); err != nil {
-		return fmt.Errorf("failed to start network: %w", err)
-	}
-	healthProber.AddComponent(p2pComponentName, a.p2pNetwork.(p2pv1.HealthChecker), proberHealthcheckTimeout, proberRetriesMax, proberRetryDelay)
 
 	if a.cfg.SSVAPIPort > 0 {
 		warnIfSSVAPIAddressUnset(a.logger, a.cfg.SSVAPIAddress, a.cfg.SSVAPIPort)
@@ -620,5 +607,28 @@ func (a *assembled) start(ctx context.Context) error {
 		return fmt.Errorf("failed to start SSV node: %w", err)
 	}
 
+	return nil
+}
+
+// startNetwork wires validator stats into the p2p layer, then sets up + starts the network and
+// registers it with the health prober. Split out of start() so this DynamicMaxPeers-independent
+// invariant can be unit-tested with a stub network.
+func (a *assembled) startNetwork(healthProber *hprobe.HealthProber) error {
+	// Wire validator stats into pubsub peer scoring, then set up and start the p2p network.
+	// These run unconditionally: gating them on DynamicMaxPeers (a long-standing bug) left
+	// DynamicMaxPeers=false nodes with a network that was never Setup/Start'd — operator.Node.Start
+	// then failed Subscribe* with ErrNetworkIsNotReady — and with a nil GetValidatorStats, which
+	// makes pubsub peer scoring silently fall back to fake hard-coded stats. GetValidatorStats
+	// must be set before Setup(), which reads it via setupPubsub.
+	a.cfg.P2pNetworkConfig.GetValidatorStats = func() (uint64, uint64, uint64, error) {
+		return a.validatorCtrl.GetValidatorStats()
+	}
+	if err := a.p2pNetwork.Setup(); err != nil {
+		return fmt.Errorf("failed to setup network: %w", err)
+	}
+	if err := a.p2pNetwork.Start(); err != nil {
+		return fmt.Errorf("failed to start network: %w", err)
+	}
+	healthProber.AddComponent(p2pComponentName, a.p2pNetwork.(p2pv1.HealthChecker), proberHealthcheckTimeout, proberRetriesMax, proberRetryDelay)
 	return nil
 }
