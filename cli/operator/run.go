@@ -57,6 +57,15 @@ import (
 )
 
 func run(ctx context.Context, cfg *config, logger *zap.Logger) error {
+	// Validate the configuration up front, before any network I/O, so a misconfigured node
+	// fails fast (e.g. an invalid ProposerDelay is rejected before the beacon client is built,
+	// rather than after connecting to the beacon). resolveAndValidate only reads cfg.
+	res, err := cfg.resolveAndValidate(logger)
+	if err != nil {
+		logger.Fatal("invalid configuration", configErrorLogFields(err)...)
+	}
+	usingSSVSigner, usingKeystore, usingPrivKey := res.usingSSVSigner, res.usingKeystore, res.usingPrivKey
+
 	ssvNetworkConfig, err := setupSSVNetwork(logger)
 	if err != nil {
 		logger.Fatal("could not setup network", zap.Error(err))
@@ -87,12 +96,6 @@ func run(ctx context.Context, cfg *config, logger *zap.Logger) error {
 		SSV:    ssvNetworkConfig,
 		Beacon: consensusClient.BeaconConfig(),
 	}
-
-	res, err := cfg.resolveAndValidate(logger)
-	if err != nil {
-		logger.Fatal("invalid configuration", configErrorLogFields(err)...)
-	}
-	usingSSVSigner, usingKeystore, usingPrivKey := res.usingSSVSigner, res.usingKeystore, res.usingPrivKey
 
 	var operatorPrivKey keys.OperatorPrivateKey
 	var operatorPrivKeyPEM string
