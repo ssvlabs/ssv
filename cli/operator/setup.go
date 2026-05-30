@@ -492,15 +492,15 @@ func syncContractEvents(
 	operatorDataStore operatordatastore.OperatorDataStore,
 	keyManager ekm.KeyManager,
 	doppelgangerHandler eventhandler.DoppelgangerProvider,
-) *eventsyncer.EventSyncer {
+) (*eventsyncer.EventSyncer, error) {
 	eventFilterer, err := executionClient.Filterer()
 	if err != nil {
-		logger.Fatal("failed to set up event filterer", zap.Error(err))
+		return nil, fmt.Errorf("failed to set up event filterer: %w", err)
 	}
 
 	eventParser, err := eventparser.New(eventFilterer)
 	if err != nil {
-		logger.Fatal("failed to create event parser", zap.Error(err))
+		return nil, fmt.Errorf("failed to create event parser: %w", err)
 	}
 
 	eventHandler, err := eventhandler.New(
@@ -515,7 +515,7 @@ func syncContractEvents(
 		eventhandler.WithLogger(logger),
 	)
 	if err != nil {
-		logger.Fatal("failed to setup event data handler", zap.Error(err))
+		return nil, fmt.Errorf("failed to setup event data handler: %w", err)
 	}
 
 	eventSyncer := eventsyncer.New(
@@ -527,12 +527,12 @@ func syncContractEvents(
 
 	fromBlock, found, err := nodeStorage.GetLastProcessedBlock(nil)
 	if err != nil {
-		logger.Fatal("syncing registry contract events failed, could not get last processed block", zap.Error(err))
+		return nil, fmt.Errorf("syncing registry contract events failed, could not get last processed block: %w", err)
 	}
 	if !found {
 		fromBlock = networkConfig.RegistrySyncOffset
 	} else if fromBlock == nil {
-		logger.Fatal("syncing registry contract events failed, last processed block is nil")
+		return nil, errors.New("syncing registry contract events failed, last processed block is nil")
 	} else {
 		// Start syncing from the next block.
 		fromBlock = new(big.Int).SetUint64(fromBlock.Uint64() + 1)
@@ -542,11 +542,11 @@ func syncContractEvents(
 	if len(cfg.LocalEventsPath) != 0 {
 		localEvents, err := localevents.Load(cfg.LocalEventsPath)
 		if err != nil {
-			logger.Fatal("failed to load local events", zap.Error(err))
+			return nil, fmt.Errorf("failed to load local events: %w", err)
 		}
 
 		if err := eventHandler.HandleLocalEvents(ctx, localEvents); err != nil {
-			logger.Fatal("error occurred while running event data handler", zap.Error(err))
+			return nil, fmt.Errorf("error occurred while running event data handler: %w", err)
 		}
 	} else {
 		// Sync historical registry events.
@@ -566,7 +566,7 @@ func syncContractEvents(
 			)
 			fromBlock = new(big.Int).SetUint64(lastProcessedBlock + 1)
 		default:
-			logger.Fatal("failed to sync historical registry events", zap.Error(err))
+			return nil, fmt.Errorf("failed to sync historical registry events: %w", err)
 		}
 
 		// Print registry stats.
@@ -613,7 +613,7 @@ func syncContractEvents(
 		}()
 	}
 
-	return eventSyncer
+	return eventSyncer, nil
 }
 
 func initSlotPruning(ctx context.Context, stores *ibftstorage.ParticipantStores, slotTickerProvider slotticker.Provider, slot phase0.Slot, retain uint64) {

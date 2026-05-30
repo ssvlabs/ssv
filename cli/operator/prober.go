@@ -2,6 +2,7 @@ package operator
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"go.uber.org/zap"
@@ -26,15 +27,16 @@ const (
 
 const componentsUnhealthyFatalErrorMsg = "component(s) are not healthy"
 
-func ensureComponentsHealthy(ctx context.Context, logger *zap.Logger, p *hprobe.HealthProber) {
+func ensureComponentsHealthy(ctx context.Context, logger *zap.Logger, p *hprobe.HealthProber) error {
 	probeCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
 	if err := p.ProbeAll(probeCtx); err != nil {
-		logger.Fatal(componentsUnhealthyFatalErrorMsg, zap.Error(err))
+		return fmt.Errorf("%s: %w", componentsUnhealthyFatalErrorMsg, err)
 	}
 
 	logger.Info("all component(s) are healthy")
+	return nil
 }
 
 func startHealthProber(ctx context.Context, logger *zap.Logger, p *hprobe.HealthProber) {

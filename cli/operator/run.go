@@ -487,9 +487,11 @@ func run(ctx context.Context, cfg *config, logger *zap.Logger) error {
 	healthProber := hprobe.NewHealthProber(logger)
 	healthProber.AddComponent(clComponentName, consensusClient, proberHealthcheckTimeout, proberRetriesMax, proberRetryDelay)
 	healthProber.AddComponent(elComponentName, executionClient, proberHealthcheckTimeout, proberRetriesMax, proberRetryDelay)
-	ensureComponentsHealthy(ctx, logger, healthProber)
+	if err := ensureComponentsHealthy(ctx, logger, healthProber); err != nil {
+		return err
+	}
 
-	eventSyncer := syncContractEvents(
+	eventSyncer, err := syncContractEvents(
 		ctx,
 		logger,
 		executionClient,
@@ -500,13 +502,16 @@ func run(ctx context.Context, cfg *config, logger *zap.Logger) error {
 		keyManager,
 		doppelgangerHandler,
 	)
+	if err != nil {
+		return err
+	}
 	if len(cfg.LocalEventsPath) == 0 {
 		healthProber.AddComponent(eventSyncerComponentName, eventSyncer, proberHealthcheckTimeout, proberRetriesMax, proberRetryDelay)
 	}
 	go startHealthProber(ctx, logger, healthProber)
 
 	if _, err := metadataSyncer.SyncAll(ctx); err != nil {
-		logger.Fatal("failed to sync metadata on startup", zap.Error(err))
+		return fmt.Errorf("failed to sync metadata on startup: %w", err)
 	}
 
 	if usingSSVSigner {
@@ -593,7 +598,7 @@ func run(ctx context.Context, cfg *config, logger *zap.Logger) error {
 		}()
 	}
 	if err := operatorNode.Start(cfg.SSVOptions.Context); err != nil {
-		logger.Fatal("failed to start SSV node", zap.Error(err))
+		return fmt.Errorf("failed to start SSV node: %w", err)
 	}
 
 	return nil
