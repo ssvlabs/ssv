@@ -102,94 +102,16 @@ type assembled struct {
 // error it closes whatever it already opened (db/p2p) via the error-only defers below; on
 // success the returned *assembled owns those closers (run() defers a.Close()).
 func assemble(ctx context.Context, cfg *config, logger *zap.Logger, res resolved, networkConfig *networkconfig.Network, consensusClient beaconClient, executionClient executionclient.Provider) (_ *assembled, err error) {
-	usingSSVSigner, usingKeystore, usingPrivKey := res.usingSSVSigner, res.usingKeystore, res.usingPrivKey
+	usingSSVSigner := res.usingSSVSigner
 
-	var operatorPrivKey keys.OperatorPrivateKey
-	var operatorPrivKeyPEM string
-	var ssvSignerClient *ssvsigner.Client
-	var operatorPubKeyBase64 string
-
-	if cfg.ExporterOptions.Enabled {
-		logger.Info("exporter mode: skipping operator signing and key manager services")
-	} else if usingSSVSigner {
-		endpointField := zap.String("ssv_signer_endpoint", cfg.SSVSigner.Endpoint)
-		logger := logger.With(endpointField)
-		logger.Info("using ssv-signer for signing")
-
-		if _, err := url.ParseRequestURI(cfg.SSVSigner.Endpoint); err != nil {
-			return nil, startupError{err: fmt.Errorf("invalid ssv signer endpoint format: %w", err), fields: []zap.Field{endpointField}}
-		}
-
-		ssvSignerOptions := []ssvsigner.ClientOption{
-			ssvsigner.WithLogger(logger),
-			ssvsigner.WithRequestTimeout(cfg.SSVSigner.RequestTimeout),
-		}
-
-		if cfg.SSVSigner.KeystoreFile != "" || cfg.SSVSigner.ServerCertFile != "" {
-			tlsConfig := &ssvsignertls.Config{
-				ClientKeystoreFile:         cfg.SSVSigner.KeystoreFile,
-				ClientKeystorePasswordFile: cfg.SSVSigner.KeystorePasswordFile,
-				ClientServerCertFile:       cfg.SSVSigner.ServerCertFile,
-			}
-
-			clientConfig, err := tlsConfig.LoadClientTLSConfig()
-			if err != nil {
-				return nil, startupError{err: fmt.Errorf("failed to load ssv-signer TLS config: %w", err), fields: []zap.Field{endpointField}}
-			}
-
-			ssvSignerOptions = append(ssvSignerOptions, ssvsigner.WithTLSConfig(clientConfig))
-		}
-
-		ssvSignerClient = ssvsigner.NewClient(
-			cfg.SSVSigner.Endpoint,
-			ssvSignerOptions...,
-		)
-
-		operatorPubKeyString, err := ssvSignerClient.OperatorIdentity(ctx)
-		if err != nil {
-			return nil, startupError{err: fmt.Errorf("ssv-signer unavailable: %w", err), fields: []zap.Field{endpointField}}
-		}
-
-		pubKeyField := zap.String(fields.FieldPubKey, operatorPubKeyString)
-		logger = logger.With(pubKeyField)
-		logger.Info("ssv-signer operator identity")
-
-		operatorPubKey, err := keys.PublicKeyFromString(operatorPubKeyString)
-		if err != nil {
-			return nil, startupError{err: fmt.Errorf("could not extract operator public key from string: %w", err), fields: []zap.Field{endpointField, pubKeyField}}
-		}
-
-		operatorPubKeyBase64, err = operatorPubKey.Base64()
-		if err != nil {
-			return nil, startupError{err: fmt.Errorf("could not get operator public key base64: %w", err), fields: []zap.Field{endpointField, pubKeyField}}
-		}
-	} else {
-		if usingKeystore {
-			logger.Info("getting operator private key from keystore")
-
-			var decryptedKeystore []byte
-			operatorPrivKey, decryptedKeystore, err = privateKeyFromKeystore(cfg.KeyStore.PrivateKeyFile, cfg.KeyStore.PasswordFile)
-			if err != nil {
-				return nil, fmt.Errorf("could not extract private key from keystore: %w", err)
-			}
-
-			operatorPrivKeyPEM = base64.StdEncoding.EncodeToString(decryptedKeystore)
-		} else if usingPrivKey {
-			logger.Info("getting operator private key from args")
-
-			operatorPrivKey, err = keys.PrivateKeyFromString(cfg.OperatorPrivateKey)
-			if err != nil {
-				return nil, fmt.Errorf("could not decode operator private key: %w", err)
-			}
-
-			operatorPrivKeyPEM = cfg.OperatorPrivateKey
-		}
-
-		operatorPubKeyBase64, err = operatorPrivKey.Public().Base64()
-		if err != nil {
-			return nil, fmt.Errorf("could not get operator public key base64: %w", err)
-		}
+	identity, err := resolveOperatorIdentity(ctx, logger, cfg, res)
+	if err != nil {
+		return nil, err
 	}
+	operatorPrivKey := identity.privKey
+	operatorPrivKeyPEM := identity.privKeyPEM
+	ssvSignerClient := identity.ssvSigner
+	operatorPubKeyBase64 := identity.pubKeyB64
 
 	cfg.DBOptions.Ctx = ctx
 	var db basedb.Database
@@ -631,4 +553,111 @@ func (a *assembled) startNetwork(healthProber *hprobe.HealthProber) error {
 	}
 	healthProber.AddComponent(p2pComponentName, a.p2pNetwork.(p2pv1.HealthChecker), proberHealthcheckTimeout, proberRetriesMax, proberRetryDelay)
 	return nil
+}
+
+// operatorIdentity is the operator's signing material resolved from config. In exporter mode it is
+// empty (no signing); otherwise it carries either the private key (keystore / arg modes) or the
+// ssv-signer client (remote mode), plus the base64 public key persisted on first run.
+type operatorIdentity struct {
+	privKey    keys.OperatorPrivateKey
+	privKeyPEM string
+	ssvSigner  *ssvsigner.Client
+	pubKeyB64  string
+}
+
+// resolveOperatorIdentity loads the operator signing material for the node's mode: exporter nodes
+// don't sign (empty identity); operator nodes resolve it from ssv-signer, a keystore, or a raw
+// private key, depending on the configured signing method.
+func resolveOperatorIdentity(ctx context.Context, logger *zap.Logger, cfg *config, res resolved) (operatorIdentity, error) {
+	if cfg.ExporterOptions.Enabled {
+		logger.Info("exporter mode: skipping operator signing and key manager services")
+		return operatorIdentity{}, nil
+	}
+
+	if res.usingSSVSigner {
+		endpointField := zap.String("ssv_signer_endpoint", cfg.SSVSigner.Endpoint)
+		logger := logger.With(endpointField)
+		logger.Info("using ssv-signer for signing")
+
+		if _, err := url.ParseRequestURI(cfg.SSVSigner.Endpoint); err != nil {
+			return operatorIdentity{}, startupError{err: fmt.Errorf("invalid ssv signer endpoint format: %w", err), fields: []zap.Field{endpointField}}
+		}
+
+		ssvSignerOptions := []ssvsigner.ClientOption{
+			ssvsigner.WithLogger(logger),
+			ssvsigner.WithRequestTimeout(cfg.SSVSigner.RequestTimeout),
+		}
+
+		if cfg.SSVSigner.KeystoreFile != "" || cfg.SSVSigner.ServerCertFile != "" {
+			tlsConfig := &ssvsignertls.Config{
+				ClientKeystoreFile:         cfg.SSVSigner.KeystoreFile,
+				ClientKeystorePasswordFile: cfg.SSVSigner.KeystorePasswordFile,
+				ClientServerCertFile:       cfg.SSVSigner.ServerCertFile,
+			}
+
+			clientConfig, err := tlsConfig.LoadClientTLSConfig()
+			if err != nil {
+				return operatorIdentity{}, startupError{err: fmt.Errorf("failed to load ssv-signer TLS config: %w", err), fields: []zap.Field{endpointField}}
+			}
+
+			ssvSignerOptions = append(ssvSignerOptions, ssvsigner.WithTLSConfig(clientConfig))
+		}
+
+		ssvSignerClient := ssvsigner.NewClient(
+			cfg.SSVSigner.Endpoint,
+			ssvSignerOptions...,
+		)
+
+		operatorPubKeyString, err := ssvSignerClient.OperatorIdentity(ctx)
+		if err != nil {
+			return operatorIdentity{}, startupError{err: fmt.Errorf("ssv-signer unavailable: %w", err), fields: []zap.Field{endpointField}}
+		}
+
+		pubKeyField := zap.String(fields.FieldPubKey, operatorPubKeyString)
+		logger = logger.With(pubKeyField)
+		logger.Info("ssv-signer operator identity")
+
+		operatorPubKey, err := keys.PublicKeyFromString(operatorPubKeyString)
+		if err != nil {
+			return operatorIdentity{}, startupError{err: fmt.Errorf("could not extract operator public key from string: %w", err), fields: []zap.Field{endpointField, pubKeyField}}
+		}
+
+		operatorPubKeyBase64, err := operatorPubKey.Base64()
+		if err != nil {
+			return operatorIdentity{}, startupError{err: fmt.Errorf("could not get operator public key base64: %w", err), fields: []zap.Field{endpointField, pubKeyField}}
+		}
+
+		return operatorIdentity{ssvSigner: ssvSignerClient, pubKeyB64: operatorPubKeyBase64}, nil
+	}
+
+	var operatorPrivKey keys.OperatorPrivateKey
+	var operatorPrivKeyPEM string
+	if res.usingKeystore {
+		logger.Info("getting operator private key from keystore")
+
+		privKey, decryptedKeystore, err := privateKeyFromKeystore(cfg.KeyStore.PrivateKeyFile, cfg.KeyStore.PasswordFile)
+		if err != nil {
+			return operatorIdentity{}, fmt.Errorf("could not extract private key from keystore: %w", err)
+		}
+
+		operatorPrivKey = privKey
+		operatorPrivKeyPEM = base64.StdEncoding.EncodeToString(decryptedKeystore)
+	} else if res.usingPrivKey {
+		logger.Info("getting operator private key from args")
+
+		privKey, err := keys.PrivateKeyFromString(cfg.OperatorPrivateKey)
+		if err != nil {
+			return operatorIdentity{}, fmt.Errorf("could not decode operator private key: %w", err)
+		}
+
+		operatorPrivKey = privKey
+		operatorPrivKeyPEM = cfg.OperatorPrivateKey
+	}
+
+	operatorPubKeyBase64, err := operatorPrivKey.Public().Base64()
+	if err != nil {
+		return operatorIdentity{}, fmt.Errorf("could not get operator public key base64: %w", err)
+	}
+
+	return operatorIdentity{privKey: operatorPrivKey, privKeyPEM: operatorPrivKeyPEM, pubKeyB64: operatorPubKeyBase64}, nil
 }
