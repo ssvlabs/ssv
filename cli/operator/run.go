@@ -51,6 +51,7 @@ import (
 	"github.com/ssvlabs/ssv/operator/validator"
 	"github.com/ssvlabs/ssv/operator/validator/metadata"
 	"github.com/ssvlabs/ssv/operator/validators"
+	qbftcontroller "github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/storage/basedb"
@@ -282,6 +283,7 @@ func run(ctx context.Context, cfg *config, logger *zap.Logger) error {
 	}
 
 	var keyManager ekm.KeyManager
+	var operatorSigner types.OperatorSigner
 	ekmDB := ekmadapter.NewDatabaseAdapter(db)
 	if !cfg.ExporterOptions.Enabled && usingSSVSigner {
 		remoteKeyManager, err := ekm.NewRemoteKeyManager(
@@ -297,7 +299,7 @@ func run(ctx context.Context, cfg *config, logger *zap.Logger) error {
 		}
 
 		keyManager = remoteKeyManager
-		cfg.SSVOptions.ValidatorOptions.OperatorSigner = remoteKeyManager
+		operatorSigner = remoteKeyManager
 	} else if !cfg.ExporterOptions.Enabled {
 		localKeyManager, err := ekm.NewLocalKeyManager(logger, ekmDB, networkConfig.Beacon, operatorPrivKey)
 		if err != nil {
@@ -305,7 +307,7 @@ func run(ctx context.Context, cfg *config, logger *zap.Logger) error {
 		}
 
 		keyManager = localKeyManager
-		cfg.SSVOptions.ValidatorOptions.OperatorSigner = types.NewSsvOperatorSigner(operatorPrivKey, operatorDataStore.GetOperatorID)
+		operatorSigner = types.NewSsvOperatorSigner(operatorPrivKey, operatorDataStore.GetOperatorID)
 	}
 
 	cfg.P2pNetworkConfig.NodeStorage = nodeStorage
@@ -330,7 +332,6 @@ func run(ctx context.Context, cfg *config, logger *zap.Logger) error {
 	)
 
 	cfg.P2pNetworkConfig.MessageValidator = messageValidator
-	cfg.SSVOptions.ValidatorOptions.MessageValidator = messageValidator
 
 	p2pNetwork, err := setupP2P(ctx, logger, cfg, db, cfg.ExporterOptions.Enabled, operatorPrivKey, ssvSignerClient)
 	if err != nil {
@@ -351,28 +352,16 @@ func run(ctx context.Context, cfg *config, logger *zap.Logger) error {
 	cfg.SSVOptions.ExecutionClient = executionClient
 	cfg.SSVOptions.NetworkConfig = networkConfig
 	cfg.SSVOptions.P2PNetwork = p2pNetwork
-	cfg.SSVOptions.ValidatorOptions.NetworkConfig = networkConfig
-	cfg.SSVOptions.ValidatorOptions.Context = ctx
-	cfg.SSVOptions.ValidatorOptions.DB = db
-	cfg.SSVOptions.ValidatorOptions.Network = p2pNetwork
-	cfg.SSVOptions.ValidatorOptions.Beacon = consensusClient
-	cfg.SSVOptions.ValidatorOptions.BeaconSigner = keyManager
-	cfg.SSVOptions.ValidatorOptions.ValidatorsMap = validatorsMap
 
-	cfg.SSVOptions.ValidatorOptions.OperatorDataStore = operatorDataStore
-	cfg.SSVOptions.ValidatorOptions.RegistryStorage = nodeStorage
-	cfg.SSVOptions.ValidatorOptions.ValidatorRegistrationSubmitter = validatorRegistrationSubmitter
-
+	var newDecidedHandler qbftcontroller.NewDecidedHandler
 	var decidedStreamPublisherFn func(dutytracer.DecidedInfo)
 	if cfg.WsAPIPort != 0 {
 		ws := exporterapi.NewWsServer(ctx, logger, nil, http.NewServeMux(), cfg.WithPing)
 		cfg.SSVOptions.WS = ws
 		cfg.SSVOptions.WsAPIPort = cfg.WsAPIPort
-		cfg.SSVOptions.ValidatorOptions.NewDecidedHandler = decided.NewStreamPublisher(logger, networkConfig.DomainType, ws)
+		newDecidedHandler = decided.NewStreamPublisher(logger, networkConfig.DomainType, ws)
 		decidedStreamPublisherFn = decided.NewDecidedListener(logger, networkConfig.DomainType, ws, nodeStorage.ValidatorStore())
 	}
-
-	cfg.SSVOptions.ValidatorOptions.DutyRoles = []spectypes.BeaconRole{spectypes.BNRoleAttester} // TODO could be better to set in other place
 
 	storageRoles := []spectypes.BeaconRole{
 		spectypes.BNRoleAttester,
@@ -387,7 +376,7 @@ func run(ctx context.Context, cfg *config, logger *zap.Logger) error {
 	storageMap := ibftstorage.NewStores()
 
 	for _, storageRole := range storageRoles {
-		s := ibftstorage.New(logger, cfg.SSVOptions.ValidatorOptions.DB, storageRole)
+		s := ibftstorage.New(logger, db, storageRole)
 		storageMap.Add(storageRole, s)
 	}
 
@@ -403,11 +392,6 @@ func run(ctx context.Context, cfg *config, logger *zap.Logger) error {
 		threshold := cfg.SSVOptions.NetworkConfig.EstimatedCurrentSlot()
 		initSlotPruning(ctx, storageMap, slotTickerProvider, threshold, retain)
 	}
-
-	cfg.SSVOptions.ValidatorOptions.StorageMap = storageMap
-	cfg.SSVOptions.ValidatorOptions.Graffiti = []byte(cfg.Graffiti)
-	cfg.SSVOptions.ValidatorOptions.ProposerDelay = cfg.ProposerDelay
-	cfg.SSVOptions.ValidatorOptions.ValidatorStore = nodeStorage.ValidatorStore()
 
 	fixedSubnets, err := networkcommons.SubnetsFromString(cfg.P2pNetworkConfig.Subnets)
 	if err != nil {
@@ -426,7 +410,6 @@ func run(ctx context.Context, cfg *config, logger *zap.Logger) error {
 		fixedSubnets,
 		metadata.WithSyncInterval(cfg.SSVOptions.ValidatorOptions.MetadataUpdateInterval),
 	)
-	cfg.SSVOptions.ValidatorOptions.ValidatorSyncer = metadataSyncer
 
 	// Exporter duty tracing. An invalid EXPORTER_MODE is rejected up front by resolveAndValidate,
 	// so res.mode here is always one of the known modes.
@@ -443,7 +426,6 @@ func run(ctx context.Context, cfg *config, logger *zap.Logger) error {
 			dutyStore)
 
 		go collector.Start(ctx, slotTickerProvider)
-		cfg.SSVOptions.ValidatorOptions.DutyTraceCollector = collector
 		cfg.SSVOptions.ExporterRead = exporter2.NewExporter(logger, storageMap, collector, nodeStorage.ValidatorStore())
 	case modeExporterStandard:
 		logger.Info("exporter mode: standard")
@@ -467,9 +449,34 @@ func run(ctx context.Context, cfg *config, logger *zap.Logger) error {
 		doppelgangerHandler = doppelganger.NoOpHandler{}
 		logger.Info("Doppelganger protection disabled.")
 	}
-	cfg.SSVOptions.ValidatorOptions.DoppelgangerHandler = doppelgangerHandler
+	// Assemble the validator controller options in one place: start from the YAML-loaded base and
+	// fill in the resolved runtime dependencies, rather than mutating the struct field-by-field
+	// across the function.
+	valOpts := cfg.SSVOptions.ValidatorOptions
+	valOpts.Context = ctx
+	valOpts.NetworkConfig = networkConfig
+	valOpts.DB = db
+	valOpts.Network = p2pNetwork
+	valOpts.Beacon = consensusClient
+	valOpts.BeaconSigner = keyManager
+	valOpts.OperatorSigner = operatorSigner
+	valOpts.MessageValidator = messageValidator
+	valOpts.ValidatorsMap = validatorsMap
+	valOpts.OperatorDataStore = operatorDataStore
+	valOpts.RegistryStorage = nodeStorage
+	valOpts.ValidatorStore = nodeStorage.ValidatorStore()
+	valOpts.ValidatorRegistrationSubmitter = validatorRegistrationSubmitter
+	valOpts.NewDecidedHandler = newDecidedHandler
+	valOpts.DutyRoles = []spectypes.BeaconRole{spectypes.BNRoleAttester} // TODO could be better to set in other place
+	valOpts.StorageMap = storageMap
+	valOpts.Graffiti = []byte(cfg.Graffiti)
+	valOpts.ProposerDelay = cfg.ProposerDelay
+	valOpts.ValidatorSyncer = metadataSyncer
+	valOpts.DutyTraceCollector = collector
+	valOpts.DoppelgangerHandler = doppelgangerHandler
+	cfg.SSVOptions.ValidatorOptions = valOpts
 
-	validatorCtrl := validator.NewController(logger, cfg.SSVOptions.ValidatorOptions, cfg.ExporterOptions)
+	validatorCtrl := validator.NewController(logger, valOpts, cfg.ExporterOptions)
 	cfg.SSVOptions.ValidatorController = validatorCtrl
 	cfg.SSVOptions.ValidatorStore = nodeStorage.ValidatorStore()
 
