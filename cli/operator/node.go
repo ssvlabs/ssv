@@ -402,6 +402,14 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.MessageValidator = messageValidator
 
 		p2pNetwork := setupP2P(cmd.Context(), logger, db, cfg.ExporterOptions.Enabled, operatorPrivKey, ssvSignerClient)
+		// The CLI owns the p2p network's lifecycle (setupP2P created it), so it also closes it
+		// (operator.Node.Start no longer does). Close() is robust on partial states, so deferring
+		// it right after construction is safe even if startup aborts before Setup/Start.
+		defer func() {
+			if err := p2pNetwork.Close(); err != nil {
+				logger.Error("could not close p2p network", zap.Error(err))
+			}
+		}()
 
 		cfg.SSVOptions.Context = cmd.Context()
 		cfg.SSVOptions.DB = db
