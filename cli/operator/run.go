@@ -3,6 +3,7 @@ package operator
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -67,7 +68,7 @@ func run(ctx context.Context, cfg *config, logger *zap.Logger) error {
 
 	ssvNetworkConfig, err := setupSSVNetwork(logger)
 	if err != nil {
-		logger.Fatal("could not setup network", zap.Error(err))
+		return fmt.Errorf("could not setup network: %w", err)
 	}
 
 	logger.Info("connecting CL(s)",
@@ -78,17 +79,17 @@ func run(ctx context.Context, cfg *config, logger *zap.Logger) error {
 
 	cliopt, err := goclient.NewOptions(cfg.ConsensusClient, cfg.ProposerDelay)
 	if err != nil {
-		logger.Fatal("failed to create beacon client options",
-			zap.Error(err),
-			fields.Address(cfg.ConsensusClient.BeaconNodeAddr),
-		)
+		return startupError{
+			err:    fmt.Errorf("failed to create beacon client options: %w", err),
+			fields: []zap.Field{fields.Address(cfg.ConsensusClient.BeaconNodeAddr)},
+		}
 	}
 	consensusClient, err := goclient.New(ctx, logger, cliopt)
 	if err != nil {
-		logger.Fatal("failed to create beacon go-client",
-			zap.Error(err),
-			fields.Address(cfg.ConsensusClient.BeaconNodeAddr),
-		)
+		return startupError{
+			err:    fmt.Errorf("failed to create beacon go-client: %w", err),
+			fields: []zap.Field{fields.Address(cfg.ConsensusClient.BeaconNodeAddr)},
+		}
 	}
 
 	networkConfig := &networkconfig.Network{
@@ -237,7 +238,7 @@ func run(ctx context.Context, cfg *config, logger *zap.Logger) error {
 
 	executionAddrList := strings.Split(cfg.ExecutionClient.Addr, ";")
 	if len(executionAddrList) == 0 {
-		logger.Fatal("no execution node address provided")
+		return errors.New("no execution node address provided")
 	}
 
 	logger.Info("connecting EL(s)",
@@ -257,7 +258,7 @@ func run(ctx context.Context, cfg *config, logger *zap.Logger) error {
 			executionclient.WithSyncDistanceTolerance(cfg.ExecutionClient.SyncDistanceTolerance),
 		)
 		if err != nil {
-			logger.Fatal("could not connect to execution client", zap.Error(err))
+			return fmt.Errorf("could not connect to execution client: %w", err)
 		}
 
 		executionClient = ec
@@ -271,7 +272,7 @@ func run(ctx context.Context, cfg *config, logger *zap.Logger) error {
 			executionclient.WithSyncDistanceToleranceMulti(cfg.ExecutionClient.SyncDistanceTolerance),
 		)
 		if err != nil {
-			logger.Fatal("could not connect to execution client", zap.Error(err))
+			return fmt.Errorf("could not connect to execution client: %w", err)
 		}
 
 		executionClient = ec
@@ -289,7 +290,7 @@ func run(ctx context.Context, cfg *config, logger *zap.Logger) error {
 			operatorDataStore.GetOperatorID,
 		)
 		if err != nil {
-			logger.Fatal("could not create remote key manager", zap.Error(err))
+			return fmt.Errorf("could not create remote key manager: %w", err)
 		}
 
 		keyManager = remoteKeyManager
@@ -297,7 +298,7 @@ func run(ctx context.Context, cfg *config, logger *zap.Logger) error {
 	} else if !cfg.ExporterOptions.Enabled {
 		localKeyManager, err := ekm.NewLocalKeyManager(logger, ekmDB, networkConfig.Beacon, operatorPrivKey)
 		if err != nil {
-			logger.Fatal("could not create new eth-key-manager signer", zap.Error(err))
+			return fmt.Errorf("could not create new eth-key-manager signer: %w", err)
 		}
 
 		keyManager = localKeyManager
