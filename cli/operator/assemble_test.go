@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"testing"
 
+	api "github.com/attestantio/go-eth2-client/api"
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -30,6 +31,14 @@ type stubBeaconClient struct {
 // SetProposalPreparationsProvider is the one beacon method invoked synchronously during assembly
 // (operator.New wires it into the fee-recipient controller); a no-op satisfies the smoke test.
 func (stubBeaconClient) SetProposalPreparationsProvider(func() ([]*eth2apiv1.ProposalPreparation, error)) {
+}
+
+// SubmitValidatorRegistrations is called unconditionally on each slot tick by the NewVRSubmitter
+// goroutine assemble() starts in operator mode. A no-op makes the smoke test structurally safe if
+// that goroutine ticks before ctx is canceled, rather than relying on the slot interval winning the
+// race (it would otherwise hit the embedded-nil beacon and panic).
+func (stubBeaconClient) SubmitValidatorRegistrations(context.Context, []*api.VersionedSignedValidatorRegistration) error {
+	return nil
 }
 
 // stubExecutionClient satisfies executionclient.Provider the same way. assemble() only stores the
