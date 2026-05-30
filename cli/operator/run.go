@@ -229,7 +229,10 @@ func run(ctx context.Context, cfg *config, logger *zap.Logger) error {
 	}
 
 	cfg.P2pNetworkConfig.Ctx = ctx
-	operatorDataStore := setupOperatorDataStore(logger, nodeStorage, operatorPubKeyBase64)
+	operatorDataStore, err := setupOperatorDataStore(nodeStorage, operatorPubKeyBase64)
+	if err != nil {
+		return err
+	}
 	validatorProvider := nodeStorage.ValidatorStore().WithOperatorID(operatorDataStore.GetOperatorID)
 	var validatorRegistrationSubmitter runner.ValidatorRegistrationSubmitter
 	if !cfg.ExporterOptions.Enabled {
@@ -504,7 +507,9 @@ func run(ctx context.Context, cfg *config, logger *zap.Logger) error {
 	}
 
 	if usingSSVSigner {
-		ensureNoMissingKeys(ctx, logger, nodeStorage, operatorDataStore, ssvSignerClient)
+		if err := ensureNoMissingKeys(ctx, nodeStorage, operatorDataStore, ssvSignerClient); err != nil {
+			return err
+		}
 	}
 
 	// Increase MaxPeers if the operator is subscribed to many subnets.

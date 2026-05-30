@@ -63,13 +63,12 @@ func warnIfSSVAPIAddressUnset(logger *zap.Logger, address string, port int) {
 
 func ensureNoMissingKeys(
 	ctx context.Context,
-	logger *zap.Logger,
 	nodeStorage operatorstorage.Storage,
 	operatorDataStore operatordatastore.OperatorDataStore,
 	ssvSignerClient *ssvsigner.Client,
-) {
+) error {
 	if !operatorDataStore.OperatorIDReady() {
-		return
+		return nil
 	}
 
 	shares := nodeStorage.Shares().List(
@@ -78,7 +77,7 @@ func ensureNoMissingKeys(
 		registrystorage.ByOperatorID(operatorDataStore.GetOperatorID()),
 	)
 	if len(shares) == 0 {
-		return
+		return nil
 	}
 
 	localKeys := make([]phase0.BLSPubKey, 0, len(shares))
@@ -88,18 +87,18 @@ func ensureNoMissingKeys(
 
 	missingKeys, err := ssvSignerClient.MissingKeys(ctx, localKeys)
 	if err != nil {
-		logger.Fatal("failed to check for missing keys", zap.Error(err))
+		return fmt.Errorf("failed to check for missing keys: %w", err)
 	}
 
 	if len(missingKeys) > 0 {
+		// >50 keys: log only the count to keep the line readable; otherwise list them.
+		keysField := zap.Stringers("keys", missingKeys)
 		if len(missingKeys) > 50 {
-			logger = logger.With(zap.Int("count", len(missingKeys)))
-		} else {
-			logger = logger.With(zap.Stringers("keys", missingKeys))
+			keysField = zap.Int("count", len(missingKeys))
 		}
-
-		logger.Fatal("remote signer misses keys")
+		return startupError{err: errors.New("remote signer misses keys"), fields: []zap.Field{keysField}}
 	}
+	return nil
 }
 
 func privateKeyFromKeystore(privKeyFile, passwordFile string) (keys.OperatorPrivateKey, []byte, error) {
@@ -235,19 +234,18 @@ func applyMigrations(
 }
 
 func setupOperatorDataStore(
-	logger *zap.Logger,
 	nodeStorage operatorstorage.Storage,
 	base64PubKey string,
-) operatordatastore.OperatorDataStore {
+) (operatordatastore.OperatorDataStore, error) {
 	if base64PubKey == "" {
 		// Exporter runs without operator identity, so initialize an empty datastore
 		// instead of looking up operator data by pubkey.
-		return operatordatastore.New(&registrystorage.OperatorData{})
+		return operatordatastore.New(&registrystorage.OperatorData{}), nil
 	}
 
 	operatorData, found, err := nodeStorage.GetOperatorDataByPubKey(nil, base64PubKey)
 	if err != nil {
-		logger.Fatal("could not get operator data by public key", zap.Error(err))
+		return nil, fmt.Errorf("could not get operator data by public key: %w", err)
 	}
 	if !found {
 		operatorData = &registrystorage.OperatorData{
@@ -255,10 +253,10 @@ func setupOperatorDataStore(
 		}
 	}
 	if operatorData == nil {
-		logger.Fatal("invalid operator data in database: nil")
+		return nil, errors.New("invalid operator data in database: nil")
 	}
 
-	return operatordatastore.New(operatorData)
+	return operatordatastore.New(operatorData), nil
 }
 
 // ensureOperatorPrivateKey makes sure the operator private key hash
