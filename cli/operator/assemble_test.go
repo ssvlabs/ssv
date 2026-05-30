@@ -10,6 +10,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/eth/executionclient"
+	"github.com/ssvlabs/ssv/exporter"
 	"github.com/ssvlabs/ssv/hprobe"
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -77,6 +78,62 @@ func Test_assemble_wiresOperatorNode(t *testing.T) {
 	// CLI-owned resources close cleanly — the p2p network was constructed but never Setup/Start'd.
 	cancel()
 	require.NoError(t, a.Close())
+}
+
+// Test_assemble_wiresExporterNode mirrors the operator smoke test for the exporter paths: with no
+// signing identity, it asserts assemble() wires the graph for both exporter modes and that the
+// mode-specific divergences hold — no key manager in either, and a duty-trace collector only in
+// archive mode.
+func Test_assemble_wiresExporterNode(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		mode          nodeMode
+		exporterMode  string
+		wantCollector bool
+	}{
+		{name: "standard", mode: modeExporterStandard, exporterMode: exporter.ModeStandard, wantCollector: false},
+		{name: "archive", mode: modeExporterArchive, exporterMode: exporter.ModeArchive, wantCollector: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			logger := zap.NewNop()
+
+			netCfg := *networkconfig.TestNetwork
+			networkConfig := &netCfg
+
+			cfg := &config{}
+			cfg.DBOptions.Path = t.TempDir()
+			cfg.ExporterOptions.Enabled = true
+			cfg.ExporterOptions.Mode = tc.exporterMode
+			cfg.MetricsAPIPort = 0
+			cfg.SSVAPIPort = 0
+			cfg.WsAPIPort = 0
+
+			// Exporter mode resolves no signing flags; mode alone drives the divergence.
+			res := resolved{mode: tc.mode}
+
+			a, err := assemble(ctx, cfg, logger, res, networkConfig, stubBeaconClient{}, stubExecutionClient{})
+			require.NoError(t, err)
+			require.NotNil(t, a)
+			require.NotNil(t, a.db)
+			require.NotNil(t, a.nodeStorage)
+			require.NotNil(t, a.p2pNetwork)
+			require.NotNil(t, a.validatorCtrl)
+			require.NotNil(t, a.operatorNode)
+			require.Nil(t, a.keyManager, "exporter nodes have no key manager")
+
+			if tc.wantCollector {
+				require.NotNil(t, a.collector, "archive mode wires a duty-trace collector")
+			} else {
+				require.Nil(t, a.collector, "standard mode has no duty-trace collector")
+			}
+
+			cancel()
+			require.NoError(t, a.Close())
+		})
+	}
 }
 
 // recordingP2PNetwork is a stub network.P2PNetwork that records Setup/Start instead of performing
