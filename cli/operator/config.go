@@ -248,17 +248,38 @@ type signingConfigError struct {
 	fields []zap.Field
 }
 
-func (e signingConfigError) Error() string { return e.err.Error() }
-func (e signingConfigError) Unwrap() error { return e.err }
+func (e signingConfigError) Error() string          { return e.err.Error() }
+func (e signingConfigError) Unwrap() error          { return e.err }
+func (e signingConfigError) logFields() []zap.Field { return e.fields }
 
-// configErrorLogFields returns the structured log fields for an error returned by
-// resolveAndValidate: the error itself, plus any signing-source context carried by a
-// signingConfigError (so the consolidated fatal preserves the pre-refactor structured fields).
-func configErrorLogFields(err error) []zap.Field {
+// startupError wraps an error returned from run() with structured log fields, so the single
+// consolidated fatal in the cobra Run closure preserves the context (e.g. the ssv-signer
+// endpoint) that was attached to the original in-run logger.Fatal call. Mirrors
+// signingConfigError, for non-validation startup failures.
+type startupError struct {
+	err    error
+	fields []zap.Field
+}
+
+func (e startupError) Error() string          { return e.err.Error() }
+func (e startupError) Unwrap() error          { return e.err }
+func (e startupError) logFields() []zap.Field { return e.fields }
+
+// fieldedError is implemented by the startup error types that carry structured log fields.
+// startupErrorLogFields matches it with errors.As, which returns the outermost such error in
+// the chain — so wrapping one field-carrier inside another never double-counts its fields.
+type fieldedError interface {
+	logFields() []zap.Field
+}
+
+// startupErrorLogFields returns the structured log fields for an error returned by run(): the
+// error itself, plus any context carried by a fieldedError (signingConfigError / startupError),
+// so the consolidated fatal preserves the structured fields the original in-run fatals logged.
+func startupErrorLogFields(err error) []zap.Field {
 	fields := []zap.Field{zap.Error(err)}
-	var sce signingConfigError
-	if errors.As(err, &sce) {
-		fields = append(fields, sce.fields...)
+	var fe fieldedError
+	if errors.As(err, &fe) {
+		fields = append(fields, fe.logFields()...)
 	}
 	return fields
 }

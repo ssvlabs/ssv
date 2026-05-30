@@ -61,7 +61,7 @@ func run(ctx context.Context, cfg *config, logger *zap.Logger) error {
 	// rather than after connecting to the beacon). resolveAndValidate only reads cfg.
 	res, err := cfg.resolveAndValidate(logger)
 	if err != nil {
-		logger.Fatal("invalid configuration", configErrorLogFields(err)...)
+		return err
 	}
 	usingSSVSigner, usingKeystore, usingPrivKey := res.usingSSVSigner, res.usingKeystore, res.usingPrivKey
 
@@ -104,11 +104,12 @@ func run(ctx context.Context, cfg *config, logger *zap.Logger) error {
 	if cfg.ExporterOptions.Enabled {
 		logger.Info("exporter mode: skipping operator signing and key manager services")
 	} else if usingSSVSigner {
-		logger := logger.With(zap.String("ssv_signer_endpoint", cfg.SSVSigner.Endpoint))
+		endpointField := zap.String("ssv_signer_endpoint", cfg.SSVSigner.Endpoint)
+		logger := logger.With(endpointField)
 		logger.Info("using ssv-signer for signing")
 
 		if _, err := url.ParseRequestURI(cfg.SSVSigner.Endpoint); err != nil {
-			logger.Fatal("invalid ssv signer endpoint format", zap.Error(err))
+			return startupError{err: fmt.Errorf("invalid ssv signer endpoint format: %w", err), fields: []zap.Field{endpointField}}
 		}
 
 		ssvSignerOptions := []ssvsigner.ClientOption{
@@ -125,7 +126,7 @@ func run(ctx context.Context, cfg *config, logger *zap.Logger) error {
 
 			clientConfig, err := tlsConfig.LoadClientTLSConfig()
 			if err != nil {
-				logger.Fatal("failed to load ssv-signer TLS config", zap.Error(err))
+				return startupError{err: fmt.Errorf("failed to load ssv-signer TLS config: %w", err), fields: []zap.Field{endpointField}}
 			}
 
 			ssvSignerOptions = append(ssvSignerOptions, ssvsigner.WithTLSConfig(clientConfig))
@@ -138,20 +139,21 @@ func run(ctx context.Context, cfg *config, logger *zap.Logger) error {
 
 		operatorPubKeyString, err := ssvSignerClient.OperatorIdentity(ctx)
 		if err != nil {
-			logger.Fatal("ssv-signer unavailable", zap.Error(err))
+			return startupError{err: fmt.Errorf("ssv-signer unavailable: %w", err), fields: []zap.Field{endpointField}}
 		}
 
-		logger = logger.With(zap.String(fields.FieldPubKey, operatorPubKeyString))
+		pubKeyField := zap.String(fields.FieldPubKey, operatorPubKeyString)
+		logger = logger.With(pubKeyField)
 		logger.Info("ssv-signer operator identity")
 
 		operatorPubKey, err := keys.PublicKeyFromString(operatorPubKeyString)
 		if err != nil {
-			logger.Fatal("could not extract operator public key from string", zap.Error(err))
+			return startupError{err: fmt.Errorf("could not extract operator public key from string: %w", err), fields: []zap.Field{endpointField, pubKeyField}}
 		}
 
 		operatorPubKeyBase64, err = operatorPubKey.Base64()
 		if err != nil {
-			logger.Fatal("could not get operator public key base64", zap.Error(err))
+			return startupError{err: fmt.Errorf("could not get operator public key base64: %w", err), fields: []zap.Field{endpointField, pubKeyField}}
 		}
 	} else {
 		if usingKeystore {
@@ -160,7 +162,7 @@ func run(ctx context.Context, cfg *config, logger *zap.Logger) error {
 			var decryptedKeystore []byte
 			operatorPrivKey, decryptedKeystore, err = privateKeyFromKeystore(cfg.KeyStore.PrivateKeyFile, cfg.KeyStore.PasswordFile)
 			if err != nil {
-				logger.Fatal("could not extract private key from keystore", zap.Error(err))
+				return fmt.Errorf("could not extract private key from keystore: %w", err)
 			}
 
 			operatorPrivKeyPEM = base64.StdEncoding.EncodeToString(decryptedKeystore)
@@ -169,7 +171,7 @@ func run(ctx context.Context, cfg *config, logger *zap.Logger) error {
 
 			operatorPrivKey, err = keys.PrivateKeyFromString(cfg.OperatorPrivateKey)
 			if err != nil {
-				logger.Fatal("could not decode operator private key", zap.Error(err))
+				return fmt.Errorf("could not decode operator private key: %w", err)
 			}
 
 			operatorPrivKeyPEM = cfg.OperatorPrivateKey
@@ -177,7 +179,7 @@ func run(ctx context.Context, cfg *config, logger *zap.Logger) error {
 
 		operatorPubKeyBase64, err = operatorPrivKey.Public().Base64()
 		if err != nil {
-			logger.Fatal("could not get operator public key base64", zap.Error(err))
+			return fmt.Errorf("could not get operator public key base64: %w", err)
 		}
 	}
 
@@ -191,7 +193,7 @@ func run(ctx context.Context, cfg *config, logger *zap.Logger) error {
 		db, err = setupBadgerDB(logger, networkConfig.Beacon, operatorPrivKey)
 	}
 	if err != nil {
-		logger.Fatal("could not setup db", zap.Error(err))
+		return fmt.Errorf("could not setup db: %w", err)
 	}
 	defer func() {
 		if err := db.Close(); err != nil {
@@ -201,18 +203,18 @@ func run(ctx context.Context, cfg *config, logger *zap.Logger) error {
 
 	nodeStorage, err := operatorstorage.NewNodeStorage(networkConfig.Beacon, logger, db)
 	if err != nil {
-		logger.Fatal("failed to create node storage", zap.Error(err))
+		return fmt.Errorf("failed to create node storage: %w", err)
 	}
 
 	if !cfg.ExporterOptions.Enabled {
 		if usingSSVSigner {
 			// Ensure the pubkey is saved on first run and never changes afterwards
 			if err := ensureOperatorPubKey(nodeStorage, operatorPubKeyBase64); err != nil {
-				logger.Fatal("could not save base64-encoded operator public key", zap.Error(err))
+				return fmt.Errorf("could not save base64-encoded operator public key: %w", err)
 			}
 		} else {
 			if err := ensureOperatorPrivateKey(nodeStorage, operatorPrivKey, operatorPrivKeyPEM); err != nil {
-				logger.Fatal("could not save operator private key", zap.Error(err))
+				return fmt.Errorf("could not save operator private key: %w", err)
 			}
 		}
 
@@ -222,7 +224,7 @@ func run(ctx context.Context, cfg *config, logger *zap.Logger) error {
 	usingLocalEvents := len(cfg.LocalEventsPath) != 0
 
 	if err := validateConfig(nodeStorage, networkConfig.StorageName(), usingLocalEvents, usingSSVSigner, cfg.ExporterOptions.Enabled); err != nil {
-		logger.Fatal("failed to validate config", zap.Error(err))
+		return fmt.Errorf("failed to validate config: %w", err)
 	}
 
 	cfg.P2pNetworkConfig.Ctx = ctx

@@ -1,6 +1,7 @@
 package operator
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -178,10 +179,10 @@ func Test_resolveAndValidate_signingErrorContext(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "cannot enable both remote signing")
 
-	// node.go logs the error via configErrorLogFields — the configured signing-source context
+	// node.go logs run()'s error via startupErrorLogFields — the configured signing-source context
 	// must be preserved as queryable structured fields, without exposing the key value.
 	core, recorded := observer.New(zapcore.ErrorLevel)
-	zap.New(core).Error("invalid configuration", configErrorLogFields(err)...)
+	zap.New(core).Error("could not start node", startupErrorLogFields(err)...)
 	require.Len(t, recorded.All(), 1)
 
 	m := recorded.All()[0].ContextMap()
@@ -192,6 +193,33 @@ func Test_resolveAndValidate_signingErrorContext(t *testing.T) {
 	for _, v := range m {
 		require.NotEqual(t, testOperatorKey, v) // the private key value itself is never logged
 	}
+}
+
+// Test_startupErrorLogFields verifies the consolidated startup fatal preserves the structured
+// fields carried by a startupError (e.g. the ssv-signer endpoint), and degrades to just the
+// error for a plain error.
+func Test_startupErrorLogFields(t *testing.T) {
+	t.Run("startupError fields are attached", func(t *testing.T) {
+		err := startupError{
+			err:    errors.New("ssv-signer unavailable"),
+			fields: []zap.Field{zap.String("ssv_signer_endpoint", testSignerEndpoint)},
+		}
+		core, recorded := observer.New(zapcore.ErrorLevel)
+		zap.New(core).Error("could not start node", startupErrorLogFields(err)...)
+
+		m := recorded.All()[0].ContextMap()
+		require.Equal(t, testSignerEndpoint, m["ssv_signer_endpoint"])
+		require.Contains(t, m, "error")
+	})
+
+	t.Run("plain error -> no extra fields", func(t *testing.T) {
+		core, recorded := observer.New(zapcore.ErrorLevel)
+		zap.New(core).Error("could not start node", startupErrorLogFields(errors.New("boom"))...)
+
+		m := recorded.All()[0].ContextMap()
+		require.Contains(t, m, "error")
+		require.NotContains(t, m, "ssv_signer_endpoint")
+	})
 }
 
 // Test_resolveMode covers operating-mode resolution and the fail-fast rejection of an

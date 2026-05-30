@@ -48,7 +48,7 @@ var StartNodeCmd = &cobra.Command{
 		logger.Info(fmt.Sprintf("starting %v", commons.GetBuildData()))
 
 		if err := run(cmd.Context(), &cfg, logger); err != nil {
-			logger.Fatal("failed to run node", zap.Error(err))
+			logger.Fatal("could not start node", startupErrorLogFields(err)...)
 		}
 	},
 }
