@@ -69,14 +69,25 @@ func init() {
 // acknowledge the risk via AllowDangerousProposerDelay.
 const maxSafeProposerDelay = 1000 * time.Millisecond
 
+// nodeMode is the resolved operating mode of the node, derived once from ExporterOptions by
+// resolveAndValidate so startup can dispatch on a typed value instead of re-deriving the mode
+// from ExporterOptions.Enabled / .Mode at each site.
+type nodeMode int
+
+const (
+	modeOperator         nodeMode = iota // not an exporter
+	modeExporterStandard                 // exporter, standard tracing
+	modeExporterArchive                  // exporter, archive tracing (pre-consensus + consensus)
+)
+
 // resolved carries config-DERIVED state (computed during resolveAndValidate, not directly
 // operator-provided) that startup needs but that (a) has no home as a field on config and
-// (b) is consumed only within cli/operator. General-purpose bucket: today it holds the
-// signing-mode flags; extend it as more such derived state is consolidated here.
+// (b) is consumed only within cli/operator: the operating mode and the signing-method flags.
 type resolved struct {
 	usingSSVSigner bool
 	usingKeystore  bool
 	usingPrivKey   bool
+	mode           nodeMode
 }
 
 // load reads the operator config (and optional share config) from the given paths. Paths are
@@ -126,6 +137,15 @@ func (c *config) resolveAndValidate(logger *zap.Logger) (resolved, error) {
 			zap.Duration("max_safe_proposer_delay", maxSafeProposerDelay))
 	}
 
+	// Resolve the operating mode last so a doubly-misconfigured node still surfaces the signing
+	// or proposer-delay error first (matching pre-refactor precedence, where an invalid
+	// EXPORTER_MODE was the latest of these checks).
+	m, err := resolveMode(c.ExporterOptions)
+	if err != nil {
+		return resolved{}, err
+	}
+	res.mode = m
+
 	return res, nil
 }
 
@@ -165,6 +185,23 @@ func (c *config) resolveSigning() (resolved, error) {
 	}
 
 	return res, nil
+}
+
+// resolveMode derives the node's operating mode from the exporter options. An unrecognized
+// EXPORTER_MODE is rejected here (fail-fast) instead of late in the exporter collector switch.
+// A non-exporter node is always modeOperator, regardless of the (then-irrelevant) EXPORTER_MODE.
+func resolveMode(opts exporter.Options) (nodeMode, error) {
+	if !opts.Enabled {
+		return modeOperator, nil
+	}
+	switch opts.Mode {
+	case exporter.ModeStandard:
+		return modeExporterStandard, nil
+	case exporter.ModeArchive:
+		return modeExporterArchive, nil
+	default:
+		return modeOperator, fmt.Errorf("invalid exporter mode %q (must be %q or %q)", opts.Mode, exporter.ModeStandard, exporter.ModeArchive)
+	}
 }
 
 // warnExporterSigning warns when signing configuration is provided in exporter mode (where it

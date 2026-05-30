@@ -29,7 +29,6 @@ import (
 	"github.com/ssvlabs/ssv/beacon/goclient"
 	"github.com/ssvlabs/ssv/doppelganger"
 	"github.com/ssvlabs/ssv/eth/executionclient"
-	"github.com/ssvlabs/ssv/exporter"
 	exporterapi "github.com/ssvlabs/ssv/exporter/api"
 	"github.com/ssvlabs/ssv/exporter/api/decided"
 	dutytracestore "github.com/ssvlabs/ssv/exporter/store"
@@ -390,7 +389,7 @@ func run(ctx context.Context, cfg *config, logger *zap.Logger) error {
 		})
 	}
 
-	if cfg.ExporterOptions.Enabled && cfg.ExporterOptions.Mode == exporter.ModeStandard {
+	if res.mode == modeExporterStandard {
 		retain := cfg.ExporterOptions.RetainSlots
 		threshold := cfg.SSVOptions.NetworkConfig.EstimatedCurrentSlot()
 		initSlotPruning(ctx, storageMap, slotTickerProvider, threshold, retain)
@@ -420,28 +419,27 @@ func run(ctx context.Context, cfg *config, logger *zap.Logger) error {
 	)
 	cfg.SSVOptions.ValidatorOptions.ValidatorSyncer = metadataSyncer
 
-	// Exporter duty tracing
+	// Exporter duty tracing. An invalid EXPORTER_MODE is rejected up front by resolveAndValidate,
+	// so res.mode here is always one of the known modes.
 	var collector *dutytracer.Collector
-	if cfg.ExporterOptions.Enabled {
-		switch cfg.ExporterOptions.Mode {
-		case exporter.ModeArchive:
-			logger.Info("exporter mode: archive")
-			dstore := &dutytracer.DutyTraceStoreMetrics{
-				Store: dutytracestore.New(db),
-			}
-			collector = dutytracer.New(logger,
-				nodeStorage.ValidatorStore(), consensusClient,
-				dstore, networkConfig.Beacon, decidedStreamPublisherFn,
-				dutyStore)
-
-			go collector.Start(ctx, slotTickerProvider)
-			cfg.SSVOptions.ValidatorOptions.DutyTraceCollector = collector
-			cfg.SSVOptions.ExporterRead = exporter2.NewExporter(logger, storageMap, collector, nodeStorage.ValidatorStore())
-		case exporter.ModeStandard:
-			logger.Info("exporter mode: standard")
-		default:
-			logger.Fatal("invalid exporter configuration", zap.String("mode", cfg.ExporterOptions.Mode))
+	switch res.mode {
+	case modeExporterArchive:
+		logger.Info("exporter mode: archive")
+		dstore := &dutytracer.DutyTraceStoreMetrics{
+			Store: dutytracestore.New(db),
 		}
+		collector = dutytracer.New(logger,
+			nodeStorage.ValidatorStore(), consensusClient,
+			dstore, networkConfig.Beacon, decidedStreamPublisherFn,
+			dutyStore)
+
+		go collector.Start(ctx, slotTickerProvider)
+		cfg.SSVOptions.ValidatorOptions.DutyTraceCollector = collector
+		cfg.SSVOptions.ExporterRead = exporter2.NewExporter(logger, storageMap, collector, nodeStorage.ValidatorStore())
+	case modeExporterStandard:
+		logger.Info("exporter mode: standard")
+	case modeOperator:
+		// not an exporter: no duty-trace collector
 	}
 
 	var doppelgangerHandler doppelganger.Provider
@@ -574,7 +572,7 @@ func run(ctx context.Context, cfg *config, logger *zap.Logger) error {
 				Shares: nodeStorage.Shares(),
 			},
 			hexporter.NewExporter(logger, storageMap, collector, nodeStorage.ValidatorStore()),
-			cfg.ExporterOptions.Enabled && cfg.ExporterOptions.Mode == exporter.ModeArchive,
+			res.mode == modeExporterArchive,
 		)
 		go func() {
 			err := apiServer.Run()
