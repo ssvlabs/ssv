@@ -90,6 +90,13 @@ type resolved struct {
 	mode           nodeMode
 }
 
+// isExporter reports whether the node runs as an exporter (standard or archive) rather than as an
+// operator. It is the single mode-axis predicate the startup path dispatches on, replacing the
+// scattered cfg.ExporterOptions.Enabled re-checks.
+func (r resolved) isExporter() bool {
+	return r.mode != modeOperator
+}
+
 // load reads the operator config (and optional share config) from the given paths. Paths are
 // passed in (rather than read from the globalArgs global) so it can be tested in isolation.
 // Called before the zap logger exists, so the caller handles failures via the std logger.

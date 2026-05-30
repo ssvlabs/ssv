@@ -114,7 +114,7 @@ func assemble(ctx context.Context, cfg *config, logger *zap.Logger, res resolved
 	operatorPubKeyBase64 := identity.pubKeyB64
 
 	cfg.DBOptions.Ctx = ctx
-	db, err := openNodeDB(logger, cfg, networkConfig.Beacon, operatorPrivKey)
+	db, err := openNodeDB(logger, cfg, res, networkConfig.Beacon, operatorPrivKey)
 	if err != nil {
 		return nil, fmt.Errorf("could not setup db: %w", err)
 	}
@@ -131,7 +131,7 @@ func assemble(ctx context.Context, cfg *config, logger *zap.Logger, res resolved
 		return nil, fmt.Errorf("failed to create node storage: %w", err)
 	}
 
-	if !cfg.ExporterOptions.Enabled {
+	if !res.isExporter() {
 		if usingSSVSigner {
 			// Ensure the pubkey is saved on first run and never changes afterwards
 			if err := ensureOperatorPubKey(nodeStorage, operatorPubKeyBase64); err != nil {
@@ -148,7 +148,7 @@ func assemble(ctx context.Context, cfg *config, logger *zap.Logger, res resolved
 
 	usingLocalEvents := len(cfg.LocalEventsPath) != 0
 
-	if err := validateConfig(nodeStorage, networkConfig.StorageName(), usingLocalEvents, usingSSVSigner, cfg.ExporterOptions.Enabled); err != nil {
+	if err := validateConfig(nodeStorage, networkConfig.StorageName(), usingLocalEvents, usingSSVSigner, res.isExporter()); err != nil {
 		return nil, fmt.Errorf("failed to validate config: %w", err)
 	}
 
@@ -159,7 +159,7 @@ func assemble(ctx context.Context, cfg *config, logger *zap.Logger, res resolved
 	}
 	validatorProvider := nodeStorage.ValidatorStore().WithOperatorID(operatorDataStore.GetOperatorID)
 	var validatorRegistrationSubmitter runner.ValidatorRegistrationSubmitter
-	if !cfg.ExporterOptions.Enabled {
+	if !res.isExporter() {
 		validatorRegistrationSubmitter = runner.NewVRSubmitter(ctx, logger, networkConfig.Beacon, consensusClient, validatorProvider)
 	}
 
@@ -191,7 +191,7 @@ func assemble(ctx context.Context, cfg *config, logger *zap.Logger, res resolved
 
 	cfg.P2pNetworkConfig.MessageValidator = messageValidator
 
-	p2pNetwork, err := setupP2P(ctx, logger, cfg, db, cfg.ExporterOptions.Enabled, operatorPrivKey, ssvSignerClient)
+	p2pNetwork, err := setupP2P(ctx, logger, cfg, db, res.isExporter(), operatorPrivKey, ssvSignerClient)
 	if err != nil {
 		return nil, err
 	}
@@ -255,7 +255,7 @@ func assemble(ctx context.Context, cfg *config, logger *zap.Logger, res resolved
 		return nil, fmt.Errorf("failed to parse fixed subnets: %w", err)
 	}
 
-	if cfg.ExporterOptions.Enabled && fixedSubnets == networkcommons.ZeroSubnets {
+	if res.isExporter() && fixedSubnets == networkcommons.ZeroSubnets {
 		fixedSubnets = networkcommons.AllSubnets
 	}
 
@@ -290,7 +290,7 @@ func assemble(ctx context.Context, cfg *config, logger *zap.Logger, res resolved
 		// not an exporter: no duty-trace collector
 	}
 
-	doppelgangerHandler := buildDoppelganger(logger, cfg, networkConfig.Beacon, consensusClient, validatorProvider, slotTickerProvider)
+	doppelgangerHandler := buildDoppelganger(logger, cfg, res, networkConfig.Beacon, consensusClient, validatorProvider, slotTickerProvider)
 	// Assemble the validator controller options in one place: start from the YAML-loaded base and
 	// fill in the resolved runtime dependencies, rather than mutating the struct field-by-field
 	// across the function.
@@ -510,6 +510,9 @@ func (a *assembled) startNetwork(healthProber *hprobe.HealthProber) error {
 	return nil
 }
 
+// Leaf builders — the per-mode steps assemble() composes. Each handles its own operator-vs-exporter
+// branching (dispatching on resolved.isExporter / .mode) so the assemble() spine reads top-to-bottom.
+
 // operatorIdentity is the operator's signing material resolved from config. In exporter mode it is
 // empty (no signing); otherwise it carries either the private key (keystore / arg modes) or the
 // ssv-signer client (remote mode), plus the base64 public key persisted on first run.
@@ -524,7 +527,7 @@ type operatorIdentity struct {
 // don't sign (empty identity); operator nodes resolve it from ssv-signer, a keystore, or a raw
 // private key, depending on the configured signing method.
 func resolveOperatorIdentity(ctx context.Context, logger *zap.Logger, cfg *config, res resolved) (operatorIdentity, error) {
-	if cfg.ExporterOptions.Enabled {
+	if res.isExporter() {
 		logger.Info("exporter mode: skipping operator signing and key manager services")
 		return operatorIdentity{}, nil
 	}
@@ -619,8 +622,8 @@ func resolveOperatorIdentity(ctx context.Context, logger *zap.Logger, cfg *confi
 
 // openNodeDB opens the node's database, picking the backend by mode: exporter nodes use pebble,
 // operator nodes use badger.
-func openNodeDB(logger *zap.Logger, cfg *config, beaconConfig *networkconfig.Beacon, operatorPrivKey keys.OperatorPrivateKey) (basedb.Database, error) {
-	if cfg.ExporterOptions.Enabled {
+func openNodeDB(logger *zap.Logger, cfg *config, res resolved, beaconConfig *networkconfig.Beacon, operatorPrivKey keys.OperatorPrivateKey) (basedb.Database, error) {
+	if res.isExporter() {
 		logger.Info("using pebble db")
 		return setupPebbleDB(logger, cfg, beaconConfig, operatorPrivKey)
 	}
@@ -641,7 +644,7 @@ func buildKeyManager(
 	operatorPrivKey keys.OperatorPrivateKey,
 	operatorDataStore operatordatastore.OperatorDataStore,
 ) (ekm.KeyManager, types.OperatorSigner, error) {
-	if cfg.ExporterOptions.Enabled {
+	if res.isExporter() {
 		return nil, nil, nil
 	}
 
@@ -675,12 +678,13 @@ func buildKeyManager(
 func buildDoppelganger(
 	logger *zap.Logger,
 	cfg *config,
+	res resolved,
 	beaconConfig *networkconfig.Beacon,
 	beaconNode doppelganger.BeaconNode,
 	validatorProvider doppelganger.ValidatorProvider,
 	slotTickerProvider slotticker.Provider,
 ) doppelganger.Provider {
-	if cfg.ExporterOptions.Enabled {
+	if res.isExporter() {
 		return doppelganger.NoOpHandler{}
 	}
 	if cfg.EnableDoppelgangerProtection {
