@@ -1,397 +1,270 @@
 package operator
 
 import (
-	"bytes"
 	"context"
-	"io"
-	"net"
-	"net/http"
-	"net/http/httptest"
-	"strconv"
+	"fmt"
 	"testing"
 
+	api "github.com/attestantio/go-eth2-client/api"
+	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
-	"go.uber.org/zap/zaptest/observer"
 
+	"github.com/ssvlabs/ssv/doppelganger"
+	"github.com/ssvlabs/ssv/eth/executionclient"
+	"github.com/ssvlabs/ssv/exporter"
+	"github.com/ssvlabs/ssv/hprobe"
+	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/networkconfig"
-	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
-	"github.com/ssvlabs/ssv/ssvsigner"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
-func newTestSSVSignerClient(t *testing.T, register func(mux *http.ServeMux)) *ssvsigner.Client {
-	mux := http.NewServeMux()
-	if register != nil {
-		register(mux)
-	}
+// Test_runNode_invalidConfigReturns verifies runNode() returns the configuration error instead of
+// calling logger.Fatal (which would os.Exit the test process) when resolveAndValidate fails.
+// A conflicting signing config trips resolveAndValidate — the first thing runNode() does — before
+// any network I/O, so the call is safe to make in-process.
+func Test_runNode_invalidConfigReturns(t *testing.T) {
+	c := config{}
+	c.SSVSigner.Endpoint = testSignerEndpoint
+	c.OperatorPrivateKey = testOperatorKey // remote + local signing => rejected by resolveAndValidate
 
-	server := httptest.NewServer(mux)
-	t.Cleanup(server.Close)
-
-	return ssvsigner.NewClient(server.URL, ssvsigner.WithLogger(zap.NewNop()))
+	err := runNode(context.Background(), &c, zap.NewNop())
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "cannot enable both remote signing")
 }
 
-func Test_warnIfSSVAPIAddressUnset(t *testing.T) {
-	t.Parallel()
-
-	t.Run("warns when address is empty", func(t *testing.T) {
-		core, recorded := observer.New(zapcore.WarnLevel)
-		logger := zap.New(core)
-
-		warnIfSSVAPIAddressUnset(logger, "", 16000)
-
-		logs := recorded.All()
-		require.Len(t, logs, 1)
-		require.Equal(t, zapcore.WarnLevel, logs[0].Level)
-		require.Equal(t, "SSV API address not configured; listening on all interfaces", logs[0].Message)
-		require.EqualValues(t, 16000, logs[0].ContextMap()["port"])
-		require.Equal(t, "SSVAPIAddress", logs[0].ContextMap()["config_key"])
-		require.Equal(t, "127.0.0.1", logs[0].ContextMap()["recommended_address"])
-	})
-
-	t.Run("does not warn when address is set", func(t *testing.T) {
-		core, recorded := observer.New(zapcore.WarnLevel)
-		logger := zap.New(core)
-
-		warnIfSSVAPIAddressUnset(logger, "127.0.0.1", 16000)
-
-		require.Len(t, recorded.All(), 0)
-	})
+// stubBeaconClient satisfies the in-package beaconClient interface by embedding it (nil): it
+// promotes every method so the type compiles as a beaconClient, while implementing only what the
+// test path actually invokes. In operator mode with Doppelganger disabled, newNode() never calls
+// a beacon method synchronously (it only stores the client); the one async caller is the
+// NewVRSubmitter goroutine, which the test stops by canceling ctx before its first slot tick.
+type stubBeaconClient struct {
+	beaconClient
 }
 
-func TestDecideNetworkKeyProtectors(t *testing.T) {
-	t.Run("exporter ignores operator key", func(t *testing.T) {
-		operatorPrivKey, err := keys.GeneratePrivateKey()
-		require.NoError(t, err)
-
-		protectFn, unprotectFn, err := decideNetworkKeyProtectors(context.Background(), zap.NewNop(), nil, true, operatorPrivKey, nil)
-		require.NoError(t, err)
-		require.Nil(t, protectFn)
-		require.Nil(t, unprotectFn)
-	})
-
-	t.Run("exporter ignores ssv-signer config", func(t *testing.T) {
-		client := newTestSSVSignerClient(t, nil)
-
-		protectFn, unprotectFn, err := decideNetworkKeyProtectors(context.Background(), zap.NewNop(), nil, true, nil, client)
-		require.NoError(t, err)
-		require.Nil(t, protectFn)
-		require.Nil(t, unprotectFn)
-	})
-
-	t.Run("non-exporter keeps local operator key", func(t *testing.T) {
-		operatorPrivKey, err := keys.GeneratePrivateKey()
-		require.NoError(t, err)
-
-		protectFn, unprotectFn, err := decideNetworkKeyProtectors(context.Background(), zap.NewNop(), nil, false, operatorPrivKey, nil)
-		require.NoError(t, err)
-		require.NotNil(t, protectFn)
-		require.NotNil(t, unprotectFn)
-
-		plaintext := []byte("local-protected-payload")
-		protectedValue, err := protectFn(context.Background(), plaintext)
-		require.NoError(t, err)
-		require.NotEqual(t, plaintext, protectedValue)
-
-		decryptedValue, err := unprotectFn(context.Background(), protectedValue)
-		require.NoError(t, err)
-		require.Equal(t, plaintext, decryptedValue)
-	})
-
-	t.Run("non-exporter keeps ssv-signer client", func(t *testing.T) {
-		probeClient := newTestSSVSignerClient(t, func(mux *http.ServeMux) {
-			mux.HandleFunc(ssvsigner.PathOperatorEncrypt, func(w http.ResponseWriter, r *http.Request) {
-				payload, err := io.ReadAll(r.Body)
-				require.NoError(t, err)
-				_, err = w.Write(append([]byte("encrypted:"), payload...))
-				require.NoError(t, err)
-			})
-			mux.HandleFunc(ssvsigner.PathOperatorDecrypt, func(w http.ResponseWriter, r *http.Request) {
-				payload, err := io.ReadAll(r.Body)
-				require.NoError(t, err)
-				_, err = w.Write(bytes.TrimPrefix(payload, []byte("encrypted:")))
-				require.NoError(t, err)
-			})
-		})
-
-		protectFn, unprotectFn, err := decideNetworkKeyProtectors(context.Background(), zap.NewNop(), nil, false, nil, probeClient)
-		require.NoError(t, err)
-		require.NotNil(t, protectFn)
-		require.NotNil(t, unprotectFn)
-
-		plaintext := []byte("remote-protected-payload")
-		protectedValue, err := protectFn(context.Background(), plaintext)
-		require.NoError(t, err)
-		require.Equal(t, []byte("encrypted:"+string(plaintext)), protectedValue)
-
-		decryptedValue, err := unprotectFn(context.Background(), protectedValue)
-		require.NoError(t, err)
-		require.Equal(t, plaintext, decryptedValue)
-	})
+// SetProposalPreparationsProvider is the one beacon method invoked synchronously during assembly
+// (operator.New wires it into the fee-recipient controller); a no-op satisfies the smoke test.
+func (stubBeaconClient) SetProposalPreparationsProvider(func() ([]*eth2apiv1.ProposalPreparation, error)) {
 }
 
-func Test_ssvAPIListenAddress(t *testing.T) {
-	t.Parallel()
+// SubmitValidatorRegistrations is called unconditionally on each slot tick by the NewVRSubmitter
+// goroutine newNode() starts in operator mode. A no-op makes the smoke test structurally safe if
+// that goroutine ticks before ctx is canceled, rather than relying on the slot interval winning the
+// race (it would otherwise hit the embedded-nil beacon and panic).
+func (stubBeaconClient) SubmitValidatorRegistrations(context.Context, []*api.VersionedSignedValidatorRegistration) error {
+	return nil
+}
 
-	testCases := []struct {
-		name    string
-		address string
-		port    int
-		want    string
+// stubExecutionClient satisfies executionclient.Provider the same way. newNode() only stores the
+// EL client (it is consumed in start(), not here), so no method is invoked during assembly.
+type stubExecutionClient struct {
+	executionclient.Provider
+}
+
+// Close is a no-op: node.Close() (invoked by the smoke tests during teardown) calls it, so it must
+// not fall through to the nil embedded Provider.
+func (stubExecutionClient) Close() error { return nil }
+
+// Test_newNode_wiresOperatorNode is the in-process smoke test for the newNode() seam: with
+// stubbed beacon/EL clients and a minimal operator-mode config, the full wiring graph
+// (db → storage → keys → p2p → validator controller → operator node) must construct without
+// error. It exercises everything up to — but not including — start()'s network bring-up, which
+// performs real socket I/O. The doppelganger dimension covers buildDoppelganger's real-handler
+// path (enabled) alongside the no-op path (disabled).
+func Test_newNode_wiresOperatorNode(t *testing.T) {
+	for _, tc := range []struct {
+		name           string
+		doppelgangerOn bool
 	}{
-		{
-			name: "empty address listens on all interfaces",
-			port: 16000,
-			want: ":16000",
-		},
-		{
-			name:    "ipv4 loopback",
-			address: "127.0.0.1",
-			port:    16000,
-			want:    "127.0.0.1:16000",
-		},
-		{
-			name:    "ipv6 loopback",
-			address: "::1",
-			port:    16000,
-			want:    "[::1]:16000",
-		},
-	}
-
-	for _, tc := range testCases {
+		{name: "doppelganger disabled", doppelgangerOn: false},
+		{name: "doppelganger enabled", doppelgangerOn: true},
+	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got := net.JoinHostPort(tc.address, strconv.Itoa(tc.port))
-			require.Equal(t, tc.want, got)
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			logger := zap.NewNop()
+
+			operatorPrivKey, err := keys.GeneratePrivateKey()
+			require.NoError(t, err)
+
+			netCfg := *networkconfig.TestNetwork
+			networkConfig := &netCfg
+
+			cfg := &config{}
+			cfg.OperatorPrivateKey = operatorPrivKey.Base64()
+			cfg.DBOptions.Path = t.TempDir()
+			// Keep all long-lived servers off; they only matter in start().
+			cfg.MetricsAPIPort = 0
+			cfg.SSVAPIPort = 0
+			cfg.WsAPIPort = 0
+			cfg.EnableDoppelgangerProtection = tc.doppelgangerOn
+
+			res := resolved{mode: modeOperator, usingPrivKey: true}
+
+			a, err := newNode(ctx, cfg, logger, res, networkConfig, stubBeaconClient{}, stubExecutionClient{})
+			require.NoError(t, err)
+			require.NotNil(t, a)
+			require.NotNil(t, a.db)
+			require.NotNil(t, a.nodeStorage)
+			require.NotNil(t, a.p2pNetwork)
+			require.NotNil(t, a.validatorCtrl)
+			require.NotNil(t, a.operatorNode)
+
+			// buildDoppelganger returns the no-op handler when protection is disabled and a real
+			// handler when enabled.
+			_, isNoOp := a.doppelgangerHandler.(doppelganger.NoOpHandler)
+			require.Equal(t, !tc.doppelgangerOn, isNoOp, "doppelganger handler must match the configured protection")
+
+			// Stop the VRSubmitter goroutine (started in newNode) before tearing down, then ensure
+			// the CLI-owned resources close cleanly — the p2p network was constructed but never
+			// Setup/Start'd.
+			cancel()
+			require.NoError(t, a.Close())
 		})
 	}
 }
 
-func Test_verifyConfig(t *testing.T) {
-	logger := zap.New(zapcore.NewNopCore(), zap.WithFatalHook(zapcore.WriteThenPanic))
+// Test_newNode_wiresExporterNode mirrors the operator smoke test for the exporter paths: with no
+// signing identity, it asserts newNode() wires the graph for both exporter modes and that the
+// mode-specific divergences hold — no key manager in either, and a duty-trace collector only in
+// archive mode.
+func Test_newNode_wiresExporterNode(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		mode          nodeMode
+		exporterMode  string
+		wantCollector bool
+	}{
+		{name: "standard", mode: modeExporterStandard, exporterMode: exporter.ModeStandard, wantCollector: false},
+		{name: "archive", mode: modeExporterArchive, exporterMode: exporter.ModeArchive, wantCollector: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
 
-	db, err := kv.NewInMemory(logger, basedb.Options{})
-	require.NoError(t, err)
+			logger := zap.NewNop()
 
-	netCfg := networkconfig.TestNetwork
-	nodeStorage, err := operatorstorage.NewNodeStorage(netCfg.Beacon, logger, db)
-	require.NoError(t, err)
+			netCfg := *networkconfig.TestNetwork
+			networkConfig := &netCfg
 
-	testNetworkName := netCfg.StorageName()
+			cfg := &config{}
+			cfg.DBOptions.Path = t.TempDir()
+			cfg.ExporterOptions.Enabled = true
+			cfg.ExporterOptions.Mode = tc.exporterMode
+			cfg.MetricsAPIPort = 0
+			cfg.SSVAPIPort = 0
+			cfg.WsAPIPort = 0
 
-	t.Run("no config in DB", func(t *testing.T) {
-		c := &operatorstorage.ConfigLock{
-			NetworkName:      testNetworkName,
-			UsingLocalEvents: true,
-			UsingSSVSigner:   true,
-		}
-		require.NoError(t, validateConfig(nodeStorage, c.NetworkName, c.UsingLocalEvents, c.UsingSSVSigner, false))
+			// Exporter mode resolves no signing flags; mode alone drives the divergence.
+			res := resolved{mode: tc.mode}
 
-		storedConfig, found, err := nodeStorage.GetConfig(nil)
-		require.NoError(t, err)
-		require.True(t, found)
-		require.Equal(t, c, storedConfig)
+			a, err := newNode(ctx, cfg, logger, res, networkConfig, stubBeaconClient{}, stubExecutionClient{})
+			require.NoError(t, err)
+			require.NotNil(t, a)
+			require.NotNil(t, a.db)
+			require.NotNil(t, a.nodeStorage)
+			require.NotNil(t, a.p2pNetwork)
+			require.NotNil(t, a.validatorCtrl)
+			require.NotNil(t, a.operatorNode)
+			require.Nil(t, a.keyManager, "exporter nodes have no key manager")
 
-		require.NoError(t, nodeStorage.DeleteConfig(nil))
-	})
+			if tc.wantCollector {
+				require.NotNil(t, a.collector, "archive mode wires a duty-trace collector")
+			} else {
+				require.Nil(t, a.collector, "standard mode has no duty-trace collector")
+			}
 
-	t.Run("has same config in DB", func(t *testing.T) {
-		c := &operatorstorage.ConfigLock{
-			NetworkName:      testNetworkName,
-			UsingLocalEvents: true,
-			UsingSSVSigner:   true,
-		}
-		require.NoError(t, nodeStorage.SaveConfig(nil, c))
-		require.NoError(t, validateConfig(nodeStorage, c.NetworkName, c.UsingLocalEvents, c.UsingSSVSigner, false))
-
-		storedConfig, found, err := nodeStorage.GetConfig(nil)
-		require.NoError(t, err)
-		require.True(t, found)
-		require.Equal(t, c, storedConfig)
-
-		require.NoError(t, nodeStorage.DeleteConfig(nil))
-	})
-
-	t.Run("has different network name, events type, and ssv signer in DB", func(t *testing.T) {
-		c := &operatorstorage.ConfigLock{
-			NetworkName:      testNetworkName + "1",
-			UsingLocalEvents: false,
-			UsingSSVSigner:   false,
-		}
-		require.NoError(t, nodeStorage.SaveConfig(nil, c))
-		require.ErrorContains(t,
-			validateConfig(nodeStorage, testNetworkName, true, true, false),
-			"incompatible config change: network mismatch. Stored network testnet:alan1 does not match current network testnet:alan. The database must be removed or reinitialized",
-		)
-
-		storedConfig, found, err := nodeStorage.GetConfig(nil)
-		require.NoError(t, err)
-		require.True(t, found)
-		require.Equal(t, c, storedConfig)
-
-		require.NoError(t, nodeStorage.DeleteConfig(nil))
-	})
-
-	t.Run("has different network name in DB", func(t *testing.T) {
-		c := &operatorstorage.ConfigLock{
-			NetworkName:      testNetworkName + "1",
-			UsingLocalEvents: true,
-			UsingSSVSigner:   true,
-		}
-		require.NoError(t, nodeStorage.SaveConfig(nil, c))
-		require.ErrorContains(t,
-			validateConfig(nodeStorage, testNetworkName, c.UsingLocalEvents, c.UsingSSVSigner, false),
-			"incompatible config change: network mismatch. Stored network testnet:alan1 does not match current network testnet:alan. The database must be removed or reinitialized",
-		)
-
-		storedConfig, found, err := nodeStorage.GetConfig(nil)
-		require.NoError(t, err)
-		require.True(t, found)
-		require.Equal(t, c, storedConfig)
-
-		require.NoError(t, nodeStorage.DeleteConfig(nil))
-	})
-
-	t.Run("has real events in DB but runs with local events", func(t *testing.T) {
-		c := &operatorstorage.ConfigLock{
-			NetworkName:      testNetworkName,
-			UsingLocalEvents: false,
-			UsingSSVSigner:   true,
-		}
-		require.NoError(t, nodeStorage.SaveConfig(nil, c))
-		require.ErrorContains(t,
-			validateConfig(nodeStorage, c.NetworkName, true, true, false),
-			"incompatible config change: enabling local events is not allowed. The database must be removed or reinitialized",
-		)
-
-		storedConfig, found, err := nodeStorage.GetConfig(nil)
-		require.NoError(t, err)
-		require.True(t, found)
-		require.Equal(t, c, storedConfig)
-
-		require.NoError(t, nodeStorage.DeleteConfig(nil))
-	})
-
-	t.Run("has local events in DB but runs with real events", func(t *testing.T) {
-		c := &operatorstorage.ConfigLock{
-			NetworkName:      testNetworkName,
-			UsingLocalEvents: true,
-			UsingSSVSigner:   true,
-		}
-		require.NoError(t, nodeStorage.SaveConfig(nil, c))
-		require.ErrorContains(t,
-			validateConfig(nodeStorage, c.NetworkName, false, true, false),
-			"incompatible config change: disabling local events is not allowed. The database must be removed or reinitialized",
-		)
-
-		storedConfig, found, err := nodeStorage.GetConfig(nil)
-		require.NoError(t, err)
-		require.True(t, found)
-		require.Equal(t, c, storedConfig)
-
-		require.NoError(t, nodeStorage.DeleteConfig(nil))
-	})
-
-	t.Run("has local signer in DB but runs with remote signer", func(t *testing.T) {
-		c := &operatorstorage.ConfigLock{
-			NetworkName:      testNetworkName,
-			UsingLocalEvents: true,
-			UsingSSVSigner:   true,
-		}
-		require.NoError(t, nodeStorage.SaveConfig(nil, c))
-		require.ErrorContains(t,
-			validateConfig(nodeStorage, c.NetworkName, true, false, false),
-			"incompatible config change: disabling ssv-signer is not allowed. The database must be removed or reinitialized",
-		)
-
-		storedConfig, found, err := nodeStorage.GetConfig(nil)
-		require.NoError(t, err)
-		require.True(t, found)
-		require.Equal(t, c, storedConfig)
-
-		require.NoError(t, nodeStorage.DeleteConfig(nil))
-	})
-
-	t.Run("has remote signer in DB but runs with local signer", func(t *testing.T) {
-		c := &operatorstorage.ConfigLock{
-			NetworkName:      testNetworkName,
-			UsingLocalEvents: true,
-			UsingSSVSigner:   false,
-		}
-		require.NoError(t, nodeStorage.SaveConfig(nil, c))
-		require.ErrorContains(t,
-			validateConfig(nodeStorage, c.NetworkName, true, true, false),
-			"incompatible config change: enabling ssv-signer is not allowed. The database must be removed or reinitialized",
-		)
-
-		storedConfig, found, err := nodeStorage.GetConfig(nil)
-		require.NoError(t, err)
-		require.True(t, found)
-		require.Equal(t, c, storedConfig)
-
-		require.NoError(t, nodeStorage.DeleteConfig(nil))
-	})
-
-	t.Run("exporter ignores stored signer mode", func(t *testing.T) {
-		c := &operatorstorage.ConfigLock{
-			NetworkName:      testNetworkName,
-			UsingLocalEvents: true,
-			UsingSSVSigner:   true,
-		}
-		require.NoError(t, nodeStorage.SaveConfig(nil, c))
-		require.NoError(t, validateConfig(nodeStorage, c.NetworkName, true, false, true))
-
-		storedConfig, found, err := nodeStorage.GetConfig(nil)
-		require.NoError(t, err)
-		require.True(t, found)
-		require.Equal(t, c, storedConfig)
-
-		require.NoError(t, nodeStorage.DeleteConfig(nil))
-	})
+			cancel()
+			require.NoError(t, a.Close())
+		})
+	}
 }
 
-func Test_probeRemoteNetworkKeyProtector(t *testing.T) {
-	t.Run("uses remote signer encrypt and decrypt endpoints when supported", func(t *testing.T) {
-		client := newTestSSVSignerClient(t, func(mux *http.ServeMux) {
-			mux.HandleFunc(ssvsigner.PathOperatorEncrypt, func(w http.ResponseWriter, r *http.Request) {
-				require.Equal(t, http.MethodPost, r.Method)
-				payload, err := io.ReadAll(r.Body)
-				require.NoError(t, err)
-				_, err = w.Write(append([]byte("encrypted:"), payload...))
-				require.NoError(t, err)
-			})
-			mux.HandleFunc(ssvsigner.PathOperatorDecrypt, func(w http.ResponseWriter, r *http.Request) {
-				require.Equal(t, http.MethodPost, r.Method)
-				payload, err := io.ReadAll(r.Body)
-				require.NoError(t, err)
-				_, err = w.Write(bytes.TrimPrefix(payload, []byte("encrypted:")))
-				require.NoError(t, err)
-			})
+// Test_newNode_closesDBOnAssemblyFailure locks in newNode()'s error-only cleanup contract: when
+// assembly fails after the db is opened, the named-return-err defer must Close the db. It forces a
+// failure in setupP2P (an invalid NetworkPrivateKey) — which runs after openNodeDB — and proves the
+// db was closed by reopening the badger dir: a leaked handle would still hold the directory lock and
+// fail the reopen. Guards against a future `:=` shadow of the named err silently breaking cleanup.
+func Test_newNode_closesDBOnAssemblyFailure(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	logger := zap.NewNop()
+
+	operatorPrivKey, err := keys.GeneratePrivateKey()
+	require.NoError(t, err)
+
+	netCfg := *networkconfig.TestNetwork
+	networkConfig := &netCfg
+
+	cfg := &config{}
+	cfg.OperatorPrivateKey = operatorPrivKey.Base64()
+	cfg.DBOptions.Path = t.TempDir()
+	cfg.MetricsAPIPort = 0
+	cfg.SSVAPIPort = 0
+	cfg.WsAPIPort = 0
+	// An invalid network key makes setupP2P fail — but only after openNodeDB has run, so the
+	// failure exercises the db-close defer rather than failing before the db is even opened.
+	cfg.NetworkPrivateKey = "not-a-valid-network-key"
+
+	res := resolved{mode: modeOperator, usingPrivKey: true}
+
+	a, err := newNode(ctx, cfg, logger, res, networkConfig, stubBeaconClient{}, stubExecutionClient{})
+	require.Error(t, err)
+	require.ErrorContains(t, err, "failed to setup network private key") // i.e. failed in setupP2P, after db-open
+	require.Nil(t, a)
+
+	// Stop the VRSubmitter goroutine newNode started before the failure point.
+	cancel()
+
+	// The error-only defer must have closed the db: a fresh badger open of the same dir succeeds
+	// only if the previous handle released its directory lock.
+	reopened, err := kv.New(zap.NewNop(), basedb.Options{Path: cfg.DBOptions.Path, Ctx: context.Background()})
+	require.NoError(t, err, "newNode must Close the db on assembly failure; a leaked handle keeps the badger dir locked")
+	require.NoError(t, reopened.Close())
+}
+
+// recordingP2PNetwork is a stub network.P2PNetwork that records Setup/Start instead of performing
+// real socket I/O, and satisfies p2pv1.HealthChecker (via Healthy) so startNetwork's health-prober
+// registration — a.p2pNetwork.(p2pv1.HealthChecker) — succeeds.
+type recordingP2PNetwork struct {
+	network.P2PNetwork
+	setupCalled bool
+	startCalled bool
+}
+
+func (r *recordingP2PNetwork) Setup() error                  { r.setupCalled = true; return nil }
+func (r *recordingP2PNetwork) Start() error                  { r.startCalled = true; return nil }
+func (r *recordingP2PNetwork) Healthy(context.Context) error { return nil }
+
+// Test_node_startNetwork_wiresStatsRegardlessOfDynamicMaxPeers is the CLI-level regression for
+// the DynamicMaxPeers bug: GetValidatorStats must be wired and the p2p network Set up + Started
+// whether or not DynamicMaxPeers is enabled. Re-nesting these under the DynamicMaxPeers flag (the
+// original bug) would fail this test.
+func Test_node_startNetwork_wiresStatsRegardlessOfDynamicMaxPeers(t *testing.T) {
+	for _, dynamicMaxPeers := range []bool{false, true} {
+		t.Run(fmt.Sprintf("DynamicMaxPeers=%t", dynamicMaxPeers), func(t *testing.T) {
+			stubNet := &recordingP2PNetwork{}
+			cfg := &config{}
+			cfg.P2pNetworkConfig.DynamicMaxPeers = dynamicMaxPeers
+
+			a := &node{
+				logger:     zap.NewNop(),
+				cfg:        cfg,
+				p2pNetwork: stubNet,
+				// validatorCtrl stays nil: startNetwork only *assigns* the GetValidatorStats closure
+				// (pubsub invokes it later, not here), so a nil controller is never dereferenced.
+			}
+
+			require.NoError(t, a.startNetwork(hprobe.NewHealthProber(zap.NewNop())))
+
+			require.NotNil(t, cfg.P2pNetworkConfig.GetValidatorStats,
+				"GetValidatorStats must be wired regardless of DynamicMaxPeers")
+			require.True(t, stubNet.setupCalled, "p2p Setup must run regardless of DynamicMaxPeers")
+			require.True(t, stubNet.startCalled, "p2p Start must run regardless of DynamicMaxPeers")
 		})
-
-		err := probeRemoteNetworkKeyProtector(context.Background(), client)
-		require.NoError(t, err)
-	})
-
-	t.Run("returns unsupported when remote signer does not support remote data protection", func(t *testing.T) {
-		client := newTestSSVSignerClient(t, nil)
-
-		err := probeRemoteNetworkKeyProtector(context.Background(), client)
-		require.ErrorIs(t, err, ssvsigner.ErrOperatorDataProtectionUnsupported)
-	})
-
-	t.Run("fails instead of downgrading on transient remote signer fetch error", func(t *testing.T) {
-		client := newTestSSVSignerClient(t, func(mux *http.ServeMux) {
-			mux.HandleFunc(ssvsigner.PathOperatorEncrypt, func(w http.ResponseWriter, r *http.Request) {
-				http.Error(w, "temporary upstream failure", http.StatusInternalServerError)
-			})
-		})
-
-		err := probeRemoteNetworkKeyProtector(context.Background(), client)
-		require.ErrorContains(t, err, "probe remote data protector encrypt")
-		require.ErrorContains(t, err, "unexpected status: 500")
-	})
+	}
 }

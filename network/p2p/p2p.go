@@ -222,12 +222,12 @@ func (n *p2pNetwork) PeersByTopic() map[string][]peer.ID {
 	return peerz
 }
 
-// Close implements io.Closer. It is idempotent (safe to call more than once) and safe on a
-// network in any state — constructed-but-never-Setup, Setup-but-not-Started, Started, or
-// Start-failed — so the owner can always defer Close() right after constructing the network.
-// Idempotency is via closeOnce rather than the state field, because stateClosed is ambiguous:
-// it's both the freshly-constructed state and the state Start() leaves on failure (where the
-// host/services are allocated and still need closing).
+// Close implements io.Closer. It is idempotent and safe on a network in any state —
+// constructed-but-never-Setup, Setup-but-not-Started, Started, or Start-failed — so the owner can
+// always defer Close() right after constructing the network. Idempotency is via closeOnce rather
+// than the state field, because stateClosed is ambiguous: it's both the freshly-constructed state
+// and the state Start() leaves on failure (where the host/services are allocated and still need
+// closing).
 func (n *p2pNetwork) Close() error {
 	var err error
 	n.closeOnce.Do(func() {

@@ -25,14 +25,14 @@ const (
 	proberRetryDelay         = 10 * time.Second
 )
 
-const componentsUnhealthyFatalErrorMsg = "component(s) are not healthy"
+const componentsUnhealthyErrorMsg = "component(s) are not healthy"
 
 func ensureComponentsHealthy(ctx context.Context, logger *zap.Logger, p *hprobe.HealthProber) error {
 	probeCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
 	if err := p.ProbeAll(probeCtx); err != nil {
-		return fmt.Errorf("%s: %w", componentsUnhealthyFatalErrorMsg, err)
+		return fmt.Errorf("%s: %w", componentsUnhealthyErrorMsg, err)
 	}
 
 	logger.Info("all component(s) are healthy")
@@ -54,7 +54,7 @@ func startHealthProber(ctx context.Context, logger *zap.Logger, p *hprobe.Health
 			defer cancel()
 
 			if err := p.ProbeAll(probeCtx); err != nil {
-				logger.Fatal(componentsUnhealthyFatalErrorMsg, zap.Error(err))
+				logger.Fatal(componentsUnhealthyErrorMsg, zap.Error(err))
 			}
 		}()
 

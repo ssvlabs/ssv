@@ -9,11 +9,12 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/beacon/goclient"
-	global_config "github.com/ssvlabs/ssv/cli/config"
+	globalcfg "github.com/ssvlabs/ssv/cli/config"
 	"github.com/ssvlabs/ssv/eth/executionclient"
 	"github.com/ssvlabs/ssv/exporter"
 	p2pv1 "github.com/ssvlabs/ssv/network/p2p"
 	"github.com/ssvlabs/ssv/operator"
+	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
@@ -31,7 +32,7 @@ type SSVSignerConfig struct {
 }
 
 type config struct {
-	global_config.Global         `yaml:"global"`
+	globalcfg.Global             `yaml:"global"`
 	DBOptions                    basedb.Options          `yaml:"db"`
 	SSVOptions                   operator.Options        `yaml:"ssv"`
 	ExporterOptions              exporter.Options        `yaml:"exporter"`
@@ -56,14 +57,6 @@ type config struct {
 	EnableDoppelgangerProtection bool                    `yaml:"EnableDoppelgangerProtection" env:"ENABLE_DOPPELGANGER_PROTECTION" env-description:"Enable doppelganger protection for validators"`
 }
 
-var cfg config
-
-var globalArgs global_config.Args
-
-func init() {
-	global_config.ProcessArgs(&cfg, &globalArgs, StartNodeCmd)
-}
-
 // maxSafeProposerDelay is the largest ProposerDelay considered safe. Above this, the
 // worst-case 2-round QBFT scenario risks missing the slot, so the operator must explicitly
 // acknowledge the risk via AllowDangerousProposerDelay.
@@ -80,9 +73,8 @@ const (
 	modeExporterArchive                  // exporter, archive tracing (pre-consensus + consensus)
 )
 
-// resolved carries config-DERIVED state (computed during resolveAndValidate, not directly
-// operator-provided) that startup needs but that (a) has no home as a field on config and
-// (b) is consumed only within cli/operator: the operating mode and the signing-method flags.
+// resolved carries config-derived state computed by resolveAndValidate (not operator-provided):
+// the operating mode and the signing-method flags.
 type resolved struct {
 	usingSSVSigner bool
 	usingKeystore  bool
@@ -91,8 +83,7 @@ type resolved struct {
 }
 
 // isExporter reports whether the node runs as an exporter (standard or archive) rather than as an
-// operator. It is the single mode-axis predicate the startup path dispatches on, replacing the
-// scattered cfg.ExporterOptions.Enabled re-checks.
+// operator. It is the single mode-axis predicate the startup path dispatches on.
 func (r resolved) isExporter() bool {
 	return r.mode != modeOperator
 }
@@ -114,12 +105,12 @@ func (c *config) load(configPath, shareConfigPath string) error {
 	return nil
 }
 
-// resolveAndValidate validates the operator configuration, emits advisory warnings (via
-// logger), and returns derived signing state. A returned error is fatal — the caller logs it
-// once. logger is used only for warnings, never for fatal conditions.
+// resolveAndValidate validates the operator configuration, emits advisory warnings, and returns
+// the derived state (operating mode + signing flags). A returned error is fatal — the caller logs
+// it once. logger is used only for warnings, never for fatal conditions.
 func (c *config) resolveAndValidate(logger *zap.Logger) (resolved, error) {
-	// Signing first (matches the pre-refactor order: signing config was asserted before the
-	// ProposerDelay check), so the same error surfaces first for a doubly-misconfigured node.
+	// Resolve signing before the proposer-delay check so a doubly-misconfigured node surfaces
+	// the signing error first.
 	var res resolved
 	if c.ExporterOptions.Enabled {
 		c.warnExporterSigning(logger)
@@ -127,8 +118,7 @@ func (c *config) resolveAndValidate(logger *zap.Logger) (resolved, error) {
 		var err error
 		if res, err = c.resolveSigning(); err != nil {
 			// Carry the configured signing-source context so the caller can attach it as
-			// structured fields on the fatal log line — matching the pre-refactor
-			// assertSigningConfig observability (the private key value is never logged).
+			// structured fields on the fatal log line (the private key value is never logged).
 			return resolved{}, signingConfigError{err: err, fields: c.signingLogFields()}
 		}
 	}
@@ -145,8 +135,7 @@ func (c *config) resolveAndValidate(logger *zap.Logger) (resolved, error) {
 	}
 
 	// Resolve the operating mode last so a doubly-misconfigured node still surfaces the signing
-	// or proposer-delay error first (matching pre-refactor precedence, where an invalid
-	// EXPORTER_MODE was the latest of these checks).
+	// or proposer-delay error first.
 	m, err := resolveMode(c.ExporterOptions)
 	if err != nil {
 		return resolved{}, err
@@ -165,6 +154,35 @@ func validateProposerDelay(proposerDelay time.Duration, allowDangerous bool) err
 			"If you understand the risks and want to proceed, set AllowDangerousProposerDelay to true or use the ALLOW_DANGEROUS_PROPOSER_DELAY environment variable",
 			proposerDelay, maxSafeProposerDelay)
 	}
+	return nil
+}
+
+func validateConfig(
+	nodeStorage operatorstorage.Storage,
+	networkName string,
+	usingLocalEvents, usingSSVSigner, exporterMode bool,
+) error {
+	storedConfig, foundConfig, err := nodeStorage.GetConfig(nil)
+	if err != nil {
+		return fmt.Errorf("failed to get stored config: %w", err)
+	}
+
+	currentConfig := &operatorstorage.ConfigLock{
+		NetworkName:      networkName,
+		UsingLocalEvents: usingLocalEvents,
+		UsingSSVSigner:   usingSSVSigner,
+	}
+
+	if foundConfig {
+		if err := storedConfig.ValidateCompatibility(currentConfig, exporterMode); err != nil {
+			return fmt.Errorf("incompatible config change: %w", err)
+		}
+	} else {
+		if err := nodeStorage.SaveConfig(nil, currentConfig); err != nil {
+			return fmt.Errorf("failed to store config: %w", err)
+		}
+	}
+
 	return nil
 }
 
@@ -194,9 +212,9 @@ func (c *config) resolveSigning() (resolved, error) {
 	return res, nil
 }
 
-// resolveMode derives the node's operating mode from the exporter options. An unrecognized
-// EXPORTER_MODE is rejected here (fail-fast) instead of late in the exporter collector switch.
-// A non-exporter node is always modeOperator, regardless of the (then-irrelevant) EXPORTER_MODE.
+// resolveMode derives the node's operating mode from the exporter options, rejecting an
+// unrecognized EXPORTER_MODE up front (fail-fast). A non-exporter node is always modeOperator,
+// regardless of the (then-irrelevant) EXPORTER_MODE.
 func resolveMode(opts exporter.Options) (nodeMode, error) {
 	if !opts.Enabled {
 		return modeOperator, nil
@@ -236,9 +254,20 @@ func (c *config) warnExporterSigning(logger *zap.Logger) {
 	)
 }
 
-// signingLogFields returns the configured signing-source fields for diagnostics, matching the
-// pre-refactor assertSigningConfig fields. The private key value is never included — only its
-// length.
+func warnIfSSVAPIAddressUnset(logger *zap.Logger, address string, port int) {
+	if address != "" {
+		return
+	}
+
+	logger.Warn("SSV API address not configured; listening on all interfaces",
+		zap.Int("port", port),
+		zap.String("config_key", "SSVAPIAddress"),
+		zap.String("recommended_address", "127.0.0.1"),
+	)
+}
+
+// signingLogFields returns the configured signing-source fields for diagnostics. The private
+// key value is never included — only its length.
 func (c *config) signingLogFields() []zap.Field {
 	return []zap.Field{
 		zap.String("ssv_signer_endpoint", c.SSVSigner.Endpoint),
@@ -259,10 +288,9 @@ func (e signingConfigError) Error() string          { return e.err.Error() }
 func (e signingConfigError) Unwrap() error          { return e.err }
 func (e signingConfigError) logFields() []zap.Field { return e.fields }
 
-// startupError wraps an error returned from run() with structured log fields, so the single
-// consolidated fatal in the cobra Run closure preserves the context (e.g. the ssv-signer
-// endpoint) that was attached to the original in-run logger.Fatal call. Mirrors
-// signingConfigError, for non-validation startup failures.
+// startupError wraps an error returned from runNode() with structured log fields, so the single
+// top-level fatal preserves the context (e.g. the ssv-signer endpoint). Mirrors signingConfigError,
+// for non-validation startup failures.
 type startupError struct {
 	err    error
 	fields []zap.Field
@@ -279,9 +307,8 @@ type fieldedError interface {
 	logFields() []zap.Field
 }
 
-// startupErrorLogFields returns the structured log fields for an error returned by run(): the
-// error itself, plus any context carried by a fieldedError (signingConfigError / startupError),
-// so the consolidated fatal preserves the structured fields the original in-run fatals logged.
+// startupErrorLogFields returns the structured log fields for an error returned by runNode(): the
+// error itself, plus any context carried by a fieldedError (signingConfigError / startupError).
 func startupErrorLogFields(err error) []zap.Field {
 	fields := []zap.Field{zap.Error(err)}
 	var fe fieldedError
