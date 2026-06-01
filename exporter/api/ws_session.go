@@ -241,7 +241,12 @@ func isCloseError(err error) bool {
 	return errors.As(err, &closeError)
 }
 
-// pingMsg construct a ping message
+// pingMsg constructs a ping message from the connection id. The payload is
+// only echoed back by the peer in its pong and is never inspected, so for a
+// short id we just return its bytes verbatim rather than risk an index panic.
 func pingMsg(cid string) []byte {
+	if len(cid) < 5 {
+		return []byte(cid)
+	}
 	return []byte{cid[0], cid[1], cid[3], cid[4]}
 }

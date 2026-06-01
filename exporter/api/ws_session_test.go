@@ -36,6 +36,30 @@ func TestWSSession_Send_FullQueue(t *testing.T) {
 	require.Equal(t, chanSize-1, len(sess.send), "Send after cancel must not enqueue")
 }
 
+// TestPingMsg pins that pingMsg never panics regardless of id length: it
+// reads indices 0,1,3,4, so without the length guard any id shorter than 5
+// chars (e.g. a withPing=true session built with a short id) would panic.
+func TestPingMsg(t *testing.T) {
+	tests := []struct {
+		name string
+		cid  string
+		want []byte
+	}{
+		{"empty", "", []byte{}},
+		{"short", "ab", []byte("ab")},
+		{"len-4 trap", "test", []byte("test")}, // would panic at cid[4] without the guard
+		{"boundary-5", "abcde", []byte{'a', 'b', 'd', 'e'}},
+		{"realistic id", "conn-127.0.0.1:54321-1780320736564442000", []byte{'c', 'o', 'n', '-'}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.NotPanics(t, func() {
+				require.Equal(t, tt.want, pingMsg(tt.cid))
+			})
+		})
+	}
+}
+
 // dialTestWebsocket spins up an httptest server that upgrades and then idles,
 // dials it, and returns the client-side *websocket.Conn. The server and the
 // client conn are both torn down via t.Cleanup.
