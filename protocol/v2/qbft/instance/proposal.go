@@ -10,6 +10,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -28,24 +29,21 @@ func (i *Instance) uponProposal(ctx context.Context, logger *zap.Logger, msg *sp
 
 	logger.Debug("📬 got proposal message")
 
-	i.State.ProposalAcceptedForCurrentRound = msg
-
+	currentRound := i.State.Round
 	msgRound := msg.QBFTMessage.Round
 
-	// A future justified proposal should bump us into future round and reset the round timer.
-	if msgRound > i.State.Round {
-		i.roundTimer.TimeoutForRound(msgRound)
-	}
-	i.bumpToRound(msgRound)
-
-	i.metrics.EndStage(ctx, msgRound)
+	i.metrics.EndStage(ctx, currentRound)
 	i.metrics.StartStage(stagePrepare)
 
-	r, err := specqbft.HashDataRoot(msg.SignedMessage.FullData)
-	if err != nil {
-		return fmt.Errorf("could not hash input data: %w", err)
-	}
+	// A future justified proposal should move us into the future round, hence we try to bump the round here.
+	// Always move on to the message-round. The round-change message broadcast is a best-effort thing, the QBFT
+	// cluster as a whole can progress further even if our round-change message cannot be created/broadcast
+	// for whatever reason.
+	i.bumpToRound(msgRound)
 
+	i.State.ProposalAcceptedForCurrentRound = msg
+
+	r := qbft.HashDataRoot(msg.SignedMessage.FullData)
 	prepare, err := i.CreatePrepare(msgRound, r)
 	if err != nil {
 		return fmt.Errorf("could not create prepare msg: %w", err)
@@ -83,10 +81,7 @@ func (i *Instance) isValidProposal(msg *specqbft.ProcessingMessage) error {
 	}
 
 	// verify full data integrity
-	r, err := specqbft.HashDataRoot(msg.SignedMessage.FullData)
-	if err != nil {
-		return fmt.Errorf("could not hash input data: %w", err)
-	}
+	r := qbft.HashDataRoot(msg.SignedMessage.FullData)
 	if !bytes.Equal(msg.QBFTMessage.Root[:], r[:]) {
 		return spectypes.NewError(spectypes.RootHashInvalidErrorCode, "H(data) != root")
 	}
@@ -189,10 +184,7 @@ func (i *Instance) isProposalJustification(
 	}
 
 	// proposed fullData must equal highest prepared fullData
-	r, err := specqbft.HashDataRoot(fullData)
-	if err != nil {
-		return fmt.Errorf("could not hash input data: %w", err)
-	}
+	r := qbft.HashDataRoot(fullData)
 	if !bytes.Equal(r[:], rcMsg.QBFTMessage.Root[:]) {
 		return errors.New("proposed data doesn't match highest prepared")
 	}
@@ -233,16 +225,13 @@ func (i *Instance) ProposerForRound(round specqbft.Round) spectypes.OperatorID {
                         extractSignedPrepares(prepares));
 */
 func (i *Instance) CreateProposal(fullData []byte, roundChanges, prepares []*specqbft.ProcessingMessage) (*spectypes.SignedSSVMessage, error) {
-	r, err := specqbft.HashDataRoot(fullData)
-	if err != nil {
-		return nil, fmt.Errorf("could not hash input data: %w", err)
-	}
+	r := qbft.HashDataRoot(fullData)
 
-	roundChangeSignedMessages := make([]*spectypes.SignedSSVMessage, 0)
+	roundChangeSignedMessages := make([]*spectypes.SignedSSVMessage, 0, len(roundChanges))
 	for _, msg := range roundChanges {
 		roundChangeSignedMessages = append(roundChangeSignedMessages, msg.SignedMessage)
 	}
-	prepareSignedMessages := make([]*spectypes.SignedSSVMessage, 0)
+	prepareSignedMessages := make([]*spectypes.SignedSSVMessage, 0, len(prepares))
 	for _, msg := range prepares {
 		prepareSignedMessages = append(prepareSignedMessages, msg.SignedMessage)
 	}
