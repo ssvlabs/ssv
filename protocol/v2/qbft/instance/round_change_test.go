@@ -227,6 +227,40 @@ func TestUponRoundChangeAsLeaderBroadcastsProposalOnJustifiedQuorum(t *testing.T
 	require.Equal(t, env.hash(env.inst.StartValue), msg.QBFTMessage.Root)
 }
 
+func TestUponRoundChangeAsLeaderBroadcastsFutureRoundProposalOnJustifiedQuorum(t *testing.T) {
+	env := newInstanceTestEnv(t, 1)
+	env.setLeader(1)
+	env.inst.State.Round = 1
+	env.inst.StartValue = []byte("start-value")
+
+	// Preload container to exercise the future-round leader path; this path is unreachable via
+	// natural message flow (partial-quorum f+1 fires before full quorum 2f+1 in uponRoundChange),
+	// kept as defense-in-depth against future refactors.
+	env.addMessages(
+		env.inst.State.RoundChangeContainer,
+		env.roundChange(2, 2, specqbft.NoRound, [32]byte{}, nil, nil),
+		env.roundChange(2, 3, specqbft.NoRound, [32]byte{}, nil, nil),
+	)
+
+	err := env.inst.uponRoundChange(
+		context.Background(),
+		zap.NewNop(),
+		env.roundChange(2, 4, specqbft.NoRound, [32]byte{}, nil, nil),
+	)
+	require.NoError(t, err)
+
+	require.Equal(t, specqbft.Round(2), env.inst.State.Round)
+
+	msg := env.broadcastedProcessingMessage(0)
+	require.Equal(t, specqbft.ProposalMsgType, msg.QBFTMessage.MsgType)
+	require.Equal(t, specqbft.Round(2), msg.QBFTMessage.Round)
+	require.Equal(t, env.hash(env.inst.StartValue), msg.QBFTMessage.Root)
+
+	roundChangeJustifications, err := msg.QBFTMessage.GetRoundChangeJustifications()
+	require.NoError(t, err)
+	require.Len(t, roundChangeJustifications, 3)
+}
+
 func TestValidRoundChangeForDataIgnoreSignatureValidationBranches(t *testing.T) {
 	env := newInstanceTestEnv(t, 2)
 	fullData := []byte("prepared-value")

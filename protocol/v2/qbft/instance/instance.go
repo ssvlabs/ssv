@@ -121,12 +121,7 @@ func (i *Instance) Start(
 			// TODO align spec to add else to avoid broadcast errored proposal
 		}
 
-		startValueRoot, err := specqbft.HashDataRoot(i.StartValue)
-		if err != nil {
-			logger.Warn("❗ failed to hash instance start value", zap.Error(err))
-			span.SetStatus(codes.Error, err.Error())
-			return
-		}
+		startValueRoot := qbft.HashDataRoot(i.StartValue)
 		logger = logger.With(zap.String("qbft_start_value_root", hex.EncodeToString(startValueRoot[:])))
 
 		const eventMsg = "📢 leader broadcasting proposal message"
@@ -172,8 +167,8 @@ func (i *Instance) MarkIrrelevant() {
 }
 
 func (i *Instance) Broadcast(msg *spectypes.SignedSSVMessage) error {
-	if !i.CanProcessMessages() {
-		return spectypes.NewError(spectypes.InstanceStoppedProcessingMessagesErrorCode, "instance stopped processing messages")
+	if !i.IsRelevant() {
+		return spectypes.NewError(spectypes.InstanceStoppedProcessingMessagesErrorCode, "instance is no longer considered relevant")
 	}
 
 	return i.GetConfig().GetNetwork().Broadcast(msg.SSVMessage.GetID(), msg)
@@ -191,8 +186,8 @@ func allSigners(all []*specqbft.ProcessingMessage) []spectypes.OperatorID {
 // The returned bool/value pair reports whether this call newly decided the
 // instance. Callers that need the post-call state should inspect State/IsDecided.
 func (i *Instance) ProcessMsg(ctx context.Context, logger *zap.Logger, msg *specqbft.ProcessingMessage) (decided bool, decidedValue []byte, aggregatedCommit *spectypes.SignedSSVMessage, err error) {
-	if !i.CanProcessMessages() {
-		return false, nil, nil, spectypes.NewError(spectypes.InstanceStoppedProcessingMessagesErrorCode, "instance stopped processing messages")
+	if !i.IsRelevant() {
+		return false, nil, nil, spectypes.NewError(spectypes.InstanceStoppedProcessingMessagesErrorCode, "instance is no longer considered relevant")
 	}
 
 	if err := i.BaseMsgValidation(msg); err != nil {
@@ -304,12 +299,16 @@ func (i *Instance) Decode(data []byte) error {
 	return json.Unmarshal(data, &i)
 }
 
-// bumpToRound sets round and sends current round metrics.
+// bumpToRound pushes this instance to a higher round, also scheduling a timeout for it.
 func (i *Instance) bumpToRound(round specqbft.Round) {
-	i.State.Round = round
+	if round > i.State.Round {
+		i.State.ProposalAcceptedForCurrentRound = nil
+		i.State.Round = round
+		i.roundTimer.TimeoutForRound(round)
+	}
 }
 
-// CanProcessMessages will return true if instance can process messages
-func (i *Instance) CanProcessMessages() bool {
+// IsRelevant will return true if instance can process messages
+func (i *Instance) IsRelevant() bool {
 	return !i.markedIrrelevant && i.State.Round < i.config.GetCutOffRound()
 }
