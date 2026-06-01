@@ -370,21 +370,37 @@ var StartNodeCmd = &cobra.Command{
 			logger.Fatal("no execution node address provided")
 		}
 
+		// Optional positionally-paired HTTP endpoints for request/response calls
+		// (eth_getLogs etc.) — keeps the heavy responses off WebSocket and works
+		// around Besu's StreamBackpressure event-loop block. Empty leaves the
+		// legacy single-transport behavior.
+		var queryAddrList []string
+		if cfg.ExecutionClient.QueryAddr != "" {
+			queryAddrList = strings.Split(cfg.ExecutionClient.QueryAddr, ";")
+		}
+
 		logger.Info("connecting EL(s)",
 			fields.Addresses(executionAddrList),
+			zap.Strings("query_addresses", queryAddrList),
 			zap.Duration("request_timeout", cfg.ExecutionClient.ConnectionTimeout),
 			zap.Uint64("sync_distance_tolerance", cfg.ExecutionClient.SyncDistanceTolerance),
 		)
 
 		var executionClient executionclient.Provider
 		if len(executionAddrList) == 1 {
+			singleOpts := []executionclient.Option{
+				executionclient.WithLogger(logger),
+				executionclient.WithReqTimeout(cfg.ExecutionClient.ConnectionTimeout),
+				executionclient.WithSyncDistanceTolerance(cfg.ExecutionClient.SyncDistanceTolerance),
+			}
+			if len(queryAddrList) > 0 && queryAddrList[0] != "" {
+				singleOpts = append(singleOpts, executionclient.WithQueryAddr(queryAddrList[0]))
+			}
 			ec, err := executionclient.New(
 				cmd.Context(),
 				executionAddrList[0],
 				ssvNetworkConfig.RegistryContractAddr,
-				executionclient.WithLogger(logger),
-				executionclient.WithReqTimeout(cfg.ExecutionClient.ConnectionTimeout),
-				executionclient.WithSyncDistanceTolerance(cfg.ExecutionClient.SyncDistanceTolerance),
+				singleOpts...,
 			)
 			if err != nil {
 				logger.Fatal("could not connect to execution client", zap.Error(err))
@@ -392,13 +408,19 @@ var StartNodeCmd = &cobra.Command{
 
 			executionClient = ec
 		} else {
+			multiOpts := []executionclient.OptionMulti{
+				executionclient.WithLoggerMulti(logger),
+				executionclient.WithReqTimeoutMulti(cfg.ExecutionClient.ConnectionTimeout),
+				executionclient.WithSyncDistanceToleranceMulti(cfg.ExecutionClient.SyncDistanceTolerance),
+			}
+			if len(queryAddrList) > 0 {
+				multiOpts = append(multiOpts, executionclient.WithQueryAddrsMulti(queryAddrList))
+			}
 			ec, err := executionclient.NewMulti(
 				cmd.Context(),
 				executionAddrList,
 				ssvNetworkConfig.RegistryContractAddr,
-				executionclient.WithLoggerMulti(logger),
-				executionclient.WithReqTimeoutMulti(cfg.ExecutionClient.ConnectionTimeout),
-				executionclient.WithSyncDistanceToleranceMulti(cfg.ExecutionClient.SyncDistanceTolerance),
+				multiOpts...,
 			)
 			if err != nil {
 				logger.Fatal("could not connect to execution client", zap.Error(err))

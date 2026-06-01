@@ -50,6 +50,13 @@ type ExecutionClient struct {
 	nodeAddr        string
 	contractAddress ethcommon.Address
 
+	// queryAddr is an optional HTTP endpoint paired with nodeAddr. When set, all
+	// request/response calls (eth_getLogs, eth_blockNumber, etc.) are routed to
+	// this transport while subscriptions stay on nodeAddr (WS). Sidesteps Besu's
+	// StreamBackpressure event-loop block on large WS responses; safe on any EL.
+	// When empty, nodeAddr is used for both — preserves single-transport behavior.
+	queryAddr string
+
 	logger *zap.Logger
 
 	reqTimeout    time.Duration
@@ -526,17 +533,34 @@ func (ec *ExecutionClient) streamLogsToChan(
 }
 
 // connect connects to Ethereum execution client.
+//
+// Dials nodeAddr for the subscription transport (always required — eth_subscribe
+// only works over WS/IPC). When queryAddr is also set, dials a second client
+// for request/response calls so large eth_getLogs responses don't traverse the
+// WebSocket path that hits Besu's StreamBackpressure event-loop block.
 func (ec *ExecutionClient) connect(ctx context.Context) error {
 	reqCtx, cancel := context.WithTimeout(ctx, ec.reqTimeout)
 	defer cancel()
+
 	reqStart := time.Now()
-	c, err := ethclient.DialContext(reqCtx, ec.nodeAddr)
+	subClient, err := ethclient.DialContext(reqCtx, ec.nodeAddr)
 	recordRequest(ctx, ec.logger, "DialContext", ec, time.Since(reqStart), err)
 	if err != nil {
 		return ec.errSingleClient(fmt.Errorf("ethclient dial: %w", err), "dial")
 	}
 
-	ec.client = newEthClient(c, ec.reqTimeout)
+	var queryClient *ethclient.Client
+	if ec.queryAddr != "" && ec.queryAddr != ec.nodeAddr {
+		reqStart = time.Now()
+		queryClient, err = ethclient.DialContext(reqCtx, ec.queryAddr)
+		recordRequest(ctx, ec.logger, "DialContext", ec, time.Since(reqStart), err)
+		if err != nil {
+			subClient.Close()
+			return ec.errSingleClient(fmt.Errorf("ethclient dial query addr: %w", err), "dial")
+		}
+	}
+
+	ec.client = newEthClient(subClient, queryClient, ec.reqTimeout)
 
 	return nil
 }

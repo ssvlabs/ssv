@@ -64,6 +64,7 @@ type MultiClient struct {
 	closed          chan struct{}
 
 	clientAddrs        []string
+	queryAddrs         []string               // optional, parallel to clientAddrs; nil/empty entries fall back to single-transport
 	clientsMu          []sync.Mutex           // clientsMu allow for lazy initialization of each client in `clients` slice in thread-safe manner (atomically)
 	clients            []SingleClientProvider // nil if not connected
 	currentClientIndex atomic.Int64
@@ -137,14 +138,24 @@ func (mc *MultiClient) getClient(ctx context.Context, clientIndex int) (SingleCl
 // connect connects to a client by clientIndex and updates mc.clients[clientIndex] without locks.
 // Caller must lock mc.clientsMu[clientIndex].
 func (mc *MultiClient) connect(ctx context.Context, clientAddr string) (*ExecutionClient, error) {
-	singleClient, err := New(
-		ctx,
-		clientAddr,
-		mc.contractAddress,
+	opts := []Option{
 		WithLogger(mc.logger),
 		WithReqTimeout(mc.reqTimeout),
 		WithHealthInvalidationInterval(mc.healthInvalidationInterval),
 		WithSyncDistanceTolerance(mc.syncDistanceTolerance),
+	}
+	// Pair with the positionally-matching query addr, if any was configured.
+	for i, addr := range mc.clientAddrs {
+		if addr == clientAddr && i < len(mc.queryAddrs) && mc.queryAddrs[i] != "" {
+			opts = append(opts, WithQueryAddr(mc.queryAddrs[i]))
+			break
+		}
+	}
+	singleClient, err := New(
+		ctx,
+		clientAddr,
+		mc.contractAddress,
+		opts...,
 	)
 	if err != nil {
 		recordClientInitStatus(ctx, clientAddr, false)
