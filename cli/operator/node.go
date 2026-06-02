@@ -212,9 +212,9 @@ func newNode(ctx context.Context, cfg *config, logger *zap.Logger, res resolved,
 
 	// Derive the node's own ctx from the parent so node.Close() can stop the ctx-bound goroutines
 	// wired below — the VRSubmitter, plus (in exporter modes) the duty-trace collector / slot-pruning.
-	// Note the validator controller's ttlcache cleanup goroutines are NOT ctx-bound (they stop only
-	// via a Stop() the controller never calls — a separate, pre-existing leak). On assembly failure
-	// cancel here so a half-wired node doesn't leak the ctx-bound ones; on success Close() owns it.
+	// (The validator controller's ttlcache cleanup goroutines aren't ctx-bound; node.Close() stops
+	// those separately via validatorCtrl.Stop().) On assembly failure cancel here so a half-wired
+	// node doesn't leak the ctx-bound ones; on success Close() owns it.
 	ctx, cancel := context.WithCancel(ctx)
 	defer func() {
 		if err != nil {
@@ -466,12 +466,14 @@ func newNode(ctx context.Context, cfg *config, logger *zap.Logger, res resolved,
 	}, nil
 }
 
-// Close cancels the node's ctx — stopping the ctx-bound goroutines newNode started (the VRSubmitter
-// and, in exporter modes, the duty-trace collector / slot-pruning) — then tears down the CLI-owned
-// resources (p2p network and execution client, then the db that p2p depends on). newNode is the only
-// constructor, so cancel and these fields are always set.
+// Close stops the node's background work and tears down its resources. It cancels the node's ctx
+// (stopping the VRSubmitter and, in exporter modes, the duty-trace collector / slot-pruning) and
+// calls validatorCtrl.Stop() (the controller's ttlcache cleanup loops, which aren't ctx-bound), then
+// closes the CLI-owned resources (p2p network and execution client, then the db that p2p depends on).
+// newNode is the only constructor, so all these fields are always set.
 func (n *node) Close() error {
 	n.cancel()
+	n.validatorCtrl.Stop()
 
 	var errs []error
 	if err := n.p2pNetwork.Close(); err != nil {

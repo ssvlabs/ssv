@@ -34,6 +34,10 @@ func (dc *DomainCache) Start() {
 	dc.cache.Start()
 }
 
+func (dc *DomainCache) Stop() {
+	dc.cache.Stop()
+}
+
 func (dc *DomainCache) Get(
 	ctx context.Context,
 	epoch phase0.Epoch,
