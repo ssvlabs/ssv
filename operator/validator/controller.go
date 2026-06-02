@@ -269,8 +269,8 @@ func (c *Controller) Stop() {
 	c.committeesObservers.Stop()
 	c.attesterRoots.Stop()
 	c.syncCommRoots.Stop()
-	c.beaconVoteRoots.Stop()
 	c.domainCache.Stop()
+	c.beaconVoteRoots.Stop()
 }
 
 func (c *Controller) IndicesChangeChan() chan struct{} {

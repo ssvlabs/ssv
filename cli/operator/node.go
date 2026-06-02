@@ -57,8 +57,7 @@ import (
 func runNode(ctx context.Context, cfg *config, logger *zap.Logger) error {
 	// runNode owns the parent ctx for the clients it builds directly (goclient, execution) before
 	// newNode exists. goclient has no Close() of its own — ctx cancellation is its only shutdown —
-	// so cancel on return to release it once the node has stopped and we unwind. (The execution
-	// client is closed explicitly by node.Close(); the parent ctx only backstops its background work.)
+	// so cancel on return to release it once the node has stopped and we unwind.
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -212,9 +211,8 @@ func newNode(ctx context.Context, cfg *config, logger *zap.Logger, res resolved,
 
 	// Derive the node's own ctx from the parent so node.Close() can stop the ctx-bound goroutines
 	// wired below — the VRSubmitter, plus (in exporter modes) the duty-trace collector / slot-pruning.
-	// (The validator controller's ttlcache cleanup goroutines aren't ctx-bound; node.Close() stops
-	// those separately via validatorCtrl.Stop().) On assembly failure cancel here so a half-wired
-	// node doesn't leak the ctx-bound ones; on success Close() owns it.
+	// On assembly failure cancel here so a half-wired node doesn't leak the ctx-bound ones; on success
+	// Close() owns it.
 	ctx, cancel := context.WithCancel(ctx)
 	defer func() {
 		if err != nil {
