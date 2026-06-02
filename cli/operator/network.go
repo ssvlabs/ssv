@@ -31,12 +31,14 @@ func setupSSVNetwork(logger *zap.Logger, cfg *config) (*networkconfig.SSV, error
 	} else if cfg.SSVOptions.NetworkName != "" {
 		snc, err := networkconfig.SSVConfigByName(cfg.SSVOptions.NetworkName)
 		if err != nil {
-			return ssvConfig, err
+			return nil, err
 		}
 		ssvConfig = snc
 		logger.Info("found network config by name",
 			zap.String("name", cfg.SSVOptions.NetworkName),
 		)
+	} else {
+		return nil, fmt.Errorf("no ssv network configured: set Network (e.g. \"mainnet\") or CustomNetwork")
 	}
 
 	if cfg.SSVOptions.CustomDomainType != "" {
@@ -51,6 +53,9 @@ func setupSSVNetwork(logger *zap.Logger, cfg *config) (*networkconfig.SSV, error
 			return nil, fmt.Errorf("custom domain type must be 4 bytes")
 		}
 
+		// Shallow-copy here before updating DomainType below — otherwise the update mutates the underlying global
+		// value ssvConfig is pointing to.
+		ssvConfig = new(*ssvConfig)
 		// https://github.com/ssvlabs/ssv/pull/1808 incremented the post-fork domain type by 1, so we have to maintain the compatibility.
 		postForkDomain := binary.BigEndian.Uint32(domainBytes) + 1
 		binary.BigEndian.PutUint32(ssvConfig.DomainType[:], postForkDomain)

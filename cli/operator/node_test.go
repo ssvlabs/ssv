@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"testing"
 
-	api "github.com/attestantio/go-eth2-client/api"
+	"github.com/attestantio/go-eth2-client/api"
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -39,7 +39,7 @@ func Test_runNode_invalidConfigReturns(t *testing.T) {
 // promotes every method so the type compiles as a beaconClient, while implementing only what the
 // test path actually invokes. In operator mode with Doppelganger disabled, newNode() never calls
 // a beacon method synchronously (it only stores the client); the one async caller is the
-// NewVRSubmitter goroutine, which the test stops by canceling ctx before its first slot tick.
+// NewVRSubmitter goroutine, which a.Close() stops by canceling the node's ctx.
 type stubBeaconClient struct {
 	beaconClient
 }
@@ -118,10 +118,9 @@ func Test_newNode_wiresOperatorNode(t *testing.T) {
 			_, isNoOp := a.doppelgangerHandler.(doppelganger.NoOpHandler)
 			require.Equal(t, !tc.doppelgangerOn, isNoOp, "doppelganger handler must match the configured protection")
 
-			// Stop the VRSubmitter goroutine (started in newNode) before tearing down, then ensure
-			// the CLI-owned resources close cleanly — the p2p network was constructed but never
-			// Setup/Start'd.
-			cancel()
+			// a.Close() cancels the node's ctx (stopping the VRSubmitter goroutine newNode started in
+			// operator mode), then closes the CLI-owned resources cleanly — the p2p network was
+			// constructed but never Setup/Start'd.
 			require.NoError(t, a.Close())
 		})
 	}
@@ -177,7 +176,6 @@ func Test_newNode_wiresExporterNode(t *testing.T) {
 				require.Nil(t, a.collector, "standard mode has no duty-trace collector")
 			}
 
-			cancel()
 			require.NoError(t, a.Close())
 		})
 	}
@@ -217,9 +215,9 @@ func Test_newNode_closesDBOnAssemblyFailure(t *testing.T) {
 	require.ErrorContains(t, err, "failed to setup network private key") // i.e. failed in setupP2P, after db-open
 	require.Nil(t, a)
 
-	// Stop the VRSubmitter goroutine newNode started before the failure point.
-	cancel()
-
+	// newNode's error path cancels the node's ctx itself (stopping the VRSubmitter goroutine it started before the
+	// failure), so the test no longer has to.
+	//
 	// The error-only defer must have closed the db: a fresh badger open of the same dir succeeds
 	// only if the previous handle released its directory lock.
 	reopened, err := kv.New(zap.NewNop(), basedb.Options{Path: cfg.DBOptions.Path, Ctx: context.Background()})

@@ -55,6 +55,13 @@ import (
 )
 
 func runNode(ctx context.Context, cfg *config, logger *zap.Logger) error {
+	// runNode owns the parent ctx for the clients it builds directly (goclient, execution) before
+	// newNode exists. goclient has no Close() of its own — ctx cancellation is its only shutdown —
+	// so cancel on return to release it once the node has stopped and we unwind. (The execution
+	// client is closed explicitly by node.Close(); the parent ctx only backstops its background work.)
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	// Validate the configuration up front, before any network I/O, so a misconfigured node
 	// fails fast (e.g. an invalid ProposerDelay is rejected before the beacon client is built,
 	// rather than after connecting to the beacon). resolveAndValidate only reads cfg.
@@ -153,7 +160,7 @@ func runNode(ctx context.Context, cfg *config, logger *zap.Logger) error {
 		}
 	}()
 
-	return n.start(ctx)
+	return n.start()
 }
 
 // beaconClient is the beacon-node surface that newNode()/start() consume: the duty-call
@@ -169,13 +176,16 @@ type beaconClient interface {
 var _ beaconClient = (*goclient.GoClient)(nil)
 
 // node bundles the constructed pieces that start() runs and Close() tears down.
-// Construction intermediates (signature verifier, duty store, ekm adapter, …) stay locals in
-// newNode(); only what start()/Close() read lives here.
 type node struct {
-	logger              *zap.Logger
-	cfg                 *config
-	mode                nodeMode
-	usingSSVSigner      bool
+	ctx    context.Context
+	cancel context.CancelFunc
+
+	logger *zap.Logger
+
+	cfg            *config
+	mode           nodeMode
+	usingSSVSigner bool
+
 	db                  basedb.Database
 	consensusClient     beaconClient
 	executionClient     executionclient.Provider
@@ -199,6 +209,18 @@ type node struct {
 // in place (filling SSVOptions/P2pNetworkConfig with runtime deps), so a given cfg is single-use.
 func newNode(ctx context.Context, cfg *config, logger *zap.Logger, res resolved, networkConfig *networkconfig.Network, consensusClient beaconClient, executionClient executionclient.Provider) (_ *node, err error) {
 	usingSSVSigner := res.usingSSVSigner
+
+	// Derive the node's own ctx from the parent so node.Close() can stop the ctx-bound goroutines
+	// wired below — the VRSubmitter, plus (in exporter modes) the duty-trace collector / slot-pruning.
+	// Note the validator controller's ttlcache cleanup goroutines are NOT ctx-bound (they stop only
+	// via a Stop() the controller never calls — a separate, pre-existing leak). On assembly failure
+	// cancel here so a half-wired node doesn't leak the ctx-bound ones; on success Close() owns it.
+	ctx, cancel := context.WithCancel(ctx)
+	defer func() {
+		if err != nil {
+			cancel()
+		}
+	}()
 
 	identity, err := resolveOperatorIdentity(ctx, logger, cfg, res)
 	if err != nil {
@@ -420,6 +442,8 @@ func newNode(ctx context.Context, cfg *config, logger *zap.Logger, res resolved,
 	operatorNode := operator.New(logger, cfg.SSVOptions, cfg.ExporterOptions, slotTickerProvider, storageMap)
 
 	return &node{
+		ctx:                 ctx,
+		cancel:              cancel,
 		logger:              logger,
 		cfg:                 cfg,
 		mode:                res.mode,
@@ -442,33 +466,31 @@ func newNode(ctx context.Context, cfg *config, logger *zap.Logger, res resolved,
 	}, nil
 }
 
-// Close tears down the CLI-owned resources (p2p network and execution client, then the db that
-// p2p depends on). Safe to call on a partially-assembled node (each field is nil-guarded).
+// Close cancels the node's ctx — stopping the ctx-bound goroutines newNode started (the VRSubmitter
+// and, in exporter modes, the duty-trace collector / slot-pruning) — then tears down the CLI-owned
+// resources (p2p network and execution client, then the db that p2p depends on). newNode is the only
+// constructor, so cancel and these fields are always set.
 func (n *node) Close() error {
+	n.cancel()
+
 	var errs []error
-	if n.p2pNetwork != nil {
-		if err := n.p2pNetwork.Close(); err != nil {
-			errs = append(errs, fmt.Errorf("close p2p network: %w", err))
-		}
+	if err := n.p2pNetwork.Close(); err != nil {
+		errs = append(errs, fmt.Errorf("close p2p network: %w", err))
 	}
-	if n.executionClient != nil {
-		if err := n.executionClient.Close(); err != nil {
-			errs = append(errs, fmt.Errorf("close execution client: %w", err))
-		}
+	if err := n.executionClient.Close(); err != nil {
+		errs = append(errs, fmt.Errorf("close execution client: %w", err))
 	}
-	if n.db != nil {
-		if err := n.db.Close(); err != nil {
-			errs = append(errs, fmt.Errorf("close db: %w", err))
-		}
+	if err := n.db.Close(); err != nil {
+		errs = append(errs, fmt.Errorf("close db: %w", err))
 	}
 	return errors.Join(errs...)
 }
 
 // start launches the node's long-lived services (metrics + SSV API servers, the health
-// prober, contract-event sync) and blocks on operatorNode.Start until ctx is canceled.
+// prober, contract-event sync) and blocks on operatorNode.Start until the node's ctx is canceled.
 // NOTE: the metrics/SSV-API server goroutines call logger.Fatal on failure — crashing the
 // process and bypassing Close() — a candidate for errgroup-based coordinated shutdown.
-func (n *node) start(ctx context.Context) error {
+func (n *node) start() error {
 	if n.cfg.MetricsAPIPort > 0 {
 		go func() {
 			metricsHandler := metrics.NewHandler(n.logger, n.db, n.cfg.EnableProfile, n.operatorNode)
@@ -481,12 +503,12 @@ func (n *node) start(ctx context.Context) error {
 	healthProber := hprobe.NewHealthProber(n.logger)
 	healthProber.AddComponent(clComponentName, n.consensusClient, proberHealthcheckTimeout, proberRetriesMax, proberRetryDelay)
 	healthProber.AddComponent(elComponentName, n.executionClient, proberHealthcheckTimeout, proberRetriesMax, proberRetryDelay)
-	if err := ensureComponentsHealthy(ctx, n.logger, healthProber); err != nil {
+	if err := ensureComponentsHealthy(n.ctx, n.logger, healthProber); err != nil {
 		return err
 	}
 
 	eventSyncer, err := syncContractEvents(
-		ctx,
+		n.ctx,
 		n.logger,
 		n.cfg,
 		n.executionClient,
@@ -504,14 +526,14 @@ func (n *node) start(ctx context.Context) error {
 		healthProber.AddComponent(eventSyncerComponentName, eventSyncer, proberHealthcheckTimeout, proberRetriesMax, proberRetryDelay)
 	}
 
-	go startHealthProber(ctx, n.logger, healthProber)
+	go startHealthProber(n.ctx, n.logger, healthProber)
 
-	if _, err := n.metadataSyncer.SyncAll(ctx); err != nil {
+	if _, err := n.metadataSyncer.SyncAll(n.ctx); err != nil {
 		return fmt.Errorf("failed to sync metadata on startup: %w", err)
 	}
 
 	if n.usingSSVSigner {
-		if err := ensureNoMissingKeys(ctx, n.nodeStorage, n.operatorDataStore, n.ssvSignerClient); err != nil {
+		if err := ensureNoMissingKeys(n.ctx, n.nodeStorage, n.operatorDataStore, n.ssvSignerClient); err != nil {
 			return err
 		}
 	}
@@ -580,7 +602,7 @@ func (n *node) start(ctx context.Context) error {
 			}
 		}()
 	}
-	if err := n.operatorNode.Start(ctx); err != nil {
+	if err := n.operatorNode.Start(n.ctx); err != nil {
 		return fmt.Errorf("failed to start SSV node: %w", err)
 	}
 
