@@ -492,10 +492,14 @@ func (n *node) Close() error {
 // process and bypassing Close() — a candidate for errgroup-based coordinated shutdown.
 func (n *node) start() error {
 	if n.cfg.MetricsAPIPort > 0 {
+		metricsHandler := metrics.NewHandler(n.logger, n.db, n.cfg.EnableProfile, n.operatorNode)
+		_, metricsServeErr, err := metricsHandler.Start(n.ctx, http.NewServeMux(), fmt.Sprintf(":%d", n.cfg.MetricsAPIPort))
+		if err != nil {
+			n.logger.Fatal("failed to start metrics server", zap.Error(err))
+		}
 		go func() {
-			metricsHandler := metrics.NewHandler(n.logger, n.db, n.cfg.EnableProfile, n.operatorNode)
-			if err := metricsHandler.Start(http.NewServeMux(), fmt.Sprintf(":%d", n.cfg.MetricsAPIPort)); err != nil {
-				n.logger.Fatal("failed to serve metrics", zap.Error(err))
+			if err := <-metricsServeErr; err != nil {
+				n.logger.Fatal("metrics server serve loop exited", zap.Error(err))
 			}
 		}()
 	}
@@ -595,7 +599,7 @@ func (n *node) start() error {
 			hexporter.NewExporter(n.logger, n.storageMap, n.collector, n.nodeStorage.ValidatorStore()),
 			n.mode == modeExporterArchive,
 		)
-		_, apiServeErr, err := apiServer.Start(cfg.SSVOptions.Context)
+		_, apiServeErr, err := apiServer.Start(n.ctx)
 		if err != nil {
 			n.logger.Fatal("failed to start API server", zap.Error(err))
 		}

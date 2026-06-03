@@ -187,7 +187,9 @@ func validateConfig(
 }
 
 // resolveSigning determines which signing method the operator configured and validates that
-// mutually-exclusive methods aren't combined. Returns the resolved signing flags.
+// exactly one method is set: mutually-exclusive methods aren't combined, and at least one source
+// is configured (resolveSigning runs only for operator mode, which must sign). Returns the
+// resolved signing flags.
 func (c *config) resolveSigning() (resolved, error) {
 	var res resolved
 	if c.SSVSigner.Endpoint != "" {
@@ -207,6 +209,10 @@ func (c *config) resolveSigning() (resolved, error) {
 		return resolved{}, fmt.Errorf("cannot enable both remote signing (SSVSigner.Endpoint) and local signing (PrivateKeyFile/OperatorPrivateKey)")
 	} else if res.usingKeystore && res.usingPrivKey {
 		return resolved{}, fmt.Errorf("cannot enable both OperatorPrivateKey and PrivateKeyFile")
+	}
+
+	if !res.usingSSVSigner && !res.usingKeystore && !res.usingPrivKey {
+		return resolved{}, fmt.Errorf("no operator signing configured: set one of SSVSigner.Endpoint, KeyStore (PrivateKeyFile + PasswordFile), or OperatorPrivateKey")
 	}
 
 	return res, nil

@@ -39,14 +39,15 @@ func Test_config_load(t *testing.T) {
 }
 
 // Test_resolveAndValidate_proposerDelay covers the proposer-delay advisory warning emitted by
-// resolveAndValidate (validation itself is covered by Test_validateProposerDelay). Signing is
-// left unset + non-exporter so resolveSigning is a no-op for these cases.
+// resolveAndValidate (validation itself is covered by Test_validateProposerDelay). A minimal
+// operator signing source is set so resolveSigning passes and these cases isolate proposer-delay.
 func Test_resolveAndValidate_proposerDelay(t *testing.T) {
 	t.Run("dangerous delay with flag - warns with duration fields", func(t *testing.T) {
 		for _, delay := range []time.Duration{1001 * time.Millisecond, 2000 * time.Millisecond, 5000 * time.Millisecond} {
 			t.Run(delay.String(), func(t *testing.T) {
 				core, recorded := observer.New(zapcore.WarnLevel)
 				c := config{}
+				c.OperatorPrivateKey = testOperatorKey
 				c.ProposerDelay = delay
 				c.AllowDangerousProposerDelay = true
 
@@ -71,6 +72,7 @@ func Test_resolveAndValidate_proposerDelay(t *testing.T) {
 			t.Run(delay.String(), func(t *testing.T) {
 				core, recorded := observer.New(zapcore.WarnLevel)
 				c := config{}
+				c.OperatorPrivateKey = testOperatorKey
 				c.ProposerDelay = delay
 
 				_, err := c.resolveAndValidate(zap.New(core))
@@ -83,6 +85,7 @@ func Test_resolveAndValidate_proposerDelay(t *testing.T) {
 	t.Run("dangerous delay without flag - error, no warning", func(t *testing.T) {
 		core, recorded := observer.New(zapcore.WarnLevel)
 		c := config{}
+		c.OperatorPrivateKey = testOperatorKey
 		c.ProposerDelay = 2000 * time.Millisecond
 
 		_, err := c.resolveAndValidate(zap.New(core))
@@ -124,6 +127,7 @@ func Test_resolveAndValidate_signingErrorContext(t *testing.T) {
 func Test_resolveAndValidate_mode(t *testing.T) {
 	t.Run("non-exporter -> modeOperator", func(t *testing.T) {
 		c := config{}
+		c.OperatorPrivateKey = testOperatorKey
 		res, err := c.resolveAndValidate(zap.NewNop())
 		require.NoError(t, err)
 		require.Equal(t, modeOperator, res.mode)
@@ -375,7 +379,7 @@ func Test_resolveSigning(t *testing.T) {
 		wantKS  bool
 		wantPK  bool
 	}{
-		{name: "nothing set -> no flags", mutate: func(c *config) {}},
+		{name: "nothing set -> error", mutate: func(c *config) {}, wantErr: "no operator signing configured"},
 		{name: "ssv-signer only", mutate: func(c *config) { c.SSVSigner.Endpoint = testSignerEndpoint }, wantSSV: true},
 		{name: "keystore (both files)", mutate: func(c *config) {
 			c.KeyStore.PrivateKeyFile = "pk"
