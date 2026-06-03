@@ -24,6 +24,17 @@ func (i *Instance) UponRoundTimeout(ctx context.Context, logger *zap.Logger) err
 	prevRound := i.State.Round
 	newRound := prevRound + 1
 
+	// Always move on to the next round. The round-change message broadcast is a best-effort thing, the QBFT
+	// cluster as a whole can progress further even if our round-change message cannot be created/broadcast
+	// for whatever reason — hence the bump is deferred, so it still runs even when CreateRoundChange/Broadcast
+	// below return early with an error.
+	//
+	// Deferring also keeps State.Round at prevRound while we create and broadcast the round change. Bumping
+	// eagerly would advance the instance into the cut-off round at the boundary (prevRound == CutOffRound-1),
+	// at which point Broadcast rejects the message as no-longer-relevant and this final round-change — the one
+	// the spec expects us to send — would never go out.
+	defer i.bumpToRound(newRound)
+
 	i.metrics.EndStage(ctx, prevRound)
 	i.metrics.StartStage(stageRoundChange)
 	i.metrics.RecordRoundChange(ctx, prevRound, reasonTimeout)
@@ -32,11 +43,6 @@ func (i *Instance) UponRoundTimeout(ctx context.Context, logger *zap.Logger) err
 	logger = logger.With(zap.String("qbft_start_value_root", hex.EncodeToString(startValueRoot[:])))
 
 	logger.Debug("⌛ round timed out")
-
-	// Always move on to the next round. The round-change message broadcast is a best-effort thing, the QBFT
-	// cluster as a whole can progress further even if our round-change message cannot be created/broadcast
-	// for whatever reason.
-	i.bumpToRound(newRound)
 
 	roundChange, err := i.CreateRoundChange(newRound)
 	if err != nil {
