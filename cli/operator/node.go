@@ -366,7 +366,10 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		executionAddrList := strings.Split(cfg.ExecutionClient.Addr, ";")
-		if len(executionAddrList) == 0 {
+		for i := range executionAddrList {
+			executionAddrList[i] = strings.TrimSpace(executionAddrList[i])
+		}
+		if len(executionAddrList) == 0 || executionAddrList[0] == "" {
 			logger.Fatal("no execution node address provided")
 		}
 
@@ -374,9 +377,41 @@ var StartNodeCmd = &cobra.Command{
 		// (eth_getLogs etc.) — keeps the heavy responses off WebSocket and works
 		// around Besu's StreamBackpressure event-loop block. Empty leaves the
 		// legacy single-transport behavior.
+		//
+		// Empty entries within the list are permitted and mean "use WS only for
+		// this position" — useful for mixed backend setups where only some ELs
+		// are Besu. MultiClient.connect handles the per-entry fallback.
 		var queryAddrList []string
 		if cfg.ExecutionClient.QueryAddr != "" {
 			queryAddrList = strings.Split(cfg.ExecutionClient.QueryAddr, ";")
+			for i := range queryAddrList {
+				queryAddrList[i] = strings.TrimSpace(queryAddrList[i])
+			}
+			// Pair-by-position: a silent length mismatch would leave some
+			// clients falling back to WS — the very situation
+			// ETH_1_QUERY_ADDR exists to avoid. Fail loud on misconfig.
+			if len(queryAddrList) != len(executionAddrList) {
+				logger.Fatal("ETH_1_QUERY_ADDR entry count must match ETH_1_ADDR — fix the config or unset ETH_1_QUERY_ADDR",
+					zap.Int("query_addr_count", len(queryAddrList)),
+					zap.Int("node_addr_count", len(executionAddrList)),
+				)
+			}
+			// Surface any positions that fall back to WS so operators see
+			// at startup that the Besu workaround isn't covering every
+			// backend. Not fatal — explicitly supported, but worth knowing
+			// because large eth_getLogs on these positions may still hit
+			// Besu's StreamBackpressure event-loop block.
+			var wsOnlyAddrs []string
+			for i, q := range queryAddrList {
+				if q == "" {
+					wsOnlyAddrs = append(wsOnlyAddrs, executionAddrList[i])
+				}
+			}
+			if len(wsOnlyAddrs) > 0 {
+				logger.Warn("ETH_1_QUERY_ADDR set but some positions are blank — those EL backends will use WS for queries and may trigger Besu's StreamBackpressure event-loop block on large eth_getLogs responses. Set an HTTP endpoint at each blank position to opt those backends into the dual-transport path.",
+					zap.Strings("ws_only_addrs", wsOnlyAddrs),
+				)
+			}
 		}
 
 		logger.Info("connecting EL(s)",

@@ -135,7 +135,8 @@ func (ec *ExecutionClient) FetchHistoricalLogs(ctx context.Context, fromBlock ui
 ) {
 	start := time.Now()
 	currentBlock, err := ec.client.BlockNumber(ctx)
-	recordRequest(ctx, ec.logger, "BlockNumber", ec, time.Since(start), err)
+	recordRequest(ctx, ec.logger, "BlockNumber", ec.client.QueryAddr(), time.Since(start), err,
+		zap.String("transport", ec.client.QueryTransport()))
 	if err != nil {
 		return nil, nil, ec.errSingleClient(fmt.Errorf("get current block: %w", err), "eth_blockNumber")
 	}
@@ -387,7 +388,8 @@ func (ec *ExecutionClient) Healthy(ctx context.Context) error {
 
 	start := time.Now()
 	sp, err := ec.SyncProgress(ctx)
-	recordRequest(ctx, ec.logger, "SyncProgress", ec, time.Since(start), err)
+	recordRequest(ctx, ec.logger, "SyncProgress", ec.client.QueryAddr(), time.Since(start), err,
+		zap.String("transport", ec.client.QueryTransport()))
 	if err != nil {
 		recordExecutionClientStatus(ctx, statusFailure, ec.nodeAddr)
 		return ec.errSingleClient(fmt.Errorf("get sync progress: %w", err), "eth_syncing")
@@ -406,6 +408,20 @@ func (ec *ExecutionClient) Healthy(ctx context.Context) error {
 		syncDistanceGauge.Record(ctx, 0, metric.WithAttributes(semconv.ServerAddress(ec.nodeAddr)))
 	}
 
+	// SyncProgress above only touched the query transport when dual-transport
+	// is in use. Probe the sub (WS) transport too — without this, a WS-down /
+	// HTTP-up partial failure looks healthy here while SubscribeFilterLogs /
+	// SubscribeNewHead stall, and MultiClient never failovers.
+	// PingSub is a no-op in single-transport mode.
+	start = time.Now()
+	subErr := ec.client.PingSub(ctx)
+	recordRequest(ctx, ec.logger, "PingSub", ec.client.SubAddr(), time.Since(start), subErr,
+		zap.String("transport", "ws"))
+	if subErr != nil {
+		recordExecutionClientStatus(ctx, statusFailure, ec.nodeAddr)
+		return ec.errSingleClient(fmt.Errorf("probe sub transport: %w", subErr), "eth_blockNumber")
+	}
+
 	recordExecutionClientStatus(ctx, statusReady, ec.nodeAddr)
 
 	ec.lastHealthyTime.Store(time.Now().Unix())
@@ -416,7 +432,8 @@ func (ec *ExecutionClient) Healthy(ctx context.Context) error {
 func (ec *ExecutionClient) HeaderByNumber(ctx context.Context, blockNumber *big.Int) (*ethtypes.Header, error) {
 	start := time.Now()
 	h, err := ec.client.HeaderByNumber(ctx, blockNumber)
-	recordRequest(ctx, ec.logger, "HeaderByNumber", ec, time.Since(start), err)
+	recordRequest(ctx, ec.logger, "HeaderByNumber", ec.client.QueryAddr(), time.Since(start), err,
+		zap.String("transport", ec.client.QueryTransport()))
 	if err != nil {
 		return nil, ec.errSingleClient(fmt.Errorf("get header by block number %s: %w", blockNumber, err), "eth_getBlockByNumber")
 	}
@@ -426,7 +443,8 @@ func (ec *ExecutionClient) HeaderByNumber(ctx context.Context, blockNumber *big.
 func (ec *ExecutionClient) SubscribeFilterLogs(ctx context.Context, q ethereum.FilterQuery, ch chan<- ethtypes.Log) (ethereum.Subscription, error) {
 	start := time.Now()
 	logs, err := ec.client.SubscribeFilterLogs(ctx, q, ch)
-	recordRequest(ctx, ec.logger, "SubscribeFilterLogs", ec, time.Since(start), err)
+	recordRequest(ctx, ec.logger, "SubscribeFilterLogs", ec.client.SubAddr(), time.Since(start), err,
+		zap.String("transport", "ws"))
 	if err != nil {
 		return nil, ec.errSingleClient(fmt.Errorf("subscribe to filtered logs (query=%s): %w", q, err), "logs")
 	}
@@ -436,7 +454,8 @@ func (ec *ExecutionClient) SubscribeFilterLogs(ctx context.Context, q ethereum.F
 func (ec *ExecutionClient) FilterLogs(ctx context.Context, q ethereum.FilterQuery) ([]ethtypes.Log, error) {
 	start := time.Now()
 	logs, err := ec.client.FilterLogs(ctx, q)
-	recordRequest(ctx, ec.logger, "FilterLogs", ec, time.Since(start), err)
+	recordRequest(ctx, ec.logger, "FilterLogs", ec.client.QueryAddr(), time.Since(start), err,
+		zap.String("transport", ec.client.QueryTransport()))
 	if err != nil {
 		return nil, ec.errSingleClient(fmt.Errorf("get filtered logs (query=%s): %w", q, err), "eth_getLogs")
 	}
@@ -481,7 +500,8 @@ func (ec *ExecutionClient) streamLogsToChan(
 	// So we can restart from this block once everything is good.
 	start := time.Now()
 	sub, err := ec.client.SubscribeNewHead(ctx, heads)
-	recordRequest(ctx, ec.logger, "SubscribeNewHead", ec, time.Since(start), err)
+	recordRequest(ctx, ec.logger, "SubscribeNewHead", ec.client.SubAddr(), time.Since(start), err,
+		zap.String("transport", "ws"))
 	if err != nil {
 		return 0, false, ec.errSingleClient(fmt.Errorf("subscribe new head: %w", err), "newHeads")
 	}
@@ -544,7 +564,7 @@ func (ec *ExecutionClient) connect(ctx context.Context) error {
 
 	reqStart := time.Now()
 	subClient, err := ethclient.DialContext(reqCtx, ec.nodeAddr)
-	recordRequest(ctx, ec.logger, "DialContext", ec, time.Since(reqStart), err)
+	recordRequest(ctx, ec.logger, "DialContext.sub", ec.nodeAddr, time.Since(reqStart), err)
 	if err != nil {
 		return ec.errSingleClient(fmt.Errorf("ethclient dial: %w", err), "dial")
 	}
@@ -553,14 +573,50 @@ func (ec *ExecutionClient) connect(ctx context.Context) error {
 	if ec.queryAddr != "" && ec.queryAddr != ec.nodeAddr {
 		reqStart = time.Now()
 		queryClient, err = ethclient.DialContext(reqCtx, ec.queryAddr)
-		recordRequest(ctx, ec.logger, "DialContext", ec, time.Since(reqStart), err)
+		recordRequest(ctx, ec.logger, "DialContext.query", ec.queryAddr, time.Since(reqStart), err)
 		if err != nil {
 			subClient.Close()
 			return ec.errSingleClient(fmt.Errorf("ethclient dial query addr: %w", err), "dial")
 		}
 	}
 
-	ec.client = newEthClient(subClient, queryClient, ec.reqTimeout)
+	// When dual-transport is in use, both clients MUST be on the same chain.
+	// Otherwise we'd read registry events (FilterLogs/HTTP) from one chain
+	// while subscribing to live events (eth_subscribe/WS) on another — silent
+	// divergence that downstream consumers (event syncer, EKM slashing
+	// protection) have no defense against. Validate once at startup.
+	if queryClient != nil {
+		chainIDStart := time.Now()
+		subChainID, idErr := subClient.ChainID(reqCtx)
+		recordRequest(ctx, ec.logger, "eth_chainId.sub", ec.nodeAddr, time.Since(chainIDStart), idErr)
+		if idErr != nil {
+			subClient.Close()
+			queryClient.Close()
+			return ec.errSingleClient(fmt.Errorf("fetch chain ID from sub addr %s: %w", ec.nodeAddr, idErr), "eth_chainId")
+		}
+		chainIDStart = time.Now()
+		queryChainID, idErr := queryClient.ChainID(reqCtx)
+		recordRequest(ctx, ec.logger, "eth_chainId.query", ec.queryAddr, time.Since(chainIDStart), idErr)
+		if idErr != nil {
+			subClient.Close()
+			queryClient.Close()
+			return ec.errSingleClient(fmt.Errorf("fetch chain ID from query addr %s: %w", ec.queryAddr, idErr), "eth_chainId")
+		}
+		if subChainID.Cmp(queryChainID) != 0 {
+			subClient.Close()
+			queryClient.Close()
+			return ec.errSingleClient(fmt.Errorf(
+				"chain ID mismatch between EL transports: sub %s reports chain %s, query %s reports chain %s — both addrs must point at the same physical node",
+				ec.nodeAddr, subChainID, ec.queryAddr, queryChainID,
+			), "eth_chainId")
+		}
+	}
+
+	queryAddrForClient := ""
+	if queryClient != nil {
+		queryAddrForClient = ec.queryAddr
+	}
+	ec.client = newEthClient(subClient, ec.nodeAddr, queryClient, queryAddrForClient, ec.reqTimeout)
 
 	return nil
 }
@@ -572,7 +628,8 @@ func (ec *ExecutionClient) Filterer() (*contract.ContractFilterer, error) {
 func (ec *ExecutionClient) ChainID(ctx context.Context) (*big.Int, error) {
 	start := time.Now()
 	chainID, err := ec.client.ChainID(ctx)
-	recordRequest(ctx, ec.logger, "ChainID", ec, time.Since(start), err)
+	recordRequest(ctx, ec.logger, "ChainID", ec.client.QueryAddr(), time.Since(start), err,
+		zap.String("transport", ec.client.QueryTransport()))
 	if chainID == nil {
 		return nil, ec.errSingleClient(fmt.Errorf("chain id response is nil"), "eth_chainId")
 	}

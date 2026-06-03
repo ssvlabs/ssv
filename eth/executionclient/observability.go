@@ -104,13 +104,21 @@ var (
 			metric.WithDescription("number of bloom cross-check outcomes by type")))
 )
 
+// recordRequest emits a debug log + duration histogram for one EL RPC call.
+//
+// addr should be the URL the call actually traveled (e.g. the HTTP query
+// addr when dual-transport routed a FilterLogs over the query client). When
+// the caller knows the transport semantically, pass it via extraFields as
+// zap.String("transport", "http"|"ws") so observability records can be
+// filtered by transport regardless of how the operator named the URLs.
 func recordRequest(
 	ctx context.Context,
 	logger *zap.Logger,
 	routeName string,
-	client interface{ Address() string },
+	addr string,
 	duration time.Duration,
 	err error,
+	extraFields ...zap.Field,
 ) {
 	// Log the request, but only if it has errored or if it took long enough that we want to pay attention
 	// to it (there are too many requests being made to log them every time, some requests don't even result
@@ -123,19 +131,20 @@ func recordRequest(
 				success = "unknown" // we don't know the outcome of this request
 			}
 		}
-		logger.Debug("EL request done",
+		logFields := []zap.Field{
 			zap.String("route_name", routeName),
-			zap.String("client_addr", client.Address()),
+			zap.String("client_addr", addr),
 			fields.Took(duration),
 			zap.String("success", success),
 			zap.Error(err),
-		)
+		}
+		logger.Debug("EL request done", append(logFields, extraFields...)...)
 	}
 
 	// Build metric attributes, add error-code attribute in case there is an error (treat context.Canceled
 	// as non-error since it means we've canceled the request ourselves).
 	attr := []attribute.KeyValue{
-		semconv.ServerAddress(client.Address()),
+		semconv.ServerAddress(addr),
 		attribute.String("rpc.route_name", routeName),
 	}
 	if err != nil && !errors.Is(err, context.Canceled) {
