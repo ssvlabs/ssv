@@ -226,22 +226,35 @@ func (c *validatorStore) OperatorCommittees(id spectypes.OperatorID) []*Committe
 }
 
 func (c *validatorStore) WithOperatorID(operatorID func() spectypes.OperatorID) SelfValidatorStore {
+	c.mu.Lock()
 	c.operatorID = operatorID
+	c.mu.Unlock()
 	return c
 }
 
+// operatorIDFunc returns the configured operator-ID accessor under the store lock, so the Self*
+// readers can snapshot it without racing a concurrent WithOperatorID. The func is invoked outside
+// the lock, since OperatorValidators/OperatorCommittees take the lock themselves.
+func (c *validatorStore) operatorIDFunc() func() spectypes.OperatorID {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.operatorID
+}
+
 func (c *validatorStore) SelfValidators() []*types.SSVShare {
-	if c.operatorID == nil {
+	operatorID := c.operatorIDFunc()
+	if operatorID == nil {
 		return nil
 	}
-	return c.OperatorValidators(c.operatorID())
+	return c.OperatorValidators(operatorID())
 }
 
 func (c *validatorStore) SelfParticipatingValidators(epoch phase0.Epoch) []*types.SSVShare {
-	if c.operatorID == nil {
+	operatorID := c.operatorIDFunc()
+	if operatorID == nil {
 		return nil
 	}
-	shares := c.OperatorValidators(c.operatorID())
+	shares := c.OperatorValidators(operatorID())
 	var participating []*types.SSVShare
 	for _, share := range shares {
 		if share.IsParticipating(c.beaconCfg, epoch) {
@@ -253,17 +266,19 @@ func (c *validatorStore) SelfParticipatingValidators(epoch phase0.Epoch) []*type
 }
 
 func (c *validatorStore) SelfCommittees() []*Committee {
-	if c.operatorID == nil {
+	operatorID := c.operatorIDFunc()
+	if operatorID == nil {
 		return nil
 	}
-	return c.OperatorCommittees(c.operatorID())
+	return c.OperatorCommittees(operatorID())
 }
 
 func (c *validatorStore) SelfParticipatingCommittees(epoch phase0.Epoch) []*Committee {
-	if c.operatorID == nil {
+	operatorID := c.operatorIDFunc()
+	if operatorID == nil {
 		return nil
 	}
-	committees := c.OperatorCommittees(c.operatorID())
+	committees := c.OperatorCommittees(operatorID())
 	var participating []*Committee
 	for _, committee := range committees {
 		if committee.IsParticipating(c.beaconCfg, epoch) {
