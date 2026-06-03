@@ -552,6 +552,41 @@ func (ec *ExecutionClient) streamLogsToChan(
 	}
 }
 
+// chainIDWithRetry fetches the chain ID from an ethclient.Client with bounded
+// retry to ride out transient transport flakes at startup (e.g., Besu HTTP
+// occasionally returning EOF on the first poll right after dial). Each attempt
+// gets its own short per-attempt context so one slow attempt can't eat the
+// caller's whole budget. The outer ctx still bounds the total wall-clock —
+// if it's cancelled mid-backoff, we return its error.
+//
+// On every attempt failing, returns the last error so the caller can fail
+// closed (the caller's responsibility — this helper does not decide policy).
+func chainIDWithRetry(ctx context.Context, client *ethclient.Client) (*big.Int, error) {
+	const attempts = 3
+	const perAttemptTimeout = 2 * time.Second
+	const backoff = 1 * time.Second
+
+	var lastErr error
+	for i := 0; i < attempts; i++ {
+		attemptCtx, cancel := context.WithTimeout(ctx, perAttemptTimeout)
+		chainID, err := client.ChainID(attemptCtx)
+		cancel()
+		if err == nil {
+			return chainID, nil
+		}
+		lastErr = err
+		if i == attempts-1 {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(backoff):
+		}
+	}
+	return nil, lastErr
+}
+
 // connect connects to Ethereum execution client.
 //
 // Dials nodeAddr for the subscription transport (always required — eth_subscribe
@@ -584,23 +619,27 @@ func (ec *ExecutionClient) connect(ctx context.Context) error {
 	// Otherwise we'd read registry events (FilterLogs/HTTP) from one chain
 	// while subscribing to live events (eth_subscribe/WS) on another — silent
 	// divergence that downstream consumers (event syncer, EKM slashing
-	// protection) have no defense against. Validate once at startup.
+	// protection) have no defense against. Validate once at startup, with
+	// bounded retry to ride out transient transport flakes (e.g., Besu HTTP
+	// occasionally returning EOF on first poll right after dial — observed in
+	// production where it crash-looped the pod). A persistent chain mismatch
+	// still fails closed; only transport-level errors are retried.
 	if queryClient != nil {
 		chainIDStart := time.Now()
-		subChainID, idErr := subClient.ChainID(reqCtx)
+		subChainID, idErr := chainIDWithRetry(reqCtx, subClient)
 		recordRequest(ctx, ec.logger, "eth_chainId.sub", ec.nodeAddr, time.Since(chainIDStart), idErr)
 		if idErr != nil {
 			subClient.Close()
 			queryClient.Close()
-			return ec.errSingleClient(fmt.Errorf("fetch chain ID from sub addr %s: %w", ec.nodeAddr, idErr), "eth_chainId")
+			return ec.errSingleClient(fmt.Errorf("fetch chain ID from sub addr %s after retries: %w", ec.nodeAddr, idErr), "eth_chainId")
 		}
 		chainIDStart = time.Now()
-		queryChainID, idErr := queryClient.ChainID(reqCtx)
+		queryChainID, idErr := chainIDWithRetry(reqCtx, queryClient)
 		recordRequest(ctx, ec.logger, "eth_chainId.query", ec.queryAddr, time.Since(chainIDStart), idErr)
 		if idErr != nil {
 			subClient.Close()
 			queryClient.Close()
-			return ec.errSingleClient(fmt.Errorf("fetch chain ID from query addr %s: %w", ec.queryAddr, idErr), "eth_chainId")
+			return ec.errSingleClient(fmt.Errorf("fetch chain ID from query addr %s after retries: %w", ec.queryAddr, idErr), "eth_chainId")
 		}
 		if subChainID.Cmp(queryChainID) != 0 {
 			subClient.Close()
