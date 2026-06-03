@@ -54,6 +54,9 @@ func startHealthProber(ctx context.Context, logger *zap.Logger, p *hprobe.Health
 			defer cancel()
 
 			if err := p.ProbeAll(probeCtx); err != nil {
+				// TODO(#2867): trigger graceful shutdown (-> Close -> non-zero exit) instead of Fatal,
+				// which bypasses Close. Crash-and-restart on persistent unhealth is intentional; the
+				// goroutine os.Exit mechanism is the wart.
 				logger.Fatal(componentsUnhealthyErrorMsg, zap.Error(err))
 			}
 		}()
