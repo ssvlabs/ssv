@@ -23,6 +23,24 @@ const (
 	RunnerRoleAttrKey = "ssv.runner.role"
 )
 
+// OperatorIDAttribute identifies the SSV operator this process is running on behalf of.
+// Typically set as an OTel resource attribute via observability.WithResourceAttributes so
+// every metric and trace emitted by the process is labeled automatically — see also
+// cli/operator/node.go where this is wired up after operatorDataStore initialization.
+func OperatorIDAttribute(id spectypes.OperatorID) attribute.KeyValue {
+	return attribute.KeyValue{
+		Key:   "ssv.operator_id",
+		Value: Uint64AttributeValue(id),
+	}
+}
+
+// BeaconClientAttribute identifies which configured beacon client (by address) produced
+// the data being measured. Useful for diagnosing which beacon returned stale data, etc.
+// Per-call attribute (not a resource attribute) since operators may run multiple beacons.
+func BeaconClientAttribute(addr string) attribute.KeyValue {
+	return attribute.String("ssv.beacon.client", addr)
+}
+
 func BeaconRoleAttribute(role spectypes.BeaconRole) attribute.KeyValue {
 	return attribute.String("ssv.beacon.role", role.String())
 }

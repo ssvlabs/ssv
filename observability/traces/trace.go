@@ -11,8 +11,10 @@ import (
 	"go.uber.org/zap"
 )
 
-// logger is defined as global var here to keep package API as simple as possible (instead of returning error we log them with this logger in some places)
-var logger *zap.Logger
+// logger is defined as global var here to keep package API as simple as possible (instead of returning error we log them with this logger in some places).
+// Defaults to a no-op logger so any logging before InitLogger runs doesn't panic on a
+// nil pointer. InitLogger replaces this with the configured global zap logger.
+var logger = zap.NewNop()
 
 const traceIDByteLen = 16
 
@@ -21,6 +23,12 @@ type dutyIDKey struct{}
 
 func InitLogger(l *zap.Logger) {
 	logger = l
+}
+
+// Logger returns the package-level logger. Symmetric with InitLogger; primarily useful
+// for tests that need to save and restore the logger around mutations.
+func Logger() *zap.Logger {
+	return logger
 }
 
 // DutyIDFromContext retrieves the duty ID string from the context if present.

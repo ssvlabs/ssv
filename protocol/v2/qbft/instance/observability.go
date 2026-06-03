@@ -44,11 +44,12 @@ var (
 			metric.WithDescription("validator stage(proposal, prepare, commit) duration"),
 			metric.WithExplicitBucketBoundaries(metrics.SecondsHistogramBuckets...)))
 
-	roundsChangedCounter = metrics.New(
+	// Sparse: QBFT round changes only happen on consensus failures/timeouts (rare).
+	roundsChangedCounter = metrics.RegisterSparseCounter(metrics.New(
 		meter.Int64Counter(
 			observability.InstrumentName(observabilityNamespace, "duty.rounds_changed"),
 			metric.WithUnit("{change}"),
-			metric.WithDescription("number of round changes with their reasons")))
+			metric.WithDescription("number of round changes with their reasons"))))
 )
 
 func stageAttribute(stage stage) attribute.KeyValue {

@@ -114,11 +114,12 @@ var (
 			metric.WithUnit("{submission}"),
 			metric.WithDescription("number of duty submissions")))
 
-	failedSubmissionCounter = metrics.New(
+	// Sparse: only fires when a duty submission fails (rare).
+	failedSubmissionCounter = metrics.RegisterSparseCounter(metrics.New(
 		meter.Int64Counter(
 			observability.InstrumentName(observabilityNamespace, "submissions.failed"),
 			metric.WithUnit("{submission}"),
-			metric.WithDescription("total number of failed duty submissions")))
+			metric.WithDescription("total number of failed duty submissions"))))
 )
 
 func recordSuccessfulSubmission(ctx context.Context, count int64, epoch phase0.Epoch, role spectypes.BeaconRole) {

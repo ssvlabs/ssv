@@ -1,5 +1,7 @@
 package observability
 
+import "go.opentelemetry.io/otel/attribute"
+
 type (
 	tracesConfig struct {
 		enabled bool
@@ -9,15 +11,9 @@ type (
 		enabled bool
 	}
 
-	loggerConfig struct {
-		enabled                              bool
-		level, levelFormat, format, filePath string
-		fileSize, fileBackups                int
-	}
-
 	Config struct {
-		traces  tracesConfig
-		metrics metricsConfig
-		logger  loggerConfig
+		traces        tracesConfig
+		metrics       metricsConfig
+		resourceAttrs []attribute.KeyValue
 	}
 )

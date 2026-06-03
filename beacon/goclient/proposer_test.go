@@ -14,6 +14,7 @@ import (
 	"time"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
+	apiv1electra "github.com/attestantio/go-eth2-client/api/v1/electra"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -128,37 +129,37 @@ func createProposalBeaconServer(t *testing.T, options beaconProposalServerOption
 	return server, serverGotRequests
 }
 
-// Create a safe proposal response using ssv-spec utilities (called once during server setup)
+// createProposalResponseSafe builds a JSON-encoded beacon proposal response with the
+// requested slot + fee recipient. It deep-clones the shared spec-testing fixture before
+// mutating: TestingBeaconBlockV / TestingBlindedBeaconBlockV return wrappers whose inner
+// *electra.BlockContents / *electra.BlindedBeaconBlock fields point at package-level
+// singletons (TestingBlockContentsElectra, TestingBlindedBeaconBlockElectra). Mutating
+// those directly leaks state across every test in the binary; SSZ round-trip gives us a
+// per-call independent copy.
 func createProposalResponseSafe(slot phase0.Slot, feeRecipient bellatrix.ExecutionAddress, blinded bool) []byte {
 	if blinded {
-		// Get a blinded block from ssv-spec testing utilities
-		versionedBlinded := spectestingutils.TestingBlindedBeaconBlockV(spec.DataVersionElectra)
-		block := versionedBlinded.ElectraBlinded
+		shared := spectestingutils.TestingBlindedBeaconBlockV(spec.DataVersionElectra).ElectraBlinded
+		sszBytes, _ := shared.MarshalSSZ()
+		block := new(apiv1electra.BlindedBeaconBlock)
+		_ = block.UnmarshalSSZ(sszBytes)
 
-		// Modify the fields we need for our test
 		block.Slot = slot
 		block.Body.ExecutionPayloadHeader.FeeRecipient = feeRecipient
 
-		// Wrap in response structure
-		response := map[string]any{
-			"data": block,
-		}
+		response := map[string]any{"data": block}
 		data, _ := json.Marshal(response)
 		return data
 	}
 
-	// Get a regular block from ssv-spec testing utilities
-	versioned := spectestingutils.TestingBeaconBlockV(spec.DataVersionElectra)
-	blockContents := versioned.Electra
+	shared := spectestingutils.TestingBeaconBlockV(spec.DataVersionElectra).Electra
+	sszBytes, _ := shared.MarshalSSZ()
+	blockContents := new(apiv1electra.BlockContents)
+	_ = blockContents.UnmarshalSSZ(sszBytes)
 
-	// Modify the fields we need for our test
 	blockContents.Block.Slot = slot
 	blockContents.Block.Body.ExecutionPayload.FeeRecipient = feeRecipient
 
-	// Wrap in response structure
-	response := map[string]any{
-		"data": blockContents,
-	}
+	response := map[string]any{"data": blockContents}
 	data, _ := json.Marshal(response)
 	return data
 }

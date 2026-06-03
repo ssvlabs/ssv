@@ -212,6 +212,12 @@ func New(ctx context.Context, logger *zap.Logger, opt Options) (*GoClient, error
 		}
 	}
 
+	// Pre-register baselines for the proposal_parent counters across the configured
+	// beacon clients so that PromQL increase()/rate() return correct values per
+	// ssv.beacon.client label after restart. The registered function runs when
+	// metrics.EmitBaselines is called from startup (after observability.Initialize).
+	registerProposalParentBaselines(client.clients)
+
 	client.log.Debug("connecting")
 
 	err := client.initMultiClient(ctx)

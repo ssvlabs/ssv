@@ -22,8 +22,10 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/observability/traces"
 )
@@ -97,24 +99,29 @@ func (gc *GoClient) GetBeaconBlock(
 	copy(graffiti[:], graffitiBytes[:])
 
 	var beaconBlock *api.VersionedProposal
+	// beaconClient is the address of the BN that produced the selected proposal — used
+	// for metric labeling so per-client staleness rates can be measured.
+	var beaconClient string
 	var err error
 
 	// For single client, use direct call to avoid multi-client overhead
 	if len(gc.clients) == 1 {
-		beaconBlock, err = gc.fetchProposal(ctx, gc.clients[0], slot, sig, graffiti)
+		client := gc.clients[0]
+		beaconBlock, err = gc.fetchProposal(ctx, client, slot, sig, graffiti)
 		if err != nil {
 			return nil, nil, err
 		}
+		beaconClient = client.Address()
 	} else {
 		// For multiple clients, race them in parallel for the fastest response
-		beaconBlock, err = gc.getProposalParallel(ctx, logger, slot, sig, graffiti)
+		beaconBlock, beaconClient, err = gc.getProposalParallel(ctx, logger, slot, sig, graffiti)
 		if err != nil {
 			return nil, nil, err
 		}
 	}
 
 	// Verify proposal parent root against cached HeadEvent (observability only).
-	gc.verifyProposalParent(ctx, logger, slot, beaconBlock)
+	gc.verifyProposalParent(ctx, logger, slot, beaconBlock, beaconClient)
 
 	// Check and log if fee recipient is missing (for both single and multi-client paths)
 	feeRecipient, err := beaconBlock.FeeRecipient()
@@ -173,13 +180,17 @@ func (gc *GoClient) GetBeaconBlock(
 // The parent context (from duty runner, bounded by slot timing) serves as the hard
 // deadline. We never give up early on getting a block proposal - missing a proposal
 // is catastrophic, so we wait as long as the slot allows.
+//
+// Returns the selected proposal along with the address of the beacon client that
+// produced it — used for metric labeling so we can attribute stale-parent proposals
+// (and other diagnostics) to specific beacon clients in operators' setups.
 func (gc *GoClient) getProposalParallel(
 	ctx context.Context,
 	logger *zap.Logger,
 	slot phase0.Slot,
 	sig phase0.BLSSignature,
 	graffiti [32]byte,
-) (*api.VersionedProposal, error) {
+) (*api.VersionedProposal, string, error) {
 	// Create a context for the collection period - during this time we gather
 	// proposals from multiple beacon nodes to select the best one.
 	// After this expires, we return the best seen so far or wait for the first valid one.
@@ -274,7 +285,7 @@ collect:
 			fields.Slot(slot),
 		)
 
-		return bestProposal, nil
+		return bestProposal, bestClient, nil
 	}
 
 	logger.Debug("did not receive any valid proposals during the collection period",
@@ -304,15 +315,15 @@ collect:
 				zap.Bool("blinded", res.proposal.Blinded),
 				fields.Slot(slot),
 			)
-			return res.proposal, nil
+			return res.proposal, res.client, nil
 
 		case <-ctx.Done():
 			// Parent context canceled (duty deadline reached)
-			return nil, ctx.Err()
+			return nil, "", ctx.Err()
 		}
 	}
 
-	return nil, fmt.Errorf("all %d clients failed to get proposal for slot %d, encountered errors: %w", len(gc.clients), slot, errs)
+	return nil, "", fmt.Errorf("all %d clients failed to get proposal for slot %d, encountered errors: %w", len(gc.clients), slot, errs)
 }
 
 // scoreProposal computes a score for a beacon proposal.
@@ -326,13 +337,26 @@ func (gc *GoClient) scoreProposal(
 
 // verifyProposalParent checks the proposal's parent root against cached HeadEvent.
 // This is observability only - no re-fetch, just metrics and logging.
+// beaconClient is the address of the beacon node that produced the proposal, attached as
+// a metric label so per-client staleness rates can be measured.
 func (gc *GoClient) verifyProposalParent(
 	ctx context.Context,
 	logger *zap.Logger,
 	slot phase0.Slot,
 	proposal *api.VersionedProposal,
+	beaconClient string,
 ) {
-	proposalParentVerifyCounter.Add(ctx, 1)
+	if slot == 0 {
+		// Guards against the slot-1 uint64 underflow below. In production this branch
+		// never fires (the slot ticker is well past 0 by the time GetBeaconBlock runs),
+		// but tests with synthetic zero slots can reach here. Genesis has no parent root
+		// to verify in any case.
+		return
+	}
+
+	clientAttr := metric.WithAttributes(observability.BeaconClientAttribute(beaconClient))
+
+	proposalParentVerifyCounter.Add(ctx, 1, clientAttr)
 
 	parentRoot, err := proposal.ParentRoot()
 	if err != nil {
@@ -344,22 +368,26 @@ func (gc *GoClient) verifyProposalParent(
 	parentSlot := slot - 1
 	item := gc.headCache.Get(parentSlot)
 	if item == nil {
-		proposalParentCacheMissCounter.Add(ctx, 1)
+		proposalParentCacheMissCounter.Add(ctx, 1, clientAttr)
 		return
 	}
 	expectedRoot := item.Value()
 
 	if parentRoot == expectedRoot {
-		proposalParentMatchCounter.Add(ctx, 1)
+		proposalParentMatchCounter.Add(ctx, 1, clientAttr)
 		return
 	}
 
-	proposalParentMismatchCounter.Add(ctx, 1)
-	logger.Warn("proposal parent root mismatch detected",
+	proposalParentMismatchCounter.Add(ctx, 1, clientAttr)
+	// Logged at Info: this is observability-only with no corrective action. The metric
+	// commonly fires during normal fork resolution (cache-vs-BN drift), not staleness —
+	// Warn would create alert fatigue. Revisit if the check becomes actionable.
+	logger.Info("proposal parent root mismatch detected",
 		fields.Slot(slot),
 		zap.Uint64("parent_slot", uint64(parentSlot)),
 		zap.Stringer("expected_root", expectedRoot),
 		zap.Stringer("got_root", parentRoot),
+		fields.BeaconClient(beaconClient),
 	)
 }
 

@@ -58,21 +58,22 @@ var (
 			metric.WithUnit("{block_number}"),
 			metric.WithDescription("last processed block by execution client")))
 
-	// MultiClient metrics
-	clientSwitchCounter = metrics.New(
+	// Sparse: only fires on multi-client failover (rare).
+	clientSwitchCounter = metrics.RegisterSparseCounter(metrics.New(
 		meter.Int64Counter(
 			observability.InstrumentName(observabilityNamespace, "client.switch"),
-			metric.WithDescription("number of times the execution client has been switched")))
+			metric.WithDescription("number of times the execution client has been switched"))))
 
 	multiClientMethodCallsCounter = metrics.New(
 		meter.Int64Counter(
 			observability.InstrumentName(observabilityNamespace, "multi_client.method_calls"),
 			metric.WithDescription("number of method calls to the multi client")))
 
-	multiClientMethodErrorsCounter = metrics.New(
+	// Sparse: tracks RPC error rate which is typically low.
+	multiClientMethodErrorsCounter = metrics.RegisterSparseCounter(metrics.New(
 		meter.Int64Counter(
 			observability.InstrumentName(observabilityNamespace, "multi_client.method_errors"),
-			metric.WithDescription("number of method call errors in the multi client")))
+			metric.WithDescription("number of method call errors in the multi client"))))
 
 	multiClientMethodDurationHistogram = metrics.New(
 		meter.Float64Histogram(
@@ -93,15 +94,17 @@ var (
 			metric.WithUnit("{clients}"),
 			metric.WithDescription("number of clients in the multi client")))
 
-	clientInitCounter = metrics.New(
+	// Sparse: fires only at startup/recovery (rare lifecycle event).
+	clientInitCounter = metrics.RegisterSparseCounter(metrics.New(
 		meter.Int64Counter(
 			observability.InstrumentName(observabilityNamespace, "client.init"),
-			metric.WithDescription("number of times a client was initialized")))
+			metric.WithDescription("number of times a client was initialized"))))
 
-	bloomCheckCounter = metrics.New(
+	// Sparse: only fires during bloom cross-check recovery scenarios.
+	bloomCheckCounter = metrics.RegisterSparseCounter(metrics.New(
 		meter.Int64Counter(
 			observability.InstrumentName(observabilityNamespace, "bloom.checks"),
-			metric.WithDescription("number of bloom cross-check outcomes by type")))
+			metric.WithDescription("number of bloom cross-check outcomes by type"))))
 )
 
 func recordRequest(

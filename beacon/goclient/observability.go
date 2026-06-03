@@ -70,67 +70,99 @@ var (
 			metric.WithUnit("{match}"),
 			metric.WithDescription("attestation data head matched cached HeadEvent")))
 
-	attestationDataHeadCacheMissCounter = metrics.New(
+	// Sparse: only fires when cache lookup fails for an attestation; registered for
+	// baseline emission so increase()/rate() work correctly after process restart.
+	attestationDataHeadCacheMissCounter = metrics.RegisterSparseCounter(metrics.New(
 		meter.Int64Counter(
 			observability.InstrumentName(observabilityNamespace, "attestation_data.head_cache_miss"),
 			metric.WithUnit("{miss}"),
-			metric.WithDescription("head root was not cached (no verification performed)")))
+			metric.WithDescription("head root was not cached (no verification performed)"))))
 
-	attestationDataHeadMismatchCounter = metrics.New(
+	// Sparse: only fires on a head-mismatch (rare condition).
+	attestationDataHeadMismatchCounter = metrics.RegisterSparseCounter(metrics.New(
 		meter.Int64Counter(
 			observability.InstrumentName(observabilityNamespace, "attestation_data.head_mismatch"),
 			metric.WithUnit("{mismatch}"),
-			metric.WithDescription("attestation data head did not match cached HeadEvent")))
+			metric.WithDescription("attestation data head did not match cached HeadEvent"))))
 
-	attestationDataRefetchSuccessCounter = metrics.New(
+	// Sparse: only fires when a re-fetch succeeds (which only happens after a mismatch).
+	attestationDataRefetchSuccessCounter = metrics.RegisterSparseCounter(metrics.New(
 		meter.Int64Counter(
 			observability.InstrumentName(observabilityNamespace, "attestation_data.refetch_success"),
 			metric.WithUnit("{refetch}"),
-			metric.WithDescription("re-fetch got correct head after mismatch")))
+			metric.WithDescription("re-fetch got correct head after mismatch"))))
 
-	attestationDataRefetchFailedCounter = metrics.New(
+	// Sparse: only fires on re-fetch failure (which only happens after a mismatch).
+	attestationDataRefetchFailedCounter = metrics.RegisterSparseCounter(metrics.New(
 		meter.Int64Counter(
 			observability.InstrumentName(observabilityNamespace, "attestation_data.refetch_failed"),
 			metric.WithUnit("{refetch}"),
-			metric.WithDescription("re-fetch failed or timed out")))
+			metric.WithDescription("re-fetch failed or timed out"))))
 
-	attestationDataRefetchStillMismatchCounter = metrics.New(
+	// Sparse: only fires when a re-fetch returns the same stale data (likely reorg).
+	attestationDataRefetchStillMismatchCounter = metrics.RegisterSparseCounter(metrics.New(
 		meter.Int64Counter(
 			observability.InstrumentName(observabilityNamespace, "attestation_data.refetch_still_mismatch"),
 			metric.WithUnit("{refetch}"),
-			metric.WithDescription("re-fetch still had wrong head (possible reorg)")))
+			metric.WithDescription("re-fetch still had wrong head (possible reorg)"))))
 
-	attestationDataRefetchSkippedCounter = metrics.New(
+	// Sparse: only fires when re-fetch is skipped due to insufficient deadline budget.
+	attestationDataRefetchSkippedCounter = metrics.RegisterSparseCounter(metrics.New(
 		meter.Int64Counter(
 			observability.InstrumentName(observabilityNamespace, "attestation_data.refetch_skipped"),
 			metric.WithUnit("{skip}"),
-			metric.WithDescription("retry skipped due to insufficient time before deadline")))
+			metric.WithDescription("retry skipped due to insufficient time before deadline"))))
 
-	// Proposal parent verification metrics (observability only, no re-fetch)
-	proposalParentVerifyCounter = metrics.New(
+	// Proposal parent verification metrics (observability only, no re-fetch). All four are
+	// sparse — proposals occur once per slot at most, and only when this operator is the
+	// proposer for the slot. Registered for baseline emission so increase()/rate() work.
+	proposalParentVerifyCounter = metrics.RegisterSparseCounter(metrics.New(
 		meter.Int64Counter(
 			observability.InstrumentName(observabilityNamespace, "proposal.parent_verify"),
 			metric.WithUnit("{verification}"),
-			metric.WithDescription("total proposals that attempted parent root verification")))
+			metric.WithDescription("total proposals that attempted parent root verification"))))
 
-	proposalParentMatchCounter = metrics.New(
+	proposalParentMatchCounter = metrics.RegisterSparseCounter(metrics.New(
 		meter.Int64Counter(
 			observability.InstrumentName(observabilityNamespace, "proposal.parent_match"),
 			metric.WithUnit("{match}"),
-			metric.WithDescription("proposal parent root matched cached HeadEvent")))
+			metric.WithDescription("proposal parent root matched cached HeadEvent"))))
 
-	proposalParentCacheMissCounter = metrics.New(
+	proposalParentCacheMissCounter = metrics.RegisterSparseCounter(metrics.New(
 		meter.Int64Counter(
 			observability.InstrumentName(observabilityNamespace, "proposal.parent_cache_miss"),
 			metric.WithUnit("{miss}"),
-			metric.WithDescription("parent slot head was not cached (no verification performed)")))
+			metric.WithDescription("parent slot head was not cached (no verification performed)"))))
 
-	proposalParentMismatchCounter = metrics.New(
+	proposalParentMismatchCounter = metrics.RegisterSparseCounter(metrics.New(
 		meter.Int64Counter(
 			observability.InstrumentName(observabilityNamespace, "proposal.parent_mismatch"),
 			metric.WithUnit("{mismatch}"),
-			metric.WithDescription("proposal parent root did not match cached HeadEvent")))
+			metric.WithDescription("proposal parent root did not match cached HeadEvent"))))
 )
+
+// registerProposalParentBaselines pre-emits Add(ctx, 0) for each (counter, beacon_client)
+// combination so that PromQL increase()/rate() return correct values for per-client
+// queries after process restart. Without this, each labeled time series starts at the
+// first real increment with no prior sample, and Prometheus has nothing to compute a
+// delta from. Configured beacon addresses are passed in because they're only known after
+// GoClient construction.
+//
+// Invariant: `clients` must be final at call time. The closure captures the slice header,
+// so any later append to the same backing array (or a re-slice via append-that-reallocates)
+// would not be visible here. Today this is satisfied because the caller in goclient.New
+// finishes all addSingleClient calls before invoking registerProposalParentBaselines.
+func registerProposalParentBaselines(clients []Client) {
+	metrics.RegisterLabeledBaseline(func(ctx context.Context) {
+		for _, c := range clients {
+			attr := metric.WithAttributes(observability.BeaconClientAttribute(c.Address()))
+			proposalParentVerifyCounter.Add(ctx, 0, attr)
+			proposalParentMatchCounter.Add(ctx, 0, attr)
+			proposalParentCacheMissCounter.Add(ctx, 0, attr)
+			proposalParentMismatchCounter.Add(ctx, 0, attr)
+		}
+	})
+}
 
 func recordRequest(
 	ctx context.Context,

@@ -32,12 +32,54 @@ func init() {
 	model.NameValidationScheme = model.LegacyValidation // nolint: staticcheck
 }
 
+// InitializeLogger configures the global zap logger and propagates it to the
+// observability sub-packages (metrics, traces). It must be called before Initialize, and
+// is split from Initialize so the logger is available during early startup (before
+// process-global facts like operator_id are known, which delays metric/trace provider
+// initialization — see Initialize and WithResourceAttributes). Initialize intentionally
+// does not re-propagate the logger so that calling it again mid-startup does not have the
+// surprising side effect of replacing the metrics/traces internal loggers.
+func InitializeLogger(level, levelFormat, format, filePath string, fileSize, fileBackups int) error {
+	err := log.SetGlobal(
+		level,
+		levelFormat,
+		format,
+		&log.LogFileOptions{
+			FilePath:   filePath,
+			MaxSize:    fileSize,
+			MaxBackups: fileBackups,
+		},
+	)
+	if err != nil {
+		return fmt.Errorf("could not setup global logger: %w", err)
+	}
+	// Propagate the configured logger to observability sub-packages so they can log.
+	// initLogger returns the named logger but we don't need it here.
+	initLogger(zap.L())
+	return nil
+}
+
+// Initialize configures the OTel metric and trace providers. The global zap logger must
+// already be set up (see InitializeLogger); this function intentionally does not touch the
+// logger, so that callers can defer Initialize until late-known facts like operator_id are
+// available to pass via WithResourceAttributes.
 func Initialize(ctx context.Context, appName, appVersion string, options ...Option) (shutdown func(context.Context) error, err error) {
 	var (
-		localLogger   = zap.NewNop()
 		config        Config
 		shutdownFuncs []func(context.Context) error
 	)
+
+	for _, option := range options {
+		option(&config)
+	}
+
+	// Derive a named logger for Initialize's own log messages. metrics/traces internal
+	// loggers are propagated by InitializeLogger (which must be called first); we don't
+	// repeat that here to avoid the surprising side effect of replacing them mid-startup.
+	// If InitializeLogger was never called, zap.L() returns the no-op global and these
+	// messages are silently discarded — that's fine for tests but operators should always
+	// have called InitializeLogger before Initialize.
+	localLogger := zap.L().Named(log.NameObservability)
 
 	shutdown = func(ctx context.Context) error {
 		var joinedErr error
@@ -50,32 +92,8 @@ func Initialize(ctx context.Context, appName, appVersion string, options ...Opti
 		return joinedErr
 	}
 
-	for _, option := range options {
-		option(&config)
-	}
-
-	if config.logger.enabled {
-		err = log.SetGlobal(
-			config.logger.level,
-			config.logger.levelFormat,
-			config.logger.format,
-			&log.LogFileOptions{
-				FilePath:   config.logger.filePath,
-				MaxSize:    config.logger.fileSize,
-				MaxBackups: config.logger.fileBackups,
-			},
-		)
-		if err != nil {
-			return nil, fmt.Errorf("could not setup global logger: %w", err)
-		}
-
-		localLogger = initLogger(zap.L())
-
-		localLogger.Info("global logger initialized")
-	}
-
 	localLogger.Info("building OTel resources")
-	resources, err := buildResources(appName, appVersion, localLogger)
+	resources, err := buildResources(appName, appVersion, config.resourceAttrs, localLogger)
 	if err != nil {
 		return nil, fmt.Errorf("could not build OTel resources: %w", err)
 	}

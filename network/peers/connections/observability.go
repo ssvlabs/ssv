@@ -19,23 +19,29 @@ const (
 var (
 	meter = otel.Meter(observabilityComponentName)
 
-	connectedCounter = metrics.New(
+	// TODO(audit): peer-connection lifecycle events on a node with dozens of peers may
+	// not be sparse in practice (peer churn, discovery surges). Re-evaluate classification
+	// against production rates. Mis-classifying as sparse is harmless (Add(0) on a dense
+	// counter is a no-op for PromQL), but the intent should be accurate.
+	connectedCounter = metrics.RegisterSparseCounter(metrics.New(
 		meter.Int64Counter(
 			observability.InstrumentName(observabilityNamespace, "connected"),
 			metric.WithUnit("{connection}"),
-			metric.WithDescription("total number of connected peers")))
+			metric.WithDescription("total number of connected peers"))))
 
-	disconnectedCounter = metrics.New(
+	// TODO(audit): see note on connectedCounter — same caveat applies.
+	disconnectedCounter = metrics.RegisterSparseCounter(metrics.New(
 		meter.Int64Counter(
 			observability.InstrumentName(observabilityNamespace, "disconnected"),
 			metric.WithUnit("{connection}"),
-			metric.WithDescription("total number of disconnected peers")))
+			metric.WithDescription("total number of disconnected peers"))))
 
-	filteredCounter = metrics.New(
+	// TODO(audit): see note on connectedCounter — same caveat applies.
+	filteredCounter = metrics.RegisterSparseCounter(metrics.New(
 		meter.Int64Counter(
 			observability.InstrumentName(observabilityNamespace, "filtered"),
 			metric.WithUnit("{connection}"),
-			metric.WithDescription("total number of filtered connections")))
+			metric.WithDescription("total number of filtered connections"))))
 )
 
 func recordConnected(ctx context.Context, direction network.Direction) {

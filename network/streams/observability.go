@@ -42,11 +42,12 @@ var (
 			metric.WithUnit("{response}"),
 			metric.WithDescription("total number of stream responses received(as response to initiated by us request)")))
 
-	oversizedPayloadsCounter = metrics.New(
+	// Sparse: only fires when a peer sends an oversized payload (rare).
+	oversizedPayloadsCounter = metrics.RegisterSparseCounter(metrics.New(
 		meter.Int64Counter(
 			observability.InstrumentName(observabilityNamespace, "payloads.oversized"),
 			metric.WithUnit("{payload}"),
-			metric.WithDescription("total number of oversized stream payloads rejected")))
+			metric.WithDescription("total number of oversized stream payloads rejected"))))
 )
 
 func protocolIDAttribute(id protocol.ID) attribute.KeyValue {
