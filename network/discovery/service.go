@@ -1,7 +1,6 @@
 package discovery
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"time"
@@ -10,7 +9,6 @@ import (
 	"github.com/libp2p/go-libp2p/core/discovery"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
-	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -35,7 +33,7 @@ type PeerEvent struct {
 // HandleNewPeer is the function interface for handling new peer
 type HandleNewPeer func(e PeerEvent)
 
-// Options represents the options passed to create a service
+// Options represents the options passed to create a discv5 discovery service.
 type Options struct {
 	Host                host.Host
 	DiscV5Opts          *DiscV5Options
@@ -64,18 +62,6 @@ type Service interface {
 	DeregisterSubnets(subnets ...uint64) (updated bool, err error)
 	Bootstrap(handler HandleNewPeer) error
 	PublishENR()
-}
-
-// NewService creates new discovery.Service
-func NewService(ctx context.Context, logger *zap.Logger, opts Options) (Service, error) {
-	if err := opts.Validate(); err != nil {
-		return nil, err
-	}
-
-	if opts.DiscV5Opts == nil {
-		return NewLocalDiscovery(ctx, logger, opts.Host)
-	}
-	return newDiscV5Service(ctx, logger, &opts)
 }
 
 type DiscoveredPeer struct {

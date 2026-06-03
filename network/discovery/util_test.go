@@ -78,7 +78,7 @@ func testingDiscoveryOptions(t *testing.T, ssvConfig *networkconfig.SSV) *Option
 // Testing discovery service
 func testingDiscovery(t *testing.T) *DiscV5Service {
 	opts := testingDiscoveryOptions(t, testNetConfig.SSV)
-	dvs, err := newDiscV5Service(t.Context(), testLogger, opts)
+	dvs, err := NewDiscV5Service(t.Context(), testLogger, opts)
 	require.NoError(t, err)
 	require.NotNil(t, dvs)
 	return dvs

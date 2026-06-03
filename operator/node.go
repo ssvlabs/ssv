@@ -170,12 +170,9 @@ func New(logger *zap.Logger, opts Options, exporterOpts exporter.Options, slotTi
 func (n *Node) Start(ctx context.Context) error {
 	n.logger.Info("starting operator node")
 
-	go func() {
-		err := n.startWSServer()
-		if err != nil {
-			return
-		}
-	}()
+	if err := n.startWSServer(); err != nil {
+		return fmt.Errorf("start WS server: %w", err)
+	}
 
 	// Start the duty scheduler in modes that use it.
 	if n.dutyScheduler != nil {
@@ -440,9 +437,15 @@ func (n *Node) startWSServer() error {
 
 		n.ws.UseQueryHandler(n.handleQueryRequests)
 
-		if err := n.ws.Start(fmt.Sprintf(":%d", n.wsAPIPort)); err != nil {
+		_, serveErr, err := n.ws.Start(fmt.Sprintf(":%d", n.wsAPIPort))
+		if err != nil {
 			return err
 		}
+		go func() {
+			if err := <-serveErr; err != nil {
+				n.logger.Fatal("WS server serve loop exited", zap.Error(err))
+			}
+		}()
 	}
 
 	return nil
