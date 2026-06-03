@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"math/rand"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -356,32 +357,49 @@ func (p *P) saveMsg(t string, msg *pubsub.Message) {
 
 // TODO: use p2p/testing
 func newPeers(ctx context.Context, logger *zap.Logger, t *testing.T, n int, msgValidator validation.MessageValidator, msgID bool, scoreInspector pubsub.ExtendedPeerScoreInspectFn) []*P {
+	// Per-call random mDNS tag so concurrent test processes running the same
+	// test don't cross-discover each other's peers.
+	mdnsTag := fmt.Sprintf("ssv.test.%016x", rand.Uint64()) //nolint: gosec // G404 is acceptable here
 	peers := make([]*P, n)
 	for i := 0; i < n; i++ {
-		peers[i] = newPeer(ctx, logger, t, msgValidator, msgID, scoreInspector)
+		peers[i] = newPeer(t, ctx, logger, mdnsTag, msgValidator, msgID, scoreInspector)
 	}
 	t.Logf("%d peers were created", n)
 	th := uint64(n/2) + uint64(n/4)
-	for ctx.Err() == nil {
-		done := 0
+	require.Eventually(t, func() bool {
 		for _, p := range peers {
-			if atomic.LoadUint64(&p.connsCount) >= th {
-				done++
+			if atomic.LoadUint64(&p.connsCount) < th {
+				return false
 			}
 		}
-		if done == len(peers) {
-			break
-		}
-	}
+		return true
+	}, 30*time.Second, 100*time.Millisecond, "peers never reached connection threshold %d", th)
 	t.Log("peers are connected")
 	return peers
 }
 
-func newPeer(ctx context.Context, logger *zap.Logger, t *testing.T, msgValidator validation.MessageValidator, msgID bool, scoreInspector pubsub.ExtendedPeerScoreInspectFn) *P {
+func newPeer(t *testing.T, ctx context.Context, logger *zap.Logger, mdnsTag string, msgValidator validation.MessageValidator, msgID bool, scoreInspector pubsub.ExtendedPeerScoreInspectFn) *P {
 	h, err := libp2p.New(libp2p.ListenAddrStrings("/ip4/0.0.0.0/tcp/0"))
 	require.NoError(t, err)
-	ds, err := discovery.NewLocalDiscovery(ctx, logger, h)
+	t.Cleanup(func() { _ = h.Close() })
+
+	ds, err := discovery.NewLocalDiscovery(ctx, logger, h, mdnsTag)
 	require.NoError(t, err)
+	t.Cleanup(func() {
+		// ds.Close → mdnsService.Close → zeroconf.Server.Shutdown blocks
+		// waiting to multicast an unregister, which on a broken mDNS
+		// environment doesn't return — and that's exactly the timeout
+		// case this cleanup is meant to keep diagnosable. Cap it so the
+		// real failure (e.g. the newPeers connection wait) surfaces
+		// cleanly instead of the test hitting -timeout.
+		done := make(chan struct{})
+		go func() { _ = ds.Close(); close(done) }()
+		select {
+		case <-done:
+		case <-time.After(2 * time.Second):
+			t.Log("ds.Close timed out; leaking mdns goroutines")
+		}
+	})
 
 	var p *P
 	var midHandler topics.MsgIDHandler

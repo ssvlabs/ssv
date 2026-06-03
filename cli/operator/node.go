@@ -595,10 +595,13 @@ func (n *node) start() error {
 			hexporter.NewExporter(n.logger, n.storageMap, n.collector, n.nodeStorage.ValidatorStore()),
 			n.mode == modeExporterArchive,
 		)
+		_, apiServeErr, err := apiServer.Start(cfg.SSVOptions.Context)
+		if err != nil {
+			n.logger.Fatal("failed to start API server", zap.Error(err))
+		}
 		go func() {
-			err := apiServer.Run()
-			if err != nil {
-				n.logger.Fatal("failed to start API server", zap.Error(err))
+			if err := <-apiServeErr; err != nil {
+				n.logger.Fatal("API server serve loop exited", zap.Error(err))
 			}
 		}()
 	}
