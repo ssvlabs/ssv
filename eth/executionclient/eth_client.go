@@ -13,21 +13,21 @@ import (
 // ethClient wraps two ethclient.Client instances and routes each call to the
 // transport best suited for it:
 //   - sub:   used only for streaming endpoints (eth_subscribe family). These
-//            require WebSocket or IPC and only carry tiny messages, so they
-//            don't trigger response-side backpressure on any EL.
+//     require WebSocket or IPC and only carry tiny messages, so they
+//     don't trigger response-side backpressure on any EL.
 //   - query: used for request/response endpoints (eth_getLogs, eth_blockNumber,
-//            etc.). These can return large payloads; routing them over HTTP
-//            avoids Besu's WebSocket-only StreamBackpressure code path that
-//            parks the JSON-RPC event loop on large responses
-//            (see hyperledger/besu#9848 + WebSocketMessageHandler.replyToClient).
+//     etc.). These can return large payloads; routing them over HTTP
+//     avoids Besu's WebSocket-only StreamBackpressure code path that
+//     parks the JSON-RPC event loop on large responses
+//     (see hyperledger/besu#9848 + WebSocketMessageHandler.replyToClient).
 //
 // When the dual-transport configuration isn't set (queryClient is nil), every
 // call falls back to subClient — preserving the pre-split single-client
 // behavior and keeping the change backward compatible.
 type ethClient struct {
-	sub      *ethclient.Client
-	subAddr  string // URL dialed for sub (always set)
-	query    *ethclient.Client
+	sub       *ethclient.Client
+	subAddr   string // URL dialed for sub (always set)
+	query     *ethclient.Client
 	queryAddr string // URL dialed for query (empty when query is nil)
 
 	// reqTimeout specifies the default timeout to be used with every ethclient.Client call.
