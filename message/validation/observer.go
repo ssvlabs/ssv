@@ -16,12 +16,31 @@ const (
 	SSVValidationRejected = "rejected"
 )
 
+const (
+	SSVValidationStageUnknown         = "unknown"
+	SSVValidationStageContext         = "context"
+	SSVValidationStagePubsubBasic     = "pubsub_basic"
+	SSVValidationStageDecodeSigned    = "decode_signed"
+	SSVValidationStageSignedSemantics = "signed_semantics"
+	SSVValidationStageSSVSemantics    = "ssv_semantics"
+	SSVValidationStageCommitteeLookup = "committee_lookup"
+	SSVValidationStageCommitteeChecks = "committee_checks"
+	SSVValidationStageConsensus       = "consensus_validation"
+	SSVValidationStagePartial         = "partial_validation"
+	SSVValidationStageSignatureVerify = "signature_verification"
+	SSVValidationStageStateUpdate     = "state_update"
+	SSVValidationStageComplete        = "complete"
+)
+
 // SSVValidationEvent describes the SSV-level validation decision before it
 // is reduced to libp2p's accept/reject/ignore validation result.
 type SSVValidationEvent struct {
 	PeerID         peer.ID
 	Outcome        string
 	Reason         string
+	Stage          string
+	Topic          string
+	PayloadSize    int
 	Role           spectypes.RunnerRole
 	SSVMessageType spectypes.MsgType
 	Slot           phase0.Slot

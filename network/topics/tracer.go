@@ -45,6 +45,8 @@ func (pst *psTracer) log(logger *zap.Logger, evt *ps_pb.TraceEvent) {
 		zap.String("type", evt.GetType().String()),
 	}
 	var highlightedPeer peer.ID
+	var rejectTopic, rejectReason string
+	var dropEventType, dropTopic string
 	switch evt.GetType() {
 	case ps_pb.TraceEvent_PUBLISH_MESSAGE:
 		msg := evt.GetPublishMessage()
@@ -60,6 +62,8 @@ func (pst *psTracer) log(logger *zap.Logger, evt *ps_pb.TraceEvent) {
 		fields = append(fields, zap.String("msgID", hex.EncodeToString(msg.GetMessageID())))
 		fields = append(fields, zap.String("topic", msg.GetTopic()))
 		fields = append(fields, zap.String("reason", msg.GetReason()))
+		rejectTopic = msg.GetTopic()
+		rejectReason = msg.GetReason()
 	case ps_pb.TraceEvent_DUPLICATE_MESSAGE:
 		msg := evt.GetDuplicateMessage()
 		pid, err := peer.IDFromBytes(msg.GetReceivedFrom())
@@ -69,6 +73,8 @@ func (pst *psTracer) log(logger *zap.Logger, evt *ps_pb.TraceEvent) {
 		}
 		fields = append(fields, zap.String("msgID", hex.EncodeToString(msg.GetMessageID())))
 		fields = append(fields, zap.String("topic", msg.GetTopic()))
+		dropEventType = strings.ToLower(evt.GetType().String())
+		dropTopic = msg.GetTopic()
 	case ps_pb.TraceEvent_DELIVER_MESSAGE:
 		msg := evt.GetDeliverMessage()
 		pid, err := peer.IDFromBytes(msg.GetReceivedFrom())
@@ -141,6 +147,8 @@ func (pst *psTracer) log(logger *zap.Logger, evt *ps_pb.TraceEvent) {
 		}
 		if meta := msg.GetMeta(); meta != nil {
 			fields = appendMessages(fields, meta.GetMessages())
+			dropEventType = strings.ToLower(evt.GetType().String())
+			dropTopic = topicFromMessageMeta(meta.GetMessages())
 			if ctrl := meta.Control; ctrl != nil {
 				fields = appendIHave(fields, ctrl.GetIhave())
 				fields = appendIWant(fields, ctrl.GetIwant())
@@ -180,10 +188,28 @@ func (pst *psTracer) log(logger *zap.Logger, evt *ps_pb.TraceEvent) {
 		return
 	}
 	if highlightedPeer != "" {
-		pst.peerObserver.Observe(context.Background(), logger, "pubsub_trace_"+strings.ToLower(evt.GetType().String()), highlightedPeer, fields...)
+		ctx := context.Background()
+		pst.peerObserver.Observe(ctx, logger, "pubsub_trace_"+strings.ToLower(evt.GetType().String()), highlightedPeer, fields...)
+		if rejectTopic != "" || rejectReason != "" {
+			pst.peerObserver.ObservePubsubReject(ctx, highlightedPeer, rejectTopic, rejectReason)
+		}
+		if dropEventType != "" {
+			pst.peerObserver.ObservePubsubDrop(ctx, highlightedPeer, dropEventType, dropTopic)
+		}
 	}
 	if pst.traceLog {
 		logger.Debug("pubsub event", fields...)
+	}
+}
+
+func topicFromMessageMeta(messages []*ps_pb.TraceEvent_MessageMeta) string {
+	switch len(messages) {
+	case 0:
+		return ""
+	case 1:
+		return messages[0].GetTopic()
+	default:
+		return "multiple"
 	}
 }
 

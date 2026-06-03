@@ -31,27 +31,27 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 		e := ErrSSVDataTooBig
 		e.got = len(ssvMessage.Data)
 		e.want = maxEncodedPartialSignatureSize
-		return nil, e
+		return nil, withValidationStage(SSVValidationStagePartial, e)
 	}
 
 	partialSignatureMessages := &spectypes.PartialSignatureMessages{}
 	if err := partialSignatureMessages.Decode(ssvMessage.Data); err != nil {
 		e := ErrUndecodableMessageData
 		e.innerErr = err
-		return nil, e
+		return nil, withValidationStage(SSVValidationStagePartial, e)
 	}
 
 	if err := mv.validatePartialSignatureMessageSemantics(signedSSVMessage, partialSignatureMessages, committeeInfo.validatorIndices); err != nil {
-		return partialSignatureMessages, err
+		return partialSignatureMessages, withValidationStage(SSVValidationStagePartial, err)
 	}
 
 	state := mv.validatorState(ssvMessage.GetID(), committeeInfo)
 	if err := mv.validatePartialSigMessagesByDutyLogic(signedSSVMessage, partialSignatureMessages, committeeInfo, receivedFrom, receivedAt, state); err != nil {
-		return partialSignatureMessages, err
+		return partialSignatureMessages, withValidationStage(SSVValidationStagePartial, err)
 	}
 
 	if err := ctx.Err(); err != nil {
-		return partialSignatureMessages, err
+		return partialSignatureMessages, withValidationStage(SSVValidationStageContext, err)
 	}
 
 	signature := signedSSVMessage.Signatures[0]
@@ -59,11 +59,11 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 	if err := mv.signatureVerifier.VerifySignature(signer, ssvMessage, signature); err != nil {
 		e := ErrSignatureVerification
 		e.innerErr = fmt.Errorf("verify opid: %v signature: %w", signer, err)
-		return partialSignatureMessages, e
+		return partialSignatureMessages, withValidationStage(SSVValidationStageSignatureVerify, e)
 	}
 
 	if err := mv.updatePartialSignatureState(partialSignatureMessages, receivedFrom, state, signer, committeeInfo); err != nil {
-		return partialSignatureMessages, err
+		return partialSignatureMessages, withValidationStage(SSVValidationStageStateUpdate, err)
 	}
 
 	return partialSignatureMessages, nil

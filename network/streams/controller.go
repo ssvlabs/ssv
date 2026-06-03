@@ -60,6 +60,7 @@ func (n *streamCtrl) Request(logger *zap.Logger, peerID peer.ID, protocol protoc
 
 	stream, err := n.host.NewStream(ctx, peerID, protocol)
 	if err != nil {
+		recordStreamError(n.ctx, protocol, streamOperationDial, streamErrorReason(err))
 		return nil, err
 	}
 
@@ -78,9 +79,11 @@ func (n *streamCtrl) Request(logger *zap.Logger, peerID peer.ID, protocol protoc
 	}()
 
 	if err := s.WriteWithTimeout(data, n.readWriteTimeout); err != nil {
+		recordStreamError(n.ctx, s.Protocol(), streamOperationWriteRequest, streamErrorReason(err))
 		return nil, fmt.Errorf("could not write to stream: %w", err)
 	}
 	if err := s.CloseWrite(); err != nil {
+		recordStreamError(n.ctx, s.Protocol(), streamOperationCloseWrite, streamErrorReason(err))
 		return nil, fmt.Errorf("could not close write stream: %w", err)
 	}
 	res, err := s.ReadWithTimeout(n.readWriteTimeout)
@@ -88,6 +91,7 @@ func (n *streamCtrl) Request(logger *zap.Logger, peerID peer.ID, protocol protoc
 		if errors.Is(err, ErrStreamMessageTooLarge) {
 			n.observeOversizedPayload(logger, peerID, s.Protocol(), "response")
 		}
+		recordStreamError(n.ctx, s.Protocol(), streamOperationReadResponse, streamErrorReason(err))
 		return nil, fmt.Errorf("could not read stream msg: %w", err)
 	}
 
@@ -117,6 +121,7 @@ func (n *streamCtrl) HandleStream(logger *zap.Logger, stream core.Stream) ([]byt
 		if errors.Is(err, ErrStreamMessageTooLarge) {
 			n.observeOversizedPayload(logger, s.Conn().RemotePeer(), s.Protocol(), "request")
 		}
+		recordStreamError(n.ctx, s.Protocol(), streamOperationReadRequest, streamErrorReason(err))
 		return nil, nil, done, fmt.Errorf("could not read stream msg: %w", err)
 	}
 	n.peerObserver.Observe(n.ctx, logger, "stream_request_received", s.Conn().RemotePeer(),
@@ -128,6 +133,7 @@ func (n *streamCtrl) HandleStream(logger *zap.Logger, stream core.Stream) ([]byt
 		cp := make([]byte, len(res))
 		copy(cp, res)
 		if err := s.WriteWithTimeout(cp, n.readWriteTimeout); err != nil {
+			recordStreamError(n.ctx, s.Protocol(), streamOperationWriteResponse, streamErrorReason(err))
 			return fmt.Errorf("could not write to stream: %w", err)
 		}
 
@@ -156,4 +162,17 @@ func (n *streamCtrl) observeOversizedPayload(logger *zap.Logger, peerID peer.ID,
 		zap.String(fields.FieldProtocolID, string(protocolID)),
 		zap.String("direction", direction),
 	)
+}
+
+func streamErrorReason(err error) string {
+	switch {
+	case errors.Is(err, ErrStreamMessageTooLarge):
+		return streamErrorReasonOversizedPayload
+	case errors.Is(err, context.DeadlineExceeded):
+		return streamErrorReasonTimeout
+	case errors.Is(err, libp2pnetwork.ErrReset):
+		return streamErrorReasonReset
+	default:
+		return streamErrorReasonError
+	}
 }
