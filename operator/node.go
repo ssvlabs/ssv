@@ -259,10 +259,9 @@ func (n *Node) Start(ctx context.Context) error {
 		<-ctx.Done()
 	}
 
-	if err := n.net.Close(); err != nil {
-		n.logger.Error("could not close network", zap.Error(err))
-	}
-
+	// The p2p network is owned by its creator (cli/operator), which closes it via defer.
+	// Start() no longer closes it: closing it only on this happy path leaked the network
+	// whenever Start returned early with an error.
 	return nil
 }
 

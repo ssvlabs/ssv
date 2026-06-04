@@ -98,6 +98,8 @@ type p2pNetwork struct {
 	trustedPeers    []*peer.AddrInfo
 
 	state int32
+	// closeOnce makes Close() idempotent and safe to run on a partially-initialized network.
+	closeOnce sync.Once
 
 	// subscribedCommittees tracks committee subscription statuses for committees we've subscribed to.
 	subscribedCommittees *hashmap.Map[string, committeeSubscriptionStatus]
@@ -150,6 +152,7 @@ func New(
 		trimmedRecently:      ttl.New[peer.ID, struct{}](ctx, 30*time.Minute, 3*time.Minute),
 	}
 	if err := n.parseTrustedPeers(); err != nil {
+		cancel() // release the ctx-bound ttl goroutines started above before bailing out
 		return nil, err
 	}
 	return n, nil
@@ -219,24 +222,47 @@ func (n *p2pNetwork) PeersByTopic() map[string][]peer.ID {
 	return peerz
 }
 
-// Close implements io.Closer
+// Close implements io.Closer. It is idempotent and safe on a network in any state —
+// constructed-but-never-Setup, Setup-but-not-Started, Started, or Start-failed — so the owner can
+// always defer Close() right after constructing the network. Idempotency is via closeOnce rather
+// than the state field, because stateClosed is ambiguous: it's both the freshly-constructed state
+// and the state Start() leaves on failure (where the host/services are allocated and still need
+// closing).
 func (n *p2pNetwork) Close() error {
-	atomic.SwapInt32(&n.state, stateClosing)
-	defer atomic.StoreInt32(&n.state, stateClosed)
-	n.cancel()
-	if err := n.libConnManager.Close(); err != nil {
-		n.logger.Warn("could not close discovery", zap.Error(err))
-	}
-	if err := n.disc.Close(); err != nil {
-		n.logger.Warn("could not close discovery", zap.Error(err))
-	}
-	if err := n.idx.Close(); err != nil {
-		n.logger.Warn("could not close index", zap.Error(err))
-	}
-	if err := n.topicsCtrl.Close(); err != nil {
-		n.logger.Warn("could not close topics controller", zap.Error(err))
-	}
-	return n.Host().Close()
+	var err error
+	n.closeOnce.Do(func() {
+		atomic.SwapInt32(&n.state, stateClosing)
+		defer atomic.StoreInt32(&n.state, stateClosed)
+
+		n.cancel()
+
+		// libConnManager/disc/idx/topicsCtrl/host are allocated only during Setup; guard each so a
+		// network that was never Setup (or whose Setup failed partway) doesn't nil-panic on Close.
+		if n.libConnManager != nil {
+			if e := n.libConnManager.Close(); e != nil {
+				n.logger.Warn("could not close connection manager", zap.Error(e))
+			}
+		}
+		if n.disc != nil {
+			if e := n.disc.Close(); e != nil {
+				n.logger.Warn("could not close discovery", zap.Error(e))
+			}
+		}
+		if n.idx != nil {
+			if e := n.idx.Close(); e != nil {
+				n.logger.Warn("could not close index", zap.Error(e))
+			}
+		}
+		if n.topicsCtrl != nil {
+			if e := n.topicsCtrl.Close(); e != nil {
+				n.logger.Warn("could not close topics controller", zap.Error(e))
+			}
+		}
+		if h := n.Host(); h != nil {
+			err = h.Close()
+		}
+	})
+	return err
 }
 
 func (n *p2pNetwork) getConnector() (chan peer.AddrInfo, error) {
