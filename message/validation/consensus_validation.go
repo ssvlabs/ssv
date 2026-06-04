@@ -17,6 +17,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/protocol/v2/message"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
@@ -116,15 +117,8 @@ func (mv *messageValidator) validateConsensusMessageSemantics(
 			return ErrPrepareOrCommitWithFullData
 		}
 
-		hashedFullData, err := specqbft.HashDataRoot(signedSSVMessage.FullData)
-		if err != nil {
-			e := ErrFullDataHash
-			e.innerErr = err
-			return e
-		}
-
 		// Rule: Full data hash must match root
-		if hashedFullData != consensusMessage.Root {
+		if qbft.HashDataRoot(signedSSVMessage.FullData) != consensusMessage.Root {
 			return ErrInvalidHash
 		}
 	}

@@ -118,9 +118,7 @@ func (e *instanceTestEnv) setNetwork(network specqbft.Network) {
 func (e *instanceTestEnv) hash(fullData []byte) [32]byte {
 	e.t.Helper()
 
-	root, err := specqbft.HashDataRoot(fullData)
-	require.NoError(e.t, err)
-	return root
+	return qbftconfig.HashDataRoot(fullData)
 }
 
 func (e *instanceTestEnv) marshalJustifications(msgs []*specqbft.ProcessingMessage) [][]byte {

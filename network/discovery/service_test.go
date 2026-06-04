@@ -149,7 +149,7 @@ func TestDiscV5Service_PublishENR(t *testing.T) {
 	defer cancel()
 
 	opts := testingDiscoveryOptions(t, testNetConfig.SSV)
-	dvs, err := newDiscV5Service(ctx, testLogger, opts)
+	dvs, err := NewDiscV5Service(ctx, testLogger, opts)
 	require.NoError(t, err)
 
 	// Replace listener
@@ -176,7 +176,7 @@ func TestDiscV5Service_Bootstrap(t *testing.T) {
 
 	opts := testingDiscoveryOptions(t, testNetConfig.SSV)
 
-	dvs, err := newDiscV5Service(t.Context(), testLogger, opts)
+	dvs, err := NewDiscV5Service(t.Context(), testLogger, opts)
 	require.NoError(t, err)
 
 	// Replace listener
@@ -415,7 +415,7 @@ func TestServiceAddressConfiguration(t *testing.T) {
 			opts.HostAddress = tc.hostAddress
 			opts.HostDNS = tc.hostDNS
 
-			service, err := NewService(ctx, zap.NewNop(), *opts)
+			service, err := NewDiscV5Service(ctx, zap.NewNop(), opts)
 			if tc.expectError {
 				require.Error(t, err)
 
@@ -429,12 +429,8 @@ func TestServiceAddressConfiguration(t *testing.T) {
 				}
 			})
 
-			// verify we got the expected service type
-			dv5Service, ok := service.(*DiscV5Service)
-			require.True(t, ok)
-
 			// check that the node has the expected IP configuration
-			localNode := dv5Service.Self()
+			localNode := service.Self()
 			ip := localNode.Node().IP()
 
 			if tc.expectedResult != "" {
