@@ -62,6 +62,11 @@ func TestUponRoundTimeoutKilledInstance(t *testing.T) {
 func TestUponRoundTimeoutStopsProcessingAfterReachingCutOffRound(t *testing.T) {
 	env := newInstanceTestEnv(t, 2)
 	env.inst.StartValue = []byte("start-value")
+	// CutOffRound == State.Round+1, so the first timeout fires at the last relevant round and bumps the
+	// instance *into* the cutoff round. Because the bump runs before Broadcast, the final round-change is
+	// intentionally dropped and UponRoundTimeout returns the "no longer relevant" error (CutOffRound is the
+	// cluster-wide give-up point, so that RC has no liveness value). The second call then exercises the
+	// plain already-at-cutoff path.
 	env.config.CutOffRound = env.inst.State.Round + 1
 
 	err := env.inst.UponRoundTimeout(t.Context(), zap.NewNop())
