@@ -25,7 +25,7 @@ func TestWSSession_Send_FullQueue(t *testing.T) {
 	require.NoError(t, sess.ctx.Err(), "ctx should not be canceled before overflow")
 
 	for i := 0; i < chanSize+2; i++ {
-		sess.Send([]byte(fmt.Sprintf("test-%d", i)))
+		sess.Send(fmt.Appendf(nil, "test-%d", i))
 	}
 	require.Error(t, sess.ctx.Err(), "ctx should be canceled after overflow")
 

@@ -556,7 +556,7 @@ func createBeaconServer(t *testing.T, options beaconServerResponseOptions) (*htt
 				w.WriteHeader(http.StatusInternalServerError)
 				return
 			}
-			resp := []byte(fmt.Sprintf(`{
+			resp := fmt.Appendf(nil, `{
 				"execution_optimistic": false,
 				"finalized": false,
 				"data": {
@@ -573,7 +573,7 @@ func createBeaconServer(t *testing.T, options beaconServerResponseOptions) (*htt
 					"root": "0x2922d4d36529c39ae7c463bc0a18f434d616954bdc0a38f7c24e0847a181de15",
 					"canonical": true
 				}
-			}`, options.SlotReturnedFromHeaderEndpoint))
+			}`, options.SlotReturnedFromHeaderEndpoint)
 			if _, err := w.Write(resp); err != nil {
 				w.WriteHeader(http.StatusInternalServerError)
 				return
@@ -643,7 +643,7 @@ func createAttestationDataResponse(
 	blockRoot, sourceRoot, targetRoot string,
 	sourceEpoch, targetEpoch phase0.Epoch,
 ) []byte {
-	resp := []byte(fmt.Sprintf(`{
+	resp := fmt.Appendf(nil, `{
 		"data": {
 		  "slot": "%d",
 		  "index": "%d",
@@ -657,7 +657,7 @@ func createAttestationDataResponse(
 			"root": "%s"
 		  }
 		}
-	  }`, slot, committeeIndex, blockRoot, sourceEpoch, sourceRoot, targetEpoch, targetRoot))
+	  }`, slot, committeeIndex, blockRoot, sourceEpoch, sourceRoot, targetEpoch, targetRoot)
 
 	return resp
 }

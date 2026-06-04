@@ -279,7 +279,7 @@ func Test_OperatorData(t *testing.T) {
 	operatorIDs := []uint64{1, 2, 3}
 
 	for _, id := range operatorIDs {
-		pubkey := base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("publicKey%d", id)))
+		pubkey := base64.StdEncoding.EncodeToString(fmt.Appendf(nil, "publicKey%d", id))
 		operatorData := &registrystorage.OperatorData{
 			ID:           id,
 			PublicKey:    pubkey,
