@@ -9,9 +9,12 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/eth/executionclient"
+	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 )
 
@@ -168,6 +171,20 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 			dutySlot := blockSlot + validatorRegistrationDutySlotsToPostpone
 			earliestExecutionSlot := blockSlot + validatorRegistrationExecutionSlotsToPostpone
 
+			// No de-dup on enqueue: redundant entries are harmless and bounded.
+			// Each event's dutySlot is a deterministic wire input (it sets the
+			// signed ValidatorRegistration.Timestamp's epoch), and the duty
+			// carries no fee recipient — the runner reads the current one at
+			// execution time — so multiple entries sharing a (ValidatorIndex,
+			// dutySlot) produce byte-identical registrations. Downstream they're
+			// bounded by the receiver's dutyLimit=2/epoch and reconciled by the
+			// periodic VRSubmitter loop; the queue is drained every slot and
+			// items live at most validatorRegistrationExecutionSlotsToPostpone
+			// slots, and the producer (Controller.UpdateFeeRecipient) already
+			// throttles to scheduledValidatorRegsLimit per owner. Any future
+			// de-dup MUST key on (ValidatorIndex, dutySlot), never ValidatorIndex
+			// alone: collapsing across blocks would let operators diverge on
+			// dutySlot and break partial-sig aggregation.
 			h.eventQueue = append(h.eventQueue, &queuedRegistration{
 				duty: &spectypes.ValidatorDuty{
 					Type:           spectypes.BNRoleValidatorRegistration,
@@ -195,6 +212,11 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 }
 
 func (h *ValidatorRegistrationHandler) processExecution(ctx context.Context, epoch phase0.Epoch, slot phase0.Slot) {
+	ctx, span := tracer.Start(ctx,
+		observability.InstrumentName(observabilityNamespace, "validator_registration.execute"),
+		trace.WithAttributes(observability.BeaconSlotAttribute(slot)))
+	defer span.End()
+
 	shares := h.validatorProvider.SelfValidators()
 	duties := make([]*spectypes.ValidatorDuty, 0, len(h.eventQueue)+len(shares))
 
@@ -209,17 +231,6 @@ func (h *ValidatorRegistrationHandler) processExecution(ctx context.Context, epo
 	}
 	eventDrivenDispatched := len(duties)
 	h.eventQueue = pendingItems
-
-	if eventDrivenDispatched > 0 {
-		// Mirrors the dispatch log on voluntary-exit's path so the
-		// deferred-broadcast flow is greppable in operator logs; the
-		// per-duty enqueue log ("🛠 scheduled validator registration duty
-		// for execution") already carries the descriptor details, this is
-		// the counterpart confirming dispatch at the gate.
-		h.logger.Debug("dispatched event-driven validator registration duties",
-			fields.Slot(slot),
-			fields.Count(eventDrivenDispatched))
-	}
 
 	// validator should be registered within frequencyEpochs epochs time in a corresponding slot
 	registrationSlots := h.beaconConfig.SlotsPerEpoch * frequencyEpochs
@@ -248,9 +259,24 @@ func (h *ValidatorRegistrationHandler) processExecution(ctx context.Context, epo
 			zap.String("validator_pubkey", pk.String()))
 	}
 
+	span.SetAttributes(observability.DutyCountAttribute(len(duties)))
+
 	if len(duties) > 0 {
 		h.dutiesExecutor.ExecuteDuties(ctx, duties, h.dutyExecutionDeadline(slot))
 	}
+
+	if eventDrivenDispatched > 0 {
+		// Mirrors voluntary-exit's post-dispatch log so the deferred-broadcast
+		// flow is greppable in operator logs; the per-duty enqueue log
+		// ("🛠 scheduled validator registration duty for execution") already
+		// carries the descriptor details — this confirms dispatch at the gate.
+		// Logged after ExecuteDuties so "dispatched" reflects work handed off.
+		h.logger.Debug("dispatched event-driven validator registration duties",
+			fields.Slot(slot),
+			fields.Count(eventDrivenDispatched))
+	}
+
+	span.SetStatus(codes.Ok, "")
 }
 
 // blockSlot returns slot that happens (corresponds to) at the same time as block.
