@@ -155,6 +155,7 @@ var StartNodeCmd = &cobra.Command{
 				cfg.LogFilePath,
 				cfg.LogFileSize,
 				cfg.LogFileBackups,
+				!cfg.DisableFileLog,
 			),
 		}
 		if cfg.MetricsAPIPort > 0 {
