@@ -147,19 +147,11 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 				return
 			}
 
-			// Derive dutySlot deterministically from the EL event's block slot
-			// so every operator arrives at the same value regardless of when
-			// they personally received the event, and regardless of code
-			// version. dutySlot feeds the outbound partial-sig envelope and
-			// the signed ValidatorRegistration.Timestamp (via Epoch). The
-			// Timestamp is epoch-granular so small slot divergences within an
-			// epoch are tolerated, but a divergence across an epoch boundary
-			// would break BLS aggregation; the wire constant being a network
-			// invariant keeps all operators on the same epoch.
-			//
-			// earliestExecutionSlot is a separate, local-only gate that defers
-			// our own broadcast until peers' EL streaming pipelines have
-			// plausibly caught up — see the two constants' docstrings.
+			// dutySlot is the deterministic wire slot — identical across
+			// operators regardless of receipt time or code version — feeding the
+			// partial-sig envelope and the signed Timestamp's epoch.
+			// earliestExecutionSlot is a separate, local-only broadcast gate. See
+			// both constants' docstrings for the full rationale.
 			blockSlot, err := h.blockSlot(ctx, regDescriptor.BlockNumber)
 			if err != nil {
 				h.logger.Warn(
@@ -171,20 +163,15 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 			dutySlot := blockSlot + validatorRegistrationDutySlotsToPostpone
 			earliestExecutionSlot := blockSlot + validatorRegistrationExecutionSlotsToPostpone
 
-			// No de-dup on enqueue: redundant entries are harmless and bounded.
-			// Each event's dutySlot is a deterministic wire input (it sets the
-			// signed ValidatorRegistration.Timestamp's epoch), and the duty
-			// carries no fee recipient — the runner reads the current one at
-			// execution time — so multiple entries sharing a (ValidatorIndex,
-			// dutySlot) produce byte-identical registrations. Downstream they're
-			// bounded by the receiver's dutyLimit=2/epoch and reconciled by the
-			// periodic VRSubmitter loop; the queue is drained every slot and
-			// items live at most validatorRegistrationExecutionSlotsToPostpone
-			// slots, and the producer (Controller.UpdateFeeRecipient) already
-			// throttles to scheduledValidatorRegsLimit per owner. Any future
+			// No de-dup on enqueue: entries are idempotent and bounded. The duty
+			// carries no fee recipient (the runner reads the current one at
+			// execution), so entries sharing a (ValidatorIndex, dutySlot) are
+			// byte-identical; downstream they're bounded by the receiver's
+			// dutyLimit=2/epoch and the periodic VRSubmitter, and the queue drains
+			// every slot (the producer also throttles per owner). Any future
 			// de-dup MUST key on (ValidatorIndex, dutySlot), never ValidatorIndex
-			// alone: collapsing across blocks would let operators diverge on
-			// dutySlot and break partial-sig aggregation.
+			// alone — collapsing across blocks would diverge dutySlot across
+			// operators and break partial-sig aggregation.
 			h.eventQueue = append(h.eventQueue, &queuedRegistration{
 				duty: &spectypes.ValidatorDuty{
 					Type:           spectypes.BNRoleValidatorRegistration,
@@ -266,11 +253,9 @@ func (h *ValidatorRegistrationHandler) processExecution(ctx context.Context, epo
 	}
 
 	if eventDrivenDispatched > 0 {
-		// Mirrors voluntary-exit's post-dispatch log so the deferred-broadcast
-		// flow is greppable in operator logs; the per-duty enqueue log
-		// ("🛠 scheduled validator registration duty for execution") already
-		// carries the descriptor details — this confirms dispatch at the gate.
-		// Logged after ExecuteDuties so "dispatched" reflects work handed off.
+		// Counterpart to the per-duty enqueue log above — confirms dispatch at
+		// the gate and keeps the deferred-broadcast flow greppable (mirrors
+		// voluntary-exit). Placed after ExecuteDuties so "dispatched" is accurate.
 		h.logger.Debug("dispatched event-driven validator registration duties",
 			fields.Slot(slot),
 			fields.Count(eventDrivenDispatched))
