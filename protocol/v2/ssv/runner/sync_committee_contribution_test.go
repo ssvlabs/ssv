@@ -11,10 +11,9 @@ import (
 // collected (subnet, selection-proof) pairs before calling GetSyncCommitteeContribution.
 // See sortBySubnet for the full rationale.
 //
-// Covers the two properties the fix needs to guarantee — determinism across runs and
-// spec-canonical ascending-by-subnet ordering — by testing the helper directly. A full
-// runner-level test was considered but the helper is the only behavior the fix introduces;
-// everything upstream is unchanged.
+// It covers the two properties the fix guarantees — determinism across runs and
+// spec-canonical ascending-by-subnet ordering — at the helper level. The wiring that calls
+// it is pinned separately by TestSyncCommitteeAggregatorProcessPreConsensusSortsSubnetsForBeaconCall.
 func TestSortBySubnet(t *testing.T) {
 	// sig builds a phase0.BLSSignature with byte[0] set to tag for identity tracking.
 	sig := func(tag byte) phase0.BLSSignature {

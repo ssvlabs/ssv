@@ -19,30 +19,17 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestEnsureBlinded_FuluProducesElectraEquivalentBytes verifies that SSV's
-// deliberate reuse of apiv1electra.BlindedBeaconBlock for Fulu (documented in
-// EnsureBlinded's DataVersionFulu branch: "Fulu reuses Electra blinded block
-// structures in this codebase") produces SSZ bytes that are byte-identical to the
-// equivalent Electra-versioned blinded block.
+// TestEnsureBlinded_FuluProducesElectraEquivalentBytes asserts that EnsureBlinded's
+// Fulu branch produces SSZ bytes byte-identical to its Electra branch given the same
+// block body. Both branches build an apiv1electra.BlindedBeaconBlock (Fulu reuses the
+// Electra blinded structures), but they are separate, duplicated field-copy blocks — so
+// this guards against the two drifting: a field added, dropped, or reordered in one branch
+// but not the other changes the bytes and fails here.
 //
-// Why this matters for cross-client interop:
-//   - Lighthouse defines BeaconBlockBodyFulu and BeaconBlockBodyElectra as
-//     distinct superstruct variants. They differ in exactly one declared field:
-//     `execution_payload` (Payload::Fulu vs Payload::Electra).
-//   - For BLINDED blocks specifically, the field becomes the
-//     ExecutionPayloadHeader. Lighthouse's ExecutionPayloadHeaderFulu and
-//     ExecutionPayloadHeaderElectra superstruct variants have **byte-identical**
-//     SSZ schemas (verified at https://github.com/sigp/lighthouse/blob/e3ee7feb/
-//     consensus/types/src/execution_payload_header.rs — same fields, same types,
-//     same fork-gates).
-//   - All 12 other BeaconBlockBody fields are identical between Electra and
-//     Fulu, with identical superstruct gates that include both forks.
-//   - Therefore, an SSZ-encoded BlindedBeaconBlockBodyElectra is, byte-for-byte,
-//     a valid BlindedBeaconBlockBodyFulu for Lighthouse.
-//
-// This test pins SSV's behavior: any future Fulu-specific divergence in the
-// blind.go encoder would break this test, surfacing the change before it can
-// hit production interop.
+// Why the reuse is valid: for blinded blocks Lighthouse's Fulu and Electra bodies share a
+// byte-identical SSZ schema (Fulu differs only in the unblinded ExecutionPayload, which the
+// blinded form replaces with an identical ExecutionPayloadHeader). This test does not
+// re-verify that Lighthouse-level claim — it only pins SSV's two branches to each other.
 func TestEnsureBlinded_FuluProducesElectraEquivalentBytes(t *testing.T) {
 	// Build a deterministic ExecutionPayload, body, and block once; reuse for
 	// both Electra and Fulu versions so the only difference is the version tag.
@@ -125,22 +112,13 @@ func TestEnsureBlinded_FuluProducesElectraEquivalentBytes(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Truef(t, bytes.Equal(electraBytes, fuluBytes),
-		"Electra and Fulu blinded SSZ bytes differ (Electra: %d bytes, Fulu: %d bytes). "+
-			"SSV's blind.go reuses apiv1electra.BlindedBeaconBlock for Fulu, so they MUST produce "+
-			"identical bytes given identical body content. If this fails, blind.go's Fulu branch "+
-			"has diverged from the Electra branch in some byte-level way — investigate before any "+
-			"release that touches blind.go.",
-		len(electraBytes), len(fuluBytes))
+		"Fulu and Electra blinded SSZ differ (Fulu: %d bytes, Electra: %d bytes); "+
+			"blind.go's two branches have drifted — reconcile them before releasing.",
+		len(fuluBytes), len(electraBytes))
 
-	// Confirm round-trip: the bytes that SSV produces are decodable back through
-	// apiv1electra.BlindedBeaconBlock — the schema Lighthouse uses for both
-	// Electra and Fulu blinded bodies (verified via Lighthouse source inspection).
+	// The bytes also decode back through apiv1electra.BlindedBeaconBlock — the schema
+	// Lighthouse uses for both Electra and Fulu blinded bodies.
 	var roundTrip apiv1electra.BlindedBeaconBlock
 	require.NoError(t, roundTrip.UnmarshalSSZ(fuluBytes),
-		"SSV's Fulu blinded output must round-trip through apiv1electra.BlindedBeaconBlock — "+
-			"this is the same SSZ schema Lighthouse's BlindedBeaconBlockFulu uses.")
-
-	t.Logf("Electra blinded SSZ: %d bytes", len(electraBytes))
-	t.Logf("Fulu blinded SSZ:    %d bytes", len(fuluBytes))
-	t.Logf("Bytes match: %v (round-trip OK)", bytes.Equal(electraBytes, fuluBytes))
+		"SSV's Fulu blinded output must round-trip through apiv1electra.BlindedBeaconBlock")
 }

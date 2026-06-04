@@ -2,6 +2,7 @@ package runner
 
 import (
 	"context"
+	"maps"
 	"testing"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -33,8 +34,7 @@ type runnerTestKit struct {
 }
 
 // newRunnerTestKit builds the common single-validator runner scaffolding for role,
-// wiring bn as the runner's beacon node. If cfg is nil a fresh cloneTestNetworkConfig()
-// is used, so parallel tests can mutate beacon timing without racing on the shared global.
+// wiring bn as the runner's beacon node. If cfg is nil a fresh cloneTestNetworkConfig() is used.
 func newRunnerTestKit(t *testing.T, role spectypes.RunnerRole, bn beacon.BeaconNode, cfg *networkconfig.Network) *runnerTestKit {
 	t.Helper()
 
@@ -86,6 +86,21 @@ func newRunnerTestKit(t *testing.T, role spectypes.RunnerRole, bn beacon.BeaconN
 			OperatorSigner: operatorSigner,
 		},
 	}
+}
+
+// cloneTestNetworkConfig returns a copy of networkconfig.TestNetwork that a test may safely
+// mutate without racing other parallel tests on the shared global. Only the Beacon value and
+// its Forks map are deep-copied — the fields tests actually change (beacon timing). Any other
+// pointer/map/slice field still aliases the global, so a test that mutates one must extend
+// this clone first.
+func cloneTestNetworkConfig() *networkconfig.Network {
+	cfg := *networkconfig.TestNetwork
+	beaconCfg := *networkconfig.TestNetwork.Beacon
+	if beaconCfg.Forks != nil {
+		beaconCfg.Forks = maps.Clone(beaconCfg.Forks)
+	}
+	cfg.Beacon = &beaconCfg
+	return &cfg
 }
 
 // testingRoundTimerF is the no-wait QBFT round timer factory shared by runner tests.

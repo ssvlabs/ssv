@@ -55,13 +55,11 @@ func (b *syncCommitteeContributionTestBeacon) GetSyncCommitteeContribution(
 // quorum through ProcessPreConsensus and asserts that the subnets actually passed to
 // GetSyncCommitteeContribution are in ascending (spec-canonical) order.
 //
-// Why this exists on top of the TestSortBySubnet unit test: the regression that
-// motivated the fix (#2675) was in the *wiring*, not in a sort helper — the upstream
-// `roots` come from slices.Collect(maps.Keys(...)) (random per process), and the bug
-// was that the order was never canonicalized before the beacon call. A helper-only
-// test cannot catch a dropped or misplaced sort call; this one can, because it pins
-// the contract at the GetSyncCommitteeContribution boundary. ssv-spec's runner tests
-// cannot catch it either: their TestingBeaconNode.GetSyncCommitteeContribution
+// It complements the TestSortBySubnet unit test by pinning the fix at the wiring boundary,
+// where the non-determinism actually lives: the upstream `roots` come from
+// slices.Collect(maps.Keys(...)) (random per process) and must be canonicalized before the
+// beacon call. A helper-only test can't catch a dropped or misplaced sort call; this one can.
+// ssv-spec's runner tests can't either — their TestingBeaconNode.GetSyncCommitteeContribution
 // discards subnetIDs and returns a pre-sorted fixture.
 func TestSyncCommitteeAggregatorProcessPreConsensusSortsSubnetsForBeaconCall(t *testing.T) {
 	testBeacon := newSyncCommitteeContributionTestBeacon()
@@ -83,15 +81,17 @@ func TestSyncCommitteeAggregatorProcessPreConsensusSortsSubnetsForBeaconCall(t *
 	require.Equal(t, 1, testBeacon.getContributionCalls,
 		"GetSyncCommitteeContribution should be called exactly once, when pre-consensus quorum is reached")
 
-	// TestingContributionProofIndexes = {0,1,2} map to subnets {0,1,2}; with the fix
-	// the runner hands them to the beacon node in ascending order regardless of the
-	// random map-iteration order of the upstream roots slice. Without the sort this
-	// assertion would observe a random permutation and fail.
-	require.Equal(t, []uint64{0, 1, 2}, testBeacon.capturedSubnets,
-		"subnets passed to GetSyncCommitteeContribution must be in canonical ascending order")
-	require.True(t, slices.IsSorted(testBeacon.capturedSubnets))
-	// One proof per subnet reaches the beacon node. The (subnet, proof) pairing itself
-	// is exercised exhaustively by TestSortBySubnet; here we just confirm none are dropped.
+	// Sortedness is the invariant the determinism fix guarantees: without the sort the runner
+	// would hand the beacon node a random permutation of the upstream map-iteration order.
+	require.Truef(t, slices.IsSorted(testBeacon.capturedSubnets),
+		"subnets passed to GetSyncCommitteeContribution must be ascending (spec-canonical), got %v",
+		testBeacon.capturedSubnets)
+	// Exact-set sanity check: TestingContributionProofIndexes {0,1,2} map to subnets {0,1,2}
+	// (ssv-spec/types/testingutils/beacon_node_sync_committee.go). A future fixture change trips
+	// this line specifically — update it here, not the sortedness assertion above.
+	require.Equal(t, []uint64{0, 1, 2}, testBeacon.capturedSubnets)
+	// One proof per subnet reaches the beacon node; the (subnet, proof) pairing is exercised
+	// exhaustively by TestSortBySubnet. Here we just confirm none were dropped.
 	require.Len(t, testBeacon.capturedSelectionProofs, len(testBeacon.capturedSubnets))
 
 	// Sanity: the runner proceeded into consensus after the beacon call.

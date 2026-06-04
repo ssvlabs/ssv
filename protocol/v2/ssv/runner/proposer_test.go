@@ -2,7 +2,6 @@ package runner
 
 import (
 	"context"
-	"maps"
 	"testing"
 	"time"
 
@@ -475,15 +474,4 @@ func countPartialSignatureBroadcastsByType(
 	}
 
 	return count
-}
-
-func cloneTestNetworkConfig() *networkconfig.Network {
-	cfg := *networkconfig.TestNetwork
-	beaconCfg := *networkconfig.TestNetwork.Beacon
-	// Tests only mutate beacon timing fields; the rest of TestNetwork can remain shared.
-	if beaconCfg.Forks != nil {
-		beaconCfg.Forks = maps.Clone(beaconCfg.Forks)
-	}
-	cfg.Beacon = &beaconCfg
-	return &cfg
 }
