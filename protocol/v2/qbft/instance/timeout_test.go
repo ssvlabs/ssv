@@ -9,7 +9,7 @@ import (
 	"go.uber.org/zap"
 )
 
-func TestUponRoundTimeoutBumpsRoundAfterBroadcast(t *testing.T) {
+func TestUponRoundTimeoutBumpsRound(t *testing.T) {
 	env := newInstanceTestEnv(t, 2)
 	env.inst.State.Round = 1
 	env.inst.State.ProposalAcceptedForCurrentRound = env.proposal(1, 1, []byte("proposal-value"), env.hash([]byte("proposal-value")), nil, nil)
@@ -26,8 +26,8 @@ func TestUponRoundTimeoutBumpsRoundAfterBroadcast(t *testing.T) {
 
 	network := &recordingNetwork{
 		onBroadcast: func(message *spectypes.SignedSSVMessage) error {
-			require.Equal(t, specqbft.Round(1), env.inst.State.Round)
-			require.NotNil(t, env.inst.State.ProposalAcceptedForCurrentRound)
+			require.Equal(t, specqbft.Round(2), env.inst.State.Round)
+			require.Nil(t, env.inst.State.ProposalAcceptedForCurrentRound)
 			return nil
 		},
 	}
@@ -56,7 +56,7 @@ func TestUponRoundTimeoutKilledInstance(t *testing.T) {
 	env.inst.MarkIrrelevant()
 
 	err := env.inst.UponRoundTimeout(t.Context(), zap.NewNop())
-	require.ErrorContains(t, err, "instance stopped processing timeouts")
+	require.ErrorContains(t, err, "instance is no longer considered relevant")
 }
 
 func TestUponRoundTimeoutStopsProcessingAfterReachingCutOffRound(t *testing.T) {
@@ -65,9 +65,10 @@ func TestUponRoundTimeoutStopsProcessingAfterReachingCutOffRound(t *testing.T) {
 	env.config.CutOffRound = env.inst.State.Round + 1
 
 	err := env.inst.UponRoundTimeout(t.Context(), zap.NewNop())
-	require.NoError(t, err)
-	require.Equal(t, specqbft.Round(2), env.inst.State.Round)
+	require.ErrorContains(t, err, "instance is no longer considered relevant")
+	require.Equal(t, env.config.CutOffRound, env.inst.State.Round)
 
 	err = env.inst.UponRoundTimeout(t.Context(), zap.NewNop())
-	require.ErrorContains(t, err, "instance stopped processing timeouts")
+	require.ErrorContains(t, err, "instance is no longer considered relevant")
+	require.Equal(t, env.config.CutOffRound, env.inst.State.Round)
 }

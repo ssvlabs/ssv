@@ -53,9 +53,15 @@ func NewNode(
 func (h *Node) Identity(w http.ResponseWriter, r *http.Request) error {
 	nodeInfo := h.peersIndex.Self()
 	resp := identityJSON{
-		PeerID:  h.network.LocalPeer(),
-		Subnets: nodeInfo.Metadata.Subnets,
-		Version: nodeInfo.Metadata.NodeVersion,
+		PeerID: h.network.LocalPeer(),
+	}
+	// invariant: setupPeerServices initializes self.Metadata at startup, so on
+	// the live path nodeInfo.Metadata is always non-nil. The guard defends
+	// against a future UpdateSelfRecord caller that returns a NodeInfo without
+	// a Metadata block — cheap insurance and mirrors the peers-handler shape.
+	if nodeInfo != nil && nodeInfo.Metadata != nil {
+		resp.Subnets = nodeInfo.Metadata.Subnets
+		resp.Version = nodeInfo.Metadata.NodeVersion
 	}
 	for _, addr := range h.network.ListenAddresses() {
 		resp.Addresses = append(resp.Addresses, addr.String())
@@ -146,7 +152,11 @@ func (h *Node) peers(peers []peer.ID) []peerJSON {
 		}
 
 		nodeInfo := h.peersIndex.NodeInfo(id)
-		if nodeInfo == nil {
+		if nodeInfo == nil || nodeInfo.Metadata == nil {
+			// Metadata can be nil if the peer sent a NodeInfo envelope without a
+			// metadata block; we reject such peers at handshake time
+			// (verifyTheirNodeInfo), but historical entries from before that fix
+			// — or from a future reader path — should not crash this endpoint.
 			continue
 		}
 		resp[i].Version = nodeInfo.Metadata.NodeVersion

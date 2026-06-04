@@ -1445,6 +1445,8 @@ func setupEventHandler(
 		OperatorDataStore: operatorDataStore,
 		ValidatorsMap:     validators.New(ctx),
 	}, exporter.Options{})
+	// NewController starts ttlcache cleanup goroutines; stop them so they don't leak across tests.
+	t.Cleanup(validatorCtrl.Stop)
 
 	contractFilterer, err := contract.NewContractFilterer(ethcommon.Address{}, nil)
 	require.NoError(t, err)

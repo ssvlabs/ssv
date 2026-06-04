@@ -10,6 +10,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/observability/log/fields"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -70,10 +71,7 @@ func (i *Instance) getRoundChangeJustification() ([]*specqbft.ProcessingMessage,
 		return nil, nil
 	}
 
-	r, err := specqbft.HashDataRoot(i.State.LastPreparedValue)
-	if err != nil {
-		return nil, fmt.Errorf("could not hash input data: %w", err)
-	}
+	r := qbft.HashDataRoot(i.State.LastPreparedValue)
 
 	prepareMsgs := i.State.PrepareContainer.MessagesForRound(i.State.LastPreparedRound)
 	ret := make([]*specqbft.ProcessingMessage, 0)

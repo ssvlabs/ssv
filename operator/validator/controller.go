@@ -262,6 +262,17 @@ func NewController(logger *zap.Logger, options ControllerOptions, exporterOption
 	return ctrl
 }
 
+// Stop releases the controller's background goroutines that are not tied to its context — the
+// ttlcache cleanup loops started in NewController, which otherwise run until the process exits.
+// Context-bound goroutines (e.g. the message worker) stop via the controller's ctx instead.
+func (c *Controller) Stop() {
+	c.committeesObservers.Stop()
+	c.attesterRoots.Stop()
+	c.syncCommRoots.Stop()
+	c.domainCache.Stop()
+	c.beaconVoteRoots.Stop()
+}
+
 func (c *Controller) IndicesChangeChan() chan struct{} {
 	return c.indicesChangeCh
 }

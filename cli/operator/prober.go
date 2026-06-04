@@ -2,6 +2,7 @@ package operator
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"go.uber.org/zap"
@@ -24,17 +25,18 @@ const (
 	proberRetryDelay         = 10 * time.Second
 )
 
-const componentsUnhealthyFatalErrorMsg = "component(s) are not healthy"
+const componentsUnhealthyErrorMsg = "component(s) are not healthy"
 
-func ensureComponentsHealthy(ctx context.Context, logger *zap.Logger, p *hprobe.HealthProber) {
+func ensureComponentsHealthy(ctx context.Context, logger *zap.Logger, p *hprobe.HealthProber) error {
 	probeCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
 	if err := p.ProbeAll(probeCtx); err != nil {
-		logger.Fatal(componentsUnhealthyFatalErrorMsg, zap.Error(err))
+		return fmt.Errorf("%s: %w", componentsUnhealthyErrorMsg, err)
 	}
 
 	logger.Info("all component(s) are healthy")
+	return nil
 }
 
 func startHealthProber(ctx context.Context, logger *zap.Logger, p *hprobe.HealthProber) {
@@ -52,7 +54,10 @@ func startHealthProber(ctx context.Context, logger *zap.Logger, p *hprobe.Health
 			defer cancel()
 
 			if err := p.ProbeAll(probeCtx); err != nil {
-				logger.Fatal(componentsUnhealthyFatalErrorMsg, zap.Error(err))
+				// TODO(#2867): trigger graceful shutdown (-> Close -> non-zero exit) instead of Fatal,
+				// which bypasses Close. Crash-and-restart on persistent unhealth is intentional; the
+				// goroutine os.Exit mechanism is the wart.
+				logger.Fatal(componentsUnhealthyErrorMsg, zap.Error(err))
 			}
 		}()
 

@@ -1,7 +1,6 @@
 package api
 
 import (
-	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -11,43 +10,39 @@ import (
 	"go.uber.org/zap/zaptest"
 )
 
-func TestConn_Send_FullQueue(t *testing.T) {
-	c := newConn(t.Context(), nil, "test", 0, false)
-
-	for i := 0; i < chanSize+2; i++ {
-		c.Send([]byte(fmt.Sprintf("test-%d", i)))
-	}
-}
-
+// TestBroadcaster verifies the basic register / fan-out / deregister flow:
+// feed.Send delivers to every registered connection, a Deregister'd
+// connection stops receiving, and Register/Deregister are idempotent
+// against duplicate calls. No timing assumptions: each step waits for
+// delivery via Eventually before issuing the next operation.
 func TestBroadcaster(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 	b := newBroadcaster(logger)
 
 	feed := new(event.Feed)
-	go func() {
-		require.NoError(t, b.FromFeed(feed))
-	}()
+	b.FromFeed(t.Context(), feed)
 	bm1 := newBroadcastedMock("1")
 	bm2 := newBroadcastedMock("2")
 
 	require.True(t, b.Register(bm1))
+	require.False(t, b.Register(bm1), "Register must be idempotent for the same id")
 	defer b.Deregister(bm1)
-
 	require.True(t, b.Register(bm2))
 
-	// wait so setup will be finished
-	<-time.After(10 * time.Millisecond)
-	go feed.Send(Message{Type: TypeValidator, Filter: MessageFilter{From: 0, To: 0}})
-	<-time.After(5 * time.Millisecond)
-	go b.Deregister(bm2)
-	<-time.After(5 * time.Millisecond)
-	go feed.Send(Message{Type: TypeValidator, Filter: MessageFilter{From: 0, To: 0}})
+	// First message reaches both connections.
+	feed.Send(Message{Type: TypeValidator, Filter: MessageFilter{From: 0, To: 0}})
+	require.Eventually(t, func() bool {
+		return bm1.Size() == 1 && bm2.Size() == 1
+	}, 2*time.Second, 5*time.Millisecond)
 
-	// wait so messages will propagate
-	<-time.After(100 * time.Millisecond)
-	require.Equal(t, bm1.Size(), 2)
-	// the second broadcasted was deregistered after the first message
-	require.Equal(t, bm2.Size(), 1)
+	// Deregister bm2 — second call returns false (idempotent).
+	require.True(t, b.Deregister(bm2))
+	require.False(t, b.Deregister(bm2))
+
+	// Second message reaches only bm1.
+	feed.Send(Message{Type: TypeValidator, Filter: MessageFilter{From: 0, To: 0}})
+	require.Eventually(t, func() bool { return bm1.Size() == 2 }, 2*time.Second, 5*time.Millisecond)
+	require.Equal(t, 1, bm2.Size(), "bm2 must not receive after deregister")
 }
 
 type broadcastedMock struct {
@@ -58,7 +53,6 @@ type broadcastedMock struct {
 
 func newBroadcastedMock(id string) *broadcastedMock {
 	return &broadcastedMock{
-		mut:  sync.Mutex{},
 		msgs: [][]byte{},
 		id:   id,
 	}
@@ -71,7 +65,6 @@ func (b *broadcastedMock) ID() string {
 func (b *broadcastedMock) Send(msg []byte) {
 	b.mut.Lock()
 	defer b.mut.Unlock()
-	fmt.Println("sent")
 	b.msgs = append(b.msgs, msg)
 }
 

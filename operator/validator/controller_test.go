@@ -95,6 +95,8 @@ func TestNewController(t *testing.T) {
 		Context:           t.Context(),
 	}
 	control := NewController(logger, controllerOptions, exporter.Options{})
+	// NewController starts ttlcache cleanup goroutines; stop them so they don't leak across tests.
+	defer control.Stop()
 	require.IsType(t, &Controller{}, control)
 }
 
@@ -123,6 +125,8 @@ func TestNewControllerRouterConcurrencyOverride(t *testing.T) {
 		MsgRouterConcurrency: 24,
 	}
 	control := NewController(logger, controllerOptions, exporter.Options{})
+	// NewController starts ttlcache cleanup goroutines; stop them so they don't leak across tests.
+	defer control.Stop()
 	require.Equal(t, 24, control.msgRouterConcurrency)
 }
 
