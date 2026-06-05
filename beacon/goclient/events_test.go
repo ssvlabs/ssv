@@ -253,7 +253,6 @@ func TestNewEventHandler(t *testing.T) {
 func eventsTestClient(t *testing.T, serverURL string) *GoClient {
 	server, err := New(t.Context(), zap.NewNop(), Options{
 		BeaconNodeAddr: serverURL,
-		BlockFetchPath: BlockFetchPathSafe,
 	})
 	require.NoError(t, err)
 

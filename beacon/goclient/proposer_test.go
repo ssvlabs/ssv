@@ -707,10 +707,11 @@ func TestProposalPreparationReconnectLogic_SkipsOnNilProvider(t *testing.T) {
 
 func createClientForProposerTest(t *testing.T, serverURL string) (*GoClient, error) {
 	return New(t.Context(), log.TestLogger(t), Options{
-		BeaconNodeAddr: serverURL,
-		CommonTimeout:  time.Second * 2,
-		LongTimeout:    time.Second * 5,
-		BlockFetchPath: BlockFetchPathSafe,
+		BeaconNodeAddr:                 serverURL,
+		CommonTimeout:                  time.Second * 2,
+		LongTimeout:                    time.Second * 5,
+		ProposalCollectionSlotRelative: true,
+		EarlyExitOnBlinded:             true,
 		// safe-path slot-relative deadline (config resolution defaults this in production).
 		ProposalSoftDeadline: 1450 * time.Millisecond,
 	})

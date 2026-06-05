@@ -180,7 +180,7 @@ func (c *config) resolveBlockFetch(logger *zap.Logger) error {
 	}
 
 	switch path {
-	case goclient.BlockFetchPathLegacy:
+	case blockFetchPathLegacy:
 		if err := validateProposerDelay(proposerDelay, c.AllowDangerousProposerDelay); err != nil {
 			return err
 		}
@@ -196,29 +196,37 @@ func (c *config) resolveBlockFetch(logger *zap.Logger) error {
 			softTimeout = minProposalSoftTimeout
 		}
 		c.ConsensusClient.ProposalSoftTimeout = softTimeout
-	case goclient.BlockFetchPathMEVOptimized:
+		// Legacy collects for a relative timeout and always early-exits on the first blinded.
+		c.ConsensusClient.ProposalCollectionSlotRelative = false
+		c.ConsensusClient.EarlyExitOnBlinded = true
+	case blockFetchPathMEVOptimized:
 		if err := validateProposalSoftDeadline(rawSoftDeadline); err != nil {
 			return err
 		}
-	case goclient.BlockFetchPathSafe:
+		// Slot-relative collection that keeps collecting past the first blinded to compare bids.
+		c.ConsensusClient.ProposalCollectionSlotRelative = true
+		c.ConsensusClient.EarlyExitOnBlinded = false
+	case blockFetchPathSafe:
 		// The safe path is selected only when no deadline was set, so resolve the unset deadline
 		// to the safe-path default.
 		c.ConsensusClient.ProposalSoftDeadline = defaultProposalSoftDeadline
+		// Slot-relative collection with early-exit on the first blinded (MEV) response.
+		c.ConsensusClient.ProposalCollectionSlotRelative = true
+		c.ConsensusClient.EarlyExitOnBlinded = true
 	}
 
-	c.ConsensusClient.BlockFetchPath = path
 	logger.Info("block-fetch path selected", zap.String("path", path.String()))
 
 	// Advisory warnings — emitted after validation, so they never precede a validation error.
 	switch path {
-	case goclient.BlockFetchPathLegacy:
+	case blockFetchPathLegacy:
 		if proposerDelay > maxSafeProposerDelay {
 			// Reachable only after validateProposerDelay passed (AllowDangerousProposerDelay set).
 			logger.Warn("Using dangerous ProposerDelay value that may cause missed block proposals",
 				zap.Int64("proposer_delay_ms", proposerDelay.Milliseconds()),
 				zap.Int64("max_safe_proposer_delay_ms", maxSafeProposerDelay.Milliseconds()))
 		}
-	case goclient.BlockFetchPathMEVOptimized:
+	case blockFetchPathMEVOptimized:
 		if rawSoftDeadline > safeMaxProposalSoftDeadline {
 			logger.Warn(
 				"ProposalSoftDeadline exceeds the safe-max threshold: "+
@@ -229,17 +237,50 @@ func (c *config) resolveBlockFetch(logger *zap.Logger) error {
 				zap.Int64("proposal_soft_deadline_ms", rawSoftDeadline.Milliseconds()),
 				zap.Int64("safe_max_ms", safeMaxProposalSoftDeadline.Milliseconds()))
 		}
-	case goclient.BlockFetchPathSafe:
+	case blockFetchPathSafe:
 		// Safe path has no advisory warning — its default deadline sits at the safe-max.
 	}
 
 	return nil
 }
 
+// blockFetchPath is the operator-facing block-fetch strategy selected at startup from config.
+// It is policy vocabulary owned by the config layer; resolveBlockFetch translates it into the
+// mechanical knobs goclient consumes (ProposalCollectionSlotRelative / EarlyExitOnBlinded).
+// Documented end-to-end in docs/MEV_CONSIDERATIONS.md.
+type blockFetchPath int
+
+const (
+	// blockFetchPathSafe is the default: slot-relative collection with early-exit on the first
+	// blinded response (deadline defaults to safeMaxProposalSoftDeadline).
+	blockFetchPathSafe blockFetchPath = iota
+	// blockFetchPathLegacy preserves the original ProposerDelay / ProposalSoftTimeout behavior
+	// (relative-timeout collection); selected when an operator sets either legacy knob.
+	blockFetchPathLegacy
+	// blockFetchPathMEVOptimized is opt-in: slot-relative collection without early-exit, returns
+	// the best-scored response collected by ProposalSoftDeadline. Selected when an operator sets
+	// ProposalSoftDeadline explicitly.
+	blockFetchPathMEVOptimized
+)
+
+// String returns a human-readable label for logging.
+func (p blockFetchPath) String() string {
+	switch p {
+	case blockFetchPathSafe:
+		return "safe"
+	case blockFetchPathLegacy:
+		return "legacy"
+	case blockFetchPathMEVOptimized:
+		return "mev-optimized"
+	default:
+		return fmt.Sprintf("unknown(%d)", int(p))
+	}
+}
+
 // determineBlockFetchPath selects the block-fetch path from the operator's raw timing knobs.
 // Negative durations and combining legacy knobs (ProposerDelay/ProposalSoftTimeout) with the
 // MEV-optimized ProposalSoftDeadline are rejected.
-func determineBlockFetchPath(proposalSoftTimeout, proposalSoftDeadline, proposerDelay time.Duration) (goclient.BlockFetchPath, error) {
+func determineBlockFetchPath(proposalSoftTimeout, proposalSoftDeadline, proposerDelay time.Duration) (blockFetchPath, error) {
 	if proposerDelay < 0 {
 		return 0, fmt.Errorf("ProposerDelay must be non-negative, got %v", proposerDelay)
 	}
@@ -259,11 +300,11 @@ func determineBlockFetchPath(proposalSoftTimeout, proposalSoftDeadline, proposer
 
 	switch {
 	case legacySet:
-		return goclient.BlockFetchPathLegacy, nil
+		return blockFetchPathLegacy, nil
 	case deadlineSet:
-		return goclient.BlockFetchPathMEVOptimized, nil
+		return blockFetchPathMEVOptimized, nil
 	default:
-		return goclient.BlockFetchPathSafe, nil
+		return blockFetchPathSafe, nil
 	}
 }
 

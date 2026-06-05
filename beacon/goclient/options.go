@@ -1,7 +1,6 @@
 package goclient
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -15,39 +14,6 @@ const (
 	defaultLongTimeout = time.Second * 60
 )
 
-// BlockFetchPath identifies which block-header fetch strategy the SSV node is using.
-// Determined at startup from operator-provided config by cli/operator config resolution.
-//
-// Documented end-to-end in docs/MEV_CONSIDERATIONS.md.
-type BlockFetchPath int
-
-const (
-	// BlockFetchPathSafe is the default. Multi-BN parallel fetch with early-exit on
-	// first blinded response; fallback at slot-relative ProposalSoftDeadline.
-	BlockFetchPathSafe BlockFetchPath = iota
-	// BlockFetchPathLegacy preserves the original ProposerDelay / ProposalSoftTimeout
-	// behavior bit-for-bit; selected when an operator has set either of those legacy knobs.
-	BlockFetchPathLegacy
-	// BlockFetchPathMEVOptimized is opt-in. Multi-BN parallel fetch without early-exit,
-	// returns the best-scored response collected by ProposalSoftDeadline. Selected when an
-	// operator sets ProposalSoftDeadline explicitly.
-	BlockFetchPathMEVOptimized
-)
-
-// String returns a human-readable label for logging.
-func (p BlockFetchPath) String() string {
-	switch p {
-	case BlockFetchPathSafe:
-		return "safe"
-	case BlockFetchPathLegacy:
-		return "legacy"
-	case BlockFetchPathMEVOptimized:
-		return "mev-optimized"
-	default:
-		return fmt.Sprintf("unknown(%d)", int(p))
-	}
-}
-
 // Options defines beacon client options
 type Options struct {
 	BeaconConfig                *networkconfig.Beacon
@@ -60,8 +26,8 @@ type Options struct {
 	LongTimeout   time.Duration `yaml:"LongTimeout" env:"WITH_LONG_TIMEOUT" env-description:"Specifies the long timeout for network operations"`
 
 	// ProposalSoftTimeout is the legacy collection-period timeout in multi-BN parallel
-	// fetch. Setting this (or ProposerDelay) selects BlockFetchPathLegacy. New operators
-	// should prefer ProposalSoftDeadline. See docs/MEV_CONSIDERATIONS.md.
+	// fetch. Setting this (or ProposerDelay) selects the legacy relative-timeout collection.
+	// New operators should prefer ProposalSoftDeadline. See docs/MEV_CONSIDERATIONS.md.
 	ProposalSoftTimeout time.Duration `yaml:"ProposalSoftTimeout" env:"WITH_PROPOSAL_SOFT_TIMEOUT" env-description:"Legacy MEV configuration. Specifies the beacon proposal collection soft timeout (collection period for comparing proposals from multiple beacon nodes to select the most profitable one). Cannot be set lower than 500ms, to leave the Beacon node enough time to serve the block-fetch request. Setting this opts the SSV node into the legacy block-fetch path; the recommended approach is to leave this unset and use ProposalSoftDeadline instead. See https://github.com/ssvlabs/ssv/blob/main/docs/MEV_CONSIDERATIONS.md for details."`
 
 	// ProposalSoftDeadline is the slot-relative deadline (in ms-into-slot) for the
@@ -72,8 +38,14 @@ type Options struct {
 	// legacy path).
 	ProposalSoftDeadline time.Duration `yaml:"ProposalSoftDeadline" env:"WITH_PROPOSAL_SOFT_DEADLINE" env-description:"Slot-relative deadline (ms into slot) for the multi-BN proposal-collection window. Leave unset for the default safe path; set explicitly to opt into the MEV-optimized path (value must be in [1000ms, 3600ms]). Cannot be combined with ProposerDelay or ProposalSoftTimeout. See https://github.com/ssvlabs/ssv/blob/main/docs/MEV_CONSIDERATIONS.md for details."`
 
-	// BlockFetchPath is set by cli/operator config resolution from the determined path; not
-	// directly configured by the operator. Consumed by GoClient at runtime to dispatch block
-	// fetching to the correct strategy.
-	BlockFetchPath BlockFetchPath `yaml:"-"`
+	// ProposalCollectionSlotRelative and EarlyExitOnBlinded are the mechanical multi-BN
+	// proposal-collection knobs resolved by cli/operator config resolution (not configured
+	// directly by the operator):
+	//   - ProposalCollectionSlotRelative: true  -> collect until the slot-relative
+	//     ProposalSoftDeadline; false -> collect for the relative ProposalSoftTimeout (legacy).
+	//   - EarlyExitOnBlinded: stop collecting on the first blinded (MEV) response. Applies to
+	//     the slot-relative collection; the legacy collection always early-exits internally.
+	// GoClient consumes these to dispatch block fetching. See docs/MEV_CONSIDERATIONS.md.
+	ProposalCollectionSlotRelative bool `yaml:"-"`
+	EarlyExitOnBlinded             bool `yaml:"-"`
 }

@@ -12,7 +12,6 @@ import (
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
 
-	"github.com/ssvlabs/ssv/beacon/goclient"
 	"github.com/ssvlabs/ssv/exporter"
 	"github.com/ssvlabs/ssv/networkconfig"
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
@@ -193,13 +192,13 @@ func TestDetermineBlockFetchPath(t *testing.T) {
 		proposalSoftTimeout  time.Duration
 		proposalSoftDeadline time.Duration
 		proposerDelay        time.Duration
-		want                 goclient.BlockFetchPath
+		want                 blockFetchPath
 		wantErr              string
 	}{
-		{name: "nothing set -> safe", want: goclient.BlockFetchPathSafe},
-		{name: "ProposerDelay -> legacy", proposerDelay: 300 * time.Millisecond, want: goclient.BlockFetchPathLegacy},
-		{name: "ProposalSoftTimeout -> legacy", proposalSoftTimeout: 1500 * time.Millisecond, want: goclient.BlockFetchPathLegacy},
-		{name: "ProposalSoftDeadline -> mev-optimized", proposalSoftDeadline: 1100 * time.Millisecond, want: goclient.BlockFetchPathMEVOptimized},
+		{name: "nothing set -> safe", want: blockFetchPathSafe},
+		{name: "ProposerDelay -> legacy", proposerDelay: 300 * time.Millisecond, want: blockFetchPathLegacy},
+		{name: "ProposalSoftTimeout -> legacy", proposalSoftTimeout: 1500 * time.Millisecond, want: blockFetchPathLegacy},
+		{name: "ProposalSoftDeadline -> mev-optimized", proposalSoftDeadline: 1100 * time.Millisecond, want: blockFetchPathMEVOptimized},
 		{name: "legacy + deadline -> conflict", proposalSoftDeadline: 1100 * time.Millisecond, proposerDelay: 300 * time.Millisecond, wantErr: "conflicts with legacy"},
 		{name: "negative ProposerDelay -> error", proposerDelay: -1, wantErr: "ProposerDelay must be non-negative"},
 		{name: "negative ProposalSoftTimeout -> error", proposalSoftTimeout: -1, wantErr: "ProposalSoftTimeout must be non-negative"},
@@ -215,6 +214,23 @@ func TestDetermineBlockFetchPath(t *testing.T) {
 			}
 			require.NoError(t, err)
 			require.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func Test_blockFetchPath_String(t *testing.T) {
+	tests := []struct {
+		path blockFetchPath
+		want string
+	}{
+		{blockFetchPathSafe, "safe"},
+		{blockFetchPathLegacy, "legacy"},
+		{blockFetchPathMEVOptimized, "mev-optimized"},
+		{blockFetchPath(99), "unknown(99)"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.want, func(t *testing.T) {
+			require.Equal(t, tt.want, tt.path.String())
 		})
 	}
 }
@@ -247,10 +263,11 @@ func TestValidateProposalSoftDeadline(t *testing.T) {
 }
 
 func Test_resolveBlockFetch_defaults(t *testing.T) {
-	t.Run("safe path defaults deadline to 1450ms and sets path", func(t *testing.T) {
+	t.Run("safe path defaults deadline to 1450ms and sets slot-relative early-exit knobs", func(t *testing.T) {
 		c := config{}
 		require.NoError(t, c.resolveBlockFetch(zap.NewNop()))
-		require.Equal(t, goclient.BlockFetchPathSafe, c.ConsensusClient.BlockFetchPath)
+		require.True(t, c.ConsensusClient.ProposalCollectionSlotRelative)
+		require.True(t, c.ConsensusClient.EarlyExitOnBlinded)
 		require.Equal(t, 1450*time.Millisecond, c.ConsensusClient.ProposalSoftDeadline)
 	})
 
@@ -258,7 +275,8 @@ func Test_resolveBlockFetch_defaults(t *testing.T) {
 		c := config{}
 		c.ProposerDelay = 300 * time.Millisecond
 		require.NoError(t, c.resolveBlockFetch(zap.NewNop()))
-		require.Equal(t, goclient.BlockFetchPathLegacy, c.ConsensusClient.BlockFetchPath)
+		require.False(t, c.ConsensusClient.ProposalCollectionSlotRelative)
+		require.True(t, c.ConsensusClient.EarlyExitOnBlinded)
 		require.Equal(t, 1500*time.Millisecond, c.ConsensusClient.ProposalSoftTimeout)
 	})
 
@@ -270,11 +288,12 @@ func Test_resolveBlockFetch_defaults(t *testing.T) {
 		require.Equal(t, 500*time.Millisecond, c.ConsensusClient.ProposalSoftTimeout)
 	})
 
-	t.Run("mev-optimized path keeps operator deadline and sets path", func(t *testing.T) {
+	t.Run("mev-optimized path keeps operator deadline and sets slot-relative no-early-exit knobs", func(t *testing.T) {
 		c := config{}
 		c.ConsensusClient.ProposalSoftDeadline = 1850 * time.Millisecond
 		require.NoError(t, c.resolveBlockFetch(zap.NewNop()))
-		require.Equal(t, goclient.BlockFetchPathMEVOptimized, c.ConsensusClient.BlockFetchPath)
+		require.True(t, c.ConsensusClient.ProposalCollectionSlotRelative)
+		require.False(t, c.ConsensusClient.EarlyExitOnBlinded)
 		require.Equal(t, 1850*time.Millisecond, c.ConsensusClient.ProposalSoftDeadline)
 	})
 

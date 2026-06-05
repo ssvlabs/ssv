@@ -106,18 +106,15 @@ func (gc *GoClient) GetBeaconBlock(
 			return nil, nil, err
 		}
 	} else {
-		// For multiple clients, dispatch to the selected block-fetch path.
-		// Safe and MEV-optimized share an implementation differing only in whether
-		// to early-exit on the first blinded response. See docs/MEV_CONSIDERATIONS.md.
-		switch gc.blockFetchPath {
-		case BlockFetchPathSafe:
-			beaconBlock, err = gc.getProposalParallelByDeadline(ctx, logger, slot, sig, graffiti, true /* earlyExitOnBlinded */)
-		case BlockFetchPathLegacy:
+		// For multiple clients, race them in parallel. Two mechanical knobs resolved from
+		// operator config by cli/operator drive the strategy: proposalCollectionSlotRelative
+		// selects the collection-window timing (slot-relative deadline vs legacy relative
+		// timeout), and earlyExitOnBlinded whether to stop on the first blinded (MEV) response.
+		// See docs/MEV_CONSIDERATIONS.md.
+		if gc.proposalCollectionSlotRelative {
+			beaconBlock, err = gc.getProposalParallelByDeadline(ctx, logger, slot, sig, graffiti, gc.earlyExitOnBlinded)
+		} else {
 			beaconBlock, err = gc.getProposalParallelLegacy(ctx, logger, slot, sig, graffiti)
-		case BlockFetchPathMEVOptimized:
-			beaconBlock, err = gc.getProposalParallelByDeadline(ctx, logger, slot, sig, graffiti, false /* earlyExitOnBlinded */)
-		default:
-			return nil, nil, fmt.Errorf("unknown block-fetch path %d", gc.blockFetchPath)
 		}
 		if err != nil {
 			return nil, nil, err

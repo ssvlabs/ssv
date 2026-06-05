@@ -14,46 +14,53 @@ import (
 	"github.com/ssvlabs/ssv/observability/log"
 )
 
-// Tests for the block-fetch path dispatch (BlockFetchPathSafe / Legacy / MEVOptimized).
-// See docs/MEV_CONSIDERATIONS.md for path semantics.
+// Tests for multi-BN proposal-collection dispatch: the slot-relative-deadline strategy
+// (with/without early-exit on blinded) and the legacy relative-timeout strategy.
+// See docs/MEV_CONSIDERATIONS.md for the semantics.
 
-// TestNew_StoresBlockFetchPath verifies that the selected path and its associated
-// timing field (proposalSoftDeadline / proposalSoftTimeout) get propagated from
-// Options into the resulting GoClient.
-func TestNew_StoresBlockFetchPath(t *testing.T) {
-	for _, path := range []BlockFetchPath{BlockFetchPathSafe, BlockFetchPathLegacy, BlockFetchPathMEVOptimized} {
-		t.Run(path.String(), func(t *testing.T) {
+// TestNew_StoresProposalFetchConfig verifies that the mechanical multi-BN proposal-collection
+// knobs (proposalCollectionSlotRelative / earlyExitOnBlinded) and their associated timing field
+// (proposalSoftDeadline / proposalSoftTimeout) get propagated from Options into the GoClient.
+// In production these resolved values come from cli/operator config resolution.
+func TestNew_StoresProposalFetchConfig(t *testing.T) {
+	tests := []struct {
+		name string
+		opts Options // block-fetch knobs only; transport fields are filled in below
+	}{
+		{
+			name: "safe-equivalent (slot-relative, early-exit)",
+			opts: Options{ProposalCollectionSlotRelative: true, EarlyExitOnBlinded: true, ProposalSoftDeadline: 1100 * time.Millisecond},
+		},
+		{
+			name: "mev-equivalent (slot-relative, no early-exit)",
+			opts: Options{ProposalCollectionSlotRelative: true, EarlyExitOnBlinded: false, ProposalSoftDeadline: 1100 * time.Millisecond},
+		},
+		{
+			name: "legacy-equivalent (relative timeout)",
+			opts: Options{ProposalCollectionSlotRelative: false, ProposalSoftTimeout: 1800 * time.Millisecond},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
 			server, _ := createProposalBeaconServer(t, beaconProposalServerOptions{})
 			defer server.Close()
 
-			// In production these resolved values come from cli/operator config resolution;
-			// here we set them explicitly and verify New propagates them onto the GoClient.
-			base := Options{
-				BeaconNodeAddr: server.URL,
-				CommonTimeout:  time.Second * 2,
-				LongTimeout:    time.Second * 5,
-				BlockFetchPath: path,
-			}
-			switch path {
-			case BlockFetchPathSafe, BlockFetchPathMEVOptimized:
-				base.ProposalSoftDeadline = 1100 * time.Millisecond
-			case BlockFetchPathLegacy:
-				base.ProposalSoftTimeout = 1800 * time.Millisecond
-			}
+			base := tt.opts
+			base.BeaconNodeAddr = server.URL
+			base.CommonTimeout = time.Second * 2
+			base.LongTimeout = time.Second * 5
 
 			client, err := New(t.Context(), log.TestLogger(t), base)
 			require.NoError(t, err)
 
-			assert.Equal(t, path, client.blockFetchPath, "GoClient.blockFetchPath should reflect opt.BlockFetchPath")
-
-			switch path {
-			case BlockFetchPathSafe, BlockFetchPathMEVOptimized:
-				assert.Equal(t, 1100*time.Millisecond, client.proposalSoftDeadline,
-					"New should propagate ProposalSoftDeadline")
-			case BlockFetchPathLegacy:
-				assert.Equal(t, 1800*time.Millisecond, client.proposalSoftTimeout,
-					"New should propagate ProposalSoftTimeout")
-			}
+			assert.Equal(t, tt.opts.ProposalCollectionSlotRelative, client.proposalCollectionSlotRelative,
+				"New should propagate ProposalCollectionSlotRelative")
+			assert.Equal(t, tt.opts.EarlyExitOnBlinded, client.earlyExitOnBlinded,
+				"New should propagate EarlyExitOnBlinded")
+			assert.Equal(t, tt.opts.ProposalSoftDeadline, client.proposalSoftDeadline,
+				"New should propagate ProposalSoftDeadline")
+			assert.Equal(t, tt.opts.ProposalSoftTimeout, client.proposalSoftTimeout,
+				"New should propagate ProposalSoftTimeout")
 		})
 	}
 }
@@ -76,7 +83,7 @@ func TestGetBeaconBlock_MultiBN_SafePath_EarlyExitOnBlinded(t *testing.T) {
 	})
 	defer bn2.Close()
 
-	client := setupMultiBNClient(t, bn1.URL, bn2.URL, BlockFetchPathSafe, 1500*time.Millisecond)
+	client := setupMultiBNClient(t, bn1.URL, bn2.URL, true /* earlyExitOnBlinded */, 1500*time.Millisecond)
 
 	// Use a slot starting in the near future so the slot-relative deadline lands
 	// well after both BN responses (we want to observe the early-exit on blinded,
@@ -113,7 +120,7 @@ func TestGetBeaconBlock_MultiBN_MEVOptimizedPath_NoEarlyExit(t *testing.T) {
 	})
 	defer bn2.Close()
 
-	client := setupMultiBNClient(t, bn1.URL, bn2.URL, BlockFetchPathMEVOptimized, 1500*time.Millisecond)
+	client := setupMultiBNClient(t, bn1.URL, bn2.URL, false /* earlyExitOnBlinded */, 1500*time.Millisecond)
 
 	slot := client.getBeaconConfig().EstimatedCurrentSlot() + 2
 
@@ -150,7 +157,7 @@ func TestGetBeaconBlock_MultiBN_MEVOptimizedPath_HighestScoringBlindedWins(t *te
 	})
 	defer bn2.Close()
 
-	client := setupMultiBNClient(t, bn1.URL, bn2.URL, BlockFetchPathMEVOptimized, 1500*time.Millisecond)
+	client := setupMultiBNClient(t, bn1.URL, bn2.URL, false /* earlyExitOnBlinded */, 1500*time.Millisecond)
 
 	slot := client.getBeaconConfig().EstimatedCurrentSlot() + 2
 
@@ -182,7 +189,7 @@ func TestGetBeaconBlock_MultiBN_SoftDeadlineFires_FallsBackToFirstValid(t *testi
 	})
 	defer bn2.Close()
 
-	client := setupMultiBNClient(t, bn1.URL, bn2.URL, BlockFetchPathSafe, 1000*time.Millisecond)
+	client := setupMultiBNClient(t, bn1.URL, bn2.URL, true /* earlyExitOnBlinded */, 1000*time.Millisecond)
 
 	// Slot 1 is in the past (mainnet genesis is in 2020). The slot-relative
 	// deadline = slotStart + 1000ms is also in the past, so softCtx is already
@@ -290,18 +297,19 @@ func TestGetBeaconBlock_MultiBN_LegacyPath_SoftTimeoutFallsBackToFirstValid(t *t
 		"should NOT have waited for the slower BN2 (~500ms); took %v", elapsed)
 }
 
-// setupMultiBNClient builds a GoClient connected to two test BN servers via
-// semicolon-separated URLs, with the given block-fetch path and deadline. Used by
-// the per-path behavior tests.
-func setupMultiBNClient(t *testing.T, bn1URL, bn2URL string, path BlockFetchPath, deadline time.Duration) *GoClient {
+// setupMultiBNClient builds a GoClient connected to two test BN servers via semicolon-separated
+// URLs, on the slot-relative-deadline strategy with the given early-exit-on-blinded setting and
+// deadline. Used by the safe (earlyExit=true) / MEV-optimized (earlyExit=false) behavior tests.
+func setupMultiBNClient(t *testing.T, bn1URL, bn2URL string, earlyExitOnBlinded bool, deadline time.Duration) *GoClient {
 	t.Helper()
 
 	client, err := New(t.Context(), log.TestLogger(t), Options{
-		BeaconNodeAddr:       bn1URL + ";" + bn2URL,
-		CommonTimeout:        time.Second * 2,
-		LongTimeout:          time.Second * 5,
-		ProposalSoftDeadline: deadline,
-		BlockFetchPath:       path,
+		BeaconNodeAddr:                 bn1URL + ";" + bn2URL,
+		CommonTimeout:                  time.Second * 2,
+		LongTimeout:                    time.Second * 5,
+		ProposalSoftDeadline:           deadline,
+		ProposalCollectionSlotRelative: true,
+		EarlyExitOnBlinded:             earlyExitOnBlinded,
 	})
 	require.NoError(t, err)
 	return client
@@ -318,7 +326,7 @@ func setupMultiBNLegacyClient(t *testing.T, bn1URL, bn2URL string, softTimeout t
 		CommonTimeout:       time.Second * 2,
 		LongTimeout:         time.Second * 5,
 		ProposalSoftTimeout: softTimeout,
-		BlockFetchPath:      BlockFetchPathLegacy,
+		// Legacy = relative-timeout collection (ProposalCollectionSlotRelative defaults to false).
 	})
 	require.NoError(t, err)
 	return client
