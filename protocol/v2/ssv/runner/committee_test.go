@@ -17,10 +17,7 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
 
-	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
-	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
@@ -115,7 +112,7 @@ func newCommitteeRunnerEnv(
 	config.Network = network
 	config.BeaconSigner = signer
 
-	controller := protocoltesting.NewTestingQBFTController(
+	ctrl := protocoltesting.NewTestingQBFTController(
 		sampleKey,
 		msgID,
 		spectestingutils.TestingCommitteeMember(sampleKey),
@@ -133,7 +130,7 @@ func newCommitteeRunnerEnv(
 
 	runnerI, err := NewCommitteeRunner(CommitteeRunnerOptions{
 		BaseRunnerOptions: BaseRunnerOptions{
-			NetworkConfig:  networkconfig.TestNetwork,
+			NetworkConfig:  cloneTestNetworkConfig(),
 			Share:          shareMap,
 			Beacon:         beacon,
 			Network:        network,
@@ -141,16 +138,14 @@ func newCommitteeRunnerEnv(
 			OperatorSigner: spectestingutils.NewOperatorSigner(sampleKey, 1),
 		},
 		AttestingValidators: sharePubKeys,
-		QBFTController:      controller,
+		QBFTController:      ctrl,
 		DutyGuard:           guard,
 		DoppelgangerHandler: doppelganger,
 	})
 	require.NoError(t, err)
 
 	crunner := runnerI.(*CommitteeRunner)
-	crunner.SetQBFTRoundTimerF(func(_ context.Context, _ *zap.Logger, _ phase0.Slot) ssv.QBFTRoundTimer {
-		return roundtimer.NewTestingTimer()
-	})
+	crunner.SetQBFTRoundTimerF(testingRoundTimerF)
 
 	return &committeeRunnerEnv{
 		logger:     logger,
@@ -159,7 +154,7 @@ func newCommitteeRunnerEnv(
 		network:    network,
 		keySetMap:  keySetMap,
 		sampleKey:  sampleKey,
-		controller: controller,
+		controller: ctrl,
 	}
 }
 

@@ -2,11 +2,13 @@ package runner
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/altair"
@@ -106,12 +108,10 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(ctx context.Context,
 	r.measurements.EndPreConsensus()
 	recordPreConsensusDuration(ctx, r.measurements.PreConsensusTime(), spectypes.RoleSyncCommitteeContribution)
 
-	// Collect selection proofs and subnets. We must iterate the
-	//nolint: prealloc
-	var (
-		selectionProofs []phase0.BLSSignature
-		subnets         []uint64
-	)
+	// Collect (subnet, selection-proof) pairs. Pairing them in a single slice keeps
+	// subnet and proof together by construction — there's no second slice to fall out
+	// of sync, so no length invariant to guard.
+	pairs := make([]subnetSelectionProof, 0, len(roots))
 	for _, root := range roots {
 		// reconstruct selection proof sig
 		span.AddEvent("reconstructing beacon signature", trace.WithAttributes(observability.BeaconBlockRootAttribute(root)))
@@ -140,11 +140,14 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(ctx context.Context,
 		}
 		subnet := r.GetBeaconNode().SyncCommitteeSubnetID(phase0.CommitteeIndex(vIdx))
 
-		selectionProofs = append(selectionProofs, blsSigSelectionProof)
-		subnets = append(subnets, subnet)
+		pairs = append(pairs, subnetSelectionProof{subnet: subnet, selectionProof: blsSigSelectionProof})
 	}
 
-	if len(selectionProofs) == 0 {
+	// Sort by ascending subnet so the resulting Contributions slice has a
+	// deterministic, spec-canonical order. See sortBySubnet for the full rationale.
+	sortBySubnet(pairs)
+
+	if len(pairs) == 0 {
 		r.markDutyFinished()
 		r.measurements.EndDutyFlow()
 		recordTotalDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.RoleSyncCommitteeContribution, 0)
@@ -161,6 +164,14 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(ctx context.Context,
 	duty, err := r.currentValidatorDuty()
 	if err != nil {
 		return fmt.Errorf("current validator duty: %w", err)
+	}
+
+	// GetSyncCommitteeContribution takes the proofs and subnets as parallel slices;
+	// split the sorted pairs back out at the call boundary.
+	selectionProofs := make([]phase0.BLSSignature, len(pairs))
+	subnets := make([]uint64, len(pairs))
+	for i, p := range pairs {
+		selectionProofs[i], subnets[i] = p.selectionProof, p.subnet
 	}
 
 	span.AddEvent("fetching sync committee contributions")
@@ -625,4 +636,34 @@ func (r *SyncCommitteeAggregatorRunner) GetRoot() ([32]byte, error) {
 	}
 	ret := sha256.Sum256(marshaledRoot)
 	return ret, nil
+}
+
+// subnetSelectionProof pairs a reconstructed selection-proof signature with the
+// sync-committee subnet it belongs to. Keeping them in one slice (rather than two
+// parallel slices) makes the (subnet, proof) pairing unbreakable by construction.
+type subnetSelectionProof struct {
+	subnet         uint64
+	selectionProof phase0.BLSSignature
+}
+
+// sortBySubnet canonicalizes the pre-consensus output before calling
+// GetSyncCommitteeContribution by sorting in-place by ascending subnet, so the resulting
+// Contributions slice has a deterministic, spec-aligned order.
+//
+// Without this normalization, the upstream `roots` slice from basePreConsensusMsgProcessing
+// is built via `slices.Collect(maps.Keys(...))`, which Go randomizes per process. Two SSV
+// nodes can then produce different Contributions SSZ roots for the same logical
+// contribution set. The spec's de-facto canonical ordering is ascending SubcommitteeIndex
+// (see ssv-spec/types/testingutils/beacon_node_sync_committee.go test fixtures).
+//
+// Subnet alone is a total order here, so the (unstable) slices.SortFunc needs no
+// tiebreaker: each pre-consensus root is the hash of
+// SyncAggregatorSelectionData{Slot, SubcommitteeIndex: subnet} (see executeDuty), so two
+// sync-committee indices that map to the same subnet collapse to a single root — pairs
+// never holds duplicate subnets. If that selection data ever becomes keyed by validator
+// index instead of subnet, add a deterministic tiebreaker (e.g. selection-proof bytes).
+func sortBySubnet(pairs []subnetSelectionProof) {
+	slices.SortFunc(pairs, func(a, b subnetSelectionProof) int {
+		return cmp.Compare(a.subnet, b.subnet)
+	})
 }
