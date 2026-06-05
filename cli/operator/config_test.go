@@ -189,24 +189,25 @@ func Test_validateProposerDelay(t *testing.T) {
 
 func TestDetermineBlockFetchPath(t *testing.T) {
 	tests := []struct {
-		name          string
-		opts          goclient.Options
-		proposerDelay time.Duration
-		want          goclient.BlockFetchPath
-		wantErr       string
+		name                 string
+		proposalSoftTimeout  time.Duration
+		proposalSoftDeadline time.Duration
+		proposerDelay        time.Duration
+		want                 goclient.BlockFetchPath
+		wantErr              string
 	}{
 		{name: "nothing set -> safe", want: goclient.BlockFetchPathSafe},
 		{name: "ProposerDelay -> legacy", proposerDelay: 300 * time.Millisecond, want: goclient.BlockFetchPathLegacy},
-		{name: "ProposalSoftTimeout -> legacy", opts: goclient.Options{ProposalSoftTimeout: 1500 * time.Millisecond}, want: goclient.BlockFetchPathLegacy},
-		{name: "ProposalSoftDeadline -> mev-optimized", opts: goclient.Options{ProposalSoftDeadline: 1100 * time.Millisecond}, want: goclient.BlockFetchPathMEVOptimized},
-		{name: "legacy + deadline -> conflict", opts: goclient.Options{ProposalSoftDeadline: 1100 * time.Millisecond}, proposerDelay: 300 * time.Millisecond, wantErr: "conflicts with legacy"},
+		{name: "ProposalSoftTimeout -> legacy", proposalSoftTimeout: 1500 * time.Millisecond, want: goclient.BlockFetchPathLegacy},
+		{name: "ProposalSoftDeadline -> mev-optimized", proposalSoftDeadline: 1100 * time.Millisecond, want: goclient.BlockFetchPathMEVOptimized},
+		{name: "legacy + deadline -> conflict", proposalSoftDeadline: 1100 * time.Millisecond, proposerDelay: 300 * time.Millisecond, wantErr: "conflicts with legacy"},
 		{name: "negative ProposerDelay -> error", proposerDelay: -1, wantErr: "ProposerDelay must be non-negative"},
-		{name: "negative ProposalSoftTimeout -> error", opts: goclient.Options{ProposalSoftTimeout: -1}, wantErr: "ProposalSoftTimeout must be non-negative"},
-		{name: "negative ProposalSoftDeadline -> error", opts: goclient.Options{ProposalSoftDeadline: -1}, wantErr: "ProposalSoftDeadline must be non-negative"},
+		{name: "negative ProposalSoftTimeout -> error", proposalSoftTimeout: -1, wantErr: "ProposalSoftTimeout must be non-negative"},
+		{name: "negative ProposalSoftDeadline -> error", proposalSoftDeadline: -1, wantErr: "ProposalSoftDeadline must be non-negative"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := determineBlockFetchPath(tt.opts, tt.proposerDelay)
+			got, err := determineBlockFetchPath(tt.proposalSoftTimeout, tt.proposalSoftDeadline, tt.proposerDelay)
 			if tt.wantErr != "" {
 				require.Error(t, err)
 				require.Contains(t, err.Error(), tt.wantErr)
@@ -281,6 +282,30 @@ func Test_resolveBlockFetch_defaults(t *testing.T) {
 		c := config{}
 		c.ConsensusClient.ProposalSoftDeadline = 5000 * time.Millisecond
 		require.ErrorContains(t, c.resolveBlockFetch(zap.NewNop()), "out of range")
+	})
+
+	t.Run("mev-optimized above safe-max - warns with ms fields", func(t *testing.T) {
+		core, recorded := observer.New(zapcore.WarnLevel)
+		c := config{}
+		c.ConsensusClient.ProposalSoftDeadline = 1850 * time.Millisecond // > safe-max (1450ms), within range
+		require.NoError(t, c.resolveBlockFetch(zap.New(core)))
+
+		logs := recorded.All()
+		require.Len(t, logs, 1)
+		require.Equal(t, zapcore.WarnLevel, logs[0].Level)
+		require.Contains(t, logs[0].Message, "exceeds the safe-max threshold")
+
+		fields := logs[0].ContextMap()
+		require.Equal(t, int64(1850), fields["proposal_soft_deadline_ms"])
+		require.Equal(t, int64(1450), fields["safe_max_ms"])
+	})
+
+	t.Run("mev-optimized at safe-max - no warning", func(t *testing.T) {
+		core, recorded := observer.New(zapcore.WarnLevel)
+		c := config{}
+		c.ConsensusClient.ProposalSoftDeadline = safeMaxProposalSoftDeadline // == safe-max, no warning
+		require.NoError(t, c.resolveBlockFetch(zap.New(core)))
+		require.Len(t, recorded.All(), 0)
 	})
 }
 

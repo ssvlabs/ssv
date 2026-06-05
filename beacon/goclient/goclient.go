@@ -208,6 +208,28 @@ func New(ctx context.Context, logger *zap.Logger, opt Options) (*GoClient, error
 
 	beaconAddrList := strings.Split(opt.BeaconNodeAddr, ";")
 
+	// Defensive precondition for the multi-BN block-fetch paths: each path's collection
+	// window is driven by a timing knob that must be positive, otherwise the window is already
+	// expired on entry and the path silently degrades to "return the first valid response".
+	// These values arrive pre-resolved/pre-validated from cli/operator config resolution; this
+	// guard only catches a future caller that constructs Options directly without resolving them.
+	// Single-BN clients fetch directly (GetBeaconBlock) and never consult these knobs, so they
+	// are exempt.
+	if len(beaconAddrList) > 1 {
+		switch opt.BlockFetchPath {
+		case BlockFetchPathSafe, BlockFetchPathMEVOptimized:
+			if opt.ProposalSoftDeadline <= 0 {
+				return nil, fmt.Errorf("block-fetch path %q requires a positive ProposalSoftDeadline, got %v", opt.BlockFetchPath, opt.ProposalSoftDeadline)
+			}
+		case BlockFetchPathLegacy:
+			if opt.ProposalSoftTimeout <= 0 {
+				return nil, fmt.Errorf("block-fetch path %q requires a positive ProposalSoftTimeout, got %v", opt.BlockFetchPath, opt.ProposalSoftTimeout)
+			}
+		default:
+			return nil, fmt.Errorf("unknown block-fetch path %d", opt.BlockFetchPath)
+		}
+	}
+
 	client := &GoClient{
 		log:                                logger.Named(log.NameConsensusClient),
 		beaconConfigInit:                   make(chan struct{}),

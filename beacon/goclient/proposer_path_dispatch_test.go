@@ -212,6 +212,84 @@ func TestGetBeaconBlock_MultiBN_SoftDeadlineFires_FallsBackToFirstValid(t *testi
 		"should NOT have waited for the slowest BN (~500ms); took %v", elapsed)
 }
 
+// TestGetBeaconBlock_MultiBN_LegacyPath_EarlyExitOnBlinded drives the legacy block-fetch path
+// (getProposalParallelLegacy) end-to-end. Like the safe path, legacy early-exits on the first
+// blinded response: with one fast and one slow blinded BN it must return shortly after the fast
+// BN without waiting for the slow one. Legacy uses a *relative* collection timeout (unlike the
+// safe/MEV slot-relative deadline), so slot timing is irrelevant here.
+func TestGetBeaconBlock_MultiBN_LegacyPath_EarlyExitOnBlinded(t *testing.T) {
+	bn1, _ := createProposalBeaconServer(t, beaconProposalServerOptions{
+		ProposalResponseDuration: 10 * time.Millisecond,
+		BlindedProposal:          true,
+		FeeRecipient:             feeRecipientAllOnes(),
+	})
+	defer bn1.Close()
+	bn2, _ := createProposalBeaconServer(t, beaconProposalServerOptions{
+		ProposalResponseDuration: 500 * time.Millisecond,
+		BlindedProposal:          true,
+		FeeRecipient:             feeRecipientAllTwos(),
+	})
+	defer bn2.Close()
+
+	client := setupMultiBNLegacyClient(t, bn1.URL, bn2.URL, 1500*time.Millisecond)
+
+	slot := client.getBeaconConfig().EstimatedCurrentSlot() + 2
+
+	start := time.Now()
+	versionedProposal, _, err := client.GetBeaconBlock(context.Background(), slot, []byte("test"), getTestRANDAO())
+	elapsed := time.Since(start)
+	require.NoError(t, err)
+	require.NotNil(t, versionedProposal)
+
+	actualFeeRecipient, err := versionedProposal.FeeRecipient()
+	require.NoError(t, err)
+	assert.Equal(t, feeRecipientAllOnes(), actualFeeRecipient,
+		"legacy path should return the first blinded (BN1's), not wait for BN2's")
+	assert.Less(t, elapsed, 350*time.Millisecond,
+		"legacy path should early-exit on first blinded; took %v", elapsed)
+}
+
+// TestGetBeaconBlock_MultiBN_LegacyPath_SoftTimeoutFallsBackToFirstValid exercises the legacy
+// path's *relative* collection timeout (gc.proposalSoftTimeout, measured from when the fetch
+// starts — the key behavioral difference from the safe/MEV slot-relative deadline) and its
+// fallback. With a 50ms relative timeout and no BN responding that fast, the collection window
+// expires before any proposal arrives, so the path falls through to waitForFirstValidProposal
+// and returns the first valid response (BN1's, ~200ms).
+func TestGetBeaconBlock_MultiBN_LegacyPath_SoftTimeoutFallsBackToFirstValid(t *testing.T) {
+	bn1, _ := createProposalBeaconServer(t, beaconProposalServerOptions{
+		ProposalResponseDuration: 200 * time.Millisecond,
+		BlindedProposal:          true,
+		FeeRecipient:             feeRecipientAllOnes(),
+	})
+	defer bn1.Close()
+	bn2, _ := createProposalBeaconServer(t, beaconProposalServerOptions{
+		ProposalResponseDuration: 500 * time.Millisecond,
+		BlindedProposal:          true,
+		FeeRecipient:             feeRecipientAllTwos(),
+	})
+	defer bn2.Close()
+
+	// 50ms relative collection window — fires well before either BN responds.
+	client := setupMultiBNLegacyClient(t, bn1.URL, bn2.URL, 50*time.Millisecond)
+
+	slot := client.getBeaconConfig().EstimatedCurrentSlot() + 2
+
+	start := time.Now()
+	versionedProposal, _, err := client.GetBeaconBlock(context.Background(), slot, []byte("test"), getTestRANDAO())
+	elapsed := time.Since(start)
+	require.NoError(t, err)
+	require.NotNil(t, versionedProposal)
+
+	actualFeeRecipient, err := versionedProposal.FeeRecipient()
+	require.NoError(t, err)
+	assert.Equal(t, feeRecipientAllOnes(), actualFeeRecipient,
+		"legacy fallback should return the first valid response (BN1's)")
+	assert.GreaterOrEqual(t, elapsed, 150*time.Millisecond,
+		"should have waited for BN1's response (~200ms); took %v", elapsed)
+	assert.Less(t, elapsed, 450*time.Millisecond,
+		"should NOT have waited for the slower BN2 (~500ms); took %v", elapsed)
+}
+
 // setupMultiBNClient builds a GoClient connected to two test BN servers via
 // semicolon-separated URLs, with the given block-fetch path and deadline. Used by
 // the per-path behavior tests.
@@ -224,6 +302,23 @@ func setupMultiBNClient(t *testing.T, bn1URL, bn2URL string, path BlockFetchPath
 		LongTimeout:          time.Second * 5,
 		ProposalSoftDeadline: deadline,
 		BlockFetchPath:       path,
+	})
+	require.NoError(t, err)
+	return client
+}
+
+// setupMultiBNLegacyClient builds a GoClient connected to two test BN servers on the legacy
+// block-fetch path, with the given relative ProposalSoftTimeout. Mirrors setupMultiBNClient
+// (which covers the safe / MEV-optimized slot-relative-deadline paths).
+func setupMultiBNLegacyClient(t *testing.T, bn1URL, bn2URL string, softTimeout time.Duration) *GoClient {
+	t.Helper()
+
+	client, err := New(t.Context(), log.TestLogger(t), Options{
+		BeaconNodeAddr:      bn1URL + ";" + bn2URL,
+		CommonTimeout:       time.Second * 2,
+		LongTimeout:         time.Second * 5,
+		ProposalSoftTimeout: softTimeout,
+		BlockFetchPath:      BlockFetchPathLegacy,
 	})
 	require.NoError(t, err)
 	return client

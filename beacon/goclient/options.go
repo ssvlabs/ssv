@@ -62,7 +62,7 @@ type Options struct {
 	// ProposalSoftTimeout is the legacy collection-period timeout in multi-BN parallel
 	// fetch. Setting this (or ProposerDelay) selects BlockFetchPathLegacy. New operators
 	// should prefer ProposalSoftDeadline. See docs/MEV_CONSIDERATIONS.md.
-	ProposalSoftTimeout time.Duration `yaml:"ProposalSoftTimeout" env:"WITH_PROPOSAL_SOFT_TIMEOUT" env-description:"Legacy MEV configuration. Specifies the beacon proposal collection soft timeout (collection period for comparing proposals from multiple beacon nodes to select the most profitable one). Setting this opts the SSV node into the legacy block-fetch path; the recommended approach is to leave this unset and use ProposalSoftDeadline instead. See https://github.com/ssvlabs/ssv/blob/main/docs/MEV_CONSIDERATIONS.md for details."`
+	ProposalSoftTimeout time.Duration `yaml:"ProposalSoftTimeout" env:"WITH_PROPOSAL_SOFT_TIMEOUT" env-description:"Legacy MEV configuration. Specifies the beacon proposal collection soft timeout (collection period for comparing proposals from multiple beacon nodes to select the most profitable one). Cannot be set lower than 500ms, to leave the Beacon node enough time to serve the block-fetch request. Setting this opts the SSV node into the legacy block-fetch path; the recommended approach is to leave this unset and use ProposalSoftDeadline instead. See https://github.com/ssvlabs/ssv/blob/main/docs/MEV_CONSIDERATIONS.md for details."`
 
 	// ProposalSoftDeadline is the slot-relative deadline (in ms-into-slot) for the
 	// multi-BN proposal-collection window used by the safe and MEV-optimized paths.

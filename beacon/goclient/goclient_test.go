@@ -174,6 +174,9 @@ func runHealthyTest(
 		CommonTimeout:         commonTimeout,
 		LongTimeout:           longTimeout,
 		SyncDistanceTolerance: syncDistanceTolerance,
+		// This multi-BN client defaults to the safe block-fetch path; a positive deadline is
+		// required to satisfy New's block-fetch precondition (unused by this sync-focused test).
+		ProposalSoftDeadline: 1450 * time.Millisecond,
 	})
 	require.NoError(t, err)
 

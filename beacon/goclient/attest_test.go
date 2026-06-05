@@ -512,6 +512,9 @@ func createClient(
 		LongTimeout:                 time.Second,
 		WithWeightedAttestationData: withWeightedAttestationData,
 		BlockFetchPath:              BlockFetchPathSafe,
+		// Safe-path deadline (config resolution defaults this in production); required for the
+		// multi-BN variants of this helper to satisfy New's block-fetch precondition.
+		ProposalSoftDeadline: 1450 * time.Millisecond,
 	})
 }
 

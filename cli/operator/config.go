@@ -42,7 +42,7 @@ type config struct {
 	KeyStore                     KeyStore                `yaml:"KeyStore"`
 	SSVSigner                    SSVSignerConfig         `yaml:"SSVSigner" env-prefix:"SSV_SIGNER_"`
 	Graffiti                     string                  `yaml:"Graffiti" env:"GRAFFITI" env-description:"Custom graffiti for block proposals" env-default:"ssv.network"`
-	ProposerDelay                time.Duration           `yaml:"ProposerDelay" env:"PROPOSER_DELAY" env-description:"Duration to wait out before requesting Ethereum block to propose if this Operator is proposer-duty Leader (eg. 300ms). See https://github.com/ssvlabs/ssv/blob/main/docs/MEV_CONSIDERATIONS.md#getting-started-with-mev-configuration for detailed instructions on how to use it."`
+	ProposerDelay                time.Duration           `yaml:"ProposerDelay" env:"PROPOSER_DELAY" env-description:"Duration to wait out before requesting Ethereum block to propose if this Operator is proposer-duty Leader (eg. 300ms). See https://github.com/ssvlabs/ssv/blob/main/docs/MEV_CONSIDERATIONS.md#appendix-a--legacy-proposerdelay-approach for detailed instructions on how to use it."`
 	AllowDangerousProposerDelay  bool                    `yaml:"AllowDangerousProposerDelay" env:"ALLOW_DANGEROUS_PROPOSER_DELAY" env-description:"Allow ProposerDelay values higher than 1s (dangerous, may cause missed block proposals)"`
 	OperatorPrivateKey           string                  `yaml:"OperatorPrivateKey" env:"OPERATOR_KEY" env-description:"Operator private key for contract event decryption"`
 	MetricsAPIPort               int                     `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"Port for metrics API server"`
@@ -159,35 +159,51 @@ func (c *config) resolveAndValidate(logger *zap.Logger) (resolved, error) {
 // resolveBlockFetch determines the block-fetch path from the operator's config, validates the
 // path-specific knobs, resolves their defaults onto c.ConsensusClient (consumed by goclient at
 // runtime), and emits advisory warnings. A returned error is fatal.
+//
+// Must run exactly once. It reads the raw operator inputs once, up front, then writes the
+// resolved values back onto c.ConsensusClient — including, on the safe path, a default
+// ProposalSoftDeadline. Because that field is also one of the inputs path selection snapshots, a
+// second invocation would observe the resolved default and silently flip safe → mev-optimized.
+// resolveAndValidate (the sole caller) runs once at startup.
 func (c *config) resolveBlockFetch(logger *zap.Logger) error {
-	path, err := determineBlockFetchPath(c.ConsensusClient, c.ProposerDelay)
+	// Raw operator inputs, snapshotted before any resolution writes below — so path selection and
+	// defaulting never observe a value that this function itself produced.
+	var (
+		proposerDelay   = c.ProposerDelay
+		rawSoftTimeout  = c.ConsensusClient.ProposalSoftTimeout
+		rawSoftDeadline = c.ConsensusClient.ProposalSoftDeadline
+	)
+
+	path, err := determineBlockFetchPath(rawSoftTimeout, rawSoftDeadline, proposerDelay)
 	if err != nil {
 		return err
 	}
 
 	switch path {
 	case goclient.BlockFetchPathLegacy:
-		if err := validateProposerDelay(c.ProposerDelay, c.AllowDangerousProposerDelay); err != nil {
+		if err := validateProposerDelay(proposerDelay, c.AllowDangerousProposerDelay); err != nil {
 			return err
 		}
 		// Default the legacy soft timeout: 1800ms reduced by ProposerDelay, floored at 500ms.
-		if c.ConsensusClient.ProposalSoftTimeout == 0 {
-			c.ConsensusClient.ProposalSoftTimeout = defaultProposalSoftTimeout
-			if c.ProposerDelay > 0 {
-				c.ConsensusClient.ProposalSoftTimeout -= c.ProposerDelay
+		softTimeout := rawSoftTimeout
+		if softTimeout == 0 {
+			softTimeout = defaultProposalSoftTimeout
+			if proposerDelay > 0 {
+				softTimeout -= proposerDelay
 			}
 		}
-		if c.ConsensusClient.ProposalSoftTimeout < minProposalSoftTimeout {
-			c.ConsensusClient.ProposalSoftTimeout = minProposalSoftTimeout
+		if softTimeout < minProposalSoftTimeout {
+			softTimeout = minProposalSoftTimeout
 		}
+		c.ConsensusClient.ProposalSoftTimeout = softTimeout
 	case goclient.BlockFetchPathMEVOptimized:
-		if err := validateProposalSoftDeadline(c.ConsensusClient.ProposalSoftDeadline); err != nil {
+		if err := validateProposalSoftDeadline(rawSoftDeadline); err != nil {
 			return err
 		}
 	case goclient.BlockFetchPathSafe:
-		if c.ConsensusClient.ProposalSoftDeadline == 0 {
-			c.ConsensusClient.ProposalSoftDeadline = defaultProposalSoftDeadline
-		}
+		// The safe path is selected only when no deadline was set, so resolve the unset deadline
+		// to the safe-path default.
+		c.ConsensusClient.ProposalSoftDeadline = defaultProposalSoftDeadline
 	}
 
 	c.ConsensusClient.BlockFetchPath = path
@@ -196,21 +212,21 @@ func (c *config) resolveBlockFetch(logger *zap.Logger) error {
 	// Advisory warnings — emitted after validation, so they never precede a validation error.
 	switch path {
 	case goclient.BlockFetchPathLegacy:
-		if c.ProposerDelay > maxSafeProposerDelay {
+		if proposerDelay > maxSafeProposerDelay {
 			// Reachable only after validateProposerDelay passed (AllowDangerousProposerDelay set).
 			logger.Warn("Using dangerous ProposerDelay value that may cause missed block proposals",
-				zap.Int64("proposer_delay_ms", c.ProposerDelay.Milliseconds()),
+				zap.Int64("proposer_delay_ms", proposerDelay.Milliseconds()),
 				zap.Int64("max_safe_proposer_delay_ms", maxSafeProposerDelay.Milliseconds()))
 		}
 	case goclient.BlockFetchPathMEVOptimized:
-		if c.ConsensusClient.ProposalSoftDeadline > safeMaxProposalSoftDeadline {
+		if rawSoftDeadline > safeMaxProposalSoftDeadline {
 			logger.Warn(
 				"ProposalSoftDeadline exceeds the safe-max threshold: "+
 					"round-2 QBFT fallback may not fit within the slot deadline "+
 					"for clusters with typical latencies, "+
 					"so the slot may be missed when round 1 fails "+
 					"(this is an explicit 'round 1 must succeed' configuration).",
-				zap.Int64("proposal_soft_deadline_ms", c.ConsensusClient.ProposalSoftDeadline.Milliseconds()),
+				zap.Int64("proposal_soft_deadline_ms", rawSoftDeadline.Milliseconds()),
 				zap.Int64("safe_max_ms", safeMaxProposalSoftDeadline.Milliseconds()))
 		}
 	case goclient.BlockFetchPathSafe:
@@ -220,22 +236,22 @@ func (c *config) resolveBlockFetch(logger *zap.Logger) error {
 	return nil
 }
 
-// determineBlockFetchPath selects the block-fetch path from the operator's raw config. Negative
-// durations and combining legacy knobs (ProposerDelay/ProposalSoftTimeout) with the MEV-optimized
-// ProposalSoftDeadline are rejected.
-func determineBlockFetchPath(base goclient.Options, proposerDelay time.Duration) (goclient.BlockFetchPath, error) {
+// determineBlockFetchPath selects the block-fetch path from the operator's raw timing knobs.
+// Negative durations and combining legacy knobs (ProposerDelay/ProposalSoftTimeout) with the
+// MEV-optimized ProposalSoftDeadline are rejected.
+func determineBlockFetchPath(proposalSoftTimeout, proposalSoftDeadline, proposerDelay time.Duration) (goclient.BlockFetchPath, error) {
 	if proposerDelay < 0 {
 		return 0, fmt.Errorf("ProposerDelay must be non-negative, got %v", proposerDelay)
 	}
-	if base.ProposalSoftTimeout < 0 {
-		return 0, fmt.Errorf("ProposalSoftTimeout must be non-negative, got %v", base.ProposalSoftTimeout)
+	if proposalSoftTimeout < 0 {
+		return 0, fmt.Errorf("ProposalSoftTimeout must be non-negative, got %v", proposalSoftTimeout)
 	}
-	if base.ProposalSoftDeadline < 0 {
-		return 0, fmt.Errorf("ProposalSoftDeadline must be non-negative, got %v", base.ProposalSoftDeadline)
+	if proposalSoftDeadline < 0 {
+		return 0, fmt.Errorf("ProposalSoftDeadline must be non-negative, got %v", proposalSoftDeadline)
 	}
 
-	legacySet := proposerDelay > 0 || base.ProposalSoftTimeout > 0
-	deadlineSet := base.ProposalSoftDeadline > 0
+	legacySet := proposerDelay > 0 || proposalSoftTimeout > 0
+	deadlineSet := proposalSoftDeadline > 0
 
 	if legacySet && deadlineSet {
 		return 0, fmt.Errorf("ProposalSoftDeadline conflicts with legacy ProposerDelay/ProposalSoftTimeout config — remove one. See docs/MEV_CONSIDERATIONS.md for path selection guidance")
