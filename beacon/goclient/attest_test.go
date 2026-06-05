@@ -447,7 +447,10 @@ func TestGoClient_GetAttestationData_Weighted(t *testing.T) {
 		response, version, err := client.GetAttestationData(t.Context(), phase0.Slot(100))
 
 		require.Error(t, err)
-		require.ErrorContains(t, err, "failed to get attestation data for slot 100")
+		// The hard-timeout path returns before any per-client error is recorded, so
+		// errs stays nil and the message must omit the "encountered errors:" suffix.
+		require.ErrorContains(t, err, "all 3 clients failed to get attestation data for slot 100")
+		require.NotContains(t, err.Error(), "encountered errors:")
 		require.Nil(t, response)
 		require.Equal(t, DataVersionNil, version)
 		timeElapsed := time.Since(startTime)
