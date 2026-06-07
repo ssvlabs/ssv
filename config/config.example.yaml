@@ -19,23 +19,22 @@ eth2:
   # HTTP URL of the Beacon node to connect to.
   BeaconNodeAddr: http://example.url:5052
 
-  # Block-fetch tuning. The SSV node selects between the safe (default), MEV-optimized,
-  # and legacy paths at startup based on the settings below; see
+  # Block-fetch tuning. The SSV node selects between the legacy (default) and MEV-optimized
+  # block-fetch paths at startup based on the settings below; see
   # docs/MEV_CONSIDERATIONS.md for the full model.
   #
-  # ProposalSoftDeadline opts the SSV node into the MEV-optimized path: SSV waits for all
-  # multi-BN responses until this slot-relative deadline (ms into slot) and returns the
-  # highest-value bid received, without early-exiting on the first MEV block. Match this
-  # to your PBS late_in_slot_time_ms + ~50ms BN→SSV transport. Valid range: [1000ms,
-  # 3600ms]; values above 1450ms emit a startup warning (round-2 QBFT fallback may not
-  # fit within the slot for typical clusters). Cannot be combined with ProposerDelay or
-  # ProposalSoftTimeout.
-  # Only relevant with multiple Beacon nodes — with a single Beacon node SSV fetches the
-  # block directly and this setting has no effect.
-  # Leave unset to use the default safe path (early-exit on first MEV block, deadline 1450ms).
-  # Note: setting ProposalSoftDeadline = 1450ms is *not* a no-op — it opts into the
-  # MEV-optimized path at the same numeric deadline the safe path uses by default
-  # (the difference is behavioral: no early-exit on first blinded, best-bid wins).
+  # ProposalSoftDeadline opts the SSV node into the MEV-optimized path. It is a slot-relative
+  # deadline (ms into slot) that applies to single- and multi-Beacon-node setups alike:
+  #   - multi-BN: SSV collects responses from all BNs until this deadline (no early-exit on the
+  #     first MEV block) and proposes the highest-value bid;
+  #   - single- and multi-BN: SSV holds the block until this deadline before starting QBFT, so
+  #     every operator in the cluster starts QBFT at the same slot-relative time (aligned round
+  #     timers, better convergence).
+  # Match this to your PBS late_in_slot_time_ms + ~50ms BN→SSV transport. Valid range: [1000ms,
+  # 3600ms]; values above 1450ms emit a startup warning (round-2 QBFT fallback may not fit within
+  # the slot for typical clusters). Cannot be combined with ProposerDelay or ProposalSoftTimeout.
+  # Leave unset to use the default legacy path (relative-timeout collection, early-exit on the
+  # first MEV block; single-BN fetches directly with no slot-relative floor).
   # ProposalSoftDeadline: 1100ms
 
   # ProposalSoftTimeout (legacy): collection-period timeout for multi-BN proposal scoring

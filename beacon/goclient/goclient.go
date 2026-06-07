@@ -140,17 +140,12 @@ type GoClient struct {
 	// proposalSoftDeadline instead.
 	proposalSoftTimeout time.Duration
 
-	// proposalSoftDeadline is the slot-relative deadline (ms into slot) for the slot-relative
-	// collection (getProposalParallelByDeadline). See docs/MEV_CONSIDERATIONS.md.
+	// proposalSoftDeadline is the slot-relative deadline (ms into slot) for the MEV-optimized
+	// block-fetch path. A positive value both selects that path (see useSlotRelativeFetch) and
+	// bounds it: multi-BN collection runs until the deadline, and the fetched block is held until
+	// the deadline before QBFT starts. Zero selects the legacy relative-timeout path. See
+	// docs/MEV_CONSIDERATIONS.md.
 	proposalSoftDeadline time.Duration
-
-	// proposalCollectionSlotRelative selects how GetBeaconBlock collects proposals across
-	// multiple BNs: true -> slot-relative deadline (getProposalParallelByDeadline), false ->
-	// legacy relative timeout (getProposalParallelLegacy). earlyExitOnBlinded stops the
-	// slot-relative collection on the first blinded (MEV) response. Both are resolved from
-	// operator config by cli/operator; see docs/MEV_CONSIDERATIONS.md.
-	proposalCollectionSlotRelative bool
-	earlyExitOnBlinded             bool
 
 	// blockRootToSlotCache is used for attestation data scoring. When multiple Consensus clients are used,
 	// the cache helps reduce the number of Consensus Client calls by `n-1`, where `n` is the number of Consensus clients
@@ -200,8 +195,7 @@ func New(ctx context.Context, logger *zap.Logger, opt Options) (*GoClient, error
 	}
 
 	// Apply mechanical network-timeout defaults (previously done by NewOptions, now removed).
-	// Block-fetch values (ProposalSoftTimeout / ProposalSoftDeadline /
-	// ProposalCollectionSlotRelative / EarlyExitOnBlinded) arrive pre-resolved from
+	// Block-fetch values (ProposalSoftTimeout / ProposalSoftDeadline) arrive pre-resolved from
 	// cli/operator config resolution.
 	if opt.CommonTimeout == 0 {
 		opt.CommonTimeout = defaultCommonTimeout
@@ -212,21 +206,13 @@ func New(ctx context.Context, logger *zap.Logger, opt Options) (*GoClient, error
 
 	beaconAddrList := strings.Split(opt.BeaconNodeAddr, ";")
 
-	// Defensive precondition for the multi-BN block-fetch paths: each path's collection
-	// window is driven by a timing knob that must be positive, otherwise the window is already
-	// expired on entry and the path silently degrades to "return the first valid response".
-	// These values arrive pre-resolved/pre-validated from cli/operator config resolution; this
-	// guard only catches a future caller that constructs Options directly without resolving them.
-	// Single-BN clients fetch directly (GetBeaconBlock) and never consult these knobs, so they
-	// are exempt.
-	if len(beaconAddrList) > 1 {
-		if opt.ProposalCollectionSlotRelative {
-			if opt.ProposalSoftDeadline <= 0 {
-				return nil, fmt.Errorf("slot-relative proposal collection requires a positive ProposalSoftDeadline, got %v", opt.ProposalSoftDeadline)
-			}
-		} else if opt.ProposalSoftTimeout <= 0 {
-			return nil, fmt.Errorf("legacy (relative) proposal collection requires a positive ProposalSoftTimeout, got %v", opt.ProposalSoftTimeout)
-		}
+	// Defensive precondition: multi-BN legacy collection needs a positive ProposalSoftTimeout, else
+	// its window is already expired on entry and it silently degrades to "return the first valid
+	// response". (The MEV-optimized path is keyed off a positive ProposalSoftDeadline, so it can't
+	// hit this; a single-BN legacy client fetches directly and needs neither knob.) Pre-resolved by
+	// cli/operator config; this guard only catches a future caller that builds Options directly.
+	if opt.ProposalSoftDeadline <= 0 && len(beaconAddrList) > 1 && opt.ProposalSoftTimeout <= 0 {
+		return nil, fmt.Errorf("multi-BN legacy proposal collection requires a positive ProposalSoftTimeout, got %v", opt.ProposalSoftTimeout)
 	}
 
 	client := &GoClient{
@@ -241,8 +227,6 @@ func New(ctx context.Context, logger *zap.Logger, opt Options) (*GoClient, error
 		weightedAttestationDataHardTimeout: opt.CommonTimeout,
 		proposalSoftTimeout:                opt.ProposalSoftTimeout,
 		proposalSoftDeadline:               opt.ProposalSoftDeadline,
-		proposalCollectionSlotRelative:     opt.ProposalCollectionSlotRelative,
-		earlyExitOnBlinded:                 opt.EarlyExitOnBlinded,
 		supportedTopics:                    []eventTopic{eventTopicHead, eventTopicBlock},
 		activatedClients:                   hashmap.New[string, struct{}](),
 	}

@@ -2,13 +2,13 @@
 
 ## TL;DR
 
-To get the most out of MEV opportunities, configure `timing games on the PBS layer` — either mev-boost v1.11+ launched with `-config <path>` (and optionally `-watch-config` for hot reload), or commit-boost. With PBS-side timing games configured, SSV's `ProposerDelay` should stay at its default value of `0` — operators relying on `ProposerDelay` can't also use the multi-BN bid scoring described in [Multi-BN setup](#multi-bn-setup).
+To get the most out of MEV opportunities, configure `timing games on the PBS layer` — either mev-boost v1.11+ launched with `-config <path>` (and optionally `-watch-config` for hot reload), or commit-boost. With PBS-side timing games configured, SSV's `ProposerDelay` should stay at its default value of `0` — operators relying on `ProposerDelay` can't also use the MEV-optimized block fetch described in [MEV-optimized block fetch](#mev-optimized-block-fetch).
 
 If your PBS does not support timing games (mev-boost < v1.11, mev-boost without `-config <path>`, or any other PBS lacking the feature), SSV's `ProposerDelay` is still available — see [Appendix A](#appendix-a--legacy-proposerdelay-approach). PBS-side timing games are preferred because the PBS polls each relay multiple times within a precise slot-relative auction window — yielding higher-value bids than a single `getHeader` call after an SSV-side `ProposerDelay` sleep.
 
 **Do NOT apply both**: `timing games on the PBS layer` configuration + SSV's `ProposerDelay / ProposalSoftTimeout` - only one of these is supposed to run at any given time. Here are the recommended configuration steps, to avoid any sort of undesirable downtime during transition:
 - configure SSV node first to remove/unset any of `ProposerDelay / ProposalSoftTimeout`
-- if you run multiple Beacon nodes, set `ProposalSoftDeadline = your PBS late_in_slot_time_ms + ~50ms BN→SSV transport` - see [Multi-BN setup](#multi-bn-setup) for details, single-BN operators can skip that section entirely
+- set `ProposalSoftDeadline = your PBS late_in_slot_time_ms + ~50ms BN→SSV transport` to opt into MEV-optimized block fetch - see [MEV-optimized block fetch](#mev-optimized-block-fetch) for details (applies to both single- and multi-Beacon-node setups)
 - restart SSV node to apply
 - set/update mev/commit-boost configuration settings to enable `timing games on the PBS layer` - see [PBS configuration settings](#configuration-knobs) for details
 - it is desirable for all SSV nodes in the same cluster to run the same/similar configuration (very large differences may lead to missed duties)
@@ -123,7 +123,7 @@ relays:
     frequency_get_header_ms: 150
 ```
 
-**SSV-side** (multi-BN setups only — see [Multi-BN setup](#multi-bn-setup); single-BN operators skip this):
+**SSV-side** (opts into MEV-optimized block fetch — see [MEV-optimized block fetch](#mev-optimized-block-fetch); applies to single- and multi-BN setups):
 ```yaml
 eth2:
   ProposalSoftDeadline: 1100ms   # = PBS late_in_slot_time_ms (1050ms) + ~50ms BN→SSV transport
@@ -172,7 +172,7 @@ relays:
     frequency_get_header_ms: 200
 ```
 
-**SSV-side** (multi-BN setups only — 1850ms triggers the safe-max startup warning since it exceeds the ~1450ms threshold; see [Multi-BN setup](#multi-bn-setup); single-BN operators skip this):
+**SSV-side** (opts into MEV-optimized block fetch — 1850ms triggers the safe-max startup warning since it exceeds the ~1450ms threshold; see [MEV-optimized block fetch](#mev-optimized-block-fetch); applies to single- and multi-BN setups):
 ```yaml
 eth2:
   ProposalSoftDeadline: 1850ms   # = PBS late_in_slot_time_ms (1800ms) + ~50ms BN→SSV transport
@@ -186,7 +186,7 @@ The example configs are starting points. Production tuning requires measuring yo
 
 Bid value grows through the slot, so the auction cutoff should be as late as possible, subject to:
 
-- **Round-2 fallback should fit:** `QBFT + PostConsensusSigning + BlockSubmission < 4000ms − late_in_slot_time_ms − ~50ms` (the ~50ms covers BN→SSV transport between the PBS cutoff and SSV receiving the header). Using the typical values from [Definitions](#definitions-and-typical-values), the post-cutoff budget needed is ~2500ms, giving a strict bound of `late_in_slot_time_ms ≲ ~1450ms`. **Recommended:** stay at `late_in_slot_time_ms ≲ ~1400ms` to keep a 50ms buffer for latency variance — this also matches SSV's startup-warning threshold (`SafeMaxProposalSoftDeadline = 1450ms` SSV-side, which equals `~1400ms` PBS-side plus the `~50ms` BN→SSV transport).
+- **Round-2 fallback should fit:** `QBFT + PostConsensusSigning + BlockSubmission < 4000ms − late_in_slot_time_ms − ~50ms` (the ~50ms covers BN→SSV transport between the PBS cutoff and SSV receiving the header). Using the typical values from [Definitions](#definitions-and-typical-values), the post-cutoff budget needed is ~2500ms, giving a strict bound of `late_in_slot_time_ms ≲ ~1450ms`. **Recommended:** stay at `late_in_slot_time_ms ≲ ~1400ms` to keep a 50ms buffer for latency variance — this also matches SSV's startup-warning threshold (`safeMaxProposalSoftDeadline = 1450ms` SSV-side, which equals `~1400ms` PBS-side plus the `~50ms` BN→SSV transport).
 - **Cutoffs above ~1400ms** consume the variance buffer; SSV emits a startup warning. **Cutoffs above ~1450ms** are past the strict bound and accept that round 1 must succeed — if round 1 fails, the slot may be missed (depending on your cluster's QBFT + submission latencies). Example B (1800ms) sits in this regime.
 - **Round-1-only variance buffer:** even in the round-1-must-succeed regime, cutoffs much beyond ~3000ms tighten the slot enough that occasional latency spikes risk missing the deadline even when round 1 succeeds.
 
@@ -207,40 +207,41 @@ Useful signals to baseline before tuning, by data source:
 
 **End-to-end** — submission round-trip from the signed block leaving SSV through the relay payload-reveal step (visible from PBS and relay logs).
 
-## Multi-BN setup
+## MEV-optimized block fetch
 
-> Single-BN operators can skip this section — SSV bypasses parallel fetch entirely and calls the single BN directly regardless of which knobs are set below.
-
-With multiple Beacon nodes, SSV races them in parallel for the block proposal. The recommended action is to set `ProposalSoftDeadline`:
+Setting `ProposalSoftDeadline` opts into the **MEV-optimized** block-fetch path:
 
 ```yaml
 eth2:
   ProposalSoftDeadline: <your PBS late_in_slot_time_ms + ~50ms BN→SSV transport>
 ```
 
-This makes SSV wait for all BN responses up to that slot-relative deadline and return the highest-scored bid. Valid range `[1000ms, 3600ms]`; values above ~1450ms emit a startup warning — for typical clusters, the worst-case 2-round QBFT scenario may no longer fit within the slot, so round 1 effectively has to succeed.
+`ProposalSoftDeadline` is a **slot-relative** deadline (measured from slot start). It does two things, and applies to single- and multi-Beacon-node setups alike:
+
+1. **Bid collection (multi-BN).** With multiple Beacon nodes, SSV races them in parallel and keeps collecting until the deadline — *without* early-exiting on the first blinded response — then proposes the highest-scored bid across all BNs. (With a single BN there is nothing to compare, so this step just fetches from that one BN.)
+2. **QBFT start alignment (single- and multi-BN).** SSV holds the fetched block until the deadline before starting QBFT consensus, even when the block is already in hand. Because the deadline is slot-relative, every operator in the cluster starts QBFT at the same point in the slot — which keeps their QBFT round timers aligned and improves consensus convergence (round-change timing matches across operators).
+
+So the deadline effectively *defines the QBFT instance start time*: QBFT starts at `max(slot_start + ProposalSoftDeadline, block_arrival)`. In the common case every operator has a block by the deadline and they start together; an operator whose BN only responds after the deadline starts as soon as its block arrives (it cannot start earlier — the block is the consensus input).
+
+Valid range `[1000ms, 3600ms]`; values above ~1450ms emit a startup warning — for typical clusters, the worst-case 2-round QBFT scenario may no longer fit within the slot, so round 1 effectively has to succeed (see [Tuning guidance](#tuning-guidance--measurement-methodology)).
 
 ### Default behavior (if you don't set `ProposalSoftDeadline`)
 
-SSV returns as soon as one BN delivers a blinded (MEV) block — treating the first blinded response as the chosen MEV bid. If no blinded response arrives by the default slot-relative deadline (1450ms — the largest safest deadline for typical clusters; see [Tuning guidance](#tuning-guidance--measurement-methodology)), SSV returns the best non-blinded response collected so far, waiting for the first valid response if nothing usable arrived.
+The default is the **legacy** block-fetch path (relative-timeout collection). With multiple Beacon nodes, SSV returns as soon as one BN delivers a blinded (MEV) block — treating the first blinded response as the chosen MEV bid — falling back to the best response collected within `ProposalSoftTimeout` (a *relative* window, default 1800ms) if no blinded one arrives. With a single Beacon node, SSV fetches from it directly and starts QBFT as soon as the block arrives (no slot-relative floor).
 
-This default is faster but doesn't compare bid *values* across BNs — the first BN to return blinded wins regardless of bid quality. Fine for multi-BN setups run primarily for redundancy.
-
-### Legacy approach
-
-Setting `ProposerDelay` or `ProposalSoftTimeout` selects legacy block-fetch behavior (preserved bit-for-bit) — see [Appendix A](#appendix-a--legacy-proposerdelay-approach). SSV logs a startup warning suggesting migration.
+The legacy default is faster in the common case but doesn't compare bid *values* across BNs, and doesn't align QBFT start across the cluster. It's fine for setups run primarily for redundancy; set `ProposalSoftDeadline` if you want cross-BN bid scoring and/or cluster-aligned QBFT start. The legacy `ProposerDelay` knob is also available — see [Appendix A](#appendix-a--legacy-proposerdelay-approach).
 
 ### Interaction
 
-The approaches are mutually exclusive. Selection at startup:
+`ProposalSoftDeadline` (MEV-optimized) and the legacy knobs (`ProposerDelay` / `ProposalSoftTimeout`) are mutually exclusive. Selection at startup:
 
 ```
 if ProposerDelay > 0 || ProposalSoftTimeout is set:
-    -> legacy approach (see Appendix A)
+    -> legacy path (see Appendix A)
 elif ProposalSoftDeadline is set:
-    -> new approach (waits for all BN responses, picks highest-scored)
+    -> MEV-optimized path (collect to the slot-relative deadline, pick highest-scored, aligned QBFT start)
 else:
-    -> new approach default (returns first blinded response)
+    -> legacy path (the default)
 ```
 
 Setting `ProposalSoftDeadline` together with either legacy knob (`ProposerDelay` or `ProposalSoftTimeout`) is rejected at startup with a clear error — pick one approach.

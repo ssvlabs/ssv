@@ -30,22 +30,12 @@ type Options struct {
 	// New operators should prefer ProposalSoftDeadline. See docs/MEV_CONSIDERATIONS.md.
 	ProposalSoftTimeout time.Duration `yaml:"ProposalSoftTimeout" env:"WITH_PROPOSAL_SOFT_TIMEOUT" env-description:"Legacy MEV configuration. Specifies the beacon proposal collection soft timeout (collection period for comparing proposals from multiple beacon nodes to select the most profitable one). Cannot be set lower than 500ms, to leave the Beacon node enough time to serve the block-fetch request. Setting this opts the SSV node into the legacy block-fetch path; the recommended approach is to leave this unset and use ProposalSoftDeadline instead. See https://github.com/ssvlabs/ssv/blob/main/docs/MEV_CONSIDERATIONS.md for details."`
 
-	// ProposalSoftDeadline is the slot-relative deadline (in ms-into-slot) for the
-	// multi-BN proposal-collection window used by the safe and MEV-optimized paths.
-	//   - Unset (zero) -> safe path, defaults to the safe-path default deadline.
-	//   - Set explicitly -> MEV-optimized path.
-	// Cannot be combined with ProposerDelay or ProposalSoftTimeout (which select the
-	// legacy path).
-	ProposalSoftDeadline time.Duration `yaml:"ProposalSoftDeadline" env:"WITH_PROPOSAL_SOFT_DEADLINE" env-description:"Slot-relative deadline (ms into slot) for the multi-BN proposal-collection window. Leave unset for the default safe path; set explicitly to opt into the MEV-optimized path (value must be in [1000ms, 3600ms]). Cannot be combined with ProposerDelay or ProposalSoftTimeout. See https://github.com/ssvlabs/ssv/blob/main/docs/MEV_CONSIDERATIONS.md for details."`
-
-	// ProposalCollectionSlotRelative and EarlyExitOnBlinded are the mechanical multi-BN
-	// proposal-collection knobs resolved by cli/operator config resolution (not configured
-	// directly by the operator):
-	//   - ProposalCollectionSlotRelative: true  -> collect until the slot-relative
-	//     ProposalSoftDeadline; false -> collect for the relative ProposalSoftTimeout (legacy).
-	//   - EarlyExitOnBlinded: stop collecting on the first blinded (MEV) response. Applies to
-	//     the slot-relative collection; the legacy collection always early-exits internally.
-	// GoClient consumes these to dispatch block fetching. See docs/MEV_CONSIDERATIONS.md.
-	ProposalCollectionSlotRelative bool `yaml:"-"`
-	EarlyExitOnBlinded             bool `yaml:"-"`
+	// ProposalSoftDeadline is the slot-relative deadline (in ms-into-slot) for the MEV-optimized
+	// proposal-collection window.
+	//   - Unset (zero) -> legacy (default) relative-timeout path.
+	//   - Set explicitly -> MEV-optimized path: collect proposals until this slot-relative
+	//     deadline (no early-exit), then start QBFT at it. Applies to single- and multi-BN setups
+	//     alike, so all operators in the cluster start QBFT at the same slot-relative time.
+	// Cannot be combined with ProposerDelay or ProposalSoftTimeout (which select the legacy path).
+	ProposalSoftDeadline time.Duration `yaml:"ProposalSoftDeadline" env:"WITH_PROPOSAL_SOFT_DEADLINE" env-description:"Slot-relative deadline (ms into slot) for the MEV-optimized proposal-collection window. Leave unset for the default (legacy relative-timeout) path; set explicitly to opt into the MEV-optimized path (value must be in [1000ms, 3600ms]). Cannot be combined with ProposerDelay or ProposalSoftTimeout. See https://github.com/ssvlabs/ssv/blob/main/docs/MEV_CONSIDERATIONS.md for details."`
 }

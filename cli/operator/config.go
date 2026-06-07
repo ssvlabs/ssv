@@ -65,10 +65,11 @@ const (
 	// acknowledge the risk via AllowDangerousProposerDelay.
 	maxSafeProposerDelay = 1000 * time.Millisecond
 
-	// ProposalSoftDeadline bounds (slot-relative). safeMaxProposalSoftDeadline is the
-	// startup-warning threshold; the safe path defaults to it.
+	// ProposalSoftDeadline bounds (slot-relative), used by the MEV-optimized path.
+	// [minProposalSoftDeadline, maxProposalSoftDeadline] is the hard accepted range;
+	// safeMaxProposalSoftDeadline is the startup-warning threshold above which a round-2 QBFT
+	// fallback may not fit within the slot.
 	safeMaxProposalSoftDeadline = 1450 * time.Millisecond
-	defaultProposalSoftDeadline = safeMaxProposalSoftDeadline
 	minProposalSoftDeadline     = 1000 * time.Millisecond
 	maxProposalSoftDeadline     = 3600 * time.Millisecond
 
@@ -160,11 +161,9 @@ func (c *config) resolveAndValidate(logger *zap.Logger) (resolved, error) {
 // path-specific knobs, resolves their defaults onto c.ConsensusClient (consumed by goclient at
 // runtime), and emits advisory warnings. A returned error is fatal.
 //
-// Must run exactly once. It reads the raw operator inputs once, up front, then writes the
-// resolved values back onto c.ConsensusClient — including, on the safe path, a default
-// ProposalSoftDeadline. Because that field is also one of the inputs path selection snapshots, a
-// second invocation would observe the resolved default and silently flip safe → mev-optimized.
-// resolveAndValidate (the sole caller) runs once at startup.
+// Must run exactly once (resolveAndValidate, the sole caller, runs it at startup): the legacy
+// path resolves ProposalSoftTimeout in place (1800ms reduced by ProposerDelay, floored), so a
+// second pass would reduce it twice.
 func (c *config) resolveBlockFetch(logger *zap.Logger) error {
 	// Raw operator inputs, snapshotted before any resolution writes below — so path selection and
 	// defaulting never observe a value that this function itself produced.
@@ -195,24 +194,15 @@ func (c *config) resolveBlockFetch(logger *zap.Logger) error {
 		if softTimeout < minProposalSoftTimeout {
 			softTimeout = minProposalSoftTimeout
 		}
+		// goclient keys the legacy (relative-timeout) path off ProposalSoftTimeout > 0.
 		c.ConsensusClient.ProposalSoftTimeout = softTimeout
-		// Legacy collects for a relative timeout and always early-exits on the first blinded.
-		c.ConsensusClient.ProposalCollectionSlotRelative = false
-		c.ConsensusClient.EarlyExitOnBlinded = true
 	case blockFetchPathMEVOptimized:
+		// The operator-set ProposalSoftDeadline is validated and passed through unchanged; goclient
+		// keys the MEV-optimized (slot-relative) path off it. Applies to single- and multi-BN
+		// setups alike. See docs/MEV_CONSIDERATIONS.md.
 		if err := validateProposalSoftDeadline(rawSoftDeadline); err != nil {
 			return err
 		}
-		// Slot-relative collection that keeps collecting past the first blinded to compare bids.
-		c.ConsensusClient.ProposalCollectionSlotRelative = true
-		c.ConsensusClient.EarlyExitOnBlinded = false
-	case blockFetchPathSafe:
-		// The safe path is selected only when no deadline was set, so resolve the unset deadline
-		// to the safe-path default.
-		c.ConsensusClient.ProposalSoftDeadline = defaultProposalSoftDeadline
-		// Slot-relative collection with early-exit on the first blinded (MEV) response.
-		c.ConsensusClient.ProposalCollectionSlotRelative = true
-		c.ConsensusClient.EarlyExitOnBlinded = true
 	}
 
 	logger.Info("block-fetch path selected", zap.String("path", path.String()))
@@ -237,28 +227,25 @@ func (c *config) resolveBlockFetch(logger *zap.Logger) error {
 				zap.Int64("proposal_soft_deadline_ms", rawSoftDeadline.Milliseconds()),
 				zap.Int64("safe_max_ms", safeMaxProposalSoftDeadline.Milliseconds()))
 		}
-	case blockFetchPathSafe:
-		// Safe path has no advisory warning — its default deadline sits at the safe-max.
 	}
 
 	return nil
 }
 
 // blockFetchPath is the operator-facing block-fetch strategy selected at startup from config.
-// It is policy vocabulary owned by the config layer; resolveBlockFetch translates it into the
-// mechanical knobs goclient consumes (ProposalCollectionSlotRelative / EarlyExitOnBlinded).
+// It is policy vocabulary owned by the config layer; resolveBlockFetch resolves it into the timing
+// field goclient keys off (ProposalSoftDeadline for MEV-optimized, ProposalSoftTimeout for legacy).
 // Documented end-to-end in docs/MEV_CONSIDERATIONS.md.
 type blockFetchPath int
 
 const (
-	// blockFetchPathSafe is the default: slot-relative collection with early-exit on the first
-	// blinded response (deadline defaults to safeMaxProposalSoftDeadline).
-	blockFetchPathSafe blockFetchPath = iota
-	// blockFetchPathLegacy preserves the original ProposerDelay / ProposalSoftTimeout behavior
-	// (relative-timeout collection); selected when an operator sets either legacy knob.
-	blockFetchPathLegacy
-	// blockFetchPathMEVOptimized is opt-in: slot-relative collection without early-exit, returns
-	// the best-scored response collected by ProposalSoftDeadline. Selected when an operator sets
+	// blockFetchPathLegacy is the default: relative-timeout collection that early-exits on the
+	// first blinded response. Selected when neither ProposalSoftDeadline nor the legacy knobs are
+	// set, or when an operator sets ProposerDelay / ProposalSoftTimeout explicitly.
+	blockFetchPathLegacy blockFetchPath = iota
+	// blockFetchPathMEVOptimized is opt-in: slot-relative collection (no early-exit) that returns
+	// the best-scored response collected by ProposalSoftDeadline and starts QBFT at that
+	// slot-relative deadline (single- and multi-BN setups alike). Selected when an operator sets
 	// ProposalSoftDeadline explicitly.
 	blockFetchPathMEVOptimized
 )
@@ -266,8 +253,6 @@ const (
 // String returns a human-readable label for logging.
 func (p blockFetchPath) String() string {
 	switch p {
-	case blockFetchPathSafe:
-		return "safe"
 	case blockFetchPathLegacy:
 		return "legacy"
 	case blockFetchPathMEVOptimized:
@@ -277,9 +262,10 @@ func (p blockFetchPath) String() string {
 	}
 }
 
-// determineBlockFetchPath selects the block-fetch path from the operator's raw timing knobs.
-// Negative durations and combining legacy knobs (ProposerDelay/ProposalSoftTimeout) with the
-// MEV-optimized ProposalSoftDeadline are rejected.
+// determineBlockFetchPath selects the block-fetch path from the operator's raw timing knobs:
+// ProposalSoftDeadline set -> MEV-optimized; otherwise (nothing set, or ProposerDelay /
+// ProposalSoftTimeout set) -> legacy (the default). Negative durations, and combining the legacy
+// knobs with ProposalSoftDeadline, are rejected.
 func determineBlockFetchPath(proposalSoftTimeout, proposalSoftDeadline, proposerDelay time.Duration) (blockFetchPath, error) {
 	if proposerDelay < 0 {
 		return 0, fmt.Errorf("ProposerDelay must be non-negative, got %v", proposerDelay)
@@ -298,14 +284,11 @@ func determineBlockFetchPath(proposalSoftTimeout, proposalSoftDeadline, proposer
 		return 0, fmt.Errorf("ProposalSoftDeadline conflicts with legacy ProposerDelay/ProposalSoftTimeout config — remove one. See docs/MEV_CONSIDERATIONS.md for path selection guidance")
 	}
 
-	switch {
-	case legacySet:
-		return blockFetchPathLegacy, nil
-	case deadlineSet:
+	if deadlineSet {
 		return blockFetchPathMEVOptimized, nil
-	default:
-		return blockFetchPathSafe, nil
 	}
+	// Default (nothing set) and the explicit legacy knobs both resolve to the legacy path.
+	return blockFetchPathLegacy, nil
 }
 
 // validateProposalSoftDeadline ensures an operator-set ProposalSoftDeadline (MEV-optimized path)

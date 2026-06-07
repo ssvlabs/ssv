@@ -80,9 +80,8 @@ func runNode(ctx context.Context, cfg *config, logger *zap.Logger) error {
 		zap.Bool("with_parallel_submissions", cfg.ConsensusClient.WithParallelSubmissions),
 	)
 
-	// goclient consumes the block-fetch values (ProposalCollectionSlotRelative / EarlyExitOnBlinded
-	// / ProposalSoftTimeout / ProposalSoftDeadline) that resolveAndValidate already resolved onto
-	// cfg.ConsensusClient.
+	// goclient consumes the block-fetch values (ProposalSoftTimeout / ProposalSoftDeadline) that
+	// resolveAndValidate already resolved onto cfg.ConsensusClient.
 	consensusClient, err := goclient.New(ctx, logger, cfg.ConsensusClient)
 	if err != nil {
 		return startupError{

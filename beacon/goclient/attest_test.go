@@ -507,15 +507,14 @@ func createClient(
 	beaconServerURL string,
 	withWeightedAttestationData bool) (*GoClient, error) {
 	return New(ctx, zap.NewNop(), Options{
-		BeaconNodeAddr:                 beaconServerURL,
-		CommonTimeout:                  defaultHardTimeout,
-		LongTimeout:                    time.Second,
-		WithWeightedAttestationData:    withWeightedAttestationData,
-		ProposalCollectionSlotRelative: true,
-		EarlyExitOnBlinded:             true,
-		// Safe-path deadline (config resolution defaults this in production); required for the
-		// multi-BN variants of this helper to satisfy New's block-fetch precondition.
-		ProposalSoftDeadline: 1450 * time.Millisecond,
+		BeaconNodeAddr:              beaconServerURL,
+		CommonTimeout:               defaultHardTimeout,
+		LongTimeout:                 time.Second,
+		WithWeightedAttestationData: withWeightedAttestationData,
+		// Legacy (default) block-fetch path: relative-timeout collection, no slot-relative floor.
+		// Multi-BN variants of this helper need a positive ProposalSoftTimeout to satisfy New's
+		// block-fetch precondition.
+		ProposalSoftTimeout: 1800 * time.Millisecond,
 	})
 }
 

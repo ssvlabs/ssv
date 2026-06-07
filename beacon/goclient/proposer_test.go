@@ -411,10 +411,8 @@ func TestGetProposalParallel_MultiClient(t *testing.T) {
 		feeRecipient2 := bellatrix.ExecutionAddress{0x22}
 		feeRecipient3 := bellatrix.ExecutionAddress{0x33}
 
-		// Responses are generated per-request from the URL slot (rather than
-		// pre-generated) so the safe path's slot-relative deadline can be set against
-		// a future slot below — pre-baking a fixed slot would trip go-eth2-client's
-		// "expected slot N" response check.
+		// Responses are generated per-request from the requested slot so any slot works
+		// (pre-baking a fixed slot would trip go-eth2-client's "expected slot N" check).
 		server1, _ := createProposalBeaconServer(t, beaconProposalServerOptions{
 			ProposalResponseDuration: 500 * time.Millisecond,
 			FeeRecipient:             feeRecipient1,
@@ -440,9 +438,8 @@ func TestGetProposalParallel_MultiClient(t *testing.T) {
 		graffiti := []byte(testGraffiti)
 		randao := getTestRANDAO()
 
-		// Use a future slot so the safe path's slot-relative ProposalSoftDeadline doesn't
-		// fire before the collection loop starts — otherwise this test would exercise
-		// waitForFirstValidProposal instead of the multi-BN scoring/racing logic.
+		// Legacy collection uses a relative timeout (not slot-relative), so slot timing
+		// is irrelevant here; any valid slot works.
 		slot := client.getBeaconConfig().EstimatedCurrentSlot() + 2
 
 		startTime := time.Now()
@@ -706,13 +703,10 @@ func TestProposalPreparationReconnectLogic_SkipsOnNilProvider(t *testing.T) {
 }
 
 func createClientForProposerTest(t *testing.T, serverURL string) (*GoClient, error) {
+	// Single-BN client: block fetch is a direct call, so no block-fetch path knobs are needed.
 	return New(t.Context(), log.TestLogger(t), Options{
-		BeaconNodeAddr:                 serverURL,
-		CommonTimeout:                  time.Second * 2,
-		LongTimeout:                    time.Second * 5,
-		ProposalCollectionSlotRelative: true,
-		EarlyExitOnBlinded:             true,
-		// safe-path slot-relative deadline (config resolution defaults this in production).
-		ProposalSoftDeadline: 1450 * time.Millisecond,
+		BeaconNodeAddr: serverURL,
+		CommonTimeout:  time.Second * 2,
+		LongTimeout:    time.Second * 5,
 	})
 }

@@ -195,7 +195,7 @@ func TestDetermineBlockFetchPath(t *testing.T) {
 		want                 blockFetchPath
 		wantErr              string
 	}{
-		{name: "nothing set -> safe", want: blockFetchPathSafe},
+		{name: "nothing set -> legacy (default)", want: blockFetchPathLegacy},
 		{name: "ProposerDelay -> legacy", proposerDelay: 300 * time.Millisecond, want: blockFetchPathLegacy},
 		{name: "ProposalSoftTimeout -> legacy", proposalSoftTimeout: 1500 * time.Millisecond, want: blockFetchPathLegacy},
 		{name: "ProposalSoftDeadline -> mev-optimized", proposalSoftDeadline: 1100 * time.Millisecond, want: blockFetchPathMEVOptimized},
@@ -223,7 +223,6 @@ func Test_blockFetchPath_String(t *testing.T) {
 		path blockFetchPath
 		want string
 	}{
-		{blockFetchPathSafe, "safe"},
 		{blockFetchPathLegacy, "legacy"},
 		{blockFetchPathMEVOptimized, "mev-optimized"},
 		{blockFetchPath(99), "unknown(99)"},
@@ -263,21 +262,19 @@ func TestValidateProposalSoftDeadline(t *testing.T) {
 }
 
 func Test_resolveBlockFetch_defaults(t *testing.T) {
-	t.Run("safe path defaults deadline to 1450ms and sets slot-relative early-exit knobs", func(t *testing.T) {
+	t.Run("default (nothing set) resolves to the legacy relative-timeout path", func(t *testing.T) {
 		c := config{}
 		require.NoError(t, c.resolveBlockFetch(zap.NewNop()))
-		require.True(t, c.ConsensusClient.ProposalCollectionSlotRelative)
-		require.True(t, c.ConsensusClient.EarlyExitOnBlinded)
-		require.Equal(t, 1450*time.Millisecond, c.ConsensusClient.ProposalSoftDeadline)
+		require.Equal(t, defaultProposalSoftTimeout, c.ConsensusClient.ProposalSoftTimeout)
+		require.Zero(t, c.ConsensusClient.ProposalSoftDeadline)
 	})
 
 	t.Run("legacy path defaults soft timeout to 1800ms - delay", func(t *testing.T) {
 		c := config{}
 		c.ProposerDelay = 300 * time.Millisecond
 		require.NoError(t, c.resolveBlockFetch(zap.NewNop()))
-		require.False(t, c.ConsensusClient.ProposalCollectionSlotRelative)
-		require.True(t, c.ConsensusClient.EarlyExitOnBlinded)
 		require.Equal(t, 1500*time.Millisecond, c.ConsensusClient.ProposalSoftTimeout)
+		require.Zero(t, c.ConsensusClient.ProposalSoftDeadline)
 	})
 
 	t.Run("legacy path floors soft timeout at 500ms", func(t *testing.T) {
@@ -288,13 +285,12 @@ func Test_resolveBlockFetch_defaults(t *testing.T) {
 		require.Equal(t, 500*time.Millisecond, c.ConsensusClient.ProposalSoftTimeout)
 	})
 
-	t.Run("mev-optimized path keeps operator deadline and sets slot-relative no-early-exit knobs", func(t *testing.T) {
+	t.Run("mev-optimized path keeps the operator deadline", func(t *testing.T) {
 		c := config{}
 		c.ConsensusClient.ProposalSoftDeadline = 1850 * time.Millisecond
 		require.NoError(t, c.resolveBlockFetch(zap.NewNop()))
-		require.True(t, c.ConsensusClient.ProposalCollectionSlotRelative)
-		require.False(t, c.ConsensusClient.EarlyExitOnBlinded)
 		require.Equal(t, 1850*time.Millisecond, c.ConsensusClient.ProposalSoftDeadline)
+		require.Zero(t, c.ConsensusClient.ProposalSoftTimeout)
 	})
 
 	t.Run("mev-optimized out-of-range deadline -> error", func(t *testing.T) {
