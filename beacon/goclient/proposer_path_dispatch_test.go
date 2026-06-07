@@ -78,7 +78,7 @@ func TestGetBeaconBlock_MultiBN_MEVOptimized_WaitsUntilDeadline(t *testing.T) {
 	})
 	defer bn2.Close()
 
-	client := setupMultiBNClient(t, bn1.URL, bn2.URL, 1500*time.Millisecond)
+	client := setupMultiBNClient(t, bn1.URL, bn2.URL)
 	const deadlineFromNow = 600 * time.Millisecond
 	slot := armProposalDeadline(t, client, deadlineFromNow)
 
@@ -115,7 +115,7 @@ func TestGetBeaconBlock_MultiBN_MEVOptimized_HighestScoringBlindedWins(t *testin
 	})
 	defer bn2.Close()
 
-	client := setupMultiBNClient(t, bn1.URL, bn2.URL, 1500*time.Millisecond)
+	client := setupMultiBNClient(t, bn1.URL, bn2.URL)
 	slot := armProposalDeadline(t, client, 500*time.Millisecond)
 
 	versionedProposal, _, err := client.GetBeaconBlock(context.Background(), slot, []byte("test"), getTestRANDAO())
@@ -146,10 +146,11 @@ func TestGetBeaconBlock_MultiBN_MEVOptimized_DeadlinePast_FallsBackToFirstValid(
 	})
 	defer bn2.Close()
 
-	client := setupMultiBNClient(t, bn1.URL, bn2.URL, 1000*time.Millisecond)
+	client := setupMultiBNClient(t, bn1.URL, bn2.URL)
 
-	// Slot 1 is in the past (mainnet genesis is in 2020). The slot-relative deadline =
-	// slotStart + 1000ms is also in the past, so softCtx is already done when collection starts.
+	// Slot 1 is in the past (mainnet genesis is in 2020). The slot-relative deadline
+	// (slotStart + ProposalSoftDeadline) is therefore also in the past, so softCtx is already done
+	// when collection starts.
 	pastSlot := phase0.Slot(1)
 
 	start := time.Now()
@@ -170,6 +171,38 @@ func TestGetBeaconBlock_MultiBN_MEVOptimized_DeadlinePast_FallsBackToFirstValid(
 		"should NOT have waited for the slowest BN (~500ms); took %v", elapsed)
 }
 
+// TestGetBeaconBlock_MultiBN_MEVOptimized_AllFail verifies that when every BN fails on the
+// MEV-optimized path, GetBeaconBlock returns the aggregated "all clients failed" error as soon as
+// the last BN errors — it does NOT idle until the (future) slot-relative deadline, since once every
+// BN has responded, waiting it out cannot conjure a proposal.
+func TestGetBeaconBlock_MultiBN_MEVOptimized_AllFail(t *testing.T) {
+	bn1, _ := createProposalBeaconServer(t, beaconProposalServerOptions{
+		WithProposalEndpointError: true,
+	})
+	defer bn1.Close()
+	bn2, _ := createProposalBeaconServer(t, beaconProposalServerOptions{
+		WithProposalEndpointError: true,
+	})
+	defer bn2.Close()
+
+	client := setupMultiBNClient(t, bn1.URL, bn2.URL)
+	// Deadline set far in the future: had the loop waited it out instead of bailing on total
+	// failure, elapsed would be ~2s. The early-bail returns as soon as the last BN errors.
+	const deadlineFromNow = 2 * time.Second
+	slot := armProposalDeadline(t, client, deadlineFromNow)
+
+	start := time.Now()
+	versionedProposal, marshaledBlk, err := client.GetBeaconBlock(context.Background(), slot, []byte("test"), getTestRANDAO())
+	elapsed := time.Since(start)
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "all 2 clients failed")
+	require.Nil(t, versionedProposal)
+	require.Nil(t, marshaledBlk)
+	assert.Less(t, elapsed, 500*time.Millisecond,
+		"should bail as soon as all BNs fail, not wait out the ~2s deadline; took %v", elapsed)
+}
+
 // TestGetBeaconBlock_SingleBN_MEVOptimized_WaitsUntilDeadline verifies the single-BN deadline floor:
 // even though the lone BN responds quickly, GetBeaconBlock holds the block until the slot-relative
 // deadline so a single-BN operator starts QBFT at the same slot time as multi-BN operators.
@@ -181,7 +214,7 @@ func TestGetBeaconBlock_SingleBN_MEVOptimized_WaitsUntilDeadline(t *testing.T) {
 	})
 	defer bn.Close()
 
-	client := setupSingleBNClient(t, bn.URL, true /* slotRelative */, 1500*time.Millisecond)
+	client := setupSingleBNClient(t, bn.URL, true /* slotRelative */)
 	const deadlineFromNow = 500 * time.Millisecond
 	slot := armProposalDeadline(t, client, deadlineFromNow)
 
@@ -206,7 +239,7 @@ func TestGetBeaconBlock_SingleBN_Legacy_NoFloor(t *testing.T) {
 	})
 	defer bn.Close()
 
-	client := setupSingleBNClient(t, bn.URL, false /* slotRelative */, 0)
+	client := setupSingleBNClient(t, bn.URL, false /* slotRelative */)
 	slot := client.getBeaconConfig().EstimatedCurrentSlot()
 
 	start := time.Now()
@@ -309,25 +342,31 @@ func armProposalDeadline(t *testing.T, client *GoClient, fromNow time.Duration) 
 	return slot
 }
 
+// pathSelectingSoftDeadline is any positive ProposalSoftDeadline — enough for New to select the
+// MEV-optimized (slot-relative) path. Tests that care about *when* the deadline fires set it
+// explicitly via armProposalDeadline (relative to now), or drive a slot whose deadline is already
+// in the past; the value New sees is irrelevant to them beyond being positive.
+const pathSelectingSoftDeadline = 1500 * time.Millisecond
+
 // setupMultiBNClient builds a GoClient connected to two test BN servers via semicolon-separated
-// URLs, on the MEV-optimized slot-relative-deadline strategy with the given deadline. Tests that
-// need the deadline to land a short, known time from now should call armProposalDeadline after.
-func setupMultiBNClient(t *testing.T, bn1URL, bn2URL string, deadline time.Duration) *GoClient {
+// URLs, on the MEV-optimized slot-relative-deadline path. Tests that need the deadline to land a
+// short, known time from now should call armProposalDeadline after.
+func setupMultiBNClient(t *testing.T, bn1URL, bn2URL string) *GoClient {
 	t.Helper()
 
 	client, err := New(t.Context(), log.TestLogger(t), Options{
 		BeaconNodeAddr:       bn1URL + ";" + bn2URL,
 		CommonTimeout:        time.Second * 2,
 		LongTimeout:          time.Second * 5,
-		ProposalSoftDeadline: deadline, // positive deadline selects the MEV-optimized path
+		ProposalSoftDeadline: pathSelectingSoftDeadline, // positive value selects the MEV-optimized path
 	})
 	require.NoError(t, err)
 	return client
 }
 
 // setupSingleBNClient builds a GoClient connected to a single test BN server. slotRelative selects
-// the MEV-optimized slot-relative path (with the given deadline) vs the legacy direct fetch.
-func setupSingleBNClient(t *testing.T, bnURL string, slotRelative bool, deadline time.Duration) *GoClient {
+// the MEV-optimized slot-relative path vs the legacy direct fetch.
+func setupSingleBNClient(t *testing.T, bnURL string, slotRelative bool) *GoClient {
 	t.Helper()
 
 	opts := Options{
@@ -336,7 +375,7 @@ func setupSingleBNClient(t *testing.T, bnURL string, slotRelative bool, deadline
 		LongTimeout:    time.Second * 5,
 	}
 	if slotRelative {
-		opts.ProposalSoftDeadline = deadline // positive deadline selects the MEV-optimized path
+		opts.ProposalSoftDeadline = pathSelectingSoftDeadline // positive value selects the MEV-optimized path
 	}
 	client, err := New(t.Context(), log.TestLogger(t), opts)
 	require.NoError(t, err)

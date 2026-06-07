@@ -225,13 +225,13 @@ So the deadline effectively *defines the QBFT instance start time*: QBFT starts 
 
 Valid range `[1000ms, 3600ms]`; values above ~1450ms emit a startup warning — for typical clusters, the worst-case 2-round QBFT scenario may no longer fit within the slot, so round 1 effectively has to succeed (see [Tuning guidance](#tuning-guidance--measurement-methodology)).
 
-### Default behavior (if you don't set `ProposalSoftDeadline`)
+## Default (legacy) block fetch
 
-The default is the **legacy** block-fetch path (relative-timeout collection). With multiple Beacon nodes, SSV returns as soon as one BN delivers a blinded (MEV) block — treating the first blinded response as the chosen MEV bid — falling back to the best response collected within `ProposalSoftTimeout` (a *relative* window, default 1800ms) if no blinded one arrives. With a single Beacon node, SSV fetches from it directly and starts QBFT as soon as the block arrives (no slot-relative floor).
+If you don't set `ProposalSoftDeadline`, the default is the **legacy** block-fetch path (relative-timeout collection). With multiple Beacon nodes, SSV returns as soon as one BN delivers a blinded (MEV) block — treating the first blinded response as the chosen MEV bid — falling back to the best response collected within `ProposalSoftTimeout` (a *relative* window, default 1800ms) if no blinded one arrives. With a single Beacon node, SSV fetches from it directly and starts QBFT as soon as the block arrives (no slot-relative floor).
 
 The legacy default is faster in the common case but doesn't compare bid *values* across BNs, and doesn't align QBFT start across the cluster. It's fine for setups run primarily for redundancy; set `ProposalSoftDeadline` if you want cross-BN bid scoring and/or cluster-aligned QBFT start. The legacy `ProposerDelay` knob is also available — see [Appendix A](#appendix-a--legacy-proposerdelay-approach).
 
-### Interaction
+## Path selection
 
 `ProposalSoftDeadline` (MEV-optimized) and the legacy knobs (`ProposerDelay` / `ProposalSoftTimeout`) are mutually exclusive. Selection at startup:
 
