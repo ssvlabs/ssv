@@ -11,6 +11,7 @@ If your PBS does not support timing games (mev-boost < v1.11, mev-boost without 
 - if you run multiple Beacon nodes, set `ProposalSoftDeadline = your PBS late_in_slot_time_ms + ~50ms BN→SSV transport` - see [Multi-BN setup](#multi-bn-setup) for details, single-BN operators can skip that section entirely
 - restart SSV node to apply
 - set/update mev/commit-boost configuration settings to enable `timing games on the PBS layer` - see [PBS configuration settings](#configuration-knobs) for details
+- it is desirable for all SSV nodes in the same cluster to run the same/similar configuration (very large differences may lead to missed duties)
 
 ## Definitions and typical values
 
