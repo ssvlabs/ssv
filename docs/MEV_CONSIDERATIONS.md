@@ -7,11 +7,11 @@ To get the most out of MEV opportunities, configure `timing games on the PBS lay
 If your PBS does not support timing games (mev-boost < v1.11, mev-boost without `-config <path>`, or any other PBS lacking the feature), SSV's `ProposerDelay` is still available — see [Appendix A](#appendix-a--legacy-proposerdelay-approach). PBS-side timing games are preferred because the PBS polls each relay multiple times within a precise slot-relative auction window — yielding higher-value bids than a single `getHeader` call after an SSV-side `ProposerDelay` sleep.
 
 **Do NOT apply both**: `timing games on the PBS layer` configuration + SSV's `ProposerDelay / ProposalSoftTimeout` - only one of these is supposed to run at any given time. Here are the recommended configuration steps, to avoid any sort of undesirable downtime during transition:
-- configure SSV node first to remove/unset any of `ProposerDelay / ProposalSoftTimeout`
-- set `ProposalSoftDeadline = your PBS late_in_slot_time_ms + ~50ms BN→SSV transport` to opt into MEV-optimized block fetch - see [MEV-optimized block fetch](#ssv-side-configuration) for details (applies to both single- and multi-Beacon-node setups)
-- restart SSV node to apply
-- set/update mev/commit-boost configuration settings to enable `timing games on the PBS layer` - see [PBS configuration settings](#pbs-side-configuration) for details
-- it is recommended that all SSV nodes in the same cluster use the same or similar configuration, as significant differences may lead to missed duties
+- Configure SSV node first to remove/unset any of `ProposerDelay / ProposalSoftTimeout`.
+- Set `ProposalSoftDeadline = your PBS late_in_slot_time_ms + ~50ms BN→SSV transport` to opt into MEV-optimized block fetch - see [MEV-optimized block fetch](#ssv-side-configuration) for details.
+- Restart SSV node to apply.
+- Set/update mev/commit-boost configuration settings to enable `timing games on the PBS layer` - see [PBS configuration settings](#pbs-side-configuration) for details.
+- It is recommended that all SSV nodes in the same cluster use the same or similar configuration, as significant differences may lead to missed duties.
 
 ## Definitions and typical values
 
@@ -132,7 +132,7 @@ relays:
     frequency_get_header_ms: 150
 ```
 
-**SSV-side** (opts into MEV-optimized block fetch — see [MEV-optimized block fetch](#ssv-side-configuration); applies to single- and multi-BN setups):
+**SSV-side** (opts into MEV-optimized block fetch — see [SSV-side configuration](#ssv-side-configuration):
 ```yaml
 eth2:
   ProposalSoftDeadline: 1100ms   # = PBS late_in_slot_time_ms (1050ms) + ~50ms BN→SSV transport
@@ -181,7 +181,7 @@ relays:
     frequency_get_header_ms: 200
 ```
 
-**SSV-side** (opts into MEV-optimized block fetch — 1850ms triggers the safe-max startup warning since it exceeds the ~1450ms threshold; see [MEV-optimized block fetch](#ssv-side-configuration); applies to single- and multi-BN setups):
+**SSV-side** (opts into MEV-optimized block fetch — 1850ms triggers the safe-max startup warning since it exceeds the ~1450ms threshold; see [MEV-optimized block fetch](#ssv-side-configuration)):
 ```yaml
 eth2:
   ProposalSoftDeadline: 1850ms   # = PBS late_in_slot_time_ms (1800ms) + ~50ms BN→SSV transport
