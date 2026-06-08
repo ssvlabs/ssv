@@ -178,8 +178,12 @@ func (n *Node) Start(ctx context.Context) error {
 		return fmt.Errorf("start WS server: %w", err)
 	}
 
-	// Start the duty scheduler in modes that use it. It joins gctx so a sibling failure (e.g. the WS
-	// serve loop) tears it down too, letting the Wait in runServices return.
+	// Start the duty scheduler (modes that use it) on gctx, so it stops when the group is canceled —
+	// on shutdown, or once runServices joins the long-lived members and one fails. dutyScheduler.Start
+	// blocks (HandleInitialDuties, itself bounded to ~a slot), and the WS serve loop isn't joined until
+	// runServices, so a WS serve failure during this window is buffered in wsServeErr and surfaced once
+	// runServices joins it — same as the metrics/API serve loops in cli/operator. This is deliberate:
+	// a diagnostic-server crash shouldn't abort in-progress (resumable) startup mid-flight.
 	if n.dutyScheduler != nil {
 		if err := n.dutyScheduler.Start(gctx); err != nil {
 			return fmt.Errorf("failed to run duty scheduler: %w", err)
