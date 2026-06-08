@@ -84,7 +84,7 @@ eth2:
 
 So the deadline effectively *defines the QBFT instance start time*: QBFT starts at `max(slot_start + ProposalSoftDeadline, block_arrival)`. In the common case every operator has a block by the deadline and they start together; an operator whose BN only responds after the deadline starts as soon as its block arrives (it cannot start earlier — the block is the consensus input).
 
-Valid range `[1000ms, 3600ms]`; values above ~1450ms emit a startup warning — for typical clusters, the worst-case 2-round QBFT scenario may no longer fit within the slot, so round 1 effectively has to succeed.
+Valid range `[1000ms, 3600ms]`; values below 1000ms don't make much sense to use as you'd be leaving MEV opportunity on the table that's safe to extract (falling back to a locally built block); values above ~1450ms emit a startup warning — for typical clusters, the worst-case 2-round QBFT scenario may no longer fit within the slot, so round 1 effectively has to succeed; values above 3600ms don't make much sense to use as they leave no room for even 1 QBFT round.
 
 ## Configuration examples
 
