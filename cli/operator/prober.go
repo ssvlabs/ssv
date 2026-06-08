@@ -61,9 +61,12 @@ func startHealthProber(ctx context.Context, logger *zap.Logger, p *hprobe.Health
 	for {
 		logger.Debug("health-prober tick: probing all components")
 		if err := probe(ctx, p, probeFrequency); err != nil {
-			// A canceled ctx means we're shutting down, not that a component is unhealthy: the probe
-			// inherits ctx, so cancellation surfaces here as a probe error. Return nil (exit 0) rather
-			// than tripping the watchdog (non-zero exit).
+			// Discriminate "we're shutting down" from "a component is unhealthy" by the parent ctx
+			// state, not the error value. A wedged component (e.g. a hung EL) surfaces as a probe
+			// DeadlineExceeded while ctx is still live, and that MUST trip the watchdog — inspecting
+			// err for context.Canceled/DeadlineExceeded would wrongly suppress real unhealth. Only a
+			// canceled parent ctx means a deliberate stop: normal shutdown, or a sibling errgroup
+			// member already failed (its error drives the non-zero exit, so returning nil here is safe).
 			if ctx.Err() != nil {
 				return nil
 			}

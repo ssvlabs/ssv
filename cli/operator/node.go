@@ -511,6 +511,11 @@ func (n *node) start() error {
 	defer cancel()
 	g, gctx := errgroup.WithContext(ctx)
 
+	// The metrics server starts here but its serveErr is buffered (cap 1) and only joined in
+	// runServices, after historical event sync — which can take a long time on a fresh node. A serve
+	// crash during that window is surfaced when runServices reads the channel, not immediately. That
+	// delay is acceptable: the metrics server is diagnostic, and deferring the crash keeps a long,
+	// resumable sync from being aborted by a non-critical server.
 	var metricsServeErr <-chan error
 	if n.cfg.MetricsAPIPort > 0 {
 		metricsHandler := metrics.NewHandler(n.logger, n.db, n.cfg.EnableProfile, n.operatorNode)
@@ -640,6 +645,11 @@ func (n *node) runServices(
 	healthProber *hprobe.HealthProber,
 	startOngoingSync func(context.Context) error,
 ) error {
+	// Both HTTP servers were started with gctx, so their ctx-aware Shutdown watcher fires on cancel
+	// and closes serveErr (http.Server.Serve returns ErrServerClosed as soon as the listener closes,
+	// independent of connection draining). A plain receive therefore can't wedge g.Wait() — unlike
+	// the WS server in the operator package, whose shutdown is bound to a different ctx and so needs
+	// an explicit gctx-escape select.
 	if metricsServeErr != nil {
 		g.Go(func() error {
 			if err := <-metricsServeErr; err != nil {
