@@ -2,15 +2,15 @@
 
 ## TL;DR
 
-To get the most out of MEV opportunities, configure `timing games on the PBS layer` — either mev-boost v1.11+ launched with `-config <path>` (and optionally `-watch-config` for hot reload), or commit-boost. With PBS-side timing games configured, SSV's `ProposerDelay` should stay at its default value of `0` — operators relying on `ProposerDelay` can't also use the MEV-optimized block fetch described in [MEV-optimized block fetch](#mev-optimized-block-fetch).
+To get the most out of MEV opportunities, configure `timing games on the PBS layer` — either mev-boost v1.11+ launched with `-config <path>` (and optionally `-watch-config` for hot reload), or commit-boost. With PBS-side timing games configured, SSV's `ProposerDelay` should stay at its default value of `0` — operators relying on `ProposerDelay` can't also use the MEV-optimized block fetch described in [MEV-optimized block fetch](#ssv-side-configuration).
 
 If your PBS does not support timing games (mev-boost < v1.11, mev-boost without `-config <path>`, or any other PBS lacking the feature), SSV's `ProposerDelay` is still available — see [Appendix A](#appendix-a--legacy-proposerdelay-approach). PBS-side timing games are preferred because the PBS polls each relay multiple times within a precise slot-relative auction window — yielding higher-value bids than a single `getHeader` call after an SSV-side `ProposerDelay` sleep.
 
 **Do NOT apply both**: `timing games on the PBS layer` configuration + SSV's `ProposerDelay / ProposalSoftTimeout` - only one of these is supposed to run at any given time. Here are the recommended configuration steps, to avoid any sort of undesirable downtime during transition:
 - configure SSV node first to remove/unset any of `ProposerDelay / ProposalSoftTimeout`
-- set `ProposalSoftDeadline = your PBS late_in_slot_time_ms + ~50ms BN→SSV transport` to opt into MEV-optimized block fetch - see [MEV-optimized block fetch](#mev-optimized-block-fetch) for details (applies to both single- and multi-Beacon-node setups)
+- set `ProposalSoftDeadline = your PBS late_in_slot_time_ms + ~50ms BN→SSV transport` to opt into MEV-optimized block fetch - see [MEV-optimized block fetch](#ssv-side-configuration) for details (applies to both single- and multi-Beacon-node setups)
 - restart SSV node to apply
-- set/update mev/commit-boost configuration settings to enable `timing games on the PBS layer` - see [PBS configuration settings](#configuration-knobs) for details
+- set/update mev/commit-boost configuration settings to enable `timing games on the PBS layer` - see [PBS configuration settings](#pbs-side-configuration) for details
 - it is recommended that all SSV nodes in the same cluster use the same or similar configuration, as significant differences may lead to missed duties
 
 ## Definitions and typical values
@@ -20,7 +20,7 @@ The variables below name the stages of the SSV proposer-duty timeline. The value
 | Variable | Typical | Description |
 |---|---|---|
 | `RANDAO` | ~50ms | Pre-consensus phase: SSV operators build the RANDAO signature used in the block-fetch request. |
-| `(auction window)` | varies | PBS-side relay polling. Configurable; see [PBS-side timing games](#pbs-side-timing-games-recommended). |
+| `(auction window)` | varies | PBS-side relay polling. Configurable; see [PBS-side timing games](#pbs-side-configuration). |
 | `MEVBoostRelayTimeout` | ~200ms | *Legacy path only:* mev-boost's single getHeader call when SSV asks for a block. Replaced by `(auction window)` in PBS-timing-games setups. |
 | `QBFT` | ~2350ms worst case | QBFT consensus over the blinded block. Worst-case decomposes into `QBFTRound1Time` (~2000ms round-1 timer, fires if round 1 fails) + `QBFTRoundChange` (~100ms ROUND-CHANGE handshake) + `QBFTRound2Time` (~250ms successful round 2). |
 | `PostConsensusSigning` | ~50ms | Operators reconstruct the validator BLS signature from partial signatures. |
@@ -50,12 +50,11 @@ Both mev-boost and commit-boost expose the same five knobs:
 - `target_first_request_ms` — when the first poll for this relay fires, measured from slot start.
 - `frequency_get_header_ms` — interval between subsequent polls.
 
-The effective per-request deadline is:
+A single `getHeader` poll waits up to `timeout_get_header_ms`, but the PBS never lets it run past the `late_in_slot_time_ms` cutoff. So a poll fired at `ms_into_slot` returns by:
 ```
-max_timeout_ms = min(timeout_get_header_ms, late_in_slot_time_ms - ms_into_slot)
-slot-relative cutoff = ms_into_slot + max_timeout_ms
+min(ms_into_slot + timeout_get_header_ms, late_in_slot_time_ms)
 ```
-When the PBS receives the request early in the slot, `timeout_get_header_ms` tends to bind; when asked later, `late_in_slot_time_ms - ms_into_slot` binds.
+Early in the slot the per-request timeout binds; closer to the cutoff, `late_in_slot_time_ms` binds and the poll is cut short.
 
 ### PBS-specific notes
 
@@ -76,6 +75,8 @@ Setting `ProposalSoftDeadline` opts into the **MEV-optimized** block-fetch path:
 eth2:
   ProposalSoftDeadline: <your PBS late_in_slot_time_ms + ~50ms BN→SSV transport>
 ```
+
+The `+ ~50ms BN→SSV transport` term is the inbound fetch hop: after the PBS returns its winning bid at `late_in_slot_time_ms`, the beacon node assembles the blinded block and forwards it to SSV. Adding it to the PBS cutoff estimates when SSV actually holds the block — the point the deadline should track. This is *not* the same as `BlockSubmission` in the [Definitions table](#definitions-and-typical-values): that is the outbound end of the flow (SSV → BN → relay reveal → propagation), and shares only the single BN↔SSV network hop with this term — `BlockSubmission` adds relay reveal and propagation on top, which is why it is the larger figure.
 
 `ProposalSoftDeadline` is a **slot-relative** deadline (measured from slot start). It does two things, and applies to single- and multi-Beacon-node setups alike:
 
@@ -131,7 +132,7 @@ relays:
     frequency_get_header_ms: 150
 ```
 
-**SSV-side** (opts into MEV-optimized block fetch — see [MEV-optimized block fetch](#mev-optimized-block-fetch); applies to single- and multi-BN setups):
+**SSV-side** (opts into MEV-optimized block fetch — see [MEV-optimized block fetch](#ssv-side-configuration); applies to single- and multi-BN setups):
 ```yaml
 eth2:
   ProposalSoftDeadline: 1100ms   # = PBS late_in_slot_time_ms (1050ms) + ~50ms BN→SSV transport
@@ -180,7 +181,7 @@ relays:
     frequency_get_header_ms: 200
 ```
 
-**SSV-side** (opts into MEV-optimized block fetch — 1850ms triggers the safe-max startup warning since it exceeds the ~1450ms threshold; see [MEV-optimized block fetch](#mev-optimized-block-fetch); applies to single- and multi-BN setups):
+**SSV-side** (opts into MEV-optimized block fetch — 1850ms triggers the safe-max startup warning since it exceeds the ~1450ms threshold; see [MEV-optimized block fetch](#ssv-side-configuration); applies to single- and multi-BN setups):
 ```yaml
 eth2:
   ProposalSoftDeadline: 1850ms   # = PBS late_in_slot_time_ms (1800ms) + ~50ms BN→SSV transport
