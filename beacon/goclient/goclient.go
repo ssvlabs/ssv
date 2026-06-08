@@ -205,7 +205,10 @@ func New(ctx context.Context, logger *zap.Logger, opt Options) (*GoClient, error
 		activatedClients:                   hashmap.New[string, struct{}](),
 	}
 
-	// First error stops the loop on purpose - a malformed CL address must surface to the operator, not be silently skipped.
+	// First error stops the loop on purpose. addSingleClient sets WithAllowDelayedStart(true), so a valid
+	// but currently-unreachable CL does not error here - it's tolerated and connected to later. Only a genuine
+	// construction error (e.g. a malformed address) surfaces, and that must reach the operator rather than be
+	// silently skipped.
 	for _, beaconAddr := range beaconAddrList {
 		if err := client.addSingleClient(ctx, beaconAddr); err != nil {
 			return nil, err
