@@ -85,7 +85,7 @@ The `+ ~50–100ms BN→SSV transport` term is the inbound fetch hop: after the 
 
 So the deadline effectively *defines the QBFT instance start time*: QBFT starts at `max(slot_start + ProposalSoftDeadline, block_arrival)`. In the common case every operator has a block by the deadline and they start together; an operator whose BN only responds after the deadline starts as soon as its block arrives (it cannot start earlier — the block is the consensus input).
 
-Valid range `[1000ms, 3600ms]`; values below 1000ms don't make much sense to use as you'd be leaving MEV opportunity on the table that's safe to extract (falling back to a locally built block); values above ~1450ms emit a startup warning — for typical clusters, the worst-case 2-round QBFT scenario may no longer fit within the slot, so round 1 effectively has to succeed; values above 3600ms don't make much sense to use as they leave no room for even 1 QBFT round.
+Valid range `[1000ms, 3600ms]` — values outside it are rejected at startup. Below ~1000ms leaves safe-to-extract MEV on the table (the node would fall back to a locally built block). Above the safe-max of ~1450ms the node **refuses to start unless `AllowDangerousProposalSoftDeadline: true` is also set** (env `ALLOW_DANGEROUS_PROPOSAL_SOFT_DEADLINE`), mirroring `AllowDangerousProposerDelay`: for typical clusters the worst-case 2-round QBFT scenario may no longer fit within the slot, so round 1 effectively has to succeed (a startup WARN is logged once the flag is set). Even with the flag, values above 3600ms are rejected — they leave no room for even one QBFT round.
 
 ## Configuration examples
 
@@ -179,10 +179,11 @@ relays:
     frequency_get_header_ms: 200
 ```
 
-**SSV-side** (opts into MEV-optimized block fetch — 1900ms triggers the safe-max startup warning since it exceeds the ~1450ms threshold; see [SSV-side configuration](#ssv-side-configuration)):
+**SSV-side** (opts into MEV-optimized block fetch — 1900ms exceeds the ~1450ms safe-max, so it requires `AllowDangerousProposalSoftDeadline` and logs a startup WARN; see [SSV-side configuration](#ssv-side-configuration)):
 ```yaml
 eth2:
-  ProposalSoftDeadline: 1900ms   # = PBS late_in_slot_time_ms (1800ms) + ~100ms BN→SSV transport
+  ProposalSoftDeadline: 1900ms               # = PBS late_in_slot_time_ms (1800ms) + ~100ms BN→SSV transport
+  AllowDangerousProposalSoftDeadline: true   # required: 1900ms exceeds the ~1450ms safe-max
 ```
 
 ## Appendix A — Legacy `ProposerDelay` approach

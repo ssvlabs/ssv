@@ -37,5 +37,12 @@ type Options struct {
 	//     deadline (no early-exit), then start QBFT at it. Applies to single- and multi-BN setups
 	//     alike, so all operators in the cluster start QBFT at the same slot-relative time.
 	// Cannot be combined with ProposerDelay or ProposalSoftTimeout (which select the legacy path).
-	ProposalSoftDeadline time.Duration `yaml:"ProposalSoftDeadline" env:"WITH_PROPOSAL_SOFT_DEADLINE" env-description:"Slot-relative deadline (ms into slot) for the MEV-optimized proposal-collection window. Leave unset for the default (legacy relative-timeout) path; set explicitly to opt into the MEV-optimized path (value must be in [1000ms, 3600ms]). Cannot be combined with ProposerDelay or ProposalSoftTimeout. See https://github.com/ssvlabs/ssv/blob/main/docs/MEV_CONSIDERATIONS.md for details."`
+	ProposalSoftDeadline time.Duration `yaml:"ProposalSoftDeadline" env:"WITH_PROPOSAL_SOFT_DEADLINE" env-description:"Slot-relative deadline (ms into slot) for the MEV-optimized proposal-collection window. Leave unset for the default (legacy relative-timeout) path; set explicitly to opt into the MEV-optimized path (value must be in [1000ms, 1450ms]; higher values up to 3600ms require AllowDangerousProposalSoftDeadline). Cannot be combined with ProposerDelay or ProposalSoftTimeout. See https://github.com/ssvlabs/ssv/blob/main/docs/MEV_CONSIDERATIONS.md for details."`
+
+	// AllowDangerousProposalSoftDeadline lifts the ProposalSoftDeadline safe-max cap (~1450ms) up
+	// to the hard maximum (3600ms). Without it, a ProposalSoftDeadline above the safe-max is
+	// rejected at startup, because the worst-case 2-round QBFT scenario may not fit within the slot
+	// (an explicit "round 1 must succeed" configuration). Mirrors AllowDangerousProposerDelay.
+	// See docs/MEV_CONSIDERATIONS.md.
+	AllowDangerousProposalSoftDeadline bool `yaml:"AllowDangerousProposalSoftDeadline" env:"ALLOW_DANGEROUS_PROPOSAL_SOFT_DEADLINE" env-description:"Allow ProposalSoftDeadline values above the safe-max (~1450ms) up to the hard maximum (3600ms). Dangerous: the worst-case 2-round QBFT fallback may not fit within the slot, risking missed proposals. See https://github.com/ssvlabs/ssv/blob/main/docs/MEV_CONSIDERATIONS.md for details."`
 }

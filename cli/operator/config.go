@@ -66,9 +66,11 @@ const (
 	maxSafeProposerDelay = 1000 * time.Millisecond
 
 	// ProposalSoftDeadline bounds (slot-relative), used by the MEV-optimized path.
-	// [minProposalSoftDeadline, maxProposalSoftDeadline] is the hard accepted range;
-	// safeMaxProposalSoftDeadline is the startup-warning threshold above which a round-2 QBFT
-	// fallback may not fit within the slot.
+	// [minProposalSoftDeadline, maxProposalSoftDeadline] is the hard accepted range.
+	// safeMaxProposalSoftDeadline is the largest value considered safe: above it the worst-case
+	// 2-round QBFT fallback may not fit within the slot, so the operator must explicitly
+	// acknowledge the risk via AllowDangerousProposalSoftDeadline (mirrors maxSafeProposerDelay /
+	// AllowDangerousProposerDelay).
 	safeMaxProposalSoftDeadline = 1450 * time.Millisecond
 	minProposalSoftDeadline     = 1000 * time.Millisecond
 	maxProposalSoftDeadline     = 3600 * time.Millisecond
@@ -200,7 +202,7 @@ func (c *config) resolveBlockFetch(logger *zap.Logger) error {
 		// The operator-set ProposalSoftDeadline is validated and passed through unchanged; goclient
 		// keys the MEV-optimized (slot-relative) path off it. Applies to single- and multi-BN
 		// setups alike. See docs/MEV_CONSIDERATIONS.md.
-		if err := validateProposalSoftDeadline(rawSoftDeadline); err != nil {
+		if err := validateProposalSoftDeadline(rawSoftDeadline, c.ConsensusClient.AllowDangerousProposalSoftDeadline); err != nil {
 			return err
 		}
 	}
@@ -218,6 +220,7 @@ func (c *config) resolveBlockFetch(logger *zap.Logger) error {
 		}
 	case blockFetchPathMEVOptimized:
 		if rawSoftDeadline > safeMaxProposalSoftDeadline {
+			// Reachable only after validateProposalSoftDeadline passed (AllowDangerousProposalSoftDeadline set).
 			logger.Warn(
 				"ProposalSoftDeadline exceeds the safe-max threshold: "+
 					"round-2 QBFT fallback may not fit within the slot deadline "+
@@ -292,13 +295,21 @@ func determineBlockFetchPath(proposalSoftTimeout, proposalSoftDeadline, proposer
 }
 
 // validateProposalSoftDeadline ensures an operator-set ProposalSoftDeadline (MEV-optimized path)
-// is within the acceptable range. The safe-max advisory warning is emitted separately.
-func validateProposalSoftDeadline(d time.Duration) error {
+// is within the hard [min, max] range, and rejects a value above safeMaxProposalSoftDeadline
+// unless the operator explicitly acknowledges the risk via allowDangerous (mirrors
+// validateProposerDelay). The safe-max WARN is emitted separately.
+func validateProposalSoftDeadline(d time.Duration, allowDangerous bool) error {
 	if d < minProposalSoftDeadline || d > maxProposalSoftDeadline {
 		return fmt.Errorf("ProposalSoftDeadline value %dms is out of range [%dms, %dms]",
 			d.Milliseconds(),
 			minProposalSoftDeadline.Milliseconds(),
 			maxProposalSoftDeadline.Milliseconds())
+	}
+	if d > safeMaxProposalSoftDeadline && !allowDangerous {
+		return fmt.Errorf("ProposalSoftDeadline value %dms exceeds maximum safe deadline of %dms. "+
+			"This may cause missed block proposals. "+
+			"If you understand the risks and want to proceed, set AllowDangerousProposalSoftDeadline to true or use the ALLOW_DANGEROUS_PROPOSAL_SOFT_DEADLINE environment variable",
+			d.Milliseconds(), safeMaxProposalSoftDeadline.Milliseconds())
 	}
 	return nil
 }

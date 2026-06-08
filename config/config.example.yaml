@@ -30,12 +30,15 @@ eth2:
   #   - single- and multi-BN: SSV holds the block until this deadline before starting QBFT, so
   #     every operator in the cluster starts QBFT at the same slot-relative time (aligned round
   #     timers, better convergence).
-  # Match this to your PBS late_in_slot_time_ms + ~50ms BN→SSV transport. Valid range: [1000ms,
-  # 3600ms]; values above 1450ms emit a startup warning (round-2 QBFT fallback may not fit within
-  # the slot for typical clusters). Cannot be combined with ProposerDelay or ProposalSoftTimeout.
+  # Match this to your PBS late_in_slot_time_ms + ~50–100ms BN→SSV transport. Valid range:
+  # [1000ms, 3600ms]; values above the safe-max of 1450ms are rejected at startup unless
+  # AllowDangerousProposalSoftDeadline is also set (then allowed up to 3600ms, with a startup WARN):
+  # for typical clusters the round-2 QBFT fallback may not fit within the slot. Cannot be combined
+  # with ProposerDelay or ProposalSoftTimeout.
   # Leave unset to use the default legacy path (relative-timeout collection, early-exit on the
   # first MEV block; single-BN fetches directly with no slot-relative floor).
   # ProposalSoftDeadline: 1100ms
+  # AllowDangerousProposalSoftDeadline: true   # only needed when ProposalSoftDeadline exceeds the ~1450ms safe-max
 
   # ProposalSoftTimeout (legacy): collection-period timeout for multi-BN proposal scoring
   # in the legacy block-fetch path. Setting this (or ProposerDelay below) opts into the
