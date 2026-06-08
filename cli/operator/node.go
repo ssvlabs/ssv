@@ -14,6 +14,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 
 	hexporter "github.com/ssvlabs/ssv/api/handlers/exporter"
 	hnode "github.com/ssvlabs/ssv/api/handlers/node"
@@ -174,6 +175,16 @@ type beaconClient interface {
 
 var _ beaconClient = (*goclient.GoClient)(nil)
 
+// operatorNode is the operator.Node surface that start() drives: Start (run as a long-lived
+// errgroup member) plus HealthCheck (wired into the metrics handler as its health checker). It's a
+// seam so the normal-shutdown invariant can be unit-tested with a stub in place of a real *operator.Node.
+type operatorNode interface {
+	Start(context.Context) error
+	HealthCheck() error
+}
+
+var _ operatorNode = (*operator.Node)(nil)
+
 // node bundles the constructed pieces that start() runs and Close() tears down.
 type node struct {
 	ctx    context.Context
@@ -199,7 +210,7 @@ type node struct {
 	storageMap          *ibftstorage.ParticipantStores
 	collector           *dutytracer.Collector
 	p2pNetwork          network.P2PNetwork
-	operatorNode        *operator.Node
+	operatorNode        operatorNode
 }
 
 // newNode wires the node's components from config + the injected beacon/EL clients. On any
@@ -486,33 +497,39 @@ func (n *node) Close() error {
 	return errors.Join(errs...)
 }
 
-// start launches the node's long-lived services (metrics + SSV API servers, the health
-// prober, contract-event sync) and blocks on operatorNode.Start until the node's ctx is canceled.
-// NOTE: the metrics/SSV-API server goroutines call logger.Fatal on failure — crashing the
-// process and bypassing Close() — a candidate for errgroup-based coordinated shutdown.
+// start launches the node's long-lived services (metrics + SSV API servers, the health prober,
+// contract-event sync) and blocks until the node's ctx is canceled or the first service fails.
+//
+// All long-lived services join an errgroup bound to a child of the node's ctx. The first failure
+// cancels gctx — which tears down the HTTP servers via their ctx-aware Shutdown watchers — and
+// surfaces as the group error; a plain ctx cancellation has every service return nil, so a clean
+// shutdown returns nil. The synchronous bring-up below returns its errors directly; the defer
+// cancel() then unwinds any service already started. Every failure path thus returns up through
+// runNode() to the single top-level Fatal, with node.Close() running on the way out.
 func (n *node) start() error {
+	ctx, cancel := context.WithCancel(n.ctx)
+	defer cancel()
+	g, gctx := errgroup.WithContext(ctx)
+
+	var metricsServeErr <-chan error
 	if n.cfg.MetricsAPIPort > 0 {
 		metricsHandler := metrics.NewHandler(n.logger, n.db, n.cfg.EnableProfile, n.operatorNode)
-		_, metricsServeErr, err := metricsHandler.Start(n.ctx, http.NewServeMux(), fmt.Sprintf(":%d", n.cfg.MetricsAPIPort))
+		_, serveErr, err := metricsHandler.Start(gctx, http.NewServeMux(), fmt.Sprintf(":%d", n.cfg.MetricsAPIPort))
 		if err != nil {
-			n.logger.Fatal("failed to start metrics server", zap.Error(err))
+			return fmt.Errorf("failed to start metrics server: %w", err)
 		}
-		go func() {
-			if err := <-metricsServeErr; err != nil {
-				n.logger.Fatal("metrics server serve loop exited", zap.Error(err))
-			}
-		}()
+		metricsServeErr = serveErr
 	}
 
 	healthProber := hprobe.NewHealthProber(n.logger)
 	healthProber.AddComponent(clComponentName, n.consensusClient, proberHealthcheckTimeout, proberRetriesMax, proberRetryDelay)
 	healthProber.AddComponent(elComponentName, n.executionClient, proberHealthcheckTimeout, proberRetriesMax, proberRetryDelay)
-	if err := ensureComponentsHealthy(n.ctx, n.logger, healthProber); err != nil {
+	if err := ensureComponentsHealthy(gctx, n.logger, healthProber); err != nil {
 		return err
 	}
 
-	eventSyncer, err := syncContractEvents(
-		n.ctx,
+	eventSyncer, startOngoingSync, err := syncContractEvents(
+		gctx,
 		n.logger,
 		n.cfg,
 		n.executionClient,
@@ -530,14 +547,12 @@ func (n *node) start() error {
 		healthProber.AddComponent(eventSyncerComponentName, eventSyncer, proberHealthcheckTimeout, proberRetriesMax, proberRetryDelay)
 	}
 
-	go startHealthProber(n.ctx, n.logger, healthProber)
-
-	if _, err := n.metadataSyncer.SyncAll(n.ctx); err != nil {
+	if _, err := n.metadataSyncer.SyncAll(gctx); err != nil {
 		return fmt.Errorf("failed to sync metadata on startup: %w", err)
 	}
 
 	if n.usingSSVSigner {
-		if err := ensureNoMissingKeys(n.ctx, n.nodeStorage, n.operatorDataStore, n.ssvSignerClient); err != nil {
+		if err := ensureNoMissingKeys(gctx, n.nodeStorage, n.operatorDataStore, n.ssvSignerClient); err != nil {
 			return err
 		}
 	}
@@ -577,6 +592,7 @@ func (n *node) start() error {
 		return err
 	}
 
+	var apiServeErr <-chan error
 	if n.cfg.SSVAPIPort > 0 {
 		warnIfSSVAPIAddressUnset(n.logger, n.cfg.SSVAPIAddress, n.cfg.SSVAPIPort)
 		apiServer := apiserver.New(
@@ -599,21 +615,63 @@ func (n *node) start() error {
 			hexporter.NewExporter(n.logger, n.storageMap, n.collector, n.nodeStorage.ValidatorStore()),
 			n.mode == modeExporterArchive,
 		)
-		_, apiServeErr, err := apiServer.Start(n.ctx)
+		_, serveErr, err := apiServer.Start(gctx)
 		if err != nil {
-			n.logger.Fatal("failed to start API server", zap.Error(err))
+			return fmt.Errorf("failed to start API server: %w", err)
 		}
-		go func() {
-			if err := <-apiServeErr; err != nil {
-				n.logger.Fatal("API server serve loop exited", zap.Error(err))
-			}
-		}()
-	}
-	if err := n.operatorNode.Start(n.ctx); err != nil {
-		return fmt.Errorf("failed to start SSV node: %w", err)
+		apiServeErr = serveErr
 	}
 
-	return nil
+	return n.runServices(g, gctx, metricsServeErr, apiServeErr, healthProber, startOngoingSync)
+}
+
+// runServices joins the node's long-lived services into the errgroup and blocks until the first one
+// fails or gctx is canceled. The two HTTP serve loops join via their serveErr channels (nil channel
+// = server disabled), each yielding nil when the server shuts down cleanly (channel closed) or the
+// serve error otherwise; the health prober and the ongoing event sync (nil = local-events mode) join
+// directly; and operatorNode.Start runs as a member too — never returned ahead of g.Wait(), so its
+// failure is awaited alongside the rest rather than skipping the group. The first non-nil return
+// cancels gctx (unwinding the HTTP servers and the other members) and is returned to start().
+func (n *node) runServices(
+	g *errgroup.Group,
+	gctx context.Context,
+	metricsServeErr <-chan error,
+	apiServeErr <-chan error,
+	healthProber *hprobe.HealthProber,
+	startOngoingSync func(context.Context) error,
+) error {
+	if metricsServeErr != nil {
+		g.Go(func() error {
+			if err := <-metricsServeErr; err != nil {
+				return fmt.Errorf("metrics server serve loop exited: %w", err)
+			}
+			return nil
+		})
+	}
+	if apiServeErr != nil {
+		g.Go(func() error {
+			if err := <-apiServeErr; err != nil {
+				return fmt.Errorf("API server serve loop exited: %w", err)
+			}
+			return nil
+		})
+	}
+	g.Go(func() error {
+		return startHealthProber(gctx, n.logger, healthProber)
+	})
+	if startOngoingSync != nil {
+		g.Go(func() error {
+			return startOngoingSync(gctx)
+		})
+	}
+	g.Go(func() error {
+		if err := n.operatorNode.Start(gctx); err != nil {
+			return fmt.Errorf("failed to start SSV node: %w", err)
+		}
+		return nil
+	})
+
+	return g.Wait()
 }
 
 // startNetwork wires validator stats into the p2p layer, then sets up + starts the network and

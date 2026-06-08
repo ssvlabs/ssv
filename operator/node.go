@@ -9,6 +9,7 @@ import (
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/hashicorp/go-multierror"
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 
@@ -170,13 +171,17 @@ func New(logger *zap.Logger, opts Options, exporterOpts exporter.Options, slotTi
 func (n *Node) Start(ctx context.Context) error {
 	n.logger.Info("starting operator node")
 
-	if err := n.startWSServer(); err != nil {
+	g, gctx := errgroup.WithContext(ctx)
+
+	wsServeErr, err := n.startWSServer()
+	if err != nil {
 		return fmt.Errorf("start WS server: %w", err)
 	}
 
-	// Start the duty scheduler in modes that use it.
+	// Start the duty scheduler in modes that use it. It joins gctx so a sibling failure (e.g. the WS
+	// serve loop) tears it down too, letting the Wait in runServices return.
 	if n.dutyScheduler != nil {
-		if err := n.dutyScheduler.Start(ctx); err != nil {
+		if err := n.dutyScheduler.Start(gctx); err != nil {
 			return fmt.Errorf("failed to run duty scheduler: %w", err)
 		}
 	} else {
@@ -248,21 +253,55 @@ func (n *Node) Start(ctx context.Context) error {
 
 	n.logger.Info("operator node has been started", fields.OperatorID(n.validatorOptions.OperatorDataStore.GetOperatorID()))
 
-	if n.dutyScheduler != nil {
-		if err := n.dutyScheduler.Wait(); err != nil {
-			n.logger.Fatal("duty scheduler exited with error", zap.Error(err))
-		}
-	} else {
-		if !n.exporterOptions.Enabled || n.exporterOptions.Mode != exporter.ModeStandard {
-			n.logger.Fatal("duty scheduler is nil for non-exporter-standard node")
-		}
-		<-ctx.Done()
-	}
-
 	// The p2p network is owned by its creator (cli/operator), which closes it via defer.
 	// Start() no longer closes it: closing it only on this happy path leaked the network
 	// whenever Start returned early with an error.
-	return nil
+	return n.runServices(g, gctx, wsServeErr)
+}
+
+// runServices joins the operator node's long-lived members — the WS server's serve loop and the
+// duty scheduler's blocking wait — into the errgroup and blocks until the first fails or gctx is
+// canceled. On a clean cancellation every member returns nil, so Start returns nil; the first
+// non-nil return cancels gctx (unwinding the others) and propagates up to cli/operator's single
+// top-level Fatal, with node.Close() running. This replaces three goroutine/blocking-tail Fatals
+// that os.Exit-ed the process directly.
+func (n *Node) runServices(g *errgroup.Group, gctx context.Context, wsServeErr <-chan error) error {
+	if wsServeErr != nil {
+		g.Go(func() error {
+			// The WS server's shutdown is bound to its constructor ctx (the node ctx), not gctx, so
+			// its serveErr won't close when the group is torn down by another member. Watch gctx too
+			// to avoid blocking here in that case; the WS server is then stopped by node.Close().
+			select {
+			case err := <-wsServeErr:
+				if err != nil {
+					return fmt.Errorf("WS server serve loop exited: %w", err)
+				}
+				return nil
+			case <-gctx.Done():
+				return nil
+			}
+		})
+	}
+
+	g.Go(func() error {
+		if n.dutyScheduler != nil {
+			// Wait blocks until the scheduler's tasks drain (they exit on gctx cancel). It currently
+			// always returns nil, but propagate any future error rather than swallowing it.
+			if err := n.dutyScheduler.Wait(); err != nil {
+				return fmt.Errorf("duty scheduler exited with error: %w", err)
+			}
+			return nil
+		}
+		// dutyScheduler is only nil for exporter-standard nodes; any other mode reaching here is a
+		// wiring inconsistency that must surface rather than silently idling.
+		if !n.exporterOptions.Enabled || n.exporterOptions.Mode != exporter.ModeStandard {
+			return errors.New("duty scheduler is nil for non-exporter-standard node")
+		}
+		<-gctx.Done()
+		return nil
+	})
+
+	return g.Wait()
 }
 
 // HealthCheck returns a list of issues regards the state of the operator node
@@ -430,24 +469,26 @@ func filterOutDutyNotFoundErrors(e *multierror.Error) *multierror.Error {
 	return filtered
 }
 
-func (n *Node) startWSServer() error {
-	if n.ws != nil {
-		n.logger.Info("starting WS server")
-
-		n.ws.UseQueryHandler(n.handleQueryRequests)
-
-		_, serveErr, err := n.ws.Start(fmt.Sprintf(":%d", n.wsAPIPort))
-		if err != nil {
-			return err
-		}
-		go func() {
-			if err := <-serveErr; err != nil {
-				n.logger.Fatal("WS server serve loop exited", zap.Error(err))
-			}
-		}()
+// startWSServer binds and starts the WS API server (if configured) and returns its serve-error
+// channel for the caller to join into the node's errgroup; a nil channel means no WS server is
+// configured. The serve loop's error is no longer turned into a Fatal here — it propagates via the
+// returned channel so a serve failure brings the node down gracefully (through Close) rather than
+// os.Exit-ing the process from a goroutine.
+func (n *Node) startWSServer() (<-chan error, error) {
+	if n.ws == nil {
+		return nil, nil
 	}
 
-	return nil
+	n.logger.Info("starting WS server")
+
+	n.ws.UseQueryHandler(n.handleQueryRequests)
+
+	_, serveErr, err := n.ws.Start(fmt.Sprintf(":%d", n.wsAPIPort))
+	if err != nil {
+		return nil, err
+	}
+
+	return serveErr, nil
 }
 
 func (n *Node) reportOperators() {

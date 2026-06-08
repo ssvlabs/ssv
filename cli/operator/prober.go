@@ -27,11 +27,18 @@ const (
 
 const componentsUnhealthyErrorMsg = "component(s) are not healthy"
 
-func ensureComponentsHealthy(ctx context.Context, logger *zap.Logger, p *hprobe.HealthProber) error {
-	probeCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+// probe runs a single ProbeAll over all registered components, bounded by timeout, and returns the
+// prober's error verbatim. It is the shared core of the one-shot startup gate (ensureComponentsHealthy)
+// and the periodic runtime watchdog (startHealthProber), which differ only in timeout and the policy
+// wrapped around it — fail-fast vs. shutdown-trip.
+func probe(ctx context.Context, p *hprobe.HealthProber, timeout time.Duration) error {
+	probeCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
+	return p.ProbeAll(probeCtx)
+}
 
-	if err := p.ProbeAll(probeCtx); err != nil {
+func ensureComponentsHealthy(ctx context.Context, logger *zap.Logger, p *hprobe.HealthProber) error {
+	if err := probe(ctx, p, 30*time.Second); err != nil {
 		return fmt.Errorf("%s: %w", componentsUnhealthyErrorMsg, err)
 	}
 
@@ -39,33 +46,35 @@ func ensureComponentsHealthy(ctx context.Context, logger *zap.Logger, p *hprobe.
 	return nil
 }
 
-func startHealthProber(ctx context.Context, logger *zap.Logger, p *hprobe.HealthProber) {
+// startHealthProber is a runtime liveness watchdog: every probeFrequency it probes all components,
+// and on persistent unhealth returns an error so the node terminates gracefully (errgroup -> Close ->
+// non-zero exit) and the orchestrator restarts it — potentially onto a healthy endpoint. A clean ctx
+// cancellation (normal shutdown) returns nil. The crash-and-restart on persistent unhealth is
+// intentional: a node idling with a dead EL while reporting healthy at the process level is a silent
+// failure, worse than a loud restart — so this must not degrade to "log and retry forever".
+func startHealthProber(ctx context.Context, logger *zap.Logger, p *hprobe.HealthProber) error {
 	const probeFrequency = 60 * time.Second
 
 	ticker := time.NewTicker(probeFrequency)
 	defer ticker.Stop()
 
 	for {
-		func() {
-			logger.Debug("health-prober tick: probing all components")
-			defer logger.Debug("health-prober tick: probing all components done")
-
-			probeCtx, cancel := context.WithTimeout(ctx, probeFrequency)
-			defer cancel()
-
-			if err := p.ProbeAll(probeCtx); err != nil {
-				// TODO(#2867): trigger graceful shutdown (-> Close -> non-zero exit) instead of Fatal,
-				// which bypasses Close. Crash-and-restart on persistent unhealth is intentional; the
-				// goroutine os.Exit mechanism is the wart.
-				logger.Fatal(componentsUnhealthyErrorMsg, zap.Error(err))
+		logger.Debug("health-prober tick: probing all components")
+		if err := probe(ctx, p, probeFrequency); err != nil {
+			// A canceled ctx means we're shutting down, not that a component is unhealthy: the probe
+			// inherits ctx, so cancellation surfaces here as a probe error. Return nil (exit 0) rather
+			// than tripping the watchdog (non-zero exit).
+			if ctx.Err() != nil {
+				return nil
 			}
-		}()
+			return fmt.Errorf("%s: %w", componentsUnhealthyErrorMsg, err)
+		}
+		logger.Debug("health-prober tick: probing all components done")
 
 		select {
 		case <-ctx.Done():
-			return
+			return nil
 		case <-ticker.C:
-			continue
 		}
 	}
 }
