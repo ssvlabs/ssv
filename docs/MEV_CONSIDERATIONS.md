@@ -2,13 +2,13 @@
 
 ## TL;DR
 
-To get the most out of MEV opportunities, configure `timing games on the PBS layer` — either mev-boost v1.11+ launched with `-config <path>` (and optionally `-watch-config` for hot reload), or commit-boost. With PBS-side timing games configured, SSV's `ProposerDelay` should stay at its default value of `0` — operators relying on `ProposerDelay` can't also use the MEV-optimized block fetch described in [MEV-optimized block fetch](#ssv-side-configuration).
+To get the most out of MEV opportunities, configure `timing games on the PBS layer` — either mev-boost v1.11+ launched with `-config <path>` (and optionally `-watch-config` for hot reload), or commit-boost. With PBS-side timing games configured, SSV's `ProposerDelay` should stay at its default value of `0` — operators relying on `ProposerDelay` can't also use the MEV-optimized block fetch described in [SSV-side configuration](#ssv-side-configuration).
 
 If your PBS does not support timing games (mev-boost < v1.11, mev-boost without `-config <path>`, or any other PBS lacking the feature), SSV's `ProposerDelay` is still available — see [Appendix A](#appendix-a--legacy-proposerdelay-approach). PBS-side timing games are preferred because the PBS polls each relay multiple times within a precise slot-relative auction window — yielding higher-value bids than a single `getHeader` call after an SSV-side `ProposerDelay` sleep.
 
 **Do NOT apply both**: `timing games on the PBS layer` configuration + SSV's `ProposerDelay / ProposalSoftTimeout` - only one of these is supposed to run at any given time. Here are the recommended configuration steps, to avoid any sort of undesirable downtime during transition:
 - Configure SSV node first to remove/unset any of `ProposerDelay / ProposalSoftTimeout`.
-- Set `ProposalSoftDeadline = your PBS late_in_slot_time_ms + ~50ms BN→SSV transport` to opt into MEV-optimized block fetch - see [MEV-optimized block fetch](#ssv-side-configuration) for details.
+- Set `ProposalSoftDeadline = your PBS late_in_slot_time_ms + ~50ms BN→SSV transport` to opt into MEV-optimized block fetch - see [SSV-side configuration](#ssv-side-configuration) for details.
 - Restart SSV node to apply.
 - Set/update mev/commit-boost configuration settings to enable `timing games on the PBS layer` - see [PBS configuration settings](#pbs-side-configuration) for details.
 - It is recommended that all SSV nodes in the same cluster use the same or similar configuration, as significant differences may lead to missed duties.
@@ -102,7 +102,6 @@ The polling pattern (`target_first_request_ms = 700`, `frequency_get_header_ms =
 [pbs]
 late_in_slot_time_ms = 1050
 timeout_get_header_ms = 1030        # must be < late_in_slot_time_ms in commit-boost
-timeout_get_payload_ms = 4000
 
 [[relays]]
 url = "https://<relay-pubkey>@relay-1.example"
@@ -132,7 +131,7 @@ relays:
     frequency_get_header_ms: 150
 ```
 
-**SSV-side** (opts into MEV-optimized block fetch — see [SSV-side configuration](#ssv-side-configuration):
+**SSV-side** (opts into MEV-optimized block fetch — see [SSV-side configuration](#ssv-side-configuration)):
 ```yaml
 eth2:
   ProposalSoftDeadline: 1100ms   # = PBS late_in_slot_time_ms (1050ms) + ~50ms BN→SSV transport
@@ -151,7 +150,6 @@ Trade-off vs Example A: bid-sample time shifts ~600ms later, capturing more intr
 [pbs]
 late_in_slot_time_ms = 1800
 timeout_get_header_ms = 1780        # must be < late_in_slot_time_ms in commit-boost
-timeout_get_payload_ms = 4000
 
 [[relays]]
 url = "https://<relay-pubkey>@relay-1.example"
@@ -181,7 +179,7 @@ relays:
     frequency_get_header_ms: 200
 ```
 
-**SSV-side** (opts into MEV-optimized block fetch — 1850ms triggers the safe-max startup warning since it exceeds the ~1450ms threshold; see [MEV-optimized block fetch](#ssv-side-configuration)):
+**SSV-side** (opts into MEV-optimized block fetch — 1850ms triggers the safe-max startup warning since it exceeds the ~1450ms threshold; see [SSV-side configuration](#ssv-side-configuration)):
 ```yaml
 eth2:
   ProposalSoftDeadline: 1850ms   # = PBS late_in_slot_time_ms (1800ms) + ~50ms BN→SSV transport
