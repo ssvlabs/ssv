@@ -342,7 +342,7 @@ func Test_resolveBlockFetch_defaults(t *testing.T) {
 	t.Run("mev-optimized at safe-max - no warning", func(t *testing.T) {
 		core, recorded := observer.New(zapcore.WarnLevel)
 		c := config{}
-		c.ConsensusClient.ProposalSoftDeadline = safeMaxProposalSoftDeadline // == safe-max, no warning
+		c.ConsensusClient.ProposalSoftDeadline = maxSafeProposalSoftDeadline // == safe-max, no warning
 		require.NoError(t, c.resolveBlockFetch(zap.New(core)))
 		require.Len(t, recorded.All(), 0)
 	})
