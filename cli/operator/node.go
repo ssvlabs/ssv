@@ -175,16 +175,6 @@ type beaconClient interface {
 
 var _ beaconClient = (*goclient.GoClient)(nil)
 
-// operatorNode is the operator.Node surface that start() drives: Start (run as a long-lived
-// errgroup member) plus HealthCheck (wired into the metrics handler as its health checker). It's a
-// seam so the normal-shutdown invariant can be unit-tested with a stub in place of a real *operator.Node.
-type operatorNode interface {
-	Start(context.Context) error
-	HealthCheck() error
-}
-
-var _ operatorNode = (*operator.Node)(nil)
-
 // node bundles the constructed pieces that start() runs and Close() tears down.
 type node struct {
 	ctx    context.Context
@@ -210,7 +200,7 @@ type node struct {
 	storageMap          *ibftstorage.ParticipantStores
 	collector           *dutytracer.Collector
 	p2pNetwork          network.P2PNetwork
-	operatorNode        operatorNode
+	operatorNode        *operator.Node
 }
 
 // newNode wires the node's components from config + the injected beacon/EL clients. On any
@@ -500,20 +490,18 @@ func (n *node) Close() error {
 // start launches the node's long-lived services (metrics + SSV API servers, the health prober,
 // contract-event sync) and blocks until the node's ctx is canceled or the first service fails.
 //
-// All long-lived services join an errgroup bound to a child of the node's ctx. The first failure
-// cancels gctx — which tears down the HTTP servers via their ctx-aware Shutdown watchers — and
-// surfaces as the group error; a plain ctx cancellation has every service return nil, so a clean
-// shutdown returns nil. The synchronous bring-up below returns its errors directly; the defer
-// cancel() then unwinds any service already started. Every failure path thus returns up through
-// runNode() to the single top-level Fatal, with node.Close() running on the way out.
+// All long-lived services join an errgroup derived from the node's ctx. The first failure cancels
+// gctx — which tears down the HTTP servers via their ctx-aware Shutdown watchers — and surfaces as
+// the group error; a plain ctx cancellation has every service return nil, so a clean shutdown
+// returns nil. The synchronous bring-up below returns its errors directly; an already-started HTTP
+// server is then torn down by node.Close() (deferred in runNode, which cancels the node ctx). Every
+// failure path thus returns up through runNode() to the single top-level Fatal, with Close() running.
 func (n *node) start() error {
-	ctx, cancel := context.WithCancel(n.ctx)
-	defer cancel()
-	g, gctx := errgroup.WithContext(ctx)
+	g, gctx := errgroup.WithContext(n.ctx)
 
-	// The metrics server starts here but its serveErr is buffered (cap 1) and only joined in
-	// runServices, after historical event sync — which can take a long time on a fresh node. A serve
-	// crash during that window is surfaced when runServices reads the channel, not immediately. That
+	// The metrics server starts here but its serveErr is buffered (cap 1) and only joined into the
+	// errgroup below, after historical event sync — which can take a long time on a fresh node. A
+	// serve crash during that window surfaces when the join reads the channel, not immediately. That
 	// delay is acceptable: the metrics server is diagnostic, and deferring the crash keeps a long,
 	// resumable sync from being aborted by a non-critical server.
 	var metricsServeErr <-chan error
@@ -627,29 +615,13 @@ func (n *node) start() error {
 		apiServeErr = serveErr
 	}
 
-	return n.runServices(g, gctx, metricsServeErr, apiServeErr, healthProber, startOngoingSync)
-}
-
-// runServices joins the node's long-lived services into the errgroup and blocks until the first one
-// fails or gctx is canceled. The two HTTP serve loops join via their serveErr channels (nil channel
-// = server disabled), each yielding nil when the server shuts down cleanly (channel closed) or the
-// serve error otherwise; the health prober and the ongoing event sync (nil = local-events mode) join
-// directly; and operatorNode.Start runs as a member too — never returned ahead of g.Wait(), so its
-// failure is awaited alongside the rest rather than skipping the group. The first non-nil return
-// cancels gctx (unwinding the HTTP servers and the other members) and is returned to start().
-func (n *node) runServices(
-	g *errgroup.Group,
-	gctx context.Context,
-	metricsServeErr <-chan error,
-	apiServeErr <-chan error,
-	healthProber *hprobe.HealthProber,
-	startOngoingSync func(context.Context) error,
-) error {
-	// Both HTTP servers were started with gctx, so their ctx-aware Shutdown watcher fires on cancel
-	// and closes serveErr (http.Server.Serve returns ErrServerClosed as soon as the listener closes,
-	// independent of connection draining). A plain receive therefore can't wedge g.Wait() — unlike
-	// the WS server in the operator package, whose shutdown is bound to a different ctx and so needs
-	// an explicit gctx-escape select.
+	// Join the long-lived services into the errgroup and block until the first fails or gctx is
+	// canceled (clean shutdown → every service returns nil → nil). operatorNode.Start runs as a
+	// member too — never returned ahead of g.Wait(), so its failure is awaited alongside the rest.
+	// Both HTTP servers were started with gctx, so their ctx-aware Shutdown closes serveErr on cancel
+	// (Serve returns ErrServerClosed once the listener closes), and a plain receive can't wedge
+	// g.Wait() — unlike the WS server in the operator package, whose shutdown is bound to a different
+	// ctx and so needs an explicit gctx-escape select.
 	if metricsServeErr != nil {
 		g.Go(func() error {
 			if err := <-metricsServeErr; err != nil {

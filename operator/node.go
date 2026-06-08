@@ -179,11 +179,11 @@ func (n *Node) Start(ctx context.Context) error {
 	}
 
 	// Start the duty scheduler (modes that use it) on gctx, so it stops when the group is canceled —
-	// on shutdown, or once runServices joins the long-lived members and one fails. dutyScheduler.Start
-	// blocks (HandleInitialDuties, itself bounded to ~a slot), and the WS serve loop isn't joined until
-	// runServices, so a WS serve failure during this window is buffered in wsServeErr and surfaced once
-	// runServices joins it — same as the metrics/API serve loops in cli/operator. This is deliberate:
-	// a diagnostic-server crash shouldn't abort in-progress (resumable) startup mid-flight.
+	// on shutdown, or once the long-lived members are joined below and one fails. dutyScheduler.Start
+	// blocks (HandleInitialDuties, itself bounded to ~a slot), and the WS serve loop isn't joined
+	// until after that, so a WS serve failure during this window is buffered in wsServeErr and
+	// surfaced once it's joined — same as the metrics/API serve loops in cli/operator. This is
+	// deliberate: a diagnostic-server crash shouldn't abort in-progress (resumable) startup mid-flight.
 	if n.dutyScheduler != nil {
 		if err := n.dutyScheduler.Start(gctx); err != nil {
 			return fmt.Errorf("failed to run duty scheduler: %w", err)
@@ -260,16 +260,12 @@ func (n *Node) Start(ctx context.Context) error {
 	// The p2p network is owned by its creator (cli/operator), which closes it via defer.
 	// Start() no longer closes it: closing it only on this happy path leaked the network
 	// whenever Start returned early with an error.
-	return n.runServices(g, gctx, wsServeErr)
-}
-
-// runServices joins the operator node's long-lived members — the WS server's serve loop and the
-// duty scheduler's blocking wait — into the errgroup and blocks until the first fails or gctx is
-// canceled. On a clean cancellation every member returns nil, so Start returns nil; the first
-// non-nil return cancels gctx (unwinding the others) and propagates up to cli/operator's single
-// top-level Fatal, with node.Close() running. This replaces three goroutine/blocking-tail Fatals
-// that os.Exit-ed the process directly.
-func (n *Node) runServices(g *errgroup.Group, gctx context.Context, wsServeErr <-chan error) error {
+	//
+	// Join the long-lived members — the WS serve loop and the duty scheduler's blocking wait — into
+	// the errgroup and block until the first fails or gctx is canceled (clean cancel → every member
+	// returns nil → nil). The first non-nil return cancels gctx and propagates up to cli/operator's
+	// single top-level Fatal, with node.Close() running — replacing three goroutine/blocking-tail
+	// Fatals that os.Exit-ed the process directly.
 	if wsServeErr != nil {
 		g.Go(func() error {
 			// The WS server's shutdown is bound to its constructor ctx (the node ctx), not gctx, so

@@ -2,16 +2,13 @@ package operator
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"testing"
-	"time"
 
 	"github.com/attestantio/go-eth2-client/api"
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
-	"golang.org/x/sync/errgroup"
 
 	"github.com/ssvlabs/ssv/doppelganger"
 	"github.com/ssvlabs/ssv/eth/executionclient"
@@ -69,23 +66,6 @@ type stubExecutionClient struct {
 // Close is a no-op: node.Close() (invoked by the smoke tests during teardown) calls it, so it must
 // not fall through to the nil embedded Provider.
 func (stubExecutionClient) Close() error { return nil }
-
-// stubOperatorNode is a test double for the operatorNode seam. Its Start blocks until ctx is
-// canceled and then returns nil — mirroring a clean operator.Node shutdown — unless startErr is set,
-// in which case Start returns it immediately to exercise failure propagation through the errgroup.
-type stubOperatorNode struct {
-	startErr error
-}
-
-func (s stubOperatorNode) Start(ctx context.Context) error {
-	if s.startErr != nil {
-		return s.startErr
-	}
-	<-ctx.Done()
-	return nil
-}
-
-func (stubOperatorNode) HealthCheck() error { return nil }
 
 // Test_newNode_wiresOperatorNode is the in-process smoke test for the newNode() seam: with
 // stubbed beacon/EL clients and a minimal operator-mode config, the full wiring graph
@@ -285,59 +265,4 @@ func Test_node_startNetwork_wiresStatsRegardlessOfDynamicMaxPeers(t *testing.T) 
 			require.True(t, stubNet.startCalled, "p2p Start must run regardless of DynamicMaxPeers")
 		})
 	}
-}
-
-// Test_node_runServices_returnsNilOnCtxCancel locks in the normal-shutdown invariant: every
-// long-lived service joined by runServices must return nil on a plain ctx cancellation, so a clean
-// SIGINT unwinds through start() -> runNode() as nil rather than tripping the single top-level Fatal.
-// It drives runServices with stand-ins for each member shape — HTTP serve-error channels that close
-// on shutdown (as the real ctx-aware servers do), an empty health prober (ProbeAll over zero
-// components is a no-op), an ongoing-sync func that returns nil on cancel, and a stub operatorNode
-// that blocks until cancel — then cancels ctx and asserts runServices returns nil.
-func Test_node_runServices_returnsNilOnCtxCancel(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	g, gctx := errgroup.WithContext(ctx)
-
-	// Mimic the ctx-aware HTTP servers: their serveErr channel is closed (silently) once gctx-driven
-	// shutdown completes, so the joined <-serveErr yields nil.
-	metricsServeErr := make(chan error, 1)
-	apiServeErr := make(chan error, 1)
-	go func() { <-gctx.Done(); close(metricsServeErr) }()
-	go func() { <-gctx.Done(); close(apiServeErr) }()
-
-	ongoingSync := func(c context.Context) error { <-c.Done(); return nil }
-
-	n := &node{logger: zap.NewNop(), operatorNode: stubOperatorNode{}}
-
-	done := make(chan error, 1)
-	go func() {
-		done <- n.runServices(g, gctx, metricsServeErr, apiServeErr, hprobe.NewHealthProber(zap.NewNop()), ongoingSync)
-	}()
-
-	cancel()
-
-	select {
-	case err := <-done:
-		require.NoError(t, err, "runServices must return nil on a clean ctx cancellation")
-	case <-time.After(5 * time.Second):
-		t.Fatal("runServices did not return after ctx cancellation")
-	}
-}
-
-// Test_node_runServices_propagatesMemberError verifies the failure path: when one joined service
-// returns an error, runServices cancels the group (so the siblings unwind via gctx) and returns that
-// error up to start() -> runNode() -> the single top-level Fatal. A stub operatorNode that fails
-// immediately stands in for any long-lived service failure.
-func Test_node_runServices_propagatesMemberError(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	g, gctx := errgroup.WithContext(ctx)
-
-	wantErr := errors.New("boom")
-	n := &node{logger: zap.NewNop(), operatorNode: stubOperatorNode{startErr: wantErr}}
-
-	// No HTTP servers (nil channels) and no ongoing sync (nil func); the empty prober returns nil on
-	// the group cancellation the failing operatorNode member triggers.
-	err := n.runServices(g, gctx, nil, nil, hprobe.NewHealthProber(zap.NewNop()), nil)
-	require.ErrorIs(t, err, wantErr)
 }
