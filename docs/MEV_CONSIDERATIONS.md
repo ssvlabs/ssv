@@ -8,7 +8,7 @@ If your PBS does not support timing games (mev-boost < v1.11, mev-boost without 
 
 **Do NOT apply both**: `timing games on the PBS layer` configuration + SSV's `ProposerDelay / ProposalSoftTimeout` - only one of these is supposed to run at any given time. Here are the recommended configuration steps, to avoid any sort of undesirable downtime during transition:
 - Configure SSV node first to remove/unset any of `ProposerDelay / ProposalSoftTimeout`.
-- Set `ProposalSoftDeadline = your PBS late_in_slot_time_ms + ~50ms BN→SSV transport` to opt into MEV-optimized block fetch - see [SSV-side configuration](#ssv-side-configuration) for details.
+- Set `ProposalSoftDeadline = your PBS late_in_slot_time_ms + ~50–100ms BN→SSV transport` to opt into MEV-optimized block fetch - see [SSV-side configuration](#ssv-side-configuration) for details.
 - Restart SSV node to apply.
 - Set/update mev/commit-boost configuration settings to enable `timing games on the PBS layer` - see [PBS configuration settings](#pbs-side-configuration) for details.
 - It is recommended that all SSV nodes in the same cluster use the same or similar configuration, as significant differences may lead to missed duties.
@@ -73,10 +73,10 @@ Setting `ProposalSoftDeadline` opts into the **MEV-optimized** block-fetch path:
 
 ```yaml
 eth2:
-  ProposalSoftDeadline: <your PBS late_in_slot_time_ms + ~50ms BN→SSV transport>
+  ProposalSoftDeadline: <your PBS late_in_slot_time_ms + ~50–100ms BN→SSV transport>
 ```
 
-The `+ ~50ms BN→SSV transport` term is the inbound fetch hop: after the PBS returns its winning bid at `late_in_slot_time_ms`, the beacon node assembles the blinded block and forwards it to SSV. Adding it to the PBS cutoff estimates when SSV actually holds the block — the point the deadline should track. This is *not* the same as `BlockSubmission` in the [Definitions table](#definitions-and-typical-values): that is the outbound end of the flow (SSV → BN → relay reveal → propagation), and shares only the single BN↔SSV network hop with this term — `BlockSubmission` adds relay reveal and propagation on top, which is why it is the larger figure.
+The `+ ~50–100ms BN→SSV transport` term is the inbound fetch hop: after the PBS returns its winning bid at `late_in_slot_time_ms`, the beacon node assembles the blinded block and forwards it to SSV. Adding it to the PBS cutoff estimates when SSV actually holds the block — the point the deadline should track. It covers BN-side block assembly plus a one-way BN→SSV hop, so it grows with remote or loaded beacon nodes — measure your own (SSV logs per-proposal arrival latency) and round up: under-shooting trims the multi-BN bid-collection window (costing MEV, not slots), while over-shooting costs only a few ms of slot budget. It is *not* the same as `BlockSubmission` in the [Definitions table](#definitions-and-typical-values): that is the outbound end of the flow (SSV → BN → relay reveal → propagation), sharing only the single BN↔SSV hop with this term — `BlockSubmission` adds relay reveal and propagation on top, which is why it is the larger figure.
 
 `ProposalSoftDeadline` is a **slot-relative** deadline (measured from slot start). It does two things, and applies to single- and multi-Beacon-node setups alike:
 
@@ -93,7 +93,7 @@ Two scenarios shown for both PBSes. The numbers are starting points for a health
 
 ### Example A — bid-sample equivalent of legacy `ProposerDelay ≈ 1000ms` (recommended starting point)
 
-Lands the last relay poll at ~1000ms, matching when legacy `ProposerDelay = 1000ms` would have queried the relays. Useful as a migration baseline — same bid quality, but the header arrives at SSV at ~1100ms (1050ms PBS cutoff + ~50ms BN→SSV) instead of legacy's ~1300–2000ms (depending on relay response speed), leaving more slot budget for QBFT and submission.
+Lands the last relay poll at ~1000ms, matching when legacy `ProposerDelay = 1000ms` would have queried the relays. Useful as a migration baseline — same bid quality, but the header arrives at SSV at ~1150ms (1050ms PBS cutoff + ~100ms BN→SSV) instead of legacy's ~1300–2000ms (depending on relay response speed), leaving more slot budget for QBFT and submission.
 
 The polling pattern (`target_first_request_ms = 700`, `frequency_get_header_ms = 150`) fires polls at 700ms, 850ms, and 1000ms.
 
@@ -134,16 +134,16 @@ relays:
 **SSV-side** (opts into MEV-optimized block fetch — see [SSV-side configuration](#ssv-side-configuration)):
 ```yaml
 eth2:
-  ProposalSoftDeadline: 1100ms   # = PBS late_in_slot_time_ms (1050ms) + ~50ms BN→SSV transport
+  ProposalSoftDeadline: 1150ms   # = PBS late_in_slot_time_ms (1050ms) + ~100ms BN→SSV transport
 ```
 
 ### Example B — aggressive: PBS-side cutoff at 1800ms (round 1 must succeed)
 
-Pushes the PBS-side cutoff to `1800ms` — past the ~1450ms threshold where round-2 QBFT fallback may no longer fit within the slot for typical clusters. This accepts "round 1 must succeed" in exchange for capturing more intra-slot bid growth (clusters with measurably faster QBFT + submission may still leave room for round 2). Last relay poll at ~1600ms; header at SSV by ~1850ms.
+Pushes the PBS-side cutoff to `1800ms` — past the ~1450ms threshold where round-2 QBFT fallback may no longer fit within the slot for typical clusters. This accepts "round 1 must succeed" in exchange for capturing more intra-slot bid growth (clusters with measurably faster QBFT + submission may still leave room for round 2). Last relay poll at ~1600ms; header at SSV by ~1900ms.
 
 The polling pattern (`target_first_request_ms = 1000`, `frequency_get_header_ms = 200`) fires polls at 1000ms, 1200ms, 1400ms, 1600ms — four chances with ~200ms RTT margin.
 
-Trade-off vs Example A: bid-sample time shifts ~600ms later, capturing more intra-slot bid growth, but the remaining slot budget for QBFT and submission shrinks from ~2900ms to ~2150ms — below the ~2500ms typically needed for the worst-case 2-round QBFT scenario. Example B accepts that round 1 must succeed; if round 1 fails, the slot may be missed (whether it's actually missed depends on your cluster's QBFT + submission latencies). Use only after baselining your stack's round-1 success rate.
+Trade-off vs Example A: bid-sample time shifts ~600ms later, capturing more intra-slot bid growth, but the remaining slot budget for QBFT and submission shrinks from ~2850ms to ~2100ms — below the ~2500ms typically needed for the worst-case 2-round QBFT scenario. Example B accepts that round 1 must succeed; if round 1 fails, the slot may be missed (whether it's actually missed depends on your cluster's QBFT + submission latencies). Use only after baselining your stack's round-1 success rate.
 
 **commit-boost** (TOML):
 ```toml
@@ -179,10 +179,10 @@ relays:
     frequency_get_header_ms: 200
 ```
 
-**SSV-side** (opts into MEV-optimized block fetch — 1850ms triggers the safe-max startup warning since it exceeds the ~1450ms threshold; see [SSV-side configuration](#ssv-side-configuration)):
+**SSV-side** (opts into MEV-optimized block fetch — 1900ms triggers the safe-max startup warning since it exceeds the ~1450ms threshold; see [SSV-side configuration](#ssv-side-configuration)):
 ```yaml
 eth2:
-  ProposalSoftDeadline: 1850ms   # = PBS late_in_slot_time_ms (1800ms) + ~50ms BN→SSV transport
+  ProposalSoftDeadline: 1900ms   # = PBS late_in_slot_time_ms (1800ms) + ~100ms BN→SSV transport
 ```
 
 ## Appendix A — Legacy `ProposerDelay` approach
