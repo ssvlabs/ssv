@@ -4,6 +4,9 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -56,7 +59,20 @@ var StartNodeCmd = &cobra.Command{
 
 		logger.Info(fmt.Sprintf("starting %v", commons.GetBuildData()))
 
-		if err := runNode(cmd.Context(), &cfg, logger); err != nil {
+		// Cancel the node ctx on SIGINT/SIGTERM so shutdown unwinds gracefully through the errgroup
+		// (long-lived services return nil, node.Close() runs) instead of the process being terminated
+		// abruptly. Scoped to start-node so other subcommands keep cobra's default signal behavior.
+		ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
+		defer stop()
+
+		if err := runNode(ctx, &cfg, logger); err != nil {
+			// A signal during the synchronous startup phase surfaces as an error rather than the
+			// errgroup's clean-cancel (nil) path; treat it as a deliberate stop, not a startup failure
+			// — exit 0 (letting the deferred observability shutdown run) instead of Fatal.
+			if ctx.Err() != nil {
+				logger.Info("node shut down before startup completed", zap.Error(err))
+				return
+			}
 			logger.Fatal("could not start node", startupErrorLogFields(err)...)
 		}
 	},
