@@ -329,9 +329,8 @@ func newNode(ctx context.Context, cfg *config, logger *zap.Logger, res resolved,
 	var newDecidedHandler qbftcontroller.NewDecidedHandler
 	var decidedStreamPublisherFn func(dutytracer.DecidedInfo)
 	if cfg.WsAPIPort != 0 {
-		ws := exporterapi.NewWsServer(ctx, logger, nil, http.NewServeMux(), cfg.WithPing)
+		ws := exporterapi.NewWsServer(ctx, logger, nil, http.NewServeMux(), cfg.WithPing, fmt.Sprintf(":%d", cfg.WsAPIPort))
 		cfg.SSVOptions.WS = ws
-		cfg.SSVOptions.WsAPIPort = cfg.WsAPIPort
 		newDecidedHandler = decided.NewStreamPublisher(logger, networkConfig.DomainType, ws)
 		decidedStreamPublisherFn = decided.NewDecidedListener(logger, networkConfig.DomainType, ws, nodeStorage.ValidatorStore())
 	}
@@ -487,19 +486,16 @@ func (n *node) Close() error {
 	return errors.Join(errs...)
 }
 
-// start launches the node's long-lived services (metrics + SSV API servers, the health prober,
-// contract-event sync, operatorNode.Start) and blocks until the node's ctx is canceled or the first
-// service fails.
-//
-// Each service joins an errgroup on gctx as it is brought up; the first failure cancels gctx — which
-// tears down the others (and the ctx-aware HTTP servers) — and surfaces as the group error, while a
-// plain ctx cancellation has every service return nil (clean shutdown → nil). The synchronous
-// bring-up steps run on n.ctx, not gctx, so they abort only on actual shutdown: a long resumable step
-// (e.g. historical sync) is not torn down when a non-critical service (e.g. a diagnostic HTTP server)
-// crashes — that error still surfaces, at g.Wait. Every failure path returns up through runNode() to
-// the single top-level Fatal, with node.Close() running on the way out.
+// start launches the node's long-lived services and blocks until the node's ctx is canceled (clean
+// shutdown → nil) or the first service fails (→ that error). Every failure path returns up through
+// runNode() to the single top-level Fatal, with node.Close() running on the way out.
 func (n *node) start() error {
-	g, gctx := errgroup.WithContext(n.ctx)
+	// The long-lived members below run on gctx, so any one's failure cancels it and tears the rest
+	// down. On an early return, defer cancel() signals the already-joined members to stop (it doesn't
+	// await them — they wind down alongside runNode's Close()).
+	ctx, cancel := context.WithCancel(n.ctx)
+	defer cancel()
+	g, gctx := errgroup.WithContext(ctx)
 
 	if n.cfg.MetricsAPIPort > 0 {
 		metricsHandler := metrics.NewHandler(n.logger, n.db, n.cfg.EnableProfile, n.operatorNode)
@@ -507,10 +503,9 @@ func (n *node) start() error {
 		if err != nil {
 			return fmt.Errorf("failed to start metrics server: %w", err)
 		}
-		// The serve loops join on gctx with a plain receive: each server's ctx-aware Shutdown closes
-		// serveErr on cancel (Serve returns ErrServerClosed once the listener closes), so this can't
-		// wedge g.Wait() — unlike the operator-package WS loop, whose shutdown ctx differs and so needs
-		// an explicit gctx-escape select.
+		// Plain receive is safe: the server's gctx-bound Shutdown closes serveErr on cancel, so this
+		// can't wedge g.Wait(). The operator-package WS loop needs a gctx-escape select only because
+		// its shutdown ctx differs.
 		g.Go(func() error {
 			if err := <-metricsServeErr; err != nil {
 				return fmt.Errorf("metrics server serve loop exited: %w", err)
@@ -541,9 +536,7 @@ func (n *node) start() error {
 	if err != nil {
 		return err
 	}
-	if len(n.cfg.LocalEventsPath) == 0 {
-		// Contract-sync mode: register the event syncer for health probing and join its ongoing sync
-		// (startOngoingSync is non-nil only on this path).
+	if startOngoingSync != nil {
 		healthProber.AddComponent(eventSyncerComponentName, eventSyncer, proberHealthcheckTimeout, proberRetriesMax, proberRetryDelay)
 		g.Go(func() error {
 			return startOngoingSync(gctx)
@@ -594,8 +587,7 @@ func (n *node) start() error {
 	if err := n.startNetwork(healthProber); err != nil {
 		return err
 	}
-	// The prober joins here — after startNetwork, so all its components (CL/EL, event-syncer, p2p) are
-	// registered. It returns nil on clean cancel and the unhealth error on a watchdog trip.
+	// After startNetwork, so the prober's components (CL/EL, event-syncer, p2p) are all registered.
 	g.Go(func() error {
 		return startHealthProber(gctx, n.logger, healthProber)
 	})
@@ -634,8 +626,6 @@ func (n *node) start() error {
 		})
 	}
 
-	// operatorNode.Start runs as a member too — never returned ahead of g.Wait(), so its failure is
-	// awaited alongside the rest.
 	g.Go(func() error {
 		if err := n.operatorNode.Start(gctx); err != nil {
 			return fmt.Errorf("failed to start SSV node: %w", err)

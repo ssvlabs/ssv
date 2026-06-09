@@ -67,10 +67,11 @@ var StartNodeCmd = &cobra.Command{
 
 		if err := runNode(ctx, &cfg, logger); err != nil {
 			// A signal during the synchronous startup phase surfaces as an error rather than the
-			// errgroup's clean-cancel (nil) path; treat it as a deliberate stop, not a startup failure
-			// — exit 0 (letting the deferred observability shutdown run) instead of Fatal.
+			// clean-cancel (nil) path. Key on whether a signal arrived, not the error's nature: a
+			// deliberate stop exits 0 (running the deferred observability shutdown) even if a genuine
+			// error coincided — whoever sent the signal isn't restarting on exit code anyway.
 			if ctx.Err() != nil {
-				logger.Info("node shut down before startup completed", zap.Error(err))
+				logger.Info("node stopped on signal", startupErrorLogFields(err)...)
 				return
 			}
 			logger.Fatal("could not start node", startupErrorLogFields(err)...)

@@ -20,10 +20,10 @@ import (
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
-// syncContractEvents blocks until historical events are synced, then returns the event syncer along
-// with a start-func for ongoing event sync (nil in local-events mode). The caller runs the start-func
-// as a long-lived errgroup member so an ongoing-sync failure returns up to the single top-level Fatal
-// (with Close running) instead of os.Exit-ing the process from inside a goroutine.
+// syncContractEvents blocks until historical events are synced, then returns the event syncer plus a
+// start-func for ongoing event sync (nil in local-events mode). The caller runs the start-func as an
+// errgroup member, so an ongoing-sync failure surfaces up to the top-level Fatal instead of
+// os.Exit-ing from a goroutine.
 func syncContractEvents(
 	ctx context.Context,
 	logger *zap.Logger,
@@ -81,8 +81,7 @@ func syncContractEvents(
 		fromBlock = new(big.Int).SetUint64(fromBlock.Uint64() + 1)
 	}
 
-	// Set only in the contract-sync path below; stays nil in local-events mode, where there is no
-	// ongoing sync to run.
+	// Set only on the contract-sync path below; nil in local-events mode (no ongoing sync there).
 	var startOngoingSync func(context.Context) error
 
 	// load & parse local events yaml if exists, otherwise sync from contract
@@ -144,12 +143,11 @@ func syncContractEvents(
 			zap.Int("my_validators", operatorValidators),
 		)
 
-		// Sync ongoing registry events. Terminate the node if it stops: the node can't operate without
+		// Sync ongoing registry events; terminate the node if it stops. The node can't operate without
 		// staying current with Ethereum events, and until reorg handling exists, restarting from
 		// persisted state is safer than continuing on possibly-incorrect state. A clean ctx
-		// cancellation (normal shutdown) returns nil; any other failure returns up to the single
-		// top-level Fatal (with Close running). startupError carries last_processed_block so that
-		// context is preserved through the returned-error path.
+		// cancellation returns nil; any other error surfaces up to the top-level Fatal, with
+		// last_processed_block preserved via startupError.
 		startOngoingSync = func(ctx context.Context) error {
 			if err := eventSyncer.SyncOngoing(ctx, fromBlock.Uint64()); err != nil && !errors.Is(err, context.Canceled) {
 				return startupError{

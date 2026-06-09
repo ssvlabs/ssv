@@ -27,18 +27,11 @@ const (
 
 const componentsUnhealthyErrorMsg = "component(s) are not healthy"
 
-// probe runs a single ProbeAll over all registered components, bounded by timeout, and returns the
-// prober's error verbatim. It is the shared core of the one-shot startup gate (ensureComponentsHealthy)
-// and the periodic runtime watchdog (startHealthProber), which differ only in timeout and the policy
-// wrapped around it — fail-fast vs. shutdown-trip.
-func probe(ctx context.Context, p *hprobe.HealthProber, timeout time.Duration) error {
-	probeCtx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-	return p.ProbeAll(probeCtx)
-}
-
 func ensureComponentsHealthy(ctx context.Context, logger *zap.Logger, p *hprobe.HealthProber) error {
-	if err := probe(ctx, p, 30*time.Second); err != nil {
+	probeCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	if err := p.ProbeAll(probeCtx); err != nil {
 		return fmt.Errorf("%s: %w", componentsUnhealthyErrorMsg, err)
 	}
 
@@ -46,27 +39,30 @@ func ensureComponentsHealthy(ctx context.Context, logger *zap.Logger, p *hprobe.
 	return nil
 }
 
-// startHealthProber is a runtime liveness watchdog: every probeFrequency it probes all components,
-// and on persistent unhealth returns an error so the node terminates gracefully (errgroup -> Close ->
-// non-zero exit) and the orchestrator restarts it — potentially onto a healthy endpoint. A clean ctx
-// cancellation (normal shutdown) returns nil. The crash-and-restart on persistent unhealth is
-// intentional: a node idling with a dead EL while reporting healthy at the process level is a silent
-// failure, worse than a loud restart — so this must not degrade to "log and retry forever".
+// startHealthProber is a runtime liveness watchdog: it probes all components every probeFrequency
+// and, on persistent unhealth, returns an error so the node terminates gracefully (via Close,
+// non-zero exit) and the orchestrator restarts it; a clean ctx cancellation returns nil. Crashing on
+// persistent unhealth is intentional — a node idling with a dead EL while reporting healthy is a
+// silent failure, worse than a restart — so it must not degrade to log-and-retry.
 func startHealthProber(ctx context.Context, logger *zap.Logger, p *hprobe.HealthProber) error {
-	const probeFrequency = 60 * time.Second
+	const (
+		probeFrequency = 60 * time.Second // how often a probe round runs
+		probeTimeout   = 60 * time.Second // max time for one probe round (ProbeAll)
+	)
 
 	ticker := time.NewTicker(probeFrequency)
 	defer ticker.Stop()
 
 	for {
 		logger.Debug("health-prober tick: probing all components")
-		if err := probe(ctx, p, probeFrequency); err != nil {
-			// Discriminate "we're shutting down" from "a component is unhealthy" by the parent ctx
-			// state, not the error value. A wedged component (e.g. a hung EL) surfaces as a probe
-			// DeadlineExceeded while ctx is still live, and that MUST trip the watchdog — inspecting
-			// err for context.Canceled/DeadlineExceeded would wrongly suppress real unhealth. Only a
-			// canceled parent ctx means a deliberate stop: normal shutdown, or a sibling errgroup
-			// member already failed (its error drives the non-zero exit, so returning nil here is safe).
+		probeCtx, cancel := context.WithTimeout(ctx, probeTimeout)
+		err := p.ProbeAll(probeCtx)
+		cancel() // not deferred: this is a loop, so release each tick's ctx immediately
+		if err != nil {
+			// Key off the parent ctx, not the error value: a wedged component (e.g. a hung EL) surfaces
+			// as a probe DeadlineExceeded while ctx is still live and must trip the watchdog, so
+			// matching context.Canceled/DeadlineExceeded would suppress real unhealth. A canceled
+			// parent ctx means a deliberate stop (shutdown, or a sibling already failed), so nil is safe.
 			if ctx.Err() != nil {
 				return nil
 			}

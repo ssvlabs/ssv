@@ -24,8 +24,8 @@ func TestHandleQuery(t *testing.T) {
 		nm.Msg.Data = []registrystorage.OperatorData{
 			{PublicKey: fmt.Sprintf("pubkey-%d", nm.Msg.Filter.From)},
 		}
-	}, mux, false)
-	addr, _, err := ws.Start("127.0.0.1:0")
+	}, mux, false, "127.0.0.1:0")
+	addr, _, err := ws.Start()
 	require.NoError(t, err)
 
 	clientCtx, cancelClientCtx := context.WithCancel(ctx)
@@ -65,8 +65,8 @@ func TestHandleQuery_ServerCtxCancelClosesIdleConn(t *testing.T) {
 	defer cancel()
 
 	mux := http.NewServeMux()
-	ws := NewWsServer(ctx, zap.NewNop(), func(nm *NetworkMessage) {}, mux, false)
-	addr, _, err := ws.Start("127.0.0.1:0")
+	ws := NewWsServer(ctx, zap.NewNop(), func(nm *NetworkMessage) {}, mux, false, "127.0.0.1:0")
+	addr, _, err := ws.Start()
 	require.NoError(t, err)
 
 	conn, _, err := websocket.DefaultDialer.Dial("ws://"+addr+"/query", nil)
@@ -84,8 +84,8 @@ func TestHandleStream(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 	ctx := t.Context()
 	mux := http.NewServeMux()
-	ws := NewWsServer(ctx, zap.NewNop(), nil, mux, false)
-	addr, _, err := ws.Start("127.0.0.1:0")
+	ws := NewWsServer(ctx, zap.NewNop(), nil, mux, false, "127.0.0.1:0")
+	addr, _, err := ws.Start()
 	require.NoError(t, err)
 
 	testCtx, cancelCtx := context.WithCancel(ctx)
