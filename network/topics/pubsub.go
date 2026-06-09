@@ -180,7 +180,7 @@ func NewPubSub(
 			peerConnected := func(pid peer.ID) bool {
 				return cfg.Host.Network().Connectedness(pid) == libp2pnetwork.Connected
 			}
-			inspector = scoreInspector(logger, cfg.ScoreIndex, scoreInspectLogFrequency, peerConnected, peerScoreParams, topicScoreFactory, gossipScoreIndex, cfg.PeerObserver)
+			inspector = scoreInspector(ctx, logger, cfg.ScoreIndex, scoreInspectLogFrequency, peerConnected, peerScoreParams, topicScoreFactory, gossipScoreIndex, cfg.PeerObserver)
 		}
 		if inspectInterval == 0 {
 			inspectInterval = defaultScoreInspectInterval
@@ -200,7 +200,7 @@ func NewPubSub(
 	}
 
 	if cfg.TraceLog || cfg.PeerObserver.Enabled() {
-		psOpts = append(psOpts, pubsub.WithEventTracer(newTracer(logger, cfg.TraceLog, cfg.PeerObserver)))
+		psOpts = append(psOpts, pubsub.WithEventTracer(newTracer(ctx, logger, cfg.TraceLog, cfg.PeerObserver)))
 	}
 
 	ps, err := pubsub.NewGossipSub(ctx, cfg.Host, psOpts...)

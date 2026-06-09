@@ -74,6 +74,7 @@ func TestScoreInspectorObservesHighlightedPeersBetweenLogCycles(t *testing.T) {
 	core, logs := zapobserver.New(zap.DebugLevel)
 	logger := zap.New(core)
 	inspector := scoreInspector(
+		t.Context(),
 		logger,
 		nil,
 		2,

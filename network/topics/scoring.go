@@ -35,7 +35,8 @@ type topicScoreSnapshot struct {
 // It also updates the GossipScoreIndex by resetting it and
 // adding the peers' scores.
 // TODO: finalize once validation is in place
-func scoreInspector(logger *zap.Logger,
+func scoreInspector(ctx context.Context,
+	logger *zap.Logger,
 	scoreIdx peers.ScoreIndex,
 	logFrequency int,
 	peerConnected func(pid peer.ID) bool,
@@ -165,7 +166,7 @@ func scoreInspector(logger *zap.Logger,
 			}
 
 			if highlightedPeer {
-				peerObserver.Observe(context.Background(), logger, "pubsub_peer_score", pid, fields...)
+				peerObserver.Observe(ctx, logger, "pubsub_peer_score", pid, fields...)
 			}
 			if shouldLog {
 				logger.Debug("peer scores", fields...)

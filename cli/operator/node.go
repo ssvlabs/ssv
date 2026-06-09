@@ -64,6 +64,7 @@ import (
 	networkcommons "github.com/ssvlabs/ssv/network/commons"
 	p2pv1 "github.com/ssvlabs/ssv/network/p2p"
 	"github.com/ssvlabs/ssv/network/peers/peertrace"
+	peertracessvvalidation "github.com/ssvlabs/ssv/network/peers/peertrace/ssvvalidation"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability"
 	ssvlog "github.com/ssvlabs/ssv/observability/log"
@@ -464,7 +465,7 @@ var StartNodeCmd = &cobra.Command{
 			dutyStore,
 			signatureVerifier,
 			validation.WithLogger(logger),
-			validation.WithSSVValidationObserver(highlightedPeerObserver),
+			validation.WithSSVValidationObserver(peertracessvvalidation.New(highlightedPeerObserver)),
 		)
 
 		cfg.P2pNetworkConfig.MessageValidator = messageValidator

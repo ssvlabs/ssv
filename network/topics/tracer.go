@@ -18,14 +18,16 @@ import (
 // it can run with logging in addition to reporting (on by default)
 type psTracer struct {
 	logger       *zap.Logger // struct logger to implement pubsub.EventTracer
+	ctx          context.Context
 	traceLog     bool
 	peerObserver *peertrace.Observer
 }
 
 // newTracer creates an instance of psTracer
-func newTracer(logger *zap.Logger, traceLog bool, peerObserver *peertrace.Observer) pubsub.EventTracer {
+func newTracer(ctx context.Context, logger *zap.Logger, traceLog bool, peerObserver *peertrace.Observer) pubsub.EventTracer {
 	return &psTracer{
 		logger:       logger.Named(log.NamePubsubTrace),
+		ctx:          ctx,
 		traceLog:     traceLog,
 		peerObserver: peerObserver,
 	}
@@ -117,7 +119,7 @@ func (pst *psTracer) log(logger *zap.Logger, evt *ps_pb.TraceEvent) {
 			fields = append(fields, zap.String("targetPeer", pid.String()))
 			highlightedPeer = pid
 		}
-		if meta := msg.GetMeta(); meta != nil {
+		if meta := msg.GetMeta(); meta != nil && pst.highlighted(highlightedPeer) {
 			fields = appendMessages(fields, meta.GetMessages())
 			if ctrl := meta.Control; ctrl != nil {
 				fields = appendIHave(fields, ctrl.GetIhave())
@@ -139,7 +141,7 @@ func (pst *psTracer) log(logger *zap.Logger, evt *ps_pb.TraceEvent) {
 			fields = append(fields, zap.String("targetPeer", pid.String()))
 			highlightedPeer = pid
 		}
-		if meta := msg.GetMeta(); meta != nil {
+		if meta := msg.GetMeta(); meta != nil && pst.highlighted(highlightedPeer) {
 			fields = appendMessages(fields, meta.GetMessages())
 			if ctrl := meta.Control; ctrl != nil {
 				fields = appendIHave(fields, ctrl.GetIhave())
@@ -161,7 +163,7 @@ func (pst *psTracer) log(logger *zap.Logger, evt *ps_pb.TraceEvent) {
 			fields = append(fields, zap.String("receivedFrom", pid.String()))
 			highlightedPeer = pid
 		}
-		if meta := msg.GetMeta(); meta != nil {
+		if meta := msg.GetMeta(); meta != nil && pst.highlighted(highlightedPeer) {
 			fields = appendMessages(fields, meta.GetMessages())
 			if ctrl := meta.Control; ctrl != nil {
 				fields = appendIHave(fields, ctrl.GetIhave())
@@ -180,11 +182,23 @@ func (pst *psTracer) log(logger *zap.Logger, evt *ps_pb.TraceEvent) {
 		return
 	}
 	if highlightedPeer != "" {
-		pst.peerObserver.Observe(context.Background(), logger, "pubsub_trace_"+strings.ToLower(evt.GetType().String()), highlightedPeer, fields...)
+		pst.peerObserver.Observe(pst.context(), logger, "pubsub_trace_"+strings.ToLower(evt.GetType().String()), highlightedPeer, fields...)
 	}
 	if pst.traceLog {
 		logger.Debug("pubsub event", fields...)
 	}
+}
+
+func (pst *psTracer) highlighted(pid peer.ID) bool {
+	_, ok := pst.peerObserver.Match(pid)
+	return ok
+}
+
+func (pst *psTracer) context() context.Context {
+	if pst.ctx == nil {
+		return context.Background()
+	}
+	return pst.ctx
 }
 
 func appendMessages(fields []zap.Field, messages []*ps_pb.TraceEvent_MessageMeta) []zap.Field {

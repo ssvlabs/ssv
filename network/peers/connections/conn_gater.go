@@ -141,7 +141,11 @@ func (n *connGater) InterceptAccept(multiaddrs libp2pnetwork.ConnMultiaddrs) (al
 		runtime.Gosched()
 
 		n.observeDecision(connectionGaterPhaseAccept, connectionGaterDecisionReject, reason, "", libp2pnetwork.DirInbound)
-		n.logger.Debug("connection rejected by connection gater",
+		message := "connection rejected by connection gater"
+		if reason == connectionGaterReasonIPRateLimit {
+			message = "connection rejected due to IP rate limit"
+		}
+		n.logger.Debug(message,
 			zap.String("reason", reason),
 			zap.String("remote_addr", remoteAddr.String()),
 		)

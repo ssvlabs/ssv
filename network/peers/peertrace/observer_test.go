@@ -9,8 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	zapobserver "go.uber.org/zap/zaptest/observer"
-
-	ssvvalidation "github.com/ssvlabs/ssv/message/validation"
 )
 
 const attackSimulatorPublicKey = "0x02006c0a9a7e965cb22399987a5a748e90bcc4cb76c461b5d62643c2f2f112055e"
@@ -115,7 +113,7 @@ func TestObserveValidation_LogsHighlightedPeerAndFields(t *testing.T) {
 	require.Equal(t, "invalid role", fields["reason"])
 }
 
-func TestObserveSSVValidation_UsesProvidedLogger(t *testing.T) {
+func TestObserveValidation_NilLoggerDoesNotPanic(t *testing.T) {
 	observer, err := New(Config{Peers: attackSimulatorPublicKey})
 	require.NoError(t, err)
 
@@ -124,15 +122,7 @@ func TestObserveSSVValidation_UsesProvidedLogger(t *testing.T) {
 		pid = highlightedPeer
 	}
 
-	core, logs := zapobserver.New(zap.InfoLevel)
-	logger := zap.New(core)
-	observer.ObserveSSVValidation(t.Context(), logger, ssvvalidation.SSVValidationEvent{
-		PeerID:  pid,
-		Outcome: ssvvalidation.SSVValidationAccepted,
-		Reason:  "valid",
+	require.NotPanics(t, func() {
+		observer.ObserveValidation(t.Context(), nil, pid, "ssv.v2.42", "reject", 128)
 	})
-
-	require.Len(t, logs.All(), 1)
-	require.Equal(t, "p2p highlighted peer ssv validation", logs.All()[0].Message)
-	require.Equal(t, ssvvalidation.SSVValidationAccepted, logs.All()[0].ContextMap()["ssv_validation_result"])
 }

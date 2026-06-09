@@ -13,10 +13,8 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
 
-	ssvvalidation "github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/observability/metrics"
-	ssvmessage "github.com/ssvlabs/ssv/protocol/v2/message"
 )
 
 const (
@@ -40,12 +38,6 @@ var (
 			observability.InstrumentName(observabilityNamespace, "validations"),
 			metric.WithUnit("{message}"),
 			metric.WithDescription("total number of pubsub messages from configured highlighted peers by validation outcome")))
-
-	highlightedPeerSSVValidationsCounter = metrics.New(
-		meter.Int64Counter(
-			observability.InstrumentName(observabilityNamespace, "ssv_validations"),
-			metric.WithUnit("{message}"),
-			metric.WithDescription("total number of SSV-level validation decisions for messages from configured highlighted peers by outcome and reason")))
 )
 
 // Config defines peers that should be highlighted in p2p logs and metrics.
@@ -109,6 +101,13 @@ func (o *Observer) Count() int {
 	return len(o.peers)
 }
 
+func (o *Observer) Label() string {
+	if o == nil {
+		return ""
+	}
+	return o.label
+}
+
 func (o *Observer) Match(pid peer.ID) (Peer, bool) {
 	if o == nil || pid == "" {
 		return Peer{}, false
@@ -121,6 +120,9 @@ func (o *Observer) Observe(ctx context.Context, logger *zap.Logger, event string
 	match, ok := o.Match(pid)
 	if !ok {
 		return
+	}
+	if logger == nil {
+		logger = zap.NewNop()
 	}
 
 	highlightFields := []zap.Field{
@@ -170,57 +172,6 @@ func (o *Observer) ObserveValidation(
 		attribute.String("ssv.p2p.highlight.label", o.label),
 		attribute.String("ssv.p2p.validation.result", outcome),
 		attribute.String("ssv.p2p.pubsub.topic", topic),
-		attribute.String("ssv.p2p.peer.id", match.ID.String()),
-	))
-}
-
-func (o *Observer) ObserveSSVValidation(ctx context.Context, logger *zap.Logger, event ssvvalidation.SSVValidationEvent) {
-	match, ok := o.Match(event.PeerID)
-	if !ok {
-		return
-	}
-	if logger == nil {
-		logger = zap.NewNop()
-	}
-
-	logFields := []zap.Field{
-		zap.Bool("p2p_highlight", true),
-		zap.String("p2p_highlight_label", o.label),
-		zap.String("p2p_highlight_event", "ssv_message_validated"),
-		zap.String("peer_id", match.ID.String()),
-		zap.String("peer_source", match.Source),
-		zap.String("ssv_validation_result", event.Outcome),
-		zap.String("ssv_validation_reason", event.Reason),
-		zap.String("role", event.Role.String()),
-		zap.Int32("role_id", int32(event.Role)),
-		zap.String("ssv_message_type", ssvmessage.MsgTypeToString(event.SSVMessageType)),
-		zap.Uint64("slot", uint64(event.Slot)),
-		zap.String("duty_executor_id", hex.EncodeToString(event.DutyExecutorID)),
-		zap.Any("signers", event.Signers),
-	}
-	qbftMessageType := ""
-	if event.Consensus != nil {
-		qbftMessageType = ssvmessage.QBFTMsgTypeToString(event.Consensus.QBFTMessageType)
-		logFields = append(logFields,
-			zap.Uint64("qbft_round", uint64(event.Consensus.Round)),
-			zap.String("qbft_message_type", qbftMessageType),
-		)
-	}
-	if match.PublicKeyHex != "" {
-		logFields = append(logFields, zap.String("peer_public_key", match.PublicKeyHex))
-	}
-	if event.Error != "" {
-		logFields = append(logFields, zap.String("ssv_validation_error", event.Error))
-	}
-	logger.Info("p2p highlighted peer ssv validation", logFields...)
-
-	highlightedPeerSSVValidationsCounter.Add(ctx, 1, metric.WithAttributes(
-		attribute.String("ssv.p2p.highlight.label", o.label),
-		attribute.String("ssv.p2p.ssv_validation.result", event.Outcome),
-		attribute.String("ssv.p2p.ssv_validation.reason", event.Reason),
-		attribute.String("ssv.p2p.message.role", event.Role.String()),
-		attribute.String("ssv.p2p.message.type", ssvmessage.MsgTypeToString(event.SSVMessageType)),
-		attribute.String("ssv.p2p.qbft.message.type", qbftMessageType),
 		attribute.String("ssv.p2p.peer.id", match.ID.String()),
 	))
 }
