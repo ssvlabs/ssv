@@ -19,7 +19,7 @@ import (
 func TestBaseRunner_watchNonBeaconDutyDeadline(t *testing.T) {
 	const (
 		quorum      = uint64(3)
-		warnSnippet = "did not complete by deadline"
+		warnSnippet = "did not reach quorum or submit by deadline"
 	)
 	duty := &spectypes.ValidatorDuty{Type: spectypes.BNRoleVoluntaryExit, Slot: 100}
 

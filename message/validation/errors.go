@@ -178,11 +178,9 @@ func (mv *messageValidator) handleValidationSuccess(ctx context.Context, decoded
 	role := messageRole(decodedMessage)
 	recordAcceptedMessage(ctx, role)
 
-	// Accepts are metered but not logged in general — committee/attestation traffic would make it
-	// a firehose. But for the rare, one-shot quorum duties (voluntary exit, validator
-	// registration), an explicit accept line at the validation boundary lets you confirm a peer's
-	// partial signature actually reached and passed validation (with the duty id, slot and
-	// signer) — the exact question that couldn't be answered from logs in past exit failures.
+	// Accepts aren't logged in general (committee/attestation traffic would be a firehose), but for
+	// the rare, one-shot quorum duties an accept line confirms a peer's partial signature reached
+	// and passed validation — the question past voluntary-exit failures couldn't answer from logs.
 	if role == spectypes.RoleVoluntaryExit || role == spectypes.RoleValidatorRegistration {
 		loggerFields := mv.buildLoggerFields(decodedMessage)
 		mv.logger.With(loggerFields.AsZapFields()...).Debug("accepted message")

@@ -65,11 +65,18 @@ func (n *p2pNetwork) Broadcast(msgID spectypes.MessageID, msg *spectypes.SignedS
 		topicNames = commons.CommitteeTopicID(val.CommitteeID())
 	}
 
-	// Egress logging is scoped to the rare, one-shot quorum duties (voluntary exit, validator
-	// registration): the only ones where confirming a single message left the node matters, and
-	// where the volume is low enough to compute a per-broadcast msg-id and peer count. Keeping it
-	// off the hot path also matters because the file logger captures DEBUG regardless of level.
+	// Egress logging is scoped to the rare, one-shot quorum duties: confirming a single message
+	// left the node only matters for these, and their low volume keeps the msg-id hash and
+	// peer-count lookup off the hot path (the file logger captures DEBUG regardless of level).
 	logEgress := role == spectypes.RoleVoluntaryExit || role == spectypes.RoleValidatorRegistration
+
+	// gossip_msg_id is the id gossipsub itself assigns — hex-encoded to match SSV's pubsub tracer
+	// (network/topics/tracer.go) so one message can be correlated across nodes and against that
+	// trace. It hashes the payload, which is identical for every topic, so compute it once.
+	var gossipMsgID string
+	if logEgress {
+		gossipMsgID = hex.EncodeToString([]byte(topics.MsgID(encodedMsg)))
+	}
 
 	for _, topic := range topicNames {
 		if err := n.topicsCtrl.Broadcast(topic, encodedMsg, n.cfg.RequestTimeout); err != nil {
@@ -78,16 +85,12 @@ func (n *p2pNetwork) Broadcast(msgID spectypes.MessageID, msg *spectypes.SignedS
 		}
 
 		if logEgress {
-			// gossip_msg_id is the id gossipsub itself assigns, hex-encoded to match SSV's
-			// pubsub event tracer (network/topics/tracer.go, enabled by PubSubTrace), which logs
-			// the same hex form — so a single message can be followed across nodes and against
-			// that trace. (A raw go-libp2p JSONTracer emits the id in binary and would need a
-			// hex-decode to correlate.) topic_peers surfaces a near-empty/sparse topic mesh,
-			// a prime suspect when a one-shot message fails to reach peers.
+			// topic_peers surfaces a sparse/empty mesh — a prime suspect when a one-shot message
+			// fails to reach peers.
 			topicPeers, _ := n.topicsCtrl.Peers(topic)
 			n.logger.Debug("📤 broadcast message to topic",
 				fields.MessageID(msg.SSVMessage.MsgID),
-				zap.String("gossip_msg_id", hex.EncodeToString([]byte(topics.MsgID(encodedMsg)))),
+				zap.String("gossip_msg_id", gossipMsgID),
 				fields.Topic(topic),
 				zap.Int("topic_peers", len(topicPeers)),
 			)

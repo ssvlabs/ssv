@@ -125,9 +125,9 @@ func (handler *msgIDHandler) pubsubMsgToMsgID(msg []byte) string {
 	return MsgID(msg)
 }
 
-// MsgID computes the gossipsub message-id for a raw pubsub payload, identically to the id
-// gossipsub itself assigns. Exported so the broadcast path can log the same id a receiver
-// (and the libp2p pubsub tracer) would see, enabling cross-node correlation of a single message.
+// MsgID computes the gossipsub message-id for a raw pubsub payload, identical to the id gossipsub
+// itself assigns. Exported so the broadcast path can log the same id a receiver (and the pubsub
+// tracer) sees, for cross-node correlation.
 //
 // TODO: (Alan) should we hash only the message body or what? @GalRogozinski @MatheusFranco99
 // In Alan message structure the message body can be identical for all 4 operators
