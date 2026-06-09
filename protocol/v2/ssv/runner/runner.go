@@ -264,7 +264,14 @@ func (b *BaseRunner) baseStartNewNonBeaconDuty(ctx context.Context, logger *zap.
 	// collect a partial-signature quorum is otherwise completely silent (the runner just stops
 	// at the !hasQuorum early-return). Watch the deadline and emit one operator-visible warning
 	// if the duty never completes.
-	b.watchNonBeaconDutyDeadline(ctx, logger, duty, quorum)
+	//
+	// Only start the watcher if the duty is still running: should executeDuty ever complete it
+	// synchronously (e.g. a single-operator setup, or a future refactor), markDutyFinished would
+	// already have run while nonBeaconDeadlineDone was still nil, so a watcher started now would
+	// never be released and would warn ~2 slots later about a duty that actually succeeded.
+	if b.hasDutyRunning() {
+		b.watchNonBeaconDutyDeadline(ctx, logger, duty, quorum)
+	}
 	return nil
 }
 

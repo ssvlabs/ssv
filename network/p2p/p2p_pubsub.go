@@ -78,10 +78,12 @@ func (n *p2pNetwork) Broadcast(msgID spectypes.MessageID, msg *spectypes.SignedS
 		}
 
 		if logEgress {
-			// gossip_msg_id is the id gossipsub itself assigns (and the libp2p pubsub tracer
-			// logs), so a single message can be followed across nodes and against a trace.
-			// topic_peers surfaces a near-empty/sparse topic mesh, a prime suspect when a
-			// one-shot message fails to reach peers.
+			// gossip_msg_id is the id gossipsub itself assigns, hex-encoded to match SSV's
+			// pubsub event tracer (network/topics/tracer.go, enabled by PubSubTrace), which logs
+			// the same hex form — so a single message can be followed across nodes and against
+			// that trace. (A raw go-libp2p JSONTracer emits the id in binary and would need a
+			// hex-decode to correlate.) topic_peers surfaces a near-empty/sparse topic mesh,
+			// a prime suspect when a one-shot message fails to reach peers.
 			topicPeers, _ := n.topicsCtrl.Peers(topic)
 			n.logger.Debug("📤 broadcast message to topic",
 				fields.MessageID(msg.SSVMessage.MsgID),
