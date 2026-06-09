@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
+	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/electra"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -293,6 +294,15 @@ func (km *RemoteKeyManager) prepareSignRequest(
 			return web3signer.SignRequest{}, phase0.Root{}, errors.New("could not cast obj to VoluntaryExit")
 		}
 
+		// EIP-7044 pins voluntary exits to the Capella domain. Override the current fork
+		// (from GetForkInfo) with Capella to match the signing_root computed below; else a
+		// signer that doesn't apply EIP-7044 (e.g. a wrong Web3Signer --network) rejects it.
+		forkInfo, err := km.voluntaryExitForkInfo()
+		if err != nil {
+			return web3signer.SignRequest{}, phase0.Root{}, err
+		}
+		req.ForkInfo = forkInfo
+
 		req.Type = web3signer.TypeVoluntaryExit
 		req.VoluntaryExit = data
 
@@ -381,6 +391,15 @@ func (km *RemoteKeyManager) prepareSignRequest(
 			return web3signer.SignRequest{}, phase0.Root{}, errors.New("could not cast obj to ValidatorRegistration")
 		}
 
+		// The application-builder domain is fixed to the genesis fork, independent of the
+		// current fork. Pin it to match the signing_root computed below, mirroring the
+		// voluntary-exit case (a no-op for a correct signer, which derives the domain itself).
+		forkInfo, err := km.validatorRegistrationForkInfo()
+		if err != nil {
+			return web3signer.SignRequest{}, phase0.Root{}, err
+		}
+		req.ForkInfo = forkInfo
+
 		req.Type = web3signer.TypeValidatorRegistration
 		req.ValidatorRegistration = data
 	default:
@@ -459,6 +478,35 @@ func (km *RemoteKeyManager) GetForkInfo(epoch phase0.Epoch) web3signer.ForkInfo 
 		Fork:                  currentFork,
 		GenesisValidatorsRoot: km.genesisRoot,
 	}
+}
+
+// voluntaryExitForkInfo returns ForkInfo pinned to the Capella fork, as EIP-7044 requires for
+// voluntary exits. See the DomainVoluntaryExit case in prepareSignRequest.
+func (km *RemoteKeyManager) voluntaryExitForkInfo() (web3signer.ForkInfo, error) {
+	capellaFork, ok := km.beaconConfig.ForkAtVersion(spec.DataVersionCapella)
+	if !ok {
+		return web3signer.ForkInfo{}, errors.New("capella fork not configured")
+	}
+
+	return web3signer.ForkInfo{
+		Fork:                  &capellaFork,
+		GenesisValidatorsRoot: km.genesisRoot,
+	}, nil
+}
+
+// validatorRegistrationForkInfo returns ForkInfo pinned to the genesis fork and an empty
+// genesis validators root, matching the fixed application-builder domain. See the
+// DomainApplicationBuilder case in prepareSignRequest.
+func (km *RemoteKeyManager) validatorRegistrationForkInfo() (web3signer.ForkInfo, error) {
+	genesisFork, ok := km.beaconConfig.ForkAtVersion(spec.DataVersionPhase0)
+	if !ok {
+		return web3signer.ForkInfo{}, errors.New("genesis fork not configured")
+	}
+
+	return web3signer.ForkInfo{
+		Fork:                  &genesisFork,
+		GenesisValidatorsRoot: phase0.Root{},
+	}, nil
 }
 
 func (km *RemoteKeyManager) Sign(payload []byte) ([]byte, error) {

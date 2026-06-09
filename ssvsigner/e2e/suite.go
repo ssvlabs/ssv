@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 
+	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
+	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/sourcegraph/conc/pool"
@@ -77,6 +79,60 @@ func (s *E2ETestSuite) CalculateDomain(domainType phase0.DomainType, epoch phase
 	return domain, nil
 }
 
+// CalculateVoluntaryExitDomain computes the voluntary-exit signing domain, which per
+// EIP-7044 is permanently fixed to the Capella fork version (unlike CalculateDomain,
+// which uses the fork active at the given epoch). This mirrors what the SSV node's
+// beacon client computes for exits.
+func (s *E2ETestSuite) CalculateVoluntaryExitDomain() (phase0.Domain, error) {
+	capellaFork, ok := s.env.GetBeaconConfig().ForkAtVersion(spec.DataVersionCapella)
+	if !ok {
+		return phase0.Domain{}, errors.New("capella fork not configured")
+	}
+
+	forkData := &phase0.ForkData{
+		CurrentVersion:        capellaFork.CurrentVersion,
+		GenesisValidatorsRoot: s.env.GetBeaconConfig().GenesisValidatorsRoot,
+	}
+
+	forkDataRoot, err := forkData.HashTreeRoot()
+	if err != nil {
+		return phase0.Domain{}, err
+	}
+
+	domain := phase0.Domain{}
+	copy(domain[:4], spectypes.DomainVoluntaryExit[:])
+	copy(domain[4:], forkDataRoot[:28])
+
+	return domain, nil
+}
+
+// CalculateValidatorRegistrationDomain computes the validator-registration (application
+// builder) signing domain, which uses the genesis fork version and an empty genesis
+// validators root - independent of the current fork. Like the voluntary-exit domain it
+// is fixed, so it mirrors what the SSV node's beacon client computes for registrations.
+func (s *E2ETestSuite) CalculateValidatorRegistrationDomain() (phase0.Domain, error) {
+	genesisFork, ok := s.env.GetBeaconConfig().ForkAtVersion(spec.DataVersionPhase0)
+	if !ok {
+		return phase0.Domain{}, errors.New("genesis (phase0) fork not configured")
+	}
+
+	forkData := &phase0.ForkData{
+		CurrentVersion:        genesisFork.CurrentVersion,
+		GenesisValidatorsRoot: phase0.Root{},
+	}
+
+	forkDataRoot, err := forkData.HashTreeRoot()
+	if err != nil {
+		return phase0.Domain{}, err
+	}
+
+	domain := phase0.Domain{}
+	copy(domain[:4], spectypes.DomainApplicationBuilder[:])
+	copy(domain[4:], forkDataRoot[:28])
+
+	return domain, nil
+}
+
 // RequireSlashingError verifies that Web3Signer returns HTTP 412 for slashing protection violations
 func (s *E2ETestSuite) RequireSlashingError(err error, operation string) {
 	var httpErr web3signer.HTTPResponseError
@@ -118,6 +174,28 @@ func (s *E2ETestSuite) SignWeb3Signer(
 		}
 		req.Type = web3signer.TypeBlockV2
 		req.BeaconBlock = beaconBlockData
+
+	case spectypes.DomainVoluntaryExit:
+		data, ok := obj.(*phase0.VoluntaryExit)
+		if !ok {
+			return nil, phase0.Root{}, errors.New("could not cast obj to VoluntaryExit")
+		}
+		// Unlike the production RemoteKeyManager (which pins Capella, see
+		// voluntaryExitForkInfo), this helper intentionally forwards the current fork.
+		// The caller's signing_root is already over the Capella domain (EIP-7044), and
+		// the e2e Web3Signer (--network=mainnet) overrides the exit fork to Capella
+		// itself, so the roots still match — this exercises Web3Signer's own EIP-7044
+		// path. Do not "align" this with the production path without that context.
+		req.Type = web3signer.TypeVoluntaryExit
+		req.VoluntaryExit = data
+
+	case spectypes.DomainApplicationBuilder:
+		data, ok := obj.(*eth2apiv1.ValidatorRegistration)
+		if !ok {
+			return nil, phase0.Root{}, errors.New("could not cast obj to ValidatorRegistration")
+		}
+		req.Type = web3signer.TypeValidatorRegistration
+		req.ValidatorRegistration = data
 
 	default:
 		return nil, phase0.Root{}, errors.New("unsupported domain type for testing")

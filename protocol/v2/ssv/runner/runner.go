@@ -440,7 +440,9 @@ func (b *BaseRunner) basePartialSigMsgProcessing(
 
 		// Check if it has two signatures for the same signer
 		if container.HasSignature(msg.ValidatorIndex, msg.Signer, msg.SigningRoot) {
-			b.resolveDuplicateSignature(container, msg)
+			// A failure means neither signature was valid; the container is left without
+			// one, which is fine here since we only track quorum.
+			_ = container.ResolveDuplicateSignature(msg, b.Share[msg.ValidatorIndex].Committee)
 		} else {
 			container.AddSignature(msg)
 		}

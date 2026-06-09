@@ -190,7 +190,9 @@ func (r *VoluntaryExitRunner) executeDuty(ctx context.Context, logger *zap.Logge
 		spectypes.DomainVoluntaryExit,
 	)
 	if err != nil {
-		return fmt.Errorf("could not sign VoluntaryExit object: %w", err)
+		// EIP-7044 pins exits to the Capella domain; a remote signer that disagrees on the
+		// fork (e.g. a wrong Web3Signer --network) rejects exits while other duties still sign.
+		return fmt.Errorf("could not sign voluntary exit (the remote signer may be misconfigured, e.g. a wrong Web3Signer --network): %w", err)
 	}
 
 	msgs := &spectypes.PartialSignatureMessages{
