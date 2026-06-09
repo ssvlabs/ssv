@@ -174,23 +174,18 @@ func (n *Node) Start(ctx context.Context) error {
 	defer cancel()
 	g, gctx := errgroup.WithContext(ctx)
 
-	// The WS server's shutdown is bound to the node ctx, not gctx, so the select also watches gctx to
-	// unblock g.Wait() if another member fails first.
+	// Plain receive is safe: the WS server takes gctx (via startWSServer), so its Shutdown closes
+	// serveErr on cancel and this can't wedge g.Wait().
 	if n.ws != nil {
-		wsServeErr, err := n.startWSServer()
+		wsServeErr, err := n.startWSServer(gctx)
 		if err != nil {
 			return fmt.Errorf("start WS server: %w", err)
 		}
 		g.Go(func() error {
-			select {
-			case err := <-wsServeErr:
-				if err != nil {
-					return fmt.Errorf("WS server serve loop exited: %w", err)
-				}
-				return nil
-			case <-gctx.Done():
-				return nil
+			if err := <-wsServeErr; err != nil {
+				return fmt.Errorf("WS server serve loop exited: %w", err)
 			}
+			return nil
 		})
 	}
 
@@ -454,12 +449,12 @@ func filterOutDutyNotFoundErrors(e *multierror.Error) *multierror.Error {
 // startWSServer starts the WS API server and returns its serve-error channel for the caller to join
 // into the node's errgroup. A serve failure propagates via the channel — bringing the node down
 // gracefully through Close — rather than os.Exit-ing from a goroutine. Callers gate on n.ws != nil.
-func (n *Node) startWSServer() (<-chan error, error) {
+func (n *Node) startWSServer(ctx context.Context) (<-chan error, error) {
 	n.logger.Info("starting WS server")
 
 	n.ws.UseQueryHandler(n.handleQueryRequests)
 
-	_, serveErr, err := n.ws.Start()
+	_, serveErr, err := n.ws.Start(ctx)
 	if err != nil {
 		return nil, err
 	}

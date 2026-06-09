@@ -28,9 +28,8 @@ const (
 type WebSocketServer interface {
 	// Start binds a listener on the address passed to NewWsServer and serves in the background. It
 	// returns the bound address (useful with a :0 port) plus a channel that emits a non-graceful
-	// serve error, closed silently once shutdown completes. Canceling the ctx passed to NewWsServer
-	// triggers shutdown.
-	Start() (string, <-chan error, error)
+	// serve error, closed silently once shutdown completes. Canceling ctx triggers shutdown.
+	Start(ctx context.Context) (string, <-chan error, error)
 	BroadcastFeed() *event.Feed
 	UseQueryHandler(handler QueryMessageHandler)
 }
@@ -53,9 +52,8 @@ type wsServer struct {
 }
 
 // NewWsServer creates a new instance that listens on addr when Started.
-func NewWsServer(ctx context.Context, logger *zap.Logger, handler QueryMessageHandler, mux *http.ServeMux, withPing bool, addr string) WebSocketServer {
+func NewWsServer(logger *zap.Logger, handler QueryMessageHandler, mux *http.ServeMux, withPing bool, addr string) WebSocketServer {
 	ws := wsServer{
-		ctx:         ctx,
 		addr:        addr,
 		logger:      logger.Named(log.NameWSServer),
 		handler:     handler,
@@ -73,9 +71,11 @@ func (ws *wsServer) UseQueryHandler(handler QueryMessageHandler) {
 	ws.handler = handler
 }
 
-// Start binds the listener and serves in the background until the ctx passed to NewWsServer is
-// canceled. See the WebSocketServer interface for the returned address and error channel.
-func (ws *wsServer) Start() (string, <-chan error, error) {
+// Start binds the listener and serves in the background until ctx is canceled. See the
+// WebSocketServer interface for the returned address and error channel.
+func (ws *wsServer) Start(ctx context.Context) (string, <-chan error, error) {
+	ws.ctx = ctx
+
 	l, err := net.Listen("tcp", ws.addr)
 	if err != nil {
 		return "", nil, fmt.Errorf("listen on %s: %w", ws.addr, err)

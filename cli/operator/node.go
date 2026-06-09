@@ -329,7 +329,7 @@ func newNode(ctx context.Context, cfg *config, logger *zap.Logger, res resolved,
 	var newDecidedHandler qbftcontroller.NewDecidedHandler
 	var decidedStreamPublisherFn func(dutytracer.DecidedInfo)
 	if cfg.WsAPIPort != 0 {
-		ws := exporterapi.NewWsServer(ctx, logger, nil, http.NewServeMux(), cfg.WithPing, fmt.Sprintf(":%d", cfg.WsAPIPort))
+		ws := exporterapi.NewWsServer(logger, nil, http.NewServeMux(), cfg.WithPing, fmt.Sprintf(":%d", cfg.WsAPIPort))
 		cfg.SSVOptions.WS = ws
 		newDecidedHandler = decided.NewStreamPublisher(logger, networkConfig.DomainType, ws)
 		decidedStreamPublisherFn = decided.NewDecidedListener(logger, networkConfig.DomainType, ws, nodeStorage.ValidatorStore())
@@ -504,8 +504,7 @@ func (n *node) start() error {
 			return fmt.Errorf("failed to start metrics server: %w", err)
 		}
 		// Plain receive is safe: the server's gctx-bound Shutdown closes serveErr on cancel, so this
-		// can't wedge g.Wait(). The operator-package WS loop needs a gctx-escape select only because
-		// its shutdown ctx differs.
+		// can't wedge g.Wait().
 		g.Go(func() error {
 			if err := <-metricsServeErr; err != nil {
 				return fmt.Errorf("metrics server serve loop exited: %w", err)
