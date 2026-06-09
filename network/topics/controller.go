@@ -320,9 +320,11 @@ func (ctrl *topicsCtrl) setupTopicValidator(name string) error {
 		validator := ctrl.msgValidator.ValidatorForTopic(name)
 		wrappedValidator := func(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
 			result := validator(ctx, p, pmsg)
-			ctrl.peerObserver.ObserveValidation(ctx, ctrl.logger, p, name, validationResultString(result), len(pmsg.Data),
-				zap.Int("validation_result_code", int(result)),
-			)
+			if ctrl.peerObserver.Enabled() {
+				ctrl.peerObserver.ObserveValidation(ctx, ctrl.logger, p, name, validationResultString(result), len(pmsg.Data),
+					zap.Int("validation_result_code", int(result)),
+				)
+			}
 			return result
 		}
 
