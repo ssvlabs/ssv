@@ -8,6 +8,7 @@ import (
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/observability/log/fields"
@@ -20,7 +21,6 @@ type Error struct {
 	want     any
 	innerErr error
 	reject   bool
-	silent   bool
 }
 
 func (e Error) Error() string {
@@ -47,10 +47,6 @@ const (
 
 func (e Error) Reject() bool {
 	return e.reject
-}
-
-func (e Error) Silent() bool {
-	return e.silent
 }
 
 func (e Error) Text() string {
@@ -168,22 +164,29 @@ func (mv *messageValidator) handleValidationError(ctx context.Context, peerID pe
 	}
 
 	if !valErr.Reject() {
-		if !valErr.Silent() {
-			logger.Debug("ignoring invalid message", zap.Error(valErr))
-		}
+		logger.Debug("ignoring invalid message", zap.Error(valErr))
 		recordIgnoredMessage(ctx, loggerFields.Role, valErr.Text())
 		return pubsub.ValidationIgnore
 	}
 
-	if !valErr.Silent() {
-		logger.Debug("rejecting invalid message", zap.Error(valErr))
-	}
-
+	logger.Debug("rejecting invalid message", zap.Error(valErr))
 	recordRejectedMessage(ctx, loggerFields.Role, valErr.Text())
 	return pubsub.ValidationReject
 }
 
 func (mv *messageValidator) handleValidationSuccess(ctx context.Context, decodedMessage *queue.SSVMessage) pubsub.ValidationResult {
-	recordAcceptedMessage(ctx, messageRole(decodedMessage))
+	role := messageRole(decodedMessage)
+	recordAcceptedMessage(ctx, role)
+
+	// Accepts are metered but not logged in general — committee/attestation traffic would make it
+	// a firehose. But for the rare, one-shot quorum duties (voluntary exit, validator
+	// registration), an explicit accept line at the validation boundary lets you confirm a peer's
+	// partial signature actually reached and passed validation (with the duty id, slot and
+	// signer) — the exact question that couldn't be answered from logs in past exit failures.
+	if role == spectypes.RoleVoluntaryExit || role == spectypes.RoleValidatorRegistration {
+		loggerFields := mv.buildLoggerFields(decodedMessage)
+		mv.logger.With(loggerFields.AsZapFields()...).Debug("accepted message")
+	}
+
 	return pubsub.ValidationAccept
 }

@@ -122,12 +122,18 @@ func (handler *msgIDHandler) MsgID(logger *zap.Logger) func(pmsg *ps_pb.Message)
 }
 
 func (handler *msgIDHandler) pubsubMsgToMsgID(msg []byte) string {
-	// TODO: (Alan) should we hash only the message body or what? @GalRogozinski @MatheusFranco99
+	return MsgID(msg)
+}
 
-	// In Alan message structure the message body can be identical for all 4 operators
-	// whereas before it included a BLS signature which made it unique
-	// so we hash full message (including signer) to make it unique
-
+// MsgID computes the gossipsub message-id for a raw pubsub payload, identically to the id
+// gossipsub itself assigns. Exported so the broadcast path can log the same id a receiver
+// (and the libp2p pubsub tracer) would see, enabling cross-node correlation of a single message.
+//
+// TODO: (Alan) should we hash only the message body or what? @GalRogozinski @MatheusFranco99
+// In Alan message structure the message body can be identical for all 4 operators
+// whereas before it included a BLS signature which made it unique
+// so we hash full message (including signer) to make it unique
+func MsgID(msg []byte) string {
 	if len(msg) == 0 {
 		return ""
 	}

@@ -268,7 +268,16 @@ func (v *Validator) StartQueueConsumer(
 					}(msg, msgState, currentAttempt)
 				default:
 					var droppingMsgDueToErrorEvent = couldNotHandleMsgLogPrefix + "dropping message"
-					msgLogger.Debug(droppingMsgDueToErrorEvent, zap.Error(err))
+					// Voluntary exit and validator registration are rare, one-shot, quorum-based
+					// duties with no retry; a dropped message (failed signing/broadcast, bad
+					// partial-sig, failed submission) otherwise vanishes at DEBUG. These are
+					// operator-actionable, so surface them at WARN. Frequent duties stay at DEBUG.
+					switch msgID.GetRoleType() {
+					case spectypes.RoleVoluntaryExit, spectypes.RoleValidatorRegistration:
+						msgLogger.Warn(droppingMsgDueToErrorEvent, zap.Error(err))
+					default:
+						msgLogger.Debug(droppingMsgDueToErrorEvent, zap.Error(err))
+					}
 					msgState.span.AddEvent(droppingMsgDueToErrorEvent, trace.WithAttributes(
 						attribute.String("drop_reason", err.Error()),
 						attribute.Int64("attempt", currentAttempt),
