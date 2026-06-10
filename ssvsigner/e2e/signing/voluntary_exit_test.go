@@ -21,9 +21,14 @@ type VoluntaryExitSigningTestSuite struct {
 // TestVoluntaryExitSigningConsistency verifies that LocalKeyManager, RemoteKeyManager
 // (via SSV-Signer + Web3Signer), and Web3Signer-direct all produce the same voluntary
 // exit signature, computed over the Capella domain — even though "now" is in the Fulu
-// era and the current fork differs from Capella. This mirrors the Hoodi incident where
-// the remote path was sending the current fork instead of Capella, and guards the
-// Capella fork pinning in RemoteKeyManager.prepareSignRequest.
+// era and the current fork differs from Capella.
+//
+// Note: this only exercises the EIP-7044-correct path. With --network=mainnet,
+// Web3Signer applies the EIP-7044 override itself and derives the Capella domain from
+// its own config, so the roots match regardless of the Capella pin in
+// RemoteKeyManager.prepareSignRequest. The Hoodi incident — a signer that falls back
+// to the fork_info we send — is not reproduced here; the Capella assertion in
+// remote_key_manager_test.go (SignVoluntaryExit) is what guards the pin.
 func (s *VoluntaryExitSigningTestSuite) TestVoluntaryExitSigningConsistency() {
 	// Place the chain clock in the Fulu era (mainnet Fulu @ epoch 411392) so the
 	// current fork (0x06000000) is well past Capella (0x03000000). Web3Signer is run
