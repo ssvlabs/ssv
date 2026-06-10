@@ -60,7 +60,7 @@ type Config struct {
 	// DiscoveryTrace is a flag to turn on/off discovery tracing in logs
 	DiscoveryTrace bool `yaml:"DiscoveryTrace" env:"DISCOVERY_TRACE" env-description:"Enable discovery debug tracing in logs"`
 	// HighlightedPeers is a list of libp2p peer IDs that should be highlighted in p2p logs and metrics.
-	HighlightedPeers string `yaml:"HighlightedPeers" env:"P2P_HIGHLIGHTED_PEERS" env-default:"" env-description:"Comma, semicolon, or whitespace-separated libp2p peer IDs to highlight in p2p logs and metrics. 0x-prefixed secp256k1 public keys are still accepted for backwards compatibility, but P2P_HIGHLIGHTED_PEER_KEYS is preferred for keys"`
+	HighlightedPeers string `yaml:"HighlightedPeers" env:"P2P_HIGHLIGHTED_PEERS" env-default:"" env-description:"Comma, semicolon, or whitespace-separated libp2p peer IDs to highlight in p2p logs and metrics. 0x-prefixed secp256k1 public keys are also accepted for convenience, but P2P_HIGHLIGHTED_PEER_KEYS is preferred for keys"`
 	// HighlightedPeerKeys is a list of secp256k1 public identity keys whose derived libp2p peers should be highlighted in p2p logs and metrics.
 	HighlightedPeerKeys string `yaml:"HighlightedPeerKeys" env:"P2P_HIGHLIGHTED_PEER_KEYS" env-default:"" env-description:"Comma, semicolon, or whitespace-separated 0x-prefixed secp256k1 public identity keys to highlight in p2p logs and metrics"`
 	// HighlightedPeerLabel is attached to every highlighted peer log and metric.

@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	zapobserver "go.uber.org/zap/zaptest/observer"
+	"golang.org/x/time/rate"
 )
 
 const attackSimulatorPublicKey = "0x02006c0a9a7e965cb22399987a5a748e90bcc4cb76c461b5d62643c2f2f112055e"
@@ -82,6 +83,31 @@ func TestNew_EmptyConfigDisablesObserver(t *testing.T) {
 	observer, err := New(Config{})
 	require.NoError(t, err)
 	require.Nil(t, observer)
+}
+
+func TestNew_RejectsPeerIDInPeerKeys(t *testing.T) {
+	_, err := New(Config{PeerKeys: "12D3KooWGRZpEouTWybB5jDKsVLqYXn3hXyzuTNxti4ghui6u5HE"})
+	require.Error(t, err)
+}
+
+func TestObserveRateLimitsLogsButNotMatches(t *testing.T) {
+	observer, err := New(Config{Peers: attackSimulatorPublicKey})
+	require.NoError(t, err)
+
+	var pid peer.ID
+	for highlightedPeer := range observer.peers {
+		pid = highlightedPeer
+	}
+
+	observer.logLimiter = rate.NewLimiter(0, 2) // 2 logs allowed, then dry
+
+	core, logs := zapobserver.New(zap.InfoLevel)
+	logger := zap.New(core)
+	for range 5 {
+		observer.Observe(t.Context(), logger, "test_event", pid)
+	}
+
+	require.Len(t, logs.All(), 2)
 }
 
 func TestObserveValidation_LogsHighlightedPeerAndFields(t *testing.T) {
