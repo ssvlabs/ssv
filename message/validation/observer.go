@@ -18,6 +18,8 @@ const (
 
 // SSVValidationEvent describes the SSV-level validation decision before it
 // is reduced to libp2p's accept/reject/ignore validation result.
+// Its pointer and slice fields are shared with the validator, so the event is
+// only valid for the duration of the ObserveSSVValidation call.
 type SSVValidationEvent struct {
 	PeerID         peer.ID
 	Outcome        string
@@ -33,5 +35,9 @@ type SSVValidationEvent struct {
 
 // SSVValidationObserver receives SSV-level validation decisions.
 type SSVValidationObserver interface {
+	// Interested reports whether the observer wants events for messages received
+	// from the given peer. It must be cheap: it gates event construction on the
+	// message validation hot path.
+	Interested(peer.ID) bool
 	ObserveSSVValidation(context.Context, *zap.Logger, SSVValidationEvent)
 }
