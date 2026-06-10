@@ -43,10 +43,41 @@ func (pst *psTracer) log(logger *zap.Logger, evt *ps_pb.TraceEvent) {
 	if evt == nil {
 		return
 	}
+	eventPeer := tracedEventPeer(evt)
+	_, highlighted := pst.peerObserver.Match(eventPeer)
+	// Building the fields below is not free, so skip it entirely when nothing
+	// would consume them (highlighted-peer-only mode, event from a regular peer).
+	if !pst.traceLog && !highlighted {
+		return
+	}
 	fields := []zap.Field{
 		zap.String("type", evt.GetType().String()),
 	}
-	var highlightedPeer peer.ID
+	// appendRPCMeta keeps the long-standing trace-log schema (IHAVE/IWANT and
+	// subscriptions) for every peer and adds the more verbose message/GRAFT/PRUNE
+	// metadata only for highlighted peers.
+	appendRPCMeta := func(meta *ps_pb.TraceEvent_RPCMeta) {
+		if meta == nil {
+			return
+		}
+		if highlighted {
+			fields = appendMessages(fields, meta.GetMessages())
+		}
+		if ctrl := meta.Control; ctrl != nil {
+			fields = appendIHave(fields, ctrl.GetIhave())
+			fields = appendIWant(fields, ctrl.GetIwant())
+			if highlighted {
+				fields = appendGraft(fields, ctrl.GetGraft())
+				fields = appendPrune(fields, ctrl.GetPrune())
+			}
+		}
+		var subs []string
+		for _, sub := range meta.Subscription {
+			subs = append(subs, sub.GetTopic())
+		}
+		fields = append(fields, zap.Int("subsCount", len(subs)))
+		fields = append(fields, zap.Strings("subs", subs))
+	}
 	switch evt.GetType() {
 	case ps_pb.TraceEvent_PUBLISH_MESSAGE:
 		msg := evt.GetPublishMessage()
@@ -54,144 +85,107 @@ func (pst *psTracer) log(logger *zap.Logger, evt *ps_pb.TraceEvent) {
 		fields = append(fields, zap.String("topic", msg.GetTopic()))
 	case ps_pb.TraceEvent_REJECT_MESSAGE:
 		msg := evt.GetRejectMessage()
-		pid, err := peer.IDFromBytes(msg.GetReceivedFrom())
-		if err == nil {
-			fields = append(fields, zap.String("receivedFrom", pid.String()))
-			highlightedPeer = pid
+		if eventPeer != "" {
+			fields = append(fields, zap.String("receivedFrom", eventPeer.String()))
 		}
 		fields = append(fields, zap.String("msgID", hex.EncodeToString(msg.GetMessageID())))
 		fields = append(fields, zap.String("topic", msg.GetTopic()))
 		fields = append(fields, zap.String("reason", msg.GetReason()))
 	case ps_pb.TraceEvent_DUPLICATE_MESSAGE:
 		msg := evt.GetDuplicateMessage()
-		pid, err := peer.IDFromBytes(msg.GetReceivedFrom())
-		if err == nil {
-			fields = append(fields, zap.String("receivedFrom", pid.String()))
-			highlightedPeer = pid
+		if eventPeer != "" {
+			fields = append(fields, zap.String("receivedFrom", eventPeer.String()))
 		}
 		fields = append(fields, zap.String("msgID", hex.EncodeToString(msg.GetMessageID())))
 		fields = append(fields, zap.String("topic", msg.GetTopic()))
 	case ps_pb.TraceEvent_DELIVER_MESSAGE:
 		msg := evt.GetDeliverMessage()
-		pid, err := peer.IDFromBytes(msg.GetReceivedFrom())
-		if err == nil {
-			fields = append(fields, zap.String("receivedFrom", pid.String()))
-			highlightedPeer = pid
+		if eventPeer != "" {
+			fields = append(fields, zap.String("receivedFrom", eventPeer.String()))
 		}
 		fields = append(fields, zap.String("msgID", hex.EncodeToString(msg.GetMessageID())))
 		fields = append(fields, zap.String("topic", msg.GetTopic()))
 	case ps_pb.TraceEvent_ADD_PEER:
-		pid, err := peer.IDFromBytes(evt.GetAddPeer().GetPeerID())
-		if err == nil {
-			fields = append(fields, zap.String("targetPeer", pid.String()))
-			highlightedPeer = pid
+		if eventPeer != "" {
+			fields = append(fields, zap.String("targetPeer", eventPeer.String()))
 		}
 	case ps_pb.TraceEvent_REMOVE_PEER:
-		pid, err := peer.IDFromBytes(evt.GetRemovePeer().GetPeerID())
-		if err == nil {
-			fields = append(fields, zap.String("targetPeer", pid.String()))
-			highlightedPeer = pid
+		if eventPeer != "" {
+			fields = append(fields, zap.String("targetPeer", eventPeer.String()))
 		}
 	case ps_pb.TraceEvent_JOIN:
 		fields = append(fields, zap.String("topic", evt.GetJoin().GetTopic()))
 	case ps_pb.TraceEvent_LEAVE:
 		fields = append(fields, zap.String("topic", evt.GetLeave().GetTopic()))
 	case ps_pb.TraceEvent_GRAFT:
-		msg := evt.GetGraft()
-		pid, err := peer.IDFromBytes(msg.GetPeerID())
-		if err == nil {
-			fields = append(fields, zap.String("graftPeer", pid.String()))
-			highlightedPeer = pid
+		if eventPeer != "" {
+			fields = append(fields, zap.String("graftPeer", eventPeer.String()))
 		}
-		fields = append(fields, zap.String("topic", msg.GetTopic()))
+		fields = append(fields, zap.String("topic", evt.GetGraft().GetTopic()))
 	case ps_pb.TraceEvent_PRUNE:
-		msg := evt.GetPrune()
-		pid, err := peer.IDFromBytes(msg.GetPeerID())
-		if err == nil {
-			fields = append(fields, zap.String("prunePeer", pid.String()))
-			highlightedPeer = pid
+		if eventPeer != "" {
+			fields = append(fields, zap.String("prunePeer", eventPeer.String()))
 		}
-		fields = append(fields, zap.String("topic", msg.GetTopic()))
+		fields = append(fields, zap.String("topic", evt.GetPrune().GetTopic()))
 	case ps_pb.TraceEvent_SEND_RPC:
-		msg := evt.GetSendRPC()
-		pid, err := peer.IDFromBytes(msg.GetSendTo())
-		if err == nil {
-			fields = append(fields, zap.String("targetPeer", pid.String()))
-			highlightedPeer = pid
+		if eventPeer != "" {
+			fields = append(fields, zap.String("targetPeer", eventPeer.String()))
 		}
-		if meta := msg.GetMeta(); meta != nil && pst.highlighted(highlightedPeer) {
-			fields = appendMessages(fields, meta.GetMessages())
-			if ctrl := meta.Control; ctrl != nil {
-				fields = appendIHave(fields, ctrl.GetIhave())
-				fields = appendIWant(fields, ctrl.GetIwant())
-				fields = appendGraft(fields, ctrl.GetGraft())
-				fields = appendPrune(fields, ctrl.GetPrune())
-			}
-			var subs []string
-			for _, sub := range meta.Subscription {
-				subs = append(subs, sub.GetTopic())
-			}
-			fields = append(fields, zap.Int("subsCount", len(subs)))
-			fields = append(fields, zap.Strings("subs", subs))
-		}
+		appendRPCMeta(evt.GetSendRPC().GetMeta())
 	case ps_pb.TraceEvent_DROP_RPC:
-		msg := evt.GetDropRPC()
-		pid, err := peer.IDFromBytes(msg.GetSendTo())
-		if err == nil {
-			fields = append(fields, zap.String("targetPeer", pid.String()))
-			highlightedPeer = pid
+		if eventPeer != "" {
+			fields = append(fields, zap.String("targetPeer", eventPeer.String()))
 		}
-		if meta := msg.GetMeta(); meta != nil && pst.highlighted(highlightedPeer) {
-			fields = appendMessages(fields, meta.GetMessages())
-			if ctrl := meta.Control; ctrl != nil {
-				fields = appendIHave(fields, ctrl.GetIhave())
-				fields = appendIWant(fields, ctrl.GetIwant())
-				fields = appendGraft(fields, ctrl.GetGraft())
-				fields = appendPrune(fields, ctrl.GetPrune())
-			}
-			var subs []string
-			for _, sub := range meta.Subscription {
-				subs = append(subs, sub.GetTopic())
-			}
-			fields = append(fields, zap.Int("subsCount", len(subs)))
-			fields = append(fields, zap.Strings("subs", subs))
-		}
+		appendRPCMeta(evt.GetDropRPC().GetMeta())
 	case ps_pb.TraceEvent_RECV_RPC:
-		msg := evt.GetRecvRPC()
-		pid, err := peer.IDFromBytes(msg.GetReceivedFrom())
-		if err == nil {
-			fields = append(fields, zap.String("receivedFrom", pid.String()))
-			highlightedPeer = pid
+		if eventPeer != "" {
+			fields = append(fields, zap.String("receivedFrom", eventPeer.String()))
 		}
-		if meta := msg.GetMeta(); meta != nil && pst.highlighted(highlightedPeer) {
-			fields = appendMessages(fields, meta.GetMessages())
-			if ctrl := meta.Control; ctrl != nil {
-				fields = appendIHave(fields, ctrl.GetIhave())
-				fields = appendIWant(fields, ctrl.GetIwant())
-				fields = appendGraft(fields, ctrl.GetGraft())
-				fields = appendPrune(fields, ctrl.GetPrune())
-			}
-			var subs []string
-			for _, sub := range meta.Subscription {
-				subs = append(subs, sub.GetTopic())
-			}
-			fields = append(fields, zap.Int("subsCount", len(subs)))
-			fields = append(fields, zap.Strings("subs", subs))
-		}
+		appendRPCMeta(evt.GetRecvRPC().GetMeta())
 	default:
 		return
 	}
-	if highlightedPeer != "" {
-		pst.peerObserver.Observe(pst.context(), logger, "pubsub_trace_"+strings.ToLower(evt.GetType().String()), highlightedPeer, fields...)
+	if highlighted {
+		pst.peerObserver.Observe(pst.context(), logger, "pubsub_trace_"+strings.ToLower(evt.GetType().String()), eventPeer, fields...)
 	}
 	if pst.traceLog {
 		logger.Debug("pubsub event", fields...)
 	}
 }
 
-func (pst *psTracer) highlighted(pid peer.ID) bool {
-	_, ok := pst.peerObserver.Match(pid)
-	return ok
+// tracedEventPeer extracts the remote peer a trace event relates to, if any.
+func tracedEventPeer(evt *ps_pb.TraceEvent) peer.ID {
+	var raw []byte
+	switch evt.GetType() {
+	case ps_pb.TraceEvent_REJECT_MESSAGE:
+		raw = evt.GetRejectMessage().GetReceivedFrom()
+	case ps_pb.TraceEvent_DUPLICATE_MESSAGE:
+		raw = evt.GetDuplicateMessage().GetReceivedFrom()
+	case ps_pb.TraceEvent_DELIVER_MESSAGE:
+		raw = evt.GetDeliverMessage().GetReceivedFrom()
+	case ps_pb.TraceEvent_ADD_PEER:
+		raw = evt.GetAddPeer().GetPeerID()
+	case ps_pb.TraceEvent_REMOVE_PEER:
+		raw = evt.GetRemovePeer().GetPeerID()
+	case ps_pb.TraceEvent_GRAFT:
+		raw = evt.GetGraft().GetPeerID()
+	case ps_pb.TraceEvent_PRUNE:
+		raw = evt.GetPrune().GetPeerID()
+	case ps_pb.TraceEvent_SEND_RPC:
+		raw = evt.GetSendRPC().GetSendTo()
+	case ps_pb.TraceEvent_DROP_RPC:
+		raw = evt.GetDropRPC().GetSendTo()
+	case ps_pb.TraceEvent_RECV_RPC:
+		raw = evt.GetRecvRPC().GetReceivedFrom()
+	}
+	if len(raw) == 0 {
+		return ""
+	}
+	pid, err := peer.IDFromBytes(raw)
+	if err != nil {
+		return ""
+	}
+	return pid
 }
 
 func (pst *psTracer) context() context.Context {
