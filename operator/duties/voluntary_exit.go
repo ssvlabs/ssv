@@ -48,6 +48,20 @@ const (
 	// time to receive the EL event and register the duty in its local dutyStore
 	// — which the inbound message-validation path checks via dutyCount.
 	//
+	// CAVEAT: that dutyCount admission check runs on every node validating the
+	// partial-sig on the gossip topic, not just on committee members. When
+	// committee operators are not direct mesh neighbors, the message must pass
+	// validation on intermediate nodes too — and an intermediary that never
+	// registered the exit silently ignores the message and does NOT forward it
+	// (dutyLimit is 0 without the dutyStore entry → ErrTooManyDutiesPerEpoch →
+	// ValidationIgnore; see dutyLimit in message/validation/common_checks.go).
+	// That is the case for nodes that run no duty scheduler at all (exporter
+	// standard mode), nodes whose EL event stream lags beyond this slack, and
+	// any node once it purges the entry an epoch after dutySlot (see
+	// processExecution). The slack cannot cover those nodes: reliable exit
+	// propagation currently assumes committee operators are mesh-connected on
+	// the topic.
+	//
 	// Independent of voluntaryExitDutySlotsToPostpone despite happening to
 	// share the same numeric value (4); see the note on that constant.
 	voluntaryExitSchedulingSlack = 4
@@ -175,6 +189,11 @@ func (h *VoluntaryExitHandler) HandleDuties(ctx context.Context) {
 				ValidatorIndex: exitDescriptor.ValidatorIndex,
 			}
 
+			// Register the duty even for validators that are not ours: inbound
+			// message validation consults this store (dutyCount), so without
+			// the entry this node would ignore — and refuse to relay — the
+			// committee's exit partial-sigs (see the CAVEAT on
+			// voluntaryExitSchedulingSlack).
 			h.duties.AddDuty(dutySlot, exitDescriptor.PubKey)
 			if !exitDescriptor.OwnValidator {
 				continue
