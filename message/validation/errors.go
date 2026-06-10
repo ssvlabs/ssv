@@ -8,7 +8,6 @@ import (
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/observability/log/fields"
@@ -175,16 +174,7 @@ func (mv *messageValidator) handleValidationError(ctx context.Context, peerID pe
 }
 
 func (mv *messageValidator) handleValidationSuccess(ctx context.Context, decodedMessage *queue.SSVMessage) pubsub.ValidationResult {
-	role := messageRole(decodedMessage)
-	recordAcceptedMessage(ctx, role)
-
-	// Accepts aren't logged in general (committee/attestation traffic would be a firehose), but for
-	// the rare, one-shot quorum duties an accept line confirms a peer's partial signature reached
-	// and passed validation — the question past voluntary-exit failures couldn't answer from logs.
-	if role == spectypes.RoleVoluntaryExit || role == spectypes.RoleValidatorRegistration {
-		loggerFields := mv.buildLoggerFields(decodedMessage)
-		mv.logger.With(loggerFields.AsZapFields()...).Debug("accepted message")
-	}
+	recordAcceptedMessage(ctx, messageRole(decodedMessage))
 
 	return pubsub.ValidationAccept
 }

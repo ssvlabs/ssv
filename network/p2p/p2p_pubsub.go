@@ -11,6 +11,7 @@ import (
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
@@ -65,10 +66,10 @@ func (n *p2pNetwork) Broadcast(msgID spectypes.MessageID, msg *spectypes.SignedS
 		topicNames = commons.CommitteeTopicID(val.CommitteeID())
 	}
 
-	// Egress logging is scoped to the rare, one-shot quorum duties: confirming a single message
-	// left the node only matters for these, and their low volume keeps the msg-id hash and
-	// peer-count lookup off the hot path (the file logger captures DEBUG regardless of level).
-	logEgress := role == spectypes.RoleVoluntaryExit || role == spectypes.RoleValidatorRegistration
+	// Confirm egress for every broadcast at DEBUG — without it, a message lost in transit is
+	// indistinguishable from one never sent. The level check keeps the msg-id hash and
+	// peer-count lookups off the hot path when DEBUG is disabled.
+	logEgress := n.logger.Core().Enabled(zapcore.DebugLevel)
 
 	// gossip_msg_id is the id gossipsub itself assigns — hex-encoded to match SSV's pubsub tracer
 	// (network/topics/tracer.go) so one message can be correlated across nodes and against that

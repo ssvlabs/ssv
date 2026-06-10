@@ -274,7 +274,9 @@ func (b *BaseRunner) baseStartNewNonBeaconDuty(ctx context.Context, logger *zap.
 // watchNonBeaconDutyDeadline warns if a pre-consensus-only duty hasn't finished by its deadline.
 // Completion is signaled by markDutyFinished closing nonBeaconDeadlineDone, not by reading runner
 // state, so it's safe alongside the single-threaded message loop. Each duty gets its own channel so
-// a reused runner still reports an earlier duty that never completed.
+// a reused runner still reports an earlier duty that never completed. If that earlier duty failed
+// mid-flight (markDutyFinished never ran), starting a new duty overwrites the channel and orphans
+// the earlier watcher — harmless: it warns for its own duty and is reaped by its own timer.
 func (b *BaseRunner) watchNonBeaconDutyDeadline(ctx context.Context, logger *zap.Logger, duty *spectypes.ValidatorDuty, quorum uint64) {
 	done := make(chan struct{})
 	b.nonBeaconDeadlineDone = done
@@ -296,6 +298,10 @@ func (b *BaseRunner) watchNonBeaconDutyDeadline(ctx context.Context, logger *zap
 		case <-timer.C:
 		}
 
+		// Fires both when quorum never formed and when quorum formed but reconstruction/submission
+		// failed — the latter logs its specific error the moment it happens (the queue's
+		// could-not-handle drop log, DEBUG), so this warning with no such preceding error means the
+		// partial-signature quorum never formed.
 		logger.Warn("⚠️ pre-consensus duty did not reach quorum or submit by deadline",
 			fields.Slot(duty.DutySlot()),
 			zap.Uint64("quorum", quorum),

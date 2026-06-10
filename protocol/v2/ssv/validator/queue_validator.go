@@ -268,15 +268,7 @@ func (v *Validator) StartQueueConsumer(
 					}(msg, msgState, currentAttempt)
 				default:
 					var droppingMsgDueToErrorEvent = couldNotHandleMsgLogPrefix + "dropping message"
-					// A dropped message for these rare, one-shot, no-retry duties is operator-
-					// actionable but otherwise vanishes at DEBUG, so surface it at WARN. Frequent
-					// duties stay at DEBUG.
-					switch msgID.GetRoleType() {
-					case spectypes.RoleVoluntaryExit, spectypes.RoleValidatorRegistration:
-						msgLogger.Warn(droppingMsgDueToErrorEvent, zap.Error(err))
-					default:
-						msgLogger.Debug(droppingMsgDueToErrorEvent, zap.Error(err))
-					}
+					msgLogger.Debug(droppingMsgDueToErrorEvent, zap.Error(err))
 					msgState.span.AddEvent(droppingMsgDueToErrorEvent, trace.WithAttributes(
 						attribute.String("drop_reason", err.Error()),
 						attribute.Int64("attempt", currentAttempt),
