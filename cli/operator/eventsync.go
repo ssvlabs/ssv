@@ -21,9 +21,8 @@ import (
 )
 
 // syncContractEvents blocks until historical events are synced, then returns the event syncer plus a
-// start-func for ongoing event sync (nil in local-events mode). The caller runs the start-func as an
-// errgroup member, so an ongoing-sync failure surfaces up to the top-level Fatal instead of
-// os.Exit-ing from a goroutine.
+// start-func for ongoing event sync (nil in local-events mode). The start-func runs until a clean
+// ctx cancellation (→ nil) or a sync failure (→ a startupError carrying last_processed_block).
 func syncContractEvents(
 	ctx context.Context,
 	logger *zap.Logger,
@@ -143,11 +142,11 @@ func syncContractEvents(
 			zap.Int("my_validators", operatorValidators),
 		)
 
-		// Sync ongoing registry events; terminate the node if it stops. The node can't operate without
-		// staying current with Ethereum events, and until reorg handling exists, restarting from
-		// persisted state is safer than continuing on possibly-incorrect state. A clean ctx
-		// cancellation returns nil; any other error surfaces up to the top-level Fatal, with
-		// last_processed_block preserved via startupError.
+		// Sync ongoing registry events; the node must terminate if this stops. It can't operate
+		// without staying current with Ethereum events, and until reorg handling exists, restarting
+		// from persisted state is safer than continuing on possibly-incorrect state. A clean ctx
+		// cancellation returns nil; any other error is returned as a startupError carrying
+		// last_processed_block.
 		startOngoingSync = func(ctx context.Context) error {
 			if err := eventSyncer.SyncOngoing(ctx, fromBlock.Uint64()); err != nil && !errors.Is(err, context.Canceled) {
 				return startupError{

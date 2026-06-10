@@ -18,7 +18,8 @@ const (
 	p2pComponentName         = "p2p"
 )
 
-// Common prober parameters we use to health check various prober-components.
+// Health-check parameters shared by the prober components. A component's full probe schedule — the
+// initial attempt plus retries, with delays in between — adds up to ~110s.
 const (
 	proberHealthcheckTimeout = 10 * time.Second
 	proberRetriesMax         = 5
@@ -28,10 +29,18 @@ const (
 const componentsUnhealthyErrorMsg = "component(s) are not healthy"
 
 func ensureComponentsHealthy(ctx context.Context, logger *zap.Logger, p *hprobe.HealthProber) error {
-	probeCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	// Deliberately cuts the full ~110s probe schedule short: at bring-up a component should answer
+	// within a couple of attempts, and a failed gate just gets the node restarted.
+	const gateTimeout = 30 * time.Second
+
+	probeCtx, cancel := context.WithTimeout(ctx, gateTimeout)
 	defer cancel()
 
 	if err := p.ProbeAll(probeCtx); err != nil {
+		// A canceled parent ctx is a deliberate stop (eg. shutdown), everything else fails the gate.
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		return fmt.Errorf("%s: %w", componentsUnhealthyErrorMsg, err)
 	}
 
@@ -39,28 +48,31 @@ func ensureComponentsHealthy(ctx context.Context, logger *zap.Logger, p *hprobe.
 	return nil
 }
 
-// startHealthProber is a runtime liveness watchdog: it probes all components every probeFrequency
+// startHealthProber is a runtime liveness watchdog: it probes all components every probeInterval
 // and, on persistent unhealth, returns an error so the node terminates gracefully (via Close,
 // non-zero exit) and the orchestrator restarts it; a clean ctx cancellation returns nil. Crashing on
 // persistent unhealth is intentional — a node idling with a dead EL while reporting healthy is a
 // silent failure, worse than a restart — so it must not degrade to log-and-retry.
 func startHealthProber(ctx context.Context, logger *zap.Logger, p *hprobe.HealthProber) error {
 	const (
-		probeFrequency = 60 * time.Second // how often a probe round runs
-		probeTimeout   = 60 * time.Second // max time for one probe round (ProbeAll)
+		// probeInterval is the pause between probe rounds, measured from round end — a round that runs
+		// long (components burning retries before recovering) still leaves a full quiet gap after it,
+		// never back-to-back rounds.
+		probeInterval = 60 * time.Second
+		// probeTimeout bounds one round (ProbeAll) as the watchdog's own liveness guard: even a
+		// Healthy impl that ignores its ctx can't stall the loop. Like the bring-up gate's timeout,
+		// it deliberately cuts the full probe schedule short — failing solidly for a whole round is
+		// exactly the unhealth the watchdog exists to trip on.
+		probeTimeout = 60 * time.Second
 	)
-
-	ticker := time.NewTicker(probeFrequency)
-	defer ticker.Stop()
 
 	for {
 		logger.Debug("health-prober tick: probing all components")
 		probeCtx, cancel := context.WithTimeout(ctx, probeTimeout)
 		err := p.ProbeAll(probeCtx)
-		cancel() // not deferred: this is a loop, so release each tick's ctx immediately
+		cancel() // not deferred: this is a loop, so release each round's ctx immediately
 		if err != nil {
-			// A canceled parent ctx is a deliberate stop (shutdown or sibling failure). Otherwise the
-			// probe genuinely failed (e.g. a wedged component) — real unhealth, so trip the watchdog.
+			// A canceled parent ctx is a deliberate stop (eg. shutdown), everything else trips the watchdog.
 			if ctx.Err() != nil {
 				return nil
 			}
@@ -71,7 +83,7 @@ func startHealthProber(ctx context.Context, logger *zap.Logger, p *hprobe.Health
 		select {
 		case <-ctx.Done():
 			return nil
-		case <-ticker.C:
+		case <-time.After(probeInterval):
 		}
 	}
 }

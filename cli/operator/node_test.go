@@ -39,7 +39,7 @@ func Test_runNode_invalidConfigReturns(t *testing.T) {
 // promotes every method so the type compiles as a beaconClient, while implementing only what the
 // test path actually invokes. In operator mode with Doppelganger disabled, newNode() never calls
 // a beacon method synchronously (it only stores the client); the one async caller is the
-// NewVRSubmitter goroutine, which a.Close() stops by canceling the node's ctx.
+// NewVRSubmitter goroutine, which stops when the test cancels its ctx.
 type stubBeaconClient struct {
 	beaconClient
 }
@@ -118,9 +118,10 @@ func Test_newNode_wiresOperatorNode(t *testing.T) {
 			_, isNoOp := a.doppelgangerHandler.(doppelganger.NoOpHandler)
 			require.Equal(t, !tc.doppelgangerOn, isNoOp, "doppelganger handler must match the configured protection")
 
-			// a.Close() cancels the node's ctx (stopping the VRSubmitter goroutine newNode started in
-			// operator mode), then closes the CLI-owned resources cleanly — the p2p network was
-			// constructed but never Setup/Start'd.
+			// Mirror production teardown ordering: cancel the ctx first (stopping the VRSubmitter
+			// goroutine newNode started in operator mode), then Close releases the CLI-owned
+			// resources cleanly — the p2p network was constructed but never Setup/Start'd.
+			cancel()
 			require.NoError(t, a.Close())
 		})
 	}
@@ -176,6 +177,8 @@ func Test_newNode_wiresExporterNode(t *testing.T) {
 				require.Nil(t, a.collector, "standard mode has no duty-trace collector")
 			}
 
+			// Mirror production teardown ordering: ctx-bound goroutines stop before Close.
+			cancel()
 			require.NoError(t, a.Close())
 		})
 	}
@@ -215,8 +218,8 @@ func Test_newNode_closesDBOnAssemblyFailure(t *testing.T) {
 	require.ErrorContains(t, err, "failed to setup network private key") // i.e. failed in setupP2P, after db-open
 	require.Nil(t, a)
 
-	// newNode's error path cancels the node's ctx itself (stopping the VRSubmitter goroutine it started before the
-	// failure), so the test no longer has to.
+	// Goroutines newNode started before the failure (the VRSubmitter) bind to the test's ctx and
+	// stop via the deferred cancel above.
 	//
 	// The error-only defer must have closed the db: a fresh badger open of the same dir succeeds
 	// only if the previous handle released its directory lock.

@@ -169,7 +169,7 @@ func (n *Node) Start(ctx context.Context) error {
 	n.logger.Info("starting operator node")
 
 	// On an early return, defer cancel() signals the early-joined members (the WS serve loop and the
-	// scheduler wait) to stop; it doesn't await them — they wind down alongside the caller's shutdown.
+	// scheduler wait) to stop; it doesn't await them — they unwind in the background.
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	g, gctx := errgroup.WithContext(ctx)
@@ -446,9 +446,9 @@ func filterOutDutyNotFoundErrors(e *multierror.Error) *multierror.Error {
 	return filtered
 }
 
-// startWSServer starts the WS API server and returns its serve-error channel for the caller to join
-// into the node's errgroup. A serve failure propagates via the channel — bringing the node down
-// gracefully through Close — rather than os.Exit-ing from a goroutine. Callers gate on n.ws != nil.
+// startWSServer starts the WS API server and returns its serve-error channel. A serve failure
+// propagates via the channel — bringing the node down gracefully through Close — rather than
+// os.Exit-ing from a goroutine. Requires n.ws != nil.
 func (n *Node) startWSServer(ctx context.Context) (<-chan error, error) {
 	n.logger.Info("starting WS server")
 

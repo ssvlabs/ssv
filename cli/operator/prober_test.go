@@ -2,6 +2,7 @@ package operator
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -34,6 +35,37 @@ func Test_startHealthProber_tripsOnUnhealthyComponent(t *testing.T) {
 
 	err := startHealthProber(context.Background(), zap.NewNop(), p)
 	require.ErrorContains(t, err, componentsUnhealthyErrorMsg)
+}
+
+// cancelMaskingComponent mimics a real client that surfaces ctx cancellation as its own transport
+// error instead of ctx.Err(): hprobe forgives a bare context.Canceled (not a component failure), so
+// only a masked error makes a probe round fail because of a shutdown — reaching the watchdog as
+// ordinary unhealth that only its own ctx.Err() guard can classify correctly.
+type cancelMaskingComponent struct{}
+
+func (cancelMaskingComponent) Healthy(ctx context.Context) error {
+	<-ctx.Done()
+	return errors.New("connection reset")
+}
+
+// Test_startHealthProber_returnsNilOnCancelMidProbe verifies the shutdown-vs-unhealth race: the
+// parent ctx is canceled while a probe is in flight, so the round fails (with a non-ctx error, as
+// real clients produce) at the same time as ctx.Err() != nil. The watchdog must classify that as a
+// clean shutdown (nil), not unhealth — pinning the ctx.Err() guard ahead of the error return.
+func Test_startHealthProber_returnsNilOnCancelMidProbe(t *testing.T) {
+	p := hprobe.NewHealthProber(zap.NewNop())
+	// Generous healthcheck timeout: the probe must still be in flight when cancel lands, so its
+	// failure is cancellation-caused — not a timeout, which must keep tripping the watchdog.
+	p.AddComponent("el", cancelMaskingComponent{}, 10*time.Second, 0, 0)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		cancel()
+	}()
+
+	err := startHealthProber(ctx, zap.NewNop(), p)
+	require.NoError(t, err, "a probe failure caused by shutdown cancellation must not trip the watchdog")
 }
 
 // Test_startHealthProber_returnsNilOnCtxCancel verifies a clean ctx cancellation (normal shutdown)

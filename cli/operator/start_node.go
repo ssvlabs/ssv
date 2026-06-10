@@ -59,17 +59,28 @@ var StartNodeCmd = &cobra.Command{
 
 		logger.Info(fmt.Sprintf("starting %v", commons.GetBuildData()))
 
-		// Cancel the node ctx on SIGINT/SIGTERM so shutdown unwinds gracefully through the errgroup
-		// (long-lived services return nil, node.Close() runs) instead of the process being terminated
-		// abruptly. Scoped to start-node so other subcommands keep cobra's default signal behavior.
-		ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
-		defer stop()
+		// First SIGINT/SIGTERM cancels the node ctx so shutdown unwinds gracefully (services stop,
+		// node Close runs); a second one force-exits via Fatal — the escape hatch for a graceful
+		// teardown that wedged. Scoped to start-node so other subcommands keep cobra's default
+		// signal behavior.
+		ctx, cancel := context.WithCancel(cmd.Context())
+		defer cancel()
+		sigC := make(chan os.Signal, 2)
+		signal.Notify(sigC, os.Interrupt, syscall.SIGTERM)
+		go func() {
+			sig := <-sigC
+			logger.Info("received shutdown signal, shutting down gracefully (repeat to force-exit)", zap.String("signal", sig.String()))
+			cancel()
+			sig = <-sigC
+			logger.Fatal("received second shutdown signal, exiting immediately", zap.String("signal", sig.String()))
+		}()
 
 		if err := runNode(ctx, &cfg, logger); err != nil {
-			// A signal during the synchronous startup phase surfaces as an error rather than the
-			// clean-cancel (nil) path. Key on whether a signal arrived, not the error's nature: a
-			// deliberate stop exits 0 (running the deferred observability shutdown) even if a genuine
-			// error coincided — whoever sent the signal isn't restarting on exit code anyway.
+			// runNode surfaces the terminal cause — for a deliberate stop that's context.Canceled,
+			// or whatever was in flight when the signal landed. Key on whether a signal arrived, not
+			// the error's nature: a deliberate stop exits 0 (running the deferred observability
+			// shutdown) even if a genuine error coincided — whoever sent the signal isn't restarting
+			// on exit code anyway.
 			if ctx.Err() != nil {
 				logger.Info("node stopped on signal", startupErrorLogFields(err)...)
 				return
