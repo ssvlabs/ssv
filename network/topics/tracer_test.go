@@ -22,6 +22,7 @@ func TestPsTracerLogRecvRPCMetadataForHighlightedPeer(t *testing.T) {
 
 	tracer := &psTracer{
 		logger:       zap.New(core),
+		ctx:          t.Context(),
 		traceLog:     true,
 		peerObserver: observer,
 	}
@@ -52,6 +53,7 @@ func TestPsTracerLogRecvRPCKeepsStandardTraceMetadataForRegularPeer(t *testing.T
 	core, logs := zapobserver.New(zap.DebugLevel)
 	tracer := &psTracer{
 		logger:   zap.New(core),
+		ctx:      t.Context(),
 		traceLog: true,
 	}
 
@@ -84,6 +86,7 @@ func TestPsTracerSkipsRegularPeerEventsWithoutTraceLog(t *testing.T) {
 
 	tracer := &psTracer{
 		logger:       zap.New(core),
+		ctx:          t.Context(),
 		traceLog:     false,
 		peerObserver: observer,
 	}
