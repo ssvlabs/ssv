@@ -161,7 +161,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			shares.liquidated,
 			shares.inactive,
 			shares.nonUpdatedMetadata,
-			shares.nonUpdatedMetadataNextEpoch,
+			shares.nonUpdatedMetadataFutureEpoch,
 			shares.noMetadata,
 		} {
 			if bytes.Equal(share.ValidatorPubKey[:], pubKey) {
@@ -576,12 +576,12 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.ErrorIs(t, err, expectedErr)
 	})
 
-	// Ignore messages related to a validator that in pending queued state
+	// Ignore messages related to a validator that is in pending queued state
 	t.Run("pending queued state validator", func(t *testing.T) {
 		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
-		nonUpdatedMetadataNextEpochIdentifier := spectypes.NewMsgID(netCfg.DomainType, shares.nonUpdatedMetadataNextEpoch.ValidatorPubKey[:], nonCommitteeRole)
-		signedSSVMessage := generateSignedMessage(leaderCtx, ks, nonUpdatedMetadataNextEpochIdentifier, defaultSlot)
+		nonUpdatedMetadataFutureEpochIdentifier := spectypes.NewMsgID(netCfg.DomainType, shares.nonUpdatedMetadataFutureEpoch.ValidatorPubKey[:], nonCommitteeRole)
+		signedSSVMessage := generateSignedMessage(leaderCtx, ks, nonUpdatedMetadataFutureEpochIdentifier, defaultSlot)
 
 		receivedAt := netCfg.SlotStartTime(defaultSlot)
 		_, err = validator.handleSignedSSVMessage(context.Background(), signedSSVMessage, topicID, peerID, receivedAt)
@@ -590,7 +590,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.ErrorIs(t, err, expectedErr)
 	})
 
-	// Don't ignore messages related to a validator that in pending queued state (in case metadata is not updated),
+	// Don't ignore messages related to a validator that is in pending queued state (in case metadata is not updated),
 	// but it is active (activation epoch <= current epoch)
 	t.Run("active validator with pending queued state", func(t *testing.T) {
 		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
@@ -2046,12 +2046,12 @@ func cloneSSVShare(t *testing.T, original *ssvtypes.SSVShare) *ssvtypes.SSVShare
 }
 
 type shareSet struct {
-	active                      *ssvtypes.SSVShare
-	liquidated                  *ssvtypes.SSVShare
-	inactive                    *ssvtypes.SSVShare
-	nonUpdatedMetadata          *ssvtypes.SSVShare
-	nonUpdatedMetadataNextEpoch *ssvtypes.SSVShare
-	noMetadata                  *ssvtypes.SSVShare
+	active                        *ssvtypes.SSVShare
+	liquidated                    *ssvtypes.SSVShare
+	inactive                      *ssvtypes.SSVShare
+	nonUpdatedMetadata            *ssvtypes.SSVShare
+	nonUpdatedMetadataFutureEpoch *ssvtypes.SSVShare
+	noMetadata                    *ssvtypes.SSVShare
 }
 
 func generateShares(t *testing.T, ks *spectestingutils.TestKeySet, ns storage.Storage, netCfg *networkconfig.Network) shareSet {
@@ -2063,86 +2063,69 @@ func generateShares(t *testing.T, ks *spectestingutils.TestKeySet, ns storage.St
 
 	require.NoError(t, ns.Shares().Save(nil, activeShare))
 
-	liquidatedShare := &ssvtypes.SSVShare{
+	liquidatedShare := saveShareWithRandomKey(t, ns, &ssvtypes.SSVShare{
 		Share:      *spectestingutils.TestingShare(ks, spectestingutils.TestingValidatorIndex),
 		Status:     eth2apiv1.ValidatorStateActiveOngoing,
 		Liquidated: true,
-	}
+	})
 
-	liquidatedSK, err := eth2types.GenerateBLSPrivateKey()
-	require.NoError(t, err)
-
-	copy(liquidatedShare.ValidatorPubKey[:], liquidatedSK.PublicKey().Marshal())
-	require.NoError(t, ns.Shares().Save(nil, liquidatedShare))
-
-	inactiveShare := &ssvtypes.SSVShare{
+	inactiveShare := saveShareWithRandomKey(t, ns, &ssvtypes.SSVShare{
 		Share:      *spectestingutils.TestingShare(ks, spectestingutils.TestingValidatorIndex),
 		Status:     eth2apiv1.ValidatorStateUnknown,
 		Liquidated: false,
-	}
-
-	inactiveSK, err := eth2types.GenerateBLSPrivateKey()
-	require.NoError(t, err)
-
-	copy(inactiveShare.ValidatorPubKey[:], inactiveSK.PublicKey().Marshal())
-	require.NoError(t, ns.Shares().Save(nil, inactiveShare))
+	})
 
 	slot := netCfg.EstimatedCurrentSlot()
 	activationEpoch := netCfg.EstimatedEpochAtSlot(slot)
 	exitEpoch := goclient.FarFutureEpoch
 
-	nonUpdatedMetadataShare := &ssvtypes.SSVShare{
+	nonUpdatedMetadataShare := saveShareWithRandomKey(t, ns, &ssvtypes.SSVShare{
 		Share:           *spectestingutils.TestingShare(ks, spectestingutils.TestingValidatorIndex),
 		Status:          eth2apiv1.ValidatorStatePendingQueued,
 		ActivationEpoch: activationEpoch,
 		ExitEpoch:       exitEpoch,
 		Liquidated:      false,
-	}
+	})
 
-	nonUpdatedMetadataSK, err := eth2types.GenerateBLSPrivateKey()
-	require.NoError(t, err)
-
-	copy(nonUpdatedMetadataShare.ValidatorPubKey[:], nonUpdatedMetadataSK.PublicKey().Marshal())
-	require.NoError(t, ns.Shares().Save(nil, nonUpdatedMetadataShare))
-
-	nonUpdatedMetadataNextEpochShare := &ssvtypes.SSVShare{
+	// Keep this validator "pending_queued / not yet attesting" for the whole run — the
+	// "pending queued state validator" subtest asserts ErrValidatorNotAttesting. IsAttesting
+	// compares ActivationEpoch against the wall-clock epoch at validation time, so a +1 margin
+	// was flaky: a run crossing an epoch boundary before the assertion saw it as attesting.
+	nonUpdatedMetadataFutureEpochShare := saveShareWithRandomKey(t, ns, &ssvtypes.SSVShare{
 		Share:           *spectestingutils.TestingShare(ks, spectestingutils.TestingValidatorIndex),
 		Status:          eth2apiv1.ValidatorStatePendingQueued,
-		ActivationEpoch: activationEpoch + 1,
+		ActivationEpoch: activationEpoch + 100,
 		ExitEpoch:       exitEpoch,
 		Liquidated:      false,
-	}
+	})
 
-	nonUpdatedMetadataNextEpochSK, err := eth2types.GenerateBLSPrivateKey()
-	require.NoError(t, err)
-
-	copy(nonUpdatedMetadataNextEpochShare.ValidatorPubKey[:], nonUpdatedMetadataNextEpochSK.PublicKey().Marshal())
-	require.NoError(t, ns.Shares().Save(nil, nonUpdatedMetadataNextEpochShare))
-
-	noMetadataShare := &ssvtypes.SSVShare{
+	noMetadataShare := saveShareWithRandomKey(t, ns, &ssvtypes.SSVShare{
 		Share:      *spectestingutils.TestingShare(ks, spectestingutils.TestingValidatorIndex),
 		Liquidated: false,
-	}
-
-	noMetadataShareSK, err := eth2types.GenerateBLSPrivateKey()
-	require.NoError(t, err)
-
-	copy(noMetadataShare.ValidatorPubKey[:], noMetadataShareSK.PublicKey().Marshal())
-	require.NoError(t, ns.Shares().Save(nil, noMetadataShare))
+	})
 
 	return shareSet{
-		active:                      activeShare,
-		liquidated:                  liquidatedShare,
-		inactive:                    inactiveShare,
-		nonUpdatedMetadata:          nonUpdatedMetadataShare,
-		nonUpdatedMetadataNextEpoch: nonUpdatedMetadataNextEpochShare,
-		noMetadata:                  noMetadataShare,
+		active:                        activeShare,
+		liquidated:                    liquidatedShare,
+		inactive:                      inactiveShare,
+		nonUpdatedMetadata:            nonUpdatedMetadataShare,
+		nonUpdatedMetadataFutureEpoch: nonUpdatedMetadataFutureEpochShare,
+		noMetadata:                    noMetadataShare,
 	}
 }
 
 type leaderTestCtx struct {
 	netCfg    *networkconfig.Network
 	committee []spectypes.OperatorID
+}
+
+// saveShareWithRandomKey assigns share a fresh random validator public key, persists it, and returns it.
+func saveShareWithRandomKey(t *testing.T, ns storage.Storage, share *ssvtypes.SSVShare) *ssvtypes.SSVShare {
+	sk, err := eth2types.GenerateBLSPrivateKey()
+	require.NoError(t, err)
+	copy(share.ValidatorPubKey[:], sk.PublicKey().Marshal())
+	require.NoError(t, ns.Shares().Save(nil, share))
+	return share
 }
 
 func generateSignedMessage(
