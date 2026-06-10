@@ -39,5 +39,5 @@ func TestObserveSSVValidation_UsesProvidedLogger(t *testing.T) {
 	require.Equal(t, "p2p highlighted peer ssv validation", logs.All()[0].Message)
 	fields := logs.All()[0].ContextMap()
 	require.Equal(t, validation.SSVValidationAccepted, fields["ssv_validation_result"])
-	require.Equal(t, uint64(0), fields["role_id"])
+	require.Equal(t, int32(0), fields["role_id"])
 }
