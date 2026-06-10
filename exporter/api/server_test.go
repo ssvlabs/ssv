@@ -3,12 +3,11 @@ package api
 import (
 	"context"
 	"fmt"
-	"math/rand"
-	"net"
 	"net/http"
 	"testing"
 	"time"
 
+	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
@@ -25,20 +24,9 @@ func TestHandleQuery(t *testing.T) {
 		nm.Msg.Data = []registrystorage.OperatorData{
 			{PublicKey: fmt.Sprintf("pubkey-%d", nm.Msg.Filter.From)},
 		}
-	}, mux, false).(*wsServer)
-	port := getRandomPort(8001, 14000)
-	addr := fmt.Sprintf(":%d", port)
-	serverErrCh := make(chan error, 1)
-	go func() {
-		serverErrCh <- ws.Start(addr)
-	}()
-	waitForCondition(t, 2*time.Second, func() bool { return checkPort(port) == nil })
-	select {
-	case err := <-serverErrCh:
-		require.NoError(t, err)
-		t.Fatal("server exited unexpectedly")
-	default:
-	}
+	}, mux, false)
+	addr, _, err := ws.Start("127.0.0.1:0")
+	require.NoError(t, err)
 
 	clientCtx, cancelClientCtx := context.WithCancel(ctx)
 	client := NewWSClient(clientCtx, logger)
@@ -68,24 +56,37 @@ func TestHandleQuery(t *testing.T) {
 	require.Equal(t, 2, client.MessageCount())
 }
 
+// TestHandleQuery_ServerCtxCancelClosesIdleConn pins the wrappedHandler ctx
+// watcher: an idle /query connection (blocked in ReadJSON server-side) must
+// be torn down when the server ctx is canceled, otherwise the handler
+// goroutine leaks past shutdown.
+func TestHandleQuery_ServerCtxCancelClosesIdleConn(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	mux := http.NewServeMux()
+	ws := NewWsServer(ctx, zap.NewNop(), func(nm *NetworkMessage) {}, mux, false)
+	addr, _, err := ws.Start("127.0.0.1:0")
+	require.NoError(t, err)
+
+	conn, _, err := websocket.DefaultDialer.Dial("ws://"+addr+"/query", nil)
+	require.NoError(t, err)
+	defer conn.Close()
+
+	cancel()
+
+	require.NoError(t, conn.SetReadDeadline(time.Now().Add(2*time.Second)))
+	_, _, err = conn.ReadMessage()
+	require.Error(t, err, "client read should fail once server ctx is canceled")
+}
+
 func TestHandleStream(t *testing.T) {
 	logger := zaptest.NewLogger(t)
-	ctx := context.Background() // t.Context() breaks the test
+	ctx := t.Context()
 	mux := http.NewServeMux()
-	ws := NewWsServer(ctx, zap.NewNop(), nil, mux, false).(*wsServer)
-	port := getRandomPort(8001, 14000)
-	addr := fmt.Sprintf(":%d", port)
-	serverErrCh := make(chan error, 1)
-	go func() {
-		serverErrCh <- ws.Start(addr)
-	}()
-	waitForCondition(t, 2*time.Second, func() bool { return checkPort(port) == nil })
-	select {
-	case err := <-serverErrCh:
-		require.NoError(t, err)
-		t.Fatal("server exited unexpectedly")
-	default:
-	}
+	ws := NewWsServer(ctx, zap.NewNop(), nil, mux, false)
+	addr, _, err := ws.Start("127.0.0.1:0")
+	require.NoError(t, err)
 
 	testCtx, cancelCtx := context.WithCancel(ctx)
 	defer cancelCtx()
@@ -98,7 +99,7 @@ func TestHandleStream(t *testing.T) {
 
 	// Wait until one stream client is connected and registered.
 	waitForCondition(t, 2*time.Second, func() bool {
-		b := ws.broadcaster.(*broadcaster)
+		b := ws.(*wsServer).broadcaster.(*broadcaster)
 		b.mut.Lock()
 		defer b.mut.Unlock()
 		return len(b.connections) == 1
@@ -111,18 +112,18 @@ func TestHandleStream(t *testing.T) {
 	}
 
 	// send 3 messages in the stream channel
-	ws.out.Send(newTestMessage())
+	ws.BroadcastFeed().Send(newTestMessage())
 
 	msg2 := newTestMessage()
 	msg2.Data = []registrystorage.OperatorData{
 		{PublicKey: "pubkey-operator"},
 	}
-	ws.out.Send(msg2)
+	ws.BroadcastFeed().Send(msg2)
 
 	msg3 := newTestMessage()
 	msg3.Type = TypeValidator
 	msg3.Data = map[string]string{"PublicKey": "pubkey3"}
-	ws.out.Send(msg3)
+	ws.BroadcastFeed().Send(msg3)
 
 	waitForCondition(t, 2*time.Second, func() bool { return client.MessageCount() == 3 })
 
@@ -152,24 +153,4 @@ func newTestMessage() Message {
 			{"PublicKey": "pubkey3"},
 		},
 	}
-}
-
-func getRandomPort(from, to int) int {
-	for {
-		port := rand.Intn(to-from) + from
-		if checkPort(port) == nil {
-			// port is taken
-			continue
-		}
-		return port
-	}
-}
-
-func checkPort(port int) error {
-	conn, err := net.DialTimeout("tcp", fmt.Sprintf(":%d", port), 3*time.Second)
-	if err != nil {
-		return err
-	}
-	_ = conn.Close()
-	return nil
 }

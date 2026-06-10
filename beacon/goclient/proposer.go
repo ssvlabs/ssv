@@ -312,6 +312,9 @@ collect:
 		}
 	}
 
+	if errs == nil {
+		return nil, fmt.Errorf("all %d clients failed to get proposal for slot %d", len(gc.clients), slot)
+	}
 	return nil, fmt.Errorf("all %d clients failed to get proposal for slot %d, encountered errors: %w", len(gc.clients), slot, errs)
 }
 

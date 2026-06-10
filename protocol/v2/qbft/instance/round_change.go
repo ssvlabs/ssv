@@ -11,7 +11,9 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/observability/log/fields"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -22,9 +24,8 @@ func (i *Instance) uponRoundChange(
 	logger *zap.Logger,
 	msg *specqbft.ProcessingMessage,
 ) error {
-	prevRound := i.State.Round
 	logger = logger.With(
-		zap.Uint64("qbft_instance_round", uint64(prevRound)),
+		zap.Uint64("qbft_instance_round", uint64(i.State.Round)),
 		zap.Uint64("qbft_instance_height", uint64(i.State.Height)),
 	)
 
@@ -53,6 +54,19 @@ func (i *Instance) uponRoundChange(
 	}
 
 	if justifiedRoundChangeMsg != nil {
+		i.metrics.EndStage(ctx, i.State.Round)
+		i.metrics.StartStage(stageProposal)
+
+		// hasReceivedProposalJustificationForLeadingRound accepts future-round quorums, but CreateProposal
+		// uses i.State.Round as the proposal round and MessagesForRound(i.State.Round) selects the
+		// round-change justifications - so bump to the justified round here before building the proposal.
+		//
+		// In practice this branch never observes a future-round quorum: on natural message flow, the
+		// partial-quorum branch (f+1 < 2f+1) fires on an earlier uponRoundChange call and advances
+		// State.Round before this branch can see a full quorum, so bumpToRound here is always a no-op.
+		// Kept as defense-in-depth in case the message-processing flow changes.
+		i.bumpToRound(justifiedRoundChangeMsg.QBFTMessage.Round)
+
 		roundChangeJustificationSignedMessages, _ := justifiedRoundChangeMsg.QBFTMessage.GetRoundChangeJustifications() // no need to check error, check on isValidRoundChange
 
 		roundChangeJustification := make([]*specqbft.ProcessingMessage, 0)
@@ -66,26 +80,18 @@ func (i *Instance) uponRoundChange(
 
 		proposal, err := i.CreateProposal(
 			valueToPropose,
-			i.State.RoundChangeContainer.MessagesForRound(prevRound), // TODO - might be optimized to include only necessary quorum
+			i.State.RoundChangeContainer.MessagesForRound(i.State.Round), // TODO - might be optimized to include only necessary quorum
 			roundChangeJustification,
 		)
 		if err != nil {
 			return fmt.Errorf("failed to create proposal: %w", err)
 		}
 
-		valueToProposeRoot, err := specqbft.HashDataRoot(valueToPropose)
-		if err != nil {
-			return fmt.Errorf("failed to hash value-to-propose: %w", err)
-		}
+		valueToProposeRoot := qbft.HashDataRoot(valueToPropose)
 		logger = logger.With(zap.String("qbft_value_to_propose_root", hex.EncodeToString(valueToProposeRoot[:])))
 
-		i.metrics.EndStage(ctx, prevRound)
-		i.metrics.StartStage(stageProposal)
-
-		i.metrics.RecordRoundChange(ctx, prevRound, reasonJustified)
-
 		logger.Debug("🔄 got justified round change, leader broadcasting proposal message",
-			zap.Any("round_change_signers", allSigners(i.State.RoundChangeContainer.MessagesForRound(prevRound))),
+			zap.Any("round_change_signers", allSigners(i.State.RoundChangeContainer.MessagesForRound(i.State.Round))),
 		)
 
 		if err := i.Broadcast(proposal); err != nil {
@@ -93,40 +99,40 @@ func (i *Instance) uponRoundChange(
 		}
 	} else if partialQuorum, rcs := i.hasReceivedPartialQuorum(); partialQuorum {
 		newRound := minRound(rcs)
-		if newRound <= prevRound {
+		if newRound <= i.State.Round {
 			// No need to advance round, we've already changed it.
 			return nil
 		}
 
-		i.metrics.EndStage(ctx, prevRound)
-		i.metrics.StartStage(stageRoundChange)
-
-		i.metrics.RecordRoundChange(ctx, prevRound, reasonPartialQuorum)
-
-		err := i.uponChangeRoundPartialQuorum(logger, newRound)
-		if err != nil {
+		if err := i.uponChangeRoundPartialQuorum(ctx, logger, newRound); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (i *Instance) uponChangeRoundPartialQuorum(logger *zap.Logger, newRound specqbft.Round) error {
-	i.bumpToRound(newRound)
-	i.State.ProposalAcceptedForCurrentRound = nil
+func (i *Instance) uponChangeRoundPartialQuorum(ctx context.Context, logger *zap.Logger, newRound specqbft.Round) error {
+	ctx, span := tracer.Start(ctx, observability.InstrumentName(observabilityNamespace, "qbft.instance.change_round_partial_quorum"))
+	defer span.End()
 
-	i.roundTimer.TimeoutForRound(newRound)
+	prevRound := i.State.Round
+
+	i.metrics.EndStage(ctx, prevRound)
+	i.metrics.StartStage(stageRoundChange)
+	i.metrics.RecordRoundChange(ctx, prevRound, reasonPartialQuorum)
+
+	// Always move on to the next round. The round-change message broadcast is a best-effort thing, the QBFT
+	// cluster as a whole can progress further even if our round-change message cannot be created/broadcast
+	// for whatever reason.
+	i.bumpToRound(newRound)
+
+	startValueRoot := qbft.HashDataRoot(i.StartValue)
+	logger = logger.With(zap.String("qbft_start_value_root", hex.EncodeToString(startValueRoot[:])))
 
 	roundChange, err := i.CreateRoundChange(newRound)
 	if err != nil {
 		return fmt.Errorf("failed to create round change message: %w", err)
 	}
-
-	startValueRoot, err := specqbft.HashDataRoot(i.StartValue)
-	if err != nil {
-		return fmt.Errorf("failed to hash instance start value: %w", err)
-	}
-	logger = logger.With(zap.String("qbft_start_value_root", hex.EncodeToString(startValueRoot[:])))
 
 	logger.Debug("📢 broadcasting round change message (got partial quorum)",
 		zap.Uint64("qbft_new_round", uint64(newRound)),
@@ -282,10 +288,7 @@ func (i *Instance) validRoundChangeForDataIgnoreSignature(
 	// Addition to formal spec
 	// We add this extra tests on the msg itself to filter round change msgs with invalid justifications, before they are inserted into msg containers
 	if msg.QBFTMessage.RoundChangePrepared() {
-		r, err := specqbft.HashDataRoot(fullData)
-		if err != nil {
-			return fmt.Errorf("could not hash input data: %w", err)
-		}
+		r := qbft.HashDataRoot(fullData)
 
 		// validate prepare message justifications
 		prepareSignedMsgs, _ := msg.QBFTMessage.GetRoundChangeJustifications() // no need to check error, checked on msg.QBFTMessage.Validate()
@@ -384,10 +387,7 @@ func (i *Instance) getRoundChangeData() (specqbft.Round, [32]byte, []byte, []*sp
 			return specqbft.NoRound, [32]byte{}, nil, nil, fmt.Errorf("could not get round change justification: %w", err)
 		}
 
-		r, err := specqbft.HashDataRoot(i.State.LastPreparedValue)
-		if err != nil {
-			return specqbft.NoRound, [32]byte{}, nil, nil, fmt.Errorf("could not hash input data: %w", err)
-		}
+		r := qbft.HashDataRoot(i.State.LastPreparedValue)
 
 		return i.State.LastPreparedRound, r, i.State.LastPreparedValue, justifications, nil
 	}

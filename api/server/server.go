@@ -1,6 +1,10 @@
 package server
 
 import (
+	"context"
+	"errors"
+	"fmt"
+	"net"
 	"net/http"
 	"runtime"
 	"time"
@@ -20,8 +24,8 @@ import (
 type Server struct {
 	logger *zap.Logger
 
-	addr       string
-	httpServer *http.Server
+	addr   string
+	router *chi.Mux
 }
 
 // New creates a new Server instance.
@@ -35,22 +39,10 @@ func New(
 ) *Server {
 	router := chi.NewRouter()
 
-	s := &Server{
-		logger: logger,
-		addr:   addr,
-		httpServer: &http.Server{
-			Addr:              addr,
-			Handler:           router,
-			ReadHeaderTimeout: 10 * time.Second,
-			ReadTimeout:       12 * time.Second,
-			WriteTimeout:      12 * time.Second,
-		},
-	}
-
-	router.Use(middleware.Recoverer)
+	router.Use(middlewareRecover(logger))
 	router.Use(middleware.Throttle(runtime.NumCPU() * 4))
 	router.Use(middleware.Compress(5, "application/json"))
-	router.Use(middlewareLogger(s.logger))
+	router.Use(middlewareLogger(logger))
 	router.Use(middlewareNodeVersion)
 
 	// @Summary Get node identity information
@@ -111,14 +103,52 @@ func New(
 		router.Post("/v1/exporter/decideds", api.Handler(exporter.Decideds))
 	}
 
-	return s
+	return &Server{
+		logger: logger,
+		addr:   addr,
+		router: router,
+	}
 }
 
-// Run starts the server and blocks until it's shut down.
-func (s *Server) Run() error {
-	s.logger.Info("Serving SSV API", zap.String("addr", s.addr))
+// Start binds a listener on the configured address and serves the HTTP API in
+// the background. It returns the bound address once the listener is ready (so
+// callers using a :0 port can discover the kernel-assigned one) and a channel
+// that emits a non-graceful serve error (the channel is closed silently when
+// ctx-driven shutdown completes). The server shuts down when ctx is canceled.
+func (s *Server) Start(ctx context.Context) (string, <-chan error, error) {
+	l, err := net.Listen("tcp", s.addr)
+	if err != nil {
+		return "", nil, fmt.Errorf("listen on %s: %w", s.addr, err)
+	}
+	boundAddr := l.Addr().String()
 
-	return s.httpServer.ListenAndServe()
+	httpServer := &http.Server{
+		Handler:           s.router,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       12 * time.Second,
+		WriteTimeout:      12 * time.Second,
+	}
+
+	s.logger.Info("Serving SSV API", zap.String("addr", boundAddr))
+
+	go func() {
+		<-ctx.Done()
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := httpServer.Shutdown(shutdownCtx); err != nil {
+			s.logger.Error("shutdown failed", zap.Error(err))
+		}
+	}()
+
+	serveErr := make(chan error, 1)
+	go func() {
+		defer close(serveErr)
+		if err := httpServer.Serve(l); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			serveErr <- err
+		}
+	}()
+
+	return boundAddr, serveErr, nil
 }
 
 func middlewareLogger(logger *zap.Logger) func(next http.Handler) http.Handler {
@@ -149,4 +179,46 @@ func middlewareNodeVersion(next http.Handler) http.Handler {
 		w.Header().Set("X-SSV-Node-Version", commons.GetNodeVersion())
 		next.ServeHTTP(w, r)
 	})
+}
+
+// middlewareRecover replaces chi's middleware.Recoverer with a zap-based
+// equivalent. It logs panics at ERROR level with full request context (method,
+// path, remote address, panic value, and the stack) instead of dumping the
+// stack to stderr via debug.PrintStack — which makes panics queryable in log
+// aggregators alongside the request that triggered them.
+//
+// http.ErrAbortHandler is rethrown unchanged: it's a sentinel used by callers
+// (including net/http itself) to abort a request without it being logged as a
+// real panic, and we match chi's behavior here so existing assumptions hold.
+func middlewareRecover(logger *zap.Logger) func(next http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			defer func() {
+				rvr := recover()
+				if rvr == nil {
+					return
+				}
+				if err, ok := rvr.(error); ok && errors.Is(err, http.ErrAbortHandler) {
+					// Re-panic so net/http's outer recover (in conn.serve)
+					// catches the sentinel and silently aborts the response
+					// / closes the connection — the behavior callers rely
+					// on. The panic stays within this single request's
+					// goroutine, so it cannot crash the process.
+					panic(rvr)
+				}
+				logger.Error("panic serving SSV API request",
+					zap.String("method", r.Method),
+					zap.String("path", r.URL.Path),
+					zap.String("remote_addr", r.RemoteAddr),
+					zap.Any("panic", rvr),
+					zap.Stack("stack"),
+				)
+				// Best-effort 500 response. If headers were already written
+				// this will produce a "superfluous WriteHeader" warning from
+				// net/http but won't change the client-visible behavior.
+				w.WriteHeader(http.StatusInternalServerError)
+			}()
+			next.ServeHTTP(w, r)
+		})
+	}
 }

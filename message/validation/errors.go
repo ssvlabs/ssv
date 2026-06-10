@@ -118,7 +118,6 @@ var (
 	ErrSignersNotSorted                        = Error{text: "signers are not sorted", reject: true}
 	ErrInconsistentSigners                     = Error{text: "signer is not expected", reject: true}
 	ErrInvalidHash                             = Error{text: "root doesn't match full data hash", reject: true}
-	ErrFullDataHash                            = Error{text: "couldn't hash root", reject: true}
 	ErrUndecodableMessageData                  = Error{text: "message data could not be decoded", reject: true}
 	ErrEventMessage                            = Error{text: "unexpected event message", reject: true}
 	ErrUnknownSSVMessageType                   = Error{text: "unknown SSV message type", reject: true}

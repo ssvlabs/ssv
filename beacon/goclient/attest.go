@@ -2,6 +2,7 @@ package goclient
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"sync/atomic"
@@ -204,6 +205,7 @@ func (gc *GoClient) weightedAttestationData(ctx context.Context, slot phase0.Slo
 		bestScore           float64
 		bestAttestationData *phase0.AttestationData
 		bestClientAddr      string
+		errs                error
 	)
 
 	for shouldWaitForAttestationDataResponse(succeeded, errored, softTimedOut, numberOfRequests) {
@@ -231,13 +233,18 @@ func (gc *GoClient) weightedAttestationData(ctx context.Context, slot phase0.Slo
 			}
 		case err := <-errCh:
 			errored++
+			errs = errors.Join(errs, err.err)
+			// A single client erroring is tolerated: the weighted fetch can still
+			// succeed via another beacon node. Log per-client failures at debug and
+			// aggregate them so the error returned on total failure reports why
+			// each client failed.
 			logger.With(
 				zap.Duration("elapsed", time.Since(started)),
 				zap.String("client_addr", err.clientAddr),
 				zap.Int("succeeded", succeeded),
 				zap.Int("errored", errored),
 				zap.Error(err.err),
-			).Error("error received")
+			).Debug("error fetching attestation data")
 		case <-softCtx.Done():
 			softTimedOut = numberOfRequests - (succeeded + errored)
 
@@ -276,13 +283,14 @@ func (gc *GoClient) weightedAttestationData(ctx context.Context, slot phase0.Slo
 				}
 			case err := <-errCh:
 				errored++
+				errs = errors.Join(errs, err.err)
 				logger.With(
 					zap.Duration("elapsed", time.Since(started)),
 					zap.String("client_addr", err.clientAddr),
 					zap.Int("succeeded", succeeded),
 					zap.Int("errored", errored),
 					zap.Error(err.err),
-				).Error("received error fetching attestation data")
+				).Debug("error fetching attestation data")
 			case <-ctx.Done():
 				hardTimedOut = numberOfRequests - (succeeded + errored)
 				logger.With(
@@ -290,9 +298,16 @@ func (gc *GoClient) weightedAttestationData(ctx context.Context, slot phase0.Slo
 					zap.Int("succeeded", succeeded),
 					zap.Int("errored", errored),
 					zap.Int("hard_timed_out", hardTimedOut),
-				).Error("hard timeout reached")
+				).Warn("hard timeout reached")
 			}
 		}
+	}
+
+	if bestAttestationData == nil {
+		if errs == nil {
+			return nil, fmt.Errorf("all %d clients failed to get attestation data for slot %d", numberOfRequests, slot)
+		}
+		return nil, fmt.Errorf("all %d clients failed to get attestation data for slot %d, encountered errors: %w", numberOfRequests, slot, errs)
 	}
 
 	resultLogger := logger.With(
@@ -303,11 +318,6 @@ func (gc *GoClient) weightedAttestationData(ctx context.Context, slot phase0.Slo
 		zap.Int("hard_timed_out", hardTimedOut),
 		zap.Bool("with_weighted_attestation_data", true),
 	)
-	if bestAttestationData == nil {
-		resultLogger.Error("no attestations received")
-		return nil, fmt.Errorf("no attestations received")
-	}
-
 	resultLogger.With(
 		zap.String("client_addr", bestClientAddr),
 		zap.Float64("score", bestScore)).

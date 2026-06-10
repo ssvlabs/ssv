@@ -100,6 +100,11 @@ type Config struct {
 
 	// PeerScoreInspectorInterval is the interval at which the PeerScoreInspector is called.
 	PeerScoreInspectorInterval time.Duration
+
+	// MdnsDiscoveryTag overrides the mDNS service tag used by local discovery.
+	// Empty falls back to discovery.LocalDiscoveryServiceTag. Tests set this to
+	// a unique value so concurrent test processes don't cross-discover peers.
+	MdnsDiscoveryTag string
 }
 
 // Libp2pOptions creates options list for the libp2p host

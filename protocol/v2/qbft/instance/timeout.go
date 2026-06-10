@@ -4,52 +4,50 @@ import (
 	"context"
 	"encoding/hex"
 
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	"github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/observability/traces"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 )
 
 func (i *Instance) UponRoundTimeout(ctx context.Context, logger *zap.Logger) error {
 	ctx, span := tracer.Start(ctx, observability.InstrumentName(observabilityNamespace, "qbft.instance.round_timeout"))
 	defer span.End()
 
-	if !i.CanProcessMessages() {
-		return types.WrapError(types.TimeoutInstanceErrorCode, traces.Errorf(span, "instance stopped processing timeouts"))
+	if !i.IsRelevant() {
+		return types.WrapError(types.TimeoutInstanceErrorCode, traces.Errorf(span, "instance is no longer considered relevant"))
 	}
-
-	i.metrics.EndStage(ctx, i.State.Round)
-	i.metrics.StartStage(stageRoundChange)
-
-	startValueRoot, err := specqbft.HashDataRoot(i.StartValue)
-	if err != nil {
-		return traces.Errorf(span, "failed to hash instance start value: %w", err)
-	}
-	logger = logger.With(zap.String("qbft_start_value_root", hex.EncodeToString(startValueRoot[:])))
-
-	logger.Debug("⌛ round timed out")
 
 	prevRound := i.State.Round
 	newRound := prevRound + 1
 
-	// TODO: previously this was done outside of a defer, which caused the
-	// round to be bumped before the round change message was created & broadcasted.
-	// Remember to track the impact of this change and revert/modify if necessary.
-	defer func() {
-		i.bumpToRound(newRound)
-		i.State.ProposalAcceptedForCurrentRound = nil
-		i.roundTimer.TimeoutForRound(newRound)
-	}()
+	i.metrics.EndStage(ctx, prevRound)
+	i.metrics.StartStage(stageRoundChange)
+	i.metrics.RecordRoundChange(ctx, prevRound, reasonTimeout)
+
+	startValueRoot := qbft.HashDataRoot(i.StartValue)
+	logger = logger.With(zap.String("qbft_start_value_root", hex.EncodeToString(startValueRoot[:])))
+
+	logger.Debug("⌛ round timed out")
+
+	// Always move on to the next round. The round-change message broadcast is a best-effort thing, the QBFT
+	// cluster as a whole can progress further even if our round-change message cannot be created/broadcast
+	// for whatever reason.
+	//
+	// We bump *before* the broadcast (unlike ssv-spec, which defers it). At the cutoff boundary
+	// (prevRound == CutOffRound-1) this advances State.Round into CutOffRound, so the Broadcast below sees
+	// !IsRelevant() and rejects the final round-change, and UponRoundTimeout returns an error. That is
+	// intentional and inert: CutOffRound is the cluster-wide give-up round (no instance can decide at or
+	// past it), so the dropped round-change carries no liveness value.
+	i.bumpToRound(newRound)
 
 	roundChange, err := i.CreateRoundChange(newRound)
 	if err != nil {
 		return traces.Errorf(span, "could not generate round change msg: %w", err)
 	}
-
-	i.metrics.RecordRoundChange(ctx, prevRound, reasonTimeout)
 
 	const eventMsg = "📢 broadcasting round change message (this round timed out)"
 	span.AddEvent(eventMsg, trace.WithAttributes(observability.BeaconBlockRootAttribute(startValueRoot), observability.DutyRoundAttribute(prevRound)))
