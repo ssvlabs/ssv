@@ -221,7 +221,9 @@ func (n *connGater) observeDecision(
 	_, highlighted := n.peerObserver.Match(id)
 	recordConnectionGaterDecision(ctx, phase, decision, reason, direction, highlighted)
 
-	if id == "" {
+	// Only highlighted peers consume the log fields below; gating decisions fire
+	// for every dial/accept, so skip the field building for everyone else.
+	if !highlighted {
 		return
 	}
 

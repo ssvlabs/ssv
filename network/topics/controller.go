@@ -290,11 +290,15 @@ func (ctrl *topicsCtrl) listen(sub *pubsub.Subscription) error {
 				messageTopicAttribute(topicNameFull),
 				messageTypeAttribute(uint64(m.MsgType)),
 			))
-			ctrl.peerObserver.Observe(ctrl.ctx, logger, "pubsub_message_delivered", msg.ReceivedFrom,
-				zap.String("topic", topicNameFull),
-				zap.Uint64("message_type", uint64(m.MsgType)),
-				zap.Int("payload_size", len(msg.Data)),
-			)
+			// Variadic args are evaluated before Observe no-ops internally, so match
+			// first to keep regular message delivery free of highlight-only work.
+			if _, ok := ctrl.peerObserver.Match(msg.ReceivedFrom); ok {
+				ctrl.peerObserver.Observe(ctrl.ctx, logger, "pubsub_message_delivered", msg.ReceivedFrom,
+					zap.String("topic", topicNameFull),
+					zap.Uint64("message_type", uint64(m.MsgType)),
+					zap.Int("payload_size", len(msg.Data)),
+				)
+			}
 		default:
 			logger.Warn("unknown message type", zap.Any("message", m))
 		}
@@ -320,7 +324,7 @@ func (ctrl *topicsCtrl) setupTopicValidator(name string) error {
 		validator := ctrl.msgValidator.ValidatorForTopic(name)
 		wrappedValidator := func(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
 			result := validator(ctx, p, pmsg)
-			if ctrl.peerObserver.Enabled() {
+			if _, ok := ctrl.peerObserver.Match(p); ok {
 				ctrl.peerObserver.ObserveValidation(ctx, ctrl.logger, p, name, validationResultString(result), len(pmsg.Data),
 					zap.Int("validation_result_code", int(result)),
 				)
