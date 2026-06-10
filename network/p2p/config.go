@@ -65,7 +65,8 @@ type Config struct {
 	HighlightedPeerKeys string `yaml:"HighlightedPeerKeys" env:"P2P_HIGHLIGHTED_PEER_KEYS" env-default:"" env-description:"Comma, semicolon, or whitespace-separated 0x-prefixed secp256k1 public identity keys to highlight in p2p logs and metrics"`
 	// HighlightedPeerLabel is attached to every highlighted peer log and metric.
 	HighlightedPeerLabel string `yaml:"HighlightedPeerLabel" env:"P2P_HIGHLIGHTED_PEER_LABEL" env-default:"highlighted-peer" env-description:"Label attached to highlighted peer logs and metrics"`
-	// PeerObserver observes traffic for highlighted peers. If unset, it is built from HighlightedPeers and HighlightedPeerKeys.
+	// PeerObserver observes traffic for highlighted peers. The operator setup builds it
+	// from HighlightedPeers and HighlightedPeerKeys; nil disables highlighting.
 	PeerObserver *peertrace.Observer `yaml:"-"`
 	// NetworkPrivateKey is used for network identity, MUST be injected
 	NetworkPrivateKey *ecdsa.PrivateKey

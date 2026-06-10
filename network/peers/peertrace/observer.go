@@ -73,12 +73,12 @@ type Observer struct {
 	logLimiter *rate.Limiter
 }
 
+// New builds an observer from cfg. It never returns a nil observer: with no
+// peers configured the observer is disabled (Enabled reports false) and every
+// observation method is a no-op.
 func New(cfg Config) (*Observer, error) {
 	peerTokens := splitPeerList(cfg.Peers)
 	keyTokens := splitPeerList(cfg.PeerKeys)
-	if len(peerTokens)+len(keyTokens) == 0 {
-		return nil, nil
-	}
 
 	label := strings.TrimSpace(cfg.Label)
 	if label == "" {

@@ -82,7 +82,11 @@ func TestNew_DeduplicatesPeerKeysAcrossConfigFields(t *testing.T) {
 func TestNew_EmptyConfigDisablesObserver(t *testing.T) {
 	observer, err := New(Config{})
 	require.NoError(t, err)
-	require.Nil(t, observer)
+	require.NotNil(t, observer)
+	require.False(t, observer.Enabled())
+
+	_, ok := observer.Match("some-peer")
+	require.False(t, ok)
 }
 
 func TestNew_RejectsPeerIDInPeerKeys(t *testing.T) {

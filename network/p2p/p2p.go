@@ -137,19 +137,6 @@ func New(
 	cfg *Config,
 ) (*p2pNetwork, error) {
 	ctx, cancel := context.WithCancel(cfg.Ctx)
-	peerObserver := cfg.PeerObserver
-	if peerObserver == nil {
-		var err error
-		peerObserver, err = peertrace.New(peertrace.Config{
-			Label:    cfg.HighlightedPeerLabel,
-			Peers:    cfg.HighlightedPeers,
-			PeerKeys: cfg.HighlightedPeerKeys,
-		})
-		if err != nil {
-			cancel()
-			return nil, fmt.Errorf("could not parse highlighted peers: %w", err)
-		}
-	}
 
 	n := &p2pNetwork{
 		parentCtx:            cfg.Ctx,
@@ -163,12 +150,12 @@ func New(
 		subscribedCommittees: hashmap.New[string, committeeSubscriptionStatus](),
 		nodeStorage:          cfg.NodeStorage,
 		operatorDataStore:    cfg.OperatorDataStore,
-		peerObserver:         peerObserver,
+		peerObserver:         cfg.PeerObserver,
 		discoveredPeersPool:  ttl.New[peer.ID, discovery.DiscoveredPeer](ctx, 30*time.Minute, 3*time.Minute),
 		trimmedRecently:      ttl.New[peer.ID, struct{}](ctx, 30*time.Minute, 3*time.Minute),
 	}
-	if peerObserver.Enabled() {
-		n.logger.Info("p2p highlighted peer observer configured", zap.Int("peer_count", peerObserver.Count()))
+	if n.peerObserver.Enabled() {
+		n.logger.Info("p2p highlighted peer observer configured", zap.Int("peer_count", n.peerObserver.Count()))
 	}
 	if err := n.parseTrustedPeers(); err != nil {
 		cancel() // release the ctx-bound ttl goroutines started above before bailing out
