@@ -146,7 +146,7 @@ func (pst *psTracer) log(logger *zap.Logger, evt *ps_pb.TraceEvent) {
 		return
 	}
 	if highlighted {
-		pst.peerObserver.Observe(pst.context(), logger, "pubsub_trace_"+strings.ToLower(evt.GetType().String()), eventPeer, fields...)
+		pst.peerObserver.Observe(pst.ctx, logger, "pubsub_trace_"+strings.ToLower(evt.GetType().String()), eventPeer, fields...)
 	}
 	if pst.traceLog {
 		logger.Debug("pubsub event", fields...)
@@ -177,6 +177,8 @@ func tracedEventPeer(evt *ps_pb.TraceEvent) peer.ID {
 		raw = evt.GetDropRPC().GetSendTo()
 	case ps_pb.TraceEvent_RECV_RPC:
 		raw = evt.GetRecvRPC().GetReceivedFrom()
+	default:
+		return ""
 	}
 	if len(raw) == 0 {
 		return ""
@@ -186,13 +188,6 @@ func tracedEventPeer(evt *ps_pb.TraceEvent) peer.ID {
 		return ""
 	}
 	return pid
-}
-
-func (pst *psTracer) context() context.Context {
-	if pst.ctx == nil {
-		return context.Background()
-	}
-	return pst.ctx
 }
 
 func appendMessages(fields []zap.Field, messages []*ps_pb.TraceEvent_MessageMeta) []zap.Field {
