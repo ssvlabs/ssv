@@ -111,11 +111,10 @@ type BaseRunner struct {
 
 	qbftRoundTimerF ssv.QBFTRoundTimerF `json:"-"`
 
-	// nonBeaconDeadlineDone is closed by markDutyFinished to release the deadline watcher started
-	// for a pre-consensus-only duty. Set and closed only from the single message-processing
-	// goroutine (the watcher reads its own captured copy), so it needs no lock. See
-	// watchNonBeaconDutyDeadline.
-	nonBeaconDeadlineDone chan struct{} `json:"-"`
+	// dutyDeadlineDone is closed by markDutyFinished to release the duty-completion watcher.
+	// Set and closed only from the single message-processing goroutine (the watcher reads its
+	// own captured copy), so it needs no lock. See watchDutyDeadline.
+	dutyDeadlineDone chan struct{} `json:"-"`
 
 	// highestDecidedSlot holds the highest decided duty slot and gets updated after each decided is reached
 	highestDecidedSlot phase0.Slot
@@ -242,6 +241,7 @@ func (b *BaseRunner) baseStartNewDuty(ctx context.Context, logger *zap.Logger, r
 	}
 
 	b.State = NewRunnerState(quorum, duty)
+	b.watchDutyDeadline(ctx, logger)
 
 	if err := runner.executeDuty(ctx, logger, duty); err != nil {
 		return fmt.Errorf("failed to execute duty: %w", err)
@@ -255,36 +255,30 @@ func (b *BaseRunner) baseStartNewNonBeaconDuty(ctx context.Context, logger *zap.
 		return fmt.Errorf("can't start non-beacon duty: %w", err)
 	}
 	b.State = NewRunnerState(quorum, duty)
+	b.watchDutyDeadline(ctx, logger)
+
 	if err := runner.executeDuty(ctx, logger, duty); err != nil {
 		return err
-	}
-
-	// Pre-consensus-only duties broadcast their partial signature once and have no later phase, so
-	// a failure to reach quorum is otherwise silent (the runner just stops at the !hasQuorum
-	// early-return). Watch the deadline and warn once if the duty never completes.
-	//
-	// Guard on hasDutyRunning so a duty completed synchronously inside executeDuty (cannot happen
-	// today) can't leave a watcher that never gets released and warns about an already-finished duty.
-	if b.hasDutyRunning() {
-		b.watchNonBeaconDutyDeadline(ctx, logger, duty, quorum)
 	}
 	return nil
 }
 
-// watchNonBeaconDutyDeadline warns if a pre-consensus-only duty hasn't finished by its deadline.
-// Completion is signaled by markDutyFinished closing nonBeaconDeadlineDone, not by reading runner
-// state, so it's safe alongside the single-threaded message loop. Each duty gets its own channel so
-// a reused runner still reports an earlier duty that never completed. If that earlier duty failed
-// mid-flight (markDutyFinished never ran), starting a new duty overwrites the channel and orphans
-// the earlier watcher — harmless: it warns for its own duty and is reaped by its own timer.
-func (b *BaseRunner) watchNonBeaconDutyDeadline(ctx context.Context, logger *zap.Logger, duty *spectypes.ValidatorDuty, quorum uint64) {
+// watchDutyDeadline warns once if the duty hasn't completed by the end of the current wall-clock
+// slot. It knows nothing about how duties complete: completion is signaled by markDutyFinished
+// closing dutyDeadlineDone, not by reading runner state, so it's safe alongside the single-threaded
+// message loop. It is started before executeDuty so a duty that completes synchronously releases
+// its own channel. Each duty gets its own channel: starting the next duty overwrites the field, and
+// the previous duty's watcher (if still pending) warns for its own duty and is reaped by its own
+// timer.
+//
+// The deadline is the end of the current wall-clock slot rather than duty.Slot's end because some
+// duties are stamped with a slot in the past (a voluntary-exit envelope carries blockSlot+4 but
+// executes at blockSlot+12); for beacon duties the two coincide.
+func (b *BaseRunner) watchDutyDeadline(ctx context.Context, logger *zap.Logger) {
 	done := make(chan struct{})
-	b.nonBeaconDeadlineDone = done
+	b.dutyDeadlineDone = done
 
-	// Measure from now, not duty.Slot: a voluntary-exit envelope Slot can be several slots in the
-	// past (stamped blockSlot+4 but broadcast at blockSlot+12). Two slots is generous — pre-consensus
-	// quorums normally form in well under one slot.
-	deadline := time.Now().Add(2 * b.NetworkConfig.SlotDuration)
+	deadline := b.NetworkConfig.SlotStartTime(b.NetworkConfig.EstimatedCurrentSlot() + 1)
 
 	go func() {
 		timer := time.NewTimer(time.Until(deadline))
@@ -292,19 +286,13 @@ func (b *BaseRunner) watchNonBeaconDutyDeadline(ctx context.Context, logger *zap
 
 		select {
 		case <-done:
-			return // duty finished successfully
+			return // duty completed
 		case <-ctx.Done():
 			return // node/validator shutting down
 		case <-timer.C:
 		}
 
-		// Fires both when quorum never formed and when quorum formed but reconstruction/submission
-		// failed — the latter logs its specific error the moment it happens (the queue's
-		// could-not-handle drop log, DEBUG), so this warning with no such preceding error means the
-		// partial-signature quorum never formed.
-		logger.Warn("⚠️ pre-consensus duty did not reach quorum or submit by deadline",
-			zap.Uint64("quorum", quorum),
-		)
+		logger.Warn("⚠️ duty did not complete before slot end")
 	}()
 }
 
@@ -602,12 +590,12 @@ func (b *BaseRunner) hasDutyFinished() bool {
 func (b *BaseRunner) markDutyFinished() {
 	// NOTE: b.State cannot be nil at this point, by construction.
 	b.State.Finished = true
-	// Release the deadline watcher (if any) so it doesn't warn about a completed duty. Set b.nonBeaconDeadlineDone
+	// Release the deadline watcher (if any) so it doesn't warn about a completed duty. Set b.dutyDeadlineDone
 	// to nil makes this func idempotent (it shouldn't be called twice, but it's hard to ensure that with the current
 	// code shape).
-	if b.nonBeaconDeadlineDone != nil {
-		close(b.nonBeaconDeadlineDone)
-		b.nonBeaconDeadlineDone = nil
+	if b.dutyDeadlineDone != nil {
+		close(b.dutyDeadlineDone)
+		b.dutyDeadlineDone = nil
 	}
 }
 

@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -14,45 +13,45 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 )
 
-// TestBaseRunner_watchNonBeaconDutyDeadline covers the deadline watcher that turns a silent
-// pre-consensus-only duty failure (no quorum / failed submission) into one operator-visible warning.
-func TestBaseRunner_watchNonBeaconDutyDeadline(t *testing.T) {
-	const (
-		quorum      = uint64(3)
-		warnSnippet = "did not reach quorum or submit by deadline"
-	)
-	duty := &spectypes.ValidatorDuty{Type: spectypes.BNRoleVoluntaryExit, Slot: 100}
+// TestBaseRunner_watchDutyDeadline covers the duty-completion watcher that turns a silently
+// abandoned duty (of any kind) into one operator-visible warning at slot end.
+func TestBaseRunner_watchDutyDeadline(t *testing.T) {
+	const warnSnippet = "did not complete before slot end"
 
-	// Tiny slot duration so the ~2-slot deadline elapses in milliseconds. A fresh *Beacon is used
-	// (Network embeds *Beacon by pointer) so the shared global config isn't mutated.
+	// Genesis is set to now so the watcher starts at the beginning of slot 0 and its deadline
+	// (end of the current slot) is a full slot away. A fresh *Beacon is used (Network embeds
+	// *Beacon by pointer) so the shared global config isn't mutated.
 	newRunner := func() *BaseRunner {
 		return &BaseRunner{
 			NetworkConfig: &networkconfig.Network{
-				Beacon: &networkconfig.Beacon{SlotDuration: 5 * time.Millisecond},
+				Beacon: &networkconfig.Beacon{
+					GenesisTime:  time.Now(),
+					SlotDuration: 50 * time.Millisecond,
+				},
 			},
 		}
 	}
 
-	t.Run("warns when the duty does not complete by the deadline", func(t *testing.T) {
+	t.Run("warns when the duty does not complete before slot end", func(t *testing.T) {
 		core, logs := observer.New(zapcore.WarnLevel)
 		b := newRunner()
 
-		b.watchNonBeaconDutyDeadline(context.Background(), zap.New(core), duty, quorum)
+		b.watchDutyDeadline(context.Background(), zap.New(core))
 
 		require.Eventually(t, func() bool {
 			return logs.FilterMessageSnippet(warnSnippet).Len() == 1
-		}, time.Second, 2*time.Millisecond, "expected exactly one deadline warning")
+		}, time.Second, 5*time.Millisecond, "expected exactly one deadline warning")
 	})
 
-	t.Run("stays silent when the duty finishes before the deadline", func(t *testing.T) {
+	t.Run("stays silent when the duty finishes before slot end", func(t *testing.T) {
 		core, logs := observer.New(zapcore.WarnLevel)
 		b := newRunner()
 
-		b.watchNonBeaconDutyDeadline(context.Background(), zap.New(core), duty, quorum)
-		// markDutyFinished closes this channel on successful completion.
-		close(b.nonBeaconDeadlineDone)
+		b.watchDutyDeadline(context.Background(), zap.New(core))
+		// markDutyFinished closes this channel on duty completion.
+		close(b.dutyDeadlineDone)
 
-		time.Sleep(50 * time.Millisecond) // well past the ~10ms deadline
+		time.Sleep(100 * time.Millisecond) // well past the slot end
 		require.Zero(t, logs.FilterMessageSnippet(warnSnippet).Len(), "must not warn for a completed duty")
 	})
 
@@ -61,10 +60,10 @@ func TestBaseRunner_watchNonBeaconDutyDeadline(t *testing.T) {
 		b := newRunner()
 
 		ctx, cancel := context.WithCancel(context.Background())
-		b.watchNonBeaconDutyDeadline(ctx, zap.New(core), duty, quorum)
+		b.watchDutyDeadline(ctx, zap.New(core))
 		cancel()
 
-		time.Sleep(50 * time.Millisecond)
+		time.Sleep(100 * time.Millisecond)
 		require.Zero(t, logs.FilterMessageSnippet(warnSnippet).Len(), "must not warn on shutdown")
 	})
 }
