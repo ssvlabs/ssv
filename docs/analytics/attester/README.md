@@ -20,6 +20,14 @@ What lateness does cost is **quality, not inclusion**:
 - **Inclusion in the first possible block** holds ≥97% through ~7.1s, then falls off sharply: roughly 70% at ~7.4s and ~56% past 7.5s (small samples there — see the error bars) — late attestations increasingly miss the slot+1 aggregate but still get included a slot or two later.
 - **Head-vote correctness** dips to ~96.4% for round-1 decisions at 4.0–5.0s — the "no block seen by 4s" fallback path votes for a head that often turns out stale — and *recovers to 99.6%+ for round-2 decisions at 6–7s*. The round-change retry waits long enough for the late block to arrive: **round changes heal head votes**.
 
+Conditioning on the decided round separates the two effects — i.e. what the curves would look like if every duty decided in round K:
+
+![Round-1 decisions only](quality-vs-decision-time-round1.png)
+
+![Round-2 decisions only](quality-vs-decision-time-round2.png)
+
+Round-1 decisions carry the entire 4–5s head-vote dip (the fallback path) but never pay an inclusion-optimality price — they complete well before the danger zone. Round-2 decisions are the mirror image: head votes near-perfect throughout, and the only cost is first-block inclusion once the decision slips past ~7.2s.
+
 ## Headline numbers (sampled epochs)
 
 | Question | Result |
