@@ -5,7 +5,6 @@ import (
 	"math"
 	"time"
 
-	p2pnet "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/oleiade/lane/v2"
 	"go.uber.org/zap"
@@ -27,14 +26,6 @@ type peerSelectionPoolStats struct {
 const (
 	peerSelectionRetryCooldownMin = 30 * time.Second
 	peerSelectionRetryCooldownMax = 300 * time.Second
-
-	// unconnectedProposalWarnAfter is how long a repeatedly-proposed peer may remain unconnected
-	// before the node warns about it. Peers we select share our subnets (often committee
-	// partners), so consistently failing to connect to them degrades duty execution — yet the
-	// dial errors themselves are visible only at DEBUG (see backoffConnector).
-	unconnectedProposalWarnAfter = 10 * time.Minute
-	// unconnectedProposalWarnInterval rate-limits the warning above.
-	unconnectedProposalWarnInterval = 5 * time.Minute
 )
 
 func (s *peerSelectionPoolStats) AsLogFields() []zap.Field {
@@ -67,12 +58,6 @@ func (n *p2pNetwork) startDiscovery() error {
 			n.discoveredPeersPool.Set(proposal.ID, discoveredPeer)
 		}
 	}()
-
-	// proposalFirstTry records when each still-discovered peer was first proposed for connection,
-	// to surface peers that never become connections. Accessed only from the selection interval
-	// goroutine below.
-	proposalFirstTry := make(map[peer.ID]time.Time)
-	var lastUnconnectedWarn time.Time
 
 	// Spawn a goroutine to repeatedly select & connect to the best peers.
 	// To find the best set of peers to connect we'll:
@@ -185,36 +170,6 @@ func (n *p2pNetwork) startDiscovery() error {
 				LastTry:  time.Now(),
 			})
 			connector <- p.AddrInfo
-		}
-
-		// A peer we keep proposing that never becomes a connection usually means this node cannot
-		// reach it (firewall/NAT/wrong advertised address). The dial errors are logged only at
-		// DEBUG, so periodically surface the lasting condition at WARN.
-		now := time.Now()
-		for pid := range peersToConnect {
-			if _, ok := proposalFirstTry[pid]; !ok {
-				proposalFirstTry[pid] = now
-			}
-		}
-		var unconnected []string
-		for pid, firstTry := range proposalFirstTry {
-			if n.Host().Network().Connectedness(pid) == p2pnet.Connected {
-				delete(proposalFirstTry, pid)
-				continue
-			}
-			if _, stillDiscovered := n.discoveredPeersPool.Get(pid); !stillDiscovered {
-				// No longer a candidate, not worth warning about.
-				delete(proposalFirstTry, pid)
-				continue
-			}
-			if waited := now.Sub(firstTry); waited >= unconnectedProposalWarnAfter {
-				unconnected = append(unconnected, fmt.Sprintf("%s (first proposed %s ago)", pid, waited.Round(time.Minute)))
-			}
-		}
-		if len(unconnected) > 0 && now.Sub(lastUnconnectedWarn) >= unconnectedProposalWarnInterval {
-			lastUnconnectedWarn = now
-			n.logger.Warn("discovered peers sharing our subnets keep failing to connect, node may be unable to dial them (check firewall/NAT and advertised addresses)",
-				zap.Strings("unconnected_peers", unconnected))
 		}
 
 		if len(peersToConnect) == 0 {
