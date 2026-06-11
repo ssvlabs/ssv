@@ -17,7 +17,7 @@ What lateness does cost is **quality, not inclusion**:
 
 ![Attestation quality vs QBFT decision time](quality-vs-decision-time.png)
 
-- **Inclusion in the first possible block** holds ≥99% through 7s, then drops to 88% (7.0–7.5s), 57% (7.5–8.0s), 62% (8.0–8.5s) — late attestations increasingly miss the slot+1 aggregate but still get included a slot or two later.
+- **Inclusion in the first possible block** holds ≥97% through ~7.1s, then falls off sharply: roughly 70% at ~7.4s and ~56% past 7.5s (small samples there — see the error bars) — late attestations increasingly miss the slot+1 aggregate but still get included a slot or two later.
 - **Head-vote correctness** dips to ~96.4% for round-1 decisions at 4.0–5.0s — the "no block seen by 4s" fallback path votes for a head that often turns out stale — and *recovers to 99.6%+ for round-2 decisions at 6–7s*. The round-change retry waits long enough for the late block to arrive: **round changes heal head votes**.
 
 ## Headline numbers (sampled epochs)
