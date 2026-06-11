@@ -9,7 +9,7 @@ This is the committee-duty (attestation) companion to the [proposer analysis](..
 For block proposals, decision time is destiny (100% missed past 4.0s into the slot). For committee duties, decision time is **almost irrelevant to inclusion**:
 
 - **0 misses in 19,463 round-2 decisions** (CI95 ≤ 0.02%), 0 in 128 round-3+ decisions, 0 in the 355 duties decided 7–8.5s into the slot. Round-1 decisions miss 0.0011%. Even the handful of duties decided past 10s were included, ~13 slots late.
-- Of the 1,500 missed validator-attestations in the sample, **86% came from duties whose QBFT never decided at all** and 12% from duties with no observable consensus messages. Only 3% decided and then failed downstream — and every apparent miss-rate uptick in the time curve resolves to a single failed duty, not a trend.
+- Of the 1,500 missed validator-attestations in the sample, 97% came from duties that never produced a decision: 86% where consensus messages were observed but a decide quorum never formed, and 12% where the exporter saw no consensus activity for the duty at all. The remaining 3% (41 misses, from just four duties) completed consensus early — between 2.3s and 5.1s — and failed after it.
 
 ![Where missed attestations come from](miss-sources.png)
 
