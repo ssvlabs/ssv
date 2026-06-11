@@ -67,7 +67,7 @@ func SetGlobal(levelName string, levelEncoderName string, logFormat string, file
 
 	var fileSyncer zapcore.WriteSyncer
 	if fileOptions != nil {
-		fileSyncer = zapcore.AddSync(fileOptions.writer(fileOptions))
+		fileSyncer = zapcore.AddSync(fileOptions.writer())
 	}
 
 	stdoutLevel := zap.LevelEnablerFunc(func(lvl zapcore.Level) bool {
@@ -178,11 +178,11 @@ type LogFileOptions struct {
 	MaxBackups int
 }
 
-func (o LogFileOptions) writer(options *LogFileOptions) io.Writer {
+func (o *LogFileOptions) writer() io.Writer {
 	return &lumberjack.Logger{
-		Filename:   options.FilePath,
-		MaxSize:    options.MaxSize, // megabytes
-		MaxBackups: options.MaxBackups,
+		Filename:   o.FilePath,
+		MaxSize:    o.MaxSize, // megabytes
+		MaxBackups: o.MaxBackups,
 		MaxAge:     28, // days
 		Compress:   false,
 	}
