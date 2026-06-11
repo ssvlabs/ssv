@@ -111,10 +111,10 @@ type BaseRunner struct {
 
 	qbftRoundTimerF ssv.QBFTRoundTimerF `json:"-"`
 
-	// dutyDeadlineDone is closed by markDutyFinished to release the duty-completion watcher.
+	// dutyFinishedOnTime is closed by markDutyFinished to release the duty-completion watcher.
 	// Set and closed only from the single message-processing goroutine (the watcher reads its
-	// own captured copy), so it needs no lock. See watchDutyDeadline.
-	dutyDeadlineDone chan struct{} `json:"-"`
+	// own captured copy), so it needs no lock. See watchDutyFinishedOnTime.
+	dutyFinishedOnTime chan struct{} `json:"-"`
 
 	// highestDecidedSlot holds the highest decided duty slot and gets updated after each decided is reached
 	highestDecidedSlot phase0.Slot
@@ -242,7 +242,7 @@ func (b *BaseRunner) baseStartNewDuty(ctx context.Context, logger *zap.Logger, r
 
 	b.State = NewRunnerState(quorum, duty)
 
-	b.watchDutyDeadline(ctx, logger)
+	b.watchDutyFinishedOnTime(ctx, logger)
 
 	if err := runner.executeDuty(ctx, logger, duty); err != nil {
 		return fmt.Errorf("failed to execute duty: %w", err)
@@ -259,7 +259,7 @@ func (b *BaseRunner) baseStartNewNonBeaconDuty(ctx context.Context, logger *zap.
 
 	b.State = NewRunnerState(quorum, duty)
 
-	b.watchDutyDeadline(ctx, logger)
+	b.watchDutyFinishedOnTime(ctx, logger)
 
 	if err := runner.executeDuty(ctx, logger, duty); err != nil {
 		return err
@@ -268,30 +268,30 @@ func (b *BaseRunner) baseStartNewNonBeaconDuty(ctx context.Context, logger *zap.
 	return nil
 }
 
-// watchDutyDeadline warns once if the duty hasn't completed by the end of the current wall-clock
+// watchDutyFinishedOnTime warns once if the duty hasn't completed by the end of the current wall-clock
 // slot. It knows nothing about how duties complete: completion is signaled by markDutyFinished
-// closing dutyDeadlineDone, not by reading runner state, so it's safe alongside the single-threaded
+// closing dutyFinishedOnTime, not by reading runner state, so it's safe alongside the single-threaded
 // message loop. It MUST be started before executeDuty so a duty that completes synchronously releases
 // its own channel. Each duty gets its own channel: starting the next duty overwrites the field, and
 // the previous duty's watcher (if still pending) warns for its own duty and is reaped by its own
 // timer.
 //
-// The deadline is the end of the current wall-clock slot rather than duty.Slot's end because some
+// The "on-time" is the end of the current wall-clock slot rather than duty.Slot's end because some
 // duties are stamped with a slot in the past (a voluntary-exit envelope carries blockSlot+4 but
 // executes at blockSlot+12); for beacon duties the two coincide.
-func (b *BaseRunner) watchDutyDeadline(ctx context.Context, logger *zap.Logger) {
-	done := make(chan struct{})
-	b.dutyDeadlineDone = done
+func (b *BaseRunner) watchDutyFinishedOnTime(ctx context.Context, logger *zap.Logger) {
+	finishedOnTime := make(chan struct{})
+	b.dutyFinishedOnTime = finishedOnTime
 
-	deadline := b.NetworkConfig.SlotStartTime(b.NetworkConfig.EstimatedCurrentSlot() + 1)
+	onTimeDeadline := b.NetworkConfig.SlotStartTime(b.NetworkConfig.EstimatedCurrentSlot() + 1)
 
 	go func() {
 		select {
-		case <-done:
+		case <-finishedOnTime:
 			return // duty completed
 		case <-ctx.Done():
 			return // node/validator shutting down
-		case <-time.After(time.Until(deadline)):
+		case <-time.After(time.Until(onTimeDeadline)):
 		}
 
 		logger.Warn("⚠️ duty did not complete before slot end")
@@ -595,9 +595,9 @@ func (b *BaseRunner) markDutyFinished() {
 	// Release the deadline watcher (if any) so it doesn't warn about a completed duty. Set b.dutyDeadlineDone
 	// to nil makes this func idempotent (it shouldn't be called twice, but it's hard to ensure that with the current
 	// code shape).
-	if b.dutyDeadlineDone != nil {
-		close(b.dutyDeadlineDone)
-		b.dutyDeadlineDone = nil
+	if b.dutyFinishedOnTime != nil {
+		close(b.dutyFinishedOnTime)
+		b.dutyFinishedOnTime = nil
 	}
 }
 

@@ -36,7 +36,7 @@ func TestBaseRunner_watchDutyDeadline(t *testing.T) {
 		core, logs := observer.New(zapcore.WarnLevel)
 		b := newRunner()
 
-		b.watchDutyDeadline(context.Background(), zap.New(core))
+		b.watchDutyFinishedOnTime(context.Background(), zap.New(core))
 
 		require.Eventually(t, func() bool {
 			return logs.FilterMessageSnippet(warnSnippet).Len() == 1
@@ -47,9 +47,9 @@ func TestBaseRunner_watchDutyDeadline(t *testing.T) {
 		core, logs := observer.New(zapcore.WarnLevel)
 		b := newRunner()
 
-		b.watchDutyDeadline(context.Background(), zap.New(core))
+		b.watchDutyFinishedOnTime(context.Background(), zap.New(core))
 		// markDutyFinished closes this channel on duty completion.
-		close(b.dutyDeadlineDone)
+		close(b.dutyFinishedOnTime)
 
 		time.Sleep(100 * time.Millisecond) // well past the slot end
 		require.Zero(t, logs.FilterMessageSnippet(warnSnippet).Len(), "must not warn for a completed duty")
@@ -60,7 +60,7 @@ func TestBaseRunner_watchDutyDeadline(t *testing.T) {
 		b := newRunner()
 
 		ctx, cancel := context.WithCancel(context.Background())
-		b.watchDutyDeadline(ctx, zap.New(core))
+		b.watchDutyFinishedOnTime(ctx, zap.New(core))
 		cancel()
 
 		time.Sleep(100 * time.Millisecond)
