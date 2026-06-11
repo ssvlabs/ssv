@@ -75,3 +75,7 @@ Seven committees account for 16 of the 41 misses — repeat offenders point at o
 ## Reproduction
 
 The pipeline (duty enumeration → trace fetch → analysis → this chart) lives in the internal `ssv-scout` repository under `analysis/proposer-qbft-timing/`, and is resumable; a 35-day window fetches in about 20 minutes. Exporter trace retention on mainnet was ~5 weeks at the time of writing, which bounds how far back the analysis can reach.
+
+## See also
+
+[Committee-duty QBFT decision timing vs attestation outcomes](../attester/README.md) — the attestation companion to this analysis, with the opposite conclusion: attestation inclusion is insensitive to decision time, and failures are binary and cluster-concentrated.
