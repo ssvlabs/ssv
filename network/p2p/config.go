@@ -58,6 +58,9 @@ type Config struct {
 	PubSubTrace bool `yaml:"PubSubTrace" env:"PUBSUB_TRACE" env-description:"Enable pubsub debug tracing in logs"`
 	// DiscoveryTrace is a flag to turn on/off discovery tracing in logs
 	DiscoveryTrace bool `yaml:"DiscoveryTrace" env:"DISCOVERY_TRACE" env-description:"Enable discovery debug tracing in logs"`
+	// Libp2pTrace routes go-libp2p logs through the SSV logger at error, with the
+	// swarm2 and basichost subsystems at debug (i.e. GOLOG_LOG_LEVEL=error,swarm2=debug,basichost=debug).
+	Libp2pTrace bool `yaml:"Libp2pTrace" env:"LIBP2P_TRACE" env-description:"Route go-libp2p logs through the SSV logger with swarm2/basichost at debug"`
 	// NetworkPrivateKey is used for network identity, MUST be injected
 	NetworkPrivateKey *ecdsa.PrivateKey
 	// OperatorDataStore contains own operator data including its ID

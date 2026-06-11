@@ -6,8 +6,10 @@ import (
 	"log"
 	"os"
 	"runtime/debug"
+	"sync"
 	"time"
 
+	golog "github.com/ipfs/go-log/v2"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"gopkg.in/natefinch/lumberjack.v2"
@@ -48,54 +50,124 @@ func SetGlobal(levelName string, levelEncoderName string, logFormat string, file
 
 	levelEncoder := parseConfigLevelEncoder(levelEncoderName)
 
-	lv := zap.LevelEnablerFunc(func(lvl zapcore.Level) bool {
+	encoderConfig := zapcore.EncoderConfig{
+		MessageKey:  "msg",
+		LevelKey:    "level",
+		EncodeLevel: levelEncoder,
+		TimeKey:     "time",
+		EncodeTime: func(t time.Time, enc zapcore.PrimitiveArrayEncoder) {
+			enc.AppendString(t.UTC().Format("2006-01-02T15:04:05.000000Z"))
+		},
+		CallerKey:        "caller",
+		EncodeCaller:     zapcore.ShortCallerEncoder,
+		EncodeDuration:   zapcore.StringDurationEncoder,
+		NameKey:          "name",
+		ConsoleSeparator: "\t",
+	}
+
+	var fileSyncer zapcore.WriteSyncer
+	if fileOptions != nil {
+		fileSyncer = zapcore.AddSync(fileOptions.writer(fileOptions))
+	}
+
+	stdoutLevel := zap.LevelEnablerFunc(func(lvl zapcore.Level) bool {
 		return lvl >= level
 	})
 
-	cfg := zap.Config{
-		Encoding:    logFormat,
-		Level:       zap.NewAtomicLevelAt(level),
-		OutputPaths: []string{"stdout"},
-		EncoderConfig: zapcore.EncoderConfig{
-			MessageKey:  "msg",
-			LevelKey:    "level",
-			EncodeLevel: levelEncoder,
-			TimeKey:     "time",
-			EncodeTime: func(t time.Time, enc zapcore.PrimitiveArrayEncoder) {
-				enc.AppendString(t.UTC().Format("2006-01-02T15:04:05.000000Z"))
-			},
-			CallerKey:        "caller",
-			EncodeCaller:     zapcore.ShortCallerEncoder,
-			EncodeDuration:   zapcore.StringDurationEncoder,
-			NameKey:          "name",
-			ConsoleSeparator: "\t",
-		},
+	core, err := assembleCore(stdoutLevel, encoderConfig, logFormat, fileSyncer)
+	if err != nil {
+		return err
 	}
 
-	var zapCore zapcore.Core
+	globalLogConfigMu.Lock()
+	globalEncoderConfig = encoderConfig
+	globalLogFormat = logFormat
+	globalFileSyncer = fileSyncer
+	globalLogConfigMu.Unlock()
+
+	zap.ReplaceGlobals(zap.New(core))
+
+	return nil
+}
+
+// Logging config resolved by the most recent SetGlobal call, retained so
+// go-libp2p logs can be routed through a matching core (see HookLibp2pLogging).
+// Guarded by globalLogConfigMu since SetGlobal may run concurrently (e.g. tests).
+var (
+	globalLogConfigMu   sync.Mutex
+	globalEncoderConfig zapcore.EncoderConfig
+	globalLogFormat     string
+	globalFileSyncer    zapcore.WriteSyncer
+)
+
+// stdoutSyncer is shared by every core built via assembleCore so concurrent
+// writes from the SSV logger and the go-libp2p core don't interleave.
+var stdoutSyncer = zapcore.Lock(zapcore.AddSync(os.Stdout))
+
+// assembleCore builds the SSV logging core: a stdout core gated by stdoutLevel,
+// optionally tee'd with an always-on file core. The same builder is reused to
+// route go-libp2p logs through an identical sink.
+func assembleCore(stdoutLevel zapcore.LevelEnabler, encoderConfig zapcore.EncoderConfig, logFormat string, fileSyncer zapcore.WriteSyncer) (zapcore.Core, error) {
+	var stdoutEncoder zapcore.Encoder
 	switch logFormat {
 	case "console":
-		zapCore = zapcore.NewCore(zapcore.NewConsoleEncoder(cfg.EncoderConfig), os.Stdout, lv)
+		stdoutEncoder = zapcore.NewConsoleEncoder(encoderConfig)
 	case "json":
-		zapCore = zapcore.NewCore(zapcore.NewJSONEncoder(cfg.EncoderConfig), os.Stdout, lv)
+		stdoutEncoder = zapcore.NewJSONEncoder(encoderConfig)
 	default:
-		return fmt.Errorf("unknown log format: %s", logFormat)
+		return nil, fmt.Errorf("unknown log format: %s", logFormat)
 	}
 
-	if fileOptions == nil {
-		zap.ReplaceGlobals(zap.New(zapCore))
-		return nil
+	core := zapcore.NewCore(stdoutEncoder, stdoutSyncer, stdoutLevel)
+
+	if fileSyncer != nil {
+		allLevels := zap.LevelEnablerFunc(func(zapcore.Level) bool {
+			return true // file sink records all levels
+		})
+		dev := zapcore.NewJSONEncoder(zap.NewDevelopmentEncoderConfig())
+		fileCore := zapcore.NewCore(dev, fileSyncer, allLevels)
+		core = zapcore.NewTee(core, fileCore)
 	}
 
-	lv2 := zap.LevelEnablerFunc(func(lvl zapcore.Level) bool {
-		return true // debug log returns all logs
+	return core, nil
+}
+
+// HookLibp2pLogging routes go-libp2p's logs (github.com/ipfs/go-log/v2) through
+// the SSV logger, with the swarm2 and basichost subsystems at debug and the rest
+// at error. It surfaces libp2p connection/host diagnostics in SSV's own log
+// format without the GOLOG_LOG_LEVEL environment variable. SetGlobal must run first.
+func HookLibp2pLogging() error {
+	globalLogConfigMu.Lock()
+	encoderConfig, logFormat, fileSyncer := globalEncoderConfig, globalLogFormat, globalFileSyncer
+	globalLogConfigMu.Unlock()
+
+	if logFormat == "" {
+		return fmt.Errorf("global logger not initialized")
+	}
+
+	// Seed go-log's per-subsystem levels and default the rest to error. Setting
+	// them via SetupLogging (rather than SetLogLevel) registers the levels even
+	// for subsystem loggers that haven't been created yet, so the policy holds
+	// regardless of package init ordering.
+	golog.SetupLogging(golog.Config{
+		Level: golog.LevelError,
+		SubsystemLevels: map[string]golog.LogLevel{
+			"swarm2":    golog.LevelDebug,
+			"basichost": golog.LevelDebug,
+		},
+		// No Stdout/Stderr/File: the core SetupLogging builds writes nowhere and
+		// is immediately replaced by the SSV core below.
 	})
 
-	dev := zapcore.NewJSONEncoder(zap.NewDevelopmentEncoderConfig())
-	fileWriter := fileOptions.writer(fileOptions)
-	fileCore := zapcore.NewCore(dev, zapcore.AddSync(fileWriter), lv2)
+	// Route libp2p logs through a debug-floor core sharing the SSV logger's
+	// encoder and writers; the per-subsystem levels above do the gating.
+	allLevels := zap.LevelEnablerFunc(func(zapcore.Level) bool { return true })
+	core, err := assembleCore(allLevels, encoderConfig, logFormat, fileSyncer)
+	if err != nil {
+		return fmt.Errorf("build libp2p logging core: %w", err)
+	}
 
-	zap.ReplaceGlobals(zap.New(zapcore.NewTee(zapCore, fileCore)))
+	golog.SetPrimaryCore(core)
 
 	return nil
 }
