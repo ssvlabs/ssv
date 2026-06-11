@@ -44,6 +44,16 @@ The first two rows count committee duties (one QBFT each); the miss-rate rows co
 
 Decision-time distribution: **p50 = 2.42s, p90 = 3.84s, p99 = 6.07s, max = 23.7s** into the slot. The committee QBFT starts when the slot's beacon block arrives (typically ~2s into the slot), with a 4s fallback; round timeouts are slot-aligned — round 1 ends at 6s, round 2 at 8s (`protocol/v2/qbft/roundtimer/timer.go`). Post-consensus signing quorum trails the decision by only 16ms median (p99 ~200ms), so decision time ≈ submission time.
 
+### Why round changes are ~7× more common here than for proposals
+
+The [proposer analysis](../proposer/README.md) found only 0.29% of QBFTs touching round ≥2, vs 1.95% here. The gap is real, and mostly by design rather than a difference in cluster health:
+
+- **The two round timers measure different things.** Proposer round timeouts run relative to QBFT *instance start* ([#2429](https://github.com/ssvlabs/ssv/issues/2429)): the slow upstream step (relay payload fetch) delays the start without consuming round budget, and once started, a healthy cluster decides in ~0.2s against a 2s timer — it almost never fires. Committee round timeouts are *slot-aligned* while the instance start is gated on beacon-block arrival, so block lateness eats the round-1 budget directly. The data shows exactly that: **72% of round-2-touching committee duties never produced a round-1 proposal at all** — the leader was still waiting for the block when the 6s timer fired.
+- **Late or contested blocks hit every cluster at once.** Half of all round-2 touches occur in slots where ≥5 clusters (up to 59) moved to round 2 simultaneously — a network-level event. Proposer duties run at most one per slot, so this amplification channel does not exist for them.
+- **Different weighting of unhealthy clusters.** Committee statistics count every active cluster once per slot, so a few chronically-degraded clusters with small validator counts weigh heavily: the top-10 round-2-touching clusters (individual touch rates of 7–28%) contribute 29% of all touches, and the rate excluding them is still 1.43%. Proposer statistics weight clusters by validator count, diluting the same clusters.
+
+Given the quality results above — round-2 decisions land reliably and carry *better* head votes — the higher committee round-change rate is the slot-aligned timer doing its job when the chain's block is late, not a reliability deficit.
+
 ## Full-window cluster-failure forensics
 
 All events where ≥5 validators of one cluster missed together, over the full 35 days (7,732 events; 121 excluded as suspect near a monitoring ingestion gap):
