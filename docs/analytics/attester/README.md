@@ -52,7 +52,9 @@ All events where ≥5 validators of one cluster missed together, over the full 3
 | No consensus messages observed | 196 | 2.6% |
 | Decided round 2 | 133 | 1.7% |
 | Decided round 3+ | 7 | 0.1% |
-| of which decided ≥7.0s into the slot | **15** | 0.2% |
+| *Roll-up: decided ≥7.0s into the slot (across the three "decided" rows above)* | **15** | 0.2% |
+
+Of the 1,140 failure events that did reach a decision (rounds 1, 2, and 3+ combined), only 15 decided at 7.0s or later — 98.7% decided with comfortable margin before the aggregation deadline, so their failures happened after consensus, not because of its timing.
 
 Failures are heavily concentrated: **five chronically-failing clusters account for 82% of all cluster-failure events** (the worst single cluster alone is 39%). Attestation reliability on mainnet is an operator-health problem, not a consensus-timing problem.
 
