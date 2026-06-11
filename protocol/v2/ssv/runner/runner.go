@@ -241,11 +241,13 @@ func (b *BaseRunner) baseStartNewDuty(ctx context.Context, logger *zap.Logger, r
 	}
 
 	b.State = NewRunnerState(quorum, duty)
+
 	b.watchDutyDeadline(ctx, logger)
 
 	if err := runner.executeDuty(ctx, logger, duty); err != nil {
 		return fmt.Errorf("failed to execute duty: %w", err)
 	}
+
 	return nil
 }
 
@@ -254,19 +256,22 @@ func (b *BaseRunner) baseStartNewNonBeaconDuty(ctx context.Context, logger *zap.
 	if err := b.ShouldProcessNonBeaconDuty(duty); err != nil {
 		return fmt.Errorf("can't start non-beacon duty: %w", err)
 	}
+
 	b.State = NewRunnerState(quorum, duty)
+
 	b.watchDutyDeadline(ctx, logger)
 
 	if err := runner.executeDuty(ctx, logger, duty); err != nil {
 		return err
 	}
+
 	return nil
 }
 
 // watchDutyDeadline warns once if the duty hasn't completed by the end of the current wall-clock
 // slot. It knows nothing about how duties complete: completion is signaled by markDutyFinished
 // closing dutyDeadlineDone, not by reading runner state, so it's safe alongside the single-threaded
-// message loop. It is started before executeDuty so a duty that completes synchronously releases
+// message loop. It MUST be started before executeDuty so a duty that completes synchronously releases
 // its own channel. Each duty gets its own channel: starting the next duty overwrites the field, and
 // the previous duty's watcher (if still pending) warns for its own duty and is reaped by its own
 // timer.
@@ -281,15 +286,12 @@ func (b *BaseRunner) watchDutyDeadline(ctx context.Context, logger *zap.Logger) 
 	deadline := b.NetworkConfig.SlotStartTime(b.NetworkConfig.EstimatedCurrentSlot() + 1)
 
 	go func() {
-		timer := time.NewTimer(time.Until(deadline))
-		defer timer.Stop()
-
 		select {
 		case <-done:
 			return // duty completed
 		case <-ctx.Done():
 			return // node/validator shutting down
-		case <-timer.C:
+		case <-time.After(time.Until(deadline)):
 		}
 
 		logger.Warn("⚠️ duty did not complete before slot end")
