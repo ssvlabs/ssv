@@ -33,12 +33,14 @@ Round-1 decisions carry the entire 4–5s head-vote dip (the fallback path) but 
 
 | Question | Result |
 |---|---|
-| Committee QBFTs that touched round ≥2 | 4,207 / 216,076 traced = **1.95%** |
-| Decided in round 2 | 2,826 duties = **1.31%** of decided (round 3+: 28 duties = 0.013%) |
-| Round-1 decision → attestation missed | 41 / 3,870,361 = **0.0011%** |
-| Round-2 decision → attestation missed | **0** / 19,463 (CI95 ≤ 0.02%) |
-| QBFT never decided → missed | 1,283 / 1,283 = **100%** |
-| Overall validator-attestation miss rate | 1,500 / 3,891,411 = **0.039%** |
+| Committee QBFTs that touched round ≥2 | 4,207 of 216,076 traced duties = **1.95%** |
+| Decided in round 2 | 2,826 of 215,311 decided duties = **1.31%** (round 3+: 28 duties = 0.013%) |
+| Round-1 decision → attestation missed | 41 of 3,870,361 attestations = **0.0011%** |
+| Round-2 decision → attestation missed | **0** of 19,463 attestations (CI95 ≤ 0.02%) |
+| QBFT never decided → missed | 1,283 of 1,283 attestations = **100%** |
+| Overall validator-attestation miss rate | 1,500 of 3,891,411 attestations = **0.039%** |
+
+The first two rows count committee duties (one QBFT each); the miss-rate rows count validator-attestations, since one duty carries the attestations of many validators.
 
 Decision-time distribution: **p50 = 2.42s, p90 = 3.84s, p99 = 6.07s, max = 23.7s** into the slot. The committee QBFT starts when the slot's beacon block arrives (typically ~2s into the slot), with a 4s fallback; round timeouts are slot-aligned — round 1 ends at 6s, round 2 at 8s (`protocol/v2/qbft/roundtimer/timer.go`). Post-consensus signing quorum trails the decision by only 16ms median (p99 ~200ms), so decision time ≈ submission time.
 
