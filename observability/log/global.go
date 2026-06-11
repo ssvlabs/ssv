@@ -107,6 +107,10 @@ var (
 // writes from the SSV logger and the go-libp2p core don't interleave.
 var stdoutSyncer = zapcore.Lock(zapcore.AddSync(os.Stdout))
 
+// levelAll enables every level. Used where gating happens elsewhere: the always-on
+// file sink, and the go-libp2p core whose per-subsystem levels do the gating.
+var levelAll = zap.LevelEnablerFunc(func(zapcore.Level) bool { return true })
+
 // assembleCore builds the SSV logging core: a stdout core gated by stdoutLevel,
 // optionally tee'd with an always-on file core. The same builder is reused to
 // route go-libp2p logs through an identical sink.
@@ -124,11 +128,8 @@ func assembleCore(stdoutLevel zapcore.LevelEnabler, encoderConfig zapcore.Encode
 	core := zapcore.NewCore(stdoutEncoder, stdoutSyncer, stdoutLevel)
 
 	if fileSyncer != nil {
-		allLevels := zap.LevelEnablerFunc(func(zapcore.Level) bool {
-			return true // file sink records all levels
-		})
 		dev := zapcore.NewJSONEncoder(zap.NewDevelopmentEncoderConfig())
-		fileCore := zapcore.NewCore(dev, fileSyncer, allLevels)
+		fileCore := zapcore.NewCore(dev, fileSyncer, levelAll) // file sink records all levels
 		core = zapcore.NewTee(core, fileCore)
 	}
 
@@ -139,6 +140,10 @@ func assembleCore(stdoutLevel zapcore.LevelEnabler, encoderConfig zapcore.Encode
 // the SSV logger, with the swarm2 and basichost subsystems at debug and the rest
 // at error. It surfaces libp2p connection/host diagnostics in SSV's own log
 // format without the GOLOG_LOG_LEVEL environment variable. SetGlobal must run first.
+//
+// go-log holds its logging state in process-global variables, so this reconfigures
+// libp2p logging for the entire process, not a single network instance. Calling it
+// more than once (e.g. a second p2p network) simply re-applies the same policy.
 func HookLibp2pLogging() error {
 	globalLogConfigMu.Lock()
 	encoderConfig, logFormat, fileSyncer := globalEncoderConfig, globalLogFormat, globalFileSyncer
@@ -165,8 +170,7 @@ func HookLibp2pLogging() error {
 
 	// Route libp2p logs through a debug-floor core sharing the SSV logger's
 	// encoder and writers; the per-subsystem levels above do the gating.
-	allLevels := zap.LevelEnablerFunc(func(zapcore.Level) bool { return true })
-	core, err := assembleCore(allLevels, encoderConfig, logFormat, fileSyncer)
+	core, err := assembleCore(levelAll, encoderConfig, logFormat, fileSyncer)
 	if err != nil {
 		return fmt.Errorf("build libp2p logging core: %w", err)
 	}

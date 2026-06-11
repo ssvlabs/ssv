@@ -33,6 +33,12 @@ p2p:
   # TcpPort: 13001
   # UdpPort: 12001
 
+  # Optionally surface networking debug logs through the SSV logger (all off by default;
+  # enable individually when troubleshooting connectivity):
+  # PubSubTrace: true      # gossipsub (pubsub) debug tracing
+  # DiscoveryTrace: true   # discv5 discovery debug tracing
+  # Libp2pTrace: true      # go-libp2p logs, swarm2 & basichost at debug (replaces GOLOG_LOG_LEVEL)
+
 # Note: Operator private key can be generated with the `generate-operator-keys` command.
 OperatorPrivateKey:
 
