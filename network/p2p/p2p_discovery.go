@@ -34,7 +34,7 @@ const (
 	// dial errors themselves are visible only at DEBUG (see backoffConnector).
 	unconnectedProposalWarnAfter = 10 * time.Minute
 	// unconnectedProposalWarnInterval rate-limits the warning above.
-	unconnectedProposalWarnInterval = 2 * time.Minute
+	unconnectedProposalWarnInterval = 5 * time.Minute
 )
 
 func (s *peerSelectionPoolStats) AsLogFields() []zap.Field {
