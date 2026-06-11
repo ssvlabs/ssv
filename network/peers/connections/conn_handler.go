@@ -71,9 +71,13 @@ func (ch *connHandler) Handle() *libp2pnetwork.NotifyBundle {
 		errClose := net.ClosePeer(id)
 		if errClose == nil {
 			recordFiltered(ch.ctx, conn.Stat().Direction)
-			ch.peerObserver.Observe(ch.ctx, logger, "connection_filtered", id,
-				zap.String("conn_dir", conn.Stat().Direction.String()),
-			)
+			// Match before Observe: variadic fields are evaluated at the call site,
+			// so the check keeps regular connections free of highlight-only work.
+			if _, ok := ch.peerObserver.Match(id); ok {
+				ch.peerObserver.Observe(ch.ctx, logger, "connection_filtered", id,
+					zap.String("conn_dir", conn.Stat().Direction.String()),
+				)
+			}
 		}
 	}
 
@@ -208,10 +212,12 @@ func (ch *connHandler) Handle() *libp2pnetwork.NotifyBundle {
 				recordConnected(ch.ctx, conn.Stat().Direction)
 
 				ch.peerInfos.SetState(conn.RemotePeer(), peers.StateConnected)
-				ch.peerObserver.Observe(ch.ctx, logger, "connection_connected", conn.RemotePeer(),
-					zap.String("remote_addr", conn.RemoteMultiaddr().String()),
-					zap.String("conn_dir", conn.Stat().Direction.String()),
-				)
+				if _, ok := ch.peerObserver.Match(conn.RemotePeer()); ok {
+					ch.peerObserver.Observe(ch.ctx, logger, "connection_connected", conn.RemotePeer(),
+						zap.String("remote_addr", conn.RemoteMultiaddr().String()),
+						zap.String("conn_dir", conn.Stat().Direction.String()),
+					)
+				}
 				logger.Debug("peer connected")
 
 				// if this connection is the one we found through discovery - remove it from discoveredPeersPool
@@ -238,10 +244,12 @@ func (ch *connHandler) Handle() *libp2pnetwork.NotifyBundle {
 			ch.peerInfos.SetState(conn.RemotePeer(), peers.StateDisconnected)
 
 			logger := connLogger(conn)
-			ch.peerObserver.Observe(ch.ctx, logger, "connection_disconnected", conn.RemotePeer(),
-				zap.String("remote_addr", conn.RemoteMultiaddr().String()),
-				zap.String("conn_dir", conn.Stat().Direction.String()),
-			)
+			if _, ok := ch.peerObserver.Match(conn.RemotePeer()); ok {
+				ch.peerObserver.Observe(ch.ctx, logger, "connection_disconnected", conn.RemotePeer(),
+					zap.String("remote_addr", conn.RemoteMultiaddr().String()),
+					zap.String("conn_dir", conn.Stat().Direction.String()),
+				)
+			}
 			logger.Debug("peer disconnected")
 		},
 	}

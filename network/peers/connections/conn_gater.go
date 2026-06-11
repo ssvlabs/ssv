@@ -213,15 +213,12 @@ func (n *connGater) observeDecision(
 	direction libp2pnetwork.Direction,
 	extraFields ...zap.Field,
 ) {
-	ctx := n.ctx
-	if ctx == nil {
-		ctx = context.Background()
-	}
-
 	_, highlighted := n.peerObserver.Match(id)
-	recordConnectionGaterDecision(ctx, phase, decision, reason, direction, highlighted)
+	recordConnectionGaterDecision(n.ctx, phase, decision, reason, direction, highlighted)
 
-	if id == "" {
+	// Only highlighted peers consume the log fields below; gating decisions fire
+	// for every dial/accept, so skip the field building for everyone else.
+	if !highlighted {
 		return
 	}
 
@@ -233,12 +230,5 @@ func (n *connGater) observeDecision(
 		zap.String("conn_direction", direction.String()),
 	)
 	logFields = append(logFields, extraFields...)
-	n.peerObserver.Observe(ctx, n.loggerOrNop(), "connection_gater_decision", id, logFields...)
-}
-
-func (n *connGater) loggerOrNop() *zap.Logger {
-	if n.logger == nil {
-		return zap.NewNop()
-	}
-	return n.logger
+	n.peerObserver.Observe(n.ctx, n.logger, "connection_gater_decision", id, logFields...)
 }

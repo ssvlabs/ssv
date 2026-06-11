@@ -12,6 +12,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
+	"golang.org/x/time/rate"
 
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/observability/metrics"
@@ -19,6 +20,13 @@ import (
 
 const (
 	defaultLabel = "highlighted-peer"
+
+	// Highlighted peers are typically observed exactly when they flood the node
+	// (attack simulations), so log emission is rate-limited to keep the node
+	// responsive and its logs readable. Counters are never rate-limited, so
+	// metrics stay exact while logs degrade to a sample.
+	logsPerSecond = 10
+	logsBurst     = 100
 
 	observabilityName      = "github.com/ssvlabs/ssv/network/peers/peertrace"
 	observabilityNamespace = "ssv.p2p.highlighted_peer"
@@ -44,9 +52,9 @@ var (
 type Config struct {
 	// Label is attached to every log and metric for this observer.
 	Label string
-	// Peers is a comma, semicolon, or whitespace separated list of libp2p peer IDs
-	// or secp256k1 public keys encoded as hex. Hex public keys are accepted here
-	// for backwards compatibility; prefer PeerKeys for new key-based configuration.
+	// Peers is a comma, semicolon, or whitespace separated list of libp2p peer IDs.
+	// 0x-prefixed hex secp256k1 public keys are also accepted here for convenience;
+	// prefer PeerKeys for key-based configuration.
 	Peers string
 	// PeerKeys is a comma, semicolon, or whitespace separated list of secp256k1
 	// public identity keys encoded as hex.
@@ -60,15 +68,17 @@ type Peer struct {
 }
 
 type Observer struct {
-	label string
-	peers map[peer.ID]Peer
+	label      string
+	peers      map[peer.ID]Peer
+	logLimiter *rate.Limiter
 }
 
+// New builds an observer from cfg. It never returns a nil observer: with no
+// peers configured the observer is disabled (Enabled reports false) and every
+// observation method is a no-op.
 func New(cfg Config) (*Observer, error) {
-	tokens := splitPeerList(strings.Join([]string{cfg.Peers, cfg.PeerKeys}, " "))
-	if len(tokens) == 0 {
-		return nil, nil
-	}
+	peerTokens := splitPeerList(cfg.Peers)
+	keyTokens := splitPeerList(cfg.PeerKeys)
 
 	label := strings.TrimSpace(cfg.Label)
 	if label == "" {
@@ -76,13 +86,21 @@ func New(cfg Config) (*Observer, error) {
 	}
 
 	observer := &Observer{
-		label: label,
-		peers: make(map[peer.ID]Peer, len(tokens)),
+		label:      label,
+		peers:      make(map[peer.ID]Peer, len(peerTokens)+len(keyTokens)),
+		logLimiter: rate.NewLimiter(logsPerSecond, logsBurst),
 	}
-	for _, token := range tokens {
+	for _, token := range peerTokens {
 		tracedPeer, err := parsePeer(token)
 		if err != nil {
 			return nil, fmt.Errorf("parse highlighted peer %q: %w", token, err)
+		}
+		observer.peers[tracedPeer.ID] = tracedPeer
+	}
+	for _, token := range keyTokens {
+		tracedPeer, err := parsePublicKey(token)
+		if err != nil {
+			return nil, fmt.Errorf("parse highlighted peer key %q: %w", token, err)
 		}
 		observer.peers[tracedPeer.ID] = tracedPeer
 	}
@@ -121,6 +139,16 @@ func (o *Observer) Observe(ctx context.Context, logger *zap.Logger, event string
 	if !ok {
 		return
 	}
+
+	highlightedPeerEventsCounter.Add(ctx, 1, metric.WithAttributes(
+		attribute.String("ssv.p2p.highlight.label", o.label),
+		attribute.String("ssv.p2p.highlight.event", event),
+		attribute.String("ssv.p2p.peer.id", match.ID.String()),
+	))
+
+	if !o.AllowLog() {
+		return
+	}
 	if logger == nil {
 		logger = zap.NewNop()
 	}
@@ -137,12 +165,13 @@ func (o *Observer) Observe(ctx context.Context, logger *zap.Logger, event string
 	}
 	highlightFields = append(highlightFields, fields...)
 	logger.Info("p2p highlighted peer event", highlightFields...)
+}
 
-	highlightedPeerEventsCounter.Add(ctx, 1, metric.WithAttributes(
-		attribute.String("ssv.p2p.highlight.label", o.label),
-		attribute.String("ssv.p2p.highlight.event", event),
-		attribute.String("ssv.p2p.peer.id", match.ID.String()),
-	))
+// AllowLog reports whether a highlighted-peer log line may be emitted now.
+// It rate-limits log volume (a highlighted peer is expected to flood the node
+// during attack simulations); counters stay exact regardless.
+func (o *Observer) AllowLog() bool {
+	return o != nil && o.logLimiter.Allow()
 }
 
 func (o *Observer) ObserveValidation(

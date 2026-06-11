@@ -21,6 +21,19 @@ func TestNewDisabledObserverReturnsNilInterface(t *testing.T) {
 	require.Nil(t, New(observer))
 }
 
+func TestInterestedReportsOnlyHighlightedPeers(t *testing.T) {
+	pid, err := peer.Decode(highlightedPeerID)
+	require.NoError(t, err)
+	regularPID, err := peer.Decode("12D3KooWAVdZV4v1YKiB8icTQmeqHvRsVSVNqZ3iJ1Ls5C1xe6NC")
+	require.NoError(t, err)
+	peerObserver, err := peertrace.New(peertrace.Config{Peers: highlightedPeerID})
+	require.NoError(t, err)
+
+	observer := New(peerObserver)
+	require.True(t, observer.Interested(pid))
+	require.False(t, observer.Interested(regularPID))
+}
+
 func TestObserveSSVValidation_UsesProvidedLogger(t *testing.T) {
 	pid, err := peer.Decode(highlightedPeerID)
 	require.NoError(t, err)

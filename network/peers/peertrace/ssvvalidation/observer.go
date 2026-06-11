@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 
+	"github.com/libp2p/go-libp2p/core/peer"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
@@ -42,6 +43,12 @@ func New(peerObserver *peertrace.Observer) validation.SSVValidationObserver {
 	return &Observer{peerObserver: peerObserver}
 }
 
+// Interested reports whether messages from this peer are highlighted.
+func (o *Observer) Interested(pid peer.ID) bool {
+	_, ok := o.peerObserver.Match(pid)
+	return ok
+}
+
 func (o *Observer) ObserveSSVValidation(ctx context.Context, logger *zap.Logger, event validation.SSVValidationEvent) {
 	if o == nil || !o.peerObserver.Enabled() {
 		return
@@ -50,12 +57,31 @@ func (o *Observer) ObserveSSVValidation(ctx context.Context, logger *zap.Logger,
 	if !ok {
 		return
 	}
+
+	label := o.peerObserver.Label()
+	messageType := ssvmessage.MsgTypeToString(event.SSVMessageType)
+	qbftMessageType := ""
+	if event.Consensus != nil {
+		qbftMessageType = ssvmessage.QBFTMsgTypeToString(event.Consensus.QBFTMessageType)
+	}
+
+	highlightedPeerSSVValidationsCounter.Add(ctx, 1, metric.WithAttributes(
+		attribute.String("ssv.p2p.highlight.label", label),
+		attribute.String("ssv.p2p.ssv_validation.result", event.Outcome),
+		attribute.String("ssv.p2p.ssv_validation.reason", event.Reason),
+		attribute.String("ssv.p2p.message.role", event.Role.String()),
+		attribute.String("ssv.p2p.message.type", messageType),
+		attribute.String("ssv.p2p.qbft.message.type", qbftMessageType),
+		attribute.String("ssv.p2p.peer.id", match.ID.String()),
+	))
+
+	if !o.peerObserver.AllowLog() {
+		return
+	}
 	if logger == nil {
 		logger = zap.NewNop()
 	}
 
-	label := o.peerObserver.Label()
-	messageType := ssvmessage.MsgTypeToString(event.SSVMessageType)
 	logFields := []zap.Field{
 		zap.Bool("p2p_highlight", true),
 		zap.String("p2p_highlight_label", label),
@@ -71,9 +97,7 @@ func (o *Observer) ObserveSSVValidation(ctx context.Context, logger *zap.Logger,
 		zap.String("duty_executor_id", hex.EncodeToString(event.DutyExecutorID)),
 		zap.Any("signers", event.Signers),
 	}
-	qbftMessageType := ""
 	if event.Consensus != nil {
-		qbftMessageType = ssvmessage.QBFTMsgTypeToString(event.Consensus.QBFTMessageType)
 		logFields = append(logFields,
 			zap.Uint64("qbft_round", uint64(event.Consensus.Round)),
 			zap.String("qbft_message_type", qbftMessageType),
@@ -86,14 +110,4 @@ func (o *Observer) ObserveSSVValidation(ctx context.Context, logger *zap.Logger,
 		logFields = append(logFields, zap.String("ssv_validation_error", event.Error))
 	}
 	logger.Info("p2p highlighted peer ssv validation", logFields...)
-
-	highlightedPeerSSVValidationsCounter.Add(ctx, 1, metric.WithAttributes(
-		attribute.String("ssv.p2p.highlight.label", label),
-		attribute.String("ssv.p2p.ssv_validation.result", event.Outcome),
-		attribute.String("ssv.p2p.ssv_validation.reason", event.Reason),
-		attribute.String("ssv.p2p.message.role", event.Role.String()),
-		attribute.String("ssv.p2p.message.type", messageType),
-		attribute.String("ssv.p2p.qbft.message.type", qbftMessageType),
-		attribute.String("ssv.p2p.peer.id", match.ID.String()),
-	))
 }

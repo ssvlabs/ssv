@@ -24,6 +24,7 @@ const (
 
 func TestConnGaterInterceptAddrDial(t *testing.T) {
 	gater := &connGater{
+		ctx:             t.Context(),
 		logger:          zap.NewNop(),
 		isBadPeer:       func(id peer.ID) bool { return id == badPeerID },
 		trimmedRecently: ttl.New[peer.ID, struct{}](t.Context(), time.Minute, time.Minute),
@@ -35,6 +36,7 @@ func TestConnGaterInterceptAddrDial(t *testing.T) {
 
 func TestConnGaterInterceptPeerDial(t *testing.T) {
 	gater := &connGater{
+		ctx:             t.Context(),
 		logger:          zap.NewNop(),
 		isBadPeer:       func(id peer.ID) bool { return id == badPeerID },
 		trimmedRecently: ttl.New[peer.ID, struct{}](t.Context(), time.Minute, time.Minute),
@@ -47,6 +49,7 @@ func TestConnGaterInterceptPeerDial(t *testing.T) {
 func TestConnGaterInterceptAcceptHonorsLimits(t *testing.T) {
 	t.Run("disabled bypasses limits", func(t *testing.T) {
 		gater := &connGater{
+			ctx:             t.Context(),
 			logger:          zap.NewNop(),
 			disable:         true,
 			atMaxPeersLimit: func() bool { return true },
@@ -59,6 +62,7 @@ func TestConnGaterInterceptAcceptHonorsLimits(t *testing.T) {
 
 	t.Run("rejects at inbound limit", func(t *testing.T) {
 		gater := &connGater{
+			ctx:             t.Context(),
 			logger:          zap.NewNop(),
 			atMaxPeersLimit: func() bool { return false },
 			atInboundLimit:  func() bool { return true },
@@ -70,6 +74,7 @@ func TestConnGaterInterceptAcceptHonorsLimits(t *testing.T) {
 
 	t.Run("rejects at max peers limit after a valid dial", func(t *testing.T) {
 		gater := &connGater{
+			ctx:             t.Context(),
 			logger:          zap.NewNop(),
 			atMaxPeersLimit: func() bool { return true },
 			atInboundLimit:  func() bool { return false },
@@ -83,6 +88,7 @@ func TestConnGaterInterceptAcceptHonorsLimits(t *testing.T) {
 
 func TestConnGaterInterceptAcceptRateLimitsByIP(t *testing.T) {
 	gater := &connGater{
+		ctx:             t.Context(),
 		logger:          zap.NewNop(),
 		atMaxPeersLimit: func() bool { return false },
 		atInboundLimit:  func() bool { return false },
@@ -122,6 +128,7 @@ func TestConnGaterValidateDialReturnsReason(t *testing.T) {
 
 func TestConnGaterInterceptAcceptRejectsDNSAddresses(t *testing.T) {
 	gater := &connGater{
+		ctx:             t.Context(),
 		logger:          zap.NewNop(),
 		atMaxPeersLimit: func() bool { return false },
 		atInboundLimit:  func() bool { return false },
@@ -137,6 +144,7 @@ func TestConnGaterInterceptSecured(t *testing.T) {
 	trimmedRecently.Set(trimmedPeerID, struct{}{})
 
 	gater := &connGater{
+		ctx:             t.Context(),
 		logger:          zap.NewNop(),
 		isBadPeer:       func(id peer.ID) bool { return id == badPeerID },
 		trimmedRecently: trimmedRecently,

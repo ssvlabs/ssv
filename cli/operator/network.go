@@ -55,8 +55,7 @@ func setupSSVNetwork(logger *zap.Logger, cfg *config) (*networkconfig.SSV, error
 
 		// Shallow-copy here before updating DomainType below — otherwise the update mutates the underlying global
 		// value ssvConfig is pointing to.
-		cfgCopy := *ssvConfig
-		ssvConfig = &cfgCopy
+		ssvConfig = new(*ssvConfig)
 		// https://github.com/ssvlabs/ssv/pull/1808 incremented the post-fork domain type by 1, so we have to maintain the compatibility.
 		postForkDomain := binary.BigEndian.Uint32(domainBytes) + 1
 		binary.BigEndian.PutUint32(ssvConfig.DomainType[:], postForkDomain)

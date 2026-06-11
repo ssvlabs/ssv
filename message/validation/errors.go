@@ -43,6 +43,10 @@ func (e Error) Error() string {
 const (
 	validationTimeoutReason  = "validation_timeout"
 	validationCanceledReason = "validation_canceled"
+	// validationUnexpectedErrorReason keeps the highlighted-peer metric reason
+	// bounded for errors that are not validation Errors; the raw error text is
+	// still attached to the observed event itself.
+	validationUnexpectedErrorReason = "unexpected_error"
 )
 
 func (e Error) Reject() bool {
@@ -165,7 +169,7 @@ func (mv *messageValidator) handleValidationError(ctx context.Context, peerID pe
 	var valErr Error
 	if !errors.As(err, &valErr) {
 		recordIgnoredMessage(ctx, loggerFields.Role, err.Error())
-		mv.observeSSVValidation(ctx, peerID, loggerFields, SSVValidationIgnored, err.Error(), err)
+		mv.observeSSVValidation(ctx, peerID, loggerFields, SSVValidationIgnored, validationUnexpectedErrorReason, err)
 		logger.Debug("ignoring invalid message", zap.Error(err))
 		return pubsub.ValidationIgnore
 	}
@@ -190,7 +194,9 @@ func (mv *messageValidator) handleValidationError(ctx context.Context, peerID pe
 
 func (mv *messageValidator) handleValidationSuccess(ctx context.Context, peerID peer.ID, decodedMessage *queue.SSVMessage) pubsub.ValidationResult {
 	recordAcceptedMessage(ctx, messageRole(decodedMessage))
-	if mv.observer == nil {
+	// Accepted messages are the hot path, so don't even build the logger fields
+	// unless this message's peer is actually observed.
+	if mv.observer == nil || !mv.observer.Interested(peerID) {
 		return pubsub.ValidationAccept
 	}
 	mv.observeSSVValidation(ctx, peerID, mv.buildLoggerFields(decodedMessage), SSVValidationAccepted, "valid", nil)
@@ -205,7 +211,7 @@ func (mv *messageValidator) observeSSVValidation(
 	reason string,
 	err error,
 ) {
-	if mv.observer == nil {
+	if mv.observer == nil || !mv.observer.Interested(peerID) {
 		return
 	}
 	if loggerFields == nil {
@@ -221,10 +227,7 @@ func (mv *messageValidator) observeSSVValidation(
 		Slot:           loggerFields.Slot,
 		DutyExecutorID: loggerFields.DutyExecutorID,
 		Signers:        loggerFields.Signers,
-	}
-	if loggerFields.Consensus != nil {
-		consensus := *loggerFields.Consensus
-		event.Consensus = &consensus
+		Consensus:      loggerFields.Consensus,
 	}
 	if err != nil {
 		event.Error = err.Error()

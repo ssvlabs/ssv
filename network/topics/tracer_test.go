@@ -22,6 +22,7 @@ func TestPsTracerLogRecvRPCMetadataForHighlightedPeer(t *testing.T) {
 
 	tracer := &psTracer{
 		logger:       zap.New(core),
+		ctx:          t.Context(),
 		traceLog:     true,
 		peerObserver: observer,
 	}
@@ -48,10 +49,11 @@ func TestPsTracerLogRecvRPCMetadataForHighlightedPeer(t *testing.T) {
 	require.Equal(t, int64(2), fields["prunePeerCount"])
 }
 
-func TestPsTracerLogRecvRPCKeepsTraceLogMetadataSmallForRegularPeer(t *testing.T) {
+func TestPsTracerLogRecvRPCKeepsStandardTraceMetadataForRegularPeer(t *testing.T) {
 	core, logs := zapobserver.New(zap.DebugLevel)
 	tracer := &psTracer{
 		logger:   zap.New(core),
+		ctx:      t.Context(),
 		traceLog: true,
 	}
 
@@ -63,11 +65,37 @@ func TestPsTracerLogRecvRPCKeepsTraceLogMetadataSmallForRegularPeer(t *testing.T
 	fields := logs.All()[0].ContextMap()
 	require.Equal(t, ps_pb.TraceEvent_RECV_RPC.String(), fields["type"])
 	require.Equal(t, pid.String(), fields["receivedFrom"])
+	// The pre-highlighting trace schema stays intact for regular peers...
+	require.Equal(t, int64(1), fields["ihaveCount"])
+	require.Equal(t, int64(1), fields["iwantCount"])
+	require.Equal(t, int64(1), fields["subsCount"])
+	// ...while the more verbose highlighted-peer-only metadata is left out.
 	require.NotContains(t, fields, "messageCount")
 	require.NotContains(t, fields, "messageTopics")
 	require.NotContains(t, fields, "messageIDs")
 	require.NotContains(t, fields, "graftCount")
 	require.NotContains(t, fields, "prunePeerCount")
+}
+
+func TestPsTracerSkipsRegularPeerEventsWithoutTraceLog(t *testing.T) {
+	core, logs := zapobserver.New(zap.DebugLevel)
+	highlightedPID, err := peer.Decode("12D3KooWAVdZV4v1YKiB8icTQmeqHvRsVSVNqZ3iJ1Ls5C1xe6NC")
+	require.NoError(t, err)
+	observer, err := peertrace.New(peertrace.Config{Peers: highlightedPID.String()})
+	require.NoError(t, err)
+
+	tracer := &psTracer{
+		logger:       zap.New(core),
+		ctx:          t.Context(),
+		traceLog:     false,
+		peerObserver: observer,
+	}
+
+	regularPID, err := peer.Decode("12D3KooWGRZpEouTWybB5jDKsVLqYXn3hXyzuTNxti4ghui6u5HE")
+	require.NoError(t, err)
+	tracer.Trace(recvRPCTraceEvent(regularPID))
+
+	require.Empty(t, logs.All())
 }
 
 func TestAppendTraceMetadataSkipsEmptyInputs(t *testing.T) {

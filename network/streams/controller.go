@@ -66,10 +66,14 @@ func (n *streamCtrl) Request(logger *zap.Logger, peerID peer.ID, protocol protoc
 	s := NewStream(stream)
 
 	requestsSentCounter.Add(n.ctx, 1, metric.WithAttributes(protocolIDAttribute(s.Protocol())))
-	n.peerObserver.Observe(n.ctx, logger, "stream_request_sent", peerID,
-		zap.String(fields.FieldProtocolID, string(s.Protocol())),
-		zap.Int("payload_size", len(data)),
-	)
+	// Match before Observe: variadic fields are evaluated at the call site, so
+	// the check keeps regular stream traffic free of highlight-only allocations.
+	if _, ok := n.peerObserver.Match(peerID); ok {
+		n.peerObserver.Observe(n.ctx, logger, "stream_request_sent", peerID,
+			zap.String(fields.FieldProtocolID, string(s.Protocol())),
+			zap.Int("payload_size", len(data)),
+		)
+	}
 
 	defer func() {
 		if err := s.Close(); err != nil && !errors.Is(err, libp2pnetwork.ErrReset) {
@@ -92,10 +96,12 @@ func (n *streamCtrl) Request(logger *zap.Logger, peerID peer.ID, protocol protoc
 	}
 
 	responsesReceivedCounter.Add(n.ctx, 1, metric.WithAttributes(protocolIDAttribute(s.Protocol())))
-	n.peerObserver.Observe(n.ctx, logger, "stream_response_received", peerID,
-		zap.String(fields.FieldProtocolID, string(s.Protocol())),
-		zap.Int("payload_size", len(res)),
-	)
+	if _, ok := n.peerObserver.Match(peerID); ok {
+		n.peerObserver.Observe(n.ctx, logger, "stream_response_received", peerID,
+			zap.String(fields.FieldProtocolID, string(s.Protocol())),
+			zap.Int("payload_size", len(res)),
+		)
+	}
 	return res, nil
 }
 
@@ -119,10 +125,12 @@ func (n *streamCtrl) HandleStream(logger *zap.Logger, stream core.Stream) ([]byt
 		}
 		return nil, nil, done, fmt.Errorf("could not read stream msg: %w", err)
 	}
-	n.peerObserver.Observe(n.ctx, logger, "stream_request_received", s.Conn().RemotePeer(),
-		zap.String(fields.FieldProtocolID, string(s.Protocol())),
-		zap.Int("payload_size", len(data)),
-	)
+	if _, ok := n.peerObserver.Match(s.Conn().RemotePeer()); ok {
+		n.peerObserver.Observe(n.ctx, logger, "stream_request_received", s.Conn().RemotePeer(),
+			zap.String(fields.FieldProtocolID, string(s.Protocol())),
+			zap.Int("payload_size", len(data)),
+		)
+	}
 
 	return data, func(res []byte) error {
 		cp := make([]byte, len(res))
@@ -132,10 +140,12 @@ func (n *streamCtrl) HandleStream(logger *zap.Logger, stream core.Stream) ([]byt
 		}
 
 		responsesSentCounter.Add(n.ctx, 1, metric.WithAttributes(protocolIDAttribute(s.Protocol())))
-		n.peerObserver.Observe(n.ctx, logger, "stream_response_sent", s.Conn().RemotePeer(),
-			zap.String(fields.FieldProtocolID, string(s.Protocol())),
-			zap.Int("payload_size", len(res)),
-		)
+		if _, ok := n.peerObserver.Match(s.Conn().RemotePeer()); ok {
+			n.peerObserver.Observe(n.ctx, logger, "stream_response_sent", s.Conn().RemotePeer(),
+				zap.String(fields.FieldProtocolID, string(s.Protocol())),
+				zap.Int("payload_size", len(res)),
+			)
+		}
 		return nil
 	}, done, nil
 }
@@ -152,8 +162,10 @@ func (n *streamCtrl) observeOversizedPayload(logger *zap.Logger, peerID peer.ID,
 		zap.String(fields.FieldProtocolID, string(protocolID)),
 		zap.String("direction", direction),
 	)
-	n.peerObserver.Observe(n.ctx, logger, "stream_oversized_payload", peerID,
-		zap.String(fields.FieldProtocolID, string(protocolID)),
-		zap.String("direction", direction),
-	)
+	if _, ok := n.peerObserver.Match(peerID); ok {
+		n.peerObserver.Observe(n.ctx, logger, "stream_oversized_payload", peerID,
+			zap.String(fields.FieldProtocolID, string(protocolID)),
+			zap.String("direction", direction),
+		)
+	}
 }
