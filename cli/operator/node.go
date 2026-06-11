@@ -200,6 +200,10 @@ type node struct {
 	collector           *dutytracer.Collector
 	p2pNetwork          network.P2PNetwork
 	operatorNode        *operator.Node
+
+	// stopSlotPruning cancels and waits for the slot-pruning goroutines; nil
+	// outside exporter-standard mode. Called by Close() before the DB is closed.
+	stopSlotPruning func()
 }
 
 // newNode wires the node's components from config + the injected beacon/EL clients. On any
@@ -359,10 +363,18 @@ func newNode(ctx context.Context, cfg *config, logger *zap.Logger, res resolved,
 		})
 	}
 
+	var stopSlotPruning func()
 	if res.mode == modeExporterStandard {
 		retain := cfg.ExporterOptions.RetainSlots
 		threshold := networkConfig.EstimatedCurrentSlot()
-		initSlotPruning(ctx, storageMap, slotTickerProvider, threshold, retain)
+		stopSlotPruning = initSlotPruning(ctx, storageMap, slotTickerProvider, threshold, retain)
+		// On assembly failure, stop the prune goroutines before the deferred
+		// db.Close() above runs (defers are LIFO), so they can't hit a closed DB.
+		defer func() {
+			if err != nil {
+				stopSlotPruning()
+			}
+		}()
 	}
 
 	fixedSubnets, err := networkcommons.SubnetsFromString(cfg.P2pNetworkConfig.Subnets)
@@ -461,16 +473,21 @@ func newNode(ctx context.Context, cfg *config, logger *zap.Logger, res resolved,
 		collector:           collector,
 		p2pNetwork:          p2pNetwork,
 		operatorNode:        operatorNode,
+		stopSlotPruning:     stopSlotPruning,
 	}, nil
 }
 
 // Close stops the node's background work and tears down its resources. It cancels the node's ctx
-// (stopping the VRSubmitter and, in exporter modes, the duty-trace collector / slot-pruning) and
-// calls validatorCtrl.Stop() (the controller's ttlcache cleanup loops, which aren't ctx-bound), then
+// (stopping the VRSubmitter and, in exporter modes, the duty-trace collector / slot-pruning), waits
+// for the slot-pruning goroutines to exit so they can't touch the DB after it closes, and calls
+// validatorCtrl.Stop() (the controller's ttlcache cleanup loops, which aren't ctx-bound), then
 // closes the CLI-owned resources (p2p network and execution client, then the db that p2p depends on).
 // newNode is the only constructor, so all these fields are always set.
 func (n *node) Close() error {
 	n.cancel()
+	if n.stopSlotPruning != nil {
+		n.stopSlotPruning()
+	}
 	n.validatorCtrl.Stop()
 
 	var errs []error
@@ -664,28 +681,43 @@ func setupOperatorDataStore(
 	return operatordatastore.New(operatorData), nil
 }
 
-func initSlotPruning(ctx context.Context, stores *ibftstorage.ParticipantStores, slotTickerProvider slotticker.Provider, slot phase0.Slot, retain uint64) {
-	var wg sync.WaitGroup
+// initSlotPruning runs the initial stale-slot GC and then starts the continuous
+// pruning loops on a child of ctx. It returns a stop function that cancels those
+// loops and waits for them to exit; callers must invoke it before closing the DB,
+// otherwise an in-flight prune can run against a closed DB and panic.
+func initSlotPruning(ctx context.Context, stores *ibftstorage.ParticipantStores, slotTickerProvider slotticker.Provider, slot phase0.Slot, retain uint64) (stop func()) {
+	ctx, cancel := context.WithCancel(ctx)
 
 	threshold := slot - phase0.Slot(retain)
 
 	// async perform initial slot gc
+	var initWG sync.WaitGroup
 	_ = stores.Each(func(_ spectypes.BeaconRole, store ibftstorage.ParticipantStore) error {
-		wg.Add(1)
+		initWG.Add(1)
 		go func() {
-			defer wg.Done()
+			defer initWG.Done()
 			store.Prune(ctx, threshold)
 		}()
 		return nil
 	})
 
-	wg.Wait()
+	initWG.Wait()
 
 	// start background job for removing old slots on every tick
+	var pruneWG sync.WaitGroup
 	_ = stores.Each(func(_ spectypes.BeaconRole, store ibftstorage.ParticipantStore) error {
-		go store.PruneContinuously(ctx, slotTickerProvider, phase0.Slot(retain))
+		pruneWG.Add(1)
+		go func() {
+			defer pruneWG.Done()
+			store.PruneContinuously(ctx, slotTickerProvider, phase0.Slot(retain))
+		}()
 		return nil
 	})
+
+	return func() {
+		cancel()
+		pruneWG.Wait()
+	}
 }
 
 // buildDoppelganger returns the node's doppelganger-protection provider: a no-op for exporter nodes
