@@ -55,7 +55,7 @@ func TestBaseRunner_watchDutyDeadline(t *testing.T) {
 		require.Zero(t, logs.FilterMessageSnippet(warnSnippet).Len(), "must not warn for a completed duty")
 	})
 
-	t.Run("stays silent when the context is cancelled", func(t *testing.T) {
+	t.Run("stays silent when the context is canceled", func(t *testing.T) {
 		core, logs := observer.New(zapcore.WarnLevel)
 		b := newRunner()
 
