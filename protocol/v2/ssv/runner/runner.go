@@ -303,7 +303,6 @@ func (b *BaseRunner) watchNonBeaconDutyDeadline(ctx context.Context, logger *zap
 		// could-not-handle drop log, DEBUG), so this warning with no such preceding error means the
 		// partial-signature quorum never formed.
 		logger.Warn("⚠️ pre-consensus duty did not reach quorum or submit by deadline",
-			fields.Slot(duty.DutySlot()),
 			zap.Uint64("quorum", quorum),
 		)
 	}()
@@ -603,8 +602,9 @@ func (b *BaseRunner) hasDutyFinished() bool {
 func (b *BaseRunner) markDutyFinished() {
 	// NOTE: b.State cannot be nil at this point, by construction.
 	b.State.Finished = true
-	// Release the deadline watcher (if any) so it doesn't warn about a completed duty. nil-ing
-	// guards against a double close; safe without a lock as this runs only on the message goroutine.
+	// Release the deadline watcher (if any) so it doesn't warn about a completed duty. Set b.nonBeaconDeadlineDone
+	// to nil makes this func idempotent (it shouldn't be called twice, but it's hard to ensure that with the current
+	// code shape).
 	if b.nonBeaconDeadlineDone != nil {
 		close(b.nonBeaconDeadlineDone)
 		b.nonBeaconDeadlineDone = nil

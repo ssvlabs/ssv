@@ -14,28 +14,30 @@ import (
 	"github.com/ssvlabs/ssv/observability/log/fields"
 )
 
+type connCacheData struct {
+	nextTry time.Time
+	start   libp2pdiscbackoff.BackoffStrategy
+}
+
 // backoffConnector connects to proposed peers, skipping peers that are still within their backoff
 // period. It is a drop-in replacement for libp2p's discovery/backoff.BackoffConnector with one
 // difference: dial failures are logged to the node's logger. The libp2p implementation reports
 // them only to its own internal logger, so a node that cannot reach its proposed peers (firewall,
 // NAT, wrong advertised address) leaves no trace of that in SSV logs.
 type backoffConnector struct {
+	logger *zap.Logger
+
 	host       host.Host
-	logger     *zap.Logger
-	cache      *lru.TwoQueueCache[peer.ID, *connCacheData]
 	connTryDur time.Duration
 	backoff    libp2pdiscbackoff.BackoffFactory
-	mux        sync.Mutex
-}
 
-type connCacheData struct {
-	nextTry time.Time
-	strat   libp2pdiscbackoff.BackoffStrategy
+	cacheMux sync.Mutex
+	cache    *lru.TwoQueueCache[peer.ID, *connCacheData]
 }
 
 func newBackoffConnector(
-	host host.Host,
 	logger *zap.Logger,
+	host host.Host,
 	cacheSize int,
 	connTryDur time.Duration,
 	backoff libp2pdiscbackoff.BackoffFactory,
@@ -46,11 +48,11 @@ func newBackoffConnector(
 	}
 
 	return &backoffConnector{
-		host:       host,
 		logger:     logger,
-		cache:      cache,
+		host:       host,
 		connTryDur: connTryDur,
 		backoff:    backoff,
+		cache:      cache,
 	}, nil
 }
 
@@ -68,20 +70,20 @@ func (c *backoffConnector) Connect(ctx context.Context, peerCh <-chan peer.AddrI
 				continue
 			}
 
-			c.mux.Lock()
+			c.cacheMux.Lock()
 			if cached, ok := c.cache.Get(pi.ID); ok {
 				now := time.Now()
 				if now.Before(cached.nextTry) {
-					c.mux.Unlock()
+					c.cacheMux.Unlock()
 					continue
 				}
-				cached.nextTry = now.Add(cached.strat.Delay())
+				cached.nextTry = now.Add(cached.start.Delay())
 			} else {
-				cached = &connCacheData{strat: c.backoff()}
-				cached.nextTry = time.Now().Add(cached.strat.Delay())
+				cached = &connCacheData{start: c.backoff()}
+				cached.nextTry = time.Now().Add(cached.start.Delay())
 				c.cache.Add(pi.ID, cached)
 			}
-			c.mux.Unlock()
+			c.cacheMux.Unlock()
 
 			go func(pi peer.AddrInfo) {
 				ctx, cancel := context.WithTimeout(ctx, c.connTryDur)

@@ -32,9 +32,9 @@ const (
 	// before the node warns about it. Peers we select share our subnets (often committee
 	// partners), so consistently failing to connect to them degrades duty execution — yet the
 	// dial errors themselves are visible only at DEBUG (see backoffConnector).
-	unconnectedProposalWarnAfter = 30 * time.Minute
+	unconnectedProposalWarnAfter = 10 * time.Minute
 	// unconnectedProposalWarnInterval rate-limits the warning above.
-	unconnectedProposalWarnInterval = 10 * time.Minute
+	unconnectedProposalWarnInterval = 2 * time.Minute
 )
 
 func (s *peerSelectionPoolStats) AsLogFields() []zap.Field {

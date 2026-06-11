@@ -37,7 +37,7 @@ func TestBackoffConnector(t *testing.T) {
 		backoffExponentBase,
 		rand.NewSource(1),
 	)
-	connector, err := newBackoffConnector(hostA, logger, backoffConnectorCacheSize, 5*time.Second, backoffFactory)
+	connector, err := newBackoffConnector(logger, hostA, backoffConnectorCacheSize, 5*time.Second, backoffFactory)
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(context.Background())

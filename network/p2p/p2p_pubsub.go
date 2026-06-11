@@ -10,10 +10,8 @@ import (
 	"time"
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
-
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/network/commons"
@@ -66,36 +64,20 @@ func (n *p2pNetwork) Broadcast(msgID spectypes.MessageID, msg *spectypes.SignedS
 		topicNames = commons.CommitteeTopicID(val.CommitteeID())
 	}
 
-	// Confirm egress for every broadcast at DEBUG — without it, a message lost in transit is
-	// indistinguishable from one never sent. The level check keeps the msg-id hash and
-	// peer-count lookups off the hot path when DEBUG is disabled.
-	logEgress := n.logger.Core().Enabled(zapcore.DebugLevel)
-
-	// gossip_msg_id is the id gossipsub itself assigns — hex-encoded to match SSV's pubsub tracer
-	// (network/topics/tracer.go) so one message can be correlated across nodes and against that
-	// trace. It hashes the payload, which is identical for every topic, so compute it once.
-	var gossipMsgID string
-	if logEgress {
-		gossipMsgID = hex.EncodeToString([]byte(topics.MsgID(encodedMsg)))
-	}
-
 	for _, topic := range topicNames {
 		if err := n.topicsCtrl.Broadcast(topic, encodedMsg, n.cfg.RequestTimeout); err != nil {
 			n.logger.Debug("could not broadcast msg", fields.Topic(topic), zap.Error(err))
 			return fmt.Errorf("could not broadcast msg: %w", err)
 		}
 
-		if logEgress {
-			// topic_peers surfaces a sparse/empty mesh — a prime suspect when a one-shot message
-			// fails to reach peers.
-			topicPeers, _ := n.topicsCtrl.Peers(topic)
-			n.logger.Debug("📤 broadcast message to topic",
-				fields.MessageID(msg.SSVMessage.MsgID),
-				zap.String("gossip_msg_id", gossipMsgID),
-				fields.Topic(topic),
-				zap.Int("topic_peers", len(topicPeers)),
-			)
-		}
+		// topicPeers surfaces a sparse/empty mesh — a prime suspect when a one-shot message fails to reach peers.
+		topicPeers, _ := n.topicsCtrl.Peers(topic)
+		n.logger.Debug("📤 broadcast message to topic",
+			fields.MessageID(msg.SSVMessage.MsgID),
+			zap.String("gossip_msg_id", hex.EncodeToString([]byte(topics.MsgID(encodedMsg)))),
+			fields.Topic(topic),
+			zap.Int("topic_peers", len(topicPeers)),
+		)
 	}
 	return nil
 }
