@@ -8,7 +8,7 @@ This is the committee-duty (attestation) companion to the [proposer analysis](..
 
 For block proposals, decision time is destiny (100% missed past 4.0s into the slot). For committee duties, decision time is **almost irrelevant to inclusion**:
 
-- **0 misses in 19,463 round-2 decisions** (CI95 ≤ 0.02%), 0 in 128 round-3+ decisions, 0 in the 355 duties decided 7–8.5s into the slot. Round-1 decisions miss 0.0011%. Even the handful of duties decided past 10s were included, ~13 slots late.
+- **0 of the 19,463 attestations from the 2,826 round-2-decided duties were missed** (CI95 ≤ 0.02%); likewise 0 of 128 from round-3+ decisions, and 0 of 355 from the 61 duties decided 7–8.5s into the slot. Round-1 decisions miss 0.0011%. Even the handful of duties decided past 10s were included, ~13 slots late.
 - Of the 1,500 missed validator-attestations in the sample, 97% came from duties that never produced a decision: 86% where consensus messages were observed but a decide quorum never formed, and 12% where the exporter saw no consensus activity for the duty at all. The remaining 3% (41 misses, from just four duties) completed consensus early — between 2.3s and 5.1s — and failed after it.
 
 ![Where missed attestations come from](miss-sources.png)
@@ -19,6 +19,7 @@ What lateness does cost is **quality, not inclusion**:
 
 - **Inclusion in the first possible block** holds ≥97% through ~7.1s, then falls off sharply: roughly 70% at ~7.4s and ~56% past 7.5s (small samples there — see the error bars) — late attestations increasingly miss the slot+1 aggregate but still get included a slot or two later.
 - **Head-vote correctness** dips to ~96.4% for round-1 decisions at 4.0–5.0s — the "no block seen by 4s" fallback path votes for a head that often turns out stale — and *recovers to 99.6%+ for round-2 decisions at 6–7s*. The round-change retry waits long enough for the late block to arrive: **round changes heal head votes**.
+- For scale, decided duties split by round as **98.67% round 1** (212,457 duties), **1.31% round 2** (2,826 duties / 19,463 attestations), and **0.013% round 3+** (28 duties / 128 attestations) — everything right of ~6s on this chart describes a small minority of duties.
 
 Conditioning on the decided round separates the two effects — i.e. what the curves would look like if every duty decided in round K:
 
@@ -33,7 +34,7 @@ Round-1 decisions carry the entire 4–5s head-vote dip (the fallback path) but 
 | Question | Result |
 |---|---|
 | Committee QBFTs that touched round ≥2 | 4,207 / 216,076 traced = **1.95%** |
-| Decided in round 2 | 19,463 = **1.31%** of decided (round 3+: 128 = 0.013%) |
+| Decided in round 2 | 2,826 duties = **1.31%** of decided (round 3+: 28 duties = 0.013%) |
 | Round-1 decision → attestation missed | 41 / 3,870,361 = **0.0011%** |
 | Round-2 decision → attestation missed | **0** / 19,463 (CI95 ≤ 0.02%) |
 | QBFT never decided → missed | 1,283 / 1,283 = **100%** |
