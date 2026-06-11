@@ -23,8 +23,8 @@ func (b *BaseRunner) ValidatePreConsensusMsg(
 	if !b.hasDutyAssigned() {
 		return spectypes.WrapError(spectypes.NoRunningDutyErrorCode, ErrNoDutyAssigned)
 	}
-	if b.hasDutyFinished() {
-		return spectypes.WrapError(spectypes.NoRunningDutyErrorCode, ErrRunningDutyFinished)
+	if b.hasDutySucceeded() {
+		return spectypes.WrapError(spectypes.NoRunningDutyErrorCode, ErrRunningDutySucceeded)
 	}
 
 	currentDutySlot, err := b.currentDutySlot()
@@ -59,8 +59,8 @@ func (b *BaseRunner) ValidatePostConsensusMsg(ctx context.Context, runner Runner
 	if !b.hasDutyAssigned() {
 		return spectypes.WrapError(spectypes.NoRunningDutyErrorCode, ErrNoDutyAssigned)
 	}
-	if b.hasDutyFinished() {
-		return spectypes.WrapError(spectypes.NoRunningDutyErrorCode, ErrRunningDutyFinished)
+	if b.hasDutySucceeded() {
+		return spectypes.WrapError(spectypes.NoRunningDutyErrorCode, ErrRunningDutySucceeded)
 	}
 
 	// slotIsRelevant ensures the post-consensus message is even remotely relevant (eg. we might have already

@@ -489,7 +489,7 @@ func (r *CommitteeRunner) signAttesterDuty(
 	return false, partialMsg, nil
 }
 
-func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
+func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) (err error) {
 	// Reuse the existing span instead of generating new one to keep tracing-data lightweight.
 	span := trace.SpanFromContext(ctx)
 
@@ -505,6 +505,17 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 	if !hasQuorum {
 		return nil
 	}
+
+	// We have quorum and are committed to submitting. Pre-quorum waiting, full success
+	// (markDutySucceeded) and partial progress all return nil, so this only fires on a terminal
+	// post-quorum error — report it as failed instead of letting it fall through to a false "stuck".
+	// Unlike the consensus phase, a failure here is final: submission is the duty's last step.
+	// Shutdown (context cancellation) is left to the watcher's own ctx handling.
+	defer func() {
+		if err != nil && !errors.Is(err, context.Canceled) {
+			r.markDutyFailed(err)
+		}
+	}()
 
 	r.measurements.EndPostConsensus()
 	recordPostConsensusDuration(ctx, r.measurements.PostConsensusTime(), spectypes.RoleCommittee)
@@ -799,7 +810,7 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 	}
 
 	if r.HasSubmittedAllValidatorDuties(attestationMap, committeeMap) {
-		r.markDutyFinished()
+		r.markDutySucceeded()
 		r.measurements.EndDutyFlow()
 		recordTotalDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.RoleCommittee, r.State.RunningInstance.State.Round)
 		const dutyFinishedEvent = "✔️finished duty processing (100% success)"

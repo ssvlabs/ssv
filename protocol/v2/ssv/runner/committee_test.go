@@ -367,7 +367,7 @@ func TestCommitteeRunnerProcessPostConsensus_SubmitsElectraObjectsAndDeduplicate
 		}
 	}
 
-	require.True(t, env.runner.State.Finished)
+	require.True(t, env.runner.State.Succeeded)
 	require.Len(t, env.beacon.GetBroadcastedRoots(), 2)
 
 	attesterDuty := duty.ValidatorDuties[0]
@@ -390,6 +390,6 @@ func TestCommitteeRunnerProcessPostConsensus_SubmitsElectraObjectsAndDeduplicate
 	require.ElementsMatch(t, []phase0.ValidatorIndex{attesterDuty.ValidatorIndex}, doppelganger.reports)
 
 	err = env.runner.ProcessPostConsensus(context.Background(), env.logger, postConsensusMsgs[2])
-	require.ErrorContains(t, err, ErrRunningDutyFinished.Error())
+	require.ErrorContains(t, err, ErrRunningDutySucceeded.Error())
 	require.Len(t, env.beacon.GetBroadcastedRoots(), 2)
 }
