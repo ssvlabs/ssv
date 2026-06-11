@@ -8,7 +8,19 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
+// resetGoLog restores go-log to a quiet default after the test (all subsystems
+// at error, output discarded), so the global mutations these tests make — the
+// raised subsystem levels and the replaced primary core — don't leak into other
+// tests in this package.
+func resetGoLog(t *testing.T) {
+	t.Cleanup(func() {
+		golog.SetupLogging(golog.Config{Level: golog.LevelError})
+	})
+}
+
 func TestHookLibp2pLogging(t *testing.T) {
+	resetGoLog(t)
+
 	require.NoError(t, SetGlobal("info", "capital", "json", nil))
 	require.NoError(t, HookLibp2pLogging())
 
@@ -30,6 +42,8 @@ func TestHookLibp2pLogging(t *testing.T) {
 // hook. The hook must therefore retrofit an already-created logger, not merely gate
 // ones created afterward — which is the init-order independence the hook claims.
 func TestHookLibp2pLoggingRetrofitsExistingLogger(t *testing.T) {
+	resetGoLog(t)
+
 	// Create the subsystem logger BEFORE the hook runs, then pin it to a known
 	// non-debug level so the post-hook assertion proves the retrofit happened
 	// (independent of any level other tests in this package may have left behind).

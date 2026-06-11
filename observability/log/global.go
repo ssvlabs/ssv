@@ -65,6 +65,9 @@ func SetGlobal(levelName string, levelEncoderName string, logFormat string, file
 		ConsoleSeparator: "\t",
 	}
 
+	// Unlike stdoutSyncer, the file syncer needs no zapcore.Lock: lumberjack's
+	// Write is internally mutex-guarded, so the SSV and libp2p cores can share
+	// this one instance without interleaving.
 	var fileSyncer zapcore.WriteSyncer
 	if fileOptions != nil {
 		fileSyncer = zapcore.AddSync(fileOptions.writer())
@@ -148,7 +151,8 @@ func HookLibp2pLogging() error {
 	// Seed go-log's per-subsystem levels and default the rest to error. Setting
 	// them via SetupLogging (rather than SetLogLevel) registers the levels even
 	// for subsystem loggers that haven't been created yet, so the policy holds
-	// regardless of package init ordering.
+	// regardless of package init ordering. SetupLogging resets every subsystem
+	// level first, so this deliberately overrides any GOLOG_LOG_LEVEL.
 	golog.SetupLogging(golog.Config{
 		Level: golog.LevelError,
 		SubsystemLevels: map[string]golog.LogLevel{
