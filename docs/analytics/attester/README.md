@@ -80,7 +80,7 @@ Failures are heavily concentrated: **five chronically-failing clusters account f
 
 ### Caveats
 
-- The ≥8s region is thin in the sample (n≈128 duties); conclusions there lean on the full-window forensics, which point the same way.
+- The ≥8s region is thin in the sample (28 duties / 128 attestations); conclusions there lean on the full-window forensics, which point the same way.
 - Zero observed misses in round 2/3+ bounds the rate by sample size, not to literal zero.
 - Scattered misses of 1–4 validators within decided duties exist (they are the 0.0011%) and are not part of the ≥5-validator forensics set.
 
@@ -94,7 +94,7 @@ Failures are heavily concentrated: **five chronically-failing clusters account f
 
 The pipeline lives in the internal `ssv-scout` repository under `analysis/committee-qbft-timing/` (see its README for the full runbook). The window and sample are set in one place (`common.py`): full forensics window plus a deterministic stratified sample — one uniform-random epoch per 225-epoch (one-day) stratum, fixed seed — so a re-run of the same window reproduces the same sample. Seven resumable steps:
 
-1. **`fetch_committees.py`** — committees active in the window from the duty monitor's environment endpoint; 32-byte committee IDs computed locally as sha256 over sorted uint32-LE operator IDs (ssv-spec `GetCommitteeID`).
+1. **`fetch_committees.py`** — committees active in the window from the duty monitor's environment endpoint, with committee IDs computed locally from operator sets (derivation in Method above).
 2. **`fetch_traces.py`** — `POST /v1/exporter/traces/committee`, one request per (committee × sampled epoch), reduced at fetch time to per-duty rows (rounds, `t_decided`, attester-signature quorum time, round-1 leader) — raw traces are not stored. The response's per-slot schedule yields both assigned-validator counts and a per-epoch validator→cluster map (the validator set drifts over weeks, hence per-epoch maps). ~17K requests ≈ 1h.
 3. **`fetch_misses.py`** — all `success=false` attester duties over the full window (50-epoch chunks, the server's cap for attest ranges).
 4. **`gap_scan.py`** — the false-negative guard: the monitor's block table (100-epoch chunks) vs `GET /eth/v1/beacon/headers/{slot}` on a public node for every monitor-absent slot, separating genuinely skipped slots from ingestion gaps. Misses with a gap inside `(slot, slot+32]` are excluded from rate numerators as suspects.
@@ -104,4 +104,4 @@ The pipeline lives in the internal `ssv-scout` repository under `analysis/commit
 
 Key definitions: `t_decided` = earliest decided-quorum arrival at the exporter minus slot start; signature quorum = (2f+1)-th distinct operator's attester partial-sig arrival (quorum = n − (n−1)//3); missed = monitor `InclusionSlot == 0`; inclusion delay = `InclusionSlot − slot`; optimal inclusion = `InclusionSlot == EarliestInclusionSlot`; head correctness defined only for included attestations.
 
-Constraints when re-running: exporter trace retention (~5 weeks at the time of writing) bounds the window — probe an old slot first; end the window ≥1–2h before the present so outcomes are settled; the exporter is a production observer, so keep fetch concurrency moderate; all timestamps are arrival times at the exporter (skew typically ≤300ms).
+Constraints when re-running: exporter trace retention (~5 weeks at the time of writing) bounds the window — probe an old slot first; end the window ≥1–2h before the present so outcomes are settled; the exporter is a production observer, so keep fetch concurrency moderate.
