@@ -247,7 +247,7 @@ func TestGetSyncCommitteeContributionPreservesInputOrdering(t *testing.T) {
 	client := &syncCommitteeClientMock{
 		beaconBlockRootFunc: func(_ context.Context, opts *api.BeaconBlockRootOpts) (*api.Response[*phase0.Root], error) {
 			// Must query head, not the duty slot: a by-slot lookup 404s when the slot's
-			// proposal is missed, failing the whole contribution duty.
+			// proposal is missed, failing the contribution duty.
 			require.Equal(t, "head", opts.Block)
 			return &api.Response[*phase0.Root]{Data: &blockRoot}, nil
 		},
