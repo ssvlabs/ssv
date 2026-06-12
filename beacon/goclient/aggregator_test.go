@@ -2,6 +2,7 @@ package goclient
 
 import (
 	"context"
+	"errors"
 	"sync/atomic"
 	"testing"
 	"testing/synctest"
@@ -20,15 +21,32 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 )
 
+// aggregatorClientMock is used both as a MultiClient (single-client path) and, when placed in
+// GoClient.clients, as a Client for the parallel-submission path.
 type aggregatorClientMock struct {
 	mock.Service
+
+	submitAttestationsFn func(context.Context, *api.SubmitAttestationsOpts) error
 }
+
+var _ Client = (*aggregatorClientMock)(nil)
 
 func (*aggregatorClientMock) SubmitProposal(context.Context, *api.SubmitProposalOpts) error {
 	return nil
 }
 
-func (*aggregatorClientMock) SubmitAttestations(context.Context, *api.SubmitAttestationsOpts) error {
+func (m *aggregatorClientMock) SubmitAttestations(ctx context.Context, opts *api.SubmitAttestationsOpts) error {
+	if m.submitAttestationsFn != nil {
+		return m.submitAttestationsFn(ctx, opts)
+	}
+	return nil
+}
+
+func (*aggregatorClientMock) NodeClient(context.Context) (*api.Response[string], error) {
+	return &api.Response[string]{Data: "mock"}, nil
+}
+
+func (*aggregatorClientMock) SubmitBlindedProposal(context.Context, *api.SubmitBlindedProposalOpts) error {
 	return nil
 }
 
@@ -263,6 +281,254 @@ func TestSubmitAggregateSelectionProof_RespectsContextCancellationWhileWaiting(t
 		require.Zero(t, attestationCalls.Load())
 		require.Zero(t, aggregateCalls.Load())
 	})
+}
+
+func TestSubmitAggregateSelectionProof_FallbackSurfacesAttestationDataError(t *testing.T) {
+	t.Parallel()
+
+	cfg := aggregatorTestBeaconConfig(time.Now().Add(-1000 * networkconfig.TestNetwork.SlotDuration))
+	slot := cfg.FirstSlotAtEpoch(0)
+
+	var attestationCalls atomic.Int32
+	service := &aggregatorClientMock{}
+	service.AttestationDataFunc = func(context.Context, *api.AttestationDataOpts) (*api.Response[*phase0.AttestationData], error) {
+		attestationCalls.Add(1)
+		return nil, errors.New("attestation data unavailable")
+	}
+
+	client := newAggregatorTestClient(&cfg, service)
+
+	// No prior SubmitAttestations, so the attested root is unknown and the flow falls back to
+	// re-deriving it via GetAttestationData — whose error must surface to the caller.
+	_, _, err := client.SubmitAggregateSelectionProof(t.Context(), slot, 7, 128, 42, make([]byte, 96))
+	require.ErrorContains(t, err, "fetch attestation data")
+	require.EqualValues(t, 1, attestationCalls.Load())
+}
+
+func TestAttestationCommitteeIndex(t *testing.T) {
+	t.Parallel()
+
+	data := &phase0.AttestationData{
+		Slot:   100,
+		Index:  3,
+		Source: &phase0.Checkpoint{Epoch: 1},
+		Target: &phase0.Checkpoint{Epoch: 2},
+	}
+
+	t.Run("pre-electra reads the data index", func(t *testing.T) {
+		t.Parallel()
+		att := aggregatorVersionedAttestation(spec.DataVersionPhase0, data)
+		got, err := attestationCommitteeIndex(att, data)
+		require.NoError(t, err)
+		require.Equal(t, phase0.CommitteeIndex(3), got)
+	})
+
+	t.Run("electra reads the single committee bit", func(t *testing.T) {
+		t.Parallel()
+		att := attestedVersionedAttestation(spec.DataVersionElectra, data, 7)
+		got, err := attestationCommitteeIndex(att, data)
+		require.NoError(t, err)
+		require.Equal(t, phase0.CommitteeIndex(7), got)
+	})
+
+	t.Run("fulu reads the single committee bit", func(t *testing.T) {
+		t.Parallel()
+		att := attestedVersionedAttestation(spec.DataVersionFulu, data, 9)
+		got, err := attestationCommitteeIndex(att, data)
+		require.NoError(t, err)
+		require.Equal(t, phase0.CommitteeIndex(9), got)
+	})
+
+	t.Run("electra with no committee bit set errors", func(t *testing.T) {
+		t.Parallel()
+		att := &spec.VersionedAttestation{
+			Version: spec.DataVersionElectra,
+			Electra: &electra.Attestation{Data: data, CommitteeBits: bitfield.NewBitvector64()},
+		}
+		_, err := attestationCommitteeIndex(att, data)
+		require.ErrorContains(t, err, "exactly one committee bit")
+	})
+
+	t.Run("electra with multiple committee bits errors", func(t *testing.T) {
+		t.Parallel()
+		bits := bitfield.NewBitvector64()
+		bits.SetBitAt(1, true)
+		bits.SetBitAt(2, true)
+		att := &spec.VersionedAttestation{
+			Version: spec.DataVersionElectra,
+			Electra: &electra.Attestation{Data: data, CommitteeBits: bits},
+		}
+		_, err := attestationCommitteeIndex(att, data)
+		require.ErrorContains(t, err, "exactly one committee bit")
+	})
+
+	t.Run("electra with no inner attestation errors", func(t *testing.T) {
+		t.Parallel()
+		att := &spec.VersionedAttestation{Version: spec.DataVersionElectra}
+		_, err := attestationCommitteeIndex(att, data)
+		require.Error(t, err)
+	})
+}
+
+func TestRememberAttestedDataRoots(t *testing.T) {
+	t.Parallel()
+
+	newClient := func() *GoClient {
+		return &GoClient{
+			log:                   zap.NewNop(),
+			attestedDataRootCache: ttlcache.New[attestedDataRootKey, phase0.Root](),
+		}
+	}
+
+	preElectraData := func(slot phase0.Slot, committee phase0.CommitteeIndex, block byte) *phase0.AttestationData {
+		return &phase0.AttestationData{
+			Slot:            slot,
+			Index:           committee, // pre-Electra the committee is part of the data
+			BeaconBlockRoot: phase0.Root{block},
+			Source:          &phase0.Checkpoint{Epoch: 1},
+			Target:          &phase0.Checkpoint{Epoch: 2},
+		}
+	}
+
+	t.Run("keys remembered roots by committee", func(t *testing.T) {
+		t.Parallel()
+		gc := newClient()
+		slot := phase0.Slot(100)
+
+		// Pre-Electra the committee is encoded in the data, so the two committees produce
+		// distinct roots — exactly what the (slot, committee) key must keep apart.
+		dataC1 := preElectraData(slot, 1, 0x01)
+		dataC2 := preElectraData(slot, 2, 0x02)
+		rootC1 := mustHashTreeRoot(t, dataC1)
+		rootC2 := mustHashTreeRoot(t, dataC2)
+		require.NotEqual(t, rootC1, rootC2)
+
+		gc.rememberAttestedDataRoots([]*spec.VersionedAttestation{
+			aggregatorVersionedAttestation(spec.DataVersionPhase0, dataC1),
+			aggregatorVersionedAttestation(spec.DataVersionPhase0, dataC2),
+		})
+
+		got1, ok1 := gc.attestedDataRoot(slot, 1)
+		require.True(t, ok1)
+		require.Equal(t, rootC1, got1)
+
+		got2, ok2 := gc.attestedDataRoot(slot, 2)
+		require.True(t, ok2)
+		require.Equal(t, rootC2, got2)
+
+		// A committee we never attested for, and a different slot, both miss.
+		_, ok3 := gc.attestedDataRoot(slot, 3)
+		require.False(t, ok3)
+		_, okOtherSlot := gc.attestedDataRoot(slot+1, 1)
+		require.False(t, okOtherSlot)
+	})
+
+	t.Run("remembers electra roots via committee bits", func(t *testing.T) {
+		t.Parallel()
+		gc := newClient()
+		slot := phase0.Slot(200)
+		data := &phase0.AttestationData{Slot: slot, Source: &phase0.Checkpoint{Epoch: 1}, Target: &phase0.Checkpoint{Epoch: 2}}
+		root := mustHashTreeRoot(t, data)
+
+		gc.rememberAttestedDataRoots([]*spec.VersionedAttestation{
+			attestedVersionedAttestation(spec.DataVersionElectra, data, 4),
+		})
+
+		got, ok := gc.attestedDataRoot(slot, 4)
+		require.True(t, ok)
+		require.Equal(t, root, got)
+	})
+
+	t.Run("last submission wins for the same key", func(t *testing.T) {
+		t.Parallel()
+		gc := newClient()
+		slot := phase0.Slot(300)
+		committee := phase0.CommitteeIndex(5)
+
+		first := preElectraData(slot, committee, 0x01)
+		second := preElectraData(slot, committee, 0x02)
+		require.NotEqual(t, mustHashTreeRoot(t, first), mustHashTreeRoot(t, second))
+
+		gc.rememberAttestedDataRoots([]*spec.VersionedAttestation{aggregatorVersionedAttestation(spec.DataVersionPhase0, first)})
+		gc.rememberAttestedDataRoots([]*spec.VersionedAttestation{aggregatorVersionedAttestation(spec.DataVersionPhase0, second)})
+
+		got, ok := gc.attestedDataRoot(slot, committee)
+		require.True(t, ok)
+		require.Equal(t, mustHashTreeRoot(t, second), got)
+	})
+
+	t.Run("skips malformed attestations and keeps valid ones", func(t *testing.T) {
+		t.Parallel()
+		gc := newClient()
+		slot := phase0.Slot(400)
+		valid := preElectraData(slot, 6, 0x01)
+
+		twoBits := bitfield.NewBitvector64()
+		twoBits.SetBitAt(1, true)
+		twoBits.SetBitAt(2, true)
+
+		gc.rememberAttestedDataRoots([]*spec.VersionedAttestation{
+			// Data() fails (nil inner attestation).
+			{Version: spec.DataVersionElectra},
+			// Committee extraction fails (two committee bits).
+			{Version: spec.DataVersionElectra, Electra: &electra.Attestation{Data: valid, CommitteeBits: twoBits}},
+			// Valid — must still be remembered despite the malformed entries above.
+			aggregatorVersionedAttestation(spec.DataVersionPhase0, valid),
+		})
+
+		got, ok := gc.attestedDataRoot(slot, 6)
+		require.True(t, ok)
+		require.Equal(t, mustHashTreeRoot(t, valid), got)
+	})
+}
+
+func TestSubmitAttestations_ParallelSubmissionRemembersRoots(t *testing.T) {
+	t.Parallel()
+
+	slot := phase0.Slot(500)
+	committee := phase0.CommitteeIndex(8)
+	data := &phase0.AttestationData{
+		Slot:   slot,
+		Index:  committee,
+		Source: &phase0.Checkpoint{Epoch: 1},
+		Target: &phase0.Checkpoint{Epoch: 2},
+	}
+	root := mustHashTreeRoot(t, data)
+
+	var failingCalls, succeedingCalls atomic.Int32
+	failing := &aggregatorClientMock{submitAttestationsFn: func(context.Context, *api.SubmitAttestationsOpts) error {
+		failingCalls.Add(1)
+		return errors.New("first client failed")
+	}}
+	succeeding := &aggregatorClientMock{submitAttestationsFn: func(context.Context, *api.SubmitAttestationsOpts) error {
+		succeedingCalls.Add(1)
+		return nil
+	}}
+
+	gc := &GoClient{
+		log:                     zap.NewNop(),
+		clients:                 []Client{failing, succeeding},
+		withParallelSubmissions: true,
+		attestedDataRootCache:   ttlcache.New[attestedDataRootKey, phase0.Root](),
+	}
+
+	require.NoError(t, gc.SubmitAttestations(t.Context(), []*spec.VersionedAttestation{
+		aggregatorVersionedAttestation(spec.DataVersionPhase0, data),
+	}))
+	require.EqualValues(t, 1, failingCalls.Load())
+	require.EqualValues(t, 1, succeedingCalls.Load())
+
+	// One client failed but the other accepted the attestation, so the root is still remembered.
+	got, ok := gc.attestedDataRoot(slot, committee)
+	require.True(t, ok)
+	require.Equal(t, root, got)
+}
+
+func mustHashTreeRoot(t *testing.T, data *phase0.AttestationData) phase0.Root {
+	t.Helper()
+	root, err := data.HashTreeRoot()
+	require.NoError(t, err)
+	return root
 }
 
 func aggregatorTestBeaconConfig(genesisTime time.Time) networkconfig.Beacon {
