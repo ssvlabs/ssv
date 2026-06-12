@@ -74,7 +74,16 @@ Seven committees account for 16 of the 41 misses — repeat offenders point at o
 
 ## Reproduction
 
-The pipeline (duty enumeration → trace fetch → analysis → this chart) lives in the internal `ssv-scout` repository under `analysis/proposer-qbft-timing/`, and is resumable; a 35-day window fetches in about 20 minutes. Exporter trace retention on mainnet was ~5 weeks at the time of writing, which bounds how far back the analysis can reach.
+The pipeline lives in the internal `ssv-scout` repository under `analysis/proposer-qbft-timing/` (see its README for the full runbook). Four steps, all parameterized by an epoch window and resumable after interruption:
+
+1. **`fetch_duties.py`** — enumerate proposer duties with outcomes from the duty monitor: `GET /api/duties?types=propose&with_committee`, chunked 200 epochs/request (the server caps propose-only ranges at 14 days/request). Yields `{slot, validator, committee operator IDs, success}` per duty, including missed ones — which the canonical chain alone cannot attribute.
+2. **`fetch_traces.py`** — exporter QBFT traces: `POST /v1/exporter/traces/validator` with `roles=["PROPOSER"]`, one request per 5-epoch batch carrying that batch's proposer indices (~15 min for 35 days).
+3. **`analyze.py`** — joins and metrics. Every monitor-reported miss is re-verified against the canonical chain (`GET /eth/v1/beacon/headers/{slot}` on a public node; 404 = no canonical block = real miss), which also neutralizes the monitor's known block-ingestion false-negative mode. Time buckets `[0, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 6, 8, 12]`s with Wilson 95% CIs.
+4. **`render_chart.py`** — the figure above, regenerated from the analysis output.
+
+Key definitions: `t_decided` = earliest decided-quorum message arrival at the exporter minus slot start (genesis 1606824023 + slot × 12s); decided round = lowest round with a decided aggregate; post-consensus quorum = arrival of the (2f+1)-th distinct operator's partial signature, with quorum = n − (n−1)//3 for an n-operator committee.
+
+Constraints to respect when re-running: exporter trace retention bounds the window (~5 weeks at the time of writing — probe an old slot first); end the window an hour or more before the present so duty outcomes are settled; all timestamps are arrival times at the exporter (P2P skew typically ≤300ms).
 
 ## See also
 
