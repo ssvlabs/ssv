@@ -645,7 +645,15 @@ func (b *BaseRunner) markDutyNotRequired() {
 // markDutyFailed records that the duty terminated with a non-recoverable error. It does NOT mark the
 // duty succeeded; it only reports the outcome so the watcher classifies the duty as failed rather
 // than as a silent stall.
+//
+// A context.Canceled reason is not a duty failure: a cancellation means the duty was abandoned
+// (typically node/validator shutdown), not attempted-and-failed, so "failed" stays reserved for
+// genuine, attributable failures. Filtering it here — rather than at the watcher — also means no
+// failure conclusion is ever produced to race ctx.Done() in watchDutyOutcome.
 func (b *BaseRunner) markDutyFailed(reason error) {
+	if errors.Is(reason, context.Canceled) {
+		return
+	}
 	b.concludeDuty(dutyOutcomeFailed, reason)
 }
 

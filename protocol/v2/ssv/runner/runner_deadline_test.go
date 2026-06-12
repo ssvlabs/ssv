@@ -3,6 +3,7 @@ package runner
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -82,6 +83,21 @@ func TestBaseRunner_watchDutyOutcome(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 		require.Zero(t, logs.Len(), "must not warn on shutdown")
 	})
+
+	t.Run("does not report a duty aborted by cancellation", func(t *testing.T) {
+		core, logs := observer.New(zapcore.WarnLevel)
+		b := newRunner()
+
+		// A duty aborted by shutdown returns context.Canceled; markDutyFailed drops it (a cancellation
+		// is not a failure), so no conclusion is produced and ctx.Done() unblocks the watcher silently.
+		ctx, cancel := context.WithCancel(context.Background())
+		b.watchDutyOutcome(ctx, zap.New(core))
+		cancel()
+		b.markDutyFailed(context.Canceled)
+
+		time.Sleep(100 * time.Millisecond)
+		require.Zero(t, logs.Len(), "a duty aborted by cancellation must not be reported")
+	})
 }
 
 // TestBaseRunner_markDutyOutcomes pins what each marker records: succeeded/not_required are full
@@ -127,6 +143,16 @@ func TestBaseRunner_markDutyOutcomes(t *testing.T) {
 		c := <-ch
 		require.Equal(t, dutyOutcomeFailed, c.outcome)
 		require.Equal(t, boom, c.reason)
+	})
+
+	t.Run("markDutyFailed drops a context.Canceled reason (a cancellation is not a failure)", func(t *testing.T) {
+		b := newRunner()
+
+		b.markDutyFailed(context.Canceled)
+		b.markDutyFailed(fmt.Errorf("submit: %w", context.Canceled)) // wrapped still matches
+
+		require.NotNil(t, b.dutyConcluded, "no conclusion should have been produced")
+		require.Empty(t, b.dutyConcluded, "a cancellation must not be recorded as a failure")
 	})
 
 	t.Run("a second conclusion is a no-op", func(t *testing.T) {

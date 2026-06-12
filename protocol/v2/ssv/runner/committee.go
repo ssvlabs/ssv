@@ -510,9 +510,10 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 	// (markDutySucceeded) and partial progress all return nil, so this only fires on a terminal
 	// post-quorum error — report it as failed instead of letting it fall through to a false "stuck".
 	// Unlike the consensus phase, a failure here is final: submission is the duty's last step.
-	// Shutdown (context cancellation) is left to the watcher's own ctx handling.
+	// Shutdown (context cancellation) needs no special-casing — markDutyFailed drops a context.Canceled
+	// reason, so a submission aborted by shutdown isn't recorded as a failure.
 	defer func() {
-		if err != nil && !errors.Is(err, context.Canceled) {
+		if err != nil {
 			r.markDutyFailed(err)
 		}
 	}()
