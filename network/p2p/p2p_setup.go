@@ -29,6 +29,7 @@ import (
 	"github.com/ssvlabs/ssv/network/records"
 	"github.com/ssvlabs/ssv/network/streams"
 	"github.com/ssvlabs/ssv/network/topics"
+	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/utils/commons"
 )
 
@@ -64,6 +65,14 @@ func (n *p2pNetwork) Setup() error {
 
 	if err := n.initCfg(); err != nil {
 		return fmt.Errorf("init config: %w", err)
+	}
+
+	if n.cfg.Libp2pTrace {
+		if err := log.HookLibp2pLogging(); err != nil {
+			logger.Warn("could not route go-libp2p logs through SSV logger", zap.Error(err))
+		} else {
+			logger.Info("routing go-libp2p logs through SSV logger (swarm2,basichost=debug)")
+		}
 	}
 
 	err := n.SetupHost()
