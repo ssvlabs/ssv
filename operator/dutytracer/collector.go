@@ -73,6 +73,14 @@ type Collector struct {
 	// scheduleJobs is a bounded queue for async schedule computation to avoid
 	// blocking the hot path and DB with synchronous writes.
 	scheduleJobs chan phase0.Slot
+
+	// lateWG tracks the detached goroutines Collect spawns to retry late messages
+	// (they persist to the DB). Start joins them on shutdown so a retry can't write
+	// to a closed DB; lateClosed (under lateMu) refuses new spawns once that join
+	// has begun, which keeps lateWG.Add from racing lateWG.Wait.
+	lateWG     sync.WaitGroup
+	lateMu     sync.Mutex
+	lateClosed bool
 }
 
 type DomainDataProvider interface {
@@ -116,16 +124,35 @@ type scRootKey struct {
 	blockRoot phase0.Root
 }
 
+// Start runs the eviction loop until ctx is canceled, then waits for the goroutines
+// tied to the collector's lifetime — the schedule filler/worker and any in-flight
+// late-message retries — to return before returning itself. A caller that closes the
+// DB the collector writes to must wait for Start to return first: otherwise an
+// in-flight evict, schedule, or late-message write can run against a closed DB and panic.
 func (c *Collector) Start(ctx context.Context, tickerProvider slotticker.Provider) {
 	c.logger.Info("start duty tracer cache to disk evictor")
 	ticker := tickerProvider()
+
+	// The filler and worker share Start's lifetime; join them on the way out so no
+	// schedule write outlives Start (runScheduleWorker persists schedules to disk).
+	var helpers sync.WaitGroup
+	helpers.Add(2)
 	// Start schedule filler in a separate goroutine to avoid blocking eviction.
-	go c.startScheduleFiller(ctx, tickerProvider)
+	go func() {
+		defer helpers.Done()
+		c.startScheduleFiller(ctx, tickerProvider)
+	}()
 	// Start a single worker to process schedule writes asynchronously.
-	go c.runScheduleWorker(ctx)
+	go func() {
+		defer helpers.Done()
+		c.runScheduleWorker(ctx)
+	}()
+
 	for {
 		select {
 		case <-ctx.Done():
+			helpers.Wait()
+			c.stopLateCollect()
 			return
 		case <-ticker.Next():
 			currentSlot := ticker.Slot()
@@ -520,10 +547,36 @@ func (c *Collector) computeRoleRoots(ctx context.Context, slot phase0.Slot, in [
 func (c *Collector) Collect(ctx context.Context, msg *queue.SSVMessage, verifySig func(*spectypes.PartialSignatureMessages) error) error {
 	err := c.collect(ctx, msg, verifySig)
 	if errors.Is(err, errInFlight) {
-		go c.collectLateMessage(ctx, msg, verifySig)
+		c.collectLateAsync(ctx, msg, verifySig)
 		return nil
 	}
 	return err
+}
+
+// collectLateAsync retries a late message in a tracked goroutine so Start can join
+// it on shutdown. Once shutdown has begun (Start is joining), it drops the retry
+// rather than spawn a goroutine that could outlive — and write to — a closed DB.
+func (c *Collector) collectLateAsync(ctx context.Context, msg *queue.SSVMessage, verifySig func(*spectypes.PartialSignatureMessages) error) {
+	c.lateMu.Lock()
+	defer c.lateMu.Unlock()
+	if c.lateClosed {
+		return
+	}
+	c.lateWG.Add(1)
+	go func() {
+		defer c.lateWG.Done()
+		c.collectLateMessage(ctx, msg, verifySig)
+	}()
+}
+
+// stopLateCollect refuses further late-message goroutines and waits for the
+// in-flight ones to return. Start calls it once ctx is canceled, before returning,
+// so the caller can close the DB without racing a late write.
+func (c *Collector) stopLateCollect() {
+	c.lateMu.Lock()
+	c.lateClosed = true
+	c.lateMu.Unlock()
+	c.lateWG.Wait()
 }
 
 const maxRetryCount = 3

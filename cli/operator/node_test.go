@@ -132,13 +132,15 @@ func Test_newNode_wiresOperatorNode(t *testing.T) {
 // archive mode.
 func Test_newNode_wiresExporterNode(t *testing.T) {
 	for _, tc := range []struct {
-		name          string
-		mode          nodeMode
-		exporterMode  string
-		wantCollector bool
+		name              string
+		mode              nodeMode
+		exporterMode      string
+		wantCollector     bool
+		wantStopPruning   bool
+		wantStopCollector bool
 	}{
-		{name: "standard", mode: modeExporterStandard, exporterMode: exporter.ModeStandard, wantCollector: false},
-		{name: "archive", mode: modeExporterArchive, exporterMode: exporter.ModeArchive, wantCollector: true},
+		{name: "standard", mode: modeExporterStandard, exporterMode: exporter.ModeStandard, wantCollector: false, wantStopPruning: true, wantStopCollector: false},
+		{name: "archive", mode: modeExporterArchive, exporterMode: exporter.ModeArchive, wantCollector: true, wantStopPruning: false, wantStopCollector: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
@@ -174,6 +176,22 @@ func Test_newNode_wiresExporterNode(t *testing.T) {
 				require.NotNil(t, a.collector, "archive mode wires a duty-trace collector")
 			} else {
 				require.Nil(t, a.collector, "standard mode has no duty-trace collector")
+			}
+
+			// The shutdown stop funcs must be wired so Close() can join the DB-writing
+			// goroutines before closing the DB. Close() nil-guards them, so without these
+			// assertions a dropped assignment would pass tests yet reintroduce the
+			// shutdown panic. They're mode-complementary: pruning is standard-only, the
+			// collector archive-only.
+			if tc.wantStopPruning {
+				require.NotNil(t, a.stopSlotPruning, "standard mode wires the slot-pruning stop func")
+			} else {
+				require.Nil(t, a.stopSlotPruning, "only standard mode prunes slots")
+			}
+			if tc.wantStopCollector {
+				require.NotNil(t, a.stopCollector, "archive mode wires the collector stop func")
+			} else {
+				require.Nil(t, a.stopCollector, "only archive mode runs the duty-trace collector")
 			}
 
 			require.NoError(t, a.Close())

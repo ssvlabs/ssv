@@ -204,6 +204,10 @@ type node struct {
 	// stopSlotPruning cancels and waits for the slot-pruning goroutines; nil
 	// outside exporter-standard mode. Called by Close() before the DB is closed.
 	stopSlotPruning func()
+
+	// stopCollector cancels and waits for the duty-trace collector goroutines; nil
+	// outside exporter-archive mode. Called by Close() before the DB is closed.
+	stopCollector func()
 }
 
 // newNode wires the node's components from config + the injected beacon/EL clients. On any
@@ -398,6 +402,7 @@ func newNode(ctx context.Context, cfg *config, logger *zap.Logger, res resolved,
 	// Exporter duty tracing. An invalid EXPORTER_MODE is rejected up front by resolveAndValidate,
 	// so res.mode here is always one of the known modes.
 	var collector *dutytracer.Collector
+	var stopCollector func()
 	switch res.mode {
 	case modeExporterArchive:
 		logger.Info("exporter mode: archive")
@@ -409,7 +414,14 @@ func newNode(ctx context.Context, cfg *config, logger *zap.Logger, res resolved,
 			dstore, networkConfig.Beacon, decidedStreamPublisherFn,
 			dutyStore)
 
-		go collector.Start(ctx, slotTickerProvider)
+		stopCollector = startCollector(ctx, collector, slotTickerProvider)
+		// On assembly failure, stop the collector before the deferred db.Close()
+		// above runs (defers are LIFO), so it can't hit a closed DB.
+		defer func() {
+			if err != nil {
+				stopCollector()
+			}
+		}()
 		cfg.SSVOptions.ExporterRead = exporter2.NewExporter(logger, storageMap, collector, nodeStorage.ValidatorStore())
 	case modeExporterStandard:
 		logger.Info("exporter mode: standard")
@@ -474,19 +486,23 @@ func newNode(ctx context.Context, cfg *config, logger *zap.Logger, res resolved,
 		p2pNetwork:          p2pNetwork,
 		operatorNode:        operatorNode,
 		stopSlotPruning:     stopSlotPruning,
+		stopCollector:       stopCollector,
 	}, nil
 }
 
 // Close stops the node's background work and tears down its resources. It cancels the node's ctx
 // (stopping the VRSubmitter and, in exporter modes, the duty-trace collector / slot-pruning), waits
-// for the slot-pruning goroutines to exit so they can't touch the DB after it closes, and calls
-// validatorCtrl.Stop() (the controller's ttlcache cleanup loops, which aren't ctx-bound), then
-// closes the CLI-owned resources (p2p network and execution client, then the db that p2p depends on).
-// newNode is the only constructor, so all these fields are always set.
+// for the slot-pruning and duty-trace collector goroutines to exit so they can't touch the DB after
+// it closes, and calls validatorCtrl.Stop() (the controller's ttlcache cleanup loops, which aren't
+// ctx-bound), then closes the CLI-owned resources (p2p network and execution client, then the db
+// that p2p depends on). newNode is the only constructor, so all these fields are always set.
 func (n *node) Close() error {
 	n.cancel()
 	if n.stopSlotPruning != nil {
 		n.stopSlotPruning()
+	}
+	if n.stopCollector != nil {
+		n.stopCollector()
 	}
 	n.validatorCtrl.Stop()
 
@@ -717,6 +733,26 @@ func initSlotPruning(ctx context.Context, stores *ibftstorage.ParticipantStores,
 	return func() {
 		cancel()
 		pruneWG.Wait()
+	}
+}
+
+// startCollector runs the duty-trace collector on a child of ctx and returns a stop
+// function that cancels it and waits for the collector's goroutines to exit; callers
+// must invoke it before closing the DB, otherwise an in-flight evict, schedule, or
+// late-message write can run against a closed DB and panic.
+func startCollector(ctx context.Context, collector *dutytracer.Collector, slotTickerProvider slotticker.Provider) (stop func()) {
+	ctx, cancel := context.WithCancel(ctx)
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		collector.Start(ctx, slotTickerProvider)
+	}()
+
+	return func() {
+		cancel()
+		wg.Wait()
 	}
 }
 
