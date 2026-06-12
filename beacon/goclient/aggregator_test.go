@@ -174,6 +174,7 @@ func TestSubmitAggregateSelectionProof_PrefersAttestedDataRoot(t *testing.T) {
 		epoch   phase0.Epoch
 	}{
 		{name: "electra committee comes from committee bits", version: spec.DataVersionElectra, epoch: 5},
+		{name: "fulu committee comes from committee bits", version: spec.DataVersionFulu, epoch: 6},
 		{name: "pre-electra committee comes from data index", version: spec.DataVersionPhase0, epoch: 0},
 	}
 
@@ -312,15 +313,19 @@ func aggregatorVersionedAttestation(version spec.DataVersion, data *phase0.Attes
 // it: pre-Electra the committee is the data's Index, Electra+ it's the set committee bit.
 func attestedVersionedAttestation(version spec.DataVersion, data *phase0.AttestationData, committee phase0.CommitteeIndex) *spec.VersionedAttestation {
 	att := aggregatorVersionedAttestation(version, data)
-	if version >= spec.DataVersionElectra {
-		committeeBits := bitfield.NewBitvector64()
-		committeeBits.SetBitAt(uint64(committee), true)
-		switch version {
-		case spec.DataVersionElectra:
-			att.Electra.CommitteeBits = committeeBits
-		case spec.DataVersionFulu:
-			att.Fulu.CommitteeBits = committeeBits
-		}
+	if version < spec.DataVersionElectra {
+		return att
+	}
+
+	committeeBits := bitfield.NewBitvector64()
+	committeeBits.SetBitAt(uint64(committee), true)
+	switch version {
+	case spec.DataVersionElectra:
+		att.Electra.CommitteeBits = committeeBits
+	case spec.DataVersionFulu:
+		att.Fulu.CommitteeBits = committeeBits
+	default:
+		panic("unsupported electra+ version")
 	}
 	return att
 }

@@ -565,17 +565,17 @@ func (gc *GoClient) SubmitAttestations(ctx context.Context, attestations []*spec
 		}); err != nil {
 			return err
 		}
-		gc.rememberAttestedDataRoots(attestations)
-		return nil
+	} else {
+		start := time.Now()
+		err := gc.multiClient.SubmitAttestations(ctx, opts)
+		recordRequest(ctx, gc.log, "SubmitAttestations", gc.multiClient, http.MethodPost, true, time.Since(start), err)
+		if err != nil {
+			return errMultiClient(fmt.Errorf("submit attestations: %w", err), "SubmitAttestations")
+		}
 	}
 
-	start := time.Now()
-	err := gc.multiClient.SubmitAttestations(ctx, opts)
-	recordRequest(ctx, gc.log, "SubmitAttestations", gc.multiClient, http.MethodPost, true, time.Since(start), err)
-	if err != nil {
-		return errMultiClient(fmt.Errorf("submit attestations: %w", err), "SubmitAttestations")
-	}
-
+	// Only reached when at least one client accepted the attestations, so the beacon node
+	// holds them — remember their data roots for the aggregator flow.
 	gc.rememberAttestedDataRoots(attestations)
 	return nil
 }
@@ -638,5 +638,6 @@ func attestationCommitteeIndex(att *spec.VersionedAttestation, data *phase0.Atte
 	if len(indices) != 1 {
 		return 0, fmt.Errorf("expected exactly one committee bit, got %d", len(indices))
 	}
-	return phase0.CommitteeIndex(indices[0]), nil
+	// A bit index is a position within a 64-bit vector, so it is always non-negative.
+	return phase0.CommitteeIndex(indices[0]), nil //nolint:gosec
 }
