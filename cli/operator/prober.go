@@ -18,8 +18,10 @@ const (
 	p2pComponentName         = "p2p"
 )
 
-// Health-check parameters shared by the prober components. A component's full probe schedule — the
-// initial attempt plus retries, with delays in between — adds up to ~110s.
+// Health-check parameters shared by the prober components. Probing one component is an initial
+// attempt plus proberRetriesMax retries, each capped at proberHealthcheckTimeout and spaced by
+// proberRetryDelay — so a component stuck timing out takes ~110s (6 attempts x 10s + 5 gaps x 10s)
+// to be declared unhealthy.
 const (
 	proberHealthcheckTimeout = 10 * time.Second
 	proberRetriesMax         = 5
@@ -29,8 +31,9 @@ const (
 const componentsUnhealthyErrorMsg = "component(s) are not healthy"
 
 func ensureComponentsHealthy(ctx context.Context, logger *zap.Logger, p *hprobe.HealthProber) error {
-	// Deliberately cuts the full ~110s probe schedule short: at bring-up a component should answer
-	// within a couple of attempts, and a failed gate just gets the node restarted.
+	// gateTimeout cuts the full per-component probe schedule (~110s; see the prober consts) short at
+	// bring-up: a component should answer within a couple of attempts, and a failed gate just gets the
+	// node restarted.
 	const gateTimeout = 30 * time.Second
 
 	probeCtx, cancel := context.WithTimeout(ctx, gateTimeout)

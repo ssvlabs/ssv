@@ -77,31 +77,32 @@ func (p *HealthProber) ProbeAll(ctx context.Context) error {
 		close(errsCh)
 	}()
 
+	// Collect failures until every worker returns (errsCh closed) or ctx ends the round. A timeout is
+	// itself a failure and returns straight away; the other two exits fall through to the verdict below.
 	var errs error
+collect:
 	for {
 		select {
 		case err, ok := <-errsCh:
 			if !ok {
-				// Every worker returned: the verdict is complete.
-				if errs != nil {
-					return fmt.Errorf("probe health-check failed: %w", errs)
-				}
-				return nil
+				break collect // every worker returned
 			}
 			errs = errors.Join(errs, err)
 		case <-ctx.Done():
 			// Don't wait out a wedged worker (a Healthy impl ignoring its ctx): report what's known.
 			// A wedged probe goroutine is unreapable — it leaks until process exit.
-			if errors.Is(ctx.Err(), context.Canceled) {
-				// Canceled is not a verdict: report only real failures, if any.
-				if errs != nil {
-					return fmt.Errorf("probe health-check failed: %w", errs)
-				}
-				return nil
+			if !errors.Is(ctx.Err(), context.Canceled) {
+				return fmt.Errorf("probe health-check timed out: %w", errors.Join(errs, ctx.Err()))
 			}
-			return fmt.Errorf("probe health-check timed out: %w", errors.Join(errs, ctx.Err()))
+			break collect // cancellation isn't a verdict — report only the real failures, if any
 		}
 	}
+
+	// Verdict: the joined component failures, or nil if none were observed.
+	if errs != nil {
+		return fmt.Errorf("probe health-check failed: %w", errs)
+	}
+	return nil
 }
 
 func (p *HealthProber) Probe(ctx context.Context, componentName string) error {

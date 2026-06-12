@@ -75,12 +75,18 @@ var StartNodeCmd = &cobra.Command{
 			logger.Fatal("received second shutdown signal, exiting immediately", zap.String("signal", sig.String()))
 		}()
 
-		if err := runNode(ctx, &cfg, logger); err != nil {
-			// runNode surfaces the terminal cause — for a deliberate stop that's context.Canceled,
-			// or whatever was in flight when the signal landed. Key on whether a signal arrived, not
-			// the error's nature: a deliberate stop exits 0 (running the deferred observability
-			// shutdown) even if a genuine error coincided — whoever sent the signal isn't restarting
-			// on exit code anyway.
+		// Build the node, then run it: runNode owns the node's lifecycle and blocks until the first
+		// terminal event (a service/bring-up failure, or the signal canceling ctx) brings it down.
+		n, err := buildNode(ctx, &cfg, logger)
+		if err == nil {
+			err = runNode(ctx, logger, n)
+		}
+		if err != nil {
+			// buildNode/runNode surface the terminal cause — for a deliberate stop that's
+			// context.Canceled, or whatever was in flight when the signal landed. Key on whether a
+			// signal arrived (ctx), not the error's nature: a deliberate stop exits 0 (running the
+			// deferred observability shutdown) even if a genuine error coincided — whoever sent the
+			// signal isn't restarting on exit code anyway.
 			if ctx.Err() != nil {
 				logger.Info("node stopped on signal", startupErrorLogFields(err)...)
 				return

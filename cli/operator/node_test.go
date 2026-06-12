@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/attestantio/go-eth2-client/api"
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -21,25 +20,25 @@ import (
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
-// Test_runNode_invalidConfigReturns verifies runNode() returns the configuration error instead of
+// Test_buildNode_invalidConfigReturns verifies buildNode() returns the configuration error instead of
 // calling logger.Fatal (which would os.Exit the test process) when resolveAndValidate fails.
-// A conflicting signing config trips resolveAndValidate — the first thing runNode() does — before
+// A conflicting signing config trips resolveAndValidate — the first thing buildNode() does — before
 // any network I/O, so the call is safe to make in-process.
-func Test_runNode_invalidConfigReturns(t *testing.T) {
+func Test_buildNode_invalidConfigReturns(t *testing.T) {
 	c := config{}
 	c.SSVSigner.Endpoint = testSignerEndpoint
 	c.OperatorPrivateKey = testOperatorKey // remote + local signing => rejected by resolveAndValidate
 
-	err := runNode(context.Background(), &c, zap.NewNop())
+	_, err := buildNode(context.Background(), &c, zap.NewNop())
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "cannot enable both remote signing")
 }
 
 // stubBeaconClient satisfies the in-package beaconClient interface by embedding it (nil): it
 // promotes every method so the type compiles as a beaconClient, while implementing only what the
-// test path actually invokes. In operator mode with Doppelganger disabled, newNode() never calls
-// a beacon method synchronously (it only stores the client); the one async caller is the
-// NewVRSubmitter goroutine, which stops when the test cancels its ctx.
+// test path actually invokes. newNode() starts no goroutines and — with Doppelganger disabled —
+// invokes only one beacon method synchronously during assembly (SetProposalPreparationsProvider),
+// so that's the sole override needed.
 type stubBeaconClient struct {
 	beaconClient
 }
@@ -49,21 +48,13 @@ type stubBeaconClient struct {
 func (stubBeaconClient) SetProposalPreparationsProvider(func() ([]*eth2apiv1.ProposalPreparation, error)) {
 }
 
-// SubmitValidatorRegistrations is called unconditionally on each slot tick by the NewVRSubmitter
-// goroutine newNode() starts in operator mode. A no-op makes the smoke test structurally safe if
-// that goroutine ticks before ctx is canceled, rather than relying on the slot interval winning the
-// race (it would otherwise hit the embedded-nil beacon and panic).
-func (stubBeaconClient) SubmitValidatorRegistrations(context.Context, []*api.VersionedSignedValidatorRegistration) error {
-	return nil
-}
-
 // stubExecutionClient satisfies executionclient.Provider the same way. newNode() only stores the
 // EL client (it is consumed in start(), not here), so no method is invoked during assembly.
 type stubExecutionClient struct {
 	executionclient.Provider
 }
 
-// Close is a no-op: node.Close() (invoked by the smoke tests during teardown) calls it, so it must
+// Close is a no-op: node.close() (invoked by the smoke tests during teardown) calls it, so it must
 // not fall through to the nil embedded Provider.
 func (stubExecutionClient) Close() error { return nil }
 
@@ -118,11 +109,11 @@ func Test_newNode_wiresOperatorNode(t *testing.T) {
 			_, isNoOp := a.doppelgangerHandler.(doppelganger.NoOpHandler)
 			require.Equal(t, !tc.doppelgangerOn, isNoOp, "doppelganger handler must match the configured protection")
 
-			// Mirror production teardown ordering: cancel the ctx first (stopping the VRSubmitter
-			// goroutine newNode started in operator mode), then Close releases the CLI-owned
-			// resources cleanly — the p2p network was constructed but never Setup/Start'd.
+			// Mirror production teardown ordering: cancel the ctx, then close. newNode starts no
+			// goroutines, so nothing is racing here — the p2p network was constructed but never
+			// Setup/Start'd.
 			cancel()
-			require.NoError(t, a.Close())
+			require.NoError(t, a.close())
 		})
 	}
 }
@@ -177,9 +168,9 @@ func Test_newNode_wiresExporterNode(t *testing.T) {
 				require.Nil(t, a.collector, "standard mode has no duty-trace collector")
 			}
 
-			// Mirror production teardown ordering: ctx-bound goroutines stop before Close.
+			// Mirror production teardown ordering: cancel the ctx, then close (newNode starts no goroutines).
 			cancel()
-			require.NoError(t, a.Close())
+			require.NoError(t, a.close())
 		})
 	}
 }
@@ -218,8 +209,7 @@ func Test_newNode_closesDBOnAssemblyFailure(t *testing.T) {
 	require.ErrorContains(t, err, "failed to setup network private key") // i.e. failed in setupP2P, after db-open
 	require.Nil(t, a)
 
-	// Goroutines newNode started before the failure (the VRSubmitter) bind to the test's ctx and
-	// stop via the deferred cancel above.
+	// newNode starts no goroutines, so the failed assembly leaves nothing running.
 	//
 	// The error-only defer must have closed the db: a fresh badger open of the same dir succeeds
 	// only if the previous handle released its directory lock.

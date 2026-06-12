@@ -336,27 +336,27 @@ type VRSubmitter struct {
 }
 
 func NewVRSubmitter(
-	ctx context.Context,
 	logger *zap.Logger,
 	beaconConfig *networkconfig.Beacon,
 	beacon beacon.BeaconNode,
 	validatorStore validatorStore,
 ) *VRSubmitter {
-	submitter := &VRSubmitter{
+	return &VRSubmitter{
 		logger:         logger,
 		beaconConfig:   beaconConfig,
 		beacon:         beacon,
 		validatorStore: validatorStore,
 		registrations:  map[phase0.BLSPubKey]*validatorRegistration{},
 	}
+}
 
-	slotTicker := slotticker.New(logger, slotticker.Config{
-		SlotDuration: beaconConfig.SlotDuration,
-		GenesisTime:  beaconConfig.GenesisTime,
+// Start runs the registration-submission loop until ctx is canceled.
+func (s *VRSubmitter) Start(ctx context.Context) {
+	slotTicker := slotticker.New(s.logger, slotticker.Config{
+		SlotDuration: s.beaconConfig.SlotDuration,
+		GenesisTime:  s.beaconConfig.GenesisTime,
 	})
-	go submitter.start(ctx, slotTicker)
-
-	return submitter
+	s.start(ctx, slotTicker)
 }
 
 // start periodically submits validator registrations of 2 types (in batches, 1 batch per slot):
