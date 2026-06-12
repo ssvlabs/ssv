@@ -13,6 +13,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/electra"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/jellydator/ttlcache/v3"
+	"github.com/prysmaticlabs/go-bitfield"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
@@ -24,6 +25,10 @@ type aggregatorClientMock struct {
 }
 
 func (*aggregatorClientMock) SubmitProposal(context.Context, *api.SubmitProposalOpts) error {
+	return nil
+}
+
+func (*aggregatorClientMock) SubmitAttestations(context.Context, *api.SubmitAttestationsOpts) error {
 	return nil
 }
 
@@ -156,6 +161,72 @@ func TestSubmitAggregateSelectionProof_UsesForkSpecificAggregateAndProof(t *test
 	}
 }
 
+func TestSubmitAggregateSelectionProof_PrefersAttestedDataRoot(t *testing.T) {
+	t.Parallel()
+
+	slotSig := make([]byte, 96)
+	validatorIndex := phase0.ValidatorIndex(42)
+	committeeIndex := phase0.CommitteeIndex(7)
+
+	testCases := []struct {
+		name    string
+		version spec.DataVersion
+		epoch   phase0.Epoch
+	}{
+		{name: "electra committee comes from committee bits", version: spec.DataVersionElectra, epoch: 5},
+		{name: "pre-electra committee comes from data index", version: spec.DataVersionPhase0, epoch: 0},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			cfg := aggregatorTestBeaconConfig(time.Now().Add(-1000 * networkconfig.TestNetwork.SlotDuration))
+			slot := cfg.FirstSlotAtEpoch(tc.epoch)
+
+			// The data the cluster decided and attested with.
+			attestedData := &phase0.AttestationData{
+				Slot:            slot,
+				BeaconBlockRoot: phase0.Root{1, 2, 3},
+				Source:          &phase0.Checkpoint{Epoch: 1},
+				Target:          &phase0.Checkpoint{Epoch: 2},
+			}
+			if tc.version < spec.DataVersionElectra {
+				attestedData.Index = committeeIndex
+			}
+			expectedRoot, err := attestedData.HashTreeRoot()
+			require.NoError(t, err)
+
+			service := &aggregatorClientMock{}
+			service.AttestationDataFunc = func(context.Context, *api.AttestationDataOpts) (*api.Response[*phase0.AttestationData], error) {
+				t.Error("attestation data must not be re-derived when the attested root is known")
+				return nil, nil
+			}
+			service.AggregateAttestationFunc = func(_ context.Context, opts *api.AggregateAttestationOpts) (*api.Response[*spec.VersionedAttestation], error) {
+				require.Equal(t, slot, opts.Slot)
+				require.Equal(t, committeeIndex, opts.CommitteeIndex)
+				require.EqualValues(t, expectedRoot, opts.AttestationDataRoot)
+
+				return &api.Response[*spec.VersionedAttestation]{
+					Data: aggregatorVersionedAttestation(tc.version, attestedData),
+				}, nil
+			}
+
+			client := newAggregatorTestClient(&cfg, service)
+
+			require.NoError(t, client.SubmitAttestations(t.Context(), []*spec.VersionedAttestation{
+				attestedVersionedAttestation(tc.version, attestedData, committeeIndex),
+			}))
+
+			_, gotVersion, err := client.SubmitAggregateSelectionProof(
+				t.Context(), slot, committeeIndex, 128, validatorIndex, slotSig,
+			)
+			require.NoError(t, err)
+			require.Equal(t, tc.version, gotVersion)
+		})
+	}
+}
+
 func TestSubmitAggregateSelectionProof_RespectsContextCancellationWhileWaiting(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		cfg := aggregatorTestBeaconConfig(time.Now())
@@ -205,11 +276,12 @@ func epochPtr(epoch phase0.Epoch) *phase0.Epoch {
 
 func newAggregatorTestClient(cfg *networkconfig.Beacon, service MultiClient) *GoClient {
 	client := &GoClient{
-		log:                  zap.NewNop(),
-		beaconConfig:         cfg,
-		multiClient:          service,
-		attestationDataCache: ttlcache.New[phase0.Slot, *phase0.AttestationData](),
-		headCache:            ttlcache.New[phase0.Slot, phase0.Root](),
+		log:                   zap.NewNop(),
+		beaconConfig:          cfg,
+		multiClient:           service,
+		attestationDataCache:  ttlcache.New[phase0.Slot, *phase0.AttestationData](),
+		attestedDataRootCache: ttlcache.New[attestedDataRootKey, phase0.Root](),
+		headCache:             ttlcache.New[phase0.Slot, phase0.Root](),
 	}
 	client.fetchAttestationDataFunc = client.fetchAttestationData
 	return client
@@ -234,6 +306,23 @@ func aggregatorVersionedAttestation(version spec.DataVersion, data *phase0.Attes
 	default:
 		panic("unsupported version")
 	}
+}
+
+// attestedVersionedAttestation builds an attestation the way the committee runner submits
+// it: pre-Electra the committee is the data's Index, Electra+ it's the set committee bit.
+func attestedVersionedAttestation(version spec.DataVersion, data *phase0.AttestationData, committee phase0.CommitteeIndex) *spec.VersionedAttestation {
+	att := aggregatorVersionedAttestation(version, data)
+	if version >= spec.DataVersionElectra {
+		committeeBits := bitfield.NewBitvector64()
+		committeeBits.SetBitAt(uint64(committee), true)
+		switch version {
+		case spec.DataVersionElectra:
+			att.Electra.CommitteeBits = committeeBits
+		case spec.DataVersionFulu:
+			att.Fulu.CommitteeBits = committeeBits
+		}
+	}
+	return att
 }
 
 func requireAggregateAndProof(

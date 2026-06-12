@@ -560,9 +560,13 @@ func (gc *GoClient) multiClientSubmit(
 func (gc *GoClient) SubmitAttestations(ctx context.Context, attestations []*spec.VersionedAttestation) error {
 	opts := &api.SubmitAttestationsOpts{Attestations: attestations}
 	if gc.withParallelSubmissions {
-		return gc.multiClientSubmit(ctx, "SubmitAttestations", func(ctx context.Context, client Client) error {
+		if err := gc.multiClientSubmit(ctx, "SubmitAttestations", func(ctx context.Context, client Client) error {
 			return client.SubmitAttestations(ctx, opts)
-		})
+		}); err != nil {
+			return err
+		}
+		gc.rememberAttestedDataRoots(attestations)
+		return nil
 	}
 
 	start := time.Now()
@@ -572,5 +576,67 @@ func (gc *GoClient) SubmitAttestations(ctx context.Context, attestations []*spec
 		return errMultiClient(fmt.Errorf("submit attestations: %w", err), "SubmitAttestations")
 	}
 
+	gc.rememberAttestedDataRoots(attestations)
 	return nil
+}
+
+// attestedDataRootKey identifies the attestation data a validator attested with; pre-Electra
+// each committee signs different data (the committee is part of it as Index), so the
+// committee belongs in the key.
+type attestedDataRootKey struct {
+	slot      phase0.Slot
+	committee phase0.CommitteeIndex
+}
+
+// rememberAttestedDataRoots caches the root of the attestation data that was just submitted,
+// per (slot, committee). The aggregator flow prefers this root over re-deriving the data:
+// the beacon node holds at least our own attestation matching it, so an aggregate must
+// exist, while a re-derived root may match nothing anyone attested with.
+func (gc *GoClient) rememberAttestedDataRoots(attestations []*spec.VersionedAttestation) {
+	for _, att := range attestations {
+		data, err := att.Data()
+		if err != nil {
+			gc.log.Debug("could not extract attestation data", zap.Error(err))
+			continue
+		}
+		committee, err := attestationCommitteeIndex(att, data)
+		if err != nil {
+			gc.log.Debug("could not extract attestation committee index", zap.Error(err))
+			continue
+		}
+		root, err := data.HashTreeRoot()
+		if err != nil {
+			gc.log.Debug("could not hash attestation data", zap.Error(err))
+			continue
+		}
+		key := attestedDataRootKey{slot: data.Slot, committee: committee}
+		gc.attestedDataRootCache.Set(key, root, ttlcache.DefaultTTL)
+	}
+}
+
+// attestedDataRoot returns the root of the attestation data this node submitted for the
+// given slot and committee, if known.
+func (gc *GoClient) attestedDataRoot(slot phase0.Slot, committee phase0.CommitteeIndex) (phase0.Root, bool) {
+	item := gc.attestedDataRootCache.Get(attestedDataRootKey{slot: slot, committee: committee})
+	if item == nil {
+		return phase0.Root{}, false
+	}
+	return item.Value(), true
+}
+
+// attestationCommitteeIndex extracts the committee an attestation belongs to: from the
+// committee bits for Electra and later (EIP-7549), from the data's Index field before.
+func attestationCommitteeIndex(att *spec.VersionedAttestation, data *phase0.AttestationData) (phase0.CommitteeIndex, error) {
+	if att.Version < spec.DataVersionElectra {
+		return data.Index, nil
+	}
+	bits, err := att.CommitteeBits()
+	if err != nil {
+		return 0, err
+	}
+	indices := bits.BitIndices()
+	if len(indices) != 1 {
+		return 0, fmt.Errorf("expected exactly one committee bit, got %d", len(indices))
+	}
+	return phase0.CommitteeIndex(indices[0]), nil
 }
