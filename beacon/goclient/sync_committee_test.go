@@ -3,7 +3,6 @@ package goclient
 import (
 	"context"
 	"errors"
-	"fmt"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -247,7 +246,9 @@ func TestGetSyncCommitteeContributionPreservesInputOrdering(t *testing.T) {
 	)
 	client := &syncCommitteeClientMock{
 		beaconBlockRootFunc: func(_ context.Context, opts *api.BeaconBlockRootOpts) (*api.Response[*phase0.Root], error) {
-			require.Equal(t, fmt.Sprint(slot), opts.Block)
+			// Must query head, not the duty slot: a by-slot lookup 404s when the slot's
+			// proposal is missed, failing the whole contribution duty.
+			require.Equal(t, "head", opts.Block)
 			return &api.Response[*phase0.Root]{Data: &blockRoot}, nil
 		},
 		syncCommitteeContributionFunc: func(_ context.Context, opts *api.SyncCommitteeContributionOpts) (*api.Response[*altair.SyncCommitteeContribution], error) {

@@ -54,8 +54,11 @@ func (gc *GoClient) GetSyncCommitteeContribution(
 	gc.waitOneThirdIntoSlot(ctx, slot)
 
 	scDataReqStart := time.Now()
+	// Resolve the contribution root from head rather than by slot: sync-committee messages
+	// sign the head root as seen during the duty slot, which for a missed or late proposal
+	// is an earlier block's root — a by-slot lookup would 404 there and fail the duty.
 	beaconBlockRootResp, err := gc.multiClient.BeaconBlockRoot(ctx, &api.BeaconBlockRootOpts{
-		Block: fmt.Sprint(slot),
+		Block: "head",
 	})
 	recordRequest(ctx, gc.log, "BeaconBlockRoot", gc.multiClient, http.MethodGet, true, time.Since(scDataReqStart), err)
 	if err != nil {
