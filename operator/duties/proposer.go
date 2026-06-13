@@ -123,8 +123,8 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 					logger.Info("🔁 indices change received")
 
 					// 1) Declare intents.
-					// Some validator-related state has updated, means we need to re-fetch the duties for the current
-					// and next epoch to ensure we have the up-to-date duties for all validators for both epochs.
+					// Some validator-related state has changed, so re-fetch the duties for the current and next
+					// epoch to keep them up to date for all validators.
 					h.dutyFetchIntents[nextEpoch] = false
 					h.dutyFetchIntents[currentEpoch] = false
 
