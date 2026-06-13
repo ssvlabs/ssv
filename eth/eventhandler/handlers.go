@@ -504,6 +504,7 @@ func (eh *EventHandler) handleValidatorExited(txn basedb.Txn, event *contract.Co
 	}
 
 	if !share.HasBeaconMetadata() {
+		logger.Debug("share has no beacon metadata, voluntary exit duty won't be scheduled")
 		return nil, nil
 	}
 

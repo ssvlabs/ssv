@@ -171,6 +171,7 @@ func (n *p2pNetwork) startDiscovery() error {
 			})
 			connector <- p.AddrInfo
 		}
+
 		if len(peersToConnect) == 0 {
 			n.logger.Debug("no discovered peers selected for connection", append([]zap.Field{
 				zap.String("own_subnet_peers", currentSubnetPeers.String()),

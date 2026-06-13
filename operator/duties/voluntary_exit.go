@@ -175,6 +175,9 @@ func (h *VoluntaryExitHandler) HandleDuties(ctx context.Context) {
 				ValidatorIndex: exitDescriptor.ValidatorIndex,
 			}
 
+			// Register the duty even for validators that are not ours: inbound p2p message validation consults this
+			// store (dutyCount), so without this our node would ignore a p2p message for this validator (and refuse
+			// to relay it).
 			h.duties.AddDuty(dutySlot, exitDescriptor.PubKey)
 			if !exitDescriptor.OwnValidator {
 				continue
