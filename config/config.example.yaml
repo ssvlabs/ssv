@@ -19,6 +19,32 @@ eth2:
   # HTTP URL of the Beacon node to connect to.
   BeaconNodeAddr: http://example.url:5052
 
+  # Block-fetch tuning. The SSV node selects between the legacy (default) and MEV-optimized
+  # block-fetch paths at startup based on the settings below; see
+  # docs/MEV_CONSIDERATIONS.md for the full model.
+  #
+  # ProposalSoftDeadline opts the SSV node into the MEV-optimized path. It is a slot-relative
+  # deadline (ms into slot) that applies to single- and multi-Beacon-node setups alike:
+  #   - multi-BN: SSV collects responses from all BNs until this deadline (no early-exit on the
+  #     first MEV block) and proposes the highest-value bid;
+  #   - single- and multi-BN: SSV holds the block until this deadline before starting QBFT, so
+  #     every operator in the cluster starts QBFT at the same slot-relative time (aligned round
+  #     timers, better convergence).
+  # Match this to your PBS late_in_slot_time_ms + ~50–100ms BN→SSV transport. Valid range:
+  # [1000ms, 3600ms]; values above the safe-max of 1250ms are rejected at startup unless
+  # AllowDangerousProposalSoftDeadline is also set (then allowed up to 3600ms, with a startup WARN):
+  # for typical clusters the round-2 QBFT fallback may not fit within the slot. Cannot be combined
+  # with ProposerDelay or ProposalSoftTimeout.
+  # Leave unset to use the default legacy path (relative-timeout collection, early-exit on the
+  # first MEV block; single-BN fetches directly with no slot-relative floor).
+  # ProposalSoftDeadline: 1100ms
+  # AllowDangerousProposalSoftDeadline: true   # only needed when ProposalSoftDeadline exceeds the ~1250ms safe-max
+
+  # ProposalSoftTimeout (legacy): collection-period timeout for multi-BN proposal scoring
+  # in the legacy block-fetch path. Setting this (or ProposerDelay below) opts into the
+  # legacy path. New operators should leave this unset and use ProposalSoftDeadline above.
+  # ProposalSoftTimeout: 1800ms
+
   ValidatorOptions:
 
 eth1:
@@ -43,13 +69,17 @@ p2p:
 OperatorPrivateKey:
 
 # MEV Configuration (Optional)
-# Duration to wait before requesting block proposal if this operator is proposer-duty Leader.
-# This allows extracting higher MEV by waiting for better bids. Default is 0 (no delay).
-# Recommended starting value: 300ms. See docs/MEV_CONSIDERATIONS.md for details.
+# Recommended approach: configure timing games on the PBS layer (mev-boost v1.11+ launched
+# with -config, or commit-boost). With PBS-side timing games configured, leave ProposerDelay
+# at its default value of 0. See docs/MEV_CONSIDERATIONS.md for details.
+#
+# ProposerDelay is the legacy SSV-side lever — a delay before requesting the block-proposal,
+# extracting higher MEV by waiting for better bids. Use this only when your PBS does not
+# support timing games. Default is 0 (no delay).
 # ProposerDelay: 300ms
 
-# Safety flag to allow ProposerDelay values higher than 1s.
-# WARNING: Values above 1s significantly increase the risk of missing block proposals!
+# Safety flag to allow ProposerDelay values higher than 1000ms.
+# WARNING: Values above 1000ms significantly increase the risk of missing block proposals!
 # Only set to true if you understand the risks and have carefully read the MEV documentation.
 # AllowDangerousProposerDelay: false
 

@@ -1,112 +1,229 @@
-## Getting started with `MEV` configuration
+# MEV considerations
 
-To get the most out of MEV opportunities Operator can configure ProposerDelay configuration setting using a configuration
-file (or `PROPOSER_DELAY` environment variable):
+## TL;DR
+
+To get the most out of MEV opportunities, configure `timing games on the PBS layer` — either mev-boost v1.11+ launched with `-config <path>` (and optionally `-watch-config` for hot reload), or commit-boost. With PBS-side timing games configured, SSV's `ProposerDelay` should stay at its default value of `0` — operators relying on `ProposerDelay` can't also use the MEV-optimized block fetch described in [SSV-side configuration](#ssv-side-configuration).
+
+If your PBS does not support timing games (mev-boost < v1.11, mev-boost without `-config <path>`, or any other PBS lacking the feature), SSV's `ProposerDelay` is still available — see [Appendix A](#appendix-a--legacy-proposerdelay-approach). PBS-side timing games are preferred because the PBS polls each relay multiple times within a precise slot-relative auction window — yielding higher-value bids than a single `getHeader` call after an SSV-side `ProposerDelay` sleep.
+
+**Do NOT apply both**: `timing games on the PBS layer` configuration + SSV's `ProposerDelay / ProposalSoftTimeout` - only one of these is supposed to run at any given time. Here are the recommended configuration steps, to avoid any sort of undesirable downtime during transition:
+- Configure SSV node first to remove/unset any of `ProposerDelay / ProposalSoftTimeout`.
+- Set `ProposalSoftDeadline = your PBS late_in_slot_time_ms + ~50–100ms BN→SSV transport` to opt into MEV-optimized block fetch - see [SSV-side configuration](#ssv-side-configuration) for details.
+- Restart SSV node to apply.
+- Set/update mev/commit-boost configuration settings to enable `timing games on the PBS layer` - see [PBS configuration settings](#pbs-side-configuration) for details.
+- It is recommended that all SSV nodes in the same cluster use the same or similar configuration, as significant differences may lead to missed duties.
+
+## Definitions and typical values
+
+The variables below name the stages of the SSV proposer-duty timeline. The values are typical/average for a healthy mainnet SSV cluster — real-world variance is significant.
+
+| Variable | Typical | Description |
+|---|---|---|
+| `RANDAO` | ~50ms | Pre-consensus phase: SSV operators build the RANDAO signature used in the block-fetch request. |
+| `(auction window)` | varies | PBS-side relay polling. Configurable; see [PBS-side timing games](#pbs-side-configuration). |
+| `MEVBoostRelayTimeout` | ~200ms | *Legacy path only:* mev-boost's single getHeader call when SSV asks for a block. Replaced by `(auction window)` in PBS-timing-games setups. |
+| `QBFT` | ~2350ms worst case | QBFT consensus over the blinded block. Worst-case decomposes into `QBFTRound1Time` (~2000ms round-1 timer, fires if round 1 fails) + `QBFTRoundChange` (~100ms ROUND-CHANGE handshake) + `QBFTRound2Time` (~250ms successful round 2). |
+| `PostConsensusSigning` | ~50ms | Operators reconstruct the validator BLS signature from partial signatures. |
+| `BlockSubmission` | ~300ms | Leader submits the signed blinded block to the BN; relay reveals the payload; block propagates. |
+
+The Ethereum slot-propagation deadline is **4000ms** after slot start.
+
+## SSV proposer-duty flow background
+
+The proposer-duty flow runs the stages above in sequence. For an SSV cluster to function reliably, the following must hold even in the worst case where round 1 fails and round 2 runs as fallback:
+
 ```
+RANDAO + (auction window) + QBFT + PostConsensusSigning + BlockSubmission < 4000ms
+```
+
+You must budget for the worst case: in the common case round 1 succeeds quickly and round 2 never runs, but the budget reserved by the equation cannot be reclaimed. If the equation doesn't hold, the validator risks missing its proposal slot whenever round 1 fails.
+
+Where `(auction window)` sits in the slot is what determines MEV capture — bid value grows as the slot ages, so later auction windows yield higher-value bids on average, subject to staying within this deadline.
+
+## PBS-side configuration
+
+Both mev-boost and commit-boost expose the same five knobs:
+
+- `timeout_get_header_ms` — per-relay-request timeout for a single `getHeader` call.
+- `late_in_slot_time_ms` — slot-relative hard cutoff. The PBS returns to the caller no later than this point in the slot.
+- `enable_timing_games` (per-relay) — opt in to the multi-poll behavior for this relay. Defaults to `false`; must be set per-relay.
+- `target_first_request_ms` — when the first poll for this relay fires, measured from slot start.
+- `frequency_get_header_ms` — interval between subsequent polls.
+
+A single `getHeader` poll waits up to `timeout_get_header_ms`, but the PBS never lets it run past the `late_in_slot_time_ms` cutoff. So a poll fired at `ms_into_slot` returns by:
+```
+min(ms_into_slot + timeout_get_header_ms, late_in_slot_time_ms)
+```
+Early in the slot the per-request timeout binds; closer to the cutoff, `late_in_slot_time_ms` binds and the poll is cut short.
+
+### PBS-specific notes
+
+- **commit-boost** validates `timeout_get_header_ms < late_in_slot_time_ms` at config load — refuses to start otherwise. Set `timeout_get_header_ms` just below `late_in_slot_time_ms`.
+- **mev-boost (v1.11+)** has the same knobs and budget math but does not enforce that inequality — values may be equal. Requires `-config <path>` to enable the YAML-based timing-games config; `-watch-config` enables hot reload.
+- Default `late_in_slot_time_ms`: mev-boost `2000ms`, commit-boost `3000ms`. Both are aggressive.
+- mev-boost selects the most-recently-received bid per relay, then compares across relays for the highest value.
+
+Upstream references:
+- mev-boost: [github.com/flashbots/mev-boost/blob/main/docs/timing-games.md](https://github.com/flashbots/mev-boost/blob/main/docs/timing-games.md)
+- commit-boost: [commit-boost.github.io/commit-boost-client](https://commit-boost.github.io/commit-boost-client/)
+
+## SSV-side configuration
+
+Setting `ProposalSoftDeadline` opts into the **MEV-optimized** block-fetch path:
+
+```yaml
+eth2:
+  ProposalSoftDeadline: <your PBS late_in_slot_time_ms + ~50–100ms BN→SSV transport>
+```
+
+The `+ ~50–100ms BN→SSV transport` term is the inbound fetch hop: after the PBS returns its winning bid at `late_in_slot_time_ms`, the beacon node assembles the blinded block and forwards it to SSV. Adding it to the PBS cutoff estimates when SSV actually holds the block — the point the deadline should track. It covers BN-side block assembly plus a one-way BN→SSV hop, so it grows with remote or loaded beacon nodes — measure your own (SSV logs per-proposal arrival latency) and round up: under-shooting trims the multi-BN bid-collection window (costing MEV, not slots), while over-shooting costs only a few ms of slot budget. It is *not* the same as `BlockSubmission` in the [Definitions table](#definitions-and-typical-values): that is the outbound end of the flow (SSV → BN → relay reveal → propagation), sharing only the single BN↔SSV hop with this term — `BlockSubmission` adds relay reveal and propagation on top, which is why it is the larger figure.
+
+`ProposalSoftDeadline` is a **slot-relative** deadline (measured from slot start). It does two things, and applies to single- and multi-Beacon-node setups alike:
+
+1. **Bid collection (multi-BN).** With multiple Beacon nodes, SSV races them in parallel and keeps collecting until the deadline — *without* early-exiting on the first blinded response — then proposes the highest-scored bid across all BNs. (With a single BN there is nothing to compare, so this step just fetches from that one BN.)
+2. **QBFT start alignment (single- and multi-BN).** SSV holds the fetched block until the deadline before starting QBFT consensus, even when the block is already in hand. Because the deadline is slot-relative, every operator in the cluster starts QBFT at the same point in the slot — which keeps their QBFT round timers aligned and improves consensus convergence (round-change timing matches across operators).
+
+So the deadline effectively *defines the QBFT instance start time*: QBFT starts at `max(slot_start + ProposalSoftDeadline, block_arrival)`. In the common case every operator has a block by the deadline and they start together; an operator whose BN only responds after the deadline starts as soon as its block arrives (it cannot start earlier — the block is the consensus input).
+
+Valid range `[1000ms, 3600ms]` — values outside it are rejected at startup. Below ~1000ms leaves safe-to-extract MEV on the table (the node would fall back to a locally built block). Above the safe-max of ~1250ms the node **refuses to start unless `AllowDangerousProposalSoftDeadline: true` is also set** (env `ALLOW_DANGEROUS_PROPOSAL_SOFT_DEADLINE`), mirroring `AllowDangerousProposerDelay`: for typical clusters the worst-case 2-round QBFT scenario may no longer fit within the slot, so round 1 effectively has to succeed (a startup WARN is logged once the flag is set). Even with the flag, values above 3600ms are rejected — they leave no room for even one QBFT round.
+
+## Configuration examples
+
+Two scenarios shown for both PBSes. The numbers are starting points for a healthy mainnet cluster — operators should validate against their own measured latencies.
+
+### Example A — bid-sample equivalent of legacy `ProposerDelay ≈ 1000ms` (recommended starting point)
+
+Lands the last relay poll at ~1000ms, matching when legacy `ProposerDelay = 1000ms` would have queried the relays. Useful as a migration baseline — same bid quality, but the header arrives at SSV at ~1150ms (1050ms PBS cutoff + ~100ms BN→SSV) instead of legacy's ~1300–2000ms (depending on relay response speed), leaving more slot budget for QBFT and submission.
+
+The polling pattern (`target_first_request_ms = 700`, `frequency_get_header_ms = 150`) fires polls at 700ms, 850ms, and 1000ms.
+
+**commit-boost** (TOML):
+```toml
+[pbs]
+late_in_slot_time_ms = 1050
+timeout_get_header_ms = 1030        # must be < late_in_slot_time_ms in commit-boost
+
+[[relays]]
+url = "https://<relay-pubkey>@relay-1.example"
+enable_timing_games = true
+target_first_request_ms = 700       # polls at 700ms, 850ms, 1000ms
+frequency_get_header_ms = 150
+
+[[relays]]
+url = "https://<relay-pubkey>@relay-2.example"
+enable_timing_games = true
+target_first_request_ms = 700
+frequency_get_header_ms = 150
+```
+
+**mev-boost** (YAML):
+```yaml
+timeout_get_header_ms: 1050
+late_in_slot_time_ms: 1050          # mev-boost permits equality
+relays:
+  - url: https://<relay-pubkey>@relay-1.example
+    enable_timing_games: true
+    target_first_request_ms: 700
+    frequency_get_header_ms: 150
+  - url: https://<relay-pubkey>@relay-2.example
+    enable_timing_games: true
+    target_first_request_ms: 700
+    frequency_get_header_ms: 150
+```
+
+**SSV-side** (opts into MEV-optimized block fetch — see [SSV-side configuration](#ssv-side-configuration)):
+```yaml
+eth2:
+  ProposalSoftDeadline: 1150ms   # = PBS late_in_slot_time_ms (1050ms) + ~100ms BN→SSV transport
+```
+
+### Example B — aggressive: PBS-side cutoff at 1800ms (round 1 must succeed)
+
+Pushes the PBS-side cutoff to `1800ms` — past the ~1250ms threshold where round-2 QBFT fallback may no longer fit within the slot for typical clusters. This accepts "round 1 must succeed" in exchange for capturing more intra-slot bid growth (clusters with measurably faster QBFT + submission may still leave room for round 2). Last relay poll at ~1600ms; header at SSV by ~1900ms.
+
+The polling pattern (`target_first_request_ms = 1000`, `frequency_get_header_ms = 200`) fires polls at 1000ms, 1200ms, 1400ms, 1600ms — four chances with ~200ms RTT margin.
+
+Trade-off vs Example A: bid-sample time shifts ~600ms later, capturing more intra-slot bid growth, but the remaining slot budget for QBFT and submission shrinks from ~2850ms to ~2100ms — below the ~2700ms typically needed for the worst-case 2-round QBFT scenario. Example B accepts that round 1 must succeed; if round 1 fails, the slot may be missed (whether it's actually missed depends on your cluster's QBFT + submission latencies). Use only after baselining your stack's round-1 success rate.
+
+**commit-boost** (TOML):
+```toml
+[pbs]
+late_in_slot_time_ms = 1800
+timeout_get_header_ms = 1780        # must be < late_in_slot_time_ms in commit-boost
+
+[[relays]]
+url = "https://<relay-pubkey>@relay-1.example"
+enable_timing_games = true
+target_first_request_ms = 1000      # polls at 1000ms, 1200ms, 1400ms, 1600ms
+frequency_get_header_ms = 200
+
+[[relays]]
+url = "https://<relay-pubkey>@relay-2.example"
+enable_timing_games = true
+target_first_request_ms = 1000
+frequency_get_header_ms = 200
+```
+
+**mev-boost** (YAML):
+```yaml
+timeout_get_header_ms: 1800
+late_in_slot_time_ms: 1800          # mev-boost permits equality
+relays:
+  - url: https://<relay-pubkey>@relay-1.example
+    enable_timing_games: true
+    target_first_request_ms: 1000
+    frequency_get_header_ms: 200
+  - url: https://<relay-pubkey>@relay-2.example
+    enable_timing_games: true
+    target_first_request_ms: 1000
+    frequency_get_header_ms: 200
+```
+
+**SSV-side** (opts into MEV-optimized block fetch — 1900ms exceeds the ~1250ms safe-max, so it requires `AllowDangerousProposalSoftDeadline` and logs a startup WARN; see [SSV-side configuration](#ssv-side-configuration)):
+```yaml
+eth2:
+  ProposalSoftDeadline: 1900ms               # = PBS late_in_slot_time_ms (1800ms) + ~100ms BN→SSV transport
+  AllowDangerousProposalSoftDeadline: true   # required: 1900ms exceeds the ~1250ms safe-max
+```
+
+## Appendix A — Legacy `ProposerDelay` approach
+
+The PBS timing games approach is preferred over `ProposerDelay` because:
+- The PBS polls each relay multiple times within the auction window (`target_first_request_ms` + `frequency_get_header_ms`), capturing higher-value bids than a single `getHeader` per relay. `ProposerDelay` + single `getHeader` gets one bid per relay at one point in time; PBS-side timing games sample several and keep the best.
+- The auction cutoff is slot-relative (`late_in_slot_time_ms`), so QBFT round 1 starts at a predictable point in the slot. With `ProposerDelay`, QBFT starts at `ProposerDelay + variable relay-response time`, which makes the post-auction budget harder to size.
+- The PBS handles auction-timing risk internally. If all polls time out or no relay responds, the PBS falls back to a local block (vanilla), not a missed slot.
+
+`ProposerDelay` remains supported. It is the right tool when:
+- Your PBS does not support timing games (mev-boost < v1.11, or any PBS without the feature).
+- You are running mev-boost without `-config <path>` and don't want to introduce a YAML config file.
+- Operator constraints prevent PBS-side configuration changes.
+
+To configure, set in the SSV config file (or via the `PROPOSER_DELAY` environment variable):
+```yaml
 ProposerDelay: 300ms
 ```
 
-As per our own estimates the max reasonable value of `ProposerDelay` for Ethereum mainnet is around ~1.2s, 
-although we recommend starting with something like 300ms gradually increasing it up - the higher 
-`ProposerDelay` value is the higher the chance of missing Ethereum block proposal will be.
+With `ProposerDelay` active, the slot-budget equation becomes:
+```
+RANDAO + ProposerDelay + MEVBoostRelayTimeout + QBFT + PostConsensusSigning + BlockSubmission < 4000ms
+```
 
-### Important Safety Limitation
+Using the typical values from [Definitions](#definitions-and-typical-values), `ProposerDelay ≤ 4000ms − (50 + 200 + 2350 + 50 + 300) = 1050ms` is the theoretical maximum. In practice, latency variance can easily add several hundred ms — we consider **~700ms** the maximum reasonable value for `ProposerDelay` on Ethereum mainnet, leaving ~350ms of headroom for variance.
 
-**The SSV node will refuse to start if ProposerDelay is set higher than 1s without explicit confirmation.**
+We recommend starting with a small value such as 300ms and increasing gradually while monitoring miss rate.
 
-If you attempt to use a ProposerDelay value higher than 1s, the node will exit with an error message. 
-If you understand the risks and want to proceed anyway, you must also set the `AllowDangerousProposerDelay` flag:
+**The SSV node refuses to start if `ProposerDelay` is set higher than 1000ms without explicit confirmation.** This 1000ms hard stop sits above the ~700ms recommended ceiling: values in the 700–1000ms range start without complaint, but you should only push past ~700ms after baselining your cluster's latencies.
+
+If you attempt to use a `ProposerDelay` value higher than 1000ms, the node exits with an error message. If you understand the risks and want to proceed anyway, set the `AllowDangerousProposerDelay` flag:
 
 ```yaml
 ProposerDelay: 2000ms
 AllowDangerousProposerDelay: true
 ```
 
-Or using environment variables:
+Or via environment variables:
 ```bash
 PROPOSER_DELAY=2000ms ALLOW_DANGEROUS_PROPOSER_DELAY=true ./bin/ssvnode start-node
 ```
 
-**Warning:** Using ProposerDelay values higher than 1s significantly increases the risk of missing block proposals, 
-which can result in penalties and lost rewards.
-
-As per the notes in other sections of this document `ProposerDelay` depends on a number of things, to find
-the best value Operator might want to start with lower values like 300ms gradually increasing it up.
-
-## MEV considerations & SSV proposer-duty flow background
-
-To understand how MEV fits with the SSV cluster, here is some background on the SSV proposer-duty flow:
-- SSV node participates in the pre-consensus phase to build RANDAO signature that will be used when 
-  requesting block from Beacon node (let's say it takes `RANDAOTime`)
-- SSV node (all nodes in the cluster really to handle round-changes, but current round Leader 
-  specifically) requests blinded block header from Beacon node which in turn "proxies" this request 
-  to MEV-boost that runs with some pre-configured timeout (call it `MEVBoostRelayTimeout`)
-- MEV-boost sends multiple requests to Relays it knows about and waits until that 
-  `MEVBoostRelayTimeout` time to choose the best block (based on the corresponding bid)
-- SSV node receives the response with the chosen block header and goes through QBFT consensus phase 
-  to sign it as Validator (let's say it takes `QBFTTime` at most - we can estimate it 
-  statistically with some probability/confidence)
-- QBFT consensus phase might require several rounds to complete in case there is a fault with the
-  chosen round leader, each round can take up to `RoundTimeout` (currently set to 2s on SSV-protocol 
-  level, which also means there will be 2 rounds at most because Ethereum block must be proposed 
-  within 4s from slot start) meaning if round 1 doesn't complete in under `RoundTimeout` another 
-  leader will be chosen to try and complete QBFT in round 2, etc.
-- once QBFT completes successfully, Operator needs to submit the signed block to Beacon node to 
-  propagate it throughout Ethereum network (call it `BlockSubmissionTime`)
-- there is some time spent on executing various code to "glue" this whole thing together 
-  that's small but still matters (call it `MiscellaneousTime`)
-
-and so this means for the best SSV cluster operations we want the following condition to always hold true:
-```
-RANDAOTime + MEVBoostRelayTimeout + QBFTTime + BlockSubmissionTime + MiscellaneousTime < 4s
-```
-if this equation doesn't hold, Validator will miss his opportunity to propose the block (slot will be 
-missed if the corresponding Ethereum block isn't published within 4s after slot start time)
-
-and so the most straightforward approach to extract highest MEV is (and it probably works out-of-the box 
-with SSV nodes already, but with caveats mentioned below):
-
-### approach 1
-
-To set `MEVBoostRelayTimeout` as high as possible, and have plenty of Relays 
-(MEV-boost is configured with) so that Relays themselves decide "how much time they want to wait 
-since Slot start before replying with a block/bid" - some Relays would be fast to reply but not 
-as profitable as those that withhold for longer
-
-^ the problem of this approach is that SSV node Operator might not be able to find/choose Relays 
-that fit his MEV desires (maybe he can only use those that respond right away without any additional 
-delay for the sake of higher MEV)
-
-thus an alternative approach would be:
-
-### approach 2
-
-To introduce an additional configurable delay `ProposerDelay` SSV Operator can set so 
-that it will work nicely even with Relays that "reply as fast as possible", the equation from above 
-becomes:
-```
-RANDAOTime + ProposerDelay + MEVBoostRelayTimeout + QBFTTime + BlockSubmissionTime + MiscellaneousTime < 4s
-```
-plugging in some realistic numbers into that ^ formula we get a rough estimate of ~2.2s for `ProposerDelay`: 
-```go
-const randaoTime = 100 * time.Millisecond
-const mevBoostRelayTimeout = 200 * time.Millisecond
-const qbftTime = 350 * time.Millisecond
-const miscellaneousTime = 150 * time.Millisecond
-const blockSubmissionTime = 1000 * time.Millisecond
-const proposerDelay = 4*time.Second - randaoTime - mevBoostRelayTimeout - qbftTime - blockSubmissionTime - miscellaneousTime
-```
-but on top of that, another consideration Operator needs to take into account is QBFT round timeout, specifically 
-round 1 timeout. For proposer duty round 1 times out at ~2s after slot start time (so that proposer duty can execute 2
-QBFT rounds, if necessary, and still complete before that desirable 4s after slot start deadline). To avoid round 1 timing out
-we'd want the following equation to hold:
-```go
-RANDAOTime + ProposerDelay + MEVBoostRelayTimeout + QBFTTime + MiscellaneousTime < 2s
-```
-and with the values listed above this gives us `ProposerDelay` value of ~1.2s.
-
-Therefore, we consider ~1.2s to be the maximum reasonable value for `ProposerDelay`, going beyond that value might 
-result in missed block proposal.
-
-**To enforce proposer safety limits, the SSV node will automatically prevent startup if ProposerDelay exceeds 1s 
-unless the Operator explicitly acknowledges the risk by setting `AllowDangerousProposerDelay: true`.**
+**Warning:** `ProposerDelay` values higher than 1000ms significantly increase the risk of missed block proposals, which can result in penalties and lost rewards.

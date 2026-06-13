@@ -80,14 +80,9 @@ func runNode(ctx context.Context, cfg *config, logger *zap.Logger) error {
 		zap.Bool("with_parallel_submissions", cfg.ConsensusClient.WithParallelSubmissions),
 	)
 
-	cliopt, err := goclient.NewOptions(cfg.ConsensusClient, cfg.ProposerDelay)
-	if err != nil {
-		return startupError{
-			err:    fmt.Errorf("failed to create beacon client options: %w", err),
-			fields: []zap.Field{fields.Address(cfg.ConsensusClient.BeaconNodeAddr)},
-		}
-	}
-	consensusClient, err := goclient.New(ctx, logger, cliopt)
+	// goclient consumes the block-fetch values (ProposalSoftTimeout / ProposalSoftDeadline) that
+	// resolveAndValidate already resolved onto cfg.ConsensusClient.
+	consensusClient, err := goclient.New(ctx, logger, cfg.ConsensusClient)
 	if err != nil {
 		return startupError{
 			err:    fmt.Errorf("failed to create beacon go-client: %w", err),

@@ -174,6 +174,9 @@ func runHealthyTest(
 		CommonTimeout:         commonTimeout,
 		LongTimeout:           longTimeout,
 		SyncDistanceTolerance: syncDistanceTolerance,
+		// This multi-BN client uses the MEV-optimized (slot-relative) path; the positive deadline
+		// both selects it and satisfies New's block-fetch precondition (unused by this sync test).
+		ProposalSoftDeadline: 1250 * time.Millisecond,
 	})
 	require.NoError(t, err)
 

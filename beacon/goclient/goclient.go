@@ -135,11 +135,17 @@ type GoClient struct {
 	weightedAttestationDataSoftTimeout time.Duration
 	weightedAttestationDataHardTimeout time.Duration
 
-	// proposalSoftTimeout is the collection period during which we gather proposals
-	// from multiple beacon nodes to select the best one. After this timeout, we return
-	// the best proposal seen so far, or wait for the first valid proposal if none
-	// received yet. The parent context (duty deadline) serves as the hard timeout.
+	// proposalSoftTimeout is the relative collection-period timeout used by the legacy
+	// collection (getProposalParallelLegacy); the slot-relative collection uses
+	// proposalSoftDeadline instead.
 	proposalSoftTimeout time.Duration
+
+	// proposalSoftDeadline is the slot-relative deadline (ms into slot) for the MEV-optimized
+	// block-fetch path. A positive value both selects that path (see useSlotRelativeFetch) and
+	// bounds it: multi-BN collection runs until the deadline, and the fetched block is held until
+	// the deadline before QBFT starts. Zero selects the legacy relative-timeout path. See
+	// docs/MEV_CONSIDERATIONS.md.
+	proposalSoftDeadline time.Duration
 
 	// blockRootToSlotCache is used for attestation data scoring. When multiple Consensus clients are used,
 	// the cache helps reduce the number of Consensus Client calls by `n-1`, where `n` is the number of Consensus clients
@@ -188,7 +194,26 @@ func New(ctx context.Context, logger *zap.Logger, opt Options) (*GoClient, error
 		return nil, fmt.Errorf("no beacon node address provided")
 	}
 
+	// Apply mechanical network-timeout defaults (previously done by NewOptions, now removed).
+	// Block-fetch values (ProposalSoftTimeout / ProposalSoftDeadline) arrive pre-resolved from
+	// cli/operator config resolution.
+	if opt.CommonTimeout == 0 {
+		opt.CommonTimeout = defaultCommonTimeout
+	}
+	if opt.LongTimeout == 0 {
+		opt.LongTimeout = defaultLongTimeout
+	}
+
 	beaconAddrList := strings.Split(opt.BeaconNodeAddr, ";")
+
+	// Defensive precondition: multi-BN legacy collection needs a positive ProposalSoftTimeout, else
+	// its window is already expired on entry and it silently degrades to "return the first valid
+	// response". (The MEV-optimized path is keyed off a positive ProposalSoftDeadline, so it can't
+	// hit this; a single-BN legacy client fetches directly and needs neither knob.) Pre-resolved by
+	// cli/operator config; this guard only catches a future caller that builds Options directly.
+	if opt.ProposalSoftDeadline <= 0 && len(beaconAddrList) > 1 && opt.ProposalSoftTimeout <= 0 {
+		return nil, fmt.Errorf("multi-BN legacy proposal collection requires a positive ProposalSoftTimeout, got %v", opt.ProposalSoftTimeout)
+	}
 
 	client := &GoClient{
 		log:                                logger.Named(log.NameConsensusClient),
@@ -201,6 +226,7 @@ func New(ctx context.Context, logger *zap.Logger, opt Options) (*GoClient, error
 		weightedAttestationDataSoftTimeout: time.Duration(float64(opt.CommonTimeout) / 2.5),
 		weightedAttestationDataHardTimeout: opt.CommonTimeout,
 		proposalSoftTimeout:                opt.ProposalSoftTimeout,
+		proposalSoftDeadline:               opt.ProposalSoftDeadline,
 		supportedTopics:                    []eventTopic{eventTopicHead, eventTopicBlock},
 		activatedClients:                   hashmap.New[string, struct{}](),
 	}

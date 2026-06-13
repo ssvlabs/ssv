@@ -42,7 +42,7 @@ func Test_config_load(t *testing.T) {
 // resolveAndValidate (validation itself is covered by Test_validateProposerDelay). A minimal
 // operator signing source is set so resolveSigning passes and these cases isolate proposer-delay.
 func Test_resolveAndValidate_proposerDelay(t *testing.T) {
-	t.Run("dangerous delay with flag - warns with duration fields", func(t *testing.T) {
+	t.Run("dangerous delay with flag - warns with ms fields", func(t *testing.T) {
 		for _, delay := range []time.Duration{1001 * time.Millisecond, 2000 * time.Millisecond, 5000 * time.Millisecond} {
 			t.Run(delay.String(), func(t *testing.T) {
 				core, recorded := observer.New(zapcore.WarnLevel)
@@ -61,8 +61,8 @@ func Test_resolveAndValidate_proposerDelay(t *testing.T) {
 				require.Contains(t, logs[0].Message, "may cause missed block proposals")
 
 				fields := logs[0].ContextMap()
-				require.Equal(t, delay, fields["proposer_delay"])
-				require.Equal(t, 1000*time.Millisecond, fields["max_safe_proposer_delay"])
+				require.Equal(t, delay.Milliseconds(), fields["proposer_delay_ms"])
+				require.Equal(t, int64(1000), fields["max_safe_proposer_delay_ms"])
 			})
 		}
 	})
@@ -184,6 +184,168 @@ func Test_validateProposerDelay(t *testing.T) {
 			require.NoError(t, err)
 		})
 	}
+}
+
+func TestDetermineBlockFetchPath(t *testing.T) {
+	tests := []struct {
+		name                 string
+		proposalSoftTimeout  time.Duration
+		proposalSoftDeadline time.Duration
+		proposerDelay        time.Duration
+		want                 blockFetchPath
+		wantErr              string
+	}{
+		{name: "nothing set -> legacy (default)", want: blockFetchPathLegacy},
+		{name: "ProposerDelay -> legacy", proposerDelay: 300 * time.Millisecond, want: blockFetchPathLegacy},
+		{name: "ProposalSoftTimeout -> legacy", proposalSoftTimeout: 1500 * time.Millisecond, want: blockFetchPathLegacy},
+		{name: "ProposalSoftDeadline -> mev-optimized", proposalSoftDeadline: 1100 * time.Millisecond, want: blockFetchPathMEVOptimized},
+		{name: "legacy + deadline -> conflict", proposalSoftDeadline: 1100 * time.Millisecond, proposerDelay: 300 * time.Millisecond, wantErr: "conflicts with legacy"},
+		{name: "negative ProposerDelay -> error", proposerDelay: -1, wantErr: "ProposerDelay must be non-negative"},
+		{name: "negative ProposalSoftTimeout -> error", proposalSoftTimeout: -1, wantErr: "ProposalSoftTimeout must be non-negative"},
+		{name: "negative ProposalSoftDeadline -> error", proposalSoftDeadline: -1, wantErr: "ProposalSoftDeadline must be non-negative"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := determineBlockFetchPath(tt.proposalSoftTimeout, tt.proposalSoftDeadline, tt.proposerDelay)
+			if tt.wantErr != "" {
+				require.Error(t, err)
+				require.Contains(t, err.Error(), tt.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func Test_blockFetchPath_String(t *testing.T) {
+	tests := []struct {
+		path blockFetchPath
+		want string
+	}{
+		{blockFetchPathLegacy, "legacy"},
+		{blockFetchPathMEVOptimized, "mev-optimized"},
+		{blockFetchPath(99), "unknown(99)"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.want, func(t *testing.T) {
+			require.Equal(t, tt.want, tt.path.String())
+		})
+	}
+}
+
+func TestValidateProposalSoftDeadline(t *testing.T) {
+	tests := []struct {
+		name           string
+		value          time.Duration
+		allowDangerous bool
+		wantErr        string // "" = no error
+	}{
+		{name: "at min 1000ms -> ok", value: 1000 * time.Millisecond},
+		{name: "below min 999ms -> error", value: 999 * time.Millisecond, wantErr: "out of range"},
+		{name: "zero -> error", value: 0, wantErr: "out of range"},
+		{name: "at safe-max 1250ms -> ok", value: 1250 * time.Millisecond},
+		{name: "above safe-max 1251ms without flag -> error", value: 1251 * time.Millisecond, wantErr: "exceeds maximum safe deadline"},
+		{name: "above safe-max 2500ms without flag -> error", value: 2500 * time.Millisecond, wantErr: "exceeds maximum safe deadline"},
+		{name: "at max 3600ms without flag -> error", value: 3600 * time.Millisecond, wantErr: "exceeds maximum safe deadline"},
+		{name: "above safe-max 2500ms with flag -> ok", value: 2500 * time.Millisecond, allowDangerous: true},
+		{name: "at max 3600ms with flag -> ok", value: 3600 * time.Millisecond, allowDangerous: true},
+		{name: "above max 3601ms with flag -> error", value: 3601 * time.Millisecond, allowDangerous: true, wantErr: "out of range"},
+		{name: "above max 3601ms without flag -> error", value: 3601 * time.Millisecond, wantErr: "out of range"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateProposalSoftDeadline(tt.value, tt.allowDangerous)
+			if tt.wantErr == "" {
+				require.NoError(t, err)
+				return
+			}
+			require.Error(t, err)
+			require.Contains(t, err.Error(), tt.wantErr)
+			if tt.wantErr == "exceeds maximum safe deadline" {
+				// The dangerous-value error must point the operator at the override.
+				require.Contains(t, err.Error(), "AllowDangerousProposalSoftDeadline")
+				require.Contains(t, err.Error(), "ALLOW_DANGEROUS_PROPOSAL_SOFT_DEADLINE")
+			}
+		})
+	}
+}
+
+func Test_resolveBlockFetch_defaults(t *testing.T) {
+	t.Run("default (nothing set) resolves to the legacy relative-timeout path", func(t *testing.T) {
+		c := config{}
+		require.NoError(t, c.resolveBlockFetch(zap.NewNop()))
+		require.Equal(t, defaultProposalSoftTimeout, c.ConsensusClient.ProposalSoftTimeout)
+		require.Zero(t, c.ConsensusClient.ProposalSoftDeadline)
+	})
+
+	t.Run("legacy path defaults soft timeout to 1800ms - delay", func(t *testing.T) {
+		c := config{}
+		c.ProposerDelay = 300 * time.Millisecond
+		require.NoError(t, c.resolveBlockFetch(zap.NewNop()))
+		require.Equal(t, 1500*time.Millisecond, c.ConsensusClient.ProposalSoftTimeout)
+		require.Zero(t, c.ConsensusClient.ProposalSoftDeadline)
+	})
+
+	t.Run("legacy path floors soft timeout at 500ms", func(t *testing.T) {
+		c := config{}
+		c.ProposerDelay = 1500 * time.Millisecond // 1800-1500=300, floored to 500
+		c.AllowDangerousProposerDelay = true      // 1500ms > maxSafe, must be acknowledged
+		require.NoError(t, c.resolveBlockFetch(zap.NewNop()))
+		require.Equal(t, 500*time.Millisecond, c.ConsensusClient.ProposalSoftTimeout)
+	})
+
+	t.Run("mev-optimized path keeps the operator deadline", func(t *testing.T) {
+		c := config{}
+		c.ConsensusClient.ProposalSoftDeadline = 1100 * time.Millisecond
+		require.NoError(t, c.resolveBlockFetch(zap.NewNop()))
+		require.Equal(t, 1100*time.Millisecond, c.ConsensusClient.ProposalSoftDeadline)
+		require.Zero(t, c.ConsensusClient.ProposalSoftTimeout)
+	})
+
+	t.Run("mev-optimized out-of-range deadline -> error", func(t *testing.T) {
+		c := config{}
+		c.ConsensusClient.ProposalSoftDeadline = 5000 * time.Millisecond
+		require.ErrorContains(t, c.resolveBlockFetch(zap.NewNop()), "out of range")
+	})
+
+	t.Run("mev-optimized above safe-max without flag -> error", func(t *testing.T) {
+		c := config{}
+		c.ConsensusClient.ProposalSoftDeadline = 1850 * time.Millisecond // > safe-max (1250ms)
+		require.ErrorContains(t, c.resolveBlockFetch(zap.NewNop()), "exceeds maximum safe deadline")
+	})
+
+	t.Run("mev-optimized above max with flag still -> error", func(t *testing.T) {
+		c := config{}
+		c.ConsensusClient.ProposalSoftDeadline = 5000 * time.Millisecond
+		c.ConsensusClient.AllowDangerousProposalSoftDeadline = true
+		require.ErrorContains(t, c.resolveBlockFetch(zap.NewNop()), "out of range")
+	})
+
+	t.Run("mev-optimized above safe-max with flag - warns with ms fields", func(t *testing.T) {
+		core, recorded := observer.New(zapcore.WarnLevel)
+		c := config{}
+		c.ConsensusClient.ProposalSoftDeadline = 1850 * time.Millisecond // > safe-max (1250ms), within range
+		c.ConsensusClient.AllowDangerousProposalSoftDeadline = true
+		require.NoError(t, c.resolveBlockFetch(zap.New(core)))
+
+		logs := recorded.All()
+		require.Len(t, logs, 1)
+		require.Equal(t, zapcore.WarnLevel, logs[0].Level)
+		require.Contains(t, logs[0].Message, "exceeds the safe-max threshold")
+
+		fields := logs[0].ContextMap()
+		require.Equal(t, int64(1850), fields["proposal_soft_deadline_ms"])
+		require.Equal(t, int64(1250), fields["safe_max_proposal_soft_deadline_ms"])
+	})
+
+	t.Run("mev-optimized at safe-max - no warning", func(t *testing.T) {
+		core, recorded := observer.New(zapcore.WarnLevel)
+		c := config{}
+		c.ConsensusClient.ProposalSoftDeadline = maxSafeProposalSoftDeadline // == safe-max, no warning
+		require.NoError(t, c.resolveBlockFetch(zap.New(core)))
+		require.Len(t, recorded.All(), 0)
+	})
 }
 
 func Test_validateConfig(t *testing.T) {

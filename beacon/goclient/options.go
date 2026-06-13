@@ -25,47 +25,23 @@ type Options struct {
 	CommonTimeout time.Duration `yaml:"CommonTimeout" env:"WITH_COMMON_TIMEOUT" env-description:"Specifies the common timeout for network operations"`
 	LongTimeout   time.Duration `yaml:"LongTimeout" env:"WITH_LONG_TIMEOUT" env-description:"Specifies the long timeout for network operations"`
 
-	ProposalSoftTimeout time.Duration `yaml:"ProposalSoftTimeout" env:"WITH_PROPOSAL_SOFT_TIMEOUT" env-description:"Specifies the beacon proposal collection soft timeout (collection period for comparing proposals from multiple beacon nodes to select the most profitable one). Note: the 1st MEV (blinded) block is accepted immediately, so this timeout mainly affects how long we wait for an MEV block before giving up deciding to use a vanilla block instead (if we got one already). This value cannot be set any lower than 500ms to ensure there is enough time for the Beacon node to serve the block-fetch request"`
-}
+	// ProposalSoftTimeout is the legacy collection-period timeout in multi-BN parallel
+	// fetch. Setting this (or ProposerDelay) selects the legacy relative-timeout collection.
+	// New operators should prefer ProposalSoftDeadline. See docs/MEV_CONSIDERATIONS.md.
+	ProposalSoftTimeout time.Duration `yaml:"ProposalSoftTimeout" env:"WITH_PROPOSAL_SOFT_TIMEOUT" env-description:"Legacy MEV configuration. Specifies the beacon proposal collection soft timeout (collection period for comparing proposals from multiple beacon nodes to select the most profitable one). Cannot be set lower than 500ms, to leave the Beacon node enough time to serve the block-fetch request. Setting this opts the SSV node into the legacy block-fetch path; the recommended approach is to leave this unset and use ProposalSoftDeadline instead. See https://github.com/ssvlabs/ssv/blob/main/docs/MEV_CONSIDERATIONS.md for details."`
 
-func NewOptions(base Options, proposerDelay time.Duration) (Options, error) {
-	options := base
-
-	if options.CommonTimeout == 0 {
-		options.CommonTimeout = defaultCommonTimeout
-	}
-
-	if options.LongTimeout == 0 {
-		options.LongTimeout = defaultLongTimeout
-	}
-
-	// If user explicitly set ProposalSoftTimeout, use it as-is (power user mode).
-	// Otherwise, use the default value and reduce it by proposer delay if needed.
-	if options.ProposalSoftTimeout == 0 {
-		// The default value shouldn't be too high because an operator might not be able to participate
-		// in QBFT round 2 (or finish it in time) if it is roughly > 2000 ms.
-		const defaultProposalSoftTimeout = time.Millisecond * 1800
-		options.ProposalSoftTimeout = defaultProposalSoftTimeout
-		// Reduce soft timeout by proposer delay to maintain consistent duty-execution timelines
-		// for different operators in the cluster, ensuring QBFT consensus starts at roughly
-		// the same time (timing out round 1 at roughly the same time) regardless of proposer
-		// delay configuration a particular operator is using - operators with higher proposer
-		// delay start fetching blocks later, so they must have a shorter collection period.
-		if proposerDelay > 0 {
-			options.ProposalSoftTimeout -= proposerDelay
-		}
-	}
-
-	// minProposalSoftTimeout is the minimum soft timeout value allowed.
-	// It ensures we always have enough time to fetch and compare proposals.
-	const minProposalSoftTimeout = time.Millisecond * 500
-	if options.ProposalSoftTimeout < minProposalSoftTimeout {
-		options.ProposalSoftTimeout = minProposalSoftTimeout
-	}
-
-	// Note: There is no hard timeout for proposals. The parent context from the
-	// duty runner (bounded by slot timing) serves as the ultimate deadline.
-	// This ensures we never give up early on getting a block proposal.
-
-	return options, nil
+	// ProposalSoftDeadline is the slot-relative deadline (in ms-into-slot) for the MEV-optimized
+	// proposal-collection window.
+	//   - Unset (zero) -> legacy (default) relative-timeout path.
+	//   - Set explicitly -> MEV-optimized path: collect proposals until this slot-relative
+	//     deadline (no early-exit), then start QBFT at it. Applies to single- and multi-BN setups
+	//     alike, so all operators in the cluster start QBFT at the same slot-relative time.
+	// Cannot be combined with ProposerDelay or ProposalSoftTimeout (which select the legacy path).
+	ProposalSoftDeadline time.Duration `yaml:"ProposalSoftDeadline" env:"PROPOSAL_SOFT_DEADLINE" env-description:"Slot-relative deadline (ms into slot) for the MEV-optimized proposal-collection window. Leave unset for the default (legacy relative-timeout) path; set explicitly to opt into the MEV-optimized path (value must be in [1000ms, 1250ms]; higher values up to 3600ms require AllowDangerousProposalSoftDeadline). Cannot be combined with ProposerDelay or ProposalSoftTimeout. See https://github.com/ssvlabs/ssv/blob/main/docs/MEV_CONSIDERATIONS.md for details."`
+	// AllowDangerousProposalSoftDeadline lifts the ProposalSoftDeadline safe-max cap (~1250ms) up
+	// to the hard maximum (3600ms). Without it, a ProposalSoftDeadline above the safe-max is
+	// rejected at startup, because the worst-case 2-round QBFT scenario may not fit within the slot
+	// (an explicit "round 1 must succeed" configuration). Mirrors AllowDangerousProposerDelay.
+	// See docs/MEV_CONSIDERATIONS.md.
+	AllowDangerousProposalSoftDeadline bool `yaml:"AllowDangerousProposalSoftDeadline" env:"ALLOW_DANGEROUS_PROPOSAL_SOFT_DEADLINE" env-description:"Allow ProposalSoftDeadline values above the safe-max (~1250ms) up to the hard maximum (3600ms). Dangerous: the worst-case 2-round QBFT fallback may not fit within the slot, risking missed proposals. See https://github.com/ssvlabs/ssv/blob/main/docs/MEV_CONSIDERATIONS.md for details."`
 }
