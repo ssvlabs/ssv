@@ -24,7 +24,7 @@ The variables below name the stages of the SSV proposer-duty timeline. The value
 | `MEVBoostRelayTimeout` | ~200ms | *Legacy path only:* mev-boost's single getHeader call when SSV asks for a block. Replaced by `(auction window)` in PBS-timing-games setups. |
 | `QBFT` | ~2350ms worst case | QBFT consensus over the blinded block. Worst-case decomposes into `QBFTRound1Time` (~2000ms round-1 timer, fires if round 1 fails) + `QBFTRoundChange` (~100ms ROUND-CHANGE handshake) + `QBFTRound2Time` (~250ms successful round 2). |
 | `PostConsensusSigning` | ~50ms | Operators reconstruct the validator BLS signature from partial signatures. |
-| `BlockSubmission` | ~100ms | Leader submits the signed blinded block to the BN; relay reveals the payload; block propagates. |
+| `BlockSubmission` | ~300ms | Leader submits the signed blinded block to the BN; relay reveals the payload; block propagates. |
 
 The Ethereum slot-propagation deadline is **4000ms** after slot start.
 
@@ -85,7 +85,7 @@ The `+ ~50–100ms BN→SSV transport` term is the inbound fetch hop: after the 
 
 So the deadline effectively *defines the QBFT instance start time*: QBFT starts at `max(slot_start + ProposalSoftDeadline, block_arrival)`. In the common case every operator has a block by the deadline and they start together; an operator whose BN only responds after the deadline starts as soon as its block arrives (it cannot start earlier — the block is the consensus input).
 
-Valid range `[1000ms, 3600ms]` — values outside it are rejected at startup. Below ~1000ms leaves safe-to-extract MEV on the table (the node would fall back to a locally built block). Above the safe-max of ~1450ms the node **refuses to start unless `AllowDangerousProposalSoftDeadline: true` is also set** (env `ALLOW_DANGEROUS_PROPOSAL_SOFT_DEADLINE`), mirroring `AllowDangerousProposerDelay`: for typical clusters the worst-case 2-round QBFT scenario may no longer fit within the slot, so round 1 effectively has to succeed (a startup WARN is logged once the flag is set). Even with the flag, values above 3600ms are rejected — they leave no room for even one QBFT round.
+Valid range `[1000ms, 3600ms]` — values outside it are rejected at startup. Below ~1000ms leaves safe-to-extract MEV on the table (the node would fall back to a locally built block). Above the safe-max of ~1250ms the node **refuses to start unless `AllowDangerousProposalSoftDeadline: true` is also set** (env `ALLOW_DANGEROUS_PROPOSAL_SOFT_DEADLINE`), mirroring `AllowDangerousProposerDelay`: for typical clusters the worst-case 2-round QBFT scenario may no longer fit within the slot, so round 1 effectively has to succeed (a startup WARN is logged once the flag is set). Even with the flag, values above 3600ms are rejected — they leave no room for even one QBFT round.
 
 ## Configuration examples
 
@@ -139,11 +139,11 @@ eth2:
 
 ### Example B — aggressive: PBS-side cutoff at 1800ms (round 1 must succeed)
 
-Pushes the PBS-side cutoff to `1800ms` — past the ~1450ms threshold where round-2 QBFT fallback may no longer fit within the slot for typical clusters. This accepts "round 1 must succeed" in exchange for capturing more intra-slot bid growth (clusters with measurably faster QBFT + submission may still leave room for round 2). Last relay poll at ~1600ms; header at SSV by ~1900ms.
+Pushes the PBS-side cutoff to `1800ms` — past the ~1250ms threshold where round-2 QBFT fallback may no longer fit within the slot for typical clusters. This accepts "round 1 must succeed" in exchange for capturing more intra-slot bid growth (clusters with measurably faster QBFT + submission may still leave room for round 2). Last relay poll at ~1600ms; header at SSV by ~1900ms.
 
 The polling pattern (`target_first_request_ms = 1000`, `frequency_get_header_ms = 200`) fires polls at 1000ms, 1200ms, 1400ms, 1600ms — four chances with ~200ms RTT margin.
 
-Trade-off vs Example A: bid-sample time shifts ~600ms later, capturing more intra-slot bid growth, but the remaining slot budget for QBFT and submission shrinks from ~2850ms to ~2100ms — below the ~2500ms typically needed for the worst-case 2-round QBFT scenario. Example B accepts that round 1 must succeed; if round 1 fails, the slot may be missed (whether it's actually missed depends on your cluster's QBFT + submission latencies). Use only after baselining your stack's round-1 success rate.
+Trade-off vs Example A: bid-sample time shifts ~600ms later, capturing more intra-slot bid growth, but the remaining slot budget for QBFT and submission shrinks from ~2850ms to ~2100ms — below the ~2700ms typically needed for the worst-case 2-round QBFT scenario. Example B accepts that round 1 must succeed; if round 1 fails, the slot may be missed (whether it's actually missed depends on your cluster's QBFT + submission latencies). Use only after baselining your stack's round-1 success rate.
 
 **commit-boost** (TOML):
 ```toml
@@ -179,11 +179,11 @@ relays:
     frequency_get_header_ms: 200
 ```
 
-**SSV-side** (opts into MEV-optimized block fetch — 1900ms exceeds the ~1450ms safe-max, so it requires `AllowDangerousProposalSoftDeadline` and logs a startup WARN; see [SSV-side configuration](#ssv-side-configuration)):
+**SSV-side** (opts into MEV-optimized block fetch — 1900ms exceeds the ~1250ms safe-max, so it requires `AllowDangerousProposalSoftDeadline` and logs a startup WARN; see [SSV-side configuration](#ssv-side-configuration)):
 ```yaml
 eth2:
   ProposalSoftDeadline: 1900ms               # = PBS late_in_slot_time_ms (1800ms) + ~100ms BN→SSV transport
-  AllowDangerousProposalSoftDeadline: true   # required: 1900ms exceeds the ~1450ms safe-max
+  AllowDangerousProposalSoftDeadline: true   # required: 1900ms exceeds the ~1250ms safe-max
 ```
 
 ## Appendix A — Legacy `ProposerDelay` approach
@@ -208,7 +208,7 @@ With `ProposerDelay` active, the slot-budget equation becomes:
 RANDAO + ProposerDelay + MEVBoostRelayTimeout + QBFT + PostConsensusSigning + BlockSubmission < 4000ms
 ```
 
-Using the typical values from [Definitions](#definitions-and-typical-values), `ProposerDelay ≤ 4000ms − (50 + 200 + 2350 + 50 + 100) = 1250ms` is the theoretical maximum. In practice, latency variance can easily add several hundred ms — we consider **~700ms** the maximum reasonable value for `ProposerDelay` on Ethereum mainnet, leaving ~550ms of headroom for variance.
+Using the typical values from [Definitions](#definitions-and-typical-values), `ProposerDelay ≤ 4000ms − (50 + 200 + 2350 + 50 + 300) = 1050ms` is the theoretical maximum. In practice, latency variance can easily add several hundred ms — we consider **~700ms** the maximum reasonable value for `ProposerDelay` on Ethereum mainnet, leaving ~350ms of headroom for variance.
 
 We recommend starting with a small value such as 300ms and increasing gradually while monitoring miss rate.
 

@@ -72,7 +72,7 @@ const (
 	// acknowledge the risk via AllowDangerousProposalSoftDeadline (mirrors maxSafeProposerDelay /
 	// AllowDangerousProposerDelay).
 	minProposalSoftDeadline     = 1000 * time.Millisecond
-	maxSafeProposalSoftDeadline = 1450 * time.Millisecond
+	maxSafeProposalSoftDeadline = 1250 * time.Millisecond
 	maxProposalSoftDeadline     = 3600 * time.Millisecond
 
 	// Legacy-path soft-timeout defaulting (1800ms, reduced by ProposerDelay, floored at 500ms).

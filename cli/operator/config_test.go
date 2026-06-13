@@ -244,8 +244,8 @@ func TestValidateProposalSoftDeadline(t *testing.T) {
 		{name: "at min 1000ms -> ok", value: 1000 * time.Millisecond},
 		{name: "below min 999ms -> error", value: 999 * time.Millisecond, wantErr: "out of range"},
 		{name: "zero -> error", value: 0, wantErr: "out of range"},
-		{name: "at safe-max 1450ms -> ok", value: 1450 * time.Millisecond},
-		{name: "above safe-max 1451ms without flag -> error", value: 1451 * time.Millisecond, wantErr: "exceeds maximum safe deadline"},
+		{name: "at safe-max 1250ms -> ok", value: 1250 * time.Millisecond},
+		{name: "above safe-max 1251ms without flag -> error", value: 1251 * time.Millisecond, wantErr: "exceeds maximum safe deadline"},
 		{name: "above safe-max 2500ms without flag -> error", value: 2500 * time.Millisecond, wantErr: "exceeds maximum safe deadline"},
 		{name: "at max 3600ms without flag -> error", value: 3600 * time.Millisecond, wantErr: "exceeds maximum safe deadline"},
 		{name: "above safe-max 2500ms with flag -> ok", value: 2500 * time.Millisecond, allowDangerous: true},
@@ -311,7 +311,7 @@ func Test_resolveBlockFetch_defaults(t *testing.T) {
 
 	t.Run("mev-optimized above safe-max without flag -> error", func(t *testing.T) {
 		c := config{}
-		c.ConsensusClient.ProposalSoftDeadline = 1850 * time.Millisecond // > safe-max (1450ms)
+		c.ConsensusClient.ProposalSoftDeadline = 1850 * time.Millisecond // > safe-max (1250ms)
 		require.ErrorContains(t, c.resolveBlockFetch(zap.NewNop()), "exceeds maximum safe deadline")
 	})
 
@@ -325,7 +325,7 @@ func Test_resolveBlockFetch_defaults(t *testing.T) {
 	t.Run("mev-optimized above safe-max with flag - warns with ms fields", func(t *testing.T) {
 		core, recorded := observer.New(zapcore.WarnLevel)
 		c := config{}
-		c.ConsensusClient.ProposalSoftDeadline = 1850 * time.Millisecond // > safe-max (1450ms), within range
+		c.ConsensusClient.ProposalSoftDeadline = 1850 * time.Millisecond // > safe-max (1250ms), within range
 		c.ConsensusClient.AllowDangerousProposalSoftDeadline = true
 		require.NoError(t, c.resolveBlockFetch(zap.New(core)))
 
@@ -336,7 +336,7 @@ func Test_resolveBlockFetch_defaults(t *testing.T) {
 
 		fields := logs[0].ContextMap()
 		require.Equal(t, int64(1850), fields["proposal_soft_deadline_ms"])
-		require.Equal(t, int64(1450), fields["safe_max_ms"])
+		require.Equal(t, int64(1250), fields["safe_max_proposal_soft_deadline_ms"])
 	})
 
 	t.Run("mev-optimized at safe-max - no warning", func(t *testing.T) {
