@@ -160,7 +160,7 @@ func (n *p2pNetwork) SetupHost() error {
 		backoffExponentBase,
 		rand.NewSource(time.Now().UnixNano()),
 	)
-	backoffConnector, err := libp2pdiscbackoff.NewBackoffConnector(h, backoffConnectorCacheSize, connectTimeout, backoffFactory)
+	backoffConnector, err := newBackoffConnector(n.logger, h, backoffConnectorCacheSize, connectTimeout, backoffFactory)
 	if err != nil {
 		return fmt.Errorf("could not create backoff connector: %w", err)
 	}

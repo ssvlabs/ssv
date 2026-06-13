@@ -17,7 +17,6 @@ import (
 	"github.com/libp2p/go-libp2p/core/host"
 	p2pnet "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
-	libp2pdiscbackoff "github.com/libp2p/go-libp2p/p2p/discovery/backoff"
 	ma "github.com/multiformats/go-multiaddr"
 	"go.uber.org/zap"
 
@@ -104,7 +103,7 @@ type p2pNetwork struct {
 	// subscribedCommittees tracks committee subscription statuses for committees we've subscribed to.
 	subscribedCommittees *hashmap.Map[string, committeeSubscriptionStatus]
 
-	backoffConnector *libp2pdiscbackoff.BackoffConnector
+	backoffConnector *backoffConnector
 
 	// persistentSubnets holds subnets on node startup,
 	// these subnets should not be unsubscribed from even if all validators associated with them are removed

@@ -806,7 +806,7 @@ func TestCommitteeQueueFilteringScenarios(t *testing.T) {
 
 			// Set runner state based on hasRunningDuty parameter
 			if !tc.hasRunningDuty {
-				committeeRunner.State.Finished = true // This makes hasDutyRunning() return false
+				committeeRunner.State.Succeeded = true // This makes hasDutyRunning() return false
 			}
 
 			msgChannel := make(chan *queue.SSVMessage, len(tc.messagesTypes))

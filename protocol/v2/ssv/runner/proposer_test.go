@@ -247,7 +247,7 @@ func TestProposerRunnerStartNewDutySkipsRandaoSigningWhenDoppelgangerBlocks(t *t
 	require.Equal(t, 0, beacon.getCalls)
 	require.Nil(t, runner.cachedFullBlock)
 	require.Nil(t, runner.State.RunningInstance)
-	require.False(t, runner.State.Finished)
+	require.False(t, runner.State.Succeeded)
 	require.Empty(t, dg.reportQuorum)
 }
 
@@ -282,7 +282,7 @@ func TestProposerRunnerProcessConsensusSkipsPostConsensusSigningWhenDoppelganger
 	require.NotNil(t, runner.State.DecidedValue)
 	require.Equal(t, 0, countPartialSignatureBroadcastsByType(t, network, spectypes.PostConsensusPartialSig))
 	require.Equal(t, 1, countPartialSignatureBroadcastsByType(t, network, spectypes.RandaoPartialSig))
-	require.False(t, runner.State.Finished)
+	require.False(t, runner.State.Succeeded)
 }
 
 func TestProposerRunnerProcessPostConsensusLeaderUsesCachedFullBlockWhenDecisionMatches(t *testing.T) {
@@ -306,7 +306,7 @@ func TestProposerRunnerProcessPostConsensusLeaderUsesCachedFullBlockWhenDecision
 	require.False(t, beacon.submittedBlocks[0].Blinded)
 	require.NotEqual(t, phase0.BLSSignature{}, beacon.submittedSig[0])
 	require.Equal(t, []phase0.ValidatorIndex{runner.GetShare().ValidatorIndex}, dg.reportQuorum)
-	require.True(t, runner.State.Finished)
+	require.True(t, runner.State.Succeeded)
 }
 
 func TestProposerRunnerProcessPostConsensusLeaderFallsBackToDecidedBlindedBlockOnCacheMismatch(t *testing.T) {
@@ -327,7 +327,7 @@ func TestProposerRunnerProcessPostConsensusLeaderFallsBackToDecidedBlindedBlockO
 	require.Len(t, beacon.submittedBlocks, 1)
 	require.True(t, beacon.submittedBlocks[0].Blinded)
 	require.Equal(t, []phase0.ValidatorIndex{runner.GetShare().ValidatorIndex}, dg.reportQuorum)
-	require.True(t, runner.State.Finished)
+	require.True(t, runner.State.Succeeded)
 }
 
 func TestProposerRunnerProcessPostConsensusNonLeaderKeepsDecidedBlindedBlock(t *testing.T) {
@@ -349,7 +349,7 @@ func TestProposerRunnerProcessPostConsensusNonLeaderKeepsDecidedBlindedBlock(t *
 	require.Len(t, beacon.submittedBlocks, 1)
 	require.True(t, beacon.submittedBlocks[0].Blinded)
 	require.Equal(t, []phase0.ValidatorIndex{runner.GetShare().ValidatorIndex}, dg.reportQuorum)
-	require.True(t, runner.State.Finished)
+	require.True(t, runner.State.Succeeded)
 }
 
 func newProposerRunnerForTest(
