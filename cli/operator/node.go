@@ -64,7 +64,7 @@ const shutdownGraceTimeout = 15 * time.Second
 // buildNode builds the node graph: it validates config up front (before any network I/O, so a
 // misconfigured node fails fast), connects the CL/EL clients — binding them to ctx, whose
 // cancellation is goclient's only shutdown — and wires everything together via newNode. The returned
-// *node owns the resources newNode opened; runNode's teardown releases them.
+// *node owns the resources newNode opened; node.close releases them at teardown.
 func buildNode(ctx context.Context, cfg *config, logger *zap.Logger) (*node, error) {
 	// Validate the configuration up front, before any network I/O, so a misconfigured node
 	// fails fast (e.g. an invalid ProposerDelay is rejected before the beacon client is built,
@@ -160,50 +160,6 @@ func buildNode(ctx context.Context, cfg *config, logger *zap.Logger) (*node, err
 	}
 
 	return n, nil
-}
-
-// runNode runs an already-built node under terminal-cause supervision and returns the cause that
-// brought it down. It owns the cancel-cause root the node's services bind to: every long-lived
-// service runs through spawn, and the first to fail cancels the root with its error as the cause,
-// telling everything else to stop (a bring-up failure is a terminal event too). A service returning
-// nil just means it stopped cleanly (it only does so once the root is already canceled), so only a
-// non-nil error is a terminal cause. The cause is context.Canceled for a deliberate stop — the
-// caller classifies it off its signal ctx.
-func runNode(ctx context.Context, logger *zap.Logger, n *node) error {
-	ctx, cancel := context.WithCancelCause(ctx)
-	defer cancel(nil)
-
-	var wg sync.WaitGroup
-	spawn := func(service func() error) {
-		wg.Go(func() {
-			if err := service(); err != nil {
-				cancel(err)
-			}
-		})
-	}
-	if err := n.start(ctx, spawn); err != nil {
-		cancel(err) // a bring-up failure is a terminal event too (the first cause wins)
-	}
-
-	// Block until the first terminal event, then tear the node down within one grace window: wait for
-	// the services to unwind, then close. Past the window give up and surface the cause rather than
-	// hang forever on something ignoring cancellation (the leftovers are reaped at process exit).
-	<-ctx.Done()
-	cause := context.Cause(ctx)
-	done := make(chan struct{})
-	go func() {
-		wg.Wait()
-		if err := n.close(); err != nil {
-			logger.Error("could not cleanly close node", zap.Error(err))
-		}
-		close(done)
-	}()
-	select {
-	case <-done:
-		return cause
-	case <-time.After(shutdownGraceTimeout):
-		return fmt.Errorf("graceful shutdown timed out after %s: %w", shutdownGraceTimeout, cause)
-	}
 }
 
 // beaconClient is the beacon-node surface the node consumes: the duty-call interface plus the

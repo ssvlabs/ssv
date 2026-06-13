@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/ssvlabs/ssv/eth/executionclient"
 	"github.com/ssvlabs/ssv/exporter"
 	"github.com/ssvlabs/ssv/hprobe"
+	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
@@ -258,4 +260,28 @@ func Test_node_startNetwork_wiresStatsRegardlessOfDynamicMaxPeers(t *testing.T) 
 			require.True(t, stubNet.startCalled, "p2p Start must run regardless of DynamicMaxPeers")
 		})
 	}
+}
+
+// Test_startSlotPruning_spawnsContinuousPrunerPerStore checks the wiring the goroutine-free refactor
+// introduced: the per-store background pruning is launched through spawn (one per store) rather than
+// a bare go, and the synchronous initial GC runs without hanging. The spawn here only counts — it
+// doesn't run the pruners — so this asserts the wiring, not the pruning semantics (those live in
+// ibft/storage).
+func Test_startSlotPruning_spawnsContinuousPrunerPerStore(t *testing.T) {
+	db, err := kv.New(zap.NewNop(), basedb.Options{Path: t.TempDir(), Ctx: context.Background()})
+	require.NoError(t, err)
+	defer func() { _ = db.Close() }()
+
+	stores := ibftstorage.NewStores()
+	stores.Add(spectypes.BNRoleAttester, ibftstorage.New(zap.NewNop(), db, spectypes.BNRoleAttester))
+	stores.Add(spectypes.BNRoleProposer, ibftstorage.New(zap.NewNop(), db, spectypes.BNRoleProposer))
+
+	spawned := 0
+	spawn := func(func() error) { spawned++ } // count, don't run — testing the wiring, not pruning
+
+	// slot > retain so the initial-GC threshold doesn't underflow; the ticker provider is never
+	// invoked because spawn doesn't run the pruners.
+	startSlotPruning(context.Background(), spawn, stores, nil, 1000, 100)
+
+	require.Equal(t, 2, spawned, "one continuous-pruner must be spawned per store")
 }

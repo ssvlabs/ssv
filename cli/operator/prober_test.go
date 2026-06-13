@@ -86,3 +86,41 @@ func Test_startHealthProber_returnsNilOnCtxCancel(t *testing.T) {
 		t.Fatal("startHealthProber did not return after ctx cancellation")
 	}
 }
+
+// fixedComponent is a hprobe component whose health is a fixed result — nil for healthy, a non-nil
+// error for unhealthy — answered immediately (no ctx dependence). Enough to drive the bring-up gate.
+type fixedComponent struct{ err error }
+
+func (c fixedComponent) Healthy(context.Context) error { return c.err }
+
+// Test_ensureComponentsHealthy_passesWhenHealthy: a healthy component clears the gate (nil).
+func Test_ensureComponentsHealthy_passesWhenHealthy(t *testing.T) {
+	p := hprobe.NewHealthProber(zap.NewNop())
+	p.AddComponent("el", fixedComponent{nil}, 10*time.Second, 0, 0)
+	require.NoError(t, ensureComponentsHealthy(context.Background(), zap.NewNop(), p))
+}
+
+// Test_ensureComponentsHealthy_failsWhenUnhealthy: an unhealthy component fails the gate (so the
+// node restarts) — the error carries componentsUnhealthyErrorMsg.
+func Test_ensureComponentsHealthy_failsWhenUnhealthy(t *testing.T) {
+	p := hprobe.NewHealthProber(zap.NewNop())
+	p.AddComponent("el", fixedComponent{errors.New("el down")}, 10*time.Second, 0, 0)
+	err := ensureComponentsHealthy(context.Background(), zap.NewNop(), p)
+	require.ErrorContains(t, err, componentsUnhealthyErrorMsg)
+}
+
+// Test_ensureComponentsHealthy_doesNotReportUnhealthOnCancel: a canceled parent (a deliberate stop)
+// is never classified as component unhealth. The gate returns nil or the ctx error — depending on
+// whether the probe surfaced its failure before the cancel was observed — but never the unhealthy
+// verdict, which would trip a restart for the wrong reason.
+func Test_ensureComponentsHealthy_doesNotReportUnhealthOnCancel(t *testing.T) {
+	p := hprobe.NewHealthProber(zap.NewNop())
+	p.AddComponent("el", fixedComponent{errors.New("el down")}, 10*time.Second, 0, 0)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	err := ensureComponentsHealthy(ctx, zap.NewNop(), p)
+	if err != nil {
+		require.ErrorIs(t, err, context.Canceled, "a deliberate stop must surface the ctx error, never unhealth")
+	}
+}
