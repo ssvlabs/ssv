@@ -56,13 +56,13 @@ import (
 type ControllerOptions struct {
 	Context                        context.Context
 	DB                             basedb.Database
-	SignatureCollectionTimeout     time.Duration `yaml:"SignatureCollectionTimeout" env:"SIGNATURE_COLLECTION_TIMEOUT" env-default:"5s" env-description:"Timeout for signature collection after consensus"`
-	MetadataUpdateInterval         time.Duration `yaml:"MetadataUpdateInterval" env:"METADATA_UPDATE_INTERVAL" env-default:"12m" env-description:"Interval for updating validator metadata"` // used outside of validator controller, left for compatibility
-	HistorySyncBatchSize           int           `yaml:"HistorySyncBatchSize" env:"HISTORY_SYNC_BATCH_SIZE" env-default:"25" env-description:"Maximum number of messages to sync in a single batch"`
-	MinPeers                       int           `yaml:"MinimumPeers" env:"MINIMUM_PEERS" env-default:"2" env-description:"Minimum number of peers required for sync"`
+	SignatureCollectionTimeout     time.Duration `yaml:"SignatureCollectionTimeout" env:"SIGNATURE_COLLECTION_TIMEOUT" env-description:"Timeout for signature collection after consensus"`
+	MetadataUpdateInterval         time.Duration `yaml:"MetadataUpdateInterval" env:"METADATA_UPDATE_INTERVAL" env-description:"Interval for updating validator metadata"` // used outside of validator controller, left for compatibility
+	HistorySyncBatchSize           int           `yaml:"HistorySyncBatchSize" env:"HISTORY_SYNC_BATCH_SIZE" env-description:"Maximum number of messages to sync in a single batch"`
+	MinPeers                       int           `yaml:"MinimumPeers" env:"MINIMUM_PEERS" env-description:"Minimum number of peers required for sync"`
 	Network                        P2PNetwork
 	Beacon                         beaconprotocol.BeaconNode
-	FullNode                       bool `yaml:"FullNode" env:"FULLNODE" env-default:"false" env-description:"Store complete message history instead of just latest messages"`
+	FullNode                       bool `yaml:"FullNode" env:"FULLNODE" env-description:"Store complete message history instead of just latest messages"`
 	BeaconSigner                   ekm.BeaconSigner
 	OperatorSigner                 ssvtypes.OperatorSigner
 	OperatorDataStore              operatordatastore.OperatorDataStore
@@ -82,12 +82,22 @@ type ControllerOptions struct {
 	ProposerDelay                  time.Duration
 
 	// worker flags
-	WorkersCount    int `yaml:"MsgWorkersCount" env:"MSG_WORKERS_COUNT" env-default:"256" env-description:"Number of message processing workers"`
-	QueueBufferSize int `yaml:"MsgWorkerBufferSize" env:"MSG_WORKER_BUFFER_SIZE" env-default:"65536" env-description:"Size of message worker queue buffer"`
+	WorkersCount    int `yaml:"MsgWorkersCount" env:"MSG_WORKERS_COUNT" env-description:"Number of message processing workers"`
+	QueueBufferSize int `yaml:"MsgWorkerBufferSize" env:"MSG_WORKER_BUFFER_SIZE" env-description:"Size of message worker queue buffer"`
 	// Chosen from BenchmarkRouterFanout for the current pod shape, where the
 	// 3.6 CPU cgroup quota rounds to GOMAXPROCS=4.
-	MsgRouterConcurrency int    `yaml:"MsgRouterConcurrency" env:"MSG_ROUTER_CONCURRENCY" env-default:"16" env-description:"Number of goroutines draining the network message router; 16 is tuned for ~4 vCPU pods, override on larger hosts"`
+	MsgRouterConcurrency int    `yaml:"MsgRouterConcurrency" env:"MSG_ROUTER_CONCURRENCY" env-description:"Number of goroutines draining the network message router; 16 is tuned for ~4 vCPU pods, override on larger hosts"`
 	GasLimit             uint64 `yaml:"ExperimentalGasLimit" env:"EXPERIMENTAL_GAS_LIMIT" env-description:"Gas limit for MEV block proposals (must match across committee, otherwise MEV fails). Do not change unless you know what you're doing"`
+}
+
+func (o *ControllerOptions) ApplyDefaults() {
+	o.SignatureCollectionTimeout = 5 * time.Second
+	o.MetadataUpdateInterval = 12 * time.Minute
+	o.HistorySyncBatchSize = 25
+	o.MinPeers = 2
+	o.WorkersCount = 256
+	o.QueueBufferSize = 65536
+	o.MsgRouterConcurrency = 16
 }
 
 type SharesStorage interface {
