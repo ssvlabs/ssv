@@ -77,7 +77,8 @@ type Collector struct {
 	// lateWG tracks the detached goroutines Collect spawns to retry late messages
 	// (they persist to the DB). Start joins them on shutdown so a retry can't write
 	// to a closed DB; lateClosed (under lateMu) refuses new spawns once that join
-	// has begun, which keeps lateWG.Add from racing lateWG.Wait.
+	// has begun, which keeps lateWG.Add from racing lateWG.Wait. The close is
+	// one-way: Start runs once per Collector and never re-arms lateClosed.
 	lateWG     sync.WaitGroup
 	lateMu     sync.Mutex
 	lateClosed bool
@@ -151,6 +152,11 @@ func (c *Collector) Start(ctx context.Context, tickerProvider slotticker.Provide
 	for {
 		select {
 		case <-ctx.Done():
+			// Join the filler/worker first, then the late-message retries. This
+			// ordering is deadlock-free only because the late path (collect) never
+			// enqueues to scheduleJobs; if it did, a late goroutine could block on a
+			// full scheduleJobs after the worker has exited, hanging stopLateCollect
+			// (and thus shutdown).
 			helpers.Wait()
 			c.stopLateCollect()
 			return
