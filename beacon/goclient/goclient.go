@@ -128,7 +128,9 @@ type GoClient struct {
 	// data regardless of the requested committeeIndex.
 	attestationDataCache *ttlcache.Cache[phase0.Slot, *phase0.AttestationData]
 	// attestedDataRootCache remembers the root of the attestation data this node actually
-	// submitted, per (slot, committee), for reuse by the aggregator flow.
+	// submitted (the cluster-decided value), per (slot, committee), for the aggregator flow.
+	// Unlike attestationDataCache — this node's local, pre-consensus view — this is the value
+	// the cluster attested with, which is the one an aggregate must match.
 	attestedDataRootCache *ttlcache.Cache[attestedDataRootKey, phase0.Root]
 	// domainDataReqInflight joins parallel requests for the same epoch/domain pair.
 	domainDataReqInflight singleflight.Group[domainDataCacheKey, phase0.Domain]
