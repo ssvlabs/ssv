@@ -9,7 +9,7 @@ This is the committee-duty (attestation) companion to the [proposer analysis](..
 For block proposals, decision time is destiny (100% missed past 4.0s into the slot). For committee duties, decision time is **almost irrelevant to inclusion**:
 
 - **0 of the 19,463 attestations from the 2,826 round-2-decided duties were missed** (CI95 ≤ 0.02%); likewise 0 of 128 from round-3+ decisions, and 0 of 355 from the 61 duties decided 7–8.5s into the slot. Round-1 decisions miss 0.0011%. Even the handful of duties decided past 10s were included, ~13 slots late.
-- Of the 1,500 missed validator-attestations in the sample, 97% came from duties that never produced a decision: 86% where consensus messages were observed but a decide quorum never formed, and 12% where the exporter saw no consensus activity for the duty at all. The remaining 3% (41 misses, from just four duties) completed consensus early — between 2.3s and 5.1s — and failed after it.
+- Of the 1,500 missed validator-attestations in the sample, 97% came from duties that never produced a decision: 86% where consensus messages were observed but a decide quorum never formed, and 11% where the exporter saw no consensus activity for the duty at all. The remaining 3% (41 misses, from just four duties) completed consensus early — between 2.3s and 5.1s — and failed after it.
 
 ![Where missed attestations come from](miss-sources.png)
 
@@ -80,9 +80,9 @@ Failures are heavily concentrated: **five chronically-failing clusters account f
 
 ### Caveats
 
-- The ≥8s region is thin in the sample (28 duties / 128 attestations); conclusions there lean on the full-window forensics, which point the same way.
+- Round-3+ is thin in the sample (28 duties / 128 attestations); conclusions there lean on the full-window forensics, which point the same way.
 - Zero observed misses in round 2/3+ bounds the rate by sample size, not to literal zero.
-- Scattered misses of 1–4 validators within decided duties exist (they are the 0.0011%) and are not part of the ≥5-validator forensics set.
+- The 41 round-1-decided misses (the 0.0011%) come from four duties that decided on time and failed downstream; where ≥5 of a cluster's validators missed together, those duties also appear in the full-window forensics under "decided round 1 (on time), failed downstream" — so these sample misses overlap the forensics set rather than fall outside it.
 
 ## Implications
 
