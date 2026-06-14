@@ -709,11 +709,9 @@ func initSlotPruning(ctx context.Context, stores *ibftstorage.ParticipantStores,
 	// async perform initial slot gc
 	var initWG sync.WaitGroup
 	_ = stores.Each(func(_ spectypes.BeaconRole, store ibftstorage.ParticipantStore) error {
-		initWG.Add(1)
-		go func() {
-			defer initWG.Done()
+		initWG.Go(func() {
 			store.Prune(ctx, threshold)
-		}()
+		})
 		return nil
 	})
 
@@ -722,11 +720,9 @@ func initSlotPruning(ctx context.Context, stores *ibftstorage.ParticipantStores,
 	// start background job for removing old slots on every tick
 	var pruneWG sync.WaitGroup
 	_ = stores.Each(func(_ spectypes.BeaconRole, store ibftstorage.ParticipantStore) error {
-		pruneWG.Add(1)
-		go func() {
-			defer pruneWG.Done()
+		pruneWG.Go(func() {
 			store.PruneContinuously(ctx, slotTickerProvider, phase0.Slot(retain))
-		}()
+		})
 		return nil
 	})
 
@@ -744,11 +740,9 @@ func startCollector(ctx context.Context, collector *dutytracer.Collector, slotTi
 	ctx, cancel := context.WithCancel(ctx)
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		collector.Start(ctx, slotTickerProvider)
-	}()
+	})
 
 	return func() {
 		cancel()

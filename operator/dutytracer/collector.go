@@ -77,7 +77,7 @@ type Collector struct {
 	// lateWG tracks the detached goroutines Collect spawns to retry late messages
 	// (they persist to the DB). Start joins them on shutdown so a retry can't write
 	// to a closed DB; lateClosed (under lateMu) refuses new spawns once that join
-	// has begun, which keeps lateWG.Add from racing lateWG.Wait. The close is
+	// has begun, which keeps lateWG.Go's Add from racing lateWG.Wait. The close is
 	// one-way: Start runs once per Collector and never re-arms lateClosed.
 	lateWG     sync.WaitGroup
 	lateMu     sync.Mutex
@@ -137,17 +137,14 @@ func (c *Collector) Start(ctx context.Context, tickerProvider slotticker.Provide
 	// The filler and worker share Start's lifetime; join them on the way out so no
 	// schedule write outlives Start (runScheduleWorker persists schedules to disk).
 	var helpers sync.WaitGroup
-	helpers.Add(2)
 	// Start schedule filler in a separate goroutine to avoid blocking eviction.
-	go func() {
-		defer helpers.Done()
+	helpers.Go(func() {
 		c.startScheduleFiller(ctx, tickerProvider)
-	}()
+	})
 	// Start a single worker to process schedule writes asynchronously.
-	go func() {
-		defer helpers.Done()
+	helpers.Go(func() {
 		c.runScheduleWorker(ctx)
-	}()
+	})
 
 	for {
 		select {
@@ -568,11 +565,9 @@ func (c *Collector) collectLateAsync(ctx context.Context, msg *queue.SSVMessage,
 	if c.lateClosed {
 		return
 	}
-	c.lateWG.Add(1)
-	go func() {
-		defer c.lateWG.Done()
+	c.lateWG.Go(func() {
 		c.collectLateMessage(ctx, msg, verifySig)
-	}()
+	})
 }
 
 // stopLateCollect refuses further late-message goroutines and waits for the
