@@ -32,9 +32,9 @@ func TestNew_ExporterMode_SchedulerWiring(t *testing.T) {
 	mockTicker := mockslotticker.NewMockSlotTicker(ctrl)
 
 	opts := Options{
-		NetworkConfig: networkconfig.TestNetwork,
-		Context:       context.Background(),
-		ValidatorStore: mockVS,
+		NetworkConfig:       networkconfig.TestNetwork,
+		Context:             context.Background(),
+		ValidatorStore:      mockVS,
 		ValidatorController: new(validator.Controller),
 		ValidatorOptions: validator.ControllerOptions{
 			OperatorDataStore: operatordatastore.New(nil),
