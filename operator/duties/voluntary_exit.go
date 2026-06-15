@@ -90,14 +90,16 @@ type VoluntaryExitHandler struct {
 	validatorExitCh <-chan ExitDescriptor
 	dutyQueue       []*queuedExit
 	blockSlots      map[uint64]phase0.Slot
+	exporterMode    bool
 }
 
-func NewVoluntaryExitHandler(duties *dutystore.VoluntaryExitDuties, validatorExitCh <-chan ExitDescriptor) *VoluntaryExitHandler {
+func NewVoluntaryExitHandler(duties *dutystore.VoluntaryExitDuties, validatorExitCh <-chan ExitDescriptor, exporterMode bool) *VoluntaryExitHandler {
 	return &VoluntaryExitHandler{
 		duties:          duties,
 		validatorExitCh: validatorExitCh,
 		dutyQueue:       make([]*queuedExit, 0),
 		blockSlots:      map[uint64]phase0.Slot{},
+		exporterMode:    exporterMode,
 	}
 }
 
@@ -226,6 +228,14 @@ func (h *VoluntaryExitHandler) processExecution(ctx context.Context, slot phase0
 
 	span.SetAttributes(observability.DutyCountAttribute(len(dutiesForExecution)))
 	if dutyCount := len(dutiesForExecution); dutyCount != 0 {
+		// Exporter nodes populate the duty store for p2p message-validation only and must
+		// never execute exits. In practice the queue is always empty because HandleDuties
+		// skips OwnValidator=false descriptors, and exporter mode never produces
+		// OwnValidator=true ones. This guard catches any future upstream invariant break.
+		if h.exporterMode {
+			h.logger.Error("BUG: voluntary exit execution attempted in exporter mode; OwnValidator invariant broken")
+			return
+		}
 		h.dutiesExecutor.ExecuteDuties(ctx, dutiesForExecution, h.dutyExecutionDeadline(slot))
 		h.logger.Debug("executed voluntary exit duties",
 			fields.Slot(slot),

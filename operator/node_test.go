@@ -1,48 +1,54 @@
 package operator
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
+	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/exporter"
+	"github.com/ssvlabs/ssv/networkconfig"
+	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
+	"github.com/ssvlabs/ssv/operator/duties/dutystore"
+	"github.com/ssvlabs/ssv/operator/slotticker"
+	mockslotticker "github.com/ssvlabs/ssv/operator/slotticker/mocks"
+	"github.com/ssvlabs/ssv/operator/validator"
+	registrymocks "github.com/ssvlabs/ssv/registry/storage/mocks"
 )
 
-func TestShouldRunDutyScheduler(t *testing.T) {
+// TestNew_ExporterMode_SchedulerWiring verifies that operator.New() completes successfully in exporter
+// mode and wires the duty scheduler with the AllShares provider path (no fee-recipient controller).
+// This covers the restructured scheduler-wiring lines that were previously gated by shouldRunDutyScheduler.
+func TestNew_ExporterMode_SchedulerWiring(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name         string
-		exporterOpts exporter.Options
-		expected     bool
-	}{
-		{
-			name:         "regular operator",
-			exporterOpts: exporter.Options{},
-			expected:     true,
+	ctrl := gomock.NewController(t)
+
+	mockVS := registrymocks.NewMockValidatorStore(ctrl)
+	mockVS.EXPECT().WithOperatorID(gomock.Any()).Return(nil)
+
+	mockTicker := mockslotticker.NewMockSlotTicker(ctrl)
+
+	opts := Options{
+		NetworkConfig:       networkconfig.TestNetwork,
+		Context:             context.Background(),
+		ValidatorStore:      mockVS,
+		ValidatorController: new(validator.Controller),
+		ValidatorOptions: validator.ControllerOptions{
+			OperatorDataStore: operatordatastore.New(nil),
 		},
-		{
-			name: "exporter standard",
-			exporterOpts: exporter.Options{
-				Enabled: true,
-				Mode:    exporter.ModeStandard,
-			},
-			expected: false,
-		},
-		{
-			name: "exporter archive",
-			exporterOpts: exporter.Options{
-				Enabled: true,
-				Mode:    exporter.ModeArchive,
-			},
-			expected: true,
-		},
+		DutyStore: dutystore.New(),
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			require.Equal(t, tc.expected, shouldRunDutyScheduler(tc.exporterOpts))
-		})
-	}
+	node := New(
+		zap.NewNop(),
+		opts,
+		exporter.Options{Enabled: true},
+		func() slotticker.SlotTicker { return mockTicker },
+		nil,
+	)
+	require.NotNil(t, node)
+	require.NotNil(t, node.dutyScheduler)
 }

@@ -78,10 +78,6 @@ type Node struct {
 	exporterRead *exporter2.Exporter
 }
 
-func shouldRunDutyScheduler(exporterOpts exporter.Options) bool {
-	return !exporterOpts.Enabled || exporterOpts.Mode == exporter.ModeArchive
-}
-
 // New is the constructor of Node
 func New(logger *zap.Logger, opts Options, exporterOpts exporter.Options, slotTickerProvider slotticker.Provider, qbftStorage *qbftstorage.ParticipantStores) *Node {
 	selfValidatorStore := opts.ValidatorStore.WithOperatorID(opts.ValidatorOptions.OperatorDataStore.GetOperatorID)
@@ -103,37 +99,35 @@ func New(logger *zap.Logger, opts Options, exporterOpts exporter.Options, slotTi
 		proposalPreparationsFn = feeRecipientController.GetProposalPreparations
 	}
 
-	var dutyScheduler *duties.Scheduler
-	if shouldRunDutyScheduler(exporterOpts) {
-		// Prepare scheduler wiring; in exporter archive mode we swap to AllShares provider,
-		// a prefetching beacon adapter, and a no-op executor.
-		schedulerBeacon := duties.BeaconNode(opts.BeaconNode)
-		validatorProvider := duties.ValidatorProvider(selfValidatorStore)
-		dutyExecutor := duties.DutyExecutor(opts.ValidatorController)
+	// All node modes run the duty scheduler. In exporter mode swap to AllShares provider,
+	// a prefetching beacon adapter, and a no-op executor.
+	schedulerBeacon := duties.BeaconNode(opts.BeaconNode)
+	validatorProvider := duties.ValidatorProvider(selfValidatorStore)
+	dutyExecutor := duties.DutyExecutor(opts.ValidatorController)
 
-		if exporterOpts.Enabled {
-			validatorProvider = duties.NewAllSharesProvider(opts.ValidatorStore)
-			dutyExecutor = duties.NewNoopExecutor()
-			schedulerBeacon = duties.NewPrefetchingBeacon(logger, opts.BeaconNode, opts.NetworkConfig.Beacon, opts.ValidatorStore)
-		}
-
-		dutyScheduler = duties.NewScheduler(logger, &duties.SchedulerOptions{
-			Ctx:                     opts.Context,
-			BeaconNode:              schedulerBeacon,
-			ExecutionClient:         opts.ExecutionClient,
-			BeaconConfig:            opts.NetworkConfig.Beacon,
-			ValidatorProvider:       validatorProvider,
-			ValidatorController:     opts.ValidatorController,
-			DutyExecutor:            dutyExecutor,
-			IndicesChgCh:            opts.ValidatorController.IndicesChangeChan(),
-			ValidatorRegistrationCh: opts.ValidatorController.ValidatorRegistrationChan(),
-			ValidatorExitCh:         opts.ValidatorController.ValidatorExitChan(),
-			DutyStore:               opts.DutyStore,
-			SlotTickerProvider:      slotTickerProvider,
-			P2PNetwork:              opts.P2PNetwork,
-			ExporterMode:            exporterOpts.Enabled,
-		})
+	if exporterOpts.Enabled {
+		validatorProvider = duties.NewAllSharesProvider(opts.ValidatorStore)
+		dutyExecutor = duties.NewNoopExecutor()
+		schedulerBeacon = duties.NewPrefetchingBeacon(logger, opts.BeaconNode, opts.NetworkConfig.Beacon, opts.ValidatorStore)
 	}
+
+	dutyScheduler := duties.NewScheduler(logger, &duties.SchedulerOptions{
+		Ctx:                     opts.Context,
+		BeaconNode:              schedulerBeacon,
+		ExecutionClient:         opts.ExecutionClient,
+		BeaconConfig:            opts.NetworkConfig.Beacon,
+		ValidatorProvider:       validatorProvider,
+		ValidatorController:     opts.ValidatorController,
+		DutyExecutor:            dutyExecutor,
+		IndicesChgCh:            opts.ValidatorController.IndicesChangeChan(),
+		ValidatorRegistrationCh: opts.ValidatorController.ValidatorRegistrationChan(),
+		ValidatorExitCh:         opts.ValidatorController.ValidatorExitChan(),
+		DutyStore:               opts.DutyStore,
+		SlotTickerProvider:      slotTickerProvider,
+		P2PNetwork:              opts.P2PNetwork,
+		ExporterMode:            exporterOpts.Enabled,
+		ArchiveMode:             exporterOpts.Mode == exporter.ModeArchive,
+	})
 
 	node := &Node{
 		logger:           logger.Named(log.NameOperator),
@@ -174,13 +168,8 @@ func (n *Node) Start(ctx context.Context) error {
 		return fmt.Errorf("start WS server: %w", err)
 	}
 
-	// Start the duty scheduler in modes that use it.
-	if n.dutyScheduler != nil {
-		if err := n.dutyScheduler.Start(ctx); err != nil {
-			return fmt.Errorf("failed to run duty scheduler: %w", err)
-		}
-	} else {
-		n.logger.Info("exporter standard mode: skipping duty scheduler")
+	if err := n.dutyScheduler.Start(ctx); err != nil {
+		return fmt.Errorf("failed to run duty scheduler: %w", err)
 	}
 
 	n.validatorsCtrl.StartNetworkHandlers()
@@ -248,15 +237,8 @@ func (n *Node) Start(ctx context.Context) error {
 
 	n.logger.Info("operator node has been started", fields.OperatorID(n.validatorOptions.OperatorDataStore.GetOperatorID()))
 
-	if n.dutyScheduler != nil {
-		if err := n.dutyScheduler.Wait(); err != nil {
-			n.logger.Fatal("duty scheduler exited with error", zap.Error(err))
-		}
-	} else {
-		if !n.exporterOptions.Enabled || n.exporterOptions.Mode != exporter.ModeStandard {
-			n.logger.Fatal("duty scheduler is nil for non-exporter-standard node")
-		}
-		<-ctx.Done()
+	if err := n.dutyScheduler.Wait(); err != nil {
+		n.logger.Fatal("duty scheduler exited with error", zap.Error(err))
 	}
 
 	// The p2p network is owned by its creator (cli/operator), which closes it via defer.

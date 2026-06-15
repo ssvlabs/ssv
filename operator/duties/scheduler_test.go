@@ -693,3 +693,80 @@ func TestScheduler_HandleHeadEvent_DoesNotBlockWithoutReorgConsumer(t *testing.T
 		PreviousDutyDependentRootChanged: true,
 	}}, drainReorgEvents(s.reorgCh))
 }
+
+func TestNewScheduler_HandlerRegistration(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		exporterMode bool
+		archiveMode  bool
+		wantHandlers []string
+	}{
+		{
+			name:         "operator mode",
+			exporterMode: false,
+			archiveMode:  false,
+			wantHandlers: []string{"PROPOSER", "SYNC_COMMITTEE", "VOLUNTARY_EXIT", "ATTESTER", "CLUSTER", "VALIDATOR_REGISTRATION"},
+		},
+		{
+			name:         "standard exporter",
+			exporterMode: true,
+			archiveMode:  false,
+			// VoluntaryExit is included so the dutyStore is populated for message validation;
+			// Attester is excluded because the standard exporter does not trace duties.
+			wantHandlers: []string{"PROPOSER", "SYNC_COMMITTEE", "VOLUNTARY_EXIT"},
+		},
+		{
+			name:         "archive exporter",
+			exporterMode: true,
+			archiveMode:  true,
+			// Archive exporter needs Attester for full duty tracing but still skips
+			// execution-only handlers (CLUSTER, VALIDATOR_REGISTRATION).
+			wantHandlers: []string{"PROPOSER", "SYNC_COMMITTEE", "VOLUNTARY_EXIT", "ATTESTER"},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			s := NewScheduler(zap.NewNop(), &SchedulerOptions{
+				ExporterMode: tc.exporterMode,
+				ArchiveMode:  tc.archiveMode,
+				SlotTickerProvider: func() slotticker.SlotTicker {
+					return NewMockSlotTicker(ctx)
+				},
+			})
+
+			got := make([]string, 0, len(s.dutyHandlers))
+			for _, h := range s.dutyHandlers {
+				got = append(got, h.Name())
+			}
+			require.ElementsMatch(t, tc.wantHandlers, got)
+
+			// Verify exporterMode propagates into each handler that carries the field.
+			// This locks down the wiring so that a future change cannot accidentally give
+			// exporter handlers a real executor path.
+			//
+			// Scheduler.ExecuteDuties already guards against exporter-mode execution, but
+			// individual handlers with their own exporterMode field provide a second line of
+			// defense (e.g. VoluntaryExitHandler.processExecution's explicit guard).
+			require.Equal(t, tc.exporterMode, s.exporterMode)
+
+			for _, h := range s.dutyHandlers {
+				switch h := h.(type) {
+				case *ProposerHandler:
+					require.Equal(t, tc.exporterMode, h.exporterMode, "ProposerHandler.exporterMode")
+				case *SyncCommitteeHandler:
+					require.Equal(t, tc.exporterMode, h.exporterMode, "SyncCommitteeHandler.exporterMode")
+				case *VoluntaryExitHandler:
+					require.Equal(t, tc.exporterMode, h.exporterMode, "VoluntaryExitHandler.exporterMode")
+				}
+			}
+		})
+	}
+}

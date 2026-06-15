@@ -95,6 +95,10 @@ type SchedulerOptions struct {
 	// executing duties (e.g., validator registration). When true, scheduler
 	// still fetches/stores duties for all validators but does not execute them.
 	ExporterMode bool
+	// ArchiveMode indicates this is an archive-mode exporter that needs the Attester handler
+	// for duty tracing. Only meaningful when ExporterMode is true; standard-mode exporters skip
+	// the Attester handler to avoid fetching duties for all network validators.
+	ArchiveMode bool
 }
 
 type Scheduler struct {
@@ -165,19 +169,32 @@ func NewScheduler(logger *zap.Logger, opts *SchedulerOptions) *Scheduler {
 
 	s.exporterMode = opts.ExporterMode
 
-	// These handlers fetch & record duties from the beacon node and are needed in both operator & exporter modes.
-	// When adding a new handler here, ensure it supports both modes.
+	// Proposer, SyncCommittee, and VoluntaryExit are needed in all modes.
+	// Proposer and SyncCommittee populate dutyStore entries consulted by message validation on all
+	// node types. VoluntaryExit populates the per-(slot,pk) duty count also consulted by validation.
+	// In exporter mode, exit descriptors always have OwnValidator=false (no owned validators), so
+	// the handler never queues exits for execution; VoluntaryExitHandler.processExecution also
+	// guards explicitly against execution in exporter mode as a second line of defense.
 	s.dutyHandlers = append(s.dutyHandlers,
-		NewAttesterHandler(dutyStore.Attester, opts.ExporterMode),
 		NewProposerHandler(dutyStore.Proposer, opts.ExporterMode),
 		NewSyncCommitteeHandler(dutyStore.SyncCommittee, opts.ExporterMode),
+		NewVoluntaryExitHandler(dutyStore.VoluntaryExit, opts.ValidatorExitCh, opts.ExporterMode),
 	)
+
+	// Attester is needed for duty execution (operator) and duty tracing (archive exporter).
+	// Standard-mode exporter skips it: the attester store is not checked by message validation,
+	// and fetching duties for all network validators is expensive without the tracing benefit.
+	if !opts.ExporterMode || opts.ArchiveMode {
+		s.dutyHandlers = append(s.dutyHandlers,
+			NewAttesterHandler(dutyStore.Attester, opts.ExporterMode),
+		)
+	}
+
 	// These handlers only execute duties and are not needed in exporter mode.
 	if !opts.ExporterMode {
 		s.dutyHandlers = append(s.dutyHandlers,
 			NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee),
 			NewValidatorRegistrationHandler(opts.ValidatorRegistrationCh),
-			NewVoluntaryExitHandler(dutyStore.VoluntaryExit, opts.ValidatorExitCh),
 		)
 	}
 	return s
