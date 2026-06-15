@@ -58,6 +58,20 @@ type ProposerRunner struct {
 	// cachedBlindedBlockSSZ is a fingerprint of the cachedFullBlock, it is stored here
 	// for efficient validation (so we re-use it instead of re-calculating).
 	cachedBlindedBlockSSZ []byte
+
+	// asyncBlockFetch is set when this operator is not the Round-1 leader: a background
+	// goroutine fetches the beacon block and sends the encoded consensus input here so
+	// ProcessConsensus can update the QBFT instance's StartValue before the operator
+	// needs to lead any round change.
+	asyncBlockFetch chan asyncBlockFetchResult
+}
+
+// asyncBlockFetchResult carries the output of a background beacon-block fetch.
+type asyncBlockFetchResult struct {
+	encodedInput     []byte
+	cachedFullBlock  *api.VersionedProposal
+	cachedBlindedSSZ []byte
+	err              error
 }
 
 // ProposerRunnerOptions bundles all dependencies required by NewProposerRunner.
@@ -155,81 +169,80 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 		return fmt.Errorf("current validator duty: %w", err)
 	}
 
-	// Sleep the remaining proposerDelay since slot start, ensuring on-time proposals even if duty began late.
-	if timeLeft := r.remainingProposerDelay(duty.Slot, time.Now()); timeLeft > 0 {
-		select {
-		case <-time.After(timeLeft):
-		case <-ctx.Done():
-			return ctx.Err()
+	if r.QBFTController.IsRound1Leader(specqbft.Height(duty.Slot)) {
+		// Leader path: wait out the MEV delay then fetch the block synchronously before
+		// starting QBFT. Other operators will wait for our Propose message.
+		if timeLeft := r.remainingProposerDelay(duty.Slot, time.Now()); timeLeft > 0 {
+			select {
+			case <-time.After(timeLeft):
+			case <-ctx.Done():
+				return ctx.Err()
+			}
 		}
-	}
 
-	waitedOutProposerDelayEvent := fmt.Sprintf("waited out proposer delay of %dms", r.proposerDelay.Milliseconds())
-	logger.Debug(waitedOutProposerDelayEvent)
-	span.AddEvent(waitedOutProposerDelayEvent)
+		waitedOutProposerDelayEvent := fmt.Sprintf("waited out proposer delay of %dms", r.proposerDelay.Milliseconds())
+		logger.Debug(waitedOutProposerDelayEvent)
+		span.AddEvent(waitedOutProposerDelayEvent)
 
-	duty, err = r.currentValidatorDuty()
-	if err != nil {
-		return fmt.Errorf("current validator duty: %w", err)
-	}
+		duty, err = r.currentValidatorDuty()
+		if err != nil {
+			return fmt.Errorf("current validator duty: %w", err)
+		}
 
-	// Fetch the block our operator will propose if it is a Leader (note, even if our operator
-	// isn't leading the 1st QBFT round it might become a Leader in case of round change - hence
-	// we are always fetching Ethereum block here just in case we need to propose it).
-	start := time.Now()
-	vBlk, _, err := r.GetBeaconNode().GetBeaconBlock(ctx, duty.Slot, r.graffiti, fullSig)
-	if err != nil {
-		return fmt.Errorf("get beacon block: %w", err)
-	}
-	// Log essentials about the retrieved block.
-	logFields, proposalTraceAttrs := proposalCommonFields(vBlk)
-	logFields = append(
-		logFields,
-		zap.Duration("proposer_delay", r.proposerDelay),
-		fields.Took(time.Since(start)),
-	)
+		start := time.Now()
+		vBlk, _, err := r.GetBeaconNode().GetBeaconBlock(ctx, duty.Slot, r.graffiti, fullSig)
+		if err != nil {
+			return fmt.Errorf("get beacon block: %w", err)
+		}
+		logFields, proposalTraceAttrs := proposalCommonFields(vBlk)
+		logFields = append(logFields,
+			zap.Duration("proposer_delay", r.proposerDelay),
+			fields.Took(time.Since(start)),
+		)
+		if feeRecipient, err := vBlk.FeeRecipient(); err != nil {
+			logFields = append(logFields, zap.NamedError("feeRecipient_err", err))
+		} else {
+			logFields = append(logFields, fields.FeeRecipient(feeRecipient[:]))
+		}
+		const eventMsg = "🧊 got beacon block proposal"
+		logger.Info(eventMsg, logFields...)
+		span.AddEvent(eventMsg, trace.WithAttributes(proposalTraceAttrs...))
 
-	feeRecipient, err := vBlk.FeeRecipient()
-	if err != nil {
-		logFields = append(logFields, zap.NamedError("feeRecipient_err", err))
+		blindedVBlk, blindedMarshaler, err := blindutil.EnsureBlinded(vBlk)
+		if err != nil {
+			return fmt.Errorf("failed to blind full block: %w", err)
+		}
+		byts, err := blindedMarshaler.MarshalSSZ()
+		if err != nil {
+			return fmt.Errorf("could not marshal blinded beacon block: %w", err)
+		}
+		if !vBlk.Blinded {
+			r.cachedFullBlock = vBlk
+			r.cachedBlindedBlockSSZ = byts
+		}
+
+		input := &spectypes.ValidatorConsensusData{
+			Duty:    *duty,
+			Version: blindedVBlk.Version,
+			DataSSZ: byts,
+		}
+
+		r.measurements.StartConsensus()
+		if err := r.decide(ctx, logger, duty.Slot, input, r.ValCheck); err != nil {
+			return fmt.Errorf("qbft-decide: %w", err)
+		}
 	} else {
-		logFields = append(logFields, fields.FeeRecipient(feeRecipient[:]))
-	}
-	const eventMsg = "🧊 got beacon block proposal"
-	logger.Info(eventMsg, logFields...)
-	span.AddEvent(eventMsg, trace.WithAttributes(proposalTraceAttrs...))
+		// Non-leader path: start QBFT immediately so this operator can participate in
+		// Round 1 without delay, and fetch the block in the background so it is ready
+		// if a round change makes this operator the leader in a later round.
+		ch := make(chan asyncBlockFetchResult, 1)
+		r.asyncBlockFetch = ch
+		go r.fetchBlockAsync(ctx, logger, duty, fullSig, ch)
 
-	// Ensure we propose a blinded block in QBFT. If the beacon returned a full
-	// block, convert it to blinded form by swapping the execution payload with
-	// its header (+ cache the original block so we can submit it later).
-	// Consensus value carries the blinded block SSZ.
-
-	blindedVBlk, blindedMarshaler, err := blindutil.EnsureBlinded(vBlk)
-	if err != nil {
-		return fmt.Errorf("failed to blind full block: %w", err)
-	}
-
-	byts, err := blindedMarshaler.MarshalSSZ()
-	if err != nil {
-		return fmt.Errorf("could not marshal blinded beacon block: %w", err)
-	}
-
-	// Store the original block (we are only interested in full blocks) for later re-use
-	// in the post-consensus phase.
-	if !vBlk.Blinded {
-		r.cachedFullBlock = vBlk
-		r.cachedBlindedBlockSSZ = byts
-	}
-
-	input := &spectypes.ValidatorConsensusData{
-		Duty:    *duty,
-		Version: blindedVBlk.Version,
-		DataSSZ: byts,
-	}
-
-	r.measurements.StartConsensus()
-	if err := r.decide(ctx, logger, duty.Slot, input, r.ValCheck); err != nil {
-		return fmt.Errorf("qbft-decide: %w", err)
+		r.measurements.StartConsensus()
+		if err := r.decideAsync(ctx, logger, duty.Slot, r.ValCheck); err != nil {
+			return fmt.Errorf("qbft-decide: %w", err)
+		}
 	}
 
 	return nil
@@ -238,6 +251,30 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.SignedSSVMessage) error {
 	// Reuse the existing span instead of generating new one to keep tracing-data lightweight.
 	span := trace.SpanFromContext(ctx)
+
+	// If we started QBFT without a block (non-leader async path), check whether
+	// the background fetch has completed and update the QBFT instance's StartValue.
+	if r.asyncBlockFetch != nil {
+		select {
+		case res := <-r.asyncBlockFetch:
+			r.asyncBlockFetch = nil
+			if res.err != nil {
+				// Block fetch failed; log and continue. With a nil StartValue, the nil
+				// guard in round_change.go will prevent us from leading any round, which
+				// is the safest degraded mode.
+				logger.Warn("⚠️ background block fetch failed; operator cannot lead any round in this duty",
+					zap.Error(res.err))
+			} else {
+				r.cachedFullBlock = res.cachedFullBlock
+				r.cachedBlindedBlockSSZ = res.cachedBlindedSSZ
+				if inst := r.State.RunningInstance; inst != nil {
+					inst.StartValue = res.encodedInput
+				}
+			}
+		default:
+			// Block not ready yet; StartValue will be updated on a later call.
+		}
+	}
 
 	span.AddEvent("processing QBFT consensus msg")
 	decided, decidedValue, err := r.baseConsensusMsgProcessing(ctx, logger, r.ValCheck.CheckValue, signedMsg, &spectypes.ValidatorConsensusData{})
@@ -498,9 +535,12 @@ func (r *ProposerRunner) executeDuty(ctx context.Context, logger *zap.Logger, du
 		return nil
 	}
 
-	// reset the cached original block at the beginning of a new duty
+	// Reset per-duty state at the start of each new duty.
 	r.cachedFullBlock = nil
 	r.cachedBlindedBlockSSZ = nil
+	// Drop any pending async fetch from the previous duty. The goroutine (if still
+	// running) has its own channel reference and will send+exit without blocking.
+	r.asyncBlockFetch = nil
 
 	// sign partial randao
 	span.AddEvent("signing beacon object")
@@ -532,6 +572,69 @@ func (r *ProposerRunner) executeDuty(ctx context.Context, logger *zap.Logger, du
 	}
 
 	return nil
+}
+
+// fetchBlockAsync runs in a goroutine for non-Round-1 leaders: it fetches the beacon block
+// and sends the processed result to ch. The caller must pass ch explicitly (not use
+// r.asyncBlockFetch) so that a later StartNewDuty cannot create a send-on-nil-channel race.
+func (r *ProposerRunner) fetchBlockAsync(
+	ctx context.Context,
+	logger *zap.Logger,
+	duty *spectypes.ValidatorDuty,
+	fullSig []byte,
+	ch chan<- asyncBlockFetchResult,
+) {
+	start := time.Now()
+	vBlk, _, err := r.GetBeaconNode().GetBeaconBlock(ctx, duty.Slot, r.graffiti, fullSig)
+	if err != nil {
+		ch <- asyncBlockFetchResult{err: fmt.Errorf("get beacon block: %w", err)}
+		return
+	}
+
+	logFields, _ := proposalCommonFields(vBlk)
+	logFields = append(logFields, fields.Took(time.Since(start)))
+	if feeRecipient, err := vBlk.FeeRecipient(); err != nil {
+		logFields = append(logFields, zap.NamedError("feeRecipient_err", err))
+	} else {
+		logFields = append(logFields, fields.FeeRecipient(feeRecipient[:]))
+	}
+	logger.Info("🧊 got beacon block proposal (async)", logFields...)
+
+	blindedVBlk, blindedMarshaler, err := blindutil.EnsureBlinded(vBlk)
+	if err != nil {
+		ch <- asyncBlockFetchResult{err: fmt.Errorf("failed to blind full block: %w", err)}
+		return
+	}
+
+	byts, err := blindedMarshaler.MarshalSSZ()
+	if err != nil {
+		ch <- asyncBlockFetchResult{err: fmt.Errorf("could not marshal blinded beacon block: %w", err)}
+		return
+	}
+
+	input := &spectypes.ValidatorConsensusData{
+		Duty:    *duty,
+		Version: blindedVBlk.Version,
+		DataSSZ: byts,
+	}
+	encodedInput, err := input.Encode()
+	if err != nil {
+		ch <- asyncBlockFetchResult{err: fmt.Errorf("could not encode consensus data: %w", err)}
+		return
+	}
+
+	var cachedFullBlock *api.VersionedProposal
+	var cachedBlindedSSZ []byte
+	if !vBlk.Blinded {
+		cachedFullBlock = vBlk
+		cachedBlindedSSZ = byts
+	}
+
+	ch <- asyncBlockFetchResult{
+		encodedInput:     encodedInput,
+		cachedFullBlock:  cachedFullBlock,
+		cachedBlindedSSZ: cachedBlindedSSZ,
+	}
 }
 
 func (r *ProposerRunner) remainingProposerDelay(slot phase0.Slot, now time.Time) time.Duration {

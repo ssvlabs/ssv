@@ -577,6 +577,34 @@ func (b *BaseRunner) didDecideCorrectly(prevDecided bool, signedMessage *spectyp
 	return true, nil
 }
 
+// decideAsync starts a QBFT instance without an initial consensus value.
+// It is used by non-Round-1 leaders so the message-processing loop is not
+// blocked while the beacon block is being fetched. The caller must update
+// State.RunningInstance.StartValue before the operator leads any round.
+func (b *BaseRunner) decideAsync(
+	ctx context.Context,
+	logger *zap.Logger,
+	slot phase0.Slot,
+	valueChecker ssv.ValueChecker,
+) error {
+	newInstance, err := b.QBFTController.StartNewInstanceAsync(
+		ctx,
+		logger,
+		specqbft.Height(slot),
+		valueChecker,
+		b.qbftRoundTimerF,
+	)
+	if err != nil {
+		return fmt.Errorf("could not start new QBFT instance: %w", err)
+	}
+	if newInstance == nil {
+		return fmt.Errorf("could not start new QBFT instance: instance is nil")
+	}
+
+	b.State.RunningInstance = newInstance
+	return nil
+}
+
 func (b *BaseRunner) decide(
 	ctx context.Context,
 	logger *zap.Logger,

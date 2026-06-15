@@ -2,6 +2,7 @@ package runner
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -451,6 +452,102 @@ func processPostConsensusQuorum(t *testing.T, runner *ProposerRunner, keySet *sp
 		msg := spectestingutils.PostConsensusProposerMsgV(keySet.Shares[operatorID], operatorID, version)
 		require.NoError(t, runner.ProcessPostConsensus(ctx, logger, msg))
 	}
+}
+
+// TestProposerRunnerProcessConsensusAppliesAsyncBlock verifies that when asyncBlockFetch
+// is set (non-leader async path), the first ProcessConsensus call drains the channel and
+// updates the QBFT instance's StartValue before processing the message.
+func TestProposerRunnerProcessConsensusAppliesAsyncBlock(t *testing.T) {
+	t.Parallel()
+
+	version := spec.DataVersionDeneb
+	duty := spectestingutils.TestingProposerDutyV(version)
+	beacon := newProposerTestBeacon(nil)
+	runner, keySet, _ := newProposerRunnerForTest(t, beacon, &stubDoppelganger{canSign: true}, 0, nil)
+
+	require.NoError(t, runner.StartNewDuty(context.Background(), zap.NewNop(), duty, keySet.Threshold))
+
+	consensusData := spectestingutils.TestProposerBlindedBlockConsensusDataV(version)
+	encodedInput, err := consensusData.Encode()
+	require.NoError(t, err)
+
+	// Start QBFT with a valid block first (the normal leader path), then override
+	// StartValue=nil to mimic the state the async non-leader path would leave.
+	runner.measurements.StartConsensus()
+	require.NoError(t, runner.decide(context.Background(), zap.NewNop(), duty.Slot, consensusData, runner.ValCheck))
+	runner.State.RunningInstance.StartValue = nil
+
+	// Queue the async fetch result that ProcessConsensus should pick up.
+	ch := make(chan asyncBlockFetchResult, 1)
+	ch <- asyncBlockFetchResult{encodedInput: encodedInput}
+	runner.asyncBlockFetch = ch
+
+	// The very first ProcessConsensus call must drain the channel before doing QBFT work.
+	decidedMsgs := spectestingutils.SSVDecidingMsgsForHeight(
+		consensusData,
+		runner.QBFTController.Identifier,
+		specqbft.Height(duty.Slot),
+		keySet,
+	)
+	require.NoError(t, runner.ProcessConsensus(context.Background(), zap.NewNop(), decidedMsgs[0]))
+
+	require.Equal(t, encodedInput, runner.State.RunningInstance.StartValue)
+	require.Nil(t, runner.asyncBlockFetch)
+	require.Equal(t, 0, beacon.getCalls)
+}
+
+// TestProposerRunnerProcessConsensusLogsAsyncBlockFetchError verifies that a failed
+// async fetch is surfaced as a warning (not a hard error) and the channel is cleared.
+func TestProposerRunnerProcessConsensusLogsAsyncBlockFetchError(t *testing.T) {
+	t.Parallel()
+
+	version := spec.DataVersionDeneb
+	duty := spectestingutils.TestingProposerDutyV(version)
+	beacon := newProposerTestBeacon(nil)
+	runner, keySet, _ := newProposerRunnerForTest(t, beacon, &stubDoppelganger{canSign: true}, 0, nil)
+
+	require.NoError(t, runner.StartNewDuty(context.Background(), zap.NewNop(), duty, keySet.Threshold))
+
+	consensusData := spectestingutils.TestProposerBlindedBlockConsensusDataV(version)
+
+	runner.measurements.StartConsensus()
+	require.NoError(t, runner.decide(context.Background(), zap.NewNop(), duty.Slot, consensusData, runner.ValCheck))
+
+	// Simulate an async fetch failure.
+	ch := make(chan asyncBlockFetchResult, 1)
+	ch <- asyncBlockFetchResult{err: fmt.Errorf("beacon node unreachable")}
+	runner.asyncBlockFetch = ch
+
+	decidedMsgs := spectestingutils.SSVDecidingMsgsForHeight(
+		consensusData,
+		runner.QBFTController.Identifier,
+		specqbft.Height(duty.Slot),
+		keySet,
+	)
+	// ProcessConsensus must succeed even on a fetch error (degraded non-leader mode).
+	require.NoError(t, runner.ProcessConsensus(context.Background(), zap.NewNop(), decidedMsgs[0]))
+
+	require.Nil(t, runner.asyncBlockFetch) // channel was consumed
+	require.Equal(t, 0, beacon.getCalls)
+}
+
+// TestProposerRunnerStartNewDutyClearsAsyncBlockFetch verifies that StartNewDuty clears
+// any pending async block fetch from the previous duty cycle.
+func TestProposerRunnerStartNewDutyClearsAsyncBlockFetch(t *testing.T) {
+	t.Parallel()
+
+	version := spec.DataVersionDeneb
+	duty := spectestingutils.TestingProposerDutyV(version)
+	beacon := newProposerTestBeacon(nil)
+	runner, keySet, _ := newProposerRunnerForTest(t, beacon, &stubDoppelganger{canSign: true}, 0, nil)
+
+	// Simulate a channel left over from a previous duty.
+	ch := make(chan asyncBlockFetchResult, 1)
+	runner.asyncBlockFetch = ch
+
+	require.NoError(t, runner.StartNewDuty(context.Background(), zap.NewNop(), duty, keySet.Threshold))
+
+	require.Nil(t, runner.asyncBlockFetch)
 }
 
 func countPartialSignatureBroadcastsByType(

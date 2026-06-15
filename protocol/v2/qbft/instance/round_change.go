@@ -184,6 +184,10 @@ func (i *Instance) hasReceivedProposalJustificationForLeadingRound(
 		valueToPropose := i.StartValue
 		if containerRoundChangeMessage.QBFTMessage.RoundChangePrepared() {
 			valueToPropose = containerRoundChangeMessage.SignedMessage.FullData
+		} else if len(i.StartValue) == 0 {
+			// StartValue is not yet available (async block fetch still in progress).
+			// Skip leading this round change; we will try on the next round.
+			continue
 		}
 
 		roundChangeSignedMessagesJustification, _ := containerRoundChangeMessage.QBFTMessage.GetRoundChangeJustifications() // no need to check error, checked on isValidRoundChange
