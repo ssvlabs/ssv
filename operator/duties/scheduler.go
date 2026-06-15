@@ -171,12 +171,14 @@ func NewScheduler(logger *zap.Logger, opts *SchedulerOptions) *Scheduler {
 
 	// Proposer, SyncCommittee, and VoluntaryExit are needed in all modes.
 	// Proposer and SyncCommittee populate dutyStore entries consulted by message validation on all
-	// node types. VoluntaryExit populates the per-(slot,pk) duty count also consulted by validation;
-	// in exporter mode all exit descriptors have OwnValidator=false so no exit is ever executed.
+	// node types. VoluntaryExit populates the per-(slot,pk) duty count also consulted by validation.
+	// In exporter mode, exit descriptors always have OwnValidator=false (no owned validators), so
+	// the handler never queues exits for execution; VoluntaryExitHandler.processExecution also
+	// guards explicitly against execution in exporter mode as a second line of defense.
 	s.dutyHandlers = append(s.dutyHandlers,
 		NewProposerHandler(dutyStore.Proposer, opts.ExporterMode),
 		NewSyncCommitteeHandler(dutyStore.SyncCommittee, opts.ExporterMode),
-		NewVoluntaryExitHandler(dutyStore.VoluntaryExit, opts.ValidatorExitCh),
+		NewVoluntaryExitHandler(dutyStore.VoluntaryExit, opts.ValidatorExitCh, opts.ExporterMode),
 	)
 
 	// Attester is needed for duty execution (operator) and duty tracing (archive exporter).

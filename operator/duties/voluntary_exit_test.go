@@ -32,7 +32,7 @@ func TestVoluntaryExitHandler_HandleDuties(t *testing.T) {
 	t.Parallel()
 
 	exitCh := make(chan ExitDescriptor)
-	handler := NewVoluntaryExitHandler(dutystore.NewVoluntaryExit(), exitCh)
+	handler := NewVoluntaryExitHandler(dutystore.NewVoluntaryExit(), exitCh, false)
 
 	// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
 	// This deadline needs to be large enough to not prevent tests from executing their intended flow.
@@ -170,7 +170,7 @@ func TestVoluntaryExitHandler_HandleDuties_LateObservedExitWaitsPastFollowDistan
 	t.Parallel()
 
 	exitCh := make(chan ExitDescriptor)
-	handler := NewVoluntaryExitHandler(dutystore.NewVoluntaryExit(), exitCh)
+	handler := NewVoluntaryExitHandler(dutystore.NewVoluntaryExit(), exitCh, false)
 
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 

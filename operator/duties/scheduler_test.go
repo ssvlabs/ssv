@@ -746,8 +746,27 @@ func TestNewScheduler_HandlerRegistration(t *testing.T) {
 			for _, h := range s.dutyHandlers {
 				got = append(got, h.Name())
 			}
-
 			require.ElementsMatch(t, tc.wantHandlers, got)
+
+			// Verify exporterMode propagates into each handler that carries the field.
+			// This locks down the wiring so that a future change cannot accidentally give
+			// exporter handlers a real executor path.
+			//
+			// Scheduler.ExecuteDuties already guards against exporter-mode execution, but
+			// individual handlers with their own exporterMode field provide a second line of
+			// defense (e.g. VoluntaryExitHandler.processExecution's explicit guard).
+			require.Equal(t, tc.exporterMode, s.exporterMode)
+
+			for _, h := range s.dutyHandlers {
+				switch h := h.(type) {
+				case *ProposerHandler:
+					require.Equal(t, tc.exporterMode, h.exporterMode, "ProposerHandler.exporterMode")
+				case *SyncCommitteeHandler:
+					require.Equal(t, tc.exporterMode, h.exporterMode, "SyncCommitteeHandler.exporterMode")
+				case *VoluntaryExitHandler:
+					require.Equal(t, tc.exporterMode, h.exporterMode, "VoluntaryExitHandler.exporterMode")
+				}
+			}
 		})
 	}
 }
