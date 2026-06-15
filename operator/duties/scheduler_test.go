@@ -742,7 +742,7 @@ func TestNewScheduler_HandlerRegistration(t *testing.T) {
 				},
 			})
 
-			var got []string
+			got := make([]string, 0, len(s.dutyHandlers))
 			for _, h := range s.dutyHandlers {
 				got = append(got, h.Name())
 			}
