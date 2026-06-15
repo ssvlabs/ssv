@@ -78,8 +78,8 @@ type Node struct {
 	exporterRead *exporter2.Exporter
 }
 
-func shouldRunDutyScheduler(exporterOpts exporter.Options) bool {
-	return !exporterOpts.Enabled || exporterOpts.Mode == exporter.ModeArchive
+func shouldRunDutyScheduler(_ exporter.Options) bool {
+	return true
 }
 
 // New is the constructor of Node
@@ -105,8 +105,8 @@ func New(logger *zap.Logger, opts Options, exporterOpts exporter.Options, slotTi
 
 	var dutyScheduler *duties.Scheduler
 	if shouldRunDutyScheduler(exporterOpts) {
-		// Prepare scheduler wiring; in exporter archive mode we swap to AllShares provider,
-		// a prefetching beacon adapter, and a no-op executor.
+		// Prepare scheduler wiring; in exporter mode (both standard and archive) swap to AllShares
+		// provider, a prefetching beacon adapter, and a no-op executor.
 		schedulerBeacon := duties.BeaconNode(opts.BeaconNode)
 		validatorProvider := duties.ValidatorProvider(selfValidatorStore)
 		dutyExecutor := duties.DutyExecutor(opts.ValidatorController)
@@ -132,6 +132,7 @@ func New(logger *zap.Logger, opts Options, exporterOpts exporter.Options, slotTi
 			SlotTickerProvider:      slotTickerProvider,
 			P2PNetwork:              opts.P2PNetwork,
 			ExporterMode:            exporterOpts.Enabled,
+			ArchiveMode:             exporterOpts.Mode == exporter.ModeArchive,
 		})
 	}
 
@@ -179,8 +180,6 @@ func (n *Node) Start(ctx context.Context) error {
 		if err := n.dutyScheduler.Start(ctx); err != nil {
 			return fmt.Errorf("failed to run duty scheduler: %w", err)
 		}
-	} else {
-		n.logger.Info("exporter standard mode: skipping duty scheduler")
 	}
 
 	n.validatorsCtrl.StartNetworkHandlers()

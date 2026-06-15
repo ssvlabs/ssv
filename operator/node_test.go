@@ -27,7 +27,7 @@ func TestShouldRunDutyScheduler(t *testing.T) {
 				Enabled: true,
 				Mode:    exporter.ModeStandard,
 			},
-			expected: false,
+			expected: true,
 		},
 		{
 			name: "exporter archive",
