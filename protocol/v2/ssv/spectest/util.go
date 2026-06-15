@@ -103,10 +103,17 @@ func normalizeExpectedProposerStartValues(pr *runner.ProposerRunner) {
 	if state := pr.State; state != nil {
 		state.DecidedValue = normalizeProposerConsensusValue(state.DecidedValue)
 		if pr.HasStartedQBFTInstance() {
-			state.RunningInstance.StartValue = normalizeProposerConsensusValue(state.RunningInstance.StartValue)
-			if state.RunningInstance.State != nil {
-				state.RunningInstance.State.LastPreparedValue = normalizeProposerConsensusValue(state.RunningInstance.State.LastPreparedValue)
-				state.RunningInstance.State.DecidedValue = normalizeProposerConsensusValue(state.RunningInstance.State.DecidedValue)
+			inst := state.RunningInstance
+			inst.StartValue = normalizeProposerConsensusValue(inst.StartValue)
+			// Non-Round-1 leaders fetch the block asynchronously: StartValue is nil until
+			// ProcessConsensus drains the result channel. Nil it out in the golden-file runner
+			// as well so both sides agree when comparing post-pre-consensus state.
+			if pr.QBFTController != nil && !pr.QBFTController.IsRound1Leader(inst.State.Height) {
+				inst.StartValue = nil
+			}
+			if inst.State != nil {
+				inst.State.LastPreparedValue = normalizeProposerConsensusValue(inst.State.LastPreparedValue)
+				inst.State.DecidedValue = normalizeProposerConsensusValue(inst.State.DecidedValue)
 			}
 		}
 	}
@@ -119,6 +126,10 @@ func normalizeExpectedProposerStartValues(pr *runner.ProposerRunner) {
 		}
 		inst.StartValue = normalizeProposerConsensusValue(inst.StartValue)
 		if inst.State != nil {
+			// Same non-leader nil-out for stored instances.
+			if !pr.QBFTController.IsRound1Leader(inst.State.Height) {
+				inst.StartValue = nil
+			}
 			inst.State.LastPreparedValue = normalizeProposerConsensusValue(inst.State.LastPreparedValue)
 			inst.State.DecidedValue = normalizeProposerConsensusValue(inst.State.DecidedValue)
 		}
