@@ -65,6 +65,70 @@ func NewController(
 	}
 }
 
+// IsRound1Leader returns true if this operator is the proposer for Round 1 at the given height.
+// The result is deterministic: it depends only on the committee composition and the height.
+func (c *Controller) IsRound1Leader(height specqbft.Height) bool {
+	state := &specqbft.State{
+		Height:          height,
+		CommitteeMember: c.CommitteeMember,
+	}
+	return qbft.RoundRobinProposer(state, specqbft.FirstRound) == c.CommitteeMember.OperatorID
+}
+
+// StartNewInstanceAsync starts a new QBFT instance without an initial consensus value.
+// It is intended for operators that are not the Round-1 leader: they can participate in
+// QBFT immediately while the beacon block is fetched in the background.
+// The caller must write a valid StartValue to the returned instance before it needs to
+// lead any round.
+func (c *Controller) StartNewInstanceAsync(
+	ctx context.Context,
+	logger *zap.Logger,
+	height specqbft.Height,
+	valueChecker ssv.ValueChecker,
+	roundTimerF ssv.QBFTRoundTimerF,
+) (*instance.Instance, error) {
+	ctx, span := tracer.Start(ctx,
+		observability.InstrumentName(observabilityNamespace, "qbft.controller.start"),
+		trace.WithAttributes(observability.BeaconSlotAttribute(phase0.Slot(height))))
+	defer span.End()
+
+	if height < c.LatestInstanceHeight {
+		return nil, spectypes.WrapError(spectypes.StartInstanceErrorCode, traces.Errorf(
+			span,
+			"attempting to start an instance with a past height %d, current instance height %d",
+			height,
+			c.LatestInstanceHeight,
+		),
+		)
+	}
+
+	if c.RecentInstances.FindInstance(height) != nil {
+		return nil, spectypes.WrapError(spectypes.InstanceAlreadyRunningErrorCode, traces.Errorf(
+			span,
+			"instance with height %d already running",
+			height,
+		))
+	}
+
+	c.markRecentInstancesIrrelevant()
+	newInstance := instance.NewInstance(
+		ctx,
+		logger,
+		c.GetConfig(),
+		c.CommitteeMember,
+		c.Identifier,
+		height,
+		c.OperatorSigner,
+		roundTimerF,
+	)
+	newInstance.Start(ctx, nil, valueChecker)
+	c.RecentInstances.addNewInstance(newInstance)
+	c.LatestInstanceHeight = height
+
+	span.SetStatus(codes.Ok, "")
+	return newInstance, nil
+}
+
 // StartNewInstance will attempt to start a new QBFT instance.
 func (c *Controller) StartNewInstance(
 	ctx context.Context,
