@@ -11,10 +11,12 @@ import (
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
+	"go.uber.org/zap"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/eth/executionclient"
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 )
 
@@ -221,6 +223,37 @@ func TestVoluntaryExitHandler_HandleDuties_LateObservedExitWaitsPastFollowDistan
 	close(exitCh)
 	require.NoError(t, scheduler.Wait())
 	ticker.WaitShutdown()
+}
+
+// TestVoluntaryExitHandler_ExporterModeGuard verifies the explicit guard in processExecution:
+// even when an item reaches the execution gate, an exporter-mode handler must never call
+// ExecuteDuties. This guards against an upstream invariant break (OwnValidator=true in exporter mode).
+func TestVoluntaryExitHandler_ExporterModeGuard(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+
+	exitCh := make(chan ExitDescriptor)
+	handler := NewVoluntaryExitHandler(dutystore.NewVoluntaryExit(), exitCh, true)
+
+	mockExecutor := NewMockDutiesExecutor(ctrl)
+
+	handler.logger = zap.NewNop()
+	handler.beaconConfig = networkconfig.TestNetwork.Beacon
+	handler.dutiesExecutor = mockExecutor
+
+	// Push a queued exit whose earliestExecutionSlot has already passed.
+	const slot = phase0.Slot(100)
+	handler.dutyQueue = []*queuedExit{{
+		duty: &spectypes.ValidatorDuty{
+			Type: spectypes.BNRoleVoluntaryExit,
+		},
+		earliestExecutionSlot: slot - 1,
+	}}
+
+	// If the guard is absent, processExecution calls ExecuteDuties and gomock fails the test
+	// with an unexpected call. The guard's explicit return makes this a no-op for exporters.
+	handler.processExecution(context.Background(), slot)
 }
 
 func create1to1BlockSlotMapping(scheduler *Scheduler) *atomic.Uint64 {
