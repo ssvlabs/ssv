@@ -14,6 +14,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 
 	hexporter "github.com/ssvlabs/ssv/api/handlers/exporter"
 	hnode "github.com/ssvlabs/ssv/api/handlers/node"
@@ -486,33 +487,35 @@ func (n *node) Close() error {
 	return errors.Join(errs...)
 }
 
-// start launches the node's long-lived services (metrics + SSV API servers, the health
-// prober, contract-event sync) and blocks on operatorNode.Start until the node's ctx is canceled.
-// NOTE: the metrics/SSV-API server goroutines call logger.Fatal on failure — crashing the
-// process and bypassing Close() — a candidate for errgroup-based coordinated shutdown.
+// start launches the node's long-lived services and blocks until the node's ctx is canceled
+// or any service fails. All services run under a shared errgroup so the first failure cancels
+// the rest and propagates to the single logger.Fatal in start_node.go.
 func (n *node) start() error {
+	g, gctx := errgroup.WithContext(n.ctx)
+
 	if n.cfg.MetricsAPIPort > 0 {
 		metricsHandler := metrics.NewHandler(n.logger, n.db, n.cfg.EnableProfile, n.operatorNode)
-		_, metricsServeErr, err := metricsHandler.Start(n.ctx, http.NewServeMux(), fmt.Sprintf(":%d", n.cfg.MetricsAPIPort))
+		_, metricsServeErr, err := metricsHandler.Start(gctx, http.NewServeMux(), fmt.Sprintf(":%d", n.cfg.MetricsAPIPort))
 		if err != nil {
-			n.logger.Fatal("failed to start metrics server", zap.Error(err))
+			return fmt.Errorf("failed to start metrics server: %w", err)
 		}
-		go func() {
+		g.Go(func() error {
 			if err := <-metricsServeErr; err != nil {
-				n.logger.Fatal("metrics server serve loop exited", zap.Error(err))
+				return fmt.Errorf("metrics server stopped: %w", err)
 			}
-		}()
+			return nil
+		})
 	}
 
 	healthProber := hprobe.NewHealthProber(n.logger)
 	healthProber.AddComponent(clComponentName, n.consensusClient, proberHealthcheckTimeout, proberRetriesMax, proberRetryDelay)
 	healthProber.AddComponent(elComponentName, n.executionClient, proberHealthcheckTimeout, proberRetriesMax, proberRetryDelay)
-	if err := ensureComponentsHealthy(n.ctx, n.logger, healthProber); err != nil {
+	if err := ensureComponentsHealthy(gctx, n.logger, healthProber); err != nil {
 		return err
 	}
 
-	eventSyncer, err := syncContractEvents(
-		n.ctx,
+	eventSyncer, ongoingSync, err := syncContractEvents(
+		gctx,
 		n.logger,
 		n.cfg,
 		n.executionClient,
@@ -529,15 +532,18 @@ func (n *node) start() error {
 	if len(n.cfg.LocalEventsPath) == 0 {
 		healthProber.AddComponent(eventSyncerComponentName, eventSyncer, proberHealthcheckTimeout, proberRetriesMax, proberRetryDelay)
 	}
+	if ongoingSync != nil {
+		g.Go(ongoingSync)
+	}
 
-	go startHealthProber(n.ctx, n.logger, healthProber)
+	g.Go(func() error { return startHealthProber(gctx, n.logger, healthProber) })
 
-	if _, err := n.metadataSyncer.SyncAll(n.ctx); err != nil {
+	if _, err := n.metadataSyncer.SyncAll(gctx); err != nil {
 		return fmt.Errorf("failed to sync metadata on startup: %w", err)
 	}
 
 	if n.usingSSVSigner {
-		if err := ensureNoMissingKeys(n.ctx, n.nodeStorage, n.operatorDataStore, n.ssvSignerClient); err != nil {
+		if err := ensureNoMissingKeys(gctx, n.nodeStorage, n.operatorDataStore, n.ssvSignerClient); err != nil {
 			return err
 		}
 	}
@@ -599,21 +605,26 @@ func (n *node) start() error {
 			hexporter.NewExporter(n.logger, n.storageMap, n.collector, n.nodeStorage.ValidatorStore()),
 			n.mode == modeExporterArchive,
 		)
-		_, apiServeErr, err := apiServer.Start(n.ctx)
+		_, apiServeErr, err := apiServer.Start(gctx)
 		if err != nil {
-			n.logger.Fatal("failed to start API server", zap.Error(err))
+			return fmt.Errorf("failed to start API server: %w", err)
 		}
-		go func() {
+		g.Go(func() error {
 			if err := <-apiServeErr; err != nil {
-				n.logger.Fatal("API server serve loop exited", zap.Error(err))
+				return fmt.Errorf("API server stopped: %w", err)
 			}
-		}()
-	}
-	if err := n.operatorNode.Start(n.ctx); err != nil {
-		return fmt.Errorf("failed to start SSV node: %w", err)
+			return nil
+		})
 	}
 
-	return nil
+	g.Go(func() error {
+		if err := n.operatorNode.Start(gctx); err != nil {
+			return fmt.Errorf("failed to start SSV node: %w", err)
+		}
+		return nil
+	})
+
+	return g.Wait()
 }
 
 // startNetwork wires validator stats into the p2p layer, then sets up + starts the network and
