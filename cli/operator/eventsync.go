@@ -20,7 +20,9 @@ import (
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
-// syncContractEvents blocks until historical events are synced and then spawns a goroutine syncing ongoing events.
+// syncContractEvents blocks until historical events are synced and returns the EventSyncer.
+// It also returns a start-func for ongoing event sync (nil if LocalEventsPath is set),
+// which the caller must run (e.g. via errgroup.Go) to keep the node current with the contract.
 func syncContractEvents(
 	ctx context.Context,
 	logger *zap.Logger,
@@ -32,15 +34,15 @@ func syncContractEvents(
 	operatorDataStore operatordatastore.OperatorDataStore,
 	keyManager ekm.KeyManager,
 	doppelgangerHandler eventhandler.DoppelgangerProvider,
-) (*eventsyncer.EventSyncer, error) {
+) (*eventsyncer.EventSyncer, func() error, error) {
 	eventFilterer, err := executionClient.Filterer()
 	if err != nil {
-		return nil, fmt.Errorf("failed to set up event filterer: %w", err)
+		return nil, nil, fmt.Errorf("failed to set up event filterer: %w", err)
 	}
 
 	eventParser, err := eventparser.New(eventFilterer)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create event parser: %w", err)
+		return nil, nil, fmt.Errorf("failed to create event parser: %w", err)
 	}
 
 	eventHandler, err := eventhandler.New(
@@ -55,7 +57,7 @@ func syncContractEvents(
 		eventhandler.WithLogger(logger),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to setup event data handler: %w", err)
+		return nil, nil, fmt.Errorf("failed to setup event data handler: %w", err)
 	}
 
 	eventSyncer := eventsyncer.New(
@@ -67,26 +69,28 @@ func syncContractEvents(
 
 	fromBlock, found, err := nodeStorage.GetLastProcessedBlock(nil)
 	if err != nil {
-		return nil, fmt.Errorf("syncing registry contract events failed, could not get last processed block: %w", err)
+		return nil, nil, fmt.Errorf("syncing registry contract events failed, could not get last processed block: %w", err)
 	}
 	if !found {
 		fromBlock = networkConfig.RegistrySyncOffset
 	} else if fromBlock == nil {
-		return nil, fmt.Errorf("syncing registry contract events failed, last processed block is nil")
+		return nil, nil, fmt.Errorf("syncing registry contract events failed, last processed block is nil")
 	} else {
 		// Start syncing from the next block.
 		fromBlock = new(big.Int).SetUint64(fromBlock.Uint64() + 1)
 	}
 
+	var ongoingSync func() error
+
 	// load & parse local events yaml if exists, otherwise sync from contract
 	if len(cfg.LocalEventsPath) != 0 {
 		localEvents, err := localevents.Load(cfg.LocalEventsPath)
 		if err != nil {
-			return nil, fmt.Errorf("failed to load local events: %w", err)
+			return nil, nil, fmt.Errorf("failed to load local events: %w", err)
 		}
 
 		if err := eventHandler.HandleLocalEvents(ctx, localEvents); err != nil {
-			return nil, fmt.Errorf("error occurred while running event data handler: %w", err)
+			return nil, nil, fmt.Errorf("error occurred while running event data handler: %w", err)
 		}
 	} else {
 		// Sync historical registry events.
@@ -106,7 +110,7 @@ func syncContractEvents(
 			)
 			fromBlock = new(big.Int).SetUint64(lastProcessedBlock + 1)
 		default:
-			return nil, fmt.Errorf("failed to sync historical registry events: %w", err)
+			return nil, nil, fmt.Errorf("failed to sync historical registry events: %w", err)
 		}
 
 		// Print registry stats.
@@ -137,19 +141,18 @@ func syncContractEvents(
 			zap.Int("my_validators", operatorValidators),
 		)
 
-		// Sync ongoing registry events in the background. Crash if it stops: the node can't operate
-		// without staying current with Ethereum events, and until reorg handling exists, restarting
-		// from persisted state is safer than continuing on possibly-incorrect state.
-		go func() {
-			err := eventSyncer.SyncOngoing(ctx, fromBlock.Uint64())
+		// Return a start-func for ongoing event sync. The caller (start()) registers it with errgroup
+		// so a failure propagates as a clean error rather than a Fatal. The node can't operate without
+		// staying current with Ethereum events, so any non-canceled failure exits the process.
+		ongoingFromBlock := fromBlock.Uint64()
+		ongoingSync = func() error {
+			err := eventSyncer.SyncOngoing(ctx, ongoingFromBlock)
 			if err != nil && !errors.Is(err, context.Canceled) {
-				logger.Fatal("failed syncing ongoing registry events",
-					zap.Uint64("last_processed_block", lastProcessedBlock),
-					zap.Error(err),
-				)
+				return fmt.Errorf("failed syncing ongoing registry events (from_block=%d): %w", ongoingFromBlock, err)
 			}
-		}()
+			return nil
+		}
 	}
 
-	return eventSyncer, nil
+	return eventSyncer, ongoingSync, nil
 }
