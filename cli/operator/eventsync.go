@@ -147,7 +147,7 @@ func syncContractEvents(
 		ongoingFromBlock := fromBlock.Uint64()
 		ongoingSync = func() error {
 			err := eventSyncer.SyncOngoing(ctx, ongoingFromBlock)
-			if err != nil && !errors.Is(err, context.Canceled) {
+			if err != nil && ctx.Err() == nil {
 				return fmt.Errorf("failed syncing ongoing registry events (from_block=%d): %w", ongoingFromBlock, err)
 			}
 			return nil

@@ -39,3 +39,5 @@ ignore:
   - "api/types.go"
   - "beacon/goclient/types.go"
   - "cli/operator/generate_doc.go"
+  - "cli/operator/node.go"
+  - "cli/operator/eventsync.go"

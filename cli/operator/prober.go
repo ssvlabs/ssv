@@ -52,6 +52,9 @@ func startHealthProber(ctx context.Context, logger *zap.Logger, p *hprobe.Health
 		cancel()
 		logger.Debug("health-prober tick: probing all components done")
 		if err != nil {
+			if ctx.Err() != nil {
+				return nil // ctx cancelled (clean shutdown), not a real probe failure
+			}
 			return fmt.Errorf("%s: %w", componentsUnhealthyErrorMsg, err)
 		}
 
