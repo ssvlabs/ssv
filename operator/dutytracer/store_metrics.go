@@ -47,6 +47,14 @@ func (d *DutyTraceStoreMetrics) SaveCommitteeDutyLink(slot phase0.Slot, index ph
 	return d.Store.SaveCommitteeDutyLink(slot, index, id)
 }
 
+func (d *DutyTraceStoreMetrics) PruneSlot(slot phase0.Slot) error {
+	start := time.Now()
+	defer func() {
+		record("prune", "prune_slot", start)
+	}()
+	return d.Store.PruneSlot(slot)
+}
+
 func (d *DutyTraceStoreMetrics) GetCommitteeDutyLink(slot phase0.Slot, index phase0.ValidatorIndex) (spectypes.CommitteeID, error) {
 	start := time.Now()
 	defer func() {

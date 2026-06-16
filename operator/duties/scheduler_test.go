@@ -700,29 +700,19 @@ func TestNewScheduler_HandlerRegistration(t *testing.T) {
 	tests := []struct {
 		name         string
 		exporterMode bool
-		archiveMode  bool
 		wantHandlers []string
 	}{
 		{
 			name:         "operator mode",
 			exporterMode: false,
-			archiveMode:  false,
 			wantHandlers: []string{"PROPOSER", "SYNC_COMMITTEE", "VOLUNTARY_EXIT", "ATTESTER", "CLUSTER", "VALIDATOR_REGISTRATION"},
 		},
 		{
-			name:         "standard exporter",
+			name:         "exporter mode",
 			exporterMode: true,
-			archiveMode:  false,
-			// VoluntaryExit is included so the dutyStore is populated for message validation;
-			// Attester is excluded because the standard exporter does not trace duties.
-			wantHandlers: []string{"PROPOSER", "SYNC_COMMITTEE", "VOLUNTARY_EXIT"},
-		},
-		{
-			name:         "archive exporter",
-			exporterMode: true,
-			archiveMode:  true,
-			// Archive exporter needs Attester for full duty tracing but still skips
-			// execution-only handlers (CLUSTER, VALIDATOR_REGISTRATION).
+			// Exporters run full duty tracing: Proposer/SyncCommittee/VoluntaryExit populate the
+			// stores message validation consults, and Attester is needed for duty tracing. Only the
+			// execution-only handlers (CLUSTER, VALIDATOR_REGISTRATION) are skipped.
 			wantHandlers: []string{"PROPOSER", "SYNC_COMMITTEE", "VOLUNTARY_EXIT", "ATTESTER"},
 		},
 	}
@@ -736,7 +726,6 @@ func TestNewScheduler_HandlerRegistration(t *testing.T) {
 
 			s := NewScheduler(zap.NewNop(), &SchedulerOptions{
 				ExporterMode: tc.exporterMode,
-				ArchiveMode:  tc.archiveMode,
 				SlotTickerProvider: func() slotticker.SlotTicker {
 					return NewMockSlotTicker(ctx)
 				},

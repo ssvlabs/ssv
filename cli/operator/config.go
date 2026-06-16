@@ -68,9 +68,8 @@ const maxSafeProposerDelay = 1000 * time.Millisecond
 type nodeMode int
 
 const (
-	modeOperator         nodeMode = iota // not an exporter
-	modeExporterStandard                 // exporter, standard tracing
-	modeExporterArchive                  // exporter, archive tracing (pre-consensus + consensus)
+	modeOperator nodeMode = iota // not an exporter
+	modeExporter                 // exporter (full duty tracing: pre-consensus + consensus + post-consensus)
 )
 
 // resolved carries config-derived state computed by resolveAndValidate (not operator-provided):
@@ -136,11 +135,7 @@ func (c *config) resolveAndValidate(logger *zap.Logger) (resolved, error) {
 
 	// Resolve the operating mode last so a doubly-misconfigured node still surfaces the signing
 	// or proposer-delay error first.
-	m, err := resolveMode(c.ExporterOptions)
-	if err != nil {
-		return resolved{}, err
-	}
-	res.mode = m
+	res.mode = resolveMode(c.ExporterOptions)
 
 	return res, nil
 }
@@ -218,21 +213,14 @@ func (c *config) resolveSigning() (resolved, error) {
 	return res, nil
 }
 
-// resolveMode derives the node's operating mode from the exporter options, rejecting an
-// unrecognized EXPORTER_MODE up front (fail-fast). A non-exporter node is always modeOperator,
-// regardless of the (then-irrelevant) EXPORTER_MODE.
-func resolveMode(opts exporter.Options) (nodeMode, error) {
+// resolveMode derives the node's operating mode from the exporter options. An enabled exporter
+// always runs in full duty-tracing mode; a non-exporter node is modeOperator. (The legacy
+// standard/archive EXPORTER_MODE distinction was removed — exporters are always full tracers.)
+func resolveMode(opts exporter.Options) nodeMode {
 	if !opts.Enabled {
-		return modeOperator, nil
+		return modeOperator
 	}
-	switch opts.Mode {
-	case exporter.ModeStandard:
-		return modeExporterStandard, nil
-	case exporter.ModeArchive:
-		return modeExporterArchive, nil
-	default:
-		return modeOperator, fmt.Errorf("invalid exporter mode %q (must be %q or %q)", opts.Mode, exporter.ModeStandard, exporter.ModeArchive)
-	}
+	return modeExporter
 }
 
 // warnExporterSigning warns when signing configuration is provided in exporter mode (where it

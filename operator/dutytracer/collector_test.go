@@ -1817,10 +1817,44 @@ type mockDutyTraceStore struct {
 	committeeDutyTrace      *exporter.CommitteeDutyTrace
 	saveCommitteeDutyLinkFn func(slot phase0.Slot, index phase0.ValidatorIndex, id spectypes.CommitteeID) error
 	scheduled               map[phase0.Slot]map[phase0.ValidatorIndex]rolemask.Mask
+	prunedSlots             []phase0.Slot
 }
 
 func (m *mockDutyTraceStore) SaveCommitteeDuties(slot phase0.Slot, duties []*exporter.CommitteeDutyTrace) error {
 	return m.err
+}
+
+func (m *mockDutyTraceStore) PruneSlot(slot phase0.Slot) error {
+	m.prunedSlots = append(m.prunedSlots, slot)
+	return m.err
+}
+
+func TestCollector_pruneExpired(t *testing.T) {
+	st := &mockDutyTraceStore{}
+	c := &Collector{logger: zap.NewNop(), store: st}
+	const retain = phase0.Slot(100)
+
+	// Not enough history accumulated yet: nothing pruned, cursor unchanged.
+	require.Equal(t, phase0.Slot(0), c.pruneExpired(50, retain, 0))
+	require.Empty(t, st.prunedSlots)
+
+	// First eligible tick seeds the cursor at the retention boundary without sweeping old history.
+	cur := c.pruneExpired(150, retain, 0) // boundary = 150-100 = 50
+	require.Equal(t, phase0.Slot(50), cur)
+	require.Empty(t, st.prunedSlots)
+
+	// Next tick prunes exactly the one slot that just fell outside the window.
+	cur = c.pruneExpired(151, retain, cur) // boundary = 51
+	require.Equal(t, phase0.Slot(51), cur)
+	require.Equal(t, []phase0.Slot{50}, st.prunedSlots)
+
+	// A large gap (e.g. after downtime) is capped at maxPerTick per call so the loop can't stall.
+	st.prunedSlots = nil
+	cur = c.pruneExpired(10000, retain, 51) // boundary = 9900, but capped to 64 slots
+	require.Equal(t, phase0.Slot(51+64), cur)
+	require.Len(t, st.prunedSlots, 64)
+	require.Equal(t, phase0.Slot(51), st.prunedSlots[0])
+	require.Equal(t, phase0.Slot(114), st.prunedSlots[63])
 }
 
 func (m *mockDutyTraceStore) SaveCommitteeDutyLink(slot phase0.Slot, index phase0.ValidatorIndex, id spectypes.CommitteeID) error {

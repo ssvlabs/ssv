@@ -229,6 +229,60 @@ func TestSaveScheduledDuties(t *testing.T) {
 	assert.ElementsMatch(t, []phase0.ValidatorIndex{2}, syncers)
 }
 
+func TestPruneSlot(t *testing.T) {
+	logger := zap.NewNop()
+	db, err := kv.NewInMemory(logger, basedb.Options{})
+	require.NoError(t, err)
+	defer db.Close()
+
+	s := store.New(db)
+
+	const prune = phase0.Slot(1)
+	const keep = phase0.Slot(2)
+
+	// Populate every trace kind at both the slot to prune and an adjacent slot to keep.
+	for _, slot := range []phase0.Slot{prune, keep} {
+		require.NoError(t, s.SaveValidatorDuty(makeVTrace(slot)))
+		require.NoError(t, s.SaveCommitteeDuty(makeCTrace(slot, 'a')))
+		require.NoError(t, s.SaveCommitteeDutyLinks(slot, map[phase0.ValidatorIndex]spectypes.CommitteeID{1: {1, 1, 1}}))
+		require.NoError(t, s.SaveScheduled(slot, map[phase0.ValidatorIndex]rolemask.Mask{1: rolemask.BitAttester}))
+	}
+
+	require.NoError(t, s.PruneSlot(prune))
+
+	// Pruned slot: every trace kind is gone.
+	_, err = s.GetValidatorDuty(prune, spectypes.BNRoleAttester, phase0.ValidatorIndex(39393))
+	require.Error(t, err, "validator duty should be pruned")
+
+	cds, err := s.GetCommitteeDuties(prune)
+	require.NoError(t, err)
+	require.Empty(t, cds, "committee duties should be pruned")
+
+	links, err := s.GetCommitteeDutyLinks(prune)
+	require.NoError(t, err)
+	require.Empty(t, links, "committee links should be pruned")
+
+	sched, err := s.GetScheduled(prune)
+	require.NoError(t, err)
+	require.Empty(t, sched, "scheduled duties should be pruned")
+
+	// Adjacent slot is untouched.
+	_, err = s.GetValidatorDuty(keep, spectypes.BNRoleAttester, phase0.ValidatorIndex(39393))
+	require.NoError(t, err)
+
+	cds, err = s.GetCommitteeDuties(keep)
+	require.NoError(t, err)
+	require.Len(t, cds, 1)
+
+	links, err = s.GetCommitteeDutyLinks(keep)
+	require.NoError(t, err)
+	require.Len(t, links, 1)
+
+	sched, err = s.GetScheduled(keep)
+	require.NoError(t, err)
+	require.Len(t, sched, 1)
+}
+
 func TestAddScheduledRole_UnionsIndices(t *testing.T) {
 	logger := zap.NewNop()
 	db, err := kv.NewInMemory(logger, basedb.Options{})

@@ -8,10 +8,8 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
-	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
@@ -359,12 +357,6 @@ func newNode(ctx context.Context, cfg *config, logger *zap.Logger, res resolved,
 		})
 	}
 
-	if res.mode == modeExporterStandard {
-		retain := cfg.ExporterOptions.RetainSlots
-		threshold := networkConfig.EstimatedCurrentSlot()
-		initSlotPruning(ctx, storageMap, slotTickerProvider, threshold, retain)
-	}
-
 	fixedSubnets, err := networkcommons.SubnetsFromString(cfg.P2pNetworkConfig.Subnets)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse fixed subnets: %w", err)
@@ -383,12 +375,16 @@ func newNode(ctx context.Context, cfg *config, logger *zap.Logger, res resolved,
 		metadata.WithSyncInterval(cfg.SSVOptions.ValidatorOptions.MetadataUpdateInterval),
 	)
 
-	// Exporter duty tracing. An invalid EXPORTER_MODE is rejected up front by resolveAndValidate,
-	// so res.mode here is always one of the known modes.
+	// Exporter duty tracing. Exporters always run full duty tracing — collecting pre-consensus,
+	// consensus, and post-consensus steps and serving them via the read API. (The legacy
+	// standard/archive EXPORTER_MODE distinction was removed; "standard" was a strict, and broken,
+	// subset.) RetainEpochs bounds on-disk trace history; 0 (default) retains indefinitely.
 	var collector *dutytracer.Collector
-	switch res.mode {
-	case modeExporterArchive:
-		logger.Info("exporter mode: archive")
+	if res.isExporter() {
+		retainSlots := cfg.ExporterOptions.RetainEpochs * networkConfig.Beacon.SlotsPerEpoch
+		logger.Info("exporter enabled (full duty tracing)",
+			zap.Uint64("retain_epochs", cfg.ExporterOptions.RetainEpochs),
+			zap.Uint64("retain_slots", retainSlots))
 		dstore := &dutytracer.DutyTraceStoreMetrics{
 			Store: dutytracestore.New(db),
 		}
@@ -397,12 +393,8 @@ func newNode(ctx context.Context, cfg *config, logger *zap.Logger, res resolved,
 			dstore, networkConfig.Beacon, decidedStreamPublisherFn,
 			dutyStore)
 
-		go collector.Start(ctx, slotTickerProvider)
+		go collector.Start(ctx, slotTickerProvider, retainSlots)
 		cfg.SSVOptions.ExporterRead = exporter2.NewExporter(logger, storageMap, collector, nodeStorage.ValidatorStore())
-	case modeExporterStandard:
-		logger.Info("exporter mode: standard")
-	case modeOperator:
-		// not an exporter: no duty-trace collector
 	}
 
 	doppelgangerHandler := buildDoppelganger(logger, cfg, res, networkConfig.Beacon, consensusClient, validatorProvider, slotTickerProvider)
@@ -597,7 +589,7 @@ func (n *node) start() error {
 				Shares: n.nodeStorage.Shares(),
 			},
 			hexporter.NewExporter(n.logger, n.storageMap, n.collector, n.nodeStorage.ValidatorStore()),
-			n.mode == modeExporterArchive,
+			n.mode == modeExporter,
 		)
 		_, apiServeErr, err := apiServer.Start(n.ctx)
 		if err != nil {
@@ -662,30 +654,6 @@ func setupOperatorDataStore(
 	}
 
 	return operatordatastore.New(operatorData), nil
-}
-
-func initSlotPruning(ctx context.Context, stores *ibftstorage.ParticipantStores, slotTickerProvider slotticker.Provider, slot phase0.Slot, retain uint64) {
-	var wg sync.WaitGroup
-
-	threshold := slot - phase0.Slot(retain)
-
-	// async perform initial slot gc
-	_ = stores.Each(func(_ spectypes.BeaconRole, store ibftstorage.ParticipantStore) error {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			store.Prune(ctx, threshold)
-		}()
-		return nil
-	})
-
-	wg.Wait()
-
-	// start background job for removing old slots on every tick
-	_ = stores.Each(func(_ spectypes.BeaconRole, store ibftstorage.ParticipantStore) error {
-		go store.PruneContinuously(ctx, slotTickerProvider, phase0.Slot(retain))
-		return nil
-	})
 }
 
 // buildDoppelganger returns the node's doppelganger-protection provider: a no-op for exporter nodes

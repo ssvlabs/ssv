@@ -12,7 +12,6 @@ import (
 
 	"github.com/ssvlabs/ssv/doppelganger"
 	"github.com/ssvlabs/ssv/eth/executionclient"
-	"github.com/ssvlabs/ssv/exporter"
 	"github.com/ssvlabs/ssv/hprobe"
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -126,19 +125,15 @@ func Test_newNode_wiresOperatorNode(t *testing.T) {
 	}
 }
 
-// Test_newNode_wiresExporterNode mirrors the operator smoke test for the exporter paths: with no
-// signing identity, it asserts newNode() wires the graph for both exporter modes and that the
-// mode-specific divergences hold — no key manager in either, and a duty-trace collector only in
-// archive mode.
+// Test_newNode_wiresExporterNode mirrors the operator smoke test for the exporter path: with no
+// signing identity, it asserts newNode() wires the graph for an exporter node — no key manager,
+// and a duty-trace collector (exporters always run full duty tracing).
 func Test_newNode_wiresExporterNode(t *testing.T) {
 	for _, tc := range []struct {
-		name          string
-		mode          nodeMode
-		exporterMode  string
-		wantCollector bool
+		name string
+		mode nodeMode
 	}{
-		{name: "standard", mode: modeExporterStandard, exporterMode: exporter.ModeStandard, wantCollector: false},
-		{name: "archive", mode: modeExporterArchive, exporterMode: exporter.ModeArchive, wantCollector: true},
+		{name: "exporter", mode: modeExporter},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
@@ -152,7 +147,6 @@ func Test_newNode_wiresExporterNode(t *testing.T) {
 			cfg := &config{}
 			cfg.DBOptions.Path = t.TempDir()
 			cfg.ExporterOptions.Enabled = true
-			cfg.ExporterOptions.Mode = tc.exporterMode
 			cfg.MetricsAPIPort = 0
 			cfg.SSVAPIPort = 0
 			cfg.WsAPIPort = 0
@@ -170,11 +164,7 @@ func Test_newNode_wiresExporterNode(t *testing.T) {
 			require.NotNil(t, a.operatorNode)
 			require.Nil(t, a.keyManager, "exporter nodes have no key manager")
 
-			if tc.wantCollector {
-				require.NotNil(t, a.collector, "archive mode wires a duty-trace collector")
-			} else {
-				require.Nil(t, a.collector, "standard mode has no duty-trace collector")
-			}
+			require.NotNil(t, a.collector, "exporter wires a duty-trace collector")
 
 			require.NoError(t, a.Close())
 		})

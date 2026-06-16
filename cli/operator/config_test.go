@@ -22,10 +22,6 @@ import (
 const (
 	testSignerEndpoint = "http://signer:9000"
 	testOperatorKey    = "super-secret-operator-key"
-
-	// substring of resolveMode's error for an unrecognized EXPORTER_MODE (kept as a const so
-	// the repeated assertion doesn't trip goconst).
-	msgInvalidExporterMode = "invalid exporter mode"
 )
 
 func Test_config_load(t *testing.T) {
@@ -133,22 +129,12 @@ func Test_resolveAndValidate_mode(t *testing.T) {
 		require.Equal(t, modeOperator, res.mode)
 	})
 
-	t.Run("exporter archive -> modeExporterArchive", func(t *testing.T) {
+	t.Run("exporter -> modeExporter", func(t *testing.T) {
 		c := config{}
 		c.ExporterOptions.Enabled = true
-		c.ExporterOptions.Mode = exporter.ModeArchive
 		res, err := c.resolveAndValidate(zap.NewNop())
 		require.NoError(t, err)
-		require.Equal(t, modeExporterArchive, res.mode)
-	})
-
-	t.Run("invalid exporter mode -> error", func(t *testing.T) {
-		c := config{}
-		c.ExporterOptions.Enabled = true
-		c.ExporterOptions.Mode = "bogus"
-		_, err := c.resolveAndValidate(zap.NewNop())
-		require.Error(t, err)
-		require.Contains(t, err.Error(), msgInvalidExporterMode)
+		require.Equal(t, modeExporter, res.mode)
 	})
 }
 
@@ -425,36 +411,11 @@ func Test_resolveSigning(t *testing.T) {
 	}
 }
 
-// Test_resolveMode covers operating-mode resolution and the fail-fast rejection of an
-// unrecognized EXPORTER_MODE.
+// Test_resolveMode covers operating-mode resolution: an enabled exporter resolves to modeExporter
+// (full duty tracing), everything else to modeOperator.
 func Test_resolveMode(t *testing.T) {
-	tests := []struct {
-		name    string
-		enabled bool
-		mode    string
-		want    nodeMode
-		wantErr string
-	}{
-		{name: "not exporter -> operator", enabled: false, mode: "", want: modeOperator},
-		{name: "not exporter ignores mode -> operator", enabled: false, mode: exporter.ModeArchive, want: modeOperator},
-		{name: "exporter standard", enabled: true, mode: exporter.ModeStandard, want: modeExporterStandard},
-		{name: "exporter archive", enabled: true, mode: exporter.ModeArchive, want: modeExporterArchive},
-		{name: "exporter invalid -> error", enabled: true, mode: "bogus", wantErr: msgInvalidExporterMode},
-		{name: "exporter empty mode -> error", enabled: true, mode: "", wantErr: msgInvalidExporterMode},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := resolveMode(exporter.Options{Enabled: tt.enabled, Mode: tt.mode})
-			if tt.wantErr != "" {
-				require.Error(t, err)
-				require.Contains(t, err.Error(), tt.wantErr)
-				return
-			}
-			require.NoError(t, err)
-			require.Equal(t, tt.want, got)
-		})
-	}
+	require.Equal(t, modeOperator, resolveMode(exporter.Options{Enabled: false}))
+	require.Equal(t, modeExporter, resolveMode(exporter.Options{Enabled: true}))
 }
 
 func Test_warnIfSSVAPIAddressUnset(t *testing.T) {
