@@ -1829,32 +1829,54 @@ func (m *mockDutyTraceStore) PruneSlot(slot phase0.Slot) error {
 	return m.err
 }
 
-func TestCollector_pruneExpired(t *testing.T) {
-	st := &mockDutyTraceStore{}
-	c := &Collector{logger: zap.NewNop(), store: st}
+func TestTracePruner(t *testing.T) {
 	const retain = phase0.Slot(100)
 
-	// Not enough history accumulated yet: nothing pruned, cursor unchanged.
-	require.Equal(t, phase0.Slot(0), c.pruneExpired(50, retain, 0))
-	require.Empty(t, st.prunedSlots)
+	t.Run("disabled when retainSlots is zero", func(t *testing.T) {
+		st := &mockDutyTraceStore{}
+		p := &tracePruner{store: st, logger: zap.NewNop()}
+		p.prune(1_000_000, 0)
+		require.Empty(t, st.prunedSlots)
+		require.False(t, p.seeded)
+	})
 
-	// First eligible tick seeds the cursor at the retention boundary without sweeping old history.
-	cur := c.pruneExpired(150, retain, 0) // boundary = 150-100 = 50
-	require.Equal(t, phase0.Slot(50), cur)
-	require.Empty(t, st.prunedSlots)
+	t.Run("no underflow before the window fills", func(t *testing.T) {
+		st := &mockDutyTraceStore{}
+		p := &tracePruner{store: st, logger: zap.NewNop()}
+		p.prune(50, retain) // currentSlot < retain
+		require.Empty(t, st.prunedSlots)
+		require.False(t, p.seeded)
+	})
 
-	// Next tick prunes exactly the one slot that just fell outside the window.
-	cur = c.pruneExpired(151, retain, cur) // boundary = 51
-	require.Equal(t, phase0.Slot(51), cur)
-	require.Equal(t, []phase0.Slot{50}, st.prunedSlots)
+	t.Run("first activation seeds forward without backfilling old history", func(t *testing.T) {
+		st := &mockDutyTraceStore{}
+		p := &tracePruner{store: st, logger: zap.NewNop()}
+		p.prune(1_000_000, retain) // boundary is huge; must NOT prune from slot 0
+		require.Empty(t, st.prunedSlots)
+		require.True(t, p.seeded)
+		require.Equal(t, phase0.Slot(1_000_000-100), p.cursor)
+	})
 
-	// A large gap (e.g. after downtime) is capped at maxPerTick per call so the loop can't stall.
-	st.prunedSlots = nil
-	cur = c.pruneExpired(10000, retain, 51) // boundary = 9900, but capped to 64 slots
-	require.Equal(t, phase0.Slot(51+64), cur)
-	require.Len(t, st.prunedSlots, 64)
-	require.Equal(t, phase0.Slot(51), st.prunedSlots[0])
-	require.Equal(t, phase0.Slot(114), st.prunedSlots[63])
+	t.Run("prunes exactly the slot that ages out each advancing tick", func(t *testing.T) {
+		st := &mockDutyTraceStore{}
+		p := &tracePruner{store: st, logger: zap.NewNop()}
+		p.prune(150, retain) // seed: cursor=50
+		p.prune(151, retain) // prune 50
+		p.prune(152, retain) // prune 51
+		require.Equal(t, []phase0.Slot{50, 51}, st.prunedSlots)
+		require.Equal(t, phase0.Slot(52), p.cursor)
+	})
+
+	t.Run("catches up skipped slots but caps work per tick", func(t *testing.T) {
+		st := &mockDutyTraceStore{}
+		p := &tracePruner{store: st, logger: zap.NewNop()}
+		p.prune(150, retain) // seed: cursor=50
+		st.prunedSlots = nil
+		p.prune(150+1000, retain) // boundary jumps to 1050; must cap, not stall
+		require.Len(t, st.prunedSlots, maxPrunePerTick)
+		require.Equal(t, phase0.Slot(50), st.prunedSlots[0])
+		require.Equal(t, phase0.Slot(50+maxPrunePerTick), p.cursor)
+	})
 }
 
 func (m *mockDutyTraceStore) SaveCommitteeDutyLink(slot phase0.Slot, index phase0.ValidatorIndex, id spectypes.CommitteeID) error {

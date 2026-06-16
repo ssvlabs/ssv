@@ -127,9 +127,7 @@ func (c *Collector) Start(ctx context.Context, tickerProvider slotticker.Provide
 	// Start a single worker to process schedule writes asynchronously.
 	go c.runScheduleWorker(ctx)
 
-	// lastPrunedSlot tracks retention progress; seeded lazily on the first eligible tick so we
-	// enforce retention going forward without an expensive backfill of pre-existing history.
-	var lastPrunedSlot phase0.Slot
+	pruner := &tracePruner{store: c.store, logger: c.logger}
 	for {
 		select {
 		case <-ctx.Done():
@@ -137,42 +135,59 @@ func (c *Collector) Start(ctx context.Context, tickerProvider slotticker.Provide
 		case <-ticker.Next():
 			currentSlot := ticker.Slot()
 			c.evict(currentSlot)
-			if retainSlots > 0 {
-				lastPrunedSlot = c.pruneExpired(currentSlot, phase0.Slot(retainSlots), lastPrunedSlot)
-			}
+			pruner.prune(currentSlot, phase0.Slot(retainSlots))
 		}
 	}
 }
 
-// pruneExpired deletes trace data for slots that have fallen outside the retention window. It
-// prunes only the slots that newly expired since the previous call (normally one per tick),
-// capping per-tick work so a long downtime gap cannot stall the loop. On the first eligible call
-// it seeds the cursor at the current boundary, so enabling retention does not retroactively purge
-// older history — retention is enforced from that point forward. Returns the updated cursor (the
-// lowest slot not yet pruned).
-func (c *Collector) pruneExpired(currentSlot, retainSlots, lastPruned phase0.Slot) phase0.Slot {
-	if currentSlot <= retainSlots {
-		return lastPruned // not enough history accumulated to prune anything yet
+// maxPrunePerTick bounds the slots a single tick may prune, so a large jump in the window boundary
+// (e.g. after a processing pause) cannot stall the eviction loop; the remainder is reclaimed on
+// subsequent ticks.
+const maxPrunePerTick = 64
+
+// tracePruner enforces the duty-trace retention window. It advances a cursor over expired slots so
+// the per-slot eviction loop reclaims exactly the slots that age out, while staying robust to the
+// edge cases of a long-lived chain.
+type tracePruner struct {
+	store  DutyTraceStore
+	logger *zap.Logger
+	cursor phase0.Slot // next slot to prune; meaningful once seeded
+	seeded bool
+}
+
+// prune deletes trace data for slots that have aged out of the retention window
+// [currentSlot-retainSlots, currentSlot]. Safeguards:
+//   - retainSlots == 0 disables retention (retain indefinitely — the default);
+//   - the currentSlot <= retainSlots guard avoids unsigned slot underflow early in the chain's life;
+//   - on first activation the cursor seeds at the window boundary, so enabling retention does not
+//     trigger an unbounded backfill of the chain's entire pre-existing history;
+//   - per-tick work is capped (maxPrunePerTick) so a large boundary jump cannot stall eviction;
+//   - the cursor lets a coalesced/late tick reclaim every skipped slot rather than leaking it.
+//
+// The cursor is in-memory, so slots that expire while the node is down are not reclaimed after a
+// restart (retention re-seeds forward). That is an accepted bound for a best-effort disk-retention
+// feature — trace reads never depend on pruned data.
+func (p *tracePruner) prune(currentSlot, retainSlots phase0.Slot) {
+	if retainSlots == 0 || currentSlot <= retainSlots {
+		return
 	}
 	boundary := currentSlot - retainSlots // slots strictly below boundary are expired
-	if lastPruned == 0 {
-		return boundary // first run: enforce going forward, no backfill sweep
+	if !p.seeded {
+		p.cursor, p.seeded = boundary, true
+		return
 	}
 
-	const maxPerTick = 64
-	pruned := 0
-	for s := lastPruned; s < boundary && pruned < maxPerTick; s++ {
-		if err := c.store.PruneSlot(s); err != nil {
-			c.logger.Warn("failed to prune expired duty traces", fields.Slot(s), zap.Error(err))
+	var pruned int
+	for ; p.cursor < boundary && pruned < maxPrunePerTick; pruned++ {
+		if err := p.store.PruneSlot(p.cursor); err != nil {
+			p.logger.Warn("failed to prune expired duty traces", fields.Slot(p.cursor), zap.Error(err))
 		}
-		pruned++
-		lastPruned = s + 1
+		p.cursor++
 	}
 	if pruned > 0 {
-		c.logger.Debug("pruned expired duty traces",
-			fields.Slot(lastPruned-1), zap.Int("count", pruned))
+		p.logger.Debug("pruned expired duty traces",
+			zap.Uint64("through_slot", uint64(p.cursor-1)), zap.Int("count", pruned))
 	}
-	return lastPruned
 }
 
 const slotTTL = 4
