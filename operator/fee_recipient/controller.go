@@ -104,7 +104,7 @@ func (rc *recipientController) submitPreparationsOnSchedule(ctx context.Context)
 		select {
 		case <-ctx.Done():
 			return
-		case <-ticker.Next():
+		case <-ticker.Advance():
 			slot := ticker.Slot()
 			// Check if this is the middle slot of the epoch
 			if firstTimeSubmitted && uint64(slot)%rc.beaconConfig.SlotsPerEpoch != (rc.beaconConfig.SlotsPerEpoch/2) {

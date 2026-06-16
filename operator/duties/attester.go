@@ -76,7 +76,7 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 	h.logger.Info("starting duty handler")
 	defer h.logger.Info("duty handler exited")
 
-	next := h.ticker.Next()
+	next := h.ticker.Advance()
 	for {
 		select {
 		case <-ctx.Done():
@@ -84,7 +84,7 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 
 		case <-next:
 			currentSlot := h.ticker.Slot()
-			next = h.ticker.Next() // advances h.ticker
+			next = h.ticker.Advance() // advances h.ticker
 			currentEpoch := h.beaconConfig.EstimatedEpochAtSlot(currentSlot)
 			nextEpoch := currentEpoch + 1
 

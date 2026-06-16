@@ -351,7 +351,7 @@ func (s *Scheduler) SlotTicker(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
-		case <-s.ticker.Next():
+		case <-s.ticker.Advance():
 			slot := s.ticker.Slot()
 
 			delay := s.beaconConfig.IntervalDuration()

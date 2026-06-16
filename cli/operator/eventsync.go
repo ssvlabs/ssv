@@ -140,11 +140,12 @@ func syncContractEvents(
 		// Sync ongoing registry events in the background. Crash if it stops: the node can't operate
 		// without staying current with Ethereum events, and until reorg handling exists, restarting
 		// from persisted state is safer than continuing on possibly-incorrect state.
+		ongoingFromBlock := fromBlock.Uint64()
 		go func() {
-			err := eventSyncer.SyncOngoing(ctx, fromBlock.Uint64())
+			err := eventSyncer.SyncOngoing(ctx, ongoingFromBlock)
 			if err != nil && !errors.Is(err, context.Canceled) {
 				logger.Fatal("failed syncing ongoing registry events",
-					zap.Uint64("last_processed_block", lastProcessedBlock),
+					zap.Uint64("from_block", ongoingFromBlock),
 					zap.Error(err),
 				)
 			}

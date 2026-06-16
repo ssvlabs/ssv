@@ -186,7 +186,7 @@ func TestSlotCleanupJob(t *testing.T) {
 		close(mockTimeChan)
 	})
 
-	ticker.EXPECT().Next().Return(mockTimeChan).AnyTimes()
+	ticker.EXPECT().Advance().Return(mockTimeChan).AnyTimes()
 	ticker.EXPECT().Slot().DoAndReturn(func() phase0.Slot {
 		return <-mockSlotChan
 	}).AnyTimes()

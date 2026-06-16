@@ -127,7 +127,7 @@ func (c *Collector) Start(ctx context.Context, tickerProvider slotticker.Provide
 		select {
 		case <-ctx.Done():
 			return
-		case <-ticker.Next():
+		case <-ticker.Advance():
 			currentSlot := ticker.Slot()
 			c.evict(currentSlot)
 		}
@@ -1304,7 +1304,7 @@ func (c *Collector) startScheduleFiller(ctx context.Context, tickerProvider slot
 		select {
 		case <-ctx.Done():
 			return
-		case <-t.Next():
+		case <-t.Advance():
 			slot := t.Slot()
 			// Enqueue current slot quickly; if queue is full, drop to avoid backpressure.
 			select {

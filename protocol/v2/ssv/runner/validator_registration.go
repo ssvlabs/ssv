@@ -378,7 +378,7 @@ func (s *VRSubmitter) start(ctx context.Context, ticker slotticker.SlotTicker) {
 		select {
 		case <-ctx.Done():
 			return
-		case <-ticker.Next():
+		case <-ticker.Advance():
 			config := s.beaconConfig
 
 			currentSlot := ticker.Slot()
