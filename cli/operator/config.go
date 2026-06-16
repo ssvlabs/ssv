@@ -3,6 +3,7 @@ package operator
 import (
 	"errors"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/ilyakaznacheev/cleanenv"
@@ -64,7 +65,7 @@ const maxSafeProposerDelay = 1000 * time.Millisecond
 
 // nodeMode is the resolved operating mode of the node, derived once from ExporterOptions by
 // resolveAndValidate so startup can dispatch on a typed value instead of re-deriving the mode
-// from ExporterOptions.Enabled / .Mode at each site.
+// from ExporterOptions.Enabled at each site.
 type nodeMode int
 
 const (
@@ -136,6 +137,9 @@ func (c *config) resolveAndValidate(logger *zap.Logger) (resolved, error) {
 	// Resolve the operating mode last so a doubly-misconfigured node still surfaces the signing
 	// or proposer-delay error first.
 	res.mode = resolveMode(c.ExporterOptions)
+	if res.mode != modeOperator {
+		warnDeprecatedExporterEnv(logger)
+	}
 
 	return res, nil
 }
@@ -221,6 +225,19 @@ func resolveMode(opts exporter.Options) nodeMode {
 		return modeOperator
 	}
 	return modeExporter
+}
+
+// warnDeprecatedExporterEnv flags removed exporter env vars (set via a pre-existing deployment) so
+// operators notice a stale value is now ignored: exporters always run full duty tracing, and
+// retention moved from slots to EXPORTER_RETAIN_EPOCHS. Best-effort — only env vars are checked,
+// not equivalent YAML keys (cleanenv silently drops unknown fields).
+func warnDeprecatedExporterEnv(logger *zap.Logger) {
+	for _, env := range []string{"EXPORTER_MODE", "EXPORTER_RETAIN_SLOTS"} {
+		if v, ok := os.LookupEnv(env); ok {
+			logger.Warn("ignoring removed exporter config option; exporters always run full duty tracing — use EXPORTER_RETAIN_EPOCHS for retention",
+				zap.String("env", env), zap.String("value", v))
+		}
+	}
 }
 
 // warnExporterSigning warns when signing configuration is provided in exporter mode (where it

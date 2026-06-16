@@ -1829,54 +1829,85 @@ func (m *mockDutyTraceStore) PruneSlot(slot phase0.Slot) error {
 	return m.err
 }
 
-func TestTracePruner(t *testing.T) {
+func TestRetentionState(t *testing.T) {
 	const retain = phase0.Slot(100)
 
 	t.Run("disabled when retainSlots is zero", func(t *testing.T) {
 		st := &mockDutyTraceStore{}
-		p := &tracePruner{store: st, logger: zap.NewNop()}
-		p.prune(1_000_000, 0)
+		r := &retentionState{store: st, logger: zap.NewNop()}
+		r.advance(1_000_000, 0)
 		require.Empty(t, st.prunedSlots)
-		require.False(t, p.seeded)
+		require.False(t, r.seeded)
+		require.False(t, r.expired(0), "nothing is expired when retention is disabled")
 	})
 
 	t.Run("no underflow before the window fills", func(t *testing.T) {
 		st := &mockDutyTraceStore{}
-		p := &tracePruner{store: st, logger: zap.NewNop()}
-		p.prune(50, retain) // currentSlot < retain
+		r := &retentionState{store: st, logger: zap.NewNop()}
+		r.advance(50, retain) // currentSlot < retain
 		require.Empty(t, st.prunedSlots)
-		require.False(t, p.seeded)
+		require.False(t, r.seeded)
+		require.False(t, r.expired(0))
 	})
 
-	t.Run("first activation seeds forward without backfilling old history", func(t *testing.T) {
+	t.Run("first activation seeds the floor forward without backfilling old history", func(t *testing.T) {
 		st := &mockDutyTraceStore{}
-		p := &tracePruner{store: st, logger: zap.NewNop()}
-		p.prune(1_000_000, retain) // boundary is huge; must NOT prune from slot 0
+		r := &retentionState{store: st, logger: zap.NewNop()}
+		r.advance(1_000_000, retain) // floor is huge; must NOT prune from slot 0
 		require.Empty(t, st.prunedSlots)
-		require.True(t, p.seeded)
-		require.Equal(t, phase0.Slot(1_000_000-100), p.cursor)
+		require.True(t, r.seeded)
+		require.Equal(t, phase0.Slot(1_000_000-100), r.cursor)
+		// floor guards the collection path immediately, even before the cursor prunes anything
+		require.True(t, r.expired(1_000_000-101))
+		require.False(t, r.expired(1_000_000-100))
 	})
 
 	t.Run("prunes exactly the slot that ages out each advancing tick", func(t *testing.T) {
 		st := &mockDutyTraceStore{}
-		p := &tracePruner{store: st, logger: zap.NewNop()}
-		p.prune(150, retain) // seed: cursor=50
-		p.prune(151, retain) // prune 50
-		p.prune(152, retain) // prune 51
+		r := &retentionState{store: st, logger: zap.NewNop()}
+		r.advance(150, retain) // seed: floor/cursor=50
+		r.advance(151, retain) // prune 50
+		r.advance(152, retain) // prune 51
 		require.Equal(t, []phase0.Slot{50, 51}, st.prunedSlots)
-		require.Equal(t, phase0.Slot(52), p.cursor)
+		require.Equal(t, phase0.Slot(52), r.cursor)
 	})
 
 	t.Run("catches up skipped slots but caps work per tick", func(t *testing.T) {
 		st := &mockDutyTraceStore{}
-		p := &tracePruner{store: st, logger: zap.NewNop()}
-		p.prune(150, retain) // seed: cursor=50
+		r := &retentionState{store: st, logger: zap.NewNop()}
+		r.advance(150, retain) // seed: floor/cursor=50
 		st.prunedSlots = nil
-		p.prune(150+1000, retain) // boundary jumps to 1050; must cap, not stall
+		r.advance(150+1000, retain) // floor jumps to 1050; must cap, not stall
 		require.Len(t, st.prunedSlots, maxPrunePerTick)
 		require.Equal(t, phase0.Slot(50), st.prunedSlots[0])
-		require.Equal(t, phase0.Slot(50+maxPrunePerTick), p.cursor)
+		require.Equal(t, phase0.Slot(50+maxPrunePerTick), r.cursor)
 	})
+
+	t.Run("expired tracks the current floor", func(t *testing.T) {
+		st := &mockDutyTraceStore{}
+		r := &retentionState{store: st, logger: zap.NewNop()}
+		r.advance(150, retain) // floor=50
+		require.True(t, r.expired(49))
+		require.False(t, r.expired(50))
+		require.False(t, r.expired(51))
+	})
+}
+
+// TestCollector_dropsExpiredSlot verifies the collection hot path refuses to (re)create traces for
+// a slot below the retention floor, so a late message cannot resurrect a slot already pruned.
+func TestCollector_dropsExpiredSlot(t *testing.T) {
+	c := New(zap.NewNop(), nil, nil, &mockDutyTraceStore{}, networkconfig.TestNetwork.Beacon, nil, nil)
+	c.retention.floor.Store(100) // slots < 100 are expired
+
+	_, _, err := c.getOrCreateValidatorTrace(50, spectypes.BNRoleAttester, 1)
+	require.ErrorIs(t, err, errExpiredSlot)
+
+	_, _, err = c.getOrCreateCommitteeTrace(50, spectypes.CommitteeID{})
+	require.ErrorIs(t, err, errExpiredSlot)
+
+	// A slot inside the window is not dropped by the guard.
+	_, _, err = c.getOrCreateValidatorTrace(150, spectypes.BNRoleAttester, 1)
+	require.NotErrorIs(t, err, errExpiredSlot)
 }
 
 func (m *mockDutyTraceStore) SaveCommitteeDutyLink(slot phase0.Slot, index phase0.ValidatorIndex, id spectypes.CommitteeID) error {

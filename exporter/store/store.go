@@ -369,8 +369,8 @@ func (s *DutyTraceStore) PruneSlot(slot phase0.Slot) error {
 	if err := s.db.DropPrefix(s.makeValidatorCommitteePrefix(slot)); err != nil {
 		errs = multierror.Append(errs, fmt.Errorf("prune validator-committee links (slot=%d): %w", slot, err))
 	}
-	if err := s.DeleteScheduledSlot(slot); err != nil {
-		errs = multierror.Append(errs, err)
+	if err := s.db.DropPrefix(s.makeScheduledSlotPrefix(slot)); err != nil {
+		errs = multierror.Append(errs, fmt.Errorf("prune scheduled duties (slot=%d): %w", slot, err))
 	}
 	return errs.ErrorOrNil()
 }
@@ -478,6 +478,14 @@ func (s *DutyTraceStore) makeCommitteePrefix(slot phase0.Slot, id spectypes.Comm
 func (s *DutyTraceStore) makeValidatorCommitteePrefix(slot phase0.Slot) []byte {
 	prefix := make([]byte, 0, len(validatorCommitteeIndexKey)+4)
 	prefix = append(prefix, []byte(validatorCommitteeIndexKey)...)
+	return append(prefix, slotToByteSlice(slot)...)
+}
+
+// makeScheduledSlotPrefix returns the "sd"+slot prefix covering every role's scheduled bitmap for a
+// slot, so a slot's scheduled data is dropped in a single prefix delete during pruning.
+func (s *DutyTraceStore) makeScheduledSlotPrefix(slot phase0.Slot) []byte {
+	prefix := make([]byte, 0, len(scheduledDutyKey)+slotKeyLen)
+	prefix = append(prefix, []byte(scheduledDutyKey)...)
 	return append(prefix, slotToByteSlice(slot)...)
 }
 

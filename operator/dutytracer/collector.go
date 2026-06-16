@@ -73,6 +73,10 @@ type Collector struct {
 	// scheduleJobs is a bounded queue for async schedule computation to avoid
 	// blocking the hot path and DB with synchronous writes.
 	scheduleJobs chan phase0.Slot
+
+	// retention enforces the optional duty-trace retention window (EXPORTER_RETAIN_EPOCHS) and is
+	// the single source of truth for the retained-slot floor consulted by the collection paths.
+	retention *retentionState
 }
 
 type DomainDataProvider interface {
@@ -106,6 +110,7 @@ func New(
 		duties:                         duties,
 		scheduleJobs:                   make(chan phase0.Slot, 32),
 	}
+	collector.retention = &retentionState{store: store, logger: collector.logger}
 
 	return collector
 }
@@ -127,7 +132,6 @@ func (c *Collector) Start(ctx context.Context, tickerProvider slotticker.Provide
 	// Start a single worker to process schedule writes asynchronously.
 	go c.runScheduleWorker(ctx)
 
-	pruner := &tracePruner{store: c.store, logger: c.logger}
 	for {
 		select {
 		case <-ctx.Done():
@@ -135,58 +139,74 @@ func (c *Collector) Start(ctx context.Context, tickerProvider slotticker.Provide
 		case <-ticker.Next():
 			currentSlot := ticker.Slot()
 			c.evict(currentSlot)
-			pruner.prune(currentSlot, phase0.Slot(retainSlots))
+			c.retention.advance(currentSlot, phase0.Slot(retainSlots))
 		}
 	}
 }
 
-// maxPrunePerTick bounds the slots a single tick may prune, so a large jump in the window boundary
+// maxPrunePerTick bounds the slots a single tick may prune, so a large jump in the window floor
 // (e.g. after a processing pause) cannot stall the eviction loop; the remainder is reclaimed on
 // subsequent ticks.
 const maxPrunePerTick = 64
 
-// tracePruner enforces the duty-trace retention window. It advances a cursor over expired slots so
-// the per-slot eviction loop reclaims exactly the slots that age out, while staying robust to the
-// edge cases of a long-lived chain.
-type tracePruner struct {
+// retentionState is the single source of truth for the duty-trace retention window. The eviction
+// loop advances it once per slot; the message-collection and schedule-write paths consult expired()
+// so they never (re)create trace data for a slot that has already aged out of the window — without
+// it, a late message or schedule job could resurrect a slot just deleted from disk.
+type retentionState struct {
 	store  DutyTraceStore
 	logger *zap.Logger
-	cursor phase0.Slot // next slot to prune; meaningful once seeded
+
+	// floor is the lowest slot still inside the retention window; slots strictly below it are
+	// expired. 0 means retention is disabled (retain indefinitely — the default). Read concurrently
+	// from collection goroutines, written only from the eviction loop.
+	floor atomic.Uint64
+
+	// cursor is the next slot to delete from disk; meaningful once seeded. Accessed only from the
+	// single eviction-loop goroutine.
+	cursor phase0.Slot
 	seeded bool
 }
 
-// prune deletes trace data for slots that have aged out of the retention window
-// [currentSlot-retainSlots, currentSlot]. Safeguards:
+// expired reports whether slot has aged out of the retention window and must not be (re)written.
+func (r *retentionState) expired(slot phase0.Slot) bool {
+	floor := r.floor.Load()
+	return floor > 0 && uint64(slot) < floor
+}
+
+// advance moves the retention window to currentSlot and deletes a bounded batch of newly-expired
+// slots from disk. Safeguards:
 //   - retainSlots == 0 disables retention (retain indefinitely — the default);
 //   - the currentSlot <= retainSlots guard avoids unsigned slot underflow early in the chain's life;
-//   - on first activation the cursor seeds at the window boundary, so enabling retention does not
+//   - on first activation the cursor seeds at the window floor, so enabling retention does not
 //     trigger an unbounded backfill of the chain's entire pre-existing history;
-//   - per-tick work is capped (maxPrunePerTick) so a large boundary jump cannot stall eviction;
+//   - per-tick work is capped (maxPrunePerTick) so a large floor jump cannot stall eviction;
 //   - the cursor lets a coalesced/late tick reclaim every skipped slot rather than leaking it.
 //
-// The cursor is in-memory, so slots that expire while the node is down are not reclaimed after a
-// restart (retention re-seeds forward). That is an accepted bound for a best-effort disk-retention
-// feature — trace reads never depend on pruned data.
-func (p *tracePruner) prune(currentSlot, retainSlots phase0.Slot) {
+// The cursor is in-memory, so retention is best-effort and forward-only across restarts: slots that
+// expire while the node is down are not reclaimed afterwards (see EXPORTER_RETAIN_EPOCHS docs).
+// Trace reads never depend on pruned data.
+func (r *retentionState) advance(currentSlot, retainSlots phase0.Slot) {
 	if retainSlots == 0 || currentSlot <= retainSlots {
 		return
 	}
-	boundary := currentSlot - retainSlots // slots strictly below boundary are expired
-	if !p.seeded {
-		p.cursor, p.seeded = boundary, true
+	floor := currentSlot - retainSlots // slots strictly below floor are expired
+	r.floor.Store(uint64(floor))
+	if !r.seeded {
+		r.cursor, r.seeded = floor, true
 		return
 	}
 
 	var pruned int
-	for ; p.cursor < boundary && pruned < maxPrunePerTick; pruned++ {
-		if err := p.store.PruneSlot(p.cursor); err != nil {
-			p.logger.Warn("failed to prune expired duty traces", fields.Slot(p.cursor), zap.Error(err))
+	for ; r.cursor < floor && pruned < maxPrunePerTick; pruned++ {
+		if err := r.store.PruneSlot(r.cursor); err != nil {
+			r.logger.Warn("failed to prune expired duty traces", fields.Slot(r.cursor), zap.Error(err))
 		}
-		p.cursor++
+		r.cursor++
 	}
 	if pruned > 0 {
-		p.logger.Debug("pruned expired duty traces",
-			zap.Uint64("through_slot", uint64(p.cursor-1)), zap.Int("count", pruned))
+		r.logger.Debug("pruned expired duty traces",
+			zap.Uint64("through_slot", uint64(r.cursor-1)), zap.Int("count", pruned))
 	}
 }
 
@@ -220,6 +240,11 @@ func (c *Collector) evict(currentSlot phase0.Slot) {
 }
 
 func (c *Collector) getOrCreateValidatorTrace(slot phase0.Slot, role spectypes.BeaconRole, index phase0.ValidatorIndex) (*validatorDutyTrace, bool, error) {
+	// Drop traces for slots already pruned out of the retention window so a late message cannot
+	// resurrect them on disk.
+	if c.retention.expired(slot) {
+		return nil, false, errExpiredSlot
+	}
 	// check late arrival
 	if uint64(slot) <= c.lastEvictedSlot.Load() {
 		if _, found := c.inFlightValidator.GetOrSet(index, struct{}{}); found {
@@ -273,7 +298,17 @@ func (c *Collector) getOrCreateValidatorTrace(slot phase0.Slot, role spectypes.B
 
 var errInFlight = errors.New("in flight")
 
+// errExpiredSlot signals that a message is for a slot already outside the retention window. The
+// collection path drops such messages silently so retention can't be defeated by a late write
+// resurrecting a slot that was just pruned from disk.
+var errExpiredSlot = errors.New("slot outside retention window")
+
 func (c *Collector) getOrCreateCommitteeTrace(slot phase0.Slot, committeeID spectypes.CommitteeID) (*committeeDutyTrace, bool, error) {
+	// Drop traces for slots already pruned out of the retention window so a late message cannot
+	// resurrect them on disk.
+	if c.retention.expired(slot) {
+		return nil, false, errExpiredSlot
+	}
 	// check late arrival
 	if uint64(slot) <= c.lastEvictedSlot.Load() {
 		if _, found := c.inFlightCommittee.GetOrSet(committeeID, struct{}{}); found {
@@ -579,6 +614,9 @@ func (c *Collector) Collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 		go c.collectLateMessage(ctx, msg, verifySig)
 		return nil
 	}
+	if errors.Is(err, errExpiredSlot) {
+		return nil // message is for a slot outside the retention window; drop silently
+	}
 	return err
 }
 
@@ -599,6 +637,10 @@ func (c *Collector) collectLateMessage(ctx context.Context, msg *queue.SSVMessag
 	// if another late message is in flight (for the same ID) - try `maxRetryCount` times before giving up
 	for tries < maxRetryCount {
 		err = c.collect(ctx, msg, verifySig)
+		if errors.Is(err, errExpiredSlot) {
+			err = nil // slot aged out of the retention window while retrying; drop silently
+			return
+		}
 		if !errors.Is(err, errInFlight) {
 			return
 		}
@@ -1452,6 +1494,9 @@ func (c *Collector) runScheduleWorker(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case s := <-c.scheduleJobs:
+			if c.retention.expired(s) {
+				continue // slot outside the retention window; don't recreate its scheduled data
+			}
 			if err := c.computeAndPersistScheduleForSlot(s); err != nil {
 				c.logger.Debug("schedule worker compute/persist", fields.Slot(s), zap.Error(err))
 			}

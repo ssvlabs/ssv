@@ -118,8 +118,9 @@ func Test_resolveAndValidate_signingErrorContext(t *testing.T) {
 	}
 }
 
-// Test_resolveAndValidate_mode verifies the operating mode is resolved into the result and that
-// an invalid EXPORTER_MODE fails validation up front.
+// Test_resolveAndValidate_mode verifies the operating mode is resolved into the result: a
+// non-exporter is modeOperator, and an enabled exporter is modeExporter (full duty tracing). The
+// legacy standard/archive EXPORTER_MODE validation was removed along with the mode itself.
 func Test_resolveAndValidate_mode(t *testing.T) {
 	t.Run("non-exporter -> modeOperator", func(t *testing.T) {
 		c := config{}
