@@ -126,7 +126,7 @@ func TestSubmitProposal(t *testing.T) {
 		ticker := mocks.NewMockSlotTicker(ctrl)
 		mockTimeChan := make(chan time.Time)
 		mockSlotChan := make(chan phase0.Slot)
-		ticker.EXPECT().Next().Return(mockTimeChan).AnyTimes()
+		ticker.EXPECT().Advance().Return(mockTimeChan).AnyTimes()
 		ticker.EXPECT().Slot().DoAndReturn(func() phase0.Slot { return <-mockSlotChan }).AnyTimes()
 
 		frCtrl.beaconClient = client
@@ -174,7 +174,7 @@ func TestSubmitProposal(t *testing.T) {
 
 		ticker := mocks.NewMockSlotTicker(ctrl)
 		mockTimeChan := make(chan time.Time, 1)
-		ticker.EXPECT().Next().Return(mockTimeChan).AnyTimes()
+		ticker.EXPECT().Advance().Return(mockTimeChan).AnyTimes()
 		ticker.EXPECT().Slot().Return(phase0.Slot(100)).AnyTimes()
 
 		frCtrl.beaconClient = client

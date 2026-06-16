@@ -84,7 +84,7 @@ func (m *MockSlotTicker) start(ctx context.Context) {
 	}()
 }
 
-func (m *MockSlotTicker) Next() <-chan time.Time {
+func (m *MockSlotTicker) Advance() <-chan time.Time {
 	return m.timeChan
 }
 
@@ -482,7 +482,7 @@ func TestScheduler_Run(t *testing.T) {
 		s.dutyHandlers = []dutyHandler{mockDutyHandler1, mockDutyHandler2}
 
 		mockBeaconNode.EXPECT().SubscribeToHeadEvents(ctx, "duty_scheduler", gomock.Any()).Return(nil)
-		mockTicker.EXPECT().Next().Return(nil).AnyTimes()
+		mockTicker.EXPECT().Advance().Return(nil).AnyTimes()
 
 		// setup mock duty handler expectations
 		for _, mockDutyHandler := range s.dutyHandlers {
@@ -535,7 +535,7 @@ func TestScheduler_Regression_IndicesChangeStuck(t *testing.T) {
 		// add multiple mock duty handlers
 		s.dutyHandlers = []dutyHandler{NewValidatorRegistrationHandler(nil)}
 		mockBeaconNode.EXPECT().SubscribeToHeadEvents(ctx, "duty_scheduler", gomock.Any()).Return(nil)
-		mockTicker.EXPECT().Next().Return(nil).AnyTimes()
+		mockTicker.EXPECT().Advance().Return(nil).AnyTimes()
 		err := s.Start(ctx)
 		require.NoError(t, err)
 		t.Cleanup(func() {

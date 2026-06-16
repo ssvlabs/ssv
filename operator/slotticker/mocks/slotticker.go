@@ -41,18 +41,18 @@ func (m *MockSlotTicker) EXPECT() *MockSlotTickerMockRecorder {
 	return m.recorder
 }
 
-// Next mocks base method.
-func (m *MockSlotTicker) Next() <-chan time.Time {
+// Advance mocks base method.
+func (m *MockSlotTicker) Advance() <-chan time.Time {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Next")
+	ret := m.ctrl.Call(m, "Advance")
 	ret0, _ := ret[0].(<-chan time.Time)
 	return ret0
 }
 
-// Next indicates an expected call of Next.
-func (mr *MockSlotTickerMockRecorder) Next() *gomock.Call {
+// Advance indicates an expected call of Advance.
+func (mr *MockSlotTickerMockRecorder) Advance() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Next", reflect.TypeOf((*MockSlotTicker)(nil).Next))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Advance", reflect.TypeOf((*MockSlotTicker)(nil).Advance))
 }
 
 // Slot mocks base method.
