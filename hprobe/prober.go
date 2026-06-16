@@ -58,8 +58,9 @@ func (p *HealthProber) ProbeAll(ctx context.Context) error {
 			defer wg.Done()
 
 			err := p.probeComponent(ctx, n)
-			if err != nil {
-				// Relay the error and quit early.
+			if err != nil && !errors.Is(err, context.Canceled) {
+				// Relay the error and quit early. Skip context.Canceled: it means
+				// a sibling failure triggered our cancel(), not a real probe fault.
 				errsCh <- fmt.Errorf("probe component %s: %w", name, err)
 				cancel()
 			}
