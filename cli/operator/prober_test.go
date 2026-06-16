@@ -45,7 +45,7 @@ func Test_startHealthProber_returnsErrOnUnhealthy(t *testing.T) {
 }
 
 // Test_startHealthProber_ctxCancelMasksProbeFail verifies the ctx.Err() guard: when ctx is
-// cancelled at the same time a probe fails (e.g. the network stack tears down components before
+// canceled at the same time a probe fails (e.g. the network stack tears down components before
 // the errgroup context fully propagates), startHealthProber returns nil rather than a misleading
 // "components unhealthy" error that would cause a Fatal log on normal shutdown.
 func Test_startHealthProber_ctxCancelMasksProbeFail(t *testing.T) {
