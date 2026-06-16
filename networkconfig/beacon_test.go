@@ -142,32 +142,32 @@ func TestSyncCommitteePeriodHelpers(t *testing.T) {
 	}
 
 	tests := []struct {
-		name          string
-		period        uint64
-		firstEpoch    phase0.Epoch
-		lastSlot      phase0.Slot
-		firstNextSlot phase0.Slot
+		name               string
+		period             uint64
+		firstEpoch         phase0.Epoch
+		lastActionableSlot phase0.Slot
+		firstNextSlot      phase0.Slot
 	}{
 		{
-			name:          "first period",
-			period:        0,
-			firstEpoch:    0,
-			firstNextSlot: 256,
-			lastSlot:      254,
+			name:               "first period",
+			period:             0,
+			firstEpoch:         0,
+			firstNextSlot:      256,
+			lastActionableSlot: 254,
 		},
 		{
-			name:          "second period",
-			period:        1,
-			firstEpoch:    8,
-			firstNextSlot: 512,
-			lastSlot:      510,
+			name:               "second period",
+			period:             1,
+			firstEpoch:         8,
+			firstNextSlot:      512,
+			lastActionableSlot: 510,
 		},
 		{
-			name:          "third period",
-			period:        2,
-			firstEpoch:    16,
-			firstNextSlot: 768,
-			lastSlot:      766,
+			name:               "third period",
+			period:             2,
+			firstEpoch:         16,
+			firstNextSlot:      768,
+			lastActionableSlot: 766,
 		},
 	}
 
@@ -175,8 +175,8 @@ func TestSyncCommitteePeriodHelpers(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			require.Equal(t, tc.firstEpoch, config.FirstEpochOfSyncPeriod(tc.period))
 			require.Equal(t, tc.firstNextSlot, config.FirstSlotAtEpoch(config.FirstEpochOfSyncPeriod(tc.period+1)))
-			require.Equal(t, tc.lastSlot, config.LastSlotOfSyncPeriod(tc.period))
-			require.Equal(t, tc.firstNextSlot-2, config.LastSlotOfSyncPeriod(tc.period))
+			require.Equal(t, tc.lastActionableSlot, config.LastActionableSlotOfSyncPeriod(tc.period))
+			require.Equal(t, tc.firstNextSlot-2, config.LastActionableSlotOfSyncPeriod(tc.period))
 		})
 	}
 }

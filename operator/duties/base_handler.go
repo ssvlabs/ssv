@@ -90,5 +90,5 @@ func (h *baseHandler) atLastSlotOfCurrentEpoch(currentSlot phase0.Slot) bool {
 
 // atLastSlotOrPastCurrentPeriod returns true if the currentSlot is at or past the last actionable slot of the currentPeriod.
 func (h *baseHandler) atLastSlotOrPastCurrentPeriod(currentSlot phase0.Slot, currentPeriod uint64) bool {
-	return currentSlot >= h.beaconConfig.LastSlotOfSyncPeriod(currentPeriod)
+	return currentSlot >= h.beaconConfig.LastActionableSlotOfSyncPeriod(currentPeriod)
 }

@@ -134,8 +134,8 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 					// 1) Declare intents.
 					// Some validator-related state has changed, so re-fetch the duties for the current and next
 					// epoch to keep them up to date for all validators.
-					h.dutyFetchIntents[nextEpoch] = false
 					h.dutyFetchIntents[currentEpoch] = false
+					h.dutyFetchIntents[nextEpoch] = false
 
 					// 2) Process certain intents immediately.
 					// When at epoch boundary, we only care about pre-fetching & preparing the duties for the next
