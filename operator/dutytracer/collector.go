@@ -1494,12 +1494,18 @@ func (c *Collector) runScheduleWorker(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case s := <-c.scheduleJobs:
-			if c.retention.expired(s) {
-				continue // slot outside the retention window; don't recreate its scheduled data
-			}
-			if err := c.computeAndPersistScheduleForSlot(s); err != nil {
-				c.logger.Debug("schedule worker compute/persist", fields.Slot(s), zap.Error(err))
-			}
+			c.processScheduleJob(s)
 		}
+	}
+}
+
+// processScheduleJob persists the per-slot scheduled-role map, unless the slot has already aged out
+// of the retention window — recreating its scheduled data would defeat pruning.
+func (c *Collector) processScheduleJob(s phase0.Slot) {
+	if c.retention.expired(s) {
+		return // slot outside the retention window; don't recreate its scheduled data
+	}
+	if err := c.computeAndPersistScheduleForSlot(s); err != nil {
+		c.logger.Debug("schedule worker compute/persist", fields.Slot(s), zap.Error(err))
 	}
 }

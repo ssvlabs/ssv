@@ -298,6 +298,18 @@ func TestPruneSlot(t *testing.T) {
 	require.Len(t, sched, 1)
 }
 
+// TestPruneSlot_DBError exercises PruneSlot's error aggregation: a closed DB makes every prefix
+// drop fail, and PruneSlot must surface a (combined) error rather than silently succeeding.
+func TestPruneSlot_DBError(t *testing.T) {
+	logger := zap.NewNop()
+	db, err := kv.NewInMemory(logger, basedb.Options{})
+	require.NoError(t, err)
+	require.NoError(t, db.Close()) // subsequent DropPrefix/Delete calls now fail
+
+	s := store.New(db)
+	require.Error(t, s.PruneSlot(1))
+}
+
 func TestAddScheduledRole_UnionsIndices(t *testing.T) {
 	logger := zap.NewNop()
 	db, err := kv.NewInMemory(logger, basedb.Options{})

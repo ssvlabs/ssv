@@ -419,6 +419,19 @@ func Test_resolveMode(t *testing.T) {
 	require.Equal(t, modeExporter, resolveMode(exporter.Options{Enabled: true}))
 }
 
+// Test_warnDeprecatedExporterEnv verifies a stale, now-removed exporter env var is flagged rather
+// than silently ignored.
+func Test_warnDeprecatedExporterEnv(t *testing.T) {
+	t.Setenv("EXPORTER_MODE", "archive")
+	t.Setenv("EXPORTER_RETAIN_SLOTS", "50400")
+
+	core, logs := observer.New(zapcore.WarnLevel)
+	warnDeprecatedExporterEnv(zap.New(core))
+
+	require.Equal(t, 1, logs.FilterField(zap.String("env", "EXPORTER_MODE")).Len())
+	require.Equal(t, 1, logs.FilterField(zap.String("env", "EXPORTER_RETAIN_SLOTS")).Len())
+}
+
 func Test_warnIfSSVAPIAddressUnset(t *testing.T) {
 	t.Parallel()
 

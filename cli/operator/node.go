@@ -381,7 +381,7 @@ func newNode(ctx context.Context, cfg *config, logger *zap.Logger, res resolved,
 	// subset.) RetainEpochs bounds on-disk trace history; 0 (default) retains indefinitely.
 	var collector *dutytracer.Collector
 	if res.isExporter() {
-		retainSlots := cfg.ExporterOptions.RetainEpochs * networkConfig.Beacon.SlotsPerEpoch
+		retainSlots := cfg.ExporterOptions.RetainEpochs * networkConfig.SlotsPerEpoch
 		logger.Info("exporter enabled (full duty tracing)",
 			zap.Uint64("retain_epochs", cfg.ExporterOptions.RetainEpochs),
 			zap.Uint64("retain_slots", retainSlots))
