@@ -28,7 +28,7 @@ func setupBadgerDB(
 		return nil, fmt.Errorf("failed to open db: %w", err)
 	}
 	// On any later failure here (migrations/GC), close the freshly-opened db; on success the
-	// caller (newNode) owns it and tears it down via node.Close().
+	// caller (newNode) owns it and tears it down via node.close().
 	defer func() {
 		if err != nil {
 			_ = db.Close()
@@ -55,7 +55,7 @@ func setupPebbleDB(
 		return nil, fmt.Errorf("failed to open db: %w", err)
 	}
 	// On any later failure here (migrations/GC), close the freshly-opened db; on success the
-	// caller (newNode) owns it and tears it down via node.Close().
+	// caller (newNode) owns it and tears it down via node.close().
 	defer func() {
 		if err != nil {
 			_ = db.Close()

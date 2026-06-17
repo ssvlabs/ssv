@@ -54,24 +54,29 @@ import (
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
-func runNode(ctx context.Context, cfg *config, logger *zap.Logger) error {
-	// runNode owns the parent ctx for the clients it builds directly (goclient, execution) before
-	// newNode exists. goclient has no Close() of its own — ctx cancellation is its only shutdown —
-	// so cancel on return to release it once the node has stopped and we unwind.
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
+// shutdownGraceTimeout bounds the whole graceful teardown — services unwinding plus the node close —
+// once the first terminal event has landed. Past it teardown gives up and surfaces the terminal
+// cause instead of hanging forever on something ignoring the cancellation convention; the leftovers
+// are reaped at process exit. 15s is generous against the designed sub-second unwind and leaves
+// room ahead of orchestrator kill grace.
+const shutdownGraceTimeout = 15 * time.Second
 
+// buildNode builds the node graph: it validates config up front (before any network I/O, so a
+// misconfigured node fails fast), connects the CL/EL clients — binding them to ctx, whose
+// cancellation is goclient's only shutdown — and wires everything together via newNode. The returned
+// *node owns the resources newNode opened; node.close releases them at teardown.
+func buildNode(ctx context.Context, cfg *config, logger *zap.Logger) (*node, error) {
 	// Validate the configuration up front, before any network I/O, so a misconfigured node
 	// fails fast (e.g. an invalid ProposerDelay is rejected before the beacon client is built,
 	// rather than after connecting to the beacon). resolveAndValidate only reads cfg.
 	res, err := cfg.resolveAndValidate(logger)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	ssvNetworkConfig, err := setupSSVNetwork(logger, cfg)
 	if err != nil {
-		return fmt.Errorf("could not setup network: %w", err)
+		return nil, fmt.Errorf("could not setup network: %w", err)
 	}
 
 	logger.Info("connecting CL(s)",
@@ -82,14 +87,14 @@ func runNode(ctx context.Context, cfg *config, logger *zap.Logger) error {
 
 	cliopt, err := goclient.NewOptions(cfg.ConsensusClient, cfg.ProposerDelay)
 	if err != nil {
-		return startupError{
+		return nil, startupError{
 			err:    fmt.Errorf("failed to create beacon client options: %w", err),
 			fields: []zap.Field{fields.Address(cfg.ConsensusClient.BeaconNodeAddr)},
 		}
 	}
 	consensusClient, err := goclient.New(ctx, logger, cliopt)
 	if err != nil {
-		return startupError{
+		return nil, startupError{
 			err:    fmt.Errorf("failed to create beacon go-client: %w", err),
 			fields: []zap.Field{fields.Address(cfg.ConsensusClient.BeaconNodeAddr)},
 		}
@@ -107,7 +112,7 @@ func runNode(ctx context.Context, cfg *config, logger *zap.Logger) error {
 		}
 	}
 	if len(executionAddrList) == 0 {
-		return fmt.Errorf("no execution node address provided")
+		return nil, fmt.Errorf("no execution node address provided")
 	}
 
 	logger.Info("connecting EL(s)",
@@ -127,7 +132,7 @@ func runNode(ctx context.Context, cfg *config, logger *zap.Logger) error {
 			executionclient.WithSyncDistanceTolerance(cfg.ExecutionClient.SyncDistanceTolerance),
 		)
 		if err != nil {
-			return fmt.Errorf("could not connect to execution client: %w", err)
+			return nil, fmt.Errorf("could not connect to execution client: %w", err)
 		}
 
 		executionClient = ec
@@ -141,7 +146,7 @@ func runNode(ctx context.Context, cfg *config, logger *zap.Logger) error {
 			executionclient.WithSyncDistanceToleranceMulti(cfg.ExecutionClient.SyncDistanceTolerance),
 		)
 		if err != nil {
-			return fmt.Errorf("could not connect to execution client: %w", err)
+			return nil, fmt.Errorf("could not connect to execution client: %w", err)
 		}
 
 		executionClient = ec
@@ -149,23 +154,18 @@ func runNode(ctx context.Context, cfg *config, logger *zap.Logger) error {
 
 	n, err := newNode(ctx, cfg, logger, res, networkConfig, consensusClient, executionClient)
 	if err != nil {
-		// newNode failed before node.Close() owns the EL client, so close it here.
+		// newNode failed before node.close() owns the EL client, so close it here.
 		_ = executionClient.Close()
-		return err
+		return nil, err
 	}
-	defer func() {
-		if err := n.Close(); err != nil {
-			logger.Error("could not cleanly close node", zap.Error(err))
-		}
-	}()
 
-	return n.start()
+	return n, nil
 }
 
-// beaconClient is the beacon-node surface that newNode()/start() consume: the duty-call
-// interface plus the Healthy probe used to register it as a health-prober component. runNode()
-// passes in a *goclient.GoClient as this interface, so an in-process smoke test can inject a
-// stub instead of a real beacon connection.
+// beaconClient is the beacon-node surface the node consumes: the duty-call interface plus the
+// Healthy probe used to register it as a health-prober component. An interface (satisfied by
+// *goclient.GoClient) so an in-process smoke test can inject a stub instead of a real beacon
+// connection.
 type beaconClient interface {
 	beaconprotocol.BeaconNode
 	doppelganger.BeaconNode // adds ValidatorLiveness, required by doppelganger.NewHandler
@@ -174,11 +174,8 @@ type beaconClient interface {
 
 var _ beaconClient = (*goclient.GoClient)(nil)
 
-// node bundles the constructed pieces that start() runs and Close() tears down.
+// node bundles the constructed pieces that start() brings up and close() tears down.
 type node struct {
-	ctx    context.Context
-	cancel context.CancelFunc
-
 	logger *zap.Logger
 
 	cfg            *config
@@ -198,27 +195,28 @@ type node struct {
 	metadataSyncer      *metadata.Syncer
 	storageMap          *ibftstorage.ParticipantStores
 	collector           *dutytracer.Collector
+	vrSubmitter         *runner.VRSubmitter
+	slotTickerProvider  slotticker.Provider
 	p2pNetwork          network.P2PNetwork
 	operatorNode        *operator.Node
 }
 
 // newNode wires the node's components from config + the injected beacon/EL clients. On any
 // error it closes whatever it already opened (db/p2p) via the error-only defers below; on
-// success the returned *node owns those closers (runNode() defers n.Close()). It mutates cfg
+// success the returned *node owns those closers, released via node.close(). Goroutines wired
+// here (the VRSubmitter; in exporter modes the duty-trace collector / slot-pruning) bind to ctx:
+// cancel it before Close, so they've stopped using the resources Close releases. It mutates cfg
 // in place (filling SSVOptions/P2pNetworkConfig with runtime deps), so a given cfg is single-use.
-func newNode(ctx context.Context, cfg *config, logger *zap.Logger, res resolved, networkConfig *networkconfig.Network, consensusClient beaconClient, executionClient executionclient.Provider) (_ *node, err error) {
+func newNode(
+	ctx context.Context,
+	cfg *config,
+	logger *zap.Logger,
+	res resolved,
+	networkConfig *networkconfig.Network,
+	consensusClient beaconClient,
+	executionClient executionclient.Provider,
+) (_ *node, err error) {
 	usingSSVSigner := res.usingSSVSigner
-
-	// Derive the node's own ctx from the parent so node.Close() can stop the ctx-bound goroutines
-	// wired below — the VRSubmitter, plus (in exporter modes) the duty-trace collector / slot-pruning.
-	// On assembly failure cancel here so a half-wired node doesn't leak the ctx-bound ones; on success
-	// Close() owns it.
-	ctx, cancel := context.WithCancel(ctx)
-	defer func() {
-		if err != nil {
-			cancel()
-		}
-	}()
 
 	identity, err := resolveOperatorIdentity(ctx, logger, cfg, res)
 	if err != nil {
@@ -273,9 +271,9 @@ func newNode(ctx context.Context, cfg *config, logger *zap.Logger, res resolved,
 		return nil, err
 	}
 	validatorProvider := nodeStorage.ValidatorStore().WithOperatorID(operatorDataStore.GetOperatorID)
-	var validatorRegistrationSubmitter runner.ValidatorRegistrationSubmitter
+	var vrSubmitter *runner.VRSubmitter
 	if !res.isExporter() {
-		validatorRegistrationSubmitter = runner.NewVRSubmitter(ctx, logger, networkConfig.Beacon, consensusClient, validatorProvider)
+		vrSubmitter = runner.NewVRSubmitter(logger, networkConfig.Beacon, consensusClient, validatorProvider)
 	}
 
 	keyManager, operatorSigner, err := buildKeyManager(ctx, logger, cfg, res, networkConfig.Beacon, db, ssvSignerClient, operatorPrivKey, operatorDataStore)
@@ -328,9 +326,8 @@ func newNode(ctx context.Context, cfg *config, logger *zap.Logger, res resolved,
 	var newDecidedHandler qbftcontroller.NewDecidedHandler
 	var decidedStreamPublisherFn func(dutytracer.DecidedInfo)
 	if cfg.WsAPIPort != 0 {
-		ws := exporterapi.NewWsServer(ctx, logger, nil, http.NewServeMux(), cfg.WithPing)
+		ws := exporterapi.NewWsServer(logger, nil, http.NewServeMux(), cfg.WithPing, fmt.Sprintf(":%d", cfg.WsAPIPort))
 		cfg.SSVOptions.WS = ws
-		cfg.SSVOptions.WsAPIPort = cfg.WsAPIPort
 		newDecidedHandler = decided.NewStreamPublisher(logger, networkConfig.DomainType, ws)
 		decidedStreamPublisherFn = decided.NewDecidedListener(logger, networkConfig.DomainType, ws, nodeStorage.ValidatorStore())
 	}
@@ -357,12 +354,6 @@ func newNode(ctx context.Context, cfg *config, logger *zap.Logger, res resolved,
 			SlotDuration: networkConfig.SlotDuration,
 			GenesisTime:  networkConfig.GenesisTime,
 		})
-	}
-
-	if res.mode == modeExporterStandard {
-		retain := cfg.ExporterOptions.RetainSlots
-		threshold := networkConfig.EstimatedCurrentSlot()
-		initSlotPruning(ctx, storageMap, slotTickerProvider, threshold, retain)
 	}
 
 	fixedSubnets, err := networkcommons.SubnetsFromString(cfg.P2pNetworkConfig.Subnets)
@@ -397,7 +388,6 @@ func newNode(ctx context.Context, cfg *config, logger *zap.Logger, res resolved,
 			dstore, networkConfig.Beacon, decidedStreamPublisherFn,
 			dutyStore)
 
-		go collector.Start(ctx, slotTickerProvider)
 		cfg.SSVOptions.ExporterRead = exporter2.NewExporter(logger, storageMap, collector, nodeStorage.ValidatorStore())
 	case modeExporterStandard:
 		logger.Info("exporter mode: standard")
@@ -422,7 +412,11 @@ func newNode(ctx context.Context, cfg *config, logger *zap.Logger, res resolved,
 	valOpts.OperatorDataStore = operatorDataStore
 	valOpts.RegistryStorage = nodeStorage
 	valOpts.ValidatorStore = nodeStorage.ValidatorStore()
-	valOpts.ValidatorRegistrationSubmitter = validatorRegistrationSubmitter
+	if vrSubmitter != nil {
+		// Guarded so the interface field stays a true nil in exporter mode — assigning a nil
+		// *VRSubmitter would make it a non-nil typed-nil interface. start() uses the concrete type.
+		valOpts.ValidatorRegistrationSubmitter = vrSubmitter
+	}
 	valOpts.NewDecidedHandler = newDecidedHandler
 	valOpts.DutyRoles = []spectypes.BeaconRole{spectypes.BNRoleAttester} // TODO could be better to set in other place
 	valOpts.StorageMap = storageMap
@@ -440,8 +434,6 @@ func newNode(ctx context.Context, cfg *config, logger *zap.Logger, res resolved,
 	operatorNode := operator.New(logger, cfg.SSVOptions, cfg.ExporterOptions, slotTickerProvider, storageMap)
 
 	return &node{
-		ctx:                 ctx,
-		cancel:              cancel,
 		logger:              logger,
 		cfg:                 cfg,
 		mode:                res.mode,
@@ -459,18 +451,19 @@ func newNode(ctx context.Context, cfg *config, logger *zap.Logger, res resolved,
 		metadataSyncer:      metadataSyncer,
 		storageMap:          storageMap,
 		collector:           collector,
+		vrSubmitter:         vrSubmitter,
+		slotTickerProvider:  slotTickerProvider,
 		p2pNetwork:          p2pNetwork,
 		operatorNode:        operatorNode,
 	}, nil
 }
 
-// Close stops the node's background work and tears down its resources. It cancels the node's ctx
-// (stopping the VRSubmitter and, in exporter modes, the duty-trace collector / slot-pruning) and
-// calls validatorCtrl.Stop() (the controller's ttlcache cleanup loops, which aren't ctx-bound), then
-// closes the CLI-owned resources (p2p network and execution client, then the db that p2p depends on).
-// newNode is the only constructor, so all these fields are always set.
-func (n *node) Close() error {
-	n.cancel()
+// close tears down the node's resources: validatorCtrl.Stop() (the controller's ttlcache cleanup
+// loops, which aren't ctx-bound), then the CLI-owned resources (p2p network and execution client,
+// then the db that p2p depends on). The ctx given to newNode must be canceled first, so the
+// ctx-bound goroutines have stopped using these resources. newNode is the only constructor, so all
+// these fields are always set.
+func (n *node) close() error {
 	n.validatorCtrl.Stop()
 
 	var errs []error
@@ -486,33 +479,47 @@ func (n *node) Close() error {
 	return errors.Join(errs...)
 }
 
-// start launches the node's long-lived services (metrics + SSV API servers, the health
-// prober, contract-event sync) and blocks on operatorNode.Start until the node's ctx is canceled.
-// NOTE: the metrics/SSV-API server goroutines call logger.Fatal on failure — crashing the
-// process and bypassing Close() — a candidate for errgroup-based coordinated shutdown.
-func (n *node) start() error {
+// start brings the node up: it runs the synchronous bring-up steps and registers every long-lived
+// service via spawn, returning once the node is up (nil) or a bring-up step has failed (that
+// error). Everything binds to ctx — when it dies, bring-up aborts mid-step and the services stop;
+// the services' terminal errors travel through spawn, not through the return value.
+func (n *node) start(ctx context.Context, spawn func(func() error)) error {
+	// Background services wired (but not started) by newNode, mode-dependent.
+	if n.vrSubmitter != nil {
+		spawn(func() error { n.vrSubmitter.Start(ctx); return nil })
+	}
+	if n.collector != nil {
+		spawn(func() error { n.collector.Start(ctx, n.slotTickerProvider); return nil })
+	}
+	if n.mode == modeExporterStandard {
+		startSlotPruning(ctx, spawn, n.storageMap, n.slotTickerProvider, n.networkConfig.EstimatedCurrentSlot(), n.cfg.ExporterOptions.RetainSlots)
+	}
+
 	if n.cfg.MetricsAPIPort > 0 {
 		metricsHandler := metrics.NewHandler(n.logger, n.db, n.cfg.EnableProfile, n.operatorNode)
-		_, metricsServeErr, err := metricsHandler.Start(n.ctx, http.NewServeMux(), fmt.Sprintf(":%d", n.cfg.MetricsAPIPort))
+		_, metricsServeErr, err := metricsHandler.Start(ctx, http.NewServeMux(), fmt.Sprintf(":%d", n.cfg.MetricsAPIPort))
 		if err != nil {
-			n.logger.Fatal("failed to start metrics server", zap.Error(err))
+			return fmt.Errorf("failed to start metrics server: %w", err)
 		}
-		go func() {
+		// Plain receive is safe: the server's ctx-bound Shutdown closes serveErr on cancel, so this
+		// service can't wedge teardown.
+		spawn(func() error {
 			if err := <-metricsServeErr; err != nil {
-				n.logger.Fatal("metrics server serve loop exited", zap.Error(err))
+				return fmt.Errorf("metrics server serve loop exited: %w", err)
 			}
-		}()
+			return nil
+		})
 	}
 
 	healthProber := hprobe.NewHealthProber(n.logger)
 	healthProber.AddComponent(clComponentName, n.consensusClient, proberHealthcheckTimeout, proberRetriesMax, proberRetryDelay)
 	healthProber.AddComponent(elComponentName, n.executionClient, proberHealthcheckTimeout, proberRetriesMax, proberRetryDelay)
-	if err := ensureComponentsHealthy(n.ctx, n.logger, healthProber); err != nil {
+	if err := ensureComponentsHealthy(ctx, n.logger, healthProber); err != nil {
 		return err
 	}
 
-	eventSyncer, err := syncContractEvents(
-		n.ctx,
+	eventSyncer, startOngoingSync, err := syncContractEvents(
+		ctx,
 		n.logger,
 		n.cfg,
 		n.executionClient,
@@ -526,56 +533,32 @@ func (n *node) start() error {
 	if err != nil {
 		return err
 	}
-	if len(n.cfg.LocalEventsPath) == 0 {
+	if startOngoingSync != nil {
 		healthProber.AddComponent(eventSyncerComponentName, eventSyncer, proberHealthcheckTimeout, proberRetriesMax, proberRetryDelay)
+		spawn(func() error {
+			return startOngoingSync(ctx)
+		})
 	}
 
-	go startHealthProber(n.ctx, n.logger, healthProber)
-
-	if _, err := n.metadataSyncer.SyncAll(n.ctx); err != nil {
+	if _, err := n.metadataSyncer.SyncAll(ctx); err != nil {
 		return fmt.Errorf("failed to sync metadata on startup: %w", err)
 	}
 
 	if n.usingSSVSigner {
-		if err := ensureNoMissingKeys(n.ctx, n.nodeStorage, n.operatorDataStore, n.ssvSignerClient); err != nil {
+		if err := ensureNoMissingKeys(ctx, n.nodeStorage, n.operatorDataStore, n.ssvSignerClient); err != nil {
 			return err
 		}
 	}
 
-	// Increase MaxPeers if the operator is subscribed to many subnets.
-	// TODO: use OperatorCommittees when it's fixed.
-	if n.cfg.P2pNetworkConfig.DynamicMaxPeers {
-		var (
-			baseMaxPeers        = 60
-			maxPeersLimit       = n.cfg.P2pNetworkConfig.DynamicMaxPeersLimit
-			idealPeersPerSubnet = 3
-		)
-		start := time.Now()
-		myValidators := n.nodeStorage.ValidatorStore().OperatorValidators(n.operatorDataStore.GetOperatorID())
-		mySubnets := networkcommons.Subnets{}
-		myActiveSubnets := 0
-		for _, v := range myValidators {
-			subnet := networkcommons.CommitteeSubnet(v.CommitteeID())
-			if !mySubnets.IsSet(subnet) {
-				mySubnets.Set(subnet)
-				myActiveSubnets++
-			}
-		}
-		idealMaxPeers := min(baseMaxPeers+idealPeersPerSubnet*myActiveSubnets, maxPeersLimit)
-		if n.cfg.P2pNetworkConfig.MaxPeers < idealMaxPeers {
-			n.logger.Warn("increasing MaxPeers to match the operator's subscribed subnets",
-				zap.Int("old_max_peers", n.cfg.P2pNetworkConfig.MaxPeers),
-				zap.Int("new_max_peers", idealMaxPeers),
-				zap.Int("subscribed_subnets", myActiveSubnets),
-				fields.Took(time.Since(start)),
-			)
-			n.cfg.P2pNetworkConfig.MaxPeers = idealMaxPeers
-		}
-	}
+	n.applyDynamicMaxPeers()
 
 	if err := n.startNetwork(healthProber); err != nil {
 		return err
 	}
+	// After startNetwork, so the prober's components (CL/EL, event-syncer, p2p) are all registered.
+	spawn(func() error {
+		return startHealthProber(ctx, n.logger, healthProber)
+	})
 
 	if n.cfg.SSVAPIPort > 0 {
 		warnIfSSVAPIAddressUnset(n.logger, n.cfg.SSVAPIAddress, n.cfg.SSVAPIPort)
@@ -599,21 +582,63 @@ func (n *node) start() error {
 			hexporter.NewExporter(n.logger, n.storageMap, n.collector, n.nodeStorage.ValidatorStore()),
 			n.mode == modeExporterArchive,
 		)
-		_, apiServeErr, err := apiServer.Start(n.ctx)
+		_, apiServeErr, err := apiServer.Start(ctx)
 		if err != nil {
-			n.logger.Fatal("failed to start API server", zap.Error(err))
+			return fmt.Errorf("failed to start API server: %w", err)
 		}
-		go func() {
+		spawn(func() error {
 			if err := <-apiServeErr; err != nil {
-				n.logger.Fatal("API server serve loop exited", zap.Error(err))
+				return fmt.Errorf("API server serve loop exited: %w", err)
 			}
-		}()
-	}
-	if err := n.operatorNode.Start(n.ctx); err != nil {
-		return fmt.Errorf("failed to start SSV node: %w", err)
+			return nil
+		})
 	}
 
+	spawn(func() error {
+		if err := n.operatorNode.Start(ctx); err != nil {
+			return fmt.Errorf("failed to start SSV node: %w", err)
+		}
+		return nil
+	})
+
 	return nil
+}
+
+// applyDynamicMaxPeers raises the configured MaxPeers to match the number of subnets the operator is
+// subscribed to, so a default sized for small operators doesn't starve a large one for peers. No-op
+// unless DynamicMaxPeers is enabled; must run before startNetwork so the network comes up with the
+// raised value.
+// TODO: use OperatorCommittees when it's fixed.
+func (n *node) applyDynamicMaxPeers() {
+	if !n.cfg.P2pNetworkConfig.DynamicMaxPeers {
+		return
+	}
+	var (
+		baseMaxPeers        = 60
+		maxPeersLimit       = n.cfg.P2pNetworkConfig.DynamicMaxPeersLimit
+		idealPeersPerSubnet = 3
+	)
+	start := time.Now()
+	myValidators := n.nodeStorage.ValidatorStore().OperatorValidators(n.operatorDataStore.GetOperatorID())
+	mySubnets := networkcommons.Subnets{}
+	myActiveSubnets := 0
+	for _, v := range myValidators {
+		subnet := networkcommons.CommitteeSubnet(v.CommitteeID())
+		if !mySubnets.IsSet(subnet) {
+			mySubnets.Set(subnet)
+			myActiveSubnets++
+		}
+	}
+	idealMaxPeers := min(baseMaxPeers+idealPeersPerSubnet*myActiveSubnets, maxPeersLimit)
+	if n.cfg.P2pNetworkConfig.MaxPeers < idealMaxPeers {
+		n.logger.Warn("increasing MaxPeers to match the operator's subscribed subnets",
+			zap.Int("old_max_peers", n.cfg.P2pNetworkConfig.MaxPeers),
+			zap.Int("new_max_peers", idealMaxPeers),
+			zap.Int("subscribed_subnets", myActiveSubnets),
+			fields.Took(time.Since(start)),
+		)
+		n.cfg.P2pNetworkConfig.MaxPeers = idealMaxPeers
+	}
 }
 
 // startNetwork wires validator stats into the p2p layer, then sets up + starts the network and
@@ -664,26 +689,25 @@ func setupOperatorDataStore(
 	return operatordatastore.New(operatorData), nil
 }
 
-func initSlotPruning(ctx context.Context, stores *ibftstorage.ParticipantStores, slotTickerProvider slotticker.Provider, slot phase0.Slot, retain uint64) {
-	var wg sync.WaitGroup
-
+// startSlotPruning runs the one-time initial slot GC (synchronously, in parallel across stores) and
+// then spawns a per-store background cleanup loop joined to the supervised lifecycle.
+func startSlotPruning(ctx context.Context, spawn func(func() error), stores *ibftstorage.ParticipantStores, slotTickerProvider slotticker.Provider, slot phase0.Slot, retain uint64) {
 	threshold := slot - phase0.Slot(retain)
 
-	// async perform initial slot gc
+	// One-time initial GC: prune each store in parallel, wait for all.
+	var wg sync.WaitGroup
 	_ = stores.Each(func(_ spectypes.BeaconRole, store ibftstorage.ParticipantStore) error {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			store.Prune(ctx, threshold)
-		}()
+		wg.Go(func() { store.Prune(ctx, threshold) })
 		return nil
 	})
-
 	wg.Wait()
 
-	// start background job for removing old slots on every tick
+	// Background per-store cleanup on every tick.
 	_ = stores.Each(func(_ spectypes.BeaconRole, store ibftstorage.ParticipantStore) error {
-		go store.PruneContinuously(ctx, slotTickerProvider, phase0.Slot(retain))
+		spawn(func() error {
+			store.PruneContinuously(ctx, slotTickerProvider, phase0.Slot(retain))
+			return nil
+		})
 		return nil
 	})
 }

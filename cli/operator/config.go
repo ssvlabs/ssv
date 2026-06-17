@@ -294,9 +294,9 @@ func (e signingConfigError) Error() string          { return e.err.Error() }
 func (e signingConfigError) Unwrap() error          { return e.err }
 func (e signingConfigError) logFields() []zap.Field { return e.fields }
 
-// startupError wraps an error returned from runNode() with structured log fields, so the single
-// top-level fatal preserves the context (e.g. the ssv-signer endpoint). Mirrors signingConfigError,
-// for non-validation startup failures.
+// startupError attaches structured log fields to a startup error, so whoever logs it preserves
+// context (e.g. the ssv-signer endpoint) that the message alone can't carry. Mirrors
+// signingConfigError, for non-validation startup failures.
 type startupError struct {
 	err    error
 	fields []zap.Field
@@ -313,8 +313,8 @@ type fieldedError interface {
 	logFields() []zap.Field
 }
 
-// startupErrorLogFields returns the structured log fields for an error returned by runNode(): the
-// error itself, plus any context carried by a fieldedError (signingConfigError / startupError).
+// startupErrorLogFields returns the structured log fields for a startup error: the error itself,
+// plus any context carried by a fieldedError (signingConfigError / startupError).
 func startupErrorLogFields(err error) []zap.Field {
 	fields := []zap.Field{zap.Error(err)}
 	var fe fieldedError

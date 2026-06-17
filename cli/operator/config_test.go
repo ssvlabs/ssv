@@ -106,7 +106,7 @@ func Test_resolveAndValidate_signingErrorContext(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "cannot enable both remote signing")
 
-	// start_node.go logs runNode()'s error via startupErrorLogFields — the signing-source context
+	// start_node.go logs the startup error via startupErrorLogFields — the signing-source context
 	// must be preserved as queryable structured fields, without exposing the key value.
 	core, recorded := observer.New(zapcore.ErrorLevel)
 	zap.New(core).Error("could not start node", startupErrorLogFields(err)...)

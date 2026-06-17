@@ -4,6 +4,9 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -56,10 +59,50 @@ var StartNodeCmd = &cobra.Command{
 
 		logger.Info(fmt.Sprintf("starting %v", commons.GetBuildData()))
 
-		if err := runNode(cmd.Context(), &cfg, logger); err != nil {
+		// First SIGINT/SIGTERM cancels the node ctx so shutdown unwinds gracefully (services stop,
+		// node Close runs); a second one force-exits via Fatal — the escape hatch for a graceful
+		// teardown that wedged. Scoped to start-node so other subcommands keep cobra's default
+		// signal behavior.
+		ctx, cancel := context.WithCancel(cmd.Context())
+		defer cancel()
+		sigC := make(chan os.Signal, 2)
+		signal.Notify(sigC, os.Interrupt, syscall.SIGTERM)
+		go handleShutdownSignals(sigC, logger, cancel, func(sig os.Signal) {
+			logger.Fatal("received second shutdown signal, exiting immediately", zap.String("signal", sig.String()))
+		})
+
+		// Build the node, then supervise it: supervise blocks until the first terminal event (a
+		// service/bring-up failure, or the signal canceling ctx) brings the node down.
+		n, err := buildNode(ctx, &cfg, logger)
+		if err == nil {
+			err = supervise(ctx, logger, shutdownGraceTimeout, n.start, n.close)
+		}
+		if err != nil {
+			// buildNode/supervise surface the terminal cause — for a deliberate stop that's
+			// context.Canceled, or whatever was in flight when the signal landed. Key on whether a
+			// signal arrived (ctx), not the error's nature: a deliberate stop exits 0 (running the
+			// deferred observability shutdown) even if a genuine error coincided — whoever sent the
+			// signal isn't restarting on exit code anyway.
+			if ctx.Err() != nil {
+				logger.Info("node stopped on signal", startupErrorLogFields(err)...)
+				return
+			}
 			logger.Fatal("could not start node", startupErrorLogFields(err)...)
 		}
 	},
+}
+
+// handleShutdownSignals implements the two-stage stop scoped to start-node: the first signal calls
+// gracefulStop (cancel the node ctx so shutdown unwinds cleanly), and a second one calls forceStop —
+// the escape hatch for a graceful teardown that wedged. forceStop is injected (it's logger.Fatal in
+// production, which os.Exits) so the two-stage behavior is testable.
+func handleShutdownSignals(sigC <-chan os.Signal, logger *zap.Logger, gracefulStop func(), forceStop func(os.Signal)) {
+	sig := <-sigC
+	logger.Info("received shutdown signal, shutting down gracefully (repeat to force-exit)", zap.String("signal", sig.String()))
+	gracefulStop()
+
+	sig = <-sigC
+	forceStop(sig)
 }
 
 // buildObservabilityOptions assembles the observability stack options (logger plus
