@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/attestantio/go-eth2-client/api"
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
@@ -14,6 +14,7 @@ import (
 	"github.com/ssvlabs/ssv/eth/executionclient"
 	"github.com/ssvlabs/ssv/exporter"
 	"github.com/ssvlabs/ssv/hprobe"
+	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
@@ -21,25 +22,25 @@ import (
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
-// Test_runNode_invalidConfigReturns verifies runNode() returns the configuration error instead of
+// Test_buildNode_invalidConfigReturns verifies buildNode() returns the configuration error instead of
 // calling logger.Fatal (which would os.Exit the test process) when resolveAndValidate fails.
-// A conflicting signing config trips resolveAndValidate — the first thing runNode() does — before
+// A conflicting signing config trips resolveAndValidate — the first thing buildNode() does — before
 // any network I/O, so the call is safe to make in-process.
-func Test_runNode_invalidConfigReturns(t *testing.T) {
+func Test_buildNode_invalidConfigReturns(t *testing.T) {
 	c := config{}
 	c.SSVSigner.Endpoint = testSignerEndpoint
 	c.OperatorPrivateKey = testOperatorKey // remote + local signing => rejected by resolveAndValidate
 
-	err := runNode(context.Background(), &c, zap.NewNop())
+	_, err := buildNode(context.Background(), &c, zap.NewNop())
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "cannot enable both remote signing")
 }
 
 // stubBeaconClient satisfies the in-package beaconClient interface by embedding it (nil): it
 // promotes every method so the type compiles as a beaconClient, while implementing only what the
-// test path actually invokes. In operator mode with Doppelganger disabled, newNode() never calls
-// a beacon method synchronously (it only stores the client); the one async caller is the
-// NewVRSubmitter goroutine, which a.Close() stops by canceling the node's ctx.
+// test path actually invokes. newNode() starts no goroutines and — with Doppelganger disabled —
+// invokes only one beacon method synchronously during assembly (SetProposalPreparationsProvider),
+// so that's the sole override needed.
 type stubBeaconClient struct {
 	beaconClient
 }
@@ -49,21 +50,13 @@ type stubBeaconClient struct {
 func (stubBeaconClient) SetProposalPreparationsProvider(func() ([]*eth2apiv1.ProposalPreparation, error)) {
 }
 
-// SubmitValidatorRegistrations is called unconditionally on each slot tick by the NewVRSubmitter
-// goroutine newNode() starts in operator mode. A no-op makes the smoke test structurally safe if
-// that goroutine ticks before ctx is canceled, rather than relying on the slot interval winning the
-// race (it would otherwise hit the embedded-nil beacon and panic).
-func (stubBeaconClient) SubmitValidatorRegistrations(context.Context, []*api.VersionedSignedValidatorRegistration) error {
-	return nil
-}
-
 // stubExecutionClient satisfies executionclient.Provider the same way. newNode() only stores the
 // EL client (it is consumed in start(), not here), so no method is invoked during assembly.
 type stubExecutionClient struct {
 	executionclient.Provider
 }
 
-// Close is a no-op: node.Close() (invoked by the smoke tests during teardown) calls it, so it must
+// Close is a no-op: node.close() (invoked by the smoke tests during teardown) calls it, so it must
 // not fall through to the nil embedded Provider.
 func (stubExecutionClient) Close() error { return nil }
 
@@ -118,10 +111,11 @@ func Test_newNode_wiresOperatorNode(t *testing.T) {
 			_, isNoOp := a.doppelgangerHandler.(doppelganger.NoOpHandler)
 			require.Equal(t, !tc.doppelgangerOn, isNoOp, "doppelganger handler must match the configured protection")
 
-			// a.Close() cancels the node's ctx (stopping the VRSubmitter goroutine newNode started in
-			// operator mode), then closes the CLI-owned resources cleanly — the p2p network was
-			// constructed but never Setup/Start'd.
-			require.NoError(t, a.Close())
+			// Mirror production teardown ordering: cancel the ctx, then close. newNode starts no
+			// goroutines, so nothing is racing here — the p2p network was constructed but never
+			// Setup/Start'd.
+			cancel()
+			require.NoError(t, a.close())
 		})
 	}
 }
@@ -132,15 +126,13 @@ func Test_newNode_wiresOperatorNode(t *testing.T) {
 // archive mode.
 func Test_newNode_wiresExporterNode(t *testing.T) {
 	for _, tc := range []struct {
-		name              string
-		mode              nodeMode
-		exporterMode      string
-		wantCollector     bool
-		wantStopPruning   bool
-		wantStopCollector bool
+		name          string
+		mode          nodeMode
+		exporterMode  string
+		wantCollector bool
 	}{
-		{name: "standard", mode: modeExporterStandard, exporterMode: exporter.ModeStandard, wantCollector: false, wantStopPruning: true, wantStopCollector: false},
-		{name: "archive", mode: modeExporterArchive, exporterMode: exporter.ModeArchive, wantCollector: true, wantStopPruning: false, wantStopCollector: true},
+		{name: "standard", mode: modeExporterStandard, exporterMode: exporter.ModeStandard, wantCollector: false},
+		{name: "archive", mode: modeExporterArchive, exporterMode: exporter.ModeArchive, wantCollector: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
@@ -178,23 +170,9 @@ func Test_newNode_wiresExporterNode(t *testing.T) {
 				require.Nil(t, a.collector, "standard mode has no duty-trace collector")
 			}
 
-			// The shutdown stop funcs must be wired so Close() can join the DB-writing
-			// goroutines before closing the DB. Close() nil-guards them, so without these
-			// assertions a dropped assignment would pass tests yet reintroduce the
-			// shutdown panic. They're mode-complementary: pruning is standard-only, the
-			// collector archive-only.
-			if tc.wantStopPruning {
-				require.NotNil(t, a.stopSlotPruning, "standard mode wires the slot-pruning stop func")
-			} else {
-				require.Nil(t, a.stopSlotPruning, "only standard mode prunes slots")
-			}
-			if tc.wantStopCollector {
-				require.NotNil(t, a.stopCollector, "archive mode wires the collector stop func")
-			} else {
-				require.Nil(t, a.stopCollector, "only archive mode runs the duty-trace collector")
-			}
-
-			require.NoError(t, a.Close())
+			// Mirror production teardown ordering: cancel the ctx, then close (newNode starts no goroutines).
+			cancel()
+			require.NoError(t, a.close())
 		})
 	}
 }
@@ -233,8 +211,7 @@ func Test_newNode_closesDBOnAssemblyFailure(t *testing.T) {
 	require.ErrorContains(t, err, "failed to setup network private key") // i.e. failed in setupP2P, after db-open
 	require.Nil(t, a)
 
-	// newNode's error path cancels the node's ctx itself (stopping the VRSubmitter goroutine it started before the
-	// failure), so the test no longer has to.
+	// newNode starts no goroutines, so the failed assembly leaves nothing running.
 	//
 	// The error-only defer must have closed the db: a fresh badger open of the same dir succeeds
 	// only if the previous handle released its directory lock.
@@ -283,4 +260,28 @@ func Test_node_startNetwork_wiresStatsRegardlessOfDynamicMaxPeers(t *testing.T) 
 			require.True(t, stubNet.startCalled, "p2p Start must run regardless of DynamicMaxPeers")
 		})
 	}
+}
+
+// Test_startSlotPruning_spawnsContinuousPrunerPerStore checks the wiring the goroutine-free refactor
+// introduced: the per-store background pruning is launched through spawn (one per store) rather than
+// a bare go, and the synchronous initial GC runs without hanging. The spawn here only counts — it
+// doesn't run the pruners — so this asserts the wiring, not the pruning semantics (those live in
+// ibft/storage).
+func Test_startSlotPruning_spawnsContinuousPrunerPerStore(t *testing.T) {
+	db, err := kv.New(zap.NewNop(), basedb.Options{Path: t.TempDir(), Ctx: context.Background()})
+	require.NoError(t, err)
+	defer func() { _ = db.Close() }()
+
+	stores := ibftstorage.NewStores()
+	stores.Add(spectypes.BNRoleAttester, ibftstorage.New(zap.NewNop(), db, spectypes.BNRoleAttester))
+	stores.Add(spectypes.BNRoleProposer, ibftstorage.New(zap.NewNop(), db, spectypes.BNRoleProposer))
+
+	spawned := 0
+	spawn := func(func() error) { spawned++ } // count, don't run — testing the wiring, not pruning
+
+	// slot > retain so the initial-GC threshold doesn't underflow; the ticker provider is never
+	// invoked because spawn doesn't run the pruners.
+	startSlotPruning(context.Background(), spawn, stores, nil, 1000, 100)
+
+	require.Equal(t, 2, spawned, "one continuous-pruner must be spawned per store")
 }

@@ -122,12 +122,22 @@ func (handler *msgIDHandler) MsgID(logger *zap.Logger) func(pmsg *ps_pb.Message)
 }
 
 func (handler *msgIDHandler) pubsubMsgToMsgID(msg []byte) string {
-	// TODO: (Alan) should we hash only the message body or what? @GalRogozinski @MatheusFranco99
+	return MsgID(msg)
+}
 
-	// In Alan message structure the message body can be identical for all 4 operators
-	// whereas before it included a BLS signature which made it unique
-	// so we hash full message (including signer) to make it unique
-
+// MsgID computes the gossipsub message-id for a raw pubsub payload, identical to the id gossipsub
+// itself assigns. Exported so the broadcast path can log the same id a receiver (and the pubsub
+// tracer) sees, for cross-node correlation.
+//
+// We hash the full SignedSSVMessage, not just its body. Under the Alan message structure the body
+// can be byte-identical across a committee's operators — e.g. same-view prepare/commit messages, or
+// a decided vs. a plain commit — so a body-only id would alias their distinct messages onto a single
+// id. gossipsub marks an id "seen" before our validators run and silently drops later duplicates, so
+// that aliasing would censor all but the first operator's message to arrive and deadlock consensus.
+// Hashing the full message — which includes each operator's RSA signatures — keeps every message's id
+// distinct; as a side benefit the ids also become unpredictable to an observer, avoiding seen-cache
+// shadowing.
+func MsgID(msg []byte) string {
 	if len(msg) == 0 {
 		return ""
 	}

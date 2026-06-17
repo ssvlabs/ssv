@@ -44,24 +44,29 @@ func NewHealthProber(logger *zap.Logger) *HealthProber {
 	}
 }
 
+// ProbeAll probes all components in parallel and returns the joined failure verdict (nil if no
+// failure was observed). It returns when every probe finishes or when ctx expires, whichever comes
+// first — a Healthy impl that ignores its ctx can't stall the round past its deadline.
 func (p *HealthProber) ProbeAll(ctx context.Context) error {
-	// Probe all components in parallel, use cancel to quit early canceling irrelevant workers.
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
+	// The internal cancel quits the remaining probes early once one component has failed.
+	probeCtx, probeCancel := context.WithCancel(ctx)
+	defer probeCancel()
 
 	var wg sync.WaitGroup
-	errsCh := make(chan error)
+	// Buffered to component count so a worker never blocks on send: it can deposit its error and
+	// exit even after ProbeAll has already returned on ctx expiry below.
+	errsCh := make(chan error, p.components.SlowLen())
 
 	p.components.Range(func(name string, n pComponent) bool {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 
-			err := p.probeComponent(ctx, n)
+			err := p.probeComponent(probeCtx, n)
 			if err != nil {
-				// Relay the error and quit early.
+				// Relay the failure and quit the other probes early.
 				errsCh <- fmt.Errorf("probe component %s: %w", name, err)
-				cancel()
+				probeCancel()
 			}
 		}()
 		return true
@@ -72,14 +77,32 @@ func (p *HealthProber) ProbeAll(ctx context.Context) error {
 		close(errsCh)
 	}()
 
+	// Collect failures until every worker returns (errsCh closed) or ctx ends the round. A timeout is
+	// itself a failure and returns straight away; the other two exits fall through to the verdict below.
 	var errs error
-	for err := range errsCh {
-		errs = errors.Join(errs, err)
+collect:
+	for {
+		select {
+		case err, ok := <-errsCh:
+			if !ok {
+				break collect // every worker returned
+			}
+			errs = errors.Join(errs, err)
+		case <-ctx.Done():
+			// Don't wait out a wedged worker (a Healthy impl ignoring its ctx): report what's known.
+			// A wedged probe goroutine is unreapable — it leaks until process exit.
+			if !errors.Is(ctx.Err(), context.Canceled) {
+				return fmt.Errorf("probe health-check timed out: %w", errors.Join(errs, ctx.Err()))
+			}
+			break collect // cancellation isn't a verdict — report only the real failures, if any
+		}
 	}
+
+	// Verdict: the joined component failures, or nil if none were observed.
 	if errs != nil {
-		errs = fmt.Errorf("probe health-check failed: %w", errs)
+		return fmt.Errorf("probe health-check failed: %w", errs)
 	}
-	return errs
+	return nil
 }
 
 func (p *HealthProber) Probe(ctx context.Context, componentName string) error {
@@ -109,7 +132,7 @@ func (p *HealthProber) probeComponent(ctx context.Context, c pComponent) (err er
 			return c.c.Healthy(healthCtx)
 		}()
 		if errors.Is(err, context.Canceled) {
-			return nil // probing was canceled (it's not an error then)
+			return nil // probing was cut short (canceled) — not a component failure
 		}
 		if err == nil {
 			return nil // success
@@ -127,6 +150,9 @@ func (p *HealthProber) probeComponent(ctx context.Context, c pComponent) (err er
 		// Wait before the next attempt.
 		select {
 		case <-ctx.Done():
+			if errors.Is(ctx.Err(), context.Canceled) {
+				return nil // probing was cut short (canceled) — not a component failure
+			}
 			return ctx.Err()
 		case <-time.After(c.retryDelay):
 		}

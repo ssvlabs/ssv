@@ -12,9 +12,9 @@ var (
 	// ErrNoDutyAssigned means we haven't started the duty yet, while another operator already has + sent
 	// this message to us.
 	ErrNoDutyAssigned = fmt.Errorf("no duty assigned")
-	// ErrRunningDutyFinished means we have finished the duty already, while another operator hasn't finished it
-	// yet + sent this message to us.
-	ErrRunningDutyFinished = fmt.Errorf("running duty finished")
+	// ErrRunningDutySucceeded means we have successfully finished the duty already, while another operator hasn't
+	// finished it yet + sent this message to us.
+	ErrRunningDutySucceeded = fmt.Errorf("running duty already succeeded")
 	// ErrFuturePartialSigMsg means the message we've got is "from the future"; it can happen if we haven't advanced
 	// the runner to the slot the message is targeting yet, while another operator already has + sent this message
 	// to us.

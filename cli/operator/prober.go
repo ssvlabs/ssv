@@ -18,7 +18,10 @@ const (
 	p2pComponentName         = "p2p"
 )
 
-// Common prober parameters we use to health check various prober-components.
+// Health-check parameters shared by the prober components. Probing one component is an initial
+// attempt plus proberRetriesMax retries, each capped at proberHealthcheckTimeout and spaced by
+// proberRetryDelay — so a component stuck timing out takes ~110s (6 attempts x 10s + 5 gaps x 10s)
+// to be declared unhealthy.
 const (
 	proberHealthcheckTimeout = 10 * time.Second
 	proberRetriesMax         = 5
@@ -28,10 +31,19 @@ const (
 const componentsUnhealthyErrorMsg = "component(s) are not healthy"
 
 func ensureComponentsHealthy(ctx context.Context, logger *zap.Logger, p *hprobe.HealthProber) error {
-	probeCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	// gateTimeout cuts the full per-component probe schedule (~110s; see the prober consts) short at
+	// bring-up: a component should answer within a couple of attempts, and a failed gate just gets the
+	// node restarted.
+	const gateTimeout = 30 * time.Second
+
+	probeCtx, cancel := context.WithTimeout(ctx, gateTimeout)
 	defer cancel()
 
 	if err := p.ProbeAll(probeCtx); err != nil {
+		// A canceled parent ctx is a deliberate stop (eg. shutdown), everything else fails the gate.
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		return fmt.Errorf("%s: %w", componentsUnhealthyErrorMsg, err)
 	}
 
@@ -39,33 +51,42 @@ func ensureComponentsHealthy(ctx context.Context, logger *zap.Logger, p *hprobe.
 	return nil
 }
 
-func startHealthProber(ctx context.Context, logger *zap.Logger, p *hprobe.HealthProber) {
-	const probeFrequency = 60 * time.Second
-
-	ticker := time.NewTicker(probeFrequency)
-	defer ticker.Stop()
+// startHealthProber is a runtime liveness watchdog: it probes all components every probeInterval
+// and, on persistent unhealth, returns an error so the node terminates gracefully (via Close,
+// non-zero exit) and the orchestrator restarts it; a clean ctx cancellation returns nil. Crashing on
+// persistent unhealth is intentional — a node idling with a dead EL while reporting healthy is a
+// silent failure, worse than a restart — so it must not degrade to log-and-retry.
+func startHealthProber(ctx context.Context, logger *zap.Logger, p *hprobe.HealthProber) error {
+	const (
+		// probeInterval is the pause between probe rounds, measured from round end — a round that runs
+		// long (components burning retries before recovering) still leaves a full quiet gap after it,
+		// never back-to-back rounds.
+		probeInterval = 60 * time.Second
+		// probeTimeout bounds one round (ProbeAll) as the watchdog's own liveness guard: even a
+		// Healthy impl that ignores its ctx can't stall the loop. Like the bring-up gate's timeout,
+		// it deliberately cuts the full probe schedule short — failing solidly for a whole round is
+		// exactly the unhealth the watchdog exists to trip on.
+		probeTimeout = 60 * time.Second
+	)
 
 	for {
-		func() {
-			logger.Debug("health-prober tick: probing all components")
-			defer logger.Debug("health-prober tick: probing all components done")
-
-			probeCtx, cancel := context.WithTimeout(ctx, probeFrequency)
-			defer cancel()
-
-			if err := p.ProbeAll(probeCtx); err != nil {
-				// TODO(#2867): trigger graceful shutdown (-> Close -> non-zero exit) instead of Fatal,
-				// which bypasses Close. Crash-and-restart on persistent unhealth is intentional; the
-				// goroutine os.Exit mechanism is the wart.
-				logger.Fatal(componentsUnhealthyErrorMsg, zap.Error(err))
+		logger.Debug("health-prober tick: probing all components")
+		probeCtx, cancel := context.WithTimeout(ctx, probeTimeout)
+		err := p.ProbeAll(probeCtx)
+		cancel() // not deferred: this is a loop, so release each round's ctx immediately
+		if err != nil {
+			// A canceled parent ctx is a deliberate stop (eg. shutdown), everything else trips the watchdog.
+			if ctx.Err() != nil {
+				return nil
 			}
-		}()
+			return fmt.Errorf("%s: %w", componentsUnhealthyErrorMsg, err)
+		}
+		logger.Debug("health-prober tick: probing all components done")
 
 		select {
 		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			continue
+			return nil
+		case <-time.After(probeInterval):
 		}
 	}
 }

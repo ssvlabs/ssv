@@ -10,12 +10,12 @@ import (
 	"time"
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
-	"go.uber.org/zap"
-
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/network/topics"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	p2pprotocol "github.com/ssvlabs/ssv/protocol/v2/p2p"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
@@ -51,23 +51,33 @@ func (n *p2pNetwork) Broadcast(msgID spectypes.MessageID, msg *spectypes.SignedS
 		return fmt.Errorf("could not encode signed ssv message: %w", err)
 	}
 
-	var topics []string
+	role := msg.SSVMessage.MsgID.GetRoleType()
 
-	if msg.SSVMessage.MsgID.GetRoleType() == spectypes.RoleCommittee {
-		topics = commons.CommitteeTopicID(spectypes.CommitteeID(msg.SSVMessage.MsgID.GetDutyExecutorID()[16:]))
+	var topicNames []string
+	if role == spectypes.RoleCommittee {
+		topicNames = commons.CommitteeTopicID(spectypes.CommitteeID(msg.SSVMessage.MsgID.GetDutyExecutorID()[16:]))
 	} else {
 		val, exists := n.nodeStorage.ValidatorStore().Validator(msg.SSVMessage.MsgID.GetDutyExecutorID())
 		if !exists {
 			return fmt.Errorf("could not find share for validator %s", hex.EncodeToString(msg.SSVMessage.MsgID.GetDutyExecutorID()))
 		}
-		topics = commons.CommitteeTopicID(val.CommitteeID())
+		topicNames = commons.CommitteeTopicID(val.CommitteeID())
 	}
 
-	for _, topic := range topics {
+	for _, topic := range topicNames {
 		if err := n.topicsCtrl.Broadcast(topic, encodedMsg, n.cfg.RequestTimeout); err != nil {
 			n.logger.Debug("could not broadcast msg", fields.Topic(topic), zap.Error(err))
 			return fmt.Errorf("could not broadcast msg: %w", err)
 		}
+
+		// topicPeers surfaces a sparse/empty mesh — a prime suspect when a one-shot message fails to reach peers.
+		topicPeers, _ := n.topicsCtrl.Peers(topic)
+		n.logger.Debug("📤 broadcast message to topic",
+			fields.MessageID(msg.SSVMessage.MsgID),
+			zap.String("gossip_msg_id", hex.EncodeToString([]byte(topics.MsgID(encodedMsg)))),
+			fields.Topic(topic),
+			zap.Int("topic_peers", len(topicPeers)),
+		)
 	}
 	return nil
 }

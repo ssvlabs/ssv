@@ -89,13 +89,13 @@ func (r *ValidatorRegistrationRunner) StartNewDuty(ctx context.Context, logger *
 	return r.baseStartNewNonBeaconDuty(ctx, logger, r, validatorDuty, quorum)
 }
 
-func (r *ValidatorRegistrationRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
+func (r *ValidatorRegistrationRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) (err error) {
 	// Reuse the existing span instead of generating new one to keep tracing-data lightweight.
 	span := trace.SpanFromContext(ctx)
 
 	hasQuorum, roots, err := r.basePreConsensusMsgProcessing(ctx, logger, r, signedMsg)
-	if errors.Is(err, ErrNoDutyAssigned) || errors.Is(err, ErrRunningDutyFinished) {
-		// Since we are re-using the same runner for different duties, ErrRunningDutyFinished error
+	if errors.Is(err, ErrNoDutyAssigned) || errors.Is(err, ErrRunningDutySucceeded) {
+		// Since we are re-using the same runner for different duties, ErrRunningDutySucceeded error
 		// also needs to be retried.
 		err = NewRetryableError(err)
 	}
@@ -107,6 +107,14 @@ func (r *ValidatorRegistrationRunner) ProcessPreConsensus(ctx context.Context, l
 	if !hasQuorum {
 		return nil
 	}
+
+	// We have quorum and are committed to completing this duty here. The quorum above fires only once,
+	// so a terminal failure below won't be retried.
+	defer func() {
+		if err != nil {
+			r.markDutyFailed(err)
+		}
+	}()
 
 	// only 1 root, verified in basePreConsensusMsgProcessing
 	root := roots[0]
@@ -151,7 +159,7 @@ func (r *ValidatorRegistrationRunner) ProcessPreConsensus(ctx context.Context, l
 		zap.String("signature", hex.EncodeToString(specSig[:])),
 	)
 
-	r.markDutyFinished()
+	r.markDutySucceeded()
 	const dutyFinishedEvent = "✔️successfully finished duty processing"
 	logger.Info(dutyFinishedEvent)
 	span.AddEvent(dutyFinishedEvent)
@@ -336,27 +344,27 @@ type VRSubmitter struct {
 }
 
 func NewVRSubmitter(
-	ctx context.Context,
 	logger *zap.Logger,
 	beaconConfig *networkconfig.Beacon,
 	beacon beacon.BeaconNode,
 	validatorStore validatorStore,
 ) *VRSubmitter {
-	submitter := &VRSubmitter{
+	return &VRSubmitter{
 		logger:         logger,
 		beaconConfig:   beaconConfig,
 		beacon:         beacon,
 		validatorStore: validatorStore,
 		registrations:  map[phase0.BLSPubKey]*validatorRegistration{},
 	}
+}
 
-	slotTicker := slotticker.New(logger, slotticker.Config{
-		SlotDuration: beaconConfig.SlotDuration,
-		GenesisTime:  beaconConfig.GenesisTime,
+// Start runs the registration-submission loop until ctx is canceled.
+func (s *VRSubmitter) Start(ctx context.Context) {
+	slotTicker := slotticker.New(s.logger, slotticker.Config{
+		SlotDuration: s.beaconConfig.SlotDuration,
+		GenesisTime:  s.beaconConfig.GenesisTime,
 	})
-	go submitter.start(ctx, slotTicker)
-
-	return submitter
+	s.start(ctx, slotTicker)
 }
 
 // start periodically submits validator registrations of 2 types (in batches, 1 batch per slot):
