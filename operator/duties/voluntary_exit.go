@@ -12,14 +12,61 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/eth/executionclient"
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 )
 
-// voluntaryExitSlotsToPostpone defines how many slots we want to wait out before
-// executing voluntary exit duty.
-const voluntaryExitSlotsToPostpone = phase0.Slot(4)
+const (
+	// voluntaryExitDutySlotsToPostpone is the offset added to an exit event's
+	// block slot to derive duty.Slot — the shared coordination slot used as
+	// the dutyStore key (inbound dutyCount validation), as the outbound
+	// partial-sig envelope Slot, and as input to the signed VoluntaryExit.Epoch
+	// (see VoluntaryExitRunner.calculateVoluntaryExit). Every operator must
+	// compute the same value for partial-sigs to validate, route, and
+	// aggregate, so it's part of the wire format.
+	//
+	// Kept at 4 — the value used by pre-#2851 operators — so upgraded nodes
+	// remain backwards-compatible in mixed clusters. Do NOT change it without
+	// a coordinated network-wide upgrade.
+	//
+	// This is NOT when this operator broadcasts its own partial-sig; see
+	// voluntaryExitExecutionSlotsToPostpone for that.
+	//
+	// Note: shares its numeric value (4) with voluntaryExitSchedulingSlack
+	// below by coincidence — the two are independent.
+	voluntaryExitDutySlotsToPostpone = 4
+
+	// voluntaryExitSchedulingSlack absorbs per-operator timing variance once an
+	// exit event clears the execution-layer follow distance. Different operators
+	// observe the event at slightly different wall-clock times due to EL client
+	// differences, head-subscription latency, FilterLogs round-trip, and the
+	// phase of the local slot ticker relative to event delivery. The slack
+	// ensures that by the time the earliest operator broadcasts its partial-sig
+	// (at voluntaryExitExecutionSlotsToPostpone), every other operator has had
+	// time to receive the EL event and register the duty in its local dutyStore
+	// — which the inbound message-validation path checks via dutyCount.
+	//
+	// Independent of voluntaryExitDutySlotsToPostpone despite happening to
+	// share the same numeric value (4); see the note on that constant.
+	voluntaryExitSchedulingSlack = 4
+
+	// voluntaryExitExecutionSlotsToPostpone is the earliest slot, expressed as
+	// an offset from the exit event's block slot, at which this operator may
+	// broadcast its own partial-sig. It is a *local-only* scheduling decision:
+	// it does not appear on the wire and need not match across operators.
+	//
+	// The value must exceed the worst-case EL streaming latency from event
+	// production to handler delivery, which is dominated by
+	// executionclient.FollowDistance (the EL log stream only surfaces an event
+	// once the chain head reaches blockSlot + FollowDistance); the remainder is
+	// voluntaryExitSchedulingSlack. Broadcasting earlier than this risks racing
+	// peers whose EL streaming pipeline hasn't yet delivered the event: their
+	// dutyStore returns 0 for the (slot, pk) key, so the dutyCount check fails
+	// and our message is dropped (ValidationIgnore on ErrTooManyDutiesPerEpoch).
+	voluntaryExitExecutionSlotsToPostpone = executionclient.FollowDistance + voluntaryExitSchedulingSlack
+)
 
 type ExitDescriptor struct {
 	OwnValidator   bool
@@ -28,11 +75,20 @@ type ExitDescriptor struct {
 	BlockNumber    uint64
 }
 
+// queuedExit holds an own-validator exit duty awaiting its local execution
+// gate. duty.Slot is the shared duty slot (voluntaryExitDutySlotsToPostpone);
+// earliestExecutionSlot is when this operator may broadcast its partial-sig
+// (voluntaryExitExecutionSlotsToPostpone).
+type queuedExit struct {
+	duty                  *spectypes.ValidatorDuty
+	earliestExecutionSlot phase0.Slot
+}
+
 type VoluntaryExitHandler struct {
 	baseHandler
 	duties          *dutystore.VoluntaryExitDuties
 	validatorExitCh <-chan ExitDescriptor
-	dutyQueue       []*spectypes.ValidatorDuty
+	dutyQueue       []*queuedExit
 	blockSlots      map[uint64]phase0.Slot
 }
 
@@ -40,7 +96,7 @@ func NewVoluntaryExitHandler(duties *dutystore.VoluntaryExitDuties, validatorExi
 	return &VoluntaryExitHandler{
 		duties:          duties,
 		validatorExitCh: validatorExitCh,
-		dutyQueue:       make([]*spectypes.ValidatorDuty, 0),
+		dutyQueue:       make([]*queuedExit, 0),
 		blockSlots:      map[uint64]phase0.Slot{},
 	}
 }
@@ -85,10 +141,22 @@ func (h *VoluntaryExitHandler) HandleDuties(ctx context.Context) {
 				return
 			}
 
-			// Calculate duty slot in a deterministic manner to ensure every Operator will have the same
-			// slot value for this duty. Additionally, add validatorRegistrationSlotsToPostpone slots on
-			// top to ensure the duty is scheduled with a slot number never in the past since several slots
-			// might have passed by the time we are processing this event here.
+			// Derive dutySlot deterministically from the EL event's block slot
+			// so every operator arrives at the same value regardless of when
+			// they personally received the event, and regardless of code version.
+			// This matters because dutySlot feeds dutyStore (used by inbound
+			// message-validation's dutyCount check), the outbound partial-sig
+			// envelope's Slot field, and VoluntaryExit.Epoch via
+			// EstimatedEpochAtSlot (see VoluntaryExitRunner.calculateVoluntaryExit).
+			// Divergent slots — across operators or across versions — would
+			// either drop messages at validation or break BLS partial-signature
+			// aggregation near epoch boundaries, silently failing the exit.
+			//
+			// earliestExecutionSlot is a separate, local-only gate that defers
+			// our own broadcast until peers' EL streaming pipelines have
+			// plausibly caught up. The two slots are deliberately decoupled so
+			// this operator's wire behavior stays interoperable with pre-#2851
+			// operators in mixed clusters.
 			blockSlot, err := h.blockSlot(ctx, exitDescriptor.BlockNumber)
 			if err != nil {
 				h.logger.Warn(
@@ -97,7 +165,8 @@ func (h *VoluntaryExitHandler) HandleDuties(ctx context.Context) {
 				)
 				continue
 			}
-			dutySlot := blockSlot + voluntaryExitSlotsToPostpone
+			dutySlot := blockSlot + voluntaryExitDutySlotsToPostpone
+			earliestExecutionSlot := blockSlot + voluntaryExitExecutionSlotsToPostpone
 
 			duty := &spectypes.ValidatorDuty{
 				Type:           spectypes.BNRoleVoluntaryExit,
@@ -111,11 +180,15 @@ func (h *VoluntaryExitHandler) HandleDuties(ctx context.Context) {
 				continue
 			}
 
-			h.dutyQueue = append(h.dutyQueue, duty)
+			h.dutyQueue = append(h.dutyQueue, &queuedExit{
+				duty:                  duty,
+				earliestExecutionSlot: earliestExecutionSlot,
+			})
 
 			h.logger.Debug("🛠 scheduled duty for execution",
 				zap.Uint64("block_slot", uint64(blockSlot)),
 				zap.Uint64("duty_slot", uint64(dutySlot)),
+				zap.Uint64("earliest_execution_slot", uint64(earliestExecutionSlot)),
 				fields.BlockNumber(exitDescriptor.BlockNumber),
 			)
 
@@ -134,17 +207,18 @@ func (h *VoluntaryExitHandler) processExecution(ctx context.Context, slot phase0
 		trace.WithAttributes(observability.BeaconSlotAttribute(slot)))
 	defer span.End()
 
-	var dutiesForExecution, pendingDuties []*spectypes.ValidatorDuty
+	dutiesForExecution := make([]*spectypes.ValidatorDuty, 0, len(h.dutyQueue))
+	pendingItems := make([]*queuedExit, 0, len(h.dutyQueue))
 
-	for _, duty := range h.dutyQueue {
-		if duty.Slot <= slot {
-			dutiesForExecution = append(dutiesForExecution, duty)
+	for _, item := range h.dutyQueue {
+		if item.earliestExecutionSlot <= slot {
+			dutiesForExecution = append(dutiesForExecution, item.duty)
 		} else {
-			pendingDuties = append(pendingDuties, duty)
+			pendingItems = append(pendingItems, item)
 		}
 	}
 
-	h.dutyQueue = pendingDuties
+	h.dutyQueue = pendingItems
 	h.duties.RemoveSlot(slot - phase0.Slot(h.netCfg.SlotsPerEpoch))
 
 	span.SetAttributes(observability.DutyCountAttribute(len(dutiesForExecution)))
@@ -188,7 +262,7 @@ func (h *VoluntaryExitHandler) blockSlot(ctx context.Context, blockNumber uint64
 }
 
 func (h *VoluntaryExitHandler) dutyExecutionDeadline(slot phase0.Slot) time.Time {
-	// 1 slot of time since the target slot should be sufficient for this duty-type.
+	// 1 wall-clock slot from execution should be sufficient for this duty-type.
 	dutyDeadline := h.netCfg.SlotStartTime(slot + 1)
 	return dutyDeadline
 }

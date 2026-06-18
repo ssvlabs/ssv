@@ -55,10 +55,6 @@ type MultiClient struct {
 	reqTimeout    time.Duration
 	reqRetryDelay time.Duration
 
-	// followDistance defines an offset into the past from the head block such that the block
-	// at this offset will be considered as very likely finalized.
-	followDistance uint64 // TODO: consider reading the finalized checkpoint from consensus layer
-
 	healthInvalidationInterval time.Duration
 
 	syncDistanceTolerance uint64
@@ -88,7 +84,6 @@ func NewMulti(ctx context.Context, nodeAddrs []string, contractAddr ethcommon.Ad
 		logger:                     zap.NewNop(),
 		reqTimeout:                 DefaultReqTimeout,
 		reqRetryDelay:              DefaultReqRetryDelay,
-		followDistance:             DefaultFollowDistance,
 		healthInvalidationInterval: DefaultHealthInvalidationInterval,
 		syncDistanceTolerance:      DefaultSyncDistanceTolerance,
 	}
@@ -147,7 +142,6 @@ func (mc *MultiClient) connect(ctx context.Context, clientAddr string) (*Executi
 		clientAddr,
 		mc.contractAddress,
 		WithLogger(mc.logger),
-		WithFollowDistance(mc.followDistance),
 		WithReqTimeout(mc.reqTimeout),
 		WithHealthInvalidationInterval(mc.healthInvalidationInterval),
 		WithSyncDistanceTolerance(mc.syncDistanceTolerance),

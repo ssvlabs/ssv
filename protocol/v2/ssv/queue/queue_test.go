@@ -10,7 +10,9 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/attribute"
+	otelmetric "go.opentelemetry.io/otel/metric"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	"golang.org/x/text/language"
 	"golang.org/x/text/message"
@@ -23,8 +25,7 @@ import (
 
 var mockState = &State{
 	HasRunningInstance: true,
-	Height:             100,
-	Slot:               64,
+	Slot:               100,
 	Quorum:             4,
 }
 
@@ -198,7 +199,6 @@ func TestPriorityQueue_Pop_NothingThenSomething(t *testing.T) {
 
 	state := &State{
 		HasRunningInstance: true,
-		Height:             1,
 		Slot:               1,
 		Round:              1,
 		Quorum:             4,
@@ -236,7 +236,6 @@ func TestPriorityQueue_Pop_WithLoopForNonMatchingAndMatchingMessages(t *testing.
 
 	state := &State{
 		HasRunningInstance: true,
-		Height:             1,
 		Slot:               1,
 		Round:              1,
 		Quorum:             4,
@@ -274,8 +273,8 @@ func TestPriorityQueue_Pop_WithLoopForNonMatchingAndMatchingMessages(t *testing.
 }
 
 func TestPriorityQueue_InboxSizeMetricAttributes(t *testing.T) {
-	reader := metric.NewManualReader()
-	provider := metric.NewMeterProvider(metric.WithReader(reader))
+	reader := sdkmetric.NewManualReader()
+	provider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
 	testMeter := provider.Meter("test")
 
 	gauge, err := testMeter.Int64Gauge("test_inbox_size")
@@ -286,7 +285,7 @@ func TestPriorityQueue_InboxSizeMetricAttributes(t *testing.T) {
 		queueID   = "attester"
 	)
 
-	queue := New(log.TestLogger(t), 4, WithInboxSizeMetric(gauge, queueType, queueID))
+	queue := New(log.TestLogger(t), 4, WithQueueMetrics(gauge, queueType, queueID))
 	decodeAndPush(t, queue, mockConsensusMessage{Height: 100, Type: specqbft.PrepareMsgType}, mockState)
 
 	var rm metricdata.ResourceMetrics
@@ -311,6 +310,53 @@ func TestPriorityQueue_InboxSizeMetricAttributes(t *testing.T) {
 	queueIDAttr, ok := dataPoint.Attributes.Value("ssv.queue.id")
 	require.True(t, ok)
 	require.Equal(t, queueID, queueIDAttr.AsString())
+}
+
+func TestPriorityQueue_TryPushInboxSizeMetricDoesNotExceedCapacityOnDrop(t *testing.T) {
+	reader := sdkmetric.NewManualReader()
+	provider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
+	testMeter := provider.Meter("test")
+
+	gauge, err := testMeter.Int64Gauge("test_inbox_size")
+	require.NoError(t, err)
+
+	const (
+		queueType = ValidatorQueueMetricType
+		queueID   = "attester"
+	)
+
+	queue := New(log.TestLogger(t), 1, WithQueueMetrics(gauge, queueType, queueID))
+	msg, err := DecodeSignedSSVMessage(mockConsensusMessage{Height: 100, Type: specqbft.PrepareMsgType}.ssvMessage(mockState))
+	require.NoError(t, err)
+
+	require.True(t, queue.TryPush(msg))
+	require.False(t, queue.TryPush(msg))
+
+	var rm metricdata.ResourceMetrics
+	err = reader.Collect(t.Context(), &rm)
+	require.NoError(t, err)
+
+	gaugeData, ok := rm.ScopeMetrics[0].Metrics[0].Data.(metricdata.Gauge[int64])
+	require.True(t, ok)
+	require.Len(t, gaugeData.DataPoints, 1)
+	require.EqualValues(t, 1, gaugeData.DataPoints[0].Value)
+}
+
+func TestPriorityQueue_LenTracksBacklogAfterInboxDrain(t *testing.T) {
+	q := New(log.TestLogger(t), 4).(*priorityQueue)
+
+	for i := 0; i < 3; i++ {
+		decodeAndPush(t, q, mockConsensusMessage{Height: specqbft.Height(100 + i), Type: specqbft.PrepareMsgType}, mockState)
+	}
+
+	require.Equal(t, 3, q.Len())
+	require.Equal(t, 3, len(q.inbox))
+
+	q.readInbox()
+
+	require.Equal(t, 3, q.Len())
+	require.Equal(t, 0, len(q.inbox))
+	require.NotNil(t, q.head)
 }
 
 func BenchmarkPriorityQueue_Parallel(b *testing.B) {
@@ -516,6 +562,132 @@ func BenchmarkPriorityQueue_Concurrent(b *testing.B) {
 
 	b.Logf("popped %d messages", popped)
 	b.Logf("pushed %d messages", pushed.Load())
+}
+
+// requireQueueDropCounter asserts that the package-global droppedMessagesMetric
+// (read via pkgTestMetricReader) has a data point matching queueType/queueID/reason
+// with the expected value. Fatals if no matching data point exists, so a missing
+// data point shows up as a clear "no data point found for …" failure rather than
+// a confusing "expected N, got -1" comparison.
+func requireQueueDropCounter(t *testing.T, queueType, queueID, reason string, expected int64) {
+	t.Helper()
+
+	var rm metricdata.ResourceMetrics
+	require.NoError(t, pkgTestMetricReader.Collect(t.Context(), &rm))
+
+	for _, sm := range rm.ScopeMetrics {
+		for _, m := range sm.Metrics {
+			if m.Name != "ssv.queue.messages.dropped" {
+				continue
+			}
+			sum, ok := m.Data.(metricdata.Sum[int64])
+			require.True(t, ok, "expected Sum[int64], got %T", m.Data)
+			for _, dp := range sum.DataPoints {
+				if !attrEquals(dp.Attributes, "ssv.queue.type", queueType) {
+					continue
+				}
+				if !attrEquals(dp.Attributes, "ssv.queue.id", queueID) {
+					continue
+				}
+				if !attrEquals(dp.Attributes, "ssv.queue.drop_reason", reason) {
+					continue
+				}
+				require.Equal(t, expected, dp.Value)
+				return
+			}
+		}
+	}
+	t.Fatalf("no drop counter data point found for queueType=%q queueID=%q reason=%q", queueType, queueID, reason)
+}
+
+func attrEquals(set attribute.Set, key, expected string) bool {
+	v, ok := set.Value(attribute.Key(key))
+	return ok && v.AsString() == expected
+}
+
+func TestPriorityQueue_TryPushDropMetric_RecordsAttributes(t *testing.T) {
+	t.Parallel()
+
+	gauge := newTestGauge(t)
+	const queueType = ValidatorQueueMetricType
+	queueID := uniqueQueueID(t)
+
+	q := New(log.TestLogger(t), 1, WithQueueMetrics(gauge, queueType, queueID))
+	msg, err := DecodeSignedSSVMessage(mockConsensusMessage{Height: 100, Type: specqbft.PrepareMsgType}.ssvMessage(mockState))
+	require.NoError(t, err)
+
+	require.True(t, q.TryPush(msg))
+	require.False(t, q.TryPush(msg))
+	require.False(t, q.TryPush(msg))
+
+	requireQueueDropCounter(t, queueType, queueID, DropReasonBufferFull, 2)
+}
+
+func TestMetricsQueueObserver_RecordDrop_FallbackForUnregisteredReason(t *testing.T) {
+	t.Parallel()
+
+	gauge := newTestGauge(t)
+	const (
+		queueType = ValidatorQueueMetricType
+		reason    = "synthetic_unregistered_reason"
+	)
+	queueID := uniqueQueueID(t)
+
+	q := New(log.TestLogger(t), 1, WithQueueMetrics(gauge, queueType, queueID)).(*priorityQueue)
+	q.observer.recordDrop(reason)
+
+	requireQueueDropCounter(t, queueType, queueID, reason, 1)
+}
+
+func TestPriorityQueue_ConcurrentTryPush_RecordsAllDrops(t *testing.T) {
+	t.Parallel()
+
+	gauge := newTestGauge(t)
+	const (
+		queueType = ValidatorQueueMetricType
+		pushers   = 64
+	)
+	queueID := uniqueQueueID(t)
+
+	q := New(log.TestLogger(t), 1, WithQueueMetrics(gauge, queueType, queueID))
+	msg, err := DecodeSignedSSVMessage(mockConsensusMessage{Height: 100, Type: specqbft.PrepareMsgType}.ssvMessage(mockState))
+	require.NoError(t, err)
+
+	var wg sync.WaitGroup
+	var pushed atomic.Int64
+	wg.Add(pushers)
+	for i := 0; i < pushers; i++ {
+		go func() {
+			defer wg.Done()
+			if q.TryPush(msg) {
+				pushed.Add(1)
+			}
+		}()
+	}
+	wg.Wait()
+
+	// With cap=1 and no consumer, exactly one TryPush succeeds; the rest drop.
+	require.Equal(t, int64(1), pushed.Load(), "exactly one push should succeed for cap=1 with no consumer")
+	requireQueueDropCounter(t, queueType, queueID, DropReasonBufferFull, pushers-1)
+}
+
+// uniqueQueueID builds a queueID that's stable within a test invocation but
+// differs across re-runs (e.g. `go test -count=N`). Necessary because the
+// queue-side drop counter is a package-global that accumulates across runs.
+func uniqueQueueID(t *testing.T) string {
+	return fmt.Sprintf("%s/%d", t.Name(), time.Now().UnixNano())
+}
+
+// newTestGauge returns a gauge backed by a fresh provider/reader, isolated
+// from the package-global pkgTestMetricReader. It's used wherever a test only
+// needs to satisfy WithQueueMetrics' gauge parameter without asserting on the
+// gauge itself.
+func newTestGauge(t *testing.T) otelmetric.Int64Gauge {
+	t.Helper()
+	provider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(sdkmetric.NewManualReader()))
+	gauge, err := provider.Meter("test").Int64Gauge("test_inbox_size")
+	require.NoError(t, err)
+	return gauge
 }
 
 func decodeAndPush(t require.TestingT, queue Queue, msg mockMessage, state *State) *SSVMessage {

@@ -24,6 +24,7 @@ import (
 	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	ssvprotocoltesting "github.com/ssvlabs/ssv/protocol/v2/ssv/testing"
@@ -82,8 +83,8 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 	setRunnerValueCheckersIfNil(test.Runner, valCheck)
 	test.Runner.GetBeaconNode().(*protocoltesting.BeaconNodeWrapped).GetBeaconNode().SetAggregators(test.BeaconAggregatorsMap())
 
-	test.Runner.SetTimeoutFunc(func(_ context.Context, _ *zap.Logger, _ spectypes.MessageID, _ specqbft.Height) roundtimer.OnRoundTimeoutF {
-		return func(specqbft.Round) {}
+	test.Runner.SetQBFTRoundTimerF(func(_ context.Context, _ *zap.Logger, _ phase0.Slot) ssv.QBFTRoundTimer {
+		return roundtimer.NewTestingTimer()
 	})
 
 	var v *validator.Validator

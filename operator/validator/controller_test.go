@@ -98,6 +98,34 @@ func TestNewController(t *testing.T) {
 	require.IsType(t, &Controller{}, control)
 }
 
+func TestNewControllerRouterConcurrencyOverride(t *testing.T) {
+	operatorDataStore := operatordatastore.New(buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811"))
+
+	operatorSigner, err := keys.GeneratePrivateKey()
+	require.NoError(t, err)
+
+	_, logger, _, network, _, bc := setupCommonTestComponents(t, operatorSigner)
+	db, err := getBaseStorage(logger)
+	require.NoError(t, err)
+
+	registryStorage, newStorageErr := storage.NewNodeStorage(networkconfig.TestNetwork.Beacon, logger, db)
+	require.NoError(t, newStorageErr)
+
+	controllerOptions := ControllerOptions{
+		NetworkConfig:        networkconfig.TestNetwork,
+		Beacon:               bc,
+		FullNode:             true,
+		Network:              network,
+		OperatorDataStore:    operatorDataStore,
+		OperatorSigner:       types.NewSsvOperatorSigner(operatorSigner, operatorDataStore.GetOperatorID),
+		RegistryStorage:      registryStorage,
+		Context:              t.Context(),
+		MsgRouterConcurrency: 24,
+	}
+	control := NewController(logger, controllerOptions, exporter.Options{})
+	require.Equal(t, 24, control.msgRouterConcurrency)
+}
+
 func TestSetupValidatorsExporter(t *testing.T) {
 	logger := log.TestLogger(t)
 	controllerOptions := MockControllerOptions{

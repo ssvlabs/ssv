@@ -193,18 +193,22 @@ func TestTimeouts(t *testing.T) {
 		mockServerEpoch = 132502
 	)
 
-	// Too slow to dial.
+	// CLs unresponsive at startup: New must wait under ctx, not fatal eagerly with "client is not active".
 	{
 		undialableServer := mocks.NewServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
 			time.Sleep(commonTimeout + timeoutMargin)
 			return resp, nil
 		})
-		_, err := New(t.Context(), zap.NewNop(), Options{
+		ctx, cancel := context.WithTimeout(t.Context(), commonTimeout+timeoutMargin)
+		defer cancel()
+		_, err := New(ctx, zap.NewNop(), Options{
 			BeaconNodeAddr: undialableServer.URL,
 			CommonTimeout:  commonTimeout,
 			LongTimeout:    longTimeout,
 		})
-		require.ErrorContains(t, err, "client is not active")
+		require.Error(t, err)
+		require.NotContains(t, err.Error(), "client is not active")
+		require.ErrorIs(t, err, context.DeadlineExceeded)
 	}
 
 	// Too slow to respond to the Validators request.

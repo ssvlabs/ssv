@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -23,33 +22,34 @@ import (
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
-// Instance is a single QBFT instance that starts with a Start call (including a value).
-// Every new msg the ProcessMsg function needs to be called
+// Instance represents a single QBFT instance. It is NOT thread-safe.
 type Instance struct {
 	logger *zap.Logger
 
-	State  *specqbft.State
 	config qbft.IConfig
 	signer ssvtypes.OperatorSigner
-	timer  specqbft.Timer
 
-	processMsgF *spectypes.ThreadSafeF
-
-	forceStop    bool
+	State        *specqbft.State
+	processMsgF  *spectypes.ThreadSafeF
 	StartValue   []byte
 	ValueChecker ssv.ValueChecker `json:"-"`
+	roundTimer   ssv.QBFTRoundTimer
+	// markedIrrelevant is set to signal that Instance will no longer process messages (aka forcefully stopped in
+	// ssv-spec terms).
+	markedIrrelevant bool
 
 	metrics *metricsRecorder
 }
 
 func NewInstance(
+	ctx context.Context,
 	logger *zap.Logger,
 	config qbft.IConfig,
 	committeeMember *spectypes.CommitteeMember,
 	identifier []byte,
 	height specqbft.Height,
 	signer ssvtypes.OperatorSigner,
-	timer specqbft.Timer,
+	roundTimerF ssv.QBFTRoundTimerF,
 ) *Instance {
 	runnerRole := spectypes.RoleUnknown // RoleUnknown is of int type, hence have to type-cast
 	if len(identifier) == 56 {
@@ -60,6 +60,8 @@ func NewInstance(
 
 	return &Instance{
 		logger: logger,
+		config: config,
+		signer: signer,
 		State: &specqbft.State{
 			CommitteeMember:      committeeMember,
 			ID:                   identifier,
@@ -71,24 +73,17 @@ func NewInstance(
 			CommitContainer:      specqbft.NewMsgContainer(),
 			RoundChangeContainer: specqbft.NewMsgContainer(),
 		},
-		config:      config,
-		signer:      signer,
-		timer:       timer,
 		processMsgF: spectypes.NewThreadSafeF(),
+		roundTimer:  roundTimerF(ctx, logger, phase0.Slot(height)),
 		metrics:     newMetrics(logger, runnerRole),
 	}
 }
 
-func (i *Instance) ForceStop() {
-	i.forceStop = true
-}
-
 // Timer returns the instance timer.
 func (i *Instance) Timer() specqbft.Timer {
-	return i.timer
+	return i.roundTimer
 }
 
-// Start is an interface implementation
 func (i *Instance) Start(
 	ctx context.Context,
 	value []byte,
@@ -113,7 +108,7 @@ func (i *Instance) Start(
 
 	i.StartValue = value
 	i.ValueChecker = valueChecker
-	i.timer.TimeoutForRound(specqbft.FirstRound)
+	i.roundTimer.TimeoutForRound(specqbft.FirstRound)
 	i.metrics.StartStage(stageProposal)
 
 	// propose if this node is the proposer
@@ -147,6 +142,35 @@ func (i *Instance) Start(
 	span.SetStatus(codes.Ok, "")
 }
 
+// MarkDecided marks instance as decided, recording the decided-round and decided-value.
+// This func essentially terminates instance (no QBFT-related progress is done afterward), releasing all the resources
+// it spawned.
+// Both MarkDecided and MarkIrrelevant can be called on the same instance, these calls do not conflict.
+func (i *Instance) MarkDecided(round specqbft.Round, value []byte) error {
+	if i.State.Decided {
+		return fmt.Errorf(
+			"instance has already decided in round %d (attempted to mark as decided in round %d)",
+			i.State.Round,
+			round,
+		)
+	}
+	i.State.Decided = true
+	i.State.Round = round
+	i.State.DecidedValue = value
+	i.roundTimer.Stop()
+	return nil
+}
+
+// MarkIrrelevant marks instance as irrelevant to signal that it will no longer process messages, hence no further
+// progress will be made on this instance.
+// This func essentially terminates instance (no QBFT-related progress is done afterward), releasing all the resources
+// it spawned.
+// Both MarkDecided and MarkIrrelevant can be called on the same instance, these calls do not conflict.
+func (i *Instance) MarkIrrelevant() {
+	i.markedIrrelevant = true
+	i.roundTimer.Stop()
+}
+
 func (i *Instance) Broadcast(msg *spectypes.SignedSSVMessage) error {
 	if !i.CanProcessMessages() {
 		return spectypes.NewError(spectypes.InstanceStoppedProcessingMessagesErrorCode, "instance stopped processing messages")
@@ -164,7 +188,9 @@ func allSigners(all []*specqbft.ProcessingMessage) []spectypes.OperatorID {
 	return signers
 }
 
-// ProcessMsg processes a new QBFT msg, returns non nil error on msg processing error
+// ProcessMsg processes a new QBFT message.
+// The returned bool/value pair reports whether this call newly decided the
+// instance. Callers that need the post-call state should inspect State/IsDecided.
 func (i *Instance) ProcessMsg(ctx context.Context, logger *zap.Logger, msg *specqbft.ProcessingMessage) (decided bool, decidedValue []byte, aggregatedCommit *spectypes.SignedSSVMessage, err error) {
 	if !i.CanProcessMessages() {
 		return false, nil, nil, spectypes.NewError(spectypes.InstanceStoppedProcessingMessagesErrorCode, "instance stopped processing messages")
@@ -181,22 +207,24 @@ func (i *Instance) ProcessMsg(ctx context.Context, logger *zap.Logger, msg *spec
 		case specqbft.PrepareMsgType:
 			return i.uponPrepare(ctx, logger, msg)
 		case specqbft.CommitMsgType:
-			decided, decidedValue, aggregatedCommit, err = i.UponCommit(ctx, logger, msg)
+			decided, decidedValue, aggregatedCommit, err = i.uponCommit(ctx, logger, msg)
 			if decided {
-				i.State.Decided = decided
-				i.State.DecidedValue = decidedValue
+				err := i.MarkDecided(msg.QBFTMessage.Round, decidedValue)
+				if err != nil {
+					return fmt.Errorf("mark as decided: %w", err)
+				}
 			}
 			return err
 		case specqbft.RoundChangeMsgType:
 			return i.uponRoundChange(ctx, logger, msg)
 		default:
-			return errors.New("signed message type not supported")
+			return fmt.Errorf("signed message type not supported")
 		}
 	})
 	if res != nil {
 		return false, nil, nil, res.(error)
 	}
-	return i.State.Decided, i.State.DecidedValue, aggregatedCommit, nil
+	return decided, decidedValue, aggregatedCommit, nil
 }
 
 func (i *Instance) BaseMsgValidation(msg *specqbft.ProcessingMessage) error {
@@ -235,7 +263,7 @@ func (i *Instance) BaseMsgValidation(msg *specqbft.ProcessingMessage) error {
 	case specqbft.RoundChangeMsgType:
 		return i.validRoundChangeForDataIgnoreSignature(msg, msg.QBFTMessage.Round, msg.SignedMessage.FullData)
 	default:
-		return errors.New("signed message type not supported")
+		return fmt.Errorf("signed message type not supported")
 	}
 }
 
@@ -284,5 +312,5 @@ func (i *Instance) bumpToRound(round specqbft.Round) {
 
 // CanProcessMessages will return true if instance can process messages
 func (i *Instance) CanProcessMessages() bool {
-	return !i.forceStop && i.State.Round < i.config.GetCutOffRound()
+	return !i.markedIrrelevant && i.State.Round < i.config.GetCutOffRound()
 }

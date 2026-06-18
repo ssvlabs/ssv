@@ -1,6 +1,7 @@
 package server
 
 import (
+	"errors"
 	"net/http"
 	"runtime"
 	"time"
@@ -47,7 +48,7 @@ func New(
 		},
 	}
 
-	router.Use(middleware.Recoverer)
+	router.Use(middlewareRecover(s.logger))
 	router.Use(middleware.Throttle(runtime.NumCPU() * 4))
 	router.Use(middleware.Compress(5, "application/json"))
 	router.Use(middlewareLogger(s.logger))
@@ -149,4 +150,46 @@ func middlewareNodeVersion(next http.Handler) http.Handler {
 		w.Header().Set("X-SSV-Node-Version", commons.GetNodeVersion())
 		next.ServeHTTP(w, r)
 	})
+}
+
+// middlewareRecover replaces chi's middleware.Recoverer with a zap-based
+// equivalent. It logs panics at ERROR level with full request context (method,
+// path, remote address, panic value, and the stack) instead of dumping the
+// stack to stderr via debug.PrintStack — which makes panics queryable in log
+// aggregators alongside the request that triggered them.
+//
+// http.ErrAbortHandler is rethrown unchanged: it's a sentinel used by callers
+// (including net/http itself) to abort a request without it being logged as a
+// real panic, and we match chi's behavior here so existing assumptions hold.
+func middlewareRecover(logger *zap.Logger) func(next http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			defer func() {
+				rvr := recover()
+				if rvr == nil {
+					return
+				}
+				if err, ok := rvr.(error); ok && errors.Is(err, http.ErrAbortHandler) {
+					// Re-panic so net/http's outer recover (in conn.serve)
+					// catches the sentinel and silently aborts the response
+					// / closes the connection — the behavior callers rely
+					// on. The panic stays within this single request's
+					// goroutine, so it cannot crash the process.
+					panic(rvr)
+				}
+				logger.Error("panic serving SSV API request",
+					zap.String("method", r.Method),
+					zap.String("path", r.URL.Path),
+					zap.String("remote_addr", r.RemoteAddr),
+					zap.Any("panic", rvr),
+					zap.Stack("stack"),
+				)
+				// Best-effort 500 response. If headers were already written
+				// this will produce a "superfluous WriteHeader" warning from
+				// net/http but won't change the client-visible behavior.
+				w.WriteHeader(http.StatusInternalServerError)
+			}()
+			next.ServeHTTP(w, r)
+		})
+	}
 }

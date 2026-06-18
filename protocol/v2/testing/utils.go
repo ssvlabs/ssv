@@ -76,6 +76,6 @@ func NewTestingQBFTController(
 		testingutils.TestingOperatorSigner(keySet),
 		fullNode,
 	)
-	ctrl.StoredInstances = make(controller.InstanceContainer, 0, controller.InstanceContainerTestCapacity)
+	ctrl.RecentInstances = make(controller.Instances, 0, controller.InstancesTestCapacity)
 	return ctrl
 }

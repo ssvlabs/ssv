@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/jellydator/ttlcache/v3"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -71,7 +72,8 @@ func (c *Committee) EnqueueMessage(ctx context.Context, msg *queue.SSVMessage) {
 	span.AddEvent("pushing message to the queue")
 	if pushed := q.Q.TryPush(msg); !pushed {
 		const errMsg = "❗ dropping message because the queue is full"
-		logger.Warn(errMsg)
+		logger.Warn(errMsg, zap.String("drop_reason", queue.DropReasonBufferFull))
+		span.AddEvent(errMsg, trace.WithAttributes(attribute.String("drop_reason", queue.DropReasonBufferFull)))
 		span.SetStatus(codes.Error, errMsg)
 		return
 	}
@@ -86,12 +88,10 @@ func (c *Committee) ConsumeQueue(
 	logger *zap.Logger,
 	q queueContainer,
 	handler MessageHandler, // should be c.ProcessMessage, it is a param so can be mocked out for testing
-	rnr runner.Runner,
+	r runner.Runner,
 ) {
 	logger.Debug("📬 queue consumer is running")
 	defer logger.Debug("📪 queue consumer is closed")
-	// Construct a representation of the current state.
-	state := *q.queueState
 
 	// msgStates keeps track of in-flight processing state (retry count + span context) per message.
 	// Since this map grows over time, we need to clean it up automatically. There is no specific TTL value
@@ -103,11 +103,21 @@ func (c *Committee) ConsumeQueue(
 	go msgStates.Start()
 	defer msgStates.Stop()
 
+	// rState defines current runner state that will be used for deciding which messages we want to process
+	// sooner (vs which ones can wait till later).
+	rState := queue.State{
+		Quorum: c.CommitteeMember.GetQuorum(), // never changes for duty runner
+	}
+
 	for ctx.Err() == nil {
-		state.HasRunningInstance = rnr.HasRunningQBFTInstance()
+		// Update rState to incorporate the effects that the previously handled message might have had
+		// on the runner state.
+		rState.HasRunningInstance = r.HasRunningQBFTInstance()
+		rState.Slot = phase0.Slot(r.GetLastHeight())
+		rState.Round = r.GetLastRound()
 
 		filter := queue.FilterAny
-		if state.HasRunningInstance && !rnr.HasAcceptedProposalForCurrentRound() {
+		if rState.HasRunningInstance && !r.HasAcceptedProposalForCurrentRound() {
 			// If no proposal was accepted for the current round, skip prepare & commit messages
 			// for the current round.
 			filter = func(m *queue.SSVMessage) bool {
@@ -116,13 +126,13 @@ func (c *Committee) ConsumeQueue(
 					return m.MsgType != spectypes.SSVPartialSignatureMsgType
 				}
 
-				if sm.Round != state.Round { // allow next round or change round messages.
+				if sm.Round != rState.Round { // allow next round or change round messages.
 					return true
 				}
 
 				return sm.MsgType != specqbft.PrepareMsgType && sm.MsgType != specqbft.CommitMsgType
 			}
-		} else if state.HasRunningInstance {
+		} else if rState.HasRunningInstance {
 			filter = func(ssvMessage *queue.SSVMessage) bool {
 				// don't read post consensus until decided
 				return ssvMessage.MsgType != spectypes.SSVPartialSignatureMsgType
@@ -130,8 +140,7 @@ func (c *Committee) ConsumeQueue(
 		}
 
 		// Pop the highest priority message for the current state.
-		// TODO: (Alan) bring back filter
-		msg := q.Q.Pop(ctx, queue.NewCommitteeQueuePrioritizer(&state), filter)
+		msg := q.Q.Pop(ctx, queue.NewCommitteeQueuePrioritizer(&rState), filter)
 		if ctx.Err() != nil {
 			// Optimization: terminate fast if we can.
 			return
@@ -293,7 +302,7 @@ func (c *Committee) logWithMessageFields(logger *zap.Logger, msg *queue.SSVMessa
 			if err != nil {
 				return nil, fmt.Errorf("event message: get timeout data: %w", err)
 			}
-			logger = logger.With(fields.QBFTRound(timeoutData.Round), fields.QBFTHeight(timeoutData.Height))
+			logger = logger.With(fields.QBFTRound(timeoutData.Round))
 		}
 	}
 	if msg.MsgType == spectypes.SSVConsensusMsgType {

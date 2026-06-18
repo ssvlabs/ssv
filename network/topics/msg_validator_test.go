@@ -2,6 +2,7 @@ package topics
 
 import (
 	"testing"
+	"time"
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -38,6 +39,16 @@ func topicForSlot(netCfg *networkconfig.Network, share *ssvtypes.SSVShare, slot 
 
 func TestMsgValidator(t *testing.T) {
 	logger := zaptest.NewLogger(t)
+	beaconCfg := *networkconfig.TestNetwork.Beacon
+	// Pin slot 0 to start right now so that by the time `mv.Validate` runs the message is
+	// still comfortably inside round 1 for the committee role. Committee round 1 is accepted
+	// as long as timeIntoSlot stays below ~(slotDuration/3 + 3*QuickTimeout) ≈ 10s — any
+	// larger offset here would eat into that budget. A zero offset maximizes it.
+	beaconCfg.GenesisTime = time.Now()
+	testNet := &networkconfig.Network{
+		Beacon: &beaconCfg,
+		SSV:    networkconfig.TestNetwork.SSV,
+	}
 
 	ks := spectestingutils.Testing4SharesSet()
 	share := &ssvtypes.SSVShare{
@@ -49,7 +60,7 @@ func TestMsgValidator(t *testing.T) {
 	db, err := kv.NewInMemory(logger, basedb.Options{})
 	require.NoError(t, err)
 
-	ns, err := operatorstorage.NewNodeStorage(networkconfig.TestNetwork.Beacon, logger, db)
+	ns, err := operatorstorage.NewNodeStorage(testNet.Beacon, logger, db)
 	require.NoError(t, err)
 
 	require.NoError(t, ns.Shares().Save(nil, share))
@@ -58,7 +69,7 @@ func TestMsgValidator(t *testing.T) {
 
 	signatureVerifier := signatureverifier.NewSignatureVerifier(ns)
 	mv := validation.New(
-		networkconfig.TestNetwork,
+		testNet,
 		ns.ValidatorStore(),
 		ns,
 		dutystore.New(),
@@ -68,7 +79,7 @@ func TestMsgValidator(t *testing.T) {
 
 	require.NotNil(t, mv)
 
-	slot := networkconfig.TestNetwork.EstimatedCurrentSlot()
+	slot := testNet.EstimatedCurrentSlot()
 
 	operatorID := uint64(1)
 	operatorPrivateKey := ks.OperatorKeys[operatorID]

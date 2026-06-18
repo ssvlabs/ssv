@@ -95,7 +95,7 @@ func normalizeExpectedProposerStartValues(pr *runner.ProposerRunner) {
 	if pr.QBFTController == nil {
 		return
 	}
-	for _, inst := range pr.QBFTController.StoredInstances {
+	for _, inst := range pr.QBFTController.RecentInstances {
 		if inst == nil {
 			continue
 		}
@@ -179,7 +179,7 @@ func setRunnerValueCheckers(r runner.Runner, valCheck ssv.ValueChecker) {
 	if base == nil || base.QBFTController == nil {
 		return
 	}
-	for _, inst := range base.QBFTController.StoredInstances {
+	for _, inst := range base.QBFTController.RecentInstances {
 		if inst == nil {
 			continue
 		}
@@ -198,7 +198,7 @@ func setRunnerValueCheckersIfNil(r runner.Runner, valCheck ssv.ValueChecker) {
 	if base == nil || base.QBFTController == nil {
 		return
 	}
-	for _, inst := range base.QBFTController.StoredInstances {
+	for _, inst := range base.QBFTController.RecentInstances {
 		if inst == nil || inst.ValueChecker != nil {
 			continue
 		}

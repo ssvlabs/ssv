@@ -203,7 +203,7 @@ func (c *Committee) getQueueForRole(logger *zap.Logger, slot phase0.Slot, role s
 			Q: queue.New(
 				logger,
 				defaultValidatorQueueSize,
-				queue.WithInboxSizeMetric(
+				queue.WithQueueMetrics(
 					queue.InboxSizeMetric,
 					qType,
 					queue.CommitteeMetricID(slot),
@@ -211,7 +211,6 @@ func (c *Committee) getQueueForRole(logger *zap.Logger, slot phase0.Slot, role s
 			),
 			queueState: &queue.State{
 				HasRunningInstance: false,
-				Height:             specqbft.Height(slot),
 				Slot:               slot,
 				Quorum:             c.CommitteeMember.GetQuorum(),
 			},
@@ -394,7 +393,7 @@ func (c *Committee) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 				return fmt.Errorf("event message: get timeout data: %w", err)
 			}
 
-			if err := r.OnTimeoutQBFT(ctx, logger, timeoutData); err != nil {
+			if err := r.OnQBFTRoundTimeout(ctx, logger, timeoutData); err != nil {
 				return fmt.Errorf("event message: process timeout event: %w", err)
 			}
 
@@ -558,7 +557,12 @@ func (c *Committee) createRunner(
 	if err != nil {
 		return nil, fmt.Errorf("create committee runner: %w", err)
 	}
-	r.SetTimeoutFunc(c.onTimeout)
+
+	// Wire the QBFT round-timer factory, bound to a msg ID carrying this duty's role so timeout
+	// events are routed to the matching (committee vs aggregator-committee) slot queue.
+	role := types.RunnerRoleForDuty(duty, c.networkConfig.BooleForkAtSlot(duty.DutySlot()))
+	runnerIdentifier := spectypes.NewMsgID(c.networkConfig.CurrentDomainType(), c.CommitteeMember.CommitteeID[:], role)
+	r.SetQBFTRoundTimerF(c.newQBFTRoundTimerF(runnerIdentifier))
 
 	switch duty := duty.(type) {
 	case *spectypes.CommitteeDuty:

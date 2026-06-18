@@ -51,20 +51,19 @@ func NewCommonTestInput(
 }
 
 type TestEnv struct {
-	eventSyncer    *eventsyncer.EventSyncer
-	validators     []*testValidatorData
-	ops            []*testOperator
-	nodeStorage    storage.Storage
-	sim            *simulator.Backend
-	boundContract  *simcontract.Simcontract
-	auth           *bind.TransactOpts
-	shares         [][]byte
-	execClient     *executionclient.ExecutionClient
-	rpcServer      *rpc.Server
-	httpSrv        *httptest.Server
-	taskExecutor   *mocks.MockTaskExecutor
-	mockCtrl       *gomock.Controller
-	followDistance *uint64
+	eventSyncer   *eventsyncer.EventSyncer
+	validators    []*testValidatorData
+	ops           []*testOperator
+	nodeStorage   storage.Storage
+	sim           *simulator.Backend
+	boundContract *simcontract.Simcontract
+	auth          *bind.TransactOpts
+	shares        [][]byte
+	execClient    *executionclient.ExecutionClient
+	rpcServer     *rpc.Server
+	httpSrv       *httptest.Server
+	taskExecutor  *mocks.MockTaskExecutor
+	mockCtrl      *gomock.Controller
 }
 
 func (e *TestEnv) shutdown() {
@@ -89,9 +88,6 @@ func (e *TestEnv) setup(
 	validatorsCount uint64,
 	operatorsCount uint64,
 ) error {
-	if e.followDistance == nil {
-		e.SetDefaultFollowDistance()
-	}
 	logger := zaptest.NewLogger(t)
 
 	// Create operators RSA keys
@@ -173,7 +169,6 @@ func (e *TestEnv) setup(
 		addr,
 		contractAddr,
 		executionclient.WithLogger(logger),
-		executionclient.WithFollowDistance(*e.followDistance),
 	)
 	if err != nil {
 		return err
@@ -206,14 +201,10 @@ func (e *TestEnv) setup(
 	return nil
 }
 
-func (e *TestEnv) SetDefaultFollowDistance() {
-	// 8 is current production offset
-	value := uint64(8)
-	e.followDistance = &value
-}
-
+// CloseFollowDistance advances the simulator past the EL follow-distance
+// window so that events committed before it become visible to log streaming.
 func (e *TestEnv) CloseFollowDistance(blockNum *uint64) {
-	for i := uint64(0); i < *e.followDistance; i++ {
+	for i := uint64(0); i < executionclient.FollowDistance; i++ {
 		commitBlock(e.sim, blockNum)
 	}
 }
