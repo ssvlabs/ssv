@@ -58,6 +58,9 @@ func (gc *GoClient) GetSyncCommitteeContribution(
 	// Resolve the contribution root from head rather than by slot: sync-committee messages
 	// sign the head root as seen during the duty slot, which for a missed or late proposal
 	// is an earlier block's root — a by-slot lookup would 404 there and fail the duty.
+	// In the common case head matches the root the cluster's own messages signed; those
+	// sign the QBFT-decided head vote, which can diverge from a freshly-queried head under
+	// a reorg or a lagging node.
 	start := time.Now()
 	beaconBlockRootResp, err := gc.multiClient.BeaconBlockRoot(ctx, &api.BeaconBlockRootOpts{
 		Block: "head",
@@ -66,11 +69,8 @@ func (gc *GoClient) GetSyncCommitteeContribution(
 	if err != nil {
 		return nil, DataVersionNil, errMultiClient(fmt.Errorf("fetch beacon block root: %w", err), "BeaconBlockRoot")
 	}
-	if beaconBlockRootResp == nil {
-		return nil, DataVersionNil, errMultiClient(fmt.Errorf("beacon block root response is nil"), "BeaconBlockRoot")
-	}
-	if beaconBlockRootResp.Data == nil {
-		return nil, DataVersionNil, errMultiClient(fmt.Errorf("beacon block root response data is nil"), "BeaconBlockRoot")
+	if err := checkPtrResponse(beaconBlockRootResp, "beacon block root"); err != nil {
+		return nil, DataVersionNil, errMultiClient(err, "BeaconBlockRoot")
 	}
 
 	blockRoot := beaconBlockRootResp.Data
@@ -96,11 +96,8 @@ func (gc *GoClient) GetSyncCommitteeContribution(
 			if err != nil {
 				return errMultiClient(fmt.Errorf("fetch sync committee contribution: %w", err), "SyncCommitteeContribution")
 			}
-			if syncCommitteeContrResp == nil {
-				return errMultiClient(fmt.Errorf("sync committee contribution response is nil"), "SyncCommitteeContribution")
-			}
-			if syncCommitteeContrResp.Data == nil {
-				return errMultiClient(fmt.Errorf("sync committee contribution response data is nil"), "SyncCommitteeContribution")
+			if err := checkPtrResponse(syncCommitteeContrResp, "sync committee contribution"); err != nil {
+				return errMultiClient(err, "SyncCommitteeContribution")
 			}
 
 			contribution := syncCommitteeContrResp.Data

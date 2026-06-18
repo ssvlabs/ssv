@@ -305,7 +305,8 @@ func TestGetSyncCommitteeContributionPreservesInputOrdering(t *testing.T) {
 // empty-slot 404 bug: the contribution root must be resolved from "head", never the
 // duty slot. When the slot's proposal is missed, a by-slot block-root lookup 404s and
 // terminally fails the duty for the whole cluster, whereas "head" resolves to the
-// previous block's root — exactly what the cluster's sync-committee messages signed.
+// previous block's root — in the common case the root the cluster's sync-committee
+// messages signed.
 //
 // The mock 404s any by-slot lookup and only answers "head", so this test fails if the
 // query ever regresses to the by-slot form.

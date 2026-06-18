@@ -56,11 +56,8 @@ func (gc *GoClient) specForClient(ctx context.Context, provider client.Service) 
 	if err != nil {
 		return nil, errSingleClient(fmt.Errorf("fetch spec response: %w", err), provider.Address(), "Spec")
 	}
-	if specResponse == nil {
-		return nil, errSingleClient(fmt.Errorf("spec response is nil"), provider.Address(), "Spec")
-	}
-	if specResponse.Data == nil {
-		return nil, errSingleClient(fmt.Errorf("spec response data is nil"), provider.Address(), "Spec")
+	if err := checkMapResponse(specResponse, "spec"); err != nil {
+		return nil, errSingleClient(err, provider.Address(), "Spec")
 	}
 
 	return specResponse.Data, nil

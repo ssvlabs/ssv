@@ -20,11 +20,8 @@ func (gc *GoClient) genesisForClient(ctx context.Context, provider client.Servic
 	if err != nil {
 		return nil, errSingleClient(fmt.Errorf("fetch genesis: %w", err), provider.Address(), "Genesis")
 	}
-	if genesisResp == nil {
-		return nil, errSingleClient(fmt.Errorf("genesis response is nil"), provider.Address(), "Genesis")
-	}
-	if genesisResp.Data == nil {
-		return nil, errSingleClient(fmt.Errorf("genesis response data is nil"), provider.Address(), "Genesis")
+	if err := checkPtrResponse(genesisResp, "genesis"); err != nil {
+		return nil, errSingleClient(err, provider.Address(), "Genesis")
 	}
 
 	return genesisResp.Data, nil

@@ -39,11 +39,8 @@ func (gc *GoClient) ProposerDuties(ctx context.Context, epoch phase0.Epoch, vali
 	if err != nil {
 		return nil, errMultiClient(fmt.Errorf("fetch proposer duties: %w", err), "ProposerDuties")
 	}
-	if resp == nil {
-		return nil, errMultiClient(fmt.Errorf("proposer duties response is nil"), "ProposerDuties")
-	}
-	if resp.Data == nil {
-		return nil, errMultiClient(fmt.Errorf("proposer duties response data is nil"), "ProposerDuties")
+	if err := checkSliceResponse(resp, "proposer duties"); err != nil {
+		return nil, errMultiClient(err, "ProposerDuties")
 	}
 
 	return resp.Data, nil
@@ -67,11 +64,8 @@ func (gc *GoClient) fetchProposal(
 	if err != nil {
 		return nil, errSingleClient(fmt.Errorf("fetch proposal: %w", err), client.Address(), "Proposal")
 	}
-	if resp == nil {
-		return nil, errSingleClient(fmt.Errorf("proposal response is nil"), client.Address(), "Proposal")
-	}
-	if resp.Data == nil {
-		return nil, errSingleClient(fmt.Errorf("proposal response data is nil"), client.Address(), "Proposal")
+	if err := checkPtrResponse(resp, "proposal"); err != nil {
+		return nil, errSingleClient(err, client.Address(), "Proposal")
 	}
 
 	return resp.Data, nil
