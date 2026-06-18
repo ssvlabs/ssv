@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
@@ -110,6 +111,12 @@ type BaseRunner struct {
 	ssvtypes.OperatorSigner
 
 	qbftRoundTimerF ssv.QBFTRoundTimerF `json:"-"`
+
+	// dutyConcluded carries a duty's terminal outcome (success / not-required / failure) from the
+	// markers to its watcher (watchDutyOutcome), which reports it exactly once. Buffered(1) so a
+	// marker never blocks even if the watcher already exited. Set and sent-on only from the single
+	// message-processing goroutine (the watcher reads its own captured copy), so it needs no lock.
+	dutyConcluded chan dutyConclusion `json:"-"`
 
 	// highestDecidedSlot holds the highest decided duty slot and gets updated after each decided is reached
 	highestDecidedSlot phase0.Slot
@@ -237,9 +244,13 @@ func (b *BaseRunner) baseStartNewDuty(ctx context.Context, logger *zap.Logger, r
 
 	b.State = NewRunnerState(quorum, duty)
 
+	b.watchDutyOutcome(ctx, logger)
+
 	if err := runner.executeDuty(ctx, logger, duty); err != nil {
+		b.markDutyFailed(err)
 		return fmt.Errorf("failed to execute duty: %w", err)
 	}
+
 	return nil
 }
 
@@ -248,8 +259,80 @@ func (b *BaseRunner) baseStartNewNonBeaconDuty(ctx context.Context, logger *zap.
 	if err := b.ShouldProcessNonBeaconDuty(duty); err != nil {
 		return fmt.Errorf("can't start non-beacon duty: %w", err)
 	}
+
 	b.State = NewRunnerState(quorum, duty)
-	return runner.executeDuty(ctx, logger, duty)
+
+	b.watchDutyOutcome(ctx, logger)
+
+	if err := runner.executeDuty(ctx, logger, duty); err != nil {
+		b.markDutyFailed(err)
+		return err
+	}
+
+	return nil
+}
+
+// dutyOutcome classifies how a duty concluded. Every duty concludes with exactly one outcome,
+// reported once by watchDutyOutcome and recorded as the ssv.runner.duty.outcome metric.
+type dutyOutcome string
+
+const (
+	dutyOutcomeSucceeded   dutyOutcome = "succeeded"    // full successful cycle with quorum, submitted to the beacon node
+	dutyOutcomeNotRequired dutyOutcome = "not_required" // completed with nothing to submit (e.g. not selected as aggregator)
+	dutyOutcomeFailed      dutyOutcome = "failed"       // terminated by a non-recoverable error
+	dutyOutcomeStuck       dutyOutcome = "stuck"        // not concluded before the end of the current wall-clock slot
+)
+
+// dutyConclusion is handed by a marker (markDutySucceeded / markDutyNotRequired / markDutyFailed) to
+// the duty's watcher (watchDutyOutcome), which reports it.
+type dutyConclusion struct {
+	outcome dutyOutcome
+	reason  error // populated for dutyOutcomeFailed
+}
+
+// watchDutyOutcome reports a duty's terminal outcome exactly once: it records the
+// ssv.runner.duty.outcome metric and warns for the outcomes worth an operator's attention (failed
+// and stuck). It knows nothing about how duties complete — the outcome is delivered by a marker
+// over dutyConcluded, not by reading runner state — so it's safe alongside the single-threaded
+// message loop. It MUST be started before executeDuty so a duty that concludes synchronously is still
+// reported. Each duty gets its own channel: starting the next duty overwrites the field, and the
+// previous duty's watcher (if still pending) reports its own duty and is reaped by its own timer.
+//
+// The deadline is the end of the current wall-clock slot rather than duty.Slot's end because some
+// duties are stamped with a slot in the past (a voluntary-exit envelope carries blockSlot+4 but
+// executes at blockSlot+12); for beacon duties the two coincide.
+func (b *BaseRunner) watchDutyOutcome(ctx context.Context, logger *zap.Logger) {
+	concluded := make(chan dutyConclusion, 1)
+	b.dutyConcluded = concluded
+
+	deadline := b.NetworkConfig.SlotStartTime(b.NetworkConfig.EstimatedCurrentSlot() + 1)
+
+	report := func(c dutyConclusion) {
+		recordDutyOutcome(ctx, b.GetRole(), c.outcome)
+		if c.outcome == dutyOutcomeFailed {
+			logger.Warn("⚠️ duty failed", zap.Error(c.reason))
+		}
+		if c.outcome == dutyOutcomeStuck {
+			logger.Warn("⚠️ duty did not complete before slot end (likely stuck)")
+		}
+	}
+
+	go func() {
+		select {
+		case c := <-concluded:
+			report(c)
+		case <-ctx.Done():
+			return // node/validator shutting down
+		case <-time.After(time.Until(deadline)):
+			// Prefer a conclusion that landed right at the deadline over reporting a false miss.
+			select {
+			case c := <-concluded:
+				report(c)
+			default:
+				report(dutyConclusion{outcome: dutyOutcomeStuck})
+			}
+		}
+	}()
 }
 
 // signAndBroadcastPartialSigMsgs encodes msgs into an SSVMessage, signs it with opSigner,
@@ -536,16 +619,54 @@ func (b *BaseRunner) hasDutyAssigned() bool {
 }
 
 func (b *BaseRunner) hasDutyRunning() bool {
-	return b.hasDutyAssigned() && !b.State.Finished
+	return b.hasDutyAssigned() && !b.State.Succeeded
 }
 
-func (b *BaseRunner) hasDutyFinished() bool {
-	return b.hasDutyAssigned() && b.State.Finished
+func (b *BaseRunner) hasDutySucceeded() bool {
+	return b.hasDutyAssigned() && b.State.Succeeded
 }
 
-func (b *BaseRunner) markDutyFinished() {
+// markDutySucceeded records that the duty completed its full cycle (pre-consensus, consensus and
+// post-consensus) successfully, submitting to the beacon node.
+func (b *BaseRunner) markDutySucceeded() {
 	// NOTE: b.State cannot be nil at this point, by construction.
-	b.State.Finished = true
+	b.State.Succeeded = true
+	b.concludeDuty(dutyOutcomeSucceeded, nil)
+}
+
+// markDutyNotRequired records that the duty completed correctly with nothing to submit — e.g. the
+// validator turned out not to be an aggregator. Like a success it is a full, correct completion
+// (State.Succeeded is set); it is reported under a distinct outcome so the two can be told apart.
+func (b *BaseRunner) markDutyNotRequired() {
+	// NOTE: b.State cannot be nil at this point, by construction.
+	b.State.Succeeded = true
+	b.concludeDuty(dutyOutcomeNotRequired, nil)
+}
+
+// markDutyFailed records that the duty terminated with a non-recoverable error. It does NOT mark the
+// duty succeeded; it only reports the outcome so the watcher classifies the duty as failed rather
+// than as a silent stall.
+//
+// A context.Canceled reason is not a duty failure: a cancellation means the duty was abandoned
+// (typically node/validator shutdown), not attempted-and-failed, so "failed" stays reserved for
+// genuine, attributable failures. Filtering it here — rather than at the watcher — also means no
+// failure conclusion is ever produced to race ctx.Done() in watchDutyOutcome.
+func (b *BaseRunner) markDutyFailed(reason error) {
+	if errors.Is(reason, context.Canceled) {
+		return
+	}
+	b.concludeDuty(dutyOutcomeFailed, reason)
+}
+
+// concludeDuty hands the duty's terminal outcome to its watcher (watchDutyOutcome), which reports it
+// exactly once. A duty concludes at most once, but nil-ing dutyConcluded after the (buffered, so
+// non-blocking) send keeps this idempotent: a second call — or one before watchDutyOutcome armed the
+// channel — must never block the single message-processing goroutine on the buffered(1) channel.
+func (b *BaseRunner) concludeDuty(outcome dutyOutcome, reason error) {
+	if b.dutyConcluded != nil {
+		b.dutyConcluded <- dutyConclusion{outcome: outcome, reason: reason}
+		b.dutyConcluded = nil
+	}
 }
 
 func (b *BaseRunner) ShouldProcessDuty(duty spectypes.Duty) error {

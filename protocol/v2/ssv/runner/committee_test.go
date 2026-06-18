@@ -164,7 +164,9 @@ func newCommitteeRunnerEnv(
 func (e *committeeRunnerEnv) startAndDecideCommitteeDuty(t *testing.T, duty *spectypes.CommitteeDuty) {
 	t.Helper()
 
-	ctx := context.Background()
+	// t.Context: StartNewDuty spawns a deadline watcher that may log at slot end; the test-scoped
+	// context releases it before the zaptest logger becomes invalid.
+	ctx := t.Context()
 	require.NoError(t, e.runner.StartNewDuty(ctx, e.logger, duty, e.sampleKey.Threshold))
 
 	for _, msg := range spectestingutils.CommitteeInputForDuty(duty, duty.Slot, e.keySetMap, false) {
@@ -245,7 +247,8 @@ func TestCommitteeRunnerStartNewDuty_StartsGuardAndResetsSubmissions(t *testing.
 	env.runner.RecordSubmission(spectypes.BNRoleAttester, 1)
 	env.runner.RecordSubmission(spectypes.BNRoleSyncCommittee, 2)
 
-	require.NoError(t, env.runner.StartNewDuty(context.Background(), env.logger, duty, env.sampleKey.Threshold))
+	// t.Context releases the duty deadline watcher before the zaptest logger becomes invalid.
+	require.NoError(t, env.runner.StartNewDuty(t.Context(), env.logger, duty, env.sampleKey.Threshold))
 
 	require.Len(t, guard.startCalls, 2)
 	gotRoles := make([]spectypes.BeaconRole, 0, len(guard.startCalls))
@@ -367,7 +370,7 @@ func TestCommitteeRunnerProcessPostConsensus_SubmitsElectraObjectsAndDeduplicate
 		}
 	}
 
-	require.True(t, env.runner.State.Finished)
+	require.True(t, env.runner.State.Succeeded)
 	require.Len(t, env.beacon.GetBroadcastedRoots(), 2)
 
 	attesterDuty := duty.ValidatorDuties[0]
@@ -390,6 +393,6 @@ func TestCommitteeRunnerProcessPostConsensus_SubmitsElectraObjectsAndDeduplicate
 	require.ElementsMatch(t, []phase0.ValidatorIndex{attesterDuty.ValidatorIndex}, doppelganger.reports)
 
 	err = env.runner.ProcessPostConsensus(context.Background(), env.logger, postConsensusMsgs[2])
-	require.ErrorContains(t, err, ErrRunningDutyFinished.Error())
+	require.ErrorContains(t, err, ErrRunningDutySucceeded.Error())
 	require.Len(t, env.beacon.GetBroadcastedRoots(), 2)
 }
