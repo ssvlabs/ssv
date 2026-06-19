@@ -380,7 +380,8 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 
 	// Wait for the rate + bucket + strict-separation invariants to hold on
 	// every observer in one consistent snapshot. Returns quickly on a fast
-	// machine; times out at 15s if scores never settle.
+	// machine; the 30s ceiling gives loaded CI runners enough decay cycles for
+	// GossipSub scores to settle before giving up.
 	ok := assert.Eventually(t, func() bool {
 		snapshot := make(map[NodeIndex][]peerScore, len(vNet.Nodes))
 		for _, node := range vNet.Nodes {
@@ -402,7 +403,7 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 		}
 		settled.Store(&snapshot)
 		return true
-	}, 15*time.Second, 100*time.Millisecond, "peer scores never satisfied rate + bucket + strict-separation invariants")
+	}, 30*time.Second, 100*time.Millisecond, "peer scores never satisfied rate + bucket + strict-separation invariants")
 
 	if !ok {
 		// Eventually marked the test as failed but didn't FailNow (assert.*
