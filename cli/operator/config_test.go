@@ -3,6 +3,8 @@ package operator
 import (
 	"fmt"
 	"net"
+	"os"
+	"path/filepath"
 	"strconv"
 	"testing"
 	"time"
@@ -36,6 +38,69 @@ func Test_config_load(t *testing.T) {
 		"could not read config needed for logger initialization")
 	require.ErrorContains(t, c.load("", "/nonexistent/share.yaml"),
 		"could not read share config needed for logger initialization")
+}
+
+// Test_config_load_trueDefaultBools is the regression for #2868: the true-default p2p bools
+// (DynamicMaxPeers, PubSubScoring) must honor an explicit `false` from YAML or env instead of
+// reverting to true. The defaults are now seeded in code by config.ApplyDefaults before ReadConfig.
+func Test_config_load_trueDefaultBools(t *testing.T) {
+	// Minimal base with the env-required eth1/eth2 addresses so ReadConfig succeeds; each case
+	// appends its own p2p section.
+	const requiredBase = "eth1:\n  ETH1Addr: ws://localhost:8546\neth2:\n  BeaconNodeAddr: http://localhost:5052\n"
+
+	writeConfig := func(t *testing.T, p2pBody string) string {
+		t.Helper()
+		path := filepath.Join(t.TempDir(), "config.yaml")
+		require.NoError(t, os.WriteFile(path, []byte(requiredBase+p2pBody), 0o600))
+		return path
+	}
+
+	t.Run("explicit false in YAML is honored", func(t *testing.T) {
+		var c config
+		path := writeConfig(t, "p2p:\n  DynamicMaxPeers: false\n  PubSubScoring: false\n")
+		require.NoError(t, c.load(path, ""))
+		require.False(t, c.P2pNetworkConfig.DynamicMaxPeers)
+		require.False(t, c.P2pNetworkConfig.PubSubScoring)
+	})
+
+	t.Run("omitted keys default to true", func(t *testing.T) {
+		var c config
+		path := writeConfig(t, "p2p:\n  TcpPort: 13001\n")
+		require.NoError(t, c.load(path, ""))
+		require.True(t, c.P2pNetworkConfig.DynamicMaxPeers)
+		require.True(t, c.P2pNetworkConfig.PubSubScoring)
+	})
+
+	t.Run("explicit true in YAML stays true", func(t *testing.T) {
+		var c config
+		path := writeConfig(t, "p2p:\n  DynamicMaxPeers: true\n  PubSubScoring: true\n")
+		require.NoError(t, c.load(path, ""))
+		require.True(t, c.P2pNetworkConfig.DynamicMaxPeers)
+		require.True(t, c.P2pNetworkConfig.PubSubScoring)
+	})
+
+	t.Run("env var false overrides the seeded default", func(t *testing.T) {
+		t.Setenv("P2P_DYNAMIC_MAX_PEERS", "false")
+		t.Setenv("PUBSUB_SCORING", "false")
+		var c config
+		path := writeConfig(t, "p2p:\n  TcpPort: 13001\n")
+		require.NoError(t, c.load(path, ""))
+		require.False(t, c.P2pNetworkConfig.DynamicMaxPeers)
+		require.False(t, c.P2pNetworkConfig.PubSubScoring)
+	})
+
+	t.Run("explicit false in main config survives the share-config read", func(t *testing.T) {
+		// The dual-config path was the worst case of the bug: the second ReadConfig(shareConfigPath)
+		// re-applied env-default:"true" and clobbered a false set by the first. With defaults now in code,
+		// a share config that omits the keys must leave the main config's explicit false intact.
+		var c config
+		mainPath := writeConfig(t, "p2p:\n  DynamicMaxPeers: false\n  PubSubScoring: false\n")
+		sharePath := filepath.Join(t.TempDir(), "share.yaml")
+		require.NoError(t, os.WriteFile(sharePath, []byte("p2p:\n  TcpPort: 13002\n"), 0o600))
+		require.NoError(t, c.load(mainPath, sharePath))
+		require.False(t, c.P2pNetworkConfig.DynamicMaxPeers)
+		require.False(t, c.P2pNetworkConfig.PubSubScoring)
+	})
 }
 
 // Test_resolveAndValidate_proposerDelay covers the proposer-delay advisory warning emitted by

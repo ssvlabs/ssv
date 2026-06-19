@@ -33,27 +33,27 @@ const (
 // Config holds the configuration options for p2p network
 type Config struct {
 	Ctx          context.Context
-	Bootnodes    string   `yaml:"Bootnodes" env:"BOOTNODES" env-default:"" env-description:"Bootnodes to use for discovery (semicolon-separated ENRs, e.g. 'enr:-abc123;enr:-def456')" `
-	Discovery    string   `yaml:"Discovery" env:"P2P_DISCOVERY" env-default:"discv5" env-description:"Discovery protocol to use (discv5, mdns)" `
-	TrustedPeers []string `yaml:"TrustedPeers" env:"TRUSTED_PEERS" env-default:"" env-description:"List of peer IDs to always connect to"`
+	Bootnodes    string   `yaml:"Bootnodes" env:"BOOTNODES" env-description:"Bootnodes to use for discovery (semicolon-separated ENRs, e.g. 'enr:-abc123;enr:-def456')" `
+	Discovery    string   `yaml:"Discovery" env:"P2P_DISCOVERY" env-description:"Discovery protocol to use (discv5, mdns)" `
+	TrustedPeers []string `yaml:"TrustedPeers" env:"TRUSTED_PEERS" env-description:"List of peer IDs to always connect to"`
 
-	TCPPort     uint16 `yaml:"TcpPort" env:"TCP_PORT" env-default:"13001" env-description:"TCP port for P2P transport"`
-	UDPPort     uint16 `yaml:"UdpPort" env:"UDP_PORT" env-default:"12001" env-description:"UDP port for discovery"`
+	TCPPort     uint16 `yaml:"TcpPort" env:"TCP_PORT" env-description:"TCP port for P2P transport"`
+	UDPPort     uint16 `yaml:"UdpPort" env:"UDP_PORT" env-description:"UDP port for discovery"`
 	HostAddress string `yaml:"HostAddress" env:"HOST_ADDRESS" env-description:"External IP address for discovery (mutually exclusive with HostDNS)"`
 	HostDNS     string `yaml:"HostDNS" env:"HOST_DNS" env-description:"External DNS name for discovery (mutually exclusive with HostAddress)"`
 
-	RequestTimeout   time.Duration `yaml:"RequestTimeout" env:"P2P_REQUEST_TIMEOUT"  env-default:"10s" env-description:"Timeout for P2P requests"`
-	MaxBatchResponse uint64        `yaml:"MaxBatchResponse" env:"P2P_MAX_BATCH_RESPONSE" env-default:"25" env-description:"Maximum number of objects returned in a batch response"`
+	RequestTimeout   time.Duration `yaml:"RequestTimeout" env:"P2P_REQUEST_TIMEOUT" env-description:"Timeout for P2P requests"`
+	MaxBatchResponse uint64        `yaml:"MaxBatchResponse" env:"P2P_MAX_BATCH_RESPONSE" env-description:"Maximum number of objects returned in a batch response"`
 
-	MaxPeers             int  `yaml:"MaxPeers" env:"P2P_MAX_PEERS" env-default:"60" env-description:"Maximum number of connected peers"`
-	DynamicMaxPeers      bool `yaml:"DynamicMaxPeers" env:"P2P_DYNAMIC_MAX_PEERS" env-default:"true" env-description:"Automatically adjust MaxPeers based on committee count"`
-	DynamicMaxPeersLimit int  `yaml:"DynamicMaxPeersLimit" env:"P2P_DYNAMIC_MAX_PEERS_LIMIT" env-default:"150" env-description:"Upper limit for MaxPeers when DynamicMaxPeers is enabled"`
-	TopicMaxPeers        int  `yaml:"TopicMaxPeers" env:"P2P_TOPIC_MAX_PEERS" env-default:"10" env-description:"Maximum peers per pubsub topic"`
+	MaxPeers             int  `yaml:"MaxPeers" env:"P2P_MAX_PEERS" env-description:"Maximum number of connected peers"`
+	DynamicMaxPeers      bool `yaml:"DynamicMaxPeers" env:"P2P_DYNAMIC_MAX_PEERS" env-description:"Automatically adjust MaxPeers based on committee count"`
+	DynamicMaxPeersLimit int  `yaml:"DynamicMaxPeersLimit" env:"P2P_DYNAMIC_MAX_PEERS_LIMIT" env-description:"Upper limit for MaxPeers when DynamicMaxPeers is enabled"`
+	TopicMaxPeers        int  `yaml:"TopicMaxPeers" env:"P2P_TOPIC_MAX_PEERS" env-description:"Maximum peers per pubsub topic"`
 
 	// Subnets is a static bit list of subnets that this node will register upon start.
 	Subnets string `yaml:"Subnets" env:"SUBNETS" env-description:"Hex string (32 characters) representing 128 subnets to join on startup. Each bit corresponds to a subnet - 1 means join, 0 means skip. Examples: '0x0000000000000000000000000000ffff' (join last 16 subnets), '0xffffffffffffffffffffffffffffffff' (join all 128 subnets)"`
 	// PubSubScoring is a flag to turn on/off pubsub scoring
-	PubSubScoring bool `yaml:"PubSubScoring" env:"PUBSUB_SCORING" env-default:"true" env-description:"Enable pubsub peer scoring"`
+	PubSubScoring bool `yaml:"PubSubScoring" env:"PUBSUB_SCORING" env-description:"Enable pubsub peer scoring"`
 	// PubSubTrace is a flag to turn on/off pubsub tracing in logs
 	PubSubTrace bool `yaml:"PubSubTrace" env:"PUBSUB_TRACE" env-description:"Enable pubsub debug tracing in logs"`
 	// DiscoveryTrace is a flag to turn on/off discovery tracing in logs
@@ -86,7 +86,7 @@ type Config struct {
 	// If false, SyncDecidedByRange becomes a no-op.
 	FullNode bool
 
-	DisableIPRateLimit bool `yaml:"DisableIPRateLimit" env:"DISABLE_IP_RATE_LIMIT" default:"false" env-description:"Disable IP-based rate limiting"`
+	DisableIPRateLimit bool `yaml:"DisableIPRateLimit" env:"DISABLE_IP_RATE_LIMIT" env-description:"Disable IP-based rate limiting"`
 
 	GetValidatorStats network.GetValidatorStats
 
@@ -100,6 +100,19 @@ type Config struct {
 	// Empty falls back to discovery.LocalDiscoveryServiceTag. Tests set this to
 	// a unique value so concurrent test processes don't cross-discover peers.
 	MdnsDiscoveryTag string
+}
+
+func (c *Config) ApplyDefaults() {
+	c.Discovery = "discv5"
+	c.TCPPort = 13001
+	c.UDPPort = 12001
+	c.RequestTimeout = 10 * time.Second
+	c.MaxBatchResponse = 25
+	c.MaxPeers = 60
+	c.DynamicMaxPeers = true
+	c.DynamicMaxPeersLimit = 150
+	c.TopicMaxPeers = 10
+	c.PubSubScoring = true
 }
 
 // Libp2pOptions creates options list for the libp2p host

@@ -1,0 +1,14 @@
+{
+  "bootnode.DbPath": "/data/bootnode",
+  "bootnode.ExternalIP": "",
+  "bootnode.Network": "mainnet",
+  "bootnode.PrivateKey": "",
+  "bootnode.TcpPort": "5000",
+  "bootnode.UdpPort": "4000",
+  "global.LogFileBackups": "3",
+  "global.LogFilePath": "./data/debug.log",
+  "global.LogFileSize": "500",
+  "global.LogFormat": "console",
+  "global.LogLevel": "info",
+  "global.LogLevelFormat": "capitalColor"
+}

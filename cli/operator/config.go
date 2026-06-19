@@ -25,10 +25,14 @@ type KeyStore struct {
 
 type SSVSignerConfig struct {
 	Endpoint             string        `yaml:"Endpoint" env:"ENDPOINT" env-description:"Endpoint of ssv-signer. It must be a correct URL"`
-	RequestTimeout       time.Duration `yaml:"RequestTimeout" env:"REQUEST_TIMEOUT" env-description:"Request timeout for ssv-signer" env-default:"10s"`
+	RequestTimeout       time.Duration `yaml:"RequestTimeout" env:"REQUEST_TIMEOUT" env-description:"Request timeout for ssv-signer"`
 	KeystoreFile         string        `yaml:"KeystoreFile" env:"KEYSTORE_FILE" env-description:"Path to ssv-signer client keystore file"`
 	KeystorePasswordFile string        `yaml:"KeystorePasswordFile" env:"KEYSTORE_PASSWORD_FILE" env-description:"Path to file containing the password for client keystore file"`
 	ServerCertFile       string        `yaml:"ServerCertFile" env:"SERVER_CERT_FILE" env-description:"Path to trusted server certificate file for ssv-signer"`
+}
+
+func (c *SSVSignerConfig) ApplyDefaults() {
+	c.RequestTimeout = 10 * time.Second
 }
 
 type config struct {
@@ -41,7 +45,7 @@ type config struct {
 	P2pNetworkConfig             p2pv1.Config            `yaml:"p2p"`
 	KeyStore                     KeyStore                `yaml:"KeyStore"`
 	SSVSigner                    SSVSignerConfig         `yaml:"SSVSigner" env-prefix:"SSV_SIGNER_"`
-	Graffiti                     string                  `yaml:"Graffiti" env:"GRAFFITI" env-description:"Custom graffiti for block proposals" env-default:"ssv.network"`
+	Graffiti                     string                  `yaml:"Graffiti" env:"GRAFFITI" env-description:"Custom graffiti for block proposals"`
 	ProposerDelay                time.Duration           `yaml:"ProposerDelay" env:"PROPOSER_DELAY" env-description:"Duration to wait out before requesting Ethereum block to propose if this Operator is proposer-duty Leader (eg. 300ms). See https://github.com/ssvlabs/ssv/blob/main/docs/MEV_CONSIDERATIONS.md#getting-started-with-mev-configuration for detailed instructions on how to use it."`
 	AllowDangerousProposerDelay  bool                    `yaml:"AllowDangerousProposerDelay" env:"ALLOW_DANGEROUS_PROPOSER_DELAY" env-description:"Allow ProposerDelay values higher than 1s (dangerous, may cause missed block proposals)"`
 	OperatorPrivateKey           string                  `yaml:"OperatorPrivateKey" env:"OPERATOR_KEY" env-description:"Operator private key for contract event decryption"`
@@ -88,10 +92,29 @@ func (r resolved) isExporter() bool {
 	return r.mode != modeOperator
 }
 
+// ApplyDefaults seeds the operator config defaults in code (see cli/config.Defaulter), composing
+// each section's own defaults. The env-required eth1 ETH1Addr / eth2 BeaconNodeAddr are left unset
+// so cleanenv still enforces them.
+func (c *config) ApplyDefaults() {
+	c.Graffiti = "ssv.network"
+	c.Global.ApplyDefaults()
+	c.DBOptions.ApplyDefaults()
+	c.SSVOptions.ApplyDefaults()
+	c.ExporterOptions.ApplyDefaults()
+	c.ExecutionClient.ApplyDefaults()
+	c.ConsensusClient.ApplyDefaults()
+	c.P2pNetworkConfig.ApplyDefaults()
+	c.SSVSigner.ApplyDefaults()
+}
+
 // load reads the operator config (and optional share config) from the given paths. Paths are
 // passed in (rather than read from the globalArgs global) so it can be tested in isolation.
 // Called before the zap logger exists, so the caller handles failures via the std logger.
 func (c *config) load(configPath, shareConfigPath string) error {
+	// Seed defaults before reading, so an explicit YAML/env value wins over the default (see
+	// cli/config.Defaulter, #2868).
+	c.ApplyDefaults()
+
 	if configPath != "" {
 		if err := cleanenv.ReadConfig(configPath, c); err != nil {
 			return fmt.Errorf("could not read config needed for logger initialization: %w", err)
