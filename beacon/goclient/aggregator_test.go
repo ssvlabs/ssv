@@ -524,6 +524,37 @@ func TestSubmitAttestations_ParallelSubmissionRemembersRoots(t *testing.T) {
 	require.Equal(t, root, got)
 }
 
+func TestSubmitAttestations_ParallelSubmissionNoClientsErrsWithoutRemembering(t *testing.T) {
+	t.Parallel()
+
+	slot := phase0.Slot(500)
+	committee := phase0.CommitteeIndex(8)
+	data := &phase0.AttestationData{
+		Slot:   slot,
+		Index:  committee,
+		Source: &phase0.Checkpoint{Epoch: 1},
+		Target: &phase0.Checkpoint{Epoch: 2},
+	}
+
+	// No clients to submit to. SubmitAttestations must surface an error and must NOT remember the
+	// root: nothing was submitted, so the aggregator flow would otherwise request an aggregate for
+	// a root no beacon node holds — the exact 404 this cache exists to avoid.
+	gc := &GoClient{
+		log:                     zap.NewNop(),
+		clients:                 nil,
+		withParallelSubmissions: true,
+		attestedDataRootCache:   ttlcache.New[attestedDataRootKey, phase0.Root](),
+	}
+
+	err := gc.SubmitAttestations(t.Context(), []*spec.VersionedAttestation{
+		aggregatorVersionedAttestation(spec.DataVersionPhase0, data),
+	})
+	require.Error(t, err)
+
+	_, ok := gc.attestedDataRoot(slot, committee)
+	require.False(t, ok, "root must not be remembered when nothing was submitted")
+}
+
 func mustHashTreeRoot(t *testing.T, data *phase0.AttestationData) phase0.Root {
 	t.Helper()
 	root, err := data.HashTreeRoot()

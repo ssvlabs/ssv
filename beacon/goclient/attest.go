@@ -525,12 +525,18 @@ func weightedAttestationDataRequestIDField(id uuid.UUID) zap.Field {
 }
 
 // multiClientSubmit is a generic function that submits data to multiple beacon clients concurrently.
-// Returns nil if at least one client successfully submitted the data.
+// Returns nil only if at least one client successfully submitted the data.
 func (gc *GoClient) multiClientSubmit(
 	ctx context.Context,
 	routeName string,
 	submitFunc func(ctx context.Context, client Client) error,
 ) error {
+	if len(gc.clients) == 0 {
+		// No clients to submit to. Guard explicitly: WithMaxGoroutines(0) below would panic, and
+		// returning nil would break the "nil only on success" contract — callers such as the
+		// attested-data-root cache would then treat a non-submission as a success.
+		return errMultiClient(fmt.Errorf("no clients available to submit"), routeName)
+	}
 	submissions := atomic.Int32{}
 	p := pool.New().WithErrors().WithContext(ctx).WithMaxGoroutines(len(gc.clients))
 	for _, client := range gc.clients {
@@ -550,10 +556,9 @@ func (gc *GoClient) multiClientSubmit(
 		// At least one client has submitted successfully, so we can return without error.
 		return nil
 	}
-	if err != nil {
-		return errMultiClient(fmt.Errorf("all clients failed to submit: %w", err), routeName)
-	}
-	return nil
+	// With at least one client, zero successful submissions means every client errored, so
+	// p.Wait() returned a non-nil error.
+	return errMultiClient(fmt.Errorf("all clients failed to submit: %w", err), routeName)
 }
 
 // SubmitAttestations implements Beacon interface and sends attestations to the first client that succeeds
