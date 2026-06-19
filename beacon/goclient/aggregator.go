@@ -59,11 +59,8 @@ func (gc *GoClient) SubmitAggregateSelectionProof(
 	if err != nil {
 		return nil, DataVersionNil, errMultiClient(fmt.Errorf("fetch aggregate attestation: %w", err), "AggregateAttestation")
 	}
-	if aggDataResp == nil {
-		return nil, DataVersionNil, errMultiClient(fmt.Errorf("aggregate attestation response is nil"), "AggregateAttestation")
-	}
-	if aggDataResp.Data == nil {
-		return nil, DataVersionNil, errMultiClient(fmt.Errorf("aggregate attestation response data is nil"), "AggregateAttestation")
+	if err := checkPtrResponse(aggDataResp, "aggregate attestation"); err != nil {
+		return nil, DataVersionNil, errMultiClient(err, "AggregateAttestation")
 	}
 
 	var selectionProof phase0.BLSSignature

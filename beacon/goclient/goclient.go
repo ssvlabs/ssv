@@ -501,13 +501,9 @@ func (gc *GoClient) checkNodeHealth(ctx context.Context, client Client) error {
 		recordBeaconClientStatus(ctx, statusUnknown, client.Address())
 		return errSingleClient(fmt.Errorf("fetch node syncing status: %w", err), client.Address(), "NodeSyncing")
 	}
-	if nodeSyncingResp == nil {
+	if err := checkPtrResponse(nodeSyncingResp, "node syncing"); err != nil {
 		recordBeaconClientStatus(ctx, statusUnknown, client.Address())
-		return errSingleClient(fmt.Errorf("node syncing response is nil"), client.Address(), "NodeSyncing")
-	}
-	if nodeSyncingResp.Data == nil {
-		recordBeaconClientStatus(ctx, statusUnknown, client.Address())
-		return errSingleClient(fmt.Errorf("node syncing response data is nil"), client.Address(), "NodeSyncing")
+		return errSingleClient(err, client.Address(), "NodeSyncing")
 	}
 
 	syncState := nodeSyncingResp.Data

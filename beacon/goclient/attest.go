@@ -54,11 +54,8 @@ func (gc *GoClient) AttesterDuties(ctx context.Context, epoch phase0.Epoch, vali
 	if err != nil {
 		return nil, errMultiClient(fmt.Errorf("fetch attester duties: %w", err), "AttesterDuties")
 	}
-	if resp == nil {
-		return nil, errMultiClient(fmt.Errorf("attester duties response is nil"), "AttesterDuties")
-	}
-	if resp.Data == nil {
-		return nil, errMultiClient(fmt.Errorf("attester duties response data is nil"), "AttesterDuties")
+	if err := checkSliceResponse(resp, "attester duties"); err != nil {
+		return nil, errMultiClient(err, "AttesterDuties")
 	}
 
 	return resp.Data, nil
@@ -344,11 +341,8 @@ func (gc *GoClient) simpleAttestationData(ctx context.Context, slot phase0.Slot)
 	if err != nil {
 		return nil, errMultiClient(fmt.Errorf("get attestation data: %w", err), "AttestationData")
 	}
-	if resp == nil {
-		return nil, errMultiClient(fmt.Errorf("attestation data response is nil"), "AttestationData")
-	}
-	if resp.Data == nil {
-		return nil, errMultiClient(fmt.Errorf("attestation data is nil"), "AttestationData")
+	if err := checkPtrResponse(resp, "attestation data"); err != nil {
+		return nil, errMultiClient(err, "AttestationData")
 	}
 
 	logger.Debug("successfully fetched attestation data",
@@ -383,21 +377,14 @@ func (gc *GoClient) fetchWeightedAttestationData(
 		}
 		return
 	}
-	if response == nil {
+	if err := checkPtrResponse(response, "attestation data"); err != nil {
 		errCh <- &attestationDataError{
 			clientAddr: client.Address(),
-			err:        errSingleClient(fmt.Errorf("response is nil"), client.Address(), "AttestationData"),
+			err:        errSingleClient(err, client.Address(), "AttestationData"),
 		}
 		return
 	}
 	attestationData := response.Data
-	if attestationData == nil {
-		errCh <- &attestationDataError{
-			clientAddr: client.Address(),
-			err:        errSingleClient(fmt.Errorf("response data nil"), client.Address(), "AttestationData"),
-		}
-		return
-	}
 
 	logger = logger.With(fields.BlockRoot(attestationData.BeaconBlockRoot))
 
