@@ -30,7 +30,7 @@ type NewDecidedHandler func(msg qbftstorage.Participation)
 // Controller is a QBFT coordinator responsible for starting and following the entire life cycle of multiple QBFT Instances
 type Controller struct {
 	// IdentifierFn derives the QBFT Identifier for a given height (the Boole fork rotates the
-	// domain — and therefore the identifier — across heights). Marshalled manually (see
+	// domain — and therefore the identifier — across heights). Marshaled manually (see
 	// MarshalJSON/UnmarshalJSON) as the resolved "Identifier" bytes.
 	IdentifierFn func(height specqbft.Height) []byte `json:"-"`
 
