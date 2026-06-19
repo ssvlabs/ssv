@@ -1147,8 +1147,7 @@ func TestScheduler_SyncCommittee_Retry_Next_Period_Fetch_On_Next_Tick_Period_Tra
 }
 
 // A reorg-triggered next-period re-fetch that fails must not drop the duties: the intent stays unfulfilled
-// and is retried on subsequent ticks (regression guard for the reorg code path - the reorg handler is
-// distinct from the ticker path, using its own reorgCtx).
+// and is retried on later ticks. Regression guard for the reorg path, which is distinct from the ticker path.
 func TestScheduler_SyncCommittee_Reorg_Retry_Next_Period_Fetch_On_Next_Tick(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		var (
@@ -1221,6 +1220,14 @@ func TestScheduler_SyncCommittee_Reorg_Retry_Next_Period_Fetch_On_Next_Tick(t *t
 		scheduler.HandleHeadEvent()(t.Context(), e.Data.(*v1.HeadEvent))
 		waitForFetchedSyncCommitteePeriod(t, fetchDutiesCall, fetchedPeriods, timeout, 1)
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
+
+		// The failed re-fetch must not drop the previously-fetched next-period duties - they stay available
+		// (a successful re-fetch overwrites them; a failed one leaves them intact). Asserting here, between the
+		// failed re-fetch and the STEP 5 retry, is what makes "duties are not dropped" observable: the retry
+		// would otherwise repopulate them regardless.
+		keptDuties := handler.duties.CommitteePeriodDuties(1)
+		require.Len(t, keptDuties, 1, "next-period duties must survive a failed reorg re-fetch")
+		require.Equal(t, phase0.ValidatorIndex(1), keptDuties[0].ValidatorIndex)
 
 		// STEP 5: the next tick retries the failed next-period fetch and succeeds.
 		failNextPeriodFetch.Store(false)

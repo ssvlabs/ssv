@@ -129,11 +129,10 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 					delete(h.dutyFetchIntents, currentPeriod-1)
 				}
 
-				// 2. Schedule the duty-fetch for the next period, but only if it hasn't been scheduled already
-				// (also, already fulfilled intents need not be re-scheduled). We do this before handling indices
-				// changes below because that handling can bail out early (on tickCtx.Done) - registering the intent
-				// here makes sure a tick that runs out of time still schedules the next-period pre-fetch, otherwise
-				// right at a period boundary it could end up deferred indefinitely under sustained slowness.
+				// 2. Schedule the next-period duty-fetch intent (only if absent, so a pending or fulfilled one is
+				// left untouched). We register it before the indices-change handling below, which can return early
+				// on tickCtx.Done - so even a tick that overruns its deadline still records the intent, and the
+				// next-period pre-fetch can't be deferred indefinitely at a period boundary under sustained slowness.
 				if _, ok := h.dutyFetchIntents[nextPeriod]; !ok {
 					h.dutyFetchIntents[nextPeriod] = false
 				}
@@ -207,11 +206,9 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 				}
 
 				// 1) Declare intent.
-				// Note: unlike the previous implementation, we deliberately do NOT clear (Reset) the existing
-				// next-period duties before re-fetching. If the re-fetch fails we keep serving the previously
-				// fetched (possibly stale) duties and retry on subsequent ticks, rather than dropping a whole
-				// period's duties on a transient error - consistent with the retry approach this handler takes.
-				// A successful re-fetch overwrites the stale duties.
+				// We deliberately do NOT Reset the existing next-period duties before re-fetching: if the re-fetch
+				// fails we keep serving the previously fetched (possibly stale) duties and retry on later ticks,
+				// rather than dropping a whole period's duties on a transient error. A successful re-fetch overwrites them.
 				h.dutyFetchIntents[nextPeriod] = false
 
 				// 2) Process the intent immediately (when it's a "good time") so the duties are ready for the
