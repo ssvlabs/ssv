@@ -1146,6 +1146,105 @@ func TestScheduler_SyncCommittee_Retry_Next_Period_Fetch_On_Next_Tick_Period_Tra
 	})
 }
 
+// A reorg-triggered next-period re-fetch that fails must not drop the duties: the intent stays unfulfilled
+// and is retried on subsequent ticks (regression guard for the reorg code path - the reorg handler is
+// distinct from the ticker path, using its own reorgCtx).
+func TestScheduler_SyncCommittee_Reorg_Retry_Next_Period_Fetch_On_Next_Tick(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		var (
+			handler             = NewSyncCommitteeHandler(dutystore.NewSyncCommitteeDuties(), false)
+			waitForDuties       = &SafeValue[bool]{}
+			dutiesMap           = hashmap.New[uint64, []*v1.SyncCommitteeDuty]()
+			activeShares        = eligibleShares()
+			failNextPeriodFetch atomic.Bool
+		)
+		dutiesMap.Set(1, []*v1.SyncCommitteeDuty{
+			{
+				PubKey:         phase0.BLSPubKey{1, 2, 3},
+				ValidatorIndex: phase0.ValidatorIndex(1),
+			},
+		})
+
+		// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
+		// This deadline needs to be large enough to not prevent tests from executing their intended flow.
+		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
+		startSlot := phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch - 3)
+		scheduler, ticker := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{handler}, startSlot)
+		waitForSlotN(scheduler.beaconConfig, startSlot)
+		fetchedPeriods := make(chan uint64, 100)
+		fetchDutiesCall, executeDutiesCall := setupSyncCommitteeDutiesMockWithFetcher(
+			scheduler,
+			activeShares,
+			dutiesMap,
+			waitForDuties,
+			func(ctx context.Context, epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*v1.SyncCommitteeDuty, error) {
+				period := scheduler.beaconConfig.EstimatedSyncCommitteePeriodAtEpoch(epoch)
+				fetchedPeriods <- period
+				if period == 1 && failNextPeriodFetch.Load() {
+					return nil, errors.New("failed to fetch sync committee duties")
+				}
+				duties, _ := dutiesMap.Get(period)
+				return duties, nil
+			},
+		)
+
+		// STEP 1: on startup, fetch duties for the current period.
+		waitForDuties.Set(true)
+		require.NoError(t, scheduler.Start(ctx))
+		waitForFetchedSyncCommitteePeriod(t, fetchDutiesCall, fetchedPeriods, timeout, 0)
+
+		// STEP 2: record the baseline dependent root via a head event (no reorg detected yet).
+		e := &v1.Event{
+			Data: &v1.HeadEvent{
+				Slot:                     startSlot,
+				CurrentDutyDependentRoot: phase0.Root{0x01},
+			},
+		}
+		scheduler.HandleHeadEvent()(t.Context(), e.Data.(*v1.HeadEvent))
+		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
+
+		// STEP 3: the ticker pre-fetches the next-period duties successfully.
+		waitForSlotN(scheduler.beaconConfig, startSlot+1)
+		ticker.Send(startSlot + 1)
+		waitForFetchedSyncCommitteePeriod(t, fetchDutiesCall, fetchedPeriods, timeout, 1)
+		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
+
+		// STEP 4: a reorg (current dependent root changed) re-fetches the next period, but the fetch fails. The
+		// intent must stay unfulfilled (duties are not dropped) rather than being cleared.
+		failNextPeriodFetch.Store(true)
+		e = &v1.Event{
+			Data: &v1.HeadEvent{
+				Slot:                     startSlot + 1,
+				CurrentDutyDependentRoot: phase0.Root{0x02},
+			},
+		}
+		scheduler.HandleHeadEvent()(t.Context(), e.Data.(*v1.HeadEvent))
+		waitForFetchedSyncCommitteePeriod(t, fetchDutiesCall, fetchedPeriods, timeout, 1)
+		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
+
+		// STEP 5: the next tick retries the failed next-period fetch and succeeds.
+		failNextPeriodFetch.Store(false)
+		waitForSlotN(scheduler.beaconConfig, startSlot+2)
+		ticker.Send(startSlot + 2)
+		waitForFetchedSyncCommitteePeriod(t, fetchDutiesCall, fetchedPeriods, timeout, 1)
+		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
+
+		// STEP 6: on the period-transition tick the duties for the (now current) period are executed.
+		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch))
+		duties, _ := dutiesMap.Get(1)
+		expected := expectedExecutedSyncCommitteeDuties(handler, duties, testEpochsPerSCPeriod*testSlotsPerEpoch)
+		setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
+
+		ticker.Send(phase0.Slot(testEpochsPerSCPeriod * testSlotsPerEpoch))
+		waitForDutiesExecution(t, fetchDutiesCall, executeDutiesCall, timeout, expected)
+
+		// Stop scheduler & wait for graceful exit.
+		cancel()
+		require.NoError(t, scheduler.Wait())
+		ticker.WaitShutdown()
+	})
+}
+
 func eligibleShares() []*ssvtypes.SSVShare {
 	participationShares := []*ssvtypes.SSVShare{
 		{

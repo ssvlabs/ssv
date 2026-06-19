@@ -129,7 +129,16 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 					delete(h.dutyFetchIntents, currentPeriod-1)
 				}
 
-				// 2. Process validator indices changes (if any). We want to process it on the current slot only
+				// 2. Schedule the duty-fetch for the next period, but only if it hasn't been scheduled already
+				// (also, already fulfilled intents need not be re-scheduled). We do this before handling indices
+				// changes below because that handling can bail out early (on tickCtx.Done) - registering the intent
+				// here makes sure a tick that runs out of time still schedules the next-period pre-fetch, otherwise
+				// right at a period boundary it could end up deferred indefinitely under sustained slowness.
+				if _, ok := h.dutyFetchIntents[nextPeriod]; !ok {
+					h.dutyFetchIntents[nextPeriod] = false
+				}
+
+				// 3. Process validator indices changes (if any). We want to process it on the current slot only
 				// if we are still early into the slot (1 slot-interval is just a guesstimate), otherwise we might
 				// be delaying the next tick (the duties that need to be executed on the next slot).
 
@@ -158,12 +167,6 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 					// It's too late(risky) to handle indices change on the current slot, we'll do it on the next slot.
 				case <-tickCtx.Done():
 					return
-				}
-
-				// 3. Schedule the duty-fetch for the next period, but only if it hasn't been scheduled already (also,
-				// already fulfilled intents need not be re-scheduled).
-				if _, ok := h.dutyFetchIntents[nextPeriod]; !ok {
-					h.dutyFetchIntents[nextPeriod] = false
 				}
 			}()
 
@@ -204,6 +207,11 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 				}
 
 				// 1) Declare intent.
+				// Note: unlike the previous implementation, we deliberately do NOT clear (Reset) the existing
+				// next-period duties before re-fetching. If the re-fetch fails we keep serving the previously
+				// fetched (possibly stale) duties and retry on subsequent ticks, rather than dropping a whole
+				// period's duties on a transient error - consistent with the retry approach this handler takes.
+				// A successful re-fetch overwrites the stale duties.
 				h.dutyFetchIntents[nextPeriod] = false
 
 				// 2) Process the intent immediately (when it's a "good time") so the duties are ready for the
