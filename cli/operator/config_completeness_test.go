@@ -23,7 +23,7 @@ func Test_config_defaults_complete(t *testing.T) {
 		"AllowDangerousProposerDelay", "EnableDoppelgangerProtection", "EnableProfile", "EnableTraces",
 		"WithPing", "db.Reporting", "exporter.Enabled", "eth2.WithParallelSubmissions",
 		"eth2.WithWeightedAttestationData", "p2p.DisableIPRateLimit", "p2p.DiscoveryTrace",
-		"p2p.Libp2pTrace", "p2p.PubSubTrace", "ssv.ValidatorOptions.FullNode",
+		"p2p.Libp2pTrace", "p2p.PubSubTrace", "p2p.SilentBroadcast", "ssv.ValidatorOptions.FullNode",
 		// optional values / paths / keys (no default)
 		"LocalEventsPath", "NetworkPrivateKey", "OperatorPrivateKey", "SSVAPIAddress",
 		"KeyStore.PasswordFile", "KeyStore.PrivateKeyFile", "SSVSigner.Endpoint", "SSVSigner.KeystoreFile",

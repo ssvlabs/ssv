@@ -317,7 +317,11 @@ func (n *p2pNetwork) Start() (err error) {
 	n.logger.Info("starting p2p",
 		zap.String("my_address", strings.Join(maStrs, ",")),
 		zap.Int("trusted_peers", len(n.trustedPeers)),
+		zap.Bool("silent_broadcast", n.cfg.SilentBroadcast),
 	)
+	if n.cfg.SilentBroadcast {
+		n.logger.Warn("silent broadcast enabled: outbound gossip is suppressed (test only)")
+	}
 
 	err = n.startDiscovery()
 	if err != nil {

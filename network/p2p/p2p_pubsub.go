@@ -38,6 +38,13 @@ func (n *p2pNetwork) UseMessageRouter(router network.MessageRouter) {
 
 // Broadcast publishes the message to all peers in subnet
 func (n *p2pNetwork) Broadcast(msgID spectypes.MessageID, msg *spectypes.SignedSSVMessage) error {
+	if n.cfg.SilentBroadcast {
+		n.logger.Debug("dropping outbound broadcast (silent mode)",
+			fields.MessageID(msg.SSVMessage.MsgID),
+		)
+		return nil
+	}
+
 	if !n.isReady() {
 		return p2pprotocol.ErrNetworkIsNotReady
 	}

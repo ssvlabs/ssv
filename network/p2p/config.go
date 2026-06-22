@@ -88,6 +88,11 @@ type Config struct {
 
 	DisableIPRateLimit bool `yaml:"DisableIPRateLimit" env:"DISABLE_IP_RATE_LIMIT" env-description:"Disable IP-based rate limiting"`
 
+	// SilentBroadcast suppresses all outbound gossip broadcasts. The node still receives
+	// messages and runs duties locally, but never publishes to peers. Intended for test
+	// environments to simulate consensus failures (e.g. a non-participating operator).
+	SilentBroadcast bool `yaml:"SilentBroadcast" env:"P2P_SILENT_BROADCAST" env-description:"Suppress all outbound gossip broadcasts (test only)"`
+
 	GetValidatorStats network.GetValidatorStats
 
 	// PeerScoreInspector is called periodically to inspect the peer scores.
