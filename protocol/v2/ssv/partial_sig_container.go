@@ -103,6 +103,26 @@ func (ps *PartialSigContainer) Remove(validatorIndex phase0.ValidatorIndex, sign
 	delete(signers, signer)
 }
 
+// ResolveDuplicateSignature handles a second partial signature for an already-seen
+// (validator, signer, root): it keeps the existing one if it still verifies against
+// committee, otherwise replaces it with msg's signature when that verifies. It returns
+// an error when the incoming signature is invalid.
+func (ps *PartialSigContainer) ResolveDuplicateSignature(msg *spectypes.PartialSignatureMessage, committee []*spectypes.ShareMember) error {
+	if existing, err := ps.GetSignature(msg.ValidatorIndex, msg.Signer, msg.SigningRoot); err == nil {
+		if types.VerifyBeaconPartialSignature(msg.Signer, existing, msg.SigningRoot, committee) == nil {
+			return nil
+		}
+	}
+
+	ps.Remove(msg.ValidatorIndex, msg.Signer, msg.SigningRoot)
+
+	if err := types.VerifyBeaconPartialSignature(msg.Signer, msg.PartialSignature, msg.SigningRoot, committee); err != nil {
+		return err
+	}
+	ps.AddSignature(msg)
+	return nil
+}
+
 // ReconstructSignature aggregates collected partial sigs and verifies the result.
 func (ps *PartialSigContainer) ReconstructSignature(root [32]byte, validatorPubKey []byte, validatorIndex phase0.ValidatorIndex) ([]byte, error) {
 	ps.signaturesMu.RLock()

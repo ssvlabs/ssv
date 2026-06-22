@@ -97,3 +97,8 @@ func (b *Config) ForkAtEpoch(epoch phase0.Epoch) (spec.DataVersion, *phase0.Fork
 
 	return previousVersion, &previousFork
 }
+
+func (b *Config) ForkAtVersion(version spec.DataVersion) (phase0.Fork, bool) {
+	fork, ok := b.Forks[version]
+	return fork, ok
+}

@@ -10,7 +10,6 @@ import (
 	"sync"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/jellydator/ttlcache/v3"
 	"go.uber.org/zap"
 
@@ -262,7 +261,7 @@ func (ncv *CommitteeObserver) VerifySig(partialMsgs *spectypes.PartialSignatureM
 			slotValidators[msg.ValidatorIndex] = container
 		}
 		if container.HasSignature(msg.ValidatorIndex, msg.Signer, msg.SigningRoot) {
-			if err := ncv.resolveDuplicateSignature(container, msg, validator); err != nil {
+			if err := container.ResolveDuplicateSignature(msg, validator.Committee); err != nil {
 				return err
 			}
 		} else {
@@ -298,7 +297,7 @@ func (ncv *CommitteeObserver) verifySigAndgetQuorums(
 			slotValidators[msg.ValidatorIndex] = container
 		}
 		if container.HasSignature(msg.ValidatorIndex, msg.Signer, msg.SigningRoot) {
-			_ = ncv.resolveDuplicateSignature(container, msg, validator)
+			_ = container.ResolveDuplicateSignature(msg, validator.Committee)
 		} else {
 			container.AddSignature(msg)
 		}
@@ -334,54 +333,6 @@ func (ncv *CommitteeObserver) pruneOldSlots(currentSlot phase0.Slot) {
 			}
 		}
 	}
-}
-
-// Stores the container's existing signature or the new one, depending on their validity. If both are invalid, remove the existing one
-// copied from BaseRunner
-func (ncv *CommitteeObserver) resolveDuplicateSignature(container *ssv.PartialSigContainer, msg *spectypes.PartialSignatureMessage, share *ssvtypes.SSVShare) error {
-	// Check previous signature validity
-	previousSignature, err := container.GetSignature(msg.ValidatorIndex, msg.Signer, msg.SigningRoot)
-	if err == nil {
-		err = ncv.verifyBeaconPartialSignature(msg.Signer, previousSignature, msg.SigningRoot, share)
-		if err == nil {
-			// Keep the previous signature since it's correct
-			return nil
-		}
-	}
-
-	// Previous signature is incorrect or doesn't exist
-	container.Remove(msg.ValidatorIndex, msg.Signer, msg.SigningRoot)
-
-	// Hold the new signature, if correct
-	err = ncv.verifyBeaconPartialSignature(msg.Signer, msg.PartialSignature, msg.SigningRoot, share)
-	if err == nil {
-		container.AddSignature(msg)
-	}
-
-	return err
-}
-
-// copied from BaseRunner
-func (ncv *CommitteeObserver) verifyBeaconPartialSignature(signer uint64, signature spectypes.Signature, root phase0.Root, share *ssvtypes.SSVShare) error {
-	for _, n := range share.Committee {
-		if n.Signer == signer {
-			pk, err := ssvtypes.DeserializeBLSPublicKey(n.SharePubKey)
-			if err != nil {
-				return fmt.Errorf("could not deserialized pk: %w", err)
-			}
-
-			sig := &bls.Sign{}
-			if err := sig.Deserialize(signature); err != nil {
-				return fmt.Errorf("could not deserialized Signature: %w", err)
-			}
-
-			if !sig.VerifyByte(&pk, root[:]) {
-				return fmt.Errorf("wrong signature")
-			}
-			return nil
-		}
-	}
-	return fmt.Errorf("unknown signer")
 }
 
 func (ncv *CommitteeObserver) SaveRoots(ctx context.Context, msg *queue.SSVMessage) error {

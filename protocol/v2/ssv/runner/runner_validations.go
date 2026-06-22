@@ -13,6 +13,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 func (b *BaseRunner) ValidatePreConsensusMsg(
@@ -49,7 +50,7 @@ func (b *BaseRunner) FallBackAndVerifyEachSignature(container *ssv.PartialSigCon
 	signatures := container.GetSignatures(validatorIndex, root)
 
 	for operatorID, signature := range signatures {
-		if err := b.verifyBeaconPartialSignature(operatorID, signature, root, committee); err != nil {
+		if err := ssvtypes.VerifyBeaconPartialSignature(operatorID, signature, root, committee); err != nil {
 			container.Remove(validatorIndex, operatorID, root)
 		}
 	}
