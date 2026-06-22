@@ -127,6 +127,11 @@ type GoClient struct {
 	// AttestationData is cached by slot only, because Beacon nodes should return the same
 	// data regardless of the requested committeeIndex.
 	attestationDataCache *ttlcache.Cache[phase0.Slot, *phase0.AttestationData]
+	// attestedDataRootCache remembers the root of the attestation data this node actually
+	// submitted (the cluster-decided value), per (slot, committee), for the aggregator flow.
+	// Unlike attestationDataCache — this node's local, pre-consensus view — this is the value
+	// the cluster attested with, which is the one an aggregate must match.
+	attestedDataRootCache *ttlcache.Cache[attestedDataRootKey, phase0.Root]
 	// domainDataReqInflight joins parallel requests for the same epoch/domain pair.
 	domainDataReqInflight singleflight.Group[domainDataCacheKey, phase0.Domain]
 	// domainDataCache helps reuse recently fetched domains. Domains change only at epoch boundaries,
@@ -251,6 +256,13 @@ func New(ctx context.Context, logger *zap.Logger, opt Options) (*GoClient, error
 
 	// Start automatic expired item deletion for attestationDataCache.
 	go client.attestationDataCache.Start()
+
+	client.attestedDataRootCache = ttlcache.New(
+		// aggregates are requested during the duty slot (and never later),
+		// hence caching the attested roots for 2 slots is sufficient
+		ttlcache.WithTTL[attestedDataRootKey, phase0.Root](2 * config.SlotDuration),
+	)
+	go client.attestedDataRootCache.Start()
 
 	// Domain data and committee assignments change at epoch boundaries, so keep both caches
 	// for approximately two epochs.

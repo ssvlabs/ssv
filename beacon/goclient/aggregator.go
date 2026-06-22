@@ -29,24 +29,32 @@ func (gc *GoClient) SubmitAggregateSelectionProof(
 		return nil, 0, fmt.Errorf("wait for 2/3 of slot: %w", err)
 	}
 
-	attData, _, err := gc.GetAttestationData(ctx, slot)
-	if err != nil {
-		return nil, DataVersionNil, fmt.Errorf("fetch attestation data: %w", err)
-	}
+	// Aggregate for the root of the attestation data this node actually submitted for this
+	// duty (the cluster-decided value): the beacon node then holds at least our own
+	// attestation matching it. Re-deriving the data locally can yield a root nobody
+	// attested with, which the node answers with a 404 (no matching aggregate).
+	root, found := gc.attestedDataRoot(slot, committeeIndex)
+	if !found {
+		// No record of our own attestation (it failed or hasn't landed yet) — fall back
+		// to re-deriving the root from this node's view of the slot.
+		attData, _, err := gc.GetAttestationData(ctx, slot)
+		if err != nil {
+			return nil, DataVersionNil, fmt.Errorf("fetch attestation data: %w", err)
+		}
 
-	// Explicitly set Index field as beacon nodes may return inconsistent values.
-	// EIP-7549: For Electra and later, index must always be 0, pre-Electra uses committee index.
-	config := gc.getBeaconConfig()
-	dataVersion, _ := config.ForkAtEpoch(config.EstimatedEpochAtSlot(slot))
-	attData.Index = 0
-	if dataVersion < spec.DataVersionElectra {
-		attData.Index = committeeIndex
-	}
+		// Explicitly set Index field as beacon nodes may return inconsistent values.
+		// EIP-7549: For Electra and later, index must always be 0, pre-Electra uses committee index.
+		config := gc.getBeaconConfig()
+		dataVersion, _ := config.ForkAtEpoch(config.EstimatedEpochAtSlot(slot))
+		attData.Index = 0
+		if dataVersion < spec.DataVersionElectra {
+			attData.Index = committeeIndex
+		}
 
-	// Get aggregate attestation data.
-	root, err := attData.HashTreeRoot()
-	if err != nil {
-		return nil, DataVersionNil, fmt.Errorf("fetch attestation data root: %w", err)
+		root, err = attData.HashTreeRoot()
+		if err != nil {
+			return nil, DataVersionNil, fmt.Errorf("fetch attestation data root: %w", err)
+		}
 	}
 
 	aggDataReqStart := time.Now()
