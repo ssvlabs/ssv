@@ -74,7 +74,7 @@ type ValidatorProvider interface {
 
 // ValidatorController represents the component that controls validators via the scheduler
 type ValidatorController interface {
-	FilterIndices(afterInit bool, filter func(*types.SSVShare) bool) []phase0.ValidatorIndex
+	FilterIndices(waitForInit bool, filter func(*types.SSVShare) bool) []phase0.ValidatorIndex
 }
 
 type SchedulerOptions struct {

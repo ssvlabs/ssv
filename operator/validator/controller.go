@@ -696,8 +696,8 @@ func (c *Controller) ExecuteCommitteeDuty(ctx context.Context, logger *zap.Logge
 	span.SetStatus(codes.Ok, "")
 }
 
-func (c *Controller) FilterIndices(afterInit bool, filter func(*ssvtypes.SSVShare) bool) []phase0.ValidatorIndex {
-	if afterInit {
+func (c *Controller) FilterIndices(waitForInit bool, filter func(*ssvtypes.SSVShare) bool) []phase0.ValidatorIndex {
+	if waitForInit {
 		<-c.validatorsInitDone
 	}
 	var indices []phase0.ValidatorIndex
