@@ -1,16 +1,16 @@
 package gloas
 
 import (
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
-	"strings"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 )
 
+// Regenerate with `go generate ./...`. The phase0 --include is resolved from the module
+// graph (`go list -m`), so it tracks go-eth2-client across dependency bumps rather than pinning.
 //go:generate sh -c "go tool -modfile=../../../../tool.mod sszgen -path ./payload_attestation.go --include $(go list -m -f '{{.Dir}}' github.com/attestantio/go-eth2-client)/spec/phase0 --objs PayloadAttestationData,PayloadAttestationMessage"
 
 // PayloadAttestationData is the Gloas (ePBS) datum a PTC member attests to: whether the
@@ -56,14 +56,9 @@ func (p *PayloadAttestationData) UnmarshalJSON(input []byte) error {
 	if err := json.Unmarshal(input, &data); err != nil {
 		return fmt.Errorf("invalid JSON: %w", err)
 	}
-	root, err := hex.DecodeString(strings.TrimPrefix(data.BeaconBlockRoot, "0x"))
-	if err != nil {
-		return fmt.Errorf("invalid value for beacon block root: %w", err)
+	if err := decodeHexInto(p.BeaconBlockRoot[:], data.BeaconBlockRoot, "beacon block root"); err != nil {
+		return err
 	}
-	if len(root) != phase0.RootLength {
-		return errors.New("incorrect length for beacon block root")
-	}
-	copy(p.BeaconBlockRoot[:], root)
 	slot, err := strconv.ParseUint(data.Slot, 10, 64)
 	if err != nil {
 		return fmt.Errorf("invalid value for slot: %w", err)
@@ -105,13 +100,8 @@ func (p *PayloadAttestationMessage) UnmarshalJSON(input []byte) error {
 		return errors.New("data missing")
 	}
 	p.Data = data.Data
-	signature, err := hex.DecodeString(strings.TrimPrefix(data.Signature, "0x"))
-	if err != nil {
-		return fmt.Errorf("invalid value for signature: %w", err)
+	if err := decodeHexInto(p.Signature[:], data.Signature, "signature"); err != nil {
+		return err
 	}
-	if len(signature) != phase0.SignatureLength {
-		return errors.New("incorrect length for signature")
-	}
-	copy(p.Signature[:], signature)
 	return nil
 }

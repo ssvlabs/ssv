@@ -1,12 +1,9 @@
 package gloas
 
 import (
-	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strconv"
-	"strings"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 )
@@ -42,14 +39,9 @@ func (d *PTCDuty) UnmarshalJSON(input []byte) error {
 	if err := json.Unmarshal(input, &data); err != nil {
 		return fmt.Errorf("invalid JSON: %w", err)
 	}
-	pubKey, err := hex.DecodeString(strings.TrimPrefix(data.PubKey, "0x"))
-	if err != nil {
-		return fmt.Errorf("invalid value for pubkey: %w", err)
+	if err := decodeHexInto(d.PubKey[:], data.PubKey, "pubkey"); err != nil {
+		return err
 	}
-	if len(pubKey) != phase0.PublicKeyLength {
-		return errors.New("incorrect length for pubkey")
-	}
-	copy(d.PubKey[:], pubKey)
 	validatorIndex, err := strconv.ParseUint(data.ValidatorIndex, 10, 64)
 	if err != nil {
 		return fmt.Errorf("invalid value for validator index: %w", err)
