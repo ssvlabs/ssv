@@ -19,6 +19,7 @@ import (
 	altair "github.com/attestantio/go-eth2-client/spec/altair"
 	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
+	gloas "github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -1112,4 +1113,72 @@ func (m *MockBeaconNode) SyncCommitteeSubnetID(index phase0.CommitteeIndex) uint
 func (mr *MockBeaconNodeMockRecorder) SyncCommitteeSubnetID(index any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncCommitteeSubnetID", reflect.TypeOf((*MockBeaconNode)(nil).SyncCommitteeSubnetID), index)
+}
+
+// MockPTCCalls is a mock of PTCCalls interface.
+type MockPTCCalls struct {
+	ctrl     *gomock.Controller
+	recorder *MockPTCCallsMockRecorder
+	isgomock struct{}
+}
+
+// MockPTCCallsMockRecorder is the mock recorder for MockPTCCalls.
+type MockPTCCallsMockRecorder struct {
+	mock *MockPTCCalls
+}
+
+// NewMockPTCCalls creates a new mock instance.
+func NewMockPTCCalls(ctrl *gomock.Controller) *MockPTCCalls {
+	mock := &MockPTCCalls{ctrl: ctrl}
+	mock.recorder = &MockPTCCallsMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockPTCCalls) EXPECT() *MockPTCCallsMockRecorder {
+	return m.recorder
+}
+
+// PayloadAttestationData mocks base method.
+func (m *MockPTCCalls) PayloadAttestationData(ctx context.Context, slot phase0.Slot) (*gloas.PayloadAttestationData, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PayloadAttestationData", ctx, slot)
+	ret0, _ := ret[0].(*gloas.PayloadAttestationData)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// PayloadAttestationData indicates an expected call of PayloadAttestationData.
+func (mr *MockPTCCallsMockRecorder) PayloadAttestationData(ctx, slot any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PayloadAttestationData", reflect.TypeOf((*MockPTCCalls)(nil).PayloadAttestationData), ctx, slot)
+}
+
+// PayloadAttestationDuties mocks base method.
+func (m *MockPTCCalls) PayloadAttestationDuties(ctx context.Context, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*gloas.PTCDuty, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PayloadAttestationDuties", ctx, epoch, validatorIndices)
+	ret0, _ := ret[0].([]*gloas.PTCDuty)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// PayloadAttestationDuties indicates an expected call of PayloadAttestationDuties.
+func (mr *MockPTCCallsMockRecorder) PayloadAttestationDuties(ctx, epoch, validatorIndices any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PayloadAttestationDuties", reflect.TypeOf((*MockPTCCalls)(nil).PayloadAttestationDuties), ctx, epoch, validatorIndices)
+}
+
+// SubmitPayloadAttestationMessages mocks base method.
+func (m *MockPTCCalls) SubmitPayloadAttestationMessages(ctx context.Context, messages []*gloas.PayloadAttestationMessage) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SubmitPayloadAttestationMessages", ctx, messages)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SubmitPayloadAttestationMessages indicates an expected call of SubmitPayloadAttestationMessages.
+func (mr *MockPTCCallsMockRecorder) SubmitPayloadAttestationMessages(ctx, messages any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitPayloadAttestationMessages", reflect.TypeOf((*MockPTCCalls)(nil).SubmitPayloadAttestationMessages), ctx, messages)
 }

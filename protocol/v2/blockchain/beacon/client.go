@@ -9,6 +9,8 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
+
+	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 )
 
 //go:generate go tool -modfile=../../../../tool.mod mockgen -package=beacon -destination=./mock_client.go -source=./client.go
@@ -132,4 +134,16 @@ type BeaconNode interface {
 	beaconValidator
 	signer // TODO need to handle differently
 	proposalPreparations
+}
+
+// PTCCalls is the beacon-node surface for Gloas (ePBS) Payload Timeliness Committee duties:
+// fetching assignments, producing the data to attest to, and submitting signed messages. It is
+// declared standalone and folded into BeaconNode once the PTC runner is wired in.
+type PTCCalls interface {
+	// PayloadAttestationDuties returns the PTC duties for the given validators at the epoch.
+	PayloadAttestationDuties(ctx context.Context, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*gloas.PTCDuty, error)
+	// PayloadAttestationData returns the PayloadAttestationData to attest to for the slot.
+	PayloadAttestationData(ctx context.Context, slot phase0.Slot) (*gloas.PayloadAttestationData, error)
+	// SubmitPayloadAttestationMessages submits signed PTC messages to the beacon node's pool.
+	SubmitPayloadAttestationMessages(ctx context.Context, messages []*gloas.PayloadAttestationMessage) error
 }
