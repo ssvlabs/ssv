@@ -2,6 +2,8 @@ package types
 
 import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
+	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 )
 
 const (
@@ -24,6 +26,10 @@ const (
 func RunnerRoleForValidatorDuty(duty *spectypes.ValidatorDuty, isBooleFork bool) spectypes.RunnerRole {
 	if duty == nil {
 		return spectypes.RoleUnknown
+	}
+	// Gloas (ePBS) duties post-date ssv-spec's RunnerRole(); resolve them node-side first.
+	if role, ok := gloas.RunnerRoleForBeaconRole(duty.Type); ok {
+		return role
 	}
 	if isBooleFork {
 		return duty.RunnerRole()

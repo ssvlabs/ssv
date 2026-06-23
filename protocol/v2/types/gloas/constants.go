@@ -15,30 +15,27 @@ import (
 // (RoleAggregator / RoleSyncCommitteeContribution) stay reserved for pre-consolidation
 // back-compat decoding — see protocol/v2/types/runner_role.go.
 const (
-	RolePTC                 = spectypes.RunnerRole(7) // §3 payload-attestation (PTC) attester
+	RolePTCAttester         = spectypes.RunnerRole(7) // §3 payload-attestation (PTC) attester
 	RoleProposerPreferences = spectypes.RunnerRole(8) // §5 proposer preferences
-	RoleEnvelope            = spectypes.RunnerRole(9) // §6 execution-payload envelope
+	RoleEnvelopeBuilder     = spectypes.RunnerRole(9) // §6 execution-payload envelope
 )
 
 // Beacon (duty) roles mirroring the runner roles above. Existing BeaconRole values
 // run 0..6 (BNRoleVoluntaryExit = 6), so 7/8/9 are the next free slots.
 const (
-	BNRolePTC                 = spectypes.BeaconRole(7)
+	BNRolePTCAttester         = spectypes.BeaconRole(7)
 	BNRoleProposerPreferences = spectypes.BeaconRole(8)
-	BNRoleEnvelope            = spectypes.BeaconRole(9)
+	BNRoleEnvelopeBuilder     = spectypes.BeaconRole(9)
 )
 
 // Partial-signature message types. Existing values run up to
-// AggregatorCommitteePartialSig = 6.
+// AggregatorCommitteePartialSig = 6. The §6 envelope duty adds no type of its own:
+// its post-consensus reuses PostConsensusPartialSig, discriminated by runner role.
 const (
 	// PTCAttesterPartialSig is the partial signature over PayloadAttestationData (§3).
 	PTCAttesterPartialSig = spectypes.PartialSigMsgType(7)
 	// ProposerPreferencesPartialSig is the partial signature over ProposerPreferences (§5).
 	ProposerPreferencesPartialSig = spectypes.PartialSigMsgType(8)
-	// EnvelopePartialSig is reserved for the §6 envelope post-consensus, used only if the
-	// no-QBFT (sign-all) variant is chosen; the SIP-default QBFT variant reuses
-	// PostConsensusPartialSig (role discriminates routing), leaving this unused otherwise.
-	EnvelopePartialSig = spectypes.PartialSigMsgType(9)
 )
 
 // Beacon signing domains introduced by Gloas — consensus-spec domains (4 bytes,
@@ -51,3 +48,19 @@ var (
 	// DomainProposerPreferences signs ProposerPreferences (§5).
 	DomainProposerPreferences = [4]byte{0x0d, 0x00, 0x00, 0x00}
 )
+
+// RunnerRoleForBeaconRole maps a Gloas (ePBS) beacon duty role to its runner role,
+// reporting ok=false for non-Gloas roles. ssv-spec's ValidatorDuty.RunnerRole() predates
+// these roles, so callers apply this mapping node-side before delegating to it.
+func RunnerRoleForBeaconRole(role spectypes.BeaconRole) (spectypes.RunnerRole, bool) {
+	switch role {
+	case BNRolePTCAttester:
+		return RolePTCAttester, true
+	case BNRoleProposerPreferences:
+		return RoleProposerPreferences, true
+	case BNRoleEnvelopeBuilder:
+		return RoleEnvelopeBuilder, true
+	default:
+		return spectypes.RoleUnknown, false
+	}
+}
