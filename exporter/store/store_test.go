@@ -229,6 +229,87 @@ func TestSaveScheduledDuties(t *testing.T) {
 	assert.ElementsMatch(t, []phase0.ValidatorIndex{2}, syncers)
 }
 
+func TestPruneSlot(t *testing.T) {
+	logger := zap.NewNop()
+	db, err := kv.NewInMemory(logger, basedb.Options{})
+	require.NoError(t, err)
+	defer db.Close()
+
+	s := store.New(db)
+
+	const prune = phase0.Slot(1)
+	const keep = phase0.Slot(2)
+
+	// Validator duties span multiple roles/indices so we prove the whole "vd"+slot keyspace is
+	// dropped, not just the attester example.
+	roles := []spectypes.BeaconRole{spectypes.BNRoleAttester, spectypes.BNRoleProposer, spectypes.BNRoleSyncCommittee}
+
+	// Populate every trace kind at both the slot to prune and an adjacent slot to keep.
+	for _, slot := range []phase0.Slot{prune, keep} {
+		for i, role := range roles {
+			require.NoError(t, s.SaveValidatorDuty(&exporter.ValidatorDutyTrace{
+				Slot: slot, Role: role, Validator: phase0.ValidatorIndex(100 + i),
+			}))
+		}
+		require.NoError(t, s.SaveCommitteeDuty(makeCTrace(slot, 'a')))
+		require.NoError(t, s.SaveCommitteeDuty(makeCTrace(slot, 'b')))
+		require.NoError(t, s.SaveCommitteeDutyLinks(slot, map[phase0.ValidatorIndex]spectypes.CommitteeID{1: {1, 1, 1}}))
+		require.NoError(t, s.SaveScheduled(slot, map[phase0.ValidatorIndex]rolemask.Mask{1: rolemask.BitAttester | rolemask.BitProposer}))
+	}
+
+	require.NoError(t, s.PruneSlot(prune))
+
+	// Pruned slot: every trace kind is gone, across all validator roles.
+	for _, role := range roles {
+		vds, err := s.GetValidatorDuties(role, prune)
+		require.NoError(t, err)
+		require.Empty(t, vds, "validator duties for role %v should be pruned", role)
+	}
+
+	cds, err := s.GetCommitteeDuties(prune)
+	require.NoError(t, err)
+	require.Empty(t, cds, "committee duties should be pruned")
+
+	links, err := s.GetCommitteeDutyLinks(prune)
+	require.NoError(t, err)
+	require.Empty(t, links, "committee links should be pruned")
+
+	sched, err := s.GetScheduled(prune)
+	require.NoError(t, err)
+	require.Empty(t, sched, "scheduled duties should be pruned")
+
+	// Adjacent slot is untouched, across all validator roles.
+	for _, role := range roles {
+		vds, err := s.GetValidatorDuties(role, keep)
+		require.NoError(t, err)
+		require.Len(t, vds, 1, "validator duties for role %v should be retained", role)
+	}
+
+	cds, err = s.GetCommitteeDuties(keep)
+	require.NoError(t, err)
+	require.Len(t, cds, 2)
+
+	links, err = s.GetCommitteeDutyLinks(keep)
+	require.NoError(t, err)
+	require.Len(t, links, 1)
+
+	sched, err = s.GetScheduled(keep)
+	require.NoError(t, err)
+	require.Len(t, sched, 1)
+}
+
+// TestPruneSlot_DBError exercises PruneSlot's error aggregation: a closed DB makes every prefix
+// drop fail, and PruneSlot must surface a (combined) error rather than silently succeeding.
+func TestPruneSlot_DBError(t *testing.T) {
+	logger := zap.NewNop()
+	db, err := kv.NewInMemory(logger, basedb.Options{})
+	require.NoError(t, err)
+	require.NoError(t, db.Close()) // subsequent DropPrefix/Delete calls now fail
+
+	s := store.New(db)
+	require.Error(t, s.PruneSlot(1))
+}
+
 func TestAddScheduledRole_UnionsIndices(t *testing.T) {
 	logger := zap.NewNop()
 	db, err := kv.NewInMemory(logger, basedb.Options{})

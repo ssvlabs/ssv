@@ -23,6 +23,7 @@ import (
 	"github.com/ssvlabs/ssv/exporter/rolemask"
 	"github.com/ssvlabs/ssv/exporter/store"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/operator/slotticker"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/registry/storage"
@@ -1817,10 +1818,185 @@ type mockDutyTraceStore struct {
 	committeeDutyTrace      *exporter.CommitteeDutyTrace
 	saveCommitteeDutyLinkFn func(slot phase0.Slot, index phase0.ValidatorIndex, id spectypes.CommitteeID) error
 	scheduled               map[phase0.Slot]map[phase0.ValidatorIndex]rolemask.Mask
+	prunedSlots             []phase0.Slot
 }
 
 func (m *mockDutyTraceStore) SaveCommitteeDuties(slot phase0.Slot, duties []*exporter.CommitteeDutyTrace) error {
 	return m.err
+}
+
+func (m *mockDutyTraceStore) PruneSlot(slot phase0.Slot) error {
+	m.prunedSlots = append(m.prunedSlots, slot)
+	return m.err
+}
+
+func TestRetentionState(t *testing.T) {
+	const retain = phase0.Slot(100)
+
+	t.Run("disabled when retainSlots is zero", func(t *testing.T) {
+		st := &mockDutyTraceStore{}
+		r := &retentionState{store: st, logger: zap.NewNop()}
+		r.advance(1_000_000, 0)
+		require.Empty(t, st.prunedSlots)
+		require.False(t, r.seeded)
+		require.False(t, r.expired(0), "nothing is expired when retention is disabled")
+	})
+
+	t.Run("no underflow before the window fills", func(t *testing.T) {
+		st := &mockDutyTraceStore{}
+		r := &retentionState{store: st, logger: zap.NewNop()}
+		r.advance(50, retain) // currentSlot < retain
+		require.Empty(t, st.prunedSlots)
+		require.False(t, r.seeded)
+		require.False(t, r.expired(0))
+	})
+
+	t.Run("first activation seeds the floor forward without backfilling old history", func(t *testing.T) {
+		st := &mockDutyTraceStore{}
+		r := &retentionState{store: st, logger: zap.NewNop()}
+		r.advance(1_000_000, retain) // floor is huge; must NOT prune from slot 0
+		require.Empty(t, st.prunedSlots)
+		require.True(t, r.seeded)
+		require.Equal(t, phase0.Slot(1_000_000-100), r.cursor)
+		// floor guards the collection path immediately, even before the cursor prunes anything
+		require.True(t, r.expired(1_000_000-101))
+		require.False(t, r.expired(1_000_000-100))
+	})
+
+	t.Run("prunes exactly the slot that ages out each advancing tick", func(t *testing.T) {
+		st := &mockDutyTraceStore{}
+		r := &retentionState{store: st, logger: zap.NewNop()}
+		r.advance(150, retain) // seed: floor/cursor=50
+		r.advance(151, retain) // prune 50
+		r.advance(152, retain) // prune 51
+		require.Equal(t, []phase0.Slot{50, 51}, st.prunedSlots)
+		require.Equal(t, phase0.Slot(52), r.cursor)
+	})
+
+	t.Run("catches up skipped slots but caps work per tick", func(t *testing.T) {
+		st := &mockDutyTraceStore{}
+		r := &retentionState{store: st, logger: zap.NewNop()}
+		r.advance(150, retain) // seed: floor/cursor=50
+		st.prunedSlots = nil
+		r.advance(150+1000, retain) // floor jumps to 1050; must cap, not stall
+		require.Len(t, st.prunedSlots, maxPrunePerTick)
+		require.Equal(t, phase0.Slot(50), st.prunedSlots[0])
+		require.Equal(t, phase0.Slot(50+maxPrunePerTick), r.cursor)
+	})
+
+	t.Run("expired tracks the current floor", func(t *testing.T) {
+		st := &mockDutyTraceStore{}
+		r := &retentionState{store: st, logger: zap.NewNop()}
+		r.advance(150, retain) // floor=50
+		require.True(t, r.expired(49))
+		require.False(t, r.expired(50))
+		require.False(t, r.expired(51))
+	})
+}
+
+// TestCollector_dropsExpiredSlot verifies the collection hot path refuses to (re)create traces for
+// a slot below the retention floor, so a late message cannot resurrect a slot already pruned.
+func TestCollector_dropsExpiredSlot(t *testing.T) {
+	c := New(zap.NewNop(), nil, nil, &mockDutyTraceStore{}, networkconfig.TestNetwork.Beacon, nil, nil)
+	c.retention.floor.Store(100) // slots < 100 are expired
+
+	_, _, err := c.getOrCreateValidatorTrace(50, spectypes.BNRoleAttester, 1)
+	require.ErrorIs(t, err, errExpiredSlot)
+
+	_, _, err = c.getOrCreateCommitteeTrace(50, spectypes.CommitteeID{})
+	require.ErrorIs(t, err, errExpiredSlot)
+
+	// A slot inside the window is not dropped by the guard.
+	_, _, err = c.getOrCreateValidatorTrace(150, spectypes.BNRoleAttester, 1)
+	require.NotErrorIs(t, err, errExpiredSlot)
+}
+
+// fakeSlotTicker fires a single pre-loaded tick and reports a fixed slot.
+type fakeSlotTicker struct {
+	ch   chan time.Time
+	slot phase0.Slot
+}
+
+func (f *fakeSlotTicker) Next() <-chan time.Time { return f.ch }
+func (f *fakeSlotTicker) Slot() phase0.Slot      { return f.slot }
+
+// TestCollector_Start_advancesRetention drives the eviction loop one tick and asserts it advances
+// the retention window (sets the floor). Only the main loop's ticker fires; the schedule filler's
+// ticker stays silent so the worker doesn't run with the test's empty deps.
+func TestCollector_Start_advancesRetention(t *testing.T) {
+	c := New(zap.NewNop(), nil, nil, &mockDutyTraceStore{}, networkconfig.TestNetwork.Beacon, nil, nil)
+
+	var calls int
+	provider := func() slotticker.SlotTicker {
+		calls++
+		ch := make(chan time.Time, 1)
+		if calls == 1 { // the main eviction loop is the first to ask for a ticker
+			ch <- time.Now()
+		}
+		return &fakeSlotTicker{ch: ch, slot: 1_000_000}
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan struct{})
+	go func() { c.Start(ctx, provider, 100); close(done) }()
+
+	require.Eventually(t, func() bool { return c.retention.floor.Load() > 0 },
+		2*time.Second, 5*time.Millisecond, "Start should advance the retention floor on a tick")
+	require.Equal(t, uint64(1_000_000-100), c.retention.floor.Load())
+
+	cancel()
+	<-done
+}
+
+// TestCollector_processScheduleJob_skipsExpired verifies the schedule worker drops jobs for slots
+// outside the retention window (so they cannot recreate pruned scheduled data). With nil duties,
+// only the guard's early return keeps computeAndPersistScheduleForSlot from being reached.
+func TestCollector_processScheduleJob_skipsExpired(t *testing.T) {
+	c := New(zap.NewNop(), nil, nil, &mockDutyTraceStore{}, networkconfig.TestNetwork.Beacon, nil, nil)
+	c.retention.floor.Store(100)
+	require.NotPanics(t, func() { c.processScheduleJob(50) }, "expired slot must be skipped before persist")
+}
+
+// TestCollector_Collect_dropsExpiredSlot drives a real message for a slot below the retention floor
+// through Collect end-to-end and asserts it is dropped silently — proving a late message cannot
+// resurrect a pruned slot.
+func TestCollector_Collect_dropsExpiredSlot(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	t.Cleanup(ctrl.Finish)
+
+	const slot = phase0.Slot(1)
+	vIndex := phase0.ValidatorIndex(55)
+	identifier := spectypes.NewMsgID([4]byte{}, []byte("pk"), spectypes.RoleAggregator)
+
+	validators := registrystoragemocks.NewMockValidatorStore(ctrl)
+	validators.EXPECT().ValidatorIndex(gomock.Any()).Return(vIndex, true).AnyTimes()
+
+	c := New(zap.NewNop(), validators, nil, &mockDutyTraceStore{}, networkconfig.TestNetwork.Beacon, nil, nil)
+	c.retention.floor.Store(100) // slot 1 is far outside the retention window
+
+	psm := spectypes.PartialSignatureMessages{
+		Type: spectypes.PostConsensusPartialSig,
+		Slot: slot,
+		Messages: []*spectypes.PartialSignatureMessage{
+			{ValidatorIndex: vIndex, Signer: 99, PartialSignature: make([]byte, 96), SigningRoot: [32]byte{1}},
+		},
+	}
+	data, err := psm.Encode()
+	require.NoError(t, err)
+
+	require.NoError(t, c.Collect(t.Context(), buildPartialSigMessage(identifier, data), dummyVerify))
+}
+
+// TestDutyTraceStoreMetrics_PruneSlot covers the metrics wrapper used in production (node.go wraps
+// the store in DutyTraceStoreMetrics).
+func TestDutyTraceStoreMetrics_PruneSlot(t *testing.T) {
+	db, err := kv.NewInMemory(zap.NewNop(), basedb.Options{})
+	require.NoError(t, err)
+	defer db.Close()
+
+	m := &DutyTraceStoreMetrics{Store: store.New(db)}
+	require.NoError(t, m.PruneSlot(123))
 }
 
 func (m *mockDutyTraceStore) SaveCommitteeDutyLink(slot phase0.Slot, index phase0.ValidatorIndex, id spectypes.CommitteeID) error {

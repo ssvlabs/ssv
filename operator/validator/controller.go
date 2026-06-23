@@ -388,12 +388,13 @@ func (c *Controller) handleWorkerMessages(ctx context.Context, msg network.Decod
 		ncv = item.Value()
 	}
 
-	if c.validatorCommonOpts.ExporterOptions.Mode == exporter.ModeArchive {
-		// use new exporter functionality
+	if c.traceCollector != nil {
+		// Exporter nodes run full duty tracing via the collector. The collector is wired only for
+		// exporter nodes (see cli/operator/node.go), so a non-nil collector means this is an exporter.
 		return c.traceCollector.Collect(c.ctx, ssvMsg, ncv.VerifySig)
 	}
 
-	// use old exporter functionality
+	// Operator nodes record post-consensus participation via the legacy participant store.
 	return c.handleNonCommitteeMessages(ctx, ssvMsg, ncv)
 }
 

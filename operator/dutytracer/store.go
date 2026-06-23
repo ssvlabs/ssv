@@ -42,6 +42,9 @@ type DutyTraceStore interface {
 	// Compact scheduled duties I/O
 	SaveScheduled(slot phase0.Slot, schedule map[phase0.ValidatorIndex]rolemask.Mask) error
 	GetScheduled(slot phase0.Slot) (map[phase0.ValidatorIndex]rolemask.Mask, error)
+
+	// PruneSlot removes all trace data for a slot, backing the optional retention window.
+	PruneSlot(slot phase0.Slot) error
 }
 
 func (c *Collector) GetCommitteeID(slot phase0.Slot, index phase0.ValidatorIndex) (spectypes.CommitteeID, error) {

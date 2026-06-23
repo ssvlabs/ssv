@@ -22,10 +22,6 @@ import (
 const (
 	testSignerEndpoint = "http://signer:9000"
 	testOperatorKey    = "super-secret-operator-key"
-
-	// substring of resolveMode's error for an unrecognized EXPORTER_MODE (kept as a const so
-	// the repeated assertion doesn't trip goconst).
-	msgInvalidExporterMode = "invalid exporter mode"
 )
 
 func Test_config_load(t *testing.T) {
@@ -122,8 +118,9 @@ func Test_resolveAndValidate_signingErrorContext(t *testing.T) {
 	}
 }
 
-// Test_resolveAndValidate_mode verifies the operating mode is resolved into the result and that
-// an invalid EXPORTER_MODE fails validation up front.
+// Test_resolveAndValidate_mode verifies the operating mode is resolved into the result: a
+// non-exporter is modeOperator, and an enabled exporter is modeExporter (full duty tracing). The
+// legacy standard/archive EXPORTER_MODE validation was removed along with the mode itself.
 func Test_resolveAndValidate_mode(t *testing.T) {
 	t.Run("non-exporter -> modeOperator", func(t *testing.T) {
 		c := config{}
@@ -133,22 +130,12 @@ func Test_resolveAndValidate_mode(t *testing.T) {
 		require.Equal(t, modeOperator, res.mode)
 	})
 
-	t.Run("exporter archive -> modeExporterArchive", func(t *testing.T) {
+	t.Run("exporter -> modeExporter", func(t *testing.T) {
 		c := config{}
 		c.ExporterOptions.Enabled = true
-		c.ExporterOptions.Mode = exporter.ModeArchive
 		res, err := c.resolveAndValidate(zap.NewNop())
 		require.NoError(t, err)
-		require.Equal(t, modeExporterArchive, res.mode)
-	})
-
-	t.Run("invalid exporter mode -> error", func(t *testing.T) {
-		c := config{}
-		c.ExporterOptions.Enabled = true
-		c.ExporterOptions.Mode = "bogus"
-		_, err := c.resolveAndValidate(zap.NewNop())
-		require.Error(t, err)
-		require.Contains(t, err.Error(), msgInvalidExporterMode)
+		require.Equal(t, modeExporter, res.mode)
 	})
 }
 
@@ -425,36 +412,24 @@ func Test_resolveSigning(t *testing.T) {
 	}
 }
 
-// Test_resolveMode covers operating-mode resolution and the fail-fast rejection of an
-// unrecognized EXPORTER_MODE.
+// Test_resolveMode covers operating-mode resolution: an enabled exporter resolves to modeExporter
+// (full duty tracing), everything else to modeOperator.
 func Test_resolveMode(t *testing.T) {
-	tests := []struct {
-		name    string
-		enabled bool
-		mode    string
-		want    nodeMode
-		wantErr string
-	}{
-		{name: "not exporter -> operator", enabled: false, mode: "", want: modeOperator},
-		{name: "not exporter ignores mode -> operator", enabled: false, mode: exporter.ModeArchive, want: modeOperator},
-		{name: "exporter standard", enabled: true, mode: exporter.ModeStandard, want: modeExporterStandard},
-		{name: "exporter archive", enabled: true, mode: exporter.ModeArchive, want: modeExporterArchive},
-		{name: "exporter invalid -> error", enabled: true, mode: "bogus", wantErr: msgInvalidExporterMode},
-		{name: "exporter empty mode -> error", enabled: true, mode: "", wantErr: msgInvalidExporterMode},
-	}
+	require.Equal(t, modeOperator, resolveMode(exporter.Options{Enabled: false}))
+	require.Equal(t, modeExporter, resolveMode(exporter.Options{Enabled: true}))
+}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := resolveMode(exporter.Options{Enabled: tt.enabled, Mode: tt.mode})
-			if tt.wantErr != "" {
-				require.Error(t, err)
-				require.Contains(t, err.Error(), tt.wantErr)
-				return
-			}
-			require.NoError(t, err)
-			require.Equal(t, tt.want, got)
-		})
-	}
+// Test_warnDeprecatedExporterEnv verifies a stale, now-removed exporter env var is flagged rather
+// than silently ignored.
+func Test_warnDeprecatedExporterEnv(t *testing.T) {
+	t.Setenv("EXPORTER_MODE", "archive")
+	t.Setenv("EXPORTER_RETAIN_SLOTS", "50400")
+
+	core, logs := observer.New(zapcore.WarnLevel)
+	warnDeprecatedExporterEnv(zap.New(core))
+
+	require.Equal(t, 1, logs.FilterField(zap.String("env", "EXPORTER_MODE")).Len())
+	require.Equal(t, 1, logs.FilterField(zap.String("env", "EXPORTER_RETAIN_SLOTS")).Len())
 }
 
 func Test_warnIfSSVAPIAddressUnset(t *testing.T) {
