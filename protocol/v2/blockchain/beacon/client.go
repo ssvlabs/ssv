@@ -127,6 +127,7 @@ type BeaconNode interface {
 	SyncCommitteeContributionCalls
 	ValidatorRegistrationCalls
 	VoluntaryExitCalls
+	PTCCalls
 	DomainCalls
 
 	beaconDuties
@@ -137,8 +138,7 @@ type BeaconNode interface {
 }
 
 // PTCCalls is the beacon-node surface for Gloas (ePBS) Payload Timeliness Committee duties:
-// fetching assignments, producing the data to attest to, and submitting signed messages. It is
-// declared standalone and folded into BeaconNode once the PTC runner is wired in.
+// fetching assignments, producing the data to attest to, and submitting signed messages.
 type PTCCalls interface {
 	// PayloadAttestationDuties returns the PTC duties for the given validators at the epoch.
 	PayloadAttestationDuties(ctx context.Context, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*gloas.PTCDuty, error)

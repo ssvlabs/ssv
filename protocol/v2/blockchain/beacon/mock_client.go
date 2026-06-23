@@ -889,6 +889,36 @@ func (mr *MockBeaconNodeMockRecorder) IsSyncCommitteeAggregator(proof any) *gomo
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsSyncCommitteeAggregator", reflect.TypeOf((*MockBeaconNode)(nil).IsSyncCommitteeAggregator), proof)
 }
 
+// PayloadAttestationData mocks base method.
+func (m *MockBeaconNode) PayloadAttestationData(ctx context.Context, slot phase0.Slot) (*gloas.PayloadAttestationData, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PayloadAttestationData", ctx, slot)
+	ret0, _ := ret[0].(*gloas.PayloadAttestationData)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// PayloadAttestationData indicates an expected call of PayloadAttestationData.
+func (mr *MockBeaconNodeMockRecorder) PayloadAttestationData(ctx, slot any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PayloadAttestationData", reflect.TypeOf((*MockBeaconNode)(nil).PayloadAttestationData), ctx, slot)
+}
+
+// PayloadAttestationDuties mocks base method.
+func (m *MockBeaconNode) PayloadAttestationDuties(ctx context.Context, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*gloas.PTCDuty, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PayloadAttestationDuties", ctx, epoch, validatorIndices)
+	ret0, _ := ret[0].([]*gloas.PTCDuty)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// PayloadAttestationDuties indicates an expected call of PayloadAttestationDuties.
+func (mr *MockBeaconNodeMockRecorder) PayloadAttestationDuties(ctx, epoch, validatorIndices any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PayloadAttestationDuties", reflect.TypeOf((*MockBeaconNode)(nil).PayloadAttestationDuties), ctx, epoch, validatorIndices)
+}
+
 // ProposerDuties mocks base method.
 func (m *MockBeaconNode) ProposerDuties(ctx context.Context, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*v1.ProposerDuty, error) {
 	m.ctrl.T.Helper()
@@ -972,6 +1002,20 @@ func (m *MockBeaconNode) SubmitBeaconCommitteeSubscriptions(ctx context.Context,
 func (mr *MockBeaconNodeMockRecorder) SubmitBeaconCommitteeSubscriptions(ctx, subscription any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitBeaconCommitteeSubscriptions", reflect.TypeOf((*MockBeaconNode)(nil).SubmitBeaconCommitteeSubscriptions), ctx, subscription)
+}
+
+// SubmitPayloadAttestationMessages mocks base method.
+func (m *MockBeaconNode) SubmitPayloadAttestationMessages(ctx context.Context, messages []*gloas.PayloadAttestationMessage) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SubmitPayloadAttestationMessages", ctx, messages)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SubmitPayloadAttestationMessages indicates an expected call of SubmitPayloadAttestationMessages.
+func (mr *MockBeaconNodeMockRecorder) SubmitPayloadAttestationMessages(ctx, messages any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitPayloadAttestationMessages", reflect.TypeOf((*MockBeaconNode)(nil).SubmitPayloadAttestationMessages), ctx, messages)
 }
 
 // SubmitProposalPreparations mocks base method.
