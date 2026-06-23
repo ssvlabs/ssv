@@ -37,41 +37,17 @@ var ptcHTTPClient = &http.Client{}
 // PayloadAttestationDuties returns the PTC duties for the given validators at the epoch, from
 // the first beacon client that responds.
 func (gc *GoClient) PayloadAttestationDuties(ctx context.Context, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*gloas.PTCDuty, error) {
-	reqCtx, cancel := context.WithTimeout(ctx, gc.commonTimeout)
-	defer cancel()
-
-	var errs error
-	for _, client := range gc.clients {
-		start := time.Now()
-		duties, err := requestPTCDuties(reqCtx, ptcHTTPClient, client.Address(), epoch, validatorIndices)
-		recordRequest(reqCtx, gc.log, "PayloadAttestationDuties", client, http.MethodPost, false, time.Since(start), err)
-		if err != nil {
-			errs = errors.Join(errs, errSingleClient(err, client.Address(), "PayloadAttestationDuties"))
-			continue
-		}
-		return duties, nil
-	}
-	return nil, errs
+	return firstClientResult(ctx, gc, "PayloadAttestationDuties", http.MethodPost, func(ctx context.Context, addr string) ([]*gloas.PTCDuty, error) {
+		return requestPTCDuties(ctx, ptcHTTPClient, addr, epoch, validatorIndices)
+	})
 }
 
 // PayloadAttestationData returns the PayloadAttestationData to attest to for the slot, from the
 // first beacon client that responds.
 func (gc *GoClient) PayloadAttestationData(ctx context.Context, slot phase0.Slot) (*gloas.PayloadAttestationData, error) {
-	reqCtx, cancel := context.WithTimeout(ctx, gc.commonTimeout)
-	defer cancel()
-
-	var errs error
-	for _, client := range gc.clients {
-		start := time.Now()
-		data, err := requestPayloadAttestationData(reqCtx, ptcHTTPClient, client.Address(), slot)
-		recordRequest(reqCtx, gc.log, "PayloadAttestationData", client, http.MethodGet, false, time.Since(start), err)
-		if err != nil {
-			errs = errors.Join(errs, errSingleClient(err, client.Address(), "PayloadAttestationData"))
-			continue
-		}
-		return data, nil
-	}
-	return nil, errs
+	return firstClientResult(ctx, gc, "PayloadAttestationData", http.MethodGet, func(ctx context.Context, addr string) (*gloas.PayloadAttestationData, error) {
+		return requestPayloadAttestationData(ctx, ptcHTTPClient, addr, slot)
+	})
 }
 
 // SubmitPayloadAttestationMessages broadcasts signed PTC messages to every beacon client's pool,
@@ -83,6 +59,27 @@ func (gc *GoClient) SubmitPayloadAttestationMessages(ctx context.Context, messag
 	return gc.multiClientSubmit(ctx, "SubmitPayloadAttestationMessages", func(ctx context.Context, client Client) error {
 		return submitPayloadAttestationMessages(ctx, ptcHTTPClient, client.Address(), messages)
 	})
+}
+
+// firstClientResult runs fn against each beacon client in turn under the common timeout,
+// returning the first success and recording every attempt; on all failures it joins the errors.
+func firstClientResult[T any](ctx context.Context, gc *GoClient, routeName, httpMethod string, fn func(ctx context.Context, addr string) (T, error)) (T, error) {
+	ctx, cancel := context.WithTimeout(ctx, gc.commonTimeout)
+	defer cancel()
+
+	var zero T
+	var errs error
+	for _, client := range gc.clients {
+		start := time.Now()
+		res, err := fn(ctx, client.Address())
+		recordRequest(ctx, gc.log, routeName, client, httpMethod, false, time.Since(start), err)
+		if err != nil {
+			errs = errors.Join(errs, errSingleClient(err, client.Address(), routeName))
+			continue
+		}
+		return res, nil
+	}
+	return zero, errs
 }
 
 // requestPTCDuties POSTs the validator indices and returns their PTC duties for the epoch.
