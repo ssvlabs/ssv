@@ -9,6 +9,8 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+
+	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 )
 
 // Beacon defines beacon network configuration. It is fetched from the consensus client during the node runtime.
@@ -171,6 +173,14 @@ func (b *Beacon) ForkAtEpoch(epoch phase0.Epoch) (spec.DataVersion, *phase0.Fork
 func (b *Beacon) ForkAtVersion(version spec.DataVersion) (phase0.Fork, bool) {
 	fork, ok := b.Forks[version]
 	return fork, ok
+}
+
+// IsGloas reports whether the beacon fork active at the given epoch is Gloas (ePBS).
+// Returns false when there is no scheduled Gloas fork (absent from Forks or far-future),
+// so it is safe on pre-Gloas networks and Beacon values without a Gloas entry.
+func (b *Beacon) IsGloas(epoch phase0.Epoch) bool {
+	fork, ok := b.Forks[gloas.DataVersionGloas]
+	return ok && epoch >= fork.Epoch
 }
 
 func (b *Beacon) AssertSame(other *Beacon) error {

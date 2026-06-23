@@ -14,6 +14,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 )
 
 const (
@@ -252,12 +253,23 @@ func (gc *GoClient) getForkData(specResponse map[string]any) (map[spec.DataVersi
 		return nil, err
 	}
 
-	// TODO: Add GLOAS_FORK_EPOCH as non-required once fork specs are available
+	gloasEpoch, err := getForkEpoch("GLOAS_FORK_EPOCH", false)
+	if err != nil {
+		return nil, err
+	}
 
 	// Only get fork version if the fork is scheduled (not FarFutureEpoch)
 	var fuluForkVersion phase0.Version
 	if fuluEpoch != FarFutureEpoch {
 		fuluForkVersion, err = getForkVersion("FULU_FORK_VERSION")
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	var gloasForkVersion phase0.Version
+	if gloasEpoch != FarFutureEpoch {
+		gloasForkVersion, err = getForkVersion("GLOAS_FORK_VERSION")
 		if err != nil {
 			return nil, err
 		}
@@ -298,6 +310,11 @@ func (gc *GoClient) getForkData(specResponse map[string]any) (map[spec.DataVersi
 			PreviousVersion: electraForkVersion,
 			CurrentVersion:  fuluForkVersion,
 			Epoch:           fuluEpoch,
+		},
+		gloas.DataVersionGloas: {
+			PreviousVersion: fuluForkVersion,
+			CurrentVersion:  gloasForkVersion,
+			Epoch:           gloasEpoch,
 		},
 	}
 
