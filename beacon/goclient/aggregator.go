@@ -107,7 +107,7 @@ func (gc *GoClient) waitTwoThirdsIntoSlot(ctx context.Context, slot phase0.Slot)
 	}
 }
 
-func (gc *GoClient) computeAttDataRootAndVersion(
+func (gc *GoClient) computeAttestationDataRoot(
 	ctx context.Context,
 	slot phase0.Slot,
 	committeeIndex phase0.CommitteeIndex,
@@ -122,7 +122,8 @@ func (gc *GoClient) computeAttDataRootAndVersion(
 	// Decide the fork from the requested duty slot, not attData.Slot — the latter is what the
 	// beacon node returned (the same source the comment above warns "may return inconsistent values"),
 	// whereas the aggregate is for our duty's slot, which is authoritative.
-	version, _ := gc.beaconConfig.BeaconForkAtEpoch(gc.getBeaconConfig().EstimatedEpochAtSlot(slot))
+	cfg := gc.getBeaconConfig()
+	version, _ := cfg.BeaconForkAtEpoch(cfg.EstimatedEpochAtSlot(slot))
 	attData.Index = 0
 	if version < spec.DataVersionElectra {
 		attData.Index = committeeIndex
@@ -140,7 +141,7 @@ func (gc *GoClient) fetchVersionedAggregate(
 	slot phase0.Slot,
 	committeeIndex phase0.CommitteeIndex,
 ) (*spec.VersionedAttestation, spec.DataVersion, error) {
-	root, err := gc.computeAttDataRootAndVersion(ctx, slot, committeeIndex)
+	root, err := gc.computeAttestationDataRoot(ctx, slot, committeeIndex)
 	if err != nil {
 		return nil, DataVersionNil, errMultiClient(fmt.Errorf("compute attestation root: %w", err), "AggregateAttestation")
 	}
