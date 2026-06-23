@@ -177,7 +177,7 @@ func TestStorage_SaveAndGetRecipientData(t *testing.T) {
 		var expectedRecipients []bellatrix.ExecutionAddress
 
 		for i := 0; i < 10; i++ {
-			owner := common.BytesToAddress([]byte(fmt.Sprintf("owner%d", i)))
+			owner := common.BytesToAddress(fmt.Appendf(nil, "owner%d", i))
 			var feeRecipient bellatrix.ExecutionAddress
 			copy(feeRecipient[:], fmt.Sprintf("fee%d", i))
 
@@ -473,7 +473,7 @@ func TestGetFeeRecipient(t *testing.T) {
 	t.Run("drop clears in-memory map", func(t *testing.T) {
 		// Add multiple recipients
 		for i := 0; i < 5; i++ {
-			owner := common.BytesToAddress([]byte(fmt.Sprintf("drop%d", i)))
+			owner := common.BytesToAddress(fmt.Appendf(nil, "drop%d", i))
 			var feeRecipient bellatrix.ExecutionAddress
 			copy(feeRecipient[:], fmt.Sprintf("fee%d", i))
 
@@ -483,7 +483,7 @@ func TestGetFeeRecipient(t *testing.T) {
 
 		// Verify they exist
 		for i := 0; i < 5; i++ {
-			owner := common.BytesToAddress([]byte(fmt.Sprintf("drop%d", i)))
+			owner := common.BytesToAddress(fmt.Appendf(nil, "drop%d", i))
 			_, err := storageCollection.GetFeeRecipient(owner)
 			require.NoError(t, err)
 		}
@@ -494,7 +494,7 @@ func TestGetFeeRecipient(t *testing.T) {
 
 		// Verify all are gone
 		for i := 0; i < 5; i++ {
-			owner := common.BytesToAddress([]byte(fmt.Sprintf("drop%d", i)))
+			owner := common.BytesToAddress(fmt.Appendf(nil, "drop%d", i))
 			_, err := storageCollection.GetFeeRecipient(owner)
 			require.Error(t, err)
 		}
