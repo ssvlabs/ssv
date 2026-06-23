@@ -4,9 +4,8 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 )
 
-// The phase0 --include is resolved from the module graph (via `go list -m`), so it
-// is not pinned to a go-eth2-client version and survives dependency bumps.
-// Regenerate with `go generate ./...`.
+// Regenerate with `go generate ./...`. The phase0 --include is resolved from the module
+// graph (`go list -m`), so it tracks go-eth2-client across dependency bumps rather than pinning.
 //go:generate sh -c "go tool -modfile=../../../../tool.mod sszgen -path ./beacon_vote.go --include $(go list -m -f '{{.Dir}}' github.com/attestantio/go-eth2-client)/spec/phase0 --objs GloasBeaconVote"
 
 // GloasBeaconVote is the Gloas (ePBS) variant of spectypes.BeaconVote — the value the
