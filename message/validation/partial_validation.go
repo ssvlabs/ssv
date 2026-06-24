@@ -121,6 +121,7 @@ func (mv *messageValidator) validatePartialSignatureMessageSemantics(
 	// - SelectionProofPartialSig or PostConsensusPartialSig for Sync committee contribution
 	// - ValidatorRegistrationPartialSig for Validator Registration
 	// - VoluntaryExitPartialSig for Voluntary Exit
+	// - PTCAttesterPartialSig for PTC attestation
 	if !mv.partialSignatureTypeMatchesRole(partialSignatureMessages.Type, role) {
 		return ErrPartialSignatureTypeRoleMismatch
 	}
@@ -196,6 +197,7 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 		// - 1 AggregatorCommitteePartialSig and 1 PostConsensusPartialSig for AggregatorCommittee
 		// - 1 ValidatorRegistrationPartialSig for Validator Registration
 		// - 1 VoluntaryExitPartialSig for Voluntary Exit
+		// - 1 PTCAttesterPartialSig for PTC attestation
 		if err := validatePartialSignatureMessageLimit(partialSignatureMessages, receivedFrom, signerState); err != nil {
 			return err
 		}
@@ -279,7 +281,7 @@ func validatePartialSignatureMessageLimit(
 	switch m.Type {
 	case spectypes.RandaoPartialSig, ssvtypes.SelectionProofPartialSig, ssvtypes.ContributionProofs,
 		spectypes.ValidatorRegistrationPartialSig, spectypes.VoluntaryExitPartialSig,
-		spectypes.AggregatorCommitteePartialSig:
+		spectypes.AggregatorCommitteePartialSig, spectypes.PTCAttesterPartialSig:
 		if signerState.Peer(receivedFrom).SeenMsgTypes.reachedPreConsensusLimit() {
 			// Check if the same peer is sending us a "logical duplicate" message, reject message to punish.
 			e := ErrTooManyPartialSigMessage
@@ -354,7 +356,8 @@ func (mv *messageValidator) validPartialSigMsgType(msgType spectypes.PartialSigM
 		ssvtypes.ContributionProofs,
 		spectypes.ValidatorRegistrationPartialSig,
 		spectypes.VoluntaryExitPartialSig,
-		spectypes.AggregatorCommitteePartialSig:
+		spectypes.AggregatorCommitteePartialSig,
+		spectypes.PTCAttesterPartialSig:
 		return true
 	default:
 		return false
@@ -377,6 +380,8 @@ func (mv *messageValidator) partialSignatureTypeMatchesRole(msgType spectypes.Pa
 		return msgType == spectypes.VoluntaryExitPartialSig
 	case spectypes.RoleAggregatorCommittee:
 		return msgType == spectypes.AggregatorCommitteePartialSig || msgType == spectypes.PostConsensusPartialSig
+	case spectypes.RolePTCAttester:
+		return msgType == spectypes.PTCAttesterPartialSig
 	default:
 		return false
 	}

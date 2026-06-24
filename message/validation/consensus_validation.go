@@ -159,8 +159,8 @@ func (mv *messageValidator) validateConsensusMessageSemantics(
 		return e
 	}
 
-	// Rule: Duty role has consensus (true except for ValidatorRegistration and VoluntaryExit)
-	if role == spectypes.RoleValidatorRegistration || role == spectypes.RoleVoluntaryExit {
+	// Rule: Duty role has consensus (true except for ValidatorRegistration, VoluntaryExit, and PTC attestation)
+	if role == spectypes.RoleValidatorRegistration || role == spectypes.RoleVoluntaryExit || role == spectypes.RolePTCAttester {
 		e := ErrUnexpectedConsensusMessage
 		e.got = role
 		return e
