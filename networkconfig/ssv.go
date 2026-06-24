@@ -21,6 +21,8 @@ var supportedSSVConfigs = map[string]*SSV{
 	HoodiSSV.Name:        HoodiSSV,
 	HoodiStageSSV.Name:   HoodiStageSSV,
 	SepoliaSSV.Name:      SepoliaSSV,
+
+	GlamsterdamDevnetSSV.Name: GlamsterdamDevnetSSV,
 }
 
 func SSVConfigByName(name string) (*SSV, error) {
