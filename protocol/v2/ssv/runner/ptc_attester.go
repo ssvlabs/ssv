@@ -75,10 +75,10 @@ func (r *PTCAttesterRunner) StartNewDuty(ctx context.Context, logger *zap.Logger
 	return r.baseStartNewNonBeaconDuty(ctx, logger, r, validatorDuty, quorum)
 }
 
-func (r *PTCAttesterRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
+func (r *PTCAttesterRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) (err error) {
 	hasQuorum, roots, err := r.basePreConsensusMsgProcessing(ctx, logger, r, signedMsg)
 	if errors.Is(err, ErrNoDutyAssigned) || errors.Is(err, ErrRunningDutySucceeded) {
-		// The runner is reused across duties, so a late message for a finished duty is retryable.
+		// The runner is reused across duties, so a late message for a concluded duty is retryable.
 		err = NewRetryableError(err)
 	}
 	if err != nil {
@@ -89,6 +89,14 @@ func (r *PTCAttesterRunner) ProcessPreConsensus(ctx context.Context, logger *zap
 	if !hasQuorum {
 		return nil
 	}
+
+	// We have quorum and are committed to completing this duty here; the quorum fires only once,
+	// so a terminal failure below won't be retried.
+	defer func() {
+		if err != nil {
+			r.markDutyFailed(err)
+		}
+	}()
 
 	if r.payloadAttestationData == nil {
 		return fmt.Errorf("reached quorum without a frozen payload attestation data")
@@ -149,15 +157,15 @@ func (r *PTCAttesterRunner) executeDuty(ctx context.Context, logger *zap.Logger,
 	// operator that has seen no beacon block for the slot abstains (signs and submits nothing).
 	data, err := r.beacon.PayloadAttestationData(ctx, slot)
 	if err != nil {
-		// A beacon-node failure (syncing, auth, unreachable) forces an abstain but is operational,
-		// not the normal "saw no block" case below — surface it so it isn't silently dropped.
-		logger.Warn("abstaining from PTC attestation: failed to fetch payload attestation data", fields.Slot(slot), zap.Error(err))
-		r.markDutySucceeded()
+		// A beacon-node failure (syncing, auth, unreachable) is operational, not the "saw no block"
+		// abstain below — record it as a failed duty so BN-induced PTC losses surface in metrics.
+		logger.Warn("PTC attestation failed: could not fetch payload attestation data", fields.Slot(slot), zap.Error(err))
+		r.markDutyFailed(err)
 		return nil
 	}
 	if data.BeaconBlockRoot == (phase0.Root{}) {
 		logger.Debug("abstaining from PTC attestation: no beacon block for slot", fields.Slot(slot))
-		r.markDutySucceeded()
+		r.markDutyNotRequired()
 		return nil
 	}
 
