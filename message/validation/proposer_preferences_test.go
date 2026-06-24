@@ -110,3 +110,16 @@ func TestMessageLateness_ProposerPreferences(t *testing.T) {
 	late := mv.messageLateness(slot, spectypes.RoleProposerPreferences, netCfg.SlotStartTime(slot+100))
 	require.Greater(t, late, time.Duration(0))
 }
+
+// ValidatorRegistration is deprecated at the Gloas fork — valid pre-Gloas, rejected for Gloas slots.
+func TestValidRoleAtSlot_ValidatorRegistrationDeprecatedAtGloas(t *testing.T) {
+	const gloasEpoch = 100
+	netCfg := networkconfig.TestNetworkWithGloas(gloasEpoch)
+	mv := &messageValidator{netCfg: netCfg}
+
+	preGloasSlot := phase0.Slot(uint64(gloasEpoch-1) * netCfg.SlotsPerEpoch)
+	gloasSlot := phase0.Slot(uint64(gloasEpoch) * netCfg.SlotsPerEpoch)
+
+	require.True(t, mv.validRoleAtSlot(spectypes.RoleValidatorRegistration, preGloasSlot))
+	require.False(t, mv.validRoleAtSlot(spectypes.RoleValidatorRegistration, gloasSlot))
+}

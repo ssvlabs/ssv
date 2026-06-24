@@ -383,6 +383,10 @@ func (s *VRSubmitter) start(ctx context.Context, ticker slotticker.SlotTicker) {
 
 			currentSlot := ticker.Slot()
 			currentEpoch := config.EstimatedEpochAtSlot(currentSlot)
+			// Validator registration is deprecated at the Gloas fork; stop submitting once it's active.
+			if config.IsGloas(currentEpoch) {
+				continue
+			}
 			slotInEpoch := uint64(currentSlot) % config.SlotsPerEpoch
 
 			// Select registrations to submit.

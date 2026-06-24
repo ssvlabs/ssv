@@ -155,8 +155,11 @@ func (mv *messageValidator) validRoleAtSlot(roleType spectypes.RunnerRole, slot 
 	isInBooleFork := mv.netCfg.BooleForkAtSlot(slot)
 	isInGloas := mv.netCfg.IsGloas(mv.netCfg.EstimatedEpochAtSlot(slot))
 	switch roleType {
-	case spectypes.RoleCommittee, spectypes.RoleProposer, spectypes.RoleValidatorRegistration, spectypes.RoleVoluntaryExit:
+	case spectypes.RoleCommittee, spectypes.RoleProposer, spectypes.RoleVoluntaryExit:
 		return true
+	case spectypes.RoleValidatorRegistration:
+		// Deprecated at the Gloas fork — superseded by proposer preferences (§5). Pre-Gloas unchanged.
+		return !isInGloas
 	case spectypes.RoleAggregatorCommittee:
 		return isInBooleFork
 	case ssvtypes.RoleAggregator, ssvtypes.RoleSyncCommitteeContribution:

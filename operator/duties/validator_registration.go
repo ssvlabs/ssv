@@ -161,6 +161,10 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 				continue
 			}
 			dutySlot := blockSlot + validatorRegistrationDutySlotsToPostpone
+			// Deprecated at the Gloas fork: don't enqueue registrations whose duty slot is Gloas-or-later.
+			if h.netCfg.IsGloas(h.netCfg.EstimatedEpochAtSlot(dutySlot)) {
+				continue
+			}
 			earliestExecutionSlot := blockSlot + validatorRegistrationExecutionSlotsToPostpone
 
 			// No de-dup on enqueue: entries are idempotent and bounded. The duty
@@ -203,6 +207,11 @@ func (h *ValidatorRegistrationHandler) processExecution(ctx context.Context, epo
 		observability.InstrumentName(observabilityNamespace, "validator_registration.execute"),
 		trace.WithAttributes(observability.BeaconSlotAttribute(slot)))
 	defer span.End()
+
+	// Validator registration is deprecated at the Gloas fork — superseded by proposer preferences (§5).
+	if h.netCfg.IsGloas(epoch) {
+		return
+	}
 
 	shares := h.validatorProvider.SelfValidators()
 	duties := make([]*spectypes.ValidatorDuty, 0, len(h.eventQueue)+len(shares))
