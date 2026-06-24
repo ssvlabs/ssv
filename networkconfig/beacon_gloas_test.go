@@ -7,8 +7,6 @@ import (
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/stretchr/testify/require"
-
-	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 )
 
 func TestBeacon_IsGloas(t *testing.T) {
@@ -19,13 +17,13 @@ func TestBeacon_IsGloas(t *testing.T) {
 
 	// Unscheduled Gloas (far-future sentinel) → never Gloas.
 	farFuture := &Beacon{Forks: map[spec.DataVersion]phase0.Fork{
-		gloas.DataVersionGloas: {Epoch: phase0.Epoch(math.MaxUint64)},
+		DataVersionGloas: {Epoch: phase0.Epoch(math.MaxUint64)},
 	}}
 	require.False(t, farFuture.IsGloas(1_000_000))
 
 	// Scheduled at epoch 100.
 	scheduled := &Beacon{Forks: map[spec.DataVersion]phase0.Fork{
-		gloas.DataVersionGloas: {Epoch: 100},
+		DataVersionGloas: {Epoch: 100},
 	}}
 	require.False(t, scheduled.IsGloas(99))
 	require.True(t, scheduled.IsGloas(100))
