@@ -1172,6 +1172,7 @@ func SetupRunners(
 		ssvtypes.RoleSyncCommitteeContribution,
 		spectypes.RoleValidatorRegistration,
 		spectypes.RoleVoluntaryExit,
+		spectypes.RolePTCAttester,
 	}
 
 	buildController := func(role spectypes.RunnerRole) *qbftcontroller.Controller {
@@ -1271,6 +1272,10 @@ func SetupRunners(
 			})
 		case spectypes.RoleVoluntaryExit:
 			runners[role], err = runner.NewVoluntaryExitRunner(runner.VoluntaryExitRunnerOptions{
+				BaseRunnerOptions: baseOpts,
+			})
+		case spectypes.RolePTCAttester:
+			runners[role], err = runner.NewPTCAttesterRunner(runner.PTCAttesterRunnerOptions{
 				BaseRunnerOptions: baseOpts,
 			})
 		default:
