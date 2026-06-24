@@ -35,10 +35,10 @@ func (h *ProposerPreferencesHandler) Name() string {
 
 func (h *ProposerPreferencesHandler) WaitShutdown() {}
 
-// HandleDuties emits proposer-preferences duties for the current and (once it's a good time to fetch)
-// the next epoch — the MIN_SEED_LOOKAHEAD=1 proposer lookahead. Reorg-driven re-emission and the
-// publication-finality hold (SIP #94 §5) are deferred refinements; the pre-fork emission window is
-// handled with the fork cutover.
+// HandleDuties emits proposer-preferences duties across the proposer lookahead (current + next epoch,
+// MIN_SEED_LOOKAHEAD=1). In the epoch immediately before the Gloas fork it pre-emits the first Gloas
+// epoch's preferences (SIP #94 §5) so builders have them before the fork. Reorg-driven re-emission and
+// the publication-finality hold are deferred refinements.
 func (h *ProposerPreferencesHandler) HandleDuties(ctx context.Context) {
 	h.logger.Info("starting duty handler")
 	defer h.logger.Info("duty handler exited")
@@ -52,22 +52,29 @@ func (h *ProposerPreferencesHandler) HandleDuties(ctx context.Context) {
 		case <-next:
 			slot := h.ticker.Slot()
 			next = h.ticker.Next()
-			epoch := h.netCfg.EstimatedEpochAtSlot(slot)
-
-			// Proposer preferences are a Gloas-only duty.
-			if !h.netCfg.IsGloas(epoch) {
-				continue
-			}
-
-			h.emitForEpoch(ctx, epoch, slot)
-			if h.shouldFetchNextEpoch(slot) {
-				h.emitForEpoch(ctx, epoch+1, slot)
-			}
-			h.evictOutdated(epoch)
+			h.emitForTick(ctx, slot)
 
 		case <-h.indicesChangeCh:
 		case <-h.reorgEventsCh:
 		}
+	}
+}
+
+// emitForTick emits the lookahead's preferences for the tick's slot: the current epoch (plus the next,
+// once it's a good time to fetch) in steady state, or the first Gloas epoch when in the pre-fork
+// window. Outside both it does nothing (pre-Gloas, no preferences yet).
+func (h *ProposerPreferencesHandler) emitForTick(ctx context.Context, slot phase0.Slot) {
+	epoch := h.netCfg.EstimatedEpochAtSlot(slot)
+	switch {
+	case h.netCfg.IsGloas(epoch):
+		h.emitForEpoch(ctx, epoch, slot)
+		if h.shouldFetchNextEpoch(slot) {
+			h.emitForEpoch(ctx, epoch+1, slot)
+		}
+		h.evictOutdated(epoch)
+	case h.netCfg.InGloasPriorWindow(slot):
+		// epoch+1 is GLOAS_FORK_EPOCH throughout the prior window (MIN_SEED_LOOKAHEAD=1).
+		h.emitForEpoch(ctx, epoch+1, slot)
 	}
 }
 

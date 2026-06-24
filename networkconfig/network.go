@@ -46,6 +46,8 @@ const boolePriorWindowEpochs = phase0.Epoch(1) // epochs before Boole to subscri
 // long or those messages are dropped by the subscription filter before validation ever sees them.
 const booleSubsequentWindowLateSlots = phase0.Slot(2)
 
+const gloasPriorWindowEpochs = phase0.Epoch(1) // MIN_SEED_LOOKAHEAD: epochs before Gloas to pre-emit proposer preferences
+
 // StorageName returns a config name used to make sure the stored network doesn't differ.
 // It combines the network name with the storage-compatibility token.
 func (n Network) StorageName() string {
@@ -173,4 +175,20 @@ func (n Network) inBooleSubsequentWindowWithSlots(slot phase0.Slot, windowSlots 
 	start := n.FirstSlotAtEpoch(n.SSV.Forks.Boole)
 	end := start + windowSlots
 	return slot >= start && slot < end
+}
+
+// InGloasPriorWindow reports whether slot falls in the MIN_SEED_LOOKAHEAD epoch(s) immediately before
+// the Gloas fork, where proposers pre-broadcast preferences for the first Gloas epoch so builders have
+// them before the fork (SIP #94 §5). False when no Gloas fork is scheduled.
+func (n Network) InGloasPriorWindow(slot phase0.Slot) bool {
+	gloasEpoch, ok := n.GloasForkEpoch()
+	if !ok {
+		return false
+	}
+	priorWindowStart := phase0.Epoch(0)
+	if gloasPriorWindowEpochs <= gloasEpoch {
+		priorWindowStart = gloasEpoch - gloasPriorWindowEpochs
+	}
+	epoch := n.EstimatedEpochAtSlot(slot)
+	return epoch >= priorWindowStart && epoch < gloasEpoch
 }
