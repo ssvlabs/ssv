@@ -135,6 +135,11 @@ func TestValidatorRegistrationHandler_HandleDuties(t *testing.T) {
 			validatorIndex := phase0.ValidatorIndex(1)
 			validatorPk := phase0.BLSPubKey{1, 2, 3}
 
+			// processExecution iterates SelfValidators for the periodic path.
+			// Return nil so periodic produces no duties and the assertion below
+			// observes only the event-driven duty.
+			scheduler.validatorProvider.(*MockValidatorProvider).EXPECT().SelfValidators().Return(nil).AnyTimes()
+
 			executeDutiesCall := make(chan []*spectypes.ValidatorDuty)
 			setExecuteDutyFunc(scheduler, executeDutiesCall, 1)
 
@@ -144,12 +149,19 @@ func TestValidatorRegistrationHandler_HandleDuties(t *testing.T) {
 				BlockNumber:     uint64(slot),
 			}
 
+			// Event-driven registrations are now gated on
+			// validatorRegistrationExecutionSlotsToPostpone — advance the
+			// ticker past the gate so processExecution drains the queue.
+			ticker.Send(slot + validatorRegistrationExecutionSlotsToPostpone)
+
 			waitForDutiesExecution(t, nil, executeDutiesCall, timeout, []*spectypes.ValidatorDuty{
 				{
 					Type:           spectypes.BNRoleValidatorRegistration,
 					PubKey:         validatorPk,
 					ValidatorIndex: validatorIndex,
-					Slot:           slot + validatorRegistrationSlotsToPostpone,
+					// Slot is the shared duty slot — what gets signed;
+					// intentionally lower than the execution-gate slot above.
+					Slot: slot + validatorRegistrationDutySlotsToPostpone,
 				},
 			})
 			require.EqualValues(t, 2, blockByNumberCalls.Load())
@@ -158,4 +170,126 @@ func TestValidatorRegistrationHandler_HandleDuties(t *testing.T) {
 			ticker.WaitShutdown()
 		})
 	})
+
+	t.Run("event-driven duty deferred until execution gate", func(t *testing.T) {
+		synctest.Test(t, func(t *testing.T) {
+			regCh := make(chan RegistrationDescriptor)
+			handler := NewValidatorRegistrationHandler(regCh)
+
+			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
+			defer cancel()
+
+			scheduler, ticker := setupSchedulerAndMocksWithParams(ctx, t, []dutyHandler{handler}, time.Unix(0, 0), time.Second)
+
+			require.NoError(t, scheduler.Start(ctx))
+
+			create1to1BlockSlotMapping(scheduler)
+
+			const slot = phase0.Slot(1)
+			validatorIndex := phase0.ValidatorIndex(1)
+			validatorPk := phase0.BLSPubKey{1, 2, 3}
+
+			scheduler.validatorProvider.(*MockValidatorProvider).EXPECT().SelfValidators().Return(nil).AnyTimes()
+
+			executeDutiesCall := make(chan []*spectypes.ValidatorDuty)
+			setExecuteDutyFunc(scheduler, executeDutiesCall, 1)
+
+			regCh <- RegistrationDescriptor{
+				ValidatorPubkey: validatorPk,
+				ValidatorIndex:  validatorIndex,
+				BlockNumber:     uint64(slot),
+			}
+
+			// Tick one slot before the execution gate — handler should keep
+			// the duty pending.
+			ticker.Send(slot + validatorRegistrationExecutionSlotsToPostpone - 1)
+			waitForNoAction(t, nil, executeDutiesCall, noActionTimeout)
+
+			// Tick at the gate — handler should drain the queue.
+			ticker.Send(slot + validatorRegistrationExecutionSlotsToPostpone)
+			waitForDutiesExecution(t, nil, executeDutiesCall, timeout, []*spectypes.ValidatorDuty{
+				{
+					Type:           spectypes.BNRoleValidatorRegistration,
+					PubKey:         validatorPk,
+					ValidatorIndex: validatorIndex,
+					Slot:           slot + validatorRegistrationDutySlotsToPostpone,
+				},
+			})
+
+			close(regCh)
+			require.NoError(t, scheduler.Wait())
+			ticker.WaitShutdown()
+		})
+	})
+
+	t.Run("multiple event-driven duties drained together", func(t *testing.T) {
+		synctest.Test(t, func(t *testing.T) {
+			regCh := make(chan RegistrationDescriptor)
+			handler := NewValidatorRegistrationHandler(regCh)
+
+			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
+			defer cancel()
+
+			scheduler, ticker := setupSchedulerAndMocksWithParams(ctx, t, []dutyHandler{handler}, time.Unix(0, 0), time.Second)
+
+			require.NoError(t, scheduler.Start(ctx))
+
+			create1to1BlockSlotMapping(scheduler)
+
+			const slot = phase0.Slot(1)
+			validatorIndex1 := phase0.ValidatorIndex(1)
+			validatorPk1 := phase0.BLSPubKey{1, 2, 3}
+			validatorIndex2 := phase0.ValidatorIndex(2)
+			validatorPk2 := phase0.BLSPubKey{4, 5, 6}
+
+			scheduler.validatorProvider.(*MockValidatorProvider).EXPECT().SelfValidators().Return(nil).AnyTimes()
+
+			executeDutiesCall := make(chan []*spectypes.ValidatorDuty)
+			setExecuteDutyFunc(scheduler, executeDutiesCall, 2)
+
+			// Two registrations from the same block — both should end up in
+			// the queue and drain together when the gate is reached.
+			regCh <- RegistrationDescriptor{
+				ValidatorPubkey: validatorPk1,
+				ValidatorIndex:  validatorIndex1,
+				BlockNumber:     uint64(slot),
+			}
+			regCh <- RegistrationDescriptor{
+				ValidatorPubkey: validatorPk2,
+				ValidatorIndex:  validatorIndex2,
+				BlockNumber:     uint64(slot),
+			}
+
+			ticker.Send(slot + validatorRegistrationExecutionSlotsToPostpone)
+			waitForDutiesExecution(t, nil, executeDutiesCall, timeout, []*spectypes.ValidatorDuty{
+				{
+					Type:           spectypes.BNRoleValidatorRegistration,
+					PubKey:         validatorPk1,
+					ValidatorIndex: validatorIndex1,
+					Slot:           slot + validatorRegistrationDutySlotsToPostpone,
+				},
+				{
+					Type:           spectypes.BNRoleValidatorRegistration,
+					PubKey:         validatorPk2,
+					ValidatorIndex: validatorIndex2,
+					Slot:           slot + validatorRegistrationDutySlotsToPostpone,
+				},
+			})
+
+			close(regCh)
+			require.NoError(t, scheduler.Wait())
+			ticker.WaitShutdown()
+		})
+	})
+}
+
+// TestValidatorRegistrationDutySlotPinned guards a wire-format invariant:
+// the value has been 4 since this constant was introduced, and every operator
+// in a cluster must compute the same signed Timestamp regardless of code
+// version. Bumping the constant is a coordinated network-wide upgrade, not a
+// code-cleanup change — this test turns any literal change into a visible
+// diff that PR review can catch.
+func TestValidatorRegistrationDutySlotPinned(t *testing.T) {
+	t.Parallel()
+	require.EqualValues(t, 4, validatorRegistrationDutySlotsToPostpone)
 }

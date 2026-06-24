@@ -102,13 +102,13 @@ func (r *AggregatorRunner) StartNewDuty(ctx context.Context, logger *zap.Logger,
 	return r.baseStartNewDuty(ctx, logger, r, validatorDuty, quorum)
 }
 
-func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
+func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) (err error) {
 	// Reuse the existing span instead of generating new one to keep tracing-data lightweight.
 	span := trace.SpanFromContext(ctx)
 
 	hasQuorum, roots, err := r.basePreConsensusMsgProcessing(ctx, logger, r, signedMsg)
-	if errors.Is(err, ErrNoDutyAssigned) || errors.Is(err, ErrRunningDutyFinished) {
-		// Since we are re-using the same runner for different duties, ErrRunningDutyFinished error
+	if errors.Is(err, ErrNoDutyAssigned) || errors.Is(err, ErrRunningDutySucceeded) {
+		// Since we are re-using the same runner for different duties, ErrRunningDutySucceeded error
 		// also needs to be retried.
 		err = NewRetryableError(err)
 	}
@@ -119,6 +119,14 @@ func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.
 	if !hasQuorum {
 		return nil
 	}
+
+	// We have quorum and are committed to completing this duty here. The quorum above fires only once,
+	// so a terminal failure below won't be retried.
+	defer func() {
+		if err != nil {
+			r.markDutyFailed(err)
+		}
+	}()
 
 	r.measurements.EndPreConsensus()
 	recordPreConsensusDuration(ctx, r.measurements.PreConsensusTime(), ssvtypes.RoleAggregator)
@@ -148,7 +156,7 @@ func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.
 	// to perform this aggregation duty or not
 	ok := r.IsAggregator(r.NetworkConfig.TargetAggregatorsPerCommittee, duty.CommitteeLength, fullSig)
 	if !ok {
-		r.finishDuty()
+		r.markDutyNotRequired()
 		r.measurements.EndDutyFlow()
 		recordTotalDutyDuration(ctx, r.measurements.TotalDutyTime(), ssvtypes.RoleAggregator, 0)
 		return nil
@@ -278,13 +286,13 @@ func (r *AggregatorRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 	return nil
 }
 
-func (r *AggregatorRunner) ProcessPostConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
+func (r *AggregatorRunner) ProcessPostConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) (err error) {
 	// Reuse the existing span instead of generating new one to keep tracing-data lightweight.
 	span := trace.SpanFromContext(ctx)
 
 	hasQuorum, roots, err := r.basePostConsensusMsgProcessing(ctx, logger, r, signedMsg)
-	if errors.Is(err, ErrNoDutyAssigned) || errors.Is(err, ErrRunningDutyFinished) {
-		// Since we are re-using the same runner for different duties, ErrRunningDutyFinished error
+	if errors.Is(err, ErrNoDutyAssigned) || errors.Is(err, ErrRunningDutySucceeded) {
+		// Since we are re-using the same runner for different duties, ErrRunningDutySucceeded error
 		// also needs to be retried.
 		err = NewRetryableError(err)
 	}
@@ -300,6 +308,14 @@ func (r *AggregatorRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 	if !hasQuorum {
 		return nil
 	}
+
+	// We have quorum and are committed to completing this duty here. The quorum above fires only once,
+	// so a terminal failure below won't be retried.
+	defer func() {
+		if err != nil {
+			r.markDutyFailed(err)
+		}
+	}()
 
 	r.measurements.EndPostConsensus()
 	recordPostConsensusDuration(ctx, r.measurements.PostConsensusTime(), ssvtypes.RoleAggregator)
@@ -352,7 +368,7 @@ func (r *AggregatorRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 	span.AddEvent(submittedSignedAggregateProofEvent)
 	logger.Debug(submittedSignedAggregateProofEvent, fields.Took(time.Since(start)))
 
-	r.finishDuty()
+	r.markDutySucceeded()
 	r.measurements.EndDutyFlow()
 	recordTotalDutyDuration(ctx, r.measurements.TotalDutyTime(), ssvtypes.RoleAggregator, r.State.RunningInstance.State.Round)
 	const dutyFinishedEvent = "✔️successfully finished duty processing"

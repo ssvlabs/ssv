@@ -479,7 +479,11 @@ func (s *Scheduler) ExecuteDuties(ctx context.Context, duties []*spectypes.Valid
 		span.AddEvent(eventMsg)
 
 		slotDelay := time.Since(s.netCfg.SlotStartTime(duty.Slot))
-		if slotDelay >= 100*time.Millisecond {
+
+		// For roles where duty.Slot is a shared coordination point rather
+		// than the execution target (see dutySlotIsExecutionSlot), slotDelay
+		// against it is meaningless.
+		if dutySlotIsExecutionSlot(role) && slotDelay >= 100*time.Millisecond {
 			const eventMsg = "⚠️ late duty execution"
 			logger.Warn(eventMsg, zap.Duration("slot_delay", slotDelay))
 			span.AddEvent(eventMsg, trace.WithAttributes(
@@ -487,7 +491,6 @@ func (s *Scheduler) ExecuteDuties(ctx context.Context, duties []*spectypes.Valid
 				observability.BeaconRoleAttribute(duty.Type),
 				observability.RunnerRoleAttribute(role)))
 		}
-
 		recordDutyScheduled(ctx, role, slotDelay)
 
 		s.backgroundTasks.Add(1)

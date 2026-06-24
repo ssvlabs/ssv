@@ -193,18 +193,28 @@ func TestTimeouts(t *testing.T) {
 		mockServerEpoch = 132502
 	)
 
-	// Too slow to dial.
+	// CLs unresponsive at startup: New must wait under ctx, not fatal eagerly with "client is not active".
+	//
+	// The mock sleeps longer than commonTimeout on every request, so each activation ping times out at
+	// commonTimeout (well before the server would respond) and the client never becomes active - forcing New
+	// to wait out ctx and return DeadlineExceeded rather than eager ErrNotActive. The ctx deadline only needs
+	// to exceed commonTimeout; it does not race the server response, since the per-request commonTimeout fires
+	// first (here ctx and the mock sleep share a value only for convenience, not because they're timed to race).
 	{
 		undialableServer := mocks.NewServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
 			time.Sleep(commonTimeout + timeoutMargin)
 			return resp, nil
 		})
-		_, err := New(t.Context(), zap.NewNop(), Options{
+		ctx, cancel := context.WithTimeout(t.Context(), commonTimeout+timeoutMargin)
+		defer cancel()
+		_, err := New(ctx, zap.NewNop(), Options{
 			BeaconNodeAddr: undialableServer.URL,
 			CommonTimeout:  commonTimeout,
 			LongTimeout:    longTimeout,
 		})
-		require.ErrorContains(t, err, "client is not active")
+		require.Error(t, err)
+		require.NotContains(t, err.Error(), "client is not active")
+		require.ErrorIs(t, err, context.DeadlineExceeded)
 	}
 
 	// Too slow to respond to the Validators request.

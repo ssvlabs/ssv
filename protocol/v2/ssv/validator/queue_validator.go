@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/jellydator/ttlcache/v3"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -61,10 +62,13 @@ func (v *Validator) EnqueueMessage(ctx context.Context, msg *queue.SSVMessage) {
 		if pushed := q.TryPush(msg); !pushed {
 			const eventMsg = "❗ dropping message because the queue is full"
 			logger.Warn(eventMsg,
+				zap.String("drop_reason", queue.DropReasonBufferFull),
 				zap.String("msg_type", message.MsgTypeToString(msg.MsgType)),
 				zap.String("msg_id", msg.MsgID.String()))
 
-			span.AddEvent(eventMsg)
+			span.AddEvent(eventMsg, trace.WithAttributes(attribute.String("ssv.queue.drop_reason", queue.DropReasonBufferFull)))
+			span.SetStatus(codes.Error, eventMsg)
+			return
 		}
 		span.SetStatus(codes.Ok, "")
 		return
@@ -109,17 +113,23 @@ func (v *Validator) StartQueueConsumer(
 		go msgStates.Start()
 		defer msgStates.Stop()
 
+		// rState defines current runner state that will be used for deciding which messages we want to process
+		// sooner (vs which ones can wait till later).
+		rState := queue.State{
+			Quorum: v.Operator.GetQuorum(), // never changes for duty runner
+		}
+
 		for ctx.Err() == nil {
-			// Construct a representation of the current state.
-			state := queue.State{}
 			r := v.DutyRunners.DutyRunnerForMsgID(msgID)
 			if r == nil {
 				return fmt.Errorf("could not get duty runner for msg ID %v", msgID)
 			}
-			state.HasRunningInstance = r.HasRunningQBFTInstance()
-			state.Height = r.GetLastHeight()
-			state.Round = r.GetLastRound()
-			state.Quorum = v.Operator.GetQuorum()
+
+			// Update rState to incorporate the effects that the previously handled message might have
+			// had on the runner state.
+			rState.HasRunningInstance = r.HasRunningQBFTInstance()
+			rState.Slot = phase0.Slot(r.GetLastHeight())
+			rState.Round = r.GetLastRound()
 
 			filter := queue.FilterAny
 			if !r.HasRunningDuty() {
@@ -131,7 +141,7 @@ func (v *Validator) StartQueueConsumer(
 					}
 					return e.Type == types.ExecuteDuty
 				}
-			} else if state.HasRunningInstance && !r.HasAcceptedProposalForCurrentRound() {
+			} else if rState.HasRunningInstance && !r.HasAcceptedProposalForCurrentRound() {
 				// If no proposal was accepted for the current round, skip prepare & commit messages
 				// for the current height and round.
 				filter = func(m *queue.SSVMessage) bool {
@@ -140,7 +150,7 @@ func (v *Validator) StartQueueConsumer(
 						return true
 					}
 
-					if qbftMsg.Height != state.Height || qbftMsg.Round != state.Round {
+					if qbftMsg.Height != specqbft.Height(rState.Slot) || qbftMsg.Round != rState.Round {
 						return true
 					}
 					return qbftMsg.MsgType != specqbft.PrepareMsgType && qbftMsg.MsgType != specqbft.CommitMsgType
@@ -148,7 +158,7 @@ func (v *Validator) StartQueueConsumer(
 			}
 
 			// Pop the highest priority message for the current state.
-			msg := q.Pop(ctx, queue.NewMessagePrioritizer(&state), filter)
+			msg := q.Pop(ctx, queue.NewMessagePrioritizer(&rState), filter)
 			if ctx.Err() != nil {
 				// Optimization: terminate fast if we can.
 				return nil
@@ -260,7 +270,7 @@ func (v *Validator) StartQueueConsumer(
 					var droppingMsgDueToErrorEvent = couldNotHandleMsgLogPrefix + "dropping message"
 					msgLogger.Debug(droppingMsgDueToErrorEvent, zap.Error(err))
 					msgState.span.AddEvent(droppingMsgDueToErrorEvent, trace.WithAttributes(
-						attribute.String("drop_reason", err.Error()),
+						attribute.String("ssv.queue.drop_reason", err.Error()),
 						attribute.Int64("attempt", currentAttempt),
 					))
 					msgState.span.SetStatus(codes.Error, droppingMsgDueToErrorEvent)
@@ -325,7 +335,7 @@ func (v *Validator) logWithMessageFields(logger *zap.Logger, msg *queue.SSVMessa
 			if err != nil {
 				return nil, fmt.Errorf("event message: get timeout data: %w", err)
 			}
-			logger = logger.With(fields.QBFTRound(timeoutData.Round), fields.QBFTHeight(timeoutData.Height))
+			logger = logger.With(fields.QBFTRound(timeoutData.Round))
 		}
 	}
 

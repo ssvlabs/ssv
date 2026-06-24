@@ -74,7 +74,7 @@ func (r *VoluntaryExitRunner) StartNewDuty(ctx context.Context, logger *zap.Logg
 
 // ProcessPreConsensus Check for quorum of partial signatures over VoluntaryExit and,
 // if has quorum, constructs SignedVoluntaryExit and submits to BeaconNode
-func (r *VoluntaryExitRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
+func (r *VoluntaryExitRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) (err error) {
 	// Reuse the existing span instead of generating new one to keep tracing-data lightweight.
 	span := trace.SpanFromContext(ctx)
 
@@ -85,8 +85,8 @@ func (r *VoluntaryExitRunner) ProcessPreConsensus(ctx context.Context, logger *z
 	}
 
 	hasQuorum, roots, err := r.basePreConsensusMsgProcessing(ctx, logger, r, signedMsg)
-	if errors.Is(err, ErrNoDutyAssigned) || errors.Is(err, ErrRunningDutyFinished) {
-		// Since we are re-using the same runner for different duties, ErrRunningDutyFinished error
+	if errors.Is(err, ErrNoDutyAssigned) || errors.Is(err, ErrRunningDutySucceeded) {
+		// Since we are re-using the same runner for different duties, ErrRunningDutySucceeded error
 		// also needs to be retried.
 		err = NewRetryableError(err)
 	}
@@ -98,6 +98,14 @@ func (r *VoluntaryExitRunner) ProcessPreConsensus(ctx context.Context, logger *z
 	if !hasQuorum {
 		return nil
 	}
+
+	// We have quorum and are committed to completing this duty here. The quorum above fires only once,
+	// so a terminal failure below won't be retried.
+	defer func() {
+		if err != nil {
+			r.markDutyFailed(err)
+		}
+	}()
 
 	// only 1 root, verified in basePreConsensusMsgProcessing
 	root := roots[0]
@@ -130,7 +138,7 @@ func (r *VoluntaryExitRunner) ProcessPreConsensus(ctx context.Context, logger *z
 		zap.String("signature", hex.EncodeToString(specSig[:])),
 	)
 
-	r.finishDuty()
+	r.markDutySucceeded()
 	const dutyFinishedEvent = "✔️successfully finished duty processing"
 	logger.Info(dutyFinishedEvent)
 	span.AddEvent(dutyFinishedEvent)

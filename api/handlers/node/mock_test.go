@@ -140,7 +140,10 @@ type MockPeersIndex struct {
 }
 
 func (m *MockPeersIndex) Self() *records.NodeInfo {
-	return m.self
+	// Mirror the real peersIndex.Self which returns a clone — keeps the mock
+	// faithful to production semantics so test callers can't accidentally
+	// mutate the stored NodeInfo through the returned pointer.
+	return m.self.Clone()
 }
 
 func (m *MockPeersIndex) NodeInfo(id peer.ID) *records.NodeInfo {

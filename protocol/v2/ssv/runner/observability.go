@@ -118,6 +118,12 @@ var (
 			observability.InstrumentName(observabilityNamespace, "submissions.failed"),
 			metric.WithUnit("{submission}"),
 			metric.WithDescription("total number of failed duty submissions")))
+
+	dutyOutcomeCounter = metrics.New(
+		meter.Int64Counter(
+			observability.InstrumentName(observabilityNamespace, "duty.outcome"),
+			metric.WithUnit("{duty}"),
+			metric.WithDescription("total number of concluded duties, by outcome")))
 )
 
 func recordSuccessfulSubmission(ctx context.Context, count int64, epoch phase0.Epoch, role spectypes.BeaconRole) {
@@ -126,6 +132,14 @@ func recordSuccessfulSubmission(ctx context.Context, count int64, epoch phase0.E
 
 func recordFailedSubmission(ctx context.Context, role spectypes.BeaconRole) {
 	failedSubmissionCounter.Add(ctx, 1, metric.WithAttributes(observability.BeaconRoleAttribute(role)))
+}
+
+func recordDutyOutcome(ctx context.Context, role spectypes.RunnerRole, outcome dutyOutcome) {
+	dutyOutcomeCounter.Add(ctx, 1,
+		metric.WithAttributes(
+			observability.RunnerRoleAttribute(role),
+			observability.DutyOutcomeAttribute(string(outcome)),
+		))
 }
 
 func recordPreConsensusDuration(ctx context.Context, duration time.Duration, role spectypes.RunnerRole) {

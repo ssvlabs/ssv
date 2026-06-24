@@ -146,6 +146,25 @@ func (h *handshaker) Handler() libp2pnetwork.StreamHandler {
 }
 
 func (h *handshaker) verifyTheirNodeInfo(logger *zap.Logger, sender peer.ID, ni *records.NodeInfo) error {
+	// Resolve the peer's libp2p identify-protocol AgentVersion up front so we
+	// can attach it to both the success and rejection logs below — it's the
+	// single most useful diagnostic for identifying misbehaving clients.
+	agentVersion := peerAgentVersion(h.net, sender)
+
+	if ni.Metadata == nil {
+		// Peers must advertise NodeMetadata in their NodeInfo envelope; without
+		// it the rest of the codebase has no node-version/subnets/etc. to work
+		// with, and downstream readers (e.g. the /v1/node/peers API) can panic
+		// on the missing pointer. Rejecting here keeps such records out of the
+		// peers index entirely.
+		logger.Warn("rejecting handshake: nodeinfo is missing metadata",
+			fields.PeerID(sender),
+			zap.String("networkID", ni.GetNodeInfo().NetworkID),
+			zap.String("agent_version", agentVersion),
+		)
+		return errors.New("nodeinfo is missing metadata")
+	}
+
 	h.updateNodeSubnets(logger, sender, ni.GetNodeInfo())
 
 	if err := h.applyFilters(sender, ni); err != nil {
@@ -158,9 +177,34 @@ func (h *handshaker) verifyTheirNodeInfo(logger *zap.Logger, sender peer.ID, ni 
 		fields.PeerID(sender),
 		zap.Any("metadata", ni.GetNodeInfo().Metadata),
 		zap.String("networkID", ni.GetNodeInfo().NetworkID),
+		zap.String("agent_version", agentVersion),
 	)
 
 	return nil
+}
+
+// peerAgentVersion returns the AgentVersion advertised by the peer through
+// libp2p's identify protocol, or empty string if unavailable. It's looked up
+// from the libp2p peerstore under the well-known "AgentVersion" key (set by
+// the identify protocol on the inbound side automatically).
+//
+// The lookup is best-effort: identify may not have completed yet when we land
+// here, in which case the peerstore returns an error and we yield "" — that's
+// fine for log diagnostics.
+func peerAgentVersion(net libp2pnetwork.Network, pid peer.ID) string {
+	if net == nil {
+		return ""
+	}
+	ps := net.Peerstore()
+	if ps == nil {
+		return ""
+	}
+	val, err := ps.Get(pid, "AgentVersion")
+	if err != nil {
+		return ""
+	}
+	av, _ := val.(string)
+	return av
 }
 
 // Handshake initiates handshake with the given conn
@@ -199,6 +243,10 @@ func (h *handshaker) updatePeerInfo(pid peer.ID, handshakeErr error) {
 
 // updateNodeSubnets tries to update the subnets of the given peer
 func (h *handshaker) updateNodeSubnets(logger *zap.Logger, pid peer.ID, ni *records.NodeInfo) {
+	// invariant: verifyTheirNodeInfo rejects nil-Metadata before calling this,
+	// so ni.Metadata is non-nil on the live handshake path. Kept as
+	// belt-and-suspenders in case the invariant is weakened or this helper is
+	// reused from another call site.
 	if ni.Metadata != nil {
 		subnets, err := commons.SubnetsFromString(ni.Metadata.Subnets)
 		if err == nil {

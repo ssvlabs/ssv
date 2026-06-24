@@ -35,8 +35,31 @@ var (
 			metric.WithDescription("total number of duties scheduled for execution")))
 )
 
+// recordDutyScheduled bumps the per-role scheduled-duty counter and, when
+// meaningful, records a slot-delay histogram point. For roles where
+// duty.Slot is not the intended execution slot (see dutySlotIsExecutionSlot),
+// the caller's slotDelay does not reflect operator lateness, so the histogram
+// point is skipped; the counter still ticks.
 func recordDutyScheduled(ctx context.Context, role types.RunnerRole, slotDelay time.Duration) {
 	runnerRoleAttr := metric.WithAttributes(observability.RunnerRoleAttribute(role))
 	dutiesScheduledCounter.Add(ctx, 1, runnerRoleAttr)
-	slotDelayHistogram.Record(ctx, slotDelay.Seconds(), runnerRoleAttr)
+	if dutySlotIsExecutionSlot(role) {
+		slotDelayHistogram.Record(ctx, slotDelay.Seconds(), runnerRoleAttr)
+	}
+}
+
+// dutySlotIsExecutionSlot reports whether duty.Slot for the given role
+// represents the wall-clock slot at which this operator intends to execute
+// its duty. True for most roles (attester, proposer, etc.); false for roles
+// where duty.Slot is a shared coordination point intentionally held in the
+// past (the operator executes later than duty.Slot) — see
+// voluntaryExitDutySlotsToPostpone and validatorRegistrationDutySlotsToPostpone
+// for the canonical rationale.
+//
+// For validator-registration this returns false for both the event-driven
+// path (where the deferred-broadcast trade-off applies) and the periodic
+// path (where slotDelay would be ~0 anyway) — keeping the role-level check
+// simple is preferable to distinguishing the two paths in the duty.
+func dutySlotIsExecutionSlot(role types.RunnerRole) bool {
+	return role != types.RoleVoluntaryExit && role != types.RoleValidatorRegistration
 }

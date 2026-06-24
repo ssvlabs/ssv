@@ -205,6 +205,10 @@ func New(ctx context.Context, logger *zap.Logger, opt Options) (*GoClient, error
 		activatedClients:                   hashmap.New[string, struct{}](),
 	}
 
+	// First error stops the loop on purpose. addSingleClient sets WithAllowDelayedStart(true), so a valid
+	// but currently-unreachable CL does not error here - it's tolerated and connected to later. Only a genuine
+	// construction error (e.g. a malformed address) surfaces, and that must reach the operator rather than be
+	// silently skipped.
 	for _, beaconAddr := range beaconAddrList {
 		if err := client.addSingleClient(ctx, beaconAddr); err != nil {
 			return nil, err
@@ -300,6 +304,8 @@ func (gc *GoClient) initMultiClient(ctx context.Context) error {
 		eth2clientmulti.WithClients(services),
 		eth2clientmulti.WithLogLevel(zerolog.DebugLevel),
 		eth2clientmulti.WithTimeout(gc.commonTimeout),
+		// Mirrors WithAllowDelayedStart on individual CL clients - avoids ErrNotActive on transient CL outages at startup.
+		eth2clientmulti.WithAllowDelayedStart(true),
 	)
 	if err != nil {
 		return fmt.Errorf("create multi client: %w", err)

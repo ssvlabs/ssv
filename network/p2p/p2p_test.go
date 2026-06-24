@@ -319,6 +319,8 @@ func (r *dummyRouter) Route(_ context.Context, _ network.DecodedSSVMessage) {
 }
 
 func createNetworkAndSubscribe(t *testing.T, ctx context.Context, options LocalNetOptions) (*LocalNet, []*dummyRouter, error) {
+	t.Helper()
+
 	logger, err := zap.NewDevelopment()
 	require.NoError(t, err)
 	ln, err := CreateAndStartLocalNet(ctx, logger.Named("createNetworkAndSubscribe"), options)
@@ -355,21 +357,15 @@ func createNetworkAndSubscribe(t *testing.T, ctx context.Context, options LocalN
 	}
 	wg.Wait()
 
-	// let the nodes subscribe
-	for {
-		noPeers := false
+	// Let the nodes subscribe, but fail instead of hanging if the network never converges.
+	require.Eventually(t, func() bool {
 		for _, node := range ln.Nodes {
-			peers := node.PeersByTopic()
-			if len(peers) < 2 {
-				noPeers = true
+			if len(node.PeersByTopic()) < 2 {
+				return false
 			}
 		}
-		if noPeers {
-			time.Sleep(time.Second * 1)
-			continue
-		}
-		break
-	}
+		return true
+	}, 10*time.Second, 100*time.Millisecond, "timed out waiting for topic peers to connect")
 
 	return ln, routers, nil
 }

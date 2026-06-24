@@ -9,17 +9,20 @@ import (
 	"testing"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectests "github.com/ssvlabs/ssv-spec/qbft/spectest/tests"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 )
 
@@ -33,13 +36,16 @@ func RunMsgProcessing(t *testing.T, test *spectests.MsgProcessingSpecTest) {
 	ks := spectestingutils.KeySetForCommitteeMember(test.Pre.State.CommitteeMember)
 	signer := spectestingutils.NewOperatorSigner(ks, 1)
 	pre := instance.NewInstance(
+		t.Context(),
 		logger,
 		protocoltesting.TestingConfig(logger, ks),
 		test.Pre.State.CommitteeMember,
 		test.Pre.State.ID,
 		test.Pre.State.Height,
 		signer,
-		roundtimer.NewTestingTimer(),
+		func(ctx context.Context, logger *zap.Logger, slot phase0.Slot) ssv.QBFTRoundTimer {
+			return roundtimer.NewTestingTimer()
+		},
 	)
 	pre.ValueChecker = protocoltesting.TestingValueChecker{}
 	require.NoError(t, pre.Decode(preByts))

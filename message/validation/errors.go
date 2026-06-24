@@ -20,7 +20,6 @@ type Error struct {
 	want     any
 	innerErr error
 	reject   bool
-	silent   bool
 }
 
 func (e Error) Error() string {
@@ -47,10 +46,6 @@ const (
 
 func (e Error) Reject() bool {
 	return e.reject
-}
-
-func (e Error) Silent() bool {
-	return e.silent
 }
 
 func (e Error) Text() string {
@@ -174,22 +169,18 @@ func (mv *messageValidator) handleValidationError(
 	}
 
 	if !valErr.Reject() {
-		if !valErr.Silent() {
-			logger.Debug("ignoring invalid message", zap.Error(valErr))
-		}
+		logger.Debug("ignoring invalid message", zap.Error(valErr))
 		recordIgnoredMessage(ctx, loggerFields.Role, valErr.Text())
 		return pubsub.ValidationIgnore
 	}
 
-	if !valErr.Silent() {
-		logger.Debug("rejecting invalid message", zap.Error(valErr))
-	}
-
+	logger.Debug("rejecting invalid message", zap.Error(valErr))
 	recordRejectedMessage(ctx, loggerFields.Role, valErr.Text())
 	return pubsub.ValidationReject
 }
 
 func (mv *messageValidator) handleValidationSuccess(ctx context.Context, decodedMessage *queue.SSVMessage) pubsub.ValidationResult {
 	recordAcceptedMessage(ctx, messageRole(decodedMessage))
+
 	return pubsub.ValidationAccept
 }

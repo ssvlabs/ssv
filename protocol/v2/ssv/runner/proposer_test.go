@@ -249,7 +249,7 @@ func TestProposerRunnerStartNewDutySkipsRandaoSigningWhenDoppelgangerBlocks(t *t
 	require.Equal(t, 0, beacon.getCalls)
 	require.Nil(t, runner.cachedFullBlock)
 	require.Nil(t, runner.State.RunningInstance)
-	require.False(t, runner.State.Finished)
+	require.False(t, runner.State.Succeeded)
 	require.Empty(t, dg.reportQuorum)
 }
 
@@ -284,7 +284,7 @@ func TestProposerRunnerProcessConsensusSkipsPostConsensusSigningWhenDoppelganger
 	require.NotNil(t, runner.State.DecidedValue)
 	require.Equal(t, 0, countPartialSignatureBroadcastsByType(t, network, spectypes.PostConsensusPartialSig))
 	require.Equal(t, 1, countPartialSignatureBroadcastsByType(t, network, spectypes.RandaoPartialSig))
-	require.False(t, runner.State.Finished)
+	require.False(t, runner.State.Succeeded)
 }
 
 func TestProposerRunnerProcessPostConsensusLeaderUsesCachedFullBlockWhenDecisionMatches(t *testing.T) {
@@ -308,7 +308,7 @@ func TestProposerRunnerProcessPostConsensusLeaderUsesCachedFullBlockWhenDecision
 	require.False(t, beacon.submittedBlocks[0].Blinded)
 	require.NotEqual(t, phase0.BLSSignature{}, beacon.submittedSig[0])
 	require.Equal(t, []phase0.ValidatorIndex{runner.GetShare().ValidatorIndex}, dg.reportQuorum)
-	require.True(t, runner.State.Finished)
+	require.True(t, runner.State.Succeeded)
 }
 
 func TestProposerRunnerProcessPostConsensusLeaderFallsBackToDecidedBlindedBlockOnCacheMismatch(t *testing.T) {
@@ -329,7 +329,7 @@ func TestProposerRunnerProcessPostConsensusLeaderFallsBackToDecidedBlindedBlockO
 	require.Len(t, beacon.submittedBlocks, 1)
 	require.True(t, beacon.submittedBlocks[0].Blinded)
 	require.Equal(t, []phase0.ValidatorIndex{runner.GetShare().ValidatorIndex}, dg.reportQuorum)
-	require.True(t, runner.State.Finished)
+	require.True(t, runner.State.Succeeded)
 }
 
 func TestProposerRunnerProcessPostConsensusNonLeaderKeepsDecidedBlindedBlock(t *testing.T) {
@@ -351,7 +351,7 @@ func TestProposerRunnerProcessPostConsensusNonLeaderKeepsDecidedBlindedBlock(t *
 	require.Len(t, beacon.submittedBlocks, 1)
 	require.True(t, beacon.submittedBlocks[0].Blinded)
 	require.Equal(t, []phase0.ValidatorIndex{runner.GetShare().ValidatorIndex}, dg.reportQuorum)
-	require.True(t, runner.State.Finished)
+	require.True(t, runner.State.Succeeded)
 }
 
 func newProposerRunnerForTest(
@@ -419,8 +419,8 @@ func newProposerRunnerForTest(
 	require.NoError(t, err)
 
 	proposerRunner := runnerIface.(*ProposerRunner)
-	proposerRunner.SetTimeoutFunc(func(_ context.Context, _ *zap.Logger, _ spectypes.MessageID, _ specqbft.Height) roundtimer.OnRoundTimeoutF {
-		return func(specqbft.Round) {}
+	proposerRunner.SetQBFTRoundTimerF(func(_ context.Context, _ *zap.Logger, _ phase0.Slot) ssv.QBFTRoundTimer {
+		return roundtimer.NewTestingTimer()
 	})
 	return proposerRunner, keySet, network
 }
@@ -452,13 +452,16 @@ func setupRunnerForPostConsensus(
 	}
 	qbftConfig.Network = runner.network
 	runner.State.RunningInstance = instance.NewInstance(
+		t.Context(),
 		zap.NewNop(),
 		qbftConfig,
 		spectestingutils.TestingCommitteeMember(keySet),
 		msgID[:],
 		specqbft.Height(duty.Slot),
 		runner.operatorSigner,
-		nil,
+		func(ctx context.Context, logger *zap.Logger, slot phase0.Slot) ssv.QBFTRoundTimer {
+			return roundtimer.NewTestingTimer()
+		},
 	)
 	runner.State.RunningInstance.State.Decided = true
 	runner.State.RunningInstance.State.DecidedValue = encodedDecidedValue

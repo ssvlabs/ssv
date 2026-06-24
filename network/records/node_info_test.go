@@ -33,6 +33,32 @@ func TestNodeInfo_Seal_Consume(t *testing.T) {
 	require.True(t, reflect.DeepEqual(ni, parsedRec))
 }
 
+// TestNodeInfo_Clone_NilSafety covers the three nil shapes Clone can encounter:
+// a nil NodeInfo receiver, a NodeInfo with nil Metadata, and a nil NodeMetadata
+// receiver. These matter because peersIndex.Self/UpdateSelfRecord clone on
+// every call, and a missing Metadata block (e.g. a peer that handshakes with a
+// 2-entry NodeInfo envelope) would otherwise nil-deref inside Clone before any
+// caller-side guard runs.
+func TestNodeInfo_Clone_NilSafety(t *testing.T) {
+	t.Run("nil NodeInfo receiver", func(t *testing.T) {
+		var ni *NodeInfo
+		require.Nil(t, ni.Clone())
+	})
+
+	t.Run("nil Metadata field", func(t *testing.T) {
+		ni := &NodeInfo{NetworkID: "testnet"}
+		cloned := ni.Clone()
+		require.NotNil(t, cloned)
+		require.Equal(t, "testnet", cloned.NetworkID)
+		require.Nil(t, cloned.Metadata)
+	})
+
+	t.Run("nil NodeMetadata receiver", func(t *testing.T) {
+		var nm *NodeMetadata
+		require.Nil(t, nm.Clone())
+	})
+}
+
 func TestNodeInfo_Marshal_Unmarshal(t *testing.T) {
 	oldSerializedData := []byte(`{"Entries":["", "testnet", "{\"NodeVersion\":\"v0.1.12\",\"ExecutionNode\":\"geth/x\",\"ConsensusNode\":\"prysm/x\",\"Subnets\":\"ffffffffffffffffffffffffffffffff\"}"]}`)
 
