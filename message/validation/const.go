@@ -24,6 +24,11 @@ const (
 	encodingOverheadDivisor = 20 // Divisor for message size to get encoding overhead, e.g. 10 for 10%, 20 for 5%. Done this way to keep const int.
 )
 
+// proposerPreferencesEarlyEpochs is the proposer-lookahead span in epochs (the current epoch plus
+// MIN_SEED_LOOKAHEAD=1): preferences are broadcast up to this far ahead of their proposal slot. It
+// bounds both how early such a message may arrive and how many slots of per-signer state to retain.
+const proposerPreferencesEarlyEpochs = 2
+
 const (
 	signatureSize    = 256
 	signatureOffset  = 0
