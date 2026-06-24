@@ -80,7 +80,7 @@ func (c *SeenMsgTypes) RecordConsensusMessage(signedSSVMessage *spectypes.Signed
 // RecordPartialSignatureMessage updates the counts based on the provided partial signature message type.
 func (c *SeenMsgTypes) RecordPartialSignatureMessage(messages *spectypes.PartialSignatureMessages) error {
 	switch messages.Type {
-	case spectypes.RandaoPartialSig, ssvtypes.SelectionProofPartialSig, ssvtypes.ContributionProofs, spectypes.ValidatorRegistrationPartialSig, spectypes.VoluntaryExitPartialSig, spectypes.AggregatorCommitteePartialSig:
+	case spectypes.RandaoPartialSig, ssvtypes.SelectionProofPartialSig, ssvtypes.ContributionProofs, spectypes.ValidatorRegistrationPartialSig, spectypes.VoluntaryExitPartialSig, spectypes.AggregatorCommitteePartialSig, spectypes.PTCAttesterPartialSig:
 		c.recordPreConsensus()
 	case spectypes.PostConsensusPartialSig:
 		c.recordPostConsensus()
