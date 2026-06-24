@@ -150,9 +150,13 @@ type PTCCalls interface {
 }
 
 // ProposerPreferencesCalls is the beacon-node surface for Gloas (ePBS) proposer preferences.
-// Publication has no beacon-API endpoint upstream yet (SIP #94 §5), so SubmitProposerPreferences is
-// currently a stub (see beacon/goclient/proposer_preferences.go).
+// Publication has no beacon-API endpoint upstream yet (SIP #94 §5), so SubmitProposerPreferences
+// returns the gloas.ErrProposerPreferencesPublishUnavailable sentinel for now (see
+// beacon/goclient/proposer_preferences.go).
 type ProposerPreferencesCalls interface {
+	// ProposerDutiesDependentRoot returns the proposer-duties dependent root for the epoch — the
+	// seed the proposer-lookahead is pinned to. go-eth2-client drops it, so it's fetched via raw HTTP.
+	ProposerDutiesDependentRoot(ctx context.Context, epoch phase0.Epoch) (phase0.Root, error)
 	// SubmitProposerPreferences broadcasts signed proposer preferences for upcoming proposal slots.
 	SubmitProposerPreferences(ctx context.Context, preferences []*gloas.SignedProposerPreferences) error
 }

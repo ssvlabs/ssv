@@ -934,6 +934,21 @@ func (mr *MockBeaconNodeMockRecorder) ProposerDuties(ctx, epoch, validatorIndice
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProposerDuties", reflect.TypeOf((*MockBeaconNode)(nil).ProposerDuties), ctx, epoch, validatorIndices)
 }
 
+// ProposerDutiesDependentRoot mocks base method.
+func (m *MockBeaconNode) ProposerDutiesDependentRoot(ctx context.Context, epoch phase0.Epoch) (phase0.Root, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ProposerDutiesDependentRoot", ctx, epoch)
+	ret0, _ := ret[0].(phase0.Root)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ProposerDutiesDependentRoot indicates an expected call of ProposerDutiesDependentRoot.
+func (mr *MockBeaconNodeMockRecorder) ProposerDutiesDependentRoot(ctx, epoch any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProposerDutiesDependentRoot", reflect.TypeOf((*MockBeaconNode)(nil).ProposerDutiesDependentRoot), ctx, epoch)
+}
+
 // SetProposalPreparationsProvider mocks base method.
 func (m *MockBeaconNode) SetProposalPreparationsProvider(provider func() ([]*v1.ProposalPreparation, error)) {
 	m.ctrl.T.Helper()
@@ -1263,6 +1278,21 @@ func NewMockProposerPreferencesCalls(ctrl *gomock.Controller) *MockProposerPrefe
 // EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockProposerPreferencesCalls) EXPECT() *MockProposerPreferencesCallsMockRecorder {
 	return m.recorder
+}
+
+// ProposerDutiesDependentRoot mocks base method.
+func (m *MockProposerPreferencesCalls) ProposerDutiesDependentRoot(ctx context.Context, epoch phase0.Epoch) (phase0.Root, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ProposerDutiesDependentRoot", ctx, epoch)
+	ret0, _ := ret[0].(phase0.Root)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ProposerDutiesDependentRoot indicates an expected call of ProposerDutiesDependentRoot.
+func (mr *MockProposerPreferencesCallsMockRecorder) ProposerDutiesDependentRoot(ctx, epoch any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProposerDutiesDependentRoot", reflect.TypeOf((*MockProposerPreferencesCalls)(nil).ProposerDutiesDependentRoot), ctx, epoch)
 }
 
 // SubmitProposerPreferences mocks base method.
