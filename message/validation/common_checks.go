@@ -107,6 +107,7 @@ func (mv *messageValidator) validateDutyCount(
 	// Rule: valid number of duties per epoch:
 	// - 2 for aggregation, voluntary exit and validator registration
 	// - 2*V for Committee and AggregatorCommittee duty (where V is the number of validators in the cluster) (if no validator is doing sync committee in this epoch)
+	// - SlotsPerEpoch for proposer preferences
 	// - else, accept
 	if dutyCount > dutyLimit {
 		e := ErrTooManyDutiesPerEpoch
@@ -149,6 +150,10 @@ func (mv *messageValidator) dutyLimit(msgID spectypes.MessageID, slot phase0.Slo
 
 		return min(slotsPerEpoch, 2*validatorIndexCount), true
 
+	case spectypes.RoleProposerPreferences:
+		// A validator proposes at most once per slot, so at most SlotsPerEpoch preferences per epoch.
+		return mv.netCfg.SlotsPerEpoch, true
+
 	default:
 		return 0, false
 	}
@@ -177,6 +182,16 @@ func (mv *messageValidator) validateBeaconDuty(
 		// Non-committee roles always have one validator index.
 		validatorIndex := indices[0]
 		if mv.dutyStore.Proposer.ValidatorDuty(epoch, slot, validatorIndex) == nil {
+			return ErrNoDuty
+		}
+	}
+
+	// Rule: For a proposer-preferences message, require a real proposer assignment for the validator at
+	// the slot — but only once the slot's epoch is fetched. Preferences ride a future proposal slot
+	// whose epoch may still be in flight; tolerate that (the earliness/lateness window bounds the slot).
+	if role == spectypes.RoleProposerPreferences {
+		validatorIndex := indices[0]
+		if mv.dutyStore.Proposer.IsEpochSet(epoch) && mv.dutyStore.Proposer.ValidatorDuty(epoch, slot, validatorIndex) == nil {
 			return ErrNoDuty
 		}
 	}

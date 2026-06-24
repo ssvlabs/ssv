@@ -4,11 +4,13 @@ import (
 	"testing"
 	"time"
 
+	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 )
 
 func TestPartialSignatureTypeMatchesRole_ProposerPreferences(t *testing.T) {
@@ -122,4 +124,37 @@ func TestValidRoleAtSlot_ValidatorRegistrationDeprecatedAtGloas(t *testing.T) {
 
 	require.True(t, mv.validRoleAtSlot(spectypes.RoleValidatorRegistration, preGloasSlot))
 	require.False(t, mv.validRoleAtSlot(spectypes.RoleValidatorRegistration, gloasSlot))
+}
+
+func TestDutyLimit_ProposerPreferences(t *testing.T) {
+	mv := &messageValidator{netCfg: networkconfig.TestNetwork}
+	msgID := spectypes.NewMsgID(spectypes.DomainType{}, make([]byte, 48), spectypes.RoleProposerPreferences)
+
+	limit, ok := mv.dutyLimit(msgID, 0, nil)
+	require.True(t, ok)
+	require.Equal(t, mv.netCfg.SlotsPerEpoch, limit)
+}
+
+// A proposer-preferences message must reference a real proposal slot for the validator once the
+// slot's epoch is fetched; an unfetched epoch is tolerated (the duty fetch may be in flight).
+func TestValidateBeaconDuty_ProposerPreferencesRequiresAssignment(t *testing.T) {
+	netCfg := networkconfig.TestNetwork
+	const epoch = phase0.Epoch(5)
+	idx := phase0.ValidatorIndex(7)
+	slot := phase0.Slot(uint64(epoch)*netCfg.SlotsPerEpoch + 3)
+
+	ds := dutystore.New()
+	ds.Proposer.Set(epoch, []dutystore.StoreDuty[eth2apiv1.ProposerDuty]{
+		{Slot: slot, ValidatorIndex: idx, Duty: &eth2apiv1.ProposerDuty{Slot: slot, ValidatorIndex: idx}, InCommittee: true},
+	})
+	mv := &messageValidator{netCfg: netCfg, dutyStore: ds}
+
+	indices := []phase0.ValidatorIndex{idx}
+	// Assigned proposal slot → accepted.
+	require.NoError(t, mv.validateBeaconDuty(spectypes.RoleProposerPreferences, slot, indices, false))
+	// Same (fetched) epoch, unassigned slot → rejected.
+	require.ErrorIs(t, mv.validateBeaconDuty(spectypes.RoleProposerPreferences, slot+1, indices, false), ErrNoDuty)
+	// Unfetched epoch → tolerated.
+	unfetched := phase0.Slot(uint64(epoch+10) * netCfg.SlotsPerEpoch)
+	require.NoError(t, mv.validateBeaconDuty(spectypes.RoleProposerPreferences, unfetched, indices, false))
 }
