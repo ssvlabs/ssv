@@ -408,6 +408,13 @@ func (km *RemoteKeyManager) prepareSignRequest(
 		// are remote-signing — but those operators must sign PTC-assigned validators locally.
 		// TODO(gloas): route PTC signing through Web3Signer once it adds a payload-attestation type.
 		return web3signer.SignRequest{}, phase0.Root{}, errors.New("payload attestation signing is not supported by the remote signer: Web3Signer has no payload-attestation type, use local signing for PTC-assigned validators")
+	case spectypes.DomainProposerPreferences:
+		// Gloas (ePBS) proposer preferences have no Web3Signer request type, so a remote-signing
+		// operator can't sign them — note this replaces the Web3Signer-supported ValidatorRegistration
+		// at the Gloas fork. Bounded (cluster reconstructs while ≤ f operators are remote-signing), but
+		// those operators must sign locally.
+		// TODO(gloas): route proposer-preferences signing through Web3Signer once it adds the type.
+		return web3signer.SignRequest{}, phase0.Root{}, errors.New("proposer preferences signing is not supported by the remote signer: Web3Signer has no proposer-preferences type, use local signing")
 	default:
 		return web3signer.SignRequest{}, phase0.Root{}, errors.New("domain unknown")
 	}
