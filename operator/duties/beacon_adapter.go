@@ -15,6 +15,7 @@ import (
 	goclient "github.com/ssvlabs/ssv/beacon/goclient"
 	"github.com/ssvlabs/ssv/networkconfig"
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 )
 
 type validatorPubkeyProvider interface {
@@ -318,6 +319,11 @@ func (p *prefetchingBeacon) SubmitSyncCommitteeSubscriptions(ctx context.Context
 
 func (p *prefetchingBeacon) SubscribeToHeadEvents(ctx context.Context, subscriberIdentifier string, ch chan<- *eth2apiv1.HeadEvent) error {
 	return p.inner.SubscribeToHeadEvents(ctx, subscriberIdentifier, ch)
+}
+
+func (p *prefetchingBeacon) PayloadAttestationDuties(ctx context.Context, epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*gloas.PTCDuty, error) {
+	// Pass-through
+	return p.inner.PayloadAttestationDuties(ctx, epoch, indices)
 }
 
 // Ensure conformance to the scheduler BeaconNode subset (defined in scheduler.go).
