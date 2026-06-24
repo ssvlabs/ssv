@@ -122,6 +122,7 @@ func (mv *messageValidator) validatePartialSignatureMessageSemantics(
 	// - ValidatorRegistrationPartialSig for Validator Registration
 	// - VoluntaryExitPartialSig for Voluntary Exit
 	// - PTCAttesterPartialSig for PTC attestation
+	// - ProposerPreferencesPartialSig for Proposer Preferences
 	if !mv.partialSignatureTypeMatchesRole(partialSignatureMessages.Type, role) {
 		return ErrPartialSignatureTypeRoleMismatch
 	}
@@ -172,8 +173,9 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 	signer := signedSSVMessage.OperatorIDs[0]
 	operatorState := state.OperatorState(committeeInfo.signerIndex(signer))
 
-	// Rule: Height must not be "old". I.e., signer must not have already advanced to a later slot.
-	if !mv.committeeRole(role) { // Rule only for validator runners
+	// Rule: Height must not be "old" — a monotonic-slot signer must not regress to an earlier slot
+	// once it has advanced (see monotonicSlotRole for the exemptions).
+	if mv.monotonicSlotRole(role) {
 		maxSlot := operatorState.MaxSlot()
 		if maxSlot != 0 && maxSlot > partialSignatureMessages.Slot {
 			e := ErrSlotAlreadyAdvanced
@@ -198,6 +200,7 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 		// - 1 ValidatorRegistrationPartialSig for Validator Registration
 		// - 1 VoluntaryExitPartialSig for Voluntary Exit
 		// - 1 PTCAttesterPartialSig for PTC attestation
+		// - 1 ProposerPreferencesPartialSig for Proposer Preferences
 		if err := validatePartialSignatureMessageLimit(partialSignatureMessages, receivedFrom, signerState); err != nil {
 			return err
 		}
@@ -281,7 +284,8 @@ func validatePartialSignatureMessageLimit(
 	switch m.Type {
 	case spectypes.RandaoPartialSig, ssvtypes.SelectionProofPartialSig, ssvtypes.ContributionProofs,
 		spectypes.ValidatorRegistrationPartialSig, spectypes.VoluntaryExitPartialSig,
-		spectypes.AggregatorCommitteePartialSig, spectypes.PTCAttesterPartialSig:
+		spectypes.AggregatorCommitteePartialSig, spectypes.PTCAttesterPartialSig,
+		spectypes.ProposerPreferencesPartialSig:
 		if signerState.Peer(receivedFrom).SeenMsgTypes.reachedPreConsensusLimit() {
 			// Check if the same peer is sending us a "logical duplicate" message, reject message to punish.
 			e := ErrTooManyPartialSigMessage
@@ -357,7 +361,8 @@ func (mv *messageValidator) validPartialSigMsgType(msgType spectypes.PartialSigM
 		spectypes.ValidatorRegistrationPartialSig,
 		spectypes.VoluntaryExitPartialSig,
 		spectypes.AggregatorCommitteePartialSig,
-		spectypes.PTCAttesterPartialSig:
+		spectypes.PTCAttesterPartialSig,
+		spectypes.ProposerPreferencesPartialSig:
 		return true
 	default:
 		return false
@@ -382,6 +387,8 @@ func (mv *messageValidator) partialSignatureTypeMatchesRole(msgType spectypes.Pa
 		return msgType == spectypes.AggregatorCommitteePartialSig || msgType == spectypes.PostConsensusPartialSig
 	case spectypes.RolePTCAttester:
 		return msgType == spectypes.PTCAttesterPartialSig
+	case spectypes.RoleProposerPreferences:
+		return msgType == spectypes.ProposerPreferencesPartialSig
 	default:
 		return false
 	}
