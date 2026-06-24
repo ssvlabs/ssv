@@ -69,6 +69,9 @@ func (r *PTCAttesterRunner) StartNewDuty(ctx context.Context, logger *zap.Logger
 	if err != nil {
 		return err
 	}
+	// Clear any prior observation; executeDuty re-freezes it only if this operator attests, so an
+	// abstained or not-yet-executed duty stays nil.
+	r.payloadAttestationData = nil
 	return r.baseStartNewNonBeaconDuty(ctx, logger, r, validatorDuty, quorum)
 }
 
@@ -146,7 +149,9 @@ func (r *PTCAttesterRunner) executeDuty(ctx context.Context, logger *zap.Logger,
 	// operator that has seen no beacon block for the slot abstains (signs and submits nothing).
 	data, err := r.beacon.PayloadAttestationData(ctx, slot)
 	if err != nil {
-		logger.Debug("abstaining from PTC attestation: no payload attestation data", fields.Slot(slot), zap.Error(err))
+		// A beacon-node failure (syncing, auth, unreachable) forces an abstain but is operational,
+		// not the normal "saw no block" case below — surface it so it isn't silently dropped.
+		logger.Warn("abstaining from PTC attestation: failed to fetch payload attestation data", fields.Slot(slot), zap.Error(err))
 		r.markDutySucceeded()
 		return nil
 	}

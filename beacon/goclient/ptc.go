@@ -30,8 +30,9 @@ const (
 )
 
 // ptcHTTPClient issues the hand-rolled PTC requests; per-call deadlines come from the request
-// context. It carries no operator transport config (TLS/auth) — acceptable for this interim
-// surface, to be retired with the go-eth2-client rebase.
+// context. Basic-auth embedded in the (unmasked) beacon address is applied by net/http; custom
+// TLS/client-cert transport is not — acceptable for this interim surface, to be retired with the
+// go-eth2-client rebase.
 var ptcHTTPClient = &http.Client{}
 
 // PayloadAttestationDuties returns the PTC duties for the given validators at the epoch, from
@@ -57,22 +58,22 @@ func (gc *GoClient) SubmitPayloadAttestationMessages(ctx context.Context, messag
 	defer cancel()
 
 	return gc.multiClientSubmit(ctx, "SubmitPayloadAttestationMessages", func(ctx context.Context, client Client) error {
-		return submitPayloadAttestationMessages(ctx, ptcHTTPClient, client.Address(), messages)
+		return submitPayloadAttestationMessages(ctx, ptcHTTPClient, gc.clientAddresses[client], messages)
 	})
 }
 
-// firstClientResult runs fn against each beacon client in turn under the common timeout,
-// returning the first success and recording every attempt; on all failures it joins the errors.
+// firstClientResult runs fn against each beacon client in turn, each under its own common-timeout
+// budget, returning the first success and recording every attempt; on all failures it joins the errors.
 func firstClientResult[T any](ctx context.Context, gc *GoClient, routeName, httpMethod string, fn func(ctx context.Context, addr string) (T, error)) (T, error) {
-	ctx, cancel := context.WithTimeout(ctx, gc.commonTimeout)
-	defer cancel()
-
 	var zero T
 	var errs error
 	for _, client := range gc.clients {
+		// Per-client timeout so a hung primary doesn't starve the fallbacks.
+		clientCtx, cancel := context.WithTimeout(ctx, gc.commonTimeout)
 		start := time.Now()
-		res, err := fn(ctx, client.Address())
-		recordRequest(ctx, gc.log, routeName, client, httpMethod, false, time.Since(start), err)
+		res, err := fn(clientCtx, gc.clientAddresses[client])
+		recordRequest(clientCtx, gc.log, routeName, client, httpMethod, false, time.Since(start), err)
+		cancel()
 		if err != nil {
 			errs = errors.Join(errs, errSingleClient(err, client.Address(), routeName))
 			continue

@@ -481,7 +481,13 @@ func (s *Scheduler) ExecuteDuties(ctx context.Context, duties []*spectypes.Valid
 		logger.Debug(eventMsg)
 		span.AddEvent(eventMsg)
 
-		slotDelay := time.Since(s.netCfg.SlotStartTime(duty.Slot))
+		// PTC duties fire at the payload-attestation cutoff by design, so measure lateness from
+		// there, not slot start, to avoid a false "late execution" warning.
+		expectedStart := s.netCfg.SlotStartTime(duty.Slot)
+		if role == spectypes.RolePTCAttester {
+			expectedStart = s.netCfg.PayloadAttestationCutoff(duty.Slot)
+		}
+		slotDelay := time.Since(expectedStart)
 
 		// For roles where duty.Slot is a shared coordination point rather
 		// than the execution target (see dutySlotIsExecutionSlot), slotDelay

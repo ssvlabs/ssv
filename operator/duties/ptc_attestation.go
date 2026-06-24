@@ -106,10 +106,9 @@ func (h *PTCAttestationHandler) fetchDuties(ctx context.Context, epoch phase0.Ep
 	h.logger.Debug("fetched PTC duties", fields.Epoch(epoch), zap.Int("duties", len(ptcDuties)))
 }
 
-// scheduleExecution fires the duty at the 75%-of-slot cutoff (PAYLOAD_ATTESTATION_DUE_BPS), with a
-// deadline at slot end.
+// scheduleExecution fires the duty at the payload-attestation cutoff, with a deadline at slot end.
 func (h *PTCAttestationHandler) scheduleExecution(ctx context.Context, slot phase0.Slot, duties []*spectypes.ValidatorDuty) {
-	executeAt := h.netCfg.SlotStartTime(slot).Add(h.netCfg.SlotDuration * 3 / 4)
+	executeAt := h.netCfg.PayloadAttestationCutoff(slot)
 	deadline := h.netCfg.SlotStartTime(slot + 1)
 	time.AfterFunc(time.Until(executeAt), func() {
 		h.dutiesExecutor.ExecuteDuties(ctx, duties, deadline)

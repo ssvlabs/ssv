@@ -118,6 +118,11 @@ type GoClient struct {
 	clients     []Client
 	multiClient MultiClient
 
+	// clientAddresses holds each client's unmasked address for the hand-rolled PTC requests
+	// (ptc.go) — Client.Address() is log-masked and unusable for real requests. Drop when those
+	// endpoints become typed go-eth2-client calls.
+	clientAddresses map[Client]string
+
 	syncDistanceTolerance phase0.Slot
 
 	// attestationReqInflight helps prevent duplicate attestation data requests
@@ -208,6 +213,7 @@ func New(ctx context.Context, logger *zap.Logger, opt Options) (*GoClient, error
 		proposalSoftTimeout:                opt.ProposalSoftTimeout,
 		supportedTopics:                    []eventTopic{eventTopicHead, eventTopicBlock},
 		activatedClients:                   hashmap.New[string, struct{}](),
+		clientAddresses:                    make(map[Client]string),
 	}
 
 	// First error stops the loop on purpose. addSingleClient sets WithAllowDelayedStart(true), so a valid
@@ -348,7 +354,9 @@ func (gc *GoClient) addSingleClient(ctx context.Context, addr string) error {
 		return fmt.Errorf("create http client: %w", err)
 	}
 
-	gc.clients = append(gc.clients, httpClient.(*eth2clienthttp.Service))
+	svc := httpClient.(*eth2clienthttp.Service)
+	gc.clients = append(gc.clients, svc)
+	gc.clientAddresses[svc] = addr
 
 	return nil
 }
