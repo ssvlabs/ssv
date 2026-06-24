@@ -15,8 +15,17 @@ func (mv *messageValidator) committeeRole(role spectypes.RunnerRole) bool {
 	return role == spectypes.RoleCommittee || role == spectypes.RoleAggregatorCommittee
 }
 
+// monotonicSlotRole reports whether a role's signer advances through slots one at a time, so a message
+// for a slot below the signer's max is stale and must be rejected. False for committee roles (state is
+// slot-keyed across many validators) and for proposer preferences (a signer holds its whole lookahead
+// of proposal slots at once, so a lower slot is a concurrent duty, not a stale one — its replay bound
+// is the earliness/lateness window instead).
+func (mv *messageValidator) monotonicSlotRole(role spectypes.RunnerRole) bool {
+	return !mv.committeeRole(role) && role != spectypes.RoleProposerPreferences
+}
+
 func (mv *messageValidator) validateSlotTime(messageSlot phase0.Slot, role spectypes.RunnerRole, receivedAt time.Time) error {
-	if earliness := mv.messageEarliness(messageSlot, receivedAt); earliness > clockErrorTolerance {
+	if earliness := mv.messageEarliness(messageSlot, receivedAt); earliness > clockErrorTolerance+mv.earlySlotAllowance(role) {
 		e := ErrEarlySlotMessage
 		e.got = fmt.Sprintf("early by %v", earliness)
 		return e
@@ -36,6 +45,18 @@ func (mv *messageValidator) messageEarliness(slot phase0.Slot, receivedAt time.T
 	return mv.netCfg.SlotStartTime(slot).Sub(receivedAt)
 }
 
+// earlySlotAllowance returns how far ahead of its slot a message for the role may legitimately
+// arrive. Proposer preferences are broadcast across the proposer lookahead — the current epoch plus
+// MIN_SEED_LOOKAHEAD — so their proposal-slot messages are expected up to that far in the future;
+// every other role acts at (or after) its slot, so the default is none.
+func (mv *messageValidator) earlySlotAllowance(role spectypes.RunnerRole) time.Duration {
+	if role == spectypes.RoleProposerPreferences {
+		// #nosec G115 -- a small epoch count times slots-per-epoch cannot overflow int64.
+		return time.Duration(proposerPreferencesEarlyEpochs*mv.netCfg.SlotsPerEpoch) * mv.netCfg.SlotDuration
+	}
+	return 0
+}
+
 // messageLateness returns how late message is or 0 if it's not
 func (mv *messageValidator) messageLateness(slot phase0.Slot, role spectypes.RunnerRole, receivedAt time.Time) time.Duration {
 	var ttl uint64
@@ -48,6 +69,11 @@ func (mv *messageValidator) messageLateness(slot phase0.Slot, role spectypes.Run
 		// Deliberately exempt from the lateness bound: these duties aren't tied to a slot
 		// deadline, so only the early-message check and per-epoch duty limits apply.
 		return 0
+	case spectypes.RoleProposerPreferences:
+		// Preferences are consumed before their proposal slot; allow only a small grace past it so a
+		// preference for a slot already behind us is rejected as a replay. This is the role's past
+		// bound, since it is exempt from the monotonic slot-advance check.
+		ttl = LateSlotAllowance
 	default:
 		return 0
 	}
