@@ -29,3 +29,27 @@ func TestBeacon_IsGloas(t *testing.T) {
 	require.True(t, scheduled.IsGloas(100))
 	require.True(t, scheduled.IsGloas(101))
 }
+
+func TestBeacon_GloasForkEpoch(t *testing.T) {
+	_, ok := (&Beacon{Forks: map[spec.DataVersion]phase0.Fork{}}).GloasForkEpoch()
+	require.False(t, ok)
+
+	epoch, ok := (&Beacon{Forks: map[spec.DataVersion]phase0.Fork{
+		DataVersionGloas: {Epoch: 100},
+	}}).GloasForkEpoch()
+	require.True(t, ok)
+	require.Equal(t, phase0.Epoch(100), epoch)
+}
+
+func TestNetwork_InGloasPriorWindow(t *testing.T) {
+	const gloasEpoch = 100
+	netCfg := TestNetworkWithGloas(gloasEpoch)
+	slotInEpoch := func(e phase0.Epoch) phase0.Slot { return phase0.Slot(uint64(e) * netCfg.SlotsPerEpoch) }
+
+	require.False(t, netCfg.InGloasPriorWindow(slotInEpoch(gloasEpoch-2)), "outside the lookahead window")
+	require.True(t, netCfg.InGloasPriorWindow(slotInEpoch(gloasEpoch-1)), "the prior window")
+	require.False(t, netCfg.InGloasPriorWindow(slotInEpoch(gloasEpoch)), "already at the fork")
+
+	// No Gloas fork scheduled → never in the window.
+	require.False(t, TestNetwork.InGloasPriorWindow(slotInEpoch(gloasEpoch-1)))
+}
