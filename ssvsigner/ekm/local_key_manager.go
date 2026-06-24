@@ -244,6 +244,11 @@ func (km *LocalKeyManager) signBeaconObject(
 			return nil, nil, fmt.Errorf("obj type is unknown: %T", obj)
 		}
 		return km.signer.SignRegistration(data, domain, pubKey[:])
+	case spectypes.DomainPTCAttester:
+		// Gloas (ePBS) PTC payload attestation: a plain BLS signature over the SSZ root under
+		// DomainPTCAttester, with no slashing protection (it is not in the slashing predicate).
+		// SignAggregateAndProof is the generic ssz.HashRoot signer; reuse it.
+		return km.signer.SignAggregateAndProof(obj, domain, pubKey[:])
 	default:
 		return nil, nil, errors.New("domain unknown")
 	}

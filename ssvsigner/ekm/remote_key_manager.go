@@ -402,6 +402,10 @@ func (km *RemoteKeyManager) prepareSignRequest(
 
 		req.Type = web3signer.TypeValidatorRegistration
 		req.ValidatorRegistration = data
+	case spectypes.DomainPTCAttester:
+		// Gloas (ePBS) PTC payload attestations have no Web3Signer request type, so the remote
+		// signer cannot sign them until Web3Signer adds support; PTC requires local signing.
+		return web3signer.SignRequest{}, phase0.Root{}, errors.New("payload attestation signing is not supported by the remote signer")
 	default:
 		return web3signer.SignRequest{}, phase0.Root{}, errors.New("domain unknown")
 	}
