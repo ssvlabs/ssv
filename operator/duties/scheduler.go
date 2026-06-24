@@ -182,6 +182,7 @@ func NewScheduler(logger *zap.Logger, opts *SchedulerOptions) *Scheduler {
 			NewValidatorRegistrationHandler(opts.ValidatorRegistrationCh),
 			NewVoluntaryExitHandler(dutyStore.VoluntaryExit, opts.ValidatorExitCh),
 			NewPTCAttestationHandler(),
+			NewProposerPreferencesHandler(),
 		)
 	}
 	return s

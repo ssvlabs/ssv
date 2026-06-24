@@ -1173,6 +1173,7 @@ func SetupRunners(
 		spectypes.RoleValidatorRegistration,
 		spectypes.RoleVoluntaryExit,
 		spectypes.RolePTCAttester,
+		spectypes.RoleProposerPreferences,
 	}
 
 	buildController := func(role spectypes.RunnerRole) *qbftcontroller.Controller {
@@ -1277,6 +1278,12 @@ func SetupRunners(
 		case spectypes.RolePTCAttester:
 			runners[role], err = runner.NewPTCAttesterRunner(runner.PTCAttesterRunnerOptions{
 				BaseRunnerOptions: baseOpts,
+			})
+		case spectypes.RoleProposerPreferences:
+			runners[role], err = runner.NewProposerPreferencesRunner(runner.ProposerPreferencesRunnerOptions{
+				BaseRunnerOptions:    baseOpts,
+				FeeRecipientProvider: validatorStore,
+				GasLimit:             options.GasLimit,
 			})
 		default:
 			return nil, fmt.Errorf("unexpected duty runner type: %s", role)
