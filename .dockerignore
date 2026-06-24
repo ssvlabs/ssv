@@ -2,6 +2,7 @@ bin
 data
 docs
 e2e
+tla
 .cache
 .github
 coverage.out
