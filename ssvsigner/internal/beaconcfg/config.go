@@ -56,6 +56,10 @@ func (b *Config) EpochDuration() time.Duration {
 	return b.SlotDuration * time.Duration(b.SlotsPerEpoch) // #nosec G115
 }
 
+// ForkAtEpoch returns the beacon fork active at the epoch. The versions list stops at
+// Fulu, so it returns Fulu for a Gloas epoch.
+// TODO(gloas): extend the list with the Gloas data version once activation is wired and
+// callers that switch on spec.DataVersion handle the new version.
 func (b *Config) ForkAtEpoch(epoch phase0.Epoch) (spec.DataVersion, *phase0.Fork) {
 	versions := []spec.DataVersion{
 		spec.DataVersionPhase0,

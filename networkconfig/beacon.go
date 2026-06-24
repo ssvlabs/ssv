@@ -9,9 +9,13 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-
-	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 )
+
+// DataVersionGloas is a node-side placeholder for the Gloas beacon data version: until
+// go-eth2-client defines it (its latest is Fulu), we slot Gloas immediately after Fulu.
+// Remove and reconcile with upstream once it ships a real spec.DataVersionGloas. Note
+// DataVersionGloas.String() returns "unknown" — the spec string/JSON tables aren't extended.
+const DataVersionGloas = spec.DataVersionFulu + 1
 
 // Beacon defines beacon network configuration. It is fetched from the consensus client during the node runtime.
 type Beacon struct {
@@ -142,6 +146,10 @@ func (b *Beacon) EpochDuration() time.Duration {
 	return b.SlotDuration * time.Duration(b.SlotsPerEpoch) // #nosec G115: slot cannot exceed math.MaxInt64
 }
 
+// ForkAtEpoch returns the beacon fork active at the epoch. The versions list stops at
+// Fulu, so it returns Fulu for a Gloas epoch; (*Beacon).IsGloas is the Gloas gate today.
+// TODO(gloas): extend the list with DataVersionGloas once activation is wired and callers
+// that switch on spec.DataVersion handle the new version.
 func (b *Beacon) ForkAtEpoch(epoch phase0.Epoch) (spec.DataVersion, *phase0.Fork) {
 	versions := []spec.DataVersion{
 		spec.DataVersionPhase0,
@@ -179,7 +187,7 @@ func (b *Beacon) ForkAtVersion(version spec.DataVersion) (phase0.Fork, bool) {
 // Returns false when there is no scheduled Gloas fork (absent from Forks or far-future),
 // so it is safe on pre-Gloas networks and Beacon values without a Gloas entry.
 func (b *Beacon) IsGloas(epoch phase0.Epoch) bool {
-	fork, ok := b.Forks[gloas.DataVersionGloas]
+	fork, ok := b.Forks[DataVersionGloas]
 	return ok && epoch >= fork.Epoch
 }
 

@@ -14,7 +14,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 )
 
 const (
@@ -311,7 +310,7 @@ func (gc *GoClient) getForkData(specResponse map[string]any) (map[spec.DataVersi
 			CurrentVersion:  fuluForkVersion,
 			Epoch:           fuluEpoch,
 		},
-		gloas.DataVersionGloas: {
+		networkconfig.DataVersionGloas: {
 			PreviousVersion: fuluForkVersion,
 			CurrentVersion:  gloasForkVersion,
 			Epoch:           gloasEpoch,
