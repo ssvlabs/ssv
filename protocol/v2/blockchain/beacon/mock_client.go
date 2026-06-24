@@ -1032,6 +1032,20 @@ func (mr *MockBeaconNodeMockRecorder) SubmitProposalPreparations(ctx, preparatio
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitProposalPreparations", reflect.TypeOf((*MockBeaconNode)(nil).SubmitProposalPreparations), ctx, preparations)
 }
 
+// SubmitProposerPreferences mocks base method.
+func (m *MockBeaconNode) SubmitProposerPreferences(ctx context.Context, preferences []*gloas.SignedProposerPreferences) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SubmitProposerPreferences", ctx, preferences)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SubmitProposerPreferences indicates an expected call of SubmitProposerPreferences.
+func (mr *MockBeaconNodeMockRecorder) SubmitProposerPreferences(ctx, preferences any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitProposerPreferences", reflect.TypeOf((*MockBeaconNode)(nil).SubmitProposerPreferences), ctx, preferences)
+}
+
 // SubmitSignedAggregateSelectionProof mocks base method.
 func (m *MockBeaconNode) SubmitSignedAggregateSelectionProof(ctx context.Context, msg *spec.VersionedSignedAggregateAndProof) error {
 	m.ctrl.T.Helper()
@@ -1225,4 +1239,42 @@ func (m *MockPTCCalls) SubmitPayloadAttestationMessages(ctx context.Context, mes
 func (mr *MockPTCCallsMockRecorder) SubmitPayloadAttestationMessages(ctx, messages any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitPayloadAttestationMessages", reflect.TypeOf((*MockPTCCalls)(nil).SubmitPayloadAttestationMessages), ctx, messages)
+}
+
+// MockProposerPreferencesCalls is a mock of ProposerPreferencesCalls interface.
+type MockProposerPreferencesCalls struct {
+	ctrl     *gomock.Controller
+	recorder *MockProposerPreferencesCallsMockRecorder
+	isgomock struct{}
+}
+
+// MockProposerPreferencesCallsMockRecorder is the mock recorder for MockProposerPreferencesCalls.
+type MockProposerPreferencesCallsMockRecorder struct {
+	mock *MockProposerPreferencesCalls
+}
+
+// NewMockProposerPreferencesCalls creates a new mock instance.
+func NewMockProposerPreferencesCalls(ctrl *gomock.Controller) *MockProposerPreferencesCalls {
+	mock := &MockProposerPreferencesCalls{ctrl: ctrl}
+	mock.recorder = &MockProposerPreferencesCallsMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockProposerPreferencesCalls) EXPECT() *MockProposerPreferencesCallsMockRecorder {
+	return m.recorder
+}
+
+// SubmitProposerPreferences mocks base method.
+func (m *MockProposerPreferencesCalls) SubmitProposerPreferences(ctx context.Context, preferences []*gloas.SignedProposerPreferences) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SubmitProposerPreferences", ctx, preferences)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SubmitProposerPreferences indicates an expected call of SubmitProposerPreferences.
+func (mr *MockProposerPreferencesCallsMockRecorder) SubmitProposerPreferences(ctx, preferences any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitProposerPreferences", reflect.TypeOf((*MockProposerPreferencesCalls)(nil).SubmitProposerPreferences), ctx, preferences)
 }

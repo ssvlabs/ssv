@@ -128,6 +128,7 @@ type BeaconNode interface {
 	ValidatorRegistrationCalls
 	VoluntaryExitCalls
 	PTCCalls
+	ProposerPreferencesCalls
 	DomainCalls
 
 	beaconDuties
@@ -146,4 +147,12 @@ type PTCCalls interface {
 	PayloadAttestationData(ctx context.Context, slot phase0.Slot) (*gloas.PayloadAttestationData, error)
 	// SubmitPayloadAttestationMessages submits signed PTC messages to the beacon node's pool.
 	SubmitPayloadAttestationMessages(ctx context.Context, messages []*gloas.PayloadAttestationMessage) error
+}
+
+// ProposerPreferencesCalls is the beacon-node surface for Gloas (ePBS) proposer preferences.
+// Publication has no beacon-API endpoint upstream yet (SIP #94 §5), so SubmitProposerPreferences is
+// currently a stub (see beacon/goclient/proposer_preferences.go).
+type ProposerPreferencesCalls interface {
+	// SubmitProposerPreferences broadcasts signed proposer preferences for upcoming proposal slots.
+	SubmitProposerPreferences(ctx context.Context, preferences []*gloas.SignedProposerPreferences) error
 }

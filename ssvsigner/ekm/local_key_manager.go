@@ -248,6 +248,10 @@ func (km *LocalKeyManager) signBeaconObject(
 		// Gloas (ePBS) PTC payload attestation: a plain BLS signature over the SSZ root under
 		// DomainPTCAttester, with no slashing protection (it is not in the slashing predicate).
 		return signSSZRoot(km.signer, obj, domain, pubKey[:])
+	case spectypes.DomainProposerPreferences:
+		// Gloas (ePBS) proposer preferences: a plain BLS signature over the SSZ root under
+		// DomainProposerPreferences, with no slashing protection.
+		return signSSZRoot(km.signer, obj, domain, pubKey[:])
 	default:
 		return nil, nil, errors.New("domain unknown")
 	}
