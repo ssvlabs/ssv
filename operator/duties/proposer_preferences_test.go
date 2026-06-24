@@ -117,3 +117,51 @@ func TestProposerPreferencesHandler_evictOutdated(t *testing.T) {
 	require.Contains(t, h.processed, phase0.Epoch(5))
 	require.Contains(t, h.processed, phase0.Epoch(6))
 }
+
+// emitForTick emits the first Gloas epoch's preferences both in steady state (a slot in that epoch)
+// and pre-fork (a slot in the epoch immediately before the fork).
+func TestProposerPreferencesHandler_emitForTick(t *testing.T) {
+	const gloasEpoch = 100
+	netCfg := networkconfig.TestNetworkWithGloas(gloasEpoch)
+
+	tt := []struct {
+		name string
+		slot phase0.Slot
+	}{
+		{"pre-fork window emits the first Gloas epoch", phase0.Slot(uint64(gloasEpoch-1) * netCfg.SlotsPerEpoch)},
+		{"steady state emits the current Gloas epoch", phase0.Slot(uint64(gloasEpoch) * netCfg.SlotsPerEpoch)},
+	}
+
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			idx := phase0.ValidatorIndex(7)
+			pk := phase0.BLSPubKey{1, 2, 3}
+			proposalSlot := phase0.Slot(uint64(gloasEpoch) * netCfg.SlotsPerEpoch) // a slot in the Gloas fork epoch
+
+			vp := NewMockValidatorProvider(ctrl)
+			vp.EXPECT().SelfParticipatingValidators(phase0.Epoch(gloasEpoch)).
+				Return([]*types.SSVShare{{Share: spectypes.Share{ValidatorIndex: idx, ValidatorPubKey: spectypes.ValidatorPK(pk)}}}).Times(1)
+
+			bn := NewMockBeaconNode(ctrl)
+			bn.EXPECT().ProposerDuties(gomock.Any(), phase0.Epoch(gloasEpoch), []phase0.ValidatorIndex{idx}).
+				Return([]*eth2apiv1.ProposerDuty{{PubKey: pk, ValidatorIndex: idx, Slot: proposalSlot}}, nil).Times(1)
+
+			executed := make(chan []*spectypes.ValidatorDuty, 1)
+			h := NewProposerPreferencesHandler()
+			h.logger = zap.NewNop()
+			h.netCfg = netCfg
+			h.validatorProvider = vp
+			h.beaconNode = bn
+			h.dutiesExecutor = &captureExecutor{executed: executed}
+
+			h.emitForTick(context.Background(), tc.slot)
+
+			require.Len(t, executed, 1)
+			got := <-executed
+			require.Len(t, got, 1)
+			require.Equal(t, spectypes.BNRoleProposerPreferences, got[0].Type)
+			require.Equal(t, proposalSlot, got[0].Slot)
+		})
+	}
+}

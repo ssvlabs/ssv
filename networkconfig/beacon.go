@@ -197,6 +197,14 @@ func (b *Beacon) IsGloas(epoch phase0.Epoch) bool {
 	return ok && epoch >= fork.Epoch
 }
 
+// GloasForkEpoch returns the scheduled Gloas (ePBS) fork epoch and whether a Gloas fork is present in
+// the schedule. An unscheduled far-future epoch is returned as-is; callers that gate on it (IsGloas,
+// InGloasPriorWindow) treat it as never active via the epoch comparison.
+func (b *Beacon) GloasForkEpoch() (phase0.Epoch, bool) {
+	fork, ok := b.Forks[DataVersionGloas]
+	return fork.Epoch, ok
+}
+
 func (b *Beacon) AssertSame(other *Beacon) error {
 	if b.Name != other.Name {
 		return fmt.Errorf("different Name")
