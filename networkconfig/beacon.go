@@ -60,6 +60,12 @@ func (b *Beacon) SlotStartTime(slot phase0.Slot) time.Time {
 	return start
 }
 
+// PayloadAttestationCutoff is the point 75% into the slot (PAYLOAD_ATTESTATION_DUE) at which a
+// Gloas PTC member observes payload presence and runs its attestation.
+func (b *Beacon) PayloadAttestationCutoff(slot phase0.Slot) time.Time {
+	return b.SlotStartTime(slot).Add(b.SlotDuration * 3 / 4)
+}
+
 // EstimatedCurrentSlot returns the estimation of the current slot
 func (b *Beacon) EstimatedCurrentSlot() phase0.Slot {
 	return b.EstimatedSlotAtTime(time.Now())

@@ -247,11 +247,19 @@ func (km *LocalKeyManager) signBeaconObject(
 	case spectypes.DomainPTCAttester:
 		// Gloas (ePBS) PTC payload attestation: a plain BLS signature over the SSZ root under
 		// DomainPTCAttester, with no slashing protection (it is not in the slashing predicate).
-		// SignAggregateAndProof is the generic ssz.HashRoot signer; reuse it.
-		return km.signer.SignAggregateAndProof(obj, domain, pubKey[:])
+		return signSSZRoot(km.signer, obj, domain, pubKey[:])
 	default:
 		return nil, nil, errors.New("domain unknown")
 	}
+}
+
+// signSSZRoot BLS-signs obj's SSZ signing root under domain, with no slashing protection. The
+// underlying signer exposes only typed methods; SignAggregateAndProof is its generic ssz.HashRoot
+// signer (it hashes any object), so it backs this until eth2-key-manager grows a dedicated root
+// signer.
+// TODO(gloas): swap to a purpose-named eth2-key-manager root signer once one exists.
+func signSSZRoot(s signer.ValidatorSigner, obj ssz.HashRoot, domain phase0.Domain, pubKey []byte) ([]byte, []byte, error) {
+	return s.SignAggregateAndProof(obj, domain, pubKey)
 }
 
 func (km *LocalKeyManager) IsAttestationSlashable(pubKey phase0.BLSPubKey, attData *phase0.AttestationData) error {
