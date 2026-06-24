@@ -538,6 +538,7 @@ func (c *Controller) StartNetworkHandlers() {
 		c.logger.Fatal("msgRouterConcurrency must be > 0")
 	}
 	c.network.UseMessageRouter(c.messageRouter)
+	c.logger.Info("starting network message router", zap.Int("concurrency", c.msgRouterConcurrency))
 	for i := 0; i < c.msgRouterConcurrency; i++ {
 		go c.handleRouterMessages()
 	}

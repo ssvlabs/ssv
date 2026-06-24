@@ -66,7 +66,7 @@ func (v *Validator) EnqueueMessage(ctx context.Context, msg *queue.SSVMessage) {
 				zap.String("msg_type", message.MsgTypeToString(msg.MsgType)),
 				zap.String("msg_id", msg.MsgID.String()))
 
-			span.AddEvent(eventMsg, trace.WithAttributes(attribute.String("drop_reason", queue.DropReasonBufferFull)))
+			span.AddEvent(eventMsg, trace.WithAttributes(attribute.String("ssv.queue.drop_reason", queue.DropReasonBufferFull)))
 			span.SetStatus(codes.Error, eventMsg)
 			return
 		}
@@ -270,7 +270,7 @@ func (v *Validator) StartQueueConsumer(
 					var droppingMsgDueToErrorEvent = couldNotHandleMsgLogPrefix + "dropping message"
 					msgLogger.Debug(droppingMsgDueToErrorEvent, zap.Error(err))
 					msgState.span.AddEvent(droppingMsgDueToErrorEvent, trace.WithAttributes(
-						attribute.String("drop_reason", err.Error()),
+						attribute.String("ssv.queue.drop_reason", err.Error()),
 						attribute.Int64("attempt", currentAttempt),
 					))
 					msgState.span.SetStatus(codes.Error, droppingMsgDueToErrorEvent)

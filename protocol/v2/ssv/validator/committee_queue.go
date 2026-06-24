@@ -73,7 +73,7 @@ func (c *Committee) EnqueueMessage(ctx context.Context, msg *queue.SSVMessage) {
 	if pushed := q.Q.TryPush(msg); !pushed {
 		const errMsg = "❗ dropping message because the queue is full"
 		logger.Warn(errMsg, zap.String("drop_reason", queue.DropReasonBufferFull))
-		span.AddEvent(errMsg, trace.WithAttributes(attribute.String("drop_reason", queue.DropReasonBufferFull)))
+		span.AddEvent(errMsg, trace.WithAttributes(attribute.String("ssv.queue.drop_reason", queue.DropReasonBufferFull)))
 		span.SetStatus(codes.Error, errMsg)
 		return
 	}
@@ -232,7 +232,7 @@ func (c *Committee) ConsumeQueue(
 				const droppingMsgDueToNoValidDutiesToExecuteEvent = "❗ " + couldNotHandleMsgLogPrefix + "dropping message and terminating committee-runner"
 				msgLogger.Error(droppingMsgDueToNoValidDutiesToExecuteEvent, zap.Error(err))
 				msgState.span.AddEvent(droppingMsgDueToNoValidDutiesToExecuteEvent, trace.WithAttributes(
-					attribute.String("drop_reason", err.Error()),
+					attribute.String("ssv.queue.drop_reason", err.Error()),
 					attribute.Int64("attempt", currentAttempt),
 				))
 				msgState.span.SetStatus(codes.Error, droppingMsgDueToNoValidDutiesToExecuteEvent)
@@ -269,7 +269,7 @@ func (c *Committee) ConsumeQueue(
 				var droppingMsgDueToErrorEvent = couldNotHandleMsgLogPrefix + "dropping message"
 				msgLogger.Debug(droppingMsgDueToErrorEvent, zap.Error(err))
 				msgState.span.AddEvent(droppingMsgDueToErrorEvent, trace.WithAttributes(
-					attribute.String("drop_reason", err.Error()),
+					attribute.String("ssv.queue.drop_reason", err.Error()),
 					attribute.Int64("attempt", currentAttempt),
 				))
 				msgState.span.SetStatus(codes.Error, droppingMsgDueToErrorEvent)
