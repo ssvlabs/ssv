@@ -66,12 +66,12 @@ func TestBuildPeerTrimScores_CharacterizesDeadSoloDuoScoring(t *testing.T) {
 	network := newTrimTestNetwork(
 		nil,
 		&testTopicsController{
-			topics: []string{"0", "1", "2", "3"},
+			topics: []string{alanTopic(0), alanTopic(1), alanTopic(2), alanTopic(3)},
 			peersByTopic: map[string][]peer.ID{
-				"0": {candidate},
-				"1": {candidate, other1},
-				"2": {candidate, other1, other2},
-				"3": {candidate, other1, other2, other3},
+				alanTopic(0): {candidate},
+				alanTopic(1): {candidate, other1},
+				alanTopic(2): {candidate, other1, other2},
+				alanTopic(3): {candidate, other1, other2, other3},
 			},
 		},
 		nil,
@@ -92,9 +92,9 @@ func TestBuildPeerTrimScores_ExcludesCandidateFromSubnetCounts(t *testing.T) {
 	network := newTrimTestNetwork(
 		nil,
 		&testTopicsController{
-			topics: []string{"1"},
+			topics: []string{alanTopic(1)},
 			peersByTopic: map[string][]peer.ID{
-				"1": {candidate, other},
+				alanTopic(1): {candidate, other},
 			},
 		},
 		nil,
@@ -115,11 +115,11 @@ func TestBuildPeerTrimScores_IgnoresInvalidTopics(t *testing.T) {
 	network := newTrimTestNetwork(
 		nil,
 		&testTopicsController{
-			topics: []string{"0", "not-a-subnet", "999"},
+			topics: []string{alanTopic(0), "not-a-subnet", alanTopic(999)},
 			peersByTopic: map[string][]peer.ID{
-				"0":            {candidate, other},
+				alanTopic(0):   {candidate, other},
 				"not-a-subnet": {candidate},
-				"999":          {candidate},
+				alanTopic(999): {candidate}, // out of range, ignored
 			},
 		},
 		nil,
@@ -147,11 +147,11 @@ func TestChoosePeersToTrim_SelectsLowestScorePeers(t *testing.T) {
 	network := newTrimTestNetwork(
 		localHost,
 		&testTopicsController{
-			topics: []string{"0", "1", "3"},
+			topics: []string{alanTopic(0), alanTopic(1), alanTopic(3)},
 			peersByTopic: map[string][]peer.ID{
-				"0": {highValuePeer.ID()},
-				"1": {highValuePeer.ID(), mediumValuePeer.ID()},
-				"3": {lowValuePeer.ID()},
+				alanTopic(0): {highValuePeer.ID()},
+				alanTopic(1): {highValuePeer.ID(), mediumValuePeer.ID()},
+				alanTopic(3): {lowValuePeer.ID()},
 			},
 			allPeers: []peer.ID{highValuePeer.ID(), mediumValuePeer.ID(), lowValuePeer.ID()},
 		},
@@ -177,11 +177,11 @@ func TestChoosePeersToTrim_TrimInboundOnlySkipsOutboundPeers(t *testing.T) {
 	network := newTrimTestNetwork(
 		localHost,
 		&testTopicsController{
-			topics: []string{"0", "1", "3"},
+			topics: []string{alanTopic(0), alanTopic(1), alanTopic(3)},
 			peersByTopic: map[string][]peer.ID{
-				"0": {highValueInboundPeer.ID()},
-				"1": {highValueInboundPeer.ID(), inboundPeer.ID()},
-				"3": {outboundPeer.ID()},
+				alanTopic(0): {highValueInboundPeer.ID()},
+				alanTopic(1): {highValueInboundPeer.ID(), inboundPeer.ID()},
+				alanTopic(3): {outboundPeer.ID()},
 			},
 			allPeers: []peer.ID{outboundPeer.ID(), inboundPeer.ID(), highValueInboundPeer.ID()},
 		},
@@ -201,11 +201,11 @@ func TestBuildPeerTrimScores_ComputesScoresForAllCandidates(t *testing.T) {
 	network := newTrimTestNetwork(
 		nil,
 		&testTopicsController{
-			topics: []string{"0", "1", "3"},
+			topics: []string{alanTopic(0), alanTopic(1), alanTopic(3)},
 			peersByTopic: map[string][]peer.ID{
-				"0": {highValuePeer},
-				"1": {highValuePeer, mediumValuePeer},
-				"3": {lowValuePeer},
+				alanTopic(0): {highValuePeer},
+				alanTopic(1): {highValuePeer, mediumValuePeer},
+				alanTopic(3): {lowValuePeer},
 			},
 		},
 		nil,
@@ -296,7 +296,11 @@ func newTrimTestNetwork(host host.Host, topicsCtrl topics.Controller, idx peers.
 	}
 
 	n := &p2pNetwork{
-		logger:               zap.NewNop(),
+		logger: zap.NewNop(),
+		// buildPeerTrimScores -> subscribedSubnetsForCurrentEpoch reads cfg.NetworkConfig.
+		// Pin Boole into the future so these Alan-path characterizations stay deterministic
+		// regardless of the SSV_TEST_BOOLE_FORK (pre/post) matrix.
+		cfg:                  &Config{NetworkConfig: subscribeRandomsTestNetCfg()},
 		topicsCtrl:           topicsCtrl,
 		idx:                  idx,
 		persistentSubnets:    ownSubnets,
@@ -306,6 +310,13 @@ func newTrimTestNetwork(host host.Host, topicsCtrl topics.Controller, idx peers.
 		n.host.Store(&host)
 	}
 	return n
+}
+
+// alanTopic builds a valid Alan gossipsub topic name ("ssv.v2.<subnet>") for a
+// subnet index. ParseTopicSubnet only accepts the fork-prefixed topic format, so
+// tests must use this rather than bare subnet numbers.
+func alanTopic(subnet uint64) string {
+	return commons.Subnet(subnet).AlanTopic()
 }
 
 func subnetsFor(subnets ...uint64) commons.Subnets {
