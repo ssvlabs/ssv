@@ -6,8 +6,6 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 )
 
 func TestCommitteeRunnerRoleForBeaconRole(t *testing.T) {
@@ -78,8 +76,8 @@ func TestRunnerRoleForDuty_CommitteeDuty(t *testing.T) {
 }
 
 func TestRunnerRoleForValidatorDuty_Gloas(t *testing.T) {
-	duty := &spectypes.ValidatorDuty{Type: gloas.BNRolePTCAttester}
-	require.Equal(t, gloas.RolePTCAttester, RunnerRoleForValidatorDuty(duty, true))
+	duty := &spectypes.ValidatorDuty{Type: spectypes.BNRolePTCAttester}
+	require.Equal(t, spectypes.RolePTCAttester, RunnerRoleForValidatorDuty(duty, true))
 	require.Equal(t, spectypes.RoleUnknown, RunnerRoleForValidatorDuty(nil, true))
 
 	// Non-Gloas roles still resolve via ssv-spec's RunnerRole().
