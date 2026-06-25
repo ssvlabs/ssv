@@ -165,3 +165,16 @@ func TestProposerPreferencesHandler_emitForTick(t *testing.T) {
 		})
 	}
 }
+
+// A reorg drops the emitted-epoch markers so the next tick re-fetches and re-emits the lookahead.
+func TestProposerPreferencesHandler_handleReorg_clearsProcessed(t *testing.T) {
+	h := NewProposerPreferencesHandler()
+	h.logger = zap.NewNop()
+	for _, e := range []phase0.Epoch{100, 101} {
+		h.processed[e] = struct{}{}
+	}
+
+	h.handleReorg()
+
+	require.Empty(t, h.processed)
+}
