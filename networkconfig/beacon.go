@@ -144,7 +144,7 @@ func (b *Beacon) TimeAtSlot(slot phase0.Slot) time.Time {
 // aggregate/contribution 2× (50%), payload attestation 3× (75%); SIP #94 §1.
 func (b *Beacon) IntervalDuration(slot phase0.Slot) time.Duration {
 	intervalsPerSlot := 3
-	if b.IsGloas(b.EstimatedEpochAtSlot(slot)) {
+	if b.IsGloasAtSlot(slot) {
 		intervalsPerSlot = 4
 	}
 	return b.SlotDuration / time.Duration(intervalsPerSlot)
@@ -200,6 +200,12 @@ func (b *Beacon) ForkAtVersion(version spec.DataVersion) (phase0.Fork, bool) {
 func (b *Beacon) IsGloas(epoch phase0.Epoch) bool {
 	fork, ok := b.Forks[DataVersionGloas]
 	return ok && epoch >= fork.Epoch
+}
+
+// IsGloasAtSlot reports whether the Gloas (ePBS) fork is active at the given slot — the slot-keyed
+// shorthand for IsGloas(EstimatedEpochAtSlot(slot)) used across the duty runners and validators.
+func (b *Beacon) IsGloasAtSlot(slot phase0.Slot) bool {
+	return b.IsGloas(b.EstimatedEpochAtSlot(slot))
 }
 
 // GloasForkEpoch returns the scheduled Gloas (ePBS) fork epoch and whether a Gloas fork is present in

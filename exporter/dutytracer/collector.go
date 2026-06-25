@@ -506,7 +506,7 @@ func (c *Collector) processPartialSigCommittee(
 // carried attestation index (nil before Gloas) — the duty tracer's mirror of the runner's fork-aware
 // decode, so the signing roots it derives match what operators actually signed.
 func (c *Collector) decodeCommitteeVote(slot phase0.Slot, in []byte) (*spectypes.BeaconVote, *phase0.CommitteeIndex, error) {
-	if c.beacon.IsGloas(c.beacon.EstimatedEpochAtSlot(slot)) {
+	if c.beacon.IsGloasAtSlot(slot) {
 		gv := &gloas.GloasBeaconVote{}
 		if err := gv.Decode(in); err != nil {
 			return nil, nil, fmt.Errorf("decode gloas beacon vote: %w", err)

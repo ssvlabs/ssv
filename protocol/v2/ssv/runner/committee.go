@@ -228,7 +228,7 @@ func (r *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Logg
 	// The decided value is a GloasBeaconVote (which carries the attestation index) on Gloas slots, a
 	// plain BeaconVote before; decode into the matching prototype.
 	decidedPrototype := spectypes.Encoder(&spectypes.BeaconVote{})
-	if dutyErr == nil && r.NetworkConfig.IsGloas(r.NetworkConfig.EstimatedEpochAtSlot(committeeDuty.DutySlot())) {
+	if dutyErr == nil && r.NetworkConfig.IsGloasAtSlot(committeeDuty.DutySlot()) {
 		decidedPrototype = &gloas.GloasBeaconVote{}
 	}
 
@@ -1176,7 +1176,7 @@ func (r *CommitteeRunner) executeDuty(ctx context.Context, logger *zap.Logger, d
 	// index (SIP #94 §2); before Gloas it is a plain BeaconVote. Both implement spectypes.Encoder, so
 	// the QBFT plumbing is identical — only the value type and its checker differ.
 	var input spectypes.Encoder
-	if r.NetworkConfig.IsGloas(r.NetworkConfig.EstimatedEpochAtSlot(slot)) {
+	if r.NetworkConfig.IsGloasAtSlot(slot) {
 		gloasVote := &gloas.GloasBeaconVote{
 			BlockRoot:            attData.BeaconBlockRoot,
 			Source:               attData.Source,

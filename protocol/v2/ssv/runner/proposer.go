@@ -184,7 +184,7 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 	// isn't leading the 1st QBFT round it might become a Leader in case of round change - hence
 	// we are always fetching Ethereum block here just in case we need to propose it).
 	var input *spectypes.ProposerConsensusData
-	if r.NetworkConfig.IsGloas(r.NetworkConfig.EstimatedEpochAtSlot(duty.Slot)) {
+	if r.NetworkConfig.IsGloasAtSlot(duty.Slot) {
 		input, err = r.gloasProposalInput(ctx, logger, duty, fullSig)
 		if err != nil {
 			return err
@@ -310,7 +310,7 @@ func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logge
 	)
 
 	var blkRootToSign ssz.HashRoot
-	if r.NetworkConfig.IsGloas(r.NetworkConfig.EstimatedEpochAtSlot(cd.Duty.Slot)) {
+	if r.NetworkConfig.IsGloasAtSlot(cd.Duty.Slot) {
 		// Gloas blocks have no spectypes block version; decode the node-side block, which doubles as
 		// the ssz.HashRoot to sign.
 		block, decErr := gloas.DecodeBeaconBlock(cd.DataSSZ)
@@ -457,7 +457,7 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 		return fmt.Errorf("could not decode decided validator consensus data: %w", err)
 	}
 
-	if r.NetworkConfig.IsGloas(r.NetworkConfig.EstimatedEpochAtSlot(validatorConsensusData.Duty.Slot)) {
+	if r.NetworkConfig.IsGloasAtSlot(validatorConsensusData.Duty.Slot) {
 		return r.submitGloasProposal(ctx, logger, span, validatorConsensusData, specSig)
 	}
 
@@ -568,7 +568,7 @@ func (r *ProposerRunner) expectedPostConsensusRootsAndDomain(context.Context) ([
 	}
 
 	var signedRoot ssz.HashRoot
-	if r.NetworkConfig.IsGloas(r.NetworkConfig.EstimatedEpochAtSlot(validatorConsensusData.Duty.Slot)) {
+	if r.NetworkConfig.IsGloasAtSlot(validatorConsensusData.Duty.Slot) {
 		block, decErr := gloas.DecodeBeaconBlock(validatorConsensusData.DataSSZ)
 		if decErr != nil {
 			return nil, phase0.DomainType{}, fmt.Errorf("could not decode gloas block: %w", decErr)

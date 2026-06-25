@@ -153,7 +153,7 @@ func (mv *messageValidator) validRoleUnion(roleType spectypes.RunnerRole) bool {
 
 func (mv *messageValidator) validRoleAtSlot(roleType spectypes.RunnerRole, slot phase0.Slot) bool {
 	isInBooleFork := mv.netCfg.BooleForkAtSlot(slot)
-	isInGloas := mv.netCfg.IsGloas(mv.netCfg.EstimatedEpochAtSlot(slot))
+	isInGloas := mv.netCfg.IsGloasAtSlot(slot)
 	switch roleType {
 	case spectypes.RoleCommittee, spectypes.RoleProposer, spectypes.RoleVoluntaryExit:
 		return true

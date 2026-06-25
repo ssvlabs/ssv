@@ -162,7 +162,7 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 			}
 			dutySlot := blockSlot + validatorRegistrationDutySlotsToPostpone
 			// Deprecated at the Gloas fork: don't enqueue registrations whose duty slot is Gloas-or-later.
-			if h.netCfg.IsGloas(h.netCfg.EstimatedEpochAtSlot(dutySlot)) {
+			if h.netCfg.IsGloasAtSlot(dutySlot) {
 				continue
 			}
 			earliestExecutionSlot := blockSlot + validatorRegistrationExecutionSlotsToPostpone
