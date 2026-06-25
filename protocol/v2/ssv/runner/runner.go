@@ -187,6 +187,9 @@ func (b *BaseRunner) GetLastRound() specqbft.Round {
 }
 
 func (b *BaseRunner) GetStateRoot() ([32]byte, error) {
+	if b.State == nil {
+		return [32]byte{}, errors.New("runner state is not initialized")
+	}
 	return b.State.GetRoot()
 }
 
