@@ -27,12 +27,12 @@ func TestRecordPubsubMessageReceived(t *testing.T) {
 	require.NoError(t, reader.Collect(t.Context(), &rm))
 
 	for _, scopeMetrics := range rm.ScopeMetrics {
-		for _, metric := range scopeMetrics.Metrics {
-			if metric.Name != "ssv.p2p.pubsub.messages.received" {
+		for _, m := range scopeMetrics.Metrics {
+			if m.Name != "ssv.p2p.pubsub.messages.received" {
 				continue
 			}
 
-			sum, ok := metric.Data.(metricdata.Sum[int64])
+			sum, ok := m.Data.(metricdata.Sum[int64])
 			require.True(t, ok)
 			require.Len(t, sum.DataPoints, 1)
 			require.EqualValues(t, 2, sum.DataPoints[0].Value)
