@@ -359,7 +359,7 @@ func (s *Scheduler) SlotTicker(ctx context.Context) {
 		case <-s.ticker.Next():
 			slot := s.ticker.Slot()
 
-			delay := s.netCfg.IntervalDuration()
+			delay := s.netCfg.IntervalDuration(slot)
 			finalTime := s.netCfg.SlotStartTime(slot).Add(delay)
 			waitDuration := time.Until(finalTime)
 			if waitDuration > 0 {
@@ -441,10 +441,10 @@ func (s *Scheduler) HandleHeadEvent() func(ctx context.Context, event *eth2apiv1
 		s.currentDutyDependentRoot = event.CurrentDutyDependentRoot
 
 		currentTime := time.Now()
-		delay := s.netCfg.IntervalDuration()
+		delay := s.netCfg.IntervalDuration(event.Slot)
 		slotStartTimeWithDelay := s.netCfg.SlotStartTime(event.Slot).Add(delay)
 		if currentTime.Before(slotStartTimeWithDelay) {
-			logger.Debug("🏁 Head event: Block arrived before 1/3 slot", zap.Duration("time_saved", slotStartTimeWithDelay.Sub(currentTime)))
+			logger.Debug("🏁 Head event: Block arrived before the attestation deadline", zap.Duration("time_saved", slotStartTimeWithDelay.Sub(currentTime)))
 
 			// We give the block some time to propagate around the rest of the
 			// nodes before kicking off duties for the block's slot.
@@ -570,7 +570,7 @@ func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, duties committee
 			defer cancel()
 
 			if role == spectypes.RoleCommittee {
-				s.waitOneThirdIntoSlotOrValidBlock(slot)
+				s.waitOneIntervalIntoSlotOrValidBlock(slot)
 			}
 			s.dutyExecutor.ExecuteCommitteeDuty(dutyCtx, logger, committee.id, duty)
 		}()
@@ -630,15 +630,15 @@ func (s *Scheduler) advanceHeadSlot(slot phase0.Slot) {
 	s.waitCond.L.Unlock()
 }
 
-// waitOneThirdIntoSlotOrValidBlock waits until one-third of the slot has passed (SECONDS_PER_SLOT / 3 seconds after
-// slot start time), or for a head block event that might come in even sooner than one-third of the slot passes.
-func (s *Scheduler) waitOneThirdIntoSlotOrValidBlock(slot phase0.Slot) {
-	s.logger.Debug("waiting 1/3 into slot (maybe)")
-	defer s.logger.Debug("waiting 1/3 into slot (done)")
+// waitOneIntervalIntoSlotOrValidBlock waits until the attestation deadline (one interval into the slot — 1/3
+// before Gloas, 1/4 from Gloas on), or for a head block event that might come in even sooner.
+func (s *Scheduler) waitOneIntervalIntoSlotOrValidBlock(slot phase0.Slot) {
+	s.logger.Debug("waiting one interval into slot (maybe)")
+	defer s.logger.Debug("waiting one interval into slot (done)")
 
 	s.waitCond.L.Lock()
 	for s.headSlot < slot {
-		s.logger.Debug("waiting 1/3 into slot",
+		s.logger.Debug("waiting one interval into slot",
 			zap.Uint64("current_head_slot", uint64(s.headSlot)),
 			zap.Uint64("slot", uint64(slot)),
 		)

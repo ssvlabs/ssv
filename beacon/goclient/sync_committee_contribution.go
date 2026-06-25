@@ -51,7 +51,7 @@ func (gc *GoClient) GetSyncCommitteeContribution(
 		return nil, DataVersionNil, fmt.Errorf("mismatching number of selection proofs and subnet IDs")
 	}
 
-	if err := gc.waitOneThirdIntoSlot(ctx, slot); err != nil {
+	if err := gc.waitIntoSlot(ctx, slot, 1); err != nil {
 		return nil, DataVersionNil, fmt.Errorf("wait for 1/3 of slot: %w", err)
 	}
 
@@ -75,7 +75,7 @@ func (gc *GoClient) GetSyncCommitteeContribution(
 
 	blockRoot := beaconBlockRootResp.Data
 
-	if err := gc.waitTwoThirdsIntoSlot(ctx, slot); err != nil {
+	if err := gc.waitIntoSlot(ctx, slot, 2); err != nil {
 		return nil, DataVersionNil, fmt.Errorf("wait for 2/3 of slot: %w", err)
 	}
 
@@ -128,22 +128,4 @@ func (gc *GoClient) SubmitSignedContributionAndProof(
 	}
 
 	return nil
-}
-
-// waitOneThirdIntoSlot waits until one-third of the slot has transpired (SECONDS_PER_SLOT / 3 seconds after slot start time)
-func (gc *GoClient) waitOneThirdIntoSlot(ctx context.Context, slot phase0.Slot) error {
-	config := gc.getBeaconConfig()
-	delay := config.IntervalDuration()
-	finalTime := config.SlotStartTime(slot).Add(delay)
-	wait := time.Until(finalTime)
-	if wait <= 0 {
-		return nil
-	}
-
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-time.After(wait):
-		return nil
-	}
 }

@@ -136,7 +136,7 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 				// if we are still early into the slot (1 slot-interval is just a guesstimate), otherwise we might
 				// be delaying the next tick (the duties that need to be executed on the next slot).
 
-				indicesChangeDeadline := h.netCfg.SlotStartTime(currentSlot).Add(h.netCfg.IntervalDuration())
+				indicesChangeDeadline := h.netCfg.SlotStartTime(currentSlot).Add(h.netCfg.IntervalDuration(currentSlot))
 				select {
 				case <-h.indicesChangeCh:
 					logger.Info("🔁 indices change received")
