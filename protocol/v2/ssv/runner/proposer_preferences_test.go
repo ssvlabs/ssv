@@ -35,8 +35,9 @@ func TestNewProposerPreferencesRunner_RequiresSingleShare(t *testing.T) {
 	require.Equal(t, spectypes.RoleProposerPreferences, r.(*ProposerPreferencesRunner).BaseRunner.RunnerRoleType)
 }
 
-// A validator can hold several lookahead proposal slots at once; the dispatcher gives each its own
-// sub-runner instead of the single-runner state overwriting/rejecting all but one.
+// Regression for the monotonic ShouldProcessNonBeaconDuty reject (runner.go): a validator can hold
+// several lookahead proposal slots at once, and a HIGHER slot started first must not cause a
+// subsequently started LOWER slot to be dropped. The dispatcher gives each slot its own sub-runner.
 func TestProposerPreferencesRunner_ConcurrentSlotsTracked(t *testing.T) {
 	netCfg := networkconfig.TestNetwork
 	opts := ProposerPreferencesRunnerOptions{
@@ -50,13 +51,16 @@ func TestProposerPreferencesRunner_ConcurrentSlotsTracked(t *testing.T) {
 	require.NoError(t, err)
 	disp := r.(*ProposerPreferencesRunner)
 
+	// Decreasing order is the exact case that broke the single runner: the higher slot, started first,
+	// made the base runner reject the lower one as "already passed".
 	current := netCfg.EstimatedCurrentSlot()
-	for _, slot := range []phase0.Slot{current + 10, current + 20} {
+	for _, slot := range []phase0.Slot{current + 20, current + 10} {
 		duty := &spectypes.ValidatorDuty{Type: spectypes.BNRoleProposerPreferences, ValidatorIndex: 0, Slot: slot}
 		require.NoError(t, disp.StartNewDuty(context.Background(), zap.NewNop(), duty, 1))
 	}
 
-	require.Len(t, disp.bySlot, 2) // both slots tracked; neither overwrote or rejected the other
+	require.Len(t, disp.bySlot, 2)               // both slots tracked, neither overwrote/rejected the other
+	require.Contains(t, disp.bySlot, current+10) // the lower slot, started second, survived
 }
 
 // evictPastSlots drops sub-runners whose proposal slot has already passed.

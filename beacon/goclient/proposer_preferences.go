@@ -18,25 +18,31 @@ import (
 // seed; go-eth2-client drops the field, so this is a raw-HTTP fetch (the same interim surface as the
 // PTC endpoints) until the fork exposes it.
 func (gc *GoClient) ProposerDutiesDependentRoot(ctx context.Context, epoch phase0.Epoch) (phase0.Root, error) {
-	return firstClientResult(ctx, gc, "ProposerDutiesDependentRoot", http.MethodGet, func(ctx context.Context, addr string) (phase0.Root, error) {
-		var resp struct {
-			DependentRoot string `json:"dependent_root"`
-		}
-		url := addr + fmt.Sprintf("/eth/v2/validator/duties/proposer/%d", epoch)
-		if err := ptcDo(ctx, ptcHTTPClient, http.MethodGet, url, nil, nil, &resp); err != nil {
-			return phase0.Root{}, err
-		}
-		raw, err := hex.DecodeString(strings.TrimPrefix(resp.DependentRoot, "0x"))
-		if err != nil {
-			return phase0.Root{}, fmt.Errorf("decode dependent_root %q: %w", resp.DependentRoot, err)
-		}
-		var root phase0.Root
-		if len(raw) != len(root) {
-			return phase0.Root{}, fmt.Errorf("dependent_root: expected %d bytes, got %d", len(root), len(raw))
-		}
-		copy(root[:], raw)
-		return root, nil
+	// Several proposer-preferences runners (one per local proposing validator in the epoch) request the
+	// same epoch's dependent_root concurrently; collapse that burst into a single GET. Not TTL-cached so
+	// a reorg re-emission still observes a fresh root.
+	root, err, _ := gc.proposerDutiesDependentRootInflight.Do(epoch, func() (phase0.Root, error) {
+		return firstClientResult(ctx, gc, "ProposerDutiesDependentRoot", http.MethodGet, func(ctx context.Context, addr string) (phase0.Root, error) {
+			var resp struct {
+				DependentRoot string `json:"dependent_root"`
+			}
+			url := addr + fmt.Sprintf("/eth/v2/validator/duties/proposer/%d", epoch)
+			if err := ptcDo(ctx, ptcHTTPClient, http.MethodGet, url, nil, nil, &resp); err != nil {
+				return phase0.Root{}, err
+			}
+			raw, err := hex.DecodeString(strings.TrimPrefix(resp.DependentRoot, "0x"))
+			if err != nil {
+				return phase0.Root{}, fmt.Errorf("decode dependent_root %q: %w", resp.DependentRoot, err)
+			}
+			var root phase0.Root
+			if len(raw) != len(root) {
+				return phase0.Root{}, fmt.Errorf("dependent_root: expected %d bytes, got %d", len(root), len(raw))
+			}
+			copy(root[:], raw)
+			return root, nil
+		})
 	})
+	return root, err
 }
 
 // SubmitProposerPreferences broadcasts signed Gloas (ePBS) proposer preferences (SIP #94 §5).
