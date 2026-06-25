@@ -254,15 +254,24 @@ func TestConstructAttestationData(t *testing.T) {
 	}
 
 	t.Run("pre electra keeps committee index", func(t *testing.T) {
-		attData := constructAttestationData(vote, duty, spec.DataVersionDeneb)
+		attData := constructAttestationData(vote, duty, spec.DataVersionDeneb, nil)
 		require.Equal(t, spectestingutils.TestingCommitteeIndex, attData.Index)
 		require.Equal(t, duty.Slot, attData.Slot)
 		require.Equal(t, vote.BlockRoot, attData.BeaconBlockRoot)
 	})
 
 	t.Run("electra zeros committee index", func(t *testing.T) {
-		attData := constructAttestationData(vote, duty, spec.DataVersionElectra)
+		attData := constructAttestationData(vote, duty, spec.DataVersionElectra, nil)
 		require.Zero(t, attData.Index)
+		require.Equal(t, duty.Slot, attData.Slot)
+		require.Equal(t, vote.BlockRoot, attData.BeaconBlockRoot)
+	})
+
+	t.Run("gloas uses the decided payload-status index", func(t *testing.T) {
+		index := phase0.CommitteeIndex(1)
+		// The Gloas index overrides the Electra zero (SIP #94 §2) — it is the value that gets signed.
+		attData := constructAttestationData(vote, duty, spec.DataVersionFulu, &index)
+		require.Equal(t, index, attData.Index)
 		require.Equal(t, duty.Slot, attData.Slot)
 		require.Equal(t, vote.BlockRoot, attData.BeaconBlockRoot)
 	})

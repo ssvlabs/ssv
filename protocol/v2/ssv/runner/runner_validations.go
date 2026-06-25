@@ -13,6 +13,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
+	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 )
 
 func (b *BaseRunner) ValidatePreConsensusMsg(
@@ -137,14 +138,20 @@ func (b *BaseRunner) ValidatePostConsensusMsg(ctx context.Context, runner Runner
 	}
 	if runner.GetRole() == spectypes.RoleCommittee {
 		validateMsg = func() error {
-			decidedValue := &spectypes.BeaconVote{}
+			// Use b.State.CurrentDuty.DutySlot() since CurrentDuty never changes for CommitteeRunner
+			// by design, hence there is no need to store slot number on decidedValue for CommitteeRunner.
+			expectedSlot := b.State.CurrentDuty.DutySlot()
+
+			// Parse-check the decided value against the slot's fork: a GloasBeaconVote (120B) on Gloas,
+			// a BeaconVote (112B) before. The two reject on length, so a wrong-fork value fails here.
+			decidedValue := spectypes.Encoder(&spectypes.BeaconVote{})
+			if b.NetworkConfig.IsGloas(b.NetworkConfig.EstimatedEpochAtSlot(expectedSlot)) {
+				decidedValue = &gloas.GloasBeaconVote{}
+			}
 			if err := decidedValue.Decode(decidedValueBytes); err != nil {
 				return fmt.Errorf("failed to parse decided value to BeaconVote: %w", err)
 			}
 
-			// Use b.State.CurrentDuty.DutySlot() since CurrentDuty never changes for CommitteeRunner
-			// by design, hence there is no need to store slot number on decidedValue for CommitteeRunner.
-			expectedSlot := b.State.CurrentDuty.DutySlot()
 			return b.validatePartialSigMsg(psigMsgs, expectedSlot)
 		}
 	}
