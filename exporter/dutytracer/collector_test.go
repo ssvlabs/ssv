@@ -25,6 +25,7 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 	"github.com/ssvlabs/ssv/registry/storage"
 	registrystoragemocks "github.com/ssvlabs/ssv/registry/storage/mocks"
 	kv "github.com/ssvlabs/ssv/storage/badger"
@@ -933,6 +934,32 @@ func TestDutyTracer_SyncCommitteeRoots(t *testing.T) {
 		166, 167, 30, 61, 93, 176, 31, 245, 206, 128, 55, 43,
 		252, 38, 103, 222, 41, 238, 156, 242, 86, 60, 152, 240}
 	assert.Equal(t, phase0.Root(wantRoot), root)
+}
+
+func TestDutyTracer_DecodeCommitteeVote(t *testing.T) {
+	// Pre-Gloas: a BeaconVote decodes to the common vote with no attestation index.
+	preGloas := New(zap.NewNop(), nil, mockclient{}, nil, networkconfig.TestNetwork.Beacon, nil, nil)
+	bv := &spectypes.BeaconVote{BlockRoot: phase0.Root{1, 2, 3}, Source: &phase0.Checkpoint{}, Target: &phase0.Checkpoint{Epoch: 1}}
+	bvBytes, err := bv.Encode()
+	require.NoError(t, err)
+
+	gotVote, gotIndex, err := preGloas.decodeCommitteeVote(1, bvBytes)
+	require.NoError(t, err)
+	require.Equal(t, bv.BlockRoot, gotVote.BlockRoot)
+	require.Nil(t, gotIndex)
+
+	// Gloas (fork at epoch 0): a GloasBeaconVote yields the common vote plus the payload-status index.
+	gloasTracer := New(zap.NewNop(), nil, mockclient{}, nil, networkconfig.TestNetworkWithGloas(0).Beacon, nil, nil)
+	gv := &gloas.GloasBeaconVote{BlockRoot: phase0.Root{4, 5, 6}, Source: &phase0.Checkpoint{}, Target: &phase0.Checkpoint{Epoch: 1}, AttestationDataIndex: 1}
+	gvBytes, err := gv.Encode()
+	require.NoError(t, err)
+
+	gotVote, gotIndex, err = gloasTracer.decodeCommitteeVote(1, gvBytes)
+	require.NoError(t, err)
+	require.Equal(t, gv.BlockRoot, gotVote.BlockRoot)
+	require.Equal(t, phase0.Epoch(1), gotVote.Target.Epoch) // Source/Target carried over, not just BlockRoot
+	require.NotNil(t, gotIndex)
+	require.Equal(t, phase0.CommitteeIndex(1), *gotIndex)
 }
 
 type mockclient struct{}
