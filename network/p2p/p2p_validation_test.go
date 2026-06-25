@@ -407,7 +407,7 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 	// entirely on this goroutine (no spawned predicate), so settledSnap needs
 	// no synchronization and there's no post-timeout predicate race to guard.
 	deadline := time.Now().Add(30 * time.Second)
-	for {
+	for ctx.Err() == nil {
 		for _, node := range vNet.Nodes {
 			if settledSnap[node.Index] != nil {
 				continue // already latched
@@ -431,7 +431,13 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 		if len(settledSnap) == len(vNet.Nodes) || time.Now().After(deadline) {
 			break
 		}
-		time.Sleep(100 * time.Millisecond)
+		// Sleep between polls, but wake immediately on context cancellation
+		// (the for-condition above then exits the loop) so we don't keep
+		// polling during teardown.
+		select {
+		case <-ctx.Done():
+		case <-time.After(100 * time.Millisecond):
+		}
 	}
 
 	// Scores have either settled or timed out; stop broadcasting. A real
