@@ -44,8 +44,13 @@ func (ec *ExecutionClient) verifyLogsWithBloom(ctx context.Context, logs []ethty
 			continue // bloom says no SSV events in this block — genuine empty
 		}
 
-		// Bloom matched but FilterLogs returned nothing — suspected EL bug.
-		ec.logger.Warn("bloom filter mismatch during block-logs fetching: block bloom matches contract but EL returned no logs for this block, gonna retry to fetch block-logs for this specific block",
+		// Bloom matched but FilterLogs returned nothing. This is inconclusive on its
+		// own: it happens routinely as a benign bloom false positive (the filter is
+		// probabilistic and other logs in the block can set the contract's bits), and
+		// only occasionally because the EL actually dropped logs. We therefore log it
+		// at debug and let the retry below decide — a successful recovery is what gets
+		// promoted to a warning.
+		ec.logger.Debug("bloom matched contract but EL returned no logs for block, retrying to confirm",
 			fields.BlockNumber(blockNum),
 			zap.String("contract", ec.contractAddress.Hex()),
 		)
@@ -56,9 +61,15 @@ func (ec *ExecutionClient) verifyLogsWithBloom(ctx context.Context, logs []ethty
 		}
 
 		if len(blockLogs) > 0 {
-			ec.logger.Warn("bloom cross-check recovered missing events",
+			// The retry recovered logs the EL had omitted from the original response.
+			// The block bloom is consensus-verified, so these events are genuine and
+			// were dropped by the EL — this is not a bloom false positive. This is the
+			// actionable signal: the execution client returned incomplete logs, which
+			// would have been silently skipped without this cross-check.
+			ec.logger.Warn("recovered contract logs the execution client omitted on first request: events were not lost, but this indicates a buggy or unhealthy EL (e.g. known geth log-dropping bug) — consider updating or checking your execution client",
 				fields.BlockNumber(blockNum),
 				zap.Int("recovered_events", len(blockLogs)),
+				zap.String("contract", ec.contractAddress.Hex()),
 			)
 			recordBloomRecovery(ctx)
 			logs = append(logs, blockLogs...)
