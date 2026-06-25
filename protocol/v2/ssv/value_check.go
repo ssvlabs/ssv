@@ -247,14 +247,24 @@ func (v *proposerChecker) CheckValue(value []byte) error {
 		return err
 	}
 
-	blockData, _, err := cd.GetBlockData()
-	if err != nil {
-		return fmt.Errorf("could not get block data: %w", err)
-	}
-
-	slot, err := blockData.Slot()
-	if err != nil {
-		return fmt.Errorf("failed to get slot from block data: %w", err)
+	var slot phase0.Slot
+	if v.beaconConfig.IsGloas(v.beaconConfig.EstimatedEpochAtSlot(cd.Duty.Slot)) {
+		// Gloas blocks have no spectypes block version; GetBlockData can't decode them, so read the
+		// slot from the node-side block directly.
+		block, decErr := gloas.DecodeBeaconBlock(cd.DataSSZ)
+		if decErr != nil {
+			return fmt.Errorf("could not decode gloas block: %w", decErr)
+		}
+		slot = block.Slot
+	} else {
+		blockData, _, bdErr := cd.GetBlockData()
+		if bdErr != nil {
+			return fmt.Errorf("could not get block data: %w", bdErr)
+		}
+		slot, bdErr = blockData.Slot()
+		if bdErr != nil {
+			return fmt.Errorf("failed to get slot from block data: %w", bdErr)
+		}
 	}
 	return v.signer.IsBeaconBlockSlashable(v.sharePublicKey, slot)
 }
@@ -316,7 +326,14 @@ func checkValidatorConsensusData(
 	if err := cd.Decode(value); err != nil {
 		return nil, fmt.Errorf("failed decoding consensus data: %w", err)
 	}
-	if err := ssvtypes.ValidateConsensusData(cd); err != nil {
+
+	if cd.Duty.Type == spectypes.BNRoleProposer && beaconConfig.IsGloas(beaconConfig.EstimatedEpochAtSlot(cd.Duty.Slot)) {
+		// Gloas blocks have no spectypes block version, so ValidateConsensusData's GetBlockData path
+		// can't decode them; a successful node-side decode is the validity check.
+		if _, err := gloas.DecodeBeaconBlock(cd.DataSSZ); err != nil {
+			return cd, spectypes.NewError(spectypes.QBFTValueInvalidErrorCode, "invalid value")
+		}
+	} else if err := ssvtypes.ValidateConsensusData(cd); err != nil {
 		return cd, spectypes.NewError(spectypes.QBFTValueInvalidErrorCode, "invalid value")
 	}
 

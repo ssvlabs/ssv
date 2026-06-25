@@ -64,3 +64,14 @@ func (b *BeaconBlock) Decode(data []byte) error { return b.UnmarshalSSZ(data) }
 
 func (b *SignedBeaconBlock) Encode() ([]byte, error)  { return b.MarshalSSZ() }
 func (b *SignedBeaconBlock) Decode(data []byte) error { return b.UnmarshalSSZ(data) }
+
+// DecodeBeaconBlock unmarshals a Gloas BeaconBlock from QBFT consensus DataSSZ. It is the proposer
+// path's node-side replacement for spectypes.ProposerConsensusData.GetBlockData, which has no Gloas
+// version; the returned block doubles as the ssz.HashRoot the proposer signs.
+func DecodeBeaconBlock(dataSSZ []byte) (*BeaconBlock, error) {
+	b := &BeaconBlock{}
+	if err := b.UnmarshalSSZ(dataSSZ); err != nil {
+		return nil, err
+	}
+	return b, nil
+}
