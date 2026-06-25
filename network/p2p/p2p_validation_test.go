@@ -523,9 +523,13 @@ func createVirtualNet(
 			if !doneSetup.Load() {
 				return
 			}
+			// This callback runs on gossipsub's scoring goroutine, so failures
+			// are reported with Errorf — Fatalf/FailNow must be called from the
+			// test goroutine. selfPeer/peerID are always one of this local net's
+			// virtual nodes, so these checks only guard a harness regression.
 			node := vn.NodeByPeerID(selfPeer)
 			if node == nil {
-				t.Fatalf("self peer not found (%s)", selfPeer)
+				t.Errorf("self peer not found (%s)", selfPeer)
 				return
 			}
 
@@ -533,7 +537,7 @@ func createVirtualNet(
 			for peerID, peerScore := range peerMap {
 				peerNode := vn.NodeByPeerID(peerID)
 				if peerNode == nil {
-					t.Fatalf("peer not found (%s)", peerID)
+					t.Errorf("peer not found (%s)", peerID)
 					return
 				}
 				peerScoresUpdated[peerNode.Index] = peerScore
