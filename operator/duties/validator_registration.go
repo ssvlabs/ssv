@@ -209,7 +209,9 @@ func (h *ValidatorRegistrationHandler) processExecution(ctx context.Context, epo
 	defer span.End()
 
 	// Validator registration is deprecated at the Gloas fork — superseded by proposer preferences (§5).
+	// Drop any entries that didn't drain before the fork; nothing more is enqueued past it.
 	if h.netCfg.IsGloas(epoch) {
+		h.eventQueue = nil
 		return
 	}
 

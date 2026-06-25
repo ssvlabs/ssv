@@ -92,3 +92,22 @@ func (h *baseHandler) atLastSlotOfCurrentEpoch(currentSlot phase0.Slot) bool {
 func (h *baseHandler) atLastSlotOrPastCurrentPeriod(currentSlot phase0.Slot, currentPeriod uint64) bool {
 	return currentSlot >= h.netCfg.LastActionableSlotOfSyncPeriod(currentPeriod)
 }
+
+// selfParticipatingIndices returns the indices of this node's validators participating in the epoch.
+func (h *baseHandler) selfParticipatingIndices(epoch phase0.Epoch) []phase0.ValidatorIndex {
+	shares := h.validatorProvider.SelfParticipatingValidators(epoch)
+	indices := make([]phase0.ValidatorIndex, 0, len(shares))
+	for _, share := range shares {
+		indices = append(indices, share.ValidatorIndex)
+	}
+	return indices
+}
+
+// evictEpochsBefore drops entries for epochs earlier than before, bounding a per-epoch cache.
+func evictEpochsBefore[V any](cache map[phase0.Epoch]V, before phase0.Epoch) {
+	for epoch := range cache {
+		if epoch < before {
+			delete(cache, epoch)
+		}
+	}
+}
