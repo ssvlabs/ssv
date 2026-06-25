@@ -14,6 +14,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -23,6 +24,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
+	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
@@ -38,6 +40,9 @@ type proposerTestBeacon struct {
 	submittedBlocks []*api.VersionedProposal
 	submittedSig    []phase0.BLSSignature
 	submitErr       error
+
+	getGloasBlock        *gloas.BeaconBlock
+	submittedGloasBlocks []*gloas.SignedBeaconBlock
 }
 
 func newProposerTestBeacon(proposal *api.VersionedProposal) *proposerTestBeacon {
@@ -58,6 +63,19 @@ func (b *proposerTestBeacon) GetBeaconBlock(_ context.Context, slot phase0.Slot,
 func (b *proposerTestBeacon) SubmitBeaconBlock(_ context.Context, block *api.VersionedProposal, sig phase0.BLSSignature) error {
 	b.submittedBlocks = append(b.submittedBlocks, block)
 	b.submittedSig = append(b.submittedSig, sig)
+	return b.submitErr
+}
+
+func (b *proposerTestBeacon) GetGloasBeaconBlock(_ context.Context, slot phase0.Slot, graffiti, randao []byte) (*gloas.BeaconBlock, error) {
+	b.getCalls++
+	b.lastGetSlot = slot
+	b.lastGetGraffiti = append([]byte(nil), graffiti...)
+	b.lastGetRandao = append([]byte(nil), randao...)
+	return b.getGloasBlock, nil
+}
+
+func (b *proposerTestBeacon) SubmitGloasBeaconBlock(_ context.Context, block *gloas.SignedBeaconBlock) error {
+	b.submittedGloasBlocks = append(b.submittedGloasBlocks, block)
 	return b.submitErr
 }
 
@@ -297,7 +315,7 @@ func TestProposerRunnerProcessPostConsensusLeaderUsesCachedFullBlockWhenDecision
 	dg := &stubDoppelganger{canSign: true}
 	runner, keySet, _ := newProposerRunnerForTest(t, beacon, dg, 0, nil)
 
-	setupRunnerForPostConsensus(t, runner, keySet, consensusData, 1)
+	setupRunnerForPostConsensus(t, runner, keySet, spectestingutils.TestingProposerDutyV(version), consensusData, 1)
 	runner.cachedFullBlock = fullBlock
 	runner.cachedBlindedBlockSSZ = append([]byte(nil), consensusData.DataSSZ...)
 
@@ -320,7 +338,7 @@ func TestProposerRunnerProcessPostConsensusLeaderFallsBackToDecidedBlindedBlockO
 	dg := &stubDoppelganger{canSign: true}
 	runner, keySet, _ := newProposerRunnerForTest(t, beacon, dg, 0, nil)
 
-	setupRunnerForPostConsensus(t, runner, keySet, consensusData, 1)
+	setupRunnerForPostConsensus(t, runner, keySet, spectestingutils.TestingProposerDutyV(version), consensusData, 1)
 	runner.cachedFullBlock = spectestingutils.TestingBeaconBlockV(version)
 	runner.cachedBlindedBlockSSZ = []byte("different-blinded-block")
 
@@ -341,7 +359,7 @@ func TestProposerRunnerProcessPostConsensusNonLeaderKeepsDecidedBlindedBlock(t *
 	dg := &stubDoppelganger{canSign: true}
 	runner, keySet, _ := newProposerRunnerForTest(t, beacon, dg, 0, nil)
 
-	setupRunnerForPostConsensus(t, runner, keySet, consensusData, 1)
+	setupRunnerForPostConsensus(t, runner, keySet, spectestingutils.TestingProposerDutyV(version), consensusData, 1)
 	runner.operatorSigner = fixedOperatorSigner{id: 2}
 	runner.cachedFullBlock = spectestingutils.TestingBeaconBlockV(version)
 	runner.cachedBlindedBlockSSZ = append([]byte(nil), consensusData.DataSSZ...)
@@ -352,6 +370,95 @@ func TestProposerRunnerProcessPostConsensusNonLeaderKeepsDecidedBlindedBlock(t *
 	require.True(t, beacon.submittedBlocks[0].Blinded)
 	require.Equal(t, []phase0.ValidatorIndex{runner.GetShare().ValidatorIndex}, dg.reportQuorum)
 	require.True(t, runner.State.Succeeded)
+}
+
+func gloasProposerDuty(slot phase0.Slot) *spectypes.ValidatorDuty {
+	return &spectypes.ValidatorDuty{
+		Type:                    spectypes.BNRoleProposer,
+		PubKey:                  spectestingutils.TestingValidatorPubKey,
+		Slot:                    slot,
+		ValidatorIndex:          spectestingutils.TestingValidatorIndex,
+		CommitteeIndex:          3,
+		CommitteesAtSlot:        36,
+		CommitteeLength:         128,
+		ValidatorCommitteeIndex: 11,
+	}
+}
+
+func gloasProposerConsensusData(t *testing.T, slot phase0.Slot) *spectypes.ProposerConsensusData {
+	t.Helper()
+	dataSSZ, err := gloas.TestingBeaconBlock(slot).MarshalSSZ()
+	require.NoError(t, err)
+	return &spectypes.ProposerConsensusData{
+		Duty:    *gloasProposerDuty(slot),
+		Version: networkconfig.DataVersionGloas,
+		DataSSZ: dataSSZ,
+	}
+}
+
+// The operator that built the decided Gloas block (its cached block content-matches the decided value)
+// signs and publishes it.
+func TestProposerRunnerSubmitGloasProposalBuilderPublishes(t *testing.T) {
+	t.Parallel()
+
+	const slot = phase0.Slot(8)
+	consensusData := gloasProposerConsensusData(t, slot)
+	beacon := newProposerTestBeacon(nil)
+	runner, keySet, _ := newProposerRunnerForTest(t, beacon, &stubDoppelganger{canSign: true}, 0, nil)
+
+	setupRunnerForPostConsensus(t, runner, keySet, gloasProposerDuty(slot), consensusData, 1)
+	runner.cachedGloasBlockSSZ = append([]byte(nil), consensusData.DataSSZ...)
+
+	err := runner.submitGloasProposal(context.Background(), zap.NewNop(), trace.SpanFromContext(context.Background()), consensusData, phase0.BLSSignature{0xab})
+	require.NoError(t, err)
+
+	require.Len(t, beacon.submittedGloasBlocks, 1)
+	require.Equal(t, slot, beacon.submittedGloasBlocks[0].Message.Slot)
+	require.Equal(t, phase0.BLSSignature{0xab}, beacon.submittedGloasBlocks[0].Signature)
+	require.True(t, runner.State.Succeeded)
+}
+
+// An operator that did not build the decided block (content mismatch) completes the duty without
+// submitting — only the builder can later reveal the matching payload.
+func TestProposerRunnerSubmitGloasProposalNonBuilderSkips(t *testing.T) {
+	t.Parallel()
+
+	const slot = phase0.Slot(8)
+	consensusData := gloasProposerConsensusData(t, slot)
+	beacon := newProposerTestBeacon(nil)
+	runner, keySet, _ := newProposerRunnerForTest(t, beacon, &stubDoppelganger{canSign: true}, 0, nil)
+
+	setupRunnerForPostConsensus(t, runner, keySet, gloasProposerDuty(slot), consensusData, 1)
+	runner.cachedGloasBlockSSZ = []byte("a-different-block")
+
+	err := runner.submitGloasProposal(context.Background(), zap.NewNop(), trace.SpanFromContext(context.Background()), consensusData, phase0.BLSSignature{0xab})
+	require.NoError(t, err)
+
+	require.Empty(t, beacon.submittedGloasBlocks)
+	require.True(t, runner.State.Succeeded)
+}
+
+// gloasProposalInput fetches the Gloas block from the beacon node, wraps it as the consensus value
+// with the Gloas version marker, and caches the SSZ for the post-consensus content-match.
+func TestProposerRunnerGloasProposalInput(t *testing.T) {
+	t.Parallel()
+
+	const slot = phase0.Slot(8)
+	beacon := newProposerTestBeacon(nil)
+	beacon.getGloasBlock = gloas.TestingBeaconBlock(slot)
+	runner, _, _ := newProposerRunnerForTest(t, beacon, &stubDoppelganger{canSign: true}, 0, nil)
+
+	input, err := runner.gloasProposalInput(context.Background(), zap.NewNop(), gloasProposerDuty(slot), []byte("randao"))
+	require.NoError(t, err)
+
+	expectedSSZ, err := gloas.TestingBeaconBlock(slot).MarshalSSZ()
+	require.NoError(t, err)
+	require.Equal(t, networkconfig.DataVersionGloas, input.Version)
+	require.Equal(t, expectedSSZ, input.DataSSZ)
+	require.Equal(t, expectedSSZ, runner.cachedGloasBlockSSZ)
+	require.Equal(t, slot, beacon.lastGetSlot)
+	require.Equal(t, []byte("graffiti"), beacon.lastGetGraffiti)
+	require.Equal(t, []byte("randao"), beacon.lastGetRandao)
 }
 
 func newProposerRunnerForTest(
@@ -429,12 +536,12 @@ func setupRunnerForPostConsensus(
 	t *testing.T,
 	runner *ProposerRunner,
 	keySet *spectestingutils.TestKeySet,
+	duty *spectypes.ValidatorDuty,
 	consensusData *spectypes.ProposerConsensusData,
 	leaderID spectypes.OperatorID,
 ) {
 	t.Helper()
 
-	duty := spectestingutils.TestingProposerDutyV(consensusData.Version)
 	runner.State = NewRunnerState(keySet.Threshold, duty)
 	runner.measurements.StartDutyFlow()
 	runner.measurements.StartConsensus()

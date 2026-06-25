@@ -21,6 +21,7 @@ import (
 
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
@@ -29,6 +30,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 )
 
 type ProposerRunner struct {
@@ -58,6 +60,11 @@ type ProposerRunner struct {
 	// cachedBlindedBlockSSZ is a fingerprint of the cachedFullBlock, it is stored here
 	// for efficient validation (so we re-use it instead of re-calculating).
 	cachedBlindedBlockSSZ []byte
+
+	// cachedGloasBlockSSZ holds the SSZ of the Gloas (ePBS) block this operator fetched for the duty.
+	// Post-consensus content-matches it against the decided value to detect whether this operator
+	// built the decided block — only that operator publishes it (and can later reveal its payload).
+	cachedGloasBlockSSZ []byte
 }
 
 // ProposerRunnerOptions bundles all dependencies required by NewProposerRunner.
@@ -176,55 +183,62 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 	// Fetch the block our operator will propose if it is a Leader (note, even if our operator
 	// isn't leading the 1st QBFT round it might become a Leader in case of round change - hence
 	// we are always fetching Ethereum block here just in case we need to propose it).
-	start := time.Now()
-	vBlk, _, err := r.GetBeaconNode().GetBeaconBlock(ctx, duty.Slot, r.graffiti, fullSig)
-	if err != nil {
-		return fmt.Errorf("get beacon block: %w", err)
-	}
-	// Log essentials about the retrieved block.
-	logFields, proposalTraceAttrs := proposalCommonFields(vBlk)
-	logFields = append(
-		logFields,
-		zap.Duration("proposer_delay", r.proposerDelay),
-		fields.Took(time.Since(start)),
-	)
-
-	feeRecipient, err := vBlk.FeeRecipient()
-	if err != nil {
-		logFields = append(logFields, zap.NamedError("feeRecipient_err", err))
+	var input *spectypes.ProposerConsensusData
+	if r.NetworkConfig.IsGloas(r.NetworkConfig.EstimatedEpochAtSlot(duty.Slot)) {
+		input, err = r.gloasProposalInput(ctx, logger, duty, fullSig)
+		if err != nil {
+			return err
+		}
 	} else {
-		logFields = append(logFields, fields.FeeRecipient(feeRecipient[:]))
-	}
-	const eventMsg = "🧊 got beacon block proposal"
-	logger.Info(eventMsg, logFields...)
-	span.AddEvent(eventMsg, trace.WithAttributes(proposalTraceAttrs...))
+		start := time.Now()
+		vBlk, _, err := r.GetBeaconNode().GetBeaconBlock(ctx, duty.Slot, r.graffiti, fullSig)
+		if err != nil {
+			return fmt.Errorf("get beacon block: %w", err)
+		}
+		// Log essentials about the retrieved block.
+		logFields, proposalTraceAttrs := proposalCommonFields(vBlk)
+		logFields = append(
+			logFields,
+			zap.Duration("proposer_delay", r.proposerDelay),
+			fields.Took(time.Since(start)),
+		)
 
-	// Ensure we propose a blinded block in QBFT. If the beacon returned a full
-	// block, convert it to blinded form by swapping the execution payload with
-	// its header (+ cache the original block so we can submit it later).
-	// Consensus value carries the blinded block SSZ.
+		feeRecipient, err := vBlk.FeeRecipient()
+		if err != nil {
+			logFields = append(logFields, zap.NamedError("feeRecipient_err", err))
+		} else {
+			logFields = append(logFields, fields.FeeRecipient(feeRecipient[:]))
+		}
+		const eventMsg = "🧊 got beacon block proposal"
+		logger.Info(eventMsg, logFields...)
+		span.AddEvent(eventMsg, trace.WithAttributes(proposalTraceAttrs...))
 
-	blindedVBlk, blindedMarshaler, err := blindutil.EnsureBlinded(vBlk)
-	if err != nil {
-		return fmt.Errorf("failed to blind full block: %w", err)
-	}
+		// Ensure we propose a blinded block in QBFT. If the beacon returned a full
+		// block, convert it to blinded form by swapping the execution payload with
+		// its header (+ cache the original block so we can submit it later).
+		// Consensus value carries the blinded block SSZ.
+		blindedVBlk, blindedMarshaler, err := blindutil.EnsureBlinded(vBlk)
+		if err != nil {
+			return fmt.Errorf("failed to blind full block: %w", err)
+		}
 
-	byts, err := blindedMarshaler.MarshalSSZ()
-	if err != nil {
-		return fmt.Errorf("could not marshal blinded beacon block: %w", err)
-	}
+		byts, err := blindedMarshaler.MarshalSSZ()
+		if err != nil {
+			return fmt.Errorf("could not marshal blinded beacon block: %w", err)
+		}
 
-	// Store the original block (we are only interested in full blocks) for later re-use
-	// in the post-consensus phase.
-	if !vBlk.Blinded {
-		r.cachedFullBlock = vBlk
-		r.cachedBlindedBlockSSZ = byts
-	}
+		// Store the original block (we are only interested in full blocks) for later re-use
+		// in the post-consensus phase.
+		if !vBlk.Blinded {
+			r.cachedFullBlock = vBlk
+			r.cachedBlindedBlockSSZ = byts
+		}
 
-	input := &spectypes.ProposerConsensusData{
-		Duty:    *duty,
-		Version: blindedVBlk.Version,
-		DataSSZ: byts,
+		input = &spectypes.ProposerConsensusData{
+			Duty:    *duty,
+			Version: blindedVBlk.Version,
+			DataSSZ: byts,
+		}
 	}
 
 	r.measurements.StartConsensus()
@@ -233,6 +247,42 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 	}
 
 	return nil
+}
+
+// gloasProposalInput fetches the Gloas (ePBS) block this operator would propose and wraps it as the
+// QBFT consensus value. The block carries only the execution-payload bid (the payload ships in the §6
+// envelope), so unlike the pre-Gloas path there is no blinding; the marshaled block is cached so
+// post-consensus can detect whether this operator built the decided block.
+func (r *ProposerRunner) gloasProposalInput(ctx context.Context, logger *zap.Logger, duty *spectypes.ValidatorDuty, randaoReveal []byte) (*spectypes.ProposerConsensusData, error) {
+	start := time.Now()
+	block, err := r.GetBeaconNode().GetGloasBeaconBlock(ctx, duty.Slot, r.graffiti, randaoReveal)
+	if err != nil {
+		return nil, fmt.Errorf("get gloas beacon block: %w", err)
+	}
+
+	byts, err := block.MarshalSSZ()
+	if err != nil {
+		return nil, fmt.Errorf("could not marshal gloas beacon block: %w", err)
+	}
+	r.cachedGloasBlockSSZ = byts
+
+	logFields := []zap.Field{
+		fields.Slot(duty.Slot),
+		zap.Duration("proposer_delay", r.proposerDelay),
+		fields.Took(time.Since(start)),
+	}
+	if bid := block.Body.SignedExecutionPayloadBid; bid != nil && bid.Message != nil {
+		logFields = append(logFields, fields.FeeRecipient(bid.Message.FeeRecipient[:]))
+	}
+	const eventMsg = "🧊 got gloas beacon block proposal"
+	logger.Info(eventMsg, logFields...)
+	trace.SpanFromContext(ctx).AddEvent(eventMsg)
+
+	return &spectypes.ProposerConsensusData{
+		Duty:    *duty,
+		Version: networkconfig.DataVersionGloas,
+		DataSSZ: byts,
+	}, nil
 }
 
 func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.SignedSSVMessage) error {
@@ -259,15 +309,27 @@ func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logge
 		observability.ValidatorPublicKeyAttribute(cd.Duty.PubKey),
 	)
 
-	versionedBlock, blkRootToSign, err := cd.GetBlockData()
-	if err != nil {
-		return fmt.Errorf("could not get block data from consensus data: %w", err)
-	}
-
-	if versionedBlock.Blinded {
-		span.AddEvent("decided has a blinded block")
+	var blkRootToSign ssz.HashRoot
+	if r.NetworkConfig.IsGloas(r.NetworkConfig.EstimatedEpochAtSlot(cd.Duty.Slot)) {
+		// Gloas blocks have no spectypes block version; decode the node-side block, which doubles as
+		// the ssz.HashRoot to sign.
+		block, decErr := gloas.DecodeBeaconBlock(cd.DataSSZ)
+		if decErr != nil {
+			return fmt.Errorf("could not decode gloas block from consensus data: %w", decErr)
+		}
+		blkRootToSign = block
+		span.AddEvent("decided has a gloas block")
 	} else {
-		span.AddEvent("decided has a vanilla block")
+		versionedBlock, signingRoot, err := cd.GetBlockData()
+		if err != nil {
+			return fmt.Errorf("could not get block data from consensus data: %w", err)
+		}
+		blkRootToSign = signingRoot
+		if versionedBlock.Blinded {
+			span.AddEvent("decided has a blinded block")
+		} else {
+			span.AddEvent("decided has a vanilla block")
+		}
 	}
 
 	duty, err := r.currentValidatorDuty()
@@ -394,6 +456,11 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 	if err != nil {
 		return fmt.Errorf("could not decode decided validator consensus data: %w", err)
 	}
+
+	if r.NetworkConfig.IsGloas(r.NetworkConfig.EstimatedEpochAtSlot(validatorConsensusData.Duty.Slot)) {
+		return r.submitGloasProposal(ctx, logger, span, validatorConsensusData, specSig)
+	}
+
 	vBlk, _, err := validatorConsensusData.GetBlockData()
 	if err != nil {
 		return fmt.Errorf("could not get block data from consensus data: %w", err)
@@ -413,7 +480,6 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 	}
 
 	loggerFields, proposalTraceAttrs := proposalCommonFields(vBlk)
-
 	logger = logger.With(loggerFields...)
 
 	start := time.Now()
@@ -421,6 +487,13 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 		recordFailedSubmission(ctx, spectypes.BNRoleProposer)
 		return fmt.Errorf("submit beacon block: %w", err)
 	}
+	return r.finishSubmittedProposal(ctx, logger, span, start, proposalTraceAttrs)
+}
+
+// finishSubmittedProposal records metrics, marks the duty succeeded, and logs after a proposal block
+// has been submitted to the beacon node. submittedAt is when the submission started (for the Took
+// metric); proposalTraceAttrs are block-specific span attributes (nil for Gloas).
+func (r *ProposerRunner) finishSubmittedProposal(ctx context.Context, logger *zap.Logger, span trace.Span, submittedAt time.Time, proposalTraceAttrs []attribute.KeyValue) error {
 	currentDutySlot, err := r.currentDutySlot()
 	if err != nil {
 		return fmt.Errorf("current duty slot: %w", err)
@@ -432,7 +505,7 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 		observability.DutyRoundAttribute(r.State.RunningInstance.State.Round),
 	}, proposalTraceAttrs...)
 	span.AddEvent(submittedBlockProposalEvent, trace.WithAttributes(submittedAttrs...))
-	logger.Info(submittedBlockProposalEvent, fields.Took(time.Since(start)))
+	logger.Info(submittedBlockProposalEvent, fields.Took(time.Since(submittedAt)))
 
 	r.markDutySucceeded()
 	r.measurements.EndDutyFlow()
@@ -449,6 +522,32 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 	span.AddEvent(dutyFinishedEvent)
 
 	return nil
+}
+
+// submitGloasProposal publishes the decided Gloas (ePBS) block, but only from the operator that built
+// it: the decided value is content-matched against this operator's cached block. Only that operator can
+// later reveal the matching payload in the §6 envelope, so the others complete the duty without
+// submitting (the builder publishes).
+func (r *ProposerRunner) submitGloasProposal(ctx context.Context, logger *zap.Logger, span trace.Span, cd *spectypes.ProposerConsensusData, sig phase0.BLSSignature) error {
+	block, err := gloas.DecodeBeaconBlock(cd.DataSSZ)
+	if err != nil {
+		return fmt.Errorf("could not decode decided gloas block: %w", err)
+	}
+
+	if !bytes.Equal(r.cachedGloasBlockSSZ, cd.DataSSZ) {
+		logger.Debug("this operator did not build the decided gloas block, skipping submission")
+		r.markDutySucceeded()
+		r.measurements.EndDutyFlow()
+		return nil
+	}
+
+	start := time.Now()
+	signedBlock := &gloas.SignedBeaconBlock{Message: block, Signature: sig}
+	if err := r.GetBeaconNode().SubmitGloasBeaconBlock(ctx, signedBlock); err != nil {
+		recordFailedSubmission(ctx, spectypes.BNRoleProposer)
+		return fmt.Errorf("submit gloas beacon block: %w", err)
+	}
+	return r.finishSubmittedProposal(ctx, logger, span, start, nil)
 }
 
 func (r *ProposerRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
@@ -468,9 +567,19 @@ func (r *ProposerRunner) expectedPostConsensusRootsAndDomain(context.Context) ([
 		return nil, phase0.DomainType{}, fmt.Errorf("could not decode consensus data: %w", err)
 	}
 
-	_, signedRoot, err := validatorConsensusData.GetBlockData()
-	if err != nil {
-		return nil, phase0.DomainType{}, fmt.Errorf("could not get block data: %w", err)
+	var signedRoot ssz.HashRoot
+	if r.NetworkConfig.IsGloas(r.NetworkConfig.EstimatedEpochAtSlot(validatorConsensusData.Duty.Slot)) {
+		block, decErr := gloas.DecodeBeaconBlock(validatorConsensusData.DataSSZ)
+		if decErr != nil {
+			return nil, phase0.DomainType{}, fmt.Errorf("could not decode gloas block: %w", decErr)
+		}
+		signedRoot = block
+	} else {
+		_, root, bdErr := validatorConsensusData.GetBlockData()
+		if bdErr != nil {
+			return nil, phase0.DomainType{}, fmt.Errorf("could not get block data: %w", bdErr)
+		}
+		signedRoot = root
 	}
 	return []ssz.HashRoot{signedRoot}, spectypes.DomainProposer, nil
 }
@@ -499,6 +608,7 @@ func (r *ProposerRunner) executeDuty(ctx context.Context, logger *zap.Logger, du
 	// reset the cached original block at the beginning of a new duty
 	r.cachedFullBlock = nil
 	r.cachedBlindedBlockSSZ = nil
+	r.cachedGloasBlockSSZ = nil
 
 	// sign partial randao
 	span.AddEvent("signing beacon object")

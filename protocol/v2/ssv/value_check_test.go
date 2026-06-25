@@ -8,6 +8,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
@@ -123,6 +124,10 @@ func (f fakeSlashingSigner) IsAttestationSlashable(phase0.BLSPubKey, *phase0.Att
 	return f.slashable
 }
 
+func (f fakeSlashingSigner) IsBeaconBlockSlashable(phase0.BLSPubKey, phase0.Slot) error {
+	return f.slashable
+}
+
 func gloasVote(source, target phase0.Epoch, index phase0.CommitteeIndex) *gloas.GloasBeaconVote {
 	return &gloas.GloasBeaconVote{
 		BlockRoot:            phase0.Root{0x01},
@@ -184,4 +189,57 @@ func TestGloasVoteChecker_DecodeError(t *testing.T) {
 	expected := gloasVote(1, 2, 0)
 	checker := newGloasChecker(fakeSlashingSigner{}, expected)
 	require.Error(t, checker.CheckValue([]byte{0x00, 0x01, 0x02})) // too short for a 120-byte vote
+}
+
+// --- proposer checker, Gloas (ePBS) ---
+
+const gloasProposerSlot = phase0.Slot(8)
+
+var gloasProposerPK = phase0.BLSPubKey{0x42}
+
+func gloasProposerConsensusData(t *testing.T, dataSSZ []byte) []byte {
+	t.Helper()
+	cd := &spectypes.ProposerConsensusData{
+		Duty: spectypes.ValidatorDuty{
+			Type:           spectypes.BNRoleProposer,
+			PubKey:         gloasProposerPK,
+			ValidatorIndex: 7,
+			Slot:           gloasProposerSlot,
+		},
+		Version: networkconfig.DataVersionGloas,
+		DataSSZ: dataSSZ,
+	}
+	out, err := cd.Encode()
+	require.NoError(t, err)
+	return out
+}
+
+func gloasBlockSSZ(t *testing.T, slot phase0.Slot) []byte {
+	t.Helper()
+	dataSSZ, err := gloas.TestingBeaconBlock(slot).MarshalSSZ()
+	require.NoError(t, err)
+	return dataSSZ
+}
+
+func newGloasProposerChecker(signer ekm.BeaconSigner) ValueChecker {
+	cfg := networkconfig.TestNetworkWithGloas(0)
+	return NewProposerChecker(signer, cfg.Beacon, spectypes.ValidatorPK(gloasProposerPK), 7, phase0.BLSPubKey{})
+}
+
+// A Gloas proposer value validates via the node-side block decode (there is no spectypes Gloas block
+// version); the decoded block's slot drives the slashing check.
+func TestProposerChecker_GloasValid(t *testing.T) {
+	checker := newGloasProposerChecker(fakeSlashingSigner{})
+	require.NoError(t, checker.CheckValue(gloasProposerConsensusData(t, gloasBlockSSZ(t, gloasProposerSlot))))
+}
+
+func TestProposerChecker_GloasSlashable(t *testing.T) {
+	checker := newGloasProposerChecker(fakeSlashingSigner{slashable: fmt.Errorf("slashable")})
+	require.Error(t, checker.CheckValue(gloasProposerConsensusData(t, gloasBlockSSZ(t, gloasProposerSlot))))
+}
+
+// DataSSZ that is not a valid Gloas block fails the node-side validity check.
+func TestProposerChecker_GloasDecodeError(t *testing.T) {
+	checker := newGloasProposerChecker(fakeSlashingSigner{})
+	require.Error(t, checker.CheckValue(gloasProposerConsensusData(t, []byte{0x00, 0x01, 0x02})))
 }
