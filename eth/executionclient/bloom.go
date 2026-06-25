@@ -66,10 +66,11 @@ func (ec *ExecutionClient) verifyLogsWithBloom(ctx context.Context, logs []ethty
 			// were dropped by the EL — this is not a bloom false positive. This is the
 			// actionable signal: the execution client returned incomplete logs, which
 			// would have been silently skipped without this cross-check.
-			ec.logger.Warn("recovered contract logs the execution client omitted on first request: events were not lost, but this indicates a buggy or unhealthy EL (e.g. known geth log-dropping bug) — consider updating or checking your execution client",
+			ec.logger.Warn("recovered contract logs the execution client omitted on first request",
 				fields.BlockNumber(blockNum),
 				zap.Int("recovered_events", len(blockLogs)),
 				zap.String("contract", ec.contractAddress.Hex()),
+				zap.String("recommendation", "events were not lost, but the EL returned incomplete logs (e.g. known geth log-dropping bug) — consider updating or checking your execution client"),
 			)
 			recordBloomRecovery(ctx)
 			logs = append(logs, blockLogs...)
@@ -116,7 +117,9 @@ func (ec *ExecutionClient) retryBlockLogs(ctx context.Context, blockNumber uint6
 
 		logs, err := ec.FilterLogs(ctx, query)
 		if err != nil {
-			ec.logger.Warn("bloom retry: FilterLogs failed",
+			// Transient RPC failure the retry usually absorbs. The final attempt returns
+			// this error, which the streaming retry loop logs at error level — so debug here.
+			ec.logger.Debug("bloom retry: FilterLogs failed",
 				fields.BlockNumber(blockNumber),
 				zap.Int("attempt", attempt),
 				zap.Error(err),
