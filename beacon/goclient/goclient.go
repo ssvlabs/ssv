@@ -160,6 +160,13 @@ type GoClient struct {
 	// committeesCache caches Beacon committees by epoch to avoid repeated fetching
 	committeesCache *ttlcache.Cache[phase0.Epoch, []*eth2apiv1.BeaconCommittee]
 
+	// proposerDutiesDependentRootInflight collapses the per-epoch dependent_root GETs that the
+	// proposer-preferences runners issue concurrently — one per local proposing validator in the epoch
+	// (SIP #94 §5) — into a single request. Deliberately not TTL-cached: a reorg re-emission must
+	// observe a fresh dependent_root, and the duplication removed here is a same-instant burst across
+	// the epoch's proposers, not reuse over time.
+	proposerDutiesDependentRootInflight singleflight.Group[phase0.Epoch, phase0.Root]
+
 	commonTimeout time.Duration
 	longTimeout   time.Duration
 
