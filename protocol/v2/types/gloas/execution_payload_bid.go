@@ -26,7 +26,7 @@ type ExecutionPayloadBid struct {
 	ParentBlockHash       phase0.Hash32              `ssz-size:"32"`
 	ParentBlockRoot       phase0.Root                `ssz-size:"32"`
 	BlockHash             phase0.Hash32              `ssz-size:"32"`
-	PrevRandao            phase0.Root                `ssz-size:"32"`
+	PrevRandao            phase0.Hash32              `ssz-size:"32"`
 	FeeRecipient          bellatrix.ExecutionAddress `ssz-size:"20"`
 	GasLimit              uint64
 	BuilderIndex          BuilderIndex
