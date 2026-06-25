@@ -129,6 +129,7 @@ type BeaconNode interface {
 	VoluntaryExitCalls
 	PTCCalls
 	ProposerPreferencesCalls
+	GloasProposerCalls
 	DomainCalls
 
 	beaconDuties
@@ -159,4 +160,15 @@ type ProposerPreferencesCalls interface {
 	ProposerDutiesDependentRoot(ctx context.Context, epoch phase0.Epoch) (phase0.Root, error)
 	// SubmitProposerPreferences broadcasts signed proposer preferences for upcoming proposal slots.
 	SubmitProposerPreferences(ctx context.Context, preferences []*gloas.SignedProposerPreferences) error
+}
+
+// GloasProposerCalls is the beacon-node surface for producing and publishing Gloas (ePBS) blocks
+// (SIP #94 §4). go-eth2-client has no Gloas types, so these are hand-rolled over HTTP against the
+// produceBlockV4 / publish endpoints (beacon-APIs#580, unmerged) — verify and iterate on a Gloas devnet.
+type GloasProposerCalls interface {
+	// GetGloasBeaconBlock produces a Gloas beacon block for the slot; the payload itself ships
+	// separately in the §6 envelope, so the block carries only the execution-payload bid.
+	GetGloasBeaconBlock(ctx context.Context, slot phase0.Slot, graffiti, randao []byte) (*gloas.BeaconBlock, error)
+	// SubmitGloasBeaconBlock publishes a signed Gloas block.
+	SubmitGloasBeaconBlock(ctx context.Context, block *gloas.SignedBeaconBlock) error
 }
