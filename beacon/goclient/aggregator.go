@@ -49,11 +49,11 @@ func (gc *GoClient) SubmitAggregateSelectionProof(
 	index phase0.ValidatorIndex,
 	slotSig []byte,
 ) (ssz.Marshaler, spec.DataVersion, error) {
-	// As specified in spec, an aggregator should wait until two thirds of the way through slot
-	// to broadcast the best aggregate to the global aggregate channel.
+	// As specified in spec, an aggregator waits until the aggregation deadline (see
+	// waitIntoSlot) to broadcast the best aggregate to the global aggregate channel.
 	// https://github.com/ethereum/consensus-specs/blob/v0.9.3/specs/validator/0_beacon-chain-validator.md#broadcast-aggregate
 	if err := gc.waitIntoSlot(ctx, slot, 2); err != nil {
-		return nil, 0, fmt.Errorf("wait for 2/3 of slot: %w", err)
+		return nil, 0, fmt.Errorf("wait for aggregation deadline: %w", err)
 	}
 
 	va, _, err := gc.fetchVersionedAggregate(ctx, slot, committeeIndex)
