@@ -55,18 +55,21 @@ func (h *ProposerPreferencesHandler) HandleDuties(ctx context.Context) {
 			h.emitForTick(ctx, slot)
 
 		case <-h.indicesChangeCh:
+			h.reEmitLookahead("indices change")
 
 		case <-h.reorgEventsCh:
-			h.handleReorg()
+			h.reEmitLookahead("reorg")
 		}
 	}
 }
 
-// handleReorg drops the emitted-epoch markers after a duty-dependent-root change so the next tick
-// re-fetches and re-emits the lookahead's preferences. Because dependent_root is part of the gossip
-// tuple (SIP #94 §5), the re-emission is a distinct preference, not a replacement of the prior one.
-func (h *ProposerPreferencesHandler) handleReorg() {
-	h.logger.Debug("🔀 reorg: re-emitting proposer preferences on next tick")
+// reEmitLookahead drops the emitted-epoch markers so the next tick re-fetches and re-emits the
+// lookahead's preferences — after a reorg (new dependent_root) or a validator-set change (new local
+// validators that missed an already-processed epoch). Per SIP #94 §5 a changed dependent_root yields a
+// distinct gossip tuple, not a replacement; re-emitting an unchanged tuple is harmless (gossip keeps
+// only the first).
+func (h *ProposerPreferencesHandler) reEmitLookahead(reason string) {
+	h.logger.Debug("🔀 re-emitting proposer preferences on next tick", zap.String("reason", reason))
 	clear(h.processed)
 }
 
@@ -95,11 +98,7 @@ func (h *ProposerPreferencesHandler) emitForEpoch(ctx context.Context, epoch pha
 		return
 	}
 
-	shares := h.validatorProvider.SelfParticipatingValidators(epoch)
-	indices := make([]phase0.ValidatorIndex, 0, len(shares))
-	for _, share := range shares {
-		indices = append(indices, share.ValidatorIndex)
-	}
+	indices := h.selfParticipatingIndices(epoch)
 	if len(indices) == 0 {
 		return // no local validators yet; retry on the next tick
 	}
@@ -138,9 +137,5 @@ func (h *ProposerPreferencesHandler) emitForEpoch(ctx context.Context, epoch pha
 
 // evictOutdated drops processed-epoch markers for epochs before the current one.
 func (h *ProposerPreferencesHandler) evictOutdated(currentEpoch phase0.Epoch) {
-	for epoch := range h.processed {
-		if epoch < currentEpoch {
-			delete(h.processed, epoch)
-		}
-	}
+	evictEpochsBefore(h.processed, currentEpoch)
 }

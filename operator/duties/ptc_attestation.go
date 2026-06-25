@@ -77,11 +77,7 @@ func (h *PTCAttestationHandler) fetchDuties(ctx context.Context, epoch phase0.Ep
 		return
 	}
 
-	shares := h.validatorProvider.SelfParticipatingValidators(epoch)
-	indices := make([]phase0.ValidatorIndex, 0, len(shares))
-	for _, share := range shares {
-		indices = append(indices, share.ValidatorIndex)
-	}
+	indices := h.selfParticipatingIndices(epoch)
 	if len(indices) == 0 {
 		return
 	}
@@ -117,9 +113,5 @@ func (h *PTCAttestationHandler) scheduleExecution(ctx context.Context, slot phas
 
 // evictOutdated drops cached duties for epochs before the current one.
 func (h *PTCAttestationHandler) evictOutdated(currentEpoch phase0.Epoch) {
-	for epoch := range h.duties {
-		if epoch < currentEpoch {
-			delete(h.duties, epoch)
-		}
-	}
+	evictEpochsBefore(h.duties, currentEpoch)
 }
