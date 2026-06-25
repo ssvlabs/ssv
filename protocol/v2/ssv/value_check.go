@@ -248,7 +248,7 @@ func (v *proposerChecker) CheckValue(value []byte) error {
 	}
 
 	var slot phase0.Slot
-	if v.beaconConfig.IsGloas(v.beaconConfig.EstimatedEpochAtSlot(cd.Duty.Slot)) {
+	if v.beaconConfig.IsGloasAtSlot(cd.Duty.Slot) {
 		// Gloas blocks have no spectypes block version; GetBlockData can't decode them, so read the
 		// slot from the node-side block directly.
 		block, decErr := gloas.DecodeBeaconBlock(cd.DataSSZ)
@@ -327,7 +327,7 @@ func checkValidatorConsensusData(
 		return nil, fmt.Errorf("failed decoding consensus data: %w", err)
 	}
 
-	if cd.Duty.Type == spectypes.BNRoleProposer && beaconConfig.IsGloas(beaconConfig.EstimatedEpochAtSlot(cd.Duty.Slot)) {
+	if cd.Duty.Type == spectypes.BNRoleProposer && beaconConfig.IsGloasAtSlot(cd.Duty.Slot) {
 		// Gloas blocks have no spectypes block version, so ValidateConsensusData's GetBlockData path
 		// can't decode them; a successful node-side decode is the validity check.
 		if _, err := gloas.DecodeBeaconBlock(cd.DataSSZ); err != nil {
