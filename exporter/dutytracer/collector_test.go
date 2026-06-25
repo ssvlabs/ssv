@@ -926,8 +926,7 @@ func TestDutyTracer_SyncCommitteeRoots(t *testing.T) {
 
 	bnVote := &spectypes.BeaconVote{BlockRoot: [32]byte{1, 2, 3}}
 
-	data, _ := bnVote.Encode()
-	root, err := collector.getSyncCommitteeRoot(t.Context(), 1, data)
+	root, err := collector.getSyncCommitteeRoot(t.Context(), 1, bnVote.BlockRoot)
 	require.NoError(t, err)
 
 	wantRoot := [32]byte{3, 73, 222, 196, 134, 206, 159, 128,
