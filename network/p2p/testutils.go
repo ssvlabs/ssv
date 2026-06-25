@@ -107,9 +107,12 @@ func CreateAndStartLocalNet(pCtx context.Context, logger *zap.Logger, options Lo
 				// (e.g. CreateKeys or a node factory error), so guard before
 				// ranging to avoid a nil-pointer panic that would mask err.
 				if ln != nil {
-					for _, node := range ln.Nodes {
-						_ = node.Close()
-					}
+					// Close the failed attempt's nodes with a timeout so a wedged
+					// Close can't stall the retry loop: zeroconf's mDNS
+					// Server.Shutdown can block indefinitely on a multicast socket
+					// write. Only this failure path closes nodes; a successful
+					// start returns them open.
+					closeNodesWithTimeout(logger, ln.Nodes, 10*time.Second)
 				}
 
 				logger.Debug("trying to relaunch local network", zap.Error(err))
@@ -118,6 +121,30 @@ func CreateAndStartLocalNet(pCtx context.Context, logger *zap.Logger, options Lo
 
 			return ln, nil
 		}
+	}
+}
+
+// closeNodesWithTimeout closes every node concurrently and waits up to timeout
+// for them to finish. A node whose Close() wedges must not stall the retry loop
+// in CreateAndStartLocalNet — zeroconf's mDNS Server.Shutdown can block
+// indefinitely on a multicast socket write — so once the timeout elapses we stop
+// waiting and let the next attempt proceed with fresh hosts and ports; an
+// abandoned Close is reclaimed when the test process exits.
+func closeNodesWithTimeout(logger *zap.Logger, nodes []network.P2PNetwork, timeout time.Duration) {
+	var eg errgroup.Group
+	for _, node := range nodes {
+		eg.Go(func() error { return node.Close() })
+	}
+	done := make(chan struct{})
+	go func() {
+		_ = eg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(timeout):
+		logger.Debug("timed out closing nodes on retry; abandoning a wedged Close (likely mDNS shutdown)",
+			zap.Duration("timeout", timeout))
 	}
 }
 
