@@ -13,9 +13,6 @@ import (
 // Source/Target checkpoints, 112 bytes) and appends the BN-supplied
 // AttestationData.Index for a fixed 120-byte SSZ encoding (field order per SIP #94).
 // The 120B-vs-112B length difference makes a cross-fork decode fail cleanly.
-//
-// Not yet wired: this is the foundation for the Gloas committee runner (the §2 attestation track);
-// the PTC slice doesn't use it. Tracked so it isn't mistaken for dead code.
 type GloasBeaconVote struct {
 	BlockRoot            phase0.Root `ssz-size:"32"`
 	Source               *phase0.Checkpoint

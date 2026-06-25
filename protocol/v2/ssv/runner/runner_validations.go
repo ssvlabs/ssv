@@ -149,7 +149,7 @@ func (b *BaseRunner) ValidatePostConsensusMsg(ctx context.Context, runner Runner
 				decidedValue = &gloas.GloasBeaconVote{}
 			}
 			if err := decidedValue.Decode(decidedValueBytes); err != nil {
-				return fmt.Errorf("failed to parse decided value to BeaconVote: %w", err)
+				return fmt.Errorf("failed to parse decided beacon vote: %w", err)
 			}
 
 			return b.validatePartialSigMsg(psigMsgs, expectedSlot)
