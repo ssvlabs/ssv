@@ -52,7 +52,7 @@ func (gc *GoClient) SubmitAggregateSelectionProof(
 	// As specified in spec, an aggregator should wait until two thirds of the way through slot
 	// to broadcast the best aggregate to the global aggregate channel.
 	// https://github.com/ethereum/consensus-specs/blob/v0.9.3/specs/validator/0_beacon-chain-validator.md#broadcast-aggregate
-	if err := gc.waitTwoThirdsIntoSlot(ctx, slot); err != nil {
+	if err := gc.waitIntoSlot(ctx, slot, 2); err != nil {
 		return nil, 0, fmt.Errorf("wait for 2/3 of slot: %w", err)
 	}
 
@@ -80,6 +80,26 @@ func (gc *GoClient) SubmitSignedAggregateSelectionProof(
 	}
 
 	return nil
+}
+
+// waitIntoSlot waits until the given number of intervals into the slot has transpired
+// (intervals * IntervalDuration after the start of the slot): intervals=1 is one interval in
+// (attestation/contribution deadline), intervals=2 is two intervals in (aggregate broadcast
+// deadline). IntervalDuration is 1/3 of the slot before Gloas, 1/4 from Gloas on (SIP #94 §1).
+func (gc *GoClient) waitIntoSlot(ctx context.Context, slot phase0.Slot, intervals int) error {
+	config := gc.getBeaconConfig()
+	finalTime := config.SlotStartTime(slot).Add(time.Duration(intervals) * config.IntervalDuration(slot))
+	wait := time.Until(finalTime)
+	if wait <= 0 {
+		return nil
+	}
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(wait):
+		return nil
+	}
 }
 
 // computeAttestationDataRoot re-derives the attestation data root for the given slot/committee
@@ -264,23 +284,5 @@ func versionedToAggregateAndProof(
 		}, va.Version, nil
 	default:
 		return nil, DataVersionNil, fmt.Errorf("unknown data version: %d", va.Version)
-	}
-}
-
-// waitTwoThirdsIntoSlot waits until two-third of the slot has transpired (SECONDS_PER_SLOT * 2 / 3 seconds after the start of slot)
-func (gc *GoClient) waitTwoThirdsIntoSlot(ctx context.Context, slot phase0.Slot) error {
-	config := gc.getBeaconConfig()
-	oneInterval := config.IntervalDuration()
-	finalTime := config.SlotStartTime(slot).Add(2 * oneInterval)
-	wait := time.Until(finalTime)
-	if wait <= 0 {
-		return nil
-	}
-
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-time.After(wait):
-		return nil
 	}
 }

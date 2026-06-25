@@ -53,3 +53,16 @@ func TestNetwork_InGloasPriorWindow(t *testing.T) {
 	// No Gloas fork scheduled → never in the window.
 	require.False(t, TestNetwork.InGloasPriorWindow(slotInEpoch(gloasEpoch-1)))
 }
+
+// IntervalDuration is a third of the slot before Gloas, a quarter from the fork on (SIP #94 §1).
+func TestBeacon_IntervalDuration(t *testing.T) {
+	// No Gloas fork → always thirds.
+	require.Equal(t, TestNetwork.SlotDuration/3, TestNetwork.IntervalDuration(0))
+	require.Equal(t, TestNetwork.SlotDuration/3, TestNetwork.IntervalDuration(1_000_000))
+
+	// Gloas at epoch 100: thirds before the fork, quarters from it on.
+	const gloasEpoch = 100
+	netCfg := TestNetworkWithGloas(gloasEpoch)
+	require.Equal(t, netCfg.SlotDuration/3, netCfg.IntervalDuration(netCfg.FirstSlotAtEpoch(gloasEpoch)-1))
+	require.Equal(t, netCfg.SlotDuration/4, netCfg.IntervalDuration(netCfg.FirstSlotAtEpoch(gloasEpoch)))
+}

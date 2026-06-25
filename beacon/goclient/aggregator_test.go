@@ -283,7 +283,7 @@ func TestSubmitAggregateSelectionProof_RespectsContextCancellationWhileWaiting(t
 			errCh <- err
 		}()
 
-		time.Sleep(cfg.IntervalDuration())
+		time.Sleep(cfg.IntervalDuration(0))
 		cancel()
 
 		err := <-errCh

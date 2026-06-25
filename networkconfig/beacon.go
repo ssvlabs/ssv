@@ -139,10 +139,15 @@ func (b *Beacon) TimeAtSlot(slot phase0.Slot) time.Time {
 	return b.GenesisTime.Add(d)
 }
 
-func (b *Beacon) IntervalDuration() time.Duration {
-	// intervalsPerSlot is always 3 as per https://github.com/ethereum/consensus-specs/blob/dev/specs/phase0/fork-choice.md#constant
-	const intervalsPerSlot = 3
-	return b.SlotDuration / intervalsPerSlot
+// IntervalDuration is the slot fraction that duty deadlines are multiples of: 1/3 of the slot before
+// Gloas, 1/4 from Gloas on. ePBS retimes the deadlines to quarters — attestation/sync 1× (25%),
+// aggregate/contribution 2× (50%), payload attestation 3× (75%); SIP #94 §1.
+func (b *Beacon) IntervalDuration(slot phase0.Slot) time.Duration {
+	intervalsPerSlot := 3
+	if b.IsGloas(b.EstimatedEpochAtSlot(slot)) {
+		intervalsPerSlot = 4
+	}
+	return b.SlotDuration / time.Duration(intervalsPerSlot)
 }
 
 func (b *Beacon) EpochDuration() time.Duration {
