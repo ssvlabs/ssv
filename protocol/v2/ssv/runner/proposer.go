@@ -529,16 +529,16 @@ func (r *ProposerRunner) finishSubmittedProposal(ctx context.Context, logger *za
 // later reveal the matching payload in the §6 envelope, so the others complete the duty without
 // submitting (the builder publishes).
 func (r *ProposerRunner) submitGloasProposal(ctx context.Context, logger *zap.Logger, span trace.Span, cd *spectypes.ProposerConsensusData, sig phase0.BLSSignature) error {
-	block, err := gloas.DecodeBeaconBlock(cd.DataSSZ)
-	if err != nil {
-		return fmt.Errorf("could not decode decided gloas block: %w", err)
-	}
-
 	if !bytes.Equal(r.cachedGloasBlockSSZ, cd.DataSSZ) {
 		logger.Debug("this operator did not build the decided gloas block, skipping submission")
 		r.markDutySucceeded()
 		r.measurements.EndDutyFlow()
 		return nil
+	}
+
+	block, err := gloas.DecodeBeaconBlock(cd.DataSSZ)
+	if err != nil {
+		return fmt.Errorf("could not decode decided gloas block: %w", err)
 	}
 
 	start := time.Now()
