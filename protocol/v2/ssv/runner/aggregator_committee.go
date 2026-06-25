@@ -232,9 +232,9 @@ func (r *AggregatorCommitteeRunner) findValidatorDuty(
 	return nil
 }
 
-// waitTwoThirdsIntoSlot waits until two-thirds of the slot has passed.
-func (r *AggregatorCommitteeRunner) waitTwoThirdsIntoSlot(ctx context.Context, slot phase0.Slot) error {
-	finalTime := r.NetworkConfig.SlotStartTime(slot).Add(2 * r.NetworkConfig.IntervalDuration())
+// waitTwoIntervalsIntoSlot waits until the aggregation deadline — 2/3 of the slot before Gloas, 1/2 from Gloas on.
+func (r *AggregatorCommitteeRunner) waitTwoIntervalsIntoSlot(ctx context.Context, slot phase0.Slot) error {
+	finalTime := r.NetworkConfig.SlotStartTime(slot).Add(2 * r.NetworkConfig.IntervalDuration(slot))
 	wait := time.Until(finalTime)
 	if wait <= 0 {
 		return nil
@@ -590,7 +590,7 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(
 
 	if len(aggregatorSelections) > 0 {
 		// Wait once per duty before fetching aggregate attestations (spec: 2/3 into slot).
-		if err := r.waitTwoThirdsIntoSlot(ctx, duty.DutySlot()); err != nil {
+		if err := r.waitTwoIntervalsIntoSlot(ctx, duty.DutySlot()); err != nil {
 			// Only reachable on shutdown (ctx canceled) within this short wait — markDutyFailed
 			// would drop a context.Canceled reason anyway, so there is nothing to record here.
 			return err

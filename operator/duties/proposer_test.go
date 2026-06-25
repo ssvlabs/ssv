@@ -1067,7 +1067,7 @@ func TestScheduler_Proposer_Indices_Changed_Too_Late_In_Slot(t *testing.T) {
 			},
 		})
 		go func() {
-			time.Sleep(scheduler.netCfg.IntervalDuration() + 1*time.Millisecond)
+			time.Sleep(scheduler.netCfg.IntervalDuration(0) + 1*time.Millisecond)
 			scheduler.indicesChgCh <- struct{}{}
 		}()
 
