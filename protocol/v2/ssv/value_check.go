@@ -12,6 +12,7 @@ import (
 
 	"github.com/ssvlabs/ssv/networkconfig"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 )
 
 type ValueChecker interface {
@@ -71,6 +72,77 @@ func (v *voteChecker) CheckValue(value []byte) error {
 		return fmt.Errorf("unexpected source epoch %v, expected %v", bv.Source.Epoch, v.expectedVote.Source.Epoch)
 	}
 
+	if bv.Target.Epoch != v.expectedVote.Target.Epoch {
+		return fmt.Errorf("unexpected target epoch %v, expected %v", bv.Target.Epoch, v.expectedVote.Target.Epoch)
+	}
+
+	return nil
+}
+
+type gloasVoteChecker struct {
+	signer          ekm.BeaconSigner
+	slot            phase0.Slot
+	sharePublicKeys []phase0.BLSPubKey
+	expectedVote    *gloas.GloasBeaconVote
+}
+
+// NewGloasVoteChecker validates the committee runner's consensus value on Gloas-and-later slots
+// (SIP #94 §2). It mirrors NewVoteChecker — slashing protection plus epoch-only majority-fork
+// protection — and adds the one Gloas rule: AttestationDataIndex, the BN-supplied payload-status
+// index, must be 0 or 1. That index is trusted from the QBFT leader, not compared against the
+// operator's own view, exactly as the runner already trusts the leader's block root.
+func NewGloasVoteChecker(
+	signer ekm.BeaconSigner,
+	slot phase0.Slot,
+	sharePublicKeys []phase0.BLSPubKey,
+	expectedVote *gloas.GloasBeaconVote,
+) ValueChecker {
+	return &gloasVoteChecker{
+		signer:          signer,
+		slot:            slot,
+		sharePublicKeys: sharePublicKeys,
+		expectedVote:    expectedVote,
+	}
+}
+
+func (v *gloasVoteChecker) CheckValue(value []byte) error {
+	bv := gloas.GloasBeaconVote{}
+	if err := bv.Decode(value); err != nil {
+		return spectypes.WrapError(spectypes.DecodeBeaconVoteErrorCode, fmt.Errorf("failed decoding gloas beacon vote: %w", err))
+	}
+
+	if bv.Source.Epoch >= bv.Target.Epoch {
+		return spectypes.NewError(spectypes.AttestationSourceNotLessThanTargetErrorCode, "attestation data source >= target")
+	}
+
+	// SIP #94 §2: AttestationDataIndex carries the attester's payload-status view (0 = EMPTY,
+	// 1 = FULL), so it must be 0 or 1. The same-slot "index = 0" rule is BN/gossip-enforced — it needs
+	// the attested block's slot — so it is not checked here.
+	if bv.AttestationDataIndex > 1 {
+		return spectypes.NewError(spectypes.QBFTValueInvalidErrorCode, "gloas attestation data index out of range")
+	}
+
+	attestationData := &phase0.AttestationData{
+		Slot: v.slot,
+		// The decided payload-status index — exactly what constructAttestationData will sign — so the
+		// slashing pre-check sees the same data that gets signed. SSV's protection is epoch-only, so the
+		// index is inert to the comparison either way.
+		Index:           bv.AttestationDataIndex,
+		BeaconBlockRoot: bv.BlockRoot,
+		Source:          bv.Source,
+		Target:          bv.Target,
+	}
+
+	for _, sharePublicKey := range v.sharePublicKeys {
+		if err := v.signer.IsAttestationSlashable(sharePublicKey, attestationData); err != nil {
+			return err
+		}
+	}
+
+	// Epoch-only majority-fork protection (sips/majority_fork_protection.md), as in NewVoteChecker.
+	if bv.Source.Epoch != v.expectedVote.Source.Epoch {
+		return fmt.Errorf("unexpected source epoch %v, expected %v", bv.Source.Epoch, v.expectedVote.Source.Epoch)
+	}
 	if bv.Target.Epoch != v.expectedVote.Target.Epoch {
 		return fmt.Errorf("unexpected target epoch %v, expected %v", bv.Target.Epoch, v.expectedVote.Target.Epoch)
 	}

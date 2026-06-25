@@ -1,11 +1,15 @@
 package ssv
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
+
+	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
 // TestVoteCheckerSourceTargetEpoch pins the behavior of the source/target epoch check at
@@ -105,4 +109,79 @@ func TestValidateNoDuplicateAggregatorCommittee(t *testing.T) {
 		}
 		require.ErrorContains(t, validateNoDuplicateAggregatorCommittee(cd), "duplicate contributor")
 	})
+}
+
+// fakeSlashingSigner implements ekm.BeaconSigner for value-check tests. Only IsAttestationSlashable is
+// exercised; the embedded nil interface panics if any other method is called, which surfaces an
+// unexpected dependency rather than hiding it.
+type fakeSlashingSigner struct {
+	ekm.BeaconSigner
+	slashable error
+}
+
+func (f fakeSlashingSigner) IsAttestationSlashable(phase0.BLSPubKey, *phase0.AttestationData) error {
+	return f.slashable
+}
+
+func gloasVote(source, target phase0.Epoch, index phase0.CommitteeIndex) *gloas.GloasBeaconVote {
+	return &gloas.GloasBeaconVote{
+		BlockRoot:            phase0.Root{0x01},
+		Source:               &phase0.Checkpoint{Epoch: source},
+		Target:               &phase0.Checkpoint{Epoch: target},
+		AttestationDataIndex: index,
+	}
+}
+
+func encodeGloasVote(t *testing.T, v *gloas.GloasBeaconVote) []byte {
+	t.Helper()
+	b, err := v.Encode()
+	require.NoError(t, err)
+	return b
+}
+
+func newGloasChecker(signer ekm.BeaconSigner, expected *gloas.GloasBeaconVote) ValueChecker {
+	return NewGloasVoteChecker(signer, 64, []phase0.BLSPubKey{{}}, expected)
+}
+
+// Both payload-status indices (0 = EMPTY, 1 = FULL) pass when source < target, the epochs match the
+// expected vote, and the attestation is not slashable.
+func TestGloasVoteChecker_Valid(t *testing.T) {
+	for _, index := range []phase0.CommitteeIndex{0, 1} {
+		expected := gloasVote(1, 2, index)
+		checker := newGloasChecker(fakeSlashingSigner{}, expected)
+		require.NoError(t, checker.CheckValue(encodeGloasVote(t, gloasVote(1, 2, index))))
+	}
+}
+
+// The one Gloas-specific rule: AttestationDataIndex outside {0, 1} is rejected.
+func TestGloasVoteChecker_IndexOutOfRange(t *testing.T) {
+	expected := gloasVote(1, 2, 0)
+	checker := newGloasChecker(fakeSlashingSigner{}, expected)
+	require.Error(t, checker.CheckValue(encodeGloasVote(t, gloasVote(1, 2, 2))))
+}
+
+func TestGloasVoteChecker_SourceNotBeforeTarget(t *testing.T) {
+	expected := gloasVote(2, 2, 0)
+	checker := newGloasChecker(fakeSlashingSigner{}, expected)
+	require.Error(t, checker.CheckValue(encodeGloasVote(t, gloasVote(2, 2, 0))))
+}
+
+// Epoch-only majority-fork protection: a vote whose target epoch differs from the operator's expected
+// vote is rejected (the index, by contrast, is trusted from the leader and not compared).
+func TestGloasVoteChecker_EpochMismatch(t *testing.T) {
+	expected := gloasVote(1, 2, 0)
+	checker := newGloasChecker(fakeSlashingSigner{}, expected)
+	require.Error(t, checker.CheckValue(encodeGloasVote(t, gloasVote(1, 3, 0))))
+}
+
+func TestGloasVoteChecker_Slashable(t *testing.T) {
+	expected := gloasVote(1, 2, 0)
+	checker := newGloasChecker(fakeSlashingSigner{slashable: fmt.Errorf("slashable")}, expected)
+	require.Error(t, checker.CheckValue(encodeGloasVote(t, gloasVote(1, 2, 0))))
+}
+
+func TestGloasVoteChecker_DecodeError(t *testing.T) {
+	expected := gloasVote(1, 2, 0)
+	checker := newGloasChecker(fakeSlashingSigner{}, expected)
+	require.Error(t, checker.CheckValue([]byte{0x00, 0x01, 0x02})) // too short for a 120-byte vote
 }
