@@ -220,16 +220,19 @@ func (r *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Logg
 	// Reuse the existing span instead of generating new one to keep tracing-data lightweight.
 	span := trace.SpanFromContext(ctx)
 
-	span.AddEvent("processing QBFT consensus msg")
+	// Fetch the running duty once: it fixes both the decode prototype's fork and, post-decide, the
+	// committee slot. A consensus message with no running duty can't decide, so the fetch error only
+	// matters once we know we decided.
+	committeeDuty, dutyErr := r.currentCommitteeDuty()
 
 	// The decided value is a GloasBeaconVote (which carries the attestation index) on Gloas slots, a
-	// plain BeaconVote before. Pick the decode prototype from the running duty's fork; a message with no
-	// running duty cannot decide, so the default is harmless there.
+	// plain BeaconVote before; decode into the matching prototype.
 	decidedPrototype := spectypes.Encoder(&spectypes.BeaconVote{})
-	if committeeDuty, dutyErr := r.currentCommitteeDuty(); dutyErr == nil && r.NetworkConfig.IsGloas(r.NetworkConfig.EstimatedEpochAtSlot(committeeDuty.DutySlot())) {
+	if dutyErr == nil && r.NetworkConfig.IsGloas(r.NetworkConfig.EstimatedEpochAtSlot(committeeDuty.DutySlot())) {
 		decidedPrototype = &gloas.GloasBeaconVote{}
 	}
 
+	span.AddEvent("processing QBFT consensus msg")
 	decided, decidedValue, err := r.baseConsensusMsgProcessing(ctx, logger, r.ValCheck.CheckValue, msg, decidedPrototype)
 	if err != nil {
 		return fmt.Errorf("failed processing consensus message: %w", err)
@@ -239,14 +242,13 @@ func (r *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Logg
 	if !decided {
 		return nil
 	}
+	if dutyErr != nil {
+		return fmt.Errorf("current committee duty: %w", dutyErr)
+	}
 
 	r.measurements.EndConsensus()
 	recordConsensusDuration(ctx, r.measurements.ConsensusTime(), spectypes.RoleCommittee)
 
-	committeeDuty, err := r.currentCommitteeDuty()
-	if err != nil {
-		return fmt.Errorf("current committee duty: %w", err)
-	}
 	committeeDutySlot := committeeDuty.DutySlot()
 	postConsensusMsg := &spectypes.PartialSignatureMessages{
 		Type:     spectypes.PostConsensusPartialSig,
