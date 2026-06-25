@@ -20,7 +20,9 @@ import (
 func (gc *GoClient) ProposerDutiesDependentRoot(ctx context.Context, epoch phase0.Epoch) (phase0.Root, error) {
 	// Several proposer-preferences runners (one per local proposing validator in the epoch) request the
 	// same epoch's dependent_root concurrently; collapse that burst into a single GET. Not TTL-cached so
-	// a reorg re-emission still observes a fresh root.
+	// a reorg re-emission still observes a fresh root. The collapsed call adopts the winning caller's
+	// ctx, so its cancellation also fails the concurrent waiters — acceptable as they share the slot's
+	// deadline window and a re-emit recovers.
 	root, err, _ := gc.proposerDutiesDependentRootInflight.Do(epoch, func() (phase0.Root, error) {
 		return firstClientResult(ctx, gc, "ProposerDutiesDependentRoot", http.MethodGet, func(ctx context.Context, addr string) (phase0.Root, error) {
 			var resp struct {
