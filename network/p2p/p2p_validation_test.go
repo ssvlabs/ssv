@@ -445,6 +445,12 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 	stopBroadcast()
 	require.NoError(t, broadcasters.Wait())
 
+	// Surface any failure the PeerScoreInspector recorded on its own goroutine
+	// (it can't safely touch t there; see VirtualNet.inspectorErr).
+	if msg := vNet.inspectorErr.Load(); msg != nil {
+		t.Fatalf("peer score inspector: %s", *msg)
+	}
+
 	// Backfill any observer that never latched with its current snapshot so the
 	// diagnostics below report which invariant on which node actually failed
 	// (the loop only records the passing ones).
@@ -501,6 +507,13 @@ func (n *VirtualNode) Broadcast(msgID spectypes.MessageID, msg *spectypes.Signed
 // VirtualNet is a utility to create & interact with a virtual network of nodes.
 type VirtualNet struct {
 	Nodes []*VirtualNode
+
+	// inspectorErr holds the first failure the PeerScoreInspector hit on
+	// gossipsub's scoring goroutine. That goroutine can outlive the test body
+	// (pubsub's shutdown inspect is detached and not awaited by Close), so it
+	// must not touch t — doing so panics the binary once the test has returned.
+	// The test goroutine surfaces this instead.
+	inspectorErr atomic.Pointer[string]
 }
 
 func createVirtualNet(
@@ -523,13 +536,15 @@ func createVirtualNet(
 			if !doneSetup.Load() {
 				return
 			}
-			// This callback runs on gossipsub's scoring goroutine, so failures
-			// are reported with Errorf — Fatalf/FailNow must be called from the
-			// test goroutine. selfPeer/peerID are always one of this local net's
-			// virtual nodes, so these checks only guard a harness regression.
+			// Runs on gossipsub's scoring goroutine, which can fire after the
+			// test body returns (pubsub's shutdown inspect is detached and not
+			// awaited by Close), so record failures rather than touch t — the
+			// test goroutine surfaces them. selfPeer/peerID are always one of
+			// this local net's virtual nodes, so these only guard a regression.
 			node := vn.NodeByPeerID(selfPeer)
 			if node == nil {
-				t.Errorf("self peer not found (%s)", selfPeer)
+				msg := fmt.Sprintf("self peer not found (%s)", selfPeer)
+				vn.inspectorErr.CompareAndSwap(nil, &msg)
 				return
 			}
 
@@ -537,7 +552,8 @@ func createVirtualNet(
 			for peerID, peerScore := range peerMap {
 				peerNode := vn.NodeByPeerID(peerID)
 				if peerNode == nil {
-					t.Errorf("peer not found (%s)", peerID)
+					msg := fmt.Sprintf("peer not found (%s)", peerID)
+					vn.inspectorErr.CompareAndSwap(nil, &msg)
 					return
 				}
 				peerScoresUpdated[peerNode.Index] = peerScore
