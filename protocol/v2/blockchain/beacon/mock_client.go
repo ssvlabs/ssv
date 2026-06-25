@@ -830,6 +830,21 @@ func (mr *MockBeaconNodeMockRecorder) GetBeaconBlock(ctx, slot, graffiti, randao
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBeaconBlock", reflect.TypeOf((*MockBeaconNode)(nil).GetBeaconBlock), ctx, slot, graffiti, randao)
 }
 
+// GetGloasBeaconBlock mocks base method.
+func (m *MockBeaconNode) GetGloasBeaconBlock(ctx context.Context, slot phase0.Slot, graffiti, randao []byte) (*gloas.BeaconBlock, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetGloasBeaconBlock", ctx, slot, graffiti, randao)
+	ret0, _ := ret[0].(*gloas.BeaconBlock)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetGloasBeaconBlock indicates an expected call of GetGloasBeaconBlock.
+func (mr *MockBeaconNodeMockRecorder) GetGloasBeaconBlock(ctx, slot, graffiti, randao any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetGloasBeaconBlock", reflect.TypeOf((*MockBeaconNode)(nil).GetGloasBeaconBlock), ctx, slot, graffiti, randao)
+}
+
 // GetSyncCommitteeContribution mocks base method.
 func (m *MockBeaconNode) GetSyncCommitteeContribution(ctx context.Context, slot phase0.Slot, selectionProofs []phase0.BLSSignature, subnetIDs []uint64) (ssz.Marshaler, spec.DataVersion, error) {
 	m.ctrl.T.Helper()
@@ -1017,6 +1032,20 @@ func (m *MockBeaconNode) SubmitBeaconCommitteeSubscriptions(ctx context.Context,
 func (mr *MockBeaconNodeMockRecorder) SubmitBeaconCommitteeSubscriptions(ctx, subscription any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitBeaconCommitteeSubscriptions", reflect.TypeOf((*MockBeaconNode)(nil).SubmitBeaconCommitteeSubscriptions), ctx, subscription)
+}
+
+// SubmitGloasBeaconBlock mocks base method.
+func (m *MockBeaconNode) SubmitGloasBeaconBlock(ctx context.Context, block *gloas.SignedBeaconBlock) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SubmitGloasBeaconBlock", ctx, block)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SubmitGloasBeaconBlock indicates an expected call of SubmitGloasBeaconBlock.
+func (mr *MockBeaconNodeMockRecorder) SubmitGloasBeaconBlock(ctx, block any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitGloasBeaconBlock", reflect.TypeOf((*MockBeaconNode)(nil).SubmitGloasBeaconBlock), ctx, block)
 }
 
 // SubmitPayloadAttestationMessages mocks base method.
@@ -1307,4 +1336,57 @@ func (m *MockProposerPreferencesCalls) SubmitProposerPreferences(ctx context.Con
 func (mr *MockProposerPreferencesCallsMockRecorder) SubmitProposerPreferences(ctx, preferences any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitProposerPreferences", reflect.TypeOf((*MockProposerPreferencesCalls)(nil).SubmitProposerPreferences), ctx, preferences)
+}
+
+// MockGloasProposerCalls is a mock of GloasProposerCalls interface.
+type MockGloasProposerCalls struct {
+	ctrl     *gomock.Controller
+	recorder *MockGloasProposerCallsMockRecorder
+	isgomock struct{}
+}
+
+// MockGloasProposerCallsMockRecorder is the mock recorder for MockGloasProposerCalls.
+type MockGloasProposerCallsMockRecorder struct {
+	mock *MockGloasProposerCalls
+}
+
+// NewMockGloasProposerCalls creates a new mock instance.
+func NewMockGloasProposerCalls(ctrl *gomock.Controller) *MockGloasProposerCalls {
+	mock := &MockGloasProposerCalls{ctrl: ctrl}
+	mock.recorder = &MockGloasProposerCallsMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockGloasProposerCalls) EXPECT() *MockGloasProposerCallsMockRecorder {
+	return m.recorder
+}
+
+// GetGloasBeaconBlock mocks base method.
+func (m *MockGloasProposerCalls) GetGloasBeaconBlock(ctx context.Context, slot phase0.Slot, graffiti, randao []byte) (*gloas.BeaconBlock, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetGloasBeaconBlock", ctx, slot, graffiti, randao)
+	ret0, _ := ret[0].(*gloas.BeaconBlock)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetGloasBeaconBlock indicates an expected call of GetGloasBeaconBlock.
+func (mr *MockGloasProposerCallsMockRecorder) GetGloasBeaconBlock(ctx, slot, graffiti, randao any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetGloasBeaconBlock", reflect.TypeOf((*MockGloasProposerCalls)(nil).GetGloasBeaconBlock), ctx, slot, graffiti, randao)
+}
+
+// SubmitGloasBeaconBlock mocks base method.
+func (m *MockGloasProposerCalls) SubmitGloasBeaconBlock(ctx context.Context, block *gloas.SignedBeaconBlock) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SubmitGloasBeaconBlock", ctx, block)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SubmitGloasBeaconBlock indicates an expected call of SubmitGloasBeaconBlock.
+func (mr *MockGloasProposerCallsMockRecorder) SubmitGloasBeaconBlock(ctx, block any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitGloasBeaconBlock", reflect.TypeOf((*MockGloasProposerCalls)(nil).SubmitGloasBeaconBlock), ctx, block)
 }
