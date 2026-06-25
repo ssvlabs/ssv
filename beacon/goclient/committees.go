@@ -34,8 +34,8 @@ func (gc *GoClient) CommitteesForEpoch(ctx context.Context, epoch phase0.Epoch) 
 	if err != nil {
 		return nil, errMultiClient(fmt.Errorf("fetch beacon committees: %w", err), "BeaconCommittees")
 	}
-	if resp == nil || resp.Data == nil {
-		return nil, errMultiClient(fmt.Errorf("beacon committees response is nil"), "BeaconCommittees")
+	if err := checkSliceResponse(resp, "beacon committees"); err != nil {
+		return nil, errMultiClient(err, "BeaconCommittees")
 	}
 	if gc.committeesCache != nil {
 		gc.committeesCache.Set(epoch, resp.Data, ttlcache.DefaultTTL)
