@@ -288,7 +288,7 @@ func TestSubmitAggregateSelectionProof_RespectsContextCancellationWhileWaiting(t
 
 		err := <-errCh
 		require.ErrorIs(t, err, context.Canceled)
-		require.ErrorContains(t, err, "wait for 2/3 of slot")
+		require.ErrorContains(t, err, "wait for aggregation deadline")
 		require.Zero(t, attestationCalls.Load())
 		require.Zero(t, aggregateCalls.Load())
 	})
