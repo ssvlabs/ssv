@@ -634,3 +634,77 @@ func cloneTestNetworkConfig() *networkconfig.Network {
 	cfg.SSV = &ssvCfg
 	return &cfg
 }
+
+func gloasExternalBuildConsensusData(t *testing.T, slot phase0.Slot) *spectypes.ProposerConsensusData {
+	t.Helper()
+	block := gloas.TestingBeaconBlock(slot)
+	block.Body.SignedExecutionPayloadBid.Message.BuilderIndex = 5 // an external builder, not self-build
+	dataSSZ, err := block.MarshalSSZ()
+	require.NoError(t, err)
+	return &spectypes.ProposerConsensusData{
+		Duty:    *gloasProposerDuty(slot),
+		Version: networkconfig.DataVersionGloas,
+		DataSSZ: dataSSZ,
+	}
+}
+
+// On the self-build path the proposer starts the §6 envelope-signing duty for the slot (fires on every
+// operator, builder or not, so all join the envelope round).
+func TestProposerRunnerSubmitGloasProposalTriggersEnvelopeOnSelfBuild(t *testing.T) {
+	t.Parallel()
+
+	const slot = phase0.Slot(8)
+	consensusData := gloasProposerConsensusData(t, slot) // self-build (TestingBeaconBlock)
+	runner, keySet, _ := newProposerRunnerForTest(t, newProposerTestBeacon(nil), &stubDoppelganger{canSign: true}, 0, nil)
+	setupRunnerForPostConsensus(t, runner, keySet, gloasProposerDuty(slot), consensusData, 1)
+	runner.cachedGloasBlockSSZ = []byte("not-the-builder") // non-builder path (no publish needed)
+
+	var gotSlot phase0.Slot
+	called := false
+	runner.startEnvelopeDuty = func(_ context.Context, s phase0.Slot) { called, gotSlot = true, s }
+
+	err := runner.submitGloasProposal(context.Background(), zap.NewNop(), trace.SpanFromContext(context.Background()), consensusData, phase0.BLSSignature{})
+	require.NoError(t, err)
+	require.True(t, called, "self-build should start the envelope duty")
+	require.Equal(t, slot, gotSlot)
+}
+
+// Block built by an external builder: that builder signs its own envelope, so SSV must not start one.
+func TestProposerRunnerSubmitGloasProposalSkipsEnvelopeOnExternalBuild(t *testing.T) {
+	t.Parallel()
+
+	const slot = phase0.Slot(8)
+	consensusData := gloasExternalBuildConsensusData(t, slot)
+	runner, keySet, _ := newProposerRunnerForTest(t, newProposerTestBeacon(nil), &stubDoppelganger{canSign: true}, 0, nil)
+	setupRunnerForPostConsensus(t, runner, keySet, gloasProposerDuty(slot), consensusData, 1)
+	runner.cachedGloasBlockSSZ = []byte("not-the-builder")
+
+	called := false
+	runner.startEnvelopeDuty = func(_ context.Context, _ phase0.Slot) { called = true }
+
+	err := runner.submitGloasProposal(context.Background(), zap.NewNop(), trace.SpanFromContext(context.Background()), consensusData, phase0.BLSSignature{})
+	require.NoError(t, err)
+	require.False(t, called, "external-build should not start the envelope duty")
+}
+
+// recordDecidedBlockRoot stores exactly block.HashTreeRoot() — the root the §6 envelope value-check
+// matches against — and is a no-op without a store.
+func TestProposerRunnerRecordDecidedBlockRoot(t *testing.T) {
+	t.Parallel()
+
+	runner, _, _ := newProposerRunnerForTest(t, newProposerTestBeacon(nil), &stubDoppelganger{canSign: true}, 0, nil)
+
+	// No store (no envelope runner) → no-op, no error.
+	require.NoError(t, runner.recordDecidedBlockRoot(9, gloas.TestingBeaconBlock(9)))
+
+	store := ssv.NewProposedBlockRoots()
+	runner.proposedBlockRoots = store
+	block := gloas.TestingBeaconBlock(8)
+	require.NoError(t, runner.recordDecidedBlockRoot(8, block))
+
+	expectedRoot, err := block.HashTreeRoot()
+	require.NoError(t, err)
+	got, ok := store.Get(8)
+	require.True(t, ok)
+	require.Equal(t, phase0.Root(expectedRoot), got)
+}
