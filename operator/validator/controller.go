@@ -1207,6 +1207,10 @@ func SetupRunners(
 		OperatorSigner: options.OperatorSigner,
 	}
 
+	// proposedBlockRoots is shared between this validator's proposer runner (which records its
+	// §4-decided block root) and the §6 envelope runner (which reads it).
+	proposedBlockRoots := ssv.NewProposedBlockRoots()
+
 	runners := runner.ValidatorDutyRunners{}
 	var err error
 	for _, role := range runnersType {
@@ -1221,6 +1225,7 @@ func SetupRunners(
 				HighestDecidedSlot:  0,
 				Graffiti:            options.Graffiti,
 				ProposerDelay:       options.ProposerDelay,
+				ProposedBlockRoots:  proposedBlockRoots,
 			})
 		case ssvtypes.RoleAggregator:
 			// Post-Boole, aggregator duties route through the merged AggregatorCommitteeRunner
