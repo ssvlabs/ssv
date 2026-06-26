@@ -386,6 +386,42 @@ func (b *BaseRunner) signAndBroadcastPartialSigMsgs(
 	return nil
 }
 
+// signAndBroadcastPostConsensusMsg signs a post-consensus partial-signature message as the operator and
+// broadcasts it on its slot's subnet. Unlike signAndBroadcastPartialSigMsgs (pre-consensus), it keys the
+// message id by the slot's fork domain and uses BroadcastAtSlot.
+func (b *BaseRunner) signAndBroadcastPostConsensusMsg(
+	network protocolp2p.Network,
+	opSigner ssvtypes.OperatorSigner,
+	validatorPubKey []byte,
+	msgs *spectypes.PartialSignatureMessages,
+) error {
+	domain := b.NetworkConfig.DomainTypeAtSlot(msgs.Slot)
+	msgID := spectypes.NewMsgID(domain, validatorPubKey, b.RunnerRoleType)
+	encodedMsg, err := msgs.Encode()
+	if err != nil {
+		return fmt.Errorf("could not encode post-consensus partial signature message: %w", err)
+	}
+
+	ssvMsg := &spectypes.SSVMessage{
+		MsgType: spectypes.SSVPartialSignatureMsgType,
+		MsgID:   msgID,
+		Data:    encodedMsg,
+	}
+
+	sig, err := opSigner.SignSSVMessage(ssvMsg)
+	if err != nil {
+		return fmt.Errorf("could not sign post-consensus SSV message: %w", err)
+	}
+
+	signed := &spectypes.SignedSSVMessage{
+		Signatures:  [][]byte{sig},
+		OperatorIDs: []spectypes.OperatorID{opSigner.GetOperatorID()},
+		SSVMessage:  ssvMsg,
+	}
+
+	return network.BroadcastAtSlot(signed, msgs.Slot)
+}
+
 // basePreConsensusMsgProcessing is a base func that all runner implementation can call for processing a pre-consensus msg
 func (b *BaseRunner) basePreConsensusMsgProcessing(ctx context.Context, logger *zap.Logger, runner Runner, signedMsg *spectypes.PartialSignatureMessages) (bool, [][32]byte, error) {
 	// Reuse the existing span instead of generating new one to keep tracing-data lightweight.
