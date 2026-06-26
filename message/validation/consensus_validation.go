@@ -530,10 +530,11 @@ func (mv *messageValidator) roundBelongsToAllowedSpread(
 ) error {
 	role := signedSSVMessage.SSVMessage.GetID().GetRoleType()
 
-	// Proposer round timeouts are relative to QBFT instance start times rather than absolute time-into-slot values
-	// (until https://github.com/ssvlabs/ssv/issues/2429 is implemented), since we don't have any visibility into
-	// the actual QBFT instance state here - we can't really check whether message round belongs to allowed spread.
-	if role == spectypes.RoleProposer {
+	// Proposer and envelope-builder round timeouts are relative to QBFT instance start times rather than
+	// absolute time-into-slot values (until https://github.com/ssvlabs/ssv/issues/2429 is implemented),
+	// since we don't have visibility into the actual QBFT instance state here - we can't check whether the
+	// message round belongs to the allowed spread.
+	if role == spectypes.RoleProposer || role == spectypes.RoleEnvelopeBuilder {
 		return nil
 	}
 
