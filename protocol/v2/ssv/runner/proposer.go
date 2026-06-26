@@ -384,34 +384,9 @@ func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logge
 		Messages: []*spectypes.PartialSignatureMessage{msg},
 	}
 
-	domain := r.NetworkConfig.DomainTypeAtSlot(cd.Duty.Slot)
-	msgID := spectypes.NewMsgID(domain, r.GetShare().ValidatorPubKey[:], r.RunnerRoleType)
-	encodedMsg, err := postConsensusMsg.Encode()
-	if err != nil {
-		return fmt.Errorf("could not encode post consensus partial signature message: %w", err)
-	}
-
-	ssvMsg := &spectypes.SSVMessage{
-		MsgType: spectypes.SSVPartialSignatureMsgType,
-		MsgID:   msgID,
-		Data:    encodedMsg,
-	}
-
-	span.AddEvent("signing SSV partial signature message")
-	sig, err := r.operatorSigner.SignSSVMessage(ssvMsg)
-	if err != nil {
-		return fmt.Errorf("could not sign SSV partial signature message: %w", err)
-	}
-
-	msgToBroadcast := &spectypes.SignedSSVMessage{
-		Signatures:  [][]byte{sig},
-		OperatorIDs: []spectypes.OperatorID{r.operatorSigner.GetOperatorID()},
-		SSVMessage:  ssvMsg,
-	}
-
 	r.measurements.StartPostConsensus()
 	span.AddEvent("broadcasting post consensus partial signature message")
-	if err := r.GetNetwork().BroadcastAtSlot(msgToBroadcast, postConsensusMsg.Slot); err != nil {
+	if err := r.signAndBroadcastPostConsensusMsg(r.GetNetwork(), r.operatorSigner, r.GetShare().ValidatorPubKey[:], postConsensusMsg); err != nil {
 		return fmt.Errorf("can't broadcast partial post consensus sig: %w", err)
 	}
 	const broadcastedPostConsensusMsgEvent = "broadcasted post-consensus partial signature message"
