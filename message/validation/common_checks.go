@@ -61,7 +61,7 @@ func (mv *messageValidator) earlySlotAllowance(role spectypes.RunnerRole) time.D
 func (mv *messageValidator) messageLateness(slot phase0.Slot, role spectypes.RunnerRole, receivedAt time.Time) time.Duration {
 	var ttl uint64
 	switch role {
-	case spectypes.RoleProposer, ssvtypes.RoleSyncCommitteeContribution:
+	case spectypes.RoleProposer, spectypes.RoleEnvelopeBuilder, ssvtypes.RoleSyncCommitteeContribution:
 		ttl = 1 + LateSlotAllowance
 	case spectypes.RoleCommittee, spectypes.RoleAggregatorCommittee, ssvtypes.RoleAggregator:
 		ttl = mv.maxStoredSlots()
@@ -150,8 +150,9 @@ func (mv *messageValidator) dutyLimit(msgID spectypes.MessageID, slot phase0.Slo
 
 		return min(slotsPerEpoch, 2*validatorIndexCount), true
 
-	case spectypes.RoleProposerPreferences:
-		// A validator proposes at most once per slot, so at most SlotsPerEpoch preferences per epoch.
+	case spectypes.RoleProposerPreferences, spectypes.RoleEnvelopeBuilder:
+		// A validator proposes at most once per slot, so at most SlotsPerEpoch preferences (and likewise
+		// self-build envelopes) per epoch.
 		return mv.netCfg.SlotsPerEpoch, true
 
 	default:
