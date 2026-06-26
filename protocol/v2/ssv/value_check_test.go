@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/attestantio/go-eth2-client/spec/electra"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
@@ -242,4 +243,74 @@ func TestProposerChecker_GloasSlashable(t *testing.T) {
 func TestProposerChecker_GloasDecodeError(t *testing.T) {
 	checker := newGloasProposerChecker(fakeSlashingSigner{})
 	require.Error(t, checker.CheckValue(gloasProposerConsensusData(t, []byte{0x00, 0x01, 0x02})))
+}
+
+// --- envelope checker, §6 ---
+
+var envelopeValidatorPK = phase0.BLSPubKey{0x42}
+
+func encodeEnvelopeValue(t *testing.T, slot phase0.Slot, valIdx phase0.ValidatorIndex, pk phase0.BLSPubKey, blockRoot phase0.Root, builderIndex uint64) []byte {
+	t.Helper()
+	blinded := &gloas.BlindedExecutionPayloadEnvelope{
+		PayloadRoot:           phase0.Root{0x09},
+		ExecutionRequests:     &electra.ExecutionRequests{},
+		BuilderIndex:          builderIndex,
+		BeaconBlockRoot:       blockRoot,
+		ParentBeaconBlockRoot: phase0.Root{0x08},
+	}
+	dataSSZ, err := blinded.Encode()
+	require.NoError(t, err)
+	cd := &gloas.EnvelopeConsensusData{
+		Duty: spectypes.ValidatorDuty{
+			Type:           spectypes.BNRoleEnvelopeBuilder,
+			Slot:           slot,
+			ValidatorIndex: valIdx,
+			PubKey:         pk,
+		},
+		DataSSZ: dataSSZ,
+	}
+	out, err := cd.Encode()
+	require.NoError(t, err)
+	return out
+}
+
+func newEnvelopeCheckerWithRoot(slot phase0.Slot, root phase0.Root) ValueChecker {
+	store := NewProposedBlockRoots()
+	store.Set(slot, root)
+	return NewEnvelopeChecker(store, slot, spectypes.ValidatorPK(envelopeValidatorPK), 3)
+}
+
+// A self-build envelope whose BeaconBlockRoot matches the §4-decided root for the slot passes.
+func TestEnvelopeChecker_Valid(t *testing.T) {
+	root := phase0.Root{0xaa}
+	checker := newEnvelopeCheckerWithRoot(7, root)
+	require.NoError(t, checker.CheckValue(encodeEnvelopeValue(t, 7, 3, envelopeValidatorPK, root, uint64(gloas.BuilderIndexSelfBuild))))
+}
+
+func TestEnvelopeChecker_NotSelfBuild(t *testing.T) {
+	root := phase0.Root{0xaa}
+	checker := newEnvelopeCheckerWithRoot(7, root)
+	require.Error(t, checker.CheckValue(encodeEnvelopeValue(t, 7, 3, envelopeValidatorPK, root, 5)))
+}
+
+func TestEnvelopeChecker_WrongBlockRoot(t *testing.T) {
+	checker := newEnvelopeCheckerWithRoot(7, phase0.Root{0xaa})
+	require.Error(t, checker.CheckValue(encodeEnvelopeValue(t, 7, 3, envelopeValidatorPK, phase0.Root{0xbb}, uint64(gloas.BuilderIndexSelfBuild))))
+}
+
+// The §4 root must be present — the proposer runner must have decided and recorded it.
+func TestEnvelopeChecker_NoDecidedRoot(t *testing.T) {
+	checker := NewEnvelopeChecker(NewProposedBlockRoots(), 7, spectypes.ValidatorPK(envelopeValidatorPK), 3)
+	require.Error(t, checker.CheckValue(encodeEnvelopeValue(t, 7, 3, envelopeValidatorPK, phase0.Root{0xaa}, uint64(gloas.BuilderIndexSelfBuild))))
+}
+
+func TestEnvelopeChecker_WrongSlot(t *testing.T) {
+	root := phase0.Root{0xaa}
+	checker := newEnvelopeCheckerWithRoot(7, root)
+	require.Error(t, checker.CheckValue(encodeEnvelopeValue(t, 8, 3, envelopeValidatorPK, root, uint64(gloas.BuilderIndexSelfBuild))))
+}
+
+func TestEnvelopeChecker_DecodeError(t *testing.T) {
+	checker := newEnvelopeCheckerWithRoot(7, phase0.Root{0xaa})
+	require.Error(t, checker.CheckValue([]byte{0x00, 0x01}))
 }

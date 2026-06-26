@@ -150,6 +150,70 @@ func (v *gloasVoteChecker) CheckValue(value []byte) error {
 	return nil
 }
 
+type envelopeChecker struct {
+	proposedBlockRoots *ProposedBlockRoots
+	slot               phase0.Slot
+	validatorPK        spectypes.ValidatorPK
+	validatorIndex     phase0.ValidatorIndex
+}
+
+// NewEnvelopeChecker validates the §6 envelope-signing duty's QBFT value (SIP #94 §6): an
+// EnvelopeConsensusData carrying a self-build BlindedExecutionPayloadEnvelope whose BeaconBlockRoot
+// matches the §4-decided block root for the slot (read from the store the proposer runner wrote). The
+// envelope's content is leader-trusted — no PayloadRoot/field validation — matching the blinded-block
+// trust model in the proposer path.
+func NewEnvelopeChecker(
+	proposedBlockRoots *ProposedBlockRoots,
+	slot phase0.Slot,
+	validatorPK spectypes.ValidatorPK,
+	validatorIndex phase0.ValidatorIndex,
+) ValueChecker {
+	return &envelopeChecker{
+		proposedBlockRoots: proposedBlockRoots,
+		slot:               slot,
+		validatorPK:        validatorPK,
+		validatorIndex:     validatorIndex,
+	}
+}
+
+func (v *envelopeChecker) CheckValue(value []byte) error {
+	cd := &gloas.EnvelopeConsensusData{}
+	if err := cd.Decode(value); err != nil {
+		return spectypes.WrapError(spectypes.QBFTValueInvalidErrorCode, fmt.Errorf("failed decoding envelope consensus data: %w", err))
+	}
+
+	if cd.Duty.Slot != v.slot {
+		return spectypes.NewError(spectypes.QBFTValueInvalidErrorCode, "wrong envelope duty slot")
+	}
+	if cd.Duty.ValidatorIndex != v.validatorIndex {
+		return spectypes.NewError(spectypes.WrongValidatorIndexErrorCode, "wrong validator index")
+	}
+	if !bytes.Equal(cd.Duty.PubKey[:], v.validatorPK[:]) {
+		return spectypes.NewError(spectypes.WrongValidatorPubkeyErrorCode, "wrong validator pk")
+	}
+
+	blinded := &gloas.BlindedExecutionPayloadEnvelope{}
+	if err := blinded.Decode(cd.DataSSZ); err != nil {
+		return spectypes.WrapError(spectypes.QBFTValueInvalidErrorCode, fmt.Errorf("failed decoding blinded envelope: %w", err))
+	}
+
+	// This duty applies only to the self-build path; external builders sign their own envelopes.
+	if blinded.BuilderIndex != uint64(gloas.BuilderIndexSelfBuild) {
+		return spectypes.NewError(spectypes.QBFTValueInvalidErrorCode, "envelope builder index is not self-build")
+	}
+
+	// The envelope must commit to the block the §4 QBFT decided for this slot.
+	decidedRoot, ok := v.proposedBlockRoots.Get(v.slot)
+	if !ok {
+		return spectypes.NewError(spectypes.QBFTValueInvalidErrorCode, "no decided block root for envelope slot")
+	}
+	if blinded.BeaconBlockRoot != decidedRoot {
+		return spectypes.NewError(spectypes.QBFTValueInvalidErrorCode, "envelope beacon block root does not match the decided block")
+	}
+
+	return nil
+}
+
 type aggregatorCommitteeChecker struct{}
 
 func NewAggregatorCommitteeChecker() ValueChecker {
