@@ -52,12 +52,6 @@ type SignedExecutionPayloadEnvelope struct {
 	Signature phase0.BLSSignature `ssz-size:"96"`
 }
 
-func (e *ExecutionPayloadEnvelope) Encode() ([]byte, error)  { return e.MarshalSSZ() }
-func (e *ExecutionPayloadEnvelope) Decode(data []byte) error { return e.UnmarshalSSZ(data) }
-
-func (e *SignedExecutionPayloadEnvelope) Encode() ([]byte, error)  { return e.MarshalSSZ() }
-func (e *SignedExecutionPayloadEnvelope) Decode(data []byte) error { return e.UnmarshalSSZ(data) }
-
 // Blinded returns the blinded form of the envelope — the full Payload replaced by its hash-tree root.
 // The blinded envelope hashes to the same root as this one, so the §6 duty agrees on and signs the
 // blinded value while the signature stays valid for this full envelope. The non-Payload fields are
