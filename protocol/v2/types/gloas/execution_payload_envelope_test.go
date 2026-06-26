@@ -13,7 +13,7 @@ func TestBlindedExecutionPayloadEnvelopeRoundTrip(t *testing.T) {
 	in := &BlindedExecutionPayloadEnvelope{
 		PayloadRoot:           phase0.Root{0x01},
 		ExecutionRequests:     &electra.ExecutionRequests{},
-		BuilderIndex:          uint64(BuilderIndexSelfBuild),
+		BuilderIndex:          BuilderIndexSelfBuild,
 		BeaconBlockRoot:       phase0.Root{0x02},
 		ParentBeaconBlockRoot: phase0.Root{0x03},
 	}
@@ -23,7 +23,7 @@ func TestBlindedExecutionPayloadEnvelopeRoundTrip(t *testing.T) {
 	out := &BlindedExecutionPayloadEnvelope{}
 	require.NoError(t, out.UnmarshalSSZ(b))
 	require.Equal(t, in.PayloadRoot, out.PayloadRoot)
-	require.Equal(t, uint64(BuilderIndexSelfBuild), out.BuilderIndex)
+	require.Equal(t, BuilderIndexSelfBuild, out.BuilderIndex)
 	require.Equal(t, in.BeaconBlockRoot, out.BeaconBlockRoot)
 	require.Equal(t, in.ParentBeaconBlockRoot, out.ParentBeaconBlockRoot)
 

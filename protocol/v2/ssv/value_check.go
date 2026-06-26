@@ -198,7 +198,7 @@ func (v *envelopeChecker) CheckValue(value []byte) error {
 	}
 
 	// This duty applies only to the self-build path; external builders sign their own envelopes.
-	if blinded.BuilderIndex != uint64(gloas.BuilderIndexSelfBuild) {
+	if blinded.BuilderIndex != gloas.BuilderIndexSelfBuild {
 		return spectypes.NewError(spectypes.QBFTValueInvalidErrorCode, "envelope builder index is not self-build")
 	}
 

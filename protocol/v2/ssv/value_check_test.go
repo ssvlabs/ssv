@@ -249,7 +249,7 @@ func TestProposerChecker_GloasDecodeError(t *testing.T) {
 
 var envelopeValidatorPK = phase0.BLSPubKey{0x42}
 
-func encodeEnvelopeValue(t *testing.T, slot phase0.Slot, valIdx phase0.ValidatorIndex, pk phase0.BLSPubKey, blockRoot phase0.Root, builderIndex uint64) []byte {
+func encodeEnvelopeValue(t *testing.T, slot phase0.Slot, valIdx phase0.ValidatorIndex, pk phase0.BLSPubKey, blockRoot phase0.Root, builderIndex gloas.BuilderIndex) []byte {
 	t.Helper()
 	blinded := &gloas.BlindedExecutionPayloadEnvelope{
 		PayloadRoot:           phase0.Root{0x09},
@@ -284,7 +284,7 @@ func newEnvelopeCheckerWithRoot(slot phase0.Slot, root phase0.Root) ValueChecker
 func TestEnvelopeChecker_Valid(t *testing.T) {
 	root := phase0.Root{0xaa}
 	checker := newEnvelopeCheckerWithRoot(7, root)
-	require.NoError(t, checker.CheckValue(encodeEnvelopeValue(t, 7, 3, envelopeValidatorPK, root, uint64(gloas.BuilderIndexSelfBuild))))
+	require.NoError(t, checker.CheckValue(encodeEnvelopeValue(t, 7, 3, envelopeValidatorPK, root, gloas.BuilderIndexSelfBuild)))
 }
 
 func TestEnvelopeChecker_NotSelfBuild(t *testing.T) {
@@ -295,19 +295,19 @@ func TestEnvelopeChecker_NotSelfBuild(t *testing.T) {
 
 func TestEnvelopeChecker_WrongBlockRoot(t *testing.T) {
 	checker := newEnvelopeCheckerWithRoot(7, phase0.Root{0xaa})
-	require.Error(t, checker.CheckValue(encodeEnvelopeValue(t, 7, 3, envelopeValidatorPK, phase0.Root{0xbb}, uint64(gloas.BuilderIndexSelfBuild))))
+	require.Error(t, checker.CheckValue(encodeEnvelopeValue(t, 7, 3, envelopeValidatorPK, phase0.Root{0xbb}, gloas.BuilderIndexSelfBuild)))
 }
 
 // The §4 root must be present — the proposer runner must have decided and recorded it.
 func TestEnvelopeChecker_NoDecidedRoot(t *testing.T) {
 	checker := NewEnvelopeChecker(NewProposedBlockRoots(), 7, spectypes.ValidatorPK(envelopeValidatorPK), 3)
-	require.Error(t, checker.CheckValue(encodeEnvelopeValue(t, 7, 3, envelopeValidatorPK, phase0.Root{0xaa}, uint64(gloas.BuilderIndexSelfBuild))))
+	require.Error(t, checker.CheckValue(encodeEnvelopeValue(t, 7, 3, envelopeValidatorPK, phase0.Root{0xaa}, gloas.BuilderIndexSelfBuild)))
 }
 
 func TestEnvelopeChecker_WrongSlot(t *testing.T) {
 	root := phase0.Root{0xaa}
 	checker := newEnvelopeCheckerWithRoot(7, root)
-	require.Error(t, checker.CheckValue(encodeEnvelopeValue(t, 8, 3, envelopeValidatorPK, root, uint64(gloas.BuilderIndexSelfBuild))))
+	require.Error(t, checker.CheckValue(encodeEnvelopeValue(t, 8, 3, envelopeValidatorPK, root, gloas.BuilderIndexSelfBuild)))
 }
 
 func TestEnvelopeChecker_DecodeError(t *testing.T) {
