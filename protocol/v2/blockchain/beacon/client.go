@@ -130,6 +130,7 @@ type BeaconNode interface {
 	PTCCalls
 	ProposerPreferencesCalls
 	GloasProposerCalls
+	GloasEnvelopeCalls
 	DomainCalls
 
 	beaconDuties
@@ -171,4 +172,15 @@ type GloasProposerCalls interface {
 	GetGloasBeaconBlock(ctx context.Context, slot phase0.Slot, graffiti, randao []byte) (*gloas.BeaconBlock, error)
 	// SubmitGloasBeaconBlock publishes a signed Gloas block.
 	SubmitGloasBeaconBlock(ctx context.Context, block *gloas.SignedBeaconBlock) error
+}
+
+// GloasEnvelopeCalls is the beacon-node surface for the §6 execution-payload envelope (SIP #94 §6):
+// fetching the payload the proposer committed to (self-build) and publishing the signed envelope. Like
+// the block calls, these are hand-rolled over HTTP (beacon-APIs#580, unmerged) — verify on a Gloas devnet.
+type GloasEnvelopeCalls interface {
+	// GetExecutionPayloadEnvelope fetches the execution-payload envelope for the proposer's committed
+	// block, to be blinded, agreed in §6 QBFT, and signed.
+	GetExecutionPayloadEnvelope(ctx context.Context, slot phase0.Slot, beaconBlockRoot phase0.Root) (*gloas.ExecutionPayloadEnvelope, error)
+	// SubmitExecutionPayloadEnvelope publishes the signed envelope.
+	SubmitExecutionPayloadEnvelope(ctx context.Context, signed *gloas.SignedExecutionPayloadEnvelope) error
 }

@@ -790,7 +790,19 @@ func (c *Controller) onShareInit(share *ssvtypes.SSVShare) (v *validator.Validat
 		// so that when the validator is stopped, the runners are stopped as well.
 		validatorCtx, validatorCancel := context.WithCancel(c.ctx)
 
-		dutyRunners, err := SetupRunners(validatorCtx, share, operator, c.validatorRegistrationSubmitter, c.validatorStore, c.validatorCommonOpts)
+		// startEnvelopeDuty lets the proposer kick off the §6 envelope duty after a self-build §4 block. It
+		// dispatches async on the validator-scoped context (not the proposer's post-consensus ctx, which ends
+		// with the block duty); c.ExecuteDuty routes by pubkey back to this validator.
+		startEnvelopeDuty := func(slot phase0.Slot) {
+			go c.ExecuteDuty(validatorCtx, c.logger, &spectypes.ValidatorDuty{
+				Type:           spectypes.BNRoleEnvelopeBuilder,
+				PubKey:         phase0.BLSPubKey(share.ValidatorPubKey),
+				Slot:           slot,
+				ValidatorIndex: share.ValidatorIndex,
+			})
+		}
+
+		dutyRunners, err := SetupRunners(validatorCtx, share, operator, c.validatorRegistrationSubmitter, c.validatorStore, c.validatorCommonOpts, startEnvelopeDuty)
 		if err != nil {
 			validatorCancel()
 			return nil, true, fmt.Errorf("could not setup runners: %w", err)
@@ -1161,6 +1173,7 @@ func SetupRunners(
 	validatorRegistrationSubmitter runner.ValidatorRegistrationSubmitter,
 	validatorStore registrystorage.ValidatorStore,
 	options *validator.CommonOptions,
+	startEnvelopeDuty func(phase0.Slot),
 ) (runner.ValidatorDutyRunners, error) {
 	if options.ExporterMode {
 		return nil, fmt.Errorf("cannot set up duty runners in exporter mode")
@@ -1227,6 +1240,7 @@ func SetupRunners(
 				Graffiti:            options.Graffiti,
 				ProposerDelay:       options.ProposerDelay,
 				ProposedBlockRoots:  proposedBlockRoots,
+				StartEnvelopeDuty:   startEnvelopeDuty,
 			})
 		case spectypes.RoleEnvelopeBuilder:
 			// The §6 envelope runner shares the proposer's proposedBlockRoots (it reads the §4 root the

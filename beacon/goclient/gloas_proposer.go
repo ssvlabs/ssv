@@ -46,7 +46,7 @@ func (gc *GoClient) SubmitGloasBeaconBlock(ctx context.Context, block *gloas.Sig
 // requestGloasBeaconBlock GETs the produce endpoint and decodes the SSZ response into a Gloas block.
 func requestGloasBeaconBlock(ctx context.Context, addr string, slot phase0.Slot, graffiti, randao []byte) (*gloas.BeaconBlock, error) {
 	url := addr + fmt.Sprintf(gloasProduceBlockPath, slot, "0x"+hex.EncodeToString(randao), "0x"+hex.EncodeToString(graffiti))
-	body, err := gloasBlockHTTP(ctx, http.MethodGet, url, nil)
+	body, err := gloasOctetStreamHTTP(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -59,14 +59,14 @@ func requestGloasBeaconBlock(ctx context.Context, addr string, slot phase0.Slot,
 
 // submitGloasBeaconBlock POSTs an SSZ-marshaled signed Gloas block to the publish endpoint.
 func submitGloasBeaconBlock(ctx context.Context, addr string, blockSSZ []byte) error {
-	_, err := gloasBlockHTTP(ctx, http.MethodPost, addr+gloasPublishBlockPath, blockSSZ)
+	_, err := gloasOctetStreamHTTP(ctx, http.MethodPost, addr+gloasPublishBlockPath, blockSSZ)
 	return err
 }
 
-// gloasBlockHTTP issues an octet-stream (SSZ) request to a Gloas produce/publish endpoint and returns
+// gloasOctetStreamHTTP issues an octet-stream (SSZ) request to a Gloas produce/publish endpoint and returns
 // the response body on a 2xx. A nil body GETs; a non-nil body POSTs SSZ tagged with the Gloas
 // consensus version.
-func gloasBlockHTTP(ctx context.Context, method, url string, body []byte) ([]byte, error) {
+func gloasOctetStreamHTTP(ctx context.Context, method, url string, body []byte) ([]byte, error) {
 	var reader io.Reader
 	if body != nil {
 		reader = bytes.NewReader(body)

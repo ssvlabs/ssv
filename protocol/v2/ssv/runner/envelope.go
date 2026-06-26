@@ -1,6 +1,7 @@
 package runner
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/json"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
@@ -51,6 +53,11 @@ type EnvelopeBuilderRunner struct {
 	// proposedBlockRoots gives executeDuty the §4-decided block root for the slot (the envelope's
 	// BeaconBlockRoot), recorded by the proposer runner. Shared with ValCheck, which checks the same root.
 	proposedBlockRoots *ssv.ProposedBlockRoots
+
+	// cachedEnvelope holds the full envelope this operator fetched in produce. Post-consensus content-matches
+	// it against the decided blinded value to detect whether this operator built it — only that operator
+	// publishes the full SignedExecutionPayloadEnvelope.
+	cachedEnvelope *gloas.ExecutionPayloadEnvelope
 }
 
 // EnvelopeBuilderRunnerOptions bundles the dependencies required by NewEnvelopeBuilderRunner.
@@ -196,17 +203,45 @@ func (r *EnvelopeBuilderRunner) ProcessPostConsensus(ctx context.Context, logger
 	return r.submitEnvelope(ctx, logger, cd, specSig)
 }
 
-// submitEnvelope publishes the signed execution-payload envelope. Only the operator that built the decided
-// envelope (content match) publishes; the others just complete the duty.
-//
-// STUB: reconstructing and POSTing the full SignedExecutionPayloadEnvelope needs the full Gloas execution
-// payload (EIP-7928 block_access_list, EIP-7843 slot_number) and the goclient submit endpoint.
+// submitEnvelope publishes the signed execution-payload envelope. Only the operator whose cached envelope
+// blinds to the decided value (content match) holds the full bytes to publish; the others just complete
+// the duty — mirroring the §4 block path.
 func (r *EnvelopeBuilderRunner) submitEnvelope(ctx context.Context, logger *zap.Logger, cd *gloas.EnvelopeConsensusData, sig phase0.BLSSignature) error {
-	return errors.New("gloas envelope publication not yet implemented (needs the full Gloas execution payload)")
+	if r.builtDecidedEnvelope(cd.DataSSZ) {
+		signed := &gloas.SignedExecutionPayloadEnvelope{Message: r.cachedEnvelope, Signature: sig}
+		if err := r.GetBeaconNode().SubmitExecutionPayloadEnvelope(ctx, signed); err != nil {
+			return fmt.Errorf("submit execution payload envelope: %w", err)
+		}
+		logger.Info("✅ published execution payload envelope")
+	} else {
+		logger.Debug("this operator did not build the decided envelope, skipping publication")
+	}
+
+	r.markDutySucceeded()
+	r.measurements.EndDutyFlow()
+	return nil
+}
+
+// builtDecidedEnvelope reports whether this operator's cached envelope blinds to the decided value — i.e.
+// it produced the agreed envelope and so holds the full bytes to publish.
+func (r *EnvelopeBuilderRunner) builtDecidedEnvelope(decidedDataSSZ []byte) bool {
+	if r.cachedEnvelope == nil {
+		return false
+	}
+	blinded, err := r.cachedEnvelope.Blinded()
+	if err != nil {
+		return false
+	}
+	blindedSSZ, err := blinded.Encode()
+	if err != nil {
+		return false
+	}
+	return bytes.Equal(blindedSSZ, decidedDataSSZ)
 }
 
 func (r *EnvelopeBuilderRunner) executeDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty) error {
 	r.measurements.StartDutyFlow()
+	r.cachedEnvelope = nil // drop any envelope cached for a prior duty
 
 	validatorDuty, err := validatorDutyFromDuty(duty)
 	if err != nil {
@@ -237,13 +272,28 @@ func (r *EnvelopeBuilderRunner) executeDuty(ctx context.Context, logger *zap.Log
 	return nil
 }
 
-// produceBlindedEnvelope fetches this operator's execution-payload envelope for the slot and wraps its
-// blinded form as the QBFT value.
-//
-// STUB: needs the full Gloas execution payload to compute PayloadRoot = hash_tree_root(payload) and the
-// goclient GET getExecutionPayloadEnvelope(slot, beacon_block_root).
+// produceBlindedEnvelope fetches this operator's execution-payload envelope for the slot, caches the full
+// envelope for the later content-matched publish, and wraps its blinded form as the QBFT value.
 func (r *EnvelopeBuilderRunner) produceBlindedEnvelope(ctx context.Context, duty *spectypes.ValidatorDuty, beaconBlockRoot phase0.Root) (*gloas.EnvelopeConsensusData, error) {
-	return nil, errors.New("gloas envelope production not yet implemented (needs the full Gloas execution payload)")
+	envelope, err := r.GetBeaconNode().GetExecutionPayloadEnvelope(ctx, duty.DutySlot(), beaconBlockRoot)
+	if err != nil {
+		return nil, fmt.Errorf("get execution payload envelope: %w", err)
+	}
+	r.cachedEnvelope = envelope
+
+	blinded, err := envelope.Blinded()
+	if err != nil {
+		return nil, err
+	}
+	dataSSZ, err := blinded.Encode()
+	if err != nil {
+		return nil, fmt.Errorf("encode blinded envelope: %w", err)
+	}
+	return &gloas.EnvelopeConsensusData{
+		Duty:    *duty,
+		Version: networkconfig.DataVersionGloas,
+		DataSSZ: dataSSZ,
+	}, nil
 }
 
 // expectedPreConsensusRootsAndDomain is unreachable: the envelope duty has no pre-consensus phase.

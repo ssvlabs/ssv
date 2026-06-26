@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 )
@@ -67,10 +68,8 @@ func TestEnvelopeBuilderRunner_NoPreConsensus(t *testing.T) {
 	require.Error(t, err)
 }
 
-// executeDuty requires the proposer to have recorded the §4 block root for the slot, then stubs the
-// (heavy-payload-dependent) production.
-func TestEnvelopeBuilderRunner_ExecuteDuty(t *testing.T) {
-	store := ssv.NewProposedBlockRoots()
+// executeDuty guards on the proposer having recorded the §4 block root for the slot before producing.
+func TestEnvelopeBuilderRunner_ExecuteDutyRequiresDecidedRoot(t *testing.T) {
 	r := &EnvelopeBuilderRunner{
 		BaseRunner: &BaseRunner{
 			RunnerRoleType: spectypes.RoleEnvelopeBuilder,
@@ -79,20 +78,71 @@ func TestEnvelopeBuilderRunner_ExecuteDuty(t *testing.T) {
 			},
 		},
 		measurements:       newMeasurementsStore(),
-		proposedBlockRoots: store,
+		proposedBlockRoots: ssv.NewProposedBlockRoots(),
 	}
 	duty := &spectypes.ValidatorDuty{Type: spectypes.BNRoleEnvelopeBuilder, Slot: 5, ValidatorIndex: 3}
 
-	// No recorded §4 root → guarded.
 	require.ErrorContains(t, r.executeDuty(context.Background(), zap.NewNop(), duty), "no decided block root")
-
-	// With the root present, production is reached and stubs out pending the full Gloas payload.
-	store.Set(5, phase0.Root{0xaa})
-	require.ErrorContains(t, r.executeDuty(context.Background(), zap.NewNop(), duty), "not yet implemented")
 }
 
-func TestEnvelopeBuilderRunner_SubmitEnvelopeStub(t *testing.T) {
-	r := &EnvelopeBuilderRunner{BaseRunner: &BaseRunner{}}
-	err := r.submitEnvelope(context.Background(), zap.NewNop(), &gloas.EnvelopeConsensusData{}, phase0.BLSSignature{})
-	require.ErrorContains(t, err, "not yet implemented")
+type envelopeTestBeacon struct {
+	beacon.BeaconNode
+	envelope  *gloas.ExecutionPayloadEnvelope
+	submitted []*gloas.SignedExecutionPayloadEnvelope
+}
+
+func (b *envelopeTestBeacon) GetExecutionPayloadEnvelope(_ context.Context, _ phase0.Slot, _ phase0.Root) (*gloas.ExecutionPayloadEnvelope, error) {
+	return b.envelope, nil
+}
+
+func (b *envelopeTestBeacon) SubmitExecutionPayloadEnvelope(_ context.Context, signed *gloas.SignedExecutionPayloadEnvelope) error {
+	b.submitted = append(b.submitted, signed)
+	return nil
+}
+
+func sampleEnvelope() *gloas.ExecutionPayloadEnvelope {
+	return &gloas.ExecutionPayloadEnvelope{
+		Payload:               &gloas.ExecutionPayload{BlockNumber: 42},
+		ExecutionRequests:     &electra.ExecutionRequests{},
+		BuilderIndex:          gloas.BuilderIndexSelfBuild,
+		BeaconBlockRoot:       phase0.Root{0xaa},
+		ParentBeaconBlockRoot: phase0.Root{0xbb},
+	}
+}
+
+// produceBlindedEnvelope fetches the envelope, caches the full one, and wraps its blinded form (PayloadRoot
+// = HTR(payload), with the §4 root and builder index preserved) as the QBFT value.
+func TestEnvelopeBuilderRunner_ProduceBlindedEnvelope(t *testing.T) {
+	envelope := sampleEnvelope()
+	r := &EnvelopeBuilderRunner{BaseRunner: &BaseRunner{}, beacon: &envelopeTestBeacon{envelope: envelope}}
+	duty := &spectypes.ValidatorDuty{Type: spectypes.BNRoleEnvelopeBuilder, Slot: 5, ValidatorIndex: 3}
+
+	cd, err := r.produceBlindedEnvelope(context.Background(), duty, phase0.Root{0xaa})
+	require.NoError(t, err)
+	require.Same(t, envelope, r.cachedEnvelope) // cached for the later content-matched publish
+
+	blinded := &gloas.BlindedExecutionPayloadEnvelope{}
+	require.NoError(t, blinded.Decode(cd.DataSSZ))
+	wantRoot, err := envelope.Payload.HashTreeRoot()
+	require.NoError(t, err)
+	require.Equal(t, phase0.Root(wantRoot), blinded.PayloadRoot)
+	require.Equal(t, envelope.BeaconBlockRoot, blinded.BeaconBlockRoot)
+	require.Equal(t, gloas.BuilderIndexSelfBuild, blinded.BuilderIndex)
+}
+
+// builtDecidedEnvelope is the content match: only the operator whose cached envelope blinds to the decided
+// value holds the full bytes and publishes.
+func TestEnvelopeBuilderRunner_BuiltDecidedEnvelope(t *testing.T) {
+	envelope := sampleEnvelope()
+	blinded, err := envelope.Blinded()
+	require.NoError(t, err)
+	decided, err := blinded.Encode()
+	require.NoError(t, err)
+
+	r := &EnvelopeBuilderRunner{cachedEnvelope: envelope}
+	require.True(t, r.builtDecidedEnvelope(decided))       // our cached envelope blinds to the decided value
+	require.False(t, r.builtDecidedEnvelope([]byte{0x01})) // a different decided value
+
+	r.cachedEnvelope = nil
+	require.False(t, r.builtDecidedEnvelope(decided)) // nothing cached (e.g. after a round change)
 }
