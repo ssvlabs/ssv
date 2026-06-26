@@ -1168,6 +1168,7 @@ func SetupRunners(
 
 	runnersType := []spectypes.RunnerRole{
 		spectypes.RoleProposer,
+		spectypes.RoleEnvelopeBuilder,
 		ssvtypes.RoleAggregator,
 		ssvtypes.RoleSyncCommitteeContribution,
 		spectypes.RoleValidatorRegistration,
@@ -1226,6 +1227,16 @@ func SetupRunners(
 				Graffiti:            options.Graffiti,
 				ProposerDelay:       options.ProposerDelay,
 				ProposedBlockRoots:  proposedBlockRoots,
+			})
+		case spectypes.RoleEnvelopeBuilder:
+			// The §6 envelope runner shares the proposer's proposedBlockRoots (it reads the §4 root the
+			// proposer records). Its value-check is built per duty, so none is passed here. The proposer
+			// trigger that starts this duty is wired with the heavy execution-payload piece.
+			runners[role], err = runner.NewEnvelopeBuilderRunner(runner.EnvelopeBuilderRunnerOptions{
+				BaseRunnerOptions:  baseOpts,
+				QBFTController:     buildController(spectypes.RoleEnvelopeBuilder),
+				ProposedBlockRoots: proposedBlockRoots,
+				HighestDecidedSlot: 0,
 			})
 		case ssvtypes.RoleAggregator:
 			// Post-Boole, aggregator duties route through the merged AggregatorCommitteeRunner
