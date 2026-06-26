@@ -72,7 +72,9 @@ type ProposerRunner struct {
 
 	// startEnvelopeDuty starts the §6 envelope-signing duty for a slot, called after a self-build §4
 	// block is published. Injected by the controller; nil pre-Gloas / when the envelope runner is absent.
-	startEnvelopeDuty func(ctx context.Context, slot phase0.Slot)
+	// It must dispatch async with a node-scoped context: the caller runs on the proposer's post-consensus
+	// path, whose context is cancelled once the block duty ends.
+	startEnvelopeDuty func(slot phase0.Slot)
 }
 
 // ProposerRunnerOptions bundles all dependencies required by NewProposerRunner.
@@ -94,8 +96,8 @@ type ProposerRunnerOptions struct {
 	ProposedBlockRoots *ssv.ProposedBlockRoots
 
 	// StartEnvelopeDuty starts the §6 envelope-signing duty for a slot; called after a self-build §4
-	// block is published. Optional.
-	StartEnvelopeDuty func(ctx context.Context, slot phase0.Slot)
+	// block is published. Must dispatch async with a node-scoped context (see startEnvelopeDuty). Optional.
+	StartEnvelopeDuty func(slot phase0.Slot)
 }
 
 func NewProposerRunner(opts ProposerRunnerOptions) (Runner, error) {
@@ -548,7 +550,9 @@ func (r *ProposerRunner) finishSubmittedProposal(ctx context.Context, logger *za
 // submitGloasProposal publishes the decided Gloas (ePBS) block — only the builder (content match)
 // submits, the others just complete the duty — then on the self-build path starts the §6
 // envelope-signing duty. The block is decoded up front because every operator needs its bid for the
-// self-build check; the trigger runs after publication and async, so it never delays the block.
+// self-build check. The envelope trigger fires on every operator (the envelope is a cluster round the
+// others join regardless, so the builder joins even if its own submit failed) and dispatches async, so
+// it never delays the block.
 func (r *ProposerRunner) submitGloasProposal(ctx context.Context, logger *zap.Logger, span trace.Span, cd *spectypes.ProposerConsensusData, sig phase0.BLSSignature) error {
 	block, err := gloas.DecodeBeaconBlock(cd.DataSSZ)
 	if err != nil {
@@ -561,23 +565,24 @@ func (r *ProposerRunner) submitGloasProposal(ctx context.Context, logger *zap.Lo
 		signedBlock := &gloas.SignedBeaconBlock{Message: block, Signature: sig}
 		if err := r.GetBeaconNode().SubmitGloasBeaconBlock(ctx, signedBlock); err != nil {
 			recordFailedSubmission(ctx, spectypes.BNRoleProposer)
-			return fmt.Errorf("submit gloas beacon block: %w", err)
+			finishErr = fmt.Errorf("submit gloas beacon block: %w", err)
+		} else {
+			finishErr = r.finishSubmittedProposal(ctx, logger, span, start, nil)
 		}
-		finishErr = r.finishSubmittedProposal(ctx, logger, span, start, nil)
 	} else {
 		logger.Debug("this operator did not build the decided gloas block, skipping submission")
 		r.markDutySucceeded()
 		r.measurements.EndDutyFlow()
 	}
 
-	r.triggerEnvelopeIfSelfBuild(ctx, block, cd.Duty.Slot)
+	r.triggerEnvelopeIfSelfBuild(block, cd.Duty.Slot)
 	return finishErr
 }
 
 // triggerEnvelopeIfSelfBuild starts the §6 envelope-signing duty for the slot when the decided block is
-// self-build — only then does the SSV cluster sign the envelope (external builders sign their own). A
-// no-op until the controller wires the starter.
-func (r *ProposerRunner) triggerEnvelopeIfSelfBuild(ctx context.Context, block *gloas.BeaconBlock, slot phase0.Slot) {
+// self-build — only then does the SSV cluster sign the envelope (external builders sign their own). The
+// starter dispatches async (see startEnvelopeDuty); a no-op until the controller wires it.
+func (r *ProposerRunner) triggerEnvelopeIfSelfBuild(block *gloas.BeaconBlock, slot phase0.Slot) {
 	if r.startEnvelopeDuty == nil {
 		return
 	}
@@ -585,7 +590,7 @@ func (r *ProposerRunner) triggerEnvelopeIfSelfBuild(ctx context.Context, block *
 	if bid == nil || bid.Message == nil || bid.Message.BuilderIndex != gloas.BuilderIndexSelfBuild {
 		return
 	}
-	r.startEnvelopeDuty(ctx, slot)
+	r.startEnvelopeDuty(slot)
 }
 
 // recordDecidedBlockRoot stores the §4-decided block's root for the §6 envelope runner and its

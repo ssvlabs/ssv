@@ -39,7 +39,9 @@ type BeaconBlockBody struct {
 	BLSToExecutionChanges     []*capella.SignedBLSToExecutionChange `ssz-max:"16"`
 	SignedExecutionPayloadBid *SignedExecutionPayloadBid
 	PayloadAttestations       []*PayloadAttestation `ssz-max:"4"`
-	ParentExecutionRequests   *electra.ExecutionRequests
+	// electra.ExecutionRequests matches the pinned Gloas spec (6ebb2216c); EIP-8282 (builder
+	// deposit/exit requests, Glamsterdam) will extend it — swap to a node-side variant then.
+	ParentExecutionRequests *electra.ExecutionRequests
 }
 
 // BeaconBlock is the Gloas (ePBS) beacon block.
