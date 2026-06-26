@@ -611,37 +611,15 @@ func (r *SyncCommitteeAggregatorRunner) GetOperatorSigner() ssvtypes.OperatorSig
 }
 
 func (r *SyncCommitteeAggregatorRunner) MarshalJSON() ([]byte, error) {
-	type syncCommitteeAggregatorRunnerJSON struct {
-		BaseRunner *BaseRunner `json:"BaseRunner"`
-		// ValCheck is intentionally kept in the JSON to preserve the historical runner state shape
-		// (and thus runner state roots used by spec tests). It is a runtime-only dependency and
-		// is ignored on decode, so it is always marshaled as `null` for determinism.
-		ValCheck any `json:"ValCheck"`
-	}
-
-	return json.Marshal(&syncCommitteeAggregatorRunnerJSON{
-		BaseRunner: r.BaseRunner,
-		ValCheck:   nil,
-	})
+	return marshalRunnerStateJSON(r.BaseRunner)
 }
 
 func (r *SyncCommitteeAggregatorRunner) UnmarshalJSON(data []byte) error {
-	type syncCommitteeAggregatorRunnerJSON struct {
-		BaseRunner *BaseRunner     `json:"BaseRunner"`
-		ValCheck   json.RawMessage `json:"ValCheck"`
-	}
-
-	aux := &syncCommitteeAggregatorRunnerJSON{}
-	if err := json.Unmarshal(data, aux); err != nil {
+	br, err := unmarshalRunnerStateJSON(data)
+	if err != nil {
 		return err
 	}
-
-	if aux.BaseRunner == nil {
-		return fmt.Errorf("missing BaseRunner")
-	}
-
-	r.BaseRunner = aux.BaseRunner
-	// ValCheck is not restored from JSON. Callers must rehydrate it explicitly.
+	r.BaseRunner = br
 	r.ValCheck = nil
 	return nil
 }

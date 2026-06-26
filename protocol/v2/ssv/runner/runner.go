@@ -239,6 +239,32 @@ func (b *BaseRunner) MarshalJSON() ([]byte, error) {
 	return byts, err
 }
 
+// marshalRunnerStateJSON encodes a runner whose persisted state is just its BaseRunner. ValCheck is a
+// runtime-only dependency but is kept in the JSON as null to preserve the historical runner-state shape
+// (and thus the state roots spec tests pin); runners restore it via unmarshalRunnerStateJSON.
+func marshalRunnerStateJSON(b *BaseRunner) ([]byte, error) {
+	return json.Marshal(&struct {
+		BaseRunner *BaseRunner `json:"BaseRunner"`
+		ValCheck   any         `json:"ValCheck"`
+	}{BaseRunner: b})
+}
+
+// unmarshalRunnerStateJSON restores the BaseRunner written by marshalRunnerStateJSON; ValCheck is left
+// nil for the caller to rehydrate.
+func unmarshalRunnerStateJSON(data []byte) (*BaseRunner, error) {
+	aux := &struct {
+		BaseRunner *BaseRunner     `json:"BaseRunner"`
+		ValCheck   json.RawMessage `json:"ValCheck"`
+	}{}
+	if err := json.Unmarshal(data, aux); err != nil {
+		return nil, err
+	}
+	if aux.BaseRunner == nil {
+		return nil, fmt.Errorf("missing BaseRunner")
+	}
+	return aux.BaseRunner, nil
+}
+
 // baseStartNewDuty is a base func that all runner implementation can call to start a duty
 func (b *BaseRunner) baseStartNewDuty(ctx context.Context, logger *zap.Logger, runner Runner, duty spectypes.Duty, quorum uint64) error {
 	if err := b.ShouldProcessDuty(duty); err != nil {

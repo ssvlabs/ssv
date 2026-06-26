@@ -287,31 +287,15 @@ func (r *EnvelopeBuilderRunner) GetOperatorSigner() ssvtypes.OperatorSigner {
 }
 
 func (r *EnvelopeBuilderRunner) MarshalJSON() ([]byte, error) {
-	type envelopeBuilderRunnerJSON struct {
-		BaseRunner *BaseRunner `json:"BaseRunner"`
-		// ValCheck is a runtime-only dependency, ignored on decode; always marshaled as null.
-		ValCheck any `json:"ValCheck"`
-	}
-	return json.Marshal(&envelopeBuilderRunnerJSON{
-		BaseRunner: r.BaseRunner,
-		ValCheck:   nil,
-	})
+	return marshalRunnerStateJSON(r.BaseRunner)
 }
 
 func (r *EnvelopeBuilderRunner) UnmarshalJSON(data []byte) error {
-	type envelopeBuilderRunnerJSON struct {
-		BaseRunner *BaseRunner     `json:"BaseRunner"`
-		ValCheck   json.RawMessage `json:"ValCheck"`
-	}
-	aux := &envelopeBuilderRunnerJSON{}
-	if err := json.Unmarshal(data, aux); err != nil {
+	br, err := unmarshalRunnerStateJSON(data)
+	if err != nil {
 		return err
 	}
-	if aux.BaseRunner == nil {
-		return fmt.Errorf("missing BaseRunner")
-	}
-	r.BaseRunner = aux.BaseRunner
-	// ValCheck is not restored from JSON. Callers must rehydrate it explicitly.
+	r.BaseRunner = br
 	r.ValCheck = nil
 	return nil
 }
