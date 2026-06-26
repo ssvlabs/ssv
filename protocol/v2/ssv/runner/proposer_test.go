@@ -661,7 +661,7 @@ func TestProposerRunnerSubmitGloasProposalTriggersEnvelopeOnSelfBuild(t *testing
 
 	var gotSlot phase0.Slot
 	called := false
-	runner.startEnvelopeDuty = func(_ context.Context, s phase0.Slot) { called, gotSlot = true, s }
+	runner.startEnvelopeDuty = func(s phase0.Slot) { called, gotSlot = true, s }
 
 	err := runner.submitGloasProposal(context.Background(), zap.NewNop(), trace.SpanFromContext(context.Background()), consensusData, phase0.BLSSignature{})
 	require.NoError(t, err)
@@ -680,7 +680,7 @@ func TestProposerRunnerSubmitGloasProposalSkipsEnvelopeOnExternalBuild(t *testin
 	runner.cachedGloasBlockSSZ = []byte("not-the-builder")
 
 	called := false
-	runner.startEnvelopeDuty = func(_ context.Context, _ phase0.Slot) { called = true }
+	runner.startEnvelopeDuty = func(_ phase0.Slot) { called = true }
 
 	err := runner.submitGloasProposal(context.Background(), zap.NewNop(), trace.SpanFromContext(context.Background()), consensusData, phase0.BLSSignature{})
 	require.NoError(t, err)
