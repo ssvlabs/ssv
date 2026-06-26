@@ -10,14 +10,14 @@ import (
 // types; includes track go-eth2-client via `go list -m`.
 //go:generate sh -c "go tool -modfile=../../../../tool.mod sszgen -path . --include $(go list -m -f '{{.Dir}}' github.com/attestantio/go-eth2-client)/spec/phase0,$(go list -m -f '{{.Dir}}' github.com/attestantio/go-eth2-client)/spec/bellatrix,$(go list -m -f '{{.Dir}}' github.com/attestantio/go-eth2-client)/spec/capella --objs ExecutionPayload --output ./execution_payload_encoding.go"
 
-// ExecutionPayload is the Gloas (ePBS) execution payload — Deneb/Electra's payload plus the two
-// Glamsterdam additions: BlockAccessList (EIP-7928, an opaque RLP-encoded byte list the consensus layer
-// only stores and hashes) and SlotNumber (EIP-7843). It ships in the §6 ExecutionPayloadEnvelope, not
-// inline in the block. BaseFeePerGas is the 32-byte little-endian SSZ form of the spec's uint256
-// (HTR-identical).
+// ExecutionPayload is the Gloas (ePBS) execution payload — Deneb's payload plus the two Glamsterdam
+// additions: BlockAccessList (EIP-7928, an opaque RLP-encoded byte list the consensus layer only stores
+// and hashes) and SlotNumber (EIP-7843). It ships in the §6 ExecutionPayloadEnvelope, not inline in the
+// block. BaseFeePerGas is the 32-byte little-endian SSZ form of the spec's uint256 (HTR-identical).
 //
-// TODO(gloas §6): confirm the field order and the BlockAccessList ssz-max bound against canonical spec
-// test vectors (the §6 HTR-parity test) before relying on the payload root on a live network.
+// The field order and bounds were verified against the canonical container (consensus-specs
+// specs/gloas/beacon-chain.md at 6ebb2216c) — block_access_list is ByteList[2**30]
+// (MAX_BYTES_PER_TRANSACTION). TestExecutionPayloadLayoutMatchesSpec pins this layout.
 type ExecutionPayload struct {
 	ParentHash      phase0.Hash32              `ssz-size:"32"`
 	FeeRecipient    bellatrix.ExecutionAddress `ssz-size:"20"`
