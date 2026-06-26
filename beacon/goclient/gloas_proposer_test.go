@@ -77,13 +77,13 @@ func TestSubmitGloasBeaconBlock(t *testing.T) {
 	require.Equal(t, []byte{0x01, 0x02}, gotBody)
 }
 
-func TestGloasBlockHTTP_Non2xxIsError(t *testing.T) {
+func TestGloasOctetStreamHTTP_Non2xxIsError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		_, _ = w.Write([]byte("bad block"))
 	}))
 	defer srv.Close()
 
-	_, err := gloasBlockHTTP(context.Background(), http.MethodGet, srv.URL, nil)
+	_, err := gloasOctetStreamHTTP(context.Background(), http.MethodGet, srv.URL, nil)
 	require.ErrorContains(t, err, "status 400")
 }
