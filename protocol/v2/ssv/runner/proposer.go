@@ -61,11 +61,6 @@ type ProposerRunner struct {
 	// for efficient validation (so we re-use it instead of re-calculating).
 	cachedBlindedBlockSSZ []byte
 
-	// cachedGloasBlockSSZ holds the SSZ of the Gloas (ePBS) block this operator fetched for the duty.
-	// Post-consensus content-matches it against the decided value to detect whether this operator
-	// built the decided block — only that operator publishes it (and can later reveal its payload).
-	cachedGloasBlockSSZ []byte
-
 	// proposedBlockRoots records this operator's §4-decided block root per slot so the §6 envelope
 	// runner and its value-check can read it (SIP #94 §6); nil pre-Gloas.
 	proposedBlockRoots *ssv.ProposedBlockRoots
@@ -284,7 +279,6 @@ func (r *ProposerRunner) gloasProposalInput(ctx context.Context, logger *zap.Log
 	if err != nil {
 		return nil, fmt.Errorf("could not marshal gloas beacon block: %w", err)
 	}
-	r.cachedGloasBlockSSZ = byts
 
 	logFields := []zap.Field{
 		fields.Slot(duty.Slot),
@@ -522,12 +516,11 @@ func (r *ProposerRunner) finishSubmittedProposal(ctx context.Context, logger *za
 	return nil
 }
 
-// submitGloasProposal publishes the decided Gloas (ePBS) block — only the builder (content match)
-// submits, the others just complete the duty — then on the self-build path starts the §6
-// envelope-signing duty. The block is decoded up front because every operator needs its bid for the
-// self-build check. The envelope trigger fires on every operator (the envelope is a cluster round the
-// others join regardless, so the builder joins even if its own submit failed) and dispatches async, so
-// it never delays the block.
+// submitGloasProposal publishes the decided Gloas (ePBS) block, then on the self-build path starts the §6
+// envelope-signing duty. Every operator submits the decided block — the ePBS block is bid-only so all hold
+// it, and submission is idempotent at the BN by root, keeping the pre-Gloas all-submit redundancy. The block
+// is decoded up front because every operator needs its bid for the self-build check; the envelope trigger
+// fires on every operator and dispatches async, so it never delays the block.
 func (r *ProposerRunner) submitGloasProposal(ctx context.Context, logger *zap.Logger, span trace.Span, cd *spectypes.ProposerConsensusData, sig phase0.BLSSignature) error {
 	block, err := gloas.DecodeBeaconBlock(cd.DataSSZ)
 	if err != nil {
@@ -535,19 +528,13 @@ func (r *ProposerRunner) submitGloasProposal(ctx context.Context, logger *zap.Lo
 	}
 
 	var finishErr error
-	if bytes.Equal(r.cachedGloasBlockSSZ, cd.DataSSZ) {
-		start := time.Now()
-		signedBlock := &gloas.SignedBeaconBlock{Message: block, Signature: sig}
-		if err := r.GetBeaconNode().SubmitGloasBeaconBlock(ctx, signedBlock); err != nil {
-			recordFailedSubmission(ctx, spectypes.BNRoleProposer)
-			finishErr = fmt.Errorf("submit gloas beacon block: %w", err)
-		} else {
-			finishErr = r.finishSubmittedProposal(ctx, logger, span, start, nil)
-		}
+	start := time.Now()
+	signedBlock := &gloas.SignedBeaconBlock{Message: block, Signature: sig}
+	if err := r.GetBeaconNode().SubmitGloasBeaconBlock(ctx, signedBlock); err != nil {
+		recordFailedSubmission(ctx, spectypes.BNRoleProposer)
+		finishErr = fmt.Errorf("submit gloas beacon block: %w", err)
 	} else {
-		logger.Debug("this operator did not build the decided gloas block, skipping submission")
-		r.markDutySucceeded()
-		r.measurements.EndDutyFlow()
+		finishErr = r.finishSubmittedProposal(ctx, logger, span, start, nil)
 	}
 
 	r.triggerEnvelopeIfSelfBuild(block, cd.Duty.Slot)
@@ -640,7 +627,6 @@ func (r *ProposerRunner) executeDuty(ctx context.Context, logger *zap.Logger, du
 	// reset the cached original block at the beginning of a new duty
 	r.cachedFullBlock = nil
 	r.cachedBlindedBlockSSZ = nil
-	r.cachedGloasBlockSSZ = nil
 
 	// sign partial randao
 	span.AddEvent("signing beacon object")
