@@ -48,6 +48,7 @@ type config struct {
 	Graffiti                     string                  `yaml:"Graffiti" env:"GRAFFITI" env-description:"Custom graffiti for block proposals"`
 	ProposerDelay                time.Duration           `yaml:"ProposerDelay" env:"PROPOSER_DELAY" env-description:"Duration to wait out before requesting Ethereum block to propose if this Operator is proposer-duty Leader (eg. 300ms). See https://github.com/ssvlabs/ssv/blob/main/docs/MEV_CONSIDERATIONS.md#getting-started-with-mev-configuration for detailed instructions on how to use it."`
 	AllowDangerousProposerDelay  bool                    `yaml:"AllowDangerousProposerDelay" env:"ALLOW_DANGEROUS_PROPOSER_DELAY" env-description:"Allow ProposerDelay values higher than 1s (dangerous, may cause missed block proposals)"`
+	ProposerDelayEPBS            time.Duration           `yaml:"ProposerDelayEPBS" env:"PROPOSER_DELAY_EPBS" env-description:"Post-ePBS (Gloas) counterpart of ProposerDelay, applied from the Gloas fork on (ProposerDelay applies before it). Hard-capped at 1s with no dangerous override. Default 0 (opt-in)."`
 	OperatorPrivateKey           string                  `yaml:"OperatorPrivateKey" env:"OPERATOR_KEY" env-description:"Operator private key for contract event decryption"`
 	MetricsAPIPort               int                     `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"Port for metrics API server"`
 	EnableTraces                 bool                    `yaml:"EnableTraces" env:"ENABLE_TRACES" env-description:"Enable Open Telemetry traces"`
@@ -155,6 +156,13 @@ func (c *config) resolveAndValidate(logger *zap.Logger) (resolved, error) {
 		logger.Warn("Using dangerous ProposerDelay value that may cause missed block proposals",
 			zap.Duration("proposer_delay", c.ProposerDelay),
 			zap.Duration("max_safe_proposer_delay", maxSafeProposerDelay))
+	}
+
+	// ProposerDelayEPBS applies from the Gloas fork on and has no dangerous-override escape hatch:
+	// the post-ePBS proposal deadline is tighter, so the cap is enforced unconditionally.
+	if c.ProposerDelayEPBS > maxSafeProposerDelay {
+		return resolved{}, fmt.Errorf("ProposerDelayEPBS value %v exceeds maximum safe delay of %v (no override is available for the post-ePBS delay)",
+			c.ProposerDelayEPBS, maxSafeProposerDelay)
 	}
 
 	// Resolve the operating mode last so a doubly-misconfigured node still surfaces the signing

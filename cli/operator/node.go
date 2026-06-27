@@ -441,6 +441,7 @@ func newNode(
 	valOpts.StorageMap = storageMap
 	valOpts.Graffiti = []byte(cfg.Graffiti)
 	valOpts.ProposerDelay = cfg.ProposerDelay
+	valOpts.ProposerDelayEPBS = cfg.ProposerDelayEPBS
 	valOpts.ValidatorSyncer = metadataSyncer
 	valOpts.ExporterMode = res.isExporter()
 	valOpts.MessageTraceHandler = messageTraceHandler

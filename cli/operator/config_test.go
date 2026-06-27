@@ -160,6 +160,35 @@ func Test_resolveAndValidate_proposerDelay(t *testing.T) {
 	})
 }
 
+// Test_resolveAndValidate_proposerDelayEPBS covers the post-ePBS delay cap: unlike ProposerDelay,
+// ProposerDelayEPBS has no dangerous-override escape hatch, so exceeding the cap always errors.
+func Test_resolveAndValidate_proposerDelayEPBS(t *testing.T) {
+	t.Run("exceeding the cap always errors (no override)", func(t *testing.T) {
+		for _, delay := range []time.Duration{1001 * time.Millisecond, 2000 * time.Millisecond} {
+			t.Run(delay.String(), func(t *testing.T) {
+				c := config{}
+				c.OperatorPrivateKey = testOperatorKey
+				c.ProposerDelayEPBS = delay
+				c.AllowDangerousProposerDelay = true // must NOT help: ProposerDelayEPBS has no override
+
+				_, err := c.resolveAndValidate(zap.NewNop())
+				require.Error(t, err)
+				require.Contains(t, err.Error(), "ProposerDelayEPBS value")
+				require.Contains(t, err.Error(), "no override")
+			})
+		}
+	})
+
+	t.Run("at the cap passes", func(t *testing.T) {
+		c := config{}
+		c.OperatorPrivateKey = testOperatorKey
+		c.ProposerDelayEPBS = 1000 * time.Millisecond
+
+		_, err := c.resolveAndValidate(zap.NewNop())
+		require.NoError(t, err)
+	})
+}
+
 // Test_resolveAndValidate_signingErrorContext verifies resolveAndValidate enriches a signing
 // error with the configured-source context, without exposing the private key value.
 func Test_resolveAndValidate_signingErrorContext(t *testing.T) {

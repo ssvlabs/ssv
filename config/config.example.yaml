@@ -53,6 +53,11 @@ OperatorPrivateKey:
 # Only set to true if you understand the risks and have carefully read the MEV documentation.
 # AllowDangerousProposerDelay: false
 
+# Post-ePBS (Gloas) counterpart of ProposerDelay, applied from the Gloas fork on (ProposerDelay applies
+# before it). Hard-capped at 1s with no dangerous override. Default is 0 (opt-in). Gloas is not active on
+# mainnet yet; tune only after validating on a Gloas network. See docs/MEV_CONSIDERATIONS.md.
+# ProposerDelayEPBS: 0
+
 # This enables monitoring at the specified port, see https://github.com/ssvlabs/ssv/tree/main/monitoring
 MetricsAPIPort: 15000
 
