@@ -534,6 +534,7 @@ func (r *ProposerRunner) submitGloasProposal(ctx context.Context, logger *zap.Lo
 		recordFailedSubmission(ctx, spectypes.BNRoleProposer)
 		finishErr = fmt.Errorf("submit gloas beacon block: %w", err)
 	} else {
+		recordProposalBuildSource(ctx, selfBuild(block))
 		finishErr = r.finishSubmittedProposal(ctx, logger, span, start, nil)
 	}
 
@@ -545,14 +546,17 @@ func (r *ProposerRunner) submitGloasProposal(ctx context.Context, logger *zap.Lo
 // self-build — only then does the SSV cluster sign the envelope (external builders sign their own). The
 // starter dispatches async (see startEnvelopeDuty); it no-ops when the starter is unset (e.g. in tests).
 func (r *ProposerRunner) triggerEnvelopeIfSelfBuild(block *gloas.BeaconBlock, slot phase0.Slot) {
-	if r.startEnvelopeDuty == nil {
-		return
-	}
-	bid := block.Body.SignedExecutionPayloadBid
-	if bid == nil || bid.Message == nil || bid.Message.BuilderIndex != gloas.BuilderIndexSelfBuild {
+	if r.startEnvelopeDuty == nil || !selfBuild(block) {
 		return
 	}
 	r.startEnvelopeDuty(slot)
+}
+
+// selfBuild reports whether the decided Gloas block commits to a self-built payload
+// (BUILDER_INDEX_SELF_BUILD) rather than an external builder's bid.
+func selfBuild(block *gloas.BeaconBlock) bool {
+	bid := block.Body.SignedExecutionPayloadBid
+	return bid != nil && bid.Message != nil && bid.Message.BuilderIndex == gloas.BuilderIndexSelfBuild
 }
 
 // recordDecidedBlockRoot stores the §4-decided block's root for the §6 envelope runner and its
