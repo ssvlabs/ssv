@@ -124,6 +124,12 @@ var (
 			observability.InstrumentName(observabilityNamespace, "duty.outcome"),
 			metric.WithUnit("{duty}"),
 			metric.WithDescription("total number of concluded duties, by outcome")))
+
+	proposalBuildSourceCounter = metrics.New(
+		meter.Int64Counter(
+			observability.InstrumentName(observabilityNamespace, "proposal.build_source"),
+			metric.WithUnit("{proposal}"),
+			metric.WithDescription("submitted Gloas block proposals by build source (self-build vs builder)")))
 )
 
 func recordSuccessfulSubmission(ctx context.Context, count int64, epoch phase0.Epoch, role spectypes.BeaconRole) {
@@ -140,6 +146,17 @@ func recordDutyOutcome(ctx context.Context, role spectypes.RunnerRole, outcome d
 			observability.RunnerRoleAttribute(role),
 			observability.DutyOutcomeAttribute(string(outcome)),
 		))
+}
+
+// recordProposalBuildSource counts a submitted Gloas proposal by build source — self-build
+// (BUILDER_INDEX_SELF_BUILD) vs external builder. Gloas-only: the decided bid is the same for every
+// operator, unlike the pre-Gloas Blinded flag, which the distributed submit skews.
+func recordProposalBuildSource(ctx context.Context, localBuild bool) {
+	source := "builder"
+	if localBuild {
+		source = "local"
+	}
+	proposalBuildSourceCounter.Add(ctx, 1, metric.WithAttributes(observability.BuildSourceAttribute(source)))
 }
 
 func recordPreConsensusDuration(ctx context.Context, duration time.Duration, role spectypes.RunnerRole) {
