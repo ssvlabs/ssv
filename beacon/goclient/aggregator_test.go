@@ -867,6 +867,35 @@ func mustHashTreeRoot(t *testing.T, data *phase0.AttestationData) phase0.Root {
 	return root
 }
 
+// Gloas keeps the BN-supplied payload-status index in the aggregation root (SIP #94 §2); Electra+ zeroes it.
+func TestComputeAttestationDataRoot_GloasKeepsBNIndex(t *testing.T) {
+	t.Parallel()
+
+	const gloasEpoch = 6
+	cfg := *networkconfig.TestNetworkWithGloas(gloasEpoch).Beacon
+	slot := cfg.FirstSlotAtEpoch(gloasEpoch)
+
+	attData := &phase0.AttestationData{
+		Slot:   slot,
+		Index:  1, // FULL — the BN payload-status index, which must be preserved
+		Source: &phase0.Checkpoint{Epoch: 1},
+		Target: &phase0.Checkpoint{Epoch: 2},
+	}
+	expectedRoot, err := attData.HashTreeRoot()
+	require.NoError(t, err)
+
+	service := &aggregatorClientMock{}
+	service.AttestationDataFunc = func(_ context.Context, opts *api.AttestationDataOpts) (*api.Response[*phase0.AttestationData], error) {
+		require.Equal(t, slot, opts.Slot)
+		return &api.Response[*phase0.AttestationData]{Data: attData}, nil
+	}
+
+	client := newAggregatorTestClient(&cfg, service)
+	root, err := client.computeAttestationDataRoot(t.Context(), slot, 7)
+	require.NoError(t, err)
+	require.Equal(t, expectedRoot, root)
+}
+
 func aggregatorTestBeaconConfig(genesisTime time.Time) networkconfig.Beacon {
 	cfg := *networkconfig.TestNetwork.Beacon
 	cfg.GenesisTime = genesisTime
