@@ -207,6 +207,17 @@ func (mv *messageValidator) validateBeaconDuty(
 		}
 	}
 
+	// Rule: For a PTC attestation message, require a real PTC assignment for the validator at the slot,
+	// but only once the slot's epoch is fetched — PTC duties are fetched per epoch, so a not-yet-fetched
+	// epoch (e.g. at startup) must be tolerated rather than rejected.
+	if role == spectypes.RolePTCAttester {
+		// Non-committee roles always have one validator index.
+		validatorIndex := indices[0]
+		if mv.dutyStore.PTC.IsEpochSet(epoch) && mv.dutyStore.PTC.ValidatorDuty(epoch, slot, validatorIndex) == nil {
+			return ErrNoDuty
+		}
+	}
+
 	// Committee roles (RoleCommittee and RoleAggregatorCommittee) are intentionally not
 	// per-validator duty-asserted here. As elsewhere in committee-role validation, we do not assume
 	// operators are synced on each other's validator sets (see knowledge-base#2), so asserting a
