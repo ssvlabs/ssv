@@ -1245,7 +1245,7 @@ func SetupRunners(
 		case spectypes.RoleEnvelopeBuilder:
 			// The §6 envelope runner shares the proposer's proposedBlockRoots (it reads the §4 root the
 			// proposer records). Its value-check is built per duty, so none is passed here. The proposer
-			// trigger that starts this duty is wired with the heavy execution-payload piece.
+			// starts this duty via the StartEnvelopeDuty callback wired in the RoleProposer case above.
 			runners[role], err = runner.NewEnvelopeBuilderRunner(runner.EnvelopeBuilderRunnerOptions{
 				BaseRunnerOptions:  baseOpts,
 				QBFTController:     buildController(spectypes.RoleEnvelopeBuilder),

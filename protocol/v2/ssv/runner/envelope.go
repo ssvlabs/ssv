@@ -32,10 +32,6 @@ import (
 // ProcessConsensus signs the decided blinded root under DOMAIN_BEACON_BUILDER and broadcasts a
 // post-consensus partial signature; ProcessPostConsensus reconstructs the BLS signature and the builder
 // publishes the full envelope.
-//
-// Produce (fetch the envelope + compute PayloadRoot) and publish (POST the full envelope) are stubbed
-// pending the full Gloas execution payload + goclient endpoints; the QBFT / signing / value-check flow is
-// complete.
 type EnvelopeBuilderRunner struct {
 	*BaseRunner
 
