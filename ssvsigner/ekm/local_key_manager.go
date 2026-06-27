@@ -252,6 +252,10 @@ func (km *LocalKeyManager) signBeaconObject(
 		// Gloas (ePBS) proposer preferences: a plain BLS signature over the SSZ root under
 		// DomainProposerPreferences, with no slashing protection.
 		return signSSZRoot(km.signer, obj, domain, pubKey[:])
+	case spectypes.DomainBeaconBuilder:
+		// Gloas (ePBS) §6 execution-payload envelope: a plain BLS signature over the blinded envelope's
+		// SSZ root under DomainBeaconBuilder, with no slashing protection.
+		return signSSZRoot(km.signer, obj, domain, pubKey[:])
 	default:
 		return nil, nil, errors.New("domain unknown")
 	}
