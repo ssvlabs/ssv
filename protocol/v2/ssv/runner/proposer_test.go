@@ -396,9 +396,9 @@ func gloasProposerConsensusData(t *testing.T, slot phase0.Slot) *spectypes.Propo
 	}
 }
 
-// The operator that built the decided Gloas block (its cached block content-matches the decided value)
-// signs and publishes it.
-func TestProposerRunnerSubmitGloasProposalBuilderPublishes(t *testing.T) {
+// Every operator submits the decided Gloas block (it is bid-only, so all hold it and submission is
+// idempotent at the BN), then completes the duty.
+func TestProposerRunnerSubmitGloasProposalSubmits(t *testing.T) {
 	t.Parallel()
 
 	const slot = phase0.Slot(8)
@@ -407,7 +407,6 @@ func TestProposerRunnerSubmitGloasProposalBuilderPublishes(t *testing.T) {
 	runner, keySet, _ := newProposerRunnerForTest(t, beacon, &stubDoppelganger{canSign: true}, 0, nil)
 
 	setupRunnerForPostConsensus(t, runner, keySet, gloasProposerDuty(slot), consensusData, 1)
-	runner.cachedGloasBlockSSZ = append([]byte(nil), consensusData.DataSSZ...)
 
 	err := runner.submitGloasProposal(context.Background(), zap.NewNop(), trace.SpanFromContext(context.Background()), consensusData, phase0.BLSSignature{0xab})
 	require.NoError(t, err)
@@ -418,28 +417,8 @@ func TestProposerRunnerSubmitGloasProposalBuilderPublishes(t *testing.T) {
 	require.True(t, runner.State.Succeeded)
 }
 
-// An operator that did not build the decided block (content mismatch) completes the duty without
-// submitting — only the builder can later reveal the matching payload.
-func TestProposerRunnerSubmitGloasProposalNonBuilderSkips(t *testing.T) {
-	t.Parallel()
-
-	const slot = phase0.Slot(8)
-	consensusData := gloasProposerConsensusData(t, slot)
-	beacon := newProposerTestBeacon(nil)
-	runner, keySet, _ := newProposerRunnerForTest(t, beacon, &stubDoppelganger{canSign: true}, 0, nil)
-
-	setupRunnerForPostConsensus(t, runner, keySet, gloasProposerDuty(slot), consensusData, 1)
-	runner.cachedGloasBlockSSZ = []byte("a-different-block")
-
-	err := runner.submitGloasProposal(context.Background(), zap.NewNop(), trace.SpanFromContext(context.Background()), consensusData, phase0.BLSSignature{0xab})
-	require.NoError(t, err)
-
-	require.Empty(t, beacon.submittedGloasBlocks)
-	require.True(t, runner.State.Succeeded)
-}
-
-// gloasProposalInput fetches the Gloas block from the beacon node, wraps it as the consensus value
-// with the Gloas version marker, and caches the SSZ for the post-consensus content-match.
+// gloasProposalInput fetches the Gloas block from the beacon node and wraps it as the consensus value
+// with the Gloas version marker.
 func TestProposerRunnerGloasProposalInput(t *testing.T) {
 	t.Parallel()
 
@@ -455,7 +434,6 @@ func TestProposerRunnerGloasProposalInput(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, networkconfig.DataVersionGloas, input.Version)
 	require.Equal(t, expectedSSZ, input.DataSSZ)
-	require.Equal(t, expectedSSZ, runner.cachedGloasBlockSSZ)
 	require.Equal(t, slot, beacon.lastGetSlot)
 	require.Equal(t, []byte("graffiti"), beacon.lastGetGraffiti)
 	require.Equal(t, []byte("randao"), beacon.lastGetRandao)
@@ -657,7 +635,6 @@ func TestProposerRunnerSubmitGloasProposalTriggersEnvelopeOnSelfBuild(t *testing
 	consensusData := gloasProposerConsensusData(t, slot) // self-build (TestingBeaconBlock)
 	runner, keySet, _ := newProposerRunnerForTest(t, newProposerTestBeacon(nil), &stubDoppelganger{canSign: true}, 0, nil)
 	setupRunnerForPostConsensus(t, runner, keySet, gloasProposerDuty(slot), consensusData, 1)
-	runner.cachedGloasBlockSSZ = []byte("not-the-builder") // non-builder path (no publish needed)
 
 	var gotSlot phase0.Slot
 	called := false
@@ -677,7 +654,6 @@ func TestProposerRunnerSubmitGloasProposalSkipsEnvelopeOnExternalBuild(t *testin
 	consensusData := gloasExternalBuildConsensusData(t, slot)
 	runner, keySet, _ := newProposerRunnerForTest(t, newProposerTestBeacon(nil), &stubDoppelganger{canSign: true}, 0, nil)
 	setupRunnerForPostConsensus(t, runner, keySet, gloasProposerDuty(slot), consensusData, 1)
-	runner.cachedGloasBlockSSZ = []byte("not-the-builder")
 
 	called := false
 	runner.startEnvelopeDuty = func(_ phase0.Slot) { called = true }
