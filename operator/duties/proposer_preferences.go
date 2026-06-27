@@ -37,8 +37,8 @@ func (h *ProposerPreferencesHandler) WaitShutdown() {}
 
 // HandleDuties emits proposer-preferences duties across the proposer lookahead (current + next epoch,
 // MIN_SEED_LOOKAHEAD=1). In the epoch immediately before the Gloas fork it pre-emits the first Gloas
-// epoch's preferences (SIP #94 §5) so builders have them before the fork. Reorg-driven re-emission and
-// the publication-finality hold are deferred refinements.
+// epoch's preferences (SIP #94 §5) so builders have them before the fork. Reorg/indices-change re-emission
+// is handled below; the publication-finality hold is a deferred refinement.
 func (h *ProposerPreferencesHandler) HandleDuties(ctx context.Context) {
 	h.logger.Info("starting duty handler")
 	defer h.logger.Info("duty handler exited")

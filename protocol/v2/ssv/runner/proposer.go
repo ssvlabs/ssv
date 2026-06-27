@@ -543,7 +543,7 @@ func (r *ProposerRunner) submitGloasProposal(ctx context.Context, logger *zap.Lo
 
 // triggerEnvelopeIfSelfBuild starts the §6 envelope-signing duty for the slot when the decided block is
 // self-build — only then does the SSV cluster sign the envelope (external builders sign their own). The
-// starter dispatches async (see startEnvelopeDuty); a no-op until the controller wires it.
+// starter dispatches async (see startEnvelopeDuty); it no-ops when the starter is unset (e.g. in tests).
 func (r *ProposerRunner) triggerEnvelopeIfSelfBuild(block *gloas.BeaconBlock, slot phase0.Slot) {
 	if r.startEnvelopeDuty == nil {
 		return
