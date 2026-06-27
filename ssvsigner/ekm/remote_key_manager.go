@@ -415,6 +415,12 @@ func (km *RemoteKeyManager) prepareSignRequest(
 		// those operators must sign locally.
 		// TODO(gloas): route proposer-preferences signing through Web3Signer once it adds the type.
 		return web3signer.SignRequest{}, phase0.Root{}, errors.New("proposer preferences signing is not supported by the remote signer: Web3Signer has no proposer-preferences type, use local signing")
+	case spectypes.DomainBeaconBuilder:
+		// Gloas (ePBS) §6 execution-payload envelopes have no Web3Signer request type, so a remote-signing
+		// operator can't sign them. Bounded (the cluster reconstructs while ≤ f operators are remote-signing),
+		// but those operators must sign self-build envelopes locally.
+		// TODO(gloas): route envelope signing through Web3Signer once it adds an envelope type.
+		return web3signer.SignRequest{}, phase0.Root{}, errors.New("execution payload envelope signing is not supported by the remote signer: Web3Signer has no envelope type, use local signing for self-build envelopes")
 	default:
 		return web3signer.SignRequest{}, phase0.Root{}, errors.New("domain unknown")
 	}
