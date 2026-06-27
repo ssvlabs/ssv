@@ -311,6 +311,47 @@ func TestSignBeaconObject(t *testing.T) {
 		require.NotNil(t, sig)
 		require.NotEqual(t, [32]byte{}, sig)
 	})
+	// The Gloas (ePBS) domains sign a generic SSZ root via signSSZRoot (no slashing protection); the obj
+	// type is incidental — the point is each domain is handled, not falling through to "domain unknown".
+	t.Run("DomainBeaconBuilder", func(t *testing.T) {
+		_, sig, err := km.(*LocalKeyManager).SignBeaconObject(
+			ctx,
+			spectypes.SSZUint64(1),
+			phase0.Domain{},
+			phase0.BLSPubKey(sk1.GetPublicKey().Serialize()),
+			currentSlot,
+			spectypes.DomainBeaconBuilder,
+		)
+		require.NoError(t, err)
+		require.NotNil(t, sig)
+		require.NotEqual(t, [32]byte{}, sig)
+	})
+	t.Run("DomainPTCAttester", func(t *testing.T) {
+		_, sig, err := km.(*LocalKeyManager).SignBeaconObject(
+			ctx,
+			spectypes.SSZUint64(1),
+			phase0.Domain{},
+			phase0.BLSPubKey(sk1.GetPublicKey().Serialize()),
+			currentSlot,
+			spectypes.DomainPTCAttester,
+		)
+		require.NoError(t, err)
+		require.NotNil(t, sig)
+		require.NotEqual(t, [32]byte{}, sig)
+	})
+	t.Run("DomainProposerPreferences", func(t *testing.T) {
+		_, sig, err := km.(*LocalKeyManager).SignBeaconObject(
+			ctx,
+			spectypes.SSZUint64(1),
+			phase0.Domain{},
+			phase0.BLSPubKey(sk1.GetPublicKey().Serialize()),
+			currentSlot,
+			spectypes.DomainProposerPreferences,
+		)
+		require.NoError(t, err)
+		require.NotNil(t, sig)
+		require.NotEqual(t, [32]byte{}, sig)
+	})
 }
 
 func TestRemoveShare(t *testing.T) {
