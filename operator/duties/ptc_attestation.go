@@ -66,9 +66,19 @@ func (h *PTCAttestationHandler) HandleDuties(ctx context.Context) {
 			}
 
 		case <-h.indicesChangeCh:
+			h.invalidateDuties("indices change")
 		case <-h.reorgEventsCh:
+			h.invalidateDuties("reorg")
 		}
 	}
+}
+
+// invalidateDuties drops the cached PTC duties so the next tick re-fetches them — after a reorg
+// (new dependent_root) or a validator-set change, the authoritative response replaces the cached
+// epoch rather than merging (SIP #94 §3).
+func (h *PTCAttestationHandler) invalidateDuties(reason string) {
+	h.logger.Debug("🔀 re-fetching PTC duties on next tick", zap.String("reason", reason))
+	clear(h.duties)
 }
 
 // fetchDuties fetches and caches an epoch's PTC duties once.

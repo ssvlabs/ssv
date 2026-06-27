@@ -62,6 +62,18 @@ func TestPTCAttestationHandler_fetchDuties_cachesPerEpoch(t *testing.T) {
 	require.Equal(t, idx, h.duties[epoch][dutySlot][0].ValidatorIndex)
 }
 
+// A reorg or indices change drops the cached PTC duties so the next tick re-fetches them (SIP #94 §3).
+func TestPTCAttestationHandler_invalidateDuties_clearsCache(t *testing.T) {
+	h := NewPTCAttestationHandler()
+	h.logger = zap.NewNop()
+	h.duties[100] = map[phase0.Slot][]*spectypes.ValidatorDuty{}
+	h.duties[101] = map[phase0.Slot][]*spectypes.ValidatorDuty{}
+
+	h.invalidateDuties("test")
+
+	require.Empty(t, h.duties)
+}
+
 // evictOutdated drops only epochs strictly before the current one.
 func TestPTCAttestationHandler_evictOutdated(t *testing.T) {
 	h := NewPTCAttestationHandler()
