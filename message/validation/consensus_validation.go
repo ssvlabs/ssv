@@ -439,8 +439,8 @@ func (mv *messageValidator) maxRound(role spectypes.RunnerRole) (specqbft.Round,
 	}
 }
 
-func (mv *messageValidator) estimatedRoundAt(role spectypes.RunnerRole, timeIntoSlot time.Duration) (specqbft.Round, error) {
-	return roundtimer.EstimatedRoundAt(role, mv.netCfg.SlotDuration, timeIntoSlot)
+func (mv *messageValidator) estimatedRoundAt(role spectypes.RunnerRole, slot phase0.Slot, timeIntoSlot time.Duration) (specqbft.Round, error) {
+	return roundtimer.EstimatedRoundAt(role, mv.netCfg.IntervalDuration(slot), timeIntoSlot)
 }
 
 func (mv *messageValidator) validConsensusMsgType(msgType specqbft.MessageType) bool {
@@ -548,7 +548,7 @@ func (mv *messageValidator) roundBelongsToAllowedSpread(
 	slotStartTime := mv.netCfg.SlotStartTime(phase0.Slot(consensusMessage.Height))
 	timeIntoSlot := receivedAt.Sub(slotStartTime)
 
-	estimatedRoundMsgReceivedAt, err := mv.estimatedRoundAt(role, timeIntoSlot)
+	estimatedRoundMsgReceivedAt, err := mv.estimatedRoundAt(role, phase0.Slot(consensusMessage.Height), timeIntoSlot)
 	if err != nil {
 		return err
 	}

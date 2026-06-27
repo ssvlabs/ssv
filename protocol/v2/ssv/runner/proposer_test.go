@@ -251,6 +251,23 @@ func TestRemainingProposerDelay(t *testing.T) {
 	}
 }
 
+// proposerDelayForSlot is fork-gated: pre-Gloas uses ProposerDelay, Gloas-on uses ProposerDelayEPBS.
+func TestProposerDelayForSlot(t *testing.T) {
+	const gloasEpoch = 5
+	netCfg := networkconfig.TestNetworkWithGloas(gloasEpoch)
+	r := &ProposerRunner{
+		BaseRunner:        &BaseRunner{NetworkConfig: netCfg},
+		proposerDelay:     300 * time.Millisecond,
+		proposerDelayEPBS: 100 * time.Millisecond,
+	}
+
+	preGloasSlot := phase0.Slot(uint64(gloasEpoch-1) * netCfg.SlotsPerEpoch)
+	gloasSlot := phase0.Slot(uint64(gloasEpoch) * netCfg.SlotsPerEpoch)
+
+	require.Equal(t, 300*time.Millisecond, r.proposerDelayForSlot(preGloasSlot))
+	require.Equal(t, 100*time.Millisecond, r.proposerDelayForSlot(gloasSlot))
+}
+
 func TestProposerRunnerStartNewDutySkipsRandaoSigningWhenDoppelgangerBlocks(t *testing.T) {
 	t.Parallel()
 

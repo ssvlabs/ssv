@@ -49,8 +49,9 @@ type ProposerRunner struct {
 
 	// proposerDelay allows Operator to configure a delay to wait out before requesting Ethereum
 	// block to propose if this Operator is proposer-duty Leader. This allows Operator to extract
-	// higher MEV.
-	proposerDelay time.Duration
+	// higher MEV. proposerDelayEPBS is its post-Gloas counterpart (see proposerDelayForSlot).
+	proposerDelay     time.Duration
+	proposerDelayEPBS time.Duration
 
 	// cachedFullBlock holds the initially fetched full (non-blinded) block
 	// for this duty on this operator, if any. Used so that the leader of the
@@ -83,8 +84,9 @@ type ProposerRunnerOptions struct {
 	Graffiti            []byte
 	// ProposerDelay allows Operator to configure a delay to wait out before requesting Ethereum
 	// block to propose if this Operator is proposer-duty Leader. This allows Operator to extract
-	// higher MEV.
-	ProposerDelay time.Duration
+	// higher MEV. ProposerDelayEPBS is its post-Gloas counterpart, applied from the Gloas fork on.
+	ProposerDelay     time.Duration
+	ProposerDelayEPBS time.Duration
 
 	// ProposedBlockRoots is the shared store the proposer records its §4-decided block root into for the
 	// §6 envelope runner to read. Optional (nil pre-Gloas / when the envelope runner is absent).
@@ -119,6 +121,7 @@ func NewProposerRunner(opts ProposerRunnerOptions) (Runner, error) {
 		graffiti:            opts.Graffiti,
 
 		proposerDelay:      opts.ProposerDelay,
+		proposerDelayEPBS:  opts.ProposerDelayEPBS,
 		proposedBlockRoots: opts.ProposedBlockRoots,
 		startEnvelopeDuty:  opts.StartEnvelopeDuty,
 	}, nil
@@ -186,7 +189,7 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 		}
 	}
 
-	waitedOutProposerDelayEvent := fmt.Sprintf("waited out proposer delay of %dms", r.proposerDelay.Milliseconds())
+	waitedOutProposerDelayEvent := fmt.Sprintf("waited out proposer delay of %dms", r.proposerDelayForSlot(duty.Slot).Milliseconds())
 	logger.Debug(waitedOutProposerDelayEvent)
 	span.AddEvent(waitedOutProposerDelayEvent)
 
@@ -282,7 +285,7 @@ func (r *ProposerRunner) gloasProposalInput(ctx context.Context, logger *zap.Log
 
 	logFields := []zap.Field{
 		fields.Slot(duty.Slot),
-		zap.Duration("proposer_delay", r.proposerDelay),
+		zap.Duration("proposer_delay", r.proposerDelayForSlot(duty.Slot)),
 		fields.Took(time.Since(start)),
 	}
 	if bid := block.Body.SignedExecutionPayloadBid; bid != nil && bid.Message != nil {
@@ -664,9 +667,19 @@ func (r *ProposerRunner) executeDuty(ctx context.Context, logger *zap.Logger, du
 	return nil
 }
 
+// proposerDelayForSlot returns the fork-appropriate proposer delay: proposerDelayEPBS from the Gloas
+// fork on, proposerDelay before it. They are separate knobs because ePBS retimes the proposal deadline
+// (slot quarters), so their safe ranges differ.
+func (r *ProposerRunner) proposerDelayForSlot(slot phase0.Slot) time.Duration {
+	if r.NetworkConfig.IsGloasAtSlot(slot) {
+		return r.proposerDelayEPBS
+	}
+	return r.proposerDelay
+}
+
 func (r *ProposerRunner) remainingProposerDelay(slot phase0.Slot, now time.Time) time.Duration {
 	slotTime := r.NetworkConfig.SlotStartTime(slot)
-	proposeTime := slotTime.Add(r.proposerDelay)
+	proposeTime := slotTime.Add(r.proposerDelayForSlot(slot))
 	if wait := proposeTime.Sub(now); wait > 0 {
 		return wait
 	}

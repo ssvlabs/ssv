@@ -2152,7 +2152,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 				timeIntoSlot := time.Duration(0)
 				for {
-					currentRound, err := validator.estimatedRoundAt(role, timeIntoSlot)
+					currentRound, err := validator.estimatedRoundAt(role, slot, timeIntoSlot)
 					require.NoError(t, err)
 					if currentRound == round {
 						break

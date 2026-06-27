@@ -142,7 +142,7 @@ func TestEstimatedRoundAt(t *testing.T) {
 
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := EstimatedRoundAt(tc.role, testBeaconConfig.SlotDuration, tc.timeIntoSlot)
+			got, err := EstimatedRoundAt(tc.role, testBeaconConfig.IntervalDuration(0), tc.timeIntoSlot)
 			require.NoError(t, err)
 			require.Equal(t, tc.want, got)
 		})
@@ -208,8 +208,32 @@ func TestRoundTimeoutOffset(t *testing.T) {
 	}
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
-			got := roundTimeoutForRound(tc.role, slotDuration, tc.round)
+			got := roundTimeoutForRound(tc.role, slotDuration/3, tc.round)
 			require.Equal(t, tc.want, got)
+		})
+	}
+}
+
+// TestRoundTimeoutOffsetGloasInterval verifies the head starts track IntervalDuration: passing the
+// Gloas interval (1/4 of the slot, vs 1/3 pre-Gloas) shrinks the committee/aggregator head starts
+// accordingly, so a stalled round 1 falls back to round 2 in step with the retimed deadlines.
+func TestRoundTimeoutOffsetGloasInterval(t *testing.T) {
+	slotDuration := networkconfig.TestNetwork.SlotDuration
+	gloasInterval := slotDuration / 4
+
+	tt := []struct {
+		name string
+		role spectypes.RunnerRole
+		want time.Duration
+	}{
+		{name: "committee head start = 1 interval", role: spectypes.RoleCommittee, want: slotDuration/4 + QuickTimeout},
+		{name: "aggregator head start = 2 intervals", role: ssvtypes.RoleAggregator, want: slotDuration/2 + QuickTimeout},
+		{name: "sync_committee_contribution head start = 2 intervals", role: ssvtypes.RoleSyncCommitteeContribution, want: slotDuration/2 + QuickTimeout},
+		{name: "proposer head start = 0", role: spectypes.RoleProposer, want: QuickTimeout},
+	}
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.want, roundTimeoutForRound(tc.role, gloasInterval, specqbft.FirstRound))
 		})
 	}
 }
@@ -244,20 +268,20 @@ func TestEstimatedRoundAtBoundaries(t *testing.T) {
 			// "late message" territory but EstimatedRoundAt is still defined and should
 			// keep incrementing with the same rules.
 			for round := specqbft.Round(1); round <= CutOffRound+2; round++ {
-				offset := roundTimeoutForRound(rc.role, slotDuration, round)
+				offset := roundTimeoutForRound(rc.role, slotDuration/3, round)
 
 				// 1 ns before the boundary: round r has not yet timed out.
-				got, err := EstimatedRoundAt(rc.role, slotDuration, offset-time.Nanosecond)
+				got, err := EstimatedRoundAt(rc.role, slotDuration/3, offset-time.Nanosecond)
 				require.NoError(t, err)
 				require.Equal(t, round, got, "round %d: 1ns before boundary", round)
 
 				// Exactly at the boundary: round r has timed out, we are now in round r+1.
-				got, err = EstimatedRoundAt(rc.role, slotDuration, offset)
+				got, err = EstimatedRoundAt(rc.role, slotDuration/3, offset)
 				require.NoError(t, err)
 				require.Equal(t, round+1, got, "round %d: exactly at boundary", round)
 
 				// 1 ns after the boundary: still in round r+1 (until next boundary).
-				got, err = EstimatedRoundAt(rc.role, slotDuration, offset+time.Nanosecond)
+				got, err = EstimatedRoundAt(rc.role, slotDuration/3, offset+time.Nanosecond)
 				require.NoError(t, err)
 				require.Equal(t, round+1, got, "round %d: 1ns after boundary", round)
 			}
@@ -299,7 +323,7 @@ func TestEstimatedRoundAtEdgeCases(t *testing.T) {
 	}
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := EstimatedRoundAt(tc.role, slotDuration, tc.timeIntoSlot)
+			got, err := EstimatedRoundAt(tc.role, slotDuration/3, tc.timeIntoSlot)
 			require.NoError(t, err)
 			require.Equal(t, specqbft.FirstRound, got)
 		})
@@ -335,7 +359,7 @@ func TestRoundTimeoutMatchesRoundTimeoutOffset(t *testing.T) {
 				timer := New(t.Context(), beaconConfig, rc.role, 0, func(round specqbft.Round) {})
 
 				for round := specqbft.Round(1); round <= CutOffRound; round++ {
-					expected := roundTimeoutForRound(rc.role, beaconConfig.SlotDuration, round)
+					expected := roundTimeoutForRound(rc.role, beaconConfig.IntervalDuration(0), round)
 					got := timer.RoundTimeout(round)
 					require.Equal(t, expected, got, "round %d", round)
 				}
@@ -382,12 +406,12 @@ func TestEstimatedRoundAtMatchesRoundTimeout(t *testing.T) {
 					}
 
 					// 1 ns before the boundary: still in current round.
-					got, err := EstimatedRoundAt(rc.role, beaconConfig.SlotDuration, cumulative-time.Nanosecond)
+					got, err := EstimatedRoundAt(rc.role, beaconConfig.IntervalDuration(0), cumulative-time.Nanosecond)
 					require.NoError(t, err)
 					require.Equal(t, round, got, "round %d: 1ns before boundary", round)
 
 					// Exactly at the boundary: advanced to next round.
-					got, err = EstimatedRoundAt(rc.role, beaconConfig.SlotDuration, cumulative)
+					got, err = EstimatedRoundAt(rc.role, beaconConfig.IntervalDuration(0), cumulative)
 					require.NoError(t, err)
 					require.Equal(t, round+1, got, "round %d: at boundary", round)
 				}

@@ -51,6 +51,7 @@ type CommonOptions struct {
 	MessageValidator    validation.MessageValidator
 	Graffiti            []byte
 	ProposerDelay       time.Duration
+	ProposerDelayEPBS   time.Duration
 }
 
 func NewCommonOptions(
@@ -69,6 +70,7 @@ func NewCommonOptions(
 	messageValidator validation.MessageValidator,
 	graffiti []byte,
 	proposerDelay time.Duration,
+	proposerDelayEPBS time.Duration,
 ) *CommonOptions {
 	result := &CommonOptions{
 		NetworkConfig:       networkConfig,
@@ -86,6 +88,7 @@ func NewCommonOptions(
 		MessageValidator:    messageValidator,
 		Graffiti:            graffiti,
 		ProposerDelay:       proposerDelay,
+		ProposerDelayEPBS:   proposerDelayEPBS,
 	}
 
 	// If full node, increase the queue size to make enough room for history sync batches to be pushed whole.

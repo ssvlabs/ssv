@@ -86,6 +86,7 @@ type ControllerOptions struct {
 	ValidatorSyncer                *metadata.Syncer
 	Graffiti                       []byte
 	ProposerDelay                  time.Duration
+	ProposerDelayEPBS              time.Duration
 
 	// worker flags
 	WorkersCount    int `yaml:"MsgWorkersCount" env:"MSG_WORKERS_COUNT" env-description:"Number of message processing workers"`
@@ -210,6 +211,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) *Controller {
 		options.MessageValidator,
 		options.Graffiti,
 		options.ProposerDelay,
+		options.ProposerDelayEPBS,
 	)
 
 	cacheTTL := 2 * options.NetworkConfig.EpochDuration() // #nosec G115
@@ -1239,6 +1241,7 @@ func SetupRunners(
 				HighestDecidedSlot:  0,
 				Graffiti:            options.Graffiti,
 				ProposerDelay:       options.ProposerDelay,
+				ProposerDelayEPBS:   options.ProposerDelayEPBS,
 				ProposedBlockRoots:  proposedBlockRoots,
 				StartEnvelopeDuty:   startEnvelopeDuty,
 			})
