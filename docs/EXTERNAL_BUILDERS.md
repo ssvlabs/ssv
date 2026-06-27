@@ -1,5 +1,12 @@
 # Builder proposals
 
+> **ePBS / Gloas (EIP-7732).** This page describes the pre-Gloas external-builder flow — out-of-protocol
+> PBS via MEV-Boost/commit-boost and relays. At the Gloas fork, in-protocol (enshrined) PBS supersedes it:
+> the proposer publishes a block committing to a builder's *bid* instead of fetching a blinded block from a
+> relay, the builder reveals the execution payload separately, and a Payload Timeliness Committee attests to
+> its on-time arrival. SSV runs these new duties automatically, with no operator configuration. Gloas is not
+> active on Ethereum mainnet yet (devnets only); this page will be revised as ePBS approaches mainnet.
+
 ## How to use
 
 1. Configure your beacon node to use an external builder

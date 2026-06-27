@@ -140,7 +140,7 @@ func TestMessageValidator_currentEstimatedRound(t *testing.T) {
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
 			mv := &messageValidator{netCfg: netCfg}
-			got, err := mv.estimatedRoundAt(tc.role, tc.timeIntoSlot)
+			got, err := mv.estimatedRoundAt(tc.role, 0, tc.timeIntoSlot)
 			require.NoError(t, err)
 			require.Equal(t, tc.want, got)
 		})
