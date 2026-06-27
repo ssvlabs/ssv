@@ -115,12 +115,22 @@ func (gc *GoClient) computeAttestationDataRoot(
 	}
 
 	// Explicitly set Index field as beacon nodes may return inconsistent values.
-	// EIP-7549: For Electra and later, index must always be 0, pre-Electra uses committee index.
-	config := gc.getBeaconConfig()
-	dataVersion, _ := config.ForkAtEpoch(config.EstimatedEpochAtSlot(slot))
-	attData.Index = 0
-	if dataVersion < spec.DataVersionElectra {
-		attData.Index = committeeIndex
+	// EIP-7549: Electra+ uses Index=0; pre-Electra uses committee index. Gloas (EIP-7732) instead keeps
+	// the BN-supplied payload-status index (0=EMPTY/1=FULL) — it is part of the signed AttestationData
+	// (SIP #94 §2 aggregation path), so the aggregate must be fetched under it.
+	// Decide the fork from the requested duty slot, not attData.Slot — the latter is what the
+	// beacon node returned (the same source the comment above warns "may return inconsistent values"),
+	// whereas the aggregate is for our duty's slot, which is authoritative.
+	cfg := gc.getBeaconConfig()
+	switch {
+	case cfg.IsGloasAtSlot(slot):
+		// keep attData.Index as the BN returned it
+	default:
+		version, _ := cfg.ForkAtEpoch(cfg.EstimatedEpochAtSlot(slot))
+		attData.Index = 0
+		if version < spec.DataVersionElectra {
+			attData.Index = committeeIndex
+		}
 	}
 
 	root, err = attData.HashTreeRoot()
