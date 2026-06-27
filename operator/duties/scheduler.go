@@ -173,6 +173,7 @@ func NewScheduler(logger *zap.Logger, opts *SchedulerOptions) *Scheduler {
 		NewAttesterHandler(dutyStore.Attester, opts.ExporterMode),
 		NewProposerHandler(dutyStore.Proposer, opts.ExporterMode),
 		NewSyncCommitteeHandler(dutyStore.SyncCommittee, opts.ExporterMode),
+		NewPTCAttestationHandler(dutyStore.PTC, opts.ExporterMode),
 	)
 	// These handlers only execute duties and are not needed in exporter mode.
 	if !opts.ExporterMode {
@@ -181,7 +182,6 @@ func NewScheduler(logger *zap.Logger, opts *SchedulerOptions) *Scheduler {
 			NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee, true),
 			NewValidatorRegistrationHandler(opts.ValidatorRegistrationCh),
 			NewVoluntaryExitHandler(dutyStore.VoluntaryExit, opts.ValidatorExitCh),
-			NewPTCAttestationHandler(),
 			NewProposerPreferencesHandler(),
 		)
 	}

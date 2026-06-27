@@ -13,6 +13,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 )
@@ -28,64 +29,121 @@ func (c *captureExecutor) ExecuteDuties(_ context.Context, duties []*spectypes.V
 
 func (c *captureExecutor) ExecuteCommitteeDuties(context.Context, committeeDutiesMap, time.Time) {}
 
-// fetchDuties caches an epoch's duties on first fetch and short-circuits on repeat — the Times(1)
-// expectations on both mocks fail if the second call re-fetches.
+// fetchDuties records an epoch's duties once and short-circuits on repeat — the Times(1)
+// expectations fail if the second call re-fetches.
 func TestPTCAttestationHandler_fetchDuties_cachesPerEpoch(t *testing.T) {
 	ctrl := gomock.NewController(t)
 
 	epoch := phase0.Epoch(5)
 	idx := phase0.ValidatorIndex(7)
 	dutySlot := phase0.Slot(60)
-	pk := phase0.BLSPubKey{1, 2, 3}
 
 	vp := NewMockValidatorProvider(ctrl)
-	vp.EXPECT().SelfParticipatingValidators(epoch).
-		Return([]*types.SSVShare{{Share: spectypes.Share{ValidatorIndex: idx, ValidatorPubKey: spectypes.ValidatorPK(pk)}}}).
-		Times(1)
+	vp.EXPECT().Validators().Return([]*types.SSVShare{activeShare(idx)}).Times(1)
+	vp.EXPECT().SelfParticipatingValidators(epoch).Return([]*types.SSVShare{activeShare(idx)}).Times(1)
 
 	bn := NewMockBeaconNode(ctrl)
 	bn.EXPECT().PayloadAttestationDuties(gomock.Any(), epoch, []phase0.ValidatorIndex{idx}).
-		Return([]*gloas.PTCDuty{{PubKey: pk, ValidatorIndex: idx, Slot: dutySlot}}, nil).
+		Return([]*gloas.PTCDuty{{ValidatorIndex: idx, Slot: dutySlot}}, nil).
 		Times(1)
 
-	h := NewPTCAttestationHandler()
+	store := dutystore.NewDuties[gloas.PTCDuty]()
+	h := NewPTCAttestationHandler(store, false)
 	h.logger = zap.NewNop()
+	h.netCfg = networkconfig.TestNetwork
 	h.validatorProvider = vp
 	h.beaconNode = bn
 
 	h.fetchDuties(context.Background(), epoch)
 	h.fetchDuties(context.Background(), epoch)
 
-	require.Contains(t, h.duties, epoch)
-	require.Len(t, h.duties[epoch][dutySlot], 1)
-	require.Equal(t, spectypes.BNRolePTCAttester, h.duties[epoch][dutySlot][0].Type)
-	require.Equal(t, idx, h.duties[epoch][dutySlot][0].ValidatorIndex)
+	require.True(t, store.IsEpochSet(epoch))
+	require.NotNil(t, store.ValidatorDuty(epoch, dutySlot, idx))
+}
+
+// fetchDuties records every participating validator's duty so the message validator can check
+// assignments, marking only this node's own InCommittee (executable).
+func TestPTCAttestationHandler_fetchDuties_recordsAllMarksSelf(t *testing.T) {
+	ctrl := gomock.NewController(t)
+
+	epoch := phase0.Epoch(5)
+	selfIdx := phase0.ValidatorIndex(7)
+	otherIdx := phase0.ValidatorIndex(8)
+	dutySlot := phase0.Slot(60)
+
+	vp := NewMockValidatorProvider(ctrl)
+	vp.EXPECT().Validators().Return([]*types.SSVShare{activeShare(selfIdx), activeShare(otherIdx)})
+	vp.EXPECT().SelfParticipatingValidators(epoch).Return([]*types.SSVShare{activeShare(selfIdx)})
+
+	bn := NewMockBeaconNode(ctrl)
+	bn.EXPECT().PayloadAttestationDuties(gomock.Any(), epoch, gomock.Any()).
+		Return([]*gloas.PTCDuty{
+			{ValidatorIndex: selfIdx, Slot: dutySlot},
+			{ValidatorIndex: otherIdx, Slot: dutySlot},
+		}, nil)
+
+	store := dutystore.NewDuties[gloas.PTCDuty]()
+	h := NewPTCAttestationHandler(store, false)
+	h.logger = zap.NewNop()
+	h.netCfg = networkconfig.TestNetwork
+	h.validatorProvider = vp
+	h.beaconNode = bn
+
+	h.fetchDuties(context.Background(), epoch)
+
+	// Both validators are recorded so the message validator can check assignments...
+	require.NotNil(t, store.ValidatorDuty(epoch, dutySlot, selfIdx))
+	require.NotNil(t, store.ValidatorDuty(epoch, dutySlot, otherIdx))
+	// ...but only this node's own duty is executable.
+	executable := store.CommitteeSlotDuties(epoch, dutySlot)
+	require.Len(t, executable, 1)
+	require.Equal(t, selfIdx, executable[0].ValidatorIndex)
+}
+
+// HandleInitialDuties pre-fetches the current epoch on startup, so the store is populated before the
+// first tick.
+func TestPTCAttestationHandler_HandleInitialDuties_prefetchesCurrentEpoch(t *testing.T) {
+	ctrl := gomock.NewController(t)
+
+	netCfg := networkconfig.TestNetworkWithGloas(0) // Gloas from genesis.
+	idx := phase0.ValidatorIndex(7)
+
+	vp := NewMockValidatorProvider(ctrl)
+	vp.EXPECT().Validators().Return([]*types.SSVShare{activeShare(idx)}).AnyTimes()
+	vp.EXPECT().SelfParticipatingValidators(gomock.Any()).Return([]*types.SSVShare{activeShare(idx)}).AnyTimes()
+
+	bn := NewMockBeaconNode(ctrl)
+	bn.EXPECT().PayloadAttestationDuties(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return([]*gloas.PTCDuty{{ValidatorIndex: idx}}, nil).AnyTimes()
+
+	store := dutystore.NewDuties[gloas.PTCDuty]()
+	h := NewPTCAttestationHandler(store, false)
+	h.logger = zap.NewNop()
+	h.netCfg = netCfg
+	h.validatorProvider = vp
+	h.beaconNode = bn
+
+	h.HandleInitialDuties(context.Background())
+
+	require.True(t, store.IsEpochSet(netCfg.EstimatedCurrentEpoch()))
 }
 
 // A reorg or indices change drops the cached PTC duties so the next tick re-fetches them (SIP #94 §3).
 func TestPTCAttestationHandler_invalidateDuties_clearsCache(t *testing.T) {
-	h := NewPTCAttestationHandler()
+	store := dutystore.NewDuties[gloas.PTCDuty]()
+	for _, epoch := range []phase0.Epoch{100, 101} {
+		store.Set(epoch, []dutystore.StoreDuty[gloas.PTCDuty]{
+			{Slot: 1, ValidatorIndex: 1, Duty: &gloas.PTCDuty{}},
+		})
+	}
+
+	h := NewPTCAttestationHandler(store, false)
 	h.logger = zap.NewNop()
-	h.duties[100] = map[phase0.Slot][]*spectypes.ValidatorDuty{}
-	h.duties[101] = map[phase0.Slot][]*spectypes.ValidatorDuty{}
 
 	h.invalidateDuties("test")
 
-	require.Empty(t, h.duties)
-}
-
-// evictOutdated drops only epochs strictly before the current one.
-func TestPTCAttestationHandler_evictOutdated(t *testing.T) {
-	h := NewPTCAttestationHandler()
-	for _, e := range []phase0.Epoch{4, 5, 6} {
-		h.duties[e] = map[phase0.Slot][]*spectypes.ValidatorDuty{}
-	}
-
-	h.evictOutdated(5)
-
-	require.NotContains(t, h.duties, phase0.Epoch(4))
-	require.Contains(t, h.duties, phase0.Epoch(5))
-	require.Contains(t, h.duties, phase0.Epoch(6))
+	require.False(t, store.IsEpochSet(100))
+	require.False(t, store.IsEpochSet(101))
 }
 
 // scheduleExecution fires the duty at the 75%-of-slot cutoff, not before.
@@ -99,7 +157,7 @@ func TestPTCAttestationHandler_scheduleExecution_firesAtCutoff(t *testing.T) {
 		netCfg.Beacon = &beaconCfg
 
 		executed := make(chan []*spectypes.ValidatorDuty, 1)
-		h := NewPTCAttestationHandler()
+		h := NewPTCAttestationHandler(dutystore.NewDuties[gloas.PTCDuty](), false)
 		h.logger = zap.NewNop()
 		h.netCfg = &netCfg
 		h.dutiesExecutor = &captureExecutor{executed: executed}
