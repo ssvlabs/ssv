@@ -9,6 +9,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/operator/duties/dutystore"
+	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 )
 
 // A PTC member signs at most one payload attestation per slot → at most SlotsPerEpoch per epoch.
@@ -32,4 +34,28 @@ func TestMessageLateness_PTCAttester(t *testing.T) {
 
 	late := mv.messageLateness(slot, spectypes.RolePTCAttester, netCfg.SlotStartTime(slot+100))
 	require.Greater(t, late, time.Duration(0))
+}
+
+// A PTC attestation message must reference a real PTC assignment for the validator once the slot's
+// epoch is fetched; an unfetched epoch is tolerated (the duty fetch may be in flight).
+func TestValidateBeaconDuty_PTCAttesterRequiresAssignment(t *testing.T) {
+	netCfg := networkconfig.TestNetwork
+	const epoch = phase0.Epoch(5)
+	idx := phase0.ValidatorIndex(7)
+	slot := phase0.Slot(uint64(epoch)*netCfg.SlotsPerEpoch + 3)
+
+	ds := dutystore.New()
+	ds.PTC.Set(epoch, []dutystore.StoreDuty[gloas.PTCDuty]{
+		{Slot: slot, ValidatorIndex: idx, Duty: &gloas.PTCDuty{Slot: slot, ValidatorIndex: idx}, InCommittee: true},
+	})
+	mv := &messageValidator{netCfg: netCfg, dutyStore: ds}
+
+	indices := []phase0.ValidatorIndex{idx}
+	// Assigned PTC slot → accepted.
+	require.NoError(t, mv.validateBeaconDuty(spectypes.RolePTCAttester, slot, indices, false))
+	// Same (fetched) epoch, unassigned slot → rejected.
+	require.ErrorIs(t, mv.validateBeaconDuty(spectypes.RolePTCAttester, slot+1, indices, false), ErrNoDuty)
+	// Unfetched epoch → tolerated.
+	unfetched := phase0.Slot(uint64(epoch+10) * netCfg.SlotsPerEpoch)
+	require.NoError(t, mv.validateBeaconDuty(spectypes.RolePTCAttester, unfetched, indices, false))
 }

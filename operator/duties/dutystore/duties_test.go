@@ -59,6 +59,36 @@ func TestDutiesEraseEpochData(t *testing.T) {
 	assert.Nil(t, duties.SlotIndices(epoch, 10))
 }
 
+func TestDutiesEraseBefore(t *testing.T) {
+	duties := NewDuties[eth2apiv1.ProposerDuty]()
+	for _, epoch := range []phase0.Epoch{4, 5, 6} {
+		duties.Set(epoch, []StoreDuty[eth2apiv1.ProposerDuty]{
+			{Slot: 10, ValidatorIndex: 1, Duty: &eth2apiv1.ProposerDuty{}},
+		})
+	}
+
+	duties.EraseBefore(5)
+
+	assert.False(t, duties.IsEpochSet(4))
+	assert.True(t, duties.IsEpochSet(5))
+	assert.True(t, duties.IsEpochSet(6))
+}
+
+func TestDutiesClear(t *testing.T) {
+	duties := NewDuties[eth2apiv1.ProposerDuty]()
+	for _, epoch := range []phase0.Epoch{4, 5, 6} {
+		duties.Set(epoch, []StoreDuty[eth2apiv1.ProposerDuty]{
+			{Slot: 10, ValidatorIndex: 1, Duty: &eth2apiv1.ProposerDuty{}},
+		})
+	}
+
+	duties.Clear()
+
+	for _, epoch := range []phase0.Epoch{4, 5, 6} {
+		assert.False(t, duties.IsEpochSet(epoch))
+	}
+}
+
 func TestStoreDutyTypesUseIndependentLocks(t *testing.T) {
 	epoch := phase0.Epoch(8)
 	slot := phase0.Slot(64)

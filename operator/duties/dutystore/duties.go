@@ -5,10 +5,12 @@ import (
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+
+	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 )
 
 type Duty interface {
-	eth2apiv1.AttesterDuty | eth2apiv1.ProposerDuty
+	eth2apiv1.AttesterDuty | eth2apiv1.ProposerDuty | gloas.PTCDuty
 }
 
 type StoreDuty[D Duty] struct {
@@ -116,6 +118,27 @@ func (d *Duties[D]) EraseEpochData(epoch phase0.Epoch) {
 	defer d.mu.Unlock()
 
 	delete(d.m, epoch)
+}
+
+// EraseBefore drops every cached epoch earlier than the given one, bounding the per-epoch cache.
+func (d *Duties[D]) EraseBefore(epoch phase0.Epoch) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	for cached := range d.m {
+		if cached < epoch {
+			delete(d.m, cached)
+		}
+	}
+}
+
+// Clear drops every cached epoch. Used when a refresh must replace the whole cache rather than
+// merge into it — e.g. PTC duties after a reorg or validator-set change (SIP #94 §3).
+func (d *Duties[D]) Clear() {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	d.m = make(map[phase0.Epoch]map[phase0.Slot]map[phase0.ValidatorIndex]StoreDuty[D])
 }
 
 func (d *Duties[D]) IsEpochSet(epoch phase0.Epoch) bool {
