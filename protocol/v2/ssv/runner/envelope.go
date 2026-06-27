@@ -17,6 +17,7 @@ import (
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
@@ -208,9 +209,9 @@ func (r *EnvelopeBuilderRunner) submitEnvelope(ctx context.Context, logger *zap.
 		if err := r.GetBeaconNode().SubmitExecutionPayloadEnvelope(ctx, signed); err != nil {
 			return fmt.Errorf("submit execution payload envelope: %w", err)
 		}
-		logger.Info("✅ published execution payload envelope")
+		logger.Info("✅ published execution payload envelope", fields.Slot(cd.Duty.Slot))
 	} else {
-		logger.Debug("this operator did not build the decided envelope, skipping publication")
+		logger.Debug("this operator did not build the decided envelope, skipping publication", fields.Slot(cd.Duty.Slot))
 	}
 
 	r.markDutySucceeded()

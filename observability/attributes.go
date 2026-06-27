@@ -64,6 +64,10 @@ func DutyOutcomeAttribute(outcome string) attribute.KeyValue {
 	return attribute.String("ssv.validator.duty.outcome", outcome)
 }
 
+func BuildSourceAttribute(source string) attribute.KeyValue {
+	return attribute.String("ssv.validator.duty.build_source", source)
+}
+
 func BeaconPeriodAttribute(period uint64) attribute.KeyValue {
 	return attribute.KeyValue{
 		Key:   "ssv.beacon.period",
