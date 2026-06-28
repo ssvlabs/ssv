@@ -63,7 +63,7 @@ func (gc *GoClient) SubmitPayloadAttestationMessages(ctx context.Context, messag
 }
 
 // firstClientResult runs fn against each beacon client in turn, each under its own common-timeout
-// budget, returning the first success and recording every attempt; on all failures it joins the errors.
+// budget, returning the first success; on all failures it joins the per-client errors.
 func firstClientResult[T any](ctx context.Context, gc *GoClient, routeName, httpMethod string, fn func(ctx context.Context, addr string) (T, error)) (T, error) {
 	var zero T
 	var errs error

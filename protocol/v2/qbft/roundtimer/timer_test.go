@@ -244,8 +244,8 @@ func TestRoundTimeoutOffsetGloasInterval(t *testing.T) {
 //   - offset exactly → just advanced to round r+1
 //   - offset + 1ns → still in round r+1
 //
-// This is the test that would have caught an off-by-one `<` vs `<=` in EstimatedRoundAt's loop,
-// or a wrong starting `r` — none of which the pre-existing tests directly exercised.
+// This catches an off-by-one (`<` vs `<=`) at a round boundary or a wrong starting round —
+// neither of which the pre-existing tests directly exercised.
 func TestEstimatedRoundAtBoundaries(t *testing.T) {
 	// Use a realistic slot duration (12s) so the numbers line up with the real QuickTimeout (2s) and
 	// SlowTimeout (2m) values.
@@ -289,10 +289,9 @@ func TestEstimatedRoundAtBoundaries(t *testing.T) {
 	}
 }
 
-// TestEstimatedRoundAtEdgeCases covers inputs at and before slot start — the cases that the
-// removed early return (`if sinceFirstRoundChange <= 0 { return FirstRound, nil }`) used to
-// special-case. After the refactor the loop itself handles them; this test regression-guards
-// that behavior.
+// TestEstimatedRoundAtEdgeCases covers inputs at and before slot start. EstimatedRoundAt
+// special-cases them with `if elapsed < 0 { return FirstRound, nil }`; this test
+// regression-guards that behavior.
 func TestEstimatedRoundAtEdgeCases(t *testing.T) {
 	// Use a realistic slot duration (12s) so the numbers line up with the real QuickTimeout (2s) and
 	// SlowTimeout (2m) values.

@@ -38,9 +38,6 @@ const (
 	//
 	// This is NOT when this operator broadcasts its own partial-sig; see
 	// validatorRegistrationExecutionSlotsToPostpone for that.
-	//
-	// Note: shares its numeric value (4) with validatorRegistrationSchedulingSlack
-	// below by coincidence — the two are independent.
 	validatorRegistrationDutySlotsToPostpone = 4
 
 	// validatorRegistrationSchedulingSlack absorbs per-operator timing
@@ -147,11 +144,9 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 				return
 			}
 
-			// dutySlot is the deterministic wire slot — identical across
-			// operators regardless of receipt time or code version — feeding the
-			// partial-sig envelope and the signed Timestamp's epoch.
-			// earliestExecutionSlot is a separate, local-only broadcast gate. See
-			// both constants' docstrings for the full rationale.
+			// dutySlot is the deterministic wire slot; earliestExecutionSlot is a
+			// separate, local-only broadcast gate. See both constants' docstrings
+			// for the full rationale.
 			blockSlot, err := h.blockSlot(ctx, regDescriptor.BlockNumber)
 			if err != nil {
 				h.logger.Warn(
