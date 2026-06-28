@@ -201,8 +201,11 @@ func (r *EnvelopeBuilderRunner) ProcessPostConsensus(ctx context.Context, logger
 }
 
 // submitEnvelope publishes the signed execution-payload envelope. Only the operator whose cached envelope
-// blinds to the decided value (content match) holds the full bytes to publish; the others just complete
-// the duty — mirroring the §4 block path.
+// blinds to the decided value (content match) holds the full bytes to publish; the others just complete the
+// duty. Unlike the §4 block path — where the bid-only block is itself the decided value, so every operator
+// holds and re-submits it — the envelope's decided value is blinded; only its builder holds the full payload
+// bytes, so content-match publication keeps a non-builder (whose cachedEnvelope is nil) from broadcasting an
+// empty envelope.
 func (r *EnvelopeBuilderRunner) submitEnvelope(ctx context.Context, logger *zap.Logger, cd *gloas.EnvelopeConsensusData, sig phase0.BLSSignature) error {
 	if r.builtDecidedEnvelope(cd.DataSSZ) {
 		signed := &gloas.SignedExecutionPayloadEnvelope{Message: r.cachedEnvelope, Signature: sig}

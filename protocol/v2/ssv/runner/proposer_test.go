@@ -2,6 +2,7 @@ package runner
 
 import (
 	"context"
+	"errors"
 	"maps"
 	"testing"
 	"time"
@@ -678,6 +679,26 @@ func TestProposerRunnerSubmitGloasProposalSkipsEnvelopeOnExternalBuild(t *testin
 	err := runner.submitGloasProposal(context.Background(), zap.NewNop(), trace.SpanFromContext(context.Background()), consensusData, phase0.BLSSignature{})
 	require.NoError(t, err)
 	require.False(t, called, "external-build should not start the envelope duty")
+}
+
+// A BN submit error fails the duty, but the self-build envelope duty must still start — the envelope is a
+// cluster round the others join regardless of this operator's block submit.
+func TestProposerRunnerSubmitGloasProposalErrorStillTriggersEnvelope(t *testing.T) {
+	t.Parallel()
+
+	const slot = phase0.Slot(8)
+	consensusData := gloasProposerConsensusData(t, slot) // self-build
+	beacon := newProposerTestBeacon(nil)
+	beacon.submitErr = errors.New("bn rejected")
+	runner, keySet, _ := newProposerRunnerForTest(t, beacon, &stubDoppelganger{canSign: true}, 0, nil)
+	setupRunnerForPostConsensus(t, runner, keySet, gloasProposerDuty(slot), consensusData, 1)
+
+	called := false
+	runner.startEnvelopeDuty = func(phase0.Slot) { called = true }
+
+	err := runner.submitGloasProposal(context.Background(), zap.NewNop(), trace.SpanFromContext(context.Background()), consensusData, phase0.BLSSignature{})
+	require.ErrorContains(t, err, "submit gloas beacon block")
+	require.True(t, called, "envelope must still start even when the block submit fails")
 }
 
 // recordDecidedBlockRoot stores exactly block.HashTreeRoot() — the root the §6 envelope value-check
