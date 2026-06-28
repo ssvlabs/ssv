@@ -52,6 +52,7 @@ Confirmed against the pinned specs and the working tree (HEAD `82a9f4f8f`). Trea
 - Tracks (§3) are dependency-ordered; graph in §4.
 - Symbol names/anchors were verified against **pre-Boole** HEAD `82a9f4f8f`; the Boole baseline (`boole-fork`) changes some of them — often small diffs, and some seams already exist on stage (e.g. the `GLOAS_FORK_EPOCH` TODO at `spec.go:255`) — so **re-verify against `boole-fork`** at implementation start. Line numbers are approximate (`~`) and may drift.
 - Each new runner role touches five seams: **(a)** type/enum, **(b)** runner impl, **(c)** `SetupRunners` registration, **(d)** duty handler/trigger, **(e)** message validation.
+- **Observability is logs-first (see §8).** Every test/verification claim in this plan must be expressed as a **greppable DEBUG log-line** — so all planned testing is automatable (grep the line, assert it). OTel metrics (U6/T13) are explicitly **nice-to-have** (dashboards / aggregation / visualization only) and are **never** a primary validation tool.
 
 ---
 
@@ -109,7 +110,7 @@ Add to `protocol/v2/blockchain/beacon/client.go` (mocks regen via `//go:generate
 - **Slashing: no change** (see §0). **Parameterizes T1, T4.**
 
 ### U6 — Local-build / reconstruction telemetry **(decided)**
-Local-build rate: counter split on `api.VersionedProposal.Blinded` (`blinded=false` ≈ local; a **pre-Gloas proxy** — the signal changes post-fork). PTC reconstruction-miss and ProposerPreferences reconstruction-failure: new counters in those runners. **Parameterizes T13** (and informs T8 priority).
+Local-build rate: counter split on `api.VersionedProposal.Blinded` (`blinded=false` ≈ local; a **pre-Gloas proxy** — the signal changes post-fork). PTC reconstruction-miss and ProposerPreferences reconstruction-failure: new counters in those runners. **Parameterizes T13** (and informs T8 priority). **Logs-first (§8): these counters are nice-to-have viz only; the primary, automatable validation is the matching greppable DEBUG log (§8 G2 build-source, G3 duty-outcome, and the reconstruction-miss logs) — never the metric alone.**
 
 ### Newly confirmed (folded into tracks)
 - Sync-committee path inert to the new vote field → noted in T4.
@@ -128,7 +129,7 @@ Local-build rate: counter split on `api.VersionedProposal.Blinded` (`blinded=fal
 | **`SignedProposerPreferences` publish endpoint** | Doesn't exist upstream yet | Abstract `SubmitProposerPreferences`, mock; **T5 publish can't be e2e-tested against a real BN until it lands** |
 | **`GLOAS_FORK_EPOCH` value** | Ethereum hasn't scheduled it (Glamsterdam ~Q3 2026) | Fetched from BN at runtime; develop/test on devnets; no config change |
 | **consensus-specs pin drift** | Spec still pre-final | Re-verify pin at start; the SIP's own watchlist tracks normative drift |
-| **Runtime rates** (local-build %, PTC/prefs reconstruction-miss %) | Only measurable in production | Ship telemetry (U6/T13), revisit §6 priority and any no-QBFT tuning post-deploy |
+| **Runtime rates** (local-build %, PTC/prefs reconstruction-miss %) | Only measurable in production | Ship telemetry (U6/T13) — **nice-to-have viz; primary validation is the §8 greppable logs** — revisit §6 priority and any no-QBFT tuning post-deploy |
 | **Anchor wire-constant lock** | Cross-client agreement; cheap now, expensive at interop | **Partially verified** (sigp/anchor `epbs` branch): PTC constants match exactly (`Role::PTCAttester=7`, `PartialSignatureKind::PTCAttester=7`, validator-scoped); domains `0x0B/0C/0D` + domain epochs (`epoch(proposal_slot)`/`epoch(data.slot)`) match consensus-specs = #632. Anchor hasn't built §5/§6 yet (PTC-first, like us) → SIP + consensus-specs are the shared reference (verified); re-check §5/§6 constants when Anchor adds them. |
 | **Full migration off ssv-spec** (all duty types) | Direction **decided**; execution is a separate, larger initiative | Out of scope here; ePBS adds Gloas types node-side as the first down-payment (see U0). Main cost (spectest decoupling) is the migration's, not ePBS's |
 
@@ -244,7 +245,7 @@ Register the new roles in `SetupRunners` (`operator/validator/controller.go`, `r
 Unit tests per runner/handler/validation arm (against T2 mocks); fork-boundary tests; **e2e on a local Gloas devnet** — the full-impl decision (U2) makes this the real acceptance bar. **e2e vehicle — ssv-mini** (`github.com/ssvlabs/ssv-mini`): the SSV-labs Kurtosis stack already runs Lighthouse + Geth + the SSV layer (4 operators, validators, contracts via Hardhat) at the **Boole** fork. **Prerequisite (a task in the ssv-mini repo):** bump its Ethereum layer from **Fulu → a Glamsterdam/Gloas-capable Lighthouse + Geth** with Glamsterdam fork params (mirror the ethpandaops `glamsterdam-devnets` configs); then run the Gloas SSV implementation e2e against it. Until ssv-mini gains Gloas, unit tests + pointing SSV at an external ethpandaops Glamsterdam devnet cover it. `SignedProposerPreferences` stays unit/mock-only (no endpoint anywhere). **Spectests:** Gloas has no ssv-spec vectors, so the node-side Gloas types add no spec-test surface — the broader migration owns spectest decoupling, not ePBS.
 
 ### T13 — Telemetry / metrics / logging / docs **(uses U6; parallel)**
-U6 metrics (Blinded-split local-build counter; PTC/prefs reconstruction-miss counters); structured logs for new duties; operator docs for new config.
+U6 metrics (Blinded-split local-build counter; PTC/prefs reconstruction-miss counters) — **nice-to-have viz only (§8)**; the **primary validation surface is the structured DEBUG logs** for the new duties (every behavior greppable — see the §8 logs-first audit); operator docs for new config.
 
 ---
 
@@ -296,7 +297,7 @@ The ssv-spec migration's handoff gates on **node-side-complete** (including T8's
 | U2/U3 | **Full node-side impl**: build Gloas types + endpoint clients now (e2e-testable on a live devnet via ssv-mini); mocks for unit tests; upstream go-eth2-client rebase = later **dedup**, not a gate | node | T2 | **resolved** (revised — full impl) |
 | U4 | Msg-validation model; ProposerPreferences carries `proposal_slot` (= `duty.Slot`), future-slot allowed via a role-specific `messageEarliness` exemption (T9) | node | T5, T6, T9 | **resolved** |
 | U5 | Gate Gloas by beacon epoch; slashing needs no change. Post-Boole: `SSVForks` now has `Boole` (pre-Boole "empty struct" basis corrected) — Gloas stays beacon-gated; re-pin `spec.go`/`beacon.go` anchors | node | T1, T4 | **resolved** |
-| U6 | `Blinded`-split local-build metric (pre-Gloas proxy) + recon-miss counters | node | T13 | **resolved** |
+| U6 | `Blinded`-split local-build metric (pre-Gloas proxy) + recon-miss counters — nice-to-have viz; §8 logs are primary | node | T13 | **resolved** |
 | — | produceBlockV4 + envelope endpoints | upstream | T2/T7/T8 | open (implement node-side vs #580; pin + watch; e2e on devnet) |
 | — | `SignedProposerPreferences` publish endpoint | upstream | T5 | open (mock-only; no e2e until it exists) |
 | — | `GLOAS_FORK_EPOCH` schedule | Ethereum | T11 | external (Glamsterdam ~Q3 2026; devnets now) |
@@ -349,36 +350,46 @@ Make-or-break question for the public-devnet path: do the Gloas devnet CL client
 - **P1 — PTC node image: DONE.** `ssvnode:epbs-gloas` builds + runs (verified). **No `GOPRIVATE` needed** for the build — the branch-pinned ssv-spec is in both go.sums, so `go mod download && go mod verify` resolves it via the public proxy without the sum-DB (GOPRIVATE is only for `go get`/`tidy`). Keep `tla/` out of the build context (`.dockerignore`) or local TLA+ scratch bloats `COPY . .`.
 - **P2 — ssv-spec #632 merged** → re-point both go.mods at the cut version (drops the branch-pin; `go get`/`tidy` then no longer need `GOPRIVATE`).
 - **P3 — DONE.** The deferred refinements: handler dependent-root/reorg refresh (committed) · PTC message lateness TTL + per-validator duty-count cap (committed) · PTC duty-assignment check (uncommitted) — a `dutyStore.PTC` (`Duties[gloas.PTCDuty]`) entry, with the handler reworked to broad-record every participating validator's duty in both operator+exporter modes (mirrors proposer/sync; `InCommittee` marks this node's own for execution) and an `IsEpochSet`-tolerant `RolePTCAttester` arm in `validateBeaconDuty`. Behavior is now sound under real-network reorgs/timing.
-- **Observability (devnet watch):** PTC non-convergence (broadcast but no quorum — peers diverged on payload presence near the boundary) calls no duty marker, so `watchDutyOutcome` reports the generic "⚠️ likely stuck" at slot end. Framework-level (the runner has no slot-end hook), not PTC code; gauge the log frequency on devnet-5 before adding a distinct non-convergence outcome.
+- **Observability (devnet watch):** PTC non-convergence (broadcast but no quorum — peers diverged on payload presence near the boundary) calls no duty marker, so `watchDutyOutcome` reports the generic "⚠️ likely stuck" at slot end. Framework-level (the runner has no slot-end hook), not PTC code; gauge the log frequency on devnet-5 before adding a distinct non-convergence outcome (tracked as §8 G5).
 
 ### Track 1 — public glamsterdam-devnet (startable now; critical path)
 1. **Devnet = devnet-5** (the live one; devnet-3/4 are down). **Sanity-check first:** `GET /eth/v1/config/spec` (confirm `GLOAS_FORK_EPOCH` is past) + a PTC endpoint on a devnet-5 BN. Pull config (genesis time/root, fork schedule, chain ID, deposit contract, EL/BN endpoints + basic-auth) from `glamsterdam-devnets/network-configs/devnet-5/` + `config.glamsterdam-devnet-5.ethpandaops.io/api/v1/nodes/inventory`.
 2. **`networkconfig` entry — DONE** (committed): `GlamsterdamDevnetSSV` in `networkconfig/glamsterdam-devnet.go` — an `&SSV{}` only (the Beacon side comes from the BN at runtime; no `&Network{}` needed), registered + selectable as `glamsterdam-devnet` (domain `{0,0,9,0}`, `Boole:0`). **Fill 3 `TODO(e2e)` fields after steps 3-4:** `RegistryContractAddr` + `RegistrySyncOffset` (contract deploy), `Bootnodes` (operator ENRs), `TotalEthereumValidators` (approx count).
 3. **Deploy SSV contracts** on the devnet EL; register 4 operators.
 4. **Validators** — deposit via the devnet faucet/deposit contract → await activation → split keys into shares → register validators+shares on the SSV contract.
-5. **Run 4 operators** (P1 image) on the devnet config; **observe** PTC: operator logs (`fetched PTC duties` → `successfully submitted payload attestation`) + the BN `payload_attestations` pool.
+5. **Run 4 operators** (P1 image) on the devnet config; **assert the greppable operator logs** (`fetched PTC duties` → `successfully submitted payload attestation`) as the automatable pass/fail signal; the BN `payload_attestations` pool is a secondary on-chain cross-check.
 - Risks: devnet resets/instability; validator activation latency; SSV contract deploy on a non-standard chain; per-client beacon-API PTC completeness (Lodestar/Lighthouse confirmed — verify the specific BN combo used).
 
-### Track 2 — ssv-mini local (hermetic) — **IMPLEMENTED (2026-06-27); gated on review/merge**
+### Track 2 — ssv-mini local (hermetic) — **IMPLEMENTED (2026-06-27); e2e PTC submission PROVEN 2026-06-28 (see result below); gated on review/merge**
 **Correction:** the earlier claim that `ethpandaops/ethereum-package@6.1.0` "has no Gloas/Glamsterdam fork (only up to Fulu+BPO)" is **wrong**. 6.1.0's `network_params.yaml` ships `gloas_fork_epoch` (+ the §1 quarter-slot `*_due_bps_gloas` timings) and threads it through `input_parser → el_cl_genesis_generator → values.env.tmpl`; its own CI test `.github/tests/fulu-genesis.yaml` runs `fulu_fork_epoch: 0` + `gloas_fork_epoch: 2`. So a local Gloas net is configurable **today** — no upstream wait. The only real blocker was Gloas-capable client images, solved by the ethpandaops `glamsterdam-devnet-5` builds (all EL/CL clients tagged).
 
 Implemented across three PRs (the local Gloas net reuses `local_testnet`'s on-chain identity — same contracts/validators — so no DB-seed duplication; Gloas is beacon-driven, read from the BN's `GLOAS_FORK_EPOCH`, so the SSV node needs no change):
-1. **ssv-mini [#34](https://github.com/ssvlabs/ssv-mini/pull/34)** — `params-gloas.yaml` + `make run-gloas`: Fulu at genesis → Gloas at epoch 2, `glamsterdam-devnet-5` EL/CL images, genesis-generator pinned to `6.0.8` (6.1.0's default `5.3.5` predates Gloas), `boole_epoch: 0`. Usable standalone today for direct PTC observation (logs/dora): `SSV_COMMIT=epbs-gloas make prepare && make run-gloas`.
+1. **ssv-mini [#34](https://github.com/ssvlabs/ssv-mini/pull/34)** — `params-gloas.yaml` + `make run-gloas`: Fulu at genesis → Gloas at epoch 2, `glamsterdam-devnet-5` EL/CL images, genesis-generator pinned to `6.0.8` (6.1.0's default `5.3.5` predates Gloas), `boole_epoch: 0`. Usable standalone today for direct PTC observation (greppable SSV logs = the automatable signal; dora as a manual visual aid): `SSV_COMMIT=epbs-gloas make prepare && make run-gloas`.
 2. **ethereum2-monitor [#504](https://github.com/ssvlabs/ethereum2-monitor/pull/504)** (scoped in #503) — Gloas block decoding (go-eth2-client v0.28.x can't decode Gloas): a reactive raw-JSON fallback in `beacon.FetchBlock` — no SSZ, no shared types. Re-enables E2M attestation validation on a Gloas chain.
-3. **aetheria [#123](https://github.com/ssvlabs/aetheria/pull/123)** — a `local_testnet_gloas` network that routes to `params-gloas.yaml`, reusing local_testnet's identity; E2M capture made best-effort. `make run NETWORK=local_testnet_gloas TESTS='(event)'`.
+3. **aetheria [#123](https://github.com/ssvlabs/aetheria/pull/123)** — a `local_testnet_gloas` network that routes to `params-gloas.yaml`, reusing local_testnet's identity; E2M capture made best-effort. `make run NETWORK=local_testnet_gloas TESTS='(event)'`. **Plus an E2M-coordination fix (2026-06-28, committed on `epbs/local-testnet-gloas`):** when `monitor-api` is absent the orchestrator now also sets the per-flow `e2m=false` (not just leaving `E2MURL` at a stale default), so the executor *skips* E2M and the `(event)` flow passes (on-chain lifecycle only) instead of hard-failing and tearing down.
 
 ### Sequencing
 - **Done (codeable side):** P1 image + the `networkconfig` stub — both shared by the two tracks.
-- **Next (infra, your hands):** devnet-5 sanity check → SSV contract deploy + 4 operators → validators → fill the 3 stub TODOs → run + observe PTC.
+- **Next (infra, your hands):** devnet-5 sanity check → SSV contract deploy + 4 operators → validators → fill the 3 stub TODOs → run + verify PTC via the greppable step-5 logs.
 - **Track 1** (live devnet) is the path to PTC execution today; **Track 2** (ssv-mini local) is now implemented (above) and is the hermetic/CI path.
 
 **Track 2 merge/enable order (don't lose the monitor re-enable — it's the one cross-repo coupling):**
-1. **ssv-mini #34** — mergeable now; `make run-gloas` works standalone (monitor off; observe ePBS via SSV logs + dora). Its `params-gloas.yaml` keeps `monitor.enabled: false` deliberately, so it's mergeable before E2M ships Gloas support.
+1. **ssv-mini #34** — mergeable now; `make run-gloas` works standalone (monitor off; verify ePBS via greppable SSV logs — dora as a visual aid). Its `params-gloas.yaml` keeps `monitor.enabled: false` deliberately, so it's mergeable before E2M ships Gloas support.
 2. **ethereum2-monitor #504** — merge; then rebuild the monitor image (ssv-mini `make prepare-monitor`, built from `../ethereum2-monitor`).
 3. **ssv-mini follow-up** — once #504 is in the monitor image, flip `monitor.enabled: true` in `params-gloas.yaml`. This turns on E2M attestation validation on the Gloas chain. *(This is the easy-to-forget step — it's intentionally deferred out of #34 so #34 stays mergeable today.)*
 4. **aetheria #123** — merge last; `local_testnet_gloas` then runs the full executor `(event)` flow with E2M. Its E2M capture is best-effort, so it also works between steps 1 and 3 — just without E2M validation until the monitor is re-enabled.
 
-Independent: aetheria #123 and ssv-mini #34 don't depend on #504 to *function* (E2M just stays skipped); #504 + step 3 only add E2M validation. The PTC/proposer/envelope ePBS behavior itself is observable from step 1 via node logs + dora.
+Independent: aetheria #123 and ssv-mini #34 don't depend on #504 to *function* (E2M just stays skipped); #504 + step 3 only add E2M validation. The PTC/proposer/envelope ePBS behavior itself is verifiable from step 1 via greppable node logs (dora as a visual aid).
+
+### Track 2 — e2e RESULT (2026-06-28): full dormant → transition → executing PROVEN on the local Gloas net
+Ran `aetheria local_testnet_gloas` end-to-end (host orchestrator + seeded DB + the `params-gloas.yaml` enclave, `node/ssv:epbs-gloas`, 4 operators). The SSV node's complete ePBS PTC lifecycle was observed live across the epoch-2 fork:
+- **Dormant (epoch 0–1):** `DutyScheduler` starts `PTC_ATTESTER` + `PROPOSER_PREFERENCES`; they react to validator-index changes ("re-fetching PTC duties on next tick") but execute nothing. Boole active (`/ssv//boole/*` subnets).
+- **Transition (epoch 2 / slot 64):** all 4 nodes' `PTC_ATTESTER` activates → `POST /eth/v1/validator/duties/ptc/2`. The first call at the exact fork-boundary slot returns CL `500 BeaconStateError(IncorrectStateVariant)` (lighthouse devnet-5: state not yet in the Gloas variant); the node's per-slot re-fetch **retries the next slot and succeeds**. Relevant to Track 1 too: expect a one-slot 500 at a node's first Gloas slot — the existing refetch absorbs it, no code change needed.
+- **Executing (epoch 5 / slot 166):** with a validator held continuously active, `🔧 executing validator duty PTC_ATTESTER-e5-s166-v64` → `GET payload_attestation_data/166` → **`✔️ successfully submitted payload attestation` on all 4 operators**. An earlier duty at slot 148 correctly **failed-safe** — CL `404 No block received` on a missed slot (~80% block production on the devnet), so a validator's one-duty-per-epoch lands within an epoch or two; this is expected, not a node bug.
+
+**Two corrections to the prior handoff:**
+1. **The "ENCRYPTION_KEY_HASH secret" blocker was a non-issue.** The working key (`SSV-AUTOMATION-…-KEY`) was already in the aetheria main checkout's `orchestrator/.env`; the stuck session was running from a different (`/tmp`) checkout whose `.env` carried the `aetheria-encryption-key` placeholder. No team secret is needed for the local Gloas run — config-gen decrypts the seed cleanly with the in-repo key (verified by decrypting the seed ciphertext directly and by a clean live config-gen).
+2. **E2M coordination fix** added to #123 (see the #123 bullet above) — without it a plain `(event)` on Gloas false-fails at bulk E2M validation even though the on-chain + PTC behavior is correct.
 
 ### PR #2855 (MEV timing games) — hold; merge ePBS first
 **Decision:** do not merge #2855 for now — merge ePBS first, then reconsider #2855's role.
@@ -410,5 +421,46 @@ Every hardcoded slot-relative timeout/deadline classified so none is missed when
 5. **§6 envelope / PTC / proposer-preferences runners — clean.** No hardcoded slot timing; all deadline-driven (deadline injected by the scheduler/executor).
 
 **Fork-agnostic — leave (verified):** `commonTimeout` 5s / `longTimeout` 60s (general HTTP); `ptcHTTPClient` has no client timeout — ctx-bounded (PTC fetches use `commonTimeout`, bounded by the slot-end duty deadline; Gloas produce/submit bounded by the proposer ctx); `blockPropagationDelay` 300ms (network propagation); scheduler `slotDelay≥100ms` drift threshold (L496/553); `attest.go:430` 100ms poll granularity; `observability.go:148` 1ms log threshold; queue micro-timings (`inboxReadFrequency` 1ms, `retryDelay` 25ms, ttlcache 10min, `SlotDuration/retryDelay` retry count); slotticker (SlotDuration boundary ticker); `DefaultSlotDuration` 12s.
+
+---
+
+## §8 — Fork-transition monitoring + logs-first observability audit
+
+### Observability principle — logs-first (DEBUG-complete)
+**Every ePBS behavior we care about MUST be verifiable from DEBUG logs alone.** OTel metrics are *nice-to-have* — dashboards/aggregation only, never the sole evidence a behavior happened (there are no in-repo dashboards anyway, and Track 2 was verified purely from logs). Rule: any metric that records an ePBS decision/outcome must have a matching log (DEBUG or higher) carrying the same fact. The audit below closes the cases where this doesn't yet hold.
+
+### Fork-transition monitoring — proven on `local_testnet_gloas`; re-apply on devnet-5 / Hoodi / Sepolia
+The dormant→transition→executing flow is already PROVEN on the local Gloas net (Track 2 RESULT above, epoch-2 fork, verified from logs). This is the generalized watch layer for any fork.
+
+**#1 blindspot:** the Gloas fork epoch is **not** in SSV config — it is read from each BN's `/eth/v1/config/spec` (`GLOAS_FORK_EPOCH`, `beacon/goclient/spec.go:259`), **with no startup log**. If a BN doesn't schedule it / BNs disagree, the node silently stays pre-Gloas (`IsGloas=false`, `IntervalDuration` stays /3) — no error, nothing ePBS fires. → pre-flight #1 + audit **G1**.
+
+**Control/scale per network:** `local_testnet_gloas` (Track 2, DONE) sets the fork via `params-gloas.yaml` `gloas_fork_epoch: 2` — fully controllable. `glamsterdam-devnet-5` (Track 1) — epoch from the BN, real 512-member PTC. Hoodi/Sepolia — unscheduled today (`FarFutureEpoch`); monitor-only once they schedule Gloas (same watch, no timing control).
+
+**Pre-flight (T-minus a few epochs):** (1) every BN's `GLOAS_FORK_EPOCH` equal + not far-future [the node can't self-check this — G1]; (2) every BN serves the 8 Gloas routes (block produce/publish, envelope get/publish, PTC duties/data/submit, proposer-dependent-root); (3) `ProposerDelayEPBS` ≤ 1s (else boot-abort); (4) validator set actually hits proposer + PTC selections in-window; (5) baseline pre-fork (`/3`, zero ePBS roles) for a clean delta.
+
+**Boundary quirks (from Track 2 — expect on any fork):** the first Gloas slot may return CL `500 BeaconStateError(IncorrectStateVariant)` → the per-slot refetch absorbs it (no code change); a missed proposal slot → CL `404 No block` → PTC fails-safe, the one-duty-per-epoch lands within an epoch or two.
+
+**Per-section primary watch** (log = source of truth; metric in parens):
+- **§1 timing** — attestation submit rate holds across `/3→/4`; red flag: `⚠️ late duty execution` bursts (PTC lateness measured from the 75% cutoff). (`ssv.cl.request.duration{route=AttestationData}`, attestation refetch counters)
+- **§2 attestation** — value-check `rejecting/ignoring invalid message` with `error=` (`AttestationDataIndex>1`, GloasBeaconVote 120B-vs-112B decode). (committee `duty.outcome`)
+- **§3 PTC** — `fetched PTC duties` → `✔️ successfully submitted payload attestation`; `abstaining…no beacon block` occasional-ok / constant-bad; failures `failed to fetch PTC duties` / `PTC attestation failed…`. (`scheduler.executions{PTC_ATTESTER}`, `duty.outcome{PTC_ATTESTER}`)
+- **§4 proposer** — `🧊 got gloas beacon block proposal` → `✅ successfully submitted block proposal`; build-source self/external [**G2 — log gap**]. (`proposal.build_source`, `submissions.failed{proposer}`)
+- **§5 prefs** — `emitted proposer preferences duties` → `proposer preferences reconstructed but publish endpoint unavailable; skipping submit` (**expected** — submit stubbed, marks `not_required`); red flag `proposer preferences failed: could not build`. (`request{route=ProposerDutiesDependentRoot}`)
+- **§6 envelope** — builder: [**G4 — produce log gap**] → `✅ published execution payload envelope`; non-builder: `this operator did not build the decided envelope, skipping publication`. (`request{route=*ExecutionPayloadEnvelope}`)
+- **cross-role** — `⚠️ duty failed` / `⚠️ duty did not complete before slot end (likely stuck)`; succeeded/not_required [**G3 — log gap**]. (`ssv.runner.duty.outcome{role×outcome}` — the spine)
+
+### Log-coverage audit — PLANNED (add the missing logs; execute after sign-off)
+**Goal:** make the logs-first principle hold across #2901 — every metric-recorded or decision-point ePBS behavior gets a DEBUG+ log; metrics unchanged (viz only).
+**Method:** per ePBS path (the new runners, duty handlers, goclient wrappers, value-checks, fork gates) enumerate behaviors/decisions/outcomes → confirm a DEBUG log carries each → where only a metric (or nothing) does, add a log. No behavior change; logs only.
+
+**Confirmed gaps + proposed logs:**
+- **G1 — fork activation.** No log; `IsGloas` is computed from the BN's `GLOAS_FORK_EPOCH`. → startup INFO: resolved Gloas epoch + source BN (makes pre-flight #1 self-verifying); optional one-time "entered Gloas fork at slot N" at the boundary.
+- **G2 — build source (self vs external builder).** Metric `ssv.runner.proposal.build_source` only; the `🧊` log lacks it. → DEBUG on each Gloas submit (the `selfBuild(block)` bit already at `proposer.go:~541`): "self-built block" vs "external builder N". *The key ePBS proposer signal.*
+- **G3 — generic duty outcome succeeded/not_required.** `watchDutyOutcome.report` (`runner.go:~339`) records the metric for all four outcomes but logs only `failed`/`stuck` (Warn). → DEBUG "duty concluded" (outcome+role) for the non-warned outcomes → fully mirrors `ssv.runner.duty.outcome`.
+- **G4 — envelope produce/cache.** `produceBlindedEnvelope` (`envelope.go:277`) fetches+caches the heavy envelope unlogged. → DEBUG "building execution payload envelope" (slot, block root, Took).
+- **G5 — PTC non-convergence.** Surfaces only as the generic "likely stuck" (§7 obs note). → distinct DEBUG/marker once its frequency is gauged on devnet-5.
+
+**Verify in the sweep (likely further gaps):** the §2 chosen vote index (EMPTY=0/FULL=1) at GloasBeaconVote build (`committee.go:~1062`); proposer-preferences pinned values (dependent_root / fee_recipient / target_gas_limit); any other metric-only ePBS fact.
+**NOT gaps (already DEBUG):** BN requests (`CL request done` + `route_name`), duty fetch/emit, `🔧 executing validator duty`, failures (Warn), abstain/skip, reorg-refresh.
 
 **Approach:** derive the hit-list fixes from `IntervalDuration`/the Gloas deadline (one fork-scaling source of truth), matching how the §1 deadlines already work.
