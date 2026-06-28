@@ -344,6 +344,12 @@ func (r *proposerPreferencesSlotRunner) executeDuty(ctx context.Context, logger 
 	// dependent_root, fee recipient, gas limit) reach quorum.
 	r.proposerPreferences = preferences
 
+	logger.Debug("built proposer preferences",
+		fields.Slot(proposalSlot),
+		zap.String("dependent_root", preferences.DependentRoot.String()),
+		fields.FeeRecipient(preferences.FeeRecipient[:]),
+		zap.Uint64("target_gas_limit", preferences.TargetGasLimit))
+
 	msg, err := signBeaconObject(ctx, r, r.NetworkConfig, validatorDuty, preferences, proposalSlot, phase0.DomainType(spectypes.DomainProposerPreferences))
 	if err != nil {
 		return fmt.Errorf("could not sign proposer preferences: %w", err)
