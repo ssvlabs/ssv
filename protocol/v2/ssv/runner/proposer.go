@@ -69,7 +69,7 @@ type ProposerRunner struct {
 	// startEnvelopeDuty starts the §6 envelope-signing duty for a slot, called after a self-build §4
 	// block is published. Injected by the controller; nil pre-Gloas / when the envelope runner is absent.
 	// It must dispatch async with a node-scoped context: the caller runs on the proposer's post-consensus
-	// path, whose context is cancelled once the block duty ends.
+	// path, whose context is canceled once the block duty ends.
 	startEnvelopeDuty func(slot phase0.Slot)
 }
 

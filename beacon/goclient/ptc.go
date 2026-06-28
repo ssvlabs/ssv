@@ -150,7 +150,7 @@ func ptcDo(ctx context.Context, httpClient *http.Client, method, url string, bod
 	if err != nil {
 		return fmt.Errorf("%s %s: %w", method, url, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {

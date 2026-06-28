@@ -85,7 +85,7 @@ func gloasOctetStreamHTTP(ctx context.Context, method, url string, body []byte) 
 	if err != nil {
 		return nil, fmt.Errorf("%s %s: %w", method, url, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {

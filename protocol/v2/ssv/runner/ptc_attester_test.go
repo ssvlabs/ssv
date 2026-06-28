@@ -23,7 +23,7 @@ func TestNewPTCAttesterRunner_RequiresSingleShare(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
-	require.Equal(t, spectypes.RolePTCAttester, r.(*PTCAttesterRunner).BaseRunner.RunnerRoleType)
+	require.Equal(t, spectypes.RolePTCAttester, r.(*PTCAttesterRunner).RunnerRoleType)
 }
 
 // The runner validates and aggregates incoming partial signatures against its own frozen

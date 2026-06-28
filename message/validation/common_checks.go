@@ -168,6 +168,12 @@ func (mv *messageValidator) validateBeaconDuty(
 ) error {
 	epoch := mv.netCfg.EstimatedEpochAtSlot(slot)
 
+	// The non-committee role checks below index indices[0]; reject a message carrying no validator
+	// indices (every duty has at least one validator).
+	if len(indices) == 0 {
+		return ErrNoValidators
+	}
+
 	// Rule: For a proposal duty message, we check if the validator is assigned to it
 	if role == spectypes.RoleProposer {
 		// Tolerate missing duties for RANDAO signatures during the first slot of an epoch,
