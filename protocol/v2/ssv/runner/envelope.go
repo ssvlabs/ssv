@@ -264,6 +264,7 @@ func (r *EnvelopeBuilderRunner) executeDuty(ctx context.Context, logger *zap.Log
 	if err != nil {
 		return fmt.Errorf("produce blinded envelope: %w", err)
 	}
+	logger.Debug("built execution payload envelope", fields.Slot(slot))
 
 	r.measurements.StartConsensus()
 	if err := r.decide(ctx, logger, slot, input, r.ValCheck); err != nil {

@@ -338,11 +338,13 @@ func (b *BaseRunner) watchDutyOutcome(ctx context.Context, logger *zap.Logger) {
 
 	report := func(c dutyConclusion) {
 		recordDutyOutcome(ctx, b.GetRole(), c.outcome)
-		if c.outcome == dutyOutcomeFailed {
+		switch c.outcome {
+		case dutyOutcomeFailed:
 			logger.Warn("⚠️ duty failed", zap.Error(c.reason))
-		}
-		if c.outcome == dutyOutcomeStuck {
+		case dutyOutcomeStuck:
 			logger.Warn("⚠️ duty did not complete before slot end (likely stuck)")
+		case dutyOutcomeSucceeded, dutyOutcomeNotRequired:
+			logger.Debug("duty concluded", zap.String("outcome", string(c.outcome)))
 		}
 	}
 
