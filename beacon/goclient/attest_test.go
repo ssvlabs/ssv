@@ -19,6 +19,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/utils/hashmap"
 )
 
@@ -886,4 +887,22 @@ func TestVerifyAndRefetchIfStale_ContextCancelledDuringDelay(t *testing.T) {
 	require.Equal(t, staleData, result, "should return original data when canceled during delay")
 	require.True(t, stale, "data is stale when context canceled")
 	require.False(t, fetchCalled, "should not have called fetch when canceled during delay")
+}
+
+// scaleToAttestationWindow keeps fetch budgets proportional to the attestation window: unchanged
+// pre-Gloas (1/3 of the slot), x3/4 from Gloas (1/4 of the slot).
+func TestScaleToAttestationWindow(t *testing.T) {
+	const gloasEpoch = 5
+	netCfg := networkconfig.TestNetworkWithGloas(gloasEpoch)
+	gc := &GoClient{beaconConfig: netCfg.Beacon}
+
+	preGloasSlot := phase0.Slot(uint64(gloasEpoch-1) * netCfg.SlotsPerEpoch)
+	gloasSlot := phase0.Slot(uint64(gloasEpoch) * netCfg.SlotsPerEpoch)
+
+	// Pre-Gloas (1/3 window): unchanged.
+	require.Equal(t, 2*time.Second, gc.scaleToAttestationWindow(2*time.Second, preGloasSlot))
+	require.Equal(t, 5*time.Second, gc.scaleToAttestationWindow(5*time.Second, preGloasSlot))
+	// Gloas (1/4 window): x3/4.
+	require.Equal(t, 1500*time.Millisecond, gc.scaleToAttestationWindow(2*time.Second, gloasSlot))
+	require.Equal(t, 3750*time.Millisecond, gc.scaleToAttestationWindow(5*time.Second, gloasSlot))
 }
