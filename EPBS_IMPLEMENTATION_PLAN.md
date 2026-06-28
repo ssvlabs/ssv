@@ -449,8 +449,8 @@ The dormant→transition→executing flow is already PROVEN on the local Gloas n
 - **§6 envelope** — builder: [**G4 — produce log gap**] → `✅ published execution payload envelope`; non-builder: `this operator did not build the decided envelope, skipping publication`. (`request{route=*ExecutionPayloadEnvelope}`)
 - **cross-role** — `⚠️ duty failed` / `⚠️ duty did not complete before slot end (likely stuck)`; succeeded/not_required [**G3 — log gap**]. (`ssv.runner.duty.outcome{role×outcome}` — the spine)
 
-### Log-coverage audit — G1–G4 DONE; G5 + sweep remaining
-**Status (done):** G1–G4 shipped as a logs-only commit. Grep: `Gloas (ePBS) fork scheduled` (G1, Info) · `decided gloas block build source`+`self_build` (G2) · `duty concluded`+`outcome` (G3) · `built execution payload envelope` (G4). G5 (PTC non-convergence) deferred until gauged on devnet-5; sweep items (§2 vote index, prefs content) still pending.
+### Log-coverage audit — G1–G4 + sweep DONE; G5 deferred
+**Status (done):** G1–G4 shipped as a logs-only commit. Grep: `Gloas (ePBS) fork scheduled` (G1, Info) · `decided gloas block build source`+`self_build` (G2) · `duty concluded`+`outcome` (G3) · `built execution payload envelope` (G4). G5 (PTC non-convergence) deferred until gauged on devnet-5. Sweep DONE: §2 `built gloas attestation vote`+`payload_status_index`; §5 `built proposer preferences`+`dependent_root`/`fee_recipient`/`target_gas_limit`.
 **Goal:** make the logs-first principle hold across #2901 — every metric-recorded or decision-point ePBS behavior gets a DEBUG+ log; metrics unchanged (viz only).
 **Method:** per ePBS path (the new runners, duty handlers, goclient wrappers, value-checks, fork gates) enumerate behaviors/decisions/outcomes → confirm a DEBUG log carries each → where only a metric (or nothing) does, add a log. No behavior change; logs only.
 
@@ -461,7 +461,7 @@ The dormant→transition→executing flow is already PROVEN on the local Gloas n
 - **G4 — envelope produce/cache.** `produceBlindedEnvelope` (`envelope.go:277`) fetches+caches the heavy envelope unlogged. → DEBUG "building execution payload envelope" (slot, block root, Took).
 - **G5 — PTC non-convergence.** Surfaces only as the generic "likely stuck" (§7 obs note). → distinct DEBUG/marker once its frequency is gauged on devnet-5.
 
-**Verify in the sweep (likely further gaps):** the §2 chosen vote index (EMPTY=0/FULL=1) at GloasBeaconVote build (`committee.go:~1062`); proposer-preferences pinned values (dependent_root / fee_recipient / target_gas_limit); any other metric-only ePBS fact.
+**Sweep (done):** §2 chosen vote index (EMPTY=0/FULL=1) → `built gloas attestation vote`; proposer-preferences pinned values → `built proposer preferences`. Standing check: any other metric-only ePBS fact gets a matching log.
 **NOT gaps (already DEBUG):** BN requests (`CL request done` + `route_name`), duty fetch/emit, `🔧 executing validator duty`, failures (Warn), abstain/skip, reorg-refresh.
 
 **Approach:** derive the hit-list fixes from `IntervalDuration`/the Gloas deadline (one fork-scaling source of truth), matching how the §1 deadlines already work.

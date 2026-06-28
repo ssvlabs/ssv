@@ -1185,6 +1185,9 @@ func (r *CommitteeRunner) executeDuty(ctx context.Context, logger *zap.Logger, d
 		}
 		input = gloasVote
 		r.ValCheck = ssv.NewGloasVoteChecker(r.signer, slot, r.attestingValidators, gloasVote)
+		logger.Debug("built gloas attestation vote",
+			fields.Slot(slot),
+			zap.Uint64("payload_status_index", uint64(attData.Index)))
 	} else {
 		vote := &spectypes.BeaconVote{
 			BlockRoot: attData.BeaconBlockRoot,
