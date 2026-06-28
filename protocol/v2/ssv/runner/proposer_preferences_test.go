@@ -32,7 +32,7 @@ func TestNewProposerPreferencesRunner_RequiresSingleShare(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
-	require.Equal(t, spectypes.RoleProposerPreferences, r.(*ProposerPreferencesRunner).BaseRunner.RunnerRoleType)
+	require.Equal(t, spectypes.RoleProposerPreferences, r.(*ProposerPreferencesRunner).RunnerRoleType)
 }
 
 // Regression for the monotonic ShouldProcessNonBeaconDuty reject (runner.go): a validator can hold
