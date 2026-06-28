@@ -129,10 +129,11 @@ func (gc *GoClient) verifyAndRefetchIfStale(
 	)
 
 	if deadline, ok := ctx.Deadline(); ok {
-		if time.Until(deadline) < minTimeForRetry {
+		minRetry := gc.scaleToAttestationWindow(minTimeForRetry, slot)
+		if time.Until(deadline) < minRetry {
 			logger.Debug("not enough time remaining for retry",
 				zap.Duration("remaining", time.Until(deadline)),
-				zap.Duration("min_required", minTimeForRetry),
+				zap.Duration("min_required", minRetry),
 			)
 			attestationDataRefetchSkippedCounter.Add(ctx, 1)
 			return attData, true
@@ -142,10 +143,10 @@ func (gc *GoClient) verifyAndRefetchIfStale(
 	select {
 	case <-ctx.Done():
 		return attData, true
-	case <-time.After(refetchDelay):
+	case <-time.After(gc.scaleToAttestationWindow(refetchDelay, slot)):
 	}
 
-	refetchCtx, cancel := context.WithTimeout(ctx, refetchTimeout)
+	refetchCtx, cancel := context.WithTimeout(ctx, gc.scaleToAttestationWindow(refetchTimeout, slot))
 	defer cancel()
 
 	newAttData, err := gc.fetchAttestationDataFunc(refetchCtx, slot)
@@ -171,16 +172,31 @@ func (gc *GoClient) verifyAndRefetchIfStale(
 	return newAttData, true
 }
 
+// scaleToAttestationWindow scales a fetch budget calibrated for the pre-Gloas attestation window
+// (one interval = 1/3 of the slot) to the slot's actual window: unchanged pre-Gloas, x3/4 from Gloas
+// (the window shrinks to 1/4 of the slot, ~4s->3s on mainnet). BN response timings — what the budget
+// waits on — are assumed fork-independent, so the budget tracks the window. Integer math (no float
+// rounding): base * 3 / intervalsPerSlot.
+func (gc *GoClient) scaleToAttestationWindow(base time.Duration, slot phase0.Slot) time.Duration {
+	cfg := gc.getBeaconConfig()
+	if cfg == nil {
+		return base // config not loaded yet (pre-init) — no scaling, i.e. pre-Gloas behavior
+	}
+	const preGloasIntervalsPerSlot = 3
+	intervalsPerSlot := int64(cfg.SlotDuration / cfg.IntervalDuration(slot)) // 3 pre-Gloas, 4 from Gloas
+	return base * preGloasIntervalsPerSlot / time.Duration(intervalsPerSlot)
+}
+
 func (gc *GoClient) weightedAttestationData(ctx context.Context, slot phase0.Slot) (*phase0.AttestationData, error) {
 	logger := gc.log.With(fields.Slot(slot), weightedAttestationDataRequestIDField(uuid.New()))
 	// We have two timeouts: a soft timeout and a hard timeout.
 	// At the soft timeout, we return if we have any responses so far.
 	// At the hard timeout, we return unconditionally.
 	// The soft timeout is half the duration of the hard timeout.
-	ctx, cancel := context.WithTimeout(ctx, gc.weightedAttestationDataHardTimeout)
+	ctx, cancel := context.WithTimeout(ctx, gc.scaleToAttestationWindow(gc.weightedAttestationDataHardTimeout, slot))
 	defer cancel()
 
-	softCtx, softCancel := context.WithTimeout(ctx, gc.weightedAttestationDataSoftTimeout)
+	softCtx, softCancel := context.WithTimeout(ctx, gc.scaleToAttestationWindow(gc.weightedAttestationDataSoftTimeout, slot))
 	defer softCancel()
 
 	started := time.Now()
@@ -411,7 +427,7 @@ func (gc *GoClient) scoreAttestationData(ctx context.Context,
 		With(zap.Float64("base_score", score)).
 		Debug("base score was set. Fetching slot for block root")
 
-	ctx, cancel := context.WithTimeout(ctx, gc.weightedAttestationDataSoftTimeout/2)
+	ctx, cancel := context.WithTimeout(ctx, gc.scaleToAttestationWindow(gc.weightedAttestationDataSoftTimeout, attestationData.Slot)/2)
 	defer cancel()
 
 	ticker := time.NewTicker(time.Millisecond * 100)
@@ -423,7 +439,7 @@ func (gc *GoClient) scoreAttestationData(ctx context.Context,
 	)
 
 	for {
-		slot, err := gc.blockRootToSlot(ctx, client, attestationData.BeaconBlockRoot, logger)
+		slot, err := gc.blockRootToSlot(ctx, client, attestationData.BeaconBlockRoot, attestationData.Slot, logger)
 		if err == nil {
 			// Increase score based on the nearness of the head slot.
 			denominator := float64(1 + attestationData.Slot - slot)
@@ -466,7 +482,7 @@ func (gc *GoClient) scoreAttestationData(ctx context.Context,
 	}
 }
 
-func (gc *GoClient) blockRootToSlot(ctx context.Context, client Client, root phase0.Root, logger *zap.Logger) (phase0.Slot, error) {
+func (gc *GoClient) blockRootToSlot(ctx context.Context, client Client, root phase0.Root, attSlot phase0.Slot, logger *zap.Logger) (phase0.Slot, error) {
 	cacheResult := gc.blockRootToSlotCache.Get(root)
 	if cacheResult != nil {
 		cachedSlot := cacheResult.Value()
@@ -479,7 +495,7 @@ func (gc *GoClient) blockRootToSlot(ctx context.Context, client Client, root pha
 
 	logger.Debug("slot was not found in cache, fetching from the client")
 
-	timeoutContext, cancel := context.WithTimeout(ctx, gc.weightedAttestationDataSoftTimeout/4)
+	timeoutContext, cancel := context.WithTimeout(ctx, gc.scaleToAttestationWindow(gc.weightedAttestationDataSoftTimeout, attSlot)/4)
 	defer cancel()
 
 	blockResponse, err := client.BeaconBlockHeader(timeoutContext, &api.BeaconBlockHeaderOpts{
