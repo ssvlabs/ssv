@@ -269,8 +269,8 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 
 // gloasProposalInput fetches the Gloas (ePBS) block this operator would propose and wraps it as the
 // QBFT consensus value. The block carries only the execution-payload bid (the payload ships in the §6
-// envelope), so unlike the pre-Gloas path there is no blinding; the marshaled block is cached so
-// post-consensus can detect whether this operator built the decided block.
+// envelope), so unlike the pre-Gloas path there is no blinding — the marshaled block is the QBFT
+// consensus value (DataSSZ) directly.
 func (r *ProposerRunner) gloasProposalInput(ctx context.Context, logger *zap.Logger, duty *spectypes.ValidatorDuty, randaoReveal []byte) (*spectypes.ProposerConsensusData, error) {
 	start := time.Now()
 	block, err := r.GetBeaconNode().GetGloasBeaconBlock(ctx, duty.Slot, r.graffiti, randaoReveal)
@@ -521,9 +521,10 @@ func (r *ProposerRunner) finishSubmittedProposal(ctx context.Context, logger *za
 
 // submitGloasProposal publishes the decided Gloas (ePBS) block, then on the self-build path starts the §6
 // envelope-signing duty. Every operator submits the decided block — the ePBS block is bid-only so all hold
-// it, and submission is idempotent at the BN by root, keeping the pre-Gloas all-submit redundancy. The block
-// is decoded up front because every operator needs its bid for the self-build check; the envelope trigger
-// fires on every operator and dispatches async, so it never delays the block.
+// it, keeping the pre-Gloas all-submit redundancy. That relies on the BN deduping duplicate submissions by
+// root (battle-tested pre-Gloas; still to be confirmed against a real Gloas BN). The block is decoded up
+// front because every operator needs its bid for the self-build check; the envelope trigger fires on every
+// operator and dispatches async, so it never delays the block.
 func (r *ProposerRunner) submitGloasProposal(ctx context.Context, logger *zap.Logger, span trace.Span, cd *spectypes.ProposerConsensusData, sig phase0.BLSSignature) error {
 	block, err := gloas.DecodeBeaconBlock(cd.DataSSZ)
 	if err != nil {
