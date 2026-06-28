@@ -521,6 +521,10 @@ func (r *ProposerRunner) submitGloasProposal(ctx context.Context, logger *zap.Lo
 		return fmt.Errorf("could not decode decided gloas block: %w", err)
 	}
 
+	logger.Debug("decided gloas block build source",
+		fields.Slot(cd.Duty.Slot),
+		zap.Bool("self_build", selfBuild(block)))
+
 	var finishErr error
 	start := time.Now()
 	signedBlock := &gloas.SignedBeaconBlock{Message: block, Signature: sig}
