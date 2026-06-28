@@ -274,6 +274,12 @@ func (gc *GoClient) getForkData(specResponse map[string]any) (map[spec.DataVersi
 		}
 	}
 
+	if gloasEpoch == FarFutureEpoch {
+		gc.log.Debug("Gloas (ePBS) fork not scheduled by the beacon node")
+	} else {
+		gc.log.Info("Gloas (ePBS) fork scheduled", zap.Uint64("epoch", uint64(gloasEpoch)))
+	}
+
 	forkEpochs := map[spec.DataVersion]phase0.Fork{
 		spec.DataVersionPhase0: {
 			PreviousVersion: genesisForkVersion,
