@@ -328,7 +328,7 @@ type dutyConclusion struct {
 // previous duty's watcher (if still pending) reports its own duty and is reaped by its own timer.
 //
 // The deadline is the end of the current wall-clock slot rather than duty.Slot's end because some
-// duties are stamped with a slot in the past (a voluntary-exit envelope carries blockSlot+4 but
+// duties are stamped with a slot in the past (a voluntary-exit duty carries blockSlot+4 but
 // executes at blockSlot+12); for beacon duties the two coincide.
 func (b *BaseRunner) watchDutyOutcome(ctx context.Context, logger *zap.Logger) {
 	concluded := make(chan dutyConclusion, 1)

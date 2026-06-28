@@ -32,12 +32,8 @@ var CutOffRound specqbft.Round = specqbft.Round(specqbft.CutoffRound)
 // roundTimeoutForRound returns the time-into-slot at which the given round will time out
 // (i.e. transition to round+1) for the given role:
 //
-//	Round 1     ends at  headStart + 1 * quick
-//	Round 2     ends at  headStart + 2 * quick
-//	...
-//	Round T     ends at  headStart + T * quick               (T = quickThreshold)
-//	Round T+1   ends at  headStart + T * quick + 1 * slow
-//	Round T+2   ends at  headStart + T * quick + 2 * slow
+//	Round r <= T:  headStart + r * quick
+//	Round r >  T:  headStart + T * quick + (r - T) * slow     (T = quickThreshold)
 //
 // Every role has its own dedicated headStart duration.
 func roundTimeoutForRound(role spectypes.RunnerRole, intervalDuration time.Duration, round specqbft.Round) time.Duration {
