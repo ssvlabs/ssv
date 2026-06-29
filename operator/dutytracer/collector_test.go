@@ -1560,6 +1560,122 @@ func TestCollector_lateMessage(t *testing.T) {
 	})
 }
 
+// buildInFlightLateMsg returns a committee message whose trace is already marked
+// in-flight on c, so collect() returns errInFlight and collectLateMessage stays in
+// its retry loop until ctx is canceled (or the retries exhaust ~3s later) — giving
+// a late-collect goroutine that is reliably still running.
+func buildInFlightLateMsg(c *Collector) *queue.SSVMessage {
+	msgID := spectypes.NewMsgID(spectypes.DomainType{1}, []byte{1}, spectypes.RoleCommittee)
+	var committeeID spectypes.CommitteeID
+	copy(committeeID[:], msgID.GetDutyExecutorID()[16:])
+	c.inFlightCommittee.Set(committeeTraceKey{id: committeeID, role: spectypes.RoleCommittee}, struct{}{})
+	c.lastEvictedSlot.Store(uint64(1))
+	return &queue.SSVMessage{
+		SSVMessage: &spectypes.SSVMessage{
+			MsgType: spectypes.SSVConsensusMsgType,
+			MsgID:   spectypes.MessageID{1},
+		},
+		Body: &specqbft.Message{
+			Height:     1,
+			MsgType:    specqbft.RoundChangeMsgType,
+			Identifier: msgID[:],
+		},
+	}
+}
+
+// TestCollector_stopLateCollect covers the shutdown coordination between
+// collectLateAsync (which Collect uses to retry late messages off the hot path) and
+// stopLateCollect (which Start calls once ctx is canceled, before returning, so the
+// caller can close the DB without racing a late write).
+func TestCollector_stopLateCollect(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	vstore := registrystoragemocks.NewMockValidatorStore(ctrl)
+	dutyStore := new(mockDutyTraceStore)
+
+	newCollector := func() *Collector {
+		return New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.Beacon, nil, nil)
+	}
+
+	t.Run("waits for in-flight late goroutine", func(t *testing.T) {
+		c := newCollector()
+		ctx, cancel := context.WithCancel(t.Context())
+		defer cancel()
+
+		// collectLateAsync does lateWG.Add(1) synchronously, so the retry goroutine
+		// is tracked by the time this returns. It stays in-flight until we cancel.
+		c.collectLateAsync(ctx, buildInFlightLateMsg(c), nil)
+
+		stopped := make(chan struct{})
+		go func() {
+			c.stopLateCollect()
+			close(stopped)
+		}()
+
+		// stopLateCollect must block while the late goroutine is still running.
+		select {
+		case <-stopped:
+			t.Fatal("stopLateCollect returned before the in-flight late goroutine finished")
+		case <-time.After(200 * time.Millisecond):
+		}
+
+		cancel() // release the late goroutine
+
+		select {
+		case <-stopped:
+		case <-time.After(5 * time.Second):
+			t.Fatal("stopLateCollect did not return after the late goroutine exited")
+		}
+	})
+
+	t.Run("drops late collects after close", func(t *testing.T) {
+		c := newCollector()
+		c.stopLateCollect() // begin shutdown with no in-flight work
+
+		ctx, cancel := context.WithCancel(t.Context())
+		defer cancel()
+
+		// A spawn after close must be dropped, not tracked — otherwise it could
+		// outlive (and write to) a closed DB. Were it spawned, this in-flight message
+		// would keep a goroutine busy ~3s and the join below would time out.
+		c.collectLateAsync(ctx, buildInFlightLateMsg(c), nil)
+
+		joined := make(chan struct{})
+		go func() {
+			c.stopLateCollect()
+			close(joined)
+		}()
+		select {
+		case <-joined:
+		case <-time.After(2 * time.Second):
+			t.Fatal("collectLateAsync spawned a tracked goroutine after close")
+		}
+	})
+
+	t.Run("concurrent spawns race shutdown", func(t *testing.T) {
+		c := newCollector()
+		ctx := t.Context()
+		// A bodyless consensus message returns from collect() immediately, keeping
+		// this focused on the lateWG.Add/Wait coordination that -race validates.
+		msg := &queue.SSVMessage{
+			SSVMessage: &spectypes.SSVMessage{
+				MsgType: spectypes.SSVConsensusMsgType,
+				MsgID:   spectypes.MessageID{1},
+			},
+		}
+
+		var spawners sync.WaitGroup
+		for i := 0; i < 200; i++ {
+			spawners.Add(1)
+			go func() {
+				defer spawners.Done()
+				c.collectLateAsync(ctx, msg, nil)
+			}()
+		}
+		c.stopLateCollect() // races the spawners; -race validates Add against Wait
+		spawners.Wait()
+	})
+}
+
 func TestEvict(t *testing.T) {
 	t.Run("evict updates last evicted slot", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
