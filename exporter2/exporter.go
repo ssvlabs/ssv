@@ -14,8 +14,8 @@ import (
 	"github.com/ssvlabs/ssv/exporter"
 	"github.com/ssvlabs/ssv/exporter/rolemask"
 	"github.com/ssvlabs/ssv/exporter/store"
+	dutytracer "github.com/ssvlabs/ssv/exporter2/dutytracer"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
-	dutytracer "github.com/ssvlabs/ssv/operator/dutytracer"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 )
 

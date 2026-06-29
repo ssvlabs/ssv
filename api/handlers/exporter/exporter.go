@@ -16,7 +16,7 @@ import (
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 
-	dutytracer "github.com/ssvlabs/ssv/operator/dutytracer"
+	dutytracer "github.com/ssvlabs/ssv/exporter2/dutytracer"
 )
 
 type Exporter struct {

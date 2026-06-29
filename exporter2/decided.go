@@ -9,8 +9,8 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
+	dutytracer "github.com/ssvlabs/ssv/exporter2/dutytracer"
 	"github.com/ssvlabs/ssv/ibft/storage"
-	dutytracer "github.com/ssvlabs/ssv/operator/dutytracer"
 )
 
 // TraceDecidedsCore contains the core logic for TraceDecideds without any HTTP concerns.

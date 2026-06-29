@@ -1,4 +1,4 @@
-package validator
+package dutytracer
 
 import (
 	"fmt"
@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	observabilityName      = "github.com/ssvlabs/ssv/operator/dutytracer"
+	observabilityName      = "github.com/ssvlabs/ssv/exporter2/dutytracer"
 	observabilityNamespace = "ssv.dutytracer"
 )
 

@@ -9,9 +9,9 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/exporter/api"
+	dutytracer "github.com/ssvlabs/ssv/exporter2/dutytracer"
 	qbftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/observability/log/fields"
-	dutytracer "github.com/ssvlabs/ssv/operator/dutytracer"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 )

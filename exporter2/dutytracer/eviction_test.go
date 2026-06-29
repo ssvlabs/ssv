@@ -1,6 +1,6 @@
 //go:build lfs
 
-package validator
+package dutytracer
 
 import (
 	"encoding/hex"

@@ -1,4 +1,4 @@
-package validator
+package dutytracer
 
 import (
 	"errors"
