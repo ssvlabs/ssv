@@ -16,8 +16,8 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/exporter"
-	"github.com/ssvlabs/ssv/exporter/store"
+	"github.com/ssvlabs/ssv/exporter2/store"
+	"github.com/ssvlabs/ssv/exporter2/traces"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
@@ -101,7 +101,7 @@ func readByteSlices(file *os.File) (result []*queue.SSVMessage, err error) {
 			return nil, fmt.Errorf("read disk msg: %w", err)
 		}
 
-		dataMsg := new(exporter.DiskMsg)
+		dataMsg := new(traces.DiskMsg)
 		if err := dataMsg.UnmarshalSSZ(diskMsgBytes); err != nil {
 			return nil, fmt.Errorf("unmarshal disk msg: %w", err)
 		}

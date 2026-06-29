@@ -14,8 +14,8 @@ import (
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 
-	"github.com/ssvlabs/ssv/exporter"
-	"github.com/ssvlabs/ssv/exporter/store"
+	"github.com/ssvlabs/ssv/exporter2/store"
+	"github.com/ssvlabs/ssv/exporter2/traces"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
@@ -145,7 +145,7 @@ func TestCommitteeDutyStore(t *testing.T) {
 
 	dutyTrace3, _, err := collector.getOrCreateCommitteeTrace(slot4, committeeID1)
 	require.NoError(t, err)
-	dutyTrace3.Decideds = append(dutyTrace3.Decideds, &exporter.DecidedTrace{
+	dutyTrace3.Decideds = append(dutyTrace3.Decideds, &traces.DecidedTrace{
 		Signers: []spectypes.OperatorID{1},
 	})
 	require.NotNil(t, dutyTrace3)
@@ -158,7 +158,7 @@ func TestCommitteeDutyStore(t *testing.T) {
 
 	dutyTrace5, _, err := collector.getOrCreateCommitteeTrace(slot7, committeeID1)
 	require.NoError(t, err)
-	dutyTrace5.Decideds = append(dutyTrace5.Decideds, &exporter.DecidedTrace{
+	dutyTrace5.Decideds = append(dutyTrace5.Decideds, &traces.DecidedTrace{
 		Signers: []spectypes.OperatorID{1},
 	})
 	require.NotNil(t, dutyTrace5)
@@ -269,9 +269,9 @@ func TestCommitteeDutyStore(t *testing.T) {
 	require.Nil(t, storedDuty7_2)
 
 	{ // check that sync committee and attester signers are included in decideds
-		dutyTrace5.SyncCommittee = append(dutyTrace5.SyncCommittee, &exporter.SignerData{Signer: 1})
-		dutyTrace5.SyncCommittee = append(dutyTrace5.SyncCommittee, &exporter.SignerData{Signer: 2})
-		dutyTrace5.Attester = append(dutyTrace5.Attester, &exporter.SignerData{Signer: 3})
+		dutyTrace5.SyncCommittee = append(dutyTrace5.SyncCommittee, &traces.SignerData{Signer: 1})
+		dutyTrace5.SyncCommittee = append(dutyTrace5.SyncCommittee, &traces.SignerData{Signer: 2})
+		dutyTrace5.Attester = append(dutyTrace5.Attester, &traces.SignerData{Signer: 3})
 		dd, err := collector.GetCommitteeDecideds(slot7, index1)
 		require.NoError(t, err)
 		require.NotNil(t, dd)
@@ -324,7 +324,7 @@ func TestCommitteeDutyStore_GetAllCommitteeDecideds(t *testing.T) {
 	// Create a new trace
 	dutyTrace, _, err := collector.getOrCreateCommitteeTrace(slot4, committeeID1)
 	require.NoError(t, err)
-	dutyTrace.Decideds = append(dutyTrace.Decideds, &exporter.DecidedTrace{
+	dutyTrace.Decideds = append(dutyTrace.Decideds, &traces.DecidedTrace{
 		Signers: []spectypes.OperatorID{1},
 	})
 	require.NotNil(t, dutyTrace)
@@ -390,7 +390,7 @@ func TestValidatorDutyStore(t *testing.T) {
 	require.NoError(t, err)
 	roleDutyTrace := dutyTrace.getOrCreate(slot4, spectypes.BNRoleProposer)
 	roleDutyTrace.Validator = index1
-	roleDutyTrace.Decideds = append(roleDutyTrace.Decideds, &exporter.DecidedTrace{
+	roleDutyTrace.Decideds = append(roleDutyTrace.Decideds, &traces.DecidedTrace{
 		Signers: []spectypes.OperatorID{1},
 	})
 
@@ -408,7 +408,7 @@ func TestValidatorDutyStore(t *testing.T) {
 	require.NoError(t, err)
 	roleDutyTrace = dutyTrace.getOrCreate(slot7, spectypes.BNRoleProposer)
 	roleDutyTrace.Validator = index1
-	roleDutyTrace.Decideds = append(roleDutyTrace.Decideds, &exporter.DecidedTrace{
+	roleDutyTrace.Decideds = append(roleDutyTrace.Decideds, &traces.DecidedTrace{
 		Signers: []spectypes.OperatorID{5},
 	})
 
@@ -434,9 +434,9 @@ func TestValidatorDutyStore(t *testing.T) {
 
 	// test that decideds include signers in the 'Post' consensus messages
 	roleDutyTrace = dutyTrace.getOrCreate(slot7, spectypes.BNRoleProposer)
-	roleDutyTrace.Post = append(roleDutyTrace.Post, &exporter.PartialSigTrace{Signer: 99})
-	roleDutyTrace.Post = append(roleDutyTrace.Post, &exporter.PartialSigTrace{Signer: 100})
-	roleDutyTrace.Decideds = append(roleDutyTrace.Decideds, &exporter.DecidedTrace{
+	roleDutyTrace.Post = append(roleDutyTrace.Post, &traces.PartialSigTrace{Signer: 99})
+	roleDutyTrace.Post = append(roleDutyTrace.Post, &traces.PartialSigTrace{Signer: 100})
+	roleDutyTrace.Decideds = append(roleDutyTrace.Decideds, &traces.DecidedTrace{
 		Signers: []spectypes.OperatorID{100},
 	})
 	dd, err = collector.GetValidatorDecideds(spectypes.BNRoleProposer, slot7, []phase0.ValidatorIndex{index2})

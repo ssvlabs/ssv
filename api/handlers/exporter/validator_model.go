@@ -10,8 +10,8 @@ import (
 	"github.com/hashicorp/go-multierror"
 
 	"github.com/ssvlabs/ssv/api"
-	"github.com/ssvlabs/ssv/exporter"
 	exporter2 "github.com/ssvlabs/ssv/exporter2"
+	"github.com/ssvlabs/ssv/exporter2/traces"
 )
 
 // ValidatorTracesRequest represents the filter parameters accepted by the
@@ -103,7 +103,7 @@ type ValidatorTrace struct {
 	Proposal string `json:"proposalData,omitempty" format:"hex"`
 }
 
-func toValidatorTrace(t *exporter.ValidatorDutyTrace) ValidatorTrace {
+func toValidatorTrace(t *traces.ValidatorDutyTrace) ValidatorTrace {
 	return ValidatorTrace{
 		Slot:      t.Slot,
 		Role:      t.Role.String(),

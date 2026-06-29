@@ -1,4 +1,4 @@
-package exporter
+package traces
 
 import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"

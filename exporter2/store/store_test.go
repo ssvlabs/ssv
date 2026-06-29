@@ -10,9 +10,9 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/exporter"
-	"github.com/ssvlabs/ssv/exporter/rolemask"
-	store "github.com/ssvlabs/ssv/exporter/store"
+	"github.com/ssvlabs/ssv/exporter2/rolemask"
+	store "github.com/ssvlabs/ssv/exporter2/store"
+	"github.com/ssvlabs/ssv/exporter2/traces"
 	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
@@ -105,7 +105,7 @@ func TestSaveCommitteeDuties(t *testing.T) {
 	require.NoError(t, err)
 	defer db.Close()
 
-	traces := []*exporter.CommitteeDutyTrace{makeCTrace(1, 'a'), makeCTrace(1, 'b')}
+	traces := []*traces.CommitteeDutyTrace{makeCTrace(1, 'a'), makeCTrace(1, 'b')}
 
 	store := store.New(db)
 	require.NoError(t, store.SaveCommitteeDuties(phase0.Slot(1), traces))
@@ -170,7 +170,7 @@ func TestSaveValidatorDuties(t *testing.T) {
 	trace2 := makeVTrace(2)
 
 	store := store.New(db)
-	require.NoError(t, store.SaveValidatorDuties([]*exporter.ValidatorDutyTrace{trace1, trace2}))
+	require.NoError(t, store.SaveValidatorDuties([]*traces.ValidatorDutyTrace{trace1, trace2}))
 
 	trace, err := store.GetValidatorDuty(phase0.Slot(1), spectypes.BNRoleAttester, phase0.ValidatorIndex(39393))
 	require.NoError(t, err)
@@ -305,23 +305,23 @@ func TestGetScheduledRoleMissing(t *testing.T) {
 	assert.ErrorIs(t, err, store.ErrNotFound)
 }
 
-func makeVTrace(slot phase0.Slot) *exporter.ValidatorDutyTrace {
-	return &exporter.ValidatorDutyTrace{
+func makeVTrace(slot phase0.Slot) *traces.ValidatorDutyTrace {
+	return &traces.ValidatorDutyTrace{
 		Slot:      slot,
 		Role:      spectypes.BNRoleAttester,
 		Validator: phase0.ValidatorIndex(39393),
 	}
 }
 
-func makeCTrace(slot phase0.Slot, committee byte) *exporter.CommitteeDutyTrace {
-	return &exporter.CommitteeDutyTrace{
+func makeCTrace(slot phase0.Slot, committee byte) *traces.CommitteeDutyTrace {
+	return &traces.CommitteeDutyTrace{
 		Slot:        slot,
 		CommitteeID: [32]byte{committee},
 		OperatorIDs: nil,
 	}
 }
 
-func partialSigTracesAreEqual(a []*exporter.PartialSigTrace, b []*exporter.PartialSigTrace) bool {
+func partialSigTracesAreEqual(a []*traces.PartialSigTrace, b []*traces.PartialSigTrace) bool {
 	if len(a) != len(b) {
 		return false
 	}
@@ -336,7 +336,7 @@ func partialSigTracesAreEqual(a []*exporter.PartialSigTrace, b []*exporter.Parti
 	return true
 }
 
-func partialSigTraceAreEqual(a *exporter.PartialSigTrace, b *exporter.PartialSigTrace) bool {
+func partialSigTraceAreEqual(a *traces.PartialSigTrace, b *traces.PartialSigTrace) bool {
 	if a == nil && b == nil {
 		return true
 	}
@@ -356,7 +356,7 @@ func partialSigTraceAreEqual(a *exporter.PartialSigTrace, b *exporter.PartialSig
 	return true
 }
 
-func qBFTTracesAreEqual(a []*exporter.QBFTTrace, b []*exporter.QBFTTrace) bool {
+func qBFTTracesAreEqual(a []*traces.QBFTTrace, b []*traces.QBFTTrace) bool {
 	if len(a) != len(b) {
 		return false
 	}
@@ -371,7 +371,7 @@ func qBFTTracesAreEqual(a []*exporter.QBFTTrace, b []*exporter.QBFTTrace) bool {
 	return true
 }
 
-func qBFTTraceAreEqual(a *exporter.QBFTTrace, b *exporter.QBFTTrace) bool {
+func qBFTTraceAreEqual(a *traces.QBFTTrace, b *traces.QBFTTrace) bool {
 	if a == nil && b == nil {
 		return true
 	}
@@ -393,7 +393,7 @@ func qBFTTraceAreEqual(a *exporter.QBFTTrace, b *exporter.QBFTTrace) bool {
 	return true
 }
 
-func proposalTraceAreEqual(a *exporter.ProposalTrace, b *exporter.ProposalTrace) bool {
+func proposalTraceAreEqual(a *traces.ProposalTrace, b *traces.ProposalTrace) bool {
 	if a == nil && b == nil {
 		return true
 	}
@@ -412,7 +412,7 @@ func proposalTraceAreEqual(a *exporter.ProposalTrace, b *exporter.ProposalTrace)
 	return true
 }
 
-func roundChangeTracesAreEqual(a []*exporter.RoundChangeTrace, b []*exporter.RoundChangeTrace) bool {
+func roundChangeTracesAreEqual(a []*traces.RoundChangeTrace, b []*traces.RoundChangeTrace) bool {
 	if len(a) != len(b) {
 		return false
 	}
@@ -427,7 +427,7 @@ func roundChangeTracesAreEqual(a []*exporter.RoundChangeTrace, b []*exporter.Rou
 	return true
 }
 
-func roundChangeTraceAreEqual(a *exporter.RoundChangeTrace, b *exporter.RoundChangeTrace) bool {
+func roundChangeTraceAreEqual(a *traces.RoundChangeTrace, b *traces.RoundChangeTrace) bool {
 	if a == nil && b == nil {
 		return true
 	}
@@ -446,7 +446,7 @@ func roundChangeTraceAreEqual(a *exporter.RoundChangeTrace, b *exporter.RoundCha
 	return true
 }
 
-func roundTracesAreEqual(a []*exporter.RoundTrace, b []*exporter.RoundTrace) bool {
+func roundTracesAreEqual(a []*traces.RoundTrace, b []*traces.RoundTrace) bool {
 	if len(a) != len(b) {
 		return false
 	}
@@ -461,7 +461,7 @@ func roundTracesAreEqual(a []*exporter.RoundTrace, b []*exporter.RoundTrace) boo
 	return true
 }
 
-func roundTraceAreEqual(a *exporter.RoundTrace, b *exporter.RoundTrace) bool {
+func roundTraceAreEqual(a *traces.RoundTrace, b *traces.RoundTrace) bool {
 	if a == nil && b == nil {
 		return true
 	}
@@ -486,7 +486,7 @@ func roundTraceAreEqual(a *exporter.RoundTrace, b *exporter.RoundTrace) bool {
 	return true
 }
 
-func decidedTracesAreEqual(a []*exporter.DecidedTrace, b []*exporter.DecidedTrace) bool {
+func decidedTracesAreEqual(a []*traces.DecidedTrace, b []*traces.DecidedTrace) bool {
 	if len(a) != len(b) {
 		return false
 	}
@@ -501,7 +501,7 @@ func decidedTracesAreEqual(a []*exporter.DecidedTrace, b []*exporter.DecidedTrac
 	return true
 }
 
-func decidedTraceAreEqual(a *exporter.DecidedTrace, b *exporter.DecidedTrace) bool {
+func decidedTraceAreEqual(a *traces.DecidedTrace, b *traces.DecidedTrace) bool {
 	if a == nil && b == nil {
 		return true
 	}
@@ -525,7 +525,7 @@ func decidedTraceAreEqual(a *exporter.DecidedTrace, b *exporter.DecidedTrace) bo
 	return true
 }
 
-func consensusTracesAreEqual(a *exporter.ConsensusTrace, b *exporter.ConsensusTrace) bool {
+func consensusTracesAreEqual(a *traces.ConsensusTrace, b *traces.ConsensusTrace) bool {
 	if a == nil && b == nil {
 		return true
 	}
@@ -541,7 +541,7 @@ func consensusTracesAreEqual(a *exporter.ConsensusTrace, b *exporter.ConsensusTr
 	return true
 }
 
-func validatorDutiesAreEqual(a *exporter.ValidatorDutyTrace, b *exporter.ValidatorDutyTrace) bool {
+func validatorDutiesAreEqual(a *traces.ValidatorDutyTrace, b *traces.ValidatorDutyTrace) bool {
 	if a == nil && b == nil {
 		return true
 	}
@@ -576,7 +576,7 @@ func validatorDutiesAreEqual(a *exporter.ValidatorDutyTrace, b *exporter.Validat
 	return true
 }
 
-func committeeDutiesAreEqual(a, b *exporter.CommitteeDutyTrace) bool {
+func committeeDutiesAreEqual(a, b *traces.CommitteeDutyTrace) bool {
 	if a == nil && b == nil {
 		return true
 	}
@@ -611,7 +611,7 @@ func committeeDutiesAreEqual(a, b *exporter.CommitteeDutyTrace) bool {
 	return true
 }
 
-func compareConsensusTrace(a, b *exporter.ConsensusTrace) bool {
+func compareConsensusTrace(a, b *traces.ConsensusTrace) bool {
 	if a == nil && b == nil {
 		return true
 	}
@@ -628,7 +628,7 @@ func compareConsensusTrace(a, b *exporter.ConsensusTrace) bool {
 	return true
 }
 
-func compareRoundTraceSlices(a, b []*exporter.RoundTrace) bool {
+func compareRoundTraceSlices(a, b []*traces.RoundTrace) bool {
 	if len(a) != len(b) {
 		return false
 	}
@@ -640,7 +640,7 @@ func compareRoundTraceSlices(a, b []*exporter.RoundTrace) bool {
 	return true
 }
 
-func compareRoundTrace(a, b *exporter.RoundTrace) bool {
+func compareRoundTrace(a, b *traces.RoundTrace) bool {
 	if a == nil && b == nil {
 		return true
 	}
@@ -665,7 +665,7 @@ func compareRoundTrace(a, b *exporter.RoundTrace) bool {
 	return true
 }
 
-func compareProposalTrace(a, b *exporter.ProposalTrace) bool {
+func compareProposalTrace(a, b *traces.ProposalTrace) bool {
 	if a == nil && b == nil {
 		return true
 	}
@@ -684,7 +684,7 @@ func compareProposalTrace(a, b *exporter.ProposalTrace) bool {
 	return true
 }
 
-func compareRoundChangeTraceSlices(a, b []*exporter.RoundChangeTrace) bool {
+func compareRoundChangeTraceSlices(a, b []*traces.RoundChangeTrace) bool {
 	if len(a) != len(b) {
 		return false
 	}
@@ -695,7 +695,7 @@ func compareRoundChangeTraceSlices(a, b []*exporter.RoundChangeTrace) bool {
 	}
 	return true
 }
-func compareRoundChangeTrace(a, b *exporter.RoundChangeTrace) bool {
+func compareRoundChangeTrace(a, b *traces.RoundChangeTrace) bool {
 	if a == nil && b == nil {
 		return true
 	}
@@ -714,7 +714,7 @@ func compareRoundChangeTrace(a, b *exporter.RoundChangeTrace) bool {
 	return true
 }
 
-func compareDecidedTraceSlices(a, b []*exporter.DecidedTrace) bool {
+func compareDecidedTraceSlices(a, b []*traces.DecidedTrace) bool {
 	if len(a) != len(b) {
 		return false
 	}
@@ -726,7 +726,7 @@ func compareDecidedTraceSlices(a, b []*exporter.DecidedTrace) bool {
 	return true
 }
 
-func compareDecidedTrace(a, b *exporter.DecidedTrace) bool {
+func compareDecidedTrace(a, b *traces.DecidedTrace) bool {
 	if a == nil && b == nil {
 		return true
 	}
@@ -748,7 +748,7 @@ func compareDecidedTrace(a, b *exporter.DecidedTrace) bool {
 	return true
 }
 
-func compareQBFTTraceSlices(a, b []*exporter.QBFTTrace) bool {
+func compareQBFTTraceSlices(a, b []*traces.QBFTTrace) bool {
 	if len(a) != len(b) {
 		return false
 	}
@@ -760,7 +760,7 @@ func compareQBFTTraceSlices(a, b []*exporter.QBFTTrace) bool {
 	return true
 }
 
-func compareQBFTTrace(a, b *exporter.QBFTTrace) bool {
+func compareQBFTTrace(a, b *traces.QBFTTrace) bool {
 	if a == nil && b == nil {
 		return true
 	}
@@ -782,7 +782,7 @@ func compareQBFTTrace(a, b *exporter.QBFTTrace) bool {
 	return true
 }
 
-func compareSignerDataSlices(a, b []*exporter.SignerData) bool {
+func compareSignerDataSlices(a, b []*traces.SignerData) bool {
 	if len(a) != len(b) {
 		return false
 	}
@@ -804,7 +804,7 @@ func compareSignerDataSlices(a, b []*exporter.SignerData) bool {
 	return true
 }
 
-func compareSignerData(a, b *exporter.SignerData) bool {
+func compareSignerData(a, b *traces.SignerData) bool {
 	if a == nil && b == nil {
 		return true
 	}

@@ -8,8 +8,8 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/api"
-	"github.com/ssvlabs/ssv/exporter"
 	exporter2 "github.com/ssvlabs/ssv/exporter2"
+	"github.com/ssvlabs/ssv/exporter2/traces"
 )
 
 type CommitteeIDLengthError struct {
@@ -104,7 +104,7 @@ type CommitteeMessage struct {
 	ReceivedTime time.Time `json:"time" format:"date-time"`
 }
 
-func toCommitteeTrace(t *exporter.CommitteeDutyTrace) CommitteeTrace {
+func toCommitteeTrace(t *traces.CommitteeDutyTrace) CommitteeTrace {
 	return CommitteeTrace{
 		// consensus trace
 		Slot:          uint64(t.Slot),
@@ -117,7 +117,7 @@ func toCommitteeTrace(t *exporter.CommitteeDutyTrace) CommitteeTrace {
 	}
 }
 
-func toCommitteePost(m []*exporter.SignerData) (out []CommitteeMessage) {
+func toCommitteePost(m []*traces.SignerData) (out []CommitteeMessage) {
 	for _, mt := range m {
 		out = append(out, CommitteeMessage{
 			Signer:       mt.Signer,
