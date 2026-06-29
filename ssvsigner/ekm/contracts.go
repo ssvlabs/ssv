@@ -48,4 +48,8 @@ type BeaconNetwork interface {
 	EstimatedEpochAtSlot(slot phase0.Slot) phase0.Epoch
 	EstimatedSlotAtTime(time time.Time) phase0.Slot
 	BeaconForkAtEpoch(epoch phase0.Epoch) (spec.DataVersion, *phase0.Fork)
+	// ForkAtVersion returns the configured fork for a data version, and whether it exists.
+	// Used to pin a fixed fork (Capella for exits per EIP-7044, genesis for registrations)
+	// independently of the current fork.
+	ForkAtVersion(version spec.DataVersion) (phase0.Fork, bool)
 }

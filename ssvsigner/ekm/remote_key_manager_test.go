@@ -13,6 +13,7 @@ import (
 	apiv1capella "github.com/attestantio/go-eth2-client/api/v1/capella"
 	apiv1deneb "github.com/attestantio/go-eth2-client/api/v1/deneb"
 	apiv1electra "github.com/attestantio/go-eth2-client/api/v1/electra"
+	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/capella"
@@ -1444,18 +1445,78 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectAdditionalDomains() {
 	slot := phase0.Slot(123)
 
 	s.Run("SignVoluntaryExit", func() {
+		// Use a post-Capella slot (epoch 6 = Fulu in the test config) so the current
+		// fork differs from Capella — that difference is what makes the EIP-7044
+		// pinning observable. Signing an exit must use the Capella fork regardless.
+		exitSlot := phase0.Slot(6 * testNetCfg.SlotsPerEpoch)
+		exitEpoch := testNetCfg.EstimatedEpochAtSlot(exitSlot)
+
 		voluntaryExit := &phase0.VoluntaryExit{
-			Epoch:          123,
+			Epoch:          exitEpoch,
 			ValidatorIndex: 456,
 		}
 
-		s.client.On("Sign", mock.Anything, pubKey, mock.Anything).Return(expectedSignature, nil).Once()
+		var capturedReq web3signer.SignRequest
+		s.client.On("Sign", mock.Anything, pubKey, mock.Anything).
+			Run(func(args mock.Arguments) {
+				capturedReq = args.Get(2).(web3signer.SignRequest)
+			}).
+			Return(expectedSignature, nil).Once()
 
-		signature, root, err := rm.SignBeaconObject(ctx, voluntaryExit, domain, pubKey, slot, spectypes.DomainVoluntaryExit)
+		signature, root, err := rm.SignBeaconObject(ctx, voluntaryExit, domain, pubKey, exitSlot, spectypes.DomainVoluntaryExit)
 
 		s.NoError(err)
 		s.EqualValues(expectedSignature[:], signature)
 		s.NotEqual([32]byte{}, root)
+
+		// EIP-7044: the exit must be signed with the Capella fork, not the current one.
+		s.Equal(web3signer.TypeVoluntaryExit, capturedReq.Type)
+		s.Require().NotNil(capturedReq.ForkInfo.Fork)
+		capellaFork, ok := testNetCfg.ForkAtVersion(spec.DataVersionCapella)
+		s.Require().True(ok)
+		s.Equal(capellaFork.CurrentVersion, capturedReq.ForkInfo.Fork.CurrentVersion)
+		_, currentFork := testNetCfg.BeaconForkAtEpoch(exitEpoch)
+		s.NotEqual(currentFork.CurrentVersion, capturedReq.ForkInfo.Fork.CurrentVersion)
+
+		s.client.AssertExpectations(s.T())
+	})
+
+	s.Run("SignValidatorRegistration", func() {
+		// Validator registration uses the application-builder domain, fixed to the
+		// genesis fork version regardless of the current fork. Use a post-genesis slot
+		// (epoch 6 = Fulu in the test config) so the current fork differs from genesis;
+		// the request must carry the pinned genesis fork and an empty genesis root.
+		registrationSlot := phase0.Slot(6 * testNetCfg.SlotsPerEpoch)
+
+		registration := &eth2api.ValidatorRegistration{
+			FeeRecipient: bellatrix.ExecutionAddress{1, 2, 3},
+			GasLimit:     30000000,
+			Timestamp:    time.Unix(1700000000, 0),
+			Pubkey:       pubKey,
+		}
+
+		var capturedReq web3signer.SignRequest
+		s.client.On("Sign", mock.Anything, pubKey, mock.Anything).
+			Run(func(args mock.Arguments) {
+				capturedReq = args.Get(2).(web3signer.SignRequest)
+			}).
+			Return(expectedSignature, nil).Once()
+
+		signature, root, err := rm.SignBeaconObject(ctx, registration, domain, pubKey, registrationSlot, spectypes.DomainApplicationBuilder)
+
+		s.NoError(err)
+		s.EqualValues(expectedSignature[:], signature)
+		s.NotEqual([32]byte{}, root)
+
+		s.Equal(web3signer.TypeValidatorRegistration, capturedReq.Type)
+		s.Require().NotNil(capturedReq.ForkInfo.Fork)
+		genesisFork, ok := testNetCfg.ForkAtVersion(spec.DataVersionPhase0)
+		s.Require().True(ok)
+		s.Equal(genesisFork.CurrentVersion, capturedReq.ForkInfo.Fork.CurrentVersion)
+		_, currentFork := testNetCfg.BeaconForkAtEpoch(testNetCfg.EstimatedEpochAtSlot(registrationSlot))
+		s.NotEqual(currentFork.CurrentVersion, capturedReq.ForkInfo.Fork.CurrentVersion)
+		s.Equal(phase0.Root{}, capturedReq.ForkInfo.GenesisValidatorsRoot)
+
 		s.client.AssertExpectations(s.T())
 	})
 

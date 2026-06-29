@@ -166,6 +166,11 @@ func (b *Beacon) BeaconForkAtEpoch(epoch phase0.Epoch) (spec.DataVersion, *phase
 	return version, &fork
 }
 
+func (b *Beacon) ForkAtVersion(version spec.DataVersion) (phase0.Fork, bool) {
+	fork, ok := b.Forks[version]
+	return fork, ok
+}
+
 func (b *Beacon) AssertSame(other *Beacon) error {
 	if b.Name != other.Name {
 		return fmt.Errorf("different Name")
