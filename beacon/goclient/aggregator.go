@@ -141,9 +141,24 @@ func (gc *GoClient) fetchVersionedAggregate(
 	slot phase0.Slot,
 	committeeIndex phase0.CommitteeIndex,
 ) (*spec.VersionedAttestation, spec.DataVersion, error) {
-	root, err := gc.computeAttestationDataRoot(ctx, slot, committeeIndex)
-	if err != nil {
-		return nil, DataVersionNil, errMultiClient(fmt.Errorf("compute attestation root: %w", err), "AggregateAttestation")
+	// Prefer the root of the attestation data this node actually submitted (the cluster-decided
+	// value): the beacon node holds at least our own attestation matching it, so a matching
+	// aggregate must exist. Re-deriving the data locally can yield a root nobody attested with,
+	// which the beacon node answers with a 404 (no matching aggregate).
+	//
+	// NOTE (boole adaptation): fetchVersionedAggregate is shared by both SubmitAggregateSelectionProof
+	// (AggregatorRunner) and GetAggregateAttestation (AggregatorCommitteeRunner). Both paths have the
+	// identical 404 risk, so injecting here fixes both — stage's #2888 only fixed the submit path.
+	root, found := gc.attestedDataRoot(slot, committeeIndex)
+	if !found {
+		// No record of our own attestation (it failed or hasn't landed yet) — fall back to
+		// re-deriving the root from this node's view of the slot. computeAttestationDataRoot
+		// preserves #2900's authoritative-slot fork-gating (BeaconForkAtEpoch(EstimatedEpochAtSlot(slot))).
+		var err error
+		root, err = gc.computeAttestationDataRoot(ctx, slot, committeeIndex)
+		if err != nil {
+			return nil, DataVersionNil, errMultiClient(fmt.Errorf("compute attestation root: %w", err), "AggregateAttestation")
+		}
 	}
 
 	start := time.Now()
