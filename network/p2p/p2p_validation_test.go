@@ -19,7 +19,6 @@ import (
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/sourcegraph/conc/pool"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
@@ -144,24 +143,56 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 		require.NoError(t, vNet.Close())
 	}()
 
-	time.Sleep(1 * time.Second)
+	// Gate broadcasting on a fully-formed mesh: wait until every node's scorer
+	// tracks all nodeCount-1 peers. Until then a broadcast races mesh
+	// formation — messages published before a peer is grafted are never
+	// delivered to it, so never counted — and any score snapshot is partial.
+	// Unlike a fixed sleep this is a monotonic precondition (a peer stays in
+	// the score map once present: RetainScore is ~one epoch, far longer than
+	// this test), so waiting on it is robust rather than racing a wall clock.
+	// Its absence — a snapshot with len != nodeCount-1 — was the test's
+	// intermittent failure.
+	require.Eventually(t, func() bool {
+		for _, node := range vNet.Nodes {
+			ptr := node.PeerScores.Load()
+			if ptr == nil || len(*ptr) != nodeCount-1 {
+				return false
+			}
+		}
+		return true
+	}, 30*time.Second, 100*time.Millisecond, "nodes never meshed: peer scores not populated for all peers")
 
-	// Prepare a pool of broadcasters.
+	// Broadcast continuously rather than in a fixed burst, so the scoring
+	// signal is sustained while we wait for it to settle below. With the mesh
+	// complete every published message is pushed to all mesh peers, so a steady
+	// stream drives each peer's score to its role-determined value and holds it
+	// there — the test no longer has to catch a transient post-burst window.
+	// The broadcasters stop once every observer has latched (or we time out).
 	height := atomic.Int64{}
-	broadcasters := pool.New().WithErrors().WithContext(ctx)
+	broadcastCtx, stopBroadcast := context.WithCancel(ctx)
+	defer stopBroadcast()
+	broadcasters := pool.New().WithErrors().WithContext(broadcastCtx)
 	broadcaster := func(node *VirtualNode, roles ...spectypes.RunnerRole) {
 		broadcasters.Go(func(ctx context.Context) error {
-			for i := 0; i < 12; i++ {
+			for i := 0; ; i++ {
+				if ctx.Err() != nil {
+					return nil // asked to stop
+				}
 				role := roles[i%len(roles)]
 
 				msgID, msg := dummyMsg(t, hex.EncodeToString(shares[rand.Intn(len(shares))].ValidatorPubKey[:]), int(height.Add(1)), role)
-				err := node.Broadcast(msgID, msg)
-				if err != nil {
+				if err := node.Broadcast(msgID, msg); err != nil {
+					if ctx.Err() != nil {
+						return nil // stop raced with an in-flight broadcast
+					}
 					return err
 				}
-				time.Sleep(100 * time.Millisecond)
+				select {
+				case <-ctx.Done():
+					return nil
+				case <-time.After(100 * time.Millisecond):
+				}
 			}
-			return nil
 		})
 	}
 
@@ -180,10 +211,6 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 	for i := 0; i < nodeCount; i++ {
 		broadcaster(vNet.Nodes[i], messageTypesByNodeIndex[i]...)
 	}
-
-	// Wait for the broadcasters to finish.
-	err := broadcasters.Wait()
-	require.NoError(t, err)
 
 	// Compute each broadcaster's fraction of rejected-role messages. A higher
 	// rate should drive that broadcaster's score lower on every observer.
@@ -330,30 +357,23 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 		return ""
 	}
 
-	// settled is the snapshot Eventually verified; falls back to the latest
-	// snapshot if Eventually times out so the diagnostic asserts and the
-	// table-printing cleanup still have something useful to show.
-	//
-	// It's an atomic.Pointer because on the Eventually-timeout path testify
-	// leaves the last predicate goroutine running (it spawns the predicate
-	// with `go` and returns on the timer without waiting for it); if that
-	// goroutine succeeds at the boundary it writes settled concurrently with
-	// the main-goroutine fallback rebuild below. The happy path is already
-	// synchronized by Eventually's channel receive, but that sad-path write
-	// would otherwise be a data race -race can flag, burying the real
-	// diagnostics.
-	var settled atomic.Pointer[map[NodeIndex][]peerScore]
+	// settledSnap holds, per observer, the first snapshot that satisfied every
+	// invariant ("latched" by the loop below); the diagnostics and the
+	// table-printing cleanup read it, and any observer still missing at the end
+	// is backfilled with a fresh snapshot. A plain map needs no synchronization:
+	// only this goroutine touches it (the latching loop, and the cleanup, which
+	// runs after the test body returns). The score inspectors run concurrently
+	// but write node.PeerScores (an atomic.Pointer), never this map.
+	settledSnap := make(map[NodeIndex][]peerScore, len(vNet.Nodes))
 
 	// Print a pretty table of each node's peers and their scores. Registered
 	// before the wait so it fires on failure too.
 	t.Cleanup(func() {
-		var snapshots map[NodeIndex][]peerScore
-		if ptr := settled.Load(); ptr != nil {
-			snapshots = *ptr
-		}
-		if snapshots == nil {
-			snapshots = make(map[NodeIndex][]peerScore, len(vNet.Nodes))
-			for _, node := range vNet.Nodes {
+		snapshots := make(map[NodeIndex][]peerScore, len(vNet.Nodes))
+		for _, node := range vNet.Nodes {
+			if peers := settledSnap[node.Index]; peers != nil {
+				snapshots[node.Index] = peers
+			} else {
 				snapshots[node.Index] = snapshotForNode(node)
 			}
 		}
@@ -378,51 +398,68 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 		}
 	})
 
-	// Wait for the rate + bucket + strict-separation invariants to hold on
-	// every observer in one consistent snapshot. Returns quickly on a fast
-	// machine; the 30s ceiling gives loaded CI runners enough decay cycles for
-	// GossipSub scores to settle before giving up.
-	ok := assert.Eventually(t, func() bool {
-		snapshot := make(map[NodeIndex][]peerScore, len(vNet.Nodes))
+	// Wait for every observer to satisfy the rate + bucket + strict-separation
+	// invariants, latching each node independently the moment it first holds a
+	// complete, valid snapshot. We don't require all nodes to be valid in the
+	// same poll: scores settle asynchronously, and within a test this short no
+	// decay runs, so a latched-valid snapshot stays valid — latching removes a
+	// cross-observer coincidence that grew flaky under CI load. The loop runs
+	// entirely on this goroutine (no spawned predicate), so settledSnap needs
+	// no synchronization and there's no post-timeout predicate race to guard.
+	deadline := time.Now().Add(30 * time.Second)
+	for ctx.Err() == nil {
 		for _, node := range vNet.Nodes {
+			if settledSnap[node.Index] != nil {
+				continue // already latched
+			}
 			peers := snapshotForNode(node)
 			// Require a fully-populated snapshot before evaluating the
 			// invariants — bucketInvariantViolation reads scoreByIdx[idx]
 			// which returns 0 for absent peers, so a partial snapshot can
 			// satisfy the bucket check spuriously (a positive accepted-only
 			// score "wins" against a missing rejected-only at score=0).
-			if peers == nil || len(peers) != len(vNet.Nodes)-1 {
-				return false
+			if peers == nil || len(peers) != nodeCount-1 {
+				continue
 			}
 			if rateInvariantViolation(peers, node.Index) != "" ||
 				bucketInvariantViolation(peers, node.Index) != "" ||
 				strictSeparationViolation(peers, node.Index) != "" {
-				return false
+				continue
 			}
-			snapshot[node.Index] = peers
+			settledSnap[node.Index] = peers
 		}
-		settled.Store(&snapshot)
-		return true
-	}, 30*time.Second, 100*time.Millisecond, "peer scores never satisfied rate + bucket + strict-separation invariants")
-
-	if !ok {
-		// Eventually marked the test as failed but didn't FailNow (assert.*
-		// not require.*). Grab the latest snapshot so the diagnostic asserts
-		// below can surface which invariant on which observer failed.
-		fresh := make(map[NodeIndex][]peerScore, len(vNet.Nodes))
-		for _, node := range vNet.Nodes {
-			fresh[node.Index] = snapshotForNode(node)
+		if len(settledSnap) == len(vNet.Nodes) || time.Now().After(deadline) {
+			break
 		}
-		settled.Store(&fresh)
+		// Sleep between polls, but wake immediately on context cancellation
+		// (the for-condition above then exits the loop) so we don't keep
+		// polling during teardown.
+		select {
+		case <-ctx.Done():
+		case <-time.After(100 * time.Millisecond):
+		}
 	}
 
-	// settled was either verified by Eventually (happy path — these are
-	// redundant) or freshly grabbed (sad path — they surface specifics on
-	// top of Eventually's generic message).
-	var settledSnap map[NodeIndex][]peerScore
-	if ptr := settled.Load(); ptr != nil {
-		settledSnap = *ptr
+	// Scores have either settled or timed out; stop broadcasting. A real
+	// Broadcast error fails the test, but the expected cancellation does not.
+	stopBroadcast()
+	require.NoError(t, broadcasters.Wait())
+
+	// Surface any failure the PeerScoreInspector recorded on its own goroutine
+	// (it can't safely touch t there; see VirtualNet.inspectorErr).
+	if msg := vNet.inspectorErr.Load(); msg != nil {
+		t.Fatalf("peer score inspector: %s", *msg)
 	}
+
+	// Backfill any observer that never latched with its current snapshot so the
+	// diagnostics below report which invariant on which node actually failed
+	// (the loop only records the passing ones).
+	for _, node := range vNet.Nodes {
+		if settledSnap[node.Index] == nil {
+			settledSnap[node.Index] = snapshotForNode(node)
+		}
+	}
+
 	for _, node := range vNet.Nodes {
 		peers := settledSnap[node.Index]
 		require.NotNilf(t, peers, "node %d: PeerScoreInspector never ran", node.Index)
@@ -470,6 +507,13 @@ func (n *VirtualNode) Broadcast(msgID spectypes.MessageID, msg *spectypes.Signed
 // VirtualNet is a utility to create & interact with a virtual network of nodes.
 type VirtualNet struct {
 	Nodes []*VirtualNode
+
+	// inspectorErr holds the first failure the PeerScoreInspector hit on
+	// gossipsub's scoring goroutine. That goroutine can outlive the test body
+	// (pubsub's shutdown inspect is detached and not awaited by Close), so it
+	// must not touch t — doing so panics the binary once the test has returned.
+	// The test goroutine surfaces this instead.
+	inspectorErr atomic.Pointer[string]
 }
 
 func createVirtualNet(
@@ -492,9 +536,15 @@ func createVirtualNet(
 			if !doneSetup.Load() {
 				return
 			}
+			// Runs on gossipsub's scoring goroutine, which can fire after the
+			// test body returns (pubsub's shutdown inspect is detached and not
+			// awaited by Close), so record failures rather than touch t — the
+			// test goroutine surfaces them. selfPeer/peerID are always one of
+			// this local net's virtual nodes, so these only guard a regression.
 			node := vn.NodeByPeerID(selfPeer)
 			if node == nil {
-				t.Fatalf("self peer not found (%s)", selfPeer)
+				msg := fmt.Sprintf("self peer not found (%s)", selfPeer)
+				vn.inspectorErr.CompareAndSwap(nil, &msg)
 				return
 			}
 
@@ -502,7 +552,8 @@ func createVirtualNet(
 			for peerID, peerScore := range peerMap {
 				peerNode := vn.NodeByPeerID(peerID)
 				if peerNode == nil {
-					t.Fatalf("peer not found (%s)", peerID)
+					msg := fmt.Sprintf("peer not found (%s)", peerID)
+					vn.inspectorErr.CompareAndSwap(nil, &msg)
 					return
 				}
 				peerScoresUpdated[peerNode.Index] = peerScore
