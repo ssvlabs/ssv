@@ -1,4 +1,4 @@
-package exporter2
+package exporter
 
 import (
 	"fmt"
@@ -9,8 +9,8 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/exporter2/rolemask"
-	"github.com/ssvlabs/ssv/exporter2/traces"
+	"github.com/ssvlabs/ssv/exporter/rolemask"
+	"github.com/ssvlabs/ssv/exporter/traces"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 )
 

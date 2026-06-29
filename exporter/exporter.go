@@ -1,4 +1,4 @@
-package exporter2
+package exporter
 
 import (
 	"errors"
@@ -11,10 +11,10 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	dutytracer "github.com/ssvlabs/ssv/exporter2/dutytracer"
-	"github.com/ssvlabs/ssv/exporter2/rolemask"
-	"github.com/ssvlabs/ssv/exporter2/store"
-	"github.com/ssvlabs/ssv/exporter2/traces"
+	dutytracer "github.com/ssvlabs/ssv/exporter/dutytracer"
+	"github.com/ssvlabs/ssv/exporter/rolemask"
+	"github.com/ssvlabs/ssv/exporter/store"
+	"github.com/ssvlabs/ssv/exporter/traces"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 )

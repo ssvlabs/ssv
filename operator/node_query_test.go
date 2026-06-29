@@ -13,11 +13,11 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
+	exportercore "github.com/ssvlabs/ssv/exporter"
+	dutytracer "github.com/ssvlabs/ssv/exporter/dutytracer"
+	dutytracestore "github.com/ssvlabs/ssv/exporter/store"
+	"github.com/ssvlabs/ssv/exporter/traces"
 	"github.com/ssvlabs/ssv/exporter/v1/api"
-	"github.com/ssvlabs/ssv/exporter2"
-	dutytracer "github.com/ssvlabs/ssv/exporter2/dutytracer"
-	dutytracestore "github.com/ssvlabs/ssv/exporter2/store"
-	"github.com/ssvlabs/ssv/exporter2/traces"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/validator"
@@ -85,7 +85,7 @@ func newWSQueryHarness(t *testing.T) *wsQueryHarness {
 	store := newFaultingDutyTraceStore(realStore)
 
 	collector := dutytracer.New(zap.NewNop(), validatorMock, nil, store, networkconfig.TestNetwork.Beacon, nil, nil)
-	coreExporter := exporter2.NewExporter(zap.NewNop(), ibftstorage.NewStores(), collector, validatorMock)
+	coreExporter := exportercore.NewExporter(zap.NewNop(), ibftstorage.NewStores(), collector, validatorMock)
 
 	node := &Node{
 		logger:       logger,

@@ -10,24 +10,24 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/api"
-	exporter2 "github.com/ssvlabs/ssv/exporter2"
-	"github.com/ssvlabs/ssv/exporter2/rolemask"
-	"github.com/ssvlabs/ssv/exporter2/traces"
+	exportercore "github.com/ssvlabs/ssv/exporter"
+	"github.com/ssvlabs/ssv/exporter/rolemask"
+	"github.com/ssvlabs/ssv/exporter/traces"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 
-	dutytracer "github.com/ssvlabs/ssv/exporter2/dutytracer"
+	dutytracer "github.com/ssvlabs/ssv/exporter/dutytracer"
 )
 
 type Exporter struct {
 	logger *zap.Logger
-	svc    *exporter2.Exporter
+	svc    *exportercore.Exporter
 }
 
 func NewExporter(logger *zap.Logger, participantStores *ibftstorage.ParticipantStores, traceStore dutyTraceStore, validators registrystorage.ValidatorStore) *Exporter {
 	return &Exporter{
 		logger: logger,
-		svc:    exporter2.NewExporter(logger, participantStores, traceStore, validators),
+		svc:    exportercore.NewExporter(logger, participantStores, traceStore, validators),
 	}
 }
 

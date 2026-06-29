@@ -22,11 +22,11 @@ import (
 	"github.com/ssvlabs/ssv/beacon/goclient"
 	"github.com/ssvlabs/ssv/doppelganger"
 	"github.com/ssvlabs/ssv/eth/executionclient"
+	exportercore "github.com/ssvlabs/ssv/exporter"
+	dutytracer "github.com/ssvlabs/ssv/exporter/dutytracer"
+	dutytracestore "github.com/ssvlabs/ssv/exporter/store"
 	exporterapi "github.com/ssvlabs/ssv/exporter/v1/api"
 	"github.com/ssvlabs/ssv/exporter/v1/api/decided"
-	"github.com/ssvlabs/ssv/exporter2"
-	dutytracer "github.com/ssvlabs/ssv/exporter2/dutytracer"
-	dutytracestore "github.com/ssvlabs/ssv/exporter2/store"
 	"github.com/ssvlabs/ssv/hprobe"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/message/signatureverifier"
@@ -388,7 +388,7 @@ func newNode(
 			dstore, networkConfig.Beacon, decidedStreamPublisherFn,
 			dutyStore)
 
-		cfg.SSVOptions.ExporterRead = exporter2.NewExporter(logger, storageMap, collector, nodeStorage.ValidatorStore())
+		cfg.SSVOptions.ExporterRead = exportercore.NewExporter(logger, storageMap, collector, nodeStorage.ValidatorStore())
 	case modeExporterStandard:
 		logger.Info("exporter mode: standard")
 	case modeOperator:

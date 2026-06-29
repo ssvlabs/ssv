@@ -10,8 +10,8 @@ import (
 	"github.com/hashicorp/go-multierror"
 
 	"github.com/ssvlabs/ssv/api"
-	exporter2 "github.com/ssvlabs/ssv/exporter2"
-	"github.com/ssvlabs/ssv/exporter2/traces"
+	exportercore "github.com/ssvlabs/ssv/exporter"
+	"github.com/ssvlabs/ssv/exporter/traces"
 )
 
 // ValidatorTracesRequest represents the filter parameters accepted by the
@@ -33,8 +33,8 @@ func (r *ValidatorTracesRequest) pubKeys() []spectypes.ValidatorPK {
 	return parsePubkeysSlice(r.PubKeys)
 }
 
-func toValidatorTracesQuery(r *ValidatorTracesRequest) (*exporter2.ValidatorTracesQuery, *PubKeyLengthError) {
-	q := &exporter2.ValidatorTracesQuery{
+func toValidatorTracesQuery(r *ValidatorTracesRequest) (*exportercore.ValidatorTracesQuery, *PubKeyLengthError) {
+	q := &exportercore.ValidatorTracesQuery{
 		From:    r.From,
 		To:      r.To,
 		Roles:   toBeaconRoles(r.Roles),
@@ -63,7 +63,7 @@ type ValidatorTracesResponse struct {
 	Errors []string `json:"errors,omitempty" swaggertype:"array,string" example:"duty data unavailable for slot 123457"`
 }
 
-func toValidatorTraceResponse(result *exporter2.ValidatorTracesResult, errs *multierror.Error) *ValidatorTracesResponse {
+func toValidatorTraceResponse(result *exportercore.ValidatorTracesResult, errs *multierror.Error) *ValidatorTracesResponse {
 	r := new(ValidatorTracesResponse)
 	r.Data = make([]ValidatorTrace, 0)
 	if result != nil {
@@ -124,7 +124,7 @@ type ValidatorSchedule struct {
 	Roles     []string `json:"roles"`
 }
 
-func toValidatorSchedule(entries []exporter2.ValidatorScheduleEntry) []ValidatorSchedule {
+func toValidatorSchedule(entries []exportercore.ValidatorScheduleEntry) []ValidatorSchedule {
 	out := make([]ValidatorSchedule, 0, len(entries))
 	for _, e := range entries {
 		roles := make([]string, 0, len(e.Roles))

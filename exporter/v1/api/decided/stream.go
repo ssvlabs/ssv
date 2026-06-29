@@ -8,8 +8,8 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	dutytracer "github.com/ssvlabs/ssv/exporter/dutytracer"
 	"github.com/ssvlabs/ssv/exporter/v1/api"
-	dutytracer "github.com/ssvlabs/ssv/exporter2/dutytracer"
 	qbftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"

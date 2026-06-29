@@ -19,9 +19,9 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/exporter2/rolemask"
-	"github.com/ssvlabs/ssv/exporter2/store"
-	"github.com/ssvlabs/ssv/exporter2/traces"
+	"github.com/ssvlabs/ssv/exporter/rolemask"
+	"github.com/ssvlabs/ssv/exporter/store"
+	"github.com/ssvlabs/ssv/exporter/traces"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"

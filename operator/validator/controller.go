@@ -19,7 +19,7 @@ import (
 
 	"github.com/ssvlabs/ssv/doppelganger"
 	exporterconfig "github.com/ssvlabs/ssv/exporter/config"
-	dutytracer "github.com/ssvlabs/ssv/exporter2/dutytracer"
+	dutytracer "github.com/ssvlabs/ssv/exporter/dutytracer"
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/network"

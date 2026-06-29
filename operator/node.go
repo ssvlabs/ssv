@@ -16,11 +16,11 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/eth/executionclient"
+	exportercore "github.com/ssvlabs/ssv/exporter"
 	exporterconfig "github.com/ssvlabs/ssv/exporter/config"
+	dutytracer "github.com/ssvlabs/ssv/exporter/dutytracer"
+	exporterstore "github.com/ssvlabs/ssv/exporter/store"
 	"github.com/ssvlabs/ssv/exporter/v1/api"
-	"github.com/ssvlabs/ssv/exporter2"
-	dutytracer "github.com/ssvlabs/ssv/exporter2/dutytracer"
-	exporterstore "github.com/ssvlabs/ssv/exporter2/store"
 	qbftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -53,7 +53,7 @@ type Options struct {
 	ValidatorStore      storage2.ValidatorStore
 	ValidatorOptions    validator.ControllerOptions `yaml:"ValidatorOptions"`
 	DutyStore           *dutystore.Store
-	ExporterRead        *exporter2.Exporter
+	ExporterRead        *exportercore.Exporter
 	WS                  api.WebSocketServer
 }
 
@@ -79,7 +79,7 @@ type Node struct {
 
 	ws api.WebSocketServer
 
-	exporterRead *exporter2.Exporter
+	exporterRead *exportercore.Exporter
 }
 
 func shouldRunDutyScheduler(exporterOpts exporterconfig.Options) bool {
@@ -309,8 +309,8 @@ func (n *Node) handleQueryRequests(nm *api.NetworkMessage) {
 
 	switch nm.Msg.Type {
 	case api.TypeDecided:
-		// In exporter v2 (archive) mode we serve decided queries via exporter2 core.
-		// Fall back to legacy qbft storage when exporter2 isn't wired.
+		// In exporter v2 (archive) mode we serve decided queries via exporter core.
+		// Fall back to legacy qbft storage when exporter isn't wired.
 		if n.exporterRead != nil {
 			n.handleDecidedViaExporter(nm)
 			break
@@ -356,7 +356,7 @@ func (n *Node) handleDecidedViaExporter(nm *api.NetworkMessage) {
 		return
 	}
 
-	coreQuery := &exporter2.DecidedsQuery{
+	coreQuery := &exportercore.DecidedsQuery{
 		From:    nm.Msg.Filter.From,
 		To:      nm.Msg.Filter.To,
 		Roles:   []spectypes.BeaconRole{role},
@@ -404,7 +404,7 @@ func (n *Node) handleDecidedViaExporter(nm *api.NetworkMessage) {
 	nm.Msg = res
 }
 
-func wsParticipationsFromCore(result *exporter2.TraceDecidedsResult) []qbftstorage.Participation {
+func wsParticipationsFromCore(result *exportercore.TraceDecidedsResult) []qbftstorage.Participation {
 	out := make([]qbftstorage.Participation, 0)
 	if result == nil {
 		return out
@@ -424,19 +424,19 @@ func wsParticipationsFromCore(result *exporter2.TraceDecidedsResult) []qbftstora
 }
 
 func isExporterValidationError(err error) bool {
-	var ve *exporter2.ValidationError
+	var ve *exportercore.ValidationError
 	return errors.As(err, &ve)
 }
 
 // isNotFoundError returns true if the error represents an expected "no duty"
 // condition, either from the duty tracer or the underlying exporter store.
-// It mirrors the semantics in exporter2 helpers to ease future refactoring.
+// It mirrors the semantics in exporter helpers to ease future refactoring.
 func isNotFoundError(err error) bool {
 	return errors.Is(err, dutytracer.ErrNotFound) || errors.Is(err, exporterstore.ErrNotFound)
 }
 
 // filterOutDutyNotFoundErrors removes not-found duty errors from a multierror,
-// returning nil if nothing remains. It mirrors exporter2.filterOutDutyNotFoundErrors
+// returning nil if nothing remains. It mirrors exportercore.filterOutDutyNotFoundErrors
 // to make future WS refactoring simpler.
 func filterOutDutyNotFoundErrors(e *multierror.Error) *multierror.Error {
 	if e == nil || e.ErrorOrNil() == nil {

@@ -10,9 +10,9 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/exporter2/rolemask"
-	store "github.com/ssvlabs/ssv/exporter2/store"
-	"github.com/ssvlabs/ssv/exporter2/traces"
+	"github.com/ssvlabs/ssv/exporter/rolemask"
+	store "github.com/ssvlabs/ssv/exporter/store"
+	"github.com/ssvlabs/ssv/exporter/traces"
 	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )

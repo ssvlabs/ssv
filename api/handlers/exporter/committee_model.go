@@ -8,8 +8,8 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/api"
-	exporter2 "github.com/ssvlabs/ssv/exporter2"
-	"github.com/ssvlabs/ssv/exporter2/traces"
+	exportercore "github.com/ssvlabs/ssv/exporter"
+	"github.com/ssvlabs/ssv/exporter/traces"
 )
 
 type CommitteeIDLengthError struct {
@@ -35,7 +35,7 @@ func (req *CommitteeTracesRequest) parseCommitteeIds() []spectypes.CommitteeID {
 	return committeeIDs
 }
 
-func toCommitteeTracesQuery(r *CommitteeTracesRequest) (*exporter2.CommitteeTracesQuery, *CommitteeIDLengthError) {
+func toCommitteeTracesQuery(r *CommitteeTracesRequest) (*exportercore.CommitteeTracesQuery, *CommitteeIDLengthError) {
 	requiredLength := len(spectypes.CommitteeID{})
 	for _, cmt := range r.CommitteeIDs {
 		if len(cmt) != requiredLength {
@@ -43,7 +43,7 @@ func toCommitteeTracesQuery(r *CommitteeTracesRequest) (*exporter2.CommitteeTrac
 		}
 	}
 
-	q := &exporter2.CommitteeTracesQuery{
+	q := &exportercore.CommitteeTracesQuery{
 		From:         r.From,
 		To:           r.To,
 		CommitteeIDs: r.parseCommitteeIds(),
@@ -63,7 +63,7 @@ type CommitteeTracesResponse struct {
 	Errors []string `json:"errors,omitempty" swaggertype:"array,string" example:"committee duty missing for slot 123456"`
 }
 
-func toCommitteeTraceResponse(result *exporter2.CommitteeTracesResult, errs *multierror.Error) *CommitteeTracesResponse {
+func toCommitteeTraceResponse(result *exportercore.CommitteeTracesResult, errs *multierror.Error) *CommitteeTracesResponse {
 	r := new(CommitteeTracesResponse)
 	r.Data = make([]CommitteeTrace, 0)
 	for _, duty := range result.Traces {
@@ -135,7 +135,7 @@ type CommitteeSchedule struct {
 	Roles       map[string][]uint64 `json:"roles"`
 }
 
-func toCommitteeSchedule(entries []exporter2.CommitteeScheduleEntry) []CommitteeSchedule {
+func toCommitteeSchedule(entries []exportercore.CommitteeScheduleEntry) []CommitteeSchedule {
 	out := make([]CommitteeSchedule, 0, len(entries))
 	for _, e := range entries {
 		roles := make(map[string][]uint64, len(e.Roles))

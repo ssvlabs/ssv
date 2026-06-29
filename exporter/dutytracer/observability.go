@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	observabilityName      = "github.com/ssvlabs/ssv/exporter2/dutytracer"
+	observabilityName      = "github.com/ssvlabs/ssv/exporter/dutytracer"
 	observabilityNamespace = "ssv.dutytracer"
 )
 

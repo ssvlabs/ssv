@@ -1,4 +1,4 @@
-package exporter2
+package exporter
 
 import (
 	"fmt"
@@ -9,7 +9,7 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	dutytracer "github.com/ssvlabs/ssv/exporter2/dutytracer"
+	dutytracer "github.com/ssvlabs/ssv/exporter/dutytracer"
 	"github.com/ssvlabs/ssv/ibft/storage"
 )
 

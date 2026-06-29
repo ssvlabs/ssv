@@ -1,11 +1,11 @@
-package exporter2
+package exporter
 
 import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/exporter2/traces"
+	"github.com/ssvlabs/ssv/exporter/traces"
 	"github.com/ssvlabs/ssv/ibft/storage"
 )
 
