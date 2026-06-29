@@ -48,7 +48,7 @@ func TestQuickGC_WithGarbage(t *testing.T) {
 	setupDataset(t, db, prefix, 100)
 
 	for i := 0; i < 50; i++ {
-		key := []byte(fmt.Sprintf("test-%d", i))
+		key := fmt.Appendf(nil, "test-%d", i)
 
 		require.NoError(t, db.Delete(prefix, key))
 	}
@@ -101,7 +101,7 @@ func TestFullGC_WithGarbage(t *testing.T) {
 	setupDataset(t, db, prefix, 100)
 
 	for i := 0; i < 50; i++ {
-		key := []byte(fmt.Sprintf("test-%d", i))
+		key := fmt.Appendf(nil, "test-%d", i)
 
 		require.NoError(t, db.Delete(prefix, key))
 	}
@@ -223,7 +223,7 @@ func TestPeriodicGC(t *testing.T) {
 	setupDataset(t, db, prefix, 100)
 
 	for i := 0; i < 50; i++ {
-		key := []byte(fmt.Sprintf("test-%d", i))
+		key := fmt.Appendf(nil, "test-%d", i)
 
 		require.NoError(t, db.Delete(prefix, key))
 	}

@@ -15,7 +15,7 @@ func TestConn_Send_FullQueue(t *testing.T) {
 	c := newConn(t.Context(), nil, "test", 0, false)
 
 	for i := 0; i < chanSize+2; i++ {
-		c.Send([]byte(fmt.Sprintf("test-%d", i)))
+		c.Send(fmt.Appendf(nil, "test-%d", i))
 	}
 }
 

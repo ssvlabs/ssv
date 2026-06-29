@@ -128,27 +128,15 @@ func New(ctx context.Context, beaconConfig *networkconfig.Beacon, role spectypes
 	}
 }
 
-// RoundTimeout calculates the timeout duration for a specific role, height, and round.
+// RoundTimeout returns the duration to wait before timing out the given round.
 //
-// Timeout Rules:
-// - For roles BNRoleAttester and BNRoleSyncCommittee, the base timeout is 1/3 of the slot duration.
-// - For roles BNRoleAggregator and BNRoleSyncCommitteeContribution, the base timeout is 2/3 of the slot duration.
-// - For role BNRoleProposer, the timeout is either quickTimeout or slowTimeout, depending on the round.
+// For RoleProposer, the timeout is round-relative (not slot-synchronized):
+//   - rounds <= QuickTimeoutThreshold → QuickTimeout
+//   - rounds >  QuickTimeoutThreshold → SlowTimeout
 //
-// Additional Timeout:
-// - For rounds less than or equal to quickThreshold, the additional timeout is 'quick' seconds.
-// - For rounds greater than quickThreshold, the additional timeout is 'slow' seconds.
-//
-// SIP Reference:
-// For more details, see SIP at https://github.com/bloxapp/SIPs/pull/22
-//
-// TODO: Update SIP for Deterministic Round Timeout
-// TODO: Decide if to make the proposer timeout deterministic
-//
-// Synchronization Note:
-// To ensure synchronized timeouts across instances, the timeout is based on the duty start time,
-// which is calculated from the slot height. The base timeout is set based on the role,
-// and the additional timeout is added based on the round number.
+// For all other roles, the timeout is slot-synchronized via roundTimeoutForRound:
+// it returns time.Until(slotStart + roundTimeoutForRound(role, slotDuration, round)),
+// so the result can be negative for duties that started late.
 func (t *RoundTimer) RoundTimeout(round specqbft.Round) time.Duration {
 	// Proposer runner round timeouts are currently relative to QBFT instance start time, not slot start time:
 	// https://github.com/ssvlabs/ssv/issues/2429
