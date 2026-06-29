@@ -358,6 +358,8 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(
 
 	aggregatorMap, contributionMap, err := r.expectedPreConsensusRoots(ctx, logger)
 	if err != nil {
+		// terminal post-quorum failure → classify as failed, not stuck
+		r.markDutyFailed(err)
 		return fmt.Errorf("could not get expected pre-consensus roots: %w", err)
 	}
 
@@ -507,8 +509,10 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(
 				}
 
 			default:
-				// This should never happen as we build rootToMetadata ourselves with valid roles
-				return fmt.Errorf("unexpected role type in pre-consensus metadata: %v", metadata.Role)
+				// deterministic terminal invariant violation → classify as failed, not stuck
+				err := fmt.Errorf("unexpected role type in pre-consensus metadata: %v", metadata.Role)
+				r.markDutyFailed(err)
+				return err
 			}
 		}
 	}
@@ -536,6 +540,8 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(
 	if len(aggregatorSelections) > 0 {
 		// Wait once per duty before fetching aggregate attestations (spec: 2/3 into slot).
 		if err := r.waitTwoThirdsIntoSlot(ctx, duty.DutySlot()); err != nil {
+			// terminal post-quorum failure → classify as failed, not stuck
+			r.markDutyFailed(err)
 			return err
 		}
 
@@ -582,6 +588,8 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(
 
 	// Else, if some aggregators or contributors were selected (even with an error for others), proceed to consensus
 	if err := consensusData.Validate(); err != nil {
+		// terminal post-quorum failure → classify as failed, not stuck
+		r.markDutyFailed(err)
 		return fmt.Errorf("invalid aggregator committee consensus data: %w", err)
 	}
 
@@ -593,6 +601,8 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(
 		consensusData,
 		r.ValCheck,
 	); err != nil {
+		// terminal post-quorum failure → classify as failed, not stuck
+		r.markDutyFailed(err)
 		return fmt.Errorf("failed to start consensus: %w", err)
 	}
 
@@ -788,6 +798,8 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 	// Get validator-root maps for attestations and sync committees, and the root-beacon object map
 	aggregatorMap, contributionMap, beaconObjects, err := r.expectedPostConsensusRootsAndBeaconObjects(ctx, logger)
 	if err != nil {
+		// terminal post-quorum failure → classify as failed, not stuck
+		r.markDutyFailed(err)
 		return fmt.Errorf("could not get expected post consensus roots and beacon objects: %w", err)
 	}
 	if len(beaconObjects) == 0 {
@@ -925,7 +937,10 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 		for {
 			select {
 			case <-ctx.Done():
-				return ctx.Err()
+				// terminal post-quorum failure → classify as failed, not stuck
+				err := ctx.Err()
+				r.markDutyFailed(err)
+				return err
 			case err := <-errCh:
 				executionErr = err
 			case signatureResult, ok := <-signatureCh:
@@ -972,7 +987,10 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 					contributionsToSubmit[signatureResult.validatorIndex][root] = signedContrib
 
 				default:
-					return fmt.Errorf("unexpected role type in post-consensus: %v", role)
+					// deterministic terminal invariant violation → classify as failed, not stuck
+					err := fmt.Errorf("unexpected role type in post-consensus: %v", role)
+					r.markDutyFailed(err)
+					return err
 				}
 			}
 		}
@@ -1043,6 +1061,7 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 	}
 
 	if executionErr != nil {
+		// Not markDutyFailed: a transient submit/reconstruct error can recover — a later post-consensus message re-enters the submit loops and retries the pending roots (already-submitted roots are skipped via HasSubmitted), so concluding "failed" here would prematurely mask a duty that still completes.
 		return executionErr
 	}
 
