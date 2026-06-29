@@ -203,6 +203,16 @@ func (mv *messageValidator) validateBeaconDuty(
 		}
 	}
 
+	// The self-build envelope rides the proposer's slot, so it must carry a real proposer assignment —
+	// guarded by IsEpochSet like proposer-preferences, since the message can arrive before the epoch's
+	// duties are fetched.
+	if role == spectypes.RoleEnvelopeBuilder {
+		validatorIndex := indices[0]
+		if mv.dutyStore.Proposer.IsEpochSet(epoch) && mv.dutyStore.Proposer.ValidatorDuty(epoch, slot, validatorIndex) == nil {
+			return ErrNoDuty
+		}
+	}
+
 	// Rule: For a sync committee aggregation duty message, we check if the validator is assigned to it
 	if role == ssvtypes.RoleSyncCommitteeContribution {
 		period := mv.netCfg.EstimatedSyncCommitteePeriodAtEpoch(epoch)

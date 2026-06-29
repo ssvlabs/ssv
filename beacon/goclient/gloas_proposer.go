@@ -31,16 +31,21 @@ func (gc *GoClient) GetGloasBeaconBlock(ctx context.Context, slot phase0.Slot, g
 	})
 }
 
-// SubmitGloasBeaconBlock publishes a signed Gloas (ePBS) block as SSZ.
+// SubmitGloasBeaconBlock publishes a signed Gloas (ePBS) block as SSZ to all configured beacon
+// nodes concurrently, succeeding if at least one accepts it. Re-publishing a signed block to
+// multiple BNs is safe — they dedupe by block root.
 func (gc *GoClient) SubmitGloasBeaconBlock(ctx context.Context, block *gloas.SignedBeaconBlock) error {
 	body, err := block.MarshalSSZ()
 	if err != nil {
 		return fmt.Errorf("marshal signed gloas block: %w", err)
 	}
-	_, err = firstClientResult(ctx, gc, "SubmitGloasBeaconBlock", http.MethodPost, func(ctx context.Context, addr string) (struct{}, error) {
-		return struct{}{}, submitGloasBeaconBlock(ctx, addr, body)
+
+	ctx, cancel := context.WithTimeout(ctx, gc.commonTimeout)
+	defer cancel()
+
+	return gc.multiClientSubmit(ctx, "SubmitGloasBeaconBlock", func(ctx context.Context, client Client) error {
+		return submitGloasBeaconBlock(ctx, gc.clientAddresses[client], body)
 	})
-	return err
 }
 
 // requestGloasBeaconBlock GETs the produce endpoint and decodes the SSZ response into a Gloas block.
