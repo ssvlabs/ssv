@@ -13,13 +13,13 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/exporter"
-	"github.com/ssvlabs/ssv/exporter/api"
+	exportercore "github.com/ssvlabs/ssv/exporter"
+	dutytracer "github.com/ssvlabs/ssv/exporter/dutytracer"
 	dutytracestore "github.com/ssvlabs/ssv/exporter/store"
-	"github.com/ssvlabs/ssv/exporter2"
+	"github.com/ssvlabs/ssv/exporter/traces"
+	"github.com/ssvlabs/ssv/exporter/v1/api"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/networkconfig"
-	dutytracer "github.com/ssvlabs/ssv/operator/dutytracer"
 	"github.com/ssvlabs/ssv/operator/validator"
 	registrystoragemocks "github.com/ssvlabs/ssv/registry/storage/mocks"
 	kv "github.com/ssvlabs/ssv/storage/badger"
@@ -51,7 +51,7 @@ func (s *faultingDutyTraceStore) SetGetValidatorDutyError(slot phase0.Slot, role
 	s.getValidatorDutyErr[validatorDutyKey{slot: slot, role: role, index: index}] = err
 }
 
-func (s *faultingDutyTraceStore) GetValidatorDuty(slot phase0.Slot, role spectypes.BeaconRole, index phase0.ValidatorIndex) (*exporter.ValidatorDutyTrace, error) {
+func (s *faultingDutyTraceStore) GetValidatorDuty(slot phase0.Slot, role spectypes.BeaconRole, index phase0.ValidatorIndex) (*traces.ValidatorDutyTrace, error) {
 	if err := s.getValidatorDutyErr[validatorDutyKey{slot: slot, role: role, index: index}]; err != nil {
 		return nil, err
 	}
@@ -85,7 +85,7 @@ func newWSQueryHarness(t *testing.T) *wsQueryHarness {
 	store := newFaultingDutyTraceStore(realStore)
 
 	collector := dutytracer.New(zap.NewNop(), validatorMock, nil, store, networkconfig.TestNetwork.Beacon, nil, nil)
-	coreExporter := exporter2.NewExporter(zap.NewNop(), ibftstorage.NewStores(), collector, validatorMock)
+	coreExporter := exportercore.NewExporter(zap.NewNop(), ibftstorage.NewStores(), collector, validatorMock)
 
 	node := &Node{
 		logger:       logger,
@@ -116,9 +116,9 @@ func (h *wsQueryHarness) ExpectValidator(pk spectypes.ValidatorPK, idx phase0.Va
 
 func (h *wsQueryHarness) SaveValidatorDuty(slot phase0.Slot, role spectypes.BeaconRole, index phase0.ValidatorIndex, decidedsSigners []spectypes.OperatorID) {
 	h.t.Helper()
-	duty := &exporter.ValidatorDutyTrace{
-		ConsensusTrace: exporter.ConsensusTrace{
-			Decideds: []*exporter.DecidedTrace{
+	duty := &traces.ValidatorDutyTrace{
+		ConsensusTrace: traces.ConsensusTrace{
+			Decideds: []*traces.DecidedTrace{
 				{Signers: decidedsSigners},
 			},
 		},
@@ -131,8 +131,8 @@ func (h *wsQueryHarness) SaveValidatorDuty(slot phase0.Slot, role spectypes.Beac
 
 func (h *wsQueryHarness) SaveValidatorDutyNoSigners(slot phase0.Slot, role spectypes.BeaconRole, index phase0.ValidatorIndex) {
 	h.t.Helper()
-	duty := &exporter.ValidatorDutyTrace{
-		ConsensusTrace: exporter.ConsensusTrace{},
+	duty := &traces.ValidatorDutyTrace{
+		ConsensusTrace: traces.ConsensusTrace{},
 		Slot:           slot,
 		Role:           role,
 		Validator:      index,
@@ -143,14 +143,14 @@ func (h *wsQueryHarness) SaveValidatorDutyNoSigners(slot phase0.Slot, role spect
 func (h *wsQueryHarness) SaveCommitteeDutyAttester(slot phase0.Slot, validatorIndex phase0.ValidatorIndex, committeeID spectypes.CommitteeID, signers []spectypes.OperatorID) {
 	h.t.Helper()
 	require.NoError(h.t, h.store.SaveCommitteeDutyLink(slot, validatorIndex, committeeID))
-	duty := &exporter.CommitteeDutyTrace{
-		ConsensusTrace: exporter.ConsensusTrace{},
+	duty := &traces.CommitteeDutyTrace{
+		ConsensusTrace: traces.ConsensusTrace{},
 		Slot:           slot,
 		CommitteeID:    committeeID,
-		Attester:       make([]*exporter.SignerData, 0, len(signers)),
+		Attester:       make([]*traces.SignerData, 0, len(signers)),
 	}
 	for _, s := range signers {
-		duty.Attester = append(duty.Attester, &exporter.SignerData{Signer: s})
+		duty.Attester = append(duty.Attester, &traces.SignerData{Signer: s})
 	}
 	require.NoError(h.t, h.store.SaveCommitteeDuty(duty))
 }

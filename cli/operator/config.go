@@ -11,7 +11,7 @@ import (
 	"github.com/ssvlabs/ssv/beacon/goclient"
 	globalcfg "github.com/ssvlabs/ssv/cli/config"
 	"github.com/ssvlabs/ssv/eth/executionclient"
-	"github.com/ssvlabs/ssv/exporter"
+	exporterconfig "github.com/ssvlabs/ssv/exporter/config"
 	p2pv1 "github.com/ssvlabs/ssv/network/p2p"
 	"github.com/ssvlabs/ssv/operator"
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
@@ -39,7 +39,7 @@ type config struct {
 	globalcfg.Global             `yaml:"global"`
 	DBOptions                    basedb.Options          `yaml:"db"`
 	SSVOptions                   operator.Options        `yaml:"ssv"`
-	ExporterOptions              exporter.Options        `yaml:"exporter"`
+	ExporterOptions              exporterconfig.Options  `yaml:"exporter"`
 	ExecutionClient              executionclient.Options `yaml:"eth1"` // TODO: execution_client in yaml
 	ConsensusClient              goclient.Options        `yaml:"eth2"` // TODO: consensus_client in yaml
 	P2pNetworkConfig             p2pv1.Config            `yaml:"p2p"`
@@ -244,17 +244,17 @@ func (c *config) resolveSigning() (resolved, error) {
 // resolveMode derives the node's operating mode from the exporter options, rejecting an
 // unrecognized EXPORTER_MODE up front (fail-fast). A non-exporter node is always modeOperator,
 // regardless of the (then-irrelevant) EXPORTER_MODE.
-func resolveMode(opts exporter.Options) (nodeMode, error) {
+func resolveMode(opts exporterconfig.Options) (nodeMode, error) {
 	if !opts.Enabled {
 		return modeOperator, nil
 	}
 	switch opts.Mode {
-	case exporter.ModeStandard:
+	case exporterconfig.ModeStandard:
 		return modeExporterStandard, nil
-	case exporter.ModeArchive:
+	case exporterconfig.ModeArchive:
 		return modeExporterArchive, nil
 	default:
-		return modeOperator, fmt.Errorf("invalid exporter mode %q (must be %q or %q)", opts.Mode, exporter.ModeStandard, exporter.ModeArchive)
+		return modeOperator, fmt.Errorf("invalid exporter mode %q (must be %q or %q)", opts.Mode, exporterconfig.ModeStandard, exporterconfig.ModeArchive)
 	}
 }
 

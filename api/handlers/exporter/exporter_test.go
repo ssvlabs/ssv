@@ -21,11 +21,11 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/api"
-	"github.com/ssvlabs/ssv/exporter"
+	dutytracer "github.com/ssvlabs/ssv/exporter/dutytracer"
 	"github.com/ssvlabs/ssv/exporter/rolemask"
 	estore "github.com/ssvlabs/ssv/exporter/store"
+	"github.com/ssvlabs/ssv/exporter/traces"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
-	dutytracer "github.com/ssvlabs/ssv/operator/dutytracer"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/registry/storage"
@@ -489,17 +489,17 @@ func TestExporterDecideds_ErrorGetParticipantsInRange(t *testing.T) {
 type mockTraceStore struct {
 	validatorDecideds           map[string][]dutytracer.ParticipantsRangeIndexEntry
 	committeeDecideds           map[string][]dutytracer.ParticipantsRangeIndexEntry
-	GetValidatorDutyFunc        func(role spectypes.BeaconRole, slot phase0.Slot, index phase0.ValidatorIndex) (*exporter.ValidatorDutyTrace, error)
-	GetValidatorDutiesFunc      func(role spectypes.BeaconRole, slot phase0.Slot) ([]*exporter.ValidatorDutyTrace, error)
-	GetCommitteeDutyFunc        func(slot phase0.Slot, committeeID spectypes.CommitteeID) (*exporter.CommitteeDutyTrace, error)
-	GetCommitteeDutiesFunc      func(slot phase0.Slot) ([]*exporter.CommitteeDutyTrace, error)
+	GetValidatorDutyFunc        func(role spectypes.BeaconRole, slot phase0.Slot, index phase0.ValidatorIndex) (*traces.ValidatorDutyTrace, error)
+	GetValidatorDutiesFunc      func(role spectypes.BeaconRole, slot phase0.Slot) ([]*traces.ValidatorDutyTrace, error)
+	GetCommitteeDutyFunc        func(slot phase0.Slot, committeeID spectypes.CommitteeID) (*traces.CommitteeDutyTrace, error)
+	GetCommitteeDutiesFunc      func(slot phase0.Slot) ([]*traces.CommitteeDutyTrace, error)
 	GetCommitteeIDFunc          func(slot phase0.Slot, index phase0.ValidatorIndex) (spectypes.CommitteeID, error)
 	GetValidatorDecidedsFunc    func(role spectypes.BeaconRole, slot phase0.Slot, indices []phase0.ValidatorIndex) ([]dutytracer.ParticipantsRangeIndexEntry, error)
 	GetCommitteeDecidedsFunc    func(slot phase0.Slot, index phase0.ValidatorIndex, _ ...spectypes.BeaconRole) ([]dutytracer.ParticipantsRangeIndexEntry, error)
 	GetAllCommitteeDecidedsFunc func(slot phase0.Slot) ([]dutytracer.ParticipantsRangeIndexEntry, error)
 	GetAllValidatorDecidedsFunc func(role spectypes.BeaconRole, slot phase0.Slot) ([]dutytracer.ParticipantsRangeIndexEntry, error)
 	// added to satisfy dutyTraceStore interface for schedule and committee links
-	GetCommitteeDutyLinksFunc func(slot phase0.Slot) ([]*exporter.CommitteeDutyLink, error)
+	GetCommitteeDutyLinksFunc func(slot phase0.Slot) ([]*traces.CommitteeDutyLink, error)
 	GetScheduledFunc          func(slot phase0.Slot) (map[phase0.ValidatorIndex]rolemask.Mask, error)
 }
 
@@ -510,28 +510,28 @@ func newMockTraceStore() *mockTraceStore {
 	}
 }
 
-func (m *mockTraceStore) GetValidatorDuty(role spectypes.BeaconRole, slot phase0.Slot, index phase0.ValidatorIndex) (*exporter.ValidatorDutyTrace, error) {
+func (m *mockTraceStore) GetValidatorDuty(role spectypes.BeaconRole, slot phase0.Slot, index phase0.ValidatorIndex) (*traces.ValidatorDutyTrace, error) {
 	if m.GetValidatorDutyFunc != nil {
 		return m.GetValidatorDutyFunc(role, slot, index)
 	}
 	return nil, nil
 }
 
-func (m *mockTraceStore) GetValidatorDuties(role spectypes.BeaconRole, slot phase0.Slot) ([]*exporter.ValidatorDutyTrace, error) {
+func (m *mockTraceStore) GetValidatorDuties(role spectypes.BeaconRole, slot phase0.Slot) ([]*traces.ValidatorDutyTrace, error) {
 	if m.GetValidatorDutiesFunc != nil {
 		return m.GetValidatorDutiesFunc(role, slot)
 	}
 	return nil, nil
 }
 
-func (m *mockTraceStore) GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.CommitteeID, role ...spectypes.BeaconRole) (*exporter.CommitteeDutyTrace, error) {
+func (m *mockTraceStore) GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.CommitteeID, role ...spectypes.BeaconRole) (*traces.CommitteeDutyTrace, error) {
 	if m.GetCommitteeDutyFunc != nil {
 		return m.GetCommitteeDutyFunc(slot, committeeID)
 	}
 	return nil, nil
 }
 
-func (m *mockTraceStore) GetCommitteeDuties(slot phase0.Slot, roles ...spectypes.BeaconRole) ([]*exporter.CommitteeDutyTrace, error) {
+func (m *mockTraceStore) GetCommitteeDuties(slot phase0.Slot, roles ...spectypes.BeaconRole) ([]*traces.CommitteeDutyTrace, error) {
 	if m.GetCommitteeDutiesFunc != nil {
 		return m.GetCommitteeDutiesFunc(slot)
 	}
@@ -581,7 +581,7 @@ func (m *mockTraceStore) GetAllCommitteeDecideds(slot phase0.Slot, roles ...spec
 	return append([]dutytracer.ParticipantsRangeIndexEntry(nil), src...), nil
 }
 
-func (m *mockTraceStore) GetCommitteeDutyLinks(slot phase0.Slot) ([]*exporter.CommitteeDutyLink, error) {
+func (m *mockTraceStore) GetCommitteeDutyLinks(slot phase0.Slot) ([]*traces.CommitteeDutyLink, error) {
 	if m.GetCommitteeDutyLinksFunc != nil {
 		return m.GetCommitteeDutyLinksFunc(slot)
 	}
@@ -1259,16 +1259,16 @@ func TestExporterTraceDecideds_InvalidJSON(t *testing.T) {
 	require.Contains(t, resp.Message, "invalid character")
 }
 
-func makeCommitteeDutyTrace(slot phase0.Slot) *exporter.CommitteeDutyTrace {
-	return &exporter.CommitteeDutyTrace{
+func makeCommitteeDutyTrace(slot phase0.Slot) *traces.CommitteeDutyTrace {
+	return &traces.CommitteeDutyTrace{
 		Slot:        slot,
 		CommitteeID: spectypes.CommitteeID{1},
-		ConsensusTrace: exporter.ConsensusTrace{
-			Rounds: []*exporter.RoundTrace{
+		ConsensusTrace: traces.ConsensusTrace{
+			Rounds: []*traces.RoundTrace{
 				{
 					Proposer: spectypes.OperatorID(1),
-					ProposalTrace: &exporter.ProposalTrace{
-						QBFTTrace: exporter.QBFTTrace{
+					ProposalTrace: &traces.ProposalTrace{
+						QBFTTrace: traces.QBFTTrace{
 							Round:        1,
 							BeaconRoot:   phase0.Root{1},
 							Signer:       spectypes.OperatorID(1),
@@ -1277,7 +1277,7 @@ func makeCommitteeDutyTrace(slot phase0.Slot) *exporter.CommitteeDutyTrace {
 					},
 				},
 			},
-			Decideds: []*exporter.DecidedTrace{
+			Decideds: []*traces.DecidedTrace{
 				{
 					Round:        1,
 					BeaconRoot:   phase0.Root{1},
@@ -1287,7 +1287,7 @@ func makeCommitteeDutyTrace(slot phase0.Slot) *exporter.CommitteeDutyTrace {
 			},
 		},
 		OperatorIDs: []spectypes.OperatorID{1, 2, 3},
-		SyncCommittee: []*exporter.SignerData{
+		SyncCommittee: []*traces.SignerData{
 			{
 				Signer:       spectypes.OperatorID(1),
 				ValidatorIdx: []phase0.ValidatorIndex{1},
@@ -1316,11 +1316,11 @@ func TestExporterCommitteeTraces(t *testing.T) {
 			setupMock: func(store *mockTraceStore, validatorStore *mockValidatorStore) {
 				var committeeID spectypes.CommitteeID
 				committeeID[0] = 1
-				store.GetCommitteeDutiesFunc = func(slot phase0.Slot) (traces []*exporter.CommitteeDutyTrace, err error) {
-					traces = []*exporter.CommitteeDutyTrace{
+				store.GetCommitteeDutiesFunc = func(slot phase0.Slot) (duties []*traces.CommitteeDutyTrace, err error) {
+					duties = []*traces.CommitteeDutyTrace{
 						makeCommitteeDutyTrace(slot),
 					}
-					return traces, nil
+					return duties, nil
 				}
 				store.GetScheduledFunc = func(slot phase0.Slot) (map[phase0.ValidatorIndex]rolemask.Mask, error) {
 					if slot != 100 {
@@ -1331,11 +1331,11 @@ func TestExporterCommitteeTraces(t *testing.T) {
 						phase0.ValidatorIndex(2): rolemask.BitAggregator,
 					}, nil
 				}
-				store.GetCommitteeDutyLinksFunc = func(slot phase0.Slot) ([]*exporter.CommitteeDutyLink, error) {
+				store.GetCommitteeDutyLinksFunc = func(slot phase0.Slot) ([]*traces.CommitteeDutyLink, error) {
 					if slot != 100 {
 						return nil, nil
 					}
-					return []*exporter.CommitteeDutyLink{
+					return []*traces.CommitteeDutyLink{
 						{
 							ValidatorIndex: phase0.ValidatorIndex(1),
 							CommitteeID:    committeeID,
@@ -1378,7 +1378,7 @@ func TestExporterCommitteeTraces(t *testing.T) {
 				"committeeIDs": []string{"0eb9655577d1af04ff5d382848be15d1454b04838713bfb1ac209808fe3e9f7f"},
 			},
 			setupMock: func(store *mockTraceStore, validatorStore *mockValidatorStore) {
-				store.GetCommitteeDutyFunc = func(slot phase0.Slot, committeeID spectypes.CommitteeID) (*exporter.CommitteeDutyTrace, error) {
+				store.GetCommitteeDutyFunc = func(slot phase0.Slot, committeeID spectypes.CommitteeID) (*traces.CommitteeDutyTrace, error) {
 					return makeCommitteeDutyTrace(slot), nil
 				}
 			},
@@ -1425,7 +1425,7 @@ func TestExporterCommitteeTraces(t *testing.T) {
 				"committeeIDs": []string{"0eb9655577d1af04ff5d382848be15d1454b04838713bfb1ac209808fe3e9f7f"},
 			},
 			setupMock: func(store *mockTraceStore, validatorStore *mockValidatorStore) {
-				store.GetCommitteeDutyFunc = func(slot phase0.Slot, committeeID spectypes.CommitteeID) (*exporter.CommitteeDutyTrace, error) {
+				store.GetCommitteeDutyFunc = func(slot phase0.Slot, committeeID spectypes.CommitteeID) (*traces.CommitteeDutyTrace, error) {
 					return nil, fmt.Errorf("forced error on GetCommitteeDuty")
 				}
 			},
@@ -1442,7 +1442,7 @@ func TestExporterCommitteeTraces(t *testing.T) {
 				"committeeIDs": []string{"0eb9655577d1af04ff5d382848be15d1454b04838713bfb1ac209808fe3e9f7f"},
 			},
 			setupMock: func(store *mockTraceStore, validatorStore *mockValidatorStore) {
-				store.GetCommitteeDutyFunc = func(slot phase0.Slot, committeeID spectypes.CommitteeID) (*exporter.CommitteeDutyTrace, error) {
+				store.GetCommitteeDutyFunc = func(slot phase0.Slot, committeeID spectypes.CommitteeID) (*traces.CommitteeDutyTrace, error) {
 					return nil, dutytracer.ErrNotFound
 				}
 			},
@@ -1461,7 +1461,7 @@ func TestExporterCommitteeTraces(t *testing.T) {
 				"to":   100,
 			},
 			setupMock: func(store *mockTraceStore, validatorStore *mockValidatorStore) {
-				store.GetCommitteeDutiesFunc = func(slot phase0.Slot) ([]*exporter.CommitteeDutyTrace, error) {
+				store.GetCommitteeDutiesFunc = func(slot phase0.Slot) ([]*traces.CommitteeDutyTrace, error) {
 					return nil, fmt.Errorf("forced error on GetCommitteeDuties")
 				}
 			},
@@ -1477,7 +1477,7 @@ func TestExporterCommitteeTraces(t *testing.T) {
 				"to":   100,
 			},
 			setupMock: func(store *mockTraceStore, validatorStore *mockValidatorStore) {
-				store.GetCommitteeDutiesFunc = func(slot phase0.Slot) ([]*exporter.CommitteeDutyTrace, error) {
+				store.GetCommitteeDutiesFunc = func(slot phase0.Slot) ([]*traces.CommitteeDutyTrace, error) {
 					return nil, multierror.Append(dutytracer.ErrNotFound, estore.ErrNotFound)
 				}
 			},
@@ -1496,8 +1496,8 @@ func TestExporterCommitteeTraces(t *testing.T) {
 				"to":   100,
 			},
 			setupMock: func(store *mockTraceStore, validatorStore *mockValidatorStore) {
-				store.GetCommitteeDutiesFunc = func(slot phase0.Slot) ([]*exporter.CommitteeDutyTrace, error) {
-					return []*exporter.CommitteeDutyTrace{
+				store.GetCommitteeDutiesFunc = func(slot phase0.Slot) ([]*traces.CommitteeDutyTrace, error) {
+					return []*traces.CommitteeDutyTrace{
 						makeCommitteeDutyTrace(slot),
 					}, multierror.Append(nil, fmt.Errorf("forced error on GetCommitteeDuties"), dutytracer.ErrNotFound)
 				}
@@ -1551,7 +1551,7 @@ func TestExporterBuildValidatorSchedule_AllIndices(t *testing.T) {
 
 	// We don't assert on duty traces here, only on the schedule, so it's safe
 	// to return no duties.
-	store.GetValidatorDutiesFunc = func(role spectypes.BeaconRole, slot phase0.Slot) ([]*exporter.ValidatorDutyTrace, error) {
+	store.GetValidatorDutiesFunc = func(role spectypes.BeaconRole, slot phase0.Slot) ([]*traces.ValidatorDutyTrace, error) {
 		return nil, nil
 	}
 
@@ -1606,8 +1606,8 @@ func TestExporterBuildValidatorSchedule_Filtered(t *testing.T) {
 
 	// We don't assert on duty traces here, only on the schedule, so it's safe
 	// to return a minimal duty or nil.
-	store.GetValidatorDutyFunc = func(role spectypes.BeaconRole, slot phase0.Slot, index phase0.ValidatorIndex) (*exporter.ValidatorDutyTrace, error) {
-		return &exporter.ValidatorDutyTrace{Slot: slot, Role: role, Validator: index}, nil
+	store.GetValidatorDutyFunc = func(role spectypes.BeaconRole, slot phase0.Slot, index phase0.ValidatorIndex) (*traces.ValidatorDutyTrace, error) {
+		return &traces.ValidatorDutyTrace{Slot: slot, Role: role, Validator: index}, nil
 	}
 
 	store.GetScheduledFunc = func(slot phase0.Slot) (map[phase0.ValidatorIndex]rolemask.Mask, error) {
@@ -1664,13 +1664,13 @@ func TestExporter_GetValidatorCommitteeDutiesForRoleAndSlot_MembershipGating(t *
 	}
 
 	// Case 1: Attester signer data does NOT include the requested index -> filtered out
-	store.GetCommitteeDutyFunc = func(s phase0.Slot, id spectypes.CommitteeID) (*exporter.CommitteeDutyTrace, error) {
+	store.GetCommitteeDutyFunc = func(s phase0.Slot, id spectypes.CommitteeID) (*traces.CommitteeDutyTrace, error) {
 		assert.Equal(t, slot, s)
 		assert.Equal(t, cmt, id)
-		return &exporter.CommitteeDutyTrace{
+		return &traces.CommitteeDutyTrace{
 			Slot:        s,
 			CommitteeID: id,
-			Attester:    []*exporter.SignerData{{Signer: 99, ValidatorIdx: []phase0.ValidatorIndex{55}}},
+			Attester:    []*traces.SignerData{{Signer: 99, ValidatorIdx: []phase0.ValidatorIndex{55}}},
 		}, nil
 	}
 	// Case 1: Attester signer data does NOT include the requested index -> filtered out
@@ -1692,11 +1692,11 @@ func TestExporter_GetValidatorCommitteeDutiesForRoleAndSlot_MembershipGating(t *
 	assert.Len(t, resp.Data, 0)
 
 	// Case 2: Attester signer data includes the requested index -> returned
-	store.GetCommitteeDutyFunc = func(s phase0.Slot, id spectypes.CommitteeID) (*exporter.CommitteeDutyTrace, error) {
-		return &exporter.CommitteeDutyTrace{
+	store.GetCommitteeDutyFunc = func(s phase0.Slot, id spectypes.CommitteeID) (*traces.CommitteeDutyTrace, error) {
+		return &traces.CommitteeDutyTrace{
 			Slot:        s,
 			CommitteeID: id,
-			Attester:    []*exporter.SignerData{{Signer: 99, ValidatorIdx: []phase0.ValidatorIndex{idx}}},
+			Attester:    []*traces.SignerData{{Signer: 99, ValidatorIdx: []phase0.ValidatorIndex{idx}}},
 		}, nil
 	}
 	// Case 2: Attester signer data includes the requested index -> returned
@@ -1772,8 +1772,8 @@ func TestExporterValidatorTraces(t *testing.T) {
 				var pk spectypes.ValidatorPK
 				copy(pk[:], pkBytes)
 				validatorStore.AddShareHex("b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1", 1)
-				store.GetValidatorDutyFunc = func(role spectypes.BeaconRole, slot phase0.Slot, index phase0.ValidatorIndex) (*exporter.ValidatorDutyTrace, error) {
-					return &exporter.ValidatorDutyTrace{
+				store.GetValidatorDutyFunc = func(role spectypes.BeaconRole, slot phase0.Slot, index phase0.ValidatorIndex) (*traces.ValidatorDutyTrace, error) {
+					return &traces.ValidatorDutyTrace{
 						Slot:      150,
 						Role:      role,
 						Validator: 1,
@@ -1803,8 +1803,8 @@ func TestExporterValidatorTraces(t *testing.T) {
 				var pk spectypes.ValidatorPK
 				copy(pk[:], pkBytes)
 				validatorStore.AddShareHex("b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1", 1)
-				store.GetValidatorDutyFunc = func(role spectypes.BeaconRole, slot phase0.Slot, index phase0.ValidatorIndex) (*exporter.ValidatorDutyTrace, error) {
-					return &exporter.ValidatorDutyTrace{
+				store.GetValidatorDutyFunc = func(role spectypes.BeaconRole, slot phase0.Slot, index phase0.ValidatorIndex) (*traces.ValidatorDutyTrace, error) {
+					return &traces.ValidatorDutyTrace{
 						Slot:      150,
 						Role:      role,
 						Validator: 1,
@@ -1835,8 +1835,8 @@ func TestExporterValidatorTraces(t *testing.T) {
 				validatorStore.AddShareHex("b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1", 1)
 				// mapping already provided by AddShareHex
 
-				store.GetValidatorDutiesFunc = func(role spectypes.BeaconRole, slot phase0.Slot) ([]*exporter.ValidatorDutyTrace, error) {
-					results := []*exporter.ValidatorDutyTrace{
+				store.GetValidatorDutiesFunc = func(role spectypes.BeaconRole, slot phase0.Slot) ([]*traces.ValidatorDutyTrace, error) {
+					results := []*traces.ValidatorDutyTrace{
 						{Slot: 150, Role: role, Validator: 1},
 						{Slot: 150, Role: role, Validator: 2},
 					}
@@ -1882,7 +1882,7 @@ func TestExporterValidatorTraces(t *testing.T) {
 			},
 			setupMock: func(store *mockTraceStore, validatorStore *mockValidatorStore) {
 				// no shares seeded => validatorStore.ValidatorByIndex will return not found
-				store.GetValidatorDutyFunc = func(role spectypes.BeaconRole, slot phase0.Slot, index phase0.ValidatorIndex) (*exporter.ValidatorDutyTrace, error) {
+				store.GetValidatorDutyFunc = func(role spectypes.BeaconRole, slot phase0.Slot, index phase0.ValidatorIndex) (*traces.ValidatorDutyTrace, error) {
 					return nil, dutytracer.ErrNotFound
 				}
 			},
@@ -1914,15 +1914,15 @@ func TestExporterValidatorTraces(t *testing.T) {
 				}
 
 				// Mock GetCommitteeDuty to return a committee duty
-				store.GetCommitteeDutyFunc = func(slot phase0.Slot, committeeID spectypes.CommitteeID) (*exporter.CommitteeDutyTrace, error) {
-					return &exporter.CommitteeDutyTrace{
+				store.GetCommitteeDutyFunc = func(slot phase0.Slot, committeeID spectypes.CommitteeID) (*traces.CommitteeDutyTrace, error) {
+					return &traces.CommitteeDutyTrace{
 						Slot: slot,
-						ConsensusTrace: exporter.ConsensusTrace{
-							Rounds: []*exporter.RoundTrace{
+						ConsensusTrace: traces.ConsensusTrace{
+							Rounds: []*traces.RoundTrace{
 								{
 									Proposer: spectypes.OperatorID(1),
-									ProposalTrace: &exporter.ProposalTrace{
-										QBFTTrace: exporter.QBFTTrace{
+									ProposalTrace: &traces.ProposalTrace{
+										QBFTTrace: traces.QBFTTrace{
 											Round:        1,
 											BeaconRoot:   phase0.Root{1},
 											Signer:       spectypes.OperatorID(1),
@@ -1931,7 +1931,7 @@ func TestExporterValidatorTraces(t *testing.T) {
 									},
 								},
 							},
-							Decideds: []*exporter.DecidedTrace{
+							Decideds: []*traces.DecidedTrace{
 								{
 									Round:        1,
 									BeaconRoot:   phase0.Root{1},
@@ -1969,7 +1969,7 @@ func TestExporterValidatorTraces(t *testing.T) {
 				}
 
 				// Mock GetCommitteeDuty to return ErrNotFound
-				store.GetCommitteeDutyFunc = func(slot phase0.Slot, committeeID spectypes.CommitteeID) (*exporter.CommitteeDutyTrace, error) {
+				store.GetCommitteeDutyFunc = func(slot phase0.Slot, committeeID spectypes.CommitteeID) (*traces.CommitteeDutyTrace, error) {
 					return nil, dutytracer.ErrNotFound
 				}
 			},
@@ -1999,7 +1999,7 @@ func TestExporterValidatorTraces(t *testing.T) {
 				}
 
 				// Mock GetCommitteeDuty to return ErrNotFound
-				store.GetCommitteeDutyFunc = func(slot phase0.Slot, committeeID spectypes.CommitteeID) (*exporter.CommitteeDutyTrace, error) {
+				store.GetCommitteeDutyFunc = func(slot phase0.Slot, committeeID spectypes.CommitteeID) (*traces.CommitteeDutyTrace, error) {
 					return nil, fmt.Errorf("forced error on GetCommitteeDuty")
 				}
 			},
@@ -2055,7 +2055,7 @@ func TestExporterValidatorTraces(t *testing.T) {
 				copy(pk[:], pkBytes)
 
 				// Mock GetValidatorDuty to return error
-				store.GetValidatorDutyFunc = func(role spectypes.BeaconRole, slot phase0.Slot, index phase0.ValidatorIndex) (*exporter.ValidatorDutyTrace, error) {
+				store.GetValidatorDutyFunc = func(role spectypes.BeaconRole, slot phase0.Slot, index phase0.ValidatorIndex) (*traces.ValidatorDutyTrace, error) {
 					return nil, fmt.Errorf("forced error on GetValidatorDuty")
 				}
 			},
@@ -2079,9 +2079,9 @@ func TestExporterValidatorTraces(t *testing.T) {
 			},
 			setupMock: func(store *mockTraceStore, validatorStore *mockValidatorStore) {
 				validatorStore.AddShareHex("b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1", 1)
-				store.GetValidatorDutyFunc = func(role spectypes.BeaconRole, slot phase0.Slot, index phase0.ValidatorIndex) (*exporter.ValidatorDutyTrace, error) {
+				store.GetValidatorDutyFunc = func(role spectypes.BeaconRole, slot phase0.Slot, index phase0.ValidatorIndex) (*traces.ValidatorDutyTrace, error) {
 					if index == 1 {
-						return &exporter.ValidatorDutyTrace{Slot: slot, Role: role, Validator: index}, nil
+						return &traces.ValidatorDutyTrace{Slot: slot, Role: role, Validator: index}, nil
 					}
 					return nil, fmt.Errorf("forced error on GetValidatorDuty")
 				}
@@ -2162,8 +2162,8 @@ func TestExporterValidatorTraces(t *testing.T) {
 			},
 			setupMock: func(store *mockTraceStore, validatorStore *mockValidatorStore) {
 				validatorStore.AddShareHex("b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1", 1)
-				store.GetValidatorDutyFunc = func(role spectypes.BeaconRole, slot phase0.Slot, index phase0.ValidatorIndex) (*exporter.ValidatorDutyTrace, error) {
-					return &exporter.ValidatorDutyTrace{}, nil
+				store.GetValidatorDutyFunc = func(role spectypes.BeaconRole, slot phase0.Slot, index phase0.ValidatorIndex) (*traces.ValidatorDutyTrace, error) {
+					return &traces.ValidatorDutyTrace{}, nil
 				}
 			},
 			expectedStatus: http.StatusOK,

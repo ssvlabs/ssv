@@ -1,4 +1,4 @@
-package validator
+package dutytracer
 
 import (
 	"bytes"
@@ -19,9 +19,9 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/exporter"
 	"github.com/ssvlabs/ssv/exporter/rolemask"
 	"github.com/ssvlabs/ssv/exporter/store"
+	"github.com/ssvlabs/ssv/exporter/traces"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
@@ -202,12 +202,12 @@ func (c *Collector) getOrCreateValidatorTrace(slot phase0.Slot, role spectypes.B
 
 		trace, err := c.getValidatorDutyFromDiskIndex(role, slot, index)
 		if errors.Is(err, store.ErrNotFound) {
-			roleDutyTrace := &exporter.ValidatorDutyTrace{
+			roleDutyTrace := &traces.ValidatorDutyTrace{
 				Slot: slot,
 				Role: role,
 			}
 			wrappedTrace := &validatorDutyTrace{
-				roles: []*exporter.ValidatorDutyTrace{roleDutyTrace},
+				roles: []*traces.ValidatorDutyTrace{roleDutyTrace},
 			}
 			return wrappedTrace, true, nil
 		}
@@ -217,7 +217,7 @@ func (c *Collector) getOrCreateValidatorTrace(slot phase0.Slot, role spectypes.B
 		}
 
 		wrappedTrace := &validatorDutyTrace{
-			roles: []*exporter.ValidatorDutyTrace{trace},
+			roles: []*traces.ValidatorDutyTrace{trace},
 		}
 
 		return wrappedTrace, true, nil
@@ -228,21 +228,21 @@ func (c *Collector) getOrCreateValidatorTrace(slot phase0.Slot, role spectypes.B
 		validatorSlots, _ = c.validatorTraces.GetOrSet(index, hashmap.New[phase0.Slot, *validatorDutyTrace]())
 	}
 
-	traces, found := validatorSlots.Get(slot)
+	slotTrace, found := validatorSlots.Get(slot)
 
 	if !found {
-		roleDutyTrace := &exporter.ValidatorDutyTrace{
+		roleDutyTrace := &traces.ValidatorDutyTrace{
 			Slot: slot,
 			Role: role,
 		}
 		newTrace := &validatorDutyTrace{
-			roles: []*exporter.ValidatorDutyTrace{roleDutyTrace},
+			roles: []*traces.ValidatorDutyTrace{roleDutyTrace},
 		}
-		traces, _ = validatorSlots.GetOrSet(slot, newTrace)
-		return traces, false, nil
+		slotTrace, _ = validatorSlots.GetOrSet(slot, newTrace)
+		return slotTrace, false, nil
 	}
 
-	return traces, false, nil
+	return slotTrace, false, nil
 }
 
 var errInFlight = errors.New("in flight")
@@ -257,7 +257,7 @@ func (c *Collector) getOrCreateCommitteeTrace(slot phase0.Slot, committeeID spec
 		diskTrace, err := c.getCommitteeDutyFromDisk(slot, committeeID)
 		if errors.Is(err, store.ErrNotFound) {
 			trace := &committeeDutyTrace{
-				CommitteeDutyTrace: exporter.CommitteeDutyTrace{
+				CommitteeDutyTrace: traces.CommitteeDutyTrace{
 					CommitteeID: committeeID,
 					Slot:        slot,
 				},
@@ -285,7 +285,7 @@ func (c *Collector) getOrCreateCommitteeTrace(slot phase0.Slot, committeeID spec
 
 	if !found {
 		trace := &committeeDutyTrace{
-			CommitteeDutyTrace: exporter.CommitteeDutyTrace{
+			CommitteeDutyTrace: traces.CommitteeDutyTrace{
 				CommitteeID: committeeID,
 				Slot:        slot,
 			},
@@ -297,8 +297,8 @@ func (c *Collector) getOrCreateCommitteeTrace(slot phase0.Slot, committeeID spec
 	return committeeTrace, false, nil
 }
 
-func (c *Collector) decodeJustificationWithPrepares(justifications [][]byte) []*exporter.QBFTTrace {
-	var traces = make([]*exporter.QBFTTrace, 0, len(justifications))
+func (c *Collector) decodeJustificationWithPrepares(justifications [][]byte) []*traces.QBFTTrace {
+	out := make([]*traces.QBFTTrace, 0, len(justifications))
 	for _, rcj := range justifications {
 		var signedMsg = new(spectypes.SignedSSVMessage)
 		err := signedMsg.Decode(rcj)
@@ -314,20 +314,20 @@ func (c *Collector) decodeJustificationWithPrepares(justifications [][]byte) []*
 			continue
 		}
 
-		justificationTrace := exporter.QBFTTrace{
+		justificationTrace := traces.QBFTTrace{
 			Round:      uint64(qbftMsg.Round),
 			BeaconRoot: qbftMsg.Root,
 			Signer:     signedMsg.OperatorIDs[0],
 		}
 
-		traces = append(traces, &justificationTrace)
+		out = append(out, &justificationTrace)
 	}
 
-	return traces
+	return out
 }
 
-func (c *Collector) decodeJustificationWithRoundChanges(justifications [][]byte) []*exporter.RoundChangeTrace {
-	var traces = make([]*exporter.RoundChangeTrace, 0, len(justifications))
+func (c *Collector) decodeJustificationWithRoundChanges(justifications [][]byte) []*traces.RoundChangeTrace {
+	out := make([]*traces.RoundChangeTrace, 0, len(justifications))
 	for _, rcj := range justifications {
 		var signedMsg = new(spectypes.SignedSSVMessage)
 		err := signedMsg.Decode(rcj)
@@ -344,15 +344,15 @@ func (c *Collector) decodeJustificationWithRoundChanges(justifications [][]byte)
 		}
 
 		var roundChangeTrace = c.createRoundChangeTrace(0, qbftMsg, signedMsg) // zero time
-		traces = append(traces, roundChangeTrace)
+		out = append(out, roundChangeTrace)
 	}
 
-	return traces
+	return out
 }
 
-func (c *Collector) createRoundChangeTrace(receivedAt uint64, msg *specqbft.Message, signedMsg *spectypes.SignedSSVMessage) *exporter.RoundChangeTrace {
-	return &exporter.RoundChangeTrace{
-		QBFTTrace: exporter.QBFTTrace{
+func (c *Collector) createRoundChangeTrace(receivedAt uint64, msg *specqbft.Message, signedMsg *spectypes.SignedSSVMessage) *traces.RoundChangeTrace {
+	return &traces.RoundChangeTrace{
+		QBFTTrace: traces.QBFTTrace{
 			Round:        uint64(msg.Round),
 			BeaconRoot:   msg.Root,
 			Signer:       signedMsg.OperatorIDs[0],
@@ -363,9 +363,9 @@ func (c *Collector) createRoundChangeTrace(receivedAt uint64, msg *specqbft.Mess
 	}
 }
 
-func (c *Collector) createProposalTrace(receivedAt uint64, msg *specqbft.Message, signedMsg *spectypes.SignedSSVMessage) *exporter.ProposalTrace {
-	return &exporter.ProposalTrace{
-		QBFTTrace: exporter.QBFTTrace{
+func (c *Collector) createProposalTrace(receivedAt uint64, msg *specqbft.Message, signedMsg *spectypes.SignedSSVMessage) *traces.ProposalTrace {
+	return &traces.ProposalTrace{
+		QBFTTrace: traces.QBFTTrace{
 			Round:        uint64(msg.Round),
 			BeaconRoot:   msg.Root,
 			Signer:       signedMsg.OperatorIDs[0],
@@ -376,13 +376,13 @@ func (c *Collector) createProposalTrace(receivedAt uint64, msg *specqbft.Message
 	}
 }
 
-func (c *Collector) processConsensus(receivedAt uint64, msg *specqbft.Message, signedMsg *spectypes.SignedSSVMessage, round *exporter.RoundTrace) *exporter.DecidedTrace {
+func (c *Collector) processConsensus(receivedAt uint64, msg *specqbft.Message, signedMsg *spectypes.SignedSSVMessage, round *traces.RoundTrace) *traces.DecidedTrace {
 	switch msg.MsgType {
 	case specqbft.ProposalMsgType:
 		round.ProposalTrace = c.createProposalTrace(receivedAt, msg, signedMsg)
 
 	case specqbft.PrepareMsgType:
-		prepare := &exporter.QBFTTrace{
+		prepare := &traces.QBFTTrace{
 			Round:        uint64(msg.Round),
 			BeaconRoot:   msg.Root,
 			Signer:       signedMsg.OperatorIDs[0],
@@ -393,7 +393,7 @@ func (c *Collector) processConsensus(receivedAt uint64, msg *specqbft.Message, s
 
 	case specqbft.CommitMsgType:
 		if len(signedMsg.OperatorIDs) > 1 {
-			return &exporter.DecidedTrace{
+			return &traces.DecidedTrace{
 				Round:        uint64(msg.Round),
 				BeaconRoot:   msg.Root,
 				Signers:      signedMsg.OperatorIDs,
@@ -401,7 +401,7 @@ func (c *Collector) processConsensus(receivedAt uint64, msg *specqbft.Message, s
 			}
 		}
 
-		commit := &exporter.QBFTTrace{
+		commit := &traces.QBFTTrace{
 			Round:        uint64(msg.Round),
 			BeaconRoot:   msg.Root,
 			Signer:       signedMsg.OperatorIDs[0],
@@ -449,7 +449,7 @@ func (c *Collector) processPartialSigCommittee(receivedAt uint64, msg *spectypes
 	if len(scIdxs) > 0 {
 		slices.Sort(scIdxs)
 		scIdxs = slices.Compact(scIdxs)
-		trace.SyncCommittee = append(trace.SyncCommittee, &exporter.SignerData{
+		trace.SyncCommittee = append(trace.SyncCommittee, &traces.SignerData{
 			Signer:       signer,
 			ValidatorIdx: scIdxs,
 			ReceivedTime: receivedAt,
@@ -458,7 +458,7 @@ func (c *Collector) processPartialSigCommittee(receivedAt uint64, msg *spectypes
 	if len(attIdxs) > 0 {
 		slices.Sort(attIdxs)
 		attIdxs = slices.Compact(attIdxs)
-		trace.Attester = append(trace.Attester, &exporter.SignerData{
+		trace.Attester = append(trace.Attester, &traces.SignerData{
 			Signer:       signer,
 			ValidatorIdx: attIdxs,
 			ReceivedTime: receivedAt,
@@ -919,7 +919,7 @@ func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 			roleDutyTrace.Validator = pSigMessages.Messages[0].ValidatorIndex
 		}
 
-		tr := &exporter.PartialSigTrace{
+		tr := &traces.PartialSigTrace{
 			Type:         pSigMessages.Type,
 			BeaconRoot:   pSigMessages.Messages[0].SigningRoot,
 			Signer:       ssvtypes.PartialSigMsgSigner(pSigMessages),
@@ -965,10 +965,10 @@ func toBNRole(r spectypes.RunnerRole) (bnRole spectypes.BeaconRole, err error) {
 
 type validatorDutyTrace struct {
 	sync.Mutex
-	roles []*exporter.ValidatorDutyTrace
+	roles []*traces.ValidatorDutyTrace
 }
 
-func (dt *validatorDutyTrace) getOrCreate(slot phase0.Slot, role spectypes.BeaconRole) *exporter.ValidatorDutyTrace {
+func (dt *validatorDutyTrace) getOrCreate(slot phase0.Slot, role spectypes.BeaconRole) *traces.ValidatorDutyTrace {
 	// find the trace for the role
 	for _, t := range dt.roles {
 		if t.Role == role {
@@ -977,7 +977,7 @@ func (dt *validatorDutyTrace) getOrCreate(slot phase0.Slot, role spectypes.Beaco
 	}
 
 	// or create a new one
-	roleDutyTrace := &exporter.ValidatorDutyTrace{
+	roleDutyTrace := &traces.ValidatorDutyTrace{
 		Slot: slot,
 		Role: role,
 	}
@@ -986,7 +986,7 @@ func (dt *validatorDutyTrace) getOrCreate(slot phase0.Slot, role spectypes.Beaco
 	return roleDutyTrace
 }
 
-func (dt *validatorDutyTrace) roleTraces() (roles []*exporter.ValidatorDutyTrace) {
+func (dt *validatorDutyTrace) roleTraces() (roles []*traces.ValidatorDutyTrace) {
 	dt.Lock()
 	defer dt.Unlock()
 
@@ -1003,7 +1003,7 @@ type committeeDutyTrace struct {
 	syncCommitteeRoot phase0.Root
 	attestationRoot   phase0.Root
 	roleRootsReady    bool
-	exporter.CommitteeDutyTrace
+	traces.CommitteeDutyTrace
 
 	// Track published quorums to avoid duplicates (validator -> role -> signers hash)
 	// Not part of the model.CommitteeDutyTrace, because it's not persisted to disk
@@ -1016,7 +1016,7 @@ type committeeDutyTrace struct {
 
 // safeDeepCopy returns a deep copy of the trace data with internal locking.
 // Use this when you don't already hold the lock. For manual locking, call DeepCopy() directly while holding the lock.
-func (dt *committeeDutyTrace) safeDeepCopy() *exporter.CommitteeDutyTrace {
+func (dt *committeeDutyTrace) safeDeepCopy() *traces.CommitteeDutyTrace {
 	dt.Lock()
 	defer dt.Unlock()
 	return dt.DeepCopy()
@@ -1068,7 +1068,7 @@ func (dt *committeeDutyTrace) flushPending() {
 				}
 				slices.Sort(idxs)
 				idxs = slices.Compact(idxs)
-				sd := &exporter.SignerData{Signer: signer, ValidatorIdx: idxs, ReceivedTime: ts}
+				sd := &traces.SignerData{Signer: signer, ValidatorIdx: idxs, ReceivedTime: ts}
 				if role == spectypes.BNRoleSyncCommittee {
 					dt.SyncCommittee = append(dt.SyncCommittee, sd)
 				} else {
@@ -1080,10 +1080,10 @@ func (dt *committeeDutyTrace) flushPending() {
 	}
 }
 
-func getOrCreateRound(trace *exporter.ConsensusTrace, rnd uint64) *exporter.RoundTrace {
+func getOrCreateRound(trace *traces.ConsensusTrace, rnd uint64) *traces.RoundTrace {
 	var count = len(trace.Rounds)
 	for rnd > uint64(count) { //nolint:gosec
-		trace.Rounds = append(trace.Rounds, &exporter.RoundTrace{})
+		trace.Rounds = append(trace.Rounds, &traces.RoundTrace{})
 		count = len(trace.Rounds)
 	}
 
@@ -1150,7 +1150,7 @@ func (c *Collector) checkAndPublishQuorumForRole(
 	partialMsg *spectypes.PartialSignatureMessage,
 	threshold uint64,
 ) {
-	var signerData []*exporter.SignerData
+	var signerData []*traces.SignerData
 
 	switch role {
 	case spectypes.BNRoleAttester:
@@ -1186,7 +1186,7 @@ func (c *Collector) checkAndPublishQuorumForRole(
 // countUniqueSignersForValidatorAndRoot counts unique signers for a specific validator and signing root
 // Note: signerData should already be filtered by role (Attester or SyncCommittee bucket), ensuring
 // all signatures are for the expected root as validated during classification.
-func (c *Collector) countUniqueSignersForValidatorAndRoot(logger *zap.Logger, signerData []*exporter.SignerData, validatorIndex phase0.ValidatorIndex, _ phase0.Root) []spectypes.OperatorID {
+func (c *Collector) countUniqueSignersForValidatorAndRoot(logger *zap.Logger, signerData []*traces.SignerData, validatorIndex phase0.ValidatorIndex, _ phase0.Root) []spectypes.OperatorID {
 	signers := make(map[spectypes.OperatorID]struct{})
 
 	for _, data := range signerData {
@@ -1244,7 +1244,7 @@ func (c *Collector) checkRoleQuorumForValidators(
 	logger *zap.Logger,
 	trace *committeeDutyTrace,
 	role spectypes.BeaconRole,
-	signerData []*exporter.SignerData,
+	signerData []*traces.SignerData,
 	slot phase0.Slot,
 	threshold uint64,
 ) {
@@ -1284,7 +1284,7 @@ func (c *Collector) checkAndPublishQuorumForRoleByIndex(
 	validatorIndex phase0.ValidatorIndex,
 	threshold uint64,
 ) {
-	var signerData []*exporter.SignerData
+	var signerData []*traces.SignerData
 
 	switch role {
 	case spectypes.BNRoleAttester:

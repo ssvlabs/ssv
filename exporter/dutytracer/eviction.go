@@ -1,4 +1,4 @@
-package validator
+package dutytracer
 
 import (
 	"encoding/hex"
@@ -10,7 +10,7 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/exporter"
+	"github.com/ssvlabs/ssv/exporter/traces"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/utils/hashmap"
 )
@@ -43,7 +43,7 @@ func (c *Collector) dumpLinkToDBPeriodically(slot phase0.Slot) (totalSaved int) 
 }
 
 func (c *Collector) dumpCommitteeToDBPeriodically(slot phase0.Slot) (totalSaved int) {
-	var duties []*exporter.CommitteeDutyTrace
+	var duties []*traces.CommitteeDutyTrace
 
 	c.committeeTraces.Range(func(key spectypes.CommitteeID, slotToTraceMap *hashmap.Map[phase0.Slot, *committeeDutyTrace]) bool {
 		trace, found := slotToTraceMap.Get(slot)
@@ -93,7 +93,7 @@ func (c *Collector) dumpCommitteeToDBPeriodically(slot phase0.Slot) (totalSaved 
 }
 
 func (c *Collector) dumpValidatorToDBPeriodically(slot phase0.Slot) (totalSaved int) {
-	var duties []*exporter.ValidatorDutyTrace
+	var duties []*traces.ValidatorDutyTrace
 
 	c.validatorTraces.Range(func(idx phase0.ValidatorIndex, slotToTraceMap *hashmap.Map[phase0.Slot, *validatorDutyTrace]) bool {
 		trace, found := slotToTraceMap.Get(slot)

@@ -1,4 +1,4 @@
-package exporter2
+package exporter
 
 import (
 	"fmt"
@@ -9,8 +9,8 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/exporter"
 	"github.com/ssvlabs/ssv/exporter/rolemask"
+	"github.com/ssvlabs/ssv/exporter/traces"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 )
 
@@ -20,7 +20,7 @@ func (e *Exporter) CommitteeTracesCore(request *CommitteeTracesQuery) (*Committe
 		return nil, multierror.Append(nil, &ValidationError{Err: err})
 	}
 
-	var all []*exporter.CommitteeDutyTrace
+	var all []*traces.CommitteeDutyTrace
 	var errs *multierror.Error
 	cids := request.CommitteeIDs
 	for s := request.From; s <= request.To; s++ {
@@ -46,13 +46,13 @@ func validateCommitteeRequest(request *CommitteeTracesQuery) error {
 	return nil
 }
 
-func (e *Exporter) getCommitteeDutiesForSlot(slot phase0.Slot, committeeIDs []spectypes.CommitteeID) ([]*exporter.CommitteeDutyTrace, error) {
+func (e *Exporter) getCommitteeDutiesForSlot(slot phase0.Slot, committeeIDs []spectypes.CommitteeID) ([]*traces.CommitteeDutyTrace, error) {
 	if len(committeeIDs) == 0 {
 		duties, err := e.traceStore.GetCommitteeDuties(slot)
 		return duties, err
 	}
 
-	duties := make([]*exporter.CommitteeDutyTrace, 0, len(committeeIDs))
+	duties := make([]*traces.CommitteeDutyTrace, 0, len(committeeIDs))
 
 	var errs *multierror.Error
 	for _, cmtID := range committeeIDs {

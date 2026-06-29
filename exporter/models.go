@@ -1,11 +1,11 @@
-package exporter2
+package exporter
 
 import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/exporter"
+	"github.com/ssvlabs/ssv/exporter/traces"
 	"github.com/ssvlabs/ssv/ibft/storage"
 )
 
@@ -72,7 +72,7 @@ type ValidatorScheduleEntry struct {
 // ValidatorCommitteeTrace is the domain representation of a validator duty trace
 // enriched with an optional committee ID.
 type ValidatorCommitteeTrace struct {
-	exporter.ValidatorDutyTrace
+	traces.ValidatorDutyTrace
 	CommitteeID *spectypes.CommitteeID
 }
 
@@ -100,7 +100,7 @@ type CommitteeScheduleEntry struct {
 
 // CommitteeTracesResult is the domain-level result for committee trace queries.
 type CommitteeTracesResult struct {
-	Traces   []*exporter.CommitteeDutyTrace
+	Traces   []*traces.CommitteeDutyTrace
 	Schedule []CommitteeScheduleEntry
 	Errors   []error
 }

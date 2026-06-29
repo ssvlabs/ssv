@@ -1,4 +1,4 @@
-package exporter2
+package exporter
 
 // ValidationError wraps an underlying error to indicate that a request is semantically invalid.
 // It allows callers to distinguish validation errors from processing errors using errors.As.

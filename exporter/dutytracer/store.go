@@ -1,4 +1,4 @@
-package validator
+package dutytracer
 
 import (
 	"errors"
@@ -9,8 +9,8 @@ import (
 	"github.com/hashicorp/go-multierror"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/exporter"
 	"github.com/ssvlabs/ssv/exporter/rolemask"
+	"github.com/ssvlabs/ssv/exporter/traces"
 	"github.com/ssvlabs/ssv/utils/hashmap"
 )
 
@@ -28,16 +28,16 @@ var ErrNotFound = errors.New("not found")
 type DutyTraceStore interface {
 	SaveCommitteeDutyLink(slot phase0.Slot, index phase0.ValidatorIndex, id spectypes.CommitteeID) error
 	SaveCommitteeDutyLinks(slot phase0.Slot, linkMap map[phase0.ValidatorIndex]spectypes.CommitteeID) error
-	SaveCommitteeDuty(duty *exporter.CommitteeDutyTrace) error
-	SaveCommitteeDuties(slot phase0.Slot, duties []*exporter.CommitteeDutyTrace) error
-	SaveValidatorDuty(duty *exporter.ValidatorDutyTrace) error
-	SaveValidatorDuties(duties []*exporter.ValidatorDutyTrace) error
-	GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.CommitteeID) (*exporter.CommitteeDutyTrace, error)
-	GetCommitteeDuties(slot phase0.Slot) ([]*exporter.CommitteeDutyTrace, error)
+	SaveCommitteeDuty(duty *traces.CommitteeDutyTrace) error
+	SaveCommitteeDuties(slot phase0.Slot, duties []*traces.CommitteeDutyTrace) error
+	SaveValidatorDuty(duty *traces.ValidatorDutyTrace) error
+	SaveValidatorDuties(duties []*traces.ValidatorDutyTrace) error
+	GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.CommitteeID) (*traces.CommitteeDutyTrace, error)
+	GetCommitteeDuties(slot phase0.Slot) ([]*traces.CommitteeDutyTrace, error)
 	GetCommitteeDutyLink(slot phase0.Slot, index phase0.ValidatorIndex) (spectypes.CommitteeID, error)
-	GetCommitteeDutyLinks(slot phase0.Slot) ([]*exporter.CommitteeDutyLink, error)
-	GetValidatorDuty(slot phase0.Slot, role spectypes.BeaconRole, index phase0.ValidatorIndex) (*exporter.ValidatorDutyTrace, error)
-	GetValidatorDuties(role spectypes.BeaconRole, slot phase0.Slot) ([]*exporter.ValidatorDutyTrace, error)
+	GetCommitteeDutyLinks(slot phase0.Slot) ([]*traces.CommitteeDutyLink, error)
+	GetValidatorDuty(slot phase0.Slot, role spectypes.BeaconRole, index phase0.ValidatorIndex) (*traces.ValidatorDutyTrace, error)
+	GetValidatorDuties(role spectypes.BeaconRole, slot phase0.Slot) ([]*traces.ValidatorDutyTrace, error)
 
 	// Compact scheduled duties I/O
 	SaveScheduled(slot phase0.Slot, schedule map[phase0.ValidatorIndex]rolemask.Mask) error
@@ -53,8 +53,8 @@ func (c *Collector) GetCommitteeID(slot phase0.Slot, index phase0.ValidatorIndex
 	return committeeID, nil
 }
 
-func (c *Collector) GetValidatorDuties(role spectypes.BeaconRole, slot phase0.Slot) ([]*exporter.ValidatorDutyTrace, error) {
-	duties := []*exporter.ValidatorDutyTrace{}
+func (c *Collector) GetValidatorDuties(role spectypes.BeaconRole, slot phase0.Slot) ([]*traces.ValidatorDutyTrace, error) {
+	duties := []*traces.ValidatorDutyTrace{}
 	var errs *multierror.Error
 
 	// lookup in cache
@@ -82,20 +82,20 @@ func (c *Collector) GetValidatorDuties(role spectypes.BeaconRole, slot phase0.Sl
 	return duties, errs.ErrorOrNil()
 }
 
-func (c *Collector) getValidatorDutiesFromDisk(role spectypes.BeaconRole, slot phase0.Slot) ([]*exporter.ValidatorDutyTrace, error) {
+func (c *Collector) getValidatorDutiesFromDisk(role spectypes.BeaconRole, slot phase0.Slot) ([]*traces.ValidatorDutyTrace, error) {
 	var errs *multierror.Error
 
 	storeDuties, err := c.store.GetValidatorDuties(role, slot)
 	errs = multierror.Append(errs, err)
 
-	duties := make([]*exporter.ValidatorDutyTrace, 0, len(storeDuties))
+	duties := make([]*traces.ValidatorDutyTrace, 0, len(storeDuties))
 	for _, duty := range storeDuties {
 		duties = append(duties, duty.DeepCopy())
 	}
 	return duties, errs.ErrorOrNil()
 }
 
-func (c *Collector) GetValidatorDuty(role spectypes.BeaconRole, slot phase0.Slot, index phase0.ValidatorIndex) (*exporter.ValidatorDutyTrace, error) {
+func (c *Collector) GetValidatorDuty(role spectypes.BeaconRole, slot phase0.Slot, index phase0.ValidatorIndex) (*traces.ValidatorDutyTrace, error) {
 	// lookup in cache
 	validatorSlots, found := c.validatorTraces.Get(index)
 	if !found {
@@ -119,7 +119,7 @@ func (c *Collector) GetValidatorDuty(role spectypes.BeaconRole, slot phase0.Slot
 	return c.getValidatorDutyFromDiskIndex(role, slot, index)
 }
 
-func (c *Collector) getValidatorDutyFromDiskIndex(role spectypes.BeaconRole, slot phase0.Slot, index phase0.ValidatorIndex) (*exporter.ValidatorDutyTrace, error) {
+func (c *Collector) getValidatorDutyFromDiskIndex(role spectypes.BeaconRole, slot phase0.Slot, index phase0.ValidatorIndex) (*traces.ValidatorDutyTrace, error) {
 	trace, err := c.store.GetValidatorDuty(slot, role, index)
 	if err != nil {
 		return nil, fmt.Errorf("get validator duty from disk (role=%s slot=%d index=%d): %w", role, slot, index, err)
@@ -128,8 +128,8 @@ func (c *Collector) getValidatorDutyFromDiskIndex(role spectypes.BeaconRole, slo
 	return trace, nil
 }
 
-func (c *Collector) GetCommitteeDuties(wantSlot phase0.Slot, roles ...spectypes.BeaconRole) ([]*exporter.CommitteeDutyTrace, error) {
-	var duties []*exporter.CommitteeDutyTrace
+func (c *Collector) GetCommitteeDuties(wantSlot phase0.Slot, roles ...spectypes.BeaconRole) ([]*traces.CommitteeDutyTrace, error) {
+	var duties []*traces.CommitteeDutyTrace
 	var errs *multierror.Error
 
 	c.committeeTraces.Range(func(committeeID spectypes.CommitteeID, committeeSlots *hashmap.Map[phase0.Slot, *committeeDutyTrace]) bool {
@@ -144,7 +144,7 @@ func (c *Collector) GetCommitteeDuties(wantSlot phase0.Slot, roles ...spectypes.
 	duties = append(duties, diskDuties...)
 	errs = multierror.Append(errs, err)
 
-	var filteredDuties []*exporter.CommitteeDutyTrace
+	var filteredDuties []*traces.CommitteeDutyTrace
 	for _, duty := range duties {
 		if hasSignersForRoles(duty, roles...) {
 			filteredDuties = append(filteredDuties, duty)
@@ -154,7 +154,7 @@ func (c *Collector) GetCommitteeDuties(wantSlot phase0.Slot, roles ...spectypes.
 	return filteredDuties, errs.ErrorOrNil()
 }
 
-func (c *Collector) GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.CommitteeID, roles ...spectypes.BeaconRole) (*exporter.CommitteeDutyTrace, error) {
+func (c *Collector) GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.CommitteeID, roles ...spectypes.BeaconRole) (*traces.CommitteeDutyTrace, error) {
 	committeeSlots, found := c.committeeTraces.Get(committeeID)
 	if !found {
 		trace, err := c.getCommitteeDutyFromDisk(slot, committeeID)
@@ -196,7 +196,7 @@ func (c *Collector) GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.Com
 // since we don't store a boolean flag to separate duties by their role in the db
 // we rely on the fact that during collection we separate the signers in their
 // corresponding fields (Attester and SyncCommittee) based on the role
-func hasSignersForRoles(duty *exporter.CommitteeDutyTrace, roles ...spectypes.BeaconRole) bool {
+func hasSignersForRoles(duty *traces.CommitteeDutyTrace, roles ...spectypes.BeaconRole) bool {
 	if len(roles) == 0 {
 		return true
 	}
@@ -215,7 +215,7 @@ func hasSignersForRoles(duty *exporter.CommitteeDutyTrace, roles ...spectypes.Be
 	return true
 }
 
-func (c *Collector) getCommitteeDutyFromDisk(slot phase0.Slot, committeeID spectypes.CommitteeID) (*exporter.CommitteeDutyTrace, error) {
+func (c *Collector) getCommitteeDutyFromDisk(slot phase0.Slot, committeeID spectypes.CommitteeID) (*traces.CommitteeDutyTrace, error) {
 	ctx := fmt.Sprintf("slot=%d committeeID=%x", slot, committeeID)
 	trace, err := c.store.GetCommitteeDuty(slot, committeeID)
 	if err != nil {
@@ -273,14 +273,14 @@ func (c *Collector) GetAllCommitteeDecideds(slot phase0.Slot, roles ...spectypes
 	return out, errs.ErrorOrNil()
 }
 
-func (c *Collector) GetCommitteeDutyLinks(slot phase0.Slot) ([]*exporter.CommitteeDutyLink, error) {
-	out := make([]*exporter.CommitteeDutyLink, 0)
+func (c *Collector) GetCommitteeDutyLinks(slot phase0.Slot) ([]*traces.CommitteeDutyLink, error) {
+	out := make([]*traces.CommitteeDutyLink, 0)
 	var errs *multierror.Error
 
 	c.validatorIndexToCommitteeLinks.Range(func(vi phase0.ValidatorIndex, m *hashmap.Map[phase0.Slot, spectypes.CommitteeID]) bool {
 		cid, found := m.Get(slot)
 		if found {
-			out = append(out, &exporter.CommitteeDutyLink{
+			out = append(out, &traces.CommitteeDutyLink{
 				ValidatorIndex: vi,
 				CommitteeID:    cid,
 			})

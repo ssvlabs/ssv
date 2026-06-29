@@ -1,4 +1,4 @@
-package exporter2
+package exporter
 
 import (
 	"fmt"
@@ -10,8 +10,8 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/exporter"
 	"github.com/ssvlabs/ssv/exporter/rolemask"
+	"github.com/ssvlabs/ssv/exporter/traces"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 )
 
@@ -161,7 +161,7 @@ func (e *Exporter) getValidatorCommitteeDutiesForRoleAndSlot(role spectypes.Beac
 		}
 
 		validatorDuty := ValidatorCommitteeTrace{
-			ValidatorDutyTrace: exporter.ValidatorDutyTrace{
+			ValidatorDutyTrace: traces.ValidatorDutyTrace{
 				ConsensusTrace: duty.ConsensusTrace,
 				Slot:           duty.Slot,
 				Validator:      index,

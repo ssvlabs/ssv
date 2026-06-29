@@ -1,4 +1,4 @@
-package validator
+package dutytracer
 
 import (
 	"context"
@@ -19,9 +19,9 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 
-	"github.com/ssvlabs/ssv/exporter"
 	"github.com/ssvlabs/ssv/exporter/rolemask"
 	"github.com/ssvlabs/ssv/exporter/store"
+	"github.com/ssvlabs/ssv/exporter/traces"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
@@ -735,7 +735,7 @@ func TestCollector_GetCommitteeDuty(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	vstore := registrystoragemocks.NewMockValidatorStore(ctrl)
 	dutyStore := new(mockDutyTraceStore)
-	dutyStore.committeeDutyTrace = &exporter.CommitteeDutyTrace{
+	dutyStore.committeeDutyTrace = &traces.CommitteeDutyTrace{
 		Slot:        phase0.Slot(10),
 		CommitteeID: spectypes.CommitteeID{1},
 		OperatorIDs: []uint64{1, 2, 3, 4},
@@ -748,7 +748,7 @@ func TestCollector_GetCommitteeDuty(t *testing.T) {
 	_, err := collector.GetCommitteeDuty(slot, committeeID, spectypes.BNRoleAttester)
 	require.ErrorIs(t, err, ErrNotFound)
 	dutyStore.committeeDutyTrace.Attester = append(dutyStore.committeeDutyTrace.Attester,
-		&exporter.SignerData{
+		&traces.SignerData{
 			Signer: 1,
 		})
 
@@ -759,7 +759,7 @@ func TestCollector_GetCommitteeDuty(t *testing.T) {
 	require.Equal(t, committeeID, duty.CommitteeID)
 
 	dutyStore.committeeDutyTrace.SyncCommittee = append(dutyStore.committeeDutyTrace.SyncCommittee,
-		&exporter.SignerData{
+		&traces.SignerData{
 			Signer: 1,
 		})
 
@@ -997,7 +997,7 @@ func TestCollector_getOrCreateCommitteeTrace(t *testing.T) {
 			trace, _, err := collector.getOrCreateCommitteeTrace(slot, committeeID)
 			require.NoError(t, err)
 			trace.OperatorIDs = []uint64{1, 2, 3}
-			collector.store.SaveCommitteeDuties(slot, []*exporter.CommitteeDutyTrace{trace.safeDeepCopy()})
+			collector.store.SaveCommitteeDuties(slot, []*traces.CommitteeDutyTrace{trace.safeDeepCopy()})
 			collector.lastEvictedSlot.Store(uint64(slot))
 			// Test: Create a new collector to ensure cache is empty and get the trace.
 			diskTrace, late, err := collector.getOrCreateCommitteeTrace(slot, committeeID)
@@ -1930,12 +1930,12 @@ func (m *mockDecidedListener) Reset() {
 
 type mockDutyTraceStore struct {
 	err                     error
-	committeeDutyTrace      *exporter.CommitteeDutyTrace
+	committeeDutyTrace      *traces.CommitteeDutyTrace
 	saveCommitteeDutyLinkFn func(slot phase0.Slot, index phase0.ValidatorIndex, id spectypes.CommitteeID) error
 	scheduled               map[phase0.Slot]map[phase0.ValidatorIndex]rolemask.Mask
 }
 
-func (m *mockDutyTraceStore) SaveCommitteeDuties(slot phase0.Slot, duties []*exporter.CommitteeDutyTrace) error {
+func (m *mockDutyTraceStore) SaveCommitteeDuties(slot phase0.Slot, duties []*traces.CommitteeDutyTrace) error {
 	return m.err
 }
 
@@ -1950,31 +1950,31 @@ func (m *mockDutyTraceStore) SaveCommitteeDutyLinks(slot phase0.Slot, linkMap ma
 	return m.err
 }
 
-func (m *mockDutyTraceStore) SaveCommitteeDuty(duty *exporter.CommitteeDutyTrace) error {
+func (m *mockDutyTraceStore) SaveCommitteeDuty(duty *traces.CommitteeDutyTrace) error {
 	return m.err
 }
 
-func (m *mockDutyTraceStore) GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.CommitteeID) (*exporter.CommitteeDutyTrace, error) {
+func (m *mockDutyTraceStore) GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.CommitteeID) (*traces.CommitteeDutyTrace, error) {
 	return m.committeeDutyTrace, m.err
 }
 
-func (m *mockDutyTraceStore) GetCommitteeDuties(slot phase0.Slot) ([]*exporter.CommitteeDutyTrace, error) {
+func (m *mockDutyTraceStore) GetCommitteeDuties(slot phase0.Slot) ([]*traces.CommitteeDutyTrace, error) {
 	return nil, m.err
 }
 
-func (m *mockDutyTraceStore) SaveValidatorDuties(duties []*exporter.ValidatorDutyTrace) error {
+func (m *mockDutyTraceStore) SaveValidatorDuties(duties []*traces.ValidatorDutyTrace) error {
 	return m.err
 }
 
-func (m *mockDutyTraceStore) SaveValidatorDuty(duty *exporter.ValidatorDutyTrace) error {
+func (m *mockDutyTraceStore) SaveValidatorDuty(duty *traces.ValidatorDutyTrace) error {
 	return m.err
 }
 
-func (m *mockDutyTraceStore) GetValidatorDuty(slot phase0.Slot, role spectypes.BeaconRole, index phase0.ValidatorIndex) (*exporter.ValidatorDutyTrace, error) {
+func (m *mockDutyTraceStore) GetValidatorDuty(slot phase0.Slot, role spectypes.BeaconRole, index phase0.ValidatorIndex) (*traces.ValidatorDutyTrace, error) {
 	return nil, m.err
 }
 
-func (m *mockDutyTraceStore) GetValidatorDuties(role spectypes.BeaconRole, slot phase0.Slot) ([]*exporter.ValidatorDutyTrace, error) {
+func (m *mockDutyTraceStore) GetValidatorDuties(role spectypes.BeaconRole, slot phase0.Slot) ([]*traces.ValidatorDutyTrace, error) {
 	return nil, m.err
 }
 
@@ -1982,7 +1982,7 @@ func (m *mockDutyTraceStore) GetCommitteeDutyLink(slot phase0.Slot, index phase0
 	return spectypes.CommitteeID{}, m.err
 }
 
-func (m *mockDutyTraceStore) GetCommitteeDutyLinks(slot phase0.Slot) ([]*exporter.CommitteeDutyLink, error) {
+func (m *mockDutyTraceStore) GetCommitteeDutyLinks(slot phase0.Slot) ([]*traces.CommitteeDutyLink, error) {
 	return nil, m.err
 }
 

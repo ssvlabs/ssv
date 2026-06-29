@@ -18,7 +18,8 @@ import (
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
 	"github.com/ssvlabs/ssv/doppelganger"
-	"github.com/ssvlabs/ssv/exporter"
+	exporterconfig "github.com/ssvlabs/ssv/exporter/config"
+	dutytracer "github.com/ssvlabs/ssv/exporter/dutytracer"
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/network"
@@ -30,7 +31,6 @@ import (
 	"github.com/ssvlabs/ssv/observability/traces"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/duties"
-	dutytracer "github.com/ssvlabs/ssv/operator/dutytracer"
 	nodestorage "github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/operator/validator/metadata"
 	"github.com/ssvlabs/ssv/operator/validators"
@@ -174,7 +174,7 @@ type Controller struct {
 }
 
 // NewController creates a new validator controller instance.
-func NewController(logger *zap.Logger, options ControllerOptions, exporterOptions exporter.Options) *Controller {
+func NewController(logger *zap.Logger, options ControllerOptions, exporterOptions exporterconfig.Options) *Controller {
 	logger.Debug("setting up validator controller")
 
 	// lookup in a map that holds all relevant operators
@@ -398,7 +398,7 @@ func (c *Controller) handleWorkerMessages(ctx context.Context, msg network.Decod
 		ncv = item.Value()
 	}
 
-	if c.validatorCommonOpts.ExporterOptions.Mode == exporter.ModeArchive {
+	if c.validatorCommonOpts.ExporterOptions.Mode == exporterconfig.ModeArchive {
 		// use new exporter functionality
 		return c.traceCollector.Collect(c.ctx, ssvMsg, ncv.VerifySig)
 	}

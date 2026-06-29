@@ -12,7 +12,7 @@ import (
 
 	"github.com/ssvlabs/ssv/doppelganger"
 	"github.com/ssvlabs/ssv/eth/executionclient"
-	"github.com/ssvlabs/ssv/exporter"
+	exporterconfig "github.com/ssvlabs/ssv/exporter/config"
 	"github.com/ssvlabs/ssv/hprobe"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/network"
@@ -131,8 +131,8 @@ func Test_newNode_wiresExporterNode(t *testing.T) {
 		exporterMode  string
 		wantCollector bool
 	}{
-		{name: "standard", mode: modeExporterStandard, exporterMode: exporter.ModeStandard, wantCollector: false},
-		{name: "archive", mode: modeExporterArchive, exporterMode: exporter.ModeArchive, wantCollector: true},
+		{name: "standard", mode: modeExporterStandard, exporterMode: exporterconfig.ModeStandard, wantCollector: false},
+		{name: "archive", mode: modeExporterArchive, exporterMode: exporterconfig.ModeArchive, wantCollector: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())

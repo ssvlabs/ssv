@@ -1,4 +1,4 @@
-package exporter
+package traces
 
 import (
 	"math/rand"

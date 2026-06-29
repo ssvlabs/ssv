@@ -1,4 +1,4 @@
-package validator
+package dutytracer
 
 import (
 	"context"
@@ -12,7 +12,7 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/exporter"
+	"github.com/ssvlabs/ssv/exporter/traces"
 	"github.com/ssvlabs/ssv/networkconfig"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/registry/storage"
@@ -573,7 +573,7 @@ func TestCollector_checkAndPublishQuorumForRoleByIndex(t *testing.T) {
 		defer trace.Unlock()
 
 		// Add 3 signers to Attester bucket (simulating what flushPending does)
-		trace.Attester = []*exporter.SignerData{
+		trace.Attester = []*traces.SignerData{
 			{Signer: operator1, ValidatorIdx: []phase0.ValidatorIndex{vIndex1}, ReceivedTime: 1000},
 			{Signer: operator2, ValidatorIdx: []phase0.ValidatorIndex{vIndex1}, ReceivedTime: 1001},
 			{Signer: operator3, ValidatorIdx: []phase0.ValidatorIndex{vIndex1}, ReceivedTime: 1002},

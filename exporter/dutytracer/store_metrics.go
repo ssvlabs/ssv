@@ -1,4 +1,4 @@
-package validator
+package dutytracer
 
 import (
 	"context"
@@ -10,9 +10,9 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/exporter"
 	"github.com/ssvlabs/ssv/exporter/rolemask"
 	"github.com/ssvlabs/ssv/exporter/store"
+	"github.com/ssvlabs/ssv/exporter/traces"
 )
 
 type DutyTraceStoreMetrics struct {
@@ -55,7 +55,7 @@ func (d *DutyTraceStoreMetrics) GetCommitteeDutyLink(slot phase0.Slot, index pha
 	return d.Store.GetCommitteeDutyLink(slot, index)
 }
 
-func (d *DutyTraceStoreMetrics) GetCommitteeDutyLinks(slot phase0.Slot) ([]*exporter.CommitteeDutyLink, error) {
+func (d *DutyTraceStoreMetrics) GetCommitteeDutyLinks(slot phase0.Slot) ([]*traces.CommitteeDutyLink, error) {
 	start := time.Now()
 	defer func() {
 		record("link", "get_all", start)
@@ -63,7 +63,7 @@ func (d *DutyTraceStoreMetrics) GetCommitteeDutyLinks(slot phase0.Slot) ([]*expo
 	return d.Store.GetCommitteeDutyLinks(slot)
 }
 
-func (d *DutyTraceStoreMetrics) SaveCommitteeDuties(slot phase0.Slot, duties []*exporter.CommitteeDutyTrace) error {
+func (d *DutyTraceStoreMetrics) SaveCommitteeDuties(slot phase0.Slot, duties []*traces.CommitteeDutyTrace) error {
 	start := time.Now()
 	defer func() {
 		record("committee", "save_all", start)
@@ -71,7 +71,7 @@ func (d *DutyTraceStoreMetrics) SaveCommitteeDuties(slot phase0.Slot, duties []*
 	return d.Store.SaveCommitteeDuties(slot, duties)
 }
 
-func (d *DutyTraceStoreMetrics) SaveCommitteeDuty(duty *exporter.CommitteeDutyTrace) error {
+func (d *DutyTraceStoreMetrics) SaveCommitteeDuty(duty *traces.CommitteeDutyTrace) error {
 	start := time.Now()
 	defer func() {
 		record("committee", "save", start)
@@ -79,7 +79,7 @@ func (d *DutyTraceStoreMetrics) SaveCommitteeDuty(duty *exporter.CommitteeDutyTr
 	return d.Store.SaveCommitteeDuty(duty)
 }
 
-func (d *DutyTraceStoreMetrics) GetCommitteeDuty(slot phase0.Slot, id spectypes.CommitteeID) (duty *exporter.CommitteeDutyTrace, err error) {
+func (d *DutyTraceStoreMetrics) GetCommitteeDuty(slot phase0.Slot, id spectypes.CommitteeID) (duty *traces.CommitteeDutyTrace, err error) {
 	start := time.Now()
 	defer func() {
 		record("committee", "get", start)
@@ -87,7 +87,7 @@ func (d *DutyTraceStoreMetrics) GetCommitteeDuty(slot phase0.Slot, id spectypes.
 	return d.Store.GetCommitteeDuty(slot, id)
 }
 
-func (d *DutyTraceStoreMetrics) GetCommitteeDuties(slot phase0.Slot) ([]*exporter.CommitteeDutyTrace, error) {
+func (d *DutyTraceStoreMetrics) GetCommitteeDuties(slot phase0.Slot) ([]*traces.CommitteeDutyTrace, error) {
 	start := time.Now()
 	defer func() {
 		record("committee", "get_all", start)
@@ -111,7 +111,7 @@ func (d *DutyTraceStoreMetrics) GetScheduled(slot phase0.Slot) (map[phase0.Valid
 	return d.Store.GetScheduled(slot)
 }
 
-func (d *DutyTraceStoreMetrics) SaveValidatorDuties(duties []*exporter.ValidatorDutyTrace) error {
+func (d *DutyTraceStoreMetrics) SaveValidatorDuties(duties []*traces.ValidatorDutyTrace) error {
 	start := time.Now()
 	defer func() {
 		record("validator", "save_all", start)
@@ -119,7 +119,7 @@ func (d *DutyTraceStoreMetrics) SaveValidatorDuties(duties []*exporter.Validator
 	return d.Store.SaveValidatorDuties(duties)
 }
 
-func (d *DutyTraceStoreMetrics) SaveValidatorDuty(duty *exporter.ValidatorDutyTrace) error {
+func (d *DutyTraceStoreMetrics) SaveValidatorDuty(duty *traces.ValidatorDutyTrace) error {
 	start := time.Now()
 	defer func() {
 		record("validator", "save", start)
@@ -127,7 +127,7 @@ func (d *DutyTraceStoreMetrics) SaveValidatorDuty(duty *exporter.ValidatorDutyTr
 	return d.Store.SaveValidatorDuty(duty)
 }
 
-func (d *DutyTraceStoreMetrics) GetValidatorDuty(slot phase0.Slot, role spectypes.BeaconRole, index phase0.ValidatorIndex) (*exporter.ValidatorDutyTrace, error) {
+func (d *DutyTraceStoreMetrics) GetValidatorDuty(slot phase0.Slot, role spectypes.BeaconRole, index phase0.ValidatorIndex) (*traces.ValidatorDutyTrace, error) {
 	start := time.Now()
 	defer func() {
 		record("validator", "get", start)
@@ -135,7 +135,7 @@ func (d *DutyTraceStoreMetrics) GetValidatorDuty(slot phase0.Slot, role spectype
 	return d.Store.GetValidatorDuty(slot, role, index)
 }
 
-func (d *DutyTraceStoreMetrics) GetValidatorDuties(role spectypes.BeaconRole, slot phase0.Slot) ([]*exporter.ValidatorDutyTrace, error) {
+func (d *DutyTraceStoreMetrics) GetValidatorDuties(role spectypes.BeaconRole, slot phase0.Slot) ([]*traces.ValidatorDutyTrace, error) {
 	start := time.Now()
 	defer func() {
 		record("validator", "get_all", start)
