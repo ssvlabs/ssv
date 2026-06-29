@@ -14,7 +14,7 @@ import (
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
 
-	"github.com/ssvlabs/ssv/exporter"
+	exporterconfig "github.com/ssvlabs/ssv/exporter/config"
 	"github.com/ssvlabs/ssv/networkconfig"
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
 	kv "github.com/ssvlabs/ssv/storage/badger"
@@ -201,7 +201,7 @@ func Test_resolveAndValidate_mode(t *testing.T) {
 	t.Run("exporter archive -> modeExporterArchive", func(t *testing.T) {
 		c := config{}
 		c.ExporterOptions.Enabled = true
-		c.ExporterOptions.Mode = exporter.ModeArchive
+		c.ExporterOptions.Mode = exporterconfig.ModeArchive
 		res, err := c.resolveAndValidate(zap.NewNop())
 		require.NoError(t, err)
 		require.Equal(t, modeExporterArchive, res.mode)
@@ -501,16 +501,16 @@ func Test_resolveMode(t *testing.T) {
 		wantErr string
 	}{
 		{name: "not exporter -> operator", enabled: false, mode: "", want: modeOperator},
-		{name: "not exporter ignores mode -> operator", enabled: false, mode: exporter.ModeArchive, want: modeOperator},
-		{name: "exporter standard", enabled: true, mode: exporter.ModeStandard, want: modeExporterStandard},
-		{name: "exporter archive", enabled: true, mode: exporter.ModeArchive, want: modeExporterArchive},
+		{name: "not exporter ignores mode -> operator", enabled: false, mode: exporterconfig.ModeArchive, want: modeOperator},
+		{name: "exporter standard", enabled: true, mode: exporterconfig.ModeStandard, want: modeExporterStandard},
+		{name: "exporter archive", enabled: true, mode: exporterconfig.ModeArchive, want: modeExporterArchive},
 		{name: "exporter invalid -> error", enabled: true, mode: "bogus", wantErr: msgInvalidExporterMode},
 		{name: "exporter empty mode -> error", enabled: true, mode: "", wantErr: msgInvalidExporterMode},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := resolveMode(exporter.Options{Enabled: tt.enabled, Mode: tt.mode})
+			got, err := resolveMode(exporterconfig.Options{Enabled: tt.enabled, Mode: tt.mode})
 			if tt.wantErr != "" {
 				require.Error(t, err)
 				require.Contains(t, err.Error(), tt.wantErr)

@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/ssvlabs/ssv/exporter"
+	exporterconfig "github.com/ssvlabs/ssv/exporter/config"
 )
 
 func TestShouldRunDutyScheduler(t *testing.T) {
@@ -13,27 +13,27 @@ func TestShouldRunDutyScheduler(t *testing.T) {
 
 	tests := []struct {
 		name         string
-		exporterOpts exporter.Options
+		exporterOpts exporterconfig.Options
 		expected     bool
 	}{
 		{
 			name:         "regular operator",
-			exporterOpts: exporter.Options{},
+			exporterOpts: exporterconfig.Options{},
 			expected:     true,
 		},
 		{
 			name: "exporter standard",
-			exporterOpts: exporter.Options{
+			exporterOpts: exporterconfig.Options{
 				Enabled: true,
-				Mode:    exporter.ModeStandard,
+				Mode:    exporterconfig.ModeStandard,
 			},
 			expected: false,
 		},
 		{
 			name: "exporter archive",
-			exporterOpts: exporter.Options{
+			exporterOpts: exporterconfig.Options{
 				Enabled: true,
-				Mode:    exporter.ModeArchive,
+				Mode:    exporterconfig.ModeArchive,
 			},
 			expected: true,
 		},

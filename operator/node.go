@@ -16,8 +16,8 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/eth/executionclient"
-	"github.com/ssvlabs/ssv/exporter"
-	"github.com/ssvlabs/ssv/exporter/api"
+	exporterconfig "github.com/ssvlabs/ssv/exporter/config"
+	"github.com/ssvlabs/ssv/exporter/v1/api"
 	"github.com/ssvlabs/ssv/exporter2"
 	dutytracer "github.com/ssvlabs/ssv/exporter2/dutytracer"
 	exporterstore "github.com/ssvlabs/ssv/exporter2/store"
@@ -68,7 +68,7 @@ type Node struct {
 	network          *networkconfig.Network
 	validatorsCtrl   *validator.Controller
 	validatorOptions validator.ControllerOptions
-	exporterOptions  exporter.Options
+	exporterOptions  exporterconfig.Options
 	consensusClient  beaconprotocol.BeaconNode
 	executionClient  executionclient.Provider
 	net              network.P2PNetwork
@@ -82,12 +82,12 @@ type Node struct {
 	exporterRead *exporter2.Exporter
 }
 
-func shouldRunDutyScheduler(exporterOpts exporter.Options) bool {
-	return !exporterOpts.Enabled || exporterOpts.Mode == exporter.ModeArchive
+func shouldRunDutyScheduler(exporterOpts exporterconfig.Options) bool {
+	return !exporterOpts.Enabled || exporterOpts.Mode == exporterconfig.ModeArchive
 }
 
 // New is the constructor of Node
-func New(logger *zap.Logger, opts Options, exporterOpts exporter.Options, slotTickerProvider slotticker.Provider, qbftStorage *qbftstorage.ParticipantStores) *Node {
+func New(logger *zap.Logger, opts Options, exporterOpts exporterconfig.Options, slotTickerProvider slotticker.Provider, qbftStorage *qbftstorage.ParticipantStores) *Node {
 	selfValidatorStore := opts.ValidatorStore.WithOperatorID(opts.ValidatorOptions.OperatorDataStore.GetOperatorID)
 
 	var (
@@ -209,7 +209,7 @@ func (n *Node) Start(ctx context.Context) error {
 			}
 			return nil
 		})
-	case n.exporterOptions.Enabled && n.exporterOptions.Mode == exporter.ModeStandard:
+	case n.exporterOptions.Enabled && n.exporterOptions.Mode == exporterconfig.ModeStandard:
 		g.Go(func() error {
 			<-gctx.Done()
 			return nil

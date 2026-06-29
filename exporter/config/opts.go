@@ -1,4 +1,4 @@
-package exporter
+package config
 
 type Options struct {
 	Enabled     bool   `yaml:"Enabled" env:"EXPORTER" env-description:"Enable exporter mode to track post-consensus participations"`

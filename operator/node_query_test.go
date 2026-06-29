@@ -13,7 +13,7 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/exporter/api"
+	"github.com/ssvlabs/ssv/exporter/v1/api"
 	"github.com/ssvlabs/ssv/exporter2"
 	dutytracer "github.com/ssvlabs/ssv/exporter2/dutytracer"
 	dutytracestore "github.com/ssvlabs/ssv/exporter2/store"

@@ -25,7 +25,7 @@ import (
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 
 	"github.com/ssvlabs/ssv/beacon/goclient"
-	"github.com/ssvlabs/ssv/exporter"
+	exporterconfig "github.com/ssvlabs/ssv/exporter/config"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -94,7 +94,7 @@ func TestNewController(t *testing.T) {
 		RegistryStorage:   registryStorage,
 		Context:           t.Context(),
 	}
-	control := NewController(logger, controllerOptions, exporter.Options{})
+	control := NewController(logger, controllerOptions, exporterconfig.Options{})
 	// NewController starts ttlcache cleanup goroutines; stop them so they don't leak across tests.
 	defer control.Stop()
 	require.IsType(t, &Controller{}, control)
@@ -124,7 +124,7 @@ func TestNewControllerRouterConcurrencyOverride(t *testing.T) {
 		Context:              t.Context(),
 		MsgRouterConcurrency: 24,
 	}
-	control := NewController(logger, controllerOptions, exporter.Options{})
+	control := NewController(logger, controllerOptions, exporterconfig.Options{})
 	// NewController starts ttlcache cleanup goroutines; stop them so they don't leak across tests.
 	defer control.Stop()
 	require.Equal(t, 24, control.msgRouterConcurrency)
@@ -134,7 +134,7 @@ func TestSetupValidatorsExporter(t *testing.T) {
 	logger := log.TestLogger(t)
 	controllerOptions := MockControllerOptions{
 		validatorCommonOpts: &validator.CommonOptions{
-			ExporterOptions: exporter.Options{
+			ExporterOptions: exporterconfig.Options{
 				Enabled: true,
 			},
 		},
@@ -153,7 +153,7 @@ func TestSetupRunnersExporter(t *testing.T) {
 		nil,
 		nil,
 		&validator.CommonOptions{
-			ExporterOptions: exporter.Options{
+			ExporterOptions: exporterconfig.Options{
 				Enabled: true,
 			},
 		},
@@ -165,7 +165,7 @@ func TestSetupRunnersExporter(t *testing.T) {
 func TestSetupCommitteeRunnersExporter(t *testing.T) {
 	committeeRunnerFunc := SetupCommitteeRunners(t.Context(), &validator.Options{
 		CommonOptions: validator.CommonOptions{
-			ExporterOptions: exporter.Options{
+			ExporterOptions: exporterconfig.Options{
 				Enabled: true,
 			},
 		},
