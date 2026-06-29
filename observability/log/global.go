@@ -48,56 +48,70 @@ func SetGlobal(levelName string, levelEncoderName string, logFormat string, file
 
 	levelEncoder := parseConfigLevelEncoder(levelEncoderName)
 
-	lv := zap.LevelEnablerFunc(func(lvl zapcore.Level) bool {
+	encoderConfig := zapcore.EncoderConfig{
+		MessageKey:  "msg",
+		LevelKey:    "level",
+		EncodeLevel: levelEncoder,
+		TimeKey:     "time",
+		EncodeTime: func(t time.Time, enc zapcore.PrimitiveArrayEncoder) {
+			enc.AppendString(t.UTC().Format("2006-01-02T15:04:05.000000Z"))
+		},
+		CallerKey:        "caller",
+		EncodeCaller:     zapcore.ShortCallerEncoder,
+		EncodeDuration:   zapcore.StringDurationEncoder,
+		NameKey:          "name",
+		ConsoleSeparator: "\t",
+	}
+
+	// Unlike stdoutSyncer, the file syncer needs no zapcore.Lock: lumberjack's
+	// Write is internally mutex-guarded.
+	var fileSyncer zapcore.WriteSyncer
+	if fileOptions != nil {
+		fileSyncer = zapcore.AddSync(fileOptions.writer())
+	}
+
+	stdoutLevel := zap.LevelEnablerFunc(func(lvl zapcore.Level) bool {
 		return lvl >= level
 	})
 
-	cfg := zap.Config{
-		Encoding:    logFormat,
-		Level:       zap.NewAtomicLevelAt(level),
-		OutputPaths: []string{"stdout"},
-		EncoderConfig: zapcore.EncoderConfig{
-			MessageKey:  "msg",
-			LevelKey:    "level",
-			EncodeLevel: levelEncoder,
-			TimeKey:     "time",
-			EncodeTime: func(t time.Time, enc zapcore.PrimitiveArrayEncoder) {
-				enc.AppendString(t.UTC().Format("2006-01-02T15:04:05.000000Z"))
-			},
-			CallerKey:        "caller",
-			EncodeCaller:     zapcore.ShortCallerEncoder,
-			EncodeDuration:   zapcore.StringDurationEncoder,
-			NameKey:          "name",
-			ConsoleSeparator: "\t",
-		},
+	core, err := assembleCore(stdoutLevel, encoderConfig, logFormat, fileSyncer)
+	if err != nil {
+		return err
 	}
 
-	var zapCore zapcore.Core
-	switch logFormat {
-	case "console":
-		zapCore = zapcore.NewCore(zapcore.NewConsoleEncoder(cfg.EncoderConfig), os.Stdout, lv)
-	case "json":
-		zapCore = zapcore.NewCore(zapcore.NewJSONEncoder(cfg.EncoderConfig), os.Stdout, lv)
-	default:
-		return fmt.Errorf("unknown log format: %s", logFormat)
-	}
-
-	if fileOptions == nil {
-		zap.ReplaceGlobals(zap.New(zapCore))
-		return nil
-	}
-
-	lv2 := zap.LevelEnablerFunc(func(lvl zapcore.Level) bool {
-		return true // debug log returns all logs
-	})
-
-	dev := zapcore.NewJSONEncoder(zap.NewDevelopmentEncoderConfig())
-	fileWriter := fileOptions.writer(fileOptions)
-	fileCore := zapcore.NewCore(dev, zapcore.AddSync(fileWriter), lv2)
-
-	zap.ReplaceGlobals(zap.New(zapcore.NewTee(zapCore, fileCore)))
+	zap.ReplaceGlobals(zap.New(core))
 
 	return nil
+}
+
+// stdoutSyncer is zapcore.Lock-wrapped so concurrent writes to stdout don't interleave.
+var stdoutSyncer = zapcore.Lock(zapcore.AddSync(os.Stdout))
+
+// levelAll enables every level; used for the always-on file sink, where gating happens elsewhere.
+var levelAll = zap.LevelEnablerFunc(func(zapcore.Level) bool { return true })
+
+// assembleCore builds the SSV logging core: a stdout core gated by stdoutLevel,
+// optionally tee'd with an always-on file core.
+func assembleCore(stdoutLevel zapcore.LevelEnabler, encoderConfig zapcore.EncoderConfig, logFormat string, fileSyncer zapcore.WriteSyncer) (zapcore.Core, error) {
+	var stdoutEncoder zapcore.Encoder
+	switch logFormat {
+	case "console":
+		stdoutEncoder = zapcore.NewConsoleEncoder(encoderConfig)
+	case "json":
+		stdoutEncoder = zapcore.NewJSONEncoder(encoderConfig)
+	default:
+		return nil, fmt.Errorf("unknown log format: %s", logFormat)
+	}
+
+	core := zapcore.NewCore(stdoutEncoder, stdoutSyncer, stdoutLevel)
+
+	if fileSyncer != nil {
+		dev := zapcore.NewJSONEncoder(zap.NewDevelopmentEncoderConfig())
+		fileCore := zapcore.NewCore(dev, fileSyncer, levelAll) // file sink records all levels
+		core = zapcore.NewTee(core, fileCore)
+	}
+
+	return core, nil
 }
 
 type LogFileOptions struct {
@@ -106,11 +120,11 @@ type LogFileOptions struct {
 	MaxBackups int
 }
 
-func (o LogFileOptions) writer(options *LogFileOptions) io.Writer {
+func (o *LogFileOptions) writer() io.Writer {
 	return &lumberjack.Logger{
-		Filename:   options.FilePath,
-		MaxSize:    options.MaxSize, // megabytes
-		MaxBackups: options.MaxBackups,
+		Filename:   o.FilePath,
+		MaxSize:    o.MaxSize, // megabytes
+		MaxBackups: o.MaxBackups,
 		MaxAge:     28, // days
 		Compress:   false,
 	}

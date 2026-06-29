@@ -23,11 +23,8 @@ func (gc *GoClient) SyncCommitteeDuties(ctx context.Context, epoch phase0.Epoch,
 	if err != nil {
 		return nil, errMultiClient(fmt.Errorf("fetch sync committee duties: %w", err), "SyncCommitteeDuties")
 	}
-	if resp == nil {
-		return nil, errMultiClient(fmt.Errorf("sync committee duties response is nil"), "SyncCommitteeDuties")
-	}
-	if resp.Data == nil {
-		return nil, errMultiClient(fmt.Errorf("sync committee duties response data is nil"), "SyncCommitteeDuties")
+	if err := checkSliceResponse(resp, "sync committee duties"); err != nil {
+		return nil, errMultiClient(err, "SyncCommitteeDuties")
 	}
 
 	return resp.Data, nil
