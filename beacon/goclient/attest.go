@@ -71,12 +71,17 @@ func (gc *GoClient) GetAttestationData(ctx context.Context, slot phase0.Slot) (*
 			return cachedResult.Value(), nil
 		}
 
-		attData, err := gc.fetchAttestationData(ctx, slot)
+		// Detach from the leader caller's ctx so its cancellation doesn't fail the other callers
+		// whose requests were collapsed into this one (mirrors domainDataReqInflight); the
+		// underlying multi-client fetch carries its own timeout.
+		fetchCtx := context.WithoutCancel(ctx)
+
+		attData, err := gc.fetchAttestationData(fetchCtx, slot)
 		if err != nil {
 			return nil, err
 		}
 
-		attData, stale := gc.verifyAndRefetchIfStale(ctx, slot, attData)
+		attData, stale := gc.verifyAndRefetchIfStale(fetchCtx, slot, attData)
 		// Not caching stale data allows next caller to retry with fresh fetch.
 		if !stale {
 			gc.attestationDataCache.Set(slot, attData, ttlcache.DefaultTTL)
