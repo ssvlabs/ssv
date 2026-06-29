@@ -20,11 +20,15 @@ import (
 func (gc *GoClient) ProposerDutiesDependentRoot(ctx context.Context, epoch phase0.Epoch) (phase0.Root, error) {
 	// Several proposer-preferences runners (one per local proposing validator in the epoch) request the
 	// same epoch's dependent_root concurrently; collapse that burst into a single GET. Not TTL-cached so
-	// a reorg re-emission still observes a fresh root. The collapsed call adopts the winning caller's
-	// ctx, so its cancellation also fails the concurrent waiters — acceptable as they share the slot's
-	// deadline window and a re-emit recovers.
+	// a reorg re-emission still observes a fresh root. The collapsed call runs on a detached context so
+	// the leader caller's cancellation is not propagated to the concurrent waiters — they may have
+	// later deadlines (different proposal slots), and a leader with a tight budget must not cancel a
+	// waiter that still had room. An outer common-timeout still bounds the detached call.
 	root, err, _ := gc.proposerDutiesDependentRootInflight.Do(epoch, func() (phase0.Root, error) {
-		return firstClientResult(ctx, gc, "ProposerDutiesDependentRoot", http.MethodGet, func(ctx context.Context, addr string) (phase0.Root, error) {
+		detached := context.WithoutCancel(ctx)
+		dctx, cancel := context.WithTimeout(detached, gc.commonTimeout)
+		defer cancel()
+		return firstClientResult(dctx, gc, "ProposerDutiesDependentRoot", http.MethodGet, func(ctx context.Context, addr string) (phase0.Root, error) {
 			var resp struct {
 				DependentRoot string `json:"dependent_root"`
 			}

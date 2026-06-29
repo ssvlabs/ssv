@@ -27,6 +27,12 @@ var supportedSSVConfigs = map[string]*SSV{
 
 func SSVConfigByName(name string) (*SSV, error) {
 	if network, ok := supportedSSVConfigs[name]; ok {
+		// A zero registry contract address means the config is a placeholder (e.g. a devnet whose
+		// contract hasn't been deployed yet). Syncing from it would silently read an empty registry at
+		// 0x0 and find no validators, so fail loudly rather than start against a misconfigured network.
+		if network.RegistryContractAddr == (ethcommon.Address{}) {
+			return nil, fmt.Errorf("network %q is not fully configured: zero registry contract address", name)
+		}
 		return network, nil
 	}
 

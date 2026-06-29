@@ -27,16 +27,21 @@ func (gc *GoClient) GetExecutionPayloadEnvelope(ctx context.Context, slot phase0
 	})
 }
 
-// SubmitExecutionPayloadEnvelope publishes a signed §6 envelope as SSZ.
+// SubmitExecutionPayloadEnvelope publishes a signed §6 envelope as SSZ to all configured beacon
+// nodes concurrently, succeeding if at least one accepts it. Re-publishing a signed envelope to
+// multiple BNs is safe — they dedupe by block root.
 func (gc *GoClient) SubmitExecutionPayloadEnvelope(ctx context.Context, signed *gloas.SignedExecutionPayloadEnvelope) error {
 	body, err := signed.MarshalSSZ()
 	if err != nil {
 		return fmt.Errorf("marshal signed execution payload envelope: %w", err)
 	}
-	_, err = firstClientResult(ctx, gc, "SubmitExecutionPayloadEnvelope", http.MethodPost, func(ctx context.Context, addr string) (struct{}, error) {
-		return struct{}{}, submitExecutionPayloadEnvelope(ctx, addr, body)
+
+	ctx, cancel := context.WithTimeout(ctx, gc.commonTimeout)
+	defer cancel()
+
+	return gc.multiClientSubmit(ctx, "SubmitExecutionPayloadEnvelope", func(ctx context.Context, client Client) error {
+		return submitExecutionPayloadEnvelope(ctx, gc.clientAddresses[client], body)
 	})
-	return err
 }
 
 // requestExecutionPayloadEnvelope GETs the produce endpoint and decodes the SSZ response into an envelope.
