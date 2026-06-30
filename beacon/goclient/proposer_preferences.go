@@ -3,6 +3,7 @@ package goclient
 import (
 	"context"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -11,6 +12,10 @@ import (
 
 	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 )
+
+// proposerPreferencesPath is the SIP #94 §5 publish endpoint; go-eth2-client has no Gloas types, so
+// SubmitProposerPreferences is a hand-rolled JSON POST.
+const proposerPreferencesPath = "/eth/v1/validator/proposer_preferences"
 
 // ProposerDutiesDependentRoot returns the dependent root from the v2 proposer-duties response for the
 // given epoch — the proposer-lookahead seed a preference is pinned to (SIP #94 §5; callers pass the
@@ -51,10 +56,24 @@ func (gc *GoClient) ProposerDutiesDependentRoot(ctx context.Context, epoch phase
 	return root, err
 }
 
-// SubmitProposerPreferences broadcasts signed Gloas (ePBS) proposer preferences (SIP #94 §5).
-// beacon-APIs exposes no validator-facing publication endpoint yet (the BN shape is TBD), so this
-// returns the gloas.ErrProposerPreferencesPublishUnavailable sentinel — which the runner treats as a
-// benign no-op — rather than silently dropping them; swap in a real client once the endpoint lands.
-func (*GoClient) SubmitProposerPreferences(_ context.Context, _ []*gloas.SignedProposerPreferences) error {
-	return gloas.ErrProposerPreferencesPublishUnavailable
+// SubmitProposerPreferences broadcasts signed Gloas (ePBS) proposer preferences (SIP #94 §5) to every
+// beacon client, succeeding if at least one accepts them; each BN verifies them and gossips on the
+// proposer_preferences topic.
+func (gc *GoClient) SubmitProposerPreferences(ctx context.Context, preferences []*gloas.SignedProposerPreferences) error {
+	ctx, cancel := context.WithTimeout(ctx, gc.commonTimeout)
+	defer cancel()
+
+	return gc.multiClientSubmit(ctx, "SubmitProposerPreferences", func(ctx context.Context, client Client) error {
+		return submitProposerPreferences(ctx, ptcHTTPClient, gc.clientAddresses[client], preferences)
+	})
+}
+
+// submitProposerPreferences POSTs the signed proposer preferences as a JSON array to the validator endpoint.
+func submitProposerPreferences(ctx context.Context, httpClient *http.Client, addr string, preferences []*gloas.SignedProposerPreferences) error {
+	body, err := json.Marshal(preferences)
+	if err != nil {
+		return fmt.Errorf("marshal proposer preferences: %w", err)
+	}
+	headers := map[string]string{"Eth-Consensus-Version": consensusVersionGloas}
+	return ptcDo(ctx, httpClient, http.MethodPost, addr+proposerPreferencesPath, body, headers, nil)
 }

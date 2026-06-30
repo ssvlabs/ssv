@@ -287,15 +287,6 @@ func (r *proposerPreferencesSlotRunner) ProcessPreConsensus(ctx context.Context,
 		Signature: signature,
 	}
 	if err := r.beacon.SubmitProposerPreferences(ctx, []*gloas.SignedProposerPreferences{signed}); err != nil {
-		if errors.Is(err, gloas.ErrProposerPreferencesPublishUnavailable) {
-			// We converged and reconstructed correctly; there is simply no upstream endpoint to publish
-			// to yet (SIP #94 §5). Record a benign no-op rather than a failure so the known-missing
-			// endpoint doesn't surface as operator-actionable errors. Returning nil leaves the deferred
-			// err nil, so markDutyFailed does not also fire.
-			logger.Debug("proposer preferences reconstructed but publish endpoint unavailable; skipping submit", fields.Slot(r.proposerPreferences.ProposalSlot))
-			r.markDutyNotRequired()
-			return nil
-		}
 		return fmt.Errorf("could not submit proposer preferences: %w", err)
 	}
 
