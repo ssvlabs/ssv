@@ -520,5 +520,10 @@ func cloneTestNetworkConfig() *networkconfig.Network {
 		beaconCfg.Forks = maps.Clone(beaconCfg.Forks)
 	}
 	cfg.Beacon = &beaconCfg
+	// Clone SSV so tests can mutate Forks.Boole (or other SSV fields) without writing
+	// through to the package-level TestNetwork global. SSVForks is a value type, so a
+	// shallow *SSV copy fully isolates it.
+	ssvCfg := *networkconfig.TestNetwork.SSV
+	cfg.SSV = &ssvCfg
 	return &cfg
 }
