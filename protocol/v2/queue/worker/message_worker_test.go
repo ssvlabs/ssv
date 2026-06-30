@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -164,6 +165,67 @@ func TestBuffer(t *testing.T) {
 		t.Fatal("timed out waiting for buffered messages to be processed")
 	}
 	assertNoAsyncError(t, handlerErrCh)
+}
+
+// TestClose_WaitsForInflightProcess verifies Close blocks until an in-flight
+// handler returns, so callers can safely tear down resources the handler writes
+// to (e.g. the duty-trace DB) only after Close. It also asserts the handler is
+// never invoked with a nil message during shutdown — Close leaves the queue open
+// precisely to avoid that.
+func TestClose_WaitsForInflightProcess(t *testing.T) {
+	testCtx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
+	defer cancel()
+
+	logger := log.TestLogger(t)
+	worker := NewWorker(logger, &Config{
+		Ctx:          testCtx,
+		WorkersCount: 1,
+		Buffer:       2,
+	})
+
+	started := make(chan struct{})
+	release := make(chan struct{})
+	var finished, sawNil atomic.Bool
+	worker.UseHandler(func(ctx context.Context, msg network.DecodedSSVMessage) error {
+		if msg == nil {
+			sawNil.Store(true)
+			return nil
+		}
+		close(started)
+		<-release
+		finished.Store(true)
+		return nil
+	})
+
+	require.True(t, worker.TryEnqueue(&queue.SSVMessage{}))
+	select {
+	case <-started:
+	case <-testCtx.Done():
+		t.Fatal("timed out waiting for handler to start")
+	}
+
+	closed := make(chan struct{})
+	go func() {
+		defer close(closed)
+		worker.Close()
+	}()
+
+	// Close must not return while the handler is still in-flight.
+	select {
+	case <-closed:
+		t.Fatal("Close returned before in-flight handler finished")
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	close(release)
+
+	select {
+	case <-closed:
+	case <-testCtx.Done():
+		t.Fatal("Close did not return after handler finished")
+	}
+	require.True(t, finished.Load(), "handler should have completed before Close returned")
+	require.False(t, sawNil.Load(), "handler must not receive a nil message during shutdown")
 }
 
 func TestMessageContextFields(t *testing.T) {

@@ -545,6 +545,21 @@ func (c *Controller) StartNetworkHandlers() {
 	c.messageWorker.UseHandler(c.handleWorkerMessages)
 }
 
+// StopNetworkHandlers quiesces the message worker, waiting for any in-flight
+// handleWorkerMessages to return. In exporter archive mode that handler runs
+// the duty-trace Collect synchronously, which writes late duties to the pebble
+// DB; callers must invoke this before closing the DB so an in-flight write
+// can't race db.Close() and panic with "pebble: closed".
+//
+// Call this only after the node context is canceled: the router goroutines
+// stop on ctx cancellation (and only enqueue, never write to the DB), so they
+// need no separate join here. The wait can briefly block if a late duty misses
+// the domain cache and Collect's DomainData fetch is in flight against a slow
+// beacon node — bounded by the beacon client's request timeout.
+func (c *Controller) StopNetworkHandlers() {
+	c.messageWorker.Close()
+}
+
 // startEligibleValidators starts validators that transitioned to eligible to start due to a metadata update.
 func (c *Controller) startEligibleValidators(ctx context.Context, pubKeys []spectypes.ValidatorPK) (count int) {
 	// Build a map for quick lookup to ensure only explicitly listed validators start.

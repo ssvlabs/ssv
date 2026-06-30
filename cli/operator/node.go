@@ -511,10 +511,13 @@ var StartNodeCmd = &cobra.Command{
 			})
 		}
 
+		// joinSlotPruning waits for all PruneContinuously goroutines to return.
+		// It is non-nil only in exporter-standard mode; must be called before db.Close().
+		var joinSlotPruning func()
 		if cfg.ExporterOptions.Enabled && cfg.ExporterOptions.Mode == exporter.ModeStandard {
 			retain := cfg.ExporterOptions.RetainSlots
 			threshold := cfg.SSVOptions.NetworkConfig.EstimatedCurrentSlot()
-			initSlotPruning(cmd.Context(), storageMap, slotTickerProvider, threshold, retain)
+			joinSlotPruning = initSlotPruning(cmd.Context(), storageMap, slotTickerProvider, threshold, retain)
 		}
 
 		cfg.SSVOptions.ValidatorOptions.StorageMap = storageMap
@@ -544,6 +547,9 @@ var StartNodeCmd = &cobra.Command{
 
 		// Exporter duty tracing
 		var collector *dutytracer.Collector
+		// collectorDone is closed when the collector goroutine returns; non-nil only
+		// in archive mode. Joined before db.Close() to prevent writes to a closed DB.
+		var collectorDone chan struct{}
 		if cfg.ExporterOptions.Enabled {
 			switch cfg.ExporterOptions.Mode {
 			case exporter.ModeArchive:
@@ -556,7 +562,11 @@ var StartNodeCmd = &cobra.Command{
 					dstore, networkConfig.Beacon, decidedStreamPublisherFn,
 					dutyStore)
 
-				go collector.Start(cmd.Context(), slotTickerProvider)
+				collectorDone = make(chan struct{})
+				go func() {
+					defer close(collectorDone)
+					collector.Start(cmd.Context(), slotTickerProvider)
+				}()
 				cfg.SSVOptions.ValidatorOptions.DutyTraceCollector = collector
 				cfg.SSVOptions.ExporterRead = exporter2.NewExporter(
 					logger,
@@ -719,6 +729,22 @@ var StartNodeCmd = &cobra.Command{
 		}
 		if err := operatorNode.Start(cfg.SSVOptions.Context); err != nil {
 			logger.Fatal("failed to start SSV node", zap.Error(err))
+		}
+
+		// Join background goroutines before the deferred db.Close() runs.
+		// Both collector.Start and PruneContinuously return promptly on ctx.Done(),
+		// so these joins complete quickly after the shutdown signal is received.
+		//
+		// Stop the message worker first: in archive mode handleWorkerMessages runs
+		// the duty-trace Collect synchronously (a late duty writes to the pebble DB),
+		// and that goroutine is otherwise unjoined. Quiescing it here also halts new
+		// late-retry spawns before the collector drains them below.
+		validatorCtrl.StopNetworkHandlers()
+		if collectorDone != nil {
+			<-collectorDone
+		}
+		if joinSlotPruning != nil {
+			joinSlotPruning()
 		}
 	},
 }
@@ -1345,7 +1371,10 @@ func syncContractEvents(
 	return eventSyncer
 }
 
-func initSlotPruning(ctx context.Context, stores *ibftstorage.ParticipantStores, slotTickerProvider slotticker.Provider, slot phase0.Slot, retain uint64) {
+// initSlotPruning starts the slot-pruning goroutines and returns a join function
+// that waits for all PruneContinuously goroutines to return. The caller must invoke
+// the returned join before closing the DB to avoid writes against a closed DB.
+func initSlotPruning(ctx context.Context, stores *ibftstorage.ParticipantStores, slotTickerProvider slotticker.Provider, slot phase0.Slot, retain uint64) func() {
 	var wg sync.WaitGroup
 
 	threshold := slot - phase0.Slot(retain)
@@ -1362,9 +1391,17 @@ func initSlotPruning(ctx context.Context, stores *ibftstorage.ParticipantStores,
 
 	wg.Wait()
 
-	// start background job for removing old slots on every tick
+	// start background job for removing old slots on every tick; track each
+	// goroutine so the caller can join them before closing the DB.
+	var pruneWG sync.WaitGroup
 	_ = stores.Each(func(_ spectypes.BeaconRole, store ibftstorage.ParticipantStore) error {
-		go store.PruneContinuously(ctx, slotTickerProvider, phase0.Slot(retain))
+		pruneWG.Add(1)
+		go func() {
+			defer pruneWG.Done()
+			store.PruneContinuously(ctx, slotTickerProvider, phase0.Slot(retain))
+		}()
 		return nil
 	})
+
+	return pruneWG.Wait
 }
