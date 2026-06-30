@@ -734,6 +734,12 @@ var StartNodeCmd = &cobra.Command{
 		// Join background goroutines before the deferred db.Close() runs.
 		// Both collector.Start and PruneContinuously return promptly on ctx.Done(),
 		// so these joins complete quickly after the shutdown signal is received.
+		//
+		// Stop the message worker first: in archive mode handleWorkerMessages runs
+		// the duty-trace Collect synchronously (a late duty writes to the pebble DB),
+		// and that goroutine is otherwise unjoined. Quiescing it here also halts new
+		// late-retry spawns before the collector drains them below.
+		validatorCtrl.StopNetworkHandlers()
 		if collectorDone != nil {
 			<-collectorDone
 		}

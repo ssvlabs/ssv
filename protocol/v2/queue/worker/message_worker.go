@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"sync"
 
 	"go.uber.org/zap"
 
@@ -39,6 +40,10 @@ type Worker struct {
 	handler       MsgHandler
 	errHandler    ErrorHandler
 	metricsPrefix string
+	// wg tracks the startWorker goroutines so Close can wait for any in-flight
+	// process() to finish. This lets callers quiesce the worker before closing
+	// resources (e.g. the DB) that a handler might still write to.
+	wg sync.WaitGroup
 }
 
 // NewWorker return new Worker
@@ -62,12 +67,14 @@ func NewWorker(logger *zap.Logger, cfg *Config) *Worker {
 // init the worker listening process
 func (w *Worker) init(logger *zap.Logger) {
 	for i := 1; i <= w.workersCount; i++ {
+		w.wg.Add(1)
 		go w.startWorker(logger, w.queue)
 	}
 }
 
 // startWorker process functionality
 func (w *Worker) startWorker(logger *zap.Logger, ch <-chan *queue.SSVMessage) {
+	defer w.wg.Done()
 	ctx, cancel := context.WithCancel(w.ctx)
 	defer cancel()
 	for {
@@ -102,10 +109,15 @@ func (w *Worker) TryEnqueue(msg *queue.SSVMessage) bool {
 	}
 }
 
-// Close queue and worker listener
+// Close stops the worker goroutines and waits for any in-flight message
+// processing to finish. Callers can rely on no handler being mid-execution
+// once Close returns — important when a handler writes to resources (e.g. the
+// DB) that are torn down right after. The queue is intentionally left open:
+// startWorker exits on ctx cancellation, and a closed queue would let it read
+// a nil message and feed it to the handler.
 func (w *Worker) Close() {
-	close(w.queue)
 	w.cancel()
+	w.wg.Wait()
 }
 
 // Size returns the queue size
