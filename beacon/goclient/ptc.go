@@ -29,10 +29,10 @@ const (
 	consensusVersionGloas = "gloas"
 )
 
-// ptcHTTPClient issues the hand-rolled PTC requests; per-call deadlines come from the request
-// context. Basic-auth embedded in the (unmasked) beacon address is applied by net/http; custom
-// TLS/client-cert transport is not — acceptable for this interim surface, to be retired with the
-// go-eth2-client rebase.
+// ptcHTTPClient issues the hand-rolled PTC requests; per-call deadlines come from the request context.
+// Basic-auth in the (unmasked) beacon address is applied by net/http; custom TLS/client-cert is not — but
+// the main eth2clienthttp path doesn't configure it either (system-CA https + basic-auth only), so no
+// regression. Interim surface, retired with the go-eth2-client rebase.
 var ptcHTTPClient = &http.Client{}
 
 // PayloadAttestationDuties returns the PTC duties for the given validators at the epoch, from
