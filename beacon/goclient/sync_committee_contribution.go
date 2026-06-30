@@ -80,6 +80,10 @@ func (gc *GoClient) GetSyncCommitteeContribution(
 	}
 
 	// Fetch sync committee contributions for each subnet in parallel.
+	// NOTE: this read and the head-root read above are not pinned to the same beacon
+	// node, and the multiClient does not fail over on a 4xx; if scores reorder in
+	// between, this call can land on a node that hasn't imported blockRoot and 404.
+	// Narrow (reorg/lagging-node window); tracked in ssvlabs/go-eth2-client#16.
 	var (
 		contributions = make(spectypes.Contributions, len(subnetIDs))
 		g             errgroup.Group
