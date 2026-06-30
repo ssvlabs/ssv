@@ -540,8 +540,8 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(
 	if len(aggregatorSelections) > 0 {
 		// Wait once per duty before fetching aggregate attestations (spec: 2/3 into slot).
 		if err := r.waitTwoThirdsIntoSlot(ctx, duty.DutySlot()); err != nil {
-			// terminal post-quorum failure → classify as failed, not stuck
-			r.markDutyFailed(err)
+			// Only reachable on shutdown (ctx canceled) within this short wait — markDutyFailed
+			// would drop a context.Canceled reason anyway, so there is nothing to record here.
 			return err
 		}
 
@@ -588,7 +588,6 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(
 
 	// Else, if some aggregators or contributors were selected (even with an error for others), proceed to consensus
 	if err := consensusData.Validate(); err != nil {
-		// terminal post-quorum failure → classify as failed, not stuck
 		r.markDutyFailed(err)
 		return fmt.Errorf("invalid aggregator committee consensus data: %w", err)
 	}
@@ -601,7 +600,6 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(
 		consensusData,
 		r.ValCheck,
 	); err != nil {
-		// terminal post-quorum failure → classify as failed, not stuck
 		r.markDutyFailed(err)
 		return fmt.Errorf("failed to start consensus: %w", err)
 	}
@@ -803,6 +801,10 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 		return fmt.Errorf("could not get expected post consensus roots and beacon objects: %w", err)
 	}
 	if len(beaconObjects) == 0 {
+		// Empty post-quorum (all beacon objects failed to build) is terminal and non-recoverable:
+		// committee_queue drops the message and terminates the runner on this error. Classify as
+		// failed (matching CommitteeRunner) rather than leaving the watcher to report a false stuck.
+		r.markDutyFailed(ErrNoValidDutiesToExecute)
 		return ErrNoValidDutiesToExecute
 	}
 
@@ -937,10 +939,9 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 		for {
 			select {
 			case <-ctx.Done():
-				// terminal post-quorum failure → classify as failed, not stuck
-				err := ctx.Err()
-				r.markDutyFailed(err)
-				return err
+				// Only reachable on shutdown (ctx canceled) — the listener completes in ms and the
+				// duty deadline is ~1 epoch out — and markDutyFailed drops context.Canceled anyway.
+				return ctx.Err()
 			case err := <-errCh:
 				executionErr = err
 			case signatureResult, ok := <-signatureCh:
@@ -1061,7 +1062,10 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 	}
 
 	if executionErr != nil {
-		// Not markDutyFailed: a transient submit/reconstruct error can recover — a later post-consensus message re-enters the submit loops and retries the pending roots (already-submitted roots are skipped via HasSubmitted), so concluding "failed" here would prematurely mask a duty that still completes.
+		// Not markDutyFailed: a transient submit/reconstruct error can recover — a later
+		// post-consensus message re-enters the submit loops and retries the pending roots
+		// (already-submitted roots are skipped via HasSubmitted), so concluding "failed" here
+		// would prematurely mask a duty that still completes.
 		return executionErr
 	}
 
