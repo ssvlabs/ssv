@@ -127,7 +127,7 @@ func TestStorage_ListOperators(t *testing.T) {
 	for i := 0; i < n; i++ {
 		randNum := rand.Int()
 		operator := storage.OperatorData{
-			PublicKey: base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("samplePublicKey%d", randNum))),
+			PublicKey: base64.StdEncoding.EncodeToString(fmt.Appendf(nil, "samplePublicKey%d", randNum)),
 			ID:        spectypes.OperatorID(i),
 		}
 		_, err := storageCollection.SaveOperatorData(nil, &operator)
@@ -158,7 +158,7 @@ func TestStorage_DeleteOperatorAndDropOperators(t *testing.T) {
 	for i := 0; i < n; i++ {
 		randNum := rand.Int()
 		operator := storage.OperatorData{
-			PublicKey: base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("samplePublicKey%d", randNum))),
+			PublicKey: base64.StdEncoding.EncodeToString(fmt.Appendf(nil, "samplePublicKey%d", randNum)),
 			ID:        spectypes.OperatorID(i),
 		}
 		_, err := storageCollection.SaveOperatorData(nil, &operator)

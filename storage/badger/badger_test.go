@@ -131,8 +131,8 @@ func TestBasicOperations(t *testing.T) {
 		itemCount := 5
 
 		for i := 0; i < itemCount; i++ {
-			key := []byte(fmt.Sprintf("key-%d", i))
-			value := []byte(fmt.Sprintf("value-%d", i))
+			key := fmt.Appendf(nil, "key-%d", i)
+			value := fmt.Appendf(nil, "value-%d", i)
 
 			require.NoError(t, db.Set(prefix, key, value))
 		}
@@ -517,8 +517,8 @@ func TestTransactions(t *testing.T) {
 		itemCount := 10
 
 		for i := 0; i < itemCount; i++ {
-			key := []byte(fmt.Sprintf("key%d", i))
-			value := []byte(fmt.Sprintf("value%d", i))
+			key := fmt.Appendf(nil, "key%d", i)
+			value := fmt.Appendf(nil, "value%d", i)
 
 			require.NoError(t, db.Set(prefix, key, value))
 		}

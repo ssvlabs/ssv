@@ -305,7 +305,7 @@ func (i *Instance) Decode(data []byte) error {
 	return json.Unmarshal(data, &i)
 }
 
-// bumpToRound sets round and sends current round metrics.
+// bumpToRound sets the current round on the instance state.
 func (i *Instance) bumpToRound(round specqbft.Round) {
 	i.State.Round = round
 }
