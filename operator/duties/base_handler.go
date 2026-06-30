@@ -82,7 +82,13 @@ func (h *baseHandler) shouldFetchNextEpoch(currentSlot phase0.Slot) bool {
 	return uint64(currentSlot)%slotsPerEpoch > slotsPerEpoch/2-2
 }
 
+// atLastSlotOfCurrentEpoch returns true if the currentSlot is the latest slot of the current epoch.
 func (h *baseHandler) atLastSlotOfCurrentEpoch(currentSlot phase0.Slot) bool {
 	slotsPerEpoch := h.netCfg.SlotsPerEpoch
 	return uint64(currentSlot+1)%slotsPerEpoch == 0
+}
+
+// atLastSlotOrPastCurrentPeriod returns true if the currentSlot is at or past the last actionable slot of the currentPeriod.
+func (h *baseHandler) atLastSlotOrPastCurrentPeriod(currentSlot phase0.Slot, currentPeriod uint64) bool {
+	return currentSlot >= h.netCfg.LastActionableSlotOfSyncPeriod(currentPeriod)
 }

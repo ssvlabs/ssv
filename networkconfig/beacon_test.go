@@ -134,3 +134,49 @@ func TestForkAtEpoch(t *testing.T) {
 		require.Equal(t, tc.fork, *fork, "Wrong fork")
 	}
 }
+
+func TestSyncCommitteePeriodHelpers(t *testing.T) {
+	config := &Beacon{
+		SlotsPerEpoch:                32,
+		EpochsPerSyncCommitteePeriod: 8, // 8 * 32 = 256 slots per period
+	}
+
+	tests := []struct {
+		name               string
+		period             uint64
+		firstEpoch         phase0.Epoch
+		lastActionableSlot phase0.Slot
+		firstNextSlot      phase0.Slot
+	}{
+		{
+			name:               "first period",
+			period:             0,
+			firstEpoch:         0,
+			firstNextSlot:      256,
+			lastActionableSlot: 254,
+		},
+		{
+			name:               "second period",
+			period:             1,
+			firstEpoch:         8,
+			firstNextSlot:      512,
+			lastActionableSlot: 510,
+		},
+		{
+			name:               "third period",
+			period:             2,
+			firstEpoch:         16,
+			firstNextSlot:      768,
+			lastActionableSlot: 766,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.firstEpoch, config.FirstEpochOfSyncPeriod(tc.period))
+			require.Equal(t, tc.firstNextSlot, config.FirstSlotAtEpoch(config.FirstEpochOfSyncPeriod(tc.period+1)))
+			require.Equal(t, tc.lastActionableSlot, config.LastActionableSlotOfSyncPeriod(tc.period))
+			require.Equal(t, tc.firstNextSlot-2, config.LastActionableSlotOfSyncPeriod(tc.period))
+		})
+	}
+}

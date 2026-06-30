@@ -114,7 +114,15 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 					delete(h.dutyFetchIntents, currentEpoch-1)
 				}
 
-				// 2. Process validator indices changes (if any). We want to process it on the current slot only
+				// 2. Schedule the next-epoch duty-fetch intent (only if absent, so a pending or fulfilled one is
+				// left untouched). We register it before the indices-change handling below, which can return early
+				// on tickCtx.Done - so even a tick that overruns its deadline still records the intent, and the
+				// next-epoch pre-fetch can't be deferred indefinitely at an epoch boundary under sustained slowness.
+				if _, ok := h.dutyFetchIntents[nextEpoch]; !ok {
+					h.dutyFetchIntents[nextEpoch] = false
+				}
+
+				// 3. Process validator indices changes (if any). We want to process it on the current slot only
 				// if we are still early into the slot (1 slot-interval is just a guesstimate), otherwise we might
 				// be delaying the next tick (the duties that need to be executed on the next slot).
 
@@ -124,10 +132,10 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 					logger.Info("🔁 indices change received")
 
 					// 1) Declare intents.
-					// Some validator-related state has updated, means we need to re-fetch the duties for the current
-					// and next epoch to ensure we have the up-to-date duties for all validators for both epochs.
-					h.dutyFetchIntents[nextEpoch] = false
+					// Some validator-related state has changed, so re-fetch the duties for the current and next
+					// epoch to keep them up to date for all validators.
 					h.dutyFetchIntents[currentEpoch] = false
+					h.dutyFetchIntents[nextEpoch] = false
 
 					// 2) Process certain intents immediately.
 					// When at epoch boundary, we only care about pre-fetching & preparing the duties for the next
@@ -143,12 +151,6 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 					// It's too late(risky) to handle indices change on the current slot, we'll do it on the next slot.
 				case <-tickCtx.Done():
 					return
-				}
-
-				// 3. Schedule the duty-fetch for the next epoch, but only if it hasn't been scheduled already (also,
-				// already fulfilled intents need not be re-scheduled).
-				if _, ok := h.dutyFetchIntents[nextEpoch]; !ok {
-					h.dutyFetchIntents[nextEpoch] = false
 				}
 			}()
 

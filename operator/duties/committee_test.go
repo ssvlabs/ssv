@@ -360,17 +360,19 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only(t *testing.T) {
 		})
 		scheduler.indicesChgCh <- struct{}{}
 		waitForDuties.Set(true)
-		// wait for attester duties to be fetched in slot 0
+		// Two fetches happen here: one for the attester handler and one for the sync-committee handler.
+		// The sync-committee handler's indicesChangeCh is now consumed inside the slot-tick closure
+		// (not the outer select), so it also triggers a re-fetch on the same tick as the attester.
+		// The test name says "Attester_Only" because no sync-committee duties are assigned — the
+		// sync-committee handler still re-fetches (period intent reset), but finds no duties.
+		waitForDutiesFetchCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
 		waitForDutiesFetchCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
 		// no other fetching or execution should happen in slot 0
 		waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
-		// STEP 3: wait for attester duties to be fetched in slot 1
+		// STEP 3: wait for no action to be taken in slot 1
 		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(1))
 		ticker.Send(phase0.Slot(1))
-		// wait for committee duties to be fetched in slot 1
-		waitForDutiesFetchCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
-		// no other fetching or execution should happen in slot 1
 		waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 4: wait for committee duties to be executed in slot 2
@@ -437,17 +439,15 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only_2(t *testing.T) {
 		})
 		scheduler.indicesChgCh <- struct{}{}
 		waitForDuties.Set(true)
-		// wait for attester duties to be fetched in slot 0
+		// wait for attester and sync committee duties to be fetched in slot 0
+		waitForDutiesFetchCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
 		waitForDutiesFetchCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
 		// no other fetching or execution should happen in slot 0
 		waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
-		// STEP 3: wait for attester duties to be fetched in slot 1
+		// STEP 3: wait for no action to be taken in slot 1
 		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(1))
 		ticker.Send(phase0.Slot(1))
-		// wait for committee duties to be fetched in slot 1
-		waitForDutiesFetchCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
-		// no other fetching or execution should happen in slot 1
 		waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 4: wait for committee duties to be executed in slot 2
@@ -512,17 +512,15 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only_3(t *testing.T) {
 		})
 		scheduler.indicesChgCh <- struct{}{}
 		waitForDuties.Set(true)
-		// wait for attester duties to be fetched in slot 0
+		// wait for attester and sync committee duties to be fetched in slot 0
+		waitForDutiesFetchCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
 		waitForDutiesFetchCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
 		// no other fetching or execution should happen in slot 0
 		waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
-		// STEP 3: wait for attester duties to be fetched in slot 1
+		// STEP 3: wait for no action to be taken in slot 1
 		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(1))
 		ticker.Send(phase0.Slot(1))
-		// wait for committee duties to be fetched in slot 1
-		waitForDutiesFetchCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
-		// no other fetching or execution should happen in slot 1
 		waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 4: wait for committee duties to be executed in slot 2

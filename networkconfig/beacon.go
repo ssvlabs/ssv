@@ -99,8 +99,10 @@ func (b *Beacon) FirstEpochOfSyncPeriod(period uint64) phase0.Epoch {
 	return phase0.Epoch(period * b.EpochsPerSyncCommitteePeriod)
 }
 
-// LastSlotOfSyncPeriod calculates the first epoch of the given sync period.
-func (b *Beacon) LastSlotOfSyncPeriod(period uint64) phase0.Slot {
+// LastActionableSlotOfSyncPeriod calculates the last slot of the given sync period for which
+// producing a sync committee message still makes sense. Note this is one slot before the period's
+// literal last slot (a message produced during that final slot would never be included).
+func (b *Beacon) LastActionableSlotOfSyncPeriod(period uint64) phase0.Slot {
 	lastEpoch := b.FirstEpochOfSyncPeriod(period+1) - 1
 	// If we are in the sync committee that ends at slot x we do not generate a message during slot x-1
 	// as it will never be included, hence -1.
