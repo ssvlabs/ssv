@@ -303,6 +303,7 @@ The ssv-spec migration's handoff gates on **node-side-complete** (including T8's
 | U6 | `Blinded`-split local-build metric (pre-Gloas proxy) + recon-miss counters — nice-to-have viz; §8 logs are primary | node | T13 | **resolved** |
 | — | produceBlockV4 + envelope endpoints | upstream | T2/T7/T8 | **resolved** (beacon-APIs#580 merged 2026-06-29; §4→v4 produce `include_payload=false`, §6→blinded publish wired; go-eth2-client dedup still pending) |
 | — | `SignedProposerPreferences` publish endpoint | upstream | T5 | **resolved** (endpoint merged: `POST /eth/v1/validator/proposer_preferences`; §5 publishes for real, sentinel removed) |
+| — | §5 proposer-preferences **re-emission** (reorg/`dependent_root` change) vs the ≤1-per-`(slot,signer)` pre-consensus dedup | node + SIP | T5 | **BLOCKED — pending SIP-94 §5** ([discussion](https://github.com/ssvlabs/SIPs/pull/94#discussion_r3499380025)); current `reEmitLookahead` is broken (penalty + non-convergence); proposed fix + interim in the §7 DEFERRED block |
 | — | `GLOAS_FORK_EPOCH` schedule | Ethereum | T11 | external (Glamsterdam ~Q3 2026; devnets now) |
 | — | Anchor wire-constant lock | node + Anchor | T1 | **PTC verified vs sigp/anchor `epbs` (matches); domains = consensus-specs = #632**; §5/§6 not in Anchor yet — re-check when added |
 | — | go-eth2-client upstream Gloas + fork rebase | upstream | T2 | optional **dedup** — we implement node-side now; swap for upstream `spec/gloas` when it ships |
@@ -342,10 +343,22 @@ PTC is implemented node-side end-to-end (wire types → goclient endpoints → e
 
 ### Update 2026-06-30 — §4/§5/§6 wired to the merged beacon-APIs (#580)
 [beacon-APIs#580](https://github.com/ethereum/beacon-APIs/pull/580) merged 2026-06-29 and the `proposer_preferences` validator endpoint is in master, so the three endpoints that were abstract/stubbed are now implemented against the real merged paths. (go-eth2-client still has no Gloas types, so they stay hand-rolled HTTP — the typed dedup is unchanged and post-fork-OK. The older T5/T7/T8 notes below predate this and are superseded here.)
-- **§5 proposer preferences** — `SubmitProposerPreferences` POSTs to `/eth/v1/validator/proposer_preferences` (JSON); the `ErrProposerPreferencesPublishUnavailable` sentinel + the runner skip-branch are removed; goclient test added.
+- **§5 proposer preferences** — `SubmitProposerPreferences` POSTs to `/eth/v1/validator/proposer_preferences` (JSON); the `ErrProposerPreferencesPublishUnavailable` sentinel + the runner skip-branch are removed; goclient test added. ⚠️ The *publish* path is done, but the reorg/`dependent_root` **re-emission** is a separate open issue — see the **DEFERRED** block below.
 - **§4 proposer block** — produce switched v3→**v4** (`/eth/v4/validator/blocks/{slot}?…&include_payload=false`): a Gloas block is bid-only, so the response stays a bare `BeaconBlock` (no `BlockContents`).
 - **§6 envelope** — produce path → plural with `beacon_block_root` as a path segment; publish → plural, posting the **blinded** body (`SignedBlindedExecutionPayloadEnvelope`, new node-side SSZ type) with `Eth-Execution-Payload-Blinded: true` (stateful — the producing BN un-blinds from cache; no blob sourcing).
 - **Remaining:** the stateless `SignedExecutionPayloadEnvelopeContents` body (full envelope + blobs/KZG, for cross-BN failover — needs blob sourcing); confirm the §6 body choice (blinded vs Contents) on a Gloas devnet; the go-eth2-client typed dedup.
+
+### ⚠️ DEFERRED (pending SIP-94 §5 decision) — proposer-preferences re-emission
+**Do not implement until SIP-94 §5 specifies the coordination rule.** Discussion opened: <https://github.com/ssvlabs/SIPs/pull/94#discussion_r3499380025>.
+
+**Issue (PR review finding #2 + SIP-94 §5, lines ~200/202/329):** SIP-94 requires re-emitting a new `ProposerPreferences` when `dependent_root` changes for a proposal slot already in the lookahead. But SSV message-validation — and Anchor's `message_validator` (`MAX_MESSAGES_PER_ROUND = 1`) — enforce **≤1 pre-consensus partial sig per `(slot, signer)`**, content-agnostic. `ProposerPreferences` pins `duty.Slot` to the **fixed proposal slot** (unlike `ValidatorRegistration`, whose slot advances), so the re-emission is a duplicate `(slot, signer)` → rejected → (1) gossip penalty on the re-emitting operator, (2) the new-root preference can't reconstruct. So today's `reEmitLookahead` (clear-all → re-emit) is **broken**, not merely incomplete: §5 reorg/`dependent_root` refresh does not work.
+
+**To implement once the SIP decides** (proposed in the discussion above):
+- **Validation:** dedup `ProposerPreferencesPartialSig` by `(slot, signer, signing_root)` — reject a repeat root (true duplicate), allow a *new* root up to a bound `N` (proposed `4`). Every other pre-consensus type keeps ≤1 (no regression).
+- **Handler** (`operator/duties/proposer_preferences.go`): re-emit only when a proposal slot's `dependent_root` actually changes (track the emitted root per slot), so the bound is spent on genuine refreshes.
+- Relaxes a **cross-client** invariant → must land in SIP-94 §5 and be matched by Anchor (no §5 there yet).
+
+**Interim (NOT applied; flagged):** if the penalty disrupts devnet testing before the SIP resolves, suppress no-op re-emits (option a) to stop the penalty — but that does **not** refresh on reorg (a deliberate SIP deviation), so only as a stopgap.
 
 **Committed on `epbs-gloas`** (rebased onto the refreshed `boole-fork` — see §6): the PTC implementation (above); two review rounds — first the `DataVersionGloas` → `networkconfig` / `BeaconForkAtEpoch` TODO / SSZ-regen tidy-up, then the 11-point PTC code review (unmasked-address requests, per-client timeouts, transient-BN warn, cutoff-baselined lateness, `signSSZRoot`, abstain semantics, handler tests); the `GlamsterdamDevnet` networkconfig stub; a `.dockerignore` `tla/` exclusion. **P1 image `ssvnode:epbs-gloas` builds + runs** (verified).
 
@@ -389,6 +402,7 @@ Do both: mock-green ≠ local-green ≠ interop-green.
 - [ ] **5 · Fill remaining stub TODOs** — `RegistryContractAddr` + `RegistrySyncOffset` (from 3), `Bootnodes` (operator ENRs from 3).
 - [ ] **6 · Run 4 operators** — `Network: glamsterdam-devnet`, `BeaconNodeAddr`=devnet-6 CL, `ETH1Addr`=devnet-6 EL (WS).
 - [ ] **7 · Verify PTC** — grep all 4 operators: `Gloas (ePBS) fork scheduled` → `fetched PTC duties` → `✔️ successfully submitted payload attestation`; abstain only on missed slots; cross-check the BN `payload_attestations` pool.
+- [ ] **8 · Confirm §2 aggregate payload-status index (review finding #4)** — `computeAttestationDataRoot` (`beacon/goclient/aggregator.go`) fetches the attestation data fresh from the aggregator's own BN and keeps that BN's payload-status index, not the QBFT-decided index the committee signed. Confirm the aggregate fetch matches the signed index across BNs (low risk — payload status should be settled by aggregation time — but a cross-BN mismatch would silently miss the aggregate).
 
 ### `devnet` — operator run config (env vars; own EL/CL, no config file)
 Config is `cleanenv`-based: a node started without `--config` reads purely from env (`ReadEnv`), and env overrides a file when one is passed — so the whole operator can be driven by env vars. Minimal set per operator (we run our own EL/CL):
