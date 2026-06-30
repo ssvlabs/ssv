@@ -10,7 +10,7 @@ import (
 // Regenerate with `go generate ./...`. -path is the package dir (not just this file) so sszgen resolves
 // the sibling gloas BuilderIndex the envelope references; --objs limits output to the blinded envelope,
 // collected into its own _encoding.go. Includes track go-eth2-client via `go list -m`.
-//go:generate sh -c "go tool -modfile=../../../../tool.mod sszgen -path . --include $(go list -m -f '{{.Dir}}' github.com/attestantio/go-eth2-client)/spec/phase0,$(go list -m -f '{{.Dir}}' github.com/attestantio/go-eth2-client)/spec/electra,$(go list -m -f '{{.Dir}}' github.com/attestantio/go-eth2-client)/spec/bellatrix,$(go list -m -f '{{.Dir}}' github.com/attestantio/go-eth2-client)/spec/capella --objs BlindedExecutionPayloadEnvelope,ExecutionPayloadEnvelope,SignedExecutionPayloadEnvelope --exclude-objs ExecutionPayload --output ./execution_payload_envelope_encoding.go"
+//go:generate sh -c "go tool -modfile=../../../../tool.mod sszgen -path . --include $(go list -m -f '{{.Dir}}' github.com/attestantio/go-eth2-client)/spec/phase0,$(go list -m -f '{{.Dir}}' github.com/attestantio/go-eth2-client)/spec/electra,$(go list -m -f '{{.Dir}}' github.com/attestantio/go-eth2-client)/spec/bellatrix,$(go list -m -f '{{.Dir}}' github.com/attestantio/go-eth2-client)/spec/capella --objs BlindedExecutionPayloadEnvelope,SignedBlindedExecutionPayloadEnvelope,ExecutionPayloadEnvelope,SignedExecutionPayloadEnvelope --exclude-objs ExecutionPayload --output ./execution_payload_envelope_encoding.go"
 
 // BlindedExecutionPayloadEnvelope is the blinded form of the Gloas ExecutionPayloadEnvelope that the §6
 // envelope-signing duty signs (SIP #94 §6): the full `payload` is replaced by
@@ -46,9 +46,20 @@ type ExecutionPayloadEnvelope struct {
 }
 
 // SignedExecutionPayloadEnvelope wraps the envelope with the builder's signature (under
-// DOMAIN_BEACON_BUILDER) — the §6 publication body on the stateful path.
+// DOMAIN_BEACON_BUILDER). The cluster reconstructs this full signed form; it is published as either the
+// blinded body below (stateful: the producing BN un-blinds from cache) or, for stateless cross-BN
+// failover, a SignedExecutionPayloadEnvelopeContents (full envelope + blobs/KZG — not yet wired).
 type SignedExecutionPayloadEnvelope struct {
 	Message   *ExecutionPayloadEnvelope
+	Signature phase0.BLSSignature `ssz-size:"96"`
+}
+
+// SignedBlindedExecutionPayloadEnvelope wraps the blinded envelope with the builder's signature — the §6
+// publication body on the blinded (stateful) path, where the producing beacon node reconstructs the full
+// envelope from its cache. The signature is valid here because the blinded root equals the full envelope's
+// (see BlindedExecutionPayloadEnvelope) — the same property the §6 duty relies on to sign the blinded form.
+type SignedBlindedExecutionPayloadEnvelope struct {
+	Message   *BlindedExecutionPayloadEnvelope
 	Signature phase0.BLSSignature `ssz-size:"96"`
 }
 
@@ -68,4 +79,15 @@ func (e *ExecutionPayloadEnvelope) Blinded() (*BlindedExecutionPayloadEnvelope, 
 		BeaconBlockRoot:       e.BeaconBlockRoot,
 		ParentBeaconBlockRoot: e.ParentBeaconBlockRoot,
 	}, nil
+}
+
+// Blinded returns the signed blinded form for §6 publication: the same signature carried onto the blinded
+// envelope (valid for both, since their roots match). Shares the inner envelope's non-Payload fields, so
+// the result must not outlive this one.
+func (s *SignedExecutionPayloadEnvelope) Blinded() (*SignedBlindedExecutionPayloadEnvelope, error) {
+	blinded, err := s.Message.Blinded()
+	if err != nil {
+		return nil, err
+	}
+	return &SignedBlindedExecutionPayloadEnvelope{Message: blinded, Signature: s.Signature}, nil
 }

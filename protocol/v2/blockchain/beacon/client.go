@@ -151,10 +151,8 @@ type PTCCalls interface {
 	SubmitPayloadAttestationMessages(ctx context.Context, messages []*gloas.PayloadAttestationMessage) error
 }
 
-// ProposerPreferencesCalls is the beacon-node surface for Gloas (ePBS) proposer preferences.
-// Publication has no beacon-API endpoint upstream yet (SIP #94 §5), so SubmitProposerPreferences
-// returns the gloas.ErrProposerPreferencesPublishUnavailable sentinel for now (see
-// beacon/goclient/proposer_preferences.go).
+// ProposerPreferencesCalls is the beacon-node surface for Gloas (ePBS) proposer preferences (SIP #94 §5).
+// go-eth2-client has no Gloas types, so these are hand-rolled over HTTP.
 type ProposerPreferencesCalls interface {
 	// ProposerDutiesDependentRoot returns the proposer-duties dependent root for the epoch — the
 	// seed the proposer-lookahead is pinned to. go-eth2-client drops it, so it's fetched via raw HTTP.
@@ -165,7 +163,7 @@ type ProposerPreferencesCalls interface {
 
 // GloasProposerCalls is the beacon-node surface for producing and publishing Gloas (ePBS) blocks
 // (SIP #94 §4). go-eth2-client has no Gloas types, so these are hand-rolled over HTTP against the
-// produceBlockV4 / publish endpoints (beacon-APIs#580, unmerged) — verify and iterate on a Gloas devnet.
+// merged produce-block-v4 / publish endpoints (beacon-APIs#580).
 type GloasProposerCalls interface {
 	// GetGloasBeaconBlock produces a Gloas beacon block for the slot; the payload itself ships
 	// separately in the §6 envelope, so the block carries only the execution-payload bid.
@@ -175,8 +173,9 @@ type GloasProposerCalls interface {
 }
 
 // GloasEnvelopeCalls is the beacon-node surface for the §6 execution-payload envelope (SIP #94 §6):
-// fetching the payload the proposer committed to (self-build) and publishing the signed envelope. Like
-// the block calls, these are hand-rolled over HTTP (beacon-APIs#580, unmerged) — verify on a Gloas devnet.
+// fetching the payload the proposer committed to (self-build) and publishing the signed envelope as its
+// blinded form. Like the block calls, these are hand-rolled over HTTP against the merged beacon-APIs#580
+// endpoints.
 type GloasEnvelopeCalls interface {
 	// GetExecutionPayloadEnvelope fetches the execution-payload envelope for the proposer's committed
 	// block, to be blinded, agreed in §6 QBFT, and signed.

@@ -33,13 +33,6 @@ type SignedProposerPreferences struct {
 	Signature phase0.BLSSignature `ssz-size:"96"`
 }
 
-// ErrProposerPreferencesPublishUnavailable is returned by a beacon client's SubmitProposerPreferences
-// while no upstream beacon-API endpoint to publish Gloas (ePBS) proposer preferences exists yet
-// (SIP #94 §5). It is a sentinel the runner matches (errors.Is) to record a benign no-op instead of a
-// duty failure, so the known-missing endpoint doesn't surface as operator-actionable errors; it goes
-// away once a real publish client lands.
-var ErrProposerPreferencesPublishUnavailable = errors.New("proposer preferences: no upstream beacon-API publication endpoint yet (SIP #94 §5)")
-
 // proposerPreferencesJSON is the beacon-API JSON form: uint64 as a decimal string, root/address as
 // 0x-hex, per go-eth2-client conventions.
 type proposerPreferencesJSON struct {

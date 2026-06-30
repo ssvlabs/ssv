@@ -14,17 +14,17 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 )
 
-// Gloas produce/publish endpoints (beacon-APIs#580, unmerged). produceBlockV4 reuses the v3 produce
-// path with a Gloas SSZ response; publish is the standard v2 blocks endpoint. The exact path/headers
-// may still shift upstream — these are best-effort and must be verified against a real Gloas devnet BN.
+// Gloas produce/publish endpoints (beacon-APIs#580, merged 2026-06-29). Produce is v4 with
+// include_payload=false: a Gloas block carries only the execution-payload bid (the payload ships in the
+// §6 envelope), so the response is a bare BeaconBlock — no BlockContents. Publish is the standard v2
+// blocks endpoint (version-tagged via Eth-Consensus-Version).
 const (
-	gloasProduceBlockPath = "/eth/v3/validator/blocks/%d?randao_reveal=%s&graffiti=%s" // slot, randao 0x-hex, graffiti 0x-hex
+	gloasProduceBlockPath = "/eth/v4/validator/blocks/%d?randao_reveal=%s&graffiti=%s&include_payload=false" // slot, randao 0x-hex, graffiti 0x-hex
 	gloasPublishBlockPath = "/eth/v2/beacon/blocks"
 )
 
-// GetGloasBeaconBlock produces a Gloas (ePBS) block via the produce endpoint as SSZ — go-eth2-client
-// has no Gloas types. Only the bare block is handled; a payload-included BlockContents response
-// (blobs/KZG) is deferred.
+// GetGloasBeaconBlock produces a Gloas (ePBS) block via the v4 produce endpoint as SSZ — go-eth2-client
+// has no Gloas types. The response is a bare BeaconBlock (see the include_payload=false path).
 func (gc *GoClient) GetGloasBeaconBlock(ctx context.Context, slot phase0.Slot, graffiti, randao []byte) (*gloas.BeaconBlock, error) {
 	return firstClientResult(ctx, gc, "GetGloasBeaconBlock", http.MethodGet, func(ctx context.Context, addr string) (*gloas.BeaconBlock, error) {
 		return requestGloasBeaconBlock(ctx, addr, slot, graffiti, randao)
@@ -51,7 +51,7 @@ func (gc *GoClient) SubmitGloasBeaconBlock(ctx context.Context, block *gloas.Sig
 // requestGloasBeaconBlock GETs the produce endpoint and decodes the SSZ response into a Gloas block.
 func requestGloasBeaconBlock(ctx context.Context, addr string, slot phase0.Slot, graffiti, randao []byte) (*gloas.BeaconBlock, error) {
 	url := addr + fmt.Sprintf(gloasProduceBlockPath, slot, "0x"+hex.EncodeToString(randao), "0x"+hex.EncodeToString(graffiti))
-	body, err := gloasOctetStreamHTTP(ctx, http.MethodGet, url, nil)
+	body, err := gloasOctetStreamHTTP(ctx, http.MethodGet, url, nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -64,14 +64,14 @@ func requestGloasBeaconBlock(ctx context.Context, addr string, slot phase0.Slot,
 
 // submitGloasBeaconBlock POSTs an SSZ-marshaled signed Gloas block to the publish endpoint.
 func submitGloasBeaconBlock(ctx context.Context, addr string, blockSSZ []byte) error {
-	_, err := gloasOctetStreamHTTP(ctx, http.MethodPost, addr+gloasPublishBlockPath, blockSSZ)
+	_, err := gloasOctetStreamHTTP(ctx, http.MethodPost, addr+gloasPublishBlockPath, blockSSZ, nil)
 	return err
 }
 
 // gloasOctetStreamHTTP issues an octet-stream (SSZ) request to a Gloas produce/publish endpoint and returns
 // the response body on a 2xx. A nil body GETs; a non-nil body POSTs SSZ tagged with the Gloas
-// consensus version.
-func gloasOctetStreamHTTP(ctx context.Context, method, url string, body []byte) ([]byte, error) {
+// consensus version. extraHeaders (e.g. Eth-Execution-Payload-Blinded for the §6 envelope) are applied last.
+func gloasOctetStreamHTTP(ctx context.Context, method, url string, body []byte, extraHeaders map[string]string) ([]byte, error) {
 	var reader io.Reader
 	if body != nil {
 		reader = bytes.NewReader(body)
@@ -84,6 +84,9 @@ func gloasOctetStreamHTTP(ctx context.Context, method, url string, body []byte) 
 	if body != nil {
 		req.Header.Set("Content-Type", "application/octet-stream")
 		req.Header.Set("Eth-Consensus-Version", consensusVersionGloas)
+	}
+	for k, v := range extraHeaders {
+		req.Header.Set(k, v)
 	}
 
 	resp, err := ptcHTTPClient.Do(req)
