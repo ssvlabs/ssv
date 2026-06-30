@@ -11,12 +11,11 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 )
 
-// Gloas §6 envelope produce/publish endpoints (beacon-APIs#580, unmerged). Best-effort paths, as with
-// the §4 block endpoints — verify against a real Gloas devnet BN. The publish body is the bare signed
-// envelope (stateful path); the blob-carrying Contents body is deferred.
+// Gloas §6 envelope produce/publish endpoints (beacon-APIs#580, merged 2026-06-29). Produce takes the
+// beacon block root as a path segment; publish posts the blinded body (see SubmitExecutionPayloadEnvelope).
 const (
-	gloasProduceEnvelopePath = "/eth/v1/validator/execution_payload_envelope/%d?beacon_block_root=%s" // slot, root 0x-hex
-	gloasPublishEnvelopePath = "/eth/v1/beacon/execution_payload_envelope"
+	gloasProduceEnvelopePath = "/eth/v1/validator/execution_payload_envelopes/%d/%s" // slot, beacon_block_root 0x-hex
+	gloasPublishEnvelopePath = "/eth/v1/beacon/execution_payload_envelopes"
 )
 
 // GetExecutionPayloadEnvelope fetches the §6 execution-payload envelope (the payload the proposer
@@ -27,13 +26,18 @@ func (gc *GoClient) GetExecutionPayloadEnvelope(ctx context.Context, slot phase0
 	})
 }
 
-// SubmitExecutionPayloadEnvelope publishes a signed §6 envelope as SSZ to all configured beacon
-// nodes concurrently, succeeding if at least one accepts it. Re-publishing a signed envelope to
-// multiple BNs is safe — they dedupe by block root.
+// SubmitExecutionPayloadEnvelope publishes the signed §6 envelope as its blinded SSZ form to all
+// configured beacon nodes concurrently, succeeding if at least one accepts it. The producing BN
+// reconstructs the full payload from its cache. Re-publishing to multiple BNs is safe — they dedupe by
+// block root.
 func (gc *GoClient) SubmitExecutionPayloadEnvelope(ctx context.Context, signed *gloas.SignedExecutionPayloadEnvelope) error {
-	body, err := signed.MarshalSSZ()
+	blinded, err := signed.Blinded()
 	if err != nil {
-		return fmt.Errorf("marshal signed execution payload envelope: %w", err)
+		return fmt.Errorf("blind execution payload envelope: %w", err)
+	}
+	body, err := blinded.MarshalSSZ()
+	if err != nil {
+		return fmt.Errorf("marshal signed blinded execution payload envelope: %w", err)
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, gc.commonTimeout)
@@ -47,7 +51,7 @@ func (gc *GoClient) SubmitExecutionPayloadEnvelope(ctx context.Context, signed *
 // requestExecutionPayloadEnvelope GETs the produce endpoint and decodes the SSZ response into an envelope.
 func requestExecutionPayloadEnvelope(ctx context.Context, addr string, slot phase0.Slot, beaconBlockRoot phase0.Root) (*gloas.ExecutionPayloadEnvelope, error) {
 	url := addr + fmt.Sprintf(gloasProduceEnvelopePath, slot, "0x"+hex.EncodeToString(beaconBlockRoot[:]))
-	body, err := gloasOctetStreamHTTP(ctx, http.MethodGet, url, nil)
+	body, err := gloasOctetStreamHTTP(ctx, http.MethodGet, url, nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -58,8 +62,10 @@ func requestExecutionPayloadEnvelope(ctx context.Context, addr string, slot phas
 	return envelope, nil
 }
 
-// submitExecutionPayloadEnvelope POSTs an SSZ-marshaled signed envelope to the publish endpoint.
-func submitExecutionPayloadEnvelope(ctx context.Context, addr string, envelopeSSZ []byte) error {
-	_, err := gloasOctetStreamHTTP(ctx, http.MethodPost, addr+gloasPublishEnvelopePath, envelopeSSZ)
+// submitExecutionPayloadEnvelope POSTs the SSZ-marshaled signed blinded envelope to the publish endpoint,
+// tagged Eth-Execution-Payload-Blinded.
+func submitExecutionPayloadEnvelope(ctx context.Context, addr string, blindedEnvelopeSSZ []byte) error {
+	headers := map[string]string{"Eth-Execution-Payload-Blinded": "true"}
+	_, err := gloasOctetStreamHTTP(ctx, http.MethodPost, addr+gloasPublishEnvelopePath, blindedEnvelopeSSZ, headers)
 	return err
 }

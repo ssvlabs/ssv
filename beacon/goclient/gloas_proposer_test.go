@@ -36,11 +36,12 @@ func TestRequestGloasBeaconBlock(t *testing.T) {
 	blockSSZ, err := minimalGloasBlock().MarshalSSZ()
 	require.NoError(t, err)
 
-	var gotMethod, gotPath, gotRandao, gotGraffiti, gotAccept string
+	var gotMethod, gotPath, gotRandao, gotGraffiti, gotAccept, gotIncludePayload string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotMethod, gotPath = r.Method, r.URL.Path
 		gotRandao = r.URL.Query().Get("randao_reveal")
 		gotGraffiti = r.URL.Query().Get("graffiti")
+		gotIncludePayload = r.URL.Query().Get("include_payload")
 		gotAccept = r.Header.Get("Accept")
 		_, _ = w.Write(blockSSZ)
 	}))
@@ -49,8 +50,9 @@ func TestRequestGloasBeaconBlock(t *testing.T) {
 	got, err := requestGloasBeaconBlock(context.Background(), srv.URL, 7, []byte{0x02}, []byte{0x01})
 	require.NoError(t, err)
 	require.Equal(t, http.MethodGet, gotMethod)
-	require.Equal(t, "/eth/v3/validator/blocks/7", gotPath)
-	require.Equal(t, "0x01", gotRandao) // randao is the 5th arg, graffiti the 4th
+	require.Equal(t, "/eth/v4/validator/blocks/7", gotPath)
+	require.Equal(t, "false", gotIncludePayload) // bare block; payload ships in the §6 envelope
+	require.Equal(t, "0x01", gotRandao)          // randao is the 5th arg, graffiti the 4th
 	require.Equal(t, "0x02", gotGraffiti)
 	require.Equal(t, "application/octet-stream", gotAccept)
 	require.Equal(t, phase0.Slot(7), got.Slot)
@@ -84,6 +86,6 @@ func TestGloasOctetStreamHTTP_Non2xxIsError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, err := gloasOctetStreamHTTP(context.Background(), http.MethodGet, srv.URL, nil)
+	_, err := gloasOctetStreamHTTP(context.Background(), http.MethodGet, srv.URL, nil, nil)
 	require.ErrorContains(t, err, "status 400")
 }
