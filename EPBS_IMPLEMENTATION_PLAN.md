@@ -392,7 +392,7 @@ Do both: mock-green ≠ local-green ≠ interop-green.
 - Risks: devnet resets/instability; validator activation latency; SSV contract deploy on a non-standard chain; per-client beacon-API PTC completeness (Lodestar/Lighthouse confirmed — verify the specific BN combo used).
 
 ### Progress checklist
-**`local_testnet` initiative:** ✅ **DONE** — implemented + PTC submission PROVEN 2026-06-28 (see RESULT below); gated only on PR review/merge (#34 / #504 / #123).
+**`local_testnet` initiative:** ✅ **DONE** — automated Loki-based `(ptc)` suite **merged to aetheria `main` 2026-06-30** (#123 / #126 / #127 + ssv-mini#34 + ethereum2-monitor#504); #128 (kurtosis-native Loki) is the one open follow-up. Full checklist: [aetheria#125](https://github.com/ssvlabs/aetheria/issues/125).
 
 **`devnet` initiative:**
 - [x] **1 · Pick & verify the live devnet** — devnet-6 verified live 2026-06-30 (see step 1): epoch ~1118 (Gloas active), PTC route 200, open BN/EL endpoints recorded, spec wire-values match the PR.
@@ -420,10 +420,10 @@ Config is `cleanenv`-based: a node started without `--config` reads purely from 
 
 Once the 4 nodes are up, harvest their ENRs into the stub `Bootnodes` (or pin a known `NETWORK_PRIVATE_KEY` per node) so the cluster discovers itself.
 
-### Initiative `local_testnet` (Track 2) — ssv-mini / aetheria local Gloas net — **IMPLEMENTED (2026-06-27); e2e PTC submission PROVEN 2026-06-28 (see result below); gated on review/merge**
+### Initiative `local_testnet` (Track 2) — ssv-mini / aetheria local Gloas net — **MERGED to aetheria `main` 2026-06-30; automated `(ptc)` suite live (see result below). Tracking: [aetheria#125](https://github.com/ssvlabs/aetheria/issues/125)**
 **Correction:** the earlier claim that `ethpandaops/ethereum-package@6.1.0` "has no Gloas/Glamsterdam fork (only up to Fulu+BPO)" is **wrong**. 6.1.0's `network_params.yaml` ships `gloas_fork_epoch` (+ the §1 quarter-slot `*_due_bps_gloas` timings) and threads it through `input_parser → el_cl_genesis_generator → values.env.tmpl`; its own CI test `.github/tests/fulu-genesis.yaml` runs `fulu_fork_epoch: 0` + `gloas_fork_epoch: 2`. So a local Gloas net is configurable **today** — no upstream wait. The only real blocker was Gloas-capable client images, solved by the ethpandaops `glamsterdam-devnet-5` builds (all EL/CL clients tagged).
 
-Implemented across three PRs (the local Gloas net reuses `local_testnet`'s on-chain identity — same contracts/validators — so no DB-seed duplication; Gloas is beacon-driven, read from the BN's `GLOAS_FORK_EPOCH`, so the SSV node needs no change):
+Built across these PRs — **all merged 2026-06-30** (the local Gloas net reuses `local_testnet`'s on-chain identity — same contracts/validators — so no DB-seed duplication; Gloas is beacon-driven, read from the BN's `GLOAS_FORK_EPOCH`, so the SSV node needs no change). The automated assertion layer (Loki `(ptc)` suite #127, dbtest fail-fast #126) and the one remaining piece (#128) are tracked in [aetheria#125](https://github.com/ssvlabs/aetheria/issues/125):
 1. **ssv-mini [#34](https://github.com/ssvlabs/ssv-mini/pull/34)** — `params-gloas.yaml` + `make run-gloas`: Fulu at genesis → Gloas at epoch 2, `glamsterdam-devnet-5` EL/CL images (Gloas-capable; the local net **pins these independently of whichever public devnet is live** — bump only if a later devnet build carries a client fix you need), genesis-generator pinned to `6.0.8` (6.1.0's default `5.3.5` predates Gloas), `boole_epoch: 0`. Usable standalone today for direct PTC observation (greppable SSV logs = the automatable signal; dora as a manual visual aid): `SSV_COMMIT=epbs-gloas make prepare && make run-gloas`.
 2. **ethereum2-monitor [#504](https://github.com/ssvlabs/ethereum2-monitor/pull/504)** (scoped in #503) — Gloas block decoding (go-eth2-client v0.28.x can't decode Gloas): a reactive raw-JSON fallback in `beacon.FetchBlock` — no SSZ, no shared types. Re-enables E2M attestation validation on a Gloas chain.
 3. **aetheria [#123](https://github.com/ssvlabs/aetheria/pull/123)** — a `local_testnet_gloas` network that routes to `params-gloas.yaml`, reusing local_testnet's identity; E2M capture made best-effort. `make run NETWORK=local_testnet_gloas TESTS='(event)'`. **Plus an E2M-coordination fix (2026-06-28, committed on `epbs/local-testnet-gloas`):** when `monitor-api` is absent the orchestrator now also sets the per-flow `e2m=false` (not just leaving `E2MURL` at a stale default), so the executor *skips* E2M and the `(event)` flow passes (on-chain lifecycle only) instead of hard-failing and tearing down.
@@ -433,7 +433,7 @@ Implemented across three PRs (the local Gloas net reuses `local_testnet`'s on-ch
 - **`local_testnet` (DONE — keep green):** implemented + PROVEN (below). Re-run on each branch tip / in CI as the fast regression signal; owns its own client images + validator set.
 - **`devnet` (infra, your hands — start in parallel):** devnet-6 probe + sanity check → SSV contract deploy + 4 operators → validators → fill the 3 stub TODOs → run + verify PTC via the greppable logs. Does **not** depend on `local_testnet`; can start any time.
 
-**`local_testnet` merge/enable order (don't lose the monitor re-enable — it's the one cross-repo coupling):**
+**`local_testnet` merge/enable order — ✅ completed (all merged 2026-06-30); kept for reference:**
 1. **ssv-mini #34** — mergeable now; `make run-gloas` works standalone (monitor off; verify ePBS via greppable SSV logs — dora as a visual aid). Its `params-gloas.yaml` keeps `monitor.enabled: false` deliberately, so it's mergeable before E2M ships Gloas support.
 2. **ethereum2-monitor #504** — merge; then rebuild the monitor image (ssv-mini `make prepare-monitor`, built from `../ethereum2-monitor`).
 3. **ssv-mini follow-up** — once #504 is in the monitor image, flip `monitor.enabled: true` in `params-gloas.yaml`. This turns on E2M attestation validation on the Gloas chain. *(This is the easy-to-forget step — it's intentionally deferred out of #34 so #34 stays mergeable today.)*
