@@ -65,9 +65,15 @@ func (h *ProposerPreferencesHandler) HandleDuties(ctx context.Context) {
 
 // reEmitLookahead drops the emitted-epoch markers so the next tick re-fetches and re-emits the
 // lookahead's preferences — after a reorg (new dependent_root) or a validator-set change (new local
-// validators that missed an already-processed epoch). Per SIP #94 §5 a changed dependent_root yields a
-// distinct gossip tuple, not a replacement; re-emitting an unchanged tuple is harmless (gossip keeps
-// only the first).
+// validators that missed an already-processed epoch). New local validators land on distinct proposal
+// slots and emit correctly.
+//
+// KNOWN ISSUE (pending the SIP-94 §5 coordination rule): re-emitting for an already-emitted
+// (proposal-slot, signer) — e.g. a changed dependent_root after a reorg — is rejected by the
+// ≤1-per-(slot,signer) pre-consensus dedup, so the refresh neither converges nor replaces the prior
+// preference, and the re-emitting operator is gossip-penalized. The fix (a bounded distinct-root
+// allowance for ProposerPreferences pre-consensus, plus re-emitting only on a real dependent_root
+// change) waits on the agreed SIP-94 §5 rule, since it relaxes a cross-client validation invariant.
 func (h *ProposerPreferencesHandler) reEmitLookahead(reason string) {
 	h.logger.Debug("🔀 re-emitting proposer preferences on next tick", zap.String("reason", reason))
 	clear(h.processed)

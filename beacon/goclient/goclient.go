@@ -340,7 +340,19 @@ func (gc *GoClient) initMultiClient(ctx context.Context) error {
 	return nil
 }
 
+// normalizeBeaconAddr ensures the configured beacon address carries an http(s) scheme, mirroring
+// go-eth2-client's parseAddress. eth2clienthttp normalizes internally, but the hand-rolled Gloas/PTC
+// requests concatenate this stored address into request URLs, so a scheme-less config (e.g. "host:port")
+// would otherwise fail http.NewRequest. Basic-auth credentials and any path prefix are preserved.
+func normalizeBeaconAddr(addr string) string {
+	if !strings.HasPrefix(addr, "http") {
+		addr = "http://" + addr
+	}
+	return strings.TrimSuffix(addr, "/")
+}
+
 func (gc *GoClient) addSingleClient(ctx context.Context, addr string) error {
+	addr = normalizeBeaconAddr(addr)
 	httpClient, err := eth2clienthttp.New(
 		ctx,
 		// WithAddress supplies the address of the beacon node, in host:port format.
