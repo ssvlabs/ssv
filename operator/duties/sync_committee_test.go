@@ -78,7 +78,7 @@ func setupSyncCommitteeDutiesMockWithFetcher(
 
 	if fetcher == nil {
 		fetcher = func(_ context.Context, epoch phase0.Epoch, _ []phase0.ValidatorIndex) ([]*v1.SyncCommitteeDuty, error) {
-			period := s.netCfg.Beacon.EstimatedSyncCommitteePeriodAtEpoch(epoch)
+			period := s.netCfg.EstimatedSyncCommitteePeriodAtEpoch(epoch)
 			duties, _ := dutiesMap.Get(period)
 			return duties, nil
 		}
@@ -105,7 +105,7 @@ func setupSyncCommitteeDutiesMockWithFetcher(
 								ValidatorIndex: duty.ValidatorIndex,
 							},
 						}
-						firstEpoch := s.netCfg.Beacon.FirstEpochOfSyncPeriod(period)
+						firstEpoch := s.netCfg.FirstEpochOfSyncPeriod(period)
 						if firstEpoch < minEpoch {
 							minEpoch = firstEpoch
 							ssvShare.SetMinParticipationEpoch(firstEpoch)
@@ -764,7 +764,7 @@ func TestScheduler_SyncCommittee_Reorg_Previous_Epoch_Transition(t *testing.T) {
 			dutiesMap,
 			waitForDuties,
 			func(ctx context.Context, epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*v1.SyncCommitteeDuty, error) {
-				period := scheduler.netCfg.Beacon.EstimatedSyncCommitteePeriodAtEpoch(epoch)
+				period := scheduler.netCfg.EstimatedSyncCommitteePeriodAtEpoch(epoch)
 				fetchedPeriods <- period
 				duties, _ := dutiesMap.Get(period)
 				return duties, nil
@@ -851,7 +851,7 @@ func TestScheduler_SyncCommittee_Retry_Current_Period_Fetch_On_Next_Tick(t *test
 			dutiesMap,
 			waitForDuties,
 			func(ctx context.Context, epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*v1.SyncCommitteeDuty, error) {
-				period := scheduler.netCfg.Beacon.EstimatedSyncCommitteePeriodAtEpoch(epoch)
+				period := scheduler.netCfg.EstimatedSyncCommitteePeriodAtEpoch(epoch)
 				duties, _ := dutiesMap.Get(period)
 				if period == 0 && currentPeriodFetches.Add(1) <= 3 {
 					return nil, errors.New("failed to fetch sync committee duties")
@@ -952,7 +952,7 @@ func TestScheduler_SyncCommittee_Retry_Next_Period_Fetch_On_Next_Tick_Mid_Period
 			dutiesMap,
 			waitForDuties,
 			func(ctx context.Context, epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*v1.SyncCommitteeDuty, error) {
-				period := scheduler.netCfg.Beacon.EstimatedSyncCommitteePeriodAtEpoch(epoch)
+				period := scheduler.netCfg.EstimatedSyncCommitteePeriodAtEpoch(epoch)
 				fetchedPeriods <- period
 				duties, _ := dutiesMap.Get(period)
 				if period == 1 && nextPeriodFetches.Add(1) <= 3 {
@@ -1026,7 +1026,7 @@ func TestScheduler_SyncCommittee_Retry_Next_Period_Fetch_On_Next_Tick_Period_Tra
 			dutiesMap,
 			waitForDuties,
 			func(ctx context.Context, epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*v1.SyncCommitteeDuty, error) {
-				period := scheduler.netCfg.Beacon.EstimatedSyncCommitteePeriodAtEpoch(epoch)
+				period := scheduler.netCfg.EstimatedSyncCommitteePeriodAtEpoch(epoch)
 				fetchedPeriods <- period
 				duties, _ := dutiesMap.Get(period)
 				if period == 1 && nextPeriodFetches.Add(1) <= 3 {
@@ -1104,7 +1104,7 @@ func TestScheduler_SyncCommittee_Retry_Next_Period_Fetch_On_Next_Tick_Period_Tra
 			dutiesMap,
 			waitForDuties,
 			func(ctx context.Context, epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*v1.SyncCommitteeDuty, error) {
-				period := scheduler.netCfg.Beacon.EstimatedSyncCommitteePeriodAtEpoch(epoch)
+				period := scheduler.netCfg.EstimatedSyncCommitteePeriodAtEpoch(epoch)
 				fetchedPeriods <- period
 				duties, _ := dutiesMap.Get(period)
 				if period == 1 && nextPeriodFetches.Add(1) <= 3 {
@@ -1179,7 +1179,7 @@ func TestScheduler_SyncCommittee_Reorg_Retry_Next_Period_Fetch_On_Next_Tick(t *t
 			dutiesMap,
 			waitForDuties,
 			func(ctx context.Context, epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*v1.SyncCommitteeDuty, error) {
-				period := scheduler.netCfg.Beacon.EstimatedSyncCommitteePeriodAtEpoch(epoch)
+				period := scheduler.netCfg.EstimatedSyncCommitteePeriodAtEpoch(epoch)
 				fetchedPeriods <- period
 				if period == 1 && failNextPeriodFetch.Load() {
 					return nil, errors.New("failed to fetch sync committee duties")
