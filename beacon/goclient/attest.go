@@ -581,7 +581,7 @@ func (gc *GoClient) SubmitAttestations(ctx context.Context, attestations []*spec
 
 	// Only reached when at least one client accepted the attestations, so the beacon node
 	// holds them — remember their data roots for the aggregator flow.
-	gc.rememberAttestedDataRoots(attestations)
+	gc.rememberAttestedDataRoots(ctx, attestations)
 	return nil
 }
 
@@ -597,24 +597,38 @@ type attestedDataRootKey struct {
 // per (slot, committee). The aggregator flow prefers this root over re-deriving the data:
 // the beacon node holds at least our own attestation matching it, so an aggregate must
 // exist, while a re-derived root may match nothing anyone attested with.
-func (gc *GoClient) rememberAttestedDataRoots(attestations []*spec.VersionedAttestation) {
+//
+// The committee runner submits one attestation per validator, and validators in the same
+// committee share a single AttestationData (for Electra it is identical across all committees),
+// so we dedupe per distinct (slot, committee) to hash and store each root only once.
+func (gc *GoClient) rememberAttestedDataRoots(ctx context.Context, attestations []*spec.VersionedAttestation) {
+	seen := make(map[attestedDataRootKey]struct{}, len(attestations))
 	for _, att := range attestations {
 		data, err := att.Data()
 		if err != nil {
-			gc.log.Debug("could not extract attestation data", zap.Error(err))
+			// We just submitted this attestation successfully, so extraction should not fail; a
+			// silent miss would degrade the aggregator flow to the 404-prone re-derivation.
+			gc.log.Warn("could not extract attestation data to remember its root", zap.Error(err))
+			attestedDataRootRememberFailedCounter.Add(ctx, 1)
 			continue
 		}
-		committee, err := attestationCommitteeIndex(att, data)
+		committee, err := att.CommitteeIndex()
 		if err != nil {
-			gc.log.Debug("could not extract attestation committee index", zap.Error(err))
+			gc.log.Warn("could not extract attestation committee index to remember its root", zap.Error(err))
+			attestedDataRootRememberFailedCounter.Add(ctx, 1)
+			continue
+		}
+		key := attestedDataRootKey{slot: data.Slot, committee: committee}
+		if _, ok := seen[key]; ok {
 			continue
 		}
 		root, err := data.HashTreeRoot()
 		if err != nil {
-			gc.log.Debug("could not hash attestation data", zap.Error(err))
+			gc.log.Warn("could not hash attestation data to remember its root", zap.Error(err))
+			attestedDataRootRememberFailedCounter.Add(ctx, 1)
 			continue
 		}
-		key := attestedDataRootKey{slot: data.Slot, committee: committee}
+		seen[key] = struct{}{}
 		gc.attestedDataRootCache.Set(key, root, ttlcache.DefaultTTL)
 	}
 }
@@ -627,22 +641,4 @@ func (gc *GoClient) attestedDataRoot(slot phase0.Slot, committee phase0.Committe
 		return phase0.Root{}, false
 	}
 	return item.Value(), true
-}
-
-// attestationCommitteeIndex extracts the committee an attestation belongs to: from the
-// committee bits for Electra and later (EIP-7549), from the data's Index field before.
-func attestationCommitteeIndex(att *spec.VersionedAttestation, data *phase0.AttestationData) (phase0.CommitteeIndex, error) {
-	if att.Version < spec.DataVersionElectra {
-		return data.Index, nil
-	}
-	bits, err := att.CommitteeBits()
-	if err != nil {
-		return 0, err
-	}
-	indices := bits.BitIndices()
-	if len(indices) != 1 {
-		return 0, fmt.Errorf("expected exactly one committee bit, got %d", len(indices))
-	}
-	// A bit index is a position within a 64-bit vector, so it is always non-negative.
-	return phase0.CommitteeIndex(indices[0]), nil //nolint:gosec
 }

@@ -314,71 +314,6 @@ func TestSubmitAggregateSelectionProof_FallbackSurfacesAttestationDataError(t *t
 	require.EqualValues(t, 1, attestationCalls.Load())
 }
 
-func TestAttestationCommitteeIndex(t *testing.T) {
-	t.Parallel()
-
-	data := &phase0.AttestationData{
-		Slot:   100,
-		Index:  3,
-		Source: &phase0.Checkpoint{Epoch: 1},
-		Target: &phase0.Checkpoint{Epoch: 2},
-	}
-
-	t.Run("pre-electra reads the data index", func(t *testing.T) {
-		t.Parallel()
-		att := aggregatorVersionedAttestation(spec.DataVersionPhase0, data)
-		got, err := attestationCommitteeIndex(att, data)
-		require.NoError(t, err)
-		require.Equal(t, phase0.CommitteeIndex(3), got)
-	})
-
-	t.Run("electra reads the single committee bit", func(t *testing.T) {
-		t.Parallel()
-		att := attestedVersionedAttestation(spec.DataVersionElectra, data, 7)
-		got, err := attestationCommitteeIndex(att, data)
-		require.NoError(t, err)
-		require.Equal(t, phase0.CommitteeIndex(7), got)
-	})
-
-	t.Run("fulu reads the single committee bit", func(t *testing.T) {
-		t.Parallel()
-		att := attestedVersionedAttestation(spec.DataVersionFulu, data, 9)
-		got, err := attestationCommitteeIndex(att, data)
-		require.NoError(t, err)
-		require.Equal(t, phase0.CommitteeIndex(9), got)
-	})
-
-	t.Run("electra with no committee bit set errors", func(t *testing.T) {
-		t.Parallel()
-		att := &spec.VersionedAttestation{
-			Version: spec.DataVersionElectra,
-			Electra: &electra.Attestation{Data: data, CommitteeBits: bitfield.NewBitvector64()},
-		}
-		_, err := attestationCommitteeIndex(att, data)
-		require.ErrorContains(t, err, "exactly one committee bit")
-	})
-
-	t.Run("electra with multiple committee bits errors", func(t *testing.T) {
-		t.Parallel()
-		bits := bitfield.NewBitvector64()
-		bits.SetBitAt(1, true)
-		bits.SetBitAt(2, true)
-		att := &spec.VersionedAttestation{
-			Version: spec.DataVersionElectra,
-			Electra: &electra.Attestation{Data: data, CommitteeBits: bits},
-		}
-		_, err := attestationCommitteeIndex(att, data)
-		require.ErrorContains(t, err, "exactly one committee bit")
-	})
-
-	t.Run("electra with no inner attestation errors", func(t *testing.T) {
-		t.Parallel()
-		att := &spec.VersionedAttestation{Version: spec.DataVersionElectra}
-		_, err := attestationCommitteeIndex(att, data)
-		require.Error(t, err)
-	})
-}
-
 func TestRememberAttestedDataRoots(t *testing.T) {
 	t.Parallel()
 
@@ -412,7 +347,7 @@ func TestRememberAttestedDataRoots(t *testing.T) {
 		rootC2 := mustHashTreeRoot(t, dataC2)
 		require.NotEqual(t, rootC1, rootC2)
 
-		gc.rememberAttestedDataRoots([]*spec.VersionedAttestation{
+		gc.rememberAttestedDataRoots(t.Context(), []*spec.VersionedAttestation{
 			aggregatorVersionedAttestation(spec.DataVersionPhase0, dataC1),
 			aggregatorVersionedAttestation(spec.DataVersionPhase0, dataC2),
 		})
@@ -439,7 +374,7 @@ func TestRememberAttestedDataRoots(t *testing.T) {
 		data := &phase0.AttestationData{Slot: slot, Source: &phase0.Checkpoint{Epoch: 1}, Target: &phase0.Checkpoint{Epoch: 2}}
 		root := mustHashTreeRoot(t, data)
 
-		gc.rememberAttestedDataRoots([]*spec.VersionedAttestation{
+		gc.rememberAttestedDataRoots(t.Context(), []*spec.VersionedAttestation{
 			attestedVersionedAttestation(spec.DataVersionElectra, data, 4),
 		})
 
@@ -458,8 +393,8 @@ func TestRememberAttestedDataRoots(t *testing.T) {
 		second := preElectraData(slot, committee, 0x02)
 		require.NotEqual(t, mustHashTreeRoot(t, first), mustHashTreeRoot(t, second))
 
-		gc.rememberAttestedDataRoots([]*spec.VersionedAttestation{aggregatorVersionedAttestation(spec.DataVersionPhase0, first)})
-		gc.rememberAttestedDataRoots([]*spec.VersionedAttestation{aggregatorVersionedAttestation(spec.DataVersionPhase0, second)})
+		gc.rememberAttestedDataRoots(t.Context(), []*spec.VersionedAttestation{aggregatorVersionedAttestation(spec.DataVersionPhase0, first)})
+		gc.rememberAttestedDataRoots(t.Context(), []*spec.VersionedAttestation{aggregatorVersionedAttestation(spec.DataVersionPhase0, second)})
 
 		got, ok := gc.attestedDataRoot(slot, committee)
 		require.True(t, ok)
@@ -476,7 +411,7 @@ func TestRememberAttestedDataRoots(t *testing.T) {
 		twoBits.SetBitAt(1, true)
 		twoBits.SetBitAt(2, true)
 
-		gc.rememberAttestedDataRoots([]*spec.VersionedAttestation{
+		gc.rememberAttestedDataRoots(t.Context(), []*spec.VersionedAttestation{
 			// Data() fails (nil inner attestation).
 			{Version: spec.DataVersionElectra},
 			// Committee extraction fails (two committee bits).
