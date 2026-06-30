@@ -3,7 +3,6 @@ package goclient
 import (
 	"context"
 	"errors"
-	"fmt"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -247,7 +246,9 @@ func TestGetSyncCommitteeContributionPreservesInputOrdering(t *testing.T) {
 	)
 	client := &syncCommitteeClientMock{
 		beaconBlockRootFunc: func(_ context.Context, opts *api.BeaconBlockRootOpts) (*api.Response[*phase0.Root], error) {
-			require.Equal(t, fmt.Sprint(slot), opts.Block)
+			// Must query head, not the duty slot: a by-slot lookup 404s when the slot's
+			// proposal is missed, failing the contribution duty.
+			require.Equal(t, "head", opts.Block)
 			return &api.Response[*phase0.Root]{Data: &blockRoot}, nil
 		},
 		syncCommitteeContributionFunc: func(_ context.Context, opts *api.SyncCommitteeContributionOpts) (*api.Response[*altair.SyncCommitteeContribution], error) {
@@ -298,6 +299,98 @@ func TestGetSyncCommitteeContributionPreservesInputOrdering(t *testing.T) {
 		require.Equal(t, blockRoot, contribution.Contribution.BeaconBlockRoot)
 		require.Equal(t, slot, contribution.Contribution.Slot)
 	}
+}
+
+// TestGetSyncCommitteeContributionFetchesHeadRoot is a regression test for the
+// empty-slot 404 bug: the contribution root must be resolved from "head", never the
+// duty slot. When the slot's proposal is missed, a by-slot block-root lookup 404s and
+// terminally fails the duty for the whole cluster, whereas "head" resolves to the
+// previous block's root — in the common case the root the cluster's sync-committee
+// messages signed.
+//
+// The mock 404s any by-slot lookup and only answers "head", so this test fails if the
+// query ever regresses to the by-slot form.
+func TestGetSyncCommitteeContributionFetchesHeadRoot(t *testing.T) {
+	t.Parallel()
+
+	cfg := *networkconfig.TestNetwork.Beacon
+	headRoot := phase0.Root{4, 5, 6}
+	slot := phase0.Slot(64)
+	selectionProofs := []phase0.BLSSignature{signatureWithFirstByte(1)}
+	subnetIDs := []uint64{7}
+
+	client := &syncCommitteeClientMock{
+		beaconBlockRootFunc: func(_ context.Context, opts *api.BeaconBlockRootOpts) (*api.Response[*phase0.Root], error) {
+			if opts.Block != "head" {
+				// Emulate a missed-proposal slot: the by-slot lookup the old code used 404s.
+				return nil, errors.New("GET failed with status 404: block not found")
+			}
+			return &api.Response[*phase0.Root]{Data: &headRoot}, nil
+		},
+		syncCommitteeContributionFunc: func(_ context.Context, opts *api.SyncCommitteeContributionOpts) (*api.Response[*altair.SyncCommitteeContribution], error) {
+			// The contribution must be requested for the head root resolved above.
+			require.Equal(t, headRoot, opts.BeaconBlockRoot)
+			return &api.Response[*altair.SyncCommitteeContribution]{
+				Data: &altair.SyncCommitteeContribution{
+					Slot:              opts.Slot,
+					BeaconBlockRoot:   opts.BeaconBlockRoot,
+					SubcommitteeIndex: opts.SubcommitteeIndex,
+				},
+			}, nil
+		},
+	}
+
+	goClient := &GoClient{
+		log:          zap.NewNop(),
+		beaconConfig: &cfg,
+		multiClient:  client,
+	}
+
+	got, version, err := goClient.GetSyncCommitteeContribution(t.Context(), slot, selectionProofs, subnetIDs)
+	require.NoError(t, err)
+	require.Equal(t, spec.DataVersionAltair, version)
+
+	contributions, ok := got.(*spectypes.Contributions)
+	require.True(t, ok)
+	require.Len(t, *contributions, len(subnetIDs))
+	require.Equal(t, headRoot, (*contributions)[0].Contribution.BeaconBlockRoot)
+}
+
+// TestGetSyncCommitteeContributionPropagatesCanceledContext locks in the cancellation
+// path of the 1/3-into-slot wait. With a future slot (so the wait blocks instead of
+// early-returning) and an already-canceled context, GetSyncCommitteeContribution must
+// return the wrapped "wait for 1/3 of slot" error and DataVersionNil, without ever
+// querying the beacon node.
+func TestGetSyncCommitteeContributionPropagatesCanceledContext(t *testing.T) {
+	t.Parallel()
+
+	cfg := *networkconfig.TestNetwork.Beacon
+	// A slot well into the future so waitIntoSlot blocks rather than early-returning.
+	slot := cfg.EstimatedCurrentSlot() + 1_000_000
+	selectionProofs := []phase0.BLSSignature{signatureWithFirstByte(1)}
+	subnetIDs := []uint64{7}
+
+	client := &syncCommitteeClientMock{
+		beaconBlockRootFunc: func(_ context.Context, _ *api.BeaconBlockRootOpts) (*api.Response[*phase0.Root], error) {
+			t.Error("beacon node must not be queried when the context is canceled before the wait completes")
+			return nil, errors.New("unexpected call")
+		},
+	}
+
+	goClient := &GoClient{
+		log:          zap.NewNop(),
+		beaconConfig: &cfg,
+		multiClient:  client,
+	}
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	got, version, err := goClient.GetSyncCommitteeContribution(ctx, slot, selectionProofs, subnetIDs)
+	require.ErrorContains(t, err, "wait for 1/3 of slot")
+	require.ErrorIs(t, err, context.Canceled)
+	require.Equal(t, DataVersionNil, version)
+	require.Nil(t, got)
 }
 
 func TestIsSyncCommitteeAggregatorHandlesZeroModulo(t *testing.T) {
