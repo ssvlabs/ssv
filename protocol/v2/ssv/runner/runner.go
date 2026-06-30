@@ -348,7 +348,10 @@ func (b *BaseRunner) signAndBroadcastPartialSigMsgs(
 	// Reuse the existing span instead of generating new one to keep tracing-data lightweight.
 	span := trace.SpanFromContext(ctx)
 
-	msgID := spectypes.NewMsgID(b.NetworkConfig.DomainType, validatorPubKey, b.RunnerRoleType)
+	// Use the fork-aware domain so the pubsub message validator accepts the message after the
+	// Boole fork activates (post-fork it checks NextDomainType). Mirrors CommitteeRunner and
+	// QBFT domain selection. Fixes #2915.
+	msgID := spectypes.NewMsgID(b.NetworkConfig.DomainTypeAtSlot(msgs.Slot), validatorPubKey, b.RunnerRoleType)
 	encodedMsg, err := msgs.Encode()
 	if err != nil {
 		return fmt.Errorf("could not encode partial signature messages: %w", err)
