@@ -169,7 +169,7 @@ func (r *VoluntaryExitRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRo
 
 // expectedPostConsensusRootsAndDomain an INTERNAL function, returns the expected post-consensus roots to sign
 func (r *VoluntaryExitRunner) expectedPostConsensusRootsAndDomain(context.Context) ([]ssz.HashRoot, phase0.DomainType, error) {
-	return nil, [4]byte{}, errors.New("no post consensus roots for voluntary exit")
+	return nil, spectypes.DomainError, errors.New("no post consensus roots for voluntary exit")
 }
 
 func (r *VoluntaryExitRunner) executeDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty) error {
@@ -198,7 +198,9 @@ func (r *VoluntaryExitRunner) executeDuty(ctx context.Context, logger *zap.Logge
 		spectypes.DomainVoluntaryExit,
 	)
 	if err != nil {
-		return fmt.Errorf("could not sign VoluntaryExit object: %w", err)
+		// EIP-7044 pins exits to the Capella domain, so a signer that disagrees on the fork
+		// rejects exits while other duties still sign (e.g. a remote Web3Signer with the wrong --network).
+		return fmt.Errorf("could not sign voluntary exit (if signing remotely, check the signer config, e.g. the Web3Signer --network): %w", err)
 	}
 
 	msgs := &spectypes.PartialSignatureMessages{
