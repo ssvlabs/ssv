@@ -50,7 +50,11 @@ func (gc *GoClient) SubmitGloasBeaconBlock(ctx context.Context, block *gloas.Sig
 
 // requestGloasBeaconBlock GETs the produce endpoint and decodes the SSZ response into a Gloas block.
 func requestGloasBeaconBlock(ctx context.Context, addr string, slot phase0.Slot, graffiti, randao []byte) (*gloas.BeaconBlock, error) {
-	url := addr + fmt.Sprintf(gloasProduceBlockPath, slot, "0x"+hex.EncodeToString(randao), "0x"+hex.EncodeToString(graffiti))
+	// Graffiti must be a full 32-byte value in the query — lighthouse rejects a short one with
+	// 400 "Invalid query string" (mirror the mature GetBeaconBlock path which pads to [32]byte).
+	g := [32]byte{}
+	copy(g[:], graffiti)
+	url := addr + fmt.Sprintf(gloasProduceBlockPath, slot, "0x"+hex.EncodeToString(randao), "0x"+hex.EncodeToString(g[:]))
 	body, err := gloasOctetStreamHTTP(ctx, http.MethodGet, url, nil, nil)
 	if err != nil {
 		return nil, err
