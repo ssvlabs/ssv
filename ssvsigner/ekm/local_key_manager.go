@@ -189,7 +189,14 @@ func (km *LocalKeyManager) signBeaconObject(
 			}
 			return km.signer.SignBlindedBeaconBlock(vBlindedBlock, domain, pubKey[:])
 		default:
-			return nil, nil, fmt.Errorf("obj type is unknown: %T", obj)
+			// Gloas (ePBS) block: go-eth2-client has no Gloas VersionedBeaconBlock for the slashing-
+			// protected SignBeaconBlock path, and ssvsigner (a separate module) can't import the node's
+			// *gloas.BeaconBlock to type-switch on it. The decided block arrives as an ssz.HashRoot, so
+			// sign its SSZ signing root directly, as the other Gloas domains do.
+			// TODO(gloas): unlike those domains a block proposal IS slashable — add block slashing
+			// protection (IsBeaconBlockSlashable + a highest-proposal record) before mainnet. That needs
+			// the slot, currently discarded by the outer SignBeaconObject, so it must be plumbed through.
+			return signSSZRoot(km.signer, obj, domain, pubKey[:])
 		}
 
 	case spectypes.DomainVoluntaryExit:
