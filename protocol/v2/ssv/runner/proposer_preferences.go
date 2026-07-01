@@ -287,9 +287,13 @@ func (r *proposerPreferencesSlotRunner) ProcessPreConsensus(ctx context.Context,
 		Signature: signature,
 	}
 	if err := r.beacon.SubmitProposerPreferences(ctx, []*gloas.SignedProposerPreferences{signed}); err != nil {
-		return fmt.Errorf("could not submit proposer preferences: %w", err)
+		recordFailedSubmission(ctx, spectypes.BNRoleProposerPreferences)
+		const errMsg = "could not submit proposer preferences"
+		logger.Error(errMsg, fields.Slot(r.proposerPreferences.ProposalSlot), zap.Error(err))
+		return fmt.Errorf("%s: %w", errMsg, err)
 	}
 
+	recordSuccessfulSubmission(ctx, 1, r.NetworkConfig.EstimatedEpochAtSlot(r.proposerPreferences.ProposalSlot), spectypes.BNRoleProposerPreferences)
 	r.markDutySucceeded()
 	logger.Info("✔️ successfully submitted proposer preferences", fields.Slot(r.proposerPreferences.ProposalSlot))
 	return nil

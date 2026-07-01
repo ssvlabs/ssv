@@ -480,7 +480,9 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 	start := time.Now()
 	if err := r.GetBeaconNode().SubmitBeaconBlock(ctx, vBlk, specSig); err != nil {
 		recordFailedSubmission(ctx, spectypes.BNRoleProposer)
-		return fmt.Errorf("submit beacon block: %w", err)
+		const errMsg = "could not submit beacon block"
+		logger.Error(errMsg, fields.Slot(validatorConsensusData.Duty.Slot), zap.Error(err))
+		return fmt.Errorf("%s: %w", errMsg, err)
 	}
 	return r.finishSubmittedProposal(ctx, logger, span, start, proposalTraceAttrs)
 }
@@ -540,7 +542,9 @@ func (r *ProposerRunner) submitGloasProposal(ctx context.Context, logger *zap.Lo
 	signedBlock := &gloas.SignedBeaconBlock{Message: block, Signature: sig}
 	if err := r.GetBeaconNode().SubmitGloasBeaconBlock(ctx, signedBlock); err != nil {
 		recordFailedSubmission(ctx, spectypes.BNRoleProposer)
-		finishErr = fmt.Errorf("submit gloas beacon block: %w", err)
+		const errMsg = "could not submit gloas beacon block"
+		logger.Error(errMsg, fields.Slot(cd.Duty.Slot), zap.Error(err))
+		finishErr = fmt.Errorf("%s: %w", errMsg, err)
 	} else {
 		recordProposalBuildSource(ctx, selfBuild(block))
 		finishErr = r.finishSubmittedProposal(ctx, logger, span, start, nil)

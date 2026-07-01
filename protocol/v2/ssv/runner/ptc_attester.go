@@ -119,9 +119,13 @@ func (r *PTCAttesterRunner) ProcessPreConsensus(ctx context.Context, logger *zap
 		Signature:      signature,
 	}
 	if err := r.beacon.SubmitPayloadAttestationMessages(ctx, []*gloas.PayloadAttestationMessage{msg}); err != nil {
-		return fmt.Errorf("could not submit payload attestation message: %w", err)
+		recordFailedSubmission(ctx, spectypes.BNRolePTCAttester)
+		const errMsg = "could not submit payload attestation message"
+		logger.Error(errMsg, fields.Slot(r.payloadAttestationData.Slot), zap.Error(err))
+		return fmt.Errorf("%s: %w", errMsg, err)
 	}
 
+	recordSuccessfulSubmission(ctx, 1, r.NetworkConfig.EstimatedEpochAtSlot(r.payloadAttestationData.Slot), spectypes.BNRolePTCAttester)
 	r.markDutySucceeded()
 	logger.Info("✔️ successfully submitted payload attestation", fields.Slot(r.payloadAttestationData.Slot))
 	return nil
