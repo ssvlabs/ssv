@@ -385,6 +385,11 @@ func (r *proposerPreferencesSlotRunner) buildProposerPreferences(ctx context.Con
 		return nil, fmt.Errorf("could not fetch proposer-duties dependent root for epoch %d: %w", epoch, err)
 	}
 
+	// KNOWN ISSUE (SIP-94 §5 publish-finality — pending): dependent_root/fee_recipient/target_gas_limit are
+	// read here at emit time and the preference is published once pre-consensus quorum is reached, with no
+	// guard holding publication until they are final. A reorg can change dependent_root afterwards — and the
+	// ≤1-per-(slot,signer) pre-consensus dedup means the refresh can't be re-emitted (see the reEmitLookahead
+	// KNOWN ISSUE). Low severity (reorg-gated, §5 is observational); add a finality hold only if it bites on devnet.
 	return &gloas.ProposerPreferences{
 		DependentRoot:  dependentRoot,
 		ProposalSlot:   proposalSlot,
