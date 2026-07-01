@@ -210,8 +210,12 @@ func (r *EnvelopeBuilderRunner) submitEnvelope(ctx context.Context, logger *zap.
 	if r.builtDecidedEnvelope(cd.DataSSZ) {
 		signed := &gloas.SignedExecutionPayloadEnvelope{Message: r.cachedEnvelope, Signature: sig}
 		if err := r.GetBeaconNode().SubmitExecutionPayloadEnvelope(ctx, signed); err != nil {
-			return fmt.Errorf("submit execution payload envelope: %w", err)
+			recordFailedSubmission(ctx, spectypes.BNRoleEnvelopeBuilder)
+			const errMsg = "could not submit execution payload envelope"
+			logger.Error(errMsg, fields.Slot(cd.Duty.Slot), zap.Error(err))
+			return fmt.Errorf("%s: %w", errMsg, err)
 		}
+		recordSuccessfulSubmission(ctx, 1, r.NetworkConfig.EstimatedEpochAtSlot(cd.Duty.Slot), spectypes.BNRoleEnvelopeBuilder)
 		logger.Info("✅ published execution payload envelope", fields.Slot(cd.Duty.Slot))
 	} else {
 		logger.Debug("this operator did not build the decided envelope, skipping publication", fields.Slot(cd.Duty.Slot))
