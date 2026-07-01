@@ -124,9 +124,9 @@ func (v *gloasVoteChecker) CheckValue(value []byte) error {
 
 	attestationData := &phase0.AttestationData{
 		Slot: v.slot,
-		// The decided payload-status index — exactly what constructAttestationData will sign — so the
-		// slashing pre-check sees the same data that gets signed. SSV's protection is epoch-only, so the
-		// index is inert to the comparison either way.
+		// The decided payload-status index — the same value constructAttestationData will sign — so the
+		// slashing pre-check sees exactly the signed data. (SSV slashing protection is epoch-only, so the
+		// index doesn't change today's outcome, but keeping the two in sync is correct and future-proof.)
 		Index:           bv.AttestationDataIndex,
 		BeaconBlockRoot: bv.BlockRoot,
 		Source:          bv.Source,

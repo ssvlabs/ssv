@@ -18,10 +18,9 @@ type BuilderIndex uint64
 const BuilderIndexSelfBuild = BuilderIndex(^uint64(0))
 
 // ExecutionPayloadBid is the Gloas (ePBS) bid the proposer commits to in the block body, replacing the
-// inline execution payload of pre-Gloas blocks: the block carries only this
-// commitment, and the payload itself ships separately in the envelope (§6). For self-build, BuilderIndex
-// is BuilderIndexSelfBuild. Fields match the pinned spec / go-eth2-client PR #280 (the earlier #269
-// shape — a single BlobKZGCommitmentsRoot — predates the blob-commitments-list change and is stale).
+// inline execution payload of pre-Gloas blocks: the block carries only this commitment, and the payload
+// itself ships separately in the envelope (§6). For self-build, BuilderIndex is BuilderIndexSelfBuild.
+// Fields match the pinned spec / go-eth2-client PR #280.
 type ExecutionPayloadBid struct {
 	ParentBlockHash       phase0.Hash32              `ssz-size:"32"`
 	ParentBlockRoot       phase0.Root                `ssz-size:"32"`
