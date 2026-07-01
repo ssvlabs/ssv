@@ -56,6 +56,39 @@ Confirmed against the pinned specs and the working tree (HEAD `82a9f4f8f`). Trea
 
 ---
 
+## 1b. Revisit-later TODOs — consolidated index
+
+The single canonical list of "revisit at a later date" items; detail lives at the `§`/file pointers. **New TODOs land here**, not sprinkled inline. Migrate this list into the #2901 description when this doc is removed (per the top-of-file note). Verify each against the code before acting — some inline notes may have closed since.
+
+**On the first devnet run / verification**
+- [ ] **§2 Fulu-tag attestation** — confirm a Gloas BN accepts the Fulu-tagged attestation submission on Gloas slots; if rejected, extend `BeaconForkAtEpoch` → `DataVersionGloas` (the `TODO(gloas)` in `networkconfig/beacon.go`). *High if it fails — every attestation would.* (T4, ~line 168)
+- [ ] **§4/§6 stateless Contents** — confirm the §6 blinded-vs-`Contents` body choice; wire `SignedExecutionPayloadEnvelopeContents` (envelope + blobs + KZG) only if a devnet BN runs payload-stateless (also un-defers T7's blob plumbing). (§7 "Remaining"; finding #2)
+- [ ] **QuickTimeout** — RTT-tune the 2s round budget / decide on restoring the round-2 proposer fallback from devnet data. (T3 note; §7 timing audit)
+- [ ] **Telemetry on devnet** — add the G5 PTC-non-convergence log once gauged; revisit §6 priority + any no-QBFT tuning against real local-build / recon-miss rates. (§8; §2b)
+- [ ] **devnet network stubs** — fill `RegistryContractAddr`, `RegistrySyncOffset` (contract deploy), `Bootnodes` (operator ENRs). (§7 checklist step 5)
+- [ ] **ssv-mini monitor** — flip `monitor.enabled: true` in `params-gloas.yaml` once ethereum2-monitor#504 is in the image. (§7 local_testnet step 3)
+
+**On the SIP-94 §5 decision (cross-client — blocked)**
+- [ ] **§5 re-emission** — validation: dedup `ProposerPreferencesPartialSig` by `(slot, signer, root)` up to a bound N (proposed 4); handler: re-emit only on a real `dependent_root` change (needs per-slot root tracking). Must land in SIP-94 §5 + be matched by Anchor. (§7 DEFERRED; finding #1)
+- [ ] **§5 publish-finality** — hold publication until `dependent_root`/`fee_recipient`/`target_gas_limit` are final. `KNOWN ISSUE` comment now in `buildProposerPreferences`; implement the hold only if it bites on devnet. (finding #3)
+
+**On upstream / cross-client maturity**
+- [ ] **go-eth2-client Gloas** — swap the hand-rolled types/HTTP for upstream `spec/gloas` when it ships (a dedup, not a gate). (§2b; U2)
+- [ ] **Web3Signer ePBS duties** — route PTC / preferences / envelope signing via Web3Signer when it adds the types (the `TODO(gloas)` in `ssvsigner/ekm/remote_key_manager.go`). (§2b)
+- [ ] **Anchor §5/§6 constants** — re-check wire constants vs sigp/anchor once it builds §5/§6 (PTC already verified). (§2b; §4 seq)
+- [ ] **consensus-specs pin** — re-verify at each milestone (SIP watchlist tracks normative drift). (§2b)
+- [ ] **HTR spec vectors** — run the computational Gloas SSZ cross-check against canonical vectors once the fork ships (none exist yet). (T8)
+- [ ] **SIP-94 §4/§6 text** — reconcile the SIP to the merged beacon-APIs#580 flow (`include_payload=false` + blinded) that the impl tracks. (finding #2)
+- [ ] **EIP-8282** — add node-side Gloas `ExecutionRequests` (builder deposit/exit) + HTR-parity vectors if/when a target devnet adopts it. (T8 review)
+
+**On Boole → stage landing**
+- [ ] `git rebase --onto stage <boole-fork-tip> epbs-gloas` to move the ePBS commits when Boole merges. (§6)
+
+**Investigated & closed — do not revisit**
+- **§2 slashing-index** — the Gloas payload-status index passed to `IsAttestationSlashable` is inert (SSV's slashing protection is epoch-only; verified in eth2-key-manager). No action. (finding #4)
+
+---
+
 ## 2. Resolved investigations (findings + decisions)
 
 ### U0 — How the new protocol types enter the node **(decided — incl. the ssv-spec posture)**
@@ -361,6 +394,13 @@ PTC is implemented node-side end-to-end (wire types → goclient endpoints → e
 **Interim (NOT applied; flagged):** if the penalty disrupts devnet testing before the SIP resolves, suppress no-op re-emits (option a) to stop the penalty — but that does **not** refresh on reorg (a deliberate SIP deviation), so only as a stopgap.
 
 **Committed on `epbs-gloas`** (rebased onto the refreshed `boole-fork` — see §6): the PTC implementation (above); two review rounds — first the `DataVersionGloas` → `networkconfig` / `BeaconForkAtEpoch` TODO / SSZ-regen tidy-up, then the 11-point PTC code review (unmasked-address requests, per-client timeouts, transient-BN warn, cutoff-baselined lateness, `signSSZRoot`, abstain semantics, handler tests); the `GlamsterdamDevnet` networkconfig stub; a `.dockerignore` `tla/` exclusion. **P1 image `ssvnode:epbs-gloas` builds + runs** (verified).
+
+### PR review round (2026-07-01) — §2/§4/§5/§6 spec-alignment sweep
+A second review pass over the ePBS submit paths (findings #1–#4). **None are functional runtime bugs** — all are spec-alignment / SIP-coordination / documentation items. Only one new TODO (§5 publish-finality); the rest confirm or cross-ref items already tracked.
+- **§5 publish-finality guard — NEW TODO; the one gap with no in-code note.** SIP-94 §5 says hold publication until a proposal slot's `dependent_root` / `fee_recipient` / `target_gas_limit` are final. The runner does not: `buildProposerPreferences` reads them at emit time and the preference is published on pre-consensus quorum (`protocol/v2/ssv/runner/proposer_preferences.go`), so it can publish on a non-final `dependent_root` — and, per the re-emission DEFERRED block above, can't be corrected afterward. Reorg-gated + §5 is observational → low severity. **Done:** `KNOWN ISSUE` comment added in `buildProposerPreferences` for parity with the re-emission one; implement the finality hold only if it bites on devnet. *(Promotes the "ProposerPreferences publish-finality follow-up" from the top-of-file delete-note into a tracked item — see §1b.)*
+- **§5 re-emission (finding #1) — already tracked** (DEFERRED block above). Correction to the earlier "cheap interim" idea: `reEmitLookahead` does fire on **every** reorg (not just `dependent_root` changes), but gating it on `ReorgEvent.CurrentDutyDependentRootChanged` is **not** a safe one-liner — preferences span the current **and** next epoch, and that flag covers only the current epoch (the proposer handler always re-fetches the next epoch on any reorg), so a naive gate would suppress legitimate next-epoch refreshes. The `dependent_root`-change gate therefore belongs **with** the full §5 fix (same per-slot root tracking), not as a standalone interim.
+- **§4/§6 stateless Contents (finding #2) — already tracked** (§7 "Remaining" above; `include_payload=false` + blinded/stateful publish, #580-pinned). Reconciliation angle: the divergence from SIP-94's `BlockContents` / `…EnvelopeContents` flow is deliberate — it tracks the *merged* beacon-APIs#580 that real BNs serve — so the fix is a **SIP-text update** (its watchlist authorizes it), not wiring Contents. Wire Contents only if a devnet BN proves payload-stateless.
+- **§2 slashing-index (finding #4) — investigated, non-issue (no code action).** The Gloas payload-status index passed to `IsAttestationSlashable` (`value_check.go`) is inert: SSV's slashing protection (eth2-key-manager `NewNormalProtection`) compares **only** `source`/`target` epochs and explicitly stores no signing roots (verified in the lib). The code comment already states this and is accurate. At most a SIP-text rationale nuance.
 
 ### Gate check — PASSED
 Make-or-break question for the public-devnet path: do the Gloas devnet CL clients expose the **beacon-API PTC validator endpoints**? (A Gloas chain can run with built-in VCs doing PTC internally without exposing them to an external VC like SSV.) They do:
