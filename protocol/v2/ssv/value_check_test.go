@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/attestantio/go-eth2-client/spec/electra"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
@@ -253,7 +252,7 @@ func encodeEnvelopeValue(t *testing.T, slot phase0.Slot, valIdx phase0.Validator
 	t.Helper()
 	blinded := &gloas.BlindedExecutionPayloadEnvelope{
 		PayloadRoot:           phase0.Root{0x09},
-		ExecutionRequests:     &electra.ExecutionRequests{},
+		ExecutionRequests:     &gloas.ExecutionRequests{},
 		BuilderIndex:          builderIndex,
 		BeaconBlockRoot:       blockRoot,
 		ParentBeaconBlockRoot: phase0.Root{0x08},

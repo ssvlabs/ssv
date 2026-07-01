@@ -3,14 +3,13 @@ package gloas
 import (
 	"fmt"
 
-	"github.com/attestantio/go-eth2-client/spec/electra"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 )
 
 // Regenerate with `go generate ./...`. -path is the package dir (not just this file) so sszgen resolves
 // the sibling gloas BuilderIndex the envelope references; --objs limits output to the blinded envelope,
 // collected into its own _encoding.go. Includes track go-eth2-client via `go list -m`.
-//go:generate sh -c "go tool -modfile=../../../../tool.mod sszgen -path . --include $(go list -m -f '{{.Dir}}' github.com/attestantio/go-eth2-client)/spec/phase0,$(go list -m -f '{{.Dir}}' github.com/attestantio/go-eth2-client)/spec/electra,$(go list -m -f '{{.Dir}}' github.com/attestantio/go-eth2-client)/spec/bellatrix,$(go list -m -f '{{.Dir}}' github.com/attestantio/go-eth2-client)/spec/capella --objs BlindedExecutionPayloadEnvelope,SignedBlindedExecutionPayloadEnvelope,ExecutionPayloadEnvelope,SignedExecutionPayloadEnvelope --exclude-objs ExecutionPayload --output ./execution_payload_envelope_encoding.go"
+//go:generate sh -c "go tool -modfile=../../../../tool.mod sszgen -path . --include $(go list -m -f '{{.Dir}}' github.com/attestantio/go-eth2-client)/spec/phase0,$(go list -m -f '{{.Dir}}' github.com/attestantio/go-eth2-client)/spec/electra,$(go list -m -f '{{.Dir}}' github.com/attestantio/go-eth2-client)/spec/bellatrix,$(go list -m -f '{{.Dir}}' github.com/attestantio/go-eth2-client)/spec/capella --objs BlindedExecutionPayloadEnvelope,SignedBlindedExecutionPayloadEnvelope,ExecutionPayloadEnvelope,SignedExecutionPayloadEnvelope --exclude-objs ExecutionPayload,ExecutionRequests,BuilderDepositRequest,BuilderExitRequest --output ./execution_payload_envelope_encoding.go"
 
 // BlindedExecutionPayloadEnvelope is the blinded form of the Gloas ExecutionPayloadEnvelope that the §6
 // envelope-signing duty signs (SIP #94 §6): the full `payload` is replaced by
@@ -20,10 +19,8 @@ import (
 // value bounded — a few hundred bytes rather than the full payload's hundreds of KB to ~MB.
 type BlindedExecutionPayloadEnvelope struct {
 	PayloadRoot phase0.Root `ssz-size:"32"`
-	// electra.ExecutionRequests matches the pinned Gloas spec (consensus-specs 6ebb2216c). EIP-8282
-	// (builder deposit/exit requests, slated for Glamsterdam) will extend it — swap to a node-side Gloas
-	// variant when the target devnet adopts it.
-	ExecutionRequests     *electra.ExecutionRequests
+	// Gloas execution requests — the EIP-8282 five-list variant, not electra's three (see execution_requests.go).
+	ExecutionRequests     *ExecutionRequests
 	BuilderIndex          BuilderIndex
 	BeaconBlockRoot       phase0.Root `ssz-size:"32"`
 	ParentBeaconBlockRoot phase0.Root `ssz-size:"32"`
@@ -39,7 +36,7 @@ func (b *BlindedExecutionPayloadEnvelope) Decode(data []byte) error { return b.U
 // so the signature over the blinded root is valid for this full envelope.
 type ExecutionPayloadEnvelope struct {
 	Payload               *ExecutionPayload
-	ExecutionRequests     *electra.ExecutionRequests
+	ExecutionRequests     *ExecutionRequests
 	BuilderIndex          BuilderIndex
 	BeaconBlockRoot       phase0.Root `ssz-size:"32"`
 	ParentBeaconBlockRoot phase0.Root `ssz-size:"32"`

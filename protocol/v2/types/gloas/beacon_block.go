@@ -11,7 +11,7 @@ import (
 // Regenerate with `go generate ./...`. -path is the package dir so sszgen resolves the sibling gloas
 // types the body references; --exclude-objs leaves their (already-generated) SSZ in their own files,
 // and --output collects only the body types here. Includes track go-eth2-client via `go list -m`.
-//go:generate sh -c "go tool -modfile=../../../../tool.mod sszgen -path . --include $(go list -m -f '{{.Dir}}' github.com/attestantio/go-eth2-client)/spec/phase0,$(go list -m -f '{{.Dir}}' github.com/attestantio/go-eth2-client)/spec/altair,$(go list -m -f '{{.Dir}}' github.com/attestantio/go-eth2-client)/spec/capella,$(go list -m -f '{{.Dir}}' github.com/attestantio/go-eth2-client)/spec/electra,$(go list -m -f '{{.Dir}}' github.com/attestantio/go-eth2-client)/spec/bellatrix,$(go list -m -f '{{.Dir}}' github.com/attestantio/go-eth2-client)/spec/deneb --objs PayloadAttestation,BeaconBlockBody,BeaconBlock,SignedBeaconBlock --exclude-objs ExecutionPayloadBid,SignedExecutionPayloadBid,PayloadAttestationData --output ./beacon_block_encoding.go"
+//go:generate sh -c "go tool -modfile=../../../../tool.mod sszgen -path . --include $(go list -m -f '{{.Dir}}' github.com/attestantio/go-eth2-client)/spec/phase0,$(go list -m -f '{{.Dir}}' github.com/attestantio/go-eth2-client)/spec/altair,$(go list -m -f '{{.Dir}}' github.com/attestantio/go-eth2-client)/spec/capella,$(go list -m -f '{{.Dir}}' github.com/attestantio/go-eth2-client)/spec/electra,$(go list -m -f '{{.Dir}}' github.com/attestantio/go-eth2-client)/spec/bellatrix,$(go list -m -f '{{.Dir}}' github.com/attestantio/go-eth2-client)/spec/deneb --objs PayloadAttestation,BeaconBlockBody,BeaconBlock,SignedBeaconBlock --exclude-objs ExecutionPayloadBid,SignedExecutionPayloadBid,PayloadAttestationData,ExecutionRequests,BuilderDepositRequest,BuilderExitRequest --output ./beacon_block_encoding.go"
 
 // PayloadAttestation is the aggregated PTC attestation the proposer includes in the block body for the
 // previous slot's payload (consensus-specs gloas) — distinct from the single-member
@@ -40,9 +40,8 @@ type BeaconBlockBody struct {
 	BLSToExecutionChanges     []*capella.SignedBLSToExecutionChange `ssz-max:"16"`
 	SignedExecutionPayloadBid *SignedExecutionPayloadBid
 	PayloadAttestations       []*PayloadAttestation `ssz-max:"4"`
-	// electra.ExecutionRequests matches the pinned Gloas spec (6ebb2216c); EIP-8282 (builder
-	// deposit/exit requests, Glamsterdam) will extend it — swap to a node-side variant then.
-	ParentExecutionRequests *electra.ExecutionRequests
+	// Gloas execution requests — the EIP-8282 five-list variant, not electra's three (see execution_requests.go).
+	ParentExecutionRequests *ExecutionRequests
 }
 
 // BeaconBlock is the Gloas (ePBS) beacon block.

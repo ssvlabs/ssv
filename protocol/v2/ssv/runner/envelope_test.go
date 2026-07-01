@@ -4,7 +4,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/attestantio/go-eth2-client/spec/electra"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
@@ -21,7 +20,7 @@ func envelopeConsensusDataSSZ(t *testing.T, slot phase0.Slot, blockRoot phase0.R
 	t.Helper()
 	blinded := &gloas.BlindedExecutionPayloadEnvelope{
 		PayloadRoot:           phase0.Root{0x09},
-		ExecutionRequests:     &electra.ExecutionRequests{},
+		ExecutionRequests:     &gloas.ExecutionRequests{},
 		BuilderIndex:          gloas.BuilderIndexSelfBuild,
 		BeaconBlockRoot:       blockRoot,
 		ParentBeaconBlockRoot: phase0.Root{0x08},
@@ -103,7 +102,7 @@ func (b *envelopeTestBeacon) SubmitExecutionPayloadEnvelope(_ context.Context, s
 func sampleEnvelope() *gloas.ExecutionPayloadEnvelope {
 	return &gloas.ExecutionPayloadEnvelope{
 		Payload:               &gloas.ExecutionPayload{BlockNumber: 42},
-		ExecutionRequests:     &electra.ExecutionRequests{},
+		ExecutionRequests:     &gloas.ExecutionRequests{},
 		BuilderIndex:          gloas.BuilderIndexSelfBuild,
 		BeaconBlockRoot:       phase0.Root{0xaa},
 		ParentBeaconBlockRoot: phase0.Root{0xbb},

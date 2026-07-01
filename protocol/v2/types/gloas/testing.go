@@ -2,7 +2,6 @@ package gloas
 
 import (
 	"github.com/attestantio/go-eth2-client/spec/altair"
-	"github.com/attestantio/go-eth2-client/spec/electra"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	bitfield "github.com/prysmaticlabs/go-bitfield"
 )
@@ -16,7 +15,7 @@ func TestingBeaconBlock(slot phase0.Slot) *BeaconBlock {
 			ETH1Data:                  &phase0.ETH1Data{BlockHash: make([]byte, 32)},
 			SyncAggregate:             &altair.SyncAggregate{SyncCommitteeBits: bitfield.NewBitvector512()},
 			SignedExecutionPayloadBid: &SignedExecutionPayloadBid{Message: &ExecutionPayloadBid{BuilderIndex: BuilderIndexSelfBuild}},
-			ParentExecutionRequests:   &electra.ExecutionRequests{},
+			ParentExecutionRequests:   &ExecutionRequests{},
 		},
 	}
 }

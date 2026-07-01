@@ -8,7 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/attestantio/go-eth2-client/spec/electra"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/stretchr/testify/require"
 
@@ -22,7 +21,7 @@ var _ beacon.GloasEnvelopeCalls = (*GoClient)(nil)
 func minimalExecutionPayloadEnvelope() *gloas.ExecutionPayloadEnvelope {
 	return &gloas.ExecutionPayloadEnvelope{
 		Payload:           &gloas.ExecutionPayload{},
-		ExecutionRequests: &electra.ExecutionRequests{},
+		ExecutionRequests: &gloas.ExecutionRequests{},
 		BuilderIndex:      gloas.BuilderIndexSelfBuild,
 	}
 }

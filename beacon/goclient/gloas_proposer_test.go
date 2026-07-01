@@ -5,10 +5,10 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/attestantio/go-eth2-client/spec/altair"
-	"github.com/attestantio/go-eth2-client/spec/electra"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	bitfield "github.com/prysmaticlabs/go-bitfield"
 	"github.com/stretchr/testify/require"
@@ -27,7 +27,7 @@ func minimalGloasBlock() *gloas.BeaconBlock {
 			ETH1Data:                  &phase0.ETH1Data{BlockHash: make([]byte, 32)},
 			SyncAggregate:             &altair.SyncAggregate{SyncCommitteeBits: bitfield.NewBitvector512()},
 			SignedExecutionPayloadBid: &gloas.SignedExecutionPayloadBid{Message: &gloas.ExecutionPayloadBid{BuilderIndex: gloas.BuilderIndexSelfBuild}},
-			ParentExecutionRequests:   &electra.ExecutionRequests{},
+			ParentExecutionRequests:   &gloas.ExecutionRequests{},
 		},
 	}
 }
@@ -53,7 +53,8 @@ func TestRequestGloasBeaconBlock(t *testing.T) {
 	require.Equal(t, "/eth/v4/validator/blocks/7", gotPath)
 	require.Equal(t, "false", gotIncludePayload) // bare block; payload ships in the §6 envelope
 	require.Equal(t, "0x01", gotRandao)          // randao is the 5th arg, graffiti the 4th
-	require.Equal(t, "0x02", gotGraffiti)
+	// graffiti is padded to a full 32-byte value before hex-encoding (lighthouse rejects a short one).
+	require.Equal(t, "0x02"+strings.Repeat("00", 31), gotGraffiti)
 	require.Equal(t, "application/octet-stream", gotAccept)
 	require.Equal(t, phase0.Slot(7), got.Slot)
 }
