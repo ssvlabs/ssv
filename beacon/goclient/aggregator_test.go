@@ -884,13 +884,14 @@ func TestComputeAttestationDataRoot_GloasKeepsBNIndex(t *testing.T) {
 	expectedRoot, err := attData.HashTreeRoot()
 	require.NoError(t, err)
 
-	service := &aggregatorClientMock{}
-	service.AttestationDataFunc = func(_ context.Context, opts *api.AttestationDataOpts) (*api.Response[*phase0.AttestationData], error) {
-		require.Equal(t, slot, opts.Slot)
-		return &api.Response[*phase0.AttestationData]{Data: attData}, nil
+	client := newAggregatorTestClient(&cfg, &aggregatorClientMock{})
+	// On Gloas, GetAttestationData uses a hand-rolled fetch (not go-eth2-client, whose post-Electra
+	// validation would reject the payload-status Index=1) — inject the BN's data via the fetch hook so this
+	// test exercises computeAttestationDataRoot's index-keeping independent of the transport.
+	client.fetchAttestationDataFunc = func(_ context.Context, gotSlot phase0.Slot) (*phase0.AttestationData, error) {
+		require.Equal(t, slot, gotSlot)
+		return attData, nil
 	}
-
-	client := newAggregatorTestClient(&cfg, service)
 	root, err := client.computeAttestationDataRoot(t.Context(), slot, 7)
 	require.NoError(t, err)
 	require.Equal(t, expectedRoot, root)
