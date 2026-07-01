@@ -312,6 +312,10 @@ func (h *ProposerHandler) processExecution(ctx context.Context, epoch phase0.Epo
 	defer span.End()
 
 	duties := h.duties.CommitteeSlotDuties(epoch, slot)
+
+	// TEMP(ssvlabs/ssv#2901): per-slot dispatch diagnostic — remove after devnet confirmation.
+	h.logSlotDispatchDiagnostic(epoch, slot, duties)
+
 	if duties == nil {
 		span.AddEvent("no duties available")
 		span.SetStatus(codes.Ok, "")
@@ -398,6 +402,9 @@ func (h *ProposerHandler) fetchAndProcessDuties(ctx context.Context, logger *zap
 	span.AddEvent("storing duties", trace.WithAttributes(observability.DutyCountAttribute(len(storeDuties))))
 	h.duties.Set(targetEpoch, storeDuties)
 
+	// TEMP(ssvlabs/ssv#2901): late-fetch / InCommittee-on-success diagnostic — remove after devnet confirmation.
+	h.logFetchDispatchDiagnostic(logger, targetEpoch, currentSlot, storeDuties)
+
 	truncate := -1
 	if h.exporterMode {
 		truncate = 10
@@ -447,6 +454,90 @@ func (h *ProposerHandler) logNoEligibleDiagnostic(logger *zap.Logger, targetEpoc
 		zap.Int("self_attesting", selfAttesting),
 		zap.Strings("shares", samples),
 	)
+}
+
+// logSlotDispatchDiagnostic is a TEMPORARY diagnostic (ssvlabs/ssv#2901) for the "every proposer slot
+// missed on the Gloas devnet" investigation. On any slot for which this node holds a stored proposer duty
+// it records how the duty flows through the two execution gates — InCommittee (CommitteeSlotDuties) and
+// shouldExecute (the one-slot execution window) — so a devnet run can tell apart the candidate causes of a
+// missed proposal without guessing:
+//
+//	stored_any>0, in_committee=0  → stored but dropped by the InCommittee flag (the PR-comment hypothesis)
+//	in_committee>0, executable=0  → in-committee but outside the one-slot window (resolved/fetched too late)
+//	executable>0                  → dispatched to the runner; any remaining loss is downstream (see the
+//	                                "🔧 executing validator duty" / "could not find validator" logs)
+//
+// It fires only on slots that actually carry a stored duty (SlotIndices short-circuits otherwise), so it is
+// not per-slot noise. Remove once the root cause is confirmed on devnet.
+func (h *ProposerHandler) logSlotDispatchDiagnostic(epoch phase0.Epoch, slot phase0.Slot, inCommittee []*eth2apiv1.ProposerDuty) {
+	storedAny := h.duties.SlotIndices(epoch, slot)
+	if len(storedAny) == 0 {
+		return // no proposer duty stored for this slot — nothing was assigned to us here, nothing to diagnose
+	}
+
+	// Mirror shouldExecute's window (currentSlot == or +1 == duty.Slot) WITHOUT its warnMisalignedSlotAndDuty
+	// side effect, so the diagnostic never double-logs the misalignment warning the real dispatch loop emits.
+	currentSlot := h.netCfg.EstimatedCurrentSlot()
+	executable := 0
+	for _, d := range inCommittee {
+		if currentSlot == d.Slot || currentSlot+1 == d.Slot {
+			executable++
+		}
+	}
+
+	storedIdx := make([]uint64, len(storedAny))
+	for i, idx := range storedAny {
+		storedIdx[i] = uint64(idx)
+	}
+
+	h.logger.Debug("🔬 proposer slot dispatch (diagnostic)",
+		zap.Uint64("epoch", uint64(epoch)),
+		zap.Uint64("slot", uint64(slot)),
+		zap.Uint64("current_slot", uint64(currentSlot)),
+		zap.Int("stored_any", len(storedAny)),
+		zap.Int("in_committee", len(inCommittee)),
+		zap.Int("executable", executable),
+		zap.Uint64s("stored_indices", storedIdx),
+	)
+}
+
+// logFetchDispatchDiagnostic is a TEMPORARY diagnostic (ssvlabs/ssv#2901). Right after a fetch stores an
+// epoch's proposer duties it reports, for THIS node's in-committee duties, how many are for slots that have
+// already passed at fetch time (current_slot) — proposals whose one-slot execution window is already gone
+// (the "fetched too late" failure the retry fix does not address). It also surfaces the InCommittee split on
+// the fetch-SUCCESS path, which logNoEligibleDiagnostic (zero-eligible only) cannot see — so a run can
+// directly confirm or refute InCommittee=0 at loaded epochs. Remove once the root cause is confirmed.
+func (h *ProposerHandler) logFetchDispatchDiagnostic(logger *zap.Logger, targetEpoch phase0.Epoch, currentSlot phase0.Slot, stored []dutystore.StoreDuty[eth2apiv1.ProposerDuty]) {
+	inCommittee := 0
+	alreadyPassed := make([]uint64, 0)
+	for _, d := range stored {
+		if !d.InCommittee {
+			continue
+		}
+		inCommittee++
+		if d.Slot < currentSlot {
+			alreadyPassed = append(alreadyPassed, uint64(d.Slot))
+		}
+	}
+
+	// Fetched some duties, but none belong to this node — the InCommittee=0 case the PR comment posits.
+	if len(stored) > 0 && inCommittee == 0 {
+		logger.Debug("🔬 proposer fetch: stored duties but none in-committee (diagnostic)",
+			zap.Uint64("target_epoch", uint64(targetEpoch)),
+			zap.Int("stored_total", len(stored)),
+		)
+	}
+
+	// Fetched in-committee duties for slots that already passed — a guaranteed miss (fetched too late).
+	if len(alreadyPassed) > 0 {
+		logger.Warn("🔬 proposer fetch: in-committee duties for already-passed slots (diagnostic)",
+			zap.Uint64("target_epoch", uint64(targetEpoch)),
+			zap.Uint64("current_slot", uint64(currentSlot)),
+			zap.Int("in_committee_total", inCommittee),
+			zap.Int("already_passed", len(alreadyPassed)),
+			zap.Uint64s("passed_slots", alreadyPassed),
+		)
+	}
 }
 
 func (h *ProposerHandler) toSpecDuty(duty *eth2apiv1.ProposerDuty, role spectypes.BeaconRole) *spectypes.ValidatorDuty {
