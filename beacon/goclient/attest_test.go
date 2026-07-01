@@ -3,6 +3,7 @@ package goclient
 import (
 	"context"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"math/rand"
 	"net/http"
@@ -93,6 +94,36 @@ var (
 		}`),
 	}
 )
+
+func TestRequestGloasAttestationData(t *testing.T) {
+	// Gloas payload-status index FULL (1). go-eth2-client's validated path rejects data.Index != 0
+	// post-Electra with ErrInconsistentResult; the hand-rolled Gloas fetch must accept it and keep the
+	// index (the signed §2 value) so attestations don't fail whenever the payload is present.
+	data := &phase0.AttestationData{
+		Slot:            9,
+		Index:           1,
+		BeaconBlockRoot: phase0.Root{0xaa},
+		Source:          &phase0.Checkpoint{Epoch: 1, Root: phase0.Root{0x01}},
+		Target:          &phase0.Checkpoint{Epoch: 2, Root: phase0.Root{0x02}},
+	}
+	dataJSON, err := json.Marshal(data)
+	require.NoError(t, err)
+
+	var gotMethod, gotPath, gotQuery string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod, gotPath, gotQuery = r.Method, r.URL.Path, r.URL.RawQuery
+		_, _ = fmt.Fprintf(w, `{"data":%s}`, dataJSON)
+	}))
+	defer srv.Close()
+
+	got, err := requestGloasAttestationData(context.Background(), srv.Client(), srv.URL, 9)
+	require.NoError(t, err)
+	require.Equal(t, http.MethodGet, gotMethod)
+	require.Equal(t, "/eth/v1/validator/attestation_data", gotPath)
+	require.Equal(t, "slot=9&committee_index=0", gotQuery)
+	require.Equal(t, data, got)
+	require.EqualValues(t, 1, got.Index) // payload-status index survived (not zeroed or rejected)
+}
 
 func TestGoClient_GetAttestationData_Simple(t *testing.T) {
 	const withWeightedAttestationData = false
