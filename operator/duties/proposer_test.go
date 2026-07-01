@@ -1047,7 +1047,7 @@ func TestScheduler_Proposer_Indices_Changed_Too_Late_In_Slot(t *testing.T) {
 			waitForDuties = &SafeValue[bool]{}
 		)
 		// A duty exists from the start, so there's an eligible validator (proposer shares are derived from the
-		// duties map) and the silent startup fetch fulfils the current-epoch intent. That settles the epoch
+		// duties map) and the silent startup fetch fulfills the current-epoch intent. That settles the epoch
 		// before the indices change, isolating what we test: a late indices change is the only slot-1 re-fetch.
 		dutiesMap.Set(phase0.Epoch(0), []*eth2apiv1.ProposerDuty{
 			{

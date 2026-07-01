@@ -261,7 +261,7 @@ func (h *ProposerHandler) prepareCurrentEpoch(ctx context.Context, logger *zap.L
 			span.SetStatus(codes.Error, err.Error())
 			return
 		}
-		// Fulfil the intent only if a fetch actually ran; a not-yet-eligible epoch stays pending so a later tick retries.
+		// Fulfill the intent only if a fetch actually ran; a not-yet-eligible epoch stays pending so a later tick retries.
 		if fetched {
 			h.dutyFetchIntents[currentEpoch] = true
 		}
@@ -288,7 +288,7 @@ func (h *ProposerHandler) prepareNextEpoch(ctx context.Context, logger *zap.Logg
 			span.SetStatus(codes.Error, err.Error())
 			return
 		}
-		// Fulfil the intent only if a fetch actually ran; a not-yet-eligible epoch stays pending so a later tick retries.
+		// Fulfill the intent only if a fetch actually ran; a not-yet-eligible epoch stays pending so a later tick retries.
 		if fetched {
 			h.dutyFetchIntents[currentEpoch+1] = true
 		}
