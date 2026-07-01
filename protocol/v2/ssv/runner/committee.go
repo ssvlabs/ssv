@@ -505,27 +505,19 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 		return nil
 	}
 
-	// We have quorum and are committed to submitting. Pre-quorum waiting, full success
-	// (markDutySucceeded) and partial progress all return nil, so this only fires on a terminal
-	// post-quorum error — report it as failed instead of letting it fall through to a false "stuck".
-	// Unlike the consensus phase, a failure here is final: submission is the duty's last step.
-	// Shutdown (context cancellation) needs no special-casing — markDutyFailed drops a context.Canceled
-	// reason, so a submission aborted by shutdown isn't recorded as a failure.
-	defer func() {
-		if err != nil {
-			r.markDutyFailed(err)
-		}
-	}()
-
 	r.measurements.EndPostConsensus()
 	recordPostConsensusDuration(ctx, r.measurements.PostConsensusTime(), spectypes.RoleCommittee)
 
 	// Get validator-root maps for attestations and sync committees, and the root-beacon object map
 	attestationMap, committeeMap, beaconObjects, err := r.expectedPostConsensusRootsAndBeaconObjects(ctx, logger)
 	if err != nil {
+		// terminal post-quorum failure → classify as failed, not stuck
+		r.markDutyFailed(err)
 		return fmt.Errorf("could not get expected post consensus roots and beacon objects: %w", err)
 	}
 	if len(beaconObjects) == 0 {
+		// terminal post-quorum failure → classify as failed, not stuck
+		r.markDutyFailed(ErrNoValidDutiesToExecute)
 		return ErrNoValidDutiesToExecute
 	}
 
@@ -648,7 +640,11 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 		for {
 			select {
 			case <-ctx.Done():
-				return ctx.Err()
+				// terminal post-quorum failure → classify as failed, not stuck; markDutyFailed
+				// drops context.Canceled internally, so shutdown isn't recorded as a failure.
+				err := ctx.Err()
+				r.markDutyFailed(err)
+				return err
 			case err := <-errCh:
 				executionErr = err
 			case signatureResult, ok := <-signatureCh:
@@ -718,17 +714,26 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 			recordFailedSubmission(ctx, spectypes.BNRoleAttester)
 			const errMsg = "could not submit attestations"
 			aLogger.Error(errMsg, zap.Error(err))
-			return fmt.Errorf("%s: %w", errMsg, err)
+			err = fmt.Errorf("%s: %w", errMsg, err)
+			// terminal post-quorum failure → classify as failed, not stuck
+			r.markDutyFailed(err)
+			return err
 		}
 
 		currentDutySlot, err := r.currentDutySlot()
 		if err != nil {
-			return fmt.Errorf("current duty slot: %w", err)
+			err = fmt.Errorf("current duty slot: %w", err)
+			// terminal post-quorum failure → classify as failed, not stuck
+			r.markDutyFailed(err)
+			return err
 		}
 		recordSuccessfulSubmission(ctx, int64(len(attestations)), r.NetworkConfig.EstimatedEpochAtSlot(currentDutySlot), spectypes.BNRoleAttester)
 		attData, err := attestations[0].Data()
 		if err != nil {
-			return fmt.Errorf("could not get attestation data: %w", err)
+			err = fmt.Errorf("could not get attestation data: %w", err)
+			// terminal post-quorum failure → classify as failed, not stuck
+			r.markDutyFailed(err)
+			return err
 		}
 		const eventMsg = "✅ successfully submitted attestations"
 		span.AddEvent(eventMsg, trace.WithAttributes(
@@ -769,14 +774,20 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 			recordFailedSubmission(ctx, spectypes.BNRoleSyncCommittee)
 			const errMsg = "could not submit sync committee messages"
 			scLogger.Error(errMsg, zap.Error(err))
-			return fmt.Errorf("%s: %w", errMsg, err)
+			err = fmt.Errorf("%s: %w", errMsg, err)
+			// terminal post-quorum failure → classify as failed, not stuck
+			r.markDutyFailed(err)
+			return err
 		}
 
 		syncMsgsCount := len(syncCommitteeMessages)
 		if syncMsgsCount <= math.MaxUint32 {
 			currentDutySlot, err := r.currentDutySlot()
 			if err != nil {
-				return fmt.Errorf("current duty slot: %w", err)
+				err = fmt.Errorf("current duty slot: %w", err)
+				// terminal post-quorum failure → classify as failed, not stuck
+				r.markDutyFailed(err)
+				return err
 			}
 			recordSuccessfulSubmission(
 				ctx,
@@ -788,7 +799,10 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 
 		currentDutySlot, err := r.currentDutySlot()
 		if err != nil {
-			return fmt.Errorf("current duty slot: %w", err)
+			err = fmt.Errorf("current duty slot: %w", err)
+			// terminal post-quorum failure → classify as failed, not stuck
+			r.markDutyFailed(err)
+			return err
 		}
 		const eventMsg = "✅ successfully submitted sync committee"
 		span.AddEvent(eventMsg, trace.WithAttributes(
@@ -812,6 +826,17 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 	}
 
 	if executionErr != nil {
+		// Reconstruct-invalid-sigs is recoverable: FallBackAndVerifyEachSignature can drop the root
+		// below quorum, so a later partial-sig message re-crosses quorum and re-enters this loop to
+		// retry pending roots (already-submitted roots are skipped via HasSubmitted). ReconstructBeaconSig
+		// tags this with ReconstructSignatureErrorCode (spec expects code 32 for the committee role; the
+		// aggregator role uses PostConsensusQuorumWithInvalidSignatures instead). Not markDutyFailed.
+		var specErr *spectypes.Error
+		if errors.As(executionErr, &specErr) && specErr.Code == spectypes.ReconstructSignatureErrorCode {
+			return executionErr
+		}
+		// terminal post-quorum failure → classify as failed, not stuck
+		r.markDutyFailed(executionErr)
 		return executionErr
 	}
 
