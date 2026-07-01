@@ -167,12 +167,9 @@ func (r *PTCAttesterRunner) executeDuty(ctx context.Context, logger *zap.Logger,
 		r.markDutyFailed(err)
 		return nil
 	}
-	// BN contract: an all-zero BeaconBlockRoot is the beacon node signaling "no block for this slot"
-	// (the SIP #94 §3 abstain trigger) — we sign and submit nothing. The abstention is still counted:
-	// markDutyNotRequired concludes the duty as dutyOutcomeNotRequired, which watchDutyOutcome records
-	// on the ssv.runner.duty.outcome metric (labeled by role), so PTC abstentions are observable there.
-	// Caveat: a BN that erroneously returns a zero root would be silently misclassified as a benign
-	// abstention rather than a fault — we cannot distinguish the two from the root alone.
+	// BN contract: an all-zero BeaconBlockRoot signals "no block for this slot" — the SIP #94 §3 abstain
+	// trigger. We sign and submit nothing; markDutyNotRequired still records the abstention for metrics.
+	// Caveat: a BN erroneously returning a zero root is indistinguishable from a genuine abstention here.
 	if data.BeaconBlockRoot == (phase0.Root{}) {
 		logger.Debug("abstaining from PTC attestation: no beacon block for slot", fields.Slot(slot))
 		r.markDutyNotRequired()

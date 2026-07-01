@@ -15,7 +15,7 @@ import (
 
 // PayloadAttestationData is the Gloas (ePBS) datum a PTC member attests to: whether the
 // execution payload for BeaconBlockRoot at Slot was present, and its blobs available.
-// Signed under DomainPTCAttester. Fixed 42-byte SSZ.
+// Signed under DomainPTCAttester with domain epoch = epoch(Slot). Fixed 42-byte SSZ.
 type PayloadAttestationData struct {
 	BeaconBlockRoot   phase0.Root `ssz-size:"32"`
 	Slot              phase0.Slot
