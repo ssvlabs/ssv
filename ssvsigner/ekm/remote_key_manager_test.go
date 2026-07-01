@@ -1574,6 +1574,34 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectAdditionalDomains() {
 	})
 }
 
+func (s *RemoteKeyManagerTestSuite) TestGetForkInfoUsesGloasForkOnGloasEpoch() {
+	// testBeaconConfig tops out at Fulu (epoch 6); add a Gloas fork so ForkAtEpoch's Fulu cap is
+	// observable. On a Gloas epoch, fork_info must carry the Gloas fork — sending the Fulu version would
+	// make Web3Signer derive the wrong domain and reject/mis-sign every remote duty (RS-1).
+	cfg := testBeaconConfig()
+	const gloasEpoch = phase0.Epoch(7)
+	gloasVersion := phase0.Version{7, 0, 0, 0}
+	cfg.Forks[gloasDataVersion] = phase0.Fork{
+		Epoch:           gloasEpoch,
+		PreviousVersion: phase0.Version{6, 0, 0, 0},
+		CurrentVersion:  gloasVersion,
+	}
+	rm := &RemoteKeyManager{beaconConfig: cfg, genesisRoot: cfg.GenesisValidatorsRoot}
+
+	gloasFI := rm.GetForkInfo(gloasEpoch)
+	s.Require().NotNil(gloasFI.Fork)
+	s.Equal(gloasVersion, gloasFI.Fork.CurrentVersion)
+	_, fuluFork := cfg.ForkAtEpoch(gloasEpoch) // ForkAtEpoch still caps at Fulu
+	s.Equal(phase0.Version{6, 0, 0, 0}, fuluFork.CurrentVersion)
+	s.NotEqual(fuluFork.CurrentVersion, gloasFI.Fork.CurrentVersion)
+	s.Equal(cfg.GenesisValidatorsRoot, gloasFI.GenesisValidatorsRoot)
+
+	// A pre-Gloas epoch is unaffected — still the current (Fulu) fork.
+	fuluFI := rm.GetForkInfo(6)
+	s.Require().NotNil(fuluFI.Fork)
+	s.Equal(phase0.Version{6, 0, 0, 0}, fuluFI.Fork.CurrentVersion)
+}
+
 func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectMoreDomains() {
 	ctx := s.T().Context()
 
