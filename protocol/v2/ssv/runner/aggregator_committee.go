@@ -588,7 +588,13 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(
 
 	// Else, if some aggregators or contributors were selected (even with an error for others), proceed to consensus
 	if err := consensusData.Validate(); err != nil {
-		r.markDutyFailed(err)
+		// Not markDutyFailed: this pre-consensus window is re-entrant until consensus starts
+		// (guarded by HasStartedConsensus). basePreConsensusMsgProcessing reports a new quorum
+		// per root, not once per duty, and a Validate error is non-retryable so the committee
+		// queue drops the message but keeps the runner alive. A transient GetAggregateAttestation
+		// failure can leave consensusData empty here, yet a later message whose root reaches quorum
+		// can still build valid data and start consensus — concluding "failed" now would mask a
+		// duty that still completes.
 		return fmt.Errorf("invalid aggregator committee consensus data: %w", err)
 	}
 
@@ -600,7 +606,11 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(
 		consensusData,
 		r.ValCheck,
 	); err != nil {
-		r.markDutyFailed(err)
+		// Not markDutyFailed: same re-entrant pre-consensus window as the Validate check above.
+		// decide sets RunningInstance only on success, so a failure here leaves HasStartedConsensus
+		// false and a later new-quorum message can start consensus and complete the duty. The
+		// message drop is non-terminal (runner survives), so concluding "failed" now would risk a
+		// false failure on a duty that still succeeds.
 		return fmt.Errorf("failed to start consensus: %w", err)
 	}
 
