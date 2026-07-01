@@ -5,7 +5,6 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/capella"
-	"github.com/attestantio/go-eth2-client/spec/electra"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/stretchr/testify/require"
 )
@@ -14,7 +13,7 @@ import (
 func TestBlindedExecutionPayloadEnvelopeRoundTrip(t *testing.T) {
 	in := &BlindedExecutionPayloadEnvelope{
 		PayloadRoot:           phase0.Root{0x01},
-		ExecutionRequests:     &electra.ExecutionRequests{},
+		ExecutionRequests:     &ExecutionRequests{},
 		BuilderIndex:          BuilderIndexSelfBuild,
 		BeaconBlockRoot:       phase0.Root{0x02},
 		ParentBeaconBlockRoot: phase0.Root{0x03},
@@ -79,7 +78,7 @@ func TestExecutionPayloadRoundTrip(t *testing.T) {
 func TestExecutionPayloadEnvelopeRoundTrip(t *testing.T) {
 	in := &ExecutionPayloadEnvelope{
 		Payload:               sampleExecutionPayload(),
-		ExecutionRequests:     &electra.ExecutionRequests{},
+		ExecutionRequests:     &ExecutionRequests{},
 		BuilderIndex:          BuilderIndexSelfBuild,
 		BeaconBlockRoot:       phase0.Root{0x02},
 		ParentBeaconBlockRoot: phase0.Root{0x03},
@@ -102,7 +101,7 @@ func TestExecutionPayloadEnvelopeRoundTrip(t *testing.T) {
 func TestExecutionPayloadEnvelopeBlindsToSameRoot(t *testing.T) {
 	full := &ExecutionPayloadEnvelope{
 		Payload:               sampleExecutionPayload(),
-		ExecutionRequests:     &electra.ExecutionRequests{},
+		ExecutionRequests:     &ExecutionRequests{},
 		BuilderIndex:          BuilderIndexSelfBuild,
 		BeaconBlockRoot:       phase0.Root{0x02},
 		ParentBeaconBlockRoot: phase0.Root{0x03},
@@ -125,7 +124,7 @@ func TestSignedExecutionPayloadEnvelopeBlindedRoundTrip(t *testing.T) {
 	full := &SignedExecutionPayloadEnvelope{
 		Message: &ExecutionPayloadEnvelope{
 			Payload:               sampleExecutionPayload(),
-			ExecutionRequests:     &electra.ExecutionRequests{},
+			ExecutionRequests:     &ExecutionRequests{},
 			BuilderIndex:          BuilderIndexSelfBuild,
 			BeaconBlockRoot:       phase0.Root{0x02},
 			ParentBeaconBlockRoot: phase0.Root{0x03},

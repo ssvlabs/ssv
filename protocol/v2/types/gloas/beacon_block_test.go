@@ -5,7 +5,6 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/deneb"
-	"github.com/attestantio/go-eth2-client/spec/electra"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	bitfield "github.com/prysmaticlabs/go-bitfield"
 	"github.com/stretchr/testify/require"
@@ -28,7 +27,7 @@ func TestSignedBeaconBlockRoundTrip(t *testing.T) {
 				AggregationBits: bitfield.NewBitvector512(),
 				Data:            &PayloadAttestationData{Slot: 6, PayloadPresent: true},
 			}},
-			ParentExecutionRequests: &electra.ExecutionRequests{},
+			ParentExecutionRequests: &ExecutionRequests{},
 		},
 	}}
 	b, err := in.MarshalSSZ()
