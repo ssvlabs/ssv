@@ -287,7 +287,7 @@ func (h *SyncCommitteeHandler) prepareCurrentPeriod(
 			span.SetStatus(codes.Error, err.Error())
 			return
 		}
-		// Fulfil the intent only if a fetch actually ran; a not-yet-eligible period stays pending so a later tick retries.
+		// Fulfill the intent only if a fetch actually ran; a not-yet-eligible period stays pending so a later tick retries.
 		if fetched {
 			h.dutyFetchIntents[currentPeriod] = true
 		}
@@ -321,7 +321,7 @@ func (h *SyncCommitteeHandler) prepareNextPeriod(
 			span.SetStatus(codes.Error, err.Error())
 			return
 		}
-		// Fulfil the intent only if a fetch actually ran; a not-yet-eligible period stays pending so a later tick retries.
+		// Fulfill the intent only if a fetch actually ran; a not-yet-eligible period stays pending so a later tick retries.
 		if fetched {
 			h.dutyFetchIntents[currentPeriod+1] = true
 		}
