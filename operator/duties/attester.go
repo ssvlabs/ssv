@@ -312,17 +312,16 @@ func (h *AttesterHandler) prepareCurrentEpoch(ctx context.Context, logger *zap.L
 	defer span.End()
 
 	if fulfilled, ok := h.dutyFetchIntents[currentEpoch]; ok && !fulfilled {
-		logger.Debug("fetching duties for the current epoch")
-
-		err := h.fetchAndProcessDuties(ctx, logger, currentEpoch, currentSlot)
+		fetched, err := h.fetchAndProcessDuties(ctx, logger, currentEpoch, currentSlot)
 		if err != nil {
 			logger.Error("fetching duties for the current epoch failed", zap.Error(err))
 			span.SetStatus(codes.Error, err.Error())
 			return
 		}
-		h.dutyFetchIntents[currentEpoch] = true // the intent has been fulfilled
-
-		logger.Debug("fetching duties for the current epoch succeeded")
+		// Fulfil the intent only if a fetch actually ran; a not-yet-eligible epoch stays pending so a later tick retries.
+		if fetched {
+			h.dutyFetchIntents[currentEpoch] = true
+		}
 	}
 
 	span.SetStatus(codes.Ok, "")
@@ -340,23 +339,25 @@ func (h *AttesterHandler) prepareNextEpoch(ctx context.Context, logger *zap.Logg
 
 	// Delaying the duty fetch until it's a "good time" allows us to do it when the beacon node should be less busy.
 	if fulfilled, ok := h.dutyFetchIntents[currentEpoch+1]; ok && !fulfilled && h.shouldFetchNextEpoch(currentSlot) {
-		logger.Debug("fetching duties for the next epoch")
-
-		err := h.fetchAndProcessDuties(ctx, logger, currentEpoch+1, currentSlot)
+		fetched, err := h.fetchAndProcessDuties(ctx, logger, currentEpoch+1, currentSlot)
 		if err != nil {
 			logger.Error("fetching duties for the next epoch failed", zap.Error(err))
 			span.SetStatus(codes.Error, err.Error())
 			return
 		}
-		h.dutyFetchIntents[currentEpoch+1] = true // the intent has been fulfilled
-
-		logger.Debug("fetching duties for the next epoch succeeded")
+		// Fulfil the intent only if a fetch actually ran; a not-yet-eligible epoch stays pending so a later tick retries.
+		if fetched {
+			h.dutyFetchIntents[currentEpoch+1] = true
+		}
 	}
 
 	span.SetStatus(codes.Ok, "")
 }
 
-func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, logger *zap.Logger, targetEpoch phase0.Epoch, currentSlot phase0.Slot) error {
+// fetchAndProcessDuties fetches and stores the epoch's attester duties. It returns fetched=false (with a
+// nil error) when no validators are eligible yet — a not-ready state (e.g. beacon metadata not synced) the
+// caller must retry rather than treat as fulfilled; fetched=true means a beacon fetch actually ran.
+func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, logger *zap.Logger, targetEpoch phase0.Epoch, currentSlot phase0.Slot) (fetched bool, err error) {
 	ctx, span := tracer.Start(ctx,
 		observability.InstrumentName(observabilityNamespace, "attester.fetch_and_store"),
 		trace.WithAttributes(
@@ -383,13 +384,14 @@ func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, logger *zap
 		logger.Debug(eventMsg)
 		span.AddEvent(eventMsg)
 		span.SetStatus(codes.Ok, "")
-		return nil
+		// No eligible validators yet — not a fulfilled fetch; caller retries on a later tick.
+		return false, nil
 	}
 
 	span.AddEvent("fetching duties from beacon node", trace.WithAttributes(observability.ValidatorCountAttribute(len(eligibleIndices))))
 	duties, err := h.beaconNode.AttesterDuties(ctx, targetEpoch, eligibleIndices)
 	if err != nil {
-		return traces.Errorf(span, "failed to fetch attester duties: %w", err)
+		return false, traces.Errorf(span, "failed to fetch attester duties: %w", err)
 	}
 
 	specDuties := make([]*spectypes.ValidatorDuty, 0, len(duties))
@@ -426,7 +428,7 @@ func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, logger *zap
 	// and avoids unnecessary log noise
 	if h.exporterMode {
 		span.SetStatus(codes.Ok, "")
-		return nil
+		return true, nil
 	}
 
 	// calculate subscriptions
@@ -434,7 +436,7 @@ func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, logger *zap
 	if len(subscriptions) == 0 {
 		span.AddEvent("no subscriptions available")
 		span.SetStatus(codes.Ok, "")
-		return nil
+		return true, nil
 	}
 
 	span.AddEvent("submitting beacon committee subscriptions", trace.WithAttributes(
@@ -456,7 +458,7 @@ func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, logger *zap
 	}()
 
 	span.SetStatus(codes.Ok, "")
-	return nil
+	return true, nil
 }
 
 func (h *AttesterHandler) toSpecDuty(duty *eth2apiv1.AttesterDuty, role spectypes.BeaconRole) *spectypes.ValidatorDuty {
