@@ -76,7 +76,9 @@ func (gc *GoClient) GetAttestationData(ctx context.Context, slot phase0.Slot) (*
 		// underlying multi-client fetch carries its own timeout.
 		fetchCtx := context.WithoutCancel(ctx)
 
-		attData, err := gc.fetchAttestationData(fetchCtx, slot)
+		// Via the hook (defaults to fetchAttestationData) so it matches the stale-refetch call below and
+		// stays overridable in tests — needed now that Gloas routes to a hand-rolled fetch, not go-eth2-client.
+		attData, err := gc.fetchAttestationDataFunc(fetchCtx, slot)
 		if err != nil {
 			return nil, err
 		}
@@ -98,10 +100,41 @@ func (gc *GoClient) GetAttestationData(ctx context.Context, slot phase0.Slot) (*
 
 // fetchAttestationData fetches attestation data from beacon node(s).
 func (gc *GoClient) fetchAttestationData(ctx context.Context, slot phase0.Slot) (*phase0.AttestationData, error) {
+	if gc.getBeaconConfig().IsGloasAtSlot(slot) {
+		// go-eth2-client's post-Electra AttestationData enforces data.Index == 0 and rejects anything else
+		// with ErrInconsistentResult. On Gloas, Index carries the payload-status view (0=EMPTY / 1=FULL,
+		// SIP #94 §2), so a FULL payload — the healthy case — is wrongly rejected and the attestation fails.
+		// Hand-roll the fetch to skip that check and keep the BN's index (the signed §2 value). Trades the
+		// weighted multi-BN selection for first-client, acceptable on Gloas (matches the other Gloas fetches).
+		return gc.gloasAttestationData(ctx, slot)
+	}
 	if gc.withWeightedAttestationData {
 		return gc.weightedAttestationData(ctx, slot)
 	}
 	return gc.simpleAttestationData(ctx, slot)
+}
+
+// gloasAttestationDataPath is the standard attestation-data endpoint; we hand-roll the GET for Gloas
+// slots to bypass go-eth2-client's post-Electra "data.Index must be 0" validation (see fetchAttestationData).
+const gloasAttestationDataPath = "/eth/v1/validator/attestation_data?slot=%d&committee_index=0"
+
+func (gc *GoClient) gloasAttestationData(ctx context.Context, slot phase0.Slot) (*phase0.AttestationData, error) {
+	return firstClientResult(ctx, gc, "AttestationData", http.MethodGet, func(ctx context.Context, addr string) (*phase0.AttestationData, error) {
+		return requestGloasAttestationData(ctx, ptcHTTPClient, addr, slot)
+	})
+}
+
+func requestGloasAttestationData(ctx context.Context, httpClient *http.Client, addr string, slot phase0.Slot) (*phase0.AttestationData, error) {
+	var resp struct {
+		Data *phase0.AttestationData `json:"data"`
+	}
+	if err := ptcDo(ctx, httpClient, http.MethodGet, addr+fmt.Sprintf(gloasAttestationDataPath, slot), nil, nil, &resp); err != nil {
+		return nil, err
+	}
+	if resp.Data == nil {
+		return nil, errors.New("no attestation data in response")
+	}
+	return resp.Data, nil
 }
 
 // verifyAndRefetchIfStale checks attestation data against cached head root.
