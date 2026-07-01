@@ -1072,10 +1072,17 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 	}
 
 	if executionErr != nil {
-		// Not markDutyFailed: a transient submit/reconstruct error can recover — a later
-		// post-consensus message re-enters the submit loops and retries the pending roots
-		// (already-submitted roots are skipped via HasSubmitted), so concluding "failed" here
-		// would prematurely mask a duty that still completes.
+		// Reconstruct-invalid-sigs is recoverable: FallBackAndVerifyEachSignature can drop the root
+		// below quorum, so a later partial-sig message re-crosses quorum and re-enters this loop to
+		// retry pending roots (already-submitted roots are skipped via HasSubmitted). Not markDutyFailed.
+		var specErr *spectypes.Error
+		if errors.As(executionErr, &specErr) && specErr.Code == spectypes.PostConsensusQuorumWithInvalidSignatures {
+			return executionErr
+		}
+		// Submit/construct/missing-object failures: reconstruction already succeeded so the root keeps
+		// its quorum and is never re-reported (runner.go:534 reports only on first quorum crossing), so
+		// the submit loop never revisits it and the duty never concludes → mark failed, not a false stuck.
+		r.markDutyFailed(executionErr)
 		return executionErr
 	}
 
