@@ -255,17 +255,16 @@ func (h *ProposerHandler) prepareCurrentEpoch(ctx context.Context, logger *zap.L
 	defer span.End()
 
 	if fulfilled, ok := h.dutyFetchIntents[currentEpoch]; ok && !fulfilled {
-		logger.Debug("fetching duties for the current epoch")
-
-		err := h.fetchAndProcessDuties(ctx, logger, currentEpoch, currentSlot)
+		fetched, err := h.fetchAndProcessDuties(ctx, logger, currentEpoch, currentSlot)
 		if err != nil {
 			logger.Error("fetching duties for the current epoch failed", zap.Error(err))
 			span.SetStatus(codes.Error, err.Error())
 			return
 		}
-		h.dutyFetchIntents[currentEpoch] = true // the intent has been fulfilled
-
-		logger.Debug("fetching duties for the current epoch succeeded")
+		// Fulfil the intent only if a fetch actually ran; a not-yet-eligible epoch stays pending so a later tick retries.
+		if fetched {
+			h.dutyFetchIntents[currentEpoch] = true
+		}
 	}
 
 	span.SetStatus(codes.Ok, "")
@@ -283,17 +282,16 @@ func (h *ProposerHandler) prepareNextEpoch(ctx context.Context, logger *zap.Logg
 
 	// Delaying the duty fetch until it's a "good time" allows us to do it when the beacon node should be less busy.
 	if fulfilled, ok := h.dutyFetchIntents[currentEpoch+1]; ok && !fulfilled && h.shouldFetchNextEpoch(currentSlot) {
-		logger.Debug("fetching duties for the next epoch")
-
-		err := h.fetchAndProcessDuties(ctx, logger, currentEpoch+1, currentSlot)
+		fetched, err := h.fetchAndProcessDuties(ctx, logger, currentEpoch+1, currentSlot)
 		if err != nil {
 			logger.Error("fetching duties for the next epoch failed", zap.Error(err))
 			span.SetStatus(codes.Error, err.Error())
 			return
 		}
-		h.dutyFetchIntents[currentEpoch+1] = true // the intent has been fulfilled
-
-		logger.Debug("fetching duties for the next epoch succeeded")
+		// Fulfil the intent only if a fetch actually ran; a not-yet-eligible epoch stays pending so a later tick retries.
+		if fetched {
+			h.dutyFetchIntents[currentEpoch+1] = true
+		}
 	}
 
 	span.SetStatus(codes.Ok, "")
@@ -338,7 +336,10 @@ func (h *ProposerHandler) processExecution(ctx context.Context, epoch phase0.Epo
 	span.SetStatus(codes.Ok, "")
 }
 
-func (h *ProposerHandler) fetchAndProcessDuties(ctx context.Context, logger *zap.Logger, targetEpoch phase0.Epoch, currentSlot phase0.Slot) error {
+// fetchAndProcessDuties fetches and stores the epoch's proposer duties. It returns fetched=false (with a
+// nil error) when no validators are eligible yet — a not-ready state (e.g. beacon metadata not synced) the
+// caller must retry rather than treat as fulfilled; fetched=true means a beacon fetch actually ran.
+func (h *ProposerHandler) fetchAndProcessDuties(ctx context.Context, logger *zap.Logger, targetEpoch phase0.Epoch, currentSlot phase0.Slot) (fetched bool, err error) {
 	ctx, span := tracer.Start(ctx,
 		observability.InstrumentName(observabilityNamespace, "proposer.fetch_and_store"),
 		trace.WithAttributes(
@@ -360,10 +361,11 @@ func (h *ProposerHandler) fetchAndProcessDuties(ctx context.Context, logger *zap
 	}
 	if len(allEligibleIndices) == 0 {
 		const eventMsg = "no eligible validators for epoch"
-		logger.Debug(eventMsg)
+		h.logNoEligibleDiagnostic(logger, targetEpoch) // TEMP(ssvlabs/ssv#2901): remove after devnet confirmation
 		span.AddEvent(eventMsg)
 		span.SetStatus(codes.Ok, "")
-		return nil
+		// No eligible validators yet — not a fulfilled fetch; caller retries on a later tick.
+		return false, nil
 	}
 
 	selfEligibleIndices := map[phase0.ValidatorIndex]struct{}{}
@@ -376,7 +378,7 @@ func (h *ProposerHandler) fetchAndProcessDuties(ctx context.Context, logger *zap
 	span.AddEvent("fetching duties from beacon node", trace.WithAttributes(observability.ValidatorCountAttribute(len(allEligibleIndices))))
 	duties, err := h.beaconNode.ProposerDuties(ctx, targetEpoch, allEligibleIndices)
 	if err != nil {
-		return traces.Errorf(span, "failed to fetch proposer duties: %w", err)
+		return false, traces.Errorf(span, "failed to fetch proposer duties: %w", err)
 	}
 
 	specDuties := make([]*spectypes.ValidatorDuty, 0, len(duties))
@@ -409,7 +411,42 @@ func (h *ProposerHandler) fetchAndProcessDuties(ctx context.Context, logger *zap
 	)
 
 	span.SetStatus(codes.Ok, "")
-	return nil
+	return true, nil
+}
+
+// logNoEligibleDiagnostic is a TEMPORARY diagnostic (ssvlabs/ssv#2901) for the "every proposer slot missed
+// on the Gloas devnet" investigation. On zero eligible validators it dumps Validators() vs SelfValidators()
+// so a devnet run can distinguish metadata-not-synced-yet (shares present but IsAttesting=false; the retry
+// fix recovers these) from a diverging/empty Validators() view (self_attesting>0 yet none eligible; a
+// different root cause the retry would not fix). Remove once the root cause is confirmed on devnet.
+func (h *ProposerHandler) logNoEligibleDiagnostic(logger *zap.Logger, targetEpoch phase0.Epoch) {
+	all := h.validatorProvider.Validators()
+	self := h.validatorProvider.SelfValidators()
+
+	selfAttesting := 0
+	for _, s := range self {
+		if s.IsAttesting(targetEpoch) {
+			selfAttesting++
+		}
+	}
+
+	const sampleCap = 16
+	samples := make([]string, 0, min(len(all), sampleCap))
+	for i, s := range all {
+		if i >= sampleCap {
+			break
+		}
+		samples = append(samples, fmt.Sprintf("idx=%d status=%s hasMeta=%t attesting=%t liquidated=%t",
+			s.ValidatorIndex, s.Status, s.HasBeaconMetadata(), s.IsAttesting(targetEpoch), s.Liquidated))
+	}
+
+	logger.Debug("🔬 no eligible validators for epoch (diagnostic)",
+		zap.Uint64("target_epoch", uint64(targetEpoch)),
+		zap.Int("validators_total", len(all)),
+		zap.Int("self_validators", len(self)),
+		zap.Int("self_attesting", selfAttesting),
+		zap.Strings("shares", samples),
+	)
 }
 
 func (h *ProposerHandler) toSpecDuty(duty *eth2apiv1.ProposerDuty, role spectypes.BeaconRole) *spectypes.ValidatorDuty {
