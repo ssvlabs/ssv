@@ -525,12 +525,18 @@ func weightedAttestationDataRequestIDField(id uuid.UUID) zap.Field {
 }
 
 // multiClientSubmit is a generic function that submits data to multiple beacon clients concurrently.
-// Returns nil if at least one client successfully submitted the data.
+// Returns nil only if at least one client successfully submitted the data.
 func (gc *GoClient) multiClientSubmit(
 	ctx context.Context,
 	routeName string,
 	submitFunc func(ctx context.Context, client Client) error,
 ) error {
+	if len(gc.clients) == 0 {
+		// No clients to submit to. Guard explicitly: WithMaxGoroutines(0) below would panic, and
+		// returning nil would break the "nil only on success" contract — callers such as the
+		// attested-data-root cache would then treat a non-submission as a success.
+		return errMultiClient(fmt.Errorf("no clients available to submit"), routeName)
+	}
 	submissions := atomic.Int32{}
 	p := pool.New().WithErrors().WithContext(ctx).WithMaxGoroutines(len(gc.clients))
 	for _, client := range gc.clients {
@@ -550,27 +556,89 @@ func (gc *GoClient) multiClientSubmit(
 		// At least one client has submitted successfully, so we can return without error.
 		return nil
 	}
-	if err != nil {
-		return errMultiClient(fmt.Errorf("all clients failed to submit: %w", err), routeName)
-	}
-	return nil
+	// With at least one client, zero successful submissions means every client errored, so
+	// p.Wait() returned a non-nil error.
+	return errMultiClient(fmt.Errorf("all clients failed to submit: %w", err), routeName)
 }
 
 // SubmitAttestations implements Beacon interface and sends attestations to the first client that succeeds
 func (gc *GoClient) SubmitAttestations(ctx context.Context, attestations []*spec.VersionedAttestation) error {
 	opts := &api.SubmitAttestationsOpts{Attestations: attestations}
 	if gc.withParallelSubmissions {
-		return gc.multiClientSubmit(ctx, "SubmitAttestations", func(ctx context.Context, client Client) error {
+		if err := gc.multiClientSubmit(ctx, "SubmitAttestations", func(ctx context.Context, client Client) error {
 			return client.SubmitAttestations(ctx, opts)
-		})
+		}); err != nil {
+			return err
+		}
+	} else {
+		start := time.Now()
+		err := gc.multiClient.SubmitAttestations(ctx, opts)
+		recordRequest(ctx, gc.log, "SubmitAttestations", gc.multiClient, http.MethodPost, true, time.Since(start), err)
+		if err != nil {
+			return errMultiClient(fmt.Errorf("submit attestations: %w", err), "SubmitAttestations")
+		}
 	}
 
-	start := time.Now()
-	err := gc.multiClient.SubmitAttestations(ctx, opts)
-	recordRequest(ctx, gc.log, "SubmitAttestations", gc.multiClient, http.MethodPost, true, time.Since(start), err)
-	if err != nil {
-		return errMultiClient(fmt.Errorf("submit attestations: %w", err), "SubmitAttestations")
-	}
-
+	// Only reached when at least one client accepted the attestations, so the beacon node
+	// holds them — remember their data roots for the aggregator flow.
+	gc.rememberAttestedDataRoots(ctx, attestations)
 	return nil
+}
+
+// attestedDataRootKey identifies the attestation data a validator attested with; pre-Electra
+// each committee signs different data (the committee is part of it as Index), so the
+// committee belongs in the key.
+type attestedDataRootKey struct {
+	slot      phase0.Slot
+	committee phase0.CommitteeIndex
+}
+
+// rememberAttestedDataRoots caches the root of the attestation data that was just submitted,
+// per (slot, committee). The aggregator flow prefers this root over re-deriving the data:
+// the beacon node holds at least our own attestation matching it, so an aggregate must
+// exist, while a re-derived root may match nothing anyone attested with.
+//
+// The committee runner submits one attestation per validator, and validators in the same
+// committee share a single AttestationData (for Electra it is identical across all committees),
+// so we dedupe per distinct (slot, committee) to hash and store each root only once.
+func (gc *GoClient) rememberAttestedDataRoots(ctx context.Context, attestations []*spec.VersionedAttestation) {
+	seen := make(map[attestedDataRootKey]struct{}, len(attestations))
+	for _, att := range attestations {
+		data, err := att.Data()
+		if err != nil {
+			// We just submitted this attestation successfully, so extraction should not fail; a
+			// silent miss would degrade the aggregator flow to the 404-prone re-derivation.
+			gc.log.Warn("could not extract attestation data to remember its root", zap.Error(err))
+			attestedDataRootRememberFailedCounter.Add(ctx, 1)
+			continue
+		}
+		committee, err := att.CommitteeIndex()
+		if err != nil {
+			gc.log.Warn("could not extract attestation committee index to remember its root", zap.Error(err))
+			attestedDataRootRememberFailedCounter.Add(ctx, 1)
+			continue
+		}
+		key := attestedDataRootKey{slot: data.Slot, committee: committee}
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		root, err := data.HashTreeRoot()
+		if err != nil {
+			gc.log.Warn("could not hash attestation data to remember its root", zap.Error(err))
+			attestedDataRootRememberFailedCounter.Add(ctx, 1)
+			continue
+		}
+		seen[key] = struct{}{}
+		gc.attestedDataRootCache.Set(key, root, ttlcache.DefaultTTL)
+	}
+}
+
+// attestedDataRoot returns the root of the attestation data this node submitted for the
+// given slot and committee, if known.
+func (gc *GoClient) attestedDataRoot(slot phase0.Slot, committee phase0.CommitteeIndex) (phase0.Root, bool) {
+	item := gc.attestedDataRootCache.Get(attestedDataRootKey{slot: slot, committee: committee})
+	if item == nil {
+		return phase0.Root{}, false
+	}
+	return item.Value(), true
 }

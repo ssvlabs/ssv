@@ -143,9 +143,24 @@ func (gc *GoClient) fetchVersionedAggregate(
 	slot phase0.Slot,
 	committeeIndex phase0.CommitteeIndex,
 ) (*spec.VersionedAttestation, spec.DataVersion, error) {
-	root, err := gc.computeAttestationDataRoot(ctx, slot, committeeIndex)
-	if err != nil {
-		return nil, DataVersionNil, errMultiClient(fmt.Errorf("compute attestation root: %w", err), "AggregateAttestation")
+	// Prefer the root of the attestation data this node actually submitted (the cluster-decided
+	// value): the beacon node holds at least our own attestation matching it, so a matching
+	// aggregate must exist. Re-deriving the data locally can yield a root nobody attested with,
+	// which the beacon node answers with a 404 (no matching aggregate).
+	//
+	// A cache hit only guarantees that *some* beacon node accepted the attestation. The
+	// AggregateAttestation request below is routed to the single highest-scored client and does
+	// not fail over on 4xx, so it can still 404 if that node hasn't ingested the attestation yet
+	// (gossip backfill before 2/3 of the slot makes this rare).
+	root, found := gc.attestedDataRoot(slot, committeeIndex)
+	if !found {
+		// No record of our own attestation (it failed or hasn't landed yet) — fall back to
+		// re-deriving the root from this node's view of the slot, fork-gated by the duty slot.
+		var err error
+		root, err = gc.computeAttestationDataRoot(ctx, slot, committeeIndex)
+		if err != nil {
+			return nil, DataVersionNil, errMultiClient(fmt.Errorf("compute attestation root: %w", err), "AggregateAttestation")
+		}
 	}
 
 	start := time.Now()

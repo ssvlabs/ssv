@@ -130,6 +130,14 @@ var (
 			observability.InstrumentName(observabilityNamespace, "proposal.parent_mismatch"),
 			metric.WithUnit("{mismatch}"),
 			metric.WithDescription("proposal parent root did not match cached HeadEvent")))
+
+	// Counts attestations we submitted successfully but could not remember the data root for, so
+	// the aggregator flow silently degrades to the 404-prone re-derivation. Should stay at zero.
+	attestedDataRootRememberFailedCounter = metrics.New(
+		meter.Int64Counter(
+			observability.InstrumentName(observabilityNamespace, "attestation_data.remember_root_failed"),
+			metric.WithUnit("{failure}"),
+			metric.WithDescription("submitted attestations whose data root could not be remembered for the aggregator flow")))
 )
 
 func recordRequest(
