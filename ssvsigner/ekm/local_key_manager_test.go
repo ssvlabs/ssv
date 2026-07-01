@@ -337,6 +337,40 @@ func TestSignBeaconObject(t *testing.T) {
 	}
 }
 
+func TestSignBeaconObjectGloasBlockSlashingProtection(t *testing.T) {
+	ctx := t.Context()
+
+	operatorPrivateKey, err := keys.GeneratePrivateKey()
+	require.NoError(t, err)
+	km := testKeyManager(t, operatorPrivateKey)
+
+	sk1 := &bls.SecretKey{}
+	require.NoError(t, sk1.SetHexString(sk1Str))
+	encryptedSK1, err := operatorPrivateKey.Public().Encrypt([]byte(sk1.SerializeToHexStr()))
+	require.NoError(t, err)
+	pk := phase0.BLSPubKey(sk1.GetPublicKey().Serialize())
+	require.NoError(t, km.AddShare(ctx, nil, encryptedSK1, pk))
+
+	lkm := km.(*LocalKeyManager)
+
+	// A Gloas block reaches signBeaconObject's default case (ssvsigner can't name *gloas.BeaconBlock); any
+	// ssz.HashRoot that isn't a known go-eth2-client block type exercises it — a header is a fine stand-in.
+	// That path used to signSSZRoot with no slashing protection; the guard must now reject a re-proposal.
+	proposalSlot := testBeaconConfig().EstimatedCurrentSlot() + minSPProposalSlotGap + 10
+	block := &phase0.BeaconBlockHeader{Slot: proposalSlot}
+
+	// First proposal: signs and records the highest proposal.
+	_, root, err := lkm.SignBeaconObject(ctx, block, phase0.Domain{}, pk, proposalSlot, spectypes.DomainProposer)
+	require.NoError(t, err)
+	require.NotEqual(t, phase0.Root{}, root)
+
+	// Re-proposing the same slot is slashable → rejected (proves the highest-proposal record + the
+	// IsBeaconBlockSlashable guard that the direct signSSZRoot path used to skip).
+	_, _, err = lkm.SignBeaconObject(ctx, block, phase0.Domain{}, pk, proposalSlot, spectypes.DomainProposer)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "slashable")
+}
+
 func TestRemoveShare(t *testing.T) {
 	require.NoError(t, bls.Init(bls.BLS12_381))
 
