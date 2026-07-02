@@ -2,6 +2,7 @@ package ekm
 
 import (
 	"encoding/hex"
+	"math"
 	"testing"
 	"time"
 
@@ -337,9 +338,17 @@ func TestSignBeaconObject(t *testing.T) {
 	}
 }
 
-func TestSignBeaconObjectGloasBlockSlashingProtection(t *testing.T) {
-	ctx := t.Context()
+// gloasBlockStub stands in for *gloas.BeaconBlock in these tests. The ssvsigner module can't import the
+// node-side gloas package, so we exercise signBeaconObject's slashableBeaconBlock path with a type that,
+// like the real block, is HTR-able (via the embedded header) and exposes its own slot through BlockSlot.
+type gloasBlockStub struct {
+	*phase0.BeaconBlockHeader
+}
 
+func (b gloasBlockStub) BlockSlot() phase0.Slot { return b.BeaconBlockHeader.Slot }
+
+// newLocalKeyManagerWithShare returns a LocalKeyManager with sk1 added as a share, plus its public key.
+func newLocalKeyManagerWithShare(t *testing.T) (*LocalKeyManager, phase0.BLSPubKey) {
 	operatorPrivateKey, err := keys.GeneratePrivateKey()
 	require.NoError(t, err)
 	km := testKeyManager(t, operatorPrivateKey)
@@ -349,26 +358,60 @@ func TestSignBeaconObjectGloasBlockSlashingProtection(t *testing.T) {
 	encryptedSK1, err := operatorPrivateKey.Public().Encrypt([]byte(sk1.SerializeToHexStr()))
 	require.NoError(t, err)
 	pk := phase0.BLSPubKey(sk1.GetPublicKey().Serialize())
-	require.NoError(t, km.AddShare(ctx, nil, encryptedSK1, pk))
+	require.NoError(t, km.AddShare(t.Context(), nil, encryptedSK1, pk))
 
-	lkm := km.(*LocalKeyManager)
+	return km.(*LocalKeyManager), pk
+}
 
-	// A Gloas block reaches signBeaconObject's default case (ssvsigner can't name *gloas.BeaconBlock); any
-	// ssz.HashRoot that isn't a known go-eth2-client block type exercises it — a header is a fine stand-in.
-	// That path used to signSSZRoot with no slashing protection; the guard must now reject a re-proposal.
-	proposalSlot := testBeaconConfig().EstimatedCurrentSlot() + minSPProposalSlotGap + 10
-	block := &phase0.BeaconBlockHeader{Slot: proposalSlot}
+func TestSignBeaconObjectGloasBlockSlashingProtection(t *testing.T) {
+	ctx := t.Context()
+	lkm, pk := newLocalKeyManagerWithShare(t)
 
-	// First proposal: signs and records the highest proposal.
-	_, root, err := lkm.SignBeaconObject(ctx, block, phase0.Domain{}, pk, proposalSlot, spectypes.DomainProposer)
+	// A Gloas block reaches signBeaconObject's default case via the slashableBeaconBlock interface. That
+	// path must key slashing protection to the block's OWN slot, not the plumbed duty slot, so pass a
+	// different plumbed slot and assert the recorded highest proposal is the block's.
+	blockSlot := testBeaconConfig().EstimatedCurrentSlot() + minSPProposalSlotGap + 10
+	block := gloasBlockStub{&phase0.BeaconBlockHeader{Slot: blockSlot}}
+	plumbedSlot := blockSlot - 5 // deliberately different; the Gloas arm must ignore it
+
+	// First proposal signs and records the highest proposal keyed to the block's own slot.
+	_, root, err := lkm.SignBeaconObject(ctx, block, phase0.Domain{}, pk, plumbedSlot, spectypes.DomainProposer)
 	require.NoError(t, err)
 	require.NotEqual(t, phase0.Root{}, root)
 
-	// Re-proposing the same slot is slashable → rejected (proves the highest-proposal record + the
+	highest, found, err := lkm.RetrieveHighestProposal(pk)
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Equal(t, blockSlot, highest, "slashing protection must record the block's own slot, not the plumbed slot")
+
+	// Re-proposing the same block slot is slashable → rejected (proves the highest-proposal record + the
 	// IsBeaconBlockSlashable guard that the direct signSSZRoot path used to skip).
-	_, _, err = lkm.SignBeaconObject(ctx, block, phase0.Domain{}, pk, proposalSlot, spectypes.DomainProposer)
+	_, _, err = lkm.SignBeaconObject(ctx, block, phase0.Domain{}, pk, plumbedSlot, spectypes.DomainProposer)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "slashable")
+}
+
+func TestSignBeaconObjectGloasRejectsUnknownProposerObject(t *testing.T) {
+	ctx := t.Context()
+	lkm, pk := newLocalKeyManagerWithShare(t)
+
+	// A proposer-domain object that is neither a known go-eth2-client block nor a slashableBeaconBlock is a
+	// routing bug: the signer must fail loud rather than sign an unrecognized object without slashing
+	// protection. A bare header (no BlockSlot method) does not satisfy the interface.
+	slot := testBeaconConfig().EstimatedCurrentSlot() + minSPProposalSlotGap + 10
+	_, _, err := lkm.SignBeaconObject(ctx, &phase0.BeaconBlockHeader{Slot: slot}, phase0.Domain{}, pk, slot, spectypes.DomainProposer)
+	require.ErrorContains(t, err, "unexpected object type")
+}
+
+func TestSignBeaconObjectGloasRejectsFarFutureSlot(t *testing.T) {
+	ctx := t.Context()
+	lkm, pk := newLocalKeyManagerWithShare(t)
+
+	// Keying slashing protection to the block's own slot means the Gloas arm must guard the far-future
+	// bound itself (the plumbed slot is no longer the bound). An absurd block slot is rejected before signing.
+	block := gloasBlockStub{&phase0.BeaconBlockHeader{Slot: math.MaxUint64 / 2}}
+	_, _, err := lkm.SignBeaconObject(ctx, block, phase0.Domain{}, pk, testBeaconConfig().EstimatedCurrentSlot(), spectypes.DomainProposer)
+	require.ErrorContains(t, err, "too far into the future")
 }
 
 func TestRemoveShare(t *testing.T) {

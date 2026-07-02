@@ -55,11 +55,20 @@ type LocalKeyManager struct {
 	signer            signer.ValidatorSigner
 	operatorDecrypter keys.OperatorDecrypter
 	slashingProtector slashingProtector
+	beaconConfig      BeaconNetwork
 
 	// blockProposalLock serializes the manual slashing check→record→sign for Gloas blocks, which can't go
 	// through the lib's atomic SignBeaconBlock (see signBeaconObject's Gloas case). walletLock is only
 	// RLocked during signing, so without this two concurrent same-validator block signs could both pass.
 	blockProposalLock sync.Mutex
+}
+
+// slashableBeaconBlock is the structural view the signer needs of a Gloas (ePBS) block: its SSZ signing
+// root (to sign) plus its own slot (to key slashing protection). *gloas.BeaconBlock satisfies it, so the
+// signer reads the slot without importing the node-side type across the module boundary.
+type slashableBeaconBlock interface {
+	ssz.HashRoot
+	BlockSlot() phase0.Slot
 }
 
 // NewLocalKeyManager returns a new LocalKeyManager.
@@ -107,6 +116,7 @@ func NewLocalKeyManager(
 		signer:            beaconSigner,
 		slashingProtector: NewSlashingProtector(logger, beacon, signerStore, protection),
 		operatorDecrypter: operatorPrivKey,
+		beaconConfig:      beacon,
 	}, nil
 }
 
@@ -121,10 +131,12 @@ func (km *LocalKeyManager) SignBeaconObject(
 	obj ssz.HashRoot,
 	domain phase0.Domain,
 	pubKey phase0.BLSPubKey,
-	slot phase0.Slot,
+	_ phase0.Slot,
 	signatureDomain phase0.DomainType,
 ) (spectypes.Signature, phase0.Root, error) {
-	sig, rootSlice, err := km.signBeaconObject(obj, domain, pubKey, slot, signatureDomain)
+	// slot is unused: the local signer derives the proposal slot it protects from the block object itself
+	// (see signBeaconObject's Gloas case); the other domains don't need it.
+	sig, rootSlice, err := km.signBeaconObject(obj, domain, pubKey, signatureDomain)
 	if err != nil {
 		return nil, phase0.Root{}, err
 	}
@@ -137,7 +149,6 @@ func (km *LocalKeyManager) signBeaconObject(
 	obj ssz.HashRoot,
 	domain phase0.Domain,
 	pubKey phase0.BLSPubKey,
-	slot phase0.Slot,
 	signatureDomain phase0.DomainType,
 ) (spectypes.Signature, []byte, error) {
 	km.walletLock.RLock()
@@ -197,20 +208,27 @@ func (km *LocalKeyManager) signBeaconObject(
 		default:
 			// Gloas (ePBS) block: go-eth2-client has no Gloas VersionedBeaconBlock for the slashing-
 			// protected SignBeaconBlock path, and ssvsigner (a separate module) can't import the node's
-			// *gloas.BeaconBlock to type-switch on it. The decided block arrives as an ssz.HashRoot, so
-			// sign its SSZ signing root directly.
-			//
-			// A block proposal IS slashable (unlike the other Gloas domains, which signSSZRoot handles
-			// unguarded), and signSSZRoot doesn't protect it — so replicate what the lib's SignBeaconBlock
-			// does internally: check + record the highest proposal, then sign. Use the plumbed-through slot,
-			// since we can't read it off the opaque block. blockProposalLock makes the check→record→sign
-			// atomic (walletLock is only RLocked here). Mirrors the remote handleDomainProposer.
+			// *gloas.BeaconBlock to type-switch on it. Match the structural slashableBeaconBlock interface
+			// instead; anything else reaching this arm is a routing bug, so fail loud rather than sign it.
+			block, ok := obj.(slashableBeaconBlock)
+			if !ok {
+				return nil, nil, fmt.Errorf("unexpected object type for proposer domain: %T", obj)
+			}
+			// A block proposal is slashable but signSSZRoot doesn't protect it, so replicate the lib's
+			// SignBeaconBlock: check + record the highest proposal, then sign. Key it to the block's own
+			// slot (what we sign), not the plumbed duty slot, so the slashing DB reflects the signed content
+			// — and guard the far-future bound here, since the plumbed slot no longer does. blockProposalLock
+			// makes check→record→sign atomic (walletLock is only RLocked). Mirrors the remote handleDomainProposer.
+			blockSlot := block.BlockSlot()
+			if !signer.IsValidFarFutureSlot(km.beaconConfig, blockSlot) {
+				return nil, nil, fmt.Errorf("proposed block slot too far into the future")
+			}
 			km.blockProposalLock.Lock()
 			defer km.blockProposalLock.Unlock()
-			if err := km.slashingProtector.IsBeaconBlockSlashable(pubKey, slot); err != nil {
+			if err := km.slashingProtector.IsBeaconBlockSlashable(pubKey, blockSlot); err != nil {
 				return nil, nil, err
 			}
-			if err := km.slashingProtector.UpdateHighestProposal(pubKey, slot); err != nil {
+			if err := km.slashingProtector.UpdateHighestProposal(pubKey, blockSlot); err != nil {
 				return nil, nil, err
 			}
 			return signSSZRoot(km.signer, obj, domain, pubKey[:])

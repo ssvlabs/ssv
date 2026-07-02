@@ -528,9 +528,10 @@ func (h *ProposerHandler) logFetchDispatchDiagnostic(logger *zap.Logger, targetE
 		)
 	}
 
-	// Fetched in-committee duties for slots that already passed — a guaranteed miss (fetched too late).
+	// Fetched in-committee duties for slots that already passed — a guaranteed miss only on a first fetch;
+	// on routine re-fetches (reorg, validator-indices change) it is expected, so log at Debug, not Warn.
 	if len(alreadyPassed) > 0 {
-		logger.Warn("🔬 proposer fetch: in-committee duties for already-passed slots (diagnostic)",
+		logger.Debug("🔬 proposer fetch: in-committee duties for already-passed slots (diagnostic)",
 			zap.Uint64("target_epoch", uint64(targetEpoch)),
 			zap.Uint64("current_slot", uint64(currentSlot)),
 			zap.Int("in_committee_total", inCommittee),

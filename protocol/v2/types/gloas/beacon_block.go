@@ -64,6 +64,10 @@ type SignedBeaconBlock struct {
 func (b *BeaconBlock) Encode() ([]byte, error)  { return b.MarshalSSZ() }
 func (b *BeaconBlock) Decode(data []byte) error { return b.UnmarshalSSZ(data) }
 
+// BlockSlot exposes the slot through a method so the ekm — a separate module that can't import
+// *gloas.BeaconBlock — can read it via a structural interface to key block slashing protection.
+func (b *BeaconBlock) BlockSlot() phase0.Slot { return b.Slot }
+
 func (b *SignedBeaconBlock) Encode() ([]byte, error)  { return b.MarshalSSZ() }
 func (b *SignedBeaconBlock) Decode(data []byte) error { return b.UnmarshalSSZ(data) }
 

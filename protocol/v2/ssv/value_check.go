@@ -306,20 +306,16 @@ func NewProposerChecker(
 }
 
 func (v *proposerChecker) CheckValue(value []byte) error {
-	cd, err := checkValidatorConsensusData(value, v.beaconConfig, spectypes.BNRoleProposer, v.validatorPK, v.validatorIndex)
+	cd, gloasBlock, err := checkValidatorConsensusData(value, v.beaconConfig, spectypes.BNRoleProposer, v.validatorPK, v.validatorIndex)
 	if err != nil {
 		return err
 	}
 
 	var slot phase0.Slot
-	if v.beaconConfig.IsGloasAtSlot(cd.Duty.Slot) {
-		// Gloas blocks have no spectypes block version; GetBlockData can't decode them, so read the
-		// slot from the node-side block directly.
-		block, decErr := gloas.DecodeBeaconBlock(cd.DataSSZ)
-		if decErr != nil {
-			return fmt.Errorf("could not decode gloas block: %w", decErr)
-		}
-		slot = block.Slot
+	if gloasBlock != nil {
+		// Gloas blocks have no spectypes block version; checkValidatorConsensusData already decoded the
+		// node-side block and verified block.Slot == duty slot, so reuse it rather than decode again.
+		slot = gloasBlock.Slot
 	} else {
 		blockData, _, bdErr := cd.GetBlockData()
 		if bdErr != nil {
@@ -352,7 +348,7 @@ func NewAggregatorChecker(
 }
 
 func (v *aggregatorChecker) CheckValue(value []byte) error {
-	_, err := checkValidatorConsensusData(value, v.beaconConfig, spectypes.BNRoleAggregator, v.validatorPK, v.validatorIndex)
+	_, _, err := checkValidatorConsensusData(value, v.beaconConfig, spectypes.BNRoleAggregator, v.validatorPK, v.validatorIndex)
 	return err
 }
 
@@ -375,47 +371,59 @@ func NewSyncCommitteeContributionChecker(
 }
 
 func (v *syncCommitteeContributionChecker) CheckValue(value []byte) error {
-	_, err := checkValidatorConsensusData(value, v.beaconConfig, spectypes.BNRoleSyncCommitteeContribution, v.validatorPK, v.validatorIndex)
+	_, _, err := checkValidatorConsensusData(value, v.beaconConfig, spectypes.BNRoleSyncCommitteeContribution, v.validatorPK, v.validatorIndex)
 	return err
 }
 
+// checkValidatorConsensusData decodes and validates a ProposerConsensusData value. On the Gloas
+// proposer path it also decodes the node-side block and returns it (nil otherwise) so callers reuse it
+// instead of decoding the ~MB block a second time.
 func checkValidatorConsensusData(
 	value []byte,
 	beaconConfig *networkconfig.Beacon,
 	expectedType spectypes.BeaconRole,
 	validatorPK spectypes.ValidatorPK,
 	validatorIndex phase0.ValidatorIndex,
-) (*spectypes.ProposerConsensusData, error) {
+) (*spectypes.ProposerConsensusData, *gloas.BeaconBlock, error) {
 	cd := &spectypes.ProposerConsensusData{}
 	if err := cd.Decode(value); err != nil {
-		return nil, fmt.Errorf("failed decoding consensus data: %w", err)
+		return nil, nil, fmt.Errorf("failed decoding consensus data: %w", err)
 	}
 
+	var gloasBlock *gloas.BeaconBlock
 	if cd.Duty.Type == spectypes.BNRoleProposer && beaconConfig.IsGloasAtSlot(cd.Duty.Slot) {
 		// Gloas blocks have no spectypes block version, so ValidateConsensusData's GetBlockData path
 		// can't decode them; a successful node-side decode is the validity check.
-		if _, err := gloas.DecodeBeaconBlock(cd.DataSSZ); err != nil {
-			return cd, spectypes.NewError(spectypes.QBFTValueInvalidErrorCode, "invalid value")
+		block, err := gloas.DecodeBeaconBlock(cd.DataSSZ)
+		if err != nil {
+			return cd, nil, spectypes.NewError(spectypes.QBFTValueInvalidErrorCode, "invalid value")
 		}
+		// Pin the block's own slot to the duty slot: the block is signed under block.Slot and slashing
+		// protection keys on it, so a leader that decoupled the two could harvest a signature for another
+		// slot — an equivocation the slashing DB would miss. Also bounds block.Slot to the far-future check.
+		if block.Slot != cd.Duty.Slot {
+			return cd, nil, spectypes.NewError(spectypes.QBFTValueInvalidErrorCode, "gloas block slot does not match duty slot")
+		}
+		gloasBlock = block
 	} else if err := ssvtypes.ValidateConsensusData(cd); err != nil {
-		return cd, spectypes.NewError(spectypes.QBFTValueInvalidErrorCode, "invalid value")
+		return cd, nil, spectypes.NewError(spectypes.QBFTValueInvalidErrorCode, "invalid value")
 	}
 
 	if expectedType != cd.Duty.Type {
-		return cd, spectypes.NewError(spectypes.WrongBeaconRoleTypeErrorCode, "wrong beacon role type")
+		return cd, nil, spectypes.NewError(spectypes.WrongBeaconRoleTypeErrorCode, "wrong beacon role type")
 	}
 
 	if beaconConfig.EstimatedEpochAtSlot(cd.Duty.Slot) > beaconConfig.EstimatedCurrentEpoch()+1 {
-		return cd, spectypes.NewError(spectypes.DutyEpochTooFarFutureErrorCode, "duty epoch is into far future")
+		return cd, nil, spectypes.NewError(spectypes.DutyEpochTooFarFutureErrorCode, "duty epoch is into far future")
 	}
 
 	if !bytes.Equal(validatorPK[:], cd.Duty.PubKey[:]) {
-		return cd, spectypes.NewError(spectypes.WrongValidatorPubkeyErrorCode, "wrong validator pk")
+		return cd, nil, spectypes.NewError(spectypes.WrongValidatorPubkeyErrorCode, "wrong validator pk")
 	}
 
 	if validatorIndex != cd.Duty.ValidatorIndex {
-		return cd, spectypes.NewError(spectypes.WrongValidatorIndexErrorCode, "wrong validator index")
+		return cd, nil, spectypes.NewError(spectypes.WrongValidatorIndexErrorCode, "wrong validator index")
 	}
 
-	return cd, nil
+	return cd, gloasBlock, nil
 }
