@@ -34,7 +34,7 @@ func (b *faultyAttestationSubmitBeacon) SubmitAttestations(_ context.Context, _ 
 // ProcessPostConsensus call that concludes the duty.
 func observeConclusion(env *committeeRunnerEnv) chan dutyConclusion {
 	concluded := make(chan dutyConclusion, 1)
-	env.runner.BaseRunner.dutyConcluded = concluded
+	env.runner.dutyConcluded = concluded
 	return concluded
 }
 

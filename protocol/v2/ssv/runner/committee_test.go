@@ -144,7 +144,7 @@ func newCommitteeRunnerEnvInternal(
 		false,
 	)
 
-	beacon := protocoltesting.NewTestingBeaconNodeWrapped().(*protocoltesting.BeaconNodeWrapped)
+	defaultBeacon := protocoltesting.NewTestingBeaconNodeWrapped().(*protocoltesting.BeaconNodeWrapped)
 	if guard == nil {
 		guard = &committeeDutyGuardStub{}
 	}
@@ -154,10 +154,9 @@ func newCommitteeRunnerEnvInternal(
 
 	// The runner talks to the injected beacon when supplied (e.g. a faulty one), otherwise the plain
 	// testing wrapper. env.beacon keeps the base wrapper so broadcast assertions still work.
-	// (runnerBeacon takes beaconNode's interface type; the wrapped node satisfies it.)
 	runnerBeacon := beaconNode
 	if runnerBeacon == nil {
-		runnerBeacon = beacon
+		runnerBeacon = defaultBeacon
 	}
 
 	runnerI, err := NewCommitteeRunner(CommitteeRunnerOptions{
@@ -184,7 +183,7 @@ func newCommitteeRunnerEnvInternal(
 	return &committeeRunnerEnv{
 		logger:     logger,
 		runner:     crunner,
-		beacon:     beacon,
+		beacon:     defaultBeacon,
 		network:    network,
 		keySetMap:  keySetMap,
 		sampleKey:  sampleKey,
