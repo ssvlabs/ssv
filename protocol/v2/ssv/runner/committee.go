@@ -535,6 +535,10 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 	attestationsToSubmit := make(map[phase0.ValidatorIndex]*spec.VersionedAttestation)
 	syncCommitteeMessagesToSubmit := make(map[phase0.ValidatorIndex]*altair.SyncCommitteeMessage)
 
+	// Recoverable reconstruct failures are discriminated by the recoverableReconstructError tag rather
+	// than by a spec error code — the tag also covers the uncoded BLS Deserialize/Recover failures.
+	// The sibling AggregatorCommitteeRunner instead classifies by the PostConsensusQuorumWithInvalidSignatures
+	// code; the divergence is deliberate (tagging with that code there breaks its spectest fixtures).
 	var recoverableErr, terminalErr error
 
 	span.SetAttributes(observability.BeaconBlockRootCountAttribute(len(roots)))
