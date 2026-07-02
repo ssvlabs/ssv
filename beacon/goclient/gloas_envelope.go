@@ -12,7 +12,7 @@ import (
 )
 
 // Gloas §6 envelope produce/publish endpoints (beacon-APIs#580, merged 2026-06-29). Produce takes the
-// beacon block root as a path segment; publish posts the blinded body (see SubmitExecutionPayloadEnvelope).
+// beacon block root as a path segment; publish posts the full signed envelope (see SubmitExecutionPayloadEnvelope).
 const (
 	gloasProduceEnvelopePath = "/eth/v1/validator/execution_payload_envelopes/%d/%s" // slot, beacon_block_root 0x-hex
 	gloasPublishEnvelopePath = "/eth/v1/beacon/execution_payload_envelopes"
@@ -26,18 +26,20 @@ func (gc *GoClient) GetExecutionPayloadEnvelope(ctx context.Context, slot phase0
 	})
 }
 
-// SubmitExecutionPayloadEnvelope publishes the signed §6 envelope as its blinded SSZ form to all
-// configured beacon nodes concurrently, succeeding if at least one accepts it. The producing BN
-// reconstructs the full payload from its cache. Re-publishing to multiple BNs is safe — they dedupe by
-// block root.
+// SubmitExecutionPayloadEnvelope publishes the full signed §6 envelope as SSZ to all configured beacon
+// nodes concurrently, succeeding if at least one accepts it. Re-publishing to multiple BNs is safe — they
+// dedupe by block root.
+//
+// The body is the full SignedExecutionPayloadEnvelope. beacon-APIs#580 also defines a blinded body
+// (Eth-Execution-Payload-Blinded, reconstructed from the BN's cache) and an unblinded
+// SignedExecutionPayloadEnvelopeContents (envelope + blobs + KZG proofs), but Lodestar v1.43.0 — the first
+// CL to implement the endpoint — decodes only the full SignedExecutionPayloadEnvelope. The full envelope's
+// hash-tree root equals the blinded root the §6 QBFT signed, so the reconstructed signature stays valid.
+// The blinded form is retained in the gloas types for the deferred blinded/Contents path.
 func (gc *GoClient) SubmitExecutionPayloadEnvelope(ctx context.Context, signed *gloas.SignedExecutionPayloadEnvelope) error {
-	blinded, err := signed.Blinded()
+	body, err := signed.MarshalSSZ()
 	if err != nil {
-		return fmt.Errorf("blind execution payload envelope: %w", err)
-	}
-	body, err := blinded.MarshalSSZ()
-	if err != nil {
-		return fmt.Errorf("marshal signed blinded execution payload envelope: %w", err)
+		return fmt.Errorf("marshal signed execution payload envelope: %w", err)
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, gc.commonTimeout)
@@ -62,10 +64,10 @@ func requestExecutionPayloadEnvelope(ctx context.Context, addr string, slot phas
 	return envelope, nil
 }
 
-// submitExecutionPayloadEnvelope POSTs the SSZ-marshaled signed blinded envelope to the publish endpoint,
-// tagged Eth-Execution-Payload-Blinded.
-func submitExecutionPayloadEnvelope(ctx context.Context, addr string, blindedEnvelopeSSZ []byte) error {
-	headers := map[string]string{"Eth-Execution-Payload-Blinded": "true"}
-	_, err := gloasOctetStreamHTTP(ctx, http.MethodPost, addr+gloasPublishEnvelopePath, blindedEnvelopeSSZ, headers)
+// submitExecutionPayloadEnvelope POSTs the SSZ-marshaled full signed envelope to the publish endpoint. No
+// Eth-Execution-Payload-Blinded header: Lodestar decodes the body as a full SignedExecutionPayloadEnvelope
+// (gloasOctetStreamHTTP tags the request with the Gloas Eth-Consensus-Version).
+func submitExecutionPayloadEnvelope(ctx context.Context, addr string, envelopeSSZ []byte) error {
+	_, err := gloasOctetStreamHTTP(ctx, http.MethodPost, addr+gloasPublishEnvelopePath, envelopeSSZ, nil)
 	return err
 }
