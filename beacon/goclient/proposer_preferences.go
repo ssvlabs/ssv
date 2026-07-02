@@ -2,11 +2,9 @@ package goclient
 
 import (
 	"context"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strings"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 
@@ -34,23 +32,15 @@ func (gc *GoClient) ProposerDutiesDependentRoot(ctx context.Context, epoch phase
 		dctx, cancel := context.WithTimeout(detached, gc.commonTimeout)
 		defer cancel()
 		return firstClientResult(dctx, gc, "ProposerDutiesDependentRoot", http.MethodGet, func(ctx context.Context, addr string) (phase0.Root, error) {
+			// phase0.Root.UnmarshalJSON parses and length-checks the "0x…" hex, so decode straight into it.
 			var resp struct {
-				DependentRoot string `json:"dependent_root"`
+				DependentRoot phase0.Root `json:"dependent_root"`
 			}
 			url := addr + fmt.Sprintf("/eth/v2/validator/duties/proposer/%d", epoch)
 			if err := ptcDo(ctx, ptcHTTPClient, http.MethodGet, url, nil, nil, &resp); err != nil {
 				return phase0.Root{}, err
 			}
-			raw, err := hex.DecodeString(strings.TrimPrefix(resp.DependentRoot, "0x"))
-			if err != nil {
-				return phase0.Root{}, fmt.Errorf("decode dependent_root %q: %w", resp.DependentRoot, err)
-			}
-			var root phase0.Root
-			if len(raw) != len(root) {
-				return phase0.Root{}, fmt.Errorf("dependent_root: expected %d bytes, got %d", len(root), len(raw))
-			}
-			copy(root[:], raw)
-			return root, nil
+			return resp.DependentRoot, nil
 		})
 	})
 	return root, err
