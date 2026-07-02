@@ -358,6 +358,8 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(
 
 	aggregatorMap, contributionMap, err := r.expectedPreConsensusRoots(ctx, logger)
 	if err != nil {
+		// terminal post-quorum failure → classify as failed, not stuck
+		r.markDutyFailed(err)
 		return fmt.Errorf("could not get expected pre-consensus roots: %w", err)
 	}
 
@@ -507,8 +509,10 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(
 				}
 
 			default:
-				// This should never happen as we build rootToMetadata ourselves with valid roles
-				return fmt.Errorf("unexpected role type in pre-consensus metadata: %v", metadata.Role)
+				// deterministic terminal invariant violation → classify as failed, not stuck
+				err := fmt.Errorf("unexpected role type in pre-consensus metadata: %v", metadata.Role)
+				r.markDutyFailed(err)
+				return err
 			}
 		}
 	}
@@ -536,6 +540,8 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(
 	if len(aggregatorSelections) > 0 {
 		// Wait once per duty before fetching aggregate attestations (spec: 2/3 into slot).
 		if err := r.waitTwoThirdsIntoSlot(ctx, duty.DutySlot()); err != nil {
+			// Only reachable on shutdown (ctx canceled) within this short wait — markDutyFailed
+			// would drop a context.Canceled reason anyway, so there is nothing to record here.
 			return err
 		}
 
@@ -582,6 +588,13 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(
 
 	// Else, if some aggregators or contributors were selected (even with an error for others), proceed to consensus
 	if err := consensusData.Validate(); err != nil {
+		// Not markDutyFailed: this pre-consensus window is re-entrant until consensus starts
+		// (guarded by HasStartedConsensus). basePreConsensusMsgProcessing reports a new quorum
+		// per root, not once per duty, and a Validate error is non-retryable so the committee
+		// queue drops the message but keeps the runner alive. A transient GetAggregateAttestation
+		// failure can leave consensusData empty here, yet a later message whose root reaches quorum
+		// can still build valid data and start consensus — concluding "failed" now would mask a
+		// duty that still completes.
 		return fmt.Errorf("invalid aggregator committee consensus data: %w", err)
 	}
 
@@ -593,6 +606,11 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(
 		consensusData,
 		r.ValCheck,
 	); err != nil {
+		// Not markDutyFailed: same re-entrant pre-consensus window as the Validate check above.
+		// decide sets RunningInstance only on success, so a failure here leaves HasStartedConsensus
+		// false and a later new-quorum message can start consensus and complete the duty. The
+		// message drop is non-terminal (runner survives), so concluding "failed" now would risk a
+		// false failure on a duty that still succeeds.
 		return fmt.Errorf("failed to start consensus: %w", err)
 	}
 
@@ -788,9 +806,15 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 	// Get validator-root maps for attestations and sync committees, and the root-beacon object map
 	aggregatorMap, contributionMap, beaconObjects, err := r.expectedPostConsensusRootsAndBeaconObjects(ctx, logger)
 	if err != nil {
+		// terminal post-quorum failure → classify as failed, not stuck
+		r.markDutyFailed(err)
 		return fmt.Errorf("could not get expected post consensus roots and beacon objects: %w", err)
 	}
 	if len(beaconObjects) == 0 {
+		// Empty post-quorum (all beacon objects failed to build) is terminal and non-recoverable:
+		// committee_queue drops the message and terminates the runner on this error. Classify as
+		// failed (matching CommitteeRunner) rather than leaving the watcher to report a false stuck.
+		r.markDutyFailed(ErrNoValidDutiesToExecute)
 		return ErrNoValidDutiesToExecute
 	}
 
@@ -925,6 +949,8 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 		for {
 			select {
 			case <-ctx.Done():
+				// Only reachable on shutdown (ctx canceled) — the listener completes in ms and the
+				// duty deadline is ~1 epoch out — and markDutyFailed drops context.Canceled anyway.
 				return ctx.Err()
 			case err := <-errCh:
 				executionErr = err
@@ -972,7 +998,10 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 					contributionsToSubmit[signatureResult.validatorIndex][root] = signedContrib
 
 				default:
-					return fmt.Errorf("unexpected role type in post-consensus: %v", role)
+					// deterministic terminal invariant violation → classify as failed, not stuck
+					err := fmt.Errorf("unexpected role type in post-consensus: %v", role)
+					r.markDutyFailed(err)
+					return err
 				}
 			}
 		}
@@ -1043,6 +1072,17 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 	}
 
 	if executionErr != nil {
+		// Reconstruct-invalid-sigs is recoverable: FallBackAndVerifyEachSignature can drop the root
+		// below quorum, so a later partial-sig message re-crosses quorum and re-enters this loop to
+		// retry pending roots (already-submitted roots are skipped via HasSubmitted). Not markDutyFailed.
+		var specErr *spectypes.Error
+		if errors.As(executionErr, &specErr) && specErr.Code == spectypes.PostConsensusQuorumWithInvalidSignatures {
+			return executionErr
+		}
+		// Submit/construct/missing-object failures: reconstruction already succeeded so the root keeps
+		// its quorum and is never re-reported (runner.go:534 reports only on first quorum crossing), so
+		// the submit loop never revisits it and the duty never concludes → mark failed, not a false stuck.
+		r.markDutyFailed(executionErr)
 		return executionErr
 	}
 
