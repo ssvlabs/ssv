@@ -244,6 +244,14 @@ func TestProposerChecker_GloasDecodeError(t *testing.T) {
 	require.Error(t, checker.CheckValue(gloasProposerConsensusData(t, []byte{0x00, 0x01, 0x02})))
 }
 
+// A block whose own slot differs from the duty slot is rejected: the anti-harvest guard in
+// checkValidatorConsensusData (SIP #94 §4).
+func TestProposerChecker_GloasBlockSlotMismatch(t *testing.T) {
+	checker := newGloasProposerChecker(fakeSlashingSigner{})
+	err := checker.CheckValue(gloasProposerConsensusData(t, gloasBlockSSZ(t, gloasProposerSlot+1)))
+	require.ErrorContains(t, err, "does not match duty slot")
+}
+
 // --- envelope checker, §6 ---
 
 var envelopeValidatorPK = phase0.BLSPubKey{0x42}
