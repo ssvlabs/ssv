@@ -2,6 +2,7 @@ package goclient
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -89,4 +90,35 @@ func TestGloasOctetStreamHTTP_Non2xxIsError(t *testing.T) {
 
 	_, err := gloasOctetStreamHTTP(context.Background(), http.MethodGet, srv.URL, nil, nil)
 	require.ErrorContains(t, err, "status 400")
+}
+
+// A block the beacon node already knows (canonical) is treated as a successful submit: every operator
+// submits the decided block for redundancy, so non-leader duplicates must not surface as errors.
+func TestSubmitGloasBeaconBlock_AlreadyKnownIsSuccess(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = io.WriteString(w, `{"code":500,"message":"BLOCK_ERROR_ALREADY_KNOWN"}`) // Lodestar's response
+	}))
+	defer srv.Close()
+
+	require.NoError(t, submitGloasBeaconBlock(context.Background(), srv.URL, []byte{0x01, 0x02}))
+}
+
+// A genuine rejection (not "already known") still propagates as an error.
+func TestSubmitGloasBeaconBlock_RealErrorPropagates(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = io.WriteString(w, `{"code":400,"message":"invalid block"}`)
+	}))
+	defer srv.Close()
+
+	require.Error(t, submitGloasBeaconBlock(context.Background(), srv.URL, []byte{0x01, 0x02}))
+}
+
+func TestIsBlockAlreadyKnown(t *testing.T) {
+	require.False(t, isBlockAlreadyKnown(nil))
+	require.False(t, isBlockAlreadyKnown(errors.New("some other error")))
+	require.False(t, isBlockAlreadyKnown(&gloasHTTPError{statusCode: http.StatusBadRequest, body: "invalid block"}))
+	require.True(t, isBlockAlreadyKnown(&gloasHTTPError{statusCode: http.StatusInternalServerError, body: `{"message":"BLOCK_ERROR_ALREADY_KNOWN"}`}))
+	require.True(t, isBlockAlreadyKnown(&gloasHTTPError{statusCode: http.StatusAccepted, body: "block already known"}))
 }
