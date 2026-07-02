@@ -49,3 +49,32 @@ func TestSubmitProposerPreferences(t *testing.T) {
 	require.NoError(t, err)
 	require.JSONEq(t, string(want), string(gotBody))
 }
+
+func TestRequestProposerDutiesDependentRoot(t *testing.T) {
+	want := phase0.Root{0xde, 0xad, 0xbe, 0xef}
+
+	var gotMethod, gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod, gotPath = r.Method, r.URL.Path
+		// phase0.Root marshals to the "0x…" JSON string the endpoint returns.
+		_ = json.NewEncoder(w).Encode(map[string]any{"dependent_root": want, "data": []any{}})
+	}))
+	defer srv.Close()
+
+	got, err := requestProposerDutiesDependentRoot(context.Background(), srv.Client(), srv.URL, 3)
+	require.NoError(t, err)
+	require.Equal(t, http.MethodGet, gotMethod)
+	require.Equal(t, "/eth/v2/validator/duties/proposer/3", gotPath)
+	require.Equal(t, want, got)
+}
+
+// A dependent_root that is not a valid 32-byte "0x…" root is rejected (phase0.Root.UnmarshalJSON).
+func TestRequestProposerDutiesDependentRootRejectsMalformed(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, `{"dependent_root":"0x00","data":[]}`)
+	}))
+	defer srv.Close()
+
+	_, err := requestProposerDutiesDependentRoot(context.Background(), srv.Client(), srv.URL, 3)
+	require.Error(t, err)
+}
