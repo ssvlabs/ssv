@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -66,10 +67,28 @@ func requestGloasBeaconBlock(ctx context.Context, addr string, slot phase0.Slot,
 	return block, nil
 }
 
-// submitGloasBeaconBlock POSTs an SSZ-marshaled signed Gloas block to the publish endpoint.
+// submitGloasBeaconBlock POSTs an SSZ-marshaled signed Gloas block to the publish endpoint. A response
+// signalling the block is already known is treated as success: every operator submits the decided block
+// for liveness redundancy, so a non-leader's submit legitimately races the canonical one, and some beacon
+// nodes (e.g. Lodestar) report that duplicate as an error rather than deduping silently.
 func submitGloasBeaconBlock(ctx context.Context, addr string, blockSSZ []byte) error {
 	_, err := gloasOctetStreamHTTP(ctx, http.MethodPost, addr+gloasPublishBlockPath, blockSSZ, nil)
+	if isBlockAlreadyKnown(err) {
+		return nil
+	}
 	return err
+}
+
+// isBlockAlreadyKnown reports whether err is a beacon-node response signalling the submitted block is
+// already known (i.e. already canonical). Beacon-APIs has no standard code for this, so match on the
+// message: Lodestar returns 500 "BLOCK_ERROR_ALREADY_KNOWN".
+func isBlockAlreadyKnown(err error) bool {
+	var httpErr *gloasHTTPError
+	if !errors.As(err, &httpErr) {
+		return false
+	}
+	body := strings.ToLower(httpErr.body)
+	return strings.Contains(body, "already known") || strings.Contains(body, "already_known")
 }
 
 // gloasOctetStreamHTTP issues an octet-stream (SSZ) request to a Gloas produce/publish endpoint and returns
@@ -104,7 +123,19 @@ func gloasOctetStreamHTTP(ctx context.Context, method, url string, body []byte, 
 		return nil, fmt.Errorf("read response body: %w", err)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("%s %s: status %d: %s", method, url, resp.StatusCode, strings.TrimSpace(string(respBody)))
+		return nil, &gloasHTTPError{method: method, url: url, statusCode: resp.StatusCode, body: strings.TrimSpace(string(respBody))}
 	}
 	return respBody, nil
+}
+
+// gloasHTTPError is the error gloasOctetStreamHTTP returns for a non-2xx response. It exposes the status
+// code and body so callers can special-case specific beacon-node responses (see isBlockAlreadyKnown).
+type gloasHTTPError struct {
+	method, url string
+	statusCode  int
+	body        string
+}
+
+func (e *gloasHTTPError) Error() string {
+	return fmt.Sprintf("%s %s: status %d: %s", e.method, e.url, e.statusCode, e.body)
 }
