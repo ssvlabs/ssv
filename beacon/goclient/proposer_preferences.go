@@ -32,18 +32,23 @@ func (gc *GoClient) ProposerDutiesDependentRoot(ctx context.Context, epoch phase
 		dctx, cancel := context.WithTimeout(detached, gc.commonTimeout)
 		defer cancel()
 		return firstClientResult(dctx, gc, "ProposerDutiesDependentRoot", http.MethodGet, func(ctx context.Context, addr string) (phase0.Root, error) {
-			// phase0.Root.UnmarshalJSON parses and length-checks the "0x…" hex, so decode straight into it.
-			var resp struct {
-				DependentRoot phase0.Root `json:"dependent_root"`
-			}
-			url := addr + fmt.Sprintf("/eth/v2/validator/duties/proposer/%d", epoch)
-			if err := ptcDo(ctx, ptcHTTPClient, http.MethodGet, url, nil, nil, &resp); err != nil {
-				return phase0.Root{}, err
-			}
-			return resp.DependentRoot, nil
+			return requestProposerDutiesDependentRoot(ctx, ptcHTTPClient, addr, epoch)
 		})
 	})
 	return root, err
+}
+
+// requestProposerDutiesDependentRoot GETs the v2 proposer-duties response and returns its dependent_root.
+// phase0.Root.UnmarshalJSON parses and length-checks the "0x…" hex, so decode straight into it.
+func requestProposerDutiesDependentRoot(ctx context.Context, httpClient *http.Client, addr string, epoch phase0.Epoch) (phase0.Root, error) {
+	var resp struct {
+		DependentRoot phase0.Root `json:"dependent_root"`
+	}
+	url := addr + fmt.Sprintf("/eth/v2/validator/duties/proposer/%d", epoch)
+	if err := ptcDo(ctx, httpClient, http.MethodGet, url, nil, nil, &resp); err != nil {
+		return phase0.Root{}, err
+	}
+	return resp.DependentRoot, nil
 }
 
 // SubmitProposerPreferences broadcasts signed Gloas (ePBS) proposer preferences (SIP #94 §5) to every
