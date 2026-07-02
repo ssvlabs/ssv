@@ -511,9 +511,10 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 	// Get validator-root maps for attestations and sync committees, and the root-beacon object map
 	attestationMap, committeeMap, beaconObjects, err := r.expectedPostConsensusRootsAndBeaconObjects(ctx, logger)
 	if err != nil {
+		err = fmt.Errorf("could not get expected post consensus roots and beacon objects: %w", err)
 		// terminal post-quorum failure → classify as failed, not stuck
 		r.markDutyFailed(err)
-		return fmt.Errorf("could not get expected post consensus roots and beacon objects: %w", err)
+		return err
 	}
 	if len(beaconObjects) == 0 {
 		// terminal post-quorum failure → classify as failed, not stuck
@@ -524,7 +525,7 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 	attestationsToSubmit := make(map[phase0.ValidatorIndex]*spec.VersionedAttestation)
 	syncCommitteeMessagesToSubmit := make(map[phase0.ValidatorIndex]*altair.SyncCommitteeMessage)
 
-	var executionErr error
+	var recoverableErr, terminalErr error
 
 	span.SetAttributes(observability.BeaconBlockRootCountAttribute(len(roots)))
 	// For each root that got at least one quorum, find the duties associated to it and try to submit
@@ -646,7 +647,14 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 				r.markDutyFailed(err)
 				return err
 			case err := <-errCh:
-				executionErr = err
+				// errCh currently carries only the reconstruct-invalid-sigs error, which is recoverable;
+				// classify defensively by code so any other error arriving here is still treated as terminal.
+				var specErr *spectypes.Error
+				if errors.As(err, &specErr) && specErr.Code == spectypes.ReconstructSignatureErrorCode {
+					recoverableErr = err
+				} else {
+					terminalErr = err
+				}
 			case signatureResult, ok := <-signatureCh:
 				if !ok {
 					break listener
@@ -654,12 +662,12 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 
 				validatorObjects, exists := beaconObjects[signatureResult.validatorIndex]
 				if !exists {
-					executionErr = fmt.Errorf("could not find beacon object for validator index: %d", signatureResult.validatorIndex)
+					terminalErr = fmt.Errorf("could not find beacon object for validator index: %d", signatureResult.validatorIndex)
 					continue
 				}
 				sszObject, exists := validatorObjects[root]
 				if !exists {
-					executionErr = fmt.Errorf("could not find ssz object for root: %s", root)
+					terminalErr = fmt.Errorf("could not find ssz object for root: %s", root)
 					continue
 				}
 
@@ -678,7 +686,7 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 					att := sszObject.(*spec.VersionedAttestation)
 					att, err = specssv.VersionedAttestationWithSignature(att, signatureResult.signature)
 					if err != nil {
-						executionErr = fmt.Errorf("could not insert signature in versioned attestation")
+						terminalErr = fmt.Errorf("could not insert signature in versioned attestation")
 						continue
 					}
 
@@ -825,19 +833,23 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 		}
 	}
 
-	if executionErr != nil {
+	// A terminal error on any root wins over a recoverable one. executionErr used to be a single
+	// last-write-wins variable, so when a genuine failure and a recoverable reconstruct error happened
+	// in the same round, classification depended on goroutine/root ordering. Splitting the two keeps it
+	// deterministic — a real failure is always recorded as failed, never mislabeled as recoverable/stuck.
+	if terminalErr != nil {
+		// terminal post-quorum failure → classify as failed, not stuck
+		r.markDutyFailed(terminalErr)
+		return terminalErr
+	}
+	if recoverableErr != nil {
 		// Reconstruct-invalid-sigs is recoverable: FallBackAndVerifyEachSignature can drop the root
 		// below quorum, so a later partial-sig message re-crosses quorum and re-enters this loop to
 		// retry pending roots (already-submitted roots are skipped via HasSubmitted). ReconstructBeaconSig
-		// tags this with ReconstructSignatureErrorCode (spec expects code 32 for the committee role; the
-		// aggregator role uses PostConsensusQuorumWithInvalidSignatures instead). Not markDutyFailed.
-		var specErr *spectypes.Error
-		if errors.As(executionErr, &specErr) && specErr.Code == spectypes.ReconstructSignatureErrorCode {
-			return executionErr
-		}
-		// terminal post-quorum failure → classify as failed, not stuck
-		r.markDutyFailed(executionErr)
-		return executionErr
+		// tags this with ReconstructSignatureErrorCode (code 32 in the pinned ssv-spec). Not markDutyFailed.
+		// Note: the post-Boole AggregatorCommitteeRunner tags the analogous condition with
+		// PostConsensusQuorumWithInvalidSignatures (code 81) instead.
+		return recoverableErr
 	}
 
 	if r.HasSubmittedAllValidatorDuties(attestationMap, committeeMap) {
