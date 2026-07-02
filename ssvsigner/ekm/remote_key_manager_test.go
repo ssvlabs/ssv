@@ -1581,7 +1581,7 @@ func (s *RemoteKeyManagerTestSuite) TestGetForkInfoUsesGloasForkOnGloasEpoch() {
 	cfg := testBeaconConfig()
 	const gloasEpoch = phase0.Epoch(7)
 	gloasVersion := phase0.Version{7, 0, 0, 0}
-	cfg.Forks[gloasDataVersion] = phase0.Fork{
+	cfg.Forks[GloasDataVersion] = phase0.Fork{
 		Epoch:           gloasEpoch,
 		PreviousVersion: phase0.Version{6, 0, 0, 0},
 		CurrentVersion:  gloasVersion,

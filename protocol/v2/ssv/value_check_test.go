@@ -321,3 +321,10 @@ func TestEnvelopeChecker_DecodeError(t *testing.T) {
 	checker := newEnvelopeCheckerWithRoot(7, phase0.Root{0xaa})
 	require.Error(t, checker.CheckValue([]byte{0x00, 0x01}))
 }
+
+// ekm.GloasDataVersion is a hand-kept mirror of networkconfig.DataVersionGloas (the ssvsigner module has
+// its own go.mod and can't import networkconfig). If they drift, the remote signer resolves the wrong
+// fork/domain on Gloas slots, so guard the mirror here on the node side, where both are importable.
+func TestGloasDataVersionMirror(t *testing.T) {
+	require.Equal(t, networkconfig.DataVersionGloas, ekm.GloasDataVersion)
+}

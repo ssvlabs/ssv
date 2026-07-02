@@ -490,9 +490,10 @@ func (km *RemoteKeyManager) handleDomainProposer(
 	return ret, nil
 }
 
-// gloasDataVersion mirrors networkconfig.DataVersionGloas — the ssvsigner module has its own go.mod and
-// can't import the node-side placeholder. Remove once go-eth2-client ships a real spec.DataVersionGloas.
-const gloasDataVersion = spec.DataVersionFulu + 1
+// GloasDataVersion mirrors networkconfig.DataVersionGloas — the ssvsigner module has its own go.mod and
+// can't import the node-side placeholder, so a node-side test asserts the two stay equal. Remove once
+// go-eth2-client ships a real spec.DataVersionGloas.
+const GloasDataVersion = spec.DataVersionFulu + 1
 
 // GetForkInfo returns the ForkInfo for the epoch's active fork. Web3Signer derives the signing domain
 // from it, so on a Gloas epoch it must carry the Gloas fork: ForkAtEpoch's version list caps at Fulu
@@ -500,7 +501,7 @@ const gloasDataVersion = spec.DataVersionFulu + 1
 // duty under the wrong (Fulu) domain. Substitute the Gloas fork when it is configured and active.
 func (km *RemoteKeyManager) GetForkInfo(epoch phase0.Epoch) web3signer.ForkInfo {
 	_, currentFork := km.beaconConfig.ForkAtEpoch(epoch)
-	if gloasFork, ok := km.beaconConfig.ForkAtVersion(gloasDataVersion); ok && epoch >= gloasFork.Epoch {
+	if gloasFork, ok := km.beaconConfig.ForkAtVersion(GloasDataVersion); ok && epoch >= gloasFork.Epoch {
 		currentFork = &gloasFork
 	}
 
