@@ -7,9 +7,11 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
@@ -65,7 +67,39 @@ func TestSubmitExecutionPayloadEnvelope(t *testing.T) {
 	require.Equal(t, http.MethodPost, gotMethod)
 	require.Equal(t, "/eth/v1/beacon/execution_payload_envelopes", gotPath)
 	require.Equal(t, consensusVersionGloas, gotVersion)
-	require.Equal(t, "true", gotBlinded) // published as the blinded (stateful) body
+	require.Empty(t, gotBlinded) // full envelope, not blinded — no Eth-Execution-Payload-Blinded header
 	require.Equal(t, "application/octet-stream", gotContentType)
 	require.Equal(t, []byte{0x01, 0x02}, gotBody)
+}
+
+// The publish sends the full SignedExecutionPayloadEnvelope SSZ (what Lodestar v1.43.0 decodes), not the
+// blinded form the node signs over.
+func TestSubmitExecutionPayloadEnvelope_PublishesFullSignedEnvelope(t *testing.T) {
+	signed := &gloas.SignedExecutionPayloadEnvelope{
+		Message:   minimalExecutionPayloadEnvelope(),
+		Signature: phase0.BLSSignature{0x01},
+	}
+	wantBody, err := signed.MarshalSSZ()
+	require.NoError(t, err)
+
+	var gotBlinded string
+	var gotBody []byte
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotBlinded = r.Header.Get("Eth-Execution-Payload-Blinded")
+		gotBody, _ = io.ReadAll(r.Body)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	client := &aggregatorClientMock{}
+	gc := &GoClient{
+		log:             zap.NewNop(),
+		clients:         []Client{client},
+		clientAddresses: map[Client]string{client: srv.URL},
+		commonTimeout:   time.Second,
+	}
+
+	require.NoError(t, gc.SubmitExecutionPayloadEnvelope(t.Context(), signed))
+	require.Empty(t, gotBlinded, "publish must not blind the envelope")
+	require.Equal(t, wantBody, gotBody, "publish must send the full signed envelope SSZ")
 }
