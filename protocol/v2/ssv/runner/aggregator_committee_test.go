@@ -109,7 +109,7 @@ func (e *aggregatorCommitteeRunnerEnv) startAndFeedThroughConsensus(t *testing.T
 	require.NoError(t, e.runner.StartNewDuty(ctx, e.logger, duty, e.sampleKey.Threshold))
 
 	concluded := make(chan dutyConclusion, 1)
-	e.runner.BaseRunner.dutyConcluded = concluded
+	e.runner.dutyConcluded = concluded
 
 	for _, msg := range spectestingutils.AggregatorCommitteeInputForDuty(duty, e.keySetMap, version) {
 		switch msg.SSVMessage.MsgType {
@@ -121,6 +121,7 @@ func (e *aggregatorCommitteeRunnerEnv) startAndFeedThroughConsensus(t *testing.T
 			if psig.Type != spectypes.PostConsensusPartialSig {
 				require.NoError(t, e.runner.ProcessPreConsensus(ctx, e.logger, psig))
 			}
+		default:
 		}
 	}
 	return concluded
