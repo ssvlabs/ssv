@@ -313,8 +313,7 @@ func (h *ProposerHandler) processExecution(ctx context.Context, epoch phase0.Epo
 
 	duties := h.duties.CommitteeSlotDuties(epoch, slot)
 
-	// TEMP(ssvlabs/ssv#2901): per-slot dispatch diagnostic — remove after devnet confirmation.
-	h.logSlotDispatchDiagnostic(epoch, slot, duties)
+	h.logProposerSlotDispatch(epoch, slot, duties)
 
 	if duties == nil {
 		span.AddEvent("no duties available")
@@ -365,7 +364,7 @@ func (h *ProposerHandler) fetchAndProcessDuties(ctx context.Context, logger *zap
 	}
 	if len(allEligibleIndices) == 0 {
 		const eventMsg = "no eligible validators for epoch"
-		h.logNoEligibleDiagnostic(logger, targetEpoch) // TEMP(ssvlabs/ssv#2901): remove after devnet confirmation
+		h.logNoEligibleValidators(logger, targetEpoch)
 		span.AddEvent(eventMsg)
 		span.SetStatus(codes.Ok, "")
 		// No eligible validators yet — not a fulfilled fetch; caller retries on a later tick.
@@ -402,8 +401,7 @@ func (h *ProposerHandler) fetchAndProcessDuties(ctx context.Context, logger *zap
 	span.AddEvent("storing duties", trace.WithAttributes(observability.DutyCountAttribute(len(storeDuties))))
 	h.duties.Set(targetEpoch, storeDuties)
 
-	// TEMP(ssvlabs/ssv#2901): late-fetch / InCommittee-on-success diagnostic — remove after devnet confirmation.
-	h.logFetchDispatchDiagnostic(logger, targetEpoch, currentSlot, storeDuties)
+	h.logProposerFetchOutcome(logger, targetEpoch, currentSlot, storeDuties)
 
 	truncate := -1
 	if h.exporterMode {
@@ -421,12 +419,11 @@ func (h *ProposerHandler) fetchAndProcessDuties(ctx context.Context, logger *zap
 	return true, nil
 }
 
-// logNoEligibleDiagnostic is a TEMPORARY diagnostic (ssvlabs/ssv#2901) for the "every proposer slot missed
-// on the Gloas devnet" investigation. On zero eligible validators it dumps Validators() vs SelfValidators()
-// so a devnet run can distinguish metadata-not-synced-yet (shares present but IsAttesting=false; the retry
-// fix recovers these) from a diverging/empty Validators() view (self_attesting>0 yet none eligible; a
-// different root cause the retry would not fix). Remove once the root cause is confirmed on devnet.
-func (h *ProposerHandler) logNoEligibleDiagnostic(logger *zap.Logger, targetEpoch phase0.Epoch) {
+// logNoEligibleValidators logs (Debug) the validator-set counts behind a "no eligible validators for
+// epoch" outcome — total known validators vs this node's own, and how many of those are attesting — to
+// tell "shares present but metadata not synced yet" (recovers on retry) apart from "this node has
+// attesting validators yet none are eligible" (a different cause the retry would not fix).
+func (h *ProposerHandler) logNoEligibleValidators(logger *zap.Logger, targetEpoch phase0.Epoch) {
 	all := h.validatorProvider.Validators()
 	self := h.validatorProvider.SelfValidators()
 
@@ -437,46 +434,31 @@ func (h *ProposerHandler) logNoEligibleDiagnostic(logger *zap.Logger, targetEpoc
 		}
 	}
 
-	const sampleCap = 16
-	samples := make([]string, 0, min(len(all), sampleCap))
-	for i, s := range all {
-		if i >= sampleCap {
-			break
-		}
-		samples = append(samples, fmt.Sprintf("idx=%d status=%s hasMeta=%t attesting=%t liquidated=%t",
-			s.ValidatorIndex, s.Status, s.HasBeaconMetadata(), s.IsAttesting(targetEpoch), s.Liquidated))
-	}
-
-	logger.Debug("🔬 no eligible validators for epoch (diagnostic)",
+	logger.Debug("no eligible validators for epoch",
 		zap.Uint64("target_epoch", uint64(targetEpoch)),
 		zap.Int("validators_total", len(all)),
 		zap.Int("self_validators", len(self)),
 		zap.Int("self_attesting", selfAttesting),
-		zap.Strings("shares", samples),
 	)
 }
 
-// logSlotDispatchDiagnostic is a TEMPORARY diagnostic (ssvlabs/ssv#2901) for the "every proposer slot
-// missed on the Gloas devnet" investigation. On any slot for which this node holds a stored proposer duty
-// it records how the duty flows through the two execution gates — InCommittee (CommitteeSlotDuties) and
-// shouldExecute (the one-slot execution window) — so a devnet run can tell apart the candidate causes of a
-// missed proposal without guessing:
+// logProposerSlotDispatch logs (Debug) how this node's stored proposer duty for a slot flows through the
+// two execution gates — InCommittee (CommitteeSlotDuties) and shouldExecute's one-slot window:
 //
-//	stored_any>0, in_committee=0  → stored but dropped by the InCommittee flag (the PR-comment hypothesis)
-//	in_committee>0, executable=0  → in-committee but outside the one-slot window (resolved/fetched too late)
-//	executable>0                  → dispatched to the runner; any remaining loss is downstream (see the
-//	                                "🔧 executing validator duty" / "could not find validator" logs)
+//	stored_any>0, in_committee=0 → stored but dropped by the InCommittee flag
+//	in_committee>0, executable=0 → in-committee but outside the one-slot window (resolved/fetched too late)
+//	executable>0                 → dispatched to the runner (any further loss is downstream)
 //
-// It fires only on slots that actually carry a stored duty (SlotIndices short-circuits otherwise), so it is
-// not per-slot noise. Remove once the root cause is confirmed on devnet.
-func (h *ProposerHandler) logSlotDispatchDiagnostic(epoch phase0.Epoch, slot phase0.Slot, inCommittee []*eth2apiv1.ProposerDuty) {
+// It fires only on slots that carry a stored duty (SlotIndices short-circuits otherwise), so it is not
+// per-slot noise.
+func (h *ProposerHandler) logProposerSlotDispatch(epoch phase0.Epoch, slot phase0.Slot, inCommittee []*eth2apiv1.ProposerDuty) {
 	storedAny := h.duties.SlotIndices(epoch, slot)
 	if len(storedAny) == 0 {
-		return // no proposer duty stored for this slot — nothing was assigned to us here, nothing to diagnose
+		return // no proposer duty stored for this slot — nothing was assigned to us here
 	}
 
 	// Mirror shouldExecute's window (currentSlot == or +1 == duty.Slot) WITHOUT its warnMisalignedSlotAndDuty
-	// side effect, so the diagnostic never double-logs the misalignment warning the real dispatch loop emits.
+	// side effect, so this never double-logs the misalignment warning the real dispatch loop emits.
 	currentSlot := h.netCfg.EstimatedCurrentSlot()
 	executable := 0
 	for _, d := range inCommittee {
@@ -490,7 +472,7 @@ func (h *ProposerHandler) logSlotDispatchDiagnostic(epoch phase0.Epoch, slot pha
 		storedIdx[i] = uint64(idx)
 	}
 
-	h.logger.Debug("🔬 proposer slot dispatch (diagnostic)",
+	h.logger.Debug("proposer slot dispatch",
 		zap.Uint64("epoch", uint64(epoch)),
 		zap.Uint64("slot", uint64(slot)),
 		zap.Uint64("current_slot", uint64(currentSlot)),
@@ -501,13 +483,11 @@ func (h *ProposerHandler) logSlotDispatchDiagnostic(epoch phase0.Epoch, slot pha
 	)
 }
 
-// logFetchDispatchDiagnostic is a TEMPORARY diagnostic (ssvlabs/ssv#2901). Right after a fetch stores an
-// epoch's proposer duties it reports, for THIS node's in-committee duties, how many are for slots that have
-// already passed at fetch time (current_slot) — proposals whose one-slot execution window is already gone
-// (the "fetched too late" failure the retry fix does not address). It also surfaces the InCommittee split on
-// the fetch-SUCCESS path, which logNoEligibleDiagnostic (zero-eligible only) cannot see — so a run can
-// directly confirm or refute InCommittee=0 at loaded epochs. Remove once the root cause is confirmed.
-func (h *ProposerHandler) logFetchDispatchDiagnostic(logger *zap.Logger, targetEpoch phase0.Epoch, currentSlot phase0.Slot, stored []dutystore.StoreDuty[eth2apiv1.ProposerDuty]) {
+// logProposerFetchOutcome logs (Debug), right after a fetch stores an epoch's proposer duties, two
+// outcomes worth tracing: duties were stored but none are this node's (in_committee=0), and in-committee
+// duties for slots that already passed at fetch time — a guaranteed miss on a first fetch, benign on
+// routine reorg / validator-indices re-fetches.
+func (h *ProposerHandler) logProposerFetchOutcome(logger *zap.Logger, targetEpoch phase0.Epoch, currentSlot phase0.Slot, stored []dutystore.StoreDuty[eth2apiv1.ProposerDuty]) {
 	inCommittee := 0
 	alreadyPassed := make([]uint64, 0)
 	for _, d := range stored {
@@ -520,18 +500,18 @@ func (h *ProposerHandler) logFetchDispatchDiagnostic(logger *zap.Logger, targetE
 		}
 	}
 
-	// Fetched some duties, but none belong to this node — the InCommittee=0 case the PR comment posits.
+	// Fetched some duties, but none belong to this node.
 	if len(stored) > 0 && inCommittee == 0 {
-		logger.Debug("🔬 proposer fetch: stored duties but none in-committee (diagnostic)",
+		logger.Debug("proposer fetch: stored duties but none in-committee",
 			zap.Uint64("target_epoch", uint64(targetEpoch)),
 			zap.Int("stored_total", len(stored)),
 		)
 	}
 
 	// Fetched in-committee duties for slots that already passed — a guaranteed miss only on a first fetch;
-	// on routine re-fetches (reorg, validator-indices change) it is expected, so log at Debug, not Warn.
+	// on routine re-fetches (reorg, validator-indices change) it is expected, hence Debug, not Warn.
 	if len(alreadyPassed) > 0 {
-		logger.Debug("🔬 proposer fetch: in-committee duties for already-passed slots (diagnostic)",
+		logger.Debug("proposer fetch: in-committee duties for already-passed slots",
 			zap.Uint64("target_epoch", uint64(targetEpoch)),
 			zap.Uint64("current_slot", uint64(currentSlot)),
 			zap.Int("in_committee_total", inCommittee),
