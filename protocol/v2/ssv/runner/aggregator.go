@@ -120,8 +120,13 @@ func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.
 		return nil
 	}
 
-	// We have quorum and are committed to completing this duty here. The quorum above fires only once,
-	// so a terminal failure below won't be retried.
+	// We have quorum and are committed to completing this duty here, so this defer reports a terminal
+	// failure below as failed rather than letting it surface as a false "stuck".
+	// The one exception is a recoverable BLS-reconstruction failure: the fallback drops the offending
+	// partial sig(s) below quorum, so a later partial-sig message re-crosses quorum and re-enters here —
+	// those are tagged recoverableReconstructError and must not be recorded as failed (hence the guard).
+	// Shutdown (context cancellation) needs no special-casing — markDutyFailed drops a context.Canceled
+	// reason, so a duty aborted by shutdown isn't recorded as a failure.
 	defer func() {
 		if err != nil && !isRecoverableReconstructError(err) {
 			r.markDutyFailed(err)
@@ -309,8 +314,13 @@ func (r *AggregatorRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 		return nil
 	}
 
-	// We have quorum and are committed to completing this duty here. The quorum above fires only once,
-	// so a terminal failure below won't be retried.
+	// We have quorum and are committed to completing this duty here, so this defer reports a terminal
+	// failure below as failed rather than letting it surface as a false "stuck".
+	// The one exception is a recoverable BLS-reconstruction failure: the fallback drops the offending
+	// partial sig(s) below quorum, so a later partial-sig message re-crosses quorum and re-enters here —
+	// those are tagged recoverableReconstructError and must not be recorded as failed (hence the guard).
+	// Shutdown (context cancellation) needs no special-casing — markDutyFailed drops a context.Canceled
+	// reason, so a duty aborted by shutdown isn't recorded as a failure.
 	defer func() {
 		if err != nil && !isRecoverableReconstructError(err) {
 			r.markDutyFailed(err)
