@@ -23,6 +23,7 @@ import (
 	"github.com/ssvlabs/ssv/observability/log/fields/stringer"
 	"github.com/ssvlabs/ssv/observability/utils"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/utils/format"
 )
 
@@ -285,7 +286,8 @@ func Duties(epoch phase0.Epoch, duties []*spectypes.ValidatorDuty, truncateAfter
 		if i > 0 {
 			b.WriteString(", ")
 		}
-		b.WriteString(BuildDutyID(epoch, duty.Slot, duty.RunnerRole(), duty.ValidatorIndex))
+		// TODO(convergence unit 5): thread real fork bit instead of a literal false.
+		b.WriteString(BuildDutyID(epoch, duty.Slot, ssvtypes.RunnerRoleForValidatorDuty(duty, false), duty.ValidatorIndex))
 		if truncateAfter > 0 && i+1 >= truncateAfter {
 			b.WriteString(", (truncated) ...")
 			break

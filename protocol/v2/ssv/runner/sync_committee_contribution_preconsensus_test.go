@@ -16,7 +16,24 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
+
+// legacyTestingSyncCommitteeContributionDuty reconstructs the pre-AggregatorCommittee, per-validator
+// sync committee contribution duty fixture that v1.2.2's testingutils.TestingSyncCommitteeContributionDuty
+// used to provide. v1.2.3 replaced it with a batched types.AggregatorCommitteeDuty fixture, which our
+// (not yet merged, see convergence unit 5) SyncCommitteeAggregatorRunner cannot consume.
+var legacyTestingSyncCommitteeContributionDuty = spectypes.ValidatorDuty{
+	Type:                          spectypes.BNRoleSyncCommitteeContribution,
+	PubKey:                        spectestingutils.TestingValidatorPubKey,
+	Slot:                          spectestingutils.TestingDutySlot,
+	ValidatorIndex:                spectestingutils.TestingValidatorIndex,
+	CommitteeIndex:                3,
+	CommitteesAtSlot:              36,
+	CommitteeLength:               128,
+	ValidatorCommitteeIndex:       11,
+	ValidatorSyncCommitteeIndices: spectestingutils.TestingContributionProofIndexes,
+}
 
 // syncCommitteeContributionTestBeacon embeds the shared testing beacon node and
 // captures the (subnetIDs, selectionProofs) actually handed to
@@ -66,7 +83,12 @@ func TestSyncCommitteeAggregatorProcessPreConsensusSortsSubnetsForBeaconCall(t *
 	runner, keySet := newSyncCommitteeAggregatorRunnerForTest(t, testBeacon)
 
 	// Copy the shared fixture so we never alias/mutate package state across tests.
-	dutyVal := spectestingutils.TestingSyncCommitteeContributionDuty
+	//
+	// NOTE(convergence unit 0): v1.2.3 ssv-spec removed the per-validator
+	// testingutils.TestingSyncCommitteeContributionDuty fixture in favor of a batched
+	// AggregatorCommitteeDuty one; legacyTestingSyncCommitteeContributionDuty reconstructs
+	// the old fixture shape so this (not yet merged, see unit 5) runner test keeps compiling.
+	dutyVal := legacyTestingSyncCommitteeContributionDuty
 	require.NoError(t, runner.StartNewDuty(context.Background(), zap.NewNop(), &dutyVal, keySet.Threshold))
 
 	ctx := context.Background()
@@ -104,7 +126,7 @@ func newSyncCommitteeAggregatorRunnerForTest(
 ) (*SyncCommitteeAggregatorRunner, *spectestingutils.TestKeySet) {
 	t.Helper()
 
-	kit := newRunnerTestKit(t, spectypes.RoleSyncCommitteeContribution, testBeacon, nil)
+	kit := newRunnerTestKit(t, ssvtypes.RoleSyncCommitteeContribution, testBeacon, nil)
 	valCheck := ssv.NewSyncCommitteeContributionChecker(
 		kit.cfg.Beacon,
 		spectypes.ValidatorPK(spectestingutils.TestingValidatorPubKey),

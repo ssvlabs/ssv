@@ -221,7 +221,7 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 		r.cachedBlindedBlockSSZ = byts
 	}
 
-	input := &spectypes.ValidatorConsensusData{
+	input := &spectypes.ProposerConsensusData{
 		Duty:    *duty,
 		Version: blindedVBlk.Version,
 		DataSSZ: byts,
@@ -240,7 +240,7 @@ func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logge
 	span := trace.SpanFromContext(ctx)
 
 	span.AddEvent("processing QBFT consensus msg")
-	decided, decidedValue, err := r.baseConsensusMsgProcessing(ctx, logger, r.ValCheck.CheckValue, signedMsg, &spectypes.ValidatorConsensusData{})
+	decided, decidedValue, err := r.baseConsensusMsgProcessing(ctx, logger, r.ValCheck.CheckValue, signedMsg, &spectypes.ProposerConsensusData{})
 	if err != nil {
 		return fmt.Errorf("failed processing consensus message: %w", err)
 	}
@@ -391,7 +391,7 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 	// Other operators will keep submitting the blinded variant.
 	// TODO: should we send the block at all if we're not the leader? It's probably not effective but
 	//		I left it for now to keep backwards compatibility.
-	validatorConsensusData := &spectypes.ValidatorConsensusData{}
+	validatorConsensusData := &spectypes.ProposerConsensusData{}
 	err = validatorConsensusData.Decode(r.State.DecidedValue)
 	if err != nil {
 		return fmt.Errorf("could not decode decided validator consensus data: %w", err)
@@ -464,7 +464,7 @@ func (r *ProposerRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, p
 
 // expectedPostConsensusRootsAndDomain an INTERNAL function, returns the expected post-consensus roots to sign
 func (r *ProposerRunner) expectedPostConsensusRootsAndDomain(context.Context) ([]ssz.HashRoot, phase0.DomainType, error) {
-	validatorConsensusData := &spectypes.ValidatorConsensusData{}
+	validatorConsensusData := &spectypes.ProposerConsensusData{}
 	err := validatorConsensusData.Decode(r.State.DecidedValue)
 	if err != nil {
 		return nil, phase0.DomainType{}, fmt.Errorf("could not decode consensus data: %w", err)

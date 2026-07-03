@@ -427,6 +427,13 @@ func (c *Committee) validateMessage(msg *spectypes.SSVMessage) error {
 		return spectypes.NewError(spectypes.MessageIDCommitteeIDMismatchErrorCode, "msg ID doesn't match committee ID")
 	}
 
+	// TODO(convergence unit 5): RoleAggregatorCommittee is accepted here for parity with boole, but
+	// no such messages exist before the AggregatorCommittee runner lands.
+	role := msg.GetID().GetRoleType()
+	if role != spectypes.RoleCommittee && role != spectypes.RoleAggregatorCommittee {
+		return spectypes.NewError(spectypes.CommitteeWrongRoleErrorCode, "msg role is invalid")
+	}
+
 	if len(msg.GetData()) == 0 {
 		return errors.New("msg data is invalid")
 	}

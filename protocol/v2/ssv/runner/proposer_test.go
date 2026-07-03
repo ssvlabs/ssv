@@ -391,7 +391,7 @@ func setupRunnerForPostConsensus(
 	t *testing.T,
 	runner *ProposerRunner,
 	keySet *spectestingutils.TestKeySet,
-	consensusData *spectypes.ValidatorConsensusData,
+	consensusData *spectypes.ProposerConsensusData,
 	leaderID spectypes.OperatorID,
 ) {
 	t.Helper()

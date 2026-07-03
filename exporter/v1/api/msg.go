@@ -29,7 +29,7 @@ type ParticipantsAPI struct {
 	ValidatorPK string
 	Role        string
 	Message     specqbft.Message
-	FullData    *spectypes.ValidatorConsensusData
+	FullData    *spectypes.ProposerConsensusData
 }
 
 // NewParticipantsAPIMsg creates a new message in a new format from the given message.
@@ -77,7 +77,7 @@ func ParticipantsAPIData(domainType spectypes.DomainType, msgs ...qbftstorage.Pa
 				Identifier: msgID[:],
 				Round:      specqbft.FirstRound,
 			},
-			FullData: &spectypes.ValidatorConsensusData{
+			FullData: &spectypes.ProposerConsensusData{
 				Duty: spectypes.ValidatorDuty{
 					PubKey: blsPubKey,
 					Slot:   msg.Slot,

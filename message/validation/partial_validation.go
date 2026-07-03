@@ -13,6 +13,8 @@ import (
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 func (mv *messageValidator) validatePartialSignatureMessage(
@@ -214,7 +216,7 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 				return ErrTripleValidatorIndexInPartialSignatures
 			}
 		}
-	} else if signedSSVMessage.SSVMessage.MsgID.GetRoleType() == spectypes.RoleSyncCommitteeContribution {
+	} else if signedSSVMessage.SSVMessage.MsgID.GetRoleType() == ssvtypes.RoleSyncCommitteeContribution {
 		// Rule: The number of signatures must be <= MaxSignaturesInSyncCommitteeContribution for the sync committee contribution duty
 		if partialSignatureMessageCount > maxSignatures {
 			e := ErrTooManySignaturesInPartialSigMessage
@@ -241,7 +243,7 @@ func validatePartialSignatureMessageLimit(
 	signerState *SignerStateForSlotRound,
 ) error {
 	switch m.Type {
-	case spectypes.RandaoPartialSig, spectypes.SelectionProofPartialSig, spectypes.ContributionProofs,
+	case spectypes.RandaoPartialSig, ssvtypes.SelectionProofPartialSig, ssvtypes.ContributionProofs,
 		spectypes.ValidatorRegistrationPartialSig, spectypes.VoluntaryExitPartialSig:
 		if signerState.Peer(receivedFrom).SeenMsgTypes.reachedPreConsensusLimit() {
 			// Check if the same peer is sending us a "logical duplicate" message, reject message to punish.
@@ -313,8 +315,8 @@ func (mv *messageValidator) validPartialSigMsgType(msgType spectypes.PartialSigM
 	switch msgType {
 	case spectypes.PostConsensusPartialSig,
 		spectypes.RandaoPartialSig,
-		spectypes.SelectionProofPartialSig,
-		spectypes.ContributionProofs,
+		ssvtypes.SelectionProofPartialSig,
+		ssvtypes.ContributionProofs,
 		spectypes.ValidatorRegistrationPartialSig,
 		spectypes.VoluntaryExitPartialSig:
 		return true
@@ -327,12 +329,12 @@ func (mv *messageValidator) partialSignatureTypeMatchesRole(msgType spectypes.Pa
 	switch role {
 	case spectypes.RoleCommittee:
 		return msgType == spectypes.PostConsensusPartialSig
-	case spectypes.RoleAggregator:
-		return msgType == spectypes.PostConsensusPartialSig || msgType == spectypes.SelectionProofPartialSig
+	case ssvtypes.RoleAggregator:
+		return msgType == spectypes.PostConsensusPartialSig || msgType == ssvtypes.SelectionProofPartialSig
 	case spectypes.RoleProposer:
 		return msgType == spectypes.PostConsensusPartialSig || msgType == spectypes.RandaoPartialSig
-	case spectypes.RoleSyncCommitteeContribution:
-		return msgType == spectypes.PostConsensusPartialSig || msgType == spectypes.ContributionProofs
+	case ssvtypes.RoleSyncCommitteeContribution:
+		return msgType == spectypes.PostConsensusPartialSig || msgType == ssvtypes.ContributionProofs
 	case spectypes.RoleValidatorRegistration:
 		return msgType == spectypes.ValidatorRegistrationPartialSig
 	case spectypes.RoleVoluntaryExit:

@@ -476,7 +476,8 @@ func (s *Scheduler) ExecuteDuties(ctx context.Context, duties []*spectypes.Valid
 		logger.Debug(eventMsg)
 		span.AddEvent(eventMsg)
 
-		role := duty.RunnerRole()
+		// TODO(convergence unit 5): thread real fork bit instead of a literal false.
+		role := types.RunnerRoleForValidatorDuty(duty, false)
 		slotDelay := time.Since(s.beaconConfig.SlotStartTime(duty.Slot))
 
 		// For roles where duty.Slot is a shared coordination point rather
@@ -563,11 +564,13 @@ func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, duties committee
 
 // loggerWithDutyContext returns an instance of logger with the given duty's information
 func (s *Scheduler) loggerWithDutyContext(duty *spectypes.ValidatorDuty) *zap.Logger {
+	// TODO(convergence unit 5): thread real fork bit instead of a literal false.
+	role := types.RunnerRoleForValidatorDuty(duty, false)
 	dutyEpoch := s.beaconConfig.EstimatedEpochAtSlot(duty.Slot)
-	dutyID := fields.BuildDutyID(dutyEpoch, duty.Slot, duty.RunnerRole(), duty.ValidatorIndex)
+	dutyID := fields.BuildDutyID(dutyEpoch, duty.Slot, role, duty.ValidatorIndex)
 
 	return s.logger.
-		With(fields.RunnerRole(duty.RunnerRole())).
+		With(fields.RunnerRole(role)).
 		With(fields.Slot(duty.Slot)).
 		With(fields.DutyID(dutyID)).
 		With(fields.PubKey(duty.PubKey[:])).

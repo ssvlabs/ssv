@@ -42,7 +42,7 @@ func TestValidatorDuty(t *testing.T) {
 
 	const (
 		slot         = phase0.Slot(1)
-		role, bnRole = spectypes.RoleAggregator, spectypes.BNRoleAggregator
+		role, bnRole = ssvtypes.RoleAggregator, spectypes.BNRoleAggregator
 		vIndex       = phase0.ValidatorIndex(55)
 	)
 
@@ -337,7 +337,7 @@ func TestValidatorDuty(t *testing.T) {
 
 		proposalMsg.Data = data
 
-		pData, err := new(spectypes.ValidatorConsensusData).Encode()
+		pData, err := new(spectypes.ProposerConsensusData).Encode()
 		require.NoError(t, err)
 
 		proposalMsg.SignedSSVMessage.FullData = pData
@@ -377,7 +377,7 @@ func TestValidatorDuties(t *testing.T) {
 
 	const (
 		slot         = phase0.Slot(1)
-		role, bnRole = spectypes.RoleAggregator, spectypes.BNRoleAggregator
+		role, bnRole = ssvtypes.RoleAggregator, spectypes.BNRoleAggregator
 		vIndex       = phase0.ValidatorIndex(55)
 	)
 
@@ -1302,8 +1302,8 @@ func TestValidatorDutyTrace_toBNRole(t *testing.T) {
 		err  bool
 	}{
 		{spectypes.RoleProposer, spectypes.BNRoleProposer, false},
-		{spectypes.RoleAggregator, spectypes.BNRoleAggregator, false},
-		{spectypes.RoleSyncCommitteeContribution, spectypes.BNRoleSyncCommitteeContribution, false},
+		{ssvtypes.RoleAggregator, spectypes.BNRoleAggregator, false},
+		{ssvtypes.RoleSyncCommitteeContribution, spectypes.BNRoleSyncCommitteeContribution, false},
 		{spectypes.RoleValidatorRegistration, spectypes.BNRoleValidatorRegistration, false},
 		{spectypes.RoleVoluntaryExit, spectypes.BNRoleVoluntaryExit, false},
 		{spectypes.RoleCommittee, spectypes.BNRoleUnknown, true},
@@ -1324,7 +1324,7 @@ func TestCollector_newPartialSigVerifyCtx_EmptyMessages(t *testing.T) {
 	collector := &Collector{logger: zap.NewNop()}
 	msg := &queue.SSVMessage{
 		SSVMessage: &spectypes.SSVMessage{
-			MsgID: spectypes.NewMsgID([4]byte{}, []byte("pk"), spectypes.RoleAggregator),
+			MsgID: spectypes.NewMsgID([4]byte{}, []byte("pk"), ssvtypes.RoleAggregator),
 		},
 	}
 	pSigMessages := &spectypes.PartialSignatureMessages{
@@ -1337,7 +1337,7 @@ func TestCollector_newPartialSigVerifyCtx_EmptyMessages(t *testing.T) {
 		got = collector.newPartialSigVerifyCtx(msg, pSigMessages)
 	})
 
-	require.Equal(t, spectypes.RoleAggregator, got.runnerRole)
+	require.Equal(t, ssvtypes.RoleAggregator, got.runnerRole)
 	require.Equal(t, phase0.Slot(12), got.slot)
 	require.Zero(t, got.signer)
 	require.Zero(t, got.root)
@@ -1368,7 +1368,7 @@ func TestCollector_Collect_WrapVerifyPartialSigErrForValidator(t *testing.T) {
 	validators.EXPECT().ValidatorByIndex(missingIndex).Return(nil, false)
 
 	collector := New(logger, validators, nil, new(mockDutyTraceStore), networkconfig.TestNetwork.Beacon, nil, nil)
-	msgID := spectypes.NewMsgID([4]byte{}, []byte("pk"), spectypes.RoleAggregator)
+	msgID := spectypes.NewMsgID([4]byte{}, []byte("pk"), ssvtypes.RoleAggregator)
 	pSigMessages := &spectypes.PartialSignatureMessages{
 		Type: spectypes.PostConsensusPartialSig,
 		Slot: slot,
@@ -1397,7 +1397,7 @@ func TestCollector_Collect_WrapVerifyPartialSigErrForValidator(t *testing.T) {
 	require.ErrorIs(t, err, verifyErr)
 	require.ErrorContains(t, err, "verify partial sig")
 	require.ErrorContains(t, err, fmt.Sprintf("slot=%d", slot))
-	require.ErrorContains(t, err, fmt.Sprintf("runner_role=%d", spectypes.RoleAggregator))
+	require.ErrorContains(t, err, fmt.Sprintf("runner_role=%d", ssvtypes.RoleAggregator))
 	require.ErrorContains(t, err, fmt.Sprintf("signer=%d", signer))
 	require.ErrorContains(t, err, fmt.Sprintf("root=%x", root))
 	require.ErrorContains(t, err, "partial_msgs=2")

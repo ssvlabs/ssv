@@ -208,16 +208,21 @@ func (ncv *CommitteeObserver) getBeaconRoles(msg *queue.SSVMessage, root phase0.
 		default:
 			return nil
 		}
-	case spectypes.RoleAggregator:
+	// TODO(convergence unit 5): enable AggregatorCommittee handling.
+	case spectypes.RoleAggregatorCommittee:
+		return nil
+	case ssvtypes.RoleAggregator:
 		return []spectypes.BeaconRole{spectypes.BNRoleAggregator}
 	case spectypes.RoleProposer:
 		return []spectypes.BeaconRole{spectypes.BNRoleProposer}
-	case spectypes.RoleSyncCommitteeContribution:
+	case ssvtypes.RoleSyncCommitteeContribution:
 		return []spectypes.BeaconRole{spectypes.BNRoleSyncCommitteeContribution}
 	case spectypes.RoleValidatorRegistration:
 		return []spectypes.BeaconRole{spectypes.BNRoleValidatorRegistration}
 	case spectypes.RoleVoluntaryExit:
 		return []spectypes.BeaconRole{spectypes.BNRoleVoluntaryExit}
+	case spectypes.RoleUnknown:
+		return nil
 	}
 
 	return nil

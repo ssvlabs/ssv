@@ -359,11 +359,11 @@ func (c *Controller) handleRouterMessages() {
 }
 
 var nonCommitteeValidatorTTLs = map[spectypes.RunnerRole]int{
-	spectypes.RoleCommittee:  64,
-	spectypes.RoleProposer:   4,
-	spectypes.RoleAggregator: 4,
+	spectypes.RoleCommittee: 64,
+	spectypes.RoleProposer:  4,
+	ssvtypes.RoleAggregator: 4,
 	//spectypes.BNRoleSyncCommittee:             4,
-	spectypes.RoleSyncCommitteeContribution: 4,
+	ssvtypes.RoleSyncCommitteeContribution: 4,
 }
 
 func (c *Controller) handleWorkerMessages(ctx context.Context, msg network.DecodedSSVMessage) error {
@@ -620,12 +620,14 @@ func (c *Controller) GetValidator(pubKey spectypes.ValidatorPK) (*validator.Vali
 }
 
 func (c *Controller) ExecuteDuty(ctx context.Context, logger *zap.Logger, duty *spectypes.ValidatorDuty) {
+	// TODO(convergence unit 5): thread real fork bit instead of a literal false.
+	runnerRole := ssvtypes.RunnerRoleForValidatorDuty(duty, false)
 	dutyEpoch := c.networkConfig.EstimatedEpochAtSlot(duty.Slot)
-	dutyID := fields.BuildDutyID(c.networkConfig.EstimatedEpochAtSlot(duty.Slot), duty.Slot, duty.RunnerRole(), duty.ValidatorIndex)
+	dutyID := fields.BuildDutyID(c.networkConfig.EstimatedEpochAtSlot(duty.Slot), duty.Slot, runnerRole, duty.ValidatorIndex)
 	ctx, span := tracer.Start(traces.Context(ctx, dutyID),
 		observability.InstrumentName(observabilityNamespace, "execute_duty"),
 		trace.WithAttributes(
-			observability.RunnerRoleAttribute(duty.RunnerRole()),
+			observability.RunnerRoleAttribute(runnerRole),
 			observability.BeaconRoleAttribute(duty.Type),
 			observability.CommitteeIndexAttribute(duty.CommitteeIndex),
 			observability.BeaconEpochAttribute(dutyEpoch),
@@ -1100,8 +1102,8 @@ func SetupRunners(
 
 	runnersType := []spectypes.RunnerRole{
 		spectypes.RoleProposer,
-		spectypes.RoleAggregator,
-		spectypes.RoleSyncCommitteeContribution,
+		ssvtypes.RoleAggregator,
+		ssvtypes.RoleSyncCommitteeContribution,
 		spectypes.RoleValidatorRegistration,
 		spectypes.RoleVoluntaryExit,
 	}
@@ -1150,19 +1152,19 @@ func SetupRunners(
 				Graffiti:            options.Graffiti,
 				ProposerDelay:       options.ProposerDelay,
 			})
-		case spectypes.RoleAggregator:
+		case ssvtypes.RoleAggregator:
 			aggregatorValueChecker := ssv.NewAggregatorChecker(options.NetworkConfig.Beacon, share.ValidatorPubKey, share.ValidatorIndex)
 			runners[role], err = runner.NewAggregatorRunner(runner.AggregatorRunnerOptions{
 				BaseRunnerOptions:  baseOpts,
-				QBFTController:     buildController(spectypes.RoleAggregator),
+				QBFTController:     buildController(ssvtypes.RoleAggregator),
 				ValCheck:           aggregatorValueChecker,
 				HighestDecidedSlot: 0,
 			})
-		case spectypes.RoleSyncCommitteeContribution:
+		case ssvtypes.RoleSyncCommitteeContribution:
 			syncCommitteeContributionValueChecker := ssv.NewSyncCommitteeContributionChecker(options.NetworkConfig.Beacon, share.ValidatorPubKey, share.ValidatorIndex)
 			runners[role], err = runner.NewSyncCommitteeAggregatorRunner(runner.SyncCommitteeAggregatorRunnerOptions{
 				BaseRunnerOptions:  baseOpts,
-				QBFTController:     buildController(spectypes.RoleSyncCommitteeContribution),
+				QBFTController:     buildController(ssvtypes.RoleSyncCommitteeContribution),
 				ValCheck:           syncCommitteeContributionValueChecker,
 				HighestDecidedSlot: 0,
 			})

@@ -129,7 +129,7 @@ func normalizeProposerConsensusValue(value []byte) []byte {
 	if len(value) == 0 {
 		return value
 	}
-	cd := &spectypes.ValidatorConsensusData{}
+	cd := &spectypes.ProposerConsensusData{}
 	if err := cd.Decode(value); err != nil {
 		return value
 	}

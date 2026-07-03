@@ -7,6 +7,8 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 func (mv *messageValidator) committeeRole(role spectypes.RunnerRole) bool {
@@ -38,11 +40,12 @@ func (mv *messageValidator) messageEarliness(slot phase0.Slot, receivedAt time.T
 func (mv *messageValidator) messageLateness(slot phase0.Slot, role spectypes.RunnerRole, receivedAt time.Time) time.Duration {
 	var ttl uint64
 	switch role {
-	case spectypes.RoleProposer, spectypes.RoleSyncCommitteeContribution:
+	case spectypes.RoleProposer, ssvtypes.RoleSyncCommitteeContribution:
 		ttl = 1 + LateSlotAllowance
-	case spectypes.RoleCommittee, spectypes.RoleAggregator:
+	// TODO(convergence unit 5): enable AggregatorCommittee handling.
+	case spectypes.RoleCommittee, spectypes.RoleAggregatorCommittee, ssvtypes.RoleAggregator:
 		ttl = mv.maxStoredSlots()
-	case spectypes.RoleValidatorRegistration, spectypes.RoleVoluntaryExit:
+	default:
 		return 0
 	}
 
@@ -90,7 +93,7 @@ func (mv *messageValidator) dutyLimit(msgID spectypes.MessageID, slot phase0.Slo
 
 		return mv.dutyStore.VoluntaryExit.GetDutyCount(slot, pk), true
 
-	case spectypes.RoleAggregator, spectypes.RoleValidatorRegistration:
+	case ssvtypes.RoleAggregator, spectypes.RoleValidatorRegistration:
 		return 2, true
 
 	case spectypes.RoleCommittee:
@@ -146,7 +149,7 @@ func (mv *messageValidator) validateBeaconDuty(
 	}
 
 	// Rule: For a sync committee aggregation duty message, we check if the validator is assigned to it
-	if role == spectypes.RoleSyncCommitteeContribution {
+	if role == ssvtypes.RoleSyncCommitteeContribution {
 		period := mv.netCfg.EstimatedSyncCommitteePeriodAtEpoch(epoch)
 		// Non-committee roles always have one validator index.
 		validatorIndex := indices[0]

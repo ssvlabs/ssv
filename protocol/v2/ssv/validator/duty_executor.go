@@ -28,7 +28,8 @@ func (v *Validator) ExecuteDuty(ctx context.Context, logger *zap.Logger, duty *s
 		return fmt.Errorf("decode duty execute msg: %w", err)
 	}
 
-	if pushed := v.Queues[duty.RunnerRole()].TryPush(dec); !pushed {
+	// TODO(convergence unit 5): thread real fork bit instead of a literal false.
+	if pushed := v.Queues[types.RunnerRoleForValidatorDuty(duty, false)].TryPush(dec); !pushed {
 		return fmt.Errorf("dropping ExecuteDuty message for validator %s because the queue is full", duty.PubKey.String())
 	}
 
@@ -51,7 +52,8 @@ func (v *Validator) OnExecuteDuty(ctx context.Context, logger *zap.Logger, msg *
 
 	span.SetAttributes(
 		observability.BeaconSlotAttribute(duty.Slot),
-		observability.RunnerRoleAttribute(duty.RunnerRole()),
+		// TODO(convergence unit 5): thread real fork bit instead of a literal false.
+		observability.RunnerRoleAttribute(types.RunnerRoleForValidatorDuty(duty, false)),
 	)
 
 	// force the validator to be started (subscribed to validator's topic and synced)
@@ -77,7 +79,8 @@ func createDutyExecuteMsg(duty *spectypes.ValidatorDuty, pubKey phase0.BLSPubKey
 		return nil, fmt.Errorf("failed to marshal execute duty data: %w", err)
 	}
 
-	return dutyDataToSSVMsg(domain, pubKey[:], duty.RunnerRole(), data)
+	// TODO(convergence unit 5): thread real fork bit instead of a literal false.
+	return dutyDataToSSVMsg(domain, pubKey[:], types.RunnerRoleForValidatorDuty(duty, false), data)
 }
 
 func dutyDataToSSVMsg(

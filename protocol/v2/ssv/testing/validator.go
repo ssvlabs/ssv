@@ -37,12 +37,12 @@ var BaseValidator = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet
 			},
 			spectestingutils.TestingCommitteeMember(keySet),
 			map[spectypes.RunnerRole]runner.Runner{
-				spectypes.RoleCommittee:                 CommitteeRunner(logger, keySet),
-				spectypes.RoleProposer:                  ProposerRunner(logger, keySet),
-				spectypes.RoleAggregator:                AggregatorRunner(logger, keySet),
-				spectypes.RoleSyncCommitteeContribution: SyncCommitteeContributionRunner(logger, keySet),
-				spectypes.RoleValidatorRegistration:     ValidatorRegistrationRunner(logger, keySet),
-				spectypes.RoleVoluntaryExit:             VoluntaryExitRunner(logger, keySet),
+				spectypes.RoleCommittee:             CommitteeRunner(logger, keySet),
+				spectypes.RoleProposer:              ProposerRunner(logger, keySet),
+				types.RoleAggregator:                AggregatorRunner(logger, keySet),
+				types.RoleSyncCommitteeContribution: SyncCommitteeContributionRunner(logger, keySet),
+				spectypes.RoleValidatorRegistration: ValidatorRegistrationRunner(logger, keySet),
+				spectypes.RoleVoluntaryExit:         VoluntaryExitRunner(logger, keySet),
 			}),
 	)
 }

@@ -11,6 +11,7 @@ import (
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
 	"github.com/ssvlabs/ssv/networkconfig"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 type ValueChecker interface {
@@ -171,12 +172,12 @@ func checkValidatorConsensusData(
 	expectedType spectypes.BeaconRole,
 	validatorPK spectypes.ValidatorPK,
 	validatorIndex phase0.ValidatorIndex,
-) (*spectypes.ValidatorConsensusData, error) {
-	cd := &spectypes.ValidatorConsensusData{}
+) (*spectypes.ProposerConsensusData, error) {
+	cd := &spectypes.ProposerConsensusData{}
 	if err := cd.Decode(value); err != nil {
 		return nil, fmt.Errorf("failed decoding consensus data: %w", err)
 	}
-	if err := cd.Validate(); err != nil {
+	if err := ssvtypes.ValidateConsensusData(cd); err != nil {
 		return cd, spectypes.NewError(spectypes.QBFTValueInvalidErrorCode, "invalid value")
 	}
 

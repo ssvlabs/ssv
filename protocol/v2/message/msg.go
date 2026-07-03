@@ -5,6 +5,8 @@ import (
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 const (
@@ -67,11 +69,11 @@ func RunnerRoleToString(r spectypes.RunnerRole) string {
 	switch r {
 	case spectypes.RoleCommittee:
 		return "COMMITTEE"
-	case spectypes.RoleAggregator:
+	case ssvtypes.RoleAggregator:
 		return "AGGREGATOR"
 	case spectypes.RoleProposer:
 		return "PROPOSER"
-	case spectypes.RoleSyncCommitteeContribution:
+	case ssvtypes.RoleSyncCommitteeContribution:
 		return "SYNC_COMMITTEE_CONTRIBUTION"
 	case spectypes.RoleValidatorRegistration:
 		return "VALIDATOR_REGISTRATION"
