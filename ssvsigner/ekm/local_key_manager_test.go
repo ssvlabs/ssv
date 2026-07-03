@@ -345,7 +345,7 @@ type gloasBlockStub struct {
 	*phase0.BeaconBlockHeader
 }
 
-func (b gloasBlockStub) BlockSlot() phase0.Slot { return b.BeaconBlockHeader.Slot }
+func (b gloasBlockStub) BlockSlot() phase0.Slot { return b.Slot }
 
 // newLocalKeyManagerWithShare returns a LocalKeyManager with sk1 added as a share, plus its public key.
 func newLocalKeyManagerWithShare(t *testing.T) (*LocalKeyManager, phase0.BLSPubKey) {
