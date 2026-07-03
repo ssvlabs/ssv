@@ -347,7 +347,7 @@ func (f *EventFeed[T]) FanOut(ctx context.Context, in <-chan T) {
 	}
 }
 
-// SlotTicker advances "head" slot every slot-tick once we are 1/3 of slot-time past slot start
+// SlotTicker advances "head" slot every slot-tick once we are one interval past slot start
 // and only if necessary. Normally Beacon node events would trigger "head" slot updates, but in
 // case event is delayed or didn't arrive for some reason we still need to advance "head" slot
 // for duties to keep executing normally - so SlotTicker is a secondary mechanism for that.

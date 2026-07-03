@@ -83,9 +83,9 @@ func (gc *GoClient) SubmitSignedAggregateSelectionProof(
 }
 
 // waitIntoSlot waits until the given number of intervals into the slot has transpired
-// (intervals * IntervalDuration after the start of the slot): intervals=1 is one interval in
-// (attestation/contribution deadline), intervals=2 is two intervals in (aggregate broadcast
-// deadline). IntervalDuration is 1/3 of the slot before Gloas, 1/4 from Gloas on (SIP #94 §1).
+// (intervals * IntervalDuration after the start of the slot): intervals=1 is the attestation and
+// sync-message deadline, intervals=2 the aggregation and contribution deadline. IntervalDuration
+// is 1/3 of the slot before Gloas, 1/4 from Gloas on (SIP #94 §1).
 func (gc *GoClient) waitIntoSlot(ctx context.Context, slot phase0.Slot, intervals int) error {
 	config := gc.getBeaconConfig()
 	finalTime := config.SlotStartTime(slot).Add(time.Duration(intervals) * config.IntervalDuration(slot))
@@ -148,6 +148,11 @@ func (gc *GoClient) computeAttestationDataRoot(
 // cluster-decided value): the beacon node then holds at least our own attestation matching it.
 // Re-deriving the data locally can yield a root nobody attested with, which the node answers
 // with a 404 (no matching aggregate).
+//
+// A cache hit only guarantees that *some* beacon node accepted the attestation. The
+// AggregateAttestation request below is routed to the single highest-scored client and does
+// not fail over on 4xx, so it can still 404 if that node hasn't ingested the attestation yet
+// (gossip backfill before the aggregation deadline makes this rare).
 func (gc *GoClient) fetchVersionedAggregate(
 	ctx context.Context,
 	slot phase0.Slot,
