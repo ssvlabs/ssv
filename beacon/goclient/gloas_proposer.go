@@ -68,7 +68,7 @@ func requestGloasBeaconBlock(ctx context.Context, addr string, slot phase0.Slot,
 }
 
 // submitGloasBeaconBlock POSTs an SSZ-marshaled signed Gloas block to the publish endpoint. A response
-// signalling the block is already known is treated as success: every operator submits the decided block
+// signaling the block is already known is treated as success: every operator submits the decided block
 // for liveness redundancy, so a non-leader's submit legitimately races the canonical one, and some beacon
 // nodes (e.g. Lodestar) report that duplicate as an error rather than deduping silently.
 func submitGloasBeaconBlock(ctx context.Context, addr string, blockSSZ []byte) error {
@@ -79,7 +79,7 @@ func submitGloasBeaconBlock(ctx context.Context, addr string, blockSSZ []byte) e
 	return err
 }
 
-// isBlockAlreadyKnown reports whether err is a beacon-node response signalling the submitted block is
+// isBlockAlreadyKnown reports whether err is a beacon-node response signaling the submitted block is
 // already known (i.e. already canonical). Beacon-APIs has no standard code for this, so match on the
 // message: Lodestar returns 500 "BLOCK_ERROR_ALREADY_KNOWN".
 func isBlockAlreadyKnown(err error) bool {
