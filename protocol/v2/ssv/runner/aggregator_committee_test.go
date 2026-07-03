@@ -208,6 +208,69 @@ func TestAggregatorCommitteeRunnerProcessPostConsensus_DoesNotMarkFailedOnInvali
 	require.False(t, env.runner.State.Succeeded)
 }
 
+// TestAggregatorCommitteeRunnerProcessPostConsensus_RecoverableInvalidSigsThenSucceeds is the
+// regression test for the last coverage gap on #2919/#2918: a quorum that optimistically crosses
+// threshold but contains one non-deserializable partial signature must NOT conclude the duty (the
+// offending signer is dropped by FallBackAndVerifyEachSignature, so the root falls back below
+// quorum and the duty is left un-marked, recoverable), and a subsequent valid partial signature that
+// re-crosses quorum must let the duty conclude succeeded. This mirrors
+// TestCommitteeRunnerProcessPostConsensus_RecoverableInvalidSigsThenSucceeds
+// (committee_postconsensus_classification_test.go) for the aggregator-committee runner, closing the
+// gap left by TestAggregatorCommitteeRunnerProcessPostConsensus_DoesNotMarkFailedOnInvalidSigs above,
+// which only proves the "stays un-marked" half and never re-attempts a successful retry.
+func TestAggregatorCommitteeRunnerProcessPostConsensus_RecoverableInvalidSigsThenSucceeds(t *testing.T) {
+	ctx := t.Context()
+	const version = spec.DataVersionElectra
+
+	// A healthy (non-faulty) beacon node: submission on the retry round must actually succeed.
+	base := protocoltesting.NewTestingBeaconNodeWrapped().(*protocoltesting.BeaconNodeWrapped)
+	env := newAggregatorCommitteeRunnerEnv(t, []int{1}, base)
+	duty := spectestingutils.TestingAggregatorCommitteeDutyForValidators([]int{1}, []int{}, version)
+
+	concluded := env.startAndFeedThroughConsensus(t, ctx, duty, version)
+
+	// Round 1: signers 1 and 2 send valid post-consensus partial sigs; signer 3 sends a
+	// non-deserializable one. ValidatePostConsensusMsg only checks message structure (not the beacon
+	// signature), so all three enter the container and cross quorum (3-of-4) optimistically. Then
+	// ReconstructBeaconSig fails on the garbage signature, FallBackAndVerifyEachSignature drops only
+	// signer 3, and the root falls back below quorum (2-of-4) — recoverable, nothing submitted, and
+	// the duty must NOT be concluded.
+	msg1 := spectestingutils.PostConsensusAggregatorCommitteeMsgForDuty(duty, env.keySetMap, 1, version)
+	require.NoError(t, env.runner.ProcessPostConsensus(ctx, env.logger, msg1))
+
+	msg2 := spectestingutils.PostConsensusAggregatorCommitteeMsgForDuty(duty, env.keySetMap, 2, version)
+	require.NoError(t, env.runner.ProcessPostConsensus(ctx, env.logger, msg2))
+
+	badMsg3 := spectestingutils.PostConsensusAggregatorCommitteeMsgForDuty(duty, env.keySetMap, 3, version)
+	for _, m := range badMsg3.Messages {
+		m.PartialSignature = bytes.Repeat([]byte{0xEE}, len(m.PartialSignature))
+	}
+	recoverableErr := env.runner.ProcessPostConsensus(ctx, env.logger, badMsg3)
+	require.Error(t, recoverableErr, "a quorum with invalid signatures should surface an error")
+	var specErr *spectypes.Error
+	require.ErrorAs(t, recoverableErr, &specErr)
+	require.Equal(t, spectypes.PostConsensusQuorumWithInvalidSignatures, specErr.Code,
+		"invalid-sigs must carry the recoverable spec code")
+
+	// The recoverable case must NOT conclude the duty: nothing has been sent on the conclusion channel.
+	require.Empty(t, concluded, "a recoverable invalid-sigs error must NOT conclude the duty")
+	require.False(t, env.runner.State.Succeeded)
+
+	// Round 2: a subsequent valid partial signature from signer 4 re-crosses quorum with three good
+	// sigs (1, 2, 4) → reconstruction succeeds → the duty submits and concludes succeeded.
+	msg4 := spectestingutils.PostConsensusAggregatorCommitteeMsgForDuty(duty, env.keySetMap, 4, version)
+	require.NoError(t, env.runner.ProcessPostConsensus(ctx, env.logger, msg4))
+
+	require.True(t, env.runner.State.Succeeded, "a valid quorum after recovery must conclude succeeded")
+
+	select {
+	case c := <-concluded:
+		require.Equal(t, dutyOutcomeSucceeded, c.outcome, "recovery must conclude the duty succeeded, not failed")
+	default:
+		t.Fatal("expected a succeeded duty conclusion after recovery, got none")
+	}
+}
+
 // TestAggregatorCommitteeRunnerProcessPostConsensus_TerminalWinsOverConcurrentRecoverable is the
 // regression test for the terminalErr/recoverableErr split: within a single ProcessPostConsensus
 // call, one validator's post-consensus signatures reconstruct fine but then fail to submit (terminal,
