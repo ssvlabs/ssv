@@ -830,6 +830,18 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 	// reciprocal note in committee.go. A single last-write-wins error made terminal-vs-recoverable
 	// classification depend on goroutine/root ordering; splitting keeps it deterministic (terminal wins).
 	var terminalErr, recoverableErr error
+	// classify is the single source of truth for the terminal/recoverable split, shared by the listener
+	// receive site and the post-listener drain so the two can never drift apart. The reconstruct
+	// goroutine force-wraps its (recoverable, post-fallback) error with the
+	// PostConsensusQuorumWithInvalidSignatures code; anything arriving without that code is terminal.
+	classify := func(err error) {
+		var specErr *spectypes.Error
+		if errors.As(err, &specErr) && specErr.Code == spectypes.PostConsensusQuorumWithInvalidSignatures {
+			recoverableErr = err
+		} else {
+			terminalErr = err
+		}
+	}
 	aggregatesToSubmit := make(map[phase0.ValidatorIndex]map[[32]byte]*spec.VersionedSignedAggregateAndProof)
 	contributionsToSubmit := make(map[phase0.ValidatorIndex]map[[32]byte]*altair.SignedContributionAndProof)
 
@@ -960,14 +972,7 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 				// duty deadline is ~1 epoch out — and markDutyFailed drops context.Canceled anyway.
 				return ctx.Err()
 			case err := <-errCh:
-				// The reconstruct goroutine force-wraps its (recoverable, post-fallback) error with the
-				// PostConsensusQuorumWithInvalidSignatures code; anything arriving without that code is terminal.
-				var specErr *spectypes.Error
-				if errors.As(err, &specErr) && specErr.Code == spectypes.PostConsensusQuorumWithInvalidSignatures {
-					recoverableErr = err
-				} else {
-					terminalErr = err
-				}
+				classify(err)
 			case signatureResult, ok := <-signatureCh:
 				if !ok {
 					break listener
@@ -1031,12 +1036,7 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 		for {
 			select {
 			case err := <-errCh:
-				var specErr *spectypes.Error
-				if errors.As(err, &specErr) && specErr.Code == spectypes.PostConsensusQuorumWithInvalidSignatures {
-					recoverableErr = err
-				} else {
-					terminalErr = err
-				}
+				classify(err)
 			default:
 				break drainErrCh
 			}
