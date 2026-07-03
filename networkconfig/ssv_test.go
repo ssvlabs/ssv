@@ -27,7 +27,9 @@ func TestSSVConfig_MarshalUnmarshalJSON(t *testing.T) {
 		RegistryContractAddr: ethcommon.HexToAddress("0x123456789abcdef0123456789abcdef012345678"),
 		Bootnodes:            []string{"bootnode1", "bootnode2"},
 		DiscoveryProtocolID:  [6]byte{0x05, 0x06, 0x07, 0x08, 0x09, 0x0a},
-		Forks:                SSVForks{},
+		Forks: SSVForks{
+			Boole: 0,
+		},
 	}
 
 	// Marshal to JSON
@@ -66,7 +68,9 @@ func TestSSVConfig_MarshalUnmarshalYAML(t *testing.T) {
 		RegistryContractAddr: ethcommon.HexToAddress("0x123456789abcdef0123456789abcdef012345678"),
 		Bootnodes:            []string{"bootnode1", "bootnode2"},
 		DiscoveryProtocolID:  [6]byte{0x05, 0x06, 0x07, 0x08, 0x09, 0x0a},
-		Forks:                SSVForks{},
+		Forks: SSVForks{
+			Boole: 0,
+		},
 	}
 
 	// Marshal to YAML
@@ -104,6 +108,40 @@ func TestSSVConfig_MarshalUnmarshalYAML(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, originalYAMLMap, remarshaledYAMLMap)
+}
+
+func TestSSVForks_MarshalUppercaseKeys(t *testing.T) {
+	config := SSV{
+		Name:                 "testnet",
+		DomainType:           spectypes.DomainType{0x01, 0x02, 0x03, 0x04},
+		RegistrySyncOffset:   big.NewInt(123),
+		RegistryContractAddr: ethcommon.HexToAddress("0x123456789abcdef0123456789abcdef012345678"),
+		Bootnodes:            []string{"bootnode1"},
+		DiscoveryProtocolID:  [6]byte{0x05, 0x06, 0x07, 0x08, 0x09, 0x0a},
+		Forks: SSVForks{
+			Boole: 3,
+		},
+	}
+
+	yamlBytes, err := yaml.Marshal(&config)
+	require.NoError(t, err)
+
+	var yamlMap map[string]any
+	require.NoError(t, yaml.Unmarshal(yamlBytes, &yamlMap))
+
+	yamlForks, ok := yamlMap["Forks"].(map[string]any)
+	require.True(t, ok, "expected Forks to be a map")
+	assert.Contains(t, yamlForks, "Boole")
+
+	jsonBytes, err := json.Marshal(&config)
+	require.NoError(t, err)
+
+	var jsonMap map[string]any
+	require.NoError(t, json.Unmarshal(jsonBytes, &jsonMap))
+
+	jsonForks, ok := jsonMap["forks"].(map[string]any)
+	require.True(t, ok, "expected forks to be a map")
+	assert.Contains(t, jsonForks, "Boole")
 }
 
 // hashStructJSON creates a deterministic hash of a struct by marshaling to sorted JSON
@@ -159,7 +197,9 @@ func TestFieldPreservation(t *testing.T) {
 			RegistryContractAddr: ethcommon.HexToAddress("0x123456789abcdef0123456789abcdef012345678"),
 			Bootnodes:            []string{"bootnode1", "bootnode2"},
 			DiscoveryProtocolID:  [6]byte{0x05, 0x06, 0x07, 0x08, 0x09, 0x0a},
-			Forks:                SSVForks{},
+			Forks: SSVForks{
+				Boole: 0,
+			},
 		}
 
 		// Marshal and unmarshal to test preservation
@@ -181,7 +221,7 @@ func TestFieldPreservation(t *testing.T) {
 		assert.Equal(t, originalHash, unmarshaledHash, "Hash mismatch indicates fields weren't properly preserved in JSON")
 
 		// Store the expected hash - this will fail if a new field is added without updating the tests
-		expectedJSONHash := "a6d7d78c5e55f7239587e2261fc27dfb097045e7284286191202f6a3f6c8b605"
+		expectedJSONHash := "e721992bd8446fd4e36aca974d3b3b8b9d2e4d2b4d1041566e600df91ec73892"
 		assert.Equal(t, expectedJSONHash, originalHash,
 			"Hash has changed. If you've added a new field, please update the expected hash in this test.")
 	})
@@ -195,7 +235,9 @@ func TestFieldPreservation(t *testing.T) {
 			RegistryContractAddr: ethcommon.HexToAddress("0x123456789abcdef0123456789abcdef012345678"),
 			Bootnodes:            []string{"bootnode1", "bootnode2"},
 			DiscoveryProtocolID:  [6]byte{0x05, 0x06, 0x07, 0x08, 0x09, 0x0a},
-			Forks:                SSVForks{},
+			Forks: SSVForks{
+				Boole: 0,
+			},
 		}
 
 		// Marshal and unmarshal to test preservation
