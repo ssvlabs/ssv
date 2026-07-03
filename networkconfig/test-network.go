@@ -1,7 +1,10 @@
 package networkconfig
 
 import (
+	"math"
 	"math/big"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec"
@@ -66,12 +69,32 @@ var TestNetwork = &Network{
 	SSV: &SSV{
 		Name:                 "testnet",
 		DomainType:           spectypes.DomainType{0x0, 0x0, spectypes.JatoNetworkID.Byte(), 0x2},
+		NextDomainType:       spectypes.DomainType{0x0, 0x0, spectypes.JatoNetworkID.Byte(), 0x3},
 		RegistrySyncOffset:   new(big.Int).SetInt64(9015219),
 		RegistryContractAddr: ethcommon.HexToAddress("0x4B133c68A084B8A88f72eDCd7944B69c8D545f03"),
 		Bootnodes: []string{
 			"enr:-Li4QFIQzamdvTxGJhvcXG_DFmCeyggSffDnllY5DiU47pd_K_1MRnSaJimWtfKJ-MD46jUX9TwgW5Jqe0t4pH41RYWGAYuFnlyth2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhCLdu_SJc2VjcDI1NmsxoQN4v-N9zFYwEqzGPBBX37q24QPFvAVUtokIo1fblIsmTIN0Y3CCE4uDdWRwgg-j",
 		},
 		TotalEthereumValidators: 1_000_000, // just some high enough value, so we never accidentally reach the message-limits derived from it while testing something with local testnet
-		Forks:                   SSVForks{},
+		Forks: SSVForks{
+			Boole: 0,
+		},
 	},
+}
+
+func init() {
+	// Tests sometimes need to validate behavior both pre- and post-fork. This env var allows CI to
+	// flip the effective fork activation for the global TestNetwork without changing code.
+	//
+	// Supported values:
+	// - "pre":  disables the Boole fork (sets it to max epoch)
+	// - "post": enables the Boole fork from genesis (epoch 0)
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("SSV_TEST_BOOLE_FORK"))) {
+	case "":
+		// keep default from code
+	case "pre", "pre-fork", "prefork":
+		TestNetwork.SSV.Forks.Boole = phase0.Epoch(math.MaxUint64)
+	case "post", "post-fork", "postfork":
+		TestNetwork.SSV.Forks.Boole = 0
+	}
 }
