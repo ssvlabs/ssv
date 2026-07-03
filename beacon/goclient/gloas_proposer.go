@@ -73,16 +73,18 @@ func requestGloasBeaconBlock(ctx context.Context, addr string, slot phase0.Slot,
 // nodes (e.g. Lodestar) report that duplicate as an error rather than deduping silently.
 func submitGloasBeaconBlock(ctx context.Context, addr string, blockSSZ []byte) error {
 	_, err := gloasOctetStreamHTTP(ctx, http.MethodPost, addr+gloasPublishBlockPath, blockSSZ, nil)
-	if isBlockAlreadyKnown(err) {
+	if isAlreadyKnown(err) {
 		return nil
 	}
 	return err
 }
 
-// isBlockAlreadyKnown reports whether err is a beacon-node response signaling the submitted block is
-// already known (i.e. already canonical). Beacon-APIs has no standard code for this, so match on the
-// message: Lodestar returns 500 "BLOCK_ERROR_ALREADY_KNOWN".
-func isBlockAlreadyKnown(err error) bool {
+// isAlreadyKnown reports whether err is a beacon-node response signaling the submitted object is already
+// known (i.e. already canonical) — for both the §4 block and the §6 envelope publish, where every operator
+// redundantly submits the same object and the non-winning ones race the canonical one. Beacon-APIs has no
+// standard code for this, so match on the message: Lodestar returns 500 "BLOCK_ERROR_ALREADY_KNOWN" and
+// "EXECUTION_PAYLOAD_ENVELOPE_ERROR_ALREADY_KNOWN".
+func isAlreadyKnown(err error) bool {
 	var httpErr *gloasHTTPError
 	if !errors.As(err, &httpErr) {
 		return false
@@ -129,7 +131,7 @@ func gloasOctetStreamHTTP(ctx context.Context, method, url string, body []byte, 
 }
 
 // gloasHTTPError is the error gloasOctetStreamHTTP returns for a non-2xx response. It exposes the status
-// code and body so callers can special-case specific beacon-node responses (see isBlockAlreadyKnown).
+// code and body so callers can special-case specific beacon-node responses (see isAlreadyKnown).
 type gloasHTTPError struct {
 	method, url string
 	statusCode  int
