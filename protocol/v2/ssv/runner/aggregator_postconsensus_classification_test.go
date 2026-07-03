@@ -8,7 +8,6 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	ssz "github.com/ferranbt/fastssz"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
@@ -103,7 +102,7 @@ func (e *aggregatorRunnerEnv) startAndDecideAggregatorDuty(
 	require.NoError(t, e.runner.StartNewDuty(ctx, e.logger, duty, e.keySet.Threshold))
 
 	aggData := spectestingutils.TestingAggregateAndProofV(version, duty.ValidatorIndex)
-	dataSSZ, err := aggData.(ssz.Marshaler).MarshalSSZ()
+	dataSSZ, err := aggData.MarshalSSZ()
 	require.NoError(t, err)
 
 	consensusData := &spectypes.ProposerConsensusData{
@@ -123,8 +122,7 @@ func (e *aggregatorRunnerEnv) startAndDecideAggregatorDuty(
 func aggregatorPostConsensusMsgs(keySet *spectestingutils.TestKeySet, version spec.DataVersion) []*spectypes.PartialSignatureMessages {
 	msgs := make([]*spectypes.PartialSignatureMessages, 0, keySet.Threshold)
 	for i := uint64(1); i <= keySet.Threshold; i++ {
-		id := spectypes.OperatorID(i)
-		msgs = append(msgs, spectestingutils.PostConsensusAggregatorMsg(keySet.Shares[id], id, version))
+		msgs = append(msgs, spectestingutils.PostConsensusAggregatorMsg(keySet.Shares[i], i, version))
 	}
 	return msgs
 }
