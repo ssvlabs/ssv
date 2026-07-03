@@ -3,9 +3,12 @@ package spectest
 import (
 	"context"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -197,6 +200,14 @@ func overrideStateComparisonCommitteeSpecTest(t *testing.T, test *CommitteeSpecT
 
 	committee.Shares = specCommittee.Share
 	committee.CommitteeMember = &specCommittee.CommitteeMember
+
+	// v1.2.3 ssv-spec renamed types.Committee.Runners -> CommitteeRunners (and added a sibling
+	// AggregatorCommitteeRunners map for the merged runner), so struct-tag-based json.Unmarshal
+	// above no longer finds our (unrenamed) Committee.Runners field. Read the raw comparison-state
+	// JSON directly instead, falling back to the legacy "Runners" key for older fixtures.
+	// TODO(convergence unit 5): also read AggregatorCommitteeRunners.
+	committee.Runners = readCommitteeRunnersFromStateComparison(t, specDir, name, testType)
+
 	for slot := range committee.Runners {
 		committee.Runners[slot].NetworkConfig = networkconfig.TestNetwork
 		// Use test runner as signer source since deserialized runner has no signer
@@ -216,4 +227,41 @@ func overrideStateComparisonCommitteeSpecTest(t *testing.T, test *CommitteeSpecT
 	test.PostDutyCommitteeRoot = hex.EncodeToString(root[:])
 
 	test.PostDutyCommittee = committee
+}
+
+// readCommitteeRunnersFromStateComparison reads the "CommitteeRunners" (falling back to the legacy
+// "Runners") map out of the raw state-comparison JSON fixture for the given test, since v1.2.3
+// ssv-spec renamed that field and our (unrenamed) validator.Committee struct no longer matches it
+// via struct-tag-based json.Unmarshal.
+func readCommitteeRunnersFromStateComparison(t *testing.T, specDir string, name string, testType string) map[phase0.Slot]*runner.CommitteeRunner {
+	basedir := filepath.Join(specDir, "generate")
+	scDir := typescomparable.GetSCDir(basedir, testType)
+	path := filepath.Join(scDir, fmt.Sprintf("%s.json", name))
+
+	byts, err := os.ReadFile(filepath.Clean(path))
+	require.NoError(t, err)
+
+	var raw map[string]any
+	require.NoError(t, json.Unmarshal(byts, &raw))
+
+	rawRunners, _ := raw["CommitteeRunners"].(map[string]any)
+	if rawRunners == nil {
+		rawRunners, _ = raw["Runners"].(map[string]any)
+	}
+
+	runners := make(map[phase0.Slot]*runner.CommitteeRunner, len(rawRunners))
+	for slotStr, rawRunner := range rawRunners {
+		slot, err := strconv.ParseUint(slotStr, 10, 64)
+		require.NoError(t, err)
+
+		runnerBytes, err := json.Marshal(rawRunner)
+		require.NoError(t, err)
+
+		cr := &runner.CommitteeRunner{}
+		require.NoError(t, json.Unmarshal(runnerBytes, cr))
+
+		runners[phase0.Slot(slot)] = cr
+	}
+
+	return runners
 }

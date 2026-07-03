@@ -17,6 +17,7 @@ import (
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 func TestWorker(t *testing.T) {
@@ -188,7 +189,7 @@ func TestMessageContextFields(t *testing.T) {
 	})
 
 	t.Run("validator message omits slot and committee id when slot unavailable", func(t *testing.T) {
-		msgID := spectypes.NewMsgID([4]byte{}, []byte("validator_pk"), spectypes.RoleAggregator)
+		msgID := spectypes.NewMsgID([4]byte{}, []byte("validator_pk"), ssvtypes.RoleAggregator)
 		fields := messageContextFields(&queue.SSVMessage{
 			SSVMessage: &spectypes.SSVMessage{
 				MsgID:   msgID,

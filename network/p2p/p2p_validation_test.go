@@ -54,7 +54,7 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 	const (
 		acceptedRole = spectypes.RoleCommittee
 		ignoredRole  = spectypes.RoleProposer
-		rejectedRole = spectypes.RoleSyncCommitteeContribution
+		rejectedRole = ssvtypes.RoleSyncCommitteeContribution
 	)
 	messageValidators := make([]*MockMessageValidator, nodeCount)
 	var mtx sync.Mutex

@@ -11,6 +11,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/networkconfig"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/utils/casts"
 )
 
@@ -57,7 +58,7 @@ func round1HeadStart(role spectypes.RunnerRole, slotDuration time.Duration) time
 	switch role {
 	case spectypes.RoleCommittee:
 		return slotDuration / 3
-	case spectypes.RoleAggregator, spectypes.RoleSyncCommitteeContribution:
+	case ssvtypes.RoleAggregator, ssvtypes.RoleSyncCommitteeContribution:
 		return slotDuration / 3 * 2
 	default:
 		return 0

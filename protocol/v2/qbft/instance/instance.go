@@ -51,7 +51,7 @@ func NewInstance(
 	signer ssvtypes.OperatorSigner,
 	roundTimerF ssv.QBFTRoundTimerF,
 ) *Instance {
-	runnerRole := spectypes.RunnerRole(spectypes.RoleUnknown) // RoleUnknown is of int type, hence have to type-cast
+	runnerRole := spectypes.RoleUnknown
 	if len(identifier) == 56 {
 		runnerRole = spectypes.MessageID(identifier).GetRoleType()
 	}

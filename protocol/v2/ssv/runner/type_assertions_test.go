@@ -75,7 +75,7 @@ func TestCurrentDutySlot(t *testing.T) {
 }
 
 func TestDecidedValueTypeAssertions(t *testing.T) {
-	consensusData := &spectypes.ValidatorConsensusData{}
+	consensusData := &spectypes.ProposerConsensusData{}
 	gotConsensusData, err := validatorConsensusDataFromEncoder(consensusData)
 	require.NoError(t, err)
 	require.Same(t, consensusData, gotConsensusData)
@@ -83,7 +83,7 @@ func TestDecidedValueTypeAssertions(t *testing.T) {
 	_, err = validatorConsensusDataFromEncoder(nil)
 	require.ErrorContains(t, err, "decided value is nil")
 
-	var nilConsensusData *spectypes.ValidatorConsensusData
+	var nilConsensusData *spectypes.ProposerConsensusData
 	_, err = validatorConsensusDataFromEncoder(nilConsensusData)
 	require.ErrorContains(t, err, "validator consensus data is nil")
 

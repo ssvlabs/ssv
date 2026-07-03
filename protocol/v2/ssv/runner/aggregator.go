@@ -75,7 +75,7 @@ func NewAggregatorRunner(opts AggregatorRunnerOptions) (Runner, error) {
 
 	return &AggregatorRunner{
 		BaseRunner: &BaseRunner{
-			RunnerRoleType:     spectypes.RoleAggregator,
+			RunnerRoleType:     ssvtypes.RoleAggregator,
 			NetworkConfig:      opts.NetworkConfig,
 			Share:              opts.Share,
 			QBFTController:     opts.QBFTController,
@@ -129,7 +129,7 @@ func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.
 	}()
 
 	r.measurements.EndPreConsensus()
-	recordPreConsensusDuration(ctx, r.measurements.PreConsensusTime(), spectypes.RoleAggregator)
+	recordPreConsensusDuration(ctx, r.measurements.PreConsensusTime(), ssvtypes.RoleAggregator)
 
 	// only 1 root, verified by expectedPreConsensusRootsAndDomain
 	root := roots[0]
@@ -158,7 +158,7 @@ func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.
 	if !ok {
 		r.markDutyNotRequired()
 		r.measurements.EndDutyFlow()
-		recordTotalDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.RoleAggregator, 0)
+		recordTotalDutyDuration(ctx, r.measurements.TotalDutyTime(), ssvtypes.RoleAggregator, 0)
 		return nil
 	}
 
@@ -179,7 +179,7 @@ func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.
 	if err != nil {
 		return fmt.Errorf("could not marshal aggregate and proof: %w", err)
 	}
-	input := &spectypes.ValidatorConsensusData{
+	input := &spectypes.ProposerConsensusData{
 		Duty:    *duty,
 		Version: ver,
 		DataSSZ: byts,
@@ -198,7 +198,7 @@ func (r *AggregatorRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 	span := trace.SpanFromContext(ctx)
 
 	span.AddEvent("processing QBFT consensus msg")
-	decided, encDecidedValue, err := r.baseConsensusMsgProcessing(ctx, logger, r.ValCheck.CheckValue, signedMsg, &spectypes.ValidatorConsensusData{})
+	decided, encDecidedValue, err := r.baseConsensusMsgProcessing(ctx, logger, r.ValCheck.CheckValue, signedMsg, &spectypes.ProposerConsensusData{})
 	if err != nil {
 		return fmt.Errorf("failed processing consensus message: %w", err)
 	}
@@ -209,7 +209,7 @@ func (r *AggregatorRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 	}
 
 	r.measurements.EndConsensus()
-	recordConsensusDuration(ctx, r.measurements.ConsensusTime(), spectypes.RoleAggregator)
+	recordConsensusDuration(ctx, r.measurements.ConsensusTime(), ssvtypes.RoleAggregator)
 
 	decidedValue, err := validatorConsensusDataFromEncoder(encDecidedValue)
 	if err != nil {
@@ -220,7 +220,7 @@ func (r *AggregatorRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 		observability.ValidatorPublicKeyAttribute(decidedValue.Duty.PubKey),
 	)
 
-	_, aggregateAndProofHashRoot, err := decidedValue.GetAggregateAndProof()
+	_, aggregateAndProofHashRoot, err := ssvtypes.GetAggregateAndProof(decidedValue)
 	if err != nil {
 		return fmt.Errorf("could not get aggregate and proof: %w", err)
 	}
@@ -320,7 +320,7 @@ func (r *AggregatorRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 	}()
 
 	r.measurements.EndPostConsensus()
-	recordPostConsensusDuration(ctx, r.measurements.PostConsensusTime(), spectypes.RoleAggregator)
+	recordPostConsensusDuration(ctx, r.measurements.PostConsensusTime(), ssvtypes.RoleAggregator)
 
 	// only 1 root, verified by expectedPostConsensusRootsAndDomain
 	root := roots[0]
@@ -335,12 +335,12 @@ func (r *AggregatorRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 	specSig := phase0.BLSSignature{}
 	copy(specSig[:], sig)
 
-	cd := &spectypes.ValidatorConsensusData{}
+	cd := &spectypes.ProposerConsensusData{}
 	err = cd.Decode(r.State.DecidedValue)
 	if err != nil {
 		return fmt.Errorf("could not decode consensus data: %w", err)
 	}
-	aggregateAndProof, _, err := cd.GetAggregateAndProof()
+	aggregateAndProof, _, err := ssvtypes.GetAggregateAndProof(cd)
 	if err != nil {
 		return fmt.Errorf("could not get aggregate and proof: %w", err)
 	}
@@ -372,7 +372,7 @@ func (r *AggregatorRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 
 	r.markDutySucceeded()
 	r.measurements.EndDutyFlow()
-	recordTotalDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.RoleAggregator, r.State.RunningInstance.State.Round)
+	recordTotalDutyDuration(ctx, r.measurements.TotalDutyTime(), ssvtypes.RoleAggregator, r.State.RunningInstance.State.Round)
 	const dutyFinishedEvent = "✔️successfully finished duty processing"
 	logger.Info(dutyFinishedEvent,
 		fields.PreConsensusTime(r.measurements.PreConsensusTime()),
@@ -398,12 +398,12 @@ func (r *AggregatorRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot,
 
 // expectedPostConsensusRootsAndDomain an INTERNAL function, returns the expected post-consensus roots to sign
 func (r *AggregatorRunner) expectedPostConsensusRootsAndDomain(context.Context) ([]ssz.HashRoot, phase0.DomainType, error) {
-	cd := &spectypes.ValidatorConsensusData{}
+	cd := &spectypes.ProposerConsensusData{}
 	err := cd.Decode(r.State.DecidedValue)
 	if err != nil {
 		return nil, spectypes.DomainError, fmt.Errorf("could not create consensus data: %w", err)
 	}
-	_, hashRoot, err := cd.GetAggregateAndProof()
+	_, hashRoot, err := ssvtypes.GetAggregateAndProof(cd)
 	if err != nil {
 		return nil, phase0.DomainType{}, fmt.Errorf("could not get aggregate and proof: %w", err)
 	}
@@ -444,7 +444,7 @@ func (r *AggregatorRunner) executeDuty(ctx context.Context, logger *zap.Logger, 
 	}
 
 	msgs := &spectypes.PartialSignatureMessages{
-		Type:     spectypes.SelectionProofPartialSig,
+		Type:     ssvtypes.SelectionProofPartialSig,
 		Slot:     validatorDuty.DutySlot(),
 		Messages: []*spectypes.PartialSignatureMessage{msg},
 	}

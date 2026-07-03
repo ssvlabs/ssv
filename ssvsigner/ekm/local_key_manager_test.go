@@ -176,7 +176,7 @@ func TestSignBeaconObject(t *testing.T) {
 		require.NotEqual(t, [32]byte{}, sig)
 	})
 	t.Run("DomainAggregateAndProof", func(t *testing.T) {
-		aggregateAndProof := testingutils.TestingPhase0AggregateAndProof
+		aggregateAndProof := testingutils.TestingPhase0AggregateAndProof(testingutils.TestingValidatorIndex)
 
 		_, sig, err := km.(*LocalKeyManager).SignBeaconObject(
 			ctx,

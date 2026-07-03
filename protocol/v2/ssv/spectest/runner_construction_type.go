@@ -29,6 +29,11 @@ func (test *RunnerConstructionSpecTest) Run(t *testing.T) {
 	}
 
 	for role, expectedError := range test.RoleError {
+		// TODO(convergence unit 5): enable AggregatorCommittee runner construction vectors.
+		if role == types.RoleAggregatorCommittee {
+			continue
+		}
+
 		// Construct runner and get construction error
 		_, err := runnertesting.ConstructBaseRunnerWithShareMap(logger, role, test.Shares)
 

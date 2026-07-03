@@ -11,6 +11,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	ssvmessage "github.com/ssvlabs/ssv/protocol/v2/message"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 func (mv *messageValidator) decodeSignedSSVMessage(pMsg *pubsub.Message) (*spectypes.SignedSSVMessage, error) {
@@ -140,9 +141,9 @@ func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage)
 func (mv *messageValidator) validRole(roleType spectypes.RunnerRole) bool {
 	switch roleType {
 	case spectypes.RoleCommittee,
-		spectypes.RoleAggregator,
+		ssvtypes.RoleAggregator,
 		spectypes.RoleProposer,
-		spectypes.RoleSyncCommitteeContribution,
+		ssvtypes.RoleSyncCommitteeContribution,
 		spectypes.RoleValidatorRegistration,
 		spectypes.RoleVoluntaryExit:
 		return true

@@ -814,7 +814,7 @@ func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 			var qbftMsg = new(specqbft.Message)
 			if err = qbftMsg.Decode(msg.Data); err == nil {
 				if qbftMsg.MsgType == specqbft.ProposalMsgType {
-					var data = new(spectypes.ValidatorConsensusData)
+					var data = new(spectypes.ProposerConsensusData)
 					if err := data.Decode(msg.SignedSSVMessage.FullData); err == nil {
 						func() {
 							trace.Lock()
@@ -948,16 +948,21 @@ func toBNRole(r spectypes.RunnerRole) (bnRole spectypes.BeaconRole, err error) {
 	switch r {
 	case spectypes.RoleCommittee:
 		return spectypes.BNRoleUnknown, errors.New("unexpected committee role")
+	// TODO(convergence unit 5): enable AggregatorCommittee handling.
+	case spectypes.RoleAggregatorCommittee:
+		return spectypes.BNRoleUnknown, errors.New("unexpected aggregator committee role")
 	case spectypes.RoleProposer:
 		bnRole = spectypes.BNRoleProposer
-	case spectypes.RoleAggregator:
+	case ssvtypes.RoleAggregator:
 		bnRole = spectypes.BNRoleAggregator
-	case spectypes.RoleSyncCommitteeContribution:
+	case ssvtypes.RoleSyncCommitteeContribution:
 		bnRole = spectypes.BNRoleSyncCommitteeContribution
 	case spectypes.RoleValidatorRegistration:
 		bnRole = spectypes.BNRoleValidatorRegistration
 	case spectypes.RoleVoluntaryExit:
 		bnRole = spectypes.BNRoleVoluntaryExit
+	default:
+		return spectypes.BNRoleUnknown, fmt.Errorf("unexpected runner role %d", r)
 	}
 
 	return

@@ -79,12 +79,12 @@ func (b *BaseRunner) currentDutySlot() (phase0.Slot, error) {
 	}
 }
 
-func validatorConsensusDataFromEncoder(value spectypes.Encoder) (*spectypes.ValidatorConsensusData, error) {
+func validatorConsensusDataFromEncoder(value spectypes.Encoder) (*spectypes.ProposerConsensusData, error) {
 	if value == nil {
 		return nil, fmt.Errorf("decided value is nil")
 	}
 
-	consensusData, ok := value.(*spectypes.ValidatorConsensusData)
+	consensusData, ok := value.(*spectypes.ProposerConsensusData)
 	if !ok {
 		return nil, fmt.Errorf("decided value is not a ValidatorConsensusData: %T", value)
 	}

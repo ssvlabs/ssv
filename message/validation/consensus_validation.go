@@ -408,11 +408,11 @@ func (mv *messageValidator) validateJustifications(message *specqbft.Message) er
 
 func (mv *messageValidator) maxRound(role spectypes.RunnerRole) (specqbft.Round, error) {
 	switch role {
-	case spectypes.RoleCommittee, spectypes.RoleAggregator: // TODO: check if value for aggregator is correct as there are messages on stage exceeding the limit
+	case spectypes.RoleCommittee, ssvtypes.RoleAggregator: // TODO: check if value for aggregator is correct as there are messages on stage exceeding the limit
 		return 12, nil // TODO: consider calculating based on quick timeout and slow timeout
 	case spectypes.RoleProposer:
 		return 2, nil
-	case spectypes.RoleSyncCommitteeContribution:
+	case ssvtypes.RoleSyncCommitteeContribution:
 		return 6, nil
 	default:
 		return 0, fmt.Errorf("unknown role")

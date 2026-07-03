@@ -145,7 +145,7 @@ func (mv *messageValidator) Validate(ctx context.Context, peerID peer.ID, pmsg *
 
 func messageRole(decodedMessage *queue.SSVMessage) spectypes.RunnerRole {
 	if decodedMessage == nil || decodedMessage.SSVMessage == nil {
-		return spectypes.RunnerRole(spectypes.RoleUnknown)
+		return spectypes.RoleUnknown
 	}
 	return decodedMessage.SSVMessage.GetID().GetRoleType()
 }
