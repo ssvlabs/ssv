@@ -822,7 +822,14 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 		return bytes.Compare(roots[i][:], roots[j][:]) < 0
 	})
 
-	var executionErr error
+	// Unlike the sibling CommitteeRunner (which tags recoverable reconstruct failures with the
+	// recoverableReconstructError sentinel), this runner classifies them by the
+	// PostConsensusQuorumWithInvalidSignatures spec code: every reconstruct error is force-wrapped
+	// with that code at the push site below, so there is no uncoded-BLS blind spot here, and tagging
+	// instead would break this runner's spectest fixtures. The divergence is deliberate — see the
+	// reciprocal note in committee.go. A single last-write-wins error made terminal-vs-recoverable
+	// classification depend on goroutine/root ordering; splitting keeps it deterministic (terminal wins).
+	var terminalErr, recoverableErr error
 	aggregatesToSubmit := make(map[phase0.ValidatorIndex]map[[32]byte]*spec.VersionedSignedAggregateAndProof)
 	contributionsToSubmit := make(map[phase0.ValidatorIndex]map[[32]byte]*altair.SignedContributionAndProof)
 
@@ -953,7 +960,14 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 				// duty deadline is ~1 epoch out — and markDutyFailed drops context.Canceled anyway.
 				return ctx.Err()
 			case err := <-errCh:
-				executionErr = err
+				// The reconstruct goroutine force-wraps its (recoverable, post-fallback) error with the
+				// PostConsensusQuorumWithInvalidSignatures code; anything arriving without that code is terminal.
+				var specErr *spectypes.Error
+				if errors.As(err, &specErr) && specErr.Code == spectypes.PostConsensusQuorumWithInvalidSignatures {
+					recoverableErr = err
+				} else {
+					terminalErr = err
+				}
 			case signatureResult, ok := <-signatureCh:
 				if !ok {
 					break listener
@@ -961,13 +975,13 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 
 				validatorObjects, exists := beaconObjects[signatureResult.validatorIndex]
 				if !exists {
-					executionErr = fmt.Errorf("could not find beacon object for validator index: %d",
+					terminalErr = fmt.Errorf("could not find beacon object for validator index: %d",
 						signatureResult.validatorIndex)
 					continue
 				}
 				sszObject, exists := validatorObjects[root]
 				if !exists {
-					executionErr = fmt.Errorf("could not find ssz object for root: %s", root)
+					terminalErr = fmt.Errorf("could not find ssz object for root: %s", root)
 					continue
 				}
 
@@ -976,7 +990,7 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 					aggregateAndProof := sszObject.(*spec.VersionedAggregateAndProof)
 					signedAgg, err := r.constructSignedAggregateAndProof(aggregateAndProof, signatureResult.signature)
 					if err != nil {
-						executionErr = fmt.Errorf("failed to construct signed aggregate and proof: %w", err)
+						terminalErr = fmt.Errorf("failed to construct signed aggregate and proof: %w", err)
 						continue
 					}
 
@@ -1006,6 +1020,28 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 			}
 		}
 
+		// When signatureCh closes in the same iteration the select may take the close branch and skip an
+		// error still buffered on errCh. All workers have finished (signatureCh is closed only after
+		// wg.Wait), so no further sends occur and this non-blocking drain is complete. Today errCh carries
+		// only the recoverable reconstruct error (the sole producer above), and dropping one is benign —
+		// the root stays un-submitted and the duty stays open for a later retry rather than falsely
+		// succeeding. The drain is defensive: it classifies that error for completeness and future-proofs
+		// the path should a terminal error ever be pushed here.
+	drainErrCh:
+		for {
+			select {
+			case err := <-errCh:
+				var specErr *spectypes.Error
+				if errors.As(err, &specErr) && specErr.Code == spectypes.PostConsensusQuorumWithInvalidSignatures {
+					recoverableErr = err
+				} else {
+					terminalErr = err
+				}
+			default:
+				break drainErrCh
+			}
+		}
+
 		logger.Debug("🧩 reconstructed partial signatures for root",
 			fields.BlockRoot(root),
 		)
@@ -1016,7 +1052,7 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 			start := time.Now()
 			if err := r.beacon.SubmitSignedAggregateSelectionProof(ctx, signedAgg); err != nil {
 				recordFailedSubmission(ctx, spectypes.BNRoleAggregator)
-				executionErr = fmt.Errorf("failed to submit signed aggregate and proof: %w", err)
+				terminalErr = fmt.Errorf("failed to submit signed aggregate and proof: %w", err)
 				continue
 			}
 
@@ -1046,7 +1082,7 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 			start := time.Now()
 			if err := r.beacon.SubmitSignedContributionAndProof(ctx, signedContrib); err != nil {
 				recordFailedSubmission(ctx, spectypes.BNRoleSyncCommitteeContribution)
-				executionErr = fmt.Errorf("failed to submit signed contribution and proof: %w", err)
+				terminalErr = fmt.Errorf("failed to submit signed contribution and proof: %w", err)
 				continue
 			}
 
@@ -1071,19 +1107,19 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 		}
 	}
 
-	if executionErr != nil {
-		// Reconstruct-invalid-sigs is recoverable: FallBackAndVerifyEachSignature can drop the root
-		// below quorum, so a later partial-sig message re-crosses quorum and re-enters this loop to
-		// retry pending roots (already-submitted roots are skipped via HasSubmitted). Not markDutyFailed.
-		var specErr *spectypes.Error
-		if errors.As(executionErr, &specErr) && specErr.Code == spectypes.PostConsensusQuorumWithInvalidSignatures {
-			return executionErr
-		}
-		// Submit/construct/missing-object failures: reconstruction already succeeded so the root keeps
-		// its quorum and is never re-reported (runner.go:534 reports only on first quorum crossing), so
-		// the submit loop never revisits it and the duty never concludes → mark failed, not a false stuck.
-		r.markDutyFailed(executionErr)
-		return executionErr
+	// Terminal wins deterministically over a concurrent recoverable error in the same round.
+	// Submit/construct/missing-object failures: reconstruction already succeeded so the root keeps its
+	// quorum and is never re-reported (runner.go reports only on first quorum crossing), so the submit
+	// loop never revisits it and the duty never concludes → mark failed, not a false stuck.
+	if terminalErr != nil {
+		r.markDutyFailed(terminalErr)
+		return terminalErr
+	}
+	// Reconstruct-invalid-sigs is recoverable: FallBackAndVerifyEachSignature can drop the root below
+	// quorum, so a later partial-sig message re-crosses quorum and re-enters this loop to retry pending
+	// roots (already-submitted roots are skipped via HasSubmitted). Not markDutyFailed.
+	if recoverableErr != nil {
+		return recoverableErr
 	}
 
 	// Check if duty has terminated (runner has submitted for all duties)

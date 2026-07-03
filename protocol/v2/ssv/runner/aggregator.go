@@ -123,7 +123,7 @@ func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.
 	// We have quorum and are committed to completing this duty here. The quorum above fires only once,
 	// so a terminal failure below won't be retried.
 	defer func() {
-		if err != nil {
+		if err != nil && !isRecoverableReconstructError(err) {
 			r.markDutyFailed(err)
 		}
 	}()
@@ -140,7 +140,7 @@ func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.
 	if err != nil {
 		// If the reconstructed signature verification failed, fall back to verifying each partial signature
 		r.FallBackAndVerifyEachSignature(r.State.PreConsensusContainer, root, r.GetShare().Committee, r.GetShare().ValidatorIndex)
-		return fmt.Errorf("got pre-consensus quorum but it has invalid signatures: %w", err)
+		return recoverableReconstructError{fmt.Errorf("got pre-consensus quorum but it has invalid signatures: %w", err)}
 	}
 
 	duty, err := r.currentValidatorDuty()
@@ -312,7 +312,7 @@ func (r *AggregatorRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 	// We have quorum and are committed to completing this duty here. The quorum above fires only once,
 	// so a terminal failure below won't be retried.
 	defer func() {
-		if err != nil {
+		if err != nil && !isRecoverableReconstructError(err) {
 			r.markDutyFailed(err)
 		}
 	}()
@@ -328,7 +328,7 @@ func (r *AggregatorRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 	if err != nil {
 		// If the reconstructed signature verification failed, fall back to verifying each partial signature
 		r.FallBackAndVerifyEachSignature(r.State.PostConsensusContainer, root, r.GetShare().Committee, r.GetShare().ValidatorIndex)
-		return fmt.Errorf("got post-consensus quorum but it has invalid signatures: %w", err)
+		return recoverableReconstructError{fmt.Errorf("got post-consensus quorum but it has invalid signatures: %w", err)}
 	}
 	specSig := phase0.BLSSignature{}
 	copy(specSig[:], sig)

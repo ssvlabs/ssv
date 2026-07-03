@@ -712,6 +712,26 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 			}
 		}
 
+		// Drain any error still buffered on errCh: when signatureCh closes in the same iteration the select
+		// may take the close branch and skip it. All workers have finished (signatureCh closes only after
+		// wg.Wait), so this non-blocking drain is complete. Today errCh carries only the recoverable
+		// reconstruct error (the sole producer above), and dropping one is benign (the duty stays open for
+		// retry). The drain is defensive: it classifies that error for completeness and future-proofs the
+		// path should a terminal error ever be pushed here.
+	drainErrCh:
+		for {
+			select {
+			case err := <-errCh:
+				if isRecoverableReconstructError(err) {
+					recoverableErr = err
+				} else {
+					terminalErr = err
+				}
+			default:
+				break drainErrCh
+			}
+		}
+
 		logger.Debug("🧩 reconstructed partial signatures for root", fields.BlockRoot(root))
 	}
 

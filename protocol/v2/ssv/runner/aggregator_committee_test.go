@@ -207,3 +207,99 @@ func TestAggregatorCommitteeRunnerProcessPostConsensus_DoesNotMarkFailedOnInvali
 	require.Empty(t, concluded, "a recoverable invalid-sigs error must NOT conclude the duty")
 	require.False(t, env.runner.State.Succeeded)
 }
+
+// TestAggregatorCommitteeRunnerProcessPostConsensus_TerminalWinsOverConcurrentRecoverable is the
+// regression test for the terminalErr/recoverableErr split: within a single ProcessPostConsensus
+// call, one validator's post-consensus signatures reconstruct fine but then fail to submit (terminal,
+// set from the submit loop after the roots loop), while a second validator's signatures are corrupted
+// and reconstruct-fails with the recoverable PostConsensusQuorumWithInvalidSignatures code (set from
+// the errCh receive site during the roots loop). Both land in the same call, so which one is observed
+// first by the listener select is not controlled by the test. Before the split, a single
+// last-write-wins `executionErr` made the final classification depend on that arrival order; the
+// fixed code always classifies the duty failed here because terminalErr is checked first,
+// independent of goroutine/channel scheduling. We assert on the conclusion outcome, not on which
+// error message ends up attached (that part is still last-write-wins by design for same-class
+// errors).
+func TestAggregatorCommitteeRunnerProcessPostConsensus_TerminalWinsOverConcurrentRecoverable(t *testing.T) {
+	ctx := t.Context()
+	const version = spec.DataVersionElectra
+
+	base := protocoltesting.NewTestingBeaconNodeWrapped().(*protocoltesting.BeaconNodeWrapped)
+	submitErr := errors.New("beacon rejected aggregate")
+	faulty := &faultyAggregateSubmitBeacon{BeaconNodeWrapped: base, submitErr: submitErr}
+
+	env := newAggregatorCommitteeRunnerEnv(t, []int{1, 2}, faulty)
+	duty := spectestingutils.TestingAggregatorCommitteeDutyForValidators([]int{1, 2}, []int{}, version)
+
+	concluded := env.startAndFeedThroughConsensus(t, ctx, duty, version)
+
+	var postConsensusErr error
+	for _, psig := range postConsensusMsgsFromFixture(duty, env.keySetMap, version) {
+		// Corrupt only validator 2's signature in this signer's batch: validator 1 keeps a valid
+		// signature (reconstructs fine, submits, and fails there — terminal), validator 2's
+		// reconstruct fails outright (recoverable).
+		for _, m := range psig.Messages {
+			if m.ValidatorIndex == phase0.ValidatorIndex(2) {
+				m.PartialSignature = bytes.Repeat([]byte{0xEE}, len(m.PartialSignature))
+			}
+		}
+		if err := env.runner.ProcessPostConsensus(ctx, env.logger, psig); err != nil {
+			postConsensusErr = err
+		}
+	}
+
+	require.Error(t, postConsensusErr, "a terminal error concurrent with a recoverable one must still surface")
+
+	select {
+	case c := <-concluded:
+		require.Equal(t, dutyOutcomeFailed, c.outcome,
+			"terminal must win deterministically over a concurrent recoverable error in the same round")
+	default:
+		t.Fatal("expected a failed duty conclusion, got none")
+	}
+	require.False(t, env.runner.State.Succeeded, "a failed duty must not be marked succeeded")
+}
+
+// TestAggregatorCommitteeRunnerProcessPostConsensus_DrainsBufferedErrCh is a best-effort regression
+// test for Ovi finding 1 (the drainErrCh block): when the reconstruct goroutines' errCh sends race
+// against signatureCh's close, a buffered recoverable error could previously be skipped by the
+// listener select (which may take the "signatureCh closed" branch over a simultaneously-ready errCh
+// receive), silently discarding the error and letting ProcessPostConsensus return nil despite a
+// validator's post-consensus signature never having been submitted (a false "stuck", never
+// concluded). The fix drains any leftover errCh value right after the listener loop, so the error is
+// classified and returned regardless of which branch the race took.
+//
+// This exercises many validators corrupted in the same call and repeats the scenario to raise the
+// odds of hitting the race window on any single run; the assertion (a non-nil, correctly-coded error
+// on every iteration) is unconditionally guaranteed by the fix regardless of which branch fires, so
+// the test is not flaky when the drain is present — it only has a chance (not a guarantee) of
+// reproducing the pre-fix bug on a revert.
+func TestAggregatorCommitteeRunnerProcessPostConsensus_DrainsBufferedErrCh(t *testing.T) {
+	const version = spec.DataVersionElectra
+	aggValidators := []int{1, 2, 3, 4, 5, 6, 7, 8}
+
+	for iter := 0; iter < 20; iter++ {
+		ctx := t.Context()
+		base := protocoltesting.NewTestingBeaconNodeWrapped().(*protocoltesting.BeaconNodeWrapped)
+		env := newAggregatorCommitteeRunnerEnv(t, aggValidators, base)
+		duty := spectestingutils.TestingAggregatorCommitteeDutyForValidators(aggValidators, []int{}, version)
+
+		env.startAndFeedThroughConsensus(t, ctx, duty, version)
+
+		var postConsensusErr error
+		for _, psig := range postConsensusMsgsFromFixture(duty, env.keySetMap, version) {
+			for _, m := range psig.Messages {
+				m.PartialSignature = bytes.Repeat([]byte{0xEE}, len(m.PartialSignature))
+			}
+			if err := env.runner.ProcessPostConsensus(ctx, env.logger, psig); err != nil {
+				postConsensusErr = err
+			}
+		}
+
+		require.Error(t, postConsensusErr, "iteration %d: a fully-corrupted quorum must surface an error, not vanish", iter)
+		var specErr *spectypes.Error
+		require.ErrorAs(t, postConsensusErr, &specErr, "iteration %d", iter)
+		require.Equal(t, spectypes.PostConsensusQuorumWithInvalidSignatures, specErr.Code, "iteration %d", iter)
+		require.False(t, env.runner.State.Succeeded, "iteration %d", iter)
+	}
+}

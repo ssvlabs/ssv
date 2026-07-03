@@ -51,4 +51,20 @@ func TestIsRecoverableReconstructError(t *testing.T) {
 		require.ErrorAs(t, tagged, &specErr, "the tag must not hide the coded spec error underneath")
 		require.Equal(t, spectypes.ReconstructSignatureErrorCode, specErr.Code)
 	})
+
+	// Defends the tag-based design (as opposed to classifying by spec error code): an untagged error
+	// is terminal by default even when it happens to carry a spec code, including the recoverable
+	// PostConsensusQuorumWithInvalidSignatures code the AggregatorCommitteeRunner push-site uses.
+	// Only the recoverableReconstructError wrapper — attached at the push site after
+	// FallBackAndVerifyEachSignature has already run — makes an error recoverable.
+	t.Run("untagged error with an unrelated spec code stays terminal", func(t *testing.T) {
+		coded := spectypes.NewError(spectypes.UnknownValidatorIndexErrorCode, "unknown validator index")
+		require.False(t, isRecoverableReconstructError(coded))
+	})
+
+	t.Run("untagged error carrying the post-consensus-invalid-sigs code stays terminal without the tag", func(t *testing.T) {
+		coded := spectypes.WrapError(spectypes.PostConsensusQuorumWithInvalidSignatures, errors.New("got post-consensus quorum but it has invalid signatures"))
+		require.False(t, isRecoverableReconstructError(coded),
+			"classification must key off the recoverableReconstructError tag, not the spec code")
+	})
 }
