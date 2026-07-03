@@ -822,16 +822,16 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.ErrorContains(t, err, ErrNoDuty.Error())
 	})
 
-	//// Get error when receiving a message with over 13 partial signatures
+	//// Get error when receiving a message with more partial signatures than the SSZ max
 	t.Run("partial message too big", func(t *testing.T) {
 		// slot := netCfg.FirstSlotAtEpoch(1)
 		msg := spectestingutils.PostConsensusAttestationMsg(ks.Shares[1], 1, spec.DataVersionPhase0)
-		for i := 0; i < 1512; i++ {
+		for i := 0; i < 5048; i++ {
 			msg.Messages = append(msg.Messages, msg.Messages[0])
 		}
 
 		_, err := msg.Encode()
-		require.ErrorContains(t, err, "max expected 1512 and 1513 found")
+		require.ErrorContains(t, err, "max expected 5048 and 5049 found")
 	})
 
 	// Get error when receiving message from operator who is not affiliated with the validator
