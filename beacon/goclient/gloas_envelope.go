@@ -67,7 +67,14 @@ func requestExecutionPayloadEnvelope(ctx context.Context, addr string, slot phas
 // submitExecutionPayloadEnvelope POSTs the SSZ-marshaled full signed envelope to the publish endpoint. No
 // Eth-Execution-Payload-Blinded header: Lodestar decodes the body as a full SignedExecutionPayloadEnvelope
 // (gloasOctetStreamHTTP tags the request with the Gloas Eth-Consensus-Version).
+//
+// An already-known response is treated as success: on the self-build path every operator publishes the
+// identical envelope, so the non-winning ones race the canonical one and get EXECUTION_PAYLOAD_ENVELOPE_
+// ERROR_ALREADY_KNOWN — the §6 analog of the §4 block submit (see submitGloasBeaconBlock).
 func submitExecutionPayloadEnvelope(ctx context.Context, addr string, envelopeSSZ []byte) error {
 	_, err := gloasOctetStreamHTTP(ctx, http.MethodPost, addr+gloasPublishEnvelopePath, envelopeSSZ, nil)
+	if isAlreadyKnown(err) {
+		return nil
+	}
 	return err
 }

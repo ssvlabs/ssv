@@ -115,10 +115,11 @@ func TestSubmitGloasBeaconBlock_RealErrorPropagates(t *testing.T) {
 	require.Error(t, submitGloasBeaconBlock(context.Background(), srv.URL, []byte{0x01, 0x02}))
 }
 
-func TestIsBlockAlreadyKnown(t *testing.T) {
-	require.False(t, isBlockAlreadyKnown(nil))
-	require.False(t, isBlockAlreadyKnown(errors.New("some other error")))
-	require.False(t, isBlockAlreadyKnown(&gloasHTTPError{statusCode: http.StatusBadRequest, body: "invalid block"}))
-	require.True(t, isBlockAlreadyKnown(&gloasHTTPError{statusCode: http.StatusInternalServerError, body: `{"message":"BLOCK_ERROR_ALREADY_KNOWN"}`}))
-	require.True(t, isBlockAlreadyKnown(&gloasHTTPError{statusCode: http.StatusAccepted, body: "block already known"}))
+func TestIsAlreadyKnown(t *testing.T) {
+	require.False(t, isAlreadyKnown(nil))
+	require.False(t, isAlreadyKnown(errors.New("some other error")))
+	require.False(t, isAlreadyKnown(&gloasHTTPError{statusCode: http.StatusBadRequest, body: "invalid block"}))
+	require.True(t, isAlreadyKnown(&gloasHTTPError{statusCode: http.StatusInternalServerError, body: `{"message":"BLOCK_ERROR_ALREADY_KNOWN"}`}))
+	require.True(t, isAlreadyKnown(&gloasHTTPError{statusCode: http.StatusInternalServerError, body: `{"message":"EXECUTION_PAYLOAD_ENVELOPE_ERROR_ALREADY_KNOWN"}`}))
+	require.True(t, isAlreadyKnown(&gloasHTTPError{statusCode: http.StatusAccepted, body: "block already known"}))
 }

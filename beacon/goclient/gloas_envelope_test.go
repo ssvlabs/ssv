@@ -103,3 +103,16 @@ func TestSubmitExecutionPayloadEnvelope_PublishesFullSignedEnvelope(t *testing.T
 	require.Empty(t, gotBlinded, "publish must not blind the envelope")
 	require.Equal(t, wantBody, gotBody, "publish must send the full signed envelope SSZ")
 }
+
+// An envelope the beacon node already knows is treated as a successful publish: on self-build every
+// operator publishes the identical envelope, so the non-winning ones race the canonical one (§6 analog
+// of the §4 block submit).
+func TestSubmitExecutionPayloadEnvelope_AlreadyKnownIsSuccess(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = io.WriteString(w, `{"code":500,"message":"EXECUTION_PAYLOAD_ENVELOPE_ERROR_ALREADY_KNOWN"}`) // Lodestar's response
+	}))
+	defer srv.Close()
+
+	require.NoError(t, submitExecutionPayloadEnvelope(context.Background(), srv.URL, []byte{0x01, 0x02}))
+}
