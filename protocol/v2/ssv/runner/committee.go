@@ -509,10 +509,13 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 	// (markDutySucceeded) and partial progress all return nil, so this only fires on a terminal
 	// post-quorum error — report it as failed instead of letting it fall through to a false "stuck".
 	// Unlike the consensus phase, a failure here is final: submission is the duty's last step.
+	// The one exception is a recoverable BLS-reconstruction failure: the offending partial sig has
+	// already been dropped by the fallback, so a later message can re-cross quorum and retry — those
+	// are tagged recoverableReconstructError and must not be recorded as failed.
 	// Shutdown (context cancellation) needs no special-casing — markDutyFailed drops a context.Canceled
 	// reason, so a submission aborted by shutdown isn't recorded as a failure.
 	defer func() {
-		if err != nil {
+		if err != nil && !isRecoverableReconstructError(err) {
 			r.markDutyFailed(err)
 		}
 	}()
@@ -532,7 +535,11 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 	attestationsToSubmit := make(map[phase0.ValidatorIndex]*spec.VersionedAttestation)
 	syncCommitteeMessagesToSubmit := make(map[phase0.ValidatorIndex]*altair.SyncCommitteeMessage)
 
-	var executionErr error
+	// Recoverable reconstruct failures are discriminated by the recoverableReconstructError tag rather
+	// than by a spec error code — the tag also covers the uncoded BLS Deserialize/Recover failures.
+	// The sibling AggregatorCommitteeRunner instead classifies by the PostConsensusQuorumWithInvalidSignatures
+	// code; the divergence is deliberate (tagging with that code there breaks its spectest fixtures).
+	var recoverableErr, terminalErr error
 
 	span.SetAttributes(observability.BeaconBlockRootCountAttribute(len(roots)))
 	// For each root that got at least one quorum, find the duties associated to it and try to submit
@@ -626,7 +633,12 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 					span.AddEvent(eventMsg)
 					vLogger.Error(eventMsg, zap.Error(err))
 
-					errCh <- fmt.Errorf("%s: %w", eventMsg, err)
+					// FallBackAndVerifyEachSignature ran above for any reconstruct error, so this is
+					// recoverable by construction: tag it at the push site rather than inferring
+					// recoverability from a spec error code at the receive site (the code is only
+					// attached by VerifyReconstructedSignature — the earlier Deserialize/Recover step
+					// returns an uncoded but equally recoverable error).
+					errCh <- recoverableReconstructError{fmt.Errorf("%s: %w", eventMsg, err)}
 					return
 				}
 
@@ -648,9 +660,18 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 		for {
 			select {
 			case <-ctx.Done():
+				// markDutyFailed (via the defer) drops context.Canceled internally, so shutdown
+				// isn't recorded as a failure.
 				return ctx.Err()
 			case err := <-errCh:
-				executionErr = err
+				// The reconstruct goroutine tags its (recoverable, post-fallback) error with
+				// recoverableReconstructError; classify defensively so any other error arriving
+				// here without the tag is still treated as terminal.
+				if isRecoverableReconstructError(err) {
+					recoverableErr = err
+				} else {
+					terminalErr = err
+				}
 			case signatureResult, ok := <-signatureCh:
 				if !ok {
 					break listener
@@ -658,12 +679,12 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 
 				validatorObjects, exists := beaconObjects[signatureResult.validatorIndex]
 				if !exists {
-					executionErr = fmt.Errorf("could not find beacon object for validator index: %d", signatureResult.validatorIndex)
+					terminalErr = fmt.Errorf("could not find beacon object for validator index: %d", signatureResult.validatorIndex)
 					continue
 				}
 				sszObject, exists := validatorObjects[root]
 				if !exists {
-					executionErr = fmt.Errorf("could not find ssz object for root: %s", root)
+					terminalErr = fmt.Errorf("could not find ssz object for root: %s", root)
 					continue
 				}
 
@@ -682,7 +703,7 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 					att := sszObject.(*spec.VersionedAttestation)
 					att, err = specssv.VersionedAttestationWithSignature(att, signatureResult.signature)
 					if err != nil {
-						executionErr = fmt.Errorf("could not insert signature in versioned attestation")
+						terminalErr = fmt.Errorf("could not insert signature in versioned attestation")
 						continue
 					}
 
@@ -811,8 +832,20 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 		}
 	}
 
-	if executionErr != nil {
-		return executionErr
+	// A terminal error on any root wins over a recoverable one. executionErr used to be a single
+	// last-write-wins variable, so when a genuine failure and a recoverable reconstruct error happened
+	// in the same round, classification depended on goroutine/root ordering. Splitting the two keeps it
+	// deterministic — a real failure is always recorded as failed, never mislabeled as recoverable/stuck.
+	// The defer classifies both: terminalErr → markDutyFailed; recoverableErr carries its tag → excluded.
+	if terminalErr != nil {
+		return terminalErr
+	}
+	if recoverableErr != nil {
+		// Reconstruct-invalid-sigs is recoverable: FallBackAndVerifyEachSignature can drop the root
+		// below quorum, so a later partial-sig message re-crosses quorum and re-enters this loop to
+		// retry pending roots (already-submitted roots are skipped via HasSubmitted). Returned with its
+		// recoverableReconstructError tag so the defer does not record the duty as failed.
+		return recoverableErr
 	}
 
 	if r.HasSubmittedAllValidatorDuties(attestationMap, committeeMap) {
