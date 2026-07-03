@@ -540,6 +540,16 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 	// The sibling AggregatorCommitteeRunner instead classifies by the PostConsensusQuorumWithInvalidSignatures
 	// code; the divergence is deliberate (tagging with that code there breaks its spectest fixtures).
 	var recoverableErr, terminalErr error
+	// classify is the single source of truth for the terminal/recoverable split, shared by the listener
+	// receive site and the post-listener drain so the two can never drift apart. Recoverable failures
+	// carry the recoverableReconstructError tag; anything arriving without it is treated as terminal.
+	classify := func(err error) {
+		if isRecoverableReconstructError(err) {
+			recoverableErr = err
+		} else {
+			terminalErr = err
+		}
+	}
 
 	span.SetAttributes(observability.BeaconBlockRootCountAttribute(len(roots)))
 	// For each root that got at least one quorum, find the duties associated to it and try to submit
@@ -664,14 +674,7 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 				// isn't recorded as a failure.
 				return ctx.Err()
 			case err := <-errCh:
-				// The reconstruct goroutine tags its (recoverable, post-fallback) error with
-				// recoverableReconstructError; classify defensively so any other error arriving
-				// here without the tag is still treated as terminal.
-				if isRecoverableReconstructError(err) {
-					recoverableErr = err
-				} else {
-					terminalErr = err
-				}
+				classify(err)
 			case signatureResult, ok := <-signatureCh:
 				if !ok {
 					break listener
@@ -722,11 +725,7 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 		for {
 			select {
 			case err := <-errCh:
-				if isRecoverableReconstructError(err) {
-					recoverableErr = err
-				} else {
-					terminalErr = err
-				}
+				classify(err)
 			default:
 				break drainErrCh
 			}
