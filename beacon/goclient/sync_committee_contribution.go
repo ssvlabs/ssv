@@ -52,7 +52,7 @@ func (gc *GoClient) GetSyncCommitteeContribution(
 	}
 
 	if err := gc.waitIntoSlot(ctx, slot, 1); err != nil {
-		return nil, DataVersionNil, fmt.Errorf("wait for 1/3 of slot: %w", err)
+		return nil, DataVersionNil, fmt.Errorf("wait for sync message deadline: %w", err)
 	}
 
 	// Resolve the contribution root from head rather than by slot: sync-committee messages

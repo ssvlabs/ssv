@@ -589,7 +589,7 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(
 	}
 
 	if len(aggregatorSelections) > 0 {
-		// Wait once per duty before fetching aggregate attestations (spec: 2/3 into slot).
+		// Wait once per duty until the spec's aggregation deadline before fetching aggregate attestations.
 		if err := r.waitTwoIntervalsIntoSlot(ctx, duty.DutySlot()); err != nil {
 			// Only reachable on shutdown (ctx canceled) within this short wait — markDutyFailed
 			// would drop a context.Canceled reason anyway, so there is nothing to record here.
