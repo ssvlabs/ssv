@@ -3,6 +3,7 @@ package networkconfig
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"math/big"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -69,7 +70,9 @@ type marshaledConfig struct {
 	Bootnodes               []string          `json:"bootnodes,omitempty" yaml:"Bootnodes,omitempty"`
 	DiscoveryProtocolID     hexutil.Bytes     `json:"discovery_protocol_id,omitempty" yaml:"DiscoveryProtocolID,omitempty"`
 	TotalEthereumValidators int               `json:"total_ethereum_validators,omitempty" yaml:"TotalEthereumValidators,omitempty"`
-	Forks                   SSVForks          `json:"forks,omitempty" yaml:"Forks,omitempty"`
+	// Forks is a pointer so unmarshaling can distinguish "forks block absent" (nil) from
+	// "forks block present with explicit zero values" (non-nil, e.g. Boole: 0).
+	Forks *SSVForks `json:"forks,omitempty" yaml:"Forks,omitempty"`
 }
 
 // Helper method to avoid duplication between MarshalJSON and MarshalYAML
@@ -83,7 +86,7 @@ func (s *SSV) marshal() *marshaledConfig {
 		Bootnodes:               s.Bootnodes,
 		DiscoveryProtocolID:     s.DiscoveryProtocolID[:],
 		TotalEthereumValidators: s.TotalEthereumValidators,
-		Forks:                   s.Forks,
+		Forks:                   &s.Forks,
 	}
 }
 
@@ -112,6 +115,16 @@ func (s *SSV) unmarshalFromConfig(aux marshaledConfig) error {
 		return fmt.Errorf("invalid discovery protocol ID length: expected 6 bytes, got %d", len(aux.DiscoveryProtocolID))
 	}
 
+	// If the config has no "forks" block at all (e.g. a stale custom-network YAML/JSON
+	// predating the Boole fork), default Boole to "never activates" rather than letting it
+	// zero-value to epoch 0 (fork-at-genesis). An explicit "forks: {Boole: 0}" is still
+	// honored verbatim. This protects custom-network operators from silently jumping to
+	// post-fork behavior when they haven't opted in.
+	forks := SSVForks{Boole: math.MaxUint64}
+	if aux.Forks != nil {
+		forks = *aux.Forks
+	}
+
 	*s = SSV{
 		Name:                    aux.Name,
 		DomainType:              spectypes.DomainType(aux.DomainType),
@@ -121,7 +134,7 @@ func (s *SSV) unmarshalFromConfig(aux marshaledConfig) error {
 		Bootnodes:               aux.Bootnodes,
 		DiscoveryProtocolID:     [6]byte(aux.DiscoveryProtocolID),
 		TotalEthereumValidators: aux.TotalEthereumValidators,
-		Forks:                   aux.Forks,
+		Forks:                   forks,
 	}
 
 	return nil

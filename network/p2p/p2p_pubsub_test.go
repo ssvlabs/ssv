@@ -1,7 +1,6 @@
 package p2pv1
 
 import (
-	"strconv"
 	"testing"
 	"time"
 
@@ -10,6 +9,7 @@ import (
 
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/topics"
+	"github.com/ssvlabs/ssv/networkconfig"
 )
 
 type subscribeRandomsTopicsController struct {
@@ -47,6 +47,18 @@ func (c *subscribeRandomsTopicsController) Close() error {
 
 var _ topics.Controller = (*subscribeRandomsTopicsController)(nil)
 
+// subscribeRandomsTestNetCfg returns a NetworkConfig with Boole far enough in the future that
+// these tests exercise pre-fork (Alan-only) subscription behavior.
+func subscribeRandomsTestNetCfg() *networkconfig.Network {
+	cfg := *networkconfig.TestNetwork
+	beaconCfg := *networkconfig.TestNetwork.Beacon
+	ssvCfg := *networkconfig.TestNetwork.SSV
+	ssvCfg.Forks.Boole = cfg.EstimatedCurrentEpoch() + 100
+	cfg.Beacon = &beaconCfg
+	cfg.SSV = &ssvCfg
+	return &cfg
+}
+
 func TestSubscribeRandomsReturnsErrorWhenNotEnoughAvailableSubnets(t *testing.T) {
 	currentSubnets := commons.AllSubnets
 	currentSubnets.Clear(17)
@@ -54,6 +66,7 @@ func TestSubscribeRandomsReturnsErrorWhenNotEnoughAvailableSubnets(t *testing.T)
 	topicsCtrl := &subscribeRandomsTopicsController{}
 	n := &p2pNetwork{
 		state:          stateReady,
+		cfg:            &Config{NetworkConfig: subscribeRandomsTestNetCfg()},
 		topicsCtrl:     topicsCtrl,
 		currentSubnets: currentSubnets,
 	}
@@ -74,6 +87,7 @@ func TestSubscribeRandomsSubscribesOnlyAvailableSubnets(t *testing.T) {
 	topicsCtrl := &subscribeRandomsTopicsController{}
 	n := &p2pNetwork{
 		state:          stateReady,
+		cfg:            &Config{NetworkConfig: subscribeRandomsTestNetCfg()},
 		topicsCtrl:     topicsCtrl,
 		currentSubnets: currentSubnets,
 	}
@@ -83,32 +97,20 @@ func TestSubscribeRandomsSubscribesOnlyAvailableSubnets(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, topicsCtrl.subscribed, 2)
 
-	availableSubnets := map[string]struct{}{
-		"5":  {},
-		"42": {},
-		"77": {},
+	availableTopics := map[string]uint64{
+		commons.GetTopicFullName(commons.SubnetTopicID(5)):  5,
+		commons.GetTopicFullName(commons.SubnetTopicID(42)): 42,
+		commons.GetTopicFullName(commons.SubnetTopicID(77)): 77,
 	}
-	for _, subnet := range topicsCtrl.subscribed {
-		_, ok := availableSubnets[subnet]
-		require.Truef(t, ok, "subscribed subnet %s must be chosen from available subnets", subnet)
-		delete(availableSubnets, subnet)
-	}
-
-	require.Len(t, availableSubnets, 1)
-	for subnet := range availableSubnets {
-		require.False(t, n.persistentSubnets.IsSet(parseSubnet(t, subnet)))
+	for _, topic := range topicsCtrl.subscribed {
+		subnet, ok := availableTopics[topic]
+		require.Truef(t, ok, "subscribed topic %s must be chosen from available subnets", topic)
+		delete(availableTopics, topic)
+		require.True(t, n.persistentSubnets.IsSet(subnet))
 	}
 
-	for _, subnet := range topicsCtrl.subscribed {
-		require.True(t, n.persistentSubnets.IsSet(parseSubnet(t, subnet)))
+	require.Len(t, availableTopics, 1)
+	for _, subnet := range availableTopics {
+		require.False(t, n.persistentSubnets.IsSet(subnet))
 	}
-}
-
-func parseSubnet(t *testing.T, subnet string) uint64 {
-	t.Helper()
-
-	value, err := strconv.ParseUint(subnet, 10, 64)
-	require.NoError(t, err)
-
-	return value
 }

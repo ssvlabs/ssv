@@ -301,7 +301,7 @@ func newTrimTestNetwork(host host.Host, topicsCtrl topics.Controller, idx peers.
 		topicsCtrl:           topicsCtrl,
 		idx:                  idx,
 		persistentSubnets:    ownSubnets,
-		subscribedCommittees: hashmap.New[string, committeeSubscriptionStatus](),
+		subscribedCommittees: hashmap.New[string, statusWithSubnet](),
 	}
 	if host != nil {
 		n.host.Store(&host)

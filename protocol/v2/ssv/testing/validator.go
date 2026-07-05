@@ -21,7 +21,7 @@ var BaseValidator = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet
 
 	commonOpts := &validator.CommonOptions{
 		NetworkConfig: networkconfig.TestNetwork,
-		Network:       spectestingutils.NewTestingNetwork(1, keySet.OperatorKeys[1]),
+		Network:       testing.NewTestingNetwork(1, keySet.OperatorKeys[1]),
 		Beacon:        testing.NewTestingBeaconNodeWrapped(),
 		Storage:       testingStores(logger),
 		Signer:        ekm.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager()),

@@ -107,7 +107,7 @@ type SharesStorage interface {
 }
 
 type P2PNetwork interface {
-	protocolp2p.Broadcaster
+	protocolp2p.Network
 	UseMessageRouter(router network.MessageRouter)
 	SubscribeRandoms(numSubnets int) error
 	ActiveSubnets() commons.Subnets

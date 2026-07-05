@@ -408,9 +408,10 @@ func newPeer(t *testing.T, ctx context.Context, logger *zap.Logger, mdnsTag stri
 		go midHandler.Start()
 	}
 	cfg := &topics.PubSubConfig{
-		Host:         h,
-		TraceLog:     false,
-		MsgIDHandler: midHandler,
+		NetworkConfig: networkconfig.TestNetwork,
+		Host:          h,
+		TraceLog:      false,
+		MsgIDHandler:  midHandler,
 		MsgHandler: func(_ context.Context, topic string, msg *pubsub.Message) error {
 			p.saveMsg(topic, msg)
 			return nil

@@ -5,11 +5,13 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"math"
 	"math/big"
 	"reflect"
 	"sort"
 	"testing"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -257,6 +259,84 @@ func TestFieldPreservation(t *testing.T) {
 
 		// The hashes should match if all fields are preserved
 		assert.Equal(t, originalHash, unmarshaledHash, "Hash mismatch indicates fields weren't properly preserved in YAML")
+	})
+}
+
+// TestSSVConfig_UnmarshalForksDefault verifies that a config lacking the "forks" block
+// defaults Boole to math.MaxUint64 (never activates) rather than zero-valuing it to
+// epoch 0 (fork-at-genesis), while a config with an explicit "forks" block (including an
+// explicit zero) is honored verbatim.
+func TestSSVConfig_UnmarshalForksDefault(t *testing.T) {
+	t.Run("JSON: absent forks defaults to MaxUint64", func(t *testing.T) {
+		jsonStr := `{
+			"domain_type": "0x01020304",
+			"discovery_protocol_id": "0x05060708090a"
+		}`
+
+		var cfg SSV
+		require.NoError(t, json.Unmarshal([]byte(jsonStr), &cfg))
+		assert.Equal(t, phase0.Epoch(math.MaxUint64), cfg.Forks.Boole)
+	})
+
+	t.Run("JSON: explicit forks with Boole 0 is honored", func(t *testing.T) {
+		jsonStr := `{
+			"domain_type": "0x01020304",
+			"discovery_protocol_id": "0x05060708090a",
+			"forks": {"Boole": "0"}
+		}`
+
+		var cfg SSV
+		require.NoError(t, json.Unmarshal([]byte(jsonStr), &cfg))
+		assert.Equal(t, phase0.Epoch(0), cfg.Forks.Boole)
+	})
+
+	t.Run("JSON: explicit forks with a specific value is honored", func(t *testing.T) {
+		jsonStr := `{
+			"domain_type": "0x01020304",
+			"discovery_protocol_id": "0x05060708090a",
+			"forks": {"Boole": "12345"}
+		}`
+
+		var cfg SSV
+		require.NoError(t, json.Unmarshal([]byte(jsonStr), &cfg))
+		assert.Equal(t, phase0.Epoch(12345), cfg.Forks.Boole)
+	})
+
+	t.Run("YAML: absent forks defaults to MaxUint64", func(t *testing.T) {
+		yamlStr := `
+DomainType: 0x01020304
+DiscoveryProtocolID: 0x05060708090a
+`
+
+		var cfg SSV
+		require.NoError(t, yaml.Unmarshal([]byte(yamlStr), &cfg))
+		assert.Equal(t, phase0.Epoch(math.MaxUint64), cfg.Forks.Boole)
+	})
+
+	t.Run("YAML: explicit forks with Boole 0 is honored", func(t *testing.T) {
+		yamlStr := `
+DomainType: 0x01020304
+DiscoveryProtocolID: 0x05060708090a
+Forks:
+  Boole: 0
+`
+
+		var cfg SSV
+		require.NoError(t, yaml.Unmarshal([]byte(yamlStr), &cfg))
+		assert.Equal(t, phase0.Epoch(0), cfg.Forks.Boole)
+	})
+
+	t.Run("YAML: explicit forks with a specific value is honored", func(t *testing.T) {
+		yamlStr := `
+DomainType: 0x01020304
+DiscoveryProtocolID: 0x05060708090a
+Forks:
+  Boole: 12345
+`
+
+		var cfg SSV
+		require.NoError(t, yaml.Unmarshal([]byte(yamlStr), &cfg))
+		assert.Equal(t, phase0.Epoch(12345), cfg.Forks.Boole)
 	})
 }
 

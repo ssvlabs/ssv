@@ -79,7 +79,7 @@ func RunMsgProcessing(t *testing.T, test *spectests.MsgProcessingSpecTest) {
 	}
 
 	// test output message
-	broadcastedMsgs := preInstance.GetConfig().GetNetwork().(*spectestingutils.TestingNetwork).BroadcastedMsgs
+	broadcastedMsgs := preInstance.GetConfig().GetNetwork().(*protocoltesting.TestingNetwork).BroadcastedMsgs
 	if len(test.OutputMessages) > 0 || len(broadcastedMsgs) > 0 {
 		require.Len(t, broadcastedMsgs, len(test.OutputMessages))
 

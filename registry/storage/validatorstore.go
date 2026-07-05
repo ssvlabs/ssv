@@ -53,10 +53,12 @@ type SelfValidatorStore interface {
 }
 
 type Committee struct {
-	ID        spectypes.CommitteeID
-	Operators []spectypes.OperatorID
-	Shares    []*types.SSVShare
-	Indices   []phase0.ValidatorIndex
+	ID          spectypes.CommitteeID
+	Operators   []spectypes.OperatorID
+	Shares      []*types.SSVShare
+	Indices     []phase0.ValidatorIndex
+	BooleSubnet uint64
+	AlanSubnet  uint64
 }
 
 // IsParticipating returns whether any validator in the committee should participate in the given epoch.
@@ -629,6 +631,12 @@ func buildCommittee(shares []*types.SSVShare) *Committee {
 		committee.Indices = append(committee.Indices, share.ValidatorIndex)
 	}
 	slices.Sort(committee.Operators)
+
+	// Some test shares might have a zero-length committee.
+	if len(shares[0].Committee) > 0 {
+		committee.BooleSubnet = shares[0].BooleCommitteeSubnet()
+		committee.AlanSubnet = shares[0].AlanCommitteeSubnet()
+	}
 
 	return committee
 }

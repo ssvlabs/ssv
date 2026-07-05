@@ -27,7 +27,7 @@ type runnerTestKit struct {
 	cfg            *networkconfig.Network
 	keySet         *spectestingutils.TestKeySet
 	share          *spectypes.Share
-	network        *spectestingutils.TestingNetwork
+	network        *protocoltesting.TestingNetwork
 	signer         ekm.BeaconSigner
 	qbftController *controller.Controller
 	baseOptions    BaseRunnerOptions
@@ -46,7 +46,7 @@ func newRunnerTestKit(t *testing.T, role spectypes.RunnerRole, bn beacon.BeaconN
 	keySet := spectestingutils.Testing4SharesSet()
 	share := spectestingutils.TestingShare(keySet, spectestingutils.TestingValidatorIndex)
 	identifier := spectypes.NewMsgID(spectypes.JatoTestnet, spectestingutils.TestingValidatorPubKey[:], role)
-	network := spectestingutils.NewTestingNetwork(1, keySet.OperatorKeys[1])
+	network := protocoltesting.NewTestingNetwork(1, keySet.OperatorKeys[1])
 	km := ekm.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager())
 	operator := spectestingutils.TestingCommitteeMember(keySet)
 	operatorSigner := spectestingutils.NewOperatorSigner(keySet, 1)
