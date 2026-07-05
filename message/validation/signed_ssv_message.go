@@ -121,12 +121,16 @@ func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage)
 		return e
 	}
 
-	// Rule: If domain is different then self domain
-	domain := mv.netCfg.DomainType
-	if !bytes.Equal(ssvMessage.GetID().GetDomain(), domain[:]) {
+	// Rule: domain must match either the current (Alan) or next (Boole) fork domain.
+	// This is a cheap pre-decode allowlist; the exact per-slot domain is enforced by
+	// validateDomainAtSlot once the message slot is known (see consensus/partial validation).
+	msgDomain := ssvMessage.GetID().GetDomain()
+	currentDomain := mv.netCfg.DomainType
+	nextDomain := mv.netCfg.NextDomainType
+	if !bytes.Equal(msgDomain, currentDomain[:]) && !bytes.Equal(msgDomain, nextDomain[:]) {
 		err := ErrWrongDomain
-		err.got = hex.EncodeToString(ssvMessage.MsgID.GetDomain())
-		err.want = hex.EncodeToString(domain[:])
+		err.got = hex.EncodeToString(msgDomain)
+		err.want = fmt.Sprintf("%s or %s", hex.EncodeToString(currentDomain[:]), hex.EncodeToString(nextDomain[:]))
 		return err
 	}
 

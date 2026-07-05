@@ -186,7 +186,8 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		ctx, cancel := context.WithDeadline(t.Context(), time.Now().Add(-time.Second))
 		defer cancel()
 
-		_, err = validator.validateConsensusMessage(ctx, signedSSVMessage, committeeInfo, peerID, receivedAt)
+		topic := expectedCommitteeTopic(netCfg, committeeInfo, slot)
+		_, err = validator.validateConsensusMessage(ctx, signedSSVMessage, committeeInfo, topic, peerID, receivedAt)
 		require.ErrorIs(t, err, context.DeadlineExceeded)
 	})
 
@@ -209,7 +210,8 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		ctx, cancel := context.WithDeadline(t.Context(), time.Now().Add(-time.Second))
 		defer cancel()
 
-		_, err = validator.validatePartialSignatureMessage(ctx, signedSSVMessage, committeeInfo, peerID, receivedAt)
+		topic := expectedCommitteeTopic(netCfg, committeeInfo, slot)
+		_, err = validator.validatePartialSignatureMessage(ctx, signedSSVMessage, committeeInfo, topic, peerID, receivedAt)
 		require.ErrorIs(t, err, context.DeadlineExceeded)
 	})
 
@@ -2310,4 +2312,13 @@ var generateRandaoMsg = func(
 	})
 
 	return &msgs
+}
+
+// expectedCommitteeTopic returns the pubsub topic a committee message is expected to arrive
+// on for the fork active at the given slot, mirroring p2pNetwork.BroadcastAtSlot / validateTopicAtSlot.
+func expectedCommitteeTopic(netCfg *networkconfig.Network, committeeInfo CommitteeInfo, slot phase0.Slot) string {
+	if netCfg.BooleForkAtSlot(slot) {
+		return commons.BooleTopic(netCfg.SSV.Name, commons.BooleCommitteeSubnet(committeeInfo.committee))
+	}
+	return commons.GetTopicFullName(commons.CommitteeTopicID(committeeInfo.committeeID)[0])
 }

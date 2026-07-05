@@ -26,6 +26,7 @@ func (mv *messageValidator) validateConsensusMessage(
 	ctx context.Context,
 	signedSSVMessage *spectypes.SignedSSVMessage,
 	committeeInfo CommitteeInfo,
+	topic string,
 	receivedFrom peer.ID,
 	receivedAt time.Time,
 ) (*specqbft.Message, error) {
@@ -43,6 +44,15 @@ func (mv *messageValidator) validateConsensusMessage(
 		e := ErrUndecodableMessageData
 		e.innerErr = err
 		return nil, e
+	}
+
+	// The QBFT height is the duty slot; use it to enforce fork-aware topic and domain.
+	slot := phase0.Slot(consensusMessage.Height)
+	if err := mv.validateTopicAtSlot(committeeInfo, topic, slot); err != nil {
+		return consensusMessage, err
+	}
+	if err := mv.validateDomainAtSlot(ssvMessage.GetID(), slot); err != nil {
+		return consensusMessage, err
 	}
 
 	if err := mv.validateConsensusMessageSemantics(signedSSVMessage, consensusMessage, committeeInfo.committee); err != nil {
