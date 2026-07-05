@@ -540,6 +540,16 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 	// The sibling AggregatorCommitteeRunner instead classifies by the PostConsensusQuorumWithInvalidSignatures
 	// code; the divergence is deliberate (tagging with that code there breaks its spectest fixtures).
 	var recoverableErr, terminalErr error
+	// classify is the single source of truth for the terminal/recoverable split, shared by the listener
+	// receive site and the post-listener drain so the two can never drift apart. Recoverable failures
+	// carry the recoverableReconstructError tag; anything arriving without it is treated as terminal.
+	classify := func(err error) {
+		if isRecoverableReconstructError(err) {
+			recoverableErr = err
+		} else {
+			terminalErr = err
+		}
+	}
 
 	span.SetAttributes(observability.BeaconBlockRootCountAttribute(len(roots)))
 	// For each root that got at least one quorum, find the duties associated to it and try to submit
@@ -664,14 +674,7 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 				// isn't recorded as a failure.
 				return ctx.Err()
 			case err := <-errCh:
-				// The reconstruct goroutine tags its (recoverable, post-fallback) error with
-				// recoverableReconstructError; classify defensively so any other error arriving
-				// here without the tag is still treated as terminal.
-				if isRecoverableReconstructError(err) {
-					recoverableErr = err
-				} else {
-					terminalErr = err
-				}
+				classify(err)
 			case signatureResult, ok := <-signatureCh:
 				if !ok {
 					break listener
@@ -709,6 +712,22 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 
 					attestationsToSubmit[signatureResult.validatorIndex] = att
 				}
+			}
+		}
+
+		// Drain any error still buffered on errCh: when signatureCh closes in the same iteration the select
+		// may take the close branch and skip it. All workers have finished (signatureCh closes only after
+		// wg.Wait), so this non-blocking drain is complete. Today errCh carries only the recoverable
+		// reconstruct error (the sole producer above), and dropping one is benign (the duty stays open for
+		// retry). The drain is defensive: it classifies that error for completeness and future-proofs the
+		// path should a terminal error ever be pushed here.
+	drainErrCh:
+		for {
+			select {
+			case err := <-errCh:
+				classify(err)
+			default:
+				break drainErrCh
 			}
 		}
 
