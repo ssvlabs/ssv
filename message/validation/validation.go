@@ -246,7 +246,9 @@ func (mv *messageValidator) validateTopicAtSlot(committeeInfo CommitteeInfo, top
 	if mv.netCfg.BooleForkAtSlot(slot) {
 		expectedTopic = commons.BooleTopic(mv.netCfg.SSV.Name, commons.BooleCommitteeSubnet(committeeInfo.committee))
 	} else {
-		expectedTopic = commons.GetTopicFullName(commons.SubnetTopicID(commons.AlanCommitteeSubnet(committeeInfo.committeeID)))
+		// CommitteeTopicID(cid)[0] == SubnetTopicID(AlanCommitteeSubnet(cid)), which is what
+		// BroadcastAtSlot publishes on the Alan side, so the full names byte-match.
+		expectedTopic = commons.GetTopicFullName(commons.CommitteeTopicID(committeeInfo.committeeID)[0])
 	}
 
 	// Rule: Check if message was sent in the correct topic

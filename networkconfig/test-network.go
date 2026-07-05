@@ -77,7 +77,10 @@ var TestNetwork = &Network{
 		},
 		TotalEthereumValidators: 1_000_000, // just some high enough value, so we never accidentally reach the message-limits derived from it while testing something with local testnet
 		Forks: SSVForks{
-			Boole: 0,
+			// Default the shared TestNetwork to pre-Boole-fork so the existing (Alan-oriented)
+			// fixtures remain valid. Post-fork behavior is exercised either via SSV_TEST_BOOLE_FORK=post
+			// (see init below) or via explicit per-test post-fork configs.
+			Boole: phase0.Epoch(math.MaxUint64),
 		},
 	},
 }
