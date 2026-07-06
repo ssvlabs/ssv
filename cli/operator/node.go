@@ -622,11 +622,19 @@ func (n *node) applyDynamicMaxPeers() {
 	myValidators := n.nodeStorage.ValidatorStore().OperatorValidators(n.operatorDataStore.GetOperatorID())
 	mySubnets := networkcommons.Subnets{}
 	myActiveSubnets := 0
+	// Post-Boole-fork committees live on Boole subnets; before/through the transition both the
+	// Alan and Boole subnets are in play, so budget peers for both.
+	booleFork := n.networkConfig.BooleForkAtSlot(n.networkConfig.EstimatedCurrentSlot())
 	for _, v := range myValidators {
-		subnet := networkcommons.AlanCommitteeSubnet(v.CommitteeID())
-		if !mySubnets.IsSet(subnet) {
+		if subnet := v.BooleCommitteeSubnet(); !mySubnets.IsSet(subnet) {
 			mySubnets.Set(subnet)
 			myActiveSubnets++
+		}
+		if !booleFork {
+			if alanSubnet := v.AlanCommitteeSubnet(); !mySubnets.IsSet(alanSubnet) {
+				mySubnets.Set(alanSubnet)
+				myActiveSubnets++
+			}
 		}
 	}
 	idealMaxPeers := min(baseMaxPeers+idealPeersPerSubnet*myActiveSubnets, maxPeersLimit)
