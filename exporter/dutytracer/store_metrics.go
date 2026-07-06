@@ -63,36 +63,36 @@ func (d *DutyTraceStoreMetrics) GetCommitteeDutyLinks(slot phase0.Slot) ([]*trac
 	return d.Store.GetCommitteeDutyLinks(slot)
 }
 
-func (d *DutyTraceStoreMetrics) SaveCommitteeDuties(slot phase0.Slot, duties []*traces.CommitteeDutyTrace) error {
+func (d *DutyTraceStoreMetrics) SaveCommitteeDuties(slot phase0.Slot, role spectypes.RunnerRole, duties []*traces.CommitteeDutyTrace) error {
 	start := time.Now()
 	defer func() {
 		record("committee", "save_all", start)
 	}()
-	return d.Store.SaveCommitteeDuties(slot, duties)
+	return d.Store.SaveCommitteeDuties(slot, role, duties)
 }
 
-func (d *DutyTraceStoreMetrics) SaveCommitteeDuty(duty *traces.CommitteeDutyTrace) error {
+func (d *DutyTraceStoreMetrics) SaveCommitteeDuty(role spectypes.RunnerRole, duty *traces.CommitteeDutyTrace) error {
 	start := time.Now()
 	defer func() {
 		record("committee", "save", start)
 	}()
-	return d.Store.SaveCommitteeDuty(duty)
+	return d.Store.SaveCommitteeDuty(role, duty)
 }
 
-func (d *DutyTraceStoreMetrics) GetCommitteeDuty(slot phase0.Slot, id spectypes.CommitteeID) (duty *traces.CommitteeDutyTrace, err error) {
+func (d *DutyTraceStoreMetrics) GetCommitteeDuty(slot phase0.Slot, role spectypes.RunnerRole, id spectypes.CommitteeID) (duty *traces.CommitteeDutyTrace, err error) {
 	start := time.Now()
 	defer func() {
 		record("committee", "get", start)
 	}()
-	return d.Store.GetCommitteeDuty(slot, id)
+	return d.Store.GetCommitteeDuty(slot, role, id)
 }
 
-func (d *DutyTraceStoreMetrics) GetCommitteeDuties(slot phase0.Slot) ([]*traces.CommitteeDutyTrace, error) {
+func (d *DutyTraceStoreMetrics) GetCommitteeDuties(slot phase0.Slot, roles ...spectypes.RunnerRole) ([]*traces.CommitteeDutyTrace, error) {
 	start := time.Now()
 	defer func() {
 		record("committee", "get_all", start)
 	}()
-	return d.Store.GetCommitteeDuties(slot)
+	return d.Store.GetCommitteeDuties(slot, roles...)
 }
 
 func (d *DutyTraceStoreMetrics) SaveScheduled(slot phase0.Slot, schedule map[phase0.ValidatorIndex]rolemask.Mask) error {

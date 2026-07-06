@@ -83,7 +83,7 @@ func (c *Collector) dumpCommitteeToDBPeriodically(slot phase0.Slot) (totalSaved 
 		return true
 	})
 
-	if err := c.store.SaveCommitteeDuties(slot, duties); err != nil {
+	if err := c.store.SaveCommitteeDuties(slot, spectypes.RoleCommittee, duties); err != nil {
 		c.logger.Error("save committee duties to disk", zap.Error(err))
 		return 0
 	}

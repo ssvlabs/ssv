@@ -783,7 +783,7 @@ func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 			}
 
 			if late {
-				err := c.store.SaveCommitteeDuty(&trace.CommitteeDutyTrace)
+				err := c.store.SaveCommitteeDuty(spectypes.RoleCommittee, &trace.CommitteeDutyTrace)
 				_ = c.inFlightCommittee.Delete(committeeID)
 				return err
 			}
@@ -891,7 +891,7 @@ func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 			c.checkAndPublishQuorum(verifyCtx.logger, pSigMessages, verifyCtx.committeeID, trace)
 
 			if late {
-				err := c.store.SaveCommitteeDuty(&trace.CommitteeDutyTrace)
+				err := c.store.SaveCommitteeDuty(spectypes.RoleCommittee, &trace.CommitteeDutyTrace)
 				_ = c.inFlightCommittee.Delete(verifyCtx.committeeID)
 				return err
 			}
