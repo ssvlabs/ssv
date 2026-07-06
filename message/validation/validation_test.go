@@ -210,6 +210,21 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.ErrorIs(t, err, ErrWrongDomain)
 	})
 
+	t.Run("committee consensus rejected with boole domain pre-fork", func(t *testing.T) {
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
+
+		slot := netCfg.FirstSlotAtEpoch(1) // pre-fork (default TestNetwork Boole=MaxUint64)
+		// Boole (next) domain on a pre-fork slot: passes the pre-decode allowlist but must be
+		// rejected by the slot-exact domain check.
+		booleDomainIdentifier := spectypes.NewMsgID(netCfg.NextDomainType, encodedCommitteeID, committeeRole)
+		signedSSVMessage := generateSignedMessage(ks, booleDomainIdentifier, slot)
+
+		alanTopic := commons.GetTopicFullName(commons.CommitteeTopicID(committeeID)[0])
+		receivedAt := netCfg.SlotStartTime(slot)
+		_, err = validator.handleSignedSSVMessage(context.Background(), signedSSVMessage, alanTopic, peerID, receivedAt)
+		require.ErrorIs(t, err, ErrWrongDomain)
+	})
+
 	// Message validation happy flow, messages are not ignored or rejected and there are no errors
 	t.Run("happy flow", func(t *testing.T) {
 		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
