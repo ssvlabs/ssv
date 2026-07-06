@@ -16,6 +16,7 @@ import (
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/topics"
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/utils/hashmap"
 )
 
@@ -37,11 +38,17 @@ func (c *testTopicsController) Peers(topicName string) ([]peer.ID, error) {
 	if topicName == "" {
 		return append([]peer.ID(nil), c.allPeers...), nil
 	}
-	return append([]peer.ID(nil), c.peersByTopic[topicName]...), nil
+	// The controller presents full topic names outward (see Topics); look up by base name.
+	return append([]peer.ID(nil), c.peersByTopic[commons.GetTopicBaseName(topicName)]...), nil
 }
 
 func (c *testTopicsController) Topics() []string {
-	return append([]string(nil), c.topics...)
+	// Mirror the real controller, which lists subscribed topics by their full pubsub name.
+	full := make([]string, len(c.topics))
+	for i, t := range c.topics {
+		full[i] = commons.GetTopicFullName(t)
+	}
+	return full
 }
 
 func (c *testTopicsController) Broadcast(string, []byte, time.Duration) error {
@@ -298,6 +305,7 @@ func newTrimTestNetwork(host host.Host, topicsCtrl topics.Controller, idx peers.
 
 	n := &p2pNetwork{
 		logger:               zap.NewNop(),
+		cfg:                  &Config{NetworkConfig: networkconfig.TestNetwork},
 		topicsCtrl:           topicsCtrl,
 		idx:                  idx,
 		persistentSubnets:    ownSubnets,

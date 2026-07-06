@@ -258,14 +258,14 @@ func getTestingData(t *testing.T) TestData {
 	}
 
 	mockHandshaker := handshaker{
-		ctx:        t.Context(),
-		nodeInfos:  nii,
-		peerInfos:  ns,
-		subnetsIdx: peers.NewSubnetsIndex(),
-		ids:        ids,
-		net:        net,
-		streams:    sc,
-		filters:    func() []HandshakeFilter { return []HandshakeFilter{} },
+		ctx:                t.Context(),
+		nodeInfos:          nii,
+		peerInfos:          ns,
+		subnetsIdx:         peers.NewSubnetsIndex(),
+		ids:                ids,
+		net:                net,
+		streams:            sc,
+		filters:            func() []HandshakeFilter { return []HandshakeFilter{} },
 		domainTypeProvider: func() spectypes.DomainType { return networkconfig.TestNetwork.DomainType },
 	}
 
