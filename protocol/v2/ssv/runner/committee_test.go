@@ -17,7 +17,11 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
 
+	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
@@ -90,6 +94,28 @@ func newCommitteeRunnerEnv(
 	doppelganger DoppelgangerProvider,
 ) *committeeRunnerEnv {
 	t.Helper()
+	return newCommitteeRunnerEnvInternal(t, validatorIndices, guard, doppelganger, nil)
+}
+
+// newCommitteeRunnerEnvWithBeacon mirrors newCommitteeRunnerEnv but wires the runner to the supplied
+// beacon node, so a test can substitute a faulty one to exercise submit-failure classification.
+func newCommitteeRunnerEnvWithBeacon(
+	t *testing.T,
+	validatorIndices []int,
+	beaconNode beacon.BeaconNode,
+) *committeeRunnerEnv {
+	t.Helper()
+	return newCommitteeRunnerEnvInternal(t, validatorIndices, &committeeDutyGuardStub{}, &doppelgangerStub{}, beaconNode)
+}
+
+func newCommitteeRunnerEnvInternal(
+	t *testing.T,
+	validatorIndices []int,
+	guard CommitteeDutyGuard,
+	doppelganger DoppelgangerProvider,
+	beaconNode beacon.BeaconNode,
+) *committeeRunnerEnv {
+	t.Helper()
 
 	keySetMap := spectestingutils.KeySetMapForValidatorIndexList(validatorIndices)
 	sorted := make([]int, 0, len(validatorIndices))
@@ -110,9 +136,7 @@ func newCommitteeRunnerEnv(
 
 	config := protocoltesting.TestingConfig(logger, sampleKey)
 	config.Network = network
-	config.BeaconSigner = signer
-
-	ctrl := protocoltesting.NewTestingQBFTController(
+	controller := protocoltesting.NewTestingQBFTController(
 		sampleKey,
 		msgID,
 		spectestingutils.TestingCommitteeMember(sampleKey),
@@ -120,7 +144,7 @@ func newCommitteeRunnerEnv(
 		false,
 	)
 
-	beacon := protocoltesting.NewTestingBeaconNodeWrapped().(*protocoltesting.BeaconNodeWrapped)
+	defaultBeacon := protocoltesting.NewTestingBeaconNodeWrapped().(*protocoltesting.BeaconNodeWrapped)
 	if guard == nil {
 		guard = &committeeDutyGuardStub{}
 	}
@@ -128,33 +152,42 @@ func newCommitteeRunnerEnv(
 		doppelganger = &doppelgangerStub{}
 	}
 
+	// The runner talks to the injected beacon when supplied (e.g. a faulty one), otherwise the plain
+	// testing wrapper. env.beacon keeps the base wrapper so broadcast assertions still work.
+	runnerBeacon := beaconNode
+	if runnerBeacon == nil {
+		runnerBeacon = defaultBeacon
+	}
+
 	runnerI, err := NewCommitteeRunner(CommitteeRunnerOptions{
 		BaseRunnerOptions: BaseRunnerOptions{
-			NetworkConfig:  cloneTestNetworkConfig(),
+			NetworkConfig:  networkconfig.TestNetwork,
 			Share:          shareMap,
-			Beacon:         beacon,
+			Beacon:         runnerBeacon,
 			Network:        network,
 			Signer:         signer,
 			OperatorSigner: spectestingutils.NewOperatorSigner(sampleKey, 1),
 		},
 		AttestingValidators: sharePubKeys,
-		QBFTController:      ctrl,
+		QBFTController:      controller,
 		DutyGuard:           guard,
 		DoppelgangerHandler: doppelganger,
 	})
 	require.NoError(t, err)
 
 	crunner := runnerI.(*CommitteeRunner)
-	crunner.SetQBFTRoundTimerF(testingRoundTimerF)
+	crunner.SetQBFTRoundTimerF(func(_ context.Context, _ *zap.Logger, _ phase0.Slot) ssv.QBFTRoundTimer {
+		return roundtimer.NewTestingTimer()
+	})
 
 	return &committeeRunnerEnv{
 		logger:     logger,
 		runner:     crunner,
-		beacon:     beacon,
+		beacon:     defaultBeacon,
 		network:    network,
 		keySetMap:  keySetMap,
 		sampleKey:  sampleKey,
-		controller: ctrl,
+		controller: controller,
 	}
 }
 

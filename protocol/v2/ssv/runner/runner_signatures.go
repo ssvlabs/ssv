@@ -7,9 +7,11 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
+	"github.com/herumi/bls-eth-go-binary/bls"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -132,4 +134,59 @@ func (b *BaseRunner) validateValidatorIndexInPartialSigMsg(
 		}
 	}
 	return nil
+}
+
+func (b *BaseRunner) verifyBeaconPartialSignature(signer spectypes.OperatorID, signature spectypes.Signature, root [32]byte,
+	committee []*spectypes.ShareMember) error {
+	for _, n := range committee {
+		if n.Signer == signer {
+			pk, err := ssvtypes.DeserializeBLSPublicKey(n.SharePubKey)
+			if err != nil {
+				return fmt.Errorf("could not deserialized pk: %w", err)
+			}
+			sig := &bls.Sign{}
+			if err := sig.Deserialize(signature); err != nil {
+				return fmt.Errorf("could not deserialized Signature: %w", err)
+			}
+
+			// verify
+			if !sig.VerifyByte(&pk, root[:]) {
+				return errors.New("wrong signature")
+			}
+			return nil
+		}
+	}
+	return errors.New("unknown signer")
+}
+
+// Stores the container's existing signature or the new one, depending on their validity. If both are invalid, remove the existing one
+func (b *BaseRunner) resolveDuplicateSignature(container *ssv.PartialSigContainer, msg *spectypes.PartialSignatureMessage) {
+	// Check previous signature validity
+	previousSignature, err := container.GetSignature(msg.ValidatorIndex, msg.Signer, msg.SigningRoot)
+	if err == nil {
+		err = b.verifyBeaconPartialSignature(
+			msg.Signer,
+			previousSignature,
+			msg.SigningRoot,
+			b.Share[msg.ValidatorIndex].Committee,
+		)
+		if err == nil {
+			// Keep the previous signature since it's correct
+			return
+		}
+	}
+
+	// Previous signature is incorrect or doesn't exist
+	container.Remove(msg.ValidatorIndex, msg.Signer, msg.SigningRoot)
+
+	// Hold the new signature, if correct
+	err = b.verifyBeaconPartialSignature(
+		msg.Signer,
+		msg.PartialSignature,
+		msg.SigningRoot,
+		b.Share[msg.ValidatorIndex].Committee,
+	)
+	if err == nil {
+		container.AddSignature(msg)
+	}
 }
