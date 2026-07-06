@@ -9,8 +9,8 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/exporter"
 	estore "github.com/ssvlabs/ssv/exporter/store"
+	traces "github.com/ssvlabs/ssv/exporter/traces"
 	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
@@ -52,7 +52,7 @@ func TestMigration9CommitteeDutyRoleField(t *testing.T) {
 		newValue, found := getCommitteeObj(t, opt.Db, prefix, newKey)
 		require.True(t, found)
 
-		var migrated exporter.CommitteeDutyTrace
+		var migrated traces.CommitteeDutyTrace
 		require.NoError(t, migrated.UnmarshalSSZ(newValue))
 		require.Equal(t, slot, migrated.Slot)
 		require.Equal(t, role, migrated.Role)
@@ -70,7 +70,7 @@ func TestMigration9CommitteeDutyRoleField(t *testing.T) {
 		slot := phase0.Slot(321)
 		role := spectypes.RoleAggregatorCommittee
 		committeeID := testCommitteeID(0x22)
-		trace := &exporter.CommitteeDutyTrace{
+		trace := &traces.CommitteeDutyTrace{
 			Slot:        slot,
 			Role:        role,
 			CommitteeID: committeeID,
@@ -95,7 +95,7 @@ func TestMigration9CommitteeDutyRoleField(t *testing.T) {
 		require.True(t, found)
 		require.Equal(t, initialValue, value)
 
-		var migrated exporter.CommitteeDutyTrace
+		var migrated traces.CommitteeDutyTrace
 		require.NoError(t, migrated.UnmarshalSSZ(value))
 		require.Equal(t, slot, migrated.Slot)
 		require.Equal(t, role, migrated.Role)

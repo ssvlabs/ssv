@@ -9,8 +9,8 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	traces "github.com/ssvlabs/ssv/exporter/traces"
 	estore "github.com/ssvlabs/ssv/exporter/store"
+	traces "github.com/ssvlabs/ssv/exporter/traces"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 

@@ -26,7 +26,24 @@ const (
 	scheduledDutyKey           = "sd"
 	// slotKeyLen is the number of bytes used to encode a slot in keys.
 	slotKeyLen = 4
+
+	// Stable internal bytes used for role-aware committee-duty key prefixes.
+	committeeRolePrefixByte           byte = 0x00
+	aggregatorCommitteeRolePrefixByte byte = 0x06
 )
+
+// CommitteeRunnerRoleToPrefix maps a committee-backed runner role to its stable
+// key-prefix byte used in role-aware committee-duty keys.
+func CommitteeRunnerRoleToPrefix(role spectypes.RunnerRole) (byte, error) {
+	switch role {
+	case spectypes.RoleCommittee:
+		return committeeRolePrefixByte, nil
+	case spectypes.RoleAggregatorCommittee:
+		return aggregatorCommitteeRolePrefixByte, nil
+	default:
+		return 0, fmt.Errorf("unsupported committee runner role: %s", role)
+	}
+}
 
 type DutyTraceStore struct {
 	db basedb.Database

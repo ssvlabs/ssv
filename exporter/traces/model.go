@@ -181,6 +181,7 @@ func (trace *CommitteeDutyTrace) DeepCopy() *CommitteeDutyTrace {
 			Decideds: deepCopySlice(trace.Decideds),
 		},
 		Slot:          trace.Slot,
+		Role:          trace.Role,
 		CommitteeID:   trace.CommitteeID,
 		OperatorIDs:   opIDs,
 		SyncCommittee: deepCopySlice(trace.SyncCommittee),
