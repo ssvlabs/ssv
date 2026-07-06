@@ -23,22 +23,8 @@ import (
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
-// faultyAggregateSubmitBeacon wraps the testing beacon node and forces the aggregate-selection-proof
-// submission to fail, so we can exercise the terminal post-quorum "submit failed" path in
-// AggregatorRunner.ProcessPostConsensus. All other beacon behavior is inherited unchanged via the
-// embedded *BeaconNodeWrapped (method promotion).
-//
-// NOTE: AggregatorCommitteeRunner's test suite (deferred to a later unit) defines an identical
-// helper in aggregator_committee_test.go. When that file lands, dedup by keeping a single
-// definition rather than declaring it twice in this package.
-type faultyAggregateSubmitBeacon struct {
-	*protocoltesting.BeaconNodeWrapped
-	submitErr error
-}
-
-func (b *faultyAggregateSubmitBeacon) SubmitSignedAggregateSelectionProof(_ context.Context, _ *spec.VersionedSignedAggregateAndProof) error {
-	return b.submitErr
-}
+// faultyAggregateSubmitBeacon is declared in aggregator_committee_test.go and shared by both
+// AggregatorRunner (this file) and AggregatorCommitteeRunner test suites.
 
 // aggregatorRunnerEnv wires a legacy (non-committee) AggregatorRunner. The beacon node is injected
 // so a test can substitute a faulty one.
