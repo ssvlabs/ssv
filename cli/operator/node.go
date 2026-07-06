@@ -325,8 +325,9 @@ func newNode(
 
 	var newDecidedHandler qbftcontroller.NewDecidedHandler
 	var decidedStreamPublisherFn func(dutytracer.DecidedInfo)
+	var ws exporterapi.WebSocketServer
 	if cfg.WsAPIPort != 0 {
-		ws := exporterapi.NewWsServer(logger, nil, http.NewServeMux(), cfg.WithPing, fmt.Sprintf(":%d", cfg.WsAPIPort))
+		ws = exporterapi.NewWsServer(logger, nil, http.NewServeMux(), cfg.WithPing, fmt.Sprintf(":%d", cfg.WsAPIPort))
 		cfg.SSVOptions.WS = ws
 		newDecidedHandler = decided.NewStreamPublisher(logger, networkConfig.DomainType, ws)
 		decidedStreamPublisherFn = decided.NewDecidedListener(logger, networkConfig.DomainType, ws, nodeStorage.ValidatorStore())
@@ -432,11 +433,11 @@ func newNode(
 	cfg.SSVOptions.ValidatorController = validatorCtrl
 	cfg.SSVOptions.ValidatorStore = nodeStorage.ValidatorStore()
 
-	if cfg.WsAPIPort != 0 {
+	if ws != nil {
 		handler := exporterapi.NewHandler(logger)
-		cfg.SSVOptions.WSQueryHandler = func(nm *exporterapi.NetworkMessage) {
+		ws.UseQueryHandler(func(nm *exporterapi.NetworkMessage) {
 			handler.HandleQueryRequests(storageMap, exporterRead, nodeStorage.ValidatorStore(), networkConfig.DomainType, nm)
-		}
+		})
 	}
 
 	operatorNode := operator.New(logger, cfg.SSVOptions, cfg.ExporterOptions, slotTickerProvider)

@@ -11,7 +11,6 @@ import (
 
 	"github.com/ssvlabs/ssv/eth/executionclient"
 	exporterconfig "github.com/ssvlabs/ssv/exporter/config"
-	"github.com/ssvlabs/ssv/exporter/v1/api"
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability/log"
@@ -26,6 +25,10 @@ import (
 	storage2 "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
+
+type webSocketServer interface {
+	Start(ctx context.Context) (string, <-chan error, error)
+}
 
 // Options contains options to create the node
 type Options struct {
@@ -42,8 +45,7 @@ type Options struct {
 	ValidatorStore      storage2.ValidatorStore
 	ValidatorOptions    validator.ControllerOptions `yaml:"ValidatorOptions"`
 	DutyStore           *dutystore.Store
-	WS                  api.WebSocketServer
-	WSQueryHandler      api.QueryMessageHandler
+	WS                  webSocketServer
 }
 
 func (o *Options) ApplyDefaults() {
@@ -64,8 +66,7 @@ type Node struct {
 	dutyScheduler    *duties.Scheduler
 	feeRecipientCtrl fee_recipient.RecipientController
 
-	ws             api.WebSocketServer
-	wsQueryHandler api.QueryMessageHandler
+	ws webSocketServer
 }
 
 func shouldRunDutyScheduler(exporterOpts exporterconfig.Options) bool {
@@ -137,8 +138,7 @@ func New(logger *zap.Logger, opts Options, exporterOpts exporterconfig.Options, 
 		dutyScheduler:    dutyScheduler,
 		feeRecipientCtrl: feeRecipientCtrl,
 
-		ws:             opts.WS,
-		wsQueryHandler: opts.WSQueryHandler,
+		ws: opts.WS,
 	}
 
 	if feeRecipientCtrl != nil {
@@ -283,8 +283,6 @@ func (n *Node) HealthCheck() error {
 // os.Exit-ing from a goroutine. Requires n.ws != nil.
 func (n *Node) startWSServer(ctx context.Context) (<-chan error, error) {
 	n.logger.Info("starting WS server")
-
-	n.ws.UseQueryHandler(n.wsQueryHandler)
 
 	_, serveErr, err := n.ws.Start(ctx)
 	if err != nil {

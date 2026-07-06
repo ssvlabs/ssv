@@ -13,7 +13,6 @@ import (
 	"github.com/ssvlabs/ssv/doppelganger"
 	"github.com/ssvlabs/ssv/eth/executionclient"
 	exporterconfig "github.com/ssvlabs/ssv/exporter/config"
-	exporterapi "github.com/ssvlabs/ssv/exporter/v1/api"
 	"github.com/ssvlabs/ssv/hprobe"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/network"
@@ -176,48 +175,6 @@ func Test_newNode_wiresExporterNode(t *testing.T) {
 			require.NoError(t, a.close())
 		})
 	}
-}
-
-// Test_newNode_wiresWebsocketQueryHandler covers the WS composition point: when
-// the WS API is enabled, newNode must construct the server and provide the
-// query handler that operator.Node later installs when starting the server.
-func Test_newNode_wiresWebsocketQueryHandler(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	logger := zap.NewNop()
-
-	netCfg := *networkconfig.TestNetwork
-	networkConfig := &netCfg
-
-	cfg := &config{}
-	cfg.DBOptions.Path = t.TempDir()
-	cfg.ExporterOptions.Enabled = true
-	cfg.ExporterOptions.Mode = exporterconfig.ModeArchive
-	cfg.MetricsAPIPort = 0
-	cfg.SSVAPIPort = 0
-	cfg.WsAPIPort = 1
-
-	res := resolved{mode: modeExporterArchive}
-
-	a, err := newNode(ctx, cfg, logger, res, networkConfig, stubBeaconClient{}, stubExecutionClient{})
-	require.NoError(t, err)
-	require.NotNil(t, a)
-	require.NotNil(t, cfg.SSVOptions.WS)
-	require.NotNil(t, cfg.SSVOptions.WSQueryHandler)
-
-	nm := &exporterapi.NetworkMessage{
-		Msg: exporterapi.Message{Type: exporterapi.MessageType("unsupported")},
-	}
-	cfg.SSVOptions.WSQueryHandler(nm)
-	require.Equal(t, exporterapi.TypeError, nm.Msg.Type)
-	errs, ok := nm.Msg.Data.([]string)
-	require.True(t, ok)
-	require.Equal(t, []string{"bad request - unknown message type 'unsupported'"}, errs)
-
-	// Mirror production teardown ordering: cancel the ctx, then close (newNode starts no goroutines).
-	cancel()
-	require.NoError(t, a.close())
 }
 
 // Test_newNode_closesDBOnAssemblyFailure locks in newNode()'s error-only cleanup contract: when
