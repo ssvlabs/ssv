@@ -2,24 +2,16 @@ package operator
 
 import (
 	"context"
-	"encoding/hex"
 	"errors"
 	"fmt"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
-	"github.com/hashicorp/go-multierror"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
-
-	"github.com/attestantio/go-eth2-client/spec/phase0"
-
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/eth/executionclient"
 	exportercore "github.com/ssvlabs/ssv/exporter"
 	exporterconfig "github.com/ssvlabs/ssv/exporter/config"
-	dutytracer "github.com/ssvlabs/ssv/exporter/dutytracer"
-	exporterstore "github.com/ssvlabs/ssv/exporter/store"
 	"github.com/ssvlabs/ssv/exporter/v1/api"
 	qbftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/network"
@@ -33,7 +25,6 @@ import (
 	"github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/operator/validator"
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
-	"github.com/ssvlabs/ssv/protocol/v2/message"
 	storage2 "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
@@ -294,170 +285,16 @@ func (n *Node) HealthCheck() error {
 	return nil
 }
 
-// handleQueryRequests waits for incoming messages and
-func (n *Node) handleQueryRequests(nm *api.NetworkMessage) {
-	if nm.Err != nil {
-		nm.Msg = api.Message{
-			Type: api.TypeError,
-			Data: []string{fmt.Sprintf("could not parse network message: %v", nm.Err)},
-		}
-	}
-	n.logger.Debug("got incoming export request",
-		zap.String("type", string(nm.Msg.Type)))
-
-	h := api.NewHandler(n.logger)
-
-	switch nm.Msg.Type {
-	case api.TypeDecided:
-		// In exporter v2 (archive) mode we serve decided queries via exporter core.
-		// Fall back to legacy qbft storage when exporter isn't wired.
-		if n.exporterRead != nil {
-			n.handleDecidedViaExporter(nm)
-			break
-		}
-		h.HandleParticipantsQuery(n.qbftStorage, nm, n.network.DomainType)
-	case api.TypeError:
-		h.HandleErrorQuery(nm)
-	default:
-		h.HandleUnknownQuery(nm)
-	}
-}
-
-func (n *Node) handleDecidedViaExporter(nm *api.NetworkMessage) {
-	res := api.Message{Type: nm.Msg.Type, Filter: nm.Msg.Filter}
-
-	pkBytes, err := hex.DecodeString(nm.Msg.Filter.PublicKey)
-	if err != nil {
-		n.logger.Warn("failed to decode validator public key", zap.Error(err))
-		res.Type = api.TypeError
-		res.Data = []string{fmt.Sprintf("invalid publicKey %q: %v", nm.Msg.Filter.PublicKey, err)}
-		nm.Msg = res
-		return
-	}
-
-	var pk spectypes.ValidatorPK
-	copy(pk[:], pkBytes)
-
-	idx, ok := n.validatorOptions.ValidatorStore.ValidatorIndex(pk)
-	if !ok {
-		n.logger.Warn("validator not found for public key", zap.String("validator_pubkey", hex.EncodeToString(pk[:])))
-		res.Type = api.TypeError
-		res.Data = []string{fmt.Sprintf("validator not found for public key %s", nm.Msg.Filter.PublicKey)}
-		nm.Msg = res
-		return
-	}
-
-	role, err := message.BeaconRoleFromString(nm.Msg.Filter.Role)
-	if err != nil {
-		n.logger.Warn("failed to parse role", zap.Error(err))
-		res.Type = api.TypeError
-		res.Data = []string{fmt.Sprintf("role doesn't exist: %q", nm.Msg.Filter.Role)}
-		nm.Msg = res
-		return
-	}
-
-	coreQuery := &exportercore.DecidedsQuery{
-		From:    nm.Msg.Filter.From,
-		To:      nm.Msg.Filter.To,
-		Roles:   []spectypes.BeaconRole{role},
-		Indices: []phase0.ValidatorIndex{idx},
-	}
-
-	result, errs := n.exporterRead.TraceDecidedsCore(coreQuery)
-	participations := wsParticipationsFromCore(result)
-
-	var unexpectedErr error
-	filtered := filterOutDutyNotFoundErrors(errs)
-	if filtered.ErrorOrNil() != nil {
-		for _, e := range filtered.Errors {
-			// Preserve legacy WS leniency: treat validation errors as "no messages".
-			if isExporterValidationError(e) {
-				continue
-			}
-			unexpectedErr = e
-		}
-	}
-
-	if len(participations) == 0 {
-		if unexpectedErr != nil {
-			n.logger.Warn("failed to build participants api data due to exporter errors", zap.Error(unexpectedErr), fields.ValidatorIndex(idx))
-			res.Type = api.TypeError
-			res.Data = []string{fmt.Sprintf("internal error - could not build response: %v", unexpectedErr)}
-		} else {
-			// Mirror legacy exporter behavior: empty range returns "no messages" as a decided response.
-			res.Data = []string{"no messages"}
-		}
-		nm.Msg = res
-		return
-	}
-
-	data, err := api.ParticipantsAPIData(n.network.DomainType, participations...)
-	if err != nil {
-		n.logger.Warn("failed to build participants api data", zap.Error(err))
-		res.Type = api.TypeError
-		res.Data = []string{fmt.Sprintf("internal error - could not build response: %v", err)}
-		nm.Msg = res
-		return
-	}
-
-	res.Data = data
-	nm.Msg = res
-}
-
-func wsParticipationsFromCore(result *exportercore.TraceDecidedsResult) []qbftstorage.Participation {
-	out := make([]qbftstorage.Participation, 0)
-	if result == nil {
-		return out
-	}
-	for _, p := range result.Participants {
-		out = append(out, qbftstorage.Participation{
-			ParticipantsRangeEntry: qbftstorage.ParticipantsRangeEntry{
-				Slot:    p.Slot,
-				PubKey:  p.PubKey,
-				Signers: p.Signers,
-			},
-			Role:   p.Role,
-			PubKey: p.PubKey,
-		})
-	}
-	return out
-}
-
-func isExporterValidationError(err error) bool {
-	var ve *exportercore.ValidationError
-	return errors.As(err, &ve)
-}
-
-// isNotFoundError returns true if the error represents an expected "no duty"
-// condition, either from the duty tracer or the underlying exporter store.
-// It mirrors the semantics in exporter helpers to ease future refactoring.
-func isNotFoundError(err error) bool {
-	return errors.Is(err, dutytracer.ErrNotFound) || errors.Is(err, exporterstore.ErrNotFound)
-}
-
-// filterOutDutyNotFoundErrors removes not-found duty errors from a multierror,
-// returning nil if nothing remains. It mirrors exportercore.filterOutDutyNotFoundErrors
-// to make future WS refactoring simpler.
-func filterOutDutyNotFoundErrors(e *multierror.Error) *multierror.Error {
-	if e == nil || e.ErrorOrNil() == nil {
-		return nil
-	}
-	var filtered *multierror.Error
-	for _, err := range e.Errors {
-		if err != nil && !isNotFoundError(err) {
-			filtered = multierror.Append(filtered, err)
-		}
-	}
-	return filtered
-}
-
 // startWSServer starts the WS API server and returns its serve-error channel. A serve failure
 // propagates via the channel — bringing the node down gracefully through Close — rather than
 // os.Exit-ing from a goroutine. Requires n.ws != nil.
 func (n *Node) startWSServer(ctx context.Context) (<-chan error, error) {
 	n.logger.Info("starting WS server")
 
-	n.ws.UseQueryHandler(n.handleQueryRequests)
+	h := api.NewHandler(n.logger)
+	n.ws.UseQueryHandler(func(nm *api.NetworkMessage) {
+		h.HandleQueryRequests(n.qbftStorage, n.exporterRead, n.validatorOptions.ValidatorStore, n.network.DomainType, nm)
+	})
 
 	_, serveErr, err := n.ws.Start(ctx)
 	if err != nil {
