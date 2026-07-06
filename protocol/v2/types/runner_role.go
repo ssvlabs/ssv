@@ -41,3 +41,16 @@ func RunnerRoleForDuty(duty spectypes.Duty, isBooleFork bool) spectypes.RunnerRo
 	}
 	return duty.RunnerRole()
 }
+
+// RunnerRoleToString is a workaround for Alan runner roles.
+// Deprecated: use (spectypes.RunnerRole).String() after the Boole fork
+func RunnerRoleToString(r spectypes.RunnerRole) string {
+	switch r {
+	case RoleAggregator:
+		return "AGGREGATOR"
+	case RoleSyncCommitteeContribution:
+		return "SYNC_COMMITTEE_CONTRIBUTION"
+	default:
+		return r.String()
+	}
+}

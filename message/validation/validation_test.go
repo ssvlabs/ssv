@@ -654,10 +654,15 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		slot := netCfg.FirstSlotAtEpoch(1)
 
-		badIdentifier := spectypes.NewMsgID(netCfg.DomainType, encodedCommitteeID, math.MaxInt32)
+		// Use a real validator pubkey (rather than encodedCommitteeID) as the duty executor ID so
+		// getCommitteeAndValidatorIndices/belongsToCommittee succeed and the flow actually reaches
+		// the role check (validateConsensusMessageSemantics), which is where an invalid role is
+		// now caught (moved there from validateSSVMessage so it can be evaluated fork-aware, i.e.
+		// per-slot, via validRoleAtSlot).
+		badIdentifier := spectypes.NewMsgID(netCfg.DomainType, shares.active.ValidatorPubKey[:], math.MaxInt32)
 		signedSSVMessage := generateSignedMessage(ks, badIdentifier, slot)
 
-		topicID := commons.GetTopicFullName(commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0])
+		topicID := commons.GetTopicFullName(commons.CommitteeTopicID(committeeID)[0])
 		receivedAt := netCfg.SlotStartTime(slot)
 		_, err = validator.handleSignedSSVMessage(context.Background(), signedSSVMessage, topicID, peerID, receivedAt)
 		require.ErrorIs(t, err, ErrInvalidRole)
@@ -2184,7 +2189,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		receivedAt := netCfg.SlotStartTime(slot)
 		topicID := commons.GetTopicFullName(commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0])
 		_, err = validator.handleSignedSSVMessage(context.Background(), signedSSVMessage, topicID, peerID, receivedAt)
-		require.ErrorContains(t, err, ErrTripleValidatorIndexInPartialSignatures.Error())
+		require.ErrorContains(t, err, ErrTooManyEqualValidatorIndicesInPartialSignatures.Error())
 	})
 
 	// Receive a partial signature message with validator index mismatch

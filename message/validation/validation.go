@@ -191,13 +191,16 @@ func (mv *messageValidator) handleSignedSSVMessage(
 	if err := mv.validateSSVMessage(signedSSVMessage.SSVMessage); err != nil {
 		return decodedMessage, err
 	}
+	if err := mv.validateDomainAllowlist(signedSSVMessage.SSVMessage.GetID()); err != nil {
+		return decodedMessage, err
+	}
 
 	committeeInfo, err := mv.getCommitteeAndValidatorIndices(signedSSVMessage.SSVMessage.GetID())
 	if err != nil {
 		return decodedMessage, err
 	}
 
-	if err := mv.committeeChecks(signedSSVMessage, committeeInfo); err != nil {
+	if err := mv.belongsToCommittee(signedSSVMessage.OperatorIDs, committeeInfo.committee); err != nil {
 		return decodedMessage, err
 	}
 
@@ -232,10 +235,21 @@ func (mv *messageValidator) handleSignedSSVMessage(
 	return decodedMessage, nil
 }
 
-func (mv *messageValidator) committeeChecks(signedSSVMessage *spectypes.SignedSSVMessage, committeeInfo CommitteeInfo) error {
-	// Note: the "correct topic" rule is enforced later, per-slot and fork-aware, by
-	// validateTopicAtSlot once the message slot is known (see consensus/partial validation).
-	return mv.belongsToCommittee(signedSSVMessage.OperatorIDs, committeeInfo.committee)
+// validateDomainAllowlist enforces that the message domain matches either the current (Alan) or
+// next (Boole) fork domain. This is a cheap pre-decode allowlist; the exact per-slot domain is
+// enforced by validateDomainAtSlot once the message slot is known (see consensus/partial validation).
+func (mv *messageValidator) validateDomainAllowlist(msgID spectypes.MessageID) error {
+	msgDomain := msgID.GetDomain()
+	currentDomain := mv.netCfg.DomainType[:]
+	nextDomain := mv.netCfg.NextDomainType[:]
+	if !bytes.Equal(msgDomain, currentDomain) && !bytes.Equal(msgDomain, nextDomain) {
+		err := ErrWrongDomain
+		err.got = hex.EncodeToString(msgDomain)
+		err.want = fmt.Sprintf("%s or %s", hex.EncodeToString(currentDomain), hex.EncodeToString(nextDomain))
+		return err
+	}
+
+	return nil
 }
 
 // validateTopicAtSlot enforces that the message arrived on the topic that matches the
