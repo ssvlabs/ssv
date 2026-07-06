@@ -150,6 +150,7 @@ type CommitteeDutyTrace struct {
 	ConsensusTrace
 
 	Slot phase0.Slot
+	Role spectypes.RunnerRole
 
 	CommitteeID spectypes.CommitteeID  `ssz-size:"32"`
 	OperatorIDs []spectypes.OperatorID `ssz-max:"13"`
