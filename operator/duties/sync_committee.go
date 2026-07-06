@@ -90,11 +90,11 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 		case <-next:
 			currentSlot := h.ticker.Slot()
 			next = h.ticker.Next() // advances h.ticker
-			currentEpoch := h.beaconConfig.EstimatedEpochAtSlot(currentSlot)
-			currentPeriod := h.beaconConfig.EstimatedSyncCommitteePeriodAtEpoch(currentEpoch)
+			currentEpoch := h.netCfg.EstimatedEpochAtSlot(currentSlot)
+			currentPeriod := h.netCfg.EstimatedSyncCommitteePeriodAtEpoch(currentEpoch)
 			nextPeriod := currentPeriod + 1
 
-			slotNumber := uint64(currentSlot)%h.beaconConfig.SlotsPerEpoch + 1
+			slotNumber := uint64(currentSlot)%h.netCfg.SlotsPerEpoch + 1
 			buildStr := fmt.Sprintf("p%v-e%v-s%v-#%v", currentPeriod, currentEpoch, currentSlot, slotNumber)
 			logger := h.logger.With(
 				zap.String("period_epoch_slot_pos", buildStr),
@@ -109,7 +109,7 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 				// tickCtx ensures we never take too long to process ticks (otherwise we might not be able to catch up
 				// with the latest tick for a while, if ever). Since the ticker always fires at around slot start-time,
 				// setting the deadline to currentSlot+1 gives us about ~1 full slot (12s) to process the tick.
-				tickCtx, cancel := context.WithDeadline(ctx, h.beaconConfig.SlotStartTime(currentSlot+1))
+				tickCtx, cancel := context.WithDeadline(ctx, h.netCfg.SlotStartTime(currentSlot+1))
 				defer cancel()
 
 				// 1. Process the duty execution & fetching.
@@ -117,8 +117,13 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 				// Process intents (if any): fetch & prepare the duties for the current period.
 				h.prepareCurrentPeriod(tickCtx, logger, currentPeriod, currentEpoch, currentSlot, true)
 
-				h.processExecution(tickCtx, currentPeriod, currentSlot)
+				if !h.netCfg.BooleForkAtSlot(currentSlot) {
+					// Before Boole fork: execute Alan sync committee contribution flow.
+					h.processExecution(tickCtx, currentPeriod, currentSlot)
+				}
 
+				// After Boole fork: keep fetching duties (to pass them to both Committee and AggregatorCommittee handlers),
+				// but skip Alan execution, as the aggregator committee handler will be responsible for executing them.
 				// Process intents (if any): fetch & prepare the duties for the next period.
 				h.prepareNextPeriod(tickCtx, logger, currentPeriod, currentEpoch, currentSlot, true)
 
@@ -141,7 +146,7 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 				// if we are still early into the slot (1 slot-interval is just a guesstimate), otherwise we might
 				// be delaying the next tick (the duties that need to be executed on the next slot).
 
-				indicesChangeDeadline := h.beaconConfig.SlotStartTime(currentSlot).Add(h.beaconConfig.IntervalDuration())
+				indicesChangeDeadline := h.netCfg.SlotStartTime(currentSlot).Add(h.netCfg.IntervalDuration())
 				select {
 				case <-h.indicesChangeCh:
 					logger.Info("🔁 indices change received")
@@ -170,12 +175,12 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 			}()
 
 		case reorgEvent := <-h.reorgEventsCh:
-			currentSlot := h.beaconConfig.EstimatedCurrentSlot()
-			currentEpoch := h.beaconConfig.EstimatedEpochAtSlot(currentSlot)
-			currentPeriod := h.beaconConfig.EstimatedSyncCommitteePeriodAtEpoch(currentEpoch)
+			currentSlot := h.netCfg.EstimatedCurrentSlot()
+			currentEpoch := h.netCfg.EstimatedEpochAtSlot(currentSlot)
+			currentPeriod := h.netCfg.EstimatedSyncCommitteePeriodAtEpoch(currentEpoch)
 			nextPeriod := currentPeriod + 1
 
-			slotNumber := uint64(currentSlot)%h.beaconConfig.SlotsPerEpoch + 1
+			slotNumber := uint64(currentSlot)%h.netCfg.SlotsPerEpoch + 1
 			buildStr := fmt.Sprintf("p%v-e%v-s%v-#%v", currentPeriod, currentEpoch, currentSlot, slotNumber)
 			logger := h.logger.With(
 				zap.String("period_epoch_slot_pos", buildStr),
@@ -198,7 +203,7 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 				// slot-ticker from executing duties even if some of them might not be up to date). Since the
 				// reorg can happen closer to the end of the current slot we wouldn't want to set the deadline
 				// to currentSlot+1 as that might be too short (hence setting it to currentSlot+2).
-				reorgCtx, cancel := context.WithDeadline(ctx, h.beaconConfig.SlotStartTime(currentSlot+2))
+				reorgCtx, cancel := context.WithDeadline(ctx, h.netCfg.SlotStartTime(currentSlot+2))
 				defer cancel()
 
 				if !refetchNextPeriod {
@@ -221,18 +226,18 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 
 // HandleInitialDuties fetches & prepares the duties for the current and next periods.
 func (h *SyncCommitteeHandler) HandleInitialDuties(ctx context.Context) {
-	initCtx, cancel := context.WithTimeout(ctx, h.beaconConfig.SlotDuration)
+	initCtx, cancel := context.WithTimeout(ctx, h.netCfg.SlotDuration)
 	defer cancel()
 
 	// Prepare the next-period duties 1.5 epochs ahead of the period change, when the beacon node is likely less busy.
-	h.preparationSlots = h.beaconConfig.SlotsPerEpoch * 3 / 2
+	h.preparationSlots = h.netCfg.SlotsPerEpoch * 3 / 2
 
-	currentSlot := h.beaconConfig.EstimatedCurrentSlot()
-	currentEpoch := h.beaconConfig.EstimatedEpochAtSlot(currentSlot)
-	currentPeriod := h.beaconConfig.EstimatedSyncCommitteePeriodAtEpoch(currentEpoch)
+	currentSlot := h.netCfg.EstimatedCurrentSlot()
+	currentEpoch := h.netCfg.EstimatedEpochAtSlot(currentSlot)
+	currentPeriod := h.netCfg.EstimatedSyncCommitteePeriodAtEpoch(currentEpoch)
 	nextPeriod := currentPeriod + 1
 
-	slotNumber := uint64(currentSlot)%h.beaconConfig.SlotsPerEpoch + 1
+	slotNumber := uint64(currentSlot)%h.netCfg.SlotsPerEpoch + 1
 	buildStr := fmt.Sprintf("p%v-e%v-s%v-#%v", currentPeriod, currentEpoch, currentSlot, slotNumber)
 	logger := h.logger.With(
 		zap.String("period_epoch_slot_pos", buildStr),
@@ -360,7 +365,7 @@ func (h *SyncCommitteeHandler) processExecution(ctx context.Context, period uint
 
 	// Sync committee contributions are rewarded as long as they are included within 1 slot of their target slot
 	// (i.e., from target slot up to and including target + 1).
-	dutyDeadline := h.beaconConfig.SlotStartTime(slot + 1)
+	dutyDeadline := h.netCfg.SlotStartTime(slot + 1)
 	h.dutiesExecutor.ExecuteDuties(ctx, toExecute, dutyDeadline)
 
 	span.SetStatus(codes.Ok, "")
@@ -388,8 +393,8 @@ func (h *SyncCommitteeHandler) fetchAndProcessDuties(
 		))
 	defer span.End()
 
-	if period > h.beaconConfig.EstimatedSyncCommitteePeriodAtEpoch(epoch) {
-		epoch = h.beaconConfig.FirstEpochOfSyncPeriod(period)
+	if period > h.netCfg.EstimatedSyncCommitteePeriodAtEpoch(epoch) {
+		epoch = h.netCfg.FirstEpochOfSyncPeriod(period)
 	}
 
 	span.SetAttributes(observability.BeaconEpochAttribute(epoch))
@@ -399,7 +404,7 @@ func (h *SyncCommitteeHandler) fetchAndProcessDuties(
 	)
 
 	eligibleIndices := h.validatorController.FilterIndices(waitForInit, func(s *types.SSVShare) bool {
-		return s.IsParticipating(h.beaconConfig, epoch)
+		return s.IsParticipating(h.netCfg.Beacon, epoch)
 	})
 
 	if len(eligibleIndices) == 0 {
@@ -447,7 +452,7 @@ func (h *SyncCommitteeHandler) fetchAndProcessDuties(
 	}
 
 	// lastEpoch + 1 because the subscription's "until" epoch is exclusive
-	lastEpoch := h.beaconConfig.FirstEpochOfSyncPeriod(period+1) - 1
+	lastEpoch := h.netCfg.FirstEpochOfSyncPeriod(period+1) - 1
 	subscriptions := calculateSubscriptions(lastEpoch+1, duties)
 
 	if len(subscriptions) == 0 {
@@ -520,7 +525,7 @@ func (h *SyncCommitteeHandler) toSpecDuty(duty *eth2apiv1.SyncCommitteeDuty, slo
 }
 
 func (h *SyncCommitteeHandler) shouldExecute(duty *eth2apiv1.SyncCommitteeDuty, slot phase0.Slot) bool {
-	currentSlot := h.beaconConfig.EstimatedCurrentSlot()
+	currentSlot := h.netCfg.EstimatedCurrentSlot()
 
 	_, exists := h.validatorProvider.Validator(duty.PubKey[:])
 	if !exists {
@@ -559,5 +564,5 @@ func (h *SyncCommitteeHandler) shouldFetchNextPeriod(slot phase0.Slot) bool {
 }
 
 func (h *SyncCommitteeHandler) slotsPerPeriod() uint64 {
-	return h.beaconConfig.EpochsPerSyncCommitteePeriod * h.beaconConfig.SlotsPerEpoch
+	return h.netCfg.EpochsPerSyncCommitteePeriod * h.netCfg.SlotsPerEpoch
 }
