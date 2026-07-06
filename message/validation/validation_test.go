@@ -167,7 +167,19 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		slot := postBooleCfg.FirstSlotAtEpoch(1)
 		booleIdentifier := spectypes.NewMsgID(postBooleCfg.DomainTypeAtSlot(slot), encodedCommitteeID, committeeRole)
-		signedSSVMessage := generateSignedMessage(ks, booleIdentifier, slot)
+		qbftMessage := &specqbft.Message{
+			MsgType:                  specqbft.ProposalMsgType,
+			Height:                   specqbft.Height(slot),
+			Round:                    specqbft.FirstRound,
+			Identifier:               booleIdentifier[:],
+			Root:                     sha256.Sum256(spectestingutils.TestingQBFTFullData),
+			RoundChangeJustification: [][]byte{},
+			PrepareJustification:     [][]byte{},
+		}
+		// Post-fork proposals must be signed by the fork-aware round-robin leader.
+		leader := qbft.RoundRobinProposer(specqbft.Height(slot), specqbft.FirstRound, committee, postBooleCfg)
+		signedSSVMessage := spectestingutils.SignQBFTMsg(ks.OperatorKeys[leader], leader, qbftMessage)
+		signedSSVMessage.FullData = spectestingutils.TestingQBFTFullData
 
 		committeeInfo, err := validator.getCommitteeAndValidatorIndices(signedSSVMessage.SSVMessage.GetID())
 		require.NoError(t, err)
@@ -743,7 +755,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			PrepareJustification:     [][]byte{},
 		}
 
-		leader := validator.roundRobinProposer(specqbft.Height(slot), specqbft.FirstRound, committee)
+		leader := validator.roundRobinProposerPreBooleFork(specqbft.Height(slot), specqbft.FirstRound, committee)
 		signedSSVMessage := spectestingutils.SignQBFTMsg(ks.OperatorKeys[leader], leader, qbftMessage)
 		signedSSVMessage.FullData = spectestingutils.TestingQBFTFullData
 
