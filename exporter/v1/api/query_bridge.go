@@ -6,13 +6,10 @@ import (
 	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/hashicorp/go-multierror"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
 	exportercore "github.com/ssvlabs/ssv/exporter"
-	dutytracer "github.com/ssvlabs/ssv/exporter/dutytracer"
-	exporterstore "github.com/ssvlabs/ssv/exporter/store"
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
@@ -94,9 +91,8 @@ func (h *Handler) handleDecidedViaExporter(exporterRead *exportercore.Exporter, 
 	participations := wsParticipationsFromCore(result)
 
 	var unexpectedErr error
-	filtered := filterOutDutyNotFoundErrors(errs)
-	if filtered.ErrorOrNil() != nil {
-		for _, e := range filtered.Errors {
+	if errs.ErrorOrNil() != nil {
+		for _, e := range errs.Errors {
 			// Preserve legacy WS leniency: treat validation errors as "no messages".
 			if isExporterValidationError(e) {
 				continue
@@ -153,23 +149,4 @@ func wsParticipationsFromCore(result *exportercore.TraceDecidedsResult) []storag
 func isExporterValidationError(err error) bool {
 	var ve *exportercore.ValidationError
 	return errors.As(err, &ve)
-}
-
-// isNotFoundError returns true if the error represents an expected "no duty"
-// condition, either from the duty tracer or the underlying exporter store.
-func isNotFoundError(err error) bool {
-	return errors.Is(err, dutytracer.ErrNotFound) || errors.Is(err, exporterstore.ErrNotFound)
-}
-
-func filterOutDutyNotFoundErrors(e *multierror.Error) *multierror.Error {
-	if e == nil || e.ErrorOrNil() == nil {
-		return nil
-	}
-	var filtered *multierror.Error
-	for _, err := range e.Errors {
-		if err != nil && !isNotFoundError(err) {
-			filtered = multierror.Append(filtered, err)
-		}
-	}
-	return filtered
 }
