@@ -377,6 +377,7 @@ func newNode(
 	// Exporter duty tracing. An invalid EXPORTER_MODE is rejected up front by resolveAndValidate,
 	// so res.mode here is always one of the known modes.
 	var collector *dutytracer.Collector
+	var exporterRead *exportercore.Exporter
 	switch res.mode {
 	case modeExporterArchive:
 		logger.Info("exporter mode: archive")
@@ -388,7 +389,7 @@ func newNode(
 			dstore, networkConfig.Beacon, decidedStreamPublisherFn,
 			dutyStore)
 
-		cfg.SSVOptions.ExporterRead = exportercore.NewExporter(logger, storageMap, collector, nodeStorage.ValidatorStore())
+		exporterRead = exportercore.NewExporter(logger, storageMap, collector, nodeStorage.ValidatorStore())
 	case modeExporterStandard:
 		logger.Info("exporter mode: standard")
 	case modeOperator:
@@ -431,7 +432,14 @@ func newNode(
 	cfg.SSVOptions.ValidatorController = validatorCtrl
 	cfg.SSVOptions.ValidatorStore = nodeStorage.ValidatorStore()
 
-	operatorNode := operator.New(logger, cfg.SSVOptions, cfg.ExporterOptions, slotTickerProvider, storageMap)
+	if cfg.WsAPIPort != 0 {
+		handler := exporterapi.NewHandler(logger)
+		cfg.SSVOptions.WSQueryHandler = func(nm *exporterapi.NetworkMessage) {
+			handler.HandleQueryRequests(storageMap, exporterRead, nodeStorage.ValidatorStore(), networkConfig.DomainType, nm)
+		}
+	}
+
+	operatorNode := operator.New(logger, cfg.SSVOptions, cfg.ExporterOptions, slotTickerProvider)
 
 	return &node{
 		logger:              logger,

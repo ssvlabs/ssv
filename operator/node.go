@@ -10,10 +10,8 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/ssvlabs/ssv/eth/executionclient"
-	exportercore "github.com/ssvlabs/ssv/exporter"
 	exporterconfig "github.com/ssvlabs/ssv/exporter/config"
 	"github.com/ssvlabs/ssv/exporter/v1/api"
-	qbftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability/log"
@@ -44,8 +42,8 @@ type Options struct {
 	ValidatorStore      storage2.ValidatorStore
 	ValidatorOptions    validator.ControllerOptions `yaml:"ValidatorOptions"`
 	DutyStore           *dutystore.Store
-	ExporterRead        *exportercore.Exporter
 	WS                  api.WebSocketServer
+	WSQueryHandler      api.QueryMessageHandler
 }
 
 func (o *Options) ApplyDefaults() {
@@ -56,7 +54,6 @@ func (o *Options) ApplyDefaults() {
 type Node struct {
 	logger *zap.Logger
 
-	network          *networkconfig.Network
 	validatorsCtrl   *validator.Controller
 	validatorOptions validator.ControllerOptions
 	exporterOptions  exporterconfig.Options
@@ -64,13 +61,11 @@ type Node struct {
 	executionClient  executionclient.Provider
 	net              network.P2PNetwork
 	storage          storage.Storage
-	qbftStorage      *qbftstorage.ParticipantStores
 	dutyScheduler    *duties.Scheduler
 	feeRecipientCtrl fee_recipient.RecipientController
 
-	ws api.WebSocketServer
-
-	exporterRead *exportercore.Exporter
+	ws             api.WebSocketServer
+	wsQueryHandler api.QueryMessageHandler
 }
 
 func shouldRunDutyScheduler(exporterOpts exporterconfig.Options) bool {
@@ -78,7 +73,7 @@ func shouldRunDutyScheduler(exporterOpts exporterconfig.Options) bool {
 }
 
 // New is the constructor of Node
-func New(logger *zap.Logger, opts Options, exporterOpts exporterconfig.Options, slotTickerProvider slotticker.Provider, qbftStorage *qbftstorage.ParticipantStores) *Node {
+func New(logger *zap.Logger, opts Options, exporterOpts exporterconfig.Options, slotTickerProvider slotticker.Provider) *Node {
 	selfValidatorStore := opts.ValidatorStore.WithOperatorID(opts.ValidatorOptions.OperatorDataStore.GetOperatorID)
 
 	var (
@@ -135,17 +130,15 @@ func New(logger *zap.Logger, opts Options, exporterOpts exporterconfig.Options, 
 		validatorsCtrl:   opts.ValidatorController,
 		validatorOptions: opts.ValidatorOptions,
 		exporterOptions:  exporterOpts,
-		network:          opts.NetworkConfig,
 		consensusClient:  opts.BeaconNode,
 		executionClient:  opts.ExecutionClient,
 		net:              opts.P2PNetwork,
 		storage:          opts.ValidatorOptions.RegistryStorage,
-		qbftStorage:      qbftStorage,
 		dutyScheduler:    dutyScheduler,
 		feeRecipientCtrl: feeRecipientCtrl,
 
-		ws:           opts.WS,
-		exporterRead: opts.ExporterRead,
+		ws:             opts.WS,
+		wsQueryHandler: opts.WSQueryHandler,
 	}
 
 	if feeRecipientCtrl != nil {
@@ -291,10 +284,7 @@ func (n *Node) HealthCheck() error {
 func (n *Node) startWSServer(ctx context.Context) (<-chan error, error) {
 	n.logger.Info("starting WS server")
 
-	h := api.NewHandler(n.logger)
-	n.ws.UseQueryHandler(func(nm *api.NetworkMessage) {
-		h.HandleQueryRequests(n.qbftStorage, n.exporterRead, n.validatorOptions.ValidatorStore, n.network.DomainType, nm)
-	})
+	n.ws.UseQueryHandler(n.wsQueryHandler)
 
 	_, serveErr, err := n.ws.Start(ctx)
 	if err != nil {
