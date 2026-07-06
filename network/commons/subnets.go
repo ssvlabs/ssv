@@ -91,8 +91,13 @@ func AlanCommitteeSubnet(cid spectypes.CommitteeID) uint64 {
 }
 
 // BooleCommitteeSubnet returns the subnet for the given committee, calculated as (lowestHash % SubnetsCount).
-// It requires committee to be non-empty. This determines which subnet a committee lands on post-Boole-fork.
+// This determines which subnet a committee lands on post-Boole-fork. An empty committee has no
+// subnet; it returns UnknownSubnetId defensively rather than panicking (real shares are non-empty).
 func BooleCommitteeSubnet(committee []spectypes.OperatorID) uint64 {
+	if len(committee) == 0 {
+		return UnknownSubnetId
+	}
+
 	var operatorBytes [8]byte
 	binary.LittleEndian.PutUint64(operatorBytes[:], committee[0])
 

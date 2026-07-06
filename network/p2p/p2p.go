@@ -113,7 +113,13 @@ type p2pNetwork struct {
 	backoffConnector *backoffConnector
 
 	// persistentSubnets holds subnets on node startup,
-	// these subnets should not be unsubscribed from even if all validators associated with them are removed
+	// these subnets should not be unsubscribed from even if all validators associated with them are removed.
+	//
+	// Concurrency invariant: written only during single-threaded startup (SubscribeAll /
+	// SubscribeRandoms / setup, all documented not-thread-safe and completed in startValidators
+	// before the discovery/trim goroutines act on it). The goroutine readers
+	// (subscribedSubnetsForCurrentEpoch) rely on that startup happens-before edge. If that ordering
+	// ever changes, guard this field with a mutex (see TODO(convergence): -race-verified lock).
 	persistentSubnets commons.Subnets
 	// currentSubnets holds current subnets which depend on current active validators and committees
 	currentSubnets   commons.Subnets
