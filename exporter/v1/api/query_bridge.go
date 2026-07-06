@@ -18,17 +18,13 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 )
 
-type traceDecidedsReader interface {
-	TraceDecidedsCore(*exportercore.DecidedsQuery) (*exportercore.TraceDecidedsResult, *multierror.Error)
-}
-
 type validatorIndexReader interface {
 	ValidatorIndex(spectypes.ValidatorPK) (phase0.ValidatorIndex, bool)
 }
 
 // HandleQueryRequests dispatches websocket query messages to either the legacy
 // participant-store path or the archive exporter-core compatibility path.
-func (h *Handler) HandleQueryRequests(store *storage.ParticipantStores, exporterRead traceDecidedsReader, validators validatorIndexReader, domain spectypes.DomainType, nm *NetworkMessage) {
+func (h *Handler) HandleQueryRequests(store *storage.ParticipantStores, exporterRead *exportercore.Exporter, validators validatorIndexReader, domain spectypes.DomainType, nm *NetworkMessage) {
 	if nm.Err != nil {
 		nm.Msg = Message{
 			Type: TypeError,
@@ -54,7 +50,7 @@ func (h *Handler) HandleQueryRequests(store *storage.ParticipantStores, exporter
 	}
 }
 
-func (h *Handler) handleDecidedViaExporter(exporterRead traceDecidedsReader, validators validatorIndexReader, domain spectypes.DomainType, nm *NetworkMessage) {
+func (h *Handler) handleDecidedViaExporter(exporterRead *exportercore.Exporter, validators validatorIndexReader, domain spectypes.DomainType, nm *NetworkMessage) {
 	res := Message{Type: nm.Msg.Type, Filter: nm.Msg.Filter}
 
 	pkBytes, err := hex.DecodeString(nm.Msg.Filter.PublicKey)

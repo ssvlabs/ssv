@@ -171,6 +171,34 @@ func makePK(bytes []byte) spectypes.ValidatorPK {
 	return pk
 }
 
+func TestWSQuery_Decided_NilExporterReadFallsBackToLegacyParticipants(t *testing.T) {
+	logger := zaptest.NewLogger(t)
+	db, err := kv.NewInMemory(zap.NewNop(), basedb.Options{})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+
+	role := spectypes.BNRoleProposer
+	_, ibftStorage := newStorageForTest(db, logger, role)
+
+	pk := makePK([]byte{1, 2, 3, 4})
+	signers := []spectypes.OperatorID{11, 12}
+	_, err = ibftStorage.Get(role).SaveParticipants(pk, phase0.Slot(10), signers)
+	require.NoError(t, err)
+
+	nm := decidedMessage(uint64(10), uint64(10), hex.EncodeToString(pk[:]), role.String())
+	handler := NewHandler(logger)
+	handler.HandleQueryRequests(ibftStorage, nil, nil, networkconfig.TestNetwork.DomainType, nm)
+
+	require.Equal(t, TypeDecided, nm.Msg.Type)
+	data, ok := nm.Msg.Data.([]*ParticipantsAPI)
+	require.True(t, ok, "response data should be participants slice")
+	require.Len(t, data, 1)
+	require.Equal(t, uint64(10), uint64(data[0].Slot))
+	require.Equal(t, signers, data[0].Signers)
+	require.Equal(t, role.String(), data[0].Role)
+	require.Equal(t, hex.EncodeToString(pk[:]), data[0].ValidatorPK)
+}
+
 func TestWSQuery_Decided_Proposer_SingleSlot(t *testing.T) {
 	h := newWSQueryHarness(t)
 	pk := makePK([]byte{1, 2, 3, 4, 5})
