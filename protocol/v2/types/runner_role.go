@@ -11,8 +11,6 @@ const (
 
 // RunnerRoleForValidatorDuty resolves the runner role for validator duties,
 // mapping Alan fork aggregator duties to Alan runner roles.
-//
-// TODO(convergence unit 5): thread real fork bit instead of a literal false.
 func RunnerRoleForValidatorDuty(duty *spectypes.ValidatorDuty, isBooleFork bool) spectypes.RunnerRole {
 	if duty == nil {
 		return spectypes.RoleUnknown
