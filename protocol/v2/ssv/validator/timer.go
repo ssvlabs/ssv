@@ -94,10 +94,15 @@ func (c *Committee) newQBFTRoundTimerF(runnerIdentifier spectypes.MessageID) ssv
 			// If the relevant queue hasn't been initialized yet, there isn't a running duty we can issue a
 			// timeout for, in practice this should never happen - but we need to handle this just in case.
 			// This is also possible if the queue got pruned already (due to becoming old and irrelevant).
-			// A map miss on c.Queues returns the zero value of the queue.Queue interface (nil), so the
-			// nil-check below covers both "slot absent" and "stored value is nil" cases in one go.
-			q := c.Queues[slot]
-			if q == nil {
+			// Route to the role-specific queue so committee and aggregator-committee timeouts land in
+			// their respective slot queues.
+			var q queueContainer
+			if runnerIdentifier.GetRoleType() == spectypes.RoleAggregatorCommittee {
+				q = c.AggregatorQueues[slot]
+			} else {
+				q = c.Queues[slot]
+			}
+			if q.Q == nil {
 				logger.Debug("couldn't schedule timeout event due to missing queue (likely was pruned)")
 				return
 			}
@@ -113,7 +118,7 @@ func (c *Committee) newQBFTRoundTimerF(runnerIdentifier spectypes.MessageID) ssv
 				return
 			}
 
-			if pushed := q.TryPush(dec); !pushed {
+			if pushed := q.Q.TryPush(dec); !pushed {
 				logger.Error("❗️ dropping timeout message because the queue is full", fields.RunnerRole(runnerIdentifier.GetRoleType()))
 			}
 		}

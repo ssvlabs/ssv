@@ -171,7 +171,7 @@ func TestSetupCommitteeRunnersExporter(t *testing.T) {
 		},
 	})
 
-	runner, err := committeeRunnerFunc(0, nil, nil, nil)
+	runner, err := committeeRunnerFunc(&spectypes.CommitteeDuty{}, nil, nil, nil)
 	require.Nil(t, runner)
 	require.ErrorContains(t, err, "cannot set up committee runners in exporter mode")
 }

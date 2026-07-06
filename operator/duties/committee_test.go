@@ -1036,7 +1036,7 @@ func TestCommitteeHandlerBuildCommitteeDutiesIncludesSyncButNotAttesterDuringPar
 	require.Len(t, committeeMap, 1)
 	committeeDuty := committeeMap[share.CommitteeID()]
 	require.NotNil(t, committeeDuty)
-	validatorDuties := committeeDuty.duty.ValidatorDuties
+	validatorDuties := committeeDuty.validatorDuties()
 	require.Len(t, validatorDuties, 1)
 	require.Equal(t, spectypes.BNRoleSyncCommittee, validatorDuties[0].Type)
 	require.Equal(t, share.ValidatorIndex, validatorDuties[0].ValidatorIndex)

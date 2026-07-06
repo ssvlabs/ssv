@@ -42,8 +42,9 @@ var (
 )
 
 const (
-	ValidatorQueueMetricType = "validator"
-	CommitteeQueueMetricType = "committee"
+	ValidatorQueueMetricType           = "validator"
+	CommitteeQueueMetricType           = "committee"
+	AggregatorCommitteeQueueMetricType = "aggregator_committee"
 
 	DropReasonBufferFull = "buffer_full"
 )

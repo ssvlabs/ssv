@@ -19,7 +19,11 @@ import (
 )
 
 func (v *Validator) ExecuteDuty(ctx context.Context, logger *zap.Logger, duty *spectypes.ValidatorDuty) error {
-	ssvMsg, err := createDutyExecuteMsg(duty, duty.PubKey, v.NetworkConfig.DomainType)
+	isBooleFork := v.NetworkConfig.BooleForkAtSlot(duty.Slot)
+	role := types.RunnerRoleForValidatorDuty(duty, isBooleFork)
+
+	domain := v.NetworkConfig.DomainTypeAtSlot(duty.Slot)
+	ssvMsg, err := createDutyExecuteMsg(duty, duty.PubKey, domain, role)
 	if err != nil {
 		return fmt.Errorf("create duty execute msg: %w", err)
 	}
@@ -28,8 +32,7 @@ func (v *Validator) ExecuteDuty(ctx context.Context, logger *zap.Logger, duty *s
 		return fmt.Errorf("decode duty execute msg: %w", err)
 	}
 
-	// TODO(convergence unit 5): thread real fork bit instead of a literal false.
-	if pushed := v.Queues[types.RunnerRoleForValidatorDuty(duty, false)].TryPush(dec); !pushed {
+	if pushed := v.Queues[role].TryPush(dec); !pushed {
 		return fmt.Errorf("dropping ExecuteDuty message for validator %s because the queue is full", duty.PubKey.String())
 	}
 
@@ -52,8 +55,7 @@ func (v *Validator) OnExecuteDuty(ctx context.Context, logger *zap.Logger, msg *
 
 	span.SetAttributes(
 		observability.BeaconSlotAttribute(duty.Slot),
-		// TODO(convergence unit 5): thread real fork bit instead of a literal false.
-		observability.RunnerRoleAttribute(types.RunnerRoleForValidatorDuty(duty, false)),
+		observability.RunnerRoleAttribute(types.RunnerRoleForValidatorDuty(duty, v.NetworkConfig.BooleForkAtSlot(duty.Slot))),
 	)
 
 	// force the validator to be started (subscribed to validator's topic and synced)
@@ -72,15 +74,19 @@ func (v *Validator) OnExecuteDuty(ctx context.Context, logger *zap.Logger, msg *
 }
 
 // createDutyExecuteMsg returns ssvMsg with event type of execute duty
-func createDutyExecuteMsg(duty *spectypes.ValidatorDuty, pubKey phase0.BLSPubKey, domain spectypes.DomainType) (*spectypes.SSVMessage, error) {
+func createDutyExecuteMsg(
+	duty *spectypes.ValidatorDuty,
+	pubKey phase0.BLSPubKey,
+	domain spectypes.DomainType,
+	runnerRole spectypes.RunnerRole,
+) (*spectypes.SSVMessage, error) {
 	executeDutyData := types.ExecuteDutyData{Duty: duty}
 	data, err := json.Marshal(executeDutyData)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal execute duty data: %w", err)
 	}
 
-	// TODO(convergence unit 5): thread real fork bit instead of a literal false.
-	return dutyDataToSSVMsg(domain, pubKey[:], types.RunnerRoleForValidatorDuty(duty, false), data)
+	return dutyDataToSSVMsg(domain, pubKey[:], runnerRole, data)
 }
 
 func dutyDataToSSVMsg(

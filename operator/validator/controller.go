@@ -620,14 +620,13 @@ func (c *Controller) GetValidator(pubKey spectypes.ValidatorPK) (*validator.Vali
 }
 
 func (c *Controller) ExecuteDuty(ctx context.Context, logger *zap.Logger, duty *spectypes.ValidatorDuty) {
-	// TODO(convergence unit 5): thread real fork bit instead of a literal false.
-	runnerRole := ssvtypes.RunnerRoleForValidatorDuty(duty, false)
 	dutyEpoch := c.networkConfig.EstimatedEpochAtSlot(duty.Slot)
-	dutyID := fields.BuildDutyID(c.networkConfig.EstimatedEpochAtSlot(duty.Slot), duty.Slot, runnerRole, duty.ValidatorIndex)
+	role := ssvtypes.RunnerRoleForValidatorDuty(duty, c.networkConfig.BooleForkAtSlot(duty.Slot))
+	dutyID := fields.BuildDutyID(dutyEpoch, duty.Slot, role, duty.ValidatorIndex)
 	ctx, span := tracer.Start(traces.Context(ctx, dutyID),
 		observability.InstrumentName(observabilityNamespace, "execute_duty"),
 		trace.WithAttributes(
-			observability.RunnerRoleAttribute(runnerRole),
+			observability.RunnerRoleAttribute(role),
 			observability.BeaconRoleAttribute(duty.Type),
 			observability.CommitteeIndexAttribute(duty.CommitteeIndex),
 			observability.BeaconEpochAttribute(dutyEpoch),
@@ -658,7 +657,12 @@ func (c *Controller) ExecuteDuty(ctx context.Context, logger *zap.Logger, duty *
 	span.SetStatus(codes.Ok, "")
 }
 
-func (c *Controller) ExecuteCommitteeDuty(ctx context.Context, logger *zap.Logger, committeeID spectypes.CommitteeID, duty *spectypes.CommitteeDuty) {
+func (c *Controller) ExecuteCommitteeDuty(
+	ctx context.Context,
+	logger *zap.Logger,
+	committeeID spectypes.CommitteeID,
+	duty spectypes.Duty,
+) {
 	cm, ok := c.validatorsMap.GetCommittee(committeeID)
 	if !ok {
 		const eventMsg = "could not find committee"
@@ -671,14 +675,15 @@ func (c *Controller) ExecuteCommitteeDuty(ctx context.Context, logger *zap.Logge
 		committee = append(committee, operator.OperatorID)
 	}
 
-	dutyEpoch := c.networkConfig.EstimatedEpochAtSlot(duty.Slot)
-	dutyID := fields.BuildCommitteeDutyID(committee, dutyEpoch, duty.Slot)
+	dutyEpoch := c.networkConfig.EstimatedEpochAtSlot(duty.DutySlot())
+	role := ssvtypes.RunnerRoleForDuty(duty, c.networkConfig.BooleForkAtSlot(duty.DutySlot()))
+	dutyID := fields.BuildCommitteeDutyID(committee, dutyEpoch, duty.DutySlot(), role)
 	ctx, span := tracer.Start(traces.Context(ctx, dutyID),
 		observability.InstrumentName(observabilityNamespace, "execute_committee_duty"),
 		trace.WithAttributes(
-			observability.RunnerRoleAttribute(duty.RunnerRole()),
+			observability.RunnerRoleAttribute(role),
 			observability.BeaconEpochAttribute(dutyEpoch),
-			observability.BeaconSlotAttribute(duty.Slot),
+			observability.BeaconSlotAttribute(duty.DutySlot()),
 			observability.CommitteeIDAttribute(committeeID),
 			observability.DutyIDAttribute(dutyID),
 		),
@@ -1034,11 +1039,11 @@ func SetupCommitteeRunners(
 ) validator.CommitteeRunnerFunc {
 	if options.ExporterOptions.Enabled {
 		return func(
-			phase0.Slot,
+			spectypes.Duty,
 			map[phase0.ValidatorIndex]*spectypes.Share,
 			[]phase0.BLSPubKey,
 			runner.CommitteeDutyGuard,
-		) (*runner.CommitteeRunner, error) {
+		) (runner.Runner, error) {
 			return nil, fmt.Errorf("cannot set up committee runners in exporter mode")
 		}
 	}
@@ -1065,29 +1070,36 @@ func SetupCommitteeRunners(
 	}
 
 	return func(
-		slot phase0.Slot,
+		duty spectypes.Duty,
 		shares map[phase0.ValidatorIndex]*spectypes.Share,
 		attestingValidators []phase0.BLSPubKey,
 		dutyGuard runner.CommitteeDutyGuard,
-	) (*runner.CommitteeRunner, error) {
-		crunner, err := runner.NewCommitteeRunner(runner.CommitteeRunnerOptions{
-			BaseRunnerOptions: runner.BaseRunnerOptions{
-				NetworkConfig:  options.NetworkConfig,
-				Share:          shares,
-				Beacon:         options.Beacon,
-				Network:        options.Network,
-				Signer:         options.Signer,
-				OperatorSigner: options.OperatorSigner,
-			},
-			AttestingValidators: attestingValidators,
-			QBFTController:      buildController(spectypes.RoleCommittee),
-			DutyGuard:           dutyGuard,
-			DoppelgangerHandler: options.DoppelgangerHandler,
-		})
-		if err != nil {
-			return nil, err
+	) (runner.Runner, error) {
+		switch duty.(type) {
+		case *spectypes.CommitteeDuty:
+			crunner, err := runner.NewCommitteeRunner(runner.CommitteeRunnerOptions{
+				BaseRunnerOptions: runner.BaseRunnerOptions{
+					NetworkConfig:  options.NetworkConfig,
+					Share:          shares,
+					Beacon:         options.Beacon,
+					Network:        options.Network,
+					Signer:         options.Signer,
+					OperatorSigner: options.OperatorSigner,
+				},
+				AttestingValidators: attestingValidators,
+				QBFTController:      buildController(spectypes.RoleCommittee),
+				DutyGuard:           dutyGuard,
+				DoppelgangerHandler: options.DoppelgangerHandler,
+			})
+			if err != nil {
+				return nil, err
+			}
+			return crunner, nil
+		default:
+			// TODO(convergence unit 5c, group 3): construct AggregatorCommitteeRunner for
+			// *spectypes.AggregatorCommitteeDuty here.
+			return nil, fmt.Errorf("unsupported committee duty type: %T", duty)
 		}
-		return crunner.(*runner.CommitteeRunner), nil
 	}
 }
 

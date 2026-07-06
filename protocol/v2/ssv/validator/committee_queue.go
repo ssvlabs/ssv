@@ -24,6 +24,12 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
+// queueContainer wraps a queue with its corresponding state
+type queueContainer struct {
+	Q          queue.Queue
+	queueState *queue.State
+}
+
 // EnqueueMessage enqueues a spectypes.SSVMessage for processing.
 // TODO: accept DecodedSSVMessage once p2p is upgraded to decode messages during validation.
 func (c *Committee) EnqueueMessage(ctx context.Context, msg *queue.SSVMessage) {
@@ -40,7 +46,7 @@ func (c *Committee) EnqueueMessage(ctx context.Context, msg *queue.SSVMessage) {
 		logger.Error("❌ couldn't get message slot", zap.Error(err))
 		return
 	}
-	dutyID := fields.BuildCommitteeDutyID(types.OperatorIDsFromOperators(c.CommitteeMember.Committee), c.networkConfig.EstimatedEpochAtSlot(slot), slot)
+	dutyID := fields.BuildCommitteeDutyID(types.OperatorIDsFromOperators(c.CommitteeMember.Committee), c.networkConfig.EstimatedEpochAtSlot(slot), slot, msgID.GetRoleType())
 
 	logger = logger.
 		With(fields.Slot(slot)).
@@ -58,11 +64,13 @@ func (c *Committee) EnqueueMessage(ctx context.Context, msg *queue.SSVMessage) {
 	defer span.End()
 
 	c.mtx.Lock()
-	q := c.getQueue(logger, slot)
+	// Route to role-specific queue to avoid concurrent Pop calls on same queue
+	// when both committee and aggregator consumers are running for the slot.
+	q := c.getQueueForRole(logger, slot, msgID.GetRoleType())
 	c.mtx.Unlock()
 
 	span.AddEvent("pushing message to the queue")
-	if pushed := q.TryPush(msg); !pushed {
+	if pushed := q.Q.TryPush(msg); !pushed {
 		const errMsg = "❗ dropping message because the queue is full"
 		logger.Warn(errMsg, zap.String("drop_reason", queue.DropReasonBufferFull))
 		span.AddEvent(errMsg, trace.WithAttributes(attribute.String("drop_reason", queue.DropReasonBufferFull)))
@@ -78,9 +86,9 @@ func (c *Committee) EnqueueMessage(ctx context.Context, msg *queue.SSVMessage) {
 func (c *Committee) ConsumeQueue(
 	ctx context.Context,
 	logger *zap.Logger,
-	q queue.Queue,
+	q queueContainer,
 	handler MessageHandler, // should be c.ProcessMessage, it is a param so can be mocked out for testing
-	r *runner.CommitteeRunner,
+	r runner.Runner,
 ) {
 	logger.Debug("📬 queue consumer is running")
 	defer logger.Debug("📪 queue consumer is closed")
@@ -132,7 +140,7 @@ func (c *Committee) ConsumeQueue(
 		}
 
 		// Pop the highest priority message for the current state.
-		msg := q.Pop(ctx, queue.NewCommitteeQueuePrioritizer(&rState), filter)
+		msg := q.Q.Pop(ctx, queue.NewCommitteeQueuePrioritizer(&rState), filter)
 		if ctx.Err() != nil {
 			// Optimization: terminate fast if we can.
 			return
@@ -175,6 +183,7 @@ func (c *Committee) ConsumeQueue(
 					types.OperatorIDsFromOperators(c.CommitteeMember.Committee),
 					c.networkConfig.EstimatedEpochAtSlot(slot),
 					slot,
+					msg.GetID().GetRoleType(),
 				)
 				spanOpts = append(spanOpts, trace.WithAttributes(
 					observability.BeaconSlotAttribute(slot),
@@ -245,7 +254,7 @@ func (c *Committee) ConsumeQueue(
 					case <-msgState.ctx.Done():
 						return
 					}
-					if pushed := q.TryPush(msg); !pushed {
+					if pushed := q.Q.TryPush(msg); !pushed {
 						const droppingMsgDueToQueueIsFullEvent = "❗ not gonna replay message because the queue is full"
 						msgLogger.Error(droppingMsgDueToQueueIsFullEvent)
 						msgState.span.AddEvent(droppingMsgDueToQueueIsFullEvent, trace.WithAttributes(

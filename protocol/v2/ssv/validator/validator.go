@@ -20,6 +20,7 @@ import (
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/observability/traces"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
+	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
@@ -45,7 +46,7 @@ type Validator struct {
 	cancel context.CancelFunc
 
 	NetworkConfig *networkconfig.Network
-	Network       specqbft.Network
+	Network       protocolp2p.Network
 
 	Operator       *spectypes.CommitteeMember
 	Share          *ssvtypes.SSVShare
@@ -96,11 +97,11 @@ func NewValidator(ctx context.Context, cancel func(), logger *zap.Logger, option
 
 // StartDuty starts a duty for the validator
 func (v *Validator) StartDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty) error {
-	// TODO(convergence unit 5): thread real fork bit instead of a literal false.
+	role := ssvtypes.RunnerRoleForDuty(duty, v.NetworkConfig.BooleForkAtSlot(duty.DutySlot()))
 	ctx, span := tracer.Start(ctx,
 		observability.InstrumentName(observabilityNamespace, "start_duty"),
 		trace.WithAttributes(
-			observability.RunnerRoleAttribute(ssvtypes.RunnerRoleForDuty(duty, false)),
+			observability.RunnerRoleAttribute(role),
 			observability.BeaconSlotAttribute(duty.DutySlot())),
 	)
 	defer span.End()
@@ -110,7 +111,7 @@ func (v *Validator) StartDuty(ctx context.Context, logger *zap.Logger, duty spec
 		return traces.Errorf(span, "expected ValidatorDuty, got %T", duty)
 	}
 
-	dutyRunner := v.DutyRunners[ssvtypes.RunnerRoleForValidatorDuty(vDuty, false)]
+	dutyRunner := v.DutyRunners[role]
 	if dutyRunner == nil {
 		return traces.Errorf(span, "no duty runner for role %s", vDuty.Type.String())
 	}

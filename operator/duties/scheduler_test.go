@@ -383,11 +383,11 @@ func waitForDutiesExecutionCommittee(
 			if !ok {
 				require.FailNow(t, "missing cluster id")
 			}
-			require.Len(t, aCommDuty.duty.ValidatorDuties, len(eCommDuty.duty.ValidatorDuties))
+			require.Len(t, aCommDuty.validatorDuties(), len(eCommDuty.validatorDuties()))
 
-			for _, e := range eCommDuty.duty.ValidatorDuties {
+			for _, e := range eCommDuty.validatorDuties() {
 				found := false
-				for _, d := range aCommDuty.duty.ValidatorDuties {
+				for _, d := range aCommDuty.validatorDuties() {
 					if e.Type == d.Type && e.PubKey == d.PubKey && e.ValidatorIndex == d.ValidatorIndex && e.Slot == d.Slot {
 						found = true
 						break
