@@ -760,7 +760,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			PrepareJustification:     [][]byte{},
 		}
 
-		leader := validator.roundRobinProposerPreBooleFork(specqbft.Height(slot), specqbft.FirstRound, committee)
+		leader := qbft.Proposer(specqbft.Height(slot), specqbft.FirstRound, committee, netCfg)
 		signedSSVMessage := spectestingutils.SignQBFTMsg(ks.OperatorKeys[leader], leader, qbftMessage)
 		signedSSVMessage.FullData = spectestingutils.TestingQBFTFullData
 
