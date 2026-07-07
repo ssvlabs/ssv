@@ -39,3 +39,8 @@ ignore:
   - "api/types.go"
   - "beacon/goclient/types.go"
   - "cli/operator/generate_doc.go"
+  # libp2p networking is exercised by integration tests (not counted in the
+  # unit-coverage build), same rationale as the `protocol` exclusion above.
+  - "network/p2p/**"
+  - "network/topics/**"
+  - "network/peers/connections/**"
