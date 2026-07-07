@@ -14,6 +14,11 @@ import (
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
+// migrationBatchSize caps how many rewrites are held in memory before being flushed in a
+// single Update transaction. A mainnet exporter can have tens of millions of legacy "cd"
+// records, so we must not accumulate them all at once.
+const migrationBatchSize = 5000
+
 // This migration updates legacy committee duty keys and values to include the runner role field.
 // It processes only legacy keys (slot+committeeID) and skips already role-aware keys.
 var migration_9_migrate_committee_duty_role_field = Migration{
@@ -42,10 +47,6 @@ var migration_9_migrate_committee_duty_role_field = Migration{
 			committeeIDLen        = 32
 			oldKeyLen             = slotKeyLen + committeeIDLen
 			newKeyLen             = slotKeyLen + roleKeyLen + committeeIDLen
-			// migrationBatchSize caps how many rewrites are held in memory before being
-			// flushed in a single Update transaction. A mainnet exporter can have tens of
-			// millions of legacy "cd" records, so we must not accumulate them all at once.
-			migrationBatchSize = 5000
 		)
 
 		prefix := []byte(committeeDutyTraceKey)
