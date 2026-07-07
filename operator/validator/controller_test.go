@@ -176,6 +176,195 @@ func TestSetupCommitteeRunnersExporter(t *testing.T) {
 	require.ErrorContains(t, err, "cannot set up committee runners in exporter mode")
 }
 
+func TestSetupCommitteeRunners(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mockBeaconNode := beacon.NewMockBeaconNode(ctrl)
+
+	options := &validator.Options{
+		CommonOptions: validator.CommonOptions{
+			NetworkConfig: networkconfig.TestNetwork,
+			Beacon:        mockBeaconNode,
+		},
+		Operator: &spectypes.CommitteeMember{},
+	}
+
+	committeeRunnerFunc := SetupCommitteeRunners(t.Context(), options)
+
+	shares := map[phase0.ValidatorIndex]*spectypes.Share{
+		0: {},
+	}
+
+	t.Run("CommitteeDuty builds a CommitteeRunner", func(t *testing.T) {
+		r, err := committeeRunnerFunc(&spectypes.CommitteeDuty{}, shares, nil, nil)
+		require.NoError(t, err)
+		require.IsType(t, &runner.CommitteeRunner{}, r)
+	})
+
+	t.Run("AggregatorCommitteeDuty builds an AggregatorCommitteeRunner", func(t *testing.T) {
+		r, err := committeeRunnerFunc(&spectypes.AggregatorCommitteeDuty{}, shares, nil, nil)
+		require.NoError(t, err)
+		require.IsType(t, &runner.AggregatorCommitteeRunner{}, r)
+	})
+
+	t.Run("unsupported duty type errors", func(t *testing.T) {
+		r, err := committeeRunnerFunc(&spectypes.ValidatorDuty{}, shares, nil, nil)
+		require.Nil(t, r)
+		require.ErrorContains(t, err, "unsupported committee duty type")
+	})
+
+	t.Run("no shares errors regardless of duty type", func(t *testing.T) {
+		r, err := committeeRunnerFunc(&spectypes.CommitteeDuty{}, nil, nil, nil)
+		require.Nil(t, r)
+		require.ErrorContains(t, err, "no shares")
+
+		r, err = committeeRunnerFunc(&spectypes.AggregatorCommitteeDuty{}, nil, nil, nil)
+		require.Nil(t, r)
+		require.ErrorContains(t, err, "no shares")
+	})
+}
+
+func TestHandleNonCommitteeMessages_RoleGuard(t *testing.T) {
+	logger := log.TestLogger(t)
+	controllerOptions := MockControllerOptions{
+		validatorCommonOpts: &validator.CommonOptions{},
+	}
+	ctr := setupController(t, logger, controllerOptions)
+
+	newConsensusMsg := func(role spectypes.RunnerRole, body any) *queue.SSVMessage {
+		return &queue.SSVMessage{
+			SSVMessage: &spectypes.SSVMessage{
+				MsgType: spectypes.SSVConsensusMsgType,
+				MsgID:   spectypes.NewMsgID(spectypes.DomainType{}, make([]byte, 48), role),
+			},
+			Body: body,
+		}
+	}
+
+	t.Run("non-committee, non-aggregator-committee roles are ignored", func(t *testing.T) {
+		msg := newConsensusMsg(types.RoleAggregator, &specqbft.Message{MsgType: specqbft.ProposalMsgType})
+
+		// ncv is nil: if the role guard didn't short-circuit before touching ncv, this would panic.
+		err := ctr.handleNonCommitteeMessages(t.Context(), msg, nil)
+		require.NoError(t, err)
+	})
+
+	t.Run("aggregator-committee role with non-proposal consensus message is ignored", func(t *testing.T) {
+		msg := newConsensusMsg(spectypes.RoleAggregatorCommittee, &specqbft.Message{MsgType: specqbft.CommitMsgType})
+
+		err := ctr.handleNonCommitteeMessages(t.Context(), msg, nil)
+		require.NoError(t, err)
+	})
+
+	t.Run("committee role with non-proposal consensus message is ignored", func(t *testing.T) {
+		msg := newConsensusMsg(spectypes.RoleCommittee, &specqbft.Message{MsgType: specqbft.CommitMsgType})
+
+		err := ctr.handleNonCommitteeMessages(t.Context(), msg, nil)
+		require.NoError(t, err)
+	})
+
+	t.Run("unrelated message types are ignored", func(t *testing.T) {
+		msg := &queue.SSVMessage{
+			SSVMessage: &spectypes.SSVMessage{
+				MsgType: spectypes.DKGMsgType,
+				MsgID:   spectypes.NewMsgID(spectypes.DomainType{}, make([]byte, 48), spectypes.RoleCommittee),
+			},
+		}
+
+		err := ctr.handleNonCommitteeMessages(t.Context(), msg, nil)
+		require.NoError(t, err)
+	})
+}
+
+func TestExecuteDuty(t *testing.T) {
+	t.Run("validator not found logs and returns without panicking", func(t *testing.T) {
+		logger := log.TestLogger(t)
+		controllerOptions := MockControllerOptions{
+			validatorsMap:       validators.New(t.Context()),
+			validatorCommonOpts: &validator.CommonOptions{},
+		}
+		ctr := setupController(t, logger, controllerOptions)
+
+		// No validator registered for this pubkey. This also exercises the real
+		// c.networkConfig.BooleForkAtSlot(duty.Slot) role computation (replacing the previous
+		// hard-coded `false`) on the way to the early-return.
+		duty := &spectypes.ValidatorDuty{
+			Type:           spectypes.BNRoleAttester,
+			PubKey:         phase0.BLSPubKey{1, 2, 3},
+			Slot:           1,
+			ValidatorIndex: 7,
+		}
+		ctr.ExecuteDuty(t.Context(), logger, duty)
+	})
+}
+
+func TestExecuteCommitteeDuty(t *testing.T) {
+	t.Run("committee not found logs and returns without panicking", func(t *testing.T) {
+		logger := log.TestLogger(t)
+		controllerOptions := MockControllerOptions{
+			validatorsMap:       validators.New(t.Context()),
+			validatorCommonOpts: &validator.CommonOptions{},
+		}
+		ctr := setupController(t, logger, controllerOptions)
+
+		// No committee registered for this ID — must not panic despite the duty carrying no
+		// runner-role information the caller can rely on ahead of time.
+		ctr.ExecuteCommitteeDuty(t.Context(), logger, spectypes.CommitteeID{1, 2, 3}, &spectypes.CommitteeDuty{Slot: 1})
+	})
+
+	t.Run("committee found but duty preparation fails is handled without panicking", func(t *testing.T) {
+		logger := log.TestLogger(t)
+		vmap := validators.New(t.Context())
+		controllerOptions := MockControllerOptions{
+			validatorsMap:       vmap,
+			validatorCommonOpts: &validator.CommonOptions{NetworkConfig: networkconfig.TestNetwork},
+		}
+		ctr := setupController(t, logger, controllerOptions)
+
+		committeeID := spectypes.CommitteeID{9, 9, 9}
+		cm := validator.NewCommittee(
+			logger,
+			networkconfig.TestNetwork,
+			&spectypes.CommitteeMember{CommitteeID: committeeID, Committee: []*spectypes.Operator{{OperatorID: 1}}},
+			nil, // CreateRunnerFn is never invoked: prepareDuty fails before createRunner runs.
+			nil,
+			nil,
+		)
+		vmap.PutCommittee(committeeID, cm)
+
+		// An empty ValidatorDuties list makes the committee's StartDuty fail fast with
+		// "no beacon duties" — this exercises ExecuteCommitteeDuty's new
+		// duty.DutySlot()/RunnerRoleForDuty(duty, ...) plumbing (replacing the old
+		// *spectypes.CommitteeDuty-only signature) down the error-handling path, without
+		// needing a fully wired runner stack.
+		ctr.ExecuteCommitteeDuty(t.Context(), logger, committeeID, &spectypes.CommitteeDuty{Slot: 1, ValidatorDuties: nil})
+	})
+
+	t.Run("aggregator-committee duty found but duty preparation fails is handled without panicking", func(t *testing.T) {
+		logger := log.TestLogger(t)
+		vmap := validators.New(t.Context())
+		controllerOptions := MockControllerOptions{
+			validatorsMap:       vmap,
+			validatorCommonOpts: &validator.CommonOptions{NetworkConfig: networkconfig.TestNetwork},
+		}
+		ctr := setupController(t, logger, controllerOptions)
+
+		committeeID := spectypes.CommitteeID{4, 5, 6}
+		cm := validator.NewCommittee(
+			logger,
+			networkconfig.TestNetwork,
+			&spectypes.CommitteeMember{CommitteeID: committeeID, Committee: []*spectypes.Operator{{OperatorID: 1}}},
+			nil,
+			nil,
+			nil,
+		)
+		vmap.PutCommittee(committeeID, cm)
+
+		// Same as above but for the new AggregatorCommitteeDuty type, so RunnerRoleForDuty
+		// resolves to RoleAggregatorCommittee instead of RoleCommittee.
+		ctr.ExecuteCommitteeDuty(t.Context(), logger, committeeID, &spectypes.AggregatorCommitteeDuty{Slot: 1, ValidatorDuties: nil})
+	})
+}
+
 func TestHandleNonCommitteeMessages(t *testing.T) {
 	logger := log.TestLogger(t)
 	mockValidatorsMap := validators.New(t.Context())

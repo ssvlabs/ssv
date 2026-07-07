@@ -17,6 +17,7 @@ import (
 
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
+	mockslotticker "github.com/ssvlabs/ssv/operator/slotticker/mocks"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/utils/hashmap"
 )
@@ -1040,6 +1041,186 @@ func TestCommitteeHandlerBuildCommitteeDutiesIncludesSyncButNotAttesterDuringPar
 	require.Len(t, validatorDuties, 1)
 	require.Equal(t, spectypes.BNRoleSyncCommittee, validatorDuties[0].Type)
 	require.Equal(t, share.ValidatorIndex, validatorDuties[0].ValidatorIndex)
+}
+
+func TestCommitteeHandlerName(t *testing.T) {
+	dutyStore := dutystore.New()
+
+	committeeHandler := NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee)
+	require.Equal(t, "COMMITTEE", committeeHandler.Name())
+
+	aggregatorCommitteeHandler := NewAggregatorCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee)
+	require.Equal(t, "AGGREGATOR_COMMITTEE", aggregatorCommitteeHandler.Name())
+}
+
+func TestAggregatorCommitteeHandlerBuildCommitteeDutiesUsesAggregatorRolesAndDutyType(t *testing.T) {
+	ctrl := gomock.NewController(t)
+
+	share := activeShare(1)
+	share.ValidatorPubKey = spectypes.ValidatorPK{1, 2, 3}
+
+	validatorProvider := NewMockValidatorProvider(ctrl)
+	validatorProvider.EXPECT().SelfParticipatingValidators(phase0.Epoch(0)).Return([]*ssvtypes.SSVShare{share})
+	validatorProvider.EXPECT().Validator(share.ValidatorPubKey[:]).Return(share, true).Times(2)
+
+	beaconCfg := *networkconfig.TestNetwork.Beacon
+	beaconCfg.GenesisTime = time.Now()
+	beaconCfg.SlotDuration = time.Hour
+	beaconCfg.SlotsPerEpoch = testSlotsPerEpoch
+	netCfg := *networkconfig.TestNetwork
+	netCfg.Beacon = &beaconCfg
+
+	dutyStore := dutystore.New()
+	handler := NewAggregatorCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee)
+	handler.logger = zap.NewNop()
+	handler.netCfg = &netCfg
+	handler.validatorProvider = validatorProvider
+
+	committeeMap := handler.buildCommitteeDuties(
+		[]*eth2apiv1.AttesterDuty{{
+			PubKey:         phase0.BLSPubKey(share.ValidatorPubKey),
+			Slot:           0,
+			ValidatorIndex: share.ValidatorIndex,
+		}},
+		[]*eth2apiv1.SyncCommitteeDuty{{
+			PubKey:         phase0.BLSPubKey(share.ValidatorPubKey),
+			ValidatorIndex: share.ValidatorIndex,
+		}},
+		0,
+		0,
+	)
+
+	require.Len(t, committeeMap, 1)
+	cd := committeeMap[share.CommitteeID()]
+	require.NotNil(t, cd)
+
+	// The aggregator-committee handler must build an AggregatorCommitteeDuty (not a
+	// CommitteeDuty), and tag the validator duties with the aggregator-flavored beacon roles.
+	aggDuty, ok := cd.duty.(*spectypes.AggregatorCommitteeDuty)
+	require.True(t, ok, "expected *spectypes.AggregatorCommitteeDuty, got %T", cd.duty)
+	require.Equal(t, phase0.Slot(0), aggDuty.Slot)
+
+	validatorDuties := cd.validatorDuties()
+	require.Len(t, validatorDuties, 2)
+
+	gotRoles := make(map[spectypes.BeaconRole]struct{})
+	for _, vd := range validatorDuties {
+		gotRoles[vd.Type] = struct{}{}
+	}
+	require.Contains(t, gotRoles, spectypes.BNRoleAggregator)
+	require.Contains(t, gotRoles, spectypes.BNRoleSyncCommitteeContribution)
+	require.NotContains(t, gotRoles, spectypes.BNRoleAttester)
+	require.NotContains(t, gotRoles, spectypes.BNRoleSyncCommittee)
+}
+
+func TestCommitteeHandlerHandleDuties_AggregatorSkipsTicksPreBooleFork(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+
+		// A validatorProvider/dutiesExecutor with no EXPECT() calls set: if the pre-fork skip
+		// branch didn't short-circuit HandleDuties, processExecution would call into these and
+		// gomock would fail the test on the unexpected call.
+		validatorProvider := NewMockValidatorProvider(ctrl)
+		dutiesExecutor := NewMockDutiesExecutor(ctrl)
+		mockTicker := mockslotticker.NewMockSlotTicker(ctrl)
+
+		tickCh := make(chan time.Time, 1)
+		mockTicker.EXPECT().Next().Return((<-chan time.Time)(tickCh)).AnyTimes()
+		mockTicker.EXPECT().Slot().Return(phase0.Slot(1)).AnyTimes()
+
+		// Pre-fork: BooleForkAtSlot must be false for any slot.
+		netCfg := *networkconfig.TestNetwork
+
+		dutyStore := dutystore.New()
+		handler := NewAggregatorCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee)
+		handler.logger = zap.NewNop()
+		handler.netCfg = &netCfg
+		handler.validatorProvider = validatorProvider
+		handler.dutiesExecutor = dutiesExecutor
+		handler.ticker = mockTicker
+		handler.reorgEventsCh = make(chan ReorgEvent)
+		handler.indicesChangeCh = make(chan struct{})
+
+		ctx, cancel := context.WithCancel(t.Context())
+		done := make(chan struct{})
+		go func() {
+			handler.HandleDuties(ctx)
+			close(done)
+		}()
+
+		tickCh <- time.Now()
+		synctest.Wait()
+
+		cancel()
+		<-done
+	})
+}
+
+func TestCommitteeHandlerHandleDuties_AggregatorExecutesTicksPostBooleFork(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+
+		pubKey := phase0.BLSPubKey{9, 9, 9}
+
+		validatorProvider := NewMockValidatorProvider(ctrl)
+		validatorProvider.EXPECT().SelfParticipatingValidators(phase0.Epoch(0)).Return(nil).Times(1)
+		// The seeded duty's validator isn't self-participating, so buildCommitteeDuties ends up
+		// with an empty result — but reaching this call at all proves the tick was processed
+		// rather than skipped by the pre-fork guard.
+		validatorProvider.EXPECT().Validator(pubKey[:]).Return(nil, false).Times(1)
+
+		dutiesExecutor := NewMockDutiesExecutor(ctrl)
+		dutiesExecutor.EXPECT().ExecuteCommitteeDuties(gomock.Any(), gomock.Any(), gomock.Any()).Times(1)
+
+		mockTicker := mockslotticker.NewMockSlotTicker(ctrl)
+		tickCh := make(chan time.Time, 1)
+		mockTicker.EXPECT().Next().Return((<-chan time.Time)(tickCh)).AnyTimes()
+		mockTicker.EXPECT().Slot().Return(phase0.Slot(1)).AnyTimes()
+
+		// Post-fork: BooleForkAtSlot must be true from genesis.
+		netCfg := *networkconfig.TestNetwork
+		ssvCfg := *networkconfig.TestNetwork.SSV
+		ssvCfg.Forks.Boole = phase0.Epoch(0)
+		netCfg.SSV = &ssvCfg
+
+		dutyStore := dutystore.New()
+		dutyStore.Attester.Set(phase0.Epoch(0), []dutystore.StoreDuty[eth2apiv1.AttesterDuty]{
+			{
+				Slot:           phase0.Slot(1),
+				ValidatorIndex: phase0.ValidatorIndex(1),
+				InCommittee:    true,
+				Duty: &eth2apiv1.AttesterDuty{
+					PubKey:         pubKey,
+					Slot:           phase0.Slot(1),
+					ValidatorIndex: phase0.ValidatorIndex(1),
+				},
+			},
+		})
+
+		handler := NewAggregatorCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee)
+		handler.logger = zap.NewNop()
+		handler.netCfg = &netCfg
+		handler.validatorProvider = validatorProvider
+		handler.dutiesExecutor = dutiesExecutor
+		handler.ticker = mockTicker
+		handler.reorgEventsCh = make(chan ReorgEvent)
+		handler.indicesChangeCh = make(chan struct{})
+
+		ctx, cancel := context.WithCancel(t.Context())
+		done := make(chan struct{})
+		go func() {
+			handler.HandleDuties(ctx)
+			close(done)
+		}()
+
+		tickCh <- time.Now()
+		synctest.Wait()
+
+		cancel()
+		<-done
+
+		ctrl.Finish()
+	})
 }
 
 // The purpose of the test is to ensure that the scheduler can handle the case where the indices change

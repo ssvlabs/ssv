@@ -10,9 +10,28 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 )
+
+// fakeValidatorStore is a minimal validatorStore double for exercising addDutyIDField, which
+// only needs Committee/Validator lookups (no full registry/storage machinery).
+type fakeValidatorStore struct {
+	validator      *ssvtypes.SSVShare
+	validatorFound bool
+	committee      *registrystorage.Committee
+	committeeFound bool
+}
+
+func (f *fakeValidatorStore) Validator([]byte) (*ssvtypes.SSVShare, bool) {
+	return f.validator, f.validatorFound
+}
+
+func (f *fakeValidatorStore) Committee(spectypes.CommitteeID) (*registrystorage.Committee, bool) {
+	return f.committee, f.committeeFound
+}
 
 func TestBuildLoggerFields(t *testing.T) {
 	mv := &messageValidator{
@@ -378,5 +397,130 @@ func TestAsZapFields(t *testing.T) {
 
 		// Should have minimum required fields
 		require.Len(t, fields, 5) // DutyExecutorID, Role, SSVMessageType, Slot, Signers (all with zero values)
+	})
+}
+
+// TestBuildLoggerFields_DutyID covers addDutyIDField, which buildLoggerFields only invokes at
+// debug log level. It must build a duty ID for both the committee and aggregator-committee
+// roles (using the committee lookup), and for per-validator roles (using the validator lookup).
+func TestBuildLoggerFields_DutyID(t *testing.T) {
+	debugLogger, err := zap.NewDevelopment()
+	require.NoError(t, err)
+	require.Equal(t, zap.DebugLevel, debugLogger.Level())
+
+	committeeID := spectypes.CommitteeID{1, 2, 3}
+	operators := []spectypes.OperatorID{4, 5, 6}
+
+	newConsensusMsg := func(role spectypes.RunnerRole, dutyExecutorID []byte, slot phase0.Slot) *queue.SSVMessage {
+		consensusMsg := &specqbft.Message{
+			MsgType: specqbft.CommitMsgType,
+			Height:  specqbft.Height(slot),
+		}
+		ssvMsg := &spectypes.SSVMessage{
+			MsgType: spectypes.SSVConsensusMsgType,
+			MsgID:   spectypes.NewMsgID(spectypes.DomainType{}, dutyExecutorID, role),
+		}
+		return &queue.SSVMessage{
+			SignedSSVMessage: &spectypes.SignedSSVMessage{SSVMessage: ssvMsg},
+			SSVMessage:       ssvMsg,
+			Body:             consensusMsg,
+		}
+	}
+
+	t.Run("committee role builds duty ID from committee lookup", func(t *testing.T) {
+		mv := &messageValidator{
+			logger: debugLogger,
+			netCfg: networkconfig.TestNetwork,
+			validatorStore: &fakeValidatorStore{
+				committee:      &registrystorage.Committee{Operators: operators},
+				committeeFound: true,
+			},
+		}
+
+		msg := newConsensusMsg(spectypes.RoleCommittee, committeeID[:], phase0.Slot(100))
+		fields := mv.buildLoggerFields(msg)
+
+		require.Equal(t, "COMMITTEE-4_5_6-e3-s100", fields.DutyID)
+	})
+
+	t.Run("aggregator-committee role builds a distinct duty ID from the same committee lookup", func(t *testing.T) {
+		mv := &messageValidator{
+			logger: debugLogger,
+			netCfg: networkconfig.TestNetwork,
+			validatorStore: &fakeValidatorStore{
+				committee:      &registrystorage.Committee{Operators: operators},
+				committeeFound: true,
+			},
+		}
+
+		msg := newConsensusMsg(spectypes.RoleAggregatorCommittee, committeeID[:], phase0.Slot(100))
+		fields := mv.buildLoggerFields(msg)
+
+		require.Equal(t, "AGGREGATOR_COMMITTEE-4_5_6-e3-s100", fields.DutyID)
+		require.NotEqual(t, "COMMITTEE-4_5_6-e3-s100", fields.DutyID)
+	})
+
+	t.Run("committee role with unknown committee leaves duty ID empty", func(t *testing.T) {
+		mv := &messageValidator{
+			logger:         debugLogger,
+			netCfg:         networkconfig.TestNetwork,
+			validatorStore: &fakeValidatorStore{committeeFound: false},
+		}
+
+		msg := newConsensusMsg(spectypes.RoleCommittee, committeeID[:], phase0.Slot(100))
+		fields := mv.buildLoggerFields(msg)
+
+		require.Empty(t, fields.DutyID)
+	})
+
+	t.Run("per-validator role builds duty ID from validator lookup", func(t *testing.T) {
+		pubKey := make([]byte, 48)
+		pubKey[0] = 0xAB
+
+		mv := &messageValidator{
+			logger: debugLogger,
+			netCfg: networkconfig.TestNetwork,
+			validatorStore: &fakeValidatorStore{
+				validator:      &ssvtypes.SSVShare{Share: spectypes.Share{ValidatorIndex: phase0.ValidatorIndex(77)}},
+				validatorFound: true,
+			},
+		}
+
+		msg := newConsensusMsg(ssvtypes.RoleAggregator, pubKey, phase0.Slot(200))
+		fields := mv.buildLoggerFields(msg)
+
+		require.Equal(t, "AGGREGATOR-e6-s200-v77", fields.DutyID)
+	})
+
+	t.Run("per-validator role with unknown validator leaves duty ID empty", func(t *testing.T) {
+		pubKey := make([]byte, 48)
+		pubKey[0] = 0xCD
+
+		mv := &messageValidator{
+			logger:         debugLogger,
+			netCfg:         networkconfig.TestNetwork,
+			validatorStore: &fakeValidatorStore{validatorFound: false},
+		}
+
+		msg := newConsensusMsg(ssvtypes.RoleAggregator, pubKey, phase0.Slot(200))
+		fields := mv.buildLoggerFields(msg)
+
+		require.Empty(t, fields.DutyID)
+	})
+
+	t.Run("not invoked below debug level", func(t *testing.T) {
+		mv := &messageValidator{
+			logger: zap.NewNop(),
+			netCfg: networkconfig.TestNetwork,
+			validatorStore: &fakeValidatorStore{
+				committee:      &registrystorage.Committee{Operators: operators},
+				committeeFound: true,
+			},
+		}
+
+		msg := newConsensusMsg(spectypes.RoleCommittee, committeeID[:], phase0.Slot(100))
+		fields := mv.buildLoggerFields(msg)
+
+		require.Empty(t, fields.DutyID, "addDutyIDField must be skipped when the logger isn't at debug level")
 	})
 }
