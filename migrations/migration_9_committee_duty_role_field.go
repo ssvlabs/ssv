@@ -14,6 +14,11 @@ import (
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
+// migrationBatchSize caps how many rewrites are held in memory before being flushed in a
+// single Update transaction. A mainnet exporter can have tens of millions of legacy "cd"
+// records, so we must not accumulate them all at once.
+const migrationBatchSize = 5000
+
 // This migration updates legacy committee duty keys and values to include the runner role field.
 // It processes only legacy keys (slot+committeeID) and skips already role-aware keys.
 var migration_9_migrate_committee_duty_role_field = Migration{
@@ -45,6 +50,37 @@ var migration_9_migrate_committee_duty_role_field = Migration{
 		)
 
 		prefix := []byte(committeeDutyTraceKey)
+
+		roleByte, err := estore.CommitteeRunnerRoleToPrefix(spectypes.RoleCommittee)
+		if err != nil {
+			return fmt.Errorf("map committee runner role to prefix: %w", err)
+		}
+
+		pending := make([]migration_9_pendingRewrite, 0, migrationBatchSize)
+
+		flush := func() error {
+			if len(pending) == 0 {
+				return nil
+			}
+			if err := opt.Db.Update(func(txn basedb.Txn) error {
+				for _, rewrite := range pending {
+					if err := txn.Set(prefix, rewrite.newKey, rewrite.value); err != nil {
+						return fmt.Errorf("set committee duty with role: %w", err)
+					}
+					if err := txn.Delete(prefix, rewrite.oldKey); err != nil {
+						return fmt.Errorf("delete legacy committee duty: %w", err)
+					}
+				}
+				return nil
+			}); err != nil {
+				return fmt.Errorf("flush committee duty role field batch: %w", err)
+			}
+			migrated += len(pending)
+			logger.Info("migration in progress", zap.Int("migrated", migrated))
+			pending = pending[:0]
+			return nil
+		}
+
 		if err = opt.Db.GetAll(prefix, func(i int, obj basedb.Obj) error {
 			select {
 			case <-ctx.Done():
@@ -82,30 +118,40 @@ var migration_9_migrate_committee_duty_role_field = Migration{
 				return fmt.Errorf("marshal committee duty with role: %w", err)
 			}
 
-			roleByte, err := estore.CommitteeRunnerRoleToPrefix(spectypes.RoleCommittee)
-			if err != nil {
-				return fmt.Errorf("map committee runner role to prefix: %w", err)
-			}
-
 			newKey := make([]byte, 0, newKeyLen)
 			newKey = append(newKey, obj.Key[:slotKeyLen]...)
 			newKey = append(newKey, roleByte)
 			newKey = append(newKey, obj.Key[slotKeyLen:]...)
-			if err := opt.Db.Set(prefix, newKey, value); err != nil {
-				return fmt.Errorf("set committee duty with role: %w", err)
-			}
-			if err := opt.Db.Delete(prefix, obj.Key); err != nil {
-				return fmt.Errorf("delete legacy committee duty: %w", err)
+
+			pending = append(pending, migration_9_pendingRewrite{
+				newKey: newKey,
+				value:  value,
+				oldKey: obj.Key,
+			})
+
+			if len(pending) >= migrationBatchSize {
+				return flush()
 			}
 
-			migrated++
 			return nil
 		}); err != nil {
 			return fmt.Errorf("migrate committee duty role field: %w", err)
 		}
 
+		if err = flush(); err != nil {
+			return fmt.Errorf("migrate committee duty role field: %w", err)
+		}
+
 		return nil
 	},
+}
+
+// migration_9_pendingRewrite holds a single legacy-to-role-aware key rewrite
+// accumulated in memory before being committed as part of a batch.
+type migration_9_pendingRewrite struct {
+	newKey []byte
+	value  []byte
+	oldKey []byte
 }
 
 func convertSignerDataV1(in []*migration_9_SignerData) []*traces.SignerData {

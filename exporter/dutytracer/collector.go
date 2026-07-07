@@ -262,7 +262,8 @@ func (c *Collector) getOrCreateCommitteeTrace(slot phase0.Slot, committeeID spec
 					Slot:        slot,
 					// Set Role explicitly so the stored value matches its role-aware key byte,
 					// rather than relying on RoleCommittee being the zero value (unit-5 will add
-					// the AggregatorCommittee path, which must set 0x06 here).
+					// the AggregatorCommittee path, which must set Role: RoleAggregatorCommittee here;
+					// the store derives the key-prefix byte from it via CommitteeRunnerRoleToPrefix).
 					Role: spectypes.RoleCommittee,
 				},
 			}
