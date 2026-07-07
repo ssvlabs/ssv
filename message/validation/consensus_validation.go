@@ -195,12 +195,7 @@ func (mv *messageValidator) validateQBFTLogic(
 ) error {
 	if consensusMessage.MsgType == specqbft.ProposalMsgType {
 		// Rule: Signer must be the leader
-		var leader spectypes.OperatorID
-		if mv.netCfg.BooleForkAtSlot(phase0.Slot(consensusMessage.Height)) {
-			leader = qbft.RoundRobinProposer(consensusMessage.Height, consensusMessage.Round, committeeInfo.committee, mv.netCfg)
-		} else {
-			leader = mv.roundRobinProposerPreBooleFork(consensusMessage.Height, consensusMessage.Round, committeeInfo.committee)
-		}
+		leader := qbft.Proposer(consensusMessage.Height, consensusMessage.Round, committeeInfo.committee, mv.netCfg)
 		if signedSSVMessage.OperatorIDs[0] != leader {
 			e := ErrSignerNotLeader
 			e.got = signedSSVMessage.OperatorIDs[0]
@@ -563,14 +558,4 @@ func (mv *messageValidator) roundBelongsToAllowedSpread(
 	}
 
 	return nil
-}
-
-func (mv *messageValidator) roundRobinProposerPreBooleFork(height specqbft.Height, round specqbft.Round, committee []spectypes.OperatorID) spectypes.OperatorID {
-	firstRoundIndex := uint64(0)
-	if height != specqbft.FirstHeight {
-		firstRoundIndex += uint64(height) % uint64(len(committee))
-	}
-
-	index := (firstRoundIndex + uint64(round) - uint64(specqbft.FirstRound)) % uint64(len(committee))
-	return committee[index]
 }

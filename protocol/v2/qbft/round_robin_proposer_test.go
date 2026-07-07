@@ -3,6 +3,7 @@ package qbft
 import (
 	"testing"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/stretchr/testify/require"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
@@ -11,22 +12,19 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 )
 
+// preBooleForkNetConfig is a stub networkConfig whose fork gate is always off, exercising
+// Proposer's pre-fork branch.
+type preBooleForkNetConfig struct{}
+
+func (preBooleForkNetConfig) EstimatedEpochAtSlot(phase0.Slot) phase0.Epoch { return 0 }
+func (preBooleForkNetConfig) BooleForkAtSlot(phase0.Slot) bool              { return false }
+
 func TestRoundRobinProposerPreBooleFork_MatchesStageLogic(t *testing.T) {
 	height := specqbft.Height(20)
-	state := &specqbft.State{
-		Height: height,
-		CommitteeMember: &spectypes.CommitteeMember{
-			Committee: []*spectypes.Operator{
-				{OperatorID: 1},
-				{OperatorID: 2},
-				{OperatorID: 3},
-				{OperatorID: 4},
-			},
-		},
-	}
+	committee := []spectypes.OperatorID{1, 2, 3, 4}
 
 	// height%4=0 so leader should be the first operator for FirstRound.
-	require.Equal(t, spectypes.OperatorID(1), RoundRobinProposerPreBooleFork(state, specqbft.FirstRound))
+	require.Equal(t, spectypes.OperatorID(1), Proposer(height, specqbft.FirstRound, committee, preBooleForkNetConfig{}))
 }
 
 func TestRoundRobinProposer_PostBooleFork_OffsetFromSlotsPerEpoch(t *testing.T) {
