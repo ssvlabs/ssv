@@ -16,11 +16,73 @@ import (
 	"github.com/ssvlabs/ssv/hprobe"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/network"
+	networkcommons "github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/networkconfig"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
+
+// shareWithCommittee builds a minimal SSVShare whose committee is the given operator IDs — enough
+// to exercise BooleCommitteeSubnet/AlanCommitteeSubnet, which derive solely from the committee.
+func shareWithCommittee(operatorIDs ...spectypes.OperatorID) *ssvtypes.SSVShare {
+	committee := make([]*spectypes.ShareMember, len(operatorIDs))
+	for i, id := range operatorIDs {
+		committee[i] = &spectypes.ShareMember{Signer: id}
+	}
+	return &ssvtypes.SSVShare{
+		Share: spectypes.Share{Committee: committee},
+	}
+}
+
+// Test_operatorActiveSubnets locks in the fork-gated subnet-counting behavior extracted from
+// applyDynamicMaxPeers: post-fork only Boole subnets count, pre-fork both Alan and Boole subnets
+// count, and validators landing on an already-seen subnet don't inflate the count.
+func TestOperatorActiveSubnets(t *testing.T) {
+	shareA := shareWithCommittee(1, 2, 3, 4)
+	shareB := shareWithCommittee(5, 6, 7, 8)
+	shareADup := shareWithCommittee(1, 2, 3, 4) // same committee as shareA => same subnets
+
+	t.Run("post-fork counts only distinct Boole subnets", func(t *testing.T) {
+		validators := []*ssvtypes.SSVShare{shareA, shareB}
+
+		subnets, active := operatorActiveSubnets(validators, true)
+
+		require.Equal(t, 2, active)
+		require.True(t, subnets.IsSet(shareA.BooleCommitteeSubnet()))
+		require.True(t, subnets.IsSet(shareB.BooleCommitteeSubnet()))
+		require.False(t, subnets.IsSet(shareA.AlanCommitteeSubnet()))
+	})
+
+	t.Run("pre-fork counts both Alan and Boole subnets", func(t *testing.T) {
+		validators := []*ssvtypes.SSVShare{shareA, shareB}
+
+		subnets, active := operatorActiveSubnets(validators, false)
+
+		require.Equal(t, 4, active)
+		require.True(t, subnets.IsSet(shareA.BooleCommitteeSubnet()))
+		require.True(t, subnets.IsSet(shareA.AlanCommitteeSubnet()))
+		require.True(t, subnets.IsSet(shareB.BooleCommitteeSubnet()))
+		require.True(t, subnets.IsSet(shareB.AlanCommitteeSubnet()))
+	})
+
+	t.Run("validators sharing a committee dedupe to a single subnet", func(t *testing.T) {
+		validators := []*ssvtypes.SSVShare{shareA, shareADup}
+
+		subnets, active := operatorActiveSubnets(validators, true)
+
+		require.Equal(t, 1, active)
+		require.True(t, subnets.IsSet(shareA.BooleCommitteeSubnet()))
+	})
+
+	t.Run("no validators yields no active subnets", func(t *testing.T) {
+		subnets, active := operatorActiveSubnets(nil, true)
+
+		require.Equal(t, 0, active)
+		require.Equal(t, networkcommons.Subnets{}, subnets)
+	})
+}
 
 // Test_buildNode_invalidConfigReturns verifies buildNode() returns the configuration error instead of
 // calling logger.Fatal (which would os.Exit the test process) when resolveAndValidate fails.

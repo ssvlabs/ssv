@@ -48,6 +48,7 @@ import (
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	qbftcontroller "github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/ssvsigner"
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
@@ -620,23 +621,10 @@ func (n *node) applyDynamicMaxPeers() {
 	)
 	start := time.Now()
 	myValidators := n.nodeStorage.ValidatorStore().OperatorValidators(n.operatorDataStore.GetOperatorID())
-	mySubnets := networkcommons.Subnets{}
-	myActiveSubnets := 0
 	// Post-Boole-fork committees live on Boole subnets; before/through the transition both the
 	// Alan and Boole subnets are in play, so budget peers for both.
 	booleFork := n.networkConfig.BooleForkAtSlot(n.networkConfig.EstimatedCurrentSlot())
-	for _, v := range myValidators {
-		if subnet := v.BooleCommitteeSubnet(); !mySubnets.IsSet(subnet) {
-			mySubnets.Set(subnet)
-			myActiveSubnets++
-		}
-		if !booleFork {
-			if alanSubnet := v.AlanCommitteeSubnet(); !mySubnets.IsSet(alanSubnet) {
-				mySubnets.Set(alanSubnet)
-				myActiveSubnets++
-			}
-		}
-	}
+	_, myActiveSubnets := operatorActiveSubnets(myValidators, booleFork)
 	idealMaxPeers := min(baseMaxPeers+idealPeersPerSubnet*myActiveSubnets, maxPeersLimit)
 	if n.cfg.P2pNetworkConfig.MaxPeers < idealMaxPeers {
 		n.logger.Warn("increasing MaxPeers to match the operator's subscribed subnets",
@@ -647,6 +635,27 @@ func (n *node) applyDynamicMaxPeers() {
 		)
 		n.cfg.P2pNetworkConfig.MaxPeers = idealMaxPeers
 	}
+}
+
+// operatorActiveSubnets returns the committee subnets the operator's validators participate in and
+// their count. Before/through the Boole transition both Alan and Boole subnets are counted; post-fork
+// only Boole.
+func operatorActiveSubnets(validators []*ssvtypes.SSVShare, booleFork bool) (networkcommons.Subnets, int) {
+	mySubnets := networkcommons.Subnets{}
+	active := 0
+	for _, v := range validators {
+		if subnet := v.BooleCommitteeSubnet(); !mySubnets.IsSet(subnet) {
+			mySubnets.Set(subnet)
+			active++
+		}
+		if !booleFork {
+			if alanSubnet := v.AlanCommitteeSubnet(); !mySubnets.IsSet(alanSubnet) {
+				mySubnets.Set(alanSubnet)
+				active++
+			}
+		}
+	}
+	return mySubnets, active
 }
 
 // startNetwork wires validator stats into the p2p layer, then sets up + starts the network and
