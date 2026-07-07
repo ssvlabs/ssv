@@ -1,7 +1,7 @@
 package qbft
 
 import (
-	"sort"
+	"slices"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 
@@ -9,24 +9,27 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
-// Deprecated - only for pre-Boole fork
-func RoundRobinProposerPreBooleFork(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
+// roundRobinProposerPreBooleFork is the pre-Boole proposer selection. Kept only for
+// heights before the Boole fork; new code should go through Proposer.
+func roundRobinProposerPreBooleFork(height specqbft.Height, round specqbft.Round, committee []spectypes.OperatorID) spectypes.OperatorID {
 	firstRoundIndex := uint64(0)
-	if state.Height != specqbft.FirstHeight {
-		firstRoundIndex += uint64(state.Height) % uint64(len(state.CommitteeMember.Committee))
+	if height != specqbft.FirstHeight {
+		firstRoundIndex += uint64(height) % uint64(len(committee))
 	}
 
-	index := (firstRoundIndex + uint64(round) - uint64(specqbft.FirstRound)) % uint64(len(state.CommitteeMember.Committee))
-	return state.CommitteeMember.Committee[index].OperatorID
+	index := (firstRoundIndex + uint64(round) - uint64(specqbft.FirstRound)) % uint64(len(committee))
+	return committee[index]
 }
 
 type networkConfig interface {
 	EstimatedEpochAtSlot(slot phase0.Slot) phase0.Epoch
+	BooleForkAtSlot(slot phase0.Slot) bool
 }
 
 // RoundRobinProposer returns the proposer for the round.
 // Each new height starts with the first proposer and increments by 1 with each following round.
-// Each new height has a different first round proposer which is +1 from the previous height.
+// Each new height has a different first round proposer which is +1 from the previous height
+// (+2 when the height crosses an epoch boundary, as the epoch offset advances as well).
 // Also, the current Ethereum epoch is taken into account to introduce variability through epochs
 // (mostly for committees with 4 operators, as 32%4 = 0 as the epochs would "repeat" otherwise).
 func RoundRobinProposer(
@@ -36,11 +39,9 @@ func RoundRobinProposer(
 	netCfg networkConfig,
 ) spectypes.OperatorID {
 	// Ensure committee is sorted to avoid proposer depending on input order.
-	if !sort.SliceIsSorted(committee, func(i, j int) bool { return committee[i] < committee[j] }) {
-		sorted := make([]spectypes.OperatorID, len(committee))
-		copy(sorted, committee)
-		sort.Slice(sorted, func(i, j int) bool { return sorted[i] < sorted[j] })
-		committee = sorted
+	if !slices.IsSorted(committee) {
+		committee = slices.Clone(committee)
+		slices.Sort(committee)
 	}
 
 	ethEpoch := uint64(netCfg.EstimatedEpochAtSlot(phase0.Slot(height)))
@@ -52,4 +53,14 @@ func RoundRobinProposer(
 
 	index := (firstRoundIndex + uint64(round) - uint64(specqbft.FirstRound) + ethEpoch) % uint64(len(committee))
 	return committee[index]
+}
+
+// Proposer returns the round-robin proposer for the given height/round, selecting the
+// fork-appropriate algorithm from netCfg. Both the runners (via ProposerF) and message
+// validation call this, so the two always agree on the leader per fork.
+func Proposer(height specqbft.Height, round specqbft.Round, committee []spectypes.OperatorID, netCfg networkConfig) spectypes.OperatorID {
+	if netCfg.BooleForkAtSlot(phase0.Slot(height)) {
+		return RoundRobinProposer(height, round, committee, netCfg)
+	}
+	return roundRobinProposerPreBooleFork(height, round, committee)
 }
