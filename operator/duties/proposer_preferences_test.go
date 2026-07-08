@@ -32,6 +32,7 @@ func TestProposerPreferencesHandler_emitForEpoch_emitsAndCachesPerEpoch(t *testi
 		Times(1)
 
 	bn := NewMockBeaconNode(ctrl)
+	bn.EXPECT().ProposerDutiesDependentRoot(gomock.Any(), epoch).Return(phase0.Root{0xaa}, nil).Times(1)
 	bn.EXPECT().ProposerDuties(gomock.Any(), epoch, []phase0.ValidatorIndex{idx}).
 		Return([]*eth2apiv1.ProposerDuty{{PubKey: pk, ValidatorIndex: idx, Slot: proposalSlot}}, nil).
 		Times(1)
@@ -44,10 +45,10 @@ func TestProposerPreferencesHandler_emitForEpoch_emitsAndCachesPerEpoch(t *testi
 	h.beaconNode = bn
 	h.dutiesExecutor = &captureExecutor{executed: executed}
 
-	h.emitForEpoch(context.Background(), epoch, currentSlot)
-	h.emitForEpoch(context.Background(), epoch, currentSlot) // cached: must not re-fetch or re-emit
+	h.emitForEpoch(context.Background(), epoch, currentSlot, false)
+	h.emitForEpoch(context.Background(), epoch, currentSlot, false) // cached: must not re-fetch or re-emit
 
-	require.Contains(t, h.processed, epoch)
+	require.Contains(t, h.emitted, epoch)
 
 	require.Len(t, executed, 1)
 	got := <-executed
@@ -71,9 +72,9 @@ func TestProposerPreferencesHandler_emitForEpoch_noLocalValidators(t *testing.T)
 	h.logger = zap.NewNop()
 	h.validatorProvider = vp
 
-	h.emitForEpoch(context.Background(), epoch, phase0.Slot(40))
+	h.emitForEpoch(context.Background(), epoch, phase0.Slot(40), false)
 
-	require.NotContains(t, h.processed, epoch)
+	require.NotContains(t, h.emitted, epoch)
 }
 
 // When the beacon node reports no local proposals for the epoch, it's marked processed (no retry) and
@@ -88,6 +89,7 @@ func TestProposerPreferencesHandler_emitForEpoch_noProposals(t *testing.T) {
 		Return([]*types.SSVShare{{Share: spectypes.Share{ValidatorIndex: idx}}}).Times(1)
 
 	bn := NewMockBeaconNode(ctrl)
+	bn.EXPECT().ProposerDutiesDependentRoot(gomock.Any(), epoch).Return(phase0.Root{0xaa}, nil).Times(1)
 	bn.EXPECT().ProposerDuties(gomock.Any(), epoch, []phase0.ValidatorIndex{idx}).
 		Return([]*eth2apiv1.ProposerDuty{}, nil).Times(1)
 
@@ -98,9 +100,9 @@ func TestProposerPreferencesHandler_emitForEpoch_noProposals(t *testing.T) {
 	h.beaconNode = bn
 	h.dutiesExecutor = &captureExecutor{executed: executed}
 
-	h.emitForEpoch(context.Background(), epoch, phase0.Slot(40))
+	h.emitForEpoch(context.Background(), epoch, phase0.Slot(40), false)
 
-	require.Contains(t, h.processed, epoch)
+	require.Contains(t, h.emitted, epoch)
 	require.Len(t, executed, 0)
 }
 
@@ -108,14 +110,14 @@ func TestProposerPreferencesHandler_emitForEpoch_noProposals(t *testing.T) {
 func TestProposerPreferencesHandler_evictOutdated(t *testing.T) {
 	h := NewProposerPreferencesHandler()
 	for _, e := range []phase0.Epoch{4, 5, 6} {
-		h.processed[e] = struct{}{}
+		h.emitted[e] = phase0.Root{}
 	}
 
 	h.evictOutdated(5)
 
-	require.NotContains(t, h.processed, phase0.Epoch(4))
-	require.Contains(t, h.processed, phase0.Epoch(5))
-	require.Contains(t, h.processed, phase0.Epoch(6))
+	require.NotContains(t, h.emitted, phase0.Epoch(4))
+	require.Contains(t, h.emitted, phase0.Epoch(5))
+	require.Contains(t, h.emitted, phase0.Epoch(6))
 }
 
 // emitForTick emits the first Gloas epoch's preferences both in steady state (a slot in that epoch)
@@ -144,6 +146,7 @@ func TestProposerPreferencesHandler_emitForTick(t *testing.T) {
 				Return([]*types.SSVShare{{Share: spectypes.Share{ValidatorIndex: idx, ValidatorPubKey: spectypes.ValidatorPK(pk)}}}).Times(1)
 
 			bn := NewMockBeaconNode(ctrl)
+			bn.EXPECT().ProposerDutiesDependentRoot(gomock.Any(), phase0.Epoch(gloasEpoch)).Return(phase0.Root{0xaa}, nil).Times(1)
 			bn.EXPECT().ProposerDuties(gomock.Any(), phase0.Epoch(gloasEpoch), []phase0.ValidatorIndex{idx}).
 				Return([]*eth2apiv1.ProposerDuty{{PubKey: pk, ValidatorIndex: idx, Slot: proposalSlot}}, nil).Times(1)
 
@@ -166,16 +169,50 @@ func TestProposerPreferencesHandler_emitForTick(t *testing.T) {
 	}
 }
 
-// A reorg or indices change drops the emitted-epoch markers so the next tick re-fetches and re-emits
-// the lookahead.
-func TestProposerPreferencesHandler_reEmitLookahead_clearsProcessed(t *testing.T) {
+// A post-reorg recheck re-emits an epoch's preferences only when its dependent_root actually changed:
+// an unchanged root is skipped (re-emitting it would just duplicate the preference, SIP #94 §5), while
+// a changed root re-emits.
+func TestProposerPreferencesHandler_recheckReEmitsOnlyOnDependentRootChange(t *testing.T) {
+	ctrl := gomock.NewController(t)
+
+	epoch := phase0.Epoch(5)
+	idx := phase0.ValidatorIndex(7)
+	proposalSlot := phase0.Slot(60)
+	currentSlot := phase0.Slot(40)
+	pk := phase0.BLSPubKey{1, 2, 3}
+	rootA := phase0.Root{0xaa}
+	rootB := phase0.Root{0xbb}
+
+	vp := NewMockValidatorProvider(ctrl)
+	vp.EXPECT().SelfParticipatingValidators(epoch).
+		Return([]*types.SSVShare{{Share: spectypes.Share{ValidatorIndex: idx, ValidatorPubKey: spectypes.ValidatorPK(pk)}}}).
+		AnyTimes()
+
+	duty := []*eth2apiv1.ProposerDuty{{PubKey: pk, ValidatorIndex: idx, Slot: proposalSlot}}
+	bn := NewMockBeaconNode(ctrl)
+	// The first emit and the changed-root recheck each fetch duties; the unchanged-root recheck must not.
+	gomock.InOrder(
+		bn.EXPECT().ProposerDutiesDependentRoot(gomock.Any(), epoch).Return(rootA, nil), // first emit
+		bn.EXPECT().ProposerDuties(gomock.Any(), epoch, []phase0.ValidatorIndex{idx}).Return(duty, nil),
+		bn.EXPECT().ProposerDutiesDependentRoot(gomock.Any(), epoch).Return(rootA, nil), // recheck, unchanged → skip
+		bn.EXPECT().ProposerDutiesDependentRoot(gomock.Any(), epoch).Return(rootB, nil), // recheck, changed → re-emit
+		bn.EXPECT().ProposerDuties(gomock.Any(), epoch, []phase0.ValidatorIndex{idx}).Return(duty, nil),
+	)
+
+	executed := make(chan []*spectypes.ValidatorDuty, 2)
 	h := NewProposerPreferencesHandler()
 	h.logger = zap.NewNop()
-	for _, e := range []phase0.Epoch{100, 101} {
-		h.processed[e] = struct{}{}
-	}
+	h.netCfg = networkconfig.TestNetwork
+	h.validatorProvider = vp
+	h.beaconNode = bn
+	h.dutiesExecutor = &captureExecutor{executed: executed}
 
-	h.reEmitLookahead("test")
+	h.emitForEpoch(context.Background(), epoch, currentSlot, false) // first emit → root A
+	require.Equal(t, rootA, h.emitted[epoch])
 
-	require.Empty(t, h.processed)
+	h.emitForEpoch(context.Background(), epoch, currentSlot, true) // recheck, unchanged → no re-emit
+	h.emitForEpoch(context.Background(), epoch, currentSlot, true) // recheck, changed → re-emit
+	require.Equal(t, rootB, h.emitted[epoch])
+
+	require.Len(t, executed, 2) // first emit + changed-root re-emit only
 }

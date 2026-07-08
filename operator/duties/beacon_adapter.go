@@ -290,6 +290,11 @@ func (p *prefetchingBeacon) ProposerDuties(ctx context.Context, epoch phase0.Epo
 	return out, nil
 }
 
+func (p *prefetchingBeacon) ProposerDutiesDependentRoot(ctx context.Context, epoch phase0.Epoch) (phase0.Root, error) {
+	// Pass-through: a single cheap root, no prefetch/cache needed.
+	return p.inner.ProposerDutiesDependentRoot(ctx, epoch)
+}
+
 func (p *prefetchingBeacon) SyncCommitteeDuties(ctx context.Context, epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*eth2apiv1.SyncCommitteeDuty, error) {
 	if err := p.ensureSyncPeriod(ctx, epoch, indices); err != nil {
 		return nil, err

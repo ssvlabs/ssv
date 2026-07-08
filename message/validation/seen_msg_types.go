@@ -1,6 +1,6 @@
 package validation
 
-// seen_msg_types.go contains code for counting and validating messages per validator-slot-round.
+// seen_msg_types.go tracks which message types have been seen per validator-slot-round.
 
 import (
 	"fmt"
@@ -80,8 +80,11 @@ func (c *SeenMsgTypes) RecordConsensusMessage(signedSSVMessage *spectypes.Signed
 // RecordPartialSignatureMessage updates the counts based on the provided partial signature message type.
 func (c *SeenMsgTypes) RecordPartialSignatureMessage(messages *spectypes.PartialSignatureMessages) error {
 	switch messages.Type {
-	case spectypes.RandaoPartialSig, ssvtypes.SelectionProofPartialSig, ssvtypes.ContributionProofs, spectypes.ValidatorRegistrationPartialSig, spectypes.VoluntaryExitPartialSig, spectypes.AggregatorCommitteePartialSig, spectypes.PTCAttesterPartialSig, spectypes.ProposerPreferencesPartialSig:
+	case spectypes.RandaoPartialSig, ssvtypes.SelectionProofPartialSig, ssvtypes.ContributionProofs, spectypes.ValidatorRegistrationPartialSig, spectypes.VoluntaryExitPartialSig, spectypes.AggregatorCommitteePartialSig, spectypes.PTCAttesterPartialSig:
 		c.recordPreConsensus()
+	case spectypes.ProposerPreferencesPartialSig:
+		// Capped by distinct signing root rather than the single pre-consensus bit (SIP #94 §5); the root
+		// set is tracked on SignerState, so there is nothing to record in this type bitmask.
 	case spectypes.PostConsensusPartialSig:
 		c.recordPostConsensus()
 	default:

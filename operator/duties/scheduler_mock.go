@@ -190,6 +190,21 @@ func (mr *MockBeaconNodeMockRecorder) ProposerDuties(ctx, epoch, validatorIndice
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProposerDuties", reflect.TypeOf((*MockBeaconNode)(nil).ProposerDuties), ctx, epoch, validatorIndices)
 }
 
+// ProposerDutiesDependentRoot mocks base method.
+func (m *MockBeaconNode) ProposerDutiesDependentRoot(ctx context.Context, epoch phase0.Epoch) (phase0.Root, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ProposerDutiesDependentRoot", ctx, epoch)
+	ret0, _ := ret[0].(phase0.Root)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ProposerDutiesDependentRoot indicates an expected call of ProposerDutiesDependentRoot.
+func (mr *MockBeaconNodeMockRecorder) ProposerDutiesDependentRoot(ctx, epoch any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProposerDutiesDependentRoot", reflect.TypeOf((*MockBeaconNode)(nil).ProposerDutiesDependentRoot), ctx, epoch)
+}
+
 // SubmitBeaconCommitteeSubscriptions mocks base method.
 func (m *MockBeaconNode) SubmitBeaconCommitteeSubscriptions(ctx context.Context, subscription []*v1.BeaconCommitteeSubscription) error {
 	m.ctrl.T.Helper()

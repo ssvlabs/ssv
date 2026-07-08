@@ -3,8 +3,11 @@ package validation
 // signer_state.go describes state of a signer.
 
 import (
+	"slices"
+
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/libp2p/go-libp2p/core/peer"
+
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 )
 
@@ -49,6 +52,7 @@ func (s *SignerStateForSlotRound) Reset(slot phase0.Slot, round specqbft.Round) 
 	s.World.SeenMsgTypes = SeenMsgTypes{}
 	s.World.HashedProposalData = nil
 	s.World.SeenDecidedMsgSignersCount = 0
+	s.World.SeenProposerPreferencesRoots = nil
 }
 
 // SignerState represents the state of a signer (an Operator running a Runner that performs partial-signing for
@@ -64,4 +68,27 @@ type SignerState struct {
 
 	// SeenDecidedMsgSignersCount records the max number of signers we've seen with a decided message.
 	SeenDecidedMsgSignersCount int
+
+	// SeenProposerPreferencesRoots records the distinct ProposerPreferences signing roots seen from this
+	// signer (SIP #94 §5): that type is capped by distinct root (up to maxProposerPreferencesDistinctRoots),
+	// not by the single pre-consensus bit in SeenMsgTypes. nil until the first such message.
+	SeenProposerPreferencesRoots [][32]byte
+}
+
+// hasProposerPreferencesRoot reports whether root has already been seen from this signer.
+func (s *SignerState) hasProposerPreferencesRoot(root [32]byte) bool {
+	return slices.Contains(s.SeenProposerPreferencesRoots, root)
+}
+
+// proposerPreferencesRootCount returns the number of distinct roots seen from this signer.
+func (s *SignerState) proposerPreferencesRootCount() int {
+	return len(s.SeenProposerPreferencesRoots)
+}
+
+// recordProposerPreferencesRoot adds root to the seen set, skipping roots already present.
+func (s *SignerState) recordProposerPreferencesRoot(root [32]byte) {
+	if slices.Contains(s.SeenProposerPreferencesRoots, root) {
+		return
+	}
+	s.SeenProposerPreferencesRoots = append(s.SeenProposerPreferencesRoots, root)
 }
