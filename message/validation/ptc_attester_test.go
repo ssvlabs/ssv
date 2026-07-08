@@ -13,14 +13,15 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 )
 
-// A PTC member signs at most one payload attestation per slot → at most SlotsPerEpoch per epoch.
+// A PTC member is drawn from a beacon committee, and a validator sits on exactly one beacon committee
+// per epoch → at most one PTC duty per epoch, plus a reorg margin → limit 2.
 func TestDutyLimit_PTCAttester(t *testing.T) {
 	mv := &messageValidator{netCfg: networkconfig.TestNetwork}
 	msgID := spectypes.NewMsgID(spectypes.DomainType{}, make([]byte, 48), spectypes.RolePTCAttester)
 
 	limit, ok := mv.dutyLimit(msgID, 0, nil)
 	require.True(t, ok)
-	require.Equal(t, mv.netCfg.SlotsPerEpoch, limit)
+	require.Equal(t, uint64(2), limit)
 }
 
 // PTC fires at the slot's 75% cutoff (a current-slot duty): fine around its slot, late for a slot well behind.
