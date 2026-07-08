@@ -325,8 +325,9 @@ func newNode(
 
 	var newDecidedHandler qbftcontroller.NewDecidedHandler
 	var decidedStreamPublisherFn func(dutytracer.DecidedInfo)
+	var ws exporterapi.WebSocketServer
 	if cfg.WsAPIPort != 0 {
-		ws := exporterapi.NewWsServer(logger, nil, http.NewServeMux(), cfg.WithPing, fmt.Sprintf(":%d", cfg.WsAPIPort))
+		ws = exporterapi.NewWsServer(logger, nil, http.NewServeMux(), cfg.WithPing, fmt.Sprintf(":%d", cfg.WsAPIPort))
 		cfg.SSVOptions.WS = ws
 		newDecidedHandler = decided.NewStreamPublisher(logger, networkConfig.DomainType, ws)
 		decidedStreamPublisherFn = decided.NewDecidedListener(logger, networkConfig.DomainType, ws, nodeStorage.ValidatorStore())
@@ -377,6 +378,7 @@ func newNode(
 	// Exporter duty tracing. An invalid EXPORTER_MODE is rejected up front by resolveAndValidate,
 	// so res.mode here is always one of the known modes.
 	var collector *dutytracer.Collector
+	var exporterRead *exportercore.Exporter
 	switch res.mode {
 	case modeExporterArchive:
 		logger.Info("exporter mode: archive")
@@ -388,7 +390,7 @@ func newNode(
 			dstore, networkConfig.Beacon, decidedStreamPublisherFn,
 			dutyStore)
 
-		cfg.SSVOptions.ExporterRead = exportercore.NewExporter(logger, storageMap, collector, nodeStorage.ValidatorStore())
+		exporterRead = exportercore.NewExporter(logger, storageMap, collector, nodeStorage.ValidatorStore())
 	case modeExporterStandard:
 		logger.Info("exporter mode: standard")
 	case modeOperator:
@@ -431,7 +433,14 @@ func newNode(
 	cfg.SSVOptions.ValidatorController = validatorCtrl
 	cfg.SSVOptions.ValidatorStore = nodeStorage.ValidatorStore()
 
-	operatorNode := operator.New(logger, cfg.SSVOptions, cfg.ExporterOptions, slotTickerProvider, storageMap)
+	if ws != nil {
+		handler := exporterapi.NewHandler(logger)
+		ws.UseQueryHandler(func(nm *exporterapi.NetworkMessage) {
+			handler.HandleQueryRequests(storageMap, exporterRead, nodeStorage.ValidatorStore(), networkConfig.DomainType, nm)
+		})
+	}
+
+	operatorNode := operator.New(logger, cfg.SSVOptions, cfg.ExporterOptions, slotTickerProvider)
 
 	return &node{
 		logger:              logger,
