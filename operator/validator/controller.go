@@ -1048,8 +1048,8 @@ func SetupCommitteeRunners(
 			BeaconSigner: options.Signer,
 			Domain:       options.NetworkConfig.DomainType,
 			ProposerF: func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
-				leader := qbft.RoundRobinProposer(state, round)
-				return leader
+				committee := ssvtypes.OperatorIDsFromOperators(state.CommitteeMember.Committee)
+				return qbft.Proposer(state.Height, round, committee, options.NetworkConfig)
 			},
 			Network:     options.Network,
 			CutOffRound: roundtimer.CutOffRound,
@@ -1113,8 +1113,8 @@ func SetupRunners(
 			BeaconSigner: options.Signer,
 			Domain:       options.NetworkConfig.DomainType,
 			ProposerF: func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
-				leader := qbft.RoundRobinProposer(state, round)
-				return leader
+				committee := ssvtypes.OperatorIDsFromOperators(state.CommitteeMember.Committee)
+				return qbft.Proposer(state.Height, round, committee, options.NetworkConfig)
 			},
 			Network:     options.Network,
 			CutOffRound: roundtimer.CutOffRound,
