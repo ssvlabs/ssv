@@ -624,7 +624,7 @@ func (n *node) applyDynamicMaxPeers() {
 	// Post-Boole-fork committees live on Boole subnets; before/through the transition both the
 	// Alan and Boole subnets are in play, so budget peers for both.
 	booleFork := n.networkConfig.BooleForkAtSlot(n.networkConfig.EstimatedCurrentSlot())
-	_, myActiveSubnets := operatorActiveSubnets(myValidators, booleFork)
+	myActiveSubnets := operatorActiveSubnets(myValidators, booleFork)
 	idealMaxPeers := min(baseMaxPeers+idealPeersPerSubnet*myActiveSubnets, maxPeersLimit)
 	if n.cfg.P2pNetworkConfig.MaxPeers < idealMaxPeers {
 		n.logger.Warn("increasing MaxPeers to match the operator's subscribed subnets",
@@ -637,25 +637,21 @@ func (n *node) applyDynamicMaxPeers() {
 	}
 }
 
-// operatorActiveSubnets returns the committee subnets the operator's validators participate in and
-// their count. Before/through the Boole transition both Alan and Boole subnets are counted; post-fork
-// only Boole.
-func operatorActiveSubnets(validators []*ssvtypes.SSVShare, booleFork bool) (networkcommons.Subnets, int) {
-	mySubnets := networkcommons.Subnets{}
-	active := 0
+// operatorActiveSubnets returns the number of distinct committee subnets the operator's validators
+// participate in. Boole and Alan subnets are tallied in separate bitmaps: they are independent gossip
+// topics (/ssv/<net>/boole/<n> vs ssv.v2.<n>) even when their subnet numbers coincide, so a shared
+// bitmap would under-count on collision. Before/through the Boole transition both Alan and Boole
+// subnets are counted; post-fork only Boole. BooleCommitteeSubnet may return UnknownSubnetId for an
+// empty committee, but Set drops out-of-range indices, so it never inflates the count.
+func operatorActiveSubnets(validators []*ssvtypes.SSVShare, booleFork bool) int {
+	var booleSubnets, alanSubnets networkcommons.Subnets
 	for _, v := range validators {
-		if subnet := v.BooleCommitteeSubnet(); !mySubnets.IsSet(subnet) {
-			mySubnets.Set(subnet)
-			active++
-		}
+		booleSubnets.Set(v.BooleCommitteeSubnet())
 		if !booleFork {
-			if alanSubnet := v.AlanCommitteeSubnet(); !mySubnets.IsSet(alanSubnet) {
-				mySubnets.Set(alanSubnet)
-				active++
-			}
+			alanSubnets.Set(v.AlanCommitteeSubnet())
 		}
 	}
-	return mySubnets, active
+	return booleSubnets.ActiveCount() + alanSubnets.ActiveCount()
 }
 
 // startNetwork wires validator stats into the p2p layer, then sets up + starts the network and
