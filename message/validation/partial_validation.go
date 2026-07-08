@@ -302,21 +302,20 @@ func validatePartialSignatureMessageLimit(
 	case spectypes.ProposerPreferencesPartialSig:
 		// SIP #94 §5: admit up to maxProposerPreferencesDistinctRoots distinct signing roots per
 		// (slot, signer) — a dependent_root refresh re-emits under a new root — instead of the usual ≤1
-		// pre-consensus cap; a repeat of an already-seen root is a logical duplicate.
+		// pre-consensus cap. Only a same-peer repeat of a seen root is a provable duplicate (REJECT); a
+		// relayed repeat or a distinct root beyond the cap is rate-limiting, not a provable violation (IGNORE).
 		root := m.Messages[0].SigningRoot // exactly one message for this role (enforced by semantics + count rules)
-		peerState := signerState.Peer(receivedFrom)
-		if peerState.hasProposerPreferencesRoot(root) ||
-			peerState.proposerPreferencesRootCount() >= maxProposerPreferencesDistinctRoots {
-			// Same peer re-sent a seen root, or exceeded its distinct-root budget — reject to punish.
+		if signerState.Peer(receivedFrom).hasProposerPreferencesRoot(root) {
+			// Same peer re-sent a root it already sent — a logical duplicate; reject to punish.
 			e := ErrTooManyPartialSigMessage
 			e.reject = true
-			e.got = fmt.Sprintf("proposer-preferences, %d distinct root(s) from peer", peerState.proposerPreferencesRootCount())
+			e.got = "proposer-preferences, duplicate signing root from peer"
 			return e
 		}
 		if signerState.World.hasProposerPreferencesRoot(root) ||
 			signerState.World.proposerPreferencesRootCount() >= maxProposerPreferencesDistinctRoots {
 			// A different peer already supplied this root, or the cluster-wide distinct-root budget is
-			// spent — ignore, as this is expected occasionally under gossip.
+			// spent — ignore either way; both are expected under gossip and neither is a provable violation.
 			e := ErrTooManyPartialSigMessage
 			e.got = fmt.Sprintf("proposer-preferences, %d distinct root(s) world-wide", signerState.World.proposerPreferencesRootCount())
 			return e
