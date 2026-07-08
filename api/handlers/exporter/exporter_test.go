@@ -491,12 +491,12 @@ type mockTraceStore struct {
 	committeeDecideds           map[string][]dutytracer.ParticipantsRangeIndexEntry
 	GetValidatorDutyFunc        func(role spectypes.BeaconRole, slot phase0.Slot, index phase0.ValidatorIndex) (*traces.ValidatorDutyTrace, error)
 	GetValidatorDutiesFunc      func(role spectypes.BeaconRole, slot phase0.Slot) ([]*traces.ValidatorDutyTrace, error)
-	GetCommitteeDutyFunc        func(slot phase0.Slot, committeeID spectypes.CommitteeID) (*traces.CommitteeDutyTrace, error)
-	GetCommitteeDutiesFunc      func(slot phase0.Slot) ([]*traces.CommitteeDutyTrace, error)
+	GetCommitteeDutyFunc        func(slot phase0.Slot, committeeID spectypes.CommitteeID, role spectypes.RunnerRole) (*traces.CommitteeDutyTrace, error)
+	GetCommitteeDutiesFunc      func(slot phase0.Slot, roles ...spectypes.RunnerRole) ([]*traces.CommitteeDutyTrace, error)
 	GetCommitteeIDFunc          func(slot phase0.Slot, index phase0.ValidatorIndex) (spectypes.CommitteeID, error)
 	GetValidatorDecidedsFunc    func(role spectypes.BeaconRole, slot phase0.Slot, indices []phase0.ValidatorIndex) ([]dutytracer.ParticipantsRangeIndexEntry, error)
 	GetCommitteeDecidedsFunc    func(slot phase0.Slot, index phase0.ValidatorIndex, _ ...spectypes.BeaconRole) ([]dutytracer.ParticipantsRangeIndexEntry, error)
-	GetAllCommitteeDecidedsFunc func(slot phase0.Slot) ([]dutytracer.ParticipantsRangeIndexEntry, error)
+	GetAllCommitteeDecidedsFunc func(slot phase0.Slot, roles ...spectypes.BeaconRole) ([]dutytracer.ParticipantsRangeIndexEntry, error)
 	GetAllValidatorDecidedsFunc func(role spectypes.BeaconRole, slot phase0.Slot) ([]dutytracer.ParticipantsRangeIndexEntry, error)
 	// added to satisfy dutyTraceStore interface for schedule and committee links
 	GetCommitteeDutyLinksFunc func(slot phase0.Slot) ([]*traces.CommitteeDutyLink, error)
@@ -524,16 +524,16 @@ func (m *mockTraceStore) GetValidatorDuties(role spectypes.BeaconRole, slot phas
 	return nil, nil
 }
 
-func (m *mockTraceStore) GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.CommitteeID, role ...spectypes.BeaconRole) (*traces.CommitteeDutyTrace, error) {
+func (m *mockTraceStore) GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.CommitteeID, role spectypes.RunnerRole) (*traces.CommitteeDutyTrace, error) {
 	if m.GetCommitteeDutyFunc != nil {
-		return m.GetCommitteeDutyFunc(slot, committeeID)
+		return m.GetCommitteeDutyFunc(slot, committeeID, role)
 	}
-	return nil, nil
+	return nil, estore.ErrNotFound
 }
 
-func (m *mockTraceStore) GetCommitteeDuties(slot phase0.Slot, roles ...spectypes.BeaconRole) ([]*traces.CommitteeDutyTrace, error) {
+func (m *mockTraceStore) GetCommitteeDuties(slot phase0.Slot, roles ...spectypes.RunnerRole) ([]*traces.CommitteeDutyTrace, error) {
 	if m.GetCommitteeDutiesFunc != nil {
-		return m.GetCommitteeDutiesFunc(slot)
+		return m.GetCommitteeDutiesFunc(slot, roles...)
 	}
 	return nil, nil
 }
@@ -574,7 +574,7 @@ func (m *mockTraceStore) GetCommitteeDecideds(slot phase0.Slot, index phase0.Val
 
 func (m *mockTraceStore) GetAllCommitteeDecideds(slot phase0.Slot, roles ...spectypes.BeaconRole) ([]dutytracer.ParticipantsRangeIndexEntry, error) {
 	if m.GetAllCommitteeDecidedsFunc != nil {
-		return m.GetAllCommitteeDecidedsFunc(slot)
+		return m.GetAllCommitteeDecidedsFunc(slot, roles...)
 	}
 	key := fmt.Sprintf("%d", slot)
 	src := m.committeeDecideds[key]
@@ -855,7 +855,7 @@ func TestExporterTraceDecideds(t *testing.T) {
 						{Slot: slot, Index: 2, Signers: []uint64{4, 5, 6}},
 					}, nil
 				}
-				store.GetAllCommitteeDecidedsFunc = func(slot phase0.Slot) ([]dutytracer.ParticipantsRangeIndexEntry, error) {
+				store.GetAllCommitteeDecidedsFunc = func(slot phase0.Slot, roles ...spectypes.BeaconRole) ([]dutytracer.ParticipantsRangeIndexEntry, error) {
 					return []dutytracer.ParticipantsRangeIndexEntry{
 						{Slot: slot, Index: 1, Signers: []uint64{1, 2, 3}},
 					}, nil
@@ -947,7 +947,7 @@ func TestExporterTraceDecideds(t *testing.T) {
 				"roles": []string{"ATTESTER"},
 			},
 			setupMock: func(store *mockTraceStore) {
-				store.GetAllCommitteeDecidedsFunc = func(slot phase0.Slot) ([]dutytracer.ParticipantsRangeIndexEntry, error) {
+				store.GetAllCommitteeDecidedsFunc = func(slot phase0.Slot, roles ...spectypes.BeaconRole) ([]dutytracer.ParticipantsRangeIndexEntry, error) {
 					return nil, fmt.Errorf("forced error on GetAllCommitteeDecideds")
 				}
 			},
@@ -1118,7 +1118,7 @@ func TestExporterTraceDecideds(t *testing.T) {
 				pkBytes := common.Hex2Bytes("b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1")
 				var pk spectypes.ValidatorPK
 				copy(pk[:], pkBytes)
-				store.GetAllCommitteeDecidedsFunc = func(slot phase0.Slot) ([]dutytracer.ParticipantsRangeIndexEntry, error) {
+				store.GetAllCommitteeDecidedsFunc = func(slot phase0.Slot, roles ...spectypes.BeaconRole) ([]dutytracer.ParticipantsRangeIndexEntry, error) {
 					return []dutytracer.ParticipantsRangeIndexEntry{
 						{Slot: slot, Index: 1, Signers: []uint64{}},
 					}, nil
@@ -1262,6 +1262,7 @@ func TestExporterTraceDecideds_InvalidJSON(t *testing.T) {
 func makeCommitteeDutyTrace(slot phase0.Slot) *traces.CommitteeDutyTrace {
 	return &traces.CommitteeDutyTrace{
 		Slot:        slot,
+		Role:        spectypes.RoleCommittee,
 		CommitteeID: spectypes.CommitteeID{1},
 		ConsensusTrace: traces.ConsensusTrace{
 			Rounds: []*traces.RoundTrace{
@@ -1316,7 +1317,7 @@ func TestExporterCommitteeTraces(t *testing.T) {
 			setupMock: func(store *mockTraceStore, validatorStore *mockValidatorStore) {
 				var committeeID spectypes.CommitteeID
 				committeeID[0] = 1
-				store.GetCommitteeDutiesFunc = func(slot phase0.Slot) (duties []*traces.CommitteeDutyTrace, err error) {
+				store.GetCommitteeDutiesFunc = func(slot phase0.Slot, roles ...spectypes.RunnerRole) (duties []*traces.CommitteeDutyTrace, err error) {
 					duties = []*traces.CommitteeDutyTrace{
 						makeCommitteeDutyTrace(slot),
 					}
@@ -1353,6 +1354,7 @@ func TestExporterCommitteeTraces(t *testing.T) {
 				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 				require.Len(t, resp.Data, 1)
 				assert.Equal(t, uint64(100), resp.Data[0].Slot)
+				assert.Equal(t, "COMMITTEE", resp.Data[0].Role)
 				assert.Len(t, resp.Data[0].Decideds, 1)
 				assert.Len(t, resp.Data[0].Consensus, 1)
 				assert.Len(t, resp.Data[0].SyncCommittee, 1)
@@ -1378,8 +1380,13 @@ func TestExporterCommitteeTraces(t *testing.T) {
 				"committeeIDs": []string{"0eb9655577d1af04ff5d382848be15d1454b04838713bfb1ac209808fe3e9f7f"},
 			},
 			setupMock: func(store *mockTraceStore, validatorStore *mockValidatorStore) {
-				store.GetCommitteeDutyFunc = func(slot phase0.Slot, committeeID spectypes.CommitteeID) (*traces.CommitteeDutyTrace, error) {
-					return makeCommitteeDutyTrace(slot), nil
+				store.GetCommitteeDutyFunc = func(slot phase0.Slot, cID spectypes.CommitteeID, role spectypes.RunnerRole) (*traces.CommitteeDutyTrace, error) {
+					if role != spectypes.RoleCommittee {
+						return nil, dutytracer.ErrNotFound
+					}
+					duty := makeCommitteeDutyTrace(slot)
+					duty.CommitteeID = cID
+					return duty, nil
 				}
 			},
 			expectedStatus: http.StatusOK,
@@ -1388,6 +1395,7 @@ func TestExporterCommitteeTraces(t *testing.T) {
 				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 				require.Len(t, resp.Data, 1)
 				assert.Equal(t, uint64(100), resp.Data[0].Slot)
+				assert.Equal(t, "COMMITTEE", resp.Data[0].Role)
 				assert.Len(t, resp.Data[0].Decideds, 1)
 				assert.Len(t, resp.Data[0].Consensus, 1)
 				assert.Len(t, resp.Data[0].SyncCommittee, 1)
@@ -1425,7 +1433,7 @@ func TestExporterCommitteeTraces(t *testing.T) {
 				"committeeIDs": []string{"0eb9655577d1af04ff5d382848be15d1454b04838713bfb1ac209808fe3e9f7f"},
 			},
 			setupMock: func(store *mockTraceStore, validatorStore *mockValidatorStore) {
-				store.GetCommitteeDutyFunc = func(slot phase0.Slot, committeeID spectypes.CommitteeID) (*traces.CommitteeDutyTrace, error) {
+				store.GetCommitteeDutyFunc = func(slot phase0.Slot, committeeID spectypes.CommitteeID, role spectypes.RunnerRole) (*traces.CommitteeDutyTrace, error) {
 					return nil, fmt.Errorf("forced error on GetCommitteeDuty")
 				}
 			},
@@ -1442,7 +1450,7 @@ func TestExporterCommitteeTraces(t *testing.T) {
 				"committeeIDs": []string{"0eb9655577d1af04ff5d382848be15d1454b04838713bfb1ac209808fe3e9f7f"},
 			},
 			setupMock: func(store *mockTraceStore, validatorStore *mockValidatorStore) {
-				store.GetCommitteeDutyFunc = func(slot phase0.Slot, committeeID spectypes.CommitteeID) (*traces.CommitteeDutyTrace, error) {
+				store.GetCommitteeDutyFunc = func(slot phase0.Slot, committeeID spectypes.CommitteeID, role spectypes.RunnerRole) (*traces.CommitteeDutyTrace, error) {
 					return nil, dutytracer.ErrNotFound
 				}
 			},
@@ -1461,7 +1469,7 @@ func TestExporterCommitteeTraces(t *testing.T) {
 				"to":   100,
 			},
 			setupMock: func(store *mockTraceStore, validatorStore *mockValidatorStore) {
-				store.GetCommitteeDutiesFunc = func(slot phase0.Slot) ([]*traces.CommitteeDutyTrace, error) {
+				store.GetCommitteeDutiesFunc = func(slot phase0.Slot, roles ...spectypes.RunnerRole) ([]*traces.CommitteeDutyTrace, error) {
 					return nil, fmt.Errorf("forced error on GetCommitteeDuties")
 				}
 			},
@@ -1477,7 +1485,7 @@ func TestExporterCommitteeTraces(t *testing.T) {
 				"to":   100,
 			},
 			setupMock: func(store *mockTraceStore, validatorStore *mockValidatorStore) {
-				store.GetCommitteeDutiesFunc = func(slot phase0.Slot) ([]*traces.CommitteeDutyTrace, error) {
+				store.GetCommitteeDutiesFunc = func(slot phase0.Slot, roles ...spectypes.RunnerRole) ([]*traces.CommitteeDutyTrace, error) {
 					return nil, multierror.Append(dutytracer.ErrNotFound, estore.ErrNotFound)
 				}
 			},
@@ -1496,7 +1504,7 @@ func TestExporterCommitteeTraces(t *testing.T) {
 				"to":   100,
 			},
 			setupMock: func(store *mockTraceStore, validatorStore *mockValidatorStore) {
-				store.GetCommitteeDutiesFunc = func(slot phase0.Slot) ([]*traces.CommitteeDutyTrace, error) {
+				store.GetCommitteeDutiesFunc = func(slot phase0.Slot, roles ...spectypes.RunnerRole) ([]*traces.CommitteeDutyTrace, error) {
 					return []*traces.CommitteeDutyTrace{
 						makeCommitteeDutyTrace(slot),
 					}, multierror.Append(nil, fmt.Errorf("forced error on GetCommitteeDuties"), dutytracer.ErrNotFound)
@@ -1542,6 +1550,60 @@ func TestExporterCommitteeTraces(t *testing.T) {
 			tt.validateResp(t, rec)
 		})
 	}
+}
+
+func TestExporterCommitteeTraces_AggregatorCommitteeScheduleNotEmpty(t *testing.T) {
+	store := newMockTraceStore()
+	validatorStore := newMockValidatorStore()
+	exp := newTestExporterForV2(store, validatorStore)
+
+	var committeeID spectypes.CommitteeID
+	committeeID[0] = 1
+
+	store.GetCommitteeDutiesFunc = func(slot phase0.Slot, roles ...spectypes.RunnerRole) ([]*traces.CommitteeDutyTrace, error) {
+		require.ElementsMatch(t, []spectypes.RunnerRole{spectypes.RoleAggregatorCommittee}, roles)
+		return []*traces.CommitteeDutyTrace{
+			{
+				Slot:        slot,
+				Role:        spectypes.RoleAggregatorCommittee,
+				CommitteeID: committeeID,
+			},
+		}, nil
+	}
+	store.GetScheduledFunc = func(slot phase0.Slot) (map[phase0.ValidatorIndex]rolemask.Mask, error) {
+		return map[phase0.ValidatorIndex]rolemask.Mask{
+			1: rolemask.BitAttester | rolemask.BitSyncCommittee,
+		}, nil
+	}
+	store.GetCommitteeDutyLinksFunc = func(slot phase0.Slot) ([]*traces.CommitteeDutyLink, error) {
+		return []*traces.CommitteeDutyLink{
+			{
+				ValidatorIndex: 1,
+				CommitteeID:    committeeID,
+			},
+		}, nil
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/traces/committee", buildJSONBody(t, map[string]any{
+		"from":  100,
+		"to":    100,
+		"roles": []string{"AGGREGATOR_COMMITTEE"},
+	}))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	err := exp.CommitteeTraces(rec, req)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var resp CommitteeTracesResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.Len(t, resp.Data, 1)
+	require.Equal(t, "AGGREGATOR_COMMITTEE", resp.Data[0].Role)
+	require.Len(t, resp.Schedule, 1)
+	require.NotEmpty(t, resp.Schedule[0].Roles)
+	require.Contains(t, resp.Schedule[0].Roles, "ATTESTER")
+	require.Contains(t, resp.Schedule[0].Roles, "SYNC_COMMITTEE")
 }
 
 func TestExporterBuildValidatorSchedule_AllIndices(t *testing.T) {
@@ -1664,7 +1726,7 @@ func TestExporter_GetValidatorCommitteeDutiesForRoleAndSlot_MembershipGating(t *
 	}
 
 	// Case 1: Attester signer data does NOT include the requested index -> filtered out
-	store.GetCommitteeDutyFunc = func(s phase0.Slot, id spectypes.CommitteeID) (*traces.CommitteeDutyTrace, error) {
+	store.GetCommitteeDutyFunc = func(s phase0.Slot, id spectypes.CommitteeID, role spectypes.RunnerRole) (*traces.CommitteeDutyTrace, error) {
 		assert.Equal(t, slot, s)
 		assert.Equal(t, cmt, id)
 		return &traces.CommitteeDutyTrace{
@@ -1692,7 +1754,7 @@ func TestExporter_GetValidatorCommitteeDutiesForRoleAndSlot_MembershipGating(t *
 	assert.Len(t, resp.Data, 0)
 
 	// Case 2: Attester signer data includes the requested index -> returned
-	store.GetCommitteeDutyFunc = func(s phase0.Slot, id spectypes.CommitteeID) (*traces.CommitteeDutyTrace, error) {
+	store.GetCommitteeDutyFunc = func(s phase0.Slot, id spectypes.CommitteeID, role spectypes.RunnerRole) (*traces.CommitteeDutyTrace, error) {
 		return &traces.CommitteeDutyTrace{
 			Slot:        s,
 			CommitteeID: id,
@@ -1914,7 +1976,7 @@ func TestExporterValidatorTraces(t *testing.T) {
 				}
 
 				// Mock GetCommitteeDuty to return a committee duty
-				store.GetCommitteeDutyFunc = func(slot phase0.Slot, committeeID spectypes.CommitteeID) (*traces.CommitteeDutyTrace, error) {
+				store.GetCommitteeDutyFunc = func(slot phase0.Slot, committeeID spectypes.CommitteeID, role spectypes.RunnerRole) (*traces.CommitteeDutyTrace, error) {
 					return &traces.CommitteeDutyTrace{
 						Slot: slot,
 						ConsensusTrace: traces.ConsensusTrace{
@@ -1969,7 +2031,7 @@ func TestExporterValidatorTraces(t *testing.T) {
 				}
 
 				// Mock GetCommitteeDuty to return ErrNotFound
-				store.GetCommitteeDutyFunc = func(slot phase0.Slot, committeeID spectypes.CommitteeID) (*traces.CommitteeDutyTrace, error) {
+				store.GetCommitteeDutyFunc = func(slot phase0.Slot, committeeID spectypes.CommitteeID, role spectypes.RunnerRole) (*traces.CommitteeDutyTrace, error) {
 					return nil, dutytracer.ErrNotFound
 				}
 			},
@@ -1999,7 +2061,7 @@ func TestExporterValidatorTraces(t *testing.T) {
 				}
 
 				// Mock GetCommitteeDuty to return ErrNotFound
-				store.GetCommitteeDutyFunc = func(slot phase0.Slot, committeeID spectypes.CommitteeID) (*traces.CommitteeDutyTrace, error) {
+				store.GetCommitteeDutyFunc = func(slot phase0.Slot, committeeID spectypes.CommitteeID, role spectypes.RunnerRole) (*traces.CommitteeDutyTrace, error) {
 					return nil, fmt.Errorf("forced error on GetCommitteeDuty")
 				}
 			},

@@ -89,7 +89,7 @@ func TestCollector_QuorumAfterFlush(t *testing.T) {
 		require.Len(t, calls, 0, "no quorum should be detected before proposal arrives")
 
 		// Step 2: Proposal arrives with attestation and sync committee roots
-		trace, _, err := collector.getOrCreateCommitteeTrace(slot, committeeID)
+		trace, _, err := collector.getOrCreateCommitteeTrace(slot, committeeID, spectypes.RoleCommittee)
 		require.NoError(t, err)
 
 		trace.Lock()
@@ -165,7 +165,7 @@ func TestCollector_RoleSpecificQuorum(t *testing.T) {
 		listener.Reset()
 
 		// Set up roots
-		trace, _, err := collector.getOrCreateCommitteeTrace(slot, committeeID)
+		trace, _, err := collector.getOrCreateCommitteeTrace(slot, committeeID, spectypes.RoleCommittee)
 		require.NoError(t, err)
 		trace.attestationRoot = attestationRoot
 		trace.syncCommitteeRoot = syncCommitteeRoot
@@ -285,7 +285,7 @@ func TestCollector_MixedTimingQuorum(t *testing.T) {
 		require.Len(t, calls, 0)
 
 		// Step 2: Proposal arrives
-		trace, _, err := collector.getOrCreateCommitteeTrace(slot, committeeID)
+		trace, _, err := collector.getOrCreateCommitteeTrace(slot, committeeID, spectypes.RoleCommittee)
 		require.NoError(t, err)
 
 		trace.Lock()
@@ -374,7 +374,7 @@ func TestCollector_UnknownRootQuorum(t *testing.T) {
 		listener.Reset()
 
 		// Set up roots
-		trace, _, err := collector.getOrCreateCommitteeTrace(slot, committeeID)
+		trace, _, err := collector.getOrCreateCommitteeTrace(slot, committeeID, spectypes.RoleCommittee)
 		require.NoError(t, err)
 		trace.attestationRoot = attestationRoot
 		trace.syncCommitteeRoot = syncCommitteeRoot
@@ -417,7 +417,7 @@ func TestCollector_UnknownRootQuorum(t *testing.T) {
 		require.Len(t, calls, 0, "unknown root signatures should not contribute to quorum")
 
 		// Verify unknown root is in pending
-		trace, _, err = collector.getOrCreateCommitteeTrace(slot, committeeID)
+		trace, _, err = collector.getOrCreateCommitteeTrace(slot, committeeID, spectypes.RoleCommittee)
 		require.NoError(t, err)
 		trace.Lock()
 		assert.Contains(t, trace.pendingByRoot, unknownRoot, "unknown root should be in pending")
@@ -477,7 +477,7 @@ func TestCollector_MultipleValidatorsAndRoles(t *testing.T) {
 		listener.Reset()
 
 		// Set up roots
-		trace, _, err := collector.getOrCreateCommitteeTrace(slot, committeeID)
+		trace, _, err := collector.getOrCreateCommitteeTrace(slot, committeeID, spectypes.RoleCommittee)
 		require.NoError(t, err)
 		trace.attestationRoot = attestationRoot
 		trace.syncCommitteeRoot = syncCommitteeRoot
@@ -566,7 +566,7 @@ func TestCollector_checkAndPublishQuorumForRoleByIndex(t *testing.T) {
 		listener.Reset()
 
 		// Manually populate trace with signer data
-		trace, _, err := collector.getOrCreateCommitteeTrace(slot, committeeID)
+		trace, _, err := collector.getOrCreateCommitteeTrace(slot, committeeID, spectypes.RoleCommittee)
 		require.NoError(t, err)
 
 		trace.Lock()
@@ -598,7 +598,7 @@ func TestCollector_checkAndPublishQuorumForRoleByIndex(t *testing.T) {
 	t.Run("no duplicate publication on subsequent calls", func(t *testing.T) {
 		listener.Reset()
 
-		trace, _, err := collector.getOrCreateCommitteeTrace(slot, committeeID)
+		trace, _, err := collector.getOrCreateCommitteeTrace(slot, committeeID, spectypes.RoleCommittee)
 		require.NoError(t, err)
 
 		trace.Lock()

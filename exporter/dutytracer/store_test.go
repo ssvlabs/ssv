@@ -143,27 +143,27 @@ func TestCommitteeDutyStore(t *testing.T) {
 	// three slots X two committees
 	slot4 := phase0.Slot(4)
 
-	dutyTrace3, _, err := collector.getOrCreateCommitteeTrace(slot4, committeeID1)
+	dutyTrace3, _, err := collector.getOrCreateCommitteeTrace(slot4, committeeID1, spectypes.RoleCommittee)
 	require.NoError(t, err)
 	dutyTrace3.Decideds = append(dutyTrace3.Decideds, &traces.DecidedTrace{
 		Signers: []spectypes.OperatorID{1},
 	})
 	require.NotNil(t, dutyTrace3)
 
-	dutyTrace4, _, err := collector.getOrCreateCommitteeTrace(slot4, committeeID2)
+	dutyTrace4, _, err := collector.getOrCreateCommitteeTrace(slot4, committeeID2, spectypes.RoleCommittee)
 	require.NoError(t, err)
 	require.NotNil(t, dutyTrace4)
 
 	slot7 := phase0.Slot(7)
 
-	dutyTrace5, _, err := collector.getOrCreateCommitteeTrace(slot7, committeeID1)
+	dutyTrace5, _, err := collector.getOrCreateCommitteeTrace(slot7, committeeID1, spectypes.RoleCommittee)
 	require.NoError(t, err)
 	dutyTrace5.Decideds = append(dutyTrace5.Decideds, &traces.DecidedTrace{
 		Signers: []spectypes.OperatorID{1},
 	})
 	require.NotNil(t, dutyTrace5)
 
-	dutyTrace6, _, err := collector.getOrCreateCommitteeTrace(slot7, committeeID2)
+	dutyTrace6, _, err := collector.getOrCreateCommitteeTrace(slot7, committeeID2, spectypes.RoleCommittee)
 	require.NoError(t, err)
 	require.NotNil(t, dutyTrace6)
 
@@ -174,14 +174,14 @@ func TestCommitteeDutyStore(t *testing.T) {
 	// assert that traces are in available (in memory)
 	{
 		for i, slot := range []phase0.Slot{slot4, slot7} {
-			dutyTrace, err := collector.GetCommitteeDuty(slot, committeeID1)
+			dutyTrace, err := collector.GetCommitteeDuty(slot, committeeID1, spectypes.RoleCommittee)
 			require.NoError(t, err)
 			require.NotNil(t, dutyTrace)
 			assert.Equal(t, slot, dutyTrace.Slot)
 			assert.Equal(t, slot, dutiesC1[i].Slot)
 		}
 		for i, slot := range []phase0.Slot{slot4, slot7} {
-			dutyTrace, err := collector.GetCommitteeDuty(slot, committeeID2)
+			dutyTrace, err := collector.GetCommitteeDuty(slot, committeeID2, spectypes.RoleCommittee)
 			require.NoError(t, err)
 			require.NotNil(t, dutyTrace)
 			assert.Equal(t, slot, dutyTrace.Slot)
@@ -209,7 +209,7 @@ func TestCommitteeDutyStore(t *testing.T) {
 	// step 3: retrieve trace from disk (4) and memory (7)
 	{
 		for i, slot := range []phase0.Slot{slot4, slot7} {
-			dutyTrace, err := collector.GetCommitteeDuty(slot, committeeID1)
+			dutyTrace, err := collector.GetCommitteeDuty(slot, committeeID1, spectypes.RoleCommittee)
 			require.NoError(t, err)
 			require.NotNil(t, dutyTrace)
 			assert.Equal(t, slot, dutyTrace.Slot)
@@ -217,7 +217,7 @@ func TestCommitteeDutyStore(t *testing.T) {
 			assert.Equal(t, committeeID1, dutiesC1[i].CommitteeID)
 		}
 		for i, slot := range []phase0.Slot{slot4, slot7} {
-			dutyTrace, err := collector.GetCommitteeDuty(slot, committeeID2)
+			dutyTrace, err := collector.GetCommitteeDuty(slot, committeeID2, spectypes.RoleCommittee)
 			require.NoError(t, err)
 			require.NotNil(t, dutyTrace)
 			assert.Equal(t, slot, dutyTrace.Slot)
@@ -236,7 +236,7 @@ func TestCommitteeDutyStore(t *testing.T) {
 
 	// assert that only slot 7 is in memory
 	var inMem = make(map[phase0.Slot]struct{})
-	collector.committeeTraces.Range(func(key spectypes.CommitteeID, slotToTraceMap *hashmap.Map[phase0.Slot, *committeeDutyTrace]) bool {
+	collector.committeeTraces.Range(func(key committeeTraceKey, slotToTraceMap *hashmap.Map[phase0.Slot, *committeeDutyTrace]) bool {
 		slotToTraceMap.Range(func(slot phase0.Slot, dutyTrace *committeeDutyTrace) bool {
 			inMem[slot] = struct{}{}
 			return true
@@ -322,7 +322,7 @@ func TestCommitteeDutyStore_GetAllCommitteeDecideds(t *testing.T) {
 	collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.Beacon, nil, nil)
 
 	// Create a new trace
-	dutyTrace, _, err := collector.getOrCreateCommitteeTrace(slot4, committeeID1)
+	dutyTrace, _, err := collector.getOrCreateCommitteeTrace(slot4, committeeID1, spectypes.RoleCommittee)
 	require.NoError(t, err)
 	dutyTrace.Decideds = append(dutyTrace.Decideds, &traces.DecidedTrace{
 		Signers: []spectypes.OperatorID{1},
