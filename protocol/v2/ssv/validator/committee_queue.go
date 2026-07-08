@@ -24,10 +24,9 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
-// queueContainer wraps a queue with its corresponding state
+// queueContainer wraps a queue for a duty role.
 type queueContainer struct {
-	Q          queue.Queue
-	queueState *queue.State
+	Q queue.Queue
 }
 
 // EnqueueMessage enqueues a spectypes.SSVMessage for processing.

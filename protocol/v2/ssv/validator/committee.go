@@ -209,11 +209,6 @@ func (c *Committee) getQueueForRole(logger *zap.Logger, slot phase0.Slot, role s
 					queue.CommitteeMetricID(slot),
 				),
 			),
-			queueState: &queue.State{
-				HasRunningInstance: false,
-				Slot:               slot,
-				Quorum:             c.CommitteeMember.GetQuorum(),
-			},
 		}
 		assign(slot, q)
 	}
