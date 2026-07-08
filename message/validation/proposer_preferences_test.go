@@ -1,13 +1,17 @@
 package validation
 
 import (
+	"errors"
 	"testing"
 	"time"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/stretchr/testify/require"
+
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
@@ -157,4 +161,94 @@ func TestValidateBeaconDuty_ProposerPreferencesRequiresAssignment(t *testing.T) 
 	// Unfetched epoch → tolerated.
 	unfetched := phase0.Slot(uint64(epoch+10) * netCfg.SlotsPerEpoch)
 	require.NoError(t, mv.validateBeaconDuty(spectypes.RoleProposerPreferences, unfetched, indices, false))
+}
+
+// SignerState tracks distinct ProposerPreferences signing roots (SIP #94 §5): recording is idempotent
+// per root, and has/count reflect the distinct set.
+func TestSignerState_ProposerPreferencesRoots(t *testing.T) {
+	s := &SignerState{}
+	r1 := [32]byte{1}
+	r2 := [32]byte{2}
+
+	require.Equal(t, 0, s.proposerPreferencesRootCount())
+	require.False(t, s.hasProposerPreferencesRoot(r1))
+
+	s.recordProposerPreferencesRoot(r1)
+	require.True(t, s.hasProposerPreferencesRoot(r1))
+	require.Equal(t, 1, s.proposerPreferencesRootCount())
+
+	// Recording an already-seen root is a no-op.
+	s.recordProposerPreferencesRoot(r1)
+	require.Equal(t, 1, s.proposerPreferencesRootCount())
+
+	s.recordProposerPreferencesRoot(r2)
+	require.True(t, s.hasProposerPreferencesRoot(r2))
+	require.Equal(t, 2, s.proposerPreferencesRootCount())
+}
+
+// ProposerPreferences pre-consensus admits up to maxProposerPreferencesDistinctRoots distinct signing
+// roots per (slot, signer) — a dependent_root refresh re-emits under a new root (SIP #94 §5) — while a
+// repeat of a seen root is a logical duplicate (same-peer REJECT, relayed IGNORE).
+func TestValidatePartialSignatureMessageLimit_ProposerPreferences(t *testing.T) {
+	ppMsg := func(root [32]byte) *spectypes.PartialSignatureMessages {
+		return &spectypes.PartialSignatureMessages{
+			Type:     spectypes.ProposerPreferencesPartialSig,
+			Slot:     1,
+			Messages: []*spectypes.PartialSignatureMessage{{SigningRoot: root}},
+		}
+	}
+	record := func(ss *SignerStateForSlotRound, from peer.ID, root [32]byte) {
+		ss.Peer(from).recordProposerPreferencesRoot(root)
+		ss.World.recordProposerPreferencesRoot(root)
+	}
+	root := func(b byte) [32]byte { return [32]byte{b} }
+
+	const peerA = peer.ID("A")
+	const peerB = peer.ID("B")
+
+	t.Run("distinct roots accepted up to the bound, then the peer's next distinct root is rejected", func(t *testing.T) {
+		ss := newSignerState(1, specqbft.FirstRound)
+		for i := 0; i < maxProposerPreferencesDistinctRoots; i++ {
+			r := root(byte(i + 1))
+			require.NoError(t, validatePartialSignatureMessageLimit(ppMsg(r), peerA, ss))
+			record(ss, peerA, r)
+		}
+
+		var valErr Error
+		err := validatePartialSignatureMessageLimit(ppMsg(root(99)), peerA, ss)
+		require.ErrorIs(t, err, ErrTooManyPartialSigMessage)
+		require.True(t, errors.As(err, &valErr))
+		require.True(t, valErr.reject)
+	})
+
+	t.Run("same-peer duplicate root is rejected, a relayed duplicate is ignored", func(t *testing.T) {
+		ss := newSignerState(1, specqbft.FirstRound)
+		r := root(1)
+		require.NoError(t, validatePartialSignatureMessageLimit(ppMsg(r), peerA, ss))
+		record(ss, peerA, r)
+
+		var valErr Error
+		err := validatePartialSignatureMessageLimit(ppMsg(r), peerA, ss)
+		require.ErrorIs(t, err, ErrTooManyPartialSigMessage)
+		require.True(t, errors.As(err, &valErr))
+		require.True(t, valErr.reject)
+
+		err = validatePartialSignatureMessageLimit(ppMsg(r), peerB, ss)
+		require.ErrorIs(t, err, ErrTooManyPartialSigMessage)
+		require.True(t, errors.As(err, &valErr))
+		require.False(t, valErr.reject)
+	})
+
+	t.Run("a fresh peer's new distinct root is ignored once the world budget is spent", func(t *testing.T) {
+		ss := newSignerState(1, specqbft.FirstRound)
+		for i := 0; i < maxProposerPreferencesDistinctRoots; i++ {
+			record(ss, peerA, root(byte(i+1)))
+		}
+
+		var valErr Error
+		err := validatePartialSignatureMessageLimit(ppMsg(root(99)), peerB, ss)
+		require.ErrorIs(t, err, ErrTooManyPartialSigMessage)
+		require.True(t, errors.As(err, &valErr))
+		require.False(t, valErr.reject)
+	})
 }

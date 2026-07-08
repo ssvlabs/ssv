@@ -387,9 +387,10 @@ func (r *proposerPreferencesSlotRunner) buildProposerPreferences(ctx context.Con
 
 	// KNOWN ISSUE (SIP-94 §5 publish-finality — pending): dependent_root/fee_recipient/target_gas_limit are
 	// read here at emit time and the preference is published once pre-consensus quorum is reached, with no
-	// guard holding publication until they are final. A reorg can change dependent_root afterwards — and the
-	// ≤1-per-(slot,signer) pre-consensus dedup means the refresh can't be re-emitted (see the reEmitLookahead
-	// KNOWN ISSUE). Low severity (reorg-gated, §5 is observational); add a finality hold only if it bites on devnet.
+	// guard holding publication until they are final. A reorg that changes dependent_root is handled — the
+	// scheduler re-emits only on a real change and message validation admits the new signing root — but a
+	// preference already published under a soon-to-change root is not retracted. Low severity (reorg-gated,
+	// §5 is observational); add a finality hold only if it bites on devnet.
 	return &gloas.ProposerPreferences{
 		DependentRoot:  dependentRoot,
 		ProposalSlot:   proposalSlot,

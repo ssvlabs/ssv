@@ -284,8 +284,7 @@ func validatePartialSignatureMessageLimit(
 	switch m.Type {
 	case spectypes.RandaoPartialSig, ssvtypes.SelectionProofPartialSig, ssvtypes.ContributionProofs,
 		spectypes.ValidatorRegistrationPartialSig, spectypes.VoluntaryExitPartialSig,
-		spectypes.AggregatorCommitteePartialSig, spectypes.PTCAttesterPartialSig,
-		spectypes.ProposerPreferencesPartialSig:
+		spectypes.AggregatorCommitteePartialSig, spectypes.PTCAttesterPartialSig:
 		if signerState.Peer(receivedFrom).SeenMsgTypes.reachedPreConsensusLimit() {
 			// Check if the same peer is sending us a "logical duplicate" message, reject message to punish.
 			e := ErrTooManyPartialSigMessage
@@ -298,6 +297,28 @@ func validatePartialSignatureMessageLimit(
 			// is expected occasionally.
 			e := ErrTooManyPartialSigMessage
 			e.got = fmt.Sprintf("pre-consensus, having %v", signerState.World.SeenMsgTypes.String())
+			return e
+		}
+	case spectypes.ProposerPreferencesPartialSig:
+		// SIP #94 §5: admit up to maxProposerPreferencesDistinctRoots distinct signing roots per
+		// (slot, signer) — a dependent_root refresh re-emits under a new root — instead of the usual ≤1
+		// pre-consensus cap; a repeat of an already-seen root is a logical duplicate.
+		root := m.Messages[0].SigningRoot // exactly one message for this role (enforced by semantics + count rules)
+		peerState := signerState.Peer(receivedFrom)
+		if peerState.hasProposerPreferencesRoot(root) ||
+			peerState.proposerPreferencesRootCount() >= maxProposerPreferencesDistinctRoots {
+			// Same peer re-sent a seen root, or exceeded its distinct-root budget — reject to punish.
+			e := ErrTooManyPartialSigMessage
+			e.reject = true
+			e.got = fmt.Sprintf("proposer-preferences, %d distinct root(s) from peer", peerState.proposerPreferencesRootCount())
+			return e
+		}
+		if signerState.World.hasProposerPreferencesRoot(root) ||
+			signerState.World.proposerPreferencesRootCount() >= maxProposerPreferencesDistinctRoots {
+			// A different peer already supplied this root, or the cluster-wide distinct-root budget is
+			// spent — ignore, as this is expected occasionally under gossip.
+			e := ErrTooManyPartialSigMessage
+			e.got = fmt.Sprintf("proposer-preferences, %d distinct root(s) world-wide", signerState.World.proposerPreferencesRootCount())
 			return e
 		}
 	case spectypes.PostConsensusPartialSig:
@@ -347,6 +368,15 @@ func (mv *messageValidator) updatePartialSignatureState(
 	err = signerState.World.SeenMsgTypes.RecordPartialSignatureMessage(partialSignatureMessages)
 	if err != nil {
 		return err
+	}
+
+	// SIP #94 §5: record the distinct signing root so a dependent_root re-emission is admitted up to the
+	// bound (see validatePartialSignatureMessageLimit). Exactly one signature for this role (validated
+	// earlier), so Messages[0] holds the root.
+	if partialSignatureMessages.Type == spectypes.ProposerPreferencesPartialSig {
+		root := partialSignatureMessages.Messages[0].SigningRoot
+		signerState.Peer(receivedFrom).recordProposerPreferencesRoot(root)
+		signerState.World.recordProposerPreferencesRoot(root)
 	}
 
 	return nil
