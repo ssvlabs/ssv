@@ -11,6 +11,7 @@ import (
 
 	"github.com/ssvlabs/ssv/exporter/rolemask"
 	"github.com/ssvlabs/ssv/exporter/traces"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/utils/hashmap"
 )
 
@@ -128,11 +129,14 @@ func (c *Collector) getValidatorDutyFromDiskIndex(role spectypes.BeaconRole, slo
 	return trace, nil
 }
 
-func (c *Collector) GetCommitteeDuties(wantSlot phase0.Slot, roles ...spectypes.BeaconRole) ([]*traces.CommitteeDutyTrace, error) {
+func (c *Collector) GetCommitteeDuties(wantSlot phase0.Slot, roles ...spectypes.RunnerRole) ([]*traces.CommitteeDutyTrace, error) {
 	var duties []*traces.CommitteeDutyTrace
 	var errs *multierror.Error
 
-	c.committeeTraces.Range(func(committeeID spectypes.CommitteeID, committeeSlots *hashmap.Map[phase0.Slot, *committeeDutyTrace]) bool {
+	c.committeeTraces.Range(func(key committeeTraceKey, committeeSlots *hashmap.Map[phase0.Slot, *committeeDutyTrace]) bool {
+		if len(roles) > 0 && !slices.Contains(roles, key.role) {
+			return true
+		}
 		dt, found := committeeSlots.Get(wantSlot)
 		if found {
 			duties = append(duties, dt.safeDeepCopy())
@@ -140,84 +144,58 @@ func (c *Collector) GetCommitteeDuties(wantSlot phase0.Slot, roles ...spectypes.
 		return true // keep iterating
 	})
 
-	diskDuties, err := c.store.GetCommitteeDuties(wantSlot, spectypes.RoleCommittee)
+	diskDuties, err := c.store.GetCommitteeDuties(wantSlot, roles...)
 	duties = append(duties, diskDuties...)
 	errs = multierror.Append(errs, err)
-
-	var filteredDuties []*traces.CommitteeDutyTrace
-	for _, duty := range duties {
-		if hasSignersForRoles(duty, roles...) {
-			filteredDuties = append(filteredDuties, duty)
-		}
-	}
-
-	return filteredDuties, errs.ErrorOrNil()
+	return duties, errs.ErrorOrNil()
 }
 
-func (c *Collector) GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.CommitteeID, roles ...spectypes.BeaconRole) (*traces.CommitteeDutyTrace, error) {
-	committeeSlots, found := c.committeeTraces.Get(committeeID)
-	if !found {
-		trace, err := c.getCommitteeDutyFromDisk(slot, committeeID)
-		if err != nil {
-			return nil, err
+func (c *Collector) GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.CommitteeID, role spectypes.RunnerRole) (*traces.CommitteeDutyTrace, error) {
+	key := committeeTraceKey{id: committeeID, role: role}
+	if committeeSlots, found := c.committeeTraces.Get(key); found {
+		if trace, found := committeeSlots.Get(slot); found {
+			return trace.safeDeepCopy(), nil
 		}
-
-		if hasSignersForRoles(trace, roles...) {
-			return trace, nil
-		}
-
-		return nil, ErrNotFound
 	}
 
-	trace, found := committeeSlots.Get(slot)
-	if !found {
-		trace, err := c.getCommitteeDutyFromDisk(slot, committeeID)
-		if err != nil {
-			return nil, err
-		}
-
-		if hasSignersForRoles(trace, roles...) {
-			return trace, nil
-		}
-
-		return nil, ErrNotFound
+	trace, err := c.getCommitteeDutyFromDisk(slot, role, committeeID)
+	if err != nil {
+		return nil, err
 	}
 
-	clone := trace.safeDeepCopy()
-
-	if !hasSignersForRoles(clone, roles...) {
-		return nil, ErrNotFound
-	}
-
-	return clone, nil
+	return trace, nil
 }
 
-// hasSignersForRoles checks if the duty has signers for the given role
-// since we don't store a boolean flag to separate duties by their role in the db
-// we rely on the fact that during collection we separate the signers in their
-// corresponding fields (Attester and SyncCommittee) based on the role
+// hasSignersForRoles checks if the duty has signers for the given beacon role(s).
+// Committee duties are keyed by runner role, but we still use the per-role signer
+// buckets to distinguish between attester vs aggregator and sync committee vs SCC.
+// Callers should handle the "no role filter" case before invoking this helper.
 func hasSignersForRoles(duty *traces.CommitteeDutyTrace, roles ...spectypes.BeaconRole) bool {
-	if len(roles) == 0 {
-		return true
-	}
+	// Signer buckets are role-specific; use them to ensure the duty matches the requested beacon roles.
 	for _, role := range roles {
-		if role == spectypes.BNRoleAttester {
+		bucket, ok := ssvtypes.CommitteeSignerBucketForBeaconRole(role)
+		if !ok {
+			continue
+		}
+		switch bucket {
+		case ssvtypes.CommitteeSignerBucketAttester:
 			if len(duty.Attester) == 0 {
 				return false
 			}
-		}
-		if role == spectypes.BNRoleSyncCommittee {
+		case ssvtypes.CommitteeSignerBucketSyncCommittee:
 			if len(duty.SyncCommittee) == 0 {
 				return false
 			}
+		case ssvtypes.CommitteeSignerBucketUnknown:
+			// Not a committee signer bucket.
 		}
 	}
 	return true
 }
 
-func (c *Collector) getCommitteeDutyFromDisk(slot phase0.Slot, committeeID spectypes.CommitteeID) (*traces.CommitteeDutyTrace, error) {
-	ctx := fmt.Sprintf("slot=%d committeeID=%x", slot, committeeID)
-	trace, err := c.store.GetCommitteeDuty(slot, spectypes.RoleCommittee, committeeID)
+func (c *Collector) getCommitteeDutyFromDisk(slot phase0.Slot, role spectypes.RunnerRole, committeeID spectypes.CommitteeID) (*traces.CommitteeDutyTrace, error) {
+	ctx := fmt.Sprintf("slot=%d role=%d committeeID=%x", slot, role, committeeID)
+	trace, err := c.store.GetCommitteeDuty(slot, role, committeeID)
 	if err != nil {
 		return nil, fmt.Errorf("get committee duty from disk (%s): %w", ctx, err)
 	}
@@ -225,13 +203,54 @@ func (c *Collector) getCommitteeDutyFromDisk(slot phase0.Slot, committeeID spect
 	return trace, nil
 }
 
+func committeeRunnerRolesForBeaconRoles(roles ...spectypes.BeaconRole) []spectypes.RunnerRole {
+	if len(roles) == 0 {
+		return nil
+	}
+	var wantCommittee bool
+	var wantAggregator bool
+	for _, role := range roles {
+		runnerRole, ok := ssvtypes.CommitteeRunnerRoleForBeaconRole(role)
+		if !ok {
+			continue
+		}
+		switch runnerRole {
+		case spectypes.RoleCommittee:
+			wantCommittee = true
+		case spectypes.RoleAggregatorCommittee:
+			wantAggregator = true
+		default:
+			// Not a committee runner role.
+		}
+	}
+	out := make([]spectypes.RunnerRole, 0, 2)
+	if wantCommittee {
+		out = append(out, spectypes.RoleCommittee)
+	}
+	if wantAggregator {
+		out = append(out, spectypes.RoleAggregatorCommittee)
+	}
+	return out
+}
+
 func (c *Collector) GetAllCommitteeDecideds(slot phase0.Slot, roles ...spectypes.BeaconRole) ([]ParticipantsRangeIndexEntry, error) {
 	var errs *multierror.Error
 
-	duties, err := c.GetCommitteeDuties(slot, roles...)
+	runnerRoles := committeeRunnerRolesForBeaconRoles(roles...)
+	duties, err := c.GetCommitteeDuties(slot, runnerRoles...)
 	errs = multierror.Append(errs, err)
 	if len(duties) == 0 {
 		return nil, errs.ErrorOrNil()
+	}
+
+	if len(roles) > 0 {
+		filtered := make([]*traces.CommitteeDutyTrace, 0, len(duties))
+		for _, duty := range duties {
+			if hasSignersForRoles(duty, roles...) {
+				filtered = append(filtered, duty)
+			}
+		}
+		duties = filtered
 	}
 
 	out := make([]ParticipantsRangeIndexEntry, 0, len(duties))
@@ -301,9 +320,27 @@ func (c *Collector) GetCommitteeDecideds(slot phase0.Slot, index phase0.Validato
 		return nil, fmt.Errorf("get committee ID by slot(%d) and index(%d): %w", slot, index, err)
 	}
 
-	duty, err := c.GetCommitteeDuty(slot, committeeID, roles...)
-	if err != nil {
-		return nil, fmt.Errorf("get committee duty: %w", err)
+	runnerRoles := committeeRunnerRolesForBeaconRoles(roles...)
+	if len(runnerRoles) == 0 {
+		runnerRoles = []spectypes.RunnerRole{spectypes.RoleCommittee, spectypes.RoleAggregatorCommittee}
+	}
+
+	var duty *traces.CommitteeDutyTrace
+	for _, role := range runnerRoles {
+		d, dutyErr := c.GetCommitteeDuty(slot, committeeID, role)
+		if dutyErr != nil {
+			if errors.Is(dutyErr, ErrNotFound) {
+				continue
+			}
+			return nil, fmt.Errorf("get committee duty: %w", dutyErr)
+		}
+		if len(roles) == 0 || hasSignersForRoles(d, roles...) {
+			duty = d
+			break
+		}
+	}
+	if duty == nil {
+		return nil, fmt.Errorf("get committee duty: %w", ErrNotFound)
 	}
 
 	signers := make([]spectypes.OperatorID, 0, len(duty.Decideds)+len(duty.SyncCommittee)+len(duty.Attester))
