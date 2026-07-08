@@ -7,96 +7,44 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestSortBySubnet pins the canonicalization step that the runner applies to the
-// collected (subnet, selection-proof) pairs before calling GetSyncCommitteeContribution.
-// See sortBySubnet for the full rationale.
-//
-// It covers the two properties the fix guarantees — determinism across runs and
-// spec-canonical ascending-by-subnet ordering — at the helper level. The wiring that calls
-// it is pinned separately by TestSyncCommitteeAggregatorProcessPreConsensusSortsSubnetsForBeaconCall.
+// TestSortBySubnet pins the deterministic, cross-node canonical ordering that
+// sortBySubnet provides for sync-committee contributions. Two nodes building
+// contributions from the same logical set must agree on the resulting SSZ root,
+// which requires an identical (subnet-ascending) order before
+// GetSyncCommitteeContribution — otherwise the contribution roots diverge and the
+// duty silently fails. This is a standalone unit test with no dependency on the
+// runner test-kit (per PR #2899 review); the broader end-to-end regression test
+// lands with the rest of upstream #2859.
 func TestSortBySubnet(t *testing.T) {
-	// sig builds a phase0.BLSSignature with byte[0] set to tag for identity tracking.
-	sig := func(tag byte) phase0.BLSSignature {
-		var s phase0.BLSSignature
-		s[0] = tag
-		return s
+	// mk builds a pair whose proof encodes its subnet in the first byte, so we can
+	// assert the (subnet, proof) pairing stays intact across the sort.
+	mk := func(subnet uint64) subnetSelectionProof {
+		var p phase0.BLSSignature
+		p[0] = byte(subnet)
+		return subnetSelectionProof{subnet: subnet, selectionProof: p}
 	}
 
-	t.Run("sorts ascending and preserves (subnet, proof) pairing", func(t *testing.T) {
-		pairs := []subnetSelectionProof{
-			{subnet: 3, selectionProof: sig(0xa)},
-			{subnet: 1, selectionProof: sig(0xb)},
-			{subnet: 2, selectionProof: sig(0xc)},
+	t.Run("orders ascending and preserves pairing", func(t *testing.T) {
+		pairs := []subnetSelectionProof{mk(7), mk(0), mk(3), mk(12), mk(1)}
+
+		sortBySubnet(pairs)
+
+		got := make([]uint64, len(pairs))
+		for i, p := range pairs {
+			got[i] = p.subnet
+			require.Equal(t, byte(p.subnet), p.selectionProof[0], "proof must stay paired with its subnet")
 		}
-		sortBySubnet(pairs)
-		require.Equal(t, []subnetSelectionProof{
-			{subnet: 1, selectionProof: sig(0xb)},
-			{subnet: 2, selectionProof: sig(0xc)},
-			{subnet: 3, selectionProof: sig(0xa)},
-		}, pairs)
+		require.Equal(t, []uint64{0, 1, 3, 7, 12}, got)
 	})
 
-	t.Run("deterministic across repeated runs with the same input", func(t *testing.T) {
-		const iterations = 100
-		var first []subnetSelectionProof
-		for i := 0; i < iterations; i++ {
-			pairs := []subnetSelectionProof{
-				{subnet: 3, selectionProof: sig(0xa)},
-				{subnet: 1, selectionProof: sig(0xb)},
-				{subnet: 2, selectionProof: sig(0xc)},
-				{subnet: 0, selectionProof: sig(0xd)},
-			}
-			sortBySubnet(pairs)
-			if i == 0 {
-				first = append([]subnetSelectionProof(nil), pairs...)
-				continue
-			}
-			require.Equalf(t, first, pairs, "iteration %d: result differs", i)
-		}
+	t.Run("already sorted stays in order", func(t *testing.T) {
+		pairs := []subnetSelectionProof{mk(0), mk(1), mk(2)}
+		sortBySubnet(pairs)
+		require.Equal(t, []uint64{0, 1, 2}, []uint64{pairs[0].subnet, pairs[1].subnet, pairs[2].subnet})
 	})
 
-	t.Run("matches spec canonical ordering (ascending SubcommitteeIndex)", func(t *testing.T) {
-		// ssv-spec test fixture appends contributions with SubcommitteeIndex [0, 1, 2]
-		// (see ssv-spec/types/testingutils/beacon_node_sync_committee.go). Verify our
-		// sort produces that exact order regardless of input permutation.
-		pairs := []subnetSelectionProof{
-			{subnet: 2, selectionProof: sig(2)},
-			{subnet: 0, selectionProof: sig(0)},
-			{subnet: 1, selectionProof: sig(1)},
-		}
-		sortBySubnet(pairs)
-		require.Equal(t, []subnetSelectionProof{
-			{subnet: 0, selectionProof: sig(0)},
-			{subnet: 1, selectionProof: sig(1)},
-			{subnet: 2, selectionProof: sig(2)},
-		}, pairs)
-	})
-
-	t.Run("empty slice is a no-op", func(t *testing.T) {
-		pairs := []subnetSelectionProof{}
-		sortBySubnet(pairs)
-		require.Empty(t, pairs)
-	})
-
-	t.Run("single-element slice is unchanged", func(t *testing.T) {
-		pairs := []subnetSelectionProof{{subnet: 5, selectionProof: sig(0x42)}}
-		sortBySubnet(pairs)
-		require.Equal(t, []subnetSelectionProof{{subnet: 5, selectionProof: sig(0x42)}}, pairs)
-	})
-
-	t.Run("already-sorted input is unchanged", func(t *testing.T) {
-		pairs := []subnetSelectionProof{
-			{subnet: 0, selectionProof: sig(0x10)},
-			{subnet: 1, selectionProof: sig(0x11)},
-			{subnet: 2, selectionProof: sig(0x12)},
-			{subnet: 3, selectionProof: sig(0x13)},
-		}
-		sortBySubnet(pairs)
-		require.Equal(t, []subnetSelectionProof{
-			{subnet: 0, selectionProof: sig(0x10)},
-			{subnet: 1, selectionProof: sig(0x11)},
-			{subnet: 2, selectionProof: sig(0x12)},
-			{subnet: 3, selectionProof: sig(0x13)},
-		}, pairs)
+	t.Run("empty and nil do not panic", func(t *testing.T) {
+		require.NotPanics(t, func() { sortBySubnet(nil) })
+		require.NotPanics(t, func() { sortBySubnet([]subnetSelectionProof{}) })
 	})
 }

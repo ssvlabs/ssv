@@ -348,7 +348,10 @@ func (b *BaseRunner) signAndBroadcastPartialSigMsgs(
 	// Reuse the existing span instead of generating new one to keep tracing-data lightweight.
 	span := trace.SpanFromContext(ctx)
 
-	msgID := spectypes.NewMsgID(b.NetworkConfig.DomainType, validatorPubKey, b.RunnerRoleType)
+	// Use the fork-aware domain so the pubsub message validator accepts the message after the
+	// Boole fork activates (post-fork it checks NextDomainType). Mirrors CommitteeRunner and
+	// QBFT domain selection. Fixes #2915.
+	msgID := spectypes.NewMsgID(b.NetworkConfig.DomainTypeAtSlot(msgs.Slot), validatorPubKey, b.RunnerRoleType)
 	encodedMsg, err := msgs.Encode()
 	if err != nil {
 		return fmt.Errorf("could not encode partial signature messages: %w", err)
@@ -524,9 +527,7 @@ func (b *BaseRunner) basePartialSigMsgProcessing(
 
 		// Check if it has two signatures for the same signer
 		if container.HasSignature(msg.ValidatorIndex, msg.Signer, msg.SigningRoot) {
-			// A failure means neither signature was valid; the container is left without
-			// one, which is fine here since we only track quorum.
-			_ = container.ResolveDuplicateSignature(msg, b.Share[msg.ValidatorIndex].Committee)
+			b.resolveDuplicateSignature(container, msg)
 		} else {
 			container.AddSignature(msg)
 		}

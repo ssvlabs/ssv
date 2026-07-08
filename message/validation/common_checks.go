@@ -12,10 +12,6 @@ import (
 )
 
 func (mv *messageValidator) committeeRole(role spectypes.RunnerRole) bool {
-	// RoleAggregatorCommittee is committee-backed and is published on the committee topic
-	// (see p2pNetwork.BroadcastAtSlot), so it must resolve to the committee lookup on receive
-	// too — keeping publish/receive symmetric. The role isn't produced until unit 5, so this
-	// has no runtime effect yet, but avoids a half-wired asymmetry.
 	return role == spectypes.RoleCommittee || role == spectypes.RoleAggregatorCommittee
 }
 
@@ -46,7 +42,6 @@ func (mv *messageValidator) messageLateness(slot phase0.Slot, role spectypes.Run
 	switch role {
 	case spectypes.RoleProposer, ssvtypes.RoleSyncCommitteeContribution:
 		ttl = 1 + LateSlotAllowance
-	// TODO(convergence unit 5): enable AggregatorCommittee handling.
 	case spectypes.RoleCommittee, spectypes.RoleAggregatorCommittee, ssvtypes.RoleAggregator:
 		ttl = mv.maxStoredSlots()
 	default:
@@ -79,6 +74,10 @@ func (mv *messageValidator) validateDutyCount(
 		dutyCount++
 	}
 
+	// Rule: valid number of duties per epoch:
+	// - 2 for aggregation, voluntary exit and validator registration
+	// - 2*V for Committee and AggregatorCommittee duty (where V is the number of validators in the cluster) (if no validator is doing sync committee in this epoch)
+	// - else, accept
 	if dutyCount > dutyLimit {
 		e := ErrTooManyDutiesPerEpoch
 		e.got = fmt.Sprintf("%v (role %v)", dutyCount, msgID.GetRoleType())
@@ -100,7 +99,7 @@ func (mv *messageValidator) dutyLimit(msgID spectypes.MessageID, slot phase0.Slo
 	case ssvtypes.RoleAggregator, spectypes.RoleValidatorRegistration:
 		return 2, true
 
-	case spectypes.RoleCommittee:
+	case spectypes.RoleCommittee, spectypes.RoleAggregatorCommittee:
 		validatorIndexCount := uint64(len(validatorIndices))
 		slotsPerEpoch := mv.netCfg.SlotsPerEpoch
 

@@ -1,13 +1,11 @@
 package validation
 
 import (
-	"bytes"
-	"encoding/hex"
 	"fmt"
 	"slices"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
-
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	ssvmessage "github.com/ssvlabs/ssv/protocol/v2/message"
@@ -121,36 +119,18 @@ func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage)
 		return e
 	}
 
-	// Rule: domain must match either the current (Alan) or next (Boole) fork domain.
-	// This is a cheap pre-decode allowlist; the exact per-slot domain is enforced by
-	// validateDomainAtSlot once the message slot is known (see consensus/partial validation).
-	msgDomain := ssvMessage.GetID().GetDomain()
-	currentDomain := mv.netCfg.DomainType
-	nextDomain := mv.netCfg.NextDomainType
-	if !bytes.Equal(msgDomain, currentDomain[:]) && !bytes.Equal(msgDomain, nextDomain[:]) {
-		err := ErrWrongDomain
-		err.got = hex.EncodeToString(msgDomain)
-		err.want = fmt.Sprintf("%s or %s", hex.EncodeToString(currentDomain[:]), hex.EncodeToString(nextDomain[:]))
-		return err
-	}
-
-	// Rule: If role is invalid
-	if !mv.validRole(ssvMessage.GetID().GetRoleType()) {
-		return ErrInvalidRole
-	}
-
 	return nil
 }
 
-func (mv *messageValidator) validRole(roleType spectypes.RunnerRole) bool {
+func (mv *messageValidator) validRoleAtSlot(roleType spectypes.RunnerRole, slot phase0.Slot) bool {
+	isInBooleFork := mv.netCfg.BooleForkAtSlot(slot)
 	switch roleType {
-	case spectypes.RoleCommittee,
-		ssvtypes.RoleAggregator,
-		spectypes.RoleProposer,
-		ssvtypes.RoleSyncCommitteeContribution,
-		spectypes.RoleValidatorRegistration,
-		spectypes.RoleVoluntaryExit:
+	case spectypes.RoleCommittee, spectypes.RoleProposer, spectypes.RoleValidatorRegistration, spectypes.RoleVoluntaryExit:
 		return true
+	case spectypes.RoleAggregatorCommittee:
+		return isInBooleFork
+	case ssvtypes.RoleAggregator, ssvtypes.RoleSyncCommitteeContribution:
+		return !isInBooleFork
 	default:
 		return false
 	}

@@ -44,12 +44,10 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 		return nil, e
 	}
 
-	// Enforce fork-aware topic and domain using the message slot.
-	slot := partialSignatureMessages.Slot
-	if err := mv.validateTopicAtSlot(committeeInfo, topic, slot); err != nil {
+	if err := mv.validateTopicAtSlot(committeeInfo, topic, partialSignatureMessages.Slot); err != nil {
 		return partialSignatureMessages, err
 	}
-	if err := mv.validateDomainAtSlot(ssvMessage.GetID(), slot); err != nil {
+	if err := mv.validateDomainAtSlot(ssvMessage.GetID(), partialSignatureMessages.Slot); err != nil {
 		return partialSignatureMessages, err
 	}
 
@@ -87,6 +85,14 @@ func (mv *messageValidator) validatePartialSignatureMessageSemantics(
 	validatorIndices []phase0.ValidatorIndex,
 ) error {
 	role := signedSSVMessage.SSVMessage.GetID().GetRoleType()
+	slot := partialSignatureMessages.Slot
+
+	// Rule: If role is invalid
+	if !mv.validRoleAtSlot(role, slot) {
+		e := ErrInvalidRole
+		e.got = fmt.Sprintf("%v (%d) @ slot %v", role, role, slot)
+		return e
+	}
 
 	// Rule: Partial Signature message must have 1 signer
 	signers := signedSSVMessage.OperatorIDs
@@ -165,7 +171,7 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 	operatorState := state.OperatorState(committeeInfo.signerIndex(signer))
 
 	// Rule: Height must not be "old". I.e., signer must not have already advanced to a later slot.
-	if role != spectypes.RoleCommittee { // Rule only for validator runners
+	if !mv.committeeRole(role) { // Rule only for validator runners
 		maxSlot := operatorState.MaxSlot()
 		if maxSlot != 0 && maxSlot > partialSignatureMessages.Slot {
 			e := ErrSlotAlreadyAdvanced
@@ -186,6 +192,7 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 		// - 1 RandaoPartialSig and 1 PostConsensusPartialSig for Proposer
 		// - 1 SelectionProofPartialSig and 1 PostConsensusPartialSig for Aggregator
 		// - 1 SelectionProofPartialSig and 1 PostConsensusPartialSig for Sync committee contribution
+		// - 1 AggregatorCommitteePartialSig and 1 PostConsensusPartialSig for AggregatorCommittee
 		// - 1 ValidatorRegistrationPartialSig for Validator Registration
 		// - 1 VoluntaryExitPartialSig for Voluntary Exit
 		if err := validatePartialSignatureMessageLimit(partialSignatureMessages, receivedFrom, signerState); err != nil {
@@ -194,16 +201,12 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 	}
 
 	// Rule: current slot must be between duty's starting slot and:
-	// - duty's starting slot + 34 (committee and aggregation)
+	// - duty's starting slot + 34 (committee, aggregator, and aggregator committee)
 	// - duty's starting slot + 3 (other duties)
 	if err := mv.validateSlotTime(messageSlot, role, receivedAt); err != nil {
 		return err
 	}
 
-	// Rule: valid number of duties per epoch:
-	// - 2 for aggregation, voluntary exit and validator registration
-	// - 2*V for Committee duty (where V is the number of validators in the cluster) (if no validator is doing sync committee in this epoch)
-	// - else, accept
 	if err := mv.validateDutyCount(signedSSVMessage.SSVMessage.GetID(), messageSlot, committeeInfo.validatorIndices, operatorState); err != nil {
 		return err
 	}
@@ -211,22 +214,42 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 	clusterValidatorCount := len(committeeInfo.validatorIndices)
 	partialSignatureMessageCount := len(partialSignatureMessages.Messages)
 
-	if signedSSVMessage.SSVMessage.MsgID.GetRoleType() == spectypes.RoleCommittee {
-		// Rule: The number of signatures must be <= min(2*V, V + SYNC_COMMITTEE_SIZE) where V is the number of validators assigned to the cluster
-		// #nosec G115
-		if partialSignatureMessageCount > min(2*clusterValidatorCount, clusterValidatorCount+int(mv.netCfg.SyncCommitteeSize)) {
-			return ErrTooManySignaturesInPartialSigMessage
+	role = signedSSVMessage.SSVMessage.MsgID.GetRoleType()
+	if mv.committeeRole(role) {
+		scSubnets := 1
+		if role == spectypes.RoleAggregatorCommittee {
+			scSubnets = 4
 		}
 
-		// Rule: a ValidatorIndex can't appear more than 2 times in the []*PartialSignatureMessage list
+		maxDutiesForRole := scSubnets + 1
+
+		// Rule: The number of signatures must be:
+		// - <= min(2*V, V + SYNC_COMMITTEE_SIZE) for committee,
+		// - <= min(5*V, V + 4*SYNC_COMMITTEE_SIZE) for aggregator committee,
+		// where V is the number of validators assigned to the cluster
+		// #nosec G115
+		messageLimit := min(maxDutiesForRole*clusterValidatorCount, clusterValidatorCount+scSubnets*int(mv.netCfg.SyncCommitteeSize))
+		if partialSignatureMessageCount > messageLimit {
+			e := ErrTooManySignaturesInPartialSigMessage
+			e.got = partialSignatureMessageCount
+			e.want = messageLimit
+			return e
+		}
+
+		// Rule: a ValidatorIndex can't appear in the []*PartialSignatureMessage list:
+		// - more than 2 times for RoleCommittee
+		// - more than 5 times for RoleAggregatorCommittee
 		validatorIndexCount := make(map[phase0.ValidatorIndex]int)
 		for _, message := range partialSignatureMessages.Messages {
 			validatorIndexCount[message.ValidatorIndex]++
-			if validatorIndexCount[message.ValidatorIndex] > 2 {
-				return ErrTripleValidatorIndexInPartialSignatures
+			if cnt := validatorIndexCount[message.ValidatorIndex]; cnt > maxDutiesForRole {
+				e := ErrTooManyEqualValidatorIndicesInPartialSignatures
+				e.got = cnt
+				e.want = fmt.Sprintf("<=%d", maxDutiesForRole)
+				return e
 			}
 		}
-	} else if signedSSVMessage.SSVMessage.MsgID.GetRoleType() == ssvtypes.RoleSyncCommitteeContribution {
+	} else if role == ssvtypes.RoleSyncCommitteeContribution {
 		// Rule: The number of signatures must be <= MaxSignaturesInSyncCommitteeContribution for the sync committee contribution duty
 		if partialSignatureMessageCount > maxSignatures {
 			e := ErrTooManySignaturesInPartialSigMessage
@@ -328,7 +351,8 @@ func (mv *messageValidator) validPartialSigMsgType(msgType spectypes.PartialSigM
 		ssvtypes.SelectionProofPartialSig,
 		ssvtypes.ContributionProofs,
 		spectypes.ValidatorRegistrationPartialSig,
-		spectypes.VoluntaryExitPartialSig:
+		spectypes.VoluntaryExitPartialSig,
+		spectypes.AggregatorCommitteePartialSig:
 		return true
 	default:
 		return false
@@ -349,6 +373,8 @@ func (mv *messageValidator) partialSignatureTypeMatchesRole(msgType spectypes.Pa
 		return msgType == spectypes.ValidatorRegistrationPartialSig
 	case spectypes.RoleVoluntaryExit:
 		return msgType == spectypes.VoluntaryExitPartialSig
+	case spectypes.RoleAggregatorCommittee:
+		return msgType == spectypes.AggregatorCommitteePartialSig || msgType == spectypes.PostConsensusPartialSig
 	default:
 		return false
 	}

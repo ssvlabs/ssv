@@ -120,10 +120,15 @@ func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.
 		return nil
 	}
 
-	// We have quorum and are committed to completing this duty here. The quorum above fires only once,
-	// so a terminal failure below won't be retried.
+	// We have quorum and are committed to completing this duty here, so this defer reports a terminal
+	// failure below as failed rather than letting it surface as a false "stuck".
+	// The one exception is a recoverable BLS-reconstruction failure: the fallback drops the offending
+	// partial sig(s) below quorum, so a later partial-sig message re-crosses quorum and re-enters here —
+	// those are tagged recoverableReconstructError and must not be recorded as failed (hence the guard).
+	// Shutdown (context cancellation) needs no special-casing — markDutyFailed drops a context.Canceled
+	// reason, so a duty aborted by shutdown isn't recorded as a failure.
 	defer func() {
-		if err != nil {
+		if err != nil && !isRecoverableReconstructError(err) {
 			r.markDutyFailed(err)
 		}
 	}()
@@ -140,7 +145,7 @@ func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.
 	if err != nil {
 		// If the reconstructed signature verification failed, fall back to verifying each partial signature
 		r.FallBackAndVerifyEachSignature(r.State.PreConsensusContainer, root, r.GetShare().Committee, r.GetShare().ValidatorIndex)
-		return fmt.Errorf("got pre-consensus quorum but it has invalid signatures: %w", err)
+		return recoverableReconstructError{fmt.Errorf("got pre-consensus quorum but it has invalid signatures: %w", err)}
 	}
 
 	duty, err := r.currentValidatorDuty()
@@ -211,10 +216,7 @@ func (r *AggregatorRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 	r.measurements.EndConsensus()
 	recordConsensusDuration(ctx, r.measurements.ConsensusTime(), ssvtypes.RoleAggregator)
 
-	decidedValue, err := validatorConsensusDataFromEncoder(encDecidedValue)
-	if err != nil {
-		return fmt.Errorf("decided value: %w", err)
-	}
+	decidedValue := encDecidedValue.(*spectypes.ProposerConsensusData)
 	span.SetAttributes(
 		observability.BeaconSlotAttribute(decidedValue.Duty.Slot),
 		observability.ValidatorPublicKeyAttribute(decidedValue.Duty.PubKey),
@@ -251,7 +253,8 @@ func (r *AggregatorRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 		Messages: []*spectypes.PartialSignatureMessage{msg},
 	}
 
-	msgID := spectypes.NewMsgID(r.NetworkConfig.DomainType, r.GetShare().ValidatorPubKey[:], r.RunnerRoleType)
+	domain := r.NetworkConfig.DomainTypeAtSlot(decidedValue.Duty.Slot)
+	msgID := spectypes.NewMsgID(domain, r.GetShare().ValidatorPubKey[:], r.RunnerRoleType)
 
 	encodedMsg, err := postConsensusMsg.Encode()
 	if err != nil {
@@ -311,10 +314,15 @@ func (r *AggregatorRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 		return nil
 	}
 
-	// We have quorum and are committed to completing this duty here. The quorum above fires only once,
-	// so a terminal failure below won't be retried.
+	// We have quorum and are committed to completing this duty here, so this defer reports a terminal
+	// failure below as failed rather than letting it surface as a false "stuck".
+	// The one exception is a recoverable BLS-reconstruction failure: the fallback drops the offending
+	// partial sig(s) below quorum, so a later partial-sig message re-crosses quorum and re-enters here —
+	// those are tagged recoverableReconstructError and must not be recorded as failed (hence the guard).
+	// Shutdown (context cancellation) needs no special-casing — markDutyFailed drops a context.Canceled
+	// reason, so a duty aborted by shutdown isn't recorded as a failure.
 	defer func() {
-		if err != nil {
+		if err != nil && !isRecoverableReconstructError(err) {
 			r.markDutyFailed(err)
 		}
 	}()
@@ -330,7 +338,7 @@ func (r *AggregatorRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 	if err != nil {
 		// If the reconstructed signature verification failed, fall back to verifying each partial signature
 		r.FallBackAndVerifyEachSignature(r.State.PostConsensusContainer, root, r.GetShare().Committee, r.GetShare().ValidatorIndex)
-		return fmt.Errorf("got post-consensus quorum but it has invalid signatures: %w", err)
+		return recoverableReconstructError{fmt.Errorf("got post-consensus quorum but it has invalid signatures: %w", err)}
 	}
 	specSig := phase0.BLSSignature{}
 	copy(specSig[:], sig)
@@ -449,7 +457,7 @@ func (r *AggregatorRunner) executeDuty(ctx context.Context, logger *zap.Logger, 
 		Messages: []*spectypes.PartialSignatureMessage{msg},
 	}
 
-	logger.Debug("signing and broadcasting selection proof partial sig", fields.Slot(duty.DutySlot()))
+	logger.Debug("signing and broadcasting selection proof partial sig", fields.Slot(validatorDuty.DutySlot()))
 
 	r.measurements.StartPreConsensus()
 	if err := r.signAndBroadcastPartialSigMsgs(ctx, r.network, r.operatorSigner, r.GetShare().ValidatorPubKey[:], msgs); err != nil {
@@ -465,6 +473,14 @@ func (r *AggregatorRunner) GetNetwork() protocolp2p.Network {
 
 func (r *AggregatorRunner) GetBeaconNode() beacon.BeaconNode {
 	return r.beacon
+}
+
+func (r *AggregatorRunner) GetShare() *spectypes.Share {
+	// TODO better solution for this
+	for _, share := range r.Share {
+		return share
+	}
+	return nil
 }
 
 func (r *AggregatorRunner) GetSigner() ekm.BeaconSigner {

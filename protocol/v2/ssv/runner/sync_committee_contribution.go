@@ -226,23 +226,20 @@ func (r *SyncCommitteeAggregatorRunner) ProcessConsensus(ctx context.Context, lo
 	r.measurements.EndConsensus()
 	recordConsensusDuration(ctx, r.measurements.ConsensusTime(), ssvtypes.RoleSyncCommitteeContribution)
 
-	cd, err := validatorConsensusDataFromEncoder(decidedValue)
-	if err != nil {
-		return fmt.Errorf("decided value: %w", err)
-	}
+	cd := decidedValue.(*spectypes.ProposerConsensusData)
 	span.SetAttributes(
 		observability.BeaconSlotAttribute(cd.Duty.Slot),
 		observability.ValidatorPublicKeyAttribute(cd.Duty.PubKey),
 	)
 
-	duty, err := r.currentValidatorDuty()
-	if err != nil {
-		return fmt.Errorf("current validator duty: %w", err)
-	}
-
 	contributions, err := ssvtypes.GetSyncCommitteeContributions(cd)
 	if err != nil {
 		return fmt.Errorf("could not get contributions: %w", err)
+	}
+
+	duty, err := r.currentValidatorDuty()
+	if err != nil {
+		return fmt.Errorf("current validator duty: %w", err)
 	}
 
 	// specific duty sig
@@ -275,7 +272,8 @@ func (r *SyncCommitteeAggregatorRunner) ProcessConsensus(ctx context.Context, lo
 		Messages: msgs,
 	}
 
-	msgID := spectypes.NewMsgID(r.NetworkConfig.DomainType, r.GetShare().ValidatorPubKey[:], r.RunnerRoleType)
+	domain := r.NetworkConfig.DomainTypeAtSlot(cd.Duty.Slot)
+	msgID := spectypes.NewMsgID(domain, r.GetShare().ValidatorPubKey[:], r.RunnerRoleType)
 
 	encodedMsg, err := postConsensusMsg.Encode()
 	if err != nil {
@@ -302,7 +300,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessConsensus(ctx context.Context, lo
 
 	r.measurements.StartPostConsensus()
 	span.AddEvent("broadcasting post consensus partial signature message")
-	if err := r.GetNetwork().Broadcast(msgID, msgToBroadcast); err != nil {
+	if err := r.GetNetwork().BroadcastAtSlot(msgToBroadcast, postConsensusMsg.Slot); err != nil {
 		return fmt.Errorf("can't broadcast partial post consensus sig: %w", err)
 	}
 	const broadcastedPostConsensusMsgEvent = "broadcasted post-consensus partial signature message"
@@ -366,7 +364,10 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(ctx context.Context
 			for _, root := range roots {
 				r.FallBackAndVerifyEachSignature(r.State.PostConsensusContainer, root, r.GetShare().Committee, r.GetShare().ValidatorIndex)
 			}
-			return fmt.Errorf("got post-consensus quorum but it has invalid signatures: %w", err)
+			return spectypes.WrapError(
+				spectypes.PostConsensusQuorumWithInvalidSignatures,
+				fmt.Errorf("got post-consensus quorum but it has invalid signatures: %w", err),
+			)
 		}
 		specSig := phase0.BLSSignature{}
 		copy(specSig[:], sig)
@@ -483,13 +484,16 @@ func (r *SyncCommitteeAggregatorRunner) expectedPreConsensusRootsAndDomain() ([]
 	if err != nil {
 		return nil, phase0.DomainType{}, fmt.Errorf("current validator duty: %w", err)
 	}
-
+	currentDutySlot, err := r.currentDutySlot()
+	if err != nil {
+		return nil, phase0.DomainType{}, fmt.Errorf("current duty slot: %w", err)
+	}
 	indices := duty.ValidatorSyncCommitteeIndices
 	sszIndexes := make([]ssz.HashRoot, 0, len(indices))
 	for _, index := range indices {
 		subnet := r.GetBeaconNode().SyncCommitteeSubnetID(phase0.CommitteeIndex(index))
 		data := &altair.SyncAggregatorSelectionData{
-			Slot:              duty.DutySlot(),
+			Slot:              currentDutySlot,
 			SubcommitteeIndex: subnet,
 		}
 		sszIndexes = append(sszIndexes, data)
@@ -532,12 +536,12 @@ func (r *SyncCommitteeAggregatorRunner) executeDuty(ctx context.Context, logger 
 
 	r.measurements.StartDutyFlow()
 
+	// sign selection proofs
 	validatorDuty, err := validatorDutyFromDuty(duty)
 	if err != nil {
 		return err
 	}
 
-	// sign selection proofs
 	msgs := &spectypes.PartialSignatureMessages{
 		Type:     ssvtypes.ContributionProofs,
 		Slot:     validatorDuty.DutySlot(),
@@ -572,7 +576,7 @@ func (r *SyncCommitteeAggregatorRunner) executeDuty(ctx context.Context, logger 
 		r.rootToSyncCommitteeIdx[msg.SigningRoot] = phase0.ValidatorIndex(vIdx)
 	}
 
-	logger.Debug("signing and broadcasting contribution proof partial sig", fields.Slot(duty.DutySlot()))
+	logger.Debug("signing and broadcasting contribution proof partial sig", fields.Slot(validatorDuty.DutySlot()))
 
 	r.measurements.StartPreConsensus()
 	if err := r.signAndBroadcastPartialSigMsgs(ctx, r.network, r.operatorSigner, r.GetShare().ValidatorPubKey[:], msgs); err != nil {
@@ -588,6 +592,14 @@ func (r *SyncCommitteeAggregatorRunner) GetNetwork() protocolp2p.Network {
 
 func (r *SyncCommitteeAggregatorRunner) GetBeaconNode() beacon.BeaconNode {
 	return r.beacon
+}
+
+func (r *SyncCommitteeAggregatorRunner) GetShare() *spectypes.Share {
+	// TODO better solution for this
+	for _, share := range r.Share {
+		return share
+	}
+	return nil
 }
 
 func (r *SyncCommitteeAggregatorRunner) GetSigner() ekm.BeaconSigner {

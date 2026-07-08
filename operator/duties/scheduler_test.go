@@ -2,6 +2,7 @@ package duties
 
 import (
 	"context"
+	"math"
 	"sync"
 	"testing"
 	"testing/synctest"
@@ -175,11 +176,18 @@ func setupSchedulerAndMocksWithParams(
 	beaconCfg.EpochsPerSyncCommitteePeriod = testEpochsPerSCPeriod
 	beaconCfg.SlotsPerEpoch = testSlotsPerEpoch
 
+	ssvCfg := *networkconfig.TestNetwork.SSV
+	ssvCfg.Forks.Boole = math.MaxUint64
+
+	netCfg := *networkconfig.TestNetwork
+	netCfg.Beacon = &beaconCfg
+	netCfg.SSV = &ssvCfg
+
 	opts := &SchedulerOptions{
 		Ctx:                 ctx,
 		BeaconNode:          mockBeaconNode,
 		ExecutionClient:     mockExecutionClient,
-		BeaconConfig:        &beaconCfg,
+		NetworkConfig:       &netCfg,
 		ValidatorProvider:   mockValidatorProvider,
 		ValidatorController: mockValidatorController,
 		DutyExecutor:        mockDutyExecutor,
@@ -422,13 +430,15 @@ func testRoot(value byte) phase0.Root {
 
 func setupSchedulerForHeadEventTest(currentSlot phase0.Slot) *Scheduler {
 	beaconCfg := *networkconfig.TestNetwork.Beacon
+	netCfg := *networkconfig.TestNetwork
 	beaconCfg.SlotDuration = time.Hour
 	beaconCfg.SlotsPerEpoch = testSlotsPerEpoch
 	beaconCfg.GenesisTime = time.Now().Add(-(time.Duration(currentSlot) * beaconCfg.SlotDuration) - beaconCfg.SlotDuration/2)
+	netCfg.Beacon = &beaconCfg
 
 	return &Scheduler{
 		logger:              zap.NewNop(),
-		beaconConfig:        &beaconCfg,
+		netCfg:              &netCfg,
 		blockPropagateDelay: 0,
 		reorgCh:             make(chan ReorgEvent, reorgChannelBuffer),
 		waitCond:            sync.NewCond(&sync.Mutex{}),
@@ -470,7 +480,7 @@ func TestScheduler_Run(t *testing.T) {
 		opts := &SchedulerOptions{
 			Ctx:               ctx,
 			BeaconNode:        mockBeaconNode,
-			BeaconConfig:      networkconfig.TestNetwork.Beacon,
+			NetworkConfig:     networkconfig.TestNetwork,
 			ValidatorProvider: mockValidatorProvider,
 			SlotTickerProvider: func() slotticker.SlotTicker {
 				return mockTicker
@@ -522,7 +532,7 @@ func TestScheduler_Regression_IndicesChangeStuck(t *testing.T) {
 		opts := &SchedulerOptions{
 			Ctx:               ctx,
 			BeaconNode:        mockBeaconNode,
-			BeaconConfig:      networkconfig.TestNetwork.Beacon,
+			NetworkConfig:     networkconfig.TestNetwork,
 			ValidatorProvider: mockValidatorProvider,
 			SlotTickerProvider: func() slotticker.SlotTicker {
 				return mockTicker
@@ -567,7 +577,7 @@ func TestScheduler_HandleHeadEvent_ReorgFlags(t *testing.T) {
 		{
 			name: "no root change emits no reorg",
 			configure: func(s *Scheduler, event *eth2apiv1.HeadEvent) {
-				currentEpoch := s.beaconConfig.EstimatedEpochAtSlot(event.Slot)
+				currentEpoch := s.netCfg.EstimatedEpochAtSlot(event.Slot)
 				s.lastEpoch = currentEpoch
 				s.lastBlockRoot = testRoot(0x10)
 				s.previousDutyDependentRoot = testRoot(0x20)
@@ -581,7 +591,7 @@ func TestScheduler_HandleHeadEvent_ReorgFlags(t *testing.T) {
 		{
 			name: "epoch transition emits previous epoch reorg",
 			configure: func(s *Scheduler, event *eth2apiv1.HeadEvent) {
-				currentEpoch := s.beaconConfig.EstimatedEpochAtSlot(event.Slot)
+				currentEpoch := s.netCfg.EstimatedEpochAtSlot(event.Slot)
 				s.lastEpoch = currentEpoch - 1
 				s.lastBlockRoot = testRoot(0x11)
 				s.previousDutyDependentRoot = testRoot(0x01)
@@ -598,7 +608,7 @@ func TestScheduler_HandleHeadEvent_ReorgFlags(t *testing.T) {
 		{
 			name: "same epoch previous root change emits previous epoch reorg",
 			configure: func(s *Scheduler, event *eth2apiv1.HeadEvent) {
-				currentEpoch := s.beaconConfig.EstimatedEpochAtSlot(event.Slot)
+				currentEpoch := s.netCfg.EstimatedEpochAtSlot(event.Slot)
 				s.lastEpoch = currentEpoch
 				s.lastBlockRoot = testRoot(0x13)
 				s.previousDutyDependentRoot = testRoot(0x04)
@@ -615,7 +625,7 @@ func TestScheduler_HandleHeadEvent_ReorgFlags(t *testing.T) {
 		{
 			name: "epoch transition emits current epoch reorg",
 			configure: func(s *Scheduler, event *eth2apiv1.HeadEvent) {
-				currentEpoch := s.beaconConfig.EstimatedEpochAtSlot(event.Slot)
+				currentEpoch := s.netCfg.EstimatedEpochAtSlot(event.Slot)
 				s.lastEpoch = currentEpoch - 1
 				s.lastBlockRoot = testRoot(0x22)
 				s.previousDutyDependentRoot = testRoot(0x23)
@@ -632,7 +642,7 @@ func TestScheduler_HandleHeadEvent_ReorgFlags(t *testing.T) {
 		{
 			name: "same epoch current root change emits current epoch reorg",
 			configure: func(s *Scheduler, event *eth2apiv1.HeadEvent) {
-				currentEpoch := s.beaconConfig.EstimatedEpochAtSlot(event.Slot)
+				currentEpoch := s.netCfg.EstimatedEpochAtSlot(event.Slot)
 				s.lastEpoch = currentEpoch
 				s.lastBlockRoot = testRoot(0x15)
 				s.previousDutyDependentRoot = testRoot(0x07)
@@ -664,7 +674,7 @@ func TestScheduler_HandleHeadEvent_ReorgFlags(t *testing.T) {
 func TestScheduler_HandleHeadEvent_DoesNotBlockWithoutReorgConsumer(t *testing.T) {
 	currentSlot := phase0.Slot(testSlotsPerEpoch*2 + 2)
 	s := setupSchedulerForHeadEventTest(currentSlot)
-	s.lastEpoch = s.beaconConfig.EstimatedEpochAtSlot(currentSlot)
+	s.lastEpoch = s.netCfg.EstimatedEpochAtSlot(currentSlot)
 	s.lastBlockRoot = testRoot(0x17)
 	s.previousDutyDependentRoot = testRoot(0x0a)
 	s.currentDutyDependentRoot = testRoot(0x0b)

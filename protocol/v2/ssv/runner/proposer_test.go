@@ -2,6 +2,7 @@ package runner
 
 import (
 	"context"
+	"maps"
 	"testing"
 	"time"
 
@@ -22,6 +23,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
 type proposerTestBeacon struct {
@@ -270,7 +272,7 @@ func TestProposerRunnerProcessConsensusSkipsPostConsensusSigningWhenDoppelganger
 	require.NoError(t, runner.decide(context.Background(), zap.NewNop(), duty.Slot, consensusData, runner.ValCheck))
 	consensusMsgs := spectestingutils.SSVDecidingMsgsForHeight(
 		consensusData,
-		runner.QBFTController.Identifier,
+		runner.QBFTController.GetIdentifier(),
 		specqbft.Height(consensusData.Duty.Slot),
 		keySet,
 	)
@@ -361,19 +363,53 @@ func newProposerRunnerForTest(
 ) (*ProposerRunner, *spectestingutils.TestKeySet, *protocoltesting.TestingNetwork) {
 	t.Helper()
 
-	// cfg may be nil; newRunnerTestKit falls back to cloneTestNetworkConfig().
-	kit := newRunnerTestKit(t, spectypes.RoleProposer, beacon, cfg)
+	if cfg == nil {
+		cfg = cloneTestNetworkConfig()
+	}
+
+	logger := zap.NewNop()
+	keySet := spectestingutils.Testing4SharesSet()
+	share := spectestingutils.TestingShare(keySet, spectestingutils.TestingValidatorIndex)
+	identifier := spectypes.NewMsgID(spectypes.JatoTestnet, spectestingutils.TestingValidatorPubKey[:], spectypes.RoleProposer)
+	network := protocoltesting.NewTestingNetwork(1, keySet.OperatorKeys[1])
+	km := ekm.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager())
+	operator := spectestingutils.TestingCommitteeMember(keySet)
+	operatorSigner := spectestingutils.NewOperatorSigner(keySet, 1)
 	valCheck := ssv.NewProposerChecker(
-		kit.signer,
-		kit.cfg.Beacon,
+		km,
+		cfg.Beacon,
 		spectypes.ValidatorPK(spectestingutils.TestingValidatorPubKey),
 		spectestingutils.TestingValidatorIndex,
-		phase0.BLSPubKey(kit.share.SharePubKey),
+		phase0.BLSPubKey(share.SharePubKey),
 	)
 
+	qbftConfig := protocoltesting.TestingConfig(logger, keySet)
+	qbftConfig.ProposerF = func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
+		return 1
+	}
+	qbftConfig.Network = network
+	controller := protocoltesting.NewTestingQBFTController(
+		keySet,
+		identifier[:],
+		operator,
+		qbftConfig,
+		false,
+	)
+
+	shareMap := map[phase0.ValidatorIndex]*spectypes.Share{
+		share.ValidatorIndex: share,
+	}
+
 	runnerIface, err := NewProposerRunner(ProposerRunnerOptions{
-		BaseRunnerOptions:   kit.baseOptions,
-		QBFTController:      kit.qbftController,
+		BaseRunnerOptions: BaseRunnerOptions{
+			NetworkConfig:  cfg,
+			Share:          shareMap,
+			Beacon:         beacon,
+			Network:        network,
+			Signer:         km,
+			OperatorSigner: operatorSigner,
+		},
+		QBFTController:      controller,
 		DoppelgangerHandler: dg,
 		ValCheck:            valCheck,
 		HighestDecidedSlot:  0,
@@ -383,8 +419,10 @@ func newProposerRunnerForTest(
 	require.NoError(t, err)
 
 	proposerRunner := runnerIface.(*ProposerRunner)
-	proposerRunner.SetQBFTRoundTimerF(testingRoundTimerF)
-	return proposerRunner, kit.keySet, kit.network
+	proposerRunner.SetQBFTRoundTimerF(func(_ context.Context, _ *zap.Logger, _ phase0.Slot) ssv.QBFTRoundTimer {
+		return roundtimer.NewTestingTimer()
+	})
+	return proposerRunner, keySet, network
 }
 
 func setupRunnerForPostConsensus(
@@ -413,8 +451,6 @@ func setupRunnerForPostConsensus(
 		return leaderID
 	}
 	qbftConfig.Network = runner.network
-	qbftConfig.BeaconSigner = runner.signer
-
 	runner.State.RunningInstance = instance.NewInstance(
 		t.Context(),
 		zap.NewNop(),
@@ -474,4 +510,20 @@ func countPartialSignatureBroadcastsByType(
 	}
 
 	return count
+}
+
+func cloneTestNetworkConfig() *networkconfig.Network {
+	cfg := *networkconfig.TestNetwork
+	beaconCfg := *networkconfig.TestNetwork.Beacon
+	// Tests only mutate beacon timing fields; the rest of TestNetwork can remain shared.
+	if beaconCfg.Forks != nil {
+		beaconCfg.Forks = maps.Clone(beaconCfg.Forks)
+	}
+	cfg.Beacon = &beaconCfg
+	// Clone SSV so tests can mutate Forks.Boole (or other SSV fields) without writing
+	// through to the package-level TestNetwork global. SSVForks is a value type, so a
+	// shallow *SSV copy fully isolates it.
+	ssvCfg := *networkconfig.TestNetwork.SSV
+	cfg.SSV = &ssvCfg
+	return &cfg
 }

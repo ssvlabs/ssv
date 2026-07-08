@@ -16,6 +16,7 @@ import (
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/observability/traces"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 type ProposerHandler struct {
@@ -76,10 +77,10 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 		case <-next:
 			currentSlot := h.ticker.Slot()
 			next = h.ticker.Next() // advances h.ticker
-			currentEpoch := h.beaconConfig.EstimatedEpochAtSlot(currentSlot)
+			currentEpoch := h.netCfg.EstimatedEpochAtSlot(currentSlot)
 			nextEpoch := currentEpoch + 1
 
-			slotNumber := uint64(currentSlot)%h.beaconConfig.SlotsPerEpoch + 1
+			slotNumber := uint64(currentSlot)%h.netCfg.SlotsPerEpoch + 1
 			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, currentSlot, slotNumber)
 			logger := h.logger.With(
 				zap.String("epoch_slot_pos", buildStr),
@@ -93,7 +94,7 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 				// tickCtx ensures we never take too long to process ticks (otherwise we might not be able to catch up
 				// with the latest tick for a while, if ever). Since the ticker always fires at around slot start-time,
 				// setting the deadline to currentSlot+1 gives us about ~1 full slot (12s) to process the tick.
-				tickCtx, cancel := context.WithDeadline(ctx, h.beaconConfig.SlotStartTime(currentSlot+1))
+				tickCtx, cancel := context.WithDeadline(ctx, h.netCfg.SlotStartTime(currentSlot+1))
 				defer cancel()
 
 				// 1. Process the duty execution & fetching.
@@ -125,7 +126,7 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 				// if we are still early into the slot (1 slot-interval is just a guesstimate), otherwise we might
 				// be delaying the next tick (the duties that need to be executed on the next slot).
 
-				indicesChangeDeadline := h.beaconConfig.SlotStartTime(currentSlot).Add(h.beaconConfig.IntervalDuration())
+				indicesChangeDeadline := h.netCfg.SlotStartTime(currentSlot).Add(h.netCfg.IntervalDuration())
 				select {
 				case <-h.indicesChangeCh:
 					logger.Info("🔁 indices change received")
@@ -154,11 +155,11 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 			}()
 
 		case reorgEvent := <-h.reorgEventsCh:
-			currentSlot := h.beaconConfig.EstimatedCurrentSlot()
-			currentEpoch := h.beaconConfig.EstimatedEpochAtSlot(currentSlot)
+			currentSlot := h.netCfg.EstimatedCurrentSlot()
+			currentEpoch := h.netCfg.EstimatedEpochAtSlot(currentSlot)
 			nextEpoch := currentEpoch + 1
 
-			slotNumber := uint64(currentSlot)%h.beaconConfig.SlotsPerEpoch + 1
+			slotNumber := uint64(currentSlot)%h.netCfg.SlotsPerEpoch + 1
 			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, currentSlot, slotNumber)
 
 			logger := h.logger.With(
@@ -182,7 +183,7 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 				// slot-ticker from executing duties even if some of them might not be up to date). Since the
 				// reorg can happen closer to the end of the current slot we wouldn't want to set the deadline
 				// to currentSlot+1 as that might be too short (hence setting it to currentSlot+2).
-				reorgCtx, cancel := context.WithDeadline(ctx, h.beaconConfig.SlotStartTime(currentSlot+2))
+				reorgCtx, cancel := context.WithDeadline(ctx, h.netCfg.SlotStartTime(currentSlot+2))
 				defer cancel()
 
 				// 1) Declare intents.
@@ -211,14 +212,14 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 // HandleInitialDuties fetches & prepares the duties for the current and next epochs.
 func (h *ProposerHandler) HandleInitialDuties(ctx context.Context) {
 	// initCtx ensures we don't block indefinitely in case we can't fetch the duties on startup.
-	initCtx, cancel := context.WithTimeout(ctx, h.beaconConfig.SlotDuration)
+	initCtx, cancel := context.WithTimeout(ctx, h.netCfg.SlotDuration)
 	defer cancel()
 
-	currentSlot := h.beaconConfig.EstimatedCurrentSlot()
-	currentEpoch := h.beaconConfig.EstimatedEpochAtSlot(currentSlot)
+	currentSlot := h.netCfg.EstimatedCurrentSlot()
+	currentEpoch := h.netCfg.EstimatedEpochAtSlot(currentSlot)
 	nextEpoch := currentEpoch + 1
 
-	slotNumber := uint64(currentSlot)%h.beaconConfig.SlotsPerEpoch + 1
+	slotNumber := uint64(currentSlot)%h.netCfg.SlotsPerEpoch + 1
 	buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, currentSlot, slotNumber)
 	logger := h.logger.With(
 		zap.String("epoch_slot_pos", buildStr),
@@ -331,7 +332,7 @@ func (h *ProposerHandler) processExecution(ctx context.Context, epoch phase0.Epo
 
 	// Proposals need to be made within ~4s since the current slot start to be included on-chain, we'll make the
 	// deadline to be 1 slot for simplicity.
-	dutyDeadline := h.beaconConfig.SlotStartTime(slot + 1)
+	dutyDeadline := h.netCfg.SlotStartTime(slot + 1)
 	h.dutiesExecutor.ExecuteDuties(ctx, toExecute, dutyDeadline)
 
 	span.SetStatus(codes.Ok, "")
@@ -401,7 +402,9 @@ func (h *ProposerHandler) fetchAndProcessDuties(ctx context.Context, logger *zap
 	}
 	logger.Debug("📚 got duties",
 		fields.Count(len(duties)),
-		fields.Duties(targetEpoch, specDuties, truncate),
+		fields.Duties(targetEpoch, specDuties, truncate, func(duty *spectypes.ValidatorDuty) spectypes.RunnerRole {
+			return types.RunnerRoleForValidatorDuty(duty, h.netCfg.BooleForkAtSlot(duty.Slot))
+		}),
 		fields.Took(time.Since(start)),
 	)
 
@@ -419,7 +422,7 @@ func (h *ProposerHandler) toSpecDuty(duty *eth2apiv1.ProposerDuty, role spectype
 }
 
 func (h *ProposerHandler) shouldExecute(duty *eth2apiv1.ProposerDuty) bool {
-	currentSlot := h.beaconConfig.EstimatedCurrentSlot()
+	currentSlot := h.netCfg.EstimatedCurrentSlot()
 	// execute task if slot already began and not pass 1 slot
 	if currentSlot == duty.Slot {
 		return true

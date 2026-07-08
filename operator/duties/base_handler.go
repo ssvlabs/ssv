@@ -17,7 +17,7 @@ type SetupOptions struct {
 	Logger              *zap.Logger
 	BeaconNode          BeaconNode
 	ExecutionClient     ExecutionClient
-	BeaconConfig        *networkconfig.Beacon
+	NetworkConfig       *networkconfig.Network
 	ValidatorProvider   ValidatorProvider
 	ValidatorController ValidatorController
 	DutiesExecutor      DutiesExecutor
@@ -42,7 +42,7 @@ type baseHandler struct {
 
 	beaconNode          BeaconNode
 	executionClient     ExecutionClient
-	beaconConfig        *networkconfig.Beacon
+	netCfg              *networkconfig.Network
 	validatorProvider   ValidatorProvider
 	validatorController ValidatorController
 	dutiesExecutor      DutiesExecutor
@@ -57,7 +57,7 @@ func (h *baseHandler) Setup(ctx context.Context, opts SetupOptions) {
 	h.ctx = ctx
 	h.beaconNode = opts.BeaconNode
 	h.executionClient = opts.ExecutionClient
-	h.beaconConfig = opts.BeaconConfig
+	h.netCfg = opts.NetworkConfig
 	h.validatorProvider = opts.ValidatorProvider
 	h.validatorController = opts.ValidatorController
 	h.dutiesExecutor = opts.DutiesExecutor
@@ -78,17 +78,17 @@ func (h *baseHandler) HandleInitialDuties(context.Context) {
 // shouldFetchNextEpoch returns true if it is a "good time" to fetch duties for the next epoch (typically, Beacon node
 // would be under less load during the mid-end time into the epoch vs during the beginning of the epoch).
 func (h *baseHandler) shouldFetchNextEpoch(currentSlot phase0.Slot) bool {
-	slotsPerEpoch := h.beaconConfig.SlotsPerEpoch
+	slotsPerEpoch := h.netCfg.SlotsPerEpoch
 	return uint64(currentSlot)%slotsPerEpoch > slotsPerEpoch/2-2
 }
 
 // atLastSlotOfCurrentEpoch returns true if the currentSlot is the latest slot of the current epoch.
 func (h *baseHandler) atLastSlotOfCurrentEpoch(currentSlot phase0.Slot) bool {
-	slotsPerEpoch := h.beaconConfig.SlotsPerEpoch
+	slotsPerEpoch := h.netCfg.SlotsPerEpoch
 	return uint64(currentSlot+1)%slotsPerEpoch == 0
 }
 
 // atLastSlotOrPastCurrentPeriod returns true if the currentSlot is at or past the last actionable slot of the currentPeriod.
 func (h *baseHandler) atLastSlotOrPastCurrentPeriod(currentSlot phase0.Slot, currentPeriod uint64) bool {
-	return currentSlot >= h.beaconConfig.LastActionableSlotOfSyncPeriod(currentPeriod)
+	return currentSlot >= h.netCfg.LastActionableSlotOfSyncPeriod(currentPeriod)
 }

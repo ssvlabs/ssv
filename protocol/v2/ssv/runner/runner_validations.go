@@ -13,7 +13,6 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
-	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 func (b *BaseRunner) ValidatePreConsensusMsg(
@@ -28,20 +27,27 @@ func (b *BaseRunner) ValidatePreConsensusMsg(
 		return spectypes.WrapError(spectypes.NoRunningDutyErrorCode, ErrRunningDutySucceeded)
 	}
 
-	currentDutySlot, err := b.currentDutySlot()
-	if err != nil {
-		return fmt.Errorf("current duty slot: %w", err)
-	}
-	if err := b.validatePartialSigMsg(psigMsgs, currentDutySlot); err != nil {
-		return err
+	// Validate the pre-consensus message differently depending on a message type.
+	validateMsg := func() error {
+		if err := b.validatePartialSigMsg(psigMsgs, b.State.CurrentDuty.DutySlot()); err != nil {
+			return err
+		}
+
+		roots, domain, err := runner.expectedPreConsensusRootsAndDomain()
+		if err != nil {
+			return fmt.Errorf("compute pre-consensus roots and domain: %w", err)
+		}
+
+		return b.verifyExpectedRoot(ctx, runner, psigMsgs, roots, domain)
 	}
 
-	roots, domain, err := runner.expectedPreConsensusRootsAndDomain()
-	if err != nil {
-		return fmt.Errorf("compute pre-consensus roots and domain: %w", err)
+	if runner.GetRole() == spectypes.RoleAggregatorCommittee {
+		validateMsg = func() error {
+			return b.validatePartialSigMsg(psigMsgs, b.State.CurrentDuty.DutySlot())
+		}
 	}
 
-	return b.verifyExpectedRoot(ctx, runner, psigMsgs, roots, domain)
+	return validateMsg()
 }
 
 // Verify each signature in container removing the invalid ones
@@ -50,7 +56,7 @@ func (b *BaseRunner) FallBackAndVerifyEachSignature(container *ssv.PartialSigCon
 	signatures := container.GetSignatures(validatorIndex, root)
 
 	for operatorID, signature := range signatures {
-		if err := ssvtypes.VerifyBeaconPartialSignature(operatorID, signature, root, committee); err != nil {
+		if err := b.verifyBeaconPartialSignature(operatorID, signature, root, committee); err != nil {
 			container.Remove(validatorIndex, operatorID, root)
 		}
 	}
@@ -69,13 +75,9 @@ func (b *BaseRunner) ValidatePostConsensusMsg(ctx context.Context, runner Runner
 	// for the duty from the previous slot), this is a relaxed check that helps to filter out inappropriate
 	// messages as soon as possible (so we can drop non-retryable messages ASAP), the exact slot validation
 	// occurs below.
-	currentDutySlot, err := b.currentDutySlot()
-	if err != nil {
-		return fmt.Errorf("current duty slot: %w", err)
-	}
 	slotIsRelevant := func(slot phase0.Slot) error {
-		minSlot := currentDutySlot - 1
-		maxSlot := currentDutySlot
+		minSlot := b.State.CurrentDuty.DutySlot() - 1
+		maxSlot := b.State.CurrentDuty.DutySlot()
 		if psigMsgs.Slot < minSlot {
 			// This message is targeting a slot that's already too far in the past to matter.
 			return spectypes.WrapError(spectypes.PartialSigMessageInvalidSlotErrorCode, fmt.Errorf(
@@ -140,12 +142,22 @@ func (b *BaseRunner) ValidatePostConsensusMsg(ctx context.Context, runner Runner
 				return fmt.Errorf("failed to parse decided value to BeaconVote: %w", err)
 			}
 
-			// Use current duty slot since CurrentDuty never changes for CommitteeRunner
+			// Use b.State.CurrentDuty.DutySlot() since CurrentDuty never changes for CommitteeRunner
 			// by design, hence there is no need to store slot number on decidedValue for CommitteeRunner.
-			expectedSlot, err := b.currentDutySlot()
-			if err != nil {
-				return fmt.Errorf("current duty slot: %w", err)
+			expectedSlot := b.State.CurrentDuty.DutySlot()
+			return b.validatePartialSigMsg(psigMsgs, expectedSlot)
+		}
+	}
+	if runner.GetRole() == spectypes.RoleAggregatorCommittee {
+		validateMsg = func() error {
+			decidedValue := &spectypes.AggregatorCommitteeConsensusData{}
+			if err := decidedValue.Decode(decidedValueBytes); err != nil {
+				return fmt.Errorf("failed to parse decided value to AggregatorCommitteeConsensusData: %w", err)
 			}
+
+			// Use b.State.CurrentDuty.DutySlot() since CurrentDuty never changes for AggregatorCommitteeRunner
+			// by design, hence there is no need to store slot number on decidedValue for AggregatorCommitteeRunner.
+			expectedSlot := b.State.CurrentDuty.DutySlot()
 			return b.validatePartialSigMsg(psigMsgs, expectedSlot)
 		}
 	}
@@ -178,11 +190,7 @@ func (b *BaseRunner) verifyExpectedRoot(
 
 	// convert expected roots to map and mark unique roots when verified
 	sortedExpectedRoots, err := func(expectedRootObjs []ssz.HashRoot) ([][32]byte, error) {
-		currentDutySlot, err := b.currentDutySlot()
-		if err != nil {
-			return nil, fmt.Errorf("current duty slot: %w", err)
-		}
-		epoch := b.NetworkConfig.EstimatedEpochAtSlot(currentDutySlot)
+		epoch := b.NetworkConfig.EstimatedEpochAtSlot(b.State.CurrentDuty.DutySlot())
 		d, err := runner.GetBeaconNode().DomainData(ctx, epoch, domain)
 		if err != nil {
 			return nil, fmt.Errorf("could not get pre consensus root domain: %w", err)

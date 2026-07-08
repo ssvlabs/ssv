@@ -50,3 +50,26 @@ func IsRetryable(err error) bool {
 	var retryableErr *RetryableError
 	return errors.As(err, &retryableErr)
 }
+
+// recoverableReconstructError tags a post-consensus BLS-reconstruction failure as recoverable.
+// It is attached at the push site inside the reconstruct goroutine, which has by construction
+// already run FallBackAndVerifyEachSignature to drop the offending partial sig(s) — so a later
+// partial-sig message can re-cross quorum and retry the pending roots. Classifying by this tag
+// (rather than by the spec ReconstructSignatureErrorCode) covers the whole recoverable subclass:
+// VerifyReconstructedSignature attaches the code, but the earlier BLS Deserialize/Recover step
+// (e.g. 96 garbage bytes from a byzantine operator) returns an uncoded error that is equally
+// recoverable. Errors reaching the classifier without this tag stay terminal by default.
+// Unwrap keeps the wrapped chain (including any code-tagged *spectypes.Error) reachable via
+// errors.As so the committee role still observably emits the reconstruct error code.
+type recoverableReconstructError struct {
+	err error
+}
+
+func (e recoverableReconstructError) Error() string { return e.err.Error() }
+
+func (e recoverableReconstructError) Unwrap() error { return e.err }
+
+func isRecoverableReconstructError(err error) bool {
+	var rec recoverableReconstructError
+	return errors.As(err, &rec)
+}
