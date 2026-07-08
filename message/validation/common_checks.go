@@ -105,9 +105,10 @@ func (mv *messageValidator) validateDutyCount(
 	}
 
 	// Rule: valid number of duties per epoch:
-	// - 2 for aggregation, voluntary exit and validator registration
+	// - 2 for aggregation, validator registration and PTC attestation
+	// - the tracked exit-duty count for voluntary exit
 	// - 2*V for Committee and AggregatorCommittee duty (where V is the number of validators in the cluster) (if no validator is doing sync committee in this epoch)
-	// - SlotsPerEpoch for proposer preferences
+	// - SlotsPerEpoch for proposer preferences and self-build envelopes
 	// - else, accept
 	if dutyCount > dutyLimit {
 		e := ErrTooManyDutiesPerEpoch
@@ -127,7 +128,10 @@ func (mv *messageValidator) dutyLimit(msgID spectypes.MessageID, slot phase0.Slo
 
 		return mv.dutyStore.VoluntaryExit.GetDutyCount(slot, pk), true
 
-	case ssvtypes.RoleAggregator, spectypes.RoleValidatorRegistration:
+	case ssvtypes.RoleAggregator, spectypes.RoleValidatorRegistration, spectypes.RolePTCAttester:
+		// 2 = one duty per epoch plus a reorg margin. A PTC member is drawn from a beacon committee, and a
+		// validator sits on exactly one beacon committee per epoch, so it signs at most one payload
+		// attestation per epoch — the same bound as aggregation and validator registration.
 		return 2, true
 
 	case spectypes.RoleCommittee, spectypes.RoleAggregatorCommittee:
@@ -150,9 +154,9 @@ func (mv *messageValidator) dutyLimit(msgID spectypes.MessageID, slot phase0.Slo
 
 		return min(slotsPerEpoch, 2*validatorIndexCount), true
 
-	case spectypes.RoleProposerPreferences, spectypes.RoleEnvelopeBuilder, spectypes.RolePTCAttester:
+	case spectypes.RoleProposerPreferences, spectypes.RoleEnvelopeBuilder:
 		// A validator proposes at most once per slot, so at most SlotsPerEpoch preferences (and likewise
-		// self-build envelopes) per epoch; a PTC member likewise signs at most one payload attestation per slot.
+		// self-build envelopes) per epoch.
 		return mv.netCfg.SlotsPerEpoch, true
 
 	default:

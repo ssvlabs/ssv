@@ -392,6 +392,16 @@ func checkValidatorConsensusData(
 
 	var gloasBlock *gloas.BeaconBlock
 	if cd.Duty.Type == spectypes.BNRoleProposer && beaconConfig.IsGloasAtSlot(cd.Duty.Slot) {
+		// The leader-stamped Version must agree with the slot's fork. ssv-spec's ProposerValueCheckF
+		// branches to Gloas on cd.Version, whereas we branch on the slot; without this guard a value on a
+		// Gloas slot carrying a pre-Gloas Version would be accepted here (slot-based) but rejected there
+		// (version-based), splitting the value check across a mixed cluster. Reject the mismatch so both
+		// bases agree — honest proposers always stamp Version == the slot's fork. (The reverse, a Gloas
+		// Version on a pre-Gloas slot, takes the else branch and is rejected by GetBlockData's
+		// unknown-version error.)
+		if cd.Version < networkconfig.DataVersionGloas {
+			return cd, nil, spectypes.NewError(spectypes.QBFTValueInvalidErrorCode, "value version does not match slot fork")
+		}
 		// Gloas blocks have no spectypes block version, so ValidateConsensusData's GetBlockData path
 		// can't decode them; a successful node-side decode is the validity check.
 		block, err := gloas.DecodeBeaconBlock(cd.DataSSZ)

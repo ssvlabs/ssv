@@ -252,6 +252,27 @@ func TestProposerChecker_GloasBlockSlotMismatch(t *testing.T) {
 	require.ErrorContains(t, err, "does not match duty slot")
 }
 
+// A value on a Gloas slot carrying a pre-Gloas Version is rejected: our slot-based branch and ssv-spec's
+// version-based ProposerValueCheckF must agree on the fork, so a Byzantine leader can't split the value
+// check across a mixed cluster. Honest proposers always stamp Version == the slot's fork; here only the
+// Version is wrong (the block itself is a valid Gloas block for the duty slot).
+func TestProposerChecker_GloasVersionMismatch(t *testing.T) {
+	checker := newGloasProposerChecker(fakeSlashingSigner{})
+	cd := &spectypes.ProposerConsensusData{
+		Duty: spectypes.ValidatorDuty{
+			Type:           spectypes.BNRoleProposer,
+			PubKey:         gloasProposerPK,
+			ValidatorIndex: 7,
+			Slot:           gloasProposerSlot,
+		},
+		Version: networkconfig.DataVersionGloas - 1, // Fulu on a Gloas slot
+		DataSSZ: gloasBlockSSZ(t, gloasProposerSlot),
+	}
+	value, err := cd.Encode()
+	require.NoError(t, err)
+	require.ErrorContains(t, checker.CheckValue(value), "does not match slot fork")
+}
+
 // --- envelope checker, §6 ---
 
 var envelopeValidatorPK = phase0.BLSPubKey{0x42}
