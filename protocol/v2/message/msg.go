@@ -12,6 +12,16 @@ import (
 const (
 	// SSVEventMsgType extends spec msg type
 	SSVEventMsgType spectypes.MsgType = 200
+
+	roleAttester                  = "ATTESTER"
+	roleAggregator                = "AGGREGATOR"
+	roleProposer                  = "PROPOSER"
+	roleSyncCommittee             = "SYNC_COMMITTEE"
+	roleSyncCommitteeContribution = "SYNC_COMMITTEE_CONTRIBUTION"
+	roleValidatorRegistration     = "VALIDATOR_REGISTRATION"
+	roleVoluntaryExit             = "VOLUNTARY_EXIT"
+	roleCommittee                 = "COMMITTEE"
+	roleAggregatorCommittee       = "AGGREGATOR_COMMITTEE"
 )
 
 // MsgTypeToString extension for spec msg type. convert spec msg type to string
@@ -46,19 +56,19 @@ func QBFTMsgTypeToString(mt specqbft.MessageType) string {
 // BeaconRoleFromString returns BeaconRole from string
 func BeaconRoleFromString(s string) (spectypes.BeaconRole, error) {
 	switch s {
-	case "ATTESTER":
+	case roleAttester:
 		return spectypes.BNRoleAttester, nil
-	case "AGGREGATOR":
+	case roleAggregator:
 		return spectypes.BNRoleAggregator, nil
-	case "PROPOSER":
+	case roleProposer:
 		return spectypes.BNRoleProposer, nil
-	case "SYNC_COMMITTEE":
+	case roleSyncCommittee:
 		return spectypes.BNRoleSyncCommittee, nil
-	case "SYNC_COMMITTEE_CONTRIBUTION":
+	case roleSyncCommitteeContribution:
 		return spectypes.BNRoleSyncCommitteeContribution, nil
-	case "VALIDATOR_REGISTRATION":
+	case roleValidatorRegistration:
 		return spectypes.BNRoleValidatorRegistration, nil
-	case "VOLUNTARY_EXIT":
+	case roleVoluntaryExit:
 		return spectypes.BNRoleVoluntaryExit, nil
 	default:
 		return 0, fmt.Errorf("unknown role: %s", s)
@@ -68,19 +78,19 @@ func BeaconRoleFromString(s string) (spectypes.BeaconRole, error) {
 // RunnerRoleFromString returns RunnerRole from string.
 func RunnerRoleFromString(s string) (spectypes.RunnerRole, error) {
 	switch s {
-	case "COMMITTEE":
+	case roleCommittee:
 		return spectypes.RoleCommittee, nil
-	case "AGGREGATOR_COMMITTEE":
+	case roleAggregatorCommittee:
 		return spectypes.RoleAggregatorCommittee, nil
-	case "AGGREGATOR":
+	case roleAggregator:
 		return ssvtypes.RoleAggregator, nil
-	case "PROPOSER":
+	case roleProposer:
 		return spectypes.RoleProposer, nil
-	case "SYNC_COMMITTEE_CONTRIBUTION":
+	case roleSyncCommitteeContribution:
 		return ssvtypes.RoleSyncCommitteeContribution, nil
-	case "VALIDATOR_REGISTRATION":
+	case roleValidatorRegistration:
 		return spectypes.RoleValidatorRegistration, nil
-	case "VOLUNTARY_EXIT":
+	case roleVoluntaryExit:
 		return spectypes.RoleVoluntaryExit, nil
 	default:
 		return 0, fmt.Errorf("unknown role: %s", s)
@@ -90,19 +100,19 @@ func RunnerRoleFromString(s string) (spectypes.RunnerRole, error) {
 func RunnerRoleToString(r spectypes.RunnerRole) string {
 	switch r {
 	case spectypes.RoleCommittee:
-		return "COMMITTEE"
+		return roleCommittee
 	case spectypes.RoleAggregatorCommittee:
-		return "AGGREGATOR_COMMITTEE"
+		return roleAggregatorCommittee
 	case ssvtypes.RoleAggregator:
-		return "AGGREGATOR"
+		return roleAggregator
 	case spectypes.RoleProposer:
-		return "PROPOSER"
+		return roleProposer
 	case ssvtypes.RoleSyncCommitteeContribution:
-		return "SYNC_COMMITTEE_CONTRIBUTION"
+		return roleSyncCommitteeContribution
 	case spectypes.RoleValidatorRegistration:
-		return "VALIDATOR_REGISTRATION"
+		return roleValidatorRegistration
 	case spectypes.RoleVoluntaryExit:
-		return "VOLUNTARY_EXIT"
+		return roleVoluntaryExit
 	default:
 		return fmt.Sprintf("unknown(%d)", r)
 	}
