@@ -20,7 +20,6 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	specssv "github.com/ssvlabs/ssv-spec/ssv"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
@@ -30,6 +29,7 @@ import (
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
@@ -46,7 +46,7 @@ type CommitteeRunner struct {
 	// attestingValidators is a list of validator this committee-runner will be processing attestation duties for.
 	attestingValidators []phase0.BLSPubKey
 
-	network             specqbft.Network
+	network             protocolp2p.Network
 	beacon              beacon.BeaconNode
 	signer              ekm.BeaconSigner
 	operatorSigner      ssvtypes.OperatorSigner
@@ -148,7 +148,7 @@ func (r *CommitteeRunner) MarshalJSON() ([]byte, error) {
 	type CommitteeRunnerAlias struct {
 		BaseRunner     *BaseRunner
 		beacon         beacon.BeaconNode
-		network        specqbft.Network
+		network        protocolp2p.Network
 		signer         ekm.BeaconSigner
 		operatorSigner ssvtypes.OperatorSigner
 		valCheck       ssv.ValueChecker
@@ -173,7 +173,7 @@ func (r *CommitteeRunner) UnmarshalJSON(data []byte) error {
 	type CommitteeRunnerAlias struct {
 		BaseRunner     *BaseRunner
 		beacon         beacon.BeaconNode
-		network        specqbft.Network
+		network        protocolp2p.Network
 		signer         ekm.BeaconSigner
 		operatorSigner ssvtypes.OperatorSigner
 		valCheck       ssv.ValueChecker
@@ -203,7 +203,7 @@ func (r *CommitteeRunner) GetBeaconNode() beacon.BeaconNode {
 	return r.beacon
 }
 
-func (r *CommitteeRunner) GetNetwork() specqbft.Network {
+func (r *CommitteeRunner) GetNetwork() protocolp2p.Network {
 	return r.network
 }
 

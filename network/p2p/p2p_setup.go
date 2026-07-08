@@ -203,7 +203,7 @@ func (n *p2pNetwork) setupPeerServices() error {
 	if err != nil {
 		return err
 	}
-	d := n.cfg.NetworkConfig.DomainType
+	d := n.cfg.NetworkConfig.CurrentDomainType()
 	domain := "0x" + hex.EncodeToString(d[:])
 	self := records.NewNodeInfo(domain)
 	self.Metadata = &records.NodeMetadata{
@@ -233,10 +233,23 @@ func (n *p2pNetwork) setupPeerServices() error {
 
 	// Handshake filters
 	filters := func() []connections.HandshakeFilter {
-		newDomain := n.cfg.NetworkConfig.DomainType
-		newDomainString := "0x" + hex.EncodeToString(newDomain[:])
+		currentSlot := n.cfg.NetworkConfig.EstimatedCurrentSlot()
+		currentDomain := n.cfg.NetworkConfig.DomainTypeAtSlot(currentSlot)
+		allowedDomains := []string{"0x" + hex.EncodeToString(currentDomain[:])}
+		if n.cfg.NetworkConfig.InBooleTransitionWindow(currentSlot) {
+			// During transition we accept both configured fork domains for peer compatibility.
+			domainString := "0x" + hex.EncodeToString(n.cfg.NetworkConfig.DomainType[:])
+			nextDomainString := "0x" + hex.EncodeToString(n.cfg.NetworkConfig.NextDomainType[:])
+			if domainString == nextDomainString {
+				allowedDomains = []string{domainString}
+			} else {
+				allowedDomains = []string{domainString, nextDomainString}
+			}
+		}
+
+		networkFilter := connections.NetworkIDFilter(allowedDomains...)
 		return []connections.HandshakeFilter{
-			connections.NetworkIDFilter(newDomainString),
+			networkFilter,
 			connections.BadPeerFilter(n.idx),
 		}
 	}
@@ -252,7 +265,7 @@ func (n *p2pNetwork) setupPeerServices() error {
 			SubnetsIdx:      n.idx,
 			IDService:       ids,
 			Network:         h.Network(),
-			DomainType:      n.cfg.NetworkConfig.DomainType,
+			DomainTypeFn:    n.cfg.NetworkConfig.CurrentDomainType,
 			SubnetsProvider: n.ActiveSubnets,
 		}, filters)
 

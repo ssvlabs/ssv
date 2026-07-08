@@ -12,7 +12,11 @@ import (
 )
 
 func (mv *messageValidator) committeeRole(role spectypes.RunnerRole) bool {
-	return role == spectypes.RoleCommittee
+	// RoleAggregatorCommittee is committee-backed and is published on the committee topic
+	// (see p2pNetwork.BroadcastAtSlot), so it must resolve to the committee lookup on receive
+	// too — keeping publish/receive symmetric. The role isn't produced until unit 5, so this
+	// has no runtime effect yet, but avoids a half-wired asymmetry.
+	return role == spectypes.RoleCommittee || role == spectypes.RoleAggregatorCommittee
 }
 
 func (mv *messageValidator) validateSlotTime(messageSlot phase0.Slot, role spectypes.RunnerRole, receivedAt time.Time) error {

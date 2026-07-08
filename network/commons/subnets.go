@@ -2,14 +2,19 @@ package commons
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
 	"fmt"
 	"math"
 	"math/big"
 	"math/bits"
+	"strconv"
 	"strings"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
+	"github.com/ssvlabs/ssv/networkconfig"
 )
 
 const (
@@ -24,6 +29,10 @@ const (
 	UnknownSubnet = "unknown"
 
 	topicPrefix = "ssv.v2"
+
+	// topicRoot/booleTopicFork form the Boole-fork topic naming scheme, e.g. "/ssv/<network>/boole/<subnet>".
+	topicRoot      = "/ssv"
+	booleTopicFork = "boole"
 )
 
 // BigIntSubnetsCount is the big.Int representation of SubnetsCount
@@ -38,10 +47,10 @@ func SubnetTopicID(subnet uint64) string {
 }
 
 func CommitteeTopicID(cid spectypes.CommitteeID) []string {
-	return []string{fmt.Sprintf("%d", CommitteeSubnet(cid))}
+	return []string{fmt.Sprintf("%d", AlanCommitteeSubnet(cid))}
 }
 
-// GetTopicFullName returns the topic full name, including prefix
+// GetTopicFullName returns the topic full name, including prefix (Alan-side naming).
 func GetTopicFullName(baseName string) string {
 	return fmt.Sprintf("%s.%s", topicPrefix, baseName)
 }
@@ -51,10 +60,63 @@ func GetTopicBaseName(topicName string) string {
 	return strings.TrimPrefix(topicName, topicPrefix+".")
 }
 
-// CommitteeSubnet returns the subnet for the given committee
-func CommitteeSubnet(cid spectypes.CommitteeID) uint64 {
+// BooleTopic returns the Boole-fork topic name for the given network and subnet, e.g. "/ssv/<networkName>/boole/<subnet>".
+func BooleTopic(networkName string, subnet uint64) string {
+	return fmt.Sprintf("%s/%s/%s/%d", topicRoot, networkName, booleTopicFork, subnet)
+}
+
+// ParseTopicSubnet extracts the subnet number from a full topic name, along with whether it's a Boole-fork topic.
+func ParseTopicSubnet(topicName string) (subnet uint64, boole bool, err error) {
+	if strings.HasPrefix(topicName, topicPrefix+".") {
+		trimmed := strings.TrimPrefix(topicName, topicPrefix+".")
+		subnet, err = strconv.ParseUint(trimmed, 10, 64)
+		return subnet, false, err
+	}
+	if strings.HasPrefix(topicName, topicRoot+"/") {
+		remainder := strings.TrimPrefix(topicName, topicRoot+"/")
+		parts := strings.SplitN(remainder, "/", 3)
+		if len(parts) != 3 || parts[1] != booleTopicFork || parts[2] == "" {
+			return 0, false, fmt.Errorf("invalid topic format: %s", topicName)
+		}
+		subnet, err = strconv.ParseUint(parts[2], 10, 64)
+		return subnet, true, err
+	}
+	return 0, false, fmt.Errorf("invalid topic format: %s", topicName)
+}
+
+// AlanCommitteeSubnet returns the subnet for the given committee for the Alan fork.
+func AlanCommitteeSubnet(cid spectypes.CommitteeID) uint64 {
 	subnet := new(big.Int).Mod(new(big.Int).SetBytes(cid[:]), bigIntSubnetsCount)
 	return subnet.Uint64()
+}
+
+// BooleCommitteeSubnet returns the subnet for the given committee, calculated as (lowestHash % SubnetsCount).
+// This determines which subnet a committee lands on post-Boole-fork. An empty committee has no
+// subnet; it returns UnknownSubnetId defensively rather than panicking (real shares are non-empty).
+func BooleCommitteeSubnet(committee []spectypes.OperatorID) uint64 {
+	if len(committee) == 0 {
+		return UnknownSubnetId
+	}
+
+	var operatorBytes [8]byte
+	binary.LittleEndian.PutUint64(operatorBytes[:], committee[0])
+
+	var lowest, hashNum, result big.Int
+	hash := sha256.Sum256(operatorBytes[:])
+	lowest.SetBytes(hash[:])
+
+	for i := 1; i < len(committee); i++ {
+		binary.LittleEndian.PutUint64(operatorBytes[:], committee[i])
+		hash = sha256.Sum256(operatorBytes[:])
+		hashNum.SetBytes(hash[:])
+
+		if hashNum.Cmp(&lowest) < 0 {
+			lowest.Set(&hashNum)
+		}
+	}
+
+	result.Mod(&lowest, bigIntSubnetsCount)
+	return result.Uint64()
 }
 
 // SetCommitteeSubnet returns the subnet for the given committee, it doesn't allocate memory but uses the passed in big.Int
@@ -63,11 +125,15 @@ func SetCommitteeSubnet(bigInt *big.Int, cid spectypes.CommitteeID) {
 	bigInt.Mod(bigInt, bigIntSubnetsCount)
 }
 
-// Topics returns the available topics for this fork.
-func Topics() []string {
-	topics := make([]string, SubnetsCount)
-	for i := uint64(0); i < SubnetsCount; i++ {
-		topics[i] = GetTopicFullName(SubnetTopicID(i))
+// Topics returns the available topics for the given network's fork state: Alan-only pre-fork,
+// Alan+Boole during the transition window, Boole-only after.
+func Topics(netCfg *networkconfig.Network) []string {
+	topics := make([]string, 0, SubnetsCount*2)
+	for subnet := uint64(0); subnet < SubnetsCount; subnet++ {
+		if !netCfg.BooleFork() {
+			topics = append(topics, GetTopicFullName(SubnetTopicID(subnet)))
+		}
+		topics = append(topics, BooleTopic(netCfg.SSV.Name, subnet))
 	}
 	return topics
 }

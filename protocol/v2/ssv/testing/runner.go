@@ -80,7 +80,7 @@ var ConstructBaseRunner = func(
 ) (runner.Runner, error) {
 	share := spectestingutils.TestingShare(keySet, spectestingutils.TestingValidatorIndex)
 	identifier := spectypes.NewMsgID(spectypes.JatoTestnet, spectestingutils.TestingValidatorPubKey[:], role)
-	net := spectestingutils.NewTestingNetwork(1, keySet.OperatorKeys[1])
+	net := protocoltesting.NewTestingNetwork(1, keySet.OperatorKeys[1])
 	km := ekm.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager())
 	operator := spectestingutils.TestingCommitteeMember(keySet)
 	opSigner := spectestingutils.NewOperatorSigner(keySet, 1)
@@ -217,7 +217,7 @@ var ConstructBaseRunnerWithShareMap = func(
 ) (runner.Runner, error) {
 
 	var identifier spectypes.MessageID
-	var net *spectestingutils.TestingNetwork
+	var net *protocoltesting.TestingNetwork
 	var opSigner *spectypes.OperatorSigner
 	var valCheck ssv.ValueChecker
 	var contr *controller.Controller
@@ -255,7 +255,7 @@ var ConstructBaseRunnerWithShareMap = func(
 		}
 		identifier = spectypes.NewMsgID(spectestingutils.TestingSSVDomainType, ownerID, role)
 
-		net = spectestingutils.NewTestingNetwork(1, keySetInstance.OperatorKeys[1])
+		net = protocoltesting.NewTestingNetwork(1, keySetInstance.OperatorKeys[1])
 
 		km = ekm.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager())
 		committeeMember := spectestingutils.TestingCommitteeMember(keySetInstance)

@@ -77,7 +77,7 @@ type committeeRunnerEnv struct {
 	logger     *zap.Logger
 	runner     *CommitteeRunner
 	beacon     *protocoltesting.BeaconNodeWrapped
-	network    *spectestingutils.TestingNetwork
+	network    *protocoltesting.TestingNetwork
 	keySetMap  map[phase0.ValidatorIndex]*spectestingutils.TestKeySet
 	sampleKey  *spectestingutils.TestKeySet
 	controller *controller.Controller
@@ -104,7 +104,7 @@ func newCommitteeRunnerEnv(
 	}
 
 	msgID := spectestingutils.CommitteeMsgID(sampleKey)
-	network := spectestingutils.NewTestingNetwork(1, sampleKey.OperatorKeys[1])
+	network := protocoltesting.NewTestingNetwork(1, sampleKey.OperatorKeys[1])
 	logger := zaptest.NewLogger(t)
 	signer := ekm.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager())
 

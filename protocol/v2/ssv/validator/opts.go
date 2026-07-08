@@ -3,7 +3,6 @@ package validator
 import (
 	"time"
 
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
@@ -13,6 +12,7 @@ import (
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
 	qbftctrl "github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
@@ -38,7 +38,7 @@ type Options struct {
 // CommonOptions represents options that all validators share.
 type CommonOptions struct {
 	NetworkConfig       *networkconfig.Network
-	Network             specqbft.Network
+	Network             protocolp2p.Network
 	Beacon              beacon.BeaconNode
 	Storage             *storage.ParticipantStores
 	Signer              ekm.BeaconSigner
@@ -56,7 +56,7 @@ type CommonOptions struct {
 
 func NewCommonOptions(
 	networkConfig *networkconfig.Network,
-	network specqbft.Network,
+	network protocolp2p.Network,
 	beacon beacon.BeaconNode,
 	storage *storage.ParticipantStores,
 	signer ekm.BeaconSigner,

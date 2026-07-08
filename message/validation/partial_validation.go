@@ -21,6 +21,7 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 	ctx context.Context,
 	signedSSVMessage *spectypes.SignedSSVMessage,
 	committeeInfo CommitteeInfo,
+	topic string,
 	receivedFrom peer.ID,
 	receivedAt time.Time,
 ) (
@@ -41,6 +42,15 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 		e := ErrUndecodableMessageData
 		e.innerErr = err
 		return nil, e
+	}
+
+	// Enforce fork-aware topic and domain using the message slot.
+	slot := partialSignatureMessages.Slot
+	if err := mv.validateTopicAtSlot(committeeInfo, topic, slot); err != nil {
+		return partialSignatureMessages, err
+	}
+	if err := mv.validateDomainAtSlot(ssvMessage.GetID(), slot); err != nil {
+		return partialSignatureMessages, err
 	}
 
 	if err := mv.validatePartialSignatureMessageSemantics(signedSSVMessage, partialSignatureMessages, committeeInfo.validatorIndices); err != nil {

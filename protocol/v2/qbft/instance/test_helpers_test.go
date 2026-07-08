@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
+	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
 	qbftconfig "github.com/ssvlabs/ssv/protocol/v2/qbft"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
@@ -24,8 +25,34 @@ type instanceTestEnv struct {
 	keys       *spectestingutils.TestKeySet
 	config     *qbftconfig.Config
 	inst       *Instance
-	network    *spectestingutils.TestingNetwork
+	network    *testingNetwork
 	roundTimer *roundtimer.TestQBFTTimer
+}
+
+// testingNetwork wraps the spec testing network to satisfy protocolp2p.Network. Defined
+// locally (rather than reusing protocol/v2/testing.TestingNetwork) to avoid an import cycle:
+// protocol/v2/testing imports this package (protocol/v2/qbft/instance).
+type testingNetwork struct {
+	*spectestingutils.TestingNetwork
+}
+
+func newTestingNetwork(operatorID spectypes.OperatorID, sk *rsa.PrivateKey) *testingNetwork {
+	return &testingNetwork{TestingNetwork: spectestingutils.NewTestingNetwork(operatorID, sk)}
+}
+
+func (n *testingNetwork) Subscribe(_ spectypes.ValidatorPK) error {
+	return nil
+}
+
+func (n *testingNetwork) Unsubscribe(_ spectypes.ValidatorPK) error {
+	return nil
+}
+
+func (n *testingNetwork) BroadcastAtSlot(message *spectypes.SignedSSVMessage, _ phase0.Slot) error {
+	return n.Broadcast(message.SSVMessage.GetID(), message)
+}
+
+func (n *testingNetwork) ReportValidation(_ *spectypes.SSVMessage, _ protocolp2p.MsgValidationResult) {
 }
 
 type recordingNetwork struct {
@@ -39,6 +66,21 @@ func (n *recordingNetwork) Broadcast(msgID spectypes.MessageID, message *spectyp
 		return n.onBroadcast(message)
 	}
 	return nil
+}
+
+func (n *recordingNetwork) Subscribe(_ spectypes.ValidatorPK) error {
+	return nil
+}
+
+func (n *recordingNetwork) Unsubscribe(_ spectypes.ValidatorPK) error {
+	return nil
+}
+
+func (n *recordingNetwork) BroadcastAtSlot(message *spectypes.SignedSSVMessage, _ phase0.Slot) error {
+	return n.Broadcast(message.SSVMessage.GetID(), message)
+}
+
+func (n *recordingNetwork) ReportValidation(_ *spectypes.SSVMessage, _ protocolp2p.MsgValidationResult) {
 }
 
 type testValueChecker struct{}
@@ -72,7 +114,7 @@ func newInstanceTestEnv(t *testing.T, operatorID spectypes.OperatorID) *instance
 		ProposerF: func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
 			return 1
 		},
-		Network:     spectestingutils.NewTestingNetwork(operatorID, keys.OperatorKeys[operatorID]),
+		Network:     newTestingNetwork(operatorID, keys.OperatorKeys[operatorID]),
 		CutOffRound: spectestingutils.TestingCutOffRound,
 	}
 
@@ -92,7 +134,7 @@ func newInstanceTestEnv(t *testing.T, operatorID spectypes.OperatorID) *instance
 	inst.StartValue = []byte("start-value")
 	inst.ValueChecker = testValueChecker{}
 
-	network, ok := config.GetNetwork().(*spectestingutils.TestingNetwork)
+	network, ok := config.GetNetwork().(*testingNetwork)
 	require.True(t, ok)
 
 	return &instanceTestEnv{
@@ -111,7 +153,7 @@ func (e *instanceTestEnv) setLeader(operatorID spectypes.OperatorID) {
 	}
 }
 
-func (e *instanceTestEnv) setNetwork(network specqbft.Network) {
+func (e *instanceTestEnv) setNetwork(network protocolp2p.Network) {
 	e.config.Network = network
 }
 

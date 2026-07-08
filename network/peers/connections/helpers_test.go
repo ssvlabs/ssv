@@ -11,6 +11,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/peerstore"
 	ma "github.com/multiformats/go-multiaddr"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
@@ -257,15 +258,15 @@ func getTestingData(t *testing.T) TestData {
 	}
 
 	mockHandshaker := handshaker{
-		ctx:        t.Context(),
-		nodeInfos:  nii,
-		peerInfos:  ns,
-		subnetsIdx: peers.NewSubnetsIndex(),
-		ids:        ids,
-		net:        net,
-		streams:    sc,
-		filters:    func() []HandshakeFilter { return []HandshakeFilter{} },
-		domainType: networkconfig.TestNetwork.DomainType,
+		ctx:                t.Context(),
+		nodeInfos:          nii,
+		peerInfos:          ns,
+		subnetsIdx:         peers.NewSubnetsIndex(),
+		ids:                ids,
+		net:                net,
+		streams:            sc,
+		filters:            func() []HandshakeFilter { return []HandshakeFilter{} },
+		domainTypeProvider: func() spectypes.DomainType { return networkconfig.TestNetwork.DomainType },
 	}
 
 	mockConn := mock.Conn{

@@ -358,7 +358,7 @@ func newProposerRunnerForTest(
 	dg *stubDoppelganger,
 	proposerDelay time.Duration,
 	cfg *networkconfig.Network,
-) (*ProposerRunner, *spectestingutils.TestKeySet, *spectestingutils.TestingNetwork) {
+) (*ProposerRunner, *spectestingutils.TestKeySet, *protocoltesting.TestingNetwork) {
 	t.Helper()
 
 	// cfg may be nil; newRunnerTestKit falls back to cloneTestNetworkConfig().
@@ -455,7 +455,7 @@ func processPostConsensusQuorum(t *testing.T, runner *ProposerRunner, keySet *sp
 
 func countPartialSignatureBroadcastsByType(
 	t *testing.T,
-	network *spectestingutils.TestingNetwork,
+	network *protocoltesting.TestingNetwork,
 	msgType spectypes.PartialSigMsgType,
 ) int {
 	t.Helper()

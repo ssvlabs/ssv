@@ -56,7 +56,7 @@ func TestUpdateSubnetsStopsOnContextCancel(t *testing.T) {
 
 	n := &p2pNetwork{
 		ctx:                  ctx,
-		subscribedCommittees: hashmap.New[string, committeeSubscriptionStatus](),
+		subscribedCommittees: hashmap.New[string, statusWithSubnet](),
 	}
 
 	done := make(chan struct{})

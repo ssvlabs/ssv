@@ -192,7 +192,7 @@ func (test *MsgProcessingSpecTest) RunAsPartOfMultiTest(t *testing.T, logger *za
 	v, c, lastErr := test.runPreTesting(ctx, logger)
 	spectests.AssertErrorCode(t, test.ExpectedErrorCode, lastErr)
 
-	network := &spectestingutils.TestingNetwork{}
+	network := &protocoltesting.TestingNetwork{}
 	var beaconNetwork *protocoltesting.BeaconNodeWrapped
 	var committee []*spectypes.Operator
 	actualRunner := test.Runner
@@ -205,11 +205,11 @@ func (test *MsgProcessingSpecTest) RunAsPartOfMultiTest(t *testing.T, logger *za
 			break
 		}
 		actualRunner = runnerInstance
-		network = runnerInstance.GetNetwork().(*spectestingutils.TestingNetwork)
+		network = runnerInstance.GetNetwork().(*protocoltesting.TestingNetwork)
 		beaconNetwork = runnerInstance.GetBeaconNode().(*protocoltesting.BeaconNodeWrapped)
 		committee = c.CommitteeMember.Committee
 	default:
-		network = v.Network.(*spectestingutils.TestingNetwork)
+		network = v.Network.(*protocoltesting.TestingNetwork)
 		committee = v.Operator.Committee
 		beaconNetwork = test.Runner.GetBeaconNode().(*protocoltesting.BeaconNodeWrapped)
 	}

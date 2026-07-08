@@ -4,10 +4,10 @@ package validation
 // validator.go contains main code for validation and most of the rule checks.
 
 import (
+	"bytes"
 	"context"
 	"encoding/hex"
 	"fmt"
-	"slices"
 	"sync"
 	"time"
 
@@ -197,7 +197,7 @@ func (mv *messageValidator) handleSignedSSVMessage(
 		return decodedMessage, err
 	}
 
-	if err := mv.committeeChecks(signedSSVMessage, committeeInfo, topic); err != nil {
+	if err := mv.committeeChecks(signedSSVMessage, committeeInfo); err != nil {
 		return decodedMessage, err
 	}
 
@@ -212,14 +212,14 @@ func (mv *messageValidator) handleSignedSSVMessage(
 
 	switch signedSSVMessage.SSVMessage.MsgType {
 	case spectypes.SSVConsensusMsgType:
-		consensusMessage, err := mv.validateConsensusMessage(ctx, signedSSVMessage, committeeInfo, receivedFrom, receivedAt)
+		consensusMessage, err := mv.validateConsensusMessage(ctx, signedSSVMessage, committeeInfo, topic, receivedFrom, receivedAt)
 		decodedMessage.Body = consensusMessage
 		if err != nil {
 			return decodedMessage, err
 		}
 
 	case spectypes.SSVPartialSignatureMsgType:
-		partialSignatureMessages, err := mv.validatePartialSignatureMessage(ctx, signedSSVMessage, committeeInfo, receivedFrom, receivedAt)
+		partialSignatureMessages, err := mv.validatePartialSignatureMessage(ctx, signedSSVMessage, committeeInfo, topic, receivedFrom, receivedAt)
 		decodedMessage.Body = partialSignatureMessages
 		if err != nil {
 			return decodedMessage, err
@@ -232,19 +232,45 @@ func (mv *messageValidator) handleSignedSSVMessage(
 	return decodedMessage, nil
 }
 
-func (mv *messageValidator) committeeChecks(signedSSVMessage *spectypes.SignedSSVMessage, committeeInfo CommitteeInfo, topic string) error {
-	if err := mv.belongsToCommittee(signedSSVMessage.OperatorIDs, committeeInfo.committee); err != nil {
-		return err
+func (mv *messageValidator) committeeChecks(signedSSVMessage *spectypes.SignedSSVMessage, committeeInfo CommitteeInfo) error {
+	// Note: the "correct topic" rule is enforced later, per-slot and fork-aware, by
+	// validateTopicAtSlot once the message slot is known (see consensus/partial validation).
+	return mv.belongsToCommittee(signedSSVMessage.OperatorIDs, committeeInfo.committee)
+}
+
+// validateTopicAtSlot enforces that the message arrived on the topic that matches the
+// committee's subnet for the fork active at the given slot. The expected topic strings
+// mirror the publish side (p2pNetwork.BroadcastAtSlot) exactly.
+func (mv *messageValidator) validateTopicAtSlot(committeeInfo CommitteeInfo, topic string, slot phase0.Slot) error {
+	var expectedTopic string
+	if mv.netCfg.BooleForkAtSlot(slot) {
+		expectedTopic = commons.BooleTopic(mv.netCfg.SSV.Name, commons.BooleCommitteeSubnet(committeeInfo.committee))
+	} else {
+		// CommitteeTopicID(cid)[0] == SubnetTopicID(AlanCommitteeSubnet(cid)), which is what
+		// BroadcastAtSlot publishes on the Alan side, so the full names byte-match.
+		expectedTopic = commons.GetTopicFullName(commons.CommitteeTopicID(committeeInfo.committeeID)[0])
 	}
 
 	// Rule: Check if message was sent in the correct topic
-	messageTopics := commons.CommitteeTopicID(committeeInfo.committeeID)
-	topicBaseName := commons.GetTopicBaseName(topic)
-	if !slices.Contains(messageTopics, topicBaseName) {
+	if expectedTopic != topic {
 		e := ErrIncorrectTopic
-		e.got = fmt.Sprintf("topic %v / base name %v", topic, topicBaseName)
-		e.want = messageTopics
+		e.got = fmt.Sprintf("%v @ %v", topic, slot)
+		e.want = expectedTopic
 		return e
+	}
+
+	return nil
+}
+
+// validateDomainAtSlot enforces that the message domain matches the fork active at the
+// given slot (Alan before the Boole fork, Boole after).
+func (mv *messageValidator) validateDomainAtSlot(msgID spectypes.MessageID, slot phase0.Slot) error {
+	expectedDomain := mv.netCfg.DomainTypeAtSlot(slot)
+	if msgDomain := msgID.GetDomain(); !bytes.Equal(msgDomain, expectedDomain[:]) {
+		err := ErrWrongDomain
+		err.got = hex.EncodeToString(msgDomain)
+		err.want = hex.EncodeToString(expectedDomain[:])
+		return err
 	}
 
 	return nil

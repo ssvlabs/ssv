@@ -21,6 +21,7 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
@@ -39,7 +40,7 @@ type Getters interface {
 	GetStateRoot() ([32]byte, error)
 	GetSigner() ekm.BeaconSigner
 	GetOperatorSigner() ssvtypes.OperatorSigner
-	GetNetwork() specqbft.Network
+	GetNetwork() protocolp2p.Network
 	GetBeaconNode() beacon.BeaconNode
 }
 
@@ -86,7 +87,7 @@ type BaseRunnerOptions struct {
 	NetworkConfig  *networkconfig.Network
 	Share          map[phase0.ValidatorIndex]*spectypes.Share
 	Beacon         beacon.BeaconNode
-	Network        specqbft.Network
+	Network        protocolp2p.Network
 	Signer         ekm.BeaconSigner
 	OperatorSigner ssvtypes.OperatorSigner
 }
@@ -339,7 +340,7 @@ func (b *BaseRunner) watchDutyOutcome(ctx context.Context, logger *zap.Logger) {
 // executeDuty tails are otherwise identical.
 func (b *BaseRunner) signAndBroadcastPartialSigMsgs(
 	ctx context.Context,
-	network specqbft.Network,
+	network protocolp2p.Network,
 	opSigner ssvtypes.OperatorSigner,
 	validatorPubKey []byte,
 	msgs *spectypes.PartialSignatureMessages,

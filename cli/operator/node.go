@@ -623,7 +623,7 @@ func (n *node) applyDynamicMaxPeers() {
 	mySubnets := networkcommons.Subnets{}
 	myActiveSubnets := 0
 	for _, v := range myValidators {
-		subnet := networkcommons.CommitteeSubnet(v.CommitteeID())
+		subnet := networkcommons.AlanCommitteeSubnet(v.CommitteeID())
 		if !mySubnets.IsSet(subnet) {
 			mySubnets.Set(subnet)
 			myActiveSubnets++
