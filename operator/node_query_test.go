@@ -152,7 +152,7 @@ func (h *wsQueryHarness) SaveCommitteeDutyAttester(slot phase0.Slot, validatorIn
 	for _, s := range signers {
 		duty.Attester = append(duty.Attester, &traces.SignerData{Signer: s})
 	}
-	require.NoError(h.t, h.store.SaveCommitteeDuty(duty))
+	require.NoError(h.t, h.store.SaveCommitteeDuty(spectypes.RoleCommittee, duty))
 }
 
 func (h *wsQueryHarness) QueryDecided(from, to uint64, pkHex, role string) *api.NetworkMessage {

@@ -28,12 +28,12 @@ var ErrNotFound = errors.New("not found")
 type DutyTraceStore interface {
 	SaveCommitteeDutyLink(slot phase0.Slot, index phase0.ValidatorIndex, id spectypes.CommitteeID) error
 	SaveCommitteeDutyLinks(slot phase0.Slot, linkMap map[phase0.ValidatorIndex]spectypes.CommitteeID) error
-	SaveCommitteeDuty(duty *traces.CommitteeDutyTrace) error
-	SaveCommitteeDuties(slot phase0.Slot, duties []*traces.CommitteeDutyTrace) error
+	SaveCommitteeDuty(role spectypes.RunnerRole, duty *traces.CommitteeDutyTrace) error
+	SaveCommitteeDuties(slot phase0.Slot, role spectypes.RunnerRole, duties []*traces.CommitteeDutyTrace) error
 	SaveValidatorDuty(duty *traces.ValidatorDutyTrace) error
 	SaveValidatorDuties(duties []*traces.ValidatorDutyTrace) error
-	GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.CommitteeID) (*traces.CommitteeDutyTrace, error)
-	GetCommitteeDuties(slot phase0.Slot) ([]*traces.CommitteeDutyTrace, error)
+	GetCommitteeDuty(slot phase0.Slot, role spectypes.RunnerRole, committeeID spectypes.CommitteeID) (*traces.CommitteeDutyTrace, error)
+	GetCommitteeDuties(slot phase0.Slot, roles ...spectypes.RunnerRole) ([]*traces.CommitteeDutyTrace, error)
 	GetCommitteeDutyLink(slot phase0.Slot, index phase0.ValidatorIndex) (spectypes.CommitteeID, error)
 	GetCommitteeDutyLinks(slot phase0.Slot) ([]*traces.CommitteeDutyLink, error)
 	GetValidatorDuty(slot phase0.Slot, role spectypes.BeaconRole, index phase0.ValidatorIndex) (*traces.ValidatorDutyTrace, error)
@@ -140,7 +140,7 @@ func (c *Collector) GetCommitteeDuties(wantSlot phase0.Slot, roles ...spectypes.
 		return true // keep iterating
 	})
 
-	diskDuties, err := c.store.GetCommitteeDuties(wantSlot)
+	diskDuties, err := c.store.GetCommitteeDuties(wantSlot, spectypes.RoleCommittee)
 	duties = append(duties, diskDuties...)
 	errs = multierror.Append(errs, err)
 
@@ -217,7 +217,7 @@ func hasSignersForRoles(duty *traces.CommitteeDutyTrace, roles ...spectypes.Beac
 
 func (c *Collector) getCommitteeDutyFromDisk(slot phase0.Slot, committeeID spectypes.CommitteeID) (*traces.CommitteeDutyTrace, error) {
 	ctx := fmt.Sprintf("slot=%d committeeID=%x", slot, committeeID)
-	trace, err := c.store.GetCommitteeDuty(slot, committeeID)
+	trace, err := c.store.GetCommitteeDuty(slot, spectypes.RoleCommittee, committeeID)
 	if err != nil {
 		return nil, fmt.Errorf("get committee duty from disk (%s): %w", ctx, err)
 	}

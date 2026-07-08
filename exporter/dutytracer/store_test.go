@@ -249,22 +249,22 @@ func TestCommitteeDutyStore(t *testing.T) {
 	require.True(t, found)
 
 	// assert that evicted traces are on disk
-	storedDuty4_1, err := dutyStore.GetCommitteeDuty(slot4, committeeID1)
+	storedDuty4_1, err := dutyStore.GetCommitteeDuty(slot4, spectypes.RoleCommittee, committeeID1)
 	require.NoError(t, err)
 	require.NotNil(t, storedDuty4_1)
 	assert.Equal(t, slot4, storedDuty4_1.Slot)
 
-	storedDuty4_2, err := dutyStore.GetCommitteeDuty(slot4, committeeID2)
+	storedDuty4_2, err := dutyStore.GetCommitteeDuty(slot4, spectypes.RoleCommittee, committeeID2)
 	require.NoError(t, err)
 	require.NotNil(t, storedDuty4_2)
 	assert.Equal(t, slot4, storedDuty4_2.Slot)
 
 	// assert that non-evicted traces are not on disk
-	storedDuty7_1, err := dutyStore.GetCommitteeDuty(slot7, committeeID1)
+	storedDuty7_1, err := dutyStore.GetCommitteeDuty(slot7, spectypes.RoleCommittee, committeeID1)
 	assert.ErrorIs(t, err, store.ErrNotFound)
 	require.Nil(t, storedDuty7_1)
 
-	storedDuty7_2, err := dutyStore.GetCommitteeDuty(slot7, committeeID2)
+	storedDuty7_2, err := dutyStore.GetCommitteeDuty(slot7, spectypes.RoleCommittee, committeeID2)
 	assert.ErrorIs(t, err, store.ErrNotFound)
 	require.Nil(t, storedDuty7_2)
 

@@ -260,6 +260,11 @@ func (c *Collector) getOrCreateCommitteeTrace(slot phase0.Slot, committeeID spec
 				CommitteeDutyTrace: traces.CommitteeDutyTrace{
 					CommitteeID: committeeID,
 					Slot:        slot,
+					// Set Role explicitly so the stored value matches its role-aware key byte,
+					// rather than relying on RoleCommittee being the zero value (unit-5 will add
+					// the AggregatorCommittee path, which must set Role: RoleAggregatorCommittee here;
+					// the store derives the key-prefix byte from it via CommitteeRunnerRoleToPrefix).
+					Role: spectypes.RoleCommittee,
 				},
 			}
 			return trace, true, nil
@@ -783,7 +788,7 @@ func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 			}
 
 			if late {
-				err := c.store.SaveCommitteeDuty(&trace.CommitteeDutyTrace)
+				err := c.store.SaveCommitteeDuty(spectypes.RoleCommittee, &trace.CommitteeDutyTrace)
 				_ = c.inFlightCommittee.Delete(committeeID)
 				return err
 			}
@@ -891,7 +896,7 @@ func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 			c.checkAndPublishQuorum(verifyCtx.logger, pSigMessages, verifyCtx.committeeID, trace)
 
 			if late {
-				err := c.store.SaveCommitteeDuty(&trace.CommitteeDutyTrace)
+				err := c.store.SaveCommitteeDuty(spectypes.RoleCommittee, &trace.CommitteeDutyTrace)
 				_ = c.inFlightCommittee.Delete(verifyCtx.committeeID)
 				return err
 			}

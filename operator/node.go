@@ -315,7 +315,7 @@ func (n *Node) handleQueryRequests(nm *api.NetworkMessage) {
 			n.handleDecidedViaExporter(nm)
 			break
 		}
-		h.HandleParticipantsQuery(n.qbftStorage, nm, n.network.DomainType)
+		h.HandleParticipantsQuery(n.qbftStorage, nm, n.network)
 	case api.TypeError:
 		h.HandleErrorQuery(nm)
 	default:
@@ -391,7 +391,7 @@ func (n *Node) handleDecidedViaExporter(nm *api.NetworkMessage) {
 		return
 	}
 
-	data, err := api.ParticipantsAPIData(n.network.DomainType, participations...)
+	data, err := api.ParticipantsAPIData(n.network, participations...)
 	if err != nil {
 		n.logger.Warn("failed to build participants api data", zap.Error(err))
 		res.Type = api.TypeError

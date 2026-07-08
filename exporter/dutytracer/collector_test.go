@@ -997,7 +997,7 @@ func TestCollector_getOrCreateCommitteeTrace(t *testing.T) {
 			trace, _, err := collector.getOrCreateCommitteeTrace(slot, committeeID)
 			require.NoError(t, err)
 			trace.OperatorIDs = []uint64{1, 2, 3}
-			collector.store.SaveCommitteeDuties(slot, []*traces.CommitteeDutyTrace{trace.safeDeepCopy()})
+			collector.store.SaveCommitteeDuties(slot, spectypes.RoleCommittee, []*traces.CommitteeDutyTrace{trace.safeDeepCopy()})
 			collector.lastEvictedSlot.Store(uint64(slot))
 			// Test: Create a new collector to ensure cache is empty and get the trace.
 			diskTrace, late, err := collector.getOrCreateCommitteeTrace(slot, committeeID)
@@ -1935,7 +1935,7 @@ type mockDutyTraceStore struct {
 	scheduled               map[phase0.Slot]map[phase0.ValidatorIndex]rolemask.Mask
 }
 
-func (m *mockDutyTraceStore) SaveCommitteeDuties(slot phase0.Slot, duties []*traces.CommitteeDutyTrace) error {
+func (m *mockDutyTraceStore) SaveCommitteeDuties(slot phase0.Slot, role spectypes.RunnerRole, duties []*traces.CommitteeDutyTrace) error {
 	return m.err
 }
 
@@ -1950,15 +1950,15 @@ func (m *mockDutyTraceStore) SaveCommitteeDutyLinks(slot phase0.Slot, linkMap ma
 	return m.err
 }
 
-func (m *mockDutyTraceStore) SaveCommitteeDuty(duty *traces.CommitteeDutyTrace) error {
+func (m *mockDutyTraceStore) SaveCommitteeDuty(role spectypes.RunnerRole, duty *traces.CommitteeDutyTrace) error {
 	return m.err
 }
 
-func (m *mockDutyTraceStore) GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.CommitteeID) (*traces.CommitteeDutyTrace, error) {
+func (m *mockDutyTraceStore) GetCommitteeDuty(slot phase0.Slot, role spectypes.RunnerRole, committeeID spectypes.CommitteeID) (*traces.CommitteeDutyTrace, error) {
 	return m.committeeDutyTrace, m.err
 }
 
-func (m *mockDutyTraceStore) GetCommitteeDuties(slot phase0.Slot) ([]*traces.CommitteeDutyTrace, error) {
+func (m *mockDutyTraceStore) GetCommitteeDuties(slot phase0.Slot, roles ...spectypes.RunnerRole) ([]*traces.CommitteeDutyTrace, error) {
 	return nil, m.err
 }
 

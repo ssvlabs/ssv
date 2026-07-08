@@ -328,8 +328,8 @@ func newNode(
 	if cfg.WsAPIPort != 0 {
 		ws := exporterapi.NewWsServer(logger, nil, http.NewServeMux(), cfg.WithPing, fmt.Sprintf(":%d", cfg.WsAPIPort))
 		cfg.SSVOptions.WS = ws
-		newDecidedHandler = decided.NewStreamPublisher(logger, networkConfig.DomainType, ws)
-		decidedStreamPublisherFn = decided.NewDecidedListener(logger, networkConfig.DomainType, ws, nodeStorage.ValidatorStore())
+		newDecidedHandler = decided.NewStreamPublisher(logger, networkConfig, ws)
+		decidedStreamPublisherFn = decided.NewDecidedListener(logger, networkConfig, ws, nodeStorage.ValidatorStore())
 	}
 
 	storageRoles := []spectypes.BeaconRole{
