@@ -216,6 +216,9 @@ func (s *DutyTraceStore) SaveCommitteeDuties(slot phase0.Slot, role spectypes.Ru
 
 	return s.db.SetMany(prefix, len(duties), func(i int) (basedb.Obj, error) {
 		ctx := fmt.Sprintf("slot=%d role=%d committeeID=%x", duties[i].Slot, role, duties[i].CommitteeID)
+		if duties[i].Role != role {
+			return basedb.Obj{}, fmt.Errorf("duty role %d != keyed role %d (%s)", duties[i].Role, role, ctx)
+		}
 		value, err := duties[i].MarshalSSZ()
 		if err != nil {
 			return basedb.Obj{}, fmt.Errorf("marshal committee duty (%s): %w", ctx, err)
@@ -234,6 +237,9 @@ func (s *DutyTraceStore) SaveCommitteeDuty(role spectypes.RunnerRole, duty *trac
 	}
 
 	ctx := fmt.Sprintf("slot=%d role=%d committeeID=%x", duty.Slot, role, duty.CommitteeID)
+	if duty.Role != role {
+		return fmt.Errorf("duty role %d != keyed role %d (%s)", duty.Role, role, ctx)
+	}
 	value, err := duty.MarshalSSZ()
 	if err != nil {
 		return fmt.Errorf("marshal committee duty (%s): %w", ctx, err)
