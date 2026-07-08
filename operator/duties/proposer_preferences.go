@@ -18,14 +18,19 @@ import (
 type ProposerPreferencesHandler struct {
 	baseHandler
 
-	// processed records epochs already fetched and handled (preferences emitted, or confirmed to hold
-	// no local proposals), so each epoch fires once. Accessed only from the HandleDuties goroutine.
-	processed map[phase0.Epoch]struct{}
+	// emitted records the dependent_root last emitted for each epoch (SIP #94 §5). An epoch emits once
+	// per dependent_root: a steady-state tick skips an already-emitted epoch, while a post-reorg recheck
+	// re-emits only if the root actually changed. Accessed only from the HandleDuties goroutine.
+	emitted map[phase0.Epoch]phase0.Root
+
+	// recheckLookahead is set by a reorg so the next tick re-evaluates each lookahead epoch's
+	// dependent_root instead of trusting its emitted marker. Accessed only from the HandleDuties goroutine.
+	recheckLookahead bool
 }
 
 func NewProposerPreferencesHandler() *ProposerPreferencesHandler {
 	return &ProposerPreferencesHandler{
-		processed: map[phase0.Epoch]struct{}{},
+		emitted: map[phase0.Epoch]phase0.Root{},
 	}
 }
 
@@ -55,58 +60,64 @@ func (h *ProposerPreferencesHandler) HandleDuties(ctx context.Context) {
 			h.emitForTick(ctx, slot)
 
 		case <-h.indicesChangeCh:
-			h.reEmitLookahead("indices change")
+			// New local validators may hold proposal slots in an already-emitted epoch, so drop the
+			// markers to re-emit the full lookahead for them on the next tick.
+			h.logger.Debug("🔀 re-emitting proposer preferences on indices change")
+			clear(h.emitted)
 
 		case <-h.reorgEventsCh:
-			h.reEmitLookahead("reorg")
+			// A reorg may have changed a proposal slot's dependent_root; recheck the lookahead on the next
+			// tick and re-emit only the epochs whose root actually changed (SIP #94 §5).
+			h.logger.Debug("🔀 rechecking proposer-preferences dependent roots on reorg")
+			h.recheckLookahead = true
 		}
 	}
-}
-
-// reEmitLookahead drops the emitted-epoch markers so the next tick re-fetches and re-emits the
-// lookahead's preferences — after a reorg (new dependent_root) or a validator-set change (new local
-// validators that missed an already-processed epoch). New local validators land on distinct proposal
-// slots and emit correctly.
-//
-// KNOWN ISSUE (pending the SIP-94 §5 coordination rule): re-emitting for an already-emitted
-// (proposal-slot, signer) — e.g. a changed dependent_root after a reorg — is rejected by the
-// ≤1-per-(slot,signer) pre-consensus dedup, so the refresh neither converges nor replaces the prior
-// preference, and the re-emitting operator is gossip-penalized. The fix (a bounded distinct-root
-// allowance for ProposerPreferences pre-consensus, plus re-emitting only on a real dependent_root
-// change) waits on the agreed SIP-94 §5 rule, since it relaxes a cross-client validation invariant.
-func (h *ProposerPreferencesHandler) reEmitLookahead(reason string) {
-	h.logger.Debug("🔀 re-emitting proposer preferences on next tick", zap.String("reason", reason))
-	clear(h.processed)
 }
 
 // emitForTick emits the lookahead's preferences for the tick's slot: the current epoch (plus the next,
 // once it's a good time to fetch) in steady state, or the first Gloas epoch when in the pre-fork
-// window. Outside both it does nothing (pre-Gloas, no preferences yet).
+// window. Outside both it does nothing (pre-Gloas, no preferences yet). A reorg recheck flagged since
+// the last tick is consumed here, forcing the lookahead's dependent roots to be re-evaluated.
 func (h *ProposerPreferencesHandler) emitForTick(ctx context.Context, slot phase0.Slot) {
+	recheck := h.recheckLookahead
+	h.recheckLookahead = false
+
 	epoch := h.netCfg.EstimatedEpochAtSlot(slot)
 	switch {
 	case h.netCfg.IsGloas(epoch):
-		h.emitForEpoch(ctx, epoch, slot)
+		h.emitForEpoch(ctx, epoch, slot, recheck)
 		if h.shouldFetchNextEpoch(slot) {
-			h.emitForEpoch(ctx, epoch+1, slot)
+			h.emitForEpoch(ctx, epoch+1, slot, recheck)
 		}
 		h.evictOutdated(epoch)
 	case h.netCfg.InGloasPriorWindow(slot):
 		// epoch+1 is GLOAS_FORK_EPOCH throughout the prior window (MIN_SEED_LOOKAHEAD=1).
-		h.emitForEpoch(ctx, epoch+1, slot)
+		h.emitForEpoch(ctx, epoch+1, slot, recheck)
 	}
 }
 
-// emitForEpoch fetches the epoch's proposer assignments for local validators once and emits one
-// proposer-preferences duty per assignment, to be executed (broadcast) immediately.
-func (h *ProposerPreferencesHandler) emitForEpoch(ctx context.Context, epoch phase0.Epoch, currentSlot phase0.Slot) {
-	if _, done := h.processed[epoch]; done {
+// emitForEpoch emits one proposer-preferences duty per local proposal assignment in the epoch, to be
+// broadcast immediately. It emits once per (epoch, dependent_root): a steady-state tick skips an
+// already-emitted epoch, and a post-reorg recheck re-emits only when the epoch's dependent_root changed —
+// re-emitting under an unchanged root would just duplicate the preference and get the operator
+// gossip-penalized (SIP #94 §5).
+func (h *ProposerPreferencesHandler) emitForEpoch(ctx context.Context, epoch phase0.Epoch, currentSlot phase0.Slot, recheck bool) {
+	if _, done := h.emitted[epoch]; done && !recheck {
 		return
 	}
 
 	indices := h.selfParticipatingIndices(epoch)
 	if len(indices) == 0 {
 		return // no local validators yet; retry on the next tick
+	}
+
+	dependentRoot, err := h.beaconNode.ProposerDutiesDependentRoot(ctx, epoch)
+	if err != nil {
+		h.logger.Warn("failed to fetch proposer-duties dependent root", fields.Epoch(epoch), zap.Error(err))
+		return // retry on the next tick
+	}
+	if prev, done := h.emitted[epoch]; done && prev == dependentRoot {
+		return // dependent_root unchanged; a re-emission would only duplicate the preference
 	}
 
 	duties, err := h.beaconNode.ProposerDuties(ctx, epoch, indices)
@@ -124,7 +135,7 @@ func (h *ProposerPreferencesHandler) emitForEpoch(ctx context.Context, epoch pha
 			ValidatorIndex: d.ValidatorIndex,
 		})
 	}
-	h.processed[epoch] = struct{}{}
+	h.emitted[epoch] = dependentRoot
 
 	if len(preferenceDuties) == 0 {
 		return
@@ -138,10 +149,11 @@ func (h *ProposerPreferencesHandler) emitForEpoch(ctx context.Context, epoch pha
 	h.logger.Debug("emitted proposer preferences duties",
 		fields.Epoch(epoch),
 		fields.Count(len(preferenceDuties)),
+		zap.String("dependent_root", dependentRoot.String()),
 	)
 }
 
-// evictOutdated drops processed-epoch markers for epochs before the current one.
+// evictOutdated drops emitted-epoch markers for epochs before the current one.
 func (h *ProposerPreferencesHandler) evictOutdated(currentEpoch phase0.Epoch) {
-	evictEpochsBefore(h.processed, currentEpoch)
+	evictEpochsBefore(h.emitted, currentEpoch)
 }

@@ -29,6 +29,12 @@ const (
 // bounds both how early such a message may arrive and how many slots of per-signer state to retain.
 const proposerPreferencesEarlyEpochs = 2
 
+// maxProposerPreferencesDistinctRoots bounds the distinct ProposerPreferences signing roots one
+// (slot, signer) may contribute (SIP #94 §5). Unlike other pre-consensus messages (capped at 1), a
+// proposer re-emits its preference under a new root when the proposal slot's dependent_root changes, so
+// the bound admits a few genuine reorg-driven refreshes while still capping duplicates and flooding.
+const maxProposerPreferencesDistinctRoots = 4
+
 const (
 	signatureSize    = 256
 	signatureOffset  = 0
