@@ -48,6 +48,7 @@ import (
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	qbftcontroller "github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/ssvsigner"
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
@@ -620,15 +621,10 @@ func (n *node) applyDynamicMaxPeers() {
 	)
 	start := time.Now()
 	myValidators := n.nodeStorage.ValidatorStore().OperatorValidators(n.operatorDataStore.GetOperatorID())
-	mySubnets := networkcommons.Subnets{}
-	myActiveSubnets := 0
-	for _, v := range myValidators {
-		subnet := networkcommons.AlanCommitteeSubnet(v.CommitteeID())
-		if !mySubnets.IsSet(subnet) {
-			mySubnets.Set(subnet)
-			myActiveSubnets++
-		}
-	}
+	// Post-Boole-fork committees live on Boole subnets; before/through the transition both the
+	// Alan and Boole subnets are in play, so budget peers for both.
+	booleFork := n.networkConfig.BooleForkAtSlot(n.networkConfig.EstimatedCurrentSlot())
+	myActiveSubnets := operatorActiveSubnets(myValidators, booleFork)
 	idealMaxPeers := min(baseMaxPeers+idealPeersPerSubnet*myActiveSubnets, maxPeersLimit)
 	if n.cfg.P2pNetworkConfig.MaxPeers < idealMaxPeers {
 		n.logger.Warn("increasing MaxPeers to match the operator's subscribed subnets",
@@ -639,6 +635,23 @@ func (n *node) applyDynamicMaxPeers() {
 		)
 		n.cfg.P2pNetworkConfig.MaxPeers = idealMaxPeers
 	}
+}
+
+// operatorActiveSubnets returns the number of distinct committee subnets the operator's validators
+// participate in. Boole and Alan subnets are tallied in separate bitmaps: they are independent gossip
+// topics (/ssv/<net>/boole/<n> vs ssv.v2.<n>) even when their subnet numbers coincide, so a shared
+// bitmap would under-count on collision. Before/through the Boole transition both Alan and Boole
+// subnets are counted; post-fork only Boole. BooleCommitteeSubnet may return UnknownSubnetId for an
+// empty committee, but Set drops out-of-range indices, so it never inflates the count.
+func operatorActiveSubnets(validators []*ssvtypes.SSVShare, booleFork bool) int {
+	var booleSubnets, alanSubnets networkcommons.Subnets
+	for _, v := range validators {
+		booleSubnets.Set(v.BooleCommitteeSubnet())
+		if !booleFork {
+			alanSubnets.Set(v.AlanCommitteeSubnet())
+		}
+	}
+	return booleSubnets.ActiveCount() + alanSubnets.ActiveCount()
 }
 
 // startNetwork wires validator stats into the p2p layer, then sets up + starts the network and
