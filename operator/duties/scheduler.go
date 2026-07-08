@@ -48,7 +48,7 @@ type DutiesExecutor interface {
 // DutyExecutor is an interface for executing duty.
 type DutyExecutor interface {
 	ExecuteDuty(ctx context.Context, logger *zap.Logger, duty *spectypes.ValidatorDuty)
-	ExecuteCommitteeDuty(ctx context.Context, logger *zap.Logger, committeeID spectypes.CommitteeID, duty *spectypes.CommitteeDuty)
+	ExecuteCommitteeDuty(ctx context.Context, logger *zap.Logger, committeeID spectypes.CommitteeID, duty spectypes.Duty)
 }
 
 type BeaconNode interface {
@@ -176,6 +176,7 @@ func NewScheduler(logger *zap.Logger, opts *SchedulerOptions) *Scheduler {
 	if !opts.ExporterMode {
 		s.dutyHandlers = append(s.dutyHandlers,
 			NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee),
+			NewAggregatorCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee),
 			NewValidatorRegistrationHandler(opts.ValidatorRegistrationCh),
 			NewVoluntaryExitHandler(dutyStore.VoluntaryExit, opts.ValidatorExitCh),
 		)
@@ -522,20 +523,23 @@ func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, duties committee
 
 	for _, committee := range duties {
 		duty := committee.duty
+		slot := duty.DutySlot()
+		role := types.RunnerRoleForDuty(duty, s.netCfg.BooleForkAtSlot(slot))
 
 		logger := s.loggerWithCommitteeDutyContext(committee)
 
 		const eventMsg = "🔧 executing committee duty"
-		dutyEpoch := s.netCfg.EstimatedEpochAtSlot(duty.Slot)
-		logger.Debug(eventMsg, fields.Duties(dutyEpoch, duty.ValidatorDuties, -1, func(duty *spectypes.ValidatorDuty) spectypes.RunnerRole {
+		dutyEpoch := s.netCfg.EstimatedEpochAtSlot(slot)
+		logger.Debug(eventMsg, fields.Duties(dutyEpoch, committee.validatorDuties(), -1, func(duty *spectypes.ValidatorDuty) spectypes.RunnerRole {
 			return types.RunnerRoleForValidatorDuty(duty, s.netCfg.BooleForkAtSlot(duty.Slot))
 		}))
 		span.AddEvent(eventMsg, trace.WithAttributes(
+			observability.RunnerRoleAttribute(role),
 			observability.CommitteeIDAttribute(committee.id),
-			observability.DutyCountAttribute(len(duty.ValidatorDuties)),
+			observability.DutyCountAttribute(len(committee.validatorDuties())),
 		))
 
-		slotDelay := time.Since(s.netCfg.SlotStartTime(duty.Slot))
+		slotDelay := time.Since(s.netCfg.SlotStartTime(slot))
 		if slotDelay >= 100*time.Millisecond {
 			const eventMsg = "⚠️ late duty execution"
 			logger.Warn(eventMsg, zap.Duration("slot_delay", slotDelay))
@@ -544,7 +548,7 @@ func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, duties committee
 				attribute.Int64("ssv.beacon.slot_delay_ms", slotDelay.Milliseconds())))
 		}
 
-		recordDutyScheduled(ctx, duty.RunnerRole(), slotDelay)
+		recordDutyScheduled(ctx, role, slotDelay)
 
 		s.backgroundTasks.Add(1)
 		go func() {
@@ -555,7 +559,9 @@ func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, duties committee
 			dutyCtx, cancel := context.WithDeadline(s.ctx, dutyDeadline)
 			defer cancel()
 
-			s.waitOneThirdIntoSlotOrValidBlock(duty.Slot)
+			if role == spectypes.RoleCommittee {
+				s.waitOneThirdIntoSlotOrValidBlock(slot)
+			}
 			s.dutyExecutor.ExecuteCommitteeDuty(dutyCtx, logger, committee.id, duty)
 		}()
 	}
@@ -565,8 +571,8 @@ func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, duties committee
 
 // loggerWithDutyContext returns an instance of logger with the given duty's information
 func (s *Scheduler) loggerWithDutyContext(duty *spectypes.ValidatorDuty) *zap.Logger {
-	role := types.RunnerRoleForValidatorDuty(duty, s.netCfg.BooleForkAtSlot(duty.Slot))
 	dutyEpoch := s.netCfg.EstimatedEpochAtSlot(duty.Slot)
+	role := types.RunnerRoleForValidatorDuty(duty, s.netCfg.BooleForkAtSlot(duty.Slot))
 	dutyID := fields.BuildDutyID(dutyEpoch, duty.Slot, role, duty.ValidatorIndex)
 
 	return s.logger.
@@ -581,14 +587,15 @@ func (s *Scheduler) loggerWithDutyContext(duty *spectypes.ValidatorDuty) *zap.Lo
 
 // loggerWithCommitteeDutyContext returns an instance of logger with the given committee duty's information
 func (s *Scheduler) loggerWithCommitteeDutyContext(committeeDuty *committeeDuty) *zap.Logger {
-	duty := committeeDuty.duty
+	slot := committeeDuty.duty.DutySlot()
 
-	dutyEpoch := s.netCfg.EstimatedEpochAtSlot(duty.Slot)
-	committeeDutyID := fields.BuildCommitteeDutyID(committeeDuty.operatorIDs, dutyEpoch, duty.Slot)
+	dutyEpoch := s.netCfg.EstimatedEpochAtSlot(slot)
+	role := types.RunnerRoleForDuty(committeeDuty.duty, s.netCfg.BooleForkAtSlot(slot))
+	committeeDutyID := fields.BuildCommitteeDutyID(committeeDuty.operatorIDs, dutyEpoch, slot, role)
 
 	return s.logger.
-		With(fields.RunnerRole(duty.RunnerRole())).
-		With(fields.Slot(duty.Slot)).
+		With(fields.RunnerRole(role)).
+		With(fields.Slot(slot)).
 		With(fields.DutyID(committeeDutyID)).
 		With(fields.CommitteeID(committeeDuty.id)).
 		With(fields.EstimatedCurrentEpoch(s.netCfg.EstimatedCurrentEpoch())).

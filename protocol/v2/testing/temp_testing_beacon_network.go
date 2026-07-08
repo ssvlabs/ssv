@@ -50,6 +50,17 @@ func (bn *BeaconNodeWrapped) GetSyncCommitteeContribution(ctx context.Context, s
 func (bn *BeaconNodeWrapped) SubmitAggregateSelectionProof(ctx context.Context, slot phase0.Slot, committeeIndex phase0.CommitteeIndex, committeeLength uint64, index phase0.ValidatorIndex, slotSig []byte) (ssz.Marshaler, spec.DataVersion, error) {
 	return bn.Bn.SubmitAggregateSelectionProof(slot, committeeIndex, committeeLength, index, slotSig)
 }
+func (bn *BeaconNodeWrapped) IsAggregator(ctx context.Context, slot phase0.Slot, committeeIndex phase0.CommitteeIndex, committeeLength uint64, slotSig []byte) bool {
+	return bn.Bn.IsAggregator(slot, committeeIndex, committeeLength, slotSig)
+}
+func (bn *BeaconNodeWrapped) GetAggregateAttestation(ctx context.Context, slot phase0.Slot, committeeIndex phase0.CommitteeIndex) (ssz.Marshaler, spec.DataVersion, error) {
+	att, err := bn.Bn.GetAggregateAttestation(slot, committeeIndex)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return att, spectestingutils.VersionBySlot(slot), nil
+}
 func (bn *BeaconNodeWrapped) GetBeaconNetwork() spectypes.BeaconNetwork {
 	return bn.Bn.GetBeaconNetwork()
 }

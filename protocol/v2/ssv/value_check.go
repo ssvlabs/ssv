@@ -78,6 +78,27 @@ func (v *voteChecker) CheckValue(value []byte) error {
 	return nil
 }
 
+type aggregatorCommitteeChecker struct{}
+
+func NewAggregatorCommitteeChecker() ValueChecker {
+	return &aggregatorCommitteeChecker{}
+}
+
+func (v *aggregatorCommitteeChecker) CheckValue(value []byte) error {
+	cd := &spectypes.AggregatorCommitteeConsensusData{}
+	if err := cd.Decode(value); err != nil {
+		return spectypes.WrapError(
+			spectypes.AggCommConsensusDataDecodeErrorCode,
+			fmt.Errorf("failed decoding aggregator committee consensus data: %w", err),
+		)
+	}
+	if err := cd.Validate(); err != nil {
+		return fmt.Errorf("invalid value: %w", err)
+	}
+
+	return nil
+}
+
 type proposerChecker struct {
 	signer         ekm.BeaconSigner
 	beaconConfig   *networkconfig.Beacon
@@ -181,12 +202,12 @@ func checkValidatorConsensusData(
 		return cd, spectypes.NewError(spectypes.QBFTValueInvalidErrorCode, "invalid value")
 	}
 
-	if beaconConfig.EstimatedEpochAtSlot(cd.Duty.Slot) > beaconConfig.EstimatedCurrentEpoch()+1 {
-		return cd, spectypes.NewError(spectypes.DutyEpochTooFarFutureErrorCode, "duty epoch is into far future")
-	}
-
 	if expectedType != cd.Duty.Type {
 		return cd, spectypes.NewError(spectypes.WrongBeaconRoleTypeErrorCode, "wrong beacon role type")
+	}
+
+	if beaconConfig.EstimatedEpochAtSlot(cd.Duty.Slot) > beaconConfig.EstimatedCurrentEpoch()+1 {
+		return cd, spectypes.NewError(spectypes.DutyEpochTooFarFutureErrorCode, "duty epoch is into far future")
 	}
 
 	if !bytes.Equal(validatorPK[:], cd.Duty.PubKey[:]) {

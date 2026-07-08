@@ -205,8 +205,13 @@ func overrideStateComparisonCommitteeSpecTest(t *testing.T, test *CommitteeSpecT
 	// AggregatorCommitteeRunners map for the merged runner), so struct-tag-based json.Unmarshal
 	// above no longer finds our (unrenamed) Committee.Runners field. Read the raw comparison-state
 	// JSON directly instead, falling back to the legacy "Runners" key for older fixtures.
-	// TODO(convergence unit 5): also read AggregatorCommitteeRunners.
+	// This test type (CommitteeSpecTest) only ever exercises RoleCommittee duties (there is no
+	// AggregatorCommitteeDuty input path here), so there is no AggregatorCommitteeRunners fixture
+	// data to read; initialize an empty map so it matches test.Committee's own zero state (an
+	// unset nil map here would otherwise diverge in JSON encoding from the non-nil empty map the
+	// Committee constructor always produces, and desync the compared post-duty roots).
 	committee.Runners = readCommitteeRunnersFromStateComparison(t, specDir, name, testType)
+	committee.AggregatorRunners = make(map[phase0.Slot]*runner.AggregatorCommitteeRunner)
 
 	for slot := range committee.Runners {
 		committee.Runners[slot].NetworkConfig = networkconfig.TestNetwork

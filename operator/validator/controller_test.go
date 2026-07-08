@@ -173,156 +173,198 @@ func TestSetupCommitteeRunnersExporter(t *testing.T) {
 		},
 	})
 
-	runner, err := committeeRunnerFunc(0, nil, nil, nil)
+	runner, err := committeeRunnerFunc(&spectypes.CommitteeDuty{}, nil, nil, nil)
 	require.Nil(t, runner)
 	require.ErrorContains(t, err, "cannot set up committee runners in exporter mode")
 }
 
-// buildProposerFTestNetworkConfig returns an independent copy of networkconfig.TestNetwork
-// with SSV.Forks.Boole set as requested, so tests can exercise both the pre- and
-// post-Boole-fork ProposerF branches without mutating the shared global TestNetwork.
-func buildProposerFTestNetworkConfig(t *testing.T, booleForkEpoch phase0.Epoch) *networkconfig.Network {
-	t.Helper()
-
-	ssvCopy := *networkconfig.TestNetwork.SSV
-	ssvCopy.Forks.Boole = booleForkEpoch
-
-	netCfg := *networkconfig.TestNetwork
-	netCfg.SSV = &ssvCopy
-	return &netCfg
-}
-
-// buildProposerFTestCommittee returns a small, deterministic committee used to exercise
-// the ProposerF closures.
-func buildProposerFTestCommittee() []*spectypes.Operator {
-	return []*spectypes.Operator{
-		{OperatorID: 1, SSVOperatorPubKey: []byte("op-1")},
-		{OperatorID: 2, SSVOperatorPubKey: []byte("op-2")},
-		{OperatorID: 3, SSVOperatorPubKey: []byte("op-3")},
-		{OperatorID: 4, SSVOperatorPubKey: []byte("op-4")},
-	}
-}
-
-func TestSetupRunnersProposerF(t *testing.T) {
-	netCfg := buildProposerFTestNetworkConfig(t, phase0.Epoch(math.MaxUint64)) // pre-Boole-fork
-	committee := buildProposerFTestCommittee()
-
-	share := &types.SSVShare{
-		Share: spectypes.Share{
-			ValidatorIndex:  1,
-			ValidatorPubKey: createPubKey(byte('1')),
-			SharePubKey:     make([]byte, 48),
-		},
-	}
-	operator := &spectypes.CommitteeMember{
-		OperatorID: 1,
-		Committee:  committee,
-	}
-	options := &validator.CommonOptions{
-		NetworkConfig: netCfg,
-	}
-
-	runners, err := SetupRunners(t.Context(), share, operator, nil, nil, options)
-	require.NoError(t, err)
-	require.Contains(t, runners, types.RoleAggregator)
-
-	aggregatorRunner, ok := runners[types.RoleAggregator].(*runner.AggregatorRunner)
-	require.True(t, ok, "expected *runner.AggregatorRunner")
-	require.NotNil(t, aggregatorRunner.QBFTController)
-
-	proposerF := aggregatorRunner.QBFTController.GetConfig().GetProposerF()
-	require.NotNil(t, proposerF)
-
-	state := &specqbft.State{
-		CommitteeMember: &spectypes.CommitteeMember{Committee: committee},
-		Height:          specqbft.FirstHeight,
-	}
-
-	expected := qbft.Proposer(state.Height, specqbft.FirstRound, types.OperatorIDsFromOperators(committee), netCfg)
-	require.Equal(t, expected, proposerF(state, specqbft.FirstRound))
-
-	// A different round should be able to select a different proposer (round-robin).
-	nextRound := specqbft.FirstRound + 1
-	expectedNextRound := qbft.Proposer(state.Height, nextRound, types.OperatorIDsFromOperators(committee), netCfg)
-	require.Equal(t, expectedNextRound, proposerF(state, nextRound))
-}
-
-func TestSetupRunnersProposerFPostBooleFork(t *testing.T) {
-	netCfg := buildProposerFTestNetworkConfig(t, phase0.Epoch(0)) // post-Boole-fork from genesis
-	committee := buildProposerFTestCommittee()
-
-	share := &types.SSVShare{
-		Share: spectypes.Share{
-			ValidatorIndex:  1,
-			ValidatorPubKey: createPubKey(byte('2')),
-			SharePubKey:     make([]byte, 48),
-		},
-	}
-	operator := &spectypes.CommitteeMember{
-		OperatorID: 1,
-		Committee:  committee,
-	}
-	options := &validator.CommonOptions{
-		NetworkConfig: netCfg,
-	}
-
-	runners, err := SetupRunners(t.Context(), share, operator, nil, nil, options)
-	require.NoError(t, err)
-
-	aggregatorRunner, ok := runners[types.RoleAggregator].(*runner.AggregatorRunner)
-	require.True(t, ok, "expected *runner.AggregatorRunner")
-
-	proposerF := aggregatorRunner.QBFTController.GetConfig().GetProposerF()
-
-	// Pick a height whose slot lands well after genesis so BooleForkAtSlot is true.
-	state := &specqbft.State{
-		CommitteeMember: &spectypes.CommitteeMember{Committee: committee},
-		Height:          specqbft.Height(netCfg.SlotsPerEpoch) * 10,
-	}
-	require.True(t, netCfg.BooleForkAtSlot(phase0.Slot(state.Height)), "expected height to be post-Boole-fork for this assertion to be meaningful")
-
-	expected := qbft.Proposer(state.Height, specqbft.FirstRound, types.OperatorIDsFromOperators(committee), netCfg)
-	require.Equal(t, expected, proposerF(state, specqbft.FirstRound))
-}
-
-func TestSetupCommitteeRunnersProposerF(t *testing.T) {
-	netCfg := buildProposerFTestNetworkConfig(t, phase0.Epoch(math.MaxUint64)) // pre-Boole-fork
-	committee := buildProposerFTestCommittee()
+func TestSetupCommitteeRunners(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mockBeaconNode := beacon.NewMockBeaconNode(ctrl)
 
 	options := &validator.Options{
 		CommonOptions: validator.CommonOptions{
-			NetworkConfig: netCfg,
+			NetworkConfig: networkconfig.TestNetwork,
+			Beacon:        mockBeaconNode,
 		},
-		Operator: &spectypes.CommitteeMember{
-			OperatorID: 1,
-			Committee:  committee,
-		},
+		Operator: &spectypes.CommitteeMember{},
 	}
 
 	committeeRunnerFunc := SetupCommitteeRunners(t.Context(), options)
 
-	shareMap := map[phase0.ValidatorIndex]*spectypes.Share{
-		1: {ValidatorIndex: 1},
-	}
-	crunner, err := committeeRunnerFunc(0, shareMap, nil, nil)
-	require.NoError(t, err)
-	require.NotNil(t, crunner.QBFTController)
-
-	proposerF := crunner.QBFTController.GetConfig().GetProposerF()
-	require.NotNil(t, proposerF)
-
-	state := &specqbft.State{
-		CommitteeMember: &spectypes.CommitteeMember{Committee: committee},
-		Height:          specqbft.FirstHeight,
+	shares := map[phase0.ValidatorIndex]*spectypes.Share{
+		0: {},
 	}
 
-	expected := qbft.Proposer(state.Height, specqbft.FirstRound, types.OperatorIDsFromOperators(committee), netCfg)
-	require.Equal(t, expected, proposerF(state, specqbft.FirstRound))
+	t.Run("CommitteeDuty builds a CommitteeRunner", func(t *testing.T) {
+		r, err := committeeRunnerFunc(&spectypes.CommitteeDuty{}, shares, nil, nil)
+		require.NoError(t, err)
+		require.IsType(t, &runner.CommitteeRunner{}, r)
+	})
 
-	// A different round should be able to select a different proposer (round-robin).
-	nextRound := specqbft.FirstRound + 1
-	expectedNextRound := qbft.Proposer(state.Height, nextRound, types.OperatorIDsFromOperators(committee), netCfg)
-	require.Equal(t, expectedNextRound, proposerF(state, nextRound))
+	t.Run("AggregatorCommitteeDuty builds an AggregatorCommitteeRunner", func(t *testing.T) {
+		r, err := committeeRunnerFunc(&spectypes.AggregatorCommitteeDuty{}, shares, nil, nil)
+		require.NoError(t, err)
+		require.IsType(t, &runner.AggregatorCommitteeRunner{}, r)
+	})
+
+	t.Run("unsupported duty type errors", func(t *testing.T) {
+		r, err := committeeRunnerFunc(&spectypes.ValidatorDuty{}, shares, nil, nil)
+		require.Nil(t, r)
+		require.ErrorContains(t, err, "unsupported committee duty type")
+	})
+
+	t.Run("no shares errors regardless of duty type", func(t *testing.T) {
+		r, err := committeeRunnerFunc(&spectypes.CommitteeDuty{}, nil, nil, nil)
+		require.Nil(t, r)
+		require.ErrorContains(t, err, "no shares")
+
+		r, err = committeeRunnerFunc(&spectypes.AggregatorCommitteeDuty{}, nil, nil, nil)
+		require.Nil(t, r)
+		require.ErrorContains(t, err, "no shares")
+	})
+}
+
+func TestHandleNonCommitteeMessages_RoleGuard(t *testing.T) {
+	logger := log.TestLogger(t)
+	controllerOptions := MockControllerOptions{
+		validatorCommonOpts: &validator.CommonOptions{},
+	}
+	ctr := setupController(t, logger, controllerOptions)
+
+	newConsensusMsg := func(role spectypes.RunnerRole, body any) *queue.SSVMessage {
+		return &queue.SSVMessage{
+			SSVMessage: &spectypes.SSVMessage{
+				MsgType: spectypes.SSVConsensusMsgType,
+				MsgID:   spectypes.NewMsgID(spectypes.DomainType{}, make([]byte, 48), role),
+			},
+			Body: body,
+		}
+	}
+
+	t.Run("non-committee, non-aggregator-committee roles are ignored", func(t *testing.T) {
+		msg := newConsensusMsg(types.RoleAggregator, &specqbft.Message{MsgType: specqbft.ProposalMsgType})
+
+		// ncv is nil: if the role guard didn't short-circuit before touching ncv, this would panic.
+		err := ctr.handleNonCommitteeMessages(t.Context(), msg, nil)
+		require.NoError(t, err)
+	})
+
+	t.Run("aggregator-committee role with non-proposal consensus message is ignored", func(t *testing.T) {
+		msg := newConsensusMsg(spectypes.RoleAggregatorCommittee, &specqbft.Message{MsgType: specqbft.CommitMsgType})
+
+		err := ctr.handleNonCommitteeMessages(t.Context(), msg, nil)
+		require.NoError(t, err)
+	})
+
+	t.Run("committee role with non-proposal consensus message is ignored", func(t *testing.T) {
+		msg := newConsensusMsg(spectypes.RoleCommittee, &specqbft.Message{MsgType: specqbft.CommitMsgType})
+
+		err := ctr.handleNonCommitteeMessages(t.Context(), msg, nil)
+		require.NoError(t, err)
+	})
+
+	t.Run("unrelated message types are ignored", func(t *testing.T) {
+		msg := &queue.SSVMessage{
+			SSVMessage: &spectypes.SSVMessage{
+				MsgType: spectypes.DKGMsgType,
+				MsgID:   spectypes.NewMsgID(spectypes.DomainType{}, make([]byte, 48), spectypes.RoleCommittee),
+			},
+		}
+
+		err := ctr.handleNonCommitteeMessages(t.Context(), msg, nil)
+		require.NoError(t, err)
+	})
+}
+
+func TestExecuteDuty(t *testing.T) {
+	t.Run("validator not found logs and returns without panicking", func(t *testing.T) {
+		logger := log.TestLogger(t)
+		controllerOptions := MockControllerOptions{
+			validatorsMap:       validators.New(t.Context()),
+			validatorCommonOpts: &validator.CommonOptions{},
+		}
+		ctr := setupController(t, logger, controllerOptions)
+
+		// No validator registered for this pubkey. This also exercises the real
+		// c.networkConfig.BooleForkAtSlot(duty.Slot) role computation (replacing the previous
+		// hard-coded `false`) on the way to the early-return.
+		duty := &spectypes.ValidatorDuty{
+			Type:           spectypes.BNRoleAttester,
+			PubKey:         phase0.BLSPubKey{1, 2, 3},
+			Slot:           1,
+			ValidatorIndex: 7,
+		}
+		ctr.ExecuteDuty(t.Context(), logger, duty)
+	})
+}
+
+func TestExecuteCommitteeDuty(t *testing.T) {
+	t.Run("committee not found logs and returns without panicking", func(t *testing.T) {
+		logger := log.TestLogger(t)
+		controllerOptions := MockControllerOptions{
+			validatorsMap:       validators.New(t.Context()),
+			validatorCommonOpts: &validator.CommonOptions{},
+		}
+		ctr := setupController(t, logger, controllerOptions)
+
+		// No committee registered for this ID — must not panic despite the duty carrying no
+		// runner-role information the caller can rely on ahead of time.
+		ctr.ExecuteCommitteeDuty(t.Context(), logger, spectypes.CommitteeID{1, 2, 3}, &spectypes.CommitteeDuty{Slot: 1})
+	})
+
+	t.Run("committee found but duty preparation fails is handled without panicking", func(t *testing.T) {
+		logger := log.TestLogger(t)
+		vmap := validators.New(t.Context())
+		controllerOptions := MockControllerOptions{
+			validatorsMap:       vmap,
+			validatorCommonOpts: &validator.CommonOptions{NetworkConfig: networkconfig.TestNetwork},
+		}
+		ctr := setupController(t, logger, controllerOptions)
+
+		committeeID := spectypes.CommitteeID{9, 9, 9}
+		cm := validator.NewCommittee(
+			logger,
+			networkconfig.TestNetwork,
+			&spectypes.CommitteeMember{CommitteeID: committeeID, Committee: []*spectypes.Operator{{OperatorID: 1}}},
+			nil, // CreateRunnerFn is never invoked: prepareDuty fails before createRunner runs.
+			nil,
+			nil,
+		)
+		vmap.PutCommittee(committeeID, cm)
+
+		// An empty ValidatorDuties list makes the committee's StartDuty fail fast with
+		// "no beacon duties" — this exercises ExecuteCommitteeDuty's new
+		// duty.DutySlot()/RunnerRoleForDuty(duty, ...) plumbing (replacing the old
+		// *spectypes.CommitteeDuty-only signature) down the error-handling path, without
+		// needing a fully wired runner stack.
+		ctr.ExecuteCommitteeDuty(t.Context(), logger, committeeID, &spectypes.CommitteeDuty{Slot: 1, ValidatorDuties: nil})
+	})
+
+	t.Run("aggregator-committee duty found but duty preparation fails is handled without panicking", func(t *testing.T) {
+		logger := log.TestLogger(t)
+		vmap := validators.New(t.Context())
+		controllerOptions := MockControllerOptions{
+			validatorsMap:       vmap,
+			validatorCommonOpts: &validator.CommonOptions{NetworkConfig: networkconfig.TestNetwork},
+		}
+		ctr := setupController(t, logger, controllerOptions)
+
+		committeeID := spectypes.CommitteeID{4, 5, 6}
+		cm := validator.NewCommittee(
+			logger,
+			networkconfig.TestNetwork,
+			&spectypes.CommitteeMember{CommitteeID: committeeID, Committee: []*spectypes.Operator{{OperatorID: 1}}},
+			nil,
+			nil,
+			nil,
+		)
+		vmap.PutCommittee(committeeID, cm)
+
+		// Same as above but for the new AggregatorCommitteeDuty type, so RunnerRoleForDuty
+		// resolves to RoleAggregatorCommittee instead of RoleCommittee.
+		ctr.ExecuteCommitteeDuty(t.Context(), logger, committeeID, &spectypes.AggregatorCommitteeDuty{Slot: 1, ValidatorDuties: nil})
+	})
 }
 
 func TestHandleNonCommitteeMessages(t *testing.T) {
@@ -1439,4 +1481,150 @@ func (m mockShares) Delete(_ basedb.ReadWriter, pubKey []byte) error           {
 func (m mockShares) Drop() error                                               { return nil }
 func (m mockShares) UpdateValidatorsMetadata(metadataMap beacon.ValidatorMetadataMap) (beacon.ValidatorMetadataMap, error) {
 	return nil, nil
+}
+
+func buildProposerFTestNetworkConfig(t *testing.T, booleForkEpoch phase0.Epoch) *networkconfig.Network {
+	t.Helper()
+
+	ssvCopy := *networkconfig.TestNetwork.SSV
+	ssvCopy.Forks.Boole = booleForkEpoch
+
+	netCfg := *networkconfig.TestNetwork
+	netCfg.SSV = &ssvCopy
+	return &netCfg
+}
+
+func buildProposerFTestCommittee() []*spectypes.Operator {
+	return []*spectypes.Operator{
+		{OperatorID: 1, SSVOperatorPubKey: []byte("op-1")},
+		{OperatorID: 2, SSVOperatorPubKey: []byte("op-2")},
+		{OperatorID: 3, SSVOperatorPubKey: []byte("op-3")},
+		{OperatorID: 4, SSVOperatorPubKey: []byte("op-4")},
+	}
+}
+
+func TestSetupRunnersProposerF(t *testing.T) {
+	netCfg := buildProposerFTestNetworkConfig(t, phase0.Epoch(math.MaxUint64)) // pre-Boole-fork
+	committee := buildProposerFTestCommittee()
+
+	share := &types.SSVShare{
+		Share: spectypes.Share{
+			ValidatorIndex:  1,
+			ValidatorPubKey: createPubKey(byte('1')),
+			SharePubKey:     make([]byte, 48),
+		},
+	}
+	operator := &spectypes.CommitteeMember{
+		OperatorID: 1,
+		Committee:  committee,
+	}
+	options := &validator.CommonOptions{
+		NetworkConfig: netCfg,
+	}
+
+	runners, err := SetupRunners(t.Context(), share, operator, nil, nil, options)
+	require.NoError(t, err)
+	require.Contains(t, runners, types.RoleAggregator)
+
+	aggregatorRunner, ok := runners[types.RoleAggregator].(*runner.AggregatorRunner)
+	require.True(t, ok, "expected *runner.AggregatorRunner")
+	require.NotNil(t, aggregatorRunner.QBFTController)
+
+	proposerF := aggregatorRunner.QBFTController.GetConfig().GetProposerF()
+	require.NotNil(t, proposerF)
+
+	state := &specqbft.State{
+		CommitteeMember: &spectypes.CommitteeMember{Committee: committee},
+		Height:          specqbft.FirstHeight,
+	}
+
+	expected := qbft.Proposer(state.Height, specqbft.FirstRound, types.OperatorIDsFromOperators(committee), netCfg)
+	require.Equal(t, expected, proposerF(state, specqbft.FirstRound))
+
+	// A different round should be able to select a different proposer (round-robin).
+	nextRound := specqbft.FirstRound + 1
+	expectedNextRound := qbft.Proposer(state.Height, nextRound, types.OperatorIDsFromOperators(committee), netCfg)
+	require.Equal(t, expectedNextRound, proposerF(state, nextRound))
+}
+
+func TestSetupRunnersProposerFPostBooleFork(t *testing.T) {
+	netCfg := buildProposerFTestNetworkConfig(t, phase0.Epoch(0)) // post-Boole-fork from genesis
+	committee := buildProposerFTestCommittee()
+
+	share := &types.SSVShare{
+		Share: spectypes.Share{
+			ValidatorIndex:  1,
+			ValidatorPubKey: createPubKey(byte('2')),
+			SharePubKey:     make([]byte, 48),
+		},
+	}
+	operator := &spectypes.CommitteeMember{
+		OperatorID: 1,
+		Committee:  committee,
+	}
+	options := &validator.CommonOptions{
+		NetworkConfig: netCfg,
+	}
+
+	runners, err := SetupRunners(t.Context(), share, operator, nil, nil, options)
+	require.NoError(t, err)
+
+	// Post-Boole the standalone aggregator runner is not built (SetupRunners gates it behind
+	// !BooleFork); the proposer runner exists in every fork and shares the same ProposerF closure.
+	proposerRunner, ok := runners[spectypes.RoleProposer].(*runner.ProposerRunner)
+	require.True(t, ok, "expected *runner.ProposerRunner")
+
+	proposerF := proposerRunner.QBFTController.GetConfig().GetProposerF()
+
+	// Pick a height whose slot lands well after genesis so BooleForkAtSlot is true.
+	state := &specqbft.State{
+		CommitteeMember: &spectypes.CommitteeMember{Committee: committee},
+		Height:          specqbft.Height(netCfg.SlotsPerEpoch) * 10,
+	}
+	require.True(t, netCfg.BooleForkAtSlot(phase0.Slot(state.Height)), "expected height to be post-Boole-fork for this assertion to be meaningful")
+
+	expected := qbft.Proposer(state.Height, specqbft.FirstRound, types.OperatorIDsFromOperators(committee), netCfg)
+	require.Equal(t, expected, proposerF(state, specqbft.FirstRound))
+}
+
+func TestSetupCommitteeRunnersProposerF(t *testing.T) {
+	netCfg := buildProposerFTestNetworkConfig(t, phase0.Epoch(math.MaxUint64)) // pre-Boole-fork
+	committee := buildProposerFTestCommittee()
+
+	options := &validator.Options{
+		CommonOptions: validator.CommonOptions{
+			NetworkConfig: netCfg,
+		},
+		Operator: &spectypes.CommitteeMember{
+			OperatorID: 1,
+			Committee:  committee,
+		},
+	}
+
+	committeeRunnerFunc := SetupCommitteeRunners(t.Context(), options)
+
+	shareMap := map[phase0.ValidatorIndex]*spectypes.Share{
+		1: {ValidatorIndex: 1},
+	}
+	r, err := committeeRunnerFunc(&spectypes.CommitteeDuty{}, shareMap, nil, nil)
+	require.NoError(t, err)
+	crunner, ok := r.(*runner.CommitteeRunner)
+	require.True(t, ok, "expected *runner.CommitteeRunner")
+	require.NotNil(t, crunner.QBFTController)
+
+	proposerF := crunner.QBFTController.GetConfig().GetProposerF()
+	require.NotNil(t, proposerF)
+
+	state := &specqbft.State{
+		CommitteeMember: &spectypes.CommitteeMember{Committee: committee},
+		Height:          specqbft.FirstHeight,
+	}
+
+	expected := qbft.Proposer(state.Height, specqbft.FirstRound, types.OperatorIDsFromOperators(committee), netCfg)
+	require.Equal(t, expected, proposerF(state, specqbft.FirstRound))
+
+	// A different round should be able to select a different proposer (round-robin).
+	nextRound := specqbft.FirstRound + 1
+	expectedNextRound := qbft.Proposer(state.Height, nextRound, types.OperatorIDsFromOperators(committee), netCfg)
+	require.Equal(t, expectedNextRound, proposerF(state, nextRound))
 }

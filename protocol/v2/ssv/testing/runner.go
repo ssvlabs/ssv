@@ -34,6 +34,14 @@ var CommitteeRunnerWithShareMap = func(logger *zap.Logger, shareMap map[phase0.V
 	return baseRunnerWithShareMap(logger, spectypes.RoleCommittee, shareMap)
 }
 
+var AggregatorCommitteeRunner = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet) runner.Runner {
+	return baseRunner(logger, spectypes.RoleAggregatorCommittee, keySet)
+}
+
+var AggregatorCommitteeRunnerWithShareMap = func(logger *zap.Logger, shareMap map[phase0.ValidatorIndex]*spectypes.Share) runner.Runner {
+	return baseRunnerWithShareMap(logger, spectypes.RoleAggregatorCommittee, shareMap)
+}
+
 var ProposerRunner = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet) runner.Runner {
 	return baseRunner(logger, spectypes.RoleProposer, keySet)
 }
@@ -91,6 +99,8 @@ var ConstructBaseRunner = func(
 	case spectypes.RoleCommittee:
 		valCheck = ssv.NewVoteChecker(km, spectestingutils.TestingDutySlot,
 			[]phase0.BLSPubKey{phase0.BLSPubKey(share.SharePubKey)}, vote)
+	case spectypes.RoleAggregatorCommittee:
+		valCheck = ssv.NewAggregatorCommitteeChecker()
 	case spectypes.RoleProposer:
 		valCheck = ssv.NewProposerChecker(km, networkconfig.TestNetwork.Beacon,
 			(spectypes.ValidatorPK)(spectestingutils.TestingValidatorPubKey), spectestingutils.TestingValidatorIndex,
@@ -145,6 +155,15 @@ var ConstructBaseRunner = func(
 			DutyGuard:           dutyGuard,
 			DoppelgangerHandler: dgHandler,
 		})
+	case spectypes.RoleAggregatorCommittee:
+		rnr, err := runner.NewAggregatorCommitteeRunner(runner.AggregatorCommitteeRunnerOptions{
+			BaseRunnerOptions: baseOpts,
+			QBFTController:    contr,
+		})
+		if err != nil {
+			return nil, err
+		}
+		r = rnr
 	case ssvtypes.RoleAggregator:
 		rnr, err := runner.NewAggregatorRunner(runner.AggregatorRunnerOptions{
 			BaseRunnerOptions:  baseOpts,
@@ -242,7 +261,9 @@ var ConstructBaseRunnerWithShareMap = func(
 
 		// Identifier
 		var ownerID []byte
-		if role == spectypes.RoleCommittee {
+		switch role {
+		case spectypes.RoleCommittee, spectypes.RoleAggregatorCommittee:
+			// Committee-scoped identifiers: use CommitteeID for both committee and aggregator-committee runners
 			ops := keySetInstance.Committee()
 			committee := make([]uint64, 0, len(ops))
 			for _, op := range ops {
@@ -250,7 +271,8 @@ var ConstructBaseRunnerWithShareMap = func(
 			}
 			committeeID := spectypes.GetCommitteeID(committee)
 			ownerID = bytes.Clone(committeeID[:])
-		} else {
+		default:
+			// Validator-scoped identifiers
 			ownerID = spectestingutils.TestingValidatorPubKey[:]
 		}
 		identifier = spectypes.NewMsgID(spectestingutils.TestingSSVDomainType, ownerID, role)
@@ -265,6 +287,8 @@ var ConstructBaseRunnerWithShareMap = func(
 		case spectypes.RoleCommittee:
 			valCheck = ssv.NewVoteChecker(km, spectestingutils.TestingDutySlot,
 				sharePubKeys, vote)
+		case spectypes.RoleAggregatorCommittee:
+			valCheck = ssv.NewAggregatorCommitteeChecker()
 		case spectypes.RoleProposer:
 			valCheck = ssv.NewProposerChecker(km, networkconfig.TestNetwork.Beacon,
 				shareInstance.ValidatorPubKey, shareInstance.ValidatorIndex, phase0.BLSPubKey(shareInstance.SharePubKey))
@@ -314,6 +338,15 @@ var ConstructBaseRunnerWithShareMap = func(
 			DutyGuard:           dutyGuard,
 			DoppelgangerHandler: dgHandler,
 		})
+	case spectypes.RoleAggregatorCommittee:
+		rnr, err := runner.NewAggregatorCommitteeRunner(runner.AggregatorCommitteeRunnerOptions{
+			BaseRunnerOptions: baseOpts,
+			QBFTController:    contr,
+		})
+		if err != nil {
+			return nil, err
+		}
+		r = rnr
 	case ssvtypes.RoleAggregator:
 		rnr, err := runner.NewAggregatorRunner(runner.AggregatorRunnerOptions{
 			BaseRunnerOptions:  baseOpts,

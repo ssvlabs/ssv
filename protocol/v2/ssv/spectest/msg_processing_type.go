@@ -282,11 +282,11 @@ var baseCommitteeWithRunnerSample = func(
 	}
 
 	createRunnerF := func(
-		_ phase0.Slot,
+		_ spectypes.Duty,
 		shareMap map[phase0.ValidatorIndex]*spectypes.Share,
 		attestingValidators []phase0.BLSPubKey,
 		_ runner.CommitteeDutyGuard,
-	) (*runner.CommitteeRunner, error) {
+	) (runner.Runner, error) {
 		r, err := runner.NewCommitteeRunner(runner.CommitteeRunnerOptions{
 			BaseRunnerOptions: runner.BaseRunnerOptions{
 				NetworkConfig:  networkconfig.TestNetwork,
@@ -307,7 +307,7 @@ var baseCommitteeWithRunnerSample = func(
 			DutyGuard:           committeeDutyGuard,
 			DoppelgangerHandler: runnerSample.GetDoppelgangerHandler(),
 		})
-		return r.(*runner.CommitteeRunner), err
+		return r, err
 	}
 
 	c := validator.NewCommittee(
