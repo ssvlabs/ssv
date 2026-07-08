@@ -65,10 +65,34 @@ func BeaconRoleFromString(s string) (spectypes.BeaconRole, error) {
 	}
 }
 
+// RunnerRoleFromString returns RunnerRole from string.
+func RunnerRoleFromString(s string) (spectypes.RunnerRole, error) {
+	switch s {
+	case "COMMITTEE":
+		return spectypes.RoleCommittee, nil
+	case "AGGREGATOR_COMMITTEE":
+		return spectypes.RoleAggregatorCommittee, nil
+	case "AGGREGATOR":
+		return ssvtypes.RoleAggregator, nil
+	case "PROPOSER":
+		return spectypes.RoleProposer, nil
+	case "SYNC_COMMITTEE_CONTRIBUTION":
+		return ssvtypes.RoleSyncCommitteeContribution, nil
+	case "VALIDATOR_REGISTRATION":
+		return spectypes.RoleValidatorRegistration, nil
+	case "VOLUNTARY_EXIT":
+		return spectypes.RoleVoluntaryExit, nil
+	default:
+		return 0, fmt.Errorf("unknown role: %s", s)
+	}
+}
+
 func RunnerRoleToString(r spectypes.RunnerRole) string {
 	switch r {
 	case spectypes.RoleCommittee:
 		return "COMMITTEE"
+	case spectypes.RoleAggregatorCommittee:
+		return "AGGREGATOR_COMMITTEE"
 	case ssvtypes.RoleAggregator:
 		return "AGGREGATOR"
 	case spectypes.RoleProposer:

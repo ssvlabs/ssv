@@ -119,3 +119,44 @@ func (rs *RoleSlice) Bind(value string) error {
 	}
 	return nil
 }
+
+type RunnerRole spectypes.RunnerRole
+
+func (r *RunnerRole) Bind(value string) error {
+	role, err := message.RunnerRoleFromString(value)
+	if err != nil {
+		return err
+	}
+	*r = RunnerRole(role)
+	return nil
+}
+
+func (r RunnerRole) MarshalJSON() ([]byte, error) {
+	return []byte(`"` + message.RunnerRoleToString(spectypes.RunnerRole(r)) + `"`), nil
+}
+
+func (r *RunnerRole) UnmarshalJSON(data []byte) error {
+	var role string
+	err := json.Unmarshal(data, &role)
+	if err != nil {
+		return err
+	}
+	return r.Bind(role)
+}
+
+type RunnerRoleSlice []RunnerRole
+
+func (rs *RunnerRoleSlice) Bind(value string) error {
+	if value == "" {
+		return nil
+	}
+	for s := range strings.SplitSeq(value, ",") {
+		var r RunnerRole
+		err := r.Bind(s)
+		if err != nil {
+			return err
+		}
+		*rs = append(*rs, r)
+	}
+	return nil
+}
