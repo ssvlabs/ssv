@@ -25,7 +25,7 @@ func (e *Exporter) CommitteeTracesCore(request *CommitteeTracesQuery) (*Committe
 	cids := request.CommitteeIDs
 	for s := request.From; s <= request.To; s++ {
 		slot := phase0.Slot(s)
-		duties, err := e.getCommitteeDutiesForSlot(slot, cids)
+		duties, err := e.getCommitteeDutiesForSlot(slot, cids, request.Roles...)
 		all = append(all, duties...)
 		errs = multierror.Append(errs, err)
 	}
@@ -46,23 +46,30 @@ func validateCommitteeRequest(request *CommitteeTracesQuery) error {
 	return nil
 }
 
-func (e *Exporter) getCommitteeDutiesForSlot(slot phase0.Slot, committeeIDs []spectypes.CommitteeID) ([]*traces.CommitteeDutyTrace, error) {
+func (e *Exporter) getCommitteeDutiesForSlot(slot phase0.Slot, committeeIDs []spectypes.CommitteeID, roles ...spectypes.RunnerRole) ([]*traces.CommitteeDutyTrace, error) {
 	if len(committeeIDs) == 0 {
-		duties, err := e.traceStore.GetCommitteeDuties(slot)
-		return duties, err
+		return e.traceStore.GetCommitteeDuties(slot, roles...)
+	}
+
+	if len(roles) == 0 {
+		roles = []spectypes.RunnerRole{
+			spectypes.RoleCommittee,
+			spectypes.RoleAggregatorCommittee,
+		}
 	}
 
 	duties := make([]*traces.CommitteeDutyTrace, 0, len(committeeIDs))
 
 	var errs *multierror.Error
 	for _, cmtID := range committeeIDs {
-		duty, err := e.traceStore.GetCommitteeDuty(slot, cmtID)
-		if err != nil {
-			e.logger.Error("error getting committee duty", zap.Error(err), fields.Slot(slot), fields.CommitteeID(cmtID))
-			errs = multierror.Append(errs, err)
-			continue
+		for _, role := range roles {
+			duty, err := e.traceStore.GetCommitteeDuty(slot, cmtID, role)
+			if err != nil {
+				errs = multierror.Append(errs, err)
+				continue
+			}
+			duties = append(duties, duty)
 		}
-		duties = append(duties, duty)
 	}
 	return duties, errs.ErrorOrNil()
 }
