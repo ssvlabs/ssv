@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"math"
 	"testing"
 	"time"
 
@@ -37,6 +38,7 @@ import (
 	"github.com/ssvlabs/ssv/operator/validator/mocks"
 	"github.com/ssvlabs/ssv/operator/validators"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	"github.com/ssvlabs/ssv/protocol/v2/queue/worker"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
@@ -1479,4 +1481,150 @@ func (m mockShares) Delete(_ basedb.ReadWriter, pubKey []byte) error           {
 func (m mockShares) Drop() error                                               { return nil }
 func (m mockShares) UpdateValidatorsMetadata(metadataMap beacon.ValidatorMetadataMap) (beacon.ValidatorMetadataMap, error) {
 	return nil, nil
+}
+
+func buildProposerFTestNetworkConfig(t *testing.T, booleForkEpoch phase0.Epoch) *networkconfig.Network {
+	t.Helper()
+
+	ssvCopy := *networkconfig.TestNetwork.SSV
+	ssvCopy.Forks.Boole = booleForkEpoch
+
+	netCfg := *networkconfig.TestNetwork
+	netCfg.SSV = &ssvCopy
+	return &netCfg
+}
+
+func buildProposerFTestCommittee() []*spectypes.Operator {
+	return []*spectypes.Operator{
+		{OperatorID: 1, SSVOperatorPubKey: []byte("op-1")},
+		{OperatorID: 2, SSVOperatorPubKey: []byte("op-2")},
+		{OperatorID: 3, SSVOperatorPubKey: []byte("op-3")},
+		{OperatorID: 4, SSVOperatorPubKey: []byte("op-4")},
+	}
+}
+
+func TestSetupRunnersProposerF(t *testing.T) {
+	netCfg := buildProposerFTestNetworkConfig(t, phase0.Epoch(math.MaxUint64)) // pre-Boole-fork
+	committee := buildProposerFTestCommittee()
+
+	share := &types.SSVShare{
+		Share: spectypes.Share{
+			ValidatorIndex:  1,
+			ValidatorPubKey: createPubKey(byte('1')),
+			SharePubKey:     make([]byte, 48),
+		},
+	}
+	operator := &spectypes.CommitteeMember{
+		OperatorID: 1,
+		Committee:  committee,
+	}
+	options := &validator.CommonOptions{
+		NetworkConfig: netCfg,
+	}
+
+	runners, err := SetupRunners(t.Context(), share, operator, nil, nil, options)
+	require.NoError(t, err)
+	require.Contains(t, runners, types.RoleAggregator)
+
+	aggregatorRunner, ok := runners[types.RoleAggregator].(*runner.AggregatorRunner)
+	require.True(t, ok, "expected *runner.AggregatorRunner")
+	require.NotNil(t, aggregatorRunner.QBFTController)
+
+	proposerF := aggregatorRunner.QBFTController.GetConfig().GetProposerF()
+	require.NotNil(t, proposerF)
+
+	state := &specqbft.State{
+		CommitteeMember: &spectypes.CommitteeMember{Committee: committee},
+		Height:          specqbft.FirstHeight,
+	}
+
+	expected := qbft.Proposer(state.Height, specqbft.FirstRound, types.OperatorIDsFromOperators(committee), netCfg)
+	require.Equal(t, expected, proposerF(state, specqbft.FirstRound))
+
+	// A different round should be able to select a different proposer (round-robin).
+	nextRound := specqbft.FirstRound + 1
+	expectedNextRound := qbft.Proposer(state.Height, nextRound, types.OperatorIDsFromOperators(committee), netCfg)
+	require.Equal(t, expectedNextRound, proposerF(state, nextRound))
+}
+
+func TestSetupRunnersProposerFPostBooleFork(t *testing.T) {
+	netCfg := buildProposerFTestNetworkConfig(t, phase0.Epoch(0)) // post-Boole-fork from genesis
+	committee := buildProposerFTestCommittee()
+
+	share := &types.SSVShare{
+		Share: spectypes.Share{
+			ValidatorIndex:  1,
+			ValidatorPubKey: createPubKey(byte('2')),
+			SharePubKey:     make([]byte, 48),
+		},
+	}
+	operator := &spectypes.CommitteeMember{
+		OperatorID: 1,
+		Committee:  committee,
+	}
+	options := &validator.CommonOptions{
+		NetworkConfig: netCfg,
+	}
+
+	runners, err := SetupRunners(t.Context(), share, operator, nil, nil, options)
+	require.NoError(t, err)
+
+	// Post-Boole the standalone aggregator runner is not built (SetupRunners gates it behind
+	// !BooleFork); the proposer runner exists in every fork and shares the same ProposerF closure.
+	proposerRunner, ok := runners[spectypes.RoleProposer].(*runner.ProposerRunner)
+	require.True(t, ok, "expected *runner.ProposerRunner")
+
+	proposerF := proposerRunner.QBFTController.GetConfig().GetProposerF()
+
+	// Pick a height whose slot lands well after genesis so BooleForkAtSlot is true.
+	state := &specqbft.State{
+		CommitteeMember: &spectypes.CommitteeMember{Committee: committee},
+		Height:          specqbft.Height(netCfg.SlotsPerEpoch) * 10,
+	}
+	require.True(t, netCfg.BooleForkAtSlot(phase0.Slot(state.Height)), "expected height to be post-Boole-fork for this assertion to be meaningful")
+
+	expected := qbft.Proposer(state.Height, specqbft.FirstRound, types.OperatorIDsFromOperators(committee), netCfg)
+	require.Equal(t, expected, proposerF(state, specqbft.FirstRound))
+}
+
+func TestSetupCommitteeRunnersProposerF(t *testing.T) {
+	netCfg := buildProposerFTestNetworkConfig(t, phase0.Epoch(math.MaxUint64)) // pre-Boole-fork
+	committee := buildProposerFTestCommittee()
+
+	options := &validator.Options{
+		CommonOptions: validator.CommonOptions{
+			NetworkConfig: netCfg,
+		},
+		Operator: &spectypes.CommitteeMember{
+			OperatorID: 1,
+			Committee:  committee,
+		},
+	}
+
+	committeeRunnerFunc := SetupCommitteeRunners(t.Context(), options)
+
+	shareMap := map[phase0.ValidatorIndex]*spectypes.Share{
+		1: {ValidatorIndex: 1},
+	}
+	r, err := committeeRunnerFunc(&spectypes.CommitteeDuty{}, shareMap, nil, nil)
+	require.NoError(t, err)
+	crunner, ok := r.(*runner.CommitteeRunner)
+	require.True(t, ok, "expected *runner.CommitteeRunner")
+	require.NotNil(t, crunner.QBFTController)
+
+	proposerF := crunner.QBFTController.GetConfig().GetProposerF()
+	require.NotNil(t, proposerF)
+
+	state := &specqbft.State{
+		CommitteeMember: &spectypes.CommitteeMember{Committee: committee},
+		Height:          specqbft.FirstHeight,
+	}
+
+	expected := qbft.Proposer(state.Height, specqbft.FirstRound, types.OperatorIDsFromOperators(committee), netCfg)
+	require.Equal(t, expected, proposerF(state, specqbft.FirstRound))
+
+	// A different round should be able to select a different proposer (round-robin).
+	nextRound := specqbft.FirstRound + 1
+	expectedNextRound := qbft.Proposer(state.Height, nextRound, types.OperatorIDsFromOperators(committee), netCfg)
+	require.Equal(t, expectedNextRound, proposerF(state, nextRound))
 }

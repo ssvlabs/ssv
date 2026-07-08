@@ -4,12 +4,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/topics"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/utils/hashmap"
 )
 
 type subscribeRandomsTopicsController struct {
@@ -113,4 +115,61 @@ func TestSubscribeRandomsSubscribesOnlyAvailableSubnets(t *testing.T) {
 	for _, subnet := range availableTopics {
 		require.False(t, n.persistentSubnets.IsSet(subnet))
 	}
+}
+
+// TestSubscribedSubnetsForCurrentEpoch covers the Boole transition state machine that decides
+// which subnet sets (Alan / Boole) a node subscribes to: Alan-only pre-fork, BOTH during the
+// transition window, Boole-only post-fork — for both the node's persistent subnets and its
+// active committee subscriptions.
+func TestSubscribedSubnetsForCurrentEpoch(t *testing.T) {
+	booleCfg := func(booleEpoch phase0.Epoch) *networkconfig.Network {
+		cfg := *networkconfig.TestNetwork
+		beaconCfg := *networkconfig.TestNetwork.Beacon
+		ssvCfg := *networkconfig.TestNetwork.SSV
+		ssvCfg.Forks.Boole = booleEpoch
+		cfg.Beacon = &beaconCfg
+		cfg.SSV = &ssvCfg
+		return &cfg
+	}
+
+	subnetsOf := func(indices ...uint64) commons.Subnets {
+		s := commons.ZeroSubnets
+		for _, i := range indices {
+			s.Set(i)
+		}
+		return s
+	}
+
+	// A committee subscription contributing Alan subnet 5 / Boole subnet 7.
+	newNet := func(cfg *networkconfig.Network) *p2pNetwork {
+		n := &p2pNetwork{
+			cfg:                  &Config{NetworkConfig: cfg},
+			persistentSubnets:    subnetsOf(1, 2),
+			subscribedCommittees: hashmap.New[string, statusWithSubnet](),
+		}
+		n.subscribedCommittees.Set("committee", statusWithSubnet{alanSubnet: 5, booleSubnet: 7})
+		return n
+	}
+
+	cur := networkconfig.TestNetwork.EstimatedCurrentEpoch()
+
+	t.Run("pre-fork subscribes Alan only", func(t *testing.T) {
+		alan, boole := newNet(booleCfg(cur + 100)).subscribedSubnetsForCurrentEpoch()
+		require.Equal(t, subnetsOf(1, 2, 5), alan)
+		require.Equal(t, commons.ZeroSubnets, boole)
+	})
+
+	t.Run("transition window subscribes both", func(t *testing.T) {
+		cfg := booleCfg(cur + 1)
+		require.True(t, cfg.InBooleTransitionWindow(cfg.EstimatedCurrentSlot()), "expected current slot in the Boole transition window")
+		alan, boole := newNet(cfg).subscribedSubnetsForCurrentEpoch()
+		require.Equal(t, subnetsOf(1, 2, 5), alan)
+		require.Equal(t, subnetsOf(1, 2, 7), boole)
+	})
+
+	t.Run("post-fork subscribes Boole only", func(t *testing.T) {
+		alan, boole := newNet(booleCfg(0)).subscribedSubnetsForCurrentEpoch()
+		require.Equal(t, commons.ZeroSubnets, alan)
+		require.Equal(t, subnetsOf(1, 2, 7), boole)
+	})
 }
