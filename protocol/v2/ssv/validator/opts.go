@@ -8,7 +8,6 @@ import (
 
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
-	exporterconfig "github.com/ssvlabs/ssv/exporter/config"
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -46,7 +45,7 @@ type CommonOptions struct {
 	DoppelgangerHandler runner.DoppelgangerProvider
 	NewDecidedHandler   qbftctrl.NewDecidedHandler
 	FullNode            bool
-	ExporterOptions     exporterconfig.Options
+	ExporterMode        bool
 	QueueSize           int
 	GasLimit            uint64
 	MessageValidator    validation.MessageValidator
@@ -64,7 +63,7 @@ func NewCommonOptions(
 	doppelgangerHandler runner.DoppelgangerProvider,
 	newDecidedHandler qbftctrl.NewDecidedHandler,
 	fullNode bool,
-	exporterOptions exporterconfig.Options,
+	exporterMode bool,
 	historySyncBatchSize int,
 	gasLimit uint64,
 	messageValidator validation.MessageValidator,
@@ -81,7 +80,7 @@ func NewCommonOptions(
 		DoppelgangerHandler: doppelgangerHandler,
 		NewDecidedHandler:   newDecidedHandler,
 		FullNode:            fullNode,
-		ExporterOptions:     exporterOptions,
+		ExporterMode:        exporterMode,
 		QueueSize:           defaultValidatorQueueSize,
 		GasLimit:            gasLimit,
 		MessageValidator:    messageValidator,

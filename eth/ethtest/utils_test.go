@@ -26,7 +26,6 @@ import (
 	"github.com/ssvlabs/ssv/eth/eventhandler/mocks"
 	"github.com/ssvlabs/ssv/eth/eventparser"
 	"github.com/ssvlabs/ssv/eth/simulator"
-	exporterconfig "github.com/ssvlabs/ssv/exporter/config"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/networkconfig"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
@@ -213,7 +212,7 @@ func setupEventHandler(
 		BeaconSigner:      keyManager,
 		StorageMap:        storageMap,
 		OperatorDataStore: operatorDataStore,
-	}, exporterconfig.Options{})
+	})
 	// NewController starts ttlcache cleanup goroutines; stop them so they don't leak across tests.
 	t.Cleanup(validatorCtrl.Stop)
 

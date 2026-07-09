@@ -39,7 +39,6 @@ import (
 	"github.com/ssvlabs/ssv/eth/executionclient"
 	"github.com/ssvlabs/ssv/eth/simulator"
 	"github.com/ssvlabs/ssv/eth/simulator/simcontract"
-	exporterconfig "github.com/ssvlabs/ssv/exporter/config"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/networkconfig"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
@@ -1444,7 +1443,7 @@ func setupEventHandler(
 		StorageMap:        storageMap,
 		OperatorDataStore: operatorDataStore,
 		ValidatorsMap:     validators.New(ctx),
-	}, exporterconfig.Options{})
+	})
 	// NewController starts ttlcache cleanup goroutines; stop them so they don't leak across tests.
 	t.Cleanup(validatorCtrl.Stop)
 
