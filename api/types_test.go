@@ -463,6 +463,199 @@ func TestRoleSliceBind(t *testing.T) {
 	}
 }
 
+// TestRunnerRoleBind tests binding string to RunnerRole.
+func TestRunnerRoleBind(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name     string
+		input    string
+		expected RunnerRole
+		hasError bool
+	}{
+		{
+			name:     "committee role",
+			input:    "COMMITTEE",
+			expected: RunnerRole(spectypes.RoleCommittee),
+			hasError: false,
+		},
+		{
+			name:     "aggregator committee role",
+			input:    "AGGREGATOR_COMMITTEE",
+			expected: RunnerRole(spectypes.RoleAggregatorCommittee),
+			hasError: false,
+		},
+		{
+			name:     "unknown role",
+			input:    "UNKNOWN_ROLE",
+			expected: RunnerRole(0),
+			hasError: true,
+		},
+		{
+			name:     "empty string is unknown",
+			input:    "",
+			expected: RunnerRole(0),
+			hasError: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var r RunnerRole
+			err := r.Bind(tc.input)
+
+			if tc.hasError {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, tc.expected, r)
+			}
+		})
+	}
+}
+
+// TestRunnerRoleMarshalJSON tests marshaling RunnerRole to JSON.
+func TestRunnerRoleMarshalJSON(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name     string
+		role     RunnerRole
+		expected string
+	}{
+		{
+			name:     "committee role",
+			role:     RunnerRole(spectypes.RoleCommittee),
+			expected: `"COMMITTEE"`,
+		},
+		{
+			name:     "aggregator committee role",
+			role:     RunnerRole(spectypes.RoleAggregatorCommittee),
+			expected: `"AGGREGATOR_COMMITTEE"`,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			data, err := tc.role.MarshalJSON()
+
+			require.NoError(t, err)
+			assert.Equal(t, tc.expected, string(data))
+		})
+	}
+}
+
+// TestRunnerRoleUnmarshalJSON tests unmarshaling RunnerRole from JSON.
+func TestRunnerRoleUnmarshalJSON(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name     string
+		json     string
+		expected RunnerRole
+		hasError bool
+	}{
+		{
+			name:     "committee role",
+			json:     `"COMMITTEE"`,
+			expected: RunnerRole(spectypes.RoleCommittee),
+			hasError: false,
+		},
+		{
+			name:     "aggregator committee role",
+			json:     `"AGGREGATOR_COMMITTEE"`,
+			expected: RunnerRole(spectypes.RoleAggregatorCommittee),
+			hasError: false,
+		},
+		{
+			name:     "invalid role",
+			json:     `"INVALID_ROLE"`,
+			expected: RunnerRole(0),
+			hasError: true,
+		},
+		{
+			name:     "non-string value",
+			json:     `123`,
+			expected: RunnerRole(0),
+			hasError: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			var r RunnerRole
+			err := r.UnmarshalJSON([]byte(tc.json))
+
+			if tc.hasError {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, tc.expected, r)
+			}
+		})
+	}
+}
+
+// TestRunnerRoleSliceBind tests binding a comma-separated string to RunnerRoleSlice.
+func TestRunnerRoleSliceBind(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name     string
+		input    string
+		expected RunnerRoleSlice
+		hasError bool
+	}{
+		{
+			name:     "empty string",
+			input:    "",
+			expected: nil,
+			hasError: false,
+		},
+		{
+			name:     "single role",
+			input:    "COMMITTEE",
+			expected: RunnerRoleSlice{RunnerRole(spectypes.RoleCommittee)},
+			hasError: false,
+		},
+		{
+			name:  "multiple roles",
+			input: "COMMITTEE,AGGREGATOR_COMMITTEE",
+			expected: RunnerRoleSlice{
+				RunnerRole(spectypes.RoleCommittee),
+				RunnerRole(spectypes.RoleAggregatorCommittee),
+			},
+			hasError: false,
+		},
+		{
+			name:     "invalid role in list",
+			input:    "COMMITTEE,INVALID_ROLE",
+			expected: nil,
+			hasError: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			var rs RunnerRoleSlice
+			err := rs.Bind(tc.input)
+
+			if tc.hasError {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, tc.expected, rs)
+			}
+		})
+	}
+}
+
 // TestStructWithHexAndRole tests marshaling and unmarshaling a struct with Hex and Role fields.
 func TestStructWithHexAndRole(t *testing.T) {
 	t.Parallel()
