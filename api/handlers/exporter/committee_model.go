@@ -10,7 +10,7 @@ import (
 	"github.com/ssvlabs/ssv/api"
 	exportercore "github.com/ssvlabs/ssv/exporter"
 	"github.com/ssvlabs/ssv/exporter/traces"
-	obsutils "github.com/ssvlabs/ssv/observability/utils"
+	"github.com/ssvlabs/ssv/protocol/v2/message"
 )
 
 type CommitteeIDLengthError struct {
@@ -116,7 +116,7 @@ func toCommitteeTrace(t *traces.CommitteeDutyTrace) CommitteeTrace {
 	return CommitteeTrace{
 		// consensus trace
 		Slot:          uint64(t.Slot),
-		Role:          obsutils.FormatRunnerRole(t.Role),
+		Role:          message.RunnerRoleToString(t.Role),
 		Consensus:     toRounds(t.Rounds),
 		Decideds:      toDecideds(t.Decideds),
 		SyncCommittee: toCommitteePost(t.SyncCommittee),
