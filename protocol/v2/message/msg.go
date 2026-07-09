@@ -102,11 +102,13 @@ func RunnerRoleFromString(s string) (spectypes.RunnerRole, error) {
 // roles (COMMITTEE, AGGREGATOR_COMMITTEE); any other value is rejected so the
 // committee-traces filter cannot bind a role the store has no key prefix for.
 func CommitteeRunnerRoleFromString(s string) (spectypes.RunnerRole, error) {
-	switch s {
-	case roleCommittee:
-		return spectypes.RoleCommittee, nil
-	case roleAggregatorCommittee:
-		return spectypes.RoleAggregatorCommittee, nil
+	role, err := RunnerRoleFromString(s)
+	if err != nil {
+		return 0, err
+	}
+	switch role {
+	case spectypes.RoleCommittee, spectypes.RoleAggregatorCommittee:
+		return role, nil
 	default:
 		return 0, fmt.Errorf("unsupported committee runner role: %s", s)
 	}
