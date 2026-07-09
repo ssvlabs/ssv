@@ -14,6 +14,7 @@ import (
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/jellydator/ttlcache/v3"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
@@ -246,6 +247,48 @@ func TestHandleNonCommitteeMessages(t *testing.T) {
 			require.Fail(t, "timed out waiting for all 3 messages to arrive")
 		}
 	}
+}
+
+func TestHandleWorkerMessagesUsesMessageTraceHandler(t *testing.T) {
+	logger := log.TestLogger(t)
+	ctr := setupController(t, logger, MockControllerOptions{
+		validatorCommonOpts: &validator.CommonOptions{},
+	})
+	ctr.committeesObservers = ttlcache.New(
+		ttlcache.WithTTL[spectypes.MessageID, *validator.CommitteeObserver](time.Minute),
+	)
+
+	sentinelErr := errors.New("message trace handler called")
+	var calls int
+	var gotCtx context.Context
+	var gotMsg *queue.SSVMessage
+	var gotVerifySig func(*spectypes.PartialSignatureMessages) error
+	ctr.messageTraceHandler = func(ctx context.Context, msg *queue.SSVMessage, verifySig func(*spectypes.PartialSignatureMessages) error) error {
+		calls++
+		gotCtx = ctx
+		gotMsg = msg
+		gotVerifySig = verifySig
+		return sentinelErr
+	}
+
+	msgID := spectypes.NewMsgID(networkconfig.TestNetwork.DomainType, []byte("pk"), spectypes.RoleCommittee)
+	ssvMsg := &spectypes.SSVMessage{
+		MsgType: spectypes.SSVPartialSignatureMsgType,
+		MsgID:   msgID,
+		Data:    []byte("invalid partial signature payload"),
+	}
+	msg := &queue.SSVMessage{
+		SignedSSVMessage: &spectypes.SignedSSVMessage{SSVMessage: ssvMsg},
+		SSVMessage:       ssvMsg,
+	}
+
+	err := ctr.handleWorkerMessages(t.Context(), msg)
+
+	require.ErrorIs(t, err, sentinelErr)
+	require.Equal(t, 1, calls)
+	require.True(t, gotCtx == ctr.ctx)
+	require.Same(t, msg, gotMsg)
+	require.NotNil(t, gotVerifySig)
 }
 
 func TestSetupValidators(t *testing.T) {
