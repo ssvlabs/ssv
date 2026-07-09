@@ -163,6 +163,9 @@ func prepareTest(t *testing.T, logger *zap.Logger, name string, test any) *runna
 
 		return &runnable{
 			name: typedTest.TestName(),
+			// Subtests are decoded lazily inside the run closure (unlike
+			// MultiMsgProcessingSpecTest, which decodes eagerly in prepareTest) so a
+			// decode failure attributes to the individual subtest run rather than to setup.
 			test: func(t *testing.T) {
 				subtests := test.(map[string]any)["Tests"].([]any)
 				for _, subtest := range subtests {

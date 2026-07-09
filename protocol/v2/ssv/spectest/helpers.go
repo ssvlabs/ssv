@@ -14,6 +14,10 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 )
 
+// keySetFromShares returns the keyset of an arbitrary share. This assumes every
+// fixture shares a single operator keyset (true for all current fixtures); if a
+// fixture ever carried heterogeneous keysets, map iteration order would pick one
+// nondeterministically.
 func keySetFromShares(shares map[phase0.ValidatorIndex]*spectypes.Share) *spectestingutils.TestKeySet {
 	for _, share := range shares {
 		return spectestingutils.KeySetForShare(share)
