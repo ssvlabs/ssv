@@ -131,6 +131,20 @@ func (c *Collector) dumpValidatorToDBPeriodically(slot phase0.Slot) (totalSaved 
 }
 
 // pendingDetails constructs a single zap field named "pending_signers_by_root"
+// countPending returns the total number of pending validator-index entries
+// held in a pendingByRoot map, across all roots, signers and timestamps.
+func countPending(data map[phase0.Root]map[spectypes.OperatorID]map[uint64][]phase0.ValidatorIndex) int {
+	count := 0
+	for _, perSigner := range data {
+		for _, byTs := range perSigner {
+			for _, idxs := range byTs {
+				count += len(idxs)
+			}
+		}
+	}
+	return count
+}
+
 // that logs the content of pendingByRoot in a JSON-friendly structure.
 func pendingDetails(data map[phase0.Root]map[spectypes.OperatorID]map[uint64][]phase0.ValidatorIndex) zap.Field {
 	out := make(map[string]map[string]any, len(data))

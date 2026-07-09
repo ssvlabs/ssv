@@ -899,14 +899,7 @@ func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 						c.checkQuorumAfterFlush(c.logger, committeeID, slot, trace)
 					} else {
 						// CRITICAL: If we fail to compute role roots, pending signatures will be dropped.
-						pendingCount := 0
-						for _, perSigner := range trace.pendingByRoot {
-							for _, byTs := range perSigner {
-								for _, idxs := range byTs {
-									pendingCount += len(idxs)
-								}
-							}
-						}
+						pendingCount := countPending(trace.pendingByRoot)
 						c.logger.Error("CRITICAL: failed to compute role roots from proposal - pending signatures will be dropped",
 							zap.Error(err),
 							fields.Slot(slot),
@@ -924,14 +917,7 @@ func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 						c.checkQuorumAfterFlush(c.logger, committeeID, slot, trace)
 					} else {
 						// CRITICAL: If we fail to compute role roots, pending signatures will be dropped.
-						pendingCount := 0
-						for _, perSigner := range trace.pendingByRoot {
-							for _, byTs := range perSigner {
-								for _, idxs := range byTs {
-									pendingCount += len(idxs)
-								}
-							}
-						}
+						pendingCount := countPending(trace.pendingByRoot)
 						c.logger.Error("CRITICAL: failed to compute aggregator committee roots from proposal - pending signatures will be dropped",
 							zap.Error(err),
 							fields.Slot(slot),
@@ -1049,7 +1035,7 @@ func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 		if isCommitteeRunnerRole(verifyCtx.runnerRole) {
 			var aggSelectionRoot phase0.Root
 			aggSelectionRootReady := false
-			if pSigMessages.Type == spectypes.AggregatorCommitteePartialSig {
+			if verifyCtx.runnerRole == spectypes.RoleAggregatorCommittee && pSigMessages.Type == spectypes.AggregatorCommitteePartialSig {
 				root, err := c.getAggregatorSelectionRoot(ctx, verifyCtx.slot)
 				if err != nil {
 					c.logger.Warn("failed to compute aggregator selection root",
