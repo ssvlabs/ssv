@@ -65,6 +65,11 @@ func (e *Exporter) getCommitteeDutiesForSlot(slot phase0.Slot, committeeIDs []sp
 		for _, role := range roles {
 			duty, err := e.traceStore.GetCommitteeDuty(slot, cmtID, role)
 			if err != nil {
+				// not-found is expected (we probe every role per committee) and is
+				// filtered upstream; only log genuine storage failures.
+				if !isNotFoundError(err) {
+					e.logger.Error("error getting committee duty", zap.Error(err), fields.Slot(slot), fields.CommitteeID(cmtID))
+				}
 				errs = multierror.Append(errs, err)
 				continue
 			}
