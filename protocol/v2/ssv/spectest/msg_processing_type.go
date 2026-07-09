@@ -141,6 +141,9 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 				lastErr = err
 			}
 			if test.DecidedSlashable && IsQBFTProposalMessage(msg) {
+				// Every DecidedSlashable vector here is single-slot, so TestingDutySlot is
+				// equivalent to the decoded proposal Height. Revisit if a multi-slot vector
+				// that relies on the per-message height is ever added.
 				for _, validatorShare := range test.Runner.GetShares() {
 					test.Runner.GetSigner().(*ekm.TestingKeyManagerAdapter).AddSlashableSlot(validatorShare.SharePubKey, spectestingutils.TestingDutySlot)
 				}
@@ -196,6 +199,7 @@ func (test *MsgProcessingSpecTest) RunAsPartOfMultiTest(t *testing.T, logger *za
 			runnerInstance = runner
 			break
 		}
+		require.NotNil(t, runnerInstance)
 		actualRunner = runnerInstance
 		network = runnerInstance.GetNetwork().(*protocoltesting.TestingNetwork)
 		beaconNetwork = runnerInstance.GetBeaconNode().(*protocoltesting.BeaconNodeWrapped)
@@ -206,6 +210,7 @@ func (test *MsgProcessingSpecTest) RunAsPartOfMultiTest(t *testing.T, logger *za
 			runnerInstance = runner
 			break
 		}
+		require.NotNil(t, runnerInstance)
 		actualRunner = runnerInstance
 		network = runnerInstance.GetNetwork().(*protocoltesting.TestingNetwork)
 		beaconNetwork = runnerInstance.GetBeaconNode().(*protocoltesting.BeaconNodeWrapped)

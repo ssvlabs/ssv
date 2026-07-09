@@ -75,6 +75,9 @@ func RunSyncCommitteeAggProof(t *testing.T, test *synccommitteeaggregator.SyncCo
 		require.NoError(t, lastErr)
 	}
 
+	// StartDuty may have returned a nil runner (e.g. it errored); guard so the
+	// post-root assertion fails legibly instead of panicking on a nil deref.
+	require.NotNil(t, r)
 	postRoot, err := r.GetStateRoot()
 	require.NoError(t, err)
 	require.EqualValues(t, test.PostDutyRunnerStateRoot, hex.EncodeToString(postRoot[:]))
