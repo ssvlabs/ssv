@@ -123,7 +123,7 @@ func (rs *RoleSlice) Bind(value string) error {
 type RunnerRole spectypes.RunnerRole
 
 func (r *RunnerRole) Bind(value string) error {
-	role, err := message.RunnerRoleFromString(value)
+	role, err := message.CommitteeRunnerRoleFromString(value)
 	if err != nil {
 		return err
 	}

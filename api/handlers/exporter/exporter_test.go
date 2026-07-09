@@ -1414,6 +1414,18 @@ func TestExporterCommitteeTraces(t *testing.T) {
 			},
 		},
 		{
+			name: "invalid request - non-committee role in filter",
+			request: map[string]any{
+				"from":  100,
+				"to":    100,
+				"roles": []string{"AGGREGATOR"},
+			},
+			expectedStatus: http.StatusBadRequest,
+			validateErrResp: func(t *testing.T, err error) {
+				assert.ErrorContains(t, err, "unsupported committee runner role")
+			},
+		},
+		{
 			name: "invalid request - invalid committee ID length",
 			request: map[string]any{
 				"from":         100,

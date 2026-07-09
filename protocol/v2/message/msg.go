@@ -97,6 +97,21 @@ func RunnerRoleFromString(s string) (spectypes.RunnerRole, error) {
 	}
 }
 
+// CommitteeRunnerRoleFromString returns a committee-backed RunnerRole from
+// string. Unlike RunnerRoleFromString it only accepts the two committee runner
+// roles (COMMITTEE, AGGREGATOR_COMMITTEE); any other value is rejected so the
+// committee-traces filter cannot bind a role the store has no key prefix for.
+func CommitteeRunnerRoleFromString(s string) (spectypes.RunnerRole, error) {
+	switch s {
+	case roleCommittee:
+		return spectypes.RoleCommittee, nil
+	case roleAggregatorCommittee:
+		return spectypes.RoleAggregatorCommittee, nil
+	default:
+		return 0, fmt.Errorf("unsupported committee runner role: %s", s)
+	}
+}
+
 func RunnerRoleToString(r spectypes.RunnerRole) string {
 	switch r {
 	case spectypes.RoleCommittee:
