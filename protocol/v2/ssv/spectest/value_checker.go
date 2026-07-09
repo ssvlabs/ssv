@@ -61,10 +61,11 @@ func (test *ValCheckSpecTest) Run(t *testing.T) {
 	// This validates that our implementation returns errors when expected,
 	// without requiring specific error codes (which are implementation details).
 	if err != nil && test.ExpectedErrorCode != 0 {
-		err = spectypes.WrapError(test.ExpectedErrorCode, err)
+		err = spectypes.WrapError(adjustExpectedErrorCode(test.ExpectedErrorCode), err)
 	}
 
-	spectests.AssertErrorCode(t, test.ExpectedErrorCode, err)
+	actualErr := adjustActualErrorForRole(adjustActualError(err), test.RunnerRole)
+	spectests.AssertErrorCode(t, adjustExpectedErrorCode(test.ExpectedErrorCode), actualErr)
 }
 
 // valCheckF creates value checker using our implementation
@@ -132,6 +133,9 @@ func (test *ValCheckSpecTest) valCheckF(signer ekm.BeaconSigner) func([]byte) er
 			pubKeyBytes,
 			spectestingutils.TestingValidatorIndex,
 		)
+		return checker.CheckValue
+	case spectypes.RoleAggregatorCommittee:
+		checker := ssv.NewAggregatorCommitteeChecker()
 		return checker.CheckValue
 	default:
 		return nil
@@ -247,6 +251,9 @@ func createValueChecker(r runner.Runner, signerSource ...runner.Runner) ssv.Valu
 			sharePubKeys,
 			expectedVote,
 		)
+
+	case *runner.AggregatorCommitteeRunner:
+		return ssv.NewAggregatorCommitteeChecker()
 
 	default:
 		return nil
