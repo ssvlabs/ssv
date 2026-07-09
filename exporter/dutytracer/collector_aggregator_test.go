@@ -227,6 +227,8 @@ func TestCollector_AggregatorCommitteeDuty_PostConsensusQuorum(t *testing.T) {
 			aggregatorRoot = root
 		case spectypes.BNRoleSyncCommitteeContribution:
 			contributionRoot = root
+		default:
+			t.Fatalf("unexpected beacon role %v", role)
 		}
 	}
 	require.NotEqual(t, phase0.Root{}, aggregatorRoot)
