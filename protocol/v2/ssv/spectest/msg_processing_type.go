@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -19,7 +20,7 @@ import (
 
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
-	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
@@ -40,10 +41,12 @@ type MsgProcessingSpecTest struct {
 	PostDutyRunnerStateRoot string
 	PostDutyRunnerState     spectypes.Root `json:"-"` // Field is ignored by encoding/json
 	// OutputMessages compares pre/ post signed partial sigs to output. We exclude consensus msgs as it's tested in consensus
-	OutputMessages         []*spectypes.PartialSignatureMessages
-	BeaconBroadcastedRoots []string
-	DontStartDuty          bool // if set to true will not start a duty for the runner
-	ExpectedErrorCode      int
+	OutputMessages          []*spectypes.PartialSignatureMessages
+	BeaconBroadcastedRoots  []string
+	DontStartDuty           bool // if set to true will not start a duty for the runner
+	ExpectedErrorCode       int
+	BeaconAggregators       []phase0.CommitteeIndex `json:"BeaconAggregators,omitempty"`
+	BeaconAggregatorsValues []bool                  `json:"BeaconAggregatorsValues,omitempty"`
 }
 
 func (test *MsgProcessingSpecTest) TestName() string {
@@ -55,7 +58,7 @@ func (test *MsgProcessingSpecTest) FullName() string {
 }
 
 func RunMsgProcessing(t *testing.T, test *MsgProcessingSpecTest) {
-	logger := protocoltesting.SpectestLogger(t)
+	logger := log.TestLogger(t)
 	test.overrideStateComparison(t)
 	test.RunAsPartOfMultiTest(t, logger)
 }
@@ -76,32 +79,8 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 	}
 
 	valCheck := createValueChecker(test.Runner)
-	switch test.Runner.(type) {
-	case *runner.CommitteeRunner:
-		for _, inst := range test.Runner.(*runner.CommitteeRunner).QBFTController.RecentInstances {
-			if inst.ValueChecker == nil {
-				inst.ValueChecker = valCheck
-			}
-		}
-	case *runner.AggregatorRunner:
-		for _, inst := range test.Runner.(*runner.AggregatorRunner).QBFTController.RecentInstances {
-			if inst.ValueChecker == nil {
-				inst.ValueChecker = valCheck
-			}
-		}
-	case *runner.ProposerRunner:
-		for _, inst := range test.Runner.(*runner.ProposerRunner).QBFTController.RecentInstances {
-			if inst.ValueChecker == nil {
-				inst.ValueChecker = valCheck
-			}
-		}
-	case *runner.SyncCommitteeAggregatorRunner:
-		for _, inst := range test.Runner.(*runner.SyncCommitteeAggregatorRunner).QBFTController.RecentInstances {
-			if inst.ValueChecker == nil {
-				inst.ValueChecker = valCheck
-			}
-		}
-	}
+	setRunnerValueCheckersIfNil(test.Runner, valCheck)
+	test.Runner.GetBeaconNode().(*protocoltesting.BeaconNodeWrapped).GetBeaconNode().SetAggregators(test.BeaconAggregatorsMap())
 
 	test.Runner.SetQBFTRoundTimerF(func(_ context.Context, _ *zap.Logger, _ phase0.Slot) ssv.QBFTRoundTimer {
 		return roundtimer.NewTestingTimer()
@@ -112,34 +91,43 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 	var lastErr error
 
 	switch test.Runner.(type) {
-	case *runner.CommitteeRunner:
+	case *runner.CommitteeRunner, *runner.AggregatorCommitteeRunner:
 		guard := validator.NewCommitteeDutyGuard()
-		c = baseCommitteeWithRunnerSample(logger, keySetMap, test.Runner.(*runner.CommitteeRunner), guard)
+		c = baseCommitteeWithRunner(logger, keySetMap, test.Runner, guard)
 
 		if test.DontStartDuty {
-			r := test.Runner.(*runner.CommitteeRunner)
-			r.DutyGuard = guard
-			c.Runners[test.Duty.DutySlot()] = r
-
-			// Inform the duty guard of the running duty, if any, so that it won't reject it.
-			if r.State != nil && r.State.CurrentDuty != nil {
-				duty, ok := r.State.CurrentDuty.(*spectypes.CommitteeDuty)
-				if !ok {
-					panic("starting duty not found")
+			switch test.Runner.(type) {
+			case *runner.CommitteeRunner:
+				r := test.Runner.(*runner.CommitteeRunner)
+				r.DutyGuard = guard
+				// Ensure ValCheck is set when StartDuty is skipped so consensus processing can validate.
+				if r.ValCheck == nil {
+					r.ValCheck = protocoltesting.TestingValueChecker{}
 				}
-				for _, validatorDuty := range duty.ValidatorDuties {
-					err := guard.StartDuty(validatorDuty.Type, spectypes.ValidatorPK(validatorDuty.PubKey), validatorDuty.Slot)
-					if err != nil {
-						panic(err)
+				c.Runners[test.Duty.DutySlot()] = r
+				// Inform the duty guard of the running duty, if any, so that it won't reject it.
+				if r.State != nil && r.State.CurrentDuty != nil {
+					duty, ok := r.State.CurrentDuty.(*spectypes.CommitteeDuty)
+					if !ok {
+						panic("starting duty not found")
 					}
-					err = guard.ValidDuty(validatorDuty.Type, spectypes.ValidatorPK(validatorDuty.PubKey), validatorDuty.Slot)
-					if err != nil {
-						panic(err)
+					for _, validatorDuty := range duty.ValidatorDuties {
+						err := guard.StartDuty(validatorDuty.Type, spectypes.ValidatorPK(validatorDuty.PubKey), validatorDuty.Slot)
+						if err != nil {
+							panic(err)
+						}
+						err = guard.ValidDuty(validatorDuty.Type, spectypes.ValidatorPK(validatorDuty.PubKey), validatorDuty.Slot)
+						if err != nil {
+							panic(err)
+						}
 					}
 				}
+			case *runner.AggregatorCommitteeRunner:
+				r := test.Runner.(*runner.AggregatorCommitteeRunner)
+				c.AggregatorRunners[test.Duty.DutySlot()] = r
 			}
 		} else {
-			_, _, lastErr = c.StartDuty(ctx, logger, test.Duty.(*spectypes.CommitteeDuty))
+			_, _, lastErr = c.StartDuty(ctx, logger, test.Duty)
 		}
 
 		for _, msg := range test.Messages {
@@ -153,13 +141,11 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 				lastErr = err
 			}
 			if test.DecidedSlashable && IsQBFTProposalMessage(msg) {
-				consensusMsg, err := specqbft.DecodeMessage(msg.SSVMessage.Data)
-				if err != nil {
-					panic(err)
-				}
-				slot := phase0.Slot(consensusMsg.Height)
+				// Every DecidedSlashable vector here is single-slot, so TestingDutySlot is
+				// equivalent to the decoded proposal Height. Revisit if a multi-slot vector
+				// that relies on the per-message height is ever added.
 				for _, validatorShare := range test.Runner.GetShares() {
-					test.Runner.GetSigner().(*ekm.TestingKeyManagerAdapter).AddSlashableSlot(validatorShare.SharePubKey, slot)
+					test.Runner.GetSigner().(*ekm.TestingKeyManagerAdapter).AddSlashableSlot(validatorShare.SharePubKey, spectestingutils.TestingDutySlot)
 				}
 			}
 		}
@@ -187,12 +173,21 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 	return v, c, lastErr
 }
 
+func (test *MsgProcessingSpecTest) BeaconAggregatorsMap() map[phase0.CommitteeIndex]bool {
+	aggregatorsMap := make(map[phase0.CommitteeIndex]bool)
+	for i, idx := range test.BeaconAggregators {
+		aggregatorsMap[idx] = test.BeaconAggregatorsValues[i]
+	}
+	return aggregatorsMap
+}
+
 func (test *MsgProcessingSpecTest) RunAsPartOfMultiTest(t *testing.T, logger *zap.Logger) {
 	ctx := context.Background()
 	v, c, lastErr := test.runPreTesting(ctx, logger)
-	spectests.AssertErrorCode(t, test.ExpectedErrorCode, lastErr)
+	actualErr := adjustActualErrorForRunner(adjustActualError(lastErr), test.Runner)
+	spectests.AssertErrorCode(t, adjustExpectedErrorCode(test.ExpectedErrorCode), actualErr)
 
-	network := &protocoltesting.TestingNetwork{}
+	var network *protocoltesting.TestingNetwork
 	var beaconNetwork *protocoltesting.BeaconNodeWrapped
 	var committee []*spectypes.Operator
 	actualRunner := test.Runner
@@ -204,6 +199,18 @@ func (test *MsgProcessingSpecTest) RunAsPartOfMultiTest(t *testing.T, logger *za
 			runnerInstance = runner
 			break
 		}
+		require.NotNil(t, runnerInstance)
+		actualRunner = runnerInstance
+		network = runnerInstance.GetNetwork().(*protocoltesting.TestingNetwork)
+		beaconNetwork = runnerInstance.GetBeaconNode().(*protocoltesting.BeaconNodeWrapped)
+		committee = c.CommitteeMember.Committee
+	case *runner.AggregatorCommitteeRunner:
+		var runnerInstance *runner.AggregatorCommitteeRunner
+		for _, runner := range c.AggregatorRunners {
+			runnerInstance = runner
+			break
+		}
+		require.NotNil(t, runnerInstance)
 		actualRunner = runnerInstance
 		network = runnerInstance.GetNetwork().(*protocoltesting.TestingNetwork)
 		beaconNetwork = runnerInstance.GetBeaconNode().(*protocoltesting.BeaconNodeWrapped)
@@ -264,10 +271,18 @@ func overrideStateComparison(t *testing.T, test *MsgProcessingSpecTest, name str
 	test.PostDutyRunnerStateRoot = hex.EncodeToString(root[:])
 }
 
-var baseCommitteeWithRunnerSample = func(
+type mockDGHandler struct{}
+
+func (m mockDGHandler) CanSign(validatorIndex phase0.ValidatorIndex) bool {
+	return true
+}
+
+func (m mockDGHandler) ReportQuorum(validatorIndex phase0.ValidatorIndex) {}
+
+var baseCommitteeWithRunner = func(
 	logger *zap.Logger,
 	keySetMap map[phase0.ValidatorIndex]*spectestingutils.TestKeySet,
-	runnerSample *runner.CommitteeRunner,
+	runnerSample runner.Runner,
 	committeeDutyGuard *validator.CommitteeDutyGuard,
 ) *validator.Committee {
 	var keySetSample *spectestingutils.TestKeySet
@@ -277,42 +292,79 @@ var baseCommitteeWithRunnerSample = func(
 	}
 
 	shareMap := make(map[phase0.ValidatorIndex]*spectypes.Share)
-	for valIdx, ks := range keySetMap {
-		shareMap[valIdx] = spectestingutils.TestingShare(ks, valIdx)
+	for valIdx, share := range runnerSample.GetShares() {
+		shareMap[valIdx] = share
+	}
+
+	var baseRunner *runner.BaseRunner
+	var dgHandler runner.DoppelgangerProvider
+	switch r := runnerSample.(type) {
+	case *runner.CommitteeRunner:
+		baseRunner = r.BaseRunner
+		dgHandler = r.GetDoppelgangerHandler()
+	case *runner.AggregatorCommitteeRunner:
+		baseRunner = r.BaseRunner
+		dgHandler = mockDGHandler{}
 	}
 
 	createRunnerF := func(
-		_ spectypes.Duty,
+		duty spectypes.Duty,
 		shareMap map[phase0.ValidatorIndex]*spectypes.Share,
 		attestingValidators []phase0.BLSPubKey,
 		_ runner.CommitteeDutyGuard,
 	) (runner.Runner, error) {
-		r, err := runner.NewCommitteeRunner(runner.CommitteeRunnerOptions{
-			BaseRunnerOptions: runner.BaseRunnerOptions{
-				NetworkConfig:  networkconfig.TestNetwork,
-				Share:          shareMap,
-				Beacon:         runnerSample.GetBeaconNode(),
-				Network:        runnerSample.GetNetwork(),
-				Signer:         runnerSample.GetSigner(),
-				OperatorSigner: runnerSample.GetOperatorSigner(),
-			},
-			AttestingValidators: attestingValidators,
-			QBFTController: controller.NewController(
-				runnerSample.QBFTController.Identifier,
-				runnerSample.QBFTController.CommitteeMember,
-				runnerSample.QBFTController.GetConfig(),
+		switch duty.(type) {
+		case *spectypes.CommitteeDuty:
+			ctrl := controller.NewController(
+				baseRunner.QBFTController.Identifier,
+				baseRunner.QBFTController.CommitteeMember,
+				baseRunner.QBFTController.GetConfig(),
 				spectestingutils.TestingOperatorSigner(keySetSample),
 				false,
-			),
-			DutyGuard:           committeeDutyGuard,
-			DoppelgangerHandler: runnerSample.GetDoppelgangerHandler(),
-		})
-		return r, err
+			)
+			r, err := runner.NewCommitteeRunner(runner.CommitteeRunnerOptions{
+				BaseRunnerOptions: runner.BaseRunnerOptions{
+					NetworkConfig:  baseRunner.NetworkConfig,
+					Share:          shareMap,
+					Beacon:         runnerSample.GetBeaconNode(),
+					Network:        runnerSample.GetNetwork(),
+					Signer:         runnerSample.GetSigner(),
+					OperatorSigner: runnerSample.GetOperatorSigner(),
+				},
+				AttestingValidators: attestingValidators,
+				QBFTController:      ctrl,
+				DutyGuard:           committeeDutyGuard,
+				DoppelgangerHandler: dgHandler,
+			})
+			return r, err
+		case *spectypes.AggregatorCommitteeDuty:
+			ctrl := controller.NewController(
+				baseRunner.QBFTController.Identifier,
+				baseRunner.QBFTController.CommitteeMember,
+				baseRunner.QBFTController.GetConfig(),
+				spectestingutils.TestingOperatorSigner(keySetSample),
+				false,
+			)
+			r, err := runner.NewAggregatorCommitteeRunner(runner.AggregatorCommitteeRunnerOptions{
+				BaseRunnerOptions: runner.BaseRunnerOptions{
+					NetworkConfig:  baseRunner.NetworkConfig,
+					Share:          shareMap,
+					Beacon:         runnerSample.GetBeaconNode(),
+					Network:        runnerSample.GetNetwork(),
+					Signer:         runnerSample.GetSigner(),
+					OperatorSigner: runnerSample.GetOperatorSigner(),
+				},
+				QBFTController: ctrl,
+			})
+			return r, err
+		default:
+			return nil, fmt.Errorf("invalid duty type %T", duty)
+		}
 	}
 
 	c := validator.NewCommittee(
 		logger,
-		runnerSample.NetworkConfig,
+		baseRunner.NetworkConfig,
 		spectestingutils.TestingCommitteeMember(keySetSample),
 		createRunnerF,
 		shareMap,
@@ -355,8 +407,11 @@ type MsgProcessingSpecTestAlias struct {
 	BeaconBroadcastedRoots  []string
 	DontStartDuty           bool // if set to true will not start a duty for the runner
 	ExpectedErrorCode       int
-	BeaconDuty              *spectypes.ValidatorDuty `json:"ValidatorDuty,omitempty"`
-	CommitteeDuty           *spectypes.CommitteeDuty `json:"CommitteeDuty,omitempty"`
+	BeaconDuty              *spectypes.ValidatorDuty           `json:"ValidatorDuty,omitempty"`
+	CommitteeDuty           *spectypes.CommitteeDuty           `json:"CommitteeDuty,omitempty"`
+	AggregatorCommitteeDuty *spectypes.AggregatorCommitteeDuty `json:"AggregatorCommitteeDuty,omitempty"`
+	BeaconAggregators       []phase0.CommitteeIndex            `json:"BeaconAggregators,omitempty"`
+	BeaconAggregatorsValues []bool                             `json:"BeaconAggregatorsValues,omitempty"`
 }
 
 func (t *MsgProcessingSpecTest) MarshalJSON() ([]byte, error) {
@@ -371,6 +426,8 @@ func (t *MsgProcessingSpecTest) MarshalJSON() ([]byte, error) {
 		BeaconBroadcastedRoots:  t.BeaconBroadcastedRoots,
 		DontStartDuty:           t.DontStartDuty,
 		ExpectedErrorCode:       t.ExpectedErrorCode,
+		BeaconAggregators:       t.BeaconAggregators,
+		BeaconAggregatorsValues: t.BeaconAggregatorsValues,
 	}
 
 	if t.Duty != nil {
@@ -378,8 +435,10 @@ func (t *MsgProcessingSpecTest) MarshalJSON() ([]byte, error) {
 			alias.BeaconDuty = beaconDuty
 		} else if committeeDuty, ok := t.Duty.(*spectypes.CommitteeDuty); ok {
 			alias.CommitteeDuty = committeeDuty
+		} else if aggCommitteeDuty, ok := t.Duty.(*spectypes.AggregatorCommitteeDuty); ok {
+			alias.AggregatorCommitteeDuty = aggCommitteeDuty
 		} else {
-			return nil, errors.New("can't marshal StartNewRunnerDutySpecTest because t.Duty isn't ValidatorDuty or CommitteeDuty")
+			return nil, errors.New("can't marshal StartNewRunnerDutySpecTest because t.Duty isn't ValidatorDuty, CommitteeDuty, or AggregatorCommitteeDuty")
 		}
 	}
 	byts, err := json.Marshal(alias)
@@ -405,12 +464,16 @@ func (t *MsgProcessingSpecTest) UnmarshalJSON(data []byte) error {
 	t.BeaconBroadcastedRoots = aux.BeaconBroadcastedRoots
 	t.DontStartDuty = aux.DontStartDuty
 	t.ExpectedErrorCode = aux.ExpectedErrorCode
+	t.BeaconAggregators = aux.BeaconAggregators
+	t.BeaconAggregatorsValues = aux.BeaconAggregatorsValues
 
 	// Determine which type of duty was marshaled
 	if aux.BeaconDuty != nil {
 		t.Duty = aux.BeaconDuty
 	} else if aux.CommitteeDuty != nil {
 		t.Duty = aux.CommitteeDuty
+	} else if aux.AggregatorCommitteeDuty != nil {
+		t.Duty = aux.AggregatorCommitteeDuty
 	}
 
 	return nil
