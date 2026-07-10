@@ -299,6 +299,109 @@ func TestCollector_AggregatorCommitteeDuty_PostConsensusQuorum(t *testing.T) {
 	assert.ElementsMatch(t, []spectypes.OperatorID{operator1, operator2, operator3}, calls[0].Signers)
 }
 
+// TestCollector_AggregatorCommitteeDuty_PreConsensusQuorum exercises the AggregatorCommittee
+// PRE-consensus (selection-proof) classification+quorum pipeline through Collect(): partial
+// signatures of type AggregatorCommitteePartialSig are classified by comparing their signing
+// root against the derived aggregator selection root — a match buckets the validator under
+// Attester (aggregator), everything else under SyncCommittee (contribution). No proposal is
+// required, since the selection root is derived on the fly. Quorum must publish once per
+// validator/role once the threshold of unique signers for that exact root is met.
+func TestCollector_AggregatorCommitteeDuty_PreConsensusQuorum(t *testing.T) {
+	logger := zap.NewNop()
+	ctrl := gomock.NewController(t)
+	t.Cleanup(ctrl.Finish)
+
+	const (
+		slot        = phase0.Slot(3)
+		vIndexAgg   = phase0.ValidatorIndex(10)
+		vIndexContr = phase0.ValidatorIndex(20)
+		operator1   = spectypes.OperatorID(1)
+		operator2   = spectypes.OperatorID(2)
+		operator3   = spectypes.OperatorID(3)
+		operator4   = spectypes.OperatorID(4)
+	)
+
+	identifier := spectypes.NewMsgID([4]byte{}, []byte("agg_committee_pk_pre"), spectypes.RoleAggregatorCommittee)
+	var committeeID spectypes.CommitteeID
+	copy(committeeID[:], identifier.GetDutyExecutorID()[16:])
+
+	committee := &storage.Committee{
+		ID:        committeeID,
+		Operators: []spectypes.OperatorID{operator1, operator2, operator3, operator4}, // 4 ops -> quorum at 3
+	}
+
+	shareAgg := &ssvtypes.SSVShare{}
+	shareAgg.ValidatorPubKey = spectypes.ValidatorPK{1}
+	shareContr := &ssvtypes.SSVShare{}
+	shareContr.ValidatorPubKey = spectypes.ValidatorPK{2}
+
+	validators := registrystoragemocks.NewMockValidatorStore(ctrl)
+	validators.EXPECT().Committee(committeeID).Return(committee, true).AnyTimes()
+	validators.EXPECT().ValidatorByIndex(vIndexAgg).Return(shareAgg, true).AnyTimes()
+	validators.EXPECT().ValidatorByIndex(vIndexContr).Return(shareContr, true).AnyTimes()
+
+	listener := &mockDecidedListener{}
+	dutyStore := new(mockDutyTraceStore)
+	tracer := New(logger, validators, mockclient{}, dutyStore, networkconfig.TestNetwork.Beacon, listener.OnDecided, nil)
+
+	// The aggregator selection root is derived on the fly (no proposal needed). Signatures
+	// carrying it are aggregator duties; any other root is a sync-committee contribution.
+	selectionRoot, err := tracer.getAggregatorSelectionRoot(t.Context(), slot)
+	require.NoError(t, err)
+	contributionRoot := phase0.Root{0xAB, 0xCD}
+	require.NotEqual(t, selectionRoot, contributionRoot)
+
+	fakeSig := [96]byte{}
+
+	sendPreConsensus := func(vIdx phase0.ValidatorIndex, op spectypes.OperatorID, root phase0.Root) {
+		msgs := &spectypes.PartialSignatureMessages{
+			Type: spectypes.AggregatorCommitteePartialSig,
+			Slot: slot,
+			Messages: []*spectypes.PartialSignatureMessage{
+				{ValidatorIndex: vIdx, Signer: op, PartialSignature: fakeSig[:], SigningRoot: root},
+			},
+		}
+		data, encErr := msgs.Encode()
+		require.NoError(t, encErr)
+		require.NoError(t, tracer.Collect(t.Context(), buildPartialSigMessage(identifier, data), dummyVerify))
+	}
+
+	// Step 1: two signers for each duty (below quorum). Classification is immediate — no proposal.
+	sendPreConsensus(vIndexAgg, operator1, selectionRoot)
+	sendPreConsensus(vIndexAgg, operator2, selectionRoot)
+	sendPreConsensus(vIndexContr, operator1, contributionRoot)
+	sendPreConsensus(vIndexContr, operator2, contributionRoot)
+
+	require.Empty(t, listener.GetCalls(), "2 signers is below quorum threshold")
+
+	// The selection root must bucket into Attester; the other root into SyncCommittee.
+	duty, err := tracer.GetCommitteeDuty(slot, committeeID, spectypes.RoleAggregatorCommittee)
+	require.NoError(t, err)
+	require.NotNil(t, duty)
+	assert.Equal(t, spectypes.RoleAggregatorCommittee, duty.Role)
+	require.NotEmpty(t, duty.Attester, "selection-root signatures must bucket under Attester (aggregator)")
+	require.NotEmpty(t, duty.SyncCommittee, "non-selection-root signatures must bucket under SyncCommittee (contribution)")
+
+	// Step 2: third signer for the aggregator duty only -> quorum for vIndexAgg/Aggregator.
+	sendPreConsensus(vIndexAgg, operator3, selectionRoot)
+
+	calls := listener.GetCalls()
+	require.Len(t, calls, 1, "only the aggregator duty should have reached quorum")
+	assert.Equal(t, vIndexAgg, calls[0].Index)
+	assert.Equal(t, spectypes.BNRoleAggregator, calls[0].Role)
+	assert.ElementsMatch(t, []spectypes.OperatorID{operator1, operator2, operator3}, calls[0].Signers)
+
+	// Step 3: third signer for the contribution duty -> quorum for vIndexContr/SCC.
+	listener.Reset()
+	sendPreConsensus(vIndexContr, operator3, contributionRoot)
+
+	calls = listener.GetCalls()
+	require.Len(t, calls, 1)
+	assert.Equal(t, vIndexContr, calls[0].Index)
+	assert.Equal(t, spectypes.BNRoleSyncCommitteeContribution, calls[0].Role)
+	assert.ElementsMatch(t, []spectypes.OperatorID{operator1, operator2, operator3}, calls[0].Signers)
+}
+
 // TestCollector_AggregatorCommitteeDuty_UnknownRootBuffersUntilProposal ensures that
 // post-consensus signatures with a signing root that doesn't match either derived
 // AggregatorCommittee role root are buffered (not misclassified) and remain buffered
