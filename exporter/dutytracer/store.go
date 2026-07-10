@@ -237,6 +237,12 @@ func (c *Collector) GetAllCommitteeDecideds(slot phase0.Slot, roles ...spectypes
 	var errs *multierror.Error
 
 	runnerRoles := committeeRunnerRolesForBeaconRoles(roles...)
+	if len(roles) > 0 && len(runnerRoles) == 0 {
+		// A role filter was requested but none of the roles map to a committee
+		// runner role, so nothing can match. Return empty rather than querying
+		// with no filter (which would return every committee duty).
+		return nil, nil
+	}
 	duties, err := c.GetCommitteeDuties(slot, runnerRoles...)
 	errs = multierror.Append(errs, err)
 	if len(duties) == 0 {
@@ -321,6 +327,11 @@ func (c *Collector) GetCommitteeDecideds(slot phase0.Slot, index phase0.Validato
 	}
 
 	runnerRoles := committeeRunnerRolesForBeaconRoles(roles...)
+	if len(roles) > 0 && len(runnerRoles) == 0 {
+		// A role filter was requested but none of the roles map to a committee
+		// runner role, so nothing can match.
+		return nil, fmt.Errorf("get committee duty: %w", ErrNotFound)
+	}
 	if len(runnerRoles) == 0 {
 		runnerRoles = []spectypes.RunnerRole{spectypes.RoleCommittee, spectypes.RoleAggregatorCommittee}
 	}

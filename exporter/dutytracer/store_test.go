@@ -505,6 +505,14 @@ func TestCommitteeDutyStore_GetAllCommitteeDecideds(t *testing.T) {
 		require.Len(t, dd, 1)
 		require.Equal(t, index1, dd[0].Index)
 	}
+
+	// A role filter with only non-committee-backed beacon roles must match nothing,
+	// not widen to every committee duty.
+	{
+		dd, err := collector.GetAllCommitteeDecideds(slot4, spectypes.BNRoleProposer)
+		require.NoError(t, err)
+		require.Empty(t, dd)
+	}
 }
 
 func setupValidatorStoreMock(store *registrymocks.MockValidatorStore, idx int) phase0.ValidatorIndex {
