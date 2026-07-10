@@ -2486,7 +2486,7 @@ func TestExporterValidatorTraces_ForkGating(t *testing.T) {
 }
 
 // TestExporterValidatorTraces_ForkGating_ValidationSymmetric proves that validateValidatorRequest
-// (via isCommitteeDutyInRange) mirrors the same fork-gated routing decision for aggregator-family
+// (via isCommitteeDutyAtSlot at the range's upper bound) mirrors the same fork-gated routing decision for aggregator-family
 // roles: pre-Boole no pubkeys/indices are required, post-Boole they are (mirroring committee duties).
 func TestExporterValidatorTraces_ForkGating_ValidationSymmetric(t *testing.T) {
 	tests := []struct {

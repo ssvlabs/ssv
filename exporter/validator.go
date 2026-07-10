@@ -65,10 +65,12 @@ func (e *Exporter) validateValidatorRequest(request *ValidatorTracesQuery) error
 		return fmt.Errorf("at least one role is required")
 	}
 
-	// either PubKeys or Indices are required for committee duty roles
+	// either PubKeys or Indices are required for committee duty roles.
+	// Fork state is evaluated at the range's upper bound: if any slot in
+	// [from, to] is post-Boole, the 'to' slot is too.
 	if len(request.PubKeys) == 0 && len(request.Indices) == 0 {
 		for _, role := range request.Roles {
-			if e.isCommitteeDutyInRange(role, phase0.Slot(request.From), phase0.Slot(request.To)) {
+			if e.isCommitteeDutyAtSlot(role, phase0.Slot(request.To)) {
 				return fmt.Errorf("role %s is a committee duty, please provide either pubkeys or indices to filter the duty for a specific validators subset or use the /committee endpoint to query all the corresponding duties", role.String())
 			}
 		}
@@ -263,23 +265,6 @@ func (e *Exporter) isCommitteeDutyAtSlot(role spectypes.BeaconRole, slot phase0.
 		// Alan: AGGREGATOR/SYNC_COMMITTEE_CONTRIBUTION are validator duties.
 		// Boole: AGGREGATOR/SYNC_COMMITTEE_CONTRIBUTION are committee duties.
 		return e.networkConfig.BooleForkAtSlot(slot)
-	}
-	return true
-}
-
-// isCommitteeDutyInRange reports whether the given beacon role resolves to a
-// committee-backed duty anywhere in the given (inclusive) slot range, evaluated
-// against the fork at the range's upper bound.
-func (e *Exporter) isCommitteeDutyInRange(role spectypes.BeaconRole, from, to phase0.Slot) bool {
-	if from > to {
-		return false
-	}
-	runnerRole, ok := ssvtypes.CommitteeRunnerRoleForBeaconRole(role)
-	if !ok {
-		return false
-	}
-	if runnerRole == spectypes.RoleAggregatorCommittee {
-		return e.networkConfig.BooleForkAtSlot(to)
 	}
 	return true
 }
