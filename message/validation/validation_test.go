@@ -167,23 +167,11 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		slot := postBooleCfg.FirstSlotAtEpoch(1)
 		booleIdentifier := spectypes.NewMsgID(postBooleCfg.DomainTypeAtSlot(slot), encodedCommitteeID, committeeRole)
-		qbftMessage := &specqbft.Message{
-			MsgType:                  specqbft.ProposalMsgType,
-			Height:                   specqbft.Height(slot),
-			Round:                    specqbft.FirstRound,
-			Identifier:               booleIdentifier[:],
-			Root:                     sha256.Sum256(spectestingutils.TestingQBFTFullData),
-			RoundChangeJustification: [][]byte{},
-			PrepareJustification:     [][]byte{},
-		}
-		// Post-fork proposals must be signed by the fork-aware round-robin leader.
-		leader := qbft.RoundRobinProposer(specqbft.Height(slot), specqbft.FirstRound, committee, postBooleCfg)
-		signedSSVMessage := spectestingutils.SignQBFTMsg(ks.OperatorKeys[leader], leader, qbftMessage)
-		signedSSVMessage.FullData = spectestingutils.TestingQBFTFullData
+		signedSSVMessage := buildBooleProposal(postBooleCfg, ks, committee, booleIdentifier, slot)
 
 		committeeInfo, err := validator.getCommitteeAndValidatorIndices(signedSSVMessage.SSVMessage.GetID())
 		require.NoError(t, err)
-		booleTopic := commons.BooleTopic(postBooleCfg.SSV.Name, commons.BooleCommitteeSubnet(committeeInfo.committee))
+		booleTopic := expectedCommitteeTopic(postBooleCfg, committeeInfo, slot)
 
 		receivedAt := postBooleCfg.SlotStartTime(slot)
 		_, err = validator.handleSignedSSVMessage(context.Background(), signedSSVMessage, booleTopic, peerID, receivedAt)
@@ -690,11 +678,13 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		slot := postBooleCfg.FirstSlotAtEpoch(1)
 
 		badIdentifier := spectypes.NewMsgID(postBooleCfg.DomainTypeAtSlot(slot), shares.active.ValidatorPubKey[:], ssvtypes.RoleAggregator)
-		signedSSVMessage := generateSignedMessage(ks, badIdentifier, slot)
+		// Leader-signed so the subtest keeps asserting the role rejection even if the
+		// validation order between the role and leader checks ever changes.
+		signedSSVMessage := buildBooleProposal(postBooleCfg, ks, committee, badIdentifier, slot)
 
 		committeeInfo, err := validator.getCommitteeAndValidatorIndices(signedSSVMessage.SSVMessage.GetID())
 		require.NoError(t, err)
-		booleTopic := commons.BooleTopic(postBooleCfg.SSV.Name, commons.BooleCommitteeSubnet(committeeInfo.committee))
+		booleTopic := expectedCommitteeTopic(postBooleCfg, committeeInfo, slot)
 
 		receivedAt := postBooleCfg.SlotStartTime(slot)
 		_, err = validator.handleSignedSSVMessage(context.Background(), signedSSVMessage, booleTopic, peerID, receivedAt)
@@ -708,11 +698,12 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		slot := postBooleCfg.FirstSlotAtEpoch(1)
 
 		badIdentifier := spectypes.NewMsgID(postBooleCfg.DomainTypeAtSlot(slot), shares.active.ValidatorPubKey[:], ssvtypes.RoleSyncCommitteeContribution)
-		signedSSVMessage := generateSignedMessage(ks, badIdentifier, slot)
+		// Leader-signed for the same reason as the aggregator post-fork subtest above.
+		signedSSVMessage := buildBooleProposal(postBooleCfg, ks, committee, badIdentifier, slot)
 
 		committeeInfo, err := validator.getCommitteeAndValidatorIndices(signedSSVMessage.SSVMessage.GetID())
 		require.NoError(t, err)
-		booleTopic := commons.BooleTopic(postBooleCfg.SSV.Name, commons.BooleCommitteeSubnet(committeeInfo.committee))
+		booleTopic := expectedCommitteeTopic(postBooleCfg, committeeInfo, slot)
 
 		receivedAt := postBooleCfg.SlotStartTime(slot)
 		_, err = validator.handleSignedSSVMessage(context.Background(), signedSSVMessage, booleTopic, peerID, receivedAt)
@@ -1562,19 +1553,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			acSlot := postBooleCfg.FirstSlotAtEpoch(epoch)
 
 			msgID := spectypes.NewMsgID(postBooleCfg.DomainTypeAtSlot(acSlot), encodedCommitteeID, spectypes.RoleAggregatorCommittee)
-			qbftMessage := &specqbft.Message{
-				MsgType:                  specqbft.ProposalMsgType,
-				Height:                   specqbft.Height(acSlot),
-				Round:                    specqbft.FirstRound,
-				Identifier:               msgID[:],
-				Root:                     sha256.Sum256(spectestingutils.TestingQBFTFullData),
-				RoundChangeJustification: [][]byte{},
-				PrepareJustification:     [][]byte{},
-			}
-			// Post-fork proposals must be signed by the fork-aware round-robin leader.
-			leader := qbft.RoundRobinProposer(specqbft.Height(acSlot), specqbft.FirstRound, committee, postBooleCfg)
-			signedSSVMessage := spectestingutils.SignQBFTMsg(ks.OperatorKeys[leader], leader, qbftMessage)
-			signedSSVMessage.FullData = spectestingutils.TestingQBFTFullData
+			signedSSVMessage := buildBooleProposal(postBooleCfg, ks, committee, msgID, acSlot)
 
 			committeeInfo, err := postBooleValidator.getCommitteeAndValidatorIndices(signedSSVMessage.SSVMessage.GetID())
 			require.NoError(t, err)
@@ -2486,4 +2465,29 @@ func expectedCommitteeTopic(netCfg *networkconfig.Network, committeeInfo Committ
 		return commons.BooleTopic(netCfg.SSV.Name, commons.BooleCommitteeSubnet(committeeInfo.committee))
 	}
 	return commons.GetTopicFullName(commons.CommitteeTopicID(committeeInfo.committeeID)[0])
+}
+
+// buildBooleProposal builds a first-round QBFT proposal for the given message ID, signed by
+// the fork-aware round-robin leader for that height. Post-fork proposals must be leader-signed,
+// and the leader is not necessarily operator 1 (which generateSignedMessage hardcodes).
+func buildBooleProposal(
+	netCfg *networkconfig.Network,
+	ks *spectestingutils.TestKeySet,
+	committee []spectypes.OperatorID,
+	msgID spectypes.MessageID,
+	slot phase0.Slot,
+) *spectypes.SignedSSVMessage {
+	qbftMessage := &specqbft.Message{
+		MsgType:                  specqbft.ProposalMsgType,
+		Height:                   specqbft.Height(slot),
+		Round:                    specqbft.FirstRound,
+		Identifier:               msgID[:],
+		Root:                     sha256.Sum256(spectestingutils.TestingQBFTFullData),
+		RoundChangeJustification: [][]byte{},
+		PrepareJustification:     [][]byte{},
+	}
+	leader := qbft.RoundRobinProposer(specqbft.Height(slot), specqbft.FirstRound, committee, netCfg)
+	signedSSVMessage := spectestingutils.SignQBFTMsg(ks.OperatorKeys[leader], leader, qbftMessage)
+	signedSSVMessage.FullData = spectestingutils.TestingQBFTFullData
+	return signedSSVMessage
 }
