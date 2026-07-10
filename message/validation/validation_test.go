@@ -668,6 +668,57 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.ErrorIs(t, err, ErrInvalidRole)
 	})
 
+	// Pre-fork, RoleAggregatorCommittee is not yet a valid role (AC only exists post-Boole).
+	t.Run("aggregator committee pre-fork", func(t *testing.T) {
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
+
+		slot := netCfg.FirstSlotAtEpoch(1)
+
+		badIdentifier := spectypes.NewMsgID(netCfg.DomainType, encodedCommitteeID, spectypes.RoleAggregatorCommittee)
+		signedSSVMessage := generateSignedMessage(ks, badIdentifier, slot)
+
+		topicID := commons.GetTopicFullName(commons.CommitteeTopicID(committeeID)[0])
+		receivedAt := netCfg.SlotStartTime(slot)
+		_, err = validator.handleSignedSSVMessage(context.Background(), signedSSVMessage, topicID, peerID, receivedAt)
+		require.ErrorIs(t, err, ErrInvalidRole)
+	})
+
+	// Post-fork, the old (pre-Boole) RoleAggregator is superseded by RoleAggregatorCommittee.
+	t.Run("aggregator post-fork", func(t *testing.T) {
+		validator := New(postBooleCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
+
+		slot := postBooleCfg.FirstSlotAtEpoch(1)
+
+		badIdentifier := spectypes.NewMsgID(postBooleCfg.DomainTypeAtSlot(slot), shares.active.ValidatorPubKey[:], ssvtypes.RoleAggregator)
+		signedSSVMessage := generateSignedMessage(ks, badIdentifier, slot)
+
+		committeeInfo, err := validator.getCommitteeAndValidatorIndices(signedSSVMessage.SSVMessage.GetID())
+		require.NoError(t, err)
+		booleTopic := commons.BooleTopic(postBooleCfg.SSV.Name, commons.BooleCommitteeSubnet(committeeInfo.committee))
+
+		receivedAt := postBooleCfg.SlotStartTime(slot)
+		_, err = validator.handleSignedSSVMessage(context.Background(), signedSSVMessage, booleTopic, peerID, receivedAt)
+		require.ErrorIs(t, err, ErrInvalidRole)
+	})
+
+	// Post-fork, the old (pre-Boole) RoleSyncCommitteeContribution is likewise invalid.
+	t.Run("sync committee contribution post-fork", func(t *testing.T) {
+		validator := New(postBooleCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
+
+		slot := postBooleCfg.FirstSlotAtEpoch(1)
+
+		badIdentifier := spectypes.NewMsgID(postBooleCfg.DomainTypeAtSlot(slot), shares.active.ValidatorPubKey[:], ssvtypes.RoleSyncCommitteeContribution)
+		signedSSVMessage := generateSignedMessage(ks, badIdentifier, slot)
+
+		committeeInfo, err := validator.getCommitteeAndValidatorIndices(signedSSVMessage.SSVMessage.GetID())
+		require.NoError(t, err)
+		booleTopic := commons.BooleTopic(postBooleCfg.SSV.Name, commons.BooleCommitteeSubnet(committeeInfo.committee))
+
+		receivedAt := postBooleCfg.SlotStartTime(slot)
+		_, err = validator.handleSignedSSVMessage(context.Background(), signedSSVMessage, booleTopic, peerID, receivedAt)
+		require.ErrorIs(t, err, ErrInvalidRole)
+	})
+
 	// Perform validator registration or voluntary exit with a consensus type message will give an error
 	t.Run("unexpected consensus message", func(t *testing.T) {
 		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
@@ -1505,6 +1556,34 @@ func Test_ValidateSSVMessage(t *testing.T) {
 				require.ErrorContains(t, err, ErrLateSlotMessage.Error())
 			})
 		}
+
+		t.Run(message.RunnerRoleToString(spectypes.RoleAggregatorCommittee), func(t *testing.T) {
+			postBooleValidator := New(postBooleCfg, validatorStore, operators, ds, signatureVerifier).(*messageValidator)
+			acSlot := postBooleCfg.FirstSlotAtEpoch(epoch)
+
+			msgID := spectypes.NewMsgID(postBooleCfg.DomainTypeAtSlot(acSlot), encodedCommitteeID, spectypes.RoleAggregatorCommittee)
+			qbftMessage := &specqbft.Message{
+				MsgType:                  specqbft.ProposalMsgType,
+				Height:                   specqbft.Height(acSlot),
+				Round:                    specqbft.FirstRound,
+				Identifier:               msgID[:],
+				Root:                     sha256.Sum256(spectestingutils.TestingQBFTFullData),
+				RoundChangeJustification: [][]byte{},
+				PrepareJustification:     [][]byte{},
+			}
+			// Post-fork proposals must be signed by the fork-aware round-robin leader.
+			leader := qbft.RoundRobinProposer(specqbft.Height(acSlot), specqbft.FirstRound, committee, postBooleCfg)
+			signedSSVMessage := spectestingutils.SignQBFTMsg(ks.OperatorKeys[leader], leader, qbftMessage)
+			signedSSVMessage.FullData = spectestingutils.TestingQBFTFullData
+
+			committeeInfo, err := postBooleValidator.getCommitteeAndValidatorIndices(signedSSVMessage.SSVMessage.GetID())
+			require.NoError(t, err)
+			booleTopic := expectedCommitteeTopic(postBooleCfg, committeeInfo, acSlot)
+
+			receivedAt := postBooleCfg.SlotStartTime(acSlot + 35)
+			_, err = postBooleValidator.handleSignedSSVMessage(context.Background(), signedSSVMessage, booleTopic, peerID, receivedAt)
+			require.ErrorContains(t, err, ErrLateSlotMessage.Error())
+		})
 	})
 
 	// Send early message for all roles before the duty start and receive early message error
