@@ -179,7 +179,6 @@ func prepareTest(t *testing.T, logger *zap.Logger, name string, test any) *runna
 		require.NoError(t, err)
 		typedTest := &partialsigcontainer.PartialSigContainerTest{}
 		require.NoError(t, json.Unmarshal(byts, &typedTest))
-		typedTest.ExpectedErrorCode = adjustExpectedErrorCode(typedTest.ExpectedErrorCode)
 
 		return &runnable{
 			name: typedTest.TestName(),
@@ -308,6 +307,10 @@ func msgProcessingSpecTestFromMap(t *testing.T, m map[string]any) *MsgProcessing
 			beaconAggregatorsValues = append(beaconAggregatorsValues, v.(bool))
 		}
 	}
+	// BeaconAggregatorsMap zips these two slices by index, so a fixture where they
+	// differ in length would panic with an opaque index-out-of-range. Fail legibly here.
+	require.Equal(t, len(beaconAggregators), len(beaconAggregatorsValues),
+		"BeaconAggregators and BeaconAggregatorsValues must have equal length")
 
 	shareInstance := &spectypes.Share{}
 	for _, share := range baseRunnerMap["Share"].(map[string]any) {
