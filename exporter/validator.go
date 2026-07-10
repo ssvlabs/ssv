@@ -129,7 +129,10 @@ func (e *Exporter) getValidatorCommitteeDutiesForRoleAndSlot(role spectypes.Beac
 	if !ok {
 		return nil, fmt.Errorf("unexpected committee-backed beacon role: %s", role.String())
 	}
-	bucket, _ := ssvtypes.CommitteeSignerBucketForBeaconRole(role)
+	bucket, ok := ssvtypes.CommitteeSignerBucketForBeaconRole(role)
+	if !ok {
+		return nil, fmt.Errorf("no signer bucket for committee-backed beacon role: %s", role.String())
+	}
 
 	for _, index := range indices {
 		committeeID, err := e.traceStore.GetCommitteeID(slot, index)
