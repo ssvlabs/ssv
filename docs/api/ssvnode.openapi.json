@@ -260,6 +260,20 @@
                         "in": "query"
                     },
                     {
+                        "type": "array",
+                        "items": {
+                            "enum": [
+                                "COMMITTEE",
+                                "AGGREGATOR_COMMITTEE"
+                            ],
+                            "type": "string"
+                        },
+                        "collectionFormat": "csv",
+                        "description": "Roles is a comma-separated list of committee runner roles to include.",
+                        "name": "roles",
+                        "in": "query"
+                    },
+                    {
                         "minimum": 0,
                         "type": "integer",
                         "format": "int64",
@@ -332,6 +346,20 @@
                         "format": "int64",
                         "description": "From is the starting slot (inclusive).",
                         "name": "from",
+                        "in": "query"
+                    },
+                    {
+                        "type": "array",
+                        "items": {
+                            "enum": [
+                                "COMMITTEE",
+                                "AGGREGATOR_COMMITTEE"
+                            ],
+                            "type": "string"
+                        },
+                        "collectionFormat": "csv",
+                        "description": "Roles is a comma-separated list of committee runner roles to include.",
+                        "name": "roles",
                         "in": "query"
                     },
                     {
@@ -733,7 +761,7 @@
             "type": "object",
             "properties": {
                 "attester": {
-                    "description": "Attester contains post-consensus messages for attester duties.",
+                    "description": "Attester contains post-consensus messages for attester duties,\nincluding aggregator signers.",
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/exporter.CommitteeMessage"
@@ -763,13 +791,22 @@
                     "type": "string",
                     "format": "hex"
                 },
+                "role": {
+                    "description": "Role is the committee runner role for this duty (e.g., COMMITTEE).",
+                    "type": "string",
+                    "enum": [
+                        "COMMITTEE",
+                        "AGGREGATOR_COMMITTEE"
+                    ],
+                    "example": "COMMITTEE"
+                },
                 "slot": {
                     "description": "Slot is the duty slot for this committee trace.",
                     "type": "integer",
                     "format": "int64"
                 },
                 "sync_committee": {
-                    "description": "SyncCommittee contains post-consensus messages for sync-committee duties.",
+                    "description": "SyncCommittee contains post-consensus messages for sync-committee duties,\nincluding sync committee contribution signers.",
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/exporter.CommitteeMessage"
@@ -795,6 +832,17 @@
                     "type": "integer",
                     "format": "int64",
                     "minimum": 0
+                },
+                "roles": {
+                    "description": "Roles is a comma-separated list of committee runner roles to include.",
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "enum": [
+                            "COMMITTEE",
+                            "AGGREGATOR_COMMITTEE"
+                        ]
+                    }
                 },
                 "to": {
                     "description": "To is the ending slot (inclusive).",

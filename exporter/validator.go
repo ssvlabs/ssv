@@ -13,6 +13,7 @@ import (
 	"github.com/ssvlabs/ssv/exporter/rolemask"
 	"github.com/ssvlabs/ssv/exporter/traces"
 	"github.com/ssvlabs/ssv/observability/log/fields"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 // ValidatorTracesCore contains the core logic for ValidatorTraces without any HTTP concerns.
@@ -120,6 +121,13 @@ func (e *Exporter) getValidatorCommitteeDutiesForRoleAndSlot(role spectypes.Beac
 	results := make([]ValidatorCommitteeTrace, 0, len(indices))
 	var errs *multierror.Error
 
+	// This helper is only reached for committee-backed beacon roles (see isCommitteeDuty),
+	// which today always resolve to the RoleCommittee runner role.
+	runnerRole, ok := ssvtypes.CommitteeRunnerRoleForBeaconRole(role)
+	if !ok {
+		return nil, fmt.Errorf("unexpected committee-backed beacon role: %s", role.String())
+	}
+
 	for _, index := range indices {
 		committeeID, err := e.traceStore.GetCommitteeID(slot, index)
 		if err != nil {
@@ -128,7 +136,7 @@ func (e *Exporter) getValidatorCommitteeDutiesForRoleAndSlot(role spectypes.Beac
 			continue
 		}
 
-		duty, err := e.traceStore.GetCommitteeDuty(slot, committeeID, role)
+		duty, err := e.traceStore.GetCommitteeDuty(slot, committeeID, runnerRole)
 		if err != nil {
 			e.logger.Error("error getting committee duty", zap.Error(err), fields.Slot(slot), fields.BeaconRole(role), fields.ValidatorIndex(index))
 			errs = multierror.Append(errs, err)

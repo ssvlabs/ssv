@@ -9,6 +9,16 @@ const (
 	RoleSyncCommitteeContribution = spectypes.RunnerRole(3) // Deprecated
 )
 
+// CommitteeSignerBucket identifies the committee-duty signer slice that should
+// be used for a given beacon role.
+type CommitteeSignerBucket uint8
+
+const (
+	CommitteeSignerBucketUnknown CommitteeSignerBucket = iota
+	CommitteeSignerBucketAttester
+	CommitteeSignerBucketSyncCommittee
+)
+
 // RunnerRoleForValidatorDuty resolves the runner role for validator duties,
 // mapping Alan fork aggregator duties to Alan runner roles.
 func RunnerRoleForValidatorDuty(duty *spectypes.ValidatorDuty, isBooleFork bool) spectypes.RunnerRole {
@@ -38,6 +48,32 @@ func RunnerRoleForDuty(duty spectypes.Duty, isBooleFork bool) spectypes.RunnerRo
 		return RunnerRoleForValidatorDuty(vd, isBooleFork)
 	}
 	return duty.RunnerRole()
+}
+
+// CommitteeRunnerRoleForBeaconRole maps committee-backed beacon roles to the
+// corresponding committee runner role.
+func CommitteeRunnerRoleForBeaconRole(role spectypes.BeaconRole) (spectypes.RunnerRole, bool) {
+	switch role {
+	case spectypes.BNRoleAttester, spectypes.BNRoleSyncCommittee:
+		return spectypes.RoleCommittee, true
+	case spectypes.BNRoleAggregator, spectypes.BNRoleSyncCommitteeContribution:
+		return spectypes.RoleAggregatorCommittee, true
+	default:
+		return spectypes.RoleUnknown, false
+	}
+}
+
+// CommitteeSignerBucketForBeaconRole maps committee-backed beacon roles to the
+// signer bucket used in CommitteeDutyTrace.
+func CommitteeSignerBucketForBeaconRole(role spectypes.BeaconRole) (CommitteeSignerBucket, bool) {
+	switch role {
+	case spectypes.BNRoleAttester, spectypes.BNRoleAggregator:
+		return CommitteeSignerBucketAttester, true
+	case spectypes.BNRoleSyncCommittee, spectypes.BNRoleSyncCommitteeContribution:
+		return CommitteeSignerBucketSyncCommittee, true
+	default:
+		return CommitteeSignerBucketUnknown, false
+	}
 }
 
 // RunnerRoleToString is a workaround for Alan runner roles.

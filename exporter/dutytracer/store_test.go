@@ -143,27 +143,27 @@ func TestCommitteeDutyStore(t *testing.T) {
 	// three slots X two committees
 	slot4 := phase0.Slot(4)
 
-	dutyTrace3, _, err := collector.getOrCreateCommitteeTrace(slot4, committeeID1)
+	dutyTrace3, _, err := collector.getOrCreateCommitteeTrace(slot4, committeeID1, spectypes.RoleCommittee)
 	require.NoError(t, err)
 	dutyTrace3.Decideds = append(dutyTrace3.Decideds, &traces.DecidedTrace{
 		Signers: []spectypes.OperatorID{1},
 	})
 	require.NotNil(t, dutyTrace3)
 
-	dutyTrace4, _, err := collector.getOrCreateCommitteeTrace(slot4, committeeID2)
+	dutyTrace4, _, err := collector.getOrCreateCommitteeTrace(slot4, committeeID2, spectypes.RoleCommittee)
 	require.NoError(t, err)
 	require.NotNil(t, dutyTrace4)
 
 	slot7 := phase0.Slot(7)
 
-	dutyTrace5, _, err := collector.getOrCreateCommitteeTrace(slot7, committeeID1)
+	dutyTrace5, _, err := collector.getOrCreateCommitteeTrace(slot7, committeeID1, spectypes.RoleCommittee)
 	require.NoError(t, err)
 	dutyTrace5.Decideds = append(dutyTrace5.Decideds, &traces.DecidedTrace{
 		Signers: []spectypes.OperatorID{1},
 	})
 	require.NotNil(t, dutyTrace5)
 
-	dutyTrace6, _, err := collector.getOrCreateCommitteeTrace(slot7, committeeID2)
+	dutyTrace6, _, err := collector.getOrCreateCommitteeTrace(slot7, committeeID2, spectypes.RoleCommittee)
 	require.NoError(t, err)
 	require.NotNil(t, dutyTrace6)
 
@@ -174,14 +174,14 @@ func TestCommitteeDutyStore(t *testing.T) {
 	// assert that traces are in available (in memory)
 	{
 		for i, slot := range []phase0.Slot{slot4, slot7} {
-			dutyTrace, err := collector.GetCommitteeDuty(slot, committeeID1)
+			dutyTrace, err := collector.GetCommitteeDuty(slot, committeeID1, spectypes.RoleCommittee)
 			require.NoError(t, err)
 			require.NotNil(t, dutyTrace)
 			assert.Equal(t, slot, dutyTrace.Slot)
 			assert.Equal(t, slot, dutiesC1[i].Slot)
 		}
 		for i, slot := range []phase0.Slot{slot4, slot7} {
-			dutyTrace, err := collector.GetCommitteeDuty(slot, committeeID2)
+			dutyTrace, err := collector.GetCommitteeDuty(slot, committeeID2, spectypes.RoleCommittee)
 			require.NoError(t, err)
 			require.NotNil(t, dutyTrace)
 			assert.Equal(t, slot, dutyTrace.Slot)
@@ -209,7 +209,7 @@ func TestCommitteeDutyStore(t *testing.T) {
 	// step 3: retrieve trace from disk (4) and memory (7)
 	{
 		for i, slot := range []phase0.Slot{slot4, slot7} {
-			dutyTrace, err := collector.GetCommitteeDuty(slot, committeeID1)
+			dutyTrace, err := collector.GetCommitteeDuty(slot, committeeID1, spectypes.RoleCommittee)
 			require.NoError(t, err)
 			require.NotNil(t, dutyTrace)
 			assert.Equal(t, slot, dutyTrace.Slot)
@@ -217,7 +217,7 @@ func TestCommitteeDutyStore(t *testing.T) {
 			assert.Equal(t, committeeID1, dutiesC1[i].CommitteeID)
 		}
 		for i, slot := range []phase0.Slot{slot4, slot7} {
-			dutyTrace, err := collector.GetCommitteeDuty(slot, committeeID2)
+			dutyTrace, err := collector.GetCommitteeDuty(slot, committeeID2, spectypes.RoleCommittee)
 			require.NoError(t, err)
 			require.NotNil(t, dutyTrace)
 			assert.Equal(t, slot, dutyTrace.Slot)
@@ -236,7 +236,7 @@ func TestCommitteeDutyStore(t *testing.T) {
 
 	// assert that only slot 7 is in memory
 	var inMem = make(map[phase0.Slot]struct{})
-	collector.committeeTraces.Range(func(key spectypes.CommitteeID, slotToTraceMap *hashmap.Map[phase0.Slot, *committeeDutyTrace]) bool {
+	collector.committeeTraces.Range(func(key committeeTraceKey, slotToTraceMap *hashmap.Map[phase0.Slot, *committeeDutyTrace]) bool {
 		slotToTraceMap.Range(func(slot phase0.Slot, dutyTrace *committeeDutyTrace) bool {
 			inMem[slot] = struct{}{}
 			return true
@@ -298,6 +298,160 @@ func TestCommitteeDutyStore(t *testing.T) {
 	require.Equal(t, []spectypes.OperatorID{1, 2, 3}, signers)
 }
 
+// TestCommitteeDutyStore_RoleFilteringAndEvictionGrouping is a regression guard for the
+// {committeeID, role} keyed collector cache: Committee and AggregatorCommittee traces for
+// the SAME committeeID+slot must (a) be filterable independently via GetCommitteeDuties'
+// role argument, and (b) be evicted to disk as two distinct per-role groups without
+// cross-contaminating each other's persisted data.
+func TestCommitteeDutyStore_RoleFilteringAndEvictionGrouping(t *testing.T) {
+	db, err := kv.NewInMemory(zap.NewNop(), basedb.Options{})
+	require.NoError(t, err)
+	dutyStore := store.New(db)
+	_, vstore, _ := registrystorage.NewSharesStorage(networkconfig.TestNetwork.Beacon, db, dummyGetFeeRecipient, nil)
+
+	collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.Beacon, nil, nil)
+
+	committeeID := spectypes.CommitteeID{9}
+	slot := phase0.Slot(20)
+
+	committeeTrace, _, err := collector.getOrCreateCommitteeTrace(slot, committeeID, spectypes.RoleCommittee)
+	require.NoError(t, err)
+	committeeTrace.OperatorIDs = []uint64{1, 2, 3}
+
+	aggTrace, _, err := collector.getOrCreateCommitteeTrace(slot, committeeID, spectypes.RoleAggregatorCommittee)
+	require.NoError(t, err)
+	aggTrace.OperatorIDs = []uint64{4, 5, 6}
+
+	// GetCommitteeDuties with no role filter must return both traces.
+	all, err := collector.GetCommitteeDuties(slot)
+	require.NoError(t, err)
+	require.Len(t, all, 2)
+
+	// GetCommitteeDuties filtered by a single role must return only that role's trace.
+	onlyCommittee, err := collector.GetCommitteeDuties(slot, spectypes.RoleCommittee)
+	require.NoError(t, err)
+	require.Len(t, onlyCommittee, 1)
+	require.Equal(t, []uint64{1, 2, 3}, onlyCommittee[0].OperatorIDs)
+
+	onlyAgg, err := collector.GetCommitteeDuties(slot, spectypes.RoleAggregatorCommittee)
+	require.NoError(t, err)
+	require.Len(t, onlyAgg, 1)
+	require.Equal(t, []uint64{4, 5, 6}, onlyAgg[0].OperatorIDs)
+
+	// Evict: both roles at this slot must be dumped, grouped independently per role.
+	saved := collector.dumpCommitteeToDBPeriodically(slot)
+	require.Equal(t, 2, saved, "one duty per role should be saved")
+
+	diskCommittee, err := dutyStore.GetCommitteeDuty(slot, spectypes.RoleCommittee, committeeID)
+	require.NoError(t, err)
+	require.Equal(t, []uint64{1, 2, 3}, diskCommittee.OperatorIDs)
+
+	diskAgg, err := dutyStore.GetCommitteeDuty(slot, spectypes.RoleAggregatorCommittee, committeeID)
+	require.NoError(t, err)
+	require.Equal(t, []uint64{4, 5, 6}, diskAgg.OperatorIDs)
+}
+
+// TestCommitteeRunnerRolesForBeaconRoles covers the beacon-role -> committee-runner-role
+// conversion used by GetCommitteeDecideds/GetAllCommitteeDecideds to pick the correct
+// {committeeID, role}-keyed trace(s).
+func TestCommitteeRunnerRolesForBeaconRoles(t *testing.T) {
+	testCases := []struct {
+		name  string
+		roles []spectypes.BeaconRole
+		want  []spectypes.RunnerRole
+	}{
+		{
+			name:  "no roles returns nil",
+			roles: nil,
+			want:  nil,
+		},
+		{
+			name:  "attester maps to committee",
+			roles: []spectypes.BeaconRole{spectypes.BNRoleAttester},
+			want:  []spectypes.RunnerRole{spectypes.RoleCommittee},
+		},
+		{
+			name:  "sync committee maps to committee",
+			roles: []spectypes.BeaconRole{spectypes.BNRoleSyncCommittee},
+			want:  []spectypes.RunnerRole{spectypes.RoleCommittee},
+		},
+		{
+			name:  "aggregator maps to aggregator committee",
+			roles: []spectypes.BeaconRole{spectypes.BNRoleAggregator},
+			want:  []spectypes.RunnerRole{spectypes.RoleAggregatorCommittee},
+		},
+		{
+			name:  "sync committee contribution maps to aggregator committee",
+			roles: []spectypes.BeaconRole{spectypes.BNRoleSyncCommitteeContribution},
+			want:  []spectypes.RunnerRole{spectypes.RoleAggregatorCommittee},
+		},
+		{
+			name:  "mixed roles map to both runner roles, committee first",
+			roles: []spectypes.BeaconRole{spectypes.BNRoleAggregator, spectypes.BNRoleAttester},
+			want:  []spectypes.RunnerRole{spectypes.RoleCommittee, spectypes.RoleAggregatorCommittee},
+		},
+		{
+			name:  "duplicate roles for the same bucket are deduplicated",
+			roles: []spectypes.BeaconRole{spectypes.BNRoleAttester, spectypes.BNRoleSyncCommittee},
+			want:  []spectypes.RunnerRole{spectypes.RoleCommittee},
+		},
+		{
+			name:  "non-committee-backed role is ignored",
+			roles: []spectypes.BeaconRole{spectypes.BNRoleProposer},
+			want:  []spectypes.RunnerRole{},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := committeeRunnerRolesForBeaconRoles(tc.roles...)
+			require.Equal(t, tc.want, got)
+		})
+	}
+}
+
+// TestCollector_GetCommitteeDecideds_RoleFiltering verifies that GetCommitteeDecideds
+// resolves the correct {committeeID, role}-keyed trace for the requested beacon role(s),
+// distinguishing a Committee trace from an AggregatorCommittee trace at the same
+// committeeID+slot.
+func TestCollector_GetCommitteeDecideds_RoleFiltering(t *testing.T) {
+	db, err := kv.NewInMemory(zap.NewNop(), basedb.Options{})
+	require.NoError(t, err)
+	dutyStore := store.New(db)
+	_, vstore, _ := registrystorage.NewSharesStorage(networkconfig.TestNetwork.Beacon, db, dummyGetFeeRecipient, nil)
+
+	collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.Beacon, nil, nil)
+
+	committeeID := spectypes.CommitteeID{11}
+	slot := phase0.Slot(30)
+	index := phase0.ValidatorIndex(1)
+	setCommitteeLink(collector, slot, index, committeeID)
+
+	committeeTrace, _, err := collector.getOrCreateCommitteeTrace(slot, committeeID, spectypes.RoleCommittee)
+	require.NoError(t, err)
+	committeeTrace.Attester = append(committeeTrace.Attester, &traces.SignerData{Signer: 1})
+
+	aggTrace, _, err := collector.getOrCreateCommitteeTrace(slot, committeeID, spectypes.RoleAggregatorCommittee)
+	require.NoError(t, err)
+	aggTrace.Attester = append(aggTrace.Attester, &traces.SignerData{Signer: 2})
+
+	// Requesting the attester (committee) role must resolve to the RoleCommittee trace.
+	dd, err := collector.GetCommitteeDecideds(slot, index, spectypes.BNRoleAttester)
+	require.NoError(t, err)
+	require.Len(t, dd, 1)
+	require.Equal(t, []spectypes.OperatorID{1}, dd[0].Signers)
+
+	// Requesting the aggregator role must resolve to the RoleAggregatorCommittee trace, not the committee one.
+	dd, err = collector.GetCommitteeDecideds(slot, index, spectypes.BNRoleAggregator)
+	require.NoError(t, err)
+	require.Len(t, dd, 1)
+	require.Equal(t, []spectypes.OperatorID{2}, dd[0].Signers)
+
+	// Requesting the sync-committee-contribution role must miss (no signers under that bucket for the AC trace).
+	_, err = collector.GetCommitteeDecideds(slot, index, spectypes.BNRoleSyncCommitteeContribution)
+	require.ErrorIs(t, err, ErrNotFound)
+}
+
 func TestCommitteeDutyStore_GetAllCommitteeDecideds(t *testing.T) {
 	validatorPK7 := spectypes.ValidatorPK{7}
 	committeeID1 := spectypes.CommitteeID{1}
@@ -322,7 +476,7 @@ func TestCommitteeDutyStore_GetAllCommitteeDecideds(t *testing.T) {
 	collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.Beacon, nil, nil)
 
 	// Create a new trace
-	dutyTrace, _, err := collector.getOrCreateCommitteeTrace(slot4, committeeID1)
+	dutyTrace, _, err := collector.getOrCreateCommitteeTrace(slot4, committeeID1, spectypes.RoleCommittee)
 	require.NoError(t, err)
 	dutyTrace.Decideds = append(dutyTrace.Decideds, &traces.DecidedTrace{
 		Signers: []spectypes.OperatorID{1},
@@ -350,6 +504,14 @@ func TestCommitteeDutyStore_GetAllCommitteeDecideds(t *testing.T) {
 		require.NotNil(t, dd)
 		require.Len(t, dd, 1)
 		require.Equal(t, index1, dd[0].Index)
+	}
+
+	// A role filter with only non-committee-backed beacon roles must match nothing,
+	// not widen to every committee duty.
+	{
+		dd, err := collector.GetAllCommitteeDecideds(slot4, spectypes.BNRoleProposer)
+		require.NoError(t, err)
+		require.Empty(t, dd)
 	}
 }
 

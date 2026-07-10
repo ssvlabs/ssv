@@ -10,6 +10,7 @@ import (
 	"github.com/ssvlabs/ssv/api"
 	exportercore "github.com/ssvlabs/ssv/exporter"
 	"github.com/ssvlabs/ssv/exporter/traces"
+	"github.com/ssvlabs/ssv/protocol/v2/message"
 )
 
 type CommitteeIDLengthError struct {
@@ -23,6 +24,8 @@ type CommitteeTracesRequest struct {
 	From uint64 `json:"from" format:"int64" minimum:"0"`
 	// To is the ending slot (inclusive).
 	To uint64 `json:"to" format:"int64" minimum:"0"`
+	// Roles is a comma-separated list of committee runner roles to include.
+	Roles api.RunnerRoleSlice `json:"roles" swaggertype:"array,string" enums:"COMMITTEE,AGGREGATOR_COMMITTEE"`
 	// CommitteeIDs is a comma-separated list of committee IDs (hex, 64 chars per ID).
 	CommitteeIDs api.HexSlice `json:"committeeIDs" swaggertype:"array,string" format:"hex" minLength:"64" maxLength:"64" pattern:"^[0-9a-f]{64}$"`
 }
@@ -46,6 +49,7 @@ func toCommitteeTracesQuery(r *CommitteeTracesRequest) (*exportercore.CommitteeT
 	q := &exportercore.CommitteeTracesQuery{
 		From:         r.From,
 		To:           r.To,
+		Roles:        toRunnerRoles(r.Roles),
 		CommitteeIDs: r.parseCommitteeIds(),
 	}
 
@@ -78,14 +82,18 @@ func toCommitteeTraceResponse(result *exportercore.CommitteeTracesResult, errs *
 type CommitteeTrace struct {
 	// Slot is the duty slot for this committee trace.
 	Slot uint64 `json:"slot" format:"int64"`
+	// Role is the committee runner role for this duty (e.g., COMMITTEE).
+	Role string `json:"role" example:"COMMITTEE" enums:"COMMITTEE,AGGREGATOR_COMMITTEE"`
 	// Consensus lists per-round QBFT messages observed for this committee.
 	Consensus []Round `json:"consensus"`
 	// Decideds lists decided messages emitted for this duty.
 	Decideds []Decided `json:"decideds"`
 
-	// SyncCommittee contains post-consensus messages for sync-committee duties.
+	// SyncCommittee contains post-consensus messages for sync-committee duties,
+	// including sync committee contribution signers.
 	SyncCommittee []CommitteeMessage `json:"sync_committee"`
-	// Attester contains post-consensus messages for attester duties.
+	// Attester contains post-consensus messages for attester duties,
+	// including aggregator signers.
 	Attester []CommitteeMessage `json:"attester"`
 
 	// CommitteeID is the 32-byte committee identifier (hex).
@@ -108,6 +116,7 @@ func toCommitteeTrace(t *traces.CommitteeDutyTrace) CommitteeTrace {
 	return CommitteeTrace{
 		// consensus trace
 		Slot:          uint64(t.Slot),
+		Role:          message.RunnerRoleToString(t.Role),
 		Consensus:     toRounds(t.Rounds),
 		Decideds:      toDecideds(t.Decideds),
 		SyncCommittee: toCommitteePost(t.SyncCommittee),
