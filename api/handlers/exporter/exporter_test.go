@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"math"
 	"net/http"
-
 	"net/http/httptest"
 	"strings"
 	"testing"
