@@ -16,6 +16,7 @@ import (
 	"github.com/ssvlabs/ssv/exporter/store"
 	"github.com/ssvlabs/ssv/exporter/traces"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
+	"github.com/ssvlabs/ssv/networkconfig"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 )
 
@@ -24,14 +25,16 @@ type Exporter struct {
 	traceStore        dutyTraceStore
 	validators        registrystorage.ValidatorStore
 	logger            *zap.Logger
+	networkConfig     *networkconfig.Network
 }
 
-func NewExporter(logger *zap.Logger, participantStores *ibftstorage.ParticipantStores, traceStore dutyTraceStore, validators registrystorage.ValidatorStore) *Exporter {
+func NewExporter(logger *zap.Logger, participantStores *ibftstorage.ParticipantStores, traceStore dutyTraceStore, validators registrystorage.ValidatorStore, networkConfig *networkconfig.Network) *Exporter {
 	return &Exporter{
 		participantStores: participantStores,
 		traceStore:        traceStore,
 		validators:        validators,
 		logger:            logger,
+		networkConfig:     networkConfig,
 	}
 }
 

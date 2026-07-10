@@ -5,7 +5,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/http"
+
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -26,6 +28,7 @@ import (
 	estore "github.com/ssvlabs/ssv/exporter/store"
 	"github.com/ssvlabs/ssv/exporter/traces"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/registry/storage"
@@ -610,11 +613,17 @@ func (m *mockTraceStore) AddCommitteeDecided(slot phase0.Slot, signers []uint64)
 }
 
 func newTestExporterForV1(stores *ibftstorage.ParticipantStores) *Exporter {
-	return NewExporter(zap.NewNop(), stores, nil, nil)
+	return NewExporter(zap.NewNop(), stores, nil, nil, networkconfig.TestNetwork)
 }
 
 func newTestExporterForV2(traceStore *mockTraceStore, validators storage.ValidatorStore) *Exporter {
-	return NewExporter(zap.NewNop(), nil, traceStore, validators)
+	return NewExporter(zap.NewNop(), nil, traceStore, validators, networkconfig.TestNetwork)
+}
+
+// newTestExporterForV2WithNetwork builds a V2 exporter with a custom network config,
+// used to exercise fork-gated routing (pre/post Boole) without mutating the shared TestNetwork.
+func newTestExporterForV2WithNetwork(traceStore *mockTraceStore, validators storage.ValidatorStore, netCfg *networkconfig.Network) *Exporter {
+	return NewExporter(zap.NewNop(), nil, traceStore, validators, netCfg)
 }
 
 func buildJSONBody(t *testing.T, payload map[string]any) *strings.Reader {
@@ -1541,7 +1550,7 @@ func TestExporterCommitteeTraces(t *testing.T) {
 				tt.setupMock(store, validatorStore)
 			}
 
-			exporter := NewExporter(zap.NewNop(), nil, store, validatorStore)
+			exporter := NewExporter(zap.NewNop(), nil, store, validatorStore, networkconfig.TestNetwork)
 
 			body, err := json.Marshal(tt.request)
 			require.NoError(t, err)
@@ -2255,7 +2264,7 @@ func TestExporterValidatorTraces(t *testing.T) {
 			validatorStore := newMockValidatorStore()
 			tt.setupMock(store, validatorStore)
 
-			exporter := NewExporter(zap.NewNop(), nil, store, validatorStore)
+			exporter := NewExporter(zap.NewNop(), nil, store, validatorStore, networkconfig.TestNetwork)
 
 			reqBody, err := json.Marshal(tt.request)
 			require.NoError(t, err)
@@ -2283,7 +2292,7 @@ func TestExporterValidatorTraces(t *testing.T) {
 func TestExporterValidatorTraces_InvalidJSON(t *testing.T) {
 	store := newMockTraceStore()
 	validatorStore := newMockValidatorStore()
-	exporter := NewExporter(zap.NewNop(), nil, store, validatorStore)
+	exporter := NewExporter(zap.NewNop(), nil, store, validatorStore, networkconfig.TestNetwork)
 
 	req := httptest.NewRequest(http.MethodPost, "/traces/validator", strings.NewReader("{invalid"))
 	req.Header.Set("Content-Type", "application/json")
@@ -2308,6 +2317,253 @@ func TestExporterValidatorTraces_InvalidJSON(t *testing.T) {
 
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 	require.Contains(t, resp.Message, "invalid character")
+}
+
+// TestExporterValidatorTraces_ForkGating proves that AGGREGATOR/SYNC_COMMITTEE_CONTRIBUTION
+// route to the validator path pre-Boole and to the committee path post-Boole, while
+// ATTESTER/SYNC_COMMITTEE always route to the committee path regardless of fork.
+func TestExporterValidatorTraces_ForkGating(t *testing.T) {
+	idx := phase0.ValidatorIndex(1)
+	slot := phase0.Slot(100)
+	var committeeID spectypes.CommitteeID
+	committeeID[0] = 7
+
+	tests := []struct {
+		name              string
+		role              string
+		booleEpoch        phase0.Epoch
+		expectValidator   bool // duty is expected to come from the validator store
+		expectCommittee   bool // duty is expected to come from the committee store
+		signerDataBuilder func() *traces.CommitteeDutyTrace
+	}{
+		{
+			name:            "AGGREGATOR pre-Boole routes to validator path",
+			role:            "AGGREGATOR",
+			booleEpoch:      phase0.Epoch(math.MaxUint64),
+			expectValidator: true,
+		},
+		{
+			name:            "AGGREGATOR post-Boole routes to committee path",
+			role:            "AGGREGATOR",
+			booleEpoch:      phase0.Epoch(0),
+			expectCommittee: true,
+			signerDataBuilder: func() *traces.CommitteeDutyTrace {
+				return &traces.CommitteeDutyTrace{
+					Slot:        slot,
+					CommitteeID: committeeID,
+					Attester:    []*traces.SignerData{{Signer: 99, ValidatorIdx: []phase0.ValidatorIndex{idx}}},
+				}
+			},
+		},
+		{
+			name:            "SYNC_COMMITTEE_CONTRIBUTION pre-Boole routes to validator path",
+			role:            "SYNC_COMMITTEE_CONTRIBUTION",
+			booleEpoch:      phase0.Epoch(math.MaxUint64),
+			expectValidator: true,
+		},
+		{
+			name:            "SYNC_COMMITTEE_CONTRIBUTION post-Boole routes to committee path",
+			role:            "SYNC_COMMITTEE_CONTRIBUTION",
+			booleEpoch:      phase0.Epoch(0),
+			expectCommittee: true,
+			signerDataBuilder: func() *traces.CommitteeDutyTrace {
+				return &traces.CommitteeDutyTrace{
+					Slot:          slot,
+					CommitteeID:   committeeID,
+					SyncCommittee: []*traces.SignerData{{Signer: 99, ValidatorIdx: []phase0.ValidatorIndex{idx}}},
+				}
+			},
+		},
+		{
+			name:            "ATTESTER is fork-invariant pre-Boole",
+			role:            "ATTESTER",
+			booleEpoch:      phase0.Epoch(math.MaxUint64),
+			expectCommittee: true,
+			signerDataBuilder: func() *traces.CommitteeDutyTrace {
+				return &traces.CommitteeDutyTrace{
+					Slot:        slot,
+					CommitteeID: committeeID,
+					Attester:    []*traces.SignerData{{Signer: 99, ValidatorIdx: []phase0.ValidatorIndex{idx}}},
+				}
+			},
+		},
+		{
+			name:            "ATTESTER is fork-invariant post-Boole",
+			role:            "ATTESTER",
+			booleEpoch:      phase0.Epoch(0),
+			expectCommittee: true,
+			signerDataBuilder: func() *traces.CommitteeDutyTrace {
+				return &traces.CommitteeDutyTrace{
+					Slot:        slot,
+					CommitteeID: committeeID,
+					Attester:    []*traces.SignerData{{Signer: 99, ValidatorIdx: []phase0.ValidatorIndex{idx}}},
+				}
+			},
+		},
+		{
+			name:            "SYNC_COMMITTEE is fork-invariant pre-Boole",
+			role:            "SYNC_COMMITTEE",
+			booleEpoch:      phase0.Epoch(math.MaxUint64),
+			expectCommittee: true,
+			signerDataBuilder: func() *traces.CommitteeDutyTrace {
+				return &traces.CommitteeDutyTrace{
+					Slot:          slot,
+					CommitteeID:   committeeID,
+					SyncCommittee: []*traces.SignerData{{Signer: 99, ValidatorIdx: []phase0.ValidatorIndex{idx}}},
+				}
+			},
+		},
+		{
+			name:            "SYNC_COMMITTEE is fork-invariant post-Boole",
+			role:            "SYNC_COMMITTEE",
+			booleEpoch:      phase0.Epoch(0),
+			expectCommittee: true,
+			signerDataBuilder: func() *traces.CommitteeDutyTrace {
+				return &traces.CommitteeDutyTrace{
+					Slot:          slot,
+					CommitteeID:   committeeID,
+					SyncCommittee: []*traces.SignerData{{Signer: 99, ValidatorIdx: []phase0.ValidatorIndex{idx}}},
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			store := newMockTraceStore()
+			validatorStore := newMockValidatorStore()
+
+			calledValidator := false
+			calledCommittee := false
+
+			store.GetValidatorDutyFunc = func(role spectypes.BeaconRole, slot phase0.Slot, index phase0.ValidatorIndex) (*traces.ValidatorDutyTrace, error) {
+				calledValidator = true
+				return &traces.ValidatorDutyTrace{Slot: slot, Role: role, Validator: index}, nil
+			}
+			store.GetCommitteeIDFunc = func(s phase0.Slot, i phase0.ValidatorIndex) (spectypes.CommitteeID, error) {
+				return committeeID, nil
+			}
+			store.GetCommitteeDutyFunc = func(s phase0.Slot, id spectypes.CommitteeID, role spectypes.RunnerRole) (*traces.CommitteeDutyTrace, error) {
+				calledCommittee = true
+				if tt.signerDataBuilder != nil {
+					return tt.signerDataBuilder(), nil
+				}
+				return &traces.CommitteeDutyTrace{Slot: s, CommitteeID: id}, nil
+			}
+
+			ssvCopy := *networkconfig.TestNetwork.SSV
+			ssvCopy.Forks.Boole = tt.booleEpoch
+			netCfg := *networkconfig.TestNetwork
+			netCfg.SSV = &ssvCopy
+
+			exp := newTestExporterForV2WithNetwork(store, validatorStore, &netCfg)
+
+			req := httptest.NewRequest(http.MethodPost, "/traces/validator", buildJSONBody(t, map[string]any{
+				"from":    uint64(slot),
+				"to":      uint64(slot),
+				"roles":   []string{tt.role},
+				"indices": []uint64{uint64(idx)},
+			}))
+			req.Header.Set("Content-Type", "application/json")
+			rec := httptest.NewRecorder()
+
+			err := exp.ValidatorTraces(rec, req)
+			require.NoError(t, err)
+			require.Equal(t, http.StatusOK, rec.Code)
+
+			assert.Equal(t, tt.expectValidator, calledValidator, "unexpected validator-store routing")
+			assert.Equal(t, tt.expectCommittee, calledCommittee, "unexpected committee-store routing")
+
+			if tt.expectCommittee {
+				var resp ValidatorTracesResponse
+				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+				require.Len(t, resp.Data, 1)
+				require.NotEmpty(t, resp.Data[0].CommitteeID)
+				assert.Equal(t, hex.EncodeToString(committeeID[:]), resp.Data[0].CommitteeID)
+			}
+		})
+	}
+}
+
+// TestExporterValidatorTraces_ForkGating_ValidationSymmetric proves that validateValidatorRequest
+// (via isCommitteeDutyInRange) mirrors the same fork-gated routing decision for aggregator-family
+// roles: pre-Boole no pubkeys/indices are required, post-Boole they are (mirroring committee duties).
+func TestExporterValidatorTraces_ForkGating_ValidationSymmetric(t *testing.T) {
+	tests := []struct {
+		name         string
+		role         string
+		booleEpoch   phase0.Epoch
+		expectBadReq bool
+		setupMock    func(*mockTraceStore)
+	}{
+		{
+			name:         "AGGREGATOR pre-Boole without filters does not require pubkeys/indices",
+			role:         "AGGREGATOR",
+			booleEpoch:   phase0.Epoch(math.MaxUint64),
+			expectBadReq: false,
+			setupMock: func(store *mockTraceStore) {
+				store.GetValidatorDutiesFunc = func(role spectypes.BeaconRole, slot phase0.Slot) ([]*traces.ValidatorDutyTrace, error) {
+					return nil, nil
+				}
+			},
+		},
+		{
+			name:         "AGGREGATOR post-Boole without filters requires pubkeys/indices",
+			role:         "AGGREGATOR",
+			booleEpoch:   phase0.Epoch(0),
+			expectBadReq: true,
+		},
+		{
+			name:         "SYNC_COMMITTEE_CONTRIBUTION pre-Boole without filters does not require pubkeys/indices",
+			role:         "SYNC_COMMITTEE_CONTRIBUTION",
+			booleEpoch:   phase0.Epoch(math.MaxUint64),
+			expectBadReq: false,
+			setupMock: func(store *mockTraceStore) {
+				store.GetValidatorDutiesFunc = func(role spectypes.BeaconRole, slot phase0.Slot) ([]*traces.ValidatorDutyTrace, error) {
+					return nil, nil
+				}
+			},
+		},
+		{
+			name:         "SYNC_COMMITTEE_CONTRIBUTION post-Boole without filters requires pubkeys/indices",
+			role:         "SYNC_COMMITTEE_CONTRIBUTION",
+			booleEpoch:   phase0.Epoch(0),
+			expectBadReq: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			store := newMockTraceStore()
+			if tt.setupMock != nil {
+				tt.setupMock(store)
+			}
+			validatorStore := newMockValidatorStore()
+
+			ssvCopy := *networkconfig.TestNetwork.SSV
+			ssvCopy.Forks.Boole = tt.booleEpoch
+			netCfg := *networkconfig.TestNetwork
+			netCfg.SSV = &ssvCopy
+
+			exp := newTestExporterForV2WithNetwork(store, validatorStore, &netCfg)
+
+			req := httptest.NewRequest(http.MethodPost, "/traces/validator", buildJSONBody(t, map[string]any{
+				"from":  uint64(100),
+				"to":    uint64(200),
+				"roles": []string{tt.role},
+			}))
+			req.Header.Set("Content-Type", "application/json")
+			rec := httptest.NewRecorder()
+
+			err := exp.ValidatorTraces(rec, req)
+			if tt.expectBadReq {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				require.Equal(t, http.StatusOK, rec.Code)
+			}
+		})
+	}
 }
 
 // mockValidatorStore is a simple in-memory ValidatorStore implementation for tests.

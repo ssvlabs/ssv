@@ -85,7 +85,7 @@ func newWSQueryHarness(t *testing.T) *wsQueryHarness {
 	store := newFaultingDutyTraceStore(realStore)
 
 	collector := dutytracer.New(zap.NewNop(), validatorMock, nil, store, networkconfig.TestNetwork.Beacon, nil, nil)
-	coreExporter := exportercore.NewExporter(zap.NewNop(), ibftstorage.NewStores(), collector, validatorMock)
+	coreExporter := exportercore.NewExporter(zap.NewNop(), ibftstorage.NewStores(), collector, validatorMock, networkconfig.TestNetwork)
 
 	node := &Node{
 		logger:       logger,

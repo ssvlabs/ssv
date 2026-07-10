@@ -14,6 +14,7 @@ import (
 	"github.com/ssvlabs/ssv/exporter/rolemask"
 	"github.com/ssvlabs/ssv/exporter/traces"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
+	"github.com/ssvlabs/ssv/networkconfig"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 
 	dutytracer "github.com/ssvlabs/ssv/exporter/dutytracer"
@@ -24,10 +25,10 @@ type Exporter struct {
 	svc    *exportercore.Exporter
 }
 
-func NewExporter(logger *zap.Logger, participantStores *ibftstorage.ParticipantStores, traceStore dutyTraceStore, validators registrystorage.ValidatorStore) *Exporter {
+func NewExporter(logger *zap.Logger, participantStores *ibftstorage.ParticipantStores, traceStore dutyTraceStore, validators registrystorage.ValidatorStore, networkConfig *networkconfig.Network) *Exporter {
 	return &Exporter{
 		logger: logger,
-		svc:    exportercore.NewExporter(logger, participantStores, traceStore, validators),
+		svc:    exportercore.NewExporter(logger, participantStores, traceStore, validators, networkConfig),
 	}
 }
 

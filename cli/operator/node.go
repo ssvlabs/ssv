@@ -389,7 +389,7 @@ func newNode(
 			dstore, networkConfig.Beacon, decidedStreamPublisherFn,
 			dutyStore)
 
-		cfg.SSVOptions.ExporterRead = exportercore.NewExporter(logger, storageMap, collector, nodeStorage.ValidatorStore())
+		cfg.SSVOptions.ExporterRead = exportercore.NewExporter(logger, storageMap, collector, nodeStorage.ValidatorStore(), networkConfig)
 	case modeExporterStandard:
 		logger.Info("exporter mode: standard")
 	case modeOperator:
@@ -580,7 +580,7 @@ func (n *node) start(ctx context.Context, spawn func(func() error)) error {
 			&hvalidators.Validators{
 				Shares: n.nodeStorage.Shares(),
 			},
-			hexporter.NewExporter(n.logger, n.storageMap, n.collector, n.nodeStorage.ValidatorStore()),
+			hexporter.NewExporter(n.logger, n.storageMap, n.collector, n.nodeStorage.ValidatorStore(), n.networkConfig),
 			n.mode == modeExporterArchive,
 		)
 		_, apiServeErr, err := apiServer.Start(ctx)
