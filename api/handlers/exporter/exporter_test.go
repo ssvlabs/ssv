@@ -2565,6 +2565,112 @@ func TestExporterValidatorTraces_ForkGating_ValidationSymmetric(t *testing.T) {
 	}
 }
 
+// TestExporterValidatorTraces_ForkGating_CrossForkRange proves the behavior of a slot range
+// straddling the Boole fork boundary (from pre-Boole, to post-Boole): validation is evaluated
+// at the range's upper bound, so aggregator-family roles require pubkeys/indices, and with
+// indices provided each slot routes independently — validator path before the boundary,
+// committee path from it onward.
+func TestExporterValidatorTraces_ForkGating_CrossForkRange(t *testing.T) {
+	const booleEpoch = phase0.Epoch(5)
+	idx := phase0.ValidatorIndex(1)
+	var committeeID spectypes.CommitteeID
+	committeeID[0] = 7
+
+	ssvCopy := *networkconfig.TestNetwork.SSV
+	ssvCopy.Forks.Boole = booleEpoch
+	netCfg := *networkconfig.TestNetwork
+	netCfg.SSV = &ssvCopy
+
+	booleSlot := netCfg.FirstSlotAtEpoch(booleEpoch)
+	require.GreaterOrEqual(t, uint64(booleSlot), uint64(10), "boole fork slot too low for the range below")
+	from := uint64(booleSlot) - 10 // pre-Boole
+	to := uint64(booleSlot) + 10   // post-Boole
+
+	roles := []struct {
+		name              string
+		signerDataBuilder func(slot phase0.Slot) *traces.CommitteeDutyTrace
+	}{
+		{
+			name: "AGGREGATOR",
+			signerDataBuilder: func(slot phase0.Slot) *traces.CommitteeDutyTrace {
+				return &traces.CommitteeDutyTrace{
+					Slot:        slot,
+					CommitteeID: committeeID,
+					Attester:    []*traces.SignerData{{Signer: 99, ValidatorIdx: []phase0.ValidatorIndex{idx}}},
+				}
+			},
+		},
+		{
+			name: "SYNC_COMMITTEE_CONTRIBUTION",
+			signerDataBuilder: func(slot phase0.Slot) *traces.CommitteeDutyTrace {
+				return &traces.CommitteeDutyTrace{
+					Slot:          slot,
+					CommitteeID:   committeeID,
+					SyncCommittee: []*traces.SignerData{{Signer: 99, ValidatorIdx: []phase0.ValidatorIndex{idx}}},
+				}
+			},
+		},
+	}
+
+	for _, role := range roles {
+		t.Run(role.name+" without filters requires pubkeys/indices", func(t *testing.T) {
+			exp := newTestExporterForV2WithNetwork(newMockTraceStore(), newMockValidatorStore(), &netCfg)
+
+			req := httptest.NewRequest(http.MethodPost, "/traces/validator", buildJSONBody(t, map[string]any{
+				"from":  from,
+				"to":    to,
+				"roles": []string{role.name},
+			}))
+			req.Header.Set("Content-Type", "application/json")
+			rec := httptest.NewRecorder()
+
+			require.Error(t, exp.ValidatorTraces(rec, req))
+		})
+
+		t.Run(role.name+" with indices routes each slot by its own fork state", func(t *testing.T) {
+			store := newMockTraceStore()
+
+			validatorSlots := make(map[phase0.Slot]struct{})
+			committeeSlots := make(map[phase0.Slot]struct{})
+
+			store.GetValidatorDutyFunc = func(r spectypes.BeaconRole, slot phase0.Slot, index phase0.ValidatorIndex) (*traces.ValidatorDutyTrace, error) {
+				validatorSlots[slot] = struct{}{}
+				return &traces.ValidatorDutyTrace{Slot: slot, Role: r, Validator: index}, nil
+			}
+			store.GetCommitteeIDFunc = func(s phase0.Slot, i phase0.ValidatorIndex) (spectypes.CommitteeID, error) {
+				return committeeID, nil
+			}
+			store.GetCommitteeDutyFunc = func(s phase0.Slot, id spectypes.CommitteeID, r spectypes.RunnerRole) (*traces.CommitteeDutyTrace, error) {
+				committeeSlots[s] = struct{}{}
+				return role.signerDataBuilder(s), nil
+			}
+
+			exp := newTestExporterForV2WithNetwork(store, newMockValidatorStore(), &netCfg)
+
+			req := httptest.NewRequest(http.MethodPost, "/traces/validator", buildJSONBody(t, map[string]any{
+				"from":    from,
+				"to":      to,
+				"roles":   []string{role.name},
+				"indices": []uint64{uint64(idx)},
+			}))
+			req.Header.Set("Content-Type", "application/json")
+			rec := httptest.NewRecorder()
+
+			require.NoError(t, exp.ValidatorTraces(rec, req))
+			require.Equal(t, http.StatusOK, rec.Code)
+
+			require.NotEmpty(t, validatorSlots, "expected pre-Boole slots to hit the validator path")
+			require.NotEmpty(t, committeeSlots, "expected post-Boole slots to hit the committee path")
+			for slot := range validatorSlots {
+				assert.Less(t, uint64(slot), uint64(booleSlot), "validator path used at post-Boole slot")
+			}
+			for slot := range committeeSlots {
+				assert.GreaterOrEqual(t, uint64(slot), uint64(booleSlot), "committee path used at pre-Boole slot")
+			}
+		})
+	}
+}
+
 // mockValidatorStore is a simple in-memory ValidatorStore implementation for tests.
 type mockValidatorStore struct {
 	byIndex  map[phase0.ValidatorIndex]*ssvtypes.SSVShare
