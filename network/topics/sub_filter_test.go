@@ -6,12 +6,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ssvlabs/ssv/network/commons"
-	"github.com/ssvlabs/ssv/observability/log"
 )
 
 func TestSubFilter(t *testing.T) {
-	l := log.TestLogger(t)
-	sf := newSubFilter(l, 2)
+	sf := newSubFilter()
 
 	require.False(t, sf.CanSubscribe("xxx"))
 	require.False(t, sf.CanSubscribe(commons.GetTopicFullName("xxx")))
@@ -26,8 +24,7 @@ func TestSubFilter(t *testing.T) {
 // total post-Boole outage (self-subscribe crash-loop + QBFT broadcast failures).
 func TestSubFilter_CanSubscribeBoole(t *testing.T) {
 	const networkName = "hoodi-stage"
-	l := log.TestLogger(t)
-	sf := newSubFilter(l, 2)
+	sf := newSubFilter()
 
 	booleTopic := commons.BooleTopic(networkName, 51)
 
