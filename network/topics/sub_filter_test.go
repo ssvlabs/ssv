@@ -39,6 +39,10 @@ func TestSubFilter_CanSubscribeBoole(t *testing.T) {
 	// ...and a different, unregistered Boole subnet stays rejected.
 	require.False(t, sf.CanSubscribe(commons.BooleTopic(networkName, 52)))
 
+	// A well-formed Boole topic for a *different* network still parses, so it's not
+	// rejected at the gate — only the (per-network) whitelist turns it down.
+	require.False(t, sf.CanSubscribe(commons.BooleTopic("other-network", 51)))
+
 	// Alan and Boole topics coexist in the same filter.
 	sf.(Whitelist).Register(commons.GetTopicFullName("1"))
 	require.True(t, sf.CanSubscribe(commons.GetTopicFullName("1")))
