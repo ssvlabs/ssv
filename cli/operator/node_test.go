@@ -242,11 +242,14 @@ func Test_newNode_wiresExporterNode(t *testing.T) {
 			require.NotNil(t, a.validatorCtrl)
 			require.NotNil(t, a.operatorNode)
 			require.Nil(t, a.keyManager, "exporter nodes have no key manager")
+			require.True(t, cfg.SSVOptions.ValidatorOptions.ExporterMode)
 
 			if tc.wantCollector {
 				require.NotNil(t, a.collector, "archive mode wires a duty-trace collector")
+				require.NotNil(t, cfg.SSVOptions.ValidatorOptions.MessageTraceHandler, "archive mode wires the message trace handler")
 			} else {
 				require.Nil(t, a.collector, "standard mode has no duty-trace collector")
+				require.Nil(t, cfg.SSVOptions.ValidatorOptions.MessageTraceHandler, "standard mode has no message trace handler")
 			}
 
 			// Mirror production teardown ordering: cancel the ctx, then close (newNode starts no goroutines).

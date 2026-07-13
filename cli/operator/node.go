@@ -326,8 +326,9 @@ func newNode(
 
 	var newDecidedHandler qbftcontroller.NewDecidedHandler
 	var decidedStreamPublisherFn func(dutytracer.DecidedInfo)
+	var ws exporterapi.WebSocketServer
 	if cfg.WsAPIPort != 0 {
-		ws := exporterapi.NewWsServer(logger, nil, http.NewServeMux(), cfg.WithPing, fmt.Sprintf(":%d", cfg.WsAPIPort))
+		ws = exporterapi.NewWsServer(logger, nil, http.NewServeMux(), cfg.WithPing, fmt.Sprintf(":%d", cfg.WsAPIPort))
 		cfg.SSVOptions.WS = ws
 		newDecidedHandler = decided.NewStreamPublisher(logger, networkConfig, ws)
 		decidedStreamPublisherFn = decided.NewDecidedListener(logger, networkConfig, ws, nodeStorage.ValidatorStore())
@@ -378,6 +379,8 @@ func newNode(
 	// Exporter duty tracing. An invalid EXPORTER_MODE is rejected up front by resolveAndValidate,
 	// so res.mode here is always one of the known modes.
 	var collector *dutytracer.Collector
+	var messageTraceHandler validator.MessageTraceHandler
+	var exporterRead *exportercore.Exporter
 	switch res.mode {
 	case modeExporterArchive:
 		logger.Info("exporter mode: archive")
@@ -388,8 +391,9 @@ func newNode(
 			nodeStorage.ValidatorStore(), consensusClient,
 			dstore, networkConfig.Beacon, decidedStreamPublisherFn,
 			dutyStore)
+		messageTraceHandler = collector.Collect
 
-		cfg.SSVOptions.ExporterRead = exportercore.NewExporter(logger, storageMap, collector, nodeStorage.ValidatorStore(), networkConfig)
+		exporterRead = exportercore.NewExporter(logger, storageMap, collector, nodeStorage.ValidatorStore(), networkConfig)
 	case modeExporterStandard:
 		logger.Info("exporter mode: standard")
 	case modeOperator:
@@ -424,15 +428,23 @@ func newNode(
 	valOpts.Graffiti = []byte(cfg.Graffiti)
 	valOpts.ProposerDelay = cfg.ProposerDelay
 	valOpts.ValidatorSyncer = metadataSyncer
-	valOpts.DutyTraceCollector = collector
+	valOpts.ExporterMode = res.isExporter()
+	valOpts.MessageTraceHandler = messageTraceHandler
 	valOpts.DoppelgangerHandler = doppelgangerHandler
 	cfg.SSVOptions.ValidatorOptions = valOpts
 
-	validatorCtrl := validator.NewController(logger, valOpts, cfg.ExporterOptions)
+	validatorCtrl := validator.NewController(logger, valOpts)
 	cfg.SSVOptions.ValidatorController = validatorCtrl
 	cfg.SSVOptions.ValidatorStore = nodeStorage.ValidatorStore()
 
-	operatorNode := operator.New(logger, cfg.SSVOptions, cfg.ExporterOptions, slotTickerProvider, storageMap)
+	if ws != nil {
+		handler := exporterapi.NewHandler(logger)
+		ws.UseQueryHandler(func(nm *exporterapi.NetworkMessage) {
+			handler.HandleQueryRequests(storageMap, exporterRead, nodeStorage.ValidatorStore(), networkConfig, nm)
+		})
+	}
+
+	operatorNode := operator.New(logger, cfg.SSVOptions, cfg.ExporterOptions, slotTickerProvider)
 
 	return &node{
 		logger:              logger,

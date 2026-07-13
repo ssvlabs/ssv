@@ -15,6 +15,7 @@ import (
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/jellydator/ttlcache/v3"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
@@ -26,7 +27,6 @@ import (
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 
 	"github.com/ssvlabs/ssv/beacon/goclient"
-	exporterconfig "github.com/ssvlabs/ssv/exporter/config"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -96,7 +96,7 @@ func TestNewController(t *testing.T) {
 		RegistryStorage:   registryStorage,
 		Context:           t.Context(),
 	}
-	control := NewController(logger, controllerOptions, exporterconfig.Options{})
+	control := NewController(logger, controllerOptions)
 	// NewController starts ttlcache cleanup goroutines; stop them so they don't leak across tests.
 	defer control.Stop()
 	require.IsType(t, &Controller{}, control)
@@ -126,7 +126,7 @@ func TestNewControllerRouterConcurrencyOverride(t *testing.T) {
 		Context:              t.Context(),
 		MsgRouterConcurrency: 24,
 	}
-	control := NewController(logger, controllerOptions, exporterconfig.Options{})
+	control := NewController(logger, controllerOptions)
 	// NewController starts ttlcache cleanup goroutines; stop them so they don't leak across tests.
 	defer control.Stop()
 	require.Equal(t, 24, control.msgRouterConcurrency)
@@ -136,9 +136,7 @@ func TestSetupValidatorsExporter(t *testing.T) {
 	logger := log.TestLogger(t)
 	controllerOptions := MockControllerOptions{
 		validatorCommonOpts: &validator.CommonOptions{
-			ExporterOptions: exporterconfig.Options{
-				Enabled: true,
-			},
+			ExporterMode: true,
 		},
 	}
 	ctr := setupController(t, logger, controllerOptions)
@@ -155,9 +153,7 @@ func TestSetupRunnersExporter(t *testing.T) {
 		nil,
 		nil,
 		&validator.CommonOptions{
-			ExporterOptions: exporterconfig.Options{
-				Enabled: true,
-			},
+			ExporterMode: true,
 		},
 	)
 	require.Nil(t, runners)
@@ -167,9 +163,7 @@ func TestSetupRunnersExporter(t *testing.T) {
 func TestSetupCommitteeRunnersExporter(t *testing.T) {
 	committeeRunnerFunc := SetupCommitteeRunners(t.Context(), &validator.Options{
 		CommonOptions: validator.CommonOptions{
-			ExporterOptions: exporterconfig.Options{
-				Enabled: true,
-			},
+			ExporterMode: true,
 		},
 	})
 
@@ -377,7 +371,7 @@ func TestHandleNonCommitteeMessages(t *testing.T) {
 	ctr := setupController(t, logger, controllerOptions) // non-committee
 
 	// Only exporter handles non-committee messages
-	ctr.validatorCommonOpts.ExporterOptions.Enabled = true
+	ctr.validatorCommonOpts.ExporterMode = true
 
 	go ctr.handleRouterMessages()
 
@@ -444,6 +438,48 @@ func TestHandleNonCommitteeMessages(t *testing.T) {
 			require.Fail(t, "timed out waiting for all 3 messages to arrive")
 		}
 	}
+}
+
+func TestHandleWorkerMessagesUsesMessageTraceHandler(t *testing.T) {
+	logger := log.TestLogger(t)
+	ctr := setupController(t, logger, MockControllerOptions{
+		validatorCommonOpts: &validator.CommonOptions{},
+	})
+	ctr.committeesObservers = ttlcache.New(
+		ttlcache.WithTTL[spectypes.MessageID, *validator.CommitteeObserver](time.Minute),
+	)
+
+	sentinelErr := errors.New("message trace handler called")
+	var calls int
+	var gotCtx context.Context
+	var gotMsg *queue.SSVMessage
+	var gotVerifySig func(*spectypes.PartialSignatureMessages) error
+	ctr.messageTraceHandler = func(ctx context.Context, msg *queue.SSVMessage, verifySig func(*spectypes.PartialSignatureMessages) error) error {
+		calls++
+		gotCtx = ctx
+		gotMsg = msg
+		gotVerifySig = verifySig
+		return sentinelErr
+	}
+
+	msgID := spectypes.NewMsgID(networkconfig.TestNetwork.DomainType, []byte("pk"), spectypes.RoleCommittee)
+	ssvMsg := &spectypes.SSVMessage{
+		MsgType: spectypes.SSVPartialSignatureMsgType,
+		MsgID:   msgID,
+		Data:    []byte("invalid partial signature payload"),
+	}
+	msg := &queue.SSVMessage{
+		SignedSSVMessage: &spectypes.SignedSSVMessage{SSVMessage: ssvMsg},
+		SSVMessage:       ssvMsg,
+	}
+
+	err := ctr.handleWorkerMessages(t.Context(), msg)
+
+	require.ErrorIs(t, err, sentinelErr)
+	require.Equal(t, 1, calls)
+	require.True(t, gotCtx == ctr.ctx)
+	require.Same(t, msg, gotMsg)
+	require.NotNil(t, gotVerifySig)
 }
 
 func TestSetupValidators(t *testing.T) {
