@@ -2,7 +2,6 @@ package p2pv1
 
 import (
 	"context"
-	"strconv"
 	"testing"
 	"time"
 
@@ -38,8 +37,12 @@ func (c *testTopicsController) Peers(topicName string) ([]peer.ID, error) {
 	if topicName == "" {
 		return append([]peer.ID(nil), c.allPeers...), nil
 	}
-	// The controller presents full topic names outward (see Topics); look up by base name.
-	return append([]peer.ID(nil), c.peersByTopic[commons.GetTopicBaseName(topicName)]...), nil
+	// The controller presents full topic names outward (see Topics); look up by subnet ID.
+	subnet, _, err := commons.ParseTopicSubnet(topicName)
+	if err != nil {
+		return nil, nil
+	}
+	return append([]peer.ID(nil), c.peersByTopic[commons.SubnetTopicID(subnet)]...), nil
 }
 
 func (c *testTopicsController) Topics() []string {
@@ -286,7 +289,7 @@ func newTrimTestNetwork(host host.Host, topicsCtrl topics.Controller, idx peers.
 		}
 		if topicsCtrl != nil {
 			for _, topic := range topicsCtrl.Topics() {
-				subnet, err := strconv.ParseUint(commons.GetTopicBaseName(topic), 10, 64)
+				subnet, _, err := commons.ParseTopicSubnet(topic)
 				if err != nil || subnet >= commons.SubnetsCount {
 					continue
 				}

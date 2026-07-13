@@ -55,11 +55,6 @@ func GetTopicFullName(baseName string) string {
 	return fmt.Sprintf("%s.%s", topicPrefix, baseName)
 }
 
-// GetTopicBaseName return the base topic name of the topic, w/o ssv prefix
-func GetTopicBaseName(topicName string) string {
-	return strings.TrimPrefix(topicName, topicPrefix+".")
-}
-
 // BooleTopic returns the Boole-fork topic name for the given network and subnet, e.g. "/ssv/<networkName>/boole/<subnet>".
 func BooleTopic(networkName string, subnet uint64) string {
 	return fmt.Sprintf("%s/%s/%s/%d", topicRoot, networkName, booleTopicFork, subnet)
