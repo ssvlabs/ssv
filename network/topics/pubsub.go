@@ -127,7 +127,7 @@ func NewPubSub(
 	}
 
 	// Set up a SubFilter with a whitelist of known topics.
-	sf := newSubFilter(logger, subscriptionRequestLimit)
+	sf := newSubFilter()
 	for _, topic := range commons.Topics(cfg.NetworkConfig) {
 		sf.(Whitelist).Register(topic)
 	}
