@@ -47,7 +47,7 @@ func TestSubFilter_CanSubscribeBoole(t *testing.T) {
 	// Malformed / foreign-fork topics are rejected outright, even if "whitelisted",
 	// because they don't parse as a known subnet topic.
 	for _, bad := range []string{
-		"/ssv/" + networkName + "/boole/",     // missing subnet
+		"/ssv/" + networkName + "/boole/",      // missing subnet
 		"/ssv/" + networkName + "/otherfork/1", // unknown fork segment
 		"/ssv/" + networkName + "/boole/abc",   // non-numeric subnet
 	} {
