@@ -30,10 +30,14 @@ func newSubFilter(logger *zap.Logger, subsLimit int) SubFilter {
 	}
 }
 
-// CanSubscribe returns true if the topic is of interest and we can subscribe to it
+// CanSubscribe returns true if the topic is of interest and we can subscribe to it.
+// A topic is "of interest" only if it parses as a valid subnet topic for a known fork
+// scheme — Alan ("ssv.v2.<subnet>") or Boole ("/ssv/<network>/boole/<subnet>"). Topics
+// from another fork/network or malformed ones are rejected outright. Recognized topics
+// still have to be present in the dynamic whitelist.
 func (sf *subFilter) CanSubscribe(topic string) bool {
-	if commons.GetTopicBaseName(topic) == topic {
-		// not of the same fork
+	if _, _, err := commons.ParseTopicSubnet(topic); err != nil {
+		// not a recognized subnet topic (wrong fork/network or malformed)
 		return false
 	}
 	return sf.Whitelisted(topic)
