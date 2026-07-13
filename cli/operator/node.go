@@ -378,6 +378,7 @@ func newNode(
 	// Exporter duty tracing. An invalid EXPORTER_MODE is rejected up front by resolveAndValidate,
 	// so res.mode here is always one of the known modes.
 	var collector *dutytracer.Collector
+	var messageTraceHandler validator.MessageTraceHandler
 	var exporterRead *exportercore.Exporter
 	switch res.mode {
 	case modeExporterArchive:
@@ -389,6 +390,7 @@ func newNode(
 			nodeStorage.ValidatorStore(), consensusClient,
 			dstore, networkConfig.Beacon, decidedStreamPublisherFn,
 			dutyStore)
+		messageTraceHandler = collector.Collect
 
 		exporterRead = exportercore.NewExporter(logger, storageMap, collector, nodeStorage.ValidatorStore())
 	case modeExporterStandard:
@@ -425,11 +427,12 @@ func newNode(
 	valOpts.Graffiti = []byte(cfg.Graffiti)
 	valOpts.ProposerDelay = cfg.ProposerDelay
 	valOpts.ValidatorSyncer = metadataSyncer
-	valOpts.DutyTraceCollector = collector
+	valOpts.ExporterMode = res.isExporter()
+	valOpts.MessageTraceHandler = messageTraceHandler
 	valOpts.DoppelgangerHandler = doppelgangerHandler
 	cfg.SSVOptions.ValidatorOptions = valOpts
 
-	validatorCtrl := validator.NewController(logger, valOpts, cfg.ExporterOptions)
+	validatorCtrl := validator.NewController(logger, valOpts)
 	cfg.SSVOptions.ValidatorController = validatorCtrl
 	cfg.SSVOptions.ValidatorStore = nodeStorage.ValidatorStore()
 

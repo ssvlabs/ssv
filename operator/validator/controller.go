@@ -18,8 +18,6 @@ import (
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
 	"github.com/ssvlabs/ssv/doppelganger"
-	exporterconfig "github.com/ssvlabs/ssv/exporter/config"
-	dutytracer "github.com/ssvlabs/ssv/exporter/dutytracer"
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/network"
@@ -52,6 +50,13 @@ import (
 
 //go:generate go tool -modfile=../../tool.mod mockgen -package=mocks -destination=./mocks/controller.go -source=./controller.go
 
+// MessageTraceHandler traces consensus and partial-signature messages observed for validators this node does not run.
+type MessageTraceHandler func(
+	ctx context.Context,
+	msg *queue.SSVMessage,
+	verifySig func(*spectypes.PartialSignatureMessages) error,
+) error
+
 // ControllerOptions for creating a validator controller
 type ControllerOptions struct {
 	Context                        context.Context
@@ -63,6 +68,7 @@ type ControllerOptions struct {
 	Network                        P2PNetwork
 	Beacon                         beaconprotocol.BeaconNode
 	FullNode                       bool `yaml:"FullNode" env:"FULLNODE" env-description:"Store complete message history instead of just latest messages"`
+	ExporterMode                   bool
 	BeaconSigner                   ekm.BeaconSigner
 	OperatorSigner                 ssvtypes.OperatorSigner
 	OperatorDataStore              operatordatastore.OperatorDataStore
@@ -70,7 +76,7 @@ type ControllerOptions struct {
 	ValidatorRegistrationSubmitter runner.ValidatorRegistrationSubmitter
 	NewDecidedHandler              qbftcontroller.NewDecidedHandler
 	DutyRoles                      []spectypes.BeaconRole
-	DutyTraceCollector             *dutytracer.Collector
+	MessageTraceHandler            MessageTraceHandler
 	StorageMap                     *storage.ParticipantStores
 	ValidatorStore                 registrystorage.ValidatorStore
 	MessageValidator               validation.MessageValidator
@@ -170,11 +176,11 @@ type Controller struct {
 	validatorExitCh         chan duties.ExitDescriptor
 	feeRecipientChangeCh    chan struct{}
 
-	traceCollector *dutytracer.Collector
+	messageTraceHandler MessageTraceHandler
 }
 
 // NewController creates a new validator controller instance.
-func NewController(logger *zap.Logger, options ControllerOptions, exporterOptions exporterconfig.Options) *Controller {
+func NewController(logger *zap.Logger, options ControllerOptions) *Controller {
 	logger.Debug("setting up validator controller")
 
 	// lookup in a map that holds all relevant operators
@@ -195,7 +201,7 @@ func NewController(logger *zap.Logger, options ControllerOptions, exporterOption
 		options.DoppelgangerHandler,
 		options.NewDecidedHandler,
 		options.FullNode,
-		exporterOptions,
+		options.ExporterMode,
 		options.HistorySyncBatchSize,
 		options.GasLimit,
 		options.MessageValidator,
@@ -219,7 +225,7 @@ func NewController(logger *zap.Logger, options ControllerOptions, exporterOption
 		beaconSigner:                   options.BeaconSigner,
 		operatorSigner:                 options.OperatorSigner,
 		network:                        options.Network,
-		traceCollector:                 options.DutyTraceCollector,
+		messageTraceHandler:            options.MessageTraceHandler,
 
 		validatorsMap:       options.ValidatorsMap,
 		validatorCommonOpts: validatorCommonOpts,
@@ -342,7 +348,7 @@ func (c *Controller) handleRouterMessages() {
 				v.EnqueueMessage(c.ctx, m)
 			} else if vc, ok := c.validatorsMap.GetCommittee(cid); ok {
 				vc.EnqueueMessage(c.ctx, m)
-			} else if c.validatorCommonOpts.ExporterOptions.Enabled {
+			} else if c.validatorCommonOpts.ExporterMode {
 				if m.MsgType != spectypes.SSVConsensusMsgType && m.MsgType != spectypes.SSVPartialSignatureMsgType {
 					continue
 				}
@@ -398,12 +404,10 @@ func (c *Controller) handleWorkerMessages(ctx context.Context, msg network.Decod
 		ncv = item.Value()
 	}
 
-	if c.validatorCommonOpts.ExporterOptions.Mode == exporterconfig.ModeArchive {
-		// use new exporter functionality
-		return c.traceCollector.Collect(c.ctx, ssvMsg, ncv.VerifySig)
+	if c.messageTraceHandler != nil {
+		return c.messageTraceHandler(c.ctx, ssvMsg, ncv.VerifySig)
 	}
 
-	// use old exporter functionality
 	return c.handleNonCommitteeMessages(ctx, ssvMsg, ncv)
 }
 
@@ -481,7 +485,7 @@ func (c *Controller) startValidators(validators []*validator.Validator) (started
 func (c *Controller) InitValidators() ([]*validator.Validator, error) {
 	defer close(c.validatorsInitDone)
 
-	if c.validatorCommonOpts.ExporterOptions.Enabled {
+	if c.validatorCommonOpts.ExporterMode {
 		// For Exporter, there are no committee validators to set up.
 		return nil, nil
 	}
@@ -1030,7 +1034,7 @@ func SetupCommitteeRunners(
 	ctx context.Context,
 	options *validator.Options,
 ) validator.CommitteeRunnerFunc {
-	if options.ExporterOptions.Enabled {
+	if options.ExporterMode {
 		return func(
 			phase0.Slot,
 			map[phase0.ValidatorIndex]*spectypes.Share,
@@ -1094,7 +1098,7 @@ func SetupRunners(
 	validatorStore registrystorage.ValidatorStore,
 	options *validator.CommonOptions,
 ) (runner.ValidatorDutyRunners, error) {
-	if options.ExporterOptions.Enabled {
+	if options.ExporterMode {
 		return nil, fmt.Errorf("cannot set up duty runners in exporter mode")
 	}
 
