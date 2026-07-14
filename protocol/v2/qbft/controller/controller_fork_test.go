@@ -3,6 +3,7 @@ package controller
 import (
 	"bytes"
 	"context"
+	"crypto/rsa"
 	"errors"
 	"math"
 	"testing"
@@ -15,6 +16,9 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 )
 
 // TestController_IdentifierAtHeight verifies that the per-height identifier resolves to the
@@ -298,4 +302,163 @@ func TestController_NilIdentifierFn_ByteIdenticalToStatic(t *testing.T) {
 		require.True(t, bytes.Equal(staticID[:], got),
 			"nil-fn controller must return byte-identical static Identifier at height %d", height)
 	}
+}
+
+// okValueChecker accepts any value. Defined locally (rather than reusing
+// protocol/v2/testing.TestingValueChecker) to avoid an import cycle: protocol/v2/testing
+// imports this package.
+type okValueChecker struct{}
+
+func (okValueChecker) CheckValue([]byte) error { return nil }
+
+// forkTestHarness bundles the fixtures shared by the send-path fork tests: a config with
+// Boole activating at epoch 10, the fork-boundary heights, a fork-aware identifier function
+// and a static identifier frozen at the pre-fork (Alan) domain.
+type forkTestHarness struct {
+	ks             *spectestingutils.TestKeySet
+	member         *spectypes.CommitteeMember
+	cfg            *networkconfig.Network
+	preForkHeight  specqbft.Height
+	postForkHeight specqbft.Height
+	identifierFn   func(specqbft.Height) []byte
+	staticID       spectypes.MessageID
+	roundTimerF    ssv.QBFTRoundTimerF
+}
+
+func newForkTestHarness() *forkTestHarness {
+	ks := spectestingutils.Testing4SharesSet()
+	member := spectestingutils.TestingCommitteeMember(ks)
+	role := spectypes.RoleCommittee
+	committeeID := member.CommitteeID
+
+	forkEpoch := phase0.Epoch(10)
+	midBooleSSV := *networkconfig.TestNetwork.SSV
+	midBooleSSV.Forks = networkconfig.SSVForks{Boole: forkEpoch}
+	midBooleCfg := &networkconfig.Network{Beacon: networkconfig.TestNetwork.Beacon, SSV: &midBooleSSV}
+
+	slotsPerEpoch := phase0.Slot(networkconfig.TestNetwork.SlotsPerEpoch)
+
+	identifierFn := func(height specqbft.Height) []byte {
+		domain := midBooleCfg.DomainTypeAtSlot(phase0.Slot(height))
+		id := spectypes.NewMsgID(domain, committeeID[:], role)
+		return id[:]
+	}
+
+	return &forkTestHarness{
+		ks:             ks,
+		member:         member,
+		cfg:            midBooleCfg,
+		preForkHeight:  specqbft.Height(phase0.Slot(forkEpoch)*slotsPerEpoch - 1),
+		postForkHeight: specqbft.Height(phase0.Slot(forkEpoch) * slotsPerEpoch),
+		identifierFn:   identifierFn,
+		staticID:       spectypes.NewMsgID(midBooleCfg.DomainType, committeeID[:], role),
+		roundTimerF: func(ctx context.Context, logger *zap.Logger, slot phase0.Slot) ssv.QBFTRoundTimer {
+			return roundtimer.NewTestingTimer()
+		},
+	}
+}
+
+func (h *forkTestHarness) newController() *Controller {
+	cfg := &qbft.Config{
+		// Some other operator is the round-1 proposer so Start doesn't attempt to create and
+		// broadcast a proposal — irrelevant to the identifier under test.
+		ProposerF: func(*specqbft.State, specqbft.Round) spectypes.OperatorID {
+			return 2
+		},
+		CutOffRound: spectestingutils.TestingCutOffRound,
+	}
+	ctrl := NewController(h.staticID[:], h.member, cfg, nil, false)
+	ctrl.IdentifierFn = h.identifierFn
+	return ctrl
+}
+
+// instanceDomain extracts the SSV domain from an instance's State.ID.
+func instanceDomain(t *testing.T, id []byte) []byte {
+	t.Helper()
+	require.Len(t, id, 56)
+	return spectypes.MessageID(id).GetDomain()
+}
+
+// TestController_StartNewInstance_ForkDomain drives the real send path: StartNewInstance must
+// create instances whose State.ID carries the fork-correct domain, even though the controller's
+// static Identifier stays frozen at the pre-fork (Alan) domain. This guards the exact regression
+// this fix addresses — reverting StartNewInstance to c.Identifier fails these assertions.
+func TestController_StartNewInstance_ForkDomain(t *testing.T) {
+	h := newForkTestHarness()
+	logger := zap.NewNop()
+
+	t.Run("post-fork height starts instance with Boole domain", func(t *testing.T) {
+		ctrl := h.newController()
+
+		inst, err := ctrl.StartNewInstance(context.Background(), logger, h.postForkHeight,
+			spectestingutils.TestingQBFTFullData, okValueChecker{}, h.roundTimerF)
+		require.NoError(t, err)
+
+		domain := instanceDomain(t, inst.State.ID)
+		require.Equal(t, h.cfg.NextDomainType[:], domain,
+			"instance started at post-fork height must carry the Boole domain")
+		require.NotEqual(t, h.staticID.GetDomain(), domain,
+			"instance identifier must not fall back to the static (Alan) controller Identifier")
+	})
+
+	t.Run("pre-fork height starts instance with Alan domain", func(t *testing.T) {
+		ctrl := h.newController()
+
+		inst, err := ctrl.StartNewInstance(context.Background(), logger, h.preForkHeight,
+			spectestingutils.TestingQBFTFullData, okValueChecker{}, h.roundTimerF)
+		require.NoError(t, err)
+
+		require.Equal(t, h.cfg.DomainType[:], instanceDomain(t, inst.State.ID),
+			"instance started at pre-fork height must carry the Alan domain")
+	})
+}
+
+// TestController_UponDecided_ForkDomain drives the decided fast-forward path: when UponDecided
+// sees a quorum-decided message for an unknown height, the instance it creates must carry the
+// fork-correct domain rather than the controller's static Identifier.
+func TestController_UponDecided_ForkDomain(t *testing.T) {
+	h := newForkTestHarness()
+	logger := zap.NewNop()
+
+	signers := []*rsa.PrivateKey{h.ks.OperatorKeys[1], h.ks.OperatorKeys[2], h.ks.OperatorKeys[3]}
+	ids := []spectypes.OperatorID{1, 2, 3}
+
+	t.Run("post-fork decided message fast-forwards instance with Boole domain", func(t *testing.T) {
+		ctrl := h.newController()
+
+		decidedMsg := spectestingutils.TestingCommitMultiSignerMessageWithHeightAndIdentifier(
+			signers, ids, h.postForkHeight, h.identifierFn(h.postForkHeight))
+		pmsg, err := specqbft.NewProcessingMessage(decidedMsg)
+		require.NoError(t, err)
+
+		decided, err := ctrl.UponDecided(logger, pmsg, h.roundTimerF)
+		require.NoError(t, err)
+		require.NotNil(t, decided, "quorum-decided message for unknown height must be newly decided")
+
+		inst := ctrl.RecentInstances.FindInstance(h.postForkHeight)
+		require.NotNil(t, inst)
+		domain := instanceDomain(t, inst.State.ID)
+		require.Equal(t, h.cfg.NextDomainType[:], domain,
+			"fast-forwarded instance at post-fork height must carry the Boole domain")
+		require.NotEqual(t, h.staticID.GetDomain(), domain,
+			"fast-forwarded instance must not fall back to the static (Alan) controller Identifier")
+	})
+
+	t.Run("pre-fork decided message fast-forwards instance with Alan domain", func(t *testing.T) {
+		ctrl := h.newController()
+
+		decidedMsg := spectestingutils.TestingCommitMultiSignerMessageWithHeightAndIdentifier(
+			signers, ids, h.preForkHeight, h.identifierFn(h.preForkHeight))
+		pmsg, err := specqbft.NewProcessingMessage(decidedMsg)
+		require.NoError(t, err)
+
+		decided, err := ctrl.UponDecided(logger, pmsg, h.roundTimerF)
+		require.NoError(t, err)
+		require.NotNil(t, decided)
+
+		inst := ctrl.RecentInstances.FindInstance(h.preForkHeight)
+		require.NotNil(t, inst)
+		require.Equal(t, h.cfg.DomainType[:], instanceDomain(t, inst.State.ID),
+			"fast-forwarded instance at pre-fork height must carry the Alan domain")
+	})
 }
