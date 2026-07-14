@@ -123,9 +123,10 @@ func TestEstimatedRoundAt(t *testing.T) {
 			want:         specqbft.FirstRound,
 		},
 		{
-			// Regression for the missing RoleAggregatorCommittee head start: with head start 0
-			// this returned round 5 at two-thirds into the slot (when aggregation data arrives),
-			// starting aggregator-committee consensus mid-round instead of at round 1.
+			// Basic behavioral parity with the aggregator case above. NOTE: at this 600ms slot the
+			// head-start difference (0 vs 400ms) is below one QuickTimeout (2s), so this case alone
+			// does NOT discriminate patched vs unpatched — see the realistic-slot regression assertion
+			// after the loop (and TestRoundTimeoutOffset) for the actual guard.
 			name:         "aggregator-committee keeps first round until two-third slot delay passes",
 			role:         spectypes.RoleAggregatorCommittee,
 			timeIntoSlot: slotDuration / 3 * 2,
@@ -146,6 +147,18 @@ func TestEstimatedRoundAt(t *testing.T) {
 			require.Equal(t, tc.want, got)
 		})
 	}
+
+	// Discriminating regression guard for the missing RoleAggregatorCommittee head start.
+	// At a realistic 12s slot, aggregation data arrives ~2/3 in (8s). With the fix (2/3-slot head
+	// start) the round is still 1 there; without it (head start 0) EstimatedRoundAt resolves to
+	// round 5 (1 + 8s/QuickTimeout), starting consensus mid-round. Unlike the 600ms table cases
+	// above, this assertion fails against the unpatched code.
+	t.Run("aggregator-committee resolves round 1 at two-thirds of a realistic 12s slot", func(t *testing.T) {
+		const realisticSlot = 12 * time.Second
+		round, err := EstimatedRoundAt(spectypes.RoleAggregatorCommittee, realisticSlot, realisticSlot/3*2)
+		require.NoError(t, err)
+		require.Equal(t, specqbft.FirstRound, round)
+	})
 }
 
 // TestRoundTimeoutOffset covers the pure helper directly, which is the single source of truth
