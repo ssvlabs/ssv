@@ -1061,6 +1061,16 @@ func (c *Controller) ReportValidatorStatuses(ctx context.Context) {
 	}
 }
 
+// newIdentifierFn returns a per-height QBFT identifier resolver for the given executor
+// (committee ID or validator public key), carrying the fork-correct SSV domain for the
+// height's slot.
+func newIdentifierFn(cfg *networkconfig.Network, executorID []byte, role spectypes.RunnerRole) func(specqbft.Height) []byte {
+	return func(height specqbft.Height) []byte {
+		id := spectypes.NewMsgID(cfg.DomainTypeAtSlot(phase0.Slot(height)), executorID, role)
+		return id[:]
+	}
+}
+
 func SetupCommitteeRunners(
 	ctx context.Context,
 	options *validator.Options,
@@ -1089,11 +1099,7 @@ func SetupCommitteeRunners(
 		}
 
 		committeeID := options.Operator.CommitteeID
-		identifierFn := func(height specqbft.Height) []byte {
-			domain := options.NetworkConfig.DomainTypeAtSlot(phase0.Slot(height))
-			id := spectypes.NewMsgID(domain, committeeID[:], role)
-			return id[:]
-		}
+		identifierFn := newIdentifierFn(options.NetworkConfig, committeeID[:], role)
 		identifier := identifierFn(specqbft.FirstHeight) // pre-fork domain; used as Controller.Identifier (diagnostics only, not persisted)
 		qbftCtrl := qbftcontroller.NewController(identifier, options.Operator, config, options.OperatorSigner, options.FullNode)
 		qbftCtrl.IdentifierFn = identifierFn
@@ -1182,11 +1188,7 @@ func SetupRunners(
 		}
 
 		validatorPubKey := share.ValidatorPubKey
-		identifierFn := func(height specqbft.Height) []byte {
-			domain := options.NetworkConfig.DomainTypeAtSlot(phase0.Slot(height))
-			id := spectypes.NewMsgID(domain, validatorPubKey[:], role)
-			return id[:]
-		}
+		identifierFn := newIdentifierFn(options.NetworkConfig, validatorPubKey[:], role)
 		identifier := identifierFn(specqbft.FirstHeight) // pre-fork domain; used as Controller.Identifier (diagnostics only, not persisted)
 		qbftCtrl := qbftcontroller.NewController(identifier, operator, config, options.OperatorSigner, options.FullNode)
 		qbftCtrl.IdentifierFn = identifierFn
