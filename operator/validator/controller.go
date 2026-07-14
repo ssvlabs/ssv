@@ -1088,8 +1088,15 @@ func SetupCommitteeRunners(
 			CutOffRound: roundtimer.CutOffRound,
 		}
 
-		identifier := spectypes.NewMsgID(options.NetworkConfig.DomainType, options.Operator.CommitteeID[:], role)
-		qbftCtrl := qbftcontroller.NewController(identifier[:], options.Operator, config, options.OperatorSigner, options.FullNode)
+		committeeID := options.Operator.CommitteeID
+		identifierFn := func(height specqbft.Height) []byte {
+			domain := options.NetworkConfig.DomainTypeAtSlot(phase0.Slot(height))
+			id := spectypes.NewMsgID(domain, committeeID[:], role)
+			return id[:]
+		}
+		identifier := identifierFn(specqbft.FirstHeight) // pre-fork domain; used as Controller.Identifier (diagnostics only, not persisted)
+		qbftCtrl := qbftcontroller.NewController(identifier, options.Operator, config, options.OperatorSigner, options.FullNode)
+		qbftCtrl.IdentifierFn = identifierFn
 		return qbftCtrl
 	}
 
@@ -1174,8 +1181,15 @@ func SetupRunners(
 			CutOffRound: roundtimer.CutOffRound,
 		}
 
-		identifier := spectypes.NewMsgID(options.NetworkConfig.DomainType, share.ValidatorPubKey[:], role)
-		qbftCtrl := qbftcontroller.NewController(identifier[:], operator, config, options.OperatorSigner, options.FullNode)
+		validatorPubKey := share.ValidatorPubKey
+		identifierFn := func(height specqbft.Height) []byte {
+			domain := options.NetworkConfig.DomainTypeAtSlot(phase0.Slot(height))
+			id := spectypes.NewMsgID(domain, validatorPubKey[:], role)
+			return id[:]
+		}
+		identifier := identifierFn(specqbft.FirstHeight) // pre-fork domain; used as Controller.Identifier (diagnostics only, not persisted)
+		qbftCtrl := qbftcontroller.NewController(identifier, operator, config, options.OperatorSigner, options.FullNode)
+		qbftCtrl.IdentifierFn = identifierFn
 		return qbftCtrl
 	}
 

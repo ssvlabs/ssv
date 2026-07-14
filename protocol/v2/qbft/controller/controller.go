@@ -31,6 +31,13 @@ type NewDecidedHandler func(msg qbftstorage.Participation)
 type Controller struct {
 	Identifier []byte
 
+	// IdentifierFn, when non-nil, resolves the QBFT message identifier at a given height.
+	// It is used on both send (StartNewInstance) and receive (ProcessMsg) paths to produce
+	// the fork-correct SSV domain for the height/slot. When nil, falls back to Identifier.
+	// JSON-tagged as "-" because funcs are not JSON-serialisable; Controller is only marshalled
+	// in spec-test fixtures and is never persisted and rehydrated in production.
+	IdentifierFn func(height specqbft.Height) []byte `json:"-"`
+
 	// LatestInstanceHeight is the height of the latest Instance Controller spun up. That latest instance
 	// is the "relevant" one currently driving consensus.
 	// JSON-tagged as "Height" to preserve compatibility with existing spec-test fixtures.
@@ -45,6 +52,16 @@ type Controller struct {
 	NewDecidedHandler NewDecidedHandler       `json:"-"`
 	config            qbft.IConfig
 	fullNode          bool
+}
+
+// identifierAtHeight returns the QBFT message identifier for the given height.
+// When IdentifierFn is set it delegates to it (producing the fork-correct domain);
+// otherwise it falls back to the static Identifier field.
+func (c *Controller) identifierAtHeight(height specqbft.Height) []byte {
+	if c.IdentifierFn != nil {
+		return c.IdentifierFn(height)
+	}
+	return c.Identifier
 }
 
 func NewController(
@@ -110,7 +127,7 @@ func (c *Controller) StartNewInstance(
 		logger,
 		c.GetConfig(),
 		c.CommitteeMember,
-		c.Identifier,
+		c.identifierAtHeight(height),
 		height,
 		c.OperatorSigner,
 		roundTimerF,
@@ -143,7 +160,7 @@ func (c *Controller) ProcessMsg(
 		return nil, fmt.Errorf("could not create ProcessingMessage from signed message: %w", err)
 	}
 
-	if !bytes.Equal(c.Identifier, msg.QBFTMessage.Identifier) {
+	if !bytes.Equal(c.identifierAtHeight(msg.QBFTMessage.Height), msg.QBFTMessage.Identifier) {
 		return nil, spectypes.NewError(spectypes.MessageIdentifierInvalidErrorCode, "message doesn't belong to Identifier")
 	}
 
