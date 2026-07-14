@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"math"
 	"testing"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -33,8 +34,12 @@ func TestController_IdentifierAtHeight(t *testing.T) {
 	postBooleSSV.Forks = networkconfig.SSVForks{Boole: 0}
 	postBooleCfg := &networkconfig.Network{Beacon: networkconfig.TestNetwork.Beacon, SSV: &postBooleSSV}
 
-	// Build a pre-Boole config: Boole disabled (epoch MaxUint64).
-	preBooleCfg := networkconfig.TestNetwork // Boole = MaxUint64 by default
+	// Build a pre-Boole config explicitly: Boole disabled (epoch MaxUint64). Built from an
+	// explicit copy rather than aliasing the package-global TestNetwork, whose Boole epoch can
+	// be flipped to 0 by SSV_TEST_BOOLE_FORK=post (see networkconfig/test-network.go init).
+	preBooleSSV := *networkconfig.TestNetwork.SSV
+	preBooleSSV.Forks = networkconfig.SSVForks{Boole: phase0.Epoch(math.MaxUint64)}
+	preBooleCfg := &networkconfig.Network{Beacon: networkconfig.TestNetwork.Beacon, SSV: &preBooleSSV}
 
 	committeeID := member.CommitteeID
 
