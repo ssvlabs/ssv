@@ -103,7 +103,7 @@ func TestController_IdentifierAtHeight(t *testing.T) {
 		ctrl := NewController(identifier, member, nil, nil, false)
 		ctrl.IdentifierFn = identifierFn
 
-		slotsPerEpoch := phase0.Slot(networkconfig.TestNetwork.Beacon.SlotsPerEpoch)
+		slotsPerEpoch := phase0.Slot(networkconfig.TestNetwork.SlotsPerEpoch)
 
 		preForkSlot := phase0.Slot(forkEpoch)*slotsPerEpoch - 1
 		postForkSlot := phase0.Slot(forkEpoch) * slotsPerEpoch
@@ -145,7 +145,6 @@ func TestController_IdentifierAtHeight(t *testing.T) {
 		require.NotEqual(t, expectedBooleDomain[:], resolvedID.GetDomain(),
 			"unpatched controller must NOT produce Boole domain (proves the bug exists without fix)")
 	})
-
 }
 
 // makeSignedQBFTMsg builds a minimal SignedSSVMessage carrying a RoundChange QBFT message
@@ -175,7 +174,7 @@ func TestController_ProcessMsg_ForkDomainCheck(t *testing.T) {
 	midBooleSSV.Forks = networkconfig.SSVForks{Boole: forkEpoch}
 	midBooleCfg := &networkconfig.Network{Beacon: networkconfig.TestNetwork.Beacon, SSV: &midBooleSSV}
 
-	slotsPerEpoch := phase0.Slot(networkconfig.TestNetwork.Beacon.SlotsPerEpoch)
+	slotsPerEpoch := phase0.Slot(networkconfig.TestNetwork.SlotsPerEpoch)
 	preForkSlot := phase0.Slot(forkEpoch)*slotsPerEpoch - 1
 	postForkSlot := phase0.Slot(forkEpoch) * slotsPerEpoch
 

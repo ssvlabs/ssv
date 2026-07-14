@@ -34,7 +34,7 @@ type Controller struct {
 	// IdentifierFn, when non-nil, resolves the QBFT message identifier at a given height.
 	// It is used on both send (StartNewInstance) and receive (ProcessMsg) paths to produce
 	// the fork-correct SSV domain for the height/slot. When nil, falls back to Identifier.
-	// JSON-tagged as "-" because funcs are not JSON-serialisable; Controller is only marshalled
+	// JSON-tagged as "-" because funcs are not JSON-serialisable; Controller is only marshaled
 	// in spec-test fixtures and is never persisted and rehydrated in production.
 	IdentifierFn func(height specqbft.Height) []byte `json:"-"`
 
