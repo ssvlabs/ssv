@@ -132,9 +132,9 @@ func New(ctx context.Context, beaconConfig *networkconfig.Beacon, role spectypes
 // RoundTimeout calculates the timeout duration for a specific role, height, and round.
 //
 // Timeout Rules:
-// - For roles BNRoleAttester and BNRoleSyncCommittee, the base timeout is 1/3 of the slot duration.
-// - For roles BNRoleAggregator and BNRoleSyncCommitteeContribution, the base timeout is 2/3 of the slot duration.
-// - For role BNRoleProposer, the timeout is either quickTimeout or slowTimeout, depending on the round.
+// - For RoleCommittee, the base timeout (Round 1 head start) is 1/3 of the slot duration.
+// - For RoleAggregator, RoleSyncCommitteeContribution and RoleAggregatorCommittee, it is 2/3 of the slot duration.
+// - For RoleProposer, the timeout is either quickTimeout or slowTimeout, depending on the round.
 //
 // Additional Timeout:
 // - For rounds less than or equal to quickThreshold, the additional timeout is 'quick' seconds.
