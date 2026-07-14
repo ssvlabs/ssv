@@ -48,8 +48,9 @@ func roundTimeoutForRound(role spectypes.RunnerRole, slotDuration time.Duration,
 
 // round1HeadStart returns the extra time, on top of Round 1's normal quick timeout, that
 // Round 1 is allowed to run for a given role. Committee gets 1/3 of the slot as head start
-// (time for the block to become available); aggregator and sync-committee-contribution get
-// 2/3 of the slot (time for attestations to arrive); proposer gets zero.
+// (time for the block to become available); aggregator, aggregator-committee and
+// sync-committee-contribution get 2/3 of the slot (time for attestations to arrive before
+// aggregating); proposer gets zero.
 //
 // Note: this is NOT the time at which Round 1 -> Round 2 transitions — that transition actually
 // happens at `slotStart + round1HeadStart + QuickTimeout`, because Round 1 still needs to run its
@@ -58,7 +59,7 @@ func round1HeadStart(role spectypes.RunnerRole, slotDuration time.Duration) time
 	switch role {
 	case spectypes.RoleCommittee:
 		return slotDuration / 3
-	case ssvtypes.RoleAggregator, ssvtypes.RoleSyncCommitteeContribution:
+	case ssvtypes.RoleAggregator, ssvtypes.RoleSyncCommitteeContribution, spectypes.RoleAggregatorCommittee:
 		return slotDuration / 3 * 2
 	default:
 		return 0

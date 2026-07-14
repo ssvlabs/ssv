@@ -33,6 +33,7 @@ func TestTimeoutForRound(t *testing.T) {
 		ssvtypes.RoleAggregator,
 		spectypes.RoleProposer,
 		ssvtypes.RoleSyncCommitteeContribution,
+		spectypes.RoleAggregatorCommittee,
 	}
 
 	for _, role := range roles {
@@ -122,6 +123,15 @@ func TestEstimatedRoundAt(t *testing.T) {
 			want:         specqbft.FirstRound,
 		},
 		{
+			// Regression for the missing RoleAggregatorCommittee head start: with head start 0
+			// this returned round 5 at two-thirds into the slot (when aggregation data arrives),
+			// starting aggregator-committee consensus mid-round instead of at round 1.
+			name:         "aggregator-committee keeps first round until two-third slot delay passes",
+			role:         spectypes.RoleAggregatorCommittee,
+			timeIntoSlot: slotDuration / 3 * 2,
+			want:         specqbft.FirstRound,
+		},
+		{
 			name:         "sync committee contribution advances after two-third slot delay plus quick timeout",
 			role:         ssvtypes.RoleSyncCommitteeContribution,
 			timeIntoSlot: slotDuration/3*2 + QuickTimeout,
@@ -178,6 +188,10 @@ func TestRoundTimeoutOffset(t *testing.T) {
 
 		// Sync committee contribution uses the same 2/3-slot branch as aggregator.
 		{name: "sync_committee_contribution, round 1", role: ssvtypes.RoleSyncCommitteeContribution, round: 1, want: 8*time.Second + QuickTimeout},
+
+		// Aggregator-committee uses the same 2/3-slot branch as aggregator.
+		{name: "aggregator_committee, round 1", role: spectypes.RoleAggregatorCommittee, round: 1, want: 8*time.Second + QuickTimeout},
+		{name: "aggregator_committee, round 8", role: spectypes.RoleAggregatorCommittee, round: QuickTimeoutThreshold, want: 8*time.Second + quickPhase},
 	}
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
@@ -208,6 +222,7 @@ func TestEstimatedRoundAtBoundaries(t *testing.T) {
 		{"committee", spectypes.RoleCommittee},
 		{"aggregator", ssvtypes.RoleAggregator},
 		{"sync_committee_contribution", ssvtypes.RoleSyncCommitteeContribution},
+		{"aggregator_committee", spectypes.RoleAggregatorCommittee},
 	}
 
 	for _, rc := range roles {
@@ -332,6 +347,7 @@ func TestEstimatedRoundAtMatchesRoundTimeout(t *testing.T) {
 		{"committee", spectypes.RoleCommittee},
 		{"aggregator", ssvtypes.RoleAggregator},
 		{"sync_committee_contribution", ssvtypes.RoleSyncCommitteeContribution},
+		{"aggregator_committee", spectypes.RoleAggregatorCommittee},
 	}
 
 	for _, rc := range roles {
