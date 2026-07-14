@@ -18,8 +18,8 @@ import (
 )
 
 // TestController_IdentifierAtHeight verifies that the per-height identifier resolves to the
-// fork-correct SSV domain. Pre-Boole heights must yield DomainType (Alan, 0x...3114) and
-// post-Boole heights must yield NextDomainType (Boole, 0x...3115).
+// fork-correct SSV domain. Pre-Boole heights must yield the config's DomainType (Alan) and
+// post-Boole heights must yield its NextDomainType (Boole).
 //
 // The test also confirms the regression: without IdentifierFn the controller uses the static
 // Identifier frozen at construction time, causing post-fork heights to still carry the pre-fork
