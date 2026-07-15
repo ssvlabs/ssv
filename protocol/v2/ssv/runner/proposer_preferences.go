@@ -40,7 +40,21 @@ type ProposerPreferencesRunner struct {
 	// bySlot holds one sub-runner per concurrently-active proposal slot. Accessed only from the
 	// validator's single message-processing goroutine.
 	bySlot map[phase0.Slot]*proposerPreferencesSlotRunner
+
+	// pending stashes every §5 partial-signature message by proposal slot so StartNewDuty can replay
+	// it into a new (or replacement) sub-runner. Operators broadcast their §5 partial exactly once, at
+	// their own emission tick, and those ticks skew across the committee (registration/event-sync
+	// timing); a partial that arrives before the local duty (re)starts would otherwise be lost — the
+	// sender does not re-broadcast, and message validation would drop a same-root re-broadcast as a
+	// duplicate anyway. Bounded per slot (committee × distinct-root cap), pruned with evictPastSlots.
+	// Accessed only from the validator's single message-processing goroutine.
+	pending map[phase0.Slot][]*spectypes.PartialSignatureMessages
 }
+
+// maxPendingRootsPerSigner mirrors message validation's maxProposerPreferencesDistinctRoots: the wire
+// admits at most that many distinct §5 signing roots per (slot, signer), so the pending stash never
+// needs to retain more per signer.
+const maxPendingRootsPerSigner = 4
 
 // ProposerPreferencesRunnerOptions bundles the dependencies required by NewProposerPreferencesRunner.
 type ProposerPreferencesRunnerOptions struct {
@@ -61,8 +75,9 @@ func NewProposerPreferencesRunner(opts ProposerPreferencesRunnerOptions) (Runner
 			NetworkConfig:  opts.NetworkConfig,
 			Share:          opts.Share,
 		},
-		opts:   opts,
-		bySlot: map[phase0.Slot]*proposerPreferencesSlotRunner{},
+		opts:    opts,
+		bySlot:  map[phase0.Slot]*proposerPreferencesSlotRunner{},
+		pending: map[phase0.Slot][]*spectypes.PartialSignatureMessages{},
 	}, nil
 }
 
@@ -74,21 +89,75 @@ func (r *ProposerPreferencesRunner) StartNewDuty(ctx context.Context, logger *za
 
 	r.evictPastSlots()
 
-	// One sub-runner per proposal slot; a re-emission for the same slot (e.g. after a reorg) replaces
-	// the prior one so it freezes the new dependent_root.
+	// One sub-runner per proposal slot; a re-emission for the same slot (e.g. after a reorg, or an
+	// indices-change re-emit) replaces the prior one so it freezes the current dependent_root. The
+	// replaced incarnation is concluded so its outcome watcher doesn't report a false "stuck", and its
+	// submitted preference carries over so an unchanged re-emission stays idempotent (no duplicate
+	// broadcast or beacon-node submit; see executeDuty).
+	slot := validatorDuty.DutySlot()
 	sub := newProposerPreferencesSlotRunner(r.opts)
-	r.bySlot[validatorDuty.DutySlot()] = sub
-	return sub.StartNewDuty(ctx, logger, duty, quorum)
+	if prev, ok := r.bySlot[slot]; ok {
+		sub.submittedPreferences = prev.submittedPreferences
+		if prev.hasDutyRunning() {
+			prev.markDutyNotRequired() // superseded by the re-emission, not stuck
+		}
+	}
+	r.bySlot[slot] = sub
+	if err := sub.StartNewDuty(ctx, logger, duty, quorum); err != nil {
+		return err
+	}
+
+	// Replay the stashed partials for this proposal slot. Peers broadcast their §5 partial once, at
+	// their own emission tick, so it may predate this (re)start; the stash is the only recovery path —
+	// there is no re-broadcast, and message validation would dedup one by signing root anyway. A
+	// stashed partial that doesn't match the freshly frozen preference fails signature verification
+	// inside the sub-runner and is skipped.
+	if sub.hasDutyRunning() {
+		for _, stashed := range r.pending[slot] {
+			if err := sub.ProcessPreConsensus(ctx, logger, stashed); err != nil {
+				logger.Debug("skipped stashed proposer-preferences partial on replay",
+					fields.Slot(slot), zap.Error(err))
+			}
+		}
+	}
+	return nil
 }
 
 func (r *ProposerPreferencesRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
+	// Stash every §5 partial (bounded, deduplicated), even when a sub-runner exists: a later
+	// re-emission replaces the sub-runner and its container, and peers won't re-broadcast, so the
+	// stash is what re-seeds the replacement (see StartNewDuty).
+	r.stashPending(signedMsg)
+
 	sub, ok := r.bySlot[signedMsg.Slot]
 	if !ok {
-		// No sub-runner for this proposal slot — it hasn't executed here yet, or it already concluded
-		// and was evicted. Retryable so a slightly-early peer message lands once the duty starts.
+		// No sub-runner for this proposal slot — it hasn't executed here yet (the stash above replays
+		// once it starts), or it already concluded and was evicted. Retryable so a message racing the
+		// duty start also lands via the queue replay.
 		return NewRetryableError(spectypes.WrapError(spectypes.NoRunningDutyErrorCode, ErrNoDutyAssigned))
 	}
 	return sub.ProcessPreConsensus(ctx, logger, signedMsg)
+}
+
+// stashPending records a §5 partial for its proposal slot so StartNewDuty can replay it. Duplicates
+// by (signer, signing root) are skipped; a slot's stash is capped at the committee size times the
+// wire's per-signer distinct-root cap, so a full stash can only mean noise.
+func (r *ProposerPreferencesRunner) stashPending(signedMsg *spectypes.PartialSignatureMessages) {
+	if signedMsg == nil || len(signedMsg.Messages) != 1 {
+		return // §5 partials carry exactly one message (enforced by message validation)
+	}
+	msg := signedMsg.Messages[0]
+	stash := r.pending[signedMsg.Slot]
+	for _, existing := range stash {
+		e := existing.Messages[0]
+		if e.Signer == msg.Signer && e.SigningRoot == msg.SigningRoot {
+			return
+		}
+	}
+	if len(stash) >= len(r.GetShare().Committee)*maxPendingRootsPerSigner {
+		return
+	}
+	r.pending[signedMsg.Slot] = append(stash, signedMsg)
 }
 
 func (r *ProposerPreferencesRunner) ProcessConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.SignedSSVMessage) error {
@@ -110,13 +179,18 @@ func (r *ProposerPreferencesRunner) HasRunningDuty() bool {
 	return false
 }
 
-// evictPastSlots drops sub-runners whose proposal slot has passed; the preference is moot once the
-// proposal slot arrives, and convergence completes well before it.
+// evictPastSlots drops sub-runners (and stashed partials) whose proposal slot has passed; the
+// preference is moot once the proposal slot arrives, and convergence completes well before it.
 func (r *ProposerPreferencesRunner) evictPastSlots() {
 	current := r.NetworkConfig.EstimatedCurrentSlot()
 	for slot := range r.bySlot {
 		if slot < current {
 			delete(r.bySlot, slot)
+		}
+	}
+	for slot := range r.pending {
+		if slot < current {
+			delete(r.pending, slot)
 		}
 	}
 }
@@ -169,6 +243,9 @@ func (r *ProposerPreferencesRunner) UnmarshalJSON(data []byte) error {
 	if r.bySlot == nil {
 		r.bySlot = map[phase0.Slot]*proposerPreferencesSlotRunner{}
 	}
+	if r.pending == nil {
+		r.pending = map[phase0.Slot][]*spectypes.PartialSignatureMessages{}
+	}
 	return nil
 }
 
@@ -215,6 +292,13 @@ type proposerPreferencesSlotRunner struct {
 	// are validated and aggregated against exactly this object's signing root; nil means the duty has
 	// not executed yet.
 	proposerPreferences *gloas.ProposerPreferences
+
+	// submittedPreferences is the preference this proposal slot already submitted to the beacon node,
+	// carried across sub-runner replacements by the dispatcher. executeDuty compares against it so a
+	// re-emission that would rebuild the exact same preference (e.g. an indices-change re-emit under an
+	// unchanged dependent_root) concludes as not-required instead of duplicating the gossip broadcast
+	// (peers dedup it by signing root) and the beacon-node submit.
+	submittedPreferences *gloas.ProposerPreferences
 }
 
 func newProposerPreferencesSlotRunner(opts ProposerPreferencesRunnerOptions) *proposerPreferencesSlotRunner {
@@ -294,6 +378,7 @@ func (r *proposerPreferencesSlotRunner) ProcessPreConsensus(ctx context.Context,
 	}
 
 	recordSuccessfulSubmission(ctx, 1, r.NetworkConfig.EstimatedEpochAtSlot(r.proposerPreferences.ProposalSlot), spectypes.BNRoleProposerPreferences)
+	r.submittedPreferences = r.proposerPreferences
 	r.markDutySucceeded()
 	logger.Info("✔️ successfully submitted proposer preferences", fields.Slot(r.proposerPreferences.ProposalSlot))
 	return nil
@@ -331,6 +416,16 @@ func (r *proposerPreferencesSlotRunner) executeDuty(ctx context.Context, logger 
 		// a failure there is operational, so record a failed duty to surface it in metrics.
 		logger.Warn("proposer preferences failed: could not build preferences", fields.Slot(proposalSlot), zap.Error(err))
 		r.markDutyFailed(err)
+		return nil
+	}
+
+	if r.submittedPreferences != nil && *preferences == *r.submittedPreferences {
+		// A re-emission rebuilt the exact preference this slot already submitted: nothing changed, so
+		// re-signing it would only produce a duplicate broadcast (dropped by peers' signing-root dedup)
+		// and a duplicate beacon-node submit. Conclude quietly.
+		logger.Debug("proposer preferences unchanged since last successful submit; skipping re-emission",
+			fields.Slot(proposalSlot))
+		r.markDutyNotRequired()
 		return nil
 	}
 

@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -46,6 +47,24 @@ func TestBaseRunner_watchDutyOutcome(t *testing.T) {
 		require.Eventually(t, func() bool {
 			return logs.FilterMessageSnippet(deadlineSnippet).Len() == 1
 		}, time.Second, 5*time.Millisecond, "expected exactly one deadline warning")
+	})
+
+	t.Run("proposer preferences: stuck horizon extends to the proposal slot start", func(t *testing.T) {
+		core, logs := observer.New(zapcore.WarnLevel)
+		b := newRunner()
+		b.RunnerRoleType = spectypes.RoleProposerPreferences
+		// duty.Slot is a future proposal slot (slot 4 → its start is 4 slots away); the §5 duty keeps
+		// converging until then, so the current slot's end must not report it stuck.
+		b.State = &State{CurrentDuty: &spectypes.ValidatorDuty{Slot: 4}}
+
+		b.watchDutyOutcome(context.Background(), zap.New(core))
+
+		time.Sleep(120 * time.Millisecond) // two slots past the emission slot's end
+		require.Zero(t, logs.FilterMessageSnippet(deadlineSnippet).Len(), "§5 must not report stuck before its proposal slot")
+
+		require.Eventually(t, func() bool {
+			return logs.FilterMessageSnippet(deadlineSnippet).Len() == 1
+		}, time.Second, 5*time.Millisecond, "expected the stuck warning at the proposal slot's start")
 	})
 
 	t.Run("warns when the duty fails before slot end", func(t *testing.T) {

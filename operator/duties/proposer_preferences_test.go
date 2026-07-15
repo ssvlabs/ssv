@@ -3,13 +3,15 @@ package duties
 import (
 	"context"
 	"testing"
+	"time"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
+
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
@@ -106,6 +108,97 @@ func TestProposerPreferencesHandler_emitForEpoch_noProposals(t *testing.T) {
 	require.Len(t, executed, 0)
 }
 
+// emitForEpoch skips assignments whose proposal slot has already been reached (the preference is
+// moot and peers would reject its partials as late) and bounds each remaining duty by its own
+// proposal slot's end — §5 convergence legitimately spans the slots up to it.
+func TestProposerPreferencesHandler_emitForEpoch_skipsReachedSlotsAndBoundsPerDuty(t *testing.T) {
+	ctrl := gomock.NewController(t)
+
+	epoch := phase0.Epoch(5)
+	idx := phase0.ValidatorIndex(7)
+	currentSlot := phase0.Slot(40)
+	pk := phase0.BLSPubKey{1, 2, 3}
+
+	vp := NewMockValidatorProvider(ctrl)
+	vp.EXPECT().SelfParticipatingValidators(epoch).
+		Return([]*types.SSVShare{{Share: spectypes.Share{ValidatorIndex: idx, ValidatorPubKey: spectypes.ValidatorPK(pk)}}}).Times(1)
+
+	bn := NewMockBeaconNode(ctrl)
+	bn.EXPECT().ProposerDutiesDependentRoot(gomock.Any(), epoch).Return(phase0.Root{0xaa}, nil).Times(1)
+	bn.EXPECT().ProposerDuties(gomock.Any(), epoch, []phase0.ValidatorIndex{idx}).
+		Return([]*eth2apiv1.ProposerDuty{
+			{PubKey: pk, ValidatorIndex: idx, Slot: currentSlot - 1}, // passed: skipped
+			{PubKey: pk, ValidatorIndex: idx, Slot: currentSlot},     // reached: skipped
+			{PubKey: pk, ValidatorIndex: idx, Slot: currentSlot + 5}, // upcoming: emitted
+		}, nil).Times(1)
+
+	executed := make(chan []*spectypes.ValidatorDuty, 3)
+	deadlines := make(chan time.Time, 3)
+	h := NewProposerPreferencesHandler()
+	h.logger = zap.NewNop()
+	h.netCfg = networkconfig.TestNetwork
+	h.validatorProvider = vp
+	h.beaconNode = bn
+	h.dutiesExecutor = &captureExecutor{executed: executed, deadlines: deadlines}
+
+	h.emitForEpoch(context.Background(), epoch, currentSlot, false)
+
+	require.Len(t, executed, 1, "only the upcoming assignment is emitted")
+	got := <-executed
+	require.Len(t, got, 1)
+	require.Equal(t, currentSlot+5, got[0].Slot)
+	require.Equal(t, networkconfig.TestNetwork.SlotStartTime(currentSlot+5+1), <-deadlines,
+		"each duty's execution window runs to the end of its own proposal slot")
+}
+
+// The first Gloas tick forces a one-time lookahead recheck: a boundary epoch emitted pre-fork under
+// a dependent_root that shifts at the fork transition is re-emitted under the fresh root; later
+// Gloas ticks don't recheck again (the pinned mock call order fails on any extra fetch).
+func TestProposerPreferencesHandler_firstGloasTickRechecksBoundaryEpoch(t *testing.T) {
+	const gloasEpoch = 100
+	netCfg := networkconfig.TestNetworkWithGloas(gloasEpoch)
+
+	ctrl := gomock.NewController(t)
+	idx := phase0.ValidatorIndex(7)
+	pk := phase0.BLSPubKey{1, 2, 3}
+	proposalSlot := phase0.Slot(uint64(gloasEpoch)*netCfg.SlotsPerEpoch) + 10
+	rootA, rootB := phase0.Root{0xaa}, phase0.Root{0xbb}
+
+	vp := NewMockValidatorProvider(ctrl)
+	vp.EXPECT().SelfParticipatingValidators(phase0.Epoch(gloasEpoch)).
+		Return([]*types.SSVShare{{Share: spectypes.Share{ValidatorIndex: idx, ValidatorPubKey: spectypes.ValidatorPK(pk)}}}).AnyTimes()
+
+	duty := []*eth2apiv1.ProposerDuty{{PubKey: pk, ValidatorIndex: idx, Slot: proposalSlot}}
+	bn := NewMockBeaconNode(ctrl)
+	gomock.InOrder(
+		bn.EXPECT().ProposerDutiesDependentRoot(gomock.Any(), phase0.Epoch(gloasEpoch)).Return(rootA, nil), // pre-fork window emit
+		bn.EXPECT().ProposerDuties(gomock.Any(), phase0.Epoch(gloasEpoch), []phase0.ValidatorIndex{idx}).Return(duty, nil),
+		bn.EXPECT().ProposerDutiesDependentRoot(gomock.Any(), phase0.Epoch(gloasEpoch)).Return(rootB, nil), // fork-tick recheck: root shifted
+		bn.EXPECT().ProposerDuties(gomock.Any(), phase0.Epoch(gloasEpoch), []phase0.ValidatorIndex{idx}).Return(duty, nil),
+	)
+
+	executed := make(chan []*spectypes.ValidatorDuty, 2)
+	h := NewProposerPreferencesHandler()
+	h.logger = zap.NewNop()
+	h.netCfg = netCfg
+	h.validatorProvider = vp
+	h.beaconNode = bn
+	h.dutiesExecutor = &captureExecutor{executed: executed}
+
+	preForkSlot := phase0.Slot(uint64(gloasEpoch-1) * netCfg.SlotsPerEpoch)
+	forkSlot := phase0.Slot(uint64(gloasEpoch) * netCfg.SlotsPerEpoch)
+
+	h.emitForTick(context.Background(), preForkSlot) // pre-fork window: emits under rootA
+	require.Equal(t, rootA, h.emitted[phase0.Epoch(gloasEpoch)])
+
+	h.emitForTick(context.Background(), forkSlot) // first Gloas tick: forced recheck re-emits under rootB
+	require.Equal(t, rootB, h.emitted[phase0.Epoch(gloasEpoch)])
+
+	h.emitForTick(context.Background(), forkSlot+1) // second Gloas tick: no recheck, no re-fetch
+
+	require.Len(t, executed, 2, "pre-fork emit and the fork-tick re-emit only")
+}
+
 // evictOutdated drops only epochs strictly before the current one.
 func TestProposerPreferencesHandler_evictOutdated(t *testing.T) {
 	h := NewProposerPreferencesHandler()
@@ -139,7 +232,9 @@ func TestProposerPreferencesHandler_emitForTick(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			idx := phase0.ValidatorIndex(7)
 			pk := phase0.BLSPubKey{1, 2, 3}
-			proposalSlot := phase0.Slot(uint64(gloasEpoch) * netCfg.SlotsPerEpoch) // a slot in the Gloas fork epoch
+			// A still-upcoming slot in the Gloas fork epoch: the steady-state tick sits on the epoch's
+			// first slot, and an assignment at the tick slot itself is filtered as already reached.
+			proposalSlot := phase0.Slot(uint64(gloasEpoch)*netCfg.SlotsPerEpoch) + 1
 
 			vp := NewMockValidatorProvider(ctrl)
 			vp.EXPECT().SelfParticipatingValidators(phase0.Epoch(gloasEpoch)).

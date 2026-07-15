@@ -18,13 +18,18 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 )
 
-// captureExecutor records the duties handed to ExecuteDuties so a test can assert on them.
+// captureExecutor records the duties handed to ExecuteDuties (and, when a deadlines channel is set,
+// each call's duty deadline) so a test can assert on them.
 type captureExecutor struct {
-	executed chan []*spectypes.ValidatorDuty
+	executed  chan []*spectypes.ValidatorDuty
+	deadlines chan time.Time
 }
 
-func (c *captureExecutor) ExecuteDuties(_ context.Context, duties []*spectypes.ValidatorDuty, _ time.Time) {
+func (c *captureExecutor) ExecuteDuties(_ context.Context, duties []*spectypes.ValidatorDuty, deadline time.Time) {
 	c.executed <- duties
+	if c.deadlines != nil {
+		c.deadlines <- deadline
+	}
 }
 
 func (c *captureExecutor) ExecuteCommitteeDuties(context.Context, committeeDutiesMap, time.Time) {}
