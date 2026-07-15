@@ -26,6 +26,10 @@ type ProposerPreferencesHandler struct {
 	// recheckLookahead is set by a reorg so the next tick re-evaluates each lookahead epoch's
 	// dependent_root instead of trusting its emitted marker. Accessed only from the HandleDuties goroutine.
 	recheckLookahead bool
+
+	// gloasForkRechecked is set once the first Gloas tick has forced a lookahead recheck (see
+	// emitForTick). Accessed only from the HandleDuties goroutine.
+	gloasForkRechecked bool
 }
 
 func NewProposerPreferencesHandler() *ProposerPreferencesHandler {
@@ -85,6 +89,14 @@ func (h *ProposerPreferencesHandler) emitForTick(ctx context.Context, slot phase
 	epoch := h.netCfg.EstimatedEpochAtSlot(slot)
 	switch {
 	case h.netCfg.IsGloas(epoch):
+		// The first Gloas tick forces a recheck, like a reorg would: the pre-fork window emitted the
+		// fork epoch under the pre-fork view of its dependent_root, and a CL whose reported root
+		// shifts at the fork transition would otherwise leave the boundary epoch pinned to the stale
+		// root (an epoch re-emits only on a root change). With an unchanged root this is a no-op.
+		if !h.gloasForkRechecked {
+			h.gloasForkRechecked = true
+			recheck = true
+		}
 		h.emitForEpoch(ctx, epoch, slot, recheck)
 		if h.shouldFetchNextEpoch(slot) {
 			h.emitForEpoch(ctx, epoch+1, slot, recheck)
@@ -96,8 +108,8 @@ func (h *ProposerPreferencesHandler) emitForTick(ctx context.Context, slot phase
 	}
 }
 
-// emitForEpoch emits one proposer-preferences duty per local proposal assignment in the epoch, to be
-// broadcast immediately. It emits once per (epoch, dependent_root): a steady-state tick skips an
+// emitForEpoch emits one proposer-preferences duty per still-upcoming local proposal assignment in
+// the epoch, to be broadcast immediately. It emits once per (epoch, dependent_root): a steady-state tick skips an
 // already-emitted epoch, and a post-reorg recheck re-emits only when the epoch's dependent_root changed —
 // re-emitting under an unchanged root would just duplicate the preference and get the operator
 // gossip-penalized (SIP #94 §5).
@@ -128,6 +140,12 @@ func (h *ProposerPreferencesHandler) emitForEpoch(ctx context.Context, epoch pha
 
 	preferenceDuties := make([]*spectypes.ValidatorDuty, 0, len(duties))
 	for _, d := range duties {
+		if d.Slot <= currentSlot {
+			// The epoch fetch returns every assignment in the epoch, including proposal slots already
+			// reached: a preference for those is moot (builders needed it beforehand) and peers would
+			// reject its partials as late, so emitting it could only produce a doomed duty.
+			continue
+		}
 		preferenceDuties = append(preferenceDuties, &spectypes.ValidatorDuty{
 			Type:           spectypes.BNRoleProposerPreferences,
 			PubKey:         d.PubKey,
@@ -142,9 +160,12 @@ func (h *ProposerPreferencesHandler) emitForEpoch(ctx context.Context, epoch pha
 	}
 
 	// Emit now: the runner builds, signs, and broadcasts immediately. duty.Slot is the (future)
-	// proposal slot, so bound execution by the current slot, not duty.Slot.
-	deadline := h.netCfg.SlotStartTime(currentSlot + 1)
-	h.dutiesExecutor.ExecuteDuties(ctx, preferenceDuties, deadline)
+	// proposal slot, and operators emit at their own ticks (registration/event timing), so §5
+	// convergence may legitimately span the slots up to it — give each duty an execution window
+	// running to the end of its own proposal slot, matching the runner's §5 outcome horizon.
+	for _, d := range preferenceDuties {
+		h.dutiesExecutor.ExecuteDuties(ctx, []*spectypes.ValidatorDuty{d}, h.netCfg.SlotStartTime(d.Slot+1))
+	}
 
 	h.logger.Debug("emitted proposer preferences duties",
 		fields.Epoch(epoch),
