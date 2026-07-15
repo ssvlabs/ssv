@@ -199,6 +199,39 @@ func TestProposerPreferencesHandler_firstGloasTickRechecksBoundaryEpoch(t *testi
 	require.Len(t, executed, 2, "pre-fork emit and the fork-tick re-emit only")
 }
 
+// Ticks within the post-indices-change grace neither emit nor consume a pending reorg recheck (or
+// the one-time fork recheck); the first post-grace tick proceeds normally.
+func TestProposerPreferencesHandler_emitGraceAfterIndicesChange(t *testing.T) {
+	const gloasEpoch = 100
+	netCfg := networkconfig.TestNetworkWithGloas(gloasEpoch)
+
+	ctrl := gomock.NewController(t)
+	vp := NewMockValidatorProvider(ctrl)
+
+	h := NewProposerPreferencesHandler()
+	h.logger = zap.NewNop()
+	h.netCfg = netCfg
+	h.validatorProvider = vp
+	h.beaconNode = NewMockBeaconNode(ctrl) // no expectations: any fetch during the grace fails the test
+	h.dutiesExecutor = &captureExecutor{executed: make(chan []*spectypes.ValidatorDuty, 1)}
+
+	slot := phase0.Slot(uint64(gloasEpoch)*netCfg.SlotsPerEpoch) + 3
+	h.emitAfterSlot = slot + indicesChangeEmitGraceSlots
+	h.recheckLookahead = true
+
+	h.emitForTick(context.Background(), slot) // grace: skipped entirely
+	h.emitForTick(context.Background(), slot+1)
+	require.True(t, h.recheckLookahead, "a pending recheck must survive the grace")
+	require.False(t, h.gloasForkRechecked, "the one-time fork recheck must not be consumed during the grace")
+
+	// The first post-grace tick proceeds (and consumes the pending recheck); no local validators, so
+	// it stops before touching the beacon node.
+	vp.EXPECT().SelfParticipatingValidators(phase0.Epoch(gloasEpoch)).Return(nil).Times(1)
+	h.emitForTick(context.Background(), slot+indicesChangeEmitGraceSlots)
+	require.False(t, h.recheckLookahead, "the pending recheck is consumed by the first post-grace tick")
+	require.True(t, h.gloasForkRechecked)
+}
+
 // evictOutdated drops only epochs strictly before the current one.
 func TestProposerPreferencesHandler_evictOutdated(t *testing.T) {
 	h := NewProposerPreferencesHandler()

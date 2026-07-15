@@ -30,7 +30,18 @@ type ProposerPreferencesHandler struct {
 	// gloasForkRechecked is set once the first Gloas tick has forced a lookahead recheck (see
 	// emitForTick). Accessed only from the HandleDuties goroutine.
 	gloasForkRechecked bool
+
+	// emitAfterSlot defers emission until the given slot after a validator-set change (see
+	// HandleDuties / emitForTick). Accessed only from the HandleDuties goroutine.
+	emitAfterSlot phase0.Slot
 }
+
+// indicesChangeEmitGraceSlots is how many slots §5 emission waits after a validator-set change.
+// Peers learn of new validators (contract-event sync) and refresh their proposer-duty views on their
+// own clocks; a §5 partial broadcast into that window is dropped at their wire with no redelivery
+// (an identical re-broadcast is eaten by the gossip seen-cache). Two slots cover typical event-sync
+// skew plus the peers' duty-refetch debounce; preferences target future slots, so the delay is free.
+const indicesChangeEmitGraceSlots = 2
 
 func NewProposerPreferencesHandler() *ProposerPreferencesHandler {
 	return &ProposerPreferencesHandler{
@@ -65,9 +76,12 @@ func (h *ProposerPreferencesHandler) HandleDuties(ctx context.Context) {
 
 		case <-h.indicesChangeCh:
 			// New local validators may hold proposal slots in an already-emitted epoch, so drop the
-			// markers to re-emit the full lookahead for them on the next tick.
+			// markers to re-emit the full lookahead for them — after a short grace, so the committee's
+			// peers have learned of the new validators and refreshed their duty views before the
+			// one-shot partials are broadcast (see indicesChangeEmitGraceSlots).
 			h.logger.Debug("🔀 re-emitting proposer preferences on indices change")
 			clear(h.emitted)
+			h.emitAfterSlot = h.netCfg.EstimatedCurrentSlot() + indicesChangeEmitGraceSlots
 
 		case <-h.reorgEventsCh:
 			// A reorg may have changed a proposal slot's dependent_root; recheck the lookahead on the next
@@ -80,9 +94,17 @@ func (h *ProposerPreferencesHandler) HandleDuties(ctx context.Context) {
 
 // emitForTick emits the lookahead's preferences for the tick's slot: the current epoch (plus the next,
 // once it's a good time to fetch) in steady state, or the first Gloas epoch when in the pre-fork
-// window. Outside both it does nothing (pre-Gloas, no preferences yet). A reorg recheck flagged since
-// the last tick is consumed here, forcing the lookahead's dependent roots to be re-evaluated.
+// window. Outside both it does nothing (pre-Gloas, no preferences yet). Ticks within the grace after
+// a validator-set change are skipped entirely. A reorg recheck flagged since the last tick is
+// consumed here, forcing the lookahead's dependent roots to be re-evaluated.
 func (h *ProposerPreferencesHandler) emitForTick(ctx context.Context, slot phase0.Slot) {
+	// Within the post-indices-change grace, don't emit (and don't consume a pending recheck): the
+	// committee is still converging on the new validator set, and partials broadcast now would be
+	// dropped by peers whose view lags — unrecoverably, as §5 broadcasts are one-shot.
+	if slot < h.emitAfterSlot {
+		return
+	}
+
 	recheck := h.recheckLookahead
 	h.recheckLookahead = false
 
