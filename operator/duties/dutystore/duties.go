@@ -23,11 +23,16 @@ type StoreDuty[D Duty] struct {
 type Duties[D Duty] struct {
 	mu sync.RWMutex
 	m  map[phase0.Epoch]map[phase0.Slot]map[phase0.ValidatorIndex]StoreDuty[D]
+	// stale flags epochs whose cached duties were fetched before the latest validator-set change.
+	// The data keeps being served — only freshness-aware checks consult the flag via IsEpochStale —
+	// and Set (a completed refetch) clears it.
+	stale map[phase0.Epoch]struct{}
 }
 
 func NewDuties[D Duty]() *Duties[D] {
 	return &Duties[D]{
-		m: make(map[phase0.Epoch]map[phase0.Slot]map[phase0.ValidatorIndex]StoreDuty[D]),
+		m:     make(map[phase0.Epoch]map[phase0.Slot]map[phase0.ValidatorIndex]StoreDuty[D]),
+		stale: make(map[phase0.Epoch]struct{}),
 	}
 }
 
@@ -111,6 +116,7 @@ func (d *Duties[D]) Set(epoch phase0.Epoch, duties []StoreDuty[D]) {
 	defer d.mu.Unlock()
 
 	d.m[epoch] = mapped
+	delete(d.stale, epoch) // a completed fetch is fresh by definition
 }
 
 func (d *Duties[D]) EraseEpochData(epoch phase0.Epoch) {
@@ -118,6 +124,7 @@ func (d *Duties[D]) EraseEpochData(epoch phase0.Epoch) {
 	defer d.mu.Unlock()
 
 	delete(d.m, epoch)
+	delete(d.stale, epoch)
 }
 
 // EraseBefore drops every cached epoch earlier than the given one, bounding the per-epoch cache.
@@ -130,6 +137,11 @@ func (d *Duties[D]) EraseBefore(epoch phase0.Epoch) {
 			delete(d.m, cached)
 		}
 	}
+	for cached := range d.stale {
+		if cached < epoch {
+			delete(d.stale, cached)
+		}
+	}
 }
 
 // Clear drops every cached epoch. Used when a refresh must replace the whole cache rather than
@@ -139,6 +151,7 @@ func (d *Duties[D]) Clear() {
 	defer d.mu.Unlock()
 
 	d.m = make(map[phase0.Epoch]map[phase0.Slot]map[phase0.ValidatorIndex]StoreDuty[D])
+	d.stale = make(map[phase0.Epoch]struct{})
 }
 
 func (d *Duties[D]) IsEpochSet(epoch phase0.Epoch) bool {
@@ -147,4 +160,27 @@ func (d *Duties[D]) IsEpochSet(epoch phase0.Epoch) bool {
 
 	_, exists := d.m[epoch]
 	return exists
+}
+
+// MarkEpochsStale flags the epochs' cached duties as fetched before the latest validator-set change.
+// The data keeps being served (checks that must always enforce assignment still do), but
+// freshness-aware duty-existence checks — §5 proposer preferences and the §6 self-build envelope —
+// treat a stale epoch like a not-yet-fetched one until a refetch (Set) replaces it: a view predating
+// a just-added validator must not permanently reject that validator's honest one-shot messages.
+func (d *Duties[D]) MarkEpochsStale(epochs ...phase0.Epoch) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	for _, epoch := range epochs {
+		d.stale[epoch] = struct{}{}
+	}
+}
+
+// IsEpochStale reports whether the epoch's cached duties predate the latest validator-set change.
+func (d *Duties[D]) IsEpochStale(epoch phase0.Epoch) bool {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+
+	_, stale := d.stale[epoch]
+	return stale
 }

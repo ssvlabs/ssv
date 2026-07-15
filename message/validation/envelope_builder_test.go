@@ -3,12 +3,15 @@ package validation
 import (
 	"testing"
 
+	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 )
 
 // The §6 envelope duty is QBFT with only a post-consensus partial signature (no pre-consensus phase).
@@ -54,4 +57,30 @@ func TestDutyLimit_EnvelopeBuilder(t *testing.T) {
 func TestMonotonicSlotRole_EnvelopeBuilder(t *testing.T) {
 	mv := &messageValidator{}
 	require.True(t, mv.monotonicSlotRole(spectypes.RoleEnvelopeBuilder))
+}
+
+// An envelope message must carry a real proposer assignment once the slot's epoch is fetched AND
+// fresh; unfetched and stale (mid-indices-change) epochs are tolerated, mirroring the
+// proposer-preferences rule.
+func TestValidateBeaconDuty_EnvelopeBuilderAssignmentFreshness(t *testing.T) {
+	netCfg := networkconfig.TestNetwork
+	const epoch = phase0.Epoch(5)
+	idx := phase0.ValidatorIndex(7)
+	slot := phase0.Slot(uint64(epoch)*netCfg.SlotsPerEpoch + 3)
+
+	ds := dutystore.New()
+	assigned := []dutystore.StoreDuty[eth2apiv1.ProposerDuty]{
+		{Slot: slot, ValidatorIndex: idx, Duty: &eth2apiv1.ProposerDuty{Slot: slot, ValidatorIndex: idx}, InCommittee: true},
+	}
+	ds.Proposer.Set(epoch, assigned)
+	mv := &messageValidator{netCfg: netCfg, dutyStore: ds}
+
+	indices := []phase0.ValidatorIndex{idx}
+	require.NoError(t, mv.validateBeaconDuty(spectypes.RoleEnvelopeBuilder, slot, indices, false))
+	require.ErrorIs(t, mv.validateBeaconDuty(spectypes.RoleEnvelopeBuilder, slot+1, indices, false), ErrNoDuty)
+
+	ds.Proposer.MarkEpochsStale(epoch)
+	require.NoError(t, mv.validateBeaconDuty(spectypes.RoleEnvelopeBuilder, slot+1, indices, false))
+	ds.Proposer.Set(epoch, assigned)
+	require.ErrorIs(t, mv.validateBeaconDuty(spectypes.RoleEnvelopeBuilder, slot+1, indices, false), ErrNoDuty)
 }

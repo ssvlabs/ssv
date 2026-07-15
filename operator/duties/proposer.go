@@ -131,6 +131,12 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 				case <-h.indicesChangeCh:
 					logger.Info("🔁 indices change received")
 
+					// Mark the affected epochs' cached duties stale right away: until a refetch replaces
+					// them, freshness-aware message-validation checks (§5 proposer preferences, §6 envelope)
+					// treat them like not-yet-fetched epochs, so a view predating the change doesn't reject
+					// a just-added validator's honest messages (their one-shot broadcasts have no redelivery).
+					h.duties.MarkEpochsStale(currentEpoch, nextEpoch)
+
 					// 1) Declare intents.
 					// Some validator-related state has changed, so re-fetch the duties for the current and next
 					// epoch to keep them up to date for all validators.
