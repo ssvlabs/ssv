@@ -36,7 +36,7 @@ func (c *Controller) UponDecided(
 			logger,
 			c.GetConfig(),
 			c.CommitteeMember,
-			c.Identifier,
+			c.identifierAtHeight(msg.QBFTMessage.Height),
 			msg.QBFTMessage.Height,
 			c.OperatorSigner,
 			roundTimerF,

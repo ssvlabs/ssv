@@ -29,7 +29,18 @@ type NewDecidedHandler func(msg qbftstorage.Participation)
 
 // Controller is a QBFT coordinator responsible for starting and following the entire life cycle of multiple QBFT Instances
 type Controller struct {
+	// Identifier is the static QBFT message identifier fixed at construction time, carrying
+	// the domain at slot 0. When IdentifierFn is set, live traffic switches domains per
+	// height, so this field no longer matches what's on the wire post-fork — resolve via
+	// identifierAtHeight instead of reading this field (or GetIdentifier) directly.
 	Identifier []byte
+
+	// IdentifierFn, when non-nil, resolves the QBFT message identifier at a given height.
+	// It is used on both send (StartNewInstance) and receive (ProcessMsg) paths to produce
+	// the fork-correct SSV domain for the height/slot. When nil, falls back to Identifier.
+	// JSON-tagged as "-" because funcs are not JSON-serialisable; Controller is only marshaled
+	// in spec-test fixtures and is never persisted and rehydrated in production.
+	IdentifierFn func(height specqbft.Height) []byte `json:"-"`
 
 	// LatestInstanceHeight is the height of the latest Instance Controller spun up. That latest instance
 	// is the "relevant" one currently driving consensus.
@@ -45,6 +56,16 @@ type Controller struct {
 	NewDecidedHandler NewDecidedHandler       `json:"-"`
 	config            qbft.IConfig
 	fullNode          bool
+}
+
+// identifierAtHeight returns the QBFT message identifier for the given height.
+// When IdentifierFn is set it delegates to it (producing the fork-correct domain);
+// otherwise it falls back to the static Identifier field.
+func (c *Controller) identifierAtHeight(height specqbft.Height) []byte {
+	if c.IdentifierFn != nil {
+		return c.IdentifierFn(height)
+	}
+	return c.Identifier
 }
 
 func NewController(
@@ -110,7 +131,7 @@ func (c *Controller) StartNewInstance(
 		logger,
 		c.GetConfig(),
 		c.CommitteeMember,
-		c.Identifier,
+		c.identifierAtHeight(height),
 		height,
 		c.OperatorSigner,
 		roundTimerF,
@@ -143,7 +164,7 @@ func (c *Controller) ProcessMsg(
 		return nil, fmt.Errorf("could not create ProcessingMessage from signed message: %w", err)
 	}
 
-	if !bytes.Equal(c.Identifier, msg.QBFTMessage.Identifier) {
+	if !bytes.Equal(c.identifierAtHeight(msg.QBFTMessage.Height), msg.QBFTMessage.Identifier) {
 		return nil, spectypes.NewError(spectypes.MessageIdentifierInvalidErrorCode, "message doesn't belong to Identifier")
 	}
 
@@ -188,7 +209,9 @@ func (c *Controller) UponExistingInstanceMsg(ctx context.Context, logger *zap.Lo
 	return decidedMsg, nil
 }
 
-// GetIdentifier returns QBFT Identifier, used to identify messages
+// GetIdentifier returns the static QBFT Identifier fixed at construction time (domain at
+// slot 0). It does not reflect per-height fork domains — use identifierAtHeight for the
+// identifier actually carried on the wire at a given height.
 func (c *Controller) GetIdentifier() []byte {
 	return c.Identifier
 }
