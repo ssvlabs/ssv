@@ -29,6 +29,10 @@ type NewDecidedHandler func(msg qbftstorage.Participation)
 
 // Controller is a QBFT coordinator responsible for starting and following the entire life cycle of multiple QBFT Instances
 type Controller struct {
+	// Identifier is the static QBFT message identifier fixed at construction time, carrying
+	// the domain at slot 0. When IdentifierFn is set, live traffic switches domains per
+	// height, so this field no longer matches what's on the wire post-fork — resolve via
+	// identifierAtHeight instead of reading this field (or GetIdentifier) directly.
 	Identifier []byte
 
 	// IdentifierFn, when non-nil, resolves the QBFT message identifier at a given height.
@@ -205,7 +209,9 @@ func (c *Controller) UponExistingInstanceMsg(ctx context.Context, logger *zap.Lo
 	return decidedMsg, nil
 }
 
-// GetIdentifier returns QBFT Identifier, used to identify messages
+// GetIdentifier returns the static QBFT Identifier fixed at construction time (domain at
+// slot 0). It does not reflect per-height fork domains — use identifierAtHeight for the
+// identifier actually carried on the wire at a given height.
 func (c *Controller) GetIdentifier() []byte {
 	return c.Identifier
 }

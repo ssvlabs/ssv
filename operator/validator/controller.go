@@ -1100,7 +1100,7 @@ func SetupCommitteeRunners(
 
 		committeeID := options.Operator.CommitteeID
 		identifierFn := newIdentifierFn(options.NetworkConfig, committeeID[:], role)
-		identifier := identifierFn(specqbft.FirstHeight) // pre-fork domain; used as Controller.Identifier (diagnostics only, not persisted)
+		identifier := identifierFn(specqbft.FirstHeight) // domain at slot 0; used as Controller.Identifier (diagnostics only, not persisted)
 		qbftCtrl := qbftcontroller.NewController(identifier, options.Operator, config, options.OperatorSigner, options.FullNode)
 		qbftCtrl.IdentifierFn = identifierFn
 		return qbftCtrl
@@ -1189,7 +1189,7 @@ func SetupRunners(
 
 		validatorPubKey := share.ValidatorPubKey
 		identifierFn := newIdentifierFn(options.NetworkConfig, validatorPubKey[:], role)
-		identifier := identifierFn(specqbft.FirstHeight) // pre-fork domain; used as Controller.Identifier (diagnostics only, not persisted)
+		identifier := identifierFn(specqbft.FirstHeight) // domain at slot 0; used as Controller.Identifier (diagnostics only, not persisted)
 		qbftCtrl := qbftcontroller.NewController(identifier, operator, config, options.OperatorSigner, options.FullNode)
 		qbftCtrl.IdentifierFn = identifierFn
 		return qbftCtrl
