@@ -127,8 +127,23 @@ func submitPayloadAttestationMessages(ctx context.Context, httpClient *http.Clie
 	return ptcDo(ctx, httpClient, http.MethodPost, addr+payloadAttestationsPath, body, headers, nil)
 }
 
+// httpStatusError is a non-2xx response to a hand-rolled Gloas request. It keeps the status code
+// so callers can tell a missing route (404 — a BN build without the endpoint) from a transient
+// failure. The "METHOD URL: status N: body" message format is pinned by tests.
+type httpStatusError struct {
+	method string
+	url    string
+	status int
+	body   string
+}
+
+func (e *httpStatusError) Error() string {
+	return fmt.Sprintf("%s %s: status %d: %s", e.method, e.url, e.status, e.body)
+}
+
 // ptcDo issues a JSON request and, on a 2xx response, decodes the body into out (out may be nil
 // to ignore the body). A nil body sends no request payload; extraHeaders are applied last.
+// Non-2xx responses surface as *httpStatusError.
 func ptcDo(ctx context.Context, httpClient *http.Client, method, url string, body []byte, extraHeaders map[string]string, out any) error {
 	var reader io.Reader
 	if body != nil {
@@ -157,7 +172,7 @@ func ptcDo(ctx context.Context, httpClient *http.Client, method, url string, bod
 		return fmt.Errorf("read response body: %w", err)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("%s %s: status %d: %s", method, url, resp.StatusCode, strings.TrimSpace(string(respBody)))
+		return &httpStatusError{method: method, url: url, status: resp.StatusCode, body: strings.TrimSpace(string(respBody))}
 	}
 	if out != nil {
 		if err := json.Unmarshal(respBody, out); err != nil {
