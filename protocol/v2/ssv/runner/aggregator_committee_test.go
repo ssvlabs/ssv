@@ -378,7 +378,7 @@ func TestAggregatorCommitteeRunnerPreConsensus_DuplicateCommitteeAggregators(t *
 	ctx := t.Context()
 	const version = spec.DataVersionElectra
 
-	base := protocoltesting.NewTestingBeaconNodeWrapped().(*protocoltesting.BeaconNodeWrapped)
+	base := protocoltesting.NewTestingBeaconNodeWrapped()
 	env := newAggregatorCommitteeRunnerEnv(t, []int{1, 2}, base)
 	// Validators 1 and 2 both selected as aggregators for the same beacon committee (TestingCommitteeIndex).
 	duty := spectestingutils.TestingAggregatorCommitteeDutyMultipleAggregators(version)
