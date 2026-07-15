@@ -198,21 +198,26 @@ func (mv *messageValidator) validateBeaconDuty(
 	}
 
 	// Rule: For a proposer-preferences message, require a real proposer assignment for the validator at
-	// the slot — but only once the slot's epoch is fetched. Preferences ride a future proposal slot
-	// whose epoch may still be in flight; tolerate that (the earliness/lateness window bounds the slot).
+	// the slot — but only from a fetched AND fresh epoch. Preferences ride a future proposal slot whose
+	// epoch may still be in flight (tolerated; the earliness/lateness window bounds the slot), and an
+	// epoch fetched before the latest indices change is equally unusable for rejection: dropping a
+	// just-added validator's one-shot partial on a stale view starves its quorum permanently — an
+	// identical re-broadcast can't pass the gossip seen-cache (SIP #94 §5).
 	if role == spectypes.RoleProposerPreferences {
 		validatorIndex := indices[0]
-		if mv.dutyStore.Proposer.IsEpochSet(epoch) && mv.dutyStore.Proposer.ValidatorDuty(epoch, slot, validatorIndex) == nil {
+		if mv.dutyStore.Proposer.IsEpochSet(epoch) && !mv.dutyStore.Proposer.IsEpochStale(epoch) &&
+			mv.dutyStore.Proposer.ValidatorDuty(epoch, slot, validatorIndex) == nil {
 			return ErrNoDuty
 		}
 	}
 
 	// The self-build envelope rides the proposer's slot, so it must carry a real proposer assignment —
-	// guarded by IsEpochSet like proposer-preferences, since the message can arrive before the epoch's
-	// duties are fetched.
+	// guarded like proposer-preferences (fetched and fresh), since the message can arrive before the
+	// epoch's duties are fetched or while a refetch for changed indices is in flight.
 	if role == spectypes.RoleEnvelopeBuilder {
 		validatorIndex := indices[0]
-		if mv.dutyStore.Proposer.IsEpochSet(epoch) && mv.dutyStore.Proposer.ValidatorDuty(epoch, slot, validatorIndex) == nil {
+		if mv.dutyStore.Proposer.IsEpochSet(epoch) && !mv.dutyStore.Proposer.IsEpochStale(epoch) &&
+			mv.dutyStore.Proposer.ValidatorDuty(epoch, slot, validatorIndex) == nil {
 			return ErrNoDuty
 		}
 	}

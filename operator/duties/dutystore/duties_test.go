@@ -45,6 +45,36 @@ func TestDutiesSetAndQuery(t *testing.T) {
 	assert.ElementsMatch(t, []phase0.ValidatorIndex{1, 2}, indices)
 }
 
+// Staleness marks an epoch's cached duties as predating the latest validator-set change: the flag is
+// cleared by a refetch (Set) and dropped alongside the data on erasure.
+func TestDutiesStaleness(t *testing.T) {
+	duties := NewDuties[eth2apiv1.ProposerDuty]()
+	epoch := phase0.Epoch(8)
+
+	require.False(t, duties.IsEpochStale(epoch), "unmarked epochs are not stale")
+
+	duties.Set(epoch, nil)
+	duties.MarkEpochsStale(epoch, epoch+1)
+	require.True(t, duties.IsEpochStale(epoch))
+	require.True(t, duties.IsEpochStale(epoch+1))
+
+	duties.Set(epoch, nil)
+	require.False(t, duties.IsEpochStale(epoch), "a completed refetch freshens the epoch")
+	require.True(t, duties.IsEpochStale(epoch+1), "other epochs stay stale")
+
+	duties.MarkEpochsStale(epoch)
+	duties.EraseEpochData(epoch)
+	require.False(t, duties.IsEpochStale(epoch), "erasing an epoch drops its stale flag")
+
+	duties.MarkEpochsStale(epoch)
+	duties.EraseBefore(epoch + 1)
+	require.False(t, duties.IsEpochStale(epoch), "EraseBefore drops stale flags of erased epochs")
+	require.True(t, duties.IsEpochStale(epoch+1))
+
+	duties.Clear()
+	require.False(t, duties.IsEpochStale(epoch+1), "Clear drops all stale flags")
+}
+
 func TestDutiesEraseEpochData(t *testing.T) {
 	duties := NewDuties[eth2apiv1.ProposerDuty]()
 	epoch := phase0.Epoch(1)

@@ -140,7 +140,9 @@ func TestDutyLimit_ProposerPreferences(t *testing.T) {
 }
 
 // A proposer-preferences message must reference a real proposal slot for the validator once the
-// slot's epoch is fetched; an unfetched epoch is tolerated (the duty fetch may be in flight).
+// slot's epoch is fetched AND fresh; an unfetched epoch is tolerated (the duty fetch may be in
+// flight), and so is a stale one (fetched before the latest indices change — rejecting on it would
+// permanently starve a just-added validator's one-shot partials).
 func TestValidateBeaconDuty_ProposerPreferencesRequiresAssignment(t *testing.T) {
 	netCfg := networkconfig.TestNetwork
 	const epoch = phase0.Epoch(5)
@@ -148,9 +150,10 @@ func TestValidateBeaconDuty_ProposerPreferencesRequiresAssignment(t *testing.T) 
 	slot := phase0.Slot(uint64(epoch)*netCfg.SlotsPerEpoch + 3)
 
 	ds := dutystore.New()
-	ds.Proposer.Set(epoch, []dutystore.StoreDuty[eth2apiv1.ProposerDuty]{
+	assigned := []dutystore.StoreDuty[eth2apiv1.ProposerDuty]{
 		{Slot: slot, ValidatorIndex: idx, Duty: &eth2apiv1.ProposerDuty{Slot: slot, ValidatorIndex: idx}, InCommittee: true},
-	})
+	}
+	ds.Proposer.Set(epoch, assigned)
 	mv := &messageValidator{netCfg: netCfg, dutyStore: ds}
 
 	indices := []phase0.ValidatorIndex{idx}
@@ -161,6 +164,12 @@ func TestValidateBeaconDuty_ProposerPreferencesRequiresAssignment(t *testing.T) 
 	// Unfetched epoch → tolerated.
 	unfetched := phase0.Slot(uint64(epoch+10) * netCfg.SlotsPerEpoch)
 	require.NoError(t, mv.validateBeaconDuty(spectypes.RoleProposerPreferences, unfetched, indices, false))
+	// Stale epoch (fetched before the latest indices change) → tolerated like an unfetched one,
+	// until a refetch restores enforcement.
+	ds.Proposer.MarkEpochsStale(epoch)
+	require.NoError(t, mv.validateBeaconDuty(spectypes.RoleProposerPreferences, slot+1, indices, false))
+	ds.Proposer.Set(epoch, assigned)
+	require.ErrorIs(t, mv.validateBeaconDuty(spectypes.RoleProposerPreferences, slot+1, indices, false), ErrNoDuty)
 }
 
 // SignerState tracks distinct ProposerPreferences signing roots (SIP #94 §5): recording is idempotent
