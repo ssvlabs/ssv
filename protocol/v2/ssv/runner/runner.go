@@ -376,7 +376,7 @@ func (b *BaseRunner) signAndBroadcastPartialSigMsgs(
 	}
 
 	span.AddEvent("broadcasting signed SSV message")
-	if err := network.Broadcast(msgID, signed); err != nil {
+	if err := network.BroadcastAtSlot(signed, msgs.Slot); err != nil {
 		return fmt.Errorf("could not broadcast signed SSV message: %w", err)
 	}
 
