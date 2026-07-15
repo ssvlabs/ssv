@@ -57,6 +57,11 @@ func GetTopicFullName(baseName string) string {
 
 // BooleTopic returns the Boole-fork topic name for the given network and subnet, e.g. "/ssv/<networkName>/boole/<subnet>".
 func BooleTopic(networkName string, subnet uint64) string {
+	// Mirror SubnetTopicID: emit the sentinel instead of the raw MaxUint64 digits, which
+	// ParseTopicSubnet would otherwise accept as a valid subnet number.
+	if subnet == UnknownSubnetId {
+		return fmt.Sprintf("%s/%s/%s/%s", topicRoot, networkName, booleTopicFork, UnknownSubnet)
+	}
 	return fmt.Sprintf("%s/%s/%s/%d", topicRoot, networkName, booleTopicFork, subnet)
 }
 
