@@ -3,6 +3,7 @@ package goclient
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -64,11 +65,18 @@ func (gc *GoClient) SubmitProposerPreferences(ctx context.Context, preferences [
 }
 
 // submitProposerPreferences POSTs the signed proposer preferences as a JSON array to the validator endpoint.
+// A 404 is flagged as a missing route — a BN build predating the merged beacon-APIs#608 endpoint (e.g.
+// Lodestar releases through v1.44.0 only serve a draft path) — rather than a transient failure.
 func submitProposerPreferences(ctx context.Context, httpClient *http.Client, addr string, preferences []*gloas.SignedProposerPreferences) error {
 	body, err := json.Marshal(preferences)
 	if err != nil {
 		return fmt.Errorf("marshal proposer preferences: %w", err)
 	}
 	headers := map[string]string{"Eth-Consensus-Version": consensusVersionGloas}
-	return ptcDo(ctx, httpClient, http.MethodPost, addr+proposerPreferencesPath, body, headers, nil)
+	err = ptcDo(ctx, httpClient, http.MethodPost, addr+proposerPreferencesPath, body, headers, nil)
+	var statusErr *httpStatusError
+	if errors.As(err, &statusErr) && statusErr.status == http.StatusNotFound {
+		return fmt.Errorf("beacon node lacks the gloas proposer_preferences endpoint (beacon-APIs#608): %w", err)
+	}
+	return err
 }

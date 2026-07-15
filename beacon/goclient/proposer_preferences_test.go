@@ -50,6 +50,31 @@ func TestSubmitProposerPreferences(t *testing.T) {
 	require.JSONEq(t, string(want), string(gotBody))
 }
 
+// A 404 — a BN build without the route (predating the merged beacon-APIs#608 endpoint) — is
+// flagged as a missing endpoint rather than a transient failure.
+func TestSubmitProposerPreferencesMissingRoute(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, `{"code":404,"message":"Route POST:/eth/v1/validator/proposer_preferences not found"}`, http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	err := submitProposerPreferences(context.Background(), srv.Client(), srv.URL, nil)
+	require.ErrorContains(t, err, "beacon node lacks the gloas proposer_preferences endpoint")
+	require.ErrorContains(t, err, "status 404")
+}
+
+// Non-404 failures surface unchanged — no missing-endpoint flag.
+func TestSubmitProposerPreferencesOtherStatusUnflagged(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, `{"code":500,"message":"internal"}`, http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	err := submitProposerPreferences(context.Background(), srv.Client(), srv.URL, nil)
+	require.ErrorContains(t, err, "status 500")
+	require.NotContains(t, err.Error(), "beacon node lacks")
+}
+
 func TestRequestProposerDutiesDependentRoot(t *testing.T) {
 	want := phase0.Root{0xde, 0xad, 0xbe, 0xef}
 
