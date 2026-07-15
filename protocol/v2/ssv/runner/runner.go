@@ -329,12 +329,23 @@ type dutyConclusion struct {
 //
 // The deadline is the end of the current wall-clock slot rather than duty.Slot's end because some
 // duties are stamped with a slot in the past (a voluntary-exit duty carries blockSlot+4 but
-// executes at blockSlot+12); for beacon duties the two coincide.
+// executes at blockSlot+12); for beacon duties the two coincide. Proposer preferences are the
+// opposite case — duty.Slot is a future proposal slot and the duty executes at emission, so their
+// horizon extends to that slot's start instead (see below).
 func (b *BaseRunner) watchDutyOutcome(ctx context.Context, logger *zap.Logger) {
 	concluded := make(chan dutyConclusion, 1)
 	b.dutyConcluded = concluded
 
 	deadline := b.NetworkConfig.SlotStartTime(b.NetworkConfig.EstimatedCurrentSlot() + 1)
+	// A proposer-preferences duty emits ahead of its proposal slot and legitimately keeps converging
+	// across the gap — operators broadcast their partials at their own emission ticks — so its outcome
+	// horizon is the proposal slot's start (the preference is moot once that slot arrives), not the
+	// end of the emission slot.
+	if b.RunnerRoleType == spectypes.RoleProposerPreferences && b.State != nil {
+		if d := b.NetworkConfig.SlotStartTime(b.State.CurrentDuty.DutySlot()); d.After(deadline) {
+			deadline = d
+		}
+	}
 
 	report := func(c dutyConclusion) {
 		recordDutyOutcome(ctx, b.GetRole(), c.outcome)
