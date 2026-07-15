@@ -366,3 +366,91 @@ func TestAggregatorCommitteeRunnerProcessPostConsensus_DrainsBufferedErrCh(t *te
 		require.False(t, env.runner.State.Succeeded, "iteration %d", iter)
 	}
 }
+
+// TestAggregatorCommitteeRunnerPreConsensus_DuplicateCommitteeAggregators is the regression test for
+// #2950: when two validators are selected as aggregators for the SAME beacon committee, the
+// selectionLoop in the aggregator-committee pre-consensus path (aggregator_committee.go) must append a
+// second AssignedAggregator entry to consensusData.Aggregators for the repeat committee, while
+// AggregatorsCommitteeIndexes and AggregatedAttestations keep exactly one entry per unique committee
+// (fetched/marshaled once, not once per aggregator). This shape is otherwise only enforced by
+// consensusData.Validate() at runtime and by ssv-spec tests, not by anything in this repo.
+func TestAggregatorCommitteeRunnerPreConsensus_DuplicateCommitteeAggregators(t *testing.T) {
+	ctx := t.Context()
+	const version = spec.DataVersionElectra
+
+	base := protocoltesting.NewTestingBeaconNodeWrapped().(*protocoltesting.BeaconNodeWrapped)
+	env := newAggregatorCommitteeRunnerEnv(t, []int{1, 2}, base)
+	// Validators 1 and 2 both selected as aggregators for the same beacon committee (TestingCommitteeIndex).
+	duty := spectestingutils.TestingAggregatorCommitteeDutyMultipleAggregators(version)
+
+	require.NoError(t, env.runner.StartNewDuty(ctx, env.logger, duty, env.sampleKey.Threshold))
+
+	// Feed only pre-consensus messages (skip consensus and post-consensus) so we can inspect exactly
+	// what the selectionLoop handed to decide, before any QBFT round-change activity can happen.
+	for _, msg := range spectestingutils.AggregatorCommitteeInputForDuty(duty, env.keySetMap, version) {
+		if msg.SSVMessage.MsgType != spectypes.SSVPartialSignatureMsgType {
+			continue
+		}
+		psig := &spectypes.PartialSignatureMessages{}
+		require.NoError(t, psig.Decode(msg.SSVMessage.Data))
+		if psig.Type != spectypes.PostConsensusPartialSig {
+			require.NoError(t, env.runner.ProcessPreConsensus(ctx, env.logger, psig))
+		}
+	}
+
+	require.True(t, env.runner.HasStartedConsensus(), "pre-consensus quorum on two same-committee aggregators must start consensus")
+	require.NotNil(t, env.runner.State.RunningInstance, "decide must have set a running QBFT instance")
+
+	consensusData := &spectypes.AggregatorCommitteeConsensusData{}
+	require.NoError(t, consensusData.Decode(env.runner.State.RunningInstance.StartValue))
+
+	require.NoError(t, consensusData.Validate(), "the proposed consensus data must satisfy the spec-mandated shape")
+
+	require.Len(t, consensusData.Aggregators, 2, "both same-committee aggregators must appear in Aggregators")
+	require.Len(t, consensusData.AggregatorsCommitteeIndexes, 1,
+		"a repeated committee must not add a second AggregatorsCommitteeIndexes entry")
+	require.Len(t, consensusData.AggregatedAttestations, 1,
+		"a repeated committee must not fetch/marshal a second aggregate attestation")
+
+	committeeIndex := consensusData.AggregatorsCommitteeIndexes[0]
+	gotValidatorIndexes := make([]phase0.ValidatorIndex, 0, 2)
+	for _, agg := range consensusData.Aggregators {
+		require.Equal(t, committeeIndex, agg.CommitteeIndex, "both aggregators must reference the single shared committee index")
+		gotValidatorIndexes = append(gotValidatorIndexes, agg.ValidatorIndex)
+	}
+	require.ElementsMatch(t, []phase0.ValidatorIndex{1, 2}, gotValidatorIndexes)
+
+	proofs, err := consensusData.GetAggregateAndProofs()
+	require.NoError(t, err)
+	require.Len(t, proofs, 2, "GetAggregateAndProofs must return one proof per aggregator, even when they share a committee")
+	require.Equal(t, consensusData.Version, proofs[0].Version)
+	require.Equal(t, consensusData.Version, proofs[1].Version)
+
+	// Both proofs must wrap the same underlying aggregate attestation (same fetched-once attestation,
+	// not two independently-fetched copies), which is a stronger check than comparing the raw
+	// AggregatedAttestations bytes above. Compare the Aggregate sub-field's own hash tree root, not the
+	// whole AggregateAndProof's root (that also embeds the per-validator AggregatorIndex/SelectionProof,
+	// which legitimately differ between the two aggregators). proofs[i].Version is derived from the
+	// runner's own fork schedule (not the `version` constant used to build the fixtures), so this stays
+	// version-agnostic instead of asserting a hardcoded fork.
+	aggregateRoot := func(p *spec.VersionedAggregateAndProof) [32]byte {
+		t.Helper()
+		switch p.Version {
+		case spec.DataVersionElectra:
+			require.NotNil(t, p.Electra)
+			root, err := p.Electra.Aggregate.HashTreeRoot()
+			require.NoError(t, err)
+			return root
+		case spec.DataVersionFulu:
+			require.NotNil(t, p.Fulu)
+			root, err := p.Fulu.Aggregate.HashTreeRoot()
+			require.NoError(t, err)
+			return root
+		default:
+			t.Fatalf("unexpected aggregate-and-proof version in test: %s", p.Version)
+			return [32]byte{}
+		}
+	}
+	require.Equal(t, aggregateRoot(proofs[0]), aggregateRoot(proofs[1]),
+		"both aggregators' proofs must wrap the same aggregate attestation")
+}
