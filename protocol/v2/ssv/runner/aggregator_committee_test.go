@@ -430,27 +430,36 @@ func TestAggregatorCommitteeRunnerPreConsensus_DuplicateCommitteeAggregators(t *
 	// not two independently-fetched copies), which is a stronger check than comparing the raw
 	// AggregatedAttestations bytes above. Compare the Aggregate sub-field's own hash tree root, not the
 	// whole AggregateAndProof's root (that also embeds the per-validator AggregatorIndex/SelectionProof,
-	// which legitimately differ between the two aggregators). proofs[i].Version is derived from the
-	// runner's own fork schedule (not the `version` constant used to build the fixtures), so this stays
-	// version-agnostic instead of asserting a hardcoded fork.
-	aggregateRoot := func(p *spec.VersionedAggregateAndProof) [32]byte {
+	// which legitimately differ between the two aggregators — the whole-proof roots are asserted
+	// distinct below for exactly that reason). proofs[i].Version is derived from the runner's own fork
+	// schedule (not the `version` constant used to build the fixtures), so this stays version-agnostic
+	// instead of asserting a hardcoded fork.
+	proofRoots := func(p *spec.VersionedAggregateAndProof) (aggregateRoot, wholeRoot [32]byte) {
 		t.Helper()
 		switch p.Version {
 		case spec.DataVersionElectra:
 			require.NotNil(t, p.Electra)
-			root, err := p.Electra.Aggregate.HashTreeRoot()
+			aggregateRoot, err := p.Electra.Aggregate.HashTreeRoot()
 			require.NoError(t, err)
-			return root
+			wholeRoot, err := p.Electra.HashTreeRoot()
+			require.NoError(t, err)
+			return aggregateRoot, wholeRoot
 		case spec.DataVersionFulu:
 			require.NotNil(t, p.Fulu)
-			root, err := p.Fulu.Aggregate.HashTreeRoot()
+			aggregateRoot, err := p.Fulu.Aggregate.HashTreeRoot()
 			require.NoError(t, err)
-			return root
+			wholeRoot, err := p.Fulu.HashTreeRoot()
+			require.NoError(t, err)
+			return aggregateRoot, wholeRoot
 		default:
 			t.Fatalf("unexpected aggregate-and-proof version in test: %s", p.Version)
-			return [32]byte{}
+			return [32]byte{}, [32]byte{}
 		}
 	}
-	require.Equal(t, aggregateRoot(proofs[0]), aggregateRoot(proofs[1]),
+	aggregateRoot0, wholeRoot0 := proofRoots(proofs[0])
+	aggregateRoot1, wholeRoot1 := proofRoots(proofs[1])
+	require.Equal(t, aggregateRoot0, aggregateRoot1,
 		"both aggregators' proofs must wrap the same aggregate attestation")
+	require.NotEqual(t, wholeRoot0, wholeRoot1,
+		"whole-proof roots must differ via per-validator AggregatorIndex/SelectionProof; identical roots would mean both entries collapsed into the same proof")
 }
