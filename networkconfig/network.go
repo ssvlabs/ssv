@@ -86,6 +86,12 @@ func (n Network) inBooleSubsequentWindowWithSlots(slot phase0.Slot, windowSlots 
 		return false
 	}
 
+	// A malformed custom config can carry SlotsPerEpoch == 0; without this guard the
+	// overflow check below would panic with a divide-by-zero.
+	if n.SlotsPerEpoch == 0 {
+		return false
+	}
+
 	// Avoid FirstSlotAtEpoch overflow when Boole is beyond the representable epoch range;
 	// without this guard the multiplication would wrap and could treat small slots as in-window.
 	maxEpoch := phase0.Epoch(math.MaxUint64 / n.SlotsPerEpoch)
