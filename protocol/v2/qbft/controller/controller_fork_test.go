@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/rsa"
 	"errors"
-	"math"
 	"testing"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -21,139 +20,23 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 )
 
-// TestController_IdentifierAtHeight verifies that the per-height identifier resolves to the
-// fork-correct SSV domain. Pre-Boole heights must yield the config's DomainType (Alan) and
-// post-Boole heights must yield its NextDomainType (Boole).
-//
-// The test also confirms the regression: without IdentifierFn the controller uses the static
-// Identifier frozen at construction time, causing post-fork heights to still carry the pre-fork
-// domain.
+// TestController_IdentifierAtHeight verifies that identifierAtHeight switches the SSV domain
+// exactly at the Boole fork boundary: the slot before the fork carries DomainType (Alan), the
+// fork slot itself carries NextDomainType (Boole). The real send/receive paths are guarded by
+// TestController_StartNewInstance_ForkDomain, TestController_ProcessMsg_ForkDomainCheck and
+// TestController_UponDecided_ForkDomain; the nil-fn fallback by
+// TestController_NilIdentifierFn_ByteIdenticalToStatic.
 func TestController_IdentifierAtHeight(t *testing.T) {
-	ks := spectestingutils.Testing4SharesSet()
-	member := spectestingutils.TestingCommitteeMember(ks)
-	role := spectypes.RoleCommittee
+	h := newForkTestHarness()
+	ctrl := h.newController()
 
-	// Build a post-Boole config: Boole active from genesis (epoch 0).
-	postBooleSSV := *networkconfig.TestNetwork.SSV
-	postBooleSSV.Forks = networkconfig.SSVForks{Boole: 0}
-	postBooleCfg := &networkconfig.Network{Beacon: networkconfig.TestNetwork.Beacon, SSV: &postBooleSSV}
+	preForkID := spectypes.MessageID(ctrl.identifierAtHeight(h.preForkHeight)[0:56])
+	postForkID := spectypes.MessageID(ctrl.identifierAtHeight(h.postForkHeight)[0:56])
 
-	// Build a pre-Boole config explicitly: Boole disabled (epoch MaxUint64). Built from an
-	// explicit copy rather than aliasing the package-global TestNetwork, whose Boole epoch can
-	// be flipped to 0 by SSV_TEST_BOOLE_FORK=post (see networkconfig/test-network.go init).
-	preBooleSSV := *networkconfig.TestNetwork.SSV
-	preBooleSSV.Forks = networkconfig.SSVForks{Boole: phase0.Epoch(math.MaxUint64)}
-	preBooleCfg := &networkconfig.Network{Beacon: networkconfig.TestNetwork.Beacon, SSV: &preBooleSSV}
-
-	committeeID := member.CommitteeID
-
-	t.Run("post-Boole height yields Boole domain", func(t *testing.T) {
-		identifierFn := func(height specqbft.Height) []byte {
-			domain := postBooleCfg.DomainTypeAtSlot(phase0.Slot(height))
-			id := spectypes.NewMsgID(domain, committeeID[:], role)
-			return id[:]
-		}
-
-		// height 1 is slot 1, which in an epoch-0 Boole fork is already post-fork.
-		postBooleHeight := specqbft.Height(1)
-		identifier := identifierFn(specqbft.FirstHeight)
-
-		ctrl := NewController(identifier, member, nil, nil, false)
-		ctrl.IdentifierFn = identifierFn
-
-		resolvedID := ctrl.identifierAtHeight(postBooleHeight)
-		msgID := spectypes.MessageID(resolvedID[0:56])
-
-		expectedDomain := postBooleCfg.DomainTypeAtSlot(phase0.Slot(postBooleHeight))
-		require.Equal(t, expectedDomain[:], msgID.GetDomain(),
-			"post-Boole height must use NextDomainType (Boole)")
-		require.Equal(t, postBooleCfg.NextDomainType[:], msgID.GetDomain(),
-			"post-Boole domain must equal cfg.NextDomainType")
-	})
-
-	t.Run("pre-Boole height yields Alan domain", func(t *testing.T) {
-		identifierFn := func(height specqbft.Height) []byte {
-			domain := preBooleCfg.DomainTypeAtSlot(phase0.Slot(height))
-			id := spectypes.NewMsgID(domain, committeeID[:], role)
-			return id[:]
-		}
-
-		// With Boole at MaxUint64, any normal slot is pre-fork.
-		preForkHeight := specqbft.Height(1000)
-		identifier := identifierFn(specqbft.FirstHeight)
-
-		ctrl := NewController(identifier, member, nil, nil, false)
-		ctrl.IdentifierFn = identifierFn
-
-		resolvedID := ctrl.identifierAtHeight(preForkHeight)
-		msgID := spectypes.MessageID(resolvedID[0:56])
-
-		expectedDomain := preBooleCfg.DomainTypeAtSlot(phase0.Slot(preForkHeight))
-		require.Equal(t, expectedDomain[:], msgID.GetDomain(),
-			"pre-Boole height must use DomainType (Alan)")
-		require.Equal(t, preBooleCfg.DomainType[:], msgID.GetDomain(),
-			"pre-Boole domain must equal cfg.DomainType")
-	})
-
-	t.Run("fork-spanning controller switches domain at fork boundary", func(t *testing.T) {
-		// Build a config where Boole activates at epoch 10.
-		forkEpoch := phase0.Epoch(10)
-		midBooleSSV := *networkconfig.TestNetwork.SSV
-		midBooleSSV.Forks = networkconfig.SSVForks{Boole: forkEpoch}
-		midBooleCfg := &networkconfig.Network{Beacon: networkconfig.TestNetwork.Beacon, SSV: &midBooleSSV}
-
-		identifierFn := func(height specqbft.Height) []byte {
-			domain := midBooleCfg.DomainTypeAtSlot(phase0.Slot(height))
-			id := spectypes.NewMsgID(domain, committeeID[:], role)
-			return id[:]
-		}
-		identifier := identifierFn(specqbft.FirstHeight)
-
-		ctrl := NewController(identifier, member, nil, nil, false)
-		ctrl.IdentifierFn = identifierFn
-
-		slotsPerEpoch := phase0.Slot(networkconfig.TestNetwork.SlotsPerEpoch)
-
-		preForkSlot := phase0.Slot(forkEpoch)*slotsPerEpoch - 1
-		postForkSlot := phase0.Slot(forkEpoch) * slotsPerEpoch
-
-		preForkID := spectypes.MessageID(ctrl.identifierAtHeight(specqbft.Height(preForkSlot))[0:56])
-		postForkID := spectypes.MessageID(ctrl.identifierAtHeight(specqbft.Height(postForkSlot))[0:56])
-
-		require.Equal(t, midBooleCfg.DomainType[:], preForkID.GetDomain(),
-			"slot before fork must carry Alan domain")
-		require.Equal(t, midBooleCfg.NextDomainType[:], postForkID.GetDomain(),
-			"slot at/after fork must carry Boole domain")
-	})
-
-	t.Run("nil IdentifierFn falls back to static Identifier (regression guard)", func(t *testing.T) {
-		// Build a static identifier pinned to Alan domain.
-		staticID := spectypes.NewMsgID(preBooleCfg.DomainType, committeeID[:], role)
-		ctrl := NewController(staticID[:], member, nil, nil, false)
-		// IdentifierFn intentionally left nil.
-
-		// Even for a post-Boole height, the fallback returns the static (Alan) identifier.
-		// This is the bug the fix addresses — demonstrated by checking that the domain does NOT
-		// change across heights when IdentifierFn is absent.
-		postBooleHeight := specqbft.Height(1)
-		resolvedID := spectypes.MessageID(ctrl.identifierAtHeight(postBooleHeight)[0:56])
-		require.Equal(t, preBooleCfg.DomainType[:], resolvedID.GetDomain(),
-			"without IdentifierFn, domain must be frozen at construction-time value (Alan)")
-	})
-
-	t.Run("unpatched controller (no IdentifierFn) fails post-Boole domain check", func(t *testing.T) {
-		// Demonstrate the regression: a controller WITHOUT IdentifierFn carries Alan domain at
-		// post-Boole heights. The Boole domain would NOT match, confirming the bug.
-		staticID := spectypes.NewMsgID(preBooleCfg.DomainType, committeeID[:], role)
-		ctrl := NewController(staticID[:], member, nil, nil, false)
-
-		postBooleHeight := specqbft.Height(1)
-		resolvedID := spectypes.MessageID(ctrl.identifierAtHeight(postBooleHeight)[0:56])
-
-		expectedBooleDomain := postBooleCfg.DomainTypeAtSlot(phase0.Slot(postBooleHeight))
-		require.NotEqual(t, expectedBooleDomain[:], resolvedID.GetDomain(),
-			"unpatched controller must NOT produce Boole domain (proves the bug exists without fix)")
-	})
+	require.Equal(t, h.cfg.DomainType[:], preForkID.GetDomain(),
+		"slot before fork must carry Alan domain")
+	require.Equal(t, h.cfg.NextDomainType[:], postForkID.GetDomain(),
+		"slot at/after fork must carry Boole domain")
 }
 
 // makeSignedQBFTMsg builds a minimal SignedSSVMessage carrying a RoundChange QBFT message
