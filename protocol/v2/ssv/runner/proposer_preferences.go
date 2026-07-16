@@ -98,6 +98,7 @@ func (r *ProposerPreferencesRunner) StartNewDuty(ctx context.Context, logger *za
 	sub := newProposerPreferencesSlotRunner(r.opts)
 	if prev, ok := r.bySlot[slot]; ok {
 		sub.submittedPreferences = prev.submittedPreferences
+		sub.broadcastPreferences = prev.broadcastPreferences
 		if prev.hasDutyRunning() {
 			prev.markDutyNotRequired() // superseded by the re-emission, not stuck
 		}
@@ -299,6 +300,14 @@ type proposerPreferencesSlotRunner struct {
 	// unchanged dependent_root) concludes as not-required instead of duplicating the gossip broadcast
 	// (peers dedup it by signing root) and the beacon-node submit.
 	submittedPreferences *gloas.ProposerPreferences
+
+	// broadcastPreferences is the preference this proposal slot already broadcast a partial signature
+	// for, carried across sub-runner replacements like submittedPreferences. It covers the in-flight
+	// case (broadcast, quorum still converging): a re-emission that rebuilds it byte-identically keeps
+	// converging without re-signing — peers would reject the identical re-broadcast as a same-peer
+	// duplicate, penalizing this operator's gossip score for nothing (issue #2934); the dispatcher's
+	// stash replay re-seeds the replacement instead, our own first partial included.
+	broadcastPreferences *gloas.ProposerPreferences
 }
 
 func newProposerPreferencesSlotRunner(opts ProposerPreferencesRunnerOptions) *proposerPreferencesSlotRunner {
@@ -440,6 +449,17 @@ func (r *proposerPreferencesSlotRunner) executeDuty(ctx context.Context, logger 
 		fields.FeeRecipient(preferences.FeeRecipient[:]),
 		zap.Uint64("target_gas_limit", preferences.TargetGasLimit))
 
+	if r.broadcastPreferences != nil && *preferences == *r.broadcastPreferences {
+		// A prior incarnation of this slot already broadcast this exact preference (quorum still
+		// converging): a re-broadcast would be rejected by peers as a same-peer duplicate and only
+		// self-inflict a gossip-scoring penalty (issue #2934) — and it is useless anyway, since peers
+		// stash the first copy. Keep the duty running so the stash replay (see StartNewDuty) and live
+		// partials complete the quorum against the frozen preference above.
+		logger.Debug("proposer preferences unchanged since last broadcast; skipping re-broadcast",
+			fields.Slot(proposalSlot))
+		return nil
+	}
+
 	msg, err := signBeaconObject(ctx, r, r.NetworkConfig, validatorDuty, preferences, proposalSlot, phase0.DomainType(spectypes.DomainProposerPreferences))
 	if err != nil {
 		return fmt.Errorf("could not sign proposer preferences: %w", err)
@@ -454,6 +474,7 @@ func (r *proposerPreferencesSlotRunner) executeDuty(ctx context.Context, logger 
 	if err := r.signAndBroadcastPartialSigMsgs(ctx, r.network, r.operatorSigner, r.GetShare().ValidatorPubKey[:], msgs); err != nil {
 		return fmt.Errorf("could not sign/broadcast proposer preferences partial sig: %w", err)
 	}
+	r.broadcastPreferences = preferences
 	return nil
 }
 

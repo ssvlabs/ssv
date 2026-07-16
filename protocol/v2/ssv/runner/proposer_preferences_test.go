@@ -260,6 +260,13 @@ func TestProposerPreferencesRunner_stashReplayConvergence(t *testing.T) {
 	require.Len(t, network.BroadcastedMsgs, 2, "root change must re-broadcast a fresh partial")
 	require.Len(t, bn.submitted, 1, "stale-root partials must not complete the new quorum")
 
+	// A re-emission while the duty is in flight (broadcast, quorum still pending) with an unchanged
+	// root must not re-broadcast — peers would reject the identical partial as a same-peer duplicate
+	// (issue #2934) — and the duty must keep converging on the carried-over broadcast state.
+	require.NoError(t, disp.StartNewDuty(ctx, logger, duty, quorum))
+	require.Len(t, network.BroadcastedMsgs, 2, "in-flight re-emission with an unchanged root must not re-broadcast")
+	require.Len(t, bn.submitted, 1)
+
 	// The peers' new-root partials arrive live; quorum re-forms and the updated preference submits.
 	for _, op := range []spectypes.OperatorID{2, 3, 4} {
 		require.NoError(t, disp.ProcessPreConsensus(ctx, logger, peerPartial(t, op, bn.dependentRoot)))
