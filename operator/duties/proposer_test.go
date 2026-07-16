@@ -10,10 +10,13 @@ import (
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
+	"go.uber.org/zap"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/utils/hashmap"
@@ -1584,4 +1587,46 @@ func TestScheduler_Proposer_Fetch_Execute_Next_Epoch_Duty(t *testing.T) {
 		require.NoError(t, scheduler.Wait())
 		ticker.WaitShutdown()
 	})
+}
+
+// idleTicker never ticks: Next blocks forever, pinning the handler loop to its event cases.
+type idleTicker struct{}
+
+func (idleTicker) Next() <-chan time.Time { return nil }
+func (idleTicker) Slot() phase0.Slot      { return 0 }
+
+// An indices change received while the loop is idle (between ticks) marks the current and next
+// epochs' cached duty views stale immediately — at event time, not at the next tick — so
+// freshness-aware §5/§6 message validation starts tolerating right away. The refetch intents are
+// declared for the next tick to process; no fetch happens from the idle path itself.
+func TestProposerHandler_IndicesChangeMarksStaleImmediately(t *testing.T) {
+	netCfg := networkconfig.TestNetwork
+	store := dutystore.NewDuties[eth2apiv1.ProposerDuty]()
+	currentEpoch := netCfg.EstimatedCurrentEpoch()
+	store.Set(currentEpoch, nil) // a pre-change view exists for the current epoch
+
+	h := NewProposerHandler(store, false)
+	h.logger = zap.NewNop()
+	h.netCfg = netCfg
+	h.ticker = idleTicker{}
+	h.indicesChangeCh = make(chan struct{}, 1)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	done := make(chan struct{})
+	go func() { defer close(done); h.HandleDuties(ctx) }()
+
+	h.indicesChangeCh <- struct{}{}
+
+	require.Eventually(t, func() bool {
+		return store.IsEpochStale(currentEpoch) && store.IsEpochStale(currentEpoch+1)
+	}, time.Second, 5*time.Millisecond, "stale marking must happen on event receipt, without a tick")
+
+	// Stop the loop before reading its unsynchronized intents map.
+	cancel()
+	<-done
+	require.Contains(t, h.dutyFetchIntents, currentEpoch)
+	require.False(t, h.dutyFetchIntents[currentEpoch], "current-epoch intent must be declared unfulfilled")
+	require.Contains(t, h.dutyFetchIntents, currentEpoch+1)
+	require.False(t, h.dutyFetchIntents[currentEpoch+1], "next-epoch intent must be declared unfulfilled")
 }
