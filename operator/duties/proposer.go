@@ -64,6 +64,13 @@ func (h *ProposerHandler) WaitShutdown() {}
 //  3. If necessary, fetch duties for the next epoch.
 //  4. If necessary, process validator-indices changes by declaring the intents to fetch duties for the epochs
 //     affected by it, also potentially pre-fetching duties so they are ready for processing on the next slot-tick.
+//
+// On Indices change (received while idle, i.e. between ticks):
+//  1. Mark the current/next epochs' cached duty views stale immediately, at event time — freshness-aware
+//     message validation (§5 proposer preferences, §6 envelope) must start tolerating before any refetch lands.
+//  2. Declare the refetch intents; the next tick processes them first thing (before duty execution).
+//     A change arriving while a tick is being processed is caught by the tick's own indices-change wait
+//     instead, which additionally refetches in the same slot when early enough.
 func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 	h.logger.Info("starting duty handler")
 	defer h.logger.Info("duty handler exited")
@@ -122,9 +129,11 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 					h.dutyFetchIntents[nextEpoch] = false
 				}
 
-				// 3. Process validator indices changes (if any). We want to process it on the current slot only
-				// if we are still early into the slot (1 slot-interval is just a guesstimate), otherwise we might
-				// be delaying the next tick (the duties that need to be executed on the next slot).
+				// 3. Process validator indices changes that land while this tick is being processed (changes
+				// arriving between ticks are consumed immediately by the dedicated top-level case). We want to
+				// process it on the current slot only if we are still early into the slot (1 slot-interval is
+				// just a guesstimate), otherwise we might be delaying the next tick (the duties that need to be
+				// executed on the next slot).
 
 				indicesChangeDeadline := h.netCfg.SlotStartTime(currentSlot).Add(h.netCfg.IntervalDuration(currentSlot))
 				select {
@@ -159,6 +168,25 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 					return
 				}
 			}()
+
+		case <-h.indicesChangeCh:
+			// Received while idle (between ticks): mark the cached duty views stale at event time — not
+			// at the next tick — and declare the refetch intents (processed first thing on the next
+			// tick, before duty execution). No fetch here: it stays tick-driven. A change arriving
+			// mid-tick is consumed by the tick's own indices-change wait below, which also refetches
+			// within the same slot when early enough.
+			currentSlot := h.netCfg.EstimatedCurrentSlot()
+			currentEpoch := h.netCfg.EstimatedEpochAtSlot(currentSlot)
+			nextEpoch := currentEpoch + 1
+
+			h.logger.Info("🔁 indices change received",
+				zap.Uint64("current_epoch", uint64(currentEpoch)),
+				zap.Uint64("current_slot", uint64(currentSlot)),
+			)
+
+			h.duties.MarkEpochsStale(currentEpoch, nextEpoch)
+			h.dutyFetchIntents[currentEpoch] = false
+			h.dutyFetchIntents[nextEpoch] = false
 
 		case reorgEvent := <-h.reorgEventsCh:
 			currentSlot := h.netCfg.EstimatedCurrentSlot()
