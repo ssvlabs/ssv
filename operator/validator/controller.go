@@ -375,6 +375,8 @@ func (c *Controller) handleRouterMessages() {
 				if !c.messageWorker.TryEnqueue(m) {
 					c.logger.Warn("Failed to enqueue post consensus message: buffer is full")
 				}
+			} else {
+				c.logUndeliverableOwnValidatorMessage(m, dutyExecutorID)
 			}
 
 		default:
@@ -382,6 +384,33 @@ func (c *Controller) handleRouterMessages() {
 			c.logger.Fatal("unknown message type from router", zap.Any("message", m))
 		}
 	}
+}
+
+// logUndeliverableOwnValidatorMessage makes the silent drop of a message routed to a validator with
+// no running local instance diagnosable — but only when the validator is ours: on shared subnets this
+// fall-through also swallows other operators' validator traffic, which is routine and must stay
+// quiet. The own-validator case is typically a peer's message racing this node's validator startup
+// right after registration (the share already passes message validation before the instance starts).
+// A one-shot broadcast lost here — e.g. a §5 proposer-preferences partial — has no redelivery, so
+// this line is what a starved-duty investigation greps for.
+func (c *Controller) logUndeliverableOwnValidatorMessage(msg *queue.SSVMessage, dutyExecutorID []byte) {
+	if c.validatorStore == nil || c.operatorDataStore == nil {
+		return
+	}
+	share, ok := c.validatorStore.Validator(dutyExecutorID)
+	if !ok || !share.BelongsToOperator(c.operatorDataStore.GetOperatorID()) {
+		return
+	}
+
+	logger := c.logger.With(
+		fields.RunnerRole(msg.GetID().GetRoleType()),
+		fields.MessageType(msg.MsgType),
+		fields.PubKey(dutyExecutorID),
+	)
+	if psm, ok := msg.Body.(*spectypes.PartialSignatureMessages); ok && psm != nil {
+		logger = logger.With(fields.Slot(psm.Slot), zap.Uint64("signer", ssvtypes.PartialSigMsgSigner(psm)))
+	}
+	logger.Debug("dropping message for own validator with no running instance")
 }
 
 var nonCommitteeValidatorTTLs = map[spectypes.RunnerRole]int{
