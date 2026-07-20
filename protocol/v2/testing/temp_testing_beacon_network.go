@@ -38,9 +38,6 @@ func (bn *BeaconNodeWrapped) GetAttestationData(ctx context.Context, slot phase0
 func (bn *BeaconNodeWrapped) DomainData(ctx context.Context, epoch phase0.Epoch, domain phase0.DomainType) (phase0.Domain, error) {
 	return bn.Bn.DomainData(epoch, domain)
 }
-func (bn *BeaconNodeWrapped) SyncCommitteeSubnetID(index phase0.CommitteeIndex) uint64 {
-	return bn.Bn.SyncCommitteeSubnetID(index)
-}
 func (bn *BeaconNodeWrapped) IsSyncCommitteeAggregator(proof []byte) bool {
 	return bn.Bn.IsSyncCommitteeAggregator(proof)
 }

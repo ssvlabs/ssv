@@ -179,6 +179,9 @@ func prepareTest(t *testing.T, logger *zap.Logger, name string, test any) *runna
 		require.NoError(t, err)
 		typedTest := &partialsigcontainer.PartialSigContainerTest{}
 		require.NoError(t, json.Unmarshal(byts, &typedTest))
+		// The spec struct's Run asserts the code itself, so remap the vector's expectation
+		// up front (identity in the default build, v1.2.2->v1.2.3 in the alan_spec build).
+		typedTest.ExpectedErrorCode = adjustExpectedErrorCode(typedTest.ExpectedErrorCode)
 
 		return &runnable{
 			name: typedTest.TestName(),

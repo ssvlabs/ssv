@@ -28,7 +28,7 @@ type SpecTest struct {
 func RunTimeout(t *testing.T, test *SpecTest) {
 	logger := protocoltesting.SpectestLogger(t)
 	err := test.Pre.UponRoundTimeout(context.TODO(), logger)
-	spectests.AssertErrorCode(t, test.ExpectedErrorCode, err)
+	spectests.AssertErrorCode(t, adjustExpectedErrorCode(test.ExpectedErrorCode), err)
 
 	// test calling timeout
 	timer, ok := test.Pre.Timer().(*roundtimer.TestQBFTTimer)
