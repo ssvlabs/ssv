@@ -32,7 +32,15 @@ func (v *Validator) ExecuteDuty(ctx context.Context, logger *zap.Logger, duty *s
 		return fmt.Errorf("decode duty execute msg: %w", err)
 	}
 
-	if pushed := v.Queues[role].TryPush(dec); !pushed {
+	// Queues only has entries for roles with runners; validators built post-fork have no legacy
+	// Aggregator/SyncCommitteeContribution runners, so guard the lookup rather than panicking on
+	// a nil queue (same as queue_validator.go and timer.go).
+	q, ok := v.Queues[role]
+	if !ok {
+		return fmt.Errorf("no queue for role %s", role.String())
+	}
+
+	if pushed := q.TryPush(dec); !pushed {
 		return fmt.Errorf("dropping ExecuteDuty message for validator %s because the queue is full", duty.PubKey.String())
 	}
 
