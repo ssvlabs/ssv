@@ -37,40 +37,47 @@ func shareWithCommittee(operatorIDs ...spectypes.OperatorID) *ssvtypes.SSVShare 
 }
 
 // Test_operatorActiveSubnets locks in the fork-gated subnet-counting behavior extracted from
-// applyDynamicMaxPeers: post-fork only Boole subnets count, pre-fork both Alan and Boole subnets
-// count in independent bitmaps, and validators landing on an already-seen subnet don't inflate the
-// count. It also pins the two cases iurii-ssv flagged: a Boole/Alan subnet-number collision must not
-// under-count, and an empty committee (BooleCommitteeSubnet -> UnknownSubnetId) must not inflate.
+// applyDynamicMaxPeers: with no fork scheduled only Alan subnets count, from scheduling to
+// activation both Alan and Boole subnets count in independent bitmaps, post-fork only Boole —
+// and validators landing on an already-seen subnet don't inflate the count. It also pins the two
+// cases iurii-ssv flagged: a Boole/Alan subnet-number collision must not under-count, and an empty
+// committee (BooleCommitteeSubnet -> UnknownSubnetId) must not inflate.
 func TestOperatorActiveSubnets(t *testing.T) {
 	shareA := shareWithCommittee(1, 2, 3, 4)
 	shareB := shareWithCommittee(5, 6, 7, 8)
 	shareADup := shareWithCommittee(1, 2, 3, 4) // same committee as shareA => same subnets
 
+	t.Run("unscheduled fork counts only Alan subnets", func(t *testing.T) {
+		validators := []*ssvtypes.SSVShare{shareA, shareB}
+
+		require.Equal(t, 2, operatorActiveSubnets(validators, false, false))
+	})
+
 	t.Run("post-fork counts only distinct Boole subnets", func(t *testing.T) {
 		validators := []*ssvtypes.SSVShare{shareA, shareB}
 
-		require.Equal(t, 2, operatorActiveSubnets(validators, true))
+		require.Equal(t, 2, operatorActiveSubnets(validators, true, true))
 	})
 
-	t.Run("pre-fork counts both Alan and Boole subnets", func(t *testing.T) {
+	t.Run("scheduled pre-fork counts both Alan and Boole subnets", func(t *testing.T) {
 		validators := []*ssvtypes.SSVShare{shareA, shareB}
 
-		require.Equal(t, 4, operatorActiveSubnets(validators, false))
+		require.Equal(t, 4, operatorActiveSubnets(validators, true, false))
 	})
 
 	t.Run("validators sharing a committee dedupe to a single subnet", func(t *testing.T) {
 		validators := []*ssvtypes.SSVShare{shareA, shareADup}
 
-		require.Equal(t, 1, operatorActiveSubnets(validators, true))
+		require.Equal(t, 1, operatorActiveSubnets(validators, true, true))
 	})
 
-	t.Run("pre-fork counts Boole and Alan sets independently on subnet collision", func(t *testing.T) {
+	t.Run("scheduled pre-fork counts Boole and Alan sets independently on subnet collision", func(t *testing.T) {
 		// A validator whose Alan subnet coincides with its own Boole subnet must still be counted
 		// once per set (2), not deduped to 1 by a shared bitmap.
 		v := findSubnetCollision(t)
 		require.Equal(t, v.BooleCommitteeSubnet(), v.AlanCommitteeSubnet())
 
-		require.Equal(t, 2, operatorActiveSubnets([]*ssvtypes.SSVShare{v}, false))
+		require.Equal(t, 2, operatorActiveSubnets([]*ssvtypes.SSVShare{v}, true, false))
 	})
 
 	t.Run("empty committee does not inflate the count", func(t *testing.T) {
@@ -78,11 +85,11 @@ func TestOperatorActiveSubnets(t *testing.T) {
 		require.Equal(t, uint64(networkcommons.UnknownSubnetId), empty.BooleCommitteeSubnet())
 
 		validators := []*ssvtypes.SSVShare{empty, empty, shareA}
-		require.Equal(t, 1, operatorActiveSubnets(validators, true))
+		require.Equal(t, 1, operatorActiveSubnets(validators, true, true))
 	})
 
 	t.Run("no validators yields no active subnets", func(t *testing.T) {
-		require.Equal(t, 0, operatorActiveSubnets(nil, true))
+		require.Equal(t, 0, operatorActiveSubnets(nil, true, true))
 	})
 }
 

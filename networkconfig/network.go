@@ -52,6 +52,13 @@ func (n Network) BooleForkAtEpoch(epoch phase0.Epoch) bool {
 	return epoch >= n.SSV.Forks.Boole
 }
 
+// BooleForkScheduled reports whether the Boole fork has an activation epoch set.
+// Networks without a scheduled fork pin Forks.Boole to math.MaxUint64; scheduling
+// the fork ships in a release, so a node restart is guaranteed before activation.
+func (n Network) BooleForkScheduled() bool {
+	return n.SSV.Forks.Boole != math.MaxUint64
+}
+
 func (n Network) BooleForkAtSlot(slot phase0.Slot) bool {
 	return n.BooleForkAtEpoch(n.EstimatedEpochAtSlot(slot))
 }

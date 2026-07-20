@@ -633,10 +633,12 @@ func (n *node) applyDynamicMaxPeers() {
 	)
 	start := time.Now()
 	myValidators := n.nodeStorage.ValidatorStore().OperatorValidators(n.operatorDataStore.GetOperatorID())
-	// Post-Boole-fork committees live on Boole subnets; before/through the transition both the
-	// Alan and Boole subnets are in play, so budget peers for both.
+	// Post-Boole-fork committees live on Boole subnets; from scheduling through the transition
+	// both the Alan and Boole subnets are in play, so budget peers for both. With no fork
+	// scheduled (Forks.Boole pinned to MaxUint64) only Alan subnets count — scheduling the fork
+	// ships in a release, so a restart re-tallies before Boole subnets ever matter.
 	booleFork := n.networkConfig.BooleForkAtSlot(n.networkConfig.EstimatedCurrentSlot())
-	myActiveSubnets := operatorActiveSubnets(myValidators, booleFork)
+	myActiveSubnets := operatorActiveSubnets(myValidators, n.networkConfig.BooleForkScheduled(), booleFork)
 	idealMaxPeers := min(baseMaxPeers+idealPeersPerSubnet*myActiveSubnets, maxPeersLimit)
 	if n.cfg.P2pNetworkConfig.MaxPeers < idealMaxPeers {
 		n.logger.Warn("increasing MaxPeers to match the operator's subscribed subnets",
@@ -652,13 +654,16 @@ func (n *node) applyDynamicMaxPeers() {
 // operatorActiveSubnets returns the number of distinct committee subnets the operator's validators
 // participate in. Boole and Alan subnets are tallied in separate bitmaps: they are independent gossip
 // topics (/ssv/<net>/boole/<n> vs ssv.v2.<n>) even when their subnet numbers coincide, so a shared
-// bitmap would under-count on collision. Before/through the Boole transition both Alan and Boole
-// subnets are counted; post-fork only Boole. BooleCommitteeSubnet may return UnknownSubnetId for an
+// bitmap would under-count on collision. Boole subnets are only counted once the fork is scheduled
+// (otherwise MaxPeers would be overprovisioned on production networks with no fork set); Alan subnets
+// are counted until the fork activates. BooleCommitteeSubnet may return UnknownSubnetId for an
 // empty committee, but Set drops out-of-range indices, so it never inflates the count.
-func operatorActiveSubnets(validators []*ssvtypes.SSVShare, booleFork bool) int {
+func operatorActiveSubnets(validators []*ssvtypes.SSVShare, booleScheduled, booleFork bool) int {
 	var booleSubnets, alanSubnets networkcommons.Subnets
 	for _, v := range validators {
-		booleSubnets.Set(v.BooleCommitteeSubnet())
+		if booleScheduled {
+			booleSubnets.Set(v.BooleCommitteeSubnet())
+		}
 		if !booleFork {
 			alanSubnets.Set(v.AlanCommitteeSubnet())
 		}
