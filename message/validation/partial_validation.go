@@ -277,7 +277,8 @@ func validatePartialSignatureMessageLimit(
 ) error {
 	switch m.Type {
 	case spectypes.RandaoPartialSig, ssvtypes.SelectionProofPartialSig, ssvtypes.ContributionProofs,
-		spectypes.ValidatorRegistrationPartialSig, spectypes.VoluntaryExitPartialSig:
+		spectypes.ValidatorRegistrationPartialSig, spectypes.VoluntaryExitPartialSig,
+		spectypes.AggregatorCommitteePartialSig:
 		if signerState.Peer(receivedFrom).SeenMsgTypes.reachedPreConsensusLimit() {
 			// Check if the same peer is sending us a "logical duplicate" message, reject message to punish.
 			e := ErrTooManyPartialSigMessage

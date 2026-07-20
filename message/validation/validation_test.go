@@ -61,6 +61,8 @@ func PartialMsgTypeToString(mt spectypes.PartialSigMsgType) string {
 		return "ValidatorRegistrationPartialSig"
 	case spectypes.VoluntaryExitPartialSig:
 		return "VoluntaryExitPartialSig"
+	case spectypes.AggregatorCommitteePartialSig:
+		return "AggregatorCommitteePartialSig"
 	default:
 		return fmt.Sprintf("unknown(%d)", mt)
 	}
@@ -1261,6 +1263,53 @@ func Test_ValidateSSVMessage(t *testing.T) {
 					})
 				}
 			}
+
+			// RoleAggregatorCommittee only exists post-fork, so it runs against the post-Boole
+			// config with its pre-consensus AggregatorCommitteePartialSig type.
+			subtestName := fmt.Sprintf("%v/%v", message.RunnerRoleToString(spectypes.RoleAggregatorCommittee), PartialMsgTypeToString(spectypes.AggregatorCommitteePartialSig))
+			t.Run(subtestName, func(t *testing.T) {
+				validator := New(postBooleCfg, validatorStore, operators, dutystore.New(), signatureVerifier).(*messageValidator)
+
+				slot := phase0.Slot(spectestingutils.TestingDutySlot)
+				messages := spectestingutils.PostConsensusAggregatorMsg(ks.Shares[1], 1, spec.DataVersionPhase0)
+				messages.Type = spectypes.AggregatorCommitteePartialSig
+
+				encodedMessages, err := messages.Encode()
+				require.NoError(t, err)
+
+				ssvMessage := &spectypes.SSVMessage{
+					MsgType: spectypes.SSVPartialSignatureMsgType,
+					MsgID:   spectypes.NewMsgID(postBooleCfg.DomainTypeAtSlot(slot), encodedCommitteeID, spectypes.RoleAggregatorCommittee),
+					Data:    encodedMessages,
+				}
+
+				signedSSVMessage := spectestingutils.SignedSSVMessageWithSigner(1, ks.OperatorKeys[1], ssvMessage)
+
+				committeeInfo, err := validator.getCommitteeAndValidatorIndices(ssvMessage.GetID())
+				require.NoError(t, err)
+				booleTopic := expectedCommitteeTopic(postBooleCfg, committeeInfo, slot)
+
+				receivedAt := postBooleCfg.SlotStartTime(slot)
+
+				_, err = validator.handleSignedSSVMessage(context.Background(), signedSSVMessage, booleTopic, peerID, receivedAt)
+				require.NoError(t, err)
+
+				var valErr Error
+
+				// REJECT a duplicate message from the same peer
+				_, err = validator.handleSignedSSVMessage(context.Background(), signedSSVMessage, booleTopic, peerID, receivedAt)
+				require.ErrorIs(t, err, ErrTooManyPartialSigMessage)
+				require.True(t, errors.As(err, &valErr))
+				require.True(t, valErr.reject)
+
+				// IGNORE a duplicate message from another peer
+				anotherPeerID, err := libp2ptest.RandPeerID()
+				require.NoError(t, err)
+				_, err = validator.handleSignedSSVMessage(context.Background(), signedSSVMessage, booleTopic, anotherPeerID, receivedAt)
+				require.ErrorIs(t, err, ErrTooManyPartialSigMessage)
+				require.True(t, errors.As(err, &valErr))
+				require.False(t, valErr.reject)
+			})
 		})
 	})
 
