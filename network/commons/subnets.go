@@ -125,8 +125,9 @@ func SetCommitteeSubnet(bigInt *big.Int, cid spectypes.CommitteeID) {
 	bigInt.Mod(bigInt, bigIntSubnetsCount)
 }
 
-// Topics returns the available topics for the given network's fork state: Alan-only pre-fork,
-// Alan+Boole during the transition window, Boole-only after.
+// Topics returns the topic whitelist for the given network's fork state: Alan+Boole before the
+// fork (so a node started pre-fork can accept Boole subscriptions once the transition window
+// opens, without a pubsub rebuild), Boole-only after.
 func Topics(netCfg *networkconfig.Network) []string {
 	topics := make([]string, 0, SubnetsCount*2)
 	for subnet := uint64(0); subnet < SubnetsCount; subnet++ {
