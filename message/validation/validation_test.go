@@ -78,7 +78,13 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	ns, err := storage.NewNodeStorage(networkconfig.TestNetwork.Beacon, logger, db)
 	require.NoError(t, err)
 
-	netCfg := networkconfig.TestNetwork
+	// Pin the base config explicitly pre-fork rather than relying on TestNetwork's default:
+	// the fixtures below hand-craft Alan topics/domains, and the post-fork side is covered by
+	// dedicated postBooleCfg subtests — so the suite stays deterministic under the
+	// SSV_TEST_BOOLE_FORK=post CI matrix, which flips the global TestNetwork.
+	preBooleSSV := *networkconfig.TestNetwork.SSV
+	preBooleSSV.Forks = networkconfig.SSVForks{Boole: phase0.Epoch(math.MaxUint64)}
+	netCfg := &networkconfig.Network{Beacon: networkconfig.TestNetwork.Beacon, SSV: &preBooleSSV}
 
 	ks := spectestingutils.Testing4SharesSet()
 	shares := generateShares(t, ks, ns, netCfg)
@@ -896,7 +902,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	netCfgEpoch1 := &networkconfig.Network{
 		Beacon: &beaconConfigEpoch1,
-		SSV:    networkconfig.TestNetwork.SSV,
+		SSV:    &preBooleSSV, // same explicit pre-fork pin as netCfg
 	}
 
 	t.Run("accept pre-consensus randao message when epoch duties are not set", func(t *testing.T) {
