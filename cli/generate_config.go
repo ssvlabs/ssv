@@ -4,10 +4,12 @@ import (
 	"encoding/hex"
 	"fmt"
 	"log"
+	"math"
 	"math/big"
 	"os"
 	"strings"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
@@ -40,10 +42,12 @@ var (
 	operatorPrivateKey      string
 	metricsAPIPort          int
 	ssvDomain               string
+	ssvNextDomain           string
 	ssvRegistrySyncOffset   uint64
 	ssvRegistryContractAddr string
 	ssvBootnodes            string
 	ssvDiscoveryProtocolID  string
+	ssvBooleForkEpoch       uint64
 )
 
 type SSVConfig struct {
@@ -80,6 +84,11 @@ var generateConfigCmd = &cobra.Command{
 			log.Fatalf("Failed to decode network domain: %v", err)
 		}
 
+		parsedNextDomain, err := hex.DecodeString(strings.TrimPrefix(ssvNextDomain, "0x"))
+		if err != nil {
+			log.Fatalf("Failed to decode next network domain: %v", err)
+		}
+
 		parsedDiscoveryProtocolID, err := hex.DecodeString(strings.TrimPrefix(ssvDiscoveryProtocolID, "0x"))
 		if err != nil {
 			log.Fatalf("Failed to decode discovery protocol ID: %v", err)
@@ -105,10 +114,14 @@ var generateConfigCmd = &cobra.Command{
 		config.MetricsAPIPort = metricsAPIPort
 		config.SSV.CustomNetwork = &networkconfig.SSV{
 			DomainType:           spectypes.DomainType(parsedDomain),
+			NextDomainType:       spectypes.DomainType(parsedNextDomain),
 			RegistrySyncOffset:   new(big.Int).SetUint64(ssvRegistrySyncOffset),
 			RegistryContractAddr: ethcommon.HexToAddress(ssvRegistryContractAddr),
 			Bootnodes:            bootnodes,
 			DiscoveryProtocolID:  parsedDiscoveryProtocolIDArr,
+			Forks: networkconfig.SSVForks{
+				Boole: phase0.Epoch(ssvBooleForkEpoch),
+			},
 		}
 
 		data, err := yaml.Marshal(&config)
@@ -140,11 +153,14 @@ func init() {
 
 	ssvDomainDefault := "0x" + hex.EncodeToString(defaultNetwork.DomainType[:])
 	generateConfigCmd.Flags().StringVar(&ssvDomain, "ssv-domain", ssvDomainDefault, "SSV domain type")
+	ssvNextDomainDefault := "0x" + hex.EncodeToString(defaultNetwork.NextDomainType[:])
+	generateConfigCmd.Flags().StringVar(&ssvNextDomain, "ssv-next-domain", ssvNextDomainDefault, "SSV next domain type")
 	generateConfigCmd.Flags().Uint64Var(&ssvRegistrySyncOffset, "ssv-registry-sync-offset", defaultNetwork.RegistrySyncOffset.Uint64(), "SSV registry sync offset")
 	generateConfigCmd.Flags().StringVar(&ssvRegistryContractAddr, "ssv-registry-contract-addr", defaultNetwork.RegistryContractAddr.String(), "SSV registry contract addr")
 	generateConfigCmd.Flags().StringVar(&ssvBootnodes, "ssv-bootnodes", strings.Join(defaultNetwork.Bootnodes, sliceSeparator), "SSV bootnodes (comma-separated)")
 	ssvDiscoveryProtocolIDDefault := "0x" + hex.EncodeToString(defaultNetwork.DiscoveryProtocolID[:])
 	generateConfigCmd.Flags().StringVar(&ssvDiscoveryProtocolID, "ssv-discovery-protocol-id", ssvDiscoveryProtocolIDDefault, "SSV discovery protocol ID")
+	generateConfigCmd.Flags().Uint64Var(&ssvBooleForkEpoch, "ssv-boole-fork-epoch", math.MaxUint64, "Epoch at which the Boole fork occurs in the network")
 
 	RootCmd.AddCommand(generateConfigCmd)
 }
