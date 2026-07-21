@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"maps"
 	"math"
+	mathrand "math/rand"
 	"slices"
 	"testing"
 	"time"
@@ -2330,6 +2331,33 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		_, err = validator.handleSignedSSVMessage(context.Background(), signedSSVMessage, topicID, peerID, receivedAt)
 		require.ErrorContains(t, err, ErrValidatorIndexMismatch.Error())
 	})
+}
+
+// Test_CommitteeInfoSubnets is the cross-check that CommitteeInfo.subnet/subnetAlan (whatever
+// value they were constructed with) equal what commons.* independently computes for the same
+// committee, for many random committees. It never reads the value back from any cache: the
+// expected side is recomputed from scratch via commons.BooleCommitteeSubnet/AlanCommitteeSubnet.
+func Test_CommitteeInfoSubnets(t *testing.T) {
+	rnd := mathrand.New(mathrand.NewSource(1)) //nolint:gosec
+
+	for i := 0; i < 200; i++ {
+		operators := make([]spectypes.OperatorID, 1+rnd.Intn(12))
+		for j := range operators {
+			operators[j] = spectypes.OperatorID(rnd.Uint64())
+		}
+
+		var committeeID spectypes.CommitteeID
+		_, err := rnd.Read(committeeID[:])
+		require.NoError(t, err)
+
+		booleSubnet := commons.BooleCommitteeSubnet(operators)
+		alanSubnet := commons.AlanCommitteeSubnet(committeeID)
+
+		info := newCommitteeInfo(committeeID, operators, nil, booleSubnet, alanSubnet)
+
+		require.Equal(t, commons.BooleCommitteeSubnet(operators), info.subnet)
+		require.Equal(t, commons.AlanCommitteeSubnet(committeeID), info.subnetAlan)
+	}
 }
 
 // Deep copy helper function for testing purposes only
