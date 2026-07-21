@@ -369,6 +369,7 @@ func newNode(
 
 	metadataSyncer := metadata.NewSyncer(
 		logger,
+		networkConfig,
 		nodeStorage.Shares(),
 		validatorProvider,
 		consensusClient,

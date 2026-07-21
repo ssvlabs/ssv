@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"fmt"
+	"math"
 	"testing"
 	"time"
 
@@ -17,9 +18,11 @@ import (
 
 	"github.com/ssvlabs/ssv/beacon/goclient"
 	"github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
@@ -94,7 +97,7 @@ func TestUpdateValidatorMetadata(t *testing.T) {
 				return result, nil
 			}).AnyTimes()
 
-			syncer := NewSyncer(logger, sharesStorage, validatorStore, beaconNode, commons.ZeroSubnets)
+			syncer := NewSyncer(logger, networkconfig.TestNetwork, sharesStorage, validatorStore, beaconNode, commons.ZeroSubnets)
 			_, err := syncer.Sync(t.Context(), []spectypes.ValidatorPK{tc.testPublicKey})
 			if tc.sharesStorageErr != nil {
 				require.ErrorIs(t, err, tc.sharesStorageErr)
@@ -256,6 +259,7 @@ func TestSyncer_SyncAll(t *testing.T) {
 
 		syncer := &Syncer{
 			logger:         logger,
+			netCfg:         networkconfig.TestNetwork,
 			shareStorage:   mockShareStorage,
 			validatorStore: mockValidatorStore,
 		}
@@ -279,6 +283,7 @@ func TestSyncer_SyncAll(t *testing.T) {
 
 		syncer := &Syncer{
 			logger:         logger,
+			netCfg:         networkconfig.TestNetwork,
 			shareStorage:   mockShareStorage,
 			validatorStore: mockValidatorStore,
 			beaconNode:     defaultMockBeaconNode,
@@ -334,6 +339,7 @@ func TestSyncer_SyncAll(t *testing.T) {
 
 		syncer := &Syncer{
 			logger:         logger,
+			netCfg:         networkconfig.TestNetwork,
 			shareStorage:   mockShareStorage,
 			validatorStore: mockValidatorStore,
 			beaconNode:     errMockBeaconNode,
@@ -398,6 +404,7 @@ func TestSyncer_Stream(t *testing.T) {
 		// Syncer instance
 		syncer := &Syncer{
 			logger:            logger,
+			netCfg:            networkconfig.TestNetwork,
 			shareStorage:      mockShareStorage,
 			validatorStore:    mockValidatorStore,
 			beaconNode:        defaultMockBeaconNode,
@@ -500,6 +507,7 @@ func TestSyncer_Stream(t *testing.T) {
 		// Syncer instance
 		syncer := &Syncer{
 			logger:            logger,
+			netCfg:            networkconfig.TestNetwork,
 			shareStorage:      mockShareStorage,
 			validatorStore:    mockValidatorStore,
 			beaconNode:        errMockBeaconNode,
@@ -581,6 +589,7 @@ func TestSyncer_Stream(t *testing.T) {
 		// Syncer instance
 		syncer := &Syncer{
 			logger:            logger,
+			netCfg:            networkconfig.TestNetwork,
 			shareStorage:      mockShareStorage,
 			validatorStore:    mockValidatorStore,
 			beaconNode:        defaultMockBeaconNode,
@@ -661,6 +670,7 @@ func TestWithUpdateInterval(t *testing.T) {
 	// Create a Syncer with the WithSyncInterval option
 	syncer := NewSyncer(
 		logger,
+		networkconfig.TestNetwork,
 		mockShareStorage,
 		mockValidatorStore,
 		mockBeaconNode,
@@ -787,4 +797,159 @@ func TestSyncer_Sleep(t *testing.T) {
 		// Assert that the elapsed time is minimal.
 		require.Less(t, elapsed, 10*time.Millisecond, "Sleep with zero duration should return immediately")
 	})
+}
+
+// preForkNetwork, postForkNetwork and inTransitionWindowNetwork each build their own copy of
+// networkconfig.TestNetwork with an explicit Forks.Boole value, so the SSV_TEST_BOOLE_FORK env
+// override (see networkconfig/test-network.go) can't perturb which fork phase a test exercises.
+func preForkNetwork() *networkconfig.Network {
+	netCfg := *networkconfig.TestNetwork
+	ssvCfg := *netCfg.SSV
+	ssvCfg.Forks.Boole = math.MaxUint64
+	netCfg.SSV = &ssvCfg
+	return &netCfg
+}
+
+func postForkNetwork() *networkconfig.Network {
+	netCfg := *networkconfig.TestNetwork
+	ssvCfg := *netCfg.SSV
+	ssvCfg.Forks.Boole = 0
+	netCfg.SSV = &ssvCfg
+	return &netCfg
+}
+
+func inTransitionWindowNetwork() *networkconfig.Network {
+	netCfg := *networkconfig.TestNetwork
+	ssvCfg := *netCfg.SSV
+	ssvCfg.Forks.Boole = netCfg.EstimatedCurrentEpoch() + 1
+	netCfg.SSV = &ssvCfg
+	return &netCfg
+}
+
+// shareWithCommittee builds a minimal SSVShare whose committee is the given operator IDs — enough
+// to exercise BooleCommitteeSubnet/AlanCommitteeSubnet, which derive solely from the committee.
+func shareWithCommittee(operatorIDs ...spectypes.OperatorID) *ssvtypes.SSVShare {
+	committee := make([]*spectypes.ShareMember, len(operatorIDs))
+	for i, id := range operatorIDs {
+		committee[i] = &spectypes.ShareMember{Signer: id}
+	}
+	return &ssvtypes.SSVShare{
+		Share: spectypes.Share{Committee: committee},
+	}
+}
+
+// distinctSubnetShare returns a share whose Alan and Boole committee subnets differ, so pre-fork
+// and post-fork matching can be tested independently of one another.
+func distinctSubnetShare(t *testing.T) *ssvtypes.SSVShare {
+	t.Helper()
+	for id := spectypes.OperatorID(1); id <= 4096; id++ {
+		v := shareWithCommittee(id, id+1, id+2, id+3)
+		if v.AlanCommitteeSubnet() != v.BooleCommitteeSubnet() {
+			return v
+		}
+	}
+	t.Fatal("no committee found with distinct Alan/Boole subnets")
+	return nil
+}
+
+// TestSyncer_ShareInOwnSubnets_ForkAware locks in the fork-gated subnet-matching switch mirrored
+// from the fork-aware reference implementation: pre-fork only the Alan mapping is consulted,
+// post-fork only Boole, and inside the transition window either mapping is accepted. It also
+// verifies exporters (fixedSubnets == AllSubnets) match regardless of fork phase.
+func TestSyncer_ShareInOwnSubnets_ForkAware(t *testing.T) {
+	share := distinctSubnetShare(t)
+	alanSubnet := share.AlanCommitteeSubnet()
+	booleSubnet := share.BooleCommitteeSubnet()
+
+	var alanOnlySubnets commons.Subnets
+	alanOnlySubnets.Set(alanSubnet)
+
+	var booleOnlySubnets commons.Subnets
+	booleOnlySubnets.Set(booleSubnet)
+
+	t.Run("pre-fork matches only via the Alan mapping", func(t *testing.T) {
+		s := &Syncer{netCfg: preForkNetwork()}
+		require.True(t, s.shareInOwnSubnets(share, alanOnlySubnets), "Alan-subnet match should be selected pre-fork")
+		require.False(t, s.shareInOwnSubnets(share, booleOnlySubnets), "Boole-only match should not be selected pre-fork")
+	})
+
+	t.Run("post-fork matches only via the Boole mapping", func(t *testing.T) {
+		s := &Syncer{netCfg: postForkNetwork()}
+		require.True(t, s.shareInOwnSubnets(share, booleOnlySubnets), "Boole-subnet match should be selected post-fork")
+		require.False(t, s.shareInOwnSubnets(share, alanOnlySubnets), "Alan-only match should not be selected post-fork")
+	})
+
+	t.Run("in transition window matches via either mapping", func(t *testing.T) {
+		s := &Syncer{netCfg: inTransitionWindowNetwork()}
+		require.True(t, s.shareInOwnSubnets(share, alanOnlySubnets), "Alan-subnet match should be selected in the transition window")
+		require.True(t, s.shareInOwnSubnets(share, booleOnlySubnets), "Boole-subnet match should be selected in the transition window")
+	})
+
+	t.Run("exporter's AllSubnets matches regardless of fork phase", func(t *testing.T) {
+		for _, netCfg := range []*networkconfig.Network{preForkNetwork(), postForkNetwork(), inTransitionWindowNetwork()} {
+			s := &Syncer{netCfg: netCfg}
+			require.True(t, s.shareInOwnSubnets(share, commons.AllSubnets))
+		}
+	})
+}
+
+// TestSyncer_SyncAll_ExporterUnaffectedByForkPhase confirms that with fixedSubnets == AllSubnets
+// (the exporter configuration), selfSubnets() always resolves to AllSubnets regardless of fork
+// phase, so every non-liquidated share is selected for sync in all three fork phases.
+func TestSyncer_SyncAll_ExporterUnaffectedByForkPhase(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	logger := zap.NewNop()
+
+	share1 := &ssvtypes.SSVShare{
+		Share:      spectypes.Share{ValidatorPubKey: spectypes.ValidatorPK{0x1}, Committee: []*spectypes.ShareMember{{Signer: 1}}},
+		Liquidated: false,
+	}
+	share2 := &ssvtypes.SSVShare{
+		Share:      spectypes.Share{ValidatorPubKey: spectypes.ValidatorPK{0x2}, Committee: []*spectypes.ShareMember{{Signer: 2}}},
+		Liquidated: false,
+	}
+	shares := []*ssvtypes.SSVShare{share1, share2}
+
+	for name, netCfg := range map[string]*networkconfig.Network{
+		"pre-fork":  preForkNetwork(),
+		"post-fork": postForkNetwork(),
+		"in-window": inTransitionWindowNetwork(),
+	} {
+		t.Run(name, func(t *testing.T) {
+			mockShareStorage := NewMockshareStorage(ctrl)
+			mockValidatorStore := NewMockselfValidatorStore(ctrl)
+			mockBeaconNode := beacon.NewMockBeaconNode(ctrl)
+			mockBeaconNode.EXPECT().GetValidatorData(gomock.Any(), gomock.Any()).Return(map[phase0.ValidatorIndex]*eth2apiv1.Validator{}, nil).AnyTimes()
+
+			syncer := &Syncer{
+				logger:         logger,
+				netCfg:         netCfg,
+				shareStorage:   mockShareStorage,
+				validatorStore: mockValidatorStore,
+				beaconNode:     mockBeaconNode,
+				fixedSubnets:   commons.AllSubnets,
+			}
+
+			mockValidatorStore.EXPECT().SelfValidators().Return([]*ssvtypes.SSVShare{}).AnyTimes()
+			mockShareStorage.EXPECT().List(nil, gomock.Any()).DoAndReturn(
+				func(txn basedb.Reader, filters ...registrystorage.SharesFilter) []*ssvtypes.SSVShare {
+					var selected []*ssvtypes.SSVShare
+					for _, share := range shares {
+						if filters[0](share) {
+							selected = append(selected, share)
+						}
+					}
+					return selected
+				})
+			mockShareStorage.EXPECT().UpdateValidatorsMetadata(gomock.Any()).Return(beacon.ValidatorMetadataMap{
+				share1.ValidatorPubKey: share1.BeaconMetadata(),
+				share2.ValidatorPubKey: share2.BeaconMetadata(),
+			}, nil)
+
+			_, err := syncer.SyncAll(t.Context())
+			require.NoError(t, err)
+		})
+	}
 }
