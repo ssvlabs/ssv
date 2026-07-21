@@ -267,6 +267,9 @@ func (dvs *DiscV5Service) checkPeer(ctx context.Context, e PeerEvent) error {
 	}
 
 	// Get the peer's domain type, skipping if it mismatches ours.
+	// Discovery filtering intentionally stays on the static current domain: it's symmetric
+	// within a converged fleet, and real fork enforcement happens in the fork-aware handshake
+	// filter and per-slot message validation, not here.
 	peerDiscoveriesCounter.Add(ctx, 1)
 	nodeDomainType, err := records.GetDomainTypeEntry(e.Node.Record(), records.KeyDomainType)
 	if err != nil {
@@ -489,7 +492,10 @@ func (dvs *DiscV5Service) PublishENR() {
 		dvs.logger.Error("could not set domain type", zap.Error(err))
 		return
 	}
-	err = records.SetDomainTypeEntry(dvs.dv5Listener.LocalNode(), records.KeyNextDomainType, dvs.ssvConfig.DomainType)
+	// KeyNextDomainType carries the real upcoming domain (not the current one) so that
+	// fork-aware (boole-style) binaries and future dynamic domain flips can rely on it,
+	// even though our own peer filter only ever compares against the static current domain.
+	err = records.SetDomainTypeEntry(dvs.dv5Listener.LocalNode(), records.KeyNextDomainType, dvs.ssvConfig.NextDomainType)
 	if err != nil {
 		dvs.logger.Error("could not set next domain type", zap.Error(err))
 		return
@@ -560,8 +566,9 @@ func (dvs *DiscV5Service) createLocalNode(discOpts *Options, ipAddr net.IP) (*en
 		localNode,
 
 		// Satisfy decorations of forks supported by this node.
+		// KeyNextDomainType carries the real upcoming domain, not the current one (see PublishENR).
 		DecorateWithDomainType(records.KeyDomainType, dvs.ssvConfig.DomainType),
-		DecorateWithDomainType(records.KeyNextDomainType, dvs.ssvConfig.DomainType),
+		DecorateWithDomainType(records.KeyNextDomainType, dvs.ssvConfig.NextDomainType),
 		DecorateWithSubnets(opts.Subnets),
 	)
 	if err != nil {
