@@ -68,23 +68,15 @@ func (h *CommitteeHandler) newCommitteeDuty(slot phase0.Slot) spectypes.Duty {
 	}
 }
 
+// NewCommitteeHandler creates a handler for either the committee (isAggregator=false) or the
+// aggregator-committee (isAggregator=true) duty flavor; the two differ only in this flag.
 func NewCommitteeHandler(
 	attDuties *dutystore.Duties[eth2apiv1.AttesterDuty],
 	syncDuties *dutystore.SyncCommitteeDuties,
+	isAggregator bool,
 ) *CommitteeHandler {
 	return &CommitteeHandler{
-		isAggregator: false,
-		attDuties:    attDuties,
-		syncDuties:   syncDuties,
-	}
-}
-
-func NewAggregatorCommitteeHandler(
-	attDuties *dutystore.Duties[eth2apiv1.AttesterDuty],
-	syncDuties *dutystore.SyncCommitteeDuties,
-) *CommitteeHandler {
-	return &CommitteeHandler{
-		isAggregator: true,
+		isAggregator: isAggregator,
 		attDuties:    attDuties,
 		syncDuties:   syncDuties,
 	}

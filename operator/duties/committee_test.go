@@ -128,7 +128,7 @@ func TestScheduler_Committee_Same_Slot_Attester_Only(t *testing.T) {
 			dutyStore    = dutystore.New()
 			attHandler   = NewAttesterHandler(dutyStore.Attester, false)
 			syncHandler  = NewSyncCommitteeHandler(dutyStore.SyncCommittee, false)
-			commHandler  = NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee)
+			commHandler  = NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee, false)
 			attDuties    = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
 			syncDuties   = hashmap.New[uint64, []*eth2apiv1.SyncCommitteeDuty]()
 			activeShares = []*ssvtypes.SSVShare{activeShare(1)}
@@ -175,7 +175,7 @@ func TestScheduler_Committee_Same_Slot_SyncCommittee_Only(t *testing.T) {
 			dutyStore    = dutystore.New()
 			attHandler   = NewAttesterHandler(dutyStore.Attester, false)
 			syncHandler  = NewSyncCommitteeHandler(dutyStore.SyncCommittee, false)
-			commHandler  = NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee)
+			commHandler  = NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee, false)
 			attDuties    = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
 			syncDuties   = hashmap.New[uint64, []*eth2apiv1.SyncCommitteeDuty]()
 			activeShares = []*ssvtypes.SSVShare{activeShare(1)}
@@ -221,7 +221,7 @@ func TestScheduler_Committee_Same_Slot(t *testing.T) {
 			dutyStore    = dutystore.New()
 			attHandler   = NewAttesterHandler(dutyStore.Attester, false)
 			syncHandler  = NewSyncCommitteeHandler(dutyStore.SyncCommittee, false)
-			commHandler  = NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee)
+			commHandler  = NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee, false)
 			attDuties    = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
 			syncDuties   = hashmap.New[uint64, []*eth2apiv1.SyncCommitteeDuty]()
 			activeShares = []*ssvtypes.SSVShare{activeShare(1)}
@@ -275,7 +275,7 @@ func TestScheduler_Committee_Diff_Slot_Attester_Only(t *testing.T) {
 			dutyStore    = dutystore.New()
 			attHandler   = NewAttesterHandler(dutyStore.Attester, false)
 			syncHandler  = NewSyncCommitteeHandler(dutyStore.SyncCommittee, false)
-			commHandler  = NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee)
+			commHandler  = NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee, false)
 			attDuties    = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
 			syncDuties   = hashmap.New[uint64, []*eth2apiv1.SyncCommitteeDuty]()
 			activeShares = []*ssvtypes.SSVShare{activeShare(1)}
@@ -327,7 +327,7 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only(t *testing.T) {
 			dutyStore     = dutystore.New()
 			attHandler    = NewAttesterHandler(dutyStore.Attester, false)
 			syncHandler   = NewSyncCommitteeHandler(dutyStore.SyncCommittee, false)
-			commHandler   = NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee)
+			commHandler   = NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee, false)
 			waitForDuties = &SafeValue[bool]{}
 			attDuties     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
 			syncDuties    = hashmap.New[uint64, []*eth2apiv1.SyncCommitteeDuty]()
@@ -401,7 +401,7 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only_2(t *testing.T) {
 			dutyStore     = dutystore.New()
 			attHandler    = NewAttesterHandler(dutyStore.Attester, false)
 			syncHandler   = NewSyncCommitteeHandler(dutyStore.SyncCommittee, false)
-			commHandler   = NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee)
+			commHandler   = NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee, false)
 			waitForDuties = &SafeValue[bool]{}
 			attDuties     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
 			syncDuties    = hashmap.New[uint64, []*eth2apiv1.SyncCommitteeDuty]()
@@ -476,7 +476,7 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only_3(t *testing.T) {
 			dutyStore     = dutystore.New()
 			attHandler    = NewAttesterHandler(dutyStore.Attester, false)
 			syncHandler   = NewSyncCommitteeHandler(dutyStore.SyncCommittee, false)
-			commHandler   = NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee)
+			commHandler   = NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee, false)
 			waitForDuties = &SafeValue[bool]{}
 			attDuties     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
 			syncDuties    = hashmap.New[uint64, []*eth2apiv1.SyncCommitteeDuty]()
@@ -550,7 +550,7 @@ func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Attester_only(t *te
 			dutyStore     = dutystore.New()
 			attHandler    = NewAttesterHandler(dutyStore.Attester, false)
 			syncHandler   = NewSyncCommitteeHandler(dutyStore.SyncCommittee, false)
-			commHandler   = NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee)
+			commHandler   = NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee, false)
 			waitForDuties = &SafeValue[bool]{}
 			attDuties     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
 			syncDuties    = hashmap.New[uint64, []*eth2apiv1.SyncCommitteeDuty]()
@@ -643,7 +643,7 @@ func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Indices_Changed_Att
 			dutyStore     = dutystore.New()
 			attHandler    = NewAttesterHandler(dutyStore.Attester, false)
 			syncHandler   = NewSyncCommitteeHandler(dutyStore.SyncCommittee, false)
-			commHandler   = NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee)
+			commHandler   = NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee, false)
 			waitForDuties = &SafeValue[bool]{}
 			attDuties     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
 			syncDuties    = hashmap.New[uint64, []*eth2apiv1.SyncCommitteeDuty]()
@@ -750,7 +750,7 @@ func TestScheduler_Committee_Reorg_Previous_Attester_only(t *testing.T) {
 			dutyStore     = dutystore.New()
 			attHandler    = NewAttesterHandler(dutyStore.Attester, false)
 			syncHandler   = NewSyncCommitteeHandler(dutyStore.SyncCommittee, false)
-			commHandler   = NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee)
+			commHandler   = NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee, false)
 			waitForDuties = &SafeValue[bool]{}
 			attDuties     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
 			syncDuties    = hashmap.New[uint64, []*eth2apiv1.SyncCommitteeDuty]()
@@ -842,7 +842,7 @@ func TestScheduler_Committee_Early_Block_Attester_Only(t *testing.T) {
 			dutyStore    = dutystore.New()
 			attHandler   = NewAttesterHandler(dutyStore.Attester, false)
 			syncHandler  = NewSyncCommitteeHandler(dutyStore.SyncCommittee, false)
-			commHandler  = NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee)
+			commHandler  = NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee, false)
 			attDuties    = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
 			syncDuties   = hashmap.New[uint64, []*eth2apiv1.SyncCommitteeDuty]()
 			activeShares = []*ssvtypes.SSVShare{activeShare(1)}
@@ -902,7 +902,7 @@ func TestScheduler_Committee_Early_Block(t *testing.T) {
 			dutyStore    = dutystore.New()
 			attHandler   = NewAttesterHandler(dutyStore.Attester, false)
 			syncHandler  = NewSyncCommitteeHandler(dutyStore.SyncCommittee, false)
-			commHandler  = NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee)
+			commHandler  = NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee, false)
 			attDuties    = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
 			syncDuties   = hashmap.New[uint64, []*eth2apiv1.SyncCommitteeDuty]()
 			activeShares = []*ssvtypes.SSVShare{activeShare(1)}
@@ -983,7 +983,7 @@ func TestCommitteeHandlerShouldExecuteSyncIgnoresMinParticipationEpoch(t *testin
 	netCfg := *networkconfig.TestNetwork
 	netCfg.Beacon = &beaconCfg
 
-	handler := NewCommitteeHandler(dutystore.New().Attester, dutystore.New().SyncCommittee)
+	handler := NewCommitteeHandler(dutystore.New().Attester, dutystore.New().SyncCommittee, false)
 	handler.logger = zap.NewNop()
 	handler.netCfg = &netCfg
 	handler.validatorProvider = validatorProvider
@@ -1015,7 +1015,7 @@ func TestCommitteeHandlerBuildCommitteeDutiesIncludesSyncButNotAttesterDuringPar
 	netCfg.Beacon = &beaconCfg
 
 	dutyStore := dutystore.New()
-	handler := NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee)
+	handler := NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee, false)
 	handler.logger = zap.NewNop()
 	handler.netCfg = &netCfg
 	handler.validatorProvider = validatorProvider
@@ -1046,10 +1046,10 @@ func TestCommitteeHandlerBuildCommitteeDutiesIncludesSyncButNotAttesterDuringPar
 func TestCommitteeHandlerName(t *testing.T) {
 	dutyStore := dutystore.New()
 
-	committeeHandler := NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee)
+	committeeHandler := NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee, false)
 	require.Equal(t, "COMMITTEE", committeeHandler.Name())
 
-	aggregatorCommitteeHandler := NewAggregatorCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee)
+	aggregatorCommitteeHandler := NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee, true)
 	require.Equal(t, "AGGREGATOR_COMMITTEE", aggregatorCommitteeHandler.Name())
 }
 
@@ -1071,7 +1071,7 @@ func TestAggregatorCommitteeHandlerBuildCommitteeDutiesUsesAggregatorRolesAndDut
 	netCfg.Beacon = &beaconCfg
 
 	dutyStore := dutystore.New()
-	handler := NewAggregatorCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee)
+	handler := NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee, true)
 	handler.logger = zap.NewNop()
 	handler.netCfg = &netCfg
 	handler.validatorProvider = validatorProvider
@@ -1132,7 +1132,7 @@ func TestCommitteeHandlerHandleDuties_AggregatorSkipsTicksPreBooleFork(t *testin
 		netCfg := *networkconfig.TestNetwork
 
 		dutyStore := dutystore.New()
-		handler := NewAggregatorCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee)
+		handler := NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee, true)
 		handler.logger = zap.NewNop()
 		handler.netCfg = &netCfg
 		handler.validatorProvider = validatorProvider
@@ -1197,7 +1197,7 @@ func TestCommitteeHandlerHandleDuties_AggregatorExecutesTicksPostBooleFork(t *te
 			},
 		})
 
-		handler := NewAggregatorCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee)
+		handler := NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee, true)
 		handler.logger = zap.NewNop()
 		handler.netCfg = &netCfg
 		handler.validatorProvider = validatorProvider
@@ -1231,7 +1231,7 @@ func TestScheduler_Committee_Indices_Changed_At_The_Last_Slot_Of_The_Epoch(t *te
 			dutyStore    = dutystore.New()
 			attHandler   = NewAttesterHandler(dutyStore.Attester, false)
 			syncHandler  = NewSyncCommitteeHandler(dutyStore.SyncCommittee, false)
-			commHandler  = NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee)
+			commHandler  = NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee, false)
 			attDuties    = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
 			syncDuties   = hashmap.New[uint64, []*eth2apiv1.SyncCommitteeDuty]()
 			activeShares = []*ssvtypes.SSVShare{

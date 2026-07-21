@@ -175,8 +175,8 @@ func NewScheduler(logger *zap.Logger, opts *SchedulerOptions) *Scheduler {
 	// These handlers only execute duties and are not needed in exporter mode.
 	if !opts.ExporterMode {
 		s.dutyHandlers = append(s.dutyHandlers,
-			NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee),
-			NewAggregatorCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee),
+			NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee, false),
+			NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee, true),
 			NewValidatorRegistrationHandler(opts.ValidatorRegistrationCh),
 			NewVoluntaryExitHandler(dutyStore.VoluntaryExit, opts.ValidatorExitCh),
 		)
