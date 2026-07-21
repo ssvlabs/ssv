@@ -6,6 +6,7 @@ import (
 	"maps"
 	"slices"
 	"sync"
+	"sync/atomic"
 
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -13,6 +14,7 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
+	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
@@ -53,12 +55,37 @@ type SelfValidatorStore interface {
 }
 
 type Committee struct {
-	ID          spectypes.CommitteeID
-	Operators   []spectypes.OperatorID
-	Shares      []*types.SSVShare
-	Indices     []phase0.ValidatorIndex
-	BooleSubnet uint64
-	AlanSubnet  uint64
+	ID        spectypes.CommitteeID
+	Operators []spectypes.OperatorID
+	Shares    []*types.SSVShare
+	Indices   []phase0.ValidatorIndex
+
+	// booleCommitteeSubnet is a cached value for committee subnet (post-Boole-fork) so we don't recompute it every time.
+	booleCommitteeSubnet atomic.Pointer[uint64]
+	// alanCommitteeSubnet is a cached value for committee subnet (Alan fork) so we don't recompute it every time.
+	alanCommitteeSubnet atomic.Pointer[uint64]
+}
+
+// BooleCommitteeSubnet safely retrieves or computes the committee subnet for the Boole fork.
+func (c *Committee) BooleCommitteeSubnet() uint64 {
+	if ptr := c.booleCommitteeSubnet.Load(); ptr != nil {
+		return *ptr
+	}
+
+	subnet := commons.BooleCommitteeSubnet(c.Operators)
+	c.booleCommitteeSubnet.Store(&subnet)
+	return subnet
+}
+
+// AlanCommitteeSubnet safely retrieves or computes the committee subnet for the Alan fork.
+func (c *Committee) AlanCommitteeSubnet() uint64 {
+	if ptr := c.alanCommitteeSubnet.Load(); ptr != nil {
+		return *ptr
+	}
+
+	subnet := commons.AlanCommitteeSubnet(c.ID)
+	c.alanCommitteeSubnet.Store(&subnet)
+	return subnet
 }
 
 // IsParticipating returns whether any validator in the committee should participate in the given epoch.
@@ -631,12 +658,6 @@ func buildCommittee(shares []*types.SSVShare) *Committee {
 		committee.Indices = append(committee.Indices, share.ValidatorIndex)
 	}
 	slices.Sort(committee.Operators)
-
-	// Some test shares might have a zero-length committee.
-	if len(shares[0].Committee) > 0 {
-		committee.BooleSubnet = shares[0].BooleCommitteeSubnet()
-		committee.AlanSubnet = shares[0].AlanCommitteeSubnet()
-	}
 
 	return committee
 }

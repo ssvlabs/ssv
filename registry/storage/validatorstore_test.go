@@ -24,6 +24,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/beacon/goclient"
+	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/networkconfig"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
@@ -1463,4 +1464,48 @@ func TestValidatorStore_PermanentIndexToPubkeyMapping(t *testing.T) {
 	pk, ok = store.ValidatorPubkey(share.ValidatorIndex)
 	require.True(t, ok)
 	require.Equal(t, share.ValidatorPubKey, pk)
+}
+
+// TestCommittee_SubnetMemoization_MatchesIndependentRecompute is a property test verifying the
+// memoized subnet accessors on Committee always agree with an independent recomputation from
+// the same population site (buildCommittee), for random operator sets.
+func TestCommittee_SubnetMemoization_MatchesIndependentRecompute(t *testing.T) {
+	for i := 0; i < 50; i++ {
+		operatorCount := rand.Intn(13) + 1 // 1..13 operators
+		operators := make([]spectypes.OperatorID, operatorCount)
+		committeeMembers := make([]*spectypes.ShareMember, operatorCount)
+		for j := 0; j < operatorCount; j++ {
+			opID := spectypes.OperatorID(rand.Uint64()) //nolint:gosec
+			operators[j] = opID
+			committeeMembers[j] = &spectypes.ShareMember{Signer: opID}
+		}
+
+		share := &ssvtypes.SSVShare{
+			Share: spectypes.Share{
+				ValidatorIndex:  phase0.ValidatorIndex(i + 1),
+				ValidatorPubKey: spectypes.ValidatorPK{byte(i), byte(i + 1)},
+				Committee:       committeeMembers,
+			},
+		}
+
+		c := buildCommittee([]*ssvtypes.SSVShare{share})
+
+		require.Equal(t, commons.BooleCommitteeSubnet(c.Operators), c.BooleCommitteeSubnet())
+		require.Equal(t, commons.AlanCommitteeSubnet(c.ID), c.AlanCommitteeSubnet())
+
+		// Calling the accessors again must return the memoized (equal) value.
+		require.Equal(t, c.BooleCommitteeSubnet(), c.BooleCommitteeSubnet())
+		require.Equal(t, c.AlanCommitteeSubnet(), c.AlanCommitteeSubnet())
+	}
+}
+
+// TestCommittee_SubnetMemoization_EmptyCommittee verifies an empty committee (no operators) never
+// panics and returns UnknownSubnetId for the Boole subnet while still computing a valid Alan subnet
+// from its ID.
+func TestCommittee_SubnetMemoization_EmptyCommittee(t *testing.T) {
+	id := spectypes.CommitteeID{1, 2, 3}
+	c := &Committee{ID: id}
+
+	require.Equal(t, uint64(commons.UnknownSubnetId), c.BooleCommitteeSubnet())
+	require.Equal(t, commons.AlanCommitteeSubnet(id), c.AlanCommitteeSubnet())
 }
