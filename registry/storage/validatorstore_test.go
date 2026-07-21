@@ -1475,7 +1475,7 @@ func TestCommittee_SubnetMemoization_MatchesIndependentRecompute(t *testing.T) {
 		operators := make([]spectypes.OperatorID, operatorCount)
 		committeeMembers := make([]*spectypes.ShareMember, operatorCount)
 		for j := 0; j < operatorCount; j++ {
-			opID := spectypes.OperatorID(rand.Uint64()) //nolint:gosec
+			opID := rand.Uint64() //nolint:gosec
 			operators[j] = opID
 			committeeMembers[j] = &spectypes.ShareMember{Signer: opID}
 		}

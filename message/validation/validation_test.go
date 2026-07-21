@@ -2560,7 +2560,7 @@ func Test_ForkBoundary_TopicParity(t *testing.T) {
 	// Boole activates one epoch from now, so FirstSlotAtEpoch(boole-1) is the last pre-fork
 	// slot and FirstSlotAtEpoch(boole) is the first post-fork slot - the boundary window.
 	boundarySSV := *networkconfig.TestNetwork.SSV
-	baseEpoch := networkconfig.TestNetwork.Beacon.EstimatedCurrentEpoch()
+	baseEpoch := networkconfig.TestNetwork.EstimatedCurrentEpoch()
 	booleEpoch := baseEpoch + 1
 	boundarySSV.Forks = networkconfig.SSVForks{Boole: booleEpoch}
 	netCfg := &networkconfig.Network{Beacon: networkconfig.TestNetwork.Beacon, SSV: &boundarySSV}
@@ -2655,7 +2655,7 @@ func Test_CommitteeInfoSubnets(t *testing.T) {
 	for i := 0; i < 200; i++ {
 		operators := make([]spectypes.OperatorID, 1+rnd.Intn(12))
 		for j := range operators {
-			operators[j] = spectypes.OperatorID(rnd.Uint64())
+			operators[j] = rnd.Uint64()
 		}
 
 		var committeeID spectypes.CommitteeID
