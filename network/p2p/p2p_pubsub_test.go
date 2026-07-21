@@ -6,11 +6,14 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/libp2p/go-libp2p/core/peer"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/topics"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/utils/hashmap"
 )
 
@@ -173,5 +176,105 @@ func TestSubscribedSubnetsForCurrentEpoch(t *testing.T) {
 		alan, boole := newNet(booleCfg(0)).subscribedSubnetsForCurrentEpoch()
 		require.Equal(t, commons.ZeroSubnets, alan)
 		require.Equal(t, subnetsOf(1, 2, 7), boole)
+	})
+}
+
+// TestBroadcastMessageSlot verifies broadcastMessageSlot resolves the same slot as
+// queue.DecodeSignedSSVMessage(msg).Slot() for every message type Broadcast may see, without
+// building the full queue.DecodedSSVMessage wrapper.
+func TestBroadcastMessageSlot(t *testing.T) {
+	t.Run("consensus message", func(t *testing.T) {
+		qbftMsg := &specqbft.Message{
+			MsgType:    specqbft.ProposalMsgType,
+			Height:     123,
+			Round:      1,
+			Identifier: make([]byte, 56),
+			Root:       [32]byte{1, 2, 3},
+		}
+		data, err := qbftMsg.Encode()
+		require.NoError(t, err)
+
+		msg := &spectypes.SignedSSVMessage{
+			SSVMessage: &spectypes.SSVMessage{
+				MsgType: spectypes.SSVConsensusMsgType,
+				MsgID:   spectypes.MessageID(qbftMsg.Identifier),
+				Data:    data,
+			},
+		}
+
+		slot, err := broadcastMessageSlot(msg)
+		require.NoError(t, err)
+		require.Equal(t, phase0.Slot(123), slot)
+
+		decoded, err := queue.DecodeSignedSSVMessage(msg)
+		require.NoError(t, err)
+		wantSlot, err := decoded.Slot()
+		require.NoError(t, err)
+		require.Equal(t, wantSlot, slot)
+	})
+
+	t.Run("partial signature message", func(t *testing.T) {
+		partialMsg := &spectypes.PartialSignatureMessages{
+			Type: spectypes.PostConsensusPartialSig,
+			Slot: 456,
+			Messages: []*spectypes.PartialSignatureMessage{{
+				PartialSignature: make([]byte, 96),
+				SigningRoot:      [32]byte{},
+				Signer:           1,
+				ValidatorIndex:   1,
+			}},
+		}
+		data, err := partialMsg.Encode()
+		require.NoError(t, err)
+
+		msg := &spectypes.SignedSSVMessage{
+			SSVMessage: &spectypes.SSVMessage{
+				MsgType: spectypes.SSVPartialSignatureMsgType,
+				MsgID:   spectypes.MessageID(make([]byte, 56)),
+				Data:    data,
+			},
+		}
+
+		slot, err := broadcastMessageSlot(msg)
+		require.NoError(t, err)
+		require.Equal(t, phase0.Slot(456), slot)
+
+		decoded, err := queue.DecodeSignedSSVMessage(msg)
+		require.NoError(t, err)
+		wantSlot, err := decoded.Slot()
+		require.NoError(t, err)
+		require.Equal(t, wantSlot, slot)
+	})
+
+	t.Run("unknown message type returns error matching decode path", func(t *testing.T) {
+		msg := &spectypes.SignedSSVMessage{
+			SSVMessage: &spectypes.SSVMessage{
+				MsgType: 99,
+				MsgID:   spectypes.MessageID(make([]byte, 56)),
+				Data:    []byte{1},
+			},
+		}
+
+		_, err := broadcastMessageSlot(msg)
+		require.ErrorIs(t, err, queue.ErrUnknownMessageType)
+
+		_, decodeErr := queue.DecodeSignedSSVMessage(msg)
+		require.ErrorIs(t, decodeErr, queue.ErrUnknownMessageType)
+	})
+
+	t.Run("invalid consensus message data returns error", func(t *testing.T) {
+		msg := &spectypes.SignedSSVMessage{
+			SSVMessage: &spectypes.SSVMessage{
+				MsgType: spectypes.SSVConsensusMsgType,
+				MsgID:   spectypes.MessageID(make([]byte, 56)),
+				Data:    []byte{1, 2, 3},
+			},
+		}
+
+		_, err := broadcastMessageSlot(msg)
+		require.Error(t, err)
+
+		_, decodeErr := queue.DecodeSignedSSVMessage(msg)
+		require.Error(t, decodeErr)
 	})
 }
