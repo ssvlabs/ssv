@@ -39,6 +39,8 @@ func (f *mockTopicsController) Broadcast(string, []byte, time.Duration) error {
 	return nil
 }
 
+func (f *mockTopicsController) DeregisterTopics(...string) {}
+
 func (f *mockTopicsController) UpdateScoreParams() error {
 	select {
 	case f.updateCalled <- struct{}{}:

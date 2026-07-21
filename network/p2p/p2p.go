@@ -571,6 +571,7 @@ func (n *p2pNetwork) UpdateSubnets() {
 	prevRegisteredSubnets := commons.Subnets{}
 	prevRegisteredAlanSubnets := commons.Subnets{}
 	prevRegisteredBooleSubnets := commons.Subnets{}
+	alanTopicsWhitelisted := true // registered at pubsub construction when the node starts pre-fork
 	defer ticker.Stop()
 
 	// Run immediately and then every second.
@@ -580,6 +581,24 @@ func (n *p2pNetwork) UpdateSubnets() {
 		}
 
 		start := time.Now()
+
+		// Once the transition window closes post-fork, tighten the subscription-filter
+		// whitelist: deregister the Alan topics registered at pubsub construction, so
+		// peers can no longer advertise Alan subscriptions to us. Until then incoming
+		// Alan advertisements must stay accepted, and our own Alan subscriptions are
+		// torn down by the reconciliation below (which also deregisters them).
+		if alanTopicsWhitelisted {
+			currentSlot := n.cfg.NetworkConfig.EstimatedCurrentSlot()
+			if n.cfg.NetworkConfig.BooleForkAtSlot(currentSlot) && !n.cfg.NetworkConfig.InBooleTransitionWindow(currentSlot) {
+				alanTopics := make([]string, 0, commons.SubnetsCount)
+				for subnet := uint64(0); subnet < commons.SubnetsCount; subnet++ {
+					alanTopics = append(alanTopics, commons.GetTopicFullName(commons.SubnetTopicID(subnet)))
+				}
+				n.topicsCtrl.DeregisterTopics(alanTopics...)
+				alanTopicsWhitelisted = false
+				n.logger.Debug("deregistered alan topics from the subscription-filter whitelist")
+			}
+		}
 
 		alanSubnets, booleSubnets := n.subscribedSubnetsForCurrentEpoch()
 		currentSubnets := unionSubnets(alanSubnets, booleSubnets)

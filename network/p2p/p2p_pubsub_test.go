@@ -39,6 +39,8 @@ func (c *subscribeRandomsTopicsController) Broadcast(string, []byte, time.Durati
 	return nil
 }
 
+func (c *subscribeRandomsTopicsController) DeregisterTopics(...string) {}
+
 func (c *subscribeRandomsTopicsController) UpdateScoreParams() error {
 	return nil
 }

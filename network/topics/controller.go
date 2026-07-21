@@ -28,6 +28,9 @@ type Controller interface {
 	Topics() []string
 	// Broadcast publishes the message on the given topic
 	Broadcast(topicName string, data []byte, timeout time.Duration) error
+	// DeregisterTopics removes the given topics from the subscription-filter whitelist,
+	// so incoming peer subscriptions to them are no longer accepted
+	DeregisterTopics(names ...string)
 	// UpdateScoreParams refreshes the score params for every subscribed topic
 	UpdateScoreParams() error
 
@@ -201,6 +204,14 @@ func (ctrl *topicsCtrl) Broadcast(topicName string, data []byte, timeout time.Du
 	}()
 
 	return nil
+}
+
+// DeregisterTopics removes the given topics from the subscription-filter whitelist.
+func (ctrl *topicsCtrl) DeregisterTopics(names ...string) {
+	whitelist := ctrl.subFilter.(Whitelist)
+	for _, name := range names {
+		whitelist.Deregister(name)
+	}
 }
 
 // Unsubscribe unsubscribes from the given topic, only if there are no other subscribers of the given topic

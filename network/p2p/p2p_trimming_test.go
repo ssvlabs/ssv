@@ -58,6 +58,8 @@ func (c *testTopicsController) Broadcast(string, []byte, time.Duration) error {
 	return nil
 }
 
+func (c *testTopicsController) DeregisterTopics(...string) {}
+
 func (c *testTopicsController) UpdateScoreParams() error {
 	return nil
 }
