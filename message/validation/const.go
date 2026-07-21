@@ -44,8 +44,8 @@ const (
 const (
 	partialSignatureSize           = 96
 	partialSignatureMsgSize        = partialSignatureSize + rootSize + operatorIDSize + validatorIndexSize
-	maxPartialSignatureMessages    = 1000
-	partialSigMsgTypeSize          = 8 // uint64
+	maxPartialSignatureMessages    = 5048 // post-fork worst case (boole RoleAggregatorCommittee), see ssv-spec types/spectest/tests/maxmsgsize.MaxSizePartialSignatureMessages
+	partialSigMsgTypeSize          = 8    // uint64
 	maxPartialSignatureMsgsSize    = partialSigMsgTypeSize + slotSize + maxPartialSignatureMessages*partialSignatureMsgSize
 	maxEncodedPartialSignatureSize = maxPartialSignatureMsgsSize + maxPartialSignatureMsgsSize/encodingOverheadDivisor + 4
 )
