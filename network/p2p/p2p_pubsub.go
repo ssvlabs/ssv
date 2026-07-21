@@ -16,6 +16,7 @@ import (
 
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/network/topics"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	p2pprotocol "github.com/ssvlabs/ssv/protocol/v2/p2p"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
@@ -96,6 +97,15 @@ func (n *p2pNetwork) BroadcastAtSlot(msg *spectypes.SignedSSVMessage, slot phase
 		n.logger.Debug("could not broadcast msg", fields.Topic(topic), zap.Error(err))
 		return fmt.Errorf("could not broadcast msg: %w", err)
 	}
+
+	// topicPeers surfaces a sparse/empty mesh — a prime suspect when a one-shot message fails to reach peers.
+	topicPeers, _ := n.topicsCtrl.Peers(topic)
+	n.logger.Debug("📤 broadcast message to topic",
+		fields.MessageID(msg.SSVMessage.MsgID),
+		zap.String("gossip_msg_id", hex.EncodeToString([]byte(topics.MsgID(encodedMsg)))),
+		fields.Topic(topic),
+		zap.Int("topic_peers", len(topicPeers)),
+	)
 	return nil
 }
 
