@@ -172,11 +172,16 @@ func (n *p2pNetwork) subscribedSubnetsForCurrentEpoch() (commons.Subnets, common
 	alanSubnets := commons.ZeroSubnets
 	booleSubnets := commons.ZeroSubnets
 
+	// Evaluate the time-derived fork state once so the persistent and committee sides
+	// can't observe a mixed Alan/Boole snapshot if it flips mid-iteration.
+	inTransitionWindow := n.cfg.NetworkConfig.InBooleTransitionWindow(currentSlot)
+	postBooleFork := n.cfg.NetworkConfig.BooleForkAtSlot(currentSlot)
+
 	switch {
-	case n.cfg.NetworkConfig.InBooleTransitionWindow(currentSlot):
+	case inTransitionWindow:
 		alanSubnets = n.persistentSubnets
 		booleSubnets = n.persistentSubnets
-	case n.cfg.NetworkConfig.BooleForkAtSlot(currentSlot):
+	case postBooleFork:
 		booleSubnets = n.persistentSubnets
 	default:
 		alanSubnets = n.persistentSubnets
@@ -184,10 +189,10 @@ func (n *p2pNetwork) subscribedSubnetsForCurrentEpoch() (commons.Subnets, common
 
 	n.subscribedCommittees.Range(func(encodedCommittee string, statusAndSubnet statusWithSubnet) bool {
 		switch {
-		case n.cfg.NetworkConfig.InBooleTransitionWindow(currentSlot):
+		case inTransitionWindow:
 			alanSubnets.Set(statusAndSubnet.alanSubnet)
 			booleSubnets.Set(statusAndSubnet.booleSubnet)
-		case n.cfg.NetworkConfig.BooleForkAtSlot(currentSlot):
+		case postBooleFork:
 			booleSubnets.Set(statusAndSubnet.booleSubnet)
 		default:
 			alanSubnets.Set(statusAndSubnet.alanSubnet)
