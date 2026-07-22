@@ -939,10 +939,14 @@ func TestSyncer_SyncAll_ExporterUnaffectedByForkPhase(t *testing.T) {
 			mockShareStorage.EXPECT().List(nil, gomock.Any()).DoAndReturn(
 				func(txn basedb.Reader, filters ...registrystorage.SharesFilter) []*ssvtypes.SSVShare {
 					var selected []*ssvtypes.SSVShare
+				sharesLoop:
 					for _, share := range shares {
-						if filters[0](share) {
-							selected = append(selected, share)
+						for _, filter := range filters {
+							if !filter(share) {
+								continue sharesLoop
+							}
 						}
+						selected = append(selected, share)
 					}
 					return selected
 				})
