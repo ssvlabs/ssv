@@ -92,7 +92,7 @@ func (v *Validator) StartQueueConsumer(
 			var ok bool
 			q, ok = v.Queues[msgID.GetRoleType()]
 			if !ok {
-				return fmt.Errorf("queue not found for role %s", msgID.GetRoleType().String())
+				return fmt.Errorf("queue not found for role %s", types.RunnerRoleToString(msgID.GetRoleType()))
 			}
 			return nil
 		}()
