@@ -329,7 +329,6 @@ func (s *Syncer) sleep(ctx context.Context, d time.Duration) (slept bool) {
 }
 
 // selfSubnets calculates the operator's subnets by adding up the fixed subnets and the active committees
-// it recvs big int buffer for memory reusing, if is nil it will allocate new
 func (s *Syncer) selfSubnets() networkcommons.Subnets {
 	// Start off with a copy of the fixed subnets (e.g., exporter subscribed to all subnets).
 	mySubnets := s.fixedSubnets
