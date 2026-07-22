@@ -80,8 +80,8 @@ var syncCommitteeContributionValidatorSyncCommitteeIndices = []spectypes.Validat
 // Because Go's map-iteration randomization is per-range (not fixed for the process), a single
 // draw could in principle land on already-sorted order and let a missing sortBySubnet call slip
 // through undetected; the sub-test below re-drives the whole flow on fresh runners several times to
-// make that false negative astronomically unlikely, and the mutation check documented in this
-// package's test-authoring report empirically confirms the guard trips when the sort is removed.
+// make that false negative astronomically unlikely. Deleting the sortBySubnet call from
+// ProcessPreConsensus empirically trips this guard (e.g. "got [2 3 0 1]").
 func TestSyncCommitteeAggregatorProcessPreConsensusSortsSubnetsForBeaconCall(t *testing.T) {
 	t.Parallel()
 
