@@ -6,8 +6,10 @@ import (
 	"testing"
 
 	"github.com/attestantio/go-eth2-client/spec"
+	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
+	"github.com/herumi/bls-eth-go-binary/bls"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
@@ -88,6 +90,12 @@ func TestSyncCommitteeAggregatorProcessPreConsensusSortsSubnetsForBeaconCall(t *
 	ctx := context.Background()
 	logger := zap.NewNop()
 
+	// Selection proofs are signed over SyncAggregatorSelectionData{Slot, SubcommitteeIndex} with
+	// the sync-committee selection-proof domain (see executeDuty); precompute the domain once for
+	// the per-draw pairing check below.
+	selectionProofDomain, err := spectestingutils.NewTestingBeaconNode().DomainData(1, spectypes.DomainSyncCommitteeSelectionProof)
+	require.NoError(t, err)
+
 	const draws = 25
 	for i := range draws {
 		testBeacon := newSyncCommitteeContributionPreConsensusCaptureBeacon()
@@ -120,6 +128,23 @@ func TestSyncCommitteeAggregatorProcessPreConsensusSortsSubnetsForBeaconCall(t *
 			i, testBeacon.capturedSubnets)
 		require.Equal(t, []uint64{0, 1, 2, 3}, testBeacon.capturedSubnets, "draw %d: exact-set sanity check", i)
 		require.Len(t, testBeacon.capturedSelectionProofs, len(testBeacon.capturedSubnets), "draw %d", i)
+
+		// The two slices are parallel: capturedSelectionProofs[j] must be the proof for
+		// capturedSubnets[j]. Verify each reconstructed proof is the validator's BLS signature
+		// over its paired subnet's SyncAggregatorSelectionData signing root, so a reordering that
+		// didn't drag the proofs along with the subnets could not pass.
+		for j, subnet := range testBeacon.capturedSubnets {
+			root, err := spectypes.ComputeETHSigningRoot(&altair.SyncAggregatorSelectionData{
+				Slot:              spectestingutils.TestingDutySlot,
+				SubcommitteeIndex: subnet,
+			}, selectionProofDomain)
+			require.NoError(t, err)
+
+			sig := &bls.Sign{}
+			require.NoError(t, sig.Deserialize(testBeacon.capturedSelectionProofs[j][:]))
+			require.Truef(t, sig.VerifyByte(keySet.ValidatorPK, root[:]),
+				"draw %d: selection proof at index %d does not verify for its paired subnet %d", i, j, subnet)
+		}
 
 		// Sanity: the runner proceeded into consensus after the beacon call.
 		require.NotNil(t, runner.State.RunningInstance, "draw %d", i)
