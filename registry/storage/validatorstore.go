@@ -67,6 +67,8 @@ type Committee struct {
 }
 
 // BooleCommitteeSubnet safely retrieves or computes the committee subnet for the Boole fork.
+// Note: for a committee with no Operators this returns the UnknownSubnetId sentinel,
+// whereas AlanCommitteeSubnet derives from ID and always returns a real subnet.
 func (c *Committee) BooleCommitteeSubnet() uint64 {
 	if ptr := c.booleCommitteeSubnet.Load(); ptr != nil {
 		return *ptr
