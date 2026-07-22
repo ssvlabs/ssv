@@ -83,10 +83,16 @@ var generateConfigCmd = &cobra.Command{
 		if err != nil {
 			log.Fatalf("Failed to decode network domain: %v", err)
 		}
+		if len(parsedDomain) != 4 {
+			log.Fatalf("Invalid network domain length: expected 4 bytes, got %d", len(parsedDomain))
+		}
 
 		parsedNextDomain, err := hex.DecodeString(strings.TrimPrefix(ssvNextDomain, "0x"))
 		if err != nil {
 			log.Fatalf("Failed to decode next network domain: %v", err)
+		}
+		if len(parsedNextDomain) != 4 {
+			log.Fatalf("Invalid next network domain length: expected 4 bytes, got %d", len(parsedNextDomain))
 		}
 
 		parsedDiscoveryProtocolID, err := hex.DecodeString(strings.TrimPrefix(ssvDiscoveryProtocolID, "0x"))
