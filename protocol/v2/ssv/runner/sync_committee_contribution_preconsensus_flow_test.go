@@ -85,6 +85,9 @@ var syncCommitteeContributionValidatorSyncCommitteeIndices = []spectypes.Validat
 func TestSyncCommitteeAggregatorProcessPreConsensusSortsSubnetsForBeaconCall(t *testing.T) {
 	t.Parallel()
 
+	ctx := context.Background()
+	logger := zap.NewNop()
+
 	const draws = 25
 	for i := range draws {
 		testBeacon := newSyncCommitteeContributionPreConsensusCaptureBeacon()
@@ -97,10 +100,8 @@ func TestSyncCommitteeAggregatorProcessPreConsensusSortsSubnetsForBeaconCall(t *
 			ValidatorIndex:                spectestingutils.TestingValidatorIndex,
 			ValidatorSyncCommitteeIndices: syncCommitteeContributionValidatorSyncCommitteeIndices,
 		}
-		require.NoError(t, runner.StartNewDuty(context.Background(), zap.NewNop(), duty, keySet.Threshold))
+		require.NoError(t, runner.StartNewDuty(ctx, logger, duty, keySet.Threshold))
 
-		ctx := context.Background()
-		logger := zap.NewNop()
 		for operatorID := spectypes.OperatorID(1); operatorID <= keySet.Threshold; operatorID++ {
 			msg := spectestingutils.PreConsensusContributionProofWithValidatorSyncCommitteeIndices(
 				keySet.Shares[operatorID], keySet.Shares[operatorID], operatorID, operatorID,
