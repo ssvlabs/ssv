@@ -67,6 +67,8 @@ func broadcastMessageSlot(msg *spectypes.SignedSSVMessage) (phase0.Slot, error) 
 		}
 		return psMsg.Slot, nil
 	default:
+		// Unlike queue.DecodeSignedSSVMessage, SSVEventMsgType lands here: event messages are
+		// internal loopback and never reach Broadcast.
 		return 0, queue.ErrUnknownMessageType
 	}
 }
