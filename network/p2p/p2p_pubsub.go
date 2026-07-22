@@ -57,13 +57,13 @@ func broadcastMessageSlot(msg *spectypes.SignedSSVMessage) (phase0.Slot, error) 
 	case spectypes.SSVConsensusMsgType:
 		qbftMsg := &specqbft.Message{}
 		if err := qbftMsg.Decode(msg.SSVMessage.Data); err != nil {
-			return 0, fmt.Errorf("failed to decode SignedMessage: %w", err)
+			return 0, fmt.Errorf("failed to decode qbft.Message: %w", err)
 		}
 		return phase0.Slot(qbftMsg.Height), nil
 	case spectypes.SSVPartialSignatureMsgType:
 		psMsg := &spectypes.PartialSignatureMessages{}
 		if err := psMsg.Decode(msg.SSVMessage.Data); err != nil {
-			return 0, fmt.Errorf("failed to decode SignedPartialSignatureMessage: %w", err)
+			return 0, fmt.Errorf("failed to decode PartialSignatureMessages: %w", err)
 		}
 		return psMsg.Slot, nil
 	default:
