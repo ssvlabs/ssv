@@ -12,6 +12,7 @@ import (
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"go.uber.org/zap"
 
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/network"
@@ -40,16 +41,36 @@ func (n *p2pNetwork) UseMessageRouter(router network.MessageRouter) {
 
 // Broadcast publishes the message to all peers in subnet
 func (n *p2pNetwork) Broadcast(msgID spectypes.MessageID, msg *spectypes.SignedSSVMessage) error {
-	decodedMsg, err := queue.DecodeSignedSSVMessage(msg)
-	if err != nil {
-		return fmt.Errorf("could not decode signed ssv message: %w", err)
-	}
-	msgSlot, err := decodedMsg.Slot()
+	msgSlot, err := broadcastMessageSlot(msg)
 	if err != nil {
 		return fmt.Errorf("could not resolve message slot: %w", err)
 	}
 
 	return n.BroadcastAtSlot(msg, msgSlot)
+}
+
+// broadcastMessageSlot resolves the slot of a message that's about to be broadcast, decoding only
+// the message body type actually sent over the wire (consensus or partial-signature), rather than
+// building a full queue.DecodedSSVMessage wrapper that Broadcast has no other use for.
+func broadcastMessageSlot(msg *spectypes.SignedSSVMessage) (phase0.Slot, error) {
+	switch msg.SSVMessage.MsgType {
+	case spectypes.SSVConsensusMsgType:
+		qbftMsg := &specqbft.Message{}
+		if err := qbftMsg.Decode(msg.SSVMessage.Data); err != nil {
+			return 0, fmt.Errorf("failed to decode qbft.Message: %w", err)
+		}
+		return phase0.Slot(qbftMsg.Height), nil
+	case spectypes.SSVPartialSignatureMsgType:
+		psMsg := &spectypes.PartialSignatureMessages{}
+		if err := psMsg.Decode(msg.SSVMessage.Data); err != nil {
+			return 0, fmt.Errorf("failed to decode PartialSignatureMessages: %w", err)
+		}
+		return psMsg.Slot, nil
+	default:
+		// Unlike queue.DecodeSignedSSVMessage, SSVEventMsgType lands here: event messages are
+		// internal loopback and never reach Broadcast.
+		return 0, queue.ErrUnknownMessageType
+	}
 }
 
 // BroadcastAtSlot behaves like Broadcast but takes the message's slot explicitly, so it can

@@ -6,6 +6,8 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
+
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 func TestBuildDutyID(t *testing.T) {
@@ -13,6 +15,20 @@ func TestBuildDutyID(t *testing.T) {
 
 	got := BuildDutyID(phase0.Epoch(3), phase0.Slot(100), spectypes.RoleCommittee, phase0.ValidatorIndex(42))
 	require.Equal(t, "COMMITTEE-e3-s100-v42", got)
+}
+
+func TestBuildDutyID_PreForkLegacyRoles(t *testing.T) {
+	t.Parallel()
+
+	// Pre-fork aggregator and sync committee contribution duties must render distinct,
+	// human-readable duty IDs rather than colliding on "UNDEFINED".
+	aggregatorID := BuildDutyID(phase0.Epoch(3), phase0.Slot(100), ssvtypes.RoleAggregator, phase0.ValidatorIndex(42))
+	require.Equal(t, "AGGREGATOR-e3-s100-v42", aggregatorID)
+
+	syncCommitteeContributionID := BuildDutyID(phase0.Epoch(3), phase0.Slot(100), ssvtypes.RoleSyncCommitteeContribution, phase0.ValidatorIndex(42))
+	require.Equal(t, "SYNC_COMMITTEE_CONTRIBUTION-e3-s100-v42", syncCommitteeContributionID)
+
+	require.NotEqual(t, aggregatorID, syncCommitteeContributionID)
 }
 
 func TestBuildCommitteeDutyID(t *testing.T) {

@@ -5,10 +5,12 @@ import (
 	"strings"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 func FormatRunnerRole(runnerRole spectypes.RunnerRole) string {
-	return strings.TrimSuffix(runnerRole.String(), "_RUNNER")
+	return strings.TrimSuffix(ssvtypes.RunnerRoleToString(runnerRole), "_RUNNER")
 }
 
 func FormatCommittee(operators []spectypes.OperatorID) string {

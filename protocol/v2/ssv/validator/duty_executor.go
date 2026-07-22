@@ -37,7 +37,7 @@ func (v *Validator) ExecuteDuty(ctx context.Context, logger *zap.Logger, duty *s
 	// a nil queue (same as queue_validator.go and timer.go).
 	q, ok := v.Queues[role]
 	if !ok {
-		return fmt.Errorf("no queue for role %s", role.String())
+		return fmt.Errorf("no queue for role %s", types.RunnerRoleToString(role))
 	}
 
 	if pushed := q.TryPush(dec); !pushed {

@@ -599,7 +599,9 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		slot := netCfg.FirstSlotAtEpoch(1)
 
 		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
-		signedSSVMessage.SSVMessage.Data = bytes.Repeat([]byte{1}, maxPayloadDataSize)
+		// This message is a consensus message, so its own type-specific size limit
+		// (maxEncodedConsensusMsgSize) applies before the generic maxPayloadDataSize check.
+		signedSSVMessage.SSVMessage.Data = bytes.Repeat([]byte{1}, maxEncodedConsensusMsgSize)
 
 		receivedAt := netCfg.SlotStartTime(slot)
 		topicID := commons.GetTopicFullName(commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0])
