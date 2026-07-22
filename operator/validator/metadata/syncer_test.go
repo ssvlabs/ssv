@@ -869,26 +869,29 @@ func TestSyncer_ShareInOwnSubnets_ForkAware(t *testing.T) {
 
 	t.Run("pre-fork matches only via the Alan mapping", func(t *testing.T) {
 		s := &Syncer{netCfg: preForkNetwork()}
-		require.True(t, s.shareInOwnSubnets(share, alanOnlySubnets), "Alan-subnet match should be selected pre-fork")
-		require.False(t, s.shareInOwnSubnets(share, booleOnlySubnets), "Boole-only match should not be selected pre-fork")
+		currentSlot := s.netCfg.EstimatedCurrentSlot()
+		require.True(t, s.shareInOwnSubnets(share, alanOnlySubnets, currentSlot), "Alan-subnet match should be selected pre-fork")
+		require.False(t, s.shareInOwnSubnets(share, booleOnlySubnets, currentSlot), "Boole-only match should not be selected pre-fork")
 	})
 
 	t.Run("post-fork matches only via the Boole mapping", func(t *testing.T) {
 		s := &Syncer{netCfg: postForkNetwork()}
-		require.True(t, s.shareInOwnSubnets(share, booleOnlySubnets), "Boole-subnet match should be selected post-fork")
-		require.False(t, s.shareInOwnSubnets(share, alanOnlySubnets), "Alan-only match should not be selected post-fork")
+		currentSlot := s.netCfg.EstimatedCurrentSlot()
+		require.True(t, s.shareInOwnSubnets(share, booleOnlySubnets, currentSlot), "Boole-subnet match should be selected post-fork")
+		require.False(t, s.shareInOwnSubnets(share, alanOnlySubnets, currentSlot), "Alan-only match should not be selected post-fork")
 	})
 
 	t.Run("in transition window matches via either mapping", func(t *testing.T) {
 		s := &Syncer{netCfg: inTransitionWindowNetwork()}
-		require.True(t, s.shareInOwnSubnets(share, alanOnlySubnets), "Alan-subnet match should be selected in the transition window")
-		require.True(t, s.shareInOwnSubnets(share, booleOnlySubnets), "Boole-subnet match should be selected in the transition window")
+		currentSlot := s.netCfg.EstimatedCurrentSlot()
+		require.True(t, s.shareInOwnSubnets(share, alanOnlySubnets, currentSlot), "Alan-subnet match should be selected in the transition window")
+		require.True(t, s.shareInOwnSubnets(share, booleOnlySubnets, currentSlot), "Boole-subnet match should be selected in the transition window")
 	})
 
 	t.Run("exporter's AllSubnets matches regardless of fork phase", func(t *testing.T) {
 		for _, netCfg := range []*networkconfig.Network{preForkNetwork(), postForkNetwork(), inTransitionWindowNetwork()} {
 			s := &Syncer{netCfg: netCfg}
-			require.True(t, s.shareInOwnSubnets(share, commons.AllSubnets))
+			require.True(t, s.shareInOwnSubnets(share, commons.AllSubnets, netCfg.EstimatedCurrentSlot()))
 		}
 	})
 }

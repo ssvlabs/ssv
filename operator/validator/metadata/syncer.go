@@ -105,11 +105,13 @@ func WithSyncInterval(interval time.Duration) Option {
 // and triggers a full metadata synchronization for them.
 // It returns a mapping of validator public keys to their updated metadata.
 func (s *Syncer) SyncAll(ctx context.Context) (beacon.ValidatorMetadataMap, error) {
-	ownSubnets := s.selfSubnets()
+	// Snapshot the slot once so subnet building and share filtering resolve to the same fork phase.
+	currentSlot := s.netCfg.EstimatedCurrentSlot()
+	ownSubnets := s.selfSubnets(currentSlot)
 
 	// Load non-liquidated shares.
 	shares := s.shareStorage.List(nil, registrystorage.ByNotLiquidated(), func(share *ssvtypes.SSVShare) bool {
-		return s.shareInOwnSubnets(share, ownSubnets)
+		return s.shareInOwnSubnets(share, ownSubnets, currentSlot)
 	})
 	if len(shares) == 0 {
 		s.logger.Info("could not find non-liquidated own subnets validator shares on initial metadata retrieval")
@@ -281,7 +283,9 @@ func (s *Syncer) syncNextBatch(ctx context.Context) (SyncBatch, bool, error) {
 // It prioritizes shares whose metadata was never fetched or became stale based on BeaconMetadataLastUpdated.
 func (s *Syncer) nextBatchFromDB(_ context.Context) beacon.ValidatorMetadataMap {
 	// TODO: use context, return if it's done
-	ownSubnets := s.selfSubnets()
+	// Snapshot the slot once so subnet building and share filtering resolve to the same fork phase.
+	currentSlot := s.netCfg.EstimatedCurrentSlot()
+	ownSubnets := s.selfSubnets(currentSlot)
 
 	var staleShares, newShares []*ssvtypes.SSVShare
 	s.shareStorage.Range(nil, func(share *ssvtypes.SSVShare) bool {
@@ -289,7 +293,7 @@ func (s *Syncer) nextBatchFromDB(_ context.Context) beacon.ValidatorMetadataMap 
 			return true
 		}
 
-		if !s.shareInOwnSubnets(share, ownSubnets) {
+		if !s.shareInOwnSubnets(share, ownSubnets, currentSlot) {
 			return true
 		}
 
@@ -329,18 +333,20 @@ func (s *Syncer) sleep(ctx context.Context, d time.Duration) (slept bool) {
 }
 
 // selfSubnets calculates the operator's subnets by adding up the fixed subnets and the active committees
-func (s *Syncer) selfSubnets() networkcommons.Subnets {
+func (s *Syncer) selfSubnets(currentSlot phase0.Slot) networkcommons.Subnets {
 	// Start off with a copy of the fixed subnets (e.g., exporter subscribed to all subnets).
 	mySubnets := s.fixedSubnets
-	currentSlot := s.netCfg.EstimatedCurrentSlot()
+	// The fork phase is invariant for the given slot, so decide it once before the loop.
+	inTransitionWindow := s.netCfg.InBooleTransitionWindow(currentSlot)
+	postBooleFork := s.netCfg.BooleForkAtSlot(currentSlot)
 	// Compute the new subnets according to the active committees/validators.
 	myValidators := s.validatorStore.SelfValidators()
 	for _, v := range myValidators {
 		switch {
-		case s.netCfg.InBooleTransitionWindow(currentSlot):
+		case inTransitionWindow:
 			mySubnets.Set(v.AlanCommitteeSubnet())
 			mySubnets.Set(v.BooleCommitteeSubnet())
-		case s.netCfg.BooleForkAtSlot(currentSlot):
+		case postBooleFork:
 			mySubnets.Set(v.BooleCommitteeSubnet())
 		default:
 			mySubnets.Set(v.AlanCommitteeSubnet())
@@ -350,8 +356,9 @@ func (s *Syncer) selfSubnets() networkcommons.Subnets {
 	return mySubnets
 }
 
-func (s *Syncer) shareInOwnSubnets(share *ssvtypes.SSVShare, ownSubnets networkcommons.Subnets) bool {
-	currentSlot := s.netCfg.EstimatedCurrentSlot()
+// shareInOwnSubnets reports whether the share belongs to ownSubnets. currentSlot must be the same
+// slot ownSubnets was built from, so both sides resolve to the same fork phase.
+func (s *Syncer) shareInOwnSubnets(share *ssvtypes.SSVShare, ownSubnets networkcommons.Subnets, currentSlot phase0.Slot) bool {
 	switch {
 	case s.netCfg.InBooleTransitionWindow(currentSlot):
 		return ownSubnets.IsSet(share.AlanCommitteeSubnet()) || ownSubnets.IsSet(share.BooleCommitteeSubnet())
