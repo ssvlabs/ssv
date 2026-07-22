@@ -46,10 +46,6 @@ func SubnetTopicID(subnet uint64) string {
 	return fmt.Sprintf("%d", subnet)
 }
 
-func CommitteeTopicID(cid spectypes.CommitteeID) []string {
-	return []string{fmt.Sprintf("%d", AlanCommitteeSubnet(cid))}
-}
-
 // GetTopicFullName returns the topic full name, including prefix (Alan-side naming).
 func GetTopicFullName(baseName string) string {
 	return fmt.Sprintf("%s.%s", topicPrefix, baseName)

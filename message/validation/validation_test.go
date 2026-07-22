@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"maps"
 	"math"
+	mathrand "math/rand"
 	"slices"
 	"testing"
 	"time"
@@ -197,6 +198,42 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		alanTopic := commons.GetTopicFullName(commons.CommitteeTopicID(committeeID)[0])
 		receivedAt := postBooleCfg.SlotStartTime(slot)
 		_, err = validator.handleSignedSSVMessage(context.Background(), signedSSVMessage, alanTopic, peerID, receivedAt)
+		require.ErrorIs(t, err, ErrIncorrectTopic)
+	})
+
+	t.Run("committee consensus rejected on wrong-subnet boole topic post-fork", func(t *testing.T) {
+		validator := New(postBooleCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
+
+		slot := postBooleCfg.FirstSlotAtEpoch(1)
+		booleIdentifier := spectypes.NewMsgID(postBooleCfg.DomainTypeAtSlot(slot), encodedCommitteeID, committeeRole)
+		signedSSVMessage := buildBooleProposal(postBooleCfg, ks, committee, booleIdentifier, slot)
+
+		committeeInfo, err := validator.getCommitteeAndValidatorIndices(signedSSVMessage.SSVMessage.GetID())
+		require.NoError(t, err)
+
+		// Same fork's topic scheme (Boole), but the wrong subnet number: must still be rejected.
+		wrongSubnet := (committeeInfo.subnet + 1) % commons.SubnetsCount
+		wrongSubnetTopic := commons.BooleTopic(postBooleCfg.SSV.Name, wrongSubnet)
+
+		receivedAt := postBooleCfg.SlotStartTime(slot)
+		_, err = validator.handleSignedSSVMessage(context.Background(), signedSSVMessage, wrongSubnetTopic, peerID, receivedAt)
+		require.ErrorIs(t, err, ErrIncorrectTopic)
+	})
+
+	t.Run("committee consensus rejected on boole topic pre-fork", func(t *testing.T) {
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
+
+		slot := netCfg.FirstSlotAtEpoch(1) // pre-fork (default TestNetwork Boole=MaxUint64)
+		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
+
+		committeeInfo, err := validator.getCommitteeAndValidatorIndices(signedSSVMessage.SSVMessage.GetID())
+		require.NoError(t, err)
+
+		// A Boole-fork topic on a pre-fork slot must be rejected, even though it's a
+		// well-formed topic for this same committee (just for the wrong fork).
+		booleTopic := commons.BooleTopic(netCfg.SSV.Name, committeeInfo.subnet)
+		receivedAt := netCfg.SlotStartTime(slot)
+		_, err = validator.handleSignedSSVMessage(context.Background(), signedSSVMessage, booleTopic, peerID, receivedAt)
 		require.ErrorIs(t, err, ErrIncorrectTopic)
 	})
 
@@ -716,6 +753,88 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		receivedAt := postBooleCfg.SlotStartTime(slot)
 		_, err = validator.handleSignedSSVMessage(context.Background(), signedSSVMessage, booleTopic, peerID, receivedAt)
 		require.ErrorIs(t, err, ErrInvalidRole)
+	})
+
+	// The non-committee (per-validator) path also now takes share.BooleCommitteeSubnet()/
+	// AlanCommitteeSubnet() for its CommitteeInfo (see getCommitteeAndValidatorIndices), so it
+	// needs the same topic-quadrant coverage as the committee-role path above. RoleProposer is
+	// used because it's valid at any slot pre- and post-fork (validRoleAtSlot), unlike
+	// RoleAggregator/RoleSyncCommitteeContribution which are pre-fork only.
+	t.Run("non-committee role accepted on boole topic post-fork", func(t *testing.T) {
+		slot := postBooleCfg.FirstSlotAtEpoch(1)
+		epoch := postBooleCfg.EstimatedEpochAtSlot(slot)
+
+		// RoleProposer requires a registered proposer duty (validateBeaconDuty), unlike the
+		// committee-role subtests above.
+		ds := dutystore.New()
+		ds.Proposer.Set(epoch, []dutystore.StoreDuty[eth2apiv1.ProposerDuty]{
+			{Slot: slot, ValidatorIndex: shares.active.ValidatorIndex, Duty: &eth2apiv1.ProposerDuty{}, InCommittee: true},
+		})
+		validator := New(postBooleCfg, validatorStore, operators, ds, signatureVerifier).(*messageValidator)
+
+		proposerIdentifier := spectypes.NewMsgID(postBooleCfg.DomainTypeAtSlot(slot), shares.active.ValidatorPubKey[:], spectypes.RoleProposer)
+		signedSSVMessage := buildBooleProposal(postBooleCfg, ks, committee, proposerIdentifier, slot)
+
+		committeeInfo, err := validator.getCommitteeAndValidatorIndices(signedSSVMessage.SSVMessage.GetID())
+		require.NoError(t, err)
+		booleTopic := expectedCommitteeTopic(postBooleCfg, committeeInfo, slot)
+
+		receivedAt := postBooleCfg.SlotStartTime(slot)
+		_, err = validator.handleSignedSSVMessage(context.Background(), signedSSVMessage, booleTopic, peerID, receivedAt)
+		require.NoError(t, err)
+	})
+
+	t.Run("non-committee role rejected on alan topic post-fork", func(t *testing.T) {
+		validator := New(postBooleCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
+
+		slot := postBooleCfg.FirstSlotAtEpoch(1)
+		proposerIdentifier := spectypes.NewMsgID(postBooleCfg.DomainTypeAtSlot(slot), shares.active.ValidatorPubKey[:], spectypes.RoleProposer)
+		signedSSVMessage := buildBooleProposal(postBooleCfg, ks, committee, proposerIdentifier, slot)
+
+		alanTopic := commons.GetTopicFullName(commons.CommitteeTopicID(committeeID)[0])
+		receivedAt := postBooleCfg.SlotStartTime(slot)
+		_, err = validator.handleSignedSSVMessage(context.Background(), signedSSVMessage, alanTopic, peerID, receivedAt)
+		require.ErrorIs(t, err, ErrIncorrectTopic)
+	})
+
+	t.Run("non-committee role accepted on alan topic pre-fork", func(t *testing.T) {
+		slot := netCfg.FirstSlotAtEpoch(1)
+		epoch := netCfg.EstimatedEpochAtSlot(slot)
+
+		// RoleProposer requires a registered proposer duty (validateBeaconDuty), unlike the
+		// committee-role subtests above.
+		ds := dutystore.New()
+		ds.Proposer.Set(epoch, []dutystore.StoreDuty[eth2apiv1.ProposerDuty]{
+			{Slot: slot, ValidatorIndex: shares.active.ValidatorIndex, Duty: &eth2apiv1.ProposerDuty{}, InCommittee: true},
+		})
+		validator := New(netCfg, validatorStore, operators, ds, signatureVerifier).(*messageValidator)
+
+		proposerIdentifier := spectypes.NewMsgID(netCfg.DomainType, shares.active.ValidatorPubKey[:], spectypes.RoleProposer)
+		signedSSVMessage := generateSignedMessage(ks, proposerIdentifier, slot)
+
+		committeeInfo, err := validator.getCommitteeAndValidatorIndices(signedSSVMessage.SSVMessage.GetID())
+		require.NoError(t, err)
+		alanTopic := expectedCommitteeTopic(netCfg, committeeInfo, slot)
+
+		receivedAt := netCfg.SlotStartTime(slot)
+		_, err = validator.handleSignedSSVMessage(context.Background(), signedSSVMessage, alanTopic, peerID, receivedAt)
+		require.NoError(t, err)
+	})
+
+	t.Run("non-committee role rejected on boole topic pre-fork", func(t *testing.T) {
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
+
+		slot := netCfg.FirstSlotAtEpoch(1)
+		proposerIdentifier := spectypes.NewMsgID(netCfg.DomainType, shares.active.ValidatorPubKey[:], spectypes.RoleProposer)
+		signedSSVMessage := generateSignedMessage(ks, proposerIdentifier, slot)
+
+		committeeInfo, err := validator.getCommitteeAndValidatorIndices(signedSSVMessage.SSVMessage.GetID())
+		require.NoError(t, err)
+		booleTopic := commons.BooleTopic(netCfg.SSV.Name, committeeInfo.subnet)
+
+		receivedAt := netCfg.SlotStartTime(slot)
+		_, err = validator.handleSignedSSVMessage(context.Background(), signedSSVMessage, booleTopic, peerID, receivedAt)
+		require.ErrorIs(t, err, ErrIncorrectTopic)
 	})
 
 	// Perform validator registration or voluntary exit with a consensus type message will give an error
@@ -2332,6 +2451,227 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	})
 }
 
+// Test_DegenerateCommittee_NeverReachesTopicValidation exercises the case where a committee has
+// no operators (commons.BooleCommitteeSubnet/AlanCommitteeSubnet would return UnknownSubnetId /
+// subnet(0) for it - see registry/storage.Committee.BooleCommitteeSubnet). We check whether such
+// a value can reach validateTopicAtSlot through the real entry point (handleSignedSSVMessage).
+//
+// It cannot: validateSignedSSVMessage rejects any message with zero signers (ErrNoSigners) before
+// getCommitteeAndValidatorIndices/validateTopicAtSlot ever run, and any message with at least one
+// signer is rejected by belongsToCommittee (ErrSignerNotInCommittee) - slices.Contains against an
+// empty committee is always false - which also runs strictly before validateTopicAtSlot. So a
+// degenerate empty-operator committee can never reach the topic check, let alone be accepted on
+// the "unknown" sentinel topic string. This test proves that guard holds through the real
+// pipeline, rather than asserting it only against the private helper in isolation.
+func Test_DegenerateCommittee_NeverReachesTopicValidation(t *testing.T) {
+	ctrl := gomock.NewController(t)
+
+	logger := zaptest.NewLogger(t)
+	db, err := kv.NewInMemory(logger, basedb.Options{})
+	require.NoError(t, err)
+
+	ns, err := storage.NewNodeStorage(networkconfig.TestNetwork.Beacon, logger, db)
+	require.NoError(t, err)
+
+	preBooleSSV := *networkconfig.TestNetwork.SSV
+	preBooleSSV.Forks = networkconfig.SSVForks{Boole: phase0.Epoch(math.MaxUint64)}
+	netCfg := &networkconfig.Network{Beacon: networkconfig.TestNetwork.Beacon, SSV: &preBooleSSV}
+
+	ks := spectestingutils.Testing4SharesSet()
+	_ = generateShares(t, ks, ns, netCfg)
+
+	dutyStore := dutystore.New()
+	validatorStore := mocks.NewMockValidatorStore(ctrl)
+	operators := mocks.NewMockOperators(ctrl)
+
+	degenerateCommitteeID := spectypes.CommitteeID{0xDE, 0xAD, 0xBE, 0xEF}
+
+	validatorStore.EXPECT().Committee(gomock.Any()).DoAndReturn(func(id spectypes.CommitteeID) (*registrystorage.Committee, bool) {
+		if id == degenerateCommitteeID {
+			// Operators deliberately empty, Indices deliberately non-empty: this is the only way
+			// to get past the `len(committee.Indices) == 0` guard in getCommitteeAndValidatorIndices
+			// while still carrying an empty committee (a well-behaved store never produces this;
+			// buildCommittee always populates Operators from the same shares as Indices).
+			return &registrystorage.Committee{
+				ID:        degenerateCommitteeID,
+				Operators: nil,
+				Indices:   []phase0.ValidatorIndex{1},
+			}, true
+		}
+		return nil, false
+	}).AnyTimes()
+
+	operators.EXPECT().OperatorsExist(gomock.Any(), gomock.Any()).Return(true, nil).AnyTimes()
+
+	signatureVerifier := signatureverifier.NewMockSignatureVerifier(ctrl)
+	signatureVerifier.EXPECT().VerifySignature(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+
+	peerID, err := libp2ptest.RandPeerID()
+	require.NoError(t, err)
+
+	validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
+
+	slot := netCfg.FirstSlotAtEpoch(1)
+	encodedDegenerateCommitteeID := append(bytes.Repeat([]byte{0}, 16), degenerateCommitteeID[:]...)
+	degenerateIdentifier := spectypes.NewMsgID(netCfg.DomainType, encodedDegenerateCommitteeID, spectypes.RoleCommittee)
+
+	// Confirm the store lookup itself succeeds (committee "exists"), so we know the rejection
+	// below comes from belongsToCommittee, not from ErrNonExistentCommitteeID.
+	committeeInfo, err := validator.getCommitteeAndValidatorIndices(degenerateIdentifier)
+	require.NoError(t, err)
+	require.Empty(t, committeeInfo.committee)
+	require.Equal(t, uint64(commons.UnknownSubnetId), committeeInfo.subnet)
+
+	signedSSVMessage := generateSignedMessage(ks, degenerateIdentifier, slot)
+	receivedAt := netCfg.SlotStartTime(slot)
+
+	// Try every candidate topic we can think of, including the literal "unknown" sentinel
+	// (commons.UnknownSubnet) that BooleTopic emits for UnknownSubnetId: none must ever be
+	// accepted, and the rejection must come from the signer/committee guard, never a false
+	// "accept" via an unknown-subnet topic string match.
+	candidateTopics := []string{
+		commons.BooleTopic(netCfg.SSV.Name, commons.UnknownSubnetId),
+		commons.GetTopicFullName(commons.SubnetTopicID(commons.AlanCommitteeSubnet(degenerateCommitteeID))),
+		"incorrect",
+	}
+	for _, topic := range candidateTopics {
+		_, err = validator.handleSignedSSVMessage(context.Background(), signedSSVMessage, topic, peerID, receivedAt)
+		require.ErrorIs(t, err, ErrSignerNotInCommittee)
+	}
+}
+
+// Test_ForkBoundary_TopicParity confirms that at the exact Boole activation epoch boundary -
+// not deep pre/post fork like the Test_ValidateSSVMessage subtests above, but the last pre-fork
+// slot and the first post-fork slot - validateTopicAtSlot's choice of topic (reached through the
+// real entry point) matches BroadcastAtSlot's choice for the same slot. Both call the same
+// mv.netCfg.BooleForkAtSlot(slot)/n.cfg.NetworkConfig.BooleForkAtSlot(slot) boundary function, so
+// this also guards against a future change that makes one side use a different boundary (e.g.
+// InBooleTransitionWindow) while the other keeps the exact-epoch cutoff.
+func Test_ForkBoundary_TopicParity(t *testing.T) {
+	ctrl := gomock.NewController(t)
+
+	logger := zaptest.NewLogger(t)
+	db, err := kv.NewInMemory(logger, basedb.Options{})
+	require.NoError(t, err)
+
+	ns, err := storage.NewNodeStorage(networkconfig.TestNetwork.Beacon, logger, db)
+	require.NoError(t, err)
+
+	// Boole activates one epoch from now, so FirstSlotAtEpoch(boole-1) is the last pre-fork
+	// slot and FirstSlotAtEpoch(boole) is the first post-fork slot - the boundary window.
+	boundarySSV := *networkconfig.TestNetwork.SSV
+	baseEpoch := networkconfig.TestNetwork.EstimatedCurrentEpoch()
+	booleEpoch := baseEpoch + 1
+	boundarySSV.Forks = networkconfig.SSVForks{Boole: booleEpoch}
+	netCfg := &networkconfig.Network{Beacon: networkconfig.TestNetwork.Beacon, SSV: &boundarySSV}
+
+	ks := spectestingutils.Testing4SharesSet()
+	shares := generateShares(t, ks, ns, netCfg)
+
+	dutyStore := dutystore.New()
+	validatorStore := mocks.NewMockValidatorStore(ctrl)
+	operators := mocks.NewMockOperators(ctrl)
+	operators.EXPECT().OperatorsExist(gomock.Any(), gomock.Any()).Return(true, nil).AnyTimes()
+
+	committee := slices.Collect(maps.Keys(ks.Shares))
+	slices.Sort(committee)
+	committeeID := shares.active.CommitteeID()
+	encodedCommitteeID := append(bytes.Repeat([]byte{0}, 16), committeeID[:]...)
+
+	validatorStore.EXPECT().Committee(gomock.Any()).DoAndReturn(func(id spectypes.CommitteeID) (*registrystorage.Committee, bool) {
+		if id == committeeID {
+			return &registrystorage.Committee{
+				ID:        id,
+				Operators: committee,
+				Shares:    []*ssvtypes.SSVShare{shares.active},
+				Indices:   []phase0.ValidatorIndex{shares.active.ValidatorIndex},
+			}, true
+		}
+		return nil, false
+	}).AnyTimes()
+
+	signatureVerifier := signatureverifier.NewMockSignatureVerifier(ctrl)
+	signatureVerifier.EXPECT().VerifySignature(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+
+	peerID, err := libp2ptest.RandPeerID()
+	require.NoError(t, err)
+
+	validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
+
+	lastPreForkSlot := netCfg.FirstSlotAtEpoch(booleEpoch - 1)
+	firstPostForkSlot := netCfg.FirstSlotAtEpoch(booleEpoch)
+
+	require.False(t, netCfg.BooleForkAtSlot(lastPreForkSlot), "test setup: expected last slot before Boole epoch to be pre-fork")
+	require.True(t, netCfg.BooleForkAtSlot(firstPostForkSlot), "test setup: expected first slot at Boole epoch to be post-fork")
+
+	t.Run("last pre-fork slot accepts alan topic and rejects boole topic", func(t *testing.T) {
+		slot := lastPreForkSlot
+		identifier := spectypes.NewMsgID(netCfg.DomainTypeAtSlot(slot), encodedCommitteeID, spectypes.RoleCommittee)
+		// generateSignedMessage hardcodes operator 1 as signer, which is only the leader at
+		// heights where height%len(committee)==0. lastPreForkSlot depends on the wall-clock
+		// current epoch (test setup above), so we must compute the real leader instead of
+		// assuming operator 1, or this would flake depending on when the test runs.
+		signedSSVMessage := buildProposalWithRealLeader(netCfg, ks, committee, identifier, slot)
+		receivedAt := netCfg.SlotStartTime(slot)
+
+		committeeInfo, err := validator.getCommitteeAndValidatorIndices(identifier)
+		require.NoError(t, err)
+
+		alanTopic := expectedCommitteeTopic(netCfg, committeeInfo, slot)
+		_, err = validator.handleSignedSSVMessage(context.Background(), signedSSVMessage, alanTopic, peerID, receivedAt)
+		require.NoError(t, err)
+
+		booleTopic := commons.BooleTopic(netCfg.SSV.Name, committeeInfo.subnet)
+		_, err = validator.handleSignedSSVMessage(context.Background(), signedSSVMessage, booleTopic, peerID, receivedAt)
+		require.ErrorIs(t, err, ErrIncorrectTopic)
+	})
+
+	t.Run("first post-fork slot accepts boole topic and rejects alan topic", func(t *testing.T) {
+		slot := firstPostForkSlot
+		identifier := spectypes.NewMsgID(netCfg.DomainTypeAtSlot(slot), encodedCommitteeID, spectypes.RoleCommittee)
+		signedSSVMessage := buildBooleProposal(netCfg, ks, committee, identifier, slot)
+		receivedAt := netCfg.SlotStartTime(slot)
+
+		committeeInfo, err := validator.getCommitteeAndValidatorIndices(identifier)
+		require.NoError(t, err)
+
+		booleTopic := expectedCommitteeTopic(netCfg, committeeInfo, slot)
+		_, err = validator.handleSignedSSVMessage(context.Background(), signedSSVMessage, booleTopic, peerID, receivedAt)
+		require.NoError(t, err)
+
+		alanTopic := commons.GetTopicFullName(commons.CommitteeTopicID(committeeID)[0])
+		_, err = validator.handleSignedSSVMessage(context.Background(), signedSSVMessage, alanTopic, peerID, receivedAt)
+		require.ErrorIs(t, err, ErrIncorrectTopic)
+	})
+}
+
+// Test_CommitteeInfoSubnets is the cross-check that CommitteeInfo.subnet/subnetAlan (whatever
+// value they were constructed with) equal what commons.* independently computes for the same
+// committee, for many random committees. It never reads the value back from any cache: the
+// expected side is recomputed from scratch via commons.BooleCommitteeSubnet/AlanCommitteeSubnet.
+func Test_CommitteeInfoSubnets(t *testing.T) {
+	rnd := mathrand.New(mathrand.NewSource(1)) //nolint:gosec
+
+	for i := 0; i < 200; i++ {
+		operators := make([]spectypes.OperatorID, 1+rnd.Intn(12))
+		for j := range operators {
+			operators[j] = rnd.Uint64()
+		}
+
+		var committeeID spectypes.CommitteeID
+		_, err := rnd.Read(committeeID[:])
+		require.NoError(t, err)
+
+		booleSubnet := commons.BooleCommitteeSubnet(operators)
+		alanSubnet := commons.AlanCommitteeSubnet(committeeID)
+
+		info := newCommitteeInfo(committeeID, operators, nil, booleSubnet, alanSubnet)
+
+		require.Equal(t, commons.BooleCommitteeSubnet(operators), info.subnet)
+		require.Equal(t, commons.AlanCommitteeSubnet(committeeID), info.subnetAlan)
+	}
+}
+
 // Deep copy helper function for testing purposes only
 func cloneSSVShare(t *testing.T, original *ssvtypes.SSVShare) *ssvtypes.SSVShare {
 	// json encode original
@@ -2542,6 +2882,33 @@ func buildBooleProposal(
 		PrepareJustification:     [][]byte{},
 	}
 	leader := qbft.RoundRobinProposer(specqbft.Height(slot), specqbft.FirstRound, committee, netCfg)
+	signedSSVMessage := spectestingutils.SignQBFTMsg(ks.OperatorKeys[leader], leader, qbftMessage)
+	signedSSVMessage.FullData = spectestingutils.TestingQBFTFullData
+	return signedSSVMessage
+}
+
+// buildProposalWithRealLeader is like buildBooleProposal but fork-agnostic: it resolves the
+// leader via qbft.Proposer, which itself dispatches on netCfg.BooleForkAtSlot(slot), so it is
+// safe to use both pre- and post-fork. Unlike generateSignedMessage (which hardcodes operator 1
+// as signer), this must be used whenever the height isn't guaranteed to put operator 1 in the
+// leader seat - e.g. at a slot derived from the wall-clock current epoch.
+func buildProposalWithRealLeader(
+	netCfg *networkconfig.Network,
+	ks *spectestingutils.TestKeySet,
+	committee []spectypes.OperatorID,
+	msgID spectypes.MessageID,
+	slot phase0.Slot,
+) *spectypes.SignedSSVMessage {
+	qbftMessage := &specqbft.Message{
+		MsgType:                  specqbft.ProposalMsgType,
+		Height:                   specqbft.Height(slot),
+		Round:                    specqbft.FirstRound,
+		Identifier:               msgID[:],
+		Root:                     sha256.Sum256(spectestingutils.TestingQBFTFullData),
+		RoundChangeJustification: [][]byte{},
+		PrepareJustification:     [][]byte{},
+	}
+	leader := qbft.Proposer(specqbft.Height(slot), specqbft.FirstRound, committee, netCfg)
 	signedSSVMessage := spectestingutils.SignQBFTMsg(ks.OperatorKeys[leader], leader, qbftMessage)
 	signedSSVMessage.FullData = spectestingutils.TestingQBFTFullData
 	return signedSSVMessage

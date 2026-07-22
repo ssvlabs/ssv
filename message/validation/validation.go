@@ -258,11 +258,11 @@ func (mv *messageValidator) validateDomainAllowlist(msgID spectypes.MessageID) e
 func (mv *messageValidator) validateTopicAtSlot(committeeInfo CommitteeInfo, topic string, slot phase0.Slot) error {
 	var expectedTopic string
 	if mv.netCfg.BooleForkAtSlot(slot) {
-		expectedTopic = commons.BooleTopic(mv.netCfg.SSV.Name, commons.BooleCommitteeSubnet(committeeInfo.committee))
+		expectedTopic = commons.BooleTopic(mv.netCfg.SSV.Name, committeeInfo.subnet)
 	} else {
-		// CommitteeTopicID(cid)[0] == SubnetTopicID(AlanCommitteeSubnet(cid)), which is what
+		// SubnetTopicID(committeeInfo.subnetAlan) == CommitteeTopicID(cid)[0], which is what
 		// BroadcastAtSlot publishes on the Alan side, so the full names byte-match.
-		expectedTopic = commons.GetTopicFullName(commons.CommitteeTopicID(committeeInfo.committeeID)[0])
+		expectedTopic = commons.GetTopicFullName(commons.SubnetTopicID(committeeInfo.subnetAlan))
 	}
 
 	// Rule: Check if message was sent in the correct topic
@@ -331,7 +331,7 @@ func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.Mess
 			return CommitteeInfo{}, ErrNoValidators
 		}
 
-		return newCommitteeInfo(committeeID, committee.Operators, committee.Indices), nil
+		return newCommitteeInfo(committeeID, committee.Operators, committee.Indices, committee.BooleCommitteeSubnet(), committee.AlanCommitteeSubnet()), nil
 	}
 
 	share, exists := mv.validatorStore.Validator(msgID.GetDutyExecutorID())
@@ -363,7 +363,7 @@ func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.Mess
 	}
 
 	indices := []phase0.ValidatorIndex{share.ValidatorIndex}
-	return newCommitteeInfo(share.CommitteeID(), operators, indices), nil
+	return newCommitteeInfo(share.CommitteeID(), operators, indices, share.BooleCommitteeSubnet(), share.AlanCommitteeSubnet()), nil
 }
 
 func (mv *messageValidator) validatorState(key spectypes.MessageID, committeeInfo CommitteeInfo) *ValidatorState {

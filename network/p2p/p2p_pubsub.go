@@ -77,7 +77,7 @@ func (n *p2pNetwork) BroadcastAtSlot(msg *spectypes.SignedSSVMessage, slot phase
 			if !exists {
 				return fmt.Errorf("could not find share for committee %s", hex.EncodeToString(msg.SSVMessage.MsgID.GetDutyExecutorID()))
 			}
-			topic = commons.BooleTopic(n.cfg.NetworkConfig.SSV.Name, val.BooleSubnet)
+			topic = commons.BooleTopic(n.cfg.NetworkConfig.SSV.Name, val.BooleCommitteeSubnet())
 		} else {
 			topic = commons.GetTopicFullName(commons.SubnetTopicID(commons.AlanCommitteeSubnet(committeeID)))
 		}
