@@ -61,7 +61,7 @@ func (b *syncCommitteeContributionPreConsensusCaptureBeacon) GetSyncCommitteeCon
 // non-deterministic map iteration in basePreConsensusMsgProcessing happens to already come out
 // sorted (1/4! per draw instead of 1/3!), which matters because the test below also re-drives the
 // quorum across several fresh runners to make an accidental false-negative in the mutation check
-// (see TestSyncCommitteeAggregatorProcessPreConsensusSortsSubnetsForBeaconCall) vanishingly unlikely.
+// vanishingly unlikely.
 var syncCommitteeContributionValidatorSyncCommitteeIndices = []spectypes.ValidatorSyncCommitteeIndex{0, 128, 256, 384}
 
 // TestSyncCommitteeAggregatorProcessPreConsensusSortsSubnetsForBeaconCall is the runner-flow-level
