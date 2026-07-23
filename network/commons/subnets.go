@@ -115,12 +115,6 @@ func BooleCommitteeSubnet(committee []spectypes.OperatorID) uint64 {
 	return result.Uint64()
 }
 
-// SetCommitteeSubnet returns the subnet for the given committee, it doesn't allocate memory but uses the passed in big.Int
-func SetCommitteeSubnet(bigInt *big.Int, cid spectypes.CommitteeID) {
-	bigInt.SetBytes(cid[:])
-	bigInt.Mod(bigInt, bigIntSubnetsCount)
-}
-
 // Topics returns the topic whitelist for the given network's fork state: Alan+Boole before the
 // fork (so a node started pre-fork can accept Boole subscriptions once the transition window
 // opens, without a pubsub rebuild), Boole-only after.

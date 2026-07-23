@@ -42,12 +42,12 @@ func TestAlanCommitteeSubnet(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		// Get result from AlanCommitteeSubnet
-		expected := AlanCommitteeSubnet(cid)
+		actual := AlanCommitteeSubnet(cid)
 
-		// Get result from SetCommitteeSubnet
-		SetCommitteeSubnet(bigInst, cid)
-		actual := bigInst.Uint64()
+		// Cross-check against the reference big.Int math the memoized accessor must match.
+		bigInst.SetBytes(cid[:])
+		bigInst.Mod(bigInst, bigIntSubnetsCount)
+		expected := bigInst.Uint64()
 
 		require.Equal(t, expected, actual)
 	}
