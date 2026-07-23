@@ -23,14 +23,24 @@ func (n Network) String() string {
 	return string(jsonBytes)
 }
 
-const alanForkName = "alan"
+// storageCompatToken is the suffix baked into StorageName. It is an opaque
+// storage-compatibility token, not a statement of the network's current fork:
+// changing it makes every existing node fail startup with a config-lock mismatch
+// until the DB is removed. A change to the stored data layout is normally handled
+// by a migration instead — migrations run before the config-lock check and upgrade
+// data in place with this token untouched (e.g. the gob→ssz share re-encoding).
+// Bump the token only as the escape hatch for when old data is unrecoverable and
+// a deliberate, coordinated network-wide resync is intended. The Boole fork keeps
+// the schema dual-fork-aware on the same DB, so the historical "alan" value stays.
+const storageCompatToken = "alan"
+
 const boolePriorWindowEpochs = phase0.Epoch(1)    // epochs before Boole to subscribe to both topic sets
 const booleSubsequentWindowSlots = phase0.Slot(1) // slots after Boole to keep accepting old-topic messages
 
 // StorageName returns a config name used to make sure the stored network doesn't differ.
-// It combines the network name with fork name.
+// It combines the network name with the storage-compatibility token.
 func (n Network) StorageName() string {
-	return fmt.Sprintf("%s:%s", n.SSV.Name, alanForkName) // TODO: decide what forks change DB fork name
+	return fmt.Sprintf("%s:%s", n.SSV.Name, storageCompatToken)
 }
 
 func (n Network) DomainTypeAtSlot(slot phase0.Slot) spectypes.DomainType {
