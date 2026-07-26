@@ -22,6 +22,7 @@ import (
 // a duty that concluded successfully.
 func TestBaseRunner_watchDutyOutcome(t *testing.T) {
 	const deadlineSnippet = "did not complete before slot end"
+	const noQuorumSnippet = "did not reach signature quorum before slot end"
 	const failedSnippet = "duty failed"
 
 	// Genesis is set to now so the watcher starts at the beginning of slot 0 and its deadline
@@ -65,6 +66,35 @@ func TestBaseRunner_watchDutyOutcome(t *testing.T) {
 		require.Eventually(t, func() bool {
 			return logs.FilterMessageSnippet(deadlineSnippet).Len() == 1
 		}, time.Second, 5*time.Millisecond, "expected the stuck warning at the proposal slot's start")
+	})
+
+	t.Run("PTC: an unconcluded duty is reported as a quorum miss, not a generic stall", func(t *testing.T) {
+		core, logs := observer.New(zapcore.WarnLevel)
+		b := newRunner()
+		b.RunnerRoleType = spectypes.RolePTCAttester
+
+		b.watchDutyOutcome(context.Background(), zap.New(core))
+
+		// §3 has no consensus phase and marks every other terminal path, so reaching the deadline
+		// unmarked can only mean the honest-convergence quorum never formed.
+		require.Eventually(t, func() bool {
+			return logs.FilterMessageSnippet(noQuorumSnippet).Len() == 1
+		}, time.Second, 5*time.Millisecond, "expected the quorum-miss warning")
+		require.Zero(t, logs.FilterMessageSnippet(deadlineSnippet).Len(), "PTC must not fall back to the generic stuck warning")
+	})
+
+	t.Run("PTC: a concluded duty is reported on its own terms", func(t *testing.T) {
+		core, logs := observer.New(zapcore.WarnLevel)
+		b := newRunner()
+		b.RunnerRoleType = spectypes.RolePTCAttester
+
+		// The deadline reclassification must not leak into duties that did conclude — an abstention
+		// (markDutyNotRequired) stays silent rather than being counted as a convergence failure.
+		b.watchDutyOutcome(context.Background(), zap.New(core))
+		b.dutyConcluded <- dutyConclusion{outcome: dutyOutcomeNotRequired}
+
+		time.Sleep(100 * time.Millisecond) // well past the slot end
+		require.Zero(t, logs.Len(), "an abstaining PTC duty must not warn")
 	})
 
 	t.Run("warns when the duty fails before slot end", func(t *testing.T) {
