@@ -3,7 +3,6 @@ package goclient
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 
@@ -74,8 +73,7 @@ func submitProposerPreferences(ctx context.Context, httpClient *http.Client, add
 	}
 	headers := map[string]string{"Eth-Consensus-Version": consensusVersionGloas}
 	err = ptcDo(ctx, httpClient, http.MethodPost, addr+proposerPreferencesPath, body, headers, nil)
-	var statusErr *httpStatusError
-	if errors.As(err, &statusErr) && statusErr.status == http.StatusNotFound {
+	if isNotFound(err) {
 		return fmt.Errorf("beacon node lacks the gloas proposer_preferences endpoint (beacon-APIs#608): %w", err)
 	}
 	return err

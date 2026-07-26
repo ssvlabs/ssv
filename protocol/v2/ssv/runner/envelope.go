@@ -207,7 +207,9 @@ func (r *EnvelopeBuilderRunner) ProcessPostConsensus(ctx context.Context, logger
 // bytes, so content-match publication keeps a non-builder (whose cachedEnvelope is nil) from broadcasting an
 // empty envelope.
 func (r *EnvelopeBuilderRunner) submitEnvelope(ctx context.Context, logger *zap.Logger, cd *gloas.EnvelopeConsensusData, sig phase0.BLSSignature) error {
-	if r.builtDecidedEnvelope(cd.DataSSZ) {
+	builtIt := r.builtDecidedEnvelope(cd.DataSSZ)
+	recordEnvelopeBuildMatch(ctx, builtIt)
+	if builtIt {
 		signed := &gloas.SignedExecutionPayloadEnvelope{Message: r.cachedEnvelope, Signature: sig}
 		if err := r.GetBeaconNode().SubmitExecutionPayloadEnvelope(ctx, signed); err != nil {
 			recordFailedSubmission(ctx, spectypes.BNRoleEnvelopeBuilder)

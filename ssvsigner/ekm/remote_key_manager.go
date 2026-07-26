@@ -499,6 +499,16 @@ const GloasDataVersion = spec.DataVersionFulu + 1
 // from it, so on a Gloas epoch it must carry the Gloas fork: ForkAtEpoch's version list caps at Fulu
 // (its TODO(gloas)), so it returns the Fulu fork on Gloas — which would make Web3Signer sign every remote
 // duty under the wrong (Fulu) domain. Substitute the Gloas fork when it is configured and active.
+//
+// Sending the Gloas fork suffices even against a Web3Signer with no Gloas support: its domain derivation
+// is generic over the version bytes. BeaconStateAccessors.getDomain takes fork.current_version whenever
+// epoch >= fork.epoch (always the case here — the substitution above is itself epoch-gated) and hands it
+// to MiscHelpers.computeDomain, which only hashes it into a ForkData root; no milestone enum is consulted,
+// so an unrecognized Gloas version still yields the correct domain. Its AttestationData schema likewise
+// has no post-Electra index == 0 check (unlike go-eth2-client's), so the §2 payload-status index survives
+// into the signing root. Established from the Web3Signer/Teku sources rather than a live instance. What
+// stays broken on Gloas is unrelated to fork_info: the duties needing request types Web3Signer doesn't
+// have (the three new domains) and the Gloas block, which its BLOCK_V2 milestone enum rejects.
 func (km *RemoteKeyManager) GetForkInfo(epoch phase0.Epoch) web3signer.ForkInfo {
 	_, currentFork := km.beaconConfig.ForkAtEpoch(epoch)
 	if gloasFork, ok := km.beaconConfig.ForkAtVersion(GloasDataVersion); ok && epoch >= gloasFork.Epoch {

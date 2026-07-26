@@ -310,6 +310,7 @@ const (
 	dutyOutcomeNotRequired dutyOutcome = "not_required" // completed with nothing to submit (e.g. not selected as aggregator)
 	dutyOutcomeFailed      dutyOutcome = "failed"       // terminated by a non-recoverable error
 	dutyOutcomeStuck       dutyOutcome = "stuck"        // not concluded before the end of the current wall-clock slot
+	dutyOutcomeNoQuorum    dutyOutcome = "no_quorum"    // reached the deadline having executed, but the signature quorum never formed
 )
 
 // dutyConclusion is handed by a marker (markDutySucceeded / markDutyNotRequired / markDutyFailed) to
@@ -320,8 +321,8 @@ type dutyConclusion struct {
 }
 
 // watchDutyOutcome reports a duty's terminal outcome exactly once: it records the
-// ssv.runner.duty.outcome metric and warns for the outcomes worth an operator's attention (failed
-// and stuck). It knows nothing about how duties complete — the outcome is delivered by a marker
+// ssv.runner.duty.outcome metric and warns for the outcomes worth an operator's attention (failed,
+// stuck, no_quorum). It knows nothing about how duties complete — the outcome is delivered by a marker
 // over dutyConcluded, not by reading runner state — so it's safe alongside the single-threaded
 // message loop. It MUST be started before executeDuty so a duty that concludes synchronously is still
 // reported. Each duty gets its own channel: starting the next duty overwrites the field, and the
@@ -347,6 +348,16 @@ func (b *BaseRunner) watchDutyOutcome(ctx context.Context, logger *zap.Logger) {
 		}
 	}
 
+	// A PTC attestation (SIP #94 §3) has no consensus phase, and every other way it can end already
+	// marks the duty — abstain → not_required, beacon-node/sign/broadcast failure → failed. So
+	// reaching the deadline unmarked means exactly one thing: the honest-convergence quorum never
+	// formed. Report that as its own outcome so §3 convergence health is gaugeable, rather than
+	// hiding inside the generic "likely stuck" that every role shares.
+	deadlineOutcome := dutyOutcomeStuck
+	if b.RunnerRoleType == spectypes.RolePTCAttester {
+		deadlineOutcome = dutyOutcomeNoQuorum
+	}
+
 	report := func(c dutyConclusion) {
 		recordDutyOutcome(ctx, b.GetRole(), c.outcome)
 		switch c.outcome {
@@ -354,6 +365,8 @@ func (b *BaseRunner) watchDutyOutcome(ctx context.Context, logger *zap.Logger) {
 			logger.Warn("⚠️ duty failed", zap.Error(c.reason))
 		case dutyOutcomeStuck:
 			logger.Warn("⚠️ duty did not complete before slot end (likely stuck)")
+		case dutyOutcomeNoQuorum:
+			logger.Warn("⚠️ duty did not reach signature quorum before slot end (operators did not converge)")
 		case dutyOutcomeSucceeded, dutyOutcomeNotRequired:
 			logger.Debug("duty concluded", zap.String("outcome", string(c.outcome)))
 		}
@@ -371,7 +384,7 @@ func (b *BaseRunner) watchDutyOutcome(ctx context.Context, logger *zap.Logger) {
 			case c := <-concluded:
 				report(c)
 			default:
-				report(dutyConclusion{outcome: dutyOutcomeStuck})
+				report(dutyConclusion{outcome: deadlineOutcome})
 			}
 		}
 	}()
