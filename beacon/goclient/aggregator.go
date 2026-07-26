@@ -11,8 +11,10 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/electra"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
+	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/observability/log/fields"
 )
 
 // IsAggregator returns true if the validator is selected as an aggregator for the given
@@ -102,17 +104,24 @@ func (gc *GoClient) waitIntoSlot(ctx context.Context, slot phase0.Slot, interval
 	}
 }
 
-// computeAttestationDataRoot re-derives the attestation data root for the given slot/committee
-// from this node's own view, used as a fallback when the cluster-attested root is unknown.
+// computeAttestationDataRoot re-derives the attestation-data root for (slot, committeeIndex) from this
+// node's own view. On Gloas it also returns the root under the opposite payload-status index — the one
+// field of the re-derived data that can disagree with what the cluster decided, which the caller retries
+// under (see fetchVersionedAggregate). Both roots come from the same fetch, so they are guaranteed to
+// differ in nothing else; a nil altRoot means the slot is pre-Gloas and no such alternative exists.
 func (gc *GoClient) computeAttestationDataRoot(
 	ctx context.Context,
 	slot phase0.Slot,
 	committeeIndex phase0.CommitteeIndex,
-) (root [32]byte, err error) {
-	attData, _, err := gc.GetAttestationData(ctx, slot)
+) (root [32]byte, altRoot *[32]byte, err error) {
+	cached, _, err := gc.GetAttestationData(ctx, slot)
 	if err != nil {
-		return root, fmt.Errorf("fetch attestation data: %w", err)
+		return root, nil, fmt.Errorf("fetch attestation data: %w", err)
 	}
+
+	// GetAttestationData hands back the pointer it caches for the slot, shared with every other caller
+	// (notably the committee runner). Work on a copy so the Index rewrites below can't write through.
+	attData := *cached
 
 	// Explicitly set Index field as beacon nodes may return inconsistent values.
 	// EIP-7549: Electra+ uses Index=0; pre-Electra uses committee index. Gloas (EIP-7732) instead keeps
@@ -122,10 +131,9 @@ func (gc *GoClient) computeAttestationDataRoot(
 	// beacon node returned (the same source the comment above warns "may return inconsistent values"),
 	// whereas the aggregate is for our duty's slot, which is authoritative.
 	cfg := gc.getBeaconConfig()
-	switch {
-	case cfg.IsGloasAtSlot(slot):
-		// keep attData.Index as the BN returned it
-	default:
+	isGloas := cfg.IsGloasAtSlot(slot)
+	// On Gloas the BN-supplied Index is the payload-status value and is kept exactly as returned.
+	if !isGloas {
 		version, _ := cfg.ForkAtEpoch(cfg.EstimatedEpochAtSlot(slot))
 		attData.Index = 0
 		if version < spec.DataVersionElectra {
@@ -135,9 +143,24 @@ func (gc *GoClient) computeAttestationDataRoot(
 
 	root, err = attData.HashTreeRoot()
 	if err != nil {
-		return root, fmt.Errorf("fetch attestation data root: %w", err)
+		return root, nil, fmt.Errorf("fetch attestation data root: %w", err)
 	}
-	return root, nil
+	if !isGloas {
+		return root, nil, nil
+	}
+
+	// The §2 payload-status index is a single bit (0=EMPTY / 1=FULL), so flipping it enumerates the
+	// only value the cluster could have decided other than the one our own beacon node reported.
+	if attData.Index == 0 {
+		attData.Index = 1
+	} else {
+		attData.Index = 0
+	}
+	flipped, err := attData.HashTreeRoot()
+	if err != nil {
+		return root, nil, fmt.Errorf("hash flipped attestation data root: %w", err)
+	}
+	return root, &flipped, nil
 }
 
 // fetchVersionedAggregate fetches the aggregate attestation for the given slot/committee,
@@ -159,31 +182,55 @@ func (gc *GoClient) fetchVersionedAggregate(
 	committeeIndex phase0.CommitteeIndex,
 ) (*spec.VersionedAttestation, spec.DataVersion, error) {
 	root, found := gc.attestedDataRoot(slot, committeeIndex)
+	var altRoot *[32]byte
 	if !found {
 		// No record of our own attestation (it failed or hasn't landed yet) — fall back
 		// to re-deriving the root from this node's view of the slot.
 		var err error
-		root, err = gc.computeAttestationDataRoot(ctx, slot, committeeIndex)
+		root, altRoot, err = gc.computeAttestationDataRoot(ctx, slot, committeeIndex)
 		if err != nil {
 			return nil, DataVersionNil, err
 		}
 	}
 
-	aggDataReqStart := time.Now()
-	aggDataResp, err := gc.multiClient.AggregateAttestation(ctx, &api.AggregateAttestationOpts{
+	resp, err := gc.fetchAggregate(ctx, slot, committeeIndex, root)
+	if err != nil && altRoot != nil && isNotFound(err) {
+		// Only the re-derived root can disagree with the cluster: it carries *our* beacon node's
+		// Gloas payload-status index (SIP #94 §2), while the committee signed the QBFT-decided one.
+		// A 404 means no aggregate exists under our index, so try the only other value the bit can
+		// hold rather than silently missing the aggregate. Cheap: one extra GET on a path that has
+		// already failed, and unreachable from the common cache-hit path, whose root is by
+		// construction the decided one.
+		gc.log.Debug("retrying gloas aggregate fetch under the opposite payload-status index",
+			fields.Slot(slot),
+			zap.Uint64("committee_index", uint64(committeeIndex)))
+		resp, err = gc.fetchAggregate(ctx, slot, committeeIndex, *altRoot)
+	}
+	if err != nil {
+		return nil, DataVersionNil, errMultiClient(fmt.Errorf("fetch aggregate attestation: %w", err), "AggregateAttestation")
+	}
+	if err := checkPtrResponse(resp, "aggregate attestation"); err != nil {
+		return nil, DataVersionNil, errMultiClient(err, "AggregateAttestation")
+	}
+
+	return resp.Data, resp.Data.Version, nil
+}
+
+// fetchAggregate performs the aggregate GET for one candidate attestation-data root.
+func (gc *GoClient) fetchAggregate(
+	ctx context.Context,
+	slot phase0.Slot,
+	committeeIndex phase0.CommitteeIndex,
+	root phase0.Root,
+) (*api.Response[*spec.VersionedAttestation], error) {
+	start := time.Now()
+	resp, err := gc.multiClient.AggregateAttestation(ctx, &api.AggregateAttestationOpts{
 		Slot:                slot,
 		AttestationDataRoot: root,
 		CommitteeIndex:      committeeIndex,
 	})
-	recordRequest(ctx, gc.log, "AggregateAttestation", gc.multiClient, http.MethodGet, true, time.Since(aggDataReqStart), err)
-	if err != nil {
-		return nil, DataVersionNil, errMultiClient(fmt.Errorf("fetch aggregate attestation: %w", err), "AggregateAttestation")
-	}
-	if err := checkPtrResponse(aggDataResp, "aggregate attestation"); err != nil {
-		return nil, DataVersionNil, errMultiClient(err, "AggregateAttestation")
-	}
-
-	return aggDataResp.Data, aggDataResp.Data.Version, nil
+	recordRequest(ctx, gc.log, "AggregateAttestation", gc.multiClient, http.MethodGet, true, time.Since(start), err)
+	return resp, err
 }
 
 func versionedAggregateToSSZ(va *spec.VersionedAttestation) (ssz.Marshaler, spec.DataVersion, error) {

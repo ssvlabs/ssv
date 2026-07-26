@@ -68,6 +68,10 @@ func BuildSourceAttribute(source string) attribute.KeyValue {
 	return attribute.String("ssv.validator.duty.build_source", source)
 }
 
+func EnvelopeBuildMatchAttribute(match string) attribute.KeyValue {
+	return attribute.String("ssv.validator.duty.envelope_build_match", match)
+}
+
 func BeaconPeriodAttribute(period uint64) attribute.KeyValue {
 	return attribute.KeyValue{
 		Key:   "ssv.beacon.period",
