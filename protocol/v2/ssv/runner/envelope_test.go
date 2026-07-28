@@ -28,7 +28,7 @@ func envelopeConsensusDataSSZ(t *testing.T, slot phase0.Slot, blockRoot phase0.R
 	dataSSZ, err := blinded.Encode()
 	require.NoError(t, err)
 	cd := &gloas.EnvelopeConsensusData{
-		Duty:    spectypes.ValidatorDuty{Type: spectypes.BNRoleEnvelopeBuilder, Slot: slot, ValidatorIndex: 3},
+		Duty:    spectypes.ValidatorDuty{Type: spectypes.BNRoleEnvelopeProposer, Slot: slot, ValidatorIndex: 3},
 		DataSSZ: dataSSZ,
 	}
 	encoded, err := cd.Encode()
@@ -36,16 +36,16 @@ func envelopeConsensusDataSSZ(t *testing.T, slot phase0.Slot, blockRoot phase0.R
 	return blinded, encoded
 }
 
-func TestNewEnvelopeBuilderRunner_RequiresOneShare(t *testing.T) {
-	_, err := NewEnvelopeBuilderRunner(EnvelopeBuilderRunnerOptions{})
+func TestNewEnvelopeProposerRunner_RequiresOneShare(t *testing.T) {
+	_, err := NewEnvelopeProposerRunner(EnvelopeProposerRunnerOptions{})
 	require.Error(t, err)
 }
 
 // The post-consensus signing target is the decided blinded envelope's root under DOMAIN_BEACON_BUILDER —
 // equal to the full envelope's root, so the partial signature is valid for the full envelope.
-func TestEnvelopeBuilderRunner_ExpectedPostConsensusRootsAndDomain(t *testing.T) {
+func TestEnvelopeProposerRunner_ExpectedPostConsensusRootsAndDomain(t *testing.T) {
 	blinded, encoded := envelopeConsensusDataSSZ(t, 5, phase0.Root{0xaa})
-	r := &EnvelopeBuilderRunner{BaseRunner: &BaseRunner{State: &State{DecidedValue: encoded}}}
+	r := &EnvelopeProposerRunner{BaseRunner: &BaseRunner{State: &State{DecidedValue: encoded}}}
 
 	roots, domain, err := r.expectedPostConsensusRootsAndDomain(context.Background())
 	require.NoError(t, err)
@@ -60,18 +60,18 @@ func TestEnvelopeBuilderRunner_ExpectedPostConsensusRootsAndDomain(t *testing.T)
 }
 
 // The envelope duty has no pre-consensus phase; both entry points reject.
-func TestEnvelopeBuilderRunner_NoPreConsensus(t *testing.T) {
-	r := &EnvelopeBuilderRunner{BaseRunner: &BaseRunner{}}
+func TestEnvelopeProposerRunner_NoPreConsensus(t *testing.T) {
+	r := &EnvelopeProposerRunner{BaseRunner: &BaseRunner{}}
 	require.Error(t, r.ProcessPreConsensus(context.Background(), zap.NewNop(), &spectypes.PartialSignatureMessages{}))
 	_, _, err := r.expectedPreConsensusRootsAndDomain()
 	require.Error(t, err)
 }
 
 // executeDuty guards on the proposer having recorded the §4 block root for the slot before producing.
-func TestEnvelopeBuilderRunner_ExecuteDutyRequiresDecidedRoot(t *testing.T) {
-	r := &EnvelopeBuilderRunner{
+func TestEnvelopeProposerRunner_ExecuteDutyRequiresDecidedRoot(t *testing.T) {
+	r := &EnvelopeProposerRunner{
 		BaseRunner: &BaseRunner{
-			RunnerRoleType: spectypes.RoleEnvelopeBuilder,
+			RunnerRoleType: spectypes.RoleEnvelopeProposer,
 			Share: map[phase0.ValidatorIndex]*spectypes.Share{
 				3: {ValidatorIndex: 3, ValidatorPubKey: spectypes.ValidatorPK{0x42}},
 			},
@@ -79,7 +79,7 @@ func TestEnvelopeBuilderRunner_ExecuteDutyRequiresDecidedRoot(t *testing.T) {
 		measurements:       newMeasurementsStore(),
 		proposedBlockRoots: ssv.NewProposedBlockRoots(),
 	}
-	duty := &spectypes.ValidatorDuty{Type: spectypes.BNRoleEnvelopeBuilder, Slot: 5, ValidatorIndex: 3}
+	duty := &spectypes.ValidatorDuty{Type: spectypes.BNRoleEnvelopeProposer, Slot: 5, ValidatorIndex: 3}
 
 	require.ErrorContains(t, r.executeDuty(context.Background(), zap.NewNop(), duty), "no decided block root")
 }
@@ -111,10 +111,10 @@ func sampleEnvelope() *gloas.ExecutionPayloadEnvelope {
 
 // produceBlindedEnvelope fetches the envelope, caches the full one, and wraps its blinded form (PayloadRoot
 // = HTR(payload), with the §4 root and builder index preserved) as the QBFT value.
-func TestEnvelopeBuilderRunner_ProduceBlindedEnvelope(t *testing.T) {
+func TestEnvelopeProposerRunner_ProduceBlindedEnvelope(t *testing.T) {
 	envelope := sampleEnvelope()
-	r := &EnvelopeBuilderRunner{BaseRunner: &BaseRunner{}, beacon: &envelopeTestBeacon{envelope: envelope}}
-	duty := &spectypes.ValidatorDuty{Type: spectypes.BNRoleEnvelopeBuilder, Slot: 5, ValidatorIndex: 3}
+	r := &EnvelopeProposerRunner{BaseRunner: &BaseRunner{}, beacon: &envelopeTestBeacon{envelope: envelope}}
+	duty := &spectypes.ValidatorDuty{Type: spectypes.BNRoleEnvelopeProposer, Slot: 5, ValidatorIndex: 3}
 
 	cd, err := r.produceBlindedEnvelope(context.Background(), duty, phase0.Root{0xaa})
 	require.NoError(t, err)
@@ -131,14 +131,14 @@ func TestEnvelopeBuilderRunner_ProduceBlindedEnvelope(t *testing.T) {
 
 // builtDecidedEnvelope is the content match: only the operator whose cached envelope blinds to the decided
 // value holds the full bytes and publishes.
-func TestEnvelopeBuilderRunner_BuiltDecidedEnvelope(t *testing.T) {
+func TestEnvelopeProposerRunner_BuiltDecidedEnvelope(t *testing.T) {
 	envelope := sampleEnvelope()
 	blinded, err := envelope.Blinded()
 	require.NoError(t, err)
 	decided, err := blinded.Encode()
 	require.NoError(t, err)
 
-	r := &EnvelopeBuilderRunner{cachedEnvelope: envelope}
+	r := &EnvelopeProposerRunner{cachedEnvelope: envelope}
 	require.True(t, r.builtDecidedEnvelope(decided))       // our cached envelope blinds to the decided value
 	require.False(t, r.builtDecidedEnvelope([]byte{0x01})) // a different decided value
 

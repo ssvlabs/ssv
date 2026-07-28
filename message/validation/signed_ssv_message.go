@@ -164,7 +164,7 @@ func (mv *messageValidator) validRoleAtSlot(roleType spectypes.RunnerRole, slot 
 		return isInBooleFork
 	case ssvtypes.RoleAggregator, ssvtypes.RoleSyncCommitteeContribution:
 		return !isInBooleFork
-	case spectypes.RolePTCAttester, spectypes.RoleProposerPreferences, spectypes.RoleEnvelopeBuilder:
+	case spectypes.RolePTCAttester, spectypes.RoleProposerPreferences, spectypes.RoleEnvelopeProposer:
 		return isInGloas
 	default:
 		return false

@@ -14,7 +14,7 @@ import (
 // mixed cluster. This is what justifies a distinct node-side type instead of reusing the spec one.
 func TestEnvelopeConsensusDataWireMatchesProposerConsensusData(t *testing.T) {
 	duty := spectypes.ValidatorDuty{
-		Type:           spectypes.BNRoleEnvelopeBuilder,
+		Type:           spectypes.BNRoleEnvelopeProposer,
 		PubKey:         phase0.BLSPubKey{0x01},
 		Slot:           7,
 		ValidatorIndex: 3,
