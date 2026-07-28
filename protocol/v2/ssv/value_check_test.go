@@ -290,7 +290,7 @@ func encodeEnvelopeValue(t *testing.T, slot phase0.Slot, valIdx phase0.Validator
 	require.NoError(t, err)
 	cd := &gloas.EnvelopeConsensusData{
 		Duty: spectypes.ValidatorDuty{
-			Type:           spectypes.BNRoleEnvelopeBuilder,
+			Type:           spectypes.BNRoleEnvelopeProposer,
 			Slot:           slot,
 			ValidatorIndex: valIdx,
 			PubKey:         pk,

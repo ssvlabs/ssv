@@ -826,7 +826,7 @@ func (c *Controller) onShareInit(share *ssvtypes.SSVShare) (v *validator.Validat
 		// with the block duty); c.ExecuteDuty routes by pubkey back to this validator.
 		startEnvelopeDuty := func(slot phase0.Slot) {
 			go c.ExecuteDuty(validatorCtx, c.logger, &spectypes.ValidatorDuty{
-				Type:           spectypes.BNRoleEnvelopeBuilder,
+				Type:           spectypes.BNRoleEnvelopeProposer,
 				PubKey:         phase0.BLSPubKey(share.ValidatorPubKey),
 				Slot:           slot,
 				ValidatorIndex: share.ValidatorIndex,
@@ -1212,7 +1212,7 @@ func SetupRunners(
 
 	runnersType := []spectypes.RunnerRole{
 		spectypes.RoleProposer,
-		spectypes.RoleEnvelopeBuilder,
+		spectypes.RoleEnvelopeProposer,
 		ssvtypes.RoleAggregator,
 		ssvtypes.RoleSyncCommitteeContribution,
 		spectypes.RoleValidatorRegistration,
@@ -1274,13 +1274,13 @@ func SetupRunners(
 				ProposedBlockRoots:  proposedBlockRoots,
 				StartEnvelopeDuty:   startEnvelopeDuty,
 			})
-		case spectypes.RoleEnvelopeBuilder:
+		case spectypes.RoleEnvelopeProposer:
 			// The §6 envelope runner shares the proposer's proposedBlockRoots (it reads the §4 root the
 			// proposer records). Its value-check is built per duty, so none is passed here. The proposer
 			// starts this duty via the StartEnvelopeDuty callback wired in the RoleProposer case above.
-			runners[role], err = runner.NewEnvelopeBuilderRunner(runner.EnvelopeBuilderRunnerOptions{
+			runners[role], err = runner.NewEnvelopeProposerRunner(runner.EnvelopeProposerRunnerOptions{
 				BaseRunnerOptions:  baseOpts,
-				QBFTController:     buildController(spectypes.RoleEnvelopeBuilder),
+				QBFTController:     buildController(spectypes.RoleEnvelopeProposer),
 				ProposedBlockRoots: proposedBlockRoots,
 				HighestDecidedSlot: 0,
 			})

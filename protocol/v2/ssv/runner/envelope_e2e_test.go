@@ -22,7 +22,7 @@ import (
 
 func envelopeDuty(slot phase0.Slot) *spectypes.ValidatorDuty {
 	return &spectypes.ValidatorDuty{
-		Type:           spectypes.BNRoleEnvelopeBuilder,
+		Type:           spectypes.BNRoleEnvelopeProposer,
 		PubKey:         spectestingutils.TestingValidatorPubKey,
 		Slot:           slot,
 		ValidatorIndex: spectestingutils.TestingValidatorIndex,
@@ -35,13 +35,13 @@ func newEnvelopeTestBeacon() *envelopeTestBeacon {
 	return &envelopeTestBeacon{BeaconNode: protocoltesting.NewTestingBeaconNodeWrapped()}
 }
 
-func newEnvelopeBuilderRunnerForTest(t *testing.T, bn beacon.BeaconNode) (*EnvelopeBuilderRunner, *spectestingutils.TestKeySet) {
+func newEnvelopeProposerRunnerForTest(t *testing.T, bn beacon.BeaconNode) (*EnvelopeProposerRunner, *spectestingutils.TestKeySet) {
 	t.Helper()
 
 	cfg := cloneTestNetworkConfig()
 	keySet := spectestingutils.Testing4SharesSet()
 	share := spectestingutils.TestingShare(keySet, spectestingutils.TestingValidatorIndex)
-	identifier := spectypes.NewMsgID(spectypes.JatoTestnet, spectestingutils.TestingValidatorPubKey[:], spectypes.RoleEnvelopeBuilder)
+	identifier := spectypes.NewMsgID(spectypes.JatoTestnet, spectestingutils.TestingValidatorPubKey[:], spectypes.RoleEnvelopeProposer)
 	network := protocoltesting.NewTestingNetwork(1, keySet.OperatorKeys[1])
 	km := ekm.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager())
 	operator := spectestingutils.TestingCommitteeMember(keySet)
@@ -52,7 +52,7 @@ func newEnvelopeBuilderRunnerForTest(t *testing.T, bn beacon.BeaconNode) (*Envel
 	qbftConfig.Network = network
 	controller := protocoltesting.NewTestingQBFTController(keySet, identifier[:], operator, qbftConfig, false)
 
-	runnerIface, err := NewEnvelopeBuilderRunner(EnvelopeBuilderRunnerOptions{
+	runnerIface, err := NewEnvelopeProposerRunner(EnvelopeProposerRunnerOptions{
 		BaseRunnerOptions: BaseRunnerOptions{
 			NetworkConfig:  cfg,
 			Share:          map[phase0.ValidatorIndex]*spectypes.Share{share.ValidatorIndex: share},
@@ -66,7 +66,7 @@ func newEnvelopeBuilderRunnerForTest(t *testing.T, bn beacon.BeaconNode) (*Envel
 	})
 	require.NoError(t, err)
 
-	r := runnerIface.(*EnvelopeBuilderRunner)
+	r := runnerIface.(*EnvelopeProposerRunner)
 	r.SetQBFTRoundTimerF(func(context.Context, *zap.Logger, phase0.Slot) ssv.QBFTRoundTimer {
 		return roundtimer.NewTestingTimer()
 	})
@@ -75,7 +75,7 @@ func newEnvelopeBuilderRunnerForTest(t *testing.T, bn beacon.BeaconNode) (*Envel
 
 // setupEnvelopeRunnerForPostConsensus puts the runner in the decided state it would reach after §6 QBFT,
 // so the post-consensus publish path can be exercised directly (mirrors setupRunnerForPostConsensus).
-func setupEnvelopeRunnerForPostConsensus(t *testing.T, runner *EnvelopeBuilderRunner, keySet *spectestingutils.TestKeySet, duty *spectypes.ValidatorDuty, cd *gloas.EnvelopeConsensusData) {
+func setupEnvelopeRunnerForPostConsensus(t *testing.T, runner *EnvelopeProposerRunner, keySet *spectestingutils.TestKeySet, duty *spectypes.ValidatorDuty, cd *gloas.EnvelopeConsensusData) {
 	t.Helper()
 
 	runner.State = NewRunnerState(keySet.Threshold, duty)
@@ -113,13 +113,13 @@ func decidedEnvelopeConsensusData(t *testing.T, slot phase0.Slot, envelope *gloa
 }
 
 // The builder — its cached envelope blinds to the decided value — publishes the full signed envelope.
-func TestEnvelopeBuilderRunner_SubmitEnvelopeBuilderPublishes(t *testing.T) {
+func TestEnvelopeProposerRunner_SubmitEnvelopeProposerPublishes(t *testing.T) {
 	const slot = phase0.Slot(8)
 	envelope := sampleEnvelope()
 	cd := decidedEnvelopeConsensusData(t, slot, envelope)
 
 	bn := newEnvelopeTestBeacon()
-	runner, keySet := newEnvelopeBuilderRunnerForTest(t, bn)
+	runner, keySet := newEnvelopeProposerRunnerForTest(t, bn)
 	setupEnvelopeRunnerForPostConsensus(t, runner, keySet, envelopeDuty(slot), cd)
 	runner.cachedEnvelope = envelope // this operator built the decided envelope
 
@@ -134,12 +134,12 @@ func TestEnvelopeBuilderRunner_SubmitEnvelopeBuilderPublishes(t *testing.T) {
 
 // An operator that produced a competing envelope (content mismatch) completes the duty without publishing —
 // only the builder of the decided envelope holds the matching full bytes.
-func TestEnvelopeBuilderRunner_SubmitEnvelopeNonBuilderSkips(t *testing.T) {
+func TestEnvelopeProposerRunner_SubmitEnvelopeNonBuilderSkips(t *testing.T) {
 	const slot = phase0.Slot(8)
 	cd := decidedEnvelopeConsensusData(t, slot, sampleEnvelope())
 
 	bn := newEnvelopeTestBeacon()
-	runner, keySet := newEnvelopeBuilderRunnerForTest(t, bn)
+	runner, keySet := newEnvelopeProposerRunnerForTest(t, bn)
 	setupEnvelopeRunnerForPostConsensus(t, runner, keySet, envelopeDuty(slot), cd)
 
 	// This operator's cached envelope differs from the decided one (it lost the round), so it does not
@@ -159,7 +159,7 @@ func TestEnvelopeBuilderRunner_SubmitEnvelopeNonBuilderSkips(t *testing.T) {
 // blinded envelope root (signed under DOMAIN_BEACON_BUILDER with the share keys), driving the runner to
 // reconstruct the envelope signature. Mirrors processPostConsensusQuorum — the envelope role has no spec
 // message helper, so the partial signatures are built here.
-func processEnvelopePostConsensusQuorum(t *testing.T, runner *EnvelopeBuilderRunner, keySet *spectestingutils.TestKeySet, blinded *gloas.BlindedExecutionPayloadEnvelope, slot phase0.Slot) {
+func processEnvelopePostConsensusQuorum(t *testing.T, runner *EnvelopeProposerRunner, keySet *spectestingutils.TestKeySet, blinded *gloas.BlindedExecutionPayloadEnvelope, slot phase0.Slot) {
 	t.Helper()
 
 	signer := spectestingutils.NewTestingKeyManager()
@@ -193,13 +193,13 @@ func processEnvelopePostConsensusQuorum(t *testing.T, runner *EnvelopeBuilderRun
 
 // ProcessPostConsensus collects a quorum of partial signatures, reconstructs the BLS signature, and (as the
 // builder) publishes the full signed envelope carrying it.
-func TestEnvelopeBuilderRunner_ProcessPostConsensusReconstructsAndPublishes(t *testing.T) {
+func TestEnvelopeProposerRunner_ProcessPostConsensusReconstructsAndPublishes(t *testing.T) {
 	const slot = phase0.Slot(8)
 	envelope := sampleEnvelope()
 	cd := decidedEnvelopeConsensusData(t, slot, envelope)
 
 	bn := newEnvelopeTestBeacon()
-	runner, keySet := newEnvelopeBuilderRunnerForTest(t, bn)
+	runner, keySet := newEnvelopeProposerRunnerForTest(t, bn)
 	setupEnvelopeRunnerForPostConsensus(t, runner, keySet, envelopeDuty(slot), cd)
 	runner.cachedEnvelope = envelope // this operator built the decided envelope
 

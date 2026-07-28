@@ -26,14 +26,14 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 )
 
-// EnvelopeBuilderRunner runs the §6 execution-payload-envelope-signing duty (SIP #94 §6,
-// RoleEnvelopeBuilder=9). It is a second QBFT instance for the proposer's slot, started by the proposer
+// EnvelopeProposerRunner runs the §6 execution-payload-envelope-signing duty (SIP #94 §6,
+// RoleEnvelopeProposer=9). It is a second QBFT instance for the proposer's slot, started by the proposer
 // only on the self-build path (external builders sign their own envelopes). The flow mirrors the proposer
 // minus pre-consensus: executeDuty produces a BlindedExecutionPayloadEnvelope and runs QBFT over it;
 // ProcessConsensus signs the decided blinded root under DOMAIN_BEACON_BUILDER and broadcasts a
 // post-consensus partial signature; ProcessPostConsensus reconstructs the BLS signature and the builder
 // publishes the full envelope.
-type EnvelopeBuilderRunner struct {
+type EnvelopeProposerRunner struct {
 	*BaseRunner
 
 	beacon         beacon.BeaconNode
@@ -57,8 +57,8 @@ type EnvelopeBuilderRunner struct {
 	cachedEnvelope *gloas.ExecutionPayloadEnvelope
 }
 
-// EnvelopeBuilderRunnerOptions bundles the dependencies required by NewEnvelopeBuilderRunner.
-type EnvelopeBuilderRunnerOptions struct {
+// EnvelopeProposerRunnerOptions bundles the dependencies required by NewEnvelopeProposerRunner.
+type EnvelopeProposerRunnerOptions struct {
 	BaseRunnerOptions
 
 	QBFTController     *controller.Controller
@@ -66,14 +66,14 @@ type EnvelopeBuilderRunnerOptions struct {
 	HighestDecidedSlot phase0.Slot
 }
 
-func NewEnvelopeBuilderRunner(opts EnvelopeBuilderRunnerOptions) (Runner, error) {
+func NewEnvelopeProposerRunner(opts EnvelopeProposerRunnerOptions) (Runner, error) {
 	if len(opts.Share) != 1 {
 		return nil, errors.New("must have one share")
 	}
 
-	return &EnvelopeBuilderRunner{
+	return &EnvelopeProposerRunner{
 		BaseRunner: &BaseRunner{
-			RunnerRoleType:     spectypes.RoleEnvelopeBuilder,
+			RunnerRoleType:     spectypes.RoleEnvelopeProposer,
 			NetworkConfig:      opts.NetworkConfig,
 			Share:              opts.Share,
 			QBFTController:     opts.QBFTController,
@@ -89,7 +89,7 @@ func NewEnvelopeBuilderRunner(opts EnvelopeBuilderRunnerOptions) (Runner, error)
 	}, nil
 }
 
-func (r *EnvelopeBuilderRunner) StartNewDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty, quorum uint64) error {
+func (r *EnvelopeProposerRunner) StartNewDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty, quorum uint64) error {
 	validatorDuty, err := validatorDutyFromDuty(duty)
 	if err != nil {
 		return err
@@ -98,11 +98,11 @@ func (r *EnvelopeBuilderRunner) StartNewDuty(ctx context.Context, logger *zap.Lo
 }
 
 // ProcessPreConsensus is unreachable: the envelope duty has no pre-consensus phase.
-func (r *EnvelopeBuilderRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
-	return errors.New("no pre-consensus phase for envelope builder")
+func (r *EnvelopeProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
+	return errors.New("no pre-consensus phase for envelope proposer")
 }
 
-func (r *EnvelopeBuilderRunner) ProcessConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.SignedSSVMessage) error {
+func (r *EnvelopeProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.SignedSSVMessage) error {
 	// Reuse the existing span instead of generating a new one to keep tracing-data lightweight.
 	span := trace.SpanFromContext(ctx)
 
@@ -116,7 +116,7 @@ func (r *EnvelopeBuilderRunner) ProcessConsensus(ctx context.Context, logger *za
 	}
 
 	r.measurements.EndConsensus()
-	recordConsensusDuration(ctx, r.measurements.ConsensusTime(), spectypes.RoleEnvelopeBuilder)
+	recordConsensusDuration(ctx, r.measurements.ConsensusTime(), spectypes.RoleEnvelopeProposer)
 
 	cd := decidedValue.(*gloas.EnvelopeConsensusData)
 
@@ -153,7 +153,7 @@ func (r *EnvelopeBuilderRunner) ProcessConsensus(ctx context.Context, logger *za
 	return nil
 }
 
-func (r *EnvelopeBuilderRunner) ProcessPostConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) (err error) {
+func (r *EnvelopeProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) (err error) {
 	// Reuse the existing span instead of generating a new one to keep tracing-data lightweight.
 	span := trace.SpanFromContext(ctx)
 
@@ -177,7 +177,7 @@ func (r *EnvelopeBuilderRunner) ProcessPostConsensus(ctx context.Context, logger
 	}()
 
 	r.measurements.EndPostConsensus()
-	recordPostConsensusDuration(ctx, r.measurements.PostConsensusTime(), spectypes.RoleEnvelopeBuilder)
+	recordPostConsensusDuration(ctx, r.measurements.PostConsensusTime(), spectypes.RoleEnvelopeProposer)
 
 	// only 1 root, verified by expectedPostConsensusRootsAndDomain
 	root := roots[0]
@@ -206,18 +206,18 @@ func (r *EnvelopeBuilderRunner) ProcessPostConsensus(ctx context.Context, logger
 // holds and re-submits it — the envelope's decided value is blinded; only its builder holds the full payload
 // bytes, so content-match publication keeps a non-builder (whose cachedEnvelope is nil) from broadcasting an
 // empty envelope.
-func (r *EnvelopeBuilderRunner) submitEnvelope(ctx context.Context, logger *zap.Logger, cd *gloas.EnvelopeConsensusData, sig phase0.BLSSignature) error {
+func (r *EnvelopeProposerRunner) submitEnvelope(ctx context.Context, logger *zap.Logger, cd *gloas.EnvelopeConsensusData, sig phase0.BLSSignature) error {
 	builtIt := r.builtDecidedEnvelope(cd.DataSSZ)
 	recordEnvelopeBuildMatch(ctx, builtIt)
 	if builtIt {
 		signed := &gloas.SignedExecutionPayloadEnvelope{Message: r.cachedEnvelope, Signature: sig}
 		if err := r.GetBeaconNode().SubmitExecutionPayloadEnvelope(ctx, signed); err != nil {
-			recordFailedSubmission(ctx, spectypes.BNRoleEnvelopeBuilder)
+			recordFailedSubmission(ctx, spectypes.BNRoleEnvelopeProposer)
 			const errMsg = "could not submit execution payload envelope"
 			logger.Error(errMsg, fields.Slot(cd.Duty.Slot), zap.Error(err))
 			return fmt.Errorf("%s: %w", errMsg, err)
 		}
-		recordSuccessfulSubmission(ctx, 1, r.NetworkConfig.EstimatedEpochAtSlot(cd.Duty.Slot), spectypes.BNRoleEnvelopeBuilder)
+		recordSuccessfulSubmission(ctx, 1, r.NetworkConfig.EstimatedEpochAtSlot(cd.Duty.Slot), spectypes.BNRoleEnvelopeProposer)
 		logger.Info("✅ published execution payload envelope", fields.Slot(cd.Duty.Slot))
 	} else {
 		logger.Debug("this operator did not build the decided envelope, skipping publication", fields.Slot(cd.Duty.Slot))
@@ -230,7 +230,7 @@ func (r *EnvelopeBuilderRunner) submitEnvelope(ctx context.Context, logger *zap.
 
 // builtDecidedEnvelope reports whether this operator's cached envelope blinds to the decided value — i.e.
 // it produced the agreed envelope and so holds the full bytes to publish.
-func (r *EnvelopeBuilderRunner) builtDecidedEnvelope(decidedDataSSZ []byte) bool {
+func (r *EnvelopeProposerRunner) builtDecidedEnvelope(decidedDataSSZ []byte) bool {
 	if r.cachedEnvelope == nil {
 		return false
 	}
@@ -245,7 +245,7 @@ func (r *EnvelopeBuilderRunner) builtDecidedEnvelope(decidedDataSSZ []byte) bool
 	return bytes.Equal(blindedSSZ, decidedDataSSZ)
 }
 
-func (r *EnvelopeBuilderRunner) executeDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty) error {
+func (r *EnvelopeProposerRunner) executeDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty) error {
 	r.measurements.StartDutyFlow()
 	r.cachedEnvelope = nil // drop any envelope cached for a prior duty
 
@@ -281,7 +281,7 @@ func (r *EnvelopeBuilderRunner) executeDuty(ctx context.Context, logger *zap.Log
 
 // produceBlindedEnvelope fetches this operator's execution-payload envelope for the slot, caches the full
 // envelope for the later content-matched publish, and wraps its blinded form as the QBFT value.
-func (r *EnvelopeBuilderRunner) produceBlindedEnvelope(ctx context.Context, duty *spectypes.ValidatorDuty, beaconBlockRoot phase0.Root) (*gloas.EnvelopeConsensusData, error) {
+func (r *EnvelopeProposerRunner) produceBlindedEnvelope(ctx context.Context, duty *spectypes.ValidatorDuty, beaconBlockRoot phase0.Root) (*gloas.EnvelopeConsensusData, error) {
 	envelope, err := r.GetBeaconNode().GetExecutionPayloadEnvelope(ctx, duty.DutySlot(), beaconBlockRoot)
 	if err != nil {
 		return nil, fmt.Errorf("get execution payload envelope: %w", err)
@@ -304,11 +304,11 @@ func (r *EnvelopeBuilderRunner) produceBlindedEnvelope(ctx context.Context, duty
 }
 
 // expectedPreConsensusRootsAndDomain is unreachable: the envelope duty has no pre-consensus phase.
-func (r *EnvelopeBuilderRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
-	return nil, phase0.DomainType{}, errors.New("no pre-consensus phase for envelope builder")
+func (r *EnvelopeProposerRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
+	return nil, spectypes.DomainError, errors.New("no pre-consensus phase for envelope proposer")
 }
 
-func (r *EnvelopeBuilderRunner) expectedPostConsensusRootsAndDomain(context.Context) ([]ssz.HashRoot, phase0.DomainType, error) {
+func (r *EnvelopeProposerRunner) expectedPostConsensusRootsAndDomain(context.Context) ([]ssz.HashRoot, phase0.DomainType, error) {
 	cd := &gloas.EnvelopeConsensusData{}
 	if err := cd.Decode(r.State.DecidedValue); err != nil {
 		return nil, phase0.DomainType{}, fmt.Errorf("could not decode envelope consensus data: %w", err)
@@ -320,34 +320,34 @@ func (r *EnvelopeBuilderRunner) expectedPostConsensusRootsAndDomain(context.Cont
 	return []ssz.HashRoot{blinded}, spectypes.DomainBeaconBuilder, nil
 }
 
-func (r *EnvelopeBuilderRunner) GetNetwork() protocolp2p.Network {
+func (r *EnvelopeProposerRunner) GetNetwork() protocolp2p.Network {
 	return r.network
 }
 
-func (r *EnvelopeBuilderRunner) GetBeaconNode() beacon.BeaconNode {
+func (r *EnvelopeProposerRunner) GetBeaconNode() beacon.BeaconNode {
 	return r.beacon
 }
 
-func (r *EnvelopeBuilderRunner) GetShare() *spectypes.Share {
+func (r *EnvelopeProposerRunner) GetShare() *spectypes.Share {
 	for _, share := range r.Share {
 		return share
 	}
 	return nil
 }
 
-func (r *EnvelopeBuilderRunner) GetSigner() ekm.BeaconSigner {
+func (r *EnvelopeProposerRunner) GetSigner() ekm.BeaconSigner {
 	return r.signer
 }
 
-func (r *EnvelopeBuilderRunner) GetOperatorSigner() ssvtypes.OperatorSigner {
+func (r *EnvelopeProposerRunner) GetOperatorSigner() ssvtypes.OperatorSigner {
 	return r.operatorSigner
 }
 
-func (r *EnvelopeBuilderRunner) MarshalJSON() ([]byte, error) {
+func (r *EnvelopeProposerRunner) MarshalJSON() ([]byte, error) {
 	return marshalRunnerStateJSON(r.BaseRunner)
 }
 
-func (r *EnvelopeBuilderRunner) UnmarshalJSON(data []byte) error {
+func (r *EnvelopeProposerRunner) UnmarshalJSON(data []byte) error {
 	br, err := unmarshalRunnerStateJSON(data)
 	if err != nil {
 		return err
@@ -357,18 +357,18 @@ func (r *EnvelopeBuilderRunner) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func (r *EnvelopeBuilderRunner) Encode() ([]byte, error) {
+func (r *EnvelopeProposerRunner) Encode() ([]byte, error) {
 	return json.Marshal(r)
 }
 
-func (r *EnvelopeBuilderRunner) Decode(data []byte) error {
+func (r *EnvelopeProposerRunner) Decode(data []byte) error {
 	return json.Unmarshal(data, r)
 }
 
-func (r *EnvelopeBuilderRunner) GetRoot() ([32]byte, error) {
+func (r *EnvelopeProposerRunner) GetRoot() ([32]byte, error) {
 	marshaledRoot, err := r.Encode()
 	if err != nil {
-		return [32]byte{}, fmt.Errorf("could not encode EnvelopeBuilderRunner: %w", err)
+		return [32]byte{}, fmt.Errorf("could not encode EnvelopeProposerRunner: %w", err)
 	}
 	return sha256.Sum256(marshaledRoot), nil
 }

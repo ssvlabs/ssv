@@ -430,7 +430,7 @@ func (mv *messageValidator) maxRound(role spectypes.RunnerRole) (specqbft.Round,
 	switch role {
 	case spectypes.RoleCommittee, spectypes.RoleAggregatorCommittee, ssvtypes.RoleAggregator: // TODO: check if value for aggregator is correct as there are messages on stage exceeding the limit
 		return 12, nil // TODO: consider calculating based on quick timeout and slow timeout
-	case spectypes.RoleProposer, spectypes.RoleEnvelopeBuilder:
+	case spectypes.RoleProposer, spectypes.RoleEnvelopeProposer:
 		return 2, nil
 	case ssvtypes.RoleSyncCommitteeContribution:
 		return 6, nil
@@ -537,11 +537,11 @@ func (mv *messageValidator) roundBelongsToAllowedSpread(
 ) error {
 	role := signedSSVMessage.SSVMessage.GetID().GetRoleType()
 
-	// Proposer and envelope-builder round timeouts are relative to QBFT instance start times rather than
+	// Proposer and envelope-proposer round timeouts are relative to QBFT instance start times rather than
 	// absolute time-into-slot values (until https://github.com/ssvlabs/ssv/issues/2429 is implemented),
 	// since we don't have visibility into the actual QBFT instance state here - we can't check whether the
 	// message round belongs to the allowed spread.
-	if role == spectypes.RoleProposer || role == spectypes.RoleEnvelopeBuilder {
+	if role == spectypes.RoleProposer || role == spectypes.RoleEnvelopeProposer {
 		return nil
 	}
 

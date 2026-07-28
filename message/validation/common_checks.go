@@ -61,7 +61,7 @@ func (mv *messageValidator) earlySlotAllowance(role spectypes.RunnerRole) time.D
 func (mv *messageValidator) messageLateness(slot phase0.Slot, role spectypes.RunnerRole, receivedAt time.Time) time.Duration {
 	var ttl uint64
 	switch role {
-	case spectypes.RoleProposer, spectypes.RoleEnvelopeBuilder, spectypes.RolePTCAttester, ssvtypes.RoleSyncCommitteeContribution:
+	case spectypes.RoleProposer, spectypes.RoleEnvelopeProposer, spectypes.RolePTCAttester, ssvtypes.RoleSyncCommitteeContribution:
 		ttl = 1 + LateSlotAllowance
 	case spectypes.RoleCommittee, spectypes.RoleAggregatorCommittee, ssvtypes.RoleAggregator:
 		ttl = mv.maxStoredSlots()
@@ -154,7 +154,7 @@ func (mv *messageValidator) dutyLimit(msgID spectypes.MessageID, slot phase0.Slo
 
 		return min(slotsPerEpoch, 2*validatorIndexCount), true
 
-	case spectypes.RoleProposerPreferences, spectypes.RoleEnvelopeBuilder:
+	case spectypes.RoleProposerPreferences, spectypes.RoleEnvelopeProposer:
 		// A validator proposes at most once per slot, so at most SlotsPerEpoch preferences (and likewise
 		// self-build envelopes) per epoch.
 		return mv.netCfg.SlotsPerEpoch, true
@@ -214,7 +214,7 @@ func (mv *messageValidator) validateBeaconDuty(
 	// The self-build envelope rides the proposer's slot, so it must carry a real proposer assignment —
 	// guarded like proposer-preferences (fetched and fresh), since the message can arrive before the
 	// epoch's duties are fetched or while a refetch for changed indices is in flight.
-	if role == spectypes.RoleEnvelopeBuilder {
+	if role == spectypes.RoleEnvelopeProposer {
 		validatorIndex := indices[0]
 		if mv.dutyStore.Proposer.IsEpochSet(epoch) && !mv.dutyStore.Proposer.IsEpochStale(epoch) &&
 			mv.dutyStore.Proposer.ValidatorDuty(epoch, slot, validatorIndex) == nil {
