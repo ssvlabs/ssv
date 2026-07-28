@@ -14,6 +14,13 @@ import (
 // graph (`go list -m`), so it tracks go-eth2-client across dependency bumps rather than pinning.
 //go:generate sh -c "go tool -modfile=../../../../tool.mod sszgen -path ./proposer_preferences.go --include $(go list -m -f '{{.Dir}}' github.com/attestantio/go-eth2-client)/spec/phase0,$(go list -m -f '{{.Dir}}' github.com/attestantio/go-eth2-client)/spec/bellatrix --objs ProposerPreferences,SignedProposerPreferences"
 
+// MaxProposerPreferencesDistinctRoots bounds the distinct ProposerPreferences signing roots one
+// signer may put on the wire per proposal slot — SIP #94 §7's normative cap of 4: the extra roots
+// come from preference-input changes between emissions (notably a dependent_root shift under
+// reorg), and the cap is policy headroom. Message validation enforces it world-wide per
+// (slot, signer); the §5 dispatcher sizes its pending stash from it.
+const MaxProposerPreferencesDistinctRoots = 4
+
 // ProposerPreferences is the Gloas (ePBS) preference a proposer broadcasts for an upcoming
 // proposal slot (SIP #94 §5): the fee recipient and target gas limit builders must honor, pinned to
 // the proposer-lookahead seed via DependentRoot. Signed under DomainProposerPreferences with domain
