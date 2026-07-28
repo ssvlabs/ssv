@@ -422,6 +422,11 @@ func TestSyncer_Stream(t *testing.T) {
 			Share: spectypes.Share{
 				ValidatorIndex:  1,
 				ValidatorPubKey: spectypes.ValidatorPK{0x1},
+				// A non-empty committee is required for the share to map to a real subnet:
+				// post-fork, an empty committee yields UnknownSubnetId, which selfSubnets
+				// can't set and shareInOwnSubnets can't match — the share would be silently
+				// filtered out of the sync and the update never sent.
+				Committee: []*spectypes.ShareMember{{Signer: 1}},
 			},
 			Status:          eth2apiv1.ValidatorStateActiveOngoing,
 			ActivationEpoch: 0,
