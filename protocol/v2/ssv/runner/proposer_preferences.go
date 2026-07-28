@@ -15,6 +15,7 @@ import (
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
@@ -51,10 +52,11 @@ type ProposerPreferencesRunner struct {
 	pending map[phase0.Slot][]*spectypes.PartialSignatureMessages
 }
 
-// maxPendingRootsPerSigner mirrors message validation's maxProposerPreferencesDistinctRoots: the wire
-// admits at most that many distinct §5 signing roots per (slot, signer), so the pending stash never
-// needs to retain more per signer.
-const maxPendingRootsPerSigner = 4
+// maxPendingRootsPerSigner is how many stashed partials one signer can legitimately account for per
+// proposal slot: the wire admits at most gloas.MaxProposerPreferencesDistinctRoots distinct §5
+// preference roots plus gloas.MaxRequestAuthDistinctRoots distinct request-auth roots per
+// (slot, signer) — the same shared constants message validation enforces.
+const maxPendingRootsPerSigner = gloas.MaxProposerPreferencesDistinctRoots + gloas.MaxRequestAuthDistinctRoots
 
 // ProposerPreferencesRunnerOptions bundles the dependencies required by NewProposerPreferencesRunner.
 type ProposerPreferencesRunnerOptions struct {
@@ -62,6 +64,14 @@ type ProposerPreferencesRunnerOptions struct {
 
 	FeeRecipientProvider feeRecipientProvider
 	GasLimit             uint64
+
+	// Builders is the cluster's direct-builder list (issue #2962, validated at startup): for each
+	// authenticatable entry the slot sub-runners additionally threshold-sign a RequestAuthV1 per
+	// upcoming proposal slot. Empty (the default) disables the overlay entirely.
+	Builders []gloas.BuilderEntry
+	// RequestAuthCache receives each reconstructed SignedRequestAuthV1, shared with the validator's
+	// proposer runner so the §4 produce path can attach auths at proposal time.
+	RequestAuthCache *ssv.RequestAuthCache
 }
 
 func NewProposerPreferencesRunner(opts ProposerPreferencesRunnerOptions) (Runner, error) {
@@ -99,6 +109,10 @@ func (r *ProposerPreferencesRunner) StartNewDuty(ctx context.Context, logger *za
 	if prev, ok := r.bySlot[slot]; ok {
 		sub.submittedPreferences = prev.submittedPreferences
 		sub.broadcastPreferences = prev.broadcastPreferences
+		// Auth roots are re-emission-invariant: never re-broadcast one already out, never redo a
+		// reconstruction already cached.
+		sub.broadcastAuthRoots = prev.broadcastAuthRoots
+		sub.reconstructedAuthRoots = prev.reconstructedAuthRoots
 		if prev.hasDutyRunning() {
 			prev.markDutyNotRequired() // superseded by the re-emission, not stuck
 		}
@@ -108,11 +122,12 @@ func (r *ProposerPreferencesRunner) StartNewDuty(ctx context.Context, logger *za
 		return err
 	}
 
-	// Replay the stashed partials for this proposal slot. Peers broadcast their §5 partial once, at
-	// their own emission tick, so it may predate this (re)start; the stash is the only recovery path —
-	// there is no re-broadcast, and message validation would dedup one by signing root anyway. A
-	// stashed partial that doesn't match the freshly frozen preference fails signature verification
-	// inside the sub-runner and is skipped.
+	// Replay the stashed partials for this proposal slot. Peers broadcast their §5-role partials
+	// once, at their own emission tick, so they may predate this (re)start; the stash is the only
+	// recovery path — there is no re-broadcast, and message validation would dedup one by signing
+	// root anyway. A stashed preference partial that doesn't match the freshly frozen preference
+	// fails signature verification inside the sub-runner and is skipped; a stashed request-auth
+	// partial outside the freshly frozen auth-root set is skipped the same way.
 	if sub.hasDutyRunning() {
 		for _, stashed := range r.pending[slot] {
 			if err := sub.ProcessPreConsensus(ctx, logger, stashed); err != nil {
@@ -125,9 +140,9 @@ func (r *ProposerPreferencesRunner) StartNewDuty(ctx context.Context, logger *za
 }
 
 func (r *ProposerPreferencesRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
-	// Stash every §5 partial (bounded, deduplicated), even when a sub-runner exists: a later
-	// re-emission replaces the sub-runner and its container, and peers won't re-broadcast, so the
-	// stash is what re-seeds the replacement (see StartNewDuty).
+	// Stash every §5-role partial — preference and request-auth alike (bounded, deduplicated) — even
+	// when a sub-runner exists: a later re-emission replaces the sub-runner and its containers, and
+	// peers won't re-broadcast, so the stash is what re-seeds the replacement (see StartNewDuty).
 	r.stashPending(signedMsg)
 
 	sub, ok := r.bySlot[signedMsg.Slot]
@@ -140,12 +155,14 @@ func (r *ProposerPreferencesRunner) ProcessPreConsensus(ctx context.Context, log
 	return sub.ProcessPreConsensus(ctx, logger, signedMsg)
 }
 
-// stashPending records a §5 partial for its proposal slot so StartNewDuty can replay it. Duplicates
-// by (signer, signing root) are skipped; a slot's stash is capped at the committee size times the
-// wire's per-signer distinct-root cap, so a full stash can only mean noise.
+// stashPending records a §5-role partial for its proposal slot so StartNewDuty can replay it.
+// Duplicates by (signer, signing root) are skipped — roots are globally distinct across the two
+// message types (different signing domains), so one keyspace serves both; a slot's stash is capped
+// at the committee size times the wire's combined per-signer distinct-root budget, so a full stash
+// can only mean noise.
 func (r *ProposerPreferencesRunner) stashPending(signedMsg *spectypes.PartialSignatureMessages) {
 	if signedMsg == nil || len(signedMsg.Messages) != 1 {
-		return // §5 partials carry exactly one message (enforced by message validation)
+		return // §5-role partials (preference and request-auth alike) carry exactly one message
 	}
 	msg := signedMsg.Messages[0]
 	stash := r.pending[signedMsg.Slot]
@@ -213,7 +230,7 @@ func (r *ProposerPreferencesRunner) expectedPreConsensusRootsAndDomain() ([]ssz.
 }
 
 func (r *ProposerPreferencesRunner) expectedPostConsensusRootsAndDomain(context.Context) ([]ssz.HashRoot, phase0.DomainType, error) {
-	return nil, [4]byte{}, fmt.Errorf("no post-consensus roots for proposer preferences")
+	return nil, spectypes.DomainError, fmt.Errorf("no post-consensus roots for proposer preferences")
 }
 
 func (r *ProposerPreferencesRunner) executeDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty) error {
@@ -308,6 +325,41 @@ type proposerPreferencesSlotRunner struct {
 	// duplicate, penalizing this operator's gossip score for nothing (issue #2934); the dispatcher's
 	// stash replay re-seeds the replacement instead, our own first partial included.
 	broadcastPreferences *gloas.ProposerPreferences
+
+	// builders is the cluster's direct-builder list (issue #2962 B1): for each authenticatable entry
+	// executeDuty freezes and threshold-signs a RequestAuthV1{data, proposal_slot} alongside the §5
+	// preference. Empty disables the request-auth round entirely.
+	builders         []gloas.BuilderEntry
+	requestAuthCache *ssv.RequestAuthCache
+
+	// requestAuths maps each frozen RequestAuthV1's signing root to the object and its builder, set
+	// when the duty executes; incoming RequestAuthPartialSig messages are admitted only against
+	// these roots. nil means the duty has not executed here yet.
+	requestAuths map[[32]byte]*frozenRequestAuth
+
+	// requestAuthContainer collects request-auth partials separately from the §5 preference round:
+	// the two sign under different domains, so they cannot share the base pre-consensus round, and
+	// auth collection legitimately keeps running after the preference round concludes the duty.
+	requestAuthContainer *ssv.PartialSigContainer
+
+	// broadcastAuthRoots records the auth roots this operator already broadcast a partial for,
+	// carried across sub-runner replacements like broadcastPreferences: auth roots don't depend on
+	// dependent_root, so a re-emission re-produces the identical root and a re-broadcast would only
+	// get this operator gossip-penalized as a same-peer duplicate (issue #2934).
+	broadcastAuthRoots map[[32]byte]struct{}
+
+	// reconstructedAuthRoots records the auth roots already reconstructed into the cache, carried
+	// across sub-runner replacements like broadcastAuthRoots: a replacement's fresh container would
+	// otherwise re-reach quorum from the stash replay and redo the reconstruction (and its metric)
+	// for a value that cannot have changed.
+	reconstructedAuthRoots map[[32]byte]struct{}
+}
+
+// frozenRequestAuth pairs a frozen RequestAuthV1 with the builder relationship it authenticates.
+type frozenRequestAuth struct {
+	auth     *gloas.RequestAuthV1
+	identity string // gloas.BuilderIdentity — the RequestAuthCache key
+	url      string // for logging
 }
 
 func newProposerPreferencesSlotRunner(opts ProposerPreferencesRunnerOptions) *proposerPreferencesSlotRunner {
@@ -318,12 +370,16 @@ func newProposerPreferencesSlotRunner(opts ProposerPreferencesRunnerOptions) *pr
 			Share:          opts.Share,
 		},
 
-		beacon:               opts.Beacon,
-		network:              opts.Network,
-		signer:               opts.Signer,
-		operatorSigner:       opts.OperatorSigner,
-		feeRecipientProvider: opts.FeeRecipientProvider,
-		gasLimit:             opts.GasLimit,
+		beacon:                 opts.Beacon,
+		network:                opts.Network,
+		signer:                 opts.Signer,
+		operatorSigner:         opts.OperatorSigner,
+		feeRecipientProvider:   opts.FeeRecipientProvider,
+		gasLimit:               opts.GasLimit,
+		builders:               opts.Builders,
+		requestAuthCache:       opts.RequestAuthCache,
+		broadcastAuthRoots:     map[[32]byte]struct{}{},
+		reconstructedAuthRoots: map[[32]byte]struct{}{},
 	}
 }
 
@@ -332,12 +388,18 @@ func (r *proposerPreferencesSlotRunner) StartNewDuty(ctx context.Context, logger
 	if err != nil {
 		return err
 	}
-	// Clear any prior observation; executeDuty re-freezes it, so a not-yet-executed duty stays nil.
+	// Clear any prior observations; executeDuty re-freezes them, so a not-yet-executed duty stays nil.
 	r.proposerPreferences = nil
+	r.requestAuths = nil
+	r.requestAuthContainer = ssv.NewPartialSigContainer(quorum)
 	return r.baseStartNewNonBeaconDuty(ctx, logger, r, validatorDuty, quorum)
 }
 
 func (r *proposerPreferencesSlotRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) (err error) {
+	if signedMsg.Type == spectypes.RequestAuthPartialSig {
+		return r.processRequestAuthPartial(ctx, logger, signedMsg)
+	}
+
 	hasQuorum, roots, err := r.basePreConsensusMsgProcessing(ctx, logger, r, signedMsg)
 	if errors.Is(err, ErrNoDutyAssigned) || errors.Is(err, ErrRunningDutySucceeded) {
 		// A late message for a concluded slot is retryable (the sub-runner lingers until evicted).
@@ -409,7 +471,7 @@ func (r *proposerPreferencesSlotRunner) expectedPreConsensusRootsAndDomain() ([]
 }
 
 func (r *proposerPreferencesSlotRunner) expectedPostConsensusRootsAndDomain(context.Context) ([]ssz.HashRoot, phase0.DomainType, error) {
-	return nil, [4]byte{}, fmt.Errorf("no post-consensus roots for proposer preferences")
+	return nil, spectypes.DomainError, fmt.Errorf("no post-consensus roots for proposer preferences")
 }
 
 func (r *proposerPreferencesSlotRunner) executeDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty) error {
@@ -418,6 +480,11 @@ func (r *proposerPreferencesSlotRunner) executeDuty(ctx context.Context, logger 
 		return err
 	}
 	proposalSlot := validatorDuty.DutySlot()
+
+	// The request-auth round rides every execution of the §5 duty, ahead of the preference logic so
+	// none of its early-return paths (unchanged preference, in-flight broadcast) can skip it. It
+	// never fails the duty: the overlay is opt-in and the §5 preference must not depend on it.
+	r.runRequestAuthRound(ctx, logger, validatorDuty, proposalSlot)
 
 	preferences, err := r.buildProposerPreferences(ctx, proposalSlot)
 	if err != nil {
@@ -475,6 +542,132 @@ func (r *proposerPreferencesSlotRunner) executeDuty(ctx context.Context, logger 
 		return fmt.Errorf("could not sign/broadcast proposer preferences partial sig: %w", err)
 	}
 	r.broadcastPreferences = preferences
+	return nil
+}
+
+// runRequestAuthRound freezes one RequestAuthV1{data, proposal_slot} per authenticatable configured
+// builder (issue #2962 B1): records each auth's signing root so incoming partials can be admitted,
+// and signs and broadcasts this operator's partial — once per root, across re-emissions (auth roots
+// are re-emission-invariant, see broadcastAuthRoots). Per-builder failures are logged and skipped,
+// never failing the §5 duty: a builder whose auth misses quorum is simply not contactable for the
+// slot, and the enshrined flow (gossip bids, self-build) stays available.
+func (r *proposerPreferencesSlotRunner) runRequestAuthRound(ctx context.Context, logger *zap.Logger, validatorDuty *spectypes.ValidatorDuty, proposalSlot phase0.Slot) {
+	if len(r.builders) == 0 {
+		return
+	}
+
+	// DomainRequestAuth is genesis-style (computed locally by the beacon adapter, no BN call); the
+	// epoch argument is ignored for it.
+	domain, err := r.beacon.DomainData(ctx, r.NetworkConfig.EstimatedEpochAtSlot(proposalSlot), phase0.DomainType(spectypes.DomainRequestAuth))
+	if err != nil {
+		logger.Warn("request auth skipped: could not get domain data", fields.Slot(proposalSlot), zap.Error(err))
+		return
+	}
+
+	if r.requestAuths == nil {
+		r.requestAuths = make(map[[32]byte]*frozenRequestAuth, len(r.builders))
+	}
+	for i := range r.builders {
+		entry := &r.builders[i]
+		data, err := entry.AuthDataBytes()
+		if err != nil || len(data) == 0 {
+			// The default (empty-URL) entry is not authenticatable, and invalid auth data is
+			// rejected at startup — nothing to sign either way.
+			continue
+		}
+		auth := &gloas.RequestAuthV1{Data: data, Slot: proposalSlot}
+		root, err := spectypes.ComputeETHSigningRoot(auth, domain)
+		if err != nil {
+			logger.Warn("request auth skipped: could not compute signing root",
+				fields.Slot(proposalSlot), zap.String("builder_url", entry.URL), zap.Error(err))
+			continue
+		}
+		r.requestAuths[root] = &frozenRequestAuth{auth: auth, identity: gloas.BuilderIdentity(entry.URL, data), url: entry.URL}
+
+		if _, done := r.broadcastAuthRoots[root]; done {
+			// A prior incarnation of this slot already broadcast this exact auth; the dispatcher's
+			// stash replay and live partials complete its quorum, a re-broadcast would only be
+			// dropped as a same-peer duplicate.
+			continue
+		}
+		msg, err := signAsValidator(ctx, r, validatorDuty.ValidatorIndex, auth, proposalSlot, phase0.DomainType(spectypes.DomainRequestAuth), domain)
+		if err != nil {
+			logger.Warn("request auth skipped: could not sign",
+				fields.Slot(proposalSlot), zap.String("builder_url", entry.URL), zap.Error(err))
+			continue
+		}
+		msgs := &spectypes.PartialSignatureMessages{
+			Type:     spectypes.RequestAuthPartialSig,
+			Slot:     proposalSlot,
+			Messages: []*spectypes.PartialSignatureMessage{msg},
+		}
+		if err := r.signAndBroadcastPartialSigMsgs(ctx, r.network, r.operatorSigner, r.GetShare().ValidatorPubKey[:], msgs); err != nil {
+			logger.Warn("request auth skipped: could not broadcast partial",
+				fields.Slot(proposalSlot), zap.String("builder_url", entry.URL), zap.Error(err))
+			continue
+		}
+		r.broadcastAuthRoots[root] = struct{}{}
+	}
+}
+
+// processRequestAuthPartial collects request-auth partials into their own container and, on the
+// first quorum for a root, reconstructs the builder-facing SignedRequestAuthV1 into the shared
+// cache. Unlike the §5 preference round it has no succeeded-gate: the preference submission
+// concluding the duty must not stop auth collection, which legitimately continues until the
+// proposal slot (the sub-runner lingers until evicted).
+func (r *proposerPreferencesSlotRunner) processRequestAuthPartial(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
+	if !r.hasDutyAssigned() {
+		return NewRetryableError(spectypes.WrapError(spectypes.NoRunningDutyErrorCode, ErrNoDutyAssigned))
+	}
+	if err := r.validatePartialSigMsg(signedMsg, r.State.CurrentDuty.DutySlot()); err != nil {
+		return fmt.Errorf("invalid request-auth partial: %w", err)
+	}
+	if len(signedMsg.Messages) != 1 {
+		return errors.New("request-auth partial must carry exactly one message")
+	}
+	msg := signedMsg.Messages[0]
+
+	if r.requestAuths == nil {
+		// Duty assigned but not executed here yet (or no builders configured): retryable, so a
+		// partial racing the duty start also lands via the queue replay and the dispatcher stash.
+		return NewRetryableError(spectypes.WrapError(spectypes.NoRunningDutyErrorCode, errors.New("no frozen request auths")))
+	}
+	frozen, ok := r.requestAuths[msg.SigningRoot]
+	if !ok {
+		// A root we didn't freeze: the sender's builder list or auth-data bytes diverge from ours;
+		// whatever quorum it can reach forms on the operators that share its config.
+		return fmt.Errorf("unknown request-auth signing root %x", msg.SigningRoot)
+	}
+	if _, done := r.reconstructedAuthRoots[msg.SigningRoot]; done {
+		// Already reconstructed and cached, possibly by a prior incarnation of this slot — the
+		// carried marker keeps a replacement's stash replay from redoing the work; late partials
+		// add nothing.
+		return nil
+	}
+
+	// quorum returns true only once per root (the first time it is reached).
+	hasQuorum, _ := r.basePartialSigMsgProcessing(signedMsg, r.requestAuthContainer)
+	if !hasQuorum {
+		return nil
+	}
+
+	fullSig, err := r.State.ReconstructBeaconSig(r.requestAuthContainer, msg.SigningRoot, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
+	if err != nil {
+		// If the reconstructed signature is invalid, surface which partial signatures were at fault.
+		r.FallBackAndVerifyEachSignature(r.requestAuthContainer, msg.SigningRoot, r.GetShare().Committee, r.GetShare().ValidatorIndex)
+		return fmt.Errorf("got request-auth quorum but it has invalid signatures: %w", err)
+	}
+	var signature phase0.BLSSignature
+	copy(signature[:], fullSig)
+
+	r.reconstructedAuthRoots[msg.SigningRoot] = struct{}{}
+	if r.requestAuthCache != nil {
+		r.requestAuthCache.Store(r.GetShare().ValidatorIndex, frozen.auth.Slot, frozen.identity,
+			&gloas.SignedRequestAuthV1{Message: frozen.auth, Signature: signature})
+	}
+	recordRequestAuthReconstruction(ctx)
+	logger.Info("✔️ reconstructed builder request auth",
+		fields.Slot(frozen.auth.Slot), zap.String("builder_url", frozen.url))
 	return nil
 }
 

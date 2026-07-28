@@ -155,7 +155,7 @@ func TestProposerPreferencesRunner_stashPending(t *testing.T) {
 	disp.stashPending(msg(1, 0xbb)) // same signer, another root: kept
 	require.Len(t, disp.pending[slot], 3)
 
-	for i := range 16 { // well beyond the cap
+	for i := range 2*maxPendingRootsPerSigner + 8 { // well beyond the cap
 		disp.stashPending(msg(spectypes.OperatorID(10+i), 0xcc))
 	}
 	require.Len(t, disp.pending[slot], 2*maxPendingRootsPerSigner)
