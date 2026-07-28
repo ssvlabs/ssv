@@ -406,7 +406,7 @@ func (mv *messageValidator) partialSignatureTypeMatchesRole(msgType spectypes.Pa
 		return msgType == spectypes.PostConsensusPartialSig || msgType == ssvtypes.SelectionProofPartialSig
 	case spectypes.RoleProposer:
 		return msgType == spectypes.PostConsensusPartialSig || msgType == spectypes.RandaoPartialSig
-	case spectypes.RoleEnvelopeBuilder:
+	case spectypes.RoleEnvelopeProposer:
 		// The §6 envelope duty has no pre-consensus phase, so only post-consensus partial sigs.
 		return msgType == spectypes.PostConsensusPartialSig
 	case ssvtypes.RoleSyncCommitteeContribution:
