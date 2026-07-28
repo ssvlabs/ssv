@@ -53,6 +53,7 @@ func (s *SignerStateForSlotRound) Reset(slot phase0.Slot, round specqbft.Round) 
 	s.World.HashedProposalData = nil
 	s.World.SeenDecidedMsgSignersCount = 0
 	s.World.SeenProposerPreferencesRoots = nil
+	s.World.SeenRequestAuthRoots = nil
 }
 
 // SignerState represents the state of a signer (an Operator running a Runner that performs partial-signing for
@@ -73,6 +74,12 @@ type SignerState struct {
 	// signer (SIP #94 §5): that type is capped by distinct root (up to maxProposerPreferencesDistinctRoots),
 	// not by the single pre-consensus bit in SeenMsgTypes. nil until the first such message.
 	SeenProposerPreferencesRoots [][32]byte
+
+	// SeenRequestAuthRoots records the distinct RequestAuthV1 signing roots seen from this signer
+	// (issue #2962): like §5 preferences the type is capped by distinct root (up to
+	// maxRequestAuthDistinctRoots — one per configured builder), not by the single pre-consensus
+	// bit in SeenMsgTypes. nil until the first such message.
+	SeenRequestAuthRoots [][32]byte
 }
 
 // hasProposerPreferencesRoot reports whether root has already been seen from this signer.
@@ -91,4 +98,22 @@ func (s *SignerState) recordProposerPreferencesRoot(root [32]byte) {
 		return
 	}
 	s.SeenProposerPreferencesRoots = append(s.SeenProposerPreferencesRoots, root)
+}
+
+// hasRequestAuthRoot reports whether the request-auth root has already been seen from this signer.
+func (s *SignerState) hasRequestAuthRoot(root [32]byte) bool {
+	return slices.Contains(s.SeenRequestAuthRoots, root)
+}
+
+// requestAuthRootCount returns the number of distinct request-auth roots seen from this signer.
+func (s *SignerState) requestAuthRootCount() int {
+	return len(s.SeenRequestAuthRoots)
+}
+
+// recordRequestAuthRoot adds the request-auth root to the seen set, skipping roots already present.
+func (s *SignerState) recordRequestAuthRoot(root [32]byte) {
+	if slices.Contains(s.SeenRequestAuthRoots, root) {
+		return
+	}
+	s.SeenRequestAuthRoots = append(s.SeenRequestAuthRoots, root)
 }

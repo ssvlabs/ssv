@@ -147,7 +147,7 @@ func (r *PTCAttesterRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot
 }
 
 func (r *PTCAttesterRunner) expectedPostConsensusRootsAndDomain(context.Context) ([]ssz.HashRoot, phase0.DomainType, error) {
-	return nil, [4]byte{}, fmt.Errorf("no post-consensus roots for PTC attestation")
+	return nil, spectypes.DomainError, fmt.Errorf("no post-consensus roots for PTC attestation")
 }
 
 func (r *PTCAttesterRunner) executeDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty) error {

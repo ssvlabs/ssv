@@ -122,7 +122,7 @@ func (mv *messageValidator) validatePartialSignatureMessageSemantics(
 	// - ValidatorRegistrationPartialSig for Validator Registration
 	// - VoluntaryExitPartialSig for Voluntary Exit
 	// - PTCAttesterPartialSig for PTC attestation
-	// - ProposerPreferencesPartialSig for Proposer Preferences
+	// - ProposerPreferencesPartialSig or RequestAuthPartialSig for Proposer Preferences
 	if !mv.partialSignatureTypeMatchesRole(partialSignatureMessages.Type, role) {
 		return ErrPartialSignatureTypeRoleMismatch
 	}
@@ -200,7 +200,8 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 		// - 1 ValidatorRegistrationPartialSig for Validator Registration
 		// - 1 VoluntaryExitPartialSig for Voluntary Exit
 		// - 1 PTCAttesterPartialSig for PTC attestation
-		// - 1 ProposerPreferencesPartialSig for Proposer Preferences
+		// - 1 ProposerPreferencesPartialSig for Proposer Preferences (distinct-root budget), plus
+		//   RequestAuthPartialSig up to its own distinct-root budget (issue #2962)
 		if err := validatePartialSignatureMessageLimit(partialSignatureMessages, receivedFrom, signerState); err != nil {
 			return err
 		}
@@ -320,6 +321,25 @@ func validatePartialSignatureMessageLimit(
 			e.got = fmt.Sprintf("proposer-preferences, %d distinct root(s) world-wide", signerState.World.proposerPreferencesRootCount())
 			return e
 		}
+	case spectypes.RequestAuthPartialSig:
+		// Issue #2962 (§5 request-auth extension): one root per configured direct builder per
+		// proposal slot, admitted up to maxRequestAuthDistinctRoots distinct roots per (slot, signer)
+		// with the same two-tier handling as §5 preferences — a same-peer repeat of a seen root is a
+		// provable duplicate (REJECT), a relayed repeat or over-budget distinct root is rate-limiting
+		// (IGNORE).
+		root := m.Messages[0].SigningRoot // exactly one message for this role (enforced by semantics + count rules)
+		if signerState.Peer(receivedFrom).hasRequestAuthRoot(root) {
+			e := ErrTooManyPartialSigMessage
+			e.reject = true
+			e.got = "request-auth, duplicate signing root from peer"
+			return e
+		}
+		if signerState.World.hasRequestAuthRoot(root) ||
+			signerState.World.requestAuthRootCount() >= maxRequestAuthDistinctRoots {
+			e := ErrTooManyPartialSigMessage
+			e.got = fmt.Sprintf("request-auth, %d distinct root(s) world-wide", signerState.World.requestAuthRootCount())
+			return e
+		}
 	case spectypes.PostConsensusPartialSig:
 		if signerState.Peer(receivedFrom).SeenMsgTypes.reachedPostConsensusLimit() {
 			// Check if the same peer is sending us a "logical duplicate" message, reject message to punish.
@@ -369,13 +389,21 @@ func (mv *messageValidator) updatePartialSignatureState(
 		return err
 	}
 
-	// SIP #94 §5: record the distinct signing root so a dependent_root re-emission is admitted up to the
-	// bound (see validatePartialSignatureMessageLimit). Exactly one signature for this role (validated
-	// earlier), so Messages[0] holds the root.
-	if partialSignatureMessages.Type == spectypes.ProposerPreferencesPartialSig {
+	// SIP #94 §5 (and its issue #2962 request-auth extension): record the distinct signing root so a
+	// legitimate re-emission — a dependent_root refresh for preferences, another configured builder
+	// for request auths — is admitted up to its bound (see validatePartialSignatureMessageLimit).
+	// Exactly one signature for these types (validated earlier), so Messages[0] holds the root.
+	switch partialSignatureMessages.Type {
+	case spectypes.ProposerPreferencesPartialSig:
 		root := partialSignatureMessages.Messages[0].SigningRoot
 		signerState.Peer(receivedFrom).recordProposerPreferencesRoot(root)
 		signerState.World.recordProposerPreferencesRoot(root)
+	case spectypes.RequestAuthPartialSig:
+		root := partialSignatureMessages.Messages[0].SigningRoot
+		signerState.Peer(receivedFrom).recordRequestAuthRoot(root)
+		signerState.World.recordRequestAuthRoot(root)
+	default:
+		// Every other type is capped by the SeenMsgTypes bits recorded above, not by root.
 	}
 
 	return nil
@@ -391,7 +419,8 @@ func (mv *messageValidator) validPartialSigMsgType(msgType spectypes.PartialSigM
 		spectypes.VoluntaryExitPartialSig,
 		spectypes.AggregatorCommitteePartialSig,
 		spectypes.PTCAttesterPartialSig,
-		spectypes.ProposerPreferencesPartialSig:
+		spectypes.ProposerPreferencesPartialSig,
+		spectypes.RequestAuthPartialSig:
 		return true
 	default:
 		return false
@@ -420,7 +449,9 @@ func (mv *messageValidator) partialSignatureTypeMatchesRole(msgType spectypes.Pa
 	case spectypes.RolePTCAttester:
 		return msgType == spectypes.PTCAttesterPartialSig
 	case spectypes.RoleProposerPreferences:
-		return msgType == spectypes.ProposerPreferencesPartialSig
+		// The role carries both the §5 preference round and the issue #2962 request-auth rounds —
+		// same duty cadence, distinct signing domains, so distinct partial-sig types.
+		return msgType == spectypes.ProposerPreferencesPartialSig || msgType == spectypes.RequestAuthPartialSig
 	default:
 		return false
 	}

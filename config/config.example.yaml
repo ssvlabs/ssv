@@ -58,6 +58,21 @@ OperatorPrivateKey:
 # mainnet yet; tune only after validating on a Gloas network. See docs/MEV_CONSIDERATIONS.md.
 # ProposerDelayEPBS: 0
 
+# Post-ePBS (Gloas) direct-builder connections — an opt-in overlay on top of the enshrined builder flow
+# (which needs no configuration and stays the fallback). Every entry MUST be configured identically across
+# ALL operators of every committee sharing a validator: AuthData (defaulting to the UTF-8 bytes of URL,
+# exactly as written) is threshold-signed, so any divergence silently disables that builder. At most 8
+# entries; one entry may have an empty URL to set default preferences for any contacted builder.
+# Monetary values are Gwei. See docs/EXTERNAL_BUILDERS.md.
+# Builders:
+#   - URL: "https://builder.example.com"
+#     # AuthData: "0x..."          # omit to default to the URL bytes
+#     # BuilderBoostFactor: 100    # bid multiplier %, 0 = always local, default 100
+#     # MaxTrustedBid: 0           # cap on trusted (off-protocol) bid value
+#     # MinBid: 0                  # ignore bids below this value
+#     # MaxExecutionPayment: 0     # cap on trusted execution-layer payment
+#     # PubKey: "0x..."            # optionally pin the builder's bid-signing key
+
 # This enables monitoring at the specified port, see https://github.com/ssvlabs/ssv/tree/main/monitoring
 MetricsAPIPort: 15000
 

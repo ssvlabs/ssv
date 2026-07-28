@@ -2,6 +2,8 @@ package validation
 
 import (
 	"time"
+
+	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 )
 
 // To add some encoding overhead for ssz, we use (N + N/encodingOverheadDivisor + 4) for a structure with expected size N
@@ -33,7 +35,14 @@ const proposerPreferencesEarlyEpochs = 2
 // (slot, signer) may contribute (SIP #94 §5). Unlike other pre-consensus messages (capped at 1), a
 // proposer re-emits its preference under a new root when the proposal slot's dependent_root changes, so
 // the bound admits a few genuine reorg-driven refreshes while still capping duplicates and flooding.
-const maxProposerPreferencesDistinctRoots = 4
+// The value is shared with the §5 dispatcher's pending stash, hence the central constant.
+const maxProposerPreferencesDistinctRoots = gloas.MaxProposerPreferencesDistinctRoots
+
+// maxRequestAuthDistinctRoots bounds the distinct RequestAuthV1 signing roots one (slot, signer)
+// may contribute (issue #2962): one root per configured direct-builder entry — auth roots don't
+// depend on dependent_root, so unlike §5 preferences a reorg never mints new ones — plus headroom
+// for a config change between emissions. Shared with the config entry cap and the dispatcher stash.
+const maxRequestAuthDistinctRoots = gloas.MaxRequestAuthDistinctRoots
 
 const (
 	signatureSize    = 256
