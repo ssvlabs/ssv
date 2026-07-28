@@ -247,6 +247,22 @@ func GetSpecDir(path, module string) (string, error) {
 	if replace != nil {
 		modPath = replace.New.Path
 		modVersion = replace.New.Version
+		if modVersion == "" {
+			// A version-less replace target is a local directory, not a module in the cache
+			// (go.mod semantics: a replacement path without a version must be a directory).
+			dir := modPath
+			if !filepath.IsAbs(dir) {
+				root, err := findGoModDir(path)
+				if err != nil {
+					return "", err
+				}
+				dir = filepath.Join(root, dir)
+			}
+			if _, err := os.Stat(dir); err != nil {
+				return "", fmt.Errorf("local replace directory for %s not found: %w", specModule, err)
+			}
+			return filepath.Join(filepath.Clean(dir), module), nil
+		}
 	} else {
 		// get from require
 		var req *modfile.Require
@@ -309,25 +325,33 @@ func GetModulePath(name, version string) (string, error) {
 	return path.Join(cache, escapedPath+"@"+escapedVersion), nil
 }
 
+// findGoModDir walks up from path to the directory containing the module file.
+func findGoModDir(path string) (string, error) {
+	modFileName := specGoModFilename()
+	for {
+		if _, err := os.Stat(filepath.Join(path, modFileName)); err == nil {
+			return path, nil
+		}
+		path = filepath.Dir(path)
+		if path == "/" {
+			return "", fmt.Errorf("could not find %s file", modFileName)
+		}
+	}
+}
+
 func getGoModFile(path string) (*modfile.File, error) {
 	// The alan_spec build resolves the ssv-spec version from go.spec.alan.mod instead of
 	// go.mod, so the spec-test vectors come from the alan (pre-Boole) spec release.
 	modFileName := specGoModFilename()
 
-	// find project root path
-	for {
-		if _, err := os.Stat(filepath.Join(path, modFileName)); err == nil {
-			break
-		}
-		path = filepath.Dir(path)
-		if path == "/" {
-			return nil, fmt.Errorf("could not find %s file", modFileName)
-		}
+	root, err := findGoModDir(path)
+	if err != nil {
+		return nil, err
 	}
 
 	// read mod file
 	// #nosec G304 -- modFileName is selected by build tags from fixed constants.
-	buf, err := os.ReadFile(filepath.Join(filepath.Clean(path), modFileName))
+	buf, err := os.ReadFile(filepath.Join(filepath.Clean(root), modFileName))
 	if err != nil {
 		return nil, fmt.Errorf("could not read %s", modFileName)
 	}
