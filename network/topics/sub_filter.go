@@ -14,7 +14,10 @@ type SubFilter interface {
 	// SubscriptionFilter allows controlling what topics the node will subscribe to
 	// otherwise it might subscribe to irrelevant topics that were suggested by other peers
 	pubsub.SubscriptionFilter
-	// Whitelist
+	// Whitelist maintains the dynamic topic whitelist consulted by CanSubscribe. Embedding it
+	// makes the whitelist part of the compile-time contract, so callers (topic controller
+	// register/deregister paths) don't need runtime type assertions.
+	Whitelist
 }
 
 type subFilter struct {

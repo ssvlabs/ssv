@@ -165,7 +165,7 @@ func (ctrl *topicsCtrl) Topics() []string {
 // Subscribe subscribes to the given topic, it can handle multiple concurrent calls.
 // It will create a single goroutine and channel for every topic
 func (ctrl *topicsCtrl) Subscribe(name string) error {
-	ctrl.subFilter.(Whitelist).Register(name)
+	ctrl.subFilter.Register(name)
 
 	sub, err := ctrl.container.Subscribe(name)
 	if err != nil {
@@ -208,9 +208,8 @@ func (ctrl *topicsCtrl) Broadcast(topicName string, data []byte, timeout time.Du
 
 // DeregisterTopics removes the given topics from the subscription-filter whitelist.
 func (ctrl *topicsCtrl) DeregisterTopics(names ...string) {
-	whitelist := ctrl.subFilter.(Whitelist)
 	for _, name := range names {
-		whitelist.Deregister(name)
+		ctrl.subFilter.Deregister(name)
 	}
 }
 
@@ -227,7 +226,7 @@ func (ctrl *topicsCtrl) Unsubscribe(name string, hard bool) error {
 			ctrl.logger.Debug("could not unregister msg validator", zap.String("topic", name), zap.Error(err))
 		}
 	}
-	ctrl.subFilter.(Whitelist).Deregister(name)
+	ctrl.subFilter.Deregister(name)
 
 	return nil
 }
