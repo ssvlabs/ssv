@@ -332,7 +332,16 @@ func (s *Syncer) sleep(ctx context.Context, d time.Duration) (slept bool) {
 	}
 }
 
-// selfSubnets calculates the operator's subnets by adding up the fixed subnets and the active committees
+// selfSubnets calculates the operator's subnets by adding up the fixed subnets and the active
+// committees.
+//
+// During the transition window the Alan and Boole subnet numbers are folded into one bitmap,
+// even though they are independent gossip namespaces sharing a 0..127 index space (the same
+// collision operatorActiveSubnets in cli/operator/node.go keeps two bitmaps to avoid).
+// Here the union only makes shareInOwnSubnets over-match — a share whose subnet in one
+// namespace collides with ours in the other is synced too — which is the safe direction
+// (a superset; nothing that should be synced is dropped) and bounded to the window, so the
+// extra bookkeeping isn't worth it.
 func (s *Syncer) selfSubnets(currentSlot phase0.Slot) networkcommons.Subnets {
 	// Start off with a copy of the fixed subnets (e.g., exporter subscribed to all subnets).
 	mySubnets := s.fixedSubnets
