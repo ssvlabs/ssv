@@ -321,6 +321,7 @@ func TestSignBeaconObject(t *testing.T) {
 		{"DomainBeaconBuilder", spectypes.DomainBeaconBuilder},
 		{"DomainPTCAttester", spectypes.DomainPTCAttester},
 		{"DomainProposerPreferences", spectypes.DomainProposerPreferences},
+		{"DomainRequestAuth", spectypes.DomainRequestAuth},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, sig, err := km.(*LocalKeyManager).SignBeaconObject(
