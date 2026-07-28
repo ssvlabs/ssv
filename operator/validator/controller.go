@@ -44,6 +44,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
@@ -87,6 +88,7 @@ type ControllerOptions struct {
 	Graffiti                       []byte
 	ProposerDelay                  time.Duration
 	ProposerDelayEPBS              time.Duration
+	Builders                       []gloas.BuilderEntry
 
 	// worker flags
 	WorkersCount    int `yaml:"MsgWorkersCount" env:"MSG_WORKERS_COUNT" env-description:"Number of message processing workers"`
@@ -195,24 +197,24 @@ func NewController(logger *zap.Logger, options ControllerOptions) *Controller {
 		WorkersCount: options.WorkersCount,
 		Buffer:       options.QueueBufferSize,
 	}
-	validatorCommonOpts := validator.NewCommonOptions(
-		options.NetworkConfig,
-		options.Network,
-		options.Beacon,
-		options.StorageMap,
-		options.BeaconSigner,
-		options.OperatorSigner,
-		options.DoppelgangerHandler,
-		options.NewDecidedHandler,
-		options.FullNode,
-		options.ExporterMode,
-		options.HistorySyncBatchSize,
-		options.GasLimit,
-		options.MessageValidator,
-		options.Graffiti,
-		options.ProposerDelay,
-		options.ProposerDelayEPBS,
-	)
+	validatorCommonOpts := validator.NewCommonOptions(validator.CommonOptions{
+		NetworkConfig:       options.NetworkConfig,
+		Network:             options.Network,
+		Beacon:              options.Beacon,
+		Storage:             options.StorageMap,
+		Signer:              options.BeaconSigner,
+		OperatorSigner:      options.OperatorSigner,
+		DoppelgangerHandler: options.DoppelgangerHandler,
+		NewDecidedHandler:   options.NewDecidedHandler,
+		FullNode:            options.FullNode,
+		ExporterMode:        options.ExporterMode,
+		GasLimit:            options.GasLimit,
+		MessageValidator:    options.MessageValidator,
+		Graffiti:            options.Graffiti,
+		ProposerDelay:       options.ProposerDelay,
+		ProposerDelayEPBS:   options.ProposerDelayEPBS,
+		Builders:            options.Builders,
+	}, options.HistorySyncBatchSize)
 
 	cacheTTL := 2 * options.NetworkConfig.EpochDuration() // #nosec G115
 
@@ -1256,6 +1258,11 @@ func SetupRunners(
 	// §4-decided block root) and the §6 envelope runner (which reads it).
 	proposedBlockRoots := ssv.NewProposedBlockRoots()
 
+	// requestAuthCache is shared between this validator's proposer-preferences runner (which writes
+	// each threshold-reconstructed builder request auth, issue #2962) and the proposer runner's §4
+	// produce path (which will attach them once the produceBlockV4 POST migration lands).
+	requestAuthCache := ssv.NewRequestAuthCache()
+
 	runners := runner.ValidatorDutyRunners{}
 	var err error
 	for _, role := range runnersType {
@@ -1346,6 +1353,8 @@ func SetupRunners(
 				BaseRunnerOptions:    baseOpts,
 				FeeRecipientProvider: validatorStore,
 				GasLimit:             options.GasLimit,
+				Builders:             options.Builders,
+				RequestAuthCache:     requestAuthCache,
 			})
 		default:
 			return nil, fmt.Errorf("unexpected duty runner type: %s", role)

@@ -136,6 +136,12 @@ var (
 			observability.InstrumentName(observabilityNamespace, "envelope.build_match"),
 			metric.WithUnit("{envelope}"),
 			metric.WithDescription("decided Gloas execution-payload envelopes by whether this operator is the one that built them")))
+
+	requestAuthReconstructionCounter = metrics.New(
+		meter.Int64Counter(
+			observability.InstrumentName(observabilityNamespace, "request_auth.reconstructions"),
+			metric.WithUnit("{auth}"),
+			metric.WithDescription("threshold-reconstructed Gloas direct-builder request auths (issue #2962)")))
 )
 
 func recordSuccessfulSubmission(ctx context.Context, count int64, epoch phase0.Epoch, role spectypes.BeaconRole) {
@@ -154,15 +160,24 @@ func recordDutyOutcome(ctx context.Context, role spectypes.RunnerRole, outcome d
 		))
 }
 
-// recordProposalBuildSource counts a submitted Gloas proposal by build source — self-build
-// (BUILDER_INDEX_SELF_BUILD) vs external builder. Gloas-only: the decided bid is the same for every
-// operator, unlike the pre-Gloas Blinded flag, which the distributed submit skews.
-func recordProposalBuildSource(ctx context.Context, localBuild bool) {
-	source := "builder"
-	if localBuild {
-		source = "local"
-	}
-	proposalBuildSourceCounter.Add(ctx, 1, metric.WithAttributes(observability.BuildSourceAttribute(source)))
+// proposalBuildSource is a submitted Gloas proposal's build source (issue #2962 E1). Today only the
+// outcome is knowable — the GET produce doesn't expose why the BN self-built; the produce-POST
+// migration will split buildSourceLocal by reason (no bid available / economics / builder auth
+// unavailable, the latter fed by the request-auth cache).
+type proposalBuildSource string
+
+const (
+	// buildSourceBuilder — the decided bid commits to an external builder.
+	buildSourceBuilder proposalBuildSource = "builder"
+	// buildSourceLocal — the decided bid commits to BUILDER_INDEX_SELF_BUILD.
+	buildSourceLocal proposalBuildSource = "local"
+)
+
+// recordProposalBuildSource counts a submitted Gloas proposal by build source. Gloas-only: the
+// decided bid is the same for every operator, unlike the pre-Gloas Blinded flag, which the
+// distributed submit skews.
+func recordProposalBuildSource(ctx context.Context, source proposalBuildSource) {
+	proposalBuildSourceCounter.Add(ctx, 1, metric.WithAttributes(observability.BuildSourceAttribute(string(source))))
 }
 
 // recordEnvelopeBuildMatch counts a decided §6 envelope by whether this operator's cached envelope
@@ -178,6 +193,13 @@ func recordEnvelopeBuildMatch(ctx context.Context, self bool) {
 		match = "self"
 	}
 	envelopeBuildMatchCounter.Add(ctx, 1, metric.WithAttributes(observability.EnvelopeBuildMatchAttribute(match)))
+}
+
+// recordRequestAuthReconstruction counts a threshold-reconstructed direct-builder request auth
+// (issue #2962). The inverse signal — an auth that never reached quorum — is measured where it
+// bites: at the §4 produce path's cache lookup, once the produce-POST migration lands.
+func recordRequestAuthReconstruction(ctx context.Context) {
+	requestAuthReconstructionCounter.Add(ctx, 1)
 }
 
 func recordPreConsensusDuration(ctx context.Context, duration time.Duration, role spectypes.RunnerRole) {

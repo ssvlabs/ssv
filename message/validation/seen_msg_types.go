@@ -82,9 +82,10 @@ func (c *SeenMsgTypes) RecordPartialSignatureMessage(messages *spectypes.Partial
 	switch messages.Type {
 	case spectypes.RandaoPartialSig, ssvtypes.SelectionProofPartialSig, ssvtypes.ContributionProofs, spectypes.ValidatorRegistrationPartialSig, spectypes.VoluntaryExitPartialSig, spectypes.AggregatorCommitteePartialSig, spectypes.PTCAttesterPartialSig:
 		c.recordPreConsensus()
-	case spectypes.ProposerPreferencesPartialSig:
-		// Capped by distinct signing root rather than the single pre-consensus bit (SIP #94 §5); the root
-		// set is tracked on SignerState, so there is nothing to record in this type bitmask.
+	case spectypes.ProposerPreferencesPartialSig, spectypes.RequestAuthPartialSig:
+		// Capped by distinct signing root rather than the single pre-consensus bit (SIP #94 §5 and
+		// its issue #2962 request-auth extension); the root sets are tracked on SignerState, so
+		// there is nothing to record in this type bitmask.
 	case spectypes.PostConsensusPartialSig:
 		c.recordPostConsensus()
 	default:

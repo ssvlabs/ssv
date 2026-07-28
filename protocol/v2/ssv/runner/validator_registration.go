@@ -189,7 +189,7 @@ func (r *ValidatorRegistrationRunner) expectedPreConsensusRootsAndDomain() ([]ss
 
 // expectedPostConsensusRootsAndDomain an INTERNAL function, returns the expected post-consensus roots to sign
 func (r *ValidatorRegistrationRunner) expectedPostConsensusRootsAndDomain(context.Context) ([]ssz.HashRoot, phase0.DomainType, error) {
-	return nil, [4]byte{}, fmt.Errorf("no post consensus roots for validator registration")
+	return nil, spectypes.DomainError, fmt.Errorf("no post consensus roots for validator registration")
 }
 
 func (r *ValidatorRegistrationRunner) executeDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty) error {

@@ -546,7 +546,7 @@ func (r *ProposerRunner) submitGloasProposal(ctx context.Context, logger *zap.Lo
 		logger.Error(errMsg, fields.Slot(cd.Duty.Slot), zap.Error(err))
 		finishErr = fmt.Errorf("%s: %w", errMsg, err)
 	} else {
-		recordProposalBuildSource(ctx, selfBuild(block))
+		recordProposalBuildSource(ctx, gloasBuildSource(block))
 		finishErr = r.finishSubmittedProposal(ctx, logger, span, start, nil)
 	}
 
@@ -569,6 +569,14 @@ func (r *ProposerRunner) triggerEnvelopeIfSelfBuild(block *gloas.BeaconBlock, sl
 func selfBuild(block *gloas.BeaconBlock) bool {
 	bid := block.Body.SignedExecutionPayloadBid
 	return bid != nil && bid.Message != nil && bid.Message.BuilderIndex == gloas.BuilderIndexSelfBuild
+}
+
+// gloasBuildSource classifies a decided Gloas block for the build-source telemetry (issue #2962 E1).
+func gloasBuildSource(block *gloas.BeaconBlock) proposalBuildSource {
+	if selfBuild(block) {
+		return buildSourceLocal
+	}
+	return buildSourceBuilder
 }
 
 // recordDecidedBlockRoot stores the §4-decided block's root for the §6 envelope runner and its
