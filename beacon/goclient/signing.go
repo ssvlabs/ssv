@@ -54,9 +54,12 @@ func (gc *GoClient) DomainData(
 	domain phase0.DomainType,
 ) (phase0.Domain, error) {
 	switch domain {
-	case spectypes.DomainApplicationBuilder:
-		// DomainApplicationBuilder is constructed based on what Ethereum network we are connected
-		// to (Mainnet, Hoodi, etc.)
+	case spectypes.DomainApplicationBuilder, spectypes.DomainRequestAuth:
+		// Application-namespace domains are constructed from the connected network's genesis fork
+		// version with a zero genesis-validators root (compute_domain with defaults), never from a
+		// fork-versioned state: DomainApplicationBuilder (pre-Gloas validator registrations) and
+		// DomainRequestAuth (builder-specs' Gloas DOMAIN_REQUEST_AUTH, the direct-builder request
+		// auth — 0x0b000001, not the beacon DomainBeaconBuilder 0x0b000000).
 		var appDomain phase0.Domain
 		forkData := phase0.ForkData{
 			CurrentVersion:        gc.getBeaconConfig().GenesisForkVersion,
