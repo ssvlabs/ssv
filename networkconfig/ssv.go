@@ -48,8 +48,9 @@ type SSV struct {
 	Forks                   SSVForks
 }
 
+// SSVForks holds the resolved fork schedule; serialization goes through marshaledForks.
 type SSVForks struct {
-	Boole phase0.Epoch `yaml:"Boole" json:"Boole"`
+	Boole phase0.Epoch
 }
 
 func (s *SSV) String() string {
@@ -71,12 +72,20 @@ type marshaledConfig struct {
 	DiscoveryProtocolID     hexutil.Bytes     `json:"discovery_protocol_id,omitempty" yaml:"DiscoveryProtocolID,omitempty"`
 	TotalEthereumValidators int               `json:"total_ethereum_validators,omitempty" yaml:"TotalEthereumValidators,omitempty"`
 	// Forks is a pointer so unmarshaling can distinguish "forks block absent" (nil) from
-	// "forks block present with explicit zero values" (non-nil, e.g. Boole: 0).
-	Forks *SSVForks `json:"forks,omitempty" yaml:"Forks,omitempty"`
+	// "forks block present" (non-nil); marshaledForks then distinguishes per-fork fields.
+	Forks *marshaledForks `json:"forks,omitempty" yaml:"Forks,omitempty"`
+}
+
+// marshaledForks is the wire form of SSVForks. Each fork epoch is a pointer so unmarshaling
+// can distinguish "field omitted" (nil, defaults to never-activates) from an explicit epoch —
+// otherwise an empty forks block (Forks: {}) would zero-value Boole to epoch 0 (fork-at-genesis).
+type marshaledForks struct {
+	Boole *phase0.Epoch `json:"boole,omitempty" yaml:"Boole,omitempty"`
 }
 
 // Helper method to avoid duplication between MarshalJSON and MarshalYAML
 func (s *SSV) marshal() *marshaledConfig {
+	boole := s.Forks.Boole
 	return &marshaledConfig{
 		Name:                    s.Name,
 		DomainType:              s.DomainType[:],
@@ -86,7 +95,7 @@ func (s *SSV) marshal() *marshaledConfig {
 		Bootnodes:               s.Bootnodes,
 		DiscoveryProtocolID:     s.DiscoveryProtocolID[:],
 		TotalEthereumValidators: s.TotalEthereumValidators,
-		Forks:                   &s.Forks,
+		Forks:                   &marshaledForks{Boole: &boole},
 	}
 }
 
@@ -116,13 +125,14 @@ func (s *SSV) unmarshalFromConfig(aux marshaledConfig) error {
 	}
 
 	// If the config has no "forks" block at all (e.g. a stale custom-network YAML/JSON
-	// predating the Boole fork), default Boole to "never activates" rather than letting it
-	// zero-value to epoch 0 (fork-at-genesis). An explicit "forks: {Boole: 0}" is still
-	// honored verbatim. This protects custom-network operators from silently jumping to
-	// post-fork behavior when they haven't opted in.
+	// predating the Boole fork), an empty block ("Forks: {}"), or a block that omits Boole,
+	// default Boole to "never activates" rather than letting it zero-value to epoch 0
+	// (fork-at-genesis). Only an explicit "forks: {Boole: <epoch>}" is honored verbatim.
+	// This protects custom-network operators from silently jumping to post-fork behavior
+	// when they haven't opted in.
 	forks := SSVForks{Boole: math.MaxUint64}
-	if aux.Forks != nil {
-		forks = *aux.Forks
+	if aux.Forks != nil && aux.Forks.Boole != nil {
+		forks.Boole = *aux.Forks.Boole
 	}
 
 	*s = SSV{
