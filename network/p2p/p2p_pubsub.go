@@ -39,7 +39,10 @@ func (n *p2pNetwork) UseMessageRouter(router network.MessageRouter) {
 	n.msgRouter = router
 }
 
-// Broadcast publishes the message to all peers in subnet
+// Broadcast publishes the message to all peers in subnet, resolving the slot from the message
+// body. It exists to satisfy spec's p2p.Broadcaster; no production path calls it — prefer
+// BroadcastAtSlot, which every caller with a duty slot in hand already uses. Note this handles
+// only consensus and partial-signature messages (see broadcastMessageSlot).
 func (n *p2pNetwork) Broadcast(msgID spectypes.MessageID, msg *spectypes.SignedSSVMessage) error {
 	msgSlot, err := broadcastMessageSlot(msg)
 	if err != nil {
