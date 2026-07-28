@@ -76,7 +76,10 @@ func CommitteeSignerBucketForBeaconRole(role spectypes.BeaconRole) (CommitteeSig
 	}
 }
 
-// RunnerRoleToString is a workaround for Alan runner roles.
+// RunnerRoleToString is a workaround for Alan runner roles: the pinned Boole spec removed
+// the deprecated values from (spectypes.RunnerRole).String(), so they are special-cased here.
+// message.RunnerRoleToString is an independent mapper that must stay in lockstep — a role
+// added or deprecated here must be reflected there (and vice versa).
 // Deprecated: use (spectypes.RunnerRole).String() after the Boole fork
 func RunnerRoleToString(r spectypes.RunnerRole) string {
 	switch r {

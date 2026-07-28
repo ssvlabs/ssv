@@ -114,6 +114,10 @@ func CommitteeRunnerRoleFromString(s string) (spectypes.RunnerRole, error) {
 	}
 }
 
+// RunnerRoleToString maps runner roles to the exporter/API string constants above. It must
+// stay in lockstep with ssvtypes.RunnerRoleToString (which reaches the same strings via the
+// spec's String() plus a deprecated-role shim) — a role added or deprecated in one must be
+// reflected in the other; only this switch fails loudly (unknown(N)) when it drifts.
 func RunnerRoleToString(r spectypes.RunnerRole) string {
 	switch r {
 	case spectypes.RoleCommittee:
