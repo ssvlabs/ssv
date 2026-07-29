@@ -367,7 +367,7 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(
 	r.measurements.EndPreConsensus()
 	recordPreConsensusDuration(ctx, r.measurements.PreConsensusTime(), spectypes.RoleAggregatorCommittee)
 
-	aggregatorMap, contributionMap, err := r.expectedPreConsensusRoots(ctx, logger)
+	aggregatorMap, contributionMap, err := r.expectedPreConsensusRoots(ctx)
 	if err != nil {
 		// terminal post-quorum failure → classify as failed, not stuck
 		r.markDutyFailed(err)
@@ -825,7 +825,7 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 
 	span.AddEvent("getting aggregations, sync committee contributions and root beacon objects")
 	// Get validator-root maps for attestations and sync committees, and the root-beacon object map
-	aggregatorMap, contributionMap, beaconObjects, err := r.expectedPostConsensusRootsAndBeaconObjects(ctx, logger)
+	aggregatorMap, contributionMap, beaconObjects, err := r.expectedPostConsensusRootsAndBeaconObjects(ctx)
 	if err != nil {
 		// terminal post-quorum failure → classify as failed, not stuck
 		r.markDutyFailed(err)
@@ -1180,7 +1180,7 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 // (i.e., per subcommittee index assigned to that validator for this slot).
 func (r *AggregatorCommitteeRunner) HasSubmittedAllDuties(ctx context.Context, logger *zap.Logger) bool {
 	// Build the expected post-consensus roots per validator/role from the decided data.
-	aggregatorMap, contributionMap, _, err := r.expectedPostConsensusRootsAndBeaconObjects(ctx, logger)
+	aggregatorMap, contributionMap, _, err := r.expectedPostConsensusRootsAndBeaconObjects(ctx)
 	if err != nil {
 		// If we can't resolve the expected set, do not finish yet.
 		return false
@@ -1264,7 +1264,6 @@ func (r *AggregatorCommitteeRunner) expectedPostConsensusRootsAndDomain(context.
 // It returns the aggregator and sync committee validator to root maps.
 func (r *AggregatorCommitteeRunner) expectedPreConsensusRoots(
 	ctx context.Context,
-	logger *zap.Logger,
 ) (
 	aggregatorMap map[phase0.ValidatorIndex][32]byte,
 	contributionMap map[phase0.ValidatorIndex]map[ValidatorSyncCommitteeIndex][32]byte,
@@ -1284,11 +1283,12 @@ func (r *AggregatorCommitteeRunner) expectedPreConsensusRoots(
 		case spectypes.BNRoleAggregator:
 			root, err := r.expectedAggregatorSelectionRoot(ctx, duty.Slot)
 			if err != nil {
-				logger.Debug("failed to compute aggregator selection root",
-					zap.Uint64("validator_index", uint64(vDuty.ValidatorIndex)),
-					zap.Error(err),
-				)
-				continue
+				// Only fails on a transient DomainData/beacon error, which is identical for every
+				// validator this slot — not a per-validator "no duty" condition. Swallowing it would
+				// leave the maps empty and make HaveCheckedAllDutiesForSelection conclude the duty is
+				// not required, silently dropping every aggregation for the slot. Surface it so the
+				// caller fails the duty instead.
+				return nil, nil, fmt.Errorf("compute aggregator selection root (validator %d): %w", vDuty.ValidatorIndex, err)
 			}
 			aggregatorMap[vDuty.ValidatorIndex] = root
 
@@ -1300,12 +1300,8 @@ func (r *AggregatorCommitteeRunner) expectedPreConsensusRoots(
 			for _, index := range vDuty.ValidatorSyncCommitteeIndices {
 				root, err := r.expectedSyncCommitteeSelectionRoot(ctx, duty.Slot, index)
 				if err != nil {
-					logger.Debug("failed to compute sync committee selection root",
-						zap.Uint64("validator_index", uint64(vDuty.ValidatorIndex)),
-						zap.Uint64("subcommittee_index", index),
-						zap.Error(err),
-					)
-					continue
+					// Same transient-beacon rationale as the aggregator branch above.
+					return nil, nil, fmt.Errorf("compute sync committee selection root (validator %d, subcommittee %d): %w", vDuty.ValidatorIndex, index, err)
 				}
 				contributionMap[vDuty.ValidatorIndex][index] = root
 			}
@@ -1357,7 +1353,6 @@ func (r *AggregatorCommitteeRunner) expectedSyncCommitteeSelectionRoot(
 
 func (r *AggregatorCommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(
 	ctx context.Context,
-	logger *zap.Logger,
 ) (
 	aggregatorMap map[phase0.ValidatorIndex][32]byte,
 	contributionMap map[phase0.ValidatorIndex][][32]byte,
@@ -1385,30 +1380,22 @@ func (r *AggregatorCommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(
 		validatorIndex := consensusData.Aggregators[i].ValidatorIndex
 		hashRoot, err := spectypes.GetAggregateAndProofHashRoot(aggregateAndProof)
 		if err != nil {
-			logger.Debug("failed to compute aggregate and proof hash root",
-				zap.Uint64("validator_index", uint64(validatorIndex)),
-				zap.Error(err),
-			)
-			continue
+			// This runs on already-decided data, so a failure here is not a per-validator "no duty"
+			// condition — it is a malformed object or (for DomainData) a transient beacon error that
+			// hits every validator alike. Swallowing it would leave beaconObjects empty and conclude
+			// the duty as ErrNoValidDutiesToExecute. Surface it so the caller fails the duty instead.
+			return nil, nil, nil, fmt.Errorf("compute aggregate and proof hash root (validator %d): %w", validatorIndex, err)
 		}
 
 		// Calculate signing root for aggregate and proof
 		domain, err := r.beacon.DomainData(ctx, epoch, spectypes.DomainAggregateAndProof)
 		if err != nil {
-			logger.Debug("failed to get aggregate and proof domain",
-				zap.Uint64("validator_index", uint64(validatorIndex)),
-				zap.Error(err),
-			)
-			continue
+			return nil, nil, nil, fmt.Errorf("get aggregate and proof domain (validator %d): %w", validatorIndex, err)
 		}
 
 		root, err := spectypes.ComputeETHSigningRoot(hashRoot, domain)
 		if err != nil {
-			logger.Debug("failed to compute aggregate and proof signing root",
-				zap.Uint64("validator_index", uint64(validatorIndex)),
-				zap.Error(err),
-			)
-			continue
+			return nil, nil, nil, fmt.Errorf("compute aggregate and proof signing root (validator %d): %w", validatorIndex, err)
 		}
 
 		aggregatorMap[validatorIndex] = root
@@ -1438,22 +1425,13 @@ func (r *AggregatorCommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(
 		// Calculate signing root
 		domain, err := r.beacon.DomainData(ctx, epoch, spectypes.DomainContributionAndProof)
 		if err != nil {
-			logger.Debug("failed to get contribution and proof domain",
-				zap.Uint64("validator_index", uint64(validatorIndex)),
-				zap.Uint64("subcommittee_index", contribution.Contribution.SubcommitteeIndex),
-				zap.Error(err),
-			)
-			continue
+			// Same rationale as the aggregator branch: transient beacon error on decided data.
+			return nil, nil, nil, fmt.Errorf("get contribution and proof domain (validator %d, subcommittee %d): %w", validatorIndex, contribution.Contribution.SubcommitteeIndex, err)
 		}
 
 		root, err := spectypes.ComputeETHSigningRoot(contribAndProof, domain)
 		if err != nil {
-			logger.Debug("failed to compute contribution and proof signing root",
-				zap.Uint64("validator_index", uint64(validatorIndex)),
-				zap.Uint64("subcommittee_index", contribution.Contribution.SubcommitteeIndex),
-				zap.Error(err),
-			)
-			continue
+			return nil, nil, nil, fmt.Errorf("compute contribution and proof signing root (validator %d, subcommittee %d): %w", validatorIndex, contribution.Contribution.SubcommitteeIndex, err)
 		}
 
 		contributionMap[validatorIndex] = append(contributionMap[validatorIndex], root)
