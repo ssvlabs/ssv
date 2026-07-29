@@ -44,6 +44,10 @@ func (mv *messageValidator) messageLateness(slot phase0.Slot, role spectypes.Run
 		ttl = 1 + LateSlotAllowance
 	case spectypes.RoleCommittee, spectypes.RoleAggregatorCommittee, ssvtypes.RoleAggregator:
 		ttl = mv.maxStoredSlots()
+	case spectypes.RoleValidatorRegistration, spectypes.RoleVoluntaryExit:
+		// Deliberately exempt from the lateness bound: these duties aren't tied to a slot
+		// deadline, so only the early-message check and per-epoch duty limits apply.
+		return 0
 	default:
 		return 0
 	}
