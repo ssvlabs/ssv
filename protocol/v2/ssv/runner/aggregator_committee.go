@@ -247,36 +247,44 @@ func (r *AggregatorCommitteeRunner) waitTwoThirdsIntoSlot(ctx context.Context, s
 	}
 }
 
-// getAggregateAttestationWithRetry fetches the aggregate attestation for a committee index, retrying
-// a bounded number of times on error. A failure here is typically a transient beacon-node hiccup at
-// the 2/3-into-slot fetch point, and a dropped aggregator is silently excluded from the proposal —
-// message replay does not recover it, because pre-consensus quorum is reported only once, so the
-// fetch is never re-reached on a retried message. A short in-place retry recovers the common case.
-// Fetches are deduped by committee index upstream, so this runs at most once per distinct index.
-func (r *AggregatorCommitteeRunner) getAggregateAttestationWithRetry(
-	ctx context.Context,
-	slot phase0.Slot,
-	committeeIndex phase0.CommitteeIndex,
-) (ssz.Marshaler, error) {
+// retryBeaconFetch retries a beacon fetch a bounded number of times on error, with a short
+// context-aware backoff. Beacon fetches at the 2/3-into-slot point occasionally hit a transient
+// hiccup, and a dropped result is not recovered by message replay: pre-consensus quorum is reported
+// only once, so the fetch is never re-reached on a retried message. A short in-place retry recovers
+// the common case. These fetches are deduped per committee/subnet index upstream, so each runs at
+// most once per distinct index.
+func retryBeaconFetch[T any](ctx context.Context, fetch func(context.Context) (T, error)) (T, error) {
 	const attempts = 3
 	const retryDelay = 150 * time.Millisecond
 
+	var zero T
 	var lastErr error
 	for attempt := 0; attempt < attempts; attempt++ {
 		if attempt > 0 {
 			select {
 			case <-ctx.Done():
-				return nil, ctx.Err()
+				return zero, ctx.Err()
 			case <-time.After(retryDelay):
 			}
 		}
-		attestation, _, err := r.beacon.GetAggregateAttestation(ctx, slot, committeeIndex)
+		v, err := fetch(ctx)
 		if err == nil {
-			return attestation, nil
+			return v, nil
 		}
 		lastErr = err
 	}
-	return nil, lastErr
+	return zero, lastErr
+}
+
+func (r *AggregatorCommitteeRunner) getAggregateAttestationWithRetry(
+	ctx context.Context,
+	slot phase0.Slot,
+	committeeIndex phase0.CommitteeIndex,
+) (ssz.Marshaler, error) {
+	return retryBeaconFetch(ctx, func(ctx context.Context) (ssz.Marshaler, error) {
+		attestation, _, err := r.beacon.GetAggregateAttestation(ctx, slot, committeeIndex)
+		return attestation, err
+	})
 }
 
 // processSyncCommitteeSelectionProof handles sync committee selection proofs with known index
@@ -317,13 +325,18 @@ func (r *AggregatorCommitteeRunner) processSyncCommitteeSelectionProof(
 		}
 	}
 
-	// Else, fetch contribution and include everything (if successful)
-	contributions, _, err := r.GetBeaconNode().GetSyncCommitteeContribution(
-		ctx,
-		vDuty.Slot,
-		[]phase0.BLSSignature{selectionProof},
-		[]uint64{subnetID},
-	)
+	// Else, fetch contribution and include everything (if successful). Retry a transient beacon
+	// hiccup in place: a failure here leaves the duty's selection unchecked, so it would otherwise
+	// hang to slot end (message replay never re-reaches this fetch, same as the aggregate path).
+	contributions, err := retryBeaconFetch(ctx, func(ctx context.Context) (ssz.Marshaler, error) {
+		c, _, err := r.GetBeaconNode().GetSyncCommitteeContribution(
+			ctx,
+			vDuty.Slot,
+			[]phase0.BLSSignature{selectionProof},
+			[]uint64{subnetID},
+		)
+		return c, err
+	})
 	if err != nil {
 		return true, fmt.Errorf("get sync committee contribution: %w", err)
 	}
@@ -1185,8 +1198,10 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 		return recoverableErr
 	}
 
-	// Check if duty has terminated (runner has submitted for all duties)
-	if r.HasSubmittedAllDuties(ctx, logger) {
+	// Check if duty has terminated (runner has submitted for all duties). Reuse the expected-root
+	// maps already computed above rather than re-deriving them (avoids redundant DomainData calls and
+	// a transient-error false "partial success").
+	if r.HasSubmittedAllDuties(aggregatorMap, contributionMap) {
 		r.markDutySucceeded()
 		r.measurements.EndDutyFlow()
 		recordTotalDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.RoleAggregatorCommittee, r.State.RunningInstance.State.Round)
@@ -1220,14 +1235,14 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 // For aggregator role we expect exactly one submission per validator.
 // For sync committee contribution role we expect one submission per expected root
 // (i.e., per subcommittee index assigned to that validator for this slot).
-func (r *AggregatorCommitteeRunner) HasSubmittedAllDuties(ctx context.Context, logger *zap.Logger) bool {
-	// Build the expected post-consensus roots per validator/role from the decided data.
-	aggregatorMap, contributionMap, _, err := r.expectedPostConsensusRootsAndBeaconObjects(ctx)
-	if err != nil {
-		// If we can't resolve the expected set, do not finish yet.
-		return false
-	}
-
+//
+// The expected-root maps are passed in (computed once per post-consensus message) rather than
+// re-derived here: re-deriving re-issued O(validators) DomainData calls and, since that derivation
+// can now fail on a transient beacon error, could mislabel a fully-submitted duty as partial.
+func (r *AggregatorCommitteeRunner) HasSubmittedAllDuties(
+	aggregatorMap map[phase0.ValidatorIndex][32]byte,
+	contributionMap map[phase0.ValidatorIndex][][32]byte,
+) bool {
 	// Use decided data as the source of truth; non-selected validators won't appear here.
 	for validatorIndex, expectedRoot := range aggregatorMap {
 		// Only consider validators this operator actually runs.
