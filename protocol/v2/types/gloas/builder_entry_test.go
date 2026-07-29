@@ -89,4 +89,12 @@ func TestValidateBuilderEntries(t *testing.T) {
 		"invalid PubKey hex")
 	require.NoError(t,
 		ValidateBuilderEntries([]BuilderEntry{{URL: "https://x.example", PubKey: "0x" + strings.Repeat("ab", 48)}}))
+
+	// A URL longer than the auth-data limit only matters when its bytes ARE the auth data.
+	longURL := "https://x.example/" + strings.Repeat("a", MaxRequestAuthDataSize)
+	require.ErrorContains(t,
+		ValidateBuilderEntries([]BuilderEntry{{URL: longURL}}),
+		"exceeding")
+	require.NoError(t,
+		ValidateBuilderEntries([]BuilderEntry{{URL: longURL, AuthData: "0x0102"}}))
 }

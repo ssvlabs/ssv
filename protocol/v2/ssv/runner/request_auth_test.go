@@ -305,3 +305,116 @@ func TestProposerPreferencesRunner_requestAuthAfterPreferenceSuccess(t *testing.
 	require.Len(t, cache.Get(proposalSlot), 1,
 		"auth must reconstruct even after the §5 preference concluded the duty")
 }
+
+// A re-emission that concludes immediately (unchanged preference → not-required, e.g. an
+// indices-change re-emit) replaces the sub-runner and its containers. The stash replay into the
+// replacement must run even though the duty is already concluded — peers broadcast their partials
+// exactly once, so an auth still short of quorum could otherwise never reach it.
+func TestProposerPreferencesRunner_requestAuthSurvivesConcludedReemission(t *testing.T) {
+	keySet := spectestingutils.Testing4SharesSet()
+	share := spectestingutils.TestingShare(keySet, spectestingutils.TestingValidatorIndex)
+	cfg := cloneTestNetworkConfig()
+	const quorum = 3
+	const gasLimit = 36_000_000
+	feeRecipient := bellatrix.ExecutionAddress{0xfe}
+
+	bn := &prefsTestBeacon{BeaconNode: protocoltesting.NewTestingBeaconNodeWrapped(), dependentRoot: phase0.Root{0xaa}}
+	network := protocoltesting.NewTestingNetwork(1, keySet.OperatorKeys[1])
+	cache := ssv.NewRequestAuthCache(cfg.EstimatedCurrentSlot)
+	builders := []gloas.BuilderEntry{{URL: "https://builder-a.example.com"}}
+
+	runnerIface, err := NewProposerPreferencesRunner(ProposerPreferencesRunnerOptions{
+		BaseRunnerOptions: BaseRunnerOptions{
+			NetworkConfig:  cfg,
+			Share:          map[phase0.ValidatorIndex]*spectypes.Share{share.ValidatorIndex: share},
+			Beacon:         bn,
+			Network:        network,
+			Signer:         ekm.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager()),
+			OperatorSigner: spectestingutils.NewOperatorSigner(keySet, 1),
+		},
+		FeeRecipientProvider: fixedFeeRecipientProvider{addr: feeRecipient},
+		GasLimit:             gasLimit,
+		Builders:             builders,
+		RequestAuthCache:     cache,
+	})
+	require.NoError(t, err)
+	disp := runnerIface.(*ProposerPreferencesRunner)
+
+	proposalSlot := cfg.EstimatedCurrentSlot() + 5
+	duty := &spectypes.ValidatorDuty{
+		Type:           spectypes.BNRoleProposerPreferences,
+		PubKey:         spectestingutils.TestingValidatorPubKey,
+		Slot:           proposalSlot,
+		ValidatorIndex: share.ValidatorIndex,
+	}
+	ctx := context.Background()
+	logger := zap.NewNop()
+
+	peerPreferencePartial := func(t *testing.T, opID spectypes.OperatorID) *spectypes.PartialSignatureMessages {
+		t.Helper()
+		prefs := &gloas.ProposerPreferences{
+			DependentRoot:  bn.dependentRoot,
+			ProposalSlot:   proposalSlot,
+			ValidatorIndex: share.ValidatorIndex,
+			FeeRecipient:   feeRecipient,
+			TargetGasLimit: gasLimit,
+		}
+		domain, err := bn.DomainData(ctx, cfg.EstimatedEpochAtSlot(proposalSlot), phase0.DomainType(spectypes.DomainProposerPreferences))
+		require.NoError(t, err)
+		root, err := spectypes.ComputeETHSigningRoot(prefs, domain)
+		require.NoError(t, err)
+		sig := keySet.Shares[opID].SignByte(root[:])
+		return &spectypes.PartialSignatureMessages{
+			Type: spectypes.ProposerPreferencesPartialSig,
+			Slot: proposalSlot,
+			Messages: []*spectypes.PartialSignatureMessage{{
+				PartialSignature: sig.Serialize(),
+				SigningRoot:      root,
+				Signer:           opID,
+				ValidatorIndex:   share.ValidatorIndex,
+			}},
+		}
+	}
+	peerAuthPartial := func(t *testing.T, opID spectypes.OperatorID) *spectypes.PartialSignatureMessages {
+		t.Helper()
+		auth := &gloas.RequestAuthV1{Data: []byte("https://builder-a.example.com"), Slot: proposalSlot}
+		domain, err := bn.DomainData(ctx, cfg.EstimatedEpochAtSlot(proposalSlot), phase0.DomainType(spectypes.DomainRequestAuth))
+		require.NoError(t, err)
+		root, err := spectypes.ComputeETHSigningRoot(auth, domain)
+		require.NoError(t, err)
+		sig := keySet.Shares[opID].SignByte(root[:])
+		return &spectypes.PartialSignatureMessages{
+			Type: spectypes.RequestAuthPartialSig,
+			Slot: proposalSlot,
+			Messages: []*spectypes.PartialSignatureMessage{{
+				PartialSignature: sig.Serialize(),
+				SigningRoot:      root,
+				Signer:           opID,
+				ValidatorIndex:   share.ValidatorIndex,
+			}},
+		}
+	}
+
+	require.NoError(t, disp.StartNewDuty(ctx, logger, duty, quorum))
+
+	// The §5 preference reaches quorum and submits: the duty concludes succeeded.
+	for _, op := range []spectypes.OperatorID{2, 3, 4} {
+		require.NoError(t, disp.ProcessPreConsensus(ctx, logger, peerPreferencePartial(t, op)))
+	}
+	require.Len(t, bn.submitted, 1)
+
+	// Two auth partials arrive — one short of quorum.
+	for _, op := range []spectypes.OperatorID{2, 3} {
+		require.NoError(t, disp.ProcessPreConsensus(ctx, logger, peerAuthPartial(t, op)))
+	}
+	require.Empty(t, cache.Get(proposalSlot))
+
+	// An unchanged re-emission concludes not-required immediately; the stash must still replay
+	// into the replacement's fresh container.
+	require.NoError(t, disp.StartNewDuty(ctx, logger, duty, quorum))
+
+	// The third partial completes the quorum.
+	require.NoError(t, disp.ProcessPreConsensus(ctx, logger, peerAuthPartial(t, 4)))
+	require.Len(t, cache.Get(proposalSlot), 1,
+		"stash replay into the concluded replacement must let the auth quorum complete")
+}
