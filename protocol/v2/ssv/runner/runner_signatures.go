@@ -161,6 +161,17 @@ func (b *BaseRunner) verifyBeaconPartialSignature(signer spectypes.OperatorID, s
 
 // Stores the container's existing signature or the new one, depending on their validity. If both are invalid, remove the existing one
 func (b *BaseRunner) resolveDuplicateSignature(container *ssv.PartialSigContainer, msg *spectypes.PartialSignatureMessage) {
+	// For committee duties, message validation does not assert that a partial-signature
+	// validator index belongs to a validator this operator holds a share for (see
+	// knowledge-base#2), so a message can carry an index absent from b.Share. Without the
+	// validator's committee we cannot verify either signature, so drop any stored entry for
+	// it rather than dereferencing a nil share.
+	share, ok := b.Share[msg.ValidatorIndex]
+	if !ok {
+		container.Remove(msg.ValidatorIndex, msg.Signer, msg.SigningRoot)
+		return
+	}
+
 	// Check previous signature validity
 	previousSignature, err := container.GetSignature(msg.ValidatorIndex, msg.Signer, msg.SigningRoot)
 	if err == nil {
@@ -168,7 +179,7 @@ func (b *BaseRunner) resolveDuplicateSignature(container *ssv.PartialSigContaine
 			msg.Signer,
 			previousSignature,
 			msg.SigningRoot,
-			b.Share[msg.ValidatorIndex].Committee,
+			share.Committee,
 		)
 		if err == nil {
 			// Keep the previous signature since it's correct
@@ -184,7 +195,7 @@ func (b *BaseRunner) resolveDuplicateSignature(container *ssv.PartialSigContaine
 		msg.Signer,
 		msg.PartialSignature,
 		msg.SigningRoot,
-		b.Share[msg.ValidatorIndex].Committee,
+		share.Committee,
 	)
 	if err == nil {
 		container.AddSignature(msg)
