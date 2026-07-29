@@ -1,6 +1,6 @@
 package validation
 
-// message_counts.go contains code for counting and validating messages per validator-slot-round.
+// seen_msg_types.go contains code for counting and validating messages per validator-slot-round.
 
 import (
 	"fmt"
