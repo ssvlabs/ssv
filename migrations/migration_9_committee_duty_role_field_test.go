@@ -2,6 +2,7 @@ package migrations
 
 import (
 	"encoding/binary"
+	"encoding/hex"
 	"testing"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -196,6 +197,79 @@ func testMigration9BatchesAcrossChunks(t *testing.T, opt Options, prefix []byte)
 		migratedCount++
 	}
 	require.Equal(t, numRecords, migratedCount)
+}
+
+// migration9GoldenTraceHex is the pinned serialization of the fixture below, produced by
+// traces.CommitteeDutyTrace.MarshalSSZ at the time migration_9 shipped.
+const migration9GoldenTraceHex = "48000000cc0100002a00000000000000000000000000000044000000000000000000000000000000000000000000000000000000000000001c0200003c0200004002000060020000040000000100000000000000180000001001000048010000800100000200000000000000aabb0000000000000000000000000000000000000000000000000000000000000300000000000000570400000000000040000000c0000000040000000200000000000000aabb000000000000000000000000000000000000000000000000000000000000030000000000000057040000000000000100000000000000440000000200000000000000aabb000000000000000000000000000000000000000000000000000000000000030000000000000057040000000000000200000000000000aabb000000000000000000000000000000000000000000000000000000000000030000000000000057040000000000000200000000000000aabb000000000000000000000000000000000000000000000000000000000000030000000000000057040000000000000200000000000000aabb00000000000000000000000000000000000000000000000000000000000003000000000000005704000000000000040000000200000000000000aabb00000000000000000000000000000000000000000000000000000000000034000000ae080000000000000100000000000000020000000000000003000000000000000100000000000000020000000000000003000000000000000400000000000000deadbeef04000000050000000000000014000000050d000000000000c800000000000000040000000600000000000000140000005c1100000000000064000000000000006500000000000000"
+
+// TestMigration9TargetLayoutIsFrozen pins the byte layout of migration_9's write side.
+//
+// The legacy source model is frozen (migration_9_CommitteeDutyTraceV1 with its own generated
+// encoding), but the target is the LIVE traces.CommitteeDutyTrace and the LIVE
+// estore.CommitteeRunnerRoleToPrefix map. If this test fails, one of them changed shape:
+// freeze migration_9's target into its own V2 model rather than letting an old-DB upgrade
+// silently emit the newest format, which a later migration would not expect as its input.
+func TestMigration9TargetLayoutIsFrozen(t *testing.T) {
+	root := phase0.Root{0xAA, 0xBB}
+	qbft := traces.QBFTTrace{
+		Round:        2,
+		BeaconRoot:   root,
+		Signer:       3,
+		ReceivedTime: 1111,
+	}
+	trace := &traces.CommitteeDutyTrace{
+		ConsensusTrace: traces.ConsensusTrace{
+			Rounds: []*traces.RoundTrace{
+				{
+					Proposer: 1,
+					ProposalTrace: &traces.ProposalTrace{
+						QBFTTrace: qbft,
+						RoundChanges: []*traces.RoundChangeTrace{
+							{
+								QBFTTrace:       qbft,
+								PreparedRound:   1,
+								PrepareMessages: []*traces.QBFTTrace{&qbft},
+							},
+						},
+						PrepareMessages: []*traces.QBFTTrace{&qbft},
+					},
+					Prepares:     []*traces.QBFTTrace{&qbft},
+					Commits:      []*traces.QBFTTrace{&qbft},
+					RoundChanges: nil,
+				},
+			},
+			Decideds: []*traces.DecidedTrace{
+				{
+					Round:        2,
+					BeaconRoot:   root,
+					Signers:      []spectypes.OperatorID{1, 2, 3},
+					ReceivedTime: 2222,
+				},
+			},
+		},
+		Slot:         42,
+		Role:         spectypes.RoleCommittee,
+		CommitteeID:  testCommitteeID(0x44),
+		OperatorIDs:  []spectypes.OperatorID{1, 2, 3, 4},
+		ProposalData: []byte{0xDE, 0xAD, 0xBE, 0xEF},
+		SyncCommittee: []*traces.SignerData{
+			{Signer: 5, ValidatorIdx: []phase0.ValidatorIndex{200}, ReceivedTime: 3333},
+		},
+		Attester: []*traces.SignerData{
+			{Signer: 6, ValidatorIdx: []phase0.ValidatorIndex{100, 101}, ReceivedTime: 4444},
+		},
+	}
+
+	value, err := trace.MarshalSSZ()
+	require.NoError(t, err)
+	require.Equal(t, migration9GoldenTraceHex, hex.EncodeToString(value),
+		"traces.CommitteeDutyTrace serialized layout changed")
+
+	roleByte, err := estore.CommitteeRunnerRoleToPrefix(spectypes.RoleCommittee)
+	require.NoError(t, err)
+	require.Equal(t, byte(0x00), roleByte,
+		"CommitteeRunnerRoleToPrefix(RoleCommittee) changed")
 }
 
 func testLegacyCommitteeDuty(slot phase0.Slot, committeeID spectypes.CommitteeID) *migration_9_CommitteeDutyTraceV1 {
