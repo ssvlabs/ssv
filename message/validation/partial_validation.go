@@ -144,6 +144,7 @@ func (mv *messageValidator) validatePartialSignatureMessageSemantics(
 		// Rule: (only for Validator duties) Validator index must match with validatorPK
 		// For Committee duties, we don't assume that operators are synced on the validators set
 		// So, we can't make this assertion
+		// Deliberate relaxation — rationale and blast radius: ssvlabs/knowledge-base#2
 		if !mv.committeeRole(signedSSVMessage.SSVMessage.GetID().GetRoleType()) {
 			if !slices.Contains(validatorIndices, message.ValidatorIndex) {
 				e := ErrValidatorIndexMismatch
