@@ -85,7 +85,13 @@ type marshaledForks struct {
 
 // Helper method to avoid duplication between MarshalJSON and MarshalYAML
 func (s *SSV) marshal() *marshaledConfig {
-	boole := s.Forks.Boole
+	// Mirror the unmarshal default: an unscheduled fork (the math.MaxUint64 sentinel) is
+	// emitted as an absent field rather than spelling the magic number out in printed configs.
+	forks := &marshaledForks{}
+	if s.Forks.Boole != math.MaxUint64 {
+		boole := s.Forks.Boole
+		forks.Boole = &boole
+	}
 	return &marshaledConfig{
 		Name:                    s.Name,
 		DomainType:              s.DomainType[:],
@@ -95,7 +101,7 @@ func (s *SSV) marshal() *marshaledConfig {
 		Bootnodes:               s.Bootnodes,
 		DiscoveryProtocolID:     s.DiscoveryProtocolID[:],
 		TotalEthereumValidators: s.TotalEthereumValidators,
-		Forks:                   &marshaledForks{Boole: &boole},
+		Forks:                   forks,
 	}
 }
 
