@@ -554,7 +554,11 @@ func (c *Committee) createRunner(
 	// Wire the QBFT round-timer factory, bound to a msg ID carrying this duty's role so timeout
 	// events are routed to the matching (committee vs aggregator-committee) slot queue.
 	role := types.RunnerRoleForDuty(duty, c.networkConfig.BooleForkAtSlot(duty.DutySlot()))
-	runnerIdentifier := spectypes.NewMsgID(c.networkConfig.CurrentDomainType(), c.CommitteeMember.CommitteeID[:], role)
+	// Derive the domain from the duty's own slot (like every other MsgID in the fork cutover) rather
+	// than the current wall-clock slot, so a pre-fork duty still running after the fork keys its
+	// timer events under the right domain. Only GetRoleType() is read from this ID downstream, so
+	// this is a consistency fix, not a behavior change today.
+	runnerIdentifier := spectypes.NewMsgID(c.networkConfig.DomainTypeAtSlot(duty.DutySlot()), c.CommitteeMember.CommitteeID[:], role)
 	r.SetQBFTRoundTimerF(c.newQBFTRoundTimerF(runnerIdentifier))
 
 	switch duty := duty.(type) {
