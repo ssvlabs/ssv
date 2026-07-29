@@ -16,8 +16,16 @@ import (
 
 // migrationBatchSize caps how many rewrites are held in memory before being flushed in a
 // single Update transaction. A mainnet exporter can have tens of millions of legacy "cd"
-// records, so we must not accumulate them all at once.
+// records, so batching bounds the accumulated values (on badger, GetAll still materializes
+// every key under the prefix up front, so only the values are bounded here).
 const migrationBatchSize = 5000
+
+// migrationBatchBytes caps the accumulated payload per flush. badger's transaction limit is
+// 15% of MemTableSize (~9.6MB under the badger.DefaultOptions this repo opens with), and a
+// single CommitteeDutyTrace can reach ~4MB via ProposalData, so flushing at 2MB keeps the
+// worst case (threshold plus one oversized record) well under the cap. Pebble batches are
+// memory-bound; this costs nothing there.
+const migrationBatchBytes = 2 << 20
 
 // This migration updates legacy committee duty keys and values to include the runner role field.
 // It processes only legacy keys (slot+committeeID) and skips already role-aware keys.
@@ -57,6 +65,7 @@ var migration_9_migrate_committee_duty_role_field = Migration{
 		}
 
 		pending := make([]migration_9_pendingRewrite, 0, migrationBatchSize)
+		pendingBytes := 0
 
 		flush := func() error {
 			if len(pending) == 0 {
@@ -78,6 +87,7 @@ var migration_9_migrate_committee_duty_role_field = Migration{
 			migrated += len(pending)
 			logger.Info("migration in progress", zap.Int("migrated", migrated))
 			pending = pending[:0]
+			pendingBytes = 0
 			return nil
 		}
 
@@ -128,8 +138,9 @@ var migration_9_migrate_committee_duty_role_field = Migration{
 				value:  value,
 				oldKey: obj.Key,
 			})
+			pendingBytes += len(value) + len(newKey) + len(obj.Key)
 
-			if len(pending) >= migrationBatchSize {
+			if len(pending) >= migrationBatchSize || pendingBytes >= migrationBatchBytes {
 				return flush()
 			}
 
