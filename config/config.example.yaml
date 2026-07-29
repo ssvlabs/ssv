@@ -63,7 +63,9 @@ OperatorPrivateKey:
 # ALL operators of every committee sharing a validator: AuthData (defaulting to the UTF-8 bytes of URL,
 # exactly as written) is threshold-signed, so any divergence silently disables that builder. At most 8
 # entries; one entry may have an empty URL to set default preferences for any contacted builder.
-# Monetary values are Gwei. See docs/EXTERNAL_BUILDERS.md.
+# Monetary values are Gwei. The bid-selection knobs (BuilderBoostFactor, MaxTrustedBid, MinBid,
+# MaxExecutionPayment, PubKey) are validated but NOT YET HONORED — they take effect with the
+# produceBlockV4 POST migration (beacon-APIs#625). See docs/EXTERNAL_BUILDERS.md.
 # Builders:
 #   - URL: "https://builder.example.com"
 #     # AuthData: "0x..."          # omit to default to the URL bytes

@@ -232,6 +232,13 @@ func newNode(
 ) (_ *node, err error) {
 	usingSSVSigner := res.usingSSVSigner
 
+	if len(cfg.Builders) > 0 && usingSSVSigner {
+		// Web3Signer has no request-auth type, so this operator could never contribute an auth
+		// partial — warn once here instead of once per builder per emission in the runner.
+		logger.Warn("Builders configured with a remote signer: request-auth signing is unsupported there, disabling the direct-builder overlay on this operator (the cluster still reconstructs auths while at most f operators are remote-signing)")
+		cfg.Builders = nil
+	}
+
 	identity, err := resolveOperatorIdentity(ctx, logger, cfg, res)
 	if err != nil {
 		return nil, err

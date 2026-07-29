@@ -76,9 +76,8 @@ type SignerState struct {
 	SeenProposerPreferencesRoots [][32]byte
 
 	// SeenRequestAuthRoots records the distinct RequestAuthV1 signing roots seen from this signer
-	// (issue #2962): like §5 preferences the type is capped by distinct root (up to
-	// maxRequestAuthDistinctRoots — one per configured builder), not by the single pre-consensus
-	// bit in SeenMsgTypes. nil until the first such message.
+	// (issue #2962) — root-capped like the §5 preference roots above, up to
+	// maxRequestAuthDistinctRoots. nil until the first such message.
 	SeenRequestAuthRoots [][32]byte
 }
 
