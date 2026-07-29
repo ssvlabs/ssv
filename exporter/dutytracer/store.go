@@ -10,6 +10,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/exporter/rolemask"
+	"github.com/ssvlabs/ssv/exporter/store"
 	"github.com/ssvlabs/ssv/exporter/traces"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/utils/hashmap"
@@ -340,7 +341,10 @@ func (c *Collector) GetCommitteeDecideds(slot phase0.Slot, index phase0.Validato
 	for _, role := range runnerRoles {
 		d, dutyErr := c.GetCommitteeDuty(slot, committeeID, role)
 		if dutyErr != nil {
-			if errors.Is(dutyErr, ErrNotFound) {
+			// A miss can surface as either sentinel: the in-memory path returns the package-local
+			// ErrNotFound, while a disk miss wraps exporter/store.ErrNotFound. Either way, try the
+			// next role rather than aborting the whole probe.
+			if errors.Is(dutyErr, ErrNotFound) || errors.Is(dutyErr, store.ErrNotFound) {
 				continue
 			}
 			return nil, fmt.Errorf("get committee duty: %w", dutyErr)
