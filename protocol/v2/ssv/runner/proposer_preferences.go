@@ -629,8 +629,13 @@ func (r *proposerPreferencesSlotRunner) processRequestAuthPartial(ctx context.Co
 	msg := signedMsg.Messages[0]
 
 	if r.requestAuths == nil {
-		// Duty assigned but not executed here yet (or no builders configured): retryable, so a
-		// partial racing the duty start also lands via the queue replay and the dispatcher stash.
+		if len(r.builders) == 0 {
+			// No overlay here (never configured, or disabled for a remote signer): no root will
+			// ever be frozen for this slot, so retrying cannot help.
+			return errors.New("no builders configured")
+		}
+		// Duty assigned but not executed here yet: retryable, so a partial racing the duty start
+		// also lands via the queue replay and the dispatcher stash.
 		return NewRetryableError(spectypes.WrapError(spectypes.NoRunningDutyErrorCode, errors.New("no frozen request auths")))
 	}
 	frozen, ok := r.requestAuths[msg.SigningRoot]
@@ -659,13 +664,15 @@ func (r *proposerPreferencesSlotRunner) processRequestAuthPartial(ctx context.Co
 	copy(signature[:], fullSig)
 
 	r.reconstructedAuthRoots[msg.SigningRoot] = struct{}{}
-	signed := &gloas.SignedRequestAuthV1{Message: frozen.auth, Signature: signature}
 	urls := make([]string, 0, len(frozen.builders))
 	for _, ref := range frozen.builders {
-		if r.requestAuthCache != nil {
+		urls = append(urls, ref.url)
+	}
+	if r.requestAuthCache != nil {
+		signed := &gloas.SignedRequestAuthV1{Message: frozen.auth, Signature: signature}
+		for _, ref := range frozen.builders {
 			r.requestAuthCache.Store(frozen.auth.Slot, ref.identity, signed)
 		}
-		urls = append(urls, ref.url)
 	}
 	recordRequestAuthReconstruction(ctx)
 	logger.Info("✔️ reconstructed builder request auth",
