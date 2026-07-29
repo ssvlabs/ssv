@@ -119,7 +119,36 @@ func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage)
 		return e
 	}
 
+	// Rule: Runner role must be valid in some fork. This fork-independent check runs before the
+	// executor ID is resolved to a validator (validRoleAtSlot narrows it per fork later), so a
+	// structurally-invalid role is rejected rather than degrading to an Ignore for an unknown ID.
+	role := ssvMessage.GetID().GetRoleType()
+	if !mv.validRoleUnion(role) {
+		e := ErrInvalidRole
+		e.got = fmt.Sprintf("%v (%d)", role, role)
+		return e
+	}
+
 	return nil
+}
+
+// validRoleUnion reports whether roleType is a valid runner role in any fork. This is the
+// fork-independent (structural) role check; validRoleAtSlot narrows it to the roles valid at a
+// specific slot's fork. It is enforced early, before the executor ID is resolved to a validator, so
+// a structurally-invalid role is rejected rather than degrading to an Ignore when that ID is unknown.
+func (mv *messageValidator) validRoleUnion(roleType spectypes.RunnerRole) bool {
+	switch roleType {
+	case spectypes.RoleCommittee,
+		spectypes.RoleProposer,
+		spectypes.RoleValidatorRegistration,
+		spectypes.RoleVoluntaryExit,
+		spectypes.RoleAggregatorCommittee,
+		ssvtypes.RoleAggregator,
+		ssvtypes.RoleSyncCommitteeContribution:
+		return true
+	default:
+		return false
+	}
 }
 
 func (mv *messageValidator) validRoleAtSlot(roleType spectypes.RunnerRole, slot phase0.Slot) bool {

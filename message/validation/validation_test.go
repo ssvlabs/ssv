@@ -689,12 +689,29 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		slot := netCfg.FirstSlotAtEpoch(1)
 
-		// Use a real validator pubkey (rather than encodedCommitteeID) as the duty executor ID so
-		// getCommitteeAndValidatorIndices/belongsToCommittee succeed and the flow actually reaches
-		// the role check (validateConsensusMessageSemantics), which is where an invalid role is
-		// now caught (moved there from validateSSVMessage so it can be evaluated fork-aware, i.e.
-		// per-slot, via validRoleAtSlot).
+		// A role outside the union of all forks' valid roles is rejected by the fork-independent
+		// validRoleUnion check in validateSSVMessage (the per-slot validRoleAtSlot narrows valid
+		// roles by fork later). A real validator pubkey is used as the executor ID here; the unknown
+		// -executor-ID variant is covered by the regression subtest below.
 		badIdentifier := spectypes.NewMsgID(netCfg.DomainType, shares.active.ValidatorPubKey[:], math.MaxInt32)
+		signedSSVMessage := generateSignedMessage(ks, badIdentifier, slot)
+
+		topicID := commons.GetTopicFullName(commons.CommitteeTopicID(committeeID)[0])
+		receivedAt := netCfg.SlotStartTime(slot)
+		_, err = validator.handleSignedSSVMessage(context.Background(), signedSSVMessage, topicID, peerID, receivedAt)
+		require.ErrorIs(t, err, ErrInvalidRole)
+	})
+
+	// Regression: an out-of-union role with an UNKNOWN executor ID must still be Rejected, not
+	// degrade to ErrUnknownValidator (Ignore). validateSSVMessage's fork-independent role check runs
+	// before the executor ID is resolved to a validator, so the unknown ID never gets a say.
+	t.Run("invalid role with unknown executor id", func(t *testing.T) {
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
+
+		slot := netCfg.FirstSlotAtEpoch(1)
+
+		unknownExecutorID := bytes.Repeat([]byte{0xAB}, 48)
+		badIdentifier := spectypes.NewMsgID(netCfg.DomainType, unknownExecutorID, math.MaxInt32)
 		signedSSVMessage := generateSignedMessage(ks, badIdentifier, slot)
 
 		topicID := commons.GetTopicFullName(commons.CommitteeTopicID(committeeID)[0])
