@@ -34,8 +34,16 @@ func (n Network) String() string {
 // the schema dual-fork-aware on the same DB, so the historical "alan" value stays.
 const storageCompatToken = "alan"
 
-const boolePriorWindowEpochs = phase0.Epoch(1)    // epochs before Boole to subscribe to both topic sets
-const booleSubsequentWindowSlots = phase0.Slot(1) // slots after Boole to keep accepting old-topic messages
+const boolePriorWindowEpochs = phase0.Epoch(1) // epochs before Boole to subscribe to both topic sets
+
+// booleSubsequentWindowLateSlots is the lateness margin kept on top of a full epoch when deciding
+// how long to keep the Alan topic set subscribed after the fork. It mirrors
+// message/validation.LateSlotAllowance: a message for a pre-fork slot stays valid for maxStoredSlots
+// (SlotsPerEpoch + LateSlotAllowance) slots, so the last pre-fork slots' committee-duty traffic
+// (decided and post-consensus messages, published on the Alan topic keyed by their pre-fork slot)
+// can legitimately arrive well after the fork. The Alan topics must remain subscribed at least that
+// long or those messages are dropped by the subscription filter before validation ever sees them.
+const booleSubsequentWindowLateSlots = phase0.Slot(2)
 
 // StorageName returns a config name used to make sure the stored network doesn't differ.
 // It combines the network name with the storage-compatibility token.
@@ -93,7 +101,8 @@ func (n Network) inBoolePriorWindowWithEpochs(slot phase0.Slot, windowEpochs pha
 }
 
 func (n Network) inBooleSubsequentWindow(slot phase0.Slot) bool {
-	return n.inBooleSubsequentWindowWithSlots(slot, booleSubsequentWindowSlots)
+	// #nosec G115 -- SlotsPerEpoch is bounded well below math.MaxInt64
+	return n.inBooleSubsequentWindowWithSlots(slot, phase0.Slot(n.SlotsPerEpoch)+booleSubsequentWindowLateSlots)
 }
 
 func (n Network) inBooleSubsequentWindowWithSlots(slot phase0.Slot, windowSlots phase0.Slot) bool {

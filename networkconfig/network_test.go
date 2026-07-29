@@ -60,10 +60,15 @@ func TestBooleForkInSubsequentWindow(t *testing.T) {
 		slotsPerEpoch *uint64
 		expected      bool
 	}{
+		// The default window keeps Alan accepted for maxStoredSlots (SlotsPerEpoch + LateSlotAllowance
+		// = 32 + 2 = 34) slots after the fork, so late pre-fork-slot messages are not dropped. Window
+		// is [F, F+34).
 		{name: "before_fork", boole: 10, slot: TestNetwork.FirstSlotAtEpoch(10) - 1, expected: false},
 		{name: "at_fork", boole: 10, slot: TestNetwork.FirstSlotAtEpoch(10), expected: true},
-		{name: "after_fork_slot", boole: 10, slot: TestNetwork.FirstSlotAtEpoch(10) + 1, expected: false},
-		{name: "after_fork", boole: 10, slot: TestNetwork.FirstSlotAtEpoch(11), expected: false},
+		{name: "one_slot_after_fork", boole: 10, slot: TestNetwork.FirstSlotAtEpoch(10) + 1, expected: true},
+		{name: "one_epoch_after_fork", boole: 10, slot: TestNetwork.FirstSlotAtEpoch(11), expected: true},
+		{name: "last_slot_in_window", boole: 10, slot: TestNetwork.FirstSlotAtEpoch(10) + 33, expected: true},
+		{name: "first_slot_after_window", boole: 10, slot: TestNetwork.FirstSlotAtEpoch(10) + 34, expected: false},
 		{name: "boole_zero_epoch_zero", boole: 0, slot: TestNetwork.FirstSlotAtEpoch(0), expected: false},
 		{name: "boole_max_epoch_zero", boole: phase0.Epoch(math.MaxUint64), slot: TestNetwork.FirstSlotAtEpoch(0), expected: false},
 		{name: "zero_window", boole: 10, slot: TestNetwork.FirstSlotAtEpoch(10), windowSlots: ptr(phase0.Slot(0)), expected: false},
