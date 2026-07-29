@@ -13,7 +13,7 @@ func TestSubFilter(t *testing.T) {
 
 	require.False(t, sf.CanSubscribe("xxx"))
 	require.False(t, sf.CanSubscribe(commons.GetTopicFullName("xxx")))
-	sf.(Whitelist).Register(commons.GetTopicFullName("1"))
+	sf.Register(commons.GetTopicFullName("1"))
 	require.True(t, sf.CanSubscribe(commons.GetTopicFullName("1")))
 	require.False(t, sf.CanSubscribe(commons.GetTopicFullName("2")))
 }
@@ -30,7 +30,7 @@ func TestSubFilter_CanSubscribeBoole(t *testing.T) {
 
 	// A valid Boole topic is still gated by the whitelist: rejected until registered...
 	require.False(t, sf.CanSubscribe(booleTopic))
-	sf.(Whitelist).Register(booleTopic)
+	sf.Register(booleTopic)
 	require.True(t, sf.CanSubscribe(booleTopic))
 
 	// ...and a different, unregistered Boole subnet stays rejected.
@@ -41,7 +41,7 @@ func TestSubFilter_CanSubscribeBoole(t *testing.T) {
 	require.False(t, sf.CanSubscribe(commons.BooleTopic("other-network", 51)))
 
 	// Alan and Boole topics coexist in the same filter.
-	sf.(Whitelist).Register(commons.GetTopicFullName("1"))
+	sf.Register(commons.GetTopicFullName("1"))
 	require.True(t, sf.CanSubscribe(commons.GetTopicFullName("1")))
 	require.True(t, sf.CanSubscribe(booleTopic))
 
@@ -52,7 +52,7 @@ func TestSubFilter_CanSubscribeBoole(t *testing.T) {
 		"/ssv/" + networkName + "/otherfork/1", // unknown fork segment
 		"/ssv/" + networkName + "/boole/abc",   // non-numeric subnet
 	} {
-		sf.(Whitelist).Register(bad)
+		sf.Register(bad)
 		require.Falsef(t, sf.CanSubscribe(bad), "expected %q to be rejected", bad)
 	}
 }
