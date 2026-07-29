@@ -261,6 +261,17 @@ func (r *AggregatorCommitteeRunner) processSyncCommitteeSelectionProof(
 
 	subnetID := r.beacon.SyncCommitteeSubnetID(validatorSyncCommitteeIndex)
 
+	// A validator can hold several sync-committee indices that map to the same subnet, and the
+	// selection proof is per-subnet, so this path can be reached more than once for the same
+	// (validator, subnet). Emit at most one Contributor per (validator, subnet): a duplicate
+	// would produce a redundant post-consensus partial signature for the same validator index
+	// and, past message validation's per-index cap, get the whole message rejected by peers.
+	for _, contributor := range aggregatorData.Contributors {
+		if contributor.ValidatorIndex == vDuty.ValidatorIndex && contributor.CommitteeIndex == subnetID {
+			return true, nil
+		}
+	}
+
 	// Check if we already have a contribution for this sync committee subnet ID
 	for _, contrib := range aggregatorData.SyncCommitteeContributions {
 		if contrib.SubcommitteeIndex == subnetID {
@@ -547,6 +558,16 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(
 
 	selectionLoop:
 		for _, selection := range aggregatorSelections {
+			// Emit at most one Aggregator per (validator, committee index): a duplicate would
+			// produce a redundant post-consensus partial signature for the same validator index,
+			// which past message validation's per-index cap gets the whole message rejected.
+			for _, aggregator := range consensusData.Aggregators {
+				if aggregator.ValidatorIndex == selection.duty.ValidatorIndex &&
+					aggregator.CommitteeIndex == uint64(selection.duty.CommitteeIndex) {
+					continue selectionLoop
+				}
+			}
+
 			// Check if attestation for committee index was already included
 			for _, idx := range consensusData.AggregatorsCommitteeIndexes {
 				if idx == uint64(selection.duty.CommitteeIndex) {
