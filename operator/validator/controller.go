@@ -1089,7 +1089,6 @@ func SetupCommitteeRunners(
 	buildController := func(role spectypes.RunnerRole) *qbftcontroller.Controller {
 		config := &qbft.Config{
 			BeaconSigner: options.Signer,
-			Domain:       options.NetworkConfig.DomainType,
 			ProposerF: func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
 				committee := ssvtypes.OperatorIDsFromOperators(state.CommitteeMember.Committee)
 				return qbft.Proposer(state.Height, round, committee, options.NetworkConfig)
@@ -1178,7 +1177,6 @@ func SetupRunners(
 	buildController := func(role spectypes.RunnerRole) *qbftcontroller.Controller {
 		config := &qbft.Config{
 			BeaconSigner: options.Signer,
-			Domain:       options.NetworkConfig.DomainType,
 			ProposerF: func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
 				committee := ssvtypes.OperatorIDsFromOperators(state.CommitteeMember.Committee)
 				return qbft.Proposer(state.Height, round, committee, options.NetworkConfig)

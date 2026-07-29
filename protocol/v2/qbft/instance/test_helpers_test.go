@@ -110,7 +110,6 @@ func newInstanceTestEnv(t *testing.T, operatorID spectypes.OperatorID) *instance
 
 	config := &qbftconfig.Config{
 		BeaconSigner: ekm.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager()),
-		Domain:       spectestingutils.TestingSSVDomainType,
 		ProposerF: func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
 			return 1
 		},

@@ -2,7 +2,6 @@ package qbft
 
 import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
@@ -11,8 +10,6 @@ import (
 type signing interface {
 	// GetShareSigner returns a BeaconSigner instance
 	GetShareSigner() ekm.BeaconSigner
-	// GetSignatureDomainType returns the Domain type used for signatures
-	GetSignatureDomainType() spectypes.DomainType
 }
 
 type IConfig interface {
@@ -27,7 +24,6 @@ type IConfig interface {
 
 type Config struct {
 	BeaconSigner ekm.BeaconSigner
-	Domain       spectypes.DomainType
 	ProposerF    specqbft.ProposerF
 	Network      protocolp2p.Network
 	CutOffRound  specqbft.Round
@@ -36,11 +32,6 @@ type Config struct {
 // GetShareSigner returns a BeaconSigner instance
 func (c *Config) GetShareSigner() ekm.BeaconSigner {
 	return c.BeaconSigner
-}
-
-// GetSignatureDomainType returns the Domain type used for signatures
-func (c *Config) GetSignatureDomainType() spectypes.DomainType {
-	return c.Domain
 }
 
 // GetProposerF returns func used to calculate proposer
