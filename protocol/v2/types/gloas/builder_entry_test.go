@@ -1,6 +1,7 @@
 package gloas
 
 import (
+	"encoding/hex"
 	"strings"
 	"testing"
 
@@ -77,7 +78,7 @@ func TestValidateBuilderEntries(t *testing.T) {
 	require.ErrorContains(t,
 		ValidateBuilderEntries([]BuilderEntry{
 			{URL: "https://x.example"},
-			{URL: "https://x.example", AuthData: "0x" + hexOf("https://x.example")},
+			{URL: "https://x.example", AuthData: "0x" + hex.EncodeToString([]byte("https://x.example"))},
 		}),
 		"duplicate")
 	require.ErrorContains(t,
@@ -88,13 +89,4 @@ func TestValidateBuilderEntries(t *testing.T) {
 		"invalid PubKey hex")
 	require.NoError(t,
 		ValidateBuilderEntries([]BuilderEntry{{URL: "https://x.example", PubKey: "0x" + strings.Repeat("ab", 48)}}))
-}
-
-func hexOf(s string) string {
-	const digits = "0123456789abcdef"
-	out := make([]byte, 0, len(s)*2)
-	for i := 0; i < len(s); i++ {
-		out = append(out, digits[s[i]>>4], digits[s[i]&0x0f])
-	}
-	return string(out)
 }

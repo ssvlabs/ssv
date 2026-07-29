@@ -322,11 +322,9 @@ func validatePartialSignatureMessageLimit(
 			return e
 		}
 	case spectypes.RequestAuthPartialSig:
-		// Issue #2962 (§5 request-auth extension): one root per configured direct builder per
-		// proposal slot, admitted up to maxRequestAuthDistinctRoots distinct roots per (slot, signer)
-		// with the same two-tier handling as §5 preferences — a same-peer repeat of a seen root is a
-		// provable duplicate (REJECT), a relayed repeat or over-budget distinct root is rate-limiting
-		// (IGNORE).
+		// Issue #2962 (§5 request-auth extension): up to maxRequestAuthDistinctRoots distinct roots
+		// per (slot, signer) — one per configured builder — with the preference case's two-tier
+		// handling: same-peer repeat REJECT, relayed repeat or over-budget distinct root IGNORE.
 		root := m.Messages[0].SigningRoot // exactly one message for this role (enforced by semantics + count rules)
 		if signerState.Peer(receivedFrom).hasRequestAuthRoot(root) {
 			e := ErrTooManyPartialSigMessage

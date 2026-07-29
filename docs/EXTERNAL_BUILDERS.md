@@ -39,6 +39,9 @@ byte-identical `data`:
   signing, but divergence makes the cluster's effective bid policy depend on which operator leads the
   round — keep them identical too. They take effect with the produceBlockV4 POST migration
   (beacon-APIs#625, pending upstream).
+- Remote-signing operators (Web3Signer) cannot produce request-auth partials — there is no request-auth
+  signing type there yet. A node with `Builders` set and a remote signer warns at startup and disables the
+  overlay locally; the cluster still reconstructs auths while at most `f` operators are remote-signing.
 
 ## How to use
 
