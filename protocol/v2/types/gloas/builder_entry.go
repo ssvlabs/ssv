@@ -13,10 +13,12 @@ const MaxBuilderEntries = 8
 
 // MaxRequestAuthDistinctRoots bounds the distinct RequestAuthV1 signing roots one signer may put on
 // the wire per proposal slot: exactly one per authenticatable builder entry, so the budget equals
-// the entry cap. No headroom is warranted — auth roots don't move with dependent_root and the
-// builder list is read once at startup, while wire validation is config-independent, so every
-// extra admitted root would burden clusters that never opt in. Message validation enforces it per
-// (slot, signer); the §5 dispatcher sizes its pending stash from it.
+// the entry cap. No headroom is provisioned — auth roots don't move with dependent_root, and wire
+// validation is config-independent, so every extra admitted root would burden clusters that never
+// opt in. The accepted cost: a restart with a changed builder list can present fresh roots to a
+// slot whose budget is already spent, and the excess is IGNOREd until that slot passes
+// (self-healing as the lookahead rolls). Message validation enforces the bound per (slot, signer);
+// the §5 dispatcher sizes its pending stash from it.
 const MaxRequestAuthDistinctRoots = MaxBuilderEntries
 
 // BuilderIdentity is the identity of a configured builder relationship: the (URL, auth data) pair,
