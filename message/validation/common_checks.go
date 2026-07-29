@@ -165,5 +165,15 @@ func (mv *messageValidator) validateBeaconDuty(
 		}
 	}
 
+	// Committee roles (RoleCommittee and RoleAggregatorCommittee) are intentionally not
+	// per-validator duty-asserted here. As elsewhere in committee-role validation, we do not assume
+	// operators are synced on each other's validator sets (see knowledge-base#2), so asserting a
+	// per-validator attester/sync-committee duty would reject legitimate messages from nodes still
+	// mid-sync — the self-reinforcing failure mode kb#2 documents. The pre-Boole
+	// RoleSyncCommitteeContribution branch above has the assertion only because it was a
+	// per-validator (non-committee) role with a single known index; RoleAggregatorCommittee carries
+	// that traffic post-fork as a committee role, so the assertion is dropped by design. The residual
+	// spam is insider-only (the signer is an authenticated committee member) and bounded by the
+	// per-epoch duty-count limit for committee roles in dutyLimit (min(slotsPerEpoch, 2*validators)).
 	return nil
 }
