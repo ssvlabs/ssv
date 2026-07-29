@@ -52,10 +52,9 @@ type ProposerPreferencesRunner struct {
 	pending map[phase0.Slot][]*spectypes.PartialSignatureMessages
 }
 
-// maxPendingRootsPerSigner is how many stashed partials one signer can legitimately account for per
-// proposal slot: the wire admits at most gloas.MaxProposerPreferencesDistinctRoots distinct §5
-// preference roots plus gloas.MaxRequestAuthDistinctRoots distinct request-auth roots per
-// (slot, signer) — the same shared constants message validation enforces.
+// maxPendingRootsPerSigner caps stashed partials per (slot, signer): the wire admits at most this
+// many distinct §5-role signing roots — the preference budget plus the request-auth budget, the
+// same shared constants message validation enforces.
 const maxPendingRootsPerSigner = gloas.MaxProposerPreferencesDistinctRoots + gloas.MaxRequestAuthDistinctRoots
 
 // ProposerPreferencesRunnerOptions bundles the dependencies required by NewProposerPreferencesRunner.
@@ -69,8 +68,7 @@ type ProposerPreferencesRunnerOptions struct {
 	// authenticatable entry the slot sub-runners additionally threshold-sign a RequestAuthV1 per
 	// upcoming proposal slot. Empty (the default) disables the overlay entirely.
 	Builders []gloas.BuilderEntry
-	// RequestAuthCache receives each reconstructed SignedRequestAuthV1, shared with the validator's
-	// proposer runner so the §4 produce path can attach auths at proposal time.
+	// RequestAuthCache receives each reconstructed SignedRequestAuthV1 for the §4 produce path.
 	RequestAuthCache *ssv.RequestAuthCache
 }
 
@@ -109,8 +107,7 @@ func (r *ProposerPreferencesRunner) StartNewDuty(ctx context.Context, logger *za
 	if prev, ok := r.bySlot[slot]; ok {
 		sub.submittedPreferences = prev.submittedPreferences
 		sub.broadcastPreferences = prev.broadcastPreferences
-		// Auth roots are re-emission-invariant: never re-broadcast one already out, never redo a
-		// reconstruction already cached.
+		// The auth markers carry over too — roots are re-emission-invariant (see the field docs).
 		sub.broadcastAuthRoots = prev.broadcastAuthRoots
 		sub.reconstructedAuthRoots = prev.reconstructedAuthRoots
 		if prev.hasDutyRunning() {
@@ -332,32 +329,35 @@ type proposerPreferencesSlotRunner struct {
 	builders         []gloas.BuilderEntry
 	requestAuthCache *ssv.RequestAuthCache
 
-	// requestAuths maps each frozen RequestAuthV1's signing root to the object and its builder, set
-	// when the duty executes; incoming RequestAuthPartialSig messages are admitted only against
-	// these roots. nil means the duty has not executed here yet.
+	// requestAuths maps each frozen RequestAuthV1's signing root to the object and its builders;
+	// incoming RequestAuthPartialSig messages are admitted only against these roots. nil until the
+	// duty executes here.
 	requestAuths map[[32]byte]*frozenRequestAuth
 
-	// requestAuthContainer collects request-auth partials separately from the §5 preference round:
-	// the two sign under different domains, so they cannot share the base pre-consensus round, and
-	// auth collection legitimately keeps running after the preference round concludes the duty.
+	// requestAuthContainer collects request-auth partials separately from the preference round:
+	// different signing domains cannot share the base pre-consensus round, and auth collection must
+	// keep running after the preference concludes the duty.
 	requestAuthContainer *ssv.PartialSigContainer
 
-	// broadcastAuthRoots records the auth roots this operator already broadcast a partial for,
-	// carried across sub-runner replacements like broadcastPreferences: auth roots don't depend on
-	// dependent_root, so a re-emission re-produces the identical root and a re-broadcast would only
-	// get this operator gossip-penalized as a same-peer duplicate (issue #2934).
-	broadcastAuthRoots map[[32]byte]struct{}
-
-	// reconstructedAuthRoots records the auth roots already reconstructed into the cache, carried
-	// across sub-runner replacements like broadcastAuthRoots: a replacement's fresh container would
-	// otherwise re-reach quorum from the stash replay and redo the reconstruction (and its metric)
-	// for a value that cannot have changed.
+	// broadcastAuthRoots and reconstructedAuthRoots carry across sub-runner replacements like
+	// broadcastPreferences: auth roots are re-emission-invariant, so a replacement must neither
+	// re-broadcast a root already out (a same-peer duplicate, issue #2934) nor redo a
+	// reconstruction its stash replay would re-reach quorum for.
+	broadcastAuthRoots     map[[32]byte]struct{}
 	reconstructedAuthRoots map[[32]byte]struct{}
 }
 
-// frozenRequestAuth pairs a frozen RequestAuthV1 with the builder relationship it authenticates.
+// frozenRequestAuth pairs a frozen RequestAuthV1 with every configured builder relationship it
+// authenticates: the signing root derives from (data, slot) alone — not the URL — so distinct
+// entries sharing one pre-agreed token converge on one root, one broadcast, and one reconstruction
+// serving them all.
 type frozenRequestAuth struct {
 	auth     *gloas.RequestAuthV1
+	builders []frozenBuilderRef
+}
+
+// frozenBuilderRef names one configured builder relationship covered by a frozen auth.
+type frozenBuilderRef struct {
 	identity string // gloas.BuilderIdentity — the RequestAuthCache key
 	url      string // for logging
 }
@@ -482,8 +482,7 @@ func (r *proposerPreferencesSlotRunner) executeDuty(ctx context.Context, logger 
 	proposalSlot := validatorDuty.DutySlot()
 
 	// The request-auth round rides every execution of the §5 duty, ahead of the preference logic so
-	// none of its early-return paths (unchanged preference, in-flight broadcast) can skip it. It
-	// never fails the duty: the overlay is opt-in and the §5 preference must not depend on it.
+	// none of its early-return paths can skip it; it never fails the duty.
 	r.runRequestAuthRound(ctx, logger, validatorDuty, proposalSlot)
 
 	preferences, err := r.buildProposerPreferences(ctx, proposalSlot)
@@ -546,11 +545,10 @@ func (r *proposerPreferencesSlotRunner) executeDuty(ctx context.Context, logger 
 }
 
 // runRequestAuthRound freezes one RequestAuthV1{data, proposal_slot} per authenticatable configured
-// builder (issue #2962 B1): records each auth's signing root so incoming partials can be admitted,
-// and signs and broadcasts this operator's partial — once per root, across re-emissions (auth roots
-// are re-emission-invariant, see broadcastAuthRoots). Per-builder failures are logged and skipped,
-// never failing the §5 duty: a builder whose auth misses quorum is simply not contactable for the
-// slot, and the enshrined flow (gossip bids, self-build) stays available.
+// builder, records its signing root so incoming partials can be admitted, and broadcasts this
+// operator's partial — once per root, across re-emissions. Per-builder failures are logged and
+// skipped, never failing the §5 duty: a builder whose auth misses quorum is simply not contactable
+// for the slot, and the enshrined flow (gossip bids, self-build) stays available.
 func (r *proposerPreferencesSlotRunner) runRequestAuthRound(ctx context.Context, logger *zap.Logger, validatorDuty *spectypes.ValidatorDuty, proposalSlot phase0.Slot) {
 	if len(r.builders) == 0 {
 		return
@@ -564,16 +562,12 @@ func (r *proposerPreferencesSlotRunner) runRequestAuthRound(ctx context.Context,
 		return
 	}
 
-	if r.requestAuths == nil {
-		r.requestAuths = make(map[[32]byte]*frozenRequestAuth, len(r.builders))
-	}
+	r.requestAuths = make(map[[32]byte]*frozenRequestAuth, len(r.builders))
 	for i := range r.builders {
 		entry := &r.builders[i]
 		data, err := entry.AuthDataBytes()
 		if err != nil || len(data) == 0 {
-			// The default (empty-URL) entry is not authenticatable, and invalid auth data is
-			// rejected at startup — nothing to sign either way.
-			continue
+			continue // the default (empty-URL) entry has nothing to authenticate; invalid data is rejected at startup
 		}
 		auth := &gloas.RequestAuthV1{Data: data, Slot: proposalSlot}
 		root, err := spectypes.ComputeETHSigningRoot(auth, domain)
@@ -582,13 +576,16 @@ func (r *proposerPreferencesSlotRunner) runRequestAuthRound(ctx context.Context,
 				fields.Slot(proposalSlot), zap.String("builder_url", entry.URL), zap.Error(err))
 			continue
 		}
-		r.requestAuths[root] = &frozenRequestAuth{auth: auth, identity: gloas.BuilderIdentity(entry.URL, data), url: entry.URL}
+		ref := frozenBuilderRef{identity: gloas.BuilderIdentity(entry.URL, data), url: entry.URL}
+		if frozen, ok := r.requestAuths[root]; ok {
+			// Another entry froze these exact bytes; register the extra relationship on the shared root.
+			frozen.builders = append(frozen.builders, ref)
+			continue
+		}
+		r.requestAuths[root] = &frozenRequestAuth{auth: auth, builders: []frozenBuilderRef{ref}}
 
 		if _, done := r.broadcastAuthRoots[root]; done {
-			// A prior incarnation of this slot already broadcast this exact auth; the dispatcher's
-			// stash replay and live partials complete its quorum, a re-broadcast would only be
-			// dropped as a same-peer duplicate.
-			continue
+			continue // broadcast by a prior incarnation; stash replay and live partials finish its quorum
 		}
 		msg, err := signAsValidator(ctx, r, validatorDuty.ValidatorIndex, auth, proposalSlot, phase0.DomainType(spectypes.DomainRequestAuth), domain)
 		if err != nil {
@@ -612,15 +609,19 @@ func (r *proposerPreferencesSlotRunner) runRequestAuthRound(ctx context.Context,
 
 // processRequestAuthPartial collects request-auth partials into their own container and, on the
 // first quorum for a root, reconstructs the builder-facing SignedRequestAuthV1 into the shared
-// cache. Unlike the §5 preference round it has no succeeded-gate: the preference submission
-// concluding the duty must not stop auth collection, which legitimately continues until the
-// proposal slot (the sub-runner lingers until evicted).
+// cache. No succeeded-gate: the preference submission concluding the duty must not stop auth
+// collection, which legitimately runs until the sub-runner is evicted.
 func (r *proposerPreferencesSlotRunner) processRequestAuthPartial(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
 	if !r.hasDutyAssigned() {
 		return NewRetryableError(spectypes.WrapError(spectypes.NoRunningDutyErrorCode, ErrNoDutyAssigned))
 	}
 	if err := r.validatePartialSigMsg(signedMsg, r.State.CurrentDuty.DutySlot()); err != nil {
 		return fmt.Errorf("invalid request-auth partial: %w", err)
+	}
+	// The auth root, unlike the §5 preference, doesn't bind the validator index — tie the message
+	// to this runner's share explicitly, as the post-consensus paths do.
+	if err := r.validateValidatorIndexInPartialSigMsg(signedMsg); err != nil {
+		return err
 	}
 	if len(signedMsg.Messages) != 1 {
 		return errors.New("request-auth partial must carry exactly one message")
@@ -634,15 +635,12 @@ func (r *proposerPreferencesSlotRunner) processRequestAuthPartial(ctx context.Co
 	}
 	frozen, ok := r.requestAuths[msg.SigningRoot]
 	if !ok {
-		// A root we didn't freeze: the sender's builder list or auth-data bytes diverge from ours;
-		// whatever quorum it can reach forms on the operators that share its config.
+		// The sender's builder list or auth-data bytes diverge from ours; whatever quorum this root
+		// can reach forms on the operators that share its config.
 		return fmt.Errorf("unknown request-auth signing root %x", msg.SigningRoot)
 	}
 	if _, done := r.reconstructedAuthRoots[msg.SigningRoot]; done {
-		// Already reconstructed and cached, possibly by a prior incarnation of this slot — the
-		// carried marker keeps a replacement's stash replay from redoing the work; late partials
-		// add nothing.
-		return nil
+		return nil // reconstructed and cached, possibly by a prior incarnation; late partials add nothing
 	}
 
 	// quorum returns true only once per root (the first time it is reached).
@@ -661,13 +659,17 @@ func (r *proposerPreferencesSlotRunner) processRequestAuthPartial(ctx context.Co
 	copy(signature[:], fullSig)
 
 	r.reconstructedAuthRoots[msg.SigningRoot] = struct{}{}
-	if r.requestAuthCache != nil {
-		r.requestAuthCache.Store(r.GetShare().ValidatorIndex, frozen.auth.Slot, frozen.identity,
-			&gloas.SignedRequestAuthV1{Message: frozen.auth, Signature: signature})
+	signed := &gloas.SignedRequestAuthV1{Message: frozen.auth, Signature: signature}
+	urls := make([]string, 0, len(frozen.builders))
+	for _, ref := range frozen.builders {
+		if r.requestAuthCache != nil {
+			r.requestAuthCache.Store(frozen.auth.Slot, ref.identity, signed)
+		}
+		urls = append(urls, ref.url)
 	}
 	recordRequestAuthReconstruction(ctx)
 	logger.Info("✔️ reconstructed builder request auth",
-		fields.Slot(frozen.auth.Slot), zap.String("builder_url", frozen.url))
+		fields.Slot(frozen.auth.Slot), zap.Strings("builder_urls", urls))
 	return nil
 }
 

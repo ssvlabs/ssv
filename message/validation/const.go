@@ -32,16 +32,14 @@ const (
 const proposerPreferencesEarlyEpochs = 2
 
 // maxProposerPreferencesDistinctRoots bounds the distinct ProposerPreferences signing roots one
-// (slot, signer) may contribute (SIP #94 §5). Unlike other pre-consensus messages (capped at 1), a
-// proposer re-emits its preference under a new root when the proposal slot's dependent_root changes, so
-// the bound admits a few genuine reorg-driven refreshes while still capping duplicates and flooding.
-// The value is shared with the §5 dispatcher's pending stash, hence the central constant.
+// (slot, signer) may contribute (SIP #94 §5): unlike other pre-consensus messages (capped at 1), a
+// proposer re-emits under a new root when the slot's dependent_root changes. Derivation at the
+// shared constant.
 const maxProposerPreferencesDistinctRoots = gloas.MaxProposerPreferencesDistinctRoots
 
 // maxRequestAuthDistinctRoots bounds the distinct RequestAuthV1 signing roots one (slot, signer)
-// may contribute (issue #2962): one root per configured direct-builder entry — auth roots don't
-// depend on dependent_root, so unlike §5 preferences a reorg never mints new ones — plus headroom
-// for a config change between emissions. Shared with the config entry cap and the dispatcher stash.
+// may contribute (issue #2962): exactly one per configured direct-builder entry. Derivation at the
+// shared constant.
 const maxRequestAuthDistinctRoots = gloas.MaxRequestAuthDistinctRoots
 
 const (

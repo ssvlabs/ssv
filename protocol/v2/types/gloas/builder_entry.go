@@ -7,17 +7,17 @@ import (
 	"strings"
 )
 
-// MaxBuilderEntries caps the configured direct-builder list (issue #2962 D2). It bounds both the
-// operator config and, on the wire, the distinct RequestAuthV1 signing roots message validation
-// admits per (proposal slot, signer) — the two must stay in step, so both reference this constant.
+// MaxBuilderEntries caps the configured direct-builder list (issue #2962 D2) and, through
+// MaxRequestAuthDistinctRoots, the wire budget that config implies.
 const MaxBuilderEntries = 8
 
 // MaxRequestAuthDistinctRoots bounds the distinct RequestAuthV1 signing roots one signer may put on
-// the wire per proposal slot (issue #2962 B1): one root per authenticatable builder entry, plus
-// headroom for a config change between emissions (roots are dependent_root-independent, so unlike
-// §5 preferences a reorg re-emission never mints a new one). Message validation enforces it
-// world-wide per (slot, signer); the §5 dispatcher sizes its pending stash from it.
-const MaxRequestAuthDistinctRoots = MaxBuilderEntries + 4
+// the wire per proposal slot: exactly one per authenticatable builder entry, so the budget equals
+// the entry cap. No headroom is warranted — auth roots don't move with dependent_root and the
+// builder list is read once at startup, while wire validation is config-independent, so every
+// extra admitted root would burden clusters that never opt in. Message validation enforces it per
+// (slot, signer); the §5 dispatcher sizes its pending stash from it.
+const MaxRequestAuthDistinctRoots = MaxBuilderEntries
 
 // BuilderIdentity is the identity of a configured builder relationship: the (URL, auth data) pair,
 // per keymanager-APIs#87 (multiple entries MAY share a URL with different auth data). It keys the
@@ -27,18 +27,16 @@ func BuilderIdentity(url string, authData []byte) string {
 }
 
 // BuilderEntry is one configured direct builder for the ePBS (Gloas) external-builder overlay
-// (issue #2962): the opt-in, off-protocol path that authenticates the cluster to a builder and
-// carries per-builder bid preferences. Field vocabulary follows keymanager-APIs#87's BuilderEntry
-// (plus beacon-APIs#625's max_trusted_bid), so SSV config reads like the rest of the ecosystem.
+// (issue #2962), in keymanager-APIs#87's field vocabulary plus beacon-APIs#625's max_trusted_bid.
 //
-// Entries MUST be configured identically across ALL operators of every cluster sharing a validator:
-// AuthData is threshold-signed into RequestAuthV1 (any byte divergence splits the quorum and
-// silently disables that builder), and the unsigned knobs steer bid selection per-operator (their
-// divergence is consensus-safe but makes the effective policy "whoever leads the round"). See
+// Entries MUST be identical across ALL operators of every cluster sharing a validator: AuthData is
+// threshold-signed into RequestAuthV1, so any byte divergence splits the quorum and silently
+// disables that builder; the unsigned knobs steer bid selection per-operator, where divergence is
+// consensus-safe but leaves the effective policy to whoever leads the round. See
 // docs/EXTERNAL_BUILDERS.md.
 //
-// Only URL/AuthData are consumed pre-signing (phase 1); the unsigned knobs take effect with the
-// produceBlockV4 POST migration and the semantics track beacon-APIs#625 until it merges.
+// Today only URL and AuthData are consumed; the unsigned knobs take effect with the produceBlockV4
+// POST migration and track beacon-APIs#625 until it merges.
 type BuilderEntry struct {
 	// URL the beacon node (and, for submitBuilderPreferences, the SSV node) contacts the builder
 	// on. An empty URL denotes the single default entry: unsigned preferences applied to any
@@ -101,10 +99,10 @@ func (e *BuilderEntry) EffectiveBoostFactor() uint64 {
 
 // ValidateBuilderEntries checks a configured builder list: entry cap, at most one default
 // (empty-URL) entry carrying no AuthData, parseable http(s) URLs, decodable within-limit auth
-// data, no duplicate (URL, auth data) identities (the keymanager-APIs#87 entry identity — multiple
-// entries MAY share a URL with different auth data), and well-formed optional pubkeys. It cannot
-// check the one property that matters most — that every operator of every shared cluster holds the
-// identical list — which stays an operational requirement (docs/EXTERNAL_BUILDERS.md).
+// data, no duplicate (URL, auth data) identities (multiple entries MAY share a URL with different
+// auth data), and well-formed optional pubkeys. The property that matters most — every operator of
+// every shared cluster holding the identical list — cannot be checked here and stays an
+// operational requirement (docs/EXTERNAL_BUILDERS.md).
 func ValidateBuilderEntries(entries []BuilderEntry) error {
 	if len(entries) > MaxBuilderEntries {
 		return fmt.Errorf("%d builder entries exceed the %d limit", len(entries), MaxBuilderEntries)

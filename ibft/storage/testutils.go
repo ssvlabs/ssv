@@ -229,7 +229,11 @@ func GetSpecDir(path, module string) (string, error) {
 			return "", errors.New("could not get current directory")
 		}
 	}
-	goModFile, err := getGoModFile(path)
+	root, err := findGoModDir(path)
+	if err != nil {
+		return "", err
+	}
+	goModFile, err := parseGoModFile(root)
 	if err != nil {
 		return "", errors.New("could not get go.mod file")
 	}
@@ -252,10 +256,6 @@ func GetSpecDir(path, module string) (string, error) {
 			// (go.mod semantics: a replacement path without a version must be a directory).
 			dir := modPath
 			if !filepath.IsAbs(dir) {
-				root, err := findGoModDir(path)
-				if err != nil {
-					return "", err
-				}
 				dir = filepath.Join(root, dir)
 			}
 			if _, err := os.Stat(dir); err != nil {
@@ -339,23 +339,17 @@ func findGoModDir(path string) (string, error) {
 	}
 }
 
-func getGoModFile(path string) (*modfile.File, error) {
+// parseGoModFile reads and parses the module file in root (as located by findGoModDir).
+func parseGoModFile(root string) (*modfile.File, error) {
 	// The alan_spec build resolves the ssv-spec version from go.spec.alan.mod instead of
 	// go.mod, so the spec-test vectors come from the alan (pre-Boole) spec release.
 	modFileName := specGoModFilename()
 
-	root, err := findGoModDir(path)
-	if err != nil {
-		return nil, err
-	}
-
-	// read mod file
 	// #nosec G304 -- modFileName is selected by build tags from fixed constants.
 	buf, err := os.ReadFile(filepath.Join(filepath.Clean(root), modFileName))
 	if err != nil {
 		return nil, fmt.Errorf("could not read %s", modFileName)
 	}
 
-	// parse mod file
 	return modfile.Parse(modFileName, buf, nil)
 }

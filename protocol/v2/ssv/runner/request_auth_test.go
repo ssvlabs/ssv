@@ -43,11 +43,12 @@ func TestProposerPreferencesRunner_requestAuthConvergence(t *testing.T) {
 
 	bn := &prefsTestBeacon{BeaconNode: protocoltesting.NewTestingBeaconNodeWrapped(), dependentRoot: phase0.Root{0xaa}}
 	network := protocoltesting.NewTestingNetwork(1, keySet.OperatorKeys[1])
-	cache := ssv.NewRequestAuthCache()
+	cache := ssv.NewRequestAuthCache(cfg.EstimatedCurrentSlot)
 
 	builders := []gloas.BuilderEntry{
 		{URL: "https://builder-a.example.com"},                       // auth data defaults to the URL bytes
 		{URL: "https://builder-b.example.com", AuthData: "0x010203"}, // explicit pre-agreed bytes
+		{URL: "https://builder-d.example.com", AuthData: "0x010203"}, // distinct builder sharing B's token
 		{}, // the default entry: unsigned preferences only, no auth round
 	}
 	require.NoError(t, gloas.ValidateBuilderEntries(builders))
@@ -110,14 +111,15 @@ func TestProposerPreferencesRunner_requestAuthConvergence(t *testing.T) {
 		require.True(t, IsRetryable(err))
 	}
 
-	// Our emission: one preference partial plus one auth partial per authenticatable builder go out,
-	// the stash replays builder A's peer partials to quorum, and its auth lands in the cache.
+	// Our emission: one preference partial plus one auth partial per distinct auth root goes out —
+	// builders B and D share a token, so they share a root and a single broadcast; the stash
+	// replays builder A's peer partials to quorum, and its auth lands in the cache.
 	require.NoError(t, disp.StartNewDuty(ctx, logger, duty, quorum))
 	types := broadcastPartialSigTypes(t, network.BroadcastedMsgs)
 	require.Equal(t, 1, types[spectypes.ProposerPreferencesPartialSig])
-	require.Equal(t, 2, types[spectypes.RequestAuthPartialSig], "one auth partial per authenticatable builder; the default entry signs nothing")
+	require.Equal(t, 2, types[spectypes.RequestAuthPartialSig], "one auth partial per distinct root; the token-sharing pair broadcasts once, the default entry signs nothing")
 
-	auths := cache.Get(share.ValidatorIndex, proposalSlot)
+	auths := cache.Get(proposalSlot)
 	require.Len(t, auths, 1, "builder A reached quorum via stash replay")
 	authA := auths[gloas.BuilderIdentity("https://builder-a.example.com", builderAData)]
 	require.NotNil(t, authA)
@@ -128,13 +130,16 @@ func TestProposerPreferencesRunner_requestAuthConvergence(t *testing.T) {
 	// submit yet — its quorum is driven separately below to prove full independence).
 	require.Empty(t, bn.submitted)
 
-	// Builder B's peer partials arrive live; its auth reconstructs too.
+	// The shared-token root's peer partials arrive live; ONE reconstruction must serve BOTH builder
+	// relationships that agreed on those bytes (the root derives from (data, slot), not the URL).
 	for _, op := range []spectypes.OperatorID{2, 3, 4} {
 		require.NoError(t, disp.ProcessPreConsensus(ctx, logger, peerAuthPartial(t, op, builderBData)))
 	}
-	auths = cache.Get(share.ValidatorIndex, proposalSlot)
-	require.Len(t, auths, 2)
+	auths = cache.Get(proposalSlot)
+	require.Len(t, auths, 3)
 	require.NotNil(t, auths[gloas.BuilderIdentity("https://builder-b.example.com", builderBData)])
+	require.NotNil(t, auths[gloas.BuilderIdentity("https://builder-d.example.com", builderBData)],
+		"a builder sharing another's token must get its own cache entry from the shared reconstruction")
 
 	// A re-emission for the same slot re-freezes but never re-broadcasts an auth (roots are
 	// re-emission-invariant and already out) — only the §5 side decides re-broadcast on its own rules.
@@ -162,7 +167,7 @@ func TestProposerPreferencesRunner_requestAuthAfterPreferenceSuccess(t *testing.
 
 	bn := &prefsTestBeacon{BeaconNode: protocoltesting.NewTestingBeaconNodeWrapped(), dependentRoot: phase0.Root{0xaa}}
 	network := protocoltesting.NewTestingNetwork(1, keySet.OperatorKeys[1])
-	cache := ssv.NewRequestAuthCache()
+	cache := ssv.NewRequestAuthCache(cfg.EstimatedCurrentSlot)
 	builders := []gloas.BuilderEntry{{URL: "https://builder-a.example.com"}}
 
 	runnerIface, err := NewProposerPreferencesRunner(ProposerPreferencesRunnerOptions{
@@ -244,6 +249,6 @@ func TestProposerPreferencesRunner_requestAuthAfterPreferenceSuccess(t *testing.
 			}},
 		}))
 	}
-	require.Len(t, cache.Get(share.ValidatorIndex, proposalSlot), 1,
+	require.Len(t, cache.Get(proposalSlot), 1,
 		"auth must reconstruct even after the §5 preference concluded the duty")
 }
