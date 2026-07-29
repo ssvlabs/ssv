@@ -271,6 +271,14 @@ func (s *DutyTraceStore) GetCommitteeDuties(slot phase0.Slot, roles ...spectypes
 		}
 		ctx := fmt.Sprintf("slot=%d role=%d", slot, role)
 		iterationError := s.db.GetAll(prefix, func(i int, obj basedb.Obj) error {
+			// obj.Key is the key with the slot+role prefix trimmed, so a role-aware "cd" key leaves
+			// exactly the committee ID. A legacy (pre-migration) key whose committee ID starts with
+			// the RoleCommittee byte 0x00 aliases into this scan and leaves a shorter remainder;
+			// skip it rather than failing the whole slot on an unmarshal error. Such stragglers can
+			// only appear after a post-migration downgrade wrote fresh legacy keys.
+			if len(obj.Key) != len(spectypes.CommitteeID{}) {
+				return nil
+			}
 			duty := new(traces.CommitteeDutyTrace)
 			if err := duty.UnmarshalSSZ(obj.Value); err != nil {
 				errs = multierror.Append(errs, fmt.Errorf("unmarshal committee duty (%s): %w", ctx, err))
