@@ -42,6 +42,10 @@ func TestMigration9CommitteeDutyRoleField(t *testing.T) {
 			t.Run("batches rewrites across multiple chunks", func(t *testing.T) {
 				testMigration9BatchesAcrossChunks(t, backend.setup(t), prefix)
 			})
+
+			t.Run("skips a corrupt record instead of aborting", func(t *testing.T) {
+				testMigration9SkipsCorruptRecord(t, backend.setup(t), prefix)
+			})
 		})
 	}
 }
@@ -64,6 +68,48 @@ func setupOptionsPebble(t *testing.T) Options {
 		Db:     db,
 		DbPath: t.TempDir(),
 	}
+}
+
+// testMigration9SkipsCorruptRecord seeds one unreadable legacy value alongside a valid one and
+// asserts the migration completes rather than aborting startup: the good record is migrated, and the
+// corrupt one is left in place (skipped) rather than failing the whole run.
+func testMigration9SkipsCorruptRecord(t *testing.T, opt Options, prefix []byte) {
+	ctx := t.Context()
+
+	goodSlot := phase0.Slot(10)
+	badSlot := phase0.Slot(20)
+	committeeID := testCommitteeID(0x55)
+
+	goodOldKey := testCommitteeLegacyKey(goodSlot, committeeID)
+	setCommitteeObj(t, opt.Db, prefix, goodOldKey, marshalLegacyDuty(t, testLegacyCommitteeDuty(goodSlot, committeeID)))
+
+	// A value that is not a valid migration_9_CommitteeDutyTraceV1 encoding, under a well-formed
+	// legacy key so it passes the key-length filter and reaches UnmarshalSSZ.
+	badOldKey := testCommitteeLegacyKey(badSlot, committeeID)
+	setCommitteeObj(t, opt.Db, prefix, badOldKey, []byte{0x00, 0x01, 0x02})
+
+	err := migration_9_migrate_committee_duty_role_field.Run(
+		ctx,
+		log.TestLogger(t),
+		opt,
+		[]byte(migration_9_migrate_committee_duty_role_field.Name),
+		func(rw basedb.ReadWriter) error { return nil },
+	)
+	require.NoError(t, err)
+
+	// Good record migrated: old key gone, role-aware key present.
+	_, goodOldFound := getCommitteeObj(t, opt.Db, prefix, goodOldKey)
+	require.False(t, goodOldFound)
+	goodNewKey := testCommitteeRoleAwareKey(t, goodSlot, spectypes.RoleCommittee, committeeID)
+	_, goodNewFound := getCommitteeObj(t, opt.Db, prefix, goodNewKey)
+	require.True(t, goodNewFound)
+
+	// Corrupt record skipped: left in place, not rewritten.
+	_, badOldFound := getCommitteeObj(t, opt.Db, prefix, badOldKey)
+	require.True(t, badOldFound)
+	badNewKey := testCommitteeRoleAwareKey(t, badSlot, spectypes.RoleCommittee, committeeID)
+	_, badNewFound := getCommitteeObj(t, opt.Db, prefix, badNewKey)
+	require.False(t, badNewFound)
 }
 
 func testMigration9MigratesLegacyKey(t *testing.T, opt Options, prefix []byte) {

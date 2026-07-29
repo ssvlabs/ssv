@@ -2,6 +2,7 @@ package migrations
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -32,7 +33,7 @@ const migrationBatchBytes = 2 << 20
 var migration_9_migrate_committee_duty_role_field = Migration{
 	Name: "migration_9_migrate_committee_duty_role_field",
 	Run: func(ctx context.Context, logger *zap.Logger, opt Options, key []byte, completed CompletedFunc) (err error) {
-		var migrated int
+		var migrated, skipped int
 
 		defer func() {
 			if err != nil {
@@ -45,6 +46,7 @@ var migration_9_migrate_committee_duty_role_field = Migration{
 			logger.Info(
 				"migration completed",
 				zap.Int("migrated", migrated),
+				zap.Int("skipped", skipped),
 			)
 		}()
 
@@ -104,7 +106,18 @@ var migration_9_migrate_committee_duty_role_field = Migration{
 
 			legacyTrace := new(migration_9_CommitteeDutyTraceV1)
 			if err := legacyTrace.UnmarshalSSZ(obj.Value); err != nil {
-				return fmt.Errorf("unmarshal legacy committee duty: %w", err)
+				// A single corrupt/bit-rotted legacy value must not brick node startup by aborting
+				// the whole migration — a mainnet exporter can hold tens of millions of these
+				// records. The value is already unreadable, so skipping it loses nothing
+				// recoverable; log it loudly and continue. (The marshal below is left fatal: a
+				// failure there would signal a conversion bug, not input corruption, and should not
+				// be silently skipped.)
+				logger.Error("skipping unreadable legacy committee duty",
+					zap.String("key", hex.EncodeToString(obj.Key)),
+					zap.Error(err),
+				)
+				skipped++
+				return nil
 			}
 
 			trace := &traces.CommitteeDutyTrace{
