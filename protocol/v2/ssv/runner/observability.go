@@ -140,8 +140,8 @@ var (
 	requestAuthReconstructionCounter = metrics.New(
 		meter.Int64Counter(
 			observability.InstrumentName(observabilityNamespace, "request_auth.reconstructions"),
-			metric.WithUnit("{auth}"),
-			metric.WithDescription("threshold-reconstructed Gloas direct-builder request auths (issue #2962)")))
+			metric.WithUnit("{root}"),
+			metric.WithDescription("threshold-reconstructed Gloas direct-builder request-auth signing roots (issue #2962); token-sharing builders share a root and count once")))
 )
 
 func recordSuccessfulSubmission(ctx context.Context, count int64, epoch phase0.Epoch, role spectypes.BeaconRole) {
@@ -195,9 +195,10 @@ func recordEnvelopeBuildMatch(ctx context.Context, self bool) {
 	envelopeBuildMatchCounter.Add(ctx, 1, metric.WithAttributes(observability.EnvelopeBuildMatchAttribute(match)))
 }
 
-// recordRequestAuthReconstruction counts a threshold-reconstructed direct-builder request auth
-// (issue #2962). The inverse signal — an auth that never reached quorum — is measured where it
-// bites: at the §4 produce path's cache lookup, once the produce-POST migration lands.
+// recordRequestAuthReconstruction counts a threshold-reconstructed request-auth signing root
+// (issue #2962; token-sharing builders share a root and count once). The inverse signal — an auth
+// that never reached quorum — is measured where it bites: at the §4 produce path's cache lookup,
+// once the produce-POST migration lands.
 func recordRequestAuthReconstruction(ctx context.Context) {
 	requestAuthReconstructionCounter.Add(ctx, 1)
 }

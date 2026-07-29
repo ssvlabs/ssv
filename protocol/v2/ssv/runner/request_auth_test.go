@@ -154,6 +154,59 @@ func TestProposerPreferencesRunner_requestAuthConvergence(t *testing.T) {
 	require.False(t, IsRetryable(err))
 }
 
+// A node without builders (never configured, or disabled for a remote signer) never freezes auth
+// roots, so peer auth partials for a started duty must fail hard — retrying cannot help. Only a
+// partial racing the duty start stays retryable.
+func TestProposerPreferencesRunner_requestAuthWithoutBuilders(t *testing.T) {
+	keySet := spectestingutils.Testing4SharesSet()
+	share := spectestingutils.TestingShare(keySet, spectestingutils.TestingValidatorIndex)
+	cfg := cloneTestNetworkConfig()
+
+	bn := &prefsTestBeacon{BeaconNode: protocoltesting.NewTestingBeaconNodeWrapped(), dependentRoot: phase0.Root{0xaa}}
+	runnerIface, err := NewProposerPreferencesRunner(ProposerPreferencesRunnerOptions{
+		BaseRunnerOptions: BaseRunnerOptions{
+			NetworkConfig:  cfg,
+			Share:          map[phase0.ValidatorIndex]*spectypes.Share{share.ValidatorIndex: share},
+			Beacon:         bn,
+			Network:        protocoltesting.NewTestingNetwork(1, keySet.OperatorKeys[1]),
+			Signer:         ekm.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager()),
+			OperatorSigner: spectestingutils.NewOperatorSigner(keySet, 1),
+		},
+		FeeRecipientProvider: fixedFeeRecipientProvider{addr: bellatrix.ExecutionAddress{0xfe}},
+		GasLimit:             36_000_000,
+	})
+	require.NoError(t, err)
+	disp := runnerIface.(*ProposerPreferencesRunner)
+
+	proposalSlot := cfg.EstimatedCurrentSlot() + 5
+	require.NoError(t, disp.StartNewDuty(context.Background(), zap.NewNop(), &spectypes.ValidatorDuty{
+		Type:           spectypes.BNRoleProposerPreferences,
+		PubKey:         spectestingutils.TestingValidatorPubKey,
+		Slot:           proposalSlot,
+		ValidatorIndex: share.ValidatorIndex,
+	}, 3))
+
+	auth := &gloas.RequestAuthV1{Data: []byte("https://builder.example.com"), Slot: proposalSlot}
+	domain, err := bn.DomainData(context.Background(), cfg.EstimatedEpochAtSlot(proposalSlot), phase0.DomainType(spectypes.DomainRequestAuth))
+	require.NoError(t, err)
+	root, err := spectypes.ComputeETHSigningRoot(auth, domain)
+	require.NoError(t, err)
+	sig := keySet.Shares[2].SignByte(root[:])
+
+	err = disp.ProcessPreConsensus(context.Background(), zap.NewNop(), &spectypes.PartialSignatureMessages{
+		Type: spectypes.RequestAuthPartialSig,
+		Slot: proposalSlot,
+		Messages: []*spectypes.PartialSignatureMessage{{
+			PartialSignature: sig.Serialize(),
+			SigningRoot:      root,
+			Signer:           2,
+			ValidatorIndex:   share.ValidatorIndex,
+		}},
+	})
+	require.ErrorContains(t, err, "no builders configured")
+	require.False(t, IsRetryable(err), "no root can ever be frozen here, so retrying cannot help")
+}
+
 // The request-auth round must not disturb the §5 preference lifecycle: with builders configured,
 // the preference still submits on its own quorum, and auth collection keeps running after the §5
 // duty has already succeeded (no succeeded-gate on the auth path).

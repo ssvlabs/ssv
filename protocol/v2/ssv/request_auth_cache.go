@@ -11,10 +11,10 @@ import (
 
 // RequestAuthCache holds, per proposal slot, the threshold-reconstructed SignedRequestAuthV1 for
 // each configured builder relationship (issue #2962 B1), keyed by gloas.BuilderIdentity. The §5
-// slot sub-runners write on reconstruction quorum; the §4 produce path (and later the ahead-of-time
-// submitBuilderPreferences) will read. One instance per validator, shared between its runners like
-// the sibling ProposedBlockRoots and in package ssv for the same import-cycle reason. Safe for
-// concurrent use.
+// slot sub-runners write on reconstruction quorum; there is no reader yet — the §4 produce path
+// (and later the ahead-of-time submitBuilderPreferences) becomes one with the produceBlockV4 POST
+// migration. One instance per validator, in package ssv beside ProposedBlockRoots for the same
+// import-cycle reason. Safe for concurrent use.
 type RequestAuthCache struct {
 	// currentSlot anchors eviction: writes land up to a proposer lookahead ahead of their slot, so
 	// pruning by the clock — not by the last-written slot — is what keeps one future slot's auths
@@ -55,7 +55,8 @@ func (c *RequestAuthCache) Store(slot phase0.Slot, builderIdentity string, auth 
 }
 
 // Get returns a copy of the builder-identity → reconstructed-auth map for the proposal slot; empty
-// when nothing reconstructed yet.
+// when nothing reconstructed yet. The copy is shallow: the auths are shared with the cache, with
+// the runner's frozen state, and across token-sharing identities — treat them as immutable.
 func (c *RequestAuthCache) Get(slot phase0.Slot) map[string]*gloas.SignedRequestAuthV1 {
 	c.mu.Lock()
 	defer c.mu.Unlock()
