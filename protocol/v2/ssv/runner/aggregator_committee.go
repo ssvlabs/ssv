@@ -247,6 +247,38 @@ func (r *AggregatorCommitteeRunner) waitTwoThirdsIntoSlot(ctx context.Context, s
 	}
 }
 
+// getAggregateAttestationWithRetry fetches the aggregate attestation for a committee index, retrying
+// a bounded number of times on error. A failure here is typically a transient beacon-node hiccup at
+// the 2/3-into-slot fetch point, and a dropped aggregator is silently excluded from the proposal —
+// message replay does not recover it, because pre-consensus quorum is reported only once, so the
+// fetch is never re-reached on a retried message. A short in-place retry recovers the common case.
+// Fetches are deduped by committee index upstream, so this runs at most once per distinct index.
+func (r *AggregatorCommitteeRunner) getAggregateAttestationWithRetry(
+	ctx context.Context,
+	slot phase0.Slot,
+	committeeIndex phase0.CommitteeIndex,
+) (ssz.Marshaler, error) {
+	const attempts = 3
+	const retryDelay = 150 * time.Millisecond
+
+	var lastErr error
+	for attempt := 0; attempt < attempts; attempt++ {
+		if attempt > 0 {
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(retryDelay):
+			}
+		}
+		attestation, _, err := r.beacon.GetAggregateAttestation(ctx, slot, committeeIndex)
+		if err == nil {
+			return attestation, nil
+		}
+		lastErr = err
+	}
+	return nil, lastErr
+}
+
 // processSyncCommitteeSelectionProof handles sync committee selection proofs with known index
 func (r *AggregatorCommitteeRunner) processSyncCommitteeSelectionProof(
 	ctx context.Context,
@@ -582,9 +614,19 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(
 			}
 
 			// Else, fetch attestation and include everything (if successful)
-			attestation, _, err := r.beacon.GetAggregateAttestation(ctx, selection.duty.Slot, selection.duty.CommitteeIndex)
+			attestation, err := r.getAggregateAttestationWithRetry(ctx, selection.duty.Slot, selection.duty.CommitteeIndex)
 			if err != nil {
+				// After bounded retries the beacon still won't return the aggregate. Drop this
+				// aggregator from the proposal rather than failing the whole committee duty, but log
+				// it at WARN so the loss is visible instead of silently folded into a "success"
+				// conclusion (post-consensus derives its expectation from the decided data, which no
+				// longer includes this validator).
 				anyErr = fmt.Errorf("failed to get aggregate attestation: %w", err)
+				logger.Warn("dropping aggregator from proposal: aggregate attestation unavailable",
+					zap.Uint64("validator_index", uint64(selection.duty.ValidatorIndex)),
+					zap.Uint64("committee_index", uint64(selection.duty.CommitteeIndex)),
+					zap.Error(err),
+				)
 				continue
 			}
 
