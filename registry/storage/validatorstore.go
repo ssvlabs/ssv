@@ -58,7 +58,15 @@ type Committee struct {
 	ID        spectypes.CommitteeID
 	Operators []spectypes.OperatorID
 	Shares    []*types.SSVShare
-	Indices   []phase0.ValidatorIndex
+
+	// Indices holds one entry per share in Shares, positionally aligned with it — not one
+	// entry per *known* validator index. buildCommittee appends share.ValidatorIndex
+	// unconditionally, so a share added by a contract event contributes a literal 0 until
+	// beacon metadata sync populates its real index. Consumers must not assume every entry
+	// is a live index, and must not filter the zeros out: the cardinality is relied upon by
+	// the committee duty limit (min(slotsPerEpoch, 2*len)) and by the len()==0 check in
+	// message validation, both of which would tighten against legitimate traffic if it shrank.
+	Indices []phase0.ValidatorIndex
 
 	// booleCommitteeSubnet is a cached value for committee subnet (post-Boole-fork) so we don't recompute it every time.
 	booleCommitteeSubnet atomic.Pointer[uint64]

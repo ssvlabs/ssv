@@ -327,6 +327,12 @@ func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.Mess
 			return CommitteeInfo{}, e
 		}
 
+		// Defensive assertion, currently unreachable: every stored committee is built from at
+		// least one share and Indices is share-cardinality (one entry per share, with a zero
+		// placeholder for shares awaiting beacon metadata — see storage.Committee.Indices),
+		// while removal of the last share deletes the committee entirely. If this ever fires,
+		// a buildCommittee refactor made it live, and it rejects every message for a committee
+		// that is mid-metadata-sync.
 		if len(committee.Indices) == 0 {
 			return CommitteeInfo{}, ErrNoValidators
 		}
