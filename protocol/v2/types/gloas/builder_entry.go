@@ -129,7 +129,8 @@ func ValidateBuilderEntries(entries []BuilderEntry) error {
 			if (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
 				return fmt.Errorf("builder entry %d: URL must be http(s) with a host, got %q", i, e.URL)
 			}
-			if len(e.URL) > MaxRequestAuthDataSize {
+			// The URL's bytes are signed only when they serve as the default auth data.
+			if e.AuthData == "" && len(e.URL) > MaxRequestAuthDataSize {
 				return fmt.Errorf("builder entry %d: URL is %d bytes, exceeding the %d auth-data limit its bytes default to", i, len(e.URL), MaxRequestAuthDataSize)
 			}
 		}

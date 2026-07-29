@@ -301,43 +301,12 @@ func validatePartialSignatureMessageLimit(
 			return e
 		}
 	case spectypes.ProposerPreferencesPartialSig:
-		// SIP #94 §5: admit up to maxProposerPreferencesDistinctRoots distinct signing roots per
-		// (slot, signer) — a dependent_root refresh re-emits under a new root — instead of the usual ≤1
-		// pre-consensus cap. Only a same-peer repeat of a seen root is a provable duplicate (REJECT); a
-		// relayed repeat or a distinct root beyond the cap is rate-limiting, not a provable violation (IGNORE).
-		root := m.Messages[0].SigningRoot // exactly one message for this role (enforced by semantics + count rules)
-		if signerState.Peer(receivedFrom).hasProposerPreferencesRoot(root) {
-			// Same peer re-sent a root it already sent — a logical duplicate; reject to punish.
-			e := ErrTooManyPartialSigMessage
-			e.reject = true
-			e.got = "proposer-preferences, duplicate signing root from peer"
-			return e
-		}
-		if signerState.World.hasProposerPreferencesRoot(root) ||
-			signerState.World.proposerPreferencesRootCount() >= maxProposerPreferencesDistinctRoots {
-			// A different peer already supplied this root, or the cluster-wide distinct-root budget is
-			// spent — ignore either way; both are expected under gossip and neither is a provable violation.
-			e := ErrTooManyPartialSigMessage
-			e.got = fmt.Sprintf("proposer-preferences, %d distinct root(s) world-wide", signerState.World.proposerPreferencesRootCount())
-			return e
-		}
+		// SIP #94 §5: a dependent_root refresh re-emits under a new root, so the type is budgeted by
+		// distinct signing root instead of the usual ≤1 pre-consensus cap.
+		return validateDistinctRootBudget(m, receivedFrom, signerState, "proposer-preferences", maxProposerPreferencesDistinctRoots)
 	case spectypes.RequestAuthPartialSig:
-		// Issue #2962 (§5 request-auth extension): up to maxRequestAuthDistinctRoots distinct roots
-		// per (slot, signer) — one per configured builder — with the preference case's two-tier
-		// handling: same-peer repeat REJECT, relayed repeat or over-budget distinct root IGNORE.
-		root := m.Messages[0].SigningRoot // exactly one message for this role (enforced by semantics + count rules)
-		if signerState.Peer(receivedFrom).hasRequestAuthRoot(root) {
-			e := ErrTooManyPartialSigMessage
-			e.reject = true
-			e.got = "request-auth, duplicate signing root from peer"
-			return e
-		}
-		if signerState.World.hasRequestAuthRoot(root) ||
-			signerState.World.requestAuthRootCount() >= maxRequestAuthDistinctRoots {
-			e := ErrTooManyPartialSigMessage
-			e.got = fmt.Sprintf("request-auth, %d distinct root(s) world-wide", signerState.World.requestAuthRootCount())
-			return e
-		}
+		// Issue #2962 (§5 request-auth extension): one root per configured builder, same budget scheme.
+		return validateDistinctRootBudget(m, receivedFrom, signerState, "request-auth", maxRequestAuthDistinctRoots)
 	case spectypes.PostConsensusPartialSig:
 		if signerState.Peer(receivedFrom).SeenMsgTypes.reachedPostConsensusLimit() {
 			// Check if the same peer is sending us a "logical duplicate" message, reject message to punish.
@@ -357,6 +326,33 @@ func validatePartialSignatureMessageLimit(
 		return fmt.Errorf("unexpected partial signature message type: %d", m.Type)
 	}
 
+	return nil
+}
+
+// validateDistinctRootBudget applies the shared dedup for root-budgeted types (§5 preferences and
+// #2962 request auths): only a same-peer repeat of a seen root is a provable duplicate (REJECT); a
+// relayed repeat, or a distinct root beyond the budget, is rate-limiting, not a provable violation
+// (IGNORE).
+func validateDistinctRootBudget(
+	m *spectypes.PartialSignatureMessages,
+	receivedFrom peer.ID,
+	signerState *SignerStateForSlotRound,
+	label string,
+	budget int,
+) error {
+	root := m.Messages[0].SigningRoot // exactly one message for these types (enforced by semantics + count rules)
+	if seenRootsFor(signerState.Peer(receivedFrom), m.Type).has(root) {
+		e := ErrTooManyPartialSigMessage
+		e.reject = true
+		e.got = label + ", duplicate signing root from peer"
+		return e
+	}
+	world := seenRootsFor(&signerState.World, m.Type)
+	if world.has(root) || len(*world) >= budget {
+		e := ErrTooManyPartialSigMessage
+		e.got = fmt.Sprintf("%s, %d distinct root(s) world-wide", label, len(*world))
+		return e
+	}
 	return nil
 }
 
@@ -391,15 +387,11 @@ func (mv *messageValidator) updatePartialSignatureState(
 	// legitimate re-emission — a dependent_root refresh for preferences, another configured builder
 	// for request auths — is admitted up to its bound (see validatePartialSignatureMessageLimit).
 	// Exactly one signature for these types (validated earlier), so Messages[0] holds the root.
-	switch partialSignatureMessages.Type {
-	case spectypes.ProposerPreferencesPartialSig:
+	switch t := partialSignatureMessages.Type; t {
+	case spectypes.ProposerPreferencesPartialSig, spectypes.RequestAuthPartialSig:
 		root := partialSignatureMessages.Messages[0].SigningRoot
-		signerState.Peer(receivedFrom).recordProposerPreferencesRoot(root)
-		signerState.World.recordProposerPreferencesRoot(root)
-	case spectypes.RequestAuthPartialSig:
-		root := partialSignatureMessages.Messages[0].SigningRoot
-		signerState.Peer(receivedFrom).recordRequestAuthRoot(root)
-		signerState.World.recordRequestAuthRoot(root)
+		seenRootsFor(signerState.Peer(receivedFrom), t).record(root)
+		seenRootsFor(&signerState.World, t).record(root)
 	default:
 		// Every other type is capped by the SeenMsgTypes bits recorded above, not by root.
 	}

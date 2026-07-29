@@ -32,24 +32,24 @@ func TestSignerState_RequestAuthRoots(t *testing.T) {
 	r1 := [32]byte{1}
 	r2 := [32]byte{2}
 
-	require.Equal(t, 0, s.requestAuthRootCount())
-	require.False(t, s.hasRequestAuthRoot(r1))
+	require.Empty(t, s.SeenRequestAuthRoots)
+	require.False(t, s.SeenRequestAuthRoots.has(r1))
 
-	s.recordRequestAuthRoot(r1)
-	require.True(t, s.hasRequestAuthRoot(r1))
-	require.Equal(t, 1, s.requestAuthRootCount())
+	s.SeenRequestAuthRoots.record(r1)
+	require.True(t, s.SeenRequestAuthRoots.has(r1))
+	require.Len(t, s.SeenRequestAuthRoots, 1)
 
 	// Recording an already-seen root is a no-op.
-	s.recordRequestAuthRoot(r1)
-	require.Equal(t, 1, s.requestAuthRootCount())
+	s.SeenRequestAuthRoots.record(r1)
+	require.Len(t, s.SeenRequestAuthRoots, 1)
 
-	s.recordRequestAuthRoot(r2)
-	require.Equal(t, 2, s.requestAuthRootCount())
+	s.SeenRequestAuthRoots.record(r2)
+	require.Len(t, s.SeenRequestAuthRoots, 2)
 
 	// The two root sets are independent: the same root counts once per type, not globally.
-	s.recordProposerPreferencesRoot(r1)
-	require.Equal(t, 1, s.proposerPreferencesRootCount())
-	require.Equal(t, 2, s.requestAuthRootCount())
+	s.SeenProposerPreferencesRoots.record(r1)
+	require.Len(t, s.SeenProposerPreferencesRoots, 1)
+	require.Len(t, s.SeenRequestAuthRoots, 2)
 }
 
 // RequestAuth pre-consensus admits up to maxRequestAuthDistinctRoots distinct signing roots per
@@ -65,8 +65,8 @@ func TestValidatePartialSignatureMessageLimit_RequestAuth(t *testing.T) {
 		}
 	}
 	record := func(ss *SignerStateForSlotRound, from peer.ID, root [32]byte) {
-		ss.Peer(from).recordRequestAuthRoot(root)
-		ss.World.recordRequestAuthRoot(root)
+		ss.Peer(from).SeenRequestAuthRoots.record(root)
+		ss.World.SeenRequestAuthRoots.record(root)
 	}
 	root := func(b byte) [32]byte { return [32]byte{b} }
 
@@ -109,15 +109,15 @@ func TestValidatePartialSignatureMessageLimit_RequestAuth(t *testing.T) {
 	t.Run("§5 preference roots do not consume the request-auth budget (and vice versa)", func(t *testing.T) {
 		ss := newSignerState(1, specqbft.FirstRound)
 		for i := 0; i < maxProposerPreferencesDistinctRoots; i++ {
-			ss.Peer(peerA).recordProposerPreferencesRoot(root(byte(100 + i)))
-			ss.World.recordProposerPreferencesRoot(root(byte(100 + i)))
+			ss.Peer(peerA).SeenProposerPreferencesRoots.record(root(byte(100 + i)))
+			ss.World.SeenProposerPreferencesRoots.record(root(byte(100 + i)))
 		}
 		// The §5 budget is spent; a request-auth root is still admitted.
 		require.NoError(t, validatePartialSignatureMessageLimit(raMsg(root(1)), peerA, ss))
 		record(ss, peerA, root(1))
 		// And the request-auth root did not consume the §5 budget's tracking.
-		require.Equal(t, 1, ss.World.requestAuthRootCount())
-		require.Equal(t, maxProposerPreferencesDistinctRoots, ss.World.proposerPreferencesRootCount())
+		require.Len(t, ss.World.SeenRequestAuthRoots, 1)
+		require.Len(t, ss.World.SeenProposerPreferencesRoots, maxProposerPreferencesDistinctRoots)
 	})
 }
 

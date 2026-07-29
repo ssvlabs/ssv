@@ -9,6 +9,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
 // SignerStateForSlotRound is a SignerState bundled with some target slot+round.
@@ -73,46 +74,36 @@ type SignerState struct {
 	// SeenProposerPreferencesRoots records the distinct ProposerPreferences signing roots seen from this
 	// signer (SIP #94 §5): that type is capped by distinct root (up to maxProposerPreferencesDistinctRoots),
 	// not by the single pre-consensus bit in SeenMsgTypes. nil until the first such message.
-	SeenProposerPreferencesRoots [][32]byte
+	SeenProposerPreferencesRoots seenRootSet
 
 	// SeenRequestAuthRoots records the distinct RequestAuthV1 signing roots seen from this signer
 	// (issue #2962) — root-capped like the §5 preference roots above, up to
 	// maxRequestAuthDistinctRoots. nil until the first such message.
-	SeenRequestAuthRoots [][32]byte
+	SeenRequestAuthRoots seenRootSet
 }
 
-// hasProposerPreferencesRoot reports whether root has already been seen from this signer.
-func (s *SignerState) hasProposerPreferencesRoot(root [32]byte) bool {
-	return slices.Contains(s.SeenProposerPreferencesRoots, root)
-}
+// seenRootSet tracks the distinct signing roots seen from a signer for a root-budgeted message
+// type; growth is bounded by the type's budget, enforced before recording.
+type seenRootSet [][32]byte
 
-// proposerPreferencesRootCount returns the number of distinct roots seen from this signer.
-func (s *SignerState) proposerPreferencesRootCount() int {
-	return len(s.SeenProposerPreferencesRoots)
-}
+func (s seenRootSet) has(root [32]byte) bool { return slices.Contains(s, root) }
 
-// recordProposerPreferencesRoot adds root to the seen set, skipping roots already present.
-func (s *SignerState) recordProposerPreferencesRoot(root [32]byte) {
-	if slices.Contains(s.SeenProposerPreferencesRoots, root) {
-		return
+// record adds the root, skipping roots already present.
+func (s *seenRootSet) record(root [32]byte) {
+	if !slices.Contains(*s, root) {
+		*s = append(*s, root)
 	}
-	s.SeenProposerPreferencesRoots = append(s.SeenProposerPreferencesRoots, root)
 }
 
-// hasRequestAuthRoot reports whether the request-auth root has already been seen from this signer.
-func (s *SignerState) hasRequestAuthRoot(root [32]byte) bool {
-	return slices.Contains(s.SeenRequestAuthRoots, root)
-}
-
-// requestAuthRootCount returns the number of distinct request-auth roots seen from this signer.
-func (s *SignerState) requestAuthRootCount() int {
-	return len(s.SeenRequestAuthRoots)
-}
-
-// recordRequestAuthRoot adds the request-auth root to the seen set, skipping roots already present.
-func (s *SignerState) recordRequestAuthRoot(root [32]byte) {
-	if slices.Contains(s.SeenRequestAuthRoots, root) {
-		return
+// seenRootsFor returns the signer's seen-root set for a root-budgeted message type; nil for types
+// without one.
+func seenRootsFor(s *SignerState, t spectypes.PartialSigMsgType) *seenRootSet {
+	switch t {
+	case spectypes.ProposerPreferencesPartialSig:
+		return &s.SeenProposerPreferencesRoots
+	case spectypes.RequestAuthPartialSig:
+		return &s.SeenRequestAuthRoots
+	default:
+		return nil
 	}
-	s.SeenRequestAuthRoots = append(s.SeenRequestAuthRoots, root)
 }

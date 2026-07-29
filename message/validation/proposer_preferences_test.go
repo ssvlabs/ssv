@@ -173,26 +173,26 @@ func TestValidateBeaconDuty_ProposerPreferencesRequiresAssignment(t *testing.T) 
 }
 
 // SignerState tracks distinct ProposerPreferences signing roots (SIP #94 §5): recording is idempotent
-// per root, and has/count reflect the distinct set.
+// per root, and the set reflects the distinct roots.
 func TestSignerState_ProposerPreferencesRoots(t *testing.T) {
 	s := &SignerState{}
 	r1 := [32]byte{1}
 	r2 := [32]byte{2}
 
-	require.Equal(t, 0, s.proposerPreferencesRootCount())
-	require.False(t, s.hasProposerPreferencesRoot(r1))
+	require.Empty(t, s.SeenProposerPreferencesRoots)
+	require.False(t, s.SeenProposerPreferencesRoots.has(r1))
 
-	s.recordProposerPreferencesRoot(r1)
-	require.True(t, s.hasProposerPreferencesRoot(r1))
-	require.Equal(t, 1, s.proposerPreferencesRootCount())
+	s.SeenProposerPreferencesRoots.record(r1)
+	require.True(t, s.SeenProposerPreferencesRoots.has(r1))
+	require.Len(t, s.SeenProposerPreferencesRoots, 1)
 
 	// Recording an already-seen root is a no-op.
-	s.recordProposerPreferencesRoot(r1)
-	require.Equal(t, 1, s.proposerPreferencesRootCount())
+	s.SeenProposerPreferencesRoots.record(r1)
+	require.Len(t, s.SeenProposerPreferencesRoots, 1)
 
-	s.recordProposerPreferencesRoot(r2)
-	require.True(t, s.hasProposerPreferencesRoot(r2))
-	require.Equal(t, 2, s.proposerPreferencesRootCount())
+	s.SeenProposerPreferencesRoots.record(r2)
+	require.True(t, s.SeenProposerPreferencesRoots.has(r2))
+	require.Len(t, s.SeenProposerPreferencesRoots, 2)
 }
 
 // ProposerPreferences pre-consensus admits up to maxProposerPreferencesDistinctRoots distinct signing
@@ -207,8 +207,8 @@ func TestValidatePartialSignatureMessageLimit_ProposerPreferences(t *testing.T) 
 		}
 	}
 	record := func(ss *SignerStateForSlotRound, from peer.ID, root [32]byte) {
-		ss.Peer(from).recordProposerPreferencesRoot(root)
-		ss.World.recordProposerPreferencesRoot(root)
+		ss.Peer(from).SeenProposerPreferencesRoots.record(root)
+		ss.World.SeenProposerPreferencesRoots.record(root)
 	}
 	root := func(b byte) [32]byte { return [32]byte{b} }
 
