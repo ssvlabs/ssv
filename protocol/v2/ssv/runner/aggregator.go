@@ -3,12 +3,9 @@ package runner
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"hash"
-	"sync"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec"
@@ -21,6 +18,7 @@ import (
 
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
@@ -596,54 +594,9 @@ func constructVersionedSignedAggregateAndProof(aggregateAndProof spec.VersionedA
 	return ret, nil
 }
 
-// isAggregatorFn returns IsAggregator func that performs hashing in an allocation-efficient manner.
+// isAggregatorFn returns the default IsAggregator func, delegating to the shared
+// networkconfig.IsAggregatorSelected helper so pre/post-Boole selection stays bit-identical
+// with beacon/goclient's implementation.
 func isAggregatorFn() func(targetAggregatorsPerCommittee uint64, committeeCount uint64, slotSig []byte) bool {
-	h := newHasher()
-	return func(targetAggregatorsPerCommittee uint64, committeeCount uint64, slotSig []byte) bool {
-		modulo := committeeCount / targetAggregatorsPerCommittee
-		if modulo == 0 {
-			// Modulo must be at least 1.
-			modulo = 1
-		}
-
-		b := h.hashSha256(slotSig)
-		return binary.LittleEndian.Uint64(b[:8])%modulo == 0
-	}
-}
-
-// hasher implements efficient thread-safe data-hashing functionality by pooling hash.Hash
-// instances to re-use them for different hash-requests.
-type hasher struct {
-	sha256Pool sync.Pool
-}
-
-func newHasher() *hasher {
-	return &hasher{
-		sha256Pool: sync.Pool{
-			New: func() any {
-				return sha256.New()
-			},
-		},
-	}
-}
-
-// hashSha256 defines a function that returns the sha256 checksum of the data passed in.
-// https://github.com/ethereum/consensus-specs/blob/v0.9.3/specs/core/0_beacon-chain.md#hash
-func (h *hasher) hashSha256(data []byte) [32]byte {
-	hsr := h.sha256Pool.Get().(hash.Hash)
-	defer h.sha256Pool.Put(hsr)
-
-	hsr.Reset()
-
-	var b [32]byte
-
-	// The hash interface never returns an error, for that reason
-	// we are not handling the error below. For reference, it is
-	// stated here https://golang.org/pkg/hash/#Hash
-
-	// #nosec G104
-	hsr.Write(data)
-	hsr.Sum(b[:0])
-
-	return b
+	return networkconfig.IsAggregatorSelected
 }
