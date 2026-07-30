@@ -204,7 +204,8 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex uint64, key
 	cfg := NewNetConfig(keys, ln.Bootnode, 0, 0, options.Nodes)
 	cfg.Ctx = ctx
 	cfg.MdnsDiscoveryTag = ln.mdnsTag
-	cfg.Subnets = "00000000000000000100000400000400" // calculated for topics 64, 90, 114; PAY ATTENTION for future test scenarios which use more than one eth-validator we need to make this field dynamically changing
+	testSubnets := fixedTestSubnets(options.Shares)
+	cfg.Subnets = testSubnets.StringHex() // PAY ATTENTION for future test scenarios which use more than one eth-validator we need to make this field dynamically changing
 	cfg.NodeStorage = nodeStorage
 	cfg.MessageValidator = validation.New(
 		networkconfig.TestNetwork,
@@ -290,6 +291,28 @@ func NewLocalNet(ctx context.Context, logger *zap.Logger, options LocalNetOption
 	ln.Nodes = nodes
 
 	return ln, nil
+}
+
+// fixedTestSubnets returns the persistent subnet set used by local test networks: two fixed
+// subnets (64, 90) unrelated to any share, plus - for every configured share's committee - both
+// its Alan-fork subnet (CommitteeID-hash based) and its Boole-fork subnet (lowest-operator-hash
+// based). persistentSubnets is a raw, fork-agnostic bit vector (see initCfg), so covering both
+// mappings here is what keeps the committee's subnet persistently subscribed on either side of
+// the Boole fork, rather than depending solely on the later Subscribe(vpk) path.
+func fixedTestSubnets(shares []*ssvtypes.SSVShare) p2pcommons.Subnets {
+	subnets := p2pcommons.ZeroSubnets
+	subnets.Set(64)
+	subnets.Set(90)
+	for _, share := range shares {
+		subnets.Set(p2pcommons.AlanCommitteeSubnet(share.CommitteeID()))
+
+		operators := make([]spectypes.OperatorID, 0, len(share.Committee))
+		for _, member := range share.Committee {
+			operators = append(operators, member.Signer)
+		}
+		subnets.Set(p2pcommons.BooleCommitteeSubnet(operators))
+	}
+	return subnets
 }
 
 // NewNetConfig creates a new config for tests
