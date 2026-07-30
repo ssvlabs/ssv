@@ -5,13 +5,17 @@ import (
 	crand "crypto/rand"
 	"crypto/sha256"
 	"encoding/binary"
+	"math"
 	"math/big"
 	"strings"
 	"testing"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/stretchr/testify/require"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
+	"github.com/ssvlabs/ssv/networkconfig"
 )
 
 func BenchmarkBooleCommitteeSubnet(b *testing.B) {
@@ -208,6 +212,113 @@ func TestDiffSubnets(t *testing.T) {
 
 	added, removed := s1.DiffSubnets(s2)
 	require.Equal(t, 128-62, added.ActiveCount()+removed.ActiveCount())
+}
+
+// TestTopics covers the four Boole-transition phases the pubsub startup whitelist must track in
+// lockstep with per-slot subscription derivation (network/p2p's subscribedSubnetsForCurrentEpoch):
+// pre-fork steady state, the prior window, the subsequent window (the bug this guards against —
+// a node started in this window must still whitelist Alan topics for late pre-fork committee
+// traffic), and well post-fork.
+func TestTopics(t *testing.T) {
+	booleCfg := func(booleEpoch phase0.Epoch) *networkconfig.Network {
+		cfg := *networkconfig.TestNetwork
+		beaconCfg := *networkconfig.TestNetwork.Beacon
+		ssvCfg := *networkconfig.TestNetwork.SSV
+		ssvCfg.Forks.Boole = booleEpoch
+		cfg.Beacon = &beaconCfg
+		cfg.SSV = &ssvCfg
+		return &cfg
+	}
+
+	alanTopicsSet := func() map[string]struct{} {
+		set := make(map[string]struct{}, SubnetsCount)
+		for subnet := uint64(0); subnet < SubnetsCount; subnet++ {
+			set[GetTopicFullName(SubnetTopicID(subnet))] = struct{}{}
+		}
+		return set
+	}
+	booleTopicsSet := func(name string) map[string]struct{} {
+		set := make(map[string]struct{}, SubnetsCount)
+		for subnet := uint64(0); subnet < SubnetsCount; subnet++ {
+			set[BooleTopic(name, subnet)] = struct{}{}
+		}
+		return set
+	}
+
+	toSet := func(topics []string) map[string]struct{} {
+		set := make(map[string]struct{}, len(topics))
+		for _, topic := range topics {
+			set[topic] = struct{}{}
+		}
+		return set
+	}
+
+	cur := networkconfig.TestNetwork.EstimatedCurrentEpoch()
+
+	t.Run("pre-fork steady state includes Alan and Boole", func(t *testing.T) {
+		cfg := booleCfg(math.MaxUint64) // no fork scheduled
+		slot := cfg.EstimatedCurrentSlot()
+		require.False(t, cfg.BooleForkAtSlot(slot))
+		require.False(t, cfg.InBooleTransitionWindow(slot), "far from the fork, expected no transition window")
+
+		got := toSet(Topics(cfg, slot))
+		want := alanTopicsSet()
+		for topic := range booleTopicsSet(cfg.SSV.Name) {
+			want[topic] = struct{}{}
+		}
+		require.Equal(t, want, got)
+	})
+
+	t.Run("prior window includes Alan and Boole", func(t *testing.T) {
+		cfg := booleCfg(cur + 2)
+		slot := cfg.FirstSlotAtEpoch(cur + 1) // last pre-fork epoch, inside the 1-epoch prior window
+		require.False(t, cfg.BooleForkAtSlot(slot))
+		require.True(t, cfg.InBooleTransitionWindow(slot), "expected slot inside the prior window")
+
+		got := toSet(Topics(cfg, slot))
+		want := alanTopicsSet()
+		for topic := range booleTopicsSet(cfg.SSV.Name) {
+			want[topic] = struct{}{}
+		}
+		require.Equal(t, want, got)
+	})
+
+	t.Run("subsequent window includes Alan and Boole (bug fix)", func(t *testing.T) {
+		cfg := booleCfg(cur + 1)
+		slot := cfg.FirstSlotAtEpoch(cur + 1) // fork slot itself, start of the subsequent window
+		require.True(t, cfg.BooleForkAtSlot(slot))
+		require.True(t, cfg.InBooleTransitionWindow(slot), "expected slot inside the subsequent window")
+
+		got := toSet(Topics(cfg, slot))
+		want := alanTopicsSet()
+		for topic := range booleTopicsSet(cfg.SSV.Name) {
+			want[topic] = struct{}{}
+		}
+		require.Equal(t, want, got)
+	})
+
+	t.Run("first slot past the subsequent window is Boole-only", func(t *testing.T) {
+		cfg := booleCfg(cur + 1)
+		// One slot past the window end [F, F+SlotsPerEpoch+2) — the boundary that closes Alan.
+		slot := cfg.FirstSlotAtEpoch(cur+1) + phase0.Slot(cfg.SlotsPerEpoch) + 2
+		require.True(t, cfg.BooleForkAtSlot(slot))
+		require.False(t, cfg.InBooleTransitionWindow(slot), "expected slot just past the subsequent window")
+
+		got := toSet(Topics(cfg, slot))
+		want := booleTopicsSet(cfg.SSV.Name)
+		require.Equal(t, want, got)
+	})
+
+	t.Run("well post-fork is Boole-only", func(t *testing.T) {
+		cfg := booleCfg(0)
+		slot := cfg.EstimatedCurrentSlot()
+		require.True(t, cfg.BooleForkAtSlot(slot))
+		require.False(t, cfg.InBooleTransitionWindow(slot), "well past the fork, expected no transition window")
+
+		got := toSet(Topics(cfg, slot))
+		want := booleTopicsSet(cfg.SSV.Name)
+		require.Equal(t, want, got)
+	})
 }
 
 func TestSubnetsList(t *testing.T) {
