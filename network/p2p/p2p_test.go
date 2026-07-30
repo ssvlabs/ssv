@@ -12,6 +12,7 @@ import (
 	"time"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -186,7 +187,9 @@ func generateValidatorMsg(ks *spectestingutils.TestKeySet, round specqbft.Round,
 
 	fullData := spectestingutils.TestingQBFTFullData
 
-	nonCommitteeIdentifier := spectypes.NewMsgID(netCfg.DomainType, ks.ValidatorPK.Serialize(), nonCommitteeRole)
+	// Derive the domain per-slot like production (p2p_setup.go DomainTypeAtSlot) so the
+	// fixture stays valid on both sides of the Boole fork (SSV_TEST_BOOLE_FORK matrix).
+	nonCommitteeIdentifier := spectypes.NewMsgID(netCfg.DomainTypeAtSlot(phase0.Slot(height)), ks.ValidatorPK.Serialize(), nonCommitteeRole)
 
 	qbftMessage := &specqbft.Message{
 		MsgType:    specqbft.ProposalMsgType,
@@ -220,7 +223,7 @@ func generateCommitteeMsg(ks *spectestingutils.TestKeySet, round specqbft.Round)
 	fullData := spectestingutils.TestingQBFTFullData
 
 	encodedCommitteeID := append(bytes.Repeat([]byte{0}, 16), committeeID[:]...)
-	committeeIdentifier := spectypes.NewMsgID(netCfg.DomainType, encodedCommitteeID, spectypes.RoleCommittee)
+	committeeIdentifier := spectypes.NewMsgID(netCfg.DomainTypeAtSlot(phase0.Slot(height)), encodedCommitteeID, spectypes.RoleCommittee)
 
 	qbftMessage := &specqbft.Message{
 		MsgType:    specqbft.ProposalMsgType,
@@ -260,7 +263,7 @@ func dummyMsg(t *testing.T, pkHex string, height int, role spectypes.RunnerRole)
 		committeeID := ssvtypes.ComputeCommitteeID([]spectypes.OperatorID{1, 2, 3, 4})
 		dutyExecutorID = append(bytes.Repeat([]byte{0}, 16), committeeID[:]...)
 	}
-	id := spectypes.NewMsgID(networkconfig.TestNetwork.DomainType, dutyExecutorID, role)
+	id := spectypes.NewMsgID(networkconfig.TestNetwork.DomainTypeAtSlot(phase0.Slot(height)), dutyExecutorID, role)
 
 	qbftMessage := &specqbft.Message{
 		MsgType:    specqbft.CommitMsgType,
