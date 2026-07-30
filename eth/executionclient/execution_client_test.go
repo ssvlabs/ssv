@@ -413,7 +413,10 @@ func TestStreamLogs(t *testing.T) {
 		logger, err := zap.NewDevelopment()
 		require.NoError(t, err)
 
-		env := setupTestEnv(t, 5*time.Second)
+		// This test polls for a condition (streamed log count) on a short tick,
+		// so the fast path stays fast; the deadline is only a CI-safe upper
+		// bound to absorb scheduling jitter on loaded runners.
+		env := setupTestEnv(t, 30*time.Second)
 
 		// Deploy the contract
 		contract, err := env.deployCallableContract()
@@ -770,7 +773,10 @@ func TestSimSSV(t *testing.T) {
 	logger, err := zap.NewDevelopment()
 	require.NoError(t, err)
 
-	env := setupTestEnv(t, 5*time.Second)
+	// nextEventBlock below reacts to log-channel sends immediately, so the fast
+	// path is unaffected; the deadline only needs to be a CI-safe upper bound
+	// covering all 7 emitted events plus their follow-distance block commits.
+	env := setupTestEnv(t, 30*time.Second)
 
 	// Deploy the SSV contract
 	boundContract, err := env.deploySimContract()
