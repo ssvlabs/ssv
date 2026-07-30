@@ -229,7 +229,7 @@
         },
         "/v1/exporter/traces/committee": {
             "get": {
-                "description": "Returns consensus and post-consensus traces for requested committees.",
+                "description": "Returns consensus and post-consensus traces for requested committees. Without a 'roles' filter, the response contains one trace per (slot, committeeID, role) - up to two rows per (slot, committeeID), distinguished by the 'role' field.",
                 "consumes": [
                     "application/json"
                 ],
@@ -318,7 +318,7 @@
                 }
             },
             "post": {
-                "description": "Returns consensus and post-consensus traces for requested committees.",
+                "description": "Returns consensus and post-consensus traces for requested committees. Without a 'roles' filter, the response contains one trace per (slot, committeeID, role) - up to two rows per (slot, committeeID), distinguished by the 'role' field.",
                 "consumes": [
                     "application/json"
                 ],
