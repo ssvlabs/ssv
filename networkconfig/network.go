@@ -81,6 +81,41 @@ func (n Network) BooleForkAtSlot(slot phase0.Slot) bool {
 	return n.BooleForkAtEpoch(n.EstimatedEpochAtSlot(slot))
 }
 
+// Validate checks the assembled network configuration for internal inconsistencies that fork
+// activation logic can't catch on its own. It returns non-fatal warnings for configurations that
+// are almost certainly a mistake, and an error for configurations that would panic or misbehave.
+// It stays logger-free by design: the caller decides how to surface warnings (e.g. logger.Warn)
+// and whether/how to abort on error.
+func (n Network) Validate() (warnings []string, err error) {
+	if n.BooleForkScheduled() {
+		// Guard the division below the way inBooleSubsequentWindowWithSlots does — but as a hard
+		// error: a zero SlotsPerEpoch is exactly the malformed-config class Validate exists to
+		// catch, and would otherwise panic here.
+		if n.SlotsPerEpoch == 0 {
+			return nil, fmt.Errorf("slots per epoch must be positive when a boole fork is scheduled")
+		}
+
+		// Mirrors the overflow guard in inBooleSubsequentWindowWithSlots: FirstSlotAtEpoch(Boole)
+		// would overflow if the fork epoch is beyond the representable slot range.
+		maxEpoch := phase0.Epoch(math.MaxUint64 / n.SlotsPerEpoch)
+		if n.SSV.Forks.Boole > maxEpoch {
+			return nil, fmt.Errorf("boole fork epoch %d overflows slot conversion (max supported epoch %d)", n.SSV.Forks.Boole, maxEpoch)
+		}
+
+		// unmarshalFromConfig defaults NextDomainType to DomainType when the field is absent, so
+		// equality here is exactly the signature of a scheduled fork that forgot to set
+		// NextDomainType: it would "activate" with zero observable domain change.
+		if n.NextDomainType == n.DomainType {
+			warnings = append(warnings, fmt.Sprintf(
+				"boole fork is scheduled at epoch %d but NextDomainType equals DomainType: the fork would activate with no observable domain change",
+				n.SSV.Forks.Boole,
+			))
+		}
+	}
+
+	return warnings, nil
+}
+
 // InBooleTransitionWindow checks if the slot is in the Boole transition window,
 // i.e., in `PRIOR_WINDOW` or `SUBSEQUENT_WINDOW` according to https://github.com/ssvlabs/SIPs/pull/43.
 func (n Network) InBooleTransitionWindow(slot phase0.Slot) bool {

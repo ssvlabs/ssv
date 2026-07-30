@@ -202,6 +202,83 @@ func TestBooleForkAtSlot(t *testing.T) {
 	}
 }
 
+func TestNetworkValidate(t *testing.T) {
+	domainAlan := spectypes.DomainType{0x01, 0x02, 0x03, 0x04}
+	domainBoole := spectypes.DomainType{0x05, 0x06, 0x07, 0x08}
+
+	tests := []struct {
+		name             string
+		boole            phase0.Epoch
+		slotsPerEpoch    uint64
+		domainType       spectypes.DomainType
+		nextDomainType   spectypes.DomainType
+		expectErr        bool
+		expectedWarnings int
+	}{
+		{
+			name:           "hard_error_zero_slots_per_epoch",
+			boole:          10,
+			slotsPerEpoch:  0,
+			domainType:     domainAlan,
+			nextDomainType: domainBoole,
+			expectErr:      true,
+		},
+		{
+			name:           "hard_error_overflow",
+			boole:          phase0.Epoch(math.MaxUint64/32) + 1,
+			slotsPerEpoch:  32,
+			domainType:     domainAlan,
+			nextDomainType: domainBoole,
+			expectErr:      true,
+		},
+		{
+			name:             "warning_next_domain_equals_domain",
+			boole:            10,
+			slotsPerEpoch:    32,
+			domainType:       domainAlan,
+			nextDomainType:   domainAlan,
+			expectedWarnings: 1,
+		},
+		{
+			name:           "clean_scheduled",
+			boole:          10,
+			slotsPerEpoch:  32,
+			domainType:     domainAlan,
+			nextDomainType: domainBoole,
+		},
+		{
+			name:           "clean_unscheduled",
+			boole:          phase0.Epoch(math.MaxUint64),
+			slotsPerEpoch:  32,
+			domainType:     domainAlan,
+			nextDomainType: domainAlan,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			beacon := *TestNetwork.Beacon
+			beacon.SlotsPerEpoch = test.slotsPerEpoch
+			netCfg := Network{
+				Beacon: &beacon,
+				SSV: &SSV{
+					DomainType:     test.domainType,
+					NextDomainType: test.nextDomainType,
+					Forks:          SSVForks{Boole: test.boole},
+				},
+			}
+
+			warnings, err := netCfg.Validate()
+			if test.expectErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			require.Len(t, warnings, test.expectedWarnings)
+		})
+	}
+}
+
 func beaconAtEpoch(epoch phase0.Epoch) *Beacon {
 	beacon := *TestNetwork.Beacon
 	slotsSinceGenesis := uint64(epoch) * beacon.SlotsPerEpoch
