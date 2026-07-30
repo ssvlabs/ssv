@@ -1,9 +1,13 @@
 package exporter
 
 import (
+	"errors"
 	"net/http"
 
+	"github.com/hashicorp/go-multierror"
+
 	"github.com/ssvlabs/ssv/api"
+	exportercore "github.com/ssvlabs/ssv/exporter"
 )
 
 // ValidatorTraces godoc
@@ -39,12 +43,29 @@ func (e *Exporter) ValidatorTraces(w http.ResponseWriter, r *http.Request) error
 		return toApiError(e.logger, r, "validator_traces", http.StatusBadRequest, request, underlyingValidationError(errs))
 	}
 
-	// if we don't have a single valid result and we have at least one meaningful error, return an error
-	if len(result.Traces) == 0 && errs.ErrorOrNil() != nil {
+	// if we don't have a single valid result and we have at least one meaningful error, return an error.
+	// post-fork committee-duty notes are expected on fork-straddling ranges whose pre-fork slots
+	// yield no traces (e.g. sparse aggregator duties), so they don't count as a hard failure here.
+	if len(result.Traces) == 0 && errs.ErrorOrNil() != nil && !onlyPostForkCommitteeDutyNotes(errs) {
 		return toApiError(e.logger, r, "validator_traces", http.StatusInternalServerError, request, errs.ErrorOrNil())
 	}
 
 	// otherwise return a partial response with valid duties
 	response := toValidatorTraceResponse(result, errs)
 	return api.Render(w, r, response)
+}
+
+// onlyPostForkCommitteeDutyNotes reports whether every error in errs is (or wraps)
+// exportercore.ErrPostForkCommitteeDutyNote, i.e. the errors are non-fatal notes
+// rather than genuine processing failures.
+func onlyPostForkCommitteeDutyNotes(errs *multierror.Error) bool {
+	if errs.ErrorOrNil() == nil {
+		return false
+	}
+	for _, err := range errs.Errors {
+		if !errors.Is(err, exportercore.ErrPostForkCommitteeDutyNote) {
+			return false
+		}
+	}
+	return true
 }

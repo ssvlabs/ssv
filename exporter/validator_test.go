@@ -1,6 +1,7 @@
 package exporter
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -10,6 +11,7 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
+	"github.com/ssvlabs/ssv/exporter/rolemask"
 	estore "github.com/ssvlabs/ssv/exporter/store"
 	"github.com/ssvlabs/ssv/exporter/traces"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -31,6 +33,18 @@ func preBooleNetwork() *networkconfig.Network {
 func postBooleNetwork() *networkconfig.Network {
 	ssvCopy := *networkconfig.TestNetwork.SSV
 	ssvCopy.Forks.Boole = 0
+	netCfg := *networkconfig.TestNetwork
+	netCfg.SSV = &ssvCopy
+	return &netCfg
+}
+
+// straddlingNetwork returns a *networkconfig.Network clone whose Boole fork
+// activates one epoch after "now", so a slot range that starts before the
+// fork epoch and ends after it genuinely straddles the fork boundary. It
+// never mutates the shared TestNetwork.
+func straddlingNetwork() *networkconfig.Network {
+	ssvCopy := *networkconfig.TestNetwork.SSV
+	ssvCopy.Forks.Boole = networkconfig.TestNetwork.EstimatedCurrentEpoch() + 1
 	netCfg := *networkconfig.TestNetwork
 	netCfg.SSV = &ssvCopy
 	return &netCfg
@@ -73,9 +87,11 @@ func TestIsCommitteeDutyAtSlot(t *testing.T) {
 func TestValidateValidatorRequest(t *testing.T) {
 	preFork := preBooleNetwork()
 	postFork := postBooleNetwork()
+	straddle := straddlingNetwork()
 
 	preForkSlot := uint64(preFork.FirstSlotAtEpoch(1))
 	postForkSlot := uint64(postFork.FirstSlotAtEpoch(1))
+	straddleBoundarySlot := uint64(straddle.FirstSlotAtEpoch(straddle.SSV.Forks.Boole))
 
 	tests := []struct {
 		name    string
@@ -162,7 +178,7 @@ func TestValidateValidatorRequest(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name:   "range straddling the fork resolves on the 'to' bound: pre-fork 'to' is accepted",
+			name:   "range straddling the fork resolves on the 'from' bound: pre-fork 'to' is accepted",
 			netCfg: preFork,
 			request: &ValidatorTracesQuery{
 				From:  1,
@@ -172,11 +188,31 @@ func TestValidateValidatorRequest(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name:   "range straddling the fork resolves on the 'to' bound: post-fork 'to' is rejected",
+			name:   "range straddling the fork resolves on the 'from' bound: post-fork 'to' is rejected",
 			netCfg: postFork,
 			request: &ValidatorTracesQuery{
 				From:  1,
 				To:    postForkSlot,
+				Roles: []spectypes.BeaconRole{spectypes.BNRoleAggregator},
+			},
+			wantErr: true,
+		},
+		{
+			name:   "range genuinely straddling the fork boundary is accepted (gate evaluated at 'from', not 'to')",
+			netCfg: straddle,
+			request: &ValidatorTracesQuery{
+				From:  straddleBoundarySlot - 1,
+				To:    straddleBoundarySlot + 10,
+				Roles: []spectypes.BeaconRole{spectypes.BNRoleAggregator},
+			},
+			wantErr: false,
+		},
+		{
+			name:   "range whose 'from' is already post-fork is rejected even if narrower than 'to'",
+			netCfg: straddle,
+			request: &ValidatorTracesQuery{
+				From:  straddleBoundarySlot,
+				To:    straddleBoundarySlot + 10,
 				Roles: []spectypes.BeaconRole{spectypes.BNRoleAggregator},
 			},
 			wantErr: true,
@@ -194,6 +230,54 @@ func TestValidateValidatorRequest(t *testing.T) {
 			}
 		})
 	}
+}
+
+// mockCoreTraceStore is a minimal dutyTraceStore implementation for exercising
+// ValidatorTracesCore end-to-end over a fork-straddling slot range.
+type mockCoreTraceStore struct {
+	dutyTraceStore
+}
+
+func (m *mockCoreTraceStore) GetValidatorDuties(_ spectypes.BeaconRole, _ phase0.Slot) ([]*traces.ValidatorDutyTrace, error) {
+	return nil, nil
+}
+
+func (m *mockCoreTraceStore) GetScheduled(_ phase0.Slot) (map[phase0.ValidatorIndex]rolemask.Mask, error) {
+	return map[phase0.ValidatorIndex]rolemask.Mask{}, nil
+}
+
+func TestValidatorTracesCore_StraddlingFork(t *testing.T) {
+	straddle := straddlingNetwork()
+	boundarySlot := straddle.FirstSlotAtEpoch(straddle.SSV.Forks.Boole)
+
+	e := &Exporter{
+		traceStore:    &mockCoreTraceStore{},
+		logger:        zap.NewNop(),
+		networkConfig: straddle,
+	}
+
+	request := &ValidatorTracesQuery{
+		From:  uint64(boundarySlot) - 1,
+		To:    uint64(boundarySlot) + 1,
+		Roles: []spectypes.BeaconRole{spectypes.BNRoleAggregator},
+	}
+
+	result, errs := e.ValidatorTracesCore(request)
+	require.NotNil(t, result)
+
+	// no *ValidationError: the request is accepted despite its tail crossing Boole.
+	for _, err := range errs.Errors {
+		var valErr *ValidationError
+		assert.NotErrorAs(t, err, &valErr)
+	}
+
+	// the two post-fork slots (boundarySlot, boundarySlot+1) are reported as
+	// non-fatal notes since no pubkeys/indices were supplied to filter the
+	// now-committee-backed AGGREGATOR duty.
+	require.Len(t, errs.Errors, 2)
+	assert.Contains(t, errs.Errors[0].Error(), fmt.Sprintf("slot %d", boundarySlot))
+	assert.Contains(t, errs.Errors[0].Error(), "committee duty")
+	assert.Contains(t, errs.Errors[1].Error(), fmt.Sprintf("slot %d", boundarySlot+1))
 }
 
 // mockValidatorTraceStore is a minimal dutyTraceStore implementation for

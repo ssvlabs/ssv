@@ -1,6 +1,7 @@
 package exporter
 
 import (
+	"errors"
 	"fmt"
 	"slices"
 
@@ -15,6 +16,12 @@ import (
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
+
+// ErrPostForkCommitteeDutyNote marks the non-fatal note appended when a
+// fork-straddling request reaches a post-fork slot/role pair without
+// pubkeys/indices. It lets callers (e.g. the HTTP layer) tell this expected,
+// partial-coverage note apart from genuine processing failures.
+var ErrPostForkCommitteeDutyNote = errors.New("committee duty post-fork requires pubkeys or indices")
 
 // ValidatorTracesCore contains the core logic for ValidatorTraces without any HTTP concerns.
 func (e *Exporter) ValidatorTracesCore(request *ValidatorTracesQuery) (*ValidatorTracesResult, *multierror.Error) {
@@ -36,6 +43,14 @@ func (e *Exporter) ValidatorTracesCore(request *ValidatorTracesQuery) (*Validato
 	for s := request.From; s <= request.To; s++ {
 		slot := phase0.Slot(s)
 		for _, role := range request.Roles {
+			if e.isCommitteeDutyAtSlot(role, slot) && len(indices) == 0 {
+				// request validation only gates on 'from': a window whose tail crosses
+				// Boole reaches here for its post-fork slots without pubkeys/indices,
+				// so report the gap as a non-fatal note instead of silently skipping it.
+				errs = multierror.Append(errs, fmt.Errorf("%w: slot %d: role %s is a committee duty post-fork, please provide either pubkeys or indices to filter the duty for a specific validators subset or use the /committee endpoint to query all the corresponding duties", ErrPostForkCommitteeDutyNote, slot, role.String()))
+				continue
+			}
+
 			providerFunc := e.getValidatorDutiesForRoleAndSlot
 			if e.isCommitteeDutyAtSlot(role, slot) {
 				providerFunc = e.getValidatorCommitteeDutiesForRoleAndSlot
@@ -66,11 +81,12 @@ func (e *Exporter) validateValidatorRequest(request *ValidatorTracesQuery) error
 	}
 
 	// either PubKeys or Indices are required for committee duty roles.
-	// Fork state is evaluated at the range's upper bound: if any slot in
-	// [from, to] is post-Boole, the 'to' slot is too.
+	// Fork state is evaluated at the range's lower bound so that a window
+	// whose tail crosses Boole still serves its pre-fork portion; the
+	// post-fork tail is reported as a non-fatal note in the per-slot loop.
 	if len(request.PubKeys) == 0 && len(request.Indices) == 0 {
 		for _, role := range request.Roles {
-			if e.isCommitteeDutyAtSlot(role, phase0.Slot(request.To)) {
+			if e.isCommitteeDutyAtSlot(role, phase0.Slot(request.From)) {
 				return fmt.Errorf("role %s is a committee duty, please provide either pubkeys or indices to filter the duty for a specific validators subset or use the /committee endpoint to query all the corresponding duties", role.String())
 			}
 		}

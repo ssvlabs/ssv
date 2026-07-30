@@ -2613,7 +2613,7 @@ func TestExporterValidatorTraces_ForkGating_CrossForkRange(t *testing.T) {
 	}
 
 	for _, role := range roles {
-		t.Run(role.name+" without filters requires pubkeys/indices", func(t *testing.T) {
+		t.Run(role.name+" without filters returns a partial response with post-fork notes", func(t *testing.T) {
 			exp := newTestExporterForV2WithNetwork(newMockTraceStore(), newMockValidatorStore(), &netCfg)
 
 			req := httptest.NewRequest(http.MethodPost, "/traces/validator", buildJSONBody(t, map[string]any{
@@ -2624,7 +2624,20 @@ func TestExporterValidatorTraces_ForkGating_CrossForkRange(t *testing.T) {
 			req.Header.Set("Content-Type", "application/json")
 			rec := httptest.NewRecorder()
 
-			require.Error(t, exp.ValidatorTraces(rec, req))
+			// the pre-fork portion of the range legitimately yields zero traces (no
+			// mock data), so the post-fork "requires pubkeys/indices" notes must not
+			// be treated as a hard failure: expect 200 with empty data and the notes
+			// surfaced in Errors.
+			require.NoError(t, exp.ValidatorTraces(rec, req))
+			require.Equal(t, http.StatusOK, rec.Code)
+
+			var resp ValidatorTracesResponse
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+			require.Empty(t, resp.Data)
+			require.NotEmpty(t, resp.Errors)
+			for _, msg := range resp.Errors {
+				require.Contains(t, msg, "committee duty post-fork")
+			}
 		})
 
 		t.Run(role.name+" with indices routes each slot by its own fork state", func(t *testing.T) {
@@ -2669,6 +2682,67 @@ func TestExporterValidatorTraces_ForkGating_CrossForkRange(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestExporterValidatorTraces_ForkGating_ZeroPreForkTraces covers the fix for a
+// fork-straddling AGGREGATOR/SYNC_COMMITTEE_CONTRIBUTION request without
+// pubkeys/indices whose pre-fork slots legitimately yield zero traces (e.g.
+// sparse aggregator duties): the response must be 200 with empty traces and
+// the post-fork notes surfaced, not a 500. A genuine error alongside those
+// notes must still yield 500.
+func TestExporterValidatorTraces_ForkGating_ZeroPreForkTraces(t *testing.T) {
+	const booleEpoch = phase0.Epoch(5)
+
+	ssvCopy := *networkconfig.TestNetwork.SSV
+	ssvCopy.Forks.Boole = booleEpoch
+	netCfg := *networkconfig.TestNetwork
+	netCfg.SSV = &ssvCopy
+
+	booleSlot := netCfg.FirstSlotAtEpoch(booleEpoch)
+	require.GreaterOrEqual(t, uint64(booleSlot), uint64(2), "boole fork slot too low for the range below")
+	from := uint64(booleSlot) - 2 // pre-Boole
+	to := uint64(booleSlot) + 2   // post-Boole
+
+	t.Run("only post-fork notes and no pre-fork traces -> 200 with empty data", func(t *testing.T) {
+		exp := newTestExporterForV2WithNetwork(newMockTraceStore(), newMockValidatorStore(), &netCfg)
+
+		req := httptest.NewRequest(http.MethodPost, "/traces/validator", buildJSONBody(t, map[string]any{
+			"from":  from,
+			"to":    to,
+			"roles": []string{"AGGREGATOR"},
+		}))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+
+		require.NoError(t, exp.ValidatorTraces(rec, req))
+		require.Equal(t, http.StatusOK, rec.Code)
+
+		var resp ValidatorTracesResponse
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+		require.Empty(t, resp.Data)
+		require.NotEmpty(t, resp.Errors, "expected post-fork notes to surface")
+		for _, msg := range resp.Errors {
+			require.Contains(t, msg, "committee duty post-fork")
+		}
+	})
+
+	t.Run("genuine error alongside notes still yields 500", func(t *testing.T) {
+		store := newMockTraceStore()
+		store.GetValidatorDutiesFunc = func(role spectypes.BeaconRole, slot phase0.Slot) ([]*traces.ValidatorDutyTrace, error) {
+			return nil, fmt.Errorf("forced error on GetValidatorDuties")
+		}
+		exp := newTestExporterForV2WithNetwork(store, newMockValidatorStore(), &netCfg)
+
+		req := httptest.NewRequest(http.MethodPost, "/traces/validator", buildJSONBody(t, map[string]any{
+			"from":  from,
+			"to":    to,
+			"roles": []string{"AGGREGATOR"},
+		}))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+
+		require.Error(t, exp.ValidatorTraces(rec, req))
+	})
 }
 
 // mockValidatorStore is a simple in-memory ValidatorStore implementation for tests.
