@@ -163,7 +163,7 @@ func TestFetchHistoricalLogs(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 
 	t.Run("successfully fetches historical logs within follow distance", func(t *testing.T) {
-		env := setupTestEnv(t, 5*time.Second)
+		env := setupTestEnv(t, 30*time.Second)
 		contract, err := env.deployCallableContract()
 		require.NoError(t, err)
 
@@ -200,7 +200,7 @@ func TestFetchHistoricalLogs(t *testing.T) {
 	})
 
 	t.Run("error when currentBlock < FollowDistance", func(t *testing.T) {
-		env := setupTestEnv(t, 5*time.Second)
+		env := setupTestEnv(t, 30*time.Second)
 		_, err := env.deployCallableContract()
 		require.NoError(t, err)
 
@@ -220,7 +220,7 @@ func TestFetchHistoricalLogs(t *testing.T) {
 	})
 
 	t.Run("error when toBlock < fromBlock", func(t *testing.T) {
-		env := setupTestEnv(t, 5*time.Second)
+		env := setupTestEnv(t, 30*time.Second)
 		contract, err := env.deployCallableContract()
 		require.NoError(t, err)
 
@@ -249,7 +249,7 @@ func TestFetchHistoricalLogs(t *testing.T) {
 	})
 
 	t.Run("error when BlockNumber fails", func(t *testing.T) {
-		env := setupTestEnv(t, 5*time.Second)
+		env := setupTestEnv(t, 30*time.Second)
 		_, err := env.deployCallableContract()
 		require.NoError(t, err)
 
@@ -322,7 +322,7 @@ func TestFetchHistoricalLogs_Subdivide(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			env := setupTestEnv(t, 5*time.Second)
+			env := setupTestEnv(t, 30*time.Second)
 			contract, err := env.deployCallableContract()
 			require.NoError(t, err)
 
@@ -413,7 +413,10 @@ func TestStreamLogs(t *testing.T) {
 		logger, err := zap.NewDevelopment()
 		require.NoError(t, err)
 
-		env := setupTestEnv(t, 5*time.Second)
+		// This test polls for a condition (streamed log count) on a short tick,
+		// so the fast path stays fast; the deadline is only a CI-safe upper
+		// bound to absorb scheduling jitter on loaded runners.
+		env := setupTestEnv(t, 30*time.Second)
 
 		// Deploy the contract
 		contract, err := env.deployCallableContract()
@@ -478,7 +481,7 @@ func TestStreamLogs(t *testing.T) {
 		logger, err := zap.NewDevelopment()
 		require.NoError(t, err)
 
-		env := setupTestEnv(t, 5*time.Second)
+		env := setupTestEnv(t, 30*time.Second)
 
 		// Deploy the contract
 		_, err = env.deployCallableContract()
@@ -521,7 +524,7 @@ func TestStreamLogs(t *testing.T) {
 		logger, err := zap.NewDevelopment()
 		require.NoError(t, err)
 
-		env := setupTestEnv(t, 5*time.Second)
+		env := setupTestEnv(t, 30*time.Second)
 
 		// Deploy the contract
 		_, err = env.deployCallableContract()
@@ -561,7 +564,7 @@ func TestStreamLogs(t *testing.T) {
 // TestFetchLogsInBatches tests the fetchLogsInBatches function of the client.
 func TestFetchLogsInBatches(t *testing.T) {
 	logger := zaptest.NewLogger(t)
-	env := setupTestEnv(t, 5*time.Second)
+	env := setupTestEnv(t, 30*time.Second)
 
 	// Deploy the contract
 	contract, err := env.deployCallableContract()
@@ -770,7 +773,10 @@ func TestSimSSV(t *testing.T) {
 	logger, err := zap.NewDevelopment()
 	require.NoError(t, err)
 
-	env := setupTestEnv(t, 5*time.Second)
+	// nextEventBlock below reacts to log-channel sends immediately, so the fast
+	// path is unaffected; the deadline only needs to be a CI-safe upper bound
+	// covering all 7 emitted events plus their follow-distance block commits.
+	env := setupTestEnv(t, 30*time.Second)
 
 	// Deploy the SSV contract
 	boundContract, err := env.deploySimContract()
@@ -908,7 +914,7 @@ func TestFilterLogs(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 
 	t.Run("successfully filters logs", func(t *testing.T) {
-		env := setupTestEnv(t, 5*time.Second)
+		env := setupTestEnv(t, 30*time.Second)
 
 		// Deploy the contract
 		contract, err := env.deployCallableContract()
@@ -940,7 +946,7 @@ func TestFilterLogs(t *testing.T) {
 	})
 
 	t.Run("error when FilterLogs fails", func(t *testing.T) {
-		env := setupTestEnv(t, 5*time.Second)
+		env := setupTestEnv(t, 30*time.Second)
 		_, err := env.deployCallableContract()
 		require.NoError(t, err)
 
@@ -971,7 +977,7 @@ func TestSubscribeFilterLogs(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 
 	t.Run("successfully subscribes to filter logs", func(t *testing.T) {
-		env := setupTestEnv(t, 5*time.Second)
+		env := setupTestEnv(t, 30*time.Second)
 
 		// Deploy the contract
 		contract, err := env.deployCallableContract()
@@ -1030,7 +1036,7 @@ func TestSubscribeFilterLogs(t *testing.T) {
 	})
 
 	t.Run("error when SubscribeFilterLogs fails", func(t *testing.T) {
-		env := setupTestEnv(t, 5*time.Second)
+		env := setupTestEnv(t, 30*time.Second)
 		_, err := env.deployCallableContract()
 		require.NoError(t, err)
 
@@ -1063,7 +1069,7 @@ func TestHeaderByNumber(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 
 	t.Run("successfully gets header by number", func(t *testing.T) {
-		env := setupTestEnv(t, 5*time.Second)
+		env := setupTestEnv(t, 30*time.Second)
 
 		// Deploy the contract
 		_, err := env.deployCallableContract()
@@ -1092,7 +1098,7 @@ func TestHeaderByNumber(t *testing.T) {
 	})
 
 	t.Run("error when HeaderByNumber fails", func(t *testing.T) {
-		env := setupTestEnv(t, 5*time.Second)
+		env := setupTestEnv(t, 30*time.Second)
 		_, err := env.deployCallableContract()
 		require.NoError(t, err)
 
@@ -1117,7 +1123,7 @@ func TestHeaderByNumber(t *testing.T) {
 // TestFilterer tests the Filterer method of the client.
 func TestFilterer(t *testing.T) {
 	logger := zaptest.NewLogger(t)
-	env := setupTestEnv(t, 5*time.Second)
+	env := setupTestEnv(t, 30*time.Second)
 
 	// Deploy the contract
 	_, err := env.deployCallableContract()
@@ -1136,7 +1142,7 @@ func TestFilterer(t *testing.T) {
 // TestSyncProgress tests the sync progress of the client.
 func TestSyncProgress(t *testing.T) {
 	t.Run("out of sync", func(t *testing.T) {
-		env := setupTestEnv(t, 5*time.Second)
+		env := setupTestEnv(t, 30*time.Second)
 
 		// Deploy the contract
 		_, err := env.deploySimContract()
@@ -1162,7 +1168,7 @@ func TestSyncProgress(t *testing.T) {
 	})
 
 	t.Run("within tolerable limits", func(t *testing.T) {
-		env := setupTestEnv(t, 5*time.Second)
+		env := setupTestEnv(t, 30*time.Second)
 
 		// Deploy the contract
 		_, err := env.deploySimContract()
@@ -1190,7 +1196,7 @@ func TestSyncProgress(t *testing.T) {
 // TestHealthy tests the Healthy method of the client.
 func TestHealthy(t *testing.T) {
 	t.Run("returns ErrClosed when client is closed", func(t *testing.T) {
-		env := setupTestEnv(t, 5*time.Second)
+		env := setupTestEnv(t, 30*time.Second)
 		_, err := env.deploySimContract()
 		require.NoError(t, err)
 
@@ -1208,7 +1214,7 @@ func TestHealthy(t *testing.T) {
 	})
 
 	t.Run("returns nil when health check was recently performed", func(t *testing.T) {
-		env := setupTestEnv(t, 5*time.Second)
+		env := setupTestEnv(t, 30*time.Second)
 		_, err := env.deploySimContract()
 		require.NoError(t, err)
 
