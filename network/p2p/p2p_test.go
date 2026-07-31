@@ -24,6 +24,7 @@ import (
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -243,16 +244,19 @@ func generateCommitteeMsg(ks *spectestingutils.TestKeySet, round specqbft.Round)
 	return signedSSVMessage
 }
 
+// roundLeader must agree with the validator's leader check, which delegates to the fork-aware
+// qbft.Proposer — the post-fork variant adds an epoch offset that a hand-rolled pre-fork
+// formula misses, making every committee proposal reject with ErrSignerNotLeader on the
+// post-fork CI leg for ~3 of every 4 epochs.
 func roundLeader(ks *spectestingutils.TestKeySet, height specqbft.Height, round specqbft.Round) spectypes.OperatorID {
 	share := spectestingutils.TestingShare(ks, 1)
 
-	firstRoundIndex := 0
-	if height != specqbft.FirstHeight {
-		firstRoundIndex += int(height) % len(share.Committee)
+	committee := make([]spectypes.OperatorID, 0, len(share.Committee))
+	for _, member := range share.Committee {
+		committee = append(committee, member.Signer)
 	}
 
-	index := (firstRoundIndex + int(round) - int(specqbft.FirstRound)) % len(share.Committee)
-	return share.Committee[index].Signer
+	return qbft.Proposer(height, round, committee, networkconfig.TestNetwork)
 }
 
 func dummyMsg(t *testing.T, pkHex string, height int, role spectypes.RunnerRole) (spectypes.MessageID, *spectypes.SignedSSVMessage) {

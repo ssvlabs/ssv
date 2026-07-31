@@ -213,6 +213,9 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex uint64, key
 		nodeStorage,
 		dutyStore,
 		signatureVerifier,
+		// Surface verdicts (rejecting/ignoring invalid message) in test output — validation
+		// defaults to a nop logger, which makes CI failures undiagnosable from logs.
+		validation.WithLogger(logger),
 	)
 	cfg.NetworkConfig = networkconfig.TestNetwork
 	if options.TotalValidators > 0 {
@@ -240,6 +243,7 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex uint64, key
 			dutyStore,
 			signatureVerifier,
 			validation.WithSelfAccept(selfPeerID, true),
+			validation.WithLogger(logger),
 		)
 	}
 
