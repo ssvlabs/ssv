@@ -53,6 +53,12 @@ func TestDiscV5Service_Close(t *testing.T) {
 
 	err := dvs.Close()
 	assert.NoError(t, err)
+
+	// Callers above don't guard against closing twice, and the second pass
+	// would panic closing sharedConn.Unhandled again.
+	assert.NotPanics(t, func() {
+		assert.NoError(t, dvs.Close())
+	})
 }
 
 func TestDiscV5Service_RegisterSubnets(t *testing.T) {

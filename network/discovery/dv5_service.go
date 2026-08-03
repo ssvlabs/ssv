@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/ethereum/go-ethereum/p2p/discover"
@@ -80,6 +81,9 @@ type DiscV5Service struct {
 	subnets   commons.Subnets
 
 	publishLock chan struct{}
+
+	closeOnce sync.Once
+	closeErr  error
 }
 
 func NewDiscV5Service(pctx context.Context, logger *zap.Logger, opts *Options) (*DiscV5Service, error) {
@@ -112,21 +116,37 @@ func NewDiscV5Service(pctx context.Context, logger *zap.Logger, opts *Options) (
 	return &dvs, nil
 }
 
-// Close implements io.Closer
+// Close implements io.Closer. It is safe to call more than once; callers above
+// don't guard against that, and closing sharedConn.Unhandled twice would panic.
 func (dvs *DiscV5Service) Close() error {
+	dvs.closeOnce.Do(func() {
+		dvs.closeErr = dvs.close()
+	})
+	return dvs.closeErr
+}
+
+func (dvs *DiscV5Service) close() error {
 	if dvs.cancel != nil {
 		dvs.cancel()
 	}
-	if dvs.conn != nil {
-		if err := dvs.conn.Close(); err != nil {
-			return err
-		}
+	// Order matters. The post-fork listener produces into sharedConn.Unhandled,
+	// so it must be fully stopped before that channel is closed — closing it
+	// mid-send panics the producer. Stopping the listeners first is safe:
+	// SharedUDPConn.Close releases the pre-fork reader, and draining continues
+	// throughout so the post-fork listener cannot wedge on its way down.
+	if dvs.dv5Listener != nil {
+		dvs.dv5Listener.Close()
 	}
 	if dvs.sharedConn != nil {
 		close(dvs.sharedConn.Unhandled)
+		dvs.sharedConn.WaitDrained()
 	}
-	if dvs.dv5Listener != nil {
-		dvs.dv5Listener.Close()
+	if dvs.conn != nil {
+		// The post-fork listener owns this socket and closes it on shutdown, so
+		// finding it already closed is expected rather than an error.
+		if err := dvs.conn.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
+			return err
+		}
 	}
 	return nil
 }
@@ -357,7 +377,7 @@ func (dvs *DiscV5Service) initDiscV5Listener(discOpts *Options) error {
 
 	// New discovery, with ProtocolID restriction, to be kept post-fork
 	unhandled := make(chan discover.ReadPacket, 100) // size taken from https://github.com/ethereum/go-ethereum/blob/v1.13.5/p2p/server.go#L551
-	sharedConn := &SharedUDPConn{udpConn, unhandled}
+	sharedConn := NewSharedUDPConn(dvs.ctx, udpConn, unhandled)
 	dvs.sharedConn = sharedConn
 
 	dv5PostForkCfg, err := opts.DiscV5Cfg(dvs.logger, WithProtocolID(protocolID), WithUnhandled(unhandled))
