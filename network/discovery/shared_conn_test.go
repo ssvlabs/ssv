@@ -143,6 +143,54 @@ func TestSharedUDPConn_CloseReleasesBlockedReader(t *testing.T) {
 	conn.WaitDrained()
 }
 
+// TestInitDiscV5Listener_CleansUpOnError covers the half-built service: when
+// setup fails after the drain goroutine has started, the caller discards the
+// service without ever calling Close, so init has to unwind its own resources.
+func TestInitDiscV5Listener_CleansUpOnError(t *testing.T) {
+	opts := testingDiscoveryOptions(t, testNetConfig.SSV)
+	// A malformed bootnode fails ENR parsing in DiscV5Cfg, which is the first
+	// error return after the drain goroutine is running.
+	opts.DiscV5Opts.Bootnodes = []string{"enr:-not-a-valid-record"}
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	dvs := &DiscV5Service{
+		logger:    testLogger,
+		ctx:       ctx,
+		cancel:    cancel,
+		ssvConfig: testNetConfig.SSV,
+		subnets:   opts.DiscV5Opts.Subnets,
+	}
+
+	// Reaching the assertions at all already proves drain exited: the cleanup
+	// closes Unhandled and waits for it, so a drain that never stopped would
+	// hang here instead of returning.
+	require.Error(t, dvs.initDiscV5Listener(opts))
+	require.Nil(t, dvs.sharedConn, "sharedConn should be released on the error path")
+	require.Nil(t, dvs.conn, "udp socket should be released on the error path")
+
+	// The socket is the resource that actually bites, so prove it was freed
+	// rather than trusting the nil-ing: rebinding the same port only succeeds
+	// if the failed attempt released it.
+	good := testingDiscoveryOptions(t, testNetConfig.SSV)
+	good.DiscV5Opts.Port = opts.DiscV5Opts.Port
+	good.DiscV5Opts.TCPPort = opts.DiscV5Opts.TCPPort
+
+	dvs2 := &DiscV5Service{
+		logger:    testLogger,
+		ctx:       ctx,
+		cancel:    cancel,
+		ssvConfig: testNetConfig.SSV,
+		subnets:   good.DiscV5Opts.Subnets,
+	}
+	require.NoError(t, dvs2.initDiscV5Listener(good), "port still held: the failed attempt leaked its socket")
+	t.Cleanup(func() {
+		dvs2.dv5Listener.Close()
+		close(dvs2.sharedConn.Unhandled)
+		dvs2.sharedConn.WaitDrained()
+	})
+}
+
 // TestSharedUDPConn_DrainsWhileClosing guards the shutdown ordering: the
 // producer keeps forwarding while the reader shuts down, and must not block or
 // panic. Previously Close() closed Unhandled, so an in-flight send panicked

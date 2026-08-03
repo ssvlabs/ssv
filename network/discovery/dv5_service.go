@@ -349,7 +349,7 @@ func (dvs *DiscV5Service) checkPeer(ctx context.Context, e PeerEvent) error {
 }
 
 // initDiscV5Listener creates a new listener and starts it
-func (dvs *DiscV5Service) initDiscV5Listener(discOpts *Options) error {
+func (dvs *DiscV5Service) initDiscV5Listener(discOpts *Options) (err error) {
 	opts := discOpts.DiscV5Opts
 	if err := opts.Validate(); err != nil {
 		return fmt.Errorf("invalid opts: %w", err)
@@ -380,6 +380,26 @@ func (dvs *DiscV5Service) initDiscV5Listener(discOpts *Options) error {
 	sharedConn := NewSharedUDPConn(dvs.ctx, udpConn, unhandled)
 	dvs.sharedConn = sharedConn
 
+	// Everything below can fail before dv5Listener is set, and the caller drops
+	// the half-built service without calling Close, so unwind here instead. The
+	// order mirrors Close: stop the producer first, since by the time the
+	// pre-fork listener is being built the post-fork one is already forwarding
+	// into unhandled, and closing that channel under a live producer panics.
+	var postForkListener Listener
+	defer func() {
+		if err == nil {
+			return
+		}
+		if postForkListener != nil {
+			postForkListener.Close() // also closes udpConn
+		}
+		_ = sharedConn.Close() // never returns an error
+		close(unhandled)
+		sharedConn.WaitDrained()
+		_ = udpConn.Close() // no-op once the listener above has closed it
+		dvs.sharedConn, dvs.conn = nil, nil
+	}()
+
 	dv5PostForkCfg, err := opts.DiscV5Cfg(dvs.logger, WithProtocolID(protocolID), WithUnhandled(unhandled))
 	if err != nil {
 		return err
@@ -389,6 +409,7 @@ func (dvs *DiscV5Service) initDiscV5Listener(discOpts *Options) error {
 	if err != nil {
 		return fmt.Errorf("could not create discV5 listener: %w", err)
 	}
+	postForkListener = dv5PostForkListener
 
 	dvs.logger.Debug("started discv5 post-fork listener (UDP)",
 		fields.BindIP(bindIP),

@@ -60,6 +60,12 @@ func NewSharedUDPConn(ctx context.Context, conn *net.UDPConn, unhandled chan dis
 // once it is full. It stays receptive for the whole lifetime of the producer so
 // the forwarding send in go-ethereum never blocks for longer than it takes to
 // hand the packet over.
+//
+// ctx carries the metric context only — it is deliberately not a stop signal.
+// Draining must outlive cancellation: DiscV5Service.Close cancels before it
+// joins the producer, so stopping here on ctx.Done would let the post-fork
+// listener wedge on a full channel, or panic sending to a closed one. drain
+// stops only when Unhandled is closed, which its owner does after that join.
 func (s *SharedUDPConn) drain(ctx context.Context) {
 	defer s.drained.Done()
 	for packet := range s.Unhandled {
