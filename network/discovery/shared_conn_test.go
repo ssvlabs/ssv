@@ -4,6 +4,8 @@ import (
 	"context"
 	"net"
 	"net/netip"
+	"os"
+	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -35,14 +37,14 @@ func forwardBlocking(unhandled chan discover.ReadPacket, n int, sent *atomic.Int
 // TestSharedUDPConn_ForwardingNeverBlocks is the regression test for the wedge:
 // with no reader consuming at all, a producer must still be able to forward far
 // more packets than any buffer holds. Tying Unhandled directly to the pre-fork
-// listener's read path made this block once ~100 packets were in flight, which
-// halted the post-fork listener and stopped the UDP socket being drained.
+// listener's read path made this block at unhandledChanSize packets in flight,
+// which halted the post-fork listener and stopped the UDP socket being drained.
 func TestSharedUDPConn_ForwardingNeverBlocks(t *testing.T) {
-	unhandled := make(chan discover.ReadPacket, 100)
+	unhandled := make(chan discover.ReadPacket, unhandledChanSize)
 	conn := NewSharedUDPConn(context.Background(), nil, unhandled)
 
 	// Well past unhandled's capacity and the internal buffer combined.
-	const total = 100 + unhandledBufferSize + 5000
+	const total = unhandledChanSize + unhandledBufferSize + 5000
 
 	var sent atomic.Int64
 	done := make(chan struct{})
@@ -68,7 +70,7 @@ func TestSharedUDPConn_ForwardingNeverBlocks(t *testing.T) {
 // TestSharedUDPConn_DeliversPacketsToReader covers the normal path: what the
 // producer forwards is what the pre-fork listener reads.
 func TestSharedUDPConn_DeliversPacketsToReader(t *testing.T) {
-	unhandled := make(chan discover.ReadPacket, 100)
+	unhandled := make(chan discover.ReadPacket, unhandledChanSize)
 	conn := NewSharedUDPConn(context.Background(), nil, unhandled)
 	defer func() {
 		close(unhandled)
@@ -115,7 +117,7 @@ func TestSharedUDPConn_TruncatesOversizedPacket(t *testing.T) {
 // TestSharedUDPConn_CloseReleasesBlockedReader is what lets the pre-fork
 // listener shut down without closing Unhandled out from under its producer.
 func TestSharedUDPConn_CloseReleasesBlockedReader(t *testing.T) {
-	unhandled := make(chan discover.ReadPacket, 100)
+	unhandled := make(chan discover.ReadPacket, unhandledChanSize)
 	conn := NewSharedUDPConn(context.Background(), nil, unhandled)
 
 	readErr := make(chan error, 1)
@@ -143,52 +145,76 @@ func TestSharedUDPConn_CloseReleasesBlockedReader(t *testing.T) {
 	conn.WaitDrained()
 }
 
-// TestInitDiscV5Listener_CleansUpOnError covers the half-built service: when
-// setup fails after the drain goroutine has started, the caller discards the
-// service without ever calling Close, so init has to unwind its own resources.
+// TestInitDiscV5Listener_CleansUpOnError covers the half-built service: setup
+// can fail at several points after resources are live, and the caller discards
+// the service without ever calling Close, so init has to unwind its own.
 func TestInitDiscV5Listener_CleansUpOnError(t *testing.T) {
-	opts := testingDiscoveryOptions(t, testNetConfig.SSV)
-	// A malformed bootnode fails ENR parsing in DiscV5Cfg, which is the first
-	// error return after the drain goroutine is running.
-	opts.DiscV5Opts.Bootnodes = []string{"enr:-not-a-valid-record"}
-
-	ctx, cancel := context.WithCancel(t.Context())
-	defer cancel()
-	dvs := &DiscV5Service{
-		logger:    testLogger,
-		ctx:       ctx,
-		cancel:    cancel,
-		ssvConfig: testNetConfig.SSV,
-		subnets:   opts.DiscV5Opts.Subnets,
+	newService := func(ctx context.Context, cancel context.CancelFunc, opts *Options) *DiscV5Service {
+		return &DiscV5Service{
+			logger:    testLogger,
+			ctx:       ctx,
+			cancel:    cancel,
+			ssvConfig: testNetConfig.SSV,
+			subnets:   opts.DiscV5Opts.Subnets,
+		}
 	}
 
-	// Reaching the assertions at all already proves drain exited: the cleanup
-	// closes Unhandled and waits for it, so a drain that never stopped would
-	// hang here instead of returning.
-	require.Error(t, dvs.initDiscV5Listener(opts))
-	require.Nil(t, dvs.sharedConn, "sharedConn should be released on the error path")
-	require.Nil(t, dvs.conn, "udp socket should be released on the error path")
-
-	// The socket is the resource that actually bites, so prove it was freed
-	// rather than trusting the nil-ing: rebinding the same port only succeeds
-	// if the failed attempt released it.
-	good := testingDiscoveryOptions(t, testNetConfig.SSV)
-	good.DiscV5Opts.Port = opts.DiscV5Opts.Port
-	good.DiscV5Opts.TCPPort = opts.DiscV5Opts.TCPPort
-
-	dvs2 := &DiscV5Service{
-		logger:    testLogger,
-		ctx:       ctx,
-		cancel:    cancel,
-		ssvConfig: testNetConfig.SSV,
-		subnets:   good.DiscV5Opts.Subnets,
+	cases := []struct {
+		name string
+		// break the options so init fails at a specific point
+		breakSetup func(t *testing.T, o *Options)
+	}{
+		{
+			// Fails in DiscV5Cfg, once the drain goroutine is already running.
+			name: "malformed bootnode",
+			breakSetup: func(t *testing.T, o *Options) {
+				o.DiscV5Opts.Bootnodes = []string{"enr:-not-a-valid-record"}
+			},
+		},
+		{
+			// Fails in createLocalNode, after the socket is bound but before
+			// SharedUDPConn exists — so only the socket needs releasing.
+			name: "unusable storage path",
+			breakSetup: func(t *testing.T, o *Options) {
+				blocker := filepath.Join(t.TempDir(), "not-a-dir")
+				require.NoError(t, os.WriteFile(blocker, nil, 0o600))
+				o.DiscV5Opts.StoragePath = filepath.Join(blocker, "enode")
+			},
+		},
 	}
-	require.NoError(t, dvs2.initDiscV5Listener(good), "port still held: the failed attempt leaked its socket")
-	t.Cleanup(func() {
-		dvs2.dv5Listener.Close()
-		close(dvs2.sharedConn.Unhandled)
-		dvs2.sharedConn.WaitDrained()
-	})
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+
+			opts := testingDiscoveryOptions(t, testNetConfig.SSV)
+			tc.breakSetup(t, opts)
+
+			dvs := newService(ctx, cancel, opts)
+			// Returning at all already proves drain exited where one was started:
+			// the cleanup closes Unhandled and waits on it, so a drain that never
+			// stopped would hang here.
+			require.Error(t, dvs.initDiscV5Listener(opts))
+			require.Nil(t, dvs.sharedConn, "sharedConn should be released on the error path")
+			require.Nil(t, dvs.conn, "udp socket should be released on the error path")
+
+			// The socket is the resource that actually bites, so prove it was
+			// freed rather than trusting the nil-ing: rebinding the same port
+			// only succeeds if the failed attempt released it.
+			good := testingDiscoveryOptions(t, testNetConfig.SSV)
+			good.DiscV5Opts.Port = opts.DiscV5Opts.Port
+			good.DiscV5Opts.TCPPort = opts.DiscV5Opts.TCPPort
+
+			dvs2 := newService(ctx, cancel, good)
+			require.NoError(t, dvs2.initDiscV5Listener(good), "port still held: the failed attempt leaked its socket")
+			t.Cleanup(func() {
+				dvs2.dv5Listener.Close()
+				close(dvs2.sharedConn.Unhandled)
+				dvs2.sharedConn.WaitDrained()
+			})
+		})
+	}
 }
 
 // TestSharedUDPConn_DrainsWhileClosing guards the shutdown ordering: the
@@ -196,7 +222,7 @@ func TestInitDiscV5Listener_CleansUpOnError(t *testing.T) {
 // panic. Previously Close() closed Unhandled, so an in-flight send panicked
 // with "send on closed channel".
 func TestSharedUDPConn_DrainsWhileClosing(t *testing.T) {
-	unhandled := make(chan discover.ReadPacket, 100)
+	unhandled := make(chan discover.ReadPacket, unhandledChanSize)
 	conn := NewSharedUDPConn(context.Background(), nil, unhandled)
 
 	var wg sync.WaitGroup

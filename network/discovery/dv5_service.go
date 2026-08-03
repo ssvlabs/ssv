@@ -363,6 +363,16 @@ func (dvs *DiscV5Service) initDiscV5Listener(discOpts *Options) (err error) {
 	}
 	dvs.conn = udpConn
 
+	// Registered before anything else can fail, so every error path below
+	// releases the socket. Runs last of the deferred cleanups, by which point a
+	// listener may already have closed it.
+	defer func() {
+		if err != nil {
+			_ = udpConn.Close()
+			dvs.conn = nil
+		}
+	}()
+
 	localNode, err := dvs.createLocalNode(discOpts, ipAddr)
 	if err != nil {
 		return fmt.Errorf("could not create local node: %w", err)
@@ -376,7 +386,7 @@ func (dvs *DiscV5Service) initDiscV5Listener(discOpts *Options) (err error) {
 	}
 
 	// New discovery, with ProtocolID restriction, to be kept post-fork
-	unhandled := make(chan discover.ReadPacket, 100) // size taken from https://github.com/ethereum/go-ethereum/blob/v1.13.5/p2p/server.go#L551
+	unhandled := make(chan discover.ReadPacket, unhandledChanSize)
 	sharedConn := NewSharedUDPConn(dvs.ctx, udpConn, unhandled)
 	dvs.sharedConn = sharedConn
 
@@ -396,8 +406,7 @@ func (dvs *DiscV5Service) initDiscV5Listener(discOpts *Options) (err error) {
 		_ = sharedConn.Close() // never returns an error
 		close(unhandled)
 		sharedConn.WaitDrained()
-		_ = udpConn.Close() // no-op once the listener above has closed it
-		dvs.sharedConn, dvs.conn = nil, nil
+		dvs.sharedConn = nil
 	}()
 
 	dv5PostForkCfg, err := opts.DiscV5Cfg(dvs.logger, WithProtocolID(protocolID), WithUnhandled(unhandled))
