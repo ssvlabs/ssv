@@ -2,6 +2,7 @@ package discovery
 
 import (
 	"context"
+	"errors"
 	"net"
 	"net/netip"
 	"os"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/p2p/discover"
+	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/stretchr/testify/require"
 )
 
@@ -145,6 +147,18 @@ func TestSharedUDPConn_CloseReleasesBlockedReader(t *testing.T) {
 	conn.WaitDrained()
 }
 
+// closeRecordingListener wraps a Listener and records whether Close was called,
+// so a test can assert that error-path cleanup tore the wrapped listener down.
+type closeRecordingListener struct {
+	Listener
+	closed *atomic.Bool
+}
+
+func (l closeRecordingListener) Close() {
+	l.closed.Store(true)
+	l.Listener.Close()
+}
+
 // TestInitDiscV5Listener_CleansUpOnError covers the half-built service: setup
 // can fail at several points after resources are live, and the caller discards
 // the service without ever calling Close, so init has to unwind its own.
@@ -163,6 +177,9 @@ func TestInitDiscV5Listener_CleansUpOnError(t *testing.T) {
 		name string
 		// break the options so init fails at a specific point
 		breakSetup func(t *testing.T, o *Options)
+		// or break listener creation itself, to fail after resources are live;
+		// returns an assertion to run once init has failed and unwound
+		breakListener func(t *testing.T) (assertCleanedUp func(t *testing.T))
 	}{
 		{
 			// Fails in DiscV5Cfg, once the drain goroutine is already running.
@@ -181,6 +198,43 @@ func TestInitDiscV5Listener_CleansUpOnError(t *testing.T) {
 				o.DiscV5Opts.StoragePath = filepath.Join(blocker, "enode")
 			},
 		},
+		{
+			// Fails creating the pre-fork listener while the post-fork one is
+			// already up, so cleanup must tear that listener (and its socket)
+			// down — we wrap it to assert it was actually closed.
+			//
+			// Swaps the package-level listenV5, so the test must stay non-parallel.
+			name: "pre-fork listener creation fails",
+			breakListener: func(t *testing.T) func(t *testing.T) {
+				var postForkClosed atomic.Bool
+				orig := listenV5
+				var calls int
+				listenV5 = func(conn discover.UDPConn, ln *enode.LocalNode, cfg discover.Config) (Listener, error) {
+					// init creates the post-fork listener first, then the
+					// pre-fork one; fail the pre-fork and observe the post-fork.
+					calls++
+					switch calls {
+					case 1:
+						lis, err := orig(conn, ln, cfg)
+						if err != nil {
+							return nil, err
+						}
+						return closeRecordingListener{Listener: lis, closed: &postForkClosed}, nil
+					case 2:
+						return nil, errors.New("forced pre-fork listener failure")
+					default:
+						// Later inits (the good rebind below) behave normally.
+						return orig(conn, ln, cfg)
+					}
+				}
+				t.Cleanup(func() { listenV5 = orig })
+
+				return func(t *testing.T) {
+					require.True(t, postForkClosed.Load(),
+						"cleanup must close the post-fork listener when the pre-fork listener fails")
+				}
+			},
+		},
 	}
 
 	for _, tc := range cases {
@@ -189,7 +243,13 @@ func TestInitDiscV5Listener_CleansUpOnError(t *testing.T) {
 			defer cancel()
 
 			opts := testingDiscoveryOptions(t, testNetConfig.SSV)
-			tc.breakSetup(t, opts)
+			if tc.breakSetup != nil {
+				tc.breakSetup(t, opts)
+			}
+			var assertCleanedUp func(t *testing.T)
+			if tc.breakListener != nil {
+				assertCleanedUp = tc.breakListener(t)
+			}
 
 			dvs := newService(ctx, cancel, opts)
 			// Returning at all already proves drain exited where one was started:
@@ -198,6 +258,9 @@ func TestInitDiscV5Listener_CleansUpOnError(t *testing.T) {
 			require.Error(t, dvs.initDiscV5Listener(opts))
 			require.Nil(t, dvs.sharedConn, "sharedConn should be released on the error path")
 			require.Nil(t, dvs.conn, "udp socket should be released on the error path")
+			if assertCleanedUp != nil {
+				assertCleanedUp(t)
+			}
 
 			// The socket is the resource that actually bites, so prove it was
 			// freed rather than trusting the nil-ing: rebinding the same port
@@ -209,9 +272,7 @@ func TestInitDiscV5Listener_CleansUpOnError(t *testing.T) {
 			dvs2 := newService(ctx, cancel, good)
 			require.NoError(t, dvs2.initDiscV5Listener(good), "port still held: the failed attempt leaked its socket")
 			t.Cleanup(func() {
-				dvs2.dv5Listener.Close()
-				close(dvs2.sharedConn.Unhandled)
-				dvs2.sharedConn.WaitDrained()
+				require.NoError(t, dvs2.Close())
 			})
 		})
 	}

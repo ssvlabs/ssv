@@ -12,8 +12,8 @@ import (
 
 const (
 	// unhandledChanSize is the handoff capacity between go-ethereum's forwarding
-	// send and drain. It can stay small because drain is always receptive; the
-	// queue that actually absorbs bursts is unhandledBufferSize.
+	// send and drain. It stays small because drain is always receptive; bursts
+	// are absorbed by unhandledBufferSize instead.
 	// Size taken from https://github.com/ethereum/go-ethereum/blob/v1.13.5/p2p/server.go#L551
 	unhandledChanSize = 100
 
@@ -24,19 +24,18 @@ const (
 
 // SharedUDPConn implements a shared connection: writes go to the underlying
 // socket, and reads return the packets the primary listener could not decode
-// and forwarded to Unhandled, less any shed under load.
+// and forwarded to Unhandled, minus any dropped under load.
 // Originally copied from https://github.com/ethereum/go-ethereum/blob/v1.14.8/p2p/server.go#L435
 //
-// Unlike upstream, reads are served from an internal buffer filled by drain.
-// That decoupling is load-bearing: go-ethereum forwards undecodable packets to
-// Unhandled with a blocking send and no default case (v5_udp.go, handlePacket),
-// on the post-fork listener's dispatch goroutine — which re-arms its reader only
-// after handlePacket returns. Serving reads straight off Unhandled, as the
-// pre-fork listener does one packet per dispatch cycle, therefore let a burst of
-// undecodable packets (scan noise, stray discv4, a deliberate flood) stall the
-// post-fork listener until it stopped draining the real UDP socket and the
-// kernel began dropping valid discv5 traffic. drain always accepts and discards
-// on overflow, bounding and counting that back-pressure instead.
+// Unlike upstream, reads are served from an internal buffer filled by drain,
+// not from Unhandled directly. That decoupling is load-bearing: go-ethereum
+// forwards undecodable packets with a blocking send and no default case
+// (v5_udp.go, handlePacket) on the post-fork listener's dispatch goroutine,
+// which re-arms its socket read only after handlePacket returns. Serving reads
+// straight off Unhandled — one packet per dispatch cycle — let a burst of junk
+// (scan noise, stray discv4, a flood) stall that listener until it stopped
+// draining the socket, and the kernel dropped valid discv5 traffic. drain
+// always accepts, dropping and counting on overflow instead.
 type SharedUDPConn struct {
 	*net.UDPConn
 	Unhandled chan discover.ReadPacket
@@ -66,14 +65,13 @@ func NewSharedUDPConn(ctx context.Context, conn *net.UDPConn, unhandled chan dis
 }
 
 // drain moves packets from Unhandled into the internal buffer, discarding them
-// once it is full. It stays receptive for the whole lifetime of the producer so
-// the forwarding send in go-ethereum never blocks for longer than it takes to
-// hand the packet over.
+// when it is full. It stays receptive for the producer's whole lifetime, so
+// go-ethereum's forwarding send never blocks longer than the handoff.
 //
 // ctx carries the metric context only — it is deliberately not a stop signal.
 // Draining must outlive cancellation: DiscV5Service.Close cancels before it
-// joins the producer, so stopping here on ctx.Done would let the post-fork
-// listener wedge on a full channel, or panic sending to a closed one. drain
+// joins the producer, so stopping on ctx.Done here would let the post-fork
+// listener wedge on a full channel or panic sending to a closed one. drain
 // stops only when Unhandled is closed, which its owner does after that join.
 func (s *SharedUDPConn) drain(ctx context.Context) {
 	defer s.drained.Done()

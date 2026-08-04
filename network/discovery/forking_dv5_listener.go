@@ -14,14 +14,13 @@ import (
 // forkingDV5Listener wraps a pre-fork and a post-fork listener and queries both
 // on every operation.
 //
-// The naming is historical. The pre-fork listener was meant to be dropped once
-// the protocol-ID fork completed, but #1774 removed that shutdown deliberately
-// and it has run permanently since. There is no fork check anywhere here, so
-// both listeners stay live for the lifetime of the service.
+// The naming is historical: the pre-fork listener was meant to be dropped after
+// the protocol-ID fork, but #1774 removed that shutdown, so it runs permanently.
+// No fork check remains; both listeners stay live for the service's lifetime.
 //
-// It still earns its keep: the pre-fork listener sets no protocol ID, so it is
-// the only way to reach nodes that predate the fork. That also makes it the
-// path by which unrelated discv5 traffic enters the node — see SharedUDPConn.
+// It still earns its keep: with no protocol ID set, the pre-fork listener is the
+// only way to reach nodes that predate the fork — and the path by which
+// unrelated discv5 traffic enters the node (see SharedUDPConn).
 type forkingDV5Listener struct {
 	logger           *zap.Logger
 	preForkListener  Listener
@@ -76,15 +75,10 @@ func (l *forkingDV5Listener) LocalNode() *enode.LocalNode {
 	return l.postForkListener.LocalNode()
 }
 
-// Closes both listeners
+// Close closes both listeners.
 func (l *forkingDV5Listener) Close() {
-	l.closePreForkListener()
-	l.postForkListener.Close()
-}
-
-// closePreForkListener ensures preForkListener is closed once
-func (l *forkingDV5Listener) closePreForkListener() {
 	l.preForkListener.Close()
+	l.postForkListener.Close()
 }
 
 // annotatedIterator wraps an enode.Iterator with metrics collection.

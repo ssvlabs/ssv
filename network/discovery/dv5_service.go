@@ -348,6 +348,13 @@ func (dvs *DiscV5Service) checkPeer(ctx context.Context, e PeerEvent) error {
 	return nil
 }
 
+// listenV5 is indirected so tests can wrap or fail listener creation to
+// exercise initDiscV5Listener's error-path cleanup; it returns the Listener
+// interface, not *discover.UDPv5, so a wrapper can be substituted.
+var listenV5 = func(conn discover.UDPConn, ln *enode.LocalNode, cfg discover.Config) (Listener, error) {
+	return discover.ListenV5(conn, ln, cfg)
+}
+
 // initDiscV5Listener creates a new listener and starts it
 func (dvs *DiscV5Service) initDiscV5Listener(discOpts *Options) (err error) {
 	opts := discOpts.DiscV5Opts
@@ -414,7 +421,7 @@ func (dvs *DiscV5Service) initDiscV5Listener(discOpts *Options) (err error) {
 		return err
 	}
 
-	dv5PostForkListener, err := discover.ListenV5(udpConn, localNode, *dv5PostForkCfg)
+	dv5PostForkListener, err := listenV5(udpConn, localNode, *dv5PostForkCfg)
 	if err != nil {
 		return fmt.Errorf("could not create discV5 listener: %w", err)
 	}
@@ -434,7 +441,7 @@ func (dvs *DiscV5Service) initDiscV5Listener(discOpts *Options) (err error) {
 		return err
 	}
 
-	dv5PreForkListener, err := discover.ListenV5(sharedConn, localNode, *dv5PreForkCfg)
+	dv5PreForkListener, err := listenV5(sharedConn, localNode, *dv5PreForkCfg)
 	if err != nil {
 		return fmt.Errorf("could not create discV5 pre-fork listener: %w", err)
 	}
