@@ -15,6 +15,7 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/discover"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 )
 
 func testPacket(b byte) discover.ReadPacket {
@@ -43,7 +44,7 @@ func forwardBlocking(unhandled chan discover.ReadPacket, n int, sent *atomic.Int
 // which halted the post-fork listener and stopped the UDP socket being drained.
 func TestSharedUDPConn_ForwardingNeverBlocks(t *testing.T) {
 	unhandled := make(chan discover.ReadPacket, unhandledChanSize)
-	conn := NewSharedUDPConn(context.Background(), nil, unhandled)
+	conn := NewSharedUDPConn(context.Background(), zap.NewNop(), nil, unhandled)
 
 	// Well past unhandled's capacity and the internal buffer combined.
 	const total = unhandledChanSize + unhandledBufferSize + 5000
@@ -73,7 +74,7 @@ func TestSharedUDPConn_ForwardingNeverBlocks(t *testing.T) {
 // producer forwards is what the pre-fork listener reads.
 func TestSharedUDPConn_DeliversPacketsToReader(t *testing.T) {
 	unhandled := make(chan discover.ReadPacket, unhandledChanSize)
-	conn := NewSharedUDPConn(context.Background(), nil, unhandled)
+	conn := NewSharedUDPConn(context.Background(), zap.NewNop(), nil, unhandled)
 	defer func() {
 		close(unhandled)
 		conn.WaitDrained()
@@ -98,7 +99,7 @@ func TestSharedUDPConn_DeliversPacketsToReader(t *testing.T) {
 // TestSharedUDPConn_TruncatesOversizedPacket pins the existing copy semantics.
 func TestSharedUDPConn_TruncatesOversizedPacket(t *testing.T) {
 	unhandled := make(chan discover.ReadPacket, 1)
-	conn := NewSharedUDPConn(context.Background(), nil, unhandled)
+	conn := NewSharedUDPConn(context.Background(), zap.NewNop(), nil, unhandled)
 	defer func() {
 		close(unhandled)
 		conn.WaitDrained()
@@ -120,7 +121,7 @@ func TestSharedUDPConn_TruncatesOversizedPacket(t *testing.T) {
 // listener shut down without closing Unhandled out from under its producer.
 func TestSharedUDPConn_CloseReleasesBlockedReader(t *testing.T) {
 	unhandled := make(chan discover.ReadPacket, unhandledChanSize)
-	conn := NewSharedUDPConn(context.Background(), nil, unhandled)
+	conn := NewSharedUDPConn(context.Background(), zap.NewNop(), nil, unhandled)
 
 	readErr := make(chan error, 1)
 	go func() {
@@ -284,7 +285,7 @@ func TestInitDiscV5Listener_CleansUpOnError(t *testing.T) {
 // with "send on closed channel".
 func TestSharedUDPConn_DrainsWhileClosing(t *testing.T) {
 	unhandled := make(chan discover.ReadPacket, unhandledChanSize)
-	conn := NewSharedUDPConn(context.Background(), nil, unhandled)
+	conn := NewSharedUDPConn(context.Background(), zap.NewNop(), nil, unhandled)
 
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -312,4 +313,38 @@ func TestSharedUDPConn_DrainsWhileClosing(t *testing.T) {
 
 	close(unhandled)
 	conn.WaitDrained()
+}
+
+// TestSharedUDPConn_DropsOldestWhenFull verifies overflow evicts the oldest
+// buffered packet, so the freshest packets survive a flood — a real ping
+// response must not be starved by a stale backlog. Tail-dropping the newcomer
+// would keep the oldest instead and fail this test.
+func TestSharedUDPConn_DropsOldestWhenFull(t *testing.T) {
+	unhandled := make(chan discover.ReadPacket, unhandledChanSize)
+	conn := NewSharedUDPConn(context.Background(), zap.NewNop(), nil, unhandled)
+
+	// Tag each packet with a unique port so we can tell which survived, and send
+	// more than the buffer holds. With no reader, drain fills the buffer and then
+	// evicts oldest-first.
+	const overflow = 50
+	const total = unhandledBufferSize + overflow
+	for i := 0; i < total; i++ {
+		unhandled <- discover.ReadPacket{
+			Data: []byte{0},
+			Addr: netip.AddrPortFrom(netip.MustParseAddr("1.2.3.4"), uint16(i)),
+		}
+	}
+	close(unhandled)
+	conn.WaitDrained()
+
+	require.EqualValues(t, overflow, conn.Dropped(), "the oldest `overflow` packets should have been dropped")
+
+	// The buffer should hold exactly the newest unhandledBufferSize packets, in
+	// order: ports overflow..total-1.
+	buf := make([]byte, 1500)
+	for want := overflow; want < total; want++ {
+		_, addr, err := conn.ReadFromUDPAddrPort(buf)
+		require.NoError(t, err)
+		require.EqualValues(t, want, addr.Port(), "freshest packets should survive, in order")
+	}
 }

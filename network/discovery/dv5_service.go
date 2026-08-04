@@ -111,6 +111,10 @@ func NewDiscV5Service(pctx context.Context, logger *zap.Logger, opts *Options) (
 		zap.Any("hostDNS", opts.HostDNS),
 	)
 	if err := dvs.initDiscV5Listener(opts); err != nil {
+		// initDiscV5Listener unwinds its own resources, but the context we
+		// derived above is ours to release on this failure path — the discarded
+		// service's Close (which would cancel it) never runs.
+		cancel()
 		return nil, err
 	}
 	return &dvs, nil
@@ -394,7 +398,7 @@ func (dvs *DiscV5Service) initDiscV5Listener(discOpts *Options) (err error) {
 
 	// New discovery, with ProtocolID restriction, to be kept post-fork
 	unhandled := make(chan discover.ReadPacket, unhandledChanSize)
-	sharedConn := NewSharedUDPConn(dvs.ctx, udpConn, unhandled)
+	sharedConn := NewSharedUDPConn(dvs.ctx, dvs.logger, udpConn, unhandled)
 	dvs.sharedConn = sharedConn
 
 	// Everything below can fail before dv5Listener is set, and the caller drops

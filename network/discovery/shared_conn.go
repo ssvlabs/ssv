@@ -6,8 +6,10 @@ import (
 	"net/netip"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/ethereum/go-ethereum/p2p/discover"
+	"go.uber.org/zap"
 )
 
 const (
@@ -20,6 +22,10 @@ const (
 	// unhandledBufferSize bounds how many forwarded packets are held for the
 	// pre-fork listener before drain starts discarding them.
 	unhandledBufferSize = 1024
+
+	// dropWarnInterval rate-limits drain's "buffer full" warning so a sustained
+	// flood produces a periodic heartbeat rather than a line per dropped packet.
+	dropWarnInterval = time.Minute
 )
 
 // SharedUDPConn implements a shared connection: writes go to the underlying
@@ -35,16 +41,19 @@ const (
 // straight off Unhandled — one packet per dispatch cycle — let a burst of junk
 // (scan noise, stray discv4, a flood) stall that listener until it stopped
 // draining the socket, and the kernel dropped valid discv5 traffic. drain
-// always accepts, dropping and counting on overflow instead.
+// always accepts, evicting the oldest buffered packet on overflow — counted and
+// warned — so the freshest survives instead.
 type SharedUDPConn struct {
 	*net.UDPConn
 	Unhandled chan discover.ReadPacket
 
-	buffered   chan discover.ReadPacket
-	readerDone chan struct{}
-	closeOnce  sync.Once
-	drained    sync.WaitGroup
-	dropped    atomic.Uint64
+	logger       *zap.Logger
+	buffered     chan discover.ReadPacket
+	readerDone   chan struct{}
+	closeOnce    sync.Once
+	drained      sync.WaitGroup
+	dropped      atomic.Uint64
+	lastDropWarn time.Time // touched only by drain
 }
 
 // NewSharedUDPConn returns a SharedUDPConn and starts draining unhandled.
@@ -52,10 +61,11 @@ type SharedUDPConn struct {
 // Ownership of unhandled stays with the caller: drain runs until unhandled is
 // closed, which must not happen until the listener producing into it has fully
 // stopped. Closing it earlier panics that producer mid-send.
-func NewSharedUDPConn(ctx context.Context, conn *net.UDPConn, unhandled chan discover.ReadPacket) *SharedUDPConn {
+func NewSharedUDPConn(ctx context.Context, logger *zap.Logger, conn *net.UDPConn, unhandled chan discover.ReadPacket) *SharedUDPConn {
 	s := &SharedUDPConn{
 		UDPConn:    conn,
 		Unhandled:  unhandled,
+		logger:     logger,
 		buffered:   make(chan discover.ReadPacket, unhandledBufferSize),
 		readerDone: make(chan struct{}),
 	}
@@ -64,9 +74,10 @@ func NewSharedUDPConn(ctx context.Context, conn *net.UDPConn, unhandled chan dis
 	return s
 }
 
-// drain moves packets from Unhandled into the internal buffer, discarding them
-// when it is full. It stays receptive for the producer's whole lifetime, so
-// go-ethereum's forwarding send never blocks longer than the handoff.
+// drain moves packets from Unhandled into the internal buffer, evicting the
+// oldest to make room when it is full. It stays receptive for the producer's
+// whole lifetime, so go-ethereum's forwarding send never blocks longer than the
+// handoff.
 //
 // ctx carries the metric context only — it is deliberately not a stop signal.
 // Draining must outlive cancellation: DiscV5Service.Close cancels before it
@@ -76,13 +87,46 @@ func NewSharedUDPConn(ctx context.Context, conn *net.UDPConn, unhandled chan dis
 func (s *SharedUDPConn) drain(ctx context.Context) {
 	defer s.drained.Done()
 	for packet := range s.Unhandled {
+		if !s.bufferPacket(packet) {
+			continue
+		}
+		total := s.dropped.Add(1)
+		recordUnhandledPacketDropped(ctx)
+		s.warnDropping(total)
+	}
+}
+
+// bufferPacket enqueues packet for the reader. When the buffer is full it evicts
+// the oldest packet so the freshest one wins — a real ping response must not be
+// starved by a backlog of junk during a flood. It reports whether a packet was
+// dropped to make room.
+func (s *SharedUDPConn) bufferPacket(packet discover.ReadPacket) (dropped bool) {
+	for {
 		select {
 		case s.buffered <- packet:
+			return dropped
 		default:
-			s.dropped.Add(1)
-			recordUnhandledPacketDropped(ctx)
+		}
+		// Full: evict the oldest and retry. A concurrent read may free a slot
+		// first, in which case nothing is dropped.
+		select {
+		case <-s.buffered:
+			dropped = true
+		default:
 		}
 	}
+}
+
+// warnDropping emits a rate-limited warning while drain is shedding, so an
+// operator watching pre-fork discovery degrade has a log signal, not just the
+// drop counter. Called only from drain, so lastDropWarn needs no locking.
+func (s *SharedUDPConn) warnDropping(total uint64) {
+	if time.Since(s.lastDropWarn) < dropWarnInterval {
+		return
+	}
+	s.lastDropWarn = time.Now()
+	s.logger.Warn("discv5 unhandled-packet buffer full; dropping forwarded packets",
+		zap.Uint64("dropped_total", total))
 }
 
 // Dropped reports how many forwarded packets were discarded due to a full buffer.
