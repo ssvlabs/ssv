@@ -356,7 +356,13 @@ func (dvs *DiscV5Service) checkPeer(ctx context.Context, e PeerEvent) error {
 // exercise initDiscV5Listener's error-path cleanup; it returns the Listener
 // interface, not *discover.UDPv5, so a wrapper can be substituted.
 var listenV5 = func(conn discover.UDPConn, ln *enode.LocalNode, cfg discover.Config) (Listener, error) {
-	return discover.ListenV5(conn, ln, cfg)
+	// Return an untyped nil on error, never a (*discover.UDPv5)(nil) wrapped in
+	// the interface, so a nil check on the result is meaningful for any caller.
+	listener, err := discover.ListenV5(conn, ln, cfg)
+	if err != nil {
+		return nil, err
+	}
+	return listener, nil
 }
 
 // initDiscV5Listener creates a new listener and starts it
