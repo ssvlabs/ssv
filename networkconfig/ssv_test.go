@@ -5,11 +5,13 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"math"
 	"math/big"
 	"reflect"
 	"sort"
 	"testing"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -27,7 +29,9 @@ func TestSSVConfig_MarshalUnmarshalJSON(t *testing.T) {
 		RegistryContractAddr: ethcommon.HexToAddress("0x123456789abcdef0123456789abcdef012345678"),
 		Bootnodes:            []string{"bootnode1", "bootnode2"},
 		DiscoveryProtocolID:  [6]byte{0x05, 0x06, 0x07, 0x08, 0x09, 0x0a},
-		Forks:                SSVForks{},
+		Forks: SSVForks{
+			Boole: 0,
+		},
 	}
 
 	// Marshal to JSON
@@ -66,7 +70,9 @@ func TestSSVConfig_MarshalUnmarshalYAML(t *testing.T) {
 		RegistryContractAddr: ethcommon.HexToAddress("0x123456789abcdef0123456789abcdef012345678"),
 		Bootnodes:            []string{"bootnode1", "bootnode2"},
 		DiscoveryProtocolID:  [6]byte{0x05, 0x06, 0x07, 0x08, 0x09, 0x0a},
-		Forks:                SSVForks{},
+		Forks: SSVForks{
+			Boole: 0,
+		},
 	}
 
 	// Marshal to YAML
@@ -104,6 +110,40 @@ func TestSSVConfig_MarshalUnmarshalYAML(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, originalYAMLMap, remarshaledYAMLMap)
+}
+
+func TestSSVForks_MarshalUppercaseKeys(t *testing.T) {
+	config := SSV{
+		Name:                 "testnet",
+		DomainType:           spectypes.DomainType{0x01, 0x02, 0x03, 0x04},
+		RegistrySyncOffset:   big.NewInt(123),
+		RegistryContractAddr: ethcommon.HexToAddress("0x123456789abcdef0123456789abcdef012345678"),
+		Bootnodes:            []string{"bootnode1"},
+		DiscoveryProtocolID:  [6]byte{0x05, 0x06, 0x07, 0x08, 0x09, 0x0a},
+		Forks: SSVForks{
+			Boole: 3,
+		},
+	}
+
+	yamlBytes, err := yaml.Marshal(&config)
+	require.NoError(t, err)
+
+	var yamlMap map[string]any
+	require.NoError(t, yaml.Unmarshal(yamlBytes, &yamlMap))
+
+	yamlForks, ok := yamlMap["Forks"].(map[string]any)
+	require.True(t, ok, "expected Forks to be a map")
+	assert.Contains(t, yamlForks, "Boole")
+
+	jsonBytes, err := json.Marshal(&config)
+	require.NoError(t, err)
+
+	var jsonMap map[string]any
+	require.NoError(t, json.Unmarshal(jsonBytes, &jsonMap))
+
+	jsonForks, ok := jsonMap["forks"].(map[string]any)
+	require.True(t, ok, "expected forks to be a map")
+	assert.Contains(t, jsonForks, "boole")
 }
 
 // hashStructJSON creates a deterministic hash of a struct by marshaling to sorted JSON
@@ -159,7 +199,9 @@ func TestFieldPreservation(t *testing.T) {
 			RegistryContractAddr: ethcommon.HexToAddress("0x123456789abcdef0123456789abcdef012345678"),
 			Bootnodes:            []string{"bootnode1", "bootnode2"},
 			DiscoveryProtocolID:  [6]byte{0x05, 0x06, 0x07, 0x08, 0x09, 0x0a},
-			Forks:                SSVForks{},
+			Forks: SSVForks{
+				Boole: 0,
+			},
 		}
 
 		// Marshal and unmarshal to test preservation
@@ -181,7 +223,7 @@ func TestFieldPreservation(t *testing.T) {
 		assert.Equal(t, originalHash, unmarshaledHash, "Hash mismatch indicates fields weren't properly preserved in JSON")
 
 		// Store the expected hash - this will fail if a new field is added without updating the tests
-		expectedJSONHash := "a6d7d78c5e55f7239587e2261fc27dfb097045e7284286191202f6a3f6c8b605"
+		expectedJSONHash := "a60ef0b9c9bc7416205e50d576ea645356da685d12556b9aeadb8acccdac2b75"
 		assert.Equal(t, expectedJSONHash, originalHash,
 			"Hash has changed. If you've added a new field, please update the expected hash in this test.")
 	})
@@ -195,7 +237,9 @@ func TestFieldPreservation(t *testing.T) {
 			RegistryContractAddr: ethcommon.HexToAddress("0x123456789abcdef0123456789abcdef012345678"),
 			Bootnodes:            []string{"bootnode1", "bootnode2"},
 			DiscoveryProtocolID:  [6]byte{0x05, 0x06, 0x07, 0x08, 0x09, 0x0a},
-			Forks:                SSVForks{},
+			Forks: SSVForks{
+				Boole: 0,
+			},
 		}
 
 		// Marshal and unmarshal to test preservation
@@ -215,6 +259,120 @@ func TestFieldPreservation(t *testing.T) {
 
 		// The hashes should match if all fields are preserved
 		assert.Equal(t, originalHash, unmarshaledHash, "Hash mismatch indicates fields weren't properly preserved in YAML")
+	})
+}
+
+// TestSSVConfig_UnmarshalForksDefault verifies that a config lacking the "forks" block
+// defaults Boole to math.MaxUint64 (never activates) rather than zero-valuing it to
+// epoch 0 (fork-at-genesis), while a config with an explicit "forks" block (including an
+// explicit zero) is honored verbatim.
+func TestSSVConfig_UnmarshalForksDefault(t *testing.T) {
+	t.Run("JSON: absent forks defaults to MaxUint64", func(t *testing.T) {
+		jsonStr := `{
+			"domain_type": "0x01020304",
+			"discovery_protocol_id": "0x05060708090a"
+		}`
+
+		var cfg SSV
+		require.NoError(t, json.Unmarshal([]byte(jsonStr), &cfg))
+		assert.Equal(t, phase0.Epoch(math.MaxUint64), cfg.Forks.Boole)
+	})
+
+	t.Run("JSON: empty forks block defaults to MaxUint64", func(t *testing.T) {
+		jsonStr := `{
+			"domain_type": "0x01020304",
+			"discovery_protocol_id": "0x05060708090a",
+			"forks": {}
+		}`
+
+		var cfg SSV
+		require.NoError(t, json.Unmarshal([]byte(jsonStr), &cfg))
+		assert.Equal(t, phase0.Epoch(math.MaxUint64), cfg.Forks.Boole)
+	})
+
+	t.Run("JSON: explicit forks with Boole 0 is honored", func(t *testing.T) {
+		jsonStr := `{
+			"domain_type": "0x01020304",
+			"discovery_protocol_id": "0x05060708090a",
+			"forks": {"boole": "0"}
+		}`
+
+		var cfg SSV
+		require.NoError(t, json.Unmarshal([]byte(jsonStr), &cfg))
+		assert.Equal(t, phase0.Epoch(0), cfg.Forks.Boole)
+	})
+
+	t.Run("JSON: explicit forks with a specific value is honored", func(t *testing.T) {
+		jsonStr := `{
+			"domain_type": "0x01020304",
+			"discovery_protocol_id": "0x05060708090a",
+			"forks": {"boole": "12345"}
+		}`
+
+		var cfg SSV
+		require.NoError(t, json.Unmarshal([]byte(jsonStr), &cfg))
+		assert.Equal(t, phase0.Epoch(12345), cfg.Forks.Boole)
+	})
+
+	t.Run("YAML: absent forks defaults to MaxUint64", func(t *testing.T) {
+		yamlStr := `
+DomainType: 0x01020304
+DiscoveryProtocolID: 0x05060708090a
+`
+
+		var cfg SSV
+		require.NoError(t, yaml.Unmarshal([]byte(yamlStr), &cfg))
+		assert.Equal(t, phase0.Epoch(math.MaxUint64), cfg.Forks.Boole)
+	})
+
+	t.Run("YAML: empty forks block defaults to MaxUint64", func(t *testing.T) {
+		yamlStr := `
+DomainType: 0x01020304
+DiscoveryProtocolID: 0x05060708090a
+Forks: {}
+`
+
+		var cfg SSV
+		require.NoError(t, yaml.Unmarshal([]byte(yamlStr), &cfg))
+		assert.Equal(t, phase0.Epoch(math.MaxUint64), cfg.Forks.Boole)
+	})
+
+	t.Run("YAML: null forks block defaults to MaxUint64", func(t *testing.T) {
+		yamlStr := `
+DomainType: 0x01020304
+DiscoveryProtocolID: 0x05060708090a
+Forks:
+`
+
+		var cfg SSV
+		require.NoError(t, yaml.Unmarshal([]byte(yamlStr), &cfg))
+		assert.Equal(t, phase0.Epoch(math.MaxUint64), cfg.Forks.Boole)
+	})
+
+	t.Run("YAML: explicit forks with Boole 0 is honored", func(t *testing.T) {
+		yamlStr := `
+DomainType: 0x01020304
+DiscoveryProtocolID: 0x05060708090a
+Forks:
+  Boole: 0
+`
+
+		var cfg SSV
+		require.NoError(t, yaml.Unmarshal([]byte(yamlStr), &cfg))
+		assert.Equal(t, phase0.Epoch(0), cfg.Forks.Boole)
+	})
+
+	t.Run("YAML: explicit forks with a specific value is honored", func(t *testing.T) {
+		yamlStr := `
+DomainType: 0x01020304
+DiscoveryProtocolID: 0x05060708090a
+Forks:
+  Boole: 12345
+`
+
+		var cfg SSV
+		require.NoError(t, yaml.Unmarshal([]byte(yamlStr), &cfg))
+		assert.Equal(t, phase0.Epoch(12345), cfg.Forks.Boole)
 	})
 }
 

@@ -5,12 +5,12 @@ import (
 	"time"
 
 	"github.com/patrickmn/go-cache"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
 	dutytracer "github.com/ssvlabs/ssv/exporter/dutytracer"
 	"github.com/ssvlabs/ssv/exporter/v1/api"
 	qbftstorage "github.com/ssvlabs/ssv/ibft/storage"
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
@@ -18,7 +18,7 @@ import (
 
 // NewStreamPublisher handles incoming newly decided messages.
 // it forward messages to websocket stream, where messages are cached (1m TTL) to avoid flooding
-func NewStreamPublisher(logger *zap.Logger, domainType spectypes.DomainType, ws api.WebSocketServer) controller.NewDecidedHandler {
+func NewStreamPublisher(logger *zap.Logger, netCfg *networkconfig.Network, ws api.WebSocketServer) controller.NewDecidedHandler {
 	c := cache.New(time.Minute, time.Minute*3/2)
 	feed := ws.BroadcastFeed()
 	return func(msg qbftstorage.Participation) {
@@ -30,13 +30,13 @@ func NewStreamPublisher(logger *zap.Logger, domainType spectypes.DomainType, ws 
 		c.SetDefault(key, true)
 
 		logger.Debug("broadcast decided stream", fields.PubKey(msg.PubKey[:]), fields.Slot(msg.Slot))
-		feed.Send(api.NewParticipantsAPIMsg(domainType, msg))
+		feed.Send(api.NewParticipantsAPIMsg(netCfg, msg))
 	}
 }
 
 // NewDecidedListener handles incoming newly decided messages.
 // it forward messages to websocket stream, where messages are cached (1m TTL) to avoid flooding
-func NewDecidedListener(logger *zap.Logger, domainType spectypes.DomainType, ws api.WebSocketServer, validators registrystorage.ValidatorStore) func(dutytracer.DecidedInfo) {
+func NewDecidedListener(logger *zap.Logger, netCfg *networkconfig.Network, ws api.WebSocketServer, validators registrystorage.ValidatorStore) func(dutytracer.DecidedInfo) {
 	feed := ws.BroadcastFeed()
 	cache := cache.New(time.Minute, 90*time.Second) // 1m TTL, 1.5m eviction to avoid flooding ws stream
 
@@ -65,6 +65,6 @@ func NewDecidedListener(logger *zap.Logger, domainType spectypes.DomainType, ws 
 			return
 		}
 		cache.SetDefault(key, true)
-		feed.Send(api.NewParticipantsAPIMsg(domainType, participation))
+		feed.Send(api.NewParticipantsAPIMsg(netCfg, participation))
 	}
 }

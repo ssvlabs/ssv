@@ -14,6 +14,7 @@ import (
 	"github.com/ssvlabs/ssv/exporter/rolemask"
 	"github.com/ssvlabs/ssv/exporter/traces"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
+	"github.com/ssvlabs/ssv/networkconfig"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 
 	dutytracer "github.com/ssvlabs/ssv/exporter/dutytracer"
@@ -24,18 +25,18 @@ type Exporter struct {
 	svc    *exportercore.Exporter
 }
 
-func NewExporter(logger *zap.Logger, participantStores *ibftstorage.ParticipantStores, traceStore dutyTraceStore, validators registrystorage.ValidatorStore) *Exporter {
+func NewExporter(logger *zap.Logger, participantStores *ibftstorage.ParticipantStores, traceStore dutyTraceStore, validators registrystorage.ValidatorStore, networkConfig *networkconfig.Network) *Exporter {
 	return &Exporter{
 		logger: logger,
-		svc:    exportercore.NewExporter(logger, participantStores, traceStore, validators),
+		svc:    exportercore.NewExporter(logger, participantStores, traceStore, validators, networkConfig),
 	}
 }
 
 type dutyTraceStore interface {
 	GetValidatorDuty(role spectypes.BeaconRole, slot phase0.Slot, index phase0.ValidatorIndex) (*traces.ValidatorDutyTrace, error)
 	GetValidatorDuties(role spectypes.BeaconRole, slot phase0.Slot) ([]*traces.ValidatorDutyTrace, error)
-	GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.CommitteeID, role ...spectypes.BeaconRole) (*traces.CommitteeDutyTrace, error)
-	GetCommitteeDuties(slot phase0.Slot, roles ...spectypes.BeaconRole) ([]*traces.CommitteeDutyTrace, error)
+	GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.CommitteeID, role spectypes.RunnerRole) (*traces.CommitteeDutyTrace, error)
+	GetCommitteeDuties(slot phase0.Slot, roles ...spectypes.RunnerRole) ([]*traces.CommitteeDutyTrace, error)
 	GetCommitteeID(slot phase0.Slot, index phase0.ValidatorIndex) (spectypes.CommitteeID, error)
 	GetCommitteeDutyLinks(slot phase0.Slot) ([]*traces.CommitteeDutyLink, error)
 	GetValidatorDecideds(role spectypes.BeaconRole, slot phase0.Slot, indices []phase0.ValidatorIndex) ([]dutytracer.ParticipantsRangeIndexEntry, error)

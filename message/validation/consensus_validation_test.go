@@ -10,6 +10,7 @@ import (
 
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 func TestMessageValidator_currentEstimatedRound(t *testing.T) {
@@ -124,13 +125,13 @@ func TestMessageValidator_currentEstimatedRound(t *testing.T) {
 		},
 		{
 			name:         "aggregator uses two-third slot delay before round timeouts start",
-			role:         spectypes.RoleAggregator,
+			role:         ssvtypes.RoleAggregator,
 			timeIntoSlot: netCfg.SlotDuration / 3 * 2,
 			want:         specqbft.FirstRound,
 		},
 		{
 			name:         "sync committee contribution advances after two-third slot delay plus quick timeout",
-			role:         spectypes.RoleSyncCommitteeContribution,
+			role:         ssvtypes.RoleSyncCommitteeContribution,
 			timeIntoSlot: netCfg.SlotDuration/3*2 + roundtimer.QuickTimeout,
 			want:         specqbft.FirstRound + 1,
 		},

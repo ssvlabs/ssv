@@ -9,6 +9,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/ibft/storage"
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 )
@@ -56,7 +57,7 @@ func (h *Handler) HandleUnknownQuery(nm *NetworkMessage) {
 }
 
 // HandleParticipantsQuery handles TypeParticipants queries.
-func (h *Handler) HandleParticipantsQuery(store *storage.ParticipantStores, nm *NetworkMessage, domain spectypes.DomainType) {
+func (h *Handler) HandleParticipantsQuery(store *storage.ParticipantStores, nm *NetworkMessage, netCfg *networkconfig.Network) {
 	h.logger.Debug("handles query request",
 		zap.Uint64("from", nm.Msg.Filter.From),
 		zap.Uint64("to", nm.Msg.Filter.To),
@@ -103,7 +104,7 @@ func (h *Handler) HandleParticipantsQuery(store *storage.ParticipantStores, nm *
 		res.Data = []string{"internal error - could not get participants messages"}
 	} else {
 		participations := toParticipations(role, spectypes.ValidatorPK(pkRaw), participantsList)
-		data, err := ParticipantsAPIData(domain, participations...)
+		data, err := ParticipantsAPIData(netCfg, participations...)
 		if err != nil {
 			res.Data = []string{err.Error()}
 		} else {

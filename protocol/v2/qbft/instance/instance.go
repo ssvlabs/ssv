@@ -51,7 +51,7 @@ func NewInstance(
 	signer ssvtypes.OperatorSigner,
 	roundTimerF ssv.QBFTRoundTimerF,
 ) *Instance {
-	runnerRole := spectypes.RunnerRole(spectypes.RoleUnknown) // RoleUnknown is of int type, hence have to type-cast
+	runnerRole := spectypes.RoleUnknown
 	if len(identifier) == 56 {
 		runnerRole = spectypes.MessageID(identifier).GetRoleType()
 	}
@@ -171,7 +171,8 @@ func (i *Instance) Broadcast(msg *spectypes.SignedSSVMessage) error {
 		return spectypes.NewError(spectypes.InstanceStoppedProcessingMessagesErrorCode, "instance is no longer considered relevant")
 	}
 
-	return i.GetConfig().GetNetwork().Broadcast(msg.SSVMessage.GetID(), msg)
+	net := i.GetConfig().GetNetwork()
+	return net.BroadcastAtSlot(msg, phase0.Slot(i.State.Height))
 }
 
 func allSigners(all []*specqbft.ProcessingMessage) []spectypes.OperatorID {

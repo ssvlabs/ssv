@@ -14,7 +14,6 @@ import (
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -26,6 +25,7 @@ import (
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	blindutil "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon/blind"
+	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
@@ -35,7 +35,7 @@ type ProposerRunner struct {
 	*BaseRunner
 
 	beacon              beacon.BeaconNode
-	network             specqbft.Network
+	network             protocolp2p.Network
 	signer              ekm.BeaconSigner
 	operatorSigner      ssvtypes.OperatorSigner
 	doppelgangerHandler DoppelgangerProvider
@@ -221,7 +221,7 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 		r.cachedBlindedBlockSSZ = byts
 	}
 
-	input := &spectypes.ValidatorConsensusData{
+	input := &spectypes.ProposerConsensusData{
 		Duty:    *duty,
 		Version: blindedVBlk.Version,
 		DataSSZ: byts,
@@ -240,7 +240,7 @@ func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logge
 	span := trace.SpanFromContext(ctx)
 
 	span.AddEvent("processing QBFT consensus msg")
-	decided, decidedValue, err := r.baseConsensusMsgProcessing(ctx, logger, r.ValCheck.CheckValue, signedMsg, &spectypes.ValidatorConsensusData{})
+	decided, decidedValue, err := r.baseConsensusMsgProcessing(ctx, logger, r.ValCheck.CheckValue, signedMsg, &spectypes.ProposerConsensusData{})
 	if err != nil {
 		return fmt.Errorf("failed processing consensus message: %w", err)
 	}
@@ -253,10 +253,7 @@ func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logge
 	r.measurements.EndConsensus()
 	recordConsensusDuration(ctx, r.measurements.ConsensusTime(), spectypes.RoleProposer)
 
-	cd, err := validatorConsensusDataFromEncoder(decidedValue)
-	if err != nil {
-		return fmt.Errorf("decided value: %w", err)
-	}
+	cd := decidedValue.(*spectypes.ProposerConsensusData)
 	span.SetAttributes(
 		observability.BeaconSlotAttribute(cd.Duty.Slot),
 		observability.ValidatorPublicKeyAttribute(cd.Duty.PubKey),
@@ -302,7 +299,8 @@ func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logge
 		Messages: []*spectypes.PartialSignatureMessage{msg},
 	}
 
-	msgID := spectypes.NewMsgID(r.NetworkConfig.DomainType, r.GetShare().ValidatorPubKey[:], r.RunnerRoleType)
+	domain := r.NetworkConfig.DomainTypeAtSlot(cd.Duty.Slot)
+	msgID := spectypes.NewMsgID(domain, r.GetShare().ValidatorPubKey[:], r.RunnerRoleType)
 	encodedMsg, err := postConsensusMsg.Encode()
 	if err != nil {
 		return fmt.Errorf("could not encode post consensus partial signature message: %w", err)
@@ -328,7 +326,7 @@ func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logge
 
 	r.measurements.StartPostConsensus()
 	span.AddEvent("broadcasting post consensus partial signature message")
-	if err := r.GetNetwork().Broadcast(msgID, msgToBroadcast); err != nil {
+	if err := r.GetNetwork().BroadcastAtSlot(msgToBroadcast, postConsensusMsg.Slot); err != nil {
 		return fmt.Errorf("can't broadcast partial post consensus sig: %w", err)
 	}
 	const broadcastedPostConsensusMsgEvent = "broadcasted post-consensus partial signature message"
@@ -391,7 +389,7 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 	// Other operators will keep submitting the blinded variant.
 	// TODO: should we send the block at all if we're not the leader? It's probably not effective but
 	//		I left it for now to keep backwards compatibility.
-	validatorConsensusData := &spectypes.ValidatorConsensusData{}
+	validatorConsensusData := &spectypes.ProposerConsensusData{}
 	err = validatorConsensusData.Decode(r.State.DecidedValue)
 	if err != nil {
 		return fmt.Errorf("could not decode decided validator consensus data: %w", err)
@@ -464,7 +462,7 @@ func (r *ProposerRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, p
 
 // expectedPostConsensusRootsAndDomain an INTERNAL function, returns the expected post-consensus roots to sign
 func (r *ProposerRunner) expectedPostConsensusRootsAndDomain(context.Context) ([]ssz.HashRoot, phase0.DomainType, error) {
-	validatorConsensusData := &spectypes.ValidatorConsensusData{}
+	validatorConsensusData := &spectypes.ProposerConsensusData{}
 	err := validatorConsensusData.Decode(r.State.DecidedValue)
 	if err != nil {
 		return nil, phase0.DomainType{}, fmt.Errorf("could not decode consensus data: %w", err)
@@ -524,7 +522,7 @@ func (r *ProposerRunner) executeDuty(ctx context.Context, logger *zap.Logger, du
 		Messages: []*spectypes.PartialSignatureMessage{msg},
 	}
 
-	logger.Debug("signing and broadcasting randao partial sig", fields.Slot(duty.DutySlot()))
+	logger.Debug("signing and broadcasting randao partial sig", fields.Slot(proposerDuty.DutySlot()))
 
 	r.measurements.StartPreConsensus()
 	if err := r.signAndBroadcastPartialSigMsgs(ctx, r.network, r.operatorSigner, r.GetShare().ValidatorPubKey[:], msgs); err != nil {
@@ -543,12 +541,20 @@ func (r *ProposerRunner) remainingProposerDelay(slot phase0.Slot, now time.Time)
 	return 0
 }
 
-func (r *ProposerRunner) GetNetwork() specqbft.Network {
+func (r *ProposerRunner) GetNetwork() protocolp2p.Network {
 	return r.network
 }
 
 func (r *ProposerRunner) GetBeaconNode() beacon.BeaconNode {
 	return r.beacon
+}
+
+func (r *ProposerRunner) GetShare() *spectypes.Share {
+	// TODO better solution for this
+	for _, share := range r.Share {
+		return share
+	}
+	return nil
 }
 
 func (r *ProposerRunner) GetSigner() ekm.BeaconSigner {

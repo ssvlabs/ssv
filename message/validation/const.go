@@ -42,9 +42,12 @@ const (
 )
 
 const (
-	partialSignatureSize           = 96
-	partialSignatureMsgSize        = partialSignatureSize + rootSize + operatorIDSize + validatorIndexSize
-	maxPartialSignatureMessages    = 1000
+	partialSignatureSize    = 96
+	partialSignatureMsgSize = partialSignatureSize + rootSize + operatorIDSize + validatorIndexSize
+	// maxPartialSignatureMessages is the post-fork worst case (boole RoleAggregatorCommittee). The
+	// count derives from the inner ssv-spec types/spectest/tests/maxmsgsize.MaxSizePartialSignatureMessages;
+	// the drift guard in const_test.go checks the full envelope, MaxSizeSSVMessageFromPartialSignatureMessages.
+	maxPartialSignatureMessages    = 5048
 	partialSigMsgTypeSize          = 8 // uint64
 	maxPartialSignatureMsgsSize    = partialSigMsgTypeSize + slotSize + maxPartialSignatureMessages*partialSignatureMsgSize
 	maxEncodedPartialSignatureSize = maxPartialSignatureMsgsSize + maxPartialSignatureMsgsSize/encodingOverheadDivisor + 4

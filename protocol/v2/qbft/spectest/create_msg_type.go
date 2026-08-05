@@ -87,7 +87,7 @@ func (test *CreateMsgSpecTest) RunCreateMsg(t *testing.T) {
 	default:
 		t.Fail()
 	}
-	spectests.AssertErrorCode(t, test.ExpectedErrorCode, err)
+	spectests.AssertErrorCode(t, adjustExpectedErrorCode(test.ExpectedErrorCode), err)
 
 	r, err := msg.GetRoot()
 	require.NoError(t, err)

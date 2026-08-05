@@ -42,7 +42,7 @@ func TestValidatorDuty(t *testing.T) {
 
 	const (
 		slot         = phase0.Slot(1)
-		role, bnRole = spectypes.RoleAggregator, spectypes.BNRoleAggregator
+		role, bnRole = ssvtypes.RoleAggregator, spectypes.BNRoleAggregator
 		vIndex       = phase0.ValidatorIndex(55)
 	)
 
@@ -337,7 +337,7 @@ func TestValidatorDuty(t *testing.T) {
 
 		proposalMsg.Data = data
 
-		pData, err := new(spectypes.ValidatorConsensusData).Encode()
+		pData, err := new(spectypes.ProposerConsensusData).Encode()
 		require.NoError(t, err)
 
 		proposalMsg.SignedSSVMessage.FullData = pData
@@ -377,7 +377,7 @@ func TestValidatorDuties(t *testing.T) {
 
 	const (
 		slot         = phase0.Slot(1)
-		role, bnRole = spectypes.RoleAggregator, spectypes.BNRoleAggregator
+		role, bnRole = ssvtypes.RoleAggregator, spectypes.BNRoleAggregator
 		vIndex       = phase0.ValidatorIndex(55)
 	)
 
@@ -486,7 +486,7 @@ func TestCommitteeDuty(t *testing.T) {
 		partSigMsg := buildPartialSigMessage(identifier, partSigMessagesData)
 		tracer.Collect(t.Context(), partSigMsg, dummyVerify)
 
-		duty, err := tracer.GetCommitteeDuty(slot, committeeID)
+		duty, err := tracer.GetCommitteeDuty(slot, committeeID, spectypes.RoleCommittee)
 		require.NoError(t, err)
 		require.NotNil(t, duty)
 		assert.Equal(t, slot, duty.Slot)
@@ -506,7 +506,7 @@ func TestCommitteeDuty(t *testing.T) {
 		proposal := buildCommitteeProposalWithBeaconVote(identifier, slot, testBVData)
 		tracer.Collect(t.Context(), proposal, dummyVerify)
 
-		duty, err := tracer.GetCommitteeDuty(slot, committeeID)
+		duty, err := tracer.GetCommitteeDuty(slot, committeeID, spectypes.RoleCommittee)
 		require.NoError(t, err)
 		require.NotNil(t, duty)
 		assert.Equal(t, slot, duty.Slot)
@@ -527,7 +527,7 @@ func TestCommitteeDuty(t *testing.T) {
 		proposalMsg := buildConsensusMsg(identifier, specqbft.ProposalMsgType, slot, nil)
 		tracer.Collect(t.Context(), proposalMsg, dummyVerify)
 
-		duty, err := tracer.GetCommitteeDuty(slot, committeeID)
+		duty, err := tracer.GetCommitteeDuty(slot, committeeID, spectypes.RoleCommittee)
 		require.NoError(t, err)
 		require.NotNil(t, duty)
 		assert.Equal(t, slot, duty.Slot)
@@ -553,7 +553,7 @@ func TestCommitteeDuty(t *testing.T) {
 		prepareMsg := buildConsensusMsg(identifier, specqbft.PrepareMsgType, slot, nil)
 		tracer.Collect(t.Context(), prepareMsg, dummyVerify)
 
-		duty, err := tracer.GetCommitteeDuty(slot, committeeID)
+		duty, err := tracer.GetCommitteeDuty(slot, committeeID, spectypes.RoleCommittee)
 		require.NoError(t, err)
 		require.NotNil(t, duty)
 		assert.Equal(t, slot, duty.Slot)
@@ -579,7 +579,7 @@ func TestCommitteeDuty(t *testing.T) {
 		decided := buildConsensusMsg(identifier, specqbft.CommitMsgType, slot, generateDecidedMessage(t, identifier))
 		tracer.Collect(t.Context(), decided, dummyVerify)
 
-		duty, err := tracer.GetCommitteeDuty(slot, committeeID)
+		duty, err := tracer.GetCommitteeDuty(slot, committeeID, spectypes.RoleCommittee)
 		require.NoError(t, err)
 		require.NotNil(t, duty)
 		assert.Equal(t, slot, duty.Slot)
@@ -620,7 +620,7 @@ func TestCommitteeDuty(t *testing.T) {
 
 		tracer.Collect(t.Context(), commitMsg, dummyVerify)
 
-		duty, err := tracer.GetCommitteeDuty(slot, committeeID)
+		duty, err := tracer.GetCommitteeDuty(slot, committeeID, spectypes.RoleCommittee)
 		require.NoError(t, err)
 		require.NotNil(t, duty)
 		assert.Equal(t, slot, duty.Slot)
@@ -643,7 +643,7 @@ func TestCommitteeDuty(t *testing.T) {
 		roundChangeMsg1 := buildConsensusMsg(identifier, specqbft.RoundChangeMsgType, slot, nil)
 		tracer.Collect(t.Context(), roundChangeMsg1, dummyVerify)
 
-		duty, err := tracer.GetCommitteeDuty(slot, committeeID)
+		duty, err := tracer.GetCommitteeDuty(slot, committeeID, spectypes.RoleCommittee)
 		require.NoError(t, err)
 		require.NotNil(t, duty)
 		assert.Equal(t, slot, duty.Slot)
@@ -671,7 +671,7 @@ func TestCommitteeDuty(t *testing.T) {
 
 		tracer.Collect(t.Context(), roundChangeMsg2, dummyVerify)
 
-		duty, err := tracer.GetCommitteeDuty(slot, committeeID)
+		duty, err := tracer.GetCommitteeDuty(slot, committeeID, spectypes.RoleCommittee)
 		require.NoError(t, err)
 		require.NotNil(t, duty)
 		assert.Equal(t, slot, duty.Slot)
@@ -700,7 +700,7 @@ func TestCommitteeDuty(t *testing.T) {
 
 		tracer.Collect(t.Context(), proposalMsg, dummyVerify)
 
-		duty, err := tracer.GetCommitteeDuty(slot, committeeID)
+		duty, err := tracer.GetCommitteeDuty(slot, committeeID, spectypes.RoleCommittee)
 		require.NoError(t, err)
 		require.NotNil(t, duty)
 		assert.Equal(t, slot, duty.Slot)
@@ -723,7 +723,7 @@ func TestCommitteeDuty(t *testing.T) {
 		require.Empty(t, round1.Commits)
 	}
 
-	duties, err := tracer.GetCommitteeDuties(slot, spectypes.BNRoleAttester)
+	duties, err := tracer.GetCommitteeDuties(slot, spectypes.RoleCommittee)
 	require.NoError(t, err)
 	require.NotNil(t, duties)
 	require.Len(t, duties, 1)
@@ -745,27 +745,77 @@ func TestCollector_GetCommitteeDuty(t *testing.T) {
 	committeeID := spectypes.CommitteeID{1}
 	slot := phase0.Slot(10)
 
-	_, err := collector.GetCommitteeDuty(slot, committeeID, spectypes.BNRoleAttester)
-	require.ErrorIs(t, err, ErrNotFound)
-	dutyStore.committeeDutyTrace.Attester = append(dutyStore.committeeDutyTrace.Attester,
-		&traces.SignerData{
-			Signer: 1,
-		})
-
-	duty, err := collector.GetCommitteeDuty(slot, committeeID, spectypes.BNRoleAttester)
+	duty, err := collector.GetCommitteeDuty(slot, committeeID, spectypes.RoleCommittee)
 	require.NoError(t, err)
 	require.NotNil(t, duty)
 	require.Equal(t, slot, duty.Slot)
 	require.Equal(t, committeeID, duty.CommitteeID)
 
-	dutyStore.committeeDutyTrace.SyncCommittee = append(dutyStore.committeeDutyTrace.SyncCommittee,
-		&traces.SignerData{
-			Signer: 1,
-		})
+	// Requesting the aggregator-committee role must not return the committee-role trace.
+	_, err = collector.GetCommitteeDuty(slot, committeeID, spectypes.RoleAggregatorCommittee)
+	require.ErrorIs(t, err, ErrNotFound)
+}
 
-	duty, err = collector.GetCommitteeDuty(slot, committeeID, spectypes.BNRoleSyncCommittee)
+// TestCollector_CommitteeAndAggregatorCommitteeTracesCoexist is a regression guard: Committee and
+// AggregatorCommittee duty traces for the SAME committeeID+slot must be kept as two distinct
+// in-memory cache entries (keyed by {committeeID, role}), not overwrite one another.
+func TestCollector_CommitteeAndAggregatorCommitteeTracesCoexist(t *testing.T) {
+	logger := zap.NewNop()
+	ctrl := gomock.NewController(t)
+	vstore := registrystoragemocks.NewMockValidatorStore(ctrl)
+	dutyStore := new(mockDutyTraceStore)
+
+	collector := New(logger, vstore, nil, dutyStore, networkconfig.TestNetwork.Beacon, nil, nil)
+
+	slot := phase0.Slot(50)
+	committeeID := spectypes.CommitteeID{7}
+
+	committeeTrace, lateC, err := collector.getOrCreateCommitteeTrace(slot, committeeID, spectypes.RoleCommittee)
 	require.NoError(t, err)
-	require.NotNil(t, duty)
+	require.False(t, lateC)
+	require.NotNil(t, committeeTrace)
+	committeeTrace.OperatorIDs = []uint64{1, 2, 3}
+
+	aggTrace, lateA, err := collector.getOrCreateCommitteeTrace(slot, committeeID, spectypes.RoleAggregatorCommittee)
+	require.NoError(t, err)
+	require.False(t, lateA)
+	require.NotNil(t, aggTrace)
+	aggTrace.OperatorIDs = []uint64{4, 5, 6}
+
+	// The two traces must be distinct objects, not aliases of the same underlying trace.
+	require.NotSame(t, committeeTrace, aggTrace)
+	require.Equal(t, spectypes.RoleCommittee, committeeTrace.Role)
+	require.Equal(t, spectypes.RoleAggregatorCommittee, aggTrace.Role)
+	require.Equal(t, []uint64{1, 2, 3}, committeeTrace.OperatorIDs)
+	require.Equal(t, []uint64{4, 5, 6}, aggTrace.OperatorIDs)
+
+	// Re-fetching by role must yield the same (unmutated-by-the-other-role) trace.
+	committeeTraceAgain, _, err := collector.getOrCreateCommitteeTrace(slot, committeeID, spectypes.RoleCommittee)
+	require.NoError(t, err)
+	require.Equal(t, []uint64{1, 2, 3}, committeeTraceAgain.OperatorIDs)
+
+	aggTraceAgain, _, err := collector.getOrCreateCommitteeTrace(slot, committeeID, spectypes.RoleAggregatorCommittee)
+	require.NoError(t, err)
+	require.Equal(t, []uint64{4, 5, 6}, aggTraceAgain.OperatorIDs)
+
+	// Both keys must be present in the committeeTraces cache.
+	var foundRoles []spectypes.RunnerRole
+	collector.committeeTraces.Range(func(key committeeTraceKey, _ *hashmap.Map[phase0.Slot, *committeeDutyTrace]) bool {
+		if key.id == committeeID {
+			foundRoles = append(foundRoles, key.role)
+		}
+		return true
+	})
+	require.ElementsMatch(t, []spectypes.RunnerRole{spectypes.RoleCommittee, spectypes.RoleAggregatorCommittee}, foundRoles)
+
+	// GetCommitteeDuty must resolve each role independently.
+	duty, err := collector.GetCommitteeDuty(slot, committeeID, spectypes.RoleCommittee)
+	require.NoError(t, err)
+	require.Equal(t, []uint64{1, 2, 3}, duty.OperatorIDs)
+
+	aggDuty, err := collector.GetCommitteeDuty(slot, committeeID, spectypes.RoleAggregatorCommittee)
+	require.NoError(t, err)
+	require.Equal(t, []uint64{4, 5, 6}, aggDuty.OperatorIDs)
 }
 
 func buildPartialSigMessage(identifier spectypes.MessageID, data []byte) *queue.SSVMessage {
@@ -935,7 +985,7 @@ func TestCollector_getOrCreateCommitteeTrace(t *testing.T) {
 		collector.lastEvictedSlot.Store(uint64(5))
 
 		t.Run("committee not found", func(t *testing.T) {
-			trace, late, err := collector.getOrCreateCommitteeTrace(slot, committeeID)
+			trace, late, err := collector.getOrCreateCommitteeTrace(slot, committeeID, spectypes.RoleCommittee)
 			require.NoError(t, err)
 			require.False(t, late)
 			require.NotNil(t, trace)
@@ -944,10 +994,10 @@ func TestCollector_getOrCreateCommitteeTrace(t *testing.T) {
 		})
 
 		t.Run("committee found, slot not found", func(t *testing.T) {
-			_, _, err := collector.getOrCreateCommitteeTrace(slot-1, committeeID) // create for committee
+			_, _, err := collector.getOrCreateCommitteeTrace(slot-1, committeeID, spectypes.RoleCommittee) // create for committee
 			require.NoError(t, err)
 
-			trace, late, err := collector.getOrCreateCommitteeTrace(slot, committeeID)
+			trace, late, err := collector.getOrCreateCommitteeTrace(slot, committeeID, spectypes.RoleCommittee)
 			require.NoError(t, err)
 			require.False(t, late)
 			require.NotNil(t, trace)
@@ -955,10 +1005,10 @@ func TestCollector_getOrCreateCommitteeTrace(t *testing.T) {
 		})
 
 		t.Run("committee and slot found", func(t *testing.T) {
-			trace1, _, err := collector.getOrCreateCommitteeTrace(slot, committeeID)
+			trace1, _, err := collector.getOrCreateCommitteeTrace(slot, committeeID, spectypes.RoleCommittee)
 			require.NoError(t, err)
 
-			trace2, late, err := collector.getOrCreateCommitteeTrace(slot, committeeID)
+			trace2, late, err := collector.getOrCreateCommitteeTrace(slot, committeeID, spectypes.RoleCommittee)
 			require.NoError(t, err)
 			require.False(t, late)
 			require.Same(t, trace1, trace2)
@@ -972,9 +1022,9 @@ func TestCollector_getOrCreateCommitteeTrace(t *testing.T) {
 		t.Run("committeeID is in flight", func(t *testing.T) {
 			collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.Beacon, nil, nil)
 			collector.lastEvictedSlot.Store(uint64(evictionSlot))
-			_, _ = collector.inFlightCommittee.GetOrSet(committeeID, struct{}{})
+			_, _ = collector.inFlightCommittee.GetOrSet(committeeTraceKey{id: committeeID, role: spectypes.RoleCommittee}, struct{}{})
 
-			_, late, err := collector.getOrCreateCommitteeTrace(slot, committeeID)
+			_, late, err := collector.getOrCreateCommitteeTrace(slot, committeeID, spectypes.RoleCommittee)
 			require.ErrorIs(t, err, errInFlight)
 			require.False(t, late)
 		})
@@ -983,7 +1033,7 @@ func TestCollector_getOrCreateCommitteeTrace(t *testing.T) {
 			collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.Beacon, nil, nil)
 			collector.lastEvictedSlot.Store(uint64(evictionSlot))
 
-			trace, late, err := collector.getOrCreateCommitteeTrace(slot, committeeID)
+			trace, late, err := collector.getOrCreateCommitteeTrace(slot, committeeID, spectypes.RoleCommittee)
 			require.NoError(t, err)
 			require.True(t, late)
 			require.NotNil(t, trace)
@@ -994,13 +1044,13 @@ func TestCollector_getOrCreateCommitteeTrace(t *testing.T) {
 		t.Run("committeeID found on disk", func(t *testing.T) {
 			collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.Beacon, nil, nil)
 			// Setup: Create a collector, save a trace, and then evict it to disk.
-			trace, _, err := collector.getOrCreateCommitteeTrace(slot, committeeID)
+			trace, _, err := collector.getOrCreateCommitteeTrace(slot, committeeID, spectypes.RoleCommittee)
 			require.NoError(t, err)
 			trace.OperatorIDs = []uint64{1, 2, 3}
-			collector.store.SaveCommitteeDuties(slot, []*traces.CommitteeDutyTrace{trace.safeDeepCopy()})
+			collector.store.SaveCommitteeDuties(slot, spectypes.RoleCommittee, []*traces.CommitteeDutyTrace{trace.safeDeepCopy()})
 			collector.lastEvictedSlot.Store(uint64(slot))
 			// Test: Create a new collector to ensure cache is empty and get the trace.
-			diskTrace, late, err := collector.getOrCreateCommitteeTrace(slot, committeeID)
+			diskTrace, late, err := collector.getOrCreateCommitteeTrace(slot, committeeID, spectypes.RoleCommittee)
 			require.NoError(t, err)
 			require.True(t, late)
 			require.NotNil(t, diskTrace)
@@ -1016,11 +1066,11 @@ func TestCollector_getOrCreateCommitteeTrace(t *testing.T) {
 			collector := New(zap.NewNop(), vstore, nil, dutyTraceStore, networkconfig.TestNetwork.Beacon, nil, nil)
 			collector.lastEvictedSlot.Store(uint64(evictionSlot))
 
-			trace, late, err := collector.getOrCreateCommitteeTrace(slot, committeeID)
+			trace, late, err := collector.getOrCreateCommitteeTrace(slot, committeeID, spectypes.RoleCommittee)
 			require.ErrorIs(t, err, innerErr)
 			require.False(t, late)
 			require.Nil(t, trace)
-			require.False(t, collector.inFlightCommittee.Has(committeeID))
+			require.False(t, collector.inFlightCommittee.Has(committeeTraceKey{id: committeeID, role: spectypes.RoleCommittee}))
 		})
 	})
 }
@@ -1046,7 +1096,7 @@ func TestCollector_processPartialSigCommittee_UnknownRootBuffers(t *testing.T) {
 	validators.EXPECT().Committee(committeeID).Return(committee, true).AnyTimes()
 
 	// Prepare the trace with known roots so the message root is treated as unknown
-	trace, _, err := tracer.getOrCreateCommitteeTrace(slot, committeeID)
+	trace, _, err := tracer.getOrCreateCommitteeTrace(slot, committeeID, spectypes.RoleCommittee)
 	require.NoError(t, err)
 	trace.Lock()
 	trace.roleRootsReady = true
@@ -1073,7 +1123,7 @@ func TestCollector_processPartialSigCommittee_UnknownRootBuffers(t *testing.T) {
 	require.NoError(t, tracer.Collect(t.Context(), msg, dummyVerify))
 
 	// Inspect internal pending buffer; nothing should be classified yet
-	trace2, _, err := tracer.getOrCreateCommitteeTrace(slot, committeeID)
+	trace2, _, err := tracer.getOrCreateCommitteeTrace(slot, committeeID, spectypes.RoleCommittee)
 	require.NoError(t, err)
 	trace2.Lock()
 	defer trace2.Unlock()
@@ -1151,7 +1201,7 @@ func TestCollector_FlushPending_Timestamps(t *testing.T) {
 	require.NoError(t, tracer.Collect(t.Context(), proposal, dummyVerify))
 
 	// Now the committee duty should contain two signer records for the same signer with distinct timestamps
-	duty, err := tracer.GetCommitteeDuty(slot, committeeID)
+	duty, err := tracer.GetCommitteeDuty(slot, committeeID, spectypes.RoleCommittee)
 	require.NoError(t, err)
 	require.NotNil(t, duty)
 
@@ -1302,8 +1352,8 @@ func TestValidatorDutyTrace_toBNRole(t *testing.T) {
 		err  bool
 	}{
 		{spectypes.RoleProposer, spectypes.BNRoleProposer, false},
-		{spectypes.RoleAggregator, spectypes.BNRoleAggregator, false},
-		{spectypes.RoleSyncCommitteeContribution, spectypes.BNRoleSyncCommitteeContribution, false},
+		{ssvtypes.RoleAggregator, spectypes.BNRoleAggregator, false},
+		{ssvtypes.RoleSyncCommitteeContribution, spectypes.BNRoleSyncCommitteeContribution, false},
 		{spectypes.RoleValidatorRegistration, spectypes.BNRoleValidatorRegistration, false},
 		{spectypes.RoleVoluntaryExit, spectypes.BNRoleVoluntaryExit, false},
 		{spectypes.RoleCommittee, spectypes.BNRoleUnknown, true},
@@ -1324,7 +1374,7 @@ func TestCollector_newPartialSigVerifyCtx_EmptyMessages(t *testing.T) {
 	collector := &Collector{logger: zap.NewNop()}
 	msg := &queue.SSVMessage{
 		SSVMessage: &spectypes.SSVMessage{
-			MsgID: spectypes.NewMsgID([4]byte{}, []byte("pk"), spectypes.RoleAggregator),
+			MsgID: spectypes.NewMsgID([4]byte{}, []byte("pk"), ssvtypes.RoleAggregator),
 		},
 	}
 	pSigMessages := &spectypes.PartialSignatureMessages{
@@ -1337,7 +1387,7 @@ func TestCollector_newPartialSigVerifyCtx_EmptyMessages(t *testing.T) {
 		got = collector.newPartialSigVerifyCtx(msg, pSigMessages)
 	})
 
-	require.Equal(t, spectypes.RoleAggregator, got.runnerRole)
+	require.Equal(t, ssvtypes.RoleAggregator, got.runnerRole)
 	require.Equal(t, phase0.Slot(12), got.slot)
 	require.Zero(t, got.signer)
 	require.Zero(t, got.root)
@@ -1368,7 +1418,7 @@ func TestCollector_Collect_WrapVerifyPartialSigErrForValidator(t *testing.T) {
 	validators.EXPECT().ValidatorByIndex(missingIndex).Return(nil, false)
 
 	collector := New(logger, validators, nil, new(mockDutyTraceStore), networkconfig.TestNetwork.Beacon, nil, nil)
-	msgID := spectypes.NewMsgID([4]byte{}, []byte("pk"), spectypes.RoleAggregator)
+	msgID := spectypes.NewMsgID([4]byte{}, []byte("pk"), ssvtypes.RoleAggregator)
 	pSigMessages := &spectypes.PartialSignatureMessages{
 		Type: spectypes.PostConsensusPartialSig,
 		Slot: slot,
@@ -1397,7 +1447,7 @@ func TestCollector_Collect_WrapVerifyPartialSigErrForValidator(t *testing.T) {
 	require.ErrorIs(t, err, verifyErr)
 	require.ErrorContains(t, err, "verify partial sig")
 	require.ErrorContains(t, err, fmt.Sprintf("slot=%d", slot))
-	require.ErrorContains(t, err, fmt.Sprintf("runner_role=%d", spectypes.RoleAggregator))
+	require.ErrorContains(t, err, fmt.Sprintf("runner_role=%d", ssvtypes.RoleAggregator))
 	require.ErrorContains(t, err, fmt.Sprintf("signer=%d", signer))
 	require.ErrorContains(t, err, fmt.Sprintf("root=%x", root))
 	require.ErrorContains(t, err, "partial_msgs=2")
@@ -1501,12 +1551,12 @@ func TestCollector_lateMessage(t *testing.T) {
 
 		var committeeID spectypes.CommitteeID
 		copy(committeeID[:], msgID.GetDutyExecutorID()[16:])
-		collector.inFlightCommittee.Set(committeeID, struct{}{})
+		collector.inFlightCommittee.Set(committeeTraceKey{id: committeeID, role: spectypes.RoleCommittee}, struct{}{})
 		collector.lastEvictedSlot.Store(uint64(1))
 
 		go func() {
 			time.Sleep(time.Millisecond * 400)
-			collector.inFlightCommittee.Delete(committeeID)
+			collector.inFlightCommittee.Delete(committeeTraceKey{id: committeeID, role: spectypes.RoleCommittee})
 		}()
 
 		dutyStore.err = errors.New("error")
@@ -1540,7 +1590,7 @@ func TestCollector_lateMessage(t *testing.T) {
 
 		var committeeID spectypes.CommitteeID
 		copy(committeeID[:], msgID.GetDutyExecutorID()[16:])
-		collector.inFlightCommittee.Set(committeeID, struct{}{})
+		collector.inFlightCommittee.Set(committeeTraceKey{id: committeeID, role: spectypes.RoleCommittee}, struct{}{})
 		collector.lastEvictedSlot.Store(uint64(1))
 		collector.collectLateMessage(t.Context(), msg, nil)
 
@@ -1581,7 +1631,7 @@ func buildInFlightLateMsg(c *Collector) *queue.SSVMessage {
 	msgID := spectypes.NewMsgID(spectypes.DomainType{1}, []byte{1}, spectypes.RoleCommittee)
 	var committeeID spectypes.CommitteeID
 	copy(committeeID[:], msgID.GetDutyExecutorID()[16:])
-	c.inFlightCommittee.Set(committeeID, struct{}{})
+	c.inFlightCommittee.Set(committeeTraceKey{id: committeeID, role: spectypes.RoleCommittee}, struct{}{})
 	c.lastEvictedSlot.Store(uint64(1))
 	return &queue.SSVMessage{
 		SSVMessage: &spectypes.SSVMessage{
@@ -1773,7 +1823,7 @@ func TestCollector_PublishDecidedsToListener(t *testing.T) {
 		listener.Reset()
 
 		// Pre-derive attester root so classification is active
-		trace, _, err := collector.getOrCreateCommitteeTrace(slot, committeeID)
+		trace, _, err := collector.getOrCreateCommitteeTrace(slot, committeeID, spectypes.RoleCommittee)
 		require.NoError(t, err)
 		trace.attestationRoot = signingRoot
 		trace.roleRootsReady = true
@@ -1836,7 +1886,7 @@ func TestCollector_PublishDecidedsToListener(t *testing.T) {
 		listener.Reset()
 
 		// Prepare roots for the same committee at the slot
-		trace, _, err := collector.getOrCreateCommitteeTrace(slot, committeeID)
+		trace, _, err := collector.getOrCreateCommitteeTrace(slot, committeeID, spectypes.RoleCommittee)
 		require.NoError(t, err)
 		trace.attestationRoot = signingRoot
 		trace.roleRootsReady = true
@@ -1875,7 +1925,7 @@ func TestCollector_PublishDecidedsToListener(t *testing.T) {
 		listener.Reset()
 
 		// Prepare roots for slot+1 as well
-		trace, _, err := collector.getOrCreateCommitteeTrace(slot+1, committeeID)
+		trace, _, err := collector.getOrCreateCommitteeTrace(slot+1, committeeID, spectypes.RoleCommittee)
 		require.NoError(t, err)
 		trace.attestationRoot = signingRoot
 		trace.roleRootsReady = true
@@ -1935,7 +1985,7 @@ type mockDutyTraceStore struct {
 	scheduled               map[phase0.Slot]map[phase0.ValidatorIndex]rolemask.Mask
 }
 
-func (m *mockDutyTraceStore) SaveCommitteeDuties(slot phase0.Slot, duties []*traces.CommitteeDutyTrace) error {
+func (m *mockDutyTraceStore) SaveCommitteeDuties(slot phase0.Slot, role spectypes.RunnerRole, duties []*traces.CommitteeDutyTrace) error {
 	return m.err
 }
 
@@ -1950,15 +2000,18 @@ func (m *mockDutyTraceStore) SaveCommitteeDutyLinks(slot phase0.Slot, linkMap ma
 	return m.err
 }
 
-func (m *mockDutyTraceStore) SaveCommitteeDuty(duty *traces.CommitteeDutyTrace) error {
+func (m *mockDutyTraceStore) SaveCommitteeDuty(role spectypes.RunnerRole, duty *traces.CommitteeDutyTrace) error {
 	return m.err
 }
 
-func (m *mockDutyTraceStore) GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.CommitteeID) (*traces.CommitteeDutyTrace, error) {
+func (m *mockDutyTraceStore) GetCommitteeDuty(slot phase0.Slot, role spectypes.RunnerRole, committeeID spectypes.CommitteeID) (*traces.CommitteeDutyTrace, error) {
+	if role != spectypes.RoleCommittee {
+		return nil, ErrNotFound
+	}
 	return m.committeeDutyTrace, m.err
 }
 
-func (m *mockDutyTraceStore) GetCommitteeDuties(slot phase0.Slot) ([]*traces.CommitteeDutyTrace, error) {
+func (m *mockDutyTraceStore) GetCommitteeDuties(slot phase0.Slot, roles ...spectypes.RunnerRole) ([]*traces.CommitteeDutyTrace, error) {
 	return nil, m.err
 }
 

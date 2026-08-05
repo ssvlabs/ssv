@@ -28,7 +28,7 @@ type SpecTest struct {
 func RunTimeout(t *testing.T, test *SpecTest) {
 	logger := protocoltesting.SpectestLogger(t)
 	err := test.Pre.UponRoundTimeout(context.TODO(), logger)
-	spectests.AssertErrorCode(t, test.ExpectedErrorCode, err)
+	spectests.AssertErrorCode(t, adjustExpectedErrorCode(test.ExpectedErrorCode), err)
 
 	// test calling timeout
 	timer, ok := test.Pre.Timer().(*roundtimer.TestQBFTTimer)
@@ -37,7 +37,7 @@ func RunTimeout(t *testing.T, test *SpecTest) {
 	require.Equal(t, test.ExpectedTimerState.Round, timer.State.Round)
 
 	// test output message
-	broadcastedMsgs := test.Pre.GetConfig().GetNetwork().(*testingutils.TestingNetwork).BroadcastedMsgs
+	broadcastedMsgs := test.Pre.GetConfig().GetNetwork().(*protocoltesting.TestingNetwork).BroadcastedMsgs
 	if len(test.OutputMessages) > 0 || len(broadcastedMsgs) > 0 {
 		require.Len(t, broadcastedMsgs, len(test.OutputMessages))
 

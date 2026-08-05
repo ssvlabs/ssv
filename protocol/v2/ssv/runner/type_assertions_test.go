@@ -72,22 +72,19 @@ func TestCurrentDutySlot(t *testing.T) {
 	slot, err = (&BaseRunner{State: &State{CurrentDuty: committeeDuty}}).currentDutySlot()
 	require.NoError(t, err)
 	require.Equal(t, committeeDuty.DutySlot(), slot)
+
+	aggregatorCommitteeDuty := &spectypes.AggregatorCommitteeDuty{
+		Slot:            17,
+		ValidatorDuties: []*spectypes.ValidatorDuty{{Slot: 17}},
+	}
+	slot, err = (&BaseRunner{State: &State{CurrentDuty: aggregatorCommitteeDuty}}).currentDutySlot()
+	require.NoError(t, err)
+	require.Equal(t, aggregatorCommitteeDuty.DutySlot(), slot)
 }
 
-func TestDecidedValueTypeAssertions(t *testing.T) {
-	consensusData := &spectypes.ValidatorConsensusData{}
-	gotConsensusData, err := validatorConsensusDataFromEncoder(consensusData)
-	require.NoError(t, err)
-	require.Same(t, consensusData, gotConsensusData)
-
-	_, err = validatorConsensusDataFromEncoder(nil)
-	require.ErrorContains(t, err, "decided value is nil")
-
-	var nilConsensusData *spectypes.ValidatorConsensusData
-	_, err = validatorConsensusDataFromEncoder(nilConsensusData)
-	require.ErrorContains(t, err, "validator consensus data is nil")
-
+func TestBeaconVoteFromEncoder(t *testing.T) {
 	beaconVote := &spectypes.BeaconVote{}
+
 	gotBeaconVote, err := beaconVoteFromEncoder(beaconVote)
 	require.NoError(t, err)
 	require.Same(t, beaconVote, gotBeaconVote)
@@ -99,9 +96,6 @@ func TestDecidedValueTypeAssertions(t *testing.T) {
 	_, err = beaconVoteFromEncoder(nilBeaconVote)
 	require.ErrorContains(t, err, "beacon vote is nil")
 
-	_, err = validatorConsensusDataFromEncoder(beaconVote)
-	require.ErrorContains(t, err, "decided value is not a ValidatorConsensusData")
-
-	_, err = beaconVoteFromEncoder(consensusData)
+	_, err = beaconVoteFromEncoder(&spectypes.ProposerConsensusData{})
 	require.ErrorContains(t, err, "decided value is not a BeaconVote")
 }

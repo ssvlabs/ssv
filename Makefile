@@ -69,6 +69,18 @@ spec-test:
 	@go test -tags blst_enabled -timeout 10m ${COV_CMD} -race -p 16 -parallel 256 ./protocol/v2/qbft/spectest
 	@go test -tags blst_enabled -timeout 10m ${COV_CMD} -race -p 16 -parallel 256 ./protocol/v2/ssv/spectest
 
+.PHONY: spec-test-alan
+spec-test-alan:
+	@echo "Running spec tests against ssv-spec Alan"
+	@$(MAKE) spec-test-alan-deps
+	@go test -tags "blst_enabled alan_spec" -timeout 10m ${COV_CMD} -race -p 16 -parallel 256 ./protocol/v2/qbft/spectest
+	@go test -tags "blst_enabled alan_spec" -timeout 10m ${COV_CMD} -race -p 16 -parallel 256 ./protocol/v2/ssv/spectest
+
+.PHONY: spec-test-alan-deps
+spec-test-alan-deps:
+	@echo "Downloading Alan modfile dependencies"
+	@go mod download -modfile=go.spec.alan.mod
+
 .PHONY: benchmark
 benchmark:
 	@echo "Running benchmark for specified directory"

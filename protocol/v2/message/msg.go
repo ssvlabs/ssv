@@ -5,11 +5,23 @@ import (
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 const (
 	// SSVEventMsgType extends spec msg type
 	SSVEventMsgType spectypes.MsgType = 200
+
+	roleAttester                  = "ATTESTER"
+	roleAggregator                = "AGGREGATOR"
+	roleProposer                  = "PROPOSER"
+	roleSyncCommittee             = "SYNC_COMMITTEE"
+	roleSyncCommitteeContribution = "SYNC_COMMITTEE_CONTRIBUTION"
+	roleValidatorRegistration     = "VALIDATOR_REGISTRATION"
+	roleVoluntaryExit             = "VOLUNTARY_EXIT"
+	roleCommittee                 = "COMMITTEE"
+	roleAggregatorCommittee       = "AGGREGATOR_COMMITTEE"
 )
 
 // MsgTypeToString extension for spec msg type. convert spec msg type to string
@@ -44,39 +56,84 @@ func QBFTMsgTypeToString(mt specqbft.MessageType) string {
 // BeaconRoleFromString returns BeaconRole from string
 func BeaconRoleFromString(s string) (spectypes.BeaconRole, error) {
 	switch s {
-	case "ATTESTER":
+	case roleAttester:
 		return spectypes.BNRoleAttester, nil
-	case "AGGREGATOR":
+	case roleAggregator:
 		return spectypes.BNRoleAggregator, nil
-	case "PROPOSER":
+	case roleProposer:
 		return spectypes.BNRoleProposer, nil
-	case "SYNC_COMMITTEE":
+	case roleSyncCommittee:
 		return spectypes.BNRoleSyncCommittee, nil
-	case "SYNC_COMMITTEE_CONTRIBUTION":
+	case roleSyncCommitteeContribution:
 		return spectypes.BNRoleSyncCommitteeContribution, nil
-	case "VALIDATOR_REGISTRATION":
+	case roleValidatorRegistration:
 		return spectypes.BNRoleValidatorRegistration, nil
-	case "VOLUNTARY_EXIT":
+	case roleVoluntaryExit:
 		return spectypes.BNRoleVoluntaryExit, nil
 	default:
 		return 0, fmt.Errorf("unknown role: %s", s)
 	}
 }
 
+// RunnerRoleFromString returns RunnerRole from string.
+func RunnerRoleFromString(s string) (spectypes.RunnerRole, error) {
+	switch s {
+	case roleCommittee:
+		return spectypes.RoleCommittee, nil
+	case roleAggregatorCommittee:
+		return spectypes.RoleAggregatorCommittee, nil
+	case roleAggregator:
+		return ssvtypes.RoleAggregator, nil
+	case roleProposer:
+		return spectypes.RoleProposer, nil
+	case roleSyncCommitteeContribution:
+		return ssvtypes.RoleSyncCommitteeContribution, nil
+	case roleValidatorRegistration:
+		return spectypes.RoleValidatorRegistration, nil
+	case roleVoluntaryExit:
+		return spectypes.RoleVoluntaryExit, nil
+	default:
+		return 0, fmt.Errorf("unknown role: %s", s)
+	}
+}
+
+// CommitteeRunnerRoleFromString returns a committee-backed RunnerRole from
+// string. Unlike RunnerRoleFromString it only accepts the two committee runner
+// roles (COMMITTEE, AGGREGATOR_COMMITTEE); any other value is rejected so the
+// committee-traces filter cannot bind a role the store has no key prefix for.
+func CommitteeRunnerRoleFromString(s string) (spectypes.RunnerRole, error) {
+	role, err := RunnerRoleFromString(s)
+	if err != nil {
+		return 0, err
+	}
+	switch role {
+	case spectypes.RoleCommittee, spectypes.RoleAggregatorCommittee:
+		return role, nil
+	default:
+		return 0, fmt.Errorf("unsupported committee runner role: %s", s)
+	}
+}
+
+// RunnerRoleToString maps runner roles to the exporter/API string constants above. It must
+// stay in lockstep with ssvtypes.RunnerRoleToString (which reaches the same strings via the
+// spec's String() plus a deprecated-role shim) — a role added or deprecated in one must be
+// reflected in the other; only this switch fails loudly (unknown(N)) when it drifts.
 func RunnerRoleToString(r spectypes.RunnerRole) string {
 	switch r {
 	case spectypes.RoleCommittee:
-		return "COMMITTEE"
-	case spectypes.RoleAggregator:
-		return "AGGREGATOR"
+		return roleCommittee
+	case spectypes.RoleAggregatorCommittee:
+		return roleAggregatorCommittee
+	case ssvtypes.RoleAggregator:
+		return roleAggregator
 	case spectypes.RoleProposer:
-		return "PROPOSER"
-	case spectypes.RoleSyncCommitteeContribution:
-		return "SYNC_COMMITTEE_CONTRIBUTION"
+		return roleProposer
+	case ssvtypes.RoleSyncCommitteeContribution:
+		return roleSyncCommitteeContribution
 	case spectypes.RoleValidatorRegistration:
-		return "VALIDATOR_REGISTRATION"
+		return roleValidatorRegistration
 	case spectypes.RoleVoluntaryExit:
-		return "VOLUNTARY_EXIT"
+		return roleVoluntaryExit
 	default:
 		return fmt.Sprintf("unknown(%d)", r)
 	}

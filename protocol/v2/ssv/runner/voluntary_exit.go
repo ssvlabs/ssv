@@ -10,7 +10,6 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
@@ -20,6 +19,7 @@ import (
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -30,7 +30,7 @@ type VoluntaryExitRunner struct {
 	*BaseRunner
 
 	beacon         beacon.BeaconNode
-	network        specqbft.Network
+	network        protocolp2p.Network
 	signer         ekm.BeaconSigner
 	operatorSigner ssvtypes.OperatorSigner
 
@@ -233,7 +233,7 @@ func (r *VoluntaryExitRunner) calculateVoluntaryExit(duty *spectypes.ValidatorDu
 	}, nil
 }
 
-func (r *VoluntaryExitRunner) GetNetwork() specqbft.Network {
+func (r *VoluntaryExitRunner) GetNetwork() protocolp2p.Network {
 	return r.network
 }
 
