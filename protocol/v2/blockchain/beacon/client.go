@@ -78,6 +78,50 @@ type VoluntaryExitCalls interface {
 	SubmitVoluntaryExit(ctx context.Context, voluntaryExit *phase0.SignedVoluntaryExit) error
 }
 
+// PTCCalls is the beacon-node surface for Gloas (ePBS) Payload Timeliness Committee duties:
+// fetching assignments, producing the data to attest to, and submitting signed messages.
+type PTCCalls interface {
+	// PayloadAttestationDuties returns the PTC duties for the given validators at the epoch.
+	PayloadAttestationDuties(ctx context.Context, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*gloas.PTCDuty, error)
+	// PayloadAttestationData returns the PayloadAttestationData to attest to for the slot.
+	PayloadAttestationData(ctx context.Context, slot phase0.Slot) (*gloas.PayloadAttestationData, error)
+	// SubmitPayloadAttestationMessages submits signed PTC messages to the beacon node's pool.
+	SubmitPayloadAttestationMessages(ctx context.Context, messages []*gloas.PayloadAttestationMessage) error
+}
+
+// ProposerPreferencesCalls is the beacon-node surface for Gloas (ePBS) proposer preferences (SIP #94 §5).
+// go-eth2-client has no Gloas types, so these are hand-rolled over HTTP.
+type ProposerPreferencesCalls interface {
+	// ProposerDutiesDependentRoot returns the proposer-duties dependent root for the epoch — the
+	// seed the proposer-lookahead is pinned to. go-eth2-client drops it, so it's fetched via raw HTTP.
+	ProposerDutiesDependentRoot(ctx context.Context, epoch phase0.Epoch) (phase0.Root, error)
+	// SubmitProposerPreferences broadcasts signed proposer preferences for upcoming proposal slots.
+	SubmitProposerPreferences(ctx context.Context, preferences []*gloas.SignedProposerPreferences) error
+}
+
+// GloasProposerCalls is the beacon-node surface for producing and publishing Gloas (ePBS) blocks
+// (SIP #94 §4). go-eth2-client has no Gloas types, so these are hand-rolled over HTTP against the
+// merged produce-block-v4 / publish endpoints (beacon-APIs#580).
+type GloasProposerCalls interface {
+	// GetGloasBeaconBlock produces a Gloas beacon block for the slot; the payload itself ships
+	// separately in the §6 envelope, so the block carries only the execution-payload bid.
+	GetGloasBeaconBlock(ctx context.Context, slot phase0.Slot, graffiti, randao []byte) (*gloas.BeaconBlock, error)
+	// SubmitGloasBeaconBlock publishes a signed Gloas block.
+	SubmitGloasBeaconBlock(ctx context.Context, block *gloas.SignedBeaconBlock) error
+}
+
+// GloasEnvelopeCalls is the beacon-node surface for the §6 execution-payload envelope (SIP #94 §6):
+// fetching the payload the proposer committed to (self-build) and publishing the signed envelope as its
+// blinded form. Like the block calls, these are hand-rolled over HTTP against the merged beacon-APIs#580
+// endpoints.
+type GloasEnvelopeCalls interface {
+	// GetExecutionPayloadEnvelope fetches the execution-payload envelope for the proposer's committed
+	// block, to be blinded, agreed in §6 QBFT, and signed.
+	GetExecutionPayloadEnvelope(ctx context.Context, slot phase0.Slot, beaconBlockRoot phase0.Root) (*gloas.ExecutionPayloadEnvelope, error)
+	// SubmitExecutionPayloadEnvelope publishes the signed envelope.
+	SubmitExecutionPayloadEnvelope(ctx context.Context, signed *gloas.SignedExecutionPayloadEnvelope) error
+}
+
 type DomainCalls interface {
 	DomainData(ctx context.Context, epoch phase0.Epoch, domain phase0.DomainType) (phase0.Domain, error)
 }
@@ -138,48 +182,4 @@ type BeaconNode interface {
 	beaconValidator
 	signer // TODO need to handle differently
 	proposalPreparations
-}
-
-// PTCCalls is the beacon-node surface for Gloas (ePBS) Payload Timeliness Committee duties:
-// fetching assignments, producing the data to attest to, and submitting signed messages.
-type PTCCalls interface {
-	// PayloadAttestationDuties returns the PTC duties for the given validators at the epoch.
-	PayloadAttestationDuties(ctx context.Context, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*gloas.PTCDuty, error)
-	// PayloadAttestationData returns the PayloadAttestationData to attest to for the slot.
-	PayloadAttestationData(ctx context.Context, slot phase0.Slot) (*gloas.PayloadAttestationData, error)
-	// SubmitPayloadAttestationMessages submits signed PTC messages to the beacon node's pool.
-	SubmitPayloadAttestationMessages(ctx context.Context, messages []*gloas.PayloadAttestationMessage) error
-}
-
-// ProposerPreferencesCalls is the beacon-node surface for Gloas (ePBS) proposer preferences (SIP #94 §5).
-// go-eth2-client has no Gloas types, so these are hand-rolled over HTTP.
-type ProposerPreferencesCalls interface {
-	// ProposerDutiesDependentRoot returns the proposer-duties dependent root for the epoch — the
-	// seed the proposer-lookahead is pinned to. go-eth2-client drops it, so it's fetched via raw HTTP.
-	ProposerDutiesDependentRoot(ctx context.Context, epoch phase0.Epoch) (phase0.Root, error)
-	// SubmitProposerPreferences broadcasts signed proposer preferences for upcoming proposal slots.
-	SubmitProposerPreferences(ctx context.Context, preferences []*gloas.SignedProposerPreferences) error
-}
-
-// GloasProposerCalls is the beacon-node surface for producing and publishing Gloas (ePBS) blocks
-// (SIP #94 §4). go-eth2-client has no Gloas types, so these are hand-rolled over HTTP against the
-// merged produce-block-v4 / publish endpoints (beacon-APIs#580).
-type GloasProposerCalls interface {
-	// GetGloasBeaconBlock produces a Gloas beacon block for the slot; the payload itself ships
-	// separately in the §6 envelope, so the block carries only the execution-payload bid.
-	GetGloasBeaconBlock(ctx context.Context, slot phase0.Slot, graffiti, randao []byte) (*gloas.BeaconBlock, error)
-	// SubmitGloasBeaconBlock publishes a signed Gloas block.
-	SubmitGloasBeaconBlock(ctx context.Context, block *gloas.SignedBeaconBlock) error
-}
-
-// GloasEnvelopeCalls is the beacon-node surface for the §6 execution-payload envelope (SIP #94 §6):
-// fetching the payload the proposer committed to (self-build) and publishing the signed envelope as its
-// blinded form. Like the block calls, these are hand-rolled over HTTP against the merged beacon-APIs#580
-// endpoints.
-type GloasEnvelopeCalls interface {
-	// GetExecutionPayloadEnvelope fetches the execution-payload envelope for the proposer's committed
-	// block, to be blinded, agreed in §6 QBFT, and signed.
-	GetExecutionPayloadEnvelope(ctx context.Context, slot phase0.Slot, beaconBlockRoot phase0.Root) (*gloas.ExecutionPayloadEnvelope, error)
-	// SubmitExecutionPayloadEnvelope publishes the signed envelope.
-	SubmitExecutionPayloadEnvelope(ctx context.Context, signed *gloas.SignedExecutionPayloadEnvelope) error
 }
