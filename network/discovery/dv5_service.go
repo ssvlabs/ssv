@@ -16,6 +16,8 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/records"
@@ -266,19 +268,26 @@ func (dvs *DiscV5Service) checkPeer(ctx context.Context, e PeerEvent) error {
 		return newPeerSkipError(skipReasonNotSSV, errors.New("node is not an SSV node"))
 	}
 
-	// Get the peer's domain type, skipping if it mismatches ours.
-	// Discovery filtering intentionally stays on the static current domain: it's symmetric
-	// within a converged fleet, and real fork enforcement happens in the fork-aware handshake
-	// filter and per-slot message validation, not here.
+	// Get the peer's domain type, skipping unless it matches our current or next domain.
+	// We advertise the static current domain in our main ENR key, but fork-aware clients
+	// (e.g. Anchor) advertise the active domain, which becomes the next domain after a fork —
+	// so a strict match against the current domain would reject them forever. Real fork
+	// enforcement happens in the fork-aware handshake filter and per-slot message validation,
+	// not here.
 	peerDiscoveriesCounter.Add(ctx, 1)
 	nodeDomainType, err := records.GetDomainTypeEntry(e.Node.Record(), records.KeyDomainType)
 	if err != nil {
 		recordPeerSkipped(ctx, skipReasonInvalidDomainType)
 		return newPeerSkipError(skipReasonInvalidDomainType, fmt.Errorf("could not read domain type: %w", err))
 	}
-	if dvs.ssvConfig.DomainType != nodeDomainType {
+	// Only accept NextDomainType when it's set: config parsing defaults it to DomainType,
+	// but a zero value must not make us accept peers advertising an all-zero domain.
+	domainMatches := nodeDomainType == dvs.ssvConfig.DomainType ||
+		(dvs.ssvConfig.NextDomainType != (spectypes.DomainType{}) &&
+			nodeDomainType == dvs.ssvConfig.NextDomainType)
+	if !domainMatches {
 		recordPeerSkipped(ctx, skipReasonDomainTypeMismatch)
-		return newPeerSkipError(skipReasonDomainTypeMismatch, fmt.Errorf("domain type %x doesn't match %x", nodeDomainType, dvs.ssvConfig.DomainType))
+		return newPeerSkipError(skipReasonDomainTypeMismatch, fmt.Errorf("domain type %x matches neither %x nor %x", nodeDomainType, dvs.ssvConfig.DomainType, dvs.ssvConfig.NextDomainType))
 	}
 
 	// Get the peer's subnets, skipping if it has none.
@@ -493,8 +502,8 @@ func (dvs *DiscV5Service) PublishENR() {
 		return
 	}
 	// KeyNextDomainType carries the real upcoming domain (not the current one) so that
-	// fork-aware (boole-style) binaries and future dynamic domain flips can rely on it,
-	// even though our own peer filter only ever compares against the static current domain.
+	// fork-aware (boole-style) binaries and future dynamic domain flips can rely on it;
+	// our own discovery filter accepts peers advertising either the current or next domain.
 	err = records.SetDomainTypeEntry(dvs.dv5Listener.LocalNode(), records.KeyNextDomainType, dvs.ssvConfig.NextDomainType)
 	if err != nil {
 		dvs.logger.Error("could not set next domain type", zap.Error(err))

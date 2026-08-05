@@ -49,7 +49,19 @@ func TestCheckPeer(t *testing.T) {
 				name:          "domain type mismatch",
 				domainType:    &spectypes.DomainType{0x1, 0x2, 0x3, 0x5},
 				subnets:       mySubnets,
-				expectedError: errors.New("domain type 01020305 doesn't match 01020304"),
+				expectedError: errors.New("domain type 01020305 matches neither 01020304 nor 01020306"),
+			},
+			{
+				name:          "matches next domain type",
+				domainType:    &spectypes.DomainType{0x1, 0x2, 0x3, 0x6},
+				subnets:       mySubnets,
+				expectedError: nil,
+			},
+			{
+				name:          "unrelated domain type",
+				domainType:    &spectypes.DomainType{0x0, 0x0, 0x5, 0x3},
+				subnets:       mySubnets,
+				expectedError: errors.New("domain type 00000503 matches neither 01020304 nor 01020306"),
 			},
 			{
 				name:           "missing subnets",
@@ -121,7 +133,8 @@ func TestCheckPeer(t *testing.T) {
 	)
 
 	var checkPeerTestSSVConfig = &networkconfig.SSV{
-		DomainType: spectypes.DomainType{0x1, 0x2, 0x3, 0x4},
+		DomainType:     spectypes.DomainType{0x1, 0x2, 0x3, 0x4},
+		NextDomainType: spectypes.DomainType{0x1, 0x2, 0x3, 0x6},
 	}
 
 	// Create the LocalNode instances for the tests.
@@ -205,6 +218,46 @@ func TestCheckPeer(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestCheckPeer_ZeroNextDomainType verifies the zero-value guard: when NextDomainType is
+// unset (zero, as in configs built from struct literals), a peer advertising an all-zero
+// domain type must still be rejected rather than matching the zero NextDomainType.
+func TestCheckPeer_ZeroNextDomainType(t *testing.T) {
+	ctx := t.Context()
+	logger := zap.NewNop()
+	mySubnets := mockSubnets(1, 2, 3)
+
+	priv, err := utils.ECDSAPrivateKey(logger, "")
+	require.NoError(t, err)
+
+	localNode, err := records.CreateLocalNode(priv, t.TempDir(), net.ParseIP("127.0.0.1"), 12000, 13000)
+	require.NoError(t, err)
+	localNode.Set(enr.WithEntry("ssv", true))
+	require.NoError(t, records.SetDomainTypeEntry(localNode, records.KeyDomainType, spectypes.DomainType{}))
+	require.NoError(t, records.SetSubnetsEntry(localNode, mySubnets))
+
+	addrInfo, err := ToPeer(localNode.Node())
+	require.NoError(t, err)
+
+	dvs := &DiscV5Service{
+		ctx:        ctx,
+		conns:      &mock.MockConnectionIndex{},
+		subnetsIdx: peers.NewSubnetsIndex(),
+		ssvConfig: &networkconfig.SSV{
+			DomainType: spectypes.DomainType{0x1, 0x2, 0x3, 0x4},
+			// NextDomainType intentionally left zero.
+		},
+		subnets:             mySubnets,
+		discoveredPeersPool: ttl.New[peer.ID, DiscoveredPeer](ctx, time.Hour, time.Hour),
+		trimmedRecently:     ttl.New[peer.ID, struct{}](ctx, time.Hour, time.Hour),
+	}
+
+	err = dvs.checkPeer(context.TODO(), PeerEvent{
+		AddrInfo: *addrInfo,
+		Node:     localNode.Node(),
+	})
+	require.ErrorContains(t, err, "domain type 00000000 matches neither 01020304 nor 00000000")
 }
 
 func TestCheckPeer_UpdatesSubnetsIndexBeforeConnectionFilters(t *testing.T) {

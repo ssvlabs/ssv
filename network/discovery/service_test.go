@@ -272,13 +272,18 @@ func TestDiscV5Service_checkPeer(t *testing.T) {
 	err = dvs.checkPeer(context.TODO(), ToPeerEvent(NodeWithCustomDomains(t, testNetConfig.DomainType, spectypes.DomainType{})))
 	require.NoError(t, err)
 
-	// Matching next domain
+	// Our next domain in the peer's main key (post-fork Anchor shape) is accepted
+	err = dvs.checkPeer(context.TODO(), ToPeerEvent(NodeWithCustomDomains(t, testNetConfig.NextDomainType, spectypes.DomainType{})))
+	require.NoError(t, err)
+
+	// The peer's next-domain key is ignored: a zero main domain is rejected even when
+	// the peer's next key matches our domain
 	err = dvs.checkPeer(context.TODO(), ToPeerEvent(NodeWithCustomDomains(t, spectypes.DomainType{}, testNetConfig.DomainType)))
-	require.ErrorContains(t, err, "domain type 00000000 doesn't match 00000302")
+	require.ErrorContains(t, err, "domain type 00000000 matches neither 00000302 nor 00000303")
 
 	// Mismatching domains
 	err = dvs.checkPeer(context.TODO(), ToPeerEvent(NodeWithCustomDomains(t, spectypes.DomainType{}, spectypes.DomainType{})))
-	require.ErrorContains(t, err, "domain type 00000000 doesn't match 00000302")
+	require.ErrorContains(t, err, "domain type 00000000 matches neither 00000302 nor 00000303")
 
 	// No subnets
 	err = dvs.checkPeer(context.TODO(), ToPeerEvent(NodeWithoutSubnets(t)))
