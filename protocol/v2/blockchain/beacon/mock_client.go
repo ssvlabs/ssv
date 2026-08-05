@@ -411,6 +411,233 @@ func (mr *MockVoluntaryExitCallsMockRecorder) SubmitVoluntaryExit(ctx, voluntary
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitVoluntaryExit", reflect.TypeOf((*MockVoluntaryExitCalls)(nil).SubmitVoluntaryExit), ctx, voluntaryExit)
 }
 
+// MockPTCCalls is a mock of PTCCalls interface.
+type MockPTCCalls struct {
+	ctrl     *gomock.Controller
+	recorder *MockPTCCallsMockRecorder
+	isgomock struct{}
+}
+
+// MockPTCCallsMockRecorder is the mock recorder for MockPTCCalls.
+type MockPTCCallsMockRecorder struct {
+	mock *MockPTCCalls
+}
+
+// NewMockPTCCalls creates a new mock instance.
+func NewMockPTCCalls(ctrl *gomock.Controller) *MockPTCCalls {
+	mock := &MockPTCCalls{ctrl: ctrl}
+	mock.recorder = &MockPTCCallsMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockPTCCalls) EXPECT() *MockPTCCallsMockRecorder {
+	return m.recorder
+}
+
+// PayloadAttestationData mocks base method.
+func (m *MockPTCCalls) PayloadAttestationData(ctx context.Context, slot phase0.Slot) (*gloas.PayloadAttestationData, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PayloadAttestationData", ctx, slot)
+	ret0, _ := ret[0].(*gloas.PayloadAttestationData)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// PayloadAttestationData indicates an expected call of PayloadAttestationData.
+func (mr *MockPTCCallsMockRecorder) PayloadAttestationData(ctx, slot any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PayloadAttestationData", reflect.TypeOf((*MockPTCCalls)(nil).PayloadAttestationData), ctx, slot)
+}
+
+// PayloadAttestationDuties mocks base method.
+func (m *MockPTCCalls) PayloadAttestationDuties(ctx context.Context, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*gloas.PTCDuty, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PayloadAttestationDuties", ctx, epoch, validatorIndices)
+	ret0, _ := ret[0].([]*gloas.PTCDuty)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// PayloadAttestationDuties indicates an expected call of PayloadAttestationDuties.
+func (mr *MockPTCCallsMockRecorder) PayloadAttestationDuties(ctx, epoch, validatorIndices any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PayloadAttestationDuties", reflect.TypeOf((*MockPTCCalls)(nil).PayloadAttestationDuties), ctx, epoch, validatorIndices)
+}
+
+// SubmitPayloadAttestationMessages mocks base method.
+func (m *MockPTCCalls) SubmitPayloadAttestationMessages(ctx context.Context, messages []*gloas.PayloadAttestationMessage) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SubmitPayloadAttestationMessages", ctx, messages)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SubmitPayloadAttestationMessages indicates an expected call of SubmitPayloadAttestationMessages.
+func (mr *MockPTCCallsMockRecorder) SubmitPayloadAttestationMessages(ctx, messages any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitPayloadAttestationMessages", reflect.TypeOf((*MockPTCCalls)(nil).SubmitPayloadAttestationMessages), ctx, messages)
+}
+
+// MockProposerPreferencesCalls is a mock of ProposerPreferencesCalls interface.
+type MockProposerPreferencesCalls struct {
+	ctrl     *gomock.Controller
+	recorder *MockProposerPreferencesCallsMockRecorder
+	isgomock struct{}
+}
+
+// MockProposerPreferencesCallsMockRecorder is the mock recorder for MockProposerPreferencesCalls.
+type MockProposerPreferencesCallsMockRecorder struct {
+	mock *MockProposerPreferencesCalls
+}
+
+// NewMockProposerPreferencesCalls creates a new mock instance.
+func NewMockProposerPreferencesCalls(ctrl *gomock.Controller) *MockProposerPreferencesCalls {
+	mock := &MockProposerPreferencesCalls{ctrl: ctrl}
+	mock.recorder = &MockProposerPreferencesCallsMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockProposerPreferencesCalls) EXPECT() *MockProposerPreferencesCallsMockRecorder {
+	return m.recorder
+}
+
+// ProposerDutiesDependentRoot mocks base method.
+func (m *MockProposerPreferencesCalls) ProposerDutiesDependentRoot(ctx context.Context, epoch phase0.Epoch) (phase0.Root, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ProposerDutiesDependentRoot", ctx, epoch)
+	ret0, _ := ret[0].(phase0.Root)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ProposerDutiesDependentRoot indicates an expected call of ProposerDutiesDependentRoot.
+func (mr *MockProposerPreferencesCallsMockRecorder) ProposerDutiesDependentRoot(ctx, epoch any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProposerDutiesDependentRoot", reflect.TypeOf((*MockProposerPreferencesCalls)(nil).ProposerDutiesDependentRoot), ctx, epoch)
+}
+
+// SubmitProposerPreferences mocks base method.
+func (m *MockProposerPreferencesCalls) SubmitProposerPreferences(ctx context.Context, preferences []*gloas.SignedProposerPreferences) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SubmitProposerPreferences", ctx, preferences)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SubmitProposerPreferences indicates an expected call of SubmitProposerPreferences.
+func (mr *MockProposerPreferencesCallsMockRecorder) SubmitProposerPreferences(ctx, preferences any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitProposerPreferences", reflect.TypeOf((*MockProposerPreferencesCalls)(nil).SubmitProposerPreferences), ctx, preferences)
+}
+
+// MockGloasProposerCalls is a mock of GloasProposerCalls interface.
+type MockGloasProposerCalls struct {
+	ctrl     *gomock.Controller
+	recorder *MockGloasProposerCallsMockRecorder
+	isgomock struct{}
+}
+
+// MockGloasProposerCallsMockRecorder is the mock recorder for MockGloasProposerCalls.
+type MockGloasProposerCallsMockRecorder struct {
+	mock *MockGloasProposerCalls
+}
+
+// NewMockGloasProposerCalls creates a new mock instance.
+func NewMockGloasProposerCalls(ctrl *gomock.Controller) *MockGloasProposerCalls {
+	mock := &MockGloasProposerCalls{ctrl: ctrl}
+	mock.recorder = &MockGloasProposerCallsMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockGloasProposerCalls) EXPECT() *MockGloasProposerCallsMockRecorder {
+	return m.recorder
+}
+
+// GetGloasBeaconBlock mocks base method.
+func (m *MockGloasProposerCalls) GetGloasBeaconBlock(ctx context.Context, slot phase0.Slot, graffiti, randao []byte) (*gloas.BeaconBlock, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetGloasBeaconBlock", ctx, slot, graffiti, randao)
+	ret0, _ := ret[0].(*gloas.BeaconBlock)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetGloasBeaconBlock indicates an expected call of GetGloasBeaconBlock.
+func (mr *MockGloasProposerCallsMockRecorder) GetGloasBeaconBlock(ctx, slot, graffiti, randao any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetGloasBeaconBlock", reflect.TypeOf((*MockGloasProposerCalls)(nil).GetGloasBeaconBlock), ctx, slot, graffiti, randao)
+}
+
+// SubmitGloasBeaconBlock mocks base method.
+func (m *MockGloasProposerCalls) SubmitGloasBeaconBlock(ctx context.Context, block *gloas.SignedBeaconBlock) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SubmitGloasBeaconBlock", ctx, block)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SubmitGloasBeaconBlock indicates an expected call of SubmitGloasBeaconBlock.
+func (mr *MockGloasProposerCallsMockRecorder) SubmitGloasBeaconBlock(ctx, block any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitGloasBeaconBlock", reflect.TypeOf((*MockGloasProposerCalls)(nil).SubmitGloasBeaconBlock), ctx, block)
+}
+
+// MockGloasEnvelopeCalls is a mock of GloasEnvelopeCalls interface.
+type MockGloasEnvelopeCalls struct {
+	ctrl     *gomock.Controller
+	recorder *MockGloasEnvelopeCallsMockRecorder
+	isgomock struct{}
+}
+
+// MockGloasEnvelopeCallsMockRecorder is the mock recorder for MockGloasEnvelopeCalls.
+type MockGloasEnvelopeCallsMockRecorder struct {
+	mock *MockGloasEnvelopeCalls
+}
+
+// NewMockGloasEnvelopeCalls creates a new mock instance.
+func NewMockGloasEnvelopeCalls(ctrl *gomock.Controller) *MockGloasEnvelopeCalls {
+	mock := &MockGloasEnvelopeCalls{ctrl: ctrl}
+	mock.recorder = &MockGloasEnvelopeCallsMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockGloasEnvelopeCalls) EXPECT() *MockGloasEnvelopeCallsMockRecorder {
+	return m.recorder
+}
+
+// GetExecutionPayloadEnvelope mocks base method.
+func (m *MockGloasEnvelopeCalls) GetExecutionPayloadEnvelope(ctx context.Context, slot phase0.Slot, beaconBlockRoot phase0.Root) (*gloas.ExecutionPayloadEnvelope, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetExecutionPayloadEnvelope", ctx, slot, beaconBlockRoot)
+	ret0, _ := ret[0].(*gloas.ExecutionPayloadEnvelope)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetExecutionPayloadEnvelope indicates an expected call of GetExecutionPayloadEnvelope.
+func (mr *MockGloasEnvelopeCallsMockRecorder) GetExecutionPayloadEnvelope(ctx, slot, beaconBlockRoot any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetExecutionPayloadEnvelope", reflect.TypeOf((*MockGloasEnvelopeCalls)(nil).GetExecutionPayloadEnvelope), ctx, slot, beaconBlockRoot)
+}
+
+// SubmitExecutionPayloadEnvelope mocks base method.
+func (m *MockGloasEnvelopeCalls) SubmitExecutionPayloadEnvelope(ctx context.Context, signed *gloas.SignedExecutionPayloadEnvelope) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SubmitExecutionPayloadEnvelope", ctx, signed)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SubmitExecutionPayloadEnvelope indicates an expected call of SubmitExecutionPayloadEnvelope.
+func (mr *MockGloasEnvelopeCallsMockRecorder) SubmitExecutionPayloadEnvelope(ctx, signed any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitExecutionPayloadEnvelope", reflect.TypeOf((*MockGloasEnvelopeCalls)(nil).SubmitExecutionPayloadEnvelope), ctx, signed)
+}
+
 // MockDomainCalls is a mock of DomainCalls interface.
 type MockDomainCalls struct {
 	ctrl     *gomock.Controller
@@ -1244,231 +1471,4 @@ func (m *MockBeaconNode) SyncCommitteeSubnetID(index phase0.CommitteeIndex) uint
 func (mr *MockBeaconNodeMockRecorder) SyncCommitteeSubnetID(index any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncCommitteeSubnetID", reflect.TypeOf((*MockBeaconNode)(nil).SyncCommitteeSubnetID), index)
-}
-
-// MockPTCCalls is a mock of PTCCalls interface.
-type MockPTCCalls struct {
-	ctrl     *gomock.Controller
-	recorder *MockPTCCallsMockRecorder
-	isgomock struct{}
-}
-
-// MockPTCCallsMockRecorder is the mock recorder for MockPTCCalls.
-type MockPTCCallsMockRecorder struct {
-	mock *MockPTCCalls
-}
-
-// NewMockPTCCalls creates a new mock instance.
-func NewMockPTCCalls(ctrl *gomock.Controller) *MockPTCCalls {
-	mock := &MockPTCCalls{ctrl: ctrl}
-	mock.recorder = &MockPTCCallsMockRecorder{mock}
-	return mock
-}
-
-// EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockPTCCalls) EXPECT() *MockPTCCallsMockRecorder {
-	return m.recorder
-}
-
-// PayloadAttestationData mocks base method.
-func (m *MockPTCCalls) PayloadAttestationData(ctx context.Context, slot phase0.Slot) (*gloas.PayloadAttestationData, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "PayloadAttestationData", ctx, slot)
-	ret0, _ := ret[0].(*gloas.PayloadAttestationData)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// PayloadAttestationData indicates an expected call of PayloadAttestationData.
-func (mr *MockPTCCallsMockRecorder) PayloadAttestationData(ctx, slot any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PayloadAttestationData", reflect.TypeOf((*MockPTCCalls)(nil).PayloadAttestationData), ctx, slot)
-}
-
-// PayloadAttestationDuties mocks base method.
-func (m *MockPTCCalls) PayloadAttestationDuties(ctx context.Context, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*gloas.PTCDuty, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "PayloadAttestationDuties", ctx, epoch, validatorIndices)
-	ret0, _ := ret[0].([]*gloas.PTCDuty)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// PayloadAttestationDuties indicates an expected call of PayloadAttestationDuties.
-func (mr *MockPTCCallsMockRecorder) PayloadAttestationDuties(ctx, epoch, validatorIndices any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PayloadAttestationDuties", reflect.TypeOf((*MockPTCCalls)(nil).PayloadAttestationDuties), ctx, epoch, validatorIndices)
-}
-
-// SubmitPayloadAttestationMessages mocks base method.
-func (m *MockPTCCalls) SubmitPayloadAttestationMessages(ctx context.Context, messages []*gloas.PayloadAttestationMessage) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SubmitPayloadAttestationMessages", ctx, messages)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// SubmitPayloadAttestationMessages indicates an expected call of SubmitPayloadAttestationMessages.
-func (mr *MockPTCCallsMockRecorder) SubmitPayloadAttestationMessages(ctx, messages any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitPayloadAttestationMessages", reflect.TypeOf((*MockPTCCalls)(nil).SubmitPayloadAttestationMessages), ctx, messages)
-}
-
-// MockProposerPreferencesCalls is a mock of ProposerPreferencesCalls interface.
-type MockProposerPreferencesCalls struct {
-	ctrl     *gomock.Controller
-	recorder *MockProposerPreferencesCallsMockRecorder
-	isgomock struct{}
-}
-
-// MockProposerPreferencesCallsMockRecorder is the mock recorder for MockProposerPreferencesCalls.
-type MockProposerPreferencesCallsMockRecorder struct {
-	mock *MockProposerPreferencesCalls
-}
-
-// NewMockProposerPreferencesCalls creates a new mock instance.
-func NewMockProposerPreferencesCalls(ctrl *gomock.Controller) *MockProposerPreferencesCalls {
-	mock := &MockProposerPreferencesCalls{ctrl: ctrl}
-	mock.recorder = &MockProposerPreferencesCallsMockRecorder{mock}
-	return mock
-}
-
-// EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockProposerPreferencesCalls) EXPECT() *MockProposerPreferencesCallsMockRecorder {
-	return m.recorder
-}
-
-// ProposerDutiesDependentRoot mocks base method.
-func (m *MockProposerPreferencesCalls) ProposerDutiesDependentRoot(ctx context.Context, epoch phase0.Epoch) (phase0.Root, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ProposerDutiesDependentRoot", ctx, epoch)
-	ret0, _ := ret[0].(phase0.Root)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// ProposerDutiesDependentRoot indicates an expected call of ProposerDutiesDependentRoot.
-func (mr *MockProposerPreferencesCallsMockRecorder) ProposerDutiesDependentRoot(ctx, epoch any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProposerDutiesDependentRoot", reflect.TypeOf((*MockProposerPreferencesCalls)(nil).ProposerDutiesDependentRoot), ctx, epoch)
-}
-
-// SubmitProposerPreferences mocks base method.
-func (m *MockProposerPreferencesCalls) SubmitProposerPreferences(ctx context.Context, preferences []*gloas.SignedProposerPreferences) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SubmitProposerPreferences", ctx, preferences)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// SubmitProposerPreferences indicates an expected call of SubmitProposerPreferences.
-func (mr *MockProposerPreferencesCallsMockRecorder) SubmitProposerPreferences(ctx, preferences any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitProposerPreferences", reflect.TypeOf((*MockProposerPreferencesCalls)(nil).SubmitProposerPreferences), ctx, preferences)
-}
-
-// MockGloasProposerCalls is a mock of GloasProposerCalls interface.
-type MockGloasProposerCalls struct {
-	ctrl     *gomock.Controller
-	recorder *MockGloasProposerCallsMockRecorder
-	isgomock struct{}
-}
-
-// MockGloasProposerCallsMockRecorder is the mock recorder for MockGloasProposerCalls.
-type MockGloasProposerCallsMockRecorder struct {
-	mock *MockGloasProposerCalls
-}
-
-// NewMockGloasProposerCalls creates a new mock instance.
-func NewMockGloasProposerCalls(ctrl *gomock.Controller) *MockGloasProposerCalls {
-	mock := &MockGloasProposerCalls{ctrl: ctrl}
-	mock.recorder = &MockGloasProposerCallsMockRecorder{mock}
-	return mock
-}
-
-// EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockGloasProposerCalls) EXPECT() *MockGloasProposerCallsMockRecorder {
-	return m.recorder
-}
-
-// GetGloasBeaconBlock mocks base method.
-func (m *MockGloasProposerCalls) GetGloasBeaconBlock(ctx context.Context, slot phase0.Slot, graffiti, randao []byte) (*gloas.BeaconBlock, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetGloasBeaconBlock", ctx, slot, graffiti, randao)
-	ret0, _ := ret[0].(*gloas.BeaconBlock)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetGloasBeaconBlock indicates an expected call of GetGloasBeaconBlock.
-func (mr *MockGloasProposerCallsMockRecorder) GetGloasBeaconBlock(ctx, slot, graffiti, randao any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetGloasBeaconBlock", reflect.TypeOf((*MockGloasProposerCalls)(nil).GetGloasBeaconBlock), ctx, slot, graffiti, randao)
-}
-
-// SubmitGloasBeaconBlock mocks base method.
-func (m *MockGloasProposerCalls) SubmitGloasBeaconBlock(ctx context.Context, block *gloas.SignedBeaconBlock) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SubmitGloasBeaconBlock", ctx, block)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// SubmitGloasBeaconBlock indicates an expected call of SubmitGloasBeaconBlock.
-func (mr *MockGloasProposerCallsMockRecorder) SubmitGloasBeaconBlock(ctx, block any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitGloasBeaconBlock", reflect.TypeOf((*MockGloasProposerCalls)(nil).SubmitGloasBeaconBlock), ctx, block)
-}
-
-// MockGloasEnvelopeCalls is a mock of GloasEnvelopeCalls interface.
-type MockGloasEnvelopeCalls struct {
-	ctrl     *gomock.Controller
-	recorder *MockGloasEnvelopeCallsMockRecorder
-	isgomock struct{}
-}
-
-// MockGloasEnvelopeCallsMockRecorder is the mock recorder for MockGloasEnvelopeCalls.
-type MockGloasEnvelopeCallsMockRecorder struct {
-	mock *MockGloasEnvelopeCalls
-}
-
-// NewMockGloasEnvelopeCalls creates a new mock instance.
-func NewMockGloasEnvelopeCalls(ctrl *gomock.Controller) *MockGloasEnvelopeCalls {
-	mock := &MockGloasEnvelopeCalls{ctrl: ctrl}
-	mock.recorder = &MockGloasEnvelopeCallsMockRecorder{mock}
-	return mock
-}
-
-// EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockGloasEnvelopeCalls) EXPECT() *MockGloasEnvelopeCallsMockRecorder {
-	return m.recorder
-}
-
-// GetExecutionPayloadEnvelope mocks base method.
-func (m *MockGloasEnvelopeCalls) GetExecutionPayloadEnvelope(ctx context.Context, slot phase0.Slot, beaconBlockRoot phase0.Root) (*gloas.ExecutionPayloadEnvelope, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetExecutionPayloadEnvelope", ctx, slot, beaconBlockRoot)
-	ret0, _ := ret[0].(*gloas.ExecutionPayloadEnvelope)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetExecutionPayloadEnvelope indicates an expected call of GetExecutionPayloadEnvelope.
-func (mr *MockGloasEnvelopeCallsMockRecorder) GetExecutionPayloadEnvelope(ctx, slot, beaconBlockRoot any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetExecutionPayloadEnvelope", reflect.TypeOf((*MockGloasEnvelopeCalls)(nil).GetExecutionPayloadEnvelope), ctx, slot, beaconBlockRoot)
-}
-
-// SubmitExecutionPayloadEnvelope mocks base method.
-func (m *MockGloasEnvelopeCalls) SubmitExecutionPayloadEnvelope(ctx context.Context, signed *gloas.SignedExecutionPayloadEnvelope) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SubmitExecutionPayloadEnvelope", ctx, signed)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// SubmitExecutionPayloadEnvelope indicates an expected call of SubmitExecutionPayloadEnvelope.
-func (mr *MockGloasEnvelopeCallsMockRecorder) SubmitExecutionPayloadEnvelope(ctx, signed any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitExecutionPayloadEnvelope", reflect.TypeOf((*MockGloasEnvelopeCalls)(nil).SubmitExecutionPayloadEnvelope), ctx, signed)
 }
