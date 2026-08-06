@@ -1706,7 +1706,7 @@ func requireSlashingProtectionStampInWindow(t *testing.T, netCfg *networkconfig.
 
 	require.GreaterOrEqual(t, highestAttestation.Target.Epoch, fromEpoch)
 	require.LessOrEqual(t, highestAttestation.Target.Epoch, toEpoch)
-	require.Equal(t, highestAttestation.Target.Epoch-1, highestAttestation.Source.Epoch)
+	require.Equal(t, highestAttestation.Source.Epoch+1, highestAttestation.Target.Epoch)
 	require.GreaterOrEqual(t, highestProposal, from)
 	require.LessOrEqual(t, highestProposal, to)
 }
