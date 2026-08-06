@@ -38,6 +38,11 @@ func Test_isAggregatorFn(t *testing.T) {
 // thin, bit-identical wrapper over the shared networkconfig.IsAggregatorSelected helper — the
 // same helper beacon/goclient.GoClient.IsAggregator delegates to — across a spread of committee
 // sizes (including committeeLength < target, which clamps modulo to 1).
+//
+// Note: today isAggregatorFn returns networkconfig.IsAggregatorSelected verbatim, so both sides
+// invoke the same function value and this assertion is trivially true. The test exists purely as
+// a regression guard: it fails the day the runner's default stops delegating to the shared helper
+// (or wraps it with anything that changes the result).
 func Test_isAggregatorFn_MatchesSharedHelper(t *testing.T) {
 	isAggFn := isAggregatorFn()
 
