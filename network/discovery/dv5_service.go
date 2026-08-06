@@ -289,9 +289,11 @@ func (dvs *DiscV5Service) checkPeer(ctx context.Context, e PeerEvent) error {
 	matchesNextDomain := nextDomainAccepted && nodeDomainType == dvs.ssvConfig.NextDomainType
 	if !matchesDomain && !matchesNextDomain {
 		recordPeerSkipped(ctx, skipReasonDomainTypeMismatch)
-		err := fmt.Errorf("domain type %x does not match %x", nodeDomainType, dvs.ssvConfig.DomainType)
+		var err error
 		if nextDomainAccepted {
 			err = fmt.Errorf("domain type %x matches neither %x nor %x", nodeDomainType, dvs.ssvConfig.DomainType, dvs.ssvConfig.NextDomainType)
+		} else {
+			err = fmt.Errorf("domain type %x does not match %x", nodeDomainType, dvs.ssvConfig.DomainType)
 		}
 		return newPeerSkipError(skipReasonDomainTypeMismatch, err)
 	}
