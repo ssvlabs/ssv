@@ -94,10 +94,7 @@ func (n Network) Validate() error {
 	}
 
 	if n.BooleForkScheduled() {
-		// Mirrors the overflow guard in inBooleSubsequentWindowWithSlots: FirstSlotAtEpoch(Boole)
-		// would overflow if the fork epoch is beyond the representable slot range.
-		maxEpoch := phase0.Epoch(math.MaxUint64 / n.SlotsPerEpoch)
-		if n.SSV.Forks.Boole > maxEpoch {
+		if maxEpoch := n.maxEpochConvertibleToSlot(); n.SSV.Forks.Boole > maxEpoch {
 			return fmt.Errorf("boole fork epoch %d overflows slot conversion (max supported epoch %d)", n.SSV.Forks.Boole, maxEpoch)
 		}
 
@@ -121,6 +118,13 @@ func (n Network) Validate() error {
 	}
 
 	return nil
+}
+
+// maxEpochConvertibleToSlot returns the highest epoch whose first slot still fits the slot
+// range; FirstSlotAtEpoch would overflow beyond it. Callers must rule out a zero SlotsPerEpoch
+// first, or the division panics.
+func (n Network) maxEpochConvertibleToSlot() phase0.Epoch {
+	return phase0.Epoch(math.MaxUint64 / n.SlotsPerEpoch)
 }
 
 // InBooleTransitionWindow checks if the slot is in the Boole transition window,
@@ -162,8 +166,7 @@ func (n Network) inBooleSubsequentWindowWithSlots(slot phase0.Slot, windowSlots 
 
 	// Avoid FirstSlotAtEpoch overflow when Boole is beyond the representable epoch range;
 	// without this guard the multiplication would wrap and could treat small slots as in-window.
-	maxEpoch := phase0.Epoch(math.MaxUint64 / n.SlotsPerEpoch)
-	if n.SSV.Forks.Boole > maxEpoch {
+	if n.SSV.Forks.Boole > n.maxEpochConvertibleToSlot() {
 		return false
 	}
 
