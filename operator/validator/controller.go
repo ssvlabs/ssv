@@ -1251,8 +1251,8 @@ func SetupRunners(
 			// cross-population asymmetry (some operators still running the legacy runner while others
 			// have moved to the committee runner) is bounded to the Boole subsequent window
 			// (SlotsPerEpoch + booleSubsequentWindowLateSlots; 34 slots on mainnet — see InBooleTransitionWindow)
-			// and only affects already-decided pre-fork aggregator stragglers — no correctness impact.
-			// These legacy runners retire wholesale together with the Alan topics.
+			// and only affects already-decided pre-fork sync committee contribution stragglers — no
+			// correctness impact. These legacy runners retire wholesale together with the Alan topics.
 			if !options.NetworkConfig.BooleFork() {
 				syncCommitteeContributionValueChecker := ssv.NewSyncCommitteeContributionChecker(options.NetworkConfig.Beacon, share.ValidatorPubKey, share.ValidatorIndex)
 				runners[role], err = runner.NewSyncCommitteeAggregatorRunner(runner.SyncCommitteeAggregatorRunnerOptions{
