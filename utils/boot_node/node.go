@@ -106,13 +106,11 @@ func (n *bootNode) Start(ctx context.Context) error {
 	}
 
 	ipAddr, err := network.ExternalIP()
-	// ipAddr = "127.0.0.1"
-	n.logger.Info("TEST Ip addr----", zap.String("ip_addr", ipAddr))
 	if err != nil {
 		n.logger.Fatal("Failed to get ExternalIP", zap.Error(err))
 	}
 
-	listener := n.createListener(ipAddr, n.discv5port, privKey)
+	listener, socketConn := n.createListener(ipAddr, n.discv5port, privKey)
 	node := listener.LocalNode().Node()
 	n.logger.Info("Running",
 		zap.Stringer("node", node),
@@ -124,8 +122,10 @@ func (n *bootNode) Start(ctx context.Context) error {
 		logger:   n.logger,
 		listener: listener,
 	}
+	health := newBootNodeHealth(listener, socketConn)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/p2p", handler.httpHandler())
+	mux.HandleFunc("/healthz", health.handler())
 
 	const timeout = 3 * time.Second
 
@@ -143,7 +143,7 @@ func (n *bootNode) Start(ctx context.Context) error {
 	return nil
 }
 
-func (n *bootNode) createListener(ipAddr string, port uint16, privateKey *ecdsa.PrivateKey) discovery.Listener {
+func (n *bootNode) createListener(ipAddr string, port uint16, privateKey *ecdsa.PrivateKey) (discovery.Listener, *discovery.TimedConn) {
 	// Create the UDP listener and the LocalNode record.
 	ip := net.ParseIP(ipAddr)
 	if ip.To4() == nil {
@@ -169,20 +169,22 @@ func (n *bootNode) createListener(ipAddr string, port uint16, privateKey *ecdsa.
 	if err != nil {
 		n.logger.Fatal("Failed to create UDP server", zap.Error(err))
 	}
+	// Wrap the socket so /healthz can tell whether discv5 is still draining it.
+	socketConn := discovery.NewTimedConn(conn)
 	localNode, err := n.createLocalNode(privateKey, ip, port)
 	if err != nil {
 		n.logger.Fatal("Failed to create local node", zap.Error(err))
 	}
 
-	listener, err := discover.ListenV5(conn, localNode, discover.Config{
+	listener, err := discover.ListenV5(socketConn, localNode, discover.Config{
 		PrivateKey:   privateKey,
 		V5ProtocolID: &n.ssvConfig.DiscoveryProtocolID,
 	})
 	if err != nil {
-		n.logger.Fatal("Filed to create UDPv5 listener", zap.Error(err))
+		n.logger.Fatal("failed to create UDPv5 listener", zap.Error(err))
 	}
 
-	return listener
+	return listener, socketConn
 }
 
 func (n *bootNode) createLocalNode(privKey *ecdsa.PrivateKey, ipAddr net.IP, port uint16) (*enode.LocalNode, error) {
