@@ -283,14 +283,14 @@ func (dvs *DiscV5Service) checkPeer(ctx context.Context, e PeerEvent) error {
 	// Only accept NextDomainType when it's set to a distinct value: config parsing defaults
 	// it to DomainType, and a zero value must not make us accept peers advertising an
 	// all-zero domain.
-	nextDomainAccepted := dvs.ssvConfig.NextDomainType != (spectypes.DomainType{}) &&
+	hasDistinctNextDomain := dvs.ssvConfig.NextDomainType != (spectypes.DomainType{}) &&
 		dvs.ssvConfig.NextDomainType != dvs.ssvConfig.DomainType
 	matchesDomain := nodeDomainType == dvs.ssvConfig.DomainType
-	matchesNextDomain := nextDomainAccepted && nodeDomainType == dvs.ssvConfig.NextDomainType
+	matchesNextDomain := hasDistinctNextDomain && nodeDomainType == dvs.ssvConfig.NextDomainType
 	if !matchesDomain && !matchesNextDomain {
 		recordPeerSkipped(ctx, skipReasonDomainTypeMismatch)
 		var err error
-		if nextDomainAccepted {
+		if hasDistinctNextDomain {
 			err = fmt.Errorf("domain type %x matches neither %x nor %x", nodeDomainType, dvs.ssvConfig.DomainType, dvs.ssvConfig.NextDomainType)
 		} else {
 			err = fmt.Errorf("domain type %x does not match %x", nodeDomainType, dvs.ssvConfig.DomainType)
