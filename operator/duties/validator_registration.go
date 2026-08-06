@@ -126,9 +126,9 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 		case <-next:
 			currentSlot := h.ticker.Slot()
 			next = h.ticker.Next()
-			currentEpoch := h.beaconConfig.EstimatedEpochAtSlot(currentSlot)
+			currentEpoch := h.netCfg.EstimatedEpochAtSlot(currentSlot)
 
-			slotNumber := uint64(currentSlot)%h.beaconConfig.SlotsPerEpoch + 1
+			slotNumber := uint64(currentSlot)%h.netCfg.SlotsPerEpoch + 1
 			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, currentSlot, slotNumber)
 			h.logger.Debug("🛠 ticker event", zap.String("epoch_slot_pos", buildStr))
 
@@ -136,7 +136,7 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 				// tickCtx ensures we never take too long to process ticks (otherwise we might not be able to catch up
 				// with the latest tick for a while, if ever). Since the ticker always fires at around slot start-time,
 				// setting the deadline to currentSlot+1 gives us about ~1 full slot (12s) to process the tick.
-				tickCtx, cancel := context.WithDeadline(ctx, h.beaconConfig.SlotStartTime(currentSlot+1))
+				tickCtx, cancel := context.WithDeadline(ctx, h.netCfg.SlotStartTime(currentSlot+1))
 				defer cancel()
 
 				h.processExecution(tickCtx, currentEpoch, currentSlot)
@@ -220,7 +220,7 @@ func (h *ValidatorRegistrationHandler) processExecution(ctx context.Context, epo
 	h.eventQueue = pendingItems
 
 	// validator should be registered within frequencyEpochs epochs time in a corresponding slot
-	registrationSlots := h.beaconConfig.SlotsPerEpoch * frequencyEpochs
+	registrationSlots := h.netCfg.SlotsPerEpoch * frequencyEpochs
 
 	for _, share := range shares {
 		if !share.IsAttesting(epoch + phase0.Epoch(frequencyEpochs)) {
@@ -278,7 +278,7 @@ func (h *ValidatorRegistrationHandler) blockSlot(ctx context.Context, blockNumbe
 		return 0, fmt.Errorf("request block %d from execution client: %w", blockNumber, err)
 	}
 
-	blockSlot = h.beaconConfig.EstimatedSlotAtTime(time.Unix(int64(header.Time), 0)) // #nosec G115
+	blockSlot = h.netCfg.EstimatedSlotAtTime(time.Unix(int64(header.Time), 0)) // #nosec G115
 
 	h.blockSlots[blockNumber] = blockSlot
 
@@ -295,6 +295,6 @@ func (h *ValidatorRegistrationHandler) blockSlot(ctx context.Context, blockNumbe
 
 func (h *ValidatorRegistrationHandler) dutyExecutionDeadline(slot phase0.Slot) time.Time {
 	// 1 wall-clock slot from execution should be sufficient for this duty-type.
-	dutyDeadline := h.beaconConfig.SlotStartTime(slot + 1)
+	dutyDeadline := h.netCfg.SlotStartTime(slot + 1)
 	return dutyDeadline
 }

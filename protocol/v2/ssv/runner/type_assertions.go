@@ -74,25 +74,14 @@ func (b *BaseRunner) currentDutySlot() (phase0.Slot, error) {
 			return 0, fmt.Errorf("committee duty is nil")
 		}
 		return duty.DutySlot(), nil
+	case *spectypes.AggregatorCommitteeDuty:
+		if duty == nil {
+			return 0, fmt.Errorf("aggregator committee duty is nil")
+		}
+		return duty.DutySlot(), nil
 	default:
 		return 0, fmt.Errorf("unsupported duty type: %T", b.State.CurrentDuty)
 	}
-}
-
-func validatorConsensusDataFromEncoder(value spectypes.Encoder) (*spectypes.ValidatorConsensusData, error) {
-	if value == nil {
-		return nil, fmt.Errorf("decided value is nil")
-	}
-
-	consensusData, ok := value.(*spectypes.ValidatorConsensusData)
-	if !ok {
-		return nil, fmt.Errorf("decided value is not a ValidatorConsensusData: %T", value)
-	}
-	if consensusData == nil {
-		return nil, fmt.Errorf("validator consensus data is nil")
-	}
-
-	return consensusData, nil
 }
 
 func beaconVoteFromEncoder(value spectypes.Encoder) (*spectypes.BeaconVote, error) {

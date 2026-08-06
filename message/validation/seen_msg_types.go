@@ -1,6 +1,6 @@
 package validation
 
-// message_counts.go contains code for counting and validating messages per validator-slot-round.
+// seen_msg_types.go contains code for counting and validating messages per validator-slot-round.
 
 import (
 	"fmt"
@@ -8,6 +8,8 @@ import (
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 const (
@@ -78,7 +80,7 @@ func (c *SeenMsgTypes) RecordConsensusMessage(signedSSVMessage *spectypes.Signed
 // RecordPartialSignatureMessage updates the counts based on the provided partial signature message type.
 func (c *SeenMsgTypes) RecordPartialSignatureMessage(messages *spectypes.PartialSignatureMessages) error {
 	switch messages.Type {
-	case spectypes.RandaoPartialSig, spectypes.SelectionProofPartialSig, spectypes.ContributionProofs, spectypes.ValidatorRegistrationPartialSig, spectypes.VoluntaryExitPartialSig:
+	case spectypes.RandaoPartialSig, ssvtypes.SelectionProofPartialSig, ssvtypes.ContributionProofs, spectypes.ValidatorRegistrationPartialSig, spectypes.VoluntaryExitPartialSig, spectypes.AggregatorCommitteePartialSig:
 		c.recordPreConsensus()
 	case spectypes.PostConsensusPartialSig:
 		c.recordPostConsensus()

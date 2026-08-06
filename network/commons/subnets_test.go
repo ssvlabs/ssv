@@ -1,7 +1,10 @@
 package commons
 
 import (
+	"bytes"
 	crand "crypto/rand"
+	"crypto/sha256"
+	"encoding/binary"
 	"math/big"
 	"strings"
 	"testing"
@@ -11,7 +14,25 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
-func TestCommitteeSubnet(t *testing.T) {
+func BenchmarkBooleCommitteeSubnet(b *testing.B) {
+	committee := []spectypes.OperatorID{1, 2, 3, 4, 5, 6, 7, 8}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		BooleCommitteeSubnet(committee)
+	}
+}
+
+func BenchmarkAlanCommitteeSubnet(b *testing.B) {
+	cid := [32]byte{}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		AlanCommitteeSubnet(cid)
+	}
+}
+
+func TestAlanCommitteeSubnet(t *testing.T) {
 	require.Equal(t, SubnetsCount, int(bigIntSubnetsCount.Uint64()))
 
 	bigInst := new(big.Int)
@@ -21,14 +42,111 @@ func TestCommitteeSubnet(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		// Get result from CommitteeSubnet
-		expected := CommitteeSubnet(cid)
+		actual := AlanCommitteeSubnet(cid)
 
-		// Get result from SetCommitteeSubnet
-		SetCommitteeSubnet(bigInst, cid)
-		actual := bigInst.Uint64()
+		// Cross-check against the reference big.Int math the memoized accessor must match.
+		bigInst.SetBytes(cid[:])
+		bigInst.Mod(bigInst, bigIntSubnetsCount)
+		expected := bigInst.Uint64()
 
 		require.Equal(t, expected, actual)
+	}
+}
+
+func TestBooleCommitteeSubnet(t *testing.T) {
+	require.Equal(t, SubnetsCount, int(bigIntSubnetsCount.Uint64()))
+
+	t.Run("Boole", func(t *testing.T) {
+		operators := []spectypes.OperatorID{
+			1, // sha256(0100000000000000)=7c9fa136d4413fa6173637e883b6998d32e1d675f88cddff9dcbcf331820f4b8
+			2, // sha256(0200000000000000)=d86e8112f3c4c4442126f8e9f44f16867da487f29052bf91b810457db34209a4
+			3, // sha256(0300000000000000)=35be322d094f9d154a8aba4733b8497f180353bd7ae7b0a15f90b586b549f28b
+			4, // sha256(0400000000000000)=f0a0278e4372459cca6159cd5e71cfee638302a7b9ca9b05c34181ac0a65ac5d
+		}
+
+		actual := BooleCommitteeSubnet(operators)
+
+		hashes := make([][32]byte, 0, len(operators))
+		for _, operator := range operators {
+			var operatorBytes [8]byte
+			binary.LittleEndian.PutUint64(operatorBytes[:], operator)
+			hash := sha256.Sum256(operatorBytes[:])
+
+			t.Logf("sha256(%x)=%x", operatorBytes, hash)
+			hashes = append(hashes, hash)
+		}
+
+		lowestHash := hashes[2] // pre-calculated (lowest hash is 35be322d094f9d154a8aba4733b8497f180353bd7ae7b0a15f90b586b549f28b)
+		expected := new(big.Int).Mod(new(big.Int).SetBytes(lowestHash[:]), bigIntSubnetsCount).Uint64()
+
+		require.Equal(t, expected, actual)
+	})
+
+	t.Run("Alan", func(t *testing.T) {
+		committeeID := spectypes.CommitteeID(bytes.Repeat([]byte{0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef}, 4))
+
+		actual := AlanCommitteeSubnet(committeeID)
+		expected := uint64(committeeID[31] % 128) // 0xef % 128 == 0xef % 0x80 == 0x6f
+
+		require.Equal(t, expected, actual)
+	})
+}
+
+func TestParseTopicSubnet(t *testing.T) {
+	tests := []struct {
+		name           string
+		topic          string
+		expectedSubnet uint64
+		expectedBoole  bool
+		expectedErr    bool
+	}{
+		{
+			name:           "alan topic",
+			topic:          GetTopicFullName(SubnetTopicID(12)),
+			expectedSubnet: 12,
+			expectedBoole:  false,
+		},
+		{
+			name:           "boole topic",
+			topic:          BooleTopic("mainnet", 42),
+			expectedSubnet: 42,
+			expectedBoole:  true,
+		},
+		{
+			name:        "invalid alan subnet",
+			topic:       "ssv.v2.not-a-subnet",
+			expectedErr: true,
+		},
+		{
+			name:        "invalid boole fork segment",
+			topic:       "/ssv/mainnet/alan/42",
+			expectedErr: true,
+		},
+		{
+			name:        "missing boole subnet",
+			topic:       "/ssv/mainnet/boole/",
+			expectedErr: true,
+		},
+		{
+			name:        "invalid topic root",
+			topic:       "/other/mainnet/boole/42",
+			expectedErr: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			subnet, boole, err := ParseTopicSubnet(test.topic)
+			if test.expectedErr {
+				require.Error(t, err)
+				require.False(t, boole)
+				return
+			}
+
+			require.NoError(t, err)
+			require.Equal(t, test.expectedSubnet, subnet)
+			require.Equal(t, test.expectedBoole, boole)
+		})
 	}
 }
 

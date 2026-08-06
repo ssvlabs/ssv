@@ -38,25 +38,25 @@ func (bn *BeaconNodeWrapped) GetAttestationData(ctx context.Context, slot phase0
 func (bn *BeaconNodeWrapped) DomainData(ctx context.Context, epoch phase0.Epoch, domain phase0.DomainType) (phase0.Domain, error) {
 	return bn.Bn.DomainData(epoch, domain)
 }
-func (bn *BeaconNodeWrapped) SyncCommitteeSubnetID(index phase0.CommitteeIndex) uint64 {
-	v, err := bn.Bn.SyncCommitteeSubnetID(index)
-	if err != nil {
-		panic("unexpected error from SyncCommitteeSubnetID")
-	}
-	return v
-}
 func (bn *BeaconNodeWrapped) IsSyncCommitteeAggregator(proof []byte) bool {
-	v, err := bn.Bn.IsSyncCommitteeAggregator(proof)
-	if err != nil {
-		panic("unexpected error from IsSyncCommitteeAggregator")
-	}
-	return v
+	return bn.Bn.IsSyncCommitteeAggregator(proof)
 }
 func (bn *BeaconNodeWrapped) GetSyncCommitteeContribution(ctx context.Context, slot phase0.Slot, selectionProofs []phase0.BLSSignature, subnetIDs []uint64) (ssz.Marshaler, spec.DataVersion, error) {
 	return bn.Bn.GetSyncCommitteeContribution(slot, selectionProofs, subnetIDs)
 }
 func (bn *BeaconNodeWrapped) SubmitAggregateSelectionProof(ctx context.Context, slot phase0.Slot, committeeIndex phase0.CommitteeIndex, committeeLength uint64, index phase0.ValidatorIndex, slotSig []byte) (ssz.Marshaler, spec.DataVersion, error) {
 	return bn.Bn.SubmitAggregateSelectionProof(slot, committeeIndex, committeeLength, index, slotSig)
+}
+func (bn *BeaconNodeWrapped) IsAggregator(ctx context.Context, slot phase0.Slot, committeeIndex phase0.CommitteeIndex, committeeLength uint64, slotSig []byte) bool {
+	return bn.Bn.IsAggregator(slot, committeeIndex, committeeLength, slotSig)
+}
+func (bn *BeaconNodeWrapped) GetAggregateAttestation(ctx context.Context, slot phase0.Slot, committeeIndex phase0.CommitteeIndex) (ssz.Marshaler, spec.DataVersion, error) {
+	att, err := bn.Bn.GetAggregateAttestation(slot, committeeIndex)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return att, spectestingutils.VersionBySlot(slot), nil
 }
 func (bn *BeaconNodeWrapped) GetBeaconNetwork() spectypes.BeaconNetwork {
 	return bn.Bn.GetBeaconNetwork()
@@ -86,7 +86,7 @@ func (bn *BeaconNodeWrapped) SubmitSignedContributionAndProof(ctx context.Contex
 	return bn.Bn.SubmitSignedContributionAndProof(contribution)
 }
 func (bn *BeaconNodeWrapped) SubmitSignedAggregateSelectionProof(ctx context.Context, msg *spec.VersionedSignedAggregateAndProof) error {
-	return bn.Bn.SubmitSignedAggregateSelectionProof(msg)
+	return bn.Bn.SubmitSignedAggregateAndProof(msg)
 }
 func (bn *BeaconNodeWrapped) SubmitBeaconBlock(ctx context.Context, block *api.VersionedProposal, sig phase0.BLSSignature) error {
 	return bn.Bn.SubmitBeaconBlock(block, sig)

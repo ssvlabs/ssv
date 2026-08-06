@@ -183,7 +183,7 @@ func benchmarkCommitteeFixture(
 
 	warmupMsg := benchmarkRouterMessage(committeeID, slot)
 	committee.EnqueueMessage(ctx, warmupMsg)
-	committeeQueue := committee.Queues[slot]
+	committeeQueue := committee.Queues[slot].Q
 	committeeQueue.TryPop(queue.NewCommitteeQueuePrioritizer(&queue.State{
 		Slot:   slot,
 		Quorum: 3,

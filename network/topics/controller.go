@@ -12,7 +12,6 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 )
 
@@ -29,6 +28,9 @@ type Controller interface {
 	Topics() []string
 	// Broadcast publishes the message on the given topic
 	Broadcast(topicName string, data []byte, timeout time.Duration) error
+	// DeregisterTopics removes the given topics from the subscription-filter whitelist,
+	// so incoming peer subscriptions to them are no longer accepted
+	DeregisterTopics(names ...string)
 	// UpdateScoreParams refreshes the score params for every subscribed topic
 	UpdateScoreParams() error
 
@@ -137,7 +139,7 @@ func (ctrl *topicsCtrl) UpdateScoreParams() error {
 func (ctrl *topicsCtrl) Close() error {
 	topics := ctrl.ps.GetTopics()
 	for _, tp := range topics {
-		_ = ctrl.Unsubscribe(commons.GetTopicBaseName(tp), true)
+		_ = ctrl.Unsubscribe(tp, true)
 		_ = ctrl.container.Leave(tp)
 	}
 	return nil
@@ -148,7 +150,6 @@ func (ctrl *topicsCtrl) Peers(name string) ([]peer.ID, error) {
 	if name == "" {
 		return ctrl.ps.ListPeers(""), nil
 	}
-	name = commons.GetTopicFullName(name)
 	topic := ctrl.container.Lookup(name)
 	if topic == nil {
 		return nil, nil
@@ -158,19 +159,13 @@ func (ctrl *topicsCtrl) Peers(name string) ([]peer.ID, error) {
 
 // Topics lists all topics this node is subscribed to
 func (ctrl *topicsCtrl) Topics() []string {
-	topics := ctrl.ps.GetTopics()
-	for i, tp := range topics {
-		topics[i] = commons.GetTopicBaseName(tp)
-	}
-	return topics
+	return ctrl.ps.GetTopics()
 }
 
 // Subscribe subscribes to the given topic, it can handle multiple concurrent calls.
 // It will create a single goroutine and channel for every topic
 func (ctrl *topicsCtrl) Subscribe(name string) error {
-	name = commons.GetTopicFullName(name)
-
-	ctrl.subFilter.(Whitelist).Register(name)
+	ctrl.subFilter.Register(name)
 
 	sub, err := ctrl.container.Subscribe(name)
 	if err != nil {
@@ -190,8 +185,7 @@ func (ctrl *topicsCtrl) Subscribe(name string) error {
 
 // Broadcast publishes the message on the given topic in a non-blocking manner.
 func (ctrl *topicsCtrl) Broadcast(topicName string, data []byte, timeout time.Duration) error {
-	topicNameFull := commons.GetTopicFullName(topicName)
-	topic, err := ctrl.container.Join(topicNameFull)
+	topic, err := ctrl.container.Join(topicName)
 	if err != nil {
 		return err
 	}
@@ -206,17 +200,22 @@ func (ctrl *topicsCtrl) Broadcast(topicName string, data []byte, timeout time.Du
 			return
 		}
 
-		outboundMessageCounter.Add(ctrl.ctx, 1, metric.WithAttributes(messageTopicAttribute(topicNameFull)))
+		outboundMessageCounter.Add(ctrl.ctx, 1, metric.WithAttributes(messageTopicAttribute(topicName)))
 	}()
 
 	return nil
 }
 
+// DeregisterTopics removes the given topics from the subscription-filter whitelist.
+func (ctrl *topicsCtrl) DeregisterTopics(names ...string) {
+	for _, name := range names {
+		ctrl.subFilter.Deregister(name)
+	}
+}
+
 // Unsubscribe unsubscribes from the given topic, only if there are no other subscribers of the given topic
 // if hard is true, we will unsubscribe the topic even if there are more subscribers.
 func (ctrl *topicsCtrl) Unsubscribe(name string, hard bool) error {
-	name = commons.GetTopicFullName(name)
-
 	if !ctrl.container.Unsubscribe(name) {
 		return fmt.Errorf("failed to unsubscribe from topic %s: not subscribed", name)
 	}
@@ -227,7 +226,7 @@ func (ctrl *topicsCtrl) Unsubscribe(name string, hard bool) error {
 			ctrl.logger.Debug("could not unregister msg validator", zap.String("topic", name), zap.Error(err))
 		}
 	}
-	ctrl.subFilter.(Whitelist).Deregister(name)
+	ctrl.subFilter.Deregister(name)
 
 	return nil
 }

@@ -21,6 +21,7 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
@@ -39,7 +40,7 @@ type Getters interface {
 	GetStateRoot() ([32]byte, error)
 	GetSigner() ekm.BeaconSigner
 	GetOperatorSigner() ssvtypes.OperatorSigner
-	GetNetwork() specqbft.Network
+	GetNetwork() protocolp2p.Network
 	GetBeaconNode() beacon.BeaconNode
 }
 
@@ -86,7 +87,7 @@ type BaseRunnerOptions struct {
 	NetworkConfig  *networkconfig.Network
 	Share          map[phase0.ValidatorIndex]*spectypes.Share
 	Beacon         beacon.BeaconNode
-	Network        specqbft.Network
+	Network        protocolp2p.Network
 	Signer         ekm.BeaconSigner
 	OperatorSigner ssvtypes.OperatorSigner
 }
@@ -339,7 +340,7 @@ func (b *BaseRunner) watchDutyOutcome(ctx context.Context, logger *zap.Logger) {
 // executeDuty tails are otherwise identical.
 func (b *BaseRunner) signAndBroadcastPartialSigMsgs(
 	ctx context.Context,
-	network specqbft.Network,
+	network protocolp2p.Network,
 	opSigner ssvtypes.OperatorSigner,
 	validatorPubKey []byte,
 	msgs *spectypes.PartialSignatureMessages,
@@ -347,7 +348,10 @@ func (b *BaseRunner) signAndBroadcastPartialSigMsgs(
 	// Reuse the existing span instead of generating new one to keep tracing-data lightweight.
 	span := trace.SpanFromContext(ctx)
 
-	msgID := spectypes.NewMsgID(b.NetworkConfig.DomainType, validatorPubKey, b.RunnerRoleType)
+	// Use the fork-aware domain so the pubsub message validator accepts the message after the
+	// Boole fork activates (post-fork it checks NextDomainType). Mirrors CommitteeRunner and
+	// QBFT domain selection. Fixes #2915.
+	msgID := spectypes.NewMsgID(b.NetworkConfig.DomainTypeAtSlot(msgs.Slot), validatorPubKey, b.RunnerRoleType)
 	encodedMsg, err := msgs.Encode()
 	if err != nil {
 		return fmt.Errorf("could not encode partial signature messages: %w", err)
@@ -372,7 +376,7 @@ func (b *BaseRunner) signAndBroadcastPartialSigMsgs(
 	}
 
 	span.AddEvent("broadcasting signed SSV message")
-	if err := network.Broadcast(msgID, signed); err != nil {
+	if err := network.BroadcastAtSlot(signed, msgs.Slot); err != nil {
 		return fmt.Errorf("could not broadcast signed SSV message: %w", err)
 	}
 
@@ -523,9 +527,7 @@ func (b *BaseRunner) basePartialSigMsgProcessing(
 
 		// Check if it has two signatures for the same signer
 		if container.HasSignature(msg.ValidatorIndex, msg.Signer, msg.SigningRoot) {
-			// A failure means neither signature was valid; the container is left without
-			// one, which is fine here since we only track quorum.
-			_ = container.ResolveDuplicateSignature(msg, b.Share[msg.ValidatorIndex].Committee)
+			b.resolveDuplicateSignature(container, msg)
 		} else {
 			container.AddSignature(msg)
 		}

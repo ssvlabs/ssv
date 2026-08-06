@@ -11,6 +11,7 @@ import (
 
 	exportercore "github.com/ssvlabs/ssv/exporter"
 	"github.com/ssvlabs/ssv/ibft/storage"
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 )
@@ -21,7 +22,7 @@ type validatorIndexReader interface {
 
 // HandleQueryRequests dispatches websocket query messages to either the legacy
 // participant-store path or the archive exporter-core compatibility path.
-func (h *Handler) HandleQueryRequests(store *storage.ParticipantStores, exporterRead *exportercore.Exporter, validators validatorIndexReader, domain spectypes.DomainType, nm *NetworkMessage) {
+func (h *Handler) HandleQueryRequests(store *storage.ParticipantStores, exporterRead *exportercore.Exporter, validators validatorIndexReader, netCfg *networkconfig.Network, nm *NetworkMessage) {
 	if nm.Err != nil {
 		nm.Msg = Message{
 			Type: TypeError,
@@ -36,10 +37,10 @@ func (h *Handler) HandleQueryRequests(store *storage.ParticipantStores, exporter
 		// In exporter archive mode we serve decided queries via exporter core.
 		// Fall back to legacy qbft storage when exporter isn't wired.
 		if exporterRead != nil {
-			h.handleDecidedViaExporter(exporterRead, validators, domain, nm)
+			h.handleDecidedViaExporter(exporterRead, validators, netCfg, nm)
 			break
 		}
-		h.HandleParticipantsQuery(store, nm, domain)
+		h.HandleParticipantsQuery(store, nm, netCfg)
 	case TypeError:
 		h.HandleErrorQuery(nm)
 	default:
@@ -47,7 +48,7 @@ func (h *Handler) HandleQueryRequests(store *storage.ParticipantStores, exporter
 	}
 }
 
-func (h *Handler) handleDecidedViaExporter(exporterRead *exportercore.Exporter, validators validatorIndexReader, domain spectypes.DomainType, nm *NetworkMessage) {
+func (h *Handler) handleDecidedViaExporter(exporterRead *exportercore.Exporter, validators validatorIndexReader, netCfg *networkconfig.Network, nm *NetworkMessage) {
 	res := Message{Type: nm.Msg.Type, Filter: nm.Msg.Filter}
 
 	pkBytes, err := hex.DecodeString(nm.Msg.Filter.PublicKey)
@@ -114,7 +115,7 @@ func (h *Handler) handleDecidedViaExporter(exporterRead *exportercore.Exporter, 
 		return
 	}
 
-	data, err := ParticipantsAPIData(domain, participations...)
+	data, err := ParticipantsAPIData(netCfg, participations...)
 	if err != nil {
 		h.logger.Warn("failed to build participants api data", zap.Error(err))
 		res.Type = TypeError

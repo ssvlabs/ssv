@@ -14,6 +14,7 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
+	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
@@ -52,6 +53,10 @@ type SSVShare struct {
 
 	// committeeID is a cached value for committee ID so we don't recompute it every time.
 	committeeID atomic.Pointer[spectypes.CommitteeID]
+	// booleCommitteeSubnet is a cached value for committee subnet (post-Boole-fork) so we don't recompute it every time.
+	booleCommitteeSubnet atomic.Pointer[uint64]
+	// alanCommitteeSubnet is a cached value for committee subnet (Alan fork) so we don't recompute it every time.
+	alanCommitteeSubnet atomic.Pointer[uint64]
 
 	// minParticipationEpoch is the epoch at which the validator can start participating.
 	// This is set on registration and on every reactivation, as well as on DB-resync.
@@ -196,6 +201,28 @@ func (s *SSVShare) OperatorIDs() []spectypes.OperatorID {
 		ids[i] = v.Signer
 	}
 	return ids
+}
+
+// BooleCommitteeSubnet safely retrieves or computes the committee subnet for the Boole fork.
+func (s *SSVShare) BooleCommitteeSubnet() uint64 {
+	if ptr := s.booleCommitteeSubnet.Load(); ptr != nil {
+		return *ptr
+	}
+
+	subnet := commons.BooleCommitteeSubnet(s.OperatorIDs())
+	s.booleCommitteeSubnet.Store(&subnet)
+	return subnet
+}
+
+// AlanCommitteeSubnet safely retrieves or computes the committee subnet for the Alan fork.
+func (s *SSVShare) AlanCommitteeSubnet() uint64 {
+	if ptr := s.alanCommitteeSubnet.Load(); ptr != nil {
+		return *ptr
+	}
+
+	subnet := commons.AlanCommitteeSubnet(s.CommitteeID())
+	s.alanCommitteeSubnet.Store(&subnet)
+	return subnet
 }
 
 func (s *SSVShare) HasQuorum(cnt uint64) bool {

@@ -24,8 +24,10 @@ import (
 
 const (
 	// subscriptionRequestLimit sets an upper bound for the number of topic we are allowed to subscribe to.
-	// 128 subnets + 1 safety buffer
-	subscriptionRequestLimit = 128 + 1
+	// During the Boole transition window every subnet has two live topics (Alan + Boole), so a peer can
+	// legitimately advertise up to SubnetsCount*2 subscriptions (e.g. an exporter subscribed to all
+	// subnets on both forks); +1 safety buffer.
+	subscriptionRequestLimit = commons.SubnetsCount*2 + 1
 )
 
 // the following are kept in vars to allow flexibility (e.g. in tests)
@@ -127,9 +129,9 @@ func NewPubSub(
 	}
 
 	// Set up a SubFilter with a whitelist of known topics.
-	sf := newSubFilter(logger, subscriptionRequestLimit)
-	for _, topic := range commons.Topics() {
-		sf.(Whitelist).Register(topic)
+	sf := newSubFilter()
+	for _, topic := range commons.Topics(cfg.NetworkConfig) {
+		sf.Register(topic)
 	}
 
 	psOpts := []pubsub.Option{

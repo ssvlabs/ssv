@@ -67,3 +67,42 @@ func encodeBeaconVote(t *testing.T, sourceEpoch, targetEpoch phase0.Epoch) []byt
 	require.NoError(t, err)
 	return data
 }
+
+// TestValidateNoDuplicateAggregatorCommittee covers the duplicate-rejection that closes the
+// per-index partial-signature cap gap: a validator index may repeat across the two sets (an
+// aggregator and a contributor for the same numeric index are distinct), but not within a set.
+func TestValidateNoDuplicateAggregatorCommittee(t *testing.T) {
+	agg := func(vi phase0.ValidatorIndex, ci uint64) spectypes.AssignedAggregator {
+		return spectypes.AssignedAggregator{ValidatorIndex: vi, CommitteeIndex: ci}
+	}
+
+	t.Run("clean data passes", func(t *testing.T) {
+		cd := &spectypes.AggregatorCommitteeConsensusData{
+			Aggregators:  []spectypes.AssignedAggregator{agg(1, 0), agg(2, 0), agg(1, 3)},
+			Contributors: []spectypes.AssignedAggregator{agg(1, 0), agg(1, 1), agg(2, 0)},
+		}
+		require.NoError(t, validateNoDuplicateAggregatorCommittee(cd))
+	})
+
+	t.Run("same (validator, index) across the two sets is allowed", func(t *testing.T) {
+		cd := &spectypes.AggregatorCommitteeConsensusData{
+			Aggregators:  []spectypes.AssignedAggregator{agg(7, 0)},
+			Contributors: []spectypes.AssignedAggregator{agg(7, 0)},
+		}
+		require.NoError(t, validateNoDuplicateAggregatorCommittee(cd))
+	})
+
+	t.Run("duplicate aggregator rejected", func(t *testing.T) {
+		cd := &spectypes.AggregatorCommitteeConsensusData{
+			Aggregators: []spectypes.AssignedAggregator{agg(5, 2), agg(5, 2)},
+		}
+		require.ErrorContains(t, validateNoDuplicateAggregatorCommittee(cd), "duplicate aggregator")
+	})
+
+	t.Run("duplicate contributor rejected", func(t *testing.T) {
+		cd := &spectypes.AggregatorCommitteeConsensusData{
+			Contributors: []spectypes.AssignedAggregator{agg(9, 1), agg(9, 1)},
+		}
+		require.ErrorContains(t, validateNoDuplicateAggregatorCommittee(cd), "duplicate contributor")
+	})
+}

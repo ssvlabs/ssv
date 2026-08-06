@@ -86,18 +86,26 @@ func (n *p2pNetwork) startDiscovery() error {
 			return
 		}
 
-		// Compute the number of peers we're connected to for each subnet.
-		ownSubnets := n.SubscribedSubnets()
+		// Compute the number of peers we're connected to per (fork, subnet). During the
+		// Boole-fork transition window Alan and Boole topics coexist for the same subnet
+		// index but have independent peer populations, so we track them separately to
+		// avoid a dead Alan-N topic hiding behind a healthy Boole-N (or vice versa).
+		ownAlanSubnets, ownBooleSubnets := n.subscribedSubnetsForCurrentEpoch()
 		currentSubnetPeers := newSubnetPeers()
 		for topic, peers := range n.PeersByTopic() {
-			subnet, ok := n.topicSubnet(topic)
-			if !ok {
+			subnet, isBoole, err := n.topicSubnet(topic)
+			if err != nil {
+				n.logger.Error("failed to convert topic to subnet", zap.String("topic", topic), zap.Error(err))
 				continue
 			}
-			currentSubnetPeers[subnet] = uint16(len(peers)) //nolint: gosec
+			if isBoole {
+				currentSubnetPeers.boole[subnet] = uint16(len(peers)) //nolint: gosec
+			} else {
+				currentSubnetPeers.alan[subnet] = uint16(len(peers)) //nolint: gosec
+			}
 		}
 
-		poolStats := n.peerSelectionPoolStats(ownSubnets, currentSubnetPeers)
+		poolStats := n.peerSelectionPoolStats(ownAlanSubnets, ownBooleSubnets, currentSubnetPeers)
 
 		n.logger.Debug("selecting discovered peers", append([]zap.Field{
 			zap.Int("trimmed_recently_size", n.trimmedRecently.SlowLen()),
@@ -127,7 +135,14 @@ func (n *p2pNetwork) startDiscovery() error {
 				// - the more a peer has been tried, the less relevant it is (cooldown grows)
 				// - the more time has passed since the last connect attempt the more relevant peer is (waited grows)
 				peerSubnets, _ := n.PeersIndex().GetPeerSubnets(peerID)
-				peerScore, ready := peerSelectionScore(now, discoveredPeer, optimisticSubnetPeers, ownSubnets, peerSubnets)
+				peerScore, ready := peerSelectionScore(
+					now,
+					discoveredPeer,
+					optimisticSubnetPeers,
+					ownAlanSubnets,
+					ownBooleSubnets,
+					peerSubnets,
+				)
 				if !ready {
 					return true
 				}
@@ -147,7 +162,7 @@ func (n *p2pNetwork) startDiscovery() error {
 
 			// Add the selected(best) peer's subnets to pendingSubnetPeers to be used on the next iteration.
 			bestPeerSubnets, _ := n.PeersIndex().GetPeerSubnets(bestPeer.ID)
-			bestSubnetPeers := newSubnetPeersFromSubnets(bestPeerSubnets)
+			bestSubnetPeers := newSubnetPeersFromPeerENR(bestPeerSubnets, ownAlanSubnets, ownBooleSubnets)
 			pendingSubnetPeers = pendingSubnetPeers.Add(bestSubnetPeers)
 			peersToConnect[bestPeer.ID] = bestPeer
 
@@ -186,14 +201,18 @@ func (n *p2pNetwork) startDiscovery() error {
 	return nil
 }
 
+// peerSelectionScore scores a discovered peer for outbound-connection selection. The peer's
+// ENR bitfield is the union of their Alan and Boole subnets, so we pass it as both sides to
+// SubnetPeers.Score — a bit set in the peer's ENR means the peer could be serving Alan-N,
+// Boole-N, or both, and we credit them for each side we ourselves care about.
 func peerSelectionScore(
 	now time.Time,
 	discoveredPeer discovery.DiscoveredPeer,
 	currentSubnetPeers SubnetPeers,
-	ownSubnets commons.Subnets,
+	ownAlanSubnets, ownBooleSubnets commons.Subnets,
 	peerSubnets commons.Subnets,
 ) (float64, bool) {
-	peerScore := currentSubnetPeers.Score(ownSubnets, peerSubnets)
+	peerScore := currentSubnetPeers.Score(ownAlanSubnets, ownBooleSubnets, peerSubnets, peerSubnets)
 	if discoveredPeer.Tries == 0 {
 		return peerScore, true
 	}
@@ -208,14 +227,14 @@ func peerSelectionScore(
 	return peerScore * peerRelevance * peerRelevance, true
 }
 
-func (n *p2pNetwork) peerSelectionPoolStats(ownSubnets commons.Subnets, currentSubnetPeers SubnetPeers) peerSelectionPoolStats {
+func (n *p2pNetwork) peerSelectionPoolStats(ownAlanSubnets, ownBooleSubnets commons.Subnets, currentSubnetPeers SubnetPeers) peerSelectionPoolStats {
 	var stats peerSelectionPoolStats
 	now := time.Now()
 	n.discoveredPeersPool.Range(func(peerID peer.ID, discoveredPeer discovery.DiscoveredPeer) bool {
 		stats.poolSize++
 
 		peerSubnets, _ := n.PeersIndex().GetPeerSubnets(peerID)
-		peerScore, ready := peerSelectionScore(now, discoveredPeer, currentSubnetPeers, ownSubnets, peerSubnets)
+		peerScore, ready := peerSelectionScore(now, discoveredPeer, currentSubnetPeers, ownAlanSubnets, ownBooleSubnets, peerSubnets)
 		if !ready {
 			stats.cooldownBlockedCandidates++
 			return true

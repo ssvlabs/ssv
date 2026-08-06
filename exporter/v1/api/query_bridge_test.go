@@ -84,7 +84,7 @@ func newWSQueryHarness(t *testing.T) *wsQueryHarness {
 	store := newFaultingDutyTraceStore(realStore)
 
 	collector := dutytracer.New(zap.NewNop(), validatorMock, nil, store, networkconfig.TestNetwork.Beacon, nil, nil)
-	coreExporter := exportercore.NewExporter(zap.NewNop(), ibftstorage.NewStores(), collector, validatorMock)
+	coreExporter := exportercore.NewExporter(zap.NewNop(), ibftstorage.NewStores(), collector, validatorMock, networkconfig.TestNetwork)
 
 	return &wsQueryHarness{
 		t:             t,
@@ -143,13 +143,13 @@ func (h *wsQueryHarness) SaveCommitteeDutyAttester(slot phase0.Slot, validatorIn
 	for _, s := range signers {
 		duty.Attester = append(duty.Attester, &traces.SignerData{Signer: s})
 	}
-	require.NoError(h.t, h.store.SaveCommitteeDuty(duty))
+	require.NoError(h.t, h.store.SaveCommitteeDuty(spectypes.RoleCommittee, duty))
 }
 
 func (h *wsQueryHarness) QueryDecided(from, to uint64, pkHex, role string) *NetworkMessage {
 	h.t.Helper()
 	nm := decidedMessage(from, to, pkHex, role)
-	h.handler.HandleQueryRequests(nil, h.exporterRead, h.validatorMock, networkconfig.TestNetwork.DomainType, nm)
+	h.handler.HandleQueryRequests(nil, h.exporterRead, h.validatorMock, networkconfig.TestNetwork, nm)
 	return nm
 }
 
@@ -187,7 +187,7 @@ func TestWSQuery_Decided_NilExporterReadFallsBackToLegacyParticipants(t *testing
 
 	nm := decidedMessage(uint64(10), uint64(10), hex.EncodeToString(pk[:]), role.String())
 	handler := NewHandler(logger)
-	handler.HandleQueryRequests(ibftStorage, nil, nil, networkconfig.TestNetwork.DomainType, nm)
+	handler.HandleQueryRequests(ibftStorage, nil, nil, networkconfig.TestNetwork, nm)
 
 	require.Equal(t, TypeDecided, nm.Msg.Type)
 	data, ok := nm.Msg.Data.([]*ParticipantsAPI)
@@ -374,7 +374,7 @@ func TestWSQuery_NetworkMessageParseError_GoesThroughErrorHandler(t *testing.T) 
 	h := newWSQueryHarness(t)
 
 	nm := &NetworkMessage{Err: errors.New("parsefail")}
-	h.handler.HandleQueryRequests(nil, h.exporterRead, h.validatorMock, networkconfig.TestNetwork.DomainType, nm)
+	h.handler.HandleQueryRequests(nil, h.exporterRead, h.validatorMock, networkconfig.TestNetwork, nm)
 
 	require.Equal(t, TypeError, nm.Msg.Type)
 	errs, ok := nm.Msg.Data.([]string)
@@ -391,7 +391,7 @@ func TestWSQuery_UnknownMessageType_ReturnsBadRequest(t *testing.T) {
 		Type:   "banana",
 		Filter: MessageFilter{From: 1, To: 1},
 	}}
-	h.handler.HandleQueryRequests(nil, h.exporterRead, h.validatorMock, networkconfig.TestNetwork.DomainType, nm)
+	h.handler.HandleQueryRequests(nil, h.exporterRead, h.validatorMock, networkconfig.TestNetwork, nm)
 
 	require.Equal(t, TypeError, nm.Msg.Type)
 	errs, ok := nm.Msg.Data.([]string)

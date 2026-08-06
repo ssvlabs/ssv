@@ -310,23 +310,28 @@ func GetModulePath(name, version string) (string, error) {
 }
 
 func getGoModFile(path string) (*modfile.File, error) {
+	// The alan_spec build resolves the ssv-spec version from go.spec.alan.mod instead of
+	// go.mod, so the spec-test vectors come from the alan (pre-Boole) spec release.
+	modFileName := specGoModFilename()
+
 	// find project root path
 	for {
-		if _, err := os.Stat(filepath.Join(path, "go.mod")); err == nil {
+		if _, err := os.Stat(filepath.Join(path, modFileName)); err == nil {
 			break
 		}
 		path = filepath.Dir(path)
 		if path == "/" {
-			return nil, errors.New("could not find go.mod file")
+			return nil, fmt.Errorf("could not find %s file", modFileName)
 		}
 	}
 
-	// read go.mod
-	buf, err := os.ReadFile(filepath.Join(filepath.Clean(path), "go.mod"))
+	// read mod file
+	// #nosec G304 -- modFileName is selected by build tags from fixed constants.
+	buf, err := os.ReadFile(filepath.Join(filepath.Clean(path), modFileName))
 	if err != nil {
-		return nil, errors.New("could not read go.mod")
+		return nil, fmt.Errorf("could not read %s", modFileName)
 	}
 
-	// parse go.mod
-	return modfile.Parse("go.mod", buf, nil)
+	// parse mod file
+	return modfile.Parse(modFileName, buf, nil)
 }

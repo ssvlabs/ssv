@@ -9,7 +9,9 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/jellydator/ttlcache/v3"
 	"go.uber.org/zap"
 
@@ -20,6 +22,7 @@ import (
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability/log/fields"
+	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
 	qbftcontroller "github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
@@ -30,18 +33,22 @@ import (
 type CommitteeObserver struct {
 	sync.Mutex
 
-	msgID             spectypes.MessageID
-	logger            *zap.Logger
-	Storage           *storage.ParticipantStores
-	beaconConfig      *networkconfig.Beacon
-	ValidatorStore    registrystorage.ValidatorStore
-	newDecidedHandler qbftcontroller.NewDecidedHandler
-	attesterRoots     *ttlcache.Cache[phase0.Root, struct{}]
-	syncCommRoots     *ttlcache.Cache[phase0.Root, struct{}]
-	domainCache       *DomainCache
+	msgID                spectypes.MessageID
+	logger               *zap.Logger
+	Storage              *storage.ParticipantStores
+	beaconConfig         *networkconfig.Beacon
+	ValidatorStore       registrystorage.ValidatorStore
+	newDecidedHandler    qbftcontroller.NewDecidedHandler
+	attesterRoots        *ttlcache.Cache[phase0.Root, struct{}]
+	aggregatorRoots      *ttlcache.Cache[phase0.Root, struct{}]
+	syncCommRoots        *ttlcache.Cache[phase0.Root, struct{}]
+	syncCommContribRoots *ttlcache.Cache[phase0.Root, struct{}]
+	domainCache          *DomainCache
 
 	// cache to identify and skip duplicate computations of attester/sync committee roots
 	beaconVoteRoots *ttlcache.Cache[BeaconVoteCacheKey, struct{}]
+	// cache to identify and skip duplicate computations of aggregator/sync committee contribution roots
+	aggregatorCommitteeRoots *ttlcache.Cache[AggregatorCommitteeCacheKey, struct{}]
 
 	// TODO: consider using round-robin container as []map[phase0.ValidatorIndex]*ssv.PartialSigContainer similar to what is used in OperatorState
 	postConsensusContainer map[phase0.Slot]map[phase0.ValidatorIndex]*ssv.PartialSigContainer
@@ -54,35 +61,48 @@ type BeaconVoteCacheKey struct {
 	height specqbft.Height
 }
 
+// AggregatorCommitteeCacheKey is a composite key for identifying a unique call
+// to computing aggregator committee roots.
+type AggregatorCommitteeCacheKey struct {
+	root   phase0.Root
+	height specqbft.Height
+}
+
 type CommitteeObserverOptions struct {
-	FullNode          bool
-	Logger            *zap.Logger
-	BeaconConfig      *networkconfig.Beacon
-	Network           specqbft.Network
-	Storage           *storage.ParticipantStores
-	OperatorSigner    ssvtypes.OperatorSigner
-	NewDecidedHandler qbftcontroller.NewDecidedHandler
-	ValidatorStore    registrystorage.ValidatorStore
-	AttesterRoots     *ttlcache.Cache[phase0.Root, struct{}]
-	SyncCommRoots     *ttlcache.Cache[phase0.Root, struct{}]
-	BeaconVoteRoots   *ttlcache.Cache[BeaconVoteCacheKey, struct{}]
-	DomainCache       *DomainCache
+	FullNode             bool
+	Logger               *zap.Logger
+	BeaconConfig         *networkconfig.Beacon
+	Network              protocolp2p.Network
+	Storage              *storage.ParticipantStores
+	OperatorSigner       ssvtypes.OperatorSigner
+	NewDecidedHandler    qbftcontroller.NewDecidedHandler
+	ValidatorStore       registrystorage.ValidatorStore
+	AttesterRoots        *ttlcache.Cache[phase0.Root, struct{}]
+	AggregatorRoots      *ttlcache.Cache[phase0.Root, struct{}]
+	SyncCommRoots        *ttlcache.Cache[phase0.Root, struct{}]
+	SyncCommContribRoots *ttlcache.Cache[phase0.Root, struct{}]
+	BeaconVoteRoots      *ttlcache.Cache[BeaconVoteCacheKey, struct{}]
+	AggregatorCommRoots  *ttlcache.Cache[AggregatorCommitteeCacheKey, struct{}]
+	DomainCache          *DomainCache
 }
 
 func NewCommitteeObserver(msgID spectypes.MessageID, opts CommitteeObserverOptions) *CommitteeObserver {
 	// TODO: does the specific operator matters?
 
 	co := &CommitteeObserver{
-		msgID:             msgID,
-		logger:            opts.Logger,
-		Storage:           opts.Storage,
-		beaconConfig:      opts.BeaconConfig,
-		ValidatorStore:    opts.ValidatorStore,
-		newDecidedHandler: opts.NewDecidedHandler,
-		attesterRoots:     opts.AttesterRoots,
-		syncCommRoots:     opts.SyncCommRoots,
-		domainCache:       opts.DomainCache,
-		beaconVoteRoots:   opts.BeaconVoteRoots,
+		msgID:                    msgID,
+		logger:                   opts.Logger,
+		Storage:                  opts.Storage,
+		beaconConfig:             opts.BeaconConfig,
+		ValidatorStore:           opts.ValidatorStore,
+		newDecidedHandler:        opts.NewDecidedHandler,
+		attesterRoots:            opts.AttesterRoots,
+		aggregatorRoots:          opts.AggregatorRoots,
+		syncCommRoots:            opts.SyncCommRoots,
+		syncCommContribRoots:     opts.SyncCommContribRoots,
+		domainCache:              opts.DomainCache,
+		beaconVoteRoots:          opts.BeaconVoteRoots,
+		aggregatorCommitteeRoots: opts.AggregatorCommRoots,
 	}
 
 	co.postConsensusContainer = make(map[phase0.Slot]map[phase0.ValidatorIndex]*ssv.PartialSigContainer, co.postConsensusContainerCapacity())
@@ -94,7 +114,7 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
 	role := msg.MsgID.GetRoleType()
 
 	logger := ncv.logger.With(fields.RunnerRole(role))
-	if role == spectypes.RoleCommittee {
+	if role == spectypes.RoleCommittee || role == spectypes.RoleAggregatorCommittee {
 		cid := spectypes.CommitteeID(msg.GetID().GetDutyExecutorID()[16:])
 		logger = logger.With(fields.CommitteeID(cid))
 	} else {
@@ -208,19 +228,33 @@ func (ncv *CommitteeObserver) getBeaconRoles(msg *queue.SSVMessage, root phase0.
 		default:
 			return nil
 		}
-	case spectypes.RoleAggregator:
+	case spectypes.RoleAggregatorCommittee:
+		aggregator := ncv.aggregatorRoots.Get(root)
+		syncCommitteeContrib := ncv.syncCommContribRoots.Get(root)
+
+		switch {
+		case aggregator != nil && syncCommitteeContrib != nil:
+			return []spectypes.BeaconRole{spectypes.BNRoleAggregator, spectypes.BNRoleSyncCommitteeContribution}
+		case aggregator != nil:
+			return []spectypes.BeaconRole{spectypes.BNRoleAggregator}
+		case syncCommitteeContrib != nil:
+			return []spectypes.BeaconRole{spectypes.BNRoleSyncCommitteeContribution}
+		default:
+			return nil
+		}
+	case ssvtypes.RoleAggregator:
 		return []spectypes.BeaconRole{spectypes.BNRoleAggregator}
 	case spectypes.RoleProposer:
 		return []spectypes.BeaconRole{spectypes.BNRoleProposer}
-	case spectypes.RoleSyncCommitteeContribution:
+	case ssvtypes.RoleSyncCommitteeContribution:
 		return []spectypes.BeaconRole{spectypes.BNRoleSyncCommitteeContribution}
 	case spectypes.RoleValidatorRegistration:
 		return []spectypes.BeaconRole{spectypes.BNRoleValidatorRegistration}
 	case spectypes.RoleVoluntaryExit:
 		return []spectypes.BeaconRole{spectypes.BNRoleVoluntaryExit}
+	default:
+		return nil
 	}
-
-	return nil
 }
 
 type validatorIndexAndRoot struct {
@@ -261,7 +295,7 @@ func (ncv *CommitteeObserver) VerifySig(partialMsgs *spectypes.PartialSignatureM
 			slotValidators[msg.ValidatorIndex] = container
 		}
 		if container.HasSignature(msg.ValidatorIndex, msg.Signer, msg.SigningRoot) {
-			if err := container.ResolveDuplicateSignature(msg, validator.Committee); err != nil {
+			if err := ncv.resolveDuplicateSignature(container, msg, validator); err != nil {
 				return err
 			}
 		} else {
@@ -297,7 +331,7 @@ func (ncv *CommitteeObserver) verifySigAndgetQuorums(
 			slotValidators[msg.ValidatorIndex] = container
 		}
 		if container.HasSignature(msg.ValidatorIndex, msg.Signer, msg.SigningRoot) {
-			_ = container.ResolveDuplicateSignature(msg, validator.Committee)
+			_ = ncv.resolveDuplicateSignature(container, msg, validator)
 		} else {
 			container.AddSignature(msg)
 		}
@@ -335,39 +369,118 @@ func (ncv *CommitteeObserver) pruneOldSlots(currentSlot phase0.Slot) {
 	}
 }
 
-func (ncv *CommitteeObserver) SaveRoots(ctx context.Context, msg *queue.SSVMessage) error {
-	beaconVote := &spectypes.BeaconVote{}
-	if err := beaconVote.Decode(msg.SignedSSVMessage.FullData); err != nil {
-		ncv.logger.Debug("❗ failed to get beacon vote data", zap.Error(err))
-		return err
+// Stores the container's existing signature or the new one, depending on their validity. If both are invalid, remove the existing one
+// copied from BaseRunner
+func (ncv *CommitteeObserver) resolveDuplicateSignature(container *ssv.PartialSigContainer, msg *spectypes.PartialSignatureMessage, share *ssvtypes.SSVShare) error {
+	// Check previous signature validity
+	previousSignature, err := container.GetSignature(msg.ValidatorIndex, msg.Signer, msg.SigningRoot)
+	if err == nil {
+		err = ncv.verifyBeaconPartialSignature(msg.Signer, previousSignature, msg.SigningRoot, share)
+		if err == nil {
+			// Keep the previous signature since it's correct
+			return nil
+		}
 	}
 
+	// Previous signature is incorrect or doesn't exist
+	container.Remove(msg.ValidatorIndex, msg.Signer, msg.SigningRoot)
+
+	// Hold the new signature, if correct
+	err = ncv.verifyBeaconPartialSignature(msg.Signer, msg.PartialSignature, msg.SigningRoot, share)
+	if err == nil {
+		container.AddSignature(msg)
+	}
+
+	return err
+}
+
+// copied from BaseRunner
+func (ncv *CommitteeObserver) verifyBeaconPartialSignature(signer uint64, signature spectypes.Signature, root phase0.Root, share *ssvtypes.SSVShare) error {
+	for _, n := range share.Committee {
+		if n.Signer == signer {
+			pk, err := ssvtypes.DeserializeBLSPublicKey(n.SharePubKey)
+			if err != nil {
+				return fmt.Errorf("could not deserialized pk: %w", err)
+			}
+
+			sig := &bls.Sign{}
+			if err := sig.Deserialize(signature); err != nil {
+				return fmt.Errorf("could not deserialized Signature: %w", err)
+			}
+
+			if !sig.VerifyByte(&pk, root[:]) {
+				return fmt.Errorf("wrong signature")
+			}
+			return nil
+		}
+	}
+	return fmt.Errorf("unknown signer")
+}
+
+func (ncv *CommitteeObserver) SaveRoots(ctx context.Context, msg *queue.SSVMessage) error {
 	qbftMsg, ok := msg.Body.(*specqbft.Message)
 	if !ok || qbftMsg == nil {
 		return fmt.Errorf("invalid qbft msg body, type: %T", msg.Body)
 	}
 
-	bnCacheKey := BeaconVoteCacheKey{root: beaconVote.BlockRoot, height: qbftMsg.Height}
-
-	// if the roots for this beacon vote hash and height have already been computed, skip
-	if ncv.beaconVoteRoots.Has(bnCacheKey) {
-		return nil
-	}
-
 	epoch := ncv.beaconConfig.EstimatedEpochAtSlot(phase0.Slot(qbftMsg.Height))
 
-	if err := ncv.saveAttesterRoots(ctx, epoch, beaconVote, qbftMsg); err != nil {
-		return err
+	switch msg.MsgID.GetRoleType() {
+	case spectypes.RoleCommittee:
+		beaconVote := &spectypes.BeaconVote{}
+		if err := beaconVote.Decode(msg.SignedSSVMessage.FullData); err != nil {
+			ncv.logger.Debug("❗ failed to decode beacon vote from proposal", zap.Error(err))
+			return err
+		}
+
+		bnCacheKey := BeaconVoteCacheKey{root: beaconVote.BlockRoot, height: qbftMsg.Height}
+		// if the roots for this beacon vote hash and height have already been computed, skip
+		if ncv.beaconVoteRoots.Has(bnCacheKey) {
+			return nil
+		}
+
+		if err := ncv.saveAttesterRoots(ctx, epoch, beaconVote, qbftMsg); err != nil {
+			return err
+		}
+		if err := ncv.saveSyncCommRoots(ctx, epoch, beaconVote); err != nil {
+			return err
+		}
+
+		// cache the roots for this beacon vote hash and height
+		ncv.beaconVoteRoots.Set(bnCacheKey, struct{}{}, ttlcache.DefaultTTL)
+		return nil
+
+	case spectypes.RoleAggregatorCommittee:
+		consData := &spectypes.AggregatorCommitteeConsensusData{}
+		if err := consData.Decode(msg.SignedSSVMessage.FullData); err != nil {
+			ncv.logger.Debug("❗ failed to decode aggregator committee consensus data from proposal", zap.Error(err))
+			return err
+		}
+
+		consRoot, err := consData.HashTreeRoot()
+		if err != nil {
+			ncv.logger.Debug("❗ failed to compute aggregator committee consensus data root", zap.Error(err))
+			return err
+		}
+		aggCacheKey := AggregatorCommitteeCacheKey{root: consRoot, height: qbftMsg.Height}
+		// if the roots for this consensus data and height have already been computed, skip
+		if ncv.aggregatorCommitteeRoots.Has(aggCacheKey) {
+			return nil
+		}
+
+		if err := ncv.saveAggregatorRoots(ctx, epoch, consData); err != nil {
+			return err
+		}
+		if err := ncv.saveSyncCommContribRoots(ctx, epoch, consData); err != nil {
+			return err
+		}
+
+		// cache the roots for this consensus data and height
+		ncv.aggregatorCommitteeRoots.Set(aggCacheKey, struct{}{}, ttlcache.DefaultTTL)
+		return nil
+	default:
+		return nil
 	}
-
-	if err := ncv.saveSyncCommRoots(ctx, epoch, beaconVote); err != nil {
-		return err
-	}
-
-	// cache the roots for this beacon vote hash and height
-	ncv.beaconVoteRoots.Set(bnCacheKey, struct{}{}, ttlcache.DefaultTTL)
-
-	return nil
 }
 
 func (ncv *CommitteeObserver) saveAttesterRoots(ctx context.Context, epoch phase0.Epoch, beaconVote *spectypes.BeaconVote, qbftMsg *specqbft.Message) error {
@@ -407,6 +520,64 @@ func (ncv *CommitteeObserver) saveSyncCommRoots(
 
 	ncv.syncCommRoots.Set(syncCommitteeRoot, struct{}{}, ttlcache.DefaultTTL)
 
+	return nil
+}
+
+func (ncv *CommitteeObserver) saveAggregatorRoots(
+	ctx context.Context,
+	epoch phase0.Epoch,
+	data *spectypes.AggregatorCommitteeConsensusData,
+) error {
+	aggregateAndProofs, err := data.GetAggregateAndProofs()
+	if err != nil {
+		return err
+	}
+
+	dAgg, err := ncv.domainCache.Get(ctx, epoch, spectypes.DomainAggregateAndProof)
+	if err != nil {
+		return err
+	}
+	for _, aggAndProof := range aggregateAndProofs {
+		hashRoot, err := spectypes.GetAggregateAndProofHashRoot(aggAndProof)
+		if err != nil {
+			continue
+		}
+		root, err := spectypes.ComputeETHSigningRoot(hashRoot, dAgg)
+		if err != nil {
+			return err
+		}
+		ncv.aggregatorRoots.Set(root, struct{}{}, ttlcache.DefaultTTL)
+	}
+	return nil
+}
+
+func (ncv *CommitteeObserver) saveSyncCommContribRoots(
+	ctx context.Context,
+	epoch phase0.Epoch,
+	data *spectypes.AggregatorCommitteeConsensusData,
+) error {
+	contribs, err := data.GetSyncCommitteeContributions()
+	if err != nil {
+		return err
+	}
+
+	dContrib, err := ncv.domainCache.Get(ctx, epoch, spectypes.DomainContributionAndProof)
+	if err != nil {
+		return err
+	}
+
+	for i, c := range contribs {
+		cp := &altair.ContributionAndProof{
+			AggregatorIndex: data.Contributors[i].ValidatorIndex,
+			Contribution:    &c.Contribution,
+			SelectionProof:  data.Contributors[i].SelectionProof,
+		}
+		root, err := spectypes.ComputeETHSigningRoot(cp, dContrib)
+		if err != nil {
+			return err
+		}
+		ncv.syncCommContribRoots.Set(root, struct{}{}, ttlcache.DefaultTTL)
+	}
 	return nil
 }
 

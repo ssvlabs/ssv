@@ -120,9 +120,9 @@ func (h *VoluntaryExitHandler) HandleDuties(ctx context.Context) {
 		case <-next:
 			currentSlot := h.ticker.Slot()
 			next = h.ticker.Next()
-			currentEpoch := h.beaconConfig.EstimatedEpochAtSlot(currentSlot)
+			currentEpoch := h.netCfg.EstimatedEpochAtSlot(currentSlot)
 
-			slotNumber := uint64(currentSlot)%h.beaconConfig.SlotsPerEpoch + 1
+			slotNumber := uint64(currentSlot)%h.netCfg.SlotsPerEpoch + 1
 			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, currentSlot, slotNumber)
 			h.logger.Debug("🛠 ticker event", zap.String("epoch_slot_pos", buildStr))
 
@@ -130,7 +130,7 @@ func (h *VoluntaryExitHandler) HandleDuties(ctx context.Context) {
 				// tickCtx ensures we never take too long to process ticks (otherwise we might not be able to catch up
 				// with the latest tick for a while, if ever). Since the ticker always fires at around slot start-time,
 				// setting the deadline to currentSlot+1 gives us about ~1 full slot (12s) to process the tick.
-				tickCtx, cancel := context.WithDeadline(ctx, h.beaconConfig.SlotStartTime(currentSlot+1))
+				tickCtx, cancel := context.WithDeadline(ctx, h.netCfg.SlotStartTime(currentSlot+1))
 				defer cancel()
 
 				h.processExecution(tickCtx, currentSlot)
@@ -222,7 +222,7 @@ func (h *VoluntaryExitHandler) processExecution(ctx context.Context, slot phase0
 	}
 
 	h.dutyQueue = pendingItems
-	h.duties.RemoveSlot(slot - phase0.Slot(h.beaconConfig.SlotsPerEpoch))
+	h.duties.RemoveSlot(slot - phase0.Slot(h.netCfg.SlotsPerEpoch))
 
 	span.SetAttributes(observability.DutyCountAttribute(len(dutiesForExecution)))
 	if dutyCount := len(dutiesForExecution); dutyCount != 0 {
@@ -249,7 +249,7 @@ func (h *VoluntaryExitHandler) blockSlot(ctx context.Context, blockNumber uint64
 		return 0, fmt.Errorf("request block %d from execution client: %w", blockNumber, err)
 	}
 
-	blockSlot = h.beaconConfig.EstimatedSlotAtTime(time.Unix(int64(header.Time), 0)) // #nosec G115
+	blockSlot = h.netCfg.EstimatedSlotAtTime(time.Unix(int64(header.Time), 0)) // #nosec G115
 
 	h.blockSlots[blockNumber] = blockSlot
 
@@ -266,6 +266,6 @@ func (h *VoluntaryExitHandler) blockSlot(ctx context.Context, blockNumber uint64
 
 func (h *VoluntaryExitHandler) dutyExecutionDeadline(slot phase0.Slot) time.Time {
 	// 1 wall-clock slot from execution should be sufficient for this duty-type.
-	dutyDeadline := h.beaconConfig.SlotStartTime(slot + 1)
+	dutyDeadline := h.netCfg.SlotStartTime(slot + 1)
 	return dutyDeadline
 }

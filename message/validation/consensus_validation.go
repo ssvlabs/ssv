@@ -26,6 +26,7 @@ func (mv *messageValidator) validateConsensusMessage(
 	ctx context.Context,
 	signedSSVMessage *spectypes.SignedSSVMessage,
 	committeeInfo CommitteeInfo,
+	topic string,
 	receivedFrom peer.ID,
 	receivedAt time.Time,
 ) (*specqbft.Message, error) {
@@ -43,6 +44,13 @@ func (mv *messageValidator) validateConsensusMessage(
 		e := ErrUndecodableMessageData
 		e.innerErr = err
 		return nil, e
+	}
+
+	if err := mv.validateTopicAtSlot(committeeInfo, topic, phase0.Slot(consensusMessage.Height)); err != nil {
+		return consensusMessage, err
+	}
+	if err := mv.validateDomainAtSlot(ssvMessage.GetID(), phase0.Slot(consensusMessage.Height)); err != nil {
+		return consensusMessage, err
 	}
 
 	if err := mv.validateConsensusMessageSemantics(signedSSVMessage, consensusMessage, committeeInfo.committee); err != nil {
@@ -93,6 +101,15 @@ func (mv *messageValidator) validateConsensusMessageSemantics(
 	signers := signedSSVMessage.OperatorIDs
 	quorumSize, _ := ssvtypes.ComputeQuorumAndPartialQuorum(uint64(len(committee)))
 	msgType := consensusMessage.MsgType
+	role := signedSSVMessage.SSVMessage.GetID().GetRoleType()
+	slot := phase0.Slot(consensusMessage.Height)
+
+	// Rule: If role is invalid
+	if !mv.validRoleAtSlot(role, slot) {
+		e := ErrInvalidRole
+		e.got = fmt.Sprintf("%v (%d) @ slot %v", role, role, slot)
+		return e
+	}
 
 	if len(signers) > 1 {
 		// Rule: Decided msg with different type than Commit
@@ -117,8 +134,15 @@ func (mv *messageValidator) validateConsensusMessageSemantics(
 			return ErrPrepareOrCommitWithFullData
 		}
 
+		hashedFullData, err := specqbft.HashDataRoot(signedSSVMessage.FullData)
+		if err != nil {
+			e := ErrFullDataHash
+			e.innerErr = err
+			return e
+		}
+
 		// Rule: Full data hash must match root
-		if qbft.HashDataRoot(signedSSVMessage.FullData) != consensusMessage.Root {
+		if hashedFullData != consensusMessage.Root {
 			return ErrInvalidHash
 		}
 	}
@@ -135,8 +159,6 @@ func (mv *messageValidator) validateConsensusMessageSemantics(
 		return e
 	}
 
-	role := signedSSVMessage.SSVMessage.GetID().GetRoleType()
-
 	// Rule: Duty role has consensus (true except for ValidatorRegistration and VoluntaryExit)
 	if role == spectypes.RoleValidatorRegistration || role == spectypes.RoleVoluntaryExit {
 		e := ErrUnexpectedConsensusMessage
@@ -145,7 +167,7 @@ func (mv *messageValidator) validateConsensusMessageSemantics(
 	}
 
 	// Rule: Round cut-offs for roles:
-	// - 12 (committee and aggregation)
+	// - 12 (committee, aggregator, and aggregator committee)
 	// - 2 (proposer)
 	// - 6 (other types)
 	maxRound, err := mv.maxRound(role)
@@ -185,7 +207,7 @@ func (mv *messageValidator) validateQBFTLogic(
 ) error {
 	if consensusMessage.MsgType == specqbft.ProposalMsgType {
 		// Rule: Signer must be the leader
-		leader := mv.roundRobinProposer(consensusMessage.Height, consensusMessage.Round, committeeInfo.committee)
+		leader := qbft.Proposer(consensusMessage.Height, consensusMessage.Round, committeeInfo.committee, mv.netCfg)
 		if signedSSVMessage.OperatorIDs[0] != leader {
 			e := ErrSignerNotLeader
 			e.got = signedSSVMessage.OperatorIDs[0]
@@ -265,7 +287,7 @@ func (mv *messageValidator) validateQBFTMessageByDutyLogic(
 	role := signedSSVMessage.SSVMessage.GetID().GetRoleType()
 
 	// Rule: Height must not be "old". I.e., signer must not have already advanced to a later slot.
-	if role != spectypes.RoleCommittee { // Rule only for validator runners
+	if !mv.committeeRole(role) { // Rule only for validator runners
 		for _, signer := range signedSSVMessage.OperatorIDs {
 			operatorState := state.OperatorState(committeeInfo.signerIndex(signer))
 			if maxSlot := operatorState.MaxSlot(); maxSlot > phase0.Slot(consensusMessage.Height) {
@@ -284,7 +306,7 @@ func (mv *messageValidator) validateQBFTMessageByDutyLogic(
 	}
 
 	// Rule: current slot(height) must be between duty's starting slot and:
-	// - duty's starting slot + 34 (committee and aggregation)
+	// - duty's starting slot + 34 (committee, aggregator, and aggregator committee)
 	// - duty's starting slot + 3 (other types)
 	if err := mv.validateSlotTime(msgSlot, role, receivedAt); err != nil {
 		return err
@@ -300,10 +322,6 @@ func (mv *messageValidator) validateQBFTMessageByDutyLogic(
 		}
 	}
 
-	// Rule: valid number of duties per epoch:
-	// - 2 for aggregation, voluntary exit and validator registration
-	// - 2*V for Committee duty (where V is the number of validators in the cluster) (if no validator is doing sync committee in this epoch)
-	// - else, accept
 	for _, signer := range signedSSVMessage.OperatorIDs {
 		operatorState := state.OperatorState(committeeInfo.signerIndex(signer))
 		if err := mv.validateDutyCount(signedSSVMessage.SSVMessage.GetID(), msgSlot, committeeInfo.validatorIndices, operatorState); err != nil {
@@ -408,11 +426,11 @@ func (mv *messageValidator) validateJustifications(message *specqbft.Message) er
 
 func (mv *messageValidator) maxRound(role spectypes.RunnerRole) (specqbft.Round, error) {
 	switch role {
-	case spectypes.RoleCommittee, spectypes.RoleAggregator: // TODO: check if value for aggregator is correct as there are messages on stage exceeding the limit
+	case spectypes.RoleCommittee, spectypes.RoleAggregatorCommittee, ssvtypes.RoleAggregator: // TODO: check if value for aggregator is correct as there are messages on stage exceeding the limit
 		return 12, nil // TODO: consider calculating based on quick timeout and slow timeout
 	case spectypes.RoleProposer:
 		return 2, nil
-	case spectypes.RoleSyncCommitteeContribution:
+	case ssvtypes.RoleSyncCommitteeContribution:
 		return 6, nil
 	default:
 		return 0, fmt.Errorf("unknown role")
@@ -548,14 +566,4 @@ func (mv *messageValidator) roundBelongsToAllowedSpread(
 	}
 
 	return nil
-}
-
-func (mv *messageValidator) roundRobinProposer(height specqbft.Height, round specqbft.Round, committee []spectypes.OperatorID) spectypes.OperatorID {
-	firstRoundIndex := uint64(0)
-	if height != specqbft.FirstHeight {
-		firstRoundIndex += uint64(height) % uint64(len(committee))
-	}
-
-	index := (firstRoundIndex + uint64(round) - uint64(specqbft.FirstRound)) % uint64(len(committee))
-	return committee[index]
 }

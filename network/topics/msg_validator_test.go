@@ -1,10 +1,12 @@
 package topics
 
 import (
+	"math"
 	"testing"
 	"time"
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	pspb "github.com/libp2p/go-libp2p-pubsub/pb"
@@ -37,9 +39,14 @@ func TestMsgValidator(t *testing.T) {
 	// as long as timeIntoSlot stays below ~(slotDuration/3 + 3*QuickTimeout) ≈ 10s — any
 	// larger offset here would eat into that budget. A zero offset maximizes it.
 	beaconCfg.GenesisTime = time.Now()
+	// Pin the fork explicitly pre-Boole: the fixtures below build Alan topics/domains, so the
+	// suite must stay deterministic under the SSV_TEST_BOOLE_FORK=post CI matrix, which flips
+	// the global TestNetwork default.
+	preBooleSSV := *networkconfig.TestNetwork.SSV
+	preBooleSSV.Forks = networkconfig.SSVForks{Boole: phase0.Epoch(math.MaxUint64)}
 	testNet := &networkconfig.Network{
 		Beacon: &beaconCfg,
-		SSV:    networkconfig.TestNetwork.SSV,
+		SSV:    &preBooleSSV,
 	}
 
 	ks := spectestingutils.Testing4SharesSet()
@@ -107,7 +114,7 @@ func TestMsgValidator(t *testing.T) {
 		encodedMsg, err := signedSSVMessage.Encode()
 		require.NoError(t, err)
 
-		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
+		topicID := commons.GetTopicFullName(commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0])
 
 		pmsg := &pubsub.Message{
 			Message: &pspb.Message{
@@ -169,7 +176,7 @@ func TestMsgValidator(t *testing.T) {
 		encodedMsg, err := signedSSVMessage.Encode()
 		require.NoError(t, err)
 
-		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
+		topicID := commons.GetTopicFullName(commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0])
 
 		pmsg := &pubsub.Message{
 			Message: &pspb.Message{

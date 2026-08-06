@@ -150,6 +150,7 @@ type CommitteeDutyTrace struct {
 	ConsensusTrace
 
 	Slot phase0.Slot
+	Role spectypes.RunnerRole
 
 	CommitteeID spectypes.CommitteeID  `ssz-size:"32"`
 	OperatorIDs []spectypes.OperatorID `ssz-max:"13"`
@@ -180,6 +181,7 @@ func (trace *CommitteeDutyTrace) DeepCopy() *CommitteeDutyTrace {
 			Decideds: deepCopySlice(trace.Decideds),
 		},
 		Slot:          trace.Slot,
+		Role:          trace.Role,
 		CommitteeID:   trace.CommitteeID,
 		OperatorIDs:   opIDs,
 		SyncCommittee: deepCopySlice(trace.SyncCommittee),

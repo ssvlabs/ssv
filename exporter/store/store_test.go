@@ -87,16 +87,188 @@ func TestSaveCommitteeDutyTrace(t *testing.T) {
 	trace2 := makeCTrace(2, 'b')
 
 	store := store.New(db)
-	require.NoError(t, store.SaveCommitteeDuty(trace1))
-	require.NoError(t, store.SaveCommitteeDuty(trace2))
+	require.NoError(t, store.SaveCommitteeDuty(spectypes.RoleCommittee, trace1))
+	require.NoError(t, store.SaveCommitteeDuty(spectypes.RoleCommittee, trace2))
 
-	duty, err := store.GetCommitteeDuty(phase0.Slot(1), [32]byte{'a'})
+	duty, err := store.GetCommitteeDuty(phase0.Slot(1), spectypes.RoleCommittee, [32]byte{'a'})
 	require.NoError(t, err)
 	assert.True(t, committeeDutiesAreEqual(trace1, duty))
 
-	duty, err = store.GetCommitteeDuty(phase0.Slot(2), [32]byte{'b'})
+	duty, err = store.GetCommitteeDuty(phase0.Slot(2), spectypes.RoleCommittee, [32]byte{'b'})
 	require.NoError(t, err)
 	assert.True(t, committeeDutiesAreEqual(trace2, duty))
+}
+
+func TestSaveCommitteeDutyTrace_NoCollisionAcrossRunnerRoles(t *testing.T) {
+	logger := zap.NewNop()
+	db, err := kv.NewInMemory(logger, basedb.Options{})
+	require.NoError(t, err)
+	defer db.Close()
+
+	s := store.New(db)
+	slot := phase0.Slot(5)
+	committeeID := [32]byte{'x'}
+
+	committeeDuty := makeCTrace(slot, 'x')
+	committeeDuty.Role = spectypes.RoleCommittee
+	committeeDuty.Attester = []*traces.SignerData{{Signer: 1}}
+
+	aggCommitteeDuty := makeCTrace(slot, 'x')
+	aggCommitteeDuty.Role = spectypes.RoleAggregatorCommittee
+	aggCommitteeDuty.SyncCommittee = []*traces.SignerData{{Signer: 2}}
+
+	require.NoError(t, s.SaveCommitteeDuty(spectypes.RoleCommittee, committeeDuty))
+	require.NoError(t, s.SaveCommitteeDuty(spectypes.RoleAggregatorCommittee, aggCommitteeDuty))
+
+	gotCommittee, err := s.GetCommitteeDuty(slot, spectypes.RoleCommittee, committeeID)
+	require.NoError(t, err)
+	require.Equal(t, spectypes.RoleCommittee, gotCommittee.Role)
+	require.Len(t, gotCommittee.Attester, 1)
+	require.Len(t, gotCommittee.SyncCommittee, 0)
+
+	gotAggregatorCommittee, err := s.GetCommitteeDuty(slot, spectypes.RoleAggregatorCommittee, committeeID)
+	require.NoError(t, err)
+	require.Equal(t, spectypes.RoleAggregatorCommittee, gotAggregatorCommittee.Role)
+	require.Len(t, gotAggregatorCommittee.Attester, 0)
+	require.Len(t, gotAggregatorCommittee.SyncCommittee, 1)
+}
+
+func TestCommitteeRunnerRoleToPrefix(t *testing.T) {
+	t.Run("RoleCommittee maps to a stable prefix byte", func(t *testing.T) {
+		b, err := store.CommitteeRunnerRoleToPrefix(spectypes.RoleCommittee)
+		require.NoError(t, err)
+		assert.Equal(t, byte(0x00), b)
+	})
+
+	t.Run("RoleAggregatorCommittee maps to a stable prefix byte", func(t *testing.T) {
+		b, err := store.CommitteeRunnerRoleToPrefix(spectypes.RoleAggregatorCommittee)
+		require.NoError(t, err)
+		assert.Equal(t, byte(0x06), b)
+	})
+
+	t.Run("unsupported role returns an error", func(t *testing.T) {
+		_, err := store.CommitteeRunnerRoleToPrefix(spectypes.RoleValidatorRegistration)
+		require.Error(t, err)
+	})
+}
+
+func TestSaveCommitteeDuty_UnsupportedRole(t *testing.T) {
+	logger := zap.NewNop()
+	db, err := kv.NewInMemory(logger, basedb.Options{})
+	require.NoError(t, err)
+	defer db.Close()
+
+	s := store.New(db)
+	err = s.SaveCommitteeDuty(spectypes.RoleValidatorRegistration, makeCTrace(1, 'a'))
+	require.Error(t, err)
+}
+
+func TestSaveCommitteeDuties_UnsupportedRole(t *testing.T) {
+	logger := zap.NewNop()
+	db, err := kv.NewInMemory(logger, basedb.Options{})
+	require.NoError(t, err)
+	defer db.Close()
+
+	s := store.New(db)
+	err = s.SaveCommitteeDuties(phase0.Slot(1), spectypes.RoleValidatorRegistration, []*traces.CommitteeDutyTrace{makeCTrace(1, 'a')})
+	require.Error(t, err)
+}
+
+func TestGetCommitteeDuty_UnsupportedRole(t *testing.T) {
+	logger := zap.NewNop()
+	db, err := kv.NewInMemory(logger, basedb.Options{})
+	require.NoError(t, err)
+	defer db.Close()
+
+	s := store.New(db)
+	_, err = s.GetCommitteeDuty(phase0.Slot(1), spectypes.RoleValidatorRegistration, [32]byte{'a'})
+	require.Error(t, err)
+}
+
+func TestGetCommitteeDuties_DefaultsToBothCommitteeRoles(t *testing.T) {
+	logger := zap.NewNop()
+	db, err := kv.NewInMemory(logger, basedb.Options{})
+	require.NoError(t, err)
+	defer db.Close()
+
+	s := store.New(db)
+	slot := phase0.Slot(7)
+
+	committeeDuty := makeCTrace(slot, 'c')
+	committeeDuty.Role = spectypes.RoleCommittee
+	aggregatorDuty := makeCTrace(slot, 'g')
+	aggregatorDuty.Role = spectypes.RoleAggregatorCommittee
+
+	require.NoError(t, s.SaveCommitteeDuty(spectypes.RoleCommittee, committeeDuty))
+	require.NoError(t, s.SaveCommitteeDuty(spectypes.RoleAggregatorCommittee, aggregatorDuty))
+
+	// No roles arg: must return entries from BOTH RoleCommittee and RoleAggregatorCommittee.
+	duties, err := s.GetCommitteeDuties(slot)
+	require.NoError(t, err)
+	require.Len(t, duties, 2)
+
+	gotRoles := map[spectypes.RunnerRole]bool{}
+	for _, d := range duties {
+		gotRoles[d.Role] = true
+	}
+	assert.True(t, gotRoles[spectypes.RoleCommittee])
+	assert.True(t, gotRoles[spectypes.RoleAggregatorCommittee])
+}
+
+func TestGetCommitteeDuties_FilteredByExplicitRole(t *testing.T) {
+	logger := zap.NewNop()
+	db, err := kv.NewInMemory(logger, basedb.Options{})
+	require.NoError(t, err)
+	defer db.Close()
+
+	s := store.New(db)
+	slot := phase0.Slot(8)
+
+	committeeDuty := makeCTrace(slot, 'c')
+	committeeDuty.Role = spectypes.RoleCommittee
+	aggregatorDuty := makeCTrace(slot, 'g')
+	aggregatorDuty.Role = spectypes.RoleAggregatorCommittee
+
+	require.NoError(t, s.SaveCommitteeDuty(spectypes.RoleCommittee, committeeDuty))
+	require.NoError(t, s.SaveCommitteeDuty(spectypes.RoleAggregatorCommittee, aggregatorDuty))
+
+	duties, err := s.GetCommitteeDuties(slot, spectypes.RoleCommittee)
+	require.NoError(t, err)
+	require.Len(t, duties, 1)
+	assert.Equal(t, spectypes.RoleCommittee, duties[0].Role)
+}
+
+func TestGetCommitteeDuties_UnsupportedRoleReturnsError(t *testing.T) {
+	logger := zap.NewNop()
+	db, err := kv.NewInMemory(logger, basedb.Options{})
+	require.NoError(t, err)
+	defer db.Close()
+
+	s := store.New(db)
+	_, err = s.GetCommitteeDuties(phase0.Slot(1), spectypes.RoleValidatorRegistration)
+	require.Error(t, err)
+}
+
+func TestGetCommitteeDuties_CorruptedEntryReturnsError(t *testing.T) {
+	logger := zap.NewNop()
+	db, err := kv.NewInMemory(logger, basedb.Options{})
+	require.NoError(t, err)
+	defer db.Close()
+
+	s := store.New(db)
+	slot := phase0.Slot(9)
+	committeeID := spectypes.CommitteeID{'z'}
+
+	// Directly write a corrupted (non-SSZ-decodable) value under the same key layout
+	// SaveCommitteeDuty uses: "cd" + little-endian slot(4) + role-prefix-byte, keyed by committeeID.
+	prefix := append([]byte("cd"), 0, 0, 0, 0)
+	prefix[2] = byte(slot)
+	prefix = append(prefix, 0x00) // RoleCommittee prefix byte
+	require.NoError(t, db.Set(prefix, committeeID[:], []byte{0x01, 0x02}))
+
+	duties, err := s.GetCommitteeDuties(slot, spectypes.RoleCommittee)
+	require.Error(t, err)
+	require.Empty(t, duties)
 }
 
 func TestSaveCommitteeDuties(t *testing.T) {
@@ -105,24 +277,24 @@ func TestSaveCommitteeDuties(t *testing.T) {
 	require.NoError(t, err)
 	defer db.Close()
 
-	traces := []*traces.CommitteeDutyTrace{makeCTrace(1, 'a'), makeCTrace(1, 'b')}
+	cDuties := []*traces.CommitteeDutyTrace{makeCTrace(1, 'a'), makeCTrace(1, 'b')}
 
 	store := store.New(db)
-	require.NoError(t, store.SaveCommitteeDuties(phase0.Slot(1), traces))
+	require.NoError(t, store.SaveCommitteeDuties(phase0.Slot(1), spectypes.RoleCommittee, cDuties))
 
-	duty, err := store.GetCommitteeDuty(phase0.Slot(1), [32]byte{'a'})
+	duty, err := store.GetCommitteeDuty(phase0.Slot(1), spectypes.RoleCommittee, [32]byte{'a'})
 	require.NoError(t, err)
-	assert.True(t, committeeDutiesAreEqual(traces[0], duty))
+	assert.True(t, committeeDutiesAreEqual(cDuties[0], duty))
 
-	duty, err = store.GetCommitteeDuty(phase0.Slot(1), [32]byte{'b'})
+	duty, err = store.GetCommitteeDuty(phase0.Slot(1), spectypes.RoleCommittee, [32]byte{'b'})
 	require.NoError(t, err)
-	assert.True(t, committeeDutiesAreEqual(traces[1], duty))
+	assert.True(t, committeeDutiesAreEqual(cDuties[1], duty))
 
-	duties, err := store.GetCommitteeDuties(phase0.Slot(1))
+	duties, err := store.GetCommitteeDuties(phase0.Slot(1), spectypes.RoleCommittee)
 	require.NoError(t, err)
 	require.Len(t, duties, 2)
-	require.True(t, committeeDutiesAreEqual(traces[0], duties[0]))
-	require.True(t, committeeDutiesAreEqual(traces[1], duties[1]))
+	require.True(t, committeeDutiesAreEqual(cDuties[0], duties[0]))
+	require.True(t, committeeDutiesAreEqual(cDuties[1], duties[1]))
 }
 
 func TestSaveValidatorDutyTrace(t *testing.T) {
