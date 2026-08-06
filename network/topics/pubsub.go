@@ -130,7 +130,7 @@ func NewPubSub(
 
 	// Set up a SubFilter with a whitelist of known topics.
 	sf := newSubFilter()
-	for _, topic := range commons.Topics(cfg.NetworkConfig) {
+	for _, topic := range commons.Topics(cfg.NetworkConfig, cfg.NetworkConfig.EstimatedCurrentSlot()) {
 		sf.Register(topic)
 	}
 
