@@ -12,9 +12,9 @@ import (
 // formula, mirroring the documented spec pseudocode so a bug in IsAggregatorSelected (e.g. wrong
 // endianness or hash) fails this test rather than silently drifting.
 func computeExpectedIsAggregatorSelected(targetAggregatorsPerCommittee, committeeLength uint64, slotSig []byte) bool {
-	modulo := committeeLength / targetAggregatorsPerCommittee
-	if modulo == 0 {
-		modulo = 1
+	modulo := uint64(1)
+	if targetAggregatorsPerCommittee > 0 {
+		modulo = max(1, committeeLength/targetAggregatorsPerCommittee)
 	}
 	h := sha256.Sum256(slotSig)
 	x := binary.LittleEndian.Uint64(h[:8])
@@ -39,6 +39,7 @@ func TestIsAggregatorSelected(t *testing.T) {
 		{name: "large committee uses computed modulo (sig A)", target: 16, committeeLength: 128, slotSig: slotSigA},
 		{name: "large committee uses computed modulo (sig B)", target: 16, committeeLength: 128, slotSig: slotSigB},
 		{name: "small target", target: 3, committeeLength: 10, slotSig: slotSigA},
+		{name: "zero target clamps to modulo one instead of panicking", target: 0, committeeLength: 128, slotSig: slotSigA},
 	}
 
 	for _, tc := range testCases {
