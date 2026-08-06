@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -115,13 +116,17 @@ func BooleCommitteeSubnet(committee []spectypes.OperatorID) uint64 {
 	return result.Uint64()
 }
 
-// Topics returns the topic whitelist for the given network's fork state: Alan+Boole before the
-// fork (so a node started pre-fork can accept Boole subscriptions once the transition window
-// opens, without a pubsub rebuild), Boole-only after.
-func Topics(netCfg *networkconfig.Network) []string {
+// Topics returns the topic whitelist for the given network's fork state at slot: Alan+Boole
+// while Alan traffic can still be valid (pre-fork, or within the subsequent transition window
+// during which late pre-fork committee traffic keyed by a pre-fork slot may still legitimately
+// arrive on the Alan topic), Boole-only once that window has passed. Always includes the Boole
+// set, since Boole subscriptions can legitimately start opening ahead of the fork (prior window).
+func Topics(netCfg *networkconfig.Network, slot phase0.Slot) []string {
+	includeAlan := !netCfg.BooleForkAtSlot(slot) || netCfg.InBooleTransitionWindow(slot)
+
 	topics := make([]string, 0, SubnetsCount*2)
 	for subnet := uint64(0); subnet < SubnetsCount; subnet++ {
-		if !netCfg.BooleFork() {
+		if includeAlan {
 			topics = append(topics, GetTopicFullName(SubnetTopicID(subnet)))
 		}
 		topics = append(topics, BooleTopic(netCfg.SSV.Name, subnet))
