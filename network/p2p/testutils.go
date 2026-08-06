@@ -205,7 +205,7 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex uint64, key
 	cfg.Ctx = ctx
 	cfg.MdnsDiscoveryTag = ln.mdnsTag
 	testSubnets := fixedTestSubnets(options.Shares)
-	cfg.Subnets = testSubnets.StringHex() // PAY ATTENTION for future test scenarios which use more than one eth-validator we need to make this field dynamically changing
+	cfg.Subnets = testSubnets.StringHex()
 	cfg.NodeStorage = nodeStorage
 	cfg.MessageValidator = validation.New(
 		networkconfig.TestNetwork,
@@ -298,7 +298,9 @@ func NewLocalNet(ctx context.Context, logger *zap.Logger, options LocalNetOption
 }
 
 // fixedTestSubnets returns the persistent subnet set used by local test networks: two fixed
-// subnets (64, 90) unrelated to any share, plus - for every configured share's committee - both
+// subnets (64, 90) unrelated to any share - bit positions carried over from the legacy fixture
+// constant this function replaced, kept so every node also stays subscribed to subnets with no
+// local committee - plus - for every configured share's committee - both
 // its Alan-fork subnet (CommitteeID-hash based) and its Boole-fork subnet (lowest-operator-hash
 // based). persistentSubnets is a raw, fork-agnostic bit vector (see initCfg), so covering both
 // mappings here is what keeps the committee's subnet persistently subscribed on either side of
