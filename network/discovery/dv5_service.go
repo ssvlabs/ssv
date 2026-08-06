@@ -280,14 +280,20 @@ func (dvs *DiscV5Service) checkPeer(ctx context.Context, e PeerEvent) error {
 		recordPeerSkipped(ctx, skipReasonInvalidDomainType)
 		return newPeerSkipError(skipReasonInvalidDomainType, fmt.Errorf("could not read domain type: %w", err))
 	}
-	// Only accept NextDomainType when it's set: config parsing defaults it to DomainType,
-	// but a zero value must not make us accept peers advertising an all-zero domain.
-	domainMatches := nodeDomainType == dvs.ssvConfig.DomainType ||
-		(dvs.ssvConfig.NextDomainType != (spectypes.DomainType{}) &&
-			nodeDomainType == dvs.ssvConfig.NextDomainType)
-	if !domainMatches {
+	// Only accept NextDomainType when it's set to a distinct value: config parsing defaults
+	// it to DomainType, and a zero value must not make us accept peers advertising an
+	// all-zero domain.
+	nextDomainAccepted := dvs.ssvConfig.NextDomainType != (spectypes.DomainType{}) &&
+		dvs.ssvConfig.NextDomainType != dvs.ssvConfig.DomainType
+	matchesDomain := nodeDomainType == dvs.ssvConfig.DomainType
+	matchesNextDomain := nextDomainAccepted && nodeDomainType == dvs.ssvConfig.NextDomainType
+	if !matchesDomain && !matchesNextDomain {
 		recordPeerSkipped(ctx, skipReasonDomainTypeMismatch)
-		return newPeerSkipError(skipReasonDomainTypeMismatch, fmt.Errorf("domain type %x matches neither %x nor %x", nodeDomainType, dvs.ssvConfig.DomainType, dvs.ssvConfig.NextDomainType))
+		err := fmt.Errorf("domain type %x does not match %x", nodeDomainType, dvs.ssvConfig.DomainType)
+		if nextDomainAccepted {
+			err = fmt.Errorf("domain type %x matches neither %x nor %x", nodeDomainType, dvs.ssvConfig.DomainType, dvs.ssvConfig.NextDomainType)
+		}
+		return newPeerSkipError(skipReasonDomainTypeMismatch, err)
 	}
 
 	// Get the peer's subnets, skipping if it has none.

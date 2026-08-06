@@ -257,7 +257,7 @@ func TestCheckPeer_ZeroNextDomainType(t *testing.T) {
 		AddrInfo: *addrInfo,
 		Node:     localNode.Node(),
 	})
-	require.ErrorContains(t, err, "domain type 00000000 matches neither 01020304 nor 00000000")
+	require.ErrorContains(t, err, "domain type 00000000 does not match 01020304")
 }
 
 func TestCheckPeer_UpdatesSubnetsIndexBeforeConnectionFilters(t *testing.T) {
