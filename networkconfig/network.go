@@ -87,14 +87,14 @@ func (n Network) BooleForkAtSlot(slot phase0.Slot) bool {
 // It stays logger-free by design: the caller decides how to surface warnings (e.g. logger.Warn)
 // and whether/how to abort on error.
 func (n Network) Validate() (warnings []string, err error) {
-	if n.BooleForkScheduled() {
-		// Guard the division below the way inBooleSubsequentWindowWithSlots does — but as a hard
-		// error: a zero SlotsPerEpoch is exactly the malformed-config class Validate exists to
-		// catch, and would otherwise panic here.
-		if n.SlotsPerEpoch == 0 {
-			return nil, fmt.Errorf("slots per epoch must be positive when a boole fork is scheduled")
-		}
+	// A zero SlotsPerEpoch is a malformed config regardless of fork scheduling: slot/epoch
+	// conversions divide by it unconditionally (e.g. Beacon.EstimatedEpochAtSlot), so it would
+	// panic on the first duty long before any fork logic runs.
+	if n.SlotsPerEpoch == 0 {
+		return nil, fmt.Errorf("slots per epoch must be positive")
+	}
 
+	if n.BooleForkScheduled() {
 		// Mirrors the overflow guard in inBooleSubsequentWindowWithSlots: FirstSlotAtEpoch(Boole)
 		// would overflow if the fork epoch is beyond the representable slot range.
 		maxEpoch := phase0.Epoch(math.MaxUint64 / n.SlotsPerEpoch)

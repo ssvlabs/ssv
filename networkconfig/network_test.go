@@ -224,6 +224,14 @@ func TestNetworkValidate(t *testing.T) {
 			expectErr:      true,
 		},
 		{
+			name:           "hard_error_zero_slots_per_epoch_unscheduled",
+			boole:          phase0.Epoch(math.MaxUint64),
+			slotsPerEpoch:  0,
+			domainType:     domainAlan,
+			nextDomainType: domainAlan,
+			expectErr:      true,
+		},
+		{
 			name:           "hard_error_overflow",
 			boole:          phase0.Epoch(math.MaxUint64/32) + 1,
 			slotsPerEpoch:  32,
