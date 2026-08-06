@@ -105,12 +105,8 @@ func buildNode(ctx context.Context, cfg *config, logger *zap.Logger) (*node, err
 		SSV:    ssvNetworkConfig,
 		Beacon: consensusClient.BeaconConfig(),
 	}
-	warnings, err := networkConfig.Validate()
-	if err != nil {
+	if err := networkConfig.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid network config: %w", err)
-	}
-	for _, warning := range warnings {
-		logger.Warn(warning)
 	}
 
 	var executionAddrList []string

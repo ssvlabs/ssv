@@ -207,15 +207,14 @@ func TestNetworkValidate(t *testing.T) {
 	domainBoole := spectypes.DomainType{0x05, 0x06, 0x07, 0x08}
 
 	tests := []struct {
-		name             string
-		boole            phase0.Epoch
-		currentEpoch     phase0.Epoch // wall-clock epoch the config is validated at
-		preGenesis       bool         // put GenesisTime in the future (overrides currentEpoch)
-		slotsPerEpoch    uint64
-		domainType       spectypes.DomainType
-		nextDomainType   spectypes.DomainType
-		expectErr        bool
-		expectedWarnings int
+		name           string
+		boole          phase0.Epoch
+		currentEpoch   phase0.Epoch // wall-clock epoch the config is validated at
+		preGenesis     bool         // put GenesisTime in the future (overrides currentEpoch)
+		slotsPerEpoch  uint64
+		domainType     spectypes.DomainType
+		nextDomainType spectypes.DomainType
+		expectErr      bool
 	}{
 		{
 			name:           "hard_error_zero_slots_per_epoch",
@@ -318,13 +317,12 @@ func TestNetworkValidate(t *testing.T) {
 				},
 			}
 
-			warnings, err := netCfg.Validate()
+			err := netCfg.Validate()
 			if test.expectErr {
 				require.Error(t, err)
 				return
 			}
 			require.NoError(t, err)
-			require.Len(t, warnings, test.expectedWarnings)
 		})
 	}
 }

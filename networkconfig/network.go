@@ -83,16 +83,14 @@ func (n Network) BooleForkAtSlot(slot phase0.Slot) bool {
 }
 
 // Validate checks the assembled network configuration for internal inconsistencies that fork
-// activation logic can't catch on its own. It returns non-fatal warnings for configurations that
-// are almost certainly a mistake, and an error for configurations that would panic or misbehave.
-// It stays logger-free by design: the caller decides how to surface warnings (e.g. logger.Warn)
-// and whether/how to abort on error.
-func (n Network) Validate() (warnings []string, err error) {
+// activation logic can't catch on its own, returning an error for configurations that would
+// panic or misbehave. It stays logger-free by design: the caller decides whether/how to abort.
+func (n Network) Validate() error {
 	// A zero SlotsPerEpoch is a malformed config regardless of fork scheduling: slot/epoch
 	// conversions divide by it unconditionally (e.g. Beacon.EstimatedEpochAtSlot), so it would
 	// panic on the first duty long before any fork logic runs.
 	if n.SlotsPerEpoch == 0 {
-		return nil, fmt.Errorf("slots per epoch must be positive")
+		return fmt.Errorf("slots per epoch must be positive")
 	}
 
 	if n.BooleForkScheduled() {
@@ -100,7 +98,7 @@ func (n Network) Validate() (warnings []string, err error) {
 		// would overflow if the fork epoch is beyond the representable slot range.
 		maxEpoch := phase0.Epoch(math.MaxUint64 / n.SlotsPerEpoch)
 		if n.SSV.Forks.Boole > maxEpoch {
-			return nil, fmt.Errorf("boole fork epoch %d overflows slot conversion (max supported epoch %d)", n.SSV.Forks.Boole, maxEpoch)
+			return fmt.Errorf("boole fork epoch %d overflows slot conversion (max supported epoch %d)", n.SSV.Forks.Boole, maxEpoch)
 		}
 
 		// unmarshalFromConfig defaults NextDomainType to DomainType when the field is absent, so
@@ -115,14 +113,14 @@ func (n Network) Validate() (warnings []string, err error) {
 		// yet active.
 		booleForkActive := !time.Now().Before(n.GenesisTime) && n.BooleFork()
 		if n.NextDomainType == n.DomainType && !booleForkActive {
-			return nil, fmt.Errorf(
+			return fmt.Errorf(
 				"boole fork is scheduled at epoch %d but NextDomainType equals DomainType: the fork would activate with no observable domain change",
 				n.SSV.Forks.Boole,
 			)
 		}
 	}
 
-	return warnings, nil
+	return nil
 }
 
 // InBooleTransitionWindow checks if the slot is in the Boole transition window,
