@@ -35,8 +35,16 @@ type SSV struct {
 	// Name looks similar to Beacon.Name, however, it's used to differentiate configs on the same
 	// beacon network, e.g. holesky, holesky-stage, holesky-e2e, disallowing node start with different config,
 	// even if the beacon network is the same.
-	Name                 string
-	DomainType           spectypes.DomainType
+	Name string
+	// DomainType is the domain type currently active on the network. It's advertised in
+	// the primary ENR entry and domain-separates SSV message signatures between networks.
+	DomainType spectypes.DomainType
+	// NextDomainType is the domain type expected to become active after the next fork.
+	// Discovery accepts peers advertising either DomainType or a distinct non-zero
+	// NextDomainType, so networks that need cross-client discovery around a fork must
+	// set it. Zero means no next domain (discovery is strict to DomainType). YAML/JSON
+	// parsing defaults it to DomainType when omitted; only configs built from struct
+	// literals can leave it zero.
 	NextDomainType       spectypes.DomainType
 	RegistrySyncOffset   *big.Int
 	RegistryContractAddr ethcommon.Address

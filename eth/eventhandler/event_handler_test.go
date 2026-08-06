@@ -171,6 +171,12 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	blockNum := uint64(0x1)
 	netCfgVarEpoch.GenesisTime = time.Now().Add(-100 * netCfgVarEpoch.SlotDuration)
 
+	// Slot window during which validator 3's slashing-protection data was stamped
+	// (captured around the event processing that writes it); later subtests assert
+	// against this window instead of re-reading the wall clock, which can cross a
+	// slot boundary between stamp and assertion.
+	var validator3StampedFrom, validator3StampedTo phase0.Slot
+
 	t.Run("test OperatorAdded event handle", func(t *testing.T) {
 		for _, op := range ops {
 			encodedPubKey, err := op.privateKey.Public().Base64()
@@ -515,10 +521,12 @@ func TestHandleBlockEventsStream(t *testing.T) {
 				eventsCh <- block
 			}()
 
+			validator3StampedFrom = netCfgVarEpoch.EstimatedCurrentSlot()
 			lastProcessedBlock, _, err = eh.HandleBlockEventsStream(ctx, eventsCh, false)
 			require.NoError(t, err)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
 			blockNum++
+			validator3StampedTo = netCfgVarEpoch.EstimatedCurrentSlot()
 
 			requireKeyManagerDataToExist(t, eh, 3, validatorData3)
 
@@ -862,13 +870,12 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.True(t, found)
 		require.NotNil(t, highestAttestation)
 
-		require.Equal(t, highestAttestation.Source.Epoch, netCfgVarEpoch.EstimatedEpochAtSlot(netCfgVarEpoch.EstimatedCurrentSlot())-1)
-		require.Equal(t, highestAttestation.Target.Epoch, netCfgVarEpoch.EstimatedEpochAtSlot(netCfgVarEpoch.EstimatedCurrentSlot()))
-
 		highestProposal, found, err := eh.keyManager.(*ekm.LocalKeyManager).RetrieveHighestProposal(phase0.BLSPubKey(sharePubKey))
 		require.NoError(t, err)
 		require.True(t, found)
-		require.Equal(t, highestProposal, netCfgVarEpoch.EstimatedCurrentSlot())
+		// The window was stamped back in the "ValidatorAdded again and nonce is bumped" subtest;
+		// liquidation must not touch the slashing-protection data, so it must still fall inside it.
+		requireSlashingProtectionStampInWindow(t, netCfgVarEpoch, highestAttestation, highestProposal, validator3StampedFrom, validator3StampedTo)
 	})
 
 	// Receive event, unmarshall, parse, check parse event is not nil or with an error, owner is correct, operator ids are correct
@@ -900,9 +907,11 @@ func TestHandleBlockEventsStream(t *testing.T) {
 
 		netCfgVarEpoch.GenesisTime = time.Now().Add(-1000 * netCfgVarEpoch.SlotDuration)
 
+		stampedFrom := netCfgVarEpoch.EstimatedCurrentSlot()
 		lastProcessedBlock, _, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
 		require.Equal(t, blockNum+1, lastProcessedBlock)
 		require.NoError(t, err)
+		stampedTo := netCfgVarEpoch.EstimatedCurrentSlot()
 
 		// check that slashing data was bumped
 		sharePubKey := validatorData3.operatorsShares[0].sec.GetPublicKey().Serialize()
@@ -910,13 +919,11 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.NoError(t, err)
 		require.True(t, found)
 		require.NotNil(t, highestAttestation)
-		require.Equal(t, highestAttestation.Source.Epoch, netCfgVarEpoch.EstimatedEpochAtSlot(netCfgVarEpoch.EstimatedCurrentSlot())-1)
-		require.Equal(t, highestAttestation.Target.Epoch, netCfgVarEpoch.EstimatedEpochAtSlot(netCfgVarEpoch.EstimatedCurrentSlot()))
 
 		highestProposal, found, err := eh.keyManager.(*ekm.LocalKeyManager).RetrieveHighestProposal(phase0.BLSPubKey(sharePubKey))
 		require.NoError(t, err)
 		require.True(t, found)
-		require.Equal(t, highestProposal, netCfgVarEpoch.EstimatedCurrentSlot())
+		requireSlashingProtectionStampInWindow(t, netCfgVarEpoch, highestAttestation, highestProposal, stampedFrom, stampedTo)
 
 		blockNum++
 	})
@@ -1687,6 +1694,21 @@ func generateSharesData(validatorData *testValidatorData, operators []*testOpera
 	sharesDataSigned := append(sig, sharesData...)
 
 	return sharesDataSigned, nil
+}
+
+// requireSlashingProtectionStampInWindow asserts the stored slashing-protection data was
+// stamped from a slot within [from, to] — the wall-clock window captured around the event
+// processing that wrote it. Comparing against the clock re-read at assertion time is racy:
+// a slot boundary crossing in between fails exact-equality checks spuriously.
+func requireSlashingProtectionStampInWindow(t *testing.T, netCfg *networkconfig.Network, highestAttestation *phase0.AttestationData, highestProposal phase0.Slot, from, to phase0.Slot) {
+	fromEpoch := netCfg.EstimatedEpochAtSlot(from)
+	toEpoch := netCfg.EstimatedEpochAtSlot(to)
+
+	require.GreaterOrEqual(t, highestAttestation.Target.Epoch, fromEpoch)
+	require.LessOrEqual(t, highestAttestation.Target.Epoch, toEpoch)
+	require.Equal(t, highestAttestation.Source.Epoch+1, highestAttestation.Target.Epoch)
+	require.GreaterOrEqual(t, highestProposal, from)
+	require.LessOrEqual(t, highestProposal, to)
 }
 
 func requireKeyManagerDataToExist(t *testing.T, eh *EventHandler, expectedAccounts int, validatorData *testValidatorData) {
