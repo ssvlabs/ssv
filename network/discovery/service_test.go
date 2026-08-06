@@ -37,6 +37,7 @@ func TestNewDiscV5Service(t *testing.T) {
 
 	assert.NotNil(t, dvs.dv5Listener)
 	assert.NotNil(t, dvs.conns)
+	assert.NotNil(t, dvs.socketConn)
 	assert.NotNil(t, dvs.subnetsIdx)
 	assert.NotNil(t, dvs.ssvConfig)
 

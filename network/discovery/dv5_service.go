@@ -78,6 +78,9 @@ type DiscV5Service struct {
 
 	conn       *net.UDPConn
 	sharedConn *SharedUDPConn
+	// socketConn wraps conn to time socket reads; the post-fork listener drains
+	// through it, so DiscoveryStale can detect a wedged socket.
+	socketConn *TimedConn
 
 	ssvConfig *networkconfig.SSV
 	subnets   commons.Subnets
@@ -157,6 +160,21 @@ func (dvs *DiscV5Service) close() error {
 		}
 	}
 	return nil
+}
+
+// DiscoveryStale reports whether the discv5 socket has gone unread for longer
+// than grace — the sign discovery has wedged. False before the listener is built
+// (or after a failed init), when there's nothing to judge.
+//
+// The operator health check polls this periodically, so it doubles as the
+// sampling point for the read-staleness gauge.
+func (dvs *DiscV5Service) DiscoveryStale(grace time.Duration) bool {
+	if dvs.socketConn == nil {
+		return false
+	}
+	age, ok := dvs.socketConn.ReadStaleness()
+	recordDiscoveryReadStaleness(dvs.ctx, int64(age.Seconds()))
+	return ok && age > grace
 }
 
 // Self returns self node
@@ -402,6 +420,12 @@ func (dvs *DiscV5Service) initDiscV5Listener(discOpts *Options) (err error) {
 	}
 	dvs.conn = udpConn
 
+	// Wrap the socket for liveness (see DiscoveryStale): only the post-fork
+	// listener drains it, so only it gets the wrapped conn — the pre-fork
+	// listener reads sharedConn's buffer, not the socket.
+	socketConn := NewTimedConn(udpConn)
+	dvs.socketConn = socketConn
+
 	// Registered before anything else can fail, so every error path below
 	// releases the socket. Runs last of the deferred cleanups, by which point a
 	// listener may already have closed it.
@@ -409,6 +433,7 @@ func (dvs *DiscV5Service) initDiscV5Listener(discOpts *Options) (err error) {
 		if err != nil {
 			_ = udpConn.Close()
 			dvs.conn = nil
+			dvs.socketConn = nil
 		}
 	}()
 
@@ -453,7 +478,7 @@ func (dvs *DiscV5Service) initDiscV5Listener(discOpts *Options) (err error) {
 		return err
 	}
 
-	dv5PostForkListener, err := listenV5(udpConn, localNode, *dv5PostForkCfg)
+	dv5PostForkListener, err := listenV5(socketConn, localNode, *dv5PostForkCfg)
 	if err != nil {
 		return fmt.Errorf("could not create discV5 listener: %w", err)
 	}

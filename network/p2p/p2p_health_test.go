@@ -4,8 +4,12 @@ import (
 	"context"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/network/discovery"
 )
 
 func TestP2PNetwork_Healthy(t *testing.T) {
@@ -14,6 +18,7 @@ func TestP2PNetwork_Healthy(t *testing.T) {
 		state           int32
 		discoveryFailed bool
 		cancelCtx       bool
+		disc            discovery.Service
 		wantErr         string
 	}{
 		{
@@ -43,11 +48,23 @@ func TestP2PNetwork_Healthy(t *testing.T) {
 			cancelCtx: true,
 			wantErr:   "context canceled",
 		},
+		{
+			name:    "discovery wedged",
+			state:   stateReady,
+			disc:    staleDiscovery{stale: true},
+			wantErr: "discovery wedged",
+		},
+		{
+			name:  "ready with live discovery",
+			state: stateReady,
+			disc:  staleDiscovery{stale: false},
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			n := &p2pNetwork{}
+			n := &p2pNetwork{logger: zap.NewNop()}
+			n.disc = tt.disc
 			atomic.StoreInt32(&n.state, tt.state)
 			if tt.discoveryFailed {
 				n.discoveryFailed.Store(true)
@@ -69,3 +86,12 @@ func TestP2PNetwork_Healthy(t *testing.T) {
 		})
 	}
 }
+
+// staleDiscovery is a discovery.Service whose only real method is DiscoveryStale;
+// Healthy calls nothing else, so the embedded nil Service is never dereferenced.
+type staleDiscovery struct {
+	discovery.Service
+	stale bool
+}
+
+func (d staleDiscovery) DiscoveryStale(time.Duration) bool { return d.stale }
