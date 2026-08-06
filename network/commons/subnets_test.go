@@ -214,11 +214,11 @@ func TestDiffSubnets(t *testing.T) {
 	require.Equal(t, 128-62, added.ActiveCount()+removed.ActiveCount())
 }
 
-// TestTopics covers the four Boole-transition phases the pubsub startup whitelist must track in
+// TestTopics covers the five Boole-transition phases the pubsub startup whitelist must track in
 // lockstep with per-slot subscription derivation (network/p2p's subscribedSubnetsForCurrentEpoch):
 // pre-fork steady state, the prior window, the subsequent window (the bug this guards against —
 // a node started in this window must still whitelist Alan topics for late pre-fork committee
-// traffic), and well post-fork.
+// traffic), the first slot past the subsequent window, and well post-fork.
 func TestTopics(t *testing.T) {
 	booleCfg := func(booleEpoch phase0.Epoch) *networkconfig.Network {
 		cfg := *networkconfig.TestNetwork
@@ -300,6 +300,8 @@ func TestTopics(t *testing.T) {
 	t.Run("first slot past the subsequent window is Boole-only", func(t *testing.T) {
 		cfg := booleCfg(cur + 1)
 		// One slot past the window end [F, F+SlotsPerEpoch+2) — the boundary that closes Alan.
+		// The +2 mirrors networkconfig's unexported booleSubsequentWindowLateSlots; if that margin
+		// ever changes, the InBooleTransitionWindow assertion below fails loudly.
 		slot := cfg.FirstSlotAtEpoch(cur+1) + phase0.Slot(cfg.SlotsPerEpoch) + 2
 		require.True(t, cfg.BooleForkAtSlot(slot))
 		require.False(t, cfg.InBooleTransitionWindow(slot), "expected slot just past the subsequent window")
