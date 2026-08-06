@@ -873,6 +873,8 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		highestProposal, found, err := eh.keyManager.(*ekm.LocalKeyManager).RetrieveHighestProposal(phase0.BLSPubKey(sharePubKey))
 		require.NoError(t, err)
 		require.True(t, found)
+		// The window was stamped back in the "ValidatorAdded again and nonce is bumped" subtest;
+		// liquidation must not touch the slashing-protection data, so it must still fall inside it.
 		requireSlashingProtectionStampInWindow(t, netCfgVarEpoch, highestAttestation, highestProposal, validator3StampedFrom, validator3StampedTo)
 	})
 
