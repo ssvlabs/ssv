@@ -2,8 +2,6 @@ package goclient
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/binary"
 	"fmt"
 	"net/http"
 	"time"
@@ -13,6 +11,8 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/electra"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
+
+	"github.com/ssvlabs/ssv/networkconfig"
 )
 
 // IsAggregator returns true if the validator is selected as an aggregator for the given
@@ -24,15 +24,7 @@ func (gc *GoClient) IsAggregator(
 	committeeLength uint64,
 	slotSig []byte,
 ) bool {
-	modulo := committeeLength / gc.beaconConfig.TargetAggregatorsPerCommittee
-	if modulo == 0 {
-		modulo = 1
-	}
-
-	h := sha256.Sum256(slotSig)
-	x := binary.LittleEndian.Uint64(h[:8])
-
-	return x%modulo == 0
+	return networkconfig.IsAggregatorSelected(gc.beaconConfig.TargetAggregatorsPerCommittee, committeeLength, slotSig)
 }
 
 // GetAggregateAttestation returns the aggregate attestation for the given slot and committee.
