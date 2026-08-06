@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -109,7 +110,11 @@ func (n Network) Validate() (warnings []string, err error) {
 		// is the last safe moment to catch it. Once the fork is active, equality is legitimate
 		// steady state — a config written post-fork may set DomainType to the post-fork domain and
 		// omit NextDomainType.
-		if n.NextDomainType == n.DomainType && !n.BooleFork() {
+		// The wall-clock read must be guarded: EstimatedCurrentSlot panics while the clock is
+		// still before GenesisTime, and before genesis a scheduled fork is by definition not
+		// yet active.
+		booleForkActive := !time.Now().Before(n.GenesisTime) && n.BooleFork()
+		if n.NextDomainType == n.DomainType && !booleForkActive {
 			return nil, fmt.Errorf(
 				"boole fork is scheduled at epoch %d but NextDomainType equals DomainType: the fork would activate with no observable domain change",
 				n.SSV.Forks.Boole,

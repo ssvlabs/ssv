@@ -210,6 +210,7 @@ func TestNetworkValidate(t *testing.T) {
 		name             string
 		boole            phase0.Epoch
 		currentEpoch     phase0.Epoch // wall-clock epoch the config is validated at
+		preGenesis       bool         // put GenesisTime in the future (overrides currentEpoch)
 		slotsPerEpoch    uint64
 		domainType       spectypes.DomainType
 		nextDomainType   spectypes.DomainType
@@ -244,6 +245,18 @@ func TestNetworkValidate(t *testing.T) {
 			name:           "hard_error_next_domain_equals_domain_before_fork",
 			boole:          10,
 			currentEpoch:   5,
+			slotsPerEpoch:  32,
+			domainType:     domainAlan,
+			nextDomainType: domainAlan,
+			expectErr:      true,
+		},
+		{
+			// The unchanged-domain check must not panic on EstimatedCurrentSlot when the
+			// clock is still before genesis; pre-genesis the fork is not yet active, so the
+			// misconfiguration is still reported as an error.
+			name:           "hard_error_next_domain_equals_domain_pre_genesis",
+			boole:          10,
+			preGenesis:     true,
 			slotsPerEpoch:  32,
 			domainType:     domainAlan,
 			nextDomainType: domainAlan,
@@ -293,6 +306,9 @@ func TestNetworkValidate(t *testing.T) {
 			beacon.SlotsPerEpoch = test.slotsPerEpoch
 			slotsSinceGenesis := uint64(test.currentEpoch) * test.slotsPerEpoch
 			beacon.GenesisTime = time.Now().Add(-time.Duration(slotsSinceGenesis) * beacon.SlotDuration)
+			if test.preGenesis {
+				beacon.GenesisTime = time.Now().Add(time.Hour)
+			}
 			netCfg := Network{
 				Beacon: &beacon,
 				SSV: &SSV{
