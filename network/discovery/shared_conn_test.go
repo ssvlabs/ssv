@@ -72,11 +72,11 @@ func TestSharedUDPConn_ForwardingNeverBlocks(t *testing.T) {
 
 // TestSharedUDPConn_DrainsAfterCancel pins the invariant documented on drain:
 // ctx is a metric context, not a stop signal. DiscV5Service.Close cancels before
-// it joins the producer, so a drain that honoured cancellation would let the
+// it joins the producer, so a drain that honored cancellation would let the
 // post-fork listener park in its unescapable forwarding send — deadlocking
 // shutdown in UDPv5.Close's wg.Wait, not just stalling discovery. It deliberately
-// keeps context.Background(): the whole point is a ctx cancelled before the conn
-// is built, which t.Context() (cancelled only at cleanup) cannot express.
+// keeps context.Background(): the whole point is a ctx canceled before the conn
+// is built, which t.Context() (canceled only at cleanup) cannot express.
 func TestSharedUDPConn_DrainsAfterCancel(t *testing.T) {
 	unhandled := make(chan discover.ReadPacket, unhandledChanSize)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -94,7 +94,7 @@ func TestSharedUDPConn_DrainsAfterCancel(t *testing.T) {
 	select {
 	case <-done:
 	case <-time.After(10 * time.Second):
-		t.Fatalf("forwarding blocked after %d/%d packets with a cancelled ctx: "+
+		t.Fatalf("forwarding blocked after %d/%d packets with a canceled ctx: "+
 			"drain must outlive cancellation or Close deadlocks joining the producer",
 			sent.Load(), total)
 	}
