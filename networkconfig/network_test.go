@@ -247,6 +247,20 @@ func TestNetworkValidate(t *testing.T) {
 			nextDomainType: domainBoole,
 		},
 		{
+			name:           "clean_genesis_fork",
+			boole:          0,
+			slotsPerEpoch:  32,
+			domainType:     domainAlan,
+			nextDomainType: domainBoole,
+		},
+		{
+			name:           "clean_at_max_epoch_boundary",
+			boole:          phase0.Epoch(math.MaxUint64 / 32),
+			slotsPerEpoch:  32,
+			domainType:     domainAlan,
+			nextDomainType: domainBoole,
+		},
+		{
 			name:           "clean_unscheduled",
 			boole:          phase0.Epoch(math.MaxUint64),
 			slotsPerEpoch:  32,
