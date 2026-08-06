@@ -52,6 +52,8 @@ func (c *testTopicsController) Topics() []string {
 	// Mirror the real controller, which lists subscribed topics by their full pubsub name.
 	// Entries already carrying a full Boole-fork name (e.g. "/ssv/testnet/boole/11") pass
 	// through unchanged; bare subnet strings are wrapped in the Alan-style full name.
+	// Only those two input shapes are supported: an already-wrapped Alan name (e.g.
+	// "ssv.v2.11") has no slash and would be wrapped again, yielding a mangled topic.
 	full := make([]string, len(c.topics))
 	for i, t := range c.topics {
 		if strings.Contains(t, "/") {
