@@ -545,6 +545,11 @@ func (n *p2pNetwork) isReady() bool {
 	return atomic.LoadInt32(&n.state) == stateReady
 }
 
+// discoveryStaleGrace is how long the discv5 socket may go unread before Healthy
+// treats discovery as wedged — comfortably above normal quiet on a live network,
+// where inbound traffic and query responses keep the socket busy.
+const discoveryStaleGrace = 3 * time.Minute
+
 // Healthy reports whether the p2p network is operating normally.
 // It satisfies the health-check interface from hprobe package.
 func (n *p2pNetwork) Healthy(ctx context.Context) error {
@@ -556,6 +561,16 @@ func (n *p2pNetwork) Healthy(ctx context.Context) error {
 	}
 	if n.discoveryFailed.Load() {
 		return fmt.Errorf("discovery bootstrap failed")
+	}
+	// A wedged discv5 socket leaves discovery silently dead while bootstrap keeps
+	// looping; surface it so the hprobe watchdog restarts the node. n.disc is nil
+	// in tests and briefly at startup, hence the guard.
+	if n.disc != nil && n.disc.DiscoveryStale(discoveryStaleGrace) {
+		// Surface the wedge in the log alongside the exit reason, so a restart
+		// isn't the only evidence that discovery died.
+		n.logger.Warn("discv5 socket wedged: not drained within grace, discovery stalled",
+			zap.Duration("grace", discoveryStaleGrace))
+		return fmt.Errorf("discv5 socket not drained for >%s (discovery wedged)", discoveryStaleGrace)
 	}
 	return nil
 }

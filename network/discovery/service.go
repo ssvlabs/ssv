@@ -62,6 +62,9 @@ type Service interface {
 	DeregisterSubnets(subnets ...uint64) (updated bool, err error)
 	Bootstrap(handler HandleNewPeer) error
 	PublishENR()
+	// DiscoveryStale reports whether discovery has stopped draining its socket
+	// for longer than grace (the "wedge").
+	DiscoveryStale(grace time.Duration) bool
 }
 
 type DiscoveredPeer struct {

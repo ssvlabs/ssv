@@ -65,10 +65,20 @@ var (
 			observability.InstrumentName(observabilityNamespace, "unhandled_packets.dropped"),
 			metric.WithUnit("{packet}"),
 			metric.WithDescription("total number of packets forwarded to the pre-fork listener that were dropped because its buffer was full")))
+
+	discoveryReadStalenessGauge = metrics.New(
+		meter.Int64Gauge(
+			observability.InstrumentName(observabilityNamespace, "socket.read_staleness"),
+			metric.WithUnit("s"),
+			metric.WithDescription("seconds since the discv5 socket was last read; 0 until the first read")))
 )
 
 func recordUnhandledPacketDropped(ctx context.Context) {
 	unhandledPacketsDroppedCounter.Add(ctx, 1)
+}
+
+func recordDiscoveryReadStaleness(ctx context.Context, seconds int64) {
+	discoveryReadStalenessGauge.Record(ctx, seconds)
 }
 
 func recordPeerSkipped(ctx context.Context, reason skipReason) {
