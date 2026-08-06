@@ -11,8 +11,8 @@ import (
 // computeExpectedIsAggregatorSelected is an independent recompute of the aggregator-selection
 // formula, mirroring the documented spec pseudocode so a bug in IsAggregatorSelected (e.g. wrong
 // endianness or hash) fails this test rather than silently drifting.
-func computeExpectedIsAggregatorSelected(targetAggregatorsPerCommittee, committeeCount uint64, slotSig []byte) bool {
-	modulo := committeeCount / targetAggregatorsPerCommittee
+func computeExpectedIsAggregatorSelected(targetAggregatorsPerCommittee, committeeLength uint64, slotSig []byte) bool {
+	modulo := committeeLength / targetAggregatorsPerCommittee
 	if modulo == 0 {
 		modulo = 1
 	}
@@ -30,23 +30,23 @@ func TestIsAggregatorSelected(t *testing.T) {
 	testCases := []struct {
 		name           string
 		target         uint64
-		committeeCount uint64
+		committeeLength uint64
 		slotSig        []byte
 	}{
-		{name: "small committee forces modulo to one", target: 16, committeeCount: 2, slotSig: slotSigA},
-		{name: "zero committee count forces modulo to one", target: 16, committeeCount: 0, slotSig: slotSigA},
-		{name: "committeeCount equal to target forces modulo to one", target: 16, committeeCount: 16, slotSig: slotSigA},
-		{name: "large committee uses computed modulo (sig A)", target: 16, committeeCount: 128, slotSig: slotSigA},
-		{name: "large committee uses computed modulo (sig B)", target: 16, committeeCount: 128, slotSig: slotSigB},
-		{name: "small target", target: 3, committeeCount: 10, slotSig: slotSigA},
+		{name: "small committee forces modulo to one", target: 16, committeeLength: 2, slotSig: slotSigA},
+		{name: "zero committee length forces modulo to one", target: 16, committeeLength: 0, slotSig: slotSigA},
+		{name: "committeeLength equal to target forces modulo to one", target: 16, committeeLength: 16, slotSig: slotSigA},
+		{name: "large committee uses computed modulo (sig A)", target: 16, committeeLength: 128, slotSig: slotSigA},
+		{name: "large committee uses computed modulo (sig B)", target: 16, committeeLength: 128, slotSig: slotSigB},
+		{name: "small target", target: 3, committeeLength: 10, slotSig: slotSigA},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := IsAggregatorSelected(tc.target, tc.committeeCount, tc.slotSig)
-			want := computeExpectedIsAggregatorSelected(tc.target, tc.committeeCount, tc.slotSig)
+			got := IsAggregatorSelected(tc.target, tc.committeeLength, tc.slotSig)
+			want := computeExpectedIsAggregatorSelected(tc.target, tc.committeeLength, tc.slotSig)
 			require.Equal(t, want, got)
 		})
 	}

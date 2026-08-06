@@ -41,8 +41,8 @@ type AggregatorRunner struct {
 	ValCheck ssv.ValueChecker
 
 	// IsAggregator returns true if the signature is from the input validator. The committee
-	// count is provided as an argument rather than imported implementation from spec. Having
-	// committee count as an argument allows cheaper computation at run time.
+	// length is provided as an argument rather than imported implementation from spec. Having
+	// committee length as an argument allows cheaper computation at run time.
 	//
 	// Spec pseudocode definition:
 	//
@@ -52,7 +52,7 @@ type AggregatorRunner struct {
 	//	 return bytes_to_uint64(hash(slot_signature)[0:8]) % modulo == 0
 	//
 	// IsAggregator is an exported struct field, so it can be mocked out for easy testing.
-	IsAggregator func(targetAggregatorsPerCommittee uint64, committeeCount uint64, slotSig []byte) bool `json:"-"`
+	IsAggregator func(targetAggregatorsPerCommittee uint64, committeeLength uint64, slotSig []byte) bool `json:"-"`
 }
 
 var _ Runner = &AggregatorRunner{}
@@ -597,6 +597,6 @@ func constructVersionedSignedAggregateAndProof(aggregateAndProof spec.VersionedA
 // isAggregatorFn returns the default IsAggregator func, delegating to the shared
 // networkconfig.IsAggregatorSelected helper so pre/post-Boole selection stays bit-identical
 // with beacon/goclient's implementation.
-func isAggregatorFn() func(targetAggregatorsPerCommittee uint64, committeeCount uint64, slotSig []byte) bool {
+func isAggregatorFn() func(targetAggregatorsPerCommittee uint64, committeeLength uint64, slotSig []byte) bool {
 	return networkconfig.IsAggregatorSelected
 }
