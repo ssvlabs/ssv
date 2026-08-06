@@ -54,8 +54,8 @@ func TestDiscV5Service_Close(t *testing.T) {
 	err := dvs.Close()
 	assert.NoError(t, err)
 
-	// Callers above don't guard against closing twice, and the second pass
-	// would panic closing sharedConn.Unhandled again.
+	// A repeat close would panic re-closing sharedConn.Unhandled; Close guards
+	// against that. The production caller closes once, but tests reach it directly.
 	assert.NotPanics(t, func() {
 		assert.NoError(t, dvs.Close())
 	})
@@ -103,7 +103,7 @@ func (p *producingListener) Close() {
 // above cannot catch, having no live producer.
 func TestDiscV5Service_CloseStopsProducerBeforeClosingUnhandled(t *testing.T) {
 	unhandled := make(chan discover.ReadPacket, unhandledChanSize)
-	sharedConn := NewSharedUDPConn(context.Background(), zap.NewNop(), nil, unhandled)
+	sharedConn := NewSharedUDPConn(t.Context(), zap.NewNop(), nil, unhandled)
 	producer := newProducingListener(unhandled)
 
 	dvs := &DiscV5Service{

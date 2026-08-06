@@ -44,7 +44,7 @@ func forwardBlocking(unhandled chan discover.ReadPacket, n int, sent *atomic.Int
 // which halted the post-fork listener and stopped the UDP socket being drained.
 func TestSharedUDPConn_ForwardingNeverBlocks(t *testing.T) {
 	unhandled := make(chan discover.ReadPacket, unhandledChanSize)
-	conn := NewSharedUDPConn(context.Background(), zap.NewNop(), nil, unhandled)
+	conn := NewSharedUDPConn(t.Context(), zap.NewNop(), nil, unhandled)
 
 	// Well past unhandled's capacity and the internal buffer combined.
 	const total = unhandledChanSize + unhandledBufferSize + 5000
@@ -70,11 +70,44 @@ func TestSharedUDPConn_ForwardingNeverBlocks(t *testing.T) {
 	conn.WaitDrained()
 }
 
+// TestSharedUDPConn_DrainsAfterCancel pins the invariant documented on drain:
+// ctx is a metric context, not a stop signal. DiscV5Service.Close cancels before
+// it joins the producer, so a drain that honoured cancellation would let the
+// post-fork listener park in its unescapable forwarding send — deadlocking
+// shutdown in UDPv5.Close's wg.Wait, not just stalling discovery. It deliberately
+// keeps context.Background(): the whole point is a ctx cancelled before the conn
+// is built, which t.Context() (cancelled only at cleanup) cannot express.
+func TestSharedUDPConn_DrainsAfterCancel(t *testing.T) {
+	unhandled := make(chan discover.ReadPacket, unhandledChanSize)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	conn := NewSharedUDPConn(ctx, zap.NewNop(), nil, unhandled)
+
+	const total = unhandledChanSize + unhandledBufferSize + 5000
+	var sent atomic.Int64
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		forwardBlocking(unhandled, total, &sent)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatalf("forwarding blocked after %d/%d packets with a cancelled ctx: "+
+			"drain must outlive cancellation or Close deadlocks joining the producer",
+			sent.Load(), total)
+	}
+
+	close(unhandled)
+	conn.WaitDrained()
+}
+
 // TestSharedUDPConn_DeliversPacketsToReader covers the normal path: what the
 // producer forwards is what the pre-fork listener reads.
 func TestSharedUDPConn_DeliversPacketsToReader(t *testing.T) {
 	unhandled := make(chan discover.ReadPacket, unhandledChanSize)
-	conn := NewSharedUDPConn(context.Background(), zap.NewNop(), nil, unhandled)
+	conn := NewSharedUDPConn(t.Context(), zap.NewNop(), nil, unhandled)
 	defer func() {
 		close(unhandled)
 		conn.WaitDrained()
@@ -99,7 +132,7 @@ func TestSharedUDPConn_DeliversPacketsToReader(t *testing.T) {
 // TestSharedUDPConn_TruncatesOversizedPacket pins the existing copy semantics.
 func TestSharedUDPConn_TruncatesOversizedPacket(t *testing.T) {
 	unhandled := make(chan discover.ReadPacket, 1)
-	conn := NewSharedUDPConn(context.Background(), zap.NewNop(), nil, unhandled)
+	conn := NewSharedUDPConn(t.Context(), zap.NewNop(), nil, unhandled)
 	defer func() {
 		close(unhandled)
 		conn.WaitDrained()
@@ -121,7 +154,7 @@ func TestSharedUDPConn_TruncatesOversizedPacket(t *testing.T) {
 // listener shut down without closing Unhandled out from under its producer.
 func TestSharedUDPConn_CloseReleasesBlockedReader(t *testing.T) {
 	unhandled := make(chan discover.ReadPacket, unhandledChanSize)
-	conn := NewSharedUDPConn(context.Background(), zap.NewNop(), nil, unhandled)
+	conn := NewSharedUDPConn(t.Context(), zap.NewNop(), nil, unhandled)
 
 	readErr := make(chan error, 1)
 	go func() {
@@ -285,7 +318,7 @@ func TestInitDiscV5Listener_CleansUpOnError(t *testing.T) {
 // with "send on closed channel".
 func TestSharedUDPConn_DrainsWhileClosing(t *testing.T) {
 	unhandled := make(chan discover.ReadPacket, unhandledChanSize)
-	conn := NewSharedUDPConn(context.Background(), zap.NewNop(), nil, unhandled)
+	conn := NewSharedUDPConn(t.Context(), zap.NewNop(), nil, unhandled)
 
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -316,12 +349,11 @@ func TestSharedUDPConn_DrainsWhileClosing(t *testing.T) {
 }
 
 // TestSharedUDPConn_DropsOldestWhenFull verifies overflow evicts the oldest
-// buffered packet, so the freshest packets survive a flood — a real ping
-// response must not be starved by a stale backlog. Tail-dropping the newcomer
-// would keep the oldest instead and fail this test.
+// buffered packet, so the newest are the ones retained rather than tail-dropped.
+// Tail-dropping the newcomer would keep the oldest instead and fail this test.
 func TestSharedUDPConn_DropsOldestWhenFull(t *testing.T) {
 	unhandled := make(chan discover.ReadPacket, unhandledChanSize)
-	conn := NewSharedUDPConn(context.Background(), zap.NewNop(), nil, unhandled)
+	conn := NewSharedUDPConn(t.Context(), zap.NewNop(), nil, unhandled)
 
 	// Tag each packet with a unique port so we can tell which survived, and send
 	// more than the buffer holds. With no reader, drain fills the buffer and then
@@ -345,6 +377,6 @@ func TestSharedUDPConn_DropsOldestWhenFull(t *testing.T) {
 	for want := overflow; want < total; want++ {
 		_, addr, err := conn.ReadFromUDPAddrPort(buf)
 		require.NoError(t, err)
-		require.EqualValues(t, want, addr.Port(), "freshest packets should survive, in order")
+		require.EqualValues(t, want, addr.Port(), "the newest packets should be retained, in order")
 	}
 }

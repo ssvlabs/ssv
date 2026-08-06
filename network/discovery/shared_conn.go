@@ -42,7 +42,7 @@ const (
 // (scan noise, stray discv4, a flood) stall that listener until it stopped
 // draining the socket, and the kernel dropped valid discv5 traffic. drain
 // always accepts, evicting the oldest buffered packet on overflow — counted and
-// warned — so the freshest survives instead.
+// warned — so the newest is kept rather than dropped.
 type SharedUDPConn struct {
 	*net.UDPConn
 	Unhandled chan discover.ReadPacket
@@ -96,10 +96,16 @@ func (s *SharedUDPConn) drain(ctx context.Context) {
 	}
 }
 
-// bufferPacket enqueues packet for the reader. When the buffer is full it evicts
-// the oldest packet so the freshest one wins — a real ping response must not be
-// starved by a backlog of junk during a flood. It reports whether a packet was
-// dropped to make room.
+// bufferPacket enqueues packet for the reader, evicting the oldest to make room
+// when the buffer is full so the newcomer is kept rather than tail-dropped. It
+// reports whether a packet was dropped.
+//
+// This bounds staleness; it does not guarantee a fresh packet is read promptly.
+// Reads are FIFO (ReadFromUDPAddrPort), so a retained ping response can still sit
+// behind up to unhandledBufferSize-1 older packets, and under a sustained flood a
+// persistently-full buffer can outlast geth's V5RespTimeout regardless of depth.
+// The wedge fix is the non-blocking send, not this buffer; evicting the oldest
+// only makes overflow strictly no worse than dropping the newcomer.
 func (s *SharedUDPConn) bufferPacket(packet discover.ReadPacket) (dropped bool) {
 	for {
 		select {
@@ -107,8 +113,11 @@ func (s *SharedUDPConn) bufferPacket(packet discover.ReadPacket) (dropped bool) 
 			return dropped
 		default:
 		}
-		// Full: evict the oldest and retry. A concurrent read may free a slot
-		// first, in which case nothing is dropped.
+		// Full at the send: evict the oldest, then retry. The evict is
+		// unconditional while anything is buffered, so the newcomer displaces the
+		// oldest even if a concurrent read just freed a slot. dropped stays false
+		// only when the buffer was emptied meanwhile (evict's default fires) —
+		// not reachable under the flood this guards.
 		select {
 		case <-s.buffered:
 			dropped = true

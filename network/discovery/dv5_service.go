@@ -120,8 +120,10 @@ func NewDiscV5Service(pctx context.Context, logger *zap.Logger, opts *Options) (
 	return &dvs, nil
 }
 
-// Close implements io.Closer. It is safe to call more than once; callers above
-// don't guard against that, and closing sharedConn.Unhandled twice would panic.
+// Close implements io.Closer and is idempotent: a repeat call would panic
+// re-closing sharedConn.Unhandled, so the guard lives here. The sole production
+// caller (p2pNetwork.Close) already closes once, but tests and any future caller
+// reach this directly.
 func (dvs *DiscV5Service) Close() error {
 	dvs.closeOnce.Do(func() {
 		dvs.closeErr = dvs.close()
