@@ -103,13 +103,17 @@ func (n Network) Validate() (warnings []string, err error) {
 		}
 
 		// unmarshalFromConfig defaults NextDomainType to DomainType when the field is absent, so
-		// equality here is exactly the signature of a scheduled fork that forgot to set
-		// NextDomainType: it would "activate" with zero observable domain change.
-		if n.NextDomainType == n.DomainType {
-			warnings = append(warnings, fmt.Sprintf(
+		// equality while the fork is still ahead is exactly the signature of a scheduled fork that
+		// forgot to set NextDomainType: it would "activate" with zero observable domain change, and
+		// a restart is guaranteed before activation (see BooleForkScheduled), so refusing to start
+		// is the last safe moment to catch it. Once the fork is active, equality is legitimate
+		// steady state — a config written post-fork may set DomainType to the post-fork domain and
+		// omit NextDomainType.
+		if n.NextDomainType == n.DomainType && !n.BooleFork() {
+			return nil, fmt.Errorf(
 				"boole fork is scheduled at epoch %d but NextDomainType equals DomainType: the fork would activate with no observable domain change",
 				n.SSV.Forks.Boole,
-			))
+			)
 		}
 	}
 

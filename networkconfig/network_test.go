@@ -209,6 +209,7 @@ func TestNetworkValidate(t *testing.T) {
 	tests := []struct {
 		name             string
 		boole            phase0.Epoch
+		currentEpoch     phase0.Epoch // wall-clock epoch the config is validated at
 		slotsPerEpoch    uint64
 		domainType       spectypes.DomainType
 		nextDomainType   spectypes.DomainType
@@ -240,12 +241,21 @@ func TestNetworkValidate(t *testing.T) {
 			expectErr:      true,
 		},
 		{
-			name:             "warning_next_domain_equals_domain",
-			boole:            10,
-			slotsPerEpoch:    32,
-			domainType:       domainAlan,
-			nextDomainType:   domainAlan,
-			expectedWarnings: 1,
+			name:           "hard_error_next_domain_equals_domain_before_fork",
+			boole:          10,
+			currentEpoch:   5,
+			slotsPerEpoch:  32,
+			domainType:     domainAlan,
+			nextDomainType: domainAlan,
+			expectErr:      true,
+		},
+		{
+			name:           "clean_next_domain_equals_domain_after_fork",
+			boole:          10,
+			currentEpoch:   20,
+			slotsPerEpoch:  32,
+			domainType:     domainBoole,
+			nextDomainType: domainBoole,
 		},
 		{
 			name:           "clean_scheduled",
@@ -281,6 +291,8 @@ func TestNetworkValidate(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			beacon := *TestNetwork.Beacon
 			beacon.SlotsPerEpoch = test.slotsPerEpoch
+			slotsSinceGenesis := uint64(test.currentEpoch) * test.slotsPerEpoch
+			beacon.GenesisTime = time.Now().Add(-time.Duration(slotsSinceGenesis) * beacon.SlotDuration)
 			netCfg := Network{
 				Beacon: &beacon,
 				SSV: &SSV{
