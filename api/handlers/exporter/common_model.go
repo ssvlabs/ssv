@@ -184,6 +184,16 @@ func toBeaconRoles(rs []api.Role) []spectypes.BeaconRole {
 	return out
 }
 
+// toRunnerRoles converts an API RunnerRoleSlice into a slice of runner roles.
+// It is used by HTTP adapters when constructing core query models.
+func toRunnerRoles(rs api.RunnerRoleSlice) []spectypes.RunnerRole {
+	out := make([]spectypes.RunnerRole, 0, len(rs))
+	for _, r := range rs {
+		out = append(out, spectypes.RunnerRole(r))
+	}
+	return out
+}
+
 // toValidatorIndices converts an API Uint64Slice into a slice of
 // phase0.ValidatorIndex for use by core query models.
 func toValidatorIndices(indices api.Uint64Slice) []phase0.ValidatorIndex {

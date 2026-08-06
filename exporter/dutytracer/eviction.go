@@ -43,9 +43,9 @@ func (c *Collector) dumpLinkToDBPeriodically(slot phase0.Slot) (totalSaved int) 
 }
 
 func (c *Collector) dumpCommitteeToDBPeriodically(slot phase0.Slot) (totalSaved int) {
-	var duties []*traces.CommitteeDutyTrace
+	dutiesByRole := make(map[spectypes.RunnerRole][]*traces.CommitteeDutyTrace)
 
-	c.committeeTraces.Range(func(key spectypes.CommitteeID, slotToTraceMap *hashmap.Map[phase0.Slot, *committeeDutyTrace]) bool {
+	c.committeeTraces.Range(func(key committeeTraceKey, slotToTraceMap *hashmap.Map[phase0.Slot, *committeeDutyTrace]) bool {
 		trace, found := slotToTraceMap.Get(slot)
 		if !found {
 			return true
@@ -68,7 +68,7 @@ func (c *Collector) dumpCommitteeToDBPeriodically(slot phase0.Slot) (totalSaved 
 		}
 		if pendingCount > 0 {
 			c.logger.Error("dropping buffered pending signatures during eviction (proposal never arrived or failed to establish role roots)",
-				fields.Slot(slot), fields.CommitteeID(key),
+				fields.Slot(slot), fields.CommitteeID(key.id),
 				zap.Int("pending_entries", pendingCount),
 				pendingDetails(trace.pendingByRoot))
 			// We intentionally drop pending entries here; they are not persisted.
@@ -79,16 +79,21 @@ func (c *Collector) dumpCommitteeToDBPeriodically(slot phase0.Slot) (totalSaved 
 		data := trace.DeepCopy()
 		trace.Unlock()
 
-		duties = append(duties, data)
+		dutiesByRole[key.role] = append(dutiesByRole[key.role], data)
 		return true
 	})
 
-	if err := c.store.SaveCommitteeDuties(slot, duties); err != nil {
-		c.logger.Error("save committee duties to disk", zap.Error(err))
-		return 0
+	for role, duties := range dutiesByRole {
+		if len(duties) == 0 {
+			continue
+		}
+		if err := c.store.SaveCommitteeDuties(slot, role, duties); err != nil {
+			c.logger.Error("save committee duties to disk", zap.Error(err), fields.RunnerRole(role))
+			continue
+		}
+		totalSaved += len(duties)
 	}
 
-	totalSaved = len(duties)
 	return totalSaved
 }
 
@@ -126,6 +131,20 @@ func (c *Collector) dumpValidatorToDBPeriodically(slot phase0.Slot) (totalSaved 
 }
 
 // pendingDetails constructs a single zap field named "pending_signers_by_root"
+// countPending returns the total number of pending validator-index entries
+// held in a pendingByRoot map, across all roots, signers and timestamps.
+func countPending(data map[phase0.Root]map[spectypes.OperatorID]map[uint64][]phase0.ValidatorIndex) int {
+	count := 0
+	for _, perSigner := range data {
+		for _, byTs := range perSigner {
+			for _, idxs := range byTs {
+				count += len(idxs)
+			}
+		}
+	}
+	return count
+}
+
 // that logs the content of pendingByRoot in a JSON-friendly structure.
 func pendingDetails(data map[phase0.Root]map[spectypes.OperatorID]map[uint64][]phase0.ValidatorIndex) zap.Field {
 	out := make(map[string]map[string]any, len(data))

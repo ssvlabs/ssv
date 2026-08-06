@@ -187,8 +187,8 @@ github.com/sourcegraph/conc v0.3.0 h1:OQTbbt6P72L20UqAkXXuLOj79LfEanQ+YQFNpLA9yS
 github.com/sourcegraph/conc v0.3.0/go.mod h1:Sdozi7LEKbFPqYX2/J+iBAM6HpqSLTASQIKqDmF7Mt0=
 github.com/ssvlabs/eth2-key-manager v1.5.6 h1:BMxVCsbcIlUiiO0hpePkHxzX0yhKgMkEzVSoNmSXySM=
 github.com/ssvlabs/eth2-key-manager v1.5.6/go.mod h1:tjzhmMzrc0Lzc/OMW1h9Mz8AhmKH7FQC/nFiMNJ0bd8=
-github.com/ssvlabs/ssv-spec v1.2.2 h1:as84CsvYAL4+czKBVeQSlxjDYVmU1wClwhc7YNcoBzY=
-github.com/ssvlabs/ssv-spec v1.2.2/go.mod h1:GedhFYGHVJRYYH3nEp05Gn14tyvg6VbTbaIxrMtI7Cg=
+github.com/ssvlabs/ssv-spec v1.2.3-0.20260305184636-289c93aa4c12 h1:yGQ4e0VZa3TTntgd58nArJy6rllrodwkew8hZ1uAeOY=
+github.com/ssvlabs/ssv-spec v1.2.3-0.20260305184636-289c93aa4c12/go.mod h1:GedhFYGHVJRYYH3nEp05Gn14tyvg6VbTbaIxrMtI7Cg=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
 github.com/stretchr/objx v0.5.2 h1:xuMeJ0Sdp5ZMRXx/aWO6RZxdr3beISkG5/G/aIRr3pY=
 github.com/stretchr/objx v0.5.2/go.mod h1:FRsXN1f5AsAjCGJKqEizvkpNtU+EGNCLh3NxZ/8L+MA=

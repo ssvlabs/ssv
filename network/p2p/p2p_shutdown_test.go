@@ -39,6 +39,8 @@ func (f *mockTopicsController) Broadcast(string, []byte, time.Duration) error {
 	return nil
 }
 
+func (f *mockTopicsController) DeregisterTopics(...string) {}
+
 func (f *mockTopicsController) UpdateScoreParams() error {
 	select {
 	case f.updateCalled <- struct{}{}:
@@ -56,7 +58,7 @@ func TestUpdateSubnetsStopsOnContextCancel(t *testing.T) {
 
 	n := &p2pNetwork{
 		ctx:                  ctx,
-		subscribedCommittees: hashmap.New[string, committeeSubscriptionStatus](),
+		subscribedCommittees: hashmap.New[string, statusWithSubnet](),
 	}
 
 	done := make(chan struct{})

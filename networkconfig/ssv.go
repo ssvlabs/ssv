@@ -3,8 +3,10 @@ package networkconfig
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"math/big"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 
@@ -35,6 +37,7 @@ type SSV struct {
 	// even if the beacon network is the same.
 	Name                 string
 	DomainType           spectypes.DomainType
+	NextDomainType       spectypes.DomainType
 	RegistrySyncOffset   *big.Int
 	RegistryContractAddr ethcommon.Address
 	Bootnodes            []string
@@ -45,7 +48,10 @@ type SSV struct {
 	Forks                   SSVForks
 }
 
-type SSVForks struct{}
+// SSVForks holds the resolved fork schedule; serialization goes through marshaledForks.
+type SSVForks struct {
+	Boole phase0.Epoch
+}
 
 func (s *SSV) String() string {
 	marshaled, err := json.Marshal(s)
@@ -59,25 +65,43 @@ func (s *SSV) String() string {
 type marshaledConfig struct {
 	Name                    string            `json:"name,omitempty" yaml:"Name,omitempty"`
 	DomainType              hexutil.Bytes     `json:"domain_type,omitempty" yaml:"DomainType,omitempty"`
+	NextDomainType          hexutil.Bytes     `json:"next_domain_type,omitempty" yaml:"NextDomainType,omitempty"`
 	RegistrySyncOffset      *big.Int          `json:"registry_sync_offset,omitempty" yaml:"RegistrySyncOffset,omitempty"`
 	RegistryContractAddr    ethcommon.Address `json:"registry_contract_addr,omitempty" yaml:"RegistryContractAddr,omitempty"`
 	Bootnodes               []string          `json:"bootnodes,omitempty" yaml:"Bootnodes,omitempty"`
 	DiscoveryProtocolID     hexutil.Bytes     `json:"discovery_protocol_id,omitempty" yaml:"DiscoveryProtocolID,omitempty"`
 	TotalEthereumValidators int               `json:"total_ethereum_validators,omitempty" yaml:"TotalEthereumValidators,omitempty"`
-	Forks                   SSVForks          `json:"forks,omitempty" yaml:"Forks,omitempty"`
+	// Forks is a pointer so unmarshaling can distinguish "forks block absent" (nil) from
+	// "forks block present" (non-nil); marshaledForks then distinguishes per-fork fields.
+	Forks *marshaledForks `json:"forks,omitempty" yaml:"Forks,omitempty"`
+}
+
+// marshaledForks is the wire form of SSVForks. Each fork epoch is a pointer so unmarshaling
+// can distinguish "field omitted" (nil, defaults to never-activates) from an explicit epoch —
+// otherwise an empty forks block (Forks: {}) would zero-value Boole to epoch 0 (fork-at-genesis).
+type marshaledForks struct {
+	Boole *phase0.Epoch `json:"boole,omitempty" yaml:"Boole,omitempty"`
 }
 
 // Helper method to avoid duplication between MarshalJSON and MarshalYAML
 func (s *SSV) marshal() *marshaledConfig {
+	// Mirror the unmarshal default: an unscheduled fork (the math.MaxUint64 sentinel) is
+	// emitted as an absent field rather than spelling the magic number out in printed configs.
+	forks := &marshaledForks{}
+	if s.Forks.Boole != math.MaxUint64 {
+		boole := s.Forks.Boole
+		forks.Boole = &boole
+	}
 	return &marshaledConfig{
 		Name:                    s.Name,
 		DomainType:              s.DomainType[:],
+		NextDomainType:          s.NextDomainType[:],
 		RegistrySyncOffset:      s.RegistrySyncOffset,
 		RegistryContractAddr:    s.RegistryContractAddr,
 		Bootnodes:               s.Bootnodes,
 		DiscoveryProtocolID:     s.DiscoveryProtocolID[:],
 		TotalEthereumValidators: s.TotalEthereumValidators,
-		Forks:                   s.Forks,
+		Forks:                   forks,
 	}
 }
 
@@ -94,20 +118,39 @@ func (s *SSV) unmarshalFromConfig(aux marshaledConfig) error {
 	if len(aux.DomainType) != 4 {
 		return fmt.Errorf("invalid domain type length: expected 4 bytes, got %d", len(aux.DomainType))
 	}
+	if len(aux.NextDomainType) != 0 && len(aux.NextDomainType) != 4 {
+		return fmt.Errorf("invalid next domain type length: expected 4 bytes, got %d", len(aux.NextDomainType))
+	}
+
+	if len(aux.NextDomainType) == 0 {
+		aux.NextDomainType = aux.DomainType
+	}
 
 	if len(aux.DiscoveryProtocolID) != 6 {
 		return fmt.Errorf("invalid discovery protocol ID length: expected 6 bytes, got %d", len(aux.DiscoveryProtocolID))
 	}
 
+	// If the config has no "forks" block at all (e.g. a stale custom-network YAML/JSON
+	// predating the Boole fork), an empty block ("Forks: {}"), or a block that omits Boole,
+	// default Boole to "never activates" rather than letting it zero-value to epoch 0
+	// (fork-at-genesis). Only an explicit "forks: {Boole: <epoch>}" is honored verbatim.
+	// This protects custom-network operators from silently jumping to post-fork behavior
+	// when they haven't opted in.
+	forks := SSVForks{Boole: math.MaxUint64}
+	if aux.Forks != nil && aux.Forks.Boole != nil {
+		forks.Boole = *aux.Forks.Boole
+	}
+
 	*s = SSV{
 		Name:                    aux.Name,
 		DomainType:              spectypes.DomainType(aux.DomainType),
+		NextDomainType:          spectypes.DomainType(aux.NextDomainType),
 		RegistrySyncOffset:      aux.RegistrySyncOffset,
 		RegistryContractAddr:    aux.RegistryContractAddr,
 		Bootnodes:               aux.Bootnodes,
 		DiscoveryProtocolID:     [6]byte(aux.DiscoveryProtocolID),
 		TotalEthereumValidators: aux.TotalEthereumValidators,
-		Forks:                   aux.Forks,
+		Forks:                   forks,
 	}
 
 	return nil

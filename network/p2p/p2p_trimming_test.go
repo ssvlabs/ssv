@@ -2,7 +2,6 @@ package p2pv1
 
 import (
 	"context"
-	"strconv"
 	"testing"
 	"time"
 
@@ -16,6 +15,7 @@ import (
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/topics"
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/utils/hashmap"
 )
 
@@ -37,16 +37,28 @@ func (c *testTopicsController) Peers(topicName string) ([]peer.ID, error) {
 	if topicName == "" {
 		return append([]peer.ID(nil), c.allPeers...), nil
 	}
-	return append([]peer.ID(nil), c.peersByTopic[topicName]...), nil
+	// The controller presents full topic names outward (see Topics); look up by subnet ID.
+	subnet, _, err := commons.ParseTopicSubnet(topicName)
+	if err != nil {
+		return nil, nil
+	}
+	return append([]peer.ID(nil), c.peersByTopic[commons.SubnetTopicID(subnet)]...), nil
 }
 
 func (c *testTopicsController) Topics() []string {
-	return append([]string(nil), c.topics...)
+	// Mirror the real controller, which lists subscribed topics by their full pubsub name.
+	full := make([]string, len(c.topics))
+	for i, t := range c.topics {
+		full[i] = commons.GetTopicFullName(t)
+	}
+	return full
 }
 
 func (c *testTopicsController) Broadcast(string, []byte, time.Duration) error {
 	return nil
 }
+
+func (c *testTopicsController) DeregisterTopics(...string) {}
 
 func (c *testTopicsController) UpdateScoreParams() error {
 	return nil
@@ -279,7 +291,7 @@ func newTrimTestNetwork(host host.Host, topicsCtrl topics.Controller, idx peers.
 		}
 		if topicsCtrl != nil {
 			for _, topic := range topicsCtrl.Topics() {
-				subnet, err := strconv.ParseUint(commons.GetTopicBaseName(topic), 10, 64)
+				subnet, _, err := commons.ParseTopicSubnet(topic)
 				if err != nil || subnet >= commons.SubnetsCount {
 					continue
 				}
@@ -298,10 +310,11 @@ func newTrimTestNetwork(host host.Host, topicsCtrl topics.Controller, idx peers.
 
 	n := &p2pNetwork{
 		logger:               zap.NewNop(),
+		cfg:                  &Config{NetworkConfig: networkconfig.TestNetwork},
 		topicsCtrl:           topicsCtrl,
 		idx:                  idx,
 		persistentSubnets:    ownSubnets,
-		subscribedCommittees: hashmap.New[string, committeeSubscriptionStatus](),
+		subscribedCommittees: hashmap.New[string, statusWithSubnet](),
 	}
 	if host != nil {
 		n.host.Store(&host)

@@ -50,7 +50,7 @@ func RunControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {
 		}
 		height++
 	}
-	spectests.AssertErrorCode(t, test.ExpectedErrorCode, lastErr)
+	spectests.AssertErrorCode(t, adjustExpectedErrorCode(test.ExpectedErrorCode), lastErr)
 }
 
 func generateController(logger *zap.Logger) *controller.Controller {
@@ -121,7 +121,7 @@ func testBroadcastedDecided(
 ) {
 	if runData.ExpectedDecidedState.BroadcastedDecided != nil {
 		// test broadcasted
-		broadcastedSignedMsgs := config.GetNetwork().(*spectestingutils.TestingNetwork).BroadcastedMsgs
+		broadcastedSignedMsgs := config.GetNetwork().(*protocoltesting.TestingNetwork).BroadcastedMsgs
 		require.Greater(t, len(broadcastedSignedMsgs), 0)
 		require.NoError(t, spectestingutils.VerifyListOfSignedSSVMessages(broadcastedSignedMsgs, committee))
 		found := false

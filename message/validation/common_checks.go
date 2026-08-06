@@ -7,10 +7,12 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 func (mv *messageValidator) committeeRole(role spectypes.RunnerRole) bool {
-	return role == spectypes.RoleCommittee
+	return role == spectypes.RoleCommittee || role == spectypes.RoleAggregatorCommittee
 }
 
 func (mv *messageValidator) validateSlotTime(messageSlot phase0.Slot, role spectypes.RunnerRole, receivedAt time.Time) error {
@@ -38,11 +40,15 @@ func (mv *messageValidator) messageEarliness(slot phase0.Slot, receivedAt time.T
 func (mv *messageValidator) messageLateness(slot phase0.Slot, role spectypes.RunnerRole, receivedAt time.Time) time.Duration {
 	var ttl uint64
 	switch role {
-	case spectypes.RoleProposer, spectypes.RoleSyncCommitteeContribution:
+	case spectypes.RoleProposer, ssvtypes.RoleSyncCommitteeContribution:
 		ttl = 1 + LateSlotAllowance
-	case spectypes.RoleCommittee, spectypes.RoleAggregator:
+	case spectypes.RoleCommittee, spectypes.RoleAggregatorCommittee, ssvtypes.RoleAggregator:
 		ttl = mv.maxStoredSlots()
 	case spectypes.RoleValidatorRegistration, spectypes.RoleVoluntaryExit:
+		// Deliberately exempt from the lateness bound: these duties aren't tied to a slot
+		// deadline, so only the early-message check and per-epoch duty limits apply.
+		return 0
+	default:
 		return 0
 	}
 
@@ -72,6 +78,10 @@ func (mv *messageValidator) validateDutyCount(
 		dutyCount++
 	}
 
+	// Rule: valid number of duties per epoch:
+	// - 2 for aggregation, voluntary exit and validator registration
+	// - 2*V for Committee and AggregatorCommittee duty (where V is the number of validators in the cluster) (if no validator is doing sync committee in this epoch)
+	// - else, accept
 	if dutyCount > dutyLimit {
 		e := ErrTooManyDutiesPerEpoch
 		e.got = fmt.Sprintf("%v (role %v)", dutyCount, msgID.GetRoleType())
@@ -90,10 +100,10 @@ func (mv *messageValidator) dutyLimit(msgID spectypes.MessageID, slot phase0.Slo
 
 		return mv.dutyStore.VoluntaryExit.GetDutyCount(slot, pk), true
 
-	case spectypes.RoleAggregator, spectypes.RoleValidatorRegistration:
+	case ssvtypes.RoleAggregator, spectypes.RoleValidatorRegistration:
 		return 2, true
 
-	case spectypes.RoleCommittee:
+	case spectypes.RoleCommittee, spectypes.RoleAggregatorCommittee:
 		validatorIndexCount := uint64(len(validatorIndices))
 		slotsPerEpoch := mv.netCfg.SlotsPerEpoch
 
@@ -146,7 +156,7 @@ func (mv *messageValidator) validateBeaconDuty(
 	}
 
 	// Rule: For a sync committee aggregation duty message, we check if the validator is assigned to it
-	if role == spectypes.RoleSyncCommitteeContribution {
+	if role == ssvtypes.RoleSyncCommitteeContribution {
 		period := mv.netCfg.EstimatedSyncCommitteePeriodAtEpoch(epoch)
 		// Non-committee roles always have one validator index.
 		validatorIndex := indices[0]
@@ -155,5 +165,15 @@ func (mv *messageValidator) validateBeaconDuty(
 		}
 	}
 
+	// Committee roles (RoleCommittee and RoleAggregatorCommittee) are intentionally not
+	// per-validator duty-asserted here. As elsewhere in committee-role validation, we do not assume
+	// operators are synced on each other's validator sets (see knowledge-base#2), so asserting a
+	// per-validator attester/sync-committee duty would reject legitimate messages from nodes still
+	// mid-sync — the self-reinforcing failure mode kb#2 documents. The pre-Boole
+	// RoleSyncCommitteeContribution branch above has the assertion only because it was a
+	// per-validator (non-committee) role with a single known index; RoleAggregatorCommittee carries
+	// that traffic post-fork as a committee role, so the assertion is dropped by design. The residual
+	// spam is insider-only (the signer is an authenticated committee member) and bounded by the
+	// per-epoch duty-count limit for committee roles in dutyLimit (min(slotsPerEpoch, 2*validators)).
 	return nil
 }

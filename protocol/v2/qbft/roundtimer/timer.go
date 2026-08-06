@@ -11,6 +11,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/networkconfig"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/utils/casts"
 )
 
@@ -47,8 +48,9 @@ func roundTimeoutForRound(role spectypes.RunnerRole, slotDuration time.Duration,
 
 // round1HeadStart returns the extra time, on top of Round 1's normal quick timeout, that
 // Round 1 is allowed to run for a given role. Committee gets 1/3 of the slot as head start
-// (time for the block to become available); aggregator and sync-committee-contribution get
-// 2/3 of the slot (time for attestations to arrive); proposer gets zero.
+// (time for the block to become available); aggregator, aggregator-committee and
+// sync-committee-contribution get 2/3 of the slot (time for attestations to arrive before
+// aggregating); proposer gets zero.
 //
 // Note: this is NOT the time at which Round 1 -> Round 2 transitions — that transition actually
 // happens at `slotStart + round1HeadStart + QuickTimeout`, because Round 1 still needs to run its
@@ -57,7 +59,7 @@ func round1HeadStart(role spectypes.RunnerRole, slotDuration time.Duration) time
 	switch role {
 	case spectypes.RoleCommittee:
 		return slotDuration / 3
-	case spectypes.RoleAggregator, spectypes.RoleSyncCommitteeContribution:
+	case ssvtypes.RoleAggregator, ssvtypes.RoleSyncCommitteeContribution, spectypes.RoleAggregatorCommittee:
 		return slotDuration / 3 * 2
 	default:
 		return 0
@@ -130,9 +132,9 @@ func New(ctx context.Context, beaconConfig *networkconfig.Beacon, role spectypes
 // RoundTimeout calculates the timeout duration for a specific role, height, and round.
 //
 // Timeout Rules:
-// - For roles BNRoleAttester and BNRoleSyncCommittee, the base timeout is 1/3 of the slot duration.
-// - For roles BNRoleAggregator and BNRoleSyncCommitteeContribution, the base timeout is 2/3 of the slot duration.
-// - For role BNRoleProposer, the timeout is either quickTimeout or slowTimeout, depending on the round.
+// - For RoleCommittee, the base timeout (Round 1 head start) is 1/3 of the slot duration.
+// - For RoleAggregator, RoleSyncCommitteeContribution and RoleAggregatorCommittee, it is 2/3 of the slot duration.
+// - For RoleProposer, the timeout is either quickTimeout or slowTimeout, depending on the round.
 //
 // Additional Timeout:
 // - For rounds less than or equal to quickThreshold, the additional timeout is 'quick' seconds.

@@ -6,11 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/jellydator/ttlcache/v3"
 	"go.uber.org/zap"
@@ -39,11 +41,16 @@ type DecidedInfo struct {
 	Signers []spectypes.OperatorID
 }
 
+type committeeTraceKey struct {
+	id   spectypes.CommitteeID
+	role spectypes.RunnerRole
+}
+
 type Collector struct {
 	logger *zap.Logger
 
-	// committeeID:slot:committeeDutyTrace
-	committeeTraces *hashmap.Map[spectypes.CommitteeID, *hashmap.Map[phase0.Slot, *committeeDutyTrace]]
+	// committeeID+role:slot:committeeDutyTrace (role separates committee vs aggregator-committee duties).
+	committeeTraces *hashmap.Map[committeeTraceKey, *hashmap.Map[phase0.Slot, *committeeDutyTrace]]
 
 	// validatorIndex:slot:validatorDutyTrace
 	validatorTraces *hashmap.Map[phase0.ValidatorIndex, *hashmap.Map[phase0.Slot, *validatorDutyTrace]]
@@ -54,6 +61,9 @@ type Collector struct {
 	syncCommitteeRootsCache *ttlcache.Cache[scRootKey, phase0.Root]
 	syncCommitteeRootsSf    singleflight.Group
 
+	aggregatorSelectionRootsCache *ttlcache.Cache[phase0.Slot, phase0.Root]
+	aggregatorSelectionRootsSf    singleflight.Group
+
 	beacon *networkconfig.Beacon
 
 	store      DutyTraceStore
@@ -62,7 +72,7 @@ type Collector struct {
 
 	lastEvictedSlot atomic.Uint64
 
-	inFlightCommittee hashmap.Map[spectypes.CommitteeID, struct{}]
+	inFlightCommittee hashmap.Map[committeeTraceKey, struct{}]
 	inFlightValidator hashmap.Map[phase0.ValidatorIndex, struct{}]
 
 	decidedListenerFunc func(msg DecidedInfo)
@@ -105,11 +115,12 @@ func New(
 		client:                         client,
 		beacon:                         beaconNetwork,
 		validators:                     validators,
-		committeeTraces:                hashmap.New[spectypes.CommitteeID, *hashmap.Map[phase0.Slot, *committeeDutyTrace]](),
+		committeeTraces:                hashmap.New[committeeTraceKey, *hashmap.Map[phase0.Slot, *committeeDutyTrace]](),
 		validatorTraces:                hashmap.New[phase0.ValidatorIndex, *hashmap.Map[phase0.Slot, *validatorDutyTrace]](),
 		validatorIndexToCommitteeLinks: hashmap.New[phase0.ValidatorIndex, *hashmap.Map[phase0.Slot, spectypes.CommitteeID]](),
 		syncCommitteeRootsCache:        ttlcache.New(ttlcache.WithTTL[scRootKey, phase0.Root](ttl)),
-		inFlightCommittee:              hashmap.Map[spectypes.CommitteeID, struct{}]{},
+		aggregatorSelectionRootsCache:  ttlcache.New(ttlcache.WithTTL[phase0.Slot, phase0.Root](ttl)),
+		inFlightCommittee:              hashmap.Map[committeeTraceKey, struct{}]{},
 		inFlightValidator:              hashmap.Map[phase0.ValidatorIndex, struct{}]{},
 		decidedListenerFunc:            decidedListenerFunc,
 		duties:                         duties,
@@ -189,8 +200,9 @@ func (c *Collector) evict(currentSlot phase0.Slot) {
 	evicted = c.dumpLinkToDBPeriodically(threshold)
 	c.logger.Info("evicted validator mappings to disk", fields.Slot(threshold), zap.Int("count", evicted), fields.Took(time.Since(start)))
 
-	// remove old SC roots
+	// remove expired signing-root caches
 	c.syncCommitteeRootsCache.DeleteExpired()
+	c.aggregatorSelectionRootsCache.DeleteExpired()
 }
 
 func (c *Collector) getOrCreateValidatorTrace(slot phase0.Slot, role spectypes.BeaconRole, index phase0.ValidatorIndex) (*validatorDutyTrace, bool, error) {
@@ -247,25 +259,27 @@ func (c *Collector) getOrCreateValidatorTrace(slot phase0.Slot, role spectypes.B
 
 var errInFlight = errors.New("in flight")
 
-func (c *Collector) getOrCreateCommitteeTrace(slot phase0.Slot, committeeID spectypes.CommitteeID) (*committeeDutyTrace, bool, error) {
+func (c *Collector) getOrCreateCommitteeTrace(slot phase0.Slot, committeeID spectypes.CommitteeID, role spectypes.RunnerRole) (*committeeDutyTrace, bool, error) {
+	key := committeeTraceKey{id: committeeID, role: role}
 	// check late arrival
 	if uint64(slot) <= c.lastEvictedSlot.Load() {
-		if _, found := c.inFlightCommittee.GetOrSet(committeeID, struct{}{}); found {
+		if _, found := c.inFlightCommittee.GetOrSet(key, struct{}{}); found {
 			return nil, false, errInFlight
 		}
 
-		diskTrace, err := c.getCommitteeDutyFromDisk(slot, committeeID)
+		diskTrace, err := c.getCommitteeDutyFromDisk(slot, role, committeeID)
 		if errors.Is(err, store.ErrNotFound) {
 			trace := &committeeDutyTrace{
 				CommitteeDutyTrace: traces.CommitteeDutyTrace{
 					CommitteeID: committeeID,
 					Slot:        slot,
+					Role:        role,
 				},
 			}
 			return trace, true, nil
 		}
 		if err != nil {
-			_ = c.inFlightCommittee.Delete(committeeID)
+			_ = c.inFlightCommittee.Delete(key)
 			return nil, false, fmt.Errorf("get late committee duty data: %w", err)
 		}
 
@@ -276,9 +290,9 @@ func (c *Collector) getOrCreateCommitteeTrace(slot phase0.Slot, committeeID spec
 		return trace, true, nil
 	}
 
-	committeeSlots, found := c.committeeTraces.Get(committeeID)
+	committeeSlots, found := c.committeeTraces.Get(key)
 	if !found {
-		committeeSlots, _ = c.committeeTraces.GetOrSet(committeeID, hashmap.New[phase0.Slot, *committeeDutyTrace]())
+		committeeSlots, _ = c.committeeTraces.GetOrSet(key, hashmap.New[phase0.Slot, *committeeDutyTrace]())
 	}
 
 	committeeTrace, found := committeeSlots.Get(slot)
@@ -288,6 +302,7 @@ func (c *Collector) getOrCreateCommitteeTrace(slot phase0.Slot, committeeID spec
 			CommitteeDutyTrace: traces.CommitteeDutyTrace{
 				CommitteeID: committeeID,
 				Slot:        slot,
+				Role:        role,
 			},
 		}
 
@@ -419,9 +434,15 @@ func (c *Collector) processConsensus(receivedAt uint64, msg *specqbft.Message, s
 	return nil // we're exhausting all cases in the switch
 }
 
-func (c *Collector) processPartialSigCommittee(receivedAt uint64, msg *spectypes.PartialSignatureMessages, committeeID spectypes.CommitteeID, trace *committeeDutyTrace) {
+func (c *Collector) processPartialSigCommittee(
+	receivedAt uint64,
+	msg *spectypes.PartialSignatureMessages,
+	trace *committeeDutyTrace,
+	aggSelectionRoot phase0.Root,
+	aggSelectionRootReady bool,
+) {
 	// add operator ids to the trace
-	cmt, found := c.validators.Committee(committeeID)
+	cmt, found := c.validators.Committee(trace.CommitteeID)
 	if found && len(cmt.Operators) > 0 {
 		trace.OperatorIDs = cmt.Operators
 	}
@@ -430,18 +451,32 @@ func (c *Collector) processPartialSigCommittee(receivedAt uint64, msg *spectypes
 	var attIdxs []phase0.ValidatorIndex
 	var scIdxs []phase0.ValidatorIndex
 
+	if msg.Type == spectypes.AggregatorCommitteePartialSig && aggSelectionRootReady && !trace.aggSelectionRootReady {
+		trace.aggSelectionRoot = aggSelectionRoot
+		trace.aggSelectionRootReady = true
+	}
+
 	for _, partialSigMsg := range msg.Messages {
 		root := partialSigMsg.SigningRoot
-		if trace.roleRootsReady {
-			if bytes.Equal(trace.syncCommitteeRoot[:], root[:]) {
-				scIdxs = append(scIdxs, partialSigMsg.ValidatorIndex)
-			} else if bytes.Equal(trace.attestationRoot[:], root[:]) {
+		trace.addRootSigner(root, partialSigMsg.ValidatorIndex, signer)
+		if msg.Type == spectypes.AggregatorCommitteePartialSig && trace.aggSelectionRootReady {
+			if bytes.Equal(trace.aggSelectionRoot[:], root[:]) {
 				attIdxs = append(attIdxs, partialSigMsg.ValidatorIndex)
 			} else {
-				trace.addPending(root, signer, partialSigMsg.ValidatorIndex, receivedAt)
+				scIdxs = append(scIdxs, partialSigMsg.ValidatorIndex)
 			}
 			continue
 		}
+
+		if role, ok := trace.classifyRootForPending(root); ok {
+			if role == spectypes.BNRoleSyncCommittee || role == spectypes.BNRoleSyncCommitteeContribution {
+				scIdxs = append(scIdxs, partialSigMsg.ValidatorIndex)
+			} else {
+				attIdxs = append(attIdxs, partialSigMsg.ValidatorIndex)
+			}
+			continue
+		}
+
 		// Not ready: buffer for later classification
 		trace.addPending(root, signer, partialSigMsg.ValidatorIndex, receivedAt)
 	}
@@ -514,6 +549,110 @@ func (c *Collector) getSyncCommitteeRoot(ctx context.Context, slot phase0.Slot, 
 	}
 
 	return val.(phase0.Root), nil
+}
+
+func (c *Collector) getAggregatorSelectionRoot(ctx context.Context, slot phase0.Slot) (phase0.Root, error) {
+	if item := c.aggregatorSelectionRootsCache.Get(slot); item != nil {
+		return item.Value(), nil
+	}
+
+	val, err, _ := c.aggregatorSelectionRootsSf.Do(strconv.FormatUint(uint64(slot), 10), func() (any, error) {
+		if item := c.aggregatorSelectionRootsCache.Get(slot); item != nil {
+			return item.Value(), nil
+		}
+
+		epoch := c.beacon.EstimatedEpochAtSlot(slot)
+		domain, domainErr := c.client.DomainData(ctx, epoch, spectypes.DomainSelectionProof)
+		if domainErr != nil {
+			return phase0.Root{}, fmt.Errorf("get aggregator selection domain data: %w", domainErr)
+		}
+		root, rootErr := spectypes.ComputeETHSigningRoot(spectypes.SSZUint64(slot), domain)
+		if rootErr != nil {
+			return phase0.Root{}, fmt.Errorf("compute aggregator selection root: %w", rootErr)
+		}
+
+		_ = c.aggregatorSelectionRootsCache.Set(slot, root, ttlcache.DefaultTTL)
+		return root, nil
+	})
+	if err != nil {
+		return phase0.Root{}, err
+	}
+
+	return val.(phase0.Root), nil
+}
+
+// computeAggregatorCommitteePostConsensusRoles derives the beacon role for each
+// signing root present in an AggregatorCommittee proposal's consensus data, so
+// post-consensus partial signatures can be classified into Attester/SyncCommittee
+// buckets (Aggregator -> Attester bucket, SyncCommitteeContribution -> SyncCommittee bucket).
+func (c *Collector) computeAggregatorCommitteePostConsensusRoles(
+	ctx context.Context,
+	slot phase0.Slot,
+	in []byte,
+) (map[phase0.Root]spectypes.BeaconRole, error) {
+	data := &spectypes.AggregatorCommitteeConsensusData{}
+	if err := data.Decode(in); err != nil {
+		return nil, fmt.Errorf("decode aggregator committee consensus data: %w", err)
+	}
+
+	epoch := c.beacon.EstimatedEpochAtSlot(slot)
+	roleByRoot := make(map[phase0.Root]spectypes.BeaconRole)
+
+	aggregateAndProofs, err := data.GetAggregateAndProofs()
+	if err != nil {
+		return nil, fmt.Errorf("get aggregate and proofs: %w", err)
+	}
+
+	dAgg, err := c.client.DomainData(ctx, epoch, spectypes.DomainAggregateAndProof)
+	if err != nil {
+		return nil, fmt.Errorf("get aggregate and proof domain data: %w", err)
+	}
+	for _, aggAndProof := range aggregateAndProofs {
+		hashRoot, err := spectypes.GetAggregateAndProofHashRoot(aggAndProof)
+		if err != nil {
+			c.logger.Warn("failed to get aggregate-and-proof hash root",
+				zap.Error(err),
+				fields.Slot(slot))
+			continue
+		}
+		root, err := spectypes.ComputeETHSigningRoot(hashRoot, dAgg)
+		if err != nil {
+			c.logger.Warn("failed to compute aggregate-and-proof signing root",
+				zap.Error(err),
+				fields.Slot(slot))
+			continue
+		}
+		roleByRoot[root] = spectypes.BNRoleAggregator
+	}
+
+	contribs, err := data.GetSyncCommitteeContributions()
+	if err != nil {
+		return nil, fmt.Errorf("get sync committee contributions: %w", err)
+	}
+
+	dContrib, err := c.client.DomainData(ctx, epoch, spectypes.DomainContributionAndProof)
+	if err != nil {
+		return nil, fmt.Errorf("get contribution and proof domain data: %w", err)
+	}
+
+	for i, contrib := range contribs {
+		cp := &altair.ContributionAndProof{
+			AggregatorIndex: data.Contributors[i].ValidatorIndex,
+			Contribution:    &contrib.Contribution,
+			SelectionProof:  data.Contributors[i].SelectionProof,
+		}
+		root, err := spectypes.ComputeETHSigningRoot(cp, dContrib)
+		if err != nil {
+			c.logger.Warn("failed to compute sync-committee-contribution signing root",
+				zap.Error(err),
+				fields.Slot(slot),
+				zap.Int("contribution_index", i))
+			continue
+		}
+		roleByRoot[root] = spectypes.BNRoleSyncCommitteeContribution
+	}
+
+	return roleByRoot, nil
 }
 
 // computeRoleRoots derives both sync-committee and attestation signing roots
@@ -648,7 +787,7 @@ func (c *Collector) newPartialSigVerifyCtx(msg *queue.SSVMessage, pSigMessages *
 		partialMsgsSize: len(pSigMessages.Messages),
 	}
 
-	if runnerRole == spectypes.RoleCommittee {
+	if isCommitteeRunnerRole(runnerRole) {
 		executorID := msg.MsgID.GetDutyExecutorID()
 		if len(executorID) >= 32 {
 			// committeeID is the last 16 bytes of the executorID
@@ -682,7 +821,7 @@ func (c *Collector) wrapVerifyPartialSigErr(ctx partialSigVerifyCtx, pSigMessage
 		zap.Int("missing_validator_index_count", missingCount),
 	)
 
-	if ctx.runnerRole == spectypes.RoleCommittee {
+	if isCommitteeRunnerRole(ctx.runnerRole) {
 		return fmt.Errorf(
 			"verify partial sig (slot=%d committee_id=%x signer=%d root=%x partial_msgs=%d missing_first_validator_index=%d missing_validator_index_count=%d): %w",
 			ctx.slot,
@@ -729,13 +868,13 @@ func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 		msgID := spectypes.MessageID(subMsg.Identifier[:])
 		executorID := msgID.GetDutyExecutorID()
 
-		switch role := msgID.GetRoleType(); role {
-		case spectypes.RoleCommittee:
+		role := msgID.GetRoleType()
+		if isCommitteeRunnerRole(role) {
 			var committeeID spectypes.CommitteeID
 			// committeeID is the last 16 bytes of the executorID
 			copy(committeeID[:], executorID[16:])
 
-			trace, late, err := c.getOrCreateCommitteeTrace(slot, committeeID)
+			trace, late, err := c.getOrCreateCommitteeTrace(slot, committeeID, role)
 			if err != nil {
 				return err
 			}
@@ -747,31 +886,47 @@ func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 				// save proposal data and compute role roots
 				trace.ProposalData = msg.SignedSSVMessage.FullData
 
-				if syncRoot, attRoot, err := c.computeRoleRoots(ctx, slot, msg.SignedSSVMessage.FullData); err == nil {
-					trace.syncCommitteeRoot = syncRoot
-					trace.attestationRoot = attRoot
-					trace.roleRootsReady = true
-					trace.flushPending()
-					// Check quorum for all validators after flushing pending signatures.
-					// This ensures quorum detection happens immediately when signatures that
-					// arrived before the proposal are reclassified into role buckets.
-					c.checkQuorumAfterFlush(c.logger, committeeID, slot, trace)
-				} else {
-					// CRITICAL: If we fail to compute role roots, pending signatures will be dropped.
-					pendingCount := 0
-					for _, perSigner := range trace.pendingByRoot {
-						for _, byTs := range perSigner {
-							for _, idxs := range byTs {
-								pendingCount += len(idxs)
-							}
-						}
+				switch role {
+				case spectypes.RoleCommittee:
+					if syncRoot, attRoot, err := c.computeRoleRoots(ctx, slot, msg.SignedSSVMessage.FullData); err == nil {
+						trace.syncCommitteeRoot = syncRoot
+						trace.attestationRoot = attRoot
+						trace.roleRootsReady = true
+						trace.flushPending()
+						// Check quorum for all validators after flushing pending signatures.
+						// This ensures quorum detection happens immediately when signatures that
+						// arrived before the proposal are reclassified into role buckets.
+						c.checkQuorumAfterFlush(c.logger, committeeID, slot, trace)
+					} else {
+						// CRITICAL: If we fail to compute role roots, pending signatures will be dropped.
+						pendingCount := countPending(trace.pendingByRoot)
+						c.logger.Error("CRITICAL: failed to compute role roots from proposal - pending signatures will be dropped",
+							zap.Error(err),
+							fields.Slot(slot),
+							fields.CommitteeID(committeeID),
+							zap.Int("pending_signature_count", pendingCount),
+							pendingDetails(trace.pendingByRoot))
 					}
-					c.logger.Error("CRITICAL: failed to compute role roots from proposal - pending signatures will be dropped",
-						zap.Error(err),
-						fields.Slot(slot),
-						fields.CommitteeID(committeeID),
-						zap.Int("pending_signature_count", pendingCount),
-						pendingDetails(trace.pendingByRoot))
+				case spectypes.RoleAggregatorCommittee:
+					if rolesByRoot, err := c.computeAggregatorCommitteePostConsensusRoles(ctx, slot, msg.SignedSSVMessage.FullData); err == nil {
+						trace.aggPostConsensusRoles = rolesByRoot
+						trace.flushPending()
+						// Check quorum for all validators after flushing pending signatures.
+						// This ensures quorum detection happens immediately when signatures that
+						// arrived before the proposal are reclassified into role buckets.
+						c.checkQuorumAfterFlush(c.logger, committeeID, slot, trace)
+					} else {
+						// CRITICAL: If we fail to compute role roots, pending signatures will be dropped.
+						pendingCount := countPending(trace.pendingByRoot)
+						c.logger.Error("CRITICAL: failed to compute aggregator committee roots from proposal - pending signatures will be dropped",
+							zap.Error(err),
+							fields.Slot(slot),
+							fields.CommitteeID(committeeID),
+							zap.Int("pending_signature_count", pendingCount),
+							pendingDetails(trace.pendingByRoot))
+					}
+				default:
+					c.logger.Warn("unexpected committee role on committee trace path", zap.Int32("role", int32(role)))
 				}
 			}
 
@@ -783,75 +938,74 @@ func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 			}
 
 			if late {
-				err := c.store.SaveCommitteeDuty(&trace.CommitteeDutyTrace)
-				_ = c.inFlightCommittee.Delete(committeeID)
-				return err
-			}
-
-			return nil
-
-		default:
-			var validatorPK spectypes.ValidatorPK
-			copy(validatorPK[:], executorID)
-
-			bnRole, err := toBNRole(role)
-			if err != nil {
-				return err
-			}
-
-			// map pubkey to validator index for internal storage
-			index, found := c.validators.ValidatorIndex(validatorPK)
-			if !found {
-				c.logger.Error("validator not found by pubkey", fields.Validator(validatorPK[:]))
-				return fmt.Errorf("validator not found by pubkey: %x", validatorPK[:])
-			}
-
-			trace, late, err := c.getOrCreateValidatorTrace(slot, bnRole, index)
-			if err != nil {
-				return err
-			}
-
-			var qbftMsg = new(specqbft.Message)
-			if err = qbftMsg.Decode(msg.Data); err == nil {
-				if qbftMsg.MsgType == specqbft.ProposalMsgType {
-					var data = new(spectypes.ValidatorConsensusData)
-					if err := data.Decode(msg.SignedSSVMessage.FullData); err == nil {
-						func() {
-							trace.Lock()
-							defer trace.Unlock()
-
-							roleDutyTrace := trace.getOrCreate(slot, bnRole)
-
-							if roleDutyTrace.Validator == 0 {
-								roleDutyTrace.Validator = data.Duty.ValidatorIndex
-							}
-							// non-committee duty will contain the proposal data
-							roleDutyTrace.ProposalData = data.DataSSZ
-						}()
-					}
-				}
-			}
-
-			trace.Lock()
-			defer trace.Unlock()
-
-			roleDutyTrace := trace.getOrCreate(slot, bnRole)
-
-			round := getOrCreateRound(&roleDutyTrace.ConsensusTrace, uint64(subMsg.Round))
-
-			decided := c.processConsensus(startTime, subMsg, msg.SignedSSVMessage, round)
-			if decided != nil {
-				roleDutyTrace.Decideds = append(roleDutyTrace.Decideds, decided)
-			}
-
-			if late {
-				err := c.store.SaveValidatorDuty(roleDutyTrace)
-				_ = c.inFlightValidator.Delete(index)
+				err := c.store.SaveCommitteeDuty(role, &trace.CommitteeDutyTrace)
+				_ = c.inFlightCommittee.Delete(committeeTraceKey{id: committeeID, role: role})
 				return err
 			}
 
 			return nil
 		}
+
+		var validatorPK spectypes.ValidatorPK
+		copy(validatorPK[:], executorID)
+
+		bnRole, err := toBNRole(role)
+		if err != nil {
+			return err
+		}
+
+		// map pubkey to validator index for internal storage
+		index, found := c.validators.ValidatorIndex(validatorPK)
+		if !found {
+			c.logger.Error("validator not found by pubkey", fields.Validator(validatorPK[:]))
+			return fmt.Errorf("validator not found by pubkey: %x", validatorPK[:])
+		}
+
+		trace, late, err := c.getOrCreateValidatorTrace(slot, bnRole, index)
+		if err != nil {
+			return err
+		}
+
+		var qbftMsg = new(specqbft.Message)
+		if err = qbftMsg.Decode(msg.Data); err == nil {
+			if qbftMsg.MsgType == specqbft.ProposalMsgType {
+				var data = new(spectypes.ProposerConsensusData)
+				if err := data.Decode(msg.SignedSSVMessage.FullData); err == nil {
+					func() {
+						trace.Lock()
+						defer trace.Unlock()
+
+						roleDutyTrace := trace.getOrCreate(slot, bnRole)
+
+						if roleDutyTrace.Validator == 0 {
+							roleDutyTrace.Validator = data.Duty.ValidatorIndex
+						}
+						// non-committee duty will contain the proposal data
+						roleDutyTrace.ProposalData = data.DataSSZ
+					}()
+				}
+			}
+		}
+
+		trace.Lock()
+		defer trace.Unlock()
+
+		roleDutyTrace := trace.getOrCreate(slot, bnRole)
+
+		round := getOrCreateRound(&roleDutyTrace.ConsensusTrace, uint64(subMsg.Round))
+
+		decided := c.processConsensus(startTime, subMsg, msg.SignedSSVMessage, round)
+		if decided != nil {
+			roleDutyTrace.Decideds = append(roleDutyTrace.Decideds, decided)
+		}
+
+		if late {
+			err := c.store.SaveValidatorDuty(roleDutyTrace)
+			_ = c.inFlightValidator.Delete(index)
+			return err
+		}
+
+		return nil
 	}
 
 	if msg.MsgType == spectypes.SSVPartialSignatureMsgType {
@@ -878,8 +1032,23 @@ func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 		}
 
 		// process partial sig for committee
-		if verifyCtx.runnerRole == spectypes.RoleCommittee {
-			trace, late, err := c.getOrCreateCommitteeTrace(verifyCtx.slot, verifyCtx.committeeID)
+		if isCommitteeRunnerRole(verifyCtx.runnerRole) {
+			var aggSelectionRoot phase0.Root
+			aggSelectionRootReady := false
+			if verifyCtx.runnerRole == spectypes.RoleAggregatorCommittee && pSigMessages.Type == spectypes.AggregatorCommitteePartialSig {
+				root, err := c.getAggregatorSelectionRoot(ctx, verifyCtx.slot)
+				if err != nil {
+					c.logger.Warn("failed to compute aggregator selection root",
+						zap.Error(err),
+						fields.Slot(verifyCtx.slot),
+						fields.CommitteeID(verifyCtx.committeeID))
+				} else {
+					aggSelectionRoot = root
+					aggSelectionRootReady = true
+				}
+			}
+
+			trace, late, err := c.getOrCreateCommitteeTrace(verifyCtx.slot, verifyCtx.committeeID, verifyCtx.runnerRole)
 			if err != nil {
 				return err
 			}
@@ -887,12 +1056,12 @@ func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 			trace.Lock()
 			defer trace.Unlock()
 
-			c.processPartialSigCommittee(startTime, pSigMessages, verifyCtx.committeeID, trace)
+			c.processPartialSigCommittee(startTime, pSigMessages, trace, aggSelectionRoot, aggSelectionRootReady)
 			c.checkAndPublishQuorum(verifyCtx.logger, pSigMessages, verifyCtx.committeeID, trace)
 
 			if late {
-				err := c.store.SaveCommitteeDuty(&trace.CommitteeDutyTrace)
-				_ = c.inFlightCommittee.Delete(verifyCtx.committeeID)
+				err := c.store.SaveCommitteeDuty(verifyCtx.runnerRole, &trace.CommitteeDutyTrace)
+				_ = c.inFlightCommittee.Delete(committeeTraceKey{id: verifyCtx.committeeID, role: verifyCtx.runnerRole})
 				return err
 			}
 
@@ -948,19 +1117,29 @@ func toBNRole(r spectypes.RunnerRole) (bnRole spectypes.BeaconRole, err error) {
 	switch r {
 	case spectypes.RoleCommittee:
 		return spectypes.BNRoleUnknown, errors.New("unexpected committee role")
+	case spectypes.RoleAggregatorCommittee:
+		return spectypes.BNRoleUnknown, errors.New("unexpected aggregator committee role")
 	case spectypes.RoleProposer:
 		bnRole = spectypes.BNRoleProposer
-	case spectypes.RoleAggregator:
+	case ssvtypes.RoleAggregator:
 		bnRole = spectypes.BNRoleAggregator
-	case spectypes.RoleSyncCommitteeContribution:
+	case ssvtypes.RoleSyncCommitteeContribution:
 		bnRole = spectypes.BNRoleSyncCommitteeContribution
 	case spectypes.RoleValidatorRegistration:
 		bnRole = spectypes.BNRoleValidatorRegistration
 	case spectypes.RoleVoluntaryExit:
 		bnRole = spectypes.BNRoleVoluntaryExit
+	default:
+		return spectypes.BNRoleUnknown, fmt.Errorf("unexpected runner role %d", r)
 	}
 
 	return
+}
+
+// isCommitteeRunnerRole reports whether the runner role represents a committee-keyed
+// duty trace (Committee or AggregatorCommittee), as opposed to a per-validator duty.
+func isCommitteeRunnerRole(role spectypes.RunnerRole) bool {
+	return role == spectypes.RoleCommittee || role == spectypes.RoleAggregatorCommittee
 }
 
 type validatorDutyTrace struct {
@@ -1003,6 +1182,10 @@ type committeeDutyTrace struct {
 	syncCommitteeRoot phase0.Root
 	attestationRoot   phase0.Root
 	roleRootsReady    bool
+	// Aggregator committee root metadata
+	aggSelectionRoot      phase0.Root
+	aggSelectionRootReady bool
+	aggPostConsensusRoles map[phase0.Root]spectypes.BeaconRole
 	traces.CommitteeDutyTrace
 
 	// Track published quorums to avoid duplicates (validator -> role -> signers hash)
@@ -1012,6 +1195,10 @@ type committeeDutyTrace struct {
 	// Pending signatures grouped by SigningRoot and signer until role roots are known.
 	// Shape: pendingByRoot[root][signer][receivedAt] = []validatorIndices
 	pendingByRoot map[phase0.Root]map[spectypes.OperatorID]map[uint64][]phase0.ValidatorIndex
+
+	// Root-specific signer sets used for quorum checks that must not mix multiple roots
+	// for the same role (e.g., sync committee contribution in aggregator-committee duties).
+	signersByRoot map[phase0.Root]map[phase0.ValidatorIndex]map[spectypes.OperatorID]struct{}
 }
 
 // safeDeepCopy returns a deep copy of the trace data with internal locking.
@@ -1040,6 +1227,26 @@ func (dt *committeeDutyTrace) addPending(root phase0.Root, signer spectypes.Oper
 	buckets[receivedAt] = append(buckets[receivedAt], idx)
 }
 
+// addRootSigner records that signer signed for a given (root, validatorIndex) pair,
+// used for root-scoped quorum checks that must not mix signatures for distinct roots
+// sharing the same beacon-role bucket (e.g. aggregator committee's two selection roots).
+func (dt *committeeDutyTrace) addRootSigner(root phase0.Root, idx phase0.ValidatorIndex, signer spectypes.OperatorID) {
+	if dt.signersByRoot == nil {
+		dt.signersByRoot = make(map[phase0.Root]map[phase0.ValidatorIndex]map[spectypes.OperatorID]struct{})
+	}
+	perValidator, ok := dt.signersByRoot[root]
+	if !ok {
+		perValidator = make(map[phase0.ValidatorIndex]map[spectypes.OperatorID]struct{})
+		dt.signersByRoot[root] = perValidator
+	}
+	signers, ok := perValidator[idx]
+	if !ok {
+		signers = make(map[spectypes.OperatorID]struct{})
+		perValidator[idx] = signers
+	}
+	signers[signer] = struct{}{}
+}
+
 // flushPending routes buffered entries into Attester/SyncCommittee buckets
 // according to derived role roots. Caller must hold dt.Lock().
 func (dt *committeeDutyTrace) flushPending() {
@@ -1047,13 +1254,8 @@ func (dt *committeeDutyTrace) flushPending() {
 		return
 	}
 	for root, perSigner := range dt.pendingByRoot {
-		var role spectypes.BeaconRole
-		switch root {
-		case dt.syncCommitteeRoot:
-			role = spectypes.BNRoleSyncCommittee
-		case dt.attestationRoot:
-			role = spectypes.BNRoleAttester
-		default:
+		role, ok := dt.classifyRootForPending(root)
+		if !ok {
 			// Unknown root; keep buffered
 			continue
 		}
@@ -1069,7 +1271,7 @@ func (dt *committeeDutyTrace) flushPending() {
 				slices.Sort(idxs)
 				idxs = slices.Compact(idxs)
 				sd := &traces.SignerData{Signer: signer, ValidatorIdx: idxs, ReceivedTime: ts}
-				if role == spectypes.BNRoleSyncCommittee {
+				if role == spectypes.BNRoleSyncCommittee || role == spectypes.BNRoleSyncCommitteeContribution {
 					dt.SyncCommittee = append(dt.SyncCommittee, sd)
 				} else {
 					dt.Attester = append(dt.Attester, sd)
@@ -1078,6 +1280,28 @@ func (dt *committeeDutyTrace) flushPending() {
 		}
 		delete(dt.pendingByRoot, root)
 	}
+}
+
+// classifyRootForPending resolves the beacon role a given signing root belongs to,
+// using either the RoleCommittee-derived roots (sync committee / attestation) or the
+// AggregatorCommittee-derived post-consensus roles (aggregator / sync committee contribution).
+func (dt *committeeDutyTrace) classifyRootForPending(root phase0.Root) (spectypes.BeaconRole, bool) {
+	if dt.roleRootsReady {
+		if root == dt.syncCommitteeRoot {
+			return spectypes.BNRoleSyncCommittee, true
+		}
+		if root == dt.attestationRoot {
+			return spectypes.BNRoleAttester, true
+		}
+	}
+
+	if dt.aggPostConsensusRoles != nil {
+		if role, ok := dt.aggPostConsensusRoles[root]; ok {
+			return role, true
+		}
+	}
+
+	return spectypes.BNRoleUnknown, false
 }
 
 func getOrCreateRound(trace *traces.ConsensusTrace, rnd uint64) *traces.RoundTrace {
@@ -1123,17 +1347,16 @@ func (c *Collector) checkAndPublishQuorum(logger *zap.Logger, msg *spectypes.Par
 
 		// Determine role from the signing root and check quorum only for that role.
 		// This prevents false positives where signatures for one role are counted toward another.
-		if trace.roleRootsReady {
-			// Compare against derived per-duty roots
-			if bytes.Equal(trace.syncCommitteeRoot[:], partialMsg.SigningRoot[:]) {
-				c.checkAndPublishQuorumForRole(logger, trace, spectypes.BNRoleSyncCommittee, msg, partialMsg, threshold)
-				continue
+		if msg.Type == spectypes.AggregatorCommitteePartialSig && trace.aggSelectionRootReady {
+			if bytes.Equal(trace.aggSelectionRoot[:], partialMsg.SigningRoot[:]) {
+				c.checkAndPublishQuorumForRole(logger, trace, spectypes.BNRoleAggregator, msg, partialMsg, threshold)
+			} else {
+				c.checkAndPublishQuorumForRole(logger, trace, spectypes.BNRoleSyncCommitteeContribution, msg, partialMsg, threshold)
 			}
-			if bytes.Equal(trace.attestationRoot[:], partialMsg.SigningRoot[:]) {
-				c.checkAndPublishQuorumForRole(logger, trace, spectypes.BNRoleAttester, msg, partialMsg, threshold)
-				continue
-			}
-			// Unknown root; skip quorum check (signature will be in pending)
+			continue
+		}
+		if role, ok := trace.classifyRootForPending(partialMsg.SigningRoot); ok {
+			c.checkAndPublishQuorumForRole(logger, trace, role, msg, partialMsg, threshold)
 			continue
 		}
 		// If roots are not ready yet, signatures are in pending buffer.
@@ -1153,15 +1376,15 @@ func (c *Collector) checkAndPublishQuorumForRole(
 	var signerData []*traces.SignerData
 
 	switch role {
-	case spectypes.BNRoleAttester:
+	case spectypes.BNRoleAttester, spectypes.BNRoleAggregator:
 		signerData = trace.Attester
-	case spectypes.BNRoleSyncCommittee:
+	case spectypes.BNRoleSyncCommittee, spectypes.BNRoleSyncCommitteeContribution:
 		signerData = trace.SyncCommittee
 	default:
 		return
 	}
 
-	signers := c.countUniqueSignersForValidatorAndRoot(logger, signerData, partialMsg.ValidatorIndex, partialMsg.SigningRoot)
+	signers := c.countUniqueSignersForValidatorAndRoot(trace, signerData, partialMsg.ValidatorIndex, partialMsg.SigningRoot)
 	if uint64(len(signers)) < threshold {
 		return
 	}
@@ -1183,10 +1406,9 @@ func (c *Collector) checkAndPublishQuorumForRole(
 	}
 }
 
-// countUniqueSignersForValidatorAndRoot counts unique signers for a specific validator and signing root
-// Note: signerData should already be filtered by role (Attester or SyncCommittee bucket), ensuring
-// all signatures are for the expected root as validated during classification.
-func (c *Collector) countUniqueSignersForValidatorAndRoot(logger *zap.Logger, signerData []*traces.SignerData, validatorIndex phase0.ValidatorIndex, _ phase0.Root) []spectypes.OperatorID {
+// countUniqueSignersForValidator counts unique signers for a specific validator across the
+// given role-bucket signer data, without root-scoping.
+func (c *Collector) countUniqueSignersForValidator(signerData []*traces.SignerData, validatorIndex phase0.ValidatorIndex) []spectypes.OperatorID {
 	signers := make(map[spectypes.OperatorID]struct{})
 
 	for _, data := range signerData {
@@ -1195,13 +1417,38 @@ func (c *Collector) countUniqueSignersForValidatorAndRoot(logger *zap.Logger, si
 		}
 	}
 
-	// Convert map to sorted slice
+	return sortedSigners(signers)
+}
+
+// countUniqueSignersForValidatorAndRoot counts signers for a specific validator and signing root.
+// If root-scoped data is unavailable, it falls back to role-bucket signerData.
+func (c *Collector) countUniqueSignersForValidatorAndRoot(
+	trace *committeeDutyTrace,
+	signerData []*traces.SignerData,
+	validatorIndex phase0.ValidatorIndex,
+	root phase0.Root,
+) []spectypes.OperatorID {
+	if root == (phase0.Root{}) || trace == nil {
+		return c.countUniqueSignersForValidator(signerData, validatorIndex)
+	}
+
+	byValidator, found := trace.signersByRoot[root]
+	if !found {
+		return c.countUniqueSignersForValidator(signerData, validatorIndex)
+	}
+	if signers, found := byValidator[validatorIndex]; found {
+		return sortedSigners(signers)
+	}
+
+	return nil
+}
+
+func sortedSigners(signers map[spectypes.OperatorID]struct{}) []spectypes.OperatorID {
 	result := make([]spectypes.OperatorID, 0, len(signers))
 	for signer := range signers {
 		result = append(result, signer)
 	}
 	slices.Sort(result)
-
 	return result
 }
 
@@ -1233,9 +1480,14 @@ func (c *Collector) checkQuorumAfterFlush(logger *zap.Logger, committeeID specty
 		trace.publishedQuorums = make(map[phase0.ValidatorIndex]map[spectypes.BeaconRole]string)
 	}
 
-	// Check quorum for both roles
-	c.checkRoleQuorumForValidators(logger, trace, spectypes.BNRoleAttester, trace.Attester, slot, threshold)
-	c.checkRoleQuorumForValidators(logger, trace, spectypes.BNRoleSyncCommittee, trace.SyncCommittee, slot, threshold)
+	switch trace.Role {
+	case spectypes.RoleAggregatorCommittee:
+		c.checkRoleQuorumForValidatorsByRoot(logger, trace, spectypes.BNRoleAggregator, slot, threshold)
+		c.checkRoleQuorumForValidatorsByRoot(logger, trace, spectypes.BNRoleSyncCommitteeContribution, slot, threshold)
+	default:
+		c.checkRoleQuorumForValidators(logger, trace, spectypes.BNRoleAttester, trace.Attester, slot, threshold)
+		c.checkRoleQuorumForValidators(logger, trace, spectypes.BNRoleSyncCommittee, trace.SyncCommittee, slot, threshold)
+	}
 }
 
 // checkRoleQuorumForValidators checks quorum for all validators in the given role's signer data.
@@ -1273,6 +1525,38 @@ func (c *Collector) checkRoleQuorumForValidators(
 	}
 }
 
+// checkRoleQuorumForValidatorsByRoot checks quorum for all validators in a specific role and root.
+// IMPORTANT: trace must be locked by the caller before calling this function.
+func (c *Collector) checkRoleQuorumForValidatorsByRoot(
+	logger *zap.Logger,
+	trace *committeeDutyTrace,
+	role spectypes.BeaconRole,
+	slot phase0.Slot,
+	threshold uint64,
+) {
+	for root, byValidator := range trace.signersByRoot {
+		classifiedRole, ok := trace.classifyRootForPending(root)
+		if !ok || classifiedRole != role {
+			continue
+		}
+
+		for validatorIndex := range byValidator {
+			_, exists := c.validators.ValidatorByIndex(validatorIndex)
+			if !exists {
+				logger.Debug("validator not found by index during root-specific quorum check after flush",
+					zap.Uint64("validator_index", uint64(validatorIndex)),
+					fields.BeaconRole(role),
+					fields.Slot(slot))
+				continue
+			}
+			if trace.publishedQuorums[validatorIndex] == nil {
+				trace.publishedQuorums[validatorIndex] = make(map[spectypes.BeaconRole]string)
+			}
+			c.checkAndPublishQuorumForRoleByIndexAndRoot(logger, trace, role, slot, validatorIndex, root, threshold)
+		}
+	}
+}
+
 // checkAndPublishQuorumForRoleByIndex checks quorum for a specific validator and role after flush.
 // Similar to checkAndPublishQuorumForRole but works with validator index directly.
 // IMPORTANT: trace must be locked by the caller before calling this function.
@@ -1284,18 +1568,45 @@ func (c *Collector) checkAndPublishQuorumForRoleByIndex(
 	validatorIndex phase0.ValidatorIndex,
 	threshold uint64,
 ) {
+	c.checkAndPublishQuorumForRoleByIndexCommon(logger, trace, role, slot, validatorIndex, phase0.Root{}, threshold)
+}
+
+// checkAndPublishQuorumForRoleByIndexAndRoot checks quorum for a specific validator and role after
+// flush, scoped to a specific signing root.
+// IMPORTANT: trace must be locked by the caller before calling this function.
+func (c *Collector) checkAndPublishQuorumForRoleByIndexAndRoot(
+	logger *zap.Logger,
+	trace *committeeDutyTrace,
+	role spectypes.BeaconRole,
+	slot phase0.Slot,
+	validatorIndex phase0.ValidatorIndex,
+	root phase0.Root,
+	threshold uint64,
+) {
+	c.checkAndPublishQuorumForRoleByIndexCommon(logger, trace, role, slot, validatorIndex, root, threshold)
+}
+
+func (c *Collector) checkAndPublishQuorumForRoleByIndexCommon(
+	logger *zap.Logger,
+	trace *committeeDutyTrace,
+	role spectypes.BeaconRole,
+	slot phase0.Slot,
+	validatorIndex phase0.ValidatorIndex,
+	root phase0.Root,
+	threshold uint64,
+) {
 	var signerData []*traces.SignerData
 
 	switch role {
-	case spectypes.BNRoleAttester:
+	case spectypes.BNRoleAttester, spectypes.BNRoleAggregator:
 		signerData = trace.Attester
-	case spectypes.BNRoleSyncCommittee:
+	case spectypes.BNRoleSyncCommittee, spectypes.BNRoleSyncCommitteeContribution:
 		signerData = trace.SyncCommittee
 	default:
 		return
 	}
 
-	signers := c.countUniqueSignersForValidatorAndRoot(logger, signerData, validatorIndex, phase0.Root{})
+	signers := c.countUniqueSignersForValidatorAndRoot(trace, signerData, validatorIndex, root)
 	if uint64(len(signers)) < threshold {
 		return
 	}

@@ -57,8 +57,8 @@ type handshaker struct {
 	ids        identify.IDService
 	net        libp2pnetwork.Network
 
-	domainType      spectypes.DomainType
-	subnetsProvider SubnetsProvider
+	domainTypeProvider func() spectypes.DomainType
+	subnetsProvider    SubnetsProvider
 }
 
 // HandshakerCfg is the configuration for creating an handshaker instance
@@ -70,25 +70,25 @@ type HandshakerCfg struct {
 	ConnIdx         peers.ConnectionIndex
 	SubnetsIdx      peers.SubnetsIndex
 	IDService       identify.IDService
-	DomainType      spectypes.DomainType
+	DomainTypeFn    func() spectypes.DomainType
 	SubnetsProvider SubnetsProvider
 }
 
 // NewHandshaker creates a new instance of handshaker
 func NewHandshaker(ctx context.Context, logger *zap.Logger, cfg *HandshakerCfg, filters func() []HandshakeFilter) Handshaker {
 	h := &handshaker{
-		ctx:             ctx,
-		logger:          logger,
-		streams:         cfg.Streams,
-		nodeInfos:       cfg.NodeInfos,
-		connIdx:         cfg.ConnIdx,
-		subnetsIdx:      cfg.SubnetsIdx,
-		ids:             cfg.IDService,
-		filters:         filters,
-		peerInfos:       cfg.PeerInfos,
-		subnetsProvider: cfg.SubnetsProvider,
-		domainType:      cfg.DomainType,
-		net:             cfg.Network,
+		ctx:                ctx,
+		logger:             logger,
+		streams:            cfg.Streams,
+		nodeInfos:          cfg.NodeInfos,
+		connIdx:            cfg.ConnIdx,
+		subnetsIdx:         cfg.SubnetsIdx,
+		ids:                cfg.IDService,
+		filters:            filters,
+		peerInfos:          cfg.PeerInfos,
+		subnetsProvider:    cfg.SubnetsProvider,
+		domainTypeProvider: cfg.DomainTypeFn,
+		net:                cfg.Network,
 	}
 	return h
 }
@@ -296,7 +296,8 @@ func (h *handshaker) applyFilters(sender peer.ID, ni *records.NodeInfo) error {
 func (h *handshaker) sealedNodeRecord() ([]byte, error) {
 	// Update DomainType.
 	h.nodeInfos.UpdateSelfRecord(func(self *records.NodeInfo) *records.NodeInfo {
-		self.NetworkID = "0x" + hex.EncodeToString(h.domainType[:])
+		domainType := h.domainTypeProvider()
+		self.NetworkID = "0x" + hex.EncodeToString(domainType[:])
 		return self
 	})
 

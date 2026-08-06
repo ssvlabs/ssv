@@ -15,7 +15,6 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/electra"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
@@ -25,6 +24,7 @@ import (
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
@@ -34,7 +34,7 @@ type AggregatorRunner struct {
 	*BaseRunner
 
 	beacon         beacon.BeaconNode
-	network        specqbft.Network
+	network        protocolp2p.Network
 	signer         ekm.BeaconSigner
 	operatorSigner ssvtypes.OperatorSigner
 	measurements   *dutyMeasurements
@@ -75,7 +75,7 @@ func NewAggregatorRunner(opts AggregatorRunnerOptions) (Runner, error) {
 
 	return &AggregatorRunner{
 		BaseRunner: &BaseRunner{
-			RunnerRoleType:     spectypes.RoleAggregator,
+			RunnerRoleType:     ssvtypes.RoleAggregator,
 			NetworkConfig:      opts.NetworkConfig,
 			Share:              opts.Share,
 			QBFTController:     opts.QBFTController,
@@ -120,16 +120,21 @@ func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.
 		return nil
 	}
 
-	// We have quorum and are committed to completing this duty here. The quorum above fires only once,
-	// so a terminal failure below won't be retried.
+	// We have quorum and are committed to completing this duty here, so this defer reports a terminal
+	// failure below as failed rather than letting it surface as a false "stuck".
+	// The one exception is a recoverable BLS-reconstruction failure: the fallback drops the offending
+	// partial sig(s) below quorum, so a later partial-sig message re-crosses quorum and re-enters here —
+	// those are tagged recoverableReconstructError and must not be recorded as failed (hence the guard).
+	// Shutdown (context cancellation) needs no special-casing — markDutyFailed drops a context.Canceled
+	// reason, so a duty aborted by shutdown isn't recorded as a failure.
 	defer func() {
-		if err != nil {
+		if err != nil && !isRecoverableReconstructError(err) {
 			r.markDutyFailed(err)
 		}
 	}()
 
 	r.measurements.EndPreConsensus()
-	recordPreConsensusDuration(ctx, r.measurements.PreConsensusTime(), spectypes.RoleAggregator)
+	recordPreConsensusDuration(ctx, r.measurements.PreConsensusTime(), ssvtypes.RoleAggregator)
 
 	// only 1 root, verified by expectedPreConsensusRootsAndDomain
 	root := roots[0]
@@ -140,7 +145,7 @@ func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.
 	if err != nil {
 		// If the reconstructed signature verification failed, fall back to verifying each partial signature
 		r.FallBackAndVerifyEachSignature(r.State.PreConsensusContainer, root, r.GetShare().Committee, r.GetShare().ValidatorIndex)
-		return fmt.Errorf("got pre-consensus quorum but it has invalid signatures: %w", err)
+		return recoverableReconstructError{fmt.Errorf("got pre-consensus quorum but it has invalid signatures: %w", err)}
 	}
 
 	duty, err := r.currentValidatorDuty()
@@ -158,7 +163,7 @@ func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.
 	if !ok {
 		r.markDutyNotRequired()
 		r.measurements.EndDutyFlow()
-		recordTotalDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.RoleAggregator, 0)
+		recordTotalDutyDuration(ctx, r.measurements.TotalDutyTime(), ssvtypes.RoleAggregator, 0)
 		return nil
 	}
 
@@ -179,7 +184,7 @@ func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.
 	if err != nil {
 		return fmt.Errorf("could not marshal aggregate and proof: %w", err)
 	}
-	input := &spectypes.ValidatorConsensusData{
+	input := &spectypes.ProposerConsensusData{
 		Duty:    *duty,
 		Version: ver,
 		DataSSZ: byts,
@@ -198,7 +203,7 @@ func (r *AggregatorRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 	span := trace.SpanFromContext(ctx)
 
 	span.AddEvent("processing QBFT consensus msg")
-	decided, encDecidedValue, err := r.baseConsensusMsgProcessing(ctx, logger, r.ValCheck.CheckValue, signedMsg, &spectypes.ValidatorConsensusData{})
+	decided, encDecidedValue, err := r.baseConsensusMsgProcessing(ctx, logger, r.ValCheck.CheckValue, signedMsg, &spectypes.ProposerConsensusData{})
 	if err != nil {
 		return fmt.Errorf("failed processing consensus message: %w", err)
 	}
@@ -209,18 +214,15 @@ func (r *AggregatorRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 	}
 
 	r.measurements.EndConsensus()
-	recordConsensusDuration(ctx, r.measurements.ConsensusTime(), spectypes.RoleAggregator)
+	recordConsensusDuration(ctx, r.measurements.ConsensusTime(), ssvtypes.RoleAggregator)
 
-	decidedValue, err := validatorConsensusDataFromEncoder(encDecidedValue)
-	if err != nil {
-		return fmt.Errorf("decided value: %w", err)
-	}
+	decidedValue := encDecidedValue.(*spectypes.ProposerConsensusData)
 	span.SetAttributes(
 		observability.BeaconSlotAttribute(decidedValue.Duty.Slot),
 		observability.ValidatorPublicKeyAttribute(decidedValue.Duty.PubKey),
 	)
 
-	_, aggregateAndProofHashRoot, err := decidedValue.GetAggregateAndProof()
+	_, aggregateAndProofHashRoot, err := ssvtypes.GetAggregateAndProof(decidedValue)
 	if err != nil {
 		return fmt.Errorf("could not get aggregate and proof: %w", err)
 	}
@@ -251,7 +253,8 @@ func (r *AggregatorRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 		Messages: []*spectypes.PartialSignatureMessage{msg},
 	}
 
-	msgID := spectypes.NewMsgID(r.NetworkConfig.DomainType, r.GetShare().ValidatorPubKey[:], r.RunnerRoleType)
+	domain := r.NetworkConfig.DomainTypeAtSlot(decidedValue.Duty.Slot)
+	msgID := spectypes.NewMsgID(domain, r.GetShare().ValidatorPubKey[:], r.RunnerRoleType)
 
 	encodedMsg, err := postConsensusMsg.Encode()
 	if err != nil {
@@ -278,7 +281,7 @@ func (r *AggregatorRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 
 	r.measurements.StartPostConsensus()
 	span.AddEvent("broadcasting post consensus partial signature message")
-	if err := r.network.Broadcast(msgID, msgToBroadcast); err != nil {
+	if err := r.network.BroadcastAtSlot(msgToBroadcast, postConsensusMsg.Slot); err != nil {
 		return fmt.Errorf("can't broadcast partial post consensus sig: %w", err)
 	}
 	const broadcastedPostConsensusMsgEvent = "broadcasted post-consensus partial signature message"
@@ -311,16 +314,21 @@ func (r *AggregatorRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 		return nil
 	}
 
-	// We have quorum and are committed to completing this duty here. The quorum above fires only once,
-	// so a terminal failure below won't be retried.
+	// We have quorum and are committed to completing this duty here, so this defer reports a terminal
+	// failure below as failed rather than letting it surface as a false "stuck".
+	// The one exception is a recoverable BLS-reconstruction failure: the fallback drops the offending
+	// partial sig(s) below quorum, so a later partial-sig message re-crosses quorum and re-enters here —
+	// those are tagged recoverableReconstructError and must not be recorded as failed (hence the guard).
+	// Shutdown (context cancellation) needs no special-casing — markDutyFailed drops a context.Canceled
+	// reason, so a duty aborted by shutdown isn't recorded as a failure.
 	defer func() {
-		if err != nil {
+		if err != nil && !isRecoverableReconstructError(err) {
 			r.markDutyFailed(err)
 		}
 	}()
 
 	r.measurements.EndPostConsensus()
-	recordPostConsensusDuration(ctx, r.measurements.PostConsensusTime(), spectypes.RoleAggregator)
+	recordPostConsensusDuration(ctx, r.measurements.PostConsensusTime(), ssvtypes.RoleAggregator)
 
 	// only 1 root, verified by expectedPostConsensusRootsAndDomain
 	root := roots[0]
@@ -330,17 +338,17 @@ func (r *AggregatorRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 	if err != nil {
 		// If the reconstructed signature verification failed, fall back to verifying each partial signature
 		r.FallBackAndVerifyEachSignature(r.State.PostConsensusContainer, root, r.GetShare().Committee, r.GetShare().ValidatorIndex)
-		return fmt.Errorf("got post-consensus quorum but it has invalid signatures: %w", err)
+		return recoverableReconstructError{fmt.Errorf("got post-consensus quorum but it has invalid signatures: %w", err)}
 	}
 	specSig := phase0.BLSSignature{}
 	copy(specSig[:], sig)
 
-	cd := &spectypes.ValidatorConsensusData{}
+	cd := &spectypes.ProposerConsensusData{}
 	err = cd.Decode(r.State.DecidedValue)
 	if err != nil {
 		return fmt.Errorf("could not decode consensus data: %w", err)
 	}
-	aggregateAndProof, _, err := cd.GetAggregateAndProof()
+	aggregateAndProof, _, err := ssvtypes.GetAggregateAndProof(cd)
 	if err != nil {
 		return fmt.Errorf("could not get aggregate and proof: %w", err)
 	}
@@ -372,7 +380,7 @@ func (r *AggregatorRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 
 	r.markDutySucceeded()
 	r.measurements.EndDutyFlow()
-	recordTotalDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.RoleAggregator, r.State.RunningInstance.State.Round)
+	recordTotalDutyDuration(ctx, r.measurements.TotalDutyTime(), ssvtypes.RoleAggregator, r.State.RunningInstance.State.Round)
 	const dutyFinishedEvent = "✔️successfully finished duty processing"
 	logger.Info(dutyFinishedEvent,
 		fields.PreConsensusTime(r.measurements.PreConsensusTime()),
@@ -398,12 +406,12 @@ func (r *AggregatorRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot,
 
 // expectedPostConsensusRootsAndDomain an INTERNAL function, returns the expected post-consensus roots to sign
 func (r *AggregatorRunner) expectedPostConsensusRootsAndDomain(context.Context) ([]ssz.HashRoot, phase0.DomainType, error) {
-	cd := &spectypes.ValidatorConsensusData{}
+	cd := &spectypes.ProposerConsensusData{}
 	err := cd.Decode(r.State.DecidedValue)
 	if err != nil {
 		return nil, spectypes.DomainError, fmt.Errorf("could not create consensus data: %w", err)
 	}
-	_, hashRoot, err := cd.GetAggregateAndProof()
+	_, hashRoot, err := ssvtypes.GetAggregateAndProof(cd)
 	if err != nil {
 		return nil, phase0.DomainType{}, fmt.Errorf("could not get aggregate and proof: %w", err)
 	}
@@ -444,12 +452,12 @@ func (r *AggregatorRunner) executeDuty(ctx context.Context, logger *zap.Logger, 
 	}
 
 	msgs := &spectypes.PartialSignatureMessages{
-		Type:     spectypes.SelectionProofPartialSig,
+		Type:     ssvtypes.SelectionProofPartialSig,
 		Slot:     validatorDuty.DutySlot(),
 		Messages: []*spectypes.PartialSignatureMessage{msg},
 	}
 
-	logger.Debug("signing and broadcasting selection proof partial sig", fields.Slot(duty.DutySlot()))
+	logger.Debug("signing and broadcasting selection proof partial sig", fields.Slot(validatorDuty.DutySlot()))
 
 	r.measurements.StartPreConsensus()
 	if err := r.signAndBroadcastPartialSigMsgs(ctx, r.network, r.operatorSigner, r.GetShare().ValidatorPubKey[:], msgs); err != nil {
@@ -459,12 +467,20 @@ func (r *AggregatorRunner) executeDuty(ctx context.Context, logger *zap.Logger, 
 	return nil
 }
 
-func (r *AggregatorRunner) GetNetwork() specqbft.Network {
+func (r *AggregatorRunner) GetNetwork() protocolp2p.Network {
 	return r.network
 }
 
 func (r *AggregatorRunner) GetBeaconNode() beacon.BeaconNode {
 	return r.beacon
+}
+
+func (r *AggregatorRunner) GetShare() *spectypes.Share {
+	// TODO better solution for this
+	for _, share := range r.Share {
+		return share
+	}
+	return nil
 }
 
 func (r *AggregatorRunner) GetSigner() ekm.BeaconSigner {

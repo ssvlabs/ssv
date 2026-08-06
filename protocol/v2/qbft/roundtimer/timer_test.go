@@ -15,6 +15,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/networkconfig"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 const (
@@ -29,9 +30,10 @@ func TestTimeoutForRound(t *testing.T) {
 
 	roles := []spectypes.RunnerRole{
 		spectypes.RoleCommittee,
-		spectypes.RoleAggregator,
+		ssvtypes.RoleAggregator,
 		spectypes.RoleProposer,
-		spectypes.RoleSyncCommitteeContribution,
+		ssvtypes.RoleSyncCommitteeContribution,
+		spectypes.RoleAggregatorCommittee,
 	}
 
 	for _, role := range roles {
@@ -116,13 +118,23 @@ func TestEstimatedRoundAt(t *testing.T) {
 		},
 		{
 			name:         "aggregator keeps first round until two-third slot delay passes",
-			role:         spectypes.RoleAggregator,
+			role:         ssvtypes.RoleAggregator,
+			timeIntoSlot: slotDuration / 3 * 2,
+			want:         specqbft.FirstRound,
+		},
+		{
+			// Basic behavioral parity with the aggregator case above. NOTE: at this 600ms slot the
+			// head-start difference (0 vs 400ms) is below one QuickTimeout (2s), so this case alone
+			// does NOT discriminate patched vs unpatched — see the realistic-slot regression assertion
+			// after the loop (and TestRoundTimeoutOffset) for the actual guard.
+			name:         "aggregator-committee keeps first round until two-third slot delay passes",
+			role:         spectypes.RoleAggregatorCommittee,
 			timeIntoSlot: slotDuration / 3 * 2,
 			want:         specqbft.FirstRound,
 		},
 		{
 			name:         "sync committee contribution advances after two-third slot delay plus quick timeout",
-			role:         spectypes.RoleSyncCommitteeContribution,
+			role:         ssvtypes.RoleSyncCommitteeContribution,
 			timeIntoSlot: slotDuration/3*2 + QuickTimeout,
 			want:         specqbft.FirstRound + 1,
 		},
@@ -135,6 +147,18 @@ func TestEstimatedRoundAt(t *testing.T) {
 			require.Equal(t, tc.want, got)
 		})
 	}
+
+	// Discriminating regression guard for the missing RoleAggregatorCommittee head start.
+	// At a realistic 12s slot, aggregation data arrives ~2/3 in (8s). With the fix (2/3-slot head
+	// start) the round is still 1 there; without it (head start 0) EstimatedRoundAt resolves to
+	// round 5 (1 + 8s/QuickTimeout), starting consensus mid-round. Unlike the 600ms table cases
+	// above, this assertion fails against the unpatched code.
+	t.Run("aggregator-committee resolves round 1 at two-thirds of a realistic 12s slot", func(t *testing.T) {
+		const realisticSlot = 12 * time.Second
+		round, err := EstimatedRoundAt(spectypes.RoleAggregatorCommittee, realisticSlot, realisticSlot/3*2)
+		require.NoError(t, err)
+		require.Equal(t, specqbft.FirstRound, round)
+	})
 }
 
 // TestRoundTimeoutOffset covers the pure helper directly, which is the single source of truth
@@ -171,12 +195,16 @@ func TestRoundTimeoutOffset(t *testing.T) {
 		{name: "committee, round 9 (first slow)", role: spectypes.RoleCommittee, round: QuickTimeoutThreshold + 1, want: 4*time.Second + quickPhase + SlowTimeout},
 
 		// Aggregator (head start = 8s): covers the 2/3-slot branch.
-		{name: "aggregator, round 1", role: spectypes.RoleAggregator, round: 1, want: 8*time.Second + QuickTimeout},
-		{name: "aggregator, round 8", role: spectypes.RoleAggregator, round: QuickTimeoutThreshold, want: 8*time.Second + quickPhase},
-		{name: "aggregator, round 9 (first slow)", role: spectypes.RoleAggregator, round: QuickTimeoutThreshold + 1, want: 8*time.Second + quickPhase + SlowTimeout},
+		{name: "aggregator, round 1", role: ssvtypes.RoleAggregator, round: 1, want: 8*time.Second + QuickTimeout},
+		{name: "aggregator, round 8", role: ssvtypes.RoleAggregator, round: QuickTimeoutThreshold, want: 8*time.Second + quickPhase},
+		{name: "aggregator, round 9 (first slow)", role: ssvtypes.RoleAggregator, round: QuickTimeoutThreshold + 1, want: 8*time.Second + quickPhase + SlowTimeout},
 
 		// Sync committee contribution uses the same 2/3-slot branch as aggregator.
-		{name: "sync_committee_contribution, round 1", role: spectypes.RoleSyncCommitteeContribution, round: 1, want: 8*time.Second + QuickTimeout},
+		{name: "sync_committee_contribution, round 1", role: ssvtypes.RoleSyncCommitteeContribution, round: 1, want: 8*time.Second + QuickTimeout},
+
+		// Aggregator-committee uses the same 2/3-slot branch as aggregator.
+		{name: "aggregator_committee, round 1", role: spectypes.RoleAggregatorCommittee, round: 1, want: 8*time.Second + QuickTimeout},
+		{name: "aggregator_committee, round 8", role: spectypes.RoleAggregatorCommittee, round: QuickTimeoutThreshold, want: 8*time.Second + quickPhase},
 	}
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
@@ -205,8 +233,9 @@ func TestEstimatedRoundAtBoundaries(t *testing.T) {
 	}{
 		{"proposer", spectypes.RoleProposer},
 		{"committee", spectypes.RoleCommittee},
-		{"aggregator", spectypes.RoleAggregator},
-		{"sync_committee_contribution", spectypes.RoleSyncCommitteeContribution},
+		{"aggregator", ssvtypes.RoleAggregator},
+		{"sync_committee_contribution", ssvtypes.RoleSyncCommitteeContribution},
+		{"aggregator_committee", spectypes.RoleAggregatorCommittee},
 	}
 
 	for _, rc := range roles {
@@ -253,8 +282,8 @@ func TestEstimatedRoundAtEdgeCases(t *testing.T) {
 		// timeIntoSlot = 0: all roles should report FirstRound.
 		{name: "proposer at slot start", role: spectypes.RoleProposer, timeIntoSlot: 0},
 		{name: "committee at slot start", role: spectypes.RoleCommittee, timeIntoSlot: 0},
-		{name: "aggregator at slot start", role: spectypes.RoleAggregator, timeIntoSlot: 0},
-		{name: "sync_contribution at slot start", role: spectypes.RoleSyncCommitteeContribution, timeIntoSlot: 0},
+		{name: "aggregator at slot start", role: ssvtypes.RoleAggregator, timeIntoSlot: 0},
+		{name: "sync_contribution at slot start", role: ssvtypes.RoleSyncCommitteeContribution, timeIntoSlot: 0},
 
 		// Negative timeIntoSlot (unreachable in practice — validateSlotTime catches early
 		// messages — but the pure function must still be well-defined).
@@ -266,7 +295,7 @@ func TestEstimatedRoundAtEdgeCases(t *testing.T) {
 		{name: "committee mid-head-start", role: spectypes.RoleCommittee, timeIntoSlot: 2 * time.Second},
 		{name: "committee end of head start", role: spectypes.RoleCommittee, timeIntoSlot: slotDuration / 3},
 		// Aggregator head start is 8s; at 7s we're still in Round 1.
-		{name: "aggregator mid-head-start", role: spectypes.RoleAggregator, timeIntoSlot: 7 * time.Second},
+		{name: "aggregator mid-head-start", role: ssvtypes.RoleAggregator, timeIntoSlot: 7 * time.Second},
 	}
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
@@ -293,8 +322,8 @@ func TestRoundTimeoutMatchesRoundTimeoutOffset(t *testing.T) {
 		role spectypes.RunnerRole
 	}{
 		{"committee", spectypes.RoleCommittee},
-		{"aggregator", spectypes.RoleAggregator},
-		{"sync_committee_contribution", spectypes.RoleSyncCommitteeContribution},
+		{"aggregator", ssvtypes.RoleAggregator},
+		{"sync_committee_contribution", ssvtypes.RoleSyncCommitteeContribution},
 	}
 
 	// Nest synctest inside t.Run (not the other way around) — synctest.Test disallows
@@ -329,8 +358,9 @@ func TestEstimatedRoundAtMatchesRoundTimeout(t *testing.T) {
 	}{
 		{"proposer", spectypes.RoleProposer},
 		{"committee", spectypes.RoleCommittee},
-		{"aggregator", spectypes.RoleAggregator},
-		{"sync_committee_contribution", spectypes.RoleSyncCommitteeContribution},
+		{"aggregator", ssvtypes.RoleAggregator},
+		{"sync_committee_contribution", ssvtypes.RoleSyncCommitteeContribution},
+		{"aggregator_committee", spectypes.RoleAggregatorCommittee},
 	}
 
 	for _, rc := range roles {
@@ -478,8 +508,8 @@ func TestNegativeTimeout(t *testing.T) {
 	// not proposer which returns fixed positive durations.
 	roles := []spectypes.RunnerRole{
 		spectypes.RoleCommittee,
-		spectypes.RoleAggregator,
-		spectypes.RoleSyncCommitteeContribution,
+		ssvtypes.RoleAggregator,
+		ssvtypes.RoleSyncCommitteeContribution,
 	}
 
 	for _, role := range roles {

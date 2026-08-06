@@ -1,7 +1,10 @@
 package goclient
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/binary"
 	"errors"
 	"sync/atomic"
 	"testing"
@@ -26,7 +29,8 @@ import (
 type aggregatorClientMock struct {
 	mock.Service
 
-	submitAttestationsFn func(context.Context, *api.SubmitAttestationsOpts) error
+	submitAttestationsFn          func(context.Context, *api.SubmitAttestationsOpts) error
+	submitAggregateAttestationsFn func(context.Context, *api.SubmitAggregateAttestationsOpts) error
 }
 
 var _ Client = (*aggregatorClientMock)(nil)
@@ -38,6 +42,13 @@ func (*aggregatorClientMock) SubmitProposal(context.Context, *api.SubmitProposal
 func (m *aggregatorClientMock) SubmitAttestations(ctx context.Context, opts *api.SubmitAttestationsOpts) error {
 	if m.submitAttestationsFn != nil {
 		return m.submitAttestationsFn(ctx, opts)
+	}
+	return nil
+}
+
+func (m *aggregatorClientMock) SubmitAggregateAttestations(ctx context.Context, opts *api.SubmitAggregateAttestationsOpts) error {
+	if m.submitAggregateAttestationsFn != nil {
+		return m.submitAggregateAttestationsFn(ctx, opts)
 	}
 	return nil
 }
@@ -367,6 +378,300 @@ func TestAttestationCommitteeIndex(t *testing.T) {
 		att := &spec.VersionedAttestation{Version: spec.DataVersionElectra}
 		_, err := attestationCommitteeIndex(att, data)
 		require.Error(t, err)
+	})
+}
+
+func TestIsAggregator(t *testing.T) {
+	t.Parallel()
+
+	slotSigA := bytes.Repeat([]byte{0xAA}, 96)
+	slotSigB := bytes.Repeat([]byte{0xBB}, 96)
+
+	// Mirrors the documented selection-proof modulo check so we can assert the production
+	// code wires committeeLength/TargetAggregatorsPerCommittee/slotSig into it correctly,
+	// rather than e.g. accidentally using TargetAggregatorsPerSyncSubcommittee.
+	computeExpected := func(committeeLength, target uint64, slotSig []byte) bool {
+		modulo := committeeLength / target
+		if modulo == 0 {
+			modulo = 1
+		}
+		h := sha256.Sum256(slotSig)
+		x := binary.LittleEndian.Uint64(h[:8])
+		return x%modulo == 0
+	}
+
+	testCases := []struct {
+		name            string
+		committeeLength uint64
+		target          uint64
+		slotSig         []byte
+	}{
+		{name: "small committee forces modulo to one", committeeLength: 2, target: 16, slotSig: slotSigA},
+		{name: "zero committee length forces modulo to one", committeeLength: 0, target: 16, slotSig: slotSigA},
+		{name: "large committee uses computed modulo (sig A)", committeeLength: 128, target: 16, slotSig: slotSigA},
+		{name: "large committee uses computed modulo (sig B)", committeeLength: 128, target: 16, slotSig: slotSigB},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			cfg := aggregatorTestBeaconConfig(time.Now())
+			cfg.TargetAggregatorsPerCommittee = tc.target
+			// Sentinel: distinct from TargetAggregatorsPerCommittee so a bug reading the wrong
+			// field would flip the expected/actual comparison below.
+			cfg.TargetAggregatorsPerSyncSubcommittee = tc.target + 12345
+
+			client := &GoClient{beaconConfig: &cfg}
+
+			got := client.IsAggregator(t.Context(), 0, 0, tc.committeeLength, tc.slotSig)
+			want := computeExpected(tc.committeeLength, tc.target, tc.slotSig)
+			require.Equal(t, want, got)
+		})
+	}
+
+	t.Run("modulo forced to one always selects aggregator regardless of signature", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := aggregatorTestBeaconConfig(time.Now())
+		cfg.TargetAggregatorsPerCommittee = 16
+
+		client := &GoClient{beaconConfig: &cfg}
+
+		require.True(t, client.IsAggregator(t.Context(), 0, 0, 2, slotSigA))
+		require.True(t, client.IsAggregator(t.Context(), 0, 0, 0, slotSigB))
+	})
+
+	t.Run("deterministic for identical inputs", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := aggregatorTestBeaconConfig(time.Now())
+		cfg.TargetAggregatorsPerCommittee = 16
+
+		client := &GoClient{beaconConfig: &cfg}
+
+		first := client.IsAggregator(t.Context(), 5, 3, 128, slotSigA)
+		second := client.IsAggregator(t.Context(), 5, 3, 128, slotSigA)
+		require.Equal(t, first, second)
+	})
+}
+
+func TestGetAggregateAttestation(t *testing.T) {
+	t.Parallel()
+
+	committeeIndex := phase0.CommitteeIndex(7)
+
+	testCases := []struct {
+		name    string
+		version spec.DataVersion
+	}{
+		{name: "phase0", version: spec.DataVersionPhase0},
+		{name: "altair", version: spec.DataVersionAltair},
+		{name: "bellatrix", version: spec.DataVersionBellatrix},
+		{name: "capella", version: spec.DataVersionCapella},
+		{name: "deneb", version: spec.DataVersionDeneb},
+		{name: "electra", version: spec.DataVersionElectra},
+		{name: "fulu", version: spec.DataVersionFulu},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			cfg := aggregatorTestBeaconConfig(time.Now().Add(-1000 * networkconfig.TestNetwork.SlotDuration))
+			slot := cfg.FirstSlotAtEpoch(0)
+
+			attestedData := &phase0.AttestationData{
+				Slot:            slot,
+				Index:           committeeIndex,
+				BeaconBlockRoot: phase0.Root{4, 5, 6},
+				Source:          &phase0.Checkpoint{Epoch: 1},
+				Target:          &phase0.Checkpoint{Epoch: 2},
+			}
+			if tc.version >= spec.DataVersionElectra {
+				attestedData.Index = 0
+			}
+			expectedRoot, err := attestedData.HashTreeRoot()
+			require.NoError(t, err)
+
+			service := &aggregatorClientMock{}
+			service.AggregateAttestationFunc = func(_ context.Context, opts *api.AggregateAttestationOpts) (*api.Response[*spec.VersionedAttestation], error) {
+				require.Equal(t, slot, opts.Slot)
+				require.Equal(t, committeeIndex, opts.CommitteeIndex)
+				require.EqualValues(t, expectedRoot, opts.AttestationDataRoot)
+
+				return &api.Response[*spec.VersionedAttestation]{
+					Data: aggregatorVersionedAttestation(tc.version, attestedData),
+				}, nil
+			}
+
+			client := newAggregatorTestClient(&cfg, service)
+
+			require.NoError(t, client.SubmitAttestations(t.Context(), []*spec.VersionedAttestation{
+				attestedVersionedAttestation(tc.version, attestedData, committeeIndex),
+			}))
+
+			got, gotVersion, err := client.GetAggregateAttestation(t.Context(), slot, committeeIndex)
+			require.NoError(t, err)
+			require.Equal(t, tc.version, gotVersion)
+			require.NotNil(t, got)
+		})
+	}
+
+	t.Run("surfaces fetch error", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := aggregatorTestBeaconConfig(time.Now().Add(-1000 * networkconfig.TestNetwork.SlotDuration))
+		slot := cfg.FirstSlotAtEpoch(0)
+
+		service := &aggregatorClientMock{}
+		service.AttestationDataFunc = func(context.Context, *api.AttestationDataOpts) (*api.Response[*phase0.AttestationData], error) {
+			return nil, errors.New("attestation data unavailable")
+		}
+
+		client := newAggregatorTestClient(&cfg, service)
+
+		// No prior SubmitAttestations call, so the attested root is unknown and the fallback
+		// re-derivation path's error must surface.
+		_, _, err := client.GetAggregateAttestation(t.Context(), slot, 7)
+		require.ErrorContains(t, err, "fetch attestation data")
+	})
+
+	t.Run("surfaces nil inner attestation error from unmarshal", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := aggregatorTestBeaconConfig(time.Now().Add(-1000 * networkconfig.TestNetwork.SlotDuration))
+		slot := cfg.FirstSlotAtEpoch(0)
+		committeeIndex := phase0.CommitteeIndex(3)
+
+		data := &phase0.AttestationData{
+			Slot:   slot,
+			Index:  committeeIndex,
+			Source: &phase0.Checkpoint{Epoch: 1},
+			Target: &phase0.Checkpoint{Epoch: 2},
+		}
+		root, err := data.HashTreeRoot()
+		require.NoError(t, err)
+
+		service := &aggregatorClientMock{}
+		service.AggregateAttestationFunc = func(context.Context, *api.AggregateAttestationOpts) (*api.Response[*spec.VersionedAttestation], error) {
+			// Version is set but the inner attestation payload is nil.
+			return &api.Response[*spec.VersionedAttestation]{
+				Data: &spec.VersionedAttestation{Version: spec.DataVersionPhase0},
+			}, nil
+		}
+
+		client := newAggregatorTestClient(&cfg, service)
+		client.rememberAttestedDataRoots([]*spec.VersionedAttestation{
+			aggregatorVersionedAttestation(spec.DataVersionPhase0, data),
+		})
+		require.NotZero(t, root)
+
+		_, _, err = client.GetAggregateAttestation(t.Context(), slot, committeeIndex)
+		require.ErrorContains(t, err, "data is nil")
+	})
+}
+
+func TestSubmitSignedAggregateSelectionProof(t *testing.T) {
+	t.Parallel()
+
+	t.Run("broadcasts the signed aggregate and proof", func(t *testing.T) {
+		t.Parallel()
+
+		msg := &spec.VersionedSignedAggregateAndProof{Version: spec.DataVersionPhase0}
+
+		var gotOpts *api.SubmitAggregateAttestationsOpts
+		service := &aggregatorClientMock{
+			submitAggregateAttestationsFn: func(_ context.Context, opts *api.SubmitAggregateAttestationsOpts) error {
+				gotOpts = opts
+				return nil
+			},
+		}
+
+		client := &GoClient{log: zap.NewNop(), multiClient: service}
+
+		require.NoError(t, client.SubmitSignedAggregateSelectionProof(t.Context(), msg))
+		require.NotNil(t, gotOpts)
+		require.Len(t, gotOpts.SignedAggregateAndProofs, 1)
+		require.Same(t, msg, gotOpts.SignedAggregateAndProofs[0])
+	})
+
+	t.Run("wraps submission error", func(t *testing.T) {
+		t.Parallel()
+
+		msg := &spec.VersionedSignedAggregateAndProof{Version: spec.DataVersionPhase0}
+
+		service := &aggregatorClientMock{
+			submitAggregateAttestationsFn: func(context.Context, *api.SubmitAggregateAttestationsOpts) error {
+				return errors.New("node rejected the aggregate")
+			},
+		}
+
+		client := &GoClient{log: zap.NewNop(), multiClient: service}
+
+		err := client.SubmitSignedAggregateSelectionProof(t.Context(), msg)
+		require.ErrorContains(t, err, "submit aggregate attestations")
+		require.ErrorContains(t, err, "node rejected the aggregate")
+	})
+}
+
+func TestVersionedAggregateToSSZ(t *testing.T) {
+	t.Parallel()
+
+	versions := []spec.DataVersion{
+		spec.DataVersionPhase0,
+		spec.DataVersionAltair,
+		spec.DataVersionBellatrix,
+		spec.DataVersionCapella,
+		spec.DataVersionDeneb,
+		spec.DataVersionElectra,
+		spec.DataVersionFulu,
+	}
+
+	for _, version := range versions {
+		t.Run(version.String()+" nil inner attestation errors", func(t *testing.T) {
+			t.Parallel()
+
+			_, _, err := versionedAggregateToSSZ(&spec.VersionedAttestation{Version: version})
+			require.ErrorContains(t, err, "data is nil")
+		})
+	}
+
+	t.Run("unknown version errors", func(t *testing.T) {
+		t.Parallel()
+
+		_, _, err := versionedAggregateToSSZ(&spec.VersionedAttestation{Version: spec.DataVersion(99)})
+		require.ErrorContains(t, err, "unknown data version")
+	})
+}
+
+func TestVersionedToAggregateAndProofNilAndUnknownVersion(t *testing.T) {
+	t.Parallel()
+
+	versions := []spec.DataVersion{
+		spec.DataVersionPhase0,
+		spec.DataVersionAltair,
+		spec.DataVersionBellatrix,
+		spec.DataVersionCapella,
+		spec.DataVersionDeneb,
+		spec.DataVersionElectra,
+		spec.DataVersionFulu,
+	}
+
+	for _, version := range versions {
+		t.Run(version.String()+" nil inner attestation errors", func(t *testing.T) {
+			t.Parallel()
+
+			_, _, err := versionedToAggregateAndProof(&spec.VersionedAttestation{Version: version}, 1, phase0.BLSSignature{})
+			require.ErrorContains(t, err, "data is nil")
+		})
+	}
+
+	t.Run("unknown version errors", func(t *testing.T) {
+		t.Parallel()
+
+		_, _, err := versionedToAggregateAndProof(&spec.VersionedAttestation{Version: spec.DataVersion(99)}, 1, phase0.BLSSignature{})
+		require.ErrorContains(t, err, "unknown data version")
 	})
 }
 

@@ -105,7 +105,6 @@ func TestHandleDecidedQuery(t *testing.T) {
 	}
 
 	pk := sks[1].GetPublicKey()
-	ssvConfig := networkconfig.TestNetwork.SSV
 	decided250Seq, err := qbftstorage.CreateMultipleStoredInstances(rsaKeys, specqbft.Height(0), specqbft.Height(250), func(height specqbft.Height) ([]spectypes.OperatorID, *specqbft.Message) {
 		return oids, &specqbft.Message{
 			MsgType:    specqbft.CommitMsgType,
@@ -131,7 +130,7 @@ func TestHandleDecidedQuery(t *testing.T) {
 			t.Run("valid range", func(t *testing.T) {
 				nm := newParticipantsAPIMsg(pk.SerializeToHexStr(), role, 0, 250)
 				h := NewHandler(l)
-				h.HandleParticipantsQuery(ibftStorage, nm, ssvConfig.DomainType)
+				h.HandleParticipantsQuery(ibftStorage, nm, networkconfig.TestNetwork)
 				require.NotNil(t, nm.Msg.Data)
 				msgs, ok := nm.Msg.Data.([]*ParticipantsAPI)
 
@@ -142,7 +141,7 @@ func TestHandleDecidedQuery(t *testing.T) {
 			t.Run("invalid range", func(t *testing.T) {
 				nm := newParticipantsAPIMsg(pk.SerializeToHexStr(), role, 400, 404)
 				h := NewHandler(l)
-				h.HandleParticipantsQuery(ibftStorage, nm, ssvConfig.DomainType)
+				h.HandleParticipantsQuery(ibftStorage, nm, networkconfig.TestNetwork)
 				require.NotNil(t, nm.Msg.Data)
 				data, ok := nm.Msg.Data.([]string)
 				require.True(t, ok)
@@ -152,7 +151,7 @@ func TestHandleDecidedQuery(t *testing.T) {
 			t.Run("non-existing validator", func(t *testing.T) {
 				nm := newParticipantsAPIMsg("xxx", role, 400, 404)
 				h := NewHandler(l)
-				h.HandleParticipantsQuery(ibftStorage, nm, ssvConfig.DomainType)
+				h.HandleParticipantsQuery(ibftStorage, nm, networkconfig.TestNetwork)
 				require.NotNil(t, nm.Msg.Data)
 				errs, ok := nm.Msg.Data.([]string)
 				require.True(t, ok)
@@ -162,7 +161,7 @@ func TestHandleDecidedQuery(t *testing.T) {
 			t.Run("non-existing role", func(t *testing.T) {
 				nm := newParticipantsAPIMsg(pk.SerializeToHexStr(), math.MaxUint64, 0, 250)
 				h := NewHandler(l)
-				h.HandleParticipantsQuery(ibftStorage, nm, ssvConfig.DomainType)
+				h.HandleParticipantsQuery(ibftStorage, nm, networkconfig.TestNetwork)
 				require.NotNil(t, nm.Msg.Data)
 				errs, ok := nm.Msg.Data.([]string)
 				require.True(t, ok)
@@ -172,7 +171,7 @@ func TestHandleDecidedQuery(t *testing.T) {
 			t.Run("non-existing storage", func(t *testing.T) {
 				nm := newParticipantsAPIMsg(pk.SerializeToHexStr(), spectypes.BNRoleSyncCommitteeContribution, 0, 250)
 				h := NewHandler(l)
-				h.HandleParticipantsQuery(ibftStorage, nm, ssvConfig.DomainType)
+				h.HandleParticipantsQuery(ibftStorage, nm, networkconfig.TestNetwork)
 				require.NotNil(t, nm.Msg.Data)
 				errs, ok := nm.Msg.Data.([]string)
 				require.True(t, ok)

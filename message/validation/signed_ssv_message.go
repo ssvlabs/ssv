@@ -1,16 +1,15 @@
 package validation
 
 import (
-	"bytes"
-	"encoding/hex"
 	"fmt"
 	"slices"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
-
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	ssvmessage "github.com/ssvlabs/ssv/protocol/v2/message"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 func (mv *messageValidator) decodeSignedSSVMessage(pMsg *pubsub.Message) (*spectypes.SignedSSVMessage, error) {
@@ -120,32 +119,47 @@ func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage)
 		return e
 	}
 
-	// Rule: If domain is different then self domain
-	domain := mv.netCfg.DomainType
-	if !bytes.Equal(ssvMessage.GetID().GetDomain(), domain[:]) {
-		err := ErrWrongDomain
-		err.got = hex.EncodeToString(ssvMessage.MsgID.GetDomain())
-		err.want = hex.EncodeToString(domain[:])
-		return err
-	}
-
-	// Rule: If role is invalid
-	if !mv.validRole(ssvMessage.GetID().GetRoleType()) {
-		return ErrInvalidRole
+	// Rule: Runner role must be valid in some fork. This fork-independent check runs before the
+	// executor ID is resolved to a validator (validRoleAtSlot narrows it per fork later), so a
+	// structurally-invalid role is rejected rather than degrading to an Ignore for an unknown ID.
+	role := ssvMessage.GetID().GetRoleType()
+	if !mv.validRoleUnion(role) {
+		e := ErrInvalidRole
+		e.got = fmt.Sprintf("%v (%d)", role, role)
+		return e
 	}
 
 	return nil
 }
 
-func (mv *messageValidator) validRole(roleType spectypes.RunnerRole) bool {
+// validRoleUnion reports whether roleType is a valid runner role in any fork. This is the
+// fork-independent (structural) role check; validRoleAtSlot narrows it to the roles valid at a
+// specific slot's fork. It is enforced early, before the executor ID is resolved to a validator, so
+// a structurally-invalid role is rejected rather than degrading to an Ignore when that ID is unknown.
+func (mv *messageValidator) validRoleUnion(roleType spectypes.RunnerRole) bool {
 	switch roleType {
 	case spectypes.RoleCommittee,
-		spectypes.RoleAggregator,
 		spectypes.RoleProposer,
-		spectypes.RoleSyncCommitteeContribution,
 		spectypes.RoleValidatorRegistration,
-		spectypes.RoleVoluntaryExit:
+		spectypes.RoleVoluntaryExit,
+		spectypes.RoleAggregatorCommittee,
+		ssvtypes.RoleAggregator,
+		ssvtypes.RoleSyncCommitteeContribution:
 		return true
+	default:
+		return false
+	}
+}
+
+func (mv *messageValidator) validRoleAtSlot(roleType spectypes.RunnerRole, slot phase0.Slot) bool {
+	isInBooleFork := mv.netCfg.BooleForkAtSlot(slot)
+	switch roleType {
+	case spectypes.RoleCommittee, spectypes.RoleProposer, spectypes.RoleValidatorRegistration, spectypes.RoleVoluntaryExit:
+		return true
+	case spectypes.RoleAggregatorCommittee:
+		return isInBooleFork
+	case ssvtypes.RoleAggregator, ssvtypes.RoleSyncCommitteeContribution:
+		return !isInBooleFork
 	default:
 		return false
 	}

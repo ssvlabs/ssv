@@ -11,6 +11,7 @@ import (
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
 	"github.com/ssvlabs/ssv/networkconfig"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 type ValueChecker interface {
@@ -75,6 +76,73 @@ func (v *voteChecker) CheckValue(value []byte) error {
 	}
 
 	return nil
+}
+
+type aggregatorCommitteeChecker struct{}
+
+func NewAggregatorCommitteeChecker() ValueChecker {
+	return &aggregatorCommitteeChecker{}
+}
+
+func (v *aggregatorCommitteeChecker) CheckValue(value []byte) error {
+	cd := &spectypes.AggregatorCommitteeConsensusData{}
+	if err := cd.Decode(value); err != nil {
+		return spectypes.WrapError(
+			spectypes.AggCommConsensusDataDecodeErrorCode,
+			fmt.Errorf("failed decoding aggregator committee consensus data: %w", err),
+		)
+	}
+	if err := cd.Validate(); err != nil {
+		return fmt.Errorf("invalid value: %w", err)
+	}
+
+	// spec Validate() checks that the committee/subnet index sets line up, but does not forbid a
+	// validator index repeating in Aggregators or Contributors. Post-consensus emits one partial
+	// signature per entry (GetAggregateAndProofs / GetSyncCommitteeContributions are one-per-entry),
+	// so a duplicated entry means multiple partial signatures for the same validator index. Message
+	// validation caps that at 5 per index and rejects the whole message beyond it — so a Byzantine
+	// proposer could otherwise make every honest operator broadcast a message its peers reject,
+	// draining their gossip score network-wide. Reject the duplicate here so honest operators never
+	// sign it; an honest proposer's value is always duplicate-free (the runner dedups on build).
+	if err := validateNoDuplicateAggregatorCommittee(cd); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// validateNoDuplicateAggregatorCommittee rejects consensus data that assigns the same validator
+// index to the same committee/subnet index more than once within a set. Aggregators and Contributors
+// are deduped independently: an aggregator's CommitteeIndex (attestation committee) and a
+// contributor's CommitteeIndex (sync subnet) are different namespaces, so the same (validator,
+// index) pair legitimately appearing once in each set is not a duplicate.
+func validateNoDuplicateAggregatorCommittee(cd *spectypes.AggregatorCommitteeConsensusData) error {
+	type assignment struct {
+		validatorIndex phase0.ValidatorIndex
+		committeeIndex uint64
+	}
+
+	dedup := func(kind string, count int, at func(int) (phase0.ValidatorIndex, uint64)) error {
+		seen := make(map[assignment]struct{}, count)
+		for i := 0; i < count; i++ {
+			validatorIndex, committeeIndex := at(i)
+			key := assignment{validatorIndex: validatorIndex, committeeIndex: committeeIndex}
+			if _, ok := seen[key]; ok {
+				return fmt.Errorf("duplicate %s for validator index %d, committee index %d", kind, validatorIndex, committeeIndex)
+			}
+			seen[key] = struct{}{}
+		}
+		return nil
+	}
+
+	if err := dedup("aggregator", len(cd.Aggregators), func(i int) (phase0.ValidatorIndex, uint64) {
+		return cd.Aggregators[i].ValidatorIndex, cd.Aggregators[i].CommitteeIndex
+	}); err != nil {
+		return err
+	}
+	return dedup("contributor", len(cd.Contributors), func(i int) (phase0.ValidatorIndex, uint64) {
+		return cd.Contributors[i].ValidatorIndex, cd.Contributors[i].CommitteeIndex
+	})
 }
 
 type proposerChecker struct {
@@ -171,21 +239,21 @@ func checkValidatorConsensusData(
 	expectedType spectypes.BeaconRole,
 	validatorPK spectypes.ValidatorPK,
 	validatorIndex phase0.ValidatorIndex,
-) (*spectypes.ValidatorConsensusData, error) {
-	cd := &spectypes.ValidatorConsensusData{}
+) (*spectypes.ProposerConsensusData, error) {
+	cd := &spectypes.ProposerConsensusData{}
 	if err := cd.Decode(value); err != nil {
 		return nil, fmt.Errorf("failed decoding consensus data: %w", err)
 	}
-	if err := cd.Validate(); err != nil {
+	if err := ssvtypes.ValidateConsensusData(cd); err != nil {
 		return cd, spectypes.NewError(spectypes.QBFTValueInvalidErrorCode, "invalid value")
-	}
-
-	if beaconConfig.EstimatedEpochAtSlot(cd.Duty.Slot) > beaconConfig.EstimatedCurrentEpoch()+1 {
-		return cd, spectypes.NewError(spectypes.DutyEpochTooFarFutureErrorCode, "duty epoch is into far future")
 	}
 
 	if expectedType != cd.Duty.Type {
 		return cd, spectypes.NewError(spectypes.WrongBeaconRoleTypeErrorCode, "wrong beacon role type")
+	}
+
+	if beaconConfig.EstimatedEpochAtSlot(cd.Duty.Slot) > beaconConfig.EstimatedCurrentEpoch()+1 {
+		return cd, spectypes.NewError(spectypes.DutyEpochTooFarFutureErrorCode, "duty epoch is into far future")
 	}
 
 	if !bytes.Equal(validatorPK[:], cd.Duty.PubKey[:]) {

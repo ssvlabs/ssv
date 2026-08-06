@@ -48,6 +48,7 @@ import (
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	qbftcontroller "github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/ssvsigner"
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
@@ -329,8 +330,8 @@ func newNode(
 	if cfg.WsAPIPort != 0 {
 		ws = exporterapi.NewWsServer(logger, nil, http.NewServeMux(), cfg.WithPing, fmt.Sprintf(":%d", cfg.WsAPIPort))
 		cfg.SSVOptions.WS = ws
-		newDecidedHandler = decided.NewStreamPublisher(logger, networkConfig.DomainType, ws)
-		decidedStreamPublisherFn = decided.NewDecidedListener(logger, networkConfig.DomainType, ws, nodeStorage.ValidatorStore())
+		newDecidedHandler = decided.NewStreamPublisher(logger, networkConfig, ws)
+		decidedStreamPublisherFn = decided.NewDecidedListener(logger, networkConfig, ws, nodeStorage.ValidatorStore())
 	}
 
 	storageRoles := []spectypes.BeaconRole{
@@ -368,6 +369,7 @@ func newNode(
 
 	metadataSyncer := metadata.NewSyncer(
 		logger,
+		networkConfig,
 		nodeStorage.Shares(),
 		validatorProvider,
 		consensusClient,
@@ -392,7 +394,7 @@ func newNode(
 			dutyStore)
 		messageTraceHandler = collector.Collect
 
-		exporterRead = exportercore.NewExporter(logger, storageMap, collector, nodeStorage.ValidatorStore())
+		exporterRead = exportercore.NewExporter(logger, storageMap, collector, nodeStorage.ValidatorStore(), networkConfig)
 	case modeExporterStandard:
 		logger.Info("exporter mode: standard")
 	case modeOperator:
@@ -439,7 +441,7 @@ func newNode(
 	if ws != nil {
 		handler := exporterapi.NewHandler(logger)
 		ws.UseQueryHandler(func(nm *exporterapi.NetworkMessage) {
-			handler.HandleQueryRequests(storageMap, exporterRead, nodeStorage.ValidatorStore(), networkConfig.DomainType, nm)
+			handler.HandleQueryRequests(storageMap, exporterRead, nodeStorage.ValidatorStore(), networkConfig, nm)
 		})
 	}
 
@@ -591,7 +593,7 @@ func (n *node) start(ctx context.Context, spawn func(func() error)) error {
 			&hvalidators.Validators{
 				Shares: n.nodeStorage.Shares(),
 			},
-			hexporter.NewExporter(n.logger, n.storageMap, n.collector, n.nodeStorage.ValidatorStore()),
+			hexporter.NewExporter(n.logger, n.storageMap, n.collector, n.nodeStorage.ValidatorStore(), n.networkConfig),
 			n.mode == modeExporterArchive,
 		)
 		_, apiServeErr, err := apiServer.Start(ctx)
@@ -632,15 +634,12 @@ func (n *node) applyDynamicMaxPeers() {
 	)
 	start := time.Now()
 	myValidators := n.nodeStorage.ValidatorStore().OperatorValidators(n.operatorDataStore.GetOperatorID())
-	mySubnets := networkcommons.Subnets{}
-	myActiveSubnets := 0
-	for _, v := range myValidators {
-		subnet := networkcommons.CommitteeSubnet(v.CommitteeID())
-		if !mySubnets.IsSet(subnet) {
-			mySubnets.Set(subnet)
-			myActiveSubnets++
-		}
-	}
+	// Post-Boole-fork committees live on Boole subnets; from scheduling through the transition
+	// both the Alan and Boole subnets are in play, so budget peers for both. With no fork
+	// scheduled (Forks.Boole pinned to MaxUint64) only Alan subnets count — scheduling the fork
+	// ships in a release, so a restart re-tallies before Boole subnets ever matter.
+	booleFork := n.networkConfig.BooleForkAtSlot(n.networkConfig.EstimatedCurrentSlot())
+	myActiveSubnets := operatorActiveSubnets(myValidators, n.networkConfig.BooleForkScheduled(), booleFork)
 	idealMaxPeers := min(baseMaxPeers+idealPeersPerSubnet*myActiveSubnets, maxPeersLimit)
 	if n.cfg.P2pNetworkConfig.MaxPeers < idealMaxPeers {
 		n.logger.Warn("increasing MaxPeers to match the operator's subscribed subnets",
@@ -651,6 +650,26 @@ func (n *node) applyDynamicMaxPeers() {
 		)
 		n.cfg.P2pNetworkConfig.MaxPeers = idealMaxPeers
 	}
+}
+
+// operatorActiveSubnets returns the number of distinct committee subnets the operator's validators
+// participate in. Boole and Alan subnets are tallied in separate bitmaps: they are independent gossip
+// topics (/ssv/<net>/boole/<n> vs ssv.v2.<n>) even when their subnet numbers coincide, so a shared
+// bitmap would under-count on collision. Boole subnets are only counted once the fork is scheduled
+// (otherwise MaxPeers would be overprovisioned on production networks with no fork set); Alan subnets
+// are counted until the fork activates. BooleCommitteeSubnet may return UnknownSubnetId for an
+// empty committee, but Set drops out-of-range indices, so it never inflates the count.
+func operatorActiveSubnets(validators []*ssvtypes.SSVShare, booleScheduled, booleFork bool) int {
+	var booleSubnets, alanSubnets networkcommons.Subnets
+	for _, v := range validators {
+		if booleScheduled {
+			booleSubnets.Set(v.BooleCommitteeSubnet())
+		}
+		if !booleFork {
+			alanSubnets.Set(v.AlanCommitteeSubnet())
+		}
+	}
+	return booleSubnets.ActiveCount() + alanSubnets.ActiveCount()
 }
 
 // startNetwork wires validator stats into the p2p layer, then sets up + starts the network and

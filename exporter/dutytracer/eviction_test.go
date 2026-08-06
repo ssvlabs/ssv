@@ -65,7 +65,7 @@ func TestEviction(t *testing.T) {
 		return true
 	})
 
-	collector.committeeTraces.Range(func(committeeID spectypes.CommitteeID, slotToTraceMap *hashmap.Map[phase0.Slot, *committeeDutyTrace]) bool {
+	collector.committeeTraces.Range(func(key committeeTraceKey, slotToTraceMap *hashmap.Map[phase0.Slot, *committeeDutyTrace]) bool {
 		_, found := slotToTraceMap.Get(slot1)
 		if found {
 			t.Fatalf("committee: slot %d not evicted", slot1)
