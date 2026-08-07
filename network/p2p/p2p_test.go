@@ -12,6 +12,7 @@ import (
 	"time"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -23,6 +24,7 @@ import (
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -186,7 +188,9 @@ func generateValidatorMsg(ks *spectestingutils.TestKeySet, round specqbft.Round,
 
 	fullData := spectestingutils.TestingQBFTFullData
 
-	nonCommitteeIdentifier := spectypes.NewMsgID(netCfg.DomainType, ks.ValidatorPK.Serialize(), nonCommitteeRole)
+	// Derive the domain per-slot like production (p2p_setup.go DomainTypeAtSlot) so the
+	// fixture stays valid on both sides of the Boole fork (SSV_TEST_BOOLE_FORK matrix).
+	nonCommitteeIdentifier := spectypes.NewMsgID(netCfg.DomainTypeAtSlot(phase0.Slot(height)), ks.ValidatorPK.Serialize(), nonCommitteeRole)
 
 	qbftMessage := &specqbft.Message{
 		MsgType:    specqbft.ProposalMsgType,
@@ -220,7 +224,7 @@ func generateCommitteeMsg(ks *spectestingutils.TestKeySet, round specqbft.Round)
 	fullData := spectestingutils.TestingQBFTFullData
 
 	encodedCommitteeID := append(bytes.Repeat([]byte{0}, 16), committeeID[:]...)
-	committeeIdentifier := spectypes.NewMsgID(netCfg.DomainType, encodedCommitteeID, spectypes.RoleCommittee)
+	committeeIdentifier := spectypes.NewMsgID(netCfg.DomainTypeAtSlot(phase0.Slot(height)), encodedCommitteeID, spectypes.RoleCommittee)
 
 	qbftMessage := &specqbft.Message{
 		MsgType:    specqbft.ProposalMsgType,
@@ -240,16 +244,19 @@ func generateCommitteeMsg(ks *spectestingutils.TestKeySet, round specqbft.Round)
 	return signedSSVMessage
 }
 
+// roundLeader must agree with the validator's leader check, which delegates to the fork-aware
+// qbft.Proposer — the post-fork variant adds an epoch offset that a hand-rolled pre-fork
+// formula misses, making every committee proposal reject with ErrSignerNotLeader on the
+// post-fork CI leg for ~3 of every 4 epochs.
 func roundLeader(ks *spectestingutils.TestKeySet, height specqbft.Height, round specqbft.Round) spectypes.OperatorID {
 	share := spectestingutils.TestingShare(ks, 1)
 
-	firstRoundIndex := 0
-	if height != specqbft.FirstHeight {
-		firstRoundIndex += int(height) % len(share.Committee)
+	committee := make([]spectypes.OperatorID, 0, len(share.Committee))
+	for _, member := range share.Committee {
+		committee = append(committee, member.Signer)
 	}
 
-	index := (firstRoundIndex + int(round) - int(specqbft.FirstRound)) % len(share.Committee)
-	return share.Committee[index].Signer
+	return qbft.Proposer(height, round, committee, networkconfig.TestNetwork)
 }
 
 func dummyMsg(t *testing.T, pkHex string, height int, role spectypes.RunnerRole) (spectypes.MessageID, *spectypes.SignedSSVMessage) {
@@ -260,7 +267,7 @@ func dummyMsg(t *testing.T, pkHex string, height int, role spectypes.RunnerRole)
 		committeeID := ssvtypes.ComputeCommitteeID([]spectypes.OperatorID{1, 2, 3, 4})
 		dutyExecutorID = append(bytes.Repeat([]byte{0}, 16), committeeID[:]...)
 	}
-	id := spectypes.NewMsgID(networkconfig.TestNetwork.DomainType, dutyExecutorID, role)
+	id := spectypes.NewMsgID(networkconfig.TestNetwork.DomainTypeAtSlot(phase0.Slot(height)), dutyExecutorID, role)
 
 	qbftMessage := &specqbft.Message{
 		MsgType:    specqbft.CommitMsgType,
