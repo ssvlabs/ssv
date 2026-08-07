@@ -271,13 +271,12 @@ func TestValidatorTracesCore_StraddlingFork(t *testing.T) {
 		assert.NotErrorAs(t, err, &valErr)
 	}
 
-	// the two post-fork slots (boundarySlot, boundarySlot+1) are reported as
-	// non-fatal notes since no pubkeys/indices were supplied to filter the
-	// now-committee-backed AGGREGATOR duty.
-	require.Len(t, errs.Errors, 2)
-	assert.Contains(t, errs.Errors[0].Error(), fmt.Sprintf("slot %d", boundarySlot))
+	// the two post-fork slots (boundarySlot, boundarySlot+1) are reported as a
+	// single aggregated non-fatal note per role since no pubkeys/indices were
+	// supplied to filter the now-committee-backed AGGREGATOR duty.
+	require.Len(t, errs.Errors, 1)
+	assert.Contains(t, errs.Errors[0].Error(), fmt.Sprintf("slots %d-%d", boundarySlot, boundarySlot+1))
 	assert.Contains(t, errs.Errors[0].Error(), "committee duty")
-	assert.Contains(t, errs.Errors[1].Error(), fmt.Sprintf("slot %d", boundarySlot+1))
 }
 
 // mockValidatorTraceStore is a minimal dutyTraceStore implementation for

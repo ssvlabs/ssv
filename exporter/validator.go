@@ -40,14 +40,20 @@ func (e *Exporter) ValidatorTracesCore(request *ValidatorTracesQuery) (*Validato
 		return nil, multierror.Append(nil, &ValidationError{Err: indicesErr})
 	}
 
+	// request validation only gates on 'from': a window whose tail crosses
+	// Boole reaches post-fork slots without pubkeys/indices. Fork state is
+	// monotonic in slot, so that tail is one contiguous range per role —
+	// record where it starts and report it as a single non-fatal note per
+	// role below, rather than allocating one note per skipped slot.
+	postForkNoteFrom := map[spectypes.BeaconRole]phase0.Slot{}
+
 	for s := request.From; s <= request.To; s++ {
 		slot := phase0.Slot(s)
 		for _, role := range request.Roles {
 			if e.isCommitteeDutyAtSlot(role, slot) && len(indices) == 0 {
-				// request validation only gates on 'from': a window whose tail crosses
-				// Boole reaches here for its post-fork slots without pubkeys/indices,
-				// so report the gap as a non-fatal note instead of silently skipping it.
-				errs = multierror.Append(errs, fmt.Errorf("%w: slot %d: role %s is a committee duty post-fork, please provide either pubkeys or indices to filter the duty for a specific validators subset or use the /committee endpoint to query all the corresponding duties", ErrPostForkCommitteeDutyNote, slot, role.String()))
+				if _, ok := postForkNoteFrom[role]; !ok {
+					postForkNoteFrom[role] = slot
+				}
 				continue
 			}
 
@@ -60,6 +66,15 @@ func (e *Exporter) ValidatorTracesCore(request *ValidatorTracesQuery) (*Validato
 			results = append(results, duties...)
 			errs = multierror.Append(errs, err)
 		}
+	}
+
+	for _, role := range request.Roles {
+		noteFrom, ok := postForkNoteFrom[role]
+		if !ok {
+			continue
+		}
+		delete(postForkNoteFrom, role) // guard against duplicate roles in the request
+		errs = multierror.Append(errs, fmt.Errorf("%w: slots %d-%d: role %s is a committee duty post-fork, please provide either pubkeys or indices to filter the duty for a specific validators subset or use the /committee endpoint to query all the corresponding duties", ErrPostForkCommitteeDutyNote, noteFrom, request.To, role.String()))
 	}
 
 	// by design, not found duties are expected and not considered as API errors
