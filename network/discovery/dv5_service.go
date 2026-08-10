@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/ethereum/go-ethereum/p2p/discover"
@@ -82,6 +83,9 @@ type DiscV5Service struct {
 	subnets   commons.Subnets
 
 	publishLock chan struct{}
+
+	closeOnce sync.Once
+	closeErr  error
 }
 
 func NewDiscV5Service(pctx context.Context, logger *zap.Logger, opts *Options) (*DiscV5Service, error) {
@@ -109,26 +113,48 @@ func NewDiscV5Service(pctx context.Context, logger *zap.Logger, opts *Options) (
 		zap.Any("hostDNS", opts.HostDNS),
 	)
 	if err := dvs.initDiscV5Listener(opts); err != nil {
+		// initDiscV5Listener unwinds its own resources, but the context we
+		// derived above is ours to release on this failure path — the discarded
+		// service's Close (which would cancel it) never runs.
+		cancel()
 		return nil, err
 	}
 	return &dvs, nil
 }
 
-// Close implements io.Closer
+// Close implements io.Closer and is idempotent: a repeat call would panic
+// re-closing sharedConn.Unhandled, so the guard lives here. The sole production
+// caller (p2pNetwork.Close) already closes once, but tests and any future caller
+// reach this directly.
 func (dvs *DiscV5Service) Close() error {
+	dvs.closeOnce.Do(func() {
+		dvs.closeErr = dvs.close()
+	})
+	return dvs.closeErr
+}
+
+func (dvs *DiscV5Service) close() error {
 	if dvs.cancel != nil {
 		dvs.cancel()
 	}
-	if dvs.conn != nil {
-		if err := dvs.conn.Close(); err != nil {
-			return err
-		}
+	// Order matters. The post-fork listener produces into sharedConn.Unhandled,
+	// so it must be fully stopped before that channel is closed — closing it
+	// mid-send panics the producer. Stopping the listeners first is safe:
+	// SharedUDPConn.Close releases the pre-fork reader, and draining continues
+	// throughout so the post-fork listener cannot wedge on its way down.
+	if dvs.dv5Listener != nil {
+		dvs.dv5Listener.Close()
 	}
 	if dvs.sharedConn != nil {
 		close(dvs.sharedConn.Unhandled)
+		dvs.sharedConn.WaitDrained()
 	}
-	if dvs.dv5Listener != nil {
-		dvs.dv5Listener.Close()
+	if dvs.conn != nil {
+		// The post-fork listener owns this socket and closes it on shutdown, so
+		// finding it already closed is expected rather than an error.
+		if err := dvs.conn.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
+			return err
+		}
 	}
 	return nil
 }
@@ -348,8 +374,21 @@ func (dvs *DiscV5Service) checkPeer(ctx context.Context, e PeerEvent) error {
 	return nil
 }
 
+// listenV5 is indirected so tests can wrap or fail listener creation to
+// exercise initDiscV5Listener's error-path cleanup; it returns the Listener
+// interface, not *discover.UDPv5, so a wrapper can be substituted.
+var listenV5 = func(conn discover.UDPConn, ln *enode.LocalNode, cfg discover.Config) (Listener, error) {
+	// Return an untyped nil on error, never a (*discover.UDPv5)(nil) wrapped in
+	// the interface, so a nil check on the result is meaningful for any caller.
+	listener, err := discover.ListenV5(conn, ln, cfg)
+	if err != nil {
+		return nil, err
+	}
+	return listener, nil
+}
+
 // initDiscV5Listener creates a new listener and starts it
-func (dvs *DiscV5Service) initDiscV5Listener(discOpts *Options) error {
+func (dvs *DiscV5Service) initDiscV5Listener(discOpts *Options) (err error) {
 	opts := discOpts.DiscV5Opts
 	if err := opts.Validate(); err != nil {
 		return fmt.Errorf("invalid opts: %w", err)
@@ -362,6 +401,16 @@ func (dvs *DiscV5Service) initDiscV5Listener(discOpts *Options) error {
 		return fmt.Errorf("could not listen UDP: %w", err)
 	}
 	dvs.conn = udpConn
+
+	// Registered before anything else can fail, so every error path below
+	// releases the socket. Runs last of the deferred cleanups, by which point a
+	// listener may already have closed it.
+	defer func() {
+		if err != nil {
+			_ = udpConn.Close()
+			dvs.conn = nil
+		}
+	}()
 
 	localNode, err := dvs.createLocalNode(discOpts, ipAddr)
 	if err != nil {
@@ -376,19 +425,39 @@ func (dvs *DiscV5Service) initDiscV5Listener(discOpts *Options) error {
 	}
 
 	// New discovery, with ProtocolID restriction, to be kept post-fork
-	unhandled := make(chan discover.ReadPacket, 100) // size taken from https://github.com/ethereum/go-ethereum/blob/v1.13.5/p2p/server.go#L551
-	sharedConn := &SharedUDPConn{udpConn, unhandled}
+	unhandled := make(chan discover.ReadPacket, unhandledChanSize)
+	sharedConn := NewSharedUDPConn(dvs.ctx, dvs.logger, udpConn, unhandled)
 	dvs.sharedConn = sharedConn
+
+	// Everything below can fail before dv5Listener is set, and the caller drops
+	// the half-built service without calling Close, so unwind here instead. The
+	// order mirrors Close: stop the producer first, since by the time the
+	// pre-fork listener is being built the post-fork one is already forwarding
+	// into unhandled, and closing that channel under a live producer panics.
+	var postForkListener Listener
+	defer func() {
+		if err == nil {
+			return
+		}
+		if postForkListener != nil {
+			postForkListener.Close() // also closes udpConn
+		}
+		_ = sharedConn.Close() // never returns an error
+		close(unhandled)
+		sharedConn.WaitDrained()
+		dvs.sharedConn = nil
+	}()
 
 	dv5PostForkCfg, err := opts.DiscV5Cfg(dvs.logger, WithProtocolID(protocolID), WithUnhandled(unhandled))
 	if err != nil {
 		return err
 	}
 
-	dv5PostForkListener, err := discover.ListenV5(udpConn, localNode, *dv5PostForkCfg)
+	dv5PostForkListener, err := listenV5(udpConn, localNode, *dv5PostForkCfg)
 	if err != nil {
 		return fmt.Errorf("could not create discV5 listener: %w", err)
 	}
+	postForkListener = dv5PostForkListener
 
 	dvs.logger.Debug("started discv5 post-fork listener (UDP)",
 		fields.BindIP(bindIP),
@@ -404,7 +473,7 @@ func (dvs *DiscV5Service) initDiscV5Listener(discOpts *Options) error {
 		return err
 	}
 
-	dv5PreForkListener, err := discover.ListenV5(sharedConn, localNode, *dv5PreForkCfg)
+	dv5PreForkListener, err := listenV5(sharedConn, localNode, *dv5PreForkCfg)
 	if err != nil {
 		return fmt.Errorf("could not create discV5 pre-fork listener: %w", err)
 	}
