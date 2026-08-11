@@ -50,7 +50,8 @@ func (e *Exporter) ValidatorTracesCore(request *ValidatorTracesQuery) (*Validato
 	for s := request.From; s <= request.To; s++ {
 		slot := phase0.Slot(s)
 		for _, role := range request.Roles {
-			if e.isCommitteeDutyAtSlot(role, slot) && len(indices) == 0 {
+			isCommittee := e.isCommitteeDutyAtSlot(role, slot)
+			if isCommittee && len(indices) == 0 {
 				if _, ok := postForkNoteFrom[role]; !ok {
 					postForkNoteFrom[role] = slot
 				}
@@ -58,7 +59,7 @@ func (e *Exporter) ValidatorTracesCore(request *ValidatorTracesQuery) (*Validato
 			}
 
 			providerFunc := e.getValidatorDutiesForRoleAndSlot
-			if e.isCommitteeDutyAtSlot(role, slot) {
+			if isCommittee {
 				providerFunc = e.getValidatorCommitteeDutiesForRoleAndSlot
 			}
 
