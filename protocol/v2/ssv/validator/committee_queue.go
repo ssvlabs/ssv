@@ -228,13 +228,16 @@ func (c *Committee) ConsumeQueue(
 			const couldNotHandleMsgLogPrefix = "could not handle message, "
 			switch {
 			case errors.Is(err, runner.ErrNoValidDutiesToExecute):
-				const droppingMsgDueToNoValidDutiesToExecuteEvent = "❗ " + couldNotHandleMsgLogPrefix + "dropping message and terminating committee-runner"
-				msgLogger.Error(droppingMsgDueToNoValidDutiesToExecuteEvent, zap.Error(err))
+				// Benign terminal, not a handling failure: the committee decided but this operator has
+				// no duties to execute (the runner already concluded the duty as not_required), so the
+				// message is dropped and the runner terminated without error-level noise.
+				const droppingMsgDueToNoValidDutiesToExecuteEvent = "no valid duties to execute, dropping message and terminating committee-runner"
+				msgLogger.Debug(droppingMsgDueToNoValidDutiesToExecuteEvent, zap.Error(err))
 				msgState.span.AddEvent(droppingMsgDueToNoValidDutiesToExecuteEvent, trace.WithAttributes(
 					attribute.String("drop_reason", err.Error()),
 					attribute.Int64("attempt", currentAttempt),
 				))
-				msgState.span.SetStatus(codes.Error, droppingMsgDueToNoValidDutiesToExecuteEvent)
+				msgState.span.SetStatus(codes.Ok, "")
 				msgState.span.End()
 				msgStates.Delete(msgKey)
 				return
