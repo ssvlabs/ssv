@@ -2485,7 +2485,7 @@ func TestExporterValidatorTraces_ForkGating(t *testing.T) {
 }
 
 // TestExporterValidatorTraces_ForkGating_ValidationSymmetric proves that validateValidatorRequest
-// (via isCommitteeDutyAtSlot at the range's upper bound) mirrors the same fork-gated routing decision for aggregator-family
+// (via isCommitteeDutyAtSlot at the range's lower bound) mirrors the same fork-gated routing decision for aggregator-family
 // roles: pre-Boole no pubkeys/indices are required, post-Boole they are (mirroring committee duties).
 func TestExporterValidatorTraces_ForkGating_ValidationSymmetric(t *testing.T) {
 	tests := []struct {
@@ -2567,9 +2567,9 @@ func TestExporterValidatorTraces_ForkGating_ValidationSymmetric(t *testing.T) {
 
 // TestExporterValidatorTraces_ForkGating_CrossForkRange proves the behavior of a slot range
 // straddling the Boole fork boundary (from pre-Boole, to post-Boole): validation is evaluated
-// at the range's upper bound, so aggregator-family roles require pubkeys/indices, and with
-// indices provided each slot routes independently — validator path before the boundary,
-// committee path from it onward.
+// at the range's lower bound, so unfiltered aggregator-family requests are accepted and served
+// partially — post-fork slots are reported as non-fatal notes — and with indices provided each
+// slot routes independently: validator path before the boundary, committee path from it onward.
 func TestExporterValidatorTraces_ForkGating_CrossForkRange(t *testing.T) {
 	const booleEpoch = phase0.Epoch(5)
 	idx := phase0.ValidatorIndex(1)
@@ -2741,7 +2741,15 @@ func TestExporterValidatorTraces_ForkGating_ZeroPreForkTraces(t *testing.T) {
 		req.Header.Set("Content-Type", "application/json")
 		rec := httptest.NewRecorder()
 
-		require.Error(t, exp.ValidatorTraces(rec, req))
+		err := exp.ValidatorTraces(rec, req)
+		require.Error(t, err)
+
+		var apiErr *api.ErrorResponse
+		require.ErrorAs(t, err, &apiErr)
+		require.Equal(t, http.StatusInternalServerError, apiErr.Code,
+			"a genuine store failure must not be masked by the post-fork note exemption")
+		require.Contains(t, apiErr.Message, "forced error on GetValidatorDuties",
+			"the genuine error, not a post-fork note, must surface to the caller")
 	})
 }
 
