@@ -563,9 +563,17 @@ func (c *Committee) createRunner(
 
 	switch duty := duty.(type) {
 	case *spectypes.CommitteeDuty:
-		c.Runners[duty.DutySlot()] = r.(*runner.CommitteeRunner)
+		cr, ok := r.(*runner.CommitteeRunner)
+		if !ok {
+			return nil, fmt.Errorf("BUG: runner created for committee duty has type %T, expected *runner.CommitteeRunner", r)
+		}
+		c.Runners[duty.DutySlot()] = cr
 	case *spectypes.AggregatorCommitteeDuty:
-		c.AggregatorRunners[duty.DutySlot()] = r.(*runner.AggregatorCommitteeRunner)
+		ar, ok := r.(*runner.AggregatorCommitteeRunner)
+		if !ok {
+			return nil, fmt.Errorf("BUG: runner created for aggregator committee duty has type %T, expected *runner.AggregatorCommitteeRunner", r)
+		}
+		c.AggregatorRunners[duty.DutySlot()] = ar
 	default:
 		c.logger.Panic("BUG: attempt to create committee runner with non-committee duty type",
 			zap.String("type", fmt.Sprintf("%T", duty)))
