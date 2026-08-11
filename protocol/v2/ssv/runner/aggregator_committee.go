@@ -887,10 +887,11 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 		return fmt.Errorf("could not get expected post consensus roots and beacon objects: %w", err)
 	}
 	if len(beaconObjects) == 0 {
-		// Empty post-quorum (all beacon objects failed to build) is terminal and non-recoverable:
-		// committee_queue drops the message and terminates the runner on this error. Classify as
-		// failed (matching CommitteeRunner) rather than leaving the watcher to report a false stuck.
-		r.markDutyFailed(ErrNoValidDutiesToExecute)
+		// Benign terminal: consensus reached but this operator has nothing to submit (no aggregators
+		// or contributors assigned to it in the decided data). Conclude as not_required (matching
+		// CommitteeRunner) — neither a false "stuck" nor a spurious "failed". The sentinel still
+		// tells committee_queue to drop the message and terminate the runner.
+		r.markDutyNotRequired()
 		return ErrNoValidDutiesToExecute
 	}
 

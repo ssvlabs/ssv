@@ -379,6 +379,10 @@ listener:
 	)
 
 	if totalAttestations == 0 && totalSyncCommittee == 0 {
+		// Benign terminal: the committee decided but this operator ended up with zero valid duties to
+		// sign. Conclude as not_required so the watcher doesn't report a false "stuck"; the sentinel
+		// still tells committee_queue to drop the message and terminate the runner.
+		r.markDutyNotRequired()
 		return ErrNoValidDutiesToExecute
 	}
 
@@ -514,6 +518,9 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 	// are tagged recoverableReconstructError and must not be recorded as failed.
 	// Shutdown (context cancellation) needs no special-casing — markDutyFailed drops a context.Canceled
 	// reason, so a submission aborted by shutdown isn't recorded as a failure.
+	// The benign no-beacon-objects sentinel (ErrNoValidDutiesToExecute) pre-concludes the duty as
+	// not_required before returning, which makes this deferred markDutyFailed a no-op (concludeDuty
+	// is idempotent) — it must not be recorded as failed either.
 	defer func() {
 		if err != nil && !isRecoverableReconstructError(err) {
 			r.markDutyFailed(err)
@@ -529,6 +536,12 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 		return fmt.Errorf("could not get expected post consensus roots and beacon objects: %w", err)
 	}
 	if len(beaconObjects) == 0 {
+		// Benign terminal: the committee reached consensus but this operator has no beacon objects to
+		// submit (e.g. divergent validator sets across the committee's operators). Conclude as
+		// not_required — not failed — before returning the sentinel; concludeDuty is idempotent, so
+		// the deferred markDutyFailed becomes a no-op. The sentinel still tells committee_queue to
+		// drop the message and terminate the runner.
+		r.markDutyNotRequired()
 		return ErrNoValidDutiesToExecute
 	}
 

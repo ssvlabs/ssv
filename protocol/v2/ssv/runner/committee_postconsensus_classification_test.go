@@ -122,3 +122,85 @@ func TestCommitteeRunnerProcessPostConsensus_RecoverableInvalidSigsThenSucceeds(
 		t.Fatal("expected a succeeded duty conclusion after recovery, got none")
 	}
 }
+
+// invalidateDutiesInGuard marks every validator duty of the committee duty invalid in the guard
+// stub, so expectedPostConsensusRootsAndBeaconObjects (and the ProcessConsensus signing loop) skips
+// them all.
+func invalidateDutiesInGuard(guard *committeeDutyGuardStub, duty *spectypes.CommitteeDuty) {
+	guard.validErrs = make(map[string]error)
+	for _, vd := range duty.ValidatorDuties {
+		key := guard.validKey(vd.Type, spectypes.ValidatorPK(vd.PubKey), vd.DutySlot())
+		guard.validErrs[key] = errors.New("duty no longer valid")
+	}
+}
+
+// TestCommitteeRunnerProcessPostConsensus_MarksNotRequiredOnNoBeaconObjects is the regression test
+// for #2903: a post-consensus quorum where this operator ends up with no beacon objects to submit
+// (e.g. divergent validator sets across the committee's operators — modeled here by invalidating
+// the duties in the guard after consensus) is a benign terminal. It must conclude not_required —
+// not failed (the previous behavior, surfacing as a spurious "⚠️ duty failed") and not a silent
+// stall — while still surfacing the sentinel for the queue's terminal-drop handling.
+func TestCommitteeRunnerProcessPostConsensus_MarksNotRequiredOnNoBeaconObjects(t *testing.T) {
+	guard := &committeeDutyGuardStub{}
+	env := newCommitteeRunnerEnv(t, []int{1}, guard, &doppelgangerStub{})
+	duty := spectestingutils.TestingCommitteeDuty([]int{1}, nil, spec.DataVersionElectra)
+
+	env.startAndDecideCommitteeDuty(t, duty)
+	concluded := observeConclusion(env)
+
+	invalidateDutiesInGuard(guard, duty)
+
+	var postConsensusErr error
+	for id := spectypes.OperatorID(1); id <= 3; id++ {
+		msg := spectestingutils.PostConsensusCommitteeMsgForDuty(duty, env.keySetMap, id)
+		if err := env.runner.ProcessPostConsensus(context.Background(), env.logger, msg); err != nil {
+			postConsensusErr = err
+		}
+	}
+
+	require.ErrorIs(t, postConsensusErr, ErrNoValidDutiesToExecute, "the benign sentinel must surface to the queue")
+
+	select {
+	case c := <-concluded:
+		require.Equal(t, dutyOutcomeNotRequired, c.outcome, "no beacon objects to submit must conclude not_required, not failed")
+		require.NoError(t, c.reason)
+	default:
+		t.Fatal("expected a not_required duty conclusion, got none")
+	}
+	require.True(t, env.runner.State.Succeeded, "not_required is a correct completion")
+	require.Empty(t, env.beacon.GetBroadcastedRoots(), "nothing should have been submitted")
+}
+
+// TestCommitteeRunnerProcessConsensus_MarksNotRequiredOnNoValidDuties covers the consensus-phase
+// sibling of the #2903 sentinel: a committee that decides while this operator has zero valid duties
+// to sign (all invalidated in the guard before consensus) previously concluded via no marker at
+// all, surfacing as a false "stuck". It must conclude not_required and surface the sentinel.
+func TestCommitteeRunnerProcessConsensus_MarksNotRequiredOnNoValidDuties(t *testing.T) {
+	guard := &committeeDutyGuardStub{}
+	env := newCommitteeRunnerEnv(t, []int{1}, guard, &doppelgangerStub{})
+	duty := spectestingutils.TestingCommitteeDuty([]int{1}, nil, spec.DataVersionElectra)
+
+	ctx := t.Context()
+	require.NoError(t, env.runner.StartNewDuty(ctx, env.logger, duty, env.sampleKey.Threshold))
+	concluded := observeConclusion(env)
+
+	invalidateDutiesInGuard(guard, duty)
+
+	var consensusErr error
+	for _, msg := range spectestingutils.CommitteeInputForDuty(duty, duty.Slot, env.keySetMap, false) {
+		if err := env.runner.ProcessConsensus(ctx, env.logger, msg); err != nil {
+			consensusErr = err
+		}
+	}
+
+	require.ErrorIs(t, consensusErr, ErrNoValidDutiesToExecute, "the benign sentinel must surface to the queue")
+
+	select {
+	case c := <-concluded:
+		require.Equal(t, dutyOutcomeNotRequired, c.outcome, "deciding with zero valid duties must conclude not_required")
+		require.NoError(t, c.reason)
+	default:
+		t.Fatal("expected a not_required duty conclusion, got none")
+	}
+	require.True(t, env.runner.State.Succeeded, "not_required is a correct completion")
+}

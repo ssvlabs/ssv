@@ -172,6 +172,46 @@ func TestAggregatorCommitteeRunnerProcessPostConsensus_MarksFailedOnSubmitError(
 	require.False(t, env.runner.State.Succeeded, "a failed duty must not be marked succeeded")
 }
 
+// TestAggregatorCommitteeRunnerProcessPostConsensus_MarksNotRequiredOnNoBeaconObjects is the
+// regression test for #2903: a post-consensus quorum where the decided data leaves this operator
+// with no beacon objects to submit is a benign terminal and must conclude not_required — not failed
+// (the previous behavior, surfacing as a spurious "⚠️ duty failed") — while still surfacing the
+// sentinel for the queue's terminal-drop handling. The decided value is swapped after consensus for
+// one with no aggregators or contributors to model the empty-objects terminal.
+func TestAggregatorCommitteeRunnerProcessPostConsensus_MarksNotRequiredOnNoBeaconObjects(t *testing.T) {
+	ctx := t.Context()
+	const version = spec.DataVersionElectra
+
+	base := protocoltesting.NewTestingBeaconNodeWrapped().(*protocoltesting.BeaconNodeWrapped)
+	env := newAggregatorCommitteeRunnerEnv(t, []int{1}, base)
+	duty := spectestingutils.TestingAggregatorCommitteeDutyForValidators([]int{1}, []int{}, version)
+
+	concluded := env.startAndFeedThroughConsensus(t, ctx, duty, version)
+
+	emptyDecided := &spectypes.AggregatorCommitteeConsensusData{Version: version}
+	encoded, err := emptyDecided.Encode()
+	require.NoError(t, err)
+	env.runner.State.DecidedValue = encoded
+
+	var postConsensusErr error
+	for _, psig := range postConsensusMsgsFromFixture(duty, env.keySetMap, version) {
+		if err := env.runner.ProcessPostConsensus(ctx, env.logger, psig); err != nil {
+			postConsensusErr = err
+		}
+	}
+
+	require.ErrorIs(t, postConsensusErr, ErrNoValidDutiesToExecute, "the benign sentinel must surface to the queue")
+
+	select {
+	case c := <-concluded:
+		require.Equal(t, dutyOutcomeNotRequired, c.outcome, "no beacon objects to submit must conclude not_required, not failed")
+		require.NoError(t, c.reason)
+	default:
+		t.Fatal("expected a not_required duty conclusion, got none")
+	}
+	require.True(t, env.runner.State.Succeeded, "not_required is a correct completion")
+}
+
 // TestAggregatorCommitteeRunnerProcessPostConsensus_DoesNotMarkFailedOnInvalidSigs asserts that the
 // recoverable reconstruct-invalid-signatures case is NOT concluded failed: the root can later re-cross
 // quorum on a subsequent message, so concluding here would mask a duty that still completes.
