@@ -6,6 +6,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ssvlabs/ssv/protocol/v2/message"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -77,4 +78,30 @@ func TestFormatRunnerRole(t *testing.T) {
 		require.NotEqual(t, "UNDEFINED", FormatRunnerRole(ssvtypes.RoleSyncCommitteeContribution))
 		require.NotEqual(t, FormatRunnerRole(ssvtypes.RoleAggregator), FormatRunnerRole(ssvtypes.RoleSyncCommitteeContribution))
 	})
+}
+
+// TestRunnerRoleStringMappersLockstep guards the contract documented on
+// ssvtypes.RunnerRoleToString and message.RunnerRoleToString: the two mappers are
+// independent (one reaches the strings via the spec's String() plus a deprecated-role
+// shim, the other via its own switch) and must produce the same string for every runner
+// role that is valid in any fork. A role added or deprecated in one must be reflected in
+// the other — this test is what fails when they drift.
+func TestRunnerRoleStringMappersLockstep(t *testing.T) {
+	t.Parallel()
+
+	// The full role union across forks, mirroring messageValidator.validRoleUnion.
+	roles := []spectypes.RunnerRole{
+		spectypes.RoleCommittee,
+		spectypes.RoleAggregatorCommittee,
+		spectypes.RoleProposer,
+		spectypes.RoleValidatorRegistration,
+		spectypes.RoleVoluntaryExit,
+		ssvtypes.RoleAggregator,
+		ssvtypes.RoleSyncCommitteeContribution,
+	}
+
+	for _, role := range roles {
+		require.Equal(t, message.RunnerRoleToString(role), FormatRunnerRole(role),
+			"role %d: message.RunnerRoleToString and utils.FormatRunnerRole disagree", role)
+	}
 }
