@@ -409,7 +409,7 @@
         },
         "/v1/exporter/traces/validator": {
             "get": {
-                "description": "Returns consensus, decided, and message traces for the requested validator duties.",
+                "description": "Returns consensus, decided, and message traces for the requested validator duties.\nFor AGGREGATOR and SYNC_COMMITTEE_CONTRIBUTION the fork state is evaluated at 'from': a range whose\n'from' is post-Boole and that supplies no 'pubkeys'/'indices' is rejected with 400, while a range whose\n'from' is pre-Boole is accepted and served partially — post-Boole slots are omitted from 'data' and\nreported as one note per role in 'errors' with the text \"committee duty post-fork\". Such a response is\na 200 even when 'data' is empty; clients must inspect 'errors' to detect partial coverage, and should\nsupply 'indices'/'pubkeys' or use /traces/committee to retrieve the post-fork portion.",
                 "consumes": [
                     "application/json"
                 ],
@@ -514,7 +514,7 @@
                 }
             },
             "post": {
-                "description": "Returns consensus, decided, and message traces for the requested validator duties.",
+                "description": "Returns consensus, decided, and message traces for the requested validator duties.\nFor AGGREGATOR and SYNC_COMMITTEE_CONTRIBUTION the fork state is evaluated at 'from': a range whose\n'from' is post-Boole and that supplies no 'pubkeys'/'indices' is rejected with 400, while a range whose\n'from' is pre-Boole is accepted and served partially — post-Boole slots are omitted from 'data' and\nreported as one note per role in 'errors' with the text \"committee duty post-fork\". Such a response is\na 200 even when 'data' is empty; clients must inspect 'errors' to detect partial coverage, and should\nsupply 'indices'/'pubkeys' or use /traces/committee to retrieve the post-fork portion.",
                 "consumes": [
                     "application/json"
                 ],

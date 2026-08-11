@@ -13,6 +13,12 @@ import (
 // ValidatorTraces godoc
 // @Summary Retrieve validator duty traces
 // @Description Returns consensus, decided, and message traces for the requested validator duties.
+// @Description For AGGREGATOR and SYNC_COMMITTEE_CONTRIBUTION the fork state is evaluated at 'from': a range whose
+// @Description 'from' is post-Boole and that supplies no 'pubkeys'/'indices' is rejected with 400, while a range whose
+// @Description 'from' is pre-Boole is accepted and served partially — post-Boole slots are omitted from 'data' and
+// @Description reported as one note per role in 'errors' with the text "committee duty post-fork". Such a response is
+// @Description a 200 even when 'data' is empty; clients must inspect 'errors' to detect partial coverage, and should
+// @Description supply 'indices'/'pubkeys' or use /traces/committee to retrieve the post-fork portion.
 // @Tags Exporter
 // @Accept json
 // @Produce json
