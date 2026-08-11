@@ -550,6 +550,9 @@ func (c *Committee) createRunner(
 	if err != nil {
 		return nil, fmt.Errorf("create committee runner: %w", err)
 	}
+	if r == nil {
+		return nil, fmt.Errorf("BUG: CreateRunnerFn returned nil runner without error")
+	}
 
 	// Wire the QBFT round-timer factory, bound to a msg ID carrying this duty's role so timeout
 	// events are routed to the matching (committee vs aggregator-committee) slot queue.
@@ -579,7 +582,7 @@ func (c *Committee) createRunner(
 			zap.String("type", fmt.Sprintf("%T", duty)))
 	}
 
-	return r, err
+	return r, nil
 }
 
 func (c *Committee) extractValidatorDuties(duty spectypes.Duty) []*spectypes.ValidatorDuty {

@@ -17,6 +17,10 @@ const specV122MaxSizePartialSignatureMessages = 217748
 // drifting below the pinned ssv-spec's worst-case message sizes. If this
 // fails after a spec bump, re-derive the corresponding const.go values.
 func TestSizeCapsCoverSpecWorstCase(t *testing.T) {
+	// The post-fork cap is compared against the spec's full-SSVMessage-envelope constant,
+	// which is over-conservative: the cap applies to SSVMessage.Data, the inner encoding.
+	// The pre-fork guard below compares against the inner v1.2.2 constant instead — the
+	// only partial-signature size constant that spec version published.
 	require.GreaterOrEqual(t, maxEncodedPartialSignatureSize, maxmsgsize.MaxSizeSSVMessageFromPartialSignatureMessages)
 	require.GreaterOrEqual(t, maxEncodedConsensusMsgSize, maxmsgsize.MaxSizeSSVMessageFromQBFTMessage)
 	require.GreaterOrEqual(t, MaxEncodedMsgSize, maxmsgsize.MaxSizeSignedSSVMessageFromQBFTWith2Justification)

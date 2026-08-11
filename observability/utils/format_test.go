@@ -104,4 +104,19 @@ func TestRunnerRoleStringMappersLockstep(t *testing.T) {
 		require.Equal(t, message.RunnerRoleToString(role), FormatRunnerRole(role),
 			"role %d: message.RunnerRoleToString and utils.FormatRunnerRole disagree", role)
 	}
+
+	// Sweep beyond the explicit list so a role added to the spec — which FormatRunnerRole
+	// picks up automatically via (RunnerRole).String() but message.RunnerRoleToString's
+	// hand-written switch would miss — fails here instead of drifting silently. Roles the
+	// spec does not know return "UNDEFINED" and are skipped: divergence on genuinely
+	// unknown values is intentional (the deprecated Alan roles also stringify to
+	// "UNDEFINED" in the spec, but they are covered by the explicit list above).
+	for i := 0; i <= 15; i++ {
+		role := spectypes.RunnerRole(i)
+		if role.String() == "UNDEFINED" {
+			continue
+		}
+		require.Equal(t, message.RunnerRoleToString(role), FormatRunnerRole(role),
+			"role %d is known to the spec but the two mappers disagree", role)
+	}
 }

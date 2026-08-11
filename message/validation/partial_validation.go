@@ -80,12 +80,15 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 }
 
 // currentMaxEncodedPartialSignatureSize returns the acceptance cap for encoded
-// partial-signature message data. The post-fork (boole AggregatorCommittee) worst case is
-// ~5x the pre-fork one, so pre-fork the smaller cap is enforced to keep the decode DoS
-// surface at its pre-boole size. The cap is enforced before decoding, when the message's
-// own slot is not yet known, so unlike the other fork gates in this package the switch is
-// wall-clock based — and flips one epoch before boole activation so that messages for
-// post-fork slots arriving early (clock skew) are never rejected against the smaller cap.
+// partial-signature message data (SSVMessage.Data). The post-fork (boole
+// AggregatorCommittee) worst case is ~3.3x the pre-fork one, so pre-fork the smaller cap
+// is enforced, bounding the inner PartialSignatureMessages decode at the pre-fork worst
+// case (~229 KB vs ~763 KB; the outer SignedSSVMessage decode that already happened is
+// bounded separately by MaxEncodedMsgSize). The cap is enforced before decoding, when the
+// message's own slot is not yet known, so unlike the other fork gates in this package the
+// switch is wall-clock based — and flips one epoch before boole activation (mirroring
+// SIP-43's one-epoch prior window) so that messages for post-fork slots arriving early
+// (clock skew) are never rejected against the smaller cap.
 func (mv *messageValidator) currentMaxEncodedPartialSignatureSize() int {
 	if mv.netCfg.BooleForkAtEpoch(mv.netCfg.EstimatedCurrentEpoch() + 1) {
 		return maxEncodedPartialSignatureSize
