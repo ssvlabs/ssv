@@ -106,8 +106,8 @@ func TestEthExecLayer(t *testing.T) {
 			valAddInput.produce()
 			testEnv.CloseFollowDistance(&blockNum)
 
-			// Run SyncHistory
-			lastHandledBlockNum, err = eventSyncer.SyncHistory(ctx, lastHandledBlockNum)
+			// Run SyncHistory (optimistic path, as on a normal node boot).
+			lastHandledBlockNum, err = eventSyncer.SyncHistory(ctx, lastHandledBlockNum, false)
 			require.NoError(t, err)
 
 			//check all the events were handled correctly and block number was increased

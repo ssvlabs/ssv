@@ -205,7 +205,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.Equal(t, 0, len(operators))
 
 		// Handle the event
-		lastProcessedBlock, _, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
+		lastProcessedBlock, _, err := eh.HandleBlockEventsStream(ctx, eventsCh, false, nil)
 		require.Equal(t, blockNum+1, lastProcessedBlock)
 		require.NoError(t, err)
 		blockNum++
@@ -320,7 +320,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			eventsCh <- block
 		}()
 
-		lastProcessedBlock, _, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
+		lastProcessedBlock, _, err := eh.HandleBlockEventsStream(ctx, eventsCh, false, nil)
 		require.NoError(t, err)
 		require.Equal(t, blockNum+1, lastProcessedBlock)
 		blockNum++
@@ -370,7 +370,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 				eventsCh <- block
 			}()
 
-			lastProcessedBlock, _, err = eh.HandleBlockEventsStream(ctx, eventsCh, false)
+			lastProcessedBlock, _, err = eh.HandleBlockEventsStream(ctx, eventsCh, false, nil)
 			require.NoError(t, err)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
 			blockNum++
@@ -419,7 +419,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 				eventsCh <- block
 			}()
 
-			lastProcessedBlock, _, err = eh.HandleBlockEventsStream(ctx, eventsCh, false)
+			lastProcessedBlock, _, err = eh.HandleBlockEventsStream(ctx, eventsCh, false, nil)
 			require.NoError(t, err)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
 			blockNum++
@@ -473,7 +473,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 				eventsCh <- block
 			}()
 
-			lastProcessedBlock, _, err = eh.HandleBlockEventsStream(ctx, eventsCh, false)
+			lastProcessedBlock, _, err = eh.HandleBlockEventsStream(ctx, eventsCh, false, nil)
 			require.NoError(t, err)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
 			blockNum++
@@ -522,7 +522,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			}()
 
 			validator3StampedFrom = netCfgVarEpoch.EstimatedCurrentSlot()
-			lastProcessedBlock, _, err = eh.HandleBlockEventsStream(ctx, eventsCh, false)
+			lastProcessedBlock, _, err = eh.HandleBlockEventsStream(ctx, eventsCh, false, nil)
 			require.NoError(t, err)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
 			blockNum++
@@ -572,7 +572,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 				eventsCh <- block
 			}()
 
-			lastProcessedBlock, _, err = eh.HandleBlockEventsStream(ctx, eventsCh, false)
+			lastProcessedBlock, _, err = eh.HandleBlockEventsStream(ctx, eventsCh, false, nil)
 			require.NoError(t, err)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
 			blockNum++
@@ -614,7 +614,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 				eventsCh <- block
 			}()
 
-			lastProcessedBlock, _, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
+			lastProcessedBlock, _, err := eh.HandleBlockEventsStream(ctx, eventsCh, false, nil)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
 			require.NoError(t, err)
 			blockNum++
@@ -640,7 +640,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 				eventsCh <- block
 			}()
 
-			lastProcessedBlock, _, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
+			lastProcessedBlock, _, err := eh.HandleBlockEventsStream(ctx, eventsCh, false, nil)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
 			require.NoError(t, err)
 			blockNum++
@@ -679,7 +679,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 				eventsCh <- block
 			}()
 
-			lastProcessedBlock, _, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
+			lastProcessedBlock, _, err := eh.HandleBlockEventsStream(ctx, eventsCh, false, nil)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
 			require.NoError(t, err)
 			blockNum++
@@ -723,7 +723,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 				eventsCh <- block
 			}()
 
-			lastProcessedBlock, _, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
+			lastProcessedBlock, _, err := eh.HandleBlockEventsStream(ctx, eventsCh, false, nil)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
 			require.NoError(t, err)
 			blockNum++
@@ -760,7 +760,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 				eventsCh <- block
 			}()
 
-			lastProcessedBlock, _, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
+			lastProcessedBlock, _, err := eh.HandleBlockEventsStream(ctx, eventsCh, false, nil)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
 			require.NoError(t, err)
 			blockNum++
@@ -805,7 +805,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 				eventsCh <- block
 			}()
 
-			lastProcessedBlock, _, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
+			lastProcessedBlock, _, err := eh.HandleBlockEventsStream(ctx, eventsCh, false, nil)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
 			require.NoError(t, err)
 			blockNum++
@@ -854,7 +854,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.NotNil(t, share)
 		require.False(t, share.Liquidated)
 
-		lastProcessedBlock, _, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
+		lastProcessedBlock, _, err := eh.HandleBlockEventsStream(ctx, eventsCh, false, nil)
 		require.Equal(t, blockNum+1, lastProcessedBlock)
 		require.NoError(t, err)
 		blockNum++
@@ -908,7 +908,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		netCfgVarEpoch.GenesisTime = time.Now().Add(-1000 * netCfgVarEpoch.SlotDuration)
 
 		stampedFrom := netCfgVarEpoch.EstimatedCurrentSlot()
-		lastProcessedBlock, _, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
+		lastProcessedBlock, _, err := eh.HandleBlockEventsStream(ctx, eventsCh, false, nil)
 		require.Equal(t, blockNum+1, lastProcessedBlock)
 		require.NoError(t, err)
 		stampedTo := netCfgVarEpoch.EstimatedCurrentSlot()
@@ -954,7 +954,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			eventsCh <- block
 		}()
 
-		lastProcessedBlock, _, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
+		lastProcessedBlock, _, err := eh.HandleBlockEventsStream(ctx, eventsCh, false, nil)
 		require.Equal(t, blockNum+1, lastProcessedBlock)
 		require.NoError(t, err)
 		blockNum++
@@ -996,7 +996,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.True(t, share.Liquidated)
 		netCfgVarEpoch.GenesisTime = time.Now().Add(-100 * netCfgVarEpoch.SlotDuration)
 
-		lastProcessedBlock, _, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
+		lastProcessedBlock, _, err := eh.HandleBlockEventsStream(ctx, eventsCh, false, nil)
 		require.Equal(t, blockNum+1, lastProcessedBlock)
 		require.NoError(t, err)
 
@@ -1040,7 +1040,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			eventsCh <- block
 		}()
 
-		lastProcessedBlock, _, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
+		lastProcessedBlock, _, err := eh.HandleBlockEventsStream(ctx, eventsCh, false, nil)
 		require.Equal(t, blockNum+1, lastProcessedBlock)
 		require.NoError(t, err)
 		blockNum++
@@ -1090,7 +1090,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			}()
 
 			// Handle the event
-			lastProcessedBlock, _, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
+			lastProcessedBlock, _, err := eh.HandleBlockEventsStream(ctx, eventsCh, false, nil)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
 			require.NoError(t, err)
 			blockNum++
@@ -1166,7 +1166,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 				eventsCh <- block
 			}()
 
-			lastProcessedBlock, _, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
+			lastProcessedBlock, _, err := eh.HandleBlockEventsStream(ctx, eventsCh, false, nil)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
 			require.NoError(t, err)
 			blockNum++
@@ -1229,7 +1229,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 				eventsCh <- block
 			}()
 
-			lastProcessedBlock, _, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
+			lastProcessedBlock, _, err := eh.HandleBlockEventsStream(ctx, eventsCh, false, nil)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
 			require.NoError(t, err)
 			blockNum++
@@ -1264,7 +1264,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.Equal(t, len(ops), len(operators))
 
 			// Handle the event
-			lastProcessedBlock, _, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
+			lastProcessedBlock, _, err := eh.HandleBlockEventsStream(ctx, eventsCh, false, nil)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
 			require.NoError(t, err)
 			blockNum++
@@ -1308,7 +1308,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.Equal(t, len(ops), len(operators))
 
 			// Handle OperatorAdded event
-			lastProcessedBlock, _, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
+			lastProcessedBlock, _, err := eh.HandleBlockEventsStream(ctx, eventsCh, false, nil)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
 			require.NoError(t, err)
 			blockNum++
@@ -1337,7 +1337,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.Equal(t, len(ops)+1, len(operators))
 
 			// Handle OperatorRemoved event
-			lastProcessedBlock, _, err = eh.HandleBlockEventsStream(ctx, eventsCh, false)
+			lastProcessedBlock, _, err = eh.HandleBlockEventsStream(ctx, eventsCh, false, nil)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
 			require.NoError(t, err)
 			blockNum++
@@ -1375,7 +1375,7 @@ func TestHandleBlockEventsStreamReturnsErrInferiorBlock(t *testing.T) {
 		eventsCh <- executionclient.BlockLogs{BlockNumber: 9}
 	}()
 
-	lastProcessedBlock, progressed, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
+	lastProcessedBlock, progressed, err := eh.HandleBlockEventsStream(ctx, eventsCh, false, nil)
 	require.ErrorIs(t, err, ErrInferiorBlock)
 	require.Zero(t, lastProcessedBlock)
 	require.False(t, progressed)
@@ -1384,6 +1384,126 @@ func TestHandleBlockEventsStreamReturnsErrInferiorBlock(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, found)
 	require.Equal(t, uint64(10), storedLastProcessedBlock.Uint64())
+}
+
+// TestHandleBlockEventsStreamRecordsDigests verifies the optimistic historical path (a non-nil
+// journalFrom) persists the verifier's bookkeeping: an unverified range spanning journalFrom..lastBlock,
+// and a per-block digest for each non-empty block (empty progression blocks get none — the
+// verifier reads their absence as "no logs there").
+func TestHandleBlockEventsStreamRecordsDigests(t *testing.T) {
+	logger, err := zap.NewDevelopment()
+	require.NoError(t, err)
+
+	ctx := t.Context()
+	ops, err := createOperators(1, 0)
+	require.NoError(t, err)
+
+	eh, _, err := setupEventHandler(t, ctx, logger, networkconfig.TestNetwork, ops[0], false)
+	require.NoError(t, err)
+
+	// Unknown topics are fine: they parse to no task without error, and digesting is over each
+	// log's (TxIndex, Index) identity regardless of the event type.
+	withLogs := executionclient.BlockLogs{
+		BlockNumber: 10,
+		Logs: []ethtypes.Log{
+			{BlockNumber: 10, TxIndex: 0, Index: 0, Topics: []ethcommon.Hash{{0x1}}},
+			{BlockNumber: 10, TxIndex: 1, Index: 3, Topics: []ethcommon.Hash{{0x2}}},
+		},
+	}
+	empty := executionclient.BlockLogs{BlockNumber: 11}
+
+	eventsCh := make(chan executionclient.BlockLogs, 2)
+	eventsCh <- withLogs
+	eventsCh <- empty
+	close(eventsCh)
+
+	journalFrom := uint64(10)
+	lastProcessedBlock, progressed, err := eh.HandleBlockEventsStream(ctx, eventsCh, false, &journalFrom)
+	require.NoError(t, err)
+	require.True(t, progressed)
+	require.Equal(t, uint64(11), lastProcessedBlock)
+
+	// The unverified range spans journalFrom..last block, cursor at the start.
+	ranges, err := eh.nodeStorage.ListUnverifiedRanges(nil)
+	require.NoError(t, err)
+	require.Equal(t, []operatorstorage.UnverifiedRange{{From: journalFrom, To: 11, Cursor: journalFrom}}, ranges)
+
+	got, found, err := eh.nodeStorage.GetBlockLogDigest(nil, 10)
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Equal(t, executionclient.BlockLogsDigest(withLogs.Logs), got)
+
+	_, found, err = eh.nodeStorage.GetBlockLogDigest(nil, 11)
+	require.NoError(t, err)
+	require.False(t, found)
+}
+
+// TestHandleBlockEventsStreamJournalsRangeOnFailure verifies the crash-atomicity property: the
+// unverified range is extended in the same transaction that advances the marker, so even when
+// the stream aborts mid-way the completed prefix is still journalled for verification (it can't
+// be silently skipped).
+func TestHandleBlockEventsStreamJournalsRangeOnFailure(t *testing.T) {
+	logger, err := zap.NewDevelopment()
+	require.NoError(t, err)
+
+	ctx := t.Context()
+	ops, err := createOperators(1, 0)
+	require.NoError(t, err)
+
+	eh, _, err := setupEventHandler(t, ctx, logger, networkconfig.TestNetwork, ops[0], false)
+	require.NoError(t, err)
+
+	// Blocks 10 and 11 process fine; the second block 11 is inferior (<= marker) and aborts the
+	// stream with an error, standing in for a crash partway through.
+	eventsCh := make(chan executionclient.BlockLogs, 3)
+	eventsCh <- executionclient.BlockLogs{BlockNumber: 10}
+	eventsCh <- executionclient.BlockLogs{BlockNumber: 11}
+	eventsCh <- executionclient.BlockLogs{BlockNumber: 11}
+	close(eventsCh)
+
+	journalFrom := uint64(10)
+	_, _, err = eh.HandleBlockEventsStream(ctx, eventsCh, false, &journalFrom)
+	require.ErrorIs(t, err, ErrInferiorBlock)
+
+	// The range covers exactly the successfully-processed prefix [10, 11].
+	ranges, err := eh.nodeStorage.ListUnverifiedRanges(nil)
+	require.NoError(t, err)
+	require.Equal(t, []operatorstorage.UnverifiedRange{{From: journalFrom, To: 11, Cursor: journalFrom}}, ranges)
+}
+
+// TestHandleBlockEventsStreamJournalsFromBlockZero verifies journalFrom is honored as a pointer,
+// not a 0-sentinel: an offset-0 sync (RegistrySyncOffset == 0) still journals rather than
+// silently disabling verification.
+func TestHandleBlockEventsStreamJournalsFromBlockZero(t *testing.T) {
+	logger, err := zap.NewDevelopment()
+	require.NoError(t, err)
+
+	ctx := t.Context()
+	ops, err := createOperators(1, 0)
+	require.NoError(t, err)
+
+	eh, _, err := setupEventHandler(t, ctx, logger, networkconfig.TestNetwork, ops[0], false)
+	require.NoError(t, err)
+
+	eventsCh := make(chan executionclient.BlockLogs, 1)
+	eventsCh <- executionclient.BlockLogs{
+		BlockNumber: 5,
+		Logs:        []ethtypes.Log{{BlockNumber: 5, TxIndex: 0, Index: 0, Topics: []ethcommon.Hash{{0x1}}}},
+	}
+	close(eventsCh)
+
+	journalFrom := uint64(0)
+	_, _, err = eh.HandleBlockEventsStream(ctx, eventsCh, false, &journalFrom)
+	require.NoError(t, err)
+
+	// The range is journalled starting at block 0, and the block's digest is recorded.
+	ranges, err := eh.nodeStorage.ListUnverifiedRanges(nil)
+	require.NoError(t, err)
+	require.Equal(t, []operatorstorage.UnverifiedRange{{From: 0, To: 5, Cursor: 0}}, ranges)
+
+	_, found, err := eh.nodeStorage.GetBlockLogDigest(nil, 5)
+	require.NoError(t, err)
+	require.True(t, found)
 }
 
 func setupEventHandler(

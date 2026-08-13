@@ -43,10 +43,26 @@ func (m *MockExecutionClient) EXPECT() *MockExecutionClientMockRecorder {
 	return m.recorder
 }
 
-// FetchHistoricalLogs mocks base method.
-func (m *MockExecutionClient) FetchHistoricalLogs(ctx context.Context, fromBlock uint64) (<-chan executionclient.BlockLogs, <-chan error, error) {
+// BlockContractLogs mocks base method.
+func (m *MockExecutionClient) BlockContractLogs(ctx context.Context, block uint64) ([]types.Log, bool, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "FetchHistoricalLogs", ctx, fromBlock)
+	ret := m.ctrl.Call(m, "BlockContractLogs", ctx, block)
+	ret0, _ := ret[0].([]types.Log)
+	ret1, _ := ret[1].(bool)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// BlockContractLogs indicates an expected call of BlockContractLogs.
+func (mr *MockExecutionClientMockRecorder) BlockContractLogs(ctx, block any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BlockContractLogs", reflect.TypeOf((*MockExecutionClient)(nil).BlockContractLogs), ctx, block)
+}
+
+// FetchHistoricalLogs mocks base method.
+func (m *MockExecutionClient) FetchHistoricalLogs(ctx context.Context, fromBlock uint64, verify bool) (<-chan executionclient.BlockLogs, <-chan error, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FetchHistoricalLogs", ctx, fromBlock, verify)
 	ret0, _ := ret[0].(<-chan executionclient.BlockLogs)
 	ret1, _ := ret[1].(<-chan error)
 	ret2, _ := ret[2].(error)
@@ -54,9 +70,9 @@ func (m *MockExecutionClient) FetchHistoricalLogs(ctx context.Context, fromBlock
 }
 
 // FetchHistoricalLogs indicates an expected call of FetchHistoricalLogs.
-func (mr *MockExecutionClientMockRecorder) FetchHistoricalLogs(ctx, fromBlock any) *gomock.Call {
+func (mr *MockExecutionClientMockRecorder) FetchHistoricalLogs(ctx, fromBlock, verify any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchHistoricalLogs", reflect.TypeOf((*MockExecutionClient)(nil).FetchHistoricalLogs), ctx, fromBlock)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchHistoricalLogs", reflect.TypeOf((*MockExecutionClient)(nil).FetchHistoricalLogs), ctx, fromBlock, verify)
 }
 
 // HeaderByNumber mocks base method.
@@ -88,6 +104,21 @@ func (mr *MockExecutionClientMockRecorder) StreamLogs(ctx, fromBlock any) *gomoc
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StreamLogs", reflect.TypeOf((*MockExecutionClient)(nil).StreamLogs), ctx, fromBlock)
 }
 
+// VerifyLogs mocks base method.
+func (m *MockExecutionClient) VerifyLogs(ctx context.Context, fromBlock, toBlock uint64) ([]executionclient.BlockLogs, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "VerifyLogs", ctx, fromBlock, toBlock)
+	ret0, _ := ret[0].([]executionclient.BlockLogs)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// VerifyLogs indicates an expected call of VerifyLogs.
+func (mr *MockExecutionClientMockRecorder) VerifyLogs(ctx, fromBlock, toBlock any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "VerifyLogs", reflect.TypeOf((*MockExecutionClient)(nil).VerifyLogs), ctx, fromBlock, toBlock)
+}
+
 // MockEventHandler is a mock of EventHandler interface.
 type MockEventHandler struct {
 	ctrl     *gomock.Controller
@@ -113,9 +144,9 @@ func (m *MockEventHandler) EXPECT() *MockEventHandlerMockRecorder {
 }
 
 // HandleBlockEventsStream mocks base method.
-func (m *MockEventHandler) HandleBlockEventsStream(ctx context.Context, logStreamCh <-chan executionclient.BlockLogs, executeTasks bool) (uint64, bool, error) {
+func (m *MockEventHandler) HandleBlockEventsStream(ctx context.Context, logStreamCh <-chan executionclient.BlockLogs, executeTasks bool, journalFrom *uint64) (uint64, bool, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "HandleBlockEventsStream", ctx, logStreamCh, executeTasks)
+	ret := m.ctrl.Call(m, "HandleBlockEventsStream", ctx, logStreamCh, executeTasks, journalFrom)
 	ret0, _ := ret[0].(uint64)
 	ret1, _ := ret[1].(bool)
 	ret2, _ := ret[2].(error)
@@ -123,7 +154,7 @@ func (m *MockEventHandler) HandleBlockEventsStream(ctx context.Context, logStrea
 }
 
 // HandleBlockEventsStream indicates an expected call of HandleBlockEventsStream.
-func (mr *MockEventHandlerMockRecorder) HandleBlockEventsStream(ctx, logStreamCh, executeTasks any) *gomock.Call {
+func (mr *MockEventHandlerMockRecorder) HandleBlockEventsStream(ctx, logStreamCh, executeTasks, journalFrom any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleBlockEventsStream", reflect.TypeOf((*MockEventHandler)(nil).HandleBlockEventsStream), ctx, logStreamCh, executeTasks)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleBlockEventsStream", reflect.TypeOf((*MockEventHandler)(nil).HandleBlockEventsStream), ctx, logStreamCh, executeTasks, journalFrom)
 }

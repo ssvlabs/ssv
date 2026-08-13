@@ -251,6 +251,12 @@ func recordBloomRecovery(ctx context.Context) {
 	bloomCheckCounter.Add(ctx, 1, metric.WithAttributes(bloomOutcomeAttribute("recovery")))
 }
 
+// recordBloomReceiptsRecovery counts events recovered from block receipts after the EL's
+// log index persistently omitted them from eth_getLogs responses.
+func recordBloomReceiptsRecovery(ctx context.Context) {
+	bloomCheckCounter.Add(ctx, 1, metric.WithAttributes(bloomOutcomeAttribute("receipts_recovery")))
+}
+
 func recordBloomFalsePositive(ctx context.Context) {
 	bloomCheckCounter.Add(ctx, 1, metric.WithAttributes(bloomOutcomeAttribute("false_positive")))
 }

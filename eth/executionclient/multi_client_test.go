@@ -183,8 +183,8 @@ func TestMultiClient_FetchHistoricalLogs(t *testing.T) {
 
 	mockClient.
 		EXPECT().
-		FetchHistoricalLogs(gomock.Any(), uint64(100)).
-		DoAndReturn(func(ctx context.Context, fromBlock uint64) (<-chan BlockLogs, <-chan error, error) {
+		FetchHistoricalLogs(gomock.Any(), uint64(100), gomock.Any()).
+		DoAndReturn(func(ctx context.Context, fromBlock uint64, verify bool) (<-chan BlockLogs, <-chan error, error) {
 			go func() {
 				logCh <- BlockLogs{BlockNumber: 100}
 				close(logCh)
@@ -204,7 +204,7 @@ func TestMultiClient_FetchHistoricalLogs(t *testing.T) {
 
 	mc := newTestMultiClient(t, mockClient)
 
-	logs, errs, err := mc.FetchHistoricalLogs(ctx, 100)
+	logs, errs, err := mc.FetchHistoricalLogs(ctx, 100, false)
 	require.NoError(t, err)
 	require.NotNil(t, logs)
 	require.NotNil(t, errs)
@@ -233,13 +233,13 @@ func TestMultiClient_FetchHistoricalLogs_AllClientsNothingToSync(t *testing.T) {
 
 	mockClient1.
 		EXPECT().
-		FetchHistoricalLogs(gomock.Any(), uint64(100)).
+		FetchHistoricalLogs(gomock.Any(), uint64(100), gomock.Any()).
 		Return((<-chan BlockLogs)(nil), (<-chan error)(nil), ErrNothingToSync).
 		Times(1)
 
 	mockClient2.
 		EXPECT().
-		FetchHistoricalLogs(gomock.Any(), uint64(100)).
+		FetchHistoricalLogs(gomock.Any(), uint64(100), gomock.Any()).
 		Return((<-chan BlockLogs)(nil), (<-chan error)(nil), ErrNothingToSync).
 		Times(1)
 
@@ -257,7 +257,7 @@ func TestMultiClient_FetchHistoricalLogs_AllClientsNothingToSync(t *testing.T) {
 
 	mc := newTestMultiClient(t, mockClient1, mockClient2)
 
-	logs, errs, err := mc.FetchHistoricalLogs(ctx, 100)
+	logs, errs, err := mc.FetchHistoricalLogs(ctx, 100, false)
 	require.Error(t, err)
 	require.ErrorContains(t, err, ErrNothingToSync.Error())
 	require.Nil(t, logs)
@@ -276,7 +276,7 @@ func TestMultiClient_FetchHistoricalLogs_MixedErrors(t *testing.T) {
 
 	mockClient1.
 		EXPECT().
-		FetchHistoricalLogs(gomock.Any(), uint64(100)).
+		FetchHistoricalLogs(gomock.Any(), uint64(100), gomock.Any()).
 		Return((<-chan BlockLogs)(nil), (<-chan error)(nil), fmt.Errorf("unexpected error")).
 		Times(1)
 
@@ -288,7 +288,7 @@ func TestMultiClient_FetchHistoricalLogs_MixedErrors(t *testing.T) {
 
 	mockClient2.
 		EXPECT().
-		FetchHistoricalLogs(gomock.Any(), uint64(100)).
+		FetchHistoricalLogs(gomock.Any(), uint64(100), gomock.Any()).
 		Return((<-chan BlockLogs)(nil), (<-chan error)(nil), ErrNothingToSync).
 		Times(1)
 
@@ -300,7 +300,7 @@ func TestMultiClient_FetchHistoricalLogs_MixedErrors(t *testing.T) {
 
 	mc := newTestMultiClient(t, mockClient1, mockClient2)
 
-	logs, errs, err := mc.FetchHistoricalLogs(ctx, 100)
+	logs, errs, err := mc.FetchHistoricalLogs(ctx, 100, false)
 	require.Error(t, err)
 	require.ErrorContains(t, err, "all clients failed")
 	require.Nil(t, logs)

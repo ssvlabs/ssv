@@ -24,7 +24,9 @@ const (
 )
 
 type ExecutionClient interface {
-	FetchHistoricalLogs(ctx context.Context, fromBlock uint64) (logsCh <-chan executionclient.BlockLogs, errsCh <-chan error, err error)
+	FetchHistoricalLogs(ctx context.Context, fromBlock uint64, verify bool) (logsCh <-chan executionclient.BlockLogs, errsCh <-chan error, err error)
+	VerifyLogs(ctx context.Context, fromBlock, toBlock uint64) ([]executionclient.BlockLogs, error)
+	BlockContractLogs(ctx context.Context, block uint64) (logs []types.Log, receiptsAvailable bool, err error)
 	StreamLogs(ctx context.Context, fromBlock uint64) (logsCh chan executionclient.BlockLogs)
 	HeaderByNumber(ctx context.Context, blockNumber *big.Int) (*types.Header, error)
 }
@@ -34,6 +36,7 @@ type EventHandler interface {
 		ctx context.Context,
 		logStreamCh <-chan executionclient.BlockLogs,
 		executeTasks bool,
+		journalFrom *uint64,
 	) (lastProcessedBlock uint64, progressed bool, err error)
 }
 
@@ -47,6 +50,12 @@ type EventSyncer struct {
 	logger             *zap.Logger
 	stalenessThreshold time.Duration
 
+	verifyChunkSize         uint64
+	verifyChunkDelay        time.Duration
+	verifyRetryInitialDelay time.Duration
+	verifyRetryMaxDelay     time.Duration
+	resyncCooldown          time.Duration
+
 	lastProcessedBlock       uint64
 	lastProcessedBlockChange time.Time
 }
@@ -57,8 +66,13 @@ func New(nodeStorage nodestorage.Storage, executionClient ExecutionClient, event
 		executionClient: executionClient,
 		eventHandler:    eventHandler,
 
-		logger:             zap.NewNop(),
-		stalenessThreshold: defaultStalenessThreshold,
+		logger:                  zap.NewNop(),
+		stalenessThreshold:      defaultStalenessThreshold,
+		verifyChunkSize:         defaultVerifyChunkSize,
+		verifyChunkDelay:        defaultVerifyChunkDelay,
+		verifyRetryInitialDelay: defaultVerifyRetryInitialDelay,
+		verifyRetryMaxDelay:     defaultVerifyRetryMaxDelay,
+		resyncCooldown:          defaultResyncCooldown,
 	}
 
 	for _, opt := range opts {
@@ -95,21 +109,24 @@ func (es *EventSyncer) ensureBlockAboveThreshold(ctx context.Context, block *big
 		return fmt.Errorf("failed to get header for block %d: %w", block, err)
 	}
 
-	// #nosec G115
-	if header.Time < uint64(time.Now().Add(-es.stalenessThreshold).Unix()) {
+	// Compare in signed space: a staleness threshold large enough to push the cutoff before
+	// the Unix epoch would wrap the uint64 cast and flag every block as too old.
+	cutoff := time.Now().Add(-es.stalenessThreshold).Unix()
+	// #nosec G115 -- block timestamps fit in int64
+	if int64(header.Time) < cutoff {
 		return fmt.Errorf("block %d is too old", block)
 	}
 
 	return nil
 }
 
-func (es *EventSyncer) syncHistory(ctx context.Context, fromBlock uint64) (
+func (es *EventSyncer) syncHistory(ctx context.Context, fromBlock uint64, journalFrom *uint64, verify bool) (
 	lastProcessedBlock uint64,
 	progressed bool,
 	err error,
 	retryable bool,
 ) {
-	fetchLogsCh, fetchErrCh, err := es.executionClient.FetchHistoricalLogs(ctx, fromBlock)
+	fetchLogsCh, fetchErrCh, err := es.executionClient.FetchHistoricalLogs(ctx, fromBlock, verify)
 	if errors.Is(err, executionclient.ErrNothingToSync) {
 		// Nothing to sync, should keep ongoing sync from the given fromBlock.
 		return 0, false, executionclient.ErrNothingToSync, false
@@ -118,8 +135,9 @@ func (es *EventSyncer) syncHistory(ctx context.Context, fromBlock uint64) (
 		return 0, false, fmt.Errorf("failed to fetch historical events: %w", err), true
 	}
 
-	// Process all the logs fetched until there are no more.
-	lastProcessedBlock, progressed, err = es.eventHandler.HandleBlockEventsStream(ctx, fetchLogsCh, false)
+	// An optimistic sync passes journalFrom so the handler records verification bookkeeping as it
+	// advances the marker; a verified resync passes nil (its batches are already checked inline).
+	lastProcessedBlock, progressed, err = es.eventHandler.HandleBlockEventsStream(ctx, fetchLogsCh, false, journalFrom)
 	if err != nil {
 		return lastProcessedBlock, progressed, fmt.Errorf("handle block events stream (last processed block = %d): %w", lastProcessedBlock, err), true
 	}
@@ -146,11 +164,27 @@ func (es *EventSyncer) syncHistory(ctx context.Context, fromBlock uint64) (
 	return lastProcessedBlock, progressed, nil, false
 }
 
-// SyncHistory reads and processes historical events since the given fromBlock.
-func (es *EventSyncer) SyncHistory(ctx context.Context, fromBlock uint64) (lastProcessedBlock uint64, errs error) {
+// SyncHistory reads and processes historical events since the given fromBlock. When verify is
+// false (the normal path) the sync is optimistic and fast: the handler journals an unverified
+// range and per-block digests as it advances the marker, for the background verifier to check
+// for completeness later. When true (the resync-repair path) each batch is verified inline, so
+// the result is guaranteed complete and nothing is journalled.
+func (es *EventSyncer) SyncHistory(ctx context.Context, fromBlock uint64, verify bool) (lastProcessedBlock uint64, errs error) {
+	// journalFrom keys the unverified range recorded during an optimistic sync; it stays fixed at
+	// the original start across retries so the range spans the whole optimistic span. A verified
+	// resync journals nothing (nil). It's a pointer, not a 0 sentinel, so an offset-0 network
+	// (RegistrySyncOffset == 0) still journals block 0 instead of silently skipping verification.
+	// Journaling happens in the handler's marker transaction, so a crash can't advance the marker
+	// past a block the verifier won't later check.
+	var journalFrom *uint64
+	if !verify {
+		from := fromBlock
+		journalFrom = &from
+	}
+
 	const maxTries = 3
 	for i := 0; i < maxTries; i++ {
-		lpb, progressed, err, retryable := es.syncHistory(ctx, fromBlock)
+		lpb, progressed, err, retryable := es.syncHistory(ctx, fromBlock, journalFrom, verify)
 		if err == nil {
 			// Success, errors encountered so far (if any) don't matter, no need to log them.
 			lastProcessedBlock = lpb
@@ -178,8 +212,10 @@ func (es *EventSyncer) SyncHistory(ctx context.Context, fromBlock uint64) (lastP
 func (es *EventSyncer) SyncOngoing(ctx context.Context, fromBlock uint64) error {
 	es.logger.Info("subscribing to ongoing registry events", fields.FromBlock(fromBlock))
 
+	// Streaming is verified inline (StreamLogs cross-checks each batch), so no verification
+	// bookkeeping is journalled (journalFrom=nil) and no background verification is needed.
 	logStreamCh := es.executionClient.StreamLogs(ctx, fromBlock)
-	lastProcessedBlock, progressed, err := es.eventHandler.HandleBlockEventsStream(ctx, logStreamCh, true)
+	lastProcessedBlock, progressed, err := es.eventHandler.HandleBlockEventsStream(ctx, logStreamCh, true, nil)
 	if err != nil {
 		if progressed {
 			return fmt.Errorf("handle block events stream (last processed block = %d): %w", lastProcessedBlock, err)
