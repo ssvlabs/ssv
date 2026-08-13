@@ -102,16 +102,24 @@ func New(
 	return eh, nil
 }
 
+// HandleBlockEventsStream processes each block's events, advancing the last-processed marker.
+// A non-nil journalFrom marks an optimistic historical sync: in the same transaction that
+// advances the marker, it records a per-block digest of the logs received and extends an
+// unverified range [*journalFrom, block], so the background verifier can later confirm the
+// getLogs responses were complete — and a crash can't leave a processed block outside the range
+// it checks. Streaming and verified resyncs pass nil. (It's a pointer, not a sentinel value, so
+// block 0 — e.g. a RegistrySyncOffset of 0 — is journalled rather than silently skipped.)
 func (eh *EventHandler) HandleBlockEventsStream(
 	ctx context.Context,
 	logStreamCh <-chan executionclient.BlockLogs,
 	executeTasks bool,
+	journalFrom *uint64,
 ) (lastProcessedBlock uint64, progressed bool, err error) {
 	for blockLogs := range logStreamCh {
 		logger := eh.logger.With(fields.BlockNumber(blockLogs.BlockNumber))
 
 		start := time.Now()
-		tasks, err := eh.processBlockEvents(ctx, blockLogs)
+		tasks, err := eh.processBlockEvents(ctx, blockLogs, journalFrom)
 		if err != nil {
 			return lastProcessedBlock, progressed, fmt.Errorf("process block events: %w", err)
 		}
@@ -146,7 +154,7 @@ func (eh *EventHandler) HandleBlockEventsStream(
 	return lastProcessedBlock, progressed, nil
 }
 
-func (eh *EventHandler) processBlockEvents(ctx context.Context, block executionclient.BlockLogs) ([]Task, error) {
+func (eh *EventHandler) processBlockEvents(ctx context.Context, block executionclient.BlockLogs, journalFrom *uint64) ([]Task, error) {
 	txn := eh.nodeStorage.Begin()
 	defer txn.Discard()
 
@@ -182,6 +190,25 @@ func (eh *EventHandler) processBlockEvents(ctx context.Context, block executionc
 
 	if err := eh.nodeStorage.SaveLastProcessedBlock(txn, new(big.Int).SetUint64(block.BlockNumber)); err != nil {
 		return nil, fmt.Errorf("set last processed block: %w", err)
+	}
+
+	// For an optimistic sync, record the verifier's bookkeeping in this same transaction, so a
+	// crash can't advance the marker past a block the verifier won't later check (which would
+	// silently skip its events). The range [journalFrom, block] tells the verifier which blocks
+	// to check; the per-block digest lets it confirm the logs received there were complete. Only
+	// non-empty blocks get a digest — a block the verifier finds to have logs but no digest was
+	// missed entirely.
+	if journalFrom != nil {
+		if len(block.Logs) > 0 {
+			digest := executionclient.BlockLogsDigest(block.Logs)
+			if err := eh.nodeStorage.SaveBlockLogDigest(txn, block.BlockNumber, digest); err != nil {
+				return nil, fmt.Errorf("save block-log digest: %w", err)
+			}
+		}
+		r := nodestorage.UnverifiedRange{From: *journalFrom, To: block.BlockNumber, Cursor: *journalFrom}
+		if err := eh.nodeStorage.SaveUnverifiedRange(txn, r); err != nil {
+			return nil, fmt.Errorf("extend unverified range: %w", err)
+		}
 	}
 
 	if err := txn.Commit(); err != nil {

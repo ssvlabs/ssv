@@ -139,7 +139,7 @@ func TestEventSyncer(t *testing.T) {
 		err = eventSyncer.Healthy(ctx)
 		require.NoError(t, err)
 
-		lastProcessedBlock, err := eventSyncer.SyncHistory(ctx, 0)
+		lastProcessedBlock, err := eventSyncer.SyncHistory(ctx, 0, false)
 		require.NoError(t, err)
 		require.NoError(t, client.Close())
 		require.NoError(t, eventSyncer.SyncOngoing(ctx, lastProcessedBlock+1))
@@ -178,7 +178,7 @@ func TestEventSyncer(t *testing.T) {
 		err = eventSyncer.Healthy(ctx)
 		require.NoError(t, err)
 
-		lastProcessedBlock, err := eventSyncer.SyncHistory(ctx, 0)
+		lastProcessedBlock, err := eventSyncer.SyncHistory(ctx, 0, false)
 		require.NoError(t, err)
 
 		cancel()
@@ -323,11 +323,100 @@ func TestSyncOngoingPropagatesErrInferiorBlock(t *testing.T) {
 		StreamLogs(ctx, uint64(11)).
 		Return(stream)
 	eventHandlerMock.EXPECT().
-		HandleBlockEventsStream(ctx, stream, true).
+		HandleBlockEventsStream(ctx, stream, true, gomock.Nil()).
 		Return(uint64(12), true, fmt.Errorf("process block events: %w", eventhandler.ErrInferiorBlock))
 
 	err := syncer.SyncOngoing(ctx, 11)
 	require.Error(t, err)
 	require.ErrorIs(t, err, eventhandler.ErrInferiorBlock)
 	require.ErrorContains(t, err, "last processed block = 12")
+}
+
+// blockLogsChan / closedErrChan build the channels a mocked FetchHistoricalLogs returns.
+func blockLogsChan(blocks ...executionclient.BlockLogs) <-chan executionclient.BlockLogs {
+	ch := make(chan executionclient.BlockLogs, len(blocks))
+	for _, b := range blocks {
+		ch <- b
+	}
+	close(ch)
+	return ch
+}
+
+func closedErrChan() <-chan error {
+	ch := make(chan error)
+	close(ch)
+	return ch
+}
+
+// TestEventSyncer_RepairLoop exercises the whole seam end to end against the real event handler
+// and storage (only the execution client is mocked): an optimistic sync records an incomplete
+// digest, background verification reads it back, compares against authoritative logs, detects the
+// miss and flags a resync; then the repair (drop journal + registry, keep the flag) and a
+// verified resync rebuild clean state and clear the flag.
+func TestEventSyncer_RepairLoop(t *testing.T) {
+	logger := zaptest.NewLogger(t)
+	ctx := t.Context()
+
+	db, err := kv.NewInMemory(logger, basedb.Options{Ctx: ctx})
+	require.NoError(t, err)
+	privateKey, err := keys.GeneratePrivateKey()
+	require.NoError(t, err)
+	nodeStorage, operatorData := setupOperatorStorage(logger, db, privateKey)
+	eh := setupEventHandler(t, ctx, logger, db, nodeStorage, operatorData, privateKey)
+
+	execClient := NewMockExecutionClient(gomock.NewController(t))
+	es := New(nodeStorage, execClient, eh, WithLogger(logger))
+	es.verifyChunkDelay = 0
+
+	const fromBlock = 10
+	// Unknown topics: the handler records digests without needing decodable events.
+	recordedLog := ethtypes.Log{BlockNumber: fromBlock, TxIndex: 0, Index: 0, Topics: []ethcommon.Hash{{0x1}}}
+	missedLog := ethtypes.Log{BlockNumber: fromBlock, TxIndex: 0, Index: 1, Topics: []ethcommon.Hash{{0x2}}}
+
+	// Recent header so the staleness guard passes for both syncs.
+	recentHeader := &ethtypes.Header{Time: uint64(time.Now().Unix())}
+	execClient.EXPECT().HeaderByNumber(gomock.Any(), gomock.Any()).Return(recentHeader, nil).AnyTimes()
+
+	// Optimistic sync delivers only the recorded log; the handler journals the range and its
+	// (incomplete) digest.
+	execClient.EXPECT().FetchHistoricalLogs(gomock.Any(), uint64(fromBlock), false).DoAndReturn(
+		func(context.Context, uint64, bool) (<-chan executionclient.BlockLogs, <-chan error, error) {
+			return blockLogsChan(executionclient.BlockLogs{BlockNumber: fromBlock, Logs: []ethtypes.Log{recordedLog}}), closedErrChan(), nil
+		})
+	_, err = es.SyncHistory(ctx, fromBlock, false)
+	require.NoError(t, err)
+
+	// Background verification: VerifyLogs shows both logs, and receipts confirm them → the recorded
+	// digest (one log) disagrees with receipts truth → resync flagged.
+	execClient.EXPECT().VerifyLogs(gomock.Any(), uint64(fromBlock), uint64(fromBlock)).Return(
+		[]executionclient.BlockLogs{{BlockNumber: fromBlock, Logs: []ethtypes.Log{recordedLog, missedLog}}}, nil)
+	execClient.EXPECT().BlockContractLogs(gomock.Any(), uint64(fromBlock)).Return(
+		[]ethtypes.Log{recordedLog, missedLog}, true, nil)
+	require.ErrorIs(t, es.Verify(ctx), ErrResyncRequired)
+
+	flagged, err := nodeStorage.IsResyncRequired(nil)
+	require.NoError(t, err)
+	require.True(t, flagged)
+
+	// Repair, as the boot path does on the next start: drop journal + registry, keep the flag.
+	require.NoError(t, nodeStorage.DropVerificationJournal())
+	require.NoError(t, nodeStorage.DropRegistryData())
+
+	// Verified resync delivers the complete set; nothing is journalled (journalFrom=0).
+	execClient.EXPECT().FetchHistoricalLogs(gomock.Any(), uint64(fromBlock), true).DoAndReturn(
+		func(context.Context, uint64, bool) (<-chan executionclient.BlockLogs, <-chan error, error) {
+			return blockLogsChan(executionclient.BlockLogs{BlockNumber: fromBlock, Logs: []ethtypes.Log{recordedLog, missedLog}}), closedErrChan(), nil
+		})
+	_, err = es.SyncHistory(ctx, fromBlock, true)
+	require.NoError(t, err)
+	require.NoError(t, nodeStorage.ClearResyncRequired(nil))
+
+	// Repaired: flag clear, journal empty, and a fresh verification pass is a no-op.
+	flagged, err = nodeStorage.IsResyncRequired(nil)
+	require.NoError(t, err)
+	require.False(t, flagged)
+	ranges, err := nodeStorage.ListUnverifiedRanges(nil)
+	require.NoError(t, err)
+	require.Empty(t, ranges)
+	require.NoError(t, es.Verify(ctx))
 }

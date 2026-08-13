@@ -141,7 +141,7 @@ func TestHandleBlockEventsStreamWithExecution(t *testing.T) {
 			}
 		}()
 
-		lastProcessedBlock, progressed, err := eh.HandleBlockEventsStream(ctx, eventsCh, true)
+		lastProcessedBlock, progressed, err := eh.HandleBlockEventsStream(ctx, eventsCh, true, nil)
 		require.NoError(t, err)
 		require.Equal(t, uint64(0x89EBFF), lastProcessedBlock)
 		require.True(t, progressed)
