@@ -186,7 +186,7 @@ func TestFetchHistoricalLogs(t *testing.T) {
 
 		// Fetch all logs history starting from block 0
 		fetchedLogs := make([]ethtypes.Log, 0, blocksWithLogsLength)
-		logs, fetchErrCh, err := env.client.FetchHistoricalLogs(env.ctx, 0)
+		logs, fetchErrCh, err := env.client.FetchHistoricalLogs(env.ctx, 0, false)
 		require.NoError(t, err)
 
 		for block := range logs {
@@ -219,7 +219,7 @@ func TestFetchHistoricalLogs(t *testing.T) {
 		)
 		require.NoError(t, err)
 
-		logs, fetchErrCh, err := env.client.FetchHistoricalLogs(env.ctx, 0)
+		logs, fetchErrCh, err := env.client.FetchHistoricalLogs(env.ctx, 0, false)
 		require.ErrorIs(t, err, ErrNothingToSync)
 		require.Nil(t, logs)
 		require.Nil(t, fetchErrCh)
@@ -248,7 +248,7 @@ func TestFetchHistoricalLogs(t *testing.T) {
 		// Set fromBlock to a value greater than the currentBlock - FollowDistance
 		fromBlock := currentBlock - FollowDistance + 10
 
-		logs, fetchErrCh, err := env.client.FetchHistoricalLogs(env.ctx, fromBlock)
+		logs, fetchErrCh, err := env.client.FetchHistoricalLogs(env.ctx, fromBlock, false)
 		require.ErrorIs(t, err, ErrNothingToSync)
 		require.Nil(t, logs)
 		require.Nil(t, fetchErrCh)
@@ -271,7 +271,7 @@ func TestFetchHistoricalLogs(t *testing.T) {
 		defer blockNumCancel()
 
 		// Fetch logs - should fail because BlockNumber returns an error
-		logs, fetchErrCh, err := env.client.FetchHistoricalLogs(blockNumCtx, 0)
+		logs, fetchErrCh, err := env.client.FetchHistoricalLogs(blockNumCtx, 0, false)
 		require.Error(t, err)
 		require.Nil(t, logs)
 		require.Nil(t, fetchErrCh)
@@ -685,21 +685,37 @@ func TestChainReorganizationLogs(t *testing.T) {
 		},
 	}
 
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var req struct {
-			ID     json.RawMessage `json:"id"`
-			Method string          `json:"method"`
-		}
-		body, err := io.ReadAll(r.Body)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		if err := json.Unmarshal(body, &req); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
+	// A zero logsBloom lets log verification prove the blocks without canned logs are
+	// genuinely empty, keeping this test focused on the reorg-handling branch.
+	zeroHash := "0x" + strings.Repeat("0", 64)
+	cannedHeader := map[string]any{
+		"parentHash":       zeroHash,
+		"sha3Uncles":       zeroHash,
+		"miner":            "0x" + strings.Repeat("0", 40),
+		"stateRoot":        zeroHash,
+		"transactionsRoot": zeroHash,
+		"receiptsRoot":     zeroHash,
+		"logsBloom":        "0x" + strings.Repeat("0", 512),
+		"difficulty":       "0x0",
+		"number":           "0x1",
+		"gasLimit":         "0x0",
+		"gasUsed":          "0x0",
+		"timestamp":        "0x0",
+		"extraData":        "0x",
+		"mixHash":          zeroHash,
+		"nonce":            "0x0000000000000000",
+	}
 
+	type rpcReq struct {
+		ID     json.RawMessage `json:"id"`
+		Method string          `json:"method"`
+	}
+	type rpcResp struct {
+		JSONRPC string          `json:"jsonrpc"`
+		ID      json.RawMessage `json:"id"`
+		Result  any             `json:"result"`
+	}
+	makeResp := func(req rpcReq) rpcResp {
 		var result any
 		switch req.Method {
 		case "eth_getLogs":
@@ -708,16 +724,44 @@ func TestChainReorganizationLogs(t *testing.T) {
 			result = "0x1"
 		case "eth_blockNumber":
 			result = "0xa"
+		case "eth_getBlockByNumber":
+			result = cannedHeader
 		default:
 			result = nil
 		}
+		return rpcResp{"2.0", req.ID, result}
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 
 		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(struct {
-			JSONRPC string          `json:"jsonrpc"`
-			ID      json.RawMessage `json:"id"`
-			Result  any             `json:"result"`
-		}{"2.0", req.ID, result}); err != nil {
+		if bytes.HasPrefix(bytes.TrimSpace(body), []byte("[")) {
+			var reqs []rpcReq
+			if err := json.Unmarshal(body, &reqs); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			resps := make([]rpcResp, 0, len(reqs))
+			for _, req := range reqs {
+				resps = append(resps, makeResp(req))
+			}
+			if err := json.NewEncoder(w).Encode(resps); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+			return
+		}
+
+		var req rpcReq
+		if err := json.Unmarshal(body, &req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if err := json.NewEncoder(w).Encode(makeResp(req)); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 	}))

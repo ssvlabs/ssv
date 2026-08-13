@@ -24,6 +24,11 @@ const (
 	// errCodeQueryLimit refers to request exceeding the defined limit
 	// https://github.com/ethereum/EIPs/blob/master/EIPS/eip-1474.md
 	errCodeQueryLimit = -32005
+
+	// errCodeMethodNotFound is the standard JSON-RPC code for a method the server
+	// does not support.
+	// https://github.com/ethereum/EIPs/blob/master/EIPS/eip-1474.md
+	errCodeMethodNotFound = -32601
 )
 
 // isRPCQueryLimitError checks if the provided error is a query limit error.
@@ -31,6 +36,17 @@ func isRPCQueryLimitError(err error) bool {
 	var rpcErr rpc.Error
 	if errors.As(err, &rpcErr) {
 		return rpcErr.ErrorCode() == errCodeQueryLimit
+	}
+
+	return false
+}
+
+// isRPCMethodNotFoundError checks if the provided error indicates the server does not
+// support the requested RPC method.
+func isRPCMethodNotFoundError(err error) bool {
+	var rpcErr rpc.Error
+	if errors.As(err, &rpcErr) {
+		return rpcErr.ErrorCode() == errCodeMethodNotFound
 	}
 
 	return false
