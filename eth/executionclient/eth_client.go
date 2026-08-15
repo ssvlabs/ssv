@@ -2,6 +2,7 @@ package executionclient
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/big"
 	"sync/atomic"
@@ -132,12 +133,19 @@ func (c *ethClient) HeadersByNumbers(ctx context.Context, blockNumbers []uint64)
 	return headers, nil
 }
 
-// rememberBatchingUnsupported latches batchingUnsupported when a batch failed wholesale but the
-// sequential fallback (which ran to completion above, since we reached here) recovered — that
-// distinguishes a provider that rejects batching from a general outage (where the sequential
-// calls would have errored out first). It's a one-way, best-effort memo reset on reconnect.
+// rememberBatchingUnsupported latches batchingUnsupported when a batch failed wholesale yet the
+// sequential fallback (run just above) recovered — distinguishing a provider that rejects batching
+// from a general outage, where the sequential calls would have failed too. Timeouts and
+// cancellations are excluded: they mean slow or interrupted, not unsupported, so a batch-only
+// timeout can't wrongly pin a batching-capable provider to sequential. One-way, reset on reconnect.
 func (c *ethClient) rememberBatchingUnsupported(attemptedBatch bool, batchErr error) {
-	if attemptedBatch && batchErr != nil && c.batchingUnsupported.CompareAndSwap(false, true) {
+	if !attemptedBatch || batchErr == nil {
+		return
+	}
+	if errors.Is(batchErr, context.DeadlineExceeded) || errors.Is(batchErr, context.Canceled) {
+		return
+	}
+	if c.batchingUnsupported.CompareAndSwap(false, true) {
 		c.logger.Warn("execution client rejected a batched request; falling back to sequential requests for the rest of this connection",
 			zap.Error(batchErr))
 	}

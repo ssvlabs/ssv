@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/ethereum/go-ethereum/rpc"
 )
@@ -39,6 +40,28 @@ func isRPCQueryLimitError(err error) bool {
 	}
 
 	return false
+}
+
+// isRPCResponseTooLargeError reports whether err indicates the response exceeded a transport or
+// provider size limit — a websocket read limit, an HTTP body cap, and the like — as opposed to the
+// -32005 query-limit code.
+func isRPCResponseTooLargeError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "read limit exceeded") || // gorilla/websocket
+		strings.Contains(msg, "response too large") ||
+		strings.Contains(msg, "message too big") ||
+		strings.Contains(msg, "request entity too large") // HTTP 413
+}
+
+// isSubdividableLogFetchError reports whether a failed range eth_getLogs is likely to succeed once
+// the range is split: a query-limit code and a response-size limit both shrink under subdivision.
+// Any other error (connection failure, cancellation, a genuine RPC fault) is not subdividable and
+// surfaces immediately.
+func isSubdividableLogFetchError(err error) bool {
+	return isRPCQueryLimitError(err) || isRPCResponseTooLargeError(err)
 }
 
 // isRPCMethodNotFoundError checks if the provided error indicates the server does not
