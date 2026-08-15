@@ -281,7 +281,7 @@ func (ec *ExecutionClient) subdivideLogFetch(ctx context.Context, q ethereum.Fil
 	}
 	err = ec.errSingleClient(fmt.Errorf("get filtered logs: %w", err), "eth_getLogs")
 
-	if isRPCQueryLimitError(err) {
+	if isSubdividableLogFetchError(err) {
 		if q.FromBlock == nil || q.ToBlock == nil {
 			return nil, err
 		}
@@ -294,9 +294,10 @@ func (ec *ExecutionClient) subdivideLogFetch(ctx context.Context, q ethereum.Fil
 			return nil, fmt.Errorf("insufficient blocks to subdivide (fromBlock: %d, toBlock: %d): %w", fromBlock, toBlock, err)
 		}
 
-		// Query-limit subdivision is an expected, self-healing fallback that recurses,
-		// so log at debug; a genuine failure to fetch surfaces as an error upstream.
-		ec.logger.Debug("execution client query limit exceeded, subdividing query",
+		// Range-limit subdivision (query-limit code or a response-size cap) is an expected,
+		// self-healing fallback that recurses, so log at debug; a genuine failure to fetch
+		// surfaces as an error upstream.
+		ec.logger.Debug("execution client rejected a wide log query, subdividing",
 			zap.String("method", "eth_getLogs"),
 			fields.FromBlock(fromBlock),
 			fields.ToBlock(toBlock),

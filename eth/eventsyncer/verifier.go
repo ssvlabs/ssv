@@ -94,7 +94,7 @@ func (es *EventSyncer) Verify(ctx context.Context) error {
 	recordVerifyPendingRanges(ctx, len(remaining))
 
 	if parked > 0 {
-		es.logger.Warn("background verification could not fully verify some ranges; they remain pending and will be retried (see earlier warnings)",
+		es.logger.Warn("background verification could not fully verify some ranges; they remain pending and will be re-checked on the next node start (see earlier warnings)",
 			zap.Int("parked_ranges", parked))
 	} else {
 		es.logger.Info("background verification complete: optimistically-synced registry events are consistent with chain data")
@@ -102,10 +102,11 @@ func (es *EventSyncer) Verify(ctx context.Context) error {
 	return nil
 }
 
-// VerifyWithRetry runs Verify and, on a transient failure, retries with capped exponential
-// backoff until the ranges verify clean (nil), a miss is found (ErrResyncRequired), or ctx is
-// canceled. It exists so a transient execution-client error doesn't leave an
-// optimistically-synced range unverified until the node's next restart.
+// VerifyWithRetry runs Verify, retrying only a transient failure with capped exponential backoff
+// until Verify returns nil (every range verified or parked), a miss is found (ErrResyncRequired),
+// or ctx is canceled. Parked ranges make Verify return nil, so they aren't retried here — they're
+// re-checked on the next node start; this loop exists only so a transient execution-client error
+// doesn't leave a range unverified until then.
 func (es *EventSyncer) VerifyWithRetry(ctx context.Context) error {
 	backoff := es.verifyRetryInitialDelay
 	for {
