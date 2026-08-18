@@ -390,6 +390,15 @@ listener:
 		// sign. Conclude as not_required so the watcher doesn't report a false "stuck"; the sentinel
 		// still tells committee_queue to drop the message and terminate the runner.
 		r.markDutyNotRequired()
+		r.measurements.EndDutyFlow()
+		recordTotalDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.RoleCommittee, r.State.RunningInstance.State.Round)
+		const dutyFinishedNoValidDutiesEvent = "✔️successfully finished duty processing (no valid duties to sign)"
+		logger.Info(dutyFinishedNoValidDutiesEvent,
+			fields.ConsensusTime(r.measurements.ConsensusTime()),
+			fields.ConsensusRounds(uint64(r.State.RunningInstance.State.Round)),
+			fields.TotalDutyTime(r.measurements.TotalDutyTime()),
+		)
+		span.AddEvent(dutyFinishedNoValidDutiesEvent)
 		return ErrNoValidDutiesToExecute
 	}
 
@@ -551,6 +560,16 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 		// concludeDuty is idempotent, so the deferred markDutyFailed becomes a no-op. The sentinel
 		// still tells committee_queue to drop the message and terminate the runner.
 		r.markDutyNotRequired()
+		r.measurements.EndDutyFlow()
+		recordTotalDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.RoleCommittee, r.State.RunningInstance.State.Round)
+		const dutyFinishedNoBeaconObjectsEvent = "✔️successfully finished duty processing (no beacon objects to submit)"
+		logger.Info(dutyFinishedNoBeaconObjectsEvent,
+			fields.ConsensusTime(r.measurements.ConsensusTime()),
+			fields.ConsensusRounds(uint64(r.State.RunningInstance.State.Round)),
+			fields.PostConsensusTime(r.measurements.PostConsensusTime()),
+			fields.TotalDutyTime(r.measurements.TotalDutyTime()),
+		)
+		span.AddEvent(dutyFinishedNoBeaconObjectsEvent)
 		return ErrNoValidDutiesToExecute
 	}
 
