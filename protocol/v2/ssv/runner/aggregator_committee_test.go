@@ -172,13 +172,15 @@ func TestAggregatorCommitteeRunnerProcessPostConsensus_MarksFailedOnSubmitError(
 	require.False(t, env.runner.State.Succeeded, "a failed duty must not be marked succeeded")
 }
 
-// TestAggregatorCommitteeRunnerProcessPostConsensus_MarksNotRequiredOnNoBeaconObjects is the
-// regression test for #2903: a post-consensus quorum where the decided data leaves this operator
-// with no beacon objects to submit is a benign terminal and must conclude not_required — not failed
-// (the previous behavior, surfacing as a spurious "⚠️ duty failed") — while still surfacing the
-// sentinel for the queue's terminal-drop handling. The decided value is swapped after consensus for
-// one with no aggregators or contributors to model the empty-objects terminal.
-func TestAggregatorCommitteeRunnerProcessPostConsensus_MarksNotRequiredOnNoBeaconObjects(t *testing.T) {
+// TestAggregatorCommitteeRunnerProcessPostConsensus_MarksFailedOnNoBeaconObjects pins the
+// empty-objects terminal as an invariant violation, NOT a benign no-op: beaconObjects is built purely
+// from the decided value (every construction error surfaced), and a decided value with zero
+// aggregators and zero contributors is rejected by AggregatorCommitteeConsensusData.Validate() before
+// it can ever be stored as decided. So reaching the branch means decided-value validation was
+// bypassed or regressed — it must conclude failed (loud, via the outcome watcher's warn) while still
+// carrying the sentinel for the queue's terminal-drop handling. The test necessarily hand-installs
+// State.DecidedValue to force the condition, because the normal flow cannot produce it.
+func TestAggregatorCommitteeRunnerProcessPostConsensus_MarksFailedOnNoBeaconObjects(t *testing.T) {
 	ctx := t.Context()
 	const version = spec.DataVersionElectra
 
@@ -200,16 +202,16 @@ func TestAggregatorCommitteeRunnerProcessPostConsensus_MarksNotRequiredOnNoBeaco
 		}
 	}
 
-	require.ErrorIs(t, postConsensusErr, ErrNoValidDutiesToExecute, "the benign sentinel must surface to the queue")
+	require.ErrorIs(t, postConsensusErr, ErrNoValidDutiesToExecute, "the sentinel must surface so the queue drops the message and terminates the runner")
 
 	select {
 	case c := <-concluded:
-		require.Equal(t, dutyOutcomeNotRequired, c.outcome, "no beacon objects to submit must conclude not_required, not failed")
-		require.NoError(t, c.reason)
+		require.Equal(t, dutyOutcomeFailed, c.outcome, "empty beacon objects from decided data is an invariant violation and must conclude failed")
+		require.ErrorIs(t, c.reason, ErrNoValidDutiesToExecute)
 	default:
-		t.Fatal("expected a not_required duty conclusion, got none")
+		t.Fatal("expected a failed duty conclusion, got none")
 	}
-	require.True(t, env.runner.State.Succeeded, "not_required is a correct completion")
+	require.False(t, env.runner.State.Succeeded, "an invariant violation must not be marked succeeded")
 }
 
 // TestAggregatorCommitteeRunnerProcessPostConsensus_DoesNotMarkFailedOnInvalidSigs asserts that the

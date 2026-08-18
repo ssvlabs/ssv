@@ -228,9 +228,12 @@ func (c *Committee) ConsumeQueue(
 			const couldNotHandleMsgLogPrefix = "could not handle message, "
 			switch {
 			case errors.Is(err, runner.ErrNoValidDutiesToExecute):
-				// Benign terminal, not a handling failure: the committee decided but this operator has
-				// no duties to execute (the runner already concluded the duty as not_required), so the
-				// message is dropped and the runner terminated without error-level noise.
+				// Terminal, not a handling failure: the committee decided but this operator has no
+				// duties to execute, so the message is dropped and the runner terminated without
+				// error-level noise. The runner concluded the duty outcome before returning the
+				// sentinel (not_required for the benign zero-duties cases; failed for
+				// AggregatorCommitteeRunner's empty-decided-data invariant violation, which also
+				// warns via the outcome watcher), so nothing is lost by the quiet drop here.
 				const droppingMsgDueToNoValidDutiesToExecuteEvent = "no valid duties to execute, dropping message and terminating committee-runner"
 				msgLogger.Debug(droppingMsgDueToNoValidDutiesToExecuteEvent, zap.Error(err))
 				msgState.span.AddEvent(droppingMsgDueToNoValidDutiesToExecuteEvent, trace.WithAttributes(

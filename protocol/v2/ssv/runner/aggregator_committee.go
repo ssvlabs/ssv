@@ -887,12 +887,18 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 		return fmt.Errorf("could not get expected post consensus roots and beacon objects: %w", err)
 	}
 	if len(beaconObjects) == 0 {
-		// Benign terminal: consensus reached but this operator has nothing to submit (no aggregators
-		// or contributors assigned to it in the decided data). Conclude as not_required (matching
-		// CommitteeRunner) — neither a false "stuck" nor a spurious "failed". The sentinel still
-		// tells committee_queue to drop the message and terminate the runner.
-		r.markDutyNotRequired()
-		return ErrNoValidDutiesToExecute
+		// NOT the benign terminal it is in the sibling CommitteeRunner. There, beaconObjects is built
+		// from LOCAL state, so divergent validator sets legitimately empty it on one operator. Here it
+		// is built purely from the DECIDED value with every error surfaced above, so an empty map means
+		// the decided data had zero aggregators and zero contributors — a value
+		// AggregatorCommitteeConsensusData.Validate() rejects and validateDecidedConsensusData enforces
+		// before it is ever stored as decided. Reaching this branch is an invariant violation (bypassed
+		// or regressed decided-value validation), a consensus-integrity signal that must stay loud:
+		// classify as failed. The sentinel is preserved in the chain so committee_queue still drops the
+		// message and terminates the runner.
+		err := fmt.Errorf("no beacon objects from decided data, decided-value validation should have rejected it: %w", ErrNoValidDutiesToExecute)
+		r.markDutyFailed(err)
+		return err
 	}
 
 	sort.Slice(roots, func(i, j int) bool {
