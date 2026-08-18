@@ -3,6 +3,7 @@ package exporter
 import (
 	"errors"
 	"fmt"
+	"math"
 	"slices"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -95,6 +96,13 @@ func (e *Exporter) ValidatorTracesCore(request *ValidatorTracesQuery) (*Validato
 func (e *Exporter) validateValidatorRequest(request *ValidatorTracesQuery) error {
 	if request.From > request.To {
 		return fmt.Errorf("'from' must be less than or equal to 'to'")
+	}
+
+	// the per-slot loop is inclusive of 'to', so the maximum uint64 value
+	// would wrap the counter and never terminate. An endpoint-wide range
+	// bound is tracked in #2986; this only rejects the guaranteed hang.
+	if request.To == math.MaxUint64 {
+		return fmt.Errorf("'to' must be less than %d", uint64(math.MaxUint64))
 	}
 
 	if len(request.Roles) == 0 {

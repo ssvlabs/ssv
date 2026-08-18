@@ -2,6 +2,7 @@ package exporter
 
 import (
 	"fmt"
+	"math"
 	"testing"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -214,6 +215,20 @@ func TestValidateValidatorRequest(t *testing.T) {
 				From:  straddleBoundarySlot,
 				To:    straddleBoundarySlot + 10,
 				Roles: []spectypes.BeaconRole{spectypes.BNRoleAggregator},
+			},
+			wantErr: true,
+		},
+		{
+			// the inclusive per-slot loop would wrap its uint64 counter at the
+			// maximum 'to' and never terminate; the lower-bound fork gate no
+			// longer rejects this shape for unfiltered committee-duty roles,
+			// so validation must.
+			name:   "'to' of max uint64 is rejected regardless of role or filters",
+			netCfg: preFork,
+			request: &ValidatorTracesQuery{
+				From:  1,
+				To:    math.MaxUint64,
+				Roles: []spectypes.BeaconRole{spectypes.BNRoleProposer},
 			},
 			wantErr: true,
 		},
