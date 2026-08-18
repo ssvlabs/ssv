@@ -2640,6 +2640,44 @@ func TestExporterValidatorTraces_ForkGating_CrossForkRange(t *testing.T) {
 			}
 		})
 
+		t.Run(role.name+" without filters serves pre-fork data alongside post-fork notes", func(t *testing.T) {
+			store := newMockTraceStore()
+			// the unfiltered pre-fork path reads GetValidatorDuties per slot;
+			// post-fork slots are skipped with a note and must never reach it.
+			store.GetValidatorDutiesFunc = func(r spectypes.BeaconRole, slot phase0.Slot) ([]*traces.ValidatorDutyTrace, error) {
+				require.Less(t, uint64(slot), uint64(booleSlot), "unfiltered validator path used at post-Boole slot")
+				return []*traces.ValidatorDutyTrace{{Slot: slot, Role: r, Validator: idx}}, nil
+			}
+
+			exp := newTestExporterForV2WithNetwork(store, newMockValidatorStore(), &netCfg)
+
+			req := httptest.NewRequest(http.MethodPost, "/traces/validator", buildJSONBody(t, map[string]any{
+				"from":  from,
+				"to":    to,
+				"roles": []string{role.name},
+			}))
+			req.Header.Set("Content-Type", "application/json")
+			rec := httptest.NewRecorder()
+
+			require.NoError(t, exp.ValidatorTraces(rec, req))
+			require.Equal(t, http.StatusOK, rec.Code)
+
+			var resp ValidatorTracesResponse
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+
+			// the partial-coverage contract: real pre-fork traces in Data while
+			// the post-fork tail is reported as a note in Errors, in one response.
+			require.Len(t, resp.Data, int(uint64(booleSlot)-from), "expected one trace per pre-fork slot")
+			for _, item := range resp.Data {
+				assert.Less(t, uint64(item.Slot), uint64(booleSlot), "post-fork slot leaked into data")
+				assert.Equal(t, role.name, item.Role)
+			}
+			require.NotEmpty(t, resp.Errors, "expected the post-fork note to surface alongside data")
+			for _, msg := range resp.Errors {
+				require.Contains(t, msg, "committee duty post-fork")
+			}
+		})
+
 		t.Run(role.name+" with indices routes each slot by its own fork state", func(t *testing.T) {
 			store := newMockTraceStore()
 
