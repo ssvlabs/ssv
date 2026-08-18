@@ -301,15 +301,12 @@ func TestNetworkValidate(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			beacon := *TestNetwork.Beacon
-			beacon.SlotsPerEpoch = test.slotsPerEpoch
-			slotsSinceGenesis := uint64(test.currentEpoch) * test.slotsPerEpoch
-			beacon.GenesisTime = time.Now().Add(-time.Duration(slotsSinceGenesis) * beacon.SlotDuration)
+			beacon := beaconAt(test.currentEpoch, test.slotsPerEpoch)
 			if test.preGenesis {
 				beacon.GenesisTime = time.Now().Add(time.Hour)
 			}
 			netCfg := Network{
-				Beacon: &beacon,
+				Beacon: beacon,
 				SSV: &SSV{
 					DomainType:     test.domainType,
 					NextDomainType: test.nextDomainType,
@@ -328,10 +325,16 @@ func TestNetworkValidate(t *testing.T) {
 }
 
 func beaconAtEpoch(epoch phase0.Epoch) *Beacon {
+	return beaconAt(epoch, TestNetwork.Beacon.SlotsPerEpoch)
+}
+
+// beaconAt returns a Beacon copy whose wall clock sits at the given epoch with
+// the given slots-per-epoch (which may deliberately be zero or otherwise invalid).
+func beaconAt(epoch phase0.Epoch, slotsPerEpoch uint64) *Beacon {
 	beacon := *TestNetwork.Beacon
-	slotsSinceGenesis := uint64(epoch) * beacon.SlotsPerEpoch
-	genesisTime := time.Now().Add(-time.Duration(slotsSinceGenesis) * beacon.SlotDuration)
-	beacon.GenesisTime = genesisTime
+	beacon.SlotsPerEpoch = slotsPerEpoch
+	slotsSinceGenesis := uint64(epoch) * slotsPerEpoch
+	beacon.GenesisTime = time.Now().Add(-time.Duration(slotsSinceGenesis) * beacon.SlotDuration)
 	return &beacon
 }
 
