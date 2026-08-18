@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"sync/atomic"
 	"testing"
 
 	"github.com/attestantio/go-eth2-client/spec"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
@@ -169,6 +171,64 @@ func TestCommitteeRunnerProcessPostConsensus_MarksNotRequiredOnNoBeaconObjects(t
 	}
 	require.True(t, env.runner.State.Succeeded, "not_required is a correct completion")
 	require.Empty(t, env.beacon.GetBroadcastedRoots(), "nothing should have been submitted")
+}
+
+// faultyDomainDataBeacon wraps the testing beacon node with a switchable DomainData failure, so a
+// test can let consensus-phase signing succeed and then fail every post-consensus beacon-object
+// construction. All other behavior is inherited via the embedded *BeaconNodeWrapped.
+type faultyDomainDataBeacon struct {
+	*protocoltesting.BeaconNodeWrapped
+	domainErr error
+	fail      atomic.Bool
+}
+
+func (b *faultyDomainDataBeacon) DomainData(ctx context.Context, epoch phase0.Epoch, domain phase0.DomainType) (phase0.Domain, error) {
+	if b.fail.Load() {
+		return phase0.Domain{}, b.domainErr
+	}
+	return b.BeaconNodeWrapped.DomainData(ctx, epoch, domain)
+}
+
+// TestCommitteeRunnerProcessPostConsensus_MarksFailedOnAllConstructionFailures guards the boundary of
+// the not_required classification: an empty beacon-objects map caused by every per-validator
+// construction failing (modeled by DomainData failing after consensus) is a MISSED submission, not a
+// benign no-op — expectedPostConsensusRootsAndBeaconObjects must surface the error so the duty
+// concludes failed instead of not_required.
+func TestCommitteeRunnerProcessPostConsensus_MarksFailedOnAllConstructionFailures(t *testing.T) {
+	base := protocoltesting.NewTestingBeaconNodeWrapped().(*protocoltesting.BeaconNodeWrapped)
+	domainErr := errors.New("domain data unavailable")
+	faulty := &faultyDomainDataBeacon{BeaconNodeWrapped: base, domainErr: domainErr}
+
+	env := newCommitteeRunnerEnvWithBeacon(t, []int{1}, faulty)
+	duty := spectestingutils.TestingCommitteeDuty([]int{1}, nil, spec.DataVersionElectra)
+
+	env.startAndDecideCommitteeDuty(t, duty)
+	concluded := observeConclusion(env)
+
+	// Consensus-phase signing has already fetched domain data successfully; from here on every
+	// post-consensus object construction fails, emptying the beacon-objects map for a duty this
+	// operator WAS supposed to submit.
+	faulty.fail.Store(true)
+
+	var postConsensusErr error
+	for id := spectypes.OperatorID(1); id <= 3; id++ {
+		msg := spectestingutils.PostConsensusCommitteeMsgForDuty(duty, env.keySetMap, id)
+		if err := env.runner.ProcessPostConsensus(context.Background(), env.logger, msg); err != nil {
+			postConsensusErr = err
+		}
+	}
+
+	require.ErrorIs(t, postConsensusErr, domainErr, "the construction failure must surface, not be swallowed into an empty map")
+	require.NotErrorIs(t, postConsensusErr, ErrNoValidDutiesToExecute, "an all-construction-failure empty map must not be classified as the benign sentinel")
+
+	select {
+	case c := <-concluded:
+		require.Equal(t, dutyOutcomeFailed, c.outcome, "a missed submission must conclude failed, not not_required")
+		require.ErrorIs(t, c.reason, domainErr)
+	default:
+		t.Fatal("expected a failed duty conclusion, got none")
+	}
+	require.False(t, env.runner.State.Succeeded, "a missed submission must not be marked succeeded")
 }
 
 // TestCommitteeRunnerProcessConsensus_MarksNotRequiredOnNoValidDuties covers the consensus-phase
