@@ -23,6 +23,11 @@ import (
 // partial-coverage note apart from genuine processing failures.
 var ErrPostForkCommitteeDutyNote = errors.New("committee duty post-fork requires pubkeys or indices")
 
+// committeeDutyFilterHint is the actionable tail shared by the committee-duty
+// validation error and the post-fork partial-coverage note, hoisted so the two
+// messages cannot drift apart.
+const committeeDutyFilterHint = "please provide either pubkeys or indices to filter the duty for a specific validators subset or use the /committee endpoint to query all the corresponding duties"
+
 // ValidatorTracesCore contains the core logic for ValidatorTraces without any HTTP concerns.
 func (e *Exporter) ValidatorTracesCore(request *ValidatorTracesQuery) (*ValidatorTracesResult, *multierror.Error) {
 	if err := e.validateValidatorRequest(request); err != nil {
@@ -75,7 +80,7 @@ func (e *Exporter) ValidatorTracesCore(request *ValidatorTracesQuery) (*Validato
 			continue
 		}
 		delete(postForkNoteFrom, role) // guard against duplicate roles in the request
-		errs = multierror.Append(errs, fmt.Errorf("%w: slots %d-%d: role %s is a committee duty post-fork, please provide either pubkeys or indices to filter the duty for a specific validators subset or use the /committee endpoint to query all the corresponding duties", ErrPostForkCommitteeDutyNote, noteFrom, request.To, role.String()))
+		errs = multierror.Append(errs, fmt.Errorf("%w: slots %d-%d: role %s is a committee duty post-fork, %s", ErrPostForkCommitteeDutyNote, noteFrom, request.To, role.String(), committeeDutyFilterHint))
 	}
 
 	// by design, not found duties are expected and not considered as API errors
@@ -103,7 +108,7 @@ func (e *Exporter) validateValidatorRequest(request *ValidatorTracesQuery) error
 	if len(request.PubKeys) == 0 && len(request.Indices) == 0 {
 		for _, role := range request.Roles {
 			if e.isCommitteeDutyAtSlot(role, phase0.Slot(request.From)) {
-				return fmt.Errorf("role %s is a committee duty, please provide either pubkeys or indices to filter the duty for a specific validators subset or use the /committee endpoint to query all the corresponding duties", role.String())
+				return fmt.Errorf("role %s is a committee duty, %s", role.String(), committeeDutyFilterHint)
 			}
 		}
 	}
