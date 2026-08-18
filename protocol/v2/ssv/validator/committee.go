@@ -589,6 +589,9 @@ func (c *Committee) createRunner(
 		ar.SetQBFTRoundTimerF(c.newQBFTRoundTimerF(runnerIdentifier))
 		c.AggregatorRunners[duty.DutySlot()] = ar
 	default:
+		// Unlike the runner-type mismatches above, which guard the injected CreateRunnerFn,
+		// the duty type is produced by this package's own callers — a mismatch here is a
+		// local code bug, so it stays a loud panic rather than a returned error.
 		c.logger.Panic("BUG: attempt to create committee runner with non-committee duty type",
 			zap.String("type", fmt.Sprintf("%T", duty)))
 	}
