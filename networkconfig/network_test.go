@@ -262,6 +262,16 @@ func TestNetworkValidate(t *testing.T) {
 			expectErr:      true,
 		},
 		{
+			// BooleFork activates on >=, so equal domains are already legitimate at
+			// the exact activation epoch, not just after it.
+			name:           "clean_next_domain_equals_domain_at_fork",
+			boole:          10,
+			currentEpoch:   10,
+			slotsPerEpoch:  32,
+			domainType:     domainBoole,
+			nextDomainType: domainBoole,
+		},
+		{
 			name:           "clean_next_domain_equals_domain_after_fork",
 			boole:          10,
 			currentEpoch:   20,
