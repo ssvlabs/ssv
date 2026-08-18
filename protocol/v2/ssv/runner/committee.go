@@ -379,6 +379,13 @@ listener:
 	)
 
 	if totalAttestations == 0 && totalSyncCommittee == 0 {
+		// A cancelled context also lands here with zero counts: the duty feeder and the workers bail
+		// out on ctx.Err() before incrementing any counter. That is shutdown — the duty was abandoned,
+		// not completed-with-nothing-to-do — so return without concluding an outcome, mirroring
+		// markDutyFailed's context.Canceled filter (cancellation is never an outcome).
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		// Benign terminal: the committee decided but this operator ended up with zero valid duties to
 		// sign. Conclude as not_required so the watcher doesn't report a false "stuck"; the sentinel
 		// still tells committee_queue to drop the message and terminate the runner.

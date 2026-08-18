@@ -264,3 +264,30 @@ func TestCommitteeRunnerProcessConsensus_MarksNotRequiredOnNoValidDuties(t *test
 	}
 	require.True(t, env.runner.State.Succeeded, "not_required is a correct completion")
 }
+
+// TestCommitteeRunnerProcessConsensus_CancelledContextDoesNotConcludeNotRequired guards the
+// consensus-phase zero-duties branch against shutdown: a cancelled context also reaches it with zero
+// counts (the duty feeder and workers bail out before counting), but an abandoned duty must not be
+// recorded as a not_required completion — cancellation is never an outcome, mirroring
+// markDutyFailed's context.Canceled filter.
+func TestCommitteeRunnerProcessConsensus_CancelledContextDoesNotConcludeNotRequired(t *testing.T) {
+	env := newCommitteeRunnerEnv(t, []int{1}, &committeeDutyGuardStub{}, &doppelgangerStub{})
+	duty := spectestingutils.TestingCommitteeDuty([]int{1}, nil, spec.DataVersionElectra)
+
+	require.NoError(t, env.runner.StartNewDuty(t.Context(), env.logger, duty, env.sampleKey.Threshold))
+	concluded := observeConclusion(env)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	var consensusErr error
+	for _, msg := range spectestingutils.CommitteeInputForDuty(duty, duty.Slot, env.keySetMap, false) {
+		if err := env.runner.ProcessConsensus(ctx, env.logger, msg); err != nil {
+			consensusErr = err
+		}
+	}
+
+	require.ErrorIs(t, consensusErr, context.Canceled, "shutdown must surface the cancellation, not the benign sentinel")
+	require.Empty(t, concluded, "an abandoned duty must not conclude any outcome")
+	require.False(t, env.runner.State.Succeeded, "an abandoned duty is not a completion")
+}
