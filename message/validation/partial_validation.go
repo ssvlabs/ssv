@@ -86,11 +86,11 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 // case (~229 KB vs ~763 KB; the outer SignedSSVMessage decode that already happened is
 // bounded separately by MaxEncodedMsgSize). The cap is enforced before decoding, when the
 // message's own slot is not yet known, so unlike the other fork gates in this package the
-// switch is wall-clock based — and flips one epoch before boole activation (mirroring
-// SIP-43's one-epoch prior window) so that messages for post-fork slots arriving early
-// (clock skew) are never rejected against the smaller cap.
+// switch is wall-clock based — and flips at the start of SIP-43's prior window (one epoch
+// before boole activation) so that messages for post-fork slots arriving early (clock
+// skew) are never rejected against the smaller cap.
 func (mv *messageValidator) currentMaxEncodedPartialSignatureSize() int {
-	if mv.netCfg.BooleForkAtEpoch(mv.netCfg.EstimatedCurrentEpoch() + 1) {
+	if mv.netCfg.BooleForkImminentOrActiveAtEpoch(mv.netCfg.EstimatedCurrentEpoch()) {
 		return maxEncodedPartialSignatureSize
 	}
 	return preForkMaxEncodedPartialSignatureSize

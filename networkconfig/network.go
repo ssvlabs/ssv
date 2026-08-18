@@ -81,6 +81,15 @@ func (n Network) BooleForkAtSlot(slot phase0.Slot) bool {
 	return n.BooleForkAtEpoch(n.EstimatedEpochAtSlot(slot))
 }
 
+// BooleForkImminentOrActiveAtEpoch reports whether epoch is inside the SIP-43 prior
+// window of the Boole fork (boolePriorWindowEpochs before activation) or past activation.
+// Use it for acceptance decisions that must flip to post-fork behavior as soon as
+// post-fork traffic can legitimately appear, so the window width stays defined in one
+// place.
+func (n Network) BooleForkImminentOrActiveAtEpoch(epoch phase0.Epoch) bool {
+	return n.BooleForkAtEpoch(epoch + boolePriorWindowEpochs)
+}
+
 // InBooleTransitionWindow checks if the slot is in the Boole transition window,
 // i.e., in `PRIOR_WINDOW` or `SUBSEQUENT_WINDOW` according to https://github.com/ssvlabs/SIPs/pull/43.
 func (n Network) InBooleTransitionWindow(slot phase0.Slot) bool {
