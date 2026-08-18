@@ -1,11 +1,14 @@
 package validation
 
 import (
+	"bytes"
+	"context"
 	"math"
 	"testing"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -72,4 +75,45 @@ func TestMaxEncodedPartialSignatureSizeAt(t *testing.T) {
 			require.Equal(t, tc.want, mv.maxEncodedPartialSignatureSizeAt(receivedAt))
 		})
 	}
+}
+
+// TestPartialSignatureSizeCapEnforcedInValidation drives validatePartialSignatureMessage
+// itself (not just the cap selector) with a payload sized between the two caps, guarding
+// that the fork-aware cap stays wired into the validation path: pre-fork the payload is
+// rejected as too big against the pre-fork cap; with the fork active the same payload
+// passes the size gate and only fails later, at decoding.
+func TestPartialSignatureSizeCapEnforcedInValidation(t *testing.T) {
+	t.Parallel()
+
+	const currentEpoch = phase0.Epoch(10)
+	receivedAt := testReceivedAtEpoch(currentEpoch)
+
+	betweenCaps := preForkMaxEncodedPartialSignatureSize + 1
+	require.LessOrEqual(t, betweenCaps, maxEncodedPartialSignatureSize)
+	signedSSVMessage := &spectypes.SignedSSVMessage{
+		SSVMessage: &spectypes.SSVMessage{Data: bytes.Repeat([]byte{1}, betweenCaps)},
+	}
+
+	t.Run("pre-fork rejects a payload above the pre-fork cap", func(t *testing.T) {
+		t.Parallel()
+
+		mv := &messageValidator{netCfg: testNetworkWithBoole(currentEpoch + 2)}
+		_, err := mv.validatePartialSignatureMessage(context.Background(), signedSSVMessage, CommitteeInfo{}, "", "", receivedAt)
+		require.ErrorIs(t, err, ErrSSVDataTooBig)
+
+		var valErr Error
+		require.ErrorAs(t, err, &valErr)
+		require.Equal(t, preForkMaxEncodedPartialSignatureSize, valErr.want, "rejection must be against the pre-fork cap")
+	})
+
+	t.Run("active fork lets the same payload past the size gate", func(t *testing.T) {
+		t.Parallel()
+
+		mv := &messageValidator{netCfg: testNetworkWithBoole(currentEpoch)}
+		_, err := mv.validatePartialSignatureMessage(context.Background(), signedSSVMessage, CommitteeInfo{}, "", "", receivedAt)
+		require.NotErrorIs(t, err, ErrSSVDataTooBig)
+		// The garbage payload fails at the next step, decoding — proof the size gate
+		// (not the content) made the difference between the two cases.
+		require.ErrorIs(t, err, ErrUndecodableMessageData)
+	})
 }
