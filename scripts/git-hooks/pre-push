@@ -1,15 +1,21 @@
 #!/bin/sh
-# Pre-push hook: run the misspell linter (locale US, same as .golangci.yaml's
-# misspell config) on the .go/.md files this push introduces or modifies, so
-# spelling failures surface locally instead of on the PR's lint check.
+# Pre-push hook: lint what this push introduces or modifies, so lint failures
+# surface locally instead of on the PR's lint check. Two stages:
+#
+#   1. misspell (locale US, same as .golangci.yaml's misspell config) on the
+#      changed .go/.md blobs at the pushed commit.
+#   2. golangci-lint (the same config CI's `make lint` uses) on the packages
+#      containing changed .go files. Unlike misspell it needs full packages on
+#      disk for type-checking, so it lints the checkout rather than the pushed
+#      blobs and only runs when pushing the checked-out HEAD.
 #
 # Install with: make install-hooks
 # Bypass for a one-off push: git push --no-verify
 
 root=$(git rev-parse --show-toplevel) || exit 0
 
-# go tool compiles misspell from tool.mod on first use and caches it; go may
-# not be on PATH in GUI-spawned shells, so fall back to the default install.
+# go tool compiles the linters from tool.mod on first use and caches them; go
+# may not be on PATH in GUI-spawned shells, so fall back to the default install.
 if command -v go >/dev/null 2>&1; then
 	GO=go
 elif [ -x /usr/local/go/bin/go ]; then
@@ -20,6 +26,8 @@ fi
 
 ZERO=0000000000000000000000000000000000000000
 status=0
+head_sha=$(git rev-parse HEAD)
+lint_dirs=""
 
 while read -r local_ref local_sha remote_ref remote_sha; do
 	[ "$local_sha" = "$ZERO" ] && continue # deleting a remote ref
@@ -46,11 +54,44 @@ while read -r local_ref local_sha remote_ref remote_sha; do
 			status=1
 		fi
 	done
+
+	# Collect the packages holding changed .go files for the golangci-lint
+	# stage. Only when this ref is the checked-out HEAD — the checkout is what
+	# gets linted, so for any other ref the results wouldn't describe the push.
+	[ "$local_sha" = "$head_sha" ] || continue
+	for f in $files; do
+		case $f in
+		*.go) ;;
+		*) continue ;;
+		esac
+		d=./$(dirname "$f")
+		case $d in
+		# Nested modules: CI's `make lint` golangci run covers the root module
+		# only, and golangci-lint can't load their packages from here anyway.
+		./ssvsigner | ./ssvsigner/*) continue ;;
+		./scripts/differ | ./scripts/differ/*) continue ;;
+		esac
+		[ -d "$root/${d#./}" ] || continue # dir may be gone (renames)
+		case " $lint_dirs " in
+		*" $d "*) ;;
+		*) lint_dirs="$lint_dirs $d" ;;
+		esac
+	done
 done
+
+# golangci-lint stage: staticcheck & friends on the changed packages, scoped so
+# a push costs seconds, not CI's full-repo minutes. It sees the working tree,
+# so uncommitted edits in these packages show up here.
+if [ -n "$lint_dirs" ]; then
+	# shellcheck disable=SC2086 # lint_dirs is word-split on purpose
+	if ! (cd "$root" && GOWORK=off "$GO" tool -modfile="$root/tool.mod" golangci-lint run $lint_dirs >&2); then
+		status=1
+	fi
+fi
 
 if [ "$status" -ne 0 ]; then
 	echo "" >&2
-	echo "pre-push: fix the spellings above and amend/commit — the CI lint check (golangci-lint misspell) fails on them." >&2
+	echo "pre-push: fix the issues above and amend/commit — the CI lint check (make lint) fails on them." >&2
 	echo "pre-push: bypass once with: git push --no-verify" >&2
 fi
 exit $status
