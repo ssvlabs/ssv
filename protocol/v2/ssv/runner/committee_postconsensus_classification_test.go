@@ -266,7 +266,7 @@ func TestCommitteeRunnerProcessConsensus_MarksNotRequiredOnNoValidDuties(t *test
 }
 
 // TestCommitteeRunnerProcessConsensus_CancelledContextDoesNotConcludeNotRequired guards the
-// consensus-phase zero-duties branch against shutdown: a cancelled context also reaches it with zero
+// consensus-phase zero-duties branch against shutdown: a canceled context also reaches it with zero
 // counts (the duty feeder and workers bail out before counting), but an abandoned duty must not be
 // recorded as a not_required completion — cancellation is never an outcome, mirroring
 // markDutyFailed's context.Canceled filter.

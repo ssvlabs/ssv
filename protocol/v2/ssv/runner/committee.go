@@ -379,7 +379,7 @@ listener:
 	)
 
 	if totalAttestations == 0 && totalSyncCommittee == 0 {
-		// A cancelled context also lands here with zero counts: the duty feeder and the workers bail
+		// A canceled context also lands here with zero counts: the duty feeder and the workers bail
 		// out on ctx.Err() before incrementing any counter. That is shutdown — the duty was abandoned,
 		// not completed-with-nothing-to-do — so return without concluding an outcome, mirroring
 		// markDutyFailed's context.Canceled filter (cancellation is never an outcome).
