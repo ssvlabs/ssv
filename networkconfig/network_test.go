@@ -335,7 +335,7 @@ func TestNetworkValidate(t *testing.T) {
 }
 
 func beaconAtEpoch(epoch phase0.Epoch) *Beacon {
-	return beaconAt(epoch, TestNetwork.Beacon.SlotsPerEpoch)
+	return beaconAt(epoch, TestNetwork.SlotsPerEpoch)
 }
 
 // beaconAt returns a Beacon copy whose wall clock sits at the given epoch with
