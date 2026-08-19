@@ -26,6 +26,14 @@ fi
 
 ZERO=0000000000000000000000000000000000000000
 status=0
+
+# Changed paths may contain spaces or glob characters: iterate $files with a
+# newline-only IFS (restored to the default around the outer read, which needs
+# it to split its fields) and keep pathname expansion off for the whole run.
+set -f
+nl='
+'
+oIFS=$IFS
 head_sha=$(git rev-parse HEAD)
 lint_dirs=""
 misspell_ok="" # probed lazily on the first push with changed files
@@ -62,6 +70,7 @@ while read -r local_ref local_sha remote_ref remote_sha; do
 	# Check the blobs at local_sha, not the working tree, so uncommitted edits
 	# don't mask (or fake) findings in what's actually being pushed.
 	if [ "$misspell_ok" = y ]; then
+		IFS=$nl
 		for f in $files; do
 			out=$(git show "$local_sha:$f" 2>/dev/null |
 				GOWORK=off "$GO" tool -modfile="$root/tool.mod" misspell -locale US -error 2>&1)
@@ -71,12 +80,14 @@ while read -r local_ref local_sha remote_ref remote_sha; do
 				status=1
 			fi
 		done
+		IFS=$oIFS
 	fi
 
 	# Collect the packages holding changed .go files for the golangci-lint
 	# stage. Only when this ref is the checked-out HEAD — the checkout is what
 	# gets linted, so for any other ref the results wouldn't describe the push.
 	[ "$local_sha" = "$head_sha" ] || continue
+	IFS=$nl
 	for f in $files; do
 		case $f in
 		*.go) ;;
@@ -95,6 +106,7 @@ while read -r local_ref local_sha remote_ref remote_sha; do
 		*) lint_dirs="$lint_dirs $d" ;;
 		esac
 	done
+	IFS=$oIFS
 done
 
 # golangci-lint stage: staticcheck & friends on the changed packages, scoped so
