@@ -35,7 +35,10 @@ while read -r local_ref local_sha remote_ref remote_sha; do
 	if [ "$remote_sha" = "$ZERO" ]; then
 		# New remote branch: diff against the merge-base with stage (or main).
 		base=$(git merge-base "$local_sha" origin/stage 2>/dev/null) ||
-			base=$(git merge-base "$local_sha" origin/main 2>/dev/null) || continue
+			base=$(git merge-base "$local_sha" origin/main 2>/dev/null) || {
+			echo "pre-push: no merge-base with origin/stage or origin/main — skipping lint for $local_ref" >&2
+			continue
+		}
 	else
 		base=$remote_sha
 	fi
