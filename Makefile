@@ -44,6 +44,11 @@ ssvsigner-golangci-lint:
 deadcode-lint:
 	./scripts/deadcode.sh
 
+.PHONY: install-hooks
+install-hooks:
+	git config core.hooksPath scripts/git-hooks
+	@echo "git hooks installed (core.hooksPath -> scripts/git-hooks)"
+
 .PHONY: ssvsigner-boundary-lint
 ssvsigner-boundary-lint:
 	./scripts/ssvsigner_boundary.sh
