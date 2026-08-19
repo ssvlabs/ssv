@@ -11,9 +11,16 @@ import (
 	"go.uber.org/zap"
 )
 
-// forkingDV5Listener wraps a pre-fork and a post-fork listener.
-// Before the fork, it performs operations on both services.
-// After the fork, it performs operations only on the post-fork service.
+// forkingDV5Listener wraps a pre-fork and a post-fork listener and queries both
+// on every operation.
+//
+// The naming is historical: the pre-fork listener was meant to be dropped after
+// the protocol-ID fork, but #1774 removed that shutdown, so it runs permanently.
+// No fork check remains; both listeners stay live for the service's lifetime.
+//
+// It still earns its keep: with no protocol ID set, the pre-fork listener is the
+// only way to reach nodes that predate the fork — and the path by which
+// unrelated discv5 traffic enters the node (see SharedUDPConn).
 type forkingDV5Listener struct {
 	logger           *zap.Logger
 	preForkListener  Listener
@@ -30,16 +37,14 @@ func NewForkingDV5Listener(logger *zap.Logger, preFork, postFork Listener, itera
 	}
 }
 
-// Before the fork, returns the result of a Lookup in both pre and post-fork services.
-// After the fork, returns only the result from the post-fork service.
+// Lookup returns the combined result of a lookup in both listeners.
 func (l *forkingDV5Listener) Lookup(id enode.ID) []*enode.Node {
 	nodes := l.postForkListener.Lookup(id)
 	nodes = append(nodes, l.preForkListener.Lookup(id)...)
 	return nodes
 }
 
-// Before the fork, returns an iterator for both pre and post-fork services.
-// After the fork, returns only the iterator from the post-fork service.
+// RandomNodes returns an iterator that draws fairly from both listeners.
 func (l *forkingDV5Listener) RandomNodes() enode.Iterator {
 	fairMix := enode.NewFairMix(l.iteratorTimeout)
 	fairMix.AddSource(&annotatedIterator{l.postForkListener.RandomNodes(), "post"})
@@ -47,16 +52,15 @@ func (l *forkingDV5Listener) RandomNodes() enode.Iterator {
 	return fairMix
 }
 
-// Before the fork, returns all nodes from the pre and post-fork listeners.
-// After the fork, returns only the result from the post-fork service.
+// AllNodes returns the nodes held by both listeners.
 func (l *forkingDV5Listener) AllNodes() []*enode.Node {
 	enodes := l.postForkListener.AllNodes()
 	enodes = append(enodes, l.preForkListener.AllNodes()...)
 	return enodes
 }
 
-// Sends a ping in the post-fork service.
-// Before the fork, it also tries to ping with the pre-fork service in case of error.
+// Ping tries the post-fork listener first, falling back to the pre-fork one so
+// that nodes reachable only on the default protocol ID still answer.
 func (l *forkingDV5Listener) Ping(node *enode.Node) (*v5wire.Pong, error) {
 	pong, err := l.postForkListener.Ping(node)
 	if err != nil {
@@ -71,15 +75,10 @@ func (l *forkingDV5Listener) LocalNode() *enode.LocalNode {
 	return l.postForkListener.LocalNode()
 }
 
-// Closes both listeners
+// Close closes both listeners.
 func (l *forkingDV5Listener) Close() {
-	l.closePreForkListener()
-	l.postForkListener.Close()
-}
-
-// closePreForkListener ensures preForkListener is closed once
-func (l *forkingDV5Listener) closePreForkListener() {
 	l.preForkListener.Close()
+	l.postForkListener.Close()
 }
 
 // annotatedIterator wraps an enode.Iterator with metrics collection.
