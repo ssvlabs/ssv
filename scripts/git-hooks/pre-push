@@ -28,6 +28,7 @@ ZERO=0000000000000000000000000000000000000000
 status=0
 head_sha=$(git rev-parse HEAD)
 lint_dirs=""
+misspell_ok="" # probed lazily on the first push with changed files
 
 while read -r local_ref local_sha remote_ref remote_sha; do
 	[ "$local_sha" = "$ZERO" ] && continue # deleting a remote ref
@@ -46,17 +47,31 @@ while read -r local_ref local_sha remote_ref remote_sha; do
 	files=$(git diff --name-only --diff-filter=ACMR "$base" "$local_sha" -- '*.go' '*.md')
 	[ -z "$files" ] && continue
 
+	# go tool failures (resolution, compile, module download) must not be
+	# mistaken for spelling findings, so probe misspell once up front; if it
+	# can't run, warn and skip this stage instead of blocking the push.
+	if [ -z "$misspell_ok" ]; then
+		if printf '' | GOWORK=off "$GO" tool -modfile="$root/tool.mod" misspell -locale US -error >/dev/null 2>&1; then
+			misspell_ok=y
+		else
+			misspell_ok=n
+			echo "pre-push: cannot run misspell via 'go tool' — skipping the spelling stage" >&2
+		fi
+	fi
+
 	# Check the blobs at local_sha, not the working tree, so uncommitted edits
 	# don't mask (or fake) findings in what's actually being pushed.
-	for f in $files; do
-		out=$(git show "$local_sha:$f" 2>/dev/null |
-			GOWORK=off "$GO" tool -modfile="$root/tool.mod" misspell -locale US -error 2>&1)
-		if [ -n "$out" ]; then
-			echo "pre-push: misspell found issues in $f:" >&2
-			echo "$out" | sed "s|^stdin|  $f|" >&2
-			status=1
-		fi
-	done
+	if [ "$misspell_ok" = y ]; then
+		for f in $files; do
+			out=$(git show "$local_sha:$f" 2>/dev/null |
+				GOWORK=off "$GO" tool -modfile="$root/tool.mod" misspell -locale US -error 2>&1)
+			if [ -n "$out" ]; then
+				echo "pre-push: misspell found issues in $f:" >&2
+				echo "$out" | sed "s|^stdin|  $f|" >&2
+				status=1
+			fi
+		done
+	fi
 
 	# Collect the packages holding changed .go files for the golangci-lint
 	# stage. Only when this ref is the checked-out HEAD — the checkout is what
