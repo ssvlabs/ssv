@@ -1223,6 +1223,15 @@ func SetupRunners(
 		case ssvtypes.RoleAggregator:
 			// Post-Boole, aggregator duties route through the merged AggregatorCommitteeRunner
 			// (committee-scoped) instead of this legacy per-validator runner.
+			//
+			// Gating on BooleFork() here is a deliberate snapshot taken at share-add time: once a
+			// share is added, this runner set is fixed until the share is re-added, so a share added
+			// shortly before the fork keeps its legacy runner across the transition. The resulting
+			// cross-population asymmetry (some operators still running the legacy runner while others
+			// have moved to the committee runner) is bounded to the Boole subsequent window
+			// (SlotsPerEpoch + booleSubsequentWindowLateSlots; 34 slots on mainnet — see InBooleTransitionWindow)
+			// and only affects already-decided pre-fork aggregator stragglers — no correctness impact.
+			// These legacy runners retire wholesale together with the Alan topics.
 			if !options.NetworkConfig.BooleFork() {
 				aggregatorValueChecker := ssv.NewAggregatorChecker(options.NetworkConfig.Beacon, share.ValidatorPubKey, share.ValidatorIndex)
 				runners[role], err = runner.NewAggregatorRunner(runner.AggregatorRunnerOptions{
@@ -1235,6 +1244,15 @@ func SetupRunners(
 		case ssvtypes.RoleSyncCommitteeContribution:
 			// Post-Boole, sync committee contribution duties route through the merged
 			// AggregatorCommitteeRunner (committee-scoped) instead of this legacy per-validator runner.
+			//
+			// Gating on BooleFork() here is a deliberate snapshot taken at share-add time: once a
+			// share is added, this runner set is fixed until the share is re-added, so a share added
+			// shortly before the fork keeps its legacy runner across the transition. The resulting
+			// cross-population asymmetry (some operators still running the legacy runner while others
+			// have moved to the committee runner) is bounded to the Boole subsequent window
+			// (SlotsPerEpoch + booleSubsequentWindowLateSlots; 34 slots on mainnet — see InBooleTransitionWindow)
+			// and only affects already-decided pre-fork sync committee contribution stragglers — no
+			// correctness impact. These legacy runners retire wholesale together with the Alan topics.
 			if !options.NetworkConfig.BooleFork() {
 				syncCommitteeContributionValueChecker := ssv.NewSyncCommitteeContributionChecker(options.NetworkConfig.Beacon, share.ValidatorPubKey, share.ValidatorIndex)
 				runners[role], err = runner.NewSyncCommitteeAggregatorRunner(runner.SyncCommitteeAggregatorRunnerOptions{

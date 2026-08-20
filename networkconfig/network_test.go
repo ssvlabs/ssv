@@ -202,11 +202,149 @@ func TestBooleForkAtSlot(t *testing.T) {
 	}
 }
 
+func TestNetworkValidate(t *testing.T) {
+	domainAlan := spectypes.DomainType{0x01, 0x02, 0x03, 0x04}
+	domainBoole := spectypes.DomainType{0x05, 0x06, 0x07, 0x08}
+
+	tests := []struct {
+		name           string
+		boole          phase0.Epoch
+		currentEpoch   phase0.Epoch // wall-clock epoch the config is validated at
+		preGenesis     bool         // put GenesisTime in the future (overrides currentEpoch)
+		slotsPerEpoch  uint64
+		domainType     spectypes.DomainType
+		nextDomainType spectypes.DomainType
+		expectErr      bool
+	}{
+		{
+			name:           "hard_error_zero_slots_per_epoch",
+			boole:          10,
+			slotsPerEpoch:  0,
+			domainType:     domainAlan,
+			nextDomainType: domainBoole,
+			expectErr:      true,
+		},
+		{
+			name:           "hard_error_zero_slots_per_epoch_unscheduled",
+			boole:          phase0.Epoch(math.MaxUint64),
+			slotsPerEpoch:  0,
+			domainType:     domainAlan,
+			nextDomainType: domainAlan,
+			expectErr:      true,
+		},
+		{
+			name:           "hard_error_overflow",
+			boole:          phase0.Epoch(math.MaxUint64/32) + 1,
+			slotsPerEpoch:  32,
+			domainType:     domainAlan,
+			nextDomainType: domainBoole,
+			expectErr:      true,
+		},
+		{
+			name:           "hard_error_next_domain_equals_domain_before_fork",
+			boole:          10,
+			currentEpoch:   5,
+			slotsPerEpoch:  32,
+			domainType:     domainAlan,
+			nextDomainType: domainAlan,
+			expectErr:      true,
+		},
+		{
+			// The unchanged-domain check must not panic on EstimatedCurrentSlot when the
+			// clock is still before genesis; pre-genesis the fork is not yet active, so the
+			// misconfiguration is still reported as an error.
+			name:           "hard_error_next_domain_equals_domain_pre_genesis",
+			boole:          10,
+			preGenesis:     true,
+			slotsPerEpoch:  32,
+			domainType:     domainAlan,
+			nextDomainType: domainAlan,
+			expectErr:      true,
+		},
+		{
+			// BooleFork activates on >=, so equal domains are already legitimate at
+			// the exact activation epoch, not just after it.
+			name:           "clean_next_domain_equals_domain_at_fork",
+			boole:          10,
+			currentEpoch:   10,
+			slotsPerEpoch:  32,
+			domainType:     domainBoole,
+			nextDomainType: domainBoole,
+		},
+		{
+			name:           "clean_next_domain_equals_domain_after_fork",
+			boole:          10,
+			currentEpoch:   20,
+			slotsPerEpoch:  32,
+			domainType:     domainBoole,
+			nextDomainType: domainBoole,
+		},
+		{
+			name:           "clean_scheduled",
+			boole:          10,
+			slotsPerEpoch:  32,
+			domainType:     domainAlan,
+			nextDomainType: domainBoole,
+		},
+		{
+			name:           "clean_genesis_fork",
+			boole:          0,
+			slotsPerEpoch:  32,
+			domainType:     domainAlan,
+			nextDomainType: domainBoole,
+		},
+		{
+			name:           "clean_at_max_epoch_boundary",
+			boole:          phase0.Epoch(math.MaxUint64 / 32),
+			slotsPerEpoch:  32,
+			domainType:     domainAlan,
+			nextDomainType: domainBoole,
+		},
+		{
+			name:           "clean_unscheduled",
+			boole:          phase0.Epoch(math.MaxUint64),
+			slotsPerEpoch:  32,
+			domainType:     domainAlan,
+			nextDomainType: domainAlan,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			beacon := beaconAt(test.currentEpoch, test.slotsPerEpoch)
+			if test.preGenesis {
+				beacon.GenesisTime = time.Now().Add(time.Hour)
+			}
+			netCfg := Network{
+				Beacon: beacon,
+				SSV: &SSV{
+					DomainType:     test.domainType,
+					NextDomainType: test.nextDomainType,
+					Forks:          SSVForks{Boole: test.boole},
+				},
+			}
+
+			err := netCfg.Validate()
+			if test.expectErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
+}
+
 func beaconAtEpoch(epoch phase0.Epoch) *Beacon {
+	return beaconAt(epoch, TestNetwork.SlotsPerEpoch)
+}
+
+// beaconAt returns a Beacon copy whose wall clock sits at the given epoch with
+// the given slots-per-epoch (which may deliberately be zero or otherwise invalid).
+func beaconAt(epoch phase0.Epoch, slotsPerEpoch uint64) *Beacon {
 	beacon := *TestNetwork.Beacon
-	slotsSinceGenesis := uint64(epoch) * beacon.SlotsPerEpoch
-	genesisTime := time.Now().Add(-time.Duration(slotsSinceGenesis) * beacon.SlotDuration)
-	beacon.GenesisTime = genesisTime
+	beacon.SlotsPerEpoch = slotsPerEpoch
+	slotsSinceGenesis := uint64(epoch) * slotsPerEpoch
+	beacon.GenesisTime = time.Now().Add(-time.Duration(slotsSinceGenesis) * beacon.SlotDuration)
 	return &beacon
 }
 
