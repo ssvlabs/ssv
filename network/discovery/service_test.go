@@ -53,6 +53,72 @@ func TestDiscV5Service_Close(t *testing.T) {
 
 	err := dvs.Close()
 	assert.NoError(t, err)
+
+	// A repeat close would panic re-closing sharedConn.Unhandled; Close guards
+	// against that. The production caller closes once, but tests reach it directly.
+	assert.NotPanics(t, func() {
+		assert.NoError(t, dvs.Close())
+	})
+}
+
+// producingListener stands in for the post-fork discv5 listener in a close-order
+// test: it forwards packets into unhandled until Close is called, and Close
+// blocks until that has stopped — the same guarantee go-ethereum's UDPv5.Close
+// gives (it joins its goroutines before returning). Only Close is exercised.
+type producingListener struct {
+	Listener
+	unhandled chan<- discover.ReadPacket
+	stop      chan struct{}
+	done      chan struct{}
+}
+
+func newProducingListener(unhandled chan<- discover.ReadPacket) *producingListener {
+	p := &producingListener{
+		unhandled: unhandled,
+		stop:      make(chan struct{}),
+		done:      make(chan struct{}),
+	}
+	go func() {
+		defer close(p.done)
+		for {
+			select {
+			case <-p.stop:
+				return
+			case p.unhandled <- discover.ReadPacket{Data: []byte{0}}:
+			}
+		}
+	}()
+	return p
+}
+
+func (p *producingListener) Close() {
+	close(p.stop)
+	<-p.done
+}
+
+// TestDiscV5Service_CloseStopsProducerBeforeClosingUnhandled pins the shutdown
+// order: close() must stop the listeners (the producers into Unhandled) before
+// closing Unhandled. If it ever reverts to closing Unhandled first, the still-live
+// producer panics with "send on closed channel" — which the idempotency test
+// above cannot catch, having no live producer.
+func TestDiscV5Service_CloseStopsProducerBeforeClosingUnhandled(t *testing.T) {
+	unhandled := make(chan discover.ReadPacket, unhandledChanSize)
+	sharedConn := NewSharedUDPConn(t.Context(), zap.NewNop(), nil, unhandled)
+	producer := newProducingListener(unhandled)
+
+	dvs := &DiscV5Service{
+		dv5Listener: producer,
+		sharedConn:  sharedConn,
+		cancel:      func() {},
+	}
+
+	// Let the producer get going so a wrong-order close would very likely catch
+	// it mid-send.
+	time.Sleep(20 * time.Millisecond)
+
+	assert.NotPanics(t, func() {
+		assert.NoError(t, dvs.Close())
+	})
 }
 
 func TestDiscV5Service_RegisterSubnets(t *testing.T) {

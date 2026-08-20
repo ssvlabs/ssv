@@ -2,9 +2,12 @@ package p2pv1
 
 import (
 	"context"
+	"math"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -47,8 +50,16 @@ func (c *testTopicsController) Peers(topicName string) ([]peer.ID, error) {
 
 func (c *testTopicsController) Topics() []string {
 	// Mirror the real controller, which lists subscribed topics by their full pubsub name.
+	// Entries already carrying a full Boole-fork name (e.g. "/ssv/testnet/boole/11") pass
+	// through unchanged; bare subnet strings are wrapped in the Alan-style full name.
+	// Only those two input shapes are supported: an already-wrapped Alan name (e.g.
+	// "ssv.v2.11") has no slash and would be wrapped again, yielding a mangled topic.
 	full := make([]string, len(c.topics))
 	for i, t := range c.topics {
+		if strings.Contains(t, "/") {
+			full[i] = t
+			continue
+		}
 		full[i] = commons.GetTopicFullName(t)
 	}
 	return full
@@ -233,6 +244,43 @@ func TestBuildPeerTrimScores_ComputesScoresForAllCandidates(t *testing.T) {
 	}, scores)
 }
 
+// TestBuildPeerTrimScores_ComputesScoresForAllCandidates_BooleTopics exercises the same scoring
+// logic as TestBuildPeerTrimScores_ComputesScoresForAllCandidates but against a post-fork-pinned
+// NetworkConfig and Boole-named topics ("/ssv/<network>/boole/<subnet>"), so the post leg of the
+// SSV_TEST_BOOLE_FORK matrix isn't a pure re-run of the pre-fork case.
+func TestBuildPeerTrimScores_ComputesScoresForAllCandidates_BooleTopics(t *testing.T) {
+	highValuePeer := peer.ID("high-value")
+	mediumValuePeer := peer.ID("medium-value")
+	lowValuePeer := peer.ID("low-value")
+
+	postForkCfg := trimTestNetCfg(0)
+	booleTopic := func(subnet uint64) string {
+		return commons.BooleTopic(postForkCfg.SSV.Name, subnet)
+	}
+
+	network := newTrimTestNetworkWithConfig(
+		postForkCfg,
+		nil,
+		&testTopicsController{
+			topics: []string{booleTopic(0), booleTopic(1), booleTopic(3)},
+			peersByTopic: map[string][]peer.ID{
+				"0": {highValuePeer},
+				"1": {highValuePeer, mediumValuePeer},
+				"3": {lowValuePeer},
+			},
+		},
+		nil,
+		subnetsFor(0, 1),
+	)
+
+	scores := network.buildPeerTrimScores([]peer.ID{highValuePeer, mediumValuePeer, lowValuePeer})
+	assert.Equal(t, map[peer.ID]float64{
+		highValuePeer:   16 + 4, // dead + solo
+		mediumValuePeer: 4,      // solo
+		lowValuePeer:    0,
+	}, scores)
+}
+
 func BenchmarkChoosePeersToTrim_150Peers(b *testing.B) {
 	ctx := context.Background()
 	localHost := newBenchmarkHost(b)
@@ -282,7 +330,29 @@ func singleTrimScore(network *p2pNetwork, peerID peer.ID) float64 {
 	return network.buildPeerTrimScores([]peer.ID{peerID})[peerID]
 }
 
+// trimTestNetCfg returns a per-test NetworkConfig copy (own SSV copy) with Forks.Boole pinned to
+// the given epoch, mirroring subscribeRandomsTestNetCfg / TestSubscribedSubnetsForCurrentEpoch's
+// pattern elsewhere in this package: never mutate the shared networkconfig.TestNetwork pointer.
+func trimTestNetCfg(booleEpoch phase0.Epoch) *networkconfig.Network {
+	cfg := *networkconfig.TestNetwork
+	beaconCfg := *networkconfig.TestNetwork.Beacon
+	ssvCfg := *networkconfig.TestNetwork.SSV
+	ssvCfg.Forks.Boole = booleEpoch
+	cfg.Beacon = &beaconCfg
+	cfg.SSV = &ssvCfg
+	return &cfg
+}
+
+// newTrimTestNetwork builds a p2pNetwork pinned to a pre-fork NetworkConfig copy, so these tests
+// exercise scoring against Alan-shaped topic fixtures regardless of SSV_TEST_BOOLE_FORK: the
+// Boole side of the scoring math (SubnetPeers.Score) is already covered fork-independently by
+// TestSubnetPeers_Score_BooleTransition and TestSubnetPeers_Score_MixedSubnets in
+// p2p_discovery_test.go.
 func newTrimTestNetwork(host host.Host, topicsCtrl topics.Controller, idx peers.Index, ownSubnets commons.Subnets) *p2pNetwork {
+	return newTrimTestNetworkWithConfig(trimTestNetCfg(phase0.Epoch(math.MaxUint64)), host, topicsCtrl, idx, ownSubnets)
+}
+
+func newTrimTestNetworkWithConfig(cfg *networkconfig.Network, host host.Host, topicsCtrl topics.Controller, idx peers.Index, ownSubnets commons.Subnets) *p2pNetwork {
 	if idx == nil {
 		if host != nil {
 			idx = peers.NewPeersIndex(zap.NewNop(), host.Network(), nil, func(string) int { return 0 }, nil, peers.NewGossipScoreIndex())
@@ -310,7 +380,7 @@ func newTrimTestNetwork(host host.Host, topicsCtrl topics.Controller, idx peers.
 
 	n := &p2pNetwork{
 		logger:               zap.NewNop(),
-		cfg:                  &Config{NetworkConfig: networkconfig.TestNetwork},
+		cfg:                  &Config{NetworkConfig: cfg},
 		topicsCtrl:           topicsCtrl,
 		idx:                  idx,
 		persistentSubnets:    ownSubnets,

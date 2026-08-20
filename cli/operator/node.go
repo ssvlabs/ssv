@@ -109,6 +109,16 @@ func buildNode(ctx context.Context, cfg *config, logger *zap.Logger) (*node, err
 		return nil, fmt.Errorf("invalid network config: %w", err)
 	}
 
+	// Log the Boole fork schedule at boot — the SSV-fork analog of the beacon-side "Gloas (ePBS)
+	// fork scheduled" log — so operators and tooling can read each node's epoch and cross-check
+	// agreement across the fleet. Unscheduled networks pin Forks.Boole to math.MaxUint64, surfaced
+	// at DEBUG to flag a net where Boole should be scheduled but isn't.
+	if networkConfig.BooleForkScheduled() {
+		logger.Info("boole fork scheduled", fields.Epoch(networkConfig.SSV.Forks.Boole))
+	} else {
+		logger.Debug("boole fork not scheduled")
+	}
+
 	var executionAddrList []string
 	for _, addr := range strings.Split(cfg.ExecutionClient.Addr, ";") {
 		if addr = strings.TrimSpace(addr); addr != "" {
