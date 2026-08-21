@@ -30,10 +30,10 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 ) {
 	ssvMessage := signedSSVMessage.SSVMessage
 
-	if maxSize := mv.maxEncodedPartialSignatureSizeAt(receivedAt); len(ssvMessage.Data) > maxSize {
+	if len(ssvMessage.Data) > maxEncodedPartialSignatureSize {
 		e := ErrSSVDataTooBig
 		e.got = len(ssvMessage.Data)
-		e.want = maxSize
+		e.want = maxEncodedPartialSignatureSize
 		return nil, e
 	}
 
@@ -77,26 +77,6 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 	}
 
 	return partialSignatureMessages, nil
-}
-
-// maxEncodedPartialSignatureSizeAt returns the acceptance cap for encoded
-// partial-signature message data (SSVMessage.Data). The post-fork (boole
-// AggregatorCommittee) worst case is ~3.3x the pre-fork one, so pre-fork the smaller cap
-// is enforced, bounding the inner PartialSignatureMessages decode at the pre-fork worst
-// case (~229 KB vs ~763 KB; the outer SignedSSVMessage decode that already happened is
-// bounded separately by MaxEncodedMsgSize). The cap is enforced before decoding, when the
-// message's own slot is not yet known, so unlike the other fork gates in this package the
-// switch is keyed off receivedAt — the message's pubsub arrival time, the same timestamp
-// validateSlotTime uses, so one message's validation makes all its time-based decisions
-// from a single clock read — and flips at the start of SIP-43's prior window (one epoch
-// before boole activation) so that messages for post-fork slots arriving early (clock
-// skew) are never rejected against the smaller cap.
-func (mv *messageValidator) maxEncodedPartialSignatureSizeAt(receivedAt time.Time) int {
-	epoch := mv.netCfg.EstimatedEpochAtSlot(mv.netCfg.EstimatedSlotAtTime(receivedAt))
-	if mv.netCfg.BooleForkImminentOrActiveAtEpoch(epoch) {
-		return maxEncodedPartialSignatureSize
-	}
-	return preForkMaxEncodedPartialSignatureSize
 }
 
 func (mv *messageValidator) validatePartialSignatureMessageSemantics(

@@ -51,20 +51,6 @@ const (
 	partialSigMsgTypeSize          = 8 // uint64
 	maxPartialSignatureMsgsSize    = partialSigMsgTypeSize + slotSize + maxPartialSignatureMessages*partialSignatureMsgSize
 	maxEncodedPartialSignatureSize = maxPartialSignatureMsgsSize + maxPartialSignatureMsgsSize/encodingOverheadDivisor + 4
-
-	// preForkMaxPartialSignatureMessages is the pre-boole worst case (RoleCommittee,
-	// min(2*V, V+SYNC_COMMITTEE_SIZE) with the spec's V=1000 bound), matching pre-boole
-	// ssv-spec v1.2.2 maxmsgsize.maxSizePartialSignatureMessages (1512 messages, 217748
-	// bytes — that spec figure includes the 4-byte SSZ offset of the dynamic Messages
-	// field, which preForkMaxPartialSignatureMsgsSize below omits, matching how
-	// maxPartialSignatureMsgsSize is computed; hence it evaluates to 217744).
-	// Deliberately above the 1000 enforced before the boole convergence, which
-	// sat slightly below the spec's structural bound. The pinned (post-fork) spec no
-	// longer publishes this constant, so const_test.go guards it against the hardcoded
-	// v1.2.2 value instead.
-	preForkMaxPartialSignatureMessages    = 1512
-	preForkMaxPartialSignatureMsgsSize    = partialSigMsgTypeSize + slotSize + preForkMaxPartialSignatureMessages*partialSignatureMsgSize
-	preForkMaxEncodedPartialSignatureSize = preForkMaxPartialSignatureMsgsSize + preForkMaxPartialSignatureMsgsSize/encodingOverheadDivisor + 4
 )
 
 const (
