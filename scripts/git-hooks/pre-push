@@ -36,6 +36,7 @@ nl='
 oIFS=$IFS
 head_sha=$(git rev-parse HEAD)
 lint_dirs=""
+ssvsigner_lint_dirs=""
 misspell_ok="" # probed lazily on the first push with changed files
 
 while read -r local_ref local_sha remote_ref remote_sha; do
@@ -94,13 +95,22 @@ while read -r local_ref local_sha remote_ref remote_sha; do
 		*) continue ;;
 		esac
 		d=./$(dirname "$f")
+		[ -d "$root/${d#./}" ] || continue # dir may be gone (renames)
 		case $d in
-		# Nested modules: CI's `make lint` golangci run covers the root module
-		# only, and golangci-lint can't load their packages from here anyway.
-		./ssvsigner | ./ssvsigner/*) continue ;;
+		# ssvsigner is a nested module CI lints too (make lint runs
+		# ssvsigner-golangci-lint from ssvsigner/), and its packages can't be
+		# loaded from the root, so collect its dirs for a separate run.
+		./ssvsigner | ./ssvsigner/*)
+			sd=.${d#./ssvsigner}
+			case " $ssvsigner_lint_dirs " in
+			*" $sd "*) ;;
+			*) ssvsigner_lint_dirs="$ssvsigner_lint_dirs $sd" ;;
+			esac
+			continue
+			;;
+		# Nested module CI's `make lint` doesn't cover.
 		./scripts/differ | ./scripts/differ/*) continue ;;
 		esac
-		[ -d "$root/${d#./}" ] || continue # dir may be gone (renames)
 		case " $lint_dirs " in
 		*" $d "*) ;;
 		*) lint_dirs="$lint_dirs $d" ;;
@@ -115,6 +125,14 @@ done
 if [ -n "$lint_dirs" ]; then
 	# shellcheck disable=SC2086 # lint_dirs is word-split on purpose
 	if ! (cd "$root" && GOWORK=off "$GO" tool -modfile="$root/tool.mod" golangci-lint run $lint_dirs >&2); then
+		status=1
+	fi
+fi
+if [ -n "$ssvsigner_lint_dirs" ]; then
+	# Mirrors make lint's ssvsigner-golangci-lint: the nested module is linted
+	# from its own directory, with the root's config and tool.mod.
+	# shellcheck disable=SC2086 # ssvsigner_lint_dirs is word-split on purpose
+	if ! (cd "$root/ssvsigner" && GOWORK=off "$GO" tool -modfile="$root/tool.mod" golangci-lint run -c "$root/.golangci.yaml" $ssvsigner_lint_dirs >&2); then
 		status=1
 	fi
 fi
