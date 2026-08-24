@@ -127,7 +127,7 @@ func (c *Client) AddValidators(ctx context.Context, shares ...ShareKeys) (status
 		Fetch(ctx)
 
 	if requests.HasStatusErr(err, http.StatusUnprocessableEntity) {
-		return nil, ShareDecryptionError(errors.New(errStr))
+		return nil, ShareDecryptionError{Err: errors.New(errStr)}
 	}
 
 	if err != nil {

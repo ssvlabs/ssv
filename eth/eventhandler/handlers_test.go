@@ -7,7 +7,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+	"github.com/ssvlabs/ssv/ssvsigner"
 )
 
 func TestShareDecryptionError(t *testing.T) {
@@ -17,16 +17,29 @@ func TestShareDecryptionError(t *testing.T) {
 		malformedEvent bool
 	}{
 		{
-			name: "malformed event",
+			// LocalKeyManager.AddShare returns the error directly.
+			name: "local decryption error is malformed",
 			f: func() error {
 				err1 := fmt.Errorf("some error")
-				return ekm.ShareDecryptionError{Err: fmt.Errorf("decrypt: %w", err1)}
+				return ssvsigner.ShareDecryptionError{Err: fmt.Errorf("decrypt: %w", err1)}
 			},
 			malformedEvent: true,
 		},
-
 		{
-			name: "no malformed event event",
+			// RemoteKeyManager.AddShare wraps the client's ShareDecryptionError with
+			// fmt.Errorf("add validator: %w", ...); errors.As must still classify the
+			// wrapped error as a decryption error.
+			name: "remote decryption error is malformed",
+			f: func() error {
+				clientErr := ssvsigner.ShareDecryptionError{Err: errors.New("decrypt: crypto/rsa: decryption error")}
+				return fmt.Errorf("add validator: %w", clientErr)
+			},
+			malformedEvent: true,
+		},
+		{
+			// A transport/other failure (not a share problem) must stay fatal so the node
+			// doesn't silently skip an event it failed to process.
+			name: "non-decryption error is fatal",
 			f: func() error {
 				e2 := fmt.Errorf("some error")
 				e1 := fmt.Errorf("request failed: %w", e2)
@@ -45,8 +58,8 @@ func TestShareDecryptionError(t *testing.T) {
 			var malformedEvent bool
 
 			if err := tc.f(); err != nil {
-				var shareDecryptionEKMError ekm.ShareDecryptionError
-				if errors.As(err, &shareDecryptionEKMError) {
+				var shareDecryptionError ssvsigner.ShareDecryptionError
+				if errors.As(err, &shareDecryptionError) {
 					resultErr = &MalformedEventError{Err: err}
 					malformedEvent = true
 				} else {

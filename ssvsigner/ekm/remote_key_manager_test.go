@@ -1179,6 +1179,44 @@ func (s *RemoteKeyManagerTestSuite) TestAddShareErrorCases() {
 		clientMock.AssertExpectations(s.T())
 	})
 
+	s.Run("ShareDecryptionError", func() {
+		clientMock := new(MockRemoteSigner)
+		slashingMock := new(MockSlashingProtector)
+
+		rmTest := &RemoteKeyManager{
+			logger:            s.logger,
+			beaconConfig:      testNetCfg,
+			genesisRoot:       testNetCfg.GenesisValidatorsRoot,
+			signerClient:      clientMock,
+			getOperatorId:     func() spectypes.OperatorID { return 1 },
+			operatorPubKey:    &MockOperatorPublicKey{},
+			slashingProtector: slashingMock,
+			signLocks:         map[signKey]*sync.RWMutex{},
+		}
+
+		pubKey := phase0.BLSPubKey{1, 2, 3}
+		encShare := []byte("encrypted_share_data")
+
+		slashingMock.On("BumpSlashingProtectionTxn", nil, pubKey).Return(nil).Once()
+
+		// The signer rejects a malformed share with a 422, which ssvsigner.Client surfaces
+		// as a ShareDecryptionError.
+		clientMock.On("AddValidators", mock.Anything, ssvsigner.ShareKeys{
+			PubKey:           pubKey,
+			EncryptedPrivKey: encShare,
+		}).Return(nil, ssvsigner.ShareDecryptionError{
+			Err: errors.New("decrypt: crypto/rsa: decryption error"),
+		}).Once()
+
+		err := rmTest.AddShare(s.T().Context(), nil, encShare, pubKey)
+
+		// AddShare must surface this as a ShareDecryptionError (through its fmt.Errorf wrap)
+		// so the event handler classifies it as a malformed (skippable) event.
+		var decErr ssvsigner.ShareDecryptionError
+		s.ErrorAs(err, &decErr)
+		clientMock.AssertExpectations(s.T())
+	})
+
 	s.Run("BumpSlashingProtectionError", func() {
 		clientMock := new(MockRemoteSigner)
 		slashingMock := new(MockSlashingProtector)

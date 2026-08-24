@@ -7,7 +7,29 @@ import (
 	"github.com/ethereum/go-ethereum/common/hexutil"
 )
 
-type ShareDecryptionError error
+// ShareDecryptionError indicates that an encrypted validator share could not be turned
+// into a usable signing key: the ciphertext failed to decrypt, wasn't valid hex, or didn't
+// match the expected share public key. It marks a malformed share (bad on-chain event data),
+// as opposed to a transient or transport failure, so callers can treat it as a skippable
+// malformed event rather than a fatal error.
+//
+// It must stay a concrete type (not an interface): callers distinguish it with
+// errors.As(err, &ShareDecryptionError{}), which an interface alias of error would defeat by
+// matching every error.
+type ShareDecryptionError struct {
+	Err error
+}
+
+func (e ShareDecryptionError) Error() string {
+	if e.Err == nil {
+		return "share decryption error: nil"
+	}
+	return "share decryption error: " + e.Err.Error()
+}
+
+func (e ShareDecryptionError) Unwrap() error {
+	return e.Err
+}
 
 var ErrOperatorDataProtectionUnsupported = errors.New("operator data protection is unsupported by this ssv-signer")
 

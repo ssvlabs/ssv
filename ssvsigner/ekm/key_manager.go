@@ -8,21 +8,6 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
-type ShareDecryptionError struct {
-	Err error
-}
-
-func (e ShareDecryptionError) Error() string {
-	if e.Err == nil {
-		return "share decryption error: nil"
-	}
-	return "share decryption error: " + e.Err.Error()
-}
-
-func (e ShareDecryptionError) Unwrap() error {
-	return e.Err
-}
-
 // KeyManager is the main interface for managing validator shares and performing slashing protection.
 // It embeds BeaconSigner (for signing beacon messages and checking whether attestation or beacon block are slashable)
 // and slashingProtector (for slashing checks and updates).

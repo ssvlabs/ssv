@@ -12,7 +12,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+	"github.com/ssvlabs/ssv/ssvsigner"
 
 	"github.com/ssvlabs/ssv/eth/contract"
 	"github.com/ssvlabs/ssv/observability/log/fields"
@@ -242,8 +242,8 @@ func (eh *EventHandler) handleShareCreation(
 
 	if share.BelongsToOperator(eh.operatorDataStore.GetOperatorID()) {
 		if err := eh.keyManager.AddShare(ctx, txn, encryptedKey, phase0.BLSPubKey(share.SharePubKey)); err != nil {
-			var shareDecryptionEKMError ekm.ShareDecryptionError
-			if errors.As(err, &shareDecryptionEKMError) {
+			var shareDecryptionError ssvsigner.ShareDecryptionError
+			if errors.As(err, &shareDecryptionError) {
 				return nil, &MalformedEventError{Err: err}
 			}
 			return nil, fmt.Errorf("could not add share encrypted key: %w", err)
