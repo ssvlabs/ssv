@@ -1177,6 +1177,7 @@ func (s *RemoteKeyManagerTestSuite) TestAddShareErrorCases() {
 
 		s.ErrorContains(err, "add validator")
 		clientMock.AssertExpectations(s.T())
+		slashingMock.AssertExpectations(s.T())
 	})
 
 	s.Run("ShareDecryptionError", func() {
@@ -1215,6 +1216,7 @@ func (s *RemoteKeyManagerTestSuite) TestAddShareErrorCases() {
 		var decErr ssvsigner.ShareDecryptionError
 		s.ErrorAs(err, &decErr)
 		clientMock.AssertExpectations(s.T())
+		slashingMock.AssertExpectations(s.T())
 	})
 
 	s.Run("BumpSlashingProtectionError", func() {

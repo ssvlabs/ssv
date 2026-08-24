@@ -105,11 +105,12 @@ func (km *RemoteKeyManager) AddShare(
 		PubKey:           pubKey,
 	}
 
-	// If txn gets rolled back after share is saved,
-	// there will be some inconsistency between syncer state and remote signer.
-	// However, syncer crashes node on an error and restarts the sync process from the failing block,
-	// so it will attempt to save the same share again, which won't be an issue
-	// because AddValidators doesn't fail if the same share exists.
+	// AddValidators is idempotent: it doesn't fail if the same share already exists. That matters
+	// if the surrounding txn is rolled back after the share was saved remotely — the node crashes
+	// on the (non-malformed) error, re-runs the block, and re-adds the same share harmlessly.
+	// A malformed share is different: AddValidators returns an error below, the event handler
+	// classifies it as a malformed event and skips it without crashing, and nothing was saved
+	// remotely — so there is no syncer/signer inconsistency to reconcile.
 	statuses, err := km.signerClient.AddValidators(ctx, shareKeys)
 	if err != nil {
 		return fmt.Errorf("add validator: %w", err)

@@ -212,14 +212,19 @@ func (s *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 			keystorePassword,
 		)
 		if err != nil {
-			// The share cannot be decrypted or validated (bad ciphertext, bad hex, or a
-			// pubkey mismatch). Reply 422 so the node classifies it as a malformed registry
-			// event (logged and skipped) instead of retrying it indefinitely.
+			// 422 means the share is malformed (bad ciphertext/hex/BLS/pubkey mismatch): the node
+			// classifies it as a malformed registry event and skips it. Internal failures raised
+			// after validation (keystore generation/marshalling, tagged errInternalKeystore) are
+			// not share problems, so reply 500 (retryable) for those instead.
+			status := fasthttp.StatusUnprocessableEntity
+			if errors.Is(err, errInternalKeystore) {
+				status = fasthttp.StatusInternalServerError
+			}
 			logger.Warn("failed to get keystore from encrypted share", zap.Error(err))
 			s.writeJSONErr(
 				ctx,
 				logger,
-				fasthttp.StatusUnprocessableEntity,
+				status,
 				fmt.Errorf("failed to get keystore from encrypted share index %d: %w", i, err),
 			)
 			return
@@ -257,6 +262,12 @@ func (s *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 	s.writeJSON(ctx, logger, resp)
 }
 
+// errInternalKeystore tags failures in keystoreJSONFromEncryptedShare that occur after the
+// share has been validated (keystore generation or marshalling). These are internal signer
+// failures, not malformed shares, so handleAddValidator replies 500 (retryable) for them
+// rather than 422 (which the node treats as a malformed, skippable share).
+var errInternalKeystore = errors.New("internal keystore failure")
+
 // keystoreJSONFromEncryptedShare doesn't pass errors through intentionally
 // to prevent exposing information related to private key.
 func (s *Server) keystoreJSONFromEncryptedShare(
@@ -283,14 +294,16 @@ func (s *Server) keystoreJSONFromEncryptedShare(
 		return "", errors.New("derived public key does not match expected public key")
 	}
 
+	// Past this point the share itself is valid; the remaining failures are internal to the
+	// signer, so tag them with errInternalKeystore (see handleAddValidator's 500-vs-422 split).
 	shareKeystore, err := keystore.GenerateShareKeystore(sharePrivBLS, sharePubKey, keystorePassword)
 	if err != nil {
-		return "", fmt.Errorf("failed to generate share keystore")
+		return "", fmt.Errorf("%w: generate share keystore", errInternalKeystore)
 	}
 
 	keystoreJSON, err := json.Marshal(shareKeystore)
 	if err != nil {
-		return "", fmt.Errorf("marshal share keystore: %w", err)
+		return "", fmt.Errorf("%w: marshal share keystore", errInternalKeystore)
 	}
 
 	return string(keystoreJSON), nil
@@ -519,10 +532,10 @@ func (s *Server) handleOperatorDecrypt(ctx *fasthttp.RequestCtx) {
 }
 
 func (s *Server) handleWeb3SignerErr(ctx *fasthttp.RequestCtx, logger *zap.Logger, resp any, err error) {
+	// Always report Web3Signer failures as 500. We deliberately do NOT forward Web3Signer's
+	// upstream status to the node: the node treats 422 as a malformed (skippable) share, so a
+	// forwarded upstream 422 would be misclassified. 500 keeps these failures on the retryable path.
 	statusCode := fasthttp.StatusInternalServerError
-	if he := new(web3signer.HTTPResponseError); errors.As(err, &he) {
-		statusCode = he.Status
-	}
 
 	logger.Error("web3signer request failed",
 		zap.Error(err),

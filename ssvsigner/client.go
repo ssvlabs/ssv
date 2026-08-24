@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
-	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -130,7 +129,9 @@ func (c *Client) AddValidators(ctx context.Context, shares ...ShareKeys) (status
 	// share); other failures use different statuses and fall through to the retryable error
 	// below. Surface it as ShareDecryptionError so callers treat it as a malformed event.
 	if requests.HasStatusErr(err, http.StatusUnprocessableEntity) {
-		return nil, ShareDecryptionError{Err: errors.New(errStr)}
+		// Keep the transport error too, so a bodyless 422 (empty errStr) still carries context
+		// instead of surfacing a bare "share decryption error: " for a permanently skipped event.
+		return nil, ShareDecryptionError{Err: fmt.Errorf("%s: %w", errStr, err)}
 	}
 
 	if err != nil {
