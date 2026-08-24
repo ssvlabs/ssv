@@ -26,11 +26,13 @@ var (
 			observability.InstrumentName(observabilityNamespace, "pending_ranges"),
 			metric.WithDescription("number of optimistically-synced ranges awaiting background verification")))
 
-	// verifyCursorGauge reports the highest block the verifier has confirmed complete so far.
+	// verifyCursorGauge reports the top block of the most recently verified chunk. With multiple
+	// pending ranges it is not a global watermark: it jumps between ranges as their chunks are
+	// verified, so read it as recent progress rather than a monotonic high-water mark.
 	verifyCursorGauge = metrics.New(
 		meter.Int64Gauge(
 			observability.InstrumentName(observabilityNamespace, "cursor"),
-			metric.WithDescription("highest block confirmed complete by the background verifier")))
+			metric.WithDescription("top block of the most recently verified chunk (jumps between ranges when several are pending)")))
 
 	// verifyMissCounter counts receipts-confirmed misses (a block whose recorded digest disagreed
 	// with the receipts truth). Any increment schedules a full resync — it should stay at zero.

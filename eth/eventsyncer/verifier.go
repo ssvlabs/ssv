@@ -224,7 +224,7 @@ func (es *EventSyncer) resolveMismatch(ctx context.Context, block uint64, stored
 		return false, fmt.Errorf("resolve block %d against receipts: %w", block, err)
 	}
 	if !receiptsAvailable {
-		es.logger.Warn("background verification: no authoritative source (eth_getBlockReceipts unavailable) to resolve a disagreeing block; leaving range pending",
+		es.logger.Warn("background verification: no authoritative receipts source to resolve a disagreeing block (eth_getBlockReceipts unsupported or unreliable); leaving range pending",
 			fields.BlockNumber(block))
 		return false, errRangeParked
 	}
@@ -242,13 +242,11 @@ func (es *EventSyncer) resolveMismatch(ctx context.Context, block uint64, stored
 
 	// The recorded digest disagrees with the receipts truth — the optimistic sync genuinely missed
 	// events (recorded is a subset of truth, so it can only be short, never over-recorded).
-	if err := es.flagResync(ctx, block, "receipts confirm the optimistic sync missed events"); err != nil {
-		if errors.Is(err, errResyncSuppressed) {
-			return false, errRangeParked
-		}
-		return false, err
+	err = es.flagResync(ctx, block, "receipts confirm the optimistic sync missed events")
+	if errors.Is(err, errResyncSuppressed) {
+		return false, errRangeParked
 	}
-	return false, nil // unreachable: flagResync never returns nil
+	return false, err
 }
 
 // commitVerifiedChunk advances the range's cursor past a clean chunk and drops that chunk's

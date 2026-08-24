@@ -30,7 +30,7 @@ func TestPrepareRegistryResync_NoFlag(t *testing.T) {
 	ns := newResyncTestStorage(t)
 	require.NoError(t, ns.SaveLastProcessedBlock(nil, big.NewInt(123)))
 
-	resync, err := prepareRegistryResync(ns, log.TestLogger(t))
+	resync, err := prepareRegistryResync(log.TestLogger(t), ns)
 	require.NoError(t, err)
 	require.False(t, resync)
 
@@ -48,7 +48,7 @@ func TestPrepareRegistryResync_FlagSet(t *testing.T) {
 	require.NoError(t, ns.SaveBlockLogDigest(nil, 5, []byte("digest")))
 	require.NoError(t, ns.SetResyncRequired(nil))
 
-	resync, err := prepareRegistryResync(ns, log.TestLogger(t))
+	resync, err := prepareRegistryResync(log.TestLogger(t), ns)
 	require.NoError(t, err)
 	require.True(t, resync)
 
@@ -84,7 +84,7 @@ func TestPrepareRegistryResync_ResumesInProgress(t *testing.T) {
 	require.NoError(t, ns.SetResyncRequired(nil))
 	require.NoError(t, ns.SetResyncInProgress(nil))
 
-	resync, err := prepareRegistryResync(ns, log.TestLogger(t))
+	resync, err := prepareRegistryResync(log.TestLogger(t), ns)
 	require.NoError(t, err)
 	require.True(t, resync)
 
@@ -151,7 +151,7 @@ func TestShouldVerifyCatchUpInline(t *testing.T) {
 				ec.EXPECT().HeaderByNumber(gomock.Any(), gomock.Any()).Return(&ethtypes.Header{Number: tc.head}, nil)
 			}
 
-			got := shouldVerifyCatchUpInline(t.Context(), ec, tc.fromBlock, log.TestLogger(t))
+			got := shouldVerifyCatchUpInline(t.Context(), log.TestLogger(t), ec, tc.fromBlock)
 			require.Equal(t, tc.want, got)
 		})
 	}

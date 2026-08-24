@@ -82,16 +82,24 @@ func (c *ethClient) FilterLogs(ctx context.Context, q ethereum.FilterQuery) ([]e
 	return c.client.FilterLogs(reqCtx, q)
 }
 
-// HeadersByNumbers fetches the headers for the given block numbers with a single batched
-// eth_getBlockByNumber request. Elements that the batch could not serve (some RPC servers
-// restrict or disable batching, wholesale or per element) are recovered with sequential
-// fetches. Returned headers are ordered to match blockNumbers.
-func (c *ethClient) HeadersByNumbers(ctx context.Context, blockNumbers []uint64) ([]*ethtypes.Header, error) {
+// batchedByBlock issues one RPC per block number, batched maxRPCBatchSize at a time, writing
+// results in blockNumbers order. Elements a batch could not serve (some RPC servers restrict or
+// disable batching, wholesale or per element) are recovered with sequential fetchOne calls.
+// makeElem builds the batch element writing into the given result slot; served reports whether
+// the slot was actually filled, since a batch can "succeed" with a JSON null that leaves it empty.
+func batchedByBlock[T any](
+	ctx context.Context,
+	c *ethClient,
+	blockNumbers []uint64,
+	makeElem func(blockNumber uint64, result *T) rpc.BatchElem,
+	served func(result T) bool,
+	fetchOne func(ctx context.Context, blockNumber uint64) (T, error),
+) ([]T, error) {
 	if len(blockNumbers) == 0 {
 		return nil, nil
 	}
 
-	headers := make([]*ethtypes.Header, len(blockNumbers))
+	results := make([]T, len(blockNumbers))
 	// Split into bounded windows so a wide request stays within providers' batch limits.
 	for start := 0; start < len(blockNumbers); start += maxRPCBatchSize {
 		end := min(start+maxRPCBatchSize, len(blockNumbers))
@@ -103,11 +111,7 @@ func (c *ethClient) HeadersByNumbers(ctx context.Context, blockNumbers []uint64)
 		if attemptedBatch {
 			batch = make([]rpc.BatchElem, len(window))
 			for i, blockNumber := range window {
-				batch[i] = rpc.BatchElem{
-					Method: "eth_getBlockByNumber",
-					Args:   []any{hexutil.EncodeUint64(blockNumber), false},
-					Result: &headers[start+i],
-				}
+				batch[i] = makeElem(blockNumber, &results[start+i])
 			}
 
 			reqCtx, cancel := context.WithTimeout(ctx, c.reqTimeout)
@@ -117,27 +121,27 @@ func (c *ethClient) HeadersByNumbers(ctx context.Context, blockNumbers []uint64)
 
 		for i, blockNumber := range window {
 			idx := start + i
-			if attemptedBatch && batchErr == nil && batch[i].Error == nil && headers[idx] != nil {
+			if attemptedBatch && batchErr == nil && batch[i].Error == nil && served(results[idx]) {
 				continue
 			}
-			header, err := c.HeaderByNumber(ctx, new(big.Int).SetUint64(blockNumber))
+			result, err := fetchOne(ctx, blockNumber)
 			if err != nil {
-				return nil, fmt.Errorf("get header for block %d: %w", blockNumber, err)
+				return nil, err
 			}
-			headers[idx] = header
+			results[idx] = result
 		}
 
 		c.rememberBatchingUnsupported(attemptedBatch, batchErr)
 	}
 
-	return headers, nil
+	return results, nil
 }
 
 // rememberBatchingUnsupported latches batchingUnsupported when a batch failed wholesale yet the
-// sequential fallback (run just above) recovered — distinguishing a provider that rejects batching
-// from a general outage, where the sequential calls would have failed too. Timeouts and
-// cancellations are excluded: they mean slow or interrupted, not unsupported, so a batch-only
-// timeout can't wrongly pin a batching-capable provider to sequential. One-way, reset on reconnect.
+// sequential fallback recovered — distinguishing a provider that rejects batching from a general
+// outage, where the sequential calls would have failed too. Timeouts and cancellations are
+// excluded: they mean slow or interrupted, not unsupported, so a batch-only timeout can't wrongly
+// pin a batching-capable provider to sequential. One-way, reset on reconnect.
 func (c *ethClient) rememberBatchingUnsupported(attemptedBatch bool, batchErr error) {
 	if !attemptedBatch || batchErr == nil {
 		return
@@ -151,48 +155,46 @@ func (c *ethClient) rememberBatchingUnsupported(attemptedBatch bool, batchErr er
 	}
 }
 
-// SingleBlockLogs fetches, for each of the given blocks, the logs emitted by the given
-// address, using a single batched eth_getLogs request with one single-block query per
-// block. Elements the batch could not serve are recovered with sequential FilterLogs
-// calls. Returned log slices are ordered to match blockNumbers.
+// HeadersByNumbers fetches the headers for the given block numbers with batched
+// eth_getBlockByNumber requests, recovering unserved elements with sequential fetches.
+// Returned headers are ordered to match blockNumbers.
+func (c *ethClient) HeadersByNumbers(ctx context.Context, blockNumbers []uint64) ([]*ethtypes.Header, error) {
+	return batchedByBlock(ctx, c, blockNumbers,
+		func(blockNumber uint64, result **ethtypes.Header) rpc.BatchElem {
+			return rpc.BatchElem{
+				Method: "eth_getBlockByNumber",
+				Args:   []any{hexutil.EncodeUint64(blockNumber), false},
+				Result: result,
+			}
+		},
+		func(header *ethtypes.Header) bool { return header != nil },
+		func(ctx context.Context, blockNumber uint64) (*ethtypes.Header, error) {
+			header, err := c.HeaderByNumber(ctx, new(big.Int).SetUint64(blockNumber))
+			if err != nil {
+				return nil, fmt.Errorf("get header for block %d: %w", blockNumber, err)
+			}
+			return header, nil
+		})
+}
+
+// SingleBlockLogs fetches, for each of the given blocks, the logs emitted by the given address,
+// using batched eth_getLogs requests with one single-block query per block, recovering unserved
+// elements with sequential FilterLogs calls. Returned log slices are ordered to match blockNumbers.
 func (c *ethClient) SingleBlockLogs(ctx context.Context, address ethcommon.Address, blockNumbers []uint64) ([][]ethtypes.Log, error) {
-	if len(blockNumbers) == 0 {
-		return nil, nil
-	}
-
-	blockLogs := make([][]ethtypes.Log, len(blockNumbers))
-	// Split into bounded windows so a wide request stays within providers' batch limits.
-	for start := 0; start < len(blockNumbers); start += maxRPCBatchSize {
-		end := min(start+maxRPCBatchSize, len(blockNumbers))
-		window := blockNumbers[start:end]
-
-		attemptedBatch := !c.batchingUnsupported.Load()
-		var batch []rpc.BatchElem
-		var batchErr error
-		if attemptedBatch {
-			batch = make([]rpc.BatchElem, len(window))
-			for i, blockNumber := range window {
-				batch[i] = rpc.BatchElem{
-					Method: "eth_getLogs",
-					Args: []any{map[string]any{
-						"address":   address,
-						"fromBlock": hexutil.EncodeUint64(blockNumber),
-						"toBlock":   hexutil.EncodeUint64(blockNumber),
-					}},
-					Result: &blockLogs[start+i],
-				}
+	return batchedByBlock(ctx, c, blockNumbers,
+		func(blockNumber uint64, result *[]ethtypes.Log) rpc.BatchElem {
+			return rpc.BatchElem{
+				Method: "eth_getLogs",
+				Args: []any{map[string]any{
+					"address":   address,
+					"fromBlock": hexutil.EncodeUint64(blockNumber),
+					"toBlock":   hexutil.EncodeUint64(blockNumber),
+				}},
+				Result: result,
 			}
-
-			reqCtx, cancel := context.WithTimeout(ctx, c.reqTimeout)
-			batchErr = c.client.Client().BatchCallContext(reqCtx, batch)
-			cancel()
-		}
-
-		for i, blockNumber := range window {
-			idx := start + i
-			if attemptedBatch && batchErr == nil && batch[i].Error == nil {
-				continue
-			}
+		},
+		func([]ethtypes.Log) bool { return true }, // no logs is a served result (an empty block)
+		func(ctx context.Context, blockNumber uint64) ([]ethtypes.Log, error) {
 			logs, err := c.FilterLogs(ctx, ethereum.FilterQuery{
 				Addresses: []ethcommon.Address{address},
 				FromBlock: new(big.Int).SetUint64(blockNumber),
@@ -201,13 +203,8 @@ func (c *ethClient) SingleBlockLogs(ctx context.Context, address ethcommon.Addre
 			if err != nil {
 				return nil, fmt.Errorf("get logs for block %d: %w", blockNumber, err)
 			}
-			blockLogs[idx] = logs
-		}
-
-		c.rememberBatchingUnsupported(attemptedBatch, batchErr)
-	}
-
-	return blockLogs, nil
+			return logs, nil
+		})
 }
 
 // BlockReceipts fetches all transaction receipts of the given block via eth_getBlockReceipts.
