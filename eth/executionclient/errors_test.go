@@ -18,6 +18,25 @@ type stubRPCError struct {
 func (e stubRPCError) Error() string  { return e.msg }
 func (e stubRPCError) ErrorCode() int { return e.code }
 
+func TestIsRPCMethodNotFoundError(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"nil", nil, false},
+		{"method not found -32601", stubRPCError{code: errCodeMethodNotFound, msg: "not found"}, true},
+		{"method not supported -32004", stubRPCError{code: errCodeMethodNotSupported, msg: "not supported"}, true},
+		{"query limit -32005 is not method-not-found", stubRPCError{code: errCodeQueryLimit, msg: "limit"}, false},
+		{"plain error", errors.New("boom"), false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.want, isRPCMethodNotFoundError(tc.err))
+		})
+	}
+}
+
 func TestIsSubdividableLogFetchError(t *testing.T) {
 	cases := []struct {
 		name string

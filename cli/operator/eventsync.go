@@ -86,7 +86,7 @@ func syncContractEvents(
 	// If a previous run's background verification flagged a resync (or an earlier repair was
 	// interrupted), drop/keep registry state as appropriate and rebuild below with inline
 	// verification (verify=true).
-	resyncing, err := prepareRegistryResync(nodeStorage, logger)
+	resyncing, err := prepareRegistryResync(logger, nodeStorage)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -109,7 +109,7 @@ func syncContractEvents(
 	// bloom-check cheaply is verified inline, so the node starts with guaranteed-complete state;
 	// a large cold sync from the registry offset stays optimistic and is checked afterwards by
 	// the background verifier. The resync-repair path always verifies inline.
-	verify := resyncing || shouldVerifyCatchUpInline(ctx, executionClient, fromBlock.Uint64(), logger)
+	verify := resyncing || shouldVerifyCatchUpInline(ctx, logger, executionClient, fromBlock.Uint64())
 
 	logger.Debug("syncing historical registry events",
 		zap.Uint64("fromBlock", fromBlock.Uint64()), zap.Bool("verify_inline", verify))
@@ -232,7 +232,7 @@ func syncContractEvents(
 //
 // Either way it returns true (rebuild with verify=true). The flags are cleared by the caller
 // only once the resync completes, which is what makes an interrupted repair resumable.
-func prepareRegistryResync(nodeStorage operatorstorage.Storage, logger *zap.Logger) (bool, error) {
+func prepareRegistryResync(logger *zap.Logger, nodeStorage operatorstorage.Storage) (bool, error) {
 	inProgress, err := nodeStorage.IsResyncInProgress(nil)
 	if err != nil {
 		return false, fmt.Errorf("failed to check resync-in-progress flag: %w", err)
@@ -274,7 +274,7 @@ const maxInlineVerifyCatchUp = 50_000
 // enough to bloom-check inline (so the node starts with guaranteed-complete registry state)
 // rather than sync it optimistically and rely on the background verifier. On any error sizing
 // the range it returns false: optimistic is the safe, always-available default.
-func shouldVerifyCatchUpInline(ctx context.Context, ec executionclient.Provider, fromBlock uint64, logger *zap.Logger) bool {
+func shouldVerifyCatchUpInline(ctx context.Context, logger *zap.Logger, ec executionclient.Provider, fromBlock uint64) bool {
 	head, err := ec.HeaderByNumber(ctx, nil)
 	if err != nil || head == nil || head.Number == nil {
 		logger.Debug("could not size historical catch-up; syncing optimistically", zap.Error(err))
