@@ -26,10 +26,12 @@ const (
 	// https://github.com/ethereum/EIPs/blob/master/EIPS/eip-1474.md
 	errCodeQueryLimit = -32005
 
-	// errCodeMethodNotFound is the standard JSON-RPC code for a method the server
-	// does not support.
+	// errCodeMethodNotFound and errCodeMethodNotSupported both indicate the server will not serve
+	// the requested method (both defined by EIP-1474); ELs use one or the other for a method they
+	// lack, e.g. eth_getBlockReceipts.
 	// https://github.com/ethereum/EIPs/blob/master/EIPS/eip-1474.md
-	errCodeMethodNotFound = -32601
+	errCodeMethodNotFound     = -32601
+	errCodeMethodNotSupported = -32004
 )
 
 // isRPCQueryLimitError checks if the provided error is a query limit error.
@@ -69,7 +71,8 @@ func isSubdividableLogFetchError(err error) bool {
 func isRPCMethodNotFoundError(err error) bool {
 	var rpcErr rpc.Error
 	if errors.As(err, &rpcErr) {
-		return rpcErr.ErrorCode() == errCodeMethodNotFound
+		code := rpcErr.ErrorCode()
+		return code == errCodeMethodNotFound || code == errCodeMethodNotSupported
 	}
 
 	return false

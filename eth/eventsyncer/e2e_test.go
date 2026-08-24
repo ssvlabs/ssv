@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"io"
 	"math/big"
 	"net/http"
@@ -13,10 +14,12 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
 
@@ -28,6 +31,8 @@ import (
 	"github.com/ssvlabs/ssv/ssvsigner/keys/rsaencryption"
 	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/utils/blskeygen"
+	"github.com/ssvlabs/ssv/utils/threshold"
 )
 
 // These tests drive the real historical-sync + background-verification + repair pipeline
@@ -43,6 +48,7 @@ type dropProxy struct {
 	dropBlock           uint64
 	dropActive          atomic.Bool
 	receiptsUnavailable atomic.Bool
+	receiptsEmpty       atomic.Bool
 }
 
 type jsonrpcMsg struct {
@@ -74,6 +80,9 @@ func newDropProxy(t *testing.T, base http.Handler, dropBlock uint64) (*httptest.
 		case req.Method == "eth_getBlockReceipts" && p.receiptsUnavailable.Load():
 			// -32601 = method not found; makes the client treat receipts as unsupported.
 			return jsonrpcMsg{Version: "2.0", ID: req.ID, Error: json.RawMessage(`{"code":-32601,"message":"the method eth_getBlockReceipts does not exist"}`)}
+		case req.Method == "eth_getBlockReceipts" && p.receiptsEmpty.Load():
+			// A broken receipt store: zero receipts for a block the caller knows holds logs.
+			return jsonrpcMsg{Version: "2.0", ID: req.ID, Result: json.RawMessage(`[]`)}
 		case req.Method == "eth_getLogs" && p.dropActive.Load():
 			resp := forward(req)
 			resp.Result = dropBlockLogs(t, resp.Result, p.dropBlock)
@@ -274,4 +283,245 @@ func TestE2E_ParksWhenReceiptsUnavailable(t *testing.T) {
 	ranges, err := nodeStorage.ListUnverifiedRanges(nil)
 	require.NoError(t, err)
 	require.NotEmpty(t, ranges, "range stays pending (parked), not retired as verified")
+}
+
+// TestE2E_EmptyReceiptsNotTreatedAsAuthoritative: when eth_getBlockReceipts returns zero receipts
+// for a block the sync recorded logs for, that's a broken receipt store, not proof the block is
+// empty — the verifier must park (no authoritative source), not treat it as a confirmed miss and
+// trigger a false wipe+resync.
+func TestE2E_EmptyReceiptsNotTreatedAsAuthoritative(t *testing.T) {
+	ctx := t.Context()
+	es, nodeStorage, proxy, _ := setupVerifyE2E(t, ctx, 3)
+
+	// Optimistic sync records all 3 operators (digests written).
+	_, err := es.SyncHistory(ctx, 0, false)
+	require.NoError(t, err)
+	require.Equal(t, 3, operatorCount(t, nodeStorage))
+
+	// The log index drops the middle block AND receipts come back empty (a broken receipt store):
+	// the verify-time fetch disagrees with the recorded digest, and receipts can't authoritatively
+	// resolve it.
+	proxy.dropActive.Store(true)
+	proxy.receiptsEmpty.Store(true)
+
+	require.NoError(t, es.Verify(ctx), "empty receipts must not be treated as an authoritative empty block")
+	resync, err := nodeStorage.IsResyncRequired(nil)
+	require.NoError(t, err)
+	require.False(t, resync, "an inconsistent empty-receipts response must not trigger a resync")
+	ranges, err := nodeStorage.ListUnverifiedRanges(nil)
+	require.NoError(t, err)
+	require.NotEmpty(t, ranges, "range parked (no authoritative source), not retired or resynced")
+}
+
+// TestE2E_ParkedRangeResolvesWhenReceiptsReturn: a range parked because the receipt store was
+// transiently broken (returned empty) is re-checked and cleared once receipts come back. Unlike an
+// unsupported-method (-32601) park — which latches and only clears on restart — an empty-receipts
+// park doesn't latch, so a later Verify pass resolves it in-process. Here the recorded digest is
+// vindicated by the receipts (the drop was only in the log index), so the range retires with no resync.
+func TestE2E_ParkedRangeResolvesWhenReceiptsReturn(t *testing.T) {
+	ctx := t.Context()
+	es, nodeStorage, proxy, _ := setupVerifyE2E(t, ctx, 3)
+
+	// Optimistic sync records all 3 operators.
+	_, err := es.SyncHistory(ctx, 0, false)
+	require.NoError(t, err)
+	require.Equal(t, 3, operatorCount(t, nodeStorage))
+
+	// Log index drops the middle block and the receipt store returns empty → the disagreeing block
+	// can't be resolved authoritatively, so the range parks (without latching receipts unsupported).
+	proxy.dropActive.Store(true)
+	proxy.receiptsEmpty.Store(true)
+	require.NoError(t, es.Verify(ctx))
+	ranges, err := nodeStorage.ListUnverifiedRanges(nil)
+	require.NoError(t, err)
+	require.NotEmpty(t, ranges, "range parked while the receipt store was broken")
+
+	// Receipts come back. The next Verify resolves the parked block against them; the recorded
+	// digest matches the receipts truth, so the range retires clean with no resync.
+	proxy.receiptsEmpty.Store(false)
+	require.NoError(t, es.Verify(ctx))
+	resync, err := nodeStorage.IsResyncRequired(nil)
+	require.NoError(t, err)
+	require.False(t, resync, "recorded digest vindicated by receipts → no resync")
+	ranges, err = nodeStorage.ListUnverifiedRanges(nil)
+	require.NoError(t, err)
+	require.Empty(t, ranges, "parked range retired once receipts became available")
+}
+
+// setupClusterDriftE2E builds the drift scenario from the #2990 field report
+// (https://github.com/ssvlabs/ssv/issues/2990#issuecomment-5339378358), where a dropped block
+// window was found to lose every registry event type it contained, not just OperatorAdded.
+// It registers four operators — the node's own operator first, so the sync learns its ID and
+// treats the validator below as its own — then:
+//
+//   - a kept block: a valid ValidatorAdded for the four-operator cluster owned by testAddr
+//     (bumps the owner nonce to 1, stores the share, and adds it to the node's key manager);
+//   - the block the proxy will drop: a FeeRecipientAddressUpdated, a ClusterLiquidated for that
+//     cluster, and a second ValidatorAdded (deliberately malformed: the handler skips it but
+//     still bumps the owner nonce, which is how the field report's stale-nonce drift arises).
+//
+// It returns the syncer, storage, proxy (drop not yet active), the validator public key, and
+// the updated fee recipient.
+func setupClusterDriftE2E(t *testing.T, ctx context.Context) (*EventSyncer, operatorstorage.Storage, *dropProxy, []byte, ethcommon.Address) {
+	logger := zaptest.NewLogger(t)
+
+	sim := simTestBackend(testAddr)
+	rpcServer, err := sim.Node().RPCHandler()
+	require.NoError(t, err)
+	t.Cleanup(rpcServer.Stop)
+
+	parsed, err := abi.JSON(strings.NewReader(simcontract.SimcontractMetaData.ABI))
+	require.NoError(t, err)
+	auth, err := bind.NewKeyedTransactorWithChainID(testKey, big.NewInt(1337))
+	require.NoError(t, err)
+	contractAddr, _, _, err := bind.DeployContract(auth, parsed, ethcommon.FromHex(simcontract.SimcontractMetaData.Bin), sim.Client())
+	require.NoError(t, err)
+	sim.Commit()
+
+	boundContract, err := simcontract.NewSimcontract(contractAddr, sim.Client())
+	require.NoError(t, err)
+
+	// Four operators, one per block; index 0 is the node's own key, so the sync assigns the node
+	// operator ID 1 and the validator below decrypts as its own share.
+	opKeys := make([]keys.OperatorPrivateKey, 4)
+	for i := range opKeys {
+		opKeys[i], err = keys.GeneratePrivateKey()
+		require.NoError(t, err)
+		pubKey, err := opKeys[i].Public().Base64()
+		require.NoError(t, err)
+		packed, err := eventparser.PackOperatorPublicKey(pubKey)
+		require.NoError(t, err)
+		_, err = boundContract.RegisterOperator(auth, packed, big.NewInt(100_000_000))
+		require.NoError(t, err)
+		sim.Commit()
+	}
+
+	// A valid validator for cluster {1,2,3,4}: a real BLS master key split into four shares, each
+	// encrypted to its operator, with the owner-nonce signature the handler verifies (nonce 0 —
+	// the owner's first registration).
+	threshold.Init()
+	masterSK, masterPK := blskeygen.GenBLSKeyPair()
+	shareKeys, err := threshold.Create(masterSK.Serialize(), 3, 4)
+	require.NoError(t, err)
+
+	operatorIDs := []uint64{1, 2, 3, 4}
+	sharePubKeys := make([]byte, 0, len(opKeys)*phase0.PublicKeyLength)
+	encryptedShares := make([]byte, 0, len(opKeys)*256)
+	for i, opKey := range opKeys {
+		shareSK := shareKeys[uint64(i+1)]
+		cipher, err := opKey.Public().Encrypt([]byte(shareSK.SerializeToHexStr()))
+		require.NoError(t, err)
+		sharePubKeys = append(sharePubKeys, shareSK.GetPublicKey().Serialize()...)
+		encryptedShares = append(encryptedShares, cipher...)
+	}
+	ownerNonceHash := crypto.Keccak256([]byte(fmt.Sprintf("%s:%d", testAddr.String(), 0)))
+	sharesData := masterSK.SignByte(ownerNonceHash).Serialize()
+	sharesData = append(sharesData, sharePubKeys...)
+	sharesData = append(sharesData, encryptedShares...)
+
+	cluster := simcontract.CallableCluster{
+		ValidatorCount:  1,
+		NetworkFeeIndex: 1,
+		Index:           1,
+		Active:          true,
+		Balance:         big.NewInt(100_000_000),
+	}
+	_, err = boundContract.RegisterValidator(auth, masterPK.Serialize(), operatorIDs, sharesData, big.NewInt(100_000_000), cluster)
+	require.NoError(t, err)
+	sim.Commit()
+
+	// The to-be-dropped block: three registry events of different types in one block.
+	updatedRecipient := ethcommon.HexToAddress("0x1111111111111111111111111111111111111111")
+	_, err = boundContract.SetFeeRecipientAddress(auth, updatedRecipient)
+	require.NoError(t, err)
+	_, err = boundContract.Liquidate(auth, testAddr, operatorIDs, cluster)
+	require.NoError(t, err)
+	// Deliberately malformed (wrong shares length): the handler skips it as malformed but still
+	// bumps the owner nonce, so dropping this block leaves a stale nonce behind.
+	_, err = boundContract.RegisterValidator(auth, bytes.Repeat([]byte{0xaa}, 48), operatorIDs, []byte("malformed"), big.NewInt(100_000_000), cluster)
+	require.NoError(t, err)
+	sim.Commit()
+	dropBlock, err := sim.Client().BlockNumber(ctx)
+	require.NoError(t, err)
+
+	// Pad past the follow distance so the dropped block is within the historical window.
+	for i := 0; i < executionclient.FollowDistance+2; i++ {
+		sim.Commit()
+	}
+
+	proxyURL, proxy := newDropProxy(t, rpcServer, dropBlock)
+
+	db, err := kv.NewInMemory(logger, basedb.Options{Ctx: ctx})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+	nodeStorage, operatorData := setupOperatorStorage(logger, db, opKeys[0])
+	eh := setupEventHandler(t, ctx, logger, db, nodeStorage, operatorData, opKeys[0])
+
+	execClient, err := executionclient.New(ctx, proxyURL.URL, contractAddr, executionclient.WithLogger(logger))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = execClient.Close() })
+	require.NoError(t, execClient.Healthy(ctx))
+
+	es := New(nodeStorage, execClient, eh, WithLogger(logger))
+	es.verifyChunkDelay = 0
+
+	return es, nodeStorage, proxy, masterPK.Serialize(), updatedRecipient
+}
+
+// TestE2E_DriftBeyondOperatorsRepaired pins the full blast radius documented in the #2990 field
+// report: a dropped block loses whatever registry events it contained — here a fee-recipient
+// update, a cluster liquidation, and an owner-nonce bump — and the detect→repair loop restores
+// all of them. The validator belongs to the node's own operator, so the verified resync also
+// replays ValidatorAdded against a key manager that still holds the share account (the repair
+// drops registry state, never signer state) — pinning that AddShare tolerates the replay.
+func TestE2E_DriftBeyondOperatorsRepaired(t *testing.T) {
+	ctx := t.Context()
+	es, nodeStorage, proxy, validatorPK, updatedRecipient := setupClusterDriftE2E(t, ctx)
+	proxy.dropActive.Store(true) // persistently drop the fee-recipient/liquidation/nonce block
+
+	// Optimistic sync: the dropped block's three events are silently missing, so the node runs on
+	// drifted state — stale nonce, unliquidated share, default fee recipient — as in the field report.
+	_, err := es.SyncHistory(ctx, 0, false)
+	require.NoError(t, err)
+	require.Equal(t, 4, operatorCount(t, nodeStorage))
+
+	share, found := nodeStorage.Shares().Get(nil, validatorPK)
+	require.True(t, found, "the validator from the kept block must be stored")
+	require.True(t, share.BelongsToOperator(1), "the node is operator 1, so this is its own share")
+	require.False(t, share.Liquidated, "drift: the ClusterLiquidated was silently missed")
+
+	// The kept registration's nonce bump created the default recipient record (feeRecipient ==
+	// owner); the dropped update never moved it off the default — the field report's exact drift.
+	recipient, err := nodeStorage.GetFeeRecipient(testAddr)
+	require.NoError(t, err)
+	require.Equal(t, testAddr.Bytes(), recipient[:], "drift: the FeeRecipientAddressUpdated was silently missed, recipient is still the owner default")
+
+	nonce, err := nodeStorage.GetNextNonce(nil, testAddr)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, nonce, "drift: the dropped registration's nonce bump was silently missed")
+
+	// The background verifier recovers the block from receipts and flags the repair.
+	require.ErrorIs(t, es.Verify(ctx), ErrResyncRequired)
+
+	// Repair as the boot path does: drop registry state + journal (never the key manager) and
+	// resync with inline verification, which recovers the dropped block from receipts.
+	require.NoError(t, nodeStorage.DropRegistryData())
+	require.NoError(t, nodeStorage.DropVerificationJournal())
+	_, err = es.SyncHistory(ctx, 0, true)
+	require.NoError(t, err, "the resync must tolerate replaying ValidatorAdded over the existing share account")
+
+	// Every drifted class converges to canonical state.
+	share, found = nodeStorage.Shares().Get(nil, validatorPK)
+	require.True(t, found)
+	require.True(t, share.Liquidated, "repair restored the missed liquidation")
+
+	recipient, err = nodeStorage.GetFeeRecipient(testAddr)
+	require.NoError(t, err)
+	require.Equal(t, updatedRecipient.Bytes(), recipient[:], "repair restored the missed fee-recipient update")
+
+	nonce, err = nodeStorage.GetNextNonce(nil, testAddr)
+	require.NoError(t, err)
+	require.EqualValues(t, 2, nonce, "repair restored the missed nonce bump")
+
+	require.NoError(t, es.Verify(ctx), "a fresh verification pass over the verified resync is clean")
 }
