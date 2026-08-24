@@ -192,11 +192,15 @@ func (s *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 		// So, there's no need to store the password. We can just generate a random password for each keystore.
 		keystorePassword, err := s.generateRandomPassword(16)
 		if err != nil {
+			// A password-generation failure is an internal (transient) error, not a bad share,
+			// so reply 500 rather than 422. HTTP 422 from this endpoint is reserved for shares
+			// that cannot be decrypted/validated (see below): the node treats 422 as a malformed
+			// registry event and skips it, whereas other statuses are retried.
 			logger.Warn("failed to generate random password", zap.Error(err))
 			s.writeJSONErr(
 				ctx,
 				logger,
-				fasthttp.StatusUnprocessableEntity,
+				fasthttp.StatusInternalServerError,
 				fmt.Errorf("failed to generate random password: %w", err),
 			)
 			return
@@ -208,6 +212,9 @@ func (s *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 			keystorePassword,
 		)
 		if err != nil {
+			// The share cannot be decrypted or validated (bad ciphertext, bad hex, or a
+			// pubkey mismatch). Reply 422 so the node classifies it as a malformed registry
+			// event (logged and skipped) instead of retrying it indefinitely.
 			logger.Warn("failed to get keystore from encrypted share", zap.Error(err))
 			s.writeJSONErr(
 				ctx,
