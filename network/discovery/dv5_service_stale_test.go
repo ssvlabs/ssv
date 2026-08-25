@@ -16,7 +16,7 @@ func TestDiscV5Service_DiscoveryStale(t *testing.T) {
 
 	sc := NewTimedConn(nil)
 	t0 := sc.LastRead()
-	dvs := &DiscV5Service{ctx: t.Context(), socketConn: sc}
+	dvs := &DiscV5Service{socketConn: sc}
 
 	// Never read → never stale, however long it sits idle: an operator that has
 	// simply had no inbound discv5 traffic yet must not be flagged as wedged.

@@ -67,18 +67,37 @@ var (
 			metric.WithDescription("total number of packets forwarded to the pre-fork listener that were dropped because its buffer was full")))
 
 	discoveryReadStalenessGauge = metrics.New(
-		meter.Int64Gauge(
+		meter.Int64ObservableGauge(
 			observability.InstrumentName(observabilityNamespace, "socket.read_staleness"),
 			metric.WithUnit("s"),
-			metric.WithDescription("seconds since the discv5 socket was last read; 0 until the first read")))
+			metric.WithDescription("seconds since the discv5 socket was last read; -1 until the first read")))
 )
 
 func recordUnhandledPacketDropped(ctx context.Context) {
 	unhandledPacketsDroppedCounter.Add(ctx, 1)
 }
 
-func recordDiscoveryReadStaleness(ctx context.Context, seconds int64) {
-	discoveryReadStalenessGauge.Record(ctx, seconds)
+// observeDiscoveryReadStaleness registers a callback reporting conn's read
+// staleness at scrape time. Async sampling keeps the series alive regardless of
+// the health-check path — a gauge recorded from Healthy goes quiet whenever an
+// earlier check short-circuits, i.e. exactly when discovery is broken. The
+// registration must be unregistered when the owning service closes.
+func observeDiscoveryReadStaleness(conn *TimedConn) (metric.Registration, error) {
+	return meter.RegisterCallback(func(_ context.Context, observer metric.Observer) error {
+		observer.ObserveInt64(discoveryReadStalenessGauge, readStalenessSeconds(conn))
+		return nil
+	}, discoveryReadStalenessGauge)
+}
+
+// readStalenessSeconds flattens ReadStaleness for the gauge: never-read reports
+// -1 — the state the health check deliberately ignores, kept visible for
+// alerting — distinct from a just-read socket at 0.
+func readStalenessSeconds(conn *TimedConn) int64 {
+	age, everRead := conn.ReadStaleness()
+	if !everRead {
+		return -1
+	}
+	return int64(age.Seconds())
 }
 
 func recordPeerSkipped(ctx context.Context, reason skipReason) {
