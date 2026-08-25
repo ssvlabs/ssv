@@ -108,3 +108,21 @@ func TestTimedConn_FailedReadDoesNotStamp(t *testing.T) {
 	require.Error(t, err)
 	require.Equal(t, t0.UnixNano(), c.LastRead().UnixNano(), "errored read must not stamp")
 }
+
+// TestReadStalenessSeconds: the gauge flattening keeps never-read (-1) — the
+// state the health check deliberately ignores — distinguishable from a
+// just-read socket (0), and reports whole seconds once armed.
+func TestReadStalenessSeconds(t *testing.T) {
+	c := NewTimedConn(nil)
+	t0 := c.LastRead()
+
+	c.now = func() time.Time { return t0.Add(time.Hour) }
+	require.Equal(t, int64(-1), readStalenessSeconds(c), "never-read reports the sentinel, not an age")
+
+	c.read.Store(true)
+	c.lastReadUnixNano.Store(t0.Add(time.Hour).UnixNano())
+	require.Equal(t, int64(0), readStalenessSeconds(c), "just read → 0")
+
+	c.now = func() time.Time { return t0.Add(time.Hour + 42*time.Second) }
+	require.Equal(t, int64(42), readStalenessSeconds(c))
+}

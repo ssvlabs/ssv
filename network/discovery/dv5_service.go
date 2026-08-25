@@ -14,6 +14,7 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
+	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
@@ -81,6 +82,9 @@ type DiscV5Service struct {
 	// socketConn wraps conn to time socket reads; the post-fork listener drains
 	// through it, so DiscoveryStale can detect a wedged socket.
 	socketConn *TimedConn
+	// stalenessReg is the read-staleness gauge callback for socketConn,
+	// unregistered on close.
+	stalenessReg metric.Registration
 
 	ssvConfig *networkconfig.SSV
 	subnets   commons.Subnets
@@ -140,6 +144,10 @@ func (dvs *DiscV5Service) close() error {
 	if dvs.cancel != nil {
 		dvs.cancel()
 	}
+	if dvs.stalenessReg != nil {
+		// Stop reporting the read-staleness gauge for a closed service.
+		_ = dvs.stalenessReg.Unregister()
+	}
 	// Order matters. The post-fork listener produces into sharedConn.Unhandled,
 	// so it must be fully stopped before that channel is closed — closing it
 	// mid-send panics the producer. Stopping the listeners first is safe:
@@ -164,17 +172,14 @@ func (dvs *DiscV5Service) close() error {
 
 // DiscoveryStale reports whether the discv5 socket has gone unread for longer
 // than grace — the sign discovery has wedged. False before the listener is built
-// (or after a failed init), when there's nothing to judge.
-//
-// The operator health check polls this periodically, so it doubles as the
-// sampling point for the read-staleness gauge.
+// (or after a failed init), when there's nothing to judge. The read-staleness
+// gauge is sampled separately at scrape time (see observeDiscoveryReadStaleness),
+// keeping this a pure predicate.
 func (dvs *DiscV5Service) DiscoveryStale(grace time.Duration) bool {
 	if dvs.socketConn == nil {
 		return false
 	}
-	age, ok := dvs.socketConn.ReadStaleness()
-	recordDiscoveryReadStaleness(dvs.ctx, int64(age.Seconds()))
-	return ok && age > grace
+	return dvs.socketConn.StaleFor(grace)
 }
 
 // Self returns self node
@@ -512,6 +517,15 @@ func (dvs *DiscV5Service) initDiscV5Listener(discOpts *Options) (err error) {
 
 	dvs.dv5Listener = NewForkingDV5Listener(dvs.logger, dv5PreForkListener, dv5PostForkListener, 5*time.Second)
 	dvs.bootnodes = dv5PreForkCfg.Bootnodes // Just take bootnodes from one of the config since they're equal
+
+	// Registered last so the callback only outlives init if the service does.
+	// Registration fails only on instrument misuse and the gauge is optional,
+	// so a failure is logged, not returned.
+	if reg, regErr := observeDiscoveryReadStaleness(socketConn); regErr != nil {
+		dvs.logger.Warn("could not register discovery read-staleness gauge", zap.Error(regErr))
+	} else {
+		dvs.stalenessReg = reg
+	}
 
 	return nil
 }

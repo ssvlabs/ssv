@@ -38,6 +38,7 @@ func TestNewDiscV5Service(t *testing.T) {
 	assert.NotNil(t, dvs.dv5Listener)
 	assert.NotNil(t, dvs.conns)
 	assert.NotNil(t, dvs.socketConn)
+	assert.NotNil(t, dvs.stalenessReg, "read-staleness gauge callback must be registered")
 	assert.NotNil(t, dvs.subnetsIdx)
 	assert.NotNil(t, dvs.ssvConfig)
 
@@ -417,6 +418,9 @@ func TestDiscV5ServiceListenerType(t *testing.T) {
 	require.NoError(t, err)
 }
 
+// testHostAddress is an arbitrary non-loopback address for address-configuration tests.
+const testHostAddress = "192.168.1.100"
+
 // TestServiceAddressConfiguration tests the address configuration logic in the discovery service.
 // It verifies that host addresses and DNS names are correctly resolved and applied
 // to the local node. HostDNS and HostAddress are mutually exclusive - providing both
@@ -434,9 +438,9 @@ func TestServiceAddressConfiguration(t *testing.T) {
 	}{
 		{
 			name:           "only HostAddress",
-			hostAddress:    "192.168.1.100",
+			hostAddress:    testHostAddress,
 			hostDNS:        "",
-			expectedResult: "192.168.1.100",
+			expectedResult: testHostAddress,
 			expectError:    false,
 		},
 		{
@@ -448,7 +452,7 @@ func TestServiceAddressConfiguration(t *testing.T) {
 		},
 		{
 			name:        "both HostAddress and HostDNS",
-			hostAddress: "192.168.1.100",
+			hostAddress: testHostAddress,
 			hostDNS:     "localhost",
 			expectError: true,
 		},

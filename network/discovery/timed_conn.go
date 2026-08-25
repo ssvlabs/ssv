@@ -16,6 +16,13 @@ import (
 // shows up as a last-read timestamp that stops advancing. StaleFor turns that
 // into a liveness signal, used by both the operator and boot nodes.
 //
+// The signal is scoped to the socket. On the operator only the post-fork
+// listener reads it (through this wrapper); the pre-fork listener consumes
+// decode-rejected packets relayed via SharedUDPConn's buffer. A stall confined
+// to the pre-fork listener therefore moves neither this timestamp nor the
+// post-fork reader, whose relay into that buffer drops rather than blocks
+// (#2980). The boot node runs a single listener reading the socket directly.
+//
 // Only ReadFromUDPAddrPort is overridden; writes, Close and LocalAddr fall
 // through to the embedded conn.
 type TimedConn struct {
