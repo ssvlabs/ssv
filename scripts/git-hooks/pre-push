@@ -2,8 +2,10 @@
 # Pre-push hook: lint what this push introduces or modifies, so lint failures
 # surface locally instead of on the PR's lint check. Two stages:
 #
-#   1. misspell (locale US, same as .golangci.yaml's misspell config) on the
-#      changed .go/.md blobs at the pushed commit. CI's `make lint` only lints
+#   1. misspell (-locale US, mirroring .golangci.yaml's misspell locale) on the
+#      changed .go/.md blobs at the pushed commit. Only the locale is mirrored:
+#      .golangci.yaml's misspell.ignore-rules aren't forwarded, so pass any real
+#      entry there to misspell's -i flag here too. CI's `make lint` only lints
 #      .go, so .md findings are this hook's own check rather than a CI gate.
 #   2. golangci-lint (the same config CI's `make lint` uses) on the packages
 #      containing changed .go files. Unlike misspell it needs full packages on
