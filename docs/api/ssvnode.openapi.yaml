@@ -742,6 +742,9 @@ paths:
       consumes:
       - application/json
       description: Returns consensus and post-consensus traces for requested committees.
+        Without a 'roles' filter, the response contains one trace per (slot, committeeID,
+        role) - up to two rows per (slot, committeeID), distinguished by the 'role'
+        field.
       parameters:
       - collectionFormat: csv
         description: CommitteeIDs is a comma-separated list of committee IDs (hex,
@@ -805,6 +808,9 @@ paths:
       consumes:
       - application/json
       description: Returns consensus and post-consensus traces for requested committees.
+        Without a 'roles' filter, the response contains one trace per (slot, committeeID,
+        role) - up to two rows per (slot, committeeID), distinguished by the 'role'
+        field.
       parameters:
       - collectionFormat: csv
         description: CommitteeIDs is a comma-separated list of committee IDs (hex,
@@ -868,8 +874,14 @@ paths:
     get:
       consumes:
       - application/json
-      description: Returns consensus, decided, and message traces for the requested
-        validator duties.
+      description: |-
+        Returns consensus, decided, and message traces for the requested validator duties.
+        For AGGREGATOR and SYNC_COMMITTEE_CONTRIBUTION the fork state is evaluated at 'from': a range whose
+        'from' is post-Boole and that supplies no 'pubkeys'/'indices' is rejected with 400, while a range whose
+        'from' is pre-Boole is accepted and served partially — post-Boole slots are omitted from 'data' and
+        reported as one note per role in 'errors' with the text "committee duty post-fork". Such a response is
+        a 200 even when 'data' is empty; clients must inspect 'errors' to detect partial coverage, and should
+        supply 'indices'/'pubkeys' or use /traces/committee to retrieve the post-fork portion.
       parameters:
       - description: From is the starting slot (inclusive).
         example: 123456
@@ -944,8 +956,14 @@ paths:
     post:
       consumes:
       - application/json
-      description: Returns consensus, decided, and message traces for the requested
-        validator duties.
+      description: |-
+        Returns consensus, decided, and message traces for the requested validator duties.
+        For AGGREGATOR and SYNC_COMMITTEE_CONTRIBUTION the fork state is evaluated at 'from': a range whose
+        'from' is post-Boole and that supplies no 'pubkeys'/'indices' is rejected with 400, while a range whose
+        'from' is pre-Boole is accepted and served partially — post-Boole slots are omitted from 'data' and
+        reported as one note per role in 'errors' with the text "committee duty post-fork". Such a response is
+        a 200 even when 'data' is empty; clients must inspect 'errors' to detect partial coverage, and should
+        supply 'indices'/'pubkeys' or use /traces/committee to retrieve the post-fork portion.
       parameters:
       - description: From is the starting slot (inclusive).
         example: 123456
