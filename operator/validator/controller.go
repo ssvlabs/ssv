@@ -1280,6 +1280,8 @@ func SetupRunners(
 				ProposerDelayEPBS:   options.ProposerDelayEPBS,
 				ProposedBlockRoots:  proposedBlockRoots,
 				StartEnvelopeDuty:   startEnvelopeDuty,
+				Builders:            options.Builders,
+				RequestAuthCache:    requestAuthCache,
 			})
 		case spectypes.RoleEnvelopeProposer:
 			// The §6 envelope runner shares the proposer's proposedBlockRoots (it reads the §4 root the

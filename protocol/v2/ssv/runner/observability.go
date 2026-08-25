@@ -142,6 +142,12 @@ var (
 			observability.InstrumentName(observabilityNamespace, "request_auth.reconstructions"),
 			metric.WithUnit("{root}"),
 			metric.WithDescription("threshold-reconstructed Gloas direct-builder request-auth signing roots (issue #2962); token-sharing builders share a root and count once")))
+
+	requestAuthUnavailableCounter = metrics.New(
+		meter.Int64Counter(
+			observability.InstrumentName(observabilityNamespace, "request_auth.unavailable"),
+			metric.WithUnit("{builder}"),
+			metric.WithDescription("configured Gloas direct-builders with no reconstructed request-auth at §4 produce time (issue #2962 E1); omitted from the produceBlockV4 body, degrading to the enshrined flow")))
 )
 
 func recordSuccessfulSubmission(ctx context.Context, count int64, epoch phase0.Epoch, role spectypes.BeaconRole) {
@@ -160,10 +166,11 @@ func recordDutyOutcome(ctx context.Context, role spectypes.RunnerRole, outcome d
 		))
 }
 
-// proposalBuildSource is a submitted Gloas proposal's build source (issue #2962 E1). Today only the
-// outcome is knowable — the GET produce doesn't expose why the BN self-built; the produce-POST
-// migration will split buildSourceLocal by reason (no bid available / economics / builder auth
-// unavailable, the latter fed by the request-auth cache).
+// proposalBuildSource is a submitted Gloas proposal's build source (issue #2962 E1): whether the decided
+// bid commits to an external builder or to self-build. The decided block cannot reveal why the BN
+// self-built (economics vs. a builder being unreachable), so the auth-unavailable dimension is surfaced
+// separately, at produce time, by recordProposalAuthUnavailable — a configured builder with no auth this
+// slot is a concrete, countable cause independent of this outcome classification.
 type proposalBuildSource string
 
 const (
@@ -196,11 +203,18 @@ func recordEnvelopeBuildMatch(ctx context.Context, self bool) {
 }
 
 // recordRequestAuthReconstruction counts a threshold-reconstructed request-auth signing root
-// (issue #2962; token-sharing builders share a root and count once). The inverse signal — an auth
-// that never reached quorum — is measured where it bites: at the §4 produce path's cache lookup,
-// once the produce-POST migration lands.
+// (issue #2962; token-sharing builders share a root and count once). Its inverse — an auth that never
+// reached quorum — is measured where it bites, by recordProposalAuthUnavailable at the §4 produce path.
 func recordRequestAuthReconstruction(ctx context.Context) {
 	requestAuthReconstructionCounter.Add(ctx, 1)
+}
+
+// recordProposalAuthUnavailable counts configured direct-builders that had no reconstructed request-auth
+// for the slot at §4 produce time (issue #2962 E1) — the inverse of recordRequestAuthReconstruction and
+// the auth dimension of the build-source telemetry: these builders are omitted from the produceBlockV4
+// body, so the proposal silently degrades to gossiped bids / self-build for them.
+func recordProposalAuthUnavailable(ctx context.Context, count int) {
+	requestAuthUnavailableCounter.Add(ctx, int64(count))
 }
 
 func recordPreConsensusDuration(ctx context.Context, duration time.Duration, role spectypes.RunnerRole) {

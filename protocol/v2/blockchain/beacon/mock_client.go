@@ -557,32 +557,33 @@ func (m *MockGloasProposerCalls) EXPECT() *MockGloasProposerCallsMockRecorder {
 }
 
 // GetGloasBeaconBlock mocks base method.
-func (m *MockGloasProposerCalls) GetGloasBeaconBlock(ctx context.Context, slot phase0.Slot, graffiti, randao []byte) (*gloas.BeaconBlock, error) {
+func (m *MockGloasProposerCalls) GetGloasBeaconBlock(ctx context.Context, slot phase0.Slot, graffiti, randao []byte, builderConfig *gloas.ProduceBuilderConfig) (*gloas.BeaconBlock, string, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetGloasBeaconBlock", ctx, slot, graffiti, randao)
+	ret := m.ctrl.Call(m, "GetGloasBeaconBlock", ctx, slot, graffiti, randao, builderConfig)
 	ret0, _ := ret[0].(*gloas.BeaconBlock)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret1, _ := ret[1].(string)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
 }
 
 // GetGloasBeaconBlock indicates an expected call of GetGloasBeaconBlock.
-func (mr *MockGloasProposerCallsMockRecorder) GetGloasBeaconBlock(ctx, slot, graffiti, randao any) *gomock.Call {
+func (mr *MockGloasProposerCallsMockRecorder) GetGloasBeaconBlock(ctx, slot, graffiti, randao, builderConfig any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetGloasBeaconBlock", reflect.TypeOf((*MockGloasProposerCalls)(nil).GetGloasBeaconBlock), ctx, slot, graffiti, randao)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetGloasBeaconBlock", reflect.TypeOf((*MockGloasProposerCalls)(nil).GetGloasBeaconBlock), ctx, slot, graffiti, randao, builderConfig)
 }
 
 // SubmitGloasBeaconBlock mocks base method.
-func (m *MockGloasProposerCalls) SubmitGloasBeaconBlock(ctx context.Context, block *gloas.SignedBeaconBlock) error {
+func (m *MockGloasProposerCalls) SubmitGloasBeaconBlock(ctx context.Context, block *gloas.SignedBeaconBlock, builderURL string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SubmitGloasBeaconBlock", ctx, block)
+	ret := m.ctrl.Call(m, "SubmitGloasBeaconBlock", ctx, block, builderURL)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // SubmitGloasBeaconBlock indicates an expected call of SubmitGloasBeaconBlock.
-func (mr *MockGloasProposerCallsMockRecorder) SubmitGloasBeaconBlock(ctx, block any) *gomock.Call {
+func (mr *MockGloasProposerCallsMockRecorder) SubmitGloasBeaconBlock(ctx, block, builderURL any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitGloasBeaconBlock", reflect.TypeOf((*MockGloasProposerCalls)(nil).SubmitGloasBeaconBlock), ctx, block)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitGloasBeaconBlock", reflect.TypeOf((*MockGloasProposerCalls)(nil).SubmitGloasBeaconBlock), ctx, block, builderURL)
 }
 
 // MockGloasEnvelopeCalls is a mock of GloasEnvelopeCalls interface.
@@ -1073,18 +1074,19 @@ func (mr *MockBeaconNodeMockRecorder) GetExecutionPayloadEnvelope(ctx, slot, bea
 }
 
 // GetGloasBeaconBlock mocks base method.
-func (m *MockBeaconNode) GetGloasBeaconBlock(ctx context.Context, slot phase0.Slot, graffiti, randao []byte) (*gloas.BeaconBlock, error) {
+func (m *MockBeaconNode) GetGloasBeaconBlock(ctx context.Context, slot phase0.Slot, graffiti, randao []byte, builderConfig *gloas.ProduceBuilderConfig) (*gloas.BeaconBlock, string, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetGloasBeaconBlock", ctx, slot, graffiti, randao)
+	ret := m.ctrl.Call(m, "GetGloasBeaconBlock", ctx, slot, graffiti, randao, builderConfig)
 	ret0, _ := ret[0].(*gloas.BeaconBlock)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret1, _ := ret[1].(string)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
 }
 
 // GetGloasBeaconBlock indicates an expected call of GetGloasBeaconBlock.
-func (mr *MockBeaconNodeMockRecorder) GetGloasBeaconBlock(ctx, slot, graffiti, randao any) *gomock.Call {
+func (mr *MockBeaconNodeMockRecorder) GetGloasBeaconBlock(ctx, slot, graffiti, randao, builderConfig any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetGloasBeaconBlock", reflect.TypeOf((*MockBeaconNode)(nil).GetGloasBeaconBlock), ctx, slot, graffiti, randao)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetGloasBeaconBlock", reflect.TypeOf((*MockBeaconNode)(nil).GetGloasBeaconBlock), ctx, slot, graffiti, randao, builderConfig)
 }
 
 // GetSyncCommitteeContribution mocks base method.
@@ -1291,17 +1293,17 @@ func (mr *MockBeaconNodeMockRecorder) SubmitExecutionPayloadEnvelope(ctx, signed
 }
 
 // SubmitGloasBeaconBlock mocks base method.
-func (m *MockBeaconNode) SubmitGloasBeaconBlock(ctx context.Context, block *gloas.SignedBeaconBlock) error {
+func (m *MockBeaconNode) SubmitGloasBeaconBlock(ctx context.Context, block *gloas.SignedBeaconBlock, builderURL string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SubmitGloasBeaconBlock", ctx, block)
+	ret := m.ctrl.Call(m, "SubmitGloasBeaconBlock", ctx, block, builderURL)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // SubmitGloasBeaconBlock indicates an expected call of SubmitGloasBeaconBlock.
-func (mr *MockBeaconNodeMockRecorder) SubmitGloasBeaconBlock(ctx, block any) *gomock.Call {
+func (mr *MockBeaconNodeMockRecorder) SubmitGloasBeaconBlock(ctx, block, builderURL any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitGloasBeaconBlock", reflect.TypeOf((*MockBeaconNode)(nil).SubmitGloasBeaconBlock), ctx, block)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitGloasBeaconBlock", reflect.TypeOf((*MockBeaconNode)(nil).SubmitGloasBeaconBlock), ctx, block, builderURL)
 }
 
 // SubmitPayloadAttestationMessages mocks base method.
