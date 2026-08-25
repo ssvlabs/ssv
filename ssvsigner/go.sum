@@ -191,6 +191,8 @@ github.com/ssvlabs/ssv-spec v1.2.3-0.20260623204847-d1675a2cc6e4 h1:PMwmRhbM50Cc
 github.com/ssvlabs/ssv-spec v1.2.3-0.20260623204847-d1675a2cc6e4/go.mod h1:GedhFYGHVJRYYH3nEp05Gn14tyvg6VbTbaIxrMtI7Cg=
 github.com/ssvlabs/ssv-spec v1.2.3-0.20260728180200-ac6b42337063 h1:Z9cJtaEz/MkeXWC91beLstQpFWP+1UphGUGr8HqyZz8=
 github.com/ssvlabs/ssv-spec v1.2.3-0.20260728180200-ac6b42337063/go.mod h1:GedhFYGHVJRYYH3nEp05Gn14tyvg6VbTbaIxrMtI7Cg=
+github.com/ssvlabs/ssv-spec v1.2.3-0.20260825170036-c071cf778fab h1:qwxLRgbxrFP47FlIc2zqczIW/q/B5wIOZvYNS1rpgH4=
+github.com/ssvlabs/ssv-spec v1.2.3-0.20260825170036-c071cf778fab/go.mod h1:GedhFYGHVJRYYH3nEp05Gn14tyvg6VbTbaIxrMtI7Cg=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
 github.com/stretchr/objx v0.5.2 h1:xuMeJ0Sdp5ZMRXx/aWO6RZxdr3beISkG5/G/aIRr3pY=
 github.com/stretchr/objx v0.5.2/go.mod h1:FRsXN1f5AsAjCGJKqEizvkpNtU+EGNCLh3NxZ/8L+MA=

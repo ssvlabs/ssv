@@ -23,8 +23,9 @@ const MaxBuilderAuthDataSize = 4096
 // as advertised — never canonicalized, signed exactly as serialized), and Slot is the proposal slot
 // the request is authorized for, not the slot at which it is signed or sent. One signed auth covers
 // both builder channels (getExecutionPayloadBid and submitBuilderPreferences). Signed under
-// DomainRequestAuth — a genesis-style compute_domain (fork-agnostic); the wire type is nonetheless
-// fork-versioned for decoding, so hops carrying the body set Eth-Consensus-Version. Variable-size SSZ.
+// DomainBuilderRequestAuth — a genesis-style compute_domain (fork-agnostic); the wire type is
+// nonetheless fork-versioned for decoding, so hops carrying the body set Eth-Consensus-Version.
+// Variable-size SSZ.
 type BuilderRequestAuth struct {
 	Data []byte `ssz-max:"4096"`
 	Slot phase0.Slot
