@@ -47,15 +47,26 @@ misspell_ok="" # probed lazily on the first push with changed files
 while read -r local_ref local_sha remote_ref remote_sha; do
 	[ "$local_sha" = "$ZERO" ] && continue # deleting a remote ref
 
-	if [ "$remote_sha" = "$ZERO" ]; then
-		# New remote branch: diff against the merge-base with stage (or main).
-		base=$(git merge-base "$local_sha" origin/stage 2>/dev/null) ||
-			base=$(git merge-base "$local_sha" origin/main 2>/dev/null) || {
-			echo "pre-push: no merge-base with origin/stage or origin/main — skipping lint for $local_ref" >&2
-			continue
-		}
-	else
+	# Diff base: the newest commit this push doesn't own. git diff compares two
+	# trees, so any sideways move of the branch leaks base-branch files into the
+	# diff — slow for golangci, and (since CI doesn't lint .md) able to block the
+	# push on a doc typo nobody here wrote. The remote tip is the tightest base
+	# for a plain incremental push, but not after a rebase + force-push (it isn't
+	# our ancestor) or after merging the base branch in (it sits behind the new
+	# fork point), so take it only while it's both behind us and ahead of the
+	# fork, else fall back to the merge-base with stage (or main).
+	fork=$(git merge-base "$local_sha" origin/stage 2>/dev/null) ||
+		fork=$(git merge-base "$local_sha" origin/main 2>/dev/null) ||
+		fork=""
+	base=$fork
+	if [ "$remote_sha" != "$ZERO" ] &&
+		git merge-base --is-ancestor "$remote_sha" "$local_sha" 2>/dev/null &&
+		{ [ -z "$fork" ] || git merge-base --is-ancestor "$fork" "$remote_sha" 2>/dev/null; }; then
 		base=$remote_sha
+	fi
+	if [ -z "$base" ]; then
+		echo "pre-push: no merge-base with origin/stage or origin/main — skipping lint for $local_ref" >&2
+		continue
 	fi
 
 	files=$(git diff --name-only --diff-filter=ACMR "$base" "$local_sha" -- '*.go' '*.md')
