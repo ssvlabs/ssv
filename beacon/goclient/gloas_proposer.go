@@ -96,9 +96,9 @@ func requestGloasBeaconBlock(ctx context.Context, addr string, slot phase0.Slot,
 	if err != nil {
 		return gloasBlockResult{}, err
 	}
-	block := &gloas.BeaconBlock{}
-	if err := block.UnmarshalSSZ(respBody); err != nil {
-		return gloasBlockResult{}, fmt.Errorf("decode gloas beacon block: %w", err)
+	block, err := decodeGloasBlock(respBody)
+	if err != nil {
+		return gloasBlockResult{}, err
 	}
 	return gloasBlockResult{block: block}, nil
 }
@@ -114,11 +114,20 @@ func requestGloasBeaconBlockPOST(ctx context.Context, url string, builderConfig 
 	if err != nil {
 		return gloasBlockResult{}, err
 	}
-	block := &gloas.BeaconBlock{}
-	if err := block.UnmarshalSSZ(respBody); err != nil {
-		return gloasBlockResult{}, fmt.Errorf("decode gloas beacon block: %w", err)
+	block, err := decodeGloasBlock(respBody)
+	if err != nil {
+		return gloasBlockResult{}, err
 	}
 	return gloasBlockResult{block: block, builderURL: header.Get("Eth-Builder-Url")}, nil
+}
+
+// decodeGloasBlock unmarshals an SSZ produce response into a Gloas block.
+func decodeGloasBlock(ssz []byte) (*gloas.BeaconBlock, error) {
+	block := &gloas.BeaconBlock{}
+	if err := block.UnmarshalSSZ(ssz); err != nil {
+		return nil, fmt.Errorf("decode gloas beacon block: %w", err)
+	}
+	return block, nil
 }
 
 // submitGloasBeaconBlock POSTs an SSZ-marshaled signed Gloas block to the publish endpoint, echoing any
