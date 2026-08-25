@@ -148,6 +148,12 @@ var (
 			observability.InstrumentName(observabilityNamespace, "request_auth.unavailable"),
 			metric.WithUnit("{builder}"),
 			metric.WithDescription("configured Gloas direct-builders with no reconstructed request-auth at §4 produce time (issue #2962 E1); omitted from the produceBlockV4 body, degrading to the enshrined flow")))
+
+	builderPreferencesSubmitCounter = metrics.New(
+		meter.Int64Counter(
+			observability.InstrumentName(observabilityNamespace, "builder_preferences.submits"),
+			metric.WithUnit("{submit}"),
+			metric.WithDescription("ahead-of-time Gloas builder-preferences submissions to the beacon node (issue #2962 phase 3), by outcome")))
 )
 
 func recordSuccessfulSubmission(ctx context.Context, count int64, epoch phase0.Epoch, role spectypes.BeaconRole) {
@@ -215,6 +221,16 @@ func recordRequestAuthReconstruction(ctx context.Context) {
 // body, so the proposal silently degrades to gossiped bids / self-build for them.
 func recordProposalAuthUnavailable(ctx context.Context, count int) {
 	requestAuthUnavailableCounter.Add(ctx, int64(count))
+}
+
+// recordBuilderPreferencesSubmit counts an ahead-of-time builder-preferences submission (issue #2962
+// phase 3) by outcome. It is best-effort at the caller, so a failure is a health signal, not a duty failure.
+func recordBuilderPreferencesSubmit(ctx context.Context, success bool) {
+	outcome := "failure"
+	if success {
+		outcome = "success"
+	}
+	builderPreferencesSubmitCounter.Add(ctx, 1, metric.WithAttributes(attribute.String("outcome", outcome)))
 }
 
 func recordPreConsensusDuration(ctx context.Context, duration time.Duration, role spectypes.RunnerRole) {

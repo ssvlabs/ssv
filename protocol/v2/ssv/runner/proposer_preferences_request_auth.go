@@ -29,8 +29,9 @@ type frozenRequestAuth struct {
 
 // frozenBuilderRef names one configured builder relationship covered by a frozen auth.
 type frozenBuilderRef struct {
-	identity string // gloas.BuilderIdentity — the RequestAuthCache key
-	url      string // for logging
+	identity            string // gloas.BuilderIdentity — the RequestAuthCache key
+	url                 string // the builder URL, for logging and the phase-3 preferences submit
+	maxExecutionPayment uint64 // the configured cap, forwarded via submitBuilderPreferences (phase 3)
 }
 
 // runRequestAuthRound freezes one BuilderRequestAuth{data, proposal_slot} per configured builder,
@@ -70,7 +71,7 @@ func (r *proposerPreferencesSlotRunner) runRequestAuthRound(ctx context.Context,
 				fields.Slot(proposalSlot), zap.String("builder_url", entry.URL), zap.Error(err))
 			continue
 		}
-		ref := frozenBuilderRef{identity: gloas.BuilderIdentity(entry.URL, data), url: entry.URL}
+		ref := frozenBuilderRef{identity: gloas.BuilderIdentity(entry.URL, data), url: entry.URL, maxExecutionPayment: entry.MaxExecutionPayment}
 		if frozen, ok := r.requestAuths[root]; ok {
 			// Another entry froze these exact bytes; register the extra relationship on the shared root.
 			frozen.builders = append(frozen.builders, ref)
@@ -158,18 +159,44 @@ func (r *proposerPreferencesSlotRunner) processRequestAuthPartial(ctx context.Co
 	copy(signature[:], fullSig)
 
 	r.reconstructedAuthRoots[msg.SigningRoot] = struct{}{}
+	signed := &gloas.SignedBuilderRequestAuth{Message: frozen.auth, Signature: signature}
 	urls := make([]string, 0, len(frozen.builders))
 	for _, ref := range frozen.builders {
 		urls = append(urls, ref.url)
 	}
 	if r.requestAuthCache != nil {
-		signed := &gloas.SignedBuilderRequestAuth{Message: frozen.auth, Signature: signature}
 		for _, ref := range frozen.builders {
 			r.requestAuthCache.Store(frozen.auth.Slot, ref.identity, signed)
 		}
 	}
+	r.submitBuilderPreferences(ctx, logger, signed, frozen.builders)
 	recordRequestAuthReconstruction(ctx)
 	logger.Info("✔️ reconstructed builder request auth",
 		fields.Slot(frozen.auth.Slot), zap.Strings("builder_urls", urls))
 	return nil
+}
+
+// submitBuilderPreferences forwards the reconstructed auth as the ahead-of-time per-builder preference
+// (issue #2962 phase 3, beacon-APIs#630): one BuilderPreferencesEntry per builder sharing the auth, each
+// carrying the proposer pubkey, the builder URL, and the configured max-execution-payment cap. Every
+// operator submits via its own beacon node — the builder dedupes per proposer per slot. Best-effort: a
+// failure never disturbs the §5/auth flow, only its metric and log.
+func (r *proposerPreferencesSlotRunner) submitBuilderPreferences(ctx context.Context, logger *zap.Logger, signed *gloas.SignedBuilderRequestAuth, builders []frozenBuilderRef) {
+	var pubkey phase0.BLSPubKey
+	copy(pubkey[:], r.GetShare().ValidatorPubKey[:])
+	entries := make([]*gloas.BuilderPreferencesEntry, 0, len(builders))
+	for _, ref := range builders {
+		entries = append(entries, &gloas.BuilderPreferencesEntry{
+			ProposerPubKey:      pubkey,
+			URL:                 ref.url,
+			Auth:                signed,
+			MaxExecutionPayment: ref.maxExecutionPayment,
+		})
+	}
+	if err := r.beacon.SubmitBuilderPreferences(ctx, entries); err != nil {
+		recordBuilderPreferencesSubmit(ctx, false)
+		logger.Warn("builder preferences submit failed", fields.Slot(signed.Message.Slot), zap.Error(err))
+		return
+	}
+	recordBuilderPreferencesSubmit(ctx, true)
 }
