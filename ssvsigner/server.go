@@ -212,13 +212,13 @@ func (s *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 			keystorePassword,
 		)
 		if err != nil {
-			// 422 means the share is malformed (bad ciphertext/hex/BLS/pubkey mismatch): the node
-			// classifies it as a malformed registry event and skips it. Internal failures raised
-			// after validation (keystore generation/marshalling, tagged errInternalKeystore) are
-			// not share problems, so reply 500 (retryable) for those instead.
-			status := fasthttp.StatusUnprocessableEntity
-			if errors.Is(err, errInternalKeystore) {
-				status = fasthttp.StatusInternalServerError
+			// Reply 422 only for a malformed share (errMalformedShare): the node treats 422 as a
+			// malformed registry event and skips it. Everything else defaults to 500 (retryable).
+			// Keeping 422 opt-in means a future untagged failure surfaces as a noisy crash-retry
+			// rather than a silent validator drop — the safe direction to fail.
+			status := fasthttp.StatusInternalServerError
+			if errors.Is(err, errMalformedShare) {
+				status = fasthttp.StatusUnprocessableEntity
 			}
 			logger.Warn("failed to get keystore from encrypted share", zap.Error(err))
 			s.writeJSONErr(
@@ -262,11 +262,13 @@ func (s *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 	s.writeJSON(ctx, logger, resp)
 }
 
-// errInternalKeystore tags failures in keystoreJSONFromEncryptedShare that occur after the
-// share has been validated (keystore generation or marshalling). These are internal signer
-// failures, not malformed shares, so handleAddValidator replies 500 (retryable) for them
-// rather than 422 (which the node treats as a malformed, skippable share).
-var errInternalKeystore = errors.New("internal keystore failure")
+// errMalformedShare tags the keystoreJSONFromEncryptedShare failures that mean the share itself
+// is bad (undecryptable, bad hex, invalid BLS key, or a pubkey mismatch). handleAddValidator
+// replies 422 for these, which the node treats as a malformed, skippable share. Every other
+// failure defaults to 500 (retryable): making 422 opt-in keeps the dangerous "silently skip"
+// path explicit, so an untagged internal error fails as a crash-retry instead of dropping a
+// valid validator.
+var errMalformedShare = errors.New("malformed share")
 
 // keystoreJSONFromEncryptedShare doesn't pass errors through intentionally
 // to prevent exposing information related to private key.
@@ -277,33 +279,33 @@ func (s *Server) keystoreJSONFromEncryptedShare(
 ) (string, error) {
 	sharePrivKeyHex, err := s.operatorPrivKey.Decrypt(encryptedPrivKey)
 	if err != nil {
-		return "", fmt.Errorf("failed to decrypt share")
+		return "", fmt.Errorf("%w: decrypt share", errMalformedShare)
 	}
 
 	sharePrivKey, err := hex.DecodeString(strings.TrimPrefix(string(sharePrivKeyHex), "0x"))
 	if err != nil {
-		return "", fmt.Errorf("failed to decode share private key from hex for pubkey %s", sharePubKey.String())
+		return "", fmt.Errorf("%w: decode share private key from hex for pubkey %s", errMalformedShare, sharePubKey.String())
 	}
 
 	sharePrivBLS := &bls.SecretKey{}
 	if err = sharePrivBLS.Deserialize(sharePrivKey); err != nil {
-		return "", fmt.Errorf("failed to deserialize share private key")
+		return "", fmt.Errorf("%w: deserialize share private key", errMalformedShare)
 	}
 
 	if !bytes.Equal(sharePrivBLS.GetPublicKey().Serialize(), sharePubKey[:]) {
-		return "", errors.New("derived public key does not match expected public key")
+		return "", fmt.Errorf("%w: derived public key does not match expected public key", errMalformedShare)
 	}
 
 	// Past this point the share itself is valid; the remaining failures are internal to the
-	// signer, so tag them with errInternalKeystore (see handleAddValidator's 500-vs-422 split).
+	// signer and stay untagged, so handleAddValidator replies 500 (retryable), not 422.
 	shareKeystore, err := keystore.GenerateShareKeystore(sharePrivBLS, sharePubKey, keystorePassword)
 	if err != nil {
-		return "", fmt.Errorf("%w: generate share keystore", errInternalKeystore)
+		return "", errors.New("generate share keystore")
 	}
 
 	keystoreJSON, err := json.Marshal(shareKeystore)
 	if err != nil {
-		return "", fmt.Errorf("%w: marshal share keystore", errInternalKeystore)
+		return "", fmt.Errorf("marshal share keystore: %w", err)
 	}
 
 	return string(keystoreJSON), nil
