@@ -125,12 +125,10 @@ func (c *Client) AddValidators(ctx context.Context, shares ...ShareKeys) (status
 		AddValidator(requests.ValidatorHandler(requests.DefaultValidator, requests.ToString(&errStr))).
 		Fetch(ctx)
 
-	// ssv-signer replies 422 only when a share cannot be decrypted or validated (a malformed
-	// share); other failures use different statuses and fall through to the retryable error
-	// below. Surface it as ShareDecryptionError so callers treat it as a malformed event.
+	// A 422 means the signer rejected the share as undecryptable/invalid (a malformed share); wrap
+	// it as ShareDecryptionError so callers skip the event instead of failing. Keep the transport
+	// err too, so a bodyless 422 (empty errStr) still carries context.
 	if requests.HasStatusErr(err, http.StatusUnprocessableEntity) {
-		// Keep the transport error too, so a bodyless 422 (empty errStr) still carries context
-		// instead of surfacing a bare "share decryption error: " for a permanently skipped event.
 		return nil, ShareDecryptionError{Err: fmt.Errorf("%s: %w", errStr, err)}
 	}
 

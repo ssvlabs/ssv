@@ -192,10 +192,8 @@ func (s *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 		// So, there's no need to store the password. We can just generate a random password for each keystore.
 		keystorePassword, err := s.generateRandomPassword(16)
 		if err != nil {
-			// A password-generation failure is an internal (transient) error, not a bad share,
-			// so reply 500 rather than 422. HTTP 422 from this endpoint is reserved for shares
-			// that cannot be decrypted/validated (see below): the node treats 422 as a malformed
-			// registry event and skips it, whereas other statuses are retried.
+			// Internal (transient) failure, not a bad share: reply 500 so the node retries
+			// rather than skips (see errMalformedShare for the 422/500 split).
 			logger.Warn("failed to generate random password", zap.Error(err))
 			s.writeJSONErr(
 				ctx,
@@ -212,10 +210,7 @@ func (s *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 			keystorePassword,
 		)
 		if err != nil {
-			// Reply 422 only for a malformed share (errMalformedShare): the node treats 422 as a
-			// malformed registry event and skips it. Everything else defaults to 500 (retryable).
-			// Keeping 422 opt-in means a future untagged failure surfaces as a noisy crash-retry
-			// rather than a silent validator drop — the safe direction to fail.
+			// 422 only for a malformed share; anything else defaults to 500 (see errMalformedShare).
 			status := fasthttp.StatusInternalServerError
 			if errors.Is(err, errMalformedShare) {
 				status = fasthttp.StatusUnprocessableEntity
@@ -262,12 +257,11 @@ func (s *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 	s.writeJSON(ctx, logger, resp)
 }
 
-// errMalformedShare tags the keystoreJSONFromEncryptedShare failures that mean the share itself
-// is bad (undecryptable, bad hex, invalid BLS key, or a pubkey mismatch). handleAddValidator
-// replies 422 for these, which the node treats as a malformed, skippable share. Every other
-// failure defaults to 500 (retryable): making 422 opt-in keeps the dangerous "silently skip"
-// path explicit, so an untagged internal error fails as a crash-retry instead of dropping a
-// valid validator.
+// errMalformedShare tags the keystoreJSONFromEncryptedShare failures caused by a bad share
+// (undecryptable, bad hex, invalid BLS key, or pubkey mismatch). handleAddValidator replies 422
+// for these — which the node skips as a malformed event — and 500 for everything else. Making 422
+// opt-in keeps the "silently skip" path explicit: an untagged internal failure crash-retries
+// instead of dropping a valid validator.
 var errMalformedShare = errors.New("malformed share")
 
 // keystoreJSONFromEncryptedShare doesn't pass errors through intentionally
@@ -296,8 +290,7 @@ func (s *Server) keystoreJSONFromEncryptedShare(
 		return "", fmt.Errorf("%w: derived public key does not match expected public key", errMalformedShare)
 	}
 
-	// Past this point the share itself is valid; the remaining failures are internal to the
-	// signer and stay untagged, so handleAddValidator replies 500 (retryable), not 422.
+	// The share is valid past this point; the remaining failures are internal (untagged) and get 500, not 422.
 	shareKeystore, err := keystore.GenerateShareKeystore(sharePrivBLS, sharePubKey, keystorePassword)
 	if err != nil {
 		return "", errors.New("generate share keystore")
@@ -534,9 +527,8 @@ func (s *Server) handleOperatorDecrypt(ctx *fasthttp.RequestCtx) {
 }
 
 func (s *Server) handleWeb3SignerErr(ctx *fasthttp.RequestCtx, logger *zap.Logger, resp any, err error) {
-	// Always report Web3Signer failures as 500. We deliberately do NOT forward Web3Signer's
-	// upstream status to the node: the node treats 422 as a malformed (skippable) share, so a
-	// forwarded upstream 422 would be misclassified. 500 keeps these failures on the retryable path.
+	// Report all Web3Signer failures as 500; we deliberately don't forward the upstream status,
+	// so a forwarded 422 can't be misclassified by the node as a malformed (skippable) share.
 	statusCode := fasthttp.StatusInternalServerError
 
 	logger.Error("web3signer request failed",

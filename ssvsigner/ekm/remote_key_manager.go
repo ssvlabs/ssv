@@ -101,14 +101,10 @@ func (km *RemoteKeyManager) AddShare(
 		PubKey:           pubKey,
 	}
 
-	// Register the share with the remote signer first, then bump local slashing protection below.
-	// A malformed share fails here and returns before the bump, so it leaves no orphan slashing
-	// rows — matching LocalKeyManager's validate-first order; the event handler classifies the
-	// ShareDecryptionError as a malformed event and skips it.
-	//
-	// AddValidators is idempotent: it doesn't fail if the same share already exists. So if the
-	// surrounding txn is rolled back after a successful add, the node crashes on the error, re-runs
-	// the block, and re-adds the same share harmlessly.
+	// Register the share remotely first, then bump slashing protection (below). A malformed share
+	// fails here and returns before the bump, leaving no orphan slashing rows — matching
+	// LocalKeyManager's validate-first order. AddValidators is idempotent, so if the txn is later
+	// rolled back the node crashes, re-runs the block, and re-adds the same share harmlessly.
 	statuses, err := km.signerClient.AddValidators(ctx, shareKeys)
 	if err != nil {
 		return fmt.Errorf("add validator: %w", err)
@@ -133,7 +129,7 @@ func (km *RemoteKeyManager) AddShare(
 		}
 	}
 
-	// Only now, after the share is confirmed registered remotely, bump local slashing protection.
+	// Bump only after the share is registered remotely.
 	if err := km.BumpSlashingProtection(txn, pubKey); err != nil {
 		return fmt.Errorf("could not bump slashing protection: %w", err)
 	}

@@ -254,9 +254,8 @@ func (s *SSVSignerClientSuite) TestAddValidators() {
 			if tc.isDecryptionError {
 				assert.ErrorAs(t, err, &decryptErr, "Expected a ShareDecryptionError")
 			} else if tc.expectError {
-				// Only a 422 signals a malformed share. Any other failure (transport,
-				// 4xx, 5xx, client-side validation) must not be classified as a decryption
-				// error, otherwise the node would silently skip an event it failed on.
+				// 422 is the only malformed-share signal; any other failure (transport, 4xx, 5xx,
+				// client-side validation) must not be classified as a decryption error.
 				assert.NotErrorAs(t, err, &decryptErr,
 					"non-422 error must not be classified as ShareDecryptionError")
 			}

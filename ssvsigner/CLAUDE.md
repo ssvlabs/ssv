@@ -156,9 +156,9 @@ BATCH_SIZE=20 \
 - Configuration is locked to prevent switching between local/remote signing
 
 ### Error Handling
-- Malformed shares (undecryptable/invalid) return HTTP 422; the node treats 422 as a skippable malformed registry event, so 422 is reserved exclusively for that case
+- Malformed shares (undecryptable/invalid) return HTTP 422, which the node treats as a skippable malformed event; 422 is reserved exclusively for that
 - Connection failures trigger retries with exponential backoff
-- Web3Signer failures all map to HTTP 500 (retryable); their upstream status is intentionally not forwarded, so an upstream/proxy 422 can't be misclassified as a malformed share
+- Web3Signer failures all map to HTTP 500 (retryable); the upstream status is intentionally not forwarded, so a proxy/upstream 422 can't be misclassified as a malformed share
 
 ### Performance Optimizations
 - Per-validator locking prevents concurrent signing conflicts

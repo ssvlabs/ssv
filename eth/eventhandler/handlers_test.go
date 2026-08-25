@@ -14,13 +14,11 @@ import (
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 )
 
-// TestHandleValidatorAddedUndecryptableShareIsMalformed drives the real
-// handleValidatorAdded -> handleShareCreation -> LocalKeyManager.AddShare path with a
-// ValidatorAdded event whose encrypted share cannot be decrypted: a valid owner/nonce
-// signature and correct lengths, but garbage ciphertext (the shape an attacker can submit).
-// The share belongs to this node's operator, so AddShare runs and fails with a
-// ShareDecryptionError, which the handler must classify as a MalformedEventError (logged and
-// skipped) rather than a fatal error that would crash-loop the node.
+// TestHandleValidatorAddedUndecryptableShareIsMalformed drives the real handleValidatorAdded ->
+// handleShareCreation -> LocalKeyManager.AddShare path with an event that has a valid owner/nonce
+// signature and correct lengths but an undecryptable share (what an attacker can submit). AddShare
+// must fail with a ShareDecryptionError that the handler classifies as a MalformedEventError
+// (skipped), not a fatal error that crash-loops the node.
 func TestHandleValidatorAddedUndecryptableShareIsMalformed(t *testing.T) {
 	ctx := context.Background()
 	logger := zaptest.NewLogger(t)
