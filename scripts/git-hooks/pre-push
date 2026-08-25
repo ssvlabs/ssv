@@ -3,7 +3,8 @@
 # surface locally instead of on the PR's lint check. Two stages:
 #
 #   1. misspell (locale US, same as .golangci.yaml's misspell config) on the
-#      changed .go/.md blobs at the pushed commit.
+#      changed .go/.md blobs at the pushed commit. CI's `make lint` only lints
+#      .go, so .md findings are this hook's own check rather than a CI gate.
 #   2. golangci-lint (the same config CI's `make lint` uses) on the packages
 #      containing changed .go files. Unlike misspell it needs full packages on
 #      disk for type-checking, so it lints the checkout rather than the pushed
@@ -26,6 +27,8 @@ fi
 
 ZERO=0000000000000000000000000000000000000000
 status=0
+ci_findings=0   # findings CI's `make lint` would fail on too
+docs_findings=0 # .md spelling — blocks locally, but CI doesn't lint .md
 
 # Changed paths may contain spaces or glob characters: iterate $files with a
 # newline-only IFS (restored to the default around the outer read, which needs
@@ -87,6 +90,10 @@ while read -r local_ref local_sha remote_ref remote_sha; do
 					esac
 				done >&2
 				status=1
+				case $f in
+				*.md) docs_findings=1 ;;
+				*) ci_findings=1 ;;
+				esac
 			fi
 		done
 		IFS=$oIFS
@@ -134,6 +141,7 @@ if [ -n "$lint_dirs" ]; then
 	# shellcheck disable=SC2086 # lint_dirs is word-split on purpose
 	if ! (cd "$root" && GOWORK=off "$GO" tool -modfile="$root/tool.mod" golangci-lint run $lint_dirs >&2); then
 		status=1
+		ci_findings=1
 	fi
 fi
 if [ -n "$ssvsigner_lint_dirs" ]; then
@@ -142,12 +150,18 @@ if [ -n "$ssvsigner_lint_dirs" ]; then
 	# shellcheck disable=SC2086 # ssvsigner_lint_dirs is word-split on purpose
 	if ! (cd "$root/ssvsigner" && GOWORK=off "$GO" tool -modfile="$root/tool.mod" golangci-lint run -c "$root/.golangci.yaml" $ssvsigner_lint_dirs >&2); then
 		status=1
+		ci_findings=1
 	fi
 fi
 
 if [ "$status" -ne 0 ]; then
 	echo "" >&2
-	echo "pre-push: fix the issues above and amend/commit — the CI lint check (make lint) fails on them." >&2
+	if [ "$ci_findings" -ne 0 ]; then
+		echo "pre-push: fix the issues above and amend/commit — the CI lint check (make lint) fails on them." >&2
+	fi
+	if [ "$docs_findings" -ne 0 ]; then
+		echo "pre-push: the .md spelling above is this hook's own check — CI's make lint doesn't lint .md." >&2
+	fi
 	echo "pre-push: bypass once with: git push --no-verify" >&2
 fi
 exit $status
