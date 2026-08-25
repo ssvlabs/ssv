@@ -518,6 +518,20 @@ func (mr *MockProposerPreferencesCallsMockRecorder) ProposerDutiesDependentRoot(
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProposerDutiesDependentRoot", reflect.TypeOf((*MockProposerPreferencesCalls)(nil).ProposerDutiesDependentRoot), ctx, epoch)
 }
 
+// SubmitBuilderPreferences mocks base method.
+func (m *MockProposerPreferencesCalls) SubmitBuilderPreferences(ctx context.Context, preferences []*gloas.BuilderPreferencesEntry) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SubmitBuilderPreferences", ctx, preferences)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SubmitBuilderPreferences indicates an expected call of SubmitBuilderPreferences.
+func (mr *MockProposerPreferencesCallsMockRecorder) SubmitBuilderPreferences(ctx, preferences any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitBuilderPreferences", reflect.TypeOf((*MockProposerPreferencesCalls)(nil).SubmitBuilderPreferences), ctx, preferences)
+}
+
 // SubmitProposerPreferences mocks base method.
 func (m *MockProposerPreferencesCalls) SubmitProposerPreferences(ctx context.Context, preferences []*gloas.SignedProposerPreferences) error {
 	m.ctrl.T.Helper()
@@ -1276,6 +1290,20 @@ func (m *MockBeaconNode) SubmitBeaconCommitteeSubscriptions(ctx context.Context,
 func (mr *MockBeaconNodeMockRecorder) SubmitBeaconCommitteeSubscriptions(ctx, subscription any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitBeaconCommitteeSubscriptions", reflect.TypeOf((*MockBeaconNode)(nil).SubmitBeaconCommitteeSubscriptions), ctx, subscription)
+}
+
+// SubmitBuilderPreferences mocks base method.
+func (m *MockBeaconNode) SubmitBuilderPreferences(ctx context.Context, preferences []*gloas.BuilderPreferencesEntry) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SubmitBuilderPreferences", ctx, preferences)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SubmitBuilderPreferences indicates an expected call of SubmitBuilderPreferences.
+func (mr *MockBeaconNodeMockRecorder) SubmitBuilderPreferences(ctx, preferences any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitBuilderPreferences", reflect.TypeOf((*MockBeaconNode)(nil).SubmitBuilderPreferences), ctx, preferences)
 }
 
 // SubmitExecutionPayloadEnvelope mocks base method.

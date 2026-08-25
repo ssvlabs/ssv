@@ -38,8 +38,9 @@ func (p fixedFeeRecipientProvider) GetFeeRecipient(spectypes.ValidatorPK) (bella
 // surface: a settable dependent root and a capture of submitted preferences.
 type prefsTestBeacon struct {
 	beacon.BeaconNode
-	dependentRoot phase0.Root
-	submitted     [][]*gloas.SignedProposerPreferences
+	dependentRoot         phase0.Root
+	submitted             [][]*gloas.SignedProposerPreferences
+	submittedBuilderPrefs [][]*gloas.BuilderPreferencesEntry
 }
 
 func (b *prefsTestBeacon) ProposerDutiesDependentRoot(context.Context, phase0.Epoch) (phase0.Root, error) {
@@ -48,6 +49,11 @@ func (b *prefsTestBeacon) ProposerDutiesDependentRoot(context.Context, phase0.Ep
 
 func (b *prefsTestBeacon) SubmitProposerPreferences(_ context.Context, prefs []*gloas.SignedProposerPreferences) error {
 	b.submitted = append(b.submitted, prefs)
+	return nil
+}
+
+func (b *prefsTestBeacon) SubmitBuilderPreferences(_ context.Context, prefs []*gloas.BuilderPreferencesEntry) error {
+	b.submittedBuilderPrefs = append(b.submittedBuilderPrefs, prefs)
 	return nil
 }
 
