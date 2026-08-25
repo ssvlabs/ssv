@@ -390,14 +390,8 @@ listener:
 		// sign. Conclude as not_required so the watcher doesn't report a false "stuck"; the sentinel
 		// still tells committee_queue to drop the message and terminate the runner.
 		r.markDutyNotRequired()
-		r.measurements.EndDutyFlow()
-		recordTotalDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.RoleCommittee, r.State.RunningInstance.State.Round)
 		const dutyFinishedNoValidDutiesEvent = "✔️successfully finished duty processing (no valid duties to sign)"
-		logger.Info(dutyFinishedNoValidDutiesEvent,
-			fields.ConsensusTime(r.measurements.ConsensusTime()),
-			fields.ConsensusRounds(uint64(r.State.RunningInstance.State.Round)),
-			fields.TotalDutyTime(r.measurements.TotalDutyTime()),
-		)
+		r.concludeDutyFlow(ctx, logger, dutyFinishedNoValidDutiesEvent)
 		span.AddEvent(dutyFinishedNoValidDutiesEvent)
 		return ErrNoValidDutiesToExecute
 	}
@@ -560,14 +554,9 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 		// concludeDuty is idempotent, so the deferred markDutyFailed becomes a no-op. The sentinel
 		// still tells committee_queue to drop the message and terminate the runner.
 		r.markDutyNotRequired()
-		r.measurements.EndDutyFlow()
-		recordTotalDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.RoleCommittee, r.State.RunningInstance.State.Round)
 		const dutyFinishedNoBeaconObjectsEvent = "✔️successfully finished duty processing (no beacon objects to submit)"
-		logger.Info(dutyFinishedNoBeaconObjectsEvent,
-			fields.ConsensusTime(r.measurements.ConsensusTime()),
-			fields.ConsensusRounds(uint64(r.State.RunningInstance.State.Round)),
+		r.concludeDutyFlow(ctx, logger, dutyFinishedNoBeaconObjectsEvent,
 			fields.PostConsensusTime(r.measurements.PostConsensusTime()),
-			fields.TotalDutyTime(r.measurements.TotalDutyTime()),
 		)
 		span.AddEvent(dutyFinishedNoBeaconObjectsEvent)
 		return ErrNoValidDutiesToExecute
@@ -910,15 +899,10 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 
 	if r.HasSubmittedAllValidatorDuties(attestationMap, committeeMap) {
 		r.markDutySucceeded()
-		r.measurements.EndDutyFlow()
-		recordTotalDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.RoleCommittee, r.State.RunningInstance.State.Round)
 		const dutyFinishedEvent = "✔️finished duty processing (100% success)"
-		logger.Info(dutyFinishedEvent,
-			fields.ConsensusTime(r.measurements.ConsensusTime()),
-			fields.ConsensusRounds(uint64(r.State.RunningInstance.State.Round)),
+		r.concludeDutyFlow(ctx, logger, dutyFinishedEvent,
 			fields.PostConsensusTime(r.measurements.PostConsensusTime()),
 			fields.TotalConsensusTime(r.measurements.TotalConsensusTime()),
-			fields.TotalDutyTime(r.measurements.TotalDutyTime()),
 		)
 		span.AddEvent(dutyFinishedEvent)
 		span.SetStatus(codes.Ok, "")
@@ -935,6 +919,28 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 	span.AddEvent(dutyFinishedEvent)
 
 	return nil
+}
+
+// concludeDutyFlow closes out a finished duty flow: it stops the duty-flow measurement, records the
+// total-duty-duration sample and logs the operator-visible completion line. Every terminal that
+// concludes an outcome for the slot (succeeded and both not_required branches) has to do all three —
+// an outcome counted without a matching duration sample leaves a permanent gap between the
+// duty.outcome counter and the duration histogram. The caller marks the outcome and adds the span
+// event; extraFields carries the per-terminal timings (post-consensus, total-consensus) that sit
+// between the always-present consensus fields and the total duty time.
+func (r *CommitteeRunner) concludeDutyFlow(ctx context.Context, logger *zap.Logger, event string, extraFields ...zap.Field) {
+	r.measurements.EndDutyFlow()
+	recordTotalDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.RoleCommittee, r.State.RunningInstance.State.Round)
+
+	logFields := make([]zap.Field, 0, len(extraFields)+3)
+	logFields = append(logFields,
+		fields.ConsensusTime(r.measurements.ConsensusTime()),
+		fields.ConsensusRounds(uint64(r.State.RunningInstance.State.Round)),
+	)
+	logFields = append(logFields, extraFields...)
+	logFields = append(logFields, fields.TotalDutyTime(r.measurements.TotalDutyTime()))
+
+	logger.Info(event, logFields...)
 }
 
 // HasSubmittedAllValidatorDuties -- Returns true if the runner has done submissions for all validators for the given slot
