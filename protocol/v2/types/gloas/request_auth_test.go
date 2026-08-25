@@ -18,8 +18,8 @@ const builderSpecsSignedRequestAuthJSON = `{
   "signature": "0x1b66ac1fb663c9bc59509846d6ec05345bd908eda73e670af888da41af171505cc411d61252fb6cb3fa0017b679f8bb2305b26a285fa2737f175668d0dff91cc1b66ac1fb663c9bc59509846d6ec05345bd908eda73e670af888da41af171505"
 }`
 
-func TestRequestAuthV1_SSZ(t *testing.T) {
-	r := &RequestAuthV1{
+func TestBuilderRequestAuth_SSZ(t *testing.T) {
+	r := &BuilderRequestAuth{
 		Data: []byte("https://builder.example.com"),
 		Slot: 42,
 	}
@@ -30,7 +30,7 @@ func TestRequestAuthV1_SSZ(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, b, 12+len(r.Data))
 
-	var dec RequestAuthV1
+	var dec BuilderRequestAuth
 	require.NoError(t, dec.UnmarshalSSZ(b))
 	require.Equal(t, r, &dec)
 
@@ -41,35 +41,35 @@ func TestRequestAuthV1_SSZ(t *testing.T) {
 	require.Equal(t, htr1, htr2)
 }
 
-func TestRequestAuthV1_SSZ_DataLimit(t *testing.T) {
+func TestBuilderRequestAuth_SSZ_DataLimit(t *testing.T) {
 	// At the ByteList limit both directions succeed.
-	atLimit := &RequestAuthV1{Data: make([]byte, MaxRequestAuthDataSize), Slot: 1}
+	atLimit := &BuilderRequestAuth{Data: make([]byte, MaxBuilderAuthDataSize), Slot: 1}
 	b, err := atLimit.MarshalSSZ()
 	require.NoError(t, err)
-	var dec RequestAuthV1
+	var dec BuilderRequestAuth
 	require.NoError(t, dec.UnmarshalSSZ(b))
-	require.Len(t, dec.Data, MaxRequestAuthDataSize)
+	require.Len(t, dec.Data, MaxBuilderAuthDataSize)
 
 	// One byte over: marshal of the oversize object and unmarshal of an oversize tail both fail.
-	over := &RequestAuthV1{Data: make([]byte, MaxRequestAuthDataSize+1), Slot: 1}
+	over := &BuilderRequestAuth{Data: make([]byte, MaxBuilderAuthDataSize+1), Slot: 1}
 	_, err = over.MarshalSSZ()
 	require.Error(t, err)
 	oversize := append(b, 0x00)
 	require.Error(t, dec.UnmarshalSSZ(oversize))
 }
 
-// TestRequestAuthV1_HashTreeRoot_Golden pins the merkleization against roots computed with an
+// TestBuilderRequestAuth_HashTreeRoot_Golden pins the merkleization against roots computed with an
 // independent implementation (plain SHA-256 chunk merkleization of the builder-specs layout:
 // ByteList[4096] → 128 chunk leaves + length mix-in, then 2-leaf container).
-func TestRequestAuthV1_HashTreeRoot_Golden(t *testing.T) {
-	auth := &RequestAuthV1{Data: []byte{0x12, 0x34, 0x56, 0x78, 0x90, 0xab, 0xcd, 0xef}, Slot: 1}
+func TestBuilderRequestAuth_HashTreeRoot_Golden(t *testing.T) {
+	auth := &BuilderRequestAuth{Data: []byte{0x12, 0x34, 0x56, 0x78, 0x90, 0xab, 0xcd, 0xef}, Slot: 1}
 	htr, err := auth.HashTreeRoot()
 	require.NoError(t, err)
 	require.Equal(t,
 		"0x3d6f2e216a08828a2bc2c9644edacd56fef00f2be824abc49f6d1a28569bd880",
 		phase0.Root(htr).String())
 
-	empty := &RequestAuthV1{Slot: 1}
+	empty := &BuilderRequestAuth{Slot: 1}
 	htr, err = empty.HashTreeRoot()
 	require.NoError(t, err)
 	require.Equal(t,
@@ -77,9 +77,9 @@ func TestRequestAuthV1_HashTreeRoot_Golden(t *testing.T) {
 		phase0.Root(htr).String())
 }
 
-func TestSignedRequestAuthV1_SSZ(t *testing.T) {
-	s := &SignedRequestAuthV1{
-		Message:   &RequestAuthV1{Data: []byte("token"), Slot: 9},
+func TestSignedBuilderRequestAuth_SSZ(t *testing.T) {
+	s := &SignedBuilderRequestAuth{
+		Message:   &BuilderRequestAuth{Data: []byte("token"), Slot: 9},
 		Signature: phase0.BLSSignature{0xbb, 0xcc},
 	}
 	// 4-byte message offset + 96-byte signature + message tail.
@@ -88,15 +88,15 @@ func TestSignedRequestAuthV1_SSZ(t *testing.T) {
 	b, err := s.MarshalSSZ()
 	require.NoError(t, err)
 
-	var dec SignedRequestAuthV1
+	var dec SignedBuilderRequestAuth
 	require.NoError(t, dec.UnmarshalSSZ(b))
 	require.Equal(t, s, &dec)
 }
 
-// TestSignedRequestAuthV1_BuilderSpecsExample decodes the builder-specs wire example and pins both
+// TestSignedBuilderRequestAuth_BuilderSpecsExample decodes the builder-specs wire example and pins both
 // the field values and the hash tree root (computed with an independent implementation).
-func TestSignedRequestAuthV1_BuilderSpecsExample(t *testing.T) {
-	var s SignedRequestAuthV1
+func TestSignedBuilderRequestAuth_BuilderSpecsExample(t *testing.T) {
+	var s SignedBuilderRequestAuth
 	require.NoError(t, json.Unmarshal([]byte(builderSpecsSignedRequestAuthJSON), &s))
 	require.Equal(t, []byte{0x12, 0x34, 0x56, 0x78, 0x90, 0xab, 0xcd, 0xef}, s.Message.Data)
 	require.Equal(t, phase0.Slot(1), s.Message.Slot)
@@ -113,31 +113,31 @@ func TestSignedRequestAuthV1_BuilderSpecsExample(t *testing.T) {
 	require.JSONEq(t, builderSpecsSignedRequestAuthJSON, string(out))
 }
 
-func TestRequestAuthV1_JSON(t *testing.T) {
-	r := &RequestAuthV1{Data: []byte("https://builder.example.com"), Slot: 123}
+func TestBuilderRequestAuth_JSON(t *testing.T) {
+	r := &BuilderRequestAuth{Data: []byte("https://builder.example.com"), Slot: 123}
 	out, err := json.Marshal(r)
 	require.NoError(t, err)
 
-	var dec RequestAuthV1
+	var dec BuilderRequestAuth
 	require.NoError(t, json.Unmarshal(out, &dec))
 	require.Equal(t, r, &dec)
 
 	// Empty data round-trips as "0x".
-	var empty RequestAuthV1
+	var empty BuilderRequestAuth
 	require.NoError(t, json.Unmarshal([]byte(`{"data":"0x","slot":"7"}`), &empty))
 	require.Empty(t, empty.Data)
 	require.Equal(t, phase0.Slot(7), empty.Slot)
 
 	// Oversize data, malformed hex, and malformed slot are rejected.
-	oversize := make([]byte, MaxRequestAuthDataSize+1)
-	oversizeJSON, err := json.Marshal(&RequestAuthV1{Data: oversize})
+	oversize := make([]byte, MaxBuilderAuthDataSize+1)
+	oversizeJSON, err := json.Marshal(&BuilderRequestAuth{Data: oversize})
 	require.NoError(t, err)
 	require.ErrorContains(t, json.Unmarshal(oversizeJSON, &dec), "incorrect length for data")
 	require.ErrorContains(t, json.Unmarshal([]byte(`{"data":"0xzz","slot":"1"}`), &dec), "invalid value for data")
 	require.ErrorContains(t, json.Unmarshal([]byte(`{"data":"0x00","slot":"x"}`), &dec), "invalid value for slot")
 }
 
-func TestSignedRequestAuthV1_JSON_MessageMissing(t *testing.T) {
-	var s SignedRequestAuthV1
+func TestSignedBuilderRequestAuth_JSON_MessageMissing(t *testing.T) {
+	var s SignedBuilderRequestAuth
 	require.ErrorContains(t, json.Unmarshal([]byte(`{"signature":"0x00"}`), &s), "message missing")
 }

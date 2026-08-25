@@ -15,19 +15,20 @@ On top of the enshrined flow — gossiped bids from staked builders, with local 
 always-available floor — a cluster MAY additionally maintain **direct builder connections**: authenticated
 bid requests and per-builder bid preferences, per the Gloas
 [builder-specs](https://github.com/ethereum/builder-specs/blob/master/specs/gloas/validator.md) and
-[beacon-APIs#625](https://github.com/ethereum/beacon-APIs/pull/625). This is an **opt-in enhancement, not
+[beacon-APIs#630](https://github.com/ethereum/beacon-APIs/pull/630). This is an **opt-in enhancement, not
 on the critical path**: a cluster that never configures it still proposes valid blocks, and the enshrined
 path stays the fallback whenever the overlay fails or a builder is unavailable. Design and rollout are
 tracked in [issue #2962](https://github.com/ssvlabs/ssv/issues/2962).
 
-Configuration is the `Builders` list (see `config.example.yaml`), using the ecosystem's
-[keymanager-APIs#87](https://github.com/ethereum/keymanager-APIs/pull/87) `BuilderEntry` vocabulary:
-`URL`, `AuthData`, `BuilderBoostFactor`, `MaxTrustedBid`, `MinBid`, `MaxExecutionPayment`, optional
-`PubKey`.
+Configuration is the `Builders` block (see `config.example.yaml`), using the ecosystem's
+[keymanager-APIs#88](https://github.com/ethereum/keymanager-APIs/pull/88) `BuilderConfig` vocabulary:
+top-level `MinBid` and `BuilderBoostFactor` (applied to p2p bids, and the default for any entry that omits
+its own) plus an `Entries` list — each entry `URL`, `AuthData`, optional `BuilderPubKeys`,
+`MaxExecutionPayment`, `MinBid`, `BuilderBoostFactor`.
 
 **Every operator of every committee sharing a validator MUST configure the identical list — all `n`
 operators, not just a quorum.** The builder authenticates the cluster by one BLS signature over
-`RequestAuthV1{data, slot}` reconstructed from operator partials, and the partials only combine over
+`BuilderRequestAuth{data, slot}` reconstructed from operator partials, and the partials only combine over
 byte-identical `data`:
 
 - `AuthData` divergence on a builder entry splits the signing quorum and **silently disables that builder**
@@ -35,12 +36,11 @@ byte-identical `data`:
   build-source metrics rather than proposal failures.
 - `AuthData` defaults to the UTF-8 bytes of `URL` exactly as configured — so even trailing-slash or case
   differences between operators' `URL` values break the quorum unless an explicit shared `AuthData` is set.
-- The unsigned knobs (`BuilderBoostFactor`, `MaxTrustedBid`, `MinBid`, `MaxExecutionPayment`) don't affect
-  signing, but divergence makes the cluster's effective bid policy depend on which operator leads the
-  round — keep them identical too. They take effect with the produceBlockV4 POST migration
-  (beacon-APIs#625, pending upstream).
+- The unsigned knobs (`MinBid`, `BuilderBoostFactor`, `MaxExecutionPayment`) don't affect signing, but
+  divergence makes the cluster's effective bid policy depend on which operator leads the round — keep them
+  identical too. They take effect with the produceBlockV4 POST migration (beacon-APIs#630).
 - Remote-signing operators (Web3Signer) cannot produce request-auth partials — there is no request-auth
-  signing type there yet. A node with `Builders` set and a remote signer warns at startup and disables the
+  signing type there yet. A node with `Builders` entries set and a remote signer warns at startup and disables the
   overlay locally; the cluster still reconstructs auths while at most `f` operators are remote-signing.
 
 ## How to use

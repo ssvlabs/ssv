@@ -422,7 +422,7 @@ func (km *RemoteKeyManager) prepareSignRequest(
 		// TODO(gloas): route envelope signing through Web3Signer once it adds an envelope type.
 		return web3signer.SignRequest{}, phase0.Root{}, errors.New("execution payload envelope signing is not supported by the remote signer: Web3Signer has no envelope type, use local signing for self-build envelopes")
 	case spectypes.DomainRequestAuth:
-		// The Gloas (ePBS) direct-builder request auth (builder-specs RequestAuthV1, issue #2962) has no
+		// The Gloas (ePBS) direct-builder request auth (builder-specs BuilderRequestAuth, issue #2962) has no
 		// Web3Signer request type, so a remote-signing operator can't contribute auth partials. Bounded
 		// (the cluster reconstructs while ≤ f operators are remote-signing), but those operators must
 		// sign locally for the direct-builder overlay to keep its full fault tolerance.

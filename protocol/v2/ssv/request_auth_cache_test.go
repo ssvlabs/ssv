@@ -12,8 +12,8 @@ import (
 func TestRequestAuthCache(t *testing.T) {
 	now := phase0.Slot(100)
 	cache := NewRequestAuthCache(func() phase0.Slot { return now })
-	authAt := func(slot phase0.Slot) *gloas.SignedRequestAuthV1 {
-		return &gloas.SignedRequestAuthV1{Message: &gloas.RequestAuthV1{Data: []byte("x"), Slot: slot}}
+	authAt := func(slot phase0.Slot) *gloas.SignedBuilderRequestAuth {
+		return &gloas.SignedBuilderRequestAuth{Message: &gloas.BuilderRequestAuth{Data: []byte("x"), Slot: slot}}
 	}
 
 	require.Empty(t, cache.Get(110))

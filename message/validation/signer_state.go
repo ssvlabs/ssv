@@ -76,7 +76,7 @@ type SignerState struct {
 	// not by the single pre-consensus bit in SeenMsgTypes. nil until the first such message.
 	SeenProposerPreferencesRoots seenRootSet
 
-	// SeenRequestAuthRoots records the distinct RequestAuthV1 signing roots seen from this signer
+	// SeenRequestAuthRoots records the distinct BuilderRequestAuth signing roots seen from this signer
 	// (issue #2962) — root-capped like the §5 preference roots above, up to
 	// maxRequestAuthDistinctRoots. nil until the first such message.
 	SeenRequestAuthRoots seenRootSet

@@ -9,7 +9,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 )
 
-// RequestAuthCache holds, per proposal slot, the threshold-reconstructed SignedRequestAuthV1 for
+// RequestAuthCache holds, per proposal slot, the threshold-reconstructed SignedBuilderRequestAuth for
 // each configured builder relationship (issue #2962 B1), keyed by gloas.BuilderIdentity. The §5
 // slot sub-runners write on reconstruction quorum; there is no reader yet — the §4 produce path
 // (and later the ahead-of-time submitBuilderPreferences) becomes one with the produceBlockV4 POST
@@ -22,26 +22,26 @@ type RequestAuthCache struct {
 	currentSlot func() phase0.Slot
 
 	mu    sync.Mutex
-	auths map[phase0.Slot]map[string]*gloas.SignedRequestAuthV1
+	auths map[phase0.Slot]map[string]*gloas.SignedBuilderRequestAuth
 }
 
 func NewRequestAuthCache(currentSlot func() phase0.Slot) *RequestAuthCache {
 	return &RequestAuthCache{
 		currentSlot: currentSlot,
-		auths:       make(map[phase0.Slot]map[string]*gloas.SignedRequestAuthV1),
+		auths:       make(map[phase0.Slot]map[string]*gloas.SignedBuilderRequestAuth),
 	}
 }
 
 // Store records the reconstructed auth for the proposal slot under the builder identity, and
 // evicts slots the chain has moved past. Auths for future proposal slots are always kept — their
 // count is bounded by the proposer lookahead times the builder-entry cap.
-func (c *RequestAuthCache) Store(slot phase0.Slot, builderIdentity string, auth *gloas.SignedRequestAuthV1) {
+func (c *RequestAuthCache) Store(slot phase0.Slot, builderIdentity string, auth *gloas.SignedBuilderRequestAuth) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	byBuilder := c.auths[slot]
 	if byBuilder == nil {
-		byBuilder = make(map[string]*gloas.SignedRequestAuthV1)
+		byBuilder = make(map[string]*gloas.SignedBuilderRequestAuth)
 		c.auths[slot] = byBuilder
 	}
 	byBuilder[builderIdentity] = auth
@@ -57,7 +57,7 @@ func (c *RequestAuthCache) Store(slot phase0.Slot, builderIdentity string, auth 
 // Get returns a copy of the builder-identity → reconstructed-auth map for the proposal slot; empty
 // when nothing reconstructed yet. The copy is shallow: the auths are shared with the cache, with
 // the runner's frozen state, and across token-sharing identities — treat them as immutable.
-func (c *RequestAuthCache) Get(slot phase0.Slot) map[string]*gloas.SignedRequestAuthV1 {
+func (c *RequestAuthCache) Get(slot phase0.Slot) map[string]*gloas.SignedBuilderRequestAuth {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return maps.Clone(c.auths[slot])
