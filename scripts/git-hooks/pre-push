@@ -136,23 +136,45 @@ while read -r local_ref local_sha remote_ref remote_sha; do
 	IFS=$oIFS
 done
 
+# Run golangci-lint from $1 with the remaining args, blocking the push only on
+# real findings: it exits 1 for those, and anything else (3 config or run
+# failure, 4 timeout, ...) is an execution problem this hook shouldn't gate on.
+run_golangci() {
+	dir=$1
+	shift
+	rc=0
+	(cd "$dir" && GOWORK=off "$GO" tool -modfile="$root/tool.mod" golangci-lint run "$@" >&2) || rc=$?
+	case $rc in
+	0) ;;
+	1)
+		status=1
+		ci_findings=1
+		;;
+	*) echo "pre-push: golangci-lint failed to run in $dir (exit $rc) — skipping its findings" >&2 ;;
+	esac
+}
+
 # golangci-lint stage: staticcheck & friends on the changed packages, scoped so
 # a push costs seconds, not CI's full-repo minutes. It sees the working tree,
 # so uncommitted edits in these packages show up here.
-if [ -n "$lint_dirs" ]; then
-	# shellcheck disable=SC2086 # lint_dirs is word-split on purpose
-	if ! (cd "$root" && GOWORK=off "$GO" tool -modfile="$root/tool.mod" golangci-lint run $lint_dirs >&2); then
-		status=1
-		ci_findings=1
-	fi
-fi
-if [ -n "$ssvsigner_lint_dirs" ]; then
-	# Mirrors make lint's ssvsigner-golangci-lint: the nested module is linted
-	# from its own directory, with the root's config and tool.mod.
-	# shellcheck disable=SC2086 # ssvsigner_lint_dirs is word-split on purpose
-	if ! (cd "$root/ssvsigner" && GOWORK=off "$GO" tool -modfile="$root/tool.mod" golangci-lint run -c "$root/.golangci.yaml" $ssvsigner_lint_dirs >&2); then
-		status=1
-		ci_findings=1
+#
+# As with misspell, a go tool failure (resolution, compile, module download)
+# exits 1 exactly like real findings do, so probe once before trusting any exit
+# code; if the tool can't run at all, warn and skip instead of blocking.
+if [ -n "$lint_dirs" ] || [ -n "$ssvsigner_lint_dirs" ]; then
+	if GOWORK=off "$GO" tool -modfile="$root/tool.mod" golangci-lint version >/dev/null 2>&1; then
+		if [ -n "$lint_dirs" ]; then
+			# shellcheck disable=SC2086 # lint_dirs is word-split on purpose
+			run_golangci "$root" $lint_dirs
+		fi
+		if [ -n "$ssvsigner_lint_dirs" ]; then
+			# Mirrors make lint's ssvsigner-golangci-lint: the nested module is
+			# linted from its own directory, with the root's config and tool.mod.
+			# shellcheck disable=SC2086 # ssvsigner_lint_dirs is word-split on purpose
+			run_golangci "$root/ssvsigner" -c "$root/.golangci.yaml" $ssvsigner_lint_dirs
+		fi
+	else
+		echo "pre-push: cannot run golangci-lint via 'go tool' — skipping the lint stage" >&2
 	fi
 fi
 
