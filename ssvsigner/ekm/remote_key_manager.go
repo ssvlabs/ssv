@@ -96,21 +96,19 @@ func (km *RemoteKeyManager) AddShare(
 	encryptedPrivKey []byte,
 	pubKey phase0.BLSPubKey,
 ) error {
-	if err := km.BumpSlashingProtection(txn, pubKey); err != nil {
-		return fmt.Errorf("could not bump slashing protection: %w", err)
-	}
-
 	shareKeys := ssvsigner.ShareKeys{
 		EncryptedPrivKey: hexutil.Bytes(encryptedPrivKey),
 		PubKey:           pubKey,
 	}
 
-	// AddValidators is idempotent: it doesn't fail if the same share already exists. That matters
-	// if the surrounding txn is rolled back after the share was saved remotely — the node crashes
-	// on the (non-malformed) error, re-runs the block, and re-adds the same share harmlessly.
-	// A malformed share is different: AddValidators returns an error below, the event handler
-	// classifies it as a malformed event and skips it without crashing, and nothing was saved
-	// remotely — so there is no syncer/signer inconsistency to reconcile.
+	// Register the share with the remote signer first, then bump local slashing protection below.
+	// A malformed share fails here and returns before the bump, so it leaves no orphan slashing
+	// rows — matching LocalKeyManager's validate-first order; the event handler classifies the
+	// ShareDecryptionError as a malformed event and skips it.
+	//
+	// AddValidators is idempotent: it doesn't fail if the same share already exists. So if the
+	// surrounding txn is rolled back after a successful add, the node crashes on the error, re-runs
+	// the block, and re-adds the same share harmlessly.
 	statuses, err := km.signerClient.AddValidators(ctx, shareKeys)
 	if err != nil {
 		return fmt.Errorf("add validator: %w", err)
@@ -133,6 +131,11 @@ func (km *RemoteKeyManager) AddShare(
 		default:
 			return fmt.Errorf("unexpected status %s", status)
 		}
+	}
+
+	// Only now, after the share is confirmed registered remotely, bump local slashing protection.
+	if err := km.BumpSlashingProtection(txn, pubKey); err != nil {
+		return fmt.Errorf("could not bump slashing protection: %w", err)
 	}
 
 	return nil

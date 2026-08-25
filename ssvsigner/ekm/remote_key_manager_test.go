@@ -1166,8 +1166,7 @@ func (s *RemoteKeyManagerTestSuite) TestAddShareErrorCases() {
 		pubKey := phase0.BLSPubKey{1, 2, 3}
 		encShare := []byte("encrypted_share_data")
 
-		slashingMock.On("BumpSlashingProtectionTxn", nil, pubKey).Return(nil).Once()
-
+		// Bump runs only after AddValidators succeeds, so a signer error means it is never called.
 		clientMock.On("AddValidators", mock.Anything, ssvsigner.ShareKeys{
 			PubKey:           pubKey,
 			EncryptedPrivKey: encShare,
@@ -1198,10 +1197,8 @@ func (s *RemoteKeyManagerTestSuite) TestAddShareErrorCases() {
 		pubKey := phase0.BLSPubKey{1, 2, 3}
 		encShare := []byte("encrypted_share_data")
 
-		slashingMock.On("BumpSlashingProtectionTxn", nil, pubKey).Return(nil).Once()
-
 		// The signer rejects a malformed share with a 422, which ssvsigner.Client surfaces
-		// as a ShareDecryptionError.
+		// as a ShareDecryptionError. Bump runs only after a successful add, so it is never called.
 		clientMock.On("AddValidators", mock.Anything, ssvsigner.ShareKeys{
 			PubKey:           pubKey,
 			EncryptedPrivKey: encShare,
@@ -1237,6 +1234,13 @@ func (s *RemoteKeyManagerTestSuite) TestAddShareErrorCases() {
 		pubKey := phase0.BLSPubKey{1, 2, 3}
 		encShare := []byte("encrypted_share_data")
 
+		// Bump runs only after AddValidators succeeds, so the signer call must succeed here even
+		// though this case exercises the bump failure.
+		clientMock.On("AddValidators", mock.Anything, ssvsigner.ShareKeys{
+			PubKey:           pubKey,
+			EncryptedPrivKey: encShare,
+		}).Return([]web3signer.Status{web3signer.StatusImported}, nil).Once()
+
 		slashingMock.On("BumpSlashingProtectionTxn", nil, pubKey).Return(errors.New("bump slashing protection error")).Once()
 
 		err := rmTest.AddShare(context.Background(), nil, encShare, pubKey)
@@ -1264,8 +1268,8 @@ func (s *RemoteKeyManagerTestSuite) TestAddShareErrorCases() {
 		pubKey := phase0.BLSPubKey{1, 2, 3}
 		encShare := []byte("encrypted_share_data")
 
-		slashingMock.On("BumpSlashingProtectionTxn", nil, pubKey).Return(nil).Once()
-
+		// Bump runs only after all statuses are accepted, so an unexpected status means it is
+		// never called.
 		clientMock.On("AddValidators", mock.Anything, ssvsigner.ShareKeys{
 			PubKey:           pubKey,
 			EncryptedPrivKey: encShare,
