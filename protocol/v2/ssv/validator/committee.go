@@ -550,6 +550,9 @@ func (c *Committee) createRunner(
 	if err != nil {
 		return nil, fmt.Errorf("create committee runner: %w", err)
 	}
+	if r == nil {
+		return nil, fmt.Errorf("BUG: CreateRunnerFn returned nil runner without error")
+	}
 
 	// Wire the QBFT round-timer factory, bound to a msg ID carrying this duty's role so timeout
 	// events are routed to the matching (committee vs aggregator-committee) slot queue.
@@ -559,19 +562,41 @@ func (c *Committee) createRunner(
 	// timer events under the right domain. Only GetRoleType() is read from this ID downstream, so
 	// this is a consistency fix, not a behavior change today.
 	runnerIdentifier := spectypes.NewMsgID(c.networkConfig.DomainTypeAtSlot(duty.DutySlot()), c.CommitteeMember.CommitteeID[:], role)
-	r.SetQBFTRoundTimerF(c.newQBFTRoundTimerF(runnerIdentifier))
 
+	// The typed-nil checks below complement the interface-nil guard above: a CreateRunnerFn
+	// returning a nil *runner.CommitteeRunner behind a non-nil interface passes that guard but
+	// would panic on the first (promoted) method call — so no method is called on r until its
+	// concrete type and non-nilness are established.
 	switch duty := duty.(type) {
 	case *spectypes.CommitteeDuty:
-		c.Runners[duty.DutySlot()] = r.(*runner.CommitteeRunner)
+		cr, ok := r.(*runner.CommitteeRunner)
+		if !ok {
+			return nil, fmt.Errorf("BUG: runner created for committee duty has type %T, expected *runner.CommitteeRunner", r)
+		}
+		if cr == nil {
+			return nil, fmt.Errorf("BUG: CreateRunnerFn returned a typed-nil *runner.CommitteeRunner without error")
+		}
+		cr.SetQBFTRoundTimerF(c.newQBFTRoundTimerF(runnerIdentifier))
+		c.Runners[duty.DutySlot()] = cr
 	case *spectypes.AggregatorCommitteeDuty:
-		c.AggregatorRunners[duty.DutySlot()] = r.(*runner.AggregatorCommitteeRunner)
+		ar, ok := r.(*runner.AggregatorCommitteeRunner)
+		if !ok {
+			return nil, fmt.Errorf("BUG: runner created for aggregator committee duty has type %T, expected *runner.AggregatorCommitteeRunner", r)
+		}
+		if ar == nil {
+			return nil, fmt.Errorf("BUG: CreateRunnerFn returned a typed-nil *runner.AggregatorCommitteeRunner without error")
+		}
+		ar.SetQBFTRoundTimerF(c.newQBFTRoundTimerF(runnerIdentifier))
+		c.AggregatorRunners[duty.DutySlot()] = ar
 	default:
+		// Unlike the runner-type mismatches above, which guard the injected CreateRunnerFn,
+		// the duty type is produced by this package's own callers — a mismatch here is a
+		// local code bug, so it stays a loud panic rather than a returned error.
 		c.logger.Panic("BUG: attempt to create committee runner with non-committee duty type",
 			zap.String("type", fmt.Sprintf("%T", duty)))
 	}
 
-	return r, err
+	return r, nil
 }
 
 func (c *Committee) extractValidatorDuties(duty spectypes.Duty) []*spectypes.ValidatorDuty {
