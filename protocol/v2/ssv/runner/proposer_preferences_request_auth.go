@@ -182,8 +182,7 @@ func (r *proposerPreferencesSlotRunner) processRequestAuthPartial(ctx context.Co
 // operator submits via its own beacon node — the builder dedupes per proposer per slot. Best-effort: a
 // failure never disturbs the §5/auth flow, only its metric and log.
 func (r *proposerPreferencesSlotRunner) submitBuilderPreferences(ctx context.Context, logger *zap.Logger, signed *gloas.SignedBuilderRequestAuth, builders []frozenBuilderRef) {
-	var pubkey phase0.BLSPubKey
-	copy(pubkey[:], r.GetShare().ValidatorPubKey[:])
+	pubkey := phase0.BLSPubKey(r.GetShare().ValidatorPubKey)
 	entries := make([]*gloas.BuilderPreferencesEntry, 0, len(builders))
 	for _, ref := range builders {
 		entries = append(entries, &gloas.BuilderPreferencesEntry{
