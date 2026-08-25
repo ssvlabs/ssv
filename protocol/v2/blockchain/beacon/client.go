@@ -101,7 +101,8 @@ type ProposerPreferencesCalls interface {
 
 // GloasProposerCalls is the beacon-node surface for producing and publishing Gloas (ePBS) blocks
 // (SIP #94 §4). go-eth2-client has no Gloas types, so these are hand-rolled over HTTP against the
-// merged produce-block-v4 / publish endpoints (beacon-APIs#580).
+// merged produce-block-v4 / publish endpoints (beacon-APIs#580), plus the direct-builder produceBlockV4
+// POST (beacon-APIs#630).
 type GloasProposerCalls interface {
 	// GetGloasBeaconBlock produces a Gloas beacon block for the slot; the payload itself ships
 	// separately in the §6 envelope, so the block carries only the execution-payload bid. A non-nil
