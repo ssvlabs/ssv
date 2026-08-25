@@ -379,6 +379,20 @@ listener:
 	)
 
 	if totalAttestations == 0 && totalSyncCommittee == 0 {
+		// A canceled context also lands here with zero counts: the duty feeder and the workers bail
+		// out on ctx.Err() before incrementing any counter. That is shutdown — the duty was abandoned,
+		// not completed-with-nothing-to-do — so return without concluding an outcome, mirroring
+		// markDutyFailed's context.Canceled filter (cancellation is never an outcome).
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		// Benign terminal: the committee decided but this operator ended up with zero valid duties to
+		// sign. Conclude as not_required so the watcher doesn't report a false "stuck"; the sentinel
+		// still tells committee_queue to drop the message and terminate the runner.
+		r.markDutyNotRequired()
+		const dutyFinishedNoValidDutiesEvent = "✔️successfully finished duty processing (no valid duties to sign)"
+		r.concludeDutyFlow(ctx, logger, dutyFinishedNoValidDutiesEvent)
+		span.AddEvent(dutyFinishedNoValidDutiesEvent)
 		return ErrNoValidDutiesToExecute
 	}
 
@@ -514,6 +528,9 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 	// are tagged recoverableReconstructError and must not be recorded as failed.
 	// Shutdown (context cancellation) needs no special-casing — markDutyFailed drops a context.Canceled
 	// reason, so a submission aborted by shutdown isn't recorded as a failure.
+	// The benign no-beacon-objects sentinel (ErrNoValidDutiesToExecute) pre-concludes the duty as
+	// not_required before returning, which makes this deferred markDutyFailed a no-op (concludeDuty
+	// is idempotent) — it must not be recorded as failed either.
 	defer func() {
 		if err != nil && !isRecoverableReconstructError(err) {
 			r.markDutyFailed(err)
@@ -529,6 +546,19 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 		return fmt.Errorf("could not get expected post consensus roots and beacon objects: %w", err)
 	}
 	if len(beaconObjects) == 0 {
+		// Benign terminal: the committee reached consensus but this operator has no beacon objects to
+		// submit (divergent validator sets across the committee's operators — every duty was skipped
+		// as guard-invalid). An empty map here is guaranteed benign: an all-construction-failure empty
+		// result is surfaced as an error by expectedPostConsensusRootsAndBeaconObjects above and
+		// classified failed by the defer. Conclude as not_required before returning the sentinel;
+		// concludeDuty is idempotent, so the deferred markDutyFailed becomes a no-op. The sentinel
+		// still tells committee_queue to drop the message and terminate the runner.
+		r.markDutyNotRequired()
+		const dutyFinishedNoBeaconObjectsEvent = "✔️successfully finished duty processing (no beacon objects to submit)"
+		r.concludeDutyFlow(ctx, logger, dutyFinishedNoBeaconObjectsEvent,
+			fields.PostConsensusTime(r.measurements.PostConsensusTime()),
+		)
+		span.AddEvent(dutyFinishedNoBeaconObjectsEvent)
 		return ErrNoValidDutiesToExecute
 	}
 
@@ -869,15 +899,10 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 
 	if r.HasSubmittedAllValidatorDuties(attestationMap, committeeMap) {
 		r.markDutySucceeded()
-		r.measurements.EndDutyFlow()
-		recordTotalDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.RoleCommittee, r.State.RunningInstance.State.Round)
 		const dutyFinishedEvent = "✔️finished duty processing (100% success)"
-		logger.Info(dutyFinishedEvent,
-			fields.ConsensusTime(r.measurements.ConsensusTime()),
-			fields.ConsensusRounds(uint64(r.State.RunningInstance.State.Round)),
+		r.concludeDutyFlow(ctx, logger, dutyFinishedEvent,
 			fields.PostConsensusTime(r.measurements.PostConsensusTime()),
 			fields.TotalConsensusTime(r.measurements.TotalConsensusTime()),
-			fields.TotalDutyTime(r.measurements.TotalDutyTime()),
 		)
 		span.AddEvent(dutyFinishedEvent)
 		span.SetStatus(codes.Ok, "")
@@ -894,6 +919,28 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 	span.AddEvent(dutyFinishedEvent)
 
 	return nil
+}
+
+// concludeDutyFlow closes out a finished duty flow: it stops the duty-flow measurement, records the
+// total-duty-duration sample and logs the operator-visible completion line. Every terminal that
+// concludes an outcome for the slot (succeeded and both not_required branches) has to do all three —
+// an outcome counted without a matching duration sample leaves a permanent gap between the
+// duty.outcome counter and the duration histogram. The caller marks the outcome and adds the span
+// event; extraFields carries the per-terminal timings (post-consensus, total-consensus) that sit
+// between the always-present consensus fields and the total duty time.
+func (r *CommitteeRunner) concludeDutyFlow(ctx context.Context, logger *zap.Logger, event string, extraFields ...zap.Field) {
+	r.measurements.EndDutyFlow()
+	recordTotalDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.RoleCommittee, r.State.RunningInstance.State.Round)
+
+	logFields := make([]zap.Field, 0, len(extraFields)+3)
+	logFields = append(logFields,
+		fields.ConsensusTime(r.measurements.ConsensusTime()),
+		fields.ConsensusRounds(uint64(r.State.RunningInstance.State.Round)),
+	)
+	logFields = append(logFields, extraFields...)
+	logFields = append(logFields, fields.TotalDutyTime(r.measurements.TotalDutyTime()))
+
+	logger.Info(event, logFields...)
 }
 
 // HasSubmittedAllValidatorDuties -- Returns true if the runner has done submissions for all validators for the given slot
@@ -995,6 +1042,16 @@ func (r *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(ctx context
 	epoch := r.NetworkConfig.EstimatedEpochAtSlot(slot)
 	dataVersion, _ := r.NetworkConfig.ForkAtEpoch(epoch)
 
+	// Skips fall into two classes: guard invalidations are benign (the #2903 divergent-validator-sets
+	// case — the duty is genuinely not this operator's to submit), while construction / domain-data /
+	// signing-root failures mean a submission was missed. The distinction only matters when NOTHING
+	// could be built: partial failures keep the per-validator debug-and-continue behavior so one
+	// validator's failure never blocks the others' submissions, but an all-failure empty result must
+	// surface as an error — otherwise the caller's len(beaconObjects)==0 branch would conclude the
+	// duty not_required, masking the miss (the sibling AggregatorCommitteeRunner surfaces these
+	// errors for the same reason).
+	var constructionErr error
+
 	for _, validatorDuty := range committeeDuty.ValidatorDuties {
 		if validatorDuty == nil {
 			continue
@@ -1013,6 +1070,7 @@ func (r *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(ctx context
 			attestationResponse, err := specssv.ConstructVersionedAttestationWithoutSignature(attestationData, dataVersion, validatorDuty)
 			if err != nil {
 				logger.Debug("failed to construct attestation", zap.Error(err))
+				constructionErr = errors.Join(constructionErr, fmt.Errorf("construct attestation (validator %d): %w", validatorDuty.ValidatorIndex, err))
 				continue
 			}
 
@@ -1020,12 +1078,14 @@ func (r *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(ctx context
 			domain, err := r.GetBeaconNode().DomainData(ctx, epoch, spectypes.DomainAttester)
 			if err != nil {
 				logger.Debug("failed to get attester domain", zap.Error(err))
+				constructionErr = errors.Join(constructionErr, fmt.Errorf("get attester domain (validator %d): %w", validatorDuty.ValidatorIndex, err))
 				continue
 			}
 
 			root, err := spectypes.ComputeETHSigningRoot(attestationData, domain)
 			if err != nil {
 				logger.Debug("failed to compute attester root", zap.Error(err))
+				constructionErr = errors.Join(constructionErr, fmt.Errorf("compute attester root (validator %d): %w", validatorDuty.ValidatorIndex, err))
 				continue
 			}
 
@@ -1047,6 +1107,7 @@ func (r *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(ctx context
 			domain, err := r.GetBeaconNode().DomainData(ctx, epoch, spectypes.DomainSyncCommittee)
 			if err != nil {
 				logger.Debug("failed to get sync committee domain", zap.Error(err))
+				constructionErr = errors.Join(constructionErr, fmt.Errorf("get sync committee domain (validator %d): %w", validatorDuty.ValidatorIndex, err))
 				continue
 			}
 			// Eth root
@@ -1054,6 +1115,7 @@ func (r *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(ctx context
 			root, err := spectypes.ComputeETHSigningRoot(blockRoot, domain)
 			if err != nil {
 				logger.Debug("failed to compute sync committee root", zap.Error(err))
+				constructionErr = errors.Join(constructionErr, fmt.Errorf("compute sync committee root (validator %d): %w", validatorDuty.ValidatorIndex, err))
 				continue
 			}
 
@@ -1066,6 +1128,9 @@ func (r *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(ctx context
 		default:
 			return nil, nil, nil, fmt.Errorf("invalid duty type: %s", validatorDuty.Type)
 		}
+	}
+	if len(beaconObjects) == 0 && constructionErr != nil {
+		return nil, nil, nil, fmt.Errorf("no beacon objects could be built: %w", constructionErr)
 	}
 	return attestationMap, syncCommitteeMap, beaconObjects, nil
 }

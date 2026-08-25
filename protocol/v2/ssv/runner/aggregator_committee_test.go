@@ -172,6 +172,50 @@ func TestAggregatorCommitteeRunnerProcessPostConsensus_MarksFailedOnSubmitError(
 	require.False(t, env.runner.State.Succeeded, "a failed duty must not be marked succeeded")
 }
 
+// TestAggregatorCommitteeRunnerProcessPostConsensus_MarksFailedOnNoBeaconObjects pins the
+// empty-objects terminal as an invariant violation, NOT a benign no-op: beaconObjects is built purely
+// from the decided value (every construction error surfaced), and a decided value with zero
+// aggregators and zero contributors is rejected by AggregatorCommitteeConsensusData.Validate() before
+// it can ever be stored as decided. So reaching the branch means decided-value validation was
+// bypassed or regressed — it must conclude failed (loud, via the outcome watcher's warn) while still
+// carrying the sentinel for the queue's terminal-drop handling. The test necessarily hand-installs
+// State.DecidedValue to force the condition, because the normal flow cannot produce it.
+func TestAggregatorCommitteeRunnerProcessPostConsensus_MarksFailedOnNoBeaconObjects(t *testing.T) {
+	ctx := t.Context()
+	const version = spec.DataVersionElectra
+
+	base := protocoltesting.NewTestingBeaconNodeWrapped().(*protocoltesting.BeaconNodeWrapped)
+	env := newAggregatorCommitteeRunnerEnv(t, []int{1}, base)
+	duty := spectestingutils.TestingAggregatorCommitteeDutyForValidators([]int{1}, []int{}, version)
+
+	concluded := env.startAndFeedThroughConsensus(t, ctx, duty, version)
+
+	emptyDecided := &spectypes.AggregatorCommitteeConsensusData{Version: version}
+	encoded, err := emptyDecided.Encode()
+	require.NoError(t, err)
+	env.runner.State.DecidedValue = encoded
+
+	var postConsensusErr error
+	for _, psig := range postConsensusMsgsFromFixture(duty, env.keySetMap, version) {
+		if err := env.runner.ProcessPostConsensus(ctx, env.logger, psig); err != nil {
+			postConsensusErr = err
+		}
+	}
+
+	require.ErrorIs(t, postConsensusErr, ErrNoValidDutiesToExecute, "the sentinel must surface so the queue drops the message and terminates the runner")
+	require.ErrorIs(t, postConsensusErr, ErrDutyInvariantViolation, "the invariant marker must ride along so the queue keeps the trace span red instead of green")
+
+	select {
+	case c := <-concluded:
+		require.Equal(t, dutyOutcomeFailed, c.outcome, "empty beacon objects from decided data is an invariant violation and must conclude failed")
+		require.ErrorIs(t, c.reason, ErrNoValidDutiesToExecute)
+		require.ErrorIs(t, c.reason, ErrDutyInvariantViolation)
+	default:
+		t.Fatal("expected a failed duty conclusion, got none")
+	}
+	require.False(t, env.runner.State.Succeeded, "an invariant violation must not be marked succeeded")
+}
+
 // TestAggregatorCommitteeRunnerProcessPostConsensus_DoesNotMarkFailedOnInvalidSigs asserts that the
 // recoverable reconstruct-invalid-signatures case is NOT concluded failed: the root can later re-cross
 // quorum on a subsequent message, so concluding here would mask a duty that still completes.
