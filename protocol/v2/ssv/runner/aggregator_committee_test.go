@@ -203,11 +203,13 @@ func TestAggregatorCommitteeRunnerProcessPostConsensus_MarksFailedOnNoBeaconObje
 	}
 
 	require.ErrorIs(t, postConsensusErr, ErrNoValidDutiesToExecute, "the sentinel must surface so the queue drops the message and terminates the runner")
+	require.ErrorIs(t, postConsensusErr, ErrDutyInvariantViolation, "the invariant marker must ride along so the queue keeps the trace span red instead of green")
 
 	select {
 	case c := <-concluded:
 		require.Equal(t, dutyOutcomeFailed, c.outcome, "empty beacon objects from decided data is an invariant violation and must conclude failed")
 		require.ErrorIs(t, c.reason, ErrNoValidDutiesToExecute)
+		require.ErrorIs(t, c.reason, ErrDutyInvariantViolation)
 	default:
 		t.Fatal("expected a failed duty conclusion, got none")
 	}

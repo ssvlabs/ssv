@@ -240,7 +240,14 @@ func (c *Committee) ConsumeQueue(
 					attribute.String("drop_reason", err.Error()),
 					attribute.Int64("attempt", currentAttempt),
 				))
-				msgState.span.SetStatus(codes.Ok, "")
+				// The drop is quiet either way, but the span status is a separate signal: an invariant
+				// violation rode in on the same sentinel and its duty was concluded failed, so it must
+				// not leave a green span behind for trace-based error alerting to miss.
+				if errors.Is(err, runner.ErrDutyInvariantViolation) {
+					msgState.span.SetStatus(codes.Error, err.Error())
+				} else {
+					msgState.span.SetStatus(codes.Ok, "")
+				}
 				msgState.span.End()
 				msgStates.Delete(msgKey)
 				return

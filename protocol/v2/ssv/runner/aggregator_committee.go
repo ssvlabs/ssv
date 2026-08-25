@@ -895,8 +895,10 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 		// before it is ever stored as decided. Reaching this branch is an invariant violation (bypassed
 		// or regressed decided-value validation), a consensus-integrity signal that must stay loud:
 		// classify as failed. The sentinel is preserved in the chain so committee_queue still drops the
-		// message and terminates the runner.
-		err := fmt.Errorf("no beacon objects from decided data, decided-value validation should have rejected it: %w", ErrNoValidDutiesToExecute)
+		// message and terminates the runner; ErrDutyInvariantViolation rides alongside it so the queue can
+		// tell this loud terminal apart from the benign zero-duties ones and keep the trace span red.
+		err := fmt.Errorf("no beacon objects from decided data, decided-value validation should have rejected it: %w: %w",
+			ErrDutyInvariantViolation, ErrNoValidDutiesToExecute)
 		r.markDutyFailed(err)
 		return err
 	}

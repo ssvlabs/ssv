@@ -9,6 +9,12 @@ var (
 	// ErrNoValidDutiesToExecute means committee runner has no duties to execute (even though the committee runner
 	// had to do some work to arrive at that conclusion)
 	ErrNoValidDutiesToExecute = fmt.Errorf("committee has no valid duties to execute")
+	// ErrDutyInvariantViolation marks a terminal that reached a state the code's own invariants say is
+	// unreachable. It is wrapped alongside ErrNoValidDutiesToExecute where the queue must still drop the
+	// message and terminate the runner, but the terminal is a correctness signal rather than a benign
+	// no-op — so it stays loud (duty concluded failed, trace span marked as an error) instead of being
+	// classified with the benign zero-duties terminals.
+	ErrDutyInvariantViolation = fmt.Errorf("duty invariant violation")
 	// ErrNoDutyAssigned means we haven't started the duty yet, while another operator already has + sent
 	// this message to us.
 	ErrNoDutyAssigned = fmt.Errorf("no duty assigned")
