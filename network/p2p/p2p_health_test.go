@@ -6,6 +6,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/libp2p/go-libp2p/core/host"
+	p2pnet "github.com/libp2p/go-libp2p/core/network"
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
@@ -13,12 +16,15 @@ import (
 )
 
 func TestP2PNetwork_Healthy(t *testing.T) {
+	const wedgedErr = "discovery wedged"
+
 	tests := []struct {
 		name            string
 		state           int32
 		discoveryFailed bool
 		cancelCtx       bool
 		disc            discovery.Service
+		hostPeers       int // connected-peer count; -1 means no host at all
 		wantErr         string
 	}{
 		{
@@ -49,15 +55,35 @@ func TestP2PNetwork_Healthy(t *testing.T) {
 			wantErr:   "context canceled",
 		},
 		{
-			name:    "discovery wedged",
-			state:   stateReady,
-			disc:    staleDiscovery{stale: true},
-			wantErr: "discovery wedged",
+			// No host set at all: peer count reads as zero, so the wedge is fatal
+			// (also pins that Healthy survives a nil host).
+			name:      "discovery wedged",
+			state:     stateReady,
+			disc:      staleDiscovery{stale: true},
+			hostPeers: -1,
+			wantErr:   wedgedErr,
 		},
 		{
-			name:  "ready with live discovery",
-			state: stateReady,
-			disc:  staleDiscovery{stale: false},
+			name:      "discovery wedged with degraded peer set",
+			state:     stateReady,
+			disc:      staleDiscovery{stale: true},
+			hostPeers: discoveryStalePeerFloor - 1,
+			wantErr:   wedgedErr,
+		},
+		{
+			// A stale socket with a healthy peer set may just be inbound UDP lost
+			// upstream; a restart can't fix that and would drop every live
+			// connection, so it must not fail the probe (no restart loop).
+			name:      "discovery wedged but peer set healthy",
+			state:     stateReady,
+			disc:      staleDiscovery{stale: true},
+			hostPeers: discoveryStalePeerFloor,
+		},
+		{
+			name:      "ready with live discovery",
+			state:     stateReady,
+			disc:      staleDiscovery{stale: false},
+			hostPeers: -1,
 		},
 	}
 
@@ -68,6 +94,10 @@ func TestP2PNetwork_Healthy(t *testing.T) {
 			atomic.StoreInt32(&n.state, tt.state)
 			if tt.discoveryFailed {
 				n.discoveryFailed.Store(true)
+			}
+			if tt.hostPeers >= 0 {
+				var h host.Host = fakeHost{peers: tt.hostPeers}
+				n.host.Store(&h)
 			}
 
 			ctx := t.Context()
@@ -95,3 +125,19 @@ type staleDiscovery struct {
 }
 
 func (d staleDiscovery) DiscoveryStale(time.Duration) bool { return d.stale }
+
+// fakeHost/fakeNet expose just the connected-peer count Healthy consults; the
+// embedded nil interfaces are never dereferenced.
+type fakeHost struct {
+	host.Host
+	peers int
+}
+
+func (h fakeHost) Network() p2pnet.Network { return fakeNet{peers: h.peers} }
+
+type fakeNet struct {
+	p2pnet.Network
+	peers int
+}
+
+func (n fakeNet) Peers() []peer.ID { return make([]peer.ID, n.peers) }
