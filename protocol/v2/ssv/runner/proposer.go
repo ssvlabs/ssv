@@ -71,6 +71,18 @@ type ProposerRunner struct {
 	// It must dispatch async with a node-scoped context: the caller runs on the proposer's post-consensus
 	// path, whose context is canceled once the block duty ends.
 	startEnvelopeDuty func(slot phase0.Slot)
+
+	// builders is the cluster's direct-builder config (issue #2962, phase 2): the produceBlockV4 POST
+	// body is assembled from it plus the per-slot reconstructed auths. Empty Entries -> the enshrined GET.
+	builders gloas.BuilderConfig
+	// requestAuthCache holds the per-slot reconstructed builder auths this operator attaches to the
+	// produceBlockV4 POST. Shared with the §5 dispatcher that writes it; nil pre-Gloas / no overlay.
+	requestAuthCache *ssv.RequestAuthCache
+	// gloasProducedRoot / gloasBuilderURL record this operator's own §4 produce output for the slot: the
+	// produced block root and any winning builder URL. At publish, Eth-Builder-Url is echoed only when the
+	// decided block matches gloasProducedRoot (owner-match — see decidedBuilderURL).
+	gloasProducedRoot [32]byte
+	gloasBuilderURL   string
 }
 
 // ProposerRunnerOptions bundles all dependencies required by NewProposerRunner.
@@ -95,6 +107,11 @@ type ProposerRunnerOptions struct {
 	// StartEnvelopeDuty starts the §6 envelope-signing duty for a slot; called after a self-build §4
 	// block is published. Must dispatch async with a node-scoped context (see startEnvelopeDuty). Optional.
 	StartEnvelopeDuty func(slot phase0.Slot)
+
+	// Builders / RequestAuthCache feed the phase-2 produceBlockV4 POST body (issue #2962). Optional
+	// (empty / nil pre-Gloas or when the direct-builder overlay is unconfigured).
+	Builders         gloas.BuilderConfig
+	RequestAuthCache *ssv.RequestAuthCache
 }
 
 func NewProposerRunner(opts ProposerRunnerOptions) (Runner, error) {
@@ -124,6 +141,8 @@ func NewProposerRunner(opts ProposerRunnerOptions) (Runner, error) {
 		proposerDelayEPBS:  opts.ProposerDelayEPBS,
 		proposedBlockRoots: opts.ProposedBlockRoots,
 		startEnvelopeDuty:  opts.StartEnvelopeDuty,
+		builders:           opts.Builders,
+		requestAuthCache:   opts.RequestAuthCache,
 	}, nil
 }
 
@@ -273,9 +292,16 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 // consensus value (DataSSZ) directly.
 func (r *ProposerRunner) gloasProposalInput(ctx context.Context, logger *zap.Logger, duty *spectypes.ValidatorDuty, randaoReveal []byte) (*spectypes.ProposerConsensusData, error) {
 	start := time.Now()
-	block, err := r.GetBeaconNode().GetGloasBeaconBlock(ctx, duty.Slot, r.graffiti, randaoReveal)
+	builderConfig := r.gloasBuilderConfig(ctx, duty.Slot)
+	block, builderURL, err := r.GetBeaconNode().GetGloasBeaconBlock(ctx, duty.Slot, r.graffiti, randaoReveal, builderConfig)
 	if err != nil {
 		return nil, fmt.Errorf("get gloas beacon block: %w", err)
+	}
+
+	// Remember this operator's own produce output so the §4 publish echoes Eth-Builder-Url only when the
+	// decided block is this operator's own (owner-match — see decidedBuilderURL).
+	if root, rootErr := block.HashTreeRoot(); rootErr == nil {
+		r.gloasProducedRoot, r.gloasBuilderURL = root, builderURL
 	}
 
 	byts, err := block.MarshalSSZ()
@@ -300,6 +326,21 @@ func (r *ProposerRunner) gloasProposalInput(ctx context.Context, logger *zap.Log
 		Version: networkconfig.DataVersionGloas,
 		DataSSZ: byts,
 	}, nil
+}
+
+// gloasBuilderConfig assembles the produceBlockV4 POST body for the direct-builder overlay from the
+// cluster config and the per-slot reconstructed auths, or returns nil when no builders are configured (the
+// enshrined GET path). Builders whose auth missed quorum this slot are omitted and counted for the E1
+// auth-unavailable signal; the top-level p2p knobs are always carried, so a configured cluster still POSTs.
+func (r *ProposerRunner) gloasBuilderConfig(ctx context.Context, slot phase0.Slot) *gloas.ProduceBuilderConfig {
+	if r.requestAuthCache == nil || len(r.builders.Entries) == 0 {
+		return nil
+	}
+	cfg, authUnavailable := gloas.BuildProduceConfig(r.builders, r.requestAuthCache.Get(slot))
+	if authUnavailable > 0 {
+		recordProposalAuthUnavailable(ctx, authUnavailable)
+	}
+	return &cfg
 }
 
 func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.SignedSSVMessage) error {
@@ -540,7 +581,7 @@ func (r *ProposerRunner) submitGloasProposal(ctx context.Context, logger *zap.Lo
 	var finishErr error
 	start := time.Now()
 	signedBlock := &gloas.SignedBeaconBlock{Message: block, Signature: sig}
-	if err := r.GetBeaconNode().SubmitGloasBeaconBlock(ctx, signedBlock); err != nil {
+	if err := r.GetBeaconNode().SubmitGloasBeaconBlock(ctx, signedBlock, r.decidedBuilderURL(block)); err != nil {
 		recordFailedSubmission(ctx, spectypes.BNRoleProposer)
 		const errMsg = "could not submit gloas beacon block"
 		logger.Error(errMsg, fields.Slot(cd.Duty.Slot), zap.Error(err))
@@ -562,6 +603,21 @@ func (r *ProposerRunner) triggerEnvelopeIfSelfBuild(block *gloas.BeaconBlock, sl
 		return
 	}
 	r.startEnvelopeDuty(slot)
+}
+
+// decidedBuilderURL returns the Eth-Builder-Url to echo on publish: this operator's own produce
+// Eth-Builder-Url, but only when the decided block is the one this operator produced (owner-match). A
+// follower publishing another operator's decided block echoes nothing — its beacon node did not solicit
+// that bid and holds no forwarding target for it.
+func (r *ProposerRunner) decidedBuilderURL(block *gloas.BeaconBlock) string {
+	if r.gloasBuilderURL == "" {
+		return ""
+	}
+	root, err := block.HashTreeRoot()
+	if err != nil || root != r.gloasProducedRoot {
+		return ""
+	}
+	return r.gloasBuilderURL
 }
 
 // selfBuild reports whether the decided Gloas block commits to a self-built payload
