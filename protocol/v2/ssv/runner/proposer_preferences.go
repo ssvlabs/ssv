@@ -65,11 +65,11 @@ type ProposerPreferencesRunnerOptions struct {
 	FeeRecipientProvider feeRecipientProvider
 	GasLimit             uint64
 
-	// Builders is the cluster's direct-builder list (issue #2962, validated at startup): for each
-	// authenticatable entry the slot sub-runners additionally threshold-sign a RequestAuthV1 per
-	// upcoming proposal slot. Empty (the default) disables the overlay entirely.
-	Builders []gloas.BuilderEntry
-	// RequestAuthCache receives each reconstructed SignedRequestAuthV1 for the §4 produce path.
+	// Builders is the cluster's direct-builder config (issue #2962, validated at startup): for each
+	// entry the slot sub-runners additionally threshold-sign a BuilderRequestAuth per upcoming
+	// proposal slot. Empty Entries disables the overlay entirely.
+	Builders gloas.BuilderConfig
+	// RequestAuthCache receives each reconstructed SignedBuilderRequestAuth for the §4 produce path.
 	RequestAuthCache *ssv.RequestAuthCache
 }
 
@@ -330,13 +330,13 @@ type proposerPreferencesSlotRunner struct {
 	// stash replay re-seeds the replacement instead, our own first partial included.
 	broadcastPreferences *gloas.ProposerPreferences
 
-	// builders is the cluster's direct-builder list (issue #2962 B1): for each authenticatable entry
-	// executeDuty freezes and threshold-signs a RequestAuthV1{data, proposal_slot} alongside the §5
-	// preference. Empty disables the request-auth round entirely.
+	// builders is the cluster's direct-builder entry list (issue #2962 B1): for each entry executeDuty
+	// freezes and threshold-signs a BuilderRequestAuth{data, proposal_slot} alongside the §5 preference.
+	// Empty disables the request-auth round entirely.
 	builders         []gloas.BuilderEntry
 	requestAuthCache *ssv.RequestAuthCache
 
-	// requestAuths maps each frozen RequestAuthV1's signing root to the object and its builders;
+	// requestAuths maps each frozen BuilderRequestAuth's signing root to the object and its builders;
 	// incoming RequestAuthPartialSig messages are admitted only against these roots. nil until the
 	// duty executes here; empty when it executed but could freeze nothing (domain-fetch failure),
 	// so peer partials hard-fail as unknown roots instead of burning queue retries — the
@@ -375,7 +375,7 @@ func newProposerPreferencesSlotRunner(opts ProposerPreferencesRunnerOptions) *pr
 		operatorSigner:         opts.OperatorSigner,
 		feeRecipientProvider:   opts.FeeRecipientProvider,
 		gasLimit:               opts.GasLimit,
-		builders:               opts.Builders,
+		builders:               opts.Builders.Entries,
 		requestAuthCache:       opts.RequestAuthCache,
 		broadcastAuthRoots:     map[[32]byte]struct{}{},
 		reconstructedAuthRoots: map[[32]byte]struct{}{},

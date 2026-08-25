@@ -59,21 +59,23 @@ OperatorPrivateKey:
 # ProposerDelayEPBS: 0
 
 # Post-ePBS (Gloas) direct-builder connections — an opt-in overlay on top of the enshrined builder flow
-# (which needs no configuration and stays the fallback). Every entry MUST be configured identically across
-# ALL operators of every committee sharing a validator: AuthData (defaulting to the UTF-8 bytes of URL,
-# exactly as written) is threshold-signed, so any divergence silently disables that builder. At most 8
-# entries; one entry may have an empty URL to set default preferences for any contacted builder.
-# Monetary values are Gwei. The bid-selection knobs (BuilderBoostFactor, MaxTrustedBid, MinBid,
-# MaxExecutionPayment, PubKey) are validated but NOT YET HONORED — they take effect with the
-# produceBlockV4 POST migration (beacon-APIs#625). See docs/EXTERNAL_BUILDERS.md.
+# (which needs no configuration and stays the fallback). The whole block MUST be configured identically
+# across ALL operators of every committee sharing a validator: AuthData (defaulting to the UTF-8 bytes of
+# URL, exactly as written) is threshold-signed, so any divergence silently disables that builder. At most 8
+# entries. Monetary values are Gwei. The top-level MinBid/BuilderBoostFactor apply to p2p (gossiped) bids
+# and, per keymanager-APIs#88, are the default for any entry that omits its own. The bid-selection knobs
+# are validated but NOT YET HONORED — they take effect with the produceBlockV4 POST migration
+# (beacon-APIs#630). See docs/EXTERNAL_BUILDERS.md.
 # Builders:
-#   - URL: "https://builder.example.com"
-#     # AuthData: "0x..."          # omit to default to the URL bytes
-#     # BuilderBoostFactor: 100    # bid multiplier %, 0 = always local, default 100
-#     # MaxTrustedBid: 0           # cap on trusted (off-protocol) bid value
-#     # MinBid: 0                  # ignore bids below this value
-#     # MaxExecutionPayment: 0     # cap on trusted execution-layer payment
-#     # PubKey: "0x..."            # optionally pin the builder's bid-signing key
+#   MinBid: 0                        # p2p-bid floor + default for entries below; 0 = no floor
+#   BuilderBoostFactor: 100          # p2p-bid multiplier % + default; 0 = always local, 100 = neutral
+#   Entries:
+#     - URL: "https://builder.example.com"
+#       # AuthData: "0x..."          # omit to default to the URL bytes
+#       # BuilderPubKeys: ["0x..."]  # optionally pin the builder's bid-signing key(s); empty = any
+#       # MaxExecutionPayment: 0     # cap on trusted execution-layer payment
+#       # MinBid: 0                  # optional; inherits the top-level MinBid
+#       # BuilderBoostFactor: 100    # optional; inherits the top-level BuilderBoostFactor
 
 # This enables monitoring at the specified port, see https://github.com/ssvlabs/ssv/tree/main/monitoring
 MetricsAPIPort: 15000

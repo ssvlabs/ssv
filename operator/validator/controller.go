@@ -88,7 +88,7 @@ type ControllerOptions struct {
 	Graffiti                       []byte
 	ProposerDelay                  time.Duration
 	ProposerDelayEPBS              time.Duration
-	Builders                       []gloas.BuilderEntry
+	Builders                       gloas.BuilderConfig
 
 	// worker flags
 	WorkersCount    int `yaml:"MsgWorkersCount" env:"MSG_WORKERS_COUNT" env-description:"Number of message processing workers"`

@@ -14,16 +14,16 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 )
 
-// The §5 dispatcher's request-auth rounds (issue #2962 B1): threshold-signing one RequestAuthV1
+// The §5 dispatcher's request-auth rounds (issue #2962 B1): threshold-signing one BuilderRequestAuth
 // per configured builder, riding the proposer-preferences duty. The per-slot auth state lives on
 // proposerPreferencesSlotRunner (proposer_preferences.go); this file holds the round logic.
 
-// frozenRequestAuth pairs a frozen RequestAuthV1 with every configured builder relationship it
+// frozenRequestAuth pairs a frozen BuilderRequestAuth with every configured builder relationship it
 // authenticates: the signing root derives from (data, slot) alone — not the URL — so distinct
 // entries sharing one pre-agreed token converge on one root, one broadcast, and one reconstruction
 // serving them all.
 type frozenRequestAuth struct {
-	auth     *gloas.RequestAuthV1
+	auth     *gloas.BuilderRequestAuth
 	builders []frozenBuilderRef
 }
 
@@ -33,11 +33,11 @@ type frozenBuilderRef struct {
 	url      string // for logging
 }
 
-// runRequestAuthRound freezes one RequestAuthV1{data, proposal_slot} per authenticatable configured
-// builder, records its signing root so incoming partials can be admitted, and broadcasts this
-// operator's partial — once per root, across re-emissions. Per-builder failures are logged and
-// skipped, never failing the §5 duty: a builder whose auth misses quorum is simply not contactable
-// for the slot, and the enshrined flow (gossip bids, self-build) stays available.
+// runRequestAuthRound freezes one BuilderRequestAuth{data, proposal_slot} per configured builder,
+// records its signing root so incoming partials can be admitted, and broadcasts this operator's
+// partial — once per root, across re-emissions. Per-builder failures are logged and skipped, never
+// failing the §5 duty: a builder whose auth misses quorum is simply not contactable for the slot,
+// and the enshrined flow (gossip bids, self-build) stays available.
 func (r *proposerPreferencesSlotRunner) runRequestAuthRound(ctx context.Context, logger *zap.Logger, validatorDuty *spectypes.ValidatorDuty, proposalSlot phase0.Slot) {
 	if len(r.builders) == 0 {
 		return
@@ -63,10 +63,7 @@ func (r *proposerPreferencesSlotRunner) runRequestAuthRound(ctx context.Context,
 				fields.Slot(proposalSlot), zap.String("builder_url", entry.URL), zap.Error(err))
 			continue
 		}
-		if len(data) == 0 {
-			continue // the default (empty-URL) entry has nothing to authenticate
-		}
-		auth := &gloas.RequestAuthV1{Data: data, Slot: proposalSlot}
+		auth := &gloas.BuilderRequestAuth{Data: data, Slot: proposalSlot}
 		root, err := spectypes.ComputeETHSigningRoot(auth, domain)
 		if err != nil {
 			logger.Warn("request auth skipped: could not compute signing root",
@@ -105,7 +102,7 @@ func (r *proposerPreferencesSlotRunner) runRequestAuthRound(ctx context.Context,
 }
 
 // processRequestAuthPartial collects request-auth partials into their own container and, on the
-// first quorum for a root, reconstructs the builder-facing SignedRequestAuthV1 into the shared
+// first quorum for a root, reconstructs the builder-facing SignedBuilderRequestAuth into the shared
 // cache. No succeeded-gate: the preference submission concluding the duty must not stop auth
 // collection, which legitimately runs until the sub-runner is evicted.
 func (r *proposerPreferencesSlotRunner) processRequestAuthPartial(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
@@ -166,7 +163,7 @@ func (r *proposerPreferencesSlotRunner) processRequestAuthPartial(ctx context.Co
 		urls = append(urls, ref.url)
 	}
 	if r.requestAuthCache != nil {
-		signed := &gloas.SignedRequestAuthV1{Message: frozen.auth, Signature: signature}
+		signed := &gloas.SignedBuilderRequestAuth{Message: frozen.auth, Signature: signature}
 		for _, ref := range frozen.builders {
 			r.requestAuthCache.Store(frozen.auth.Slot, ref.identity, signed)
 		}
