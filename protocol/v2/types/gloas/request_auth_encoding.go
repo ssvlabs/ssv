@@ -8,13 +8,13 @@ import (
 	ssz "github.com/ferranbt/fastssz"
 )
 
-// MarshalSSZ ssz marshals the RequestAuthV1 object
-func (r *RequestAuthV1) MarshalSSZ() ([]byte, error) {
+// MarshalSSZ ssz marshals the BuilderRequestAuth object
+func (r *BuilderRequestAuth) MarshalSSZ() ([]byte, error) {
 	return ssz.MarshalSSZ(r)
 }
 
-// MarshalSSZTo ssz marshals the RequestAuthV1 object to a target array
-func (r *RequestAuthV1) MarshalSSZTo(buf []byte) (dst []byte, err error) {
+// MarshalSSZTo ssz marshals the BuilderRequestAuth object to a target array
+func (r *BuilderRequestAuth) MarshalSSZTo(buf []byte) (dst []byte, err error) {
 	dst = buf
 	offset := int(12)
 
@@ -26,7 +26,7 @@ func (r *RequestAuthV1) MarshalSSZTo(buf []byte) (dst []byte, err error) {
 
 	// Field (0) 'Data'
 	if size := len(r.Data); size > 4096 {
-		err = ssz.ErrBytesLengthFn("RequestAuthV1.Data", size, 4096)
+		err = ssz.ErrBytesLengthFn("BuilderRequestAuth.Data", size, 4096)
 		return
 	}
 	dst = append(dst, r.Data...)
@@ -34,8 +34,8 @@ func (r *RequestAuthV1) MarshalSSZTo(buf []byte) (dst []byte, err error) {
 	return
 }
 
-// UnmarshalSSZ ssz unmarshals the RequestAuthV1 object
-func (r *RequestAuthV1) UnmarshalSSZ(buf []byte) error {
+// UnmarshalSSZ ssz unmarshals the BuilderRequestAuth object
+func (r *BuilderRequestAuth) UnmarshalSSZ(buf []byte) error {
 	var err error
 	size := uint64(len(buf))
 	if size < 12 {
@@ -71,8 +71,8 @@ func (r *RequestAuthV1) UnmarshalSSZ(buf []byte) error {
 	return err
 }
 
-// SizeSSZ returns the ssz encoded size in bytes for the RequestAuthV1 object
-func (r *RequestAuthV1) SizeSSZ() (size int) {
+// SizeSSZ returns the ssz encoded size in bytes for the BuilderRequestAuth object
+func (r *BuilderRequestAuth) SizeSSZ() (size int) {
 	size = 12
 
 	// Field (0) 'Data'
@@ -81,13 +81,13 @@ func (r *RequestAuthV1) SizeSSZ() (size int) {
 	return
 }
 
-// HashTreeRoot ssz hashes the RequestAuthV1 object
-func (r *RequestAuthV1) HashTreeRoot() ([32]byte, error) {
+// HashTreeRoot ssz hashes the BuilderRequestAuth object
+func (r *BuilderRequestAuth) HashTreeRoot() ([32]byte, error) {
 	return ssz.HashWithDefaultHasher(r)
 }
 
-// HashTreeRootWith ssz hashes the RequestAuthV1 object with a hasher
-func (r *RequestAuthV1) HashTreeRootWith(hh ssz.HashWalker) (err error) {
+// HashTreeRootWith ssz hashes the BuilderRequestAuth object with a hasher
+func (r *BuilderRequestAuth) HashTreeRootWith(hh ssz.HashWalker) (err error) {
 	indx := hh.Index()
 
 	// Field (0) 'Data'
@@ -109,18 +109,18 @@ func (r *RequestAuthV1) HashTreeRootWith(hh ssz.HashWalker) (err error) {
 	return
 }
 
-// GetTree ssz hashes the RequestAuthV1 object
-func (r *RequestAuthV1) GetTree() (*ssz.Node, error) {
+// GetTree ssz hashes the BuilderRequestAuth object
+func (r *BuilderRequestAuth) GetTree() (*ssz.Node, error) {
 	return ssz.ProofTree(r)
 }
 
-// MarshalSSZ ssz marshals the SignedRequestAuthV1 object
-func (s *SignedRequestAuthV1) MarshalSSZ() ([]byte, error) {
+// MarshalSSZ ssz marshals the SignedBuilderRequestAuth object
+func (s *SignedBuilderRequestAuth) MarshalSSZ() ([]byte, error) {
 	return ssz.MarshalSSZ(s)
 }
 
-// MarshalSSZTo ssz marshals the SignedRequestAuthV1 object to a target array
-func (s *SignedRequestAuthV1) MarshalSSZTo(buf []byte) (dst []byte, err error) {
+// MarshalSSZTo ssz marshals the SignedBuilderRequestAuth object to a target array
+func (s *SignedBuilderRequestAuth) MarshalSSZTo(buf []byte) (dst []byte, err error) {
 	dst = buf
 	offset := int(100)
 
@@ -138,8 +138,8 @@ func (s *SignedRequestAuthV1) MarshalSSZTo(buf []byte) (dst []byte, err error) {
 	return
 }
 
-// UnmarshalSSZ ssz unmarshals the SignedRequestAuthV1 object
-func (s *SignedRequestAuthV1) UnmarshalSSZ(buf []byte) error {
+// UnmarshalSSZ ssz unmarshals the SignedBuilderRequestAuth object
+func (s *SignedBuilderRequestAuth) UnmarshalSSZ(buf []byte) error {
 	var err error
 	size := uint64(len(buf))
 	if size < 100 {
@@ -165,7 +165,7 @@ func (s *SignedRequestAuthV1) UnmarshalSSZ(buf []byte) error {
 	{
 		buf = tail[o0:]
 		if s.Message == nil {
-			s.Message = new(RequestAuthV1)
+			s.Message = new(BuilderRequestAuth)
 		}
 		if err = s.Message.UnmarshalSSZ(buf); err != nil {
 			return err
@@ -174,26 +174,26 @@ func (s *SignedRequestAuthV1) UnmarshalSSZ(buf []byte) error {
 	return err
 }
 
-// SizeSSZ returns the ssz encoded size in bytes for the SignedRequestAuthV1 object
-func (s *SignedRequestAuthV1) SizeSSZ() (size int) {
+// SizeSSZ returns the ssz encoded size in bytes for the SignedBuilderRequestAuth object
+func (s *SignedBuilderRequestAuth) SizeSSZ() (size int) {
 	size = 100
 
 	// Field (0) 'Message'
 	if s.Message == nil {
-		s.Message = new(RequestAuthV1)
+		s.Message = new(BuilderRequestAuth)
 	}
 	size += s.Message.SizeSSZ()
 
 	return
 }
 
-// HashTreeRoot ssz hashes the SignedRequestAuthV1 object
-func (s *SignedRequestAuthV1) HashTreeRoot() ([32]byte, error) {
+// HashTreeRoot ssz hashes the SignedBuilderRequestAuth object
+func (s *SignedBuilderRequestAuth) HashTreeRoot() ([32]byte, error) {
 	return ssz.HashWithDefaultHasher(s)
 }
 
-// HashTreeRootWith ssz hashes the SignedRequestAuthV1 object with a hasher
-func (s *SignedRequestAuthV1) HashTreeRootWith(hh ssz.HashWalker) (err error) {
+// HashTreeRootWith ssz hashes the SignedBuilderRequestAuth object with a hasher
+func (s *SignedBuilderRequestAuth) HashTreeRootWith(hh ssz.HashWalker) (err error) {
 	indx := hh.Index()
 
 	// Field (0) 'Message'
@@ -208,7 +208,7 @@ func (s *SignedRequestAuthV1) HashTreeRootWith(hh ssz.HashWalker) (err error) {
 	return
 }
 
-// GetTree ssz hashes the SignedRequestAuthV1 object
-func (s *SignedRequestAuthV1) GetTree() (*ssz.Node, error) {
+// GetTree ssz hashes the SignedBuilderRequestAuth object
+func (s *SignedBuilderRequestAuth) GetTree() (*ssz.Node, error) {
 	return ssz.ProofTree(s)
 }

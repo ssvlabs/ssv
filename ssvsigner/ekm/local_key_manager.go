@@ -290,7 +290,7 @@ func (km *LocalKeyManager) signBeaconObject(
 		// Gloas (ePBS) domains — a plain BLS signature over the SSZ root, no slashing protection (none is
 		// in the slashing predicate): DomainPTCAttester (PTC payload attestation), DomainProposerPreferences
 		// (proposer preferences), DomainBeaconBuilder (§6 blinded execution-payload envelope), and
-		// DomainRequestAuth (builder-specs RequestAuthV1, the direct-builder request auth).
+		// DomainRequestAuth (builder-specs BuilderRequestAuth, the direct-builder request auth).
 		return signSSZRoot(km.signer, obj, domain, pubKey[:])
 	default:
 		return nil, nil, errors.New("domain unknown")

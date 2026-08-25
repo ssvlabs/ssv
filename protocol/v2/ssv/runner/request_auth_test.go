@@ -30,8 +30,8 @@ func broadcastPartialSigTypes(t *testing.T, msgs []*spectypes.SignedSSVMessage) 
 }
 
 // End-to-end request-auth convergence riding the §5 duty (issue #2962 B1): executing the duty
-// freezes and broadcasts one auth partial per authenticatable builder (the default entry excluded);
-// stashed peer partials replay into the round; quorum reconstructs the SignedRequestAuthV1 into the
+// freezes and broadcasts one auth partial per distinct auth root (token-sharing builders share one);
+// stashed peer partials replay into the round; quorum reconstructs the SignedBuilderRequestAuth into the
 // shared cache; re-emissions never re-broadcast (auth roots are re-emission-invariant); and a root
 // outside the frozen set (config divergence) is a hard error. The §5 preference flow must conclude
 // exactly as without builders.
@@ -49,9 +49,8 @@ func TestProposerPreferencesRunner_requestAuthConvergence(t *testing.T) {
 		{URL: "https://builder-a.example.com"},                       // auth data defaults to the URL bytes
 		{URL: "https://builder-b.example.com", AuthData: "0x010203"}, // explicit pre-agreed bytes
 		{URL: "https://builder-d.example.com", AuthData: "0x010203"}, // distinct builder sharing B's token
-		{}, // the default entry: unsigned preferences only, no auth round
 	}
-	require.NoError(t, gloas.ValidateBuilderEntries(builders))
+	require.NoError(t, gloas.ValidateBuilderConfig(gloas.BuilderConfig{Entries: builders}))
 
 	runnerIface, err := NewProposerPreferencesRunner(ProposerPreferencesRunnerOptions{
 		BaseRunnerOptions: BaseRunnerOptions{
@@ -64,7 +63,7 @@ func TestProposerPreferencesRunner_requestAuthConvergence(t *testing.T) {
 		},
 		FeeRecipientProvider: fixedFeeRecipientProvider{addr: bellatrix.ExecutionAddress{0xfe}},
 		GasLimit:             36_000_000,
-		Builders:             builders,
+		Builders:             gloas.BuilderConfig{Entries: builders},
 		RequestAuthCache:     cache,
 	})
 	require.NoError(t, err)
@@ -81,7 +80,7 @@ func TestProposerPreferencesRunner_requestAuthConvergence(t *testing.T) {
 	// peerAuthPartial signs the auth every operator derives from the shared builder config, as peer opID.
 	peerAuthPartial := func(t *testing.T, opID spectypes.OperatorID, data []byte) *spectypes.PartialSignatureMessages {
 		t.Helper()
-		auth := &gloas.RequestAuthV1{Data: data, Slot: proposalSlot}
+		auth := &gloas.BuilderRequestAuth{Data: data, Slot: proposalSlot}
 		domain, err := bn.DomainData(context.Background(), cfg.EstimatedEpochAtSlot(proposalSlot), phase0.DomainType(spectypes.DomainRequestAuth))
 		require.NoError(t, err)
 		root, err := spectypes.ComputeETHSigningRoot(auth, domain)
@@ -117,7 +116,7 @@ func TestProposerPreferencesRunner_requestAuthConvergence(t *testing.T) {
 	require.NoError(t, disp.StartNewDuty(ctx, logger, duty, quorum))
 	types := broadcastPartialSigTypes(t, network.BroadcastedMsgs)
 	require.Equal(t, 1, types[spectypes.ProposerPreferencesPartialSig])
-	require.Equal(t, 2, types[spectypes.RequestAuthPartialSig], "one auth partial per distinct root; the token-sharing pair broadcasts once, the default entry signs nothing")
+	require.Equal(t, 2, types[spectypes.RequestAuthPartialSig], "one auth partial per distinct root; the token-sharing pair broadcasts once")
 
 	auths := cache.Get(proposalSlot)
 	require.Len(t, auths, 1, "builder A reached quorum via stash replay")
@@ -186,7 +185,7 @@ func TestProposerPreferencesRunner_requestAuthWithoutBuilders(t *testing.T) {
 		ValidatorIndex: share.ValidatorIndex,
 	}, 3))
 
-	auth := &gloas.RequestAuthV1{Data: []byte("https://builder.example.com"), Slot: proposalSlot}
+	auth := &gloas.BuilderRequestAuth{Data: []byte("https://builder.example.com"), Slot: proposalSlot}
 	domain, err := bn.DomainData(context.Background(), cfg.EstimatedEpochAtSlot(proposalSlot), phase0.DomainType(spectypes.DomainRequestAuth))
 	require.NoError(t, err)
 	root, err := spectypes.ComputeETHSigningRoot(auth, domain)
@@ -234,7 +233,7 @@ func TestProposerPreferencesRunner_requestAuthAfterPreferenceSuccess(t *testing.
 		},
 		FeeRecipientProvider: fixedFeeRecipientProvider{addr: feeRecipient},
 		GasLimit:             gasLimit,
-		Builders:             builders,
+		Builders:             gloas.BuilderConfig{Entries: builders},
 		RequestAuthCache:     cache,
 	})
 	require.NoError(t, err)
@@ -284,7 +283,7 @@ func TestProposerPreferencesRunner_requestAuthAfterPreferenceSuccess(t *testing.
 
 	// Auth partials arriving after the §5 success must still be collected and reconstructed.
 	authData := []byte("https://builder-a.example.com")
-	auth := &gloas.RequestAuthV1{Data: authData, Slot: proposalSlot}
+	auth := &gloas.BuilderRequestAuth{Data: authData, Slot: proposalSlot}
 	domain, err := bn.DomainData(ctx, cfg.EstimatedEpochAtSlot(proposalSlot), phase0.DomainType(spectypes.DomainRequestAuth))
 	require.NoError(t, err)
 	root, err := spectypes.ComputeETHSigningRoot(auth, domain)
@@ -334,7 +333,7 @@ func TestProposerPreferencesRunner_requestAuthSurvivesConcludedReemission(t *tes
 		},
 		FeeRecipientProvider: fixedFeeRecipientProvider{addr: feeRecipient},
 		GasLimit:             gasLimit,
-		Builders:             builders,
+		Builders:             gloas.BuilderConfig{Entries: builders},
 		RequestAuthCache:     cache,
 	})
 	require.NoError(t, err)
@@ -377,7 +376,7 @@ func TestProposerPreferencesRunner_requestAuthSurvivesConcludedReemission(t *tes
 	}
 	peerAuthPartial := func(t *testing.T, opID spectypes.OperatorID) *spectypes.PartialSignatureMessages {
 		t.Helper()
-		auth := &gloas.RequestAuthV1{Data: []byte("https://builder-a.example.com"), Slot: proposalSlot}
+		auth := &gloas.BuilderRequestAuth{Data: []byte("https://builder-a.example.com"), Slot: proposalSlot}
 		domain, err := bn.DomainData(ctx, cfg.EstimatedEpochAtSlot(proposalSlot), phase0.DomainType(spectypes.DomainRequestAuth))
 		require.NoError(t, err)
 		root, err := spectypes.ComputeETHSigningRoot(auth, domain)

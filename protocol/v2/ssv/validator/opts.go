@@ -53,7 +53,7 @@ type CommonOptions struct {
 	Graffiti            []byte
 	ProposerDelay       time.Duration
 	ProposerDelayEPBS   time.Duration
-	Builders            []gloas.BuilderEntry
+	Builders            gloas.BuilderConfig
 }
 
 // NewCommonOptions finalizes a CommonOptions literal: it owns QueueSize (any caller-set value is

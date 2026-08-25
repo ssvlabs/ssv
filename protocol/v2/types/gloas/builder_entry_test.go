@@ -21,80 +21,73 @@ func TestBuilderEntry_AuthDataBytes(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []byte{0x12, 0x34, 0x56, 0x78, 0x90, 0xab, 0xcd, 0xef}, b)
 
-	// The default entry yields no bytes.
-	b, err = (&BuilderEntry{}).AuthDataBytes()
-	require.NoError(t, err)
-	require.Empty(t, b)
-
 	_, err = (&BuilderEntry{URL: "https://x.example", AuthData: "0xzz"}).AuthDataBytes()
 	require.ErrorContains(t, err, "invalid AuthData hex")
 
-	_, err = (&BuilderEntry{URL: "https://x.example", AuthData: "0x" + strings.Repeat("00", MaxRequestAuthDataSize+1)}).AuthDataBytes()
+	_, err = (&BuilderEntry{URL: "https://x.example", AuthData: "0x" + strings.Repeat("00", MaxBuilderAuthDataSize+1)}).AuthDataBytes()
 	require.ErrorContains(t, err, "exceeding")
 }
 
-func TestBuilderEntry_EffectiveBoostFactor(t *testing.T) {
-	require.Equal(t, uint64(100), (&BuilderEntry{}).EffectiveBoostFactor())
-	zero := uint64(0)
-	require.Equal(t, uint64(0), (&BuilderEntry{BuilderBoostFactor: &zero}).EffectiveBoostFactor())
+func TestBuilderEntry_Effective(t *testing.T) {
+	// Config-level boost factor defaults to the neutral 100; an entry inherits it when unset.
+	empty := &BuilderConfig{}
+	require.Equal(t, uint64(100), empty.EffectiveBoostFactor())
+	require.Equal(t, uint64(100), (&BuilderEntry{}).EffectiveBoostFactor(empty))
+	require.Equal(t, uint64(0), (&BuilderEntry{}).EffectiveMinBid(empty))
+
+	// Entry values, when set, win over the config default (including an explicit zero).
+	zero, seven, nine := uint64(0), uint64(7), uint64(9)
+	cfg := &BuilderConfig{MinBid: 5, BuilderBoostFactor: &nine}
+	require.Equal(t, uint64(9), cfg.EffectiveBoostFactor())
+	require.Equal(t, uint64(0), (&BuilderEntry{BuilderBoostFactor: &zero}).EffectiveBoostFactor(cfg))
+	require.Equal(t, uint64(7), (&BuilderEntry{MinBid: &seven}).EffectiveMinBid(cfg))
+
+	// An entry that omits its own inherits the config's (keymanager-APIs#88 resolution).
+	require.Equal(t, uint64(9), (&BuilderEntry{}).EffectiveBoostFactor(cfg))
+	require.Equal(t, uint64(5), (&BuilderEntry{}).EffectiveMinBid(cfg))
 }
 
-func TestValidateBuilderEntries(t *testing.T) {
-	valid := []BuilderEntry{
-		{URL: "https://builder-a.example.com"},
-		{URL: "https://builder-b.example.com", AuthData: "0x0102"},
-		// Same URL, different auth data — a distinct identity per keymanager-APIs#87.
-		{URL: "https://builder-b.example.com", AuthData: "0x0304"},
-		{}, // the default entry
+func TestValidateBuilderConfig(t *testing.T) {
+	validate := func(entries ...BuilderEntry) error {
+		return ValidateBuilderConfig(BuilderConfig{Entries: entries})
 	}
-	require.NoError(t, ValidateBuilderEntries(valid))
-	require.NoError(t, ValidateBuilderEntries(nil))
+
+	require.NoError(t, validate(
+		BuilderEntry{URL: "https://builder-a.example.com"},
+		BuilderEntry{URL: "https://builder-b.example.com", AuthData: "0x0102"},
+		// Same URL, different auth data — a distinct identity per keymanager-APIs#88.
+		BuilderEntry{URL: "https://builder-b.example.com", AuthData: "0x0304"},
+	))
+	require.NoError(t, ValidateBuilderConfig(BuilderConfig{}))
 
 	require.ErrorContains(t,
-		ValidateBuilderEntries(make([]BuilderEntry, MaxBuilderEntries+1)),
+		ValidateBuilderConfig(BuilderConfig{Entries: make([]BuilderEntry, MaxBuilderEntries+1)}),
 		"exceed")
-	require.ErrorContains(t,
-		ValidateBuilderEntries([]BuilderEntry{{}, {}}),
-		"at most one default")
-	require.ErrorContains(t,
-		ValidateBuilderEntries([]BuilderEntry{{AuthData: "0x01"}}),
-		"cannot carry AuthData")
-	require.ErrorContains(t,
-		ValidateBuilderEntries([]BuilderEntry{{URL: "ftp://builder.example.com"}}),
-		"must be http(s)")
-	require.ErrorContains(t,
-		ValidateBuilderEntries([]BuilderEntry{{URL: "https://"}}),
-		"must be http(s)")
-	require.ErrorContains(t,
-		ValidateBuilderEntries([]BuilderEntry{{URL: "https://x.example", AuthData: "0x"}}),
-		"explicitly empty AuthData")
-	require.ErrorContains(t,
-		ValidateBuilderEntries([]BuilderEntry{
-			{URL: "https://x.example"},
-			{URL: "https://x.example"},
-		}),
-		"duplicate")
+	// A non-empty http(s) URL is required (no empty-URL "default" entry any more).
+	require.ErrorContains(t, validate(BuilderEntry{}), "must be http(s)")
+	require.ErrorContains(t, validate(BuilderEntry{URL: "ftp://builder.example.com"}), "must be http(s)")
+	require.ErrorContains(t, validate(BuilderEntry{URL: "https://"}), "must be http(s)")
+	require.ErrorContains(t, validate(BuilderEntry{URL: "https://x.example", AuthData: "0x"}), "zero bytes")
+	require.ErrorContains(t, validate(
+		BuilderEntry{URL: "https://x.example"},
+		BuilderEntry{URL: "https://x.example"},
+	), "duplicate")
 	// Same identity via explicit auth data equal to another entry's URL-derived default.
-	require.ErrorContains(t,
-		ValidateBuilderEntries([]BuilderEntry{
-			{URL: "https://x.example"},
-			{URL: "https://x.example", AuthData: "0x" + hex.EncodeToString([]byte("https://x.example"))},
-		}),
-		"duplicate")
-	require.ErrorContains(t,
-		ValidateBuilderEntries([]BuilderEntry{{URL: "https://x.example", PubKey: "0x01"}}),
-		"PubKey must be 48 bytes")
-	require.ErrorContains(t,
-		ValidateBuilderEntries([]BuilderEntry{{URL: "https://x.example", PubKey: "0xzz"}}),
-		"invalid PubKey hex")
-	require.NoError(t,
-		ValidateBuilderEntries([]BuilderEntry{{URL: "https://x.example", PubKey: "0x" + strings.Repeat("ab", 48)}}))
+	require.ErrorContains(t, validate(
+		BuilderEntry{URL: "https://x.example"},
+		BuilderEntry{URL: "https://x.example", AuthData: "0x" + hex.EncodeToString([]byte("https://x.example"))},
+	), "duplicate")
+
+	// BuilderPubKeys is a list; each must be 48-byte 0x-hex; empty accepts any builder.
+	require.ErrorContains(t, validate(BuilderEntry{URL: "https://x.example", BuilderPubKeys: []string{"0x01"}}), "48 bytes")
+	require.ErrorContains(t, validate(BuilderEntry{URL: "https://x.example", BuilderPubKeys: []string{"0xzz"}}), "invalid hex")
+	require.NoError(t, validate(BuilderEntry{
+		URL:            "https://x.example",
+		BuilderPubKeys: []string{"0x" + strings.Repeat("ab", 48), "0x" + strings.Repeat("cd", 48)},
+	}))
 
 	// A URL longer than the auth-data limit only matters when its bytes ARE the auth data.
-	longURL := "https://x.example/" + strings.Repeat("a", MaxRequestAuthDataSize)
-	require.ErrorContains(t,
-		ValidateBuilderEntries([]BuilderEntry{{URL: longURL}}),
-		"exceeding")
-	require.NoError(t,
-		ValidateBuilderEntries([]BuilderEntry{{URL: longURL, AuthData: "0x0102"}}))
+	longURL := "https://x.example/" + strings.Repeat("a", MaxBuilderAuthDataSize)
+	require.ErrorContains(t, validate(BuilderEntry{URL: longURL}), "exceeding")
+	require.NoError(t, validate(BuilderEntry{URL: longURL, AuthData: "0x0102"}))
 }
