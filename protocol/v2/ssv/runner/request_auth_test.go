@@ -140,6 +140,22 @@ func TestProposerPreferencesRunner_requestAuthConvergence(t *testing.T) {
 	require.NotNil(t, auths[gloas.BuilderIdentity("https://builder-d.example.com", builderBData)],
 		"a builder sharing another's token must get its own cache entry from the shared reconstruction")
 
+	// Phase 3: each reconstruction also submits the builder preferences to the beacon node. Across the
+	// two reconstructions (builder A via stash replay, then the B/D shared root) every configured builder
+	// is submitted, each carrying its reconstructed auth.
+	var submittedURLs []string
+	for _, batch := range bn.submittedBuilderPrefs {
+		for _, e := range batch {
+			submittedURLs = append(submittedURLs, e.URL)
+			require.NotNil(t, e.Auth, "each submitted preference carries the reconstructed auth")
+		}
+	}
+	require.ElementsMatch(t, []string{
+		"https://builder-a.example.com",
+		"https://builder-b.example.com",
+		"https://builder-d.example.com",
+	}, submittedURLs)
+
 	// A re-emission for the same slot re-freezes but never re-broadcasts an auth (roots are
 	// re-emission-invariant and already out) — only the §5 side decides re-broadcast on its own rules.
 	broadcastsBefore := len(network.BroadcastedMsgs)

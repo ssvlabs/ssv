@@ -89,14 +89,18 @@ type PTCCalls interface {
 	SubmitPayloadAttestationMessages(ctx context.Context, messages []*gloas.PayloadAttestationMessage) error
 }
 
-// ProposerPreferencesCalls is the beacon-node surface for Gloas (ePBS) proposer preferences (SIP #94 §5).
-// go-eth2-client has no Gloas types, so these are hand-rolled over HTTP.
+// ProposerPreferencesCalls is the beacon-node surface for Gloas (ePBS) proposer preferences (SIP #94 §5)
+// and the direct-builder preferences the §5 dispatcher submits (issue #2962 phase 3). go-eth2-client has
+// no Gloas types, so these are hand-rolled over HTTP.
 type ProposerPreferencesCalls interface {
 	// ProposerDutiesDependentRoot returns the proposer-duties dependent root for the epoch — the
 	// seed the proposer-lookahead is pinned to. go-eth2-client drops it, so it's fetched via raw HTTP.
 	ProposerDutiesDependentRoot(ctx context.Context, epoch phase0.Epoch) (phase0.Root, error)
 	// SubmitProposerPreferences broadcasts signed proposer preferences for upcoming proposal slots.
 	SubmitProposerPreferences(ctx context.Context, preferences []*gloas.SignedProposerPreferences) error
+	// SubmitBuilderPreferences submits ahead-of-time per-builder preferences; the beacon node forwards
+	// each entry to its builder (beacon-APIs#630, issue #2962 phase 3).
+	SubmitBuilderPreferences(ctx context.Context, preferences []*gloas.BuilderPreferencesEntry) error
 }
 
 // GloasProposerCalls is the beacon-node surface for producing and publishing Gloas (ePBS) blocks
