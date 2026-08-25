@@ -67,6 +67,8 @@ linters:
       always: false
     misspell:
       locale: US
+      # scripts/git-hooks/pre-push runs misspell standalone and doesn't read
+      # this list: mirror any real entry added here via its -i flag.
       ignore-rules:
         - someword
     nakedret:
