@@ -257,6 +257,20 @@ func (s *ServerTestSuite) TestAddValidator() {
 		s.remoteSigner.ImportError = nil
 	})
 
+	t.Run("web3signer 422 is not forwarded", func(t *testing.T) {
+		// A Web3Signer 422 must be reported as 500, never forwarded: the node treats 422 as a
+		// malformed share, so forwarding it would misclassify an upstream failure as a bad share.
+		s.remoteSigner.ImportError = web3signer.HTTPResponseError{
+			Err:    errors.New("upstream"),
+			Status: fasthttp.StatusUnprocessableEntity,
+		}
+		resp, err := s.ServeHTTP("POST", PathValidators, reqBody)
+		require.NoError(t, err)
+		assert.Equal(t, fasthttp.StatusInternalServerError, resp.StatusCode())
+
+		s.remoteSigner.ImportError = nil
+	})
+
 	t.Run("too many shares", func(t *testing.T) {
 		tooBigRequest := request
 		for i := 0; i < addShareLimit*2; i++ {

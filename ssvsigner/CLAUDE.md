@@ -157,7 +157,7 @@ BATCH_SIZE=20 \
 
 ### Error Handling
 - Malformed shares (undecryptable/invalid) return HTTP 422, which the node treats as a skippable malformed event; 422 is reserved exclusively for that
-- Connection failures trigger retries with exponential backoff
+- Connection/transport failures surface to the node as errors; the client itself does not retry
 - Web3Signer failures all map to HTTP 500 (retryable); the upstream status is intentionally not forwarded, so a proxy/upstream 422 can't be misclassified as a malformed share
 
 ### Performance Optimizations

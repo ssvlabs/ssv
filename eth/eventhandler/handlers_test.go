@@ -3,11 +3,12 @@ package eventhandler
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
+
+	"github.com/ssvlabs/ssv/ssvsigner"
 
 	"github.com/ssvlabs/ssv/eth/contract"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -23,10 +24,8 @@ func TestHandleValidatorAddedUndecryptableShareIsMalformed(t *testing.T) {
 	ctx := context.Background()
 	logger := zaptest.NewLogger(t)
 
-	beaconConfig := *networkconfig.TestNetwork.Beacon
-	beaconConfig.GenesisTime = time.Now().Add(-32 * beaconConfig.SlotDuration)
 	netCfg := &networkconfig.Network{
-		Beacon: &beaconConfig,
+		Beacon: networkconfig.TestNetwork.Beacon,
 		SSV:    networkconfig.TestNetwork.SSV,
 	}
 
@@ -80,4 +79,8 @@ func TestHandleValidatorAddedUndecryptableShareIsMalformed(t *testing.T) {
 	var malformed *MalformedEventError
 	require.ErrorAs(t, err, &malformed,
 		"an undecryptable share must be classified as a malformed (skippable) event, not a fatal error")
+	// Pin the origin to the share-decryption branch, not one of the other MalformedEventError
+	// returns (signature, operator lookup, share length, ...).
+	var decErr ssvsigner.ShareDecryptionError
+	require.ErrorAs(t, err, &decErr, "the malformed event must originate from a ShareDecryptionError")
 }

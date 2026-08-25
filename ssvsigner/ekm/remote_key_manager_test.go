@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"sync"
 	"testing"
 	"time"
@@ -1213,6 +1215,35 @@ func (s *RemoteKeyManagerTestSuite) TestAddShareErrorCases() {
 		var decErr ssvsigner.ShareDecryptionError
 		s.ErrorAs(err, &decErr)
 		clientMock.AssertExpectations(s.T())
+		slashingMock.AssertExpectations(s.T())
+	})
+
+	s.Run("ShareDecryptionError from real client 422", func() {
+		slashingMock := new(MockSlashingProtector)
+
+		// Drive a real ssv-signer 422 (empty body) through the real client, exercising the
+		// 422 -> ShareDecryptionError mapping and the AddShare wrap end to end (not a mock).
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusUnprocessableEntity)
+		}))
+		defer srv.Close()
+
+		rmTest := &RemoteKeyManager{
+			logger:            s.logger,
+			beaconConfig:      testNetCfg,
+			genesisRoot:       testNetCfg.GenesisValidatorsRoot,
+			signerClient:      ssvsigner.NewClient(srv.URL),
+			getOperatorId:     func() spectypes.OperatorID { return 1 },
+			operatorPubKey:    &MockOperatorPublicKey{},
+			slashingProtector: slashingMock,
+			signLocks:         map[signKey]*sync.RWMutex{},
+		}
+
+		err := rmTest.AddShare(s.T().Context(), nil, []byte("enc"), phase0.BLSPubKey{1, 2, 3})
+
+		// AddShare must preserve the ShareDecryptionError and, per the validate-first order, never bump.
+		var decErr ssvsigner.ShareDecryptionError
+		s.ErrorAs(err, &decErr)
 		slashingMock.AssertExpectations(s.T())
 	})
 

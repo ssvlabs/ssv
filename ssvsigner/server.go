@@ -193,8 +193,9 @@ func (s *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 		keystorePassword, err := s.generateRandomPassword(16)
 		if err != nil {
 			// Internal (transient) failure, not a bad share: reply 500 so the node retries
-			// rather than skips (see errMalformedShare for the 422/500 split).
-			logger.Warn("failed to generate random password", zap.Error(err))
+			// rather than skips (see errMalformedShare for the 422/500 split). Log at error since a
+			// 500 crash-loops the block on the node.
+			logger.Error("failed to generate random password", zap.Error(err))
 			s.writeJSONErr(
 				ctx,
 				logger,
@@ -211,11 +212,14 @@ func (s *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 		)
 		if err != nil {
 			// 422 only for a malformed share; anything else defaults to 500 (see errMalformedShare).
+			// A 500 crash-loops the block on the node, so log it at error; a 422 is skipped, so warn.
 			status := fasthttp.StatusInternalServerError
+			logAt := logger.Error
 			if errors.Is(err, errMalformedShare) {
 				status = fasthttp.StatusUnprocessableEntity
+				logAt = logger.Warn
 			}
-			logger.Warn("failed to get keystore from encrypted share", zap.Error(err))
+			logAt("failed to get keystore from encrypted share", zap.Error(err))
 			s.writeJSONErr(
 				ctx,
 				logger,
@@ -290,10 +294,12 @@ func (s *Server) keystoreJSONFromEncryptedShare(
 		return "", fmt.Errorf("%w: derived public key does not match expected public key", errMalformedShare)
 	}
 
-	// The share is valid past this point; the remaining failures are internal (untagged) and get 500, not 422.
+	// The share is valid past this point; the remaining failures are internal (untagged) and get 500,
+	// not 422. Pass the cause through — these are scrypt/AES/encoding errors, not key bytes, and a
+	// 500 crash-loops the block, so the operator needs the detail.
 	shareKeystore, err := keystore.GenerateShareKeystore(sharePrivBLS, sharePubKey, keystorePassword)
 	if err != nil {
-		return "", errors.New("generate share keystore")
+		return "", fmt.Errorf("generate share keystore: %w", err)
 	}
 
 	keystoreJSON, err := json.Marshal(shareKeystore)
@@ -533,7 +539,7 @@ func (s *Server) handleWeb3SignerErr(ctx *fasthttp.RequestCtx, logger *zap.Logge
 
 	logger.Error("web3signer request failed",
 		zap.Error(err),
-		zap.Int("status_code", statusCode),
+		zap.Int("reply_status", statusCode),
 		zap.Any("resp", resp),
 	)
 	ctx.SetStatusCode(statusCode)

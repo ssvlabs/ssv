@@ -23,8 +23,8 @@ type KeyManager interface {
 	// due to absent or outdated protection data.
 	//
 	// If the share cannot be decrypted or validated, implementations MUST return an error that
-	// unwraps to ssvsigner.ShareDecryptionError. Callers use it to classify the failure as a
-	// skippable malformed event; otherwise the failure is fatal and crash-loops registry sync.
+	// unwraps to a by-value ssvsigner.ShareDecryptionError. Callers use it to classify the failure
+	// as a skippable malformed event; otherwise the failure is fatal and crash-loops registry sync.
 	AddShare(ctx context.Context, txn ReadWriteTxn, encryptedPrivKey []byte, pubKey phase0.BLSPubKey) error
 
 	// RemoveShare unregisters a validator share from the key manager and deletes its associated
