@@ -77,7 +77,15 @@ while read -r local_ref local_sha remote_ref remote_sha; do
 				GOWORK=off "$GO" tool -modfile="$root/tool.mod" misspell -locale US -error 2>&1)
 			if [ -n "$out" ]; then
 				echo "pre-push: misspell found issues in $f:" >&2
-				echo "$out" | sed "s|^stdin|  $f|" >&2
+				# misspell reads stdin, so it reports the path as "stdin";
+				# swap in the real one with printf rather than sed, so a
+				# path holding |, & or \ can't corrupt the substitution.
+				echo "$out" | while IFS= read -r line; do
+					case $line in
+					stdin*) printf '  %s%s\n' "$f" "${line#stdin}" ;;
+					*) printf '%s\n' "$line" ;;
+					esac
+				done >&2
 				status=1
 			fi
 		done
