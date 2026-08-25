@@ -105,6 +105,9 @@ func buildNode(ctx context.Context, cfg *config, logger *zap.Logger) (*node, err
 		SSV:    ssvNetworkConfig,
 		Beacon: consensusClient.BeaconConfig(),
 	}
+	if err := networkConfig.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid network config: %w", err)
+	}
 
 	// Log the Boole fork schedule at boot — the SSV-fork analog of the beacon-side "Gloas (ePBS)
 	// fork scheduled" log — so operators and tooling can read each node's epoch and cross-check

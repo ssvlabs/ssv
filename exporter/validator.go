@@ -1,6 +1,7 @@
 package exporter
 
 import (
+	"errors"
 	"fmt"
 	"slices"
 
@@ -15,6 +16,17 @@ import (
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
+
+// ErrPostForkCommitteeDutyNote marks the non-fatal note appended when a
+// fork-straddling request reaches a post-fork slot/role pair without
+// pubkeys/indices. It lets callers (e.g. the HTTP layer) tell this expected,
+// partial-coverage note apart from genuine processing failures.
+var ErrPostForkCommitteeDutyNote = errors.New("committee duty post-fork")
+
+// committeeDutyFilterHint is the actionable tail shared by the committee-duty
+// validation error and the post-fork partial-coverage note, hoisted so the two
+// messages cannot drift apart.
+const committeeDutyFilterHint = "please provide either pubkeys or indices to filter the duty for a specific validators subset or use the /committee endpoint to query all the corresponding duties"
 
 // ValidatorTracesCore contains the core logic for ValidatorTraces without any HTTP concerns.
 func (e *Exporter) ValidatorTracesCore(request *ValidatorTracesQuery) (*ValidatorTracesResult, *multierror.Error) {
@@ -33,11 +45,26 @@ func (e *Exporter) ValidatorTracesCore(request *ValidatorTracesQuery) (*Validato
 		return nil, multierror.Append(nil, &ValidationError{Err: indicesErr})
 	}
 
+	// request validation only gates on 'from': a window whose tail crosses
+	// Boole reaches post-fork slots without pubkeys/indices. Fork state is
+	// monotonic in slot, so that tail is one contiguous range per role —
+	// record where it starts and report it as a single non-fatal note per
+	// role below, rather than allocating one note per skipped slot.
+	postForkNoteFrom := map[spectypes.BeaconRole]phase0.Slot{}
+
 	for s := request.From; s <= request.To; s++ {
 		slot := phase0.Slot(s)
 		for _, role := range request.Roles {
+			isCommittee := e.isCommitteeDutyAtSlot(role, slot)
+			if isCommittee && len(indices) == 0 {
+				if _, ok := postForkNoteFrom[role]; !ok {
+					postForkNoteFrom[role] = slot
+				}
+				continue
+			}
+
 			providerFunc := e.getValidatorDutiesForRoleAndSlot
-			if e.isCommitteeDutyAtSlot(role, slot) {
+			if isCommittee {
 				providerFunc = e.getValidatorCommitteeDutiesForRoleAndSlot
 			}
 
@@ -45,6 +72,15 @@ func (e *Exporter) ValidatorTracesCore(request *ValidatorTracesQuery) (*Validato
 			results = append(results, duties...)
 			errs = multierror.Append(errs, err)
 		}
+	}
+
+	for _, role := range request.Roles {
+		noteFrom, ok := postForkNoteFrom[role]
+		if !ok {
+			continue
+		}
+		delete(postForkNoteFrom, role) // guard against duplicate roles in the request
+		errs = multierror.Append(errs, fmt.Errorf("%w: slots %d-%d: role %s, %s", ErrPostForkCommitteeDutyNote, noteFrom, request.To, role.String(), committeeDutyFilterHint))
 	}
 
 	// by design, not found duties are expected and not considered as API errors
@@ -57,8 +93,8 @@ func (e *Exporter) ValidatorTracesCore(request *ValidatorTracesQuery) (*Validato
 }
 
 func (e *Exporter) validateValidatorRequest(request *ValidatorTracesQuery) error {
-	if request.From > request.To {
-		return fmt.Errorf("'from' must be less than or equal to 'to'")
+	if err := validateSlotRange(request.From, request.To); err != nil {
+		return err
 	}
 
 	if len(request.Roles) == 0 {
@@ -66,12 +102,13 @@ func (e *Exporter) validateValidatorRequest(request *ValidatorTracesQuery) error
 	}
 
 	// either PubKeys or Indices are required for committee duty roles.
-	// Fork state is evaluated at the range's upper bound: if any slot in
-	// [from, to] is post-Boole, the 'to' slot is too.
+	// Fork state is evaluated at the range's lower bound so that a window
+	// whose tail crosses Boole still serves its pre-fork portion; the
+	// post-fork tail is reported as a non-fatal note in the per-slot loop.
 	if len(request.PubKeys) == 0 && len(request.Indices) == 0 {
 		for _, role := range request.Roles {
-			if e.isCommitteeDutyAtSlot(role, phase0.Slot(request.To)) {
-				return fmt.Errorf("role %s is a committee duty, please provide either pubkeys or indices to filter the duty for a specific validators subset or use the /committee endpoint to query all the corresponding duties", role.String())
+			if e.isCommitteeDutyAtSlot(role, phase0.Slot(request.From)) {
+				return fmt.Errorf("role %s is a committee duty, %s", role.String(), committeeDutyFilterHint)
 			}
 		}
 	}

@@ -119,8 +119,8 @@ func (e *Exporter) DecidedsCore(request *DecidedsQuery) (*TraceDecidedsResult, e
 }
 
 func validateDecidedRequest(request *DecidedsQuery) error {
-	if request.From > request.To {
-		return fmt.Errorf("'from' must be less than or equal to 'to'")
+	if err := validateSlotRange(request.From, request.To); err != nil {
+		return err
 	}
 
 	if len(request.Roles) == 0 {

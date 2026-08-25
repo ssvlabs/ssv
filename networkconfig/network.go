@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -81,6 +82,51 @@ func (n Network) BooleForkAtSlot(slot phase0.Slot) bool {
 	return n.BooleForkAtEpoch(n.EstimatedEpochAtSlot(slot))
 }
 
+// Validate checks the assembled network configuration for internal inconsistencies that fork
+// activation logic can't catch on its own, returning an error for configurations that would
+// panic or misbehave. It stays logger-free by design: the caller decides whether/how to abort.
+func (n Network) Validate() error {
+	// A zero SlotsPerEpoch is a malformed config regardless of fork scheduling: slot/epoch
+	// conversions divide by it unconditionally (e.g. Beacon.EstimatedEpochAtSlot), so it would
+	// panic on the first duty long before any fork logic runs.
+	if n.SlotsPerEpoch == 0 {
+		return fmt.Errorf("slots per epoch must be positive")
+	}
+
+	if n.BooleForkScheduled() {
+		if maxEpoch := n.maxEpochConvertibleToSlot(); n.SSV.Forks.Boole > maxEpoch {
+			return fmt.Errorf("boole fork epoch %d overflows slot conversion (max supported epoch %d)", n.SSV.Forks.Boole, maxEpoch)
+		}
+
+		// unmarshalFromConfig defaults NextDomainType to DomainType when the field is absent, so
+		// equality while the fork is still ahead is exactly the signature of a scheduled fork that
+		// forgot to set NextDomainType: it would "activate" with zero observable domain change, and
+		// a restart is guaranteed before activation (see BooleForkScheduled), so refusing to start
+		// is the last safe moment to catch it. Once the fork is active, equality is legitimate
+		// steady state — a config written post-fork may set DomainType to the post-fork domain and
+		// omit NextDomainType.
+		// The wall-clock read must be guarded: EstimatedCurrentSlot panics while the clock is
+		// still before GenesisTime, and before genesis a scheduled fork is by definition not
+		// yet active.
+		booleForkActive := !time.Now().Before(n.GenesisTime) && n.BooleFork()
+		if n.NextDomainType == n.DomainType && !booleForkActive {
+			return fmt.Errorf(
+				"boole fork is scheduled at epoch %d but NextDomainType equals DomainType: the fork would activate with no observable domain change",
+				n.SSV.Forks.Boole,
+			)
+		}
+	}
+
+	return nil
+}
+
+// maxEpochConvertibleToSlot returns the highest epoch whose first slot still fits the slot
+// range; FirstSlotAtEpoch would overflow beyond it. Callers must rule out a zero SlotsPerEpoch
+// first, or the division panics.
+func (n Network) maxEpochConvertibleToSlot() phase0.Epoch {
+	return phase0.Epoch(math.MaxUint64 / n.SlotsPerEpoch)
+}
+
 // InBooleTransitionWindow checks if the slot is in the Boole transition window,
 // i.e., in `PRIOR_WINDOW` or `SUBSEQUENT_WINDOW` according to https://github.com/ssvlabs/SIPs/pull/43.
 func (n Network) InBooleTransitionWindow(slot phase0.Slot) bool {
@@ -120,8 +166,7 @@ func (n Network) inBooleSubsequentWindowWithSlots(slot phase0.Slot, windowSlots 
 
 	// Avoid FirstSlotAtEpoch overflow when Boole is beyond the representable epoch range;
 	// without this guard the multiplication would wrap and could treat small slots as in-window.
-	maxEpoch := phase0.Epoch(math.MaxUint64 / n.SlotsPerEpoch)
-	if n.SSV.Forks.Boole > maxEpoch {
+	if n.SSV.Forks.Boole > n.maxEpochConvertibleToSlot() {
 		return false
 	}
 
