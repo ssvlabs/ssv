@@ -550,6 +550,16 @@ func (n *p2pNetwork) isReady() bool {
 // where inbound traffic and query responses keep the socket busy.
 const discoveryStaleGrace = 3 * time.Minute
 
+// discoveryStalePeerFloor decides what a stale discv5 socket means: below it
+// the node is effectively isolated and a restart is worth attempting; at or
+// above it the node keeps serving duties over its established connections.
+// The floor is needed because staleness alone can't tell a wedged read loop
+// from inbound UDP lost upstream (firewall/NAT changes) — a restart can't fix
+// the latter, and since any stray packet re-arms the check after boot,
+// restarting unconditionally would turn one external UDP fault into a
+// fleet-correlated restart loop.
+const discoveryStalePeerFloor = 10
+
 // Healthy reports whether the p2p network is operating normally.
 // It satisfies the health-check interface from hprobe package.
 func (n *p2pNetwork) Healthy(ctx context.Context) error {
@@ -563,14 +573,26 @@ func (n *p2pNetwork) Healthy(ctx context.Context) error {
 		return fmt.Errorf("discovery bootstrap failed")
 	}
 	// A wedged discv5 socket leaves discovery silently dead while bootstrap keeps
-	// looping; surface it so the hprobe watchdog restarts the node. n.disc is nil
-	// in tests and briefly at startup, hence the guard.
+	// looping; failing here makes the hprobe watchdog restart the node. Restart
+	// only when the wedge is actually biting — the peer set has degraded (see
+	// discoveryStalePeerFloor). n.disc is nil in tests and briefly at startup,
+	// hence the guard.
 	if n.disc != nil && n.disc.DiscoveryStale(discoveryStaleGrace) {
-		// Surface the wedge in the log alongside the exit reason, so a restart
-		// isn't the only evidence that discovery died.
-		n.logger.Warn("discv5 socket wedged: not drained within grace, discovery stalled",
-			zap.Duration("grace", discoveryStaleGrace))
-		return fmt.Errorf("discv5 socket not drained for >%s (discovery wedged)", discoveryStaleGrace)
+		peers := 0
+		if h := n.Host(); h != nil {
+			peers = len(h.Network().Peers())
+		}
+		if peers < discoveryStalePeerFloor {
+			// Surface the wedge in the log alongside the exit reason, so a restart
+			// isn't the only evidence that discovery died.
+			n.logger.Warn("discv5 socket wedged and peer set degraded, failing health check",
+				zap.Duration("grace", discoveryStaleGrace), zap.Int("peers", peers))
+			return fmt.Errorf("discv5 socket not drained for >%s with %d peers (discovery wedged)", discoveryStaleGrace, peers)
+		}
+		// This log is the only signal: the node stays up on its established peers
+		// and fails the probe only if they erode.
+		n.logger.Error("discv5 socket not drained within grace, holding restart while peer set is healthy",
+			zap.Duration("grace", discoveryStaleGrace), zap.Int("peers", peers))
 	}
 	return nil
 }
