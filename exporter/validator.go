@@ -21,7 +21,7 @@ import (
 // fork-straddling request reaches a post-fork slot/role pair without
 // pubkeys/indices. It lets callers (e.g. the HTTP layer) tell this expected,
 // partial-coverage note apart from genuine processing failures.
-var ErrPostForkCommitteeDutyNote = errors.New("committee duty post-fork requires pubkeys or indices")
+var ErrPostForkCommitteeDutyNote = errors.New("committee duty post-fork")
 
 // committeeDutyFilterHint is the actionable tail shared by the committee-duty
 // validation error and the post-fork partial-coverage note, hoisted so the two
@@ -80,7 +80,7 @@ func (e *Exporter) ValidatorTracesCore(request *ValidatorTracesQuery) (*Validato
 			continue
 		}
 		delete(postForkNoteFrom, role) // guard against duplicate roles in the request
-		errs = multierror.Append(errs, fmt.Errorf("%w: slots %d-%d: role %s is a committee duty post-fork, %s", ErrPostForkCommitteeDutyNote, noteFrom, request.To, role.String(), committeeDutyFilterHint))
+		errs = multierror.Append(errs, fmt.Errorf("%w: slots %d-%d: role %s, %s", ErrPostForkCommitteeDutyNote, noteFrom, request.To, role.String(), committeeDutyFilterHint))
 	}
 
 	// by design, not found duties are expected and not considered as API errors
