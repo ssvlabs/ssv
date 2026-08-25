@@ -104,10 +104,14 @@ type ProposerPreferencesCalls interface {
 // merged produce-block-v4 / publish endpoints (beacon-APIs#580).
 type GloasProposerCalls interface {
 	// GetGloasBeaconBlock produces a Gloas beacon block for the slot; the payload itself ships
-	// separately in the §6 envelope, so the block carries only the execution-payload bid.
-	GetGloasBeaconBlock(ctx context.Context, slot phase0.Slot, graffiti, randao []byte) (*gloas.BeaconBlock, error)
-	// SubmitGloasBeaconBlock publishes a signed Gloas block.
-	SubmitGloasBeaconBlock(ctx context.Context, block *gloas.SignedBeaconBlock) error
+	// separately in the §6 envelope, so the block carries only the execution-payload bid. A non-nil
+	// builderConfig is sent as the produceBlockV4 POST body (beacon-APIs#630, direct-builder overlay),
+	// with a GET fallback for beacon nodes that predate it; the returned string is the Eth-Builder-Url
+	// of the winning builder-API bid, empty when self-built or won by a p2p bid.
+	GetGloasBeaconBlock(ctx context.Context, slot phase0.Slot, graffiti, randao []byte, builderConfig *gloas.ProduceBuilderConfig) (*gloas.BeaconBlock, string, error)
+	// SubmitGloasBeaconBlock publishes a signed Gloas block. A non-empty builderURL is echoed as the
+	// Eth-Builder-Url header so the beacon node forwards the block to the winning builder (beacon-APIs#630).
+	SubmitGloasBeaconBlock(ctx context.Context, block *gloas.SignedBeaconBlock, builderURL string) error
 }
 
 // GloasEnvelopeCalls is the beacon-node surface for the §6 execution-payload envelope (SIP #94 §6):

@@ -67,17 +67,37 @@ func (b *proposerTestBeacon) SubmitBeaconBlock(_ context.Context, block *api.Ver
 	return b.submitErr
 }
 
-func (b *proposerTestBeacon) GetGloasBeaconBlock(_ context.Context, slot phase0.Slot, graffiti, randao []byte) (*gloas.BeaconBlock, error) {
+func (b *proposerTestBeacon) GetGloasBeaconBlock(_ context.Context, slot phase0.Slot, graffiti, randao []byte, _ *gloas.ProduceBuilderConfig) (*gloas.BeaconBlock, string, error) {
 	b.getCalls++
 	b.lastGetSlot = slot
 	b.lastGetGraffiti = append([]byte(nil), graffiti...)
 	b.lastGetRandao = append([]byte(nil), randao...)
-	return b.getGloasBlock, nil
+	return b.getGloasBlock, "", nil
 }
 
-func (b *proposerTestBeacon) SubmitGloasBeaconBlock(_ context.Context, block *gloas.SignedBeaconBlock) error {
+func (b *proposerTestBeacon) SubmitGloasBeaconBlock(_ context.Context, block *gloas.SignedBeaconBlock, _ string) error {
 	b.submittedGloasBlocks = append(b.submittedGloasBlocks, block)
 	return b.submitErr
+}
+
+// decidedBuilderURL echoes this operator's produce Eth-Builder-Url on publish only when the decided block
+// is the one this operator produced (owner-match) and a builder bid actually won.
+func TestProposerRunner_decidedBuilderURL(t *testing.T) {
+	block := gloas.TestingBeaconBlock(7)
+	root, err := block.HashTreeRoot()
+	require.NoError(t, err)
+
+	// This operator produced the decided block and its BN returned a builder URL -> echo it.
+	owner := &ProposerRunner{gloasBuilderURL: "https://b.example", gloasProducedRoot: root}
+	require.Equal(t, "https://b.example", owner.decidedBuilderURL(block))
+
+	// Another operator's block won QBFT (root mismatch) -> no echo; this BN never solicited that bid.
+	mismatch := &ProposerRunner{gloasBuilderURL: "https://b.example", gloasProducedRoot: [32]byte{0xff}}
+	require.Empty(t, mismatch.decidedBuilderURL(block))
+
+	// Self-build / p2p win (no builder URL) -> no echo even on an owner match.
+	noURL := &ProposerRunner{gloasBuilderURL: "", gloasProducedRoot: root}
+	require.Empty(t, noURL.decidedBuilderURL(block))
 }
 
 type stubDoppelganger struct {
