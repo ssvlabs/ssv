@@ -192,9 +192,8 @@ func (s *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 		// So, there's no need to store the password. We can just generate a random password for each keystore.
 		keystorePassword, err := s.generateRandomPassword(16)
 		if err != nil {
-			// Internal (transient) failure, not a bad share: reply 500 so the node retries
-			// rather than skips (see errMalformedShare for the 422/500 split). Log at error since a
-			// 500 crash-loops the block on the node.
+			// Internal (transient) failure, not a bad share -> 500 (see errMalformedShare). Log at
+			// error to match the node-fatal reply.
 			logger.Error("failed to generate random password", zap.Error(err))
 			s.writeJSONErr(
 				ctx,
@@ -212,7 +211,7 @@ func (s *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 		)
 		if err != nil {
 			// 422 only for a malformed share; anything else defaults to 500 (see errMalformedShare).
-			// A 500 crash-loops the block on the node, so log it at error; a 422 is skipped, so warn.
+			// Log level follows the reply: warn for the skippable 422, error for a node-fatal 500.
 			status := fasthttp.StatusInternalServerError
 			logAt := logger.Error
 			if errors.Is(err, errMalformedShare) {
@@ -294,9 +293,8 @@ func (s *Server) keystoreJSONFromEncryptedShare(
 		return "", fmt.Errorf("%w: derived public key does not match expected public key", errMalformedShare)
 	}
 
-	// The share is valid past this point; the remaining failures are internal (untagged) and get 500,
-	// not 422. Pass the cause through — these are scrypt/AES/encoding errors, not key bytes, and a
-	// 500 crash-loops the block, so the operator needs the detail.
+	// The share is valid past here; the remaining failures are internal (untagged -> 500). Pass the
+	// cause through (scrypt/AES/encoding, not key bytes) so the operator can diagnose the failure.
 	shareKeystore, err := keystore.GenerateShareKeystore(sharePrivBLS, sharePubKey, keystorePassword)
 	if err != nil {
 		return "", fmt.Errorf("generate share keystore: %w", err)
