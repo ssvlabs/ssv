@@ -625,6 +625,16 @@ func newTestExporterForV2WithNetwork(traceStore *mockTraceStore, validators stor
 	return NewExporter(zap.NewNop(), nil, traceStore, validators, netCfg)
 }
 
+// booleNetwork returns a clone of TestNetwork with the Boole fork pinned at the
+// given epoch. The SSV config is copied too so the shared TestNetwork is never mutated.
+func booleNetwork(epoch phase0.Epoch) *networkconfig.Network {
+	ssvCopy := *networkconfig.TestNetwork.SSV
+	ssvCopy.Forks.Boole = epoch
+	netCfg := *networkconfig.TestNetwork
+	netCfg.SSV = &ssvCopy
+	return &netCfg
+}
+
 func buildJSONBody(t *testing.T, payload map[string]any) *strings.Reader {
 	t.Helper()
 	b, err := json.Marshal(payload)
@@ -2450,12 +2460,7 @@ func TestExporterValidatorTraces_ForkGating(t *testing.T) {
 				return &traces.CommitteeDutyTrace{Slot: s, CommitteeID: id}, nil
 			}
 
-			ssvCopy := *networkconfig.TestNetwork.SSV
-			ssvCopy.Forks.Boole = tt.booleEpoch
-			netCfg := *networkconfig.TestNetwork
-			netCfg.SSV = &ssvCopy
-
-			exp := newTestExporterForV2WithNetwork(store, validatorStore, &netCfg)
+			exp := newTestExporterForV2WithNetwork(store, validatorStore, booleNetwork(tt.booleEpoch))
 
 			req := httptest.NewRequest(http.MethodPost, "/traces/validator", buildJSONBody(t, map[string]any{
 				"from":    uint64(slot),
@@ -2539,12 +2544,7 @@ func TestExporterValidatorTraces_ForkGating_ValidationSymmetric(t *testing.T) {
 			}
 			validatorStore := newMockValidatorStore()
 
-			ssvCopy := *networkconfig.TestNetwork.SSV
-			ssvCopy.Forks.Boole = tt.booleEpoch
-			netCfg := *networkconfig.TestNetwork
-			netCfg.SSV = &ssvCopy
-
-			exp := newTestExporterForV2WithNetwork(store, validatorStore, &netCfg)
+			exp := newTestExporterForV2WithNetwork(store, validatorStore, booleNetwork(tt.booleEpoch))
 
 			req := httptest.NewRequest(http.MethodPost, "/traces/validator", buildJSONBody(t, map[string]any{
 				"from":  uint64(100),
@@ -2576,11 +2576,7 @@ func TestExporterValidatorTraces_ForkGating_CrossForkRange(t *testing.T) {
 	var committeeID spectypes.CommitteeID
 	committeeID[0] = 7
 
-	ssvCopy := *networkconfig.TestNetwork.SSV
-	ssvCopy.Forks.Boole = booleEpoch
-	netCfg := *networkconfig.TestNetwork
-	netCfg.SSV = &ssvCopy
-
+	netCfg := booleNetwork(booleEpoch)
 	booleSlot := netCfg.FirstSlotAtEpoch(booleEpoch)
 	require.GreaterOrEqual(t, uint64(booleSlot), uint64(10), "boole fork slot too low for the range below")
 	from := uint64(booleSlot) - 10 // pre-Boole
@@ -2614,7 +2610,7 @@ func TestExporterValidatorTraces_ForkGating_CrossForkRange(t *testing.T) {
 
 	for _, role := range roles {
 		t.Run(role.name+" without filters returns a partial response with post-fork notes", func(t *testing.T) {
-			exp := newTestExporterForV2WithNetwork(newMockTraceStore(), newMockValidatorStore(), &netCfg)
+			exp := newTestExporterForV2WithNetwork(newMockTraceStore(), newMockValidatorStore(), netCfg)
 
 			req := httptest.NewRequest(http.MethodPost, "/traces/validator", buildJSONBody(t, map[string]any{
 				"from":  from,
@@ -2649,7 +2645,7 @@ func TestExporterValidatorTraces_ForkGating_CrossForkRange(t *testing.T) {
 				return []*traces.ValidatorDutyTrace{{Slot: slot, Role: r, Validator: idx}}, nil
 			}
 
-			exp := newTestExporterForV2WithNetwork(store, newMockValidatorStore(), &netCfg)
+			exp := newTestExporterForV2WithNetwork(store, newMockValidatorStore(), netCfg)
 
 			req := httptest.NewRequest(http.MethodPost, "/traces/validator", buildJSONBody(t, map[string]any{
 				"from":  from,
@@ -2696,7 +2692,7 @@ func TestExporterValidatorTraces_ForkGating_CrossForkRange(t *testing.T) {
 				return role.signerDataBuilder(s), nil
 			}
 
-			exp := newTestExporterForV2WithNetwork(store, newMockValidatorStore(), &netCfg)
+			exp := newTestExporterForV2WithNetwork(store, newMockValidatorStore(), netCfg)
 
 			req := httptest.NewRequest(http.MethodPost, "/traces/validator", buildJSONBody(t, map[string]any{
 				"from":    from,
@@ -2731,18 +2727,14 @@ func TestExporterValidatorTraces_ForkGating_CrossForkRange(t *testing.T) {
 func TestExporterValidatorTraces_ForkGating_ZeroPreForkTraces(t *testing.T) {
 	const booleEpoch = phase0.Epoch(5)
 
-	ssvCopy := *networkconfig.TestNetwork.SSV
-	ssvCopy.Forks.Boole = booleEpoch
-	netCfg := *networkconfig.TestNetwork
-	netCfg.SSV = &ssvCopy
-
+	netCfg := booleNetwork(booleEpoch)
 	booleSlot := netCfg.FirstSlotAtEpoch(booleEpoch)
 	require.GreaterOrEqual(t, uint64(booleSlot), uint64(2), "boole fork slot too low for the range below")
 	from := uint64(booleSlot) - 2 // pre-Boole
 	to := uint64(booleSlot) + 2   // post-Boole
 
 	t.Run("only post-fork notes and no pre-fork traces -> 200 with empty data", func(t *testing.T) {
-		exp := newTestExporterForV2WithNetwork(newMockTraceStore(), newMockValidatorStore(), &netCfg)
+		exp := newTestExporterForV2WithNetwork(newMockTraceStore(), newMockValidatorStore(), netCfg)
 
 		req := httptest.NewRequest(http.MethodPost, "/traces/validator", buildJSONBody(t, map[string]any{
 			"from":  from,
@@ -2769,7 +2761,7 @@ func TestExporterValidatorTraces_ForkGating_ZeroPreForkTraces(t *testing.T) {
 		store.GetValidatorDutiesFunc = func(role spectypes.BeaconRole, slot phase0.Slot) ([]*traces.ValidatorDutyTrace, error) {
 			return nil, fmt.Errorf("forced error on GetValidatorDuties")
 		}
-		exp := newTestExporterForV2WithNetwork(store, newMockValidatorStore(), &netCfg)
+		exp := newTestExporterForV2WithNetwork(store, newMockValidatorStore(), netCfg)
 
 		req := httptest.NewRequest(http.MethodPost, "/traces/validator", buildJSONBody(t, map[string]any{
 			"from":  from,
