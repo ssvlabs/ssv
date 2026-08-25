@@ -81,7 +81,7 @@ func TestProposerPreferencesRunner_requestAuthConvergence(t *testing.T) {
 	peerAuthPartial := func(t *testing.T, opID spectypes.OperatorID, data []byte) *spectypes.PartialSignatureMessages {
 		t.Helper()
 		auth := &gloas.BuilderRequestAuth{Data: data, Slot: proposalSlot}
-		domain, err := bn.DomainData(context.Background(), cfg.EstimatedEpochAtSlot(proposalSlot), phase0.DomainType(spectypes.DomainRequestAuth))
+		domain, err := bn.DomainData(context.Background(), cfg.EstimatedEpochAtSlot(proposalSlot), phase0.DomainType(spectypes.DomainBuilderRequestAuth))
 		require.NoError(t, err)
 		root, err := spectypes.ComputeETHSigningRoot(auth, domain)
 		require.NoError(t, err)
@@ -186,7 +186,7 @@ func TestProposerPreferencesRunner_requestAuthWithoutBuilders(t *testing.T) {
 	}, 3))
 
 	auth := &gloas.BuilderRequestAuth{Data: []byte("https://builder.example.com"), Slot: proposalSlot}
-	domain, err := bn.DomainData(context.Background(), cfg.EstimatedEpochAtSlot(proposalSlot), phase0.DomainType(spectypes.DomainRequestAuth))
+	domain, err := bn.DomainData(context.Background(), cfg.EstimatedEpochAtSlot(proposalSlot), phase0.DomainType(spectypes.DomainBuilderRequestAuth))
 	require.NoError(t, err)
 	root, err := spectypes.ComputeETHSigningRoot(auth, domain)
 	require.NoError(t, err)
@@ -284,7 +284,7 @@ func TestProposerPreferencesRunner_requestAuthAfterPreferenceSuccess(t *testing.
 	// Auth partials arriving after the §5 success must still be collected and reconstructed.
 	authData := []byte("https://builder-a.example.com")
 	auth := &gloas.BuilderRequestAuth{Data: authData, Slot: proposalSlot}
-	domain, err := bn.DomainData(ctx, cfg.EstimatedEpochAtSlot(proposalSlot), phase0.DomainType(spectypes.DomainRequestAuth))
+	domain, err := bn.DomainData(ctx, cfg.EstimatedEpochAtSlot(proposalSlot), phase0.DomainType(spectypes.DomainBuilderRequestAuth))
 	require.NoError(t, err)
 	root, err := spectypes.ComputeETHSigningRoot(auth, domain)
 	require.NoError(t, err)
@@ -377,7 +377,7 @@ func TestProposerPreferencesRunner_requestAuthSurvivesConcludedReemission(t *tes
 	peerAuthPartial := func(t *testing.T, opID spectypes.OperatorID) *spectypes.PartialSignatureMessages {
 		t.Helper()
 		auth := &gloas.BuilderRequestAuth{Data: []byte("https://builder-a.example.com"), Slot: proposalSlot}
-		domain, err := bn.DomainData(ctx, cfg.EstimatedEpochAtSlot(proposalSlot), phase0.DomainType(spectypes.DomainRequestAuth))
+		domain, err := bn.DomainData(ctx, cfg.EstimatedEpochAtSlot(proposalSlot), phase0.DomainType(spectypes.DomainBuilderRequestAuth))
 		require.NoError(t, err)
 		root, err := spectypes.ComputeETHSigningRoot(auth, domain)
 		require.NoError(t, err)

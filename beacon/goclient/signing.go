@@ -54,10 +54,10 @@ func (gc *GoClient) DomainData(
 	domain phase0.DomainType,
 ) (phase0.Domain, error) {
 	switch domain {
-	case spectypes.DomainApplicationBuilder, spectypes.DomainRequestAuth:
+	case spectypes.DomainApplicationBuilder, spectypes.DomainBuilderRequestAuth:
 		// Application-namespace domains derive from the network's genesis fork version with a zero
 		// genesis-validators root (compute_domain with defaults), never from a fork-versioned
-		// state: DomainApplicationBuilder (pre-Gloas validator registrations) and DomainRequestAuth
+		// state: DomainApplicationBuilder (pre-Gloas validator registrations) and DomainBuilderRequestAuth
 		// (the Gloas direct-builder request auth — 0x0b000001, not the beacon DomainBeaconBuilder
 		// 0x0b000000).
 		var appDomain phase0.Domain

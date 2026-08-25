@@ -43,9 +43,9 @@ func (r *proposerPreferencesSlotRunner) runRequestAuthRound(ctx context.Context,
 		return
 	}
 
-	// DomainRequestAuth is genesis-style (computed locally by the beacon adapter, no BN call); the
-	// epoch argument is ignored for it.
-	domain, err := r.beacon.DomainData(ctx, r.NetworkConfig.EstimatedEpochAtSlot(proposalSlot), phase0.DomainType(spectypes.DomainRequestAuth))
+	// DomainBuilderRequestAuth is genesis-style (computed locally by the beacon adapter, no BN
+	// call); the epoch argument is ignored for it.
+	domain, err := r.beacon.DomainData(ctx, r.NetworkConfig.EstimatedEpochAtSlot(proposalSlot), phase0.DomainType(spectypes.DomainBuilderRequestAuth))
 	if err != nil {
 		// Freeze an empty root set: executed-but-froze-nothing (see the requestAuths field doc).
 		r.requestAuths = map[[32]byte]*frozenRequestAuth{}
@@ -81,7 +81,7 @@ func (r *proposerPreferencesSlotRunner) runRequestAuthRound(ctx context.Context,
 		if _, done := r.broadcastAuthRoots[root]; done {
 			continue // broadcast by a prior incarnation; stash replay and live partials finish its quorum
 		}
-		msg, err := signAsValidator(ctx, r, validatorDuty.ValidatorIndex, auth, proposalSlot, phase0.DomainType(spectypes.DomainRequestAuth), domain)
+		msg, err := signAsValidator(ctx, r, validatorDuty.ValidatorIndex, auth, proposalSlot, phase0.DomainType(spectypes.DomainBuilderRequestAuth), domain)
 		if err != nil {
 			logger.Warn("request auth skipped: could not sign",
 				fields.Slot(proposalSlot), zap.String("builder_url", entry.URL), zap.Error(err))
