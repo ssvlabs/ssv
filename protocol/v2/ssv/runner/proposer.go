@@ -72,9 +72,10 @@ type ProposerRunner struct {
 	// path, whose context is canceled once the block duty ends.
 	startEnvelopeDuty func(slot phase0.Slot)
 
-	// builders is the cluster's direct-builder config (issue #2962, phase 2): the produceBlockV4 POST
-	// body is assembled from it plus the per-slot reconstructed auths. Empty Entries -> the enshrined GET.
-	builders gloas.BuilderConfig
+	// builders is the cluster's direct-builder config, resolved once at construction (issue #2962, phase 2):
+	// the produceBlockV4 POST body is assembled from it plus the per-slot reconstructed auths. Not
+	// Configured() -> the enshrined GET.
+	builders gloas.ResolvedBuilderConfig
 	// requestAuthCache holds the per-slot reconstructed builder auths this operator attaches to the
 	// produceBlockV4 POST. Shared with the §5 dispatcher that writes it; nil pre-Gloas / no overlay.
 	requestAuthCache *ssv.RequestAuthCache
@@ -119,6 +120,13 @@ func NewProposerRunner(opts ProposerRunnerOptions) (Runner, error) {
 		return nil, errors.New("must have one share")
 	}
 
+	// Decode/resolve the builder config once here (once per validator), so the §4 produce path reads
+	// pre-decoded values instead of re-parsing config every proposal. Startup already validated it.
+	builders, err := gloas.ResolveBuilderConfig(opts.Builders)
+	if err != nil {
+		return nil, fmt.Errorf("resolve builder config: %w", err)
+	}
+
 	return &ProposerRunner{
 		BaseRunner: &BaseRunner{
 			RunnerRoleType:     spectypes.RoleProposer,
@@ -141,7 +149,7 @@ func NewProposerRunner(opts ProposerRunnerOptions) (Runner, error) {
 		proposerDelayEPBS:  opts.ProposerDelayEPBS,
 		proposedBlockRoots: opts.ProposedBlockRoots,
 		startEnvelopeDuty:  opts.StartEnvelopeDuty,
-		builders:           opts.Builders,
+		builders:           builders,
 		requestAuthCache:   opts.RequestAuthCache,
 	}, nil
 }

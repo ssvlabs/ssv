@@ -55,6 +55,45 @@ func TestBuilderConfig_Configured(t *testing.T) {
 	require.True(t, (&BuilderConfig{BuilderBoostFactor: &zero}).Configured(), "explicit boost 0 -> configured (not the nil zero value)")
 }
 
+func TestResolveBuilderConfig(t *testing.T) {
+	// A valid config decodes and resolves once: Identity, AuthData bytes, effective knobs, pubkeys.
+	five, nine := uint64(5), uint64(9)
+	cfg := BuilderConfig{
+		MinBid:             5,
+		BuilderBoostFactor: &nine,
+		Entries: []BuilderEntry{
+			{URL: "https://a.example", MaxExecutionPayment: 250},                                                                     // AuthData -> URL bytes; knobs inherited
+			{URL: "https://b.example", AuthData: "0x0102", MinBid: &five, BuilderPubKeys: []string{"0x" + strings.Repeat("ab", 48)}}, // explicit auth + pinned key
+		},
+	}
+	resolved, err := ResolveBuilderConfig(cfg)
+	require.NoError(t, err)
+	require.True(t, resolved.Configured())
+	require.Equal(t, uint64(5), resolved.MinBid)
+	require.Equal(t, uint64(9), resolved.BoostFactor)
+	require.Len(t, resolved.Entries, 2)
+
+	a := resolved.Entries[0]
+	require.Equal(t, BuilderIdentity("https://a.example", []byte("https://a.example")), a.Identity)
+	require.Equal(t, []byte("https://a.example"), a.AuthData, "omitted AuthData -> URL bytes")
+	require.Equal(t, uint64(250), a.MaxExecutionPayment)
+	require.Equal(t, uint64(5), a.MinBid, "inherits config MinBid")
+	require.Equal(t, uint64(9), a.BoostFactor, "inherits config BoostFactor")
+	require.Empty(t, a.BuilderPubKeys)
+
+	b := resolved.Entries[1]
+	require.Equal(t, BuilderIdentity("https://b.example", []byte{0x01, 0x02}), b.Identity)
+	require.Equal(t, []byte{0x01, 0x02}, b.AuthData, "explicit AuthData decoded from hex")
+	require.Equal(t, uint64(5), b.MinBid, "entry MinBid wins over config default")
+	require.Len(t, b.BuilderPubKeys, 1)
+
+	// The zero config resolves to an empty, unconfigured result.
+	empty, err := ResolveBuilderConfig(BuilderConfig{})
+	require.NoError(t, err)
+	require.False(t, empty.Configured())
+	require.Empty(t, empty.Entries)
+}
+
 func TestValidateBuilderConfig(t *testing.T) {
 	validate := func(entries ...BuilderEntry) error {
 		return ValidateBuilderConfig(BuilderConfig{Entries: entries})

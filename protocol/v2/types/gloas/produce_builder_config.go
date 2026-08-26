@@ -1,11 +1,9 @@
 package gloas
 
 import (
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"strconv"
-	"strings"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 )
@@ -73,63 +71,31 @@ func (c *ProduceBuilderConfig) MarshalJSON() ([]byte, error) {
 	})
 }
 
-// builderPubKeys parses the entry's 0x-hex BuilderPubKeys into BLS public keys. The list is validated at
-// startup (ValidateBuilderConfig), so an error here is defensive.
-func (e *BuilderEntry) builderPubKeys() ([]phase0.BLSPubKey, error) {
-	if len(e.BuilderPubKeys) == 0 {
-		return nil, nil
-	}
-	out := make([]phase0.BLSPubKey, 0, len(e.BuilderPubKeys))
-	for _, s := range e.BuilderPubKeys {
-		b, err := hex.DecodeString(strings.TrimPrefix(s, "0x"))
-		if err != nil {
-			return nil, fmt.Errorf("invalid builder pubkey hex: %w", err)
-		}
-		if len(b) != len(phase0.BLSPubKey{}) {
-			return nil, fmt.Errorf("builder pubkey must be %d bytes, got %d", len(phase0.BLSPubKey{}), len(b))
-		}
-		var pk phase0.BLSPubKey
-		copy(pk[:], b)
-		out = append(out, pk)
-	}
-	return out, nil
-}
-
-// BuildProduceConfig resolves cfg against the per-slot reconstructed auths into the produceBlockV4 POST
-// body: one entry per configured builder that has a reconstructed auth (auth-less builders are omitted —
-// beacon-APIs#630 requires an auth per entry), with per-entry knobs resolved against the config defaults
-// (keymanager-APIs#88) and the top-level p2p knobs carried through. It also returns the number of
-// configured builders with no reconstructed auth for the slot — the E1 auth-unavailable signal.
-func BuildProduceConfig(cfg BuilderConfig, auths map[string]*SignedBuilderRequestAuth) (ProduceBuilderConfig, int) {
+// BuildProduceConfig assembles the produceBlockV4 POST body from the resolved cluster config and the
+// per-slot reconstructed auths: one entry per configured builder that has a reconstructed auth (auth-less
+// builders are omitted — beacon-APIs#630 requires an auth per entry), carrying the resolved per-entry and
+// top-level knobs. It also returns the number of configured builders with no reconstructed auth for the
+// slot — the E1 auth-unavailable signal.
+func BuildProduceConfig(cfg ResolvedBuilderConfig, auths map[string]*SignedBuilderRequestAuth) (ProduceBuilderConfig, int) {
 	out := ProduceBuilderConfig{
 		MinBid:             cfg.MinBid,
-		BuilderBoostFactor: cfg.EffectiveBoostFactor(),
+		BuilderBoostFactor: cfg.BoostFactor,
 	}
 	authUnavailable := 0
 	for i := range cfg.Entries {
 		e := &cfg.Entries[i]
-		data, err := e.AuthDataBytes()
-		if err != nil {
-			authUnavailable++ // defensive, validated at startup; count, don't drop silently
-			continue
-		}
-		auth, ok := auths[BuilderIdentity(e.URL, data)]
+		auth, ok := auths[e.Identity]
 		if !ok {
 			authUnavailable++
-			continue
-		}
-		pubkeys, err := e.builderPubKeys()
-		if err != nil {
-			authUnavailable++ // defensive, validated at startup; count, don't drop silently
 			continue
 		}
 		out.Builders = append(out.Builders, ProduceBuilderEntry{
 			URL:                 e.URL,
 			Auth:                auth,
-			BuilderPubKeys:      pubkeys,
+			BuilderPubKeys:      e.BuilderPubKeys,
 			MaxExecutionPayment: e.MaxExecutionPayment,
-			MinBid:              e.EffectiveMinBid(&cfg),
-			BuilderBoostFactor:  e.EffectiveBoostFactor(&cfg),
+			MinBid:              e.MinBid,
+			BuilderBoostFactor:  e.BoostFactor,
 		})
 	}
 	return out, authUnavailable
