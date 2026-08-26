@@ -138,8 +138,8 @@ func (e *BuilderEntry) EffectiveBoostFactor(cfg *BuilderConfig) uint64 {
 
 // ResolvedBuilderEntry is a BuilderEntry with its config strings decoded and knobs resolved once, at load
 // (ResolveBuilderConfig). Identity — BuilderIdentity(URL, AuthData) — is the single key shared by the §5
-// signing round and the §4 auth-cache lookup, so the two match by construction rather than by each
-// re-decoding the config identically on every read.
+// signing round and the §4 auth-cache lookup, so the two match by construction. The slices are shared,
+// never copied (frozen auths alias AuthData, produce bodies alias BuilderPubKeys) — treat them as immutable.
 type ResolvedBuilderEntry struct {
 	Identity            string             // BuilderIdentity(URL, AuthData)
 	URL                 string             // the builder URL, verbatim
@@ -160,13 +160,13 @@ type ResolvedBuilderConfig struct {
 }
 
 // Configured mirrors BuilderConfig.Configured for the resolved form: any entries or top-level p2p knobs.
-func (c ResolvedBuilderConfig) Configured() bool { return c.configured }
+func (c *ResolvedBuilderConfig) Configured() bool { return c.configured }
 
 // ResolveBuilderConfig validates cfg and decodes it into its runtime form in one pass: it applies every
 // builder-set check (entry cap, http(s) URLs, decodable within-limit auth data, no duplicate (URL, auth
 // data) identity, 48-byte builder pubkeys) and, per entry, decodes AuthData, resolves the effective knobs,
-// and computes the Identity. Decoding here — once, at load — is what lets the §4/§5 read sites drop their
-// per-use decode and its unreachable error branch. ValidateBuilderConfig is this, discarding the result.
+// and computes the Identity. Decoding once here is why the §4/§5 read paths carry no parse-error branches.
+// ValidateBuilderConfig is this, discarding the result.
 func ResolveBuilderConfig(cfg BuilderConfig) (ResolvedBuilderConfig, error) {
 	if len(cfg.Entries) > MaxBuilderEntries {
 		return ResolvedBuilderConfig{}, fmt.Errorf("%d builder entries exceed the %d limit", len(cfg.Entries), MaxBuilderEntries)

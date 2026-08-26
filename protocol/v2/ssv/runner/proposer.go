@@ -120,8 +120,8 @@ func NewProposerRunner(opts ProposerRunnerOptions) (Runner, error) {
 		return nil, errors.New("must have one share")
 	}
 
-	// Decode/resolve the builder config once here (once per validator), so the §4 produce path reads
-	// pre-decoded values instead of re-parsing config every proposal. Startup already validated it.
+	// Resolve the builder config once per validator — the §4 produce path reads the pre-decoded form.
+	// Startup already validated it.
 	builders, err := gloas.ResolveBuilderConfig(opts.Builders)
 	if err != nil {
 		return nil, fmt.Errorf("resolve builder config: %w", err)
