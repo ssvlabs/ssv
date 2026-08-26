@@ -868,6 +868,17 @@ func (c *Collector) wrapVerifyPartialSigErr(ctx partialSigVerifyCtx, pSigMessage
 }
 
 func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySig func(*spectypes.PartialSignatureMessages) error) error {
+	// The three Gloas duty types (SIP #94 §3 PTC, §5 proposer preferences, §6 payload envelope)
+	// are not traced yet — the trace store has no schema for them — so skip their messages
+	// explicitly instead of erroring per message in toBNRole now that message validation admits
+	// the roles on the wire (issue #2999). Tracing them is deliberate future exporter work.
+	switch msg.MsgID.GetRoleType() {
+	case spectypes.RolePTCAttester, spectypes.RoleProposerPreferences, spectypes.RoleEnvelopeProposer:
+		return nil
+	default:
+		// Other roles fall through to tracing below.
+	}
+
 	start := time.Now()
 	//nolint:gosec
 	startTime := uint64(start.UnixMilli())
