@@ -39,7 +39,8 @@ byte-identical `data`:
 - The unsigned knobs (`MinBid`, `BuilderBoostFactor`, `MaxExecutionPayment`) don't affect signing, but
   divergence makes the cluster's effective bid policy depend on which operator leads the round — keep them
   identical too. They are sent on the `produceBlockV4` POST and honored by beacon nodes that implement it
-  (beacon-APIs#630); against an older node the request falls back to GET and the knobs are inactive.
+  (beacon-APIs#630); against an older node the request falls back to GET, where only `BuilderBoostFactor`
+  still applies (the GET's long-standing knob) — `MinBid` and the per-entry knobs are POST-only.
 - Remote-signing operators (Web3Signer) cannot produce request-auth partials — there is no request-auth
   signing type there yet. A node with `Builders` entries set and a remote signer warns at startup and drops
   its direct-builder **entries** (keeping the top-level p2p knobs); the cluster still reconstructs auths
@@ -62,7 +63,8 @@ back to the enshrined flow (gossiped bids / self-build) on any failure:
    holds it before the bid request arrives.
 
 A cluster with no `Builders` config keeps the plain enshrined GET produce. A beacon node that predates the
-#630 POST answers it with 404/405; the node falls back to the legacy GET (knobs inactive) for that node.
+#630 POST answers it with 404/405; the node falls back to the legacy GET for that node, still carrying
+`BuilderBoostFactor` (the one knob that GET honors) — `MinBid` and the per-entry knobs are POST-only.
 
 ## How to use
 
