@@ -23,12 +23,13 @@ func TestRequestGloasBeaconBlock(t *testing.T) {
 	blockSSZ, err := gloas.TestingBeaconBlock(7).MarshalSSZ()
 	require.NoError(t, err)
 
-	var gotMethod, gotPath, gotRandao, gotGraffiti, gotAccept, gotIncludePayload string
+	var gotMethod, gotPath, gotRandao, gotGraffiti, gotAccept, gotIncludePayload, gotBoost string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotMethod, gotPath = r.Method, r.URL.Path
 		gotRandao = r.URL.Query().Get("randao_reveal")
 		gotGraffiti = r.URL.Query().Get("graffiti")
 		gotIncludePayload = r.URL.Query().Get("include_payload")
+		gotBoost = r.URL.Query().Get("builder_boost_factor")
 		gotAccept = r.Header.Get("Accept")
 		_, _ = w.Write(blockSSZ)
 	}))
@@ -42,6 +43,7 @@ func TestRequestGloasBeaconBlock(t *testing.T) {
 	require.Equal(t, "0x01", gotRandao)          // randao is the 5th arg, graffiti the 4th
 	// graffiti is padded to a full 32-byte value before hex-encoding (lighthouse rejects a short one).
 	require.Equal(t, "0x02"+strings.Repeat("00", 31), gotGraffiti)
+	require.Empty(t, gotBoost, "no knobs (builder_boost_factor) on an unconfigured cluster's GET")
 	require.Equal(t, "application/octet-stream", gotAccept)
 	require.Equal(t, phase0.Slot(7), got.block.Slot)
 }
@@ -83,26 +85,29 @@ func TestRequestGloasBeaconBlock_POST(t *testing.T) {
 }
 
 // A beacon node that predates the produceBlockV4 POST answers it with 404; produce then retries that node
-// as the legacy GET, transparently.
+// as the legacy GET, carrying builder_boost_factor (the one knob the pre-#630 GET also honors).
 func TestRequestGloasBeaconBlock_POSTFallbackToGET(t *testing.T) {
 	blockSSZ, err := gloas.TestingBeaconBlock(7).MarshalSSZ()
 	require.NoError(t, err)
 
 	var methods []string
+	var getBoost string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		methods = append(methods, r.Method)
 		if r.Method == http.MethodPost {
 			w.WriteHeader(http.StatusNotFound) // node predates beacon-APIs#630
 			return
 		}
+		getBoost = r.URL.Query().Get("builder_boost_factor")
 		_, _ = w.Write(blockSSZ)
 	}))
 	defer srv.Close()
 
-	cfg := &gloas.ProduceBuilderConfig{BuilderBoostFactor: 100}
+	cfg := &gloas.ProduceBuilderConfig{BuilderBoostFactor: 150}
 	got, err := requestGloasBeaconBlock(context.Background(), srv.URL, 7, []byte{0x02}, []byte{0x01}, cfg)
 	require.NoError(t, err)
 	require.Equal(t, []string{http.MethodPost, http.MethodGet}, methods, "POST 404 falls back to GET")
+	require.Equal(t, "150", getBoost, "the fallback GET carries the configured builder_boost_factor")
 	require.Equal(t, phase0.Slot(7), got.block.Slot)
 	require.Empty(t, got.builderURL)
 }
