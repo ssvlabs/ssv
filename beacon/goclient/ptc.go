@@ -29,17 +29,17 @@ const (
 	consensusVersionGloas = "gloas"
 )
 
-// ptcHTTPClient issues the hand-rolled PTC requests; per-call deadlines come from the request context.
+// gloasHTTPClient issues the hand-rolled Gloas requests; per-call deadlines come from the request context.
 // Basic-auth in the (unmasked) beacon address is applied by net/http; custom TLS/client-cert is not — but
 // the main eth2clienthttp path doesn't configure it either (system-CA https + basic-auth only), so no
 // regression. Interim surface, retired with the go-eth2-client rebase.
-var ptcHTTPClient = &http.Client{}
+var gloasHTTPClient = &http.Client{}
 
 // PayloadAttestationDuties returns the PTC duties for the given validators at the epoch, from
 // the first beacon client that responds.
 func (gc *GoClient) PayloadAttestationDuties(ctx context.Context, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*gloas.PTCDuty, error) {
 	return firstClientResult(ctx, gc, "PayloadAttestationDuties", http.MethodPost, func(ctx context.Context, addr string) ([]*gloas.PTCDuty, error) {
-		return requestPTCDuties(ctx, ptcHTTPClient, addr, epoch, validatorIndices)
+		return requestPTCDuties(ctx, gloasHTTPClient, addr, epoch, validatorIndices)
 	})
 }
 
@@ -47,7 +47,7 @@ func (gc *GoClient) PayloadAttestationDuties(ctx context.Context, epoch phase0.E
 // first beacon client that responds.
 func (gc *GoClient) PayloadAttestationData(ctx context.Context, slot phase0.Slot) (*gloas.PayloadAttestationData, error) {
 	return firstClientResult(ctx, gc, "PayloadAttestationData", http.MethodGet, func(ctx context.Context, addr string) (*gloas.PayloadAttestationData, error) {
-		return requestPayloadAttestationData(ctx, ptcHTTPClient, addr, slot)
+		return requestPayloadAttestationData(ctx, gloasHTTPClient, addr, slot)
 	})
 }
 
@@ -58,7 +58,7 @@ func (gc *GoClient) SubmitPayloadAttestationMessages(ctx context.Context, messag
 	defer cancel()
 
 	return gc.multiClientSubmit(ctx, "SubmitPayloadAttestationMessages", func(ctx context.Context, client Client) error {
-		return submitPayloadAttestationMessages(ctx, ptcHTTPClient, gc.clientAddresses[client], messages)
+		return submitPayloadAttestationMessages(ctx, gloasHTTPClient, gc.clientAddresses[client], messages)
 	})
 }
 
@@ -97,7 +97,7 @@ func requestPTCDuties(ctx context.Context, httpClient *http.Client, addr string,
 	var resp struct {
 		Data []*gloas.PTCDuty `json:"data"`
 	}
-	if err := ptcDo(ctx, httpClient, http.MethodPost, addr+fmt.Sprintf(ptcDutiesPath, epoch), body, nil, &resp); err != nil {
+	if err := jsonDo(ctx, httpClient, http.MethodPost, addr+fmt.Sprintf(ptcDutiesPath, epoch), body, nil, &resp); err != nil {
 		return nil, err
 	}
 	return resp.Data, nil
@@ -108,7 +108,7 @@ func requestPayloadAttestationData(ctx context.Context, httpClient *http.Client,
 	var resp struct {
 		Data *gloas.PayloadAttestationData `json:"data"`
 	}
-	if err := ptcDo(ctx, httpClient, http.MethodGet, addr+fmt.Sprintf(payloadAttestationDataPath, slot), nil, nil, &resp); err != nil {
+	if err := jsonDo(ctx, httpClient, http.MethodGet, addr+fmt.Sprintf(payloadAttestationDataPath, slot), nil, nil, &resp); err != nil {
 		return nil, err
 	}
 	if resp.Data == nil {
@@ -124,7 +124,7 @@ func submitPayloadAttestationMessages(ctx context.Context, httpClient *http.Clie
 		return fmt.Errorf("marshal payload attestation messages: %w", err)
 	}
 	headers := map[string]string{"Eth-Consensus-Version": consensusVersionGloas}
-	return ptcDo(ctx, httpClient, http.MethodPost, addr+payloadAttestationsPath, body, headers, nil)
+	return jsonDo(ctx, httpClient, http.MethodPost, addr+payloadAttestationsPath, body, headers, nil)
 }
 
 // httpStatusError is a non-2xx response to a hand-rolled Gloas request. It keeps the status code
@@ -143,7 +143,7 @@ func (e *httpStatusError) Error() string {
 
 // httpDo issues a hand-rolled Gloas HTTP request and returns the response body and headers on a 2xx, or
 // a *httpStatusError otherwise. accept sets the Accept header; a non-nil body is sent with contentType.
-// extraHeaders are applied last. It is the shared core of the JSON (ptcDo) and SSZ (gloasHTTPDo) helpers.
+// extraHeaders are applied last. It is the shared core of the JSON (jsonDo) and SSZ (gloasHTTPDo) helpers.
 func httpDo(ctx context.Context, httpClient *http.Client, method, url string, body []byte, accept, contentType string, extraHeaders map[string]string) ([]byte, http.Header, error) {
 	var reader io.Reader
 	if body != nil {
@@ -177,10 +177,10 @@ func httpDo(ctx context.Context, httpClient *http.Client, method, url string, bo
 	return respBody, resp.Header, nil
 }
 
-// ptcDo issues a JSON request and, on a 2xx response, decodes the body into out (out may be nil to
+// jsonDo issues a JSON request and, on a 2xx response, decodes the body into out (out may be nil to
 // ignore the body). A nil body sends no request payload; extraHeaders are applied last. Non-2xx
 // responses surface as *httpStatusError.
-func ptcDo(ctx context.Context, httpClient *http.Client, method, url string, body []byte, extraHeaders map[string]string, out any) error {
+func jsonDo(ctx context.Context, httpClient *http.Client, method, url string, body []byte, extraHeaders map[string]string, out any) error {
 	respBody, _, err := httpDo(ctx, httpClient, method, url, body, "application/json", "application/json", extraHeaders)
 	if err != nil {
 		return err

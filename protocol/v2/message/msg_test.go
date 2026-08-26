@@ -128,7 +128,7 @@ func TestRunnerRoleFromString_ToString_RoundTrip(t *testing.T) {
 	// and without this sweep FromString could silently stay behind — leaving
 	// CommitteeRunnerRoleFromString to reject the exporter's own emitted string. The
 	// bound and the skip mirror that sweep: 15 is headroom over the spec's current max
-	// role value (6), and values the spec stringifies as "UNDEFINED" (unused or
+	// role value (9), and values the spec stringifies as "UNDEFINED" (unused or
 	// deprecated) are covered by the explicit list above instead.
 	for i := 0; i <= 15; i++ {
 		role := spectypes.RunnerRole(i)

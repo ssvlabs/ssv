@@ -120,7 +120,7 @@ const gloasAttestationDataPath = "/eth/v1/validator/attestation_data?slot=%d&com
 
 func (gc *GoClient) gloasAttestationData(ctx context.Context, slot phase0.Slot) (*phase0.AttestationData, error) {
 	return firstClientResult(ctx, gc, "AttestationData", http.MethodGet, func(ctx context.Context, addr string) (*phase0.AttestationData, error) {
-		return requestGloasAttestationData(ctx, ptcHTTPClient, addr, slot)
+		return requestGloasAttestationData(ctx, gloasHTTPClient, addr, slot)
 	})
 }
 
@@ -128,7 +128,7 @@ func requestGloasAttestationData(ctx context.Context, httpClient *http.Client, a
 	var resp struct {
 		Data *phase0.AttestationData `json:"data"`
 	}
-	if err := ptcDo(ctx, httpClient, http.MethodGet, addr+fmt.Sprintf(gloasAttestationDataPath, slot), nil, nil, &resp); err != nil {
+	if err := jsonDo(ctx, httpClient, http.MethodGet, addr+fmt.Sprintf(gloasAttestationDataPath, slot), nil, nil, &resp); err != nil {
 		return nil, err
 	}
 	if resp.Data == nil {

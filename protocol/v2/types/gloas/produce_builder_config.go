@@ -110,7 +110,8 @@ func BuildProduceConfig(cfg BuilderConfig, auths map[string]*SignedBuilderReques
 		e := &cfg.Entries[i]
 		data, err := e.AuthDataBytes()
 		if err != nil {
-			continue // validated at startup; skip defensively
+			authUnavailable++ // defensive, validated at startup; count, don't drop silently
+			continue
 		}
 		auth, ok := auths[BuilderIdentity(e.URL, data)]
 		if !ok {
@@ -119,7 +120,8 @@ func BuildProduceConfig(cfg BuilderConfig, auths map[string]*SignedBuilderReques
 		}
 		pubkeys, err := e.builderPubKeys()
 		if err != nil {
-			continue // validated at startup; skip defensively
+			authUnavailable++ // defensive, validated at startup; count, don't drop silently
+			continue
 		}
 		out.Builders = append(out.Builders, ProduceBuilderEntry{
 			URL:                 e.URL,
