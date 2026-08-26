@@ -141,21 +141,21 @@ func (e *httpStatusError) Error() string {
 	return fmt.Sprintf("%s %s: status %d: %s", e.method, e.url, e.status, e.body)
 }
 
-// ptcDo issues a JSON request and, on a 2xx response, decodes the body into out (out may be nil
-// to ignore the body). A nil body sends no request payload; extraHeaders are applied last.
-// Non-2xx responses surface as *httpStatusError.
-func ptcDo(ctx context.Context, httpClient *http.Client, method, url string, body []byte, extraHeaders map[string]string, out any) error {
+// httpDo issues a hand-rolled Gloas HTTP request and returns the response body and headers on a 2xx, or
+// a *httpStatusError otherwise. accept sets the Accept header; a non-nil body is sent with contentType.
+// extraHeaders are applied last. It is the shared core of the JSON (ptcDo) and SSZ (gloasHTTPDo) helpers.
+func httpDo(ctx context.Context, httpClient *http.Client, method, url string, body []byte, accept, contentType string, extraHeaders map[string]string) ([]byte, http.Header, error) {
 	var reader io.Reader
 	if body != nil {
 		reader = bytes.NewReader(body)
 	}
 	req, err := http.NewRequestWithContext(ctx, method, url, reader)
 	if err != nil {
-		return fmt.Errorf("new request: %w", err)
+		return nil, nil, fmt.Errorf("new request: %w", err)
 	}
-	req.Header.Set("Accept", "application/json")
-	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", accept)
+	if body != nil && contentType != "" {
+		req.Header.Set("Content-Type", contentType)
 	}
 	for k, v := range extraHeaders {
 		req.Header.Set(k, v)
@@ -163,16 +163,27 @@ func ptcDo(ctx context.Context, httpClient *http.Client, method, url string, bod
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("%s %s: %w", method, url, err)
+		return nil, nil, fmt.Errorf("%s %s: %w", method, url, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return fmt.Errorf("read response body: %w", err)
+		return nil, nil, fmt.Errorf("read response body: %w", err)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return &httpStatusError{method: method, url: url, status: resp.StatusCode, body: strings.TrimSpace(string(respBody))}
+		return nil, nil, &httpStatusError{method: method, url: url, status: resp.StatusCode, body: strings.TrimSpace(string(respBody))}
+	}
+	return respBody, resp.Header, nil
+}
+
+// ptcDo issues a JSON request and, on a 2xx response, decodes the body into out (out may be nil to
+// ignore the body). A nil body sends no request payload; extraHeaders are applied last. Non-2xx
+// responses surface as *httpStatusError.
+func ptcDo(ctx context.Context, httpClient *http.Client, method, url string, body []byte, extraHeaders map[string]string, out any) error {
+	respBody, _, err := httpDo(ctx, httpClient, method, url, body, "application/json", "application/json", extraHeaders)
+	if err != nil {
+		return err
 	}
 	if out != nil {
 		if err := json.Unmarshal(respBody, out); err != nil {
