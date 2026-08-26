@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/ethereum/go-ethereum/rpc"
 )
@@ -24,6 +25,13 @@ const (
 	// errCodeQueryLimit refers to request exceeding the defined limit
 	// https://github.com/ethereum/EIPs/blob/master/EIPS/eip-1474.md
 	errCodeQueryLimit = -32005
+
+	// errCodeMethodNotFound and errCodeMethodNotSupported both indicate the server will not serve
+	// the requested method (both defined by EIP-1474); ELs use one or the other for a method they
+	// lack, e.g. eth_getBlockReceipts.
+	// https://github.com/ethereum/EIPs/blob/master/EIPS/eip-1474.md
+	errCodeMethodNotFound     = -32601
+	errCodeMethodNotSupported = -32004
 )
 
 // isRPCQueryLimitError checks if the provided error is a query limit error.
@@ -31,6 +39,40 @@ func isRPCQueryLimitError(err error) bool {
 	var rpcErr rpc.Error
 	if errors.As(err, &rpcErr) {
 		return rpcErr.ErrorCode() == errCodeQueryLimit
+	}
+
+	return false
+}
+
+// isRPCResponseTooLargeError reports whether err indicates the response exceeded a transport or
+// provider size limit — a websocket read limit, an HTTP body cap, and the like — as opposed to the
+// -32005 query-limit code.
+func isRPCResponseTooLargeError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "read limit exceeded") || // gorilla/websocket
+		strings.Contains(msg, "response too large") ||
+		strings.Contains(msg, "message too big") ||
+		strings.Contains(msg, "request entity too large") // HTTP 413
+}
+
+// isSubdividableLogFetchError reports whether a failed range eth_getLogs is likely to succeed once
+// the range is split: a query-limit code and a response-size limit both shrink under subdivision.
+// Any other error (connection failure, cancellation, a genuine RPC fault) is not subdividable and
+// surfaces immediately.
+func isSubdividableLogFetchError(err error) bool {
+	return isRPCQueryLimitError(err) || isRPCResponseTooLargeError(err)
+}
+
+// isRPCMethodNotFoundError checks if the provided error indicates the server does not
+// support the requested RPC method.
+func isRPCMethodNotFoundError(err error) bool {
+	var rpcErr rpc.Error
+	if errors.As(err, &rpcErr) {
+		code := rpcErr.ErrorCode()
+		return code == errCodeMethodNotFound || code == errCodeMethodNotSupported
 	}
 
 	return false

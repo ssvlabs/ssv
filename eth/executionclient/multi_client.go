@@ -187,12 +187,12 @@ func (mc *MultiClient) assertSameChainID(chainID *big.Int) (*big.Int, bool) {
 // FetchHistoricalLogs retrieves historical logs emitted by the Ethereum SSV contract(s) starting at fromBlock.
 // It delegates the FetchHistoricalLogs call to clients MultiClient is configured with until one of them manages
 // to serve it without an error.
-func (mc *MultiClient) FetchHistoricalLogs(ctx context.Context, fromBlock uint64) (<-chan BlockLogs, <-chan error, error) {
+func (mc *MultiClient) FetchHistoricalLogs(ctx context.Context, fromBlock uint64, verify bool) (<-chan BlockLogs, <-chan error, error) {
 	var logCh <-chan BlockLogs
 	var errCh <-chan error
 
 	f := func(client SingleClientProvider) (any, error) {
-		singleLogsCh, singleErrCh, err := client.FetchHistoricalLogs(ctx, fromBlock)
+		singleLogsCh, singleErrCh, err := client.FetchHistoricalLogs(ctx, fromBlock, verify)
 		if err != nil {
 			return nil, err
 		}
@@ -208,6 +208,67 @@ func (mc *MultiClient) FetchHistoricalLogs(ctx context.Context, fromBlock uint64
 	}
 
 	return logCh, errCh, nil
+}
+
+// VerifyLogs returns the contract's logs for [fromBlock, toBlock] verified complete against
+// block blooms and receipts (used by the background verifier). It is delegated across the
+// configured clients until one serves it without an error.
+func (mc *MultiClient) VerifyLogs(ctx context.Context, fromBlock, toBlock uint64) ([]BlockLogs, error) {
+	var blockLogs []BlockLogs
+
+	f := func(client SingleClientProvider) (any, error) {
+		logs, err := client.VerifyLogs(ctx, fromBlock, toBlock)
+		if err != nil {
+			return nil, err
+		}
+		blockLogs = logs
+		return nil, nil
+	}
+
+	if _, err := mc.call(contextWithMethod(ctx, "VerifyLogs"), f); err != nil {
+		return nil, err
+	}
+
+	return blockLogs, nil
+}
+
+// errReceiptsUnavailable signals, inside BlockContractLogs' failover, that a client couldn't serve
+// eth_getBlockReceipts, so mc.call should move on to a sibling that might. It never leaves the method.
+var errReceiptsUnavailable = errors.New("eth_getBlockReceipts unavailable on this client")
+
+// BlockContractLogs returns the contract's logs for a block from its receipts (authoritative, used
+// by the background verifier to resolve a disagreeing block). It tries the configured clients in
+// turn: the first that serves receipts wins (and routing pins to it). It reports
+// receiptsAvailable=false only when every reachable, healthy client lacks eth_getBlockReceipts; if a
+// client instead errors or is unhealthy, that surfaces as an error so the verifier retries (it may
+// have receipts once recovered) rather than parking the range on one client's gap.
+func (mc *MultiClient) BlockContractLogs(ctx context.Context, block uint64) ([]ethtypes.Log, bool, error) {
+	var logs []ethtypes.Log
+	unavailable := 0
+
+	f := func(client SingleClientProvider) (any, error) {
+		l, available, err := client.BlockContractLogs(ctx, block)
+		if err != nil {
+			return nil, err
+		}
+		if !available {
+			unavailable++
+			return nil, errReceiptsUnavailable // fail over to a client that can serve receipts
+		}
+		logs = l
+		return nil, nil
+	}
+
+	if _, err := mc.call(contextWithMethod(ctx, "BlockContractLogs"), f); err != nil {
+		// Every reachable, healthy client lacked receipts → report unavailable (the verifier parks).
+		// Otherwise some client errored or was unhealthy → surface it so the verifier retries.
+		if unavailable == len(mc.clients) {
+			return nil, false, nil
+		}
+		return nil, false, err
+	}
+
+	return logs, true, nil
 }
 
 // StreamLogs subscribes to events emitted by the Ethereum SSV contract(s) starting at fromBlock.

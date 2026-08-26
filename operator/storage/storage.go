@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/big"
+	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/ethereum/go-ethereum/common"
@@ -35,6 +36,25 @@ type Storage interface {
 
 	SaveLastProcessedBlock(rw basedb.ReadWriter, offset *big.Int) error
 	GetLastProcessedBlock(r basedb.Reader) (*big.Int, bool, error)
+
+	// Background-verification state (see the verifier in eth/eventsyncer): ranges synced
+	// optimistically that await verification, per-block log digests to verify them against,
+	// and a flag requesting a full resync when a miss is found.
+	SaveUnverifiedRange(rw basedb.ReadWriter, r UnverifiedRange) error
+	ListUnverifiedRanges(r basedb.Reader) ([]UnverifiedRange, error)
+	DeleteUnverifiedRange(rw basedb.ReadWriter, from uint64) error
+	SaveBlockLogDigest(rw basedb.ReadWriter, block uint64, digest []byte) error
+	GetBlockLogDigest(r basedb.Reader, block uint64) ([]byte, bool, error)
+	DeleteBlockLogDigest(rw basedb.ReadWriter, block uint64) error
+	SetResyncRequired(rw basedb.ReadWriter) error
+	IsResyncRequired(r basedb.Reader) (bool, error)
+	ClearResyncRequired(rw basedb.ReadWriter) error
+	SetResyncInProgress(rw basedb.ReadWriter) error
+	IsResyncInProgress(r basedb.Reader) (bool, error)
+	ClearResyncInProgress(rw basedb.ReadWriter) error
+	SetLastResyncTime(rw basedb.ReadWriter, t time.Time) error
+	GetLastResyncTime(r basedb.Reader) (time.Time, bool, error)
+	DropVerificationJournal() error
 
 	GetConfig(rw basedb.ReadWriter) (*ConfigLock, bool, error)
 	SaveConfig(rw basedb.ReadWriter, config *ConfigLock) error
