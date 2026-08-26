@@ -44,8 +44,8 @@ func BuilderIdentity(url string, authData []byte) string {
 // divergence is consensus-safe but leaves the effective policy to whoever leads the round. See
 // docs/EXTERNAL_BUILDERS.md.
 //
-// Today only Entries' URL and AuthData are consumed (the request-auth signing round); the unsigned
-// knobs and the resolution below take effect with the produceBlockV4 POST migration (beacon-APIs#630).
+// Entries' URL/AuthData drive the request-auth signing round (§5); the top-level knobs and the
+// per-entry resolution below drive the produceBlockV4 POST body (§4, beacon-APIs#630).
 type BuilderConfig struct {
 	// MinBid is the minimum total payment (Gwei) accepted from a p2p bid, and the default for any
 	// Entry that omits its own MinBid. Zero means no floor.
@@ -90,6 +90,14 @@ func (c *BuilderConfig) EffectiveBoostFactor() uint64 {
 		return defaultBuilderBoostFactor
 	}
 	return *c.BuilderBoostFactor
+}
+
+// Configured reports whether the operator set any direct-builder configuration — entries or the top-level
+// p2p knobs (MinBid / BuilderBoostFactor); the zero value is false. §4 POSTs produceBlockV4 when true and
+// uses the enshrined GET when false (imposing no proposer knobs on an unconfigured cluster) — so a
+// knobs-only config is honored, and clearing entries for a remote signer keeps the p2p knobs.
+func (c *BuilderConfig) Configured() bool {
+	return len(c.Entries) > 0 || c.MinBid != 0 || c.BuilderBoostFactor != nil
 }
 
 // AuthDataBytes returns the exact bytes signed into BuilderRequestAuth.Data for this builder: the

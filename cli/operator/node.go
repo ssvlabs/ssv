@@ -235,7 +235,7 @@ func newNode(
 	if len(cfg.Builders.Entries) > 0 && usingSSVSigner {
 		// Web3Signer has no request-auth type, so this operator could never contribute an auth
 		// partial — warn once here instead of once per builder per emission in the runner.
-		logger.Warn("Builders configured with a remote signer: request-auth signing is unsupported there, disabling the direct-builder overlay on this operator (the cluster still reconstructs auths while at most f operators are remote-signing)")
+		logger.Warn("Builders configured with a remote signer: request-auth signing is unsupported there, dropping this operator's direct-builder entries — its top-level p2p knobs are kept (the cluster still reconstructs auths while at most f operators are remote-signing)")
 		cfg.Builders.Entries = nil
 	}
 
