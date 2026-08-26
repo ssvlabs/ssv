@@ -57,21 +57,14 @@ func (r *proposerPreferencesSlotRunner) runRequestAuthRound(ctx context.Context,
 	r.requestAuths = make(map[[32]byte]*frozenRequestAuth, len(r.builders))
 	for i := range r.builders {
 		entry := &r.builders[i]
-		data, err := entry.AuthDataBytes()
-		if err != nil {
-			// Unreachable when startup validation ran, but never swallow a real error silently.
-			logger.Warn("request auth skipped: invalid auth data",
-				fields.Slot(proposalSlot), zap.String("builder_url", entry.URL), zap.Error(err))
-			continue
-		}
-		auth := &gloas.BuilderRequestAuth{Data: data, Slot: proposalSlot}
+		auth := &gloas.BuilderRequestAuth{Data: entry.AuthData, Slot: proposalSlot}
 		root, err := spectypes.ComputeETHSigningRoot(auth, domain)
 		if err != nil {
 			logger.Warn("request auth skipped: could not compute signing root",
 				fields.Slot(proposalSlot), zap.String("builder_url", entry.URL), zap.Error(err))
 			continue
 		}
-		ref := frozenBuilderRef{identity: gloas.BuilderIdentity(entry.URL, data), url: entry.URL, maxExecutionPayment: entry.MaxExecutionPayment}
+		ref := frozenBuilderRef{identity: entry.Identity, url: entry.URL, maxExecutionPayment: entry.MaxExecutionPayment}
 		if frozen, ok := r.requestAuths[root]; ok {
 			// Another entry froze these exact bytes; register the extra relationship on the shared root.
 			frozen.builders = append(frozen.builders, ref)
