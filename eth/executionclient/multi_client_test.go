@@ -49,6 +49,12 @@ func TestNewMulti(t *testing.T) {
 		require.EqualValues(t, DefaultReqRetryDelay, mc.reqRetryDelay)
 		require.EqualValues(t, DefaultHealthInvalidationInterval, mc.healthInvalidationInterval)
 		require.EqualValues(t, DefaultSyncDistanceTolerance, mc.syncDistanceTolerance)
+
+		// Regression: NewMulti must initialize mc.closed, or Close does close(nil) and panics —
+		// as it did when startup cleanup closed the EL client of a node that failed to assemble.
+		require.NotPanics(t, func() {
+			require.NoError(t, mc.Close())
+		})
 	})
 	t.Run("success, options override default values", func(t *testing.T) {
 		ctx := t.Context()
