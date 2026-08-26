@@ -22,6 +22,26 @@ import (
 	"github.com/ssvlabs/ssv/observability/log"
 )
 
+// newTestMultiClient builds a MultiClient wired for tests: a test logger, an initialized
+// closed channel, and clientAddrs/clientsMu sized to the given clients. Routing test
+// construction through here keeps closed from being forgotten — a nil closed panics Close.
+func newTestMultiClient(t *testing.T, clients ...SingleClientProvider) *MultiClient {
+	t.Helper()
+
+	addrs := make([]string, len(clients))
+	for i := range clients {
+		addrs[i] = fmt.Sprintf("client-%d", i)
+	}
+
+	return &MultiClient{
+		clientAddrs: addrs,
+		clients:     clients,
+		clientsMu:   make([]sync.Mutex, len(clients)),
+		logger:      log.TestLogger(t),
+		closed:      make(chan struct{}),
+	}
+}
+
 func TestNewMulti(t *testing.T) {
 	t.Run("success, default values", func(t *testing.T) {
 		ctx := t.Context()
@@ -87,6 +107,8 @@ func TestNewMulti(t *testing.T) {
 		require.Equal(t, customLogger.Named(log.NameExecutionClientMulti), mc.logger)
 		require.EqualValues(t, customTimeout, mc.reqTimeout)
 		require.EqualValues(t, customSyncDistanceTolerance, mc.syncDistanceTolerance)
+
+		require.NoError(t, mc.Close())
 	})
 	t.Run("no node addresses", func(t *testing.T) {
 		ctx := t.Context()
@@ -115,9 +137,7 @@ func TestMultiClient_assertSameChainIDs(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mc := &MultiClient{
-		logger: log.TestLogger(t),
-	}
+	mc := newTestMultiClient(t)
 
 	expected, ok := mc.assertSameChainID(big.NewInt(5))
 	require.True(t, ok)
@@ -136,10 +156,7 @@ func TestMultiClient_assertSameChainIDs_Error(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mc := &MultiClient{
-		logger: log.TestLogger(t),
-		closed: make(chan struct{}),
-	}
+	mc := newTestMultiClient(t)
 
 	expected, ok := mc.assertSameChainID(big.NewInt(5))
 	require.True(t, ok)
@@ -187,13 +204,7 @@ func TestMultiClient_FetchHistoricalLogs(t *testing.T) {
 		}).
 		AnyTimes()
 
-	mc := &MultiClient{
-		clientAddrs: []string{"mockaddr"},
-		clients:     []SingleClientProvider{mockClient},
-		clientsMu:   make([]sync.Mutex, 1),
-		logger:      log.TestLogger(t),
-		closed:      make(chan struct{}),
-	}
+	mc := newTestMultiClient(t, mockClient)
 
 	logs, errs, err := mc.FetchHistoricalLogs(ctx, 100)
 	require.NoError(t, err)
@@ -246,13 +257,7 @@ func TestMultiClient_FetchHistoricalLogs_AllClientsNothingToSync(t *testing.T) {
 		Return(nil).
 		AnyTimes()
 
-	mc := &MultiClient{
-		clientAddrs: []string{"mockNode1", "mockNode2"},
-		clients:     []SingleClientProvider{mockClient1, mockClient2},
-		clientsMu:   make([]sync.Mutex, 2),
-		logger:      log.TestLogger(t),
-		closed:      make(chan struct{}),
-	}
+	mc := newTestMultiClient(t, mockClient1, mockClient2)
 
 	logs, errs, err := mc.FetchHistoricalLogs(ctx, 100)
 	require.Error(t, err)
@@ -295,13 +300,7 @@ func TestMultiClient_FetchHistoricalLogs_MixedErrors(t *testing.T) {
 		Return(nil).
 		AnyTimes()
 
-	mc := &MultiClient{
-		clientAddrs: []string{"mockNode1", "mockNode2"},
-		clients:     []SingleClientProvider{mockClient1, mockClient2},
-		clientsMu:   make([]sync.Mutex, 2),
-		logger:      log.TestLogger(t),
-		closed:      make(chan struct{}),
-	}
+	mc := newTestMultiClient(t, mockClient1, mockClient2)
 
 	logs, errs, err := mc.FetchHistoricalLogs(ctx, 100)
 	require.Error(t, err)
@@ -354,13 +353,7 @@ func TestMultiClient_StreamLogs_Failover(t *testing.T) {
 				Times(1),
 		)
 
-		mc := &MultiClient{
-			clientAddrs: []string{"mockNode1", "mockNode2"},
-			clients:     []SingleClientProvider{mockClient1, mockClient2},
-			clientsMu:   make([]sync.Mutex, 2),
-			logger:      log.TestLogger(t),
-			closed:      make(chan struct{}),
-		}
+		mc := newTestMultiClient(t, mockClient1, mockClient2)
 
 		logsCh := mc.StreamLogs(ctx, 200)
 
@@ -430,13 +423,7 @@ func TestMultiClient_StreamLogs_Failover(t *testing.T) {
 				Times(1),
 		)
 
-		mc := &MultiClient{
-			clientAddrs: []string{"mockNode1", "mockNode2"},
-			clients:     []SingleClientProvider{mockClient1, mockClient2},
-			clientsMu:   make([]sync.Mutex, 2),
-			logger:      log.TestLogger(t),
-			closed:      make(chan struct{}),
-		}
+		mc := newTestMultiClient(t, mockClient1, mockClient2)
 
 		logsCh := mc.StreamLogs(ctx, 200)
 
@@ -496,13 +483,7 @@ func TestMultiClient_StreamLogs_Failover(t *testing.T) {
 				Times(1),
 		)
 
-		mc := &MultiClient{
-			clientAddrs: []string{"mockNode1", "mockClient2"},
-			clients:     []SingleClientProvider{mockClient1, mockClient2},
-			clientsMu:   make([]sync.Mutex, 2),
-			logger:      log.TestLogger(t),
-			closed:      make(chan struct{}),
-		}
+		mc := newTestMultiClient(t, mockClient1, mockClient2)
 
 		logsCh := mc.StreamLogs(ctx, 200)
 
@@ -587,13 +568,7 @@ func TestMultiClient_StreamLogs_Failover(t *testing.T) {
 				Times(1),
 		)
 
-		mc := &MultiClient{
-			clientAddrs: []string{"mockNode1", "mockNode2", "mockNode3"},
-			clients:     []SingleClientProvider{mockClient1, mockClient2, mockClient3},
-			clientsMu:   make([]sync.Mutex, 3),
-			logger:      log.TestLogger(t),
-			closed:      make(chan struct{}),
-		}
+		mc := newTestMultiClient(t, mockClient1, mockClient2, mockClient3)
 
 		logsCh := mc.StreamLogs(ctx, 200)
 
@@ -633,13 +608,7 @@ func TestMultiClient_StreamLogs_Success(t *testing.T) {
 		}).
 		AnyTimes()
 
-	mc := &MultiClient{
-		clientAddrs: []string{"mockNode1"},
-		clients:     []SingleClientProvider{mockClient},
-		clientsMu:   make([]sync.Mutex, 1),
-		logger:      log.TestLogger(t),
-		closed:      make(chan struct{}),
-	}
+	mc := newTestMultiClient(t, mockClient)
 
 	logsCh := mc.StreamLogs(ctx, 200)
 
@@ -698,13 +667,7 @@ func TestMultiClient_StreamLogs_Interrupted(t *testing.T) {
 			}).
 			AnyTimes()
 
-		mc := &MultiClient{
-			clientAddrs: []string{"mockNode1", "mockClient2"},
-			clients:     []SingleClientProvider{mockClient1, mockClient2},
-			clientsMu:   make([]sync.Mutex, 2),
-			logger:      log.TestLogger(t),
-			closed:      make(chan struct{}),
-		}
+		mc := newTestMultiClient(t, mockClient1, mockClient2)
 
 		logsCh := mc.StreamLogs(ctx, 200)
 		// Make sure logsCh is closed
@@ -756,13 +719,7 @@ func TestMultiClient_StreamLogs_Interrupted(t *testing.T) {
 			}).
 			AnyTimes()
 
-		mc := &MultiClient{
-			clientAddrs: []string{"mockNode1", "mockClient2"},
-			clients:     []SingleClientProvider{mockClient1, mockClient2},
-			clientsMu:   make([]sync.Mutex, 2),
-			logger:      log.TestLogger(t),
-			closed:      make(chan struct{}),
-		}
+		mc := newTestMultiClient(t, mockClient1, mockClient2)
 
 		logsCh := mc.StreamLogs(ctx, 200)
 		// Make sure logsCh is closed
@@ -811,13 +768,7 @@ func TestMultiClient_StreamLogs_Interrupted(t *testing.T) {
 			}).
 			AnyTimes()
 
-		mc := &MultiClient{
-			clientAddrs: []string{"mockNode1", "mockClient2"},
-			clients:     []SingleClientProvider{mockClient1, mockClient2},
-			clientsMu:   make([]sync.Mutex, 2),
-			logger:      log.TestLogger(t),
-			closed:      make(chan struct{}),
-		}
+		mc := newTestMultiClient(t, mockClient1, mockClient2)
 
 		logsCh := mc.StreamLogs(ctx, 200)
 		// Make sure logsCh is closed
@@ -839,13 +790,7 @@ func TestMultiClient_Healthy(t *testing.T) {
 		Return(nil).
 		Times(1)
 
-	mc := &MultiClient{
-		clientAddrs: []string{"mock1"},
-		clients:     []SingleClientProvider{mockClient},
-		clientsMu:   make([]sync.Mutex, 1),
-		logger:      log.TestLogger(t),
-		closed:      make(chan struct{}),
-	}
+	mc := newTestMultiClient(t, mockClient)
 
 	err := mc.Healthy(t.Context())
 	require.NoError(t, err)
@@ -871,13 +816,7 @@ func TestMultiClient_Healthy_MultiClient(t *testing.T) {
 		Return(nil).
 		Times(1)
 
-	mc := &MultiClient{
-		clientAddrs: []string{"mockNode1", "mockNode2"},
-		clients:     []SingleClientProvider{mockClient1, mockClient2},
-		clientsMu:   make([]sync.Mutex, 2),
-		logger:      log.TestLogger(t),
-		closed:      make(chan struct{}),
-	}
+	mc := newTestMultiClient(t, mockClient1, mockClient2)
 
 	err := mc.Healthy(t.Context())
 	require.NoError(t, err, "expected all clients to be healthy")
@@ -902,13 +841,7 @@ func TestMultiClient_Healthy_AllClientsUnhealthy(t *testing.T) {
 		Return(fmt.Errorf("client2 unhealthy")).
 		Times(1)
 
-	mc := &MultiClient{
-		clientAddrs: []string{"mockNode1", "mockNode2"},
-		clients:     []SingleClientProvider{mockClient1, mockClient2},
-		clientsMu:   make([]sync.Mutex, 2),
-		logger:      log.TestLogger(t),
-		closed:      make(chan struct{}),
-	}
+	mc := newTestMultiClient(t, mockClient1, mockClient2)
 
 	err := mc.Healthy(t.Context())
 	require.Error(t, err)
@@ -934,13 +867,7 @@ func TestMultiClient_HeaderByNumber(t *testing.T) {
 		Return(&ethtypes.Header{}, nil).
 		Times(1)
 
-	mc := &MultiClient{
-		clientAddrs: []string{"mock1"},
-		clients:     []SingleClientProvider{mockClient},
-		clientsMu:   make([]sync.Mutex, 1),
-		logger:      log.TestLogger(t),
-		closed:      make(chan struct{}),
-	}
+	mc := newTestMultiClient(t, mockClient)
 
 	blk, err := mc.HeaderByNumber(t.Context(), big.NewInt(1234))
 	require.NoError(t, err)
@@ -965,13 +892,7 @@ func TestMultiClient_HeaderByNumber_Error(t *testing.T) {
 		Return((*ethtypes.Header)(nil), fmt.Errorf("header not found")).
 		Times(1)
 
-	mc := &MultiClient{
-		clientAddrs: []string{"mock1"},
-		clients:     []SingleClientProvider{mockClient},
-		clientsMu:   make([]sync.Mutex, 1),
-		logger:      log.TestLogger(t),
-		closed:      make(chan struct{}),
-	}
+	mc := newTestMultiClient(t, mockClient)
 
 	blk, err := mc.HeaderByNumber(t.Context(), big.NewInt(1234))
 	require.Error(t, err)
@@ -1007,13 +928,7 @@ func TestMultiClient_SubscribeFilterLogs(t *testing.T) {
 		Return(sub, nil).
 		Times(1)
 
-	mc := &MultiClient{
-		clientAddrs: []string{"mock1"},
-		clients:     []SingleClientProvider{mockClient},
-		clientsMu:   make([]sync.Mutex, 1),
-		logger:      log.TestLogger(t),
-		closed:      make(chan struct{}),
-	}
+	mc := newTestMultiClient(t, mockClient)
 
 	subscription, err := mc.SubscribeFilterLogs(t.Context(), query, logCh)
 	require.NoError(t, err)
@@ -1046,13 +961,7 @@ func TestMultiClient_SubscribeFilterLogs_Error(t *testing.T) {
 		Return((ethereum.Subscription)(nil), fmt.Errorf("subscription error")).
 		Times(1)
 
-	mc := &MultiClient{
-		clientAddrs: []string{"mock1"},
-		clients:     []SingleClientProvider{mockClient},
-		clientsMu:   make([]sync.Mutex, 1),
-		logger:      log.TestLogger(t),
-		closed:      make(chan struct{}),
-	}
+	mc := newTestMultiClient(t, mockClient)
 
 	subscription, err := mc.SubscribeFilterLogs(t.Context(), query, logCh)
 	require.Error(t, err)
@@ -1084,13 +993,7 @@ func TestMultiClient_FilterLogs(t *testing.T) {
 		Return(expectedLogs, nil).
 		Times(1)
 
-	mc := &MultiClient{
-		clientAddrs: []string{"mock1"},
-		clients:     []SingleClientProvider{mockClient},
-		clientsMu:   make([]sync.Mutex, 1),
-		logger:      log.TestLogger(t),
-		closed:      make(chan struct{}),
-	}
+	mc := newTestMultiClient(t, mockClient)
 
 	logs, err := mc.FilterLogs(t.Context(), query)
 	require.NoError(t, err)
@@ -1117,13 +1020,7 @@ func TestMultiClient_FilterLogs_Error(t *testing.T) {
 		Return(nil, fmt.Errorf("filtering error")).
 		Times(1)
 
-	mc := &MultiClient{
-		clientAddrs: []string{"mock1"},
-		clients:     []SingleClientProvider{mockClient},
-		clientsMu:   make([]sync.Mutex, 1),
-		logger:      log.TestLogger(t),
-		closed:      make(chan struct{}),
-	}
+	mc := newTestMultiClient(t, mockClient)
 
 	logs, err := mc.FilterLogs(t.Context(), query)
 	require.Error(t, err)
@@ -1135,11 +1032,8 @@ func TestMultiClient_Filterer(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mc := &MultiClient{
-		contractAddress: ethcommon.HexToAddress("0x1234"),
-		logger:          log.TestLogger(t),
-		closed:          make(chan struct{}),
-	}
+	mc := newTestMultiClient(t)
+	mc.contractAddress = ethcommon.HexToAddress("0x1234")
 
 	filterer, err := mc.Filterer()
 	require.NoError(t, err)
@@ -1151,11 +1045,8 @@ func TestMultiClient_Filterer_Integration(t *testing.T) {
 	defer ctrl.Finish()
 
 	contractAddr := ethcommon.HexToAddress("0x1234")
-	mc := &MultiClient{
-		contractAddress: contractAddr,
-		logger:          log.TestLogger(t),
-		closed:          make(chan struct{}),
-	}
+	mc := newTestMultiClient(t)
+	mc.contractAddress = contractAddr
 
 	filterer, err := mc.Filterer()
 	require.NoError(t, err)
@@ -1181,10 +1072,7 @@ func TestMultiClient_Filterer_Integration(t *testing.T) {
 }
 
 func TestMultiClient_ChainID(t *testing.T) {
-	mc := &MultiClient{
-		logger: log.TestLogger(t),
-		closed: make(chan struct{}),
-	}
+	mc := newTestMultiClient(t)
 	mc.chainID.Store(big.NewInt(5))
 
 	cid, err := mc.ChainID(t.Context())
@@ -1193,10 +1081,7 @@ func TestMultiClient_ChainID(t *testing.T) {
 }
 
 func TestMultiClient_ChainID_NotSet(t *testing.T) {
-	mc := &MultiClient{
-		logger: log.TestLogger(t),
-		closed: make(chan struct{}),
-	}
+	mc := newTestMultiClient(t)
 
 	cid, err := mc.ChainID(t.Context())
 	require.NoError(t, err)
@@ -1222,13 +1107,7 @@ func TestMultiClient_Close(t *testing.T) {
 		Return(errors.New("close error")).
 		Times(1)
 
-	mc := &MultiClient{
-		clientAddrs: []string{"mock1", "mock2"},
-		clients:     []SingleClientProvider{mockClient1, mockClient2},
-		clientsMu:   make([]sync.Mutex, 2),
-		logger:      log.TestLogger(t),
-		closed:      make(chan struct{}),
-	}
+	mc := newTestMultiClient(t, mockClient1, mockClient2)
 
 	err := mc.Close()
 	// Should combine errors if multiple close calls fail.
@@ -1262,13 +1141,7 @@ func TestMultiClient_Close_MultiClient(t *testing.T) {
 		Return(nil).
 		Times(1)
 
-	mc := &MultiClient{
-		clientAddrs: []string{"mockNode1", "mockNode2", "mockNode3"},
-		clients:     []SingleClientProvider{mockClient1, mockClient2, mockClient3},
-		clientsMu:   make([]sync.Mutex, 3),
-		logger:      log.TestLogger(t),
-		closed:      make(chan struct{}),
-	}
+	mc := newTestMultiClient(t, mockClient1, mockClient2, mockClient3)
 
 	err := mc.Close()
 	// Should combine errors if multiple close calls fail.
@@ -1296,13 +1169,7 @@ func TestMultiClient_Call_Concurrency(t *testing.T) {
 		}).
 		Times(10)
 
-	mc := &MultiClient{
-		clientAddrs: []string{"mock1"},
-		clients:     []SingleClientProvider{mockClient},
-		clientsMu:   make([]sync.Mutex, 1),
-		logger:      log.TestLogger(t),
-		closed:      make(chan struct{}),
-	}
+	mc := newTestMultiClient(t, mockClient)
 
 	var wg sync.WaitGroup
 	wg.Add(10)
@@ -1349,13 +1216,7 @@ func TestMultiClient_Call_AllClientsFail(t *testing.T) {
 		Return(uint64(0), false, fmt.Errorf("another streaming error")).
 		Times(1)
 
-	mc := &MultiClient{
-		clientAddrs: []string{"mockNode1", "mockNode2"},
-		clients:     []SingleClientProvider{mockClient1, mockClient2},
-		clientsMu:   make([]sync.Mutex, 2),
-		logger:      log.TestLogger(t),
-		closed:      make(chan struct{}),
-	}
+	mc := newTestMultiClient(t, mockClient1, mockClient2)
 
 	// Define a simple function to simulate a call
 	f := func(client SingleClientProvider) (any, error) {
