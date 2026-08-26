@@ -1,13 +1,11 @@
 package goclient
 
 import (
-	"bytes"
 	"context"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 
@@ -92,8 +90,11 @@ func requestGloasBeaconBlock(ctx context.Context, addr string, slot phase0.Slot,
 		// The node doesn't implement the produceBlockV4 POST yet; fall through to the GET.
 	}
 
-	respBody, _, err := gloasHTTPDo(ctx, http.MethodGet, url, nil, "", nil)
+	respBody, header, err := gloasHTTPDo(ctx, http.MethodGet, url, nil, "", nil)
 	if err != nil {
+		return gloasBlockResult{}, err
+	}
+	if err := checkGloasConsensusVersion(header); err != nil {
 		return gloasBlockResult{}, err
 	}
 	block, err := decodeGloasBlock(respBody)
@@ -114,11 +115,24 @@ func requestGloasBeaconBlockPOST(ctx context.Context, url string, builderConfig 
 	if err != nil {
 		return gloasBlockResult{}, err
 	}
+	if err := checkGloasConsensusVersion(header); err != nil {
+		return gloasBlockResult{}, err
+	}
 	block, err := decodeGloasBlock(respBody)
 	if err != nil {
 		return gloasBlockResult{}, err
 	}
 	return gloasBlockResult{block: block, builderURL: header.Get("Eth-Builder-Url")}, nil
+}
+
+// checkGloasConsensusVersion guards against a beacon node returning a wrong-fork block: it fails when the
+// produce response's Eth-Consensus-Version is present but not "gloas". An absent header is tolerated (not
+// every node sets it on the response), with the SSZ decode as the backstop.
+func checkGloasConsensusVersion(header http.Header) error {
+	if v := header.Get("Eth-Consensus-Version"); v != "" && !strings.EqualFold(v, consensusVersionGloas) {
+		return fmt.Errorf("produce response Eth-Consensus-Version %q, want %q", v, consensusVersionGloas)
+	}
+	return nil
 }
 
 // decodeGloasBlock unmarshals an SSZ produce response into a Gloas block.
@@ -149,7 +163,7 @@ func submitGloasBeaconBlock(ctx context.Context, addr string, blockSSZ []byte, e
 // standard code for this, so match on the message: Lodestar returns 500 "BLOCK_ERROR_ALREADY_KNOWN" and
 // "EXECUTION_PAYLOAD_ENVELOPE_ERROR_ALREADY_KNOWN".
 func isAlreadyKnown(err error) bool {
-	var httpErr *gloasHTTPError
+	var httpErr *httpStatusError
 	if !errors.As(err, &httpErr) {
 		return false
 	}
@@ -160,45 +174,23 @@ func isAlreadyKnown(err error) bool {
 // isMethodOrPathMissing reports whether err is a 404/405 — the beacon node does not implement the endpoint
 // or method, the signal to fall back from the produceBlockV4 POST to the legacy GET.
 func isMethodOrPathMissing(err error) bool {
-	var httpErr *gloasHTTPError
-	return errors.As(err, &httpErr) && (httpErr.statusCode == http.StatusNotFound || httpErr.statusCode == http.StatusMethodNotAllowed)
+	var httpErr *httpStatusError
+	return errors.As(err, &httpErr) && (httpErr.status == http.StatusNotFound || httpErr.status == http.StatusMethodNotAllowed)
 }
 
-// gloasHTTPDo issues an HTTP request to a Gloas endpoint and returns the response body and headers on a 2xx,
-// or a *gloasHTTPError otherwise. The Accept is always application/octet-stream (SSZ responses). When body
-// is non-nil it is sent with the given contentType and tagged with the Gloas consensus version.
+// gloasHTTPDo issues an SSZ-accepting request to a Gloas endpoint and returns the response body and headers
+// on a 2xx (see httpDo). A non-nil body is sent with the given contentType and tagged with the Gloas
+// consensus version; extraHeaders are applied last.
 func gloasHTTPDo(ctx context.Context, method, url string, body []byte, contentType string, extraHeaders map[string]string) ([]byte, http.Header, error) {
-	var reader io.Reader
 	if body != nil {
-		reader = bytes.NewReader(body)
+		merged := make(map[string]string, len(extraHeaders)+1)
+		for k, v := range extraHeaders {
+			merged[k] = v
+		}
+		merged["Eth-Consensus-Version"] = consensusVersionGloas
+		extraHeaders = merged
 	}
-	req, err := http.NewRequestWithContext(ctx, method, url, reader)
-	if err != nil {
-		return nil, nil, fmt.Errorf("new request: %w", err)
-	}
-	req.Header.Set("Accept", "application/octet-stream")
-	if body != nil {
-		req.Header.Set("Content-Type", contentType)
-		req.Header.Set("Eth-Consensus-Version", consensusVersionGloas)
-	}
-	for k, v := range extraHeaders {
-		req.Header.Set(k, v)
-	}
-
-	resp, err := ptcHTTPClient.Do(req)
-	if err != nil {
-		return nil, nil, fmt.Errorf("%s %s: %w", method, url, err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, nil, fmt.Errorf("read response body: %w", err)
-	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, nil, &gloasHTTPError{method: method, url: url, statusCode: resp.StatusCode, body: strings.TrimSpace(string(respBody))}
-	}
-	return respBody, resp.Header, nil
+	return httpDo(ctx, ptcHTTPClient, method, url, body, "application/octet-stream", contentType, extraHeaders)
 }
 
 // gloasOctetStreamHTTP issues an octet-stream (SSZ) request to a Gloas produce/publish endpoint and returns
@@ -208,16 +200,4 @@ func gloasHTTPDo(ctx context.Context, method, url string, body []byte, contentTy
 func gloasOctetStreamHTTP(ctx context.Context, method, url string, body []byte, extraHeaders map[string]string) ([]byte, error) {
 	respBody, _, err := gloasHTTPDo(ctx, method, url, body, "application/octet-stream", extraHeaders)
 	return respBody, err
-}
-
-// gloasHTTPError is the error gloasHTTPDo returns for a non-2xx response. It exposes the status code and
-// body so callers can special-case specific beacon-node responses (see isAlreadyKnown, isMethodOrPathMissing).
-type gloasHTTPError struct {
-	method, url string
-	statusCode  int
-	body        string
-}
-
-func (e *gloasHTTPError) Error() string {
-	return fmt.Sprintf("%s %s: status %d: %s", e.method, e.url, e.statusCode, e.body)
 }

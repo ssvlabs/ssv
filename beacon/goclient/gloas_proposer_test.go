@@ -9,9 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	bitfield "github.com/prysmaticlabs/go-bitfield"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
@@ -21,20 +19,8 @@ import (
 // GoClient must satisfy the Gloas proposer beacon-node surface.
 var _ beacon.GloasProposerCalls = (*GoClient)(nil)
 
-func minimalGloasBlock() *gloas.BeaconBlock {
-	return &gloas.BeaconBlock{
-		Slot: 7,
-		Body: &gloas.BeaconBlockBody{
-			ETH1Data:                  &phase0.ETH1Data{BlockHash: make([]byte, 32)},
-			SyncAggregate:             &altair.SyncAggregate{SyncCommitteeBits: bitfield.NewBitvector512()},
-			SignedExecutionPayloadBid: &gloas.SignedExecutionPayloadBid{Message: &gloas.ExecutionPayloadBid{BuilderIndex: gloas.BuilderIndexSelfBuild}},
-			ParentExecutionRequests:   &gloas.ExecutionRequests{},
-		},
-	}
-}
-
 func TestRequestGloasBeaconBlock(t *testing.T) {
-	blockSSZ, err := minimalGloasBlock().MarshalSSZ()
+	blockSSZ, err := gloas.TestingBeaconBlock(7).MarshalSSZ()
 	require.NoError(t, err)
 
 	var gotMethod, gotPath, gotRandao, gotGraffiti, gotAccept, gotIncludePayload string
@@ -63,7 +49,7 @@ func TestRequestGloasBeaconBlock(t *testing.T) {
 // With a builder config, produce is a POST carrying the JSON BuilderConfig body and the winning builder's
 // Eth-Builder-Url is read back from the response (beacon-APIs#630).
 func TestRequestGloasBeaconBlock_POST(t *testing.T) {
-	blockSSZ, err := minimalGloasBlock().MarshalSSZ()
+	blockSSZ, err := gloas.TestingBeaconBlock(7).MarshalSSZ()
 	require.NoError(t, err)
 
 	var gotMethod, gotContentType, gotConsensusVersion string
@@ -99,7 +85,7 @@ func TestRequestGloasBeaconBlock_POST(t *testing.T) {
 // A beacon node that predates the produceBlockV4 POST answers it with 404; produce then retries that node
 // as the legacy GET, transparently.
 func TestRequestGloasBeaconBlock_POSTFallbackToGET(t *testing.T) {
-	blockSSZ, err := minimalGloasBlock().MarshalSSZ()
+	blockSSZ, err := gloas.TestingBeaconBlock(7).MarshalSSZ()
 	require.NoError(t, err)
 
 	var methods []string
@@ -119,6 +105,21 @@ func TestRequestGloasBeaconBlock_POSTFallbackToGET(t *testing.T) {
 	require.Equal(t, []string{http.MethodPost, http.MethodGet}, methods, "POST 404 falls back to GET")
 	require.Equal(t, phase0.Slot(7), got.block.Slot)
 	require.Empty(t, got.builderURL)
+}
+
+// A produce response tagged with a non-Gloas Eth-Consensus-Version is rejected — a wrong-fork guard.
+func TestRequestGloasBeaconBlock_WrongConsensusVersion(t *testing.T) {
+	blockSSZ, err := gloas.TestingBeaconBlock(7).MarshalSSZ()
+	require.NoError(t, err)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Eth-Consensus-Version", "fulu")
+		_, _ = w.Write(blockSSZ)
+	}))
+	defer srv.Close()
+
+	_, err = requestGloasBeaconBlock(context.Background(), srv.URL, 7, []byte{0x02}, []byte{0x01}, nil)
+	require.ErrorContains(t, err, "Eth-Consensus-Version")
+	require.ErrorContains(t, err, "fulu")
 }
 
 func TestSubmitGloasBeaconBlock(t *testing.T) {
@@ -179,8 +180,8 @@ func TestSubmitGloasBeaconBlock_RealErrorPropagates(t *testing.T) {
 func TestIsAlreadyKnown(t *testing.T) {
 	require.False(t, isAlreadyKnown(nil))
 	require.False(t, isAlreadyKnown(errors.New("some other error")))
-	require.False(t, isAlreadyKnown(&gloasHTTPError{statusCode: http.StatusBadRequest, body: "invalid block"}))
-	require.True(t, isAlreadyKnown(&gloasHTTPError{statusCode: http.StatusInternalServerError, body: `{"message":"BLOCK_ERROR_ALREADY_KNOWN"}`}))
-	require.True(t, isAlreadyKnown(&gloasHTTPError{statusCode: http.StatusInternalServerError, body: `{"message":"EXECUTION_PAYLOAD_ENVELOPE_ERROR_ALREADY_KNOWN"}`}))
-	require.True(t, isAlreadyKnown(&gloasHTTPError{statusCode: http.StatusAccepted, body: "block already known"}))
+	require.False(t, isAlreadyKnown(&httpStatusError{status: http.StatusBadRequest, body: "invalid block"}))
+	require.True(t, isAlreadyKnown(&httpStatusError{status: http.StatusInternalServerError, body: `{"message":"BLOCK_ERROR_ALREADY_KNOWN"}`}))
+	require.True(t, isAlreadyKnown(&httpStatusError{status: http.StatusInternalServerError, body: `{"message":"EXECUTION_PAYLOAD_ENVELOPE_ERROR_ALREADY_KNOWN"}`}))
+	require.True(t, isAlreadyKnown(&httpStatusError{status: http.StatusAccepted, body: "block already known"}))
 }
