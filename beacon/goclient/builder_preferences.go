@@ -16,7 +16,8 @@ const builderPreferencesPath = "/eth/v1/validator/builder_preferences"
 
 // SubmitBuilderPreferences submits the ahead-of-time per-builder preferences (issue #2962 phase 3) to
 // every beacon client, succeeding if at least one accepts them; each beacon node forwards every entry to
-// its builder's submitBuilderPreferences. It is best-effort — the caller never blocks on the result.
+// its builder's submitBuilderPreferences. The call is synchronous (bounded by commonTimeout) but
+// best-effort: callers do not gate on the outcome — a failure only surfaces in metrics and logs.
 func (gc *GoClient) SubmitBuilderPreferences(ctx context.Context, preferences []*gloas.BuilderPreferencesEntry) error {
 	ctx, cancel := context.WithTimeout(ctx, gc.commonTimeout)
 	defer cancel()

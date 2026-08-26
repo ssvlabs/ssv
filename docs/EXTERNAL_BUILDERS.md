@@ -38,10 +38,31 @@ byte-identical `data`:
   differences between operators' `URL` values break the quorum unless an explicit shared `AuthData` is set.
 - The unsigned knobs (`MinBid`, `BuilderBoostFactor`, `MaxExecutionPayment`) don't affect signing, but
   divergence makes the cluster's effective bid policy depend on which operator leads the round — keep them
-  identical too. They take effect with the produceBlockV4 POST migration (beacon-APIs#630).
+  identical too. They are sent on the `produceBlockV4` POST and honored by beacon nodes that implement it
+  (beacon-APIs#630); against an older node the request falls back to GET and the knobs are inactive.
 - Remote-signing operators (Web3Signer) cannot produce request-auth partials — there is no request-auth
-  signing type there yet. A node with `Builders` entries set and a remote signer warns at startup and disables the
-  overlay locally; the cluster still reconstructs auths while at most `f` operators are remote-signing.
+  signing type there yet. A node with `Builders` entries set and a remote signer warns at startup and drops
+  its direct-builder **entries** (keeping the top-level p2p knobs); the cluster still reconstructs auths
+  while at most `f` operators are remote-signing.
+
+### How it works
+
+Once at least one builder is configured, three things happen around a proposal — all opt-in, all falling
+back to the enshrined flow (gossiped bids / self-build) on any failure:
+
+1. **Ahead-of-time auth.** Across the proposer lookahead, the §5 dispatcher threshold-signs one
+   `BuilderRequestAuth{data, proposal_slot}` per builder and reconstructs it from operator partials into a
+   per-slot cache.
+2. **Bid request.** At proposal time the node sends `produceBlockV4` as a POST (beacon-APIs#630) carrying
+   the config plus the reconstructed auths; the beacon node authenticates to each builder and returns the
+   winning block. When a builder-API bid wins, the node echoes `Eth-Builder-Url` on publish so the beacon
+   node forwards the block to that builder.
+3. **Preferences.** On each reconstruction the node also submits the ahead-of-time
+   `submitBuilderPreferences` (the `MaxExecutionPayment` cap) through its own beacon node, so the builder
+   holds it before the bid request arrives.
+
+A cluster with no `Builders` config keeps the plain enshrined GET produce. A beacon node that predates the
+#630 POST answers it with 404/405; the node falls back to the legacy GET (knobs inactive) for that node.
 
 ## How to use
 

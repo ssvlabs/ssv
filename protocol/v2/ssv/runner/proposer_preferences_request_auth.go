@@ -180,7 +180,9 @@ func (r *proposerPreferencesSlotRunner) processRequestAuthPartial(ctx context.Co
 // (issue #2962 phase 3, beacon-APIs#630): one BuilderPreferencesEntry per builder sharing the auth, each
 // carrying the proposer pubkey, the builder URL, and the configured max-execution-payment cap. Every
 // operator submits via its own beacon node — the builder dedupes per proposer per slot. Best-effort: a
-// failure never disturbs the §5/auth flow, only its metric and log.
+// failure never disturbs the §5/auth flow, only its metric and log. The submit runs inline on the §5
+// message-queue path; the wait is bounded by commonTimeout, per-validator, and epoch-ahead of the
+// proposal, so it stays off the critical path.
 func (r *proposerPreferencesSlotRunner) submitBuilderPreferences(ctx context.Context, logger *zap.Logger, signed *gloas.SignedBuilderRequestAuth, builders []frozenBuilderRef) {
 	pubkey := phase0.BLSPubKey(r.GetShare().ValidatorPubKey)
 	entries := make([]*gloas.BuilderPreferencesEntry, 0, len(builders))

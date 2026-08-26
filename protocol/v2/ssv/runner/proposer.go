@@ -328,15 +328,20 @@ func (r *ProposerRunner) gloasProposalInput(ctx context.Context, logger *zap.Log
 	}, nil
 }
 
-// gloasBuilderConfig assembles the produceBlockV4 POST body for the direct-builder overlay from the
-// cluster config and the per-slot reconstructed auths, or returns nil when no builders are configured (the
-// enshrined GET path). Builders whose auth missed quorum this slot are omitted and counted for the E1
-// auth-unavailable signal; the top-level p2p knobs are always carried, so a configured cluster still POSTs.
+// gloasBuilderConfig assembles the produceBlockV4 POST body from the cluster's direct-builder config and
+// the per-slot reconstructed auths (beacon-APIs#630), or nil when nothing is configured (→ the enshrined
+// GET). Builders whose auth missed quorum this slot are omitted and counted for the E1 auth-unavailable
+// signal; the top-level p2p knobs are always carried. The goclient falls back to GET per beacon node that
+// predates #630.
 func (r *ProposerRunner) gloasBuilderConfig(ctx context.Context, slot phase0.Slot) *gloas.ProduceBuilderConfig {
-	if r.requestAuthCache == nil || len(r.builders.Entries) == 0 {
+	if !r.builders.Configured() {
 		return nil
 	}
-	cfg, authUnavailable := gloas.BuildProduceConfig(r.builders, r.requestAuthCache.Get(slot))
+	var auths map[string]*gloas.SignedBuilderRequestAuth
+	if r.requestAuthCache != nil {
+		auths = r.requestAuthCache.Get(slot)
+	}
+	cfg, authUnavailable := gloas.BuildProduceConfig(r.builders, auths)
 	if authUnavailable > 0 {
 		recordProposalAuthUnavailable(ctx, authUnavailable)
 	}

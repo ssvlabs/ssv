@@ -47,6 +47,14 @@ func TestBuilderEntry_Effective(t *testing.T) {
 	require.Equal(t, uint64(5), (&BuilderEntry{}).EffectiveMinBid(cfg))
 }
 
+func TestBuilderConfig_Configured(t *testing.T) {
+	require.False(t, (&BuilderConfig{}).Configured(), "zero value is not configured -> §4 uses the enshrined GET")
+	require.True(t, (&BuilderConfig{Entries: []BuilderEntry{{URL: "https://x.example"}}}).Configured(), "entries -> configured")
+	require.True(t, (&BuilderConfig{MinBid: 1}).Configured(), "top-level MinBid -> configured (knobs-only)")
+	zero := uint64(0)
+	require.True(t, (&BuilderConfig{BuilderBoostFactor: &zero}).Configured(), "explicit boost 0 -> configured (not the nil zero value)")
+}
+
 func TestValidateBuilderConfig(t *testing.T) {
 	validate := func(entries ...BuilderEntry) error {
 		return ValidateBuilderConfig(BuilderConfig{Entries: entries})
