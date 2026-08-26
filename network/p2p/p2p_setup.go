@@ -83,6 +83,13 @@ func (n *p2pNetwork) Setup() error {
 	logger = logger.With(zap.String("selfPeer", n.Host().ID().String()))
 	logger.Debug("host configured")
 
+	// Let the message validator recognize the messages we publish ourselves: gossipsub validates
+	// outbound messages locally, and self-discards should be logged as such rather than as publish
+	// failures. Must run before SetupServices wires the validator into pubsub.
+	if n.msgValidator != nil {
+		n.msgValidator.SetSelfPID(n.Host().ID())
+	}
+
 	err = n.SetupServices()
 	if err != nil {
 		return err

@@ -492,6 +492,8 @@ func (v *MockMessageValidator) Validate(ctx context.Context, p peer.ID, pmsg *pu
 	return v.ValidateFunc(ctx, p, pmsg)
 }
 
+func (v *MockMessageValidator) SetSelfPID(peer.ID) {}
+
 type NodeIndex int
 
 type VirtualNode struct {

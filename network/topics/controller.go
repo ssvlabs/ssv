@@ -196,6 +196,16 @@ func (ctrl *topicsCtrl) Broadcast(topicName string, data []byte, timeout time.Du
 
 		err := topic.Publish(ctx, data)
 		if err != nil {
+			var valErr pubsub.ValidationError
+			if errors.As(err, &valErr) {
+				// Our own message was declined by local (pre-publish) validation, not by the
+				// transport — not a publish failure. The message validator has already logged the
+				// specific reason (leveled by outcome) and recorded the discard metric, so keep a
+				// quiet breadcrumb for correlation rather than raising an error.
+				ctrl.logger.Debug("outbound message dropped by local validation",
+					zap.String("topic", topicName), zap.String("verdict", valErr.Reason))
+				return
+			}
 			ctrl.logger.Error("could not publish p2p message", zap.String("topic", topicName), zap.Error(err))
 			return
 		}

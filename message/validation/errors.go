@@ -145,6 +145,23 @@ func (mv *messageValidator) handleValidationError(ctx context.Context, peerID pe
 		With(loggerFields.AsZapFields()...).
 		With(fields.PeerID(peerID))
 
+	// A discard of one of our own outbound messages (see isSelfPeer) is routine and usually benign
+	// — e.g. a decided message a peer already propagated before we published ours — so ignores are
+	// logged at debug rather than surfaced as a failed publish. A self-reject, though, means we
+	// produced a message our own validation refuses, a local bug worth a warn. The specific reason
+	// is surfaced here because the publisher only sees a generic pubsub.ValidationError.
+	if mv.isSelfPeer(peerID) {
+		var valErr Error
+		if errors.As(err, &valErr) && valErr.Reject() {
+			recordRejectedMessage(ctx, loggerFields.Role, valErr.Text())
+			logger.Warn("own outbound message rejected by local validation", zap.Error(err))
+			return pubsub.ValidationReject
+		}
+		recordIgnoredMessage(ctx, loggerFields.Role, discardReason(err))
+		logger.Debug("own outbound message ignored by local validation", zap.Error(err))
+		return pubsub.ValidationIgnore
+	}
+
 	switch {
 	case errors.Is(err, context.DeadlineExceeded):
 		recordIgnoredMessage(ctx, loggerFields.Role, validationTimeoutReason)
@@ -172,6 +189,23 @@ func (mv *messageValidator) handleValidationError(ctx context.Context, peerID pe
 	logger.Debug("rejecting invalid message", zap.Error(valErr))
 	recordRejectedMessage(ctx, loggerFields.Role, valErr.Text())
 	return pubsub.ValidationReject
+}
+
+// discardReason returns the metric label describing why a message was discarded, mirroring how
+// handleValidationError classifies the error into a pubsub result.
+func discardReason(err error) string {
+	switch {
+	case errors.Is(err, context.DeadlineExceeded):
+		return validationTimeoutReason
+	case errors.Is(err, context.Canceled):
+		return validationCanceledReason
+	}
+
+	var valErr Error
+	if errors.As(err, &valErr) {
+		return valErr.Text()
+	}
+	return err.Error()
 }
 
 func (mv *messageValidator) handleValidationSuccess(ctx context.Context, decodedMessage *queue.SSVMessage) pubsub.ValidationResult {
