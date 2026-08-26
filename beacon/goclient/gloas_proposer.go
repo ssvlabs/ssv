@@ -38,7 +38,7 @@ type gloasBlockResult struct {
 func (gc *GoClient) GetGloasBeaconBlock(ctx context.Context, slot phase0.Slot, graffiti, randao []byte, builderConfig *gloas.ProduceBuilderConfig) (*gloas.BeaconBlock, string, error) {
 	// Telemetry labels the route by its primary method: POST when the cluster configured the overlay,
 	// else GET. A per-node GET fallback (a beacon node predating beacon-APIs#630) is still counted under
-	// POST — an accepted, transitional inaccuracy that disappears as beacon nodes adopt the #630 POST.
+	// POST — an accepted transitional inaccuracy, tracked with the POST-first flip on issue #2962.
 	httpMethod := http.MethodGet
 	if builderConfig != nil {
 		httpMethod = http.MethodPost
@@ -187,9 +187,8 @@ func isMethodOrPathMissing(err error) bool {
 }
 
 // gloasHTTPDo issues an SSZ-accepting request to a Gloas endpoint and returns the response body and headers
-// on a 2xx (see httpDo). A non-nil body is sent with the given contentType and tagged with the Gloas
-// consensus version; extraHeaders are applied last, except Eth-Consensus-Version, which is forced to the
-// Gloas version (no caller overrides it).
+// on a 2xx (see httpDo). A non-nil body is sent with the given contentType; extraHeaders are applied last,
+// except Eth-Consensus-Version, which is always the Gloas version on requests with a body.
 func gloasHTTPDo(ctx context.Context, method, url string, body []byte, contentType string, extraHeaders map[string]string) ([]byte, http.Header, error) {
 	if body != nil {
 		merged := make(map[string]string, len(extraHeaders)+1)

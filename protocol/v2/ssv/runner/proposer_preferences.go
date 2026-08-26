@@ -39,8 +39,8 @@ type ProposerPreferencesRunner struct {
 
 	opts ProposerPreferencesRunnerOptions
 
-	// builders is opts.Builders decoded/resolved once here (once per validator), handed to every per-slot
-	// sub-runner so the §5 signing round reads pre-decoded auth data instead of re-parsing config per slot.
+	// builders is opts.Builders resolved once at construction and handed to every per-slot sub-runner:
+	// the §5 signing round reads pre-decoded auth data.
 	builders []gloas.ResolvedBuilderEntry
 
 	// bySlot holds one sub-runner per concurrently-active proposal slot. Accessed only from the
@@ -82,7 +82,7 @@ func NewProposerPreferencesRunner(opts ProposerPreferencesRunnerOptions) (Runner
 		return nil, fmt.Errorf("must have one share")
 	}
 
-	// Decode/resolve the builder config once here (once per validator); startup already validated it.
+	// Resolve the builder config once per validator (see the builders field). Startup already validated it.
 	resolved, err := gloas.ResolveBuilderConfig(opts.Builders)
 	if err != nil {
 		return nil, fmt.Errorf("resolve builder config: %w", err)

@@ -143,7 +143,7 @@ func TestProposerPreferencesRunner_requestAuthConvergence(t *testing.T) {
 	// Phase 3: each reconstruction also submits the builder preferences to the beacon node. Across the
 	// two reconstructions (builder A via stash replay, then the B/D shared root) every configured builder
 	// is submitted, each carrying its reconstructed auth.
-	var submittedURLs []string
+	submittedURLs := make([]string, 0, 3) // the three configured builders asserted below
 	for _, batch := range bn.submittedBuilderPrefs {
 		for _, e := range batch {
 			submittedURLs = append(submittedURLs, e.URL)
