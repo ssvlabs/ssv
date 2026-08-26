@@ -153,7 +153,7 @@ var (
 		meter.Int64Counter(
 			observability.InstrumentName(observabilityNamespace, "builder_preferences.submits"),
 			metric.WithUnit("{submit}"),
-			metric.WithDescription("ahead-of-time Gloas builder-preferences submissions to the beacon node (issue #2962 phase 3), by outcome")))
+			metric.WithDescription("ahead-of-time Gloas builder-preferences submit calls to the beacon node (issue #2962 phase 3), by outcome — batch-level, one call per reconstructed auth root")))
 )
 
 func recordSuccessfulSubmission(ctx context.Context, count int64, epoch phase0.Epoch, role spectypes.BeaconRole) {
@@ -223,8 +223,11 @@ func recordProposalAuthUnavailable(ctx context.Context, count int) {
 	requestAuthUnavailableCounter.Add(ctx, int64(count))
 }
 
-// recordBuilderPreferencesSubmit counts an ahead-of-time builder-preferences submission (issue #2962
-// phase 3) by outcome. It is best-effort at the caller, so a failure is a health signal, not a duty failure.
+// recordBuilderPreferencesSubmit counts an ahead-of-time builder-preferences submit call (issue #2962
+// phase 3) by outcome. It is batch-level — one call per reconstructed auth root, across the builders
+// sharing it — so a non-2xx (including a beacon-APIs#630 partial 400, where the other entries were still
+// accepted) books the whole call a failure; the per-entry IndexedErrorMessage rides the caller's warn log.
+// Best-effort at the caller, so a failure is a health signal, not a duty failure.
 func recordBuilderPreferencesSubmit(ctx context.Context, success bool) {
 	outcome := "failure"
 	if success {
