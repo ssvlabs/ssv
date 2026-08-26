@@ -1383,6 +1383,11 @@ func TestValidatorDutyTrace_toBNRole(t *testing.T) {
 		{spectypes.RoleValidatorRegistration, spectypes.BNRoleValidatorRegistration, false},
 		{spectypes.RoleVoluntaryExit, spectypes.BNRoleVoluntaryExit, false},
 		{spectypes.RoleCommittee, spectypes.BNRoleUnknown, true},
+		// The Gloas duty types are intentionally unmapped: collect skips them before toBNRole
+		// (no trace-store schema yet), so reaching this error would mean the skip regressed.
+		{spectypes.RolePTCAttester, spectypes.BNRoleUnknown, true},
+		{spectypes.RoleProposerPreferences, spectypes.BNRoleUnknown, true},
+		{spectypes.RoleEnvelopeProposer, spectypes.BNRoleUnknown, true},
 	}
 
 	for _, test := range tests {
