@@ -81,6 +81,7 @@ func NewMulti(ctx context.Context, nodeAddrs []string, contractAddr ethcommon.Ad
 		clients:                    make([]SingleClientProvider, len(nodeAddrs)), // initialized with nil values (not connected)
 		clientsMu:                  make([]sync.Mutex, len(nodeAddrs)),
 		contractAddress:            contractAddr,
+		closed:                     make(chan struct{}), // must be non-nil: Close closes it and StreamLogs selects on it
 		logger:                     zap.NewNop(),
 		reqTimeout:                 DefaultReqTimeout,
 		reqRetryDelay:              DefaultReqRetryDelay,
@@ -370,7 +371,7 @@ func (mc *MultiClient) Close() error {
 
 		if client != nil {
 			if err := client.Close(); err != nil {
-				mc.logger.Debug("Failed to close client", zap.String("address", mc.clientAddrs[i]), zap.Error(err))
+				mc.logger.Debug("failed to close client", zap.String("address", mc.clientAddrs[i]), zap.Error(err))
 				multiErr = errors.Join(multiErr, err)
 			}
 		}
