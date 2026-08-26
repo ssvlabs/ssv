@@ -111,8 +111,8 @@ func TestProposerPreferencesRunner_evictPastSlots(t *testing.T) {
 	disp := r.(*ProposerPreferencesRunner)
 
 	current := netCfg.EstimatedCurrentSlot()
-	disp.bySlot[current-1] = newProposerPreferencesSlotRunner(disp.opts)
-	disp.bySlot[current+10] = newProposerPreferencesSlotRunner(disp.opts)
+	disp.bySlot[current-1] = newProposerPreferencesSlotRunner(disp.opts, disp.builders)
+	disp.bySlot[current+10] = newProposerPreferencesSlotRunner(disp.opts, disp.builders)
 
 	disp.evictPastSlots()
 

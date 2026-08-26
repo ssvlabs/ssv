@@ -39,6 +39,10 @@ type ProposerPreferencesRunner struct {
 
 	opts ProposerPreferencesRunnerOptions
 
+	// builders is opts.Builders decoded/resolved once here (once per validator), handed to every per-slot
+	// sub-runner so the §5 signing round reads pre-decoded auth data instead of re-parsing config per slot.
+	builders []gloas.ResolvedBuilderEntry
+
 	// bySlot holds one sub-runner per concurrently-active proposal slot. Accessed only from the
 	// validator's single message-processing goroutine.
 	bySlot map[phase0.Slot]*proposerPreferencesSlotRunner
@@ -78,15 +82,22 @@ func NewProposerPreferencesRunner(opts ProposerPreferencesRunnerOptions) (Runner
 		return nil, fmt.Errorf("must have one share")
 	}
 
+	// Decode/resolve the builder config once here (once per validator); startup already validated it.
+	resolved, err := gloas.ResolveBuilderConfig(opts.Builders)
+	if err != nil {
+		return nil, fmt.Errorf("resolve builder config: %w", err)
+	}
+
 	return &ProposerPreferencesRunner{
 		BaseRunner: &BaseRunner{
 			RunnerRoleType: spectypes.RoleProposerPreferences,
 			NetworkConfig:  opts.NetworkConfig,
 			Share:          opts.Share,
 		},
-		opts:    opts,
-		bySlot:  map[phase0.Slot]*proposerPreferencesSlotRunner{},
-		pending: map[phase0.Slot][]*spectypes.PartialSignatureMessages{},
+		opts:     opts,
+		builders: resolved.Entries,
+		bySlot:   map[phase0.Slot]*proposerPreferencesSlotRunner{},
+		pending:  map[phase0.Slot][]*spectypes.PartialSignatureMessages{},
 	}, nil
 }
 
@@ -104,7 +115,7 @@ func (r *ProposerPreferencesRunner) StartNewDuty(ctx context.Context, logger *za
 	// submitted preference carries over so an unchanged re-emission stays idempotent (no duplicate
 	// broadcast or beacon-node submit; see executeDuty).
 	slot := validatorDuty.DutySlot()
-	sub := newProposerPreferencesSlotRunner(r.opts)
+	sub := newProposerPreferencesSlotRunner(r.opts, r.builders)
 	if prev, ok := r.bySlot[slot]; ok {
 		sub.submittedPreferences = prev.submittedPreferences
 		sub.broadcastPreferences = prev.broadcastPreferences
@@ -330,10 +341,10 @@ type proposerPreferencesSlotRunner struct {
 	// stash replay re-seeds the replacement instead, our own first partial included.
 	broadcastPreferences *gloas.ProposerPreferences
 
-	// builders is the cluster's direct-builder entry list (issue #2962 B1): for each entry executeDuty
-	// freezes and threshold-signs a BuilderRequestAuth{data, proposal_slot} alongside the §5 preference.
-	// Empty disables the request-auth round entirely.
-	builders         []gloas.BuilderEntry
+	// builders is the cluster's resolved direct-builder entry list (issue #2962 B1): for each entry
+	// executeDuty freezes and threshold-signs a BuilderRequestAuth{data, proposal_slot} alongside the §5
+	// preference. Empty disables the request-auth round entirely.
+	builders         []gloas.ResolvedBuilderEntry
 	requestAuthCache *ssv.RequestAuthCache
 
 	// requestAuths maps each frozen BuilderRequestAuth's signing root to the object and its builders;
@@ -361,7 +372,7 @@ type proposerPreferencesSlotRunner struct {
 	reconstructedAuthRoots map[[32]byte]struct{}
 }
 
-func newProposerPreferencesSlotRunner(opts ProposerPreferencesRunnerOptions) *proposerPreferencesSlotRunner {
+func newProposerPreferencesSlotRunner(opts ProposerPreferencesRunnerOptions, builders []gloas.ResolvedBuilderEntry) *proposerPreferencesSlotRunner {
 	return &proposerPreferencesSlotRunner{
 		BaseRunner: &BaseRunner{
 			RunnerRoleType: spectypes.RoleProposerPreferences,
@@ -375,7 +386,7 @@ func newProposerPreferencesSlotRunner(opts ProposerPreferencesRunnerOptions) *pr
 		operatorSigner:         opts.OperatorSigner,
 		feeRecipientProvider:   opts.FeeRecipientProvider,
 		gasLimit:               opts.GasLimit,
-		builders:               opts.Builders.Entries,
+		builders:               builders,
 		requestAuthCache:       opts.RequestAuthCache,
 		broadcastAuthRoots:     map[[32]byte]struct{}{},
 		reconstructedAuthRoots: map[[32]byte]struct{}{},

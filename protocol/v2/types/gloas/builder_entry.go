@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 )
 
 // MaxBuilderEntries caps the configured direct-builder list (issue #2962 D2). It is SSV's own
@@ -134,50 +136,117 @@ func (e *BuilderEntry) EffectiveBoostFactor(cfg *BuilderConfig) uint64 {
 	return cfg.EffectiveBoostFactor()
 }
 
-// ValidateBuilderConfig checks a configured builder set: entry cap, non-empty parseable http(s)
-// URLs, decodable within-limit auth data, no duplicate (URL, auth data) identities (multiple entries
-// MAY share a URL with different auth data), and well-formed optional builder pubkeys. The property
-// that matters most — every operator of every shared cluster holding the identical config — cannot
-// be checked here and stays an operational requirement (docs/EXTERNAL_BUILDERS.md).
-func ValidateBuilderConfig(cfg BuilderConfig) error {
+// ResolvedBuilderEntry is a BuilderEntry with its config strings decoded and knobs resolved once, at load
+// (ResolveBuilderConfig). Identity — BuilderIdentity(URL, AuthData) — is the single key shared by the §5
+// signing round and the §4 auth-cache lookup, so the two match by construction rather than by each
+// re-decoding the config identically on every read.
+type ResolvedBuilderEntry struct {
+	Identity            string             // BuilderIdentity(URL, AuthData)
+	URL                 string             // the builder URL, verbatim
+	AuthData            []byte             // exact bytes signed into BuilderRequestAuth.Data
+	BuilderPubKeys      []phase0.BLSPubKey // decoded bid-signing keys to pin; empty accepts any builder
+	MaxExecutionPayment uint64             // Gwei cap on trusted execution-layer payment
+	MinBid              uint64             // resolved (effective) bid floor, Gwei
+	BoostFactor         uint64             // resolved (effective) bid multiplier, percent
+}
+
+// ResolvedBuilderConfig is a BuilderConfig decoded and resolved once (ResolveBuilderConfig) — the runtime
+// form the §4 produce path and §5 signing round read, so neither re-parses config on the hot path.
+type ResolvedBuilderConfig struct {
+	MinBid      uint64 // top-level p2p-bid floor, Gwei
+	BoostFactor uint64 // top-level p2p-bid multiplier, percent (resolved; neutral 100 by default)
+	Entries     []ResolvedBuilderEntry
+	configured  bool
+}
+
+// Configured mirrors BuilderConfig.Configured for the resolved form: any entries or top-level p2p knobs.
+func (c ResolvedBuilderConfig) Configured() bool { return c.configured }
+
+// ResolveBuilderConfig validates cfg and decodes it into its runtime form in one pass: it applies every
+// builder-set check (entry cap, http(s) URLs, decodable within-limit auth data, no duplicate (URL, auth
+// data) identity, 48-byte builder pubkeys) and, per entry, decodes AuthData, resolves the effective knobs,
+// and computes the Identity. Decoding here — once, at load — is what lets the §4/§5 read sites drop their
+// per-use decode and its unreachable error branch. ValidateBuilderConfig is this, discarding the result.
+func ResolveBuilderConfig(cfg BuilderConfig) (ResolvedBuilderConfig, error) {
 	if len(cfg.Entries) > MaxBuilderEntries {
-		return fmt.Errorf("%d builder entries exceed the %d limit", len(cfg.Entries), MaxBuilderEntries)
+		return ResolvedBuilderConfig{}, fmt.Errorf("%d builder entries exceed the %d limit", len(cfg.Entries), MaxBuilderEntries)
+	}
+	resolved := ResolvedBuilderConfig{
+		MinBid:      cfg.MinBid,
+		BoostFactor: cfg.EffectiveBoostFactor(),
+		configured:  cfg.Configured(),
+		Entries:     make([]ResolvedBuilderEntry, 0, len(cfg.Entries)),
 	}
 	seen := make(map[string]struct{}, len(cfg.Entries))
 	for i := range cfg.Entries {
 		e := &cfg.Entries[i]
 		u, err := url.Parse(e.URL)
 		if err != nil {
-			return fmt.Errorf("builder entry %d: invalid URL: %w", i, err)
+			return ResolvedBuilderConfig{}, fmt.Errorf("builder entry %d: invalid URL: %w", i, err)
 		}
 		if (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
-			return fmt.Errorf("builder entry %d: URL must be http(s) with a host, got %q", i, e.URL)
+			return ResolvedBuilderConfig{}, fmt.Errorf("builder entry %d: URL must be http(s) with a host, got %q", i, e.URL)
 		}
 		// The URL's bytes are signed when they serve as the default auth data.
 		if e.AuthData == "" && len(e.URL) > MaxBuilderAuthDataSize {
-			return fmt.Errorf("builder entry %d: URL is %d bytes, exceeding the %d auth-data limit its bytes default to", i, len(e.URL), MaxBuilderAuthDataSize)
+			return ResolvedBuilderConfig{}, fmt.Errorf("builder entry %d: URL is %d bytes, exceeding the %d auth-data limit its bytes default to", i, len(e.URL), MaxBuilderAuthDataSize)
 		}
 		data, err := e.AuthDataBytes()
 		if err != nil {
-			return fmt.Errorf("builder entry %d: %w", i, err)
+			return ResolvedBuilderConfig{}, fmt.Errorf("builder entry %d: %w", i, err)
 		}
 		if len(data) == 0 {
-			return fmt.Errorf("builder entry %d: AuthData decodes to zero bytes — omit it to default to the URL bytes", i)
+			return ResolvedBuilderConfig{}, fmt.Errorf("builder entry %d: AuthData decodes to zero bytes — omit it to default to the URL bytes", i)
 		}
 		identity := BuilderIdentity(e.URL, data)
 		if _, dup := seen[identity]; dup {
-			return fmt.Errorf("builder entry %d: duplicate (URL, AuthData) identity", i)
+			return ResolvedBuilderConfig{}, fmt.Errorf("builder entry %d: duplicate (URL, AuthData) identity", i)
 		}
 		seen[identity] = struct{}{}
-		for j, pk := range e.BuilderPubKeys {
-			b, err := hex.DecodeString(strings.TrimPrefix(pk, "0x"))
-			if err != nil {
-				return fmt.Errorf("builder entry %d: BuilderPubKeys[%d]: invalid hex: %w", i, j, err)
-			}
-			if len(b) != 48 {
-				return fmt.Errorf("builder entry %d: BuilderPubKeys[%d]: must be 48 bytes, got %d", i, j, len(b))
-			}
+		pubkeys, err := e.builderPubKeys()
+		if err != nil {
+			return ResolvedBuilderConfig{}, fmt.Errorf("builder entry %d: %w", i, err)
 		}
+		resolved.Entries = append(resolved.Entries, ResolvedBuilderEntry{
+			Identity:            identity,
+			URL:                 e.URL,
+			AuthData:            data,
+			BuilderPubKeys:      pubkeys,
+			MaxExecutionPayment: e.MaxExecutionPayment,
+			MinBid:              e.EffectiveMinBid(&cfg),
+			BoostFactor:         e.EffectiveBoostFactor(&cfg),
+		})
 	}
-	return nil
+	return resolved, nil
+}
+
+// builderPubKeys parses the entry's 0x-hex BuilderPubKeys into BLS public keys (empty = accept any
+// builder). Called by ResolveBuilderConfig, which surfaces any error at load.
+func (e *BuilderEntry) builderPubKeys() ([]phase0.BLSPubKey, error) {
+	if len(e.BuilderPubKeys) == 0 {
+		return nil, nil
+	}
+	out := make([]phase0.BLSPubKey, 0, len(e.BuilderPubKeys))
+	for j, s := range e.BuilderPubKeys {
+		b, err := hex.DecodeString(strings.TrimPrefix(s, "0x"))
+		if err != nil {
+			return nil, fmt.Errorf("BuilderPubKeys[%d]: invalid hex: %w", j, err)
+		}
+		if len(b) != 48 {
+			return nil, fmt.Errorf("BuilderPubKeys[%d]: must be 48 bytes, got %d", j, len(b))
+		}
+		var pk phase0.BLSPubKey
+		copy(pk[:], b)
+		out = append(out, pk)
+	}
+	return out, nil
+}
+
+// ValidateBuilderConfig reports whether cfg is a well-formed builder set — the ResolveBuilderConfig checks,
+// discarding the resolved result; used at startup, before the config reaches the runners. The property that
+// matters most — every operator of every shared cluster holding the identical config — cannot be checked
+// here and stays an operational requirement (docs/EXTERNAL_BUILDERS.md).
+func ValidateBuilderConfig(cfg BuilderConfig) error {
+	_, err := ResolveBuilderConfig(cfg)
+	return err
 }

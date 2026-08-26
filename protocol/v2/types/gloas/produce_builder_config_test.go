@@ -23,7 +23,10 @@ func TestBuildProduceConfig(t *testing.T) {
 		BuilderIdentity("https://a.example", []byte("https://a.example")): authA,
 	}
 
-	body, unavailable := BuildProduceConfig(cfg, auths)
+	resolved, err := ResolveBuilderConfig(cfg)
+	require.NoError(t, err)
+
+	body, unavailable := BuildProduceConfig(resolved, auths)
 	require.Equal(t, 1, unavailable, "builder B has no reconstructed auth for the slot")
 	require.Equal(t, uint64(5), body.MinBid)
 	require.Equal(t, uint64(100), body.BuilderBoostFactor, "nil config boost -> neutral 100")
@@ -34,7 +37,7 @@ func TestBuildProduceConfig(t *testing.T) {
 	require.Equal(t, uint64(100), body.Builders[0].BuilderBoostFactor)
 
 	// No reconstructed auths at all -> empty builders list, every configured builder counted unavailable.
-	empty, un := BuildProduceConfig(cfg, nil)
+	empty, un := BuildProduceConfig(resolved, nil)
 	require.Empty(t, empty.Builders)
 	require.Equal(t, 2, un)
 }
