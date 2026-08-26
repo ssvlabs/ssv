@@ -144,7 +144,10 @@ func (mv *messageValidator) validRoleUnion(roleType spectypes.RunnerRole) bool {
 		spectypes.RoleVoluntaryExit,
 		spectypes.RoleAggregatorCommittee,
 		ssvtypes.RoleAggregator,
-		ssvtypes.RoleSyncCommitteeContribution:
+		ssvtypes.RoleSyncCommitteeContribution,
+		spectypes.RolePTCAttester,
+		spectypes.RoleProposerPreferences,
+		spectypes.RoleEnvelopeProposer:
 		return true
 	default:
 		return false
