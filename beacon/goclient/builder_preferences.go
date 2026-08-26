@@ -23,7 +23,7 @@ func (gc *GoClient) SubmitBuilderPreferences(ctx context.Context, preferences []
 	defer cancel()
 
 	return gc.multiClientSubmit(ctx, "SubmitBuilderPreferences", func(ctx context.Context, client Client) error {
-		return submitBuilderPreferences(ctx, ptcHTTPClient, gc.clientAddresses[client], preferences)
+		return submitBuilderPreferences(ctx, gloasHTTPClient, gc.clientAddresses[client], preferences)
 	})
 }
 
@@ -36,7 +36,7 @@ func submitBuilderPreferences(ctx context.Context, httpClient *http.Client, addr
 		return fmt.Errorf("marshal builder preferences: %w", err)
 	}
 	headers := map[string]string{"Eth-Consensus-Version": consensusVersionGloas}
-	err = ptcDo(ctx, httpClient, http.MethodPost, addr+builderPreferencesPath, body, headers, nil)
+	err = jsonDo(ctx, httpClient, http.MethodPost, addr+builderPreferencesPath, body, headers, nil)
 	if isNotFound(err) {
 		return fmt.Errorf("beacon node lacks the gloas builder_preferences endpoint (beacon-APIs#630): %w", err)
 	}

@@ -32,7 +32,7 @@ func (gc *GoClient) ProposerDutiesDependentRoot(ctx context.Context, epoch phase
 		dctx, cancel := context.WithTimeout(detached, gc.commonTimeout)
 		defer cancel()
 		return firstClientResult(dctx, gc, "ProposerDutiesDependentRoot", http.MethodGet, func(ctx context.Context, addr string) (phase0.Root, error) {
-			return requestProposerDutiesDependentRoot(ctx, ptcHTTPClient, addr, epoch)
+			return requestProposerDutiesDependentRoot(ctx, gloasHTTPClient, addr, epoch)
 		})
 	})
 	return root, err
@@ -45,7 +45,7 @@ func requestProposerDutiesDependentRoot(ctx context.Context, httpClient *http.Cl
 		DependentRoot phase0.Root `json:"dependent_root"`
 	}
 	url := addr + fmt.Sprintf("/eth/v2/validator/duties/proposer/%d", epoch)
-	if err := ptcDo(ctx, httpClient, http.MethodGet, url, nil, nil, &resp); err != nil {
+	if err := jsonDo(ctx, httpClient, http.MethodGet, url, nil, nil, &resp); err != nil {
 		return phase0.Root{}, err
 	}
 	return resp.DependentRoot, nil
@@ -59,7 +59,7 @@ func (gc *GoClient) SubmitProposerPreferences(ctx context.Context, preferences [
 	defer cancel()
 
 	return gc.multiClientSubmit(ctx, "SubmitProposerPreferences", func(ctx context.Context, client Client) error {
-		return submitProposerPreferences(ctx, ptcHTTPClient, gc.clientAddresses[client], preferences)
+		return submitProposerPreferences(ctx, gloasHTTPClient, gc.clientAddresses[client], preferences)
 	})
 }
 
@@ -72,7 +72,7 @@ func submitProposerPreferences(ctx context.Context, httpClient *http.Client, add
 		return fmt.Errorf("marshal proposer preferences: %w", err)
 	}
 	headers := map[string]string{"Eth-Consensus-Version": consensusVersionGloas}
-	err = ptcDo(ctx, httpClient, http.MethodPost, addr+proposerPreferencesPath, body, headers, nil)
+	err = jsonDo(ctx, httpClient, http.MethodPost, addr+proposerPreferencesPath, body, headers, nil)
 	if isNotFound(err) {
 		return fmt.Errorf("beacon node lacks the gloas proposer_preferences endpoint (beacon-APIs#608): %w", err)
 	}

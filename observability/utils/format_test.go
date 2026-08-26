@@ -108,7 +108,7 @@ func TestRunnerRoleStringMappersLockstep(t *testing.T) {
 	// Sweep beyond the explicit list so a role added to the spec — which FormatRunnerRole
 	// picks up automatically via (RunnerRole).String() but message.RunnerRoleToString's
 	// hand-written switch would miss — fails here instead of drifting silently. The bound
-	// 15 is headroom over the spec's current max role value (6): roles are appended
+	// 15 is headroom over the spec's current max role value (9): roles are appended
 	// sequentially, so sweeping a few values past the end catches additions without the
 	// spec exporting a count. Roles the spec does not know return "UNDEFINED" and are
 	// skipped: divergence on genuinely unknown values is intentional (the deprecated Alan

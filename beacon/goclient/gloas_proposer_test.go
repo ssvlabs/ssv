@@ -148,6 +148,22 @@ func TestSubmitGloasBeaconBlock(t *testing.T) {
 	require.Equal(t, []byte{0x01, 0x02}, gotBody)
 }
 
+// The Eth-Builder-Url echo (owner-match forwarding, beacon-APIs#630) must reach the publish POST as a
+// request header so the beacon node forwards the block to the winning builder.
+func TestSubmitGloasBeaconBlock_EchoesBuilderURL(t *testing.T) {
+	var gotBuilderURL string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotBuilderURL = r.Header.Get("Eth-Builder-Url")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	err := submitGloasBeaconBlock(context.Background(), srv.URL, []byte{0x01, 0x02},
+		map[string]string{"Eth-Builder-Url": "https://builder.example.com"})
+	require.NoError(t, err)
+	require.Equal(t, "https://builder.example.com", gotBuilderURL)
+}
+
 func TestGloasOctetStreamHTTP_Non2xxIsError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
