@@ -188,7 +188,8 @@ func isMethodOrPathMissing(err error) bool {
 
 // gloasHTTPDo issues an SSZ-accepting request to a Gloas endpoint and returns the response body and headers
 // on a 2xx (see httpDo). A non-nil body is sent with the given contentType and tagged with the Gloas
-// consensus version; extraHeaders are applied last.
+// consensus version; extraHeaders are applied last, except Eth-Consensus-Version, which is forced to the
+// Gloas version (no caller overrides it).
 func gloasHTTPDo(ctx context.Context, method, url string, body []byte, contentType string, extraHeaders map[string]string) ([]byte, http.Header, error) {
 	if body != nil {
 		merged := make(map[string]string, len(extraHeaders)+1)
@@ -198,7 +199,7 @@ func gloasHTTPDo(ctx context.Context, method, url string, body []byte, contentTy
 		merged["Eth-Consensus-Version"] = consensusVersionGloas
 		extraHeaders = merged
 	}
-	return httpDo(ctx, ptcHTTPClient, method, url, body, "application/octet-stream", contentType, extraHeaders)
+	return httpDo(ctx, gloasHTTPClient, method, url, body, "application/octet-stream", contentType, extraHeaders)
 }
 
 // gloasOctetStreamHTTP issues an octet-stream (SSZ) request to a Gloas produce/publish endpoint and returns
