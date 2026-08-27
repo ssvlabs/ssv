@@ -451,6 +451,19 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 		t.Fatalf("peer score inspector: %s", *msg)
 	}
 
+	// Pin the assumption message/validation's self-discard leveling rests on (see
+	// MessageValidator.SetSelfPID): gossipsub runs every locally published message through the
+	// publishing node's own validator, with peerID set to that node's own host ID. Those
+	// self-deliveries are counted on the diagonal (a validator's own index), so a pubsub upgrade
+	// that changes this fails here rather than silently reverting self-discards to inbound-style
+	// logging.
+	mtx.Lock()
+	for i := 0; i < nodeCount; i++ {
+		selfSeen := messageValidators[i].Accepted[i] + messageValidators[i].Ignored[i] + messageValidators[i].Rejected[i]
+		require.Positivef(t, selfSeen, "node %d: own validator never saw the node's own publishes (peerID == own host ID)", i)
+	}
+	mtx.Unlock()
+
 	// Backfill any observer that never latched with its current snapshot so the
 	// diagnostics below report which invariant on which node actually failed
 	// (the loop only records the passing ones).

@@ -138,6 +138,43 @@ var (
 	ErrZeroRound                                       = Error{text: "zero round", reject: true}
 )
 
+// discardKind classifies why a message is being discarded. handleValidationError derives the
+// pubsub result, the metric, and the log level/message from it, so classification is decided
+// in exactly one place (classifyDiscard).
+type discardKind int
+
+const (
+	// discardIgnored is an ignore-classified validation verdict (or an unclassified error).
+	discardIgnored discardKind = iota
+	// discardTimeout means validation ran out of time and the message was dropped unvalidated.
+	discardTimeout
+	// discardCanceled means validation was interrupted, typically by node shutdown.
+	discardCanceled
+	// discardRejected is a reject-classified validation verdict.
+	discardRejected
+)
+
+// classifyDiscard maps a validation error to its discard kind and metric reason label. Context
+// sentinels take precedence over verdict classification: an error that descends from a
+// timeout/cancellation is a validation that didn't finish, not a verdict.
+func classifyDiscard(err error) (discardKind, string) {
+	switch {
+	case errors.Is(err, context.DeadlineExceeded):
+		return discardTimeout, validationTimeoutReason
+	case errors.Is(err, context.Canceled):
+		return discardCanceled, validationCanceledReason
+	}
+
+	var valErr Error
+	if !errors.As(err, &valErr) {
+		return discardIgnored, err.Error()
+	}
+	if valErr.Reject() {
+		return discardRejected, valErr.Text()
+	}
+	return discardIgnored, valErr.Text()
+}
+
 func (mv *messageValidator) handleValidationError(ctx context.Context, peerID peer.ID, decodedMessage *queue.SSVMessage, err error) pubsub.ValidationResult {
 	loggerFields := mv.buildLoggerFields(decodedMessage)
 
@@ -145,67 +182,45 @@ func (mv *messageValidator) handleValidationError(ctx context.Context, peerID pe
 		With(loggerFields.AsZapFields()...).
 		With(fields.PeerID(peerID))
 
-	// A discard of one of our own outbound messages (see isSelfPeer) is routine and usually benign
-	// — e.g. a decided message a peer already propagated before we published ours — so ignores are
-	// logged at debug rather than surfaced as a failed publish. A self-reject, though, means we
-	// produced a message our own validation refuses, a local bug worth a warn. The specific reason
-	// is surfaced here because the publisher only sees a generic pubsub.ValidationError.
+	kind, reason := classifyDiscard(err)
+
+	result := pubsub.ValidationIgnore
+	if kind == discardRejected {
+		result = pubsub.ValidationReject
+		recordRejectedMessage(ctx, loggerFields.Role, reason)
+	} else {
+		recordIgnoredMessage(ctx, loggerFields.Role, reason)
+	}
+
+	// A discard of one of our own outbound messages (see isSelfPeer) is leveled by what it says
+	// about this node: an ignored verdict is routine (e.g. a decided message a peer already
+	// propagated before we published ours) and a cancellation is shutdown noise — debug; a reject
+	// (we produced a message our own validation refuses) or a timeout (the message was never
+	// published because local validation was too slow) is a local problem — warn. The specific
+	// reason is logged here because the publisher only sees a generic pubsub.ValidationError.
 	if mv.isSelfPeer(peerID) {
-		var valErr Error
-		if errors.As(err, &valErr) && valErr.Reject() {
-			recordRejectedMessage(ctx, loggerFields.Role, valErr.Text())
+		switch kind {
+		case discardRejected:
 			logger.Warn("own outbound message rejected by local validation", zap.Error(err))
-			return pubsub.ValidationReject
+		case discardTimeout:
+			logger.Warn("own outbound message dropped by local validation timeout", zap.Error(err))
+		default:
+			logger.Debug("own outbound message ignored by local validation", zap.Error(err))
 		}
-		recordIgnoredMessage(ctx, loggerFields.Role, discardReason(err))
-		logger.Debug("own outbound message ignored by local validation", zap.Error(err))
-		return pubsub.ValidationIgnore
+		return result
 	}
 
-	switch {
-	case errors.Is(err, context.DeadlineExceeded):
-		recordIgnoredMessage(ctx, loggerFields.Role, validationTimeoutReason)
+	switch kind {
+	case discardTimeout:
 		logger.Debug("ignoring message due to validation timeout", zap.Error(err))
-		return pubsub.ValidationIgnore
-	case errors.Is(err, context.Canceled):
-		recordIgnoredMessage(ctx, loggerFields.Role, validationCanceledReason)
+	case discardCanceled:
 		logger.Debug("ignoring message due to validation cancellation", zap.Error(err))
-		return pubsub.ValidationIgnore
-	}
-
-	var valErr Error
-	if !errors.As(err, &valErr) {
-		recordIgnoredMessage(ctx, loggerFields.Role, err.Error())
+	case discardRejected:
+		logger.Debug("rejecting invalid message", zap.Error(err))
+	default:
 		logger.Debug("ignoring invalid message", zap.Error(err))
-		return pubsub.ValidationIgnore
 	}
-
-	if !valErr.Reject() {
-		logger.Debug("ignoring invalid message", zap.Error(valErr))
-		recordIgnoredMessage(ctx, loggerFields.Role, valErr.Text())
-		return pubsub.ValidationIgnore
-	}
-
-	logger.Debug("rejecting invalid message", zap.Error(valErr))
-	recordRejectedMessage(ctx, loggerFields.Role, valErr.Text())
-	return pubsub.ValidationReject
-}
-
-// discardReason returns the metric label describing why a message was discarded, mirroring how
-// handleValidationError classifies the error into a pubsub result.
-func discardReason(err error) string {
-	switch {
-	case errors.Is(err, context.DeadlineExceeded):
-		return validationTimeoutReason
-	case errors.Is(err, context.Canceled):
-		return validationCanceledReason
-	}
-
-	var valErr Error
-	if errors.As(err, &valErr) {
-		return valErr.Text()
-	}
-	return err.Error()
+	return result
 }
 
 func (mv *messageValidator) handleValidationSuccess(ctx context.Context, decodedMessage *queue.SSVMessage) pubsub.ValidationResult {

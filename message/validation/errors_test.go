@@ -13,9 +13,10 @@ import (
 )
 
 // TestHandleValidationError_SelfDiscardLeveling pins the logging contract for validation discards:
-// our own outbound messages (peerID == selfPID) are logged distinctly — ignores quietly at debug
-// (routine, e.g. decided-message dedup), rejects loudly at warn (we produced a message our own
-// validation refuses) — while messages received from peers keep their existing debug logging.
+// our own outbound messages (peerID == selfPID) are leveled by what the discard says about this
+// node — ignores and cancellations at debug (routine dedup, shutdown), rejects and timeouts at
+// warn (own message refused by own validation, or never published because validation was too
+// slow) — while messages received from peers keep their existing debug logging.
 func TestHandleValidationError_SelfDiscardLeveling(t *testing.T) {
 	const self = peer.ID("self")
 	const other = peer.ID("other")
@@ -55,6 +56,24 @@ func TestHandleValidationError_SelfDiscardLeveling(t *testing.T) {
 			wantResult: pubsub.ValidationIgnore,
 			wantLevel:  zapcore.DebugLevel,
 			wantMsg:    "own outbound message ignored by local validation",
+		},
+		{
+			name:       "own drop via validation timeout is surfaced (warn)",
+			selfPID:    self,
+			peerID:     self,
+			err:        context.DeadlineExceeded,
+			wantResult: pubsub.ValidationIgnore,
+			wantLevel:  zapcore.WarnLevel,
+			wantMsg:    "own outbound message dropped by local validation timeout",
+		},
+		{
+			name:       "inbound timeout keeps existing debug log",
+			selfPID:    self,
+			peerID:     other,
+			err:        context.DeadlineExceeded,
+			wantResult: pubsub.ValidationIgnore,
+			wantLevel:  zapcore.DebugLevel,
+			wantMsg:    "ignoring message due to validation timeout",
 		},
 		{
 			name:       "inbound ignore keeps existing debug log",
