@@ -32,9 +32,10 @@ func (gc *GoClient) GetExecutionPayloadEnvelope(ctx context.Context, slot phase0
 //
 // The body is the full SignedExecutionPayloadEnvelope, whose hash-tree root equals the blinded root the §6
 // QBFT signed, so the reconstructed signature stays valid. beacon-APIs#580 also defined a blinded body, but
-// beacon-APIs#624 removed it; the only remaining alternative is the stateless SignedExecutionPayloadEnvelope
-// Contents (envelope + blobs + KZG proofs), not yet wired. Lodestar v1.43.0 — the first CL to implement the
-// endpoint — decodes only the full SignedExecutionPayloadEnvelope.
+// beacon-APIs#624 removed it; the required Eth-Blob-Data-Included header now selects the full envelope
+// (false, the stateful flow — the beacon node attaches the blobs it cached at production) over the deferred,
+// stateless SignedExecutionPayloadEnvelopeContents (true — envelope + blobs + KZG, not yet wired). Lodestar
+// v1.43.0, the first CL to implement the endpoint, takes the full envelope.
 func (gc *GoClient) SubmitExecutionPayloadEnvelope(ctx context.Context, signed *gloas.SignedExecutionPayloadEnvelope) error {
 	body, err := signed.MarshalSSZ()
 	if err != nil {
@@ -63,15 +64,14 @@ func requestExecutionPayloadEnvelope(ctx context.Context, addr string, slot phas
 	return envelope, nil
 }
 
-// submitExecutionPayloadEnvelope POSTs the SSZ-marshaled full signed envelope to the publish endpoint. No
-// Eth-Execution-Payload-Blinded header: Lodestar decodes the body as a full SignedExecutionPayloadEnvelope
-// (gloasOctetStreamHTTP tags the request with the Gloas Eth-Consensus-Version).
-//
-// An already-known response is treated as success: on the self-build path every operator publishes the
-// identical envelope, so the non-winning ones race the canonical one and get EXECUTION_PAYLOAD_ENVELOPE_
-// ERROR_ALREADY_KNOWN — the §6 analog of the §4 block submit (see submitGloasBeaconBlock).
+// submitExecutionPayloadEnvelope POSTs the SSZ full signed envelope, tagged Eth-Blob-Data-Included: false
+// per beacon-APIs#624 (see SubmitExecutionPayloadEnvelope). An already-known response is treated as success:
+// on the self-build path every operator publishes the identical envelope, so the non-winning ones race the
+// canonical one and get EXECUTION_PAYLOAD_ENVELOPE_ERROR_ALREADY_KNOWN — the §6 analog of the §4 block
+// submit (see submitGloasBeaconBlock).
 func submitExecutionPayloadEnvelope(ctx context.Context, addr string, envelopeSSZ []byte) error {
-	_, err := gloasOctetStreamHTTP(ctx, http.MethodPost, addr+gloasPublishEnvelopePath, envelopeSSZ, nil)
+	headers := map[string]string{"Eth-Blob-Data-Included": "false"}
+	_, err := gloasOctetStreamHTTP(ctx, http.MethodPost, addr+gloasPublishEnvelopePath, envelopeSSZ, headers)
 	if isAlreadyKnown(err) {
 		return nil
 	}

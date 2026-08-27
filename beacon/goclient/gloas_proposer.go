@@ -200,8 +200,8 @@ func gloasHTTPDo(ctx context.Context, method, url string, body []byte, contentTy
 
 // gloasOctetStreamHTTP issues an octet-stream (SSZ) request to a Gloas produce/publish endpoint and returns
 // the response body on a 2xx. A nil body GETs; a non-nil body POSTs SSZ tagged with the Gloas consensus
-// version. extraHeaders (e.g. Eth-Builder-Url on publish, Eth-Execution-Payload-Blinded for the §6
-// envelope) are applied last.
+// version. extraHeaders (e.g. Eth-Builder-Url on the §4 block publish, Eth-Blob-Data-Included on the §6
+// envelope publish) are applied last.
 func gloasOctetStreamHTTP(ctx context.Context, method, url string, body []byte, extraHeaders map[string]string) ([]byte, error) {
 	respBody, _, err := gloasHTTPDo(ctx, method, url, body, "application/octet-stream", extraHeaders)
 	return respBody, err
