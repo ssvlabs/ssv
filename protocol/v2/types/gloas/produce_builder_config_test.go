@@ -66,3 +66,16 @@ func TestProduceBuilderConfig_MarshalJSON(t *testing.T) {
 	require.Contains(t, s, `"builder_pubkeys":["0xab00`) // pubkey as 0x-hex
 	require.Contains(t, s, `"auth":{"message":`)         // nested SignedBuilderRequestAuth object
 }
+
+func TestNeutralProduceBuilderConfig(t *testing.T) {
+	// The no-builders local-build body: neutral boost (100), no min-bid floor, and an empty (not null)
+	// builders list — the beacon-APIs#630 shape a cluster with no builders configured POSTs.
+	c := NeutralProduceBuilderConfig()
+	require.Equal(t, uint64(defaultBuilderBoostFactor), c.BuilderBoostFactor)
+	require.Zero(t, c.MinBid)
+	require.Empty(t, c.Builders)
+
+	b, err := json.Marshal(c)
+	require.NoError(t, err)
+	require.JSONEq(t, `{"min_bid":"0","builder_boost_factor":"100","builders":[]}`, string(b))
+}

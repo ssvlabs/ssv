@@ -62,8 +62,9 @@ back to the enshrined flow (gossiped bids / self-build) on any failure:
    `submitBuilderPreferences` (the `MaxExecutionPayment` cap) through its own beacon node, so the builder
    holds it before the bid request arrives.
 
-A cluster with no `Builders` config keeps the plain enshrined GET produce. A beacon node that predates the
-#630 POST answers it with 404/405; the node falls back to the legacy GET for that node, still carrying
+A cluster with no `Builders` config produces over the same `produceBlockV4` POST, sending a neutral
+local-build config (empty `builders`, `builder_boost_factor` 100). A beacon node that predates the #630
+POST answers it with 404/405; the node falls back to the legacy GET for that node, still carrying
 `BuilderBoostFactor` (the one knob that GET honors) — `MinBid` and the per-entry knobs are POST-only.
 
 ## How to use

@@ -100,3 +100,10 @@ func BuildProduceConfig(cfg ResolvedBuilderConfig, auths map[string]*SignedBuild
 	}
 	return out, authUnavailable
 }
+
+// NeutralProduceBuilderConfig is the produceBlockV4 POST body a cluster with no builders configured sends:
+// an empty builders list with the neutral boost factor, so the beacon node weighs any p2p bid at par with
+// the local build (beacon-APIs#630).
+func NeutralProduceBuilderConfig() *ProduceBuilderConfig {
+	return &ProduceBuilderConfig{BuilderBoostFactor: defaultBuilderBoostFactor}
+}

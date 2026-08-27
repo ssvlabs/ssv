@@ -110,10 +110,11 @@ type ProposerPreferencesCalls interface {
 // POST (beacon-APIs#630).
 type GloasProposerCalls interface {
 	// GetGloasBeaconBlock produces a Gloas beacon block for the slot; the payload itself ships
-	// separately in the §6 envelope, so the block carries only the execution-payload bid. A non-nil
-	// builderConfig is sent as the produceBlockV4 POST body (beacon-APIs#630, direct-builder overlay),
-	// with a GET fallback for beacon nodes that predate it; the returned string is the Eth-Builder-Url
-	// of the winning builder-API bid, empty when self-built or won by a p2p bid.
+	// separately in the §6 envelope, so the block carries only the execution-payload bid. It is sent as
+	// the produceBlockV4 POST body (beacon-APIs#630) — builderConfig when the direct-builder overlay is
+	// configured, else a neutral local-build config — with a GET fallback for beacon nodes that predate
+	// it; the returned string is the Eth-Builder-Url of the winning builder-API bid, empty when
+	// self-built or won by a p2p bid.
 	GetGloasBeaconBlock(ctx context.Context, slot phase0.Slot, graffiti, randao []byte, builderConfig *gloas.ProduceBuilderConfig) (*gloas.BeaconBlock, string, error)
 	// SubmitGloasBeaconBlock publishes a signed Gloas block. A non-empty builderURL is echoed as the
 	// Eth-Builder-Url header so the beacon node forwards the block to the winning builder (beacon-APIs#630).

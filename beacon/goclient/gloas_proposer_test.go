@@ -19,32 +19,66 @@ import (
 // GoClient must satisfy the Gloas proposer beacon-node surface.
 var _ beacon.GloasProposerCalls = (*GoClient)(nil)
 
+// With no builder config, produce still POSTs (produceBlockV4 is POST-first per beacon-APIs#630), carrying
+// a neutral local-build body: empty builders with the neutral boost factor (100).
 func TestRequestGloasBeaconBlock(t *testing.T) {
 	blockSSZ, err := gloas.TestingBeaconBlock(7).MarshalSSZ()
 	require.NoError(t, err)
 
-	var gotMethod, gotPath, gotRandao, gotGraffiti, gotAccept, gotIncludePayload, gotBoost string
+	var gotMethod, gotPath, gotRandao, gotGraffiti, gotAccept, gotContentType, gotIncludePayload string
+	var gotBody []byte
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotMethod, gotPath = r.Method, r.URL.Path
 		gotRandao = r.URL.Query().Get("randao_reveal")
 		gotGraffiti = r.URL.Query().Get("graffiti")
 		gotIncludePayload = r.URL.Query().Get("include_payload")
-		gotBoost = r.URL.Query().Get("builder_boost_factor")
 		gotAccept = r.Header.Get("Accept")
+		gotContentType = r.Header.Get("Content-Type")
+		gotBody, _ = io.ReadAll(r.Body)
 		_, _ = w.Write(blockSSZ)
 	}))
 	defer srv.Close()
 
 	got, err := requestGloasBeaconBlock(context.Background(), srv.URL, 7, []byte{0x02}, []byte{0x01}, nil)
 	require.NoError(t, err)
-	require.Equal(t, http.MethodGet, gotMethod)
+	require.Equal(t, http.MethodPost, gotMethod)
 	require.Equal(t, "/eth/v4/validator/blocks/7", gotPath)
 	require.Equal(t, "false", gotIncludePayload) // bare block; payload ships in the §6 envelope
 	require.Equal(t, "0x01", gotRandao)          // randao is the 5th arg, graffiti the 4th
 	// graffiti is padded to a full 32-byte value before hex-encoding (lighthouse rejects a short one).
 	require.Equal(t, "0x02"+strings.Repeat("00", 31), gotGraffiti)
-	require.Empty(t, gotBoost, "no knobs (builder_boost_factor) on an unconfigured cluster's GET")
 	require.Equal(t, "application/octet-stream", gotAccept)
+	require.Equal(t, "application/json", gotContentType)
+	// the neutral local-build body: no builders, p2p bids weighed at par with the local build (100).
+	require.Contains(t, string(gotBody), `"builders":[]`)
+	require.Contains(t, string(gotBody), `"builder_boost_factor":"100"`)
+	require.Equal(t, phase0.Slot(7), got.block.Slot)
+}
+
+// The common transitional path: an unconfigured cluster against a beacon node that still serves only the
+// GET (Lighthouse/Lodestar/Prysm today). The neutral POST is rejected (405) and the fallback GET carries
+// the neutral boost factor (100).
+func TestRequestGloasBeaconBlock_UnconfiguredFallbackToGET(t *testing.T) {
+	blockSSZ, err := gloas.TestingBeaconBlock(7).MarshalSSZ()
+	require.NoError(t, err)
+
+	var methods []string
+	var getBoost string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		methods = append(methods, r.Method)
+		if r.Method == http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed) // node predates beacon-APIs#630 (GET-only)
+			return
+		}
+		getBoost = r.URL.Query().Get("builder_boost_factor")
+		_, _ = w.Write(blockSSZ)
+	}))
+	defer srv.Close()
+
+	got, err := requestGloasBeaconBlock(context.Background(), srv.URL, 7, []byte{0x02}, []byte{0x01}, nil)
+	require.NoError(t, err)
+	require.Equal(t, []string{http.MethodPost, http.MethodGet}, methods, "unconfigured POST 405 falls back to GET")
+	require.Equal(t, "100", getBoost, "the fallback GET carries the neutral builder_boost_factor")
 	require.Equal(t, phase0.Slot(7), got.block.Slot)
 }
 
