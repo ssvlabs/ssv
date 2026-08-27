@@ -127,6 +127,21 @@ func (s *ServerTestSuite) TestListValidators() {
 		resp, err := s.ServeHTTP("GET", PathValidators, nil)
 		require.NoError(t, err)
 		assert.Equal(t, fasthttp.StatusInternalServerError, resp.StatusCode())
+		assert.JSONEq(t, `{"message":"remote signer error"}`, string(resp.Body()))
+
+		s.remoteSigner.ListKeysError = nil
+	})
+
+	t.Run("web3signer error status and reason propagated", func(t *testing.T) {
+		s.remoteSigner.ListKeysError = web3signer.HTTPResponseError{
+			Err:     errors.New("unexpected status: 503"),
+			Status:  fasthttp.StatusServiceUnavailable,
+			ErrText: "web3signer unavailable",
+		}
+		resp, err := s.ServeHTTP("GET", PathValidators, nil)
+		require.NoError(t, err)
+		assert.Equal(t, fasthttp.StatusServiceUnavailable, resp.StatusCode())
+		assert.Contains(t, string(resp.Body()), "web3signer unavailable")
 
 		s.remoteSigner.ListKeysError = nil
 	})

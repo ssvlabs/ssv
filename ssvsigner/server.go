@@ -156,7 +156,7 @@ func (s *Server) handleListValidators(ctx *fasthttp.RequestCtx) {
 	recordRemoteSignerOperation(ctx, opRemoteSignerListKeys, err, time.Since(start))
 	logger = logger.With(zap.Duration("took", time.Since(start)))
 	if err != nil {
-		s.handleWeb3SignerErr(ctx, logger, resp, err)
+		s.handleWeb3SignerErr(ctx, logger, err)
 		return
 	}
 
@@ -227,7 +227,7 @@ func (s *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 	recordRemoteSignerOperation(ctx, opRemoteSignerImportKeystore, err, time.Since(start))
 	logger = logger.With(zap.Duration("took", time.Since(start)))
 	if err != nil {
-		s.handleWeb3SignerErr(ctx, logger, resp, err)
+		s.handleWeb3SignerErr(ctx, logger, err)
 		return
 	}
 
@@ -321,7 +321,7 @@ func (s *Server) handleRemoveValidator(ctx *fasthttp.RequestCtx) {
 	recordRemoteSignerOperation(ctx, opRemoteSignerDeleteKeystore, err, time.Since(start))
 	logger = logger.With(zap.Duration("took", time.Since(start)))
 	if err != nil {
-		s.handleWeb3SignerErr(ctx, logger, resp, err)
+		s.handleWeb3SignerErr(ctx, logger, err)
 		return
 	}
 
@@ -372,7 +372,7 @@ func (s *Server) handleSignValidator(ctx *fasthttp.RequestCtx) {
 	recordRemoteSignerOperation(ctx, opRemoteSignerValidatorSign, err, time.Since(start))
 	logger = logger.With(zap.Duration("took", time.Since(start)))
 	if err != nil {
-		s.handleWeb3SignerErr(ctx, logger, resp, err)
+		s.handleWeb3SignerErr(ctx, logger, err)
 		return
 	}
 
@@ -511,19 +511,22 @@ func (s *Server) handleOperatorDecrypt(ctx *fasthttp.RequestCtx) {
 	s.writeBytes(ctx, logger, decrypted)
 }
 
-func (s *Server) handleWeb3SignerErr(ctx *fasthttp.RequestCtx, logger *zap.Logger, resp any, err error) {
+// handleWeb3SignerErr responds with the upstream Web3Signer status when it is known
+// (falling back to 500 for transport-level failures such as connection errors and
+// timeouts) and an error body describing the failure, so that clients can log the
+// actual reason rather than just a bare status code.
+func (s *Server) handleWeb3SignerErr(ctx *fasthttp.RequestCtx, logger *zap.Logger, err error) {
 	statusCode := fasthttp.StatusInternalServerError
-	if he := new(web3signer.HTTPResponseError); errors.As(err, &he) {
+	var he web3signer.HTTPResponseError
+	if errors.As(err, &he) {
 		statusCode = he.Status
 	}
 
 	logger.Error("web3signer request failed",
 		zap.Error(err),
 		zap.Int("status_code", statusCode),
-		zap.Any("resp", resp),
 	)
-	ctx.SetStatusCode(statusCode)
-	s.writeJSON(ctx, logger, resp)
+	s.writeJSONErr(ctx, logger, statusCode, err)
 }
 
 func (s *Server) writeString(ctx *fasthttp.RequestCtx, logger *zap.Logger, str string) {

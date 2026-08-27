@@ -336,6 +336,7 @@ func (s *SSVSignerClientSuite) TestListValidators() {
 		expectedResponse   interface{}
 		expectedResult     []phase0.BLSPubKey
 		expectError        bool
+		errContains        string
 	}{
 		{
 			name:               "Success", // TODO: fix
@@ -363,6 +364,8 @@ func (s *SSVSignerClientSuite) TestListValidators() {
 			expectedResponse:   nil,
 			expectedResult:     nil,
 			expectError:        true,
+			// writeJSONResponse writes "Server error" as the body for non-OK statuses.
+			errContains: "Server error",
 		},
 	}
 
@@ -378,6 +381,10 @@ func (s *SSVSignerClientSuite) TestListValidators() {
 
 			if tc.expectError {
 				require.Error(t, err, "Expected an error")
+				if tc.errContains != "" {
+					require.ErrorContains(t, err, tc.errContains,
+						"Expected the error to include the server-provided reason")
+				}
 			} else {
 				require.NoError(t, err, "Unexpected error")
 				assert.Equal(t, tc.expectedResult, result)
@@ -424,6 +431,7 @@ func (s *SSVSignerClientSuite) TestSign() {
 		responseBody       string
 		expectedResult     phase0.BLSSignature
 		expectError        bool
+		errContains        string
 	}{
 		{
 			name:               "Success", // TODO: fix
@@ -441,6 +449,7 @@ func (s *SSVSignerClientSuite) TestSign() {
 			expectedStatusCode: http.StatusBadRequest,
 			responseBody:       "invalid signature",
 			expectError:        true,
+			errContains:        "invalid signature",
 		},
 		{
 			name:               "ServerError",
@@ -449,6 +458,7 @@ func (s *SSVSignerClientSuite) TestSign() {
 			expectedStatusCode: http.StatusInternalServerError,
 			responseBody:       "Server error",
 			expectError:        true,
+			errContains:        "Server error",
 		},
 	}
 
@@ -475,6 +485,10 @@ func (s *SSVSignerClientSuite) TestSign() {
 
 			if tc.expectError {
 				require.Error(t, err, "Expected an error")
+				if tc.errContains != "" {
+					require.ErrorContains(t, err, tc.errContains,
+						"Expected the error to include the server-provided reason")
+				}
 			} else {
 				require.NoError(t, err, "Unexpected error")
 				assert.Equal(t, tc.expectedResult, result)
