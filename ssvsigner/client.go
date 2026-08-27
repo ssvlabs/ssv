@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -86,7 +87,7 @@ func (c *Client) ListValidators(ctx context.Context) (listResp []phase0.BLSPubKe
 		Client(c.httpClient).
 		Path(PathValidators).
 		ToJSON(&listResp).
-		AddValidator(requests.ValidatorHandler(requests.DefaultValidator, requests.ToString(&errStr))).
+		AddValidator(requests.ValidatorHandler(requests.DefaultValidator, toLimitedString(&errStr))).
 		Fetch(ctx)
 	if err != nil {
 		return nil, requestFailedErr(err, errStr)
@@ -128,7 +129,7 @@ func (c *Client) AddValidators(ctx context.Context, shares ...ShareKeys) (status
 		BodyJSON(req).
 		Post().
 		ToJSON(&resp).
-		AddValidator(requests.ValidatorHandler(requests.DefaultValidator, requests.ToString(&errStr))).
+		AddValidator(requests.ValidatorHandler(requests.DefaultValidator, toLimitedString(&errStr))).
 		Fetch(ctx)
 
 	if requests.HasStatusErr(err, http.StatusUnprocessableEntity) {
@@ -171,7 +172,7 @@ func (c *Client) RemoveValidators(ctx context.Context, pubKeys ...phase0.BLSPubK
 		BodyJSON(req).
 		Delete().
 		ToJSON(&resp).
-		AddValidator(requests.ValidatorHandler(requests.DefaultValidator, requests.ToString(&errStr))).
+		AddValidator(requests.ValidatorHandler(requests.DefaultValidator, toLimitedString(&errStr))).
 		Fetch(ctx)
 	if err != nil {
 		return nil, requestFailedErr(err, errStr)
@@ -205,7 +206,7 @@ func (c *Client) Sign(ctx context.Context, sharePubKey phase0.BLSPubKey, payload
 		BodyJSON(payload).
 		Post().
 		ToJSON(&resp).
-		AddValidator(requests.ValidatorHandler(requests.DefaultValidator, requests.ToString(&errStr))).
+		AddValidator(requests.ValidatorHandler(requests.DefaultValidator, toLimitedString(&errStr))).
 		Fetch(ctx)
 	if err != nil {
 		return phase0.BLSSignature{}, requestFailedErr(err, errStr)
@@ -228,7 +229,7 @@ func (c *Client) OperatorIdentity(ctx context.Context) (pubKeyBase64 string, err
 		Client(c.httpClient).
 		Path(PathOperatorIdentity).
 		ToString(&resp).
-		AddValidator(requests.ValidatorHandler(requests.DefaultValidator, requests.ToString(&errStr))).
+		AddValidator(requests.ValidatorHandler(requests.DefaultValidator, toLimitedString(&errStr))).
 		Fetch(ctx)
 	if err != nil {
 		return "", requestFailedErr(err, errStr)
@@ -253,7 +254,7 @@ func (c *Client) OperatorSign(ctx context.Context, payload []byte) (signature []
 		BodyBytes(payload).
 		Post().
 		ToBytesBuffer(&respBuf).
-		AddValidator(requests.ValidatorHandler(requests.DefaultValidator, requests.ToString(&errStr))).
+		AddValidator(requests.ValidatorHandler(requests.DefaultValidator, toLimitedString(&errStr))).
 		Fetch(ctx)
 	if err != nil {
 		return nil, requestFailedErr(err, errStr)
@@ -278,7 +279,7 @@ func (c *Client) OperatorEncrypt(ctx context.Context, payload []byte) (encrypted
 		BodyBytes(payload).
 		Post().
 		ToBytesBuffer(&respBuf).
-		AddValidator(requests.ValidatorHandler(requests.DefaultValidator, requests.ToString(&errStr))).
+		AddValidator(requests.ValidatorHandler(requests.DefaultValidator, toLimitedString(&errStr))).
 		Fetch(ctx)
 	if err != nil {
 		if requests.HasStatusErr(err, http.StatusNotFound, http.StatusMethodNotAllowed, http.StatusNotImplemented) {
@@ -306,7 +307,7 @@ func (c *Client) OperatorDecrypt(ctx context.Context, payload []byte) (decrypted
 		BodyBytes(payload).
 		Post().
 		ToBytesBuffer(&respBuf).
-		AddValidator(requests.ValidatorHandler(requests.DefaultValidator, requests.ToString(&errStr))).
+		AddValidator(requests.ValidatorHandler(requests.DefaultValidator, toLimitedString(&errStr))).
 		Fetch(ctx)
 	if err != nil {
 		if requests.HasStatusErr(err, http.StatusNotFound, http.StatusMethodNotAllowed, http.StatusNotImplemented) {
@@ -350,6 +351,21 @@ func (c *Client) MissingKeys(ctx context.Context, localKeys []phase0.BLSPubKey) 
 // maxErrBodyLen caps the error response body attached to returned errors, so a
 // misbehaving server can't blow up error messages and log lines.
 const maxErrBodyLen = 1024
+
+// toLimitedString is like requests.ToString, but reads at most maxErrBodyLen+1
+// bytes, so a misbehaving server can't force unbounded reads while the error
+// response body is captured. requestFailedErr's truncation then trims anything
+// past the cap.
+func toLimitedString(dst *string) requests.ResponseHandler {
+	return func(resp *http.Response) error {
+		b, err := io.ReadAll(io.LimitReader(resp.Body, maxErrBodyLen+1))
+		if err != nil {
+			return err
+		}
+		*dst = string(b)
+		return nil
+	}
+}
 
 // requestFailedErr wraps a failed request error, attaching the error response body
 // (if any) so callers can see the reason reported by the server instead of just a

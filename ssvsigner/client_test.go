@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -1045,4 +1046,49 @@ func TestNewClient_TrimsTrailingSlashFromURL(t *testing.T) {
 
 	require.NotNil(t, client)
 	assert.Equal(t, expectedURL, client.baseURL)
+}
+
+func Test_requestFailedErr(t *testing.T) {
+	baseErr := errors.New("unexpected status: 500")
+
+	t.Run("no body", func(t *testing.T) {
+		err := requestFailedErr(baseErr, "")
+		require.EqualError(t, err, "request failed: unexpected status: 500")
+		require.ErrorIs(t, err, baseErr)
+	})
+
+	t.Run("information-free bodies are skipped", func(t *testing.T) {
+		for _, body := range []string{"null", "{}", "  null  ", "\n"} {
+			require.EqualError(t, requestFailedErr(baseErr, body), "request failed: unexpected status: 500")
+		}
+	})
+
+	t.Run("body attached", func(t *testing.T) {
+		err := requestFailedErr(baseErr, `{"message":"web3signer unavailable"}`)
+		require.ErrorContains(t, err, "web3signer unavailable")
+		require.ErrorIs(t, err, baseErr)
+	})
+
+	t.Run("oversized body truncated", func(t *testing.T) {
+		err := requestFailedErr(baseErr, strings.Repeat("x", maxErrBodyLen+100))
+		require.ErrorContains(t, err, "...(truncated)")
+		require.Less(t, len(err.Error()), maxErrBodyLen+100)
+	})
+}
+
+// TestErrorBodyCaptureIsBounded verifies that a huge error response body is capped
+// at read time (toLimitedString), keeping the returned error bounded.
+func TestErrorBodyCaptureIsBounded(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		// The client stops reading past the cap and drops the connection,
+		// so this write is expected to fail partway through.
+		_, _ = w.Write(bytes.Repeat([]byte("a"), 1<<20)) // 1 MiB
+	}))
+	t.Cleanup(server.Close)
+
+	_, err := NewClient(server.URL).ListValidators(t.Context())
+	require.Error(t, err)
+	require.ErrorContains(t, err, "...(truncated)")
+	require.Less(t, len(err.Error()), 2*maxErrBodyLen)
 }
