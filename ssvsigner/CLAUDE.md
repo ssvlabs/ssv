@@ -29,7 +29,7 @@ SSV Signer is a lightweight remote signing service that acts as a security inter
 2. **Client** (`client.go`): HTTP client library for SSV nodes
     - Used by SSV nodes to communicate with SSV Signer
     - Supports TLS configuration
-    - Implements retry logic and error handling
+    - Single attempt per request: retrying is the caller's responsibility
 
 3. **EKM** (`ekm/`): Ethereum Key Manager abstraction
     - `RemoteKeyManager`: Delegates to SSV Signer (production)
@@ -157,7 +157,7 @@ BATCH_SIZE=20 \
 
 ### Error Handling
 - Decryption errors return specific status for malformed shares
-- Connection failures trigger retries with exponential backoff
+- Requests are not retried by the client; callers that need resilience implement their own retries
 - Web3Signer errors are propagated with original status codes
 
 ### Performance Optimizations
