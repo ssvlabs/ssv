@@ -119,10 +119,7 @@ func fetchMissingKeysWithRetry(
 		case <-time.After(delay):
 		}
 
-		delay *= 2
-		if delay > missingKeysRetryMaxDelay {
-			delay = missingKeysRetryMaxDelay
-		}
+		delay = min(delay*2, missingKeysRetryMaxDelay)
 	}
 }
 

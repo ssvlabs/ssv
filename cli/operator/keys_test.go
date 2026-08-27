@@ -47,12 +47,14 @@ func Test_fetchMissingKeysWithRetry(t *testing.T) {
 		})
 
 		_, err := fetchMissingKeysWithRetry(
-			context.Background(), zap.NewNop(), client, localKeys, 50*time.Millisecond, 10*time.Millisecond)
+			context.Background(), zap.NewNop(), client, localKeys, 200*time.Millisecond, 20*time.Millisecond)
 		require.ErrorContains(t, err, "unexpected status: 500")
 		require.Greater(t, hits, 1, "expected at least one retry within the window")
 	})
 
-	t.Run("stops retrying when ctx is canceled", func(t *testing.T) {
+	// Cancellation during a request: the helper bails at the ctx.Err() check,
+	// before reaching any backoff wait.
+	t.Run("stops retrying when ctx is canceled during a request", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		client := newTestSSVSignerClient(t, func(mux *http.ServeMux) {
 			mux.HandleFunc(ssvsigner.PathValidators, func(w http.ResponseWriter, r *http.Request) {
@@ -66,5 +68,37 @@ func Test_fetchMissingKeysWithRetry(t *testing.T) {
 			ctx, zap.NewNop(), client, localKeys, time.Hour, time.Hour)
 		require.Error(t, err)
 		require.Less(t, time.Since(start), time.Minute, "expected to give up without waiting out the backoff")
+	})
+
+	// Cancellation during the backoff wait (the select), not a request — the path
+	// that keeps shutdown prompt when a signal lands mid-backoff.
+	t.Run("aborts the backoff wait when ctx is canceled between attempts", func(t *testing.T) {
+		client := newTestSSVSignerClient(t, func(mux *http.ServeMux) {
+			mux.HandleFunc(ssvsigner.PathValidators, func(w http.ResponseWriter, r *http.Request) {
+				http.Error(w, "failure", http.StatusInternalServerError)
+			})
+		})
+
+		ctx, cancel := context.WithCancel(context.Background())
+		// First attempt fails fast; cancel while the retry is parked on its long
+		// backoff, so cancellation interrupts the wait itself.
+		go func() {
+			time.Sleep(20 * time.Millisecond)
+			cancel()
+		}()
+
+		done := make(chan error, 1)
+		go func() {
+			_, err := fetchMissingKeysWithRetry(
+				ctx, zap.NewNop(), client, localKeys, time.Hour, 10*time.Second)
+			done <- err
+		}()
+
+		select {
+		case err := <-done:
+			require.Error(t, err)
+		case <-time.After(5 * time.Second):
+			t.Fatal("expected the backoff wait to be interrupted by ctx cancellation")
+		}
 	})
 }
