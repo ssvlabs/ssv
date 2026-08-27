@@ -50,13 +50,13 @@ func TestRequestExecutionPayloadEnvelope(t *testing.T) {
 }
 
 func TestSubmitExecutionPayloadEnvelope(t *testing.T) {
-	var gotMethod, gotPath, gotVersion, gotContentType, gotBlinded string
+	var gotMethod, gotPath, gotVersion, gotContentType, gotBlobDataIncluded string
 	var gotBody []byte
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotMethod, gotPath = r.Method, r.URL.Path
 		gotVersion = r.Header.Get("Eth-Consensus-Version")
 		gotContentType = r.Header.Get("Content-Type")
-		gotBlinded = r.Header.Get("Eth-Execution-Payload-Blinded")
+		gotBlobDataIncluded = r.Header.Get("Eth-Blob-Data-Included")
 		gotBody, _ = io.ReadAll(r.Body)
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -67,7 +67,8 @@ func TestSubmitExecutionPayloadEnvelope(t *testing.T) {
 	require.Equal(t, http.MethodPost, gotMethod)
 	require.Equal(t, "/eth/v1/beacon/execution_payload_envelopes", gotPath)
 	require.Equal(t, consensusVersionGloas, gotVersion)
-	require.Empty(t, gotBlinded) // full envelope, not blinded — no Eth-Execution-Payload-Blinded header
+	// full envelope (stateful flow), not the blobs-carrying Contents — the required beacon-APIs#624 header.
+	require.Equal(t, "false", gotBlobDataIncluded)
 	require.Equal(t, "application/octet-stream", gotContentType)
 	require.Equal(t, []byte{0x01, 0x02}, gotBody)
 }
@@ -82,10 +83,10 @@ func TestSubmitExecutionPayloadEnvelope_PublishesFullSignedEnvelope(t *testing.T
 	wantBody, err := signed.MarshalSSZ()
 	require.NoError(t, err)
 
-	var gotBlinded string
+	var gotBlobDataIncluded string
 	var gotBody []byte
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotBlinded = r.Header.Get("Eth-Execution-Payload-Blinded")
+		gotBlobDataIncluded = r.Header.Get("Eth-Blob-Data-Included")
 		gotBody, _ = io.ReadAll(r.Body)
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -100,7 +101,7 @@ func TestSubmitExecutionPayloadEnvelope_PublishesFullSignedEnvelope(t *testing.T
 	}
 
 	require.NoError(t, gc.SubmitExecutionPayloadEnvelope(t.Context(), signed))
-	require.Empty(t, gotBlinded, "publish must not blind the envelope")
+	require.Equal(t, "false", gotBlobDataIncluded, "publish selects the full envelope, not the blobs-carrying Contents")
 	require.Equal(t, wantBody, gotBody, "publish must send the full signed envelope SSZ")
 }
 
