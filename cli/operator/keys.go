@@ -81,9 +81,14 @@ func ensureNoMissingKeys(
 
 // fetchMissingKeysWithRetry calls MissingKeys on the remote signer, retrying failed
 // attempts with exponential backoff until the window elapses or ctx is canceled.
+// The window bounds when attempts may start, not the total duration: an in-flight
+// attempt is never cut short (each is already bounded by the client's request
+// timeout), so the final one may finish up to that timeout past the window. A hard
+// cutoff would only clip the last attempt and mask its underlying error with a
+// context error.
 // All errors are retried: transient ones (the signer stack still starting up)
 // resolve within the window, and persistent ones only postpone the startup failure
-// by at most the window.
+// by roughly the window.
 func fetchMissingKeysWithRetry(
 	ctx context.Context,
 	logger *zap.Logger,
