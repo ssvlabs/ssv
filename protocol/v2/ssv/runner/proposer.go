@@ -337,10 +337,10 @@ func (r *ProposerRunner) gloasProposalInput(ctx context.Context, logger *zap.Log
 }
 
 // gloasBuilderConfig assembles the produceBlockV4 POST body from the cluster's direct-builder config and
-// the per-slot reconstructed auths (beacon-APIs#630), or nil when nothing is configured (→ the enshrined
-// GET). Builders whose auth missed quorum this slot are omitted and counted for the E1 auth-unavailable
-// signal; the top-level p2p knobs are always carried. The goclient falls back to GET per beacon node that
-// predates #630.
+// the per-slot reconstructed auths (beacon-APIs#630), or nil when nothing is configured (the goclient then
+// POSTs a neutral local-build config). Builders whose auth missed quorum this slot are omitted and counted
+// for the E1 auth-unavailable signal; the top-level p2p knobs are always carried. The goclient falls back
+// to GET per beacon node that predates #630.
 func (r *ProposerRunner) gloasBuilderConfig(ctx context.Context, slot phase0.Slot) *gloas.ProduceBuilderConfig {
 	if !r.builders.Configured() {
 		return nil

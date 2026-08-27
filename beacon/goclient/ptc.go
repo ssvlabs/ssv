@@ -45,8 +45,10 @@ func (gc *GoClient) PayloadAttestationDuties(ctx context.Context, epoch phase0.E
 	})
 }
 
-// PayloadAttestationData returns the PayloadAttestationData to attest to for the slot, from the
-// first beacon client that responds, or (nil, nil) if the node reports no block for the slot (204).
+// PayloadAttestationData returns the PayloadAttestationData to attest to for the slot, from the first
+// beacon client that responds, or (nil, nil) if that node reports no block for the slot (204). A 204 is
+// an answer, not an error, so it stops the client fallback — the operator abstains on its own node's
+// view rather than polling the rest for a block.
 func (gc *GoClient) PayloadAttestationData(ctx context.Context, slot phase0.Slot) (*gloas.PayloadAttestationData, error) {
 	return firstClientResult(ctx, gc, "PayloadAttestationData", http.MethodGet, func(ctx context.Context, addr string) (*gloas.PayloadAttestationData, error) {
 		return requestPayloadAttestationData(ctx, gloasHTTPClient, addr, slot)
