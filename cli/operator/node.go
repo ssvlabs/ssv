@@ -572,7 +572,7 @@ func (n *node) start(ctx context.Context, spawn func(func() error)) error {
 	}
 
 	if n.usingSSVSigner {
-		if err := ensureNoMissingKeys(ctx, n.nodeStorage, n.operatorDataStore, n.ssvSignerClient); err != nil {
+		if err := ensureNoMissingKeys(ctx, n.logger, n.nodeStorage, n.operatorDataStore, n.ssvSignerClient); err != nil {
 			return err
 		}
 	}

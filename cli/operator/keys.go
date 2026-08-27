@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"go.uber.org/zap"
@@ -27,8 +28,19 @@ import (
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
+// The remote signer may be briefly unavailable when the missing-keys check runs —
+// most commonly when the whole stack (node, ssv-signer, web3signer) restarts
+// together and web3signer is still starting or loading keys — so the check retries
+// with backoff for a bounded window instead of failing startup on the first error.
+const (
+	missingKeysRetryWindow   = 2 * time.Minute
+	missingKeysRetryDelay    = time.Second
+	missingKeysRetryMaxDelay = 16 * time.Second
+)
+
 func ensureNoMissingKeys(
 	ctx context.Context,
+	logger *zap.Logger,
 	nodeStorage operatorstorage.Storage,
 	operatorDataStore operatordatastore.OperatorDataStore,
 	ssvSignerClient *ssvsigner.Client,
@@ -51,7 +63,7 @@ func ensureNoMissingKeys(
 		localKeys = append(localKeys, phase0.BLSPubKey(share.SharePubKey))
 	}
 
-	missingKeys, err := ssvSignerClient.MissingKeys(ctx, localKeys)
+	missingKeys, err := fetchMissingKeysWithRetry(ctx, logger, ssvSignerClient, localKeys, missingKeysRetryWindow, missingKeysRetryDelay)
 	if err != nil {
 		return fmt.Errorf("failed to check for missing keys: %w", err)
 	}
@@ -65,6 +77,48 @@ func ensureNoMissingKeys(
 		return startupError{err: fmt.Errorf("remote signer misses keys"), fields: []zap.Field{keysField}}
 	}
 	return nil
+}
+
+// fetchMissingKeysWithRetry calls MissingKeys on the remote signer, retrying failed
+// attempts with exponential backoff until the window elapses or ctx is canceled.
+// All errors are retried: transient ones (the signer stack still starting up)
+// resolve within the window, and persistent ones only postpone the startup failure
+// by at most the window.
+func fetchMissingKeysWithRetry(
+	ctx context.Context,
+	logger *zap.Logger,
+	ssvSignerClient *ssvsigner.Client,
+	localKeys []phase0.BLSPubKey,
+	window time.Duration,
+	delay time.Duration,
+) ([]phase0.BLSPubKey, error) {
+	deadline := time.Now().Add(window)
+	for {
+		missingKeys, err := ssvSignerClient.MissingKeys(ctx, localKeys)
+		if err == nil {
+			return missingKeys, nil
+		}
+
+		// Give up if ctx is done or the next attempt wouldn't start within the window.
+		if ctx.Err() != nil || time.Now().Add(delay).After(deadline) {
+			return nil, err
+		}
+
+		logger.Warn("failed to check for missing keys in remote signer, retrying",
+			zap.Duration("retry_in", delay),
+			zap.Error(err))
+
+		select {
+		case <-ctx.Done():
+			return nil, err
+		case <-time.After(delay):
+		}
+
+		delay *= 2
+		if delay > missingKeysRetryMaxDelay {
+			delay = missingKeysRetryMaxDelay
+		}
+	}
 }
 
 func privateKeyFromKeystore(privKeyFile, passwordFile string) (keys.OperatorPrivateKey, []byte, error) {
