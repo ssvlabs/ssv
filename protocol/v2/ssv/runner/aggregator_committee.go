@@ -399,7 +399,7 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(
 			r.measurements.EndPreConsensus()
 			recordPreConsensusDuration(ctx, r.measurements.PreConsensusTime(), spectypes.RoleAggregatorCommittee)
 			const dutyFinishedNoMessages = "✔️successfully finished duty processing (got no quorums in pre-consensus)"
-			r.concludeDutyFlow(ctx, logger, 0, dutyFinishedNoMessages,
+			r.concludeDutyFlow(ctx, logger, specqbft.NoRound, dutyFinishedNoMessages,
 				fields.PreConsensusTime(r.measurements.PreConsensusTime()),
 			)
 			span.AddEvent(dutyFinishedNoMessages)
@@ -577,7 +577,7 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(
 		if r.HaveCheckedAllDutiesForSelection(aggregatorMap, contributionMap) || r.HasSeenAllPreConsensusSigners() {
 			r.markDutyNotRequired()
 			const dutyFinishedNoAggregators = "✔️successfully finished duty processing (no validator is aggregator or sync committee contributor)"
-			r.concludeDutyFlow(ctx, logger, 0, dutyFinishedNoAggregators,
+			r.concludeDutyFlow(ctx, logger, specqbft.NoRound, dutyFinishedNoAggregators,
 				fields.PreConsensusTime(r.measurements.PreConsensusTime()),
 			)
 			span.AddEvent(dutyFinishedNoAggregators)
@@ -1240,7 +1240,7 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 // the span event; extraFields carries the per-terminal timings that precede the total duty time.
 // Unlike the CommitteeRunner sibling, round is a parameter rather than read from the runner state:
 // the not_required terminals conclude in pre-consensus, before a QBFT instance (and with it a round)
-// exists — they pass 0.
+// exists — they pass specqbft.NoRound.
 func (r *AggregatorCommitteeRunner) concludeDutyFlow(ctx context.Context, logger *zap.Logger, round specqbft.Round, event string, extraFields ...zap.Field) {
 	r.measurements.EndDutyFlow()
 	recordTotalDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.RoleAggregatorCommittee, round)
@@ -1777,7 +1777,7 @@ func (r *AggregatorCommitteeRunner) executeDuty(ctx context.Context, logger *zap
 	if len(msg.Messages) == 0 {
 		r.markDutyNotRequired()
 		const dutyFinishedNoMessages = "✔️successfully finished duty processing (no selection proofs needed)"
-		r.concludeDutyFlow(ctx, logger, 0, dutyFinishedNoMessages)
+		r.concludeDutyFlow(ctx, logger, specqbft.NoRound, dutyFinishedNoMessages)
 		span.AddEvent(dutyFinishedNoMessages)
 		return nil
 	}
