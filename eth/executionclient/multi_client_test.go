@@ -1217,6 +1217,18 @@ func TestMultiClient_Call_AllClientsFail(t *testing.T) {
 	require.Contains(t, err.Error(), "all clients failed")
 }
 
+func TestMultiClient_Call_NoClients(t *testing.T) {
+	mc := newTestMultiClient(t)
+
+	f := func(client SingleClientProvider) (any, error) {
+		return nil, nil
+	}
+
+	_, err := mc.call(t.Context(), f)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "no clients configured")
+}
+
 // dummySubscription is a stub implementing ethereum.Subscription.
 type dummySubscription struct{}
 
