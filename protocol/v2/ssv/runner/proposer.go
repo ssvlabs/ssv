@@ -74,7 +74,7 @@ type ProposerRunner struct {
 
 	// builders is the cluster's direct-builder config, resolved once at construction (issue #2962, phase 2):
 	// the produceBlockV4 POST body is assembled from it plus the per-slot reconstructed auths. Not
-	// Configured() -> the enshrined GET.
+	// Configured() -> a neutral local-build POST body.
 	builders gloas.ResolvedBuilderConfig
 	// requestAuthCache holds the per-slot reconstructed builder auths this operator attaches to the
 	// produceBlockV4 POST. Shared with the §5 dispatcher that writes it; nil pre-Gloas / no overlay.
