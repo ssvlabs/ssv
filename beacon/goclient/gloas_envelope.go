@@ -30,12 +30,11 @@ func (gc *GoClient) GetExecutionPayloadEnvelope(ctx context.Context, slot phase0
 // nodes concurrently, succeeding if at least one accepts it. Re-publishing to multiple BNs is safe — they
 // dedupe by block root.
 //
-// The body is the full SignedExecutionPayloadEnvelope. beacon-APIs#580 also defines a blinded body
-// (Eth-Execution-Payload-Blinded, reconstructed from the BN's cache) and an unblinded
-// SignedExecutionPayloadEnvelopeContents (envelope + blobs + KZG proofs), but Lodestar v1.43.0 — the first
-// CL to implement the endpoint — decodes only the full SignedExecutionPayloadEnvelope. The full envelope's
-// hash-tree root equals the blinded root the §6 QBFT signed, so the reconstructed signature stays valid.
-// The blinded form is retained in the gloas types for the deferred blinded/Contents path.
+// The body is the full SignedExecutionPayloadEnvelope, whose hash-tree root equals the blinded root the §6
+// QBFT signed, so the reconstructed signature stays valid. beacon-APIs#580 also defined a blinded body, but
+// beacon-APIs#624 removed it; the only remaining alternative is the stateless SignedExecutionPayloadEnvelope
+// Contents (envelope + blobs + KZG proofs), not yet wired. Lodestar v1.43.0 — the first CL to implement the
+// endpoint — decodes only the full SignedExecutionPayloadEnvelope.
 func (gc *GoClient) SubmitExecutionPayloadEnvelope(ctx context.Context, signed *gloas.SignedExecutionPayloadEnvelope) error {
 	body, err := signed.MarshalSSZ()
 	if err != nil {
