@@ -345,6 +345,7 @@ func (s *ServerTestSuite) TestRemoveValidator() {
 		resp, err := s.ServeHTTP("DELETE", PathValidators, reqBody)
 		require.NoError(t, err)
 		assert.Equal(t, fasthttp.StatusInternalServerError, resp.StatusCode())
+		assert.JSONEq(t, `{"message":"remote signer error"}`, string(resp.Body()))
 
 		s.remoteSigner.DeleteError = nil
 	})
@@ -395,6 +396,7 @@ func (s *ServerTestSuite) TestSignValidator() {
 		resp, err := s.ServeHTTP("POST", PathValidatorsSign+pubKeyHex, reqBody)
 		require.NoError(t, err)
 		assert.Equal(t, fasthttp.StatusInternalServerError, resp.StatusCode())
+		assert.JSONEq(t, `{"message":"remote signer error"}`, string(resp.Body()))
 
 		s.remoteSigner.SignError = nil
 	})

@@ -81,16 +81,16 @@ func (c *Client) ListValidators(ctx context.Context) (listResp []phase0.BLSPubKe
 		recordClientRequest(ctx, opListValidators, err, duration)
 		c.logger.Debug("requested to list keys in remote signer", zap.Duration("duration", duration), zap.Error(err))
 	}()
-	var errStr string
+	var errBody string
 	err = requests.
 		URL(c.baseURL).
 		Client(c.httpClient).
 		Path(PathValidators).
 		ToJSON(&listResp).
-		AddValidator(requests.ValidatorHandler(requests.DefaultValidator, toLimitedString(&errStr))).
+		AddValidator(errBodyValidator(&errBody)).
 		Fetch(ctx)
 	if err != nil {
-		return nil, requestFailedErr(err, errStr)
+		return nil, requestFailedErr(err, errBody)
 	}
 
 	return listResp, nil
@@ -121,7 +121,7 @@ func (c *Client) AddValidators(ctx context.Context, shares ...ShareKeys) (status
 	}
 
 	var resp web3signer.ImportKeystoreResponse
-	var errStr string
+	var errBody string
 	err = requests.
 		URL(c.baseURL).
 		Client(c.httpClient).
@@ -129,15 +129,15 @@ func (c *Client) AddValidators(ctx context.Context, shares ...ShareKeys) (status
 		BodyJSON(req).
 		Post().
 		ToJSON(&resp).
-		AddValidator(requests.ValidatorHandler(requests.DefaultValidator, toLimitedString(&errStr))).
+		AddValidator(errBodyValidator(&errBody)).
 		Fetch(ctx)
 
 	if requests.HasStatusErr(err, http.StatusUnprocessableEntity) {
-		return nil, ShareDecryptionError(errors.New(errStr))
+		return nil, ShareDecryptionError(errors.New(errBody))
 	}
 
 	if err != nil {
-		return nil, requestFailedErr(err, errStr)
+		return nil, requestFailedErr(err, errBody)
 	}
 
 	if len(resp.Data) != len(shares) {
@@ -164,7 +164,7 @@ func (c *Client) RemoveValidators(ctx context.Context, pubKeys ...phase0.BLSPubK
 	}
 
 	var resp web3signer.DeleteKeystoreResponse
-	var errStr string
+	var errBody string
 	err = requests.
 		URL(c.baseURL).
 		Client(c.httpClient).
@@ -172,10 +172,10 @@ func (c *Client) RemoveValidators(ctx context.Context, pubKeys ...phase0.BLSPubK
 		BodyJSON(req).
 		Delete().
 		ToJSON(&resp).
-		AddValidator(requests.ValidatorHandler(requests.DefaultValidator, toLimitedString(&errStr))).
+		AddValidator(errBodyValidator(&errBody)).
 		Fetch(ctx)
 	if err != nil {
-		return nil, requestFailedErr(err, errStr)
+		return nil, requestFailedErr(err, errBody)
 	}
 
 	if len(resp.Data) != len(pubKeys) {
@@ -198,7 +198,7 @@ func (c *Client) Sign(ctx context.Context, sharePubKey phase0.BLSPubKey, payload
 		recordClientRequest(ctx, opSignValidator, err, duration)
 		c.logger.Debug("requested to sign with share key", zap.Stringer("share_pubkey", sharePubKey), zap.Duration("duration", duration), zap.Error(err))
 	}()
-	var errStr string
+	var errBody string
 	err = requests.
 		URL(c.baseURL).
 		Client(c.httpClient).
@@ -206,10 +206,10 @@ func (c *Client) Sign(ctx context.Context, sharePubKey phase0.BLSPubKey, payload
 		BodyJSON(payload).
 		Post().
 		ToJSON(&resp).
-		AddValidator(requests.ValidatorHandler(requests.DefaultValidator, toLimitedString(&errStr))).
+		AddValidator(errBodyValidator(&errBody)).
 		Fetch(ctx)
 	if err != nil {
-		return phase0.BLSSignature{}, requestFailedErr(err, errStr)
+		return phase0.BLSSignature{}, requestFailedErr(err, errBody)
 	}
 
 	return resp.Signature, nil
@@ -223,16 +223,16 @@ func (c *Client) OperatorIdentity(ctx context.Context) (pubKeyBase64 string, err
 		recordClientRequest(ctx, opOperatorIdentity, err, duration)
 		c.logger.Debug("requested operator identity", zap.Duration("duration", duration), zap.Error(err))
 	}()
-	var errStr string
+	var errBody string
 	err = requests.
 		URL(c.baseURL).
 		Client(c.httpClient).
 		Path(PathOperatorIdentity).
 		ToString(&resp).
-		AddValidator(requests.ValidatorHandler(requests.DefaultValidator, toLimitedString(&errStr))).
+		AddValidator(errBodyValidator(&errBody)).
 		Fetch(ctx)
 	if err != nil {
-		return "", requestFailedErr(err, errStr)
+		return "", requestFailedErr(err, errBody)
 	}
 
 	return resp, nil
@@ -246,7 +246,7 @@ func (c *Client) OperatorSign(ctx context.Context, payload []byte) (signature []
 		recordClientRequest(ctx, opOperatorSign, err, duration)
 		c.logger.Debug("requested to sign with operator key", zap.Duration("duration", duration), zap.Error(err))
 	}()
-	var errStr string
+	var errBody string
 	err = requests.
 		URL(c.baseURL).
 		Client(c.httpClient).
@@ -254,10 +254,10 @@ func (c *Client) OperatorSign(ctx context.Context, payload []byte) (signature []
 		BodyBytes(payload).
 		Post().
 		ToBytesBuffer(&respBuf).
-		AddValidator(requests.ValidatorHandler(requests.DefaultValidator, toLimitedString(&errStr))).
+		AddValidator(errBodyValidator(&errBody)).
 		Fetch(ctx)
 	if err != nil {
-		return nil, requestFailedErr(err, errStr)
+		return nil, requestFailedErr(err, errBody)
 	}
 
 	return respBuf.Bytes(), nil
@@ -271,7 +271,7 @@ func (c *Client) OperatorEncrypt(ctx context.Context, payload []byte) (encrypted
 		recordClientRequest(ctx, opOperatorEncrypt, err, duration)
 		c.logger.Debug("requested operator encrypt", zap.Duration("duration", duration), zap.Error(err))
 	}()
-	var errStr string
+	var errBody string
 	err = requests.
 		URL(c.baseURL).
 		Client(c.httpClient).
@@ -279,13 +279,13 @@ func (c *Client) OperatorEncrypt(ctx context.Context, payload []byte) (encrypted
 		BodyBytes(payload).
 		Post().
 		ToBytesBuffer(&respBuf).
-		AddValidator(requests.ValidatorHandler(requests.DefaultValidator, toLimitedString(&errStr))).
+		AddValidator(errBodyValidator(&errBody)).
 		Fetch(ctx)
 	if err != nil {
 		if requests.HasStatusErr(err, http.StatusNotFound, http.StatusMethodNotAllowed, http.StatusNotImplemented) {
 			return nil, fmt.Errorf("%w: %w", ErrOperatorDataProtectionUnsupported, err)
 		}
-		return nil, requestFailedErr(err, errStr)
+		return nil, requestFailedErr(err, errBody)
 	}
 
 	return respBuf.Bytes(), nil
@@ -299,7 +299,7 @@ func (c *Client) OperatorDecrypt(ctx context.Context, payload []byte) (decrypted
 		recordClientRequest(ctx, opOperatorDecrypt, err, duration)
 		c.logger.Debug("requested operator decrypt", zap.Duration("duration", duration), zap.Error(err))
 	}()
-	var errStr string
+	var errBody string
 	err = requests.
 		URL(c.baseURL).
 		Client(c.httpClient).
@@ -307,13 +307,13 @@ func (c *Client) OperatorDecrypt(ctx context.Context, payload []byte) (decrypted
 		BodyBytes(payload).
 		Post().
 		ToBytesBuffer(&respBuf).
-		AddValidator(requests.ValidatorHandler(requests.DefaultValidator, toLimitedString(&errStr))).
+		AddValidator(errBodyValidator(&errBody)).
 		Fetch(ctx)
 	if err != nil {
 		if requests.HasStatusErr(err, http.StatusNotFound, http.StatusMethodNotAllowed, http.StatusNotImplemented) {
 			return nil, fmt.Errorf("%w: %w", ErrOperatorDataProtectionUnsupported, err)
 		}
-		return nil, requestFailedErr(err, errStr)
+		return nil, requestFailedErr(err, errBody)
 	}
 
 	return respBuf.Bytes(), nil
@@ -348,37 +348,41 @@ func (c *Client) MissingKeys(ctx context.Context, localKeys []phase0.BLSPubKey) 
 	return missingKeys, nil
 }
 
-// maxErrBodyLen caps the error response body attached to returned errors, so a
-// misbehaving server can't blow up error messages and log lines.
+// maxErrBodyLen caps the error-body text attached to returned errors, so a misbehaving
+// server can't bloat error messages and logs.
 const maxErrBodyLen = 1024
 
-// toLimitedString is like requests.ToString, but reads at most maxErrBodyLen+1
-// bytes, so a misbehaving server can't force unbounded reads while the error
-// response body is captured. requestFailedErr's truncation then trims anything
-// past the cap.
-func toLimitedString(dst *string) requests.ResponseHandler {
-	return func(resp *http.Response) error {
+// errBodyValidator returns a response validator that defers to requests.DefaultValidator
+// and, on a rejected status, captures a bounded copy of the error body into *dst for
+// requestFailedErr to attach. It reads one byte past the cap so truncation is detectable.
+func errBodyValidator(dst *string) requests.ResponseHandler {
+	return requests.ValidatorHandler(requests.DefaultValidator, func(resp *http.Response) error {
 		b, err := io.ReadAll(io.LimitReader(resp.Body, maxErrBodyLen+1))
 		if err != nil {
 			return err
 		}
 		*dst = string(b)
 		return nil
-	}
+	})
 }
 
-// requestFailedErr wraps a failed request error, attaching the error response body
-// (if any) so callers can see the reason reported by the server instead of just a
-// status code.
+// requestFailedErr wraps a failed request error, attaching the captured error body (if
+// any) so callers see the reason reported by the server instead of just a status code.
 func requestFailedErr(err error, errBody string) error {
+	// Record whether the body was truncated from its raw length, before TrimSpace can
+	// shrink a whitespace tail back under the cap and hide that content was dropped.
+	truncated := len(errBody) > maxErrBodyLen
 	errBody = strings.TrimSpace(errBody)
-	// Older server versions write the zero-value response on errors, which carries
-	// no information ("null" / "{}"), so don't attach it.
+	// Older servers write the zero-value response on errors, which carries no information
+	// ("null" / "{}"), so don't attach it.
 	if errBody == "" || errBody == "null" || errBody == "{}" {
 		return fmt.Errorf("request failed: %w", err)
 	}
 	if len(errBody) > maxErrBodyLen {
-		errBody = errBody[:maxErrBodyLen] + "...(truncated)"
+		errBody = errBody[:maxErrBodyLen]
+	}
+	if truncated {
+		errBody += "...(truncated)"
 	}
 	return fmt.Errorf("request failed: %w: %s", err, errBody)
 }

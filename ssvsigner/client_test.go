@@ -1074,15 +1074,23 @@ func Test_requestFailedErr(t *testing.T) {
 		require.ErrorContains(t, err, "...(truncated)")
 		require.Less(t, len(err.Error()), maxErrBodyLen+100)
 	})
+
+	t.Run("over-cap body trimming under the cap is still marked truncated", func(t *testing.T) {
+		// A body one byte over the cap with a whitespace tail: TrimSpace brings it back
+		// under the cap, but the truncation marker must still appear.
+		body := strings.Repeat("x", maxErrBodyLen-1) + "  "
+		err := requestFailedErr(baseErr, body)
+		require.ErrorContains(t, err, "...(truncated)")
+	})
 }
 
-// TestErrorBodyCaptureIsBounded verifies that a huge error response body is capped
-// at read time (toLimitedString), keeping the returned error bounded.
+// TestErrorBodyCaptureIsBounded verifies a huge error response body is capped at read
+// time, keeping the returned error bounded.
 func TestErrorBodyCaptureIsBounded(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
-		// The client stops reading past the cap and drops the connection,
-		// so this write is expected to fail partway through.
+		// The client stops reading past the cap and drops the connection, so this
+		// write may fail partway through.
 		_, _ = w.Write(bytes.Repeat([]byte("a"), 1<<20)) // 1 MiB
 	}))
 	t.Cleanup(server.Close)

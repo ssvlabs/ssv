@@ -511,10 +511,9 @@ func (s *Server) handleOperatorDecrypt(ctx *fasthttp.RequestCtx) {
 	s.writeBytes(ctx, logger, decrypted)
 }
 
-// handleWeb3SignerErr responds with the upstream Web3Signer status when it is known
-// (falling back to 500 for transport-level failures such as connection errors and
-// timeouts) and an error body describing the failure, so that clients can log the
-// actual reason rather than just a bare status code.
+// handleWeb3SignerErr responds with the upstream Web3Signer status when known (or 500 for
+// transport failures such as connection errors and timeouts) and an error body describing
+// the failure, so clients can log the actual reason rather than just a bare status code.
 func (s *Server) handleWeb3SignerErr(ctx *fasthttp.RequestCtx, logger *zap.Logger, err error) {
 	statusCode := fasthttp.StatusInternalServerError
 	var he web3signer.HTTPResponseError
