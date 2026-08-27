@@ -21,8 +21,8 @@ import (
 // yet, so these are issued as hand-rolled HTTP requests until it is rebased onto a Gloas-aware
 // release, at which point they become typed provider calls like the rest of GoClient.
 const (
-	ptcDutiesPath              = "/eth/v1/validator/duties/ptc/%d"               // epoch
-	payloadAttestationDataPath = "/eth/v1/validator/payload_attestation_data/%d" // slot
+	ptcDutiesPath              = "/eth/v1/validator/duties/ptc/%d"                    // epoch
+	payloadAttestationDataPath = "/eth/v1/validator/payload_attestation_data?slot=%d" // slot
 	payloadAttestationsPath    = "/eth/v1/beacon/pool/payload_attestations"
 
 	// consensusVersionGloas is the Eth-Consensus-Version header value for Gloas payload attestations.
@@ -44,7 +44,7 @@ func (gc *GoClient) PayloadAttestationDuties(ctx context.Context, epoch phase0.E
 }
 
 // PayloadAttestationData returns the PayloadAttestationData to attest to for the slot, from the
-// first beacon client that responds.
+// first beacon client that responds, or (nil, nil) if the node reports no block for the slot (204).
 func (gc *GoClient) PayloadAttestationData(ctx context.Context, slot phase0.Slot) (*gloas.PayloadAttestationData, error) {
 	return firstClientResult(ctx, gc, "PayloadAttestationData", http.MethodGet, func(ctx context.Context, addr string) (*gloas.PayloadAttestationData, error) {
 		return requestPayloadAttestationData(ctx, gloasHTTPClient, addr, slot)
@@ -103,13 +103,22 @@ func requestPTCDuties(ctx context.Context, httpClient *http.Client, addr string,
 	return resp.Data, nil
 }
 
-// requestPayloadAttestationData GETs the PayloadAttestationData the PTC member must attest to for the slot.
+// requestPayloadAttestationData GETs the PayloadAttestationData for the slot. A 204 No Content —
+// the beacon-APIs "no block seen" signal — returns (nil, nil) rather than a decode error on the
+// empty body.
 func requestPayloadAttestationData(ctx context.Context, httpClient *http.Client, addr string, slot phase0.Slot) (*gloas.PayloadAttestationData, error) {
+	respBody, _, status, err := httpDo(ctx, httpClient, http.MethodGet, addr+fmt.Sprintf(payloadAttestationDataPath, slot), nil, "application/json", "", nil)
+	if err != nil {
+		return nil, err
+	}
+	if status == http.StatusNoContent {
+		return nil, nil
+	}
 	var resp struct {
 		Data *gloas.PayloadAttestationData `json:"data"`
 	}
-	if err := jsonDo(ctx, httpClient, http.MethodGet, addr+fmt.Sprintf(payloadAttestationDataPath, slot), nil, nil, &resp); err != nil {
-		return nil, err
+	if err := json.Unmarshal(respBody, &resp); err != nil {
+		return nil, fmt.Errorf("decode response: %w", err)
 	}
 	if resp.Data == nil {
 		return nil, errors.New("no payload attestation data in response")
@@ -141,17 +150,18 @@ func (e *httpStatusError) Error() string {
 	return fmt.Sprintf("%s %s: status %d: %s", e.method, e.url, e.status, e.body)
 }
 
-// httpDo issues a hand-rolled Gloas HTTP request and returns the response body and headers on a 2xx, or
-// a *httpStatusError otherwise. accept sets the Accept header; a non-nil body is sent with contentType.
-// extraHeaders are applied last. It is the shared core of the JSON (jsonDo) and SSZ (gloasHTTPDo) helpers.
-func httpDo(ctx context.Context, httpClient *http.Client, method, url string, body []byte, accept, contentType string, extraHeaders map[string]string) ([]byte, http.Header, error) {
+// httpDo issues a hand-rolled Gloas HTTP request and returns the response body, headers, and status
+// code on a 2xx, or a *httpStatusError otherwise. accept sets the Accept header; a non-nil body is
+// sent with contentType; extraHeaders are applied last. The status lets a 2xx caller tell a 200 from
+// a 204. Shared core of the JSON (jsonDo) and SSZ (gloasHTTPDo) helpers.
+func httpDo(ctx context.Context, httpClient *http.Client, method, url string, body []byte, accept, contentType string, extraHeaders map[string]string) ([]byte, http.Header, int, error) {
 	var reader io.Reader
 	if body != nil {
 		reader = bytes.NewReader(body)
 	}
 	req, err := http.NewRequestWithContext(ctx, method, url, reader)
 	if err != nil {
-		return nil, nil, fmt.Errorf("new request: %w", err)
+		return nil, nil, 0, fmt.Errorf("new request: %w", err)
 	}
 	req.Header.Set("Accept", accept)
 	if body != nil && contentType != "" {
@@ -163,25 +173,25 @@ func httpDo(ctx context.Context, httpClient *http.Client, method, url string, bo
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return nil, nil, fmt.Errorf("%s %s: %w", method, url, err)
+		return nil, nil, 0, fmt.Errorf("%s %s: %w", method, url, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, nil, fmt.Errorf("read response body: %w", err)
+		return nil, nil, resp.StatusCode, fmt.Errorf("read response body: %w", err)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, nil, &httpStatusError{method: method, url: url, status: resp.StatusCode, body: strings.TrimSpace(string(respBody))}
+		return nil, nil, resp.StatusCode, &httpStatusError{method: method, url: url, status: resp.StatusCode, body: strings.TrimSpace(string(respBody))}
 	}
-	return respBody, resp.Header, nil
+	return respBody, resp.Header, resp.StatusCode, nil
 }
 
 // jsonDo issues a JSON request and, on a 2xx response, decodes the body into out (out may be nil to
 // ignore the body). A nil body sends no request payload; extraHeaders are applied last. Non-2xx
 // responses surface as *httpStatusError.
 func jsonDo(ctx context.Context, httpClient *http.Client, method, url string, body []byte, extraHeaders map[string]string, out any) error {
-	respBody, _, err := httpDo(ctx, httpClient, method, url, body, "application/json", "application/json", extraHeaders)
+	respBody, _, _, err := httpDo(ctx, httpClient, method, url, body, "application/json", "application/json", extraHeaders)
 	if err != nil {
 		return err
 	}

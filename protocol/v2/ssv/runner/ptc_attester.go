@@ -167,10 +167,10 @@ func (r *PTCAttesterRunner) executeDuty(ctx context.Context, logger *zap.Logger,
 		r.markDutyFailed(err)
 		return nil
 	}
-	// BN contract: an all-zero BeaconBlockRoot signals "no block for this slot" — the SIP #94 §3 abstain
-	// trigger. We sign and submit nothing; markDutyNotRequired still records the abstention for metrics.
-	// Caveat: a BN erroneously returning a zero root is indistinguishable from a genuine abstention here.
-	if data.BeaconBlockRoot == (phase0.Root{}) {
+	// No block seen: nil data is the beacon node's 204 "no block" signal; a zero BeaconBlockRoot is the
+	// same, kept defensively for a BN that answers 200 with a zero root. markDutyNotRequired records the
+	// abstention. (A BN wrongly returning nil/zero is indistinguishable from a genuine abstention.)
+	if data == nil || data.BeaconBlockRoot == (phase0.Root{}) {
 		logger.Debug("abstaining from PTC attestation: no beacon block for slot", fields.Slot(slot))
 		r.markDutyNotRequired()
 		return nil
