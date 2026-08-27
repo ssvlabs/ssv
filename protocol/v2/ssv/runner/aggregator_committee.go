@@ -1233,13 +1233,13 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 }
 
 // concludeDutyFlow closes out a finished duty flow: it stops the duty-flow measurement, records the
-// total-duty-duration sample and logs the operator-visible completion line. Every terminal that
-// concludes an outcome for the slot (the 100%-success one and the three not_required branches) has
-// to do all three — an outcome counted without a matching duration sample leaves a permanent gap
-// between the duty.outcome counter and the duration histogram. The caller marks the outcome and adds
-// the span event; extraFields carries the per-terminal timings that precede the total duty time.
-// Unlike the CommitteeRunner sibling, round is a parameter rather than read from the runner state:
-// the not_required terminals conclude in pre-consensus, before a QBFT instance (and with it a round)
+// total-duty-duration sample and logs the operator-visible completion line. Only the terminals that
+// conclude the duty correctly — the success one and the three not_required ones — route through here;
+// failed and stuck duties are counted in duty.outcome but deliberately record no duration, so the
+// duration histogram covers correct completions only. The caller marks the outcome and adds the span
+// event; extraFields carries the per-terminal timings that precede the total duty time. Unlike the
+// CommitteeRunner sibling, round is a parameter rather than read from the runner state: the
+// not_required terminals conclude in pre-consensus, before a QBFT instance (and with it a round)
 // exists — they pass specqbft.NoRound.
 func (r *AggregatorCommitteeRunner) concludeDutyFlow(ctx context.Context, logger *zap.Logger, round specqbft.Round, event string, extraFields ...zap.Field) {
 	r.measurements.EndDutyFlow()
