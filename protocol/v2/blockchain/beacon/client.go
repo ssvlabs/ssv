@@ -83,7 +83,8 @@ type VoluntaryExitCalls interface {
 type PTCCalls interface {
 	// PayloadAttestationDuties returns the PTC duties for the given validators at the epoch.
 	PayloadAttestationDuties(ctx context.Context, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*gloas.PTCDuty, error)
-	// PayloadAttestationData returns the PayloadAttestationData to attest to for the slot.
+	// PayloadAttestationData returns the data to attest to for the slot, or (nil, nil) if the beacon
+	// node reports no block seen for the slot (HTTP 204) — the SIP-94 §3 signal to abstain.
 	PayloadAttestationData(ctx context.Context, slot phase0.Slot) (*gloas.PayloadAttestationData, error)
 	// SubmitPayloadAttestationMessages submits signed PTC messages to the beacon node's pool.
 	SubmitPayloadAttestationMessages(ctx context.Context, messages []*gloas.PayloadAttestationMessage) error
