@@ -25,8 +25,10 @@ const (
 	payloadAttestationDataPath = "/eth/v1/validator/payload_attestation_data?slot=%d" // slot
 	payloadAttestationsPath    = "/eth/v1/beacon/pool/payload_attestations"
 
-	// consensusVersionGloas is the Eth-Consensus-Version header value for Gloas payload attestations.
-	consensusVersionGloas = "gloas"
+	// consensusVersionHeader is the beacon-APIs consensus-version header; consensusVersionGloas is its
+	// value on Gloas requests.
+	consensusVersionHeader = "Eth-Consensus-Version"
+	consensusVersionGloas  = "gloas"
 )
 
 // gloasHTTPClient issues the hand-rolled Gloas requests; per-call deadlines come from the request context.
@@ -132,7 +134,7 @@ func submitPayloadAttestationMessages(ctx context.Context, httpClient *http.Clie
 	if err != nil {
 		return fmt.Errorf("marshal payload attestation messages: %w", err)
 	}
-	headers := map[string]string{"Eth-Consensus-Version": consensusVersionGloas}
+	headers := map[string]string{consensusVersionHeader: consensusVersionGloas}
 	return jsonDo(ctx, httpClient, http.MethodPost, addr+payloadAttestationsPath, body, headers, nil)
 }
 
