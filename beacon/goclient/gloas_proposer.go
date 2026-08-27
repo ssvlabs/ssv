@@ -137,7 +137,7 @@ func requestGloasBeaconBlockPOST(ctx context.Context, url string, builderConfig 
 // produce response's Eth-Consensus-Version is present but not "gloas". An absent header is tolerated (not
 // every node sets it on the response), with the SSZ decode as the backstop.
 func checkGloasConsensusVersion(header http.Header) error {
-	if v := header.Get("Eth-Consensus-Version"); v != "" && !strings.EqualFold(v, consensusVersionGloas) {
+	if v := header.Get(consensusVersionHeader); v != "" && !strings.EqualFold(v, consensusVersionGloas) {
 		return fmt.Errorf("produce response Eth-Consensus-Version %q, want %q", v, consensusVersionGloas)
 	}
 	return nil
@@ -195,7 +195,7 @@ func gloasHTTPDo(ctx context.Context, method, url string, body []byte, contentTy
 		for k, v := range extraHeaders {
 			merged[k] = v
 		}
-		merged["Eth-Consensus-Version"] = consensusVersionGloas
+		merged[consensusVersionHeader] = consensusVersionGloas
 		extraHeaders = merged
 	}
 	respBody, header, _, err := httpDo(ctx, gloasHTTPClient, method, url, body, "application/octet-stream", contentType, extraHeaders)

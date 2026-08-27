@@ -35,7 +35,7 @@ func submitBuilderPreferences(ctx context.Context, httpClient *http.Client, addr
 	if err != nil {
 		return fmt.Errorf("marshal builder preferences: %w", err)
 	}
-	headers := map[string]string{"Eth-Consensus-Version": consensusVersionGloas}
+	headers := map[string]string{consensusVersionHeader: consensusVersionGloas}
 	err = jsonDo(ctx, httpClient, http.MethodPost, addr+builderPreferencesPath, body, headers, nil)
 	if isNotFound(err) {
 		return fmt.Errorf("beacon node lacks the gloas builder_preferences endpoint (beacon-APIs#630): %w", err)
