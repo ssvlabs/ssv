@@ -95,8 +95,8 @@ func (c *BuilderConfig) EffectiveBoostFactor() uint64 {
 }
 
 // Configured reports whether the operator set any direct-builder configuration — entries or the top-level
-// p2p knobs (MinBid / BuilderBoostFactor); the zero value is false. §4 POSTs produceBlockV4 when true and
-// uses the enshrined GET when false (imposing no proposer knobs on an unconfigured cluster) — so a
+// p2p knobs (MinBid / BuilderBoostFactor); the zero value is false. Either way §4 produces over the
+// produceBlockV4 POST — this resolved config when true, a neutral local-build config when false — so a
 // knobs-only config is honored, and clearing entries for a remote signer keeps the p2p knobs.
 func (c *BuilderConfig) Configured() bool {
 	return len(c.Entries) > 0 || c.MinBid != 0 || c.BuilderBoostFactor != nil

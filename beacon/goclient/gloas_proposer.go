@@ -16,9 +16,10 @@ import (
 
 // Gloas produce/publish endpoints. Produce is v4 with include_payload=false: a Gloas block carries only
 // the execution-payload bid (the payload ships in the §6 envelope), so the response is a bare BeaconBlock —
-// no BlockContents. The direct-builder overlay (beacon-APIs#630) sends a BuilderConfig POST body; beacon
-// nodes that predate it (beacon-APIs#580, GET-only) are handled by the per-node GET fallback. Publish is
-// the standard v2 blocks endpoint (version-tagged via Eth-Consensus-Version).
+// no BlockContents. Produce POSTs a BuilderConfig body (beacon-APIs#630) — the direct-builder overlay when
+// configured, else a neutral local-build config — and falls back per beacon node to the legacy GET for
+// nodes that predate the POST (beacon-APIs#580, GET-only). Publish is the standard v2 blocks endpoint
+// (version-tagged via Eth-Consensus-Version).
 const (
 	gloasProduceBlockPath = "/eth/v4/validator/blocks/%d?randao_reveal=%s&graffiti=%s&include_payload=false" // slot, randao 0x-hex, graffiti 0x-hex
 	gloasPublishBlockPath = "/eth/v2/beacon/blocks"
@@ -32,18 +33,13 @@ type gloasBlockResult struct {
 }
 
 // GetGloasBeaconBlock produces a Gloas (ePBS) block via the v4 produce endpoint, decoding the SSZ response
-// (go-eth2-client has no Gloas types). A non-nil builderConfig is POSTed as the produceBlockV4 body
-// (beacon-APIs#630, direct-builder overlay), falling back per beacon node to the GET for nodes that predate
-// it; the returned string is the winning builder's Eth-Builder-Url, if any.
+// (go-eth2-client has no Gloas types). It POSTs a BuilderConfig body (beacon-APIs#630): builderConfig when
+// the direct-builder overlay is configured, else a neutral local-build config. It falls back per beacon
+// node to the legacy GET for nodes that predate the POST; the returned string is the winning builder's
+// Eth-Builder-Url, if any.
 func (gc *GoClient) GetGloasBeaconBlock(ctx context.Context, slot phase0.Slot, graffiti, randao []byte, builderConfig *gloas.ProduceBuilderConfig) (*gloas.BeaconBlock, string, error) {
-	// Telemetry labels the route by its primary method: POST when the cluster configured the overlay,
-	// else GET. A per-node GET fallback (a beacon node predating beacon-APIs#630) is still counted under
-	// POST — an accepted transitional inaccuracy, tracked with the POST-first flip on issue #2962.
-	httpMethod := http.MethodGet
-	if builderConfig != nil {
-		httpMethod = http.MethodPost
-	}
-	res, err := firstClientResult(ctx, gc, "GetGloasBeaconBlock", httpMethod, func(ctx context.Context, addr string) (gloasBlockResult, error) {
+	// A per-node GET fallback (a pre-#630 node) is still counted under this POST label — a transitional inaccuracy.
+	res, err := firstClientResult(ctx, gc, "GetGloasBeaconBlock", http.MethodPost, func(ctx context.Context, addr string) (gloasBlockResult, error) {
 		return requestGloasBeaconBlock(ctx, addr, slot, graffiti, randao, builderConfig)
 	})
 	return res.block, res.builderURL, err
@@ -73,30 +69,30 @@ func (gc *GoClient) SubmitGloasBeaconBlock(ctx context.Context, block *gloas.Sig
 	})
 }
 
-// requestGloasBeaconBlock produces one Gloas block from a single beacon node. With a builderConfig it POSTs
-// the beacon-APIs#630 body and, only on a 404/405 (the node predates the POST), retries as the GET carrying
-// builder_boost_factor (the sole knob the pre-#630 GET also honors).
+// requestGloasBeaconBlock produces one Gloas block from a single beacon node. It POSTs the beacon-APIs#630
+// BuilderConfig body — a neutral local-build config when builderConfig is nil — and, only on a 404/405 (the
+// node predates the POST), retries as the legacy GET carrying builder_boost_factor (the sole knob the
+// pre-#630 GET also honors).
 func requestGloasBeaconBlock(ctx context.Context, addr string, slot phase0.Slot, graffiti, randao []byte, builderConfig *gloas.ProduceBuilderConfig) (gloasBlockResult, error) {
+	if builderConfig == nil {
+		builderConfig = gloas.NeutralProduceBuilderConfig()
+	}
 	// Graffiti must be a full 32-byte value in the query — lighthouse rejects a short one with 400
 	// "Invalid query string" (mirror the mature GetBeaconBlock path which pads to [32]byte).
 	g := [32]byte{}
 	copy(g[:], graffiti)
 	url := addr + fmt.Sprintf(gloasProduceBlockPath, slot, "0x"+hex.EncodeToString(randao), "0x"+hex.EncodeToString(g[:]))
 
-	if builderConfig != nil {
-		res, err := requestGloasBeaconBlockPOST(ctx, url, builderConfig)
-		if err == nil {
-			return res, nil
-		}
-		if !isMethodOrPathMissing(err) {
-			return gloasBlockResult{}, err
-		}
-		// The node predates the produceBlockV4 POST; fall back to the GET, still carrying
-		// builder_boost_factor — the one knob the pre-#630 GET (beacon-APIs#580) also honors, same
-		// semantics (builder bids weighed against the local payload at 100). min_bid and the per-builder
-		// inputs have no GET counterpart, so they are POST-only.
-		url += fmt.Sprintf("&builder_boost_factor=%d", builderConfig.BuilderBoostFactor)
+	res, err := requestGloasBeaconBlockPOST(ctx, url, builderConfig)
+	if err == nil {
+		return res, nil
 	}
+	if !isMethodOrPathMissing(err) {
+		return gloasBlockResult{}, err
+	}
+	// Fall back to the legacy GET. It honors only builder_boost_factor — min_bid and the per-builder inputs
+	// are POST-only — with the same semantics: bids weighed against the local payload at 100.
+	url += fmt.Sprintf("&builder_boost_factor=%d", builderConfig.BuilderBoostFactor)
 
 	respBody, header, err := gloasHTTPDo(ctx, http.MethodGet, url, nil, "", nil)
 	if err != nil {
