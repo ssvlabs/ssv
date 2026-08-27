@@ -175,12 +175,45 @@ func classifyDiscard(err error) (discardKind, string) {
 	return discardIgnored, valErr.Text()
 }
 
-func (mv *messageValidator) handleValidationError(ctx context.Context, peerID peer.ID, decodedMessage *queue.SSVMessage, err error) pubsub.ValidationResult {
+// routineSelfIgnores are the ignore-classified errors that are benign for our own outbound
+// publishes: our validator's own state dedup (ErrDuplicatedMessage, ErrDecidedMessageWithTooFewSigners)
+// and slot/round-timing races between building a message and validating it. These stay at debug.
+//
+// Reject-vs-ignore is inbound peer-scoring policy, not how bad a drop is for us, so it can't level
+// our own drops: any other self-ignore means we published something our own validation won't pass
+// (wrong topic/domain, oversized, unknown validator/duty) and warrants a warn. Errors not listed
+// here default to warn.
+var routineSelfIgnores = []error{
+	ErrDuplicatedMessage,
+	ErrDecidedMessageWithTooFewSigners,
+	ErrSlotAlreadyAdvanced,
+	ErrRoundAlreadyAdvanced,
+	ErrEarlySlotMessage,
+	ErrLateSlotMessage,
+	ErrEstimatedRoundNotInAllowedSpread,
+}
+
+// isRoutineSelfIgnore reports whether err is one of the benign self-ignores in routineSelfIgnores.
+func isRoutineSelfIgnore(err error) bool {
+	for _, benign := range routineSelfIgnores {
+		if errors.Is(err, benign) {
+			return true
+		}
+	}
+	return false
+}
+
+func (mv *messageValidator) handleValidationError(ctx context.Context, peerID peer.ID, topic string, decodedMessage *queue.SSVMessage, err error) pubsub.ValidationResult {
 	loggerFields := mv.buildLoggerFields(decodedMessage)
 
 	logger := mv.logger.
 		With(loggerFields.AsZapFields()...).
 		With(fields.PeerID(peerID))
+	if topic != "" {
+		// On pre-decode discards decodedMessage is nil, so loggerFields carries no role/slot/duty
+		// and topic is the only field identifying what we dropped.
+		logger = logger.With(fields.Topic(topic))
+	}
 
 	kind, reason := classifyDiscard(err)
 
@@ -193,19 +226,26 @@ func (mv *messageValidator) handleValidationError(ctx context.Context, peerID pe
 	}
 
 	// A discard of one of our own outbound messages (see isSelfPeer) is leveled by what it says
-	// about this node: an ignored verdict is routine (e.g. a decided message a peer already
-	// propagated before we published ours) and a cancellation is shutdown noise — debug; a reject
-	// (we produced a message our own validation refuses) or a timeout (the message was never
-	// published because local validation was too slow) is a local problem — warn. The specific
-	// reason is logged here because the publisher only sees a generic pubsub.ValidationError.
+	// about this node: debug for the expected (a routine self-ignore or a shutdown cancellation),
+	// warn for the concerning (a reject or non-routine ignore means our own validation refuses a
+	// message we published; a timeout means it was never published). The reason is logged here
+	// because the publisher only sees a generic pubsub.ValidationError.
 	if mv.isSelfPeer(peerID) {
 		switch kind {
 		case discardRejected:
 			logger.Warn("own outbound message rejected by local validation", zap.Error(err))
 		case discardTimeout:
 			logger.Warn("own outbound message dropped by local validation timeout", zap.Error(err))
+		case discardCanceled:
+			logger.Debug("own outbound message discarded by local validation cancellation", zap.Error(err))
+		case discardIgnored:
+			if isRoutineSelfIgnore(err) {
+				logger.Debug("own outbound message ignored by local validation", zap.Error(err))
+			} else {
+				logger.Warn("own outbound message ignored by local validation (unexpected)", zap.Error(err))
+			}
 		default:
-			logger.Debug("own outbound message ignored by local validation", zap.Error(err))
+			logger.Debug("own outbound message discarded by local validation", zap.Error(err))
 		}
 		return result
 	}
@@ -217,8 +257,10 @@ func (mv *messageValidator) handleValidationError(ctx context.Context, peerID pe
 		logger.Debug("ignoring message due to validation cancellation", zap.Error(err))
 	case discardRejected:
 		logger.Debug("rejecting invalid message", zap.Error(err))
-	default:
+	case discardIgnored:
 		logger.Debug("ignoring invalid message", zap.Error(err))
+	default:
+		logger.Debug("discarding invalid message", zap.Error(err))
 	}
 	return result
 }

@@ -138,7 +138,7 @@ func (mv *messageValidator) Validate(ctx context.Context, peerID peer.ID, pmsg *
 	}
 
 	if err := ctx.Err(); err != nil {
-		return mv.handleValidationError(ctx, peerID, nil, err)
+		return mv.handleValidationError(ctx, peerID, pmsg.GetTopic(), nil, err)
 	}
 
 	validationStart := time.Now()
@@ -150,7 +150,7 @@ func (mv *messageValidator) Validate(ctx context.Context, peerID peer.ID, pmsg *
 	}()
 
 	if err != nil {
-		return mv.handleValidationError(ctx, peerID, decodedMessage, err)
+		return mv.handleValidationError(ctx, peerID, pmsg.GetTopic(), decodedMessage, err)
 	}
 
 	pmsg.ValidatorData = decodedMessage

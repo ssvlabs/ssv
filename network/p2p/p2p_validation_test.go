@@ -457,12 +457,18 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 	// self-deliveries are counted on the diagonal (a validator's own index), so a pubsub upgrade
 	// that changes this fails here rather than silently reverting self-discards to inbound-style
 	// logging.
+	// Snapshot under the lock, then assert after releasing it: require.Positivef calls FailNow
+	// (runtime.Goexit) on failure, which would leak a held mtx and deadlock the score-table cleanup
+	// and any in-flight ValidateFunc that take the same lock — hanging the package until -timeout.
+	selfSeen := make([]int, nodeCount)
 	mtx.Lock()
 	for i := 0; i < nodeCount; i++ {
-		selfSeen := messageValidators[i].Accepted[i] + messageValidators[i].Ignored[i] + messageValidators[i].Rejected[i]
-		require.Positivef(t, selfSeen, "node %d: own validator never saw the node's own publishes (peerID == own host ID)", i)
+		selfSeen[i] = messageValidators[i].Accepted[i] + messageValidators[i].Ignored[i] + messageValidators[i].Rejected[i]
 	}
 	mtx.Unlock()
+	for i := 0; i < nodeCount; i++ {
+		require.Positivef(t, selfSeen[i], "node %d: own validator never saw the node's own publishes (peerID == own host ID)", i)
+	}
 
 	// Backfill any observer that never latched with its current snapshot so the
 	// diagnostics below report which invariant on which node actually failed
