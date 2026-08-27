@@ -275,6 +275,12 @@ func (mc *MultiClient) Healthy(ctx context.Context) error {
 		return nil
 	}
 
+	if len(mc.clients) == 0 {
+		// NewMulti guarantees at least one client; without this guard the "no healthy clients"
+		// error below would wrap a nil error for a MultiClient constructed another way.
+		return fmt.Errorf("no clients configured")
+	}
+
 	healthyClients := atomic.Bool{}
 	healthyCount := atomic.Int64{}
 	p := pool.New().WithErrors().WithContext(ctx)

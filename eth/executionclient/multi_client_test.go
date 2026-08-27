@@ -843,6 +843,14 @@ func TestMultiClient_Healthy_AllClientsUnhealthy(t *testing.T) {
 	require.Contains(t, err.Error(), "client2 unhealthy")
 }
 
+func TestMultiClient_Healthy_NoClients(t *testing.T) {
+	mc := newTestMultiClient(t)
+
+	err := mc.Healthy(t.Context())
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "no clients configured")
+}
+
 func TestMultiClient_HeaderByNumber(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
