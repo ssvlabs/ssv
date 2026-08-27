@@ -46,9 +46,9 @@ func TestRequestPayloadAttestationData(t *testing.T) {
 	dataJSON, err := json.Marshal(data)
 	require.NoError(t, err)
 
-	var gotMethod, gotPath string
+	var gotMethod, gotPath, gotQuery string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotMethod, gotPath = r.Method, r.URL.Path
+		gotMethod, gotPath, gotQuery = r.Method, r.URL.Path, r.URL.RawQuery
 		_, _ = fmt.Fprintf(w, `{"version":"gloas","data":%s}`, dataJSON)
 	}))
 	defer srv.Close()
@@ -56,8 +56,22 @@ func TestRequestPayloadAttestationData(t *testing.T) {
 	got, err := requestPayloadAttestationData(context.Background(), srv.Client(), srv.URL, 9)
 	require.NoError(t, err)
 	require.Equal(t, http.MethodGet, gotMethod)
-	require.Equal(t, "/eth/v1/validator/payload_attestation_data/9", gotPath)
+	require.Equal(t, "/eth/v1/validator/payload_attestation_data", gotPath)
+	require.Equal(t, "slot=9", gotQuery)
 	require.Equal(t, data, got)
+}
+
+// A 204 No Content is the beacon-APIs "no block seen" signal: requestPayloadAttestationData surfaces
+// it as (nil, nil), not an error, so the PTC member abstains.
+func TestRequestPayloadAttestationData_NoContent(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer srv.Close()
+
+	got, err := requestPayloadAttestationData(context.Background(), srv.Client(), srv.URL, 9)
+	require.NoError(t, err)
+	require.Nil(t, got)
 }
 
 func TestSubmitPayloadAttestationMessages(t *testing.T) {

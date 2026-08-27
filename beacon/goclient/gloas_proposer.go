@@ -198,7 +198,8 @@ func gloasHTTPDo(ctx context.Context, method, url string, body []byte, contentTy
 		merged["Eth-Consensus-Version"] = consensusVersionGloas
 		extraHeaders = merged
 	}
-	return httpDo(ctx, gloasHTTPClient, method, url, body, "application/octet-stream", contentType, extraHeaders)
+	respBody, header, _, err := httpDo(ctx, gloasHTTPClient, method, url, body, "application/octet-stream", contentType, extraHeaders)
+	return respBody, header, err
 }
 
 // gloasOctetStreamHTTP issues an octet-stream (SSZ) request to a Gloas produce/publish endpoint and returns
