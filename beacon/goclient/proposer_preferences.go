@@ -71,7 +71,7 @@ func submitProposerPreferences(ctx context.Context, httpClient *http.Client, add
 	if err != nil {
 		return fmt.Errorf("marshal proposer preferences: %w", err)
 	}
-	headers := map[string]string{"Eth-Consensus-Version": consensusVersionGloas}
+	headers := map[string]string{consensusVersionHeader: consensusVersionGloas}
 	err = jsonDo(ctx, httpClient, http.MethodPost, addr+proposerPreferencesPath, body, headers, nil)
 	if isNotFound(err) {
 		return fmt.Errorf("beacon node lacks the gloas proposer_preferences endpoint (beacon-APIs#608): %w", err)
