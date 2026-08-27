@@ -134,9 +134,6 @@ func TestNewMulti(t *testing.T) {
 }
 
 func TestMultiClient_assertSameChainIDs(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
 	mc := newTestMultiClient(t)
 
 	expected, ok := mc.assertSameChainID(big.NewInt(5))
@@ -153,9 +150,6 @@ func TestMultiClient_assertSameChainIDs(t *testing.T) {
 }
 
 func TestMultiClient_assertSameChainIDs_Error(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
 	mc := newTestMultiClient(t)
 
 	expected, ok := mc.assertSameChainID(big.NewInt(5))
@@ -1029,9 +1023,6 @@ func TestMultiClient_FilterLogs_Error(t *testing.T) {
 }
 
 func TestMultiClient_Filterer(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
 	mc := newTestMultiClient(t)
 	mc.contractAddress = ethcommon.HexToAddress("0x1234")
 
@@ -1041,9 +1032,6 @@ func TestMultiClient_Filterer(t *testing.T) {
 }
 
 func TestMultiClient_Filterer_Integration(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
 	contractAddr := ethcommon.HexToAddress("0x1234")
 	mc := newTestMultiClient(t)
 	mc.contractAddress = contractAddr
