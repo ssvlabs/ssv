@@ -28,15 +28,22 @@ import (
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
+// retryBackoff configures fetchMissingKeysWithRetry's bounded exponential backoff.
+type retryBackoff struct {
+	window   time.Duration // span in which new attempts may start
+	delay    time.Duration // wait before the first retry, doubled after each failure
+	maxDelay time.Duration // ceiling for the doubling delay
+}
+
 // The remote signer may be briefly unavailable when the missing-keys check runs —
 // most commonly when the whole stack (node, ssv-signer, web3signer) restarts
 // together and web3signer is still starting or loading keys — so the check retries
 // with backoff for a bounded window instead of failing startup on the first error.
-const (
-	missingKeysRetryWindow   = 2 * time.Minute
-	missingKeysRetryDelay    = time.Second
-	missingKeysRetryMaxDelay = 16 * time.Second
-)
+var missingKeysRetryBackoff = retryBackoff{
+	window:   2 * time.Minute,
+	delay:    time.Second,
+	maxDelay: 16 * time.Second,
+}
 
 func ensureNoMissingKeys(
 	ctx context.Context,
@@ -63,7 +70,7 @@ func ensureNoMissingKeys(
 		localKeys = append(localKeys, phase0.BLSPubKey(share.SharePubKey))
 	}
 
-	missingKeys, err := fetchMissingKeysWithRetry(ctx, logger, ssvSignerClient, localKeys, missingKeysRetryWindow, missingKeysRetryDelay)
+	missingKeys, err := fetchMissingKeysWithRetry(ctx, logger, ssvSignerClient, localKeys, missingKeysRetryBackoff)
 	if err != nil {
 		return fmt.Errorf("failed to check for missing keys: %w", err)
 	}
@@ -81,23 +88,24 @@ func ensureNoMissingKeys(
 
 // fetchMissingKeysWithRetry calls MissingKeys on the remote signer, retrying failed
 // attempts with exponential backoff until the window elapses or ctx is canceled.
+//
 // The window bounds when attempts may start, not the total duration: an in-flight
-// attempt is never cut short (each is already bounded by the client's request
-// timeout), so the final one may finish up to that timeout past the window. A hard
-// cutoff would only clip the last attempt and mask its underlying error with a
-// context error.
+// attempt is never cut short (it is already bounded by the client's request
+// timeout), so the last one may finish up to that timeout past the window — a hard
+// cutoff would only clip it and mask its error with a context error.
+//
 // All errors are retried: transient ones (the signer stack still starting up)
-// resolve within the window, and persistent ones only postpone the startup failure
-// by roughly the window.
+// resolve within the window; persistent ones only postpone the startup failure by
+// roughly the window.
 func fetchMissingKeysWithRetry(
 	ctx context.Context,
 	logger *zap.Logger,
 	ssvSignerClient *ssvsigner.Client,
 	localKeys []phase0.BLSPubKey,
-	window time.Duration,
-	delay time.Duration,
+	backoff retryBackoff,
 ) ([]phase0.BLSPubKey, error) {
-	deadline := time.Now().Add(window)
+	deadline := time.Now().Add(backoff.window)
+	delay := backoff.delay
 	for {
 		missingKeys, err := ssvSignerClient.MissingKeys(ctx, localKeys)
 		if err == nil {
@@ -119,7 +127,7 @@ func fetchMissingKeysWithRetry(
 		case <-time.After(delay):
 		}
 
-		delay = min(delay*2, missingKeysRetryMaxDelay)
+		delay = min(delay*2, backoff.maxDelay)
 	}
 }
 
