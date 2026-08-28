@@ -227,7 +227,7 @@ func (s *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 	recordRemoteSignerOperation(ctx, opRemoteSignerImportKeystore, err, time.Since(start))
 	logger = logger.With(zap.Duration("took", time.Since(start)))
 	if err != nil {
-		s.handleWeb3SignerErr(ctx, logger, err)
+		s.handleImportKeystoreErr(ctx, logger, err)
 		return
 	}
 
@@ -511,21 +511,44 @@ func (s *Server) handleOperatorDecrypt(ctx *fasthttp.RequestCtx) {
 	s.writeBytes(ctx, logger, decrypted)
 }
 
-// handleWeb3SignerErr responds with the upstream Web3Signer status when known (or 500 for
-// transport failures such as connection errors and timeouts) and an error body describing
-// the failure, so clients can log the actual reason rather than just a bare status code.
-func (s *Server) handleWeb3SignerErr(ctx *fasthttp.RequestCtx, logger *zap.Logger, err error) {
-	statusCode := fasthttp.StatusInternalServerError
+// web3SignerErrStatus returns the HTTP status to surface for a failed Web3Signer request:
+// the upstream status when known, or 500 for transport failures (connection errors, timeouts).
+func web3SignerErrStatus(err error) int {
 	var he web3signer.HTTPResponseError
 	if errors.As(err, &he) {
-		statusCode = he.Status
+		return he.Status
 	}
+	return fasthttp.StatusInternalServerError
+}
 
+// handleWeb3SignerErr responds with the Web3Signer failure's status and an error body
+// describing the reason, so clients can log the actual cause instead of a bare status code.
+func (s *Server) handleWeb3SignerErr(ctx *fasthttp.RequestCtx, logger *zap.Logger, err error) {
+	statusCode := web3SignerErrStatus(err)
 	logger.Error("web3signer request failed",
 		zap.Error(err),
 		zap.Int("status_code", statusCode),
 	)
 	s.writeJSONErr(ctx, logger, statusCode, err)
+}
+
+// handleImportKeystoreErr handles a failed keystore import. Unlike handleWeb3SignerErr it never
+// relays the upstream error body: the import request carries the share keystore JSON and its
+// plaintext password, so a server that echoes the request back in an error could leak recoverable
+// key material to the node — the reason keystoreJSONFromEncryptedShare also withholds its errors.
+// The upstream status is still forwarded, except a 422, which is remapped to 502 so it can't be
+// read as ssv-signer's own share-decryption failure (see Client.AddValidators). The full error is
+// still logged locally.
+func (s *Server) handleImportKeystoreErr(ctx *fasthttp.RequestCtx, logger *zap.Logger, err error) {
+	statusCode := web3SignerErrStatus(err)
+	if statusCode == fasthttp.StatusUnprocessableEntity {
+		statusCode = fasthttp.StatusBadGateway
+	}
+	logger.Error("web3signer request failed",
+		zap.Error(err),
+		zap.Int("status_code", statusCode),
+	)
+	s.writeJSONErr(ctx, logger, statusCode, errors.New("keystore import failed"))
 }
 
 func (s *Server) writeString(ctx *fasthttp.RequestCtx, logger *zap.Logger, str string) {

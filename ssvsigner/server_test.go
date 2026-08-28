@@ -268,6 +268,39 @@ func (s *ServerTestSuite) TestAddValidator() {
 		resp, err := s.ServeHTTP("POST", PathValidators, reqBody)
 		require.NoError(t, err)
 		assert.Equal(t, fasthttp.StatusInternalServerError, resp.StatusCode())
+		// Import failures return a fixed message; the upstream body is never relayed.
+		assert.JSONEq(t, `{"message":"keystore import failed"}`, string(resp.Body()))
+
+		s.remoteSigner.ImportError = nil
+	})
+
+	t.Run("import error forwards upstream status but redacts body", func(t *testing.T) {
+		s.remoteSigner.ImportError = web3signer.HTTPResponseError{
+			Err:     errors.New("unexpected status: 503"),
+			Status:  fasthttp.StatusServiceUnavailable,
+			ErrText: "sensitive upstream keystore echo",
+		}
+		resp, err := s.ServeHTTP("POST", PathValidators, reqBody)
+		require.NoError(t, err)
+		assert.Equal(t, fasthttp.StatusServiceUnavailable, resp.StatusCode())
+		assert.JSONEq(t, `{"message":"keystore import failed"}`, string(resp.Body()))
+		assert.NotContains(t, string(resp.Body()), "sensitive")
+
+		s.remoteSigner.ImportError = nil
+	})
+
+	t.Run("import error remaps upstream 422 to 502", func(t *testing.T) {
+		// 422 on this endpoint is the client's share-decryption sentinel (raised by
+		// ssv-signer itself), so an upstream 422 must not alias onto it.
+		s.remoteSigner.ImportError = web3signer.HTTPResponseError{
+			Err:     errors.New("unexpected status: 422"),
+			Status:  fasthttp.StatusUnprocessableEntity,
+			ErrText: "web3signer rejected keystore",
+		}
+		resp, err := s.ServeHTTP("POST", PathValidators, reqBody)
+		require.NoError(t, err)
+		assert.Equal(t, fasthttp.StatusBadGateway, resp.StatusCode())
+		assert.JSONEq(t, `{"message":"keystore import failed"}`, string(resp.Body()))
 
 		s.remoteSigner.ImportError = nil
 	})

@@ -452,6 +452,25 @@ func TestUpCheck(t *testing.T) {
 	}
 }
 
+func TestErrTextBounded(t *testing.T) {
+	t.Parallel()
+
+	// The upstream returns a body larger than the cap; ErrText must be bounded so a
+	// misbehaving Web3Signer can't force unbounded reads and allocations on failure.
+	const upstreamBodyLen = maxErrTextLen * 4
+
+	_, web3Signer := setupTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write(bytes.Repeat([]byte("x"), upstreamBodyLen))
+	})
+
+	_, err := web3Signer.ListKeys(t.Context())
+
+	var httpErr HTTPResponseError
+	require.ErrorAs(t, err, &httpErr)
+	require.LessOrEqual(t, len(httpErr.ErrText), maxErrTextLen)
+}
+
 func TestTLSConfig(t *testing.T) {
 	t.Parallel()
 

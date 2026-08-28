@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/carlmjohnson/requests"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -1081,6 +1082,41 @@ func Test_requestFailedErr(t *testing.T) {
 		body := strings.Repeat("x", maxErrBodyLen-1) + "  "
 		err := requestFailedErr(baseErr, body)
 		require.ErrorContains(t, err, "...(truncated)")
+	})
+}
+
+// TestAddValidatorsUnprocessableEntitySurfacesReason checks that a 422 from ssv-signer becomes a
+// ShareDecryptionError that keeps the ResponseError chain intact (requests.HasStatusErr still
+// works) and never collapses to an empty message, even with an empty upstream body.
+func TestAddValidatorsUnprocessableEntitySurfacesReason(t *testing.T) {
+	share := ShareKeys{EncryptedPrivKey: []byte("x"), PubKey: phase0.BLSPubKey{1}}
+
+	t.Run("empty body yields status text, not an empty message", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusUnprocessableEntity)
+		}))
+		t.Cleanup(server.Close)
+
+		_, err := NewClient(server.URL).AddValidators(t.Context(), share)
+		require.Error(t, err)
+
+		var decryptErr ShareDecryptionError
+		require.ErrorAs(t, err, &decryptErr)
+		require.True(t, requests.HasStatusErr(err, http.StatusUnprocessableEntity))
+		require.ErrorContains(t, err, "request failed")
+	})
+
+	t.Run("server reason is surfaced", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			_, _ = w.Write([]byte(`{"message":"failed to decrypt share"}`))
+		}))
+		t.Cleanup(server.Close)
+
+		_, err := NewClient(server.URL).AddValidators(t.Context(), share)
+		require.Error(t, err)
+		require.ErrorContains(t, err, "failed to decrypt share")
+		require.True(t, requests.HasStatusErr(err, http.StatusUnprocessableEntity))
 	})
 }
 

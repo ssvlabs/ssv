@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -133,7 +132,10 @@ func (c *Client) AddValidators(ctx context.Context, shares ...ShareKeys) (status
 		Fetch(ctx)
 
 	if requests.HasStatusErr(err, http.StatusUnprocessableEntity) {
-		return nil, ShareDecryptionError(errors.New(errBody))
+		// Wrap via requestFailedErr so the ResponseError chain survives (errors.Is /
+		// requests.HasStatusErr keep working) and an empty-body 422 yields the status text
+		// instead of an empty message.
+		return nil, ShareDecryptionError(requestFailedErr(err, errBody))
 	}
 
 	if err != nil {

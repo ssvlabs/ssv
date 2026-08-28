@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -58,7 +59,7 @@ func (w3s *Web3Signer) ListKeys(ctx context.Context) (ListKeysResponse, error) {
 		Client(w3s.httpClient).
 		Path(PathPublicKeys).
 		ToJSON(&resp).
-		AddValidator(requests.ValidatorHandler(requests.DefaultValidator, requests.ToString(&errResp))).
+		AddValidator(errTextValidator(&errResp)).
 		Fetch(ctx)
 	return resp, w3s.handleWeb3SignerErr(err, errResp)
 }
@@ -85,7 +86,7 @@ func (w3s *Web3Signer) ImportKeystore(ctx context.Context, req ImportKeystoreReq
 		BodyJSON(req).
 		Post().
 		ToJSON(&resp).
-		AddValidator(requests.ValidatorHandler(requests.DefaultValidator, requests.ToString(&errResp))).
+		AddValidator(errTextValidator(&errResp)).
 		Fetch(ctx)
 	return resp, w3s.handleWeb3SignerErr(err, errResp)
 }
@@ -111,7 +112,7 @@ func (w3s *Web3Signer) DeleteKeystore(ctx context.Context, req DeleteKeystoreReq
 		BodyJSON(req).
 		Delete().
 		ToJSON(&resp).
-		AddValidator(requests.ValidatorHandler(requests.DefaultValidator, requests.ToString(&errResp))).
+		AddValidator(errTextValidator(&errResp)).
 		Fetch(ctx)
 	return resp, w3s.handleWeb3SignerErr(err, errResp)
 }
@@ -148,9 +149,27 @@ func (w3s *Web3Signer) Sign(ctx context.Context, sharePubKey phase0.BLSPubKey, r
 		Post().
 		Accept("application/json").
 		ToJSON(&resp).
-		AddValidator(requests.ValidatorHandler(requests.DefaultValidator, requests.ToString(&errResp))).
+		AddValidator(errTextValidator(&errResp)).
 		Fetch(ctx)
 	return resp, w3s.handleWeb3SignerErr(err, errResp)
+}
+
+// maxErrTextLen caps the upstream error body captured into HTTPResponseError.ErrText, so a
+// misbehaving Web3Signer can't force unbounded reads and allocations on failure (the node
+// applies its own cap when reading ssv-signer's response; see client.go maxErrBodyLen).
+const maxErrTextLen = 1024
+
+// errTextValidator defers to requests.DefaultValidator and, on a rejected status, captures a
+// bounded copy of the error body into *dst for handleWeb3SignerErr to attach as ErrText.
+func errTextValidator(dst *string) requests.ResponseHandler {
+	return requests.ValidatorHandler(requests.DefaultValidator, func(resp *http.Response) error {
+		b, err := io.ReadAll(io.LimitReader(resp.Body, maxErrTextLen))
+		if err != nil {
+			return err
+		}
+		*dst = string(b)
+		return nil
+	})
 }
 
 func (w3s *Web3Signer) handleWeb3SignerErr(err error, errResp string) error {
@@ -173,7 +192,7 @@ func (w3s *Web3Signer) UpCheck(ctx context.Context) error {
 		Client(w3s.httpClient).
 		Path(PathUpCheck).
 		CheckStatus(http.StatusOK).
-		AddValidator(requests.ValidatorHandler(requests.DefaultValidator, requests.ToString(&errResp))).
+		AddValidator(errTextValidator(&errResp)).
 		Fetch(ctx)
 	return w3s.handleWeb3SignerErr(err, errResp)
 }
