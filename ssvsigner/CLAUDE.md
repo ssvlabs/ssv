@@ -29,7 +29,7 @@ SSV Signer is a lightweight remote signing service that acts as a security inter
 2. **Client** (`client.go`): HTTP client library for SSV nodes
     - Used by SSV nodes to communicate with SSV Signer
     - Supports TLS configuration
-    - Single attempt per request: retrying is the caller's responsibility
+    - Single attempt per request (retries are the caller's responsibility); wraps request errors, mapping some HTTP statuses to typed errors
 
 3. **EKM** (`ekm/`): Ethereum Key Manager abstraction
     - `RemoteKeyManager`: Delegates to SSV Signer (production)
