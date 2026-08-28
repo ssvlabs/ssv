@@ -275,6 +275,12 @@ func (mc *MultiClient) Healthy(ctx context.Context) error {
 		return nil
 	}
 
+	if len(mc.clients) == 0 {
+		// NewMulti guarantees at least one client; without this guard the "no healthy clients"
+		// error below would wrap a nil error for a MultiClient constructed another way.
+		return fmt.Errorf("no clients configured")
+	}
+
 	healthyClients := atomic.Bool{}
 	healthyCount := atomic.Int64{}
 	p := pool.New().WithErrors().WithContext(ctx)
@@ -387,6 +393,11 @@ func (mc *MultiClient) call(ctx context.Context, f func(client SingleClientProvi
 	startTime := time.Now()
 
 	clientsTotal := len(mc.clients)
+	if clientsTotal == 0 {
+		// NewMulti guarantees at least one client, but guard the modulo arithmetic below
+		// from dividing by zero on a MultiClient constructed another way.
+		return nil, fmt.Errorf("no clients configured")
+	}
 
 	// Iterate over the clients in round-robin fashion, starting from the most likely healthy client (currentClientIndex).
 	startingIndex := int(mc.currentClientIndex.Load())
