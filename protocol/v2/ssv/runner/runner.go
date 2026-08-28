@@ -397,7 +397,7 @@ func (b *BaseRunner) signAndBroadcastPartialSigMsgs(
 	ctx context.Context,
 	network protocolp2p.Network,
 	opSigner ssvtypes.OperatorSigner,
-	validatorPubKey []byte,
+	validatorPubKey spectypes.ValidatorPK,
 	msgs *spectypes.PartialSignatureMessages,
 ) error {
 	// Reuse the existing span instead of generating new one to keep tracing-data lightweight.
@@ -406,7 +406,7 @@ func (b *BaseRunner) signAndBroadcastPartialSigMsgs(
 	// Use the fork-aware domain so the pubsub message validator accepts the message after the
 	// Boole fork activates (post-fork it checks NextDomainType). Mirrors CommitteeRunner and
 	// QBFT domain selection. Fixes #2915.
-	msgID := spectypes.NewMsgID(b.NetworkConfig.DomainTypeAtSlot(msgs.Slot), validatorPubKey, b.RunnerRoleType)
+	msgID := spectypes.NewValidatorMsgID(b.NetworkConfig.DomainTypeAtSlot(msgs.Slot), validatorPubKey, b.RunnerRoleType)
 	encodedMsg, err := msgs.Encode()
 	if err != nil {
 		return fmt.Errorf("could not encode partial signature messages: %w", err)
@@ -444,11 +444,11 @@ func (b *BaseRunner) signAndBroadcastPartialSigMsgs(
 func (b *BaseRunner) signAndBroadcastPostConsensusMsg(
 	network protocolp2p.Network,
 	opSigner ssvtypes.OperatorSigner,
-	validatorPubKey []byte,
+	validatorPubKey spectypes.ValidatorPK,
 	msgs *spectypes.PartialSignatureMessages,
 ) error {
 	domain := b.NetworkConfig.DomainTypeAtSlot(msgs.Slot)
-	msgID := spectypes.NewMsgID(domain, validatorPubKey, b.RunnerRoleType)
+	msgID := spectypes.NewValidatorMsgID(domain, validatorPubKey, b.RunnerRoleType)
 	encodedMsg, err := msgs.Encode()
 	if err != nil {
 		return fmt.Errorf("could not encode post-consensus partial signature message: %w", err)

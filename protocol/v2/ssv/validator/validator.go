@@ -79,7 +79,7 @@ func NewValidator(ctx context.Context, cancel func(), logger *zap.Logger, option
 
 	// some additional steps to prepare duty runners for handling duties
 	for role, dutyRunner := range options.DutyRunners {
-		runnerIdentifier := spectypes.NewMsgID(v.NetworkConfig.DomainType, v.Share.ValidatorPubKey[:], role)
+		runnerIdentifier := spectypes.NewValidatorMsgID(v.NetworkConfig.DomainType, v.Share.ValidatorPubKey, role)
 		dutyRunner.SetQBFTRoundTimerF(v.newQBFTRoundTimerF(runnerIdentifier))
 		v.Queues[role] = queue.New(
 			logger,

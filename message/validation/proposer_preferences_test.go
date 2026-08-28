@@ -15,6 +15,7 @@ import (
 
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
+	"github.com/ssvlabs/ssv/protocol/v2/types/ssvtestingutils"
 )
 
 func TestPartialSignatureTypeMatchesRole_ProposerPreferences(t *testing.T) {
@@ -132,7 +133,7 @@ func TestValidRoleAtSlot_ValidatorRegistrationDeprecatedAtGloas(t *testing.T) {
 
 func TestDutyLimit_ProposerPreferences(t *testing.T) {
 	mv := &messageValidator{netCfg: networkconfig.TestNetwork}
-	msgID := spectypes.NewMsgID(spectypes.DomainType{}, make([]byte, 48), spectypes.RoleProposerPreferences)
+	msgID := ssvtestingutils.NewMsgID(spectypes.DomainType{}, make([]byte, 48), spectypes.RoleProposerPreferences)
 
 	limit, ok := mv.dutyLimit(msgID, 0, nil)
 	require.True(t, ok)

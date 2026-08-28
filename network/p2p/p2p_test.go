@@ -27,6 +27,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/protocol/v2/types/ssvtestingutils"
 )
 
 func TestGetMaxPeers(t *testing.T) {
@@ -225,7 +226,7 @@ func generateCommitteeMsg(ks *spectestingutils.TestKeySet, round specqbft.Round)
 	fullData := spectestingutils.TestingQBFTFullData
 
 	encodedCommitteeID := append(bytes.Repeat([]byte{0}, 16), committeeID[:]...)
-	committeeIdentifier := spectypes.NewMsgID(netCfg.DomainTypeAtSlot(phase0.Slot(height)), encodedCommitteeID, spectypes.RoleCommittee)
+	committeeIdentifier := ssvtestingutils.NewMsgID(netCfg.DomainTypeAtSlot(phase0.Slot(height)), encodedCommitteeID, spectypes.RoleCommittee)
 
 	qbftMessage := &specqbft.Message{
 		MsgType:    specqbft.ProposalMsgType,
@@ -268,7 +269,7 @@ func dummyMsg(t *testing.T, pkHex string, height int, role spectypes.RunnerRole)
 		committeeID := ssvtypes.ComputeCommitteeID([]spectypes.OperatorID{1, 2, 3, 4})
 		dutyExecutorID = append(bytes.Repeat([]byte{0}, 16), committeeID[:]...)
 	}
-	id := spectypes.NewMsgID(networkconfig.TestNetwork.DomainTypeAtSlot(phase0.Slot(height)), dutyExecutorID, role)
+	id := ssvtestingutils.NewMsgID(networkconfig.TestNetwork.DomainTypeAtSlot(phase0.Slot(height)), dutyExecutorID, role)
 
 	qbftMessage := &specqbft.Message{
 		MsgType:    specqbft.CommitMsgType,

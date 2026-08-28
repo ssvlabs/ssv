@@ -425,9 +425,9 @@ listener:
 
 	ssvMsg := &spectypes.SSVMessage{
 		MsgType: spectypes.SSVPartialSignatureMsgType,
-		MsgID: spectypes.NewMsgID(
+		MsgID: spectypes.NewCommitteeMsgID(
 			r.NetworkConfig.DomainTypeAtSlot(r.State.CurrentDuty.DutySlot()),
-			r.QBFTController.CommitteeMember.CommitteeID[:],
+			r.QBFTController.CommitteeMember.CommitteeID,
 			r.RunnerRoleType,
 		),
 	}

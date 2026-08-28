@@ -191,7 +191,7 @@ func (r *PTCAttesterRunner) executeDuty(ctx context.Context, logger *zap.Logger,
 		Messages: []*spectypes.PartialSignatureMessage{msg},
 	}
 
-	if err := r.signAndBroadcastPartialSigMsgs(ctx, r.network, r.operatorSigner, r.GetShare().ValidatorPubKey[:], msgs); err != nil {
+	if err := r.signAndBroadcastPartialSigMsgs(ctx, r.network, r.operatorSigner, r.GetShare().ValidatorPubKey, msgs); err != nil {
 		return fmt.Errorf("could not sign/broadcast payload attestation partial sig: %w", err)
 	}
 	return nil

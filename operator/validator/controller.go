@@ -1111,7 +1111,15 @@ func (c *Controller) ReportValidatorStatuses(ctx context.Context) {
 // height's slot.
 func newIdentifierFn(cfg *networkconfig.Network, executorID []byte, role spectypes.RunnerRole) func(specqbft.Height) []byte {
 	return func(height specqbft.Height) []byte {
-		id := spectypes.NewMsgID(cfg.DomainTypeAtSlot(phase0.Slot(height)), executorID, role)
+		domain := cfg.DomainTypeAtSlot(phase0.Slot(height))
+		// executorID is a 32-byte committee ID (committee/aggregator-committee runners) or a
+		// 48-byte validator pubkey (all other roles); pick the matching typed MsgID constructor.
+		var id spectypes.MessageID
+		if len(executorID) == len(spectypes.CommitteeID{}) {
+			id = spectypes.NewCommitteeMsgID(domain, spectypes.CommitteeID(executorID), role)
+		} else {
+			id = spectypes.NewValidatorMsgID(domain, spectypes.ValidatorPK(executorID), role)
+		}
 		return id[:]
 	}
 }
