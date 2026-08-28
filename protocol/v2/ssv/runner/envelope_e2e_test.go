@@ -17,6 +17,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
+	"github.com/ssvlabs/ssv/protocol/v2/types/ssvtestingutils"
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
@@ -41,7 +42,7 @@ func newEnvelopeProposerRunnerForTest(t *testing.T, bn beacon.BeaconNode) (*Enve
 	cfg := cloneTestNetworkConfig()
 	keySet := spectestingutils.Testing4SharesSet()
 	share := spectestingutils.TestingShare(keySet, spectestingutils.TestingValidatorIndex)
-	identifier := spectypes.NewMsgID(spectypes.JatoTestnet, spectestingutils.TestingValidatorPubKey[:], spectypes.RoleEnvelopeProposer)
+	identifier := ssvtestingutils.NewMsgID(spectypes.JatoTestnet, spectestingutils.TestingValidatorPubKey[:], spectypes.RoleEnvelopeProposer)
 	network := protocoltesting.NewTestingNetwork(1, keySet.OperatorKeys[1])
 	km := ekm.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager())
 	operator := spectestingutils.TestingCommitteeMember(keySet)
@@ -88,7 +89,7 @@ func setupEnvelopeRunnerForPostConsensus(t *testing.T, runner *EnvelopeProposerR
 	require.NoError(t, err)
 	runner.State.DecidedValue = encoded
 
-	msgID := spectypes.NewMsgID(runner.NetworkConfig.DomainType, runner.GetShare().ValidatorPubKey[:], runner.RunnerRoleType)
+	msgID := ssvtestingutils.NewMsgID(runner.NetworkConfig.DomainType, runner.GetShare().ValidatorPubKey[:], runner.RunnerRoleType)
 	qbftConfig := protocoltesting.TestingConfig(zap.NewNop(), keySet)
 	qbftConfig.ProposerF = func(*specqbft.State, specqbft.Round) spectypes.OperatorID { return 1 }
 	qbftConfig.Network = runner.network

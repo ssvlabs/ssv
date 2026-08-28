@@ -146,7 +146,7 @@ func (r *EnvelopeProposerRunner) ProcessConsensus(ctx context.Context, logger *z
 
 	r.measurements.StartPostConsensus()
 	span.AddEvent("broadcasting post-consensus partial signature message")
-	if err := r.signAndBroadcastPostConsensusMsg(r.GetNetwork(), r.operatorSigner, r.GetShare().ValidatorPubKey[:], postConsensusMsg); err != nil {
+	if err := r.signAndBroadcastPostConsensusMsg(r.GetNetwork(), r.operatorSigner, r.GetShare().ValidatorPubKey, postConsensusMsg); err != nil {
 		return fmt.Errorf("can't broadcast partial post-consensus sig: %w", err)
 	}
 

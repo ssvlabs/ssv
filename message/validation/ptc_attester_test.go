@@ -11,13 +11,14 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
+	"github.com/ssvlabs/ssv/protocol/v2/types/ssvtestingutils"
 )
 
 // A PTC member is drawn from a beacon committee, and a validator sits on exactly one beacon committee
 // per epoch → at most one PTC duty per epoch, plus a reorg margin → limit 2.
 func TestDutyLimit_PTCAttester(t *testing.T) {
 	mv := &messageValidator{netCfg: networkconfig.TestNetwork}
-	msgID := spectypes.NewMsgID(spectypes.DomainType{}, make([]byte, 48), spectypes.RolePTCAttester)
+	msgID := ssvtestingutils.NewMsgID(spectypes.DomainType{}, make([]byte, 48), spectypes.RolePTCAttester)
 
 	limit, ok := mv.dutyLimit(msgID, 0, nil)
 	require.True(t, ok)

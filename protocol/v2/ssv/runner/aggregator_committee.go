@@ -820,9 +820,9 @@ func (r *AggregatorCommitteeRunner) ProcessConsensus(
 
 	ssvMsg := &spectypes.SSVMessage{
 		MsgType: spectypes.SSVPartialSignatureMsgType,
-		MsgID: spectypes.NewMsgID(
+		MsgID: spectypes.NewCommitteeMsgID(
 			r.NetworkConfig.DomainTypeAtSlot(duty.DutySlot()),
-			r.QBFTController.CommitteeMember.CommitteeID[:],
+			r.QBFTController.CommitteeMember.CommitteeID,
 			r.RunnerRoleType,
 		),
 	}
@@ -1782,9 +1782,9 @@ func (r *AggregatorCommitteeRunner) executeDuty(ctx context.Context, logger *zap
 		return nil
 	}
 
-	msgID := spectypes.NewMsgID(
+	msgID := spectypes.NewCommitteeMsgID(
 		r.NetworkConfig.DomainTypeAtSlot(duty.DutySlot()),
-		r.QBFTController.CommitteeMember.CommitteeID[:],
+		r.QBFTController.CommitteeMember.CommitteeID,
 		r.RunnerRoleType,
 	)
 	encodedMsg, err := msg.Encode()
