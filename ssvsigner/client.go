@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -354,32 +355,55 @@ func (c *Client) MissingKeys(ctx context.Context, localKeys []phase0.BLSPubKey) 
 // server can't bloat error messages and logs.
 const maxErrBodyLen = 1024
 
-// errBodyValidator returns a response validator that defers to requests.DefaultValidator
-// and, on a rejected status, captures a bounded copy of the error body into *dst for
-// requestFailedErr to attach. It reads one byte past the cap so truncation is detectable.
+// errBodyValidator runs requests.DefaultValidator and, on a rejected status, captures a
+// bounded copy of the error body into *dst for requestFailedErr to attach, reading one byte
+// past the cap so truncation stays detectable.
+//
+// It returns the validation error directly rather than wrapping it with
+// requests.ValidatorHandler, which labels a successful body capture "handled recovery from
+// invalid response". Capturing the body is the normal path here, so that phrase would be
+// prefixed onto every error (and a capture-read failure would render as a multi-line join);
+// returning the error directly avoids both and still satisfies requests.HasStatusErr.
 func errBodyValidator(dst *string) requests.ResponseHandler {
-	return requests.ValidatorHandler(requests.DefaultValidator, func(resp *http.Response) error {
-		b, err := io.ReadAll(io.LimitReader(resp.Body, maxErrBodyLen+1))
-		if err != nil {
-			return err
+	return func(resp *http.Response) error {
+		err := requests.DefaultValidator(resp)
+		if err == nil {
+			return nil
 		}
-		*dst = string(b)
-		return nil
-	})
+		if b, readErr := io.ReadAll(io.LimitReader(resp.Body, maxErrBodyLen+1)); readErr == nil {
+			*dst = string(b)
+		}
+		return err
+	}
 }
 
-// requestFailedErr wraps a failed request error, attaching the captured error body (if
-// any) so callers see the reason reported by the server instead of just a status code.
+// requestFailedErr wraps a failed request error, attaching the reason reported by the
+// server (if any) so callers see it instead of just a status code.
 func requestFailedErr(err error, errBody string) error {
 	// Record whether the body was truncated from its raw length, before TrimSpace can
 	// shrink a whitespace tail back under the cap and hide that content was dropped.
 	truncated := len(errBody) > maxErrBodyLen
 	errBody = strings.TrimSpace(errBody)
-	// Older servers write the zero-value response on errors, which carries no information
-	// ("null" / "{}"), so don't attach it.
-	if errBody == "" || errBody == "null" || errBody == "{}" {
+	if errBody == "" {
 		return fmt.Errorf("request failed: %w", err)
 	}
+
+	// The server reports failures as {"message": ...} (web3signer.ErrorMessage), so a
+	// non-empty message is the reason. A body that parses as JSON without one is the
+	// zero-value success response an older server writes on error — null, {},
+	// {"signature":"0x0…0"} (a zero SignResponse) — with nothing useful, so drop it and let
+	// err's status speak. Keying on the message avoids enumerating those zero values, which
+	// drift as the response structs change.
+	var em web3signer.ErrorMessage
+	if json.Unmarshal([]byte(errBody), &em) == nil {
+		if msg := strings.TrimSpace(em.Message); msg != "" {
+			return fmt.Errorf("request failed: %w: %s", err, msg)
+		}
+		return fmt.Errorf("request failed: %w", err)
+	}
+
+	// Not JSON we recognize: a plain-text error from an intermediary in front of the
+	// signer, or a body truncated mid-JSON. Surface it raw, bounded.
 	if len(errBody) > maxErrBodyLen {
 		errBody = errBody[:maxErrBodyLen]
 	}

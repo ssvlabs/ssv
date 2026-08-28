@@ -471,6 +471,29 @@ func TestErrTextBounded(t *testing.T) {
 	require.LessOrEqual(t, len(httpErr.ErrText), maxErrTextLen)
 }
 
+// TestErrOmitsHandledRecoveryPhrase guards against errTextValidator reintroducing the
+// requests.ValidatorHandler "handled recovery from invalid response" phrase: capturing the
+// upstream body is the normal failure path, and the phrase would otherwise travel into
+// HTTPResponseError.Err, the signer's logs, and the error body returned to the node.
+func TestErrOmitsHandledRecoveryPhrase(t *testing.T) {
+	t.Parallel()
+
+	_, web3Signer := setupTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte("upstream boom"))
+	})
+
+	_, err := web3Signer.ListKeys(t.Context())
+	require.Error(t, err)
+	require.NotContains(t, err.Error(), "handled recovery from invalid response")
+
+	var httpErr HTTPResponseError
+	require.ErrorAs(t, err, &httpErr)
+	require.Equal(t, http.StatusInternalServerError, httpErr.Status)
+	require.Equal(t, "upstream boom", httpErr.ErrText)
+	require.NotContains(t, httpErr.Err.Error(), "handled recovery from invalid response")
+}
+
 func TestTLSConfig(t *testing.T) {
 	t.Parallel()
 

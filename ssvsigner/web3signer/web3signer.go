@@ -134,7 +134,7 @@ type SignRequest struct {
 }
 
 type SignResponse struct {
-	Signature phase0.BLSSignature `json:"signature,omitempty"`
+	Signature phase0.BLSSignature `json:"signature"`
 }
 
 // Sign signs using https://consensys.github.io/web3signer/web3signer-eth2.html#tag/Signing/operation/ETH2_SIGN
@@ -159,17 +159,25 @@ func (w3s *Web3Signer) Sign(ctx context.Context, sharePubKey phase0.BLSPubKey, r
 // applies its own cap when reading ssv-signer's response; see client.go maxErrBodyLen).
 const maxErrTextLen = 1024
 
-// errTextValidator defers to requests.DefaultValidator and, on a rejected status, captures a
-// bounded copy of the error body into *dst for handleWeb3SignerErr to attach as ErrText.
+// errTextValidator runs requests.DefaultValidator and, on a rejected status, captures a
+// bounded copy of the upstream error body into *dst for handleWeb3SignerErr to attach as
+// ErrText.
+//
+// It returns the validation error directly rather than wrapping it with
+// requests.ValidatorHandler, which labels a successful body capture "handled recovery from
+// invalid response" — a phrase that would otherwise travel into HTTPResponseError.Err, the
+// signer's logs, and the error body returned to the node.
 func errTextValidator(dst *string) requests.ResponseHandler {
-	return requests.ValidatorHandler(requests.DefaultValidator, func(resp *http.Response) error {
-		b, err := io.ReadAll(io.LimitReader(resp.Body, maxErrTextLen))
-		if err != nil {
-			return err
+	return func(resp *http.Response) error {
+		err := requests.DefaultValidator(resp)
+		if err == nil {
+			return nil
 		}
-		*dst = string(b)
-		return nil
-	})
+		if b, readErr := io.ReadAll(io.LimitReader(resp.Body, maxErrTextLen)); readErr == nil {
+			*dst = string(b)
+		}
+		return err
+	}
 }
 
 func (w3s *Web3Signer) handleWeb3SignerErr(err error, errResp string) error {

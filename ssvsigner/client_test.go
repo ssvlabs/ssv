@@ -1064,6 +1064,24 @@ func Test_requestFailedErr(t *testing.T) {
 		}
 	})
 
+	t.Run("zero-value success bodies carry no reason", func(t *testing.T) {
+		// Older servers write the zero value of the success response on errors. These parse
+		// as JSON but have no message, so no reason must be attached — in particular the
+		// zero SignResponse, whose fixed-size BLSSignature array always serializes, giving
+		// 210 bytes of hex zeros.
+		signZero, err := json.Marshal(web3signer.SignResponse{})
+		require.NoError(t, err)
+		for _, body := range []string{
+			string(signZero),
+			`{"data":null}`,
+			`{"signature":"0x0000000000","message":""}`,
+		} {
+			require.EqualError(t, requestFailedErr(baseErr, body),
+				"request failed: unexpected status: 500",
+				"body %q should not be surfaced as a reason", body)
+		}
+	})
+
 	t.Run("body attached", func(t *testing.T) {
 		err := requestFailedErr(baseErr, `{"message":"web3signer unavailable"}`)
 		require.ErrorContains(t, err, "web3signer unavailable")
@@ -1135,4 +1153,47 @@ func TestErrorBodyCaptureIsBounded(t *testing.T) {
 	require.Error(t, err)
 	require.ErrorContains(t, err, "...(truncated)")
 	require.Less(t, len(err.Error()), 2*maxErrBodyLen)
+}
+
+// TestSignOldSignerZeroValueBodyNotSurfaced covers a mixed deployment where the node is
+// upgraded before the signer: an older signer writes the zero-value success response on a
+// Sign failure, which marshals to {"signature":"0x0…0"} (210 bytes) because a fixed-size
+// BLSSignature array is always serialized. That body must not be surfaced as the reason —
+// the status carries the signal instead.
+func TestSignOldSignerZeroValueBodyNotSurfaced(t *testing.T) {
+	zeroBody, err := json.Marshal(web3signer.SignResponse{})
+	require.NoError(t, err)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write(zeroBody)
+	}))
+	t.Cleanup(server.Close)
+
+	_, err = NewClient(server.URL).Sign(t.Context(), phase0.BLSPubKey{1}, web3signer.SignRequest{})
+	require.Error(t, err)
+	require.NotContains(t, err.Error(), "signature")
+	require.NotContains(t, err.Error(), "0x00000")
+	require.True(t, requests.HasStatusErr(err, http.StatusInternalServerError))
+	require.ErrorContains(t, err, "request failed")
+}
+
+// TestClientErrorOmitsHandledRecoveryPhrase guards against errBodyValidator reintroducing
+// the requests.ValidatorHandler "handled recovery from invalid response" phrase. Capturing
+// the error body is the normal failure path here, so the phrase would otherwise be prefixed
+// onto every returned error — including the startup ListValidators path this PR improves —
+// while the actual server reason must still come through.
+func TestClientErrorOmitsHandledRecoveryPhrase(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(`{"message":"web3signer down"}`))
+	}))
+	t.Cleanup(server.Close)
+
+	_, err := NewClient(server.URL).ListValidators(t.Context())
+	require.Error(t, err)
+	require.False(t, errors.Is(err, requests.ErrInvalidHandled))
+	require.NotContains(t, err.Error(), "handled recovery from invalid response")
+	require.ErrorContains(t, err, "web3signer down")
+	require.True(t, requests.HasStatusErr(err, http.StatusInternalServerError))
 }
