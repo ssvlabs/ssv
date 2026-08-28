@@ -86,7 +86,7 @@ func (r *proposerPreferencesSlotRunner) runRequestAuthRound(ctx context.Context,
 			Slot:     proposalSlot,
 			Messages: []*spectypes.PartialSignatureMessage{msg},
 		}
-		if err := r.signAndBroadcastPartialSigMsgs(ctx, r.network, r.operatorSigner, r.GetShare().ValidatorPubKey[:], msgs); err != nil {
+		if err := r.signAndBroadcastPartialSigMsgs(ctx, r.network, r.operatorSigner, r.GetShare().ValidatorPubKey, msgs); err != nil {
 			logger.Warn("request auth skipped: could not broadcast partial",
 				fields.Slot(proposalSlot), zap.String("builder_url", entry.URL), zap.Error(err))
 			continue

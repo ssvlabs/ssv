@@ -18,6 +18,7 @@ import (
 
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/protocol/v2/types/ssvtestingutils"
 	"github.com/ssvlabs/ssv/utils/casts"
 )
 
@@ -375,7 +376,7 @@ func (m mockExecuteDutyMessage) ssvMessage(state *State) *spectypes.SignedSSVMes
 	return &spectypes.SignedSSVMessage{
 		SSVMessage: &spectypes.SSVMessage{
 			MsgType: message.SSVEventMsgType,
-			MsgID:   spectypes.NewMsgID(testingutils.TestingSSVDomainType, testingutils.TestingValidatorPubKey[:], casts.BeaconRoleToRunnerRole(m.Role)),
+			MsgID:   ssvtestingutils.NewMsgID(testingutils.TestingSSVDomainType, testingutils.TestingValidatorPubKey[:], casts.BeaconRoleToRunnerRole(m.Role)),
 			Data:    data,
 		},
 		FullData:    []byte{1, 2, 3, 4},
@@ -405,7 +406,7 @@ func (m mockTimeoutMessage) ssvMessage(state *State) *spectypes.SignedSSVMessage
 	return &spectypes.SignedSSVMessage{
 		SSVMessage: &spectypes.SSVMessage{
 			MsgType: message.SSVEventMsgType,
-			MsgID:   spectypes.NewMsgID(testingutils.TestingSSVDomainType, testingutils.TestingValidatorPubKey[:], m.Role),
+			MsgID:   ssvtestingutils.NewMsgID(testingutils.TestingSSVDomainType, testingutils.TestingValidatorPubKey[:], m.Role),
 			Data:    eventMsgData,
 		},
 		FullData:    []byte{1, 2, 3, 4},

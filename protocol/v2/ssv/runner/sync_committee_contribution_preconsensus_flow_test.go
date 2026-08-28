@@ -22,6 +22,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/protocol/v2/types/ssvtestingutils"
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
@@ -160,7 +161,7 @@ func newSyncCommitteeAggregatorRunnerForTest(
 	logger := zap.NewNop()
 	keySet := spectestingutils.Testing4SharesSet()
 	share := spectestingutils.TestingShare(keySet, spectestingutils.TestingValidatorIndex)
-	identifier := spectypes.NewMsgID(spectypes.JatoTestnet, spectestingutils.TestingValidatorPubKey[:], ssvtypes.RoleSyncCommitteeContribution)
+	identifier := ssvtestingutils.NewMsgID(spectypes.JatoTestnet, spectestingutils.TestingValidatorPubKey[:], ssvtypes.RoleSyncCommitteeContribution)
 	network := protocoltesting.NewTestingNetwork(1, keySet.OperatorKeys[1])
 	km := ekm.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager())
 	operator := spectestingutils.TestingCommitteeMember(keySet)

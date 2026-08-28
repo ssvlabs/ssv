@@ -46,6 +46,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/protocol/v2/types/ssvtestingutils"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	storagemocks "github.com/ssvlabs/ssv/registry/storage/mocks"
 	kv "github.com/ssvlabs/ssv/storage/badger"
@@ -234,7 +235,7 @@ func TestHandleNonCommitteeMessages_RoleGuard(t *testing.T) {
 		return &queue.SSVMessage{
 			SSVMessage: &spectypes.SSVMessage{
 				MsgType: spectypes.SSVConsensusMsgType,
-				MsgID:   spectypes.NewMsgID(spectypes.DomainType{}, make([]byte, 48), role),
+				MsgID:   ssvtestingutils.NewMsgID(spectypes.DomainType{}, make([]byte, 48), role),
 			},
 			Body: body,
 		}
@@ -266,7 +267,7 @@ func TestHandleNonCommitteeMessages_RoleGuard(t *testing.T) {
 		msg := &queue.SSVMessage{
 			SSVMessage: &spectypes.SSVMessage{
 				MsgType: spectypes.DKGMsgType,
-				MsgID:   spectypes.NewMsgID(spectypes.DomainType{}, make([]byte, 48), spectypes.RoleCommittee),
+				MsgID:   ssvtestingutils.NewMsgID(spectypes.DomainType{}, make([]byte, 48), spectypes.RoleCommittee),
 			},
 		}
 
@@ -387,7 +388,7 @@ func TestHandleNonCommitteeMessages(t *testing.T) {
 
 	logger.Debug("starting to send messages")
 
-	identifier := spectypes.NewMsgID(networkconfig.TestNetwork.DomainType, []byte("pk"), spectypes.RoleCommittee)
+	identifier := ssvtestingutils.NewMsgID(networkconfig.TestNetwork.DomainType, []byte("pk"), spectypes.RoleCommittee)
 
 	ctr.messageRouter.Route(t.Context(), &queue.SSVMessage{
 		SSVMessage: &spectypes.SSVMessage{
@@ -466,7 +467,7 @@ func TestHandleWorkerMessagesUsesMessageTraceHandler(t *testing.T) {
 		return sentinelErr
 	}
 
-	msgID := spectypes.NewMsgID(networkconfig.TestNetwork.DomainType, []byte("pk"), spectypes.RoleCommittee)
+	msgID := ssvtestingutils.NewMsgID(networkconfig.TestNetwork.DomainType, []byte("pk"), spectypes.RoleCommittee)
 	ssvMsg := &spectypes.SSVMessage{
 		MsgType: spectypes.SSVPartialSignatureMsgType,
 		MsgID:   msgID,
@@ -1709,7 +1710,7 @@ func TestHandleRouterMessages_LogsOwnValidatorDrop(t *testing.T) {
 	go ctr.handleRouterMessages()
 
 	route := func(pk []byte, body any) {
-		msgID := spectypes.NewMsgID(networkconfig.TestNetwork.DomainType, pk, spectypes.RoleProposerPreferences)
+		msgID := ssvtestingutils.NewMsgID(networkconfig.TestNetwork.DomainType, pk, spectypes.RoleProposerPreferences)
 		ctr.messageRouter.Route(t.Context(), &queue.SSVMessage{
 			SSVMessage: &spectypes.SSVMessage{MsgType: spectypes.SSVPartialSignatureMsgType, MsgID: msgID, Data: []byte("data")},
 			Body:       body,

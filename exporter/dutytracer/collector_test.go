@@ -26,6 +26,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
+	"github.com/ssvlabs/ssv/protocol/v2/types/ssvtestingutils"
 	"github.com/ssvlabs/ssv/registry/storage"
 	registrystoragemocks "github.com/ssvlabs/ssv/registry/storage/mocks"
 	kv "github.com/ssvlabs/ssv/storage/badger"
@@ -47,7 +48,7 @@ func TestValidatorDuty(t *testing.T) {
 		vIndex       = phase0.ValidatorIndex(55)
 	)
 
-	identifier := spectypes.NewMsgID([4]byte{}, []byte("pk"), role)
+	identifier := ssvtestingutils.NewMsgID([4]byte{}, []byte("pk"), role)
 
 	var committeeID spectypes.CommitteeID
 	copy(committeeID[:], identifier.GetDutyExecutorID()[16:])
@@ -382,7 +383,7 @@ func TestValidatorDuties(t *testing.T) {
 		vIndex       = phase0.ValidatorIndex(55)
 	)
 
-	identifier := spectypes.NewMsgID([4]byte{}, []byte("pk"), role)
+	identifier := ssvtestingutils.NewMsgID([4]byte{}, []byte("pk"), role)
 
 	var committeeID spectypes.CommitteeID
 	copy(committeeID[:], identifier.GetDutyExecutorID()[16:])
@@ -453,7 +454,7 @@ func TestCommitteeDuty(t *testing.T) {
 		vIndex = phase0.ValidatorIndex(55)
 	)
 
-	identifier := spectypes.NewMsgID([4]byte{}, []byte("pk"), spectypes.RoleCommittee)
+	identifier := ssvtestingutils.NewMsgID([4]byte{}, []byte("pk"), spectypes.RoleCommittee)
 
 	var committeeID spectypes.CommitteeID
 	copy(committeeID[:], identifier.GetDutyExecutorID()[16:])
@@ -1112,7 +1113,7 @@ func TestCollector_processPartialSigCommittee_UnknownRootBuffers(t *testing.T) {
 	tracer := New(logger, validators, nil, dutyStore, networkconfig.TestNetwork.Beacon, nil, nil)
 
 	const slot = phase0.Slot(12)
-	identifier := spectypes.NewMsgID([4]byte{}, []byte("pk"), spectypes.RoleCommittee)
+	identifier := ssvtestingutils.NewMsgID([4]byte{}, []byte("pk"), spectypes.RoleCommittee)
 
 	var committeeID spectypes.CommitteeID
 	copy(committeeID[:], identifier.GetDutyExecutorID()[16:])
@@ -1181,7 +1182,7 @@ func TestCollector_FlushPending_Timestamps(t *testing.T) {
 	tracer := New(logger, validators, mockclient{}, dutyStore, networkconfig.TestNetwork.Beacon, nil, nil)
 
 	const slot = phase0.Slot(13)
-	identifier := spectypes.NewMsgID([4]byte{}, []byte("pk"), spectypes.RoleCommittee)
+	identifier := ssvtestingutils.NewMsgID([4]byte{}, []byte("pk"), spectypes.RoleCommittee)
 	var committeeID spectypes.CommitteeID
 	copy(committeeID[:], identifier.GetDutyExecutorID()[16:])
 
@@ -1405,7 +1406,7 @@ func TestCollector_newPartialSigVerifyCtx_EmptyMessages(t *testing.T) {
 	collector := &Collector{logger: zap.NewNop()}
 	msg := &queue.SSVMessage{
 		SSVMessage: &spectypes.SSVMessage{
-			MsgID: spectypes.NewMsgID([4]byte{}, []byte("pk"), ssvtypes.RoleAggregator),
+			MsgID: ssvtestingutils.NewMsgID([4]byte{}, []byte("pk"), ssvtypes.RoleAggregator),
 		},
 	}
 	pSigMessages := &spectypes.PartialSignatureMessages{
@@ -1449,7 +1450,7 @@ func TestCollector_Collect_WrapVerifyPartialSigErrForValidator(t *testing.T) {
 	validators.EXPECT().ValidatorByIndex(missingIndex).Return(nil, false)
 
 	collector := New(logger, validators, nil, new(mockDutyTraceStore), networkconfig.TestNetwork.Beacon, nil, nil)
-	msgID := spectypes.NewMsgID([4]byte{}, []byte("pk"), ssvtypes.RoleAggregator)
+	msgID := ssvtestingutils.NewMsgID([4]byte{}, []byte("pk"), ssvtypes.RoleAggregator)
 	pSigMessages := &spectypes.PartialSignatureMessages{
 		Type: spectypes.PostConsensusPartialSig,
 		Slot: slot,
@@ -1514,7 +1515,7 @@ func TestCollector_Collect_WrapVerifyPartialSigErrForCommittee(t *testing.T) {
 	validators.EXPECT().ValidatorByIndex(missingIndex).Return(nil, false)
 
 	collector := New(logger, validators, nil, new(mockDutyTraceStore), networkconfig.TestNetwork.Beacon, nil, nil)
-	msgID := spectypes.NewMsgID([4]byte{}, []byte("committee_pk"), spectypes.RoleCommittee)
+	msgID := ssvtestingutils.NewMsgID([4]byte{}, []byte("committee_pk"), spectypes.RoleCommittee)
 	var committeeID spectypes.CommitteeID
 	copy(committeeID[:], msgID.GetDutyExecutorID()[16:])
 
@@ -1566,7 +1567,7 @@ func TestCollector_lateMessage(t *testing.T) {
 		logger := zap.New(core)
 		collector := New(logger, vstore, nil, dutyStore, networkconfig.TestNetwork.Beacon, nil, nil)
 
-		msgID := spectypes.NewMsgID(spectypes.DomainType{1}, []byte{1}, spectypes.RoleCommittee)
+		msgID := ssvtestingutils.NewMsgID(spectypes.DomainType{1}, []byte{1}, spectypes.RoleCommittee)
 
 		msg := &queue.SSVMessage{
 			SSVMessage: &spectypes.SSVMessage{
@@ -1605,7 +1606,7 @@ func TestCollector_lateMessage(t *testing.T) {
 		logger := zap.New(core)
 		collector := New(logger, vstore, nil, dutyStore, networkconfig.TestNetwork.Beacon, nil, nil)
 
-		msgID := spectypes.NewMsgID(spectypes.DomainType{1}, []byte{1}, spectypes.RoleCommittee)
+		msgID := ssvtestingutils.NewMsgID(spectypes.DomainType{1}, []byte{1}, spectypes.RoleCommittee)
 
 		msg := &queue.SSVMessage{
 			SSVMessage: &spectypes.SSVMessage{
@@ -1659,7 +1660,7 @@ func TestCollector_lateMessage(t *testing.T) {
 // its retry loop until ctx is canceled (or the retries exhaust ~3s later) — giving
 // a late-collect goroutine that is reliably still running.
 func buildInFlightLateMsg(c *Collector) *queue.SSVMessage {
-	msgID := spectypes.NewMsgID(spectypes.DomainType{1}, []byte{1}, spectypes.RoleCommittee)
+	msgID := ssvtestingutils.NewMsgID(spectypes.DomainType{1}, []byte{1}, spectypes.RoleCommittee)
 	var committeeID spectypes.CommitteeID
 	copy(committeeID[:], msgID.GetDutyExecutorID()[16:])
 	c.inFlightCommittee.Set(committeeTraceKey{id: committeeID, role: spectypes.RoleCommittee}, struct{}{})
@@ -1819,7 +1820,7 @@ func TestCollector_PublishDecidedsToListener(t *testing.T) {
 		operator4 = spectypes.OperatorID(4)
 	)
 
-	identifier := spectypes.NewMsgID([4]byte{}, []byte("committee_pk"), spectypes.RoleCommittee)
+	identifier := ssvtestingutils.NewMsgID([4]byte{}, []byte("committee_pk"), spectypes.RoleCommittee)
 	var committeeID spectypes.CommitteeID
 	copy(committeeID[:], identifier.GetDutyExecutorID()[16:])
 

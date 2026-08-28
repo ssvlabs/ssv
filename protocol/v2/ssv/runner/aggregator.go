@@ -252,7 +252,7 @@ func (r *AggregatorRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 	}
 
 	domain := r.NetworkConfig.DomainTypeAtSlot(decidedValue.Duty.Slot)
-	msgID := spectypes.NewMsgID(domain, r.GetShare().ValidatorPubKey[:], r.RunnerRoleType)
+	msgID := spectypes.NewValidatorMsgID(domain, r.GetShare().ValidatorPubKey, r.RunnerRoleType)
 
 	encodedMsg, err := postConsensusMsg.Encode()
 	if err != nil {
@@ -458,7 +458,7 @@ func (r *AggregatorRunner) executeDuty(ctx context.Context, logger *zap.Logger, 
 	logger.Debug("signing and broadcasting selection proof partial sig", fields.Slot(validatorDuty.DutySlot()))
 
 	r.measurements.StartPreConsensus()
-	if err := r.signAndBroadcastPartialSigMsgs(ctx, r.network, r.operatorSigner, r.GetShare().ValidatorPubKey[:], msgs); err != nil {
+	if err := r.signAndBroadcastPartialSigMsgs(ctx, r.network, r.operatorSigner, r.GetShare().ValidatorPubKey, msgs); err != nil {
 		return fmt.Errorf("could not sign/broadcast selection proof partial sig: %w", err)
 	}
 

@@ -187,12 +187,8 @@ github.com/sourcegraph/conc v0.3.0 h1:OQTbbt6P72L20UqAkXXuLOj79LfEanQ+YQFNpLA9yS
 github.com/sourcegraph/conc v0.3.0/go.mod h1:Sdozi7LEKbFPqYX2/J+iBAM6HpqSLTASQIKqDmF7Mt0=
 github.com/ssvlabs/eth2-key-manager v1.5.6 h1:BMxVCsbcIlUiiO0hpePkHxzX0yhKgMkEzVSoNmSXySM=
 github.com/ssvlabs/eth2-key-manager v1.5.6/go.mod h1:tjzhmMzrc0Lzc/OMW1h9Mz8AhmKH7FQC/nFiMNJ0bd8=
-github.com/ssvlabs/ssv-spec v1.2.3-0.20260623204847-d1675a2cc6e4 h1:PMwmRhbM50CcrdGHyhOZ9uEET58FQ0DVWMlMK1Y9V0I=
-github.com/ssvlabs/ssv-spec v1.2.3-0.20260623204847-d1675a2cc6e4/go.mod h1:GedhFYGHVJRYYH3nEp05Gn14tyvg6VbTbaIxrMtI7Cg=
-github.com/ssvlabs/ssv-spec v1.2.3-0.20260728180200-ac6b42337063 h1:Z9cJtaEz/MkeXWC91beLstQpFWP+1UphGUGr8HqyZz8=
-github.com/ssvlabs/ssv-spec v1.2.3-0.20260728180200-ac6b42337063/go.mod h1:GedhFYGHVJRYYH3nEp05Gn14tyvg6VbTbaIxrMtI7Cg=
-github.com/ssvlabs/ssv-spec v1.2.3-0.20260825170036-c071cf778fab h1:qwxLRgbxrFP47FlIc2zqczIW/q/B5wIOZvYNS1rpgH4=
-github.com/ssvlabs/ssv-spec v1.2.3-0.20260825170036-c071cf778fab/go.mod h1:GedhFYGHVJRYYH3nEp05Gn14tyvg6VbTbaIxrMtI7Cg=
+github.com/ssvlabs/ssv-spec v1.2.3-0.20260827132058-5461cb30a7f4 h1:kH8KBv49TuA1PA+ZaQv1ljMewP/trobX/R5U2xS1AQA=
+github.com/ssvlabs/ssv-spec v1.2.3-0.20260827132058-5461cb30a7f4/go.mod h1:GedhFYGHVJRYYH3nEp05Gn14tyvg6VbTbaIxrMtI7Cg=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
 github.com/stretchr/objx v0.5.2 h1:xuMeJ0Sdp5ZMRXx/aWO6RZxdr3beISkG5/G/aIRr3pY=
 github.com/stretchr/objx v0.5.2/go.mod h1:FRsXN1f5AsAjCGJKqEizvkpNtU+EGNCLh3NxZ/8L+MA=

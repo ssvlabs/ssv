@@ -1,7 +1,6 @@
 package testing
 
 import (
-	"bytes"
 	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec"
@@ -87,7 +86,7 @@ var ConstructBaseRunner = func(
 	keySet *spectestingutils.TestKeySet,
 ) (runner.Runner, error) {
 	share := spectestingutils.TestingShare(keySet, spectestingutils.TestingValidatorIndex)
-	identifier := spectypes.NewMsgID(spectypes.JatoTestnet, spectestingutils.TestingValidatorPubKey[:], role)
+	identifier := spectypes.NewValidatorMsgID(spectypes.JatoTestnet, spectypes.ValidatorPK(spectestingutils.TestingValidatorPubKey), role)
 	net := protocoltesting.NewTestingNetwork(1, keySet.OperatorKeys[1])
 	km := ekm.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager())
 	operator := spectestingutils.TestingCommitteeMember(keySet)
@@ -259,23 +258,19 @@ var ConstructBaseRunnerWithShareMap = func(
 			sharePubKeys = append(sharePubKeys, phase0.BLSPubKey(share.SharePubKey))
 		}
 
-		// Identifier
-		var ownerID []byte
+		// Identifier: committee and aggregator-committee runners key by CommitteeID; all others by validator pubkey.
 		switch role {
 		case spectypes.RoleCommittee, spectypes.RoleAggregatorCommittee:
-			// Committee-scoped identifiers: use CommitteeID for both committee and aggregator-committee runners
 			ops := keySetInstance.Committee()
 			committee := make([]uint64, 0, len(ops))
 			for _, op := range ops {
 				committee = append(committee, op.Signer)
 			}
 			committeeID := spectypes.GetCommitteeID(committee)
-			ownerID = bytes.Clone(committeeID[:])
+			identifier = spectypes.NewCommitteeMsgID(spectestingutils.TestingSSVDomainType, committeeID, role)
 		default:
-			// Validator-scoped identifiers
-			ownerID = spectestingutils.TestingValidatorPubKey[:]
+			identifier = spectypes.NewValidatorMsgID(spectestingutils.TestingSSVDomainType, spectypes.ValidatorPK(spectestingutils.TestingValidatorPubKey), role)
 		}
-		identifier = spectypes.NewMsgID(spectestingutils.TestingSSVDomainType, ownerID, role)
 
 		net = protocoltesting.NewTestingNetwork(1, keySetInstance.OperatorKeys[1])
 

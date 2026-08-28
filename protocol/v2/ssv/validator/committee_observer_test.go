@@ -17,6 +17,7 @@ import (
 	"go.uber.org/zap/zaptest/observer"
 
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
+	"github.com/ssvlabs/ssv/protocol/v2/types/ssvtestingutils"
 	registrystoragemocks "github.com/ssvlabs/ssv/registry/storage/mocks"
 )
 
@@ -39,7 +40,7 @@ func TestCommitteeObserver_VerifySig_MissingValidatorLogsContext(t *testing.T) {
 	validatorStore.EXPECT().ValidatorByIndex(missingIndex).Return(nil, false)
 
 	ncv := &CommitteeObserver{
-		msgID:          spectypes.NewMsgID([4]byte{}, []byte("committee_pk"), spectypes.RoleCommittee),
+		msgID:          ssvtestingutils.NewMsgID([4]byte{}, []byte("committee_pk"), spectypes.RoleCommittee),
 		logger:         logger,
 		ValidatorStore: validatorStore,
 		postConsensusContainer: map[phase0.Slot]map[phase0.ValidatorIndex]*ssv.PartialSigContainer{

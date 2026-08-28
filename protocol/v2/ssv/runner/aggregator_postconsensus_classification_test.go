@@ -20,6 +20,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/protocol/v2/types/ssvtestingutils"
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
@@ -48,7 +49,7 @@ func newAggregatorRunnerEnv(t *testing.T, beaconNode beacon.BeaconNode) *aggrega
 	config := protocoltesting.TestingConfig(logger, keySet)
 	config.Network = network
 
-	identifier := spectypes.NewMsgID(spectypes.JatoTestnet, spectestingutils.TestingValidatorPubKey[:], ssvtypes.RoleAggregator)
+	identifier := ssvtestingutils.NewMsgID(spectypes.JatoTestnet, spectestingutils.TestingValidatorPubKey[:], ssvtypes.RoleAggregator)
 	ctrl := protocoltesting.NewTestingQBFTController(
 		keySet,
 		identifier[:],

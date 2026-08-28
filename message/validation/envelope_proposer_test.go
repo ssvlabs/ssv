@@ -12,6 +12,7 @@ import (
 
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
+	"github.com/ssvlabs/ssv/protocol/v2/types/ssvtestingutils"
 )
 
 // The §6 envelope duty is QBFT with only a post-consensus partial signature (no pre-consensus phase).
@@ -46,7 +47,7 @@ func TestMaxRound_EnvelopeProposer(t *testing.T) {
 // At most one self-build proposal (hence one envelope) per slot → at most SlotsPerEpoch per epoch.
 func TestDutyLimit_EnvelopeProposer(t *testing.T) {
 	mv := &messageValidator{netCfg: networkconfig.TestNetwork}
-	msgID := spectypes.NewMsgID(spectypes.DomainType{}, make([]byte, 48), spectypes.RoleEnvelopeProposer)
+	msgID := ssvtestingutils.NewMsgID(spectypes.DomainType{}, make([]byte, 48), spectypes.RoleEnvelopeProposer)
 
 	limit, ok := mv.dutyLimit(msgID, 0, nil)
 	require.True(t, ok)

@@ -9,6 +9,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/protocol/v2/types/ssvtestingutils"
 )
 
 // The three Gloas runner roles must pass the fork-independent validRoleUnion gate in
@@ -24,7 +25,7 @@ func TestValidateSSVMessage_GloasRolesPassRoleUnion(t *testing.T) {
 	} {
 		msg := &spectypes.SSVMessage{
 			MsgType: spectypes.SSVPartialSignatureMsgType,
-			MsgID:   spectypes.NewMsgID(spectypes.DomainType{}, make([]byte, 48), role),
+			MsgID:   ssvtestingutils.NewMsgID(spectypes.DomainType{}, make([]byte, 48), role),
 			Data:    []byte{1},
 		}
 		require.NoError(t, mv.validateSSVMessage(msg), "role %d must pass the role union", role)
@@ -33,7 +34,7 @@ func TestValidateSSVMessage_GloasRolesPassRoleUnion(t *testing.T) {
 	// Negative control: an out-of-union role still REJECTs at the same gate.
 	bad := &spectypes.SSVMessage{
 		MsgType: spectypes.SSVPartialSignatureMsgType,
-		MsgID:   spectypes.NewMsgID(spectypes.DomainType{}, make([]byte, 48), spectypes.RunnerRole(999)),
+		MsgID:   ssvtestingutils.NewMsgID(spectypes.DomainType{}, make([]byte, 48), spectypes.RunnerRole(999)),
 		Data:    []byte{1},
 	}
 	require.ErrorIs(t, mv.validateSSVMessage(bad), ErrInvalidRole)
