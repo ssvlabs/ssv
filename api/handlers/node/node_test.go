@@ -30,7 +30,11 @@ const (
 	testOperatorID     = 7
 	testOperatorPubKey = "LS0tLS1CRUdJTiBSU0EgUFVCTElDIEtFWS0tLS0t"
 	testOwnerAddress   = "0x0000000000000000000000000000000000000abc"
+	// hex of testDomainType, as the handler renders it
+	testNetworkID = "0x00000503"
 )
+
+var testDomainType = spectypes.DomainType{0x0, 0x0, 0x5, 0x3}
 
 // CreateTestNode builds a test Node using a local network.
 func CreateTestNode(t *testing.T) *Node {
@@ -104,7 +108,6 @@ func CreateTestNode(t *testing.T) *Node {
 			PublicKey:    testOperatorPubKey,
 			OwnerAddress: common.HexToAddress(testOwnerAddress),
 		},
-		OperatorIDReadyValue: true,
 	}
 
 	return NewNode(
@@ -116,6 +119,7 @@ func CreateTestNode(t *testing.T) *Node {
 		net,
 		tIndex,
 		opDataStore,
+		func() spectypes.DomainType { return testDomainType },
 		healthProber,
 		component1,
 		component2,
@@ -162,7 +166,7 @@ func TestNodeHandlers(t *testing.T) {
 
 				require.NoError(t, json.Unmarshal(body, &resp))
 				require.NotEmpty(t, resp.PeerID)
-				require.Equal(t, "self", resp.NetworkID)
+				require.Equal(t, testNetworkID, resp.NetworkID)
 				require.Equal(t, spectypes.OperatorID(testOperatorID), resp.OperatorID)
 				require.Equal(t, testOperatorPubKey, resp.OperatorPublicKey)
 				require.Equal(t, common.HexToAddress(testOwnerAddress).String(), resp.OwnerAddress)
@@ -329,7 +333,6 @@ func TestIdentity_OperatorIdentity(t *testing.T) {
 					PublicKey:    testOperatorPubKey,
 					OwnerAddress: common.HexToAddress(testOwnerAddress),
 				},
-				OperatorIDReadyValue: true,
 			},
 			wantPublicKey:  testOperatorPubKey,
 			wantIdentified: true,
@@ -340,8 +343,21 @@ func TestIdentity_OperatorIdentity(t *testing.T) {
 			// available before the registration event has been synced - and the id is not.
 			name: "registration not yet synced",
 			store: &MockOperatorDataStore{
-				OperatorDataValue:    &registrystorage.OperatorData{PublicKey: testOperatorPubKey},
-				OperatorIDReadyValue: false,
+				OperatorDataValue: &registrystorage.OperatorData{PublicKey: testOperatorPubKey},
+			},
+			wantPublicKey:  testOperatorPubKey,
+			wantIdentified: false,
+		},
+		{
+			// A zero id is what makes an operator unidentified, not a missing owner
+			// address: reading readiness separately from the data could pair an unsynced
+			// snapshot with a raised ready flag and publish the zero address as real.
+			name: "zero id is not identified even with an owner address",
+			store: &MockOperatorDataStore{
+				OperatorDataValue: &registrystorage.OperatorData{
+					PublicKey:    testOperatorPubKey,
+					OwnerAddress: common.HexToAddress(testOwnerAddress),
+				},
 			},
 			wantPublicKey:  testOperatorPubKey,
 			wantIdentified: false,
@@ -388,8 +404,8 @@ func TestIdentity_OperatorIdentity(t *testing.T) {
 				require.NotContains(t, raw, "owner_address")
 			}
 
-			// the network id comes from NodeInfo and is reported in every state
-			require.Equal(t, "self", resp.NetworkID)
+			// the network id is independent of operator state and always reported
+			require.Equal(t, testNetworkID, resp.NetworkID)
 		})
 	}
 }

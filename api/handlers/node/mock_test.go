@@ -159,15 +159,8 @@ func (m *MockPeersIndex) GetPeerSubnets(id peer.ID) (commons.Subnets, bool) {
 type MockOperatorDataStore struct {
 	// Returned by GetOperatorData()
 	OperatorDataValue *registrystorage.OperatorData
-
-	// Returned by OperatorIDReady()
-	OperatorIDReadyValue bool
 }
 
 func (m *MockOperatorDataStore) GetOperatorData() *registrystorage.OperatorData {
 	return m.OperatorDataValue
-}
-
-func (m *MockOperatorDataStore) OperatorIDReady() bool {
-	return m.OperatorIDReadyValue
 }

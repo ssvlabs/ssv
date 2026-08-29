@@ -1,6 +1,7 @@
 package node
 
 import (
+	"encoding/hex"
 	"errors"
 	"net/http"
 
@@ -8,6 +9,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/peerstore"
 	ma "github.com/multiformats/go-multiaddr"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/api"
 	"github.com/ssvlabs/ssv/hprobe"
@@ -24,7 +26,8 @@ type Node struct {
 	topicIndex topicIndex
 
 	// this node's own operator identity, as distinct from the p2p identity above
-	operatorDataStore operatorDataStore
+	operatorDataStore  operatorDataStore
+	domainTypeProvider func() spectypes.DomainType
 
 	healthProber             *hprobe.HealthProber
 	clComponentName          string
@@ -38,6 +41,7 @@ func NewNode(
 	network p2pNetwork,
 	topicIndex topicIndex,
 	operatorDataStore operatorDataStore,
+	domainTypeProvider func() spectypes.DomainType,
 	healthProber *hprobe.HealthProber,
 	clComponentName string,
 	elComponentName string,
@@ -49,6 +53,7 @@ func NewNode(
 		topicIndex:               topicIndex,
 		network:                  network,
 		operatorDataStore:        operatorDataStore,
+		domainTypeProvider:       domainTypeProvider,
 		healthProber:             healthProber,
 		clComponentName:          clComponentName,
 		elComponentName:          elComponentName,
@@ -61,27 +66,32 @@ func (h *Node) Identity(w http.ResponseWriter, r *http.Request) error {
 	resp := identityJSON{
 		PeerID: h.network.LocalPeer(),
 	}
-	if nodeInfo != nil {
-		resp.NetworkID = nodeInfo.NetworkID
-		// invariant: setupPeerServices initializes self.Metadata at startup, so on
-		// the live path nodeInfo.Metadata is always non-nil. The guard defends
-		// against a future UpdateSelfRecord caller that returns a NodeInfo without
-		// a Metadata block — cheap insurance and mirrors the peers-handler shape.
-		if nodeInfo.Metadata != nil {
-			resp.Subnets = nodeInfo.Metadata.Subnets
-			resp.Version = nodeInfo.Metadata.NodeVersion
-		}
+	// invariant: setupPeerServices initializes self.Metadata at startup, so on
+	// the live path nodeInfo.Metadata is always non-nil. The guard defends
+	// against a future UpdateSelfRecord caller that returns a NodeInfo without
+	// a Metadata block — cheap insurance and mirrors the peers-handler shape.
+	if nodeInfo != nil && nodeInfo.Metadata != nil {
+		resp.Subnets = nodeInfo.Metadata.Subnets
+		resp.Version = nodeInfo.Metadata.NodeVersion
 	}
+	// Read live rather than from the self record's NetworkID: that copy is only
+	// refreshed while sealing a node record for a handshake, so between a domain
+	// fork activating and the next handshake it still holds the pre-fork value.
+	domainType := h.domainTypeProvider()
+	resp.NetworkID = "0x" + hex.EncodeToString(domainType[:])
 	for _, addr := range h.network.ListenAddresses() {
 		resp.Addresses = append(resp.Addresses, addr.String())
 	}
 	// The operator public key is set from config at startup, so it identifies the node
-	// from first boot. The id and owner address arrive with this operator's registration
-	// event, so they are only reported once that has been synced - reporting id 0 and the
-	// zero address before then would read as real values.
+	// from first boot. The id and owner address arrive with the registration event, and
+	// are judged from this same snapshot rather than a second OperatorIDReady() call:
+	// SetOperatorData swaps the data and raises the ready flag under one lock, so two
+	// separate reads can pair pre-registration data with post-registration readiness and
+	// publish the zero owner address as real. The flag is only ever raised for a non-zero
+	// id, so this is the same test.
 	if od := h.operatorDataStore.GetOperatorData(); od != nil {
 		resp.OperatorPublicKey = od.PublicKey
-		if h.operatorDataStore.OperatorIDReady() {
+		if od.ID != 0 {
 			resp.OperatorID = od.ID
 			resp.OwnerAddress = od.OwnerAddress.String()
 		}
@@ -223,9 +233,9 @@ type topicIndex interface {
 
 // operatorDataStore exposes this node's own operator identity. The public key is
 // populated from config at startup; the id and owner address are filled in once the
-// operator's registration event has been synced from the chain, which OperatorIDReady
-// reports. A node started without an operator key holds an empty OperatorData.
+// operator's registration event has been synced from the chain, so a zero id means
+// that has not happened yet. A node started without an operator key holds an empty
+// OperatorData.
 type operatorDataStore interface {
 	GetOperatorData() *registrystorage.OperatorData
-	OperatorIDReady() bool
 }
