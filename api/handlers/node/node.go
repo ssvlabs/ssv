@@ -13,6 +13,7 @@ import (
 	"github.com/ssvlabs/ssv/hprobe"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/records"
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 )
 
 type Node struct {
@@ -21,6 +22,9 @@ type Node struct {
 	network    p2pNetwork
 	peersIndex peersIndex
 	topicIndex topicIndex
+
+	// this node's own operator identity, as distinct from the p2p identity above
+	operatorDataStore operatorDataStore
 
 	healthProber             *hprobe.HealthProber
 	clComponentName          string
@@ -33,6 +37,7 @@ func NewNode(
 	peersIndex peersIndex,
 	network p2pNetwork,
 	topicIndex topicIndex,
+	operatorDataStore operatorDataStore,
 	healthProber *hprobe.HealthProber,
 	clComponentName string,
 	elComponentName string,
@@ -43,6 +48,7 @@ func NewNode(
 		peersIndex:               peersIndex,
 		topicIndex:               topicIndex,
 		network:                  network,
+		operatorDataStore:        operatorDataStore,
 		healthProber:             healthProber,
 		clComponentName:          clComponentName,
 		elComponentName:          elComponentName,
@@ -55,16 +61,30 @@ func (h *Node) Identity(w http.ResponseWriter, r *http.Request) error {
 	resp := identityJSON{
 		PeerID: h.network.LocalPeer(),
 	}
-	// invariant: setupPeerServices initializes self.Metadata at startup, so on
-	// the live path nodeInfo.Metadata is always non-nil. The guard defends
-	// against a future UpdateSelfRecord caller that returns a NodeInfo without
-	// a Metadata block — cheap insurance and mirrors the peers-handler shape.
-	if nodeInfo != nil && nodeInfo.Metadata != nil {
-		resp.Subnets = nodeInfo.Metadata.Subnets
-		resp.Version = nodeInfo.Metadata.NodeVersion
+	if nodeInfo != nil {
+		resp.NetworkID = nodeInfo.NetworkID
+		// invariant: setupPeerServices initializes self.Metadata at startup, so on
+		// the live path nodeInfo.Metadata is always non-nil. The guard defends
+		// against a future UpdateSelfRecord caller that returns a NodeInfo without
+		// a Metadata block — cheap insurance and mirrors the peers-handler shape.
+		if nodeInfo.Metadata != nil {
+			resp.Subnets = nodeInfo.Metadata.Subnets
+			resp.Version = nodeInfo.Metadata.NodeVersion
+		}
 	}
 	for _, addr := range h.network.ListenAddresses() {
 		resp.Addresses = append(resp.Addresses, addr.String())
+	}
+	// The operator public key is set from config at startup, so it identifies the node
+	// from first boot. The id and owner address arrive with this operator's registration
+	// event, so they are only reported once that has been synced - reporting id 0 and the
+	// zero address before then would read as real values.
+	if od := h.operatorDataStore.GetOperatorData(); od != nil {
+		resp.OperatorPublicKey = od.PublicKey
+		if h.operatorDataStore.OperatorIDReady() {
+			resp.OperatorID = od.ID
+			resp.OwnerAddress = od.OwnerAddress.String()
+		}
 	}
 	return api.Render(w, r, resp)
 }
@@ -199,4 +219,13 @@ type peersIndex interface {
 
 type topicIndex interface {
 	PeersByTopic() map[string][]peer.ID
+}
+
+// operatorDataStore exposes this node's own operator identity. The public key is
+// populated from config at startup; the id and owner address are filled in once the
+// operator's registration event has been synced from the chain, which OperatorIDReady
+// reports. A node started without an operator key holds an empty OperatorData.
+type operatorDataStore interface {
+	GetOperatorData() *registrystorage.OperatorData
+	OperatorIDReady() bool
 }

@@ -598,6 +598,7 @@ func (n *node) start(ctx context.Context, spawn func(func() error)) error {
 				n.p2pNetwork.(p2pv1.PeersIndexProvider).PeersIndex(),
 				n.p2pNetwork.(p2pv1.HostProvider).Host().Network(),
 				n.p2pNetwork,
+				n.operatorDataStore,
 				healthProber,
 				clComponentName,
 				elComponentName,

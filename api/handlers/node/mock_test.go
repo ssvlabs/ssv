@@ -13,6 +13,7 @@ import (
 
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/records"
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 )
 
 // MockP2PNetwork is a simple value-based mock implementation of p2pNetwork.
@@ -152,4 +153,21 @@ func (m *MockPeersIndex) NodeInfo(id peer.ID) *records.NodeInfo {
 
 func (m *MockPeersIndex) GetPeerSubnets(id peer.ID) (commons.Subnets, bool) {
 	return m.peerSubnets, true
+}
+
+// MockOperatorDataStore is a simple value-based mock implementation of operatorDataStore.
+type MockOperatorDataStore struct {
+	// Returned by GetOperatorData()
+	OperatorDataValue *registrystorage.OperatorData
+
+	// Returned by OperatorIDReady()
+	OperatorIDReadyValue bool
+}
+
+func (m *MockOperatorDataStore) GetOperatorData() *registrystorage.OperatorData {
+	return m.OperatorDataValue
+}
+
+func (m *MockOperatorDataStore) OperatorIDReady() bool {
+	return m.OperatorIDReadyValue
 }
