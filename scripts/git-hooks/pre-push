@@ -157,22 +157,52 @@ while read -r local_ref local_sha remote_ref remote_sha; do
 	IFS=$oIFS
 done
 
-# Run golangci-lint from $1 with the remaining args, blocking the push only on
-# real findings: it exits 1 for those, and anything else (3 config or run
-# failure, 4 timeout, ...) is an execution problem this hook shouldn't gate on.
-run_golangci() {
-	dir=$1
-	shift
-	rc=0
-	(cd "$dir" && GOWORK=off "$GO" tool -modfile="$root/tool.mod" golangci-lint run "$@" >&2) || rc=$?
-	case $rc in
-	0) ;;
+# Run golangci-lint from $1, with the config in $2 (empty to let it discover
+# the config from $1) over the dirs in the remaining args.
+golangci_run() {
+	gr_wd=$1
+	gr_cfg=$2
+	shift 2
+	[ -n "$gr_cfg" ] && set -- -c "$gr_cfg" "$@"
+	(cd "$gr_wd" && GOWORK=off "$GO" tool -modfile="$root/tool.mod" golangci-lint run "$@" >&2)
+}
+
+# Fold one golangci-lint exit code into the push decision, blocking only on real
+# findings: it exits 1 for those, and anything else (3 config or run failure, 4
+# timeout, ...) is an execution problem this hook shouldn't gate on. Exit 5 is
+# "no go files to analyze" — nothing to report for that dir.
+classify_golangci() {
+	case $1 in
+	0 | 5) ;;
 	1)
 		status=1
 		ci_findings=1
 		;;
-	*) echo "pre-push: golangci-lint failed to run in $dir (exit $rc) — skipping its findings" >&2 ;;
+	*) echo "pre-push: golangci-lint failed to run in $2 (exit $1) — skipping its findings" >&2 ;;
 	esac
+}
+
+# Lint the dirs in one batched run, which is what keeps the stage at seconds.
+# One dir with no analyzable Go files (everything under a testdata/ dir, or all
+# excluded by build tags) fails the whole invocation with exit 5, though, which
+# would drop every other dir's findings with it — so on a 5, fall back to a run
+# per dir and pay the extra seconds only in that case.
+run_golangci() {
+	rg_wd=$1
+	rg_cfg=$2
+	shift 2
+	rg_rc=0
+	golangci_run "$rg_wd" "$rg_cfg" "$@" || rg_rc=$?
+	if [ "$rg_rc" -eq 5 ] && [ $# -gt 1 ]; then
+		echo "pre-push: a linted dir has no analyzable Go files — retrying one dir at a time" >&2
+		for rg_dir in "$@"; do
+			rg_rc=0
+			golangci_run "$rg_wd" "$rg_cfg" "$rg_dir" || rg_rc=$?
+			classify_golangci "$rg_rc" "$rg_wd"
+		done
+		return
+	fi
+	classify_golangci "$rg_rc" "$rg_wd"
 }
 
 # golangci-lint stage: staticcheck & friends on the changed packages, scoped so
@@ -186,13 +216,13 @@ if [ -n "$lint_dirs" ] || [ -n "$ssvsigner_lint_dirs" ]; then
 	if GOWORK=off "$GO" tool -modfile="$root/tool.mod" golangci-lint version >/dev/null 2>&1; then
 		if [ -n "$lint_dirs" ]; then
 			# shellcheck disable=SC2086 # lint_dirs is word-split on purpose
-			run_golangci "$root" $lint_dirs
+			run_golangci "$root" "" $lint_dirs
 		fi
 		if [ -n "$ssvsigner_lint_dirs" ]; then
 			# Mirrors make lint's ssvsigner-golangci-lint: the nested module is
 			# linted from its own directory, with the root's config and tool.mod.
 			# shellcheck disable=SC2086 # ssvsigner_lint_dirs is word-split on purpose
-			run_golangci "$root/ssvsigner" -c "$root/.golangci.yaml" $ssvsigner_lint_dirs
+			run_golangci "$root/ssvsigner" "$root/.golangci.yaml" $ssvsigner_lint_dirs
 		fi
 	else
 		echo "pre-push: cannot run golangci-lint via 'go tool' — skipping the lint stage" >&2
