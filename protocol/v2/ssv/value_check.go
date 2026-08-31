@@ -6,6 +6,7 @@ import (
 	"math"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
@@ -108,7 +109,7 @@ func NewGloasVoteChecker(
 func (v *gloasVoteChecker) CheckValue(value []byte) error {
 	bv := gloas.GloasBeaconVote{}
 	if err := bv.Decode(value); err != nil {
-		return spectypes.WrapError(spectypes.DecodeBeaconVoteErrorCode, fmt.Errorf("failed decoding gloas beacon vote: %w", err))
+		return spectypes.WrapError(spectypes.DecodeGloasBeaconVoteErrorCode, fmt.Errorf("failed decoding gloas beacon vote: %w", err))
 	}
 
 	if bv.Source.Epoch >= bv.Target.Epoch {
@@ -119,7 +120,7 @@ func (v *gloasVoteChecker) CheckValue(value []byte) error {
 	// 1 = FULL), so it must be 0 or 1. The same-slot "index = 0" rule is BN/gossip-enforced — it needs
 	// the attested block's slot — so it is not checked here.
 	if bv.AttestationDataIndex > 1 {
-		return spectypes.NewError(spectypes.QBFTValueInvalidErrorCode, "gloas attestation data index out of range")
+		return spectypes.NewError(spectypes.GloasBeaconVoteInvalidIndexErrorCode, "gloas attestation data index out of range")
 	}
 
 	attestationData := &phase0.AttestationData{
@@ -179,9 +180,15 @@ func NewEnvelopeChecker(
 func (v *envelopeChecker) CheckValue(value []byte) error {
 	cd := &gloas.EnvelopeConsensusData{}
 	if err := cd.Decode(value); err != nil {
-		return spectypes.WrapError(spectypes.QBFTValueInvalidErrorCode, fmt.Errorf("failed decoding envelope consensus data: %w", err))
+		return spectypes.WrapError(spectypes.EnvelopeConsensusDataDecodeErrorCode, fmt.Errorf("failed decoding envelope consensus data: %w", err))
 	}
 
+	// The duty rides the wire inside the leader's value, so pin every field the runner assumes:
+	// role, slot, and validator identity (slot equality against the node-created duty also subsumes
+	// the far-future check the spec's dutyValueCheck performs).
+	if cd.Duty.Type != spectypes.BNRoleEnvelopeProposer {
+		return spectypes.NewError(spectypes.WrongBeaconRoleTypeErrorCode, "wrong beacon role type")
+	}
 	if cd.Duty.Slot != v.slot {
 		return spectypes.NewError(spectypes.QBFTValueInvalidErrorCode, "wrong envelope duty slot")
 	}
@@ -194,21 +201,21 @@ func (v *envelopeChecker) CheckValue(value []byte) error {
 
 	blinded := &gloas.BlindedExecutionPayloadEnvelope{}
 	if err := blinded.Decode(cd.DataSSZ); err != nil {
-		return spectypes.WrapError(spectypes.QBFTValueInvalidErrorCode, fmt.Errorf("failed decoding blinded envelope: %w", err))
+		return spectypes.WrapError(spectypes.UnmarshalSSZErrorCode, fmt.Errorf("failed decoding blinded envelope: %w", err))
 	}
 
 	// This duty applies only to the self-build path; external builders sign their own envelopes.
 	if blinded.BuilderIndex != gloas.BuilderIndexSelfBuild {
-		return spectypes.NewError(spectypes.QBFTValueInvalidErrorCode, "envelope builder index is not self-build")
+		return spectypes.NewError(spectypes.EnvelopeWrongBuilderIndexErrorCode, "envelope builder index is not self-build")
 	}
 
 	// The envelope must commit to the block the §4 QBFT decided for this slot.
 	decidedRoot, ok := v.proposedBlockRoots.Get(v.slot)
 	if !ok {
-		return spectypes.NewError(spectypes.QBFTValueInvalidErrorCode, "no decided block root for envelope slot")
+		return spectypes.NewError(spectypes.EnvelopeNoProposedBlockRootErrorCode, "no decided block root for envelope slot")
 	}
 	if blinded.BeaconBlockRoot != decidedRoot {
-		return spectypes.NewError(spectypes.QBFTValueInvalidErrorCode, "envelope beacon block root does not match the decided block")
+		return spectypes.NewError(spectypes.EnvelopeBlockRootMismatchErrorCode, "envelope beacon block root does not match the decided block")
 	}
 
 	return nil
