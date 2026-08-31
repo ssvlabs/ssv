@@ -412,6 +412,7 @@ func TestUpCheck(t *testing.T) {
 		name            string
 		setupServer     func(w http.ResponseWriter, r *http.Request)
 		wantErrContains string
+		wantErrText     string
 	}{
 		{
 			name: "successful up check",
@@ -429,6 +430,19 @@ func TestUpCheck(t *testing.T) {
 			},
 			wantErrContains: "error status 500",
 		},
+		{
+			// UpCheck validates a stricter status (exactly 200) than the other endpoints, yet
+			// must still capture the upstream body into ErrText on failure: the status check
+			// runs through errTextValidator instead of short-circuiting ahead of it.
+			name: "server error body is captured",
+			setupServer: func(w http.ResponseWriter, r *http.Request) {
+				require.Equal(t, PathUpCheck, r.URL.Path)
+				w.WriteHeader(http.StatusServiceUnavailable)
+				_, _ = w.Write([]byte("web3signer starting up"))
+			},
+			wantErrContains: "error status 503",
+			wantErrText:     "web3signer starting up",
+		},
 	}
 
 	for _, tt := range testCases {
@@ -445,6 +459,9 @@ func TestUpCheck(t *testing.T) {
 
 				var httpErr HTTPResponseError
 				require.ErrorAs(t, err, &httpErr)
+				if tt.wantErrText != "" {
+					require.Equal(t, tt.wantErrText, httpErr.ErrText)
+				}
 			} else {
 				require.NoError(t, err)
 			}
@@ -456,7 +473,9 @@ func TestErrTextBounded(t *testing.T) {
 	t.Parallel()
 
 	// The upstream returns a body larger than the cap; ErrText must be bounded so a
-	// misbehaving Web3Signer can't force unbounded reads and allocations on failure.
+	// misbehaving Web3Signer can't force unbounded reads and allocations on failure, and the
+	// truncation must be marked so a body sliced mid-JSON is visible rather than passing as
+	// complete.
 	const upstreamBodyLen = maxErrTextLen * 4
 
 	_, web3Signer := setupTestServer(t, func(w http.ResponseWriter, r *http.Request) {
@@ -468,7 +487,8 @@ func TestErrTextBounded(t *testing.T) {
 
 	var httpErr HTTPResponseError
 	require.ErrorAs(t, err, &httpErr)
-	require.LessOrEqual(t, len(httpErr.ErrText), maxErrTextLen)
+	require.LessOrEqual(t, len(httpErr.ErrText), maxErrTextLen+len("...(truncated)"))
+	require.Contains(t, httpErr.ErrText, "...(truncated)")
 }
 
 // TestErrOmitsHandledRecoveryPhrase guards against errTextValidator reintroducing the

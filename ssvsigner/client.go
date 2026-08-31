@@ -389,21 +389,24 @@ func requestFailedErr(err error, errBody string) error {
 	}
 
 	// The server reports failures as {"message": ...} (web3signer.ErrorMessage), so a
-	// non-empty message is the reason. A body that parses as JSON without one is the
-	// zero-value success response an older server writes on error — null, {},
-	// {"signature":"0x0…0"} (a zero SignResponse) — with nothing useful, so drop it and let
-	// err's status speak. Keying on the message avoids enumerating those zero values, which
-	// drift as the response structs change.
+	// non-empty message is the reason. Keying on the message avoids enumerating zero values,
+	// which drift as the response structs change.
 	var em web3signer.ErrorMessage
 	if json.Unmarshal([]byte(errBody), &em) == nil {
 		if msg := strings.TrimSpace(em.Message); msg != "" {
 			return fmt.Errorf("request failed: %w: %s", err, msg)
 		}
-		return fmt.Errorf("request failed: %w", err)
+		// A JSON object without ssv-signer's "message": either a zero-value success body an
+		// older server writes on error (nothing to surface), or a real reason from a
+		// JSON-speaking intermediary, e.g. {"error":"..."} from a gateway. Drop the former and
+		// let err's status speak; surface the latter raw.
+		if !jsonBodyCarriesReason(errBody) {
+			return fmt.Errorf("request failed: %w", err)
+		}
 	}
 
-	// Not JSON we recognize: a plain-text error from an intermediary in front of the
-	// signer, or a body truncated mid-JSON. Surface it raw, bounded.
+	// A plain-text error from an intermediary in front of the signer, a body truncated
+	// mid-JSON, or a JSON body carrying its reason outside "message". Surface it raw, bounded.
 	if len(errBody) > maxErrBodyLen {
 		errBody = errBody[:maxErrBodyLen]
 	}
@@ -411,6 +414,46 @@ func requestFailedErr(err error, errBody string) error {
 		errBody += "...(truncated)"
 	}
 	return fmt.Errorf("request failed: %w: %s", err, errBody)
+}
+
+// jsonBodyCarriesReason reports whether a JSON object error body holds a human-readable reason in
+// a field other than "message" (which requestFailedErr handles directly). It returns true for a
+// field with real string content — e.g. {"error":"upstream connect failure"} from a gateway — and
+// false for the zero-value success bodies an older signer writes on error, whose fields are absent,
+// null, or an all-zero hex blob (the zero SignResponse's {"signature":"0x0…0"}).
+func jsonBodyCarriesReason(body string) bool {
+	var fields map[string]json.RawMessage
+	if json.Unmarshal([]byte(body), &fields) != nil {
+		return false // not a JSON object — nothing structured to extract
+	}
+	for name, raw := range fields {
+		if name == "message" {
+			continue
+		}
+		var s string
+		if json.Unmarshal(raw, &s) != nil {
+			continue // not a string value
+		}
+		if isMeaningfulReason(s) {
+			return true
+		}
+	}
+	return false
+}
+
+// isMeaningfulReason reports whether s carries content worth surfacing. A zero-value BLS field
+// (e.g. the zero SignResponse's signature) marshals to "0x" followed by all zeros; that reads as
+// empty here so an older signer's zero-value body isn't surfaced as a bogus reason (see
+// TestSignOldSignerZeroValueBodyNotSurfaced).
+func isMeaningfulReason(s string) bool {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return false
+	}
+	if rest, found := strings.CutPrefix(s, "0x"); found && strings.Trim(rest, "0") == "" {
+		return false
+	}
+	return true
 }
 
 // applyTLSConfig applies the given TLS configuration to the HTTP client.

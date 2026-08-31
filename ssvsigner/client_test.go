@@ -1088,6 +1088,20 @@ func Test_requestFailedErr(t *testing.T) {
 		require.ErrorIs(t, err, baseErr)
 	})
 
+	t.Run("json reason outside message is surfaced", func(t *testing.T) {
+		// A JSON-speaking intermediary in front of ssv-signer (e.g. a gateway) can report its
+		// own failure in a field other than "message". That's a real reason, not an older
+		// signer's zero-value body, so it must be surfaced rather than dropped as a bare status.
+		for _, body := range []string{
+			`{"error":"upstream connect failure"}`,
+			`{"message":"","detail":"bad gateway"}`,
+		} {
+			err := requestFailedErr(baseErr, body)
+			require.ErrorContains(t, err, body, "body %q should be surfaced", body)
+			require.ErrorIs(t, err, baseErr)
+		}
+	})
+
 	t.Run("oversized body truncated", func(t *testing.T) {
 		err := requestFailedErr(baseErr, strings.Repeat("x", maxErrBodyLen+100))
 		require.ErrorContains(t, err, "...(truncated)")
@@ -1176,6 +1190,23 @@ func TestSignOldSignerZeroValueBodyNotSurfaced(t *testing.T) {
 	require.NotContains(t, err.Error(), "0x00000")
 	require.True(t, requests.HasStatusErr(err, http.StatusInternalServerError))
 	require.ErrorContains(t, err, "request failed")
+}
+
+// TestSignSurfacesIntermediaryReason is the counterpart to the zero-value case above: a
+// JSON-speaking intermediary in front of ssv-signer (e.g. a gateway) reports its failure in a
+// field other than "message". That's a real reason, not a zero-value body, so it must reach the
+// caller rather than collapse to a bare status.
+func TestSignSurfacesIntermediaryReason(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+		_, _ = w.Write([]byte(`{"error":"upstream connect failure"}`))
+	}))
+	t.Cleanup(server.Close)
+
+	_, err := NewClient(server.URL).Sign(t.Context(), phase0.BLSPubKey{1}, web3signer.SignRequest{})
+	require.Error(t, err)
+	require.ErrorContains(t, err, "upstream connect failure")
+	require.True(t, requests.HasStatusErr(err, http.StatusBadGateway))
 }
 
 // TestClientErrorOmitsHandledRecoveryPhrase guards against errBodyValidator reintroducing
