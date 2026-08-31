@@ -76,10 +76,10 @@ type runnable struct {
 //     config, which the ssvtesting runner constructors cannot schedule Gloas into without
 //     diverging those roots, and the testing beacon-node wrapper has no Gloas produce surface.
 //
-// Mapping both is a reconciliation task tracked with the ssv-spec repin follow-up on PR #2901;
+// Mapping both is a reconciliation task tracked in issue #3017 (to land with the ssv-spec tag repoint);
 // the node's own unit tests cover the Gloas runner behavior meanwhile. The Gloas valcheck
 // vectors (which embed no config) DO run, against the node's real checkers.
-const gloasSpecRunnerSkipReason = "spec-side Gloas runner tests not yet mapped onto the node's runners (PR #2901 repin follow-up)"
+const gloasSpecRunnerSkipReason = "spec-side Gloas runner tests not yet mapped onto the node's runners (issue #3017)"
 
 // isUnmappedGloasRunnerTest reports whether the raw (untyped) runner spec test is one the mapping
 // harness cannot run yet — see gloasSpecRunnerSkipReason: a Gloas runner role outright, or a
@@ -298,7 +298,7 @@ func prepareTest(t *testing.T, logger *zap.Logger, name string, test any) *runna
 			},
 		}
 	case reflect.TypeFor[*committee.MultiCommitteeSpecTest]().String():
-		// TODO(gloas repin follow-up, PR #2901): the repinned spec's Committee.StartDuty records the
+		// TODO(#3017): the repinned spec's Committee.StartDuty records the
 		// runner in its map before the duty-level validation that fails this vector
 		// (InvalidAggregatorCommitteeDuty on mismatched inner-duty slots), so the expected post-state
 		// carries the failed runner. The node validates first and never records it — the safer order —
