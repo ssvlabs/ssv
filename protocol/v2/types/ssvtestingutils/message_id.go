@@ -12,7 +12,9 @@ import (
 // NewValidatorMsgID/NewCommitteeMsgID, which production code now uses). Tests still need the
 // length-agnostic form to build synthetic or malformed ids whose executor is neither a full
 // validator pubkey nor a committee id; for those two sizes the output is byte-identical to the
-// typed constructors.
+// typed constructors. One deliberate divergence: an executor id longer than the slot keeps only
+// its leading 48 bytes, where the removed constructor would have overflowed into the role bytes
+// — behavior no test relied on.
 func NewMsgID(domain spectypes.DomainType, dutyExecutorID []byte, role spectypes.RunnerRole) spectypes.MessageID {
 	// Delegate the domain+role bytes (with a zeroed executor slot) to the typed constructor, then
 	// right-align the arbitrary-length executor id in that slot, as the removed spectypes.NewMsgID did.

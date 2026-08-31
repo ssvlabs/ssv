@@ -12,10 +12,13 @@ import (
 )
 
 // Gloas §6 envelope produce/publish endpoints (beacon-APIs#580, merged 2026-06-29). Produce takes the
-// beacon block root as a path segment; publish posts the full signed envelope (see SubmitExecutionPayloadEnvelope).
+// beacon block root as a path segment; publish posts the full signed envelope (see SubmitExecutionPayloadEnvelope),
+// with the required blobDataIncludedHeader selecting the body form (beacon-APIs#624): "false" is the full
+// SignedExecutionPayloadEnvelope (stateful flow), "true" the blobs-carrying Contents.
 const (
 	gloasProduceEnvelopePath = "/eth/v1/validator/execution_payload_envelopes/%d/%s" // slot, beacon_block_root 0x-hex
 	gloasPublishEnvelopePath = "/eth/v1/beacon/execution_payload_envelopes"
+	blobDataIncludedHeader   = "Eth-Blob-Data-Included"
 )
 
 // GetExecutionPayloadEnvelope fetches the §6 execution-payload envelope (the payload the proposer
@@ -70,7 +73,7 @@ func requestExecutionPayloadEnvelope(ctx context.Context, addr string, slot phas
 // canonical one and get EXECUTION_PAYLOAD_ENVELOPE_ERROR_ALREADY_KNOWN — the §6 analog of the §4 block
 // submit (see submitGloasBeaconBlock).
 func submitExecutionPayloadEnvelope(ctx context.Context, addr string, envelopeSSZ []byte) error {
-	headers := map[string]string{"Eth-Blob-Data-Included": "false"}
+	headers := map[string]string{blobDataIncludedHeader: "false"}
 	_, err := gloasOctetStreamHTTP(ctx, http.MethodPost, addr+gloasPublishEnvelopePath, envelopeSSZ, headers)
 	if isAlreadyKnown(err) {
 		return nil
