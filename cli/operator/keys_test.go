@@ -16,20 +16,26 @@ import (
 	"github.com/ssvlabs/ssv/ssvsigner"
 )
 
+// newMissingKeysClient returns an ssv-signer client whose validators endpoint —
+// the one MissingKeys queries — is served by handler.
+func newMissingKeysClient(t *testing.T, handler http.HandlerFunc) *ssvsigner.Client {
+	return newTestSSVSignerClient(t, func(mux *http.ServeMux) {
+		mux.HandleFunc(ssvsigner.PathValidators, handler)
+	})
+}
+
 func Test_fetchMissingKeysWithRetry(t *testing.T) {
 	localKeys := []phase0.BLSPubKey{{1, 2, 3}}
 
 	t.Run("succeeds after transient failures", func(t *testing.T) {
 		var hits int
-		client := newTestSSVSignerClient(t, func(mux *http.ServeMux) {
-			mux.HandleFunc(ssvsigner.PathValidators, func(w http.ResponseWriter, r *http.Request) {
-				hits++
-				if hits <= 2 {
-					http.Error(w, "web3signer starting up", http.StatusInternalServerError)
-					return
-				}
-				require.NoError(t, json.NewEncoder(w).Encode(localKeys))
-			})
+		client := newMissingKeysClient(t, func(w http.ResponseWriter, r *http.Request) {
+			hits++
+			if hits <= 2 {
+				http.Error(w, "web3signer starting up", http.StatusInternalServerError)
+				return
+			}
+			require.NoError(t, json.NewEncoder(w).Encode(localKeys))
 		})
 
 		missingKeys, err := fetchMissingKeysWithRetry(
@@ -42,11 +48,9 @@ func Test_fetchMissingKeysWithRetry(t *testing.T) {
 
 	t.Run("gives up when the window elapses", func(t *testing.T) {
 		var hits int
-		client := newTestSSVSignerClient(t, func(mux *http.ServeMux) {
-			mux.HandleFunc(ssvsigner.PathValidators, func(w http.ResponseWriter, r *http.Request) {
-				hits++
-				http.Error(w, "permanent failure", http.StatusInternalServerError)
-			})
+		client := newMissingKeysClient(t, func(w http.ResponseWriter, r *http.Request) {
+			hits++
+			http.Error(w, "permanent failure", http.StatusInternalServerError)
 		})
 
 		_, err := fetchMissingKeysWithRetry(
@@ -60,11 +64,9 @@ func Test_fetchMissingKeysWithRetry(t *testing.T) {
 	// before reaching any backoff wait.
 	t.Run("stops retrying when ctx is canceled during a request", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
-		client := newTestSSVSignerClient(t, func(mux *http.ServeMux) {
-			mux.HandleFunc(ssvsigner.PathValidators, func(w http.ResponseWriter, r *http.Request) {
-				cancel()
-				http.Error(w, "failure", http.StatusInternalServerError)
-			})
+		client := newMissingKeysClient(t, func(w http.ResponseWriter, r *http.Request) {
+			cancel()
+			http.Error(w, "failure", http.StatusInternalServerError)
 		})
 
 		start := time.Now()
@@ -78,10 +80,8 @@ func Test_fetchMissingKeysWithRetry(t *testing.T) {
 	// Cancellation during the backoff wait (the select), not a request — the path
 	// that keeps shutdown prompt when a signal lands mid-backoff.
 	t.Run("aborts the backoff wait when ctx is canceled between attempts", func(t *testing.T) {
-		client := newTestSSVSignerClient(t, func(mux *http.ServeMux) {
-			mux.HandleFunc(ssvsigner.PathValidators, func(w http.ResponseWriter, r *http.Request) {
-				http.Error(w, "failure", http.StatusInternalServerError)
-			})
+		client := newMissingKeysClient(t, func(w http.ResponseWriter, r *http.Request) {
+			http.Error(w, "failure", http.StatusInternalServerError)
 		})
 
 		ctx, cancel := context.WithCancel(context.Background())
@@ -117,14 +117,12 @@ func Test_fetchMissingKeysWithRetry(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 
 		var hits int
-		client := newTestSSVSignerClient(t, func(mux *http.ServeMux) {
-			mux.HandleFunc(ssvsigner.PathValidators, func(w http.ResponseWriter, r *http.Request) {
-				hits++
-				if hits >= stopAfter {
-					cancel() // stop retrying once enough backoffs are logged
-				}
-				http.Error(w, "web3signer starting up", http.StatusInternalServerError)
-			})
+		client := newMissingKeysClient(t, func(w http.ResponseWriter, r *http.Request) {
+			hits++
+			if hits >= stopAfter {
+				cancel() // stop retrying once enough backoffs are logged
+			}
+			http.Error(w, "web3signer starting up", http.StatusInternalServerError)
 		})
 
 		initialDelay, maxDelay := time.Millisecond, 4*time.Millisecond
@@ -133,8 +131,9 @@ func Test_fetchMissingKeysWithRetry(t *testing.T) {
 			retryBackoff{window: time.Hour, delay: initialDelay, maxDelay: maxDelay})
 		require.Error(t, err)
 
-		var delays []time.Duration
-		for _, entry := range logs.All() {
+		entries := logs.All()
+		delays := make([]time.Duration, 0, len(entries))
+		for _, entry := range entries {
 			d, ok := entry.ContextMap()["retry_in"].(time.Duration)
 			require.True(t, ok, "retry log is missing a retry_in duration")
 			delays = append(delays, d)
