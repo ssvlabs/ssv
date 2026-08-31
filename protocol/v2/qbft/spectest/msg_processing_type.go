@@ -4,19 +4,18 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
-	"path/filepath"
 	"reflect"
 	"testing"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectests "github.com/ssvlabs/ssv-spec/qbft/spectest/tests"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
-	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
@@ -95,12 +94,11 @@ func RunMsgProcessing(t *testing.T, test *spectests.MsgProcessingSpecTest) {
 }
 
 func overrideStateComparisonForMsgProcessingSpecTest(t *testing.T, test *spectests.MsgProcessingSpecTest) {
-	specDir, err := storage.GetSpecDir("", filepath.Join("qbft", "spectest"))
-	require.NoError(t, err)
-	test.PostState, err = typescomparable.UnmarshalStateComparison(specDir, test.TestName(),
+	postState, err := storage.UnmarshalStateComparison("qbft", test.TestName(),
 		reflect.TypeFor[*spectests.MsgProcessingSpecTest]().String(),
 		&specqbft.State{})
 	require.NoError(t, err)
+	test.PostState = postState
 
 	r, err := test.PostState.GetRoot()
 	require.NoError(t, err)
