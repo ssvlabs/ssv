@@ -24,6 +24,8 @@ if command -v go >/dev/null 2>&1; then
 	GO=go
 elif [ -x /usr/local/go/bin/go ]; then
 	GO=/usr/local/go/bin/go
+elif [ -x /opt/homebrew/bin/go ]; then # Homebrew on Apple Silicon
+	GO=/opt/homebrew/bin/go
 else
 	exit 0
 fi
