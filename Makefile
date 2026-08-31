@@ -48,6 +48,8 @@ deadcode-lint:
 install-hooks:
 	git config core.hooksPath scripts/git-hooks
 	@echo "git hooks installed (core.hooksPath -> scripts/git-hooks)"
+	@echo "note: this replaces .git/hooks — any hook you keep there stops firing"
+	@echo "undo with: git config --unset core.hooksPath"
 
 .PHONY: ssvsigner-boundary-lint
 ssvsigner-boundary-lint:
