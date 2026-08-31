@@ -69,7 +69,10 @@ while read -r local_ref local_sha remote_ref remote_sha; do
 		continue
 	fi
 
-	files=$(git diff --name-only --diff-filter=ACMR "$base" "$local_sha" -- '*.go' '*.md')
+	# quotePath=off: git C-quotes non-ASCII paths by default ("\346\226\207.go"),
+	# and the quoted name resolves neither as a git path nor as a directory, so
+	# both stages would silently skip the file.
+	files=$(git -c core.quotePath=off diff --name-only --diff-filter=ACMR "$base" "$local_sha" -- '*.go' '*.md')
 	[ -z "$files" ] && continue
 
 	# go tool failures (resolution, compile, module download) must not be
