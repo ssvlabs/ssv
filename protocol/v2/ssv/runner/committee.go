@@ -922,10 +922,10 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 }
 
 // concludeDutyFlow closes out a finished duty flow: it stops the duty-flow measurement, records the
-// total-duty-duration sample and logs the operator-visible completion line. Every terminal that
-// concludes an outcome for the slot (succeeded and both not_required branches) has to do all three —
-// an outcome counted without a matching duration sample leaves a permanent gap between the
-// duty.outcome counter and the duration histogram. The caller marks the outcome and adds the span
+// total-duty-duration sample and logs the operator-visible completion line. Only the terminals that
+// conclude the duty correctly — the success one and both not_required ones — route through here;
+// failed and stuck duties are counted in duty.outcome but deliberately record no duration, so the
+// duration histogram covers correct completions only. The caller marks the outcome and adds the span
 // event; extraFields carries the per-terminal timings (post-consensus, total-consensus) that sit
 // between the always-present consensus fields and the total duty time.
 func (r *CommitteeRunner) concludeDutyFlow(ctx context.Context, logger *zap.Logger, event string, extraFields ...zap.Field) {

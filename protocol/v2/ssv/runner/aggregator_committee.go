@@ -17,6 +17,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/electra"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
@@ -397,12 +398,9 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(
 			r.markDutyNotRequired()
 			r.measurements.EndPreConsensus()
 			recordPreConsensusDuration(ctx, r.measurements.PreConsensusTime(), spectypes.RoleAggregatorCommittee)
-			r.measurements.EndDutyFlow()
-			recordTotalDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.RoleAggregatorCommittee, 0)
 			const dutyFinishedNoMessages = "✔️successfully finished duty processing (got no quorums in pre-consensus)"
-			logger.Info(dutyFinishedNoMessages,
+			r.concludeDutyFlow(ctx, logger, specqbft.NoRound, dutyFinishedNoMessages,
 				fields.PreConsensusTime(r.measurements.PreConsensusTime()),
-				fields.TotalDutyTime(r.measurements.TotalDutyTime()),
 			)
 			span.AddEvent(dutyFinishedNoMessages)
 		}
@@ -578,12 +576,9 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(
 		// If all duties have been tested for selection or all messages (from all operators) have been seen, terminate.
 		if r.HaveCheckedAllDutiesForSelection(aggregatorMap, contributionMap) || r.HasSeenAllPreConsensusSigners() {
 			r.markDutyNotRequired()
-			r.measurements.EndDutyFlow()
-			recordTotalDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.RoleAggregatorCommittee, 0)
 			const dutyFinishedNoAggregators = "✔️successfully finished duty processing (no validator is aggregator or sync committee contributor)"
-			logger.Info(dutyFinishedNoAggregators,
+			r.concludeDutyFlow(ctx, logger, specqbft.NoRound, dutyFinishedNoAggregators,
 				fields.PreConsensusTime(r.measurements.PreConsensusTime()),
-				fields.TotalDutyTime(r.measurements.TotalDutyTime()),
 			)
 			span.AddEvent(dutyFinishedNoAggregators)
 			return anyErr
@@ -1212,16 +1207,13 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 	// a transient-error false "partial success").
 	if r.HasSubmittedAllDuties(aggregatorMap, contributionMap) {
 		r.markDutySucceeded()
-		r.measurements.EndDutyFlow()
-		recordTotalDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.RoleAggregatorCommittee, r.State.RunningInstance.State.Round)
 		const dutyFinishedEvent = "✔️finished duty processing (100% success)"
-		logger.Info(dutyFinishedEvent,
+		r.concludeDutyFlow(ctx, logger, r.State.RunningInstance.State.Round, dutyFinishedEvent,
 			fields.PreConsensusTime(r.measurements.PreConsensusTime()),
 			fields.ConsensusTime(r.measurements.ConsensusTime()),
 			fields.ConsensusRounds(uint64(r.State.RunningInstance.State.Round)),
 			fields.PostConsensusTime(r.measurements.PostConsensusTime()),
 			fields.TotalConsensusTime(r.measurements.TotalConsensusTime()),
-			fields.TotalDutyTime(r.measurements.TotalDutyTime()),
 		)
 		span.AddEvent(dutyFinishedEvent)
 		return nil
@@ -1238,6 +1230,26 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 	span.AddEvent(dutyFinishedEvent)
 
 	return nil
+}
+
+// concludeDutyFlow closes out a finished duty flow: it stops the duty-flow measurement, records the
+// total-duty-duration sample and logs the operator-visible completion line. Only the terminals that
+// conclude the duty correctly — the success one and the three not_required ones — route through here;
+// failed and stuck duties are counted in duty.outcome but deliberately record no duration, so the
+// duration histogram covers correct completions only. The caller marks the outcome and adds the span
+// event; extraFields carries the per-terminal timings that precede the total duty time. Unlike the
+// CommitteeRunner sibling, round is a parameter rather than read from the runner state: the
+// not_required terminals conclude in pre-consensus, before a QBFT instance (and with it a round)
+// exists — they pass specqbft.NoRound.
+func (r *AggregatorCommitteeRunner) concludeDutyFlow(ctx context.Context, logger *zap.Logger, round specqbft.Round, event string, extraFields ...zap.Field) {
+	r.measurements.EndDutyFlow()
+	recordTotalDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.RoleAggregatorCommittee, round)
+
+	logFields := make([]zap.Field, 0, len(extraFields)+1)
+	logFields = append(logFields, extraFields...)
+	logFields = append(logFields, fields.TotalDutyTime(r.measurements.TotalDutyTime()))
+
+	logger.Info(event, logFields...)
 }
 
 // HasSubmittedAllDuties checks if all expected duties have been submitted.
@@ -1764,10 +1776,8 @@ func (r *AggregatorCommitteeRunner) executeDuty(ctx context.Context, logger *zap
 	// Early exit if no selection proofs needed
 	if len(msg.Messages) == 0 {
 		r.markDutyNotRequired()
-		r.measurements.EndDutyFlow()
-		recordTotalDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.RoleAggregatorCommittee, 0)
 		const dutyFinishedNoMessages = "✔️successfully finished duty processing (no selection proofs needed)"
-		logger.Info(dutyFinishedNoMessages, fields.TotalDutyTime(r.measurements.TotalDutyTime()))
+		r.concludeDutyFlow(ctx, logger, specqbft.NoRound, dutyFinishedNoMessages)
 		span.AddEvent(dutyFinishedNoMessages)
 		return nil
 	}
