@@ -63,9 +63,14 @@ back to the enshrined flow (gossiped bids / self-build) on any failure:
    holds it before the bid request arrives.
 
 A cluster with no `Builders` config produces over the same `produceBlockV4` POST, sending a neutral
-local-build config (empty `builders`, `builder_boost_factor` 100). A beacon node that predates the #630
-POST answers it with 404/405; the node falls back to the legacy GET for that node, still carrying
-`BuilderBoostFactor` (the one knob that GET honors) — `MinBid` and the per-entry knobs are POST-only.
+local-build config (empty `builders`, `builder_boost_factor` 100). The 100 weighs gossiped p2p bids at par
+with the local build — profit maximization, the same default beacon nodes applied to the pre-#630 GET — so
+an unconfigured cluster behaves as before, which also means it follows p2p bids as soon as staked builders
+gossip any. A cluster that prefers its own local build instead sets a knobs-only config —
+`BuilderBoostFactor: 0` with no `Entries` — which the beacon node honors as "local unless unviable". A
+beacon node that predates the #630 POST answers it with 404/405; the node falls back to the legacy GET for
+that node, still carrying `BuilderBoostFactor` (the one knob that GET honors) — `MinBid` and the per-entry
+knobs are POST-only.
 
 ## How to use
 
