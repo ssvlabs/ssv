@@ -7,7 +7,8 @@ three separated layers:
   qbft     : decided_round, decided_ms, r1_prop_ms, first_pre_ms, n_rounds, had_round_change
   onchain  : success, mev_reward, block_number   (overlay only)
 
-Decision time is Exporter commit-quorum receive-time relative to slot start.
+Decision time is the Exporter's receive-time of the aggregated "decided" message
+(a commit with >1 signer), relative to slot start.
 Adaptive batching bisects on the Exporter's ~20s per-request compute ceiling.
 
 Dependencies (internal): run inside an ssv-scout workspace

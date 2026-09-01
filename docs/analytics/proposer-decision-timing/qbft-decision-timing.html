@@ -163,7 +163,7 @@ footer .mono{color:var(--faint)}
   <div class="sec-head">
     <span class="eyebrow">Phase 1 &middot; when QBFT decides</span>
     <h2 style="margin-top:10px">Almost everything decides by ~1.5s &mdash; with a second, tighter cluster at ~2.05s</h2>
-    <p class="lede">Decision time (exporter's view of commit quorum, relative to slot start) is <b>bimodal</b>. A broad mass peaks at 1.4&ndash;1.5s, dominated not by ProposerDelay but by MEV <b>block-fetch</b> &mdash; even SSV Labs' own <code>delay=0</code> nodes land at ~1.1s. A distinct, tight mode sits at ~2.05s: the clusters running a real ProposerDelay. The 3s and 4s lines are almost empty.</p>
+    <p class="lede">Decision time (the Exporter's receipt of each duty's aggregated <i>decided</i> message, relative to slot start) is <b>bimodal</b>. A broad mass peaks at 1.4&ndash;1.5s, dominated not by ProposerDelay but by MEV <b>block-fetch</b> &mdash; even SSV Labs' own <code>delay=0</code> nodes land at ~1.1s. A distinct, tight mode sits at ~2.05s: the clusters running a real ProposerDelay. The 3s and 4s lines are almost empty.</p>
   </div>
   <div class="panel">
     <h3>Decision time into slot &mdash; all 25,030 decided proposer duties</h3>
@@ -286,9 +286,9 @@ footer .mono{color:var(--faint)}
   </div>
   <ul class="tight" style="font-size:14px">
     <li><b>Spine (identity + on-chain).</b> Every proposer duty in the window from the E2M duties API (<code>types=propose, with_committee</code>) &mdash; slot, validator, committee operator-set, on-chain <code>Success</code>, MEV reward. 25,126 duties.</li>
-    <li><b>QBFT timing.</b> Per-duty validator trace from the Exporter (network-wide P2P observer): per-round proposal / prepare / commit / round-change and the <code>decideds</code> quorum time. Decision time = decided timestamp &minus; slot start (beacon genesis + slot&middot;12s). 99.63% coverage; adaptive batching with bisect-on-disconnect.</li>
+    <li><b>QBFT timing.</b> Per-duty validator trace from the Exporter (network-wide P2P observer): per-round proposal / prepare / commit / round-change and the <code>decideds</code> aggregated-commit ("decided") messages. Decision time = decided-message receive-time &minus; slot start (beacon genesis + slot&middot;12s). 99.63% coverage; adaptive batching with bisect-on-disconnect.</li>
     <li><b>Delay estimate (derived).</b> Per-cluster median round-1 proposal offset, calibrated against SSV Labs' known <code>delay=0</code> (median 1115ms). Kept strictly separate from the timing and on-chain layers.</li>
-    <li><b>Caveats.</b> Exporter timestamps are receive-times (a few ms behind operators; SSV-Labs-adjacent). ProposerDelay affects proposer duties only. Absolute delay is not separable from block-fetch/source latency.</li>
+    <li><b>Caveats.</b> Exporter timestamps are receive-times of the aggregated <i>decided</i> message (a commit carrying a quorum of signers), behind the operators' own decision by the decided broadcast + one network hop. ProposerDelay affects proposer duties only. Absolute delay is not separable from block-fetch/source latency.</li>
   </ul>
   <p class="cap" style="margin-top:18px">Companion to the QBFT decision-timing analysis in ssvlabs/ssv PR #2883, scoped to the proposer duty and the ProposerDelay question.</p>
 </section>
@@ -296,7 +296,7 @@ footer .mono{color:var(--faint)}
 <footer>
   <div class="wrap" style="padding:0">
     <div class="mono">SSV Scout &middot; Exporter + E2M &middot; prod-mainnet &middot; epochs 465250&ndash;472000 &middot; generated 2026-08-31</div>
-    <div style="margin-top:6px">Decision timing reflects the exporter's P2P vantage. On-chain outcomes cross-referenced via E2M. Round-2 and miss events are individually few &mdash; see data-sufficiency.</div>
+    <div style="margin-top:6px">Decision timing is when the exporter received each duty's aggregated <i>decided</i> message. On-chain outcomes cross-referenced via E2M. Round-2 and miss events are individually few &mdash; see data-sufficiency.</div>
   </div>
 </footer>
 </div>
