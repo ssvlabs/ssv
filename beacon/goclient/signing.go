@@ -9,8 +9,8 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	ssz "github.com/ferranbt/fastssz"
 	"github.com/jellydator/ttlcache/v3"
+
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
@@ -120,7 +120,7 @@ func (gc *GoClient) ComputeSigningRoot(object any, domain phase0.Domain) ([32]by
 		return [32]byte{}, errors.New("cannot compute signing root of nil")
 	}
 	return gc.signingData(func() ([32]byte, error) {
-		if v, ok := object.(ssz.HashRoot); ok {
+		if v, ok := object.(spectypes.HashRoot); ok {
 			return v.HashTreeRoot()
 		}
 		return [32]byte{}, errors.New("cannot compute signing root")

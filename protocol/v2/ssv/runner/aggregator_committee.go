@@ -17,10 +17,11 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/electra"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
+
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
@@ -1323,7 +1324,7 @@ func (r *AggregatorCommitteeRunner) HasSubmitted(
 
 // This function signature returns only one domain type... but we can have mixed domains
 // instead we rely on expectedPreConsensusRoots that is called later
-func (r *AggregatorCommitteeRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
+func (r *AggregatorCommitteeRunner) expectedPreConsensusRootsAndDomain() ([]spectypes.HashRoot, phase0.DomainType, error) {
 	return nil, spectypes.DomainError,
 		fmt.Errorf("unexpected expectedPreConsensusRootsAndDomain func call, runner role %v", r.GetRole())
 }
@@ -1331,7 +1332,7 @@ func (r *AggregatorCommitteeRunner) expectedPreConsensusRootsAndDomain() ([]ssz.
 // This function signature returns only one domain type... but we can have mixed domains
 // instead we rely on expectedPostConsensusRootsAndBeaconObjects that is called later
 func (r *AggregatorCommitteeRunner) expectedPostConsensusRootsAndDomain(context.Context) (
-	[]ssz.HashRoot,
+	[]spectypes.HashRoot,
 	phase0.DomainType,
 	error,
 ) {

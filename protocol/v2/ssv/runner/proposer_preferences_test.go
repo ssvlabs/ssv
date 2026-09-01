@@ -7,11 +7,11 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	ssz "github.com/ferranbt/fastssz"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
-	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
@@ -301,6 +301,6 @@ func TestProposerPreferencesSlotRunner_ExpectedPreConsensusRootsAndDomain(t *tes
 	r.proposerPreferences = prefs
 	roots, domain, err := r.expectedPreConsensusRootsAndDomain()
 	require.NoError(t, err)
-	require.Equal(t, []ssz.HashRoot{prefs}, roots)
+	require.Equal(t, []spectypes.HashRoot{prefs}, roots)
 	require.Equal(t, phase0.DomainType(spectypes.DomainProposerPreferences), domain)
 }

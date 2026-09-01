@@ -12,7 +12,6 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/electra"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common/hexutil"
-	ssz "github.com/ferranbt/fastssz"
 	"github.com/ssvlabs/eth2-key-manager/signer"
 	slashingprotection "github.com/ssvlabs/eth2-key-manager/slashing_protection"
 	"go.uber.org/zap"
@@ -229,7 +228,7 @@ func (km *RemoteKeyManager) removeHighestProposal(txn ReadWriteTxn, pubKey phase
 // Otherwise, forwards to the remote service. It returns signature as well as the computed signing root.
 func (km *RemoteKeyManager) SignBeaconObject(
 	ctx context.Context,
-	obj ssz.HashRoot,
+	obj spectypes.HashRoot,
 	domain phase0.Domain,
 	sharePubkey phase0.BLSPubKey,
 	slot phase0.Slot,
@@ -249,7 +248,7 @@ func (km *RemoteKeyManager) SignBeaconObject(
 }
 
 func (km *RemoteKeyManager) prepareSignRequest(
-	obj ssz.HashRoot,
+	obj spectypes.HashRoot,
 	domain phase0.Domain,
 	sharePubkey phase0.BLSPubKey,
 	slot phase0.Slot,
@@ -442,7 +441,7 @@ func (km *RemoteKeyManager) prepareSignRequest(
 }
 
 func (km *RemoteKeyManager) handleDomainAttester(
-	obj ssz.HashRoot,
+	obj spectypes.HashRoot,
 	sharePubkey phase0.BLSPubKey,
 ) (*phase0.AttestationData, error) {
 	data, ok := obj.(*phase0.AttestationData)
@@ -469,7 +468,7 @@ func (km *RemoteKeyManager) handleDomainAttester(
 }
 
 func (km *RemoteKeyManager) handleDomainProposer(
-	obj ssz.HashRoot,
+	obj spectypes.HashRoot,
 	slot phase0.Slot,
 	sharePubkey phase0.BLSPubKey,
 ) (*web3signer.BeaconBlockData, error) {

@@ -8,7 +8,6 @@ import (
 	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	ssz "github.com/ferranbt/fastssz"
 	"go.uber.org/zap"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -240,11 +239,11 @@ func (r *ProposerPreferencesRunner) GetOperatorSigner() ssvtypes.OperatorSigner 
 
 // expectedPreConsensusRootsAndDomain / expectedPostConsensusRootsAndDomain / executeDuty are part of
 // the Runner interface but run on the per-slot sub-runners, never the dispatcher.
-func (r *ProposerPreferencesRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
+func (r *ProposerPreferencesRunner) expectedPreConsensusRootsAndDomain() ([]spectypes.HashRoot, phase0.DomainType, error) {
 	return nil, spectypes.DomainError, fmt.Errorf("proposer preferences dispatcher has no frozen preference")
 }
 
-func (r *ProposerPreferencesRunner) expectedPostConsensusRootsAndDomain(context.Context) ([]ssz.HashRoot, phase0.DomainType, error) {
+func (r *ProposerPreferencesRunner) expectedPostConsensusRootsAndDomain(context.Context) ([]spectypes.HashRoot, phase0.DomainType, error) {
 	return nil, spectypes.DomainError, fmt.Errorf("no post-consensus roots for proposer preferences")
 }
 
@@ -473,14 +472,14 @@ func (r *proposerPreferencesSlotRunner) ProcessPostConsensus(ctx context.Context
 	return fmt.Errorf("no post-consensus phase for proposer preferences")
 }
 
-func (r *proposerPreferencesSlotRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
+func (r *proposerPreferencesSlotRunner) expectedPreConsensusRootsAndDomain() ([]spectypes.HashRoot, phase0.DomainType, error) {
 	if r.proposerPreferences == nil {
 		return nil, spectypes.DomainError, fmt.Errorf("no frozen proposer preferences")
 	}
-	return []ssz.HashRoot{r.proposerPreferences}, phase0.DomainType(spectypes.DomainProposerPreferences), nil
+	return []spectypes.HashRoot{r.proposerPreferences}, phase0.DomainType(spectypes.DomainProposerPreferences), nil
 }
 
-func (r *proposerPreferencesSlotRunner) expectedPostConsensusRootsAndDomain(context.Context) ([]ssz.HashRoot, phase0.DomainType, error) {
+func (r *proposerPreferencesSlotRunner) expectedPostConsensusRootsAndDomain(context.Context) ([]spectypes.HashRoot, phase0.DomainType, error) {
 	return nil, spectypes.DomainError, fmt.Errorf("no post-consensus roots for proposer preferences")
 }
 

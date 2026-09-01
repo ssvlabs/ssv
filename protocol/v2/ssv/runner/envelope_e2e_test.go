@@ -5,11 +5,12 @@ import (
 	"testing"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
@@ -106,7 +107,7 @@ func setupEnvelopeRunnerForPostConsensus(t *testing.T, runner *EnvelopeProposerR
 
 func decidedEnvelopeConsensusData(t *testing.T, slot phase0.Slot, envelope *gloas.ExecutionPayloadEnvelope) *gloas.EnvelopeConsensusData {
 	t.Helper()
-	blinded, err := envelope.Blinded()
+	blinded, err := gloas.Blinded(envelope)
 	require.NoError(t, err)
 	dataSSZ, err := blinded.Encode()
 	require.NoError(t, err)
@@ -204,7 +205,7 @@ func TestEnvelopeProposerRunner_ProcessPostConsensusReconstructsAndPublishes(t *
 	setupEnvelopeRunnerForPostConsensus(t, runner, keySet, envelopeDuty(slot), cd)
 	runner.cachedEnvelope = envelope // this operator built the decided envelope
 
-	blinded, err := envelope.Blinded()
+	blinded, err := gloas.Blinded(envelope)
 	require.NoError(t, err)
 	processEnvelopePostConsensusQuorum(t, runner, keySet, blinded, slot)
 
