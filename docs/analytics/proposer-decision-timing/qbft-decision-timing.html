@@ -1,0 +1,469 @@
+<title>QBFT Decision Timing</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..48,600;12..48,700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+:root{
+  --bg:#eaeef2; --surface:#ffffff; --surface-2:#f4f7f9; --inset:#eef2f5;
+  --ink:#0f151c; --ink-2:#33404f; --muted:#5c6a7c; --faint:#8a97a7;
+  --line:#dbe2ea; --grid:#e7edf2;
+  --r1:#0090a3; --r2:#b8621b; --crit:#b3182a; --good:#1c7a4d;
+  --accent:#0090a3; --accent-ink:#046374;
+  --r1-wash:#0090a31a; --r2-wash:#b8621b1a; --crit-wash:#b3182a12;
+  --shadow:0 1px 2px rgba(15,21,28,.05),0 4px 16px rgba(15,21,28,.05);
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0b1118; --surface:#131b24; --surface-2:#182230; --inset:#0f1720;
+  --ink:#e8eef4; --ink-2:#bcc9d6; --muted:#93a2b4; --faint:#67788b;
+  --line:#243141; --grid:#1d2836;
+  --r1:#2ba4b2; --r2:#cc8033; --crit:#e5636f; --good:#4bbb83;
+  --accent:#2ba4b2; --accent-ink:#7fd3dd;
+  --r1-wash:#2ba4b21f; --r2-wash:#cc80331f; --crit-wash:#e5636f18;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 6px 22px rgba(0,0,0,.35);
+}}
+:root[data-theme="dark"]{
+  --bg:#0b1118; --surface:#131b24; --surface-2:#182230; --inset:#0f1720;
+  --ink:#e8eef4; --ink-2:#bcc9d6; --muted:#93a2b4; --faint:#67788b;
+  --line:#243141; --grid:#1d2836;
+  --r1:#2ba4b2; --r2:#cc8033; --crit:#e5636f; --good:#4bbb83;
+  --accent:#2ba4b2; --accent-ink:#7fd3dd;
+  --r1-wash:#2ba4b21f; --r2-wash:#cc80331f; --crit-wash:#e5636f18;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 6px 22px rgba(0,0,0,.35);
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0;background:var(--bg);color:var(--ink);
+  font-family:"IBM Plex Sans",system-ui,sans-serif;font-size:16px;line-height:1.6;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1060px;margin:0 auto;padding:0 20px}
+h1,h2,h3{font-family:"Bricolage Grotesque","IBM Plex Sans",sans-serif;font-weight:700;letter-spacing:-.01em;text-wrap:balance;line-height:1.12;margin:0}
+.mono{font-family:"IBM Plex Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;font-weight:500;letter-spacing:.16em;text-transform:uppercase;color:var(--accent-ink)}
+a{color:var(--accent-ink)}
+
+/* header */
+header{padding:56px 0 30px;border-bottom:1px solid var(--line)}
+.kicker{display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-bottom:20px}
+.chip{font-family:"IBM Plex Mono",monospace;font-size:11.5px;letter-spacing:.04em;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:3px 10px;background:var(--surface)}
+h1{font-size:clamp(30px,5.2vw,50px)}
+.thesis{margin:22px 0 0;font-size:clamp(17px,2.4vw,20px);line-height:1.5;color:var(--ink-2);max-width:64ch}
+.thesis b{color:var(--ink);font-weight:600}
+
+/* slot clock motif */
+.clock{margin:30px 0 4px}
+.clock svg{width:100%;height:58px;display:block}
+
+/* stat tiles */
+.tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:34px 0 6px}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px 18px 16px;box-shadow:var(--shadow)}
+.tile .n{font-family:"IBM Plex Mono",monospace;font-weight:600;font-size:30px;letter-spacing:-.02em;line-height:1;color:var(--ink)}
+.tile .n.warn{color:var(--r2)} .tile .n.crit{color:var(--crit)} .tile .n.tealc{color:var(--accent-ink)}
+.tile .l{margin-top:9px;font-size:12.5px;color:var(--muted);line-height:1.35}
+.tile .s{font-family:"IBM Plex Mono",monospace;font-size:11.5px;color:var(--faint);margin-top:3px}
+
+/* sections */
+section{padding:46px 0;border-bottom:1px solid var(--line)}
+.sec-head{max-width:70ch;margin-bottom:8px}
+h2{font-size:clamp(21px,3vw,27px)}
+.sec-head p{color:var(--ink-2);margin:12px 0 0;font-size:16.5px}
+.lede b{color:var(--ink);font-weight:600}
+
+/* panels / charts */
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:22px 22px 18px;box-shadow:var(--shadow);margin-top:24px}
+.panel h3{font-size:15px;font-weight:600;letter-spacing:-.005em}
+.panel .cap{font-size:13px;color:var(--muted);margin:5px 0 16px;max-width:76ch}
+.chart-scroll{overflow-x:auto}
+figure{margin:0}
+.legend{display:flex;gap:18px;flex-wrap:wrap;margin:14px 2px 0;font-size:12.5px;color:var(--ink-2)}
+.legend span{display:inline-flex;gap:7px;align-items:center}
+.sw{width:11px;height:11px;border-radius:3px;display:inline-block}
+
+svg .grid{stroke:var(--grid);stroke-width:1}
+svg .axis{stroke:var(--line);stroke-width:1}
+svg text{font-family:"IBM Plex Mono",monospace;fill:var(--muted);font-size:11px}
+svg .lbl{fill:var(--ink-2)} svg .val{fill:var(--ink);font-weight:500}
+svg .thr{stroke:var(--crit);stroke-dasharray:4 4;stroke-width:1.2;opacity:.7}
+svg .thr-t{fill:var(--crit);opacity:.85}
+svg .mk{stroke:var(--accent-ink);stroke-width:1.4}
+.bar{transition:filter .12s} .bar:hover{filter:brightness(1.12)}
+
+/* tables */
+.tbl-scroll{overflow-x:auto;margin-top:22px}
+table{border-collapse:collapse;width:100%;font-size:13.5px;min-width:560px}
+th,td{text-align:right;padding:10px 12px;border-bottom:1px solid var(--line)}
+th:first-child,td:first-child{text-align:left}
+thead th{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--ink-2)}
+tbody td{font-family:"IBM Plex Mono",monospace;color:var(--ink-2)}
+tbody tr td:first-child{font-family:"IBM Plex Sans",sans-serif;color:var(--ink);font-weight:500}
+.ci{color:var(--faint);font-size:11.5px}
+.tag{font-family:"IBM Plex Mono",monospace;font-size:10.5px;padding:2px 7px;border-radius:999px;letter-spacing:.03em;white-space:nowrap}
+.tag.sparse{background:var(--crit-wash);color:var(--crit);border:1px solid transparent}
+.tag.ok{background:var(--r1-wash);color:var(--accent-ink)}
+
+/* callouts */
+.note{border-radius:14px;padding:18px 20px;margin-top:24px;font-size:14.5px;line-height:1.55}
+.note.warn{background:var(--r2-wash);border:1px solid transparent}
+.note.crit{background:var(--crit-wash)}
+.note.flat{background:var(--surface-2);border:1px solid var(--line)}
+.note h4{margin:0 0 7px;font-family:"IBM Plex Sans",sans-serif;font-size:13px;font-weight:600;letter-spacing:.02em;text-transform:uppercase;color:var(--ink)}
+.note.warn h4{color:var(--r2)} .note.crit h4{color:var(--crit)}
+.note p{margin:0} .note p+p{margin-top:8px}
+.note b{color:var(--ink);font-weight:600}
+
+.two{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+ul.tight{margin:10px 0 0;padding-left:18px} ul.tight li{margin:5px 0;color:var(--ink-2);font-size:14.5px}
+code{font-family:"IBM Plex Mono",monospace;font-size:.9em;background:var(--inset);padding:1px 5px;border-radius:5px;color:var(--ink-2)}
+
+/* tooltip */
+#tt{position:fixed;pointer-events:none;opacity:0;transform:translate(-50%,-118%);
+  background:var(--ink);color:var(--surface);font-family:"IBM Plex Mono",monospace;font-size:12px;
+  padding:7px 10px;border-radius:8px;white-space:nowrap;z-index:50;box-shadow:0 6px 20px rgba(0,0,0,.25);line-height:1.4;transition:opacity .1s}
+#tt b{color:#fff}
+:root[data-theme="dark"] #tt,@media(prefers-color-scheme:dark){:root:not([data-theme="light"]) #tt{color:#0b1118}}
+
+footer{padding:40px 0 70px;color:var(--muted);font-size:13px}
+footer .mono{color:var(--faint)}
+.themebtn{position:fixed;top:14px;right:14px;z-index:40;font-family:"IBM Plex Mono",monospace;font-size:11px;
+  background:var(--surface);color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:6px 12px;cursor:pointer}
+.themebtn:hover{color:var(--ink)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+@media (max-width:720px){.tiles{grid-template-columns:repeat(2,1fr)}.two{grid-template-columns:1fr}header{padding:40px 0 24px}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<button class="themebtn" id="themebtn" aria-label="Toggle theme">&#9680; theme</button>
+<div id="tt" role="status" aria-live="polite"></div>
+
+<div class="wrap">
+<header>
+  <div class="kicker">
+    <span class="eyebrow">SSV &middot; Exporter forensics</span>
+    <span class="chip">prod-mainnet</span>
+    <span class="chip">30 days &middot; epochs 465250&ndash;472000</span>
+    <span class="chip">25,126 proposer duties</span>
+    <span class="chip">99.6% trace coverage</span>
+  </div>
+  <h1>Do proposer duties decide after 3&nbsp;seconds &mdash; and does ProposerDelay push them there?</h1>
+  <p class="thesis">Across a month of mainnet, deciding after 3s is <b>rare (0.11%)</b> and almost always means a QBFT <b>round change</b> &mdash; 27 of 28 late decisions are round&nbsp;2. Round&nbsp;2 is the hazard (<b>14% miss</b> vs 0.008% for round&nbsp;1), but it's rare and concentrated in a few chronic clusters. Within the ProposerDelay values actually deployed, <b>delay does not push decisions into the danger zone &mdash; only round changes do.</b></p>
+
+  <div class="clock" aria-hidden="true"><svg id="clock" viewBox="0 0 1000 58" preserveAspectRatio="none"></svg></div>
+
+  <div class="tiles">
+    <div class="tile"><div class="n tealc mono">0.11%</div><div class="l">of decided duties finish after 3s into the slot</div><div class="s mono">28 / 25,030</div></div>
+    <div class="tile"><div class="n warn mono">27/28</div><div class="l">of those late decisions are QBFT round 2</div><div class="s mono">round 1 essentially never survives past ~3s</div></div>
+    <div class="tile"><div class="n crit mono">14.3%</div><div class="l">round-2 proposals that miss on-chain</div><div class="s mono">6 / 42 &middot; vs 0.008% round 1</div></div>
+    <div class="tile"><div class="n mono">14</div><div class="l">total missed proposals in 30 days</div><div class="s mono">0.056% &middot; 9 clusters, 1 causes 36%</div></div>
+  </div>
+</header>
+
+<section id="dist">
+  <div class="sec-head">
+    <span class="eyebrow">Phase 1 &middot; when QBFT decides</span>
+    <h2 style="margin-top:10px">Almost everything decides by ~1.5s &mdash; with a second, tighter cluster at ~2.05s</h2>
+    <p class="lede">Decision time (exporter's view of commit quorum, relative to slot start) is <b>bimodal</b>. A broad mass peaks at 1.4&ndash;1.5s, dominated not by ProposerDelay but by MEV <b>block-fetch</b> &mdash; even SSV Labs' own <code>delay=0</code> nodes land at ~1.1s. A distinct, tight mode sits at ~2.05s: the clusters running a real ProposerDelay. The 3s and 4s lines are almost empty.</p>
+  </div>
+  <div class="panel">
+    <h3>Decision time into slot &mdash; all 25,030 decided proposer duties</h3>
+    <p class="cap">100ms bins. Hover a bar for exact counts. Dashed lines mark the attestation-relevant thresholds; the &gt;3.0s tail (28 duties) is shown aggregated at right.</p>
+    <div class="chart-scroll"><figure><svg id="hist" viewBox="0 0 1000 380" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Histogram of decision time into slot, bimodal with peaks near 1.45s and 2.05s"></svg></figure></div>
+  </div>
+  <div class="note flat">
+    <h4>Why the ~1.1s floor is block-fetch, not delay</h4>
+    <p>ProposerDelay sleeps until <code>slotStart + delay</code>, <i>then</i> the leader fetches the block and starts consensus. On SSV Labs' operators (ground truth <code>proposer_delay=0s</code>) the block fetch alone took ~1.13s, so the proposal didn't broadcast until +1.15s. Observed lateness &asymp; <b>ProposerDelay + block-fetch</b>, and the fetch term dominates.</p>
+  </div>
+</section>
+
+<section id="round">
+  <div class="sec-head">
+    <span class="eyebrow">Phase 1 &middot; the 3-second question, by round</span>
+    <h2 style="margin-top:10px">Past 3 seconds, it's round 2 &mdash; and round 2 is where blocks die</h2>
+    <p class="lede">Round 1 decisions concentrate under 2s and taper out by ~3s; <b>anything later is a round change.</b> Round 2 is rare (0.17% of duties) but its miss rate is three orders of magnitude worse than round 1. Three duties never reached consensus at all &mdash; all three missed.</p>
+  </div>
+  <div class="two">
+    <div class="panel">
+      <h3>Decisions by round &times; time-into-slot</h3>
+      <p class="cap">Counts on a log scale (values labeled). Round 1 vanishes after 3s; round 2 takes the tail.</p>
+      <div class="chart-scroll"><figure><svg id="matrix" viewBox="0 0 500 360" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Stacked bars of round 1 vs round 2 counts by time bucket"></svg></figure></div>
+      <div class="legend">
+        <span><i class="sw" style="background:var(--r1)"></i>Round 1</span>
+        <span><i class="sw" style="background:var(--r2)"></i>Round 2</span>
+      </div>
+    </div>
+    <div class="panel">
+      <h3>On-chain miss rate by decided round</h3>
+      <p class="cap">Wilson 95% intervals. Round 1 is a sliver; round 2 and no-consensus are catastrophic.</p>
+      <div class="chart-scroll"><figure><svg id="miss" viewBox="0 0 500 360" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Miss rate by round: round 1 0.008%, round 2 14.3%, no-consensus 100%"></svg></figure></div>
+    </div>
+  </div>
+</section>
+
+<section id="delay">
+  <div class="sec-head">
+    <span class="eyebrow">Phase 2 &middot; reading ProposerDelay from the wire</span>
+    <h2 style="margin-top:10px">Absolute ProposerDelay can't be cleanly recovered &mdash; but the high tier is visible</h2>
+    <p class="lede">We estimate a cluster's delay from its round-1 proposal timing (leader-rotation median). The problem: <b>block-fetch varies more than the delay we're hunting.</b> The fastest clusters median ~0.7s (likely local block building); SSV Labs at <code>delay=0</code> medians ~1.1s. So the 0&ndash;400 and 400&ndash;700ms buckets are <b>not separable</b> from fetch noise. Only the tight ~2.05s mode &mdash; ~21 clusters running roughly 0.9s+ &mdash; stands clearly apart.</p>
+  </div>
+  <div class="panel">
+    <h3>Per-cluster median round-1 proposal time &mdash; 188 clusters</h3>
+    <p class="cap">Each cluster's typical proposal offset. The marker shows SSV Labs (known <code>delay=0</code>) sitting mid-pack, which is exactly why low-vs-mid delay can't be read off this axis. The shaded band is the identifiable high-delay mode.</p>
+    <div class="chart-scroll"><figure><svg id="chist" viewBox="0 0 1000 320" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Histogram of per-cluster median proposal time with a baseline spread and a distinct high-delay mode near 2.05s"></svg></figure></div>
+  </div>
+
+  <div class="note warn">
+    <h4>Calibration check &mdash; the method mislabels a known cluster</h4>
+    <p>SSV Labs runs <b>ProposerDelay = 0</b> (confirmed in node logs). Its observed median proposal is <b>1115ms</b>, which a floor-subtraction estimator files under the <b>&ldquo;400&ndash;700ms&rdquo;</b> bucket. The estimate is off by ~360ms of pure block-fetch. Treat the buckets below as <b>observed-lateness tiers</b>, not measured delay.</p>
+  </div>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead><tr>
+      <th>Tier (by observed proposal timing)</th><th>Clusters</th><th>Duties</th><th>Median decide</th>
+      <th>Decide &gt;3s</th><th>Round-change</th><th>Miss</th><th></th>
+    </tr></thead>
+    <tbody>
+      <tr>
+        <td>&asymp;1.1s &nbsp;<span class="mono" style="color:var(--faint)">est 0&ndash;400ms</span></td>
+        <td>33</td><td>3,427</td><td>1,108ms</td>
+        <td>0.29%<br><span class="ci">[0.16&ndash;0.54]</span></td>
+        <td>0.73%<br><span class="ci">[0.50&ndash;1.08]</span></td>
+        <td>0.00%<br><span class="ci">[0&ndash;0.11]</span></td>
+        <td><span class="tag sparse">sparse tail</span></td>
+      </tr>
+      <tr>
+        <td>&asymp;1.4s &nbsp;<span class="mono" style="color:var(--faint)">est 400&ndash;700ms</span> <span class="tag ok">contains delay=0</span></td>
+        <td>49</td><td>15,907</td><td>1,428ms</td>
+        <td>0.06%<br><span class="ci">[0.03&ndash;0.12]</span></td>
+        <td>0.06%<br><span class="ci">[0.03&ndash;0.12]</span></td>
+        <td>0.04%<br><span class="ci">[0.02&ndash;0.09]</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>&asymp;2.05s &nbsp;<span class="mono" style="color:var(--faint)">est 700ms+</span></td>
+        <td>21</td><td>5,504</td><td>2,055ms</td>
+        <td>0.05%<br><span class="ci">[0.02&ndash;0.16]</span></td>
+        <td>0.04%<br><span class="ci">[0.01&ndash;0.13]</span></td>
+        <td>0.04%<br><span class="ci">[0.01&ndash;0.13]</span></td>
+        <td><span class="tag sparse">sparse tail</span></td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="cap" style="margin-top:12px">Clusters counted only where n&ge;8 proposals gave a reliable median (103 of 188 clusters). The relationship is <b>non-monotonic</b>: the fastest tier shows the <i>most</i> round changes &mdash; driven by a single chronic cluster, not by delay.</p>
+</section>
+
+<section id="verdict">
+  <div class="sec-head">
+    <span class="eyebrow">Reading the result</span>
+    <h2 style="margin-top:10px">The danger zone is reached by round changes, not by delay</h2>
+  </div>
+  <div class="two">
+    <div class="note crit">
+      <h4>Failures are chronic-cluster-driven</h4>
+      <p>Round 2 (42 duties) is concentrated: <b>2 clusters produce 50%</b> of it &mdash; one alone accounts for 14. Of 14 total misses, <b>one cluster causes 5 (36%)</b>. This mirrors the committee-side finding that reliability is an operator-health problem, not a timing one.</p>
+    </div>
+    <div class="note flat">
+      <h4>Delay, as deployed, stays clear of the cliff</h4>
+      <p>The highest identifiable delay tier still decides by <b>~2.05s</b> &mdash; comfortably inside the safe zone. Its miss rate (0.04%) is indistinguishable from everyone else's. A ~0.9s ProposerDelay plus ~1.1s fetch lands at ~2.0s; only a round change (+~2s) reaches 3&ndash;4s, and round changes track cluster health.</p>
+    </div>
+  </div>
+  <div class="note warn" style="margin-top:18px">
+    <h4>Data-sufficiency &mdash; read these numbers with the counts in mind</h4>
+    <ul class="tight">
+      <li><b>The whole tail is thin:</b> 28 decisions &gt;3s, 42 round-2 duties, 14 misses in 30 days. Per-tier differences sit inside overlapping Wilson intervals &mdash; <b>not enough to attribute any effect to ProposerDelay.</b></li>
+      <li><b>Only one delay tier is real:</b> the ~2.05s mode (21 reliable clusters). The 0&ndash;400 vs 400&ndash;700ms distinction is <b>below the block-fetch noise floor</b> and should not be read as a delay signal.</li>
+      <li><b>Concentration, not distribution:</b> &le;2 clusters drive half of every failure category &mdash; so tier-level rates are hostage to which tier those clusters happen to fall in.</li>
+    </ul>
+  </div>
+</section>
+
+<section id="method">
+  <div class="sec-head">
+    <span class="eyebrow">Methodology</span>
+    <h2 style="margin-top:10px">How the dataset was built</h2>
+  </div>
+  <ul class="tight" style="font-size:14px">
+    <li><b>Spine (identity + on-chain).</b> Every proposer duty in the window from the E2M duties API (<code>types=propose, with_committee</code>) &mdash; slot, validator, committee operator-set, on-chain <code>Success</code>, MEV reward. 25,126 duties.</li>
+    <li><b>QBFT timing.</b> Per-duty validator trace from the Exporter (network-wide P2P observer): per-round proposal / prepare / commit / round-change and the <code>decideds</code> quorum time. Decision time = decided timestamp &minus; slot start (beacon genesis + slot&middot;12s). 99.63% coverage; adaptive batching with bisect-on-disconnect.</li>
+    <li><b>Delay estimate (derived).</b> Per-cluster median round-1 proposal offset, calibrated against SSV Labs' known <code>delay=0</code> (median 1115ms). Kept strictly separate from the timing and on-chain layers.</li>
+    <li><b>Caveats.</b> Exporter timestamps are receive-times (a few ms behind operators; SSV-Labs-adjacent). ProposerDelay affects proposer duties only. Absolute delay is not separable from block-fetch/source latency.</li>
+  </ul>
+  <p class="cap" style="margin-top:18px">Companion to the QBFT decision-timing analysis in ssvlabs/ssv PR #2883, scoped to the proposer duty and the ProposerDelay question.</p>
+</section>
+
+<footer>
+  <div class="wrap" style="padding:0">
+    <div class="mono">SSV Scout &middot; Exporter + E2M &middot; prod-mainnet &middot; epochs 465250&ndash;472000 &middot; generated 2026-08-31</div>
+    <div style="margin-top:6px">Decision timing reflects the exporter's P2P vantage. On-chain outcomes cross-referenced via E2M. Round-2 and miss events are individually few &mdash; see data-sufficiency.</div>
+  </div>
+</footer>
+</div>
+
+<script>
+const $=(s)=>document.querySelector(s);
+const NS="http://www.w3.org/2000/svg";
+function el(n,a){const e=document.createElementNS(NS,n);for(const k in a)e.setAttribute(k,a[k]);return e;}
+const tt=$("#tt");
+function showTT(html,e){tt.innerHTML=html;tt.style.opacity=1;tt.style.left=e.clientX+"px";tt.style.top=e.clientY+"px";}
+function hideTT(){tt.style.opacity=0;}
+function hover(node,html){node.addEventListener("mousemove",e=>showTT(html,e));node.addEventListener("mouseleave",hideTT);node.style.cursor="default";}
+
+/* ---------- slot clock motif ---------- */
+(function(){
+  const s=$("#clock"),W=1000,H=58,x0=6,x1=994,y=30;
+  const sx=t=>x0+(x1-x0)*(t/12);
+  s.appendChild(el("line",{x1:x0,y1:y,x2:x1,y2:y,stroke:"var(--line)","stroke-width":2}));
+  // danger zone 3-4s and beyond
+  s.appendChild(el("rect",{x:sx(3),y:y-9,width:sx(4)-sx(3),height:18,fill:"var(--r2-wash)"}));
+  s.appendChild(el("rect",{x:sx(4),y:y-9,width:x1-sx(4),height:18,fill:"var(--crit-wash)"}));
+  for(let t=0;t<=12;t++){const gx=sx(t);
+    s.appendChild(el("line",{x1:gx,y1:y-5,x2:gx,y2:y+5,stroke:"var(--faint)","stroke-width":1}));
+  }
+  [[2,"2s"],[3,"3s"],[4,"4s"]].forEach(([t,l])=>{
+    const gx=sx(t);
+    s.appendChild(el("line",{x1:gx,y1:y-13,x2:gx,y2:y+13,stroke:"var(--crit)","stroke-width":1.4,"stroke-dasharray":"3 3",opacity:.8}));
+    const tx=el("text",{x:gx,y:y+27,"text-anchor":"middle"});tx.setAttribute("fill","var(--crit)");tx.textContent=l;s.appendChild(tx);
+  });
+  // most duties marker band 1.0-2.1s
+  const md=el("rect",{x:sx(1.0),y:y-9,width:sx(2.1)-sx(1.0),height:18,fill:"var(--r1-wash)"});s.insertBefore(md,s.firstChild.nextSibling);
+  const cap=el("text",{x:sx(1.5),y:y-16,"text-anchor":"middle"});cap.setAttribute("fill","var(--accent-ink)");cap.textContent="where ~99.9% decide";s.appendChild(cap);
+  const l0=el("text",{x:x0,y:y+27});l0.textContent="slot start";s.appendChild(l0);
+  const l12=el("text",{x:x1,y:y+27,"text-anchor":"end"});l12.textContent="12s";s.appendChild(l12);
+})();
+
+/* ---------- decision-time histogram ---------- */
+(function(){
+  const bins=[[800,159],[900,15],[1000,1375],[1100,1490],[1200,1023],[1300,5544],[1400,8168],[1500,2215],[1600,131],[1700,41],[1800,31],[1900,624],[2000,3631],[2100,476],[2200,43],[2300,12],[2400,4],[2500,3],[2600,1],[2700,14],[2800,1],[2900,29]];
+  const tail={label:">3.0s",count:28};
+  const s=$("#hist"),W=1000,H=380,L=44,R=16,T=18,B=46;
+  const iw=W-L-R,ih=H-T-B;
+  const n=bins.length+1, bw=iw/n, maxv=8168;
+  const sy=v=>ih*(1-Math.sqrt(v/maxv)); // sqrt scale so small bins remain visible
+  // gridlines
+  [0,1000,2000,4000,8168].forEach(v=>{const y=T+sy(v);
+    s.appendChild(el("line",{class:"grid",x1:L,y1:y,x2:W-R,y2:y}));
+    const t=el("text",{x:L-7,y:y+3,"text-anchor":"end"});t.textContent=v?(v>=1000?(v/1000)+"k":v):"0";s.appendChild(t);
+  });
+  bins.forEach((d,i)=>{
+    const [ms,c]=d,x=L+i*bw,h=ih-sy(c),y=T+sy(c);
+    const isMode=(ms>=1900&&ms<=2100);
+    const r=el("rect",{class:"bar",x:x+1.4,y:y,width:bw-2.8,height:Math.max(h,.6),rx:2.5,fill:isMode?"var(--r2)":"var(--r1)",opacity:isMode?.92:.9});
+    hover(r,`<b>${(ms/1000).toFixed(1)}\u2013${((ms+100)/1000).toFixed(1)}s</b> \u00b7 ${c.toLocaleString()} duties`);
+    s.appendChild(r);
+    if(ms%500===0){const t=el("text",{x:x+bw/2,y:H-B+18,"text-anchor":"middle"});t.textContent=(ms/1000).toFixed(1);s.appendChild(t);}
+  });
+  // tail bar
+  const xt=L+bins.length*bw, ht=ih-sy(tail.count), yt=T+sy(tail.count);
+  const rt=el("rect",{class:"bar",x:xt+1.4,y:yt,width:bw-2.8,height:Math.max(ht,.6),rx:2.5,fill:"var(--crit)",opacity:.9});
+  hover(rt,`<b>&gt;3.0s tail</b> \u00b7 ${tail.count} duties (aggregated)`);s.appendChild(rt);
+  const tl=el("text",{x:xt+bw/2,y:H-B+18,"text-anchor":"middle"});tl.setAttribute("fill","var(--crit)");tl.textContent=">3s";s.appendChild(tl);
+  // axis
+  s.appendChild(el("line",{class:"axis",x1:L,y1:T+ih,x2:W-R,y2:T+ih}));
+  const xa=el("text",{x:W-R,y:H-8,"text-anchor":"end"});xa.textContent="decision time into slot (s) \u00b7 sqrt-scaled counts";s.appendChild(xa);
+  // threshold lines
+  const sx=ms=>L+((ms-800)/100)*bw+bw/2;
+  [[2000,"2.0s"],[3000,"3.0s"]].forEach(([ms,l])=>{
+    const x=sx(ms);s.appendChild(el("line",{class:"thr",x1:x,y1:T,x2:x,y2:T+ih}));
+    const t=el("text",{class:"thr-t",x:x+4,y:T+11});t.textContent=l;s.appendChild(t);
+  });
+  // mode annotations
+  const a1=el("text",{x:sx(1400),y:T+30,"text-anchor":"middle","font-weight":"600"});a1.setAttribute("fill","var(--accent-ink)");a1.textContent="fetch-dominated";s.appendChild(a1);
+  const a2=el("text",{x:sx(2050),y:T+70,"text-anchor":"middle","font-weight":"600"});a2.setAttribute("fill","var(--r2)");a2.textContent="high-delay mode";s.appendChild(a2);
+})();
+
+/* ---------- round x time matrix (grouped, log) ---------- */
+(function(){
+  const data=[["<2s",20816,0],["2\u20133s",4171,15],["3\u20133.5s",0,18],["3.5\u20134s",1,5],[">4s",0,4]];
+  const s=$("#matrix"),W=500,H=360,L=40,R=14,T=24,B=54,iw=W-L-R,ih=H-T-B;
+  const bw=iw/data.length, maxlog=Math.log10(30000);
+  const hgt=v=>v<1?0:ih*(Math.log10(v)/maxlog);
+  [1,10,100,1000,10000].forEach(v=>{const y=T+ih-hgt(v);
+    s.appendChild(el("line",{class:"grid",x1:L,y1:y,x2:W-R,y2:y}));
+    const t=el("text",{x:L-6,y:y+3,"text-anchor":"end"});t.textContent=v>=1000?(v/1000)+"k":v;s.appendChild(t);});
+  data.forEach((d,i)=>{
+    const [lab,r1,r2]=d, cx=L+i*bw+bw/2, gw=bw*0.30, gap=4;
+    [[r1,"var(--r1)","round 1",-1],[r2,"var(--r2)","round 2",1]].forEach(([v,col,nm,side])=>{
+      const x=cx+(side<0?-gw-gap/2:gap/2);
+      if(v<=0){const zt=el("text",{x:x+gw/2,y:T+ih-4,"text-anchor":"middle"});zt.setAttribute("font-size","9");zt.setAttribute("fill","var(--faint)");zt.textContent="0";s.appendChild(zt);return;}
+      const h=Math.max(hgt(v),1.5),y=T+ih-h;
+      const rr=el("rect",{class:"bar",x:x,y:y,width:gw,height:h,rx:2,fill:col});
+      hover(rr,`<b>${lab}</b> \u00b7 ${nm} \u00b7 ${v.toLocaleString()}`);s.appendChild(rr);
+      const t=el("text",{x:x+gw/2,y:y-5,"text-anchor":"middle"});t.setAttribute("class","val");t.setAttribute("font-size","10");t.setAttribute("font-weight","600");t.textContent=v.toLocaleString();s.appendChild(t);
+    });
+    const t=el("text",{x:cx,y:H-B+18,"text-anchor":"middle"});t.setAttribute("class","lbl");t.textContent=lab;s.appendChild(t);
+  });
+  s.appendChild(el("line",{class:"axis",x1:L,y1:T+ih,x2:W-R,y2:T+ih}));
+  const c=el("text",{x:L,y:H-8});c.textContent="counts \u00b7 log scale";s.appendChild(c);
+})();
+
+/* ---------- miss rate by round ---------- */
+(function(){
+  const data=[
+    {lab:"Round 1",p:0.008,lo:0.002,hi:0.029,txt:"2 / 24,988",col:"var(--r1)"},
+    {lab:"Round 2",p:14.286,lo:6.716,hi:27.841,txt:"6 / 42",col:"var(--r2)"},
+    {lab:"No consensus",p:100,lo:43.85,hi:100,txt:"3 / 3",col:"var(--crit)"}
+  ];
+  const s=$("#miss"),W=500,H=360,L=52,R=20,T=18,B=54,iw=W-L-R,ih=H-T-B;
+  const bw=iw/data.length, maxv=100;
+  const sy=v=>ih*(1-v/maxv);
+  [0,25,50,75,100].forEach(v=>{const y=T+sy(v);
+    s.appendChild(el("line",{class:"grid",x1:L,y1:y,x2:W-R,y2:y}));
+    const t=el("text",{x:L-8,y:y+3,"text-anchor":"end"});t.textContent=v+"%";s.appendChild(t);});
+  data.forEach((d,i)=>{
+    const x=L+i*bw+bw*0.22,w=bw*0.56,y=T+sy(d.p),h=T+ih-y;
+    const rr=el("rect",{class:"bar",x:x,y:y,width:w,height:Math.max(h,2),rx:3,fill:d.col});
+    hover(rr,`<b>${d.lab}</b> \u00b7 miss ${d.p<0.1?d.p.toFixed(3):d.p.toFixed(1)}% \u00b7 ${d.txt}`);s.appendChild(rr);
+    // CI whisker
+    const cx=x+w/2,yl=T+sy(d.lo),yh=T+sy(d.hi);
+    s.appendChild(el("line",{x1:cx,y1:yh,x2:cx,y2:yl,stroke:"var(--ink-2)","stroke-width":1.4}));
+    s.appendChild(el("line",{x1:cx-5,y1:yh,x2:cx+5,y2:yh,stroke:"var(--ink-2)","stroke-width":1.4}));
+    s.appendChild(el("line",{x1:cx-5,y1:yl,x2:cx+5,y2:yl,stroke:"var(--ink-2)","stroke-width":1.4}));
+    // value label
+    const vt=el("text",{x:cx,y:Math.min(yh,y)-8,"text-anchor":"middle"});vt.setAttribute("class","val");vt.setAttribute("font-weight","600");
+    vt.textContent=d.p<0.1?d.p.toFixed(3)+"%":d.p.toFixed(1)+"%";s.appendChild(vt);
+    const lt=el("text",{x:L+i*bw+bw/2,y:H-B+18,"text-anchor":"middle"});lt.setAttribute("class","lbl");lt.textContent=d.lab;s.appendChild(lt);
+    const st=el("text",{x:L+i*bw+bw/2,y:H-B+32,"text-anchor":"middle"});st.setAttribute("font-size","10");st.textContent=d.txt;s.appendChild(st);
+  });
+  s.appendChild(el("line",{class:"axis",x1:L,y1:T+ih,x2:W-R,y2:T+ih}));
+})();
+
+/* ---------- cluster median histogram ---------- */
+(function(){
+  const bins=[[600,8],[700,3],[800,2],[900,0],[1000,32],[1100,31],[1200,29],[1300,26],[1400,25],[1500,3],[1600,2],[1700,0],[1800,1],[1900,6],[2000,16],[2100,3],[2200,0],[2300,1]];
+  const s=$("#chist"),W=1000,H=320,L=40,R=16,T=26,B=44,iw=W-L-R,ih=H-T-B;
+  const n=bins.length,bw=iw/n,maxv=32;
+  const sy=v=>ih*(1-v/maxv);
+  [0,10,20,32].forEach(v=>{const y=T+sy(v);
+    s.appendChild(el("line",{class:"grid",x1:L,y1:y,x2:W-R,y2:y}));
+    const t=el("text",{x:L-6,y:y+3,"text-anchor":"end"});t.textContent=v;s.appendChild(t);});
+  // high-delay band 1900-2200
+  const bx=L+((1900-600)/100)*bw, bw2=((2200-1900)/100)*bw;
+  s.appendChild(el("rect",{x:bx,y:T,width:bw2,height:ih,fill:"var(--r2-wash)"}));
+  const bt=el("text",{x:bx+bw2/2,y:T-10,"text-anchor":"middle","font-weight":"600"});bt.setAttribute("fill","var(--r2)");bt.textContent="high-delay mode \u00b7 ~21 clusters";s.appendChild(bt);
+  bins.forEach((d,i)=>{const [ms,c]=d,x=L+i*bw,y=T+sy(c),h=ih-sy(c);
+    const isMode=ms>=1900&&ms<=2100;
+    const r=el("rect",{class:"bar",x:x+1.6,y:y,width:bw-3.2,height:Math.max(h,.6),rx:2.5,fill:isMode?"var(--r2)":"var(--r1)",opacity:.88});
+    hover(r,`<b>${(ms/1000).toFixed(1)}\u2013${((ms+100)/1000).toFixed(1)}s</b> \u00b7 ${c} clusters`);s.appendChild(r);
+    if(ms%200===0){const t=el("text",{x:x+bw/2,y:H-B+18,"text-anchor":"middle"});t.textContent=(ms/1000).toFixed(1);s.appendChild(t);}
+  });
+  // SSV labs marker at 1115
+  const mx=L+((1115-600)/100)*bw;
+  s.appendChild(el("line",{class:"mk",x1:mx,y1:T-2,x2:mx,y2:T+ih}));
+  const m1=el("text",{x:mx,y:T+ih+30,"text-anchor":"middle","font-weight":"600"});m1.setAttribute("fill","var(--accent-ink)");m1.textContent="SSV Labs \u00b7 delay=0 \u00b7 1115ms";s.appendChild(m1);
+  s.appendChild(el("line",{class:"axis",x1:L,y1:T+ih,x2:W-R,y2:T+ih}));
+  const xa=el("text",{x:W-R,y:H-6,"text-anchor":"end"});xa.textContent="cluster median round-1 proposal (s)";s.appendChild(xa);
+})();
+
+/* ---------- theme toggle ---------- */
+(function(){
+  const b=$("#themebtn"),root=document.documentElement;
+  b.addEventListener("click",()=>{
+    const cur=root.getAttribute("data-theme");
+    const sysDark=matchMedia("(prefers-color-scheme:dark)").matches;
+    const next=cur? (cur==="dark"?"light":"dark") : (sysDark?"light":"dark");
+    root.setAttribute("data-theme",next);
+  });
+})();
+</script>
