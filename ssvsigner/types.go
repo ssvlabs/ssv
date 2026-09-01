@@ -12,9 +12,9 @@ import (
 // on-chain data) rather than a transient/transport failure, so callers can skip the event
 // instead of treating it as fatal.
 //
-// It must stay a concrete type, returned by value. Callers match it with
-// errors.As(err, &ShareDecryptionError{}): an interface alias of error would match every error, and
-// a pointer return (&ShareDecryptionError{}) would slip past unmatched.
+// It must stay a concrete struct returned by value: callers match with
+// errors.As(err, &ShareDecryptionError{}). An interface alias of error would match every error, and
+// returning it by pointer (*ShareDecryptionError) would slip past that value-typed match.
 type ShareDecryptionError struct {
 	Err error
 }

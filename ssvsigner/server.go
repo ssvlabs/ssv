@@ -265,8 +265,9 @@ func (s *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 // instead of dropping a valid validator.
 var errMalformedShare = errors.New("malformed share")
 
-// keystoreJSONFromEncryptedShare doesn't pass errors through intentionally
-// to prevent exposing information related to private key.
+// keystoreJSONFromEncryptedShare withholds the cause of share-data failures (tagged
+// errMalformedShare) so a bad share can't leak private-key material. Failures after the share
+// validates are internal, carry no key bytes, and pass their cause through for diagnosis.
 func (s *Server) keystoreJSONFromEncryptedShare(
 	encryptedPrivKey hexutil.Bytes,
 	sharePubKey phase0.BLSPubKey,
@@ -291,8 +292,7 @@ func (s *Server) keystoreJSONFromEncryptedShare(
 		return "", fmt.Errorf("%w: derived public key does not match expected public key", errMalformedShare)
 	}
 
-	// The share is valid past here; the remaining failures are internal (untagged -> 500). Pass the
-	// cause through (scrypt/AES/encoding, not key bytes) so the operator can diagnose the failure.
+	// Past this point the share is valid; remaining failures are internal (untagged -> 500).
 	shareKeystore, err := keystore.GenerateShareKeystore(sharePrivBLS, sharePubKey, keystorePassword)
 	if err != nil {
 		return "", fmt.Errorf("generate share keystore: %w", err)

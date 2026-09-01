@@ -129,7 +129,6 @@ func (km *RemoteKeyManager) AddShare(
 		}
 	}
 
-	// Bump only after the share is registered remotely.
 	if err := km.BumpSlashingProtection(txn, pubKey); err != nil {
 		return fmt.Errorf("could not bump slashing protection: %w", err)
 	}
