@@ -113,6 +113,7 @@ func (km *RemoteKeyManager) AddShare(
 	for _, status := range statuses {
 		switch status {
 		case web3signer.StatusImported:
+			// Imported successfully; nothing to do.
 
 		case web3signer.StatusDuplicated:
 			// A failed request does not guarantee that the keys were not added.
