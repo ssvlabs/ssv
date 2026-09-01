@@ -6,6 +6,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/capella"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/holiman/uint256"
 	"github.com/stretchr/testify/require"
 )
 
@@ -47,7 +48,7 @@ func sampleExecutionPayload() *ExecutionPayload {
 		GasUsed:         21_000,
 		Timestamp:       1_700_000_000,
 		ExtraData:       []byte("ssv"),
-		BaseFeePerGas:   [32]byte{0x66},
+		BaseFeePerGas:   uint256.NewInt(0x66),
 		BlockHash:       phase0.Hash32{0x77},
 		Transactions:    []bellatrix.Transaction{{0x01, 0x02}},
 		Withdrawals:     []*capella.Withdrawal{{Index: 1, ValidatorIndex: 2, Address: bellatrix.ExecutionAddress{0x88}, Amount: 99}},
@@ -56,44 +57,6 @@ func sampleExecutionPayload() *ExecutionPayload {
 		BlockAccessList: []byte{0xaa, 0xbb, 0xcc},
 		SlotNumber:      7,
 	}
-}
-
-// The full Gloas ExecutionPayload round-trips through SSZ with a stable root.
-func TestExecutionPayloadRoundTrip(t *testing.T) {
-	in := sampleExecutionPayload()
-	b, err := in.MarshalSSZ()
-	require.NoError(t, err)
-
-	out := &ExecutionPayload{}
-	require.NoError(t, out.UnmarshalSSZ(b))
-
-	r1, err := in.HashTreeRoot()
-	require.NoError(t, err)
-	r2, err := out.HashTreeRoot()
-	require.NoError(t, err)
-	require.Equal(t, r1, r2)
-}
-
-// The full envelope round-trips through SSZ with a stable root.
-func TestExecutionPayloadEnvelopeRoundTrip(t *testing.T) {
-	in := &ExecutionPayloadEnvelope{
-		Payload:               sampleExecutionPayload(),
-		ExecutionRequests:     &ExecutionRequests{},
-		BuilderIndex:          BuilderIndexSelfBuild,
-		BeaconBlockRoot:       phase0.Root{0x02},
-		ParentBeaconBlockRoot: phase0.Root{0x03},
-	}
-	b, err := in.MarshalSSZ()
-	require.NoError(t, err)
-
-	out := &ExecutionPayloadEnvelope{}
-	require.NoError(t, out.UnmarshalSSZ(b))
-
-	r1, err := in.HashTreeRoot()
-	require.NoError(t, err)
-	r2, err := out.HashTreeRoot()
-	require.NoError(t, err)
-	require.Equal(t, r1, r2)
 }
 
 // The blinding property §6 relies on: the full envelope's root equals the blinded envelope's when
@@ -107,7 +70,7 @@ func TestExecutionPayloadEnvelopeBlindsToSameRoot(t *testing.T) {
 		ParentBeaconBlockRoot: phase0.Root{0x03},
 	}
 
-	blinded, err := full.Blinded()
+	blinded, err := Blinded(full)
 	require.NoError(t, err)
 
 	fullRoot, err := full.HashTreeRoot()

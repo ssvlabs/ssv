@@ -6,14 +6,14 @@ import (
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/electra"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	ssz "github.com/ferranbt/fastssz"
+
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
 // GetAggregateAndProof decodes the aggregate-and-proof payload carried in a (legacy, pre-AggregatorCommittee)
 // aggregator duty's ProposerConsensusData.DataSSZ. It is a Deprecated compat shim: v1.2.3 ssv-spec removed
 // ValidatorConsensusData.GetAggregateAndProof() in favor of the batched AggregatorCommitteeConsensusData.
-func GetAggregateAndProof(cd *spectypes.ProposerConsensusData) (*spec.VersionedAggregateAndProof, ssz.HashRoot, error) {
+func GetAggregateAndProof(cd *spectypes.ProposerConsensusData) (*spec.VersionedAggregateAndProof, spectypes.HashRoot, error) {
 	switch cd.Version {
 	case spec.DataVersionPhase0:
 		ret := &phase0.AggregateAndProof{}

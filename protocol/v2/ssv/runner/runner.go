@@ -10,11 +10,11 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	ssz "github.com/ferranbt/fastssz"
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
+
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
@@ -67,9 +67,9 @@ type Runner interface {
 	OnQBFTRoundTimeout(ctx context.Context, logger *zap.Logger, timeoutData *ssvtypes.TimeoutData) error
 
 	// expectedPreConsensusRootsAndDomain an INTERNAL function, returns the expected pre-consensus roots to sign
-	expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error)
+	expectedPreConsensusRootsAndDomain() ([]spectypes.HashRoot, phase0.DomainType, error)
 	// expectedPostConsensusRootsAndDomain an INTERNAL function, returns the expected post-consensus roots to sign
-	expectedPostConsensusRootsAndDomain(ctx context.Context) ([]ssz.HashRoot, phase0.DomainType, error)
+	expectedPostConsensusRootsAndDomain(ctx context.Context) ([]spectypes.HashRoot, phase0.DomainType, error)
 	// executeDuty an INTERNAL function, executes a duty.
 	executeDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty) error
 }

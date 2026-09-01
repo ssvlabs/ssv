@@ -39,8 +39,8 @@ require (
 	github.com/sanity-io/litter v1.5.6
 	github.com/sourcegraph/conc v0.3.0
 	github.com/spf13/cobra v1.8.1
-	github.com/ssvlabs/eth2-key-manager v1.5.6
-	github.com/ssvlabs/ssv-spec v1.2.3-0.20260827132058-5461cb30a7f4
+	github.com/ssvlabs/eth2-key-manager v1.5.7-0.20260901124029-39a18877e131
+	github.com/ssvlabs/ssv-spec v1.2.3-0.20260901200942-4e047682cb37
 	github.com/ssvlabs/ssv/ssvsigner v0.0.0-20260415125841-05316f77d5e5
 	github.com/status-im/keycard-go v0.2.0
 	github.com/stretchr/testify v1.11.1
@@ -62,9 +62,11 @@ require (
 )
 
 require (
+	github.com/OffchainLabs/go-bitfield v0.0.0-20251031151322-f427d04d8506 // indirect
 	github.com/ProjectZKM/Ziren/crates/go-runtime/zkvm_runtime v0.0.0-20251001021608-1fe7b43fc4d6 // indirect
 	github.com/RaduBerinde/axisds v0.1.0 // indirect
 	github.com/RaduBerinde/btreemap v0.0.0-20250419174037-3d62b7205d54 // indirect
+	github.com/casbin/govaluate v1.10.0 // indirect
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/cockroachdb/crlib v0.0.0-20241112164430-1264a2edc35b // indirect
 	github.com/cockroachdb/pebble/v2 v2.1.4 // indirect
@@ -91,6 +93,7 @@ require (
 	github.com/pion/transport/v4 v4.0.1 // indirect
 	github.com/pion/turn/v4 v4.0.2 // indirect
 	github.com/pion/webrtc/v4 v4.1.2 // indirect
+	github.com/pk910/hashtree-bindings v0.2.2 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/wealdtech/go-eth2-wallet-encryptor-keystorev4 v1.4.1 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
@@ -225,7 +228,7 @@ require (
 	github.com/pion/sdp/v3 v3.0.13 // indirect
 	github.com/pion/stun v0.6.1 // indirect
 	github.com/pion/transport/v2 v2.2.10 // indirect
-	github.com/pk910/dynamic-ssz v0.0.4 // indirect
+	github.com/pk910/dynamic-ssz v1.3.3 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/polydawn/refmt v0.89.0 // indirect
 	github.com/prometheus/client_model v0.6.2 // indirect
@@ -276,7 +279,6 @@ require (
 	golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da // indirect
 	gonum.org/v1/gonum v0.16.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
-	gopkg.in/Knetic/govaluate.v3 v3.0.0 // indirect
 	gopkg.in/cenkalti/backoff.v1 v1.1.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	lukechampine.com/blake3 v1.4.1 // indirect
@@ -288,6 +290,6 @@ replace github.com/google/flatbuffers => github.com/google/flatbuffers v1.11.0
 replace github.com/dgraph-io/ristretto => github.com/dgraph-io/ristretto v0.1.1-0.20211108053508-297c39e6640f
 
 // SSV fork of go-eth2-client based on upstream v0.27.0 (includes Fulu support) with SSV-specific changes.
-replace github.com/attestantio/go-eth2-client => github.com/ssvlabs/go-eth2-client v0.6.31-0.20250922150906-26179dd60c9c
+replace github.com/attestantio/go-eth2-client => github.com/ssvlabs/go-eth2-client v0.6.31-0.20260831132123-66dd18fc8288
 
 replace github.com/ssvlabs/ssv/ssvsigner => ./ssvsigner

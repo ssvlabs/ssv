@@ -11,10 +11,6 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 )
 
-// Regenerate with `go generate ./...`. The phase0 --include is resolved from the module graph
-// (`go list -m`), so it tracks go-eth2-client across dependency bumps rather than pinning.
-//go:generate sh -c "go tool -modfile=../../../../tool.mod sszgen -path ./request_auth.go --include $(go list -m -f '{{.Dir}}' github.com/attestantio/go-eth2-client)/spec/phase0 --objs BuilderRequestAuth,SignedBuilderRequestAuth"
-
 // MaxBuilderAuthDataSize is builder-specs' MAX_BUILDER_AUTH_DATA_SIZE: the ByteList limit of BuilderRequestAuth.Data.
 const MaxBuilderAuthDataSize = 4096
 

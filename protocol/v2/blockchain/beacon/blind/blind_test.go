@@ -3,6 +3,7 @@ package blind
 import (
 	"testing"
 
+	bitfield "github.com/OffchainLabs/go-bitfield"
 	"github.com/attestantio/go-eth2-client/api"
 	apiv1deneb "github.com/attestantio/go-eth2-client/api/v1/deneb"
 	apiv1electra "github.com/attestantio/go-eth2-client/api/v1/electra"
@@ -17,7 +18,6 @@ import (
 	utilbellatrix "github.com/attestantio/go-eth2-client/util/bellatrix"
 	utilcapella "github.com/attestantio/go-eth2-client/util/capella"
 	"github.com/holiman/uint256"
-	bitfield "github.com/prysmaticlabs/go-bitfield"
 	"github.com/stretchr/testify/require"
 )
 
