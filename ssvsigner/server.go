@@ -25,19 +25,17 @@ import (
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
 )
 
-// TODO: The routes are currently custom and adhere DESIGN.md.
-//
-//	However, web3signer and eth remote signer APIs use different ones (prefixed with /api/v1/):
-//	- https://consensys.github.io/web3signer/web3signer-eth2.html
-//	- https://github.com/ethereum/remote-signing-api
-//	We need to decide if we need to match them.
+// The routes are custom, per DESIGN.md, and differ from the web3signer
+// (https://consensys.github.io/web3signer/web3signer-eth2.html) and eth remote-signing
+// (https://github.com/ethereum/remote-signing-api) APIs, which prefix theirs with /api/v1/.
+// Deployed nodes and signers depend on these paths, so renaming them would be a breaking change.
 const (
-	PathValidators       = "/v1/validators"        // TODO: /api/v1/eth2/publicKeys ?
-	PathValidatorsSign   = "/v1/validators/sign/"  // TODO: /api/v1/eth2/sign/ ?
-	PathOperatorIdentity = "/v1/operator/identity" // TODO: /api/v1/ssv/identity ?
-	PathOperatorSign     = "/v1/operator/sign"     // TODO: /api/v1/ssv/sign ?
-	PathOperatorEncrypt  = "/v1/operator/encrypt"  // TODO: /api/v1/ssv/encrypt ?
-	PathOperatorDecrypt  = "/v1/operator/decrypt"  // TODO: /api/v1/ssv/decrypt ?
+	PathValidators       = "/v1/validators"
+	PathValidatorsSign   = "/v1/validators/sign/"
+	PathOperatorIdentity = "/v1/operator/identity"
+	PathOperatorSign     = "/v1/operator/sign"
+	PathOperatorEncrypt  = "/v1/operator/encrypt"
+	PathOperatorDecrypt  = "/v1/operator/decrypt"
 )
 
 const (

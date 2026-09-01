@@ -625,6 +625,16 @@ func newTestExporterForV2WithNetwork(traceStore *mockTraceStore, validators stor
 	return NewExporter(zap.NewNop(), nil, traceStore, validators, netCfg)
 }
 
+// booleNetwork returns a clone of TestNetwork with the Boole fork pinned at the
+// given epoch. The SSV config is copied too so the shared TestNetwork is never mutated.
+func booleNetwork(epoch phase0.Epoch) *networkconfig.Network {
+	ssvCopy := *networkconfig.TestNetwork.SSV
+	ssvCopy.Forks.Boole = epoch
+	netCfg := *networkconfig.TestNetwork
+	netCfg.SSV = &ssvCopy
+	return &netCfg
+}
+
 func buildJSONBody(t *testing.T, payload map[string]any) *strings.Reader {
 	t.Helper()
 	b, err := json.Marshal(payload)
@@ -2450,12 +2460,7 @@ func TestExporterValidatorTraces_ForkGating(t *testing.T) {
 				return &traces.CommitteeDutyTrace{Slot: s, CommitteeID: id}, nil
 			}
 
-			ssvCopy := *networkconfig.TestNetwork.SSV
-			ssvCopy.Forks.Boole = tt.booleEpoch
-			netCfg := *networkconfig.TestNetwork
-			netCfg.SSV = &ssvCopy
-
-			exp := newTestExporterForV2WithNetwork(store, validatorStore, &netCfg)
+			exp := newTestExporterForV2WithNetwork(store, validatorStore, booleNetwork(tt.booleEpoch))
 
 			req := httptest.NewRequest(http.MethodPost, "/traces/validator", buildJSONBody(t, map[string]any{
 				"from":    uint64(slot),
@@ -2485,7 +2490,7 @@ func TestExporterValidatorTraces_ForkGating(t *testing.T) {
 }
 
 // TestExporterValidatorTraces_ForkGating_ValidationSymmetric proves that validateValidatorRequest
-// (via isCommitteeDutyAtSlot at the range's upper bound) mirrors the same fork-gated routing decision for aggregator-family
+// (via isCommitteeDutyAtSlot at the range's lower bound) mirrors the same fork-gated routing decision for aggregator-family
 // roles: pre-Boole no pubkeys/indices are required, post-Boole they are (mirroring committee duties).
 func TestExporterValidatorTraces_ForkGating_ValidationSymmetric(t *testing.T) {
 	tests := []struct {
@@ -2539,12 +2544,7 @@ func TestExporterValidatorTraces_ForkGating_ValidationSymmetric(t *testing.T) {
 			}
 			validatorStore := newMockValidatorStore()
 
-			ssvCopy := *networkconfig.TestNetwork.SSV
-			ssvCopy.Forks.Boole = tt.booleEpoch
-			netCfg := *networkconfig.TestNetwork
-			netCfg.SSV = &ssvCopy
-
-			exp := newTestExporterForV2WithNetwork(store, validatorStore, &netCfg)
+			exp := newTestExporterForV2WithNetwork(store, validatorStore, booleNetwork(tt.booleEpoch))
 
 			req := httptest.NewRequest(http.MethodPost, "/traces/validator", buildJSONBody(t, map[string]any{
 				"from":  uint64(100),
@@ -2567,20 +2567,16 @@ func TestExporterValidatorTraces_ForkGating_ValidationSymmetric(t *testing.T) {
 
 // TestExporterValidatorTraces_ForkGating_CrossForkRange proves the behavior of a slot range
 // straddling the Boole fork boundary (from pre-Boole, to post-Boole): validation is evaluated
-// at the range's upper bound, so aggregator-family roles require pubkeys/indices, and with
-// indices provided each slot routes independently — validator path before the boundary,
-// committee path from it onward.
+// at the range's lower bound, so unfiltered aggregator-family requests are accepted and served
+// partially — post-fork slots are reported as non-fatal notes — and with indices provided each
+// slot routes independently: validator path before the boundary, committee path from it onward.
 func TestExporterValidatorTraces_ForkGating_CrossForkRange(t *testing.T) {
 	const booleEpoch = phase0.Epoch(5)
 	idx := phase0.ValidatorIndex(1)
 	var committeeID spectypes.CommitteeID
 	committeeID[0] = 7
 
-	ssvCopy := *networkconfig.TestNetwork.SSV
-	ssvCopy.Forks.Boole = booleEpoch
-	netCfg := *networkconfig.TestNetwork
-	netCfg.SSV = &ssvCopy
-
+	netCfg := booleNetwork(booleEpoch)
 	booleSlot := netCfg.FirstSlotAtEpoch(booleEpoch)
 	require.GreaterOrEqual(t, uint64(booleSlot), uint64(10), "boole fork slot too low for the range below")
 	from := uint64(booleSlot) - 10 // pre-Boole
@@ -2613,8 +2609,8 @@ func TestExporterValidatorTraces_ForkGating_CrossForkRange(t *testing.T) {
 	}
 
 	for _, role := range roles {
-		t.Run(role.name+" without filters requires pubkeys/indices", func(t *testing.T) {
-			exp := newTestExporterForV2WithNetwork(newMockTraceStore(), newMockValidatorStore(), &netCfg)
+		t.Run(role.name+" without filters returns a partial response with post-fork notes", func(t *testing.T) {
+			exp := newTestExporterForV2WithNetwork(newMockTraceStore(), newMockValidatorStore(), netCfg)
 
 			req := httptest.NewRequest(http.MethodPost, "/traces/validator", buildJSONBody(t, map[string]any{
 				"from":  from,
@@ -2624,7 +2620,58 @@ func TestExporterValidatorTraces_ForkGating_CrossForkRange(t *testing.T) {
 			req.Header.Set("Content-Type", "application/json")
 			rec := httptest.NewRecorder()
 
-			require.Error(t, exp.ValidatorTraces(rec, req))
+			// the pre-fork portion of the range legitimately yields zero traces (no
+			// mock data), so the post-fork "requires pubkeys/indices" notes must not
+			// be treated as a hard failure: expect 200 with empty data and the notes
+			// surfaced in Errors.
+			require.NoError(t, exp.ValidatorTraces(rec, req))
+			require.Equal(t, http.StatusOK, rec.Code)
+
+			var resp ValidatorTracesResponse
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+			require.Empty(t, resp.Data)
+			require.NotEmpty(t, resp.Errors)
+			for _, msg := range resp.Errors {
+				require.Contains(t, msg, "committee duty post-fork")
+			}
+		})
+
+		t.Run(role.name+" without filters serves pre-fork data alongside post-fork notes", func(t *testing.T) {
+			store := newMockTraceStore()
+			// the unfiltered pre-fork path reads GetValidatorDuties per slot;
+			// post-fork slots are skipped with a note and must never reach it.
+			store.GetValidatorDutiesFunc = func(r spectypes.BeaconRole, slot phase0.Slot) ([]*traces.ValidatorDutyTrace, error) {
+				require.Less(t, uint64(slot), uint64(booleSlot), "unfiltered validator path used at post-Boole slot")
+				return []*traces.ValidatorDutyTrace{{Slot: slot, Role: r, Validator: idx}}, nil
+			}
+
+			exp := newTestExporterForV2WithNetwork(store, newMockValidatorStore(), netCfg)
+
+			req := httptest.NewRequest(http.MethodPost, "/traces/validator", buildJSONBody(t, map[string]any{
+				"from":  from,
+				"to":    to,
+				"roles": []string{role.name},
+			}))
+			req.Header.Set("Content-Type", "application/json")
+			rec := httptest.NewRecorder()
+
+			require.NoError(t, exp.ValidatorTraces(rec, req))
+			require.Equal(t, http.StatusOK, rec.Code)
+
+			var resp ValidatorTracesResponse
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+
+			// the partial-coverage contract: real pre-fork traces in Data while
+			// the post-fork tail is reported as a note in Errors, in one response.
+			require.Len(t, resp.Data, int(uint64(booleSlot)-from), "expected one trace per pre-fork slot")
+			for _, item := range resp.Data {
+				assert.Less(t, uint64(item.Slot), uint64(booleSlot), "post-fork slot leaked into data")
+				assert.Equal(t, role.name, item.Role)
+			}
+			require.NotEmpty(t, resp.Errors, "expected the post-fork note to surface alongside data")
+			for _, msg := range resp.Errors {
+				require.Contains(t, msg, "committee duty post-fork")
+			}
 		})
 
 		t.Run(role.name+" with indices routes each slot by its own fork state", func(t *testing.T) {
@@ -2645,7 +2692,7 @@ func TestExporterValidatorTraces_ForkGating_CrossForkRange(t *testing.T) {
 				return role.signerDataBuilder(s), nil
 			}
 
-			exp := newTestExporterForV2WithNetwork(store, newMockValidatorStore(), &netCfg)
+			exp := newTestExporterForV2WithNetwork(store, newMockValidatorStore(), netCfg)
 
 			req := httptest.NewRequest(http.MethodPost, "/traces/validator", buildJSONBody(t, map[string]any{
 				"from":    from,
@@ -2669,6 +2716,71 @@ func TestExporterValidatorTraces_ForkGating_CrossForkRange(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestExporterValidatorTraces_ForkGating_ZeroPreForkTraces covers the fix for a
+// fork-straddling AGGREGATOR/SYNC_COMMITTEE_CONTRIBUTION request without
+// pubkeys/indices whose pre-fork slots legitimately yield zero traces (e.g.
+// sparse aggregator duties): the response must be 200 with empty traces and
+// the post-fork notes surfaced, not a 500. A genuine error alongside those
+// notes must still yield 500.
+func TestExporterValidatorTraces_ForkGating_ZeroPreForkTraces(t *testing.T) {
+	const booleEpoch = phase0.Epoch(5)
+
+	netCfg := booleNetwork(booleEpoch)
+	booleSlot := netCfg.FirstSlotAtEpoch(booleEpoch)
+	require.GreaterOrEqual(t, uint64(booleSlot), uint64(2), "boole fork slot too low for the range below")
+	from := uint64(booleSlot) - 2 // pre-Boole
+	to := uint64(booleSlot) + 2   // post-Boole
+
+	t.Run("only post-fork notes and no pre-fork traces -> 200 with empty data", func(t *testing.T) {
+		exp := newTestExporterForV2WithNetwork(newMockTraceStore(), newMockValidatorStore(), netCfg)
+
+		req := httptest.NewRequest(http.MethodPost, "/traces/validator", buildJSONBody(t, map[string]any{
+			"from":  from,
+			"to":    to,
+			"roles": []string{"AGGREGATOR"},
+		}))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+
+		require.NoError(t, exp.ValidatorTraces(rec, req))
+		require.Equal(t, http.StatusOK, rec.Code)
+
+		var resp ValidatorTracesResponse
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+		require.Empty(t, resp.Data)
+		require.NotEmpty(t, resp.Errors, "expected post-fork notes to surface")
+		for _, msg := range resp.Errors {
+			require.Contains(t, msg, "committee duty post-fork")
+		}
+	})
+
+	t.Run("genuine error alongside notes still yields 500", func(t *testing.T) {
+		store := newMockTraceStore()
+		store.GetValidatorDutiesFunc = func(role spectypes.BeaconRole, slot phase0.Slot) ([]*traces.ValidatorDutyTrace, error) {
+			return nil, fmt.Errorf("forced error on GetValidatorDuties")
+		}
+		exp := newTestExporterForV2WithNetwork(store, newMockValidatorStore(), netCfg)
+
+		req := httptest.NewRequest(http.MethodPost, "/traces/validator", buildJSONBody(t, map[string]any{
+			"from":  from,
+			"to":    to,
+			"roles": []string{"AGGREGATOR"},
+		}))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+
+		err := exp.ValidatorTraces(rec, req)
+		require.Error(t, err)
+
+		var apiErr *api.ErrorResponse
+		require.ErrorAs(t, err, &apiErr)
+		require.Equal(t, http.StatusInternalServerError, apiErr.Code,
+			"a genuine store failure must not be masked by the post-fork note exemption")
+		require.Contains(t, apiErr.Message, "forced error on GetValidatorDuties",
+			"the genuine error, not a post-fork note, must surface to the caller")
+	})
 }
 
 // mockValidatorStore is a simple in-memory ValidatorStore implementation for tests.
