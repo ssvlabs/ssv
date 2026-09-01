@@ -13,11 +13,11 @@ import (
 	"github.com/attestantio/go-eth2-client/api"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	ssz "github.com/ferranbt/fastssz"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
+
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
@@ -380,10 +380,10 @@ func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logge
 		observability.ValidatorPublicKeyAttribute(cd.Duty.PubKey),
 	)
 
-	var blkRootToSign ssz.HashRoot
+	var blkRootToSign spectypes.HashRoot
 	if r.NetworkConfig.IsGloasAtSlot(cd.Duty.Slot) {
-		// Gloas blocks have no spectypes block version; decode the node-side block, which doubles as
-		// the ssz.HashRoot to sign.
+		// Gloas blocks have no spectypes block version; decode the Gloas block, which is itself the
+		// value to sign.
 		block, decErr := gloas.DecodeBeaconBlock(cd.DataSSZ)
 		if decErr != nil {
 			return fmt.Errorf("could not decode gloas block from consensus data: %w", decErr)
@@ -662,24 +662,24 @@ func (r *ProposerRunner) recordDecidedBlockRoot(slot phase0.Slot, block *gloas.B
 	return nil
 }
 
-func (r *ProposerRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
+func (r *ProposerRunner) expectedPreConsensusRootsAndDomain() ([]spectypes.HashRoot, phase0.DomainType, error) {
 	currentDutySlot, err := r.currentDutySlot()
 	if err != nil {
 		return nil, phase0.DomainType{}, fmt.Errorf("current duty slot: %w", err)
 	}
 	epoch := r.NetworkConfig.EstimatedEpochAtSlot(currentDutySlot)
-	return []ssz.HashRoot{spectypes.SSZUint64(epoch)}, spectypes.DomainRandao, nil
+	return []spectypes.HashRoot{spectypes.SSZUint64(epoch)}, spectypes.DomainRandao, nil
 }
 
 // expectedPostConsensusRootsAndDomain an INTERNAL function, returns the expected post-consensus roots to sign
-func (r *ProposerRunner) expectedPostConsensusRootsAndDomain(context.Context) ([]ssz.HashRoot, phase0.DomainType, error) {
+func (r *ProposerRunner) expectedPostConsensusRootsAndDomain(context.Context) ([]spectypes.HashRoot, phase0.DomainType, error) {
 	validatorConsensusData := &spectypes.ProposerConsensusData{}
 	err := validatorConsensusData.Decode(r.State.DecidedValue)
 	if err != nil {
 		return nil, phase0.DomainType{}, fmt.Errorf("could not decode consensus data: %w", err)
 	}
 
-	var signedRoot ssz.HashRoot
+	var signedRoot spectypes.HashRoot
 	if r.NetworkConfig.IsGloasAtSlot(validatorConsensusData.Duty.Slot) {
 		block, decErr := gloas.DecodeBeaconBlock(validatorConsensusData.DataSSZ)
 		if decErr != nil {
@@ -693,7 +693,7 @@ func (r *ProposerRunner) expectedPostConsensusRootsAndDomain(context.Context) ([
 		}
 		signedRoot = root
 	}
-	return []ssz.HashRoot{signedRoot}, spectypes.DomainProposer, nil
+	return []spectypes.HashRoot{signedRoot}, spectypes.DomainProposer, nil
 }
 
 // executeDuty steps:

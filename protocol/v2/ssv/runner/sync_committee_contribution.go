@@ -13,10 +13,10 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	ssz "github.com/ferranbt/fastssz"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
+
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
@@ -479,7 +479,7 @@ func (r *SyncCommitteeAggregatorRunner) generateContributionAndProof(
 	return contribAndProof, contribAndProofRoot, nil
 }
 
-func (r *SyncCommitteeAggregatorRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
+func (r *SyncCommitteeAggregatorRunner) expectedPreConsensusRootsAndDomain() ([]spectypes.HashRoot, phase0.DomainType, error) {
 	duty, err := r.currentValidatorDuty()
 	if err != nil {
 		return nil, phase0.DomainType{}, fmt.Errorf("current validator duty: %w", err)
@@ -489,7 +489,7 @@ func (r *SyncCommitteeAggregatorRunner) expectedPreConsensusRootsAndDomain() ([]
 		return nil, phase0.DomainType{}, fmt.Errorf("current duty slot: %w", err)
 	}
 	indices := duty.ValidatorSyncCommitteeIndices
-	sszIndexes := make([]ssz.HashRoot, 0, len(indices))
+	sszIndexes := make([]spectypes.HashRoot, 0, len(indices))
 	for _, index := range indices {
 		subnet := r.GetBeaconNode().SyncCommitteeSubnetID(phase0.CommitteeIndex(index))
 		data := &altair.SyncAggregatorSelectionData{
@@ -502,7 +502,7 @@ func (r *SyncCommitteeAggregatorRunner) expectedPreConsensusRootsAndDomain() ([]
 }
 
 // expectedPostConsensusRootsAndDomain an INTERNAL function, returns the expected post-consensus roots to sign
-func (r *SyncCommitteeAggregatorRunner) expectedPostConsensusRootsAndDomain(ctx context.Context) ([]ssz.HashRoot, phase0.DomainType, error) {
+func (r *SyncCommitteeAggregatorRunner) expectedPostConsensusRootsAndDomain(ctx context.Context) ([]spectypes.HashRoot, phase0.DomainType, error) {
 	// get contributions
 	validatorConsensusData := &spectypes.ProposerConsensusData{}
 	err := validatorConsensusData.Decode(r.State.DecidedValue)
@@ -514,7 +514,7 @@ func (r *SyncCommitteeAggregatorRunner) expectedPostConsensusRootsAndDomain(ctx 
 		return nil, phase0.DomainType{}, fmt.Errorf("could not get contributions: %w", err)
 	}
 
-	ret := make([]ssz.HashRoot, 0)
+	ret := make([]spectypes.HashRoot, 0)
 	for _, contrib := range contributions {
 		contribAndProof, _, err := r.generateContributionAndProof(ctx, contrib.Contribution, contrib.SelectionProofSig)
 		if err != nil {

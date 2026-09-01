@@ -7,7 +7,7 @@ import (
 	"sort"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	ssz "github.com/ferranbt/fastssz"
+
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -188,7 +188,7 @@ func (b *BaseRunner) verifyExpectedRoot(
 	ctx context.Context,
 	runner Runner,
 	psigMsgs *spectypes.PartialSignatureMessages,
-	expectedRootObjs []ssz.HashRoot,
+	expectedRootObjs []spectypes.HashRoot,
 	domain phase0.DomainType,
 ) error {
 	if len(expectedRootObjs) != len(psigMsgs.Messages) {
@@ -196,7 +196,7 @@ func (b *BaseRunner) verifyExpectedRoot(
 	}
 
 	// convert expected roots to map and mark unique roots when verified
-	sortedExpectedRoots, err := func(expectedRootObjs []ssz.HashRoot) ([][32]byte, error) {
+	sortedExpectedRoots, err := func(expectedRootObjs []spectypes.HashRoot) ([][32]byte, error) {
 		epoch := b.NetworkConfig.EstimatedEpochAtSlot(b.State.CurrentDuty.DutySlot())
 		d, err := runner.GetBeaconNode().DomainData(ctx, epoch, domain)
 		if err != nil {

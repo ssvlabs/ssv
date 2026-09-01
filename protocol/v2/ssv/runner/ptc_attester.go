@@ -8,9 +8,9 @@ import (
 	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	ssz "github.com/ferranbt/fastssz"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
+
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
@@ -139,14 +139,14 @@ func (r *PTCAttesterRunner) ProcessPostConsensus(ctx context.Context, logger *za
 	return fmt.Errorf("no post-consensus phase for PTC attestation")
 }
 
-func (r *PTCAttesterRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
+func (r *PTCAttesterRunner) expectedPreConsensusRootsAndDomain() ([]spectypes.HashRoot, phase0.DomainType, error) {
 	if r.payloadAttestationData == nil {
 		return nil, spectypes.DomainError, fmt.Errorf("no frozen payload attestation data")
 	}
-	return []ssz.HashRoot{r.payloadAttestationData}, phase0.DomainType(spectypes.DomainPTCAttester), nil
+	return []spectypes.HashRoot{r.payloadAttestationData}, phase0.DomainType(spectypes.DomainPTCAttester), nil
 }
 
-func (r *PTCAttesterRunner) expectedPostConsensusRootsAndDomain(context.Context) ([]ssz.HashRoot, phase0.DomainType, error) {
+func (r *PTCAttesterRunner) expectedPostConsensusRootsAndDomain(context.Context) ([]spectypes.HashRoot, phase0.DomainType, error) {
 	return nil, spectypes.DomainError, fmt.Errorf("no post-consensus roots for PTC attestation")
 }
 

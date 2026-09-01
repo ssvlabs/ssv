@@ -15,7 +15,6 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/cespare/xxhash/v2"
-	ssz "github.com/ferranbt/fastssz"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
@@ -176,7 +175,7 @@ func (r *ValidatorRegistrationRunner) ProcessPostConsensus(ctx context.Context, 
 	return spectypes.NewError(spectypes.ValidatorRegistrationNoPostConsensusPhaseErrorCode, "no post consensus phase for validator registration")
 }
 
-func (r *ValidatorRegistrationRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
+func (r *ValidatorRegistrationRunner) expectedPreConsensusRootsAndDomain() ([]spectypes.HashRoot, phase0.DomainType, error) {
 	currentDutySlot, err := r.currentDutySlot()
 	if err != nil {
 		return nil, spectypes.DomainError, fmt.Errorf("current duty slot: %w", err)
@@ -185,11 +184,11 @@ func (r *ValidatorRegistrationRunner) expectedPreConsensusRootsAndDomain() ([]ss
 	if err != nil {
 		return nil, spectypes.DomainError, fmt.Errorf("could not calculate validator registration: %w", err)
 	}
-	return []ssz.HashRoot{vr}, spectypes.DomainApplicationBuilder, nil
+	return []spectypes.HashRoot{vr}, spectypes.DomainApplicationBuilder, nil
 }
 
 // expectedPostConsensusRootsAndDomain an INTERNAL function, returns the expected post-consensus roots to sign
-func (r *ValidatorRegistrationRunner) expectedPostConsensusRootsAndDomain(context.Context) ([]ssz.HashRoot, phase0.DomainType, error) {
+func (r *ValidatorRegistrationRunner) expectedPostConsensusRootsAndDomain(context.Context) ([]spectypes.HashRoot, phase0.DomainType, error) {
 	return nil, spectypes.DomainError, fmt.Errorf("no post consensus roots for validator registration")
 }
 

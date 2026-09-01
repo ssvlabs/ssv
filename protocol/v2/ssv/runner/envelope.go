@@ -9,10 +9,10 @@ import (
 	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	ssz "github.com/ferranbt/fastssz"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
+
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
@@ -234,7 +234,7 @@ func (r *EnvelopeProposerRunner) builtDecidedEnvelope(decidedDataSSZ []byte) boo
 	if r.cachedEnvelope == nil {
 		return false
 	}
-	blinded, err := r.cachedEnvelope.Blinded()
+	blinded, err := gloas.Blinded(r.cachedEnvelope)
 	if err != nil {
 		return false
 	}
@@ -288,7 +288,7 @@ func (r *EnvelopeProposerRunner) produceBlindedEnvelope(ctx context.Context, dut
 	}
 	r.cachedEnvelope = envelope
 
-	blinded, err := envelope.Blinded()
+	blinded, err := gloas.Blinded(envelope)
 	if err != nil {
 		return nil, err
 	}
@@ -304,11 +304,11 @@ func (r *EnvelopeProposerRunner) produceBlindedEnvelope(ctx context.Context, dut
 }
 
 // expectedPreConsensusRootsAndDomain is unreachable: the envelope duty has no pre-consensus phase.
-func (r *EnvelopeProposerRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
+func (r *EnvelopeProposerRunner) expectedPreConsensusRootsAndDomain() ([]spectypes.HashRoot, phase0.DomainType, error) {
 	return nil, spectypes.DomainError, errors.New("no pre-consensus phase for envelope proposer")
 }
 
-func (r *EnvelopeProposerRunner) expectedPostConsensusRootsAndDomain(context.Context) ([]ssz.HashRoot, phase0.DomainType, error) {
+func (r *EnvelopeProposerRunner) expectedPostConsensusRootsAndDomain(context.Context) ([]spectypes.HashRoot, phase0.DomainType, error) {
 	cd := &gloas.EnvelopeConsensusData{}
 	if err := cd.Decode(r.State.DecidedValue); err != nil {
 		return nil, phase0.DomainType{}, fmt.Errorf("could not decode envelope consensus data: %w", err)
@@ -317,7 +317,7 @@ func (r *EnvelopeProposerRunner) expectedPostConsensusRootsAndDomain(context.Con
 	if err := blinded.Decode(cd.DataSSZ); err != nil {
 		return nil, phase0.DomainType{}, fmt.Errorf("could not decode blinded envelope: %w", err)
 	}
-	return []ssz.HashRoot{blinded}, spectypes.DomainBeaconBuilder, nil
+	return []spectypes.HashRoot{blinded}, spectypes.DomainBeaconBuilder, nil
 }
 
 func (r *EnvelopeProposerRunner) GetNetwork() protocolp2p.Network {

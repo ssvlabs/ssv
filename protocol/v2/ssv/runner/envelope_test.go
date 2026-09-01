@@ -5,9 +5,10 @@ import (
 	"testing"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
@@ -133,7 +134,7 @@ func TestEnvelopeProposerRunner_ProduceBlindedEnvelope(t *testing.T) {
 // value holds the full bytes and publishes.
 func TestEnvelopeProposerRunner_BuiltDecidedEnvelope(t *testing.T) {
 	envelope := sampleEnvelope()
-	blinded, err := envelope.Blinded()
+	blinded, err := gloas.Blinded(envelope)
 	require.NoError(t, err)
 	decided, err := blinded.Encode()
 	require.NoError(t, err)

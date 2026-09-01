@@ -5,11 +5,11 @@ import (
 	"testing"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	ssz "github.com/ferranbt/fastssz"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
+
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
@@ -41,7 +41,7 @@ func TestPTCAttesterRunner_ExpectedPreConsensusRootsAndDomain(t *testing.T) {
 	r.payloadAttestationData = data
 	roots, domain, err := r.expectedPreConsensusRootsAndDomain()
 	require.NoError(t, err)
-	require.Equal(t, []ssz.HashRoot{data}, roots)
+	require.Equal(t, []spectypes.HashRoot{data}, roots)
 	require.Equal(t, phase0.DomainType(spectypes.DomainPTCAttester), domain)
 }
 

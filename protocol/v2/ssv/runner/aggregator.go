@@ -11,10 +11,10 @@ import (
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/electra"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	ssz "github.com/ferranbt/fastssz"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
+
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
@@ -393,17 +393,17 @@ func (r *AggregatorRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 	return nil
 }
 
-func (r *AggregatorRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
+func (r *AggregatorRunner) expectedPreConsensusRootsAndDomain() ([]spectypes.HashRoot, phase0.DomainType, error) {
 	currentDutySlot, err := r.currentDutySlot()
 	if err != nil {
 		return nil, phase0.DomainType{}, fmt.Errorf("current duty slot: %w", err)
 	}
 
-	return []ssz.HashRoot{spectypes.SSZUint64(currentDutySlot)}, spectypes.DomainSelectionProof, nil
+	return []spectypes.HashRoot{spectypes.SSZUint64(currentDutySlot)}, spectypes.DomainSelectionProof, nil
 }
 
 // expectedPostConsensusRootsAndDomain an INTERNAL function, returns the expected post-consensus roots to sign
-func (r *AggregatorRunner) expectedPostConsensusRootsAndDomain(context.Context) ([]ssz.HashRoot, phase0.DomainType, error) {
+func (r *AggregatorRunner) expectedPostConsensusRootsAndDomain(context.Context) ([]spectypes.HashRoot, phase0.DomainType, error) {
 	cd := &spectypes.ProposerConsensusData{}
 	err := cd.Decode(r.State.DecidedValue)
 	if err != nil {
@@ -414,7 +414,7 @@ func (r *AggregatorRunner) expectedPostConsensusRootsAndDomain(context.Context) 
 		return nil, phase0.DomainType{}, fmt.Errorf("could not get aggregate and proof: %w", err)
 	}
 
-	return []ssz.HashRoot{hashRoot}, spectypes.DomainAggregateAndProof, nil
+	return []spectypes.HashRoot{hashRoot}, spectypes.DomainAggregateAndProof, nil
 }
 
 // executeDuty steps:

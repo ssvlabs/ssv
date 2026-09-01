@@ -9,10 +9,10 @@ import (
 	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	ssz "github.com/ferranbt/fastssz"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
+
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
@@ -154,7 +154,7 @@ func (r *VoluntaryExitRunner) ProcessPostConsensus(ctx context.Context, logger *
 	return spectypes.NewError(spectypes.ValidatorExitNoPostConsensusPhaseErrorCode, "no post consensus phase for voluntary exit")
 }
 
-func (r *VoluntaryExitRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
+func (r *VoluntaryExitRunner) expectedPreConsensusRootsAndDomain() ([]spectypes.HashRoot, phase0.DomainType, error) {
 	validatorDuty, err := r.currentValidatorDuty()
 	if err != nil {
 		return nil, spectypes.DomainError, fmt.Errorf("current validator duty: %w", err)
@@ -164,11 +164,11 @@ func (r *VoluntaryExitRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRo
 	if err != nil {
 		return nil, spectypes.DomainError, fmt.Errorf("could not calculate voluntary exit: %w", err)
 	}
-	return []ssz.HashRoot{vr}, spectypes.DomainVoluntaryExit, nil
+	return []spectypes.HashRoot{vr}, spectypes.DomainVoluntaryExit, nil
 }
 
 // expectedPostConsensusRootsAndDomain an INTERNAL function, returns the expected post-consensus roots to sign
-func (r *VoluntaryExitRunner) expectedPostConsensusRootsAndDomain(context.Context) ([]ssz.HashRoot, phase0.DomainType, error) {
+func (r *VoluntaryExitRunner) expectedPostConsensusRootsAndDomain(context.Context) ([]spectypes.HashRoot, phase0.DomainType, error) {
 	return nil, spectypes.DomainError, errors.New("no post consensus roots for voluntary exit")
 }
 

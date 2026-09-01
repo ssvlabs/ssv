@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	ssz "github.com/ferranbt/fastssz"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
@@ -55,7 +54,7 @@ type BeaconSigner interface {
 	// the computed root. If slashable, it should return an error.
 	SignBeaconObject(
 		ctx context.Context,
-		obj ssz.HashRoot,
+		obj spectypes.HashRoot,
 		domain phase0.Domain,
 		pubKey phase0.BLSPubKey,
 		slot phase0.Slot,

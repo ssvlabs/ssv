@@ -1,0 +1,14 @@
+package: .
+legacy: true
+without-dynamic-expressions: true
+types:
+  - name: GloasBeaconVote
+    output: gloasbeaconvote_ssz.go
+  - name: EnvelopeConsensusData
+    output: envelopeconsensusdata_ssz.go
+  - name: BlindedExecutionPayloadEnvelope
+    output: blindedexecutionpayloadenvelope_ssz.go
+  - name: BuilderRequestAuth
+    output: builderrequestauth_ssz.go
+  - name: SignedBuilderRequestAuth
+    output: signedbuilderrequestauth_ssz.go

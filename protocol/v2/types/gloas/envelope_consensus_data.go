@@ -2,12 +2,9 @@ package gloas
 
 import (
 	"github.com/attestantio/go-eth2-client/spec"
+
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
-
-// Regenerate with `go generate ./...`. ValidatorDuty resolves from ssv-spec and DataVersion from
-// go-eth2-client/spec; both are tracked via the module graph (`go list -m`) rather than pinned.
-//go:generate sh -c "go tool -modfile=../../../../tool.mod sszgen -path ./envelope_consensus_data.go --include $(go list -m -f '{{.Dir}}' github.com/ssvlabs/ssv-spec)/types,$(go list -m -f '{{.Dir}}' github.com/attestantio/go-eth2-client)/spec,$(go list -m -f '{{.Dir}}' github.com/attestantio/go-eth2-client)/spec/phase0 --objs EnvelopeConsensusData"
 
 // EnvelopeConsensusData is the §6 QBFT value for the envelope-signing duty (SIP #94 §6). It shares
 // spectypes.ProposerConsensusData's wire shape (Duty + Version + DataSSZ) but is a distinct type so the

@@ -1,9 +1,9 @@
 package gloas
 
 import (
+	bitfield "github.com/OffchainLabs/go-bitfield"
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	bitfield "github.com/prysmaticlabs/go-bitfield"
 )
 
 // TestingBeaconBlock returns a minimal self-build Gloas BeaconBlock for the slot, with the required
