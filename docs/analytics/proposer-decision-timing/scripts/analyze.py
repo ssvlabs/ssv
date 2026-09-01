@@ -25,11 +25,15 @@ for r in tr:
 meds = {c: st.median(v) for c, v in cl.items() if len(v) >= 8}  # reliable clusters only
 
 def bucket(c):
+    # Coarse SSV-Labs-calibrated tiers: block-fetch varies ~375ms across clusters,
+    # wider than a 400ms bucket, so only the >=700ms delay tier is separable.
     m = meds.get(c)
     if m is None:
         return "unknown(n<8)"
     d = max(0, m - BASE)
-    return "<=1000" if d <= 1000 else ("1000-1300" if d <= 1300 else "1300+")
+    return "<=700" if d < 700 else ("700-1000" if d < 1000 else "1000+")
+
+BUCKETS = ("<=700", "700-1000", "1000+", "unknown(n<8)")
 
 def wilson(k, n, z=1.96):
     if n == 0:
@@ -66,18 +70,28 @@ print("miss-rate by round:")
 for k in ("1", "2", "3+"):
     g = [r for r in tr if rk(r["qbft"]["decided_round"]) == k]
     m = sum(1 for r in g if r["onchain"]["success"] is False)
-    print(f"  round {k}: {m}/{len(g)} = {wilson(m, len(g))[0]:.3f}%")
+    print(f"  round {k:2}: {m}/{len(g)} = {wilson(m, len(g))[0]:.3f}%")
+noc = [r for r in tr if r["qbft"]["decided_round"] is None]  # traced but never decided
+print(f"  no-consensus: {sum(1 for r in noc if r['onchain']['success'] is False)}/{len(noc)}")
 
-# --- ProposerDelay buckets: forward (rate) and backward (share of late)
-print(f"\nProposerDelay buckets (baseline {BASE}ms):")
-for b in ("<=1000", "1000-1300", "1300+", "unknown(n<8)"):
+# --- ProposerDelay buckets. Forward rate P(late|bucket) is the causal read;
+#     backward share P(bucket|late) is base-rate biased (see README).
+print(f"\nProposerDelay buckets (baseline {BASE}ms) -- forward P(outcome|bucket):")
+for b in BUCKETS:
     g = [r for r in dec if bucket(tuple(r["committee"])) == b]
     if not g:
         print(f"  {b:14}: 0 duties")
         continue
     late = sum(1 for r in g if r["qbft"]["decided_ms"] > 3000)
+    rc = sum(1 for r in g if r["qbft"]["had_round_change"])
     miss = sum(1 for r in g if r["onchain"]["success"] is False)
-    print(f"  {b:14}: {len(g):6} duties | >3s {late} ({wilson(late,len(g))[0]:.3f}%) | miss {miss}")
+    print(f"  {b:14}: {len(g):6} duties | >3s {wilson(late,len(g))[0]:.3f}% | round-change {100*rc/len(g):.3f}% | miss {miss}")
+late_all = [r for r in dec if r["qbft"]["decided_ms"] > 3000]
+print("  backward P(bucket|>3s) vs base rate:")
+for b in BUCKETS:
+    share = sum(1 for r in late_all if bucket(tuple(r["committee"])) == b)
+    base = sum(1 for r in dec if bucket(tuple(r["committee"])) == b)
+    print(f"    {b:14}: {100*share/len(late_all):4.1f}% of late   vs base {100*base/len(dec):4.1f}%")
 
 # --- late-decide concentration (>2500 and >3000)
 total_by = Counter(tuple(r["committee"]) for r in tr)

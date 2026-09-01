@@ -26,7 +26,7 @@ def check(slot):
     except Exception as e:
         return ("ERR:" + type(e).__name__, None, None)
 
-def dz(r):
+def late_decided(r):  # decided in the 3-4.5s danger zone
     q = r["qbft"]
     return r["has_trace"] and q and q["decided_ms"] is not None and 3000 < q["decided_ms"] < 4500
 
@@ -40,7 +40,7 @@ for r in sorted(misses, key=lambda r: r["slot"]):
     print(f"  slot {r['slot']} val {r['val']} -> {st:6} {'confirmed miss' if ok else '!! block exists prop=%s' % prop}")
 print(f"confirmed {len(misses)-bad}/{len(misses)} misses; {bad} discrepancies")
 
-controls = [r for r in rows if r["onchain"]["success"] is True and dz(r)][:4]
+controls = [r for r in rows if r["onchain"]["success"] is True and late_decided(r)][:4]
 print(f"\n=== spot-check {len(controls)} late-but-successful controls (expect BLOCK by same validator) ===")
 for r in controls:
     st, prop, canon = check(r["slot"]); time.sleep(0.6)
