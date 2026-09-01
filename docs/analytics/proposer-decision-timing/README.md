@@ -21,9 +21,9 @@ Two self-contained HTML pages (open via [htmlpreview.github.io](https://htmlprev
 
 ## Data & method
 
-**Sources.** (1) E2M `/api/duties` — every proposer duty in the window with its committee (operator set), on-chain `Success`, and MEV reward. (2) Exporter validator traces — per-round proposal / prepare / commit / round-change and the `decideds` commit-quorum time, network-wide (covers external clusters, not just SSV Labs). (3) A public mainnet beacon node — canonical-chain validation.
+**Sources.** (1) E2M `/api/duties` — every proposer duty in the window with its committee (operator set), on-chain `Success`, and MEV reward. (2) Exporter validator traces — per-round proposal / prepare / commit / round-change and the `decideds` aggregated-commit ("decided") messages, network-wide (covers external clusters, not just SSV Labs). (3) A public mainnet beacon node — canonical-chain validation.
 
-**Decision time** is the Exporter's commit-quorum *receive* time minus slot start (`genesis + slot·12s`). It is a few ms behind the operators' own decision (one P2P hop). The three layers — QBFT timing, on-chain outcome, and the derived delay estimate — are kept strictly separate per duty.
+**Decision time** is the Exporter's receive-time of the aggregated *decided* message — a single commit carrying a quorum (≥2f+1) of signers, which an operator broadcasts once it has reached commit quorum locally — minus slot start (`genesis + slot·12s`). It is *not* the Exporter accumulating individual commits; it trails the operators' own decision by the decided broadcast + one gossip hop, so true decisions are a touch earlier. The three layers — QBFT timing, on-chain outcome, and the derived delay estimate — are kept strictly separate per duty.
 
 **Coverage & scale.** 25,126 duties; 99.63% had an Exporter trace. Exporter requests are compute-bound (~O(indices × slot-span), ~20s server ceiling), so collection batches adaptively and bisects on disconnect (see [`scripts/collect.py`](./scripts/collect.py)).
 
@@ -124,7 +124,7 @@ Miss/success come from E2M; late blocks are exactly where a reorg could mislabel
 
 ## Caveats
 
-- **Exporter vantage.** Decision time is a receive-time a few ms behind operators; near the 4.0s cliff this can nudge a duty across the line. The round-1 duration tail (what matters there) is well clear of that resolution.
+- **Exporter vantage.** Decision time is the receive-time of the aggregated *decided* message, so it trails the operators' own decision (decided broadcast + one gossip hop); near the 4.0s cliff this can nudge a duty across the line. The round-1 duration tail (what matters there) is well clear of that resolution.
 - **`ProposerDelay` is not separable at fine granularity.** Absolute delay conflates with block-fetch/source latency; treat the buckets as observed-lateness tiers, and only the ≥~700ms tiers as meaningful.
 - **Small tail counts.** 28 late decides, 42 round-2 duties, 14 misses in 30 days — per-bucket differences sit inside overlapping Wilson intervals; this shows `ProposerDelay` gives *no sign* of raising risk, not proof of immunity. Two high-delay clusters are also likely well-run (selection effect).
 - **`ProposerDelay` affects proposer duties only.**
