@@ -10,6 +10,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/electra"
+	eth2gloas "github.com/attestantio/go-eth2-client/spec/gloas"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ssvlabs/eth2-key-manager/signer"
@@ -317,6 +318,12 @@ func (km *RemoteKeyManager) prepareSignRequest(
 			req.AggregateAndProof = &web3signer.AggregateAndProof{
 				Electra: v,
 			}
+		case *eth2gloas.AggregateAndProof:
+			// Web3Signer has no Gloas aggregate type, and its Electra-shaped request would sign the Electra
+			// root, which differs from the Gloas one. Bounded like the other Gloas domains: the cluster
+			// reconstructs while ≤ f operators are remote-signing, but those must sign this duty locally.
+			// TODO(gloas): route Gloas aggregate signing through Web3Signer once it adds the type (#3000).
+			return web3signer.SignRequest{}, phase0.Root{}, errors.New("gloas aggregate and proof signing is not supported by the remote signer: Web3Signer has no Gloas aggregate-and-proof type, use local signing for aggregator duties on Gloas")
 		default:
 			return web3signer.SignRequest{}, phase0.Root{}, fmt.Errorf("obj type is unknown: %T", obj)
 		}
@@ -501,25 +508,18 @@ func (km *RemoteKeyManager) handleDomainProposer(
 // go-eth2-client's spec.DataVersionGloas.
 const GloasDataVersion = spec.DataVersionGloas
 
-// GetForkInfo returns the ForkInfo for the epoch's active fork. Web3Signer derives the signing domain
-// from it, so on a Gloas epoch it must carry the Gloas fork: ForkAtEpoch's version list caps at Fulu
-// (its TODO(gloas)), so it returns the Fulu fork on Gloas — which would make Web3Signer sign every remote
-// duty under the wrong (Fulu) domain. Substitute the Gloas fork when it is configured and active.
+// GetForkInfo returns the ForkInfo for the epoch's active fork, Gloas included. Web3Signer derives the
+// signing domain from it, so a Gloas epoch must carry the Gloas fork.
 //
-// Sending the Gloas fork suffices even against a Web3Signer with no Gloas support: its domain derivation
-// is generic over the version bytes. BeaconStateAccessors.getDomain takes fork.current_version whenever
-// epoch >= fork.epoch (always the case here — the substitution above is itself epoch-gated) and hands it
-// to MiscHelpers.computeDomain, which only hashes it into a ForkData root; no milestone enum is consulted,
-// so an unrecognized Gloas version still yields the correct domain. Its AttestationData schema likewise
-// has no post-Electra index == 0 check (unlike go-eth2-client's), so the §2 payload-status index survives
-// into the signing root. Established from the Web3Signer/Teku sources rather than a live instance. What
-// stays broken on Gloas is unrelated to fork_info: the duties needing request types Web3Signer doesn't
-// have (the three new domains) and the Gloas block, which its BLOCK_V2 milestone enum rejects.
+// That suffices even against a Web3Signer without Gloas support: its domain derivation is generic over
+// the version bytes (BeaconStateAccessors.getDomain hands fork.current_version to
+// MiscHelpers.computeDomain, which only hashes it into a ForkData root; no milestone enum is consulted),
+// and its AttestationData schema has no post-Electra index == 0 check, so the §2 payload-status index
+// survives into the signing root. Established from the Web3Signer/Teku sources rather than a live
+// instance. What stays unsupported on Gloas are the duties Web3Signer has no request type for (the new
+// domains, the Gloas aggregate) and the Gloas block, which its BLOCK_V2 milestone enum rejects.
 func (km *RemoteKeyManager) GetForkInfo(epoch phase0.Epoch) web3signer.ForkInfo {
 	_, currentFork := km.beaconConfig.ForkAtEpoch(epoch)
-	if gloasFork, ok := km.beaconConfig.ForkAtVersion(GloasDataVersion); ok && epoch >= gloasFork.Epoch {
-		currentFork = &gloasFork
-	}
 
 	return web3signer.ForkInfo{
 		Fork:                  currentFork,

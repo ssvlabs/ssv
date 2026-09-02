@@ -627,6 +627,7 @@ func TestVersionedAggregateToSSZ(t *testing.T) {
 		spec.DataVersionDeneb,
 		spec.DataVersionElectra,
 		spec.DataVersionFulu,
+		spec.DataVersionGloas,
 	}
 
 	for _, version := range versions {
@@ -657,6 +658,7 @@ func TestVersionedToAggregateAndProofNilAndUnknownVersion(t *testing.T) {
 		spec.DataVersionDeneb,
 		spec.DataVersionElectra,
 		spec.DataVersionFulu,
+		spec.DataVersionGloas,
 	}
 
 	for _, version := range versions {

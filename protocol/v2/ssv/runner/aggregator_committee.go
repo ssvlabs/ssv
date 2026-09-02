@@ -14,7 +14,6 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/altair"
-	"github.com/attestantio/go-eth2-client/spec/electra"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"go.opentelemetry.io/otel/trace"
@@ -1074,7 +1073,7 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 				switch role {
 				case spectypes.BNRoleAggregator:
 					aggregateAndProof := sszObject.(*spec.VersionedAggregateAndProof)
-					signedAgg, err := r.constructSignedAggregateAndProof(aggregateAndProof, signatureResult.signature)
+					signedAgg, err := constructVersionedSignedAggregateAndProof(aggregateAndProof, signatureResult.signature)
 					if err != nil {
 						terminalErr = fmt.Errorf("failed to construct signed aggregate and proof: %w", err)
 						continue
@@ -1600,64 +1599,6 @@ func (r *AggregatorCommitteeRunner) findValidatorsForPostConsensusRoot(
 	}
 
 	return spectypes.BNRoleUnknown, nil, false
-}
-
-// constructSignedAggregateAndProof constructs a signed aggregate and proof from versioned data
-func (r *AggregatorCommitteeRunner) constructSignedAggregateAndProof(
-	aggregateAndProof *spec.VersionedAggregateAndProof,
-	signature phase0.BLSSignature,
-) (*spec.VersionedSignedAggregateAndProof, error) {
-	ret := &spec.VersionedSignedAggregateAndProof{
-		Version: aggregateAndProof.Version,
-	}
-
-	switch ret.Version {
-	case spec.DataVersionPhase0:
-		ret.Phase0 = &phase0.SignedAggregateAndProof{
-			Message:   aggregateAndProof.Phase0,
-			Signature: signature,
-		}
-	case spec.DataVersionAltair:
-		ret.Altair = &phase0.SignedAggregateAndProof{
-			Message:   aggregateAndProof.Altair,
-			Signature: signature,
-		}
-	case spec.DataVersionBellatrix:
-		ret.Bellatrix = &phase0.SignedAggregateAndProof{
-			Message:   aggregateAndProof.Bellatrix,
-			Signature: signature,
-		}
-	case spec.DataVersionCapella:
-		ret.Capella = &phase0.SignedAggregateAndProof{
-			Message:   aggregateAndProof.Capella,
-			Signature: signature,
-		}
-	case spec.DataVersionDeneb:
-		ret.Deneb = &phase0.SignedAggregateAndProof{
-			Message:   aggregateAndProof.Deneb,
-			Signature: signature,
-		}
-	case spec.DataVersionElectra:
-		if aggregateAndProof.Electra == nil {
-			return nil, errors.New("nil Electra aggregate and proof")
-		}
-		ret.Electra = &electra.SignedAggregateAndProof{
-			Message:   aggregateAndProof.Electra,
-			Signature: signature,
-		}
-	case spec.DataVersionFulu:
-		if aggregateAndProof.Fulu == nil {
-			return nil, errors.New("nil Fulu aggregate and proof")
-		}
-		ret.Fulu = &electra.SignedAggregateAndProof{
-			Message:   aggregateAndProof.Fulu,
-			Signature: signature,
-		}
-	default:
-		return nil, fmt.Errorf("unknown version %s", ret.Version.String())
-	}
-
-	return ret, nil
 }
 
 // ValidateAggregatorCommitteeDuty checks that:

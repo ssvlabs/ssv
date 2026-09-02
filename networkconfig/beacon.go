@@ -13,8 +13,7 @@ import (
 
 // DataVersionGloas is the Gloas (ePBS) beacon data version — go-eth2-client's spec.DataVersionGloas,
 // re-exported under the node's name for its call sites and for the ssvsigner mirror (ekm.GloasDataVersion,
-// a separate module; a node-side test pins the two equal). The remaining Gloas-version reconciliation —
-// ForkAtEpoch's Fulu cap and the aggregator consensus-data version stamp — is tracked in issue #2998.
+// a separate module; a node-side test pins the two equal).
 const DataVersionGloas = spec.DataVersionGloas
 
 // Beacon defines beacon network configuration. It is fetched from the consensus client during the node runtime.
@@ -157,10 +156,9 @@ func (b *Beacon) EpochDuration() time.Duration {
 	return b.SlotDuration * time.Duration(b.SlotsPerEpoch) // #nosec G115: slot cannot exceed math.MaxInt64
 }
 
-// ForkAtEpoch returns the beacon fork active at the epoch. The versions list stops at
-// Fulu, so it returns Fulu for a Gloas epoch; (*Beacon).IsGloas is the Gloas gate today.
-// TODO(gloas): extend the list with DataVersionGloas once activation is wired and callers
-// that switch on spec.DataVersion handle the new version.
+// ForkAtEpoch returns the beacon fork active at the epoch, Gloas included, so fork-versioned values —
+// attestations, the aggregator consensus data — stamp the slot's real fork (SIP #94 §2). Forks absent
+// from the map are skipped: a Beacon without a Gloas entry still resolves to the latest fork it carries.
 func (b *Beacon) ForkAtEpoch(epoch phase0.Epoch) (spec.DataVersion, *phase0.Fork) {
 	versions := []spec.DataVersion{
 		spec.DataVersionPhase0,
@@ -170,23 +168,31 @@ func (b *Beacon) ForkAtEpoch(epoch phase0.Epoch) (spec.DataVersion, *phase0.Fork
 		spec.DataVersionDeneb,
 		spec.DataVersionElectra,
 		spec.DataVersionFulu,
+		DataVersionGloas,
 	}
 
-	for i, v := range versions {
-		if epoch < b.Forks[v].Epoch {
-			if i == 0 {
+	var (
+		activeVersion spec.DataVersion
+		activeFork    phase0.Fork
+		hasActive     bool
+	)
+	for _, v := range versions {
+		fork, ok := b.Forks[v]
+		if !ok {
+			continue
+		}
+		if epoch < fork.Epoch {
+			if !hasActive {
 				panic("epoch before genesis")
 			}
-
-			version := versions[i-1]
-			fork := b.Forks[version]
-			return version, &fork
+			return activeVersion, &activeFork
 		}
+		activeVersion, activeFork, hasActive = v, fork, true
 	}
-
-	version := versions[len(versions)-1]
-	fork := b.Forks[version]
-	return version, &fork
+	if !hasActive {
+		panic("no forks configured")
+	}
+	return activeVersion, &activeFork
 }
 
 func (b *Beacon) ForkAtVersion(version spec.DataVersion) (phase0.Fork, bool) {
