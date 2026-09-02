@@ -3,6 +3,7 @@ module github.com/ssvlabs/ssv
 go 1.26
 
 require (
+	github.com/OffchainLabs/go-bitfield v0.0.0-20251031151322-f427d04d8506
 	github.com/RoaringBitmap/roaring/v2 v2.10.0
 	github.com/aquasecurity/table v1.8.0
 	github.com/attestantio/go-eth2-client v0.27.0
@@ -40,7 +41,7 @@ require (
 	github.com/sourcegraph/conc v0.3.0
 	github.com/spf13/cobra v1.8.1
 	github.com/ssvlabs/eth2-key-manager v1.5.7-0.20260901124029-39a18877e131
-	github.com/ssvlabs/ssv-spec v1.2.3-0.20260901200942-4e047682cb37
+	github.com/ssvlabs/ssv-spec v1.2.3-0.20260902083859-95a01244c961
 	github.com/ssvlabs/ssv/ssvsigner v0.0.0-20260415125841-05316f77d5e5
 	github.com/status-im/keycard-go v0.2.0
 	github.com/stretchr/testify v1.11.1
@@ -62,7 +63,6 @@ require (
 )
 
 require (
-	github.com/OffchainLabs/go-bitfield v0.0.0-20251031151322-f427d04d8506 // indirect
 	github.com/ProjectZKM/Ziren/crates/go-runtime/zkvm_runtime v0.0.0-20251001021608-1fe7b43fc4d6 // indirect
 	github.com/RaduBerinde/axisds v0.1.0 // indirect
 	github.com/RaduBerinde/btreemap v0.0.0-20250419174037-3d62b7205d54 // indirect
@@ -228,7 +228,7 @@ require (
 	github.com/pion/sdp/v3 v3.0.13 // indirect
 	github.com/pion/stun v0.6.1 // indirect
 	github.com/pion/transport/v2 v2.2.10 // indirect
-	github.com/pk910/dynamic-ssz v1.3.3 // indirect
+	github.com/pk910/dynamic-ssz v1.3.3
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/polydawn/refmt v0.89.0 // indirect
 	github.com/prometheus/client_model v0.6.2 // indirect
