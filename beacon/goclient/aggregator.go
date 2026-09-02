@@ -9,6 +9,7 @@ import (
 	"github.com/attestantio/go-eth2-client/api"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/electra"
+	eth2gloas "github.com/attestantio/go-eth2-client/spec/gloas"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"go.uber.org/zap"
@@ -233,6 +234,7 @@ func (gc *GoClient) fetchAggregate(
 	return resp, err
 }
 
+// versionedAggregateToSSZ unwraps the fetched aggregate into its fork's attestation container.
 func versionedAggregateToSSZ(va *spec.VersionedAttestation) (ssz.Marshaler, spec.DataVersion, error) {
 	switch va.Version {
 	case spec.DataVersionPhase0:
@@ -270,81 +272,36 @@ func versionedAggregateToSSZ(va *spec.VersionedAttestation) (ssz.Marshaler, spec
 			return nil, DataVersionNil, errMultiClient(fmt.Errorf("aggregate attestation %s data is nil", va.Version.String()), "AggregateAttestation")
 		}
 		return va.Fulu, va.Version, nil
+	case spec.DataVersionGloas:
+		if va.Gloas == nil {
+			return nil, DataVersionNil, errMultiClient(fmt.Errorf("aggregate attestation %s data is nil", va.Version.String()), "AggregateAttestation")
+		}
+		return va.Gloas, va.Version, nil
 	default:
 		return nil, DataVersionNil, errMultiClient(fmt.Errorf("unknown data version: %d", va.Version), "AggregateAttestation")
 	}
 }
 
+// versionedToAggregateAndProof wraps the fetched aggregate into its fork's AggregateAndProof. Gloas gets
+// go-eth2-client's own container: it serializes like Electra's but merkleizes progressively, so the
+// Electra container would hand the aggregator a different signing root (#3009).
 func versionedToAggregateAndProof(
 	va *spec.VersionedAttestation,
 	index phase0.ValidatorIndex,
 	selectionProof phase0.BLSSignature,
 ) (ssz.Marshaler, spec.DataVersion, error) {
-	switch va.Version {
-	case spec.DataVersionPhase0:
-		if va.Phase0 == nil {
-			return nil, DataVersionNil, errMultiClient(fmt.Errorf("aggregate attestation %s data is nil", va.Version.String()), "AggregateAttestation")
-		}
-		return &phase0.AggregateAndProof{
-			AggregatorIndex: index,
-			Aggregate:       va.Phase0,
-			SelectionProof:  selectionProof,
-		}, va.Version, nil
-	case spec.DataVersionAltair:
-		if va.Altair == nil {
-			return nil, DataVersionNil, errMultiClient(fmt.Errorf("aggregate attestation %s data is nil", va.Version.String()), "AggregateAttestation")
-		}
-		return &phase0.AggregateAndProof{
-			AggregatorIndex: index,
-			Aggregate:       va.Altair,
-			SelectionProof:  selectionProof,
-		}, va.Version, nil
-	case spec.DataVersionBellatrix:
-		if va.Bellatrix == nil {
-			return nil, DataVersionNil, errMultiClient(fmt.Errorf("aggregate attestation %s data is nil", va.Version.String()), "AggregateAttestation")
-		}
-		return &phase0.AggregateAndProof{
-			AggregatorIndex: index,
-			Aggregate:       va.Bellatrix,
-			SelectionProof:  selectionProof,
-		}, va.Version, nil
-	case spec.DataVersionCapella:
-		if va.Capella == nil {
-			return nil, DataVersionNil, errMultiClient(fmt.Errorf("aggregate attestation %s data is nil", va.Version.String()), "AggregateAttestation")
-		}
-		return &phase0.AggregateAndProof{
-			AggregatorIndex: index,
-			Aggregate:       va.Capella,
-			SelectionProof:  selectionProof,
-		}, va.Version, nil
-	case spec.DataVersionDeneb:
-		if va.Deneb == nil {
-			return nil, DataVersionNil, errMultiClient(fmt.Errorf("aggregate attestation %s data is nil", va.Version.String()), "AggregateAttestation")
-		}
-		return &phase0.AggregateAndProof{
-			AggregatorIndex: index,
-			Aggregate:       va.Deneb,
-			SelectionProof:  selectionProof,
-		}, va.Version, nil
-	case spec.DataVersionElectra:
-		if va.Electra == nil {
-			return nil, DataVersionNil, errMultiClient(fmt.Errorf("aggregate attestation %s data is nil", va.Version.String()), "AggregateAttestation")
-		}
-		return &electra.AggregateAndProof{
-			AggregatorIndex: index,
-			Aggregate:       va.Electra,
-			SelectionProof:  selectionProof,
-		}, va.Version, nil
-	case spec.DataVersionFulu:
-		if va.Fulu == nil {
-			return nil, DataVersionNil, errMultiClient(fmt.Errorf("aggregate attestation %s data is nil", va.Version.String()), "AggregateAttestation")
-		}
-		return &electra.AggregateAndProof{
-			AggregatorIndex: index,
-			Aggregate:       va.Fulu,
-			SelectionProof:  selectionProof,
-		}, va.Version, nil
+	aggregate, version, err := versionedAggregateToSSZ(va)
+	if err != nil {
+		return nil, DataVersionNil, err
+	}
+	switch aggregate := aggregate.(type) {
+	case *phase0.Attestation:
+		return &phase0.AggregateAndProof{AggregatorIndex: index, Aggregate: aggregate, SelectionProof: selectionProof}, version, nil
+	case *electra.Attestation:
+		return &electra.AggregateAndProof{AggregatorIndex: index, Aggregate: aggregate, SelectionProof: selectionProof}, version, nil
+	case *eth2gloas.Attestation:
+		return &eth2gloas.AggregateAndProof{AggregatorIndex: index, Aggregate: aggregate, SelectionProof: selectionProof}, version, nil
 	default:
-		return nil, DataVersionNil, fmt.Errorf("unknown data version: %d", va.Version)
+		return nil, DataVersionNil, fmt.Errorf("unexpected aggregate attestation type %T", aggregate)
 	}
 }
