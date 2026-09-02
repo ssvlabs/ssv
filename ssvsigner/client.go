@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -79,14 +81,19 @@ func (c *Client) ListValidators(ctx context.Context) (listResp []phase0.BLSPubKe
 		recordClientRequest(ctx, opListValidators, err, duration)
 		c.logger.Debug("requested to list keys in remote signer", zap.Duration("duration", duration), zap.Error(err))
 	}()
+	var errBody string
 	err = requests.
 		URL(c.baseURL).
 		Client(c.httpClient).
 		Path(PathValidators).
 		ToJSON(&listResp).
+		AddValidator(errBodyValidator(&errBody)).
 		Fetch(ctx)
+	if err != nil {
+		return nil, requestFailedErr(err, errBody)
+	}
 
-	return listResp, err
+	return listResp, nil
 }
 
 func (c *Client) AddValidators(ctx context.Context, shares ...ShareKeys) (statuses []web3signer.Status, err error) {
@@ -114,7 +121,7 @@ func (c *Client) AddValidators(ctx context.Context, shares ...ShareKeys) (status
 	}
 
 	var resp web3signer.ImportKeystoreResponse
-	var errStr string
+	var errBody string
 	err = requests.
 		URL(c.baseURL).
 		Client(c.httpClient).
@@ -122,18 +129,19 @@ func (c *Client) AddValidators(ctx context.Context, shares ...ShareKeys) (status
 		BodyJSON(req).
 		Post().
 		ToJSON(&resp).
-		AddValidator(requests.ValidatorHandler(requests.DefaultValidator, requests.ToString(&errStr))).
+		AddValidator(errBodyValidator(&errBody)).
 		Fetch(ctx)
 
 	// A 422 means the signer rejected the share as undecryptable/invalid (a malformed share); return
-	// it as a ShareDecryptionError so callers skip the event. Keep the transport error (%w) and the
-	// response body, quoted (%q handles an empty body and neutralizes control chars).
+	// it as a ShareDecryptionError so callers skip the event. Wrap via requestFailedErr so the
+	// ResponseError chain survives (errors.Is / requests.HasStatusErr keep working) and an empty-body
+	// 422 yields the status text instead of an empty message.
 	if requests.HasStatusErr(err, http.StatusUnprocessableEntity) {
-		return nil, ShareDecryptionError{Err: fmt.Errorf("%w (body: %q)", err, errStr)}
+		return nil, ShareDecryptionError{Err: requestFailedErr(err, errBody)}
 	}
 
 	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
+		return nil, requestFailedErr(err, errBody)
 	}
 
 	if len(resp.Data) != len(shares) {
@@ -160,6 +168,7 @@ func (c *Client) RemoveValidators(ctx context.Context, pubKeys ...phase0.BLSPubK
 	}
 
 	var resp web3signer.DeleteKeystoreResponse
+	var errBody string
 	err = requests.
 		URL(c.baseURL).
 		Client(c.httpClient).
@@ -167,9 +176,10 @@ func (c *Client) RemoveValidators(ctx context.Context, pubKeys ...phase0.BLSPubK
 		BodyJSON(req).
 		Delete().
 		ToJSON(&resp).
+		AddValidator(errBodyValidator(&errBody)).
 		Fetch(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
+		return nil, requestFailedErr(err, errBody)
 	}
 
 	if len(resp.Data) != len(pubKeys) {
@@ -192,6 +202,7 @@ func (c *Client) Sign(ctx context.Context, sharePubKey phase0.BLSPubKey, payload
 		recordClientRequest(ctx, opSignValidator, err, duration)
 		c.logger.Debug("requested to sign with share key", zap.Stringer("share_pubkey", sharePubKey), zap.Duration("duration", duration), zap.Error(err))
 	}()
+	var errBody string
 	err = requests.
 		URL(c.baseURL).
 		Client(c.httpClient).
@@ -199,9 +210,10 @@ func (c *Client) Sign(ctx context.Context, sharePubKey phase0.BLSPubKey, payload
 		BodyJSON(payload).
 		Post().
 		ToJSON(&resp).
+		AddValidator(errBodyValidator(&errBody)).
 		Fetch(ctx)
 	if err != nil {
-		return phase0.BLSSignature{}, fmt.Errorf("request failed: %w", err)
+		return phase0.BLSSignature{}, requestFailedErr(err, errBody)
 	}
 
 	return resp.Signature, nil
@@ -215,14 +227,16 @@ func (c *Client) OperatorIdentity(ctx context.Context) (pubKeyBase64 string, err
 		recordClientRequest(ctx, opOperatorIdentity, err, duration)
 		c.logger.Debug("requested operator identity", zap.Duration("duration", duration), zap.Error(err))
 	}()
+	var errBody string
 	err = requests.
 		URL(c.baseURL).
 		Client(c.httpClient).
 		Path(PathOperatorIdentity).
 		ToString(&resp).
+		AddValidator(errBodyValidator(&errBody)).
 		Fetch(ctx)
 	if err != nil {
-		return "", fmt.Errorf("request failed: %w", err)
+		return "", requestFailedErr(err, errBody)
 	}
 
 	return resp, nil
@@ -236,6 +250,7 @@ func (c *Client) OperatorSign(ctx context.Context, payload []byte) (signature []
 		recordClientRequest(ctx, opOperatorSign, err, duration)
 		c.logger.Debug("requested to sign with operator key", zap.Duration("duration", duration), zap.Error(err))
 	}()
+	var errBody string
 	err = requests.
 		URL(c.baseURL).
 		Client(c.httpClient).
@@ -243,9 +258,10 @@ func (c *Client) OperatorSign(ctx context.Context, payload []byte) (signature []
 		BodyBytes(payload).
 		Post().
 		ToBytesBuffer(&respBuf).
+		AddValidator(errBodyValidator(&errBody)).
 		Fetch(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
+		return nil, requestFailedErr(err, errBody)
 	}
 
 	return respBuf.Bytes(), nil
@@ -259,6 +275,7 @@ func (c *Client) OperatorEncrypt(ctx context.Context, payload []byte) (encrypted
 		recordClientRequest(ctx, opOperatorEncrypt, err, duration)
 		c.logger.Debug("requested operator encrypt", zap.Duration("duration", duration), zap.Error(err))
 	}()
+	var errBody string
 	err = requests.
 		URL(c.baseURL).
 		Client(c.httpClient).
@@ -266,12 +283,13 @@ func (c *Client) OperatorEncrypt(ctx context.Context, payload []byte) (encrypted
 		BodyBytes(payload).
 		Post().
 		ToBytesBuffer(&respBuf).
+		AddValidator(errBodyValidator(&errBody)).
 		Fetch(ctx)
 	if err != nil {
 		if requests.HasStatusErr(err, http.StatusNotFound, http.StatusMethodNotAllowed, http.StatusNotImplemented) {
 			return nil, fmt.Errorf("%w: %w", ErrOperatorDataProtectionUnsupported, err)
 		}
-		return nil, fmt.Errorf("request failed: %w", err)
+		return nil, requestFailedErr(err, errBody)
 	}
 
 	return respBuf.Bytes(), nil
@@ -285,6 +303,7 @@ func (c *Client) OperatorDecrypt(ctx context.Context, payload []byte) (decrypted
 		recordClientRequest(ctx, opOperatorDecrypt, err, duration)
 		c.logger.Debug("requested operator decrypt", zap.Duration("duration", duration), zap.Error(err))
 	}()
+	var errBody string
 	err = requests.
 		URL(c.baseURL).
 		Client(c.httpClient).
@@ -292,12 +311,13 @@ func (c *Client) OperatorDecrypt(ctx context.Context, payload []byte) (decrypted
 		BodyBytes(payload).
 		Post().
 		ToBytesBuffer(&respBuf).
+		AddValidator(errBodyValidator(&errBody)).
 		Fetch(ctx)
 	if err != nil {
 		if requests.HasStatusErr(err, http.StatusNotFound, http.StatusMethodNotAllowed, http.StatusNotImplemented) {
 			return nil, fmt.Errorf("%w: %w", ErrOperatorDataProtectionUnsupported, err)
 		}
-		return nil, fmt.Errorf("request failed: %w", err)
+		return nil, requestFailedErr(err, errBody)
 	}
 
 	return respBuf.Bytes(), nil
@@ -330,6 +350,111 @@ func (c *Client) MissingKeys(ctx context.Context, localKeys []phase0.BLSPubKey) 
 	)
 
 	return missingKeys, nil
+}
+
+// maxErrBodyLen caps the error-body text attached to returned errors, so a misbehaving
+// server can't bloat error messages and logs.
+const maxErrBodyLen = 1024
+
+// errBodyValidator runs requests.DefaultValidator and, on a rejected status, captures a
+// bounded copy of the error body into *dst for requestFailedErr to attach, reading one byte
+// past the cap so truncation stays detectable.
+//
+// It returns the validation error directly rather than wrapping it with
+// requests.ValidatorHandler, which labels a successful body capture "handled recovery from
+// invalid response". Capturing the body is the normal path here, so that phrase would be
+// prefixed onto every error (and a capture-read failure would render as a multi-line join);
+// returning the error directly avoids both and still satisfies requests.HasStatusErr.
+func errBodyValidator(dst *string) requests.ResponseHandler {
+	return func(resp *http.Response) error {
+		err := requests.DefaultValidator(resp)
+		if err == nil {
+			return nil
+		}
+		if b, readErr := io.ReadAll(io.LimitReader(resp.Body, maxErrBodyLen+1)); readErr == nil {
+			*dst = string(b)
+		}
+		return err
+	}
+}
+
+// requestFailedErr wraps a failed request error, attaching the reason reported by the
+// server (if any) so callers see it instead of just a status code.
+func requestFailedErr(err error, errBody string) error {
+	// Record whether the body was truncated from its raw length, before TrimSpace can
+	// shrink a whitespace tail back under the cap and hide that content was dropped.
+	truncated := len(errBody) > maxErrBodyLen
+	errBody = strings.TrimSpace(errBody)
+	if errBody == "" {
+		return fmt.Errorf("request failed: %w", err)
+	}
+
+	// The server reports failures as {"message": ...} (web3signer.ErrorMessage), so a
+	// non-empty message is the reason. Keying on the message avoids enumerating zero values,
+	// which drift as the response structs change.
+	var em web3signer.ErrorMessage
+	if json.Unmarshal([]byte(errBody), &em) == nil {
+		if msg := strings.TrimSpace(em.Message); msg != "" {
+			return fmt.Errorf("request failed: %w: %s", err, msg)
+		}
+		// A JSON object without ssv-signer's "message": either a zero-value success body an
+		// older server writes on error (nothing to surface), or a real reason from a
+		// JSON-speaking intermediary, e.g. {"error":"..."} from a gateway. Drop the former and
+		// let err's status speak; surface the latter raw.
+		if !jsonBodyCarriesReason(errBody) {
+			return fmt.Errorf("request failed: %w", err)
+		}
+	}
+
+	// A plain-text error from an intermediary in front of the signer, a body truncated
+	// mid-JSON, or a JSON body carrying its reason outside "message". Surface it raw, bounded.
+	if len(errBody) > maxErrBodyLen {
+		errBody = errBody[:maxErrBodyLen]
+	}
+	if truncated {
+		errBody += "...(truncated)"
+	}
+	return fmt.Errorf("request failed: %w: %s", err, errBody)
+}
+
+// jsonBodyCarriesReason reports whether a JSON object error body holds a human-readable reason in
+// a field other than "message" (which requestFailedErr handles directly). It returns true for a
+// field with real string content — e.g. {"error":"upstream connect failure"} from a gateway — and
+// false for the zero-value success bodies an older signer writes on error, whose fields are absent,
+// null, or an all-zero hex blob (the zero SignResponse's {"signature":"0x0…0"}).
+func jsonBodyCarriesReason(body string) bool {
+	var fields map[string]json.RawMessage
+	if json.Unmarshal([]byte(body), &fields) != nil {
+		return false // not a JSON object — nothing structured to extract
+	}
+	for name, raw := range fields {
+		if name == "message" {
+			continue
+		}
+		var s string
+		if json.Unmarshal(raw, &s) != nil {
+			continue // not a string value
+		}
+		if isMeaningfulReason(s) {
+			return true
+		}
+	}
+	return false
+}
+
+// isMeaningfulReason reports whether s carries content worth surfacing. A zero-value BLS field
+// (e.g. the zero SignResponse's signature) marshals to "0x" followed by all zeros; that reads as
+// empty here so an older signer's zero-value body isn't surfaced as a bogus reason (see
+// TestSignOldSignerZeroValueBodyNotSurfaced).
+func isMeaningfulReason(s string) bool {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return false
+	}
+	if rest, found := strings.CutPrefix(s, "0x"); found && strings.Trim(rest, "0") == "" {
+		return false
+	}
+	return true
 }
 
 // applyTLSConfig applies the given TLS configuration to the HTTP client.

@@ -9,9 +9,11 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/carlmjohnson/requests"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -353,6 +355,7 @@ func (s *SSVSignerClientSuite) TestListValidators() {
 		expectedResponse   interface{}
 		expectedResult     []phase0.BLSPubKey
 		expectError        bool
+		errContains        string
 	}{
 		{
 			name:               "Success", // TODO: fix
@@ -380,6 +383,8 @@ func (s *SSVSignerClientSuite) TestListValidators() {
 			expectedResponse:   nil,
 			expectedResult:     nil,
 			expectError:        true,
+			// writeJSONResponse writes "Server error" as the body for non-OK statuses.
+			errContains: "Server error",
 		},
 	}
 
@@ -395,6 +400,10 @@ func (s *SSVSignerClientSuite) TestListValidators() {
 
 			if tc.expectError {
 				require.Error(t, err, "Expected an error")
+				if tc.errContains != "" {
+					require.ErrorContains(t, err, tc.errContains,
+						"Expected the error to include the server-provided reason")
+				}
 			} else {
 				require.NoError(t, err, "Unexpected error")
 				assert.Equal(t, tc.expectedResult, result)
@@ -441,6 +450,7 @@ func (s *SSVSignerClientSuite) TestSign() {
 		responseBody       string
 		expectedResult     phase0.BLSSignature
 		expectError        bool
+		errContains        string
 	}{
 		{
 			name:               "Success", // TODO: fix
@@ -458,6 +468,7 @@ func (s *SSVSignerClientSuite) TestSign() {
 			expectedStatusCode: http.StatusBadRequest,
 			responseBody:       "invalid signature",
 			expectError:        true,
+			errContains:        "invalid signature",
 		},
 		{
 			name:               "ServerError",
@@ -466,6 +477,7 @@ func (s *SSVSignerClientSuite) TestSign() {
 			expectedStatusCode: http.StatusInternalServerError,
 			responseBody:       "Server error",
 			expectError:        true,
+			errContains:        "Server error",
 		},
 	}
 
@@ -492,6 +504,10 @@ func (s *SSVSignerClientSuite) TestSign() {
 
 			if tc.expectError {
 				require.Error(t, err, "Expected an error")
+				if tc.errContains != "" {
+					require.ErrorContains(t, err, tc.errContains,
+						"Expected the error to include the server-provided reason")
+				}
 			} else {
 				require.NoError(t, err, "Unexpected error")
 				assert.Equal(t, tc.expectedResult, result)
@@ -1058,4 +1074,184 @@ func TestNewClient_TrimsTrailingSlashFromURL(t *testing.T) {
 
 	require.NotNil(t, client)
 	assert.Equal(t, expectedURL, client.baseURL)
+}
+
+func Test_requestFailedErr(t *testing.T) {
+	baseErr := errors.New("unexpected status: 500")
+
+	t.Run("no body", func(t *testing.T) {
+		err := requestFailedErr(baseErr, "")
+		require.EqualError(t, err, "request failed: unexpected status: 500")
+		require.ErrorIs(t, err, baseErr)
+	})
+
+	t.Run("information-free bodies are skipped", func(t *testing.T) {
+		for _, body := range []string{"null", "{}", "  null  ", "\n"} {
+			require.EqualError(t, requestFailedErr(baseErr, body), "request failed: unexpected status: 500")
+		}
+	})
+
+	t.Run("zero-value success bodies carry no reason", func(t *testing.T) {
+		// Older servers write the zero value of the success response on errors. These parse
+		// as JSON but have no message, so no reason must be attached — in particular the
+		// zero SignResponse, whose fixed-size BLSSignature array always serializes, giving
+		// 210 bytes of hex zeros.
+		signZero, err := json.Marshal(web3signer.SignResponse{})
+		require.NoError(t, err)
+		for _, body := range []string{
+			string(signZero),
+			`{"data":null}`,
+			`{"signature":"0x0000000000","message":""}`,
+		} {
+			require.EqualError(t, requestFailedErr(baseErr, body),
+				"request failed: unexpected status: 500",
+				"body %q should not be surfaced as a reason", body)
+		}
+	})
+
+	t.Run("body attached", func(t *testing.T) {
+		err := requestFailedErr(baseErr, `{"message":"web3signer unavailable"}`)
+		require.ErrorContains(t, err, "web3signer unavailable")
+		require.ErrorIs(t, err, baseErr)
+	})
+
+	t.Run("json reason outside message is surfaced", func(t *testing.T) {
+		// A JSON-speaking intermediary in front of ssv-signer (e.g. a gateway) can report its
+		// own failure in a field other than "message". That's a real reason, not an older
+		// signer's zero-value body, so it must be surfaced rather than dropped as a bare status.
+		for _, body := range []string{
+			`{"error":"upstream connect failure"}`,
+			`{"message":"","detail":"bad gateway"}`,
+		} {
+			err := requestFailedErr(baseErr, body)
+			require.ErrorContains(t, err, body, "body %q should be surfaced", body)
+			require.ErrorIs(t, err, baseErr)
+		}
+	})
+
+	t.Run("oversized body truncated", func(t *testing.T) {
+		err := requestFailedErr(baseErr, strings.Repeat("x", maxErrBodyLen+100))
+		require.ErrorContains(t, err, "...(truncated)")
+		require.Less(t, len(err.Error()), maxErrBodyLen+100)
+	})
+
+	t.Run("over-cap body trimming under the cap is still marked truncated", func(t *testing.T) {
+		// A body one byte over the cap with a whitespace tail: TrimSpace brings it back
+		// under the cap, but the truncation marker must still appear.
+		body := strings.Repeat("x", maxErrBodyLen-1) + "  "
+		err := requestFailedErr(baseErr, body)
+		require.ErrorContains(t, err, "...(truncated)")
+	})
+}
+
+// TestAddValidatorsUnprocessableEntitySurfacesReason checks that a 422 from ssv-signer becomes a
+// ShareDecryptionError that keeps the ResponseError chain intact (requests.HasStatusErr still
+// works) and never collapses to an empty message, even with an empty upstream body.
+func TestAddValidatorsUnprocessableEntitySurfacesReason(t *testing.T) {
+	share := ShareKeys{EncryptedPrivKey: []byte("x"), PubKey: phase0.BLSPubKey{1}}
+
+	t.Run("empty body yields status text, not an empty message", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusUnprocessableEntity)
+		}))
+		t.Cleanup(server.Close)
+
+		_, err := NewClient(server.URL).AddValidators(t.Context(), share)
+		require.Error(t, err)
+
+		var decryptErr ShareDecryptionError
+		require.ErrorAs(t, err, &decryptErr)
+		require.True(t, requests.HasStatusErr(err, http.StatusUnprocessableEntity))
+		require.ErrorContains(t, err, "request failed")
+	})
+
+	t.Run("server reason is surfaced", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			_, _ = w.Write([]byte(`{"message":"failed to decrypt share"}`))
+		}))
+		t.Cleanup(server.Close)
+
+		_, err := NewClient(server.URL).AddValidators(t.Context(), share)
+		require.Error(t, err)
+		require.ErrorContains(t, err, "failed to decrypt share")
+		require.True(t, requests.HasStatusErr(err, http.StatusUnprocessableEntity))
+	})
+}
+
+// TestErrorBodyCaptureIsBounded verifies a huge error response body is capped at read
+// time, keeping the returned error bounded.
+func TestErrorBodyCaptureIsBounded(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		// The client stops reading past the cap and drops the connection, so this
+		// write may fail partway through.
+		_, _ = w.Write(bytes.Repeat([]byte("a"), 1<<20)) // 1 MiB
+	}))
+	t.Cleanup(server.Close)
+
+	_, err := NewClient(server.URL).ListValidators(t.Context())
+	require.Error(t, err)
+	require.ErrorContains(t, err, "...(truncated)")
+	require.Less(t, len(err.Error()), 2*maxErrBodyLen)
+}
+
+// TestSignOldSignerZeroValueBodyNotSurfaced covers a mixed deployment where the node is
+// upgraded before the signer: an older signer writes the zero-value success response on a
+// Sign failure, which marshals to {"signature":"0x0…0"} (210 bytes) because a fixed-size
+// BLSSignature array is always serialized. That body must not be surfaced as the reason —
+// the status carries the signal instead.
+func TestSignOldSignerZeroValueBodyNotSurfaced(t *testing.T) {
+	zeroBody, err := json.Marshal(web3signer.SignResponse{})
+	require.NoError(t, err)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write(zeroBody)
+	}))
+	t.Cleanup(server.Close)
+
+	_, err = NewClient(server.URL).Sign(t.Context(), phase0.BLSPubKey{1}, web3signer.SignRequest{})
+	require.Error(t, err)
+	require.NotContains(t, err.Error(), "signature")
+	require.NotContains(t, err.Error(), "0x00000")
+	require.True(t, requests.HasStatusErr(err, http.StatusInternalServerError))
+	require.ErrorContains(t, err, "request failed")
+}
+
+// TestSignSurfacesIntermediaryReason is the counterpart to the zero-value case above: a
+// JSON-speaking intermediary in front of ssv-signer (e.g. a gateway) reports its failure in a
+// field other than "message". That's a real reason, not a zero-value body, so it must reach the
+// caller rather than collapse to a bare status.
+func TestSignSurfacesIntermediaryReason(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+		_, _ = w.Write([]byte(`{"error":"upstream connect failure"}`))
+	}))
+	t.Cleanup(server.Close)
+
+	_, err := NewClient(server.URL).Sign(t.Context(), phase0.BLSPubKey{1}, web3signer.SignRequest{})
+	require.Error(t, err)
+	require.ErrorContains(t, err, "upstream connect failure")
+	require.True(t, requests.HasStatusErr(err, http.StatusBadGateway))
+}
+
+// TestClientErrorOmitsHandledRecoveryPhrase guards against errBodyValidator reintroducing
+// the requests.ValidatorHandler "handled recovery from invalid response" phrase. Capturing
+// the error body is the normal failure path here, so the phrase would otherwise be prefixed
+// onto every returned error — including the startup ListValidators path this PR improves —
+// while the actual server reason must still come through.
+func TestClientErrorOmitsHandledRecoveryPhrase(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(`{"message":"web3signer down"}`))
+	}))
+	t.Cleanup(server.Close)
+
+	_, err := NewClient(server.URL).ListValidators(t.Context())
+	require.Error(t, err)
+	require.False(t, errors.Is(err, requests.ErrInvalidHandled))
+	require.NotContains(t, err.Error(), "handled recovery from invalid response")
+	require.ErrorContains(t, err, "web3signer down")
+	require.True(t, requests.HasStatusErr(err, http.StatusInternalServerError))
 }

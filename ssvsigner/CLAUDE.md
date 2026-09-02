@@ -156,9 +156,10 @@ BATCH_SIZE=20 \
 - Configuration is locked to prevent switching between local/remote signing
 
 ### Error Handling
-- Malformed shares (undecryptable/invalid) return HTTP 422, which the node treats as a skippable malformed event; 422 is reserved exclusively for that
-- Connection/transport failures surface to the node as errors; the client itself does not retry
-- Web3Signer failures all map to HTTP 500 (retryable); the upstream status is intentionally not forwarded, so a proxy/upstream 422 can't be misclassified as a malformed share
+- Malformed shares (undecryptable/invalid) return HTTP 422, which the node treats as a skippable malformed event
+- Connection/transport failures surface to the node as errors; requests are not retried by the client, so callers that need resilience implement their own retries
+- Web3Signer errors are propagated with their original status codes
+- Keystore-import failures are the exception: the upstream body is withheld (it may echo share key material) and an upstream 422 is remapped to 502, so it can't be misclassified as ssv-signer's own malformed-share signal
 
 ### Performance Optimizations
 - Per-validator locking prevents concurrent signing conflicts
