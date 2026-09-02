@@ -11,7 +11,7 @@ import (
 
 // builderPreferencesPath is the beacon-APIs#630 endpoint through which the beacon node forwards a
 // proposer's ahead-of-time per-builder preferences (BN -> builder submitBuilderPreferences); go-eth2-client
-// has no Gloas types, so SubmitBuilderPreferences is a hand-rolled JSON POST.
+// has no call for it, so SubmitBuilderPreferences is a hand-rolled JSON POST.
 const builderPreferencesPath = "/eth/v1/validator/builder_preferences"
 
 // SubmitBuilderPreferences submits the ahead-of-time per-builder preferences (issue #2962 phase 3) to

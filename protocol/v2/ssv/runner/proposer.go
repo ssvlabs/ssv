@@ -307,10 +307,13 @@ func (r *ProposerRunner) gloasProposalInput(ctx context.Context, logger *zap.Log
 	}
 
 	// Remember this operator's own produce output so the §4 publish echoes Eth-Builder-Url only when the
-	// decided block is this operator's own (owner-match — see decidedBuilderURL).
-	if root, rootErr := block.HashTreeRoot(); rootErr == nil {
-		r.gloasProducedRoot, r.gloasBuilderURL = root, builderURL
+	// decided block is this operator's own (owner-match — see decidedBuilderURL). The root is also what we
+	// would sign, so a block we can't hash is unusable.
+	root, err := block.HashTreeRoot()
+	if err != nil {
+		return nil, fmt.Errorf("hash tree root of produced gloas block: %w", err)
 	}
+	r.gloasProducedRoot, r.gloasBuilderURL = root, builderURL
 
 	byts, err := block.MarshalSSZ()
 	if err != nil {
@@ -717,9 +720,11 @@ func (r *ProposerRunner) executeDuty(ctx context.Context, logger *zap.Logger, du
 		return nil
 	}
 
-	// reset the cached original block at the beginning of a new duty
+	// reset the cached original block, and this operator's own Gloas produce markers, at the beginning of a
+	// new duty — a stale owner-match must not echo a previous slot's Eth-Builder-Url
 	r.cachedFullBlock = nil
 	r.cachedBlindedBlockSSZ = nil
+	r.gloasProducedRoot, r.gloasBuilderURL = [32]byte{}, ""
 
 	// sign partial randao
 	span.AddEvent("signing beacon object")

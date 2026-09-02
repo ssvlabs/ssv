@@ -1266,9 +1266,9 @@ func SetupRunners(
 	// §4-decided block root) and the §6 envelope runner (which reads it).
 	proposedBlockRoots := ssv.NewProposedBlockRoots()
 
-	// requestAuthCache collects this validator's threshold-reconstructed builder request auths
-	// (issue #2962), written by the proposer-preferences runner. No reader yet: the proposer
-	// runner's §4 produce path starts consuming it with the produceBlockV4 POST migration.
+	// requestAuthCache holds this validator's threshold-reconstructed builder request auths (issue #2962):
+	// the proposer-preferences runner writes each reconstruction, and the proposer runner's §4 produce path
+	// reads the slot's auths into the produceBlockV4 POST body.
 	requestAuthCache := ssv.NewRequestAuthCache(options.NetworkConfig.EstimatedCurrentSlot)
 
 	runners := runner.ValidatorDutyRunners{}

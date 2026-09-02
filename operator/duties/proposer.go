@@ -228,14 +228,17 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 
 				// 2) Process certain intents immediately.
 				// When at epoch boundary, we only care about pre-fetching & preparing the duties for the next epoch
-				// since the current epoch will have been passed upon the next slot-tick. Otherwise, we might need to
-				// pre-fetch & prepare the duties for the current epoch immediately since those might have been
-				// affected by this reorg (the next tick(s) will take care of the pre-fetch & prepare for the next
-				// epoch, if it was also affected by this reorg).
+				// since the current epoch will have been passed upon the next slot-tick. Otherwise, if this reorg
+				// changed the current dependent root, pre-fetch & prepare the duties for the current epoch
+				// immediately since those were affected by it (the next tick(s) will take care of the pre-fetch &
+				// prepare for the next epoch, if it was also affected by this reorg). A reorg that left the current
+				// root unchanged fetches nothing here: an intent pending for another reason (an indices change
+				// consumed between ticks, an earlier fetch with no eligible validators) is the next tick's to
+				// process, which keeps this path's fetches attributable to the reorg alone.
 				if h.atLastSlotOfCurrentEpoch(currentSlot) {
 					delete(h.dutyFetchIntents, currentEpoch) // optimization: prune irrelevant intent
 					h.prepareNextEpoch(reorgCtx, logger, currentEpoch, currentSlot)
-				} else {
+				} else if refetchCurrentEpoch {
 					h.prepareCurrentEpoch(reorgCtx, logger, currentEpoch, currentSlot)
 				}
 			}()

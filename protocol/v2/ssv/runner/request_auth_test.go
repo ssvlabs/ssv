@@ -103,11 +103,12 @@ func TestProposerPreferencesRunner_requestAuthConvergence(t *testing.T) {
 	ctx := context.Background()
 	logger := zap.NewNop()
 
-	// Builder A's peer partials arrive before our duty (emission skew): retryable, stashed.
+	// Builder A's peer partials arrive before our duty (emission skew): stashed, with a plain error (the
+	// stash replays them; a queue retry would only churn).
 	for _, op := range []spectypes.OperatorID{2, 3, 4} {
 		err := disp.ProcessPreConsensus(ctx, logger, peerAuthPartial(t, op, builderAData))
 		require.Error(t, err)
-		require.True(t, IsRetryable(err))
+		require.False(t, IsRetryable(err))
 	}
 
 	// Our emission: one preference partial plus one auth partial per distinct auth root goes out —

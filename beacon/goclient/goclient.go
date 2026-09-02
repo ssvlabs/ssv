@@ -118,9 +118,10 @@ type GoClient struct {
 	clients     []Client
 	multiClient MultiClient
 
-	// clientAddresses holds each client's unmasked address for the hand-rolled PTC requests
-	// (ptc.go) — Client.Address() is log-masked and unusable for real requests. Drop when those
-	// endpoints become typed go-eth2-client calls.
+	// clientAddresses holds each client's unmasked address for the hand-rolled Gloas requests (ptc.go,
+	// gloas_proposer.go, gloas_envelope.go, proposer_preferences.go, builder_preferences.go) —
+	// Client.Address() is log-masked and unusable for real requests. Drop when those endpoints become
+	// typed go-eth2-client calls.
 	clientAddresses map[Client]string
 
 	syncDistanceTolerance phase0.Slot
@@ -345,7 +346,7 @@ func (gc *GoClient) initMultiClient(ctx context.Context) error {
 // requests concatenate this stored address into request URLs, so a scheme-less config (e.g. "host:port")
 // would otherwise fail http.NewRequest. Basic-auth credentials and any path prefix are preserved.
 func normalizeBeaconAddr(addr string) string {
-	if !strings.HasPrefix(addr, "http") {
+	if !strings.HasPrefix(addr, "http://") && !strings.HasPrefix(addr, "https://") {
 		addr = "http://" + addr
 	}
 	return strings.TrimSuffix(addr, "/")
