@@ -159,6 +159,7 @@ BATCH_SIZE=20 \
 - Decryption errors return specific status for malformed shares
 - Requests are not retried by the client; callers that need resilience implement their own retries
 - Web3Signer errors are propagated with original status codes
+- Keystore-import failures are the exception: the upstream body is withheld (it may echo share key material) and an upstream 422 is remapped to 502
 
 ### Performance Optimizations
 - Per-validator locking prevents concurrent signing conflicts

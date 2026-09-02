@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -58,7 +59,7 @@ func (w3s *Web3Signer) ListKeys(ctx context.Context) (ListKeysResponse, error) {
 		Client(w3s.httpClient).
 		Path(PathPublicKeys).
 		ToJSON(&resp).
-		AddValidator(requests.ValidatorHandler(requests.DefaultValidator, requests.ToString(&errResp))).
+		AddValidator(errTextValidator(requests.DefaultValidator, &errResp)).
 		Fetch(ctx)
 	return resp, w3s.handleWeb3SignerErr(err, errResp)
 }
@@ -85,7 +86,7 @@ func (w3s *Web3Signer) ImportKeystore(ctx context.Context, req ImportKeystoreReq
 		BodyJSON(req).
 		Post().
 		ToJSON(&resp).
-		AddValidator(requests.ValidatorHandler(requests.DefaultValidator, requests.ToString(&errResp))).
+		AddValidator(errTextValidator(requests.DefaultValidator, &errResp)).
 		Fetch(ctx)
 	return resp, w3s.handleWeb3SignerErr(err, errResp)
 }
@@ -111,7 +112,7 @@ func (w3s *Web3Signer) DeleteKeystore(ctx context.Context, req DeleteKeystoreReq
 		BodyJSON(req).
 		Delete().
 		ToJSON(&resp).
-		AddValidator(requests.ValidatorHandler(requests.DefaultValidator, requests.ToString(&errResp))).
+		AddValidator(errTextValidator(requests.DefaultValidator, &errResp)).
 		Fetch(ctx)
 	return resp, w3s.handleWeb3SignerErr(err, errResp)
 }
@@ -133,7 +134,7 @@ type SignRequest struct {
 }
 
 type SignResponse struct {
-	Signature phase0.BLSSignature `json:"signature,omitempty"`
+	Signature phase0.BLSSignature `json:"signature"`
 }
 
 // Sign signs using https://consensys.github.io/web3signer/web3signer-eth2.html#tag/Signing/operation/ETH2_SIGN
@@ -148,9 +149,51 @@ func (w3s *Web3Signer) Sign(ctx context.Context, sharePubKey phase0.BLSPubKey, r
 		Post().
 		Accept("application/json").
 		ToJSON(&resp).
-		AddValidator(requests.ValidatorHandler(requests.DefaultValidator, requests.ToString(&errResp))).
+		AddValidator(errTextValidator(requests.DefaultValidator, &errResp)).
 		Fetch(ctx)
 	return resp, w3s.handleWeb3SignerErr(err, errResp)
+}
+
+// maxErrTextLen caps the upstream error body captured into HTTPResponseError.ErrText, so a
+// misbehaving Web3Signer can't force unbounded reads and allocations on failure.
+//
+// It stays well below the node's cap (client.go maxErrBodyLen, 1024): ErrText reaches the node
+// twice-escaped — HTTPResponseError.Error() quotes it with %q, then writeJSONErr JSON-encodes
+// that into the {"message":...} body — so a value near the node's cap would overflow the node's
+// read budget and arrive truncated mid-JSON, unparseable, instead of as the reason. 256 leaves
+// room for that expansion plus the envelope.
+const maxErrTextLen = 256
+
+// errTextValidator runs the given validator and, on a rejected response, captures a bounded copy
+// of the upstream error body into *dst for handleWeb3SignerErr to attach as ErrText. It reads one
+// byte past the cap and appends a truncation marker when the body is over-long, so a body sliced
+// mid-JSON is visibly cut rather than passing as complete (the node's errBodyValidator reads the
+// same extra byte but marks it later, in requestFailedErr).
+//
+// It returns the validator's error directly rather than wrapping it with
+// requests.ValidatorHandler, which labels a successful body capture "handled recovery from
+// invalid response" — a phrase that would otherwise travel into HTTPResponseError.Err, the
+// signer's logs, and the error body returned to the node.
+//
+// Taking the validator as a parameter lets UpCheck run its stricter requests.CheckStatus(200)
+// through the same capture: a status check added separately would short-circuit ahead of this
+// handler (requests stops at the first failing validator) and leave ErrText empty on that
+// endpoint alone.
+func errTextValidator(validator requests.ResponseHandler, dst *string) requests.ResponseHandler {
+	return func(resp *http.Response) error {
+		err := validator(resp)
+		if err == nil {
+			return nil
+		}
+		if b, readErr := io.ReadAll(io.LimitReader(resp.Body, maxErrTextLen+1)); readErr == nil {
+			text := string(b)
+			if len(b) > maxErrTextLen {
+				text = text[:maxErrTextLen] + "...(truncated)"
+			}
+			*dst = text
+		}
+		return err
+	}
 }
 
 func (w3s *Web3Signer) handleWeb3SignerErr(err error, errResp string) error {
@@ -172,8 +215,7 @@ func (w3s *Web3Signer) UpCheck(ctx context.Context) error {
 		URL(w3s.baseURL).
 		Client(w3s.httpClient).
 		Path(PathUpCheck).
-		CheckStatus(http.StatusOK).
-		AddValidator(requests.ValidatorHandler(requests.DefaultValidator, requests.ToString(&errResp))).
+		AddValidator(errTextValidator(requests.CheckStatus(http.StatusOK), &errResp)).
 		Fetch(ctx)
 	return w3s.handleWeb3SignerErr(err, errResp)
 }
