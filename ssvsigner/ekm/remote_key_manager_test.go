@@ -1575,9 +1575,9 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectAdditionalDomains() {
 }
 
 func (s *RemoteKeyManagerTestSuite) TestGetForkInfoUsesGloasForkOnGloasEpoch() {
-	// testBeaconConfig tops out at Fulu (epoch 6); add a Gloas fork so ForkAtEpoch's Fulu cap is
-	// observable. On a Gloas epoch, fork_info must carry the Gloas fork — sending the Fulu version would
-	// make Web3Signer derive the wrong domain and reject/mis-sign every remote duty (RS-1).
+	// testBeaconConfig tops out at Fulu (epoch 6); schedule a Gloas fork after it. On a Gloas epoch,
+	// fork_info must carry the Gloas fork — sending the Fulu version would make Web3Signer derive the
+	// wrong domain and reject/mis-sign every remote duty (RS-1).
 	cfg := testBeaconConfig()
 	const gloasEpoch = phase0.Epoch(7)
 	gloasVersion := phase0.Version{7, 0, 0, 0}
@@ -1591,9 +1591,9 @@ func (s *RemoteKeyManagerTestSuite) TestGetForkInfoUsesGloasForkOnGloasEpoch() {
 	gloasFI := rm.GetForkInfo(gloasEpoch)
 	s.Require().NotNil(gloasFI.Fork)
 	s.Equal(gloasVersion, gloasFI.Fork.CurrentVersion)
-	_, fuluFork := cfg.ForkAtEpoch(gloasEpoch) // ForkAtEpoch still caps at Fulu
-	s.Equal(phase0.Version{6, 0, 0, 0}, fuluFork.CurrentVersion)
-	s.NotEqual(fuluFork.CurrentVersion, gloasFI.Fork.CurrentVersion)
+	version, gloasFork := cfg.ForkAtEpoch(gloasEpoch) // ForkAtEpoch resolves the scheduled Gloas fork itself
+	s.Equal(GloasDataVersion, version)
+	s.Equal(*gloasFork, *gloasFI.Fork)
 	s.Equal(cfg.GenesisValidatorsRoot, gloasFI.GenesisValidatorsRoot)
 
 	// A pre-Gloas epoch is unaffected — still the current (Fulu) fork.

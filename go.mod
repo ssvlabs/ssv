@@ -41,7 +41,7 @@ require (
 	github.com/sourcegraph/conc v0.3.0
 	github.com/spf13/cobra v1.8.1
 	github.com/ssvlabs/eth2-key-manager v1.5.7-0.20260901124029-39a18877e131
-	github.com/ssvlabs/ssv-spec v1.2.3-0.20260902083859-95a01244c961
+	github.com/ssvlabs/ssv-spec v1.2.3-0.20260902142254-b894983674d5
 	github.com/ssvlabs/ssv/ssvsigner v0.0.0-20260415125841-05316f77d5e5
 	github.com/status-im/keycard-go v0.2.0
 	github.com/stretchr/testify v1.11.1

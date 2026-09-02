@@ -10,6 +10,7 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/electra"
+	eth2gloas "github.com/attestantio/go-eth2-client/spec/gloas"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
@@ -351,7 +352,7 @@ func (r *AggregatorRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 		return fmt.Errorf("could not get aggregate and proof: %w", err)
 	}
 
-	msg, err := constructVersionedSignedAggregateAndProof(*aggregateAndProof, specSig)
+	msg, err := constructVersionedSignedAggregateAndProof(aggregateAndProof, specSig)
 	if err != nil {
 		return fmt.Errorf("could not construct versioned aggregate and proof: %w", err)
 	}
@@ -523,50 +524,80 @@ func (r *AggregatorRunner) GetRoot() ([32]byte, error) {
 	return ret, nil
 }
 
-// Constructs a VersionedSignedAggregateAndProof from a VersionedAggregateAndProof and a signature
-func constructVersionedSignedAggregateAndProof(aggregateAndProof spec.VersionedAggregateAndProof, signature phase0.BLSSignature) (*spec.VersionedSignedAggregateAndProof, error) {
+// constructVersionedSignedAggregateAndProof wraps a decided aggregate-and-proof and its reconstructed
+// signature into the signed container the beacon node accepts; shared by both aggregator runners.
+func constructVersionedSignedAggregateAndProof(aggregateAndProof *spec.VersionedAggregateAndProof, signature phase0.BLSSignature) (*spec.VersionedSignedAggregateAndProof, error) {
 	ret := &spec.VersionedSignedAggregateAndProof{
 		Version: aggregateAndProof.Version,
 	}
 
 	switch ret.Version {
 	case spec.DataVersionPhase0:
+		if aggregateAndProof.Phase0 == nil {
+			return nil, errors.New("nil Phase0 aggregate and proof")
+		}
 		ret.Phase0 = &phase0.SignedAggregateAndProof{
 			Message:   aggregateAndProof.Phase0,
 			Signature: signature,
 		}
 	case spec.DataVersionAltair:
+		if aggregateAndProof.Altair == nil {
+			return nil, errors.New("nil Altair aggregate and proof")
+		}
 		ret.Altair = &phase0.SignedAggregateAndProof{
 			Message:   aggregateAndProof.Altair,
 			Signature: signature,
 		}
 	case spec.DataVersionBellatrix:
+		if aggregateAndProof.Bellatrix == nil {
+			return nil, errors.New("nil Bellatrix aggregate and proof")
+		}
 		ret.Bellatrix = &phase0.SignedAggregateAndProof{
 			Message:   aggregateAndProof.Bellatrix,
 			Signature: signature,
 		}
 	case spec.DataVersionCapella:
+		if aggregateAndProof.Capella == nil {
+			return nil, errors.New("nil Capella aggregate and proof")
+		}
 		ret.Capella = &phase0.SignedAggregateAndProof{
 			Message:   aggregateAndProof.Capella,
 			Signature: signature,
 		}
 	case spec.DataVersionDeneb:
+		if aggregateAndProof.Deneb == nil {
+			return nil, errors.New("nil Deneb aggregate and proof")
+		}
 		ret.Deneb = &phase0.SignedAggregateAndProof{
 			Message:   aggregateAndProof.Deneb,
 			Signature: signature,
 		}
 	case spec.DataVersionElectra:
+		if aggregateAndProof.Electra == nil {
+			return nil, errors.New("nil Electra aggregate and proof")
+		}
 		ret.Electra = &electra.SignedAggregateAndProof{
 			Message:   aggregateAndProof.Electra,
 			Signature: signature,
 		}
 	case spec.DataVersionFulu:
+		if aggregateAndProof.Fulu == nil {
+			return nil, errors.New("nil Fulu aggregate and proof")
+		}
 		ret.Fulu = &electra.SignedAggregateAndProof{
 			Message:   aggregateAndProof.Fulu,
 			Signature: signature,
 		}
+	case spec.DataVersionGloas:
+		if aggregateAndProof.Gloas == nil {
+			return nil, errors.New("nil Gloas aggregate and proof")
+		}
+		ret.Gloas = &eth2gloas.SignedAggregateAndProof{
+			Message:   aggregateAndProof.Gloas,
+			Signature: signature,
+		}
 	default:
-		return nil, errors.New("unknown version for signed aggregate and proof")
+		return nil, fmt.Errorf("unknown version %s for signed aggregate and proof", ret.Version.String())
 	}
 
 	return ret, nil
