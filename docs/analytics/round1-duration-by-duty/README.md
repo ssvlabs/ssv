@@ -10,6 +10,10 @@ How long round-1 QBFT consensus takes — from the leader's proposal to the deci
 - **That difference is structural, not incidental.** The committee (attester) runner is the only one where each operator validates the proposal against its *own* node-derived vote and does so on the *currently-arriving* head; proposer/aggregator/sync validate a self-contained value (structural-only check) built on *settled* data, so operator readiness clusters tightly.
 - **The proposer's *extra* tail over aggregator/sync is intra-cluster drift, and it separates cleanly.** The Exporter records per-operator prepare times, so removing the prepare-phase drift (both the spread among operators and the fast-leader/slow-pack lag) drops the proposer to **p99 92ms / p99.9 212ms** — at or below aggregator/sync, revealing the intrinsic ~2-hop QBFT latency all four share (aggregator/sync sit a little above it, still carrying their own small drift).
 
+## Interactive report
+
+[`round1-duration-by-duty.html`](./round1-duration-by-duty.html) — the full comparison with a live survival chart (hover for values, click the legend to isolate a curve), tables, the settled-vs-arriving mechanism, and the drift decomposition (open via [htmlpreview.github.io](https://htmlpreview.github.io/) by pasting the file's GitHub URL, or download and open locally).
+
 ## The comparison
 
 ![Round-1 duration tail by duty type](./assets/round1-duration-by-duty.png)
