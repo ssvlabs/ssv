@@ -120,7 +120,8 @@ func TestProposerPreferencesRunner_evictPastSlots(t *testing.T) {
 	require.Contains(t, disp.bySlot, current+10)
 }
 
-// An incoming partial signature for a slot with no sub-runner is retryable, not a hard error.
+// An incoming partial signature for a slot with no sub-runner is a plain (non-retryable) error: the
+// dispatcher's stash, not a queue retry, is what replays it once the slot's duty starts here.
 func TestProposerPreferencesRunner_ProcessPreConsensus_unknownSlot(t *testing.T) {
 	r, err := NewProposerPreferencesRunner(ProposerPreferencesRunnerOptions{
 		BaseRunnerOptions: BaseRunnerOptions{Share: map[phase0.ValidatorIndex]*spectypes.Share{0: {}}},
@@ -129,7 +130,7 @@ func TestProposerPreferencesRunner_ProcessPreConsensus_unknownSlot(t *testing.T)
 
 	err = r.ProcessPreConsensus(context.Background(), zap.NewNop(), &spectypes.PartialSignatureMessages{Slot: 999})
 	require.Error(t, err)
-	require.True(t, IsRetryable(err))
+	require.False(t, IsRetryable(err))
 }
 
 // stashPending dedups by (signer, signing root), caps a slot's stash at committee size times the
@@ -241,11 +242,12 @@ func TestProposerPreferencesRunner_stashReplayConvergence(t *testing.T) {
 	ctx := context.Background()
 	logger := zap.NewNop()
 
-	// Peers 2..4 emitted before us: their one-shot partials arrive with no local duty and are stashed.
+	// Peers 2..4 emitted before us: their one-shot partials arrive with no local duty and are stashed
+	// (a plain error, not a retryable one — the stash replays them, a queue retry would only churn).
 	for _, op := range []spectypes.OperatorID{2, 3, 4} {
 		err := disp.ProcessPreConsensus(ctx, logger, peerPartial(t, op, bn.dependentRoot))
 		require.Error(t, err)
-		require.True(t, IsRetryable(err))
+		require.False(t, IsRetryable(err))
 	}
 
 	// Our own (late) emission: the replay of the stashed partials completes quorum and submits.

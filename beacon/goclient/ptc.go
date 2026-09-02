@@ -17,9 +17,9 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 )
 
-// Gloas (ePBS) Payload Timeliness Committee endpoints. go-eth2-client has no Gloas provider
-// yet, so these are issued as hand-rolled HTTP requests until it is rebased onto a Gloas-aware
-// release, at which point they become typed provider calls like the rest of GoClient.
+// Gloas (ePBS) Payload Timeliness Committee endpoints. These hand-rolled HTTP requests predate the
+// go-eth2-client fork's typed PTC calls (PTCDuties, PayloadAttestationData,
+// SubmitPayloadAttestationMessages); moving onto those, like the rest of GoClient, is a follow-up.
 const (
 	ptcDutiesPath              = "/eth/v1/validator/duties/ptc/%d"                    // epoch
 	payloadAttestationDataPath = "/eth/v1/validator/payload_attestation_data?slot=%d" // slot
@@ -34,7 +34,7 @@ const (
 // gloasHTTPClient issues the hand-rolled Gloas requests; per-call deadlines come from the request context.
 // Basic-auth in the (unmasked) beacon address is applied by net/http; custom TLS/client-cert is not — but
 // the main eth2clienthttp path doesn't configure it either (system-CA https + basic-auth only), so no
-// regression. Interim surface, retired with the go-eth2-client rebase.
+// regression. Interim surface, retired once these requests move onto the fork's typed calls.
 var gloasHTTPClient = &http.Client{}
 
 // PayloadAttestationDuties returns the PTC duties for the given validators at the epoch, from

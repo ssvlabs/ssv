@@ -2,6 +2,7 @@ package runner
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -112,6 +113,48 @@ func decidedEnvelopeConsensusData(t *testing.T, slot phase0.Slot, envelope *gloa
 	dataSSZ, err := blinded.Encode()
 	require.NoError(t, err)
 	return &gloas.EnvelopeConsensusData{Duty: *envelopeDuty(slot), DataSSZ: dataSSZ}
+}
+
+// The builder produces the envelope, caches it for the later content-matched publish, and — leading
+// round 1 in this harness — proposes its blinded form.
+func TestEnvelopeProposerRunner_ExecuteDutyProposesWhenProduceSucceeds(t *testing.T) {
+	const slot = phase0.Slot(8)
+	bn := newEnvelopeTestBeacon()
+	bn.envelope = sampleEnvelope() // commits to block root 0xaa
+	runner, _ := newEnvelopeProposerRunnerForTest(t, bn)
+	runner.proposedBlockRoots.Set(slot, phase0.Root{0xaa})
+
+	require.NoError(t, runner.StartNewDuty(context.Background(), zap.NewNop(), envelopeDuty(slot), 3))
+
+	require.NotNil(t, runner.State.RunningInstance)
+	require.Same(t, bn.envelope, runner.cachedEnvelope)
+
+	broadcast := runner.network.(*protocoltesting.TestingNetwork).BroadcastedMsgs
+	require.Len(t, broadcast, 1)
+	proposal, err := specqbft.DecodeMessage(broadcast[0].SSVMessage.Data)
+	require.NoError(t, err)
+	require.Equal(t, specqbft.ProposalMsgType, proposal.MsgType)
+	require.Equal(t, specqbft.Height(slot), proposal.Height)
+}
+
+// An operator whose beacon node cannot produce the envelope — every non-builder on a cluster whose
+// operators run separate beacon nodes — still joins the §6 round: the QBFT instance starts as a voter
+// with no value of its own, and, leading round 1 in this harness, it broadcasts no proposal rather than
+// an empty one. With nothing cached it will not publish either.
+func TestEnvelopeProposerRunner_ExecuteDutyJoinsAsVoterWhenProduceFails(t *testing.T) {
+	const slot = phase0.Slot(8)
+	bn := newEnvelopeTestBeacon()
+	bn.produceErr = errors.New("404 execution payload envelope not found")
+	runner, _ := newEnvelopeProposerRunnerForTest(t, bn)
+	runner.proposedBlockRoots.Set(slot, phase0.Root{0xaa})
+
+	require.NoError(t, runner.StartNewDuty(context.Background(), zap.NewNop(), envelopeDuty(slot), 3))
+
+	require.True(t, runner.HasRunningDuty())
+	require.NotNil(t, runner.State.RunningInstance, "a voter must hold a running QBFT instance to vote in")
+	require.Empty(t, runner.State.RunningInstance.StartValue)
+	require.Nil(t, runner.cachedEnvelope)
+	require.Empty(t, runner.network.(*protocoltesting.TestingNetwork).BroadcastedMsgs)
 }
 
 // The builder — its cached envelope blinds to the decided value — publishes the full signed envelope.

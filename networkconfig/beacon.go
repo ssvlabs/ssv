@@ -11,11 +11,11 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 )
 
-// DataVersionGloas is a node-side placeholder for the Gloas beacon data version: until
-// go-eth2-client defines it (its latest is Fulu), we slot Gloas immediately after Fulu.
-// Remove and reconcile with upstream once it ships a real spec.DataVersionGloas. Note
-// DataVersionGloas.String() returns "unknown" — the spec string/JSON tables aren't extended.
-const DataVersionGloas = spec.DataVersionFulu + 1
+// DataVersionGloas is the Gloas (ePBS) beacon data version — go-eth2-client's spec.DataVersionGloas,
+// re-exported under the node's name for its call sites and for the ssvsigner mirror (ekm.GloasDataVersion,
+// a separate module; a node-side test pins the two equal). The remaining Gloas-version reconciliation —
+// ForkAtEpoch's Fulu cap and the aggregator consensus-data version stamp — is tracked in issue #2998.
+const DataVersionGloas = spec.DataVersionGloas
 
 // Beacon defines beacon network configuration. It is fetched from the consensus client during the node runtime.
 type Beacon struct {

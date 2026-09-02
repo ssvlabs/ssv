@@ -11,15 +11,14 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 )
 
-// proposerPreferencesPath is the SIP #94 §5 publish endpoint; go-eth2-client has no Gloas types, so
+// proposerPreferencesPath is the SIP #94 §5 publish endpoint; go-eth2-client has no call for it, so
 // SubmitProposerPreferences is a hand-rolled JSON POST.
 const proposerPreferencesPath = "/eth/v1/validator/proposer_preferences"
 
 // ProposerDutiesDependentRoot returns the dependent root from the v2 proposer-duties response for the
 // given epoch — the proposer-lookahead seed a preference is pinned to (SIP #94 §5; callers pass the
 // proposal slot's epoch). Gloas's v2 endpoint computes this root under the new proposer-lookahead
-// seed; go-eth2-client drops the field, so this is a raw-HTTP fetch (the same interim surface as the
-// PTC endpoints) until the fork exposes it.
+// seed; go-eth2-client drops the field, so this is a raw-HTTP fetch until the fork exposes it.
 func (gc *GoClient) ProposerDutiesDependentRoot(ctx context.Context, epoch phase0.Epoch) (phase0.Root, error) {
 	// Several proposer-preferences runners (one per local proposing validator in the epoch) request the
 	// same epoch's dependent_root concurrently; collapse that burst into a single GET. Not TTL-cached so

@@ -22,7 +22,8 @@ const (
 )
 
 // GetExecutionPayloadEnvelope fetches the §6 execution-payload envelope (the payload the proposer
-// committed to for the slot) as SSZ — go-eth2-client has no Gloas types.
+// committed to for the slot) as SSZ. Hand-rolled: it predates the go-eth2-client fork's typed envelope
+// calls, and moving onto them is a follow-up.
 func (gc *GoClient) GetExecutionPayloadEnvelope(ctx context.Context, slot phase0.Slot, beaconBlockRoot phase0.Root) (*gloas.ExecutionPayloadEnvelope, error) {
 	return firstClientResult(ctx, gc, "GetExecutionPayloadEnvelope", http.MethodGet, func(ctx context.Context, addr string) (*gloas.ExecutionPayloadEnvelope, error) {
 		return requestExecutionPayloadEnvelope(ctx, addr, slot, beaconBlockRoot)

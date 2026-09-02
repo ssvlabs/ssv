@@ -161,10 +161,10 @@ func (r *ProposerPreferencesRunner) ProcessPreConsensus(ctx context.Context, log
 
 	sub, ok := r.bySlot[signedMsg.Slot]
 	if !ok {
-		// No sub-runner for this proposal slot — it hasn't executed here yet (the stash above replays
-		// once it starts), or it already concluded and was evicted. Retryable so a message racing the
-		// duty start also lands via the queue replay.
-		return NewRetryableError(spectypes.WrapError(spectypes.NoRunningDutyErrorCode, ErrNoDutyAssigned))
+		// No sub-runner for this proposal slot — it hasn't executed here yet, or it already concluded and
+		// was evicted. Not retryable: the stash above is what replays the partial once the slot's duty
+		// starts here (StartNewDuty), so a queue retry would only churn until it gave up.
+		return spectypes.WrapError(spectypes.NoRunningDutyErrorCode, ErrNoDutyAssigned)
 	}
 	return sub.ProcessPreConsensus(ctx, logger, signedMsg)
 }
