@@ -85,7 +85,7 @@ svg .grid{{stroke:var(--grid)}}svg .axis{{stroke:var(--line)}}
 .legend{{display:flex;gap:16px;flex-wrap:wrap;margin-top:11px;font-size:12.5px;color:#33404f}}
 .legend span{{display:inline-flex;gap:7px;align-items:center}}.sw{{width:11px;height:11px;border-radius:3px;display:inline-block}}</style>
 <div class="wrap"><h3>Round-1 QBFT duration tail by duty type &mdash; does the tail match?</h3>
-<p class="cap">Share of successful round-1s <b>still not decided</b> X ms after the proposal (log scale; mainnet, 30 sampled epochs). Aggregator and sync-committee-contribution collapse by ~0.7s; only the attester (committee) carries a fat tail to ~3.3s. The proposer's extra tail over aggregator/sync is intra-cluster drift &mdash; removing it (dashed, from per-operator prepare times) drops the proposer's bulk onto the aggregator/sync band. Lower/left = tighter.</p>
+<p class="cap">Share of successful round-1s <b>still not decided</b> X ms after the proposal (log scale; mainnet, 30 sampled epochs). Aggregator and sync-committee-contribution collapse by ~0.7s; only the attester (committee) carries a fat tail to ~3.3s. The proposer's extra tail over aggregator/sync is intra-cluster drift &mdash; both the spread among operators and the fast-leader/slow-pack lag. Removing it (dashed, by capping the prepare-quorum wait at its typical value) drops the proposer onto &mdash; and slightly below &mdash; the aggregator/sync band: the intrinsic ~2-hop QBFT latency, over which aggregator/sync still carry a little drift of their own. Lower/left = tighter.</p>
 {"".join(svg)}
 <div class="legend">{leg}</div></div>"""
 page = f"{HERE}/_compare.html"; open(page, "w").write(html)

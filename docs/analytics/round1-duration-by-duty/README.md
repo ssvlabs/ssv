@@ -8,7 +8,7 @@ How long round-1 QBFT consensus takes — from the leader's proposal to the deci
 
 - **Round-1 *duration* is tight for proposer, aggregator, and sync-contribution; only the attester has a fat tail.** Aggregator (max **626ms**) and sync-contribution (max **701ms**) hug the proposer's curve — in fact a touch tighter — while the attester trails to ~**3.3s**.
 - **That difference is structural, not incidental.** The committee (attester) runner is the only one where each operator validates the proposal against its *own* node-derived vote and does so on the *currently-arriving* head; proposer/aggregator/sync validate a self-contained value (structural-only check) built on *settled* data, so operator readiness clusters tightly.
-- **The proposer's *extra* tail over aggregator/sync is intra-cluster drift, and it separates cleanly.** The Exporter records per-operator prepare times, so removing the prepare-phase readiness spread drops the proposer's bulk (p99 **191ms → 109ms**) right onto the aggregator/sync band — the intrinsic ~30–110ms QBFT latency all four share.
+- **The proposer's *extra* tail over aggregator/sync is intra-cluster drift, and it separates cleanly.** The Exporter records per-operator prepare times, so removing the prepare-phase drift (both the spread among operators and the fast-leader/slow-pack lag) drops the proposer to **p99 92ms / p99.9 212ms** — at or below aggregator/sync, revealing the intrinsic ~2-hop QBFT latency all four share (aggregator/sync sit a little above it, still carrying their own small drift).
 
 ## The comparison
 
@@ -19,7 +19,7 @@ Round-1 duration = decided − round-1 proposal (Exporter receive-times), for ro
 | duty type | n | p50 | p90 | p99 | p99.9 | max |
 |---|--:|--:|--:|--:|--:|--:|
 | proposer (observed) | 24,984 | 59 | 102 | 191 | 796 | 1,148 |
-| **proposer (drift-removed)** | 24,984 | 31 | 71 | **109** | 625 | 1,095 |
+| **proposer (drift-removed)** | 24,984 | 34 | 67 | **92** | 212 | 1,095 |
 | aggregator | 2,746 | 47 | 89 | 128 | 335 | 626 |
 | sync-contribution | 6,897 | 55 | 86 | 127 | 344 | 701 |
 | attester (committee) | 110,244 | 44 | 267 | **712** | 2,231 | 4,010* |
@@ -39,14 +39,17 @@ So aggregator/sync decide *late* (~8.1s into slot, vs proposer's ~1.4s and attes
 
 ## Isolating the drift
 
-In the proposer's slowest round-1s the **prepare spread is ~1,145ms while the commit spread is ~18ms**: the leader prepares immediately, then the quorum waits ~1s for the *marginal operator's prepare* (its block-fetch readiness — the same clock/fetch drift measured in the [drift analysis](../operator-qbft-start-drift/README.md)), and commits fire fast once 2f+1 prepares exist. So the tail lives in the prepare phase.
+The proposer's tail lives in the **prepare phase**: in its slowest round-1s the prepare spread is ~1,145ms while the commit spread is only ~18ms — the leader prepares immediately, the quorum waits ~1s for its marginal operator, and commits fire fast once 2f+1 prepares exist. That wait carries two forms of drift, both measured from the leader's proposal:
 
-Removing it per duty — `drift-removed = observed − (2f+1-th prepare − fastest non-leader prepare)` — collapses the proposer's bulk onto the aggregator/sync band (dashed line; p50 59→31, p99 191→109). Since aggregator/sync still carry their own small drift, the fully drift-removed proposer is even a shade tighter — all three converge on the intrinsic ~30–110ms QBFT latency, exactly as expected.
+- **Spread among the responding operators** — the marginal operator lags the fastest responder.
+- **Fast leader, slow pack** — the dominant one in the extreme tail. There the leader proposed *early* (median 632ms into slot, vs 1,355ms typical) because it got its block fast, while the *whole* cluster was still block-fetching, so even the quickest non-leader prepared ~426ms later (vs a normal ~9ms hop). A proposer non-leader can only prepare once its *own* block-fetch completes ([`proposer.go`](../../../protocol/v2/ssv/runner/proposer.go), it enters consensus after fetching) — even though it doesn't need that block to validate the leader's proposal. Aggregator/sync avoid this: they aggregate a light, already-settled value at ~8s, so the cluster is ready together. This is the [full operator-start spread](../operator-qbft-start-drift/README.md) surfacing in the duration.
+
+Capping the whole prepare-quorum wait (proposal → 2f+1-th prepare) at its typical drift-free value (Q ≈ **19ms**) removes both: `drift-removed = observed − max(prepare-quorum wait − Q, 0)`. Well-synced duties are unchanged; drift duties shed only the excess wait. It drops the proposer to **p99 92ms, p99.9 212ms** (dashed line) — at or below aggregator/sync, since those retain their own small drift. All four converge on the intrinsic ~2-hop QBFT latency, exactly as expected.
 
 ## Method & caveats
 
 - **Duration is Exporter receive-times** of the round-1 proposal and the aggregated decided message; the decided is gated by the marginal (2f+1-th) operator to reach quorum.
-- **The drift removal isolates single-straggler drift** (the common case). A small residual tail remains (drift-removed p99.9 625ms, max 1,095ms) from duties where even the *second*-fastest operator was slow — multiple operators or a whole-cluster stall, which is not pairwise drift.
+- **A small residual remains in the commit phase, not the prepare phase.** After the prepare-quorum drift is removed, 13 duties still exceed 300ms (max 1,095ms) — these are slow *commit* phases (2f+1 commits forming), the genuinely irreducible tail, not readiness drift. `Q` is the population-median prepare-quorum wait; using a fixed drift-free value keeps the removal conservative (well-synced duties are untouched).
 - **Aggregator is sampled** across the validator population (~3–4% are selected per duty); sync-contribution is targeted at each epoch's sync-committee validators. Both are per-validator duties, unlike the committee-level attester.
 
 ## Reproduce
