@@ -104,6 +104,42 @@ func (c *Controller) StartNewInstance(
 		return nil, traces.Errorf(span, "value invalid: %w", err)
 	}
 
+	return c.startInstance(ctx, span, logger, height, value, valueChecker, roundTimerF)
+}
+
+// JoinInstance starts a new instance for the height with no value of this node's own to propose. The
+// node takes part as a voter: it validates the leader's proposal with valueChecker and votes on it, and
+// if it comes to lead a later round it re-proposes only an already-prepared value (see
+// instance.Instance.StartValue) — it never proposes a value of its own. This is for duties where only
+// some operators can produce the value (the §6 execution-payload envelope: only the beacon node that
+// built the block holds its payload) yet every operator must still be in the instance for the quorum
+// to form.
+func (c *Controller) JoinInstance(
+	ctx context.Context,
+	logger *zap.Logger,
+	height specqbft.Height,
+	valueChecker ssv.ValueChecker,
+	roundTimerF ssv.QBFTRoundTimerF,
+) (*instance.Instance, error) {
+	ctx, span := tracer.Start(ctx,
+		observability.InstrumentName(observabilityNamespace, "qbft.controller.join"),
+		trace.WithAttributes(observability.BeaconSlotAttribute(phase0.Slot(height))))
+	defer span.End()
+
+	return c.startInstance(ctx, span, logger, height, nil, valueChecker, roundTimerF)
+}
+
+// startInstance creates, starts and records a new instance for the height. value is what this node
+// proposes when it leads a round — nil for a voter (JoinInstance), which then never proposes.
+func (c *Controller) startInstance(
+	ctx context.Context,
+	span trace.Span,
+	logger *zap.Logger,
+	height specqbft.Height,
+	value []byte,
+	valueChecker ssv.ValueChecker,
+	roundTimerF ssv.QBFTRoundTimerF,
+) (*instance.Instance, error) {
 	if height < c.LatestInstanceHeight {
 		return nil, spectypes.WrapError(spectypes.StartInstanceErrorCode, traces.Errorf(
 			span,

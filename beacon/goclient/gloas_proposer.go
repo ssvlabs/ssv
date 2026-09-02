@@ -32,11 +32,12 @@ type gloasBlockResult struct {
 	builderURL string
 }
 
-// GetGloasBeaconBlock produces a Gloas (ePBS) block via the v4 produce endpoint, decoding the SSZ response
-// (go-eth2-client has no Gloas types). It POSTs a BuilderConfig body (beacon-APIs#630): builderConfig when
-// the direct-builder overlay is configured, else a neutral local-build config. It falls back per beacon
-// node to the legacy GET for nodes that predate the POST; the returned string is the winning builder's
-// Eth-Builder-Url, if any.
+// GetGloasBeaconBlock produces a Gloas (ePBS) block via the v4 produce endpoint, decoding the SSZ response.
+// It is hand-rolled because go-eth2-client's ePBS proposal call is the pre-#630 GET, with no typed
+// equivalent for the POST body or the Eth-Builder-Url response header. It POSTs a BuilderConfig body
+// (beacon-APIs#630): builderConfig when the direct-builder overlay is configured, else a neutral local-build
+// config. It falls back per beacon node to the legacy GET for nodes that predate the POST; the returned
+// string is the winning builder's Eth-Builder-Url, if any.
 func (gc *GoClient) GetGloasBeaconBlock(ctx context.Context, slot phase0.Slot, graffiti, randao []byte, builderConfig *gloas.ProduceBuilderConfig) (*gloas.BeaconBlock, string, error) {
 	// A per-node GET fallback (a pre-#630 node) is still counted under this POST label — a transitional inaccuracy.
 	res, err := firstClientResult(ctx, gc, "GetGloasBeaconBlock", http.MethodPost, func(ctx context.Context, addr string) (gloasBlockResult, error) {

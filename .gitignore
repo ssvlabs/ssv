@@ -39,7 +39,6 @@ bin/
 /scripts/spec_align_report/ssv-spec
 .vscode/
 patches/
-tla/
 
 go.work
 go.work.sum

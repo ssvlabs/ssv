@@ -708,6 +708,34 @@ func (b *BaseRunner) decide(
 	return nil
 }
 
+// joinConsensus starts the slot's QBFT instance with no value of this node's own to propose (see
+// controller.JoinInstance): the node validates and votes on the leader's proposal with valueChecker but
+// never proposes. For duties where only some operators can produce the value.
+func (b *BaseRunner) joinConsensus(
+	ctx context.Context,
+	logger *zap.Logger,
+	slot phase0.Slot,
+	valueChecker ssv.ValueChecker,
+) error {
+	newInstance, err := b.QBFTController.JoinInstance(
+		ctx,
+		logger,
+		specqbft.Height(slot),
+		valueChecker,
+		b.qbftRoundTimerF,
+	)
+	if err != nil {
+		return fmt.Errorf("could not join QBFT instance: %w", err)
+	}
+	if newInstance == nil {
+		return fmt.Errorf("could not join QBFT instance: instance is nil")
+	}
+
+	b.State.RunningInstance = newInstance
+
+	return nil
+}
+
 func (b *BaseRunner) hasDutyAssigned() bool {
 	return b.State != nil
 }

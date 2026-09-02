@@ -50,9 +50,9 @@ func roundTimeoutForRound(role spectypes.RunnerRole, intervalDuration time.Durat
 // Round 1 is allowed to run for a given role. Committee gets one interval as head start
 // (time for the block to become available); aggregator, aggregator-committee and
 // sync-committee-contribution get two intervals (time for attestations to arrive before
-// aggregating); proposer gets zero. The interval is IntervalDuration — 1/3 of the slot
-// pre-Gloas, 1/4 from Gloas — so the head starts track the retimed attestation/aggregate
-// deadlines across the fork.
+// aggregating); the round-relative roles (see RoundRelativeRole) get zero. The interval is
+// IntervalDuration — 1/3 of the slot pre-Gloas, 1/4 from Gloas — so the head starts track the
+// retimed attestation/aggregate deadlines across the fork.
 //
 // Note: this is NOT the time at which Round 1 -> Round 2 transitions — that transition actually
 // happens at `slotStart + round1HeadStart + QuickTimeout`, because Round 1 still needs to run its
@@ -131,9 +131,19 @@ func New(ctx context.Context, beaconConfig *networkconfig.Beacon, role spectypes
 	}
 }
 
+// RoundRelativeRole reports whether the role's QBFT round timeouts are relative to the instance's
+// start rather than synchronized to the slot: the proposer (round-relative until
+// https://github.com/ssvlabs/ssv/issues/2429) and the §6 envelope proposer, whose instance only
+// starts once the §4 block is published — typically well past QuickTimeout into the slot, where a
+// slot-anchored timer would already be negative and time round 1 out on arrival. Message validation
+// keys its round-spread exemption off this same predicate, so the two stay in step.
+func RoundRelativeRole(role spectypes.RunnerRole) bool {
+	return role == spectypes.RoleProposer || role == spectypes.RoleEnvelopeProposer
+}
+
 // RoundTimeout returns the duration to wait before timing out the given round.
 //
-// For RoleProposer, the timeout is round-relative (not slot-synchronized):
+// For the round-relative roles (RoundRelativeRole), the timeout is not slot-synchronized:
 //   - rounds <= QuickTimeoutThreshold → QuickTimeout
 //   - rounds >  QuickTimeoutThreshold → SlowTimeout
 //
@@ -143,9 +153,9 @@ func New(ctx context.Context, beaconConfig *networkconfig.Beacon, role spectypes
 // (attester/sync-committee) or two intervals (aggregator/sync-contribution/aggregator-committee);
 // IntervalDuration is 1/3 of the slot before Gloas, 1/4 from Gloas on (SIP #94 §1).
 func (t *RoundTimer) RoundTimeout(round specqbft.Round) time.Duration {
-	// Proposer runner round timeouts are currently relative to QBFT instance start time, not slot start time:
-	// https://github.com/ssvlabs/ssv/issues/2429
-	if t.role == spectypes.RoleProposer {
+	// Proposer and envelope-proposer round timeouts are relative to QBFT instance start time, not slot
+	// start time (see RoundRelativeRole).
+	if RoundRelativeRole(t.role) {
 		if round <= QuickTimeoutThreshold {
 			return QuickTimeout
 		}

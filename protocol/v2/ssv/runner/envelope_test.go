@@ -42,6 +42,16 @@ func TestNewEnvelopeProposerRunner_RequiresOneShare(t *testing.T) {
 	require.Error(t, err)
 }
 
+// The §4→§6 root store is read unconditionally by executeDuty and the value-check, so it is required.
+func TestNewEnvelopeProposerRunner_RequiresProposedBlockRoots(t *testing.T) {
+	_, err := NewEnvelopeProposerRunner(EnvelopeProposerRunnerOptions{
+		BaseRunnerOptions: BaseRunnerOptions{
+			Share: map[phase0.ValidatorIndex]*spectypes.Share{3: {ValidatorIndex: 3}},
+		},
+	})
+	require.ErrorContains(t, err, "proposed block roots")
+}
+
 // The post-consensus signing target is the decided blinded envelope's root under DOMAIN_BEACON_BUILDER —
 // equal to the full envelope's root, so the partial signature is valid for the full envelope.
 func TestEnvelopeProposerRunner_ExpectedPostConsensusRootsAndDomain(t *testing.T) {
@@ -87,11 +97,15 @@ func TestEnvelopeProposerRunner_ExecuteDutyRequiresDecidedRoot(t *testing.T) {
 
 type envelopeTestBeacon struct {
 	beacon.BeaconNode
-	envelope  *gloas.ExecutionPayloadEnvelope
-	submitted []*gloas.SignedExecutionPayloadEnvelope
+	envelope   *gloas.ExecutionPayloadEnvelope
+	produceErr error // when set, produce fails — as a non-builder's beacon node does (it never held the payload)
+	submitted  []*gloas.SignedExecutionPayloadEnvelope
 }
 
 func (b *envelopeTestBeacon) GetExecutionPayloadEnvelope(_ context.Context, _ phase0.Slot, _ phase0.Root) (*gloas.ExecutionPayloadEnvelope, error) {
+	if b.produceErr != nil {
+		return nil, b.produceErr
+	}
 	return b.envelope, nil
 }
 

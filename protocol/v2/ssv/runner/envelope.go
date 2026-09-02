@@ -29,10 +29,11 @@ import (
 // EnvelopeProposerRunner runs the §6 execution-payload-envelope-signing duty (SIP #94 §6,
 // RoleEnvelopeProposer=9). It is a second QBFT instance for the proposer's slot, started by the proposer
 // only on the self-build path (external builders sign their own envelopes). The flow mirrors the proposer
-// minus pre-consensus: executeDuty produces a BlindedExecutionPayloadEnvelope and runs QBFT over it;
-// ProcessConsensus signs the decided blinded root under DOMAIN_BEACON_BUILDER and broadcasts a
-// post-consensus partial signature; ProcessPostConsensus reconstructs the BLS signature and the builder
-// publishes the full envelope.
+// minus pre-consensus: executeDuty produces a BlindedExecutionPayloadEnvelope and runs QBFT over it — or,
+// when this operator's beacon node did not build the block and so cannot produce the envelope, joins the
+// QBFT instance as a voter; ProcessConsensus signs the decided blinded root under DOMAIN_BEACON_BUILDER
+// and broadcasts a post-consensus partial signature; ProcessPostConsensus reconstructs the BLS signature
+// and the builder publishes the full envelope.
 type EnvelopeProposerRunner struct {
 	*BaseRunner
 
@@ -69,6 +70,10 @@ type EnvelopeProposerRunnerOptions struct {
 func NewEnvelopeProposerRunner(opts EnvelopeProposerRunnerOptions) (Runner, error) {
 	if len(opts.Share) != 1 {
 		return nil, errors.New("must have one share")
+	}
+	if opts.ProposedBlockRoots == nil {
+		// executeDuty and the value-check read the §4 root from it unconditionally.
+		return nil, errors.New("must have a proposed block roots store")
 	}
 
 	return &EnvelopeProposerRunner{
@@ -267,12 +272,24 @@ func (r *EnvelopeProposerRunner) executeDuty(ctx context.Context, logger *zap.Lo
 	}
 
 	input, err := r.produceBlindedEnvelope(ctx, validatorDuty, beaconBlockRoot)
+	r.measurements.StartConsensus()
 	if err != nil {
-		return fmt.Errorf("produce blinded envelope: %w", err)
+		// Only the beacon node that built the decided §4 block holds its payload, so on a cluster whose
+		// operators run separate beacon nodes every non-builder's produce fails here (typically a 404).
+		// That operator still has a part in the round: it joins the QBFT instance as a voter — validating
+		// the builder's proposal against the §4-decided root and contributing its votes and post-consensus
+		// partial signature — but proposes nothing of its own. The round therefore relies on the builder
+		// leading it, which holds for round 1 whenever §4 decided in round 1 (the same operator leads both
+		// instances); on a round change a voter re-proposes only an already-prepared value.
+		logger.Debug("could not produce the execution payload envelope, joining the envelope round as a voter",
+			fields.Slot(slot), zap.Error(err))
+		if err := r.joinConsensus(ctx, logger, slot, r.ValCheck); err != nil {
+			return fmt.Errorf("qbft-join: %w", err)
+		}
+		return nil
 	}
 	logger.Debug("built execution payload envelope", fields.Slot(slot))
 
-	r.measurements.StartConsensus()
 	if err := r.decide(ctx, logger, slot, input, r.ValCheck); err != nil {
 		return fmt.Errorf("qbft-decide: %w", err)
 	}

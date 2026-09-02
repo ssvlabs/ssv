@@ -44,6 +44,7 @@ type proposerTestBeacon struct {
 	submitErr       error
 
 	getGloasBlock        *gloas.BeaconBlock
+	getGloasBuilderURL   string // the Eth-Builder-Url the produce returns; empty = self-build / p2p win
 	submittedGloasBlocks []*gloas.SignedBeaconBlock
 }
 
@@ -73,7 +74,7 @@ func (b *proposerTestBeacon) GetGloasBeaconBlock(_ context.Context, slot phase0.
 	b.lastGetSlot = slot
 	b.lastGetGraffiti = append([]byte(nil), graffiti...)
 	b.lastGetRandao = append([]byte(nil), randao...)
-	return b.getGloasBlock, "", nil
+	return b.getGloasBlock, b.getGloasBuilderURL, nil
 }
 
 func (b *proposerTestBeacon) SubmitGloasBeaconBlock(_ context.Context, block *gloas.SignedBeaconBlock, _ string) error {
@@ -464,6 +465,7 @@ func TestProposerRunnerGloasProposalInput(t *testing.T) {
 	const slot = phase0.Slot(8)
 	beacon := newProposerTestBeacon(nil)
 	beacon.getGloasBlock = gloas.TestingBeaconBlock(slot)
+	beacon.getGloasBuilderURL = "https://b.example"
 	runner, _, _ := newProposerRunnerForTest(t, beacon, &stubDoppelganger{canSign: true}, 0, nil)
 
 	input, err := runner.gloasProposalInput(context.Background(), zap.NewNop(), gloasProposerDuty(slot), []byte("randao"))
@@ -476,6 +478,29 @@ func TestProposerRunnerGloasProposalInput(t *testing.T) {
 	require.Equal(t, slot, beacon.lastGetSlot)
 	require.Equal(t, []byte("graffiti"), beacon.lastGetGraffiti)
 	require.Equal(t, []byte("randao"), beacon.lastGetRandao)
+
+	// The produce output is recorded for the publish-time owner-match (see decidedBuilderURL).
+	expectedRoot, err := gloas.TestingBeaconBlock(slot).HashTreeRoot()
+	require.NoError(t, err)
+	require.Equal(t, expectedRoot, runner.gloasProducedRoot)
+	require.Equal(t, "https://b.example", runner.gloasBuilderURL)
+}
+
+// StartNewDuty clears the previous duty's Gloas produce markers along with the cached pre-Gloas block, so a
+// stale owner-match can't echo an old Eth-Builder-Url on the next proposal.
+func TestProposerRunnerStartNewDutyResetsGloasProduceMarkers(t *testing.T) {
+	t.Parallel()
+
+	version := spec.DataVersionDeneb
+	beacon := newProposerTestBeacon(spectestingutils.TestingBeaconBlockV(version))
+	runner, _, _ := newProposerRunnerForTest(t, beacon, &stubDoppelganger{canSign: true}, 0, nil)
+	runner.gloasProducedRoot = [32]byte{0xaa}
+	runner.gloasBuilderURL = "https://stale.example"
+
+	require.NoError(t, runner.StartNewDuty(context.Background(), zap.NewNop(), spectestingutils.TestingProposerDutyV(version), 3))
+
+	require.Equal(t, [32]byte{}, runner.gloasProducedRoot)
+	require.Empty(t, runner.gloasBuilderURL)
 }
 
 func newProposerRunnerForTest(

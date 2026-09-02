@@ -14,6 +14,7 @@ func TestNormalizeBeaconAddr(t *testing.T) {
 		{"user:pass@host:5052", "http://user:pass@host:5052"},                                                        // basic-auth preserved
 		{"ethereum-beacon.blockpi.network/rpc/v1/KEY", "http://ethereum-beacon.blockpi.network/rpc/v1/KEY"},          // path prefix preserved
 		{"http://host:5052/", "http://host:5052"},                                                                    // trailing slash trimmed
+		{"http.example.com:5052", "http://http.example.com:5052"},                                                    // scheme-less host that starts with "http"
 	} {
 		require.Equal(t, tc.want, normalizeBeaconAddr(tc.in), "input %q", tc.in)
 	}

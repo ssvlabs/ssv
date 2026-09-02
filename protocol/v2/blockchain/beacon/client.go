@@ -92,7 +92,7 @@ type PTCCalls interface {
 
 // ProposerPreferencesCalls is the beacon-node surface for Gloas (ePBS) proposer preferences (SIP #94 §5)
 // and the direct-builder preferences the §5 dispatcher submits (issue #2962 phase 3). go-eth2-client has
-// no Gloas types, so these are hand-rolled over HTTP.
+// no calls for these endpoints, so they are hand-rolled over HTTP.
 type ProposerPreferencesCalls interface {
 	// ProposerDutiesDependentRoot returns the proposer-duties dependent root for the epoch — the
 	// seed the proposer-lookahead is pinned to. go-eth2-client drops it, so it's fetched via raw HTTP.
@@ -105,9 +105,9 @@ type ProposerPreferencesCalls interface {
 }
 
 // GloasProposerCalls is the beacon-node surface for producing and publishing Gloas (ePBS) blocks
-// (SIP #94 §4). go-eth2-client has no Gloas types, so these are hand-rolled over HTTP against the
-// merged produce-block-v4 / publish endpoints (beacon-APIs#580), plus the direct-builder produceBlockV4
-// POST (beacon-APIs#630).
+// (SIP #94 §4). These are hand-rolled over HTTP against the merged produce-block-v4 / publish endpoints
+// (beacon-APIs#580) plus the direct-builder produceBlockV4 POST (beacon-APIs#630): go-eth2-client's ePBS
+// proposal call is the pre-#630 GET, with no typed equivalent for the POST body or the Eth-Builder-Url echo.
 type GloasProposerCalls interface {
 	// GetGloasBeaconBlock produces a Gloas beacon block for the slot; the payload itself ships
 	// separately in the §6 envelope, so the block carries only the execution-payload bid. It is sent as
