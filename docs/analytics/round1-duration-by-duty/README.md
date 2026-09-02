@@ -49,7 +49,8 @@ Capping the whole prepare-quorum wait (proposal → 2f+1-th prepare) at its typi
 ## Method & caveats
 
 - **Duration is Exporter receive-times** of the round-1 proposal and the aggregated decided message; the decided is gated by the marginal (2f+1-th) operator to reach quorum.
-- **A small residual remains in the commit phase, not the prepare phase.** After the prepare-quorum drift is removed, 13 duties still exceed 300ms (max 1,095ms) — these are slow *commit* phases (2f+1 commits forming), the genuinely irreducible tail, not readiness drift. `Q` is the population-median prepare-quorum wait; using a fixed drift-free value keeps the removal conservative (well-synced duties are untouched).
+- **The drift-removed proposer's extreme max (1,095ms) is sample size, not a real cost.** At fixed percentiles it is already tighter than aggregator/sync (p99.9 **212ms** vs 335/344ms); the longer visible max is only because the proposer has ~9× more duties (24,984 vs 2,746/6,897), so on the log-survival plot its curve resolves farther down before its last sample. Subsampled to the aggregator's N, the drift-removed proposer's max is ~**493ms** median [239–1,053] — comparable to, and below, the aggregator's 626ms. And the 13 duties past 300ms all show the prepare quorum forming instantly yet the *decided* stamped 0.3–1.1s later with commits bunched at a single instant (spread ≈ 0) — the signature of Exporter receive-time noise on the decided message (sporadic, across 13 different epochs), not a real commit phase.
+- **The removal is conservative.** `Q` is the population-median prepare-quorum wait; capping the wait at a fixed drift-free value leaves well-synced duties untouched.
 - **Aggregator is sampled** across the validator population (~3–4% are selected per duty); sync-contribution is targeted at each epoch's sync-committee validators. Both are per-validator duties, unlike the committee-level attester.
 
 ## Reproduce
