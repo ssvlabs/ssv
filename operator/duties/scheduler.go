@@ -26,6 +26,7 @@ import (
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 )
 
 //go:generate go tool -modfile=../../tool.mod mockgen -package=duties -destination=./scheduler_mock.go -source=./scheduler.go
@@ -54,7 +55,9 @@ type DutyExecutor interface {
 type BeaconNode interface {
 	AttesterDuties(ctx context.Context, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*eth2apiv1.AttesterDuty, error)
 	ProposerDuties(ctx context.Context, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*eth2apiv1.ProposerDuty, error)
+	ProposerDutiesDependentRoot(ctx context.Context, epoch phase0.Epoch) (phase0.Root, error)
 	SyncCommitteeDuties(ctx context.Context, epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*eth2apiv1.SyncCommitteeDuty, error)
+	PayloadAttestationDuties(ctx context.Context, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*gloas.PTCDuty, error)
 	SubmitBeaconCommitteeSubscriptions(ctx context.Context, subscription []*eth2apiv1.BeaconCommitteeSubscription) error
 	SubmitSyncCommitteeSubscriptions(ctx context.Context, subscription []*eth2apiv1.SyncCommitteeSubscription) error
 	SubscribeToHeadEvents(ctx context.Context, subscriberIdentifier string, ch chan<- *eth2apiv1.HeadEvent) error
@@ -171,6 +174,7 @@ func NewScheduler(logger *zap.Logger, opts *SchedulerOptions) *Scheduler {
 		NewAttesterHandler(dutyStore.Attester, opts.ExporterMode),
 		NewProposerHandler(dutyStore.Proposer, opts.ExporterMode),
 		NewSyncCommitteeHandler(dutyStore.SyncCommittee, opts.ExporterMode),
+		NewPTCAttestationHandler(dutyStore.PTC, opts.ExporterMode),
 	)
 	// These handlers only execute duties and are not needed in exporter mode.
 	if !opts.ExporterMode {
@@ -179,6 +183,7 @@ func NewScheduler(logger *zap.Logger, opts *SchedulerOptions) *Scheduler {
 			NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee, true),
 			NewValidatorRegistrationHandler(opts.ValidatorRegistrationCh),
 			NewVoluntaryExitHandler(dutyStore.VoluntaryExit, opts.ValidatorExitCh),
+			NewProposerPreferencesHandler(),
 		)
 	}
 	return s
@@ -343,7 +348,7 @@ func (f *EventFeed[T]) FanOut(ctx context.Context, in <-chan T) {
 	}
 }
 
-// SlotTicker advances "head" slot every slot-tick once we are 1/3 of slot-time past slot start
+// SlotTicker advances "head" slot every slot-tick once we are one interval past slot start
 // and only if necessary. Normally Beacon node events would trigger "head" slot updates, but in
 // case event is delayed or didn't arrive for some reason we still need to advance "head" slot
 // for duties to keep executing normally - so SlotTicker is a secondary mechanism for that.
@@ -355,7 +360,7 @@ func (s *Scheduler) SlotTicker(ctx context.Context) {
 		case <-s.ticker.Next():
 			slot := s.ticker.Slot()
 
-			delay := s.netCfg.IntervalDuration()
+			delay := s.netCfg.IntervalDuration(slot)
 			finalTime := s.netCfg.SlotStartTime(slot).Add(delay)
 			waitDuration := time.Until(finalTime)
 			if waitDuration > 0 {
@@ -437,10 +442,10 @@ func (s *Scheduler) HandleHeadEvent() func(ctx context.Context, event *eth2apiv1
 		s.currentDutyDependentRoot = event.CurrentDutyDependentRoot
 
 		currentTime := time.Now()
-		delay := s.netCfg.IntervalDuration()
+		delay := s.netCfg.IntervalDuration(event.Slot)
 		slotStartTimeWithDelay := s.netCfg.SlotStartTime(event.Slot).Add(delay)
 		if currentTime.Before(slotStartTimeWithDelay) {
-			logger.Debug("🏁 Head event: Block arrived before 1/3 slot", zap.Duration("time_saved", slotStartTimeWithDelay.Sub(currentTime)))
+			logger.Debug("🏁 Head event: Block arrived before the attestation deadline", zap.Duration("time_saved", slotStartTimeWithDelay.Sub(currentTime)))
 
 			// We give the block some time to propagate around the rest of the
 			// nodes before kicking off duties for the block's slot.
@@ -478,7 +483,13 @@ func (s *Scheduler) ExecuteDuties(ctx context.Context, duties []*spectypes.Valid
 		logger.Debug(eventMsg)
 		span.AddEvent(eventMsg)
 
-		slotDelay := time.Since(s.netCfg.SlotStartTime(duty.Slot))
+		// PTC duties fire at the payload-attestation cutoff by design, so measure lateness from
+		// there, not slot start, to avoid a false "late execution" warning.
+		expectedStart := s.netCfg.SlotStartTime(duty.Slot)
+		if role == spectypes.RolePTCAttester {
+			expectedStart = s.netCfg.PayloadAttestationCutoff(duty.Slot)
+		}
+		slotDelay := time.Since(expectedStart)
 
 		// For roles where duty.Slot is a shared coordination point rather
 		// than the execution target (see dutySlotIsExecutionSlot), slotDelay
@@ -560,7 +571,7 @@ func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, duties committee
 			defer cancel()
 
 			if role == spectypes.RoleCommittee {
-				s.waitOneThirdIntoSlotOrValidBlock(slot)
+				s.waitOneIntervalIntoSlotOrValidBlock(slot)
 			}
 			s.dutyExecutor.ExecuteCommitteeDuty(dutyCtx, logger, committee.id, duty)
 		}()
@@ -620,15 +631,15 @@ func (s *Scheduler) advanceHeadSlot(slot phase0.Slot) {
 	s.waitCond.L.Unlock()
 }
 
-// waitOneThirdIntoSlotOrValidBlock waits until one-third of the slot has passed (SECONDS_PER_SLOT / 3 seconds after
-// slot start time), or for a head block event that might come in even sooner than one-third of the slot passes.
-func (s *Scheduler) waitOneThirdIntoSlotOrValidBlock(slot phase0.Slot) {
-	s.logger.Debug("waiting 1/3 into slot (maybe)")
-	defer s.logger.Debug("waiting 1/3 into slot (done)")
+// waitOneIntervalIntoSlotOrValidBlock waits until the attestation deadline (one interval into the slot — 1/3
+// before Gloas, 1/4 from Gloas on), or for a head block event that might come in even sooner.
+func (s *Scheduler) waitOneIntervalIntoSlotOrValidBlock(slot phase0.Slot) {
+	s.logger.Debug("waiting one interval into slot (maybe)")
+	defer s.logger.Debug("waiting one interval into slot (done)")
 
 	s.waitCond.L.Lock()
 	for s.headSlot < slot {
-		s.logger.Debug("waiting 1/3 into slot",
+		s.logger.Debug("waiting one interval into slot",
 			zap.Uint64("current_head_slot", uint64(s.headSlot)),
 			zap.Uint64("slot", uint64(slot)),
 		)

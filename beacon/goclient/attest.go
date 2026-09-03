@@ -71,12 +71,19 @@ func (gc *GoClient) GetAttestationData(ctx context.Context, slot phase0.Slot) (*
 			return cachedResult.Value(), nil
 		}
 
-		attData, err := gc.fetchAttestationData(ctx, slot)
+		// Detach from the leader caller's ctx so its cancellation doesn't fail the other callers
+		// whose requests were collapsed into this one (mirrors domainDataReqInflight); the
+		// underlying multi-client fetch carries its own timeout.
+		fetchCtx := context.WithoutCancel(ctx)
+
+		// Via the hook (defaults to fetchAttestationData) so it matches the stale-refetch call below and
+		// stays overridable in tests — needed now that Gloas routes to a hand-rolled fetch, not go-eth2-client.
+		attData, err := gc.fetchAttestationDataFunc(fetchCtx, slot)
 		if err != nil {
 			return nil, err
 		}
 
-		attData, stale := gc.verifyAndRefetchIfStale(ctx, slot, attData)
+		attData, stale := gc.verifyAndRefetchIfStale(fetchCtx, slot, attData)
 		// Not caching stale data allows next caller to retry with fresh fetch.
 		if !stale {
 			gc.attestationDataCache.Set(slot, attData, ttlcache.DefaultTTL)
@@ -93,10 +100,41 @@ func (gc *GoClient) GetAttestationData(ctx context.Context, slot phase0.Slot) (*
 
 // fetchAttestationData fetches attestation data from beacon node(s).
 func (gc *GoClient) fetchAttestationData(ctx context.Context, slot phase0.Slot) (*phase0.AttestationData, error) {
+	if gc.getBeaconConfig().IsGloasAtSlot(slot) {
+		// go-eth2-client's post-Electra AttestationData enforces data.Index == 0 and rejects anything else
+		// with ErrInconsistentResult. On Gloas, Index carries the payload-status view (0=EMPTY / 1=FULL,
+		// SIP #94 §2), so a FULL payload — the healthy case — is wrongly rejected and the attestation fails.
+		// Hand-roll the fetch to skip that check and keep the BN's index (the signed §2 value). Trades the
+		// weighted multi-BN selection for first-client, acceptable on Gloas (matches the other Gloas fetches).
+		return gc.gloasAttestationData(ctx, slot)
+	}
 	if gc.withWeightedAttestationData {
 		return gc.weightedAttestationData(ctx, slot)
 	}
 	return gc.simpleAttestationData(ctx, slot)
+}
+
+// gloasAttestationDataPath is the standard attestation-data endpoint; we hand-roll the GET for Gloas
+// slots to bypass go-eth2-client's post-Electra "data.Index must be 0" validation (see fetchAttestationData).
+const gloasAttestationDataPath = "/eth/v1/validator/attestation_data?slot=%d&committee_index=0"
+
+func (gc *GoClient) gloasAttestationData(ctx context.Context, slot phase0.Slot) (*phase0.AttestationData, error) {
+	return firstClientResult(ctx, gc, "AttestationData", http.MethodGet, func(ctx context.Context, addr string) (*phase0.AttestationData, error) {
+		return requestGloasAttestationData(ctx, gloasHTTPClient, addr, slot)
+	})
+}
+
+func requestGloasAttestationData(ctx context.Context, httpClient *http.Client, addr string, slot phase0.Slot) (*phase0.AttestationData, error) {
+	var resp struct {
+		Data *phase0.AttestationData `json:"data"`
+	}
+	if err := jsonDo(ctx, httpClient, http.MethodGet, addr+fmt.Sprintf(gloasAttestationDataPath, slot), nil, nil, &resp); err != nil {
+		return nil, err
+	}
+	if resp.Data == nil {
+		return nil, errors.New("no attestation data in response")
+	}
+	return resp.Data, nil
 }
 
 // verifyAndRefetchIfStale checks attestation data against cached head root.
@@ -129,10 +167,11 @@ func (gc *GoClient) verifyAndRefetchIfStale(
 	)
 
 	if deadline, ok := ctx.Deadline(); ok {
-		if time.Until(deadline) < minTimeForRetry {
+		minRetry := gc.scaleToAttestationWindow(minTimeForRetry, slot)
+		if time.Until(deadline) < minRetry {
 			logger.Debug("not enough time remaining for retry",
 				zap.Duration("remaining", time.Until(deadline)),
-				zap.Duration("min_required", minTimeForRetry),
+				zap.Duration("min_required", minRetry),
 			)
 			attestationDataRefetchSkippedCounter.Add(ctx, 1)
 			return attData, true
@@ -142,10 +181,10 @@ func (gc *GoClient) verifyAndRefetchIfStale(
 	select {
 	case <-ctx.Done():
 		return attData, true
-	case <-time.After(refetchDelay):
+	case <-time.After(gc.scaleToAttestationWindow(refetchDelay, slot)):
 	}
 
-	refetchCtx, cancel := context.WithTimeout(ctx, refetchTimeout)
+	refetchCtx, cancel := context.WithTimeout(ctx, gc.scaleToAttestationWindow(refetchTimeout, slot))
 	defer cancel()
 
 	newAttData, err := gc.fetchAttestationDataFunc(refetchCtx, slot)
@@ -171,16 +210,31 @@ func (gc *GoClient) verifyAndRefetchIfStale(
 	return newAttData, true
 }
 
+// scaleToAttestationWindow scales a fetch budget calibrated for the pre-Gloas attestation window
+// (one interval = 1/3 of the slot) to the slot's actual window: unchanged pre-Gloas, x3/4 from Gloas
+// (the window shrinks to 1/4 of the slot, ~4s->3s on mainnet). BN response timings — what the budget
+// waits on — are assumed fork-independent, so the budget tracks the window. Integer math (no float
+// rounding): base * 3 / intervalsPerSlot.
+func (gc *GoClient) scaleToAttestationWindow(base time.Duration, slot phase0.Slot) time.Duration {
+	cfg := gc.getBeaconConfig()
+	if cfg == nil {
+		return base // config not loaded yet (pre-init) — no scaling, i.e. pre-Gloas behavior
+	}
+	const preGloasIntervalsPerSlot = 3
+	intervalsPerSlot := int64(cfg.SlotDuration / cfg.IntervalDuration(slot)) // 3 pre-Gloas, 4 from Gloas
+	return base * preGloasIntervalsPerSlot / time.Duration(intervalsPerSlot)
+}
+
 func (gc *GoClient) weightedAttestationData(ctx context.Context, slot phase0.Slot) (*phase0.AttestationData, error) {
 	logger := gc.log.With(fields.Slot(slot), weightedAttestationDataRequestIDField(uuid.New()))
 	// We have two timeouts: a soft timeout and a hard timeout.
 	// At the soft timeout, we return if we have any responses so far.
 	// At the hard timeout, we return unconditionally.
 	// The soft timeout is half the duration of the hard timeout.
-	ctx, cancel := context.WithTimeout(ctx, gc.weightedAttestationDataHardTimeout)
+	ctx, cancel := context.WithTimeout(ctx, gc.scaleToAttestationWindow(gc.weightedAttestationDataHardTimeout, slot))
 	defer cancel()
 
-	softCtx, softCancel := context.WithTimeout(ctx, gc.weightedAttestationDataSoftTimeout)
+	softCtx, softCancel := context.WithTimeout(ctx, gc.scaleToAttestationWindow(gc.weightedAttestationDataSoftTimeout, slot))
 	defer softCancel()
 
 	started := time.Now()
@@ -411,7 +465,7 @@ func (gc *GoClient) scoreAttestationData(ctx context.Context,
 		With(zap.Float64("base_score", score)).
 		Debug("base score was set. Fetching slot for block root")
 
-	ctx, cancel := context.WithTimeout(ctx, gc.weightedAttestationDataSoftTimeout/2)
+	ctx, cancel := context.WithTimeout(ctx, gc.scaleToAttestationWindow(gc.weightedAttestationDataSoftTimeout, attestationData.Slot)/2)
 	defer cancel()
 
 	ticker := time.NewTicker(time.Millisecond * 100)
@@ -423,7 +477,7 @@ func (gc *GoClient) scoreAttestationData(ctx context.Context,
 	)
 
 	for {
-		slot, err := gc.blockRootToSlot(ctx, client, attestationData.BeaconBlockRoot, logger)
+		slot, err := gc.blockRootToSlot(ctx, client, attestationData.BeaconBlockRoot, attestationData.Slot, logger)
 		if err == nil {
 			// Increase score based on the nearness of the head slot.
 			denominator := float64(1 + attestationData.Slot - slot)
@@ -466,7 +520,7 @@ func (gc *GoClient) scoreAttestationData(ctx context.Context,
 	}
 }
 
-func (gc *GoClient) blockRootToSlot(ctx context.Context, client Client, root phase0.Root, logger *zap.Logger) (phase0.Slot, error) {
+func (gc *GoClient) blockRootToSlot(ctx context.Context, client Client, root phase0.Root, attSlot phase0.Slot, logger *zap.Logger) (phase0.Slot, error) {
 	cacheResult := gc.blockRootToSlotCache.Get(root)
 	if cacheResult != nil {
 		cachedSlot := cacheResult.Value()
@@ -479,7 +533,7 @@ func (gc *GoClient) blockRootToSlot(ctx context.Context, client Client, root pha
 
 	logger.Debug("slot was not found in cache, fetching from the client")
 
-	timeoutContext, cancel := context.WithTimeout(ctx, gc.weightedAttestationDataSoftTimeout/4)
+	timeoutContext, cancel := context.WithTimeout(ctx, gc.scaleToAttestationWindow(gc.weightedAttestationDataSoftTimeout, attSlot)/4)
 	defer cancel()
 
 	blockResponse, err := client.BeaconBlockHeader(timeoutContext, &api.BeaconBlockHeaderOpts{

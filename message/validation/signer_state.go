@@ -3,9 +3,13 @@ package validation
 // signer_state.go describes state of a signer.
 
 import (
+	"slices"
+
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/libp2p/go-libp2p/core/peer"
+
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
 // SignerStateForSlotRound is a SignerState bundled with some target slot+round.
@@ -49,6 +53,8 @@ func (s *SignerStateForSlotRound) Reset(slot phase0.Slot, round specqbft.Round) 
 	s.World.SeenMsgTypes = SeenMsgTypes{}
 	s.World.HashedProposalData = nil
 	s.World.SeenDecidedMsgSignersCount = 0
+	s.World.SeenProposerPreferencesRoots = nil
+	s.World.SeenRequestAuthRoots = nil
 }
 
 // SignerState represents the state of a signer (an Operator running a Runner that performs partial-signing for
@@ -64,4 +70,40 @@ type SignerState struct {
 
 	// SeenDecidedMsgSignersCount records the max number of signers we've seen with a decided message.
 	SeenDecidedMsgSignersCount int
+
+	// SeenProposerPreferencesRoots records the distinct ProposerPreferences signing roots seen from this
+	// signer (SIP #94 §5): that type is capped by distinct root (up to maxProposerPreferencesDistinctRoots),
+	// not by the single pre-consensus bit in SeenMsgTypes. nil until the first such message.
+	SeenProposerPreferencesRoots seenRootSet
+
+	// SeenRequestAuthRoots records the distinct BuilderRequestAuth signing roots seen from this signer
+	// (issue #2962) — root-capped like the §5 preference roots above, up to
+	// maxRequestAuthDistinctRoots. nil until the first such message.
+	SeenRequestAuthRoots seenRootSet
+}
+
+// seenRootSet tracks the distinct signing roots seen from a signer for a root-budgeted message
+// type; growth is bounded by the type's budget, enforced before recording.
+type seenRootSet [][32]byte
+
+func (s seenRootSet) has(root [32]byte) bool { return slices.Contains(s, root) }
+
+// record adds the root, skipping roots already present.
+func (s *seenRootSet) record(root [32]byte) {
+	if !slices.Contains(*s, root) {
+		*s = append(*s, root)
+	}
+}
+
+// seenRootsFor returns the signer's seen-root set for a root-budgeted message type; nil for types
+// without one.
+func seenRootsFor(s *SignerState, t spectypes.PartialSigMsgType) *seenRootSet {
+	switch t {
+	case spectypes.ProposerPreferencesPartialSig:
+		return &s.SeenProposerPreferencesRoots
+	case spectypes.RequestAuthPartialSig:
+		return &s.SeenRequestAuthRoots
+	default:
+		return nil
+	}
 }

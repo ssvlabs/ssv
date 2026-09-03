@@ -26,6 +26,7 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/protocol/v2/types/ssvtestingutils"
 )
 
 func TestGetMaxPeers(t *testing.T) {
@@ -190,7 +191,7 @@ func generateValidatorMsg(ks *spectestingutils.TestKeySet, round specqbft.Round,
 
 	// Derive the domain per-slot like production (p2p_setup.go DomainTypeAtSlot) so the
 	// fixture stays valid on both sides of the Boole fork (SSV_TEST_BOOLE_FORK matrix).
-	nonCommitteeIdentifier := spectypes.NewMsgID(netCfg.DomainTypeAtSlot(phase0.Slot(height)), ks.ValidatorPK.Serialize(), nonCommitteeRole)
+	nonCommitteeIdentifier := ssvtestingutils.NewMsgID(netCfg.DomainTypeAtSlot(phase0.Slot(height)), ks.ValidatorPK.Serialize(), nonCommitteeRole)
 
 	qbftMessage := &specqbft.Message{
 		MsgType:    specqbft.ProposalMsgType,
@@ -224,7 +225,7 @@ func generateCommitteeMsg(ks *spectestingutils.TestKeySet, round specqbft.Round)
 	fullData := spectestingutils.TestingQBFTFullData
 
 	encodedCommitteeID := append(bytes.Repeat([]byte{0}, 16), committeeID[:]...)
-	committeeIdentifier := spectypes.NewMsgID(netCfg.DomainTypeAtSlot(phase0.Slot(height)), encodedCommitteeID, spectypes.RoleCommittee)
+	committeeIdentifier := ssvtestingutils.NewMsgID(netCfg.DomainTypeAtSlot(phase0.Slot(height)), encodedCommitteeID, spectypes.RoleCommittee)
 
 	qbftMessage := &specqbft.Message{
 		MsgType:    specqbft.ProposalMsgType,
@@ -267,7 +268,7 @@ func dummyMsg(t *testing.T, pkHex string, height int, role spectypes.RunnerRole)
 		committeeID := ssvtypes.ComputeCommitteeID([]spectypes.OperatorID{1, 2, 3, 4})
 		dutyExecutorID = append(bytes.Repeat([]byte{0}, 16), committeeID[:]...)
 	}
-	id := spectypes.NewMsgID(networkconfig.TestNetwork.DomainTypeAtSlot(phase0.Slot(height)), dutyExecutorID, role)
+	id := ssvtestingutils.NewMsgID(networkconfig.TestNetwork.DomainTypeAtSlot(phase0.Slot(height)), dutyExecutorID, role)
 
 	qbftMessage := &specqbft.Message{
 		MsgType:    specqbft.CommitMsgType,

@@ -15,14 +15,14 @@ import (
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	ssz "github.com/ferranbt/fastssz"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
+	"go.uber.org/zap"
+
 	specssv "github.com/ssvlabs/ssv-spec/ssv"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
@@ -33,6 +33,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 )
 
 type CommitteeDutyGuard interface {
@@ -219,8 +220,20 @@ func (r *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Logg
 	// Reuse the existing span instead of generating new one to keep tracing-data lightweight.
 	span := trace.SpanFromContext(ctx)
 
+	// Fetch the running duty once: it fixes both the decode prototype's fork and, post-decide, the
+	// committee slot. A consensus message with no running duty can't decide, so the fetch error only
+	// matters once we know we decided.
+	committeeDuty, dutyErr := r.currentCommitteeDuty()
+
+	// The decided value is a GloasBeaconVote (which carries the attestation index) on Gloas slots, a
+	// plain BeaconVote before; decode into the matching prototype.
+	decidedPrototype := spectypes.Encoder(&spectypes.BeaconVote{})
+	if dutyErr == nil && r.NetworkConfig.IsGloasAtSlot(committeeDuty.DutySlot()) {
+		decidedPrototype = &gloas.GloasBeaconVote{}
+	}
+
 	span.AddEvent("processing QBFT consensus msg")
-	decided, decidedValue, err := r.baseConsensusMsgProcessing(ctx, logger, r.ValCheck.CheckValue, msg, &spectypes.BeaconVote{})
+	decided, decidedValue, err := r.baseConsensusMsgProcessing(ctx, logger, r.ValCheck.CheckValue, msg, decidedPrototype)
 	if err != nil {
 		return fmt.Errorf("failed processing consensus message: %w", err)
 	}
@@ -229,14 +242,13 @@ func (r *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Logg
 	if !decided {
 		return nil
 	}
+	if dutyErr != nil {
+		return fmt.Errorf("current committee duty: %w", dutyErr)
+	}
 
 	r.measurements.EndConsensus()
 	recordConsensusDuration(ctx, r.measurements.ConsensusTime(), spectypes.RoleCommittee)
 
-	committeeDuty, err := r.currentCommitteeDuty()
-	if err != nil {
-		return fmt.Errorf("current committee duty: %w", err)
-	}
 	committeeDutySlot := committeeDuty.DutySlot()
 	postConsensusMsg := &spectypes.PartialSignatureMessages{
 		Type:     spectypes.PostConsensusPartialSig,
@@ -272,7 +284,7 @@ func (r *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Logg
 		blockedAttesterDuties atomic.Uint32
 	)
 
-	beaconVote, err := beaconVoteFromEncoder(decidedValue)
+	beaconVote, gloasAttestationIndex, err := decidedAttestationVote(decidedValue)
 	if err != nil {
 		return fmt.Errorf("beacon vote: %w", err)
 	}
@@ -316,7 +328,7 @@ func (r *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Logg
 				switch validatorDuty.Type {
 				case spectypes.BNRoleAttester:
 					totalAttesterDuties.Add(1)
-					isAttesterDutyBlocked, partialSigMsg, err := r.signAttesterDuty(ctx, validatorDuty, beaconVote, version, logger)
+					isAttesterDutyBlocked, partialSigMsg, err := r.signAttesterDuty(ctx, validatorDuty, beaconVote, version, gloasAttestationIndex, logger)
 					if err != nil {
 						errCh <- fmt.Errorf("failed signing attestation data: %w", err)
 						return
@@ -413,9 +425,9 @@ listener:
 
 	ssvMsg := &spectypes.SSVMessage{
 		MsgType: spectypes.SSVPartialSignatureMsgType,
-		MsgID: spectypes.NewMsgID(
+		MsgID: spectypes.NewCommitteeMsgID(
 			r.NetworkConfig.DomainTypeAtSlot(r.State.CurrentDuty.DutySlot()),
-			r.QBFTController.CommitteeMember.CommitteeID[:],
+			r.QBFTController.CommitteeMember.CommitteeID,
 			r.RunnerRoleType,
 		),
 	}
@@ -452,6 +464,7 @@ func (r *CommitteeRunner) signAttesterDuty(
 	validatorDuty *spectypes.ValidatorDuty,
 	beaconVote *spectypes.BeaconVote,
 	version spec.DataVersion,
+	gloasAttestationIndex *phase0.CommitteeIndex,
 	logger *zap.Logger) (isBlocked bool, partialSig *spectypes.PartialSignatureMessage, err error) {
 	// Reuse the existing span instead of generating new one to keep tracing-data lightweight.
 	span := trace.SpanFromContext(ctx)
@@ -467,7 +480,7 @@ func (r *CommitteeRunner) signAttesterDuty(
 		return true, nil, nil
 	}
 
-	attestationData := constructAttestationData(beaconVote, validatorDuty, version)
+	attestationData := constructAttestationData(beaconVote, validatorDuty, version, gloasAttestationIndex)
 
 	span.AddEvent("signing beacon object")
 	partialMsg, err := signBeaconObject(
@@ -1010,13 +1023,13 @@ func findValidators(
 }
 
 // expectedPreConsensusRootsAndDomain is not needed because there is no pre-consensus phase.
-func (r *CommitteeRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
+func (r *CommitteeRunner) expectedPreConsensusRootsAndDomain() ([]spectypes.HashRoot, phase0.DomainType, error) {
 	return nil, spectypes.DomainError, errors.New("no pre consensus roots for committee runner")
 }
 
 // expectedPostConsensusRootsAndDomain signature returns only one domain type... but we can have mixed domains
 // instead we rely on expectedPostConsensusRootsAndBeaconObjects that is called later
-func (r *CommitteeRunner) expectedPostConsensusRootsAndDomain(context.Context) ([]ssz.HashRoot, phase0.DomainType, error) {
+func (r *CommitteeRunner) expectedPostConsensusRootsAndDomain(context.Context) ([]spectypes.HashRoot, phase0.DomainType, error) {
 	return nil, spectypes.DomainError, errors.New("unexpected expectedPostConsensusRootsAndDomain func call")
 }
 
@@ -1032,15 +1045,22 @@ func (r *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(ctx context
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("current committee duty: %w", err)
 	}
-	beaconVoteData := r.State.DecidedValue
-	beaconVote := &spectypes.BeaconVote{}
-	if err := beaconVote.Decode(beaconVoteData); err != nil {
-		return nil, nil, nil, fmt.Errorf("could not decode beacon vote: %w", err)
-	}
-
 	slot := committeeDuty.DutySlot()
 	epoch := r.NetworkConfig.EstimatedEpochAtSlot(slot)
 	dataVersion, _ := r.NetworkConfig.ForkAtEpoch(epoch)
+
+	// Decode into the slot's fork prototype (GloasBeaconVote carries the attestation index on Gloas).
+	decidedVote := spectypes.Encoder(&spectypes.BeaconVote{})
+	if r.NetworkConfig.IsGloas(epoch) {
+		decidedVote = &gloas.GloasBeaconVote{}
+	}
+	if err := decidedVote.Decode(r.State.DecidedValue); err != nil {
+		return nil, nil, nil, fmt.Errorf("could not decode beacon vote: %w", err)
+	}
+	beaconVote, gloasAttestationIndex, err := decidedAttestationVote(decidedVote)
+	if err != nil {
+		return nil, nil, nil, err
+	}
 
 	// Skips fall into two classes: guard invalidations are benign (the #2903 divergent-validator-sets
 	// case — the duty is genuinely not this operator's to submit), while construction / domain-data /
@@ -1066,7 +1086,7 @@ func (r *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(ctx context
 		switch validatorDuty.Type {
 		case spectypes.BNRoleAttester:
 			// Attestation object
-			attestationData := constructAttestationData(beaconVote, validatorDuty, dataVersion)
+			attestationData := constructAttestationData(beaconVote, validatorDuty, dataVersion, gloasAttestationIndex)
 			attestationResponse, err := specssv.ConstructVersionedAttestationWithoutSignature(attestationData, dataVersion, validatorDuty)
 			if err != nil {
 				logger.Debug("failed to construct attestation", zap.Error(err))
@@ -1152,20 +1172,34 @@ func (r *CommitteeRunner) executeDuty(ctx context.Context, logger *zap.Logger, d
 	logger.Debug(attestationDataFetchedEvent, fields.Took(time.Since(start)))
 	span.AddEvent(attestationDataFetchedEvent)
 
-	vote := &spectypes.BeaconVote{
-		BlockRoot: attData.BeaconBlockRoot,
-		Source:    attData.Source,
-		Target:    attData.Target,
+	// On Gloas slots the consensus value is a GloasBeaconVote carrying the BN-supplied attestation
+	// index (SIP #94 §2); before Gloas it is a plain BeaconVote. Both implement spectypes.Encoder, so
+	// the QBFT plumbing is identical — only the value type and its checker differ.
+	var input spectypes.Encoder
+	if r.NetworkConfig.IsGloasAtSlot(slot) {
+		gloasVote := &gloas.GloasBeaconVote{
+			BlockRoot:            attData.BeaconBlockRoot,
+			Source:               attData.Source,
+			Target:               attData.Target,
+			AttestationDataIndex: attData.Index,
+		}
+		input = gloasVote
+		r.ValCheck = ssv.NewGloasVoteChecker(r.signer, slot, r.attestingValidators, gloasVote)
+		logger.Debug("built gloas attestation vote",
+			fields.Slot(slot),
+			zap.Uint64("payload_status_index", uint64(attData.Index)))
+	} else {
+		vote := &spectypes.BeaconVote{
+			BlockRoot: attData.BeaconBlockRoot,
+			Source:    attData.Source,
+			Target:    attData.Target,
+		}
+		input = vote
+		r.ValCheck = ssv.NewVoteChecker(r.signer, slot, r.attestingValidators, vote)
 	}
 
 	r.measurements.StartConsensus()
-	r.ValCheck = ssv.NewVoteChecker(
-		r.signer,
-		slot,
-		r.attestingValidators,
-		vote,
-	)
-	if err := r.decide(ctx, logger, duty.DutySlot(), vote, r.ValCheck); err != nil {
+	if err := r.decide(ctx, logger, duty.DutySlot(), input, r.ValCheck); err != nil {
 		return fmt.Errorf("qbft-decide: %w", err)
 	}
 
@@ -1184,7 +1218,7 @@ func (r *CommitteeRunner) GetDoppelgangerHandler() DoppelgangerProvider {
 	return r.doppelgangerHandler
 }
 
-func constructAttestationData(vote *spectypes.BeaconVote, duty *spectypes.ValidatorDuty, version spec.DataVersion) *phase0.AttestationData {
+func constructAttestationData(vote *spectypes.BeaconVote, duty *spectypes.ValidatorDuty, version spec.DataVersion, gloasIndex *phase0.CommitteeIndex) *phase0.AttestationData {
 	attData := &phase0.AttestationData{
 		Slot:            duty.Slot,
 		Index:           duty.CommitteeIndex,
@@ -1192,7 +1226,11 @@ func constructAttestationData(vote *spectypes.BeaconVote, duty *spectypes.Valida
 		Source:          vote.Source,
 		Target:          vote.Target,
 	}
-	if version >= spec.DataVersionElectra {
+	switch {
+	case gloasIndex != nil:
+		// SIP #94 §2: under Gloas the index is the decided payload-status value (0/1), not a committee index.
+		attData.Index = *gloasIndex
+	case version >= spec.DataVersionElectra:
 		attData.Index = 0 // EIP-7549: Index should be set to 0
 	}
 	return attData

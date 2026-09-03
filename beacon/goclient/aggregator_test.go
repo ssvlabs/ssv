@@ -6,18 +6,19 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"errors"
+	"net/http"
 	"sync/atomic"
 	"testing"
 	"testing/synctest"
 	"time"
 
+	"github.com/OffchainLabs/go-bitfield"
 	"github.com/attestantio/go-eth2-client/api"
 	"github.com/attestantio/go-eth2-client/mock"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/electra"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/jellydator/ttlcache/v3"
-	"github.com/prysmaticlabs/go-bitfield"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
@@ -283,12 +284,12 @@ func TestSubmitAggregateSelectionProof_RespectsContextCancellationWhileWaiting(t
 			errCh <- err
 		}()
 
-		time.Sleep(cfg.IntervalDuration())
+		time.Sleep(cfg.IntervalDuration(0))
 		cancel()
 
 		err := <-errCh
 		require.ErrorIs(t, err, context.Canceled)
-		require.ErrorContains(t, err, "wait for 2/3 of slot")
+		require.ErrorContains(t, err, "wait for aggregation deadline")
 		require.Zero(t, attestationCalls.Load())
 		require.Zero(t, aggregateCalls.Load())
 	})
@@ -626,6 +627,7 @@ func TestVersionedAggregateToSSZ(t *testing.T) {
 		spec.DataVersionDeneb,
 		spec.DataVersionElectra,
 		spec.DataVersionFulu,
+		spec.DataVersionGloas,
 	}
 
 	for _, version := range versions {
@@ -656,6 +658,7 @@ func TestVersionedToAggregateAndProofNilAndUnknownVersion(t *testing.T) {
 		spec.DataVersionDeneb,
 		spec.DataVersionElectra,
 		spec.DataVersionFulu,
+		spec.DataVersionGloas,
 	}
 
 	for _, version := range versions {
@@ -865,6 +868,152 @@ func mustHashTreeRoot(t *testing.T, data *phase0.AttestationData) phase0.Root {
 	root, err := data.HashTreeRoot()
 	require.NoError(t, err)
 	return root
+}
+
+// Gloas keeps the BN-supplied payload-status index in the aggregation root (SIP #94 §2); Electra+ zeroes it.
+func TestComputeAttestationDataRoot_GloasKeepsBNIndex(t *testing.T) {
+	t.Parallel()
+
+	const gloasEpoch = 6
+	cfg := *networkconfig.TestNetworkWithGloas(gloasEpoch).Beacon
+	slot := cfg.FirstSlotAtEpoch(gloasEpoch)
+
+	attData := &phase0.AttestationData{
+		Slot:   slot,
+		Index:  1, // FULL — the BN payload-status index, which must be preserved
+		Source: &phase0.Checkpoint{Epoch: 1},
+		Target: &phase0.Checkpoint{Epoch: 2},
+	}
+	expectedRoot, err := attData.HashTreeRoot()
+	require.NoError(t, err)
+
+	client := newAggregatorTestClient(&cfg, &aggregatorClientMock{})
+	// On Gloas, GetAttestationData uses a hand-rolled fetch (not go-eth2-client, whose post-Electra
+	// validation would reject the payload-status Index=1) — inject the BN's data via the fetch hook so this
+	// test exercises computeAttestationDataRoot's index-keeping independent of the transport.
+	client.fetchAttestationDataFunc = func(_ context.Context, gotSlot phase0.Slot) (*phase0.AttestationData, error) {
+		require.Equal(t, slot, gotSlot)
+		return attData, nil
+	}
+	root, altRoot, err := client.computeAttestationDataRoot(t.Context(), slot, 7)
+	require.NoError(t, err)
+	require.Equal(t, expectedRoot, root)
+	require.EqualValues(t, 1, attData.Index, "the shared cached attestation data must not be mutated")
+
+	// The alternative root is the same data under the opposite payload-status index (FULL → EMPTY).
+	require.NotNil(t, altRoot, "a Gloas root carries the payload-status index the caller may retry under")
+	flipped := *attData
+	flipped.Index = 0
+	require.Equal(t, mustHashTreeRoot(t, &flipped), phase0.Root(*altRoot))
+}
+
+// Pre-Gloas there is no payload-status bit to retry under, and the Index normalization must not write
+// through to the per-slot attestation-data cache the committee runner shares.
+func TestComputeAttestationDataRoot_PreGloasHasNoAlternative(t *testing.T) {
+	t.Parallel()
+
+	cfg := *networkconfig.TestNetwork.Beacon
+	slot := phase0.Slot(64)
+	committeeIndex := phase0.CommitteeIndex(3)
+
+	attData := &phase0.AttestationData{
+		Slot:   slot,
+		Index:  committeeIndex,
+		Source: &phase0.Checkpoint{Epoch: 1},
+		Target: &phase0.Checkpoint{Epoch: 2},
+	}
+
+	client := newAggregatorTestClient(&cfg, &aggregatorClientMock{})
+	client.fetchAttestationDataFunc = func(context.Context, phase0.Slot) (*phase0.AttestationData, error) {
+		return attData, nil
+	}
+
+	_, altRoot, err := client.computeAttestationDataRoot(t.Context(), slot, committeeIndex)
+	require.NoError(t, err)
+	require.Nil(t, altRoot)
+	require.Equal(t, committeeIndex, attData.Index, "the shared cached attestation data must not be mutated")
+}
+
+// On Gloas the re-derived aggregation root carries *our* beacon node's payload-status index, which
+// can disagree with the QBFT-decided one the committee signed (SIP #94 §2). A 404 under our index
+// must be retried under the only other value the bit can hold rather than silently missing the
+// aggregate.
+func TestFetchVersionedAggregate_GloasRetriesFlippedPayloadStatus(t *testing.T) {
+	t.Parallel()
+
+	const gloasEpoch = 6
+	cfg := *networkconfig.TestNetworkWithGloas(gloasEpoch).Beacon
+	slot := cfg.FirstSlotAtEpoch(gloasEpoch)
+	committeeIndex := phase0.CommitteeIndex(7)
+
+	// The BN reports EMPTY (0); the cluster decided FULL (1), so only the flipped root has an aggregate.
+	bnData := &phase0.AttestationData{
+		Slot:   slot,
+		Index:  0,
+		Source: &phase0.Checkpoint{Epoch: 1},
+		Target: &phase0.Checkpoint{Epoch: 2},
+	}
+	decidedData := *bnData
+	decidedData.Index = 1
+	bnRoot := mustHashTreeRoot(t, bnData)
+	decidedRoot := mustHashTreeRoot(t, &decidedData)
+
+	aggregate := &spec.VersionedAttestation{Version: spec.DataVersionElectra, Electra: &electra.Attestation{Data: &decidedData}}
+
+	var requested []phase0.Root
+	service := &aggregatorClientMock{}
+	service.AggregateAttestationFunc = func(_ context.Context, opts *api.AggregateAttestationOpts) (*api.Response[*spec.VersionedAttestation], error) {
+		requested = append(requested, opts.AttestationDataRoot)
+		if opts.AttestationDataRoot != decidedRoot {
+			return nil, &api.Error{StatusCode: http.StatusNotFound}
+		}
+		return &api.Response[*spec.VersionedAttestation]{Data: aggregate}, nil
+	}
+
+	client := newAggregatorTestClient(&cfg, service)
+	// Gloas attestation data comes from the hand-rolled fetch; inject the BN's view via the hook.
+	client.fetchAttestationDataFunc = func(context.Context, phase0.Slot) (*phase0.AttestationData, error) {
+		return bnData, nil
+	}
+
+	got, _, err := client.fetchVersionedAggregate(t.Context(), slot, committeeIndex)
+	require.NoError(t, err)
+	require.Same(t, aggregate, got)
+	require.Equal(t, []phase0.Root{bnRoot, decidedRoot}, requested, "our index first, then the flip")
+
+	// The retry must not corrupt the shared per-slot attestation-data cache the committee runner reads.
+	require.EqualValues(t, 0, bnData.Index)
+}
+
+// The flip is scoped to the Gloas re-derivation: a cache hit is by construction the decided root, so
+// a 404 there is a genuine miss and must surface instead of provoking a second, meaningless fetch.
+func TestFetchVersionedAggregate_NoFlipRetryOnCachedRoot(t *testing.T) {
+	t.Parallel()
+
+	const gloasEpoch = 6
+	cfg := *networkconfig.TestNetworkWithGloas(gloasEpoch).Beacon
+	slot := cfg.FirstSlotAtEpoch(gloasEpoch)
+	committeeIndex := phase0.CommitteeIndex(7)
+	cachedRoot := phase0.Root{0xaa}
+
+	var calls int
+	service := &aggregatorClientMock{}
+	service.AggregateAttestationFunc = func(_ context.Context, opts *api.AggregateAttestationOpts) (*api.Response[*spec.VersionedAttestation], error) {
+		calls++
+		require.Equal(t, cachedRoot, opts.AttestationDataRoot)
+		return nil, &api.Error{StatusCode: http.StatusNotFound}
+	}
+
+	client := newAggregatorTestClient(&cfg, service)
+	client.attestedDataRootCache.Set(attestedDataRootKey{slot: slot, committee: committeeIndex}, cachedRoot, ttlcache.DefaultTTL)
+	client.fetchAttestationDataFunc = func(context.Context, phase0.Slot) (*phase0.AttestationData, error) {
+		t.Fatal("must not re-derive when the submitted root is known")
+		return nil, nil
+	}
+
+	_, _, err := client.fetchVersionedAggregate(t.Context(), slot, committeeIndex)
+	require.Error(t, err)
+	require.Equal(t, 1, calls)
 }
 
 func aggregatorTestBeaconConfig(genesisTime time.Time) networkconfig.Beacon {

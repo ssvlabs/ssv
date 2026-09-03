@@ -38,9 +38,6 @@ const (
 	//
 	// This is NOT when this operator broadcasts its own partial-sig; see
 	// validatorRegistrationExecutionSlotsToPostpone for that.
-	//
-	// Note: shares its numeric value (4) with validatorRegistrationSchedulingSlack
-	// below by coincidence — the two are independent.
 	validatorRegistrationDutySlotsToPostpone = 4
 
 	// validatorRegistrationSchedulingSlack absorbs per-operator timing
@@ -147,11 +144,9 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 				return
 			}
 
-			// dutySlot is the deterministic wire slot — identical across
-			// operators regardless of receipt time or code version — feeding the
-			// partial-sig envelope and the signed Timestamp's epoch.
-			// earliestExecutionSlot is a separate, local-only broadcast gate. See
-			// both constants' docstrings for the full rationale.
+			// dutySlot is the deterministic wire slot; earliestExecutionSlot is a
+			// separate, local-only broadcast gate. See both constants' docstrings
+			// for the full rationale.
 			blockSlot, err := h.blockSlot(ctx, regDescriptor.BlockNumber)
 			if err != nil {
 				h.logger.Warn(
@@ -161,6 +156,10 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 				continue
 			}
 			dutySlot := blockSlot + validatorRegistrationDutySlotsToPostpone
+			// Deprecated at the Gloas fork: don't enqueue registrations whose duty slot is Gloas-or-later.
+			if h.netCfg.IsGloasAtSlot(dutySlot) {
+				continue
+			}
 			earliestExecutionSlot := blockSlot + validatorRegistrationExecutionSlotsToPostpone
 
 			// No de-dup on enqueue: entries are idempotent and bounded. The duty
@@ -203,6 +202,13 @@ func (h *ValidatorRegistrationHandler) processExecution(ctx context.Context, epo
 		observability.InstrumentName(observabilityNamespace, "validator_registration.execute"),
 		trace.WithAttributes(observability.BeaconSlotAttribute(slot)))
 	defer span.End()
+
+	// Validator registration is deprecated at the Gloas fork — superseded by proposer preferences (§5).
+	// Drop any entries that didn't drain before the fork; nothing more is enqueued past it.
+	if h.netCfg.IsGloas(epoch) {
+		h.eventQueue = nil
+		return
+	}
 
 	shares := h.validatorProvider.SelfValidators()
 	duties := make([]*spectypes.ValidatorDuty, 0, len(h.eventQueue)+len(shares))

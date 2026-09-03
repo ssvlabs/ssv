@@ -14,13 +14,13 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/altair"
-	"github.com/attestantio/go-eth2-client/spec/electra"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
+
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
@@ -232,9 +232,9 @@ func (r *AggregatorCommitteeRunner) findValidatorDuty(
 	return nil
 }
 
-// waitTwoThirdsIntoSlot waits until two-thirds of the slot has passed.
-func (r *AggregatorCommitteeRunner) waitTwoThirdsIntoSlot(ctx context.Context, slot phase0.Slot) error {
-	finalTime := r.NetworkConfig.SlotStartTime(slot).Add(2 * r.NetworkConfig.IntervalDuration())
+// waitTwoIntervalsIntoSlot waits until the aggregation deadline — 2/3 of the slot before Gloas, 1/2 from Gloas on.
+func (r *AggregatorCommitteeRunner) waitTwoIntervalsIntoSlot(ctx context.Context, slot phase0.Slot) error {
+	finalTime := r.NetworkConfig.SlotStartTime(slot).Add(2 * r.NetworkConfig.IntervalDuration(slot))
 	wait := time.Until(finalTime)
 	if wait <= 0 {
 		return nil
@@ -589,8 +589,8 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(
 	}
 
 	if len(aggregatorSelections) > 0 {
-		// Wait once per duty before fetching aggregate attestations (spec: 2/3 into slot).
-		if err := r.waitTwoThirdsIntoSlot(ctx, duty.DutySlot()); err != nil {
+		// Wait once per duty until the spec's aggregation deadline before fetching aggregate attestations.
+		if err := r.waitTwoIntervalsIntoSlot(ctx, duty.DutySlot()); err != nil {
 			// Only reachable on shutdown (ctx canceled) within this short wait — markDutyFailed
 			// would drop a context.Canceled reason anyway, so there is nothing to record here.
 			return err
@@ -820,9 +820,9 @@ func (r *AggregatorCommitteeRunner) ProcessConsensus(
 
 	ssvMsg := &spectypes.SSVMessage{
 		MsgType: spectypes.SSVPartialSignatureMsgType,
-		MsgID: spectypes.NewMsgID(
+		MsgID: spectypes.NewCommitteeMsgID(
 			r.NetworkConfig.DomainTypeAtSlot(duty.DutySlot()),
-			r.QBFTController.CommitteeMember.CommitteeID[:],
+			r.QBFTController.CommitteeMember.CommitteeID,
 			r.RunnerRoleType,
 		),
 	}
@@ -1073,7 +1073,7 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 				switch role {
 				case spectypes.BNRoleAggregator:
 					aggregateAndProof := sszObject.(*spec.VersionedAggregateAndProof)
-					signedAgg, err := r.constructSignedAggregateAndProof(aggregateAndProof, signatureResult.signature)
+					signedAgg, err := constructVersionedSignedAggregateAndProof(aggregateAndProof, signatureResult.signature)
 					if err != nil {
 						terminalErr = fmt.Errorf("failed to construct signed aggregate and proof: %w", err)
 						continue
@@ -1323,7 +1323,7 @@ func (r *AggregatorCommitteeRunner) HasSubmitted(
 
 // This function signature returns only one domain type... but we can have mixed domains
 // instead we rely on expectedPreConsensusRoots that is called later
-func (r *AggregatorCommitteeRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
+func (r *AggregatorCommitteeRunner) expectedPreConsensusRootsAndDomain() ([]spectypes.HashRoot, phase0.DomainType, error) {
 	return nil, spectypes.DomainError,
 		fmt.Errorf("unexpected expectedPreConsensusRootsAndDomain func call, runner role %v", r.GetRole())
 }
@@ -1331,7 +1331,7 @@ func (r *AggregatorCommitteeRunner) expectedPreConsensusRootsAndDomain() ([]ssz.
 // This function signature returns only one domain type... but we can have mixed domains
 // instead we rely on expectedPostConsensusRootsAndBeaconObjects that is called later
 func (r *AggregatorCommitteeRunner) expectedPostConsensusRootsAndDomain(context.Context) (
-	[]ssz.HashRoot,
+	[]spectypes.HashRoot,
 	phase0.DomainType,
 	error,
 ) {
@@ -1601,64 +1601,6 @@ func (r *AggregatorCommitteeRunner) findValidatorsForPostConsensusRoot(
 	return spectypes.BNRoleUnknown, nil, false
 }
 
-// constructSignedAggregateAndProof constructs a signed aggregate and proof from versioned data
-func (r *AggregatorCommitteeRunner) constructSignedAggregateAndProof(
-	aggregateAndProof *spec.VersionedAggregateAndProof,
-	signature phase0.BLSSignature,
-) (*spec.VersionedSignedAggregateAndProof, error) {
-	ret := &spec.VersionedSignedAggregateAndProof{
-		Version: aggregateAndProof.Version,
-	}
-
-	switch ret.Version {
-	case spec.DataVersionPhase0:
-		ret.Phase0 = &phase0.SignedAggregateAndProof{
-			Message:   aggregateAndProof.Phase0,
-			Signature: signature,
-		}
-	case spec.DataVersionAltair:
-		ret.Altair = &phase0.SignedAggregateAndProof{
-			Message:   aggregateAndProof.Altair,
-			Signature: signature,
-		}
-	case spec.DataVersionBellatrix:
-		ret.Bellatrix = &phase0.SignedAggregateAndProof{
-			Message:   aggregateAndProof.Bellatrix,
-			Signature: signature,
-		}
-	case spec.DataVersionCapella:
-		ret.Capella = &phase0.SignedAggregateAndProof{
-			Message:   aggregateAndProof.Capella,
-			Signature: signature,
-		}
-	case spec.DataVersionDeneb:
-		ret.Deneb = &phase0.SignedAggregateAndProof{
-			Message:   aggregateAndProof.Deneb,
-			Signature: signature,
-		}
-	case spec.DataVersionElectra:
-		if aggregateAndProof.Electra == nil {
-			return nil, errors.New("nil Electra aggregate and proof")
-		}
-		ret.Electra = &electra.SignedAggregateAndProof{
-			Message:   aggregateAndProof.Electra,
-			Signature: signature,
-		}
-	case spec.DataVersionFulu:
-		if aggregateAndProof.Fulu == nil {
-			return nil, errors.New("nil Fulu aggregate and proof")
-		}
-		ret.Fulu = &electra.SignedAggregateAndProof{
-			Message:   aggregateAndProof.Fulu,
-			Signature: signature,
-		}
-	default:
-		return nil, fmt.Errorf("unknown version %s", ret.Version.String())
-	}
-
-	return ret, nil
-}
-
 // ValidateAggregatorCommitteeDuty checks that:
 // - all slots values are equal
 // - BeaconRole is either BNRoleAggregator or BNRoleSyncCommitteeContribution
@@ -1782,9 +1724,9 @@ func (r *AggregatorCommitteeRunner) executeDuty(ctx context.Context, logger *zap
 		return nil
 	}
 
-	msgID := spectypes.NewMsgID(
+	msgID := spectypes.NewCommitteeMsgID(
 		r.NetworkConfig.DomainTypeAtSlot(duty.DutySlot()),
-		r.QBFTController.CommitteeMember.CommitteeID[:],
+		r.QBFTController.CommitteeMember.CommitteeID,
 		r.RunnerRoleType,
 	)
 	encodedMsg, err := msg.Encode()

@@ -44,6 +44,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
@@ -86,6 +87,8 @@ type ControllerOptions struct {
 	ValidatorSyncer                *metadata.Syncer
 	Graffiti                       []byte
 	ProposerDelay                  time.Duration
+	ProposerDelayEPBS              time.Duration
+	Builders                       gloas.BuilderConfig
 
 	// worker flags
 	WorkersCount    int `yaml:"MsgWorkersCount" env:"MSG_WORKERS_COUNT" env-description:"Number of message processing workers"`
@@ -194,23 +197,24 @@ func NewController(logger *zap.Logger, options ControllerOptions) *Controller {
 		WorkersCount: options.WorkersCount,
 		Buffer:       options.QueueBufferSize,
 	}
-	validatorCommonOpts := validator.NewCommonOptions(
-		options.NetworkConfig,
-		options.Network,
-		options.Beacon,
-		options.StorageMap,
-		options.BeaconSigner,
-		options.OperatorSigner,
-		options.DoppelgangerHandler,
-		options.NewDecidedHandler,
-		options.FullNode,
-		options.ExporterMode,
-		options.HistorySyncBatchSize,
-		options.GasLimit,
-		options.MessageValidator,
-		options.Graffiti,
-		options.ProposerDelay,
-	)
+	validatorCommonOpts := validator.NewCommonOptions(validator.CommonOptions{
+		NetworkConfig:       options.NetworkConfig,
+		Network:             options.Network,
+		Beacon:              options.Beacon,
+		Storage:             options.StorageMap,
+		Signer:              options.BeaconSigner,
+		OperatorSigner:      options.OperatorSigner,
+		DoppelgangerHandler: options.DoppelgangerHandler,
+		NewDecidedHandler:   options.NewDecidedHandler,
+		FullNode:            options.FullNode,
+		ExporterMode:        options.ExporterMode,
+		GasLimit:            options.GasLimit,
+		MessageValidator:    options.MessageValidator,
+		Graffiti:            options.Graffiti,
+		ProposerDelay:       options.ProposerDelay,
+		ProposerDelayEPBS:   options.ProposerDelayEPBS,
+		Builders:            options.Builders,
+	}, options.HistorySyncBatchSize)
 
 	cacheTTL := 2 * options.NetworkConfig.EpochDuration() // #nosec G115
 
@@ -373,6 +377,8 @@ func (c *Controller) handleRouterMessages() {
 				if !c.messageWorker.TryEnqueue(m) {
 					c.logger.Warn("Failed to enqueue post consensus message: buffer is full")
 				}
+			} else {
+				c.logUndeliverableOwnValidatorMessage(m, dutyExecutorID)
 			}
 
 		default:
@@ -380,6 +386,33 @@ func (c *Controller) handleRouterMessages() {
 			c.logger.Fatal("unknown message type from router", zap.Any("message", m))
 		}
 	}
+}
+
+// logUndeliverableOwnValidatorMessage makes the silent drop of a message routed to a validator with
+// no running local instance diagnosable — but only when the validator is ours: on shared subnets this
+// fall-through also swallows other operators' validator traffic, which is routine and must stay
+// quiet. The own-validator case is typically a peer's message racing this node's validator startup
+// right after registration (the share already passes message validation before the instance starts).
+// A one-shot broadcast lost here — e.g. a §5 proposer-preferences partial — has no redelivery, so
+// this line is what a starved-duty investigation greps for.
+func (c *Controller) logUndeliverableOwnValidatorMessage(msg *queue.SSVMessage, dutyExecutorID []byte) {
+	if c.validatorStore == nil || c.operatorDataStore == nil {
+		return
+	}
+	share, ok := c.validatorStore.Validator(dutyExecutorID)
+	if !ok || !share.BelongsToOperator(c.operatorDataStore.GetOperatorID()) {
+		return
+	}
+
+	logger := c.logger.With(
+		fields.RunnerRole(msg.GetID().GetRoleType()),
+		fields.MessageType(msg.MsgType),
+		fields.PubKey(dutyExecutorID),
+	)
+	if psm, ok := msg.Body.(*spectypes.PartialSignatureMessages); ok && psm != nil {
+		logger = logger.With(fields.Slot(psm.Slot), zap.Uint64("signer", ssvtypes.PartialSigMsgSigner(psm)))
+	}
+	logger.Debug("dropping message for own validator with no running instance")
 }
 
 var nonCommitteeValidatorTTLs = map[spectypes.RunnerRole]int{
@@ -790,7 +823,19 @@ func (c *Controller) onShareInit(share *ssvtypes.SSVShare) (v *validator.Validat
 		// so that when the validator is stopped, the runners are stopped as well.
 		validatorCtx, validatorCancel := context.WithCancel(c.ctx)
 
-		dutyRunners, err := SetupRunners(validatorCtx, share, operator, c.validatorRegistrationSubmitter, c.validatorStore, c.validatorCommonOpts)
+		// startEnvelopeDuty lets the proposer kick off the §6 envelope duty after a self-build §4 block. It
+		// dispatches async on the validator-scoped context (not the proposer's post-consensus ctx, which ends
+		// with the block duty); c.ExecuteDuty routes by pubkey back to this validator.
+		startEnvelopeDuty := func(slot phase0.Slot) {
+			go c.ExecuteDuty(validatorCtx, c.logger, &spectypes.ValidatorDuty{
+				Type:           spectypes.BNRoleEnvelopeProposer,
+				PubKey:         phase0.BLSPubKey(share.ValidatorPubKey),
+				Slot:           slot,
+				ValidatorIndex: share.ValidatorIndex,
+			})
+		}
+
+		dutyRunners, err := SetupRunners(validatorCtx, share, operator, c.validatorRegistrationSubmitter, c.validatorStore, c.validatorCommonOpts, startEnvelopeDuty)
 		if err != nil {
 			validatorCancel()
 			return nil, true, fmt.Errorf("could not setup runners: %w", err)
@@ -1066,7 +1111,15 @@ func (c *Controller) ReportValidatorStatuses(ctx context.Context) {
 // height's slot.
 func newIdentifierFn(cfg *networkconfig.Network, executorID []byte, role spectypes.RunnerRole) func(specqbft.Height) []byte {
 	return func(height specqbft.Height) []byte {
-		id := spectypes.NewMsgID(cfg.DomainTypeAtSlot(phase0.Slot(height)), executorID, role)
+		domain := cfg.DomainTypeAtSlot(phase0.Slot(height))
+		// executorID is a 32-byte committee ID (committee/aggregator-committee runners) or a
+		// 48-byte validator pubkey (all other roles); pick the matching typed MsgID constructor.
+		var id spectypes.MessageID
+		if len(executorID) == len(spectypes.CommitteeID{}) {
+			id = spectypes.NewCommitteeMsgID(domain, spectypes.CommitteeID(executorID), role)
+		} else {
+			id = spectypes.NewValidatorMsgID(domain, spectypes.ValidatorPK(executorID), role)
+		}
 		return id[:]
 	}
 }
@@ -1161,6 +1214,7 @@ func SetupRunners(
 	validatorRegistrationSubmitter runner.ValidatorRegistrationSubmitter,
 	validatorStore registrystorage.ValidatorStore,
 	options *validator.CommonOptions,
+	startEnvelopeDuty func(phase0.Slot),
 ) (runner.ValidatorDutyRunners, error) {
 	if options.ExporterMode {
 		return nil, fmt.Errorf("cannot set up duty runners in exporter mode")
@@ -1168,10 +1222,13 @@ func SetupRunners(
 
 	runnersType := []spectypes.RunnerRole{
 		spectypes.RoleProposer,
+		spectypes.RoleEnvelopeProposer,
 		ssvtypes.RoleAggregator,
 		ssvtypes.RoleSyncCommitteeContribution,
 		spectypes.RoleValidatorRegistration,
 		spectypes.RoleVoluntaryExit,
+		spectypes.RolePTCAttester,
+		spectypes.RoleProposerPreferences,
 	}
 
 	buildController := func(role spectypes.RunnerRole) *qbftcontroller.Controller {
@@ -1205,6 +1262,15 @@ func SetupRunners(
 		OperatorSigner: options.OperatorSigner,
 	}
 
+	// proposedBlockRoots is shared between this validator's proposer runner (which records its
+	// §4-decided block root) and the §6 envelope runner (which reads it).
+	proposedBlockRoots := ssv.NewProposedBlockRoots()
+
+	// requestAuthCache holds this validator's threshold-reconstructed builder request auths (issue #2962):
+	// the proposer-preferences runner writes each reconstruction, and the proposer runner's §4 produce path
+	// reads the slot's auths into the produceBlockV4 POST body.
+	requestAuthCache := ssv.NewRequestAuthCache(options.NetworkConfig.EstimatedCurrentSlot)
+
 	runners := runner.ValidatorDutyRunners{}
 	var err error
 	for _, role := range runnersType {
@@ -1219,6 +1285,21 @@ func SetupRunners(
 				HighestDecidedSlot:  0,
 				Graffiti:            options.Graffiti,
 				ProposerDelay:       options.ProposerDelay,
+				ProposerDelayEPBS:   options.ProposerDelayEPBS,
+				ProposedBlockRoots:  proposedBlockRoots,
+				StartEnvelopeDuty:   startEnvelopeDuty,
+				Builders:            options.Builders,
+				RequestAuthCache:    requestAuthCache,
+			})
+		case spectypes.RoleEnvelopeProposer:
+			// The §6 envelope runner shares the proposer's proposedBlockRoots (it reads the §4 root the
+			// proposer records). Its value-check is built per duty, so none is passed here. The proposer
+			// starts this duty via the StartEnvelopeDuty callback wired in the RoleProposer case above.
+			runners[role], err = runner.NewEnvelopeProposerRunner(runner.EnvelopeProposerRunnerOptions{
+				BaseRunnerOptions:  baseOpts,
+				QBFTController:     buildController(spectypes.RoleEnvelopeProposer),
+				ProposedBlockRoots: proposedBlockRoots,
+				HighestDecidedSlot: 0,
 			})
 		case ssvtypes.RoleAggregator:
 			// Post-Boole, aggregator duties route through the merged AggregatorCommitteeRunner
@@ -1272,6 +1353,18 @@ func SetupRunners(
 		case spectypes.RoleVoluntaryExit:
 			runners[role], err = runner.NewVoluntaryExitRunner(runner.VoluntaryExitRunnerOptions{
 				BaseRunnerOptions: baseOpts,
+			})
+		case spectypes.RolePTCAttester:
+			runners[role], err = runner.NewPTCAttesterRunner(runner.PTCAttesterRunnerOptions{
+				BaseRunnerOptions: baseOpts,
+			})
+		case spectypes.RoleProposerPreferences:
+			runners[role], err = runner.NewProposerPreferencesRunner(runner.ProposerPreferencesRunnerOptions{
+				BaseRunnerOptions:    baseOpts,
+				FeeRecipientProvider: validatorStore,
+				GasLimit:             options.GasLimit,
+				Builders:             options.Builders,
+				RequestAuthCache:     requestAuthCache,
 			})
 		default:
 			return nil, fmt.Errorf("unexpected duty runner type: %s", role)

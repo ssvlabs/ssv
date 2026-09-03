@@ -96,10 +96,10 @@ func TestSignAndBroadcastPartialSigMsgsDomainIsForkAware(t *testing.T) {
 	})
 }
 
-// spectestingValidatorPubKey returns a 48-byte public key for use in tests.
-// The content is arbitrary; only the domain portion of the MsgID is under test.
-func spectestingValidatorPubKey() []byte {
-	key := make([]byte, 48)
+// spectestingValidatorPubKey returns an arbitrary validator public key for use in tests;
+// only the domain portion of the MsgID is under test.
+func spectestingValidatorPubKey() spectypes.ValidatorPK {
+	var key spectypes.ValidatorPK
 	key[0] = 0xab
 	return key
 }

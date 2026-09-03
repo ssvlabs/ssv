@@ -10,11 +10,11 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	ssz "github.com/ferranbt/fastssz"
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
+
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
@@ -67,9 +67,9 @@ type Runner interface {
 	OnQBFTRoundTimeout(ctx context.Context, logger *zap.Logger, timeoutData *ssvtypes.TimeoutData) error
 
 	// expectedPreConsensusRootsAndDomain an INTERNAL function, returns the expected pre-consensus roots to sign
-	expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error)
+	expectedPreConsensusRootsAndDomain() ([]spectypes.HashRoot, phase0.DomainType, error)
 	// expectedPostConsensusRootsAndDomain an INTERNAL function, returns the expected post-consensus roots to sign
-	expectedPostConsensusRootsAndDomain(ctx context.Context) ([]ssz.HashRoot, phase0.DomainType, error)
+	expectedPostConsensusRootsAndDomain(ctx context.Context) ([]spectypes.HashRoot, phase0.DomainType, error)
 	// executeDuty an INTERNAL function, executes a duty.
 	executeDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty) error
 }
@@ -187,6 +187,9 @@ func (b *BaseRunner) GetLastRound() specqbft.Round {
 }
 
 func (b *BaseRunner) GetStateRoot() ([32]byte, error) {
+	if b.State == nil {
+		return [32]byte{}, errors.New("runner state is not initialized")
+	}
 	return b.State.GetRoot()
 }
 
@@ -236,6 +239,32 @@ func (b *BaseRunner) MarshalJSON() ([]byte, error) {
 	return byts, err
 }
 
+// marshalRunnerStateJSON encodes a runner whose persisted state is just its BaseRunner. ValCheck is a
+// runtime-only dependency but is kept in the JSON as null to preserve the historical runner-state shape
+// (and thus the state roots spec tests pin); runners restore it via unmarshalRunnerStateJSON.
+func marshalRunnerStateJSON(b *BaseRunner) ([]byte, error) {
+	return json.Marshal(&struct {
+		BaseRunner *BaseRunner `json:"BaseRunner"`
+		ValCheck   any         `json:"ValCheck"`
+	}{BaseRunner: b})
+}
+
+// unmarshalRunnerStateJSON restores the BaseRunner written by marshalRunnerStateJSON; ValCheck is left
+// nil for the caller to rehydrate.
+func unmarshalRunnerStateJSON(data []byte) (*BaseRunner, error) {
+	aux := &struct {
+		BaseRunner *BaseRunner     `json:"BaseRunner"`
+		ValCheck   json.RawMessage `json:"ValCheck"`
+	}{}
+	if err := json.Unmarshal(data, aux); err != nil {
+		return nil, err
+	}
+	if aux.BaseRunner == nil {
+		return nil, fmt.Errorf("missing BaseRunner")
+	}
+	return aux.BaseRunner, nil
+}
+
 // baseStartNewDuty is a base func that all runner implementation can call to start a duty
 func (b *BaseRunner) baseStartNewDuty(ctx context.Context, logger *zap.Logger, runner Runner, duty spectypes.Duty, quorum uint64) error {
 	if err := b.ShouldProcessDuty(duty); err != nil {
@@ -281,6 +310,7 @@ const (
 	dutyOutcomeNotRequired dutyOutcome = "not_required" // completed with nothing to submit (e.g. not selected as aggregator)
 	dutyOutcomeFailed      dutyOutcome = "failed"       // terminated by a non-recoverable error
 	dutyOutcomeStuck       dutyOutcome = "stuck"        // not concluded before the end of the current wall-clock slot
+	dutyOutcomeNoQuorum    dutyOutcome = "no_quorum"    // reached the deadline having executed, but the signature quorum never formed
 )
 
 // dutyConclusion is handed by a marker (markDutySucceeded / markDutyNotRequired / markDutyFailed) to
@@ -291,29 +321,54 @@ type dutyConclusion struct {
 }
 
 // watchDutyOutcome reports a duty's terminal outcome exactly once: it records the
-// ssv.runner.duty.outcome metric and warns for the outcomes worth an operator's attention (failed
-// and stuck). It knows nothing about how duties complete — the outcome is delivered by a marker
+// ssv.runner.duty.outcome metric and warns for the outcomes worth an operator's attention (failed,
+// stuck, no_quorum). It knows nothing about how duties complete — the outcome is delivered by a marker
 // over dutyConcluded, not by reading runner state — so it's safe alongside the single-threaded
 // message loop. It MUST be started before executeDuty so a duty that concludes synchronously is still
 // reported. Each duty gets its own channel: starting the next duty overwrites the field, and the
 // previous duty's watcher (if still pending) reports its own duty and is reaped by its own timer.
 //
 // The deadline is the end of the current wall-clock slot rather than duty.Slot's end because some
-// duties are stamped with a slot in the past (a voluntary-exit envelope carries blockSlot+4 but
-// executes at blockSlot+12); for beacon duties the two coincide.
+// duties are stamped with a slot in the past (a voluntary-exit duty carries blockSlot+4 but
+// executes at blockSlot+12); for beacon duties the two coincide. Proposer preferences are the
+// opposite case — duty.Slot is a future proposal slot and the duty executes at emission, so their
+// horizon extends to that slot's start instead (see below).
 func (b *BaseRunner) watchDutyOutcome(ctx context.Context, logger *zap.Logger) {
 	concluded := make(chan dutyConclusion, 1)
 	b.dutyConcluded = concluded
 
 	deadline := b.NetworkConfig.SlotStartTime(b.NetworkConfig.EstimatedCurrentSlot() + 1)
+	// A proposer-preferences duty emits ahead of its proposal slot and legitimately keeps converging
+	// across the gap — operators broadcast their partials at their own emission ticks — so its outcome
+	// horizon is the proposal slot's start (the preference is moot once that slot arrives), not the
+	// end of the emission slot.
+	if b.RunnerRoleType == spectypes.RoleProposerPreferences && b.State != nil {
+		if d := b.NetworkConfig.SlotStartTime(b.State.CurrentDuty.DutySlot()); d.After(deadline) {
+			deadline = d
+		}
+	}
+
+	// A PTC attestation (SIP #94 §3) has no consensus phase, and every other way it can end already
+	// marks the duty — abstain → not_required, beacon-node/sign/broadcast failure → failed. So
+	// reaching the deadline unmarked means exactly one thing: the honest-convergence quorum never
+	// formed. Report that as its own outcome so §3 convergence health is gaugeable, rather than
+	// hiding inside the generic "likely stuck" that every role shares.
+	deadlineOutcome := dutyOutcomeStuck
+	if b.RunnerRoleType == spectypes.RolePTCAttester {
+		deadlineOutcome = dutyOutcomeNoQuorum
+	}
 
 	report := func(c dutyConclusion) {
 		recordDutyOutcome(ctx, b.GetRole(), c.outcome)
-		if c.outcome == dutyOutcomeFailed {
+		switch c.outcome {
+		case dutyOutcomeFailed:
 			logger.Warn("⚠️ duty failed", zap.Error(c.reason))
-		}
-		if c.outcome == dutyOutcomeStuck {
+		case dutyOutcomeStuck:
 			logger.Warn("⚠️ duty did not complete before slot end (likely stuck)")
+		case dutyOutcomeNoQuorum:
+			logger.Warn("⚠️ duty did not reach signature quorum before slot end (operators did not converge)")
+		case dutyOutcomeSucceeded, dutyOutcomeNotRequired:
+			logger.Debug("duty concluded", zap.String("outcome", string(c.outcome)))
 		}
 	}
 
@@ -329,7 +384,7 @@ func (b *BaseRunner) watchDutyOutcome(ctx context.Context, logger *zap.Logger) {
 			case c := <-concluded:
 				report(c)
 			default:
-				report(dutyConclusion{outcome: dutyOutcomeStuck})
+				report(dutyConclusion{outcome: deadlineOutcome})
 			}
 		}
 	}()
@@ -342,7 +397,7 @@ func (b *BaseRunner) signAndBroadcastPartialSigMsgs(
 	ctx context.Context,
 	network protocolp2p.Network,
 	opSigner ssvtypes.OperatorSigner,
-	validatorPubKey []byte,
+	validatorPubKey spectypes.ValidatorPK,
 	msgs *spectypes.PartialSignatureMessages,
 ) error {
 	// Reuse the existing span instead of generating new one to keep tracing-data lightweight.
@@ -351,7 +406,7 @@ func (b *BaseRunner) signAndBroadcastPartialSigMsgs(
 	// Use the fork-aware domain so the pubsub message validator accepts the message after the
 	// Boole fork activates (post-fork it checks NextDomainType). Mirrors CommitteeRunner and
 	// QBFT domain selection. Fixes #2915.
-	msgID := spectypes.NewMsgID(b.NetworkConfig.DomainTypeAtSlot(msgs.Slot), validatorPubKey, b.RunnerRoleType)
+	msgID := spectypes.NewValidatorMsgID(b.NetworkConfig.DomainTypeAtSlot(msgs.Slot), validatorPubKey, b.RunnerRoleType)
 	encodedMsg, err := msgs.Encode()
 	if err != nil {
 		return fmt.Errorf("could not encode partial signature messages: %w", err)
@@ -381,6 +436,42 @@ func (b *BaseRunner) signAndBroadcastPartialSigMsgs(
 	}
 
 	return nil
+}
+
+// signAndBroadcastPostConsensusMsg signs a post-consensus partial-signature message as the operator and
+// broadcasts it on its slot's subnet. Unlike signAndBroadcastPartialSigMsgs (pre-consensus), it keys the
+// message id by the slot's fork domain and uses BroadcastAtSlot.
+func (b *BaseRunner) signAndBroadcastPostConsensusMsg(
+	network protocolp2p.Network,
+	opSigner ssvtypes.OperatorSigner,
+	validatorPubKey spectypes.ValidatorPK,
+	msgs *spectypes.PartialSignatureMessages,
+) error {
+	domain := b.NetworkConfig.DomainTypeAtSlot(msgs.Slot)
+	msgID := spectypes.NewValidatorMsgID(domain, validatorPubKey, b.RunnerRoleType)
+	encodedMsg, err := msgs.Encode()
+	if err != nil {
+		return fmt.Errorf("could not encode post-consensus partial signature message: %w", err)
+	}
+
+	ssvMsg := &spectypes.SSVMessage{
+		MsgType: spectypes.SSVPartialSignatureMsgType,
+		MsgID:   msgID,
+		Data:    encodedMsg,
+	}
+
+	sig, err := opSigner.SignSSVMessage(ssvMsg)
+	if err != nil {
+		return fmt.Errorf("could not sign post-consensus SSV message: %w", err)
+	}
+
+	signed := &spectypes.SignedSSVMessage{
+		Signatures:  [][]byte{sig},
+		OperatorIDs: []spectypes.OperatorID{opSigner.GetOperatorID()},
+		SSVMessage:  ssvMsg,
+	}
+
+	return network.BroadcastAtSlot(signed, msgs.Slot)
 }
 
 // basePreConsensusMsgProcessing is a base func that all runner implementation can call for processing a pre-consensus msg
@@ -610,6 +701,34 @@ func (b *BaseRunner) decide(
 	}
 	if newInstance == nil {
 		return fmt.Errorf("could not start new QBFT instance: instance is nil")
+	}
+
+	b.State.RunningInstance = newInstance
+
+	return nil
+}
+
+// joinConsensus starts the slot's QBFT instance with no value of this node's own to propose (see
+// controller.JoinInstance): the node validates and votes on the leader's proposal with valueChecker but
+// never proposes. For duties where only some operators can produce the value.
+func (b *BaseRunner) joinConsensus(
+	ctx context.Context,
+	logger *zap.Logger,
+	slot phase0.Slot,
+	valueChecker ssv.ValueChecker,
+) error {
+	newInstance, err := b.QBFTController.JoinInstance(
+		ctx,
+		logger,
+		specqbft.Height(slot),
+		valueChecker,
+		b.qbftRoundTimerF,
+	)
+	if err != nil {
+		return fmt.Errorf("could not join QBFT instance: %w", err)
+	}
+	if newInstance == nil {
+		return fmt.Errorf("could not join QBFT instance: instance is nil")
 	}
 
 	b.State.RunningInstance = newInstance

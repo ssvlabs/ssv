@@ -30,6 +30,7 @@ import (
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/utils/hashmap"
 )
@@ -501,13 +502,27 @@ func (c *Collector) processPartialSigCommittee(
 	}
 }
 
-func (c *Collector) getSyncCommitteeRoot(ctx context.Context, slot phase0.Slot, in []byte) (phase0.Root, error) {
-	var beaconVote = new(spectypes.BeaconVote)
-	if err := beaconVote.Decode(in); err != nil {
-		return phase0.Root{}, fmt.Errorf("decode beacon vote: %w", err)
+// decodeCommitteeVote decodes committee FullData as the common BeaconVote plus, on Gloas slots, the
+// carried attestation index (nil before Gloas) — the duty tracer's mirror of the runner's fork-aware
+// decode, so the signing roots it derives match what operators actually signed.
+func (c *Collector) decodeCommitteeVote(slot phase0.Slot, in []byte) (*spectypes.BeaconVote, *phase0.CommitteeIndex, error) {
+	if c.beacon.IsGloasAtSlot(slot) {
+		gv := &gloas.GloasBeaconVote{}
+		if err := gv.Decode(in); err != nil {
+			return nil, nil, fmt.Errorf("decode gloas beacon vote: %w", err)
+		}
+		index := gv.AttestationDataIndex
+		return &spectypes.BeaconVote{BlockRoot: gv.BlockRoot, Source: gv.Source, Target: gv.Target}, &index, nil
 	}
+	bv := new(spectypes.BeaconVote)
+	if err := bv.Decode(in); err != nil {
+		return nil, nil, fmt.Errorf("decode beacon vote: %w", err)
+	}
+	return bv, nil, nil
+}
 
-	key := scRootKey{slot: slot, blockRoot: beaconVote.BlockRoot}
+func (c *Collector) getSyncCommitteeRoot(ctx context.Context, slot phase0.Slot, blockRoot phase0.Root) (phase0.Root, error) {
+	key := scRootKey{slot: slot, blockRoot: blockRoot}
 
 	// lookup in cache first
 	cacheItem := c.syncCommitteeRootsCache.Get(key)
@@ -516,14 +531,14 @@ func (c *Collector) getSyncCommitteeRoot(ctx context.Context, slot phase0.Slot, 
 	}
 
 	// Use singleflight to ensure only one goroutine computes the root for a given key
-	sfKey := fmt.Sprintf("%d-%s", slot, beaconVote.BlockRoot.String())
+	sfKey := fmt.Sprintf("%d-%s", slot, blockRoot.String())
 	val, err, _ := c.syncCommitteeRootsSf.Do(sfKey, func() (any, error) {
 		// Check cache again in case another goroutine has populated it while we were waiting
 		if cacheItem := c.syncCommitteeRootsCache.Get(key); cacheItem != nil {
 			return cacheItem.Value(), nil
 		}
 
-		c.logger.Info("fetching sync committee root", fields.Slot(slot), fields.Root(beaconVote.BlockRoot))
+		c.logger.Info("fetching sync committee root", fields.Slot(slot), fields.Root(blockRoot))
 
 		epoch := c.beacon.EstimatedEpochAtSlot(slot)
 
@@ -533,8 +548,8 @@ func (c *Collector) getSyncCommitteeRoot(ctx context.Context, slot phase0.Slot, 
 		}
 
 		// Beacon root
-		blockRoot := spectypes.SSZBytes(beaconVote.BlockRoot[:])
-		signingRoot, err := spectypes.ComputeETHSigningRoot(blockRoot, domain)
+		blockRootSSZ := spectypes.SSZBytes(blockRoot[:])
+		signingRoot, err := spectypes.ComputeETHSigningRoot(blockRootSSZ, domain)
 		if err != nil {
 			return phase0.Root{}, fmt.Errorf("compute sync committee root: %w", err)
 		}
@@ -658,23 +673,27 @@ func (c *Collector) computeAggregatorCommitteePostConsensusRoles(
 // computeRoleRoots derives both sync-committee and attestation signing roots
 // from a proposal FullData (BeaconVote) for the given slot.
 func (c *Collector) computeRoleRoots(ctx context.Context, slot phase0.Slot, in []byte) (phase0.Root, phase0.Root, error) {
-	syncRoot, err := c.getSyncCommitteeRoot(ctx, slot, in)
+	vote, gloasIndex, err := c.decodeCommitteeVote(slot, in)
 	if err != nil {
 		return phase0.Root{}, phase0.Root{}, err
 	}
 
-	var vote spectypes.BeaconVote
-	if err := vote.Decode(in); err != nil {
-		return phase0.Root{}, phase0.Root{}, fmt.Errorf("decode beacon vote: %w", err)
+	syncRoot, err := c.getSyncCommitteeRoot(ctx, slot, vote.BlockRoot)
+	if err != nil {
+		return phase0.Root{}, phase0.Root{}, err
 	}
 	epoch := c.beacon.EstimatedEpochAtSlot(slot)
 	domain, err := c.client.DomainData(ctx, epoch, spectypes.DomainAttester)
 	if err != nil {
 		return phase0.Root{}, phase0.Root{}, fmt.Errorf("get attester domain data: %w", err)
 	}
+	index := phase0.CommitteeIndex(0) // Electra semantics (EIP-7549)
+	if gloasIndex != nil {
+		index = *gloasIndex // SIP #94 §2: Gloas attestations are signed with the payload-status index
+	}
 	attData := &phase0.AttestationData{
 		Slot:            slot,
-		Index:           0, // Electra semantics (EIP-7549)
+		Index:           index,
 		BeaconBlockRoot: vote.BlockRoot,
 		Source:          vote.Source,
 		Target:          vote.Target,
@@ -849,6 +868,17 @@ func (c *Collector) wrapVerifyPartialSigErr(ctx partialSigVerifyCtx, pSigMessage
 }
 
 func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySig func(*spectypes.PartialSignatureMessages) error) error {
+	// The three Gloas duty types (SIP #94 §3 PTC, §5 proposer preferences, §6 payload envelope)
+	// are not traced yet — the trace store has no schema for them — so skip their messages
+	// explicitly instead of erroring per message in toBNRole now that message validation admits
+	// the roles on the wire (issue #2999). Tracing them is deliberate future exporter work.
+	switch msg.MsgID.GetRoleType() {
+	case spectypes.RolePTCAttester, spectypes.RoleProposerPreferences, spectypes.RoleEnvelopeProposer:
+		return nil
+	default:
+		// Other roles fall through to tracing below.
+	}
+
 	start := time.Now()
 	//nolint:gosec
 	startTime := uint64(start.UnixMilli())

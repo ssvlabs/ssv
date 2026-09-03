@@ -10,11 +10,12 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/electra"
+	eth2gloas "github.com/attestantio/go-eth2-client/spec/gloas"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	ssz "github.com/ferranbt/fastssz"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
+
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
@@ -252,7 +253,7 @@ func (r *AggregatorRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 	}
 
 	domain := r.NetworkConfig.DomainTypeAtSlot(decidedValue.Duty.Slot)
-	msgID := spectypes.NewMsgID(domain, r.GetShare().ValidatorPubKey[:], r.RunnerRoleType)
+	msgID := spectypes.NewValidatorMsgID(domain, r.GetShare().ValidatorPubKey, r.RunnerRoleType)
 
 	encodedMsg, err := postConsensusMsg.Encode()
 	if err != nil {
@@ -351,7 +352,7 @@ func (r *AggregatorRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 		return fmt.Errorf("could not get aggregate and proof: %w", err)
 	}
 
-	msg, err := constructVersionedSignedAggregateAndProof(*aggregateAndProof, specSig)
+	msg, err := constructVersionedSignedAggregateAndProof(aggregateAndProof, specSig)
 	if err != nil {
 		return fmt.Errorf("could not construct versioned aggregate and proof: %w", err)
 	}
@@ -393,17 +394,17 @@ func (r *AggregatorRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 	return nil
 }
 
-func (r *AggregatorRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
+func (r *AggregatorRunner) expectedPreConsensusRootsAndDomain() ([]spectypes.HashRoot, phase0.DomainType, error) {
 	currentDutySlot, err := r.currentDutySlot()
 	if err != nil {
 		return nil, phase0.DomainType{}, fmt.Errorf("current duty slot: %w", err)
 	}
 
-	return []ssz.HashRoot{spectypes.SSZUint64(currentDutySlot)}, spectypes.DomainSelectionProof, nil
+	return []spectypes.HashRoot{spectypes.SSZUint64(currentDutySlot)}, spectypes.DomainSelectionProof, nil
 }
 
 // expectedPostConsensusRootsAndDomain an INTERNAL function, returns the expected post-consensus roots to sign
-func (r *AggregatorRunner) expectedPostConsensusRootsAndDomain(context.Context) ([]ssz.HashRoot, phase0.DomainType, error) {
+func (r *AggregatorRunner) expectedPostConsensusRootsAndDomain(context.Context) ([]spectypes.HashRoot, phase0.DomainType, error) {
 	cd := &spectypes.ProposerConsensusData{}
 	err := cd.Decode(r.State.DecidedValue)
 	if err != nil {
@@ -414,7 +415,7 @@ func (r *AggregatorRunner) expectedPostConsensusRootsAndDomain(context.Context) 
 		return nil, phase0.DomainType{}, fmt.Errorf("could not get aggregate and proof: %w", err)
 	}
 
-	return []ssz.HashRoot{hashRoot}, spectypes.DomainAggregateAndProof, nil
+	return []spectypes.HashRoot{hashRoot}, spectypes.DomainAggregateAndProof, nil
 }
 
 // executeDuty steps:
@@ -458,7 +459,7 @@ func (r *AggregatorRunner) executeDuty(ctx context.Context, logger *zap.Logger, 
 	logger.Debug("signing and broadcasting selection proof partial sig", fields.Slot(validatorDuty.DutySlot()))
 
 	r.measurements.StartPreConsensus()
-	if err := r.signAndBroadcastPartialSigMsgs(ctx, r.network, r.operatorSigner, r.GetShare().ValidatorPubKey[:], msgs); err != nil {
+	if err := r.signAndBroadcastPartialSigMsgs(ctx, r.network, r.operatorSigner, r.GetShare().ValidatorPubKey, msgs); err != nil {
 		return fmt.Errorf("could not sign/broadcast selection proof partial sig: %w", err)
 	}
 
@@ -490,37 +491,15 @@ func (r *AggregatorRunner) GetOperatorSigner() ssvtypes.OperatorSigner {
 }
 
 func (r *AggregatorRunner) MarshalJSON() ([]byte, error) {
-	type aggregatorRunnerJSON struct {
-		BaseRunner *BaseRunner `json:"BaseRunner"`
-		// ValCheck is intentionally kept in the JSON to preserve the historical runner state shape
-		// (and thus runner state roots used by spec tests). It is a runtime-only dependency and
-		// is ignored on decode, so it is always marshaled as `null` for determinism.
-		ValCheck any `json:"ValCheck"`
-	}
-
-	return json.Marshal(&aggregatorRunnerJSON{
-		BaseRunner: r.BaseRunner,
-		ValCheck:   nil,
-	})
+	return marshalRunnerStateJSON(r.BaseRunner)
 }
 
 func (r *AggregatorRunner) UnmarshalJSON(data []byte) error {
-	type aggregatorRunnerJSON struct {
-		BaseRunner *BaseRunner     `json:"BaseRunner"`
-		ValCheck   json.RawMessage `json:"ValCheck"`
-	}
-
-	aux := &aggregatorRunnerJSON{}
-	if err := json.Unmarshal(data, aux); err != nil {
+	br, err := unmarshalRunnerStateJSON(data)
+	if err != nil {
 		return err
 	}
-
-	if aux.BaseRunner == nil {
-		return fmt.Errorf("missing BaseRunner")
-	}
-
-	r.BaseRunner = aux.BaseRunner
-	// ValCheck is not restored from JSON. Callers must rehydrate it explicitly.
+	r.BaseRunner = br
 	r.ValCheck = nil
 	return nil
 }
@@ -545,50 +524,80 @@ func (r *AggregatorRunner) GetRoot() ([32]byte, error) {
 	return ret, nil
 }
 
-// Constructs a VersionedSignedAggregateAndProof from a VersionedAggregateAndProof and a signature
-func constructVersionedSignedAggregateAndProof(aggregateAndProof spec.VersionedAggregateAndProof, signature phase0.BLSSignature) (*spec.VersionedSignedAggregateAndProof, error) {
+// constructVersionedSignedAggregateAndProof wraps a decided aggregate-and-proof and its reconstructed
+// signature into the signed container the beacon node accepts; shared by both aggregator runners.
+func constructVersionedSignedAggregateAndProof(aggregateAndProof *spec.VersionedAggregateAndProof, signature phase0.BLSSignature) (*spec.VersionedSignedAggregateAndProof, error) {
 	ret := &spec.VersionedSignedAggregateAndProof{
 		Version: aggregateAndProof.Version,
 	}
 
 	switch ret.Version {
 	case spec.DataVersionPhase0:
+		if aggregateAndProof.Phase0 == nil {
+			return nil, errors.New("nil Phase0 aggregate and proof")
+		}
 		ret.Phase0 = &phase0.SignedAggregateAndProof{
 			Message:   aggregateAndProof.Phase0,
 			Signature: signature,
 		}
 	case spec.DataVersionAltair:
+		if aggregateAndProof.Altair == nil {
+			return nil, errors.New("nil Altair aggregate and proof")
+		}
 		ret.Altair = &phase0.SignedAggregateAndProof{
 			Message:   aggregateAndProof.Altair,
 			Signature: signature,
 		}
 	case spec.DataVersionBellatrix:
+		if aggregateAndProof.Bellatrix == nil {
+			return nil, errors.New("nil Bellatrix aggregate and proof")
+		}
 		ret.Bellatrix = &phase0.SignedAggregateAndProof{
 			Message:   aggregateAndProof.Bellatrix,
 			Signature: signature,
 		}
 	case spec.DataVersionCapella:
+		if aggregateAndProof.Capella == nil {
+			return nil, errors.New("nil Capella aggregate and proof")
+		}
 		ret.Capella = &phase0.SignedAggregateAndProof{
 			Message:   aggregateAndProof.Capella,
 			Signature: signature,
 		}
 	case spec.DataVersionDeneb:
+		if aggregateAndProof.Deneb == nil {
+			return nil, errors.New("nil Deneb aggregate and proof")
+		}
 		ret.Deneb = &phase0.SignedAggregateAndProof{
 			Message:   aggregateAndProof.Deneb,
 			Signature: signature,
 		}
 	case spec.DataVersionElectra:
+		if aggregateAndProof.Electra == nil {
+			return nil, errors.New("nil Electra aggregate and proof")
+		}
 		ret.Electra = &electra.SignedAggregateAndProof{
 			Message:   aggregateAndProof.Electra,
 			Signature: signature,
 		}
 	case spec.DataVersionFulu:
+		if aggregateAndProof.Fulu == nil {
+			return nil, errors.New("nil Fulu aggregate and proof")
+		}
 		ret.Fulu = &electra.SignedAggregateAndProof{
 			Message:   aggregateAndProof.Fulu,
 			Signature: signature,
 		}
+	case spec.DataVersionGloas:
+		if aggregateAndProof.Gloas == nil {
+			return nil, errors.New("nil Gloas aggregate and proof")
+		}
+		ret.Gloas = &eth2gloas.SignedAggregateAndProof{
+			Message:   aggregateAndProof.Gloas,
+			Signature: signature,
+		}
 	default:
-		return nil, errors.New("unknown version for signed aggregate and proof")
+		return nil, fmt.Errorf("unknown version %s for signed aggregate and proof", ret.Version.String())
 	}
 
 	return ret, nil

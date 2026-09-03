@@ -26,6 +26,7 @@ import (
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/protocol/v2/types/ssvtestingutils"
 	"github.com/ssvlabs/ssv/registry/storage"
 	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
@@ -200,7 +201,7 @@ func newPBMsg(data []byte, topic string, from []byte) *pubsub.Message {
 }
 
 func dummySSVConsensusMsg(domainType spectypes.DomainType, dutyExecutorID []byte, height specqbft.Height) (*spectypes.SSVMessage, error) {
-	id := spectypes.NewMsgID(domainType, dutyExecutorID, spectypes.RoleCommittee)
+	id := ssvtestingutils.NewMsgID(domainType, dutyExecutorID, spectypes.RoleCommittee)
 	qbftMsg := &specqbft.Message{
 		MsgType:    specqbft.RoundChangeMsgType,
 		Height:     height,

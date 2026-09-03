@@ -5,15 +5,16 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/electra"
+	eth2gloas "github.com/attestantio/go-eth2-client/spec/gloas"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	ssz "github.com/ferranbt/fastssz"
+
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
 // GetAggregateAndProof decodes the aggregate-and-proof payload carried in a (legacy, pre-AggregatorCommittee)
 // aggregator duty's ProposerConsensusData.DataSSZ. It is a Deprecated compat shim: v1.2.3 ssv-spec removed
 // ValidatorConsensusData.GetAggregateAndProof() in favor of the batched AggregatorCommitteeConsensusData.
-func GetAggregateAndProof(cd *spectypes.ProposerConsensusData) (*spec.VersionedAggregateAndProof, ssz.HashRoot, error) {
+func GetAggregateAndProof(cd *spectypes.ProposerConsensusData) (*spec.VersionedAggregateAndProof, spectypes.HashRoot, error) {
 	switch cd.Version {
 	case spec.DataVersionPhase0:
 		ret := &phase0.AggregateAndProof{}
@@ -64,6 +65,14 @@ func GetAggregateAndProof(cd *spectypes.ProposerConsensusData) (*spec.VersionedA
 		}
 
 		return &spec.VersionedAggregateAndProof{Version: cd.Version, Fulu: ret}, ret, nil
+	case spec.DataVersionGloas:
+		// Decode into the Gloas container: same bytes as Electra's, different hash tree root (#3009).
+		ret := &eth2gloas.AggregateAndProof{}
+		if err := ret.UnmarshalSSZ(cd.DataSSZ); err != nil {
+			return nil, nil, spectypes.WrapError(spectypes.UnmarshalSSZErrorCode, fmt.Errorf("could not unmarshal ssz: %w", err))
+		}
+
+		return &spec.VersionedAggregateAndProof{Version: cd.Version, Gloas: ret}, ret, nil
 	default:
 		return nil, nil, fmt.Errorf("unknown aggregate and proof version %d", cd.Version)
 	}

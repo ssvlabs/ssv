@@ -1,6 +1,7 @@
 package networkconfig
 
 import (
+	"maps"
 	"math"
 	"math/big"
 	"os"
@@ -14,6 +15,18 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
+
+// TestNetworkWithGloas returns a copy of TestNetwork with the Gloas (ePBS) fork scheduled at
+// forkEpoch, for tests that exercise Gloas fork-gated behavior. TestNetwork itself has no Gloas fork.
+func TestNetworkWithGloas(forkEpoch phase0.Epoch) *Network {
+	beacon := *TestNetwork.Beacon
+	beacon.Forks = maps.Clone(TestNetwork.Beacon.Forks)
+	beacon.Forks[DataVersionGloas] = phase0.Fork{Epoch: forkEpoch}
+
+	network := *TestNetwork
+	network.Beacon = &beacon
+	return &network
+}
 
 var TestNetwork = &Network{
 	Beacon: &Beacon{

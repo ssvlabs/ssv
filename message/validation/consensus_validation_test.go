@@ -11,6 +11,7 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/protocol/v2/types/ssvtestingutils"
 )
 
 func TestMessageValidator_currentEstimatedRound(t *testing.T) {
@@ -140,7 +141,7 @@ func TestMessageValidator_currentEstimatedRound(t *testing.T) {
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
 			mv := &messageValidator{netCfg: netCfg}
-			got, err := mv.estimatedRoundAt(tc.role, tc.timeIntoSlot)
+			got, err := mv.estimatedRoundAt(tc.role, 0, tc.timeIntoSlot)
 			require.NoError(t, err)
 			require.Equal(t, tc.want, got)
 		})
@@ -153,7 +154,7 @@ func TestMessageValidator_roundBelongsToAllowedSpread(t *testing.T) {
 	slot := netCfg.FirstSlotAtEpoch(1)
 	signedSSVMessage := &spectypes.SignedSSVMessage{
 		SSVMessage: &spectypes.SSVMessage{
-			MsgID: spectypes.NewMsgID(netCfg.DomainType, make([]byte, 48), spectypes.RoleProposer),
+			MsgID: ssvtestingutils.NewMsgID(netCfg.DomainType, make([]byte, 48), spectypes.RoleProposer),
 		},
 	}
 
@@ -220,7 +221,7 @@ func TestMessageValidator_roundBelongsToAllowedSpread(t *testing.T) {
 
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
-			signedSSVMessage.SSVMessage.MsgID = spectypes.NewMsgID(netCfg.DomainType, make([]byte, 48), tc.role)
+			signedSSVMessage.SSVMessage.MsgID = ssvtestingutils.NewMsgID(netCfg.DomainType, make([]byte, 48), tc.role)
 			err := mv.roundBelongsToAllowedSpread(
 				signedSSVMessage,
 				&specqbft.Message{

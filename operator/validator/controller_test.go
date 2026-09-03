@@ -21,6 +21,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest/observer"
 
 	"github.com/ssvlabs/ssv/ekmadapter"
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
@@ -44,7 +46,9 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/protocol/v2/types/ssvtestingutils"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	storagemocks "github.com/ssvlabs/ssv/registry/storage/mocks"
 	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
@@ -155,6 +159,7 @@ func TestSetupRunnersExporter(t *testing.T) {
 		&validator.CommonOptions{
 			ExporterMode: true,
 		},
+		nil, // startEnvelopeDuty
 	)
 	require.Nil(t, runners)
 	require.ErrorContains(t, err, "cannot set up duty runners in exporter mode")
@@ -230,7 +235,7 @@ func TestHandleNonCommitteeMessages_RoleGuard(t *testing.T) {
 		return &queue.SSVMessage{
 			SSVMessage: &spectypes.SSVMessage{
 				MsgType: spectypes.SSVConsensusMsgType,
-				MsgID:   spectypes.NewMsgID(spectypes.DomainType{}, make([]byte, 48), role),
+				MsgID:   ssvtestingutils.NewMsgID(spectypes.DomainType{}, make([]byte, 48), role),
 			},
 			Body: body,
 		}
@@ -262,7 +267,7 @@ func TestHandleNonCommitteeMessages_RoleGuard(t *testing.T) {
 		msg := &queue.SSVMessage{
 			SSVMessage: &spectypes.SSVMessage{
 				MsgType: spectypes.DKGMsgType,
-				MsgID:   spectypes.NewMsgID(spectypes.DomainType{}, make([]byte, 48), spectypes.RoleCommittee),
+				MsgID:   ssvtestingutils.NewMsgID(spectypes.DomainType{}, make([]byte, 48), spectypes.RoleCommittee),
 			},
 		}
 
@@ -383,7 +388,7 @@ func TestHandleNonCommitteeMessages(t *testing.T) {
 
 	logger.Debug("starting to send messages")
 
-	identifier := spectypes.NewMsgID(networkconfig.TestNetwork.DomainType, []byte("pk"), spectypes.RoleCommittee)
+	identifier := ssvtestingutils.NewMsgID(networkconfig.TestNetwork.DomainType, []byte("pk"), spectypes.RoleCommittee)
 
 	ctr.messageRouter.Route(t.Context(), &queue.SSVMessage{
 		SSVMessage: &spectypes.SSVMessage{
@@ -462,7 +467,7 @@ func TestHandleWorkerMessagesUsesMessageTraceHandler(t *testing.T) {
 		return sentinelErr
 	}
 
-	msgID := spectypes.NewMsgID(networkconfig.TestNetwork.DomainType, []byte("pk"), spectypes.RoleCommittee)
+	msgID := ssvtestingutils.NewMsgID(networkconfig.TestNetwork.DomainType, []byte("pk"), spectypes.RoleCommittee)
 	ssvMsg := &spectypes.SSVMessage{
 		MsgType: spectypes.SSVPartialSignatureMsgType,
 		MsgID:   msgID,
@@ -1558,7 +1563,7 @@ func TestSetupRunnersProposerF(t *testing.T) {
 		NetworkConfig: netCfg,
 	}
 
-	runners, err := SetupRunners(t.Context(), share, operator, nil, nil, options)
+	runners, err := SetupRunners(t.Context(), share, operator, nil, nil, options, nil)
 	require.NoError(t, err)
 	require.Contains(t, runners, types.RoleAggregator)
 
@@ -1602,7 +1607,7 @@ func TestSetupRunnersProposerFPostBooleFork(t *testing.T) {
 		NetworkConfig: netCfg,
 	}
 
-	runners, err := SetupRunners(t.Context(), share, operator, nil, nil, options)
+	runners, err := SetupRunners(t.Context(), share, operator, nil, nil, options, nil)
 	require.NoError(t, err)
 
 	// Post-Boole the standalone aggregator runner is not built (SetupRunners gates it behind
@@ -1663,4 +1668,68 @@ func TestSetupCommitteeRunnersProposerF(t *testing.T) {
 	nextRound := specqbft.FirstRound + 1
 	expectedNextRound := qbft.Proposer(state.Height, nextRound, types.OperatorIDsFromOperators(committee), netCfg)
 	require.Equal(t, expectedNextRound, proposerF(state, nextRound))
+}
+
+// A message routed to one of our own validators that has no running local instance is dropped by
+// design, but must leave a diagnosable debug line — a one-shot broadcast lost there (e.g. a §5
+// proposer-preferences partial racing validator startup) has no redelivery. Foreign-validator
+// messages from shared subnets stay silent.
+func TestHandleRouterMessages_LogsOwnValidatorDrop(t *testing.T) {
+	core, observed := observer.New(zapcore.DebugLevel)
+	logger := zap.New(core)
+	const dropSnippet = "dropping message for own validator with no running instance"
+
+	ctrl := gomock.NewController(t)
+	ownOperatorID := spectypes.OperatorID(1)
+
+	ownPK := bytes.Repeat([]byte{0xaa}, 48)
+	foreignPK := bytes.Repeat([]byte{0xbb}, 48)
+	unknownPK := bytes.Repeat([]byte{0xcc}, 48)
+
+	shareFor := func(signer spectypes.OperatorID) *types.SSVShare {
+		return &types.SSVShare{Share: spectypes.Share{Committee: []*spectypes.ShareMember{{Signer: signer}}}}
+	}
+	validatorStore := storagemocks.NewMockValidatorStore(ctrl)
+	validatorStore.EXPECT().Validator(gomock.Any()).DoAndReturn(func(pk []byte) (*types.SSVShare, bool) {
+		switch {
+		case bytes.Equal(pk, ownPK):
+			return shareFor(ownOperatorID), true // ours, instance not started
+		case bytes.Equal(pk, foreignPK):
+			return shareFor(99), true // another operator's validator (shared subnet)
+		default:
+			return nil, false
+		}
+	}).AnyTimes()
+
+	ctr := setupController(t, logger, MockControllerOptions{
+		validatorsMap:       validators.New(t.Context()), // empty: no started instances
+		validatorStore:      validatorStore,
+		operatorDataStore:   operatordatastore.New(buildOperatorData(ownOperatorID, "67Ce5c69260bd819B4e0AD13f4b873074D479811")),
+		validatorCommonOpts: &validator.CommonOptions{}, // exporter disabled: the fall-through branch
+	})
+	go ctr.handleRouterMessages()
+
+	route := func(pk []byte, body any) {
+		msgID := ssvtestingutils.NewMsgID(networkconfig.TestNetwork.DomainType, pk, spectypes.RoleProposerPreferences)
+		ctr.messageRouter.Route(t.Context(), &queue.SSVMessage{
+			SSVMessage: &spectypes.SSVMessage{MsgType: spectypes.SSVPartialSignatureMsgType, MsgID: msgID, Data: []byte("data")},
+			Body:       body,
+		})
+	}
+
+	// Foreign and unknown validators first, own validator last: the router loop is FIFO, so once the
+	// own-validator line appears, the silent cases have already been processed.
+	route(foreignPK, nil)
+	route(unknownPK, nil)
+	route(ownPK, &spectypes.PartialSignatureMessages{Slot: 42, Messages: []*spectypes.PartialSignatureMessage{{Signer: 2}}})
+
+	require.Eventually(t, func() bool {
+		return observed.FilterMessageSnippet(dropSnippet).Len() == 1
+	}, time.Second, 5*time.Millisecond, "own-validator drop must be logged")
+
+	entries := observed.FilterMessageSnippet(dropSnippet).All()
+	require.Len(t, entries, 1, "foreign/unknown validator drops must stay silent")
+	fieldsByKey := entries[0].ContextMap()
+	require.EqualValues(t, 42, fieldsByKey["slot"], "partial-sig drops carry the slot")
+	require.EqualValues(t, 2, fieldsByKey["signer"])
 }

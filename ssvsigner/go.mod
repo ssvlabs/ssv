@@ -14,39 +14,41 @@ module github.com/ssvlabs/ssv/ssvsigner
 go 1.26
 
 require (
+	github.com/OffchainLabs/go-bitfield v0.0.0-20251031151322-f427d04d8506
 	github.com/alecthomas/kong v1.8.1
 	github.com/attestantio/go-eth2-client v0.27.0
 	github.com/carlmjohnson/requests v0.24.3
 	github.com/docker/docker v28.3.3+incompatible
 	github.com/docker/go-connections v0.5.0
-	github.com/ethereum/go-ethereum v1.16.4
+	github.com/ethereum/go-ethereum v1.17.5
 	github.com/fasthttp/router v1.5.4
-	github.com/ferranbt/fastssz v0.1.4
+	github.com/ferranbt/fastssz v1.0.0
 	github.com/google/uuid v1.6.0
-	github.com/herumi/bls-eth-go-binary v1.29.1
+	github.com/herumi/bls-eth-go-binary v1.37.0
 	github.com/holiman/uint256 v1.3.2
 	github.com/lib/pq v1.10.9
 	github.com/microsoft/go-crypto-openssl v0.2.9
-	github.com/prysmaticlabs/go-bitfield v0.0.0-20240618144021-706c95b2dd15
 	github.com/sourcegraph/conc v0.3.0
-	github.com/ssvlabs/eth2-key-manager v1.5.6
-	github.com/ssvlabs/ssv-spec v1.2.3-0.20260305184636-289c93aa4c12
+	github.com/ssvlabs/eth2-key-manager v1.5.7-0.20260901124029-39a18877e131
+	github.com/ssvlabs/ssv-spec v1.2.3-0.20260902142254-b894983674d5
 	github.com/stretchr/testify v1.11.1
 	github.com/testcontainers/testcontainers-go v0.37.0
 	github.com/valyala/fasthttp v1.58.0
-	github.com/wealdtech/go-eth2-wallet-encryptor-keystorev4 v1.1.3
+	github.com/wealdtech/go-eth2-wallet-encryptor-keystorev4 v1.4.1
 	go.opentelemetry.io/otel v1.41.0
 	go.opentelemetry.io/otel/metric v1.41.0
 	go.uber.org/zap v1.27.0
-	golang.org/x/crypto v0.45.0
+	golang.org/x/crypto v0.48.0
 )
 
 require (
 	dario.cat/mergo v1.0.1 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20210617225240-d185dfc1b5a1 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
+	github.com/ProjectZKM/Ziren/crates/go-runtime/zkvm_runtime v0.0.0-20251001021608-1fe7b43fc4d6 // indirect
 	github.com/andybalholm/brotli v1.1.1 // indirect
 	github.com/btcsuite/btcd/btcec/v2 v2.3.4 // indirect
+	github.com/casbin/govaluate v1.10.0 // indirect
 	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/containerd/errdefs v1.0.0 // indirect
@@ -89,6 +91,8 @@ require (
 	github.com/morikuni/aec v1.0.0 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect
+	github.com/pk910/dynamic-ssz v1.3.3 // indirect
+	github.com/pk910/hashtree-bindings v0.2.2 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/power-devops/perfstat v0.0.0-20210106213030-5aafc221ea8c // indirect
@@ -101,21 +105,22 @@ require (
 	github.com/tyler-smith/go-bip39 v1.1.0 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/wealdtech/go-bytesutil v1.2.1 // indirect
-	github.com/wealdtech/go-eth2-types/v2 v2.8.1 // indirect
+	github.com/wealdtech/go-eth2-types/v2 v2.8.2 // indirect
 	github.com/wealdtech/go-eth2-util v1.8.1 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.63.0 // indirect
-	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.38.0 // indirect
+	go.opentelemetry.io/otel/sdk/metric v1.41.0 // indirect
 	go.opentelemetry.io/otel/trace v1.41.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/exp v0.0.0-20250911091902-df9299821621 // indirect
-	golang.org/x/net v0.47.0 // indirect
-	golang.org/x/sys v0.38.0 // indirect
-	golang.org/x/text v0.31.0 // indirect
+	golang.org/x/net v0.50.0 // indirect
+	golang.org/x/sys v0.41.0 // indirect
+	golang.org/x/text v0.34.0 // indirect
 	golang.org/x/time v0.12.0 // indirect
 	golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da // indirect
-	google.golang.org/protobuf v1.36.9 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
+
+replace github.com/attestantio/go-eth2-client => github.com/ssvlabs/go-eth2-client v0.6.31-0.20260831132123-66dd18fc8288

@@ -64,6 +64,13 @@ func (h *ProposerHandler) WaitShutdown() {}
 //  3. If necessary, fetch duties for the next epoch.
 //  4. If necessary, process validator-indices changes by declaring the intents to fetch duties for the epochs
 //     affected by it, also potentially pre-fetching duties so they are ready for processing on the next slot-tick.
+//
+// On Indices change (received while idle, i.e. between ticks):
+//  1. Mark the current/next epochs' cached duty views stale immediately, at event time — freshness-aware
+//     message validation (§5 proposer preferences, §6 envelope) must start tolerating before any refetch lands.
+//  2. Declare the refetch intents; the next tick processes them first thing (before duty execution).
+//     A change arriving while a tick is being processed is caught by the tick's own indices-change wait
+//     instead, which additionally refetches in the same slot when early enough.
 func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 	h.logger.Info("starting duty handler")
 	defer h.logger.Info("duty handler exited")
@@ -122,14 +129,22 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 					h.dutyFetchIntents[nextEpoch] = false
 				}
 
-				// 3. Process validator indices changes (if any). We want to process it on the current slot only
-				// if we are still early into the slot (1 slot-interval is just a guesstimate), otherwise we might
-				// be delaying the next tick (the duties that need to be executed on the next slot).
+				// 3. Process validator indices changes that land while this tick is being processed (changes
+				// arriving between ticks are consumed immediately by the dedicated top-level case). We want to
+				// process it on the current slot only if we are still early into the slot (1 slot-interval is
+				// just a guesstimate), otherwise we might be delaying the next tick (the duties that need to be
+				// executed on the next slot).
 
-				indicesChangeDeadline := h.netCfg.SlotStartTime(currentSlot).Add(h.netCfg.IntervalDuration())
+				indicesChangeDeadline := h.netCfg.SlotStartTime(currentSlot).Add(h.netCfg.IntervalDuration(currentSlot))
 				select {
 				case <-h.indicesChangeCh:
 					logger.Info("🔁 indices change received")
+
+					// Mark the affected epochs' cached duties stale right away: until a refetch replaces
+					// them, freshness-aware message-validation checks (§5 proposer preferences, §6 envelope)
+					// treat them like not-yet-fetched epochs, so a view predating the change doesn't reject
+					// a just-added validator's honest messages (their one-shot broadcasts have no redelivery).
+					h.duties.MarkEpochsStale(currentEpoch, nextEpoch)
 
 					// 1) Declare intents.
 					// Some validator-related state has changed, so re-fetch the duties for the current and next
@@ -153,6 +168,25 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 					return
 				}
 			}()
+
+		case <-h.indicesChangeCh:
+			// Received while idle (between ticks): mark the cached duty views stale at event time — not
+			// at the next tick — and declare the refetch intents (processed first thing on the next
+			// tick, before duty execution). No fetch here: it stays tick-driven. A change arriving
+			// mid-tick is consumed by the tick's own indices-change wait below, which also refetches
+			// within the same slot when early enough.
+			currentSlot := h.netCfg.EstimatedCurrentSlot()
+			currentEpoch := h.netCfg.EstimatedEpochAtSlot(currentSlot)
+			nextEpoch := currentEpoch + 1
+
+			h.logger.Info("🔁 indices change received",
+				zap.Uint64("current_epoch", uint64(currentEpoch)),
+				zap.Uint64("current_slot", uint64(currentSlot)),
+			)
+
+			h.duties.MarkEpochsStale(currentEpoch, nextEpoch)
+			h.dutyFetchIntents[currentEpoch] = false
+			h.dutyFetchIntents[nextEpoch] = false
 
 		case reorgEvent := <-h.reorgEventsCh:
 			currentSlot := h.netCfg.EstimatedCurrentSlot()
@@ -194,14 +228,17 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 
 				// 2) Process certain intents immediately.
 				// When at epoch boundary, we only care about pre-fetching & preparing the duties for the next epoch
-				// since the current epoch will have been passed upon the next slot-tick. Otherwise, we might need to
-				// pre-fetch & prepare the duties for the current epoch immediately since those might have been
-				// affected by this reorg (the next tick(s) will take care of the pre-fetch & prepare for the next
-				// epoch, if it was also affected by this reorg).
+				// since the current epoch will have been passed upon the next slot-tick. Otherwise, if this reorg
+				// changed the current dependent root, pre-fetch & prepare the duties for the current epoch
+				// immediately since those were affected by it (the next tick(s) will take care of the pre-fetch &
+				// prepare for the next epoch, if it was also affected by this reorg). A reorg that left the current
+				// root unchanged fetches nothing here: an intent pending for another reason (an indices change
+				// consumed between ticks, an earlier fetch with no eligible validators) is the next tick's to
+				// process, which keeps this path's fetches attributable to the reorg alone.
 				if h.atLastSlotOfCurrentEpoch(currentSlot) {
 					delete(h.dutyFetchIntents, currentEpoch) // optimization: prune irrelevant intent
 					h.prepareNextEpoch(reorgCtx, logger, currentEpoch, currentSlot)
-				} else {
+				} else if refetchCurrentEpoch {
 					h.prepareCurrentEpoch(reorgCtx, logger, currentEpoch, currentSlot)
 				}
 			}()
@@ -255,17 +292,16 @@ func (h *ProposerHandler) prepareCurrentEpoch(ctx context.Context, logger *zap.L
 	defer span.End()
 
 	if fulfilled, ok := h.dutyFetchIntents[currentEpoch]; ok && !fulfilled {
-		logger.Debug("fetching duties for the current epoch")
-
-		err := h.fetchAndProcessDuties(ctx, logger, currentEpoch, currentSlot)
+		fetched, err := h.fetchAndProcessDuties(ctx, logger, currentEpoch, currentSlot)
 		if err != nil {
 			logger.Error("fetching duties for the current epoch failed", zap.Error(err))
 			span.SetStatus(codes.Error, err.Error())
 			return
 		}
-		h.dutyFetchIntents[currentEpoch] = true // the intent has been fulfilled
-
-		logger.Debug("fetching duties for the current epoch succeeded")
+		// Fulfill the intent only if a fetch actually ran; a not-yet-eligible epoch stays pending so a later tick retries.
+		if fetched {
+			h.dutyFetchIntents[currentEpoch] = true
+		}
 	}
 
 	span.SetStatus(codes.Ok, "")
@@ -283,17 +319,16 @@ func (h *ProposerHandler) prepareNextEpoch(ctx context.Context, logger *zap.Logg
 
 	// Delaying the duty fetch until it's a "good time" allows us to do it when the beacon node should be less busy.
 	if fulfilled, ok := h.dutyFetchIntents[currentEpoch+1]; ok && !fulfilled && h.shouldFetchNextEpoch(currentSlot) {
-		logger.Debug("fetching duties for the next epoch")
-
-		err := h.fetchAndProcessDuties(ctx, logger, currentEpoch+1, currentSlot)
+		fetched, err := h.fetchAndProcessDuties(ctx, logger, currentEpoch+1, currentSlot)
 		if err != nil {
 			logger.Error("fetching duties for the next epoch failed", zap.Error(err))
 			span.SetStatus(codes.Error, err.Error())
 			return
 		}
-		h.dutyFetchIntents[currentEpoch+1] = true // the intent has been fulfilled
-
-		logger.Debug("fetching duties for the next epoch succeeded")
+		// Fulfill the intent only if a fetch actually ran; a not-yet-eligible epoch stays pending so a later tick retries.
+		if fetched {
+			h.dutyFetchIntents[currentEpoch+1] = true
+		}
 	}
 
 	span.SetStatus(codes.Ok, "")
@@ -314,6 +349,9 @@ func (h *ProposerHandler) processExecution(ctx context.Context, epoch phase0.Epo
 	defer span.End()
 
 	duties := h.duties.CommitteeSlotDuties(epoch, slot)
+
+	h.logProposerSlotDispatch(epoch, slot, duties)
+
 	if duties == nil {
 		span.AddEvent("no duties available")
 		span.SetStatus(codes.Ok, "")
@@ -338,7 +376,10 @@ func (h *ProposerHandler) processExecution(ctx context.Context, epoch phase0.Epo
 	span.SetStatus(codes.Ok, "")
 }
 
-func (h *ProposerHandler) fetchAndProcessDuties(ctx context.Context, logger *zap.Logger, targetEpoch phase0.Epoch, currentSlot phase0.Slot) error {
+// fetchAndProcessDuties fetches and stores the epoch's proposer duties. It returns fetched=false (with a
+// nil error) when no validators are eligible yet — a not-ready state (e.g. beacon metadata not synced) the
+// caller must retry rather than treat as fulfilled; fetched=true means a beacon fetch actually ran.
+func (h *ProposerHandler) fetchAndProcessDuties(ctx context.Context, logger *zap.Logger, targetEpoch phase0.Epoch, currentSlot phase0.Slot) (fetched bool, err error) {
 	ctx, span := tracer.Start(ctx,
 		observability.InstrumentName(observabilityNamespace, "proposer.fetch_and_store"),
 		trace.WithAttributes(
@@ -360,10 +401,11 @@ func (h *ProposerHandler) fetchAndProcessDuties(ctx context.Context, logger *zap
 	}
 	if len(allEligibleIndices) == 0 {
 		const eventMsg = "no eligible validators for epoch"
-		logger.Debug(eventMsg)
+		h.logNoEligibleValidators(logger, targetEpoch)
 		span.AddEvent(eventMsg)
 		span.SetStatus(codes.Ok, "")
-		return nil
+		// No eligible validators yet — not a fulfilled fetch; caller retries on a later tick.
+		return false, nil
 	}
 
 	selfEligibleIndices := map[phase0.ValidatorIndex]struct{}{}
@@ -376,7 +418,7 @@ func (h *ProposerHandler) fetchAndProcessDuties(ctx context.Context, logger *zap
 	span.AddEvent("fetching duties from beacon node", trace.WithAttributes(observability.ValidatorCountAttribute(len(allEligibleIndices))))
 	duties, err := h.beaconNode.ProposerDuties(ctx, targetEpoch, allEligibleIndices)
 	if err != nil {
-		return traces.Errorf(span, "failed to fetch proposer duties: %w", err)
+		return false, traces.Errorf(span, "failed to fetch proposer duties: %w", err)
 	}
 
 	specDuties := make([]*spectypes.ValidatorDuty, 0, len(duties))
@@ -396,6 +438,8 @@ func (h *ProposerHandler) fetchAndProcessDuties(ctx context.Context, logger *zap
 	span.AddEvent("storing duties", trace.WithAttributes(observability.DutyCountAttribute(len(storeDuties))))
 	h.duties.Set(targetEpoch, storeDuties)
 
+	h.logProposerFetchOutcome(logger, targetEpoch, currentSlot, storeDuties)
+
 	truncate := -1
 	if h.exporterMode {
 		truncate = 10
@@ -409,7 +453,109 @@ func (h *ProposerHandler) fetchAndProcessDuties(ctx context.Context, logger *zap
 	)
 
 	span.SetStatus(codes.Ok, "")
-	return nil
+	return true, nil
+}
+
+// logNoEligibleValidators logs (Debug) the validator-set counts behind a "no eligible validators for
+// epoch" outcome — total known validators vs this node's own, and how many of those are attesting — to
+// tell "shares present but metadata not synced yet" (recovers on retry) apart from "this node has
+// attesting validators yet none are eligible" (a different cause the retry would not fix).
+func (h *ProposerHandler) logNoEligibleValidators(logger *zap.Logger, targetEpoch phase0.Epoch) {
+	all := h.validatorProvider.Validators()
+	self := h.validatorProvider.SelfValidators()
+
+	selfAttesting := 0
+	for _, s := range self {
+		if s.IsAttesting(targetEpoch) {
+			selfAttesting++
+		}
+	}
+
+	logger.Debug("no eligible validators for epoch",
+		zap.Uint64("target_epoch", uint64(targetEpoch)),
+		zap.Int("validators_total", len(all)),
+		zap.Int("self_validators", len(self)),
+		zap.Int("self_attesting", selfAttesting),
+	)
+}
+
+// logProposerSlotDispatch logs (Debug) how this node's stored proposer duty for a slot flows through the
+// two execution gates — InCommittee (CommitteeSlotDuties) and shouldExecute's one-slot window:
+//
+//	stored_any>0, in_committee=0 → stored but dropped by the InCommittee flag
+//	in_committee>0, executable=0 → in-committee but outside the one-slot window (resolved/fetched too late)
+//	executable>0                 → dispatched to the runner (any further loss is downstream)
+//
+// It fires only on slots that carry a stored duty (SlotIndices short-circuits otherwise), so it is not
+// per-slot noise.
+func (h *ProposerHandler) logProposerSlotDispatch(epoch phase0.Epoch, slot phase0.Slot, inCommittee []*eth2apiv1.ProposerDuty) {
+	storedAny := h.duties.SlotIndices(epoch, slot)
+	if len(storedAny) == 0 {
+		return // no proposer duty stored for this slot — nothing was assigned to us here
+	}
+
+	// Mirror shouldExecute's window (currentSlot == or +1 == duty.Slot) WITHOUT its warnMisalignedSlotAndDuty
+	// side effect, so this never double-logs the misalignment warning the real dispatch loop emits.
+	currentSlot := h.netCfg.EstimatedCurrentSlot()
+	executable := 0
+	for _, d := range inCommittee {
+		if currentSlot == d.Slot || currentSlot+1 == d.Slot {
+			executable++
+		}
+	}
+
+	storedIdx := make([]uint64, len(storedAny))
+	for i, idx := range storedAny {
+		storedIdx[i] = uint64(idx)
+	}
+
+	h.logger.Debug("proposer slot dispatch",
+		zap.Uint64("epoch", uint64(epoch)),
+		zap.Uint64("slot", uint64(slot)),
+		zap.Uint64("current_slot", uint64(currentSlot)),
+		zap.Int("stored_any", len(storedAny)),
+		zap.Int("in_committee", len(inCommittee)),
+		zap.Int("executable", executable),
+		zap.Uint64s("stored_indices", storedIdx),
+	)
+}
+
+// logProposerFetchOutcome logs (Debug), right after a fetch stores an epoch's proposer duties, two
+// outcomes worth tracing: duties were stored but none are this node's (in_committee=0), and in-committee
+// duties for slots that already passed at fetch time — a guaranteed miss on a first fetch, benign on
+// routine reorg / validator-indices re-fetches.
+func (h *ProposerHandler) logProposerFetchOutcome(logger *zap.Logger, targetEpoch phase0.Epoch, currentSlot phase0.Slot, stored []dutystore.StoreDuty[eth2apiv1.ProposerDuty]) {
+	inCommittee := 0
+	alreadyPassed := make([]uint64, 0)
+	for _, d := range stored {
+		if !d.InCommittee {
+			continue
+		}
+		inCommittee++
+		if d.Slot < currentSlot {
+			alreadyPassed = append(alreadyPassed, uint64(d.Slot))
+		}
+	}
+
+	// Fetched some duties, but none belong to this node.
+	if len(stored) > 0 && inCommittee == 0 {
+		logger.Debug("proposer fetch: stored duties but none in-committee",
+			zap.Uint64("target_epoch", uint64(targetEpoch)),
+			zap.Int("stored_total", len(stored)),
+		)
+	}
+
+	// Fetched in-committee duties for slots that already passed — a guaranteed miss only on a first fetch;
+	// on routine re-fetches (reorg, validator-indices change) it is expected, hence Debug, not Warn.
+	if len(alreadyPassed) > 0 {
+		logger.Debug("proposer fetch: in-committee duties for already-passed slots",
+			zap.Uint64("target_epoch", uint64(targetEpoch)),
+			zap.Uint64("current_slot", uint64(currentSlot)),
+			zap.Int("in_committee_total", inCommittee),
+			zap.Int("already_passed", len(alreadyPassed)),
+			zap.Uint64s("passed_slots", alreadyPassed),
+		)
+	}
 }
 
 func (h *ProposerHandler) toSpecDuty(duty *eth2apiv1.ProposerDuty, role spectypes.BeaconRole) *spectypes.ValidatorDuty {

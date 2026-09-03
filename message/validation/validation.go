@@ -386,7 +386,7 @@ func (mv *messageValidator) validatorState(key spectypes.MessageID, committeeInf
 	cs := &ValidatorState{
 		committeeID:     committeeInfo.committeeID,
 		operators:       make([]*OperatorState, len(committeeInfo.committee)),
-		storedSlotCount: mv.maxStoredSlots(),
+		storedSlotCount: mv.storedSlotCount(key.GetRoleType()),
 	}
 	mv.states.Set(key, cs, ttlcache.DefaultTTL)
 	return cs
@@ -395,4 +395,15 @@ func (mv *messageValidator) validatorState(key spectypes.MessageID, committeeInf
 // maxStoredSlots stores max amount of slots message validation stores.
 func (mv *messageValidator) maxStoredSlots() uint64 {
 	return mv.netCfg.SlotsPerEpoch + LateSlotAllowance
+}
+
+// storedSlotCount returns how many recent slots of per-signer state a role retains. Proposer
+// preferences are broadcast across the whole proposer lookahead, so their ring must span it (on top
+// of the normal recent-slots buffer) to give every lookahead slot a distinct ring slot and keep
+// per-slot dedup exact; every other role only ever sees roughly the current slot.
+func (mv *messageValidator) storedSlotCount(role spectypes.RunnerRole) uint64 {
+	if role == spectypes.RoleProposerPreferences {
+		return proposerPreferencesEarlyEpochs*mv.netCfg.SlotsPerEpoch + mv.maxStoredSlots()
+	}
+	return mv.maxStoredSlots()
 }

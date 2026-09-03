@@ -11,6 +11,11 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 )
 
+// DataVersionGloas is the Gloas (ePBS) beacon data version — go-eth2-client's spec.DataVersionGloas,
+// re-exported under the node's name for its call sites and for the ssvsigner mirror (ekm.GloasDataVersion,
+// a separate module; a node-side test pins the two equal).
+const DataVersionGloas = spec.DataVersionGloas
+
 // Beacon defines beacon network configuration. It is fetched from the consensus client during the node runtime.
 type Beacon struct {
 	Name                                 string
@@ -52,6 +57,12 @@ func (b *Beacon) SlotStartTime(slot phase0.Slot) time.Time {
 	durationSinceGenesisStart := time.Duration(slot) * b.SlotDuration // #nosec G115: slot cannot exceed math.MaxInt64
 	start := b.GenesisTime.Add(durationSinceGenesisStart)
 	return start
+}
+
+// PayloadAttestationCutoff is the point 75% into the slot (PAYLOAD_ATTESTATION_DUE) at which a
+// Gloas PTC member observes payload presence and runs its attestation.
+func (b *Beacon) PayloadAttestationCutoff(slot phase0.Slot) time.Time {
+	return b.SlotStartTime(slot).Add(b.SlotDuration * 3 / 4)
 }
 
 // EstimatedCurrentSlot returns the estimation of the current slot
@@ -127,10 +138,15 @@ func (b *Beacon) TimeAtSlot(slot phase0.Slot) time.Time {
 	return b.GenesisTime.Add(d)
 }
 
-func (b *Beacon) IntervalDuration() time.Duration {
-	// intervalsPerSlot is always 3 as per https://github.com/ethereum/consensus-specs/blob/dev/specs/phase0/fork-choice.md#constant
-	const intervalsPerSlot = 3
-	return b.SlotDuration / intervalsPerSlot
+// IntervalDuration is the slot fraction that duty deadlines are multiples of: 1/3 of the slot before
+// Gloas, 1/4 from Gloas on. ePBS retimes the deadlines to quarters — attestation/sync 1× (25%),
+// aggregate/contribution 2× (50%), payload attestation 3× (75%); SIP #94 §1.
+func (b *Beacon) IntervalDuration(slot phase0.Slot) time.Duration {
+	intervalsPerSlot := 3
+	if b.IsGloasAtSlot(slot) {
+		intervalsPerSlot = 4
+	}
+	return b.SlotDuration / time.Duration(intervalsPerSlot)
 }
 
 func (b *Beacon) EpochDuration() time.Duration {
@@ -140,6 +156,9 @@ func (b *Beacon) EpochDuration() time.Duration {
 	return b.SlotDuration * time.Duration(b.SlotsPerEpoch) // #nosec G115: slot cannot exceed math.MaxInt64
 }
 
+// ForkAtEpoch returns the beacon fork active at the epoch, Gloas included, so fork-versioned values —
+// attestations, the aggregator consensus data — stamp the slot's real fork (SIP #94 §2). Forks absent
+// from the map are skipped: a Beacon without a Gloas entry still resolves to the latest fork it carries.
 func (b *Beacon) ForkAtEpoch(epoch phase0.Epoch) (spec.DataVersion, *phase0.Fork) {
 	versions := []spec.DataVersion{
 		spec.DataVersionPhase0,
@@ -149,28 +168,58 @@ func (b *Beacon) ForkAtEpoch(epoch phase0.Epoch) (spec.DataVersion, *phase0.Fork
 		spec.DataVersionDeneb,
 		spec.DataVersionElectra,
 		spec.DataVersionFulu,
+		DataVersionGloas,
 	}
 
-	for i, v := range versions {
-		if epoch < b.Forks[v].Epoch {
-			if i == 0 {
+	var (
+		activeVersion spec.DataVersion
+		activeFork    phase0.Fork
+		hasActive     bool
+	)
+	for _, v := range versions {
+		fork, ok := b.Forks[v]
+		if !ok {
+			continue
+		}
+		if epoch < fork.Epoch {
+			if !hasActive {
 				panic("epoch before genesis")
 			}
-
-			version := versions[i-1]
-			fork := b.Forks[version]
-			return version, &fork
+			return activeVersion, &activeFork
 		}
+		activeVersion, activeFork, hasActive = v, fork, true
 	}
-
-	version := versions[len(versions)-1]
-	fork := b.Forks[version]
-	return version, &fork
+	if !hasActive {
+		panic("no forks configured")
+	}
+	return activeVersion, &activeFork
 }
 
 func (b *Beacon) ForkAtVersion(version spec.DataVersion) (phase0.Fork, bool) {
 	fork, ok := b.Forks[version]
 	return fork, ok
+}
+
+// IsGloas reports whether the beacon fork active at the given epoch is Gloas (ePBS).
+// Returns false when there is no scheduled Gloas fork (absent from Forks or far-future),
+// so it is safe on pre-Gloas networks and Beacon values without a Gloas entry.
+func (b *Beacon) IsGloas(epoch phase0.Epoch) bool {
+	fork, ok := b.Forks[DataVersionGloas]
+	return ok && epoch >= fork.Epoch
+}
+
+// IsGloasAtSlot reports whether the Gloas (ePBS) fork is active at the given slot — the slot-keyed
+// shorthand for IsGloas(EstimatedEpochAtSlot(slot)) used across the duty runners and validators.
+func (b *Beacon) IsGloasAtSlot(slot phase0.Slot) bool {
+	return b.IsGloas(b.EstimatedEpochAtSlot(slot))
+}
+
+// GloasForkEpoch returns the scheduled Gloas (ePBS) fork epoch and whether a Gloas fork is present in
+// the schedule. An unscheduled far-future epoch is returned as-is; callers that gate on it (IsGloas,
+// InGloasPriorWindow) treat it as never active via the epoch comparison.
+func (b *Beacon) GloasForkEpoch() (phase0.Epoch, bool) {
+	fork, ok := b.Forks[DataVersionGloas]
+	return fork.Epoch, ok
 }
 
 func (b *Beacon) AssertSame(other *Beacon) error {

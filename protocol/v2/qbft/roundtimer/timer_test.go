@@ -32,6 +32,7 @@ func TestTimeoutForRound(t *testing.T) {
 		spectypes.RoleCommittee,
 		ssvtypes.RoleAggregator,
 		spectypes.RoleProposer,
+		spectypes.RoleEnvelopeProposer,
 		ssvtypes.RoleSyncCommitteeContribution,
 		spectypes.RoleAggregatorCommittee,
 	}
@@ -74,8 +75,9 @@ func TestTimeoutForRound(t *testing.T) {
 		})
 
 		// TODO: Decide if to make the proposer timeout deterministic
-		// Proposer role is not tested for multiple synchronized timers since it's not deterministic
-		if role == spectypes.RoleProposer {
+		// The round-relative roles (proposer, envelope proposer) are not tested for multiple synchronized
+		// timers since their timeouts aren't slot-synchronized.
+		if RoundRelativeRole(role) {
 			continue
 		}
 
@@ -101,6 +103,12 @@ func TestEstimatedRoundAt(t *testing.T) {
 		{
 			name:         "proposer starts quick round timing at slot start",
 			role:         spectypes.RoleProposer,
+			timeIntoSlot: QuickTimeout,
+			want:         specqbft.FirstRound + 1,
+		},
+		{
+			name:         "envelope proposer starts quick round timing at slot start (no head start)",
+			role:         spectypes.RoleEnvelopeProposer,
 			timeIntoSlot: QuickTimeout,
 			want:         specqbft.FirstRound + 1,
 		},
@@ -142,7 +150,7 @@ func TestEstimatedRoundAt(t *testing.T) {
 
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := EstimatedRoundAt(tc.role, testBeaconConfig.SlotDuration, tc.timeIntoSlot)
+			got, err := EstimatedRoundAt(tc.role, testBeaconConfig.IntervalDuration(0), tc.timeIntoSlot)
 			require.NoError(t, err)
 			require.Equal(t, tc.want, got)
 		})
@@ -188,6 +196,10 @@ func TestRoundTimeoutOffset(t *testing.T) {
 		{name: "proposer, round 9 (first slow)", role: spectypes.RoleProposer, round: QuickTimeoutThreshold + 1, want: quickPhase + SlowTimeout},
 		{name: "proposer, round 10", role: spectypes.RoleProposer, round: QuickTimeoutThreshold + 2, want: quickPhase + 2*SlowTimeout},
 
+		// Envelope proposer (head start = 0): the same offsets as the proposer.
+		{name: "envelope_proposer, round 1", role: spectypes.RoleEnvelopeProposer, round: 1, want: QuickTimeout},
+		{name: "envelope_proposer, round 9 (first slow)", role: spectypes.RoleEnvelopeProposer, round: QuickTimeoutThreshold + 1, want: quickPhase + SlowTimeout},
+
 		// Committee (head start = 4s): offset starts with head start added.
 		{name: "committee, round 1", role: spectypes.RoleCommittee, round: 1, want: 4*time.Second + QuickTimeout},
 		{name: "committee, round 2", role: spectypes.RoleCommittee, round: 2, want: 4*time.Second + 2*QuickTimeout},
@@ -208,8 +220,33 @@ func TestRoundTimeoutOffset(t *testing.T) {
 	}
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
-			got := roundTimeoutForRound(tc.role, slotDuration, tc.round)
+			got := roundTimeoutForRound(tc.role, slotDuration/3, tc.round)
 			require.Equal(t, tc.want, got)
+		})
+	}
+}
+
+// TestRoundTimeoutOffsetGloasInterval verifies the head starts track IntervalDuration: passing the
+// Gloas interval (1/4 of the slot, vs 1/3 pre-Gloas) shrinks the committee/aggregator head starts
+// accordingly, so a stalled round 1 falls back to round 2 in step with the retimed deadlines.
+func TestRoundTimeoutOffsetGloasInterval(t *testing.T) {
+	slotDuration := networkconfig.TestNetwork.SlotDuration
+	gloasInterval := slotDuration / 4
+
+	tt := []struct {
+		name string
+		role spectypes.RunnerRole
+		want time.Duration
+	}{
+		{name: "committee head start = 1 interval", role: spectypes.RoleCommittee, want: slotDuration/4 + QuickTimeout},
+		{name: "aggregator head start = 2 intervals", role: ssvtypes.RoleAggregator, want: slotDuration/2 + QuickTimeout},
+		{name: "sync_committee_contribution head start = 2 intervals", role: ssvtypes.RoleSyncCommitteeContribution, want: slotDuration/2 + QuickTimeout},
+		{name: "proposer head start = 0", role: spectypes.RoleProposer, want: QuickTimeout},
+		{name: "envelope proposer head start = 0", role: spectypes.RoleEnvelopeProposer, want: QuickTimeout},
+	}
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.want, roundTimeoutForRound(tc.role, gloasInterval, specqbft.FirstRound))
 		})
 	}
 }
@@ -220,8 +257,8 @@ func TestRoundTimeoutOffset(t *testing.T) {
 //   - offset exactly → just advanced to round r+1
 //   - offset + 1ns → still in round r+1
 //
-// This is the test that would have caught an off-by-one `<` vs `<=` in EstimatedRoundAt's loop,
-// or a wrong starting `r` — none of which the pre-existing tests directly exercised.
+// This catches an off-by-one (`<` vs `<=`) at a round boundary or a wrong starting round —
+// neither of which the pre-existing tests directly exercised.
 func TestEstimatedRoundAtBoundaries(t *testing.T) {
 	// Use a realistic slot duration (12s) so the numbers line up with the real QuickTimeout (2s) and
 	// SlowTimeout (2m) values.
@@ -232,6 +269,7 @@ func TestEstimatedRoundAtBoundaries(t *testing.T) {
 		role spectypes.RunnerRole
 	}{
 		{"proposer", spectypes.RoleProposer},
+		{"envelope_proposer", spectypes.RoleEnvelopeProposer},
 		{"committee", spectypes.RoleCommittee},
 		{"aggregator", ssvtypes.RoleAggregator},
 		{"sync_committee_contribution", ssvtypes.RoleSyncCommitteeContribution},
@@ -244,20 +282,20 @@ func TestEstimatedRoundAtBoundaries(t *testing.T) {
 			// "late message" territory but EstimatedRoundAt is still defined and should
 			// keep incrementing with the same rules.
 			for round := specqbft.Round(1); round <= CutOffRound+2; round++ {
-				offset := roundTimeoutForRound(rc.role, slotDuration, round)
+				offset := roundTimeoutForRound(rc.role, slotDuration/3, round)
 
 				// 1 ns before the boundary: round r has not yet timed out.
-				got, err := EstimatedRoundAt(rc.role, slotDuration, offset-time.Nanosecond)
+				got, err := EstimatedRoundAt(rc.role, slotDuration/3, offset-time.Nanosecond)
 				require.NoError(t, err)
 				require.Equal(t, round, got, "round %d: 1ns before boundary", round)
 
 				// Exactly at the boundary: round r has timed out, we are now in round r+1.
-				got, err = EstimatedRoundAt(rc.role, slotDuration, offset)
+				got, err = EstimatedRoundAt(rc.role, slotDuration/3, offset)
 				require.NoError(t, err)
 				require.Equal(t, round+1, got, "round %d: exactly at boundary", round)
 
 				// 1 ns after the boundary: still in round r+1 (until next boundary).
-				got, err = EstimatedRoundAt(rc.role, slotDuration, offset+time.Nanosecond)
+				got, err = EstimatedRoundAt(rc.role, slotDuration/3, offset+time.Nanosecond)
 				require.NoError(t, err)
 				require.Equal(t, round+1, got, "round %d: 1ns after boundary", round)
 			}
@@ -265,10 +303,9 @@ func TestEstimatedRoundAtBoundaries(t *testing.T) {
 	}
 }
 
-// TestEstimatedRoundAtEdgeCases covers inputs at and before slot start — the cases that the
-// removed early return (`if sinceFirstRoundChange <= 0 { return FirstRound, nil }`) used to
-// special-case. After the refactor the loop itself handles them; this test regression-guards
-// that behavior.
+// TestEstimatedRoundAtEdgeCases covers inputs at and before slot start. EstimatedRoundAt
+// special-cases them with `if elapsed < 0 { return FirstRound, nil }`; this test
+// regression-guards that behavior.
 func TestEstimatedRoundAtEdgeCases(t *testing.T) {
 	// Use a realistic slot duration (12s) so the numbers line up with the real QuickTimeout (2s) and
 	// SlowTimeout (2m) values.
@@ -299,7 +336,7 @@ func TestEstimatedRoundAtEdgeCases(t *testing.T) {
 	}
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := EstimatedRoundAt(tc.role, slotDuration, tc.timeIntoSlot)
+			got, err := EstimatedRoundAt(tc.role, slotDuration/3, tc.timeIntoSlot)
 			require.NoError(t, err)
 			require.Equal(t, specqbft.FirstRound, got)
 		})
@@ -315,8 +352,8 @@ func TestEstimatedRoundAtEdgeCases(t *testing.T) {
 // "now" and the returned duration must exactly equal roundTimeoutForRound. If anyone changes
 // RoundTimeout's math without updating roundTimeoutForRound (or vice versa), this test fails.
 func TestRoundTimeoutMatchesRoundTimeoutOffset(t *testing.T) {
-	// Proposer uses a relative timeout, not slot-start-based, so it's exempt from the
-	// "equals roundTimeoutOffset" property. We cover non-proposer roles only.
+	// The round-relative roles (proposer, envelope proposer) don't time from slot start, so they're
+	// exempt from the "equals roundTimeoutOffset" property. We cover the slot-synchronized roles only.
 	roles := []struct {
 		name string
 		role spectypes.RunnerRole
@@ -335,7 +372,7 @@ func TestRoundTimeoutMatchesRoundTimeoutOffset(t *testing.T) {
 				timer := New(t.Context(), beaconConfig, rc.role, 0, func(round specqbft.Round) {})
 
 				for round := specqbft.Round(1); round <= CutOffRound; round++ {
-					expected := roundTimeoutForRound(rc.role, beaconConfig.SlotDuration, round)
+					expected := roundTimeoutForRound(rc.role, beaconConfig.IntervalDuration(0), round)
 					got := timer.RoundTimeout(round)
 					require.Equal(t, expected, got, "round %d", round)
 				}
@@ -345,18 +382,20 @@ func TestRoundTimeoutMatchesRoundTimeoutOffset(t *testing.T) {
 }
 
 // TestEstimatedRoundAtMatchesRoundTimeout directly cross-validates EstimatedRoundAt against
-// RoundTimeout for all roles (including proposer). If someone changes the formula in either
-// function without updating the other, this test fails.
+// RoundTimeout for all roles (including the round-relative ones). If someone changes the formula
+// in either function without updating the other, this test fails.
 //
-// For non-proposer (slot-synchronized) roles, RoundTimeout at frozen time == slot start returns
-// the cumulative offset directly. For proposer, RoundTimeout returns individual per-round
-// durations, so we accumulate them to get the boundary at which EstimatedRoundAt should advance.
+// For the slot-synchronized roles, RoundTimeout at frozen time == slot start returns the
+// cumulative offset directly. For the round-relative roles, RoundTimeout returns individual
+// per-round durations, so we accumulate them to get the boundary at which EstimatedRoundAt
+// should advance.
 func TestEstimatedRoundAtMatchesRoundTimeout(t *testing.T) {
 	roles := []struct {
 		name string
 		role spectypes.RunnerRole
 	}{
 		{"proposer", spectypes.RoleProposer},
+		{"envelope_proposer", spectypes.RoleEnvelopeProposer},
 		{"committee", spectypes.RoleCommittee},
 		{"aggregator", ssvtypes.RoleAggregator},
 		{"sync_committee_contribution", ssvtypes.RoleSyncCommitteeContribution},
@@ -369,25 +408,25 @@ func TestEstimatedRoundAtMatchesRoundTimeout(t *testing.T) {
 				beaconConfig := setupTestBeaconConfig()
 				timer := New(t.Context(), beaconConfig, rc.role, 0, func(round specqbft.Round) {})
 
-				// For proposer, RoundTimeout returns per-round durations; accumulate them.
+				// For the round-relative roles, RoundTimeout returns per-round durations; accumulate them.
 				// For other roles, RoundTimeout (at frozen time = slot start) returns
 				// the cumulative offset directly.
 				var cumulative time.Duration
 				for round := specqbft.FirstRound; round <= CutOffRound; round++ {
 					rt := timer.RoundTimeout(round)
-					if rc.role == spectypes.RoleProposer {
+					if RoundRelativeRole(rc.role) {
 						cumulative += rt
 					} else {
 						cumulative = rt
 					}
 
 					// 1 ns before the boundary: still in current round.
-					got, err := EstimatedRoundAt(rc.role, beaconConfig.SlotDuration, cumulative-time.Nanosecond)
+					got, err := EstimatedRoundAt(rc.role, beaconConfig.IntervalDuration(0), cumulative-time.Nanosecond)
 					require.NoError(t, err)
 					require.Equal(t, round, got, "round %d: 1ns before boundary", round)
 
 					// Exactly at the boundary: advanced to next round.
-					got, err = EstimatedRoundAt(rc.role, beaconConfig.SlotDuration, cumulative)
+					got, err = EstimatedRoundAt(rc.role, beaconConfig.IntervalDuration(0), cumulative)
 					require.NoError(t, err)
 					require.Equal(t, round+1, got, "round %d: at boundary", round)
 				}
@@ -504,8 +543,9 @@ func testTimeoutForRoundContextCancelledAfterArm(t *testing.T, role spectypes.Ru
 }
 
 func TestNegativeTimeout(t *testing.T) {
-	// Negative RoundTimeout only applies to roles that use time.Until(slotStart + offset),
-	// not proposer which returns fixed positive durations.
+	// Negative RoundTimeout only applies to roles that use time.Until(slotStart + offset), not the
+	// round-relative roles, which return fixed positive durations regardless of the time into the slot
+	// (see TestRoundTimeoutRoundRelativeRolesIgnoreSlotStart).
 	roles := []spectypes.RunnerRole{
 		spectypes.RoleCommittee,
 		ssvtypes.RoleAggregator,
@@ -538,6 +578,49 @@ func testNegativeTimeout(t *testing.T, role spectypes.RunnerRole) {
 
 	<-time.After(safeTestDelay)
 	require.Equal(t, int32(1), atomic.LoadInt32(&count), "callback must fire immediately for negative timeout")
+}
+
+func TestRoundRelativeRole(t *testing.T) {
+	require.True(t, RoundRelativeRole(spectypes.RoleProposer))
+	require.True(t, RoundRelativeRole(spectypes.RoleEnvelopeProposer))
+
+	for _, role := range []spectypes.RunnerRole{
+		spectypes.RoleCommittee,
+		ssvtypes.RoleAggregator,
+		ssvtypes.RoleSyncCommitteeContribution,
+		spectypes.RoleAggregatorCommittee,
+	} {
+		require.False(t, RoundRelativeRole(role), role)
+	}
+}
+
+// TestRoundTimeoutRoundRelativeRolesIgnoreSlotStart is the regression guard for the round-relative
+// roles' timers: their timeout must not depend on how far into the slot the instance starts. It
+// matters most for the §6 envelope proposer, whose instance only starts after the §4 block is
+// published — a slot-anchored timer would already be negative there and time round 1 out on arrival.
+func TestRoundTimeoutRoundRelativeRolesIgnoreSlotStart(t *testing.T) {
+	roles := []struct {
+		name string
+		role spectypes.RunnerRole
+	}{
+		{"proposer", spectypes.RoleProposer},
+		{"envelope_proposer", spectypes.RoleEnvelopeProposer},
+	}
+
+	for _, rc := range roles {
+		t.Run(rc.name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				// Slot 0 started long ago; a slot-synchronized timer would be deeply negative here.
+				config := *networkconfig.TestNetwork.Beacon
+				config.GenesisTime = time.Now().Add(-10 * time.Minute)
+				timer := New(t.Context(), &config, rc.role, 0, func(specqbft.Round) {})
+
+				require.Equal(t, QuickTimeout, timer.RoundTimeout(specqbft.FirstRound))
+				require.Equal(t, QuickTimeout, timer.RoundTimeout(QuickTimeoutThreshold))
+				require.Equal(t, SlowTimeout, timer.RoundTimeout(QuickTimeoutThreshold+1))
+			})
+		})
+	}
 }
 
 func testTimeoutForRoundMulti(t *testing.T, role spectypes.RunnerRole) {

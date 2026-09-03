@@ -10,9 +10,28 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
+
+// At and after the Gloas fork, validator registration is deprecated, so processExecution emits
+// nothing (validatorProvider is nil here: it would panic if the gate failed to short-circuit).
+func TestValidatorRegistrationHandler_processExecution_skippedAtGloas(t *testing.T) {
+	const gloasEpoch = 100
+	netCfg := networkconfig.TestNetworkWithGloas(gloasEpoch)
+
+	executed := make(chan []*spectypes.ValidatorDuty, 1)
+	h := NewValidatorRegistrationHandler(nil)
+	h.logger = zap.NewNop()
+	h.netCfg = netCfg
+	h.dutiesExecutor = &captureExecutor{executed: executed}
+
+	h.processExecution(context.Background(), gloasEpoch, phase0.Slot(uint64(gloasEpoch)*netCfg.SlotsPerEpoch))
+
+	require.Len(t, executed, 0)
+}
 
 func TestValidatorRegistrationHandler_HandleDuties(t *testing.T) {
 	t.Run("duty triggered by ticker", func(t *testing.T) {

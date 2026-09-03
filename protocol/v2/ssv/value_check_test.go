@@ -1,11 +1,16 @@
 package ssv
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
+
+	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
 // TestVoteCheckerSourceTargetEpoch pins the behavior of the source/target epoch check at
@@ -105,4 +110,242 @@ func TestValidateNoDuplicateAggregatorCommittee(t *testing.T) {
 		}
 		require.ErrorContains(t, validateNoDuplicateAggregatorCommittee(cd), "duplicate contributor")
 	})
+}
+
+// fakeSlashingSigner implements ekm.BeaconSigner for value-check tests. Only IsAttestationSlashable is
+// exercised; the embedded nil interface panics if any other method is called, which surfaces an
+// unexpected dependency rather than hiding it.
+type fakeSlashingSigner struct {
+	ekm.BeaconSigner
+	slashable error
+}
+
+func (f fakeSlashingSigner) IsAttestationSlashable(phase0.BLSPubKey, *phase0.AttestationData) error {
+	return f.slashable
+}
+
+func (f fakeSlashingSigner) IsBeaconBlockSlashable(phase0.BLSPubKey, phase0.Slot) error {
+	return f.slashable
+}
+
+func gloasVote(source, target phase0.Epoch, index phase0.CommitteeIndex) *gloas.GloasBeaconVote {
+	return &gloas.GloasBeaconVote{
+		BlockRoot:            phase0.Root{0x01},
+		Source:               &phase0.Checkpoint{Epoch: source},
+		Target:               &phase0.Checkpoint{Epoch: target},
+		AttestationDataIndex: index,
+	}
+}
+
+func encodeGloasVote(t *testing.T, v *gloas.GloasBeaconVote) []byte {
+	t.Helper()
+	b, err := v.Encode()
+	require.NoError(t, err)
+	return b
+}
+
+func newGloasChecker(signer ekm.BeaconSigner, expected *gloas.GloasBeaconVote) ValueChecker {
+	return NewGloasVoteChecker(signer, 64, []phase0.BLSPubKey{{}}, expected)
+}
+
+// Both payload-status indices (0 = EMPTY, 1 = FULL) pass when source < target, the epochs match the
+// expected vote, and the attestation is not slashable.
+func TestGloasVoteChecker_Valid(t *testing.T) {
+	for _, index := range []phase0.CommitteeIndex{0, 1} {
+		expected := gloasVote(1, 2, index)
+		checker := newGloasChecker(fakeSlashingSigner{}, expected)
+		require.NoError(t, checker.CheckValue(encodeGloasVote(t, gloasVote(1, 2, index))))
+	}
+}
+
+// The one Gloas-specific rule: AttestationDataIndex outside {0, 1} is rejected.
+func TestGloasVoteChecker_IndexOutOfRange(t *testing.T) {
+	expected := gloasVote(1, 2, 0)
+	checker := newGloasChecker(fakeSlashingSigner{}, expected)
+	require.Error(t, checker.CheckValue(encodeGloasVote(t, gloasVote(1, 2, 2))))
+}
+
+func TestGloasVoteChecker_SourceNotBeforeTarget(t *testing.T) {
+	expected := gloasVote(2, 2, 0)
+	checker := newGloasChecker(fakeSlashingSigner{}, expected)
+	require.Error(t, checker.CheckValue(encodeGloasVote(t, gloasVote(2, 2, 0))))
+}
+
+// Epoch-only majority-fork protection: a vote whose target epoch differs from the operator's expected
+// vote is rejected (the index, by contrast, is trusted from the leader and not compared).
+func TestGloasVoteChecker_EpochMismatch(t *testing.T) {
+	expected := gloasVote(1, 2, 0)
+	checker := newGloasChecker(fakeSlashingSigner{}, expected)
+	require.Error(t, checker.CheckValue(encodeGloasVote(t, gloasVote(1, 3, 0))))
+}
+
+func TestGloasVoteChecker_Slashable(t *testing.T) {
+	expected := gloasVote(1, 2, 0)
+	checker := newGloasChecker(fakeSlashingSigner{slashable: fmt.Errorf("slashable")}, expected)
+	require.Error(t, checker.CheckValue(encodeGloasVote(t, gloasVote(1, 2, 0))))
+}
+
+func TestGloasVoteChecker_DecodeError(t *testing.T) {
+	expected := gloasVote(1, 2, 0)
+	checker := newGloasChecker(fakeSlashingSigner{}, expected)
+	require.Error(t, checker.CheckValue([]byte{0x00, 0x01, 0x02})) // too short for a 120-byte vote
+}
+
+// --- proposer checker, Gloas (ePBS) ---
+
+const gloasProposerSlot = phase0.Slot(8)
+
+var gloasProposerPK = phase0.BLSPubKey{0x42}
+
+func gloasProposerConsensusData(t *testing.T, dataSSZ []byte) []byte {
+	t.Helper()
+	cd := &spectypes.ProposerConsensusData{
+		Duty: spectypes.ValidatorDuty{
+			Type:           spectypes.BNRoleProposer,
+			PubKey:         gloasProposerPK,
+			ValidatorIndex: 7,
+			Slot:           gloasProposerSlot,
+		},
+		Version: networkconfig.DataVersionGloas,
+		DataSSZ: dataSSZ,
+	}
+	out, err := cd.Encode()
+	require.NoError(t, err)
+	return out
+}
+
+func gloasBlockSSZ(t *testing.T, slot phase0.Slot) []byte {
+	t.Helper()
+	dataSSZ, err := gloas.TestingBeaconBlock(slot).MarshalSSZ()
+	require.NoError(t, err)
+	return dataSSZ
+}
+
+func newGloasProposerChecker(signer ekm.BeaconSigner) ValueChecker {
+	cfg := networkconfig.TestNetworkWithGloas(0)
+	return NewProposerChecker(signer, cfg.Beacon, spectypes.ValidatorPK(gloasProposerPK), 7, phase0.BLSPubKey{})
+}
+
+// A Gloas proposer value validates via the node-side block decode (there is no spectypes Gloas block
+// version); the decoded block's slot drives the slashing check.
+func TestProposerChecker_GloasValid(t *testing.T) {
+	checker := newGloasProposerChecker(fakeSlashingSigner{})
+	require.NoError(t, checker.CheckValue(gloasProposerConsensusData(t, gloasBlockSSZ(t, gloasProposerSlot))))
+}
+
+func TestProposerChecker_GloasSlashable(t *testing.T) {
+	checker := newGloasProposerChecker(fakeSlashingSigner{slashable: fmt.Errorf("slashable")})
+	require.Error(t, checker.CheckValue(gloasProposerConsensusData(t, gloasBlockSSZ(t, gloasProposerSlot))))
+}
+
+// DataSSZ that is not a valid Gloas block fails the node-side validity check.
+func TestProposerChecker_GloasDecodeError(t *testing.T) {
+	checker := newGloasProposerChecker(fakeSlashingSigner{})
+	require.Error(t, checker.CheckValue(gloasProposerConsensusData(t, []byte{0x00, 0x01, 0x02})))
+}
+
+// A block whose own slot differs from the duty slot is rejected: the anti-harvest guard in
+// checkValidatorConsensusData (SIP #94 §4).
+func TestProposerChecker_GloasBlockSlotMismatch(t *testing.T) {
+	checker := newGloasProposerChecker(fakeSlashingSigner{})
+	err := checker.CheckValue(gloasProposerConsensusData(t, gloasBlockSSZ(t, gloasProposerSlot+1)))
+	require.ErrorContains(t, err, "does not match duty slot")
+}
+
+// A value on a Gloas slot carrying a pre-Gloas Version is rejected: our slot-based branch and ssv-spec's
+// version-based ProposerValueCheckF must agree on the fork, so a Byzantine leader can't split the value
+// check across a mixed cluster. Honest proposers always stamp Version == the slot's fork; here only the
+// Version is wrong (the block itself is a valid Gloas block for the duty slot).
+func TestProposerChecker_GloasVersionMismatch(t *testing.T) {
+	checker := newGloasProposerChecker(fakeSlashingSigner{})
+	cd := &spectypes.ProposerConsensusData{
+		Duty: spectypes.ValidatorDuty{
+			Type:           spectypes.BNRoleProposer,
+			PubKey:         gloasProposerPK,
+			ValidatorIndex: 7,
+			Slot:           gloasProposerSlot,
+		},
+		Version: networkconfig.DataVersionGloas - 1, // Fulu on a Gloas slot
+		DataSSZ: gloasBlockSSZ(t, gloasProposerSlot),
+	}
+	value, err := cd.Encode()
+	require.NoError(t, err)
+	require.ErrorContains(t, checker.CheckValue(value), "does not match slot fork")
+}
+
+// --- envelope checker, §6 ---
+
+var envelopeValidatorPK = phase0.BLSPubKey{0x42}
+
+func encodeEnvelopeValue(t *testing.T, slot phase0.Slot, valIdx phase0.ValidatorIndex, pk phase0.BLSPubKey, blockRoot phase0.Root, builderIndex gloas.BuilderIndex) []byte {
+	t.Helper()
+	blinded := &gloas.BlindedExecutionPayloadEnvelope{
+		PayloadRoot:           phase0.Root{0x09},
+		ExecutionRequests:     &gloas.ExecutionRequests{},
+		BuilderIndex:          builderIndex,
+		BeaconBlockRoot:       blockRoot,
+		ParentBeaconBlockRoot: phase0.Root{0x08},
+	}
+	dataSSZ, err := blinded.Encode()
+	require.NoError(t, err)
+	cd := &gloas.EnvelopeConsensusData{
+		Duty: spectypes.ValidatorDuty{
+			Type:           spectypes.BNRoleEnvelopeProposer,
+			Slot:           slot,
+			ValidatorIndex: valIdx,
+			PubKey:         pk,
+		},
+		DataSSZ: dataSSZ,
+	}
+	out, err := cd.Encode()
+	require.NoError(t, err)
+	return out
+}
+
+func newEnvelopeCheckerWithRoot(slot phase0.Slot, root phase0.Root) ValueChecker {
+	store := NewProposedBlockRoots()
+	store.Set(slot, root)
+	return NewEnvelopeChecker(store, slot, spectypes.ValidatorPK(envelopeValidatorPK), 3)
+}
+
+// A self-build envelope whose BeaconBlockRoot matches the §4-decided root for the slot passes.
+func TestEnvelopeChecker_Valid(t *testing.T) {
+	root := phase0.Root{0xaa}
+	checker := newEnvelopeCheckerWithRoot(7, root)
+	require.NoError(t, checker.CheckValue(encodeEnvelopeValue(t, 7, 3, envelopeValidatorPK, root, gloas.BuilderIndexSelfBuild)))
+}
+
+func TestEnvelopeChecker_NotSelfBuild(t *testing.T) {
+	root := phase0.Root{0xaa}
+	checker := newEnvelopeCheckerWithRoot(7, root)
+	require.Error(t, checker.CheckValue(encodeEnvelopeValue(t, 7, 3, envelopeValidatorPK, root, 5)))
+}
+
+func TestEnvelopeChecker_WrongBlockRoot(t *testing.T) {
+	checker := newEnvelopeCheckerWithRoot(7, phase0.Root{0xaa})
+	require.Error(t, checker.CheckValue(encodeEnvelopeValue(t, 7, 3, envelopeValidatorPK, phase0.Root{0xbb}, gloas.BuilderIndexSelfBuild)))
+}
+
+// The §4 root must be present — the proposer runner must have decided and recorded it.
+func TestEnvelopeChecker_NoDecidedRoot(t *testing.T) {
+	checker := NewEnvelopeChecker(NewProposedBlockRoots(), 7, spectypes.ValidatorPK(envelopeValidatorPK), 3)
+	require.Error(t, checker.CheckValue(encodeEnvelopeValue(t, 7, 3, envelopeValidatorPK, phase0.Root{0xaa}, gloas.BuilderIndexSelfBuild)))
+}
+
+func TestEnvelopeChecker_WrongSlot(t *testing.T) {
+	root := phase0.Root{0xaa}
+	checker := newEnvelopeCheckerWithRoot(7, root)
+	require.Error(t, checker.CheckValue(encodeEnvelopeValue(t, 8, 3, envelopeValidatorPK, root, gloas.BuilderIndexSelfBuild)))
+}
+
+func TestEnvelopeChecker_DecodeError(t *testing.T) {
+	checker := newEnvelopeCheckerWithRoot(7, phase0.Root{0xaa})
+	require.Error(t, checker.CheckValue([]byte{0x00, 0x01}))
+}
+
+// ekm.GloasDataVersion is a hand-kept mirror of networkconfig.DataVersionGloas (the ssvsigner module has
+// its own go.mod and can't import networkconfig). If they drift, the remote signer resolves the wrong
+// fork/domain on Gloas slots, so guard the mirror here on the node side, where both are importable.
+func TestGloasDataVersionMirror(t *testing.T) {
+	require.Equal(t, networkconfig.DataVersionGloas, ekm.GloasDataVersion)
 }

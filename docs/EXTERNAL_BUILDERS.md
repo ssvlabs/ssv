@@ -1,5 +1,77 @@
 # Builder proposals
 
+> **ePBS / Gloas (EIP-7732).** The bulk of this page describes the pre-Gloas external-builder flow —
+> out-of-protocol PBS via MEV-Boost/commit-boost and relays. At the Gloas fork, in-protocol (enshrined) PBS
+> supersedes it: the proposer publishes a block committing to a builder's *bid* instead of fetching a
+> blinded block from a relay, the builder reveals the execution payload separately, and a Payload
+> Timeliness Committee attests to its on-time arrival. SSV runs these new duties automatically, with no
+> operator configuration; the optional [direct-builder overlay](#epbs-direct-builder-overlay-gloas) below
+> is the one Gloas surface that takes config. Gloas is not active on Ethereum mainnet yet (devnets only);
+> this page will be revised as ePBS approaches mainnet.
+
+## ePBS direct-builder overlay (Gloas)
+
+On top of the enshrined flow — gossiped bids from staked builders, with local self-build as the
+always-available floor — a cluster MAY additionally maintain **direct builder connections**: authenticated
+bid requests and per-builder bid preferences, per the Gloas
+[builder-specs](https://github.com/ethereum/builder-specs/blob/master/specs/gloas/validator.md) and
+[beacon-APIs#630](https://github.com/ethereum/beacon-APIs/pull/630). This is an **opt-in enhancement, not
+on the critical path**: a cluster that never configures it still proposes valid blocks, and the enshrined
+path stays the fallback whenever the overlay fails or a builder is unavailable. Design and rollout are
+tracked in [issue #2962](https://github.com/ssvlabs/ssv/issues/2962).
+
+Configuration is the `Builders` block (see `config.example.yaml`), using the ecosystem's
+[keymanager-APIs#88](https://github.com/ethereum/keymanager-APIs/pull/88) `BuilderConfig` vocabulary:
+top-level `MinBid` and `BuilderBoostFactor` (applied to p2p bids, and the default for any entry that omits
+its own) plus an `Entries` list — each entry `URL`, `AuthData`, optional `BuilderPubKeys`,
+`MaxExecutionPayment`, `MinBid`, `BuilderBoostFactor`.
+
+**Every operator of every committee sharing a validator MUST configure the identical list — all `n`
+operators, not just a quorum.** The builder authenticates the cluster by one BLS signature over
+`BuilderRequestAuth{data, slot}` reconstructed from operator partials, and the partials only combine over
+byte-identical `data`:
+
+- `AuthData` divergence on a builder entry splits the signing quorum and **silently disables that builder**
+  for the affected proposal slots — proposals still succeed via gossiped bids or self-build, so watch the
+  build-source metrics rather than proposal failures.
+- `AuthData` defaults to the UTF-8 bytes of `URL` exactly as configured — so even trailing-slash or case
+  differences between operators' `URL` values break the quorum unless an explicit shared `AuthData` is set.
+- The unsigned knobs (`MinBid`, `BuilderBoostFactor`, `MaxExecutionPayment`) don't affect signing, but
+  divergence makes the cluster's effective bid policy depend on which operator leads the round — keep them
+  identical too. They are sent on the `produceBlockV4` POST and honored by beacon nodes that implement it
+  (beacon-APIs#630); against an older node the request falls back to GET, where only `BuilderBoostFactor`
+  still applies (the GET's long-standing knob) — `MinBid` and the per-entry knobs are POST-only.
+- Remote-signing operators (Web3Signer) cannot produce request-auth partials — there is no request-auth
+  signing type there yet. A node with `Builders` entries set and a remote signer warns at startup and drops
+  its direct-builder **entries** (keeping the top-level p2p knobs); the cluster still reconstructs auths
+  while at most `f` operators are remote-signing.
+
+### How it works
+
+Once at least one builder is configured, three things happen around a proposal — all opt-in, all falling
+back to the enshrined flow (gossiped bids / self-build) on any failure:
+
+1. **Ahead-of-time auth.** Across the proposer lookahead, the §5 dispatcher threshold-signs one
+   `BuilderRequestAuth{data, proposal_slot}` per builder and reconstructs it from operator partials into a
+   per-slot cache.
+2. **Bid request.** At proposal time the node sends `produceBlockV4` as a POST (beacon-APIs#630) carrying
+   the config plus the reconstructed auths; the beacon node authenticates to each builder and returns the
+   winning block. When a builder-API bid wins, the node echoes `Eth-Builder-Url` on publish so the beacon
+   node forwards the block to that builder.
+3. **Preferences.** On each reconstruction the node also submits the ahead-of-time
+   `submitBuilderPreferences` (the `MaxExecutionPayment` cap) through its own beacon node, so the builder
+   holds it before the bid request arrives.
+
+A cluster with no `Builders` config produces over the same `produceBlockV4` POST, sending a neutral
+local-build config (empty `builders`, `builder_boost_factor` 100). The 100 weighs gossiped p2p bids at par
+with the local build — profit maximization, the same default beacon nodes applied to the pre-#630 GET — so
+an unconfigured cluster behaves as before, which also means it follows p2p bids as soon as staked builders
+gossip any. A cluster that prefers its own local build instead sets a knobs-only config —
+`BuilderBoostFactor: 0` with no `Entries` — which the beacon node honors as "local unless unviable". A
+beacon node that predates the #630 POST answers it with 404/405; the node falls back to the legacy GET for
+that node, still carrying `BuilderBoostFactor` (the one knob that GET honors) — `MinBid` and the per-entry
+knobs are POST-only.
+
 ## How to use
 
 1. Configure your beacon node to use an external builder

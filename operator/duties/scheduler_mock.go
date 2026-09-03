@@ -20,6 +20,7 @@ import (
 	types "github.com/ethereum/go-ethereum/core/types"
 	types0 "github.com/ssvlabs/ssv-spec/types"
 	types1 "github.com/ssvlabs/ssv/protocol/v2/types"
+	gloas "github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 	gomock "go.uber.org/mock/gomock"
 	zap "go.uber.org/zap"
 )
@@ -159,6 +160,21 @@ func (mr *MockBeaconNodeMockRecorder) AttesterDuties(ctx, epoch, validatorIndice
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AttesterDuties", reflect.TypeOf((*MockBeaconNode)(nil).AttesterDuties), ctx, epoch, validatorIndices)
 }
 
+// PayloadAttestationDuties mocks base method.
+func (m *MockBeaconNode) PayloadAttestationDuties(ctx context.Context, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*gloas.PTCDuty, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PayloadAttestationDuties", ctx, epoch, validatorIndices)
+	ret0, _ := ret[0].([]*gloas.PTCDuty)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// PayloadAttestationDuties indicates an expected call of PayloadAttestationDuties.
+func (mr *MockBeaconNodeMockRecorder) PayloadAttestationDuties(ctx, epoch, validatorIndices any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PayloadAttestationDuties", reflect.TypeOf((*MockBeaconNode)(nil).PayloadAttestationDuties), ctx, epoch, validatorIndices)
+}
+
 // ProposerDuties mocks base method.
 func (m *MockBeaconNode) ProposerDuties(ctx context.Context, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*v1.ProposerDuty, error) {
 	m.ctrl.T.Helper()
@@ -172,6 +188,21 @@ func (m *MockBeaconNode) ProposerDuties(ctx context.Context, epoch phase0.Epoch,
 func (mr *MockBeaconNodeMockRecorder) ProposerDuties(ctx, epoch, validatorIndices any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProposerDuties", reflect.TypeOf((*MockBeaconNode)(nil).ProposerDuties), ctx, epoch, validatorIndices)
+}
+
+// ProposerDutiesDependentRoot mocks base method.
+func (m *MockBeaconNode) ProposerDutiesDependentRoot(ctx context.Context, epoch phase0.Epoch) (phase0.Root, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ProposerDutiesDependentRoot", ctx, epoch)
+	ret0, _ := ret[0].(phase0.Root)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ProposerDutiesDependentRoot indicates an expected call of ProposerDutiesDependentRoot.
+func (mr *MockBeaconNodeMockRecorder) ProposerDutiesDependentRoot(ctx, epoch any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProposerDutiesDependentRoot", reflect.TypeOf((*MockBeaconNode)(nil).ProposerDutiesDependentRoot), ctx, epoch)
 }
 
 // SubmitBeaconCommitteeSubscriptions mocks base method.

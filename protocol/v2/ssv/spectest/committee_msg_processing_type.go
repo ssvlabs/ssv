@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"os"
 	"path/filepath"
 	"reflect"
 	"strconv"
@@ -13,14 +12,14 @@ import (
 	"testing"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+
 	spectests "github.com/ssvlabs/ssv-spec/qbft/spectest/tests"
 	spec "github.com/ssvlabs/ssv-spec/ssv"
 	stests "github.com/ssvlabs/ssv-spec/ssv/spectest/tests"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
-	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/observability/log"
@@ -174,13 +173,10 @@ func (tests *MultiCommitteeSpecTest) GetPostState(logger *zap.Logger) (any, erro
 
 func overrideStateComparisonCommitteeSpecTest(t *testing.T, test *CommitteeSpecTest, name string, testType string) {
 	specCommittee := &spec.Committee{}
-	specDir, err := storage.GetSpecDir("", filepath.Join("ssv", "spectest"))
-	require.NoError(t, err)
-	specCommittee, err = typescomparable.UnmarshalStateComparison(specDir, name, testType, specCommittee)
-
+	specCommittee, err := storage.UnmarshalStateComparison("ssv", name, testType, specCommittee)
 	require.NoError(t, err)
 	committee := &validator.Committee{}
-	committee, err = typescomparable.UnmarshalStateComparison(specDir, name, testType, committee)
+	committee, err = storage.UnmarshalStateComparison("ssv", name, testType, committee)
 	require.NoError(t, err)
 
 	committee.Shares = specCommittee.Share
@@ -188,7 +184,7 @@ func overrideStateComparisonCommitteeSpecTest(t *testing.T, test *CommitteeSpecT
 
 	netCfg := testNetworkConfig(test.NeedsAggRunners)
 
-	stateMap, err := readStateComparisonMap(specDir, name, testType)
+	stateMap, err := readStateComparisonMap(name, testType)
 	require.NoError(t, err)
 
 	committeeRunnersMap, _ := stateMap["CommitteeRunners"].(map[string]any)
@@ -275,10 +271,8 @@ func overrideStateComparisonCommitteeSpecTest(t *testing.T, test *CommitteeSpecT
 	test.PostDutyCommittee = committee
 }
 
-func readStateComparisonMap(specDir, testName, testType string) (map[string]any, error) {
-	scDir := typescomparable.GetSCDir(filepath.Join(specDir, "generate"), testType)
-	path := filepath.Join(scDir, fmt.Sprintf("%s.json", testName))
-	byteValue, err := os.ReadFile(filepath.Clean(path))
+func readStateComparisonMap(testName, testType string) (map[string]any, error) {
+	byteValue, err := storage.ReadStateComparisonFile("ssv", testName, testType)
 	if err != nil {
 		return nil, err
 	}

@@ -7,12 +7,13 @@ import (
 	"sort"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	ssz "github.com/ferranbt/fastssz"
+
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
+	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 )
 
 func (b *BaseRunner) ValidatePreConsensusMsg(
@@ -137,14 +138,20 @@ func (b *BaseRunner) ValidatePostConsensusMsg(ctx context.Context, runner Runner
 	}
 	if runner.GetRole() == spectypes.RoleCommittee {
 		validateMsg = func() error {
-			decidedValue := &spectypes.BeaconVote{}
-			if err := decidedValue.Decode(decidedValueBytes); err != nil {
-				return fmt.Errorf("failed to parse decided value to BeaconVote: %w", err)
-			}
-
 			// Use b.State.CurrentDuty.DutySlot() since CurrentDuty never changes for CommitteeRunner
 			// by design, hence there is no need to store slot number on decidedValue for CommitteeRunner.
 			expectedSlot := b.State.CurrentDuty.DutySlot()
+
+			// Parse-check the decided value against the slot's fork: a GloasBeaconVote (120B) on Gloas,
+			// a BeaconVote (112B) before. The two reject on length, so a wrong-fork value fails here.
+			decidedValue := spectypes.Encoder(&spectypes.BeaconVote{})
+			if b.NetworkConfig.IsGloasAtSlot(expectedSlot) {
+				decidedValue = &gloas.GloasBeaconVote{}
+			}
+			if err := decidedValue.Decode(decidedValueBytes); err != nil {
+				return fmt.Errorf("failed to parse decided beacon vote: %w", err)
+			}
+
 			return b.validatePartialSigMsg(psigMsgs, expectedSlot)
 		}
 	}
@@ -181,7 +188,7 @@ func (b *BaseRunner) verifyExpectedRoot(
 	ctx context.Context,
 	runner Runner,
 	psigMsgs *spectypes.PartialSignatureMessages,
-	expectedRootObjs []ssz.HashRoot,
+	expectedRootObjs []spectypes.HashRoot,
 	domain phase0.DomainType,
 ) error {
 	if len(expectedRootObjs) != len(psigMsgs.Messages) {
@@ -189,7 +196,7 @@ func (b *BaseRunner) verifyExpectedRoot(
 	}
 
 	// convert expected roots to map and mark unique roots when verified
-	sortedExpectedRoots, err := func(expectedRootObjs []ssz.HashRoot) ([][32]byte, error) {
+	sortedExpectedRoots, err := func(expectedRootObjs []spectypes.HashRoot) ([][32]byte, error) {
 		epoch := b.NetworkConfig.EstimatedEpochAtSlot(b.State.CurrentDuty.DutySlot())
 		d, err := runner.GetBeaconNode().DomainData(ctx, epoch, domain)
 		if err != nil {

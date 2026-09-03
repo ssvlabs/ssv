@@ -14,11 +14,13 @@ import (
 	"strings"
 	"testing"
 
+	"golang.org/x/mod/modfile"
+	"golang.org/x/mod/module"
+
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv-spec/types/testingutils"
-	"golang.org/x/mod/modfile"
-	"golang.org/x/mod/module"
+	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
 
 	"github.com/ssvlabs/ssv/ssvsigner/keys/rsaencryption"
 )
@@ -119,20 +121,28 @@ func GenerateSpecTestJSON(path string, module string) ([]byte, error) {
 		return nil, fmt.Errorf("failed to create spec artifacts directory: %w", err)
 	}
 	testJSONPath := filepath.Join(artifactDir, "tests.json")
+	scaffoldOut := filepath.Join(artifactDir, "spec-tests", module)
 
-	// Fast path: use already-generated tests.json from the local artifact cache.
+	// Fast path: use already-generated tests.json from the local artifact cache, provided the
+	// state-comparison vectors the per-test overrides read later are also available (in-module for
+	// pre-split spec versions, or previously regenerated into the artifact scaffold).
 	// #nosec G304 -- test helper reads from a controlled cache path.
 	jsonBytes, err := os.ReadFile(testJSONPath)
-	if err == nil && len(jsonBytes) > 0 {
+	if err == nil && len(jsonBytes) > 0 && (pathExists(filepath.Join(p, "state_comparison")) || pathExists(filepath.Join(scaffoldOut, "state_comparison"))) {
 		return jsonBytes, nil
 	}
 
-	// Fast path for first CI run: build tests.json from pre-generated files in ssv-spec module.
+	// Fast path for pre-split spec versions (e.g. the alan pin): build tests.json from the
+	// pre-generated files the ssv-spec module ships in-module.
 	jsonBytes, err = buildTestsJSONFromDir(filepath.Join(p, "tests"))
 	if err == nil {
 		_ = os.WriteFile(testJSONPath, jsonBytes, 0600)
 		return jsonBytes, nil
 	}
+
+	// Split layout: newer ssv-spec versions ship no generated vectors in-module (they moved to the
+	// sibling ssvlabs/spec-tests repo, which a module-cache checkout cannot host), so build and run
+	// the module's generator to produce them locally.
 
 	// Step 2: Build the Go package, outputting an executable to the artifact directory.
 	binaryPath := filepath.Join(artifactDir, module)
@@ -144,29 +154,106 @@ func GenerateSpecTestJSON(path string, module string) ([]byte, error) {
 		return nil, fmt.Errorf("go build failed: %w; output: %s", err, buildOutput)
 	}
 
-	// Step 3: Execute the built binary.
-	// It is assumed that running the binary generates tests.json in artifactDir.
+	// Step 3: Execute the built binary. The split-layout generator resolves its output root as
+	// <go.mod root of cwd>/../spec-tests/<module> (the sibling spec-tests checkout in a working
+	// copy), so run it from a scaffold directory carrying a go.mod: it then writes tests.json,
+	// tests/ and state_comparison/ under <artifactDir>/spec-tests/<module>.
+	scaffoldRoot := filepath.Join(artifactDir, "specrun")
+	if err := os.MkdirAll(scaffoldRoot, 0750); err != nil {
+		return nil, fmt.Errorf("failed to create generator scaffold directory: %w", err)
+	}
+	if err := os.WriteFile(filepath.Join(scaffoldRoot, "go.mod"), []byte("module spectest-scaffold\n"), 0600); err != nil {
+		return nil, fmt.Errorf("failed to write generator scaffold go.mod: %w", err)
+	}
 	//nolint: gosec
 	cmdRun := exec.Command(binaryPath)
-	cmdRun.Dir = artifactDir
+	cmdRun.Dir = scaffoldRoot
 	runOutput, err := cmdRun.CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("failed to run binary: %w; output: %s", err, runOutput)
 	}
 
-	// Step 4: Read the generated tests.json file.
-	//nolint: gosec
-	jsonBytes, err = os.ReadFile(testJSONPath)
+	// Step 4: Read the generated tests.json file and cache it at the canonical path.
+	// #nosec G304 -- test helper reads from a controlled cache path.
+	jsonBytes, err = os.ReadFile(filepath.Join(scaffoldOut, "tests.json"))
 	if err != nil {
 		return nil, fmt.Errorf("failed to read tests.json: %w", err)
 	}
+	// #nosec G703 -- test helper writes to a controlled cache path.
+	if err := os.WriteFile(testJSONPath, jsonBytes, 0600); err != nil {
+		return nil, fmt.Errorf("failed to cache tests.json: %w", err)
+	}
 
-	// Keep only tests.json to keep artifact cache size small.
+	// Keep spec-tests/<module>/state_comparison — the per-test overrides read it — and drop what
+	// nothing reads again, to keep the artifact cache small.
 	_ = os.Remove(binaryPath)
-	_ = os.RemoveAll(filepath.Join(artifactDir, "tests"))
-	_ = os.RemoveAll(filepath.Join(artifactDir, "state_comparison"))
+	_ = os.RemoveAll(scaffoldRoot)
+	_ = os.RemoveAll(filepath.Join(scaffoldOut, "tests"))
+	_ = os.Remove(filepath.Join(scaffoldOut, "tests.json"))
 
 	return jsonBytes, nil
+}
+
+// pathExists reports whether path exists.
+func pathExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
+
+// StateComparisonDir returns the directory holding the module's state_comparison vectors (the
+// parent of the state_comparison folder), across both ssv-spec layouts:
+//   - pre-split versions (e.g. the alan pin) ship the vectors in-module under
+//     <module>/spectest/generate/state_comparison;
+//   - split versions moved them to the sibling ssvlabs/spec-tests repo, which the module cache
+//     cannot host, so they are regenerated into the local artifact cache by GenerateSpecTestJSON
+//     (triggered here when missing).
+func StateComparisonDir(module string) (string, error) {
+	specDir, err := GetSpecDir("", module)
+	if err != nil {
+		return "", fmt.Errorf("could not get spec dir: %w", err)
+	}
+	generateDir := filepath.Join(specDir, "spectest", "generate")
+	if pathExists(filepath.Join(generateDir, "state_comparison")) {
+		return generateDir, nil
+	}
+	scaffoldOut := filepath.Join(specArtifactsDir(module, generateDir), "spec-tests", module)
+	if pathExists(filepath.Join(scaffoldOut, "state_comparison")) {
+		return scaffoldOut, nil
+	}
+	if _, err := GenerateSpecTestJSON("", module); err != nil {
+		return "", fmt.Errorf("state-comparison vectors unavailable and generation failed: %w", err)
+	}
+	if !pathExists(filepath.Join(scaffoldOut, "state_comparison")) {
+		return "", fmt.Errorf("state-comparison vectors missing after generation under %s", scaffoldOut)
+	}
+	return scaffoldOut, nil
+}
+
+// ReadStateComparisonFile reads the state-comparison JSON for (testName, testType) of the given
+// spec module ("qbft" or "ssv"), resolving the vectors dir via StateComparisonDir.
+func ReadStateComparisonFile(module, testName, testType string) ([]byte, error) {
+	root, err := StateComparisonDir(module)
+	if err != nil {
+		return nil, err
+	}
+	path := filepath.Join(typescomparable.GetSCDir(root, testType), fmt.Sprintf("%s.json", testName))
+	// #nosec G304 -- test helper reads from a controlled cache/module path.
+	return os.ReadFile(filepath.Clean(path))
+}
+
+// UnmarshalStateComparison mirrors the spec's typescomparable.UnmarshalStateComparison on top of
+// the layout-aware StateComparisonDir resolution (the spec's own helper hardcodes the split
+// layout's sibling-checkout paths, which do not exist under the Go module cache).
+func UnmarshalStateComparison[T spectypes.Root](module, testName, testType string, targetState T) (T, error) {
+	var nilT T
+	byteValue, err := ReadStateComparisonFile(module, testName, testType)
+	if err != nil {
+		return nilT, err
+	}
+	if err := json.Unmarshal(byteValue, targetState); err != nil {
+		return nilT, err
+	}
+	return targetState, nil
 }
 
 func specArtifactsDir(module, specGeneratePath string) string {
@@ -229,7 +316,11 @@ func GetSpecDir(path, module string) (string, error) {
 			return "", errors.New("could not get current directory")
 		}
 	}
-	goModFile, err := getGoModFile(path)
+	root, err := findGoModDir(path)
+	if err != nil {
+		return "", err
+	}
+	goModFile, err := parseGoModFile(root)
 	if err != nil {
 		return "", errors.New("could not get go.mod file")
 	}
@@ -247,6 +338,18 @@ func GetSpecDir(path, module string) (string, error) {
 	if replace != nil {
 		modPath = replace.New.Path
 		modVersion = replace.New.Version
+		if modVersion == "" {
+			// A version-less replace target is a local directory, not a module in the cache
+			// (go.mod semantics: a replacement path without a version must be a directory).
+			dir := modPath
+			if !filepath.IsAbs(dir) {
+				dir = filepath.Join(root, dir)
+			}
+			if _, err := os.Stat(dir); err != nil {
+				return "", fmt.Errorf("local replace directory for %s not found: %w", specModule, err)
+			}
+			return filepath.Join(filepath.Clean(dir), module), nil
+		}
 	} else {
 		// get from require
 		var req *modfile.Require
@@ -309,29 +412,31 @@ func GetModulePath(name, version string) (string, error) {
 	return path.Join(cache, escapedPath+"@"+escapedVersion), nil
 }
 
-func getGoModFile(path string) (*modfile.File, error) {
+// findGoModDir walks up from path to the directory containing the module file.
+func findGoModDir(path string) (string, error) {
+	modFileName := specGoModFilename()
+	for {
+		if _, err := os.Stat(filepath.Join(path, modFileName)); err == nil {
+			return path, nil
+		}
+		path = filepath.Dir(path)
+		if path == "/" {
+			return "", fmt.Errorf("could not find %s file", modFileName)
+		}
+	}
+}
+
+// parseGoModFile reads and parses the module file in root (as located by findGoModDir).
+func parseGoModFile(root string) (*modfile.File, error) {
 	// The alan_spec build resolves the ssv-spec version from go.spec.alan.mod instead of
 	// go.mod, so the spec-test vectors come from the alan (pre-Boole) spec release.
 	modFileName := specGoModFilename()
 
-	// find project root path
-	for {
-		if _, err := os.Stat(filepath.Join(path, modFileName)); err == nil {
-			break
-		}
-		path = filepath.Dir(path)
-		if path == "/" {
-			return nil, fmt.Errorf("could not find %s file", modFileName)
-		}
-	}
-
-	// read mod file
 	// #nosec G304 -- modFileName is selected by build tags from fixed constants.
-	buf, err := os.ReadFile(filepath.Join(filepath.Clean(path), modFileName))
+	buf, err := os.ReadFile(filepath.Join(filepath.Clean(root), modFileName))
 	if err != nil {
 		return nil, fmt.Errorf("could not read %s", modFileName)
 	}
 
-	// parse mod file
 	return modfile.Parse(modFileName, buf, nil)
 }

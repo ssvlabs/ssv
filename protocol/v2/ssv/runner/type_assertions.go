@@ -5,6 +5,8 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
+	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 )
 
 func validatorDutyFromDuty(duty spectypes.Duty) (*spectypes.ValidatorDuty, error) {
@@ -84,18 +86,28 @@ func (b *BaseRunner) currentDutySlot() (phase0.Slot, error) {
 	}
 }
 
-func beaconVoteFromEncoder(value spectypes.Encoder) (*spectypes.BeaconVote, error) {
-	if value == nil {
-		return nil, fmt.Errorf("decided value is nil")
+// decidedAttestationVote extracts the committee runner's decided consensus value as the common
+// BeaconVote plus, on Gloas-and-later slots, the payload-status index it carries (SIP #94 §2). The
+// concrete type — fixed by the decode prototype in ProcessConsensus — selects the fork: a
+// GloasBeaconVote yields a non-nil index, a plain BeaconVote a nil one. The BeaconVote half
+// (BlockRoot/Source/Target) is identical across forks, so the attestation and sync-committee paths
+// consume it unchanged.
+func decidedAttestationVote(value spectypes.Encoder) (*spectypes.BeaconVote, *phase0.CommitteeIndex, error) {
+	switch v := value.(type) {
+	case *gloas.GloasBeaconVote:
+		if v == nil {
+			return nil, nil, fmt.Errorf("gloas beacon vote is nil")
+		}
+		index := v.AttestationDataIndex
+		return &spectypes.BeaconVote{BlockRoot: v.BlockRoot, Source: v.Source, Target: v.Target}, &index, nil
+	case *spectypes.BeaconVote:
+		if v == nil {
+			return nil, nil, fmt.Errorf("beacon vote is nil")
+		}
+		return v, nil, nil
+	case nil:
+		return nil, nil, fmt.Errorf("decided value is nil")
+	default:
+		return nil, nil, fmt.Errorf("decided value is not a beacon vote: %T", value)
 	}
-
-	beaconVote, ok := value.(*spectypes.BeaconVote)
-	if !ok {
-		return nil, fmt.Errorf("decided value is not a BeaconVote: %T", value)
-	}
-	if beaconVote == nil {
-		return nil, fmt.Errorf("beacon vote is nil")
-	}
-
-	return beaconVote, nil
 }

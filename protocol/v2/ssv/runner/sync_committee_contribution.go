@@ -13,10 +13,10 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	ssz "github.com/ferranbt/fastssz"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
+
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
@@ -273,7 +273,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessConsensus(ctx context.Context, lo
 	}
 
 	domain := r.NetworkConfig.DomainTypeAtSlot(cd.Duty.Slot)
-	msgID := spectypes.NewMsgID(domain, r.GetShare().ValidatorPubKey[:], r.RunnerRoleType)
+	msgID := spectypes.NewValidatorMsgID(domain, r.GetShare().ValidatorPubKey, r.RunnerRoleType)
 
 	encodedMsg, err := postConsensusMsg.Encode()
 	if err != nil {
@@ -479,7 +479,7 @@ func (r *SyncCommitteeAggregatorRunner) generateContributionAndProof(
 	return contribAndProof, contribAndProofRoot, nil
 }
 
-func (r *SyncCommitteeAggregatorRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
+func (r *SyncCommitteeAggregatorRunner) expectedPreConsensusRootsAndDomain() ([]spectypes.HashRoot, phase0.DomainType, error) {
 	duty, err := r.currentValidatorDuty()
 	if err != nil {
 		return nil, phase0.DomainType{}, fmt.Errorf("current validator duty: %w", err)
@@ -489,7 +489,7 @@ func (r *SyncCommitteeAggregatorRunner) expectedPreConsensusRootsAndDomain() ([]
 		return nil, phase0.DomainType{}, fmt.Errorf("current duty slot: %w", err)
 	}
 	indices := duty.ValidatorSyncCommitteeIndices
-	sszIndexes := make([]ssz.HashRoot, 0, len(indices))
+	sszIndexes := make([]spectypes.HashRoot, 0, len(indices))
 	for _, index := range indices {
 		subnet := r.GetBeaconNode().SyncCommitteeSubnetID(phase0.CommitteeIndex(index))
 		data := &altair.SyncAggregatorSelectionData{
@@ -502,7 +502,7 @@ func (r *SyncCommitteeAggregatorRunner) expectedPreConsensusRootsAndDomain() ([]
 }
 
 // expectedPostConsensusRootsAndDomain an INTERNAL function, returns the expected post-consensus roots to sign
-func (r *SyncCommitteeAggregatorRunner) expectedPostConsensusRootsAndDomain(ctx context.Context) ([]ssz.HashRoot, phase0.DomainType, error) {
+func (r *SyncCommitteeAggregatorRunner) expectedPostConsensusRootsAndDomain(ctx context.Context) ([]spectypes.HashRoot, phase0.DomainType, error) {
 	// get contributions
 	validatorConsensusData := &spectypes.ProposerConsensusData{}
 	err := validatorConsensusData.Decode(r.State.DecidedValue)
@@ -514,7 +514,7 @@ func (r *SyncCommitteeAggregatorRunner) expectedPostConsensusRootsAndDomain(ctx 
 		return nil, phase0.DomainType{}, fmt.Errorf("could not get contributions: %w", err)
 	}
 
-	ret := make([]ssz.HashRoot, 0)
+	ret := make([]spectypes.HashRoot, 0)
 	for _, contrib := range contributions {
 		contribAndProof, _, err := r.generateContributionAndProof(ctx, contrib.Contribution, contrib.SelectionProofSig)
 		if err != nil {
@@ -579,7 +579,7 @@ func (r *SyncCommitteeAggregatorRunner) executeDuty(ctx context.Context, logger 
 	logger.Debug("signing and broadcasting contribution proof partial sig", fields.Slot(validatorDuty.DutySlot()))
 
 	r.measurements.StartPreConsensus()
-	if err := r.signAndBroadcastPartialSigMsgs(ctx, r.network, r.operatorSigner, r.GetShare().ValidatorPubKey[:], msgs); err != nil {
+	if err := r.signAndBroadcastPartialSigMsgs(ctx, r.network, r.operatorSigner, r.GetShare().ValidatorPubKey, msgs); err != nil {
 		return fmt.Errorf("could not sign/broadcast contribution proof partial sig: %w", err)
 	}
 
@@ -611,37 +611,15 @@ func (r *SyncCommitteeAggregatorRunner) GetOperatorSigner() ssvtypes.OperatorSig
 }
 
 func (r *SyncCommitteeAggregatorRunner) MarshalJSON() ([]byte, error) {
-	type syncCommitteeAggregatorRunnerJSON struct {
-		BaseRunner *BaseRunner `json:"BaseRunner"`
-		// ValCheck is intentionally kept in the JSON to preserve the historical runner state shape
-		// (and thus runner state roots used by spec tests). It is a runtime-only dependency and
-		// is ignored on decode, so it is always marshaled as `null` for determinism.
-		ValCheck any `json:"ValCheck"`
-	}
-
-	return json.Marshal(&syncCommitteeAggregatorRunnerJSON{
-		BaseRunner: r.BaseRunner,
-		ValCheck:   nil,
-	})
+	return marshalRunnerStateJSON(r.BaseRunner)
 }
 
 func (r *SyncCommitteeAggregatorRunner) UnmarshalJSON(data []byte) error {
-	type syncCommitteeAggregatorRunnerJSON struct {
-		BaseRunner *BaseRunner     `json:"BaseRunner"`
-		ValCheck   json.RawMessage `json:"ValCheck"`
-	}
-
-	aux := &syncCommitteeAggregatorRunnerJSON{}
-	if err := json.Unmarshal(data, aux); err != nil {
+	br, err := unmarshalRunnerStateJSON(data)
+	if err != nil {
 		return err
 	}
-
-	if aux.BaseRunner == nil {
-		return fmt.Errorf("missing BaseRunner")
-	}
-
-	r.BaseRunner = aux.BaseRunner
-	// ValCheck is not restored from JSON. Callers must rehydrate it explicitly.
+	r.BaseRunner = br
 	r.ValCheck = nil
 	return nil
 }

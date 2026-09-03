@@ -19,8 +19,12 @@ type OnRoundTimeoutF func(round specqbft.Round)
 
 const (
 	QuickTimeoutThreshold = specqbft.Round(8)
-	QuickTimeout          = 2 * time.Second
-	SlowTimeout           = 2 * time.Minute
+	// QuickTimeout is the per-round budget — a fixed network-round-trip allowance, not a slot fraction.
+	// It is intentionally NOT retimed for Gloas: under the tighter ~quarter-slot proposer deadline two
+	// 2s rounds no longer fit, so the Gloas proposer is effectively round-1-must-succeed (a deliberate
+	// choice, pending real-network round-trip data). Pre-Gloas behavior is unchanged.
+	QuickTimeout = 2 * time.Second
+	SlowTimeout  = 2 * time.Minute
 )
 
 var CutOffRound specqbft.Round = specqbft.Round(specqbft.CutoffRound)
@@ -28,16 +32,12 @@ var CutOffRound specqbft.Round = specqbft.Round(specqbft.CutoffRound)
 // roundTimeoutForRound returns the time-into-slot at which the given round will time out
 // (i.e. transition to round+1) for the given role:
 //
-//	Round 1     ends at  headStart + 1 * quick
-//	Round 2     ends at  headStart + 2 * quick
-//	...
-//	Round T     ends at  headStart + T * quick               (T = quickThreshold)
-//	Round T+1   ends at  headStart + T * quick + 1 * slow
-//	Round T+2   ends at  headStart + T * quick + 2 * slow
+//	Round r <= T:  headStart + r * quick
+//	Round r >  T:  headStart + T * quick + (r - T) * slow     (T = quickThreshold)
 //
 // Every role has its own dedicated headStart duration.
-func roundTimeoutForRound(role spectypes.RunnerRole, slotDuration time.Duration, round specqbft.Round) time.Duration {
-	headStart := round1HeadStart(role, slotDuration)
+func roundTimeoutForRound(role spectypes.RunnerRole, intervalDuration time.Duration, round specqbft.Round) time.Duration {
+	headStart := round1HeadStart(role, intervalDuration)
 	if round <= QuickTimeoutThreshold {
 		return headStart + casts.DurationFromUint64(uint64(round))*QuickTimeout
 	}
@@ -47,20 +47,22 @@ func roundTimeoutForRound(role spectypes.RunnerRole, slotDuration time.Duration,
 }
 
 // round1HeadStart returns the extra time, on top of Round 1's normal quick timeout, that
-// Round 1 is allowed to run for a given role. Committee gets 1/3 of the slot as head start
+// Round 1 is allowed to run for a given role. Committee gets one interval as head start
 // (time for the block to become available); aggregator, aggregator-committee and
-// sync-committee-contribution get 2/3 of the slot (time for attestations to arrive before
-// aggregating); proposer gets zero.
+// sync-committee-contribution get two intervals (time for attestations to arrive before
+// aggregating); the round-relative roles (see RoundRelativeRole) get zero. The interval is
+// IntervalDuration — 1/3 of the slot pre-Gloas, 1/4 from Gloas — so the head starts track the
+// retimed attestation/aggregate deadlines across the fork.
 //
 // Note: this is NOT the time at which Round 1 -> Round 2 transitions — that transition actually
 // happens at `slotStart + round1HeadStart + QuickTimeout`, because Round 1 still needs to run its
 // own quick timer on top of the head start.
-func round1HeadStart(role spectypes.RunnerRole, slotDuration time.Duration) time.Duration {
+func round1HeadStart(role spectypes.RunnerRole, intervalDuration time.Duration) time.Duration {
 	switch role {
 	case spectypes.RoleCommittee:
-		return slotDuration / 3
+		return intervalDuration
 	case ssvtypes.RoleAggregator, ssvtypes.RoleSyncCommitteeContribution, spectypes.RoleAggregatorCommittee:
-		return slotDuration / 3 * 2
+		return 2 * intervalDuration
 	default:
 		return 0
 	}
@@ -74,11 +76,11 @@ func round1HeadStart(role spectypes.RunnerRole, slotDuration time.Duration) time
 // IMPORTANT: the calculations in this func must be aligned with those in RoundTimeout, those funcs should re-use
 // the same code/algo - they currently don't since that would make one of them quite slow, instead the alignment
 // is enforced by unit-tests.
-func EstimatedRoundAt(role spectypes.RunnerRole, slotDuration, timeIntoSlot time.Duration) (specqbft.Round, error) {
+func EstimatedRoundAt(role spectypes.RunnerRole, intervalDuration, timeIntoSlot time.Duration) (specqbft.Round, error) {
 	// Compute the round directly by inverting the piecewise-linear roundTimeoutOffset formula:
 	//   Quick phase (r <= T): offset(r) = headStart + r * quick
 	//   Slow phase  (r >  T): offset(r) = headStart + T * quick + (r - T) * slow
-	elapsed := timeIntoSlot - round1HeadStart(role, slotDuration)
+	elapsed := timeIntoSlot - round1HeadStart(role, intervalDuration)
 	if elapsed < 0 {
 		return specqbft.FirstRound, nil
 	}
@@ -129,31 +131,31 @@ func New(ctx context.Context, beaconConfig *networkconfig.Beacon, role spectypes
 	}
 }
 
-// RoundTimeout calculates the timeout duration for a specific role, height, and round.
+// RoundRelativeRole reports whether the role's QBFT round timeouts are relative to the instance's
+// start rather than synchronized to the slot: the proposer (round-relative until
+// https://github.com/ssvlabs/ssv/issues/2429) and the §6 envelope proposer, whose instance only
+// starts once the §4 block is published — typically well past QuickTimeout into the slot, where a
+// slot-anchored timer would already be negative and time round 1 out on arrival. Message validation
+// keys its round-spread exemption off this same predicate, so the two stay in step.
+func RoundRelativeRole(role spectypes.RunnerRole) bool {
+	return role == spectypes.RoleProposer || role == spectypes.RoleEnvelopeProposer
+}
+
+// RoundTimeout returns the duration to wait before timing out the given round.
 //
-// Timeout Rules:
-// - For RoleCommittee, the base timeout (Round 1 head start) is 1/3 of the slot duration.
-// - For RoleAggregator, RoleSyncCommitteeContribution and RoleAggregatorCommittee, it is 2/3 of the slot duration.
-// - For RoleProposer, the timeout is either quickTimeout or slowTimeout, depending on the round.
+// For the round-relative roles (RoundRelativeRole), the timeout is not slot-synchronized:
+//   - rounds <= QuickTimeoutThreshold → QuickTimeout
+//   - rounds >  QuickTimeoutThreshold → SlowTimeout
 //
-// Additional Timeout:
-// - For rounds less than or equal to quickThreshold, the additional timeout is 'quick' seconds.
-// - For rounds greater than quickThreshold, the additional timeout is 'slow' seconds.
-//
-// SIP Reference:
-// For more details, see SIP at https://github.com/bloxapp/SIPs/pull/22
-//
-// TODO: Update SIP for Deterministic Round Timeout
-// TODO: Decide if to make the proposer timeout deterministic
-//
-// Synchronization Note:
-// To ensure synchronized timeouts across instances, the timeout is based on the duty start time,
-// which is calculated from the slot height. The base timeout is set based on the role,
-// and the additional timeout is added based on the round number.
+// For all other roles, the timeout is slot-synchronized via roundTimeoutForRound:
+// it returns time.Until(slotStart + roundTimeoutForRound(role, IntervalDuration(slot), round)),
+// so the result can be negative for duties that started late. The base timeout is one interval
+// (attester/sync-committee) or two intervals (aggregator/sync-contribution/aggregator-committee);
+// IntervalDuration is 1/3 of the slot before Gloas, 1/4 from Gloas on (SIP #94 §1).
 func (t *RoundTimer) RoundTimeout(round specqbft.Round) time.Duration {
-	// Proposer runner round timeouts are currently relative to QBFT instance start time, not slot start time:
-	// https://github.com/ssvlabs/ssv/issues/2429
-	if t.role == spectypes.RoleProposer {
+	// Proposer and envelope-proposer round timeouts are relative to QBFT instance start time, not slot
+	// start time (see RoundRelativeRole).
+	if RoundRelativeRole(t.role) {
 		if round <= QuickTimeoutThreshold {
 			return QuickTimeout
 		}
@@ -162,7 +164,7 @@ func (t *RoundTimer) RoundTimeout(round specqbft.Round) time.Duration {
 
 	// Slot-synchronized roles: timeout happens at slot start + roundTimeoutForRound(...).
 	dutyStartTime := t.beaconConfig.SlotStartTime(t.slot)
-	return time.Until(dutyStartTime.Add(roundTimeoutForRound(t.role, t.beaconConfig.SlotDuration, round)))
+	return time.Until(dutyStartTime.Add(roundTimeoutForRound(t.role, t.beaconConfig.IntervalDuration(t.slot), round)))
 }
 
 // TimeoutForRound implements specqbft.Timer.

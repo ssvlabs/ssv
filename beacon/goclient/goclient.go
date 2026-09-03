@@ -118,6 +118,12 @@ type GoClient struct {
 	clients     []Client
 	multiClient MultiClient
 
+	// clientAddresses holds each client's unmasked address for the hand-rolled Gloas requests (ptc.go,
+	// gloas_proposer.go, gloas_envelope.go, proposer_preferences.go, builder_preferences.go) —
+	// Client.Address() is log-masked and unusable for real requests. Drop when those endpoints become
+	// typed go-eth2-client calls.
+	clientAddresses map[Client]string
+
 	syncDistanceTolerance phase0.Slot
 
 	// attestationReqInflight helps prevent duplicate attestation data requests
@@ -154,6 +160,13 @@ type GoClient struct {
 
 	// committeesCache caches Beacon committees by epoch to avoid repeated fetching
 	committeesCache *ttlcache.Cache[phase0.Epoch, []*eth2apiv1.BeaconCommittee]
+
+	// proposerDutiesDependentRootInflight collapses the per-epoch dependent_root GETs that the
+	// proposer-preferences runners issue concurrently — one per local proposing validator in the epoch
+	// (SIP #94 §5) — into a single request. Deliberately not TTL-cached: a reorg re-emission must
+	// observe a fresh dependent_root, and the duplication removed here is a same-instant burst across
+	// the epoch's proposers, not reuse over time.
+	proposerDutiesDependentRootInflight singleflight.Group[phase0.Epoch, phase0.Root]
 
 	commonTimeout time.Duration
 	longTimeout   time.Duration
@@ -208,6 +221,7 @@ func New(ctx context.Context, logger *zap.Logger, opt Options) (*GoClient, error
 		proposalSoftTimeout:                opt.ProposalSoftTimeout,
 		supportedTopics:                    []eventTopic{eventTopicHead, eventTopicBlock},
 		activatedClients:                   hashmap.New[string, struct{}](),
+		clientAddresses:                    make(map[Client]string),
 	}
 
 	// First error stops the loop on purpose. addSingleClient sets WithAllowDelayedStart(true), so a valid
@@ -327,7 +341,19 @@ func (gc *GoClient) initMultiClient(ctx context.Context) error {
 	return nil
 }
 
+// normalizeBeaconAddr ensures the configured beacon address carries an http(s) scheme, mirroring
+// go-eth2-client's parseAddress. eth2clienthttp normalizes internally, but the hand-rolled Gloas/PTC
+// requests concatenate this stored address into request URLs, so a scheme-less config (e.g. "host:port")
+// would otherwise fail http.NewRequest. Basic-auth credentials and any path prefix are preserved.
+func normalizeBeaconAddr(addr string) string {
+	if !strings.HasPrefix(addr, "http://") && !strings.HasPrefix(addr, "https://") {
+		addr = "http://" + addr
+	}
+	return strings.TrimSuffix(addr, "/")
+}
+
 func (gc *GoClient) addSingleClient(ctx context.Context, addr string) error {
+	addr = normalizeBeaconAddr(addr)
 	httpClient, err := eth2clienthttp.New(
 		ctx,
 		// WithAddress supplies the address of the beacon node, in host:port format.
@@ -348,7 +374,9 @@ func (gc *GoClient) addSingleClient(ctx context.Context, addr string) error {
 		return fmt.Errorf("create http client: %w", err)
 	}
 
-	gc.clients = append(gc.clients, httpClient.(*eth2clienthttp.Service))
+	svc := httpClient.(*eth2clienthttp.Service)
+	gc.clients = append(gc.clients, svc)
+	gc.clientAddresses[svc] = addr
 
 	return nil
 }

@@ -1,12 +1,11 @@
 package spectest
 
 import (
-	"path/filepath"
 	"testing"
 
-	spectypes "github.com/ssvlabs/ssv-spec/types"
-	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
 	"github.com/stretchr/testify/require"
+
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -36,9 +35,7 @@ func runnerForTest(t *testing.T, runnerType runner.Runner, name string, testType
 	default:
 		t.Fatalf("unknown runner type")
 	}
-	specDir, err := storage.GetSpecDir("", filepath.Join("ssv", "spectest"))
-	require.NoError(t, err)
-	r, err = typescomparable.UnmarshalStateComparison(specDir, name, testType, r)
+	r, err := storage.UnmarshalStateComparison("ssv", name, testType, r)
 	require.NoError(t, err)
 
 	// override base-runner NetworkConfig now

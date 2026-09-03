@@ -252,7 +252,10 @@ func (gc *GoClient) getForkData(specResponse map[string]any) (map[spec.DataVersi
 		return nil, err
 	}
 
-	// TODO: Add GLOAS_FORK_EPOCH as non-required once fork specs are available
+	gloasEpoch, err := getForkEpoch("GLOAS_FORK_EPOCH", false)
+	if err != nil {
+		return nil, err
+	}
 
 	// Only get fork version if the fork is scheduled (not FarFutureEpoch)
 	var fuluForkVersion phase0.Version
@@ -261,6 +264,20 @@ func (gc *GoClient) getForkData(specResponse map[string]any) (map[spec.DataVersi
 		if err != nil {
 			return nil, err
 		}
+	}
+
+	var gloasForkVersion phase0.Version
+	if gloasEpoch != FarFutureEpoch {
+		gloasForkVersion, err = getForkVersion("GLOAS_FORK_VERSION")
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if gloasEpoch == FarFutureEpoch {
+		gc.log.Debug("Gloas (ePBS) fork not scheduled by the beacon node")
+	} else {
+		gc.log.Info("Gloas (ePBS) fork scheduled", zap.Uint64("epoch", uint64(gloasEpoch)))
 	}
 
 	forkEpochs := map[spec.DataVersion]phase0.Fork{
@@ -298,6 +315,11 @@ func (gc *GoClient) getForkData(specResponse map[string]any) (map[spec.DataVersi
 			PreviousVersion: electraForkVersion,
 			CurrentVersion:  fuluForkVersion,
 			Epoch:           fuluEpoch,
+		},
+		networkconfig.DataVersionGloas: {
+			PreviousVersion: fuluForkVersion,
+			CurrentVersion:  gloasForkVersion,
+			Epoch:           gloasEpoch,
 		},
 	}
 

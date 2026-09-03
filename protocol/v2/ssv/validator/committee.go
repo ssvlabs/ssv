@@ -561,7 +561,7 @@ func (c *Committee) createRunner(
 	// than the current wall-clock slot, so a pre-fork duty still running after the fork keys its
 	// timer events under the right domain. Only GetRoleType() is read from this ID downstream, so
 	// this is a consistency fix, not a behavior change today.
-	runnerIdentifier := spectypes.NewMsgID(c.networkConfig.DomainTypeAtSlot(duty.DutySlot()), c.CommitteeMember.CommitteeID[:], role)
+	runnerIdentifier := spectypes.NewCommitteeMsgID(c.networkConfig.DomainTypeAtSlot(duty.DutySlot()), c.CommitteeMember.CommitteeID, role)
 
 	// The typed-nil checks below complement the interface-nil guard above: a CreateRunnerFn
 	// returning a nil *runner.CommitteeRunner behind a non-nil interface passes that guard but

@@ -3,6 +3,7 @@ package goclient
 import (
 	"context"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"math/rand"
 	"net/http"
@@ -19,6 +20,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/utils/hashmap"
 )
 
@@ -92,6 +94,36 @@ var (
 		}`),
 	}
 )
+
+func TestRequestGloasAttestationData(t *testing.T) {
+	// Gloas payload-status index FULL (1). go-eth2-client's validated path rejects data.Index != 0
+	// post-Electra with ErrInconsistentResult; the hand-rolled Gloas fetch must accept it and keep the
+	// index (the signed §2 value) so attestations don't fail whenever the payload is present.
+	data := &phase0.AttestationData{
+		Slot:            9,
+		Index:           1,
+		BeaconBlockRoot: phase0.Root{0xaa},
+		Source:          &phase0.Checkpoint{Epoch: 1, Root: phase0.Root{0x01}},
+		Target:          &phase0.Checkpoint{Epoch: 2, Root: phase0.Root{0x02}},
+	}
+	dataJSON, err := json.Marshal(data)
+	require.NoError(t, err)
+
+	var gotMethod, gotPath, gotQuery string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod, gotPath, gotQuery = r.Method, r.URL.Path, r.URL.RawQuery
+		_, _ = fmt.Fprintf(w, `{"data":%s}`, dataJSON)
+	}))
+	defer srv.Close()
+
+	got, err := requestGloasAttestationData(context.Background(), srv.Client(), srv.URL, 9)
+	require.NoError(t, err)
+	require.Equal(t, http.MethodGet, gotMethod)
+	require.Equal(t, "/eth/v1/validator/attestation_data", gotPath)
+	require.Equal(t, "slot=9&committee_index=0", gotQuery)
+	require.Equal(t, data, got)
+	require.EqualValues(t, 1, got.Index) // payload-status index survived (not zeroed or rejected)
+}
 
 func TestGoClient_GetAttestationData_Simple(t *testing.T) {
 	const withWeightedAttestationData = false
@@ -886,4 +918,22 @@ func TestVerifyAndRefetchIfStale_ContextCancelledDuringDelay(t *testing.T) {
 	require.Equal(t, staleData, result, "should return original data when canceled during delay")
 	require.True(t, stale, "data is stale when context canceled")
 	require.False(t, fetchCalled, "should not have called fetch when canceled during delay")
+}
+
+// scaleToAttestationWindow keeps fetch budgets proportional to the attestation window: unchanged
+// pre-Gloas (1/3 of the slot), x3/4 from Gloas (1/4 of the slot).
+func TestScaleToAttestationWindow(t *testing.T) {
+	const gloasEpoch = 5
+	netCfg := networkconfig.TestNetworkWithGloas(gloasEpoch)
+	gc := &GoClient{beaconConfig: netCfg.Beacon}
+
+	preGloasSlot := phase0.Slot(uint64(gloasEpoch-1) * netCfg.SlotsPerEpoch)
+	gloasSlot := phase0.Slot(uint64(gloasEpoch) * netCfg.SlotsPerEpoch)
+
+	// Pre-Gloas (1/3 window): unchanged.
+	require.Equal(t, 2*time.Second, gc.scaleToAttestationWindow(2*time.Second, preGloasSlot))
+	require.Equal(t, 5*time.Second, gc.scaleToAttestationWindow(5*time.Second, preGloasSlot))
+	// Gloas (1/4 window): x3/4.
+	require.Equal(t, 1500*time.Millisecond, gc.scaleToAttestationWindow(2*time.Second, gloasSlot))
+	require.Equal(t, 3750*time.Millisecond, gc.scaleToAttestationWindow(5*time.Second, gloasSlot))
 }

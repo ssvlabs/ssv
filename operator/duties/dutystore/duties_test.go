@@ -45,6 +45,36 @@ func TestDutiesSetAndQuery(t *testing.T) {
 	assert.ElementsMatch(t, []phase0.ValidatorIndex{1, 2}, indices)
 }
 
+// Staleness marks an epoch's cached duties as predating the latest validator-set change: the flag is
+// cleared by a refetch (Set) and dropped alongside the data on erasure.
+func TestDutiesStaleness(t *testing.T) {
+	duties := NewDuties[eth2apiv1.ProposerDuty]()
+	epoch := phase0.Epoch(8)
+
+	require.False(t, duties.IsEpochStale(epoch), "unmarked epochs are not stale")
+
+	duties.Set(epoch, nil)
+	duties.MarkEpochsStale(epoch, epoch+1)
+	require.True(t, duties.IsEpochStale(epoch))
+	require.True(t, duties.IsEpochStale(epoch+1))
+
+	duties.Set(epoch, nil)
+	require.False(t, duties.IsEpochStale(epoch), "a completed refetch freshens the epoch")
+	require.True(t, duties.IsEpochStale(epoch+1), "other epochs stay stale")
+
+	duties.MarkEpochsStale(epoch)
+	duties.EraseEpochData(epoch)
+	require.False(t, duties.IsEpochStale(epoch), "erasing an epoch drops its stale flag")
+
+	duties.MarkEpochsStale(epoch)
+	duties.EraseBefore(epoch + 1)
+	require.False(t, duties.IsEpochStale(epoch), "EraseBefore drops stale flags of erased epochs")
+	require.True(t, duties.IsEpochStale(epoch+1))
+
+	duties.Clear()
+	require.False(t, duties.IsEpochStale(epoch+1), "Clear drops all stale flags")
+}
+
 func TestDutiesEraseEpochData(t *testing.T) {
 	duties := NewDuties[eth2apiv1.ProposerDuty]()
 	epoch := phase0.Epoch(1)
@@ -57,6 +87,36 @@ func TestDutiesEraseEpochData(t *testing.T) {
 	assert.Nil(t, duties.CommitteeSlotDuties(epoch, 10))
 	assert.Nil(t, duties.ValidatorDuty(epoch, 10, 1))
 	assert.Nil(t, duties.SlotIndices(epoch, 10))
+}
+
+func TestDutiesEraseBefore(t *testing.T) {
+	duties := NewDuties[eth2apiv1.ProposerDuty]()
+	for _, epoch := range []phase0.Epoch{4, 5, 6} {
+		duties.Set(epoch, []StoreDuty[eth2apiv1.ProposerDuty]{
+			{Slot: 10, ValidatorIndex: 1, Duty: &eth2apiv1.ProposerDuty{}},
+		})
+	}
+
+	duties.EraseBefore(5)
+
+	assert.False(t, duties.IsEpochSet(4))
+	assert.True(t, duties.IsEpochSet(5))
+	assert.True(t, duties.IsEpochSet(6))
+}
+
+func TestDutiesClear(t *testing.T) {
+	duties := NewDuties[eth2apiv1.ProposerDuty]()
+	for _, epoch := range []phase0.Epoch{4, 5, 6} {
+		duties.Set(epoch, []StoreDuty[eth2apiv1.ProposerDuty]{
+			{Slot: 10, ValidatorIndex: 1, Duty: &eth2apiv1.ProposerDuty{}},
+		})
+	}
+
+	duties.Clear()
+
+	for _, epoch := range []phase0.Epoch{4, 5, 6} {
+		assert.False(t, duties.IsEpochSet(epoch))
+	}
 }
 
 func TestStoreDutyTypesUseIndependentLocks(t *testing.T) {
