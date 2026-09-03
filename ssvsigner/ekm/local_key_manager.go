@@ -30,6 +30,7 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
+	"github.com/ssvlabs/ssv/ssvsigner"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 )
 
@@ -288,16 +289,16 @@ func (km *LocalKeyManager) AddShare(
 
 	sharePrivKeyHex, err := km.operatorDecrypter.Decrypt(encryptedPrivKey)
 	if err != nil {
-		return ShareDecryptionError{Err: fmt.Errorf("decrypt: %w", err)}
+		return ssvsigner.ShareDecryptionError{Err: fmt.Errorf("decrypt: %w", err)}
 	}
 
 	sharePrivKey := &bls.SecretKey{}
 	if err := sharePrivKey.SetHexString(string(sharePrivKeyHex)); err != nil {
-		return ShareDecryptionError{Err: fmt.Errorf("decode hex: %w", err)}
+		return ssvsigner.ShareDecryptionError{Err: fmt.Errorf("decode hex: %w", err)}
 	}
 
 	if !bytes.Equal(sharePrivKey.GetPublicKey().Serialize(), pubKey[:]) {
-		return ShareDecryptionError{Err: errors.New("share private key does not match public key")}
+		return ssvsigner.ShareDecryptionError{Err: errors.New("share private key does not match public key")}
 	}
 
 	if err := km.slashingProtector.BumpSlashingProtectionTxn(txn, phase0.BLSPubKey(sharePrivKey.GetPublicKey().Serialize())); err != nil {

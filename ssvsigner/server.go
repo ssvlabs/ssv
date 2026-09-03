@@ -190,11 +190,13 @@ func (s *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 		// So, there's no need to store the password. We can just generate a random password for each keystore.
 		keystorePassword, err := s.generateRandomPassword(16)
 		if err != nil {
-			logger.Warn("failed to generate random password", zap.Error(err))
+			// Internal (transient) failure, not a bad share -> 500 (see errMalformedShare). Log at
+			// error to match the node-fatal reply.
+			logger.Error("failed to generate random password", zap.Error(err))
 			s.writeJSONErr(
 				ctx,
 				logger,
-				fasthttp.StatusUnprocessableEntity,
+				fasthttp.StatusInternalServerError,
 				fmt.Errorf("failed to generate random password: %w", err),
 			)
 			return
@@ -206,11 +208,19 @@ func (s *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 			keystorePassword,
 		)
 		if err != nil {
-			logger.Warn("failed to get keystore from encrypted share", zap.Error(err))
+			// 422 only for a malformed share; anything else defaults to 500 (see errMalformedShare).
+			// Log level follows the reply: warn for the skippable 422, error for a node-fatal 500.
+			status := fasthttp.StatusInternalServerError
+			logAt := logger.Error
+			if errors.Is(err, errMalformedShare) {
+				status = fasthttp.StatusUnprocessableEntity
+				logAt = logger.Warn
+			}
+			logAt("failed to get keystore from encrypted share", zap.Error(err))
 			s.writeJSONErr(
 				ctx,
 				logger,
-				fasthttp.StatusUnprocessableEntity,
+				status,
 				fmt.Errorf("failed to get keystore from encrypted share index %d: %w", i, err),
 			)
 			return
@@ -248,8 +258,16 @@ func (s *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 	s.writeJSON(ctx, logger, resp)
 }
 
-// keystoreJSONFromEncryptedShare doesn't pass errors through intentionally
-// to prevent exposing information related to private key.
+// errMalformedShare tags the keystoreJSONFromEncryptedShare failures caused by a bad share
+// (undecryptable, bad hex, invalid BLS key, or pubkey mismatch). handleAddValidator replies 422
+// for these — which the node skips as a malformed event — and 500 for everything else. Making 422
+// opt-in keeps the "silently skip" path explicit: an untagged internal failure crash-retries
+// instead of dropping a valid validator.
+var errMalformedShare = errors.New("malformed share")
+
+// keystoreJSONFromEncryptedShare withholds the cause of share-data failures (tagged
+// errMalformedShare) so a bad share can't leak private-key material. Failures after the share
+// validates are internal, carry no key bytes, and pass their cause through for diagnosis.
 func (s *Server) keystoreJSONFromEncryptedShare(
 	encryptedPrivKey hexutil.Bytes,
 	sharePubKey phase0.BLSPubKey,
@@ -257,26 +275,27 @@ func (s *Server) keystoreJSONFromEncryptedShare(
 ) (string, error) {
 	sharePrivKeyHex, err := s.operatorPrivKey.Decrypt(encryptedPrivKey)
 	if err != nil {
-		return "", fmt.Errorf("failed to decrypt share")
+		return "", fmt.Errorf("%w: decrypt share", errMalformedShare)
 	}
 
 	sharePrivKey, err := hex.DecodeString(strings.TrimPrefix(string(sharePrivKeyHex), "0x"))
 	if err != nil {
-		return "", fmt.Errorf("failed to decode share private key from hex for pubkey %s", sharePubKey.String())
+		return "", fmt.Errorf("%w: decode share private key from hex for pubkey %s", errMalformedShare, sharePubKey.String())
 	}
 
 	sharePrivBLS := &bls.SecretKey{}
 	if err = sharePrivBLS.Deserialize(sharePrivKey); err != nil {
-		return "", fmt.Errorf("failed to deserialize share private key")
+		return "", fmt.Errorf("%w: deserialize share private key", errMalformedShare)
 	}
 
 	if !bytes.Equal(sharePrivBLS.GetPublicKey().Serialize(), sharePubKey[:]) {
-		return "", errors.New("derived public key does not match expected public key")
+		return "", fmt.Errorf("%w: derived public key does not match expected public key", errMalformedShare)
 	}
 
+	// Past this point the share is valid; remaining failures are internal (untagged -> 500).
 	shareKeystore, err := keystore.GenerateShareKeystore(sharePrivBLS, sharePubKey, keystorePassword)
 	if err != nil {
-		return "", fmt.Errorf("failed to generate share keystore")
+		return "", fmt.Errorf("generate share keystore: %w", err)
 	}
 
 	keystoreJSON, err := json.Marshal(shareKeystore)

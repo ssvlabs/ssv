@@ -8,21 +8,6 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
-type ShareDecryptionError struct {
-	Err error
-}
-
-func (e ShareDecryptionError) Error() string {
-	if e.Err == nil {
-		return "share decryption error: nil"
-	}
-	return "share decryption error: " + e.Err.Error()
-}
-
-func (e ShareDecryptionError) Unwrap() error {
-	return e.Err
-}
-
 // KeyManager is the main interface for managing validator shares and performing slashing protection.
 // It embeds BeaconSigner (for signing beacon messages and checking whether attestation or beacon block are slashable)
 // and slashingProtector (for slashing checks and updates).
@@ -36,6 +21,10 @@ type KeyManager interface {
 	// updating them only if they are missing or fall below a minimal safe threshold.
 	// This prevents the validator from signing messages that could be considered slashable
 	// due to absent or outdated protection data.
+	//
+	// If the share cannot be decrypted or validated, implementations MUST return an error that
+	// unwraps to a by-value ssvsigner.ShareDecryptionError. Callers use it to classify the failure
+	// as a skippable malformed event; otherwise the failure is fatal and crash-loops registry sync.
 	AddShare(ctx context.Context, txn ReadWriteTxn, encryptedPrivKey []byte, pubKey phase0.BLSPubKey) error
 
 	// RemoveShare unregisters a validator share from the key manager and deletes its associated

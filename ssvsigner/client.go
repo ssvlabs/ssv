@@ -132,11 +132,12 @@ func (c *Client) AddValidators(ctx context.Context, shares ...ShareKeys) (status
 		AddValidator(errBodyValidator(&errBody)).
 		Fetch(ctx)
 
+	// A 422 means the signer rejected the share as undecryptable/invalid (a malformed share); return
+	// it as a ShareDecryptionError so callers skip the event. Wrap via requestFailedErr so the
+	// ResponseError chain survives (errors.Is / requests.HasStatusErr keep working) and an empty-body
+	// 422 yields the status text instead of an empty message.
 	if requests.HasStatusErr(err, http.StatusUnprocessableEntity) {
-		// Wrap via requestFailedErr so the ResponseError chain survives (errors.Is /
-		// requests.HasStatusErr keep working) and an empty-body 422 yields the status text
-		// instead of an empty message.
-		return nil, ShareDecryptionError(requestFailedErr(err, errBody))
+		return nil, ShareDecryptionError{Err: requestFailedErr(err, errBody)}
 	}
 
 	if err != nil {

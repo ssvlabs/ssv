@@ -1,62 +1,86 @@
 package eventhandler
 
 import (
-	"errors"
-	"fmt"
+	"context"
 	"testing"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap/zaptest"
 
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+	"github.com/ssvlabs/ssv/ssvsigner"
+
+	"github.com/ssvlabs/ssv/eth/contract"
+	"github.com/ssvlabs/ssv/networkconfig"
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 )
 
-func TestShareDecryptionError(t *testing.T) {
-	tt := []struct {
-		name           string
-		f              func() error
-		malformedEvent bool
-	}{
-		{
-			name: "malformed event",
-			f: func() error {
-				err1 := fmt.Errorf("some error")
-				return ekm.ShareDecryptionError{Err: fmt.Errorf("decrypt: %w", err1)}
-			},
-			malformedEvent: true,
-		},
+// TestHandleValidatorAddedUndecryptableShareIsMalformed drives the real handleValidatorAdded ->
+// handleShareCreation -> LocalKeyManager.AddShare path with an event that has a valid owner/nonce
+// signature and correct lengths but an undecryptable share (what an attacker can submit). AddShare
+// must fail with a ShareDecryptionError that the handler classifies as a MalformedEventError
+// (skipped), not a fatal error that crash-loops the node.
+func TestHandleValidatorAddedUndecryptableShareIsMalformed(t *testing.T) {
+	ctx := context.Background()
+	logger := zaptest.NewLogger(t)
 
-		{
-			name: "no malformed event event",
-			f: func() error {
-				e2 := fmt.Errorf("some error")
-				e1 := fmt.Errorf("request failed: %w", e2)
-				return fmt.Errorf("add validator: %w", e1)
-			},
-			malformedEvent: false,
-		},
+	netCfg := &networkconfig.Network{
+		Beacon: networkconfig.TestNetwork.Beacon,
+		SSV:    networkconfig.TestNetwork.SSV,
 	}
 
-	for _, tc := range tt {
-		t.Run(tc.name, func(t *testing.T) {
-			// The implementation might be more optimal,
-			// but it's left purposely like this because it's close to the actual code.
+	ops, err := createOperators(4, 0)
+	require.NoError(t, err)
 
-			var resultErr error
-			var malformedEvent bool
+	// This node is operator ops[0]; setupEventHandler wires it as the self operator.
+	eh, _, err := setupEventHandler(t, ctx, logger, netCfg, ops[0], true)
+	require.NoError(t, err)
 
-			if err := tc.f(); err != nil {
-				var shareDecryptionEKMError ekm.ShareDecryptionError
-				if errors.As(err, &shareDecryptionEKMError) {
-					resultErr = &MalformedEventError{Err: err}
-					malformedEvent = true
-				} else {
-					resultErr = fmt.Errorf("could not add share encrypted key: %w", err)
-					malformedEvent = false
-				}
-			}
-
-			require.Error(t, resultErr)
-			require.Equal(t, tc.malformedEvent, malformedEvent)
+	// validateOperators requires every committee operator to be registered.
+	operatorIDs := make([]uint64, len(ops))
+	for i, op := range ops {
+		pubKey, err := op.privateKey.Public().Base64()
+		require.NoError(t, err)
+		_, err = eh.nodeStorage.SaveOperatorData(nil, &registrystorage.OperatorData{
+			ID:           op.id,
+			PublicKey:    pubKey,
+			OwnerAddress: testAddr,
 		})
+		require.NoError(t, err)
+		operatorIDs[i] = op.id
 	}
+
+	validatorData, err := createNewValidator(ops)
+	require.NoError(t, err)
+
+	// A valid shares blob: correct signature over owner:nonce and correct lengths...
+	sharesData, err := generateSharesData(validatorData, ops, testAddr, 0)
+	require.NoError(t, err)
+	// ...then corrupt the encrypted-shares region (layout: sig | pubKeys | encShares) so the
+	// operator's share can't be decrypted. The signature covers only owner:nonce, so it stays valid.
+	encStart := phase0.SignatureLength + phase0.PublicKeyLength*len(ops)
+	for i := encStart; i < len(sharesData); i++ {
+		sharesData[i] = 0xFF
+	}
+
+	event := &contract.ContractValidatorAdded{
+		Owner:       testAddr,
+		OperatorIds: operatorIDs,
+		PublicKey:   validatorData.masterPubKey.Serialize(),
+		Shares:      sharesData,
+	}
+
+	txn := eh.nodeStorage.Begin()
+	defer txn.Discard()
+
+	_, err = eh.handleValidatorAdded(ctx, txn, event)
+	require.Error(t, err)
+
+	var malformed *MalformedEventError
+	require.ErrorAs(t, err, &malformed,
+		"an undecryptable share must be classified as a malformed (skippable) event, not a fatal error")
+	// Pin the origin to the share-decryption branch, not one of the other MalformedEventError
+	// returns (signature, operator lookup, share length, ...).
+	var decErr ssvsigner.ShareDecryptionError
+	require.ErrorAs(t, err, &decErr, "the malformed event must originate from a ShareDecryptionError")
 }

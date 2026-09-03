@@ -149,6 +149,18 @@ func (s *SSVSignerClientSuite) TestAddValidators() {
 			expectError:        true,
 		},
 		{
+			name: "BadRequest",
+			shares: []ShareKeys{
+				{
+					EncryptedPrivKey: []byte("encrypted"),
+					PubKey:           phase0.BLSPubKey{1, 2, 3},
+				},
+			},
+			expectedStatusCode: http.StatusBadRequest,
+			expectedResponse:   web3signer.ImportKeystoreResponse{},
+			expectError:        true,
+		},
+		{
 			name:               "NoShares",
 			shares:             []ShareKeys{},
 			expectedStatusCode: http.StatusOK,
@@ -240,9 +252,14 @@ func (s *SSVSignerClientSuite) TestAddValidators() {
 
 			statuses, err := s.client.AddValidators(t.Context(), tc.shares...)
 			s.assertErrorResult(err, tc.expectError, tc.expectNoRequest, t)
+			var decryptErr ShareDecryptionError
 			if tc.isDecryptionError {
-				var decryptErr ShareDecryptionError
 				assert.ErrorAs(t, err, &decryptErr, "Expected a ShareDecryptionError")
+			} else if tc.expectError {
+				// 422 is the only malformed-share signal; any other failure (transport, 4xx, 5xx,
+				// client-side validation) must not be classified as a decryption error.
+				assert.NotErrorAs(t, err, &decryptErr,
+					"non-422 error must not be classified as ShareDecryptionError")
 			}
 			assert.Equal(t, tc.expectStatuses, statuses)
 		})
@@ -1029,12 +1046,22 @@ func TestNew(t *testing.T) {
 func Test_ShareDecryptionError(t *testing.T) {
 	t.Parallel()
 
-	var customErr error = ShareDecryptionError(errors.New("test error"))
+	inner := errors.New("test error")
+	var customErr error = ShareDecryptionError{Err: inner}
 
-	var shareDecryptionError ShareDecryptionError
-	if !errors.As(customErr, &shareDecryptionError) {
-		t.Errorf("shareDecryptionError was expected to be a ShareDecryptionError")
-	}
+	var decErr ShareDecryptionError
+	require.ErrorAs(t, customErr, &decErr, "ShareDecryptionError should be matchable via errors.As")
+	require.Equal(t, inner, decErr.Err)
+	require.ErrorIs(t, customErr, inner, "Unwrap should expose the wrapped error")
+
+	// A plain error must not be classified as a ShareDecryptionError: errors.As must
+	// match the concrete type, not every error.
+	require.NotErrorAs(t, errors.New("plain error"), &decErr,
+		"a plain error must not match ShareDecryptionError")
+
+	// It must still match after wrapping, mirroring RemoteKeyManager.AddShare.
+	wrapped := fmt.Errorf("add validator: %w", ShareDecryptionError{Err: inner})
+	require.ErrorAs(t, wrapped, &decErr, "a wrapped ShareDecryptionError should still match")
 }
 
 func TestNewClient_TrimsTrailingSlashFromURL(t *testing.T) {
