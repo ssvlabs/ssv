@@ -114,6 +114,12 @@ func (md *localDiscovery) PublishENR() {
 	// TODO
 }
 
+// DiscoveryStale implements Service. Local discovery has no discv5 socket to
+// wedge, so it's never stale.
+func (md *localDiscovery) DiscoveryStale(time.Duration) bool {
+	return false
+}
+
 // discoveryNotifee gets notified when we find a new peer via mDNS discovery
 type discoveryNotifee struct {
 	handler HandleNewPeer
