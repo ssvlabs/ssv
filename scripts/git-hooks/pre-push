@@ -7,8 +7,8 @@
 #      .golangci.yaml's misspell.ignore-rules aren't forwarded, so pass any real
 #      entry there to misspell's -i flag here too. Generated .go files are
 #      skipped, mirroring .golangci.yaml's exclusions.generated. CI's `make
-#      lint` lints only .go, and not the nested scripts/differ module, so
-#      findings in either are this hook's own check rather than a CI gate.
+#      lint` lints only .go, and not the trees in exclusions.paths, so findings
+#      outside its reach are this hook's own check rather than a CI gate.
 #   2. golangci-lint (the same config CI's `make lint` uses) on the packages
 #      containing changed .go files. Unlike misspell it needs full packages on
 #      disk for type-checking, so it lints the checkout rather than the pushed
@@ -53,7 +53,7 @@ ZERO=0000000000000000000000000000000000000000
 status=0
 ci_findings=0    # findings CI's `make lint` would fail on too
 docs_findings=0  # .md spelling — blocks locally, but CI doesn't lint .md
-nonci_findings=0 # .go spelling in a module `make lint` doesn't reach
+nonci_findings=0 # .go spelling in a path `make lint` doesn't reach
 
 # Changed paths may contain spaces or glob characters: iterate $files with a
 # newline-only IFS (restored to the default around the outer read, which needs
@@ -140,12 +140,15 @@ while read -r local_ref local_sha remote_ref remote_sha; do
 				done >&2
 				status=1
 				# Blocking either way, but only some of it is a
-				# CI front-run: `make lint` lints neither .md nor
-				# the nested scripts/differ module (the golangci
-				# stage skips it for the same reason).
+				# CI front-run: `make lint` lints no .md, and
+				# .golangci.yaml's exclusions.paths keep it out of
+				# these trees — scripts/ covering the nested
+				# scripts/differ module the golangci stage skips.
 				case $f in
 				*.md) docs_findings=1 ;;
-				scripts/differ/*) nonci_findings=1 ;;
+				scripts/* | third_party/* | builtin/* | examples/*)
+					nonci_findings=1
+					;;
 				*) ci_findings=1 ;;
 				esac
 			fi
@@ -269,7 +272,7 @@ if [ "$status" -ne 0 ]; then
 		echo "pre-push: the .md spelling above is this hook's own check — CI's make lint doesn't lint .md." >&2
 	fi
 	if [ "$nonci_findings" -ne 0 ]; then
-		echo "pre-push: the scripts/differ spelling above is this hook's own check — make lint doesn't lint that nested module." >&2
+		echo "pre-push: the .go spelling above sits in a path make lint excludes (.golangci.yaml exclusions.paths) — this hook's own check, not a CI gate." >&2
 	fi
 	echo "pre-push: bypass once with: git push --no-verify" >&2
 fi
