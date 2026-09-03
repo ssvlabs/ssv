@@ -307,7 +307,13 @@ func (ctrl *topicsCtrl) setupTopicValidator(name string) error {
 
 		opts := []pubsub.ValidatorOpt{pubsub.WithValidatorTimeout(topicValidatorTimeout)}
 
-		err = ctrl.ps.RegisterTopicValidator(name, ctrl.msgValidator.ValidatorForTopic(name), opts...)
+		validator := ctrl.msgValidator.ValidatorForTopic(name)
+		wrappedValidator := func(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
+			recordPubsubMessageReceived(ctx, name)
+			return validator(ctx, p, pmsg)
+		}
+
+		err = ctrl.ps.RegisterTopicValidator(name, wrappedValidator, opts...)
 		if err != nil {
 			return fmt.Errorf("could not register topic validator: %w", err)
 		}
