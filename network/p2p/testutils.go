@@ -47,9 +47,10 @@ func randomMdnsTag() string {
 	return fmt.Sprintf("ssv.test.%016x", rand.Uint64()) //nolint: gosec // G404 is acceptable here
 }
 
-// CreateAndStartLocalNet creates a new local network and starts it
-// if any errors occurs during starting local network CreateAndStartLocalNet trying
-// to create and start local net one more time until pCtx is not Done()
+// CreateAndStartLocalNet creates a LocalNet and starts its nodes, retrying the whole setup
+// (up to maxAttempts) when the mesh doesn't form in time — discovery can be slow on a loaded
+// machine. Bounding the retries makes an environment where the nodes can never connect (mDNS
+// discovery needs multicast) fail fast instead of hanging until the go-test timeout.
 func CreateAndStartLocalNet(pCtx context.Context, logger *zap.Logger, options LocalNetOptions) (*LocalNet, error) {
 	attempt := func(pCtx context.Context) (*LocalNet, error) {
 		ln, err := NewLocalNet(pCtx, logger, options)
@@ -91,8 +92,9 @@ func CreateAndStartLocalNet(pCtx context.Context, logger *zap.Logger, options Lo
 		return ln, eg.Wait()
 	}
 
+	const maxAttempts = 3
 	var lastErr error
-	for {
+	for attemptNum := 1; ; attemptNum++ {
 		select {
 		case <-pCtx.Done():
 			if lastErr != nil {
@@ -115,6 +117,9 @@ func CreateAndStartLocalNet(pCtx context.Context, logger *zap.Logger, options Lo
 					closeNodesWithTimeout(logger, ln.Nodes, 10*time.Second)
 				}
 
+				if attemptNum == maxAttempts {
+					return nil, fmt.Errorf("network didn't start after %d attempts: %w", maxAttempts, lastErr)
+				}
 				logger.Debug("trying to relaunch local network", zap.Error(err))
 				continue
 			}
