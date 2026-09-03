@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"math/big"
-	"sort"
 	"time"
 
 	"github.com/ethereum/go-ethereum"
@@ -81,14 +80,9 @@ func (ec *ExecutionClient) verifyLogsWithBloom(ctx context.Context, logs []ethty
 		}
 	}
 
-	// Re-sort if we appended recovered logs so downstream receives them in block/tx order.
+	// Appending recovered logs above leaves the slice unsorted, so re-sort before returning.
 	if recovered {
-		sort.Slice(logs, func(i, j int) bool {
-			if logs[i].BlockNumber != logs[j].BlockNumber {
-				return logs[i].BlockNumber < logs[j].BlockNumber
-			}
-			return logs[i].TxIndex < logs[j].TxIndex
-		})
+		sortLogsCanonical(logs)
 	}
 
 	return logs, nil
