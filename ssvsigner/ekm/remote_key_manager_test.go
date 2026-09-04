@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"sync"
 	"testing"
 	"time"
@@ -1166,8 +1168,7 @@ func (s *RemoteKeyManagerTestSuite) TestAddShareErrorCases() {
 		pubKey := phase0.BLSPubKey{1, 2, 3}
 		encShare := []byte("encrypted_share_data")
 
-		slashingMock.On("BumpSlashingProtectionTxn", nil, pubKey).Return(nil).Once()
-
+		// Bump runs only after AddValidators succeeds, so a signer error means it is never called.
 		clientMock.On("AddValidators", mock.Anything, ssvsigner.ShareKeys{
 			PubKey:           pubKey,
 			EncryptedPrivKey: encShare,
@@ -1177,6 +1178,73 @@ func (s *RemoteKeyManagerTestSuite) TestAddShareErrorCases() {
 
 		s.ErrorContains(err, "add validator")
 		clientMock.AssertExpectations(s.T())
+		slashingMock.AssertExpectations(s.T())
+	})
+
+	s.Run("ShareDecryptionError", func() {
+		clientMock := new(MockRemoteSigner)
+		slashingMock := new(MockSlashingProtector)
+
+		rmTest := &RemoteKeyManager{
+			logger:            s.logger,
+			beaconConfig:      testNetCfg,
+			genesisRoot:       testNetCfg.GenesisValidatorsRoot,
+			signerClient:      clientMock,
+			getOperatorId:     func() spectypes.OperatorID { return 1 },
+			operatorPubKey:    &MockOperatorPublicKey{},
+			slashingProtector: slashingMock,
+			signLocks:         map[signKey]*sync.RWMutex{},
+		}
+
+		pubKey := phase0.BLSPubKey{1, 2, 3}
+		encShare := []byte("encrypted_share_data")
+
+		// The signer rejects a malformed share with a 422, which ssvsigner.Client surfaces
+		// as a ShareDecryptionError. Bump runs only after a successful add, so it is never called.
+		clientMock.On("AddValidators", mock.Anything, ssvsigner.ShareKeys{
+			PubKey:           pubKey,
+			EncryptedPrivKey: encShare,
+		}).Return(nil, ssvsigner.ShareDecryptionError{
+			Err: errors.New("decrypt: crypto/rsa: decryption error"),
+		}).Once()
+
+		err := rmTest.AddShare(s.T().Context(), nil, encShare, pubKey)
+
+		// AddShare must surface this as a ShareDecryptionError (through its fmt.Errorf wrap)
+		// so the event handler classifies it as a malformed (skippable) event.
+		var decErr ssvsigner.ShareDecryptionError
+		s.ErrorAs(err, &decErr)
+		clientMock.AssertExpectations(s.T())
+		slashingMock.AssertExpectations(s.T())
+	})
+
+	s.Run("ShareDecryptionError from real client 422", func() {
+		slashingMock := new(MockSlashingProtector)
+
+		// Drive a real ssv-signer 422 (empty body) through the real client, exercising the
+		// 422 -> ShareDecryptionError mapping and the AddShare wrap end to end (not a mock).
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusUnprocessableEntity)
+		}))
+		defer srv.Close()
+
+		rmTest := &RemoteKeyManager{
+			logger:            s.logger,
+			beaconConfig:      testNetCfg,
+			genesisRoot:       testNetCfg.GenesisValidatorsRoot,
+			signerClient:      ssvsigner.NewClient(srv.URL),
+			getOperatorId:     func() spectypes.OperatorID { return 1 },
+			operatorPubKey:    &MockOperatorPublicKey{},
+			slashingProtector: slashingMock,
+			signLocks:         map[signKey]*sync.RWMutex{},
+		}
+
+		err := rmTest.AddShare(s.T().Context(), nil, []byte("enc"), phase0.BLSPubKey{1, 2, 3})
+
+		// AddShare must preserve the ShareDecryptionError and, per the validate-first order, never bump.
+		var decErr ssvsigner.ShareDecryptionError
+		s.ErrorAs(err, &decErr)
+		slashingMock.AssertExpectations(s.T())
 	})
 
 	s.Run("BumpSlashingProtectionError", func() {
@@ -1196,6 +1264,13 @@ func (s *RemoteKeyManagerTestSuite) TestAddShareErrorCases() {
 
 		pubKey := phase0.BLSPubKey{1, 2, 3}
 		encShare := []byte("encrypted_share_data")
+
+		// Bump runs only after AddValidators succeeds, so the signer call must succeed here even
+		// though this case exercises the bump failure.
+		clientMock.On("AddValidators", mock.Anything, ssvsigner.ShareKeys{
+			PubKey:           pubKey,
+			EncryptedPrivKey: encShare,
+		}).Return([]web3signer.Status{web3signer.StatusImported}, nil).Once()
 
 		slashingMock.On("BumpSlashingProtectionTxn", nil, pubKey).Return(errors.New("bump slashing protection error")).Once()
 
@@ -1224,8 +1299,8 @@ func (s *RemoteKeyManagerTestSuite) TestAddShareErrorCases() {
 		pubKey := phase0.BLSPubKey{1, 2, 3}
 		encShare := []byte("encrypted_share_data")
 
-		slashingMock.On("BumpSlashingProtectionTxn", nil, pubKey).Return(nil).Once()
-
+		// Bump runs only after all statuses are accepted, so an unexpected status means it is
+		// never called.
 		clientMock.On("AddValidators", mock.Anything, ssvsigner.ShareKeys{
 			PubKey:           pubKey,
 			EncryptedPrivKey: encShare,

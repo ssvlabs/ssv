@@ -1,8 +1,6 @@
 package exporter
 
 import (
-	"fmt"
-
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/hashicorp/go-multierror"
 	"go.uber.org/zap"
@@ -40,10 +38,7 @@ func (e *Exporter) CommitteeTracesCore(request *CommitteeTracesQuery) (*Committe
 }
 
 func validateCommitteeRequest(request *CommitteeTracesQuery) error {
-	if request.From > request.To {
-		return fmt.Errorf("'from' must be less than or equal to 'to'")
-	}
-	return nil
+	return validateSlotRange(request.From, request.To)
 }
 
 func (e *Exporter) getCommitteeDutiesForSlot(slot phase0.Slot, committeeIDs []spectypes.CommitteeID, roles ...spectypes.RunnerRole) ([]*traces.CommitteeDutyTrace, error) {

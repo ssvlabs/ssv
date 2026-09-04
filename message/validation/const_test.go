@@ -11,6 +11,9 @@ import (
 // drifting below the pinned ssv-spec's worst-case message sizes. If this
 // fails after a spec bump, re-derive the corresponding const.go values.
 func TestSizeCapsCoverSpecWorstCase(t *testing.T) {
+	// The partial-signature cap is compared against the spec's full-SSVMessage-envelope
+	// constant, which is over-conservative: the cap applies to SSVMessage.Data, the inner
+	// encoding.
 	require.GreaterOrEqual(t, maxEncodedPartialSignatureSize, maxmsgsize.MaxSizeSSVMessageFromPartialSignatureMessages)
 	require.GreaterOrEqual(t, maxEncodedConsensusMsgSize, maxmsgsize.MaxSizeSSVMessageFromQBFTMessage)
 	require.GreaterOrEqual(t, MaxEncodedMsgSize, maxmsgsize.MaxSizeSignedSSVMessageFromQBFTWith2Justification)

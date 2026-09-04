@@ -115,4 +115,23 @@ func TestRunnerRoleFromString_ToString_RoundTrip(t *testing.T) {
 		require.NoError(t, err, "round-trip failed for role %v (string %q)", role, s)
 		assert.Equal(t, role, got)
 	}
+
+	// Sweep spec-known role values beyond the hardcoded list, so a role added to the spec
+	// must gain a RunnerRoleFromString case as well: the lockstep sweep in
+	// observability/utils/format_test.go already forces a RunnerRoleToString case for it,
+	// and without this sweep FromString could silently stay behind — leaving
+	// CommitteeRunnerRoleFromString to reject the exporter's own emitted string. The
+	// bound and the skip mirror that sweep: 15 is headroom over the spec's current max
+	// role value (6), and values the spec stringifies as "UNDEFINED" (unused or
+	// deprecated) are covered by the explicit list above instead.
+	for i := 0; i <= 15; i++ {
+		role := spectypes.RunnerRole(i)
+		if role.String() == "UNDEFINED" {
+			continue
+		}
+		s := RunnerRoleToString(role)
+		got, err := RunnerRoleFromString(s)
+		require.NoError(t, err, "spec-known role %d (%q) does not round-trip", role, s)
+		assert.Equal(t, role, got)
+	}
 }
