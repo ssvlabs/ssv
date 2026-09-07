@@ -77,3 +77,85 @@ func TestCloneIsIndependent(t *testing.T) {
 	c.SSVMessage.Data[0] ^= 0xff
 	require.NotEqual(t, msg.SSVMessage.Data[0], c.SSVMessage.Data[0])
 }
+
+func prefsMsg(t *testing.T, slot phase0.Slot) *spectypes.SignedSSVMessage {
+	t.Helper()
+	msg := partialMsg(t, spectypes.RoleProposerPreferences, slot)
+	body := &spectypes.PartialSignatureMessages{}
+	require.NoError(t, body.Decode(msg.SSVMessage.Data))
+	body.Type = spectypes.ProposerPreferencesPartialSig
+	data, err := body.Encode()
+	require.NoError(t, err)
+	msg.SSVMessage.Data = data
+	return msg
+}
+
+func decodePartial(t *testing.T, msg *spectypes.SignedSSVMessage) *spectypes.PartialSignatureMessages {
+	t.Helper()
+	body := &spectypes.PartialSignatureMessages{}
+	require.NoError(t, body.Decode(msg.SSVMessage.Data))
+	return body
+}
+
+func TestPlanPrefs5Roots(t *testing.T) {
+	msg := prefsMsg(t, 200)
+
+	out := Plan(faults.Prefs5Roots, msg, 200, 150)
+
+	require.Len(t, out, 5, "the honest message plus four extra roots")
+	require.Same(t, msg, out[0].Msg)
+	require.False(t, out[0].Resign)
+
+	seen := map[[32]byte]bool{decodePartial(t, msg).Messages[0].SigningRoot: true}
+	for _, o := range out[1:] {
+		require.True(t, o.Resign)
+		root := decodePartial(t, o.Msg).Messages[0].SigningRoot
+		require.False(t, seen[root], "each extra message must carry a distinct root")
+		seen[root] = true
+	}
+	require.Len(t, seen, 5)
+}
+
+func TestPlanPrefsEarlyAndLate(t *testing.T) {
+	t.Run("early is 65 slots ahead of now", func(t *testing.T) {
+		msg := prefsMsg(t, 200)
+		out := Plan(faults.PrefsEarly, msg, 200, 150)
+		require.Len(t, out, 2)
+		require.Same(t, msg, out[0].Msg)
+		require.True(t, out[1].Resign)
+		require.Equal(t, phase0.Slot(215), decodePartial(t, out[1].Msg).Slot)
+		require.Equal(t, phase0.Slot(200), out[1].Slot, "the topic must follow the original slot")
+	})
+
+	t.Run("late is 3 slots behind now", func(t *testing.T) {
+		msg := prefsMsg(t, 200)
+		out := Plan(faults.PrefsLate, msg, 200, 150)
+		require.Len(t, out, 2)
+		require.Equal(t, phase0.Slot(147), decodePartial(t, out[1].Msg).Slot)
+	})
+
+	t.Run("late does not underflow near genesis", func(t *testing.T) {
+		msg := prefsMsg(t, 2)
+		out := Plan(faults.PrefsLate, msg, 2, 1)
+		require.Len(t, out, 1, "no room to be late yet, send only the honest message")
+	})
+}
+
+func TestPlanPrefsReplay(t *testing.T) {
+	msg := prefsMsg(t, 200)
+	honestRoot := decodePartial(t, msg).Messages[0].SigningRoot
+
+	out := Plan(faults.PrefsReplay, msg, 200, 150)
+
+	require.Len(t, out, 2)
+	require.Same(t, msg, out[0].Msg)
+
+	replay := out[1]
+	require.True(t, replay.Resign)
+	require.Equal(t, replayCount, replay.Repeat)
+	require.Equal(t, replayEvery, replay.Every)
+	body := decodePartial(t, replay.Msg)
+	require.Equal(t, honestRoot, body.Messages[0].SigningRoot, "the replay must keep the signing root")
+	require.NotEqual(t, decodePartial(t, msg).Messages[0].PartialSignature, body.Messages[0].PartialSignature,
+		"the bytes must differ or gossipsub suppresses the duplicate")
+}
