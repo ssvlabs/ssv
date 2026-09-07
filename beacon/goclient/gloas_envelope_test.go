@@ -5,10 +5,10 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec/deneb"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -26,27 +26,6 @@ func minimalExecutionPayloadEnvelope() *gloas.ExecutionPayloadEnvelope {
 		ExecutionRequests: &gloas.ExecutionRequests{},
 		BuilderIndex:      gloas.BuilderIndexSelfBuild,
 	}
-}
-
-func TestRequestExecutionPayloadEnvelope(t *testing.T) {
-	envelopeSSZ, err := minimalExecutionPayloadEnvelope().MarshalSSZ()
-	require.NoError(t, err)
-
-	var gotMethod, gotPath, gotAccept string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotMethod, gotPath = r.Method, r.URL.Path
-		gotAccept = r.Header.Get("Accept")
-		_, _ = w.Write(envelopeSSZ)
-	}))
-	defer srv.Close()
-
-	got, err := requestExecutionPayloadEnvelope(context.Background(), srv.URL, 9, phase0.Root{0xab})
-	require.NoError(t, err)
-	require.Equal(t, http.MethodGet, gotMethod)
-	// plural collection; beacon_block_root is a path segment, not a query param.
-	require.Equal(t, "/eth/v1/validator/execution_payload_envelopes/9/0xab"+strings.Repeat("0", 62), gotPath)
-	require.Equal(t, "application/octet-stream", gotAccept)
-	require.Equal(t, gloas.BuilderIndexSelfBuild, got.BuilderIndex)
 }
 
 func TestSubmitExecutionPayloadEnvelope(t *testing.T) {
@@ -67,20 +46,22 @@ func TestSubmitExecutionPayloadEnvelope(t *testing.T) {
 	require.Equal(t, http.MethodPost, gotMethod)
 	require.Equal(t, "/eth/v1/beacon/execution_payload_envelopes", gotPath)
 	require.Equal(t, consensusVersionGloas, gotVersion)
-	// full envelope (stateful flow), not the blobs-carrying Contents — the required beacon-APIs#624 header.
-	require.Equal(t, "false", gotBlobDataIncluded)
+	// the blobs-carrying Contents form — the required beacon-APIs#624 header (SIP #94 §6).
+	require.Equal(t, "true", gotBlobDataIncluded)
 	require.Equal(t, "application/octet-stream", gotContentType)
 	require.Equal(t, []byte{0x01, 0x02}, gotBody)
 }
 
-// The publish sends the full SignedExecutionPayloadEnvelope SSZ (what Lodestar v1.43.0 decodes), not the
-// blinded form the node signs over.
-func TestSubmitExecutionPayloadEnvelope_PublishesFullSignedEnvelope(t *testing.T) {
-	signed := &gloas.SignedExecutionPayloadEnvelope{
-		Message:   minimalExecutionPayloadEnvelope(),
-		Signature: phase0.BLSSignature{0x01},
+// The publish body is SignedExecutionPayloadEnvelopeContents: the signed full envelope (the node signs over
+// its blinded form, whose root is the same) with the blobs and KZG proofs any beacon node needs to broadcast it.
+func TestSubmitExecutionPayloadEnvelope_PublishesContents(t *testing.T) {
+	produced := &gloas.ProducedEnvelope{
+		Envelope:  minimalExecutionPayloadEnvelope(),
+		KZGProofs: []deneb.KZGProof{{0x01}},
+		Blobs:     []deneb.Blob{{0x02}},
 	}
-	wantBody, err := signed.MarshalSSZ()
+	contents := produced.Signed(phase0.BLSSignature{0x01})
+	wantBody, err := contents.MarshalSSZ()
 	require.NoError(t, err)
 
 	var gotBlobDataIncluded string
@@ -100,14 +81,21 @@ func TestSubmitExecutionPayloadEnvelope_PublishesFullSignedEnvelope(t *testing.T
 		commonTimeout:   time.Second,
 	}
 
-	require.NoError(t, gc.SubmitExecutionPayloadEnvelope(t.Context(), signed))
-	require.Equal(t, "false", gotBlobDataIncluded, "publish selects the full envelope, not the blobs-carrying Contents")
-	require.Equal(t, wantBody, gotBody, "publish must send the full signed envelope SSZ")
+	require.NoError(t, gc.SubmitExecutionPayloadEnvelope(t.Context(), contents))
+	require.Equal(t, "true", gotBlobDataIncluded, "publish carries the blob data so any beacon node can broadcast it")
+	require.Equal(t, wantBody, gotBody, "publish must send the contents SSZ")
+
+	decoded := &gloas.SignedExecutionPayloadEnvelopeContents{}
+	require.NoError(t, decoded.UnmarshalSSZ(gotBody))
+	require.Equal(t, produced.Envelope.BuilderIndex, decoded.SignedExecutionPayloadEnvelope.Message.BuilderIndex)
+	require.Equal(t, phase0.BLSSignature{0x01}, decoded.SignedExecutionPayloadEnvelope.Signature)
+	require.Equal(t, produced.KZGProofs, decoded.KZGProofs)
+	require.Equal(t, produced.Blobs, decoded.Blobs)
 }
 
-// An envelope the beacon node already knows is treated as a successful publish: on self-build every
-// operator publishes the identical envelope, so the non-winning ones race the canonical one (§6 analog
-// of the §4 block submit).
+// An envelope the beacon node already knows is treated as a successful publish: the builder operator
+// publishes to each of its beacon nodes, and operators sharing a beacon node publish the identical reveal
+// (§6 analog of the §4 block submit).
 func TestSubmitExecutionPayloadEnvelope_AlreadyKnownIsSuccess(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)

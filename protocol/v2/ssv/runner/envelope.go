@@ -49,14 +49,14 @@ type EnvelopeDisseminationProcessor interface {
 // dissemination round plus one threshold-signing round:
 //
 //  1. The builder operator — the one whose own produceBlockV4 response is the §4-decided block, and so
-//     the only one whose beacon node holds the payload — fetches its envelope, disseminates the blinded
-//     form (SSVEnvelopeDisseminationMsgType), and signs it.
+//     the only one holding its envelope, blobs, and KZG proofs — disseminates the blinded envelope
+//     (SSVEnvelopeDisseminationMsgType) and signs it.
 //  2. Every other operator content-selects the first disseminated envelope that binds to its own §4
 //     decision (ssv.ProposedBlock.Binds), skipping any that do not, and signs its root under
 //     DOMAIN_BEACON_BUILDER as an EnvelopePartialSig. The single signing round reuses the pre-consensus
 //     container, the same shape as the PTC and proposer-preferences runners.
 //  3. On quorum every operator reconstructs the signature; only the builder operator, whose produced
-//     envelope blinds to the selected one, publishes the full SignedExecutionPayloadEnvelope.
+//     envelope blinds to the selected one, publishes the reveal with its blobs and KZG proofs.
 type EnvelopeProposerRunner struct {
 	*BaseRunner
 
@@ -69,11 +69,11 @@ type EnvelopeProposerRunner struct {
 	// envelopes against the slot's decision recorded here.
 	proposedBlocks *ssv.ProposedBlocks
 
-	// producedEnvelope is the full envelope this operator's beacon node built, held only by the builder
-	// operator (nil otherwise) — the publish body; producedBlinded is its blinded form, compared against
-	// the selected envelope to decide whether this operator publishes.
-	producedEnvelope *gloas.ExecutionPayloadEnvelope
-	producedBlinded  *gloas.BlindedExecutionPayloadEnvelope
+	// produced is the reveal data this operator's own produce response carried, held only by the builder
+	// operator (nil otherwise) — the publish body; producedBlinded is its envelope's blinded form, compared
+	// against the selected envelope to decide whether this operator publishes.
+	produced        *gloas.ProducedEnvelope
+	producedBlinded *gloas.BlindedExecutionPayloadEnvelope
 	// selectedEnvelope is the disseminated envelope this operator chose to sign — the first arrival that
 	// binds to its §4 decision. Incoming partial signatures are validated against its root; nil until
 	// selection, so peers' partials are retried rather than dropped until then.
@@ -118,14 +118,14 @@ func (r *EnvelopeProposerRunner) StartNewDuty(ctx context.Context, logger *zap.L
 		return err
 	}
 	// Clear any prior duty's envelopes; executeDuty re-derives them, so a non-builder stays nil.
-	r.producedEnvelope, r.producedBlinded, r.selectedEnvelope = nil, nil, nil
+	r.produced, r.producedBlinded, r.selectedEnvelope = nil, nil, nil
 	return r.baseStartNewNonBeaconDuty(ctx, logger, r, validatorDuty, quorum)
 }
 
 // executeDuty runs the builder operator's side of the duty (SIP #94 §6): with the slot's §4 decision
-// recorded and this operator's own produce response being the decided block, it fetches the envelope
-// its beacon node built, disseminates the blinded form, and signs it. Every other operator disseminates
-// nothing and signs only a binding dissemination it later receives (ProcessEnvelopeDissemination).
+// recorded and this operator's own produce response being the decided block, it disseminates the blinded
+// form of the envelope that response carried and signs it. Every other operator disseminates nothing and
+// signs only a binding dissemination it later receives (ProcessEnvelopeDissemination).
 func (r *EnvelopeProposerRunner) executeDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty) error {
 	validatorDuty, err := validatorDutyFromDuty(duty)
 	if err != nil {
@@ -141,30 +141,29 @@ func (r *EnvelopeProposerRunner) executeDuty(ctx context.Context, logger *zap.Lo
 		return nil
 	}
 	if !proposal.ProducedLocally {
-		// Only the beacon node that built the decided block holds its payload, so on a cluster whose
-		// operators run separate beacon nodes every non-builder waits for the builder's dissemination.
+		// Only the builder operator holds the payload, so every other operator waits for its dissemination.
 		logger.Debug("not the builder operator for this slot, waiting for the builder's dissemination", fields.Slot(slot))
 		return nil
 	}
-
-	envelope, err := r.beacon.GetExecutionPayloadEnvelope(ctx, slot, proposal.BlockRoot)
-	if err != nil {
-		// The builder operator is the only one that can disseminate, so without its envelope the cluster
-		// misses the slot's reveal (bounded, non-slashable; SIP #94 Security Considerations).
-		return fmt.Errorf("get execution payload envelope: %w", err)
+	if proposal.ProducedEnvelope == nil {
+		// A self-build produce response is BlockContents (include_payload=true), so this is a beacon-node
+		// fault; the builder operator is the only one that can disseminate, so the cluster misses the
+		// slot's reveal (bounded, non-slashable; SIP #94 Security Considerations).
+		return errors.New("produced the decided self-build block but its produceBlockV4 response carried no payload (include_payload=true not honored)")
 	}
-	blinded, err := gloas.Blinded(envelope)
+
+	blinded, err := gloas.Blinded(proposal.ProducedEnvelope.Envelope)
 	if err != nil {
 		return fmt.Errorf("blind execution payload envelope: %w", err)
 	}
-	r.producedEnvelope, r.producedBlinded = envelope, blinded
+	r.produced, r.producedBlinded = proposal.ProducedEnvelope, blinded
 
 	if err := r.disseminate(ctx, slot, blinded); err != nil {
 		return fmt.Errorf("disseminate envelope: %w", err)
 	}
 	logger.Debug("disseminated execution payload envelope", fields.Slot(slot))
 
-	// The builder operator's own envelope binds by construction; anything else is a beacon-node bug.
+	// The builder operator's own envelope binds by construction; anything else is a beacon-node fault.
 	if !proposal.Binds(blinded) {
 		return errors.New("own execution payload envelope does not bind to the decided block")
 	}
@@ -255,7 +254,7 @@ func (r *EnvelopeProposerRunner) ProcessPreConsensus(ctx context.Context, logger
 	var signature phase0.BLSSignature
 	copy(signature[:], fullSig)
 
-	// Publish by content match: only the builder operator holds the full envelope behind the selected
+	// Publish by content match: only the builder operator holds the reveal data behind the selected
 	// blinded value; everyone else completes the duty without publishing (SIP #94 §6).
 	built := r.builtSelectedEnvelope()
 	recordEnvelopeBuildMatch(ctx, built)
@@ -265,8 +264,7 @@ func (r *EnvelopeProposerRunner) ProcessPreConsensus(ctx context.Context, logger
 		return nil
 	}
 
-	signed := &gloas.SignedExecutionPayloadEnvelope{Message: r.producedEnvelope, Signature: signature}
-	if err := r.beacon.SubmitExecutionPayloadEnvelope(ctx, signed); err != nil {
+	if err := r.beacon.SubmitExecutionPayloadEnvelope(ctx, r.produced.Signed(signature)); err != nil {
 		recordFailedSubmission(ctx, spectypes.BNRoleEnvelopeProposer)
 		const errMsg = "could not submit execution payload envelope"
 		logger.Error(errMsg, fields.Slot(duty.Slot), zap.Error(err))

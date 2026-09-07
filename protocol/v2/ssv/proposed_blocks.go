@@ -16,13 +16,15 @@ const proposedBlockRetention = 4
 // ProposedBlock is the §4 decision the §6 envelope duty binds a disseminated envelope against (SIP #94
 // §6): the decided block's root, its parent root, and the execution-requests root its bid commits to.
 // ProducedLocally marks the operator whose own produceBlockV4 response is the decided block — the
-// builder operator, the only one whose beacon node holds the payload, and therefore the only one that
-// disseminates and publishes.
+// builder operator, the only one that disseminates and publishes — and ProducedEnvelope is the reveal
+// data that response carried: the envelope, blobs, and KZG proofs of a self-build, nil for everyone else
+// and for an external build.
 type ProposedBlock struct {
 	BlockRoot             phase0.Root
 	ParentRoot            phase0.Root
 	ExecutionRequestsRoot phase0.Root
 	ProducedLocally       bool
+	ProducedEnvelope      *gloas.ProducedEnvelope
 }
 
 // Binds reports whether a disseminated blinded envelope commits to this §4 decision — the four SIP #94

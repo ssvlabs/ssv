@@ -14,36 +14,30 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 )
 
-// Gloas produce/publish endpoints. Produce is v4 with include_payload=false: a Gloas block carries only
-// the execution-payload bid (the payload ships in the §6 envelope), so the response is a bare BeaconBlock —
-// no BlockContents. Produce POSTs a BuilderConfig body (beacon-APIs#630) — the direct-builder overlay when
-// configured, else a neutral local-build config — and falls back per beacon node to the legacy GET for
-// nodes that predate the POST (beacon-APIs#580, GET-only). Publish is the standard v2 blocks endpoint
-// (version-tagged via Eth-Consensus-Version).
+// Gloas produce/publish endpoints. Produce is v4 with include_payload=true (SIP #94 §6): a self-build
+// response is BlockContents — the block plus the envelope, blobs, and KZG proofs the operator reveals in
+// §6 — so the reveal never depends on which beacon node built the block; any other response is the bare
+// bid-carrying BeaconBlock, told apart by the Eth-Execution-Payload-Included header. Produce POSTs a
+// BuilderConfig body (beacon-APIs#630) — the direct-builder overlay when configured, else a neutral
+// local-build config — and falls back per beacon node to the legacy GET for nodes that predate the POST
+// (beacon-APIs#580, GET-only). Publish is the standard v2 blocks endpoint (version-tagged via
+// Eth-Consensus-Version).
 const (
-	gloasProduceBlockPath = "/eth/v4/validator/blocks/%d?randao_reveal=%s&graffiti=%s&include_payload=false" // slot, randao 0x-hex, graffiti 0x-hex
-	gloasPublishBlockPath = "/eth/v2/beacon/blocks"
+	gloasProduceBlockPath          = "/eth/v4/validator/blocks/%d?randao_reveal=%s&graffiti=%s&include_payload=true" // slot, randao 0x-hex, graffiti 0x-hex
+	gloasPublishBlockPath          = "/eth/v2/beacon/blocks"
+	executionPayloadIncludedHeader = "Eth-Execution-Payload-Included"
 )
-
-// gloasBlockResult is the produce result threaded through firstClientResult: the block plus the winning
-// builder's Eth-Builder-Url (empty when self-built or won by a p2p bid).
-type gloasBlockResult struct {
-	block      *gloas.BeaconBlock
-	builderURL string
-}
 
 // GetGloasBeaconBlock produces a Gloas (ePBS) block via the v4 produce endpoint, decoding the SSZ response.
 // It is hand-rolled because go-eth2-client's ePBS proposal call is the pre-#630 GET, with no typed
-// equivalent for the POST body or the Eth-Builder-Url response header. It POSTs a BuilderConfig body
-// (beacon-APIs#630): builderConfig when the direct-builder overlay is configured, else a neutral local-build
-// config. It falls back per beacon node to the legacy GET for nodes that predate the POST; the returned
-// string is the winning builder's Eth-Builder-Url, if any.
-func (gc *GoClient) GetGloasBeaconBlock(ctx context.Context, slot phase0.Slot, graffiti, randao []byte, builderConfig *gloas.ProduceBuilderConfig) (*gloas.BeaconBlock, string, error) {
+// equivalent for the POST body, the BlockContents response, or the response headers. It POSTs a
+// BuilderConfig body (beacon-APIs#630): builderConfig when the direct-builder overlay is configured, else a
+// neutral local-build config. It falls back per beacon node to the legacy GET for nodes that predate the POST.
+func (gc *GoClient) GetGloasBeaconBlock(ctx context.Context, slot phase0.Slot, graffiti, randao []byte, builderConfig *gloas.ProduceBuilderConfig) (*gloas.ProducedBlock, error) {
 	// A per-node GET fallback (a pre-#630 node) is still counted under this POST label — a transitional inaccuracy.
-	res, err := firstClientResult(ctx, gc, "GetGloasBeaconBlock", http.MethodPost, func(ctx context.Context, addr string) (gloasBlockResult, error) {
+	return firstClientResult(ctx, gc, "GetGloasBeaconBlock", http.MethodPost, func(ctx context.Context, addr string) (*gloas.ProducedBlock, error) {
 		return requestGloasBeaconBlock(ctx, addr, slot, graffiti, randao, builderConfig)
 	})
-	return res.block, res.builderURL, err
 }
 
 // SubmitGloasBeaconBlock publishes a signed Gloas (ePBS) block as SSZ to all configured beacon nodes
@@ -74,7 +68,7 @@ func (gc *GoClient) SubmitGloasBeaconBlock(ctx context.Context, block *gloas.Sig
 // BuilderConfig body — a neutral local-build config when builderConfig is nil — and, only on a 404/405 (the
 // node predates the POST), retries as the legacy GET carrying builder_boost_factor (the sole knob the
 // pre-#630 GET also honors).
-func requestGloasBeaconBlock(ctx context.Context, addr string, slot phase0.Slot, graffiti, randao []byte, builderConfig *gloas.ProduceBuilderConfig) (gloasBlockResult, error) {
+func requestGloasBeaconBlock(ctx context.Context, addr string, slot phase0.Slot, graffiti, randao []byte, builderConfig *gloas.ProduceBuilderConfig) (*gloas.ProducedBlock, error) {
 	if builderConfig == nil {
 		builderConfig = gloas.NeutralProduceBuilderConfig()
 	}
@@ -89,7 +83,7 @@ func requestGloasBeaconBlock(ctx context.Context, addr string, slot phase0.Slot,
 		return res, nil
 	}
 	if !isMethodOrPathMissing(err) {
-		return gloasBlockResult{}, err
+		return nil, err
 	}
 	// Fall back to the legacy GET. It honors only builder_boost_factor — min_bid and the per-builder inputs
 	// are POST-only — with the same semantics: bids weighed against the local payload at 100.
@@ -97,37 +91,57 @@ func requestGloasBeaconBlock(ctx context.Context, addr string, slot phase0.Slot,
 
 	respBody, header, err := gloasHTTPDo(ctx, http.MethodGet, url, nil, "", nil)
 	if err != nil {
-		return gloasBlockResult{}, err
+		return nil, err
 	}
-	if err := checkGloasConsensusVersion(header); err != nil {
-		return gloasBlockResult{}, err
-	}
-	block, err := decodeGloasBlock(respBody)
-	if err != nil {
-		return gloasBlockResult{}, err
-	}
-	return gloasBlockResult{block: block}, nil
+	return decodeGloasProduceResponse(respBody, header)
 }
 
 // requestGloasBeaconBlockPOST sends the builder config as the produceBlockV4 JSON body and decodes the SSZ
-// block response, reading the winning builder's Eth-Builder-Url from the response header.
-func requestGloasBeaconBlockPOST(ctx context.Context, url string, builderConfig *gloas.ProduceBuilderConfig) (gloasBlockResult, error) {
+// response.
+func requestGloasBeaconBlockPOST(ctx context.Context, url string, builderConfig *gloas.ProduceBuilderConfig) (*gloas.ProducedBlock, error) {
 	jsonBody, err := json.Marshal(builderConfig)
 	if err != nil {
-		return gloasBlockResult{}, fmt.Errorf("marshal builder config: %w", err)
+		return nil, fmt.Errorf("marshal builder config: %w", err)
 	}
 	respBody, header, err := gloasHTTPDo(ctx, http.MethodPost, url, jsonBody, "application/json", nil)
 	if err != nil {
-		return gloasBlockResult{}, err
+		return nil, err
 	}
+	return decodeGloasProduceResponse(respBody, header)
+}
+
+// decodeGloasProduceResponse decodes a produceBlockV4 SSZ response: BlockContents when the
+// Eth-Execution-Payload-Included header says the beacon node self-built and included the payload, else a
+// bare BeaconBlock. The winning builder's Eth-Builder-Url is read from the response header either way.
+func decodeGloasProduceResponse(respBody []byte, header http.Header) (*gloas.ProducedBlock, error) {
 	if err := checkGloasConsensusVersion(header); err != nil {
-		return gloasBlockResult{}, err
+		return nil, err
 	}
-	block, err := decodeGloasBlock(respBody)
-	if err != nil {
-		return gloasBlockResult{}, err
+	produced := &gloas.ProducedBlock{BuilderURL: header.Get("Eth-Builder-Url")}
+	included := header.Get(executionPayloadIncludedHeader)
+	if !strings.EqualFold(included, "true") {
+		block, err := decodeGloasBlock(respBody)
+		if err != nil {
+			return nil, fmt.Errorf("produce response with %s=%q: %w", executionPayloadIncludedHeader, included, err)
+		}
+		produced.Block = block
+		return produced, nil
 	}
-	return gloasBlockResult{block: block, builderURL: header.Get("Eth-Builder-Url")}, nil
+
+	contents := &gloas.BlockContents{}
+	if err := contents.UnmarshalSSZ(respBody); err != nil {
+		return nil, fmt.Errorf("produce response with %s=%q: decode gloas block contents: %w", executionPayloadIncludedHeader, included, err)
+	}
+	if contents.Block == nil || contents.ExecutionPayloadEnvelope == nil {
+		return nil, errors.New("gloas block contents without a block or envelope")
+	}
+	produced.Block = contents.Block
+	produced.Envelope = &gloas.ProducedEnvelope{
+		Envelope:  contents.ExecutionPayloadEnvelope,
+		KZGProofs: contents.KZGProofs,
+		Blobs:     contents.Blobs,
+	}
+	return produced, nil
 }
 
 // checkGloasConsensusVersion guards against a beacon node returning a wrong-fork block: it fails when the

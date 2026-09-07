@@ -44,7 +44,8 @@ type proposerTestBeacon struct {
 	submitErr       error
 
 	getGloasBlock        *gloas.BeaconBlock
-	getGloasBuilderURL   string // the Eth-Builder-Url the produce returns; empty = self-build / p2p win
+	getGloasBuilderURL   string                  // the Eth-Builder-Url the produce returns; empty = self-build / p2p win
+	getGloasEnvelope     *gloas.ProducedEnvelope // the reveal data a self-build produce returns; nil = external build
 	submittedGloasBlocks []*gloas.SignedBeaconBlock
 }
 
@@ -69,12 +70,12 @@ func (b *proposerTestBeacon) SubmitBeaconBlock(_ context.Context, block *api.Ver
 	return b.submitErr
 }
 
-func (b *proposerTestBeacon) GetGloasBeaconBlock(_ context.Context, slot phase0.Slot, graffiti, randao []byte, _ *gloas.ProduceBuilderConfig) (*gloas.BeaconBlock, string, error) {
+func (b *proposerTestBeacon) GetGloasBeaconBlock(_ context.Context, slot phase0.Slot, graffiti, randao []byte, _ *gloas.ProduceBuilderConfig) (*gloas.ProducedBlock, error) {
 	b.getCalls++
 	b.lastGetSlot = slot
 	b.lastGetGraffiti = append([]byte(nil), graffiti...)
 	b.lastGetRandao = append([]byte(nil), randao...)
-	return b.getGloasBlock, b.getGloasBuilderURL, nil
+	return &gloas.ProducedBlock{Block: b.getGloasBlock, BuilderURL: b.getGloasBuilderURL, Envelope: b.getGloasEnvelope}, nil
 }
 
 func (b *proposerTestBeacon) SubmitGloasBeaconBlock(_ context.Context, block *gloas.SignedBeaconBlock, _ string) error {
@@ -776,12 +777,24 @@ func TestProposerRunnerRecordDecidedBlock(t *testing.T) {
 		ProducedLocally:       false,
 	}, got)
 
-	// Our own produce response was decided: this operator is the builder operator.
-	runner.gloasProducedRoot = expectedRoot
+	// Our own produce response was decided: this operator is the builder operator, and the record carries
+	// the reveal data that response held; the proposer's copy is dropped.
+	produced := &gloas.ProducedEnvelope{Envelope: &gloas.ExecutionPayloadEnvelope{BuilderIndex: gloas.BuilderIndexSelfBuild}}
+	runner.gloasProducedRoot, runner.gloasProducedEnvelope = expectedRoot, produced
 	require.NoError(t, runner.recordDecidedBlock(8, block))
 	got, ok = store.Get(8)
 	require.True(t, ok)
 	require.True(t, got.ProducedLocally)
+	require.Same(t, produced, got.ProducedEnvelope)
+	require.Nil(t, runner.gloasProducedEnvelope)
+
+	// Another operator's block decided while we hold reveal data for our own: none is recorded.
+	runner.gloasProducedRoot, runner.gloasProducedEnvelope = [32]byte{0xff}, produced
+	require.NoError(t, runner.recordDecidedBlock(8, block))
+	got, ok = store.Get(8)
+	require.True(t, ok)
+	require.Nil(t, got.ProducedEnvelope)
+	require.Nil(t, runner.gloasProducedEnvelope)
 
 	// A block without a bid cannot be recorded (nothing to bind the envelope's requests root to).
 	noBid := gloas.TestingBeaconBlock(8)

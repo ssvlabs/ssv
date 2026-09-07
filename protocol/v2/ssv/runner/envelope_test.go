@@ -2,9 +2,9 @@ package runner
 
 import (
 	"context"
-	"errors"
 	"testing"
 
+	"github.com/attestantio/go-eth2-client/spec/deneb"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -29,29 +29,18 @@ func envelopeDuty(slot phase0.Slot) *spectypes.ValidatorDuty {
 }
 
 // envelopeTestBeacon embeds the spec testing beacon so DomainData (used by the signing-root computation)
-// resolves, records envelope fetches, and records the published envelopes.
+// resolves, and records the published reveals.
 type envelopeTestBeacon struct {
 	beacon.BeaconNode
-	envelope   *gloas.ExecutionPayloadEnvelope
-	produceErr error // when set, the fetch fails — as a beacon node that never held the payload does
-	fetches    int
-	submitted  []*gloas.SignedExecutionPayloadEnvelope
+	submitted []*gloas.SignedExecutionPayloadEnvelopeContents
 }
 
 func newEnvelopeTestBeacon() *envelopeTestBeacon {
 	return &envelopeTestBeacon{BeaconNode: protocoltesting.NewTestingBeaconNodeWrapped()}
 }
 
-func (b *envelopeTestBeacon) GetExecutionPayloadEnvelope(_ context.Context, _ phase0.Slot, _ phase0.Root) (*gloas.ExecutionPayloadEnvelope, error) {
-	b.fetches++
-	if b.produceErr != nil {
-		return nil, b.produceErr
-	}
-	return b.envelope, nil
-}
-
-func (b *envelopeTestBeacon) SubmitExecutionPayloadEnvelope(_ context.Context, signed *gloas.SignedExecutionPayloadEnvelope) error {
-	b.submitted = append(b.submitted, signed)
+func (b *envelopeTestBeacon) SubmitExecutionPayloadEnvelope(_ context.Context, contents *gloas.SignedExecutionPayloadEnvelopeContents) error {
+	b.submitted = append(b.submitted, contents)
 	return nil
 }
 
@@ -65,17 +54,27 @@ func sampleEnvelope() *gloas.ExecutionPayloadEnvelope {
 	}
 }
 
-// proposalFor derives the §4 decision the envelope binds to, as the proposer runner would record it.
+// sampleProduced is the reveal data the builder operator's produce response carried for the envelope.
+func sampleProduced(envelope *gloas.ExecutionPayloadEnvelope) *gloas.ProducedEnvelope {
+	return &gloas.ProducedEnvelope{Envelope: envelope, KZGProofs: []deneb.KZGProof{{0x01}}, Blobs: []deneb.Blob{{0x02}}}
+}
+
+// proposalFor derives the §4 decision the envelope binds to, as the proposer runner would record it; the
+// builder operator's record also carries the reveal data.
 func proposalFor(t *testing.T, envelope *gloas.ExecutionPayloadEnvelope, producedLocally bool) ssv.ProposedBlock {
 	t.Helper()
 	requestsRoot, err := envelope.ExecutionRequests.HashTreeRoot()
 	require.NoError(t, err)
-	return ssv.ProposedBlock{
+	proposal := ssv.ProposedBlock{
 		BlockRoot:             envelope.BeaconBlockRoot,
 		ParentRoot:            envelope.ParentBeaconBlockRoot,
 		ExecutionRequestsRoot: phase0.Root(requestsRoot),
 		ProducedLocally:       producedLocally,
 	}
+	if producedLocally {
+		proposal.ProducedEnvelope = sampleProduced(envelope)
+	}
+	return proposal
 }
 
 func newEnvelopeProposerRunnerForTest(t *testing.T, bn beacon.BeaconNode) (*EnvelopeProposerRunner, *spectestingutils.TestKeySet) {
@@ -177,19 +176,18 @@ func TestNewEnvelopeProposerRunner_RequiresProposedBlocks(t *testing.T) {
 	require.ErrorContains(t, err, "proposed blocks")
 }
 
-// The builder operator — its own produce response is the decided block — fetches its envelope,
-// disseminates the blinded form, and signs it in the same step.
+// The builder operator — its own produce response is the decided block — disseminates the blinded form of
+// the envelope that response carried and signs it in the same step, with no beacon-node call.
 func TestEnvelopeProposerRunner_BuilderDisseminatesAndSigns(t *testing.T) {
 	const slot = phase0.Slot(8)
-	bn := newEnvelopeTestBeacon()
-	bn.envelope = sampleEnvelope()
-	r, _ := newEnvelopeProposerRunnerForTest(t, bn)
-	r.proposedBlocks.Record(slot, proposalFor(t, bn.envelope, true))
+	envelope := sampleEnvelope()
+	r, _ := newEnvelopeProposerRunnerForTest(t, newEnvelopeTestBeacon())
+	proposal := proposalFor(t, envelope, true)
+	r.proposedBlocks.Record(slot, proposal)
 
 	require.NoError(t, r.StartNewDuty(context.Background(), zap.NewNop(), envelopeDuty(slot), 3))
 
-	require.Equal(t, 1, bn.fetches)
-	require.Same(t, bn.envelope, r.producedEnvelope)
+	require.Same(t, proposal.ProducedEnvelope, r.produced)
 	require.NotNil(t, r.selectedEnvelope)
 	require.True(t, r.builtSelectedEnvelope())
 
@@ -198,10 +196,10 @@ func TestEnvelopeProposerRunner_BuilderDisseminatesAndSigns(t *testing.T) {
 
 	dissemination := decodeDissemination(t, broadcast[0])
 	require.Equal(t, slot, dissemination.Slot)
-	wantPayloadRoot, err := bn.envelope.Payload.HashTreeRoot()
+	wantPayloadRoot, err := envelope.Payload.HashTreeRoot()
 	require.NoError(t, err)
 	require.Equal(t, phase0.Root(wantPayloadRoot), dissemination.Envelope.PayloadRoot)
-	require.Equal(t, bn.envelope.BeaconBlockRoot, dissemination.Envelope.BeaconBlockRoot)
+	require.Equal(t, envelope.BeaconBlockRoot, dissemination.Envelope.BeaconBlockRoot)
 	require.Equal(t, uint64(gloas.BuilderIndexSelfBuild), uint64(dissemination.Envelope.BuilderIndex))
 
 	partial := decodePartialSig(t, broadcast[1])
@@ -215,45 +213,42 @@ func TestEnvelopeProposerRunner_BuilderDisseminatesAndSigns(t *testing.T) {
 	require.Equal(t, wantSigningRoot, phase0.Root(partial.Messages[0].SigningRoot))
 }
 
-// A non-builder disseminates nothing: its beacon node did not build the decided block, so it neither
-// fetches nor signs until a peer's binding dissemination arrives.
+// A non-builder disseminates nothing: it did not produce the decided block, so it signs only once a peer's
+// binding dissemination arrives.
 func TestEnvelopeProposerRunner_NonBuilderWaitsForDissemination(t *testing.T) {
 	const slot = phase0.Slot(8)
-	bn := newEnvelopeTestBeacon()
-	r, _ := newEnvelopeProposerRunnerForTest(t, bn)
+	r, _ := newEnvelopeProposerRunnerForTest(t, newEnvelopeTestBeacon())
 	r.proposedBlocks.Record(slot, proposalFor(t, sampleEnvelope(), false))
 
 	require.NoError(t, r.StartNewDuty(context.Background(), zap.NewNop(), envelopeDuty(slot), 3))
 
 	require.True(t, r.HasRunningDuty())
-	require.Zero(t, bn.fetches)
-	require.Nil(t, r.producedEnvelope)
+	require.Nil(t, r.produced)
 	require.Nil(t, r.selectedEnvelope)
 	require.Empty(t, broadcastMsgs(r))
 }
 
 // Without a recorded §4 decision the duty stays running and does nothing yet.
 func TestEnvelopeProposerRunner_NoDecisionYetWaits(t *testing.T) {
-	bn := newEnvelopeTestBeacon()
-	r, _ := newEnvelopeProposerRunnerForTest(t, bn)
+	r, _ := newEnvelopeProposerRunnerForTest(t, newEnvelopeTestBeacon())
 
 	require.NoError(t, r.StartNewDuty(context.Background(), zap.NewNop(), envelopeDuty(8), 3))
 
 	require.True(t, r.HasRunningDuty())
-	require.Zero(t, bn.fetches)
 	require.Empty(t, broadcastMsgs(r))
 }
 
-// The builder operator that cannot fetch its own envelope cannot disseminate; the duty fails.
-func TestEnvelopeProposerRunner_BuilderFetchFailureFailsDuty(t *testing.T) {
+// A builder operator whose produce response carried no reveal data (the beacon node ignored
+// include_payload=true) cannot disseminate; the duty fails.
+func TestEnvelopeProposerRunner_BuilderWithoutRevealDataFailsDuty(t *testing.T) {
 	const slot = phase0.Slot(8)
-	bn := newEnvelopeTestBeacon()
-	bn.produceErr = errors.New("404 execution payload envelope not found")
-	r, _ := newEnvelopeProposerRunnerForTest(t, bn)
-	r.proposedBlocks.Record(slot, proposalFor(t, sampleEnvelope(), true))
+	r, _ := newEnvelopeProposerRunnerForTest(t, newEnvelopeTestBeacon())
+	proposal := proposalFor(t, sampleEnvelope(), true)
+	proposal.ProducedEnvelope = nil
+	r.proposedBlocks.Record(slot, proposal)
 
 	err := r.StartNewDuty(context.Background(), zap.NewNop(), envelopeDuty(slot), 3)
-	require.ErrorContains(t, err, "get execution payload envelope")
+	require.ErrorContains(t, err, "include_payload=true not honored")
 	require.Empty(t, broadcastMsgs(r))
 }
 
@@ -263,8 +258,7 @@ func TestEnvelopeProposerRunner_ProcessEnvelopeDisseminationSelectsFirstBinding(
 	const slot = phase0.Slot(8)
 	ctx, logger := context.Background(), zap.NewNop()
 	envelope := sampleEnvelope()
-	bn := newEnvelopeTestBeacon()
-	r, _ := newEnvelopeProposerRunnerForTest(t, bn)
+	r, _ := newEnvelopeProposerRunnerForTest(t, newEnvelopeTestBeacon())
 	r.proposedBlocks.Record(slot, proposalFor(t, envelope, false))
 	require.NoError(t, r.StartNewDuty(ctx, logger, envelopeDuty(slot), 3))
 
@@ -305,8 +299,7 @@ func TestEnvelopeProposerRunner_ProcessEnvelopeDisseminationRetries(t *testing.T
 	envelope := sampleEnvelope()
 	blinded, err := gloas.Blinded(envelope)
 	require.NoError(t, err)
-	bn := newEnvelopeTestBeacon()
-	r, _ := newEnvelopeProposerRunnerForTest(t, bn)
+	r, _ := newEnvelopeProposerRunnerForTest(t, newEnvelopeTestBeacon())
 
 	// Before the duty starts.
 	msg, dissemination := disseminationMsg(t, slot, blinded, 2)
@@ -343,8 +336,7 @@ func TestEnvelopeProposerRunner_PartialSignatureBeforeSelectionRetries(t *testin
 	envelope := sampleEnvelope()
 	blinded, err := gloas.Blinded(envelope)
 	require.NoError(t, err)
-	bn := newEnvelopeTestBeacon()
-	r, keySet := newEnvelopeProposerRunnerForTest(t, bn)
+	r, keySet := newEnvelopeProposerRunnerForTest(t, newEnvelopeTestBeacon())
 	r.proposedBlocks.Record(slot, proposalFor(t, envelope, false))
 	require.NoError(t, r.StartNewDuty(ctx, logger, envelopeDuty(slot), 3))
 
@@ -353,14 +345,16 @@ func TestEnvelopeProposerRunner_PartialSignatureBeforeSelectionRetries(t *testin
 	require.ErrorIs(t, err, errNoSelectedEnvelope)
 }
 
-// On quorum the builder operator reconstructs the signature and publishes the full envelope carrying it.
+// On quorum the builder operator reconstructs the signature and publishes the reveal: the full envelope
+// carrying it, with the blobs and KZG proofs from its produce response.
 func TestEnvelopeProposerRunner_QuorumBuilderPublishes(t *testing.T) {
 	const slot = phase0.Slot(8)
 	ctx, logger := context.Background(), zap.NewNop()
+	envelope := sampleEnvelope()
 	bn := newEnvelopeTestBeacon()
-	bn.envelope = sampleEnvelope()
 	r, keySet := newEnvelopeProposerRunnerForTest(t, bn)
-	r.proposedBlocks.Record(slot, proposalFor(t, bn.envelope, true))
+	proposal := proposalFor(t, envelope, true)
+	r.proposedBlocks.Record(slot, proposal)
 	require.NoError(t, r.StartNewDuty(ctx, logger, envelopeDuty(slot), keySet.Threshold))
 
 	for opID := spectypes.OperatorID(1); opID <= keySet.Threshold; opID++ {
@@ -368,12 +362,15 @@ func TestEnvelopeProposerRunner_QuorumBuilderPublishes(t *testing.T) {
 	}
 
 	require.Len(t, bn.submitted, 1)
-	require.Equal(t, bn.envelope, bn.submitted[0].Message)
-	require.NotEqual(t, phase0.BLSSignature{}, bn.submitted[0].Signature) // the reconstructed signature
+	published := bn.submitted[0]
+	require.Equal(t, envelope, published.SignedExecutionPayloadEnvelope.Message)
+	require.NotEqual(t, phase0.BLSSignature{}, published.SignedExecutionPayloadEnvelope.Signature) // the reconstructed signature
+	require.Equal(t, proposal.ProducedEnvelope.KZGProofs, published.KZGProofs)
+	require.Equal(t, proposal.ProducedEnvelope.Blobs, published.Blobs)
 	require.True(t, r.State.Succeeded)
 }
 
-// A non-builder completes the duty on quorum without publishing: it holds no payload behind the root.
+// A non-builder completes the duty on quorum without publishing: it holds no reveal data behind the root.
 func TestEnvelopeProposerRunner_QuorumNonBuilderDoesNotPublish(t *testing.T) {
 	const slot = phase0.Slot(8)
 	ctx, logger := context.Background(), zap.NewNop()
