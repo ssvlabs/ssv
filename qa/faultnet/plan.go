@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/qa/faults"
@@ -51,7 +52,14 @@ func Plan(f faults.Fault, msg *spectypes.SignedSSVMessage, slot, now phase0.Slot
 		return prefsShift(msg, slot, now, false)
 	case faults.PrefsReplay:
 		return prefsReplay(msg, slot)
-	// Task 8 adds its cases here.
+	case faults.PTCQBFT:
+		return forgeConsensusMsg(msg, slot)
+	case faults.TwoEntries:
+		return dupEntry(msg, slot)
+	case faults.PTC3PerEpoch:
+		return ptcExtraSlots(msg, slot)
+	case faults.Role7PreFork:
+		return forgeGloasRoles(msg, slot)
 	default:
 		return identity
 	}
@@ -209,4 +217,133 @@ func prefsReplay(msg *spectypes.SignedSSVMessage, slot phase0.Slot) []Outgoing {
 		return identity
 	}
 	return append(identity, Outgoing{Msg: c, Slot: slot, Resign: true, Repeat: replayCount, Every: replayEvery})
+}
+
+// slotsPerEpoch is the mainnet and ssv-mini value; the fault menu only runs on those.
+const slotsPerEpoch = 32
+
+// forgeConsensusMsg reuses this node's role-7 MessageID but carries a QBFT proposal, so the honest
+// nodes hit the "this role has no consensus" rule (PTC-07, MSG-03).
+func forgeConsensusMsg(msg *spectypes.SignedSSVMessage, slot phase0.Slot) []Outgoing {
+	identity := []Outgoing{{Msg: msg, Slot: slot}}
+	if role(msg) != spectypes.RolePTCAttester || partialBody(msg) == nil {
+		return identity
+	}
+
+	msgID := msg.SSVMessage.GetID()
+	qbftMsg := &specqbft.Message{
+		MsgType:    specqbft.ProposalMsgType,
+		Height:     specqbft.Height(slot),
+		Round:      specqbft.FirstRound,
+		Identifier: msgID[:],
+		Root:       [32]byte{0x11},
+	}
+	data, err := qbftMsg.Encode()
+	if err != nil {
+		return identity
+	}
+
+	forged := &spectypes.SignedSSVMessage{
+		OperatorIDs: msg.OperatorIDs,
+		SSVMessage: &spectypes.SSVMessage{
+			MsgType: spectypes.SSVConsensusMsgType,
+			MsgID:   msgID,
+			Data:    data,
+		},
+	}
+	return append(identity, Outgoing{Msg: forged, Slot: slot, Resign: true})
+}
+
+// dupEntry puts two entries in a role-7 container, which the count rule allows only for committee
+// roles (MSG-03).
+func dupEntry(msg *spectypes.SignedSSVMessage, slot phase0.Slot) []Outgoing {
+	identity := []Outgoing{{Msg: msg, Slot: slot}}
+	if role(msg) != spectypes.RolePTCAttester {
+		return identity
+	}
+	c, err := Clone(msg)
+	if err != nil {
+		return identity
+	}
+	body := partialBody(c)
+	if body == nil || len(body.Messages) != 1 {
+		return identity
+	}
+	body.Messages = append(body.Messages, body.Messages[0])
+	if err := setPartialBody(c, body); err != nil {
+		return identity
+	}
+	return append(identity, Outgoing{Msg: c, Slot: slot, Resign: true})
+}
+
+// ptcExtraSlots sends the same PTC partial for two more slots of the same epoch, taking the signer
+// to three PTC duties in one epoch against a limit of two (MSG-07). The extra slots are behind the
+// current one: role 7 has no earliness allowance, so a future slot would be rejected as early
+// instead, and the lateness allowance of three slots covers both.
+func ptcExtraSlots(msg *spectypes.SignedSSVMessage, slot phase0.Slot) []Outgoing {
+	identity := []Outgoing{{Msg: msg, Slot: slot}}
+	if role(msg) != spectypes.RolePTCAttester || partialBody(msg) == nil {
+		return identity
+	}
+
+	epochStart := slot - slot%slotsPerEpoch
+	out := identity
+	for i := phase0.Slot(1); i <= 2; i++ {
+		if slot < i || slot-i < epochStart {
+			continue // no same-epoch room behind this slot yet
+		}
+		c, err := Clone(msg)
+		if err != nil {
+			continue
+		}
+		body := partialBody(c)
+		if body == nil {
+			continue
+		}
+		body.Slot = slot - i
+		// Vary the bytes so gossipsub does not suppress the copy as a duplicate. Validation never
+		// inspects the partial signature, so this does not change which rule the copy lands on.
+		if len(body.Messages[0].PartialSignature) == 0 {
+			continue
+		}
+		body.Messages[0].PartialSignature[0] ^= byte(i)
+		if err := setPartialBody(c, body); err != nil {
+			continue
+		}
+		out = append(out, Outgoing{Msg: c, Slot: slot, Resign: true})
+	}
+	if len(out) != 3 {
+		return identity // all or nothing: two extra duties are what makes the third one the third
+	}
+	return out
+}
+
+// forgeGloasRoles clones a pre-fork validator-registration partial into the three Gloas roles, which
+// the role-at-slot gate must refuse before the fork (MSG-02). Role 4 messages exist only pre-fork,
+// so no fork check is needed here.
+func forgeGloasRoles(msg *spectypes.SignedSSVMessage, slot phase0.Slot) []Outgoing {
+	identity := []Outgoing{{Msg: msg, Slot: slot}}
+	if role(msg) != spectypes.RoleValidatorRegistration || partialBody(msg) == nil {
+		return identity
+	}
+
+	var domain spectypes.DomainType
+	copy(domain[:], msg.SSVMessage.GetID().GetDomain())
+	var pk spectypes.ValidatorPK
+	copy(pk[:], msg.SSVMessage.GetID().GetDutyExecutorID())
+
+	out := identity
+	for _, r := range []spectypes.RunnerRole{
+		spectypes.RolePTCAttester,
+		spectypes.RoleProposerPreferences,
+		spectypes.RoleEnvelopeProposer,
+	} {
+		c, err := Clone(msg)
+		if err != nil {
+			continue
+		}
+		c.SSVMessage.MsgID = spectypes.NewValidatorMsgID(domain, pk, r)
+		out = append(out, Outgoing{Msg: c, Slot: slot, Resign: true})
+	}
+	return out
 }

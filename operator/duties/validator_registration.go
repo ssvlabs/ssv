@@ -16,6 +16,7 @@ import (
 	"github.com/ssvlabs/ssv/eth/executionclient"
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/observability/log/fields"
+	"github.com/ssvlabs/ssv/qa/faults"
 )
 
 const (
@@ -157,7 +158,7 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 			}
 			dutySlot := blockSlot + validatorRegistrationDutySlotsToPostpone
 			// Deprecated at the Gloas fork: don't enqueue registrations whose duty slot is Gloas-or-later.
-			if h.netCfg.IsGloasAtSlot(dutySlot) {
+			if gloasVRDeprecated(h.netCfg.IsGloasAtSlot(dutySlot)) {
 				continue
 			}
 			earliestExecutionSlot := blockSlot + validatorRegistrationExecutionSlotsToPostpone
@@ -197,6 +198,16 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 	}
 }
 
+// gloasVRDeprecated reports whether the validator-registration heartbeat must stop, given whether
+// the slot or epoch in question is Gloas. QA fault menu MSG-02 (vr-postfork) keeps the heartbeat
+// running past the fork so the honest operators must refuse role-4 messages at Gloas slots.
+func gloasVRDeprecated(isGloas bool) bool {
+	if faults.Is(faults.VRPostFork) {
+		return false
+	}
+	return isGloas
+}
+
 func (h *ValidatorRegistrationHandler) processExecution(ctx context.Context, epoch phase0.Epoch, slot phase0.Slot) {
 	ctx, span := tracer.Start(ctx,
 		observability.InstrumentName(observabilityNamespace, "validator_registration.execute"),
@@ -205,7 +216,10 @@ func (h *ValidatorRegistrationHandler) processExecution(ctx context.Context, epo
 
 	// Validator registration is deprecated at the Gloas fork — superseded by proposer preferences (§5).
 	// Drop any entries that didn't drain before the fork; nothing more is enqueued past it.
-	if h.netCfg.IsGloas(epoch) {
+	if faults.Is(faults.VRPostFork) && h.netCfg.IsGloas(epoch) {
+		faults.Fired(h.logger, zap.Uint64("epoch", uint64(epoch)))
+	}
+	if gloasVRDeprecated(h.netCfg.IsGloas(epoch)) {
 		h.eventQueue = nil
 		return
 	}
