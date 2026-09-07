@@ -161,10 +161,10 @@ func (mr *MockBeaconNodeMockRecorder) AttesterDuties(ctx, epoch, validatorIndice
 }
 
 // PayloadAttestationDuties mocks base method.
-func (m *MockBeaconNode) PayloadAttestationDuties(ctx context.Context, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*gloas.PTCDuty, error) {
+func (m *MockBeaconNode) PayloadAttestationDuties(ctx context.Context, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) (*gloas.PTCDuties, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "PayloadAttestationDuties", ctx, epoch, validatorIndices)
-	ret0, _ := ret[0].([]*gloas.PTCDuty)
+	ret0, _ := ret[0].(*gloas.PTCDuties)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

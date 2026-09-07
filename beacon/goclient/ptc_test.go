@@ -23,13 +23,14 @@ func TestRequestPTCDuties(t *testing.T) {
 	duty := &gloas.PTCDuty{PubKey: phase0.BLSPubKey{0x11, 0x22}, ValidatorIndex: 7, Slot: 9}
 	dutyJSON, err := json.Marshal(duty)
 	require.NoError(t, err)
+	dependentRoot := phase0.Root{0x01, 0x02}
 
 	var gotMethod, gotPath string
 	var gotBody []byte
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotMethod, gotPath = r.Method, r.URL.Path
 		gotBody, _ = io.ReadAll(r.Body)
-		_, _ = fmt.Fprintf(w, `{"dependent_root":"0x00","execution_optimistic":false,"data":[%s]}`, dutyJSON)
+		_, _ = fmt.Fprintf(w, `{"dependent_root":"%#x","execution_optimistic":false,"data":[%s]}`, dependentRoot, dutyJSON)
 	}))
 	defer srv.Close()
 
@@ -38,7 +39,7 @@ func TestRequestPTCDuties(t *testing.T) {
 	require.Equal(t, http.MethodPost, gotMethod)
 	require.Equal(t, "/eth/v1/validator/duties/ptc/3", gotPath)
 	require.JSONEq(t, `["7","8"]`, string(gotBody))
-	require.Equal(t, []*gloas.PTCDuty{duty}, duties)
+	require.Equal(t, &gloas.PTCDuties{DependentRoot: dependentRoot, Duties: []*gloas.PTCDuty{duty}}, duties)
 }
 
 func TestRequestPayloadAttestationData(t *testing.T) {

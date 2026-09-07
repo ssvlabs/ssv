@@ -103,6 +103,25 @@ func (d *Duties[D]) SlotIndices(epoch phase0.Epoch, slot phase0.Slot) []phase0.V
 	return out
 }
 
+// EpochDuties returns a snapshot of every duty cached for the epoch, in no particular order. It does
+// not filter by InCommittee.
+func (d *Duties[D]) EpochDuties(epoch phase0.Epoch) []StoreDuty[D] {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+
+	n := 0
+	for _, descriptorMap := range d.m[epoch] {
+		n += len(descriptorMap)
+	}
+	out := make([]StoreDuty[D], 0, n)
+	for _, descriptorMap := range d.m[epoch] {
+		for _, descriptor := range descriptorMap {
+			out = append(out, descriptor)
+		}
+	}
+	return out
+}
+
 func (d *Duties[D]) Set(epoch phase0.Epoch, duties []StoreDuty[D]) {
 	mapped := make(map[phase0.Slot]map[phase0.ValidatorIndex]StoreDuty[D])
 	for _, duty := range duties {
@@ -145,7 +164,7 @@ func (d *Duties[D]) EraseBefore(epoch phase0.Epoch) {
 }
 
 // Clear drops every cached epoch. Used when a refresh must replace the whole cache rather than
-// merge into it — e.g. PTC duties after a reorg or validator-set change (SIP #94 §3).
+// merge into it — e.g. PTC duties after a validator-set change (SIP #94 §3).
 func (d *Duties[D]) Clear() {
 	d.mu.Lock()
 	defer d.mu.Unlock()
