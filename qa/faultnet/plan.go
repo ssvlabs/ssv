@@ -98,10 +98,11 @@ func setPartialBody(msg *spectypes.SignedSSVMessage, body *spectypes.PartialSign
 	return nil
 }
 
-// Replay shape for FLT-11: 66 slots of coverage at 20 messages per second.
+// Replay shape for FLT-11: 66 slots of coverage at 20 messages per second. replayCount is Repeat —
+// the number of EXTRA sends after the first — so the series totals replayCount+1 = 15,841 sends.
 const (
 	replayEvery = 50 * time.Millisecond
-	replayCount = 66 * 12 * 1000 / 50 // 66 slots of 12 s, one message every 50 ms
+	replayCount = 66 * 12 * 1000 / 50 // 66 slots of 12 s, one message every 50 ms, minus the first send
 )
 
 // prefsEarlySlots is one slot past the 64-slot preference lookahead allowance
