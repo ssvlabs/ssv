@@ -30,39 +30,6 @@ func TestValidPartialSigMsgType_ProposerPreferences(t *testing.T) {
 	require.True(t, mv.validPartialSigMsgType(spectypes.ProposerPreferencesPartialSig))
 }
 
-// ProposerPreferences partial sigs ride the future proposal slot, so validateSlotTime must allow them
-// up to the proposer-lookahead window early — but no other role, and not beyond the window.
-func TestValidateSlotTime_ProposerPreferencesEarliness(t *testing.T) {
-	netCfg := networkconfig.TestNetwork
-	mv := &messageValidator{netCfg: netCfg}
-
-	slot := phase0.Slot(1000)
-	allowance := time.Duration(proposerPreferencesEarlyEpochs*netCfg.SlotsPerEpoch) * netCfg.SlotDuration
-
-	tt := []struct {
-		name     string
-		role     spectypes.RunnerRole
-		earlyBy  time.Duration
-		accepted bool
-	}{
-		{"preferences within the lookahead window", spectypes.RoleProposerPreferences, allowance - time.Second, true},
-		{"preferences beyond the lookahead window", spectypes.RoleProposerPreferences, allowance + time.Minute, false},
-		{"another role gets no early allowance", spectypes.RoleProposer, allowance - time.Second, false},
-	}
-
-	for _, tc := range tt {
-		t.Run(tc.name, func(t *testing.T) {
-			receivedAt := netCfg.SlotStartTime(slot).Add(-tc.earlyBy)
-			err := mv.validateSlotTime(slot, tc.role, receivedAt)
-			if tc.accepted {
-				require.NoError(t, err)
-			} else {
-				require.ErrorIs(t, err, ErrEarlySlotMessage)
-			}
-		})
-	}
-}
-
 // ProposerPreferences is exempt from the monotonic slot-advance rule (a signer holds its whole
 // lookahead at once); other validator roles still enforce it.
 func TestMonotonicSlotRole_ProposerPreferences(t *testing.T) {

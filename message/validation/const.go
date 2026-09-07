@@ -26,6 +26,15 @@ const (
 	encodingOverheadDivisor = 20 // Divisor for message size to get encoding overhead, e.g. 10 for 10%, 20 for 5%. Done this way to keep const int.
 )
 
+// earlyMessageMargin is how far before its slot a message may arrive, on top of clockErrorTolerance —
+// the early-side counterpart of lateMessageMargin. Accepting early costs nothing: the duty queues hold
+// the message until the local duty for that slot starts, and a runner still on the previous slot hands
+// it back as retryable. Dropping early is fatal for the duties that open with a single-shot
+// pre-consensus round — proposer RANDAO, selection proofs, registration, exit — since a dropped partial
+// is never re-sent: a transient clock error just past clockErrorTolerance on the sender's slot tick
+// would cost the whole duty, for the proposer the block (issue #3026).
+const earlyMessageMargin = time.Second
+
 // proposerPreferencesEarlyEpochs is the proposer-lookahead span in epochs (the current epoch plus
 // MIN_SEED_LOOKAHEAD=1): preferences are broadcast up to this far ahead of their proposal slot. It
 // bounds both how early such a message may arrive and how many slots of per-signer state to retain.

@@ -24,8 +24,11 @@ func (mv *messageValidator) monotonicSlotRole(role spectypes.RunnerRole) bool {
 	return !mv.committeeRole(role) && role != spectypes.RoleProposerPreferences
 }
 
+// validateSlotTime bounds a message's arrival against its slot: no earlier than clockErrorTolerance plus
+// earlyMessageMargin plus the role's early allowance, and no later than the role's TTL plus
+// lateMessageMargin (see messageLateness).
 func (mv *messageValidator) validateSlotTime(messageSlot phase0.Slot, role spectypes.RunnerRole, receivedAt time.Time) error {
-	if earliness := mv.messageEarliness(messageSlot, receivedAt); earliness > clockErrorTolerance+mv.earlySlotAllowance(role) {
+	if earliness := mv.messageEarliness(messageSlot, receivedAt); earliness > clockErrorTolerance+earlyMessageMargin+mv.earlySlotAllowance(role) {
 		e := ErrEarlySlotMessage
 		e.got = fmt.Sprintf("early by %v", earliness)
 		return e
@@ -45,10 +48,10 @@ func (mv *messageValidator) messageEarliness(slot phase0.Slot, receivedAt time.T
 	return mv.netCfg.SlotStartTime(slot).Sub(receivedAt)
 }
 
-// earlySlotAllowance returns how far ahead of its slot a message for the role may legitimately
-// arrive. Proposer preferences are broadcast across the proposer lookahead — the current epoch plus
-// MIN_SEED_LOOKAHEAD — so their proposal-slot messages are expected up to that far in the future;
-// every other role acts at (or after) its slot, so the default is none.
+// earlySlotAllowance returns how far ahead of its slot a message for the role may arrive beyond the
+// margin every message gets. Proposer preferences are broadcast across the proposer lookahead — the
+// current epoch plus MIN_SEED_LOOKAHEAD — so their proposal-slot messages are expected up to that far
+// in the future; every other role acts at (or after) its slot, so the default is none.
 func (mv *messageValidator) earlySlotAllowance(role spectypes.RunnerRole) time.Duration {
 	if role == spectypes.RoleProposerPreferences {
 		// #nosec G115 -- a small epoch count times slots-per-epoch cannot overflow int64.
@@ -183,7 +186,7 @@ func (mv *messageValidator) validateBeaconDuty(
 		// Tolerate missing duties for RANDAO signatures during the first slot of an epoch,
 		// while duties are still being fetched from the Beacon node.
 		//
-		// Note: we allow current slot to be lower because of the ErrEarlyMessage rule.
+		// Note: we allow current slot to be lower because of the early-message margin (ErrEarlySlotMessage).
 		if randaoMsg && mv.netCfg.IsFirstSlotOfEpoch(slot) && mv.netCfg.EstimatedCurrentSlot() <= slot {
 			if !mv.dutyStore.Proposer.IsEpochSet(epoch) {
 				return nil
