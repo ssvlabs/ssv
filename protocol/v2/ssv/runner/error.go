@@ -3,6 +3,8 @@ package runner
 import (
 	"errors"
 	"fmt"
+
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
 var (
@@ -56,6 +58,25 @@ func IsRetryable(err error) bool {
 	var retryableErr *RetryableError
 	return errors.As(err, &retryableErr)
 }
+
+// codedSentinel pairs one of the sentinels above with the spec error code it reports. spectypes.WrapError
+// alone cannot carry a sentinel: the spec's Error type has no Unwrap, so anything it wraps is invisible
+// to errors.Is, and the retry classification the runners build on errors.Is (ErrNoDutyAssigned,
+// ErrRunningDutySucceeded) never fires. Unwrap exposes both — the coded error for errors.As (spec tests,
+// observability) and the sentinel for errors.Is — under the sentinel's own message text.
+type codedSentinel struct {
+	coded    *spectypes.Error
+	sentinel error
+}
+
+// withCode tags a sentinel (or an error wrapping one) with a spec error code; see codedSentinel.
+func withCode(code int, sentinel error) error {
+	return &codedSentinel{coded: spectypes.WrapError(code, sentinel), sentinel: sentinel}
+}
+
+func (e *codedSentinel) Error() string { return e.sentinel.Error() }
+
+func (e *codedSentinel) Unwrap() []error { return []error{e.coded, e.sentinel} }
 
 // recoverableReconstructError tags a post-consensus BLS-reconstruction failure as recoverable.
 // It is attached at the push site inside the reconstruct goroutine, which has by construction

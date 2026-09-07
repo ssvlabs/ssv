@@ -21,10 +21,10 @@ func (b *BaseRunner) ValidatePreConsensusMsg(
 	psigMsgs *spectypes.PartialSignatureMessages,
 ) error {
 	if !b.hasDutyAssigned() {
-		return spectypes.WrapError(spectypes.NoRunningDutyErrorCode, ErrNoDutyAssigned)
+		return withCode(spectypes.NoRunningDutyErrorCode, ErrNoDutyAssigned)
 	}
 	if b.hasDutySucceeded() {
-		return spectypes.WrapError(spectypes.NoRunningDutyErrorCode, ErrRunningDutySucceeded)
+		return withCode(spectypes.NoRunningDutyErrorCode, ErrRunningDutySucceeded)
 	}
 
 	// Validate the pre-consensus message differently depending on a message type.
@@ -64,10 +64,10 @@ func (b *BaseRunner) FallBackAndVerifyEachSignature(container *ssv.PartialSigCon
 
 func (b *BaseRunner) ValidatePostConsensusMsg(ctx context.Context, runner Runner, psigMsgs *spectypes.PartialSignatureMessages) error {
 	if !b.hasDutyAssigned() {
-		return spectypes.WrapError(spectypes.NoRunningDutyErrorCode, ErrNoDutyAssigned)
+		return withCode(spectypes.NoRunningDutyErrorCode, ErrNoDutyAssigned)
 	}
 	if b.hasDutySucceeded() {
-		return spectypes.WrapError(spectypes.NoRunningDutyErrorCode, ErrRunningDutySucceeded)
+		return withCode(spectypes.NoRunningDutyErrorCode, ErrRunningDutySucceeded)
 	}
 
 	// slotIsRelevant ensures the post-consensus message is even remotely relevant (eg. we might have already
@@ -87,7 +87,7 @@ func (b *BaseRunner) ValidatePostConsensusMsg(ctx context.Context, runner Runner
 			))
 		}
 		if psigMsgs.Slot > maxSlot {
-			return NewRetryableError(spectypes.WrapError(spectypes.PartialSigMessageFutureSlotErrorCode, fmt.Errorf(
+			return NewRetryableError(withCode(spectypes.PartialSigMessageFutureSlotErrorCode, fmt.Errorf(
 				"%w: message slot: %d, want at most: %d",
 				ErrFuturePartialSigMsg,
 				psigMsgs.Slot,
@@ -101,13 +101,13 @@ func (b *BaseRunner) ValidatePostConsensusMsg(ctx context.Context, runner Runner
 	}
 
 	if !b.HasStartedQBFTInstance() {
-		return NewRetryableError(spectypes.WrapError(spectypes.NoRunningConsensusInstanceErrorCode, ErrInstanceNotFound))
+		return NewRetryableError(withCode(spectypes.NoRunningConsensusInstanceErrorCode, ErrInstanceNotFound))
 	}
 
 	// TODO https://github.com/ssvlabs/ssv-spec/issues/142 need to fix with this issue solution instead.
 	decided, decidedValueBytes := b.State.RunningInstance.IsDecided()
 	if !decided || len(b.State.DecidedValue) == 0 {
-		return NewRetryableError(spectypes.WrapError(spectypes.NoDecidedValueErrorCode, ErrNoDecidedValue))
+		return NewRetryableError(withCode(spectypes.NoDecidedValueErrorCode, ErrNoDecidedValue))
 	}
 
 	// Validate the post-consensus message differently depending on a message type.
