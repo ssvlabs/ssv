@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/attestantio/go-eth2-client/spec/deneb"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/stretchr/testify/require"
 
@@ -43,8 +44,8 @@ func TestRequestGloasBeaconBlock(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, http.MethodPost, gotMethod)
 	require.Equal(t, "/eth/v4/validator/blocks/7", gotPath)
-	require.Equal(t, "false", gotIncludePayload) // bare block; payload ships in the §6 envelope
-	require.Equal(t, "0x01", gotRandao)          // randao is the 5th arg, graffiti the 4th
+	require.Equal(t, "true", gotIncludePayload) // a self-build answers with BlockContents (SIP #94 §6)
+	require.Equal(t, "0x01", gotRandao)         // randao is the 5th arg, graffiti the 4th
 	// graffiti is padded to a full 32-byte value before hex-encoding (lighthouse rejects a short one).
 	require.Equal(t, "0x02"+strings.Repeat("00", 31), gotGraffiti)
 	require.Equal(t, "application/octet-stream", gotAccept)
@@ -52,7 +53,55 @@ func TestRequestGloasBeaconBlock(t *testing.T) {
 	// the neutral local-build body: no builders, p2p bids weighed at par with the local build (100).
 	require.Contains(t, string(gotBody), `"builders":[]`)
 	require.Contains(t, string(gotBody), `"builder_boost_factor":"100"`)
-	require.Equal(t, phase0.Slot(7), got.block.Slot)
+	require.Equal(t, phase0.Slot(7), got.Block.Slot)
+	require.Nil(t, got.Envelope, "a bare block response carries no reveal data")
+}
+
+// A self-build response is BlockContents, flagged by Eth-Execution-Payload-Included: the block plus the
+// envelope, blobs, and KZG proofs the operator reveals in §6.
+func TestRequestGloasBeaconBlock_SelfBuildContents(t *testing.T) {
+	contents := &gloas.BlockContents{
+		Block:                    gloas.TestingBeaconBlock(7),
+		ExecutionPayloadEnvelope: minimalExecutionPayloadEnvelope(),
+		KZGProofs:                []deneb.KZGProof{{0x01}, {0x02}},
+		Blobs:                    []deneb.Blob{{0x03}},
+	}
+	contentsSSZ, err := contents.MarshalSSZ()
+	require.NoError(t, err)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Eth-Execution-Payload-Included", "true")
+		_, _ = w.Write(contentsSSZ)
+	}))
+	defer srv.Close()
+
+	got, err := requestGloasBeaconBlock(context.Background(), srv.URL, 7, []byte{0x02}, []byte{0x01}, nil)
+	require.NoError(t, err)
+	require.Equal(t, phase0.Slot(7), got.Block.Slot)
+	require.Empty(t, got.BuilderURL)
+	require.NotNil(t, got.Envelope)
+	require.Equal(t, gloas.BuilderIndexSelfBuild, got.Envelope.Envelope.BuilderIndex)
+	require.Equal(t, contents.KZGProofs, got.Envelope.KZGProofs)
+	require.Equal(t, contents.Blobs, got.Envelope.Blobs)
+}
+
+// A BlockContents body not flagged by Eth-Execution-Payload-Included is a beacon-node contract violation;
+// produce fails naming the header rather than misreading the body as a block.
+func TestRequestGloasBeaconBlock_ContentsWithoutHeaderFails(t *testing.T) {
+	contents := &gloas.BlockContents{
+		Block:                    gloas.TestingBeaconBlock(7),
+		ExecutionPayloadEnvelope: minimalExecutionPayloadEnvelope(),
+	}
+	contentsSSZ, err := contents.MarshalSSZ()
+	require.NoError(t, err)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write(contentsSSZ)
+	}))
+	defer srv.Close()
+
+	_, err = requestGloasBeaconBlock(context.Background(), srv.URL, 7, []byte{0x02}, []byte{0x01}, nil)
+	require.ErrorContains(t, err, "Eth-Execution-Payload-Included")
 }
 
 // The common transitional path: an unconfigured cluster against a beacon node that still serves only the
@@ -79,7 +128,7 @@ func TestRequestGloasBeaconBlock_UnconfiguredFallbackToGET(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []string{http.MethodPost, http.MethodGet}, methods, "unconfigured POST 405 falls back to GET")
 	require.Equal(t, "100", getBoost, "the fallback GET carries the neutral builder_boost_factor")
-	require.Equal(t, phase0.Slot(7), got.block.Slot)
+	require.Equal(t, phase0.Slot(7), got.Block.Slot)
 }
 
 // With a builder config, produce is a POST carrying the JSON BuilderConfig body and the winning builder's
@@ -114,8 +163,8 @@ func TestRequestGloasBeaconBlock_POST(t *testing.T) {
 	require.Equal(t, "application/json", gotContentType)
 	require.Equal(t, "gloas", gotConsensusVersion)
 	require.Contains(t, string(gotBody), `"min_bid":"10"`)
-	require.Equal(t, "https://builder.example.com", got.builderURL)
-	require.Equal(t, phase0.Slot(7), got.block.Slot)
+	require.Equal(t, "https://builder.example.com", got.BuilderURL)
+	require.Equal(t, phase0.Slot(7), got.Block.Slot)
 }
 
 // A beacon node that predates the produceBlockV4 POST answers it with 404; produce then retries that node
@@ -142,8 +191,8 @@ func TestRequestGloasBeaconBlock_POSTFallbackToGET(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []string{http.MethodPost, http.MethodGet}, methods, "POST 404 falls back to GET")
 	require.Equal(t, "150", getBoost, "the fallback GET carries the configured builder_boost_factor")
-	require.Equal(t, phase0.Slot(7), got.block.Slot)
-	require.Empty(t, got.builderURL)
+	require.Equal(t, phase0.Slot(7), got.Block.Slot)
+	require.Empty(t, got.BuilderURL)
 }
 
 // A produce response tagged with a non-Gloas Eth-Consensus-Version is rejected — a wrong-fork guard.

@@ -80,11 +80,14 @@ type ProposerRunner struct {
 	// requestAuthCache holds the per-slot reconstructed builder auths this operator attaches to the
 	// produceBlockV4 POST. Shared with the §5 dispatcher that writes it; nil pre-Gloas / no overlay.
 	requestAuthCache *ssv.RequestAuthCache
-	// gloasProducedRoot / gloasBuilderURL record this operator's own §4 produce output for the slot: the
-	// produced block root and any winning builder URL. At publish, Eth-Builder-Url is echoed only when the
-	// decided block matches gloasProducedRoot (owner-match — see decidedBuilderURL).
-	gloasProducedRoot [32]byte
-	gloasBuilderURL   string
+	// gloasProducedRoot / gloasBuilderURL / gloasProducedEnvelope record this operator's own §4 produce
+	// output for the slot: the produced block root, any winning builder URL, and a self-build's reveal data.
+	// At publish, Eth-Builder-Url is echoed only when the decided block matches gloasProducedRoot
+	// (owner-match — see decidedBuilderURL), and the reveal data is handed to the §6 envelope runner only
+	// then, since it belongs to the builder operator alone (see recordDecidedBlock).
+	gloasProducedRoot     [32]byte
+	gloasBuilderURL       string
+	gloasProducedEnvelope *gloas.ProducedEnvelope
 }
 
 // ProposerRunnerOptions bundles all dependencies required by NewProposerRunner.
@@ -297,10 +300,14 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 func (r *ProposerRunner) gloasProposalInput(ctx context.Context, logger *zap.Logger, duty *spectypes.ValidatorDuty, randaoReveal []byte) (*spectypes.ProposerConsensusData, error) {
 	start := time.Now()
 	builderConfig := r.gloasBuilderConfig(ctx, duty.Slot)
-	block, builderURL, err := r.GetBeaconNode().GetGloasBeaconBlock(ctx, duty.Slot, r.graffiti, randaoReveal, builderConfig)
+	produced, err := r.GetBeaconNode().GetGloasBeaconBlock(ctx, duty.Slot, r.graffiti, randaoReveal, builderConfig)
 	if err != nil {
 		return nil, fmt.Errorf("get gloas beacon block: %w", err)
 	}
+	if produced == nil || produced.Block == nil {
+		return nil, fmt.Errorf("get gloas beacon block: empty produce result")
+	}
+	block := produced.Block
 
 	// Remember this operator's own produce output so the §4 publish echoes Eth-Builder-Url only when the
 	// decided block is this operator's own (owner-match — see decidedBuilderURL). The root is also what we
@@ -309,7 +316,14 @@ func (r *ProposerRunner) gloasProposalInput(ctx context.Context, logger *zap.Log
 	if err != nil {
 		return nil, fmt.Errorf("hash tree root of produced gloas block: %w", err)
 	}
-	r.gloasProducedRoot, r.gloasBuilderURL = root, builderURL
+	r.gloasProducedRoot, r.gloasBuilderURL, r.gloasProducedEnvelope = root, produced.BuilderURL, produced.Envelope
+	if selfBuild(block) && produced.Envelope == nil {
+		// The beacon node self-built but did not honor include_payload=true; if this block is decided the
+		// cluster cannot reveal its payload (SIP #94 §6). Warn on every such produce, not only on the
+		// self-build slots this operator ends up building, so the fault surfaces on any devnet quickly.
+		logger.Warn("beacon node returned a self-build block without its payload despite include_payload=true; the payload cannot be revealed if this block is decided",
+			fields.Slot(duty.Slot))
+	}
 
 	byts, err := block.MarshalSSZ()
 	if err != nil {
@@ -644,8 +658,9 @@ func gloasBuildSource(block *gloas.BeaconBlock) proposalBuildSource {
 
 // recordDecidedBlock stores the §4 decision for the §6 envelope runner (SIP #94 §6): the decided block's
 // root, its parent root, the execution-requests root its bid commits to, and whether this operator
-// produced it — its own produce response has the decided root, making it the builder operator, the one
-// whose beacon node holds the payload. No-op when no envelope runner shares the store.
+// produced it — its own produce response has the decided root, making it the builder operator. Only then
+// does the record carry the reveal data that response held; the proposer drops its copy either way. No-op
+// when no envelope runner shares the store.
 func (r *ProposerRunner) recordDecidedBlock(slot phase0.Slot, block *gloas.BeaconBlock) error {
 	if r.proposedBlocks == nil {
 		return nil
@@ -657,11 +672,18 @@ func (r *ProposerRunner) recordDecidedBlock(slot phase0.Slot, block *gloas.Beaco
 	if block.Body == nil || block.Body.SignedExecutionPayloadBid == nil || block.Body.SignedExecutionPayloadBid.Message == nil {
 		return fmt.Errorf("decided gloas block carries no execution payload bid")
 	}
+	producedLocally := root == r.gloasProducedRoot
+	var producedEnvelope *gloas.ProducedEnvelope
+	if producedLocally {
+		producedEnvelope = r.gloasProducedEnvelope
+	}
+	r.gloasProducedEnvelope = nil
 	r.proposedBlocks.Record(slot, ssv.ProposedBlock{
 		BlockRoot:             phase0.Root(root),
 		ParentRoot:            block.ParentRoot,
 		ExecutionRequestsRoot: block.Body.SignedExecutionPayloadBid.Message.ExecutionRequestsRoot,
-		ProducedLocally:       root == r.gloasProducedRoot,
+		ProducedLocally:       producedLocally,
+		ProducedEnvelope:      producedEnvelope,
 	})
 	return nil
 }
@@ -725,7 +747,7 @@ func (r *ProposerRunner) executeDuty(ctx context.Context, logger *zap.Logger, du
 	// new duty — a stale owner-match must not echo a previous slot's Eth-Builder-Url
 	r.cachedFullBlock = nil
 	r.cachedBlindedBlockSSZ = nil
-	r.gloasProducedRoot, r.gloasBuilderURL = [32]byte{}, ""
+	r.gloasProducedRoot, r.gloasBuilderURL, r.gloasProducedEnvelope = [32]byte{}, "", nil
 
 	// sign partial randao
 	span.AddEvent("signing beacon object")
