@@ -34,6 +34,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
+	"github.com/ssvlabs/ssv/qa/faults"
 )
 
 type CommitteeDutyGuard interface {
@@ -1188,6 +1189,13 @@ func (r *CommitteeRunner) executeDuty(ctx context.Context, logger *zap.Logger, d
 		logger.Debug("built gloas attestation vote",
 			fields.Slot(slot),
 			zap.Uint64("payload_status_index", uint64(attData.Index)))
+
+		// QA fault menu (branch qa/gloas-m3-fault-menu): may replace the value and drop the check.
+		var dropCheck bool
+		input, dropCheck = applyGloasVoteFault(logger, gloasVote, slot)
+		if dropCheck {
+			r.ValCheck = faults.PermissiveValueCheck{}
+		}
 	} else {
 		vote := &spectypes.BeaconVote{
 			BlockRoot: attData.BeaconBlockRoot,
@@ -1234,4 +1242,47 @@ func constructAttestationData(vote *spectypes.BeaconVote, duty *spectypes.Valida
 		attData.Index = 0 // EIP-7549: Index should be set to 0
 	}
 	return attData
+}
+
+// applyGloasVoteFault applies the section 2 QA faults to the consensus value this operator is about
+// to propose (menu vote-112b, vote-index-2, vote-index-flip). It returns the value to propose and
+// whether the runner must drop its own value check: a leader validates its own proposal, so a value
+// the checker refuses would never reach the wire. logger may be nil in tests.
+func applyGloasVoteFault(logger *zap.Logger, vote *gloas.GloasBeaconVote, slot phase0.Slot) (spectypes.Encoder, bool) {
+	fired := func(extra ...zap.Field) {
+		if logger != nil {
+			faults.Fired(logger, append([]zap.Field{fields.Slot(slot)}, extra...)...)
+		}
+	}
+
+	switch {
+	case faults.Is(faults.Vote112B):
+		// ATT-02: a pre-Gloas 112-byte BeaconVote at a Gloas slot. The honest decoder is length-fixed,
+		// so it fails with "failed decoding gloas beacon vote" inside the value check.
+		fired()
+		return &spectypes.BeaconVote{
+			BlockRoot: vote.BlockRoot,
+			Source:    vote.Source,
+			Target:    vote.Target,
+		}, true
+
+	case faults.Is(faults.VoteIndex2):
+		// ATT-03: an index above the 0/1 range SIP-94 section 2 allows.
+		vote.AttestationDataIndex = 2
+		fired(zap.Uint64("attestation_data_index", 2))
+		return vote, true
+
+	case faults.Is(faults.VoteIndexFlip):
+		// FLT-05: the wrong but valid index. The honest nodes must accept it by design, so the honest
+		// value check stays in place — this fault measures the on-chain consequence, not a rejection.
+		if vote.AttestationDataIndex == 0 {
+			vote.AttestationDataIndex = 1
+		} else {
+			vote.AttestationDataIndex = 0
+		}
+		fired(zap.Uint64("attestation_data_index", uint64(vote.AttestationDataIndex)))
+		return vote, false
+	}
+
+	return vote, false
 }
