@@ -13,8 +13,8 @@ import (
 	"github.com/ssvlabs/ssv/qa/faults"
 )
 
-// Network wraps the node's P2P network. Every method except the two broadcast methods is served by
-// the embedded interface, so the wrapper satisfies operator/validator.P2PNetwork unchanged.
+// Network wraps the node's P2P network. Every method except BroadcastAtSlot is served by the
+// embedded interface, so the wrapper satisfies operator/validator.P2PNetwork unchanged.
 type Network struct {
 	network.P2PNetwork
 
@@ -32,15 +32,13 @@ func Wrap(inner network.P2PNetwork, signer ssvtypes.OperatorSigner, netCfg *netw
 	return &Network{P2PNetwork: inner, signer: signer, netCfg: netCfg, logger: logger}
 }
 
+// Broadcast is deliberately NOT overridden. The stock implementation decodes the message body to
+// find its slot (network/p2p/p2p_pubsub.go, broadcastMessageSlot) and no production path calls it —
+// every runner and the QBFT instance broadcast through BroadcastAtSlot. Promoting it from the
+// embedded interface keeps it byte-identical; a fault that ever needs this path must decode the
+// body for the slot, never the wall clock.
 func (n *Network) BroadcastAtSlot(msg *spectypes.SignedSSVMessage, slot phase0.Slot) error {
 	return n.dispatch(Plan(faults.Active(), msg, slot, n.netCfg.EstimatedCurrentSlot()))
-}
-
-func (n *Network) Broadcast(id spectypes.MessageID, msg *spectypes.SignedSSVMessage) error {
-	// Broadcast derives the slot itself downstream; keep the same plan by passing the current slot
-	// for the topic decision, which is what the undecorated path effectively does.
-	now := n.netCfg.EstimatedCurrentSlot()
-	return n.dispatch(Plan(faults.Active(), msg, now, now))
 }
 
 func (n *Network) dispatch(out []Outgoing) error {
