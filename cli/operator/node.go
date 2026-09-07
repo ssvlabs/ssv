@@ -49,6 +49,7 @@ import (
 	qbftcontroller "github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/qa/faults"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/ssvsigner"
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
@@ -230,6 +231,15 @@ func newNode(
 	consensusClient beaconClient,
 	executionClient executionclient.Provider,
 ) (_ *node, err error) {
+	// QA instrumentation (branch qa/gloas-m3-fault-menu). Parse before anything else is built so an
+	// unknown value fails the boot instead of quietly producing a clean node.
+	fault, err := faults.Parse(cfg.QAFault)
+	if err != nil {
+		return nil, fmt.Errorf("qa fault menu: %w", err)
+	}
+	faults.Init(fault)
+	faults.Banner(logger)
+
 	usingSSVSigner := res.usingSSVSigner
 
 	if len(cfg.Builders.Entries) > 0 && usingSSVSigner {

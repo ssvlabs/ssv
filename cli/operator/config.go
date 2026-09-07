@@ -51,6 +51,7 @@ type config struct {
 	AllowDangerousProposerDelay  bool                    `yaml:"AllowDangerousProposerDelay" env:"ALLOW_DANGEROUS_PROPOSER_DELAY" env-description:"Allow ProposerDelay values higher than 1s (dangerous, may cause missed block proposals)"`
 	ProposerDelayEPBS            time.Duration           `yaml:"ProposerDelayEPBS" env:"PROPOSER_DELAY_EPBS" env-description:"Post-ePBS (Gloas) counterpart of ProposerDelay, applied from the Gloas fork on (ProposerDelay applies before it). Hard-capped at 1s with no dangerous override. Default 0 (opt-in)."`
 	Builders                     gloas.BuilderConfig     `yaml:"Builders" env-description:"Gloas (ePBS) direct-builder connections (opt-in overlay, YAML only). Entries must be configured identically across all operators of every shared committee; see docs/EXTERNAL_BUILDERS.md"`
+	QAFault                      string                  `yaml:"QAFault" env:"FAULT" env-description:"QA ONLY (branch qa/gloas-m3-fault-menu): name of the fault to inject, see qa/FAULTS.md. An unknown value aborts startup."`
 	OperatorPrivateKey           string                  `yaml:"OperatorPrivateKey" env:"OPERATOR_KEY" env-description:"Operator private key for contract event decryption"`
 	MetricsAPIPort               int                     `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"Port for metrics API server"`
 	EnableTraces                 bool                    `yaml:"EnableTraces" env:"ENABLE_TRACES" env-description:"Enable Open Telemetry traces"`

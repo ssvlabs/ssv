@@ -12,6 +12,7 @@
   "OperatorPrivateKey": "",
   "ProposerDelay": "0s",
   "ProposerDelayEPBS": "0s",
+  "QAFault": "",
   "SSVAPIAddress": "",
   "SSVAPIPort": "0",
   "SSVSigner.Endpoint": "",
