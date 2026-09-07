@@ -451,6 +451,25 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 		t.Fatalf("peer score inspector: %s", *msg)
 	}
 
+	// Pin the assumption message/validation's self-discard leveling rests on (see
+	// MessageValidator.SetSelfPID): gossipsub runs every locally published message through the
+	// publishing node's own validator, with peerID set to that node's own host ID. Those
+	// self-deliveries are counted on the diagonal (a validator's own index), so a pubsub upgrade
+	// that changes this fails here rather than silently reverting self-discards to inbound-style
+	// logging.
+	// Snapshot under the lock, then assert after releasing it: require.Positivef calls FailNow
+	// (runtime.Goexit) on failure, which would leak a held mtx and deadlock the score-table cleanup
+	// and any in-flight ValidateFunc that take the same lock — hanging the package until -timeout.
+	selfSeen := make([]int, nodeCount)
+	mtx.Lock()
+	for i := 0; i < nodeCount; i++ {
+		selfSeen[i] = messageValidators[i].Accepted[i] + messageValidators[i].Ignored[i] + messageValidators[i].Rejected[i]
+	}
+	mtx.Unlock()
+	for i := 0; i < nodeCount; i++ {
+		require.Positivef(t, selfSeen[i], "node %d: own validator never saw the node's own publishes (peerID == own host ID)", i)
+	}
+
 	// Backfill any observer that never latched with its current snapshot so the
 	// diagnostics below report which invariant on which node actually failed
 	// (the loop only records the passing ones).
@@ -491,6 +510,8 @@ func (v *MockMessageValidator) ValidatorForTopic(topic string) func(ctx context.
 func (v *MockMessageValidator) Validate(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
 	return v.ValidateFunc(ctx, p, pmsg)
 }
+
+func (v *MockMessageValidator) SetSelfPID(peer.ID) {}
 
 type NodeIndex int
 

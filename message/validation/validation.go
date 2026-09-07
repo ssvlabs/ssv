@@ -34,6 +34,11 @@ import (
 type MessageValidator interface {
 	ValidatorForTopic(topic string) func(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult
 	Validate(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult
+	// SetSelfPID records this node's own libp2p peer ID so the validator can recognize the messages
+	// it publishes itself (gossipsub validates outbound messages locally). It does not bypass
+	// validation — it only affects how self-discards are logged. Call once during setup, before
+	// validation begins.
+	SetSelfPID(pid peer.ID)
 }
 
 // operators defines the minimal interface needed for validation
@@ -109,6 +114,16 @@ func New(
 	return mv
 }
 
+func (mv *messageValidator) SetSelfPID(pid peer.ID) {
+	mv.selfPID = pid
+}
+
+// isSelfPeer reports whether peerID is this node's own peer — i.e. a message we are publishing
+// ourselves, which gossipsub routes through validation with peerID set to our host ID.
+func (mv *messageValidator) isSelfPeer(peerID peer.ID) bool {
+	return mv.selfPID != "" && peerID == mv.selfPID
+}
+
 // ValidatorForTopic returns a validation function for the given topic.
 // This function can be used to validate messages within the libp2p pubsub framework.
 func (mv *messageValidator) ValidatorForTopic(_ string) func(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
@@ -123,7 +138,7 @@ func (mv *messageValidator) Validate(ctx context.Context, peerID peer.ID, pmsg *
 	}
 
 	if err := ctx.Err(); err != nil {
-		return mv.handleValidationError(ctx, peerID, nil, err)
+		return mv.handleValidationError(ctx, peerID, pmsg.GetTopic(), nil, err)
 	}
 
 	validationStart := time.Now()
@@ -135,7 +150,7 @@ func (mv *messageValidator) Validate(ctx context.Context, peerID peer.ID, pmsg *
 	}()
 
 	if err != nil {
-		return mv.handleValidationError(ctx, peerID, decodedMessage, err)
+		return mv.handleValidationError(ctx, peerID, pmsg.GetTopic(), decodedMessage, err)
 	}
 
 	pmsg.ValidatorData = decodedMessage

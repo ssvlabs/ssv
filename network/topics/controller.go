@@ -2,6 +2,7 @@ package topics
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -196,6 +197,20 @@ func (ctrl *topicsCtrl) Broadcast(topicName string, data []byte, timeout time.Du
 
 		err := topic.Publish(ctx, data)
 		if err != nil {
+			var valErr pubsub.ValidationError
+			if errors.As(err, &valErr) {
+				// Our own message was declined by local (pre-publish) validation, not by the
+				// transport — not a publish failure. The validator has already logged the specific
+				// reason (leveled by outcome) and recorded the metric, so keep a quiet breadcrumb
+				// rather than raising an error. topic is the key shared with the validator's own
+				// line; msgID is the gossipsub id (as in tracer.go and every receiver's view), which
+				// the validator can't compute without an import cycle back into this package.
+				ctrl.logger.Debug("outbound message dropped by local validation",
+					zap.String("topic", topicName),
+					zap.String("msgID", hex.EncodeToString([]byte(MsgID(data)))),
+					zap.String("verdict", valErr.Reason))
+				return
+			}
 			ctrl.logger.Error("could not publish p2p message", zap.String("topic", topicName), zap.Error(err))
 			return
 		}

@@ -527,3 +527,5 @@ func (m *DummyMessageValidator) ValidatorForTopic(topic string) func(ctx context
 func (m *DummyMessageValidator) Validate(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
 	return pubsub.ValidationAccept
 }
+
+func (m *DummyMessageValidator) SetSelfPID(peer.ID) {}
