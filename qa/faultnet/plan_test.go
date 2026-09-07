@@ -4,13 +4,12 @@ import (
 	"testing"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ssvlabs/ssv/qa/faults"
 )
-
-// Task 8 adds tests that decode QBFT bodies; it adds the specqbft import then.
 
 // partialMsg builds a one-entry partial-signature message for the given role and slot, the shape
 // every wire fault starts from.
@@ -158,4 +157,79 @@ func TestPlanPrefsReplay(t *testing.T) {
 	require.Equal(t, honestRoot, body.Messages[0].SigningRoot, "the replay must keep the signing root")
 	require.NotEqual(t, decodePartial(t, msg).Messages[0].PartialSignature, body.Messages[0].PartialSignature,
 		"the bytes must differ or gossipsub suppresses the duplicate")
+}
+
+func TestPlanPTCQBFT(t *testing.T) {
+	msg := partialMsg(t, spectypes.RolePTCAttester, 200)
+
+	out := Plan(faults.PTCQBFT, msg, 200, 200)
+
+	require.Len(t, out, 2)
+	require.Same(t, msg, out[0].Msg)
+
+	forged := out[1]
+	require.True(t, forged.Resign)
+	require.Equal(t, spectypes.SSVConsensusMsgType, forged.Msg.SSVMessage.MsgType)
+	require.Equal(t, spectypes.RolePTCAttester, forged.Msg.SSVMessage.GetID().GetRoleType())
+
+	body := &specqbft.Message{}
+	require.NoError(t, body.Decode(forged.Msg.SSVMessage.Data))
+	require.Equal(t, specqbft.ProposalMsgType, body.MsgType)
+	require.Equal(t, specqbft.Height(200), body.Height)
+	require.Equal(t, specqbft.Round(1), body.Round)
+}
+
+func TestPlanTwoEntries(t *testing.T) {
+	msg := partialMsg(t, spectypes.RolePTCAttester, 200)
+
+	out := Plan(faults.TwoEntries, msg, 200, 200)
+
+	require.Len(t, out, 2)
+	require.Len(t, decodePartial(t, out[1].Msg).Messages, 2)
+	require.True(t, out[1].Resign)
+}
+
+func TestPlanPTC3PerEpoch(t *testing.T) {
+	t.Run("two extra slots inside the same epoch", func(t *testing.T) {
+		// Slot 200 sits in epoch 6 (slots 192 to 223), so 199 and 198 are same-epoch and at most
+		// three slots late, which the PTC lateness allowance admits.
+		msg := partialMsg(t, spectypes.RolePTCAttester, 200)
+
+		out := Plan(faults.PTC3PerEpoch, msg, 200, 200)
+
+		require.Len(t, out, 3)
+		require.Equal(t, phase0.Slot(199), decodePartial(t, out[1].Msg).Slot)
+		require.Equal(t, phase0.Slot(198), decodePartial(t, out[2].Msg).Slot)
+		for _, o := range out[1:] {
+			require.True(t, o.Resign)
+		}
+	})
+
+	t.Run("no room at the start of an epoch", func(t *testing.T) {
+		// Slot 192 is the first of its epoch: 191 belongs to the previous one, and a future slot would
+		// be rejected as early rather than for the duty count, so the fault waits for a later slot.
+		msg := partialMsg(t, spectypes.RolePTCAttester, 192)
+		out := Plan(faults.PTC3PerEpoch, msg, 192, 192)
+		require.Len(t, out, 1)
+	})
+}
+
+func TestPlanRole7PreFork(t *testing.T) {
+	msg := partialMsg(t, spectypes.RoleValidatorRegistration, 100)
+
+	out := Plan(faults.Role7PreFork, msg, 100, 100)
+
+	require.Len(t, out, 4, "the honest registration plus roles 7, 8 and 9")
+	roles := []spectypes.RunnerRole{
+		out[1].Msg.SSVMessage.GetID().GetRoleType(),
+		out[2].Msg.SSVMessage.GetID().GetRoleType(),
+		out[3].Msg.SSVMessage.GetID().GetRoleType(),
+	}
+	require.ElementsMatch(t, []spectypes.RunnerRole{
+		spectypes.RolePTCAttester, spectypes.RoleProposerPreferences, spectypes.RoleEnvelopeProposer,
+	}, roles)
+	for _, o := range out[1:] {
+		require.True(t, o.Resign)
+		require.Equal(t, phase0.Slot(100), decodePartial(t, o.Msg).Slot, "the forged messages keep the pre-fork slot")
+	}
 }
