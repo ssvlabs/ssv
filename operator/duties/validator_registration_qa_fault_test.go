@@ -3,7 +3,6 @@ package duties
 import (
 	"testing"
 
-	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ssvlabs/ssv/qa/faults"
@@ -22,6 +21,4 @@ func TestGloasVRDeprecatedRespectsTheFault(t *testing.T) {
 		require.False(t, gloasVRDeprecated(true))
 		require.False(t, gloasVRDeprecated(false))
 	})
-
-	_ = phase0.Slot(0)
 }
