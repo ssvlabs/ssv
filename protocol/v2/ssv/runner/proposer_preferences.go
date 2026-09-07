@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"go.uber.org/zap"
 
@@ -17,6 +18,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
+	"github.com/ssvlabs/ssv/qa/faults"
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
@@ -612,6 +614,7 @@ func (r *proposerPreferencesSlotRunner) buildProposerPreferences(ctx context.Con
 	if err != nil {
 		return nil, fmt.Errorf("could not get fee recipient for validator %x: %w", validatorPubKey, err)
 	}
+	feeRecipient = applyPreferenceFault(feeRecipient, proposalSlot)
 
 	gasLimit := r.gasLimit
 	if gasLimit == 0 {
@@ -644,6 +647,11 @@ func (r *proposerPreferencesSlotRunner) buildProposerPreferences(ctx context.Con
 	// Likewise, a re-emission that can't build its preference keeps the one already broadcast (executeDuty):
 	// if a dependent_root change triggered it, that preference is stale, peers converge on the new root without
 	// this operator, and the duty is reported stuck at the proposal slot.
+
+	if faults.Is(faults.PrefsConflict) || faults.Is(faults.Prefs34Apart) {
+		faults.Fired(logger, fields.Slot(proposalSlot), fields.FeeRecipient(feeRecipient[:]))
+	}
+
 	return &gloas.ProposerPreferences{
 		DependentRoot:  dependentRoot,
 		ProposalSlot:   proposalSlot,
@@ -651,6 +659,28 @@ func (r *proposerPreferencesSlotRunner) buildProposerPreferences(ctx context.Con
 		FeeRecipient:   feeRecipient,
 		TargetGasLimit: gasLimit,
 	}, nil
+}
+
+// applyPreferenceFault rewrites the fee recipient for the section 5 QA faults. Changing the fee
+// recipient changes the preference's signing root while keeping the message well formed and
+// genuinely signed, which is what PRF-07, FLT-07 and MSG-06 need.
+func applyPreferenceFault(fee bellatrix.ExecutionAddress, proposalSlot phase0.Slot) bellatrix.ExecutionAddress {
+	switch {
+	case faults.Is(faults.PrefsConflict):
+		// PRF-07, FLT-07: one fixed, obviously different address, so this operator's root never
+		// matches the cluster's and never reaches quorum.
+		fee[0] ^= 0xff
+		return fee
+
+	case faults.Is(faults.Prefs34Apart):
+		// MSG-06: derive the address from the proposal slot, so every proposal slot carries a distinct
+		// root and in particular two slots 34 apart differ. Deterministic, so a re-emission for the same
+		// slot keeps the same root and does not itself burn root budget.
+		fee[19] = byte(proposalSlot % 256)
+		return fee
+	}
+
+	return fee
 }
 
 func (r *proposerPreferencesSlotRunner) GetNetwork() protocolp2p.Network { return r.network }
