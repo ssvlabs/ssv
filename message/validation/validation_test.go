@@ -1099,6 +1099,44 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.ErrorContains(t, err, ErrNoDuty.Error())
 	})
 
+	// Issue #3026: a RANDAO partial arriving a little before its slot — a transient clock error on the
+	// sender's slot tick — is accepted and left to the duty queue rather than dropped, as the
+	// pre-consensus round is never re-sent; beyond the margin it is still early.
+	t.Run("pre-consensus randao message before the slot", func(t *testing.T) {
+		slot := netCfg.FirstSlotAtEpoch(1)
+		epoch := netCfg.EstimatedEpochAtSlot(slot)
+
+		ds := dutystore.New()
+		ds.Proposer.Set(epoch, []dutystore.StoreDuty[eth2apiv1.ProposerDuty]{
+			{Slot: slot, ValidatorIndex: shares.active.ValidatorIndex, Duty: &eth2apiv1.ProposerDuty{}, InCommittee: true},
+		})
+
+		messages := generateRandaoMsg(ks.Shares[1], 1, epoch, slot)
+		encodedMessages, err := messages.Encode()
+		require.NoError(t, err)
+		ssvMessage := &spectypes.SSVMessage{
+			MsgType: spectypes.SSVPartialSignatureMsgType,
+			MsgID:   ssvtestingutils.NewMsgID(netCfg.DomainType, shares.active.ValidatorPubKey[:], spectypes.RoleProposer),
+			Data:    encodedMessages,
+		}
+		signedSSVMessage := spectestingutils.SignedSSVMessageWithSigner(1, ks.OperatorKeys[1], ssvMessage)
+		topicID := commons.GetTopicFullName(commons.CommitteeTopicID(committeeID)[0])
+
+		t.Run("within the margin is accepted", func(t *testing.T) {
+			validator := New(netCfg, validatorStore, operators, ds, signatureVerifier).(*messageValidator)
+			receivedAt := netCfg.SlotStartTime(slot).Add(-(clockErrorTolerance + earlyMessageMargin))
+			_, err := validator.handleSignedSSVMessage(context.Background(), signedSSVMessage, topicID, peerID, receivedAt)
+			require.NoError(t, err)
+		})
+
+		t.Run("beyond the margin is early", func(t *testing.T) {
+			validator := New(netCfg, validatorStore, operators, ds, signatureVerifier).(*messageValidator)
+			receivedAt := netCfg.SlotStartTime(slot).Add(-(clockErrorTolerance + earlyMessageMargin + time.Millisecond))
+			_, err := validator.handleSignedSSVMessage(context.Background(), signedSSVMessage, topicID, peerID, receivedAt)
+			require.ErrorContains(t, err, ErrEarlySlotMessage.Error())
+		})
+	})
+
 	//// Get error when receiving a message with more partial signatures than the SSZ max
 	t.Run("partial message too big", func(t *testing.T) {
 		// slot := netCfg.FirstSlotAtEpoch(1)
@@ -1759,18 +1797,21 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		})
 	})
 
-	// Send early message for all roles before the duty start and receive early message error
+	// A message a whole slot ahead of its duty is early; one within the early margin (issue #3026) is
+	// accepted and waits in the slot's queue for the local duty to start.
 	t.Run("early message", func(t *testing.T) {
-		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
-
 		slot := netCfg.FirstSlotAtEpoch(1)
 		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
-
-		receivedAt := netCfg.SlotStartTime(slot - 1)
 		topicID := commons.GetTopicFullName(commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0])
-		_, err = validator.handleSignedSSVMessage(context.Background(), signedSSVMessage, topicID, peerID, receivedAt)
 
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
+		_, err = validator.handleSignedSSVMessage(context.Background(), signedSSVMessage, topicID, peerID, netCfg.SlotStartTime(slot-1))
 		require.ErrorContains(t, err, ErrEarlySlotMessage.Error())
+
+		validator = New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
+		receivedAt := netCfg.SlotStartTime(slot).Add(-(clockErrorTolerance + earlyMessageMargin))
+		_, err = validator.handleSignedSSVMessage(context.Background(), signedSSVMessage, topicID, peerID, receivedAt)
+		require.NoError(t, err)
 	})
 
 	// Send message from non-leader acting as a leader should receive an error
