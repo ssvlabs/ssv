@@ -61,9 +61,8 @@ func IsRetryable(err error) bool {
 
 // codedSentinel pairs one of the sentinels above with the spec error code it reports. spectypes.WrapError
 // alone cannot carry a sentinel: the spec's Error type has no Unwrap, so anything it wraps is invisible
-// to errors.Is, and the retry classification the runners build on errors.Is (ErrNoDutyAssigned,
-// ErrRunningDutySucceeded) never fires. Unwrap exposes both — the coded error for errors.As (spec tests,
-// observability) and the sentinel for errors.Is — under the sentinel's own message text.
+// to errors.Is. Unwrap exposes both — the coded error for errors.As (spec tests, observability) and the
+// sentinel for errors.Is — under the sentinel's own message text.
 type codedSentinel struct {
 	coded    *spectypes.Error
 	sentinel error

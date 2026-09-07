@@ -17,10 +17,6 @@ func TestRetryableError(t *testing.T) {
 	require.True(t, IsRetryable(wrappedErr))
 }
 
-// TestIsRecoverableReconstructError pins the classifier the post-consensus defer relies on: only a
-// tagged error is recoverable, and the tag survives further wrapping. Crucially, it also verifies the
-// tag never hides the wrapped chain — a code-tagged *spectypes.Error stays reachable via errors.As, so
-// the committee role still observably emits the reconstruct error code even after tagging.
 // withCode keeps both halves reachable through any further wrapping — the sentinel for errors.Is and
 // the coded spec error for errors.As — and reports the sentinel's own text, so spec tests keyed on
 // error codes and callers keyed on sentinels agree on the same error value.
@@ -38,6 +34,10 @@ func TestWithCode(t *testing.T) {
 	require.NotErrorIs(t, spectypes.WrapError(spectypes.NoRunningDutyErrorCode, ErrNoDutyAssigned), ErrNoDutyAssigned)
 }
 
+// TestIsRecoverableReconstructError pins the classifier the post-consensus defer relies on: only a
+// tagged error is recoverable, and the tag survives further wrapping. Crucially, it also verifies the
+// tag never hides the wrapped chain — a code-tagged *spectypes.Error stays reachable via errors.As, so
+// the committee role still observably emits the reconstruct error code even after tagging.
 func TestIsRecoverableReconstructError(t *testing.T) {
 	t.Run("plain error is not recoverable", func(t *testing.T) {
 		require.False(t, isRecoverableReconstructError(errors.New("boom")))

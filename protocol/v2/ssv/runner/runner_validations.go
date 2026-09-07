@@ -20,6 +20,11 @@ func (b *BaseRunner) ValidatePreConsensusMsg(
 	runner Runner,
 	psigMsgs *spectypes.PartialSignatureMessages,
 ) error {
+	// A message for a duty this runner has not started, or has already finished, is not retried: while
+	// no duty runs, the duty queue pops only duty-start events, so such a message waits in the queue
+	// and is processed once the duty starts — or, if it was for the finished duty, is dropped by the
+	// slot check once the next one starts. The sentinels stay identifiable (withCode) for callers and
+	// tests; no runner attaches a retry to them.
 	if !b.hasDutyAssigned() {
 		return withCode(spectypes.NoRunningDutyErrorCode, ErrNoDutyAssigned)
 	}
@@ -63,6 +68,7 @@ func (b *BaseRunner) FallBackAndVerifyEachSignature(container *ssv.PartialSigCon
 }
 
 func (b *BaseRunner) ValidatePostConsensusMsg(ctx context.Context, runner Runner, psigMsgs *spectypes.PartialSignatureMessages) error {
+	// Not retried; see ValidatePreConsensusMsg.
 	if !b.hasDutyAssigned() {
 		return withCode(spectypes.NoRunningDutyErrorCode, ErrNoDutyAssigned)
 	}

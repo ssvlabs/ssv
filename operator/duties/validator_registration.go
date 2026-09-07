@@ -46,9 +46,10 @@ const (
 	// validatorRegistrationSchedulingSlack absorbs per-operator timing
 	// variance once a registration event clears the EL follow distance — see
 	// voluntaryExitSchedulingSlack for the full rationale; the same race
-	// applies here on the runner-level ErrNoDutyAssigned check at the
-	// receiver side. Independent of validatorRegistrationDutySlotsToPostpone
-	// despite happening to share the same numeric value (4).
+	// applies here at the receiver's duty queue, which holds a partial for a
+	// not-yet-started duty only until its next duty starts. Independent of
+	// validatorRegistrationDutySlotsToPostpone despite happening to share the
+	// same numeric value (4).
 	validatorRegistrationSchedulingSlack = 4
 
 	// validatorRegistrationExecutionSlotsToPostpone is the earliest slot,
@@ -59,11 +60,12 @@ const (
 	//
 	// Unlike voluntary-exit, validator-registration's inbound validation does
 	// not lock to a per-slot dutyStore key (the dutyLimit is a constant 2);
-	// the failure mode if we broadcast too early is the receiver's runner
-	// returning ErrNoDutyAssigned, which is retryable for ~1 slot before the
-	// message is dropped. The periodic VRSubmitter loop will eventually
-	// resubmit anyway — but the gate mirrors voluntary-exit's pattern for
-	// consistency and reduces the retry-window race for slow-EL peers.
+	// the failure mode if we broadcast too early is that the receiver's duty
+	// queue holds our partial until its own duty starts, and drops it as a
+	// past slot if that duty is for a later slot. The periodic VRSubmitter
+	// loop will eventually resubmit anyway — but the gate mirrors
+	// voluntary-exit's pattern for consistency and narrows that race for
+	// slow-EL peers.
 	validatorRegistrationExecutionSlotsToPostpone = executionclient.FollowDistance + validatorRegistrationSchedulingSlack
 )
 

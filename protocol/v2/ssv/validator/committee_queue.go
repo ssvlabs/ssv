@@ -93,12 +93,7 @@ func (c *Committee) ConsumeQueue(
 	defer logger.Debug("📪 queue consumer is closed")
 
 	// msgStates keeps track of in-flight processing state (retry count + span context) per message.
-	// Since this map grows over time, we need to clean it up automatically. There is no specific TTL value
-	// to use for its entries - it just needs to be large enough to prevent unnecessary (but non-harmful)
-	// retries from happening.
-	msgStates := ttlcache.New(
-		ttlcache.WithTTL[messageKey, *messageProcessingState](10 * time.Minute),
-	)
+	msgStates := newMessageStates(messageStateTTL)
 	go msgStates.Start()
 	defer msgStates.Stop()
 
