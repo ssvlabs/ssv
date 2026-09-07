@@ -1262,9 +1262,9 @@ func SetupRunners(
 		OperatorSigner: options.OperatorSigner,
 	}
 
-	// proposedBlockRoots is shared between this validator's proposer runner (which records its
-	// §4-decided block root) and the §6 envelope runner (which reads it).
-	proposedBlockRoots := ssv.NewProposedBlockRoots()
+	// proposedBlocks is the §4→§6 linkage store shared between this validator's proposer runner (which
+	// records its §4 decision) and the §6 envelope runner (which binds disseminated envelopes against it).
+	proposedBlocks := ssv.NewProposedBlocks()
 
 	// requestAuthCache holds this validator's threshold-reconstructed builder request auths (issue #2962):
 	// the proposer-preferences runner writes each reconstruction, and the proposer runner's §4 produce path
@@ -1286,20 +1286,18 @@ func SetupRunners(
 				Graffiti:            options.Graffiti,
 				ProposerDelay:       options.ProposerDelay,
 				ProposerDelayEPBS:   options.ProposerDelayEPBS,
-				ProposedBlockRoots:  proposedBlockRoots,
+				ProposedBlocks:      proposedBlocks,
 				StartEnvelopeDuty:   startEnvelopeDuty,
 				Builders:            options.Builders,
 				RequestAuthCache:    requestAuthCache,
 			})
 		case spectypes.RoleEnvelopeProposer:
-			// The §6 envelope runner shares the proposer's proposedBlockRoots (it reads the §4 root the
-			// proposer records). Its value-check is built per duty, so none is passed here. The proposer
-			// starts this duty via the StartEnvelopeDuty callback wired in the RoleProposer case above.
+			// The §6 envelope runner runs no QBFT (SIP #94 §6): it binds the builder operator's disseminated
+			// envelope against the §4 decision the proposer records in proposedBlocks and threshold-signs it.
+			// The proposer starts this duty via the StartEnvelopeDuty callback wired in the RoleProposer case above.
 			runners[role], err = runner.NewEnvelopeProposerRunner(runner.EnvelopeProposerRunnerOptions{
-				BaseRunnerOptions:  baseOpts,
-				QBFTController:     buildController(spectypes.RoleEnvelopeProposer),
-				ProposedBlockRoots: proposedBlockRoots,
-				HighestDecidedSlot: 0,
+				BaseRunnerOptions: baseOpts,
+				ProposedBlocks:    proposedBlocks,
 			})
 		case ssvtypes.RoleAggregator:
 			// Post-Boole, aggregator duties route through the merged AggregatorCommitteeRunner

@@ -35,7 +35,7 @@ func (gc *GoClient) GetExecutionPayloadEnvelope(ctx context.Context, slot phase0
 // dedupe by block root.
 //
 // The body is the full SignedExecutionPayloadEnvelope, whose hash-tree root equals the blinded root the §6
-// QBFT signed, so the reconstructed signature stays valid. beacon-APIs#580 also defined a blinded body, but
+// duty threshold-signed, so the reconstructed signature stays valid. beacon-APIs#580 also defined a blinded body, but
 // beacon-APIs#624 removed it; the required Eth-Blob-Data-Included header now selects the full envelope
 // (false, the stateful flow — the beacon node attaches the blobs it cached at production) over the deferred,
 // stateless SignedExecutionPayloadEnvelopeContents (true — envelope + blobs + KZG, not yet wired). Lodestar
@@ -70,9 +70,10 @@ func requestExecutionPayloadEnvelope(ctx context.Context, addr string, slot phas
 
 // submitExecutionPayloadEnvelope POSTs the SSZ full signed envelope, tagged Eth-Blob-Data-Included: false
 // per beacon-APIs#624 (see SubmitExecutionPayloadEnvelope). An already-known response is treated as success:
-// on the self-build path every operator publishes the identical envelope, so the non-winning ones race the
-// canonical one and get EXECUTION_PAYLOAD_ENVELOPE_ERROR_ALREADY_KNOWN — the §6 analog of the §4 block
-// submit (see submitGloasBeaconBlock).
+// only the builder operator publishes, but it publishes to each of its beacon nodes, and operators sharing
+// a beacon node both publish the identical envelope, so a repeat gets
+// EXECUTION_PAYLOAD_ENVELOPE_ERROR_ALREADY_KNOWN — the §6 analog of the §4 block submit (see
+// submitGloasBeaconBlock).
 func submitExecutionPayloadEnvelope(ctx context.Context, addr string, envelopeSSZ []byte) error {
 	headers := map[string]string{blobDataIncludedHeader: "false"}
 	_, err := gloasOctetStreamHTTP(ctx, http.MethodPost, addr+gloasPublishEnvelopePath, envelopeSSZ, headers)

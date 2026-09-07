@@ -243,6 +243,13 @@ func (mv *messageValidator) handleSignedSSVMessage(
 			return decodedMessage, err
 		}
 
+	case spectypes.SSVEnvelopeDisseminationMsgType:
+		dissemination, err := mv.validateEnvelopeDisseminationMessage(ctx, signedSSVMessage, committeeInfo, topic, receivedFrom, receivedAt)
+		decodedMessage.Body = dissemination
+		if err != nil {
+			return decodedMessage, err
+		}
+
 	default:
 		return decodedMessage, fmt.Errorf("unreachable: message type assertion should have been done")
 	}

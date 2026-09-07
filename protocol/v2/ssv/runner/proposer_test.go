@@ -747,24 +747,44 @@ func TestProposerRunnerSubmitGloasProposalErrorStillTriggersEnvelope(t *testing.
 	require.True(t, called, "envelope must still start even when the block submit fails")
 }
 
-// recordDecidedBlockRoot stores exactly block.HashTreeRoot() — the root the §6 envelope value-check
-// matches against — and is a no-op without a store.
-func TestProposerRunnerRecordDecidedBlockRoot(t *testing.T) {
+// recordDecidedBlock stores the §4 decision the §6 envelope runner binds against — the block root,
+// its parent root, the bid's requests root, and whether this operator produced it — and is a no-op
+// without a store.
+func TestProposerRunnerRecordDecidedBlock(t *testing.T) {
 	t.Parallel()
 
 	runner, _, _ := newProposerRunnerForTest(t, newProposerTestBeacon(nil), &stubDoppelganger{canSign: true}, 0, nil)
 
 	// No store (no envelope runner) → no-op, no error.
-	require.NoError(t, runner.recordDecidedBlockRoot(9, gloas.TestingBeaconBlock(9)))
+	require.NoError(t, runner.recordDecidedBlock(9, gloas.TestingBeaconBlock(9)))
 
-	store := ssv.NewProposedBlockRoots()
-	runner.proposedBlockRoots = store
+	store := ssv.NewProposedBlocks()
+	runner.proposedBlocks = store
 	block := gloas.TestingBeaconBlock(8)
-	require.NoError(t, runner.recordDecidedBlockRoot(8, block))
-
 	expectedRoot, err := block.HashTreeRoot()
 	require.NoError(t, err)
+
+	// Another operator's block was decided: recorded, but not produced locally.
+	runner.gloasProducedRoot = [32]byte{0xff}
+	require.NoError(t, runner.recordDecidedBlock(8, block))
 	got, ok := store.Get(8)
 	require.True(t, ok)
-	require.Equal(t, phase0.Root(expectedRoot), got)
+	require.Equal(t, ssv.ProposedBlock{
+		BlockRoot:             phase0.Root(expectedRoot),
+		ParentRoot:            block.ParentRoot,
+		ExecutionRequestsRoot: block.Body.SignedExecutionPayloadBid.Message.ExecutionRequestsRoot,
+		ProducedLocally:       false,
+	}, got)
+
+	// Our own produce response was decided: this operator is the builder operator.
+	runner.gloasProducedRoot = expectedRoot
+	require.NoError(t, runner.recordDecidedBlock(8, block))
+	got, ok = store.Get(8)
+	require.True(t, ok)
+	require.True(t, got.ProducedLocally)
+
+	// A block without a bid cannot be recorded (nothing to bind the envelope's requests root to).
+	noBid := gloas.TestingBeaconBlock(8)
+	noBid.Body.SignedExecutionPayloadBid = nil
+	require.Error(t, runner.recordDecidedBlock(8, noBid))
 }

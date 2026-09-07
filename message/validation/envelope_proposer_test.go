@@ -15,12 +15,19 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/types/ssvtestingutils"
 )
 
-// The §6 envelope duty is QBFT with only a post-consensus partial signature (no pre-consensus phase).
+// The §6 envelope duty runs no QBFT; its single signing round is the EnvelopePartialSig (SIP #94 §6).
 func TestPartialSignatureTypeMatchesRole_EnvelopeProposer(t *testing.T) {
 	mv := &messageValidator{}
-	require.True(t, mv.partialSignatureTypeMatchesRole(spectypes.PostConsensusPartialSig, spectypes.RoleEnvelopeProposer))
+	require.True(t, mv.partialSignatureTypeMatchesRole(spectypes.EnvelopePartialSig, spectypes.RoleEnvelopeProposer))
+	require.False(t, mv.partialSignatureTypeMatchesRole(spectypes.PostConsensusPartialSig, spectypes.RoleEnvelopeProposer))
 	require.False(t, mv.partialSignatureTypeMatchesRole(spectypes.RandaoPartialSig, spectypes.RoleEnvelopeProposer))
 	require.False(t, mv.partialSignatureTypeMatchesRole(spectypes.ProposerPreferencesPartialSig, spectypes.RoleEnvelopeProposer))
+	require.False(t, mv.partialSignatureTypeMatchesRole(spectypes.EnvelopePartialSig, spectypes.RoleProposer))
+}
+
+func TestValidPartialSigMsgType_EnvelopePartialSig(t *testing.T) {
+	mv := &messageValidator{}
+	require.True(t, mv.validPartialSigMsgType(spectypes.EnvelopePartialSig))
 }
 
 // The envelope role exists only from the Gloas fork onward.
@@ -36,10 +43,14 @@ func TestValidRoleAtSlot_EnvelopeProposerGloasOnly(t *testing.T) {
 	require.True(t, mv.validRoleAtSlot(spectypes.RoleEnvelopeProposer, gloasSlot))
 }
 
-// The envelope is a QBFT role (it has a max round) and shares the proposer's tight bound.
-func TestMaxRound_EnvelopeProposer(t *testing.T) {
+// The envelope role runs no QBFT (SIP #94 §6), so it has no round bound: consensus messages for it are
+// rejected before any round check.
+func TestMaxRound_EnvelopeProposerIsNotAQBFTRole(t *testing.T) {
 	mv := &messageValidator{}
-	round, err := mv.maxRound(spectypes.RoleEnvelopeProposer)
+	_, err := mv.maxRound(spectypes.RoleEnvelopeProposer)
+	require.Error(t, err)
+
+	round, err := mv.maxRound(spectypes.RoleProposer)
 	require.NoError(t, err)
 	require.Equal(t, specqbft.Round(2), round)
 }

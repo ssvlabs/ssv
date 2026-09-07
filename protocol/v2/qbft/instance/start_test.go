@@ -25,8 +25,7 @@ func TestInstance_StartWithValueProposes(t *testing.T) {
 	require.Equal(t, env.hash(value), msg.QBFTMessage.Root)
 }
 
-// A leader that joined without a value (a voter, see controller.JoinInstance) must not broadcast an
-// empty proposal; it leaves round 1 to time out.
+// A leader started without a value must not broadcast an empty proposal; it leaves round 1 to time out.
 func TestInstance_StartWithoutValueDoesNotPropose(t *testing.T) {
 	env := newInstanceTestEnv(t, 1)
 	env.setLeader(1)

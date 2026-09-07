@@ -90,6 +90,7 @@ var (
 	ErrTooManyPartialSigMessage         = Error{text: "got more partial signature messages of a certain type than allowed"}
 	ErrDifferentProposalData            = Error{text: "got different proposal data"}
 	ErrDecidedMessageWithTooFewSigners  = Error{text: "got decided message with too few signers (same number or less)"}
+	ErrDuplicatedEnvelopeDissemination  = Error{text: "got another envelope dissemination from the same signer for the slot"}
 )
 
 // Messages with these errors are rejected (regardless of what peer they come from).
@@ -136,6 +137,8 @@ var (
 	ErrFullDataNotInConsensusMessage                   = Error{text: "full data not in consensus message", reject: true}
 	ErrTooManyEqualValidatorIndicesInPartialSignatures = Error{text: "validator index appears too many times in partial signatures", reject: true}
 	ErrZeroRound                                       = Error{text: "zero round", reject: true}
+	ErrUnexpectedEnvelopeDissemination                 = Error{text: "unexpected envelope dissemination for this role", reject: true}
+	ErrEnvelopeDisseminationMustHaveOneSigner          = Error{text: "envelope dissemination must have exactly one signer", reject: true}
 )
 
 // discardKind classifies why a message is being discarded. handleValidationError derives the

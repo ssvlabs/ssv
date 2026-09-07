@@ -151,23 +151,6 @@ func (test *ValCheckSpecTest) valCheckF(signer ekm.BeaconSigner) func([]byte) er
 	case spectypes.RoleAggregatorCommittee:
 		checker := ssv.NewAggregatorCommitteeChecker()
 		return checker.CheckValue
-	case spectypes.RoleEnvelopeProposer:
-		// The §4→§6 linkage store, seeded as if the proposer had decided the fixture block for the
-		// spec's Gloas testing slot — mirroring the spec's own valcheck construction (SIP #94 §6).
-		// The envelope vectors carry no DutySlot (the spec's checker keys everything off the roots
-		// store), so the checker is pinned to the same testing slot the store is seeded at.
-		roots := ssv.NewProposedBlockRoots()
-		roots.Set(
-			phase0.Slot(spectestingutils.TestingDutySlotGloas),
-			spectestingutils.TestingProposedGloasBlockRoot(spectestingutils.TestingDutySlotGloas),
-		)
-		checker := ssv.NewEnvelopeChecker(
-			roots,
-			phase0.Slot(spectestingutils.TestingDutySlotGloas),
-			pubKeyBytes,
-			spectestingutils.TestingValidatorIndex,
-		)
-		return checker.CheckValue
 	default:
 		return nil
 	}

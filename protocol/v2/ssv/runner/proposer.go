@@ -62,9 +62,10 @@ type ProposerRunner struct {
 	// for efficient validation (so we re-use it instead of re-calculating).
 	cachedBlindedBlockSSZ []byte
 
-	// proposedBlockRoots records this operator's §4-decided block root per slot so the §6 envelope
-	// runner and its value-check can read it (SIP #94 §6); nil pre-Gloas.
-	proposedBlockRoots *ssv.ProposedBlockRoots
+	// proposedBlocks records this operator's §4 decision per slot — the decided block's root, parent root,
+	// bid requests root, and whether this operator produced it — for the §6 envelope runner to bind
+	// disseminated envelopes against (SIP #94 §6); nil pre-Gloas.
+	proposedBlocks *ssv.ProposedBlocks
 
 	// startEnvelopeDuty starts the §6 envelope-signing duty for a slot, called after a self-build §4
 	// block is published. Injected by the controller; nil pre-Gloas / when the envelope runner is absent.
@@ -101,9 +102,9 @@ type ProposerRunnerOptions struct {
 	ProposerDelay     time.Duration
 	ProposerDelayEPBS time.Duration
 
-	// ProposedBlockRoots is the shared store the proposer records its §4-decided block root into for the
+	// ProposedBlocks is the shared §4→§6 linkage store the proposer records its §4 decision into for the
 	// §6 envelope runner to read. Optional (nil pre-Gloas / when the envelope runner is absent).
-	ProposedBlockRoots *ssv.ProposedBlockRoots
+	ProposedBlocks *ssv.ProposedBlocks
 
 	// StartEnvelopeDuty starts the §6 envelope-signing duty for a slot; called after a self-build §4
 	// block is published. Must dispatch async with a node-scoped context (see startEnvelopeDuty). Optional.
@@ -145,12 +146,12 @@ func NewProposerRunner(opts ProposerRunnerOptions) (Runner, error) {
 		measurements:        newMeasurementsStore(),
 		graffiti:            opts.Graffiti,
 
-		proposerDelay:      opts.ProposerDelay,
-		proposerDelayEPBS:  opts.ProposerDelayEPBS,
-		proposedBlockRoots: opts.ProposedBlockRoots,
-		startEnvelopeDuty:  opts.StartEnvelopeDuty,
-		builders:           builders,
-		requestAuthCache:   opts.RequestAuthCache,
+		proposerDelay:     opts.ProposerDelay,
+		proposerDelayEPBS: opts.ProposerDelayEPBS,
+		proposedBlocks:    opts.ProposedBlocks,
+		startEnvelopeDuty: opts.StartEnvelopeDuty,
+		builders:          builders,
+		requestAuthCache:  opts.RequestAuthCache,
 	}, nil
 }
 
@@ -387,7 +388,7 @@ func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logge
 			return fmt.Errorf("could not decode gloas block from consensus data: %w", decErr)
 		}
 		blkRootToSign = block
-		if err := r.recordDecidedBlockRoot(cd.Duty.Slot, block); err != nil {
+		if err := r.recordDecidedBlock(cd.Duty.Slot, block); err != nil {
 			return err
 		}
 		span.AddEvent("decided has a gloas block")
@@ -641,17 +642,27 @@ func gloasBuildSource(block *gloas.BeaconBlock) proposalBuildSource {
 	return buildSourceBuilder
 }
 
-// recordDecidedBlockRoot stores the §4-decided block's root for the §6 envelope runner and its
-// value-check to read (SIP #94 §6). No-op when no envelope runner shares the store.
-func (r *ProposerRunner) recordDecidedBlockRoot(slot phase0.Slot, block *gloas.BeaconBlock) error {
-	if r.proposedBlockRoots == nil {
+// recordDecidedBlock stores the §4 decision for the §6 envelope runner (SIP #94 §6): the decided block's
+// root, its parent root, the execution-requests root its bid commits to, and whether this operator
+// produced it — its own produce response has the decided root, making it the builder operator, the one
+// whose beacon node holds the payload. No-op when no envelope runner shares the store.
+func (r *ProposerRunner) recordDecidedBlock(slot phase0.Slot, block *gloas.BeaconBlock) error {
+	if r.proposedBlocks == nil {
 		return nil
 	}
 	root, err := block.HashTreeRoot()
 	if err != nil {
 		return fmt.Errorf("hash tree root of decided gloas block: %w", err)
 	}
-	r.proposedBlockRoots.Set(slot, phase0.Root(root))
+	if block.Body == nil || block.Body.SignedExecutionPayloadBid == nil || block.Body.SignedExecutionPayloadBid.Message == nil {
+		return fmt.Errorf("decided gloas block carries no execution payload bid")
+	}
+	r.proposedBlocks.Record(slot, ssv.ProposedBlock{
+		BlockRoot:             phase0.Root(root),
+		ParentRoot:            block.ParentRoot,
+		ExecutionRequestsRoot: block.Body.SignedExecutionPayloadBid.Message.ExecutionRequestsRoot,
+		ProducedLocally:       root == r.gloasProducedRoot,
+	})
 	return nil
 }
 

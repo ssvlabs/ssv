@@ -123,6 +123,7 @@ func (mv *messageValidator) validatePartialSignatureMessageSemantics(
 	// - VoluntaryExitPartialSig for Voluntary Exit
 	// - PTCAttesterPartialSig for PTC attestation
 	// - ProposerPreferencesPartialSig or RequestAuthPartialSig for Proposer Preferences
+	// - EnvelopePartialSig for the self-build envelope
 	if !mv.partialSignatureTypeMatchesRole(partialSignatureMessages.Type, role) {
 		return ErrPartialSignatureTypeRoleMismatch
 	}
@@ -202,6 +203,7 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 		// - 1 PTCAttesterPartialSig for PTC attestation
 		// - 1 ProposerPreferencesPartialSig for Proposer Preferences (distinct-root budget), plus
 		//   RequestAuthPartialSig up to its own distinct-root budget (issue #2962)
+		// - 1 EnvelopePartialSig for the self-build envelope
 		if err := validatePartialSignatureMessageLimit(partialSignatureMessages, receivedFrom, signerState); err != nil {
 			return err
 		}
@@ -285,7 +287,7 @@ func validatePartialSignatureMessageLimit(
 	switch m.Type {
 	case spectypes.RandaoPartialSig, ssvtypes.SelectionProofPartialSig, ssvtypes.ContributionProofs,
 		spectypes.ValidatorRegistrationPartialSig, spectypes.VoluntaryExitPartialSig,
-		spectypes.AggregatorCommitteePartialSig, spectypes.PTCAttesterPartialSig:
+		spectypes.AggregatorCommitteePartialSig, spectypes.PTCAttesterPartialSig, spectypes.EnvelopePartialSig:
 		if signerState.Peer(receivedFrom).SeenMsgTypes.reachedPreConsensusLimit() {
 			// Check if the same peer is sending us a "logical duplicate" message, reject message to punish.
 			e := ErrTooManyPartialSigMessage
@@ -410,7 +412,8 @@ func (mv *messageValidator) validPartialSigMsgType(msgType spectypes.PartialSigM
 		spectypes.AggregatorCommitteePartialSig,
 		spectypes.PTCAttesterPartialSig,
 		spectypes.ProposerPreferencesPartialSig,
-		spectypes.RequestAuthPartialSig:
+		spectypes.RequestAuthPartialSig,
+		spectypes.EnvelopePartialSig:
 		return true
 	default:
 		return false
@@ -426,8 +429,8 @@ func (mv *messageValidator) partialSignatureTypeMatchesRole(msgType spectypes.Pa
 	case spectypes.RoleProposer:
 		return msgType == spectypes.PostConsensusPartialSig || msgType == spectypes.RandaoPartialSig
 	case spectypes.RoleEnvelopeProposer:
-		// The §6 envelope duty has no pre-consensus phase, so only post-consensus partial sigs.
-		return msgType == spectypes.PostConsensusPartialSig
+		// The §6 envelope duty runs no QBFT; its single signing round is the EnvelopePartialSig (SIP #94 §6).
+		return msgType == spectypes.EnvelopePartialSig
 	case ssvtypes.RoleSyncCommitteeContribution:
 		return msgType == spectypes.PostConsensusPartialSig || msgType == ssvtypes.ContributionProofs
 	case spectypes.RoleValidatorRegistration:

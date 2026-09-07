@@ -32,7 +32,6 @@ func TestTimeoutForRound(t *testing.T) {
 		spectypes.RoleCommittee,
 		ssvtypes.RoleAggregator,
 		spectypes.RoleProposer,
-		spectypes.RoleEnvelopeProposer,
 		ssvtypes.RoleSyncCommitteeContribution,
 		spectypes.RoleAggregatorCommittee,
 	}
@@ -75,7 +74,7 @@ func TestTimeoutForRound(t *testing.T) {
 		})
 
 		// TODO: Decide if to make the proposer timeout deterministic
-		// The round-relative roles (proposer, envelope proposer) are not tested for multiple synchronized
+		// The round-relative role (the proposer) is not tested for multiple synchronized
 		// timers since their timeouts aren't slot-synchronized.
 		if RoundRelativeRole(role) {
 			continue
@@ -103,12 +102,6 @@ func TestEstimatedRoundAt(t *testing.T) {
 		{
 			name:         "proposer starts quick round timing at slot start",
 			role:         spectypes.RoleProposer,
-			timeIntoSlot: QuickTimeout,
-			want:         specqbft.FirstRound + 1,
-		},
-		{
-			name:         "envelope proposer starts quick round timing at slot start (no head start)",
-			role:         spectypes.RoleEnvelopeProposer,
 			timeIntoSlot: QuickTimeout,
 			want:         specqbft.FirstRound + 1,
 		},
@@ -196,10 +189,6 @@ func TestRoundTimeoutOffset(t *testing.T) {
 		{name: "proposer, round 9 (first slow)", role: spectypes.RoleProposer, round: QuickTimeoutThreshold + 1, want: quickPhase + SlowTimeout},
 		{name: "proposer, round 10", role: spectypes.RoleProposer, round: QuickTimeoutThreshold + 2, want: quickPhase + 2*SlowTimeout},
 
-		// Envelope proposer (head start = 0): the same offsets as the proposer.
-		{name: "envelope_proposer, round 1", role: spectypes.RoleEnvelopeProposer, round: 1, want: QuickTimeout},
-		{name: "envelope_proposer, round 9 (first slow)", role: spectypes.RoleEnvelopeProposer, round: QuickTimeoutThreshold + 1, want: quickPhase + SlowTimeout},
-
 		// Committee (head start = 4s): offset starts with head start added.
 		{name: "committee, round 1", role: spectypes.RoleCommittee, round: 1, want: 4*time.Second + QuickTimeout},
 		{name: "committee, round 2", role: spectypes.RoleCommittee, round: 2, want: 4*time.Second + 2*QuickTimeout},
@@ -242,7 +231,6 @@ func TestRoundTimeoutOffsetGloasInterval(t *testing.T) {
 		{name: "aggregator head start = 2 intervals", role: ssvtypes.RoleAggregator, want: slotDuration/2 + QuickTimeout},
 		{name: "sync_committee_contribution head start = 2 intervals", role: ssvtypes.RoleSyncCommitteeContribution, want: slotDuration/2 + QuickTimeout},
 		{name: "proposer head start = 0", role: spectypes.RoleProposer, want: QuickTimeout},
-		{name: "envelope proposer head start = 0", role: spectypes.RoleEnvelopeProposer, want: QuickTimeout},
 	}
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
@@ -269,7 +257,6 @@ func TestEstimatedRoundAtBoundaries(t *testing.T) {
 		role spectypes.RunnerRole
 	}{
 		{"proposer", spectypes.RoleProposer},
-		{"envelope_proposer", spectypes.RoleEnvelopeProposer},
 		{"committee", spectypes.RoleCommittee},
 		{"aggregator", ssvtypes.RoleAggregator},
 		{"sync_committee_contribution", ssvtypes.RoleSyncCommitteeContribution},
@@ -352,7 +339,7 @@ func TestEstimatedRoundAtEdgeCases(t *testing.T) {
 // "now" and the returned duration must exactly equal roundTimeoutForRound. If anyone changes
 // RoundTimeout's math without updating roundTimeoutForRound (or vice versa), this test fails.
 func TestRoundTimeoutMatchesRoundTimeoutOffset(t *testing.T) {
-	// The round-relative roles (proposer, envelope proposer) don't time from slot start, so they're
+	// The round-relative role (the proposer) doesn't time from slot start, so it's
 	// exempt from the "equals roundTimeoutOffset" property. We cover the slot-synchronized roles only.
 	roles := []struct {
 		name string
@@ -395,7 +382,6 @@ func TestEstimatedRoundAtMatchesRoundTimeout(t *testing.T) {
 		role spectypes.RunnerRole
 	}{
 		{"proposer", spectypes.RoleProposer},
-		{"envelope_proposer", spectypes.RoleEnvelopeProposer},
 		{"committee", spectypes.RoleCommittee},
 		{"aggregator", ssvtypes.RoleAggregator},
 		{"sync_committee_contribution", ssvtypes.RoleSyncCommitteeContribution},
@@ -582,10 +568,10 @@ func testNegativeTimeout(t *testing.T, role spectypes.RunnerRole) {
 
 func TestRoundRelativeRole(t *testing.T) {
 	require.True(t, RoundRelativeRole(spectypes.RoleProposer))
-	require.True(t, RoundRelativeRole(spectypes.RoleEnvelopeProposer))
 
 	for _, role := range []spectypes.RunnerRole{
 		spectypes.RoleCommittee,
+		spectypes.RoleEnvelopeProposer, // no QBFT at all since SIP #94 §6 moved to dissemination + signing
 		ssvtypes.RoleAggregator,
 		ssvtypes.RoleSyncCommitteeContribution,
 		spectypes.RoleAggregatorCommittee,
@@ -595,16 +581,14 @@ func TestRoundRelativeRole(t *testing.T) {
 }
 
 // TestRoundTimeoutRoundRelativeRolesIgnoreSlotStart is the regression guard for the round-relative
-// roles' timers: their timeout must not depend on how far into the slot the instance starts. It
-// matters most for the §6 envelope proposer, whose instance only starts after the §4 block is
-// published — a slot-anchored timer would already be negative there and time round 1 out on arrival.
+// role's timer: its timeout must not depend on how far into the slot the instance starts, so a
+// slot-anchored timer can never be negative on arrival and time round 1 out immediately.
 func TestRoundTimeoutRoundRelativeRolesIgnoreSlotStart(t *testing.T) {
 	roles := []struct {
 		name string
 		role spectypes.RunnerRole
 	}{
 		{"proposer", spectypes.RoleProposer},
-		{"envelope_proposer", spectypes.RoleEnvelopeProposer},
 	}
 
 	for _, rc := range roles {

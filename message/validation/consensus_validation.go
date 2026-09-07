@@ -162,7 +162,8 @@ func (mv *messageValidator) validateConsensusMessageSemantics(
 	// Rule: Duty role has consensus (true except for ValidatorRegistration, VoluntaryExit, PTC
 	// attestation, and proposer preferences)
 	if role == spectypes.RoleValidatorRegistration || role == spectypes.RoleVoluntaryExit ||
-		role == spectypes.RolePTCAttester || role == spectypes.RoleProposerPreferences {
+		role == spectypes.RolePTCAttester || role == spectypes.RoleProposerPreferences ||
+		role == spectypes.RoleEnvelopeProposer {
 		e := ErrUnexpectedConsensusMessage
 		e.got = role
 		return e
@@ -530,9 +531,9 @@ func (mv *messageValidator) roundBelongsToAllowedSpread(
 ) error {
 	role := signedSSVMessage.SSVMessage.GetID().GetRoleType()
 
-	// The round-relative roles (proposer, envelope proposer) time their rounds from the QBFT instance start
-	// rather than from slot start (see roundtimer.RoundRelativeRole), and we have no visibility into the
-	// instance state here - so we can't check whether the message round belongs to the allowed spread.
+	// The round-relative role (the proposer) times its rounds from the QBFT instance start rather than
+	// from slot start (see roundtimer.RoundRelativeRole), and we have no visibility into the instance
+	// state here - so we can't check whether the message round belongs to the allowed spread.
 	if roundtimer.RoundRelativeRole(role) {
 		return nil
 	}
