@@ -13,7 +13,7 @@ import (
 // each configured builder relationship (issue #2962 B1), keyed by gloas.BuilderIdentity. The §5
 // slot sub-runners write on reconstruction quorum; the §4 produce path reads it to attach the auths
 // to the produceBlockV4 POST body (beacon-APIs#630). One instance per validator, in package ssv beside
-// ProposedBlockRoots for the same import-cycle reason. Safe for concurrent use.
+// ProposedBlocks for the same import-cycle reason. Safe for concurrent use.
 type RequestAuthCache struct {
 	// currentSlot anchors eviction: writes land up to a proposer lookahead ahead of their slot, so
 	// pruning by the clock — not by the last-written slot — is what keeps one future slot's auths

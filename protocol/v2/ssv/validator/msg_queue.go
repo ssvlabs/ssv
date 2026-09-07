@@ -162,8 +162,25 @@ func mKey(msg *queue.SSVMessage) (messageKey, error) {
 		writeUint64(&b, ssvtypes.PartialSigMsgSigner(psm))
 		return messageKey(b.String()), nil
 	}
+	if msg.MsgType == spectypes.SSVEnvelopeDisseminationMsgType {
+		dissemination, ok := msg.Body.(*spectypes.EnvelopeDissemination)
+		if !ok || dissemination == nil {
+			return "", fmt.Errorf("envelope dissemination: invalid msg body, type: %T", msg.Body)
+		}
+		var b strings.Builder
+		b.Grow(200)
+		writeUint64(&b, uint64(msgSlot))
+		b.WriteByte('-')
+		writeUint64(&b, uint64(msg.MsgType))
+		b.WriteByte('-')
+		writeMsgIDHex(&b, msg.MsgID)
+		b.WriteByte('-')
+		// one dissemination per signer and slot (SIP #94 §7)
+		writeOperatorIDs(&b, msg.SignedSSVMessage.OperatorIDs)
+		return messageKey(b.String()), nil
+	}
 
-	return "", fmt.Errorf("unexpected message type (expected types: event, qbft, partial-sig): %d", msg.MsgType)
+	return "", fmt.Errorf("unexpected message type (expected types: event, qbft, partial-sig, envelope-dissemination): %d", msg.MsgType)
 }
 
 func logWithMessageMetadata(logger *zap.Logger, msg *queue.SSVMessage) *zap.Logger {
@@ -192,6 +209,11 @@ func logWithMessageMetadata(logger *zap.Logger, msg *queue.SSVMessage) *zap.Logg
 			zap.Uint64("partial_sig_msg_type", uint64(psm.Type)),
 			zap.Uint64("signer", ssvtypes.PartialSigMsgSigner(psm)),
 		)
+		return logger
+	}
+
+	if msg.MsgType == spectypes.SSVEnvelopeDisseminationMsgType {
+		logger = logger.With(zap.Any("signers", msg.SignedSSVMessage.OperatorIDs))
 		return logger
 	}
 

@@ -162,7 +162,8 @@ func (mv *messageValidator) validateConsensusMessageSemantics(
 	// Rule: Duty role has consensus (true except for ValidatorRegistration, VoluntaryExit, PTC
 	// attestation, and proposer preferences)
 	if role == spectypes.RoleValidatorRegistration || role == spectypes.RoleVoluntaryExit ||
-		role == spectypes.RolePTCAttester || role == spectypes.RoleProposerPreferences {
+		role == spectypes.RolePTCAttester || role == spectypes.RoleProposerPreferences ||
+		role == spectypes.RoleEnvelopeProposer {
 		e := ErrUnexpectedConsensusMessage
 		e.got = role
 		return e
@@ -430,7 +431,7 @@ func (mv *messageValidator) maxRound(role spectypes.RunnerRole) (specqbft.Round,
 	switch role {
 	case spectypes.RoleCommittee, spectypes.RoleAggregatorCommittee, ssvtypes.RoleAggregator: // TODO: check if value for aggregator is correct as there are messages on stage exceeding the limit
 		return 12, nil // TODO: consider calculating based on quick timeout and slow timeout
-	case spectypes.RoleProposer, spectypes.RoleEnvelopeProposer:
+	case spectypes.RoleProposer:
 		return 2, nil
 	case ssvtypes.RoleSyncCommitteeContribution:
 		return 6, nil
@@ -537,9 +538,9 @@ func (mv *messageValidator) roundBelongsToAllowedSpread(
 ) error {
 	role := signedSSVMessage.SSVMessage.GetID().GetRoleType()
 
-	// The round-relative roles (proposer, envelope proposer) time their rounds from the QBFT instance start
-	// rather than from slot start (see roundtimer.RoundRelativeRole), and we have no visibility into the
-	// instance state here - so we can't check whether the message round belongs to the allowed spread.
+	// The round-relative role (the proposer) times its rounds from the QBFT instance start rather than
+	// from slot start (see roundtimer.RoundRelativeRole), and we have no visibility into the instance
+	// state here - so we can't check whether the message round belongs to the allowed spread.
 	if roundtimer.RoundRelativeRole(role) {
 		return nil
 	}

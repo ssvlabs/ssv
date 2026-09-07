@@ -135,7 +135,7 @@ var (
 		meter.Int64Counter(
 			observability.InstrumentName(observabilityNamespace, "envelope.build_match"),
 			metric.WithUnit("{envelope}"),
-			metric.WithDescription("decided Gloas execution-payload envelopes by whether this operator is the one that built them")))
+			metric.WithDescription("threshold-signed Gloas execution-payload envelopes by whether this operator is the one that built them")))
 
 	requestAuthReconstructionCounter = metrics.New(
 		meter.Int64Counter(
@@ -193,12 +193,12 @@ func recordProposalBuildSource(ctx context.Context, source proposalBuildSource) 
 	proposalBuildSourceCounter.Add(ctx, 1, metric.WithAttributes(observability.BuildSourceAttribute(string(source))))
 }
 
-// recordEnvelopeBuildMatch counts a decided §6 envelope by whether this operator's cached envelope
-// content-matches it ("self") or not ("other"). Only the matching operator holds the full payload
-// bytes and publishes, so per operator an "other" share is expected and benign — the signal is
-// cluster-wide: a decided envelope no operator matched is a reconstruction miss (the builder's bytes
-// were lost and nobody can publish), which this makes countable instead of inferable only from the
-// absence of a publish log. Deliberately independent of whether the subsequent submit succeeded —
+// recordEnvelopeBuildMatch counts a threshold-signed §6 envelope by whether this operator's produced
+// envelope content-matches the selected one ("self") or not ("other"). Only the matching operator holds
+// the full payload bytes and publishes, so per operator an "other" share is expected and benign — the
+// signal is cluster-wide: a signed envelope no operator matched is a reveal miss (the cluster signed a
+// forged or lost root and nobody can publish), which this makes countable instead of inferable only from
+// the absence of a publish log. Deliberately independent of whether the subsequent submit succeeded —
 // that failure is already counted by ssv.runner.submissions.failed.
 func recordEnvelopeBuildMatch(ctx context.Context, self bool) {
 	match := "other"

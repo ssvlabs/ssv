@@ -32,10 +32,9 @@ type Instance struct {
 	State       *specqbft.State
 	processMsgF *spectypes.ThreadSafeF
 	// StartValue is the value this node proposes when it leads a round with no prepared value to
-	// re-propose. Empty for a node that joined the instance as a voter (controller.JoinInstance): it
-	// then never proposes a value of its own — round 1 is left to time out, and a later round it
-	// leads re-proposes only an already-prepared value (an empty value fails the proposal
-	// justification's value check).
+	// re-propose. A node started without one never proposes a value of its own — round 1 is left to
+	// time out, and a later round it leads re-proposes only an already-prepared value (an empty value
+	// fails the proposal justification's value check).
 	StartValue   []byte
 	ValueChecker ssv.ValueChecker `json:"-"`
 	roundTimer   ssv.QBFTRoundTimer
@@ -116,8 +115,8 @@ func (i *Instance) Start(
 	i.roundTimer.TimeoutForRound(specqbft.FirstRound)
 	i.metrics.StartStage(stageProposal)
 
-	// propose if this node is the proposer — unless it joined without a value to propose (a voter, see
-	// controller.JoinInstance): it then leaves round 1 to time out rather than broadcast an empty proposal.
+	// propose if this node is the proposer — unless it was started without a value to propose: it then
+	// leaves round 1 to time out rather than broadcast an empty proposal.
 	if proposerID == i.State.CommitteeMember.OperatorID {
 		if len(i.StartValue) == 0 {
 			const eventMsg = "leader has no start value to propose, joining as a voter"

@@ -203,6 +203,28 @@ func (v *Validator) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 		}
 
 		return nil
+	case spectypes.SSVEnvelopeDisseminationMsgType:
+		dissemination, ok := msg.Body.(*spectypes.EnvelopeDissemination)
+		if !ok || dissemination == nil {
+			return fmt.Errorf("could not decode envelope dissemination body from network message, type: %T", msg.Body)
+		}
+
+		if len(msg.SignedSSVMessage.OperatorIDs) != 1 {
+			return fmt.Errorf("EnvelopeDissemination has more than 1 signer")
+		}
+
+		// Only the §6 envelope runner consumes disseminations (SIP #94 §6).
+		processor, ok := dutyRunner.(runner.EnvelopeDisseminationProcessor)
+		if !ok {
+			return fmt.Errorf("runner for msg ID %v does not process envelope disseminations", msgID)
+		}
+
+		span.AddEvent("process validator message = envelope dissemination")
+		if err := processor.ProcessEnvelopeDissemination(ctx, logger, msg.SignedSSVMessage, dissemination); err != nil {
+			return fmt.Errorf("process envelope dissemination: %w", err)
+		}
+
+		return nil
 	case message.SSVEventMsgType:
 		eventMsg, ok := msg.Body.(*ssvtypes.EventMsg)
 		if !ok || eventMsg == nil {

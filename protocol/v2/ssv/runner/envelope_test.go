@@ -2,6 +2,7 @@ package runner
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -9,100 +10,40 @@ import (
 	"go.uber.org/zap"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
+	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
-// envelopeConsensusDataSSZ builds a decided EnvelopeConsensusData carrying a self-build blinded envelope,
-// returning the blinded value (for root comparison) and the encoded consensus data.
-func envelopeConsensusDataSSZ(t *testing.T, slot phase0.Slot, blockRoot phase0.Root) (*gloas.BlindedExecutionPayloadEnvelope, []byte) {
-	t.Helper()
-	blinded := &gloas.BlindedExecutionPayloadEnvelope{
-		PayloadRoot:           phase0.Root{0x09},
-		ExecutionRequests:     &gloas.ExecutionRequests{},
-		BuilderIndex:          gloas.BuilderIndexSelfBuild,
-		BeaconBlockRoot:       blockRoot,
-		ParentBeaconBlockRoot: phase0.Root{0x08},
+func envelopeDuty(slot phase0.Slot) *spectypes.ValidatorDuty {
+	return &spectypes.ValidatorDuty{
+		Type:           spectypes.BNRoleEnvelopeProposer,
+		PubKey:         spectestingutils.TestingValidatorPubKey,
+		Slot:           slot,
+		ValidatorIndex: spectestingutils.TestingValidatorIndex,
 	}
-	dataSSZ, err := blinded.Encode()
-	require.NoError(t, err)
-	cd := &gloas.EnvelopeConsensusData{
-		Duty:    spectypes.ValidatorDuty{Type: spectypes.BNRoleEnvelopeProposer, Slot: slot, ValidatorIndex: 3},
-		DataSSZ: dataSSZ,
-	}
-	encoded, err := cd.Encode()
-	require.NoError(t, err)
-	return blinded, encoded
 }
 
-func TestNewEnvelopeProposerRunner_RequiresOneShare(t *testing.T) {
-	_, err := NewEnvelopeProposerRunner(EnvelopeProposerRunnerOptions{})
-	require.Error(t, err)
-}
-
-// The §4→§6 root store is read unconditionally by executeDuty and the value-check, so it is required.
-func TestNewEnvelopeProposerRunner_RequiresProposedBlockRoots(t *testing.T) {
-	_, err := NewEnvelopeProposerRunner(EnvelopeProposerRunnerOptions{
-		BaseRunnerOptions: BaseRunnerOptions{
-			Share: map[phase0.ValidatorIndex]*spectypes.Share{3: {ValidatorIndex: 3}},
-		},
-	})
-	require.ErrorContains(t, err, "proposed block roots")
-}
-
-// The post-consensus signing target is the decided blinded envelope's root under DOMAIN_BEACON_BUILDER —
-// equal to the full envelope's root, so the partial signature is valid for the full envelope.
-func TestEnvelopeProposerRunner_ExpectedPostConsensusRootsAndDomain(t *testing.T) {
-	blinded, encoded := envelopeConsensusDataSSZ(t, 5, phase0.Root{0xaa})
-	r := &EnvelopeProposerRunner{BaseRunner: &BaseRunner{State: &State{DecidedValue: encoded}}}
-
-	roots, domain, err := r.expectedPostConsensusRootsAndDomain(context.Background())
-	require.NoError(t, err)
-	require.Equal(t, phase0.DomainType(spectypes.DomainBeaconBuilder), domain)
-	require.Len(t, roots, 1)
-
-	got, err := roots[0].HashTreeRoot()
-	require.NoError(t, err)
-	want, err := blinded.HashTreeRoot()
-	require.NoError(t, err)
-	require.Equal(t, want, got)
-}
-
-// The envelope duty has no pre-consensus phase; both entry points reject.
-func TestEnvelopeProposerRunner_NoPreConsensus(t *testing.T) {
-	r := &EnvelopeProposerRunner{BaseRunner: &BaseRunner{}}
-	require.Error(t, r.ProcessPreConsensus(context.Background(), zap.NewNop(), &spectypes.PartialSignatureMessages{}))
-	_, _, err := r.expectedPreConsensusRootsAndDomain()
-	require.Error(t, err)
-}
-
-// executeDuty guards on the proposer having recorded the §4 block root for the slot before producing.
-func TestEnvelopeProposerRunner_ExecuteDutyRequiresDecidedRoot(t *testing.T) {
-	r := &EnvelopeProposerRunner{
-		BaseRunner: &BaseRunner{
-			RunnerRoleType: spectypes.RoleEnvelopeProposer,
-			Share: map[phase0.ValidatorIndex]*spectypes.Share{
-				3: {ValidatorIndex: 3, ValidatorPubKey: spectypes.ValidatorPK{0x42}},
-			},
-		},
-		measurements:       newMeasurementsStore(),
-		proposedBlockRoots: ssv.NewProposedBlockRoots(),
-	}
-	duty := &spectypes.ValidatorDuty{Type: spectypes.BNRoleEnvelopeProposer, Slot: 5, ValidatorIndex: 3}
-
-	require.ErrorContains(t, r.executeDuty(context.Background(), zap.NewNop(), duty), "no decided block root")
-}
-
+// envelopeTestBeacon embeds the spec testing beacon so DomainData (used by the signing-root computation)
+// resolves, records envelope fetches, and records the published envelopes.
 type envelopeTestBeacon struct {
 	beacon.BeaconNode
 	envelope   *gloas.ExecutionPayloadEnvelope
-	produceErr error // when set, produce fails — as a non-builder's beacon node does (it never held the payload)
+	produceErr error // when set, the fetch fails — as a beacon node that never held the payload does
+	fetches    int
 	submitted  []*gloas.SignedExecutionPayloadEnvelope
 }
 
+func newEnvelopeTestBeacon() *envelopeTestBeacon {
+	return &envelopeTestBeacon{BeaconNode: protocoltesting.NewTestingBeaconNodeWrapped()}
+}
+
 func (b *envelopeTestBeacon) GetExecutionPayloadEnvelope(_ context.Context, _ phase0.Slot, _ phase0.Root) (*gloas.ExecutionPayloadEnvelope, error) {
+	b.fetches++
 	if b.produceErr != nil {
 		return nil, b.produceErr
 	}
@@ -124,39 +65,373 @@ func sampleEnvelope() *gloas.ExecutionPayloadEnvelope {
 	}
 }
 
-// produceBlindedEnvelope fetches the envelope, caches the full one, and wraps its blinded form (PayloadRoot
-// = HTR(payload), with the §4 root and builder index preserved) as the QBFT value.
-func TestEnvelopeProposerRunner_ProduceBlindedEnvelope(t *testing.T) {
-	envelope := sampleEnvelope()
-	r := &EnvelopeProposerRunner{BaseRunner: &BaseRunner{}, beacon: &envelopeTestBeacon{envelope: envelope}}
-	duty := &spectypes.ValidatorDuty{Type: spectypes.BNRoleEnvelopeProposer, Slot: 5, ValidatorIndex: 3}
-
-	cd, err := r.produceBlindedEnvelope(context.Background(), duty, phase0.Root{0xaa})
+// proposalFor derives the §4 decision the envelope binds to, as the proposer runner would record it.
+func proposalFor(t *testing.T, envelope *gloas.ExecutionPayloadEnvelope, producedLocally bool) ssv.ProposedBlock {
+	t.Helper()
+	requestsRoot, err := envelope.ExecutionRequests.HashTreeRoot()
 	require.NoError(t, err)
-	require.Same(t, envelope, r.cachedEnvelope) // cached for the later content-matched publish
-
-	blinded := &gloas.BlindedExecutionPayloadEnvelope{}
-	require.NoError(t, blinded.Decode(cd.DataSSZ))
-	wantRoot, err := envelope.Payload.HashTreeRoot()
-	require.NoError(t, err)
-	require.Equal(t, phase0.Root(wantRoot), blinded.PayloadRoot)
-	require.Equal(t, envelope.BeaconBlockRoot, blinded.BeaconBlockRoot)
-	require.Equal(t, gloas.BuilderIndexSelfBuild, blinded.BuilderIndex)
+	return ssv.ProposedBlock{
+		BlockRoot:             envelope.BeaconBlockRoot,
+		ParentRoot:            envelope.ParentBeaconBlockRoot,
+		ExecutionRequestsRoot: phase0.Root(requestsRoot),
+		ProducedLocally:       producedLocally,
+	}
 }
 
-// builtDecidedEnvelope is the content match: only the operator whose cached envelope blinds to the decided
-// value holds the full bytes and publishes.
-func TestEnvelopeProposerRunner_BuiltDecidedEnvelope(t *testing.T) {
+func newEnvelopeProposerRunnerForTest(t *testing.T, bn beacon.BeaconNode) (*EnvelopeProposerRunner, *spectestingutils.TestKeySet) {
+	t.Helper()
+
+	cfg := cloneTestNetworkConfig()
+	keySet := spectestingutils.Testing4SharesSet()
+	share := spectestingutils.TestingShare(keySet, spectestingutils.TestingValidatorIndex)
+	network := protocoltesting.NewTestingNetwork(1, keySet.OperatorKeys[1])
+	km := ekm.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager())
+	operatorSigner := spectestingutils.NewOperatorSigner(keySet, 1)
+
+	runnerIface, err := NewEnvelopeProposerRunner(EnvelopeProposerRunnerOptions{
+		BaseRunnerOptions: BaseRunnerOptions{
+			NetworkConfig:  cfg,
+			Share:          map[phase0.ValidatorIndex]*spectypes.Share{share.ValidatorIndex: share},
+			Beacon:         bn,
+			Network:        network,
+			Signer:         km,
+			OperatorSigner: operatorSigner,
+		},
+		ProposedBlocks: ssv.NewProposedBlocks(),
+	})
+	require.NoError(t, err)
+	return runnerIface.(*EnvelopeProposerRunner), keySet
+}
+
+func broadcastMsgs(r *EnvelopeProposerRunner) []*spectypes.SignedSSVMessage {
+	return r.network.(*protocoltesting.TestingNetwork).BroadcastedMsgs
+}
+
+// disseminationMsg wraps a blinded envelope as operator signer's dissemination for the slot (the operator
+// signature is irrelevant to the runner, which receives already-validated messages).
+func disseminationMsg(t *testing.T, slot phase0.Slot, blinded *gloas.BlindedExecutionPayloadEnvelope, signer spectypes.OperatorID) (*spectypes.SignedSSVMessage, *spectypes.EnvelopeDissemination) {
+	t.Helper()
+	dissemination := &spectypes.EnvelopeDissemination{Slot: slot, Envelope: blinded}
+	data, err := dissemination.Encode()
+	require.NoError(t, err)
+	return &spectypes.SignedSSVMessage{
+		OperatorIDs: []spectypes.OperatorID{signer},
+		SSVMessage:  &spectypes.SSVMessage{MsgType: spectypes.SSVEnvelopeDisseminationMsgType, Data: data},
+	}, dissemination
+}
+
+// envelopePartialSig builds operator opID's EnvelopePartialSig over the blinded envelope's root, signed
+// under DOMAIN_BEACON_BUILDER with its share key. The testing beacon's domain is epoch-invariant, so it
+// matches the domain the runner derives at the duty's epoch.
+func envelopePartialSig(t *testing.T, keySet *spectestingutils.TestKeySet, blinded *gloas.BlindedExecutionPayloadEnvelope, slot phase0.Slot, opID spectypes.OperatorID) *spectypes.PartialSignatureMessages {
+	t.Helper()
+	signer := spectestingutils.NewTestingKeyManager()
+	domain, err := spectestingutils.NewTestingBeaconNode().DomainData(1, spectypes.DomainBeaconBuilder)
+	require.NoError(t, err)
+	root, err := blinded.HashTreeRoot()
+	require.NoError(t, err)
+	sig, signingRoot, err := signer.SignBeaconObject(spectypes.SSZ32Bytes(root), domain, keySet.Shares[opID].GetPublicKey().Serialize(), spectypes.DomainBeaconBuilder)
+	require.NoError(t, err)
+	blsSig := phase0.BLSSignature{}
+	copy(blsSig[:], sig)
+	return &spectypes.PartialSignatureMessages{
+		Type: spectypes.EnvelopePartialSig,
+		Slot: slot,
+		Messages: []*spectypes.PartialSignatureMessage{{
+			PartialSignature: blsSig[:],
+			SigningRoot:      signingRoot,
+			Signer:           opID,
+			ValidatorIndex:   spectestingutils.TestingValidatorIndex,
+		}},
+	}
+}
+
+func decodeDissemination(t *testing.T, msg *spectypes.SignedSSVMessage) *spectypes.EnvelopeDissemination {
+	t.Helper()
+	require.Equal(t, spectypes.SSVEnvelopeDisseminationMsgType, msg.SSVMessage.MsgType)
+	dissemination := &spectypes.EnvelopeDissemination{}
+	require.NoError(t, dissemination.Decode(msg.SSVMessage.Data))
+	return dissemination
+}
+
+func decodePartialSig(t *testing.T, msg *spectypes.SignedSSVMessage) *spectypes.PartialSignatureMessages {
+	t.Helper()
+	require.Equal(t, spectypes.SSVPartialSignatureMsgType, msg.SSVMessage.MsgType)
+	msgs := &spectypes.PartialSignatureMessages{}
+	require.NoError(t, msgs.Decode(msg.SSVMessage.Data))
+	return msgs
+}
+
+func TestNewEnvelopeProposerRunner_RequiresOneShare(t *testing.T) {
+	_, err := NewEnvelopeProposerRunner(EnvelopeProposerRunnerOptions{})
+	require.Error(t, err)
+}
+
+// The §4→§6 linkage store is read unconditionally, so it is required.
+func TestNewEnvelopeProposerRunner_RequiresProposedBlocks(t *testing.T) {
+	_, err := NewEnvelopeProposerRunner(EnvelopeProposerRunnerOptions{
+		BaseRunnerOptions: BaseRunnerOptions{
+			Share: map[phase0.ValidatorIndex]*spectypes.Share{3: {ValidatorIndex: 3}},
+		},
+	})
+	require.ErrorContains(t, err, "proposed blocks")
+}
+
+// The builder operator — its own produce response is the decided block — fetches its envelope,
+// disseminates the blinded form, and signs it in the same step.
+func TestEnvelopeProposerRunner_BuilderDisseminatesAndSigns(t *testing.T) {
+	const slot = phase0.Slot(8)
+	bn := newEnvelopeTestBeacon()
+	bn.envelope = sampleEnvelope()
+	r, _ := newEnvelopeProposerRunnerForTest(t, bn)
+	r.proposedBlocks.Record(slot, proposalFor(t, bn.envelope, true))
+
+	require.NoError(t, r.StartNewDuty(context.Background(), zap.NewNop(), envelopeDuty(slot), 3))
+
+	require.Equal(t, 1, bn.fetches)
+	require.Same(t, bn.envelope, r.producedEnvelope)
+	require.NotNil(t, r.selectedEnvelope)
+	require.True(t, r.builtSelectedEnvelope())
+
+	broadcast := broadcastMsgs(r)
+	require.Len(t, broadcast, 2, "one dissemination, then one partial signature")
+
+	dissemination := decodeDissemination(t, broadcast[0])
+	require.Equal(t, slot, dissemination.Slot)
+	wantPayloadRoot, err := bn.envelope.Payload.HashTreeRoot()
+	require.NoError(t, err)
+	require.Equal(t, phase0.Root(wantPayloadRoot), dissemination.Envelope.PayloadRoot)
+	require.Equal(t, bn.envelope.BeaconBlockRoot, dissemination.Envelope.BeaconBlockRoot)
+	require.Equal(t, uint64(gloas.BuilderIndexSelfBuild), uint64(dissemination.Envelope.BuilderIndex))
+
+	partial := decodePartialSig(t, broadcast[1])
+	require.Equal(t, spectypes.EnvelopePartialSig, partial.Type)
+	require.Equal(t, slot, partial.Slot)
+	require.Len(t, partial.Messages, 1)
+	selectedRoot, err := r.selectedEnvelope.HashTreeRoot()
+	require.NoError(t, err)
+	wantSigningRoot, err := spectypes.ComputeETHSigningRoot(spectypes.SSZ32Bytes(selectedRoot), mustDomain(t, r))
+	require.NoError(t, err)
+	require.Equal(t, wantSigningRoot, phase0.Root(partial.Messages[0].SigningRoot))
+}
+
+// A non-builder disseminates nothing: its beacon node did not build the decided block, so it neither
+// fetches nor signs until a peer's binding dissemination arrives.
+func TestEnvelopeProposerRunner_NonBuilderWaitsForDissemination(t *testing.T) {
+	const slot = phase0.Slot(8)
+	bn := newEnvelopeTestBeacon()
+	r, _ := newEnvelopeProposerRunnerForTest(t, bn)
+	r.proposedBlocks.Record(slot, proposalFor(t, sampleEnvelope(), false))
+
+	require.NoError(t, r.StartNewDuty(context.Background(), zap.NewNop(), envelopeDuty(slot), 3))
+
+	require.True(t, r.HasRunningDuty())
+	require.Zero(t, bn.fetches)
+	require.Nil(t, r.producedEnvelope)
+	require.Nil(t, r.selectedEnvelope)
+	require.Empty(t, broadcastMsgs(r))
+}
+
+// Without a recorded §4 decision the duty stays running and does nothing yet.
+func TestEnvelopeProposerRunner_NoDecisionYetWaits(t *testing.T) {
+	bn := newEnvelopeTestBeacon()
+	r, _ := newEnvelopeProposerRunnerForTest(t, bn)
+
+	require.NoError(t, r.StartNewDuty(context.Background(), zap.NewNop(), envelopeDuty(8), 3))
+
+	require.True(t, r.HasRunningDuty())
+	require.Zero(t, bn.fetches)
+	require.Empty(t, broadcastMsgs(r))
+}
+
+// The builder operator that cannot fetch its own envelope cannot disseminate; the duty fails.
+func TestEnvelopeProposerRunner_BuilderFetchFailureFailsDuty(t *testing.T) {
+	const slot = phase0.Slot(8)
+	bn := newEnvelopeTestBeacon()
+	bn.produceErr = errors.New("404 execution payload envelope not found")
+	r, _ := newEnvelopeProposerRunnerForTest(t, bn)
+	r.proposedBlocks.Record(slot, proposalFor(t, sampleEnvelope(), true))
+
+	err := r.StartNewDuty(context.Background(), zap.NewNop(), envelopeDuty(slot), 3)
+	require.ErrorContains(t, err, "get execution payload envelope")
+	require.Empty(t, broadcastMsgs(r))
+}
+
+// Content-based selection: the first dissemination that binds to the §4 decision is signed; non-binding
+// ones are skipped, and later ones are ignored once an envelope is selected.
+func TestEnvelopeProposerRunner_ProcessEnvelopeDisseminationSelectsFirstBinding(t *testing.T) {
+	const slot = phase0.Slot(8)
+	ctx, logger := context.Background(), zap.NewNop()
+	envelope := sampleEnvelope()
+	bn := newEnvelopeTestBeacon()
+	r, _ := newEnvelopeProposerRunnerForTest(t, bn)
+	r.proposedBlocks.Record(slot, proposalFor(t, envelope, false))
+	require.NoError(t, r.StartNewDuty(ctx, logger, envelopeDuty(slot), 3))
+
+	binding, err := gloas.Blinded(envelope)
+	require.NoError(t, err)
+
+	// A well-formed dissemination for another block does not bind: skipped without selecting.
+	nonBinding, err := gloas.Blinded(envelope)
+	require.NoError(t, err)
+	nonBinding.BeaconBlockRoot = phase0.Root{0xcc}
+	msg, dissemination := disseminationMsg(t, slot, nonBinding, 2)
+	require.NoError(t, r.ProcessEnvelopeDissemination(ctx, logger, msg, dissemination))
+	require.Nil(t, r.selectedEnvelope)
+	require.Empty(t, broadcastMsgs(r))
+
+	// The binding one is selected and signed.
+	msg, dissemination = disseminationMsg(t, slot, binding, 2)
+	require.NoError(t, r.ProcessEnvelopeDissemination(ctx, logger, msg, dissemination))
+	require.Equal(t, binding, r.selectedEnvelope)
+	require.Len(t, broadcastMsgs(r), 1)
+	require.Equal(t, spectypes.EnvelopePartialSig, decodePartialSig(t, broadcastMsgs(r)[0]).Type)
+
+	// A later binding dissemination with a different PayloadRoot is ignored: selection is first-binding.
+	later, err := gloas.Blinded(envelope)
+	require.NoError(t, err)
+	later.PayloadRoot = phase0.Root{0x10}
+	msg, dissemination = disseminationMsg(t, slot, later, 3)
+	require.NoError(t, r.ProcessEnvelopeDissemination(ctx, logger, msg, dissemination))
+	require.Equal(t, binding, r.selectedEnvelope)
+	require.Len(t, broadcastMsgs(r), 1)
+}
+
+// A dissemination that arrives before the duty started, or before this operator's block instance
+// decided, is retried rather than dropped: the builder broadcasts it once.
+func TestEnvelopeProposerRunner_ProcessEnvelopeDisseminationRetries(t *testing.T) {
+	const slot = phase0.Slot(8)
+	ctx, logger := context.Background(), zap.NewNop()
 	envelope := sampleEnvelope()
 	blinded, err := gloas.Blinded(envelope)
 	require.NoError(t, err)
-	decided, err := blinded.Encode()
+	bn := newEnvelopeTestBeacon()
+	r, _ := newEnvelopeProposerRunnerForTest(t, bn)
+
+	// Before the duty starts.
+	msg, dissemination := disseminationMsg(t, slot, blinded, 2)
+	err = r.ProcessEnvelopeDissemination(ctx, logger, msg, dissemination)
+	require.True(t, IsRetryable(err))
+	require.ErrorIs(t, err, ErrNoDutyAssigned)
+
+	// Started, but §4 has not decided on this operator yet.
+	require.NoError(t, r.StartNewDuty(ctx, logger, envelopeDuty(slot), 3))
+	err = r.ProcessEnvelopeDissemination(ctx, logger, msg, dissemination)
+	require.True(t, IsRetryable(err))
+	require.ErrorIs(t, err, errEnvelopeProposalNotDecided)
+	require.Nil(t, r.selectedEnvelope)
+
+	// Once the decision lands, the retried dissemination is selected.
+	r.proposedBlocks.Record(slot, proposalFor(t, envelope, false))
+	require.NoError(t, r.ProcessEnvelopeDissemination(ctx, logger, msg, dissemination))
+	require.Equal(t, blinded, r.selectedEnvelope)
+
+	// A dissemination for a later duty is retried; one for a slot behind us is dropped.
+	future, futureDissemination := disseminationMsg(t, slot+1, blinded, 2)
+	err = r.ProcessEnvelopeDissemination(ctx, logger, future, futureDissemination)
+	require.True(t, IsRetryable(err))
+	require.ErrorIs(t, err, ErrFuturePartialSigMsg)
+	past, pastDissemination := disseminationMsg(t, slot-1, blinded, 2)
+	require.NoError(t, r.ProcessEnvelopeDissemination(ctx, logger, past, pastDissemination))
+}
+
+// A peer's partial signature that arrives before this operator selected an envelope has no expected
+// root yet; it is retried rather than dropped.
+func TestEnvelopeProposerRunner_PartialSignatureBeforeSelectionRetries(t *testing.T) {
+	const slot = phase0.Slot(8)
+	ctx, logger := context.Background(), zap.NewNop()
+	envelope := sampleEnvelope()
+	blinded, err := gloas.Blinded(envelope)
 	require.NoError(t, err)
+	bn := newEnvelopeTestBeacon()
+	r, keySet := newEnvelopeProposerRunnerForTest(t, bn)
+	r.proposedBlocks.Record(slot, proposalFor(t, envelope, false))
+	require.NoError(t, r.StartNewDuty(ctx, logger, envelopeDuty(slot), 3))
 
-	r := &EnvelopeProposerRunner{cachedEnvelope: envelope}
-	require.True(t, r.builtDecidedEnvelope(decided))       // our cached envelope blinds to the decided value
-	require.False(t, r.builtDecidedEnvelope([]byte{0x01})) // a different decided value
+	err = r.ProcessPreConsensus(ctx, logger, envelopePartialSig(t, keySet, blinded, slot, 2))
+	require.True(t, IsRetryable(err))
+	require.ErrorIs(t, err, errNoSelectedEnvelope)
+}
 
-	r.cachedEnvelope = nil
-	require.False(t, r.builtDecidedEnvelope(decided)) // nothing cached (e.g. after a round change)
+// On quorum the builder operator reconstructs the signature and publishes the full envelope carrying it.
+func TestEnvelopeProposerRunner_QuorumBuilderPublishes(t *testing.T) {
+	const slot = phase0.Slot(8)
+	ctx, logger := context.Background(), zap.NewNop()
+	bn := newEnvelopeTestBeacon()
+	bn.envelope = sampleEnvelope()
+	r, keySet := newEnvelopeProposerRunnerForTest(t, bn)
+	r.proposedBlocks.Record(slot, proposalFor(t, bn.envelope, true))
+	require.NoError(t, r.StartNewDuty(ctx, logger, envelopeDuty(slot), keySet.Threshold))
+
+	for opID := spectypes.OperatorID(1); opID <= keySet.Threshold; opID++ {
+		require.NoError(t, r.ProcessPreConsensus(ctx, logger, envelopePartialSig(t, keySet, r.selectedEnvelope, slot, opID)))
+	}
+
+	require.Len(t, bn.submitted, 1)
+	require.Equal(t, bn.envelope, bn.submitted[0].Message)
+	require.NotEqual(t, phase0.BLSSignature{}, bn.submitted[0].Signature) // the reconstructed signature
+	require.True(t, r.State.Succeeded)
+}
+
+// A non-builder completes the duty on quorum without publishing: it holds no payload behind the root.
+func TestEnvelopeProposerRunner_QuorumNonBuilderDoesNotPublish(t *testing.T) {
+	const slot = phase0.Slot(8)
+	ctx, logger := context.Background(), zap.NewNop()
+	envelope := sampleEnvelope()
+	blinded, err := gloas.Blinded(envelope)
+	require.NoError(t, err)
+	bn := newEnvelopeTestBeacon()
+	r, keySet := newEnvelopeProposerRunnerForTest(t, bn)
+	r.proposedBlocks.Record(slot, proposalFor(t, envelope, false))
+	require.NoError(t, r.StartNewDuty(ctx, logger, envelopeDuty(slot), keySet.Threshold))
+
+	msg, dissemination := disseminationMsg(t, slot, blinded, 2)
+	require.NoError(t, r.ProcessEnvelopeDissemination(ctx, logger, msg, dissemination))
+	for opID := spectypes.OperatorID(1); opID <= keySet.Threshold; opID++ {
+		require.NoError(t, r.ProcessPreConsensus(ctx, logger, envelopePartialSig(t, keySet, blinded, slot, opID)))
+	}
+
+	require.Empty(t, bn.submitted)
+	require.False(t, r.builtSelectedEnvelope())
+	require.True(t, r.State.Succeeded)
+}
+
+// The signing target is the selected blinded envelope's root under DOMAIN_BEACON_BUILDER — equal to the
+// full envelope's root, so the reconstructed signature is valid for the full envelope.
+func TestEnvelopeProposerRunner_ExpectedPreConsensusRootsAndDomain(t *testing.T) {
+	r := &EnvelopeProposerRunner{BaseRunner: &BaseRunner{}}
+	_, _, err := r.expectedPreConsensusRootsAndDomain()
+	require.ErrorIs(t, err, errNoSelectedEnvelope)
+
+	envelope := sampleEnvelope()
+	blinded, err := gloas.Blinded(envelope)
+	require.NoError(t, err)
+	r.selectedEnvelope = blinded
+
+	roots, domain, err := r.expectedPreConsensusRootsAndDomain()
+	require.NoError(t, err)
+	require.Equal(t, phase0.DomainType(spectypes.DomainBeaconBuilder), domain)
+	require.Len(t, roots, 1)
+	got, err := roots[0].HashTreeRoot()
+	require.NoError(t, err)
+	want, err := envelope.HashTreeRoot()
+	require.NoError(t, err)
+	require.Equal(t, want, got)
+}
+
+// The envelope duty has neither a consensus nor a post-consensus phase.
+func TestEnvelopeProposerRunner_NoConsensusPhases(t *testing.T) {
+	r := &EnvelopeProposerRunner{BaseRunner: &BaseRunner{}}
+	require.Error(t, r.ProcessConsensus(context.Background(), zap.NewNop(), &spectypes.SignedSSVMessage{}))
+	require.Error(t, r.ProcessPostConsensus(context.Background(), zap.NewNop(), &spectypes.PartialSignatureMessages{}))
+	_, _, err := r.expectedPostConsensusRootsAndDomain(context.Background())
+	require.Error(t, err)
+}
+
+// mustDomain returns the beacon domain the runner signs the envelope under.
+func mustDomain(t *testing.T, r *EnvelopeProposerRunner) phase0.Domain {
+	t.Helper()
+	domain, err := r.beacon.DomainData(context.Background(), 1, phase0.DomainType(spectypes.DomainBeaconBuilder))
+	require.NoError(t, err)
+	return domain
 }

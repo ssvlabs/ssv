@@ -133,12 +133,10 @@ func New(ctx context.Context, beaconConfig *networkconfig.Beacon, role spectypes
 
 // RoundRelativeRole reports whether the role's QBFT round timeouts are relative to the instance's
 // start rather than synchronized to the slot: the proposer (round-relative until
-// https://github.com/ssvlabs/ssv/issues/2429) and the §6 envelope proposer, whose instance only
-// starts once the §4 block is published — typically well past QuickTimeout into the slot, where a
-// slot-anchored timer would already be negative and time round 1 out on arrival. Message validation
-// keys its round-spread exemption off this same predicate, so the two stay in step.
+// https://github.com/ssvlabs/ssv/issues/2429). Message validation keys its round-spread exemption off
+// this same predicate, so the two stay in step.
 func RoundRelativeRole(role spectypes.RunnerRole) bool {
-	return role == spectypes.RoleProposer || role == spectypes.RoleEnvelopeProposer
+	return role == spectypes.RoleProposer
 }
 
 // RoundTimeout returns the duration to wait before timing out the given round.
@@ -153,8 +151,8 @@ func RoundRelativeRole(role spectypes.RunnerRole) bool {
 // (attester/sync-committee) or two intervals (aggregator/sync-contribution/aggregator-committee);
 // IntervalDuration is 1/3 of the slot before Gloas, 1/4 from Gloas on (SIP #94 §1).
 func (t *RoundTimer) RoundTimeout(round specqbft.Round) time.Duration {
-	// Proposer and envelope-proposer round timeouts are relative to QBFT instance start time, not slot
-	// start time (see RoundRelativeRole).
+	// Proposer round timeouts are relative to QBFT instance start time, not slot start time (see
+	// RoundRelativeRole).
 	if RoundRelativeRole(t.role) {
 		if round <= QuickTimeoutThreshold {
 			return QuickTimeout

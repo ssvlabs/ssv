@@ -9,31 +9,54 @@ import (
 	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
-
-	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
-	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
-// EnvelopeProposerRunner runs the §6 execution-payload-envelope-signing duty (SIP #94 §6,
-// RoleEnvelopeProposer=9). It is a second QBFT instance for the proposer's slot, started by the proposer
-// only on the self-build path (external builders sign their own envelopes). The flow mirrors the proposer
-// minus pre-consensus: executeDuty produces a BlindedExecutionPayloadEnvelope and runs QBFT over it — or,
-// when this operator's beacon node did not build the block and so cannot produce the envelope, joins the
-// QBFT instance as a voter; ProcessConsensus signs the decided blinded root under DOMAIN_BEACON_BUILDER
-// and broadcasts a post-consensus partial signature; ProcessPostConsensus reconstructs the BLS signature
-// and the builder publishes the full envelope.
+var (
+	_ Runner                         = (*EnvelopeProposerRunner)(nil)
+	_ EnvelopeDisseminationProcessor = (*EnvelopeProposerRunner)(nil)
+)
+
+var (
+	// errEnvelopeProposalNotDecided means this operator's §4 block instance has not decided the slot yet,
+	// so it cannot bind a disseminated envelope; the message is retried until the decision lands.
+	errEnvelopeProposalNotDecided = errors.New("no §4 decision recorded for the envelope slot yet")
+	// errNoSelectedEnvelope means this operator has not selected an envelope to sign yet (no binding
+	// dissemination has arrived), so it has no expected root to validate partial signatures against.
+	errNoSelectedEnvelope = errors.New("no selected envelope")
+)
+
+// EnvelopeDisseminationProcessor is implemented by the runner that consumes
+// SSVEnvelopeDisseminationMsgType messages (SIP #94 §6): the validator routes a decoded dissemination
+// to it alongside the runner's partial-signature traffic.
+type EnvelopeDisseminationProcessor interface {
+	ProcessEnvelopeDissemination(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.SignedSSVMessage, dissemination *spectypes.EnvelopeDissemination) error
+}
+
+// EnvelopeProposerRunner runs the §6 execution-payload-envelope signing duty (SIP #94 §6,
+// RoleEnvelopeProposer=9) for the self-build proposer. It has NO consensus phase: once §4 decides,
+// bid.block_hash pins exactly one valid envelope, so there is nothing to negotiate. The flow is one
+// dissemination round plus one threshold-signing round:
+//
+//  1. The builder operator — the one whose own produceBlockV4 response is the §4-decided block, and so
+//     the only one whose beacon node holds the payload — fetches its envelope, disseminates the blinded
+//     form (SSVEnvelopeDisseminationMsgType), and signs it.
+//  2. Every other operator content-selects the first disseminated envelope that binds to its own §4
+//     decision (ssv.ProposedBlock.Binds), skipping any that do not, and signs its root under
+//     DOMAIN_BEACON_BUILDER as an EnvelopePartialSig. The single signing round reuses the pre-consensus
+//     container, the same shape as the PTC and proposer-preferences runners.
+//  3. On quorum every operator reconstructs the signature; only the builder operator, whose produced
+//     envelope blinds to the selected one, publishes the full SignedExecutionPayloadEnvelope.
 type EnvelopeProposerRunner struct {
 	*BaseRunner
 
@@ -41,56 +64,51 @@ type EnvelopeProposerRunner struct {
 	network        protocolp2p.Network
 	signer         ekm.BeaconSigner
 	operatorSigner ssvtypes.OperatorSigner
-	measurements   *dutyMeasurements
 
-	// ValCheck validates the QBFT value (the blinded envelope). It is slot-specific (it matches the §4
-	// root recorded for the duty's slot), so it is rebuilt per duty in executeDuty — as the committee
-	// runner rebuilds its vote check — rather than fixed at construction.
-	ValCheck ssv.ValueChecker
+	// proposedBlocks is the §4→§6 linkage store the proposer runner writes: the duty binds disseminated
+	// envelopes against the slot's decision recorded here.
+	proposedBlocks *ssv.ProposedBlocks
 
-	// proposedBlockRoots gives executeDuty the §4-decided block root for the slot (the envelope's
-	// BeaconBlockRoot), recorded by the proposer runner. Shared with ValCheck, which checks the same root.
-	proposedBlockRoots *ssv.ProposedBlockRoots
-
-	// cachedEnvelope holds the full envelope this operator fetched in produce. Post-consensus content-matches
-	// it against the decided blinded value to detect whether this operator built it — only that operator
-	// publishes the full SignedExecutionPayloadEnvelope.
-	cachedEnvelope *gloas.ExecutionPayloadEnvelope
+	// producedEnvelope is the full envelope this operator's beacon node built, held only by the builder
+	// operator (nil otherwise) — the publish body; producedBlinded is its blinded form, compared against
+	// the selected envelope to decide whether this operator publishes.
+	producedEnvelope *gloas.ExecutionPayloadEnvelope
+	producedBlinded  *gloas.BlindedExecutionPayloadEnvelope
+	// selectedEnvelope is the disseminated envelope this operator chose to sign — the first arrival that
+	// binds to its §4 decision. Incoming partial signatures are validated against its root; nil until
+	// selection, so peers' partials are retried rather than dropped until then.
+	selectedEnvelope *gloas.BlindedExecutionPayloadEnvelope
 }
 
 // EnvelopeProposerRunnerOptions bundles the dependencies required by NewEnvelopeProposerRunner.
 type EnvelopeProposerRunnerOptions struct {
 	BaseRunnerOptions
 
-	QBFTController     *controller.Controller
-	ProposedBlockRoots *ssv.ProposedBlockRoots
-	HighestDecidedSlot phase0.Slot
+	// ProposedBlocks is the §4→§6 linkage store shared with the validator's proposer runner.
+	ProposedBlocks *ssv.ProposedBlocks
 }
 
 func NewEnvelopeProposerRunner(opts EnvelopeProposerRunnerOptions) (Runner, error) {
 	if len(opts.Share) != 1 {
 		return nil, errors.New("must have one share")
 	}
-	if opts.ProposedBlockRoots == nil {
-		// executeDuty and the value-check read the §4 root from it unconditionally.
-		return nil, errors.New("must have a proposed block roots store")
+	if opts.ProposedBlocks == nil {
+		// executeDuty and the binding checks read the §4 decision from it unconditionally.
+		return nil, errors.New("must have a proposed blocks store")
 	}
 
 	return &EnvelopeProposerRunner{
 		BaseRunner: &BaseRunner{
-			RunnerRoleType:     spectypes.RoleEnvelopeProposer,
-			NetworkConfig:      opts.NetworkConfig,
-			Share:              opts.Share,
-			QBFTController:     opts.QBFTController,
-			highestDecidedSlot: opts.HighestDecidedSlot,
+			RunnerRoleType: spectypes.RoleEnvelopeProposer,
+			NetworkConfig:  opts.NetworkConfig,
+			Share:          opts.Share,
 		},
 
-		beacon:             opts.Beacon,
-		network:            opts.Network,
-		signer:             opts.Signer,
-		operatorSigner:     opts.OperatorSigner,
-		measurements:       newMeasurementsStore(),
-		proposedBlockRoots: opts.ProposedBlockRoots,
+		beacon:         opts.Beacon,
+		network:        opts.Network,
+		signer:         opts.Signer,
+		operatorSigner: opts.OperatorSigner,
+		proposedBlocks: opts.ProposedBlocks,
 	}, nil
 }
 
@@ -99,75 +117,115 @@ func (r *EnvelopeProposerRunner) StartNewDuty(ctx context.Context, logger *zap.L
 	if err != nil {
 		return err
 	}
-	return r.baseStartNewDuty(ctx, logger, r, validatorDuty, quorum)
+	// Clear any prior duty's envelopes; executeDuty re-derives them, so a non-builder stays nil.
+	r.producedEnvelope, r.producedBlinded, r.selectedEnvelope = nil, nil, nil
+	return r.baseStartNewNonBeaconDuty(ctx, logger, r, validatorDuty, quorum)
 }
 
-// ProcessPreConsensus is unreachable: the envelope duty has no pre-consensus phase.
-func (r *EnvelopeProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
-	return errors.New("no pre-consensus phase for envelope proposer")
-}
-
-func (r *EnvelopeProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.SignedSSVMessage) error {
-	// Reuse the existing span instead of generating a new one to keep tracing-data lightweight.
-	span := trace.SpanFromContext(ctx)
-
-	decided, decidedValue, err := r.baseConsensusMsgProcessing(ctx, logger, r.ValCheck.CheckValue, signedMsg, &gloas.EnvelopeConsensusData{})
+// executeDuty runs the builder operator's side of the duty (SIP #94 §6): with the slot's §4 decision
+// recorded and this operator's own produce response being the decided block, it fetches the envelope
+// its beacon node built, disseminates the blinded form, and signs it. Every other operator disseminates
+// nothing and signs only a binding dissemination it later receives (ProcessEnvelopeDissemination).
+func (r *EnvelopeProposerRunner) executeDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty) error {
+	validatorDuty, err := validatorDutyFromDuty(duty)
 	if err != nil {
-		return fmt.Errorf("failed processing consensus message: %w", err)
+		return err
 	}
-	// Decided returns true only once, so it is for the current running instance.
-	if !decided {
+	slot := validatorDuty.DutySlot()
+
+	proposal, ok := r.proposedBlocks.Get(slot)
+	if !ok {
+		// The duty is started by the proposer after the §4 decision, so this is unexpected; stay running
+		// so a dissemination can still be bound once the decision is recorded.
+		logger.Debug("no §4 decision recorded for the envelope slot yet, waiting for a dissemination", fields.Slot(slot))
+		return nil
+	}
+	if !proposal.ProducedLocally {
+		// Only the beacon node that built the decided block holds its payload, so on a cluster whose
+		// operators run separate beacon nodes every non-builder waits for the builder's dissemination.
+		logger.Debug("not the builder operator for this slot, waiting for the builder's dissemination", fields.Slot(slot))
 		return nil
 	}
 
-	r.measurements.EndConsensus()
-	recordConsensusDuration(ctx, r.measurements.ConsensusTime(), spectypes.RoleEnvelopeProposer)
-
-	cd := decidedValue.(*gloas.EnvelopeConsensusData)
-
-	blinded := &gloas.BlindedExecutionPayloadEnvelope{}
-	if err := blinded.Decode(cd.DataSSZ); err != nil {
-		return fmt.Errorf("could not decode blinded envelope from consensus data: %w", err)
+	envelope, err := r.beacon.GetExecutionPayloadEnvelope(ctx, slot, proposal.BlockRoot)
+	if err != nil {
+		// The builder operator is the only one that can disseminate, so without its envelope the cluster
+		// misses the slot's reveal (bounded, non-slashable; SIP #94 Security Considerations).
+		return fmt.Errorf("get execution payload envelope: %w", err)
 	}
+	blinded, err := gloas.Blinded(envelope)
+	if err != nil {
+		return fmt.Errorf("blind execution payload envelope: %w", err)
+	}
+	r.producedEnvelope, r.producedBlinded = envelope, blinded
 
+	if err := r.disseminate(ctx, slot, blinded); err != nil {
+		return fmt.Errorf("disseminate envelope: %w", err)
+	}
+	logger.Debug("disseminated execution payload envelope", fields.Slot(slot))
+
+	// The builder operator's own envelope binds by construction; anything else is a beacon-node bug.
+	if !proposal.Binds(blinded) {
+		return errors.New("own execution payload envelope does not bind to the decided block")
+	}
+	return r.selectAndSign(ctx, logger, validatorDuty, blinded)
+}
+
+// ProcessEnvelopeDissemination handles a disseminated blinded envelope (SIP #94 §6): it selects the first
+// arrival that binds to this operator's §4 decision and signs it. Non-binding disseminations are skipped
+// (the binding checks are runner concerns, not validation rules, so they carry no peer penalty), and
+// further disseminations are ignored once an envelope is selected. A dissemination that arrives before
+// the duty started, or before this operator's block instance decided, is retried rather than dropped: the
+// builder broadcasts it once, so there may be no later copy.
+func (r *EnvelopeProposerRunner) ProcessEnvelopeDissemination(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.SignedSSVMessage, dissemination *spectypes.EnvelopeDissemination) error {
+	if !r.hasDutyAssigned() {
+		return NewRetryableError(ErrNoDutyAssigned)
+	}
 	duty, err := r.currentValidatorDuty()
 	if err != nil {
 		return fmt.Errorf("current validator duty: %w", err)
 	}
-
-	// The blinded envelope's root equals the full envelope's, so this signature is valid for the full
-	// SignedExecutionPayloadEnvelope. Signed under DOMAIN_BEACON_BUILDER (not DOMAIN_PROPOSER).
-	span.AddEvent("signing blinded envelope")
-	msg, err := signBeaconObject(ctx, r, r.NetworkConfig, duty, blinded, cd.Duty.Slot, spectypes.DomainBeaconBuilder)
-	if err != nil {
-		return fmt.Errorf("failed signing blinded envelope: %w", err)
+	switch {
+	case dissemination.Slot > duty.Slot:
+		return NewRetryableError(ErrFuturePartialSigMsg) // for a later duty this operator has not started yet
+	case dissemination.Slot < duty.Slot:
+		return nil // stale, for a slot already behind us
+	}
+	if r.hasDutySucceeded() || r.selectedEnvelope != nil {
+		return nil // the slot's duty is done or already has its envelope
 	}
 
-	postConsensusMsg := &spectypes.PartialSignatureMessages{
-		Type:     spectypes.PostConsensusPartialSig,
-		Slot:     cd.Duty.Slot,
-		Messages: []*spectypes.PartialSignatureMessage{msg},
+	proposal, ok := r.proposedBlocks.Get(duty.Slot)
+	if !ok {
+		return NewRetryableError(errEnvelopeProposalNotDecided)
 	}
 
-	r.measurements.StartPostConsensus()
-	span.AddEvent("broadcasting post-consensus partial signature message")
-	if err := r.signAndBroadcastPostConsensusMsg(r.GetNetwork(), r.operatorSigner, r.GetShare().ValidatorPubKey, postConsensusMsg); err != nil {
-		return fmt.Errorf("can't broadcast partial post-consensus sig: %w", err)
+	// Content-based selection: sign the first disseminated envelope that binds to the §4 decision,
+	// skipping any that fail (SIP #94 §6).
+	if !proposal.Binds(dissemination.Envelope) {
+		logger.Debug("skipping disseminated envelope that does not bind to the decided block",
+			fields.Slot(duty.Slot), zap.Uint64s("signers", signedMsg.OperatorIDs))
+		return nil
 	}
-
-	return nil
+	return r.selectAndSign(ctx, logger, duty, dissemination.Envelope)
 }
 
-func (r *EnvelopeProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) (err error) {
-	// Reuse the existing span instead of generating a new one to keep tracing-data lightweight.
-	span := trace.SpanFromContext(ctx)
+// ProcessPreConsensus runs the single threshold-signing round: it collects EnvelopePartialSig partial
+// signatures over the selected envelope's root and, on quorum, reconstructs the signature. Only the
+// builder operator, whose produced envelope blinds to the selected one, publishes the reveal.
+func (r *EnvelopeProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) (err error) {
+	if r.hasDutyAssigned() && !r.hasDutySucceeded() && r.selectedEnvelope == nil {
+		// A peer's partial can arrive before this operator has selected an envelope to validate it
+		// against (its dissemination or §4 decision is still in flight): retry rather than drop.
+		return NewRetryableError(errNoSelectedEnvelope)
+	}
 
-	hasQuorum, roots, err := r.basePostConsensusMsgProcessing(ctx, logger, r, signedMsg)
+	hasQuorum, roots, err := r.basePreConsensusMsgProcessing(ctx, logger, r, signedMsg)
 	if errors.Is(err, ErrNoDutyAssigned) || errors.Is(err, ErrRunningDutySucceeded) {
 		err = NewRetryableError(err)
 	}
 	if err != nil {
-		return fmt.Errorf("failed processing post-consensus message: %w", err)
+		return fmt.Errorf("failed processing envelope partial signature message: %w", err)
 	}
 	if !hasQuorum {
 		return nil
@@ -181,185 +239,153 @@ func (r *EnvelopeProposerRunner) ProcessPostConsensus(ctx context.Context, logge
 		}
 	}()
 
-	r.measurements.EndPostConsensus()
-	recordPostConsensusDuration(ctx, r.measurements.PostConsensusTime(), spectypes.RoleEnvelopeProposer)
+	duty, err := r.currentValidatorDuty()
+	if err != nil {
+		return fmt.Errorf("current validator duty: %w", err)
+	}
 
-	// only 1 root, verified by expectedPostConsensusRootsAndDomain
+	// only 1 root, verified in basePreConsensusMsgProcessing
 	root := roots[0]
-
-	sig, err := r.State.ReconstructBeaconSig(r.State.PostConsensusContainer, root, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
+	fullSig, err := r.State.ReconstructBeaconSig(r.State.PreConsensusContainer, root, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
 	if err != nil {
-		// If the reconstructed signature verification failed, fall back to verifying each partial signature.
-		r.FallBackAndVerifyEachSignature(r.State.PostConsensusContainer, root, r.GetShare().Committee, r.GetShare().ValidatorIndex)
-		return fmt.Errorf("got post-consensus quorum but it has invalid signatures: %w", err)
+		// If the reconstructed signature is invalid, surface which partial signatures were at fault.
+		r.FallBackAndVerifyEachSignature(r.State.PreConsensusContainer, root, r.GetShare().Committee, r.GetShare().ValidatorIndex)
+		return fmt.Errorf("got envelope signing quorum but it has invalid signatures: %w", err)
 	}
-	specSig := phase0.BLSSignature{}
-	copy(specSig[:], sig)
+	var signature phase0.BLSSignature
+	copy(signature[:], fullSig)
 
-	cd := &gloas.EnvelopeConsensusData{}
-	if err := cd.Decode(r.State.DecidedValue); err != nil {
-		return fmt.Errorf("could not decode decided envelope consensus data: %w", err)
-	}
-
-	span.AddEvent("submitting execution payload envelope")
-	return r.submitEnvelope(ctx, logger, cd, specSig)
-}
-
-// submitEnvelope publishes the signed execution-payload envelope. Only the operator whose cached envelope
-// blinds to the decided value (content match) holds the full bytes to publish; the others just complete the
-// duty. Unlike the §4 block path — where the bid-only block is itself the decided value, so every operator
-// holds and re-submits it — the envelope's decided value is blinded; only its builder holds the full payload
-// bytes, so content-match publication keeps a non-builder (whose cachedEnvelope is nil) from broadcasting an
-// empty envelope.
-func (r *EnvelopeProposerRunner) submitEnvelope(ctx context.Context, logger *zap.Logger, cd *gloas.EnvelopeConsensusData, sig phase0.BLSSignature) error {
-	builtIt := r.builtDecidedEnvelope(cd.DataSSZ)
-	recordEnvelopeBuildMatch(ctx, builtIt)
-	if builtIt {
-		signed := &gloas.SignedExecutionPayloadEnvelope{Message: r.cachedEnvelope, Signature: sig}
-		if err := r.GetBeaconNode().SubmitExecutionPayloadEnvelope(ctx, signed); err != nil {
-			recordFailedSubmission(ctx, spectypes.BNRoleEnvelopeProposer)
-			const errMsg = "could not submit execution payload envelope"
-			logger.Error(errMsg, fields.Slot(cd.Duty.Slot), zap.Error(err))
-			return fmt.Errorf("%s: %w", errMsg, err)
-		}
-		recordSuccessfulSubmission(ctx, 1, r.NetworkConfig.EstimatedEpochAtSlot(cd.Duty.Slot), spectypes.BNRoleEnvelopeProposer)
-		logger.Info("✅ published execution payload envelope", fields.Slot(cd.Duty.Slot))
-	} else {
-		logger.Debug("this operator did not build the decided envelope, skipping publication", fields.Slot(cd.Duty.Slot))
-	}
-
-	r.markDutySucceeded()
-	r.measurements.EndDutyFlow()
-	return nil
-}
-
-// builtDecidedEnvelope reports whether this operator's cached envelope blinds to the decided value — i.e.
-// it produced the agreed envelope and so holds the full bytes to publish.
-func (r *EnvelopeProposerRunner) builtDecidedEnvelope(decidedDataSSZ []byte) bool {
-	if r.cachedEnvelope == nil {
-		return false
-	}
-	blinded, err := gloas.Blinded(r.cachedEnvelope)
-	if err != nil {
-		return false
-	}
-	blindedSSZ, err := blinded.Encode()
-	if err != nil {
-		return false
-	}
-	return bytes.Equal(blindedSSZ, decidedDataSSZ)
-}
-
-func (r *EnvelopeProposerRunner) executeDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty) error {
-	r.measurements.StartDutyFlow()
-	r.cachedEnvelope = nil // drop any envelope cached for a prior duty
-
-	validatorDuty, err := validatorDutyFromDuty(duty)
-	if err != nil {
-		return err
-	}
-	slot := validatorDuty.DutySlot()
-
-	// The §6 value-check is slot-specific (it matches the §4 root recorded for this slot), so rebuild it
-	// per duty — as the committee runner does for its vote check — before starting QBFT.
-	share := r.GetShare()
-	r.ValCheck = ssv.NewEnvelopeChecker(r.proposedBlockRoots, slot, share.ValidatorPubKey, share.ValidatorIndex)
-
-	// The envelope commits to the §4-decided block, so the proposer must have decided and recorded its root.
-	beaconBlockRoot, ok := r.proposedBlockRoots.Get(slot)
-	if !ok {
-		return fmt.Errorf("no decided block root recorded for envelope slot %d", slot)
-	}
-
-	input, err := r.produceBlindedEnvelope(ctx, validatorDuty, beaconBlockRoot)
-	r.measurements.StartConsensus()
-	if err != nil {
-		// Only the beacon node that built the decided §4 block holds its payload, so on a cluster whose
-		// operators run separate beacon nodes every non-builder's produce fails here (typically a 404).
-		// That operator still has a part in the round: it joins the QBFT instance as a voter — validating
-		// the builder's proposal against the §4-decided root and contributing its votes and post-consensus
-		// partial signature — but proposes nothing of its own. The round therefore relies on the builder
-		// leading it, which holds for round 1 whenever §4 decided in round 1 (the same operator leads both
-		// instances); on a round change a voter re-proposes only an already-prepared value.
-		logger.Debug("could not produce the execution payload envelope, joining the envelope round as a voter",
-			fields.Slot(slot), zap.Error(err))
-		if err := r.joinConsensus(ctx, logger, slot, r.ValCheck); err != nil {
-			return fmt.Errorf("qbft-join: %w", err)
-		}
+	// Publish by content match: only the builder operator holds the full envelope behind the selected
+	// blinded value; everyone else completes the duty without publishing (SIP #94 §6).
+	built := r.builtSelectedEnvelope()
+	recordEnvelopeBuildMatch(ctx, built)
+	if !built {
+		logger.Debug("envelope signature reconstructed; this operator did not build the envelope, not publishing", fields.Slot(duty.Slot))
+		r.markDutySucceeded()
 		return nil
 	}
-	logger.Debug("built execution payload envelope", fields.Slot(slot))
 
-	if err := r.decide(ctx, logger, slot, input, r.ValCheck); err != nil {
-		return fmt.Errorf("qbft-decide: %w", err)
+	signed := &gloas.SignedExecutionPayloadEnvelope{Message: r.producedEnvelope, Signature: signature}
+	if err := r.beacon.SubmitExecutionPayloadEnvelope(ctx, signed); err != nil {
+		recordFailedSubmission(ctx, spectypes.BNRoleEnvelopeProposer)
+		const errMsg = "could not submit execution payload envelope"
+		logger.Error(errMsg, fields.Slot(duty.Slot), zap.Error(err))
+		return fmt.Errorf("%s: %w", errMsg, err)
 	}
+	recordSuccessfulSubmission(ctx, 1, r.NetworkConfig.EstimatedEpochAtSlot(duty.Slot), spectypes.BNRoleEnvelopeProposer)
+	r.markDutySucceeded()
+	logger.Info("✅ published execution payload envelope", fields.Slot(duty.Slot))
 	return nil
 }
 
-// produceBlindedEnvelope fetches this operator's execution-payload envelope for the slot, caches the full
-// envelope for the later content-matched publish, and wraps its blinded form as the QBFT value.
-func (r *EnvelopeProposerRunner) produceBlindedEnvelope(ctx context.Context, duty *spectypes.ValidatorDuty, beaconBlockRoot phase0.Root) (*gloas.EnvelopeConsensusData, error) {
-	envelope, err := r.GetBeaconNode().GetExecutionPayloadEnvelope(ctx, duty.DutySlot(), beaconBlockRoot)
-	if err != nil {
-		return nil, fmt.Errorf("get execution payload envelope: %w", err)
-	}
-	r.cachedEnvelope = envelope
-
-	blinded, err := gloas.Blinded(envelope)
-	if err != nil {
-		return nil, err
-	}
-	dataSSZ, err := blinded.Encode()
-	if err != nil {
-		return nil, fmt.Errorf("encode blinded envelope: %w", err)
-	}
-	return &gloas.EnvelopeConsensusData{
-		Duty:    *duty,
-		Version: networkconfig.DataVersionGloas,
-		DataSSZ: dataSSZ,
-	}, nil
+func (r *EnvelopeProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.SignedSSVMessage) error {
+	return errors.New("no consensus phase for envelope proposer")
 }
 
-// expectedPreConsensusRootsAndDomain is unreachable: the envelope duty has no pre-consensus phase.
+func (r *EnvelopeProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
+	return errors.New("no post-consensus phase for envelope proposer")
+}
+
+// expectedPreConsensusRootsAndDomain returns the selected envelope's root under DOMAIN_BEACON_BUILDER:
+// by root-equivalence it is the full envelope's signing root, so peers' partials over it are valid for
+// the reveal. With nothing selected there is no expected root, and ProcessPreConsensus retries instead.
 func (r *EnvelopeProposerRunner) expectedPreConsensusRootsAndDomain() ([]spectypes.HashRoot, phase0.DomainType, error) {
-	return nil, spectypes.DomainError, errors.New("no pre-consensus phase for envelope proposer")
+	if r.selectedEnvelope == nil {
+		return nil, spectypes.DomainError, errNoSelectedEnvelope
+	}
+	return []spectypes.HashRoot{r.selectedEnvelope}, phase0.DomainType(spectypes.DomainBeaconBuilder), nil
 }
 
 func (r *EnvelopeProposerRunner) expectedPostConsensusRootsAndDomain(context.Context) ([]spectypes.HashRoot, phase0.DomainType, error) {
-	cd := &gloas.EnvelopeConsensusData{}
-	if err := cd.Decode(r.State.DecidedValue); err != nil {
-		return nil, phase0.DomainType{}, fmt.Errorf("could not decode envelope consensus data: %w", err)
-	}
-	blinded := &gloas.BlindedExecutionPayloadEnvelope{}
-	if err := blinded.Decode(cd.DataSSZ); err != nil {
-		return nil, phase0.DomainType{}, fmt.Errorf("could not decode blinded envelope: %w", err)
-	}
-	return []spectypes.HashRoot{blinded}, spectypes.DomainBeaconBuilder, nil
+	return nil, spectypes.DomainError, errors.New("no post-consensus roots for envelope proposer")
 }
 
-func (r *EnvelopeProposerRunner) GetNetwork() protocolp2p.Network {
-	return r.network
+// selectAndSign records the envelope this operator signs, signs its progressive root under
+// DOMAIN_BEACON_BUILDER (domain epoch = the duty slot's epoch), and broadcasts the EnvelopePartialSig.
+func (r *EnvelopeProposerRunner) selectAndSign(ctx context.Context, logger *zap.Logger, duty *spectypes.ValidatorDuty, envelope *gloas.BlindedExecutionPayloadEnvelope) error {
+	r.selectedEnvelope = envelope
+
+	msg, err := signBeaconObject(ctx, r, r.NetworkConfig, duty, envelope, duty.Slot, phase0.DomainType(spectypes.DomainBeaconBuilder))
+	if err != nil {
+		return fmt.Errorf("could not sign blinded envelope: %w", err)
+	}
+	msgs := &spectypes.PartialSignatureMessages{
+		Type:     spectypes.EnvelopePartialSig,
+		Slot:     duty.Slot,
+		Messages: []*spectypes.PartialSignatureMessage{msg},
+	}
+	if err := r.signAndBroadcastPartialSigMsgs(ctx, r.network, r.operatorSigner, r.GetShare().ValidatorPubKey, msgs); err != nil {
+		return fmt.Errorf("could not sign/broadcast envelope partial sig: %w", err)
+	}
+	logger.Debug("selected and signed execution payload envelope", fields.Slot(duty.Slot))
+	return nil
 }
 
-func (r *EnvelopeProposerRunner) GetBeaconNode() beacon.BeaconNode {
-	return r.beacon
+// disseminate broadcasts the blinded envelope as an SSVEnvelopeDisseminationMsgType message, operator-signed
+// and routed like the role's partial-signature traffic (SIP #94 §6).
+func (r *EnvelopeProposerRunner) disseminate(ctx context.Context, slot phase0.Slot, envelope *gloas.BlindedExecutionPayloadEnvelope) error {
+	dissemination := &spectypes.EnvelopeDissemination{Slot: slot, Envelope: envelope}
+	data, err := dissemination.Encode()
+	if err != nil {
+		return fmt.Errorf("could not encode envelope dissemination: %w", err)
+	}
+
+	msgID := spectypes.NewValidatorMsgID(r.NetworkConfig.DomainTypeAtSlot(slot), r.GetShare().ValidatorPubKey, r.RunnerRoleType)
+	ssvMsg := &spectypes.SSVMessage{
+		MsgType: spectypes.SSVEnvelopeDisseminationMsgType,
+		MsgID:   msgID,
+		Data:    data,
+	}
+	sig, err := r.operatorSigner.SignSSVMessage(ssvMsg)
+	if err != nil {
+		return fmt.Errorf("could not sign SSVMessage: %w", err)
+	}
+	signed := &spectypes.SignedSSVMessage{
+		Signatures:  [][]byte{sig},
+		OperatorIDs: []spectypes.OperatorID{r.operatorSigner.GetOperatorID()},
+		SSVMessage:  ssvMsg,
+	}
+	if err := r.network.BroadcastAtSlot(signed, slot); err != nil {
+		return fmt.Errorf("could not broadcast envelope dissemination: %w", err)
+	}
+	return nil
 }
+
+// builtSelectedEnvelope reports whether this operator's own produced envelope blinds to the selected one —
+// the publish-by-content-match: only the builder operator holds the payload behind the reconstructed
+// signature.
+func (r *EnvelopeProposerRunner) builtSelectedEnvelope() bool {
+	if r.producedBlinded == nil || r.selectedEnvelope == nil {
+		return false
+	}
+	produced, err := r.producedBlinded.Encode()
+	if err != nil {
+		return false
+	}
+	selected, err := r.selectedEnvelope.Encode()
+	if err != nil {
+		return false
+	}
+	return bytes.Equal(produced, selected)
+}
+
+func (r *EnvelopeProposerRunner) GetNetwork() protocolp2p.Network { return r.network }
+
+func (r *EnvelopeProposerRunner) GetBeaconNode() beacon.BeaconNode { return r.beacon }
 
 func (r *EnvelopeProposerRunner) GetShare() *spectypes.Share {
+	// there is only one share
 	for _, share := range r.Share {
 		return share
 	}
 	return nil
 }
 
-func (r *EnvelopeProposerRunner) GetSigner() ekm.BeaconSigner {
-	return r.signer
-}
+func (r *EnvelopeProposerRunner) GetSigner() ekm.BeaconSigner { return r.signer }
 
-func (r *EnvelopeProposerRunner) GetOperatorSigner() ssvtypes.OperatorSigner {
-	return r.operatorSigner
-}
+func (r *EnvelopeProposerRunner) GetOperatorSigner() ssvtypes.OperatorSigner { return r.operatorSigner }
 
+// Only BaseRunner is persisted; the produced/selected envelopes are transient per-duty state.
 func (r *EnvelopeProposerRunner) MarshalJSON() ([]byte, error) {
 	return marshalRunnerStateJSON(r.BaseRunner)
 }
@@ -370,7 +396,6 @@ func (r *EnvelopeProposerRunner) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	r.BaseRunner = br
-	r.ValCheck = nil
 	return nil
 }
 

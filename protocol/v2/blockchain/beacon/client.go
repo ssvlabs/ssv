@@ -122,12 +122,12 @@ type GloasProposerCalls interface {
 }
 
 // GloasEnvelopeCalls is the beacon-node surface for the §6 execution-payload envelope (SIP #94 §6):
-// fetching the payload the proposer committed to (self-build) and publishing the signed envelope as its
-// blinded form. Like the block calls, these are hand-rolled over HTTP against the merged beacon-APIs#580
+// fetching the payload the proposer committed to (self-build) and publishing the threshold-signed
+// envelope. Like the block calls, these are hand-rolled over HTTP against the merged beacon-APIs#580
 // endpoints.
 type GloasEnvelopeCalls interface {
 	// GetExecutionPayloadEnvelope fetches the execution-payload envelope for the proposer's committed
-	// block, to be blinded, agreed in §6 QBFT, and signed.
+	// block from the beacon node that built it, to be blinded, disseminated, and threshold-signed.
 	GetExecutionPayloadEnvelope(ctx context.Context, slot phase0.Slot, beaconBlockRoot phase0.Root) (*gloas.ExecutionPayloadEnvelope, error)
 	// SubmitExecutionPayloadEnvelope publishes the signed envelope.
 	SubmitExecutionPayloadEnvelope(ctx context.Context, signed *gloas.SignedExecutionPayloadEnvelope) error
