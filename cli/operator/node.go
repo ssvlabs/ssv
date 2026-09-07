@@ -49,6 +49,7 @@ import (
 	qbftcontroller "github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 	"github.com/ssvlabs/ssv/qa/faultnet"
 	"github.com/ssvlabs/ssv/qa/faults"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
@@ -217,6 +218,20 @@ type node struct {
 	operatorNode        *operator.Node
 }
 
+// applyBuilderFault gives the faulted operator one synthetic direct-builder entry so it broadcasts
+// request-auth partials (type 9) that the rest of the cluster, which has none configured, must
+// hard-fail with "no builders configured" (MSG-10). A real configuration is never overwritten.
+func applyBuilderFault(cfg *gloas.BuilderConfig) bool {
+	if !faults.Is(faults.AuthNoBuilders) || len(cfg.Entries) > 0 {
+		return false
+	}
+	cfg.Entries = []gloas.BuilderEntry{{
+		URL:      "http://qa-fault-builder.invalid",
+		AuthData: "0x0102030405060708",
+	}}
+	return true
+}
+
 // newNode wires the node's components from config + the injected beacon/EL clients. On any
 // error it closes whatever it already opened (db/p2p) via the error-only defers below; on
 // success the returned *node owns those closers, released via node.close(). Goroutines wired
@@ -240,6 +255,10 @@ func newNode(
 	}
 	faults.Init(fault)
 	faults.Banner(logger)
+
+	if applyBuilderFault(&cfg.Builders) {
+		faults.Fired(logger, zap.String("builder_url", cfg.Builders.Entries[0].URL))
+	}
 
 	usingSSVSigner := res.usingSSVSigner
 
