@@ -44,23 +44,51 @@ func (n *Network) BroadcastAtSlot(msg *spectypes.SignedSSVMessage, slot phase0.S
 func (n *Network) dispatch(out []Outgoing) error {
 	for i := range out {
 		o := out[i]
-		if o.Delay > 0 {
-			go func() {
-				time.Sleep(o.Delay)
-				if err := n.send(o); err != nil {
-					n.logger.Warn("qa fault: delayed send failed", zap.Error(err))
-				}
-			}()
+		if o.Delay > 0 || o.Repeat > 0 {
+			go n.sendAsync(o)
 			continue
 		}
-		if err := n.send(o); err != nil {
+		if err := n.send(o, true); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (n *Network) send(o Outgoing) error {
+// sendAsync serves the delayed and repeated sends. It is fire-and-forget: a failure is logged, not
+// returned, because the caller has already handed off the honest message.
+//
+// A repeated series (prefs-replay sends up to replayCount+1 copies) announces only its first send;
+// intermediate sends stay silent, and one summary line closes the series out, whether it ran to
+// completion or was cut short by a send error, so the record shows how many actually went out
+// without emitting one Warn line per repeat.
+func (n *Network) sendAsync(o Outgoing) {
+	if o.Delay > 0 {
+		time.Sleep(o.Delay)
+	}
+	sent := 0
+	for i := 0; i <= o.Repeat; i++ {
+		if i > 0 && o.Every > 0 {
+			time.Sleep(o.Every)
+		}
+		if err := n.send(o, i == 0); err != nil {
+			n.logger.Warn("qa fault: asynchronous send failed", zap.Error(err))
+			break
+		}
+		sent++
+	}
+	if o.Repeat > 0 {
+		n.logger.Warn("🧪 qa fault: repeated send series finished",
+			zap.String("qa_fault", string(faults.Active())),
+			zap.Int("sent", sent),
+			zap.Int("planned", o.Repeat+1))
+	}
+}
+
+// send re-signs and broadcasts o. announce controls whether a fired Resign send is logged: a
+// repeated series wants only its first send announced, with sendAsync's summary line carrying the
+// rest; every other caller passes true.
+func (n *Network) send(o Outgoing, announce bool) error {
 	if o.Resign {
 		sig, err := n.signer.SignSSVMessage(o.Msg.SSVMessage)
 		if err != nil {
@@ -68,9 +96,11 @@ func (n *Network) send(o Outgoing) error {
 		}
 		o.Msg.Signatures = [][]byte{sig}
 		o.Msg.OperatorIDs = []spectypes.OperatorID{n.signer.GetOperatorID()}
-		faults.Fired(n.logger,
-			zap.Uint64("slot", uint64(o.Slot)),
-			zap.String("role", o.Msg.SSVMessage.GetID().GetRoleType().String()))
+		if announce {
+			faults.Fired(n.logger,
+				zap.Uint64("slot", uint64(o.Slot)),
+				zap.String("role", o.Msg.SSVMessage.GetID().GetRoleType().String()))
+		}
 	}
 	return n.P2PNetwork.BroadcastAtSlot(o.Msg, o.Slot)
 }

@@ -26,6 +26,10 @@ type Outgoing struct {
 	Slot   phase0.Slot
 	Delay  time.Duration
 	Resign bool
+	// Repeat is how many extra times to send this message after the first, Every apart. Used by
+	// prefs-replay; zero everywhere else.
+	Repeat int
+	Every  time.Duration
 }
 
 // Plan returns what to send in place of msg. slot is the slot the caller passed to
@@ -39,7 +43,15 @@ func Plan(f faults.Fault, msg *spectypes.SignedSSVMessage, slot, now phase0.Slot
 	}
 
 	switch f {
-	// Tasks 7, 8 and 10 add their cases here.
+	case faults.Prefs5Roots:
+		return prefs5Roots(msg, slot)
+	case faults.PrefsEarly:
+		return prefsShift(msg, slot, now, true)
+	case faults.PrefsLate:
+		return prefsShift(msg, slot, now, false)
+	case faults.PrefsReplay:
+		return prefsReplay(msg, slot)
+	// Task 8 adds its cases here.
 	default:
 		return identity
 	}
@@ -84,4 +96,116 @@ func setPartialBody(msg *spectypes.SignedSSVMessage, body *spectypes.PartialSign
 	}
 	msg.SSVMessage.Data = data
 	return nil
+}
+
+// Replay shape for FLT-11: 66 slots of coverage at 20 messages per second.
+const (
+	replayEvery = 50 * time.Millisecond
+	replayCount = 66 * 12 * 1000 / 50 // 66 slots of 12 s, one message every 50 ms
+)
+
+// prefsEarlySlots is one slot past the 64-slot preference lookahead allowance
+// (message/validation/const.go proposerPreferencesEarlyEpochs = 2 epochs).
+const prefsEarlySlots = 2*32 + 1
+
+// prefsLateSlots is one slot past the 2-slot preference lateness allowance
+// (message/validation/const.go LateSlotAllowance = 2).
+const prefsLateSlots = 3
+
+// isPrefs reports whether msg is this node's own proposer-preferences partial.
+func isPrefs(msg *spectypes.SignedSSVMessage) *spectypes.PartialSignatureMessages {
+	body := partialBody(msg)
+	if body == nil || body.Type != spectypes.ProposerPreferencesPartialSig || len(body.Messages) == 0 {
+		return nil
+	}
+	return body
+}
+
+// prefs5Roots presents five distinct signing roots for one (slot, signer) against a budget of four
+// (MSG-05, FLT-07).
+func prefs5Roots(msg *spectypes.SignedSSVMessage, slot phase0.Slot) []Outgoing {
+	if isPrefs(msg) == nil {
+		return []Outgoing{{Msg: msg, Slot: slot}}
+	}
+
+	out := []Outgoing{{Msg: msg, Slot: slot}}
+	for i := 1; i <= 4; i++ {
+		c, err := Clone(msg)
+		if err != nil {
+			continue
+		}
+		body := partialBody(c)
+		if body == nil {
+			continue
+		}
+		body.Messages[0].SigningRoot[0] ^= byte(i)
+		if err := setPartialBody(c, body); err != nil {
+			continue
+		}
+		out = append(out, Outgoing{Msg: c, Slot: slot, Resign: true})
+	}
+	return out
+}
+
+// prefsShift sends an extra copy whose payload slot is offset from the current slot, so the honest
+// message still reaches quorum while the copy proves the earliness or lateness reason (MSG-04).
+func prefsShift(msg *spectypes.SignedSSVMessage, slot, now phase0.Slot, ahead bool) []Outgoing {
+	identity := []Outgoing{{Msg: msg, Slot: slot}}
+	if isPrefs(msg) == nil {
+		return identity
+	}
+
+	var target phase0.Slot
+	if ahead {
+		target = now + prefsEarlySlots
+	} else {
+		if now < prefsLateSlots {
+			return identity
+		}
+		target = now - prefsLateSlots
+	}
+
+	c, err := Clone(msg)
+	if err != nil {
+		return identity
+	}
+	body := partialBody(c)
+	if body == nil {
+		return identity
+	}
+	body.Slot = target
+	if err := setPartialBody(c, body); err != nil {
+		return identity
+	}
+	// The topic keeps following the original slot: pre-Boole both slots resolve to the same subnet,
+	// and this keeps the fault about the slot in the payload, which is what validation reads.
+	return append(identity, Outgoing{Msg: c, Slot: slot, Resign: true})
+}
+
+// prefsReplay repeats one valid preference at a high rate for 66 slots (FLT-11). The signing root is
+// preserved — that is the rule under test — but the partial signature bytes are perturbed, because
+// gossipsub suppresses a byte-identical duplicate before it ever leaves this node, and validation
+// never inspects the partial signature.
+func prefsReplay(msg *spectypes.SignedSSVMessage, slot phase0.Slot) []Outgoing {
+	identity := []Outgoing{{Msg: msg, Slot: slot}}
+	if isPrefs(msg) == nil {
+		return identity
+	}
+
+	c, err := Clone(msg)
+	if err != nil {
+		return identity
+	}
+	body := partialBody(c)
+	if body == nil {
+		return identity
+	}
+	if len(body.Messages[0].PartialSignature) == 0 {
+		return identity
+	}
+	body.Messages[0].PartialSignature[0] ^= 0xff
+	if err := setPartialBody(c, body); err != nil {
+		return identity
+	}
+	return append(identity, Outgoing{Msg: c, Slot: slot, Resign: true, Repeat: replayCount, Every: replayEvery})
 }
