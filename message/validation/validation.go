@@ -406,9 +406,10 @@ func (mv *messageValidator) validatorState(key spectypes.MessageID, committeeInf
 	}
 
 	cs := &ValidatorState{
-		committeeID:     committeeInfo.committeeID,
-		operators:       make([]*OperatorState, len(committeeInfo.committee)),
-		storedSlotCount: mv.storedSlotCount(key.GetRoleType()),
+		committeeID:      committeeInfo.committeeID,
+		operators:        make([]*OperatorState, len(committeeInfo.committee)),
+		storedSlotCount:  mv.storedSlotCount(key.GetRoleType()),
+		storedEpochCount: mv.storedEpochCount(key.GetRoleType()),
 	}
 	mv.states.Set(key, cs, ttlcache.DefaultTTL)
 	return cs
@@ -428,4 +429,17 @@ func (mv *messageValidator) storedSlotCount(role spectypes.RunnerRole) uint64 {
 		return proposerPreferencesEarlyEpochs*mv.netCfg.SlotsPerEpoch + mv.maxStoredSlots()
 	}
 	return mv.maxStoredSlots()
+}
+
+// storedEpochCount returns how many epochs of per-signer duty counts a role retains. Counts must live as
+// long as any message they gate is acceptable (SIP #94 §7). Proposer preferences ride proposal slots up to
+// proposerPreferencesEarlyEpochs ahead and two slots behind, so their acceptable slots span the current
+// epoch, the lookahead epochs, and the tail of the previous one — four consecutive epochs at any instant.
+// Every other role's window is its lateness TTL, which crosses at most one epoch boundary: current and
+// previous.
+func (mv *messageValidator) storedEpochCount(role spectypes.RunnerRole) uint64 {
+	if role == spectypes.RoleProposerPreferences {
+		return proposerPreferencesEarlyEpochs + 2
+	}
+	return 2
 }

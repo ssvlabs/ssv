@@ -83,6 +83,54 @@ func TestStoredSlotCount_ProposerPreferences(t *testing.T) {
 		mv.storedSlotCount(spectypes.RoleProposerPreferences))
 }
 
+// Proposer preferences keep duty counts for the four epochs their acceptable slots span at once
+// (SIP #94 §7); every other role keeps the current and previous epoch.
+func TestStoredEpochCount(t *testing.T) {
+	mv := &messageValidator{netCfg: networkconfig.TestNetwork}
+	require.Equal(t, uint64(4), mv.storedEpochCount(spectypes.RoleProposerPreferences))
+	require.Equal(t, uint64(2), mv.storedEpochCount(spectypes.RoleProposer))
+	require.Equal(t, uint64(2), mv.storedEpochCount(spectypes.RoleCommittee))
+}
+
+// The per-epoch duty limit must count each epoch on its own when a lookahead epoch's preferences arrive
+// before the current epoch's (SIP #94 §7). With only a current and a previous bucket, every epoch older
+// than the newest but one shared the previous bucket, so a busy cluster's epoch-N preferences inflated
+// epoch N+1's count once N+2 had been seen, and honest N+1 preferences were IGNORE'd as over the limit.
+func TestValidateDutyCount_ProposerPreferencesAcrossLookaheadEpochs(t *testing.T) {
+	netCfg := networkconfig.TestNetwork
+	mv := &messageValidator{netCfg: netCfg}
+	role := spectypes.RoleProposerPreferences
+	msgID := ssvtestingutils.NewMsgID(spectypes.DomainType{}, make([]byte, 48), role)
+	os := newOperatorState(mv.storedSlotCount(role), mv.storedEpochCount(role))
+
+	const base = phase0.Epoch(100)
+	firstSlot := func(epoch phase0.Epoch) phase0.Slot { return phase0.Slot(uint64(epoch) * netCfg.SlotsPerEpoch) }
+	// accept mirrors what validation does for a duty's first accepted message: the count check, then the
+	// slot's state recorded and counted.
+	accept := func(slot phase0.Slot) {
+		require.NoError(t, mv.validateDutyCount(msgID, slot, nil, os))
+		os.SetSignerStateForSlot(slot, netCfg.EstimatedEpochAtSlot(slot), newSignerState(slot, specqbft.FirstRound))
+	}
+
+	// A cluster proposing in every slot: the lookahead epoch fills first, then the current epoch.
+	for i := range netCfg.SlotsPerEpoch {
+		accept(firstSlot(base+2) + phase0.Slot(i))
+	}
+	for i := range netCfg.SlotsPerEpoch {
+		accept(firstSlot(base) + phase0.Slot(i))
+	}
+	require.Equal(t, netCfg.SlotsPerEpoch, os.DutyCount(base+2))
+	require.Equal(t, netCfg.SlotsPerEpoch, os.DutyCount(base))
+	require.Zero(t, os.DutyCount(base+1))
+
+	// The epoch in between still has its whole budget, and the tail of the previous epoch counts too.
+	accept(firstSlot(base + 1))
+	accept(firstSlot(base) - 1)
+	require.Equal(t, uint64(1), os.DutyCount(base+1))
+	require.Equal(t, uint64(1), os.DutyCount(base-1))
+	require.Equal(t, netCfg.SlotsPerEpoch, os.DutyCount(base))
+}
+
 // Two proposal slots exactly one default-ring apart collide in the default ring but stay distinct in
 // the lookahead-sized proposer-preferences ring, keeping per-slot dedup exact.
 func TestProposerPreferencesRingAvoidsLookaheadCollision(t *testing.T) {
@@ -92,12 +140,12 @@ func TestProposerPreferencesRingAvoidsLookaheadCollision(t *testing.T) {
 	slotA := phase0.Slot(1000)
 	slotB := slotA + phase0.Slot(mv.maxStoredSlots()) // collides with slotA in the default ring
 
-	osDefault := newOperatorState(mv.maxStoredSlots())
+	osDefault := newOperatorState(mv.maxStoredSlots(), mv.storedEpochCount(spectypes.RoleProposer))
 	osDefault.SetSignerStateForSlot(slotA, 0, &SignerStateForSlotRound{Slot: slotA})
 	osDefault.SetSignerStateForSlot(slotB, 0, &SignerStateForSlotRound{Slot: slotB})
 	require.Nil(t, osDefault.GetSignerStateForSlot(slotA), "default ring should drop slotA on collision")
 
-	osPrefs := newOperatorState(mv.storedSlotCount(spectypes.RoleProposerPreferences))
+	osPrefs := newOperatorState(mv.storedSlotCount(spectypes.RoleProposerPreferences), mv.storedEpochCount(spectypes.RoleProposerPreferences))
 	osPrefs.SetSignerStateForSlot(slotA, 0, &SignerStateForSlotRound{Slot: slotA})
 	osPrefs.SetSignerStateForSlot(slotB, 0, &SignerStateForSlotRound{Slot: slotB})
 	require.NotNil(t, osPrefs.GetSignerStateForSlot(slotA))
