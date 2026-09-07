@@ -67,7 +67,7 @@ var menu = []Entry{
 	{DoubleVoteIndex, "ATT-04", "sign index 0 then index 1 for the same slot against the local signer", "protocol/v2/ssv/runner/committee.go signAttesterDuty"},
 	{PTCQBFT, "PTC-07, MSG-03", "send a QBFT consensus message under role 7", "qa/faultnet"},
 	{TwoEntries, "MSG-03", "send two entries in one role-7 partial-signature container", "qa/faultnet"},
-	{PTC3PerEpoch, "MSG-07", "send three PTC partials per validator per epoch", "qa/faultnet"},
+	{PTC3PerEpoch, "MSG-07", "send three PTC partials at three slots in one epoch; the two forged ones are refused by the per-epoch assignment gate", "qa/faultnet"},
 	{BlockWrongVersion, "PRO-07", "propose a Gloas block stamped with the Fulu data version", "protocol/v2/ssv/runner/proposer.go gloasConsensusData"},
 	{PrefsConflict, "PRF-07, FLT-07", "emit a preference whose fee recipient differs from the cluster's", "protocol/v2/ssv/runner/proposer_preferences.go buildProposerPreferences"},
 	{Prefs34Apart, "MSG-06", "alternate the preference root for proposal slots 34 slots apart", "protocol/v2/ssv/runner/proposer_preferences.go buildProposerPreferences"},

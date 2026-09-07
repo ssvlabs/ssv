@@ -293,18 +293,28 @@ func dupEntry(msg *spectypes.SignedSSVMessage, slot phase0.Slot) []Outgoing {
 	return []Outgoing{{Msg: c, Slot: slot, Resign: true}}
 }
 
-// ptcExtraSlots sends the same PTC partial for two more slots of the same epoch, taking the signer
-// to three PTC duties in one epoch against a limit of two (MSG-07).
+// ptcExtraSlots sends the honest PTC partial for slot S plus two forged copies for S+1 and S+2 of
+// the same epoch — three PTC partials, at three different slots, in one epoch (MSG-07).
 //
-// The extra copies go FORWARD in time, each delayed to arrive during its own slot — not backdated.
-// RolePTCAttester is a monotonic-slot role (message/validation/common_checks.go monotonicSlotRole):
-// once the honest message for slot S advances the signer's MaxSlot to S, a backdated copy for S-1 or
-// S-2 is refused at the monotonic-slot check (ErrSlotAlreadyAdvanced) before validateDutyCount is
-// ever reached. Slots S+1 and S+2 keep MaxSlot advancing, so that check passes; arriving during S+1
-// and S+2 respectively (via DelaySlots, converted to a real delay by the decorator, which holds the
-// network config Plan itself must stay free of) also satisfies role 7's zero earliness allowance, so
-// neither copy is early. That leaves three distinct duty slots signed in one epoch, which is what
-// exceeds the limit of two.
+// What this actually exercises: the §7 PTC assignment gate, not the per-epoch duty-count rule. A
+// validator holds exactly one PTC duty slot per epoch, so validateBeaconDuty's RolePTCAttester
+// branch (message/validation/common_checks.go:238) refuses both forged copies with ErrNoDuty — it
+// runs at message/validation/partial_validation.go:189, BEFORE validateDutyCount at
+// partial_validation.go:217, so the per-epoch limit check is never reached for either copy.
+// ErrTooManyDutiesPerEpoch for role 7 is reachable only across a genuine duty re-fetch (the limit
+// exists as "one duty per epoch plus a reorg margin", common_checks.go:131-136) — no sender-side
+// shape can trigger that, so this fault cannot exercise it. What it DOES prove is that the honest
+// side enforces the one-PTC-duty-per-epoch assignment correctly.
+//
+// Why forward and delayed rather than backdated or immediate: RolePTCAttester is a monotonic-slot
+// role (common_checks.go monotonicSlotRole) — once the honest message for slot S advances the
+// signer's MaxSlot to S, a backdated copy for S-1 or S-2 is refused at the monotonic-slot check
+// (ErrSlotAlreadyAdvanced) before it ever reaches the assignment gate this fault targets. Sending S+1
+// and S+2 keeps MaxSlot advancing, so that check passes. And role 7 has no earliness allowance
+// (common_checks.go earlySlotAllowance), so a copy for S+1 or S+2 sent immediately would be refused
+// as early instead of reaching the assignment gate; DelaySlots (converted to a real delay by the
+// decorator, which holds the network config Plan itself must stay free of) makes each copy arrive
+// during its own slot instead.
 func ptcExtraSlots(msg *spectypes.SignedSSVMessage, slot phase0.Slot) []Outgoing {
 	identity := []Outgoing{{Msg: msg, Slot: slot}}
 	if role(msg) != spectypes.RolePTCAttester || partialBody(msg) == nil {
@@ -313,7 +323,7 @@ func ptcExtraSlots(msg *spectypes.SignedSSVMessage, slot phase0.Slot) []Outgoing
 
 	epochStart := slot - slot%slotsPerEpoch
 	epochEnd := epochStart + slotsPerEpoch - 1
-	out := []Outgoing{{Msg: msg, Slot: slot}}
+	out := identity
 	for i := phase0.Slot(1); i <= 2; i++ {
 		if slot+i > epochEnd {
 			continue // no same-epoch room ahead of this slot yet
