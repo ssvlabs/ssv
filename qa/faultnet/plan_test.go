@@ -193,6 +193,11 @@ func TestPlanTwoEntries(t *testing.T) {
 	require.True(t, out[0].Resign)
 }
 
+// The two forged copies below are refused by the §7 PTC assignment gate (ErrNoDuty), not by the
+// per-epoch duty-count rule — a validator holds exactly one PTC duty slot per epoch, so that gate
+// fires before the count is ever checked. Do not "fix" this back to backdated slots: a backdated
+// copy dies on the monotonic-slot check instead, never reaching the assignment gate either. See
+// ptcExtraSlots's doc comment in plan.go.
 func TestPlanPTC3PerEpoch(t *testing.T) {
 	t.Run("two extra slots inside the same epoch", func(t *testing.T) {
 		// Slot 200 sits in epoch 6 (slots 192 to 223), so 201 and 202 are same-epoch.
