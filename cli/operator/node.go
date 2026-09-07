@@ -49,6 +49,7 @@ import (
 	qbftcontroller "github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/qa/faultnet"
 	"github.com/ssvlabs/ssv/qa/faults"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/ssvsigner"
@@ -439,7 +440,7 @@ func newNode(
 	valOpts.Context = ctx
 	valOpts.NetworkConfig = networkConfig
 	valOpts.DB = db
-	valOpts.Network = p2pNetwork
+	valOpts.Network = faultnet.Wrap(p2pNetwork, operatorSigner, networkConfig, logger)
 	valOpts.Beacon = consensusClient
 	valOpts.BeaconSigner = keyManager
 	valOpts.OperatorSigner = operatorSigner
