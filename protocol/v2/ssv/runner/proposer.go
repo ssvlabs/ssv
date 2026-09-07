@@ -31,6 +31,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
+	"github.com/ssvlabs/ssv/qa/faults"
 )
 
 type ProposerRunner struct {
@@ -332,11 +333,27 @@ func (r *ProposerRunner) gloasProposalInput(ctx context.Context, logger *zap.Log
 	logger.Info(eventMsg, logFields...)
 	trace.SpanFromContext(ctx).AddEvent(eventMsg)
 
+	if faults.Is(faults.BlockWrongVersion) {
+		// The leader validates its own proposal, so drop this node's check for the run.
+		r.ValCheck = faults.PermissiveValueCheck{}
+		faults.Fired(logger, fields.Slot(duty.Slot), zap.String("stamped_version", spec.DataVersionFulu.String()))
+	}
+
 	return &spectypes.ProposerConsensusData{
 		Duty:    *duty,
-		Version: networkconfig.DataVersionGloas,
+		Version: gloasBlockVersion(),
 		DataSSZ: byts,
 	}, nil
+}
+
+// gloasBlockVersion returns the data version stamped on a Gloas consensus value. QA fault menu
+// PRO-07 (block-wrong-version) stamps the previous fork instead, so the honest value check refuses
+// the proposal with a version-mismatch and the round changes.
+func gloasBlockVersion() spec.DataVersion {
+	if faults.Is(faults.BlockWrongVersion) {
+		return spec.DataVersionFulu
+	}
+	return networkconfig.DataVersionGloas
 }
 
 // gloasBuilderConfig assembles the produceBlockV4 POST body from the cluster's direct-builder config and
