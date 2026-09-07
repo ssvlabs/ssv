@@ -31,6 +31,11 @@ type Outgoing struct {
 	// prefs-replay; zero everywhere else.
 	Repeat int
 	Every  time.Duration
+	// DelaySlots is a delay expressed in slots rather than a duration, so a mutator that only knows
+	// slot arithmetic (ptc-3-per-epoch) can ask for "send N slots from now" without Plan reading the
+	// clock or a network config to convert it. The decorator — which already holds netCfg — turns
+	// this into an actual time.Duration added to Delay; see faultnet.go's dispatch.
+	DelaySlots int
 }
 
 // Plan returns what to send in place of msg. slot is the slot the caller passed to
@@ -256,6 +261,18 @@ func forgeConsensusMsg(msg *spectypes.SignedSSVMessage, slot phase0.Slot) []Outg
 
 // dupEntry puts two entries in a role-7 container, which the count rule allows only for committee
 // roles (MSG-03).
+//
+// It sends ONLY the forged clone, never the honest original: validatePartialSigMessagesByDutyLogic
+// checks validatePartialSignatureMessageLimit (the "already have a pre-consensus message for this
+// signer+slot" rule) before it ever reaches the entry-count rule this fault targets, but only when
+// a signerState already exists for that (signer, slot). Sending the honest message first would
+// create that state and make the honest side reject the forgery on the wrong rule
+// (ErrTooManyPartialSigMessage) instead of the one under test
+// (ErrTooManySignaturesInPartialSigMessage). With no signerState yet, validateSlotTime and
+// validateDutyCount pass and the entry-count check at the bottom of
+// validatePartialSigMessagesByDutyLogic is what fires. The cost is that this operator contributes no
+// honest PTC partial for the slot; pass M3 runs at size 7 (f=2), so quorum still forms from the other
+// six operators, and MSG-03's oracle is read on the honest side regardless.
 func dupEntry(msg *spectypes.SignedSSVMessage, slot phase0.Slot) []Outgoing {
 	identity := []Outgoing{{Msg: msg, Slot: slot}}
 	if role(msg) != spectypes.RolePTCAttester {
@@ -273,13 +290,21 @@ func dupEntry(msg *spectypes.SignedSSVMessage, slot phase0.Slot) []Outgoing {
 	if err := setPartialBody(c, body); err != nil {
 		return identity
 	}
-	return append(identity, Outgoing{Msg: c, Slot: slot, Resign: true})
+	return []Outgoing{{Msg: c, Slot: slot, Resign: true}}
 }
 
 // ptcExtraSlots sends the same PTC partial for two more slots of the same epoch, taking the signer
-// to three PTC duties in one epoch against a limit of two (MSG-07). The extra slots are behind the
-// current one: role 7 has no earliness allowance, so a future slot would be rejected as early
-// instead, and the lateness allowance of three slots covers both.
+// to three PTC duties in one epoch against a limit of two (MSG-07).
+//
+// The extra copies go FORWARD in time, each delayed to arrive during its own slot — not backdated.
+// RolePTCAttester is a monotonic-slot role (message/validation/common_checks.go monotonicSlotRole):
+// once the honest message for slot S advances the signer's MaxSlot to S, a backdated copy for S-1 or
+// S-2 is refused at the monotonic-slot check (ErrSlotAlreadyAdvanced) before validateDutyCount is
+// ever reached. Slots S+1 and S+2 keep MaxSlot advancing, so that check passes; arriving during S+1
+// and S+2 respectively (via DelaySlots, converted to a real delay by the decorator, which holds the
+// network config Plan itself must stay free of) also satisfies role 7's zero earliness allowance, so
+// neither copy is early. That leaves three distinct duty slots signed in one epoch, which is what
+// exceeds the limit of two.
 func ptcExtraSlots(msg *spectypes.SignedSSVMessage, slot phase0.Slot) []Outgoing {
 	identity := []Outgoing{{Msg: msg, Slot: slot}}
 	if role(msg) != spectypes.RolePTCAttester || partialBody(msg) == nil {
@@ -287,10 +312,11 @@ func ptcExtraSlots(msg *spectypes.SignedSSVMessage, slot phase0.Slot) []Outgoing
 	}
 
 	epochStart := slot - slot%slotsPerEpoch
-	out := identity
+	epochEnd := epochStart + slotsPerEpoch - 1
+	out := []Outgoing{{Msg: msg, Slot: slot}}
 	for i := phase0.Slot(1); i <= 2; i++ {
-		if slot < i || slot-i < epochStart {
-			continue // no same-epoch room behind this slot yet
+		if slot+i > epochEnd {
+			continue // no same-epoch room ahead of this slot yet
 		}
 		c, err := Clone(msg)
 		if err != nil {
@@ -300,7 +326,7 @@ func ptcExtraSlots(msg *spectypes.SignedSSVMessage, slot phase0.Slot) []Outgoing
 		if body == nil {
 			continue
 		}
-		body.Slot = slot - i
+		body.Slot = slot + i
 		// Vary the bytes so gossipsub does not suppress the copy as a duplicate. Validation never
 		// inspects the partial signature, so this does not change which rule the copy lands on.
 		if len(body.Messages[0].PartialSignature) == 0 {
@@ -310,7 +336,7 @@ func ptcExtraSlots(msg *spectypes.SignedSSVMessage, slot phase0.Slot) []Outgoing
 		if err := setPartialBody(c, body); err != nil {
 			continue
 		}
-		out = append(out, Outgoing{Msg: c, Slot: slot, Resign: true})
+		out = append(out, Outgoing{Msg: c, Slot: slot, Resign: true, DelaySlots: int(i)})
 	}
 	if len(out) != 3 {
 		return identity // all or nothing: two extra duties are what makes the third one the third

@@ -184,32 +184,48 @@ func TestPlanTwoEntries(t *testing.T) {
 
 	out := Plan(faults.TwoEntries, msg, 200, 200)
 
-	require.Len(t, out, 2)
-	require.Len(t, decodePartial(t, out[1].Msg).Messages, 2)
-	require.True(t, out[1].Resign)
+	// Only the forged clone is sent: sending the honest 1-entry message first would create signer
+	// state for (signer, slot) that trips the pre-consensus message-limit rule before the entry-count
+	// rule under test is ever reached. See dupEntry's doc comment.
+	require.Len(t, out, 1)
+	require.NotSame(t, msg, out[0].Msg, "must be a clone, not the original")
+	require.Len(t, decodePartial(t, out[0].Msg).Messages, 2)
+	require.True(t, out[0].Resign)
 }
 
 func TestPlanPTC3PerEpoch(t *testing.T) {
 	t.Run("two extra slots inside the same epoch", func(t *testing.T) {
-		// Slot 200 sits in epoch 6 (slots 192 to 223), so 199 and 198 are same-epoch and at most
-		// three slots late, which the PTC lateness allowance admits.
+		// Slot 200 sits in epoch 6 (slots 192 to 223), so 201 and 202 are same-epoch.
 		msg := partialMsg(t, spectypes.RolePTCAttester, 200)
 
 		out := Plan(faults.PTC3PerEpoch, msg, 200, 200)
 
 		require.Len(t, out, 3)
-		require.Equal(t, phase0.Slot(199), decodePartial(t, out[1].Msg).Slot)
-		require.Equal(t, phase0.Slot(198), decodePartial(t, out[2].Msg).Slot)
+		require.Same(t, msg, out[0].Msg, "the honest message is untouched")
+		require.False(t, out[0].Resign)
+
+		require.Equal(t, phase0.Slot(201), decodePartial(t, out[1].Msg).Slot)
+		require.Equal(t, 1, out[1].DelaySlots)
+		require.Equal(t, phase0.Slot(202), decodePartial(t, out[2].Msg).Slot)
+		require.Equal(t, 2, out[2].DelaySlots)
 		for _, o := range out[1:] {
 			require.True(t, o.Resign)
 		}
 	})
 
-	t.Run("no room at the start of an epoch", func(t *testing.T) {
-		// Slot 192 is the first of its epoch: 191 belongs to the previous one, and a future slot would
-		// be rejected as early rather than for the duty count, so the fault waits for a later slot.
-		msg := partialMsg(t, spectypes.RolePTCAttester, 192)
-		out := Plan(faults.PTC3PerEpoch, msg, 192, 192)
+	t.Run("no room at the end of an epoch", func(t *testing.T) {
+		// Slot 223 is the last slot of epoch 6 (192 to 223): neither 224 nor 225 is same-epoch, so
+		// the fault has no forward room and falls back to the honest message alone.
+		msg := partialMsg(t, spectypes.RolePTCAttester, 223)
+		out := Plan(faults.PTC3PerEpoch, msg, 223, 223)
+		require.Len(t, out, 1)
+	})
+
+	t.Run("room for only one extra slot", func(t *testing.T) {
+		// Slot 222 has room for 223 (same epoch) but not 224 (next epoch): all-or-nothing means
+		// neither extra copy is sent.
+		msg := partialMsg(t, spectypes.RolePTCAttester, 222)
+		out := Plan(faults.PTC3PerEpoch, msg, 222, 222)
 		require.Len(t, out, 1)
 	})
 }
