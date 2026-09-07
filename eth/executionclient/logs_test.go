@@ -83,3 +83,26 @@ func TestPackLogs(t *testing.T) {
 	assert.Equal(t, uint(0), result[0].Logs[0].TxIndex) // should be sorted
 	assert.Equal(t, uint(1), result[0].Logs[1].TxIndex)
 }
+
+// TestPackLogsOrdersByLogIndexWithinTransaction covers logs emitted by the same transaction
+// (same TxIndex, distinct logIndex) — e.g. bulkRegisterValidator, whose per-owner nonces require
+// in-order processing. They must be packed in logIndex order, not left in the arbitrary order a
+// non-stable sort by (block, tx) would leave them. Input is deliberately shuffled.
+func TestPackLogsOrdersByLogIndexWithinTransaction(t *testing.T) {
+	logs := []types.Log{
+		{BlockNumber: 5, TxIndex: 2, Index: 11},
+		{BlockNumber: 5, TxIndex: 2, Index: 9},
+		{BlockNumber: 5, TxIndex: 0, Index: 3}, // earlier tx in the same block
+		{BlockNumber: 5, TxIndex: 2, Index: 10},
+	}
+
+	result := PackLogs(logs)
+	assert.Len(t, result, 1)
+	assert.Equal(t, uint64(5), result[0].BlockNumber)
+
+	gotIndexes := make([]uint, 0, len(result[0].Logs))
+	for _, l := range result[0].Logs {
+		gotIndexes = append(gotIndexes, l.Index)
+	}
+	assert.Equal(t, []uint{3, 9, 10, 11}, gotIndexes)
+}
