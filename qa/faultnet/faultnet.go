@@ -44,6 +44,13 @@ func (n *Network) BroadcastAtSlot(msg *spectypes.SignedSSVMessage, slot phase0.S
 func (n *Network) dispatch(out []Outgoing) error {
 	for i := range out {
 		o := out[i]
+		// Plan stays pure — it can compute a slot offset (ptc-3-per-epoch) but must never read the
+		// clock or a network config to turn that into a duration. The decorator does that
+		// conversion here, where n.netCfg is already in scope, and folds it into Delay so the rest
+		// of dispatch/sendAsync only ever deals in durations.
+		if o.DelaySlots > 0 {
+			o.Delay += time.Duration(o.DelaySlots) * n.netCfg.SlotDuration
+		}
 		if o.Delay > 0 || o.Repeat > 0 {
 			go n.sendAsync(o)
 			continue
