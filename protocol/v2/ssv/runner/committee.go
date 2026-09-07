@@ -513,6 +513,29 @@ func (r *CommitteeRunner) signAttesterDuty(
 		zap.String("signature", hex.EncodeToString(partialMsg.PartialSignature[:])),
 	)
 
+	// QA fault menu ATT-04: after the honest signature, ask the signer for a second signature over the
+	// same slot with the other payload-status index. The local slashing protection must refuse it with
+	// "slashable attestation (...), not signing" (ssvsigner/ekm/slashing_protector.go:91). The second
+	// signature is deliberately discarded: this card tests the signer, not the wire.
+	if faults.Is(faults.DoubleVoteIndex) && gloasAttestationIndex != nil {
+		second := flipAttestationIndex(*gloasAttestationIndex)
+		secondData := constructAttestationData(beaconVote, validatorDuty, version, &second)
+		_, secondErr := signBeaconObject(
+			ctx,
+			r,
+			r.NetworkConfig,
+			validatorDuty,
+			secondData,
+			validatorDuty.DutySlot(),
+			spectypes.DomainAttester,
+		)
+		faults.Fired(logger,
+			fields.Slot(validatorDuty.DutySlot()),
+			zap.Uint64("first_index", uint64(*gloasAttestationIndex)),
+			zap.Uint64("second_index", uint64(second)),
+			zap.NamedError("second_sign_err", secondErr))
+	}
+
 	return false, partialMsg, nil
 }
 
@@ -1275,14 +1298,18 @@ func applyGloasVoteFault(logger *zap.Logger, vote *gloas.GloasBeaconVote, slot p
 	case faults.Is(faults.VoteIndexFlip):
 		// FLT-05: the wrong but valid index. The honest nodes must accept it by design, so the honest
 		// value check stays in place — this fault measures the on-chain consequence, not a rejection.
-		if vote.AttestationDataIndex == 0 {
-			vote.AttestationDataIndex = 1
-		} else {
-			vote.AttestationDataIndex = 0
-		}
+		vote.AttestationDataIndex = flipAttestationIndex(vote.AttestationDataIndex)
 		fired(zap.Uint64("attestation_data_index", uint64(vote.AttestationDataIndex)))
 		return vote, false
 	}
 
 	return vote, false
+}
+
+// flipAttestationIndex returns the other valid payload-status index.
+func flipAttestationIndex(i phase0.CommitteeIndex) phase0.CommitteeIndex {
+	if i == 0 {
+		return 1
+	}
+	return 0
 }

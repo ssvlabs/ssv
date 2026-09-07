@@ -71,3 +71,11 @@ func TestApplyGloasVoteFault(t *testing.T) {
 		require.Equal(t, phase0.CommitteeIndex(0), back.AttestationDataIndex)
 	})
 }
+
+func TestFlipAttestationIndex(t *testing.T) {
+	require.Equal(t, phase0.CommitteeIndex(1), flipAttestationIndex(0))
+	require.Equal(t, phase0.CommitteeIndex(0), flipAttestationIndex(1))
+	// Anything outside the valid range maps to 0, so the second signature is always a genuine
+	// double vote on a well-formed value rather than a malformed one.
+	require.Equal(t, phase0.CommitteeIndex(0), flipAttestationIndex(7))
+}
