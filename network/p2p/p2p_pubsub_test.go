@@ -54,16 +54,22 @@ func (c *subscribeRandomsTopicsController) Close() error {
 
 var _ topics.Controller = (*subscribeRandomsTopicsController)(nil)
 
+// testNetworkWithBoole returns a copy of TestNetwork with the Boole fork set to booleEpoch,
+// leaving the shared global config untouched.
+func testNetworkWithBoole(booleEpoch phase0.Epoch) *networkconfig.Network {
+	cfg := *networkconfig.TestNetwork
+	beacon := *networkconfig.TestNetwork.Beacon
+	ssv := *networkconfig.TestNetwork.SSV
+	ssv.Forks.Boole = booleEpoch
+	cfg.Beacon = &beacon
+	cfg.SSV = &ssv
+	return &cfg
+}
+
 // subscribeRandomsTestNetCfg returns a NetworkConfig with Boole far enough in the future that
 // these tests exercise pre-fork (Alan-only) subscription behavior.
 func subscribeRandomsTestNetCfg() *networkconfig.Network {
-	cfg := *networkconfig.TestNetwork
-	beaconCfg := *networkconfig.TestNetwork.Beacon
-	ssvCfg := *networkconfig.TestNetwork.SSV
-	ssvCfg.Forks.Boole = cfg.EstimatedCurrentEpoch() + 100
-	cfg.Beacon = &beaconCfg
-	cfg.SSV = &ssvCfg
-	return &cfg
+	return testNetworkWithBoole(networkconfig.TestNetwork.EstimatedCurrentEpoch() + 100)
 }
 
 func TestSubscribeRandomsReturnsErrorWhenNotEnoughAvailableSubnets(t *testing.T) {
@@ -127,16 +133,6 @@ func TestSubscribeRandomsSubscribesOnlyAvailableSubnets(t *testing.T) {
 // transition window, Boole-only post-fork — for both the node's persistent subnets and its
 // active committee subscriptions.
 func TestSubscribedSubnetsForCurrentEpoch(t *testing.T) {
-	booleCfg := func(booleEpoch phase0.Epoch) *networkconfig.Network {
-		cfg := *networkconfig.TestNetwork
-		beaconCfg := *networkconfig.TestNetwork.Beacon
-		ssvCfg := *networkconfig.TestNetwork.SSV
-		ssvCfg.Forks.Boole = booleEpoch
-		cfg.Beacon = &beaconCfg
-		cfg.SSV = &ssvCfg
-		return &cfg
-	}
-
 	subnetsOf := func(indices ...uint64) commons.Subnets {
 		s := commons.ZeroSubnets
 		for _, i := range indices {
@@ -159,13 +155,13 @@ func TestSubscribedSubnetsForCurrentEpoch(t *testing.T) {
 	cur := networkconfig.TestNetwork.EstimatedCurrentEpoch()
 
 	t.Run("pre-fork subscribes Alan only", func(t *testing.T) {
-		alan, boole := newNet(booleCfg(cur + 100)).subscribedSubnetsForCurrentEpoch()
+		alan, boole := newNet(testNetworkWithBoole(cur + 100)).subscribedSubnetsForCurrentEpoch()
 		require.Equal(t, subnetsOf(1, 2, 5), alan)
 		require.Equal(t, commons.ZeroSubnets, boole)
 	})
 
 	t.Run("transition window subscribes both", func(t *testing.T) {
-		cfg := booleCfg(cur + 1)
+		cfg := testNetworkWithBoole(cur + 1)
 		require.True(t, cfg.InBooleTransitionWindow(cfg.EstimatedCurrentSlot()), "expected current slot in the Boole transition window")
 		alan, boole := newNet(cfg).subscribedSubnetsForCurrentEpoch()
 		require.Equal(t, subnetsOf(1, 2, 5), alan)
@@ -173,7 +169,7 @@ func TestSubscribedSubnetsForCurrentEpoch(t *testing.T) {
 	})
 
 	t.Run("post-fork subscribes Boole only", func(t *testing.T) {
-		alan, boole := newNet(booleCfg(0)).subscribedSubnetsForCurrentEpoch()
+		alan, boole := newNet(testNetworkWithBoole(0)).subscribedSubnetsForCurrentEpoch()
 		require.Equal(t, commons.ZeroSubnets, alan)
 		require.Equal(t, subnetsOf(1, 2, 7), boole)
 	})
