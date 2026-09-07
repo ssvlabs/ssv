@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"go.uber.org/zap"
 
@@ -18,6 +19,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
+	"github.com/ssvlabs/ssv/qa/faults"
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
@@ -494,7 +496,7 @@ func (r *proposerPreferencesSlotRunner) executeDuty(ctx context.Context, logger 
 	// none of its early-return paths can skip it; it never fails the duty.
 	r.runRequestAuthRound(ctx, logger, validatorDuty, proposalSlot)
 
-	preferences, err := r.buildProposerPreferences(ctx, proposalSlot)
+	preferences, err := r.buildProposerPreferences(ctx, logger, proposalSlot)
 	if err != nil {
 		// Building hits the beacon node (dependent-root fetch) and validator config (fee recipient);
 		// a failure there is operational, so record a failed duty to surface it in metrics.
@@ -557,13 +559,14 @@ func (r *proposerPreferencesSlotRunner) executeDuty(ctx context.Context, logger 
 // view: fee recipient and target gas limit from validator config (matching validator registration),
 // and the dependent_root of the proposer duties for the proposal slot's epoch — the seed that fixed
 // this proposal assignment (SIP #94 §5), fetched per-operator so convergence is over identical roots.
-func (r *proposerPreferencesSlotRunner) buildProposerPreferences(ctx context.Context, proposalSlot phase0.Slot) (*gloas.ProposerPreferences, error) {
+func (r *proposerPreferencesSlotRunner) buildProposerPreferences(ctx context.Context, logger *zap.Logger, proposalSlot phase0.Slot) (*gloas.ProposerPreferences, error) {
 	validatorPubKey := r.GetShare().ValidatorPubKey
 
 	feeRecipient, err := r.feeRecipientProvider.GetFeeRecipient(validatorPubKey)
 	if err != nil {
 		return nil, fmt.Errorf("could not get fee recipient for validator %x: %w", validatorPubKey, err)
 	}
+	feeRecipient = applyPreferenceFault(feeRecipient, proposalSlot)
 
 	gasLimit := r.gasLimit
 	if gasLimit == 0 {
@@ -582,6 +585,10 @@ func (r *proposerPreferencesSlotRunner) buildProposerPreferences(ctx context.Con
 	// scheduler re-emits only on a real change and message validation admits the new signing root — but a
 	// preference already published under a soon-to-change root is not retracted. Low severity (reorg-gated,
 	// §5 is observational); add a finality hold only if it bites on devnet.
+	if faults.Is(faults.PrefsConflict) || faults.Is(faults.Prefs34Apart) {
+		faults.Fired(logger, fields.Slot(proposalSlot), fields.FeeRecipient(feeRecipient[:]))
+	}
+
 	return &gloas.ProposerPreferences{
 		DependentRoot:  dependentRoot,
 		ProposalSlot:   proposalSlot,
@@ -589,6 +596,28 @@ func (r *proposerPreferencesSlotRunner) buildProposerPreferences(ctx context.Con
 		FeeRecipient:   feeRecipient,
 		TargetGasLimit: gasLimit,
 	}, nil
+}
+
+// applyPreferenceFault rewrites the fee recipient for the section 5 QA faults. Changing the fee
+// recipient changes the preference's signing root while keeping the message well formed and
+// genuinely signed, which is what PRF-07, FLT-07 and MSG-06 need.
+func applyPreferenceFault(fee bellatrix.ExecutionAddress, proposalSlot phase0.Slot) bellatrix.ExecutionAddress {
+	switch {
+	case faults.Is(faults.PrefsConflict):
+		// PRF-07, FLT-07: one fixed, obviously different address, so this operator's root never
+		// matches the cluster's and never reaches quorum.
+		fee[0] ^= 0xff
+		return fee
+
+	case faults.Is(faults.Prefs34Apart):
+		// MSG-06: derive the address from the proposal slot, so every proposal slot carries a distinct
+		// root and in particular two slots 34 apart differ. Deterministic, so a re-emission for the same
+		// slot keeps the same root and does not itself burn root budget.
+		fee[19] = byte(proposalSlot % 256)
+		return fee
+	}
+
+	return fee
 }
 
 func (r *proposerPreferencesSlotRunner) GetNetwork() protocolp2p.Network { return r.network }
