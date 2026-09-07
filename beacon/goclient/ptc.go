@@ -37,10 +37,10 @@ const (
 // regression. Interim surface, retired once these requests move onto the fork's typed calls.
 var gloasHTTPClient = &http.Client{}
 
-// PayloadAttestationDuties returns the PTC duties for the given validators at the epoch, from
-// the first beacon client that responds.
-func (gc *GoClient) PayloadAttestationDuties(ctx context.Context, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*gloas.PTCDuty, error) {
-	return firstClientResult(ctx, gc, "PayloadAttestationDuties", http.MethodPost, func(ctx context.Context, addr string) ([]*gloas.PTCDuty, error) {
+// PayloadAttestationDuties returns the PTC duties for the given validators at the epoch, with the
+// dependent_root they were derived from, from the first beacon client that responds.
+func (gc *GoClient) PayloadAttestationDuties(ctx context.Context, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) (*gloas.PTCDuties, error) {
+	return firstClientResult(ctx, gc, "PayloadAttestationDuties", http.MethodPost, func(ctx context.Context, addr string) (*gloas.PTCDuties, error) {
 		return requestPTCDuties(ctx, gloasHTTPClient, addr, epoch, validatorIndices)
 	})
 }
@@ -87,8 +87,9 @@ func firstClientResult[T any](ctx context.Context, gc *GoClient, routeName, http
 	return zero, errs
 }
 
-// requestPTCDuties POSTs the validator indices and returns their PTC duties for the epoch.
-func requestPTCDuties(ctx context.Context, httpClient *http.Client, addr string, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*gloas.PTCDuty, error) {
+// requestPTCDuties POSTs the validator indices and returns their PTC duties for the epoch, with the
+// dependent_root the beacon node derived them from.
+func requestPTCDuties(ctx context.Context, httpClient *http.Client, addr string, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) (*gloas.PTCDuties, error) {
 	indices := make([]string, len(validatorIndices))
 	for i, idx := range validatorIndices {
 		indices[i] = strconv.FormatUint(uint64(idx), 10)
@@ -99,12 +100,13 @@ func requestPTCDuties(ctx context.Context, httpClient *http.Client, addr string,
 	}
 
 	var resp struct {
-		Data []*gloas.PTCDuty `json:"data"`
+		DependentRoot phase0.Root      `json:"dependent_root"`
+		Data          []*gloas.PTCDuty `json:"data"`
 	}
 	if err := jsonDo(ctx, httpClient, http.MethodPost, addr+fmt.Sprintf(ptcDutiesPath, epoch), body, nil, &resp); err != nil {
 		return nil, err
 	}
-	return resp.Data, nil
+	return &gloas.PTCDuties{DependentRoot: resp.DependentRoot, Duties: resp.Data}, nil
 }
 
 // requestPayloadAttestationData GETs the PayloadAttestationData for the slot. A 204 No Content —

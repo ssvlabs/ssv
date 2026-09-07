@@ -81,8 +81,9 @@ type VoluntaryExitCalls interface {
 // PTCCalls is the beacon-node surface for Gloas (ePBS) Payload Timeliness Committee duties:
 // fetching assignments, producing the data to attest to, and submitting signed messages.
 type PTCCalls interface {
-	// PayloadAttestationDuties returns the PTC duties for the given validators at the epoch.
-	PayloadAttestationDuties(ctx context.Context, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*gloas.PTCDuty, error)
+	// PayloadAttestationDuties returns the PTC duties for the given validators at the epoch, with the
+	// dependent_root they were derived from.
+	PayloadAttestationDuties(ctx context.Context, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) (*gloas.PTCDuties, error)
 	// PayloadAttestationData returns the data to attest to for the slot, or (nil, nil) if the beacon
 	// node reports no block seen for the slot (HTTP 204) — the SIP-94 §3 signal to abstain.
 	PayloadAttestationData(ctx context.Context, slot phase0.Slot) (*gloas.PayloadAttestationData, error)

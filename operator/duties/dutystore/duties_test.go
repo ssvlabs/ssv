@@ -104,6 +104,20 @@ func TestDutiesEraseBefore(t *testing.T) {
 	assert.True(t, duties.IsEpochSet(6))
 }
 
+func TestDutiesEpochDuties(t *testing.T) {
+	duties := NewDuties[eth2apiv1.ProposerDuty]()
+	stored := []StoreDuty[eth2apiv1.ProposerDuty]{
+		{Slot: 10, ValidatorIndex: 1, Duty: &eth2apiv1.ProposerDuty{}, InCommittee: true},
+		{Slot: 10, ValidatorIndex: 2, Duty: &eth2apiv1.ProposerDuty{}},
+		{Slot: 11, ValidatorIndex: 3, Duty: &eth2apiv1.ProposerDuty{}},
+	}
+	duties.Set(5, stored)
+
+	// Every duty of the epoch, InCommittee or not.
+	assert.ElementsMatch(t, stored, duties.EpochDuties(5))
+	assert.Empty(t, duties.EpochDuties(6))
+}
+
 func TestDutiesClear(t *testing.T) {
 	duties := NewDuties[eth2apiv1.ProposerDuty]()
 	for _, epoch := range []phase0.Epoch{4, 5, 6} {

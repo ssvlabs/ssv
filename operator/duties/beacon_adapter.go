@@ -326,7 +326,7 @@ func (p *prefetchingBeacon) SubscribeToHeadEvents(ctx context.Context, subscribe
 	return p.inner.SubscribeToHeadEvents(ctx, subscriberIdentifier, ch)
 }
 
-func (p *prefetchingBeacon) PayloadAttestationDuties(ctx context.Context, epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*gloas.PTCDuty, error) {
+func (p *prefetchingBeacon) PayloadAttestationDuties(ctx context.Context, epoch phase0.Epoch, indices []phase0.ValidatorIndex) (*gloas.PTCDuties, error) {
 	// Pass-through
 	return p.inner.PayloadAttestationDuties(ctx, epoch, indices)
 }

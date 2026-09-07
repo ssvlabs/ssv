@@ -17,6 +17,13 @@ type PTCDuty struct {
 	Slot           phase0.Slot
 }
 
+// PTCDuties is the beacon node's answer for an epoch: the assignments and the dependent_root they were
+// derived from — the block closing the epoch two before, so only a reorg past that block changes them.
+type PTCDuties struct {
+	DependentRoot phase0.Root
+	Duties        []*PTCDuty
+}
+
 // ptcDutyJSON is the beacon-API JSON form: pubkey as 0x-hex, uint64 as a decimal string.
 type ptcDutyJSON struct {
 	PubKey         string `json:"pubkey"`
