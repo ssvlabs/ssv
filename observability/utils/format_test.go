@@ -54,6 +54,21 @@ func TestFormatRunnerRole(t *testing.T) {
 			want: "AGGREGATOR_COMMITTEE",
 		},
 		{
+			name: "PTC attester role",
+			role: spectypes.RolePTCAttester,
+			want: "PTC_ATTESTER",
+		},
+		{
+			name: "proposer preferences role",
+			role: spectypes.RoleProposerPreferences,
+			want: "PROPOSER_PREFERENCES",
+		},
+		{
+			name: "envelope proposer role",
+			role: spectypes.RoleEnvelopeProposer,
+			want: "ENVELOPE_PROPOSER",
+		},
+		{
 			name: "unknown role",
 			role: spectypes.RoleUnknown,
 			want: "UNDEFINED",
@@ -98,6 +113,9 @@ func TestRunnerRoleStringMappersLockstep(t *testing.T) {
 		spectypes.RoleVoluntaryExit,
 		ssvtypes.RoleAggregator,
 		ssvtypes.RoleSyncCommitteeContribution,
+		spectypes.RolePTCAttester,
+		spectypes.RoleProposerPreferences,
+		spectypes.RoleEnvelopeProposer,
 	}
 
 	for _, role := range roles {
