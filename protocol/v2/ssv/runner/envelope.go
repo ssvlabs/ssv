@@ -24,6 +24,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
+	"github.com/ssvlabs/ssv/qa/faults"
 )
 
 // EnvelopeProposerRunner runs the §6 execution-payload-envelope-signing duty (SIP #94 §6,
@@ -290,6 +291,10 @@ func (r *EnvelopeProposerRunner) executeDuty(ctx context.Context, logger *zap.Lo
 	}
 	logger.Debug("built execution payload envelope", fields.Slot(slot))
 
+	if faults.Is(faults.EnvelopeForeignRoot) || faults.Is(faults.EnvelopeBuilderIndex) {
+		faults.Fired(logger, fields.Slot(slot))
+	}
+
 	if err := r.decide(ctx, logger, slot, input, r.ValCheck); err != nil {
 		return fmt.Errorf("qbft-decide: %w", err)
 	}
@@ -309,6 +314,9 @@ func (r *EnvelopeProposerRunner) produceBlindedEnvelope(ctx context.Context, dut
 	if err != nil {
 		return nil, err
 	}
+	if applyEnvelopeFault(blinded) {
+		r.ValCheck = faults.PermissiveValueCheck{}
+	}
 	dataSSZ, err := blinded.Encode()
 	if err != nil {
 		return nil, fmt.Errorf("encode blinded envelope: %w", err)
@@ -318,6 +326,24 @@ func (r *EnvelopeProposerRunner) produceBlindedEnvelope(ctx context.Context, dut
 		Version: networkconfig.DataVersionGloas,
 		DataSSZ: dataSSZ,
 	}, nil
+}
+
+// applyEnvelopeFault applies the section 6 QA faults to the envelope this operator is about to
+// propose (EPE-04, FLT-06). It reports whether it changed anything, so the caller knows to drop its
+// own value check: the leader validates its own proposal, and both faults are exactly what
+// NewEnvelopeChecker refuses.
+func applyEnvelopeFault(e *gloas.BlindedExecutionPayloadEnvelope) bool {
+	switch {
+	case faults.Is(faults.EnvelopeForeignRoot):
+		// A root that is not the section 4 decided block's.
+		e.BeaconBlockRoot[0] ^= 0xff
+		return true
+	case faults.Is(faults.EnvelopeBuilderIndex):
+		// Not this validator's index, so the self-build check fails.
+		e.BuilderIndex++
+		return true
+	}
+	return false
 }
 
 // expectedPreConsensusRootsAndDomain is unreachable: the envelope duty has no pre-consensus phase.
