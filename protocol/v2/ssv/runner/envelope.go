@@ -117,7 +117,9 @@ func (r *EnvelopeProposerRunner) StartNewDuty(ctx context.Context, logger *zap.L
 	if err != nil {
 		return err
 	}
-	// Clear any prior duty's envelopes; executeDuty re-derives them, so a non-builder stays nil.
+	// Single-slot runner: a new duty replaces the previous slot's envelopes (executeDuty re-derives them,
+	// so a non-builder stays nil). A slot's envelope is due by half the slot (SIP #94 §6) and a stale
+	// dissemination is dropped, so a validator's back-to-back self-build proposals never overlap here.
 	r.produced, r.producedBlinded, r.selectedEnvelope = nil, nil, nil
 	return r.baseStartNewNonBeaconDuty(ctx, logger, r, validatorDuty, quorum)
 }

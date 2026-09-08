@@ -133,7 +133,7 @@ func (h *PTCAttestationHandler) HandleInitialDuties(ctx context.Context) {
 // attester duties — so the "previous" root covers the current epoch and the "current" root the next.
 func (h *PTCAttestationHandler) handleReorg(event ReorgEvent) {
 	epoch := h.netCfg.EstimatedCurrentEpoch()
-	h.logger.Debug("🔀 reorg event received", fields.Epoch(epoch), zap.Any("event", event))
+	h.logger.Info("🔀 reorg event received", fields.Epoch(epoch), zap.Any("event", event))
 	if event.PreviousDutyDependentRootChanged {
 		h.forget(epoch)
 	}
