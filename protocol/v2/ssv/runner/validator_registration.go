@@ -247,7 +247,7 @@ func (r *ValidatorRegistrationRunner) executeDuty(ctx context.Context, logger *z
 	// QA fault menu MSG-02 (vr-postfork): fire only once the role-4 message has actually gone out
 	// on the wire, not when the duty was merely scheduled — the honest operators' silence is only
 	// evidence against a fault that provably reached them.
-	if isGloas && faults.Is(faults.VRPostFork) {
+	if r.NetworkConfig.IsGloasAtSlot(validatorDuty.DutySlot()) && faults.Is(faults.VRPostFork) {
 		faults.Fired(logger, zap.Uint64("slot", uint64(validatorDuty.DutySlot())))
 	}
 
