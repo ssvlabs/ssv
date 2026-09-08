@@ -29,8 +29,11 @@ type ProposedBlock struct {
 
 // Binds reports whether a disseminated blinded envelope commits to this §4 decision — the four SIP #94
 // §6 checks, none of which needs payload bytes: self-build builder index, the decided block root, the
-// decided block's parent root, and the requests root the bid commits to. PayloadRoot has no local
-// check; it is trusted from the builder operator, matching the blinded-block trust model.
+// decided block's parent root, and the requests root the bid commits to. PayloadRoot is left unpinned:
+// nothing local can check it, and validation admits one dissemination from any committee operator, so a
+// faulty operator can race a differing PayloadRoot in and split the signing round, costing the slot's
+// reveal (liveness only, non-slashable). Pinning it needs the §4 value to commit to the payload root, the
+// direction under discussion on SIP #94, which also retires dissemination.
 func (p ProposedBlock) Binds(envelope *gloas.BlindedExecutionPayloadEnvelope) bool {
 	if envelope == nil || envelope.ExecutionRequests == nil {
 		return false

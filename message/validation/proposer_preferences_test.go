@@ -15,6 +15,7 @@ import (
 
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/protocol/v2/types/ssvtestingutils"
 )
 
@@ -50,13 +51,17 @@ func TestStoredSlotCount_ProposerPreferences(t *testing.T) {
 		mv.storedSlotCount(spectypes.RoleProposerPreferences))
 }
 
-// Proposer preferences keep duty counts for the four epochs their acceptable slots span at once
-// (SIP #94 §7); every other role keeps the current and previous epoch.
+// The duty-count ring spans every epoch a role's lateness window can still accept (SIP #94 §7): the
+// proposer lookahead for preferences, three epochs for the roles with the epoch-long TTL, two for the rest.
 func TestStoredEpochCount(t *testing.T) {
 	mv := &messageValidator{netCfg: networkconfig.TestNetwork}
 	require.Equal(t, uint64(4), mv.storedEpochCount(spectypes.RoleProposerPreferences))
-	require.Equal(t, uint64(2), mv.storedEpochCount(spectypes.RoleProposer))
-	require.Equal(t, uint64(2), mv.storedEpochCount(spectypes.RoleCommittee))
+	for _, role := range []spectypes.RunnerRole{spectypes.RoleCommittee, spectypes.RoleAggregatorCommittee, ssvtypes.RoleAggregator} {
+		require.Equal(t, uint64(3), mv.storedEpochCount(role), role.String())
+	}
+	for _, role := range []spectypes.RunnerRole{spectypes.RoleProposer, ssvtypes.RoleSyncCommitteeContribution, spectypes.RolePTCAttester} {
+		require.Equal(t, uint64(2), mv.storedEpochCount(role), role.String())
+	}
 }
 
 // The per-epoch duty limit must count each epoch on its own when a lookahead epoch's preferences arrive
