@@ -68,7 +68,7 @@ var menu = []Entry{
 	{PTCQBFT, "PTC-07, MSG-03", "send a QBFT consensus message under role 7", "qa/faultnet"},
 	{TwoEntries, "MSG-03", "send two entries in one role-7 partial-signature container", "qa/faultnet"},
 	{PTC3PerEpoch, "MSG-07", "send three PTC partials at three slots in one epoch; the two forged ones are refused by the per-epoch assignment gate", "qa/faultnet"},
-	{BlockWrongVersion, "PRO-07", "propose a Gloas block stamped with the Fulu data version", "protocol/v2/ssv/runner/proposer.go gloasConsensusData"},
+	{BlockWrongVersion, "PRO-07", "propose a Gloas block stamped with the Fulu data version", "protocol/v2/ssv/runner/proposer.go gloasProposalInput"},
 	{PrefsConflict, "PRF-07, FLT-07", "emit a preference whose fee recipient differs from the cluster's", "protocol/v2/ssv/runner/proposer_preferences.go buildProposerPreferences"},
 	{Prefs34Apart, "MSG-06", "alternate the preference root for proposal slots 34 slots apart", "protocol/v2/ssv/runner/proposer_preferences.go buildProposerPreferences"},
 	{Prefs5Roots, "MSG-05, FLT-07", "emit five distinct preference roots for one slot", "qa/faultnet"},
@@ -79,7 +79,7 @@ var menu = []Entry{
 	{EnvelopeForeignRoot, "EPE-04, FLT-06", "propose an envelope with a foreign BeaconBlockRoot", "protocol/v2/ssv/runner/envelope.go produceBlindedEnvelope"},
 	{EnvelopeBuilderIndex, "EPE-04", "propose an envelope with a non-self-build BuilderIndex", "protocol/v2/ssv/runner/envelope.go produceBlindedEnvelope"},
 	{Role7PreFork, "MSG-02", "send role 7, 8 and 9 messages for pre-fork slots", "qa/faultnet"},
-	{VRPostFork, "MSG-02", "keep the validator-registration heartbeat running at Gloas slots", "operator/duties/validator_registration.go"},
+	{VRPostFork, "MSG-02", "keep the validator-registration heartbeat running at Gloas slots", "operator/duties/validator_registration.go processExecution"},
 }
 
 // active holds the Fault selected at boot. It is written once, before any goroutine that reads it
