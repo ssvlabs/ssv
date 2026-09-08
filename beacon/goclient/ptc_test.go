@@ -3,14 +3,20 @@ package goclient
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
+	"testing/synctest"
+	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/jellydator/ttlcache/v3"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
@@ -110,4 +116,105 @@ func TestPTCDo_ErrorStatus(t *testing.T) {
 	_, err := requestPayloadAttestationData(context.Background(), srv.Client(), srv.URL, 5)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "503")
+}
+
+// newPayloadAttestationTestClient wires a GoClient whose payload-attestation fetch is the given fake, with
+// the real client's coalescing and caching around it. The returned stop ends the cache's expiry loop.
+func newPayloadAttestationTestClient(fetch func(context.Context, phase0.Slot) (*gloas.PayloadAttestationData, error)) (*GoClient, func()) {
+	cache := ttlcache.New(ttlcache.WithTTL[phase0.Slot, *gloas.PayloadAttestationData](time.Minute))
+	go cache.Start()
+	return &GoClient{
+		log:                             zap.NewNop(),
+		payloadAttestationDataCache:     cache,
+		fetchPayloadAttestationDataFunc: fetch,
+	}, cache.Stop
+}
+
+// Every PTC member of a slot fetches the slot-level payload-attestation data at the same cutoff; the calls
+// in flight together are served by one request, and all of them get its result (issue #3031).
+func TestPayloadAttestationData_CoalescesConcurrentCalls(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		data := &gloas.PayloadAttestationData{BeaconBlockRoot: phase0.Root{0xaa}, Slot: 9, PayloadPresent: true}
+		var fetches atomic.Int32
+		release := make(chan struct{})
+		gc, stop := newPayloadAttestationTestClient(func(context.Context, phase0.Slot) (*gloas.PayloadAttestationData, error) {
+			fetches.Add(1)
+			<-release
+			return data, nil
+		})
+		defer stop()
+
+		type result struct {
+			data *gloas.PayloadAttestationData
+			err  error
+		}
+		const members = 8
+		results := make(chan result, members)
+		for range members {
+			go func() {
+				got, err := gc.PayloadAttestationData(context.Background(), 9)
+				results <- result{got, err}
+			}()
+		}
+		synctest.Wait() // every member is now either the in-flight leader or waiting on it
+		close(release)
+
+		for range members {
+			r := <-results
+			require.NoError(t, r.err)
+			require.Same(t, data, r.data)
+		}
+		require.Equal(t, int32(1), fetches.Load())
+	})
+}
+
+// A slot's data is fetched once and served from the cache to later callers; another slot is a new fetch.
+func TestPayloadAttestationData_CachesPerSlot(t *testing.T) {
+	fetches := 0
+	gc, stop := newPayloadAttestationTestClient(func(_ context.Context, slot phase0.Slot) (*gloas.PayloadAttestationData, error) {
+		fetches++
+		return &gloas.PayloadAttestationData{BeaconBlockRoot: phase0.Root{byte(slot)}, Slot: slot, PayloadPresent: true}, nil
+	})
+	defer stop()
+
+	first, err := gc.PayloadAttestationData(context.Background(), 9)
+	require.NoError(t, err)
+	second, err := gc.PayloadAttestationData(context.Background(), 9)
+	require.NoError(t, err)
+	require.Same(t, first, second)
+	require.Equal(t, 1, fetches)
+
+	_, err = gc.PayloadAttestationData(context.Background(), 10)
+	require.NoError(t, err)
+	require.Equal(t, 2, fetches)
+}
+
+// Neither the abstain signal (nil: a block may still arrive) nor a failure is cached: the next caller asks
+// the beacon node again.
+func TestPayloadAttestationData_DoesNotCacheAbstainOrError(t *testing.T) {
+	data := &gloas.PayloadAttestationData{BeaconBlockRoot: phase0.Root{0xaa}, Slot: 9, PayloadPresent: true}
+	answers := []func() (*gloas.PayloadAttestationData, error){
+		func() (*gloas.PayloadAttestationData, error) { return nil, nil },
+		func() (*gloas.PayloadAttestationData, error) { return nil, errors.New("beacon node unavailable") },
+		func() (*gloas.PayloadAttestationData, error) { return data, nil },
+	}
+	fetches := 0
+	gc, stop := newPayloadAttestationTestClient(func(context.Context, phase0.Slot) (*gloas.PayloadAttestationData, error) {
+		answer := answers[fetches]
+		fetches++
+		return answer()
+	})
+	defer stop()
+
+	got, err := gc.PayloadAttestationData(context.Background(), 9)
+	require.NoError(t, err)
+	require.Nil(t, got, "abstain passes through")
+
+	_, err = gc.PayloadAttestationData(context.Background(), 9)
+	require.Error(t, err)
+
+	got, err = gc.PayloadAttestationData(context.Background(), 9)
+	require.NoError(t, err)
+	require.Same(t, data, got)
+	require.Equal(t, 3, fetches)
 }
