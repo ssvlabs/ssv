@@ -77,7 +77,7 @@ column is carried verbatim (or split per value, where §6.6 gives one line for t
 | `prefs-34-apart` | MSG-06 | Alternates the preference root for proposal slots 34 slots apart (fee recipient derived from the slot). | "the second slot does not open a new 4-root budget." |
 | `prefs-5-roots` | MSG-05, FLT-07 | Emits five distinct preference roots for one slot (budget is four). | "roots 1 to 4 accepted; root 5 ignored; repeated root ignored." |
 | `prefs-early` | MSG-04 | Emits preferences 65 slots early — one slot past the 64-slot (2-epoch) lookahead allowance. | "early and late messages ignored with the earliness/lateness reason." (shared MSG-04 line with `prefs-late`.) |
-| `prefs-late` | MSG-04 | Emits preferences three slots late — one slot past the 2-slot lateness allowance. | "early and late messages ignored with the earliness/lateness reason." (shared MSG-04 line with `prefs-early`.) |
+| `prefs-late` | MSG-04 | Emits preferences three slots late — one slot past the 2-slot lateness allowance. **The delayed copy can wait up to ~66 slots (~13 minutes) to send** — preferences are emitted for every still-upcoming proposal slot in the lookahead, not just the nearest one, so keep the fault value active past `proposal slot + 3` or you will see nothing; silence before then is not a result. | "early and late messages ignored with the earliness/lateness reason." (shared MSG-04 line with `prefs-early`.) |
 | `prefs-replay` | FLT-11 | Replays one valid preference at a high rate across ~66 slots. **Read §6 before running this one.** | "validation memory stays flat; honest peers keep their scores." |
 | `auth-no-builders` | MSG-10 | Gives itself one synthetic direct-builder entry, so it broadcasts request-auth partials (type 9) that the rest of the cluster — which has no `Builders` configured — cannot service. | "receivers without Builders log the hard-fail; §5 unaffected." The hard-fail is `errors.New("no builders configured")` (`protocol/v2/ssv/runner/proposer_preferences_request_auth.go:123`). |
 | `envelope-foreign-root` | EPE-04, FLT-06 | Proposes an execution-payload envelope with a foreign `BeaconBlockRoot`. | "envelope beacon block root does not match the decided block ... ; round change" (the foreign-root half of the combined EPE-04/FLT-06 line). |
@@ -265,7 +265,25 @@ to chase, and a silent honest side is not itself reason to suspect either one.
    by checking that `🧪 qa fault injected` lines appear carrying the roles the active fault targets,
    and that their counts track `📤 broadcast message to topic` counts for the faulted operator, for
    every wire fault (`ptc-qbft`, `two-entries`, `ptc-3-per-epoch`, `prefs-5-roots`, `prefs-early`,
-   `prefs-late`, `prefs-replay`, `role7-prefork`).
+   `prefs-late`, `role7-prefork`). `role7-prefork` used to be an exception here — before the second
+   review cycle's fix, it also fired on committee-role partials it could never actually publish
+   (their executor bytes are not a validator pubkey), so its injection count ran ahead of a wire
+   count of zero for those. That is now fixed at the source (`qa/faultnet/plan.go`'s
+   `forgeGloasRoles` skips `RoleCommittee` and `RoleAggregatorCommittee`), so `role7-prefork` tracks
+   like every other wire fault above and needs no separate caveat.
+
+   `prefs-replay` is excluded from that list, by design, not by bug: only the first send of its
+   series announces a `🧪 qa fault injected` line, with every further repeat silent until the
+   closing summary line (`🧪 qa fault: repeated send series finished`, carrying `sent`/`planned` —
+   see §6). Counting `🧪` lines for `prefs-replay` will always look like 1, regardless of how many
+   sends actually went out — **compare the summary line's `sent` field against the `📤` count
+   instead.** `sent` counts what `libp2p`'s `Topic.Publish` actually accepted, and since the second
+   review cycle's fix (`qa/faultnet/plan.go`'s `perturbForRepeat` now spreads its per-repeat counter
+   across four bytes instead of one — a single byte aliased every 256 repeats, well inside the
+   series' ~66-slot span, and a gossipsub duplicate makes `Publish` return `nil` rather than an
+   error, so `sent` used to count sends the mesh had already silently dropped) those two counts
+   should agree; a persistently large gap between them now means real gossipsub dedupe on the wire,
+   which is itself worth reporting, not a sign the counting method is wrong.
 2. **The synthetic builder URL in `auth-no-builders` cannot degrade block production — CLOSED.**
    Source-level tracing confirms the URL cannot reach the `produceBlockV4` request body in a way
    that breaks the SIP's §4, Proposer (`docs/qa-glamsterdam-test-plan.md` §3.4): an unresolved auth
@@ -352,4 +370,11 @@ travel back to whoever maintains that document; none is a defect in this branch.
    duplicate-signing-root rejection from an unperturbed root). A future edit that "simplifies" the
    fault back to an exact duplicate of the honest message would silently move its oracle from
    lateness to a duplicate-root rejection. Note this here so nobody makes that change without
-   noticing what it does to the value's oracle.
+   noticing what it does to the value's oracle. **Separately, the wait before that delayed copy
+   sends is not fixed at "a few slots."** `DelaySlots` is computed as `body.Slot + prefsLateSlots -
+   now`, and `body.Slot` is the honest message's own proposal slot — but proposer-preferences are
+   emitted once per still-upcoming proposal slot across the whole lookahead, not only for the
+   nearest one, so `body.Slot` can be up to ~64 slots ahead of `now` at emission time. The delayed
+   copy can therefore take up to ~66 slots (~13 minutes) to actually send. A tester who stops
+   watching before `proposal slot + 3` has passed will see nothing and may record a false negative;
+   silence before then is not a result for this value.
