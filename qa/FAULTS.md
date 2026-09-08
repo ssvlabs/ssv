@@ -82,7 +82,7 @@ column is carried verbatim (or split per value, where §6.6 gives one line for t
 | `auth-no-builders` | MSG-10 | Gives itself one synthetic direct-builder entry, so it broadcasts request-auth partials (type 9) that the rest of the cluster — which has no `Builders` configured — cannot service. | "receivers without Builders log the hard-fail; §5 unaffected." The hard-fail is `errors.New("no builders configured")` (`protocol/v2/ssv/runner/proposer_preferences_request_auth.go:123`). |
 | `envelope-foreign-root` | EPE-04, FLT-06 | Proposes an execution-payload envelope with a foreign `BeaconBlockRoot`. | "envelope beacon block root does not match the decided block ... ; round change" (the foreign-root half of the combined EPE-04/FLT-06 line). |
 | `envelope-builder-index` | EPE-04 | Proposes an envelope with a non-self-build `BuilderIndex`. | "... or envelope builder index is not self-build; round change" (the builder-index half of the combined EPE-04/FLT-06 line). |
-| `role7-prefork` | MSG-02 | Sends role 7, 8 and 9 messages for pre-fork slots (cloned from this node's own validator-registration partial). | "pre-fork role 7/8/9 messages rejected; post-fork VR partials rejected." (shared MSG-02 line with `vr-postfork`; this value exercises the first half.) |
+| `role7-prefork` | MSG-02 | Sends role 7, 8 and 9 messages for a fixed pre-fork slot (cloned from ANY outgoing partial-signature message this node sends — not only validator-registration, so the value fires and can be run without depending on `vr-postfork`). | "pre-fork role 7/8/9 messages rejected; post-fork VR partials rejected." (shared MSG-02 line with `vr-postfork`; this value exercises the first half.) |
 | `vr-postfork` | MSG-02 | Keeps the validator-registration heartbeat running at Gloas slots (does not stop emitting role-4 messages after the fork). | "pre-fork role 7/8/9 messages rejected; post-fork VR partials rejected." (shared MSG-02 line with `role7-prefork`; this value exercises the second half.) |
 
 **Excluded from the menu, not a bug:** `envelope-round-3` (EPE-09) — see §1.
@@ -244,33 +244,84 @@ also needs the per-operator image/env override described in the companion ssv-mi
 enclave today runs one image and one `env_vars` map for every SSV node) — until that lands, each
 fault costs a cold resync via `kurtosis service update --env`, which wipes the log buffer.
 
-## 13. Open verification points — no unit test closes these
+## 13. Closed-by-source-reading verification points — still confirm on the first live run
 
-Two items are known to be unverified on a live enclave. Neither can be closed by `qa/faults`'
-or `qa/faultnet`'s unit tests; they need a real run.
+Two items were open questions before the final-review fix wave; both are now **CLOSED by source
+reading**, not merely deferred. Neither `qa/faults`' nor `qa/faultnet`'s unit tests can exercise a
+live enclave, so still confirm each once, on the first real run — but they are no longer unknowns
+to chase, and a silent honest side is not itself reason to suspect either one.
 
-1. **The network decorator is actually on the runner broadcast path it is meant to intercept.** The
-   decorator wraps `BroadcastAtSlot`, which every runner reaches through the shared `BaseRunner`
-   broadcast helpers (`signAndBroadcastPartialSigMsgs`, `signAndBroadcastPostConsensusMsg` in
-   `protocol/v2/ssv/runner/runner.go`) — not through `CommitteeRunner` specifically. The PTC and
-   preferences faults in particular are emitted from `ptc_attester.go` and the proposer-preferences
-   runner, each going through those same shared helpers. Confirm by checking that `🧪 qa fault
-   injected` lines appear carrying the roles the active fault targets, and compare their counts
-   against `📤 broadcast message to topic` counts for the faulted operator — they should track
-   together for every wire fault (`ptc-qbft`, `two-entries`, `ptc-3-per-epoch`, `prefs-5-roots`,
-   `prefs-early`, `prefs-late`, `prefs-replay`, `role7-prefork`). Deferred since the decorator was
-   first written.
-2. **The synthetic builder URL in `auth-no-builders` does not degrade block production on the
-   faulted node.** Source-level tracing says the URL cannot reach the `produceBlockV4` request
-   body in a way that breaks the SIP's §4, Proposer (`docs/qa-glamsterdam-test-plan.md` §3.4) — but
-   that is a trace, not a run. Confirm the faulted operator still proposes normally once this runs
-   on ssv-mini.
+1. **The network decorator is on the runner broadcast path it is meant to intercept — CLOSED.**
+   `cli/operator/node.go` sets `valOpts.Network = faultnet.Wrap(...)`, and `valOpts` (as
+   `ValidatorOptions`) is the only `Network` handed to `validator.NewController` — every runner and
+   every QBFT controller it builds shares this one wrapped instance, reached through the shared
+   `BaseRunner` broadcast helpers (`signAndBroadcastPartialSigMsgs`, `signAndBroadcastPostConsensusMsg`
+   in `protocol/v2/ssv/runner/runner.go`), not through `CommitteeRunner` specifically. Separately,
+   `cli/operator/node.go`'s startup type-assertions (`p2pv1.PeersIndexProvider`, `p2pv1.HostProvider`,
+   `p2pv1.HealthChecker`) run against the raw, pre-`Wrap` `p2pNetwork` variable, not `valOpts.Network`
+   — so those assertions still succeed regardless of the decorator, and `*faultnet.Network` promoting
+   every method but `BroadcastAtSlot` through its embedded `network.P2PNetwork` (rather than
+   hand-writing passthroughs) is what makes both of those true at once. Confirm on the first live run
+   by checking that `🧪 qa fault injected` lines appear carrying the roles the active fault targets,
+   and that their counts track `📤 broadcast message to topic` counts for the faulted operator, for
+   every wire fault (`ptc-qbft`, `two-entries`, `ptc-3-per-epoch`, `prefs-5-roots`, `prefs-early`,
+   `prefs-late`, `prefs-replay`, `role7-prefork`).
+2. **The synthetic builder URL in `auth-no-builders` cannot degrade block production — CLOSED.**
+   Source-level tracing confirms the URL cannot reach the `produceBlockV4` request body in a way
+   that breaks the SIP's §4, Proposer (`docs/qa-glamsterdam-test-plan.md` §3.4): an unresolved auth
+   is omitted from the produceBlockV4 body entirely rather than sent malformed (see
+   `protocol/v2/ssv/runner/observability.go`'s builder-telemetry comment), and
+   `gloas.ResolveBuilderConfig` only validates URL scheme and host (plus auth-data shape and the
+   builder-pubkey list) — it never attempts to reach the URL, so a synthetic, unreachable one loads
+   cleanly and never touches proposal construction. Confirm on the first live run that the faulted
+   operator still proposes normally.
+
+## 14. Runbook corrections from the final-review fix wave
+
+Four notes added while closing the whole-branch review's fix wave. None of these change any code;
+they change what a tester should conclude from what the code already does.
+
+### 14.1 The injection line is not a wire oracle for four leader-gated faults
+
+For `vote-112b`, `vote-index-2`, `vote-index-flip` and `block-wrong-version`, `faults.Fired` is
+emitted from `executeDuty`, which runs on **every** operator, **every** slot — but the malformed
+value only actually reaches the wire when this node is the round-1 QBFT leader, roughly one slot in
+seven at pass M3's size-7 rig. **"Injection line present, honest side silent" is not evidence of
+acceptance for these four values on its own** — it is equally what a slot where this node never led
+looks like. Before recording a verdict from one of these four, confirm from the QBFT logs that this
+node actually led round 1 for that duty; only then does the honest side's silence mean anything.
+
+### 14.2 REJECT-producing faults cost gossip score, and it survives the restart between menu values
+
+`ptc-qbft`, `two-entries`, `role7-prefork` and `vr-postfork` all produce message-validation REJECTs
+on the honest side. Gossipsub peer scoring keys on the libp2p peer id, which comes from
+`NetworkPrivateKey` — unchanged across a `FAULT` restart — so a REJECT-heavy value run early in a
+session can leave the operator's score degraded (fewer peers, a thinner mesh) for every value run
+after it, including non-REJECT ones. **Run the REJECT-producing values LAST in a session**, or check
+operator 5's peer count and mesh health before each value if that ordering isn't possible — a silent
+honest side late in a run may be a graylisted sender, not a clean pass.
+
+### 14.3 `prefs-5-roots` does not exercise §6.6's "repeated root ignored" clause
+
+`prefs-5-roots`'s oracle in §4's table is "roots 1 to 4 accepted; root 5 ignored; repeated root
+ignored" — but nothing in this value ever repeats a root. Its five clones (the honest message plus
+four `Clone`s, each with a distinct `SigningRoot` byte-flip) are deterministic and never re-sent, so
+the §5 runner's suppression of an identical re-emission is never exercised. This value proves the
+first two clauses (four accepted, the fifth ignored by budget); the third clause needs a
+value that re-sends an already-accepted root, which nothing in the current menu does.
+
+### 14.4 `prefs-early`'s margin is one slot minus 50 ms of clock tolerance
+
+`prefsEarlySlots` targets exactly one slot past the 2-epoch (64-slot) lookahead allowance, and
+`validateSlotTime`'s clock-error tolerance eats 50 ms of that margin. A one-off run where the early
+copy is **not** rejected most likely means the broadcast landed inside the last 50 ms of a slot
+boundary, not that earliness validation has regressed — re-run before concluding the latter.
 
 ## Errata for the pass document
 
-Two discrepancies between `docs/qa-glamsterdam-test-plan-passes.md` §6.6 and the code were found
-while writing this runbook. Both are recorded here so they travel back to whoever maintains that
-document; neither is a defect in this branch.
+Four discrepancies between `docs/qa-glamsterdam-test-plan-passes.md` §6.6 (or the MSG-06 design
+intent) and the code were found while writing this runbook. All four are recorded here so they
+travel back to whoever maintains that document; none is a defect in this branch.
 
 1. **ATT-02's oracle string is stale.** §6.6 gives the oracle as `failed to decode gloas beacon
    vote`. The value check that actually produces the round-change (`protocol/v2/ssv/value_check.go:112`,
@@ -286,3 +337,19 @@ document; neither is a defect in this branch.
    assignment gate (`ErrNoDuty`), not the per-epoch duty-count rule (`ErrTooManyDutiesPerEpoch`) the
    wording implies — see §8 above for the full writeup. §6.6 and the MSG-07 scenario card need an
    erratum.
+3. **`prefs-34-apart` does not probe MSG-06.** It alternates the preference root between two
+   proposal slots 34 slots apart, but emits exactly **one** root per slot — no root budget is ever
+   exhausted at either slot, so the ring-buffer aliasing MSG-06 is meant to probe (does a slot-34-
+   apart signer-state entry alias or evict another slot's budget?) is never exercised. As built, this
+   value is a slot-varying variant of `prefs-conflict`, not an MSG-06 probe. It needs a redesign
+   before MSG-06's e2e half can be claimed: 4 roots at slot S (exhausting the budget), 1 root at slot
+   S+34, then a 5th root back at slot S, to actually test whether the S+34 entry aliased or evicted
+   S's budget. **Do not record an MSG-06 verdict from the current `prefs-34-apart` as built.**
+4. **`prefs-late`'s oracle depends on the distinct signing root, not just the delay.** After the
+   final-review fix wave (FIX 2), `prefs-late` does reach the lateness rule (`messageLateness`) — but
+   only because its delayed copy carries a second, distinct signing root (see plan.go's `prefsLate`
+   doc comment for the two traps this avoids: `ErrNoDuty` from a backdated payload slot, and a
+   duplicate-signing-root rejection from an unperturbed root). A future edit that "simplifies" the
+   fault back to an exact duplicate of the honest message would silently move its oracle from
+   lateness to a duplicate-root rejection. Note this here so nobody makes that change without
+   noticing what it does to the value's oracle.
