@@ -10,6 +10,7 @@
 package faultnet
 
 import (
+	"encoding/binary"
 	"fmt"
 	"time"
 
@@ -285,12 +286,20 @@ func prefsReplay(msg *spectypes.SignedSSVMessage, slot phase0.Slot) []Outgoing {
 // so this cannot change which rule any given send lands on. A no-op (nil error) on anything that
 // isn't a non-empty partial-signature message, so a future Repeat-using fault on an unexpected
 // shape degrades to "no further perturbation" rather than failing the send outright.
+//
+// The counter is written across the first FOUR bytes (little-endian), not just the first byte:
+// a single byte only spans 256 distinct values, so a series longer than 256 sends (prefs-replay
+// runs 15,840) would alias every 256th iteration back onto a value already sent — and the seen-
+// cache TTL (~385s) is long enough relative to the series' own duration that those aliased repeats
+// collide with each other's still-live cache entries and get silently dropped by gossipsub, so
+// "sent" would overcount what actually reached the wire. Four bytes give ~4 billion distinct values,
+// far past any series this menu runs.
 func perturbForRepeat(msg *spectypes.SignedSSVMessage, i int) error {
 	body := partialBody(msg)
-	if body == nil || len(body.Messages) == 0 || len(body.Messages[0].PartialSignature) == 0 {
+	if body == nil || len(body.Messages) == 0 || len(body.Messages[0].PartialSignature) < 4 {
 		return nil
 	}
-	body.Messages[0].PartialSignature[0] = byte(i) // #nosec G115 -- byte() truncation is intentional
+	binary.LittleEndian.PutUint32(body.Messages[0].PartialSignature[:4], uint32(i)) // #nosec G115 -- i is bounded by replayCount (~15,840), well within uint32
 	return setPartialBody(msg, body)
 }
 

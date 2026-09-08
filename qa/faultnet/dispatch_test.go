@@ -190,19 +190,28 @@ func TestDispatchStopsSeriesWhenSigningFails(t *testing.T) {
 // a real deployment would publish ~1 message while the summary line claimed replayCount+1. This test
 // exercises the real dispatch -> sendAsync -> send path (not just Plan, which never sees a repeat
 // iteration) with a small, fast Repeat count standing in for prefs-replay's real ~15,840.
+//
+// FIX A (second review cycle): a Repeat of 5 could not have caught the single-byte aliasing bug —
+// perturbForRepeat used to write the counter into PartialSignature[0] alone, which only aliases
+// once the counter wraps past 256, and prefs-replay's real series (replayCount+1 = 15,841 sends)
+// crosses that boundary about 62 times. The point of this extension is exactly that a small Repeat
+// is blind to this bug class: it stays past the boundary (Repeat > 256) and pins sends #1 and #257
+// as the specific pair that used to encode identically, alongside the general every-send-distinct
+// assertion across the whole series. Every is kept small so the test stays fast despite the larger
+// count.
 func TestDispatchRepeatedSendsAreByteDistinct(t *testing.T) {
 	faults.SetForTest(t, faults.PrefsReplay)
 	n, inner, _ := newTestNetwork(&fakeSigner{})
 	msg := prefsMsg(t, 200)
 	honestRoot := decodePartial(t, msg).Messages[0].SigningRoot
 
-	const repeat = 5
-	err := n.dispatch([]Outgoing{{Msg: msg, Slot: 200, Resign: true, Repeat: repeat, Every: time.Millisecond}})
+	const repeat = 300 // past the 256-boundary the single-byte counter used to alias on
+	err := n.dispatch([]Outgoing{{Msg: msg, Slot: 200, Resign: true, Repeat: repeat, Every: time.Microsecond}})
 	require.NoError(t, err)
 
 	require.Eventually(t, func() bool {
 		return inner.count() == repeat+1
-	}, time.Second, 5*time.Millisecond)
+	}, 5*time.Second, 5*time.Millisecond)
 
 	seen := make(map[string]bool, repeat+1)
 	for i := 0; i <= repeat; i++ {
@@ -216,6 +225,12 @@ func TestDispatchRepeatedSendsAreByteDistinct(t *testing.T) {
 		require.Equal(t, honestRoot, body.Messages[0].SigningRoot,
 			"the signing root — the rule under test — must never move")
 	}
+
+	// Direct pin on the old aliasing boundary: send #1 (index 1, i.e. the first repeat) and send
+	// #257 (index 257) must not be byte-identical. Under the old single-byte write, byte(1) ==
+	// byte(257) == 0x01, so these two would have encoded to the exact same message.
+	require.NotEqual(t, inner.dataAt(1), inner.dataAt(257),
+		"sends #1 and #257 must no longer encode identically — this is the aliasing FIX A closes")
 }
 
 // TestDispatchPropagatesIdentitySendError pins FIX 5's other half: the identity (unmodified,

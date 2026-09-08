@@ -1,6 +1,7 @@
 package faultnet
 
 import (
+	"encoding/binary"
 	"testing"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -319,22 +320,58 @@ func TestPlanRole7PreFork(t *testing.T) {
 // Data on every repeat would re-encode to the exact same SignedSSVMessage every time, and
 // gossipsub's own dedup (network/topics/msg_id.go) silently drops every send after the first before
 // it ever reaches this node's peers — the fault would flood nothing but this node's own "sent"
-// counter. Perturbing PartialSignature[0] (which validation never reads) before each repeat keeps
-// every send in the series byte-distinct on the wire, while leaving the signing root — the rule
-// prefs-replay is actually testing — untouched.
+// counter. Perturbing the first four bytes of PartialSignature (which validation never reads)
+// before each repeat keeps every send in the series byte-distinct on the wire, while leaving the
+// signing root — the rule prefs-replay is actually testing — untouched.
+//
+// FIX A (second review cycle): this used to write the counter into a single byte
+// (PartialSignature[0] = byte(i)), which aliases every 256 iterations — send #1 and send #257
+// encoded identically, and prefs-replay's real series is 15,841 sends long, so that byte wrapped
+// around ~62 times. Writing the counter across four little-endian bytes instead gives ~4 billion
+// distinct values, so this test asserts distinctness with a uint32 key (not a byte key) and pins
+// the specific 1-vs-257 aliasing boundary the old code could not cross.
 func TestPerturbForRepeat(t *testing.T) {
 	msg := prefsMsg(t, 200)
 	honestRoot := decodePartial(t, msg).Messages[0].SigningRoot
 
-	seen := map[byte]bool{}
-	for i := 1; i <= 3; i++ {
+	seen := map[uint32]bool{}
+	for _, i := range []int{1, 2, 3, 255, 256, 257, 258, 512, 4096} {
 		require.NoError(t, perturbForRepeat(msg, i))
 		body := decodePartial(t, msg)
-		require.Equal(t, byte(i), body.Messages[0].PartialSignature[0])
-		require.False(t, seen[body.Messages[0].PartialSignature[0]], "each repeat must be distinct from the ones before it")
-		seen[body.Messages[0].PartialSignature[0]] = true
+		got := binary.LittleEndian.Uint32(body.Messages[0].PartialSignature[:4])
+		require.Equal(t, uint32(i), got, "the counter must round-trip through all four bytes")
+		require.False(t, seen[got], "each repeat must be distinct from the ones before it")
+		seen[got] = true
 		require.Equal(t, honestRoot, body.Messages[0].SigningRoot, "the signing root must never move")
 	}
+
+	// Direct assertion that iterations 1 and 257 no longer encode identically: under the old
+	// single-byte write, byte(1) == byte(257) == 0x01, so send #257 would have been byte-identical
+	// to send #1 and gossipsub would have dropped it as a duplicate of a message already inside its
+	// own seen-cache TTL.
+	require.NoError(t, perturbForRepeat(msg, 1))
+	oneBytes := append([]byte(nil), decodePartial(t, msg).Messages[0].PartialSignature[:4]...)
+	require.NoError(t, perturbForRepeat(msg, 257))
+	twoFiftySevenBytes := decodePartial(t, msg).Messages[0].PartialSignature[:4]
+	require.NotEqual(t, oneBytes, twoFiftySevenBytes, "iteration 257 must no longer alias iteration 1")
+}
+
+// TestPerturbForRepeatNoopOnEmptyMessages pins the defensive guard: perturbForRepeat degrades to a
+// no-op (nil error, no mutation) rather than panicking on an out-of-range index when there is no
+// PartialSignatureMessage to perturb. PartialSignature itself is SSZ-fixed at 96 bytes
+// (ssv-spec's PartialSignatureMessage), so a too-short signature can never round-trip through
+// Encode/Decode to exercise the four-byte-length half of the same guard directly — this is the
+// realistically-reachable half of it (a real message can carry zero entries; Messages is an
+// SSZ list, `ssz-max:"5048"`, with no lower bound).
+func TestPerturbForRepeatNoopOnEmptyMessages(t *testing.T) {
+	msg := prefsMsg(t, 200)
+	body := decodePartial(t, msg)
+	body.Messages = nil
+	require.NoError(t, setPartialBody(msg, body))
+	before := append([]byte(nil), msg.SSVMessage.Data...)
+
+	require.NoError(t, perturbForRepeat(msg, 1))
+	require.Equal(t, before, msg.SSVMessage.Data, "an empty Messages list must be left untouched")
 }
 
 // TestRole7PreForkSlot is Network.role7PreForkSlot, defined in faultnet.go beside BroadcastAtSlot —
