@@ -39,9 +39,12 @@ type Outgoing struct {
 }
 
 // Plan returns what to send in place of msg. slot is the slot the caller passed to
-// BroadcastAtSlot, which selects the topic; now is the current wall-clock slot. Plan is pure: it
-// never signs, never sends, and never reads the clock, so every fault is table-testable.
-func Plan(f faults.Fault, msg *spectypes.SignedSSVMessage, slot, now phase0.Slot) []Outgoing {
+// BroadcastAtSlot, which selects the topic; now is the current wall-clock slot; preForkSlot is a
+// slot below the Gloas fork boundary, used only by role7-prefork. Plan is pure: it never signs,
+// never sends, and never reads the clock or a network config, so every fault is table-testable —
+// preForkSlot is computed by the decorator (which already holds the network config) and handed in,
+// the same way DelaySlots is converted to a duration by the decorator rather than by Plan.
+func Plan(f faults.Fault, msg *spectypes.SignedSSVMessage, slot, now, preForkSlot phase0.Slot) []Outgoing {
 	identity := []Outgoing{{Msg: msg, Slot: slot}}
 
 	if f == faults.None || msg == nil || msg.SSVMessage == nil {
@@ -52,9 +55,9 @@ func Plan(f faults.Fault, msg *spectypes.SignedSSVMessage, slot, now phase0.Slot
 	case faults.Prefs5Roots:
 		return prefs5Roots(msg, slot)
 	case faults.PrefsEarly:
-		return prefsShift(msg, slot, now, true)
+		return prefsEarly(msg, slot, now)
 	case faults.PrefsLate:
-		return prefsShift(msg, slot, now, false)
+		return prefsLate(msg, slot, now)
 	case faults.PrefsReplay:
 		return prefsReplay(msg, slot)
 	case faults.PTCQBFT:
@@ -64,7 +67,7 @@ func Plan(f faults.Fault, msg *spectypes.SignedSSVMessage, slot, now phase0.Slot
 	case faults.PTC3PerEpoch:
 		return ptcExtraSlots(msg, slot)
 	case faults.Role7PreFork:
-		return forgeGloasRoles(msg, slot)
+		return forgeGloasRoles(msg, slot, preForkSlot)
 	default:
 		return identity
 	}
@@ -161,22 +164,15 @@ func prefs5Roots(msg *spectypes.SignedSSVMessage, slot phase0.Slot) []Outgoing {
 	return out
 }
 
-// prefsShift sends an extra copy whose payload slot is offset from the current slot, so the honest
-// message still reaches quorum while the copy proves the earliness or lateness reason (MSG-04).
-func prefsShift(msg *spectypes.SignedSSVMessage, slot, now phase0.Slot, ahead bool) []Outgoing {
+// prefsEarly sends an extra copy whose payload slot is shifted 65 slots ahead of now, so its target
+// epoch sits beyond the 2-epoch proposer lookahead and validateBeaconDuty's RoleProposerPreferences
+// assignment gate is skipped altogether (the epoch is not yet fetched) — landing the copy on
+// ErrEarlySlotMessage instead (MSG-04). Confirmed correct as-is; only prefs-late needed a fix (see
+// prefsLate's doc comment for why the two cannot share one implementation).
+func prefsEarly(msg *spectypes.SignedSSVMessage, slot, now phase0.Slot) []Outgoing {
 	identity := []Outgoing{{Msg: msg, Slot: slot}}
 	if isPrefs(msg) == nil {
 		return identity
-	}
-
-	var target phase0.Slot
-	if ahead {
-		target = now + prefsEarlySlots
-	} else {
-		if now < prefsLateSlots {
-			return identity
-		}
-		target = now - prefsLateSlots
 	}
 
 	c, err := Clone(msg)
@@ -187,7 +183,7 @@ func prefsShift(msg *spectypes.SignedSSVMessage, slot, now phase0.Slot, ahead bo
 	if body == nil {
 		return identity
 	}
-	body.Slot = target
+	body.Slot = now + prefsEarlySlots
 	if err := setPartialBody(c, body); err != nil {
 		return identity
 	}
@@ -196,10 +192,67 @@ func prefsShift(msg *spectypes.SignedSSVMessage, slot, now phase0.Slot, ahead bo
 	return append(identity, Outgoing{Msg: c, Slot: slot, Resign: true})
 }
 
+// prefsLate sends a copy that arrives 3 slots after the honest preference's own proposal slot
+// (MSG-04), by DELAYING THE SEND rather than shifting the payload slot backward the way prefsEarly
+// shifts it forward.
+//
+// TRAP 1 (do not "simplify" this back to a backdated payload slot): validateBeaconDuty's
+// RoleProposerPreferences branch (message/validation/common_checks.go ~206) runs BEFORE
+// validateSlotTime (~213), and rejects an unassigned slot in the current fetched-and-fresh epoch
+// with ErrNoDuty. A payload slot of "now - 3" sits in that fetched epoch and is essentially never
+// this validator's own proposal slot, so shifting the payload slot backward lands the copy on
+// ErrNoDuty — the wrong rule — not lateness. Keeping the payload slot ON the honest proposal slot
+// (unchanged from the identity message) makes the assignment gate pass, and the copy is instead
+// delivered late by delaying the SEND.
+//
+// TRAP 2: an otherwise-identical copy of an already-accepted message carries the SAME signing root,
+// and validateDistinctRootBudget — inside the `signerState != nil` limit block, which ALSO runs
+// before validateSlotTime — refuses a same-peer-same-root repeat first, landing on "duplicate
+// signing root from peer" instead. So the delayed copy must carry a second, distinct root (as
+// prefs5Roots does for its five), which the 4-root budget still admits, letting execution reach
+// validateSlotTime, where messageLateness (ttl = LateSlotAllowance = 2) fires at proposal slot + 3.
+func prefsLate(msg *spectypes.SignedSSVMessage, slot, now phase0.Slot) []Outgoing {
+	identity := []Outgoing{{Msg: msg, Slot: slot}}
+	body := isPrefs(msg)
+	if body == nil {
+		return identity
+	}
+
+	delaySlots := int(body.Slot) + prefsLateSlots - int(now)
+	if delaySlots <= 0 {
+		return identity
+	}
+
+	c, err := Clone(msg)
+	if err != nil {
+		return identity
+	}
+	cbody := partialBody(c)
+	if cbody == nil || len(cbody.Messages) == 0 {
+		return identity
+	}
+	// Distinct root #2 against the 4-root budget — see TRAP 2 above. The payload slot is left
+	// untouched: it must stay the honest proposal slot for the assignment gate to pass.
+	cbody.Messages[0].SigningRoot[0] ^= 0x01
+	if err := setPartialBody(c, cbody); err != nil {
+		return identity
+	}
+	// The topic keeps following the original slot, same as prefsEarly.
+	return append(identity, Outgoing{Msg: c, Slot: slot, Resign: true, DelaySlots: delaySlots})
+}
+
 // prefsReplay repeats one valid preference at a high rate for 66 slots (FLT-11). The signing root is
 // preserved — that is the rule under test — but the partial signature bytes are perturbed, because
 // gossipsub suppresses a byte-identical duplicate before it ever leaves this node, and validation
 // never inspects the partial signature.
+//
+// This perturbation only covers the FIRST send in the series, deduping it against the honest
+// original. It is NOT enough on its own: SignSSVMessage is deterministic, so re-signing the same
+// bytes on every one of the replayCount further repeats would re-encode to the exact same
+// SignedSSVMessage every time — the series would dedupe against ITSELF, not just against the
+// honest message, and "sent" would count up to 15,841 publishes that gossipsub silently collapsed
+// into roughly one. The decorator (faultnet.go sendAsync) closes that gap: it perturbs the same
+// byte again before each repeat, so every send in the series is byte-distinct from every other.
 func prefsReplay(msg *spectypes.SignedSSVMessage, slot phase0.Slot) []Outgoing {
 	identity := []Outgoing{{Msg: msg, Slot: slot}}
 	if isPrefs(msg) == nil {
@@ -224,7 +277,25 @@ func prefsReplay(msg *spectypes.SignedSSVMessage, slot phase0.Slot) []Outgoing {
 	return append(identity, Outgoing{Msg: c, Slot: slot, Resign: true, Repeat: replayCount, Every: replayEvery})
 }
 
-// slotsPerEpoch is the mainnet and ssv-mini value; the fault menu only runs on those.
+// perturbForRepeat mutates msg's partial-signature bytes so the i-th repeat of a series (i > 0) is
+// byte-distinct from every other send already made in it. Called by the decorator (faultnet.go
+// sendAsync), never by Plan: Plan hands out one message to be repeated, and mutating it further on
+// each iteration is part of "the sending", not the planning. The signing root is left untouched —
+// that is the rule prefs-replay is testing — and validation never inspects the partial signature,
+// so this cannot change which rule any given send lands on. A no-op (nil error) on anything that
+// isn't a non-empty partial-signature message, so a future Repeat-using fault on an unexpected
+// shape degrades to "no further perturbation" rather than failing the send outright.
+func perturbForRepeat(msg *spectypes.SignedSSVMessage, i int) error {
+	body := partialBody(msg)
+	if body == nil || len(body.Messages) == 0 || len(body.Messages[0].PartialSignature) == 0 {
+		return nil
+	}
+	body.Messages[0].PartialSignature[0] = byte(i) // #nosec G115 -- byte() truncation is intentional
+	return setPartialBody(msg, body)
+}
+
+// slotsPerEpoch is valid only on 32-slot networks — ssv-mini, hoodi and mainnet all are, and the
+// fault menu only ever runs on those.
 const slotsPerEpoch = 32
 
 // forgeConsensusMsg reuses this node's role-7 MessageID but carries a QBFT proposal, so the honest
@@ -354,12 +425,25 @@ func ptcExtraSlots(msg *spectypes.SignedSSVMessage, slot phase0.Slot) []Outgoing
 	return out
 }
 
-// forgeGloasRoles clones a pre-fork validator-registration partial into the three Gloas roles, which
-// the role-at-slot gate must refuse before the fork (MSG-02). Role 4 messages exist only pre-fork,
-// so no fork check is needed here.
-func forgeGloasRoles(msg *spectypes.SignedSSVMessage, slot phase0.Slot) []Outgoing {
+// forgeGloasRoles clones ANY outgoing partial-signature message into the three Gloas roles (7, 8,
+// 9) at a fixed pre-fork slot, which the role-at-slot gate must refuse regardless of when the
+// forged messages are actually broadcast (MSG-02): validRoleAtSlot is the first check in partial
+// semantics, ahead of the type-to-role matrix and ahead of all duty logic including the lateness
+// rule, so a Gloas role at a pre-fork slot still lands on ErrInvalidRole even long after the fork.
+//
+// Triggering on ANY partial-signature message — not just validator-registration — makes this fault
+// self-sufficient. It used to trigger only on an outgoing RoleValidatorRegistration partial, but
+// post-fork there are none: every honest node (this one included, unless vr-postfork — the other
+// MSG-02 half — is the active fault) stops emitting role-4 messages at the fork. The pass procedure
+// waits for the fork before iterating the menu, so a VR-only trigger for role7-prefork would never
+// fire in practice, leaving MSG-02 with zero coverage. Piggybacking on any partial-sig broadcast
+// (PTC, preferences, committee, aggregator, ...) removes that dependency entirely.
+//
+// preForkSlot is computed by the decorator from the network config (GLOAS_FORK_EPOCH *
+// SlotsPerEpoch, minus one) and passed in — Plan itself never reads a config.
+func forgeGloasRoles(msg *spectypes.SignedSSVMessage, slot, preForkSlot phase0.Slot) []Outgoing {
 	identity := []Outgoing{{Msg: msg, Slot: slot}}
-	if role(msg) != spectypes.RoleValidatorRegistration || partialBody(msg) == nil {
+	if partialBody(msg) == nil {
 		return identity
 	}
 
@@ -379,6 +463,14 @@ func forgeGloasRoles(msg *spectypes.SignedSSVMessage, slot phase0.Slot) []Outgoi
 			continue
 		}
 		c.SSVMessage.MsgID = spectypes.NewValidatorMsgID(domain, pk, r)
+		body := partialBody(c)
+		if body == nil {
+			continue
+		}
+		body.Slot = preForkSlot
+		if err := setPartialBody(c, body); err != nil {
+			continue
+		}
 		out = append(out, Outgoing{Msg: c, Slot: slot, Resign: true})
 	}
 	return out

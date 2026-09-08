@@ -38,7 +38,24 @@ func Wrap(inner network.P2PNetwork, signer ssvtypes.OperatorSigner, netCfg *netw
 // embedded interface keeps it byte-identical; a fault that ever needs this path must decode the
 // body for the slot, never the wall clock.
 func (n *Network) BroadcastAtSlot(msg *spectypes.SignedSSVMessage, slot phase0.Slot) error {
-	return n.dispatch(Plan(faults.Active(), msg, slot, n.netCfg.EstimatedCurrentSlot()))
+	return n.dispatch(Plan(faults.Active(), msg, slot, n.netCfg.EstimatedCurrentSlot(), n.role7PreForkSlot()))
+}
+
+// role7PreForkSlot returns a slot below the Gloas fork boundary, for role7-prefork (MSG-02). Plan
+// must stay pure — it never reads a network config — so the decorator computes this here, where
+// n.netCfg is already in scope, the same way DelaySlots is turned into a duration below. Computed
+// on every broadcast regardless of which fault is active; cheap, and keeps Plan's signature the
+// only place that has to know the value exists.
+//
+// Falls back to slot 0 when there is no scheduled Gloas fork (pre-Gloas network config) or the fork
+// is scheduled at epoch 0 (unreachable in practice, but would otherwise underflow the subtraction) —
+// either way, 0 is still a slot below any real Gloas fork boundary.
+func (n *Network) role7PreForkSlot() phase0.Slot {
+	epoch, ok := n.netCfg.GloasForkEpoch()
+	if !ok || epoch == 0 {
+		return 0
+	}
+	return phase0.Slot(uint64(epoch)*n.netCfg.SlotsPerEpoch) - 1
 }
 
 func (n *Network) dispatch(out []Outgoing) error {
@@ -56,7 +73,15 @@ func (n *Network) dispatch(out []Outgoing) error {
 			continue
 		}
 		if err := n.send(o, true); err != nil {
-			return err
+			if !o.Resign {
+				// The identity send carries the honest, unmodified message: its failure is a real
+				// broadcast failure and must reach the caller, exactly as the stock network would
+				// report it.
+				return err
+			}
+			// A forged/resigned send failing must never fail the honest duty it rode alongside —
+			// this instrumentation observes the duty, it must not become a dependency of it.
+			n.logger.Warn("qa fault: forged send failed, honest broadcast unaffected", zap.Error(err))
 		}
 	}
 	return nil
@@ -77,6 +102,19 @@ func (n *Network) sendAsync(o Outgoing) {
 	for i := 0; i <= o.Repeat; i++ {
 		if i > 0 && o.Every > 0 {
 			time.Sleep(o.Every)
+		}
+		if i > 0 {
+			// SignSSVMessage is deterministic: re-signing byte-identical bytes on every repeat would
+			// re-encode to the exact same SignedSSVMessage every time, and gossipsub's own dedup
+			// silently drops every send after the first before it ever reaches this node's peers —
+			// the series would flood nothing but this node's own "sent" counter. Perturb a byte
+			// validation never reads before each repeat past the first (which already carries its
+			// own distinct-from-honest perturbation from Plan) so every send in the series is
+			// byte-distinct. The signing root is untouched: it is exactly what the fault is testing.
+			if err := perturbForRepeat(o.Msg, i); err != nil {
+				n.logger.Warn("qa fault: could not perturb repeated send, stopping series", zap.Error(err))
+				break
+			}
 		}
 		if err := n.send(o, i == 0); err != nil {
 			n.logger.Warn("qa fault: asynchronous send failed", zap.Error(err))
