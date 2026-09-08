@@ -339,8 +339,10 @@ func applyEnvelopeFault(e *gloas.BlindedExecutionPayloadEnvelope) bool {
 		e.BeaconBlockRoot[0] ^= 0xff
 		return true
 	case faults.Is(faults.EnvelopeBuilderIndex):
-		// Not this validator's index, so the self-build check fails.
-		e.BuilderIndex++
+		// Not this validator's index, so the self-build check fails. The honest envelope always
+		// carries gloas.BuilderIndexSelfBuild (^uint64(0)); an explicit 0 is guaranteed non-self,
+		// rather than relying on that sentinel wrapping around to 0 on increment.
+		e.BuilderIndex = 0
 		return true
 	}
 	return false
