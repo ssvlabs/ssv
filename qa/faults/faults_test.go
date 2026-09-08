@@ -58,6 +58,8 @@ func TestParse(t *testing.T) {
 }
 
 func TestActiveAndIs(t *testing.T) {
+	SetForTest(t, None) // don't depend on test execution order leaving Active() at None already
+
 	require.Equal(t, None, Active())
 	require.False(t, Enabled())
 	require.False(t, Is(Vote112B))
