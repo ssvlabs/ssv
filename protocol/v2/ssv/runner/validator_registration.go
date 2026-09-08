@@ -28,6 +28,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/qa/faults"
 )
 
 const (
@@ -89,7 +90,7 @@ func (r *ValidatorRegistrationRunner) StartNewDuty(ctx context.Context, logger *
 	// proposer preferences instead (SIP #94 §5). The scheduler drains the duty and message validation rejects
 	// it on the wire; this runner-side guard is the belt matching ssv-spec's. It runs before the duty starts,
 	// so a rejected duty leaves no running state behind.
-	if r.NetworkConfig.IsGloasAtSlot(validatorDuty.DutySlot()) {
+	if vrDeprecatedAtSlot(r.NetworkConfig.IsGloasAtSlot(validatorDuty.DutySlot())) {
 		return spectypes.NewError(spectypes.ValidatorRegistrationDeprecatedErrorCode,
 			"validator registration is deprecated from Gloas; use proposer preferences")
 	}
@@ -191,6 +192,17 @@ func (r *ValidatorRegistrationRunner) expectedPostConsensusRootsAndDomains(conte
 	return nil, fmt.Errorf("no post consensus roots for validator registration")
 }
 
+// vrDeprecatedAtSlot is the runner-side (third) gate in the "is VR deprecated here" decision — see
+// operator/duties/validator_registration.go gloasVRDeprecated for the other two gates and the full
+// set of three. Duplicated rather than imported: the two packages must not depend on each other,
+// and the logic is one line, so a shared helper would cost more than it saves.
+func vrDeprecatedAtSlot(isGloas bool) bool {
+	if faults.Is(faults.VRPostFork) {
+		return false
+	}
+	return isGloas
+}
+
 func (r *ValidatorRegistrationRunner) executeDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty) error {
 	// Reuse the existing span instead of generating new one to keep tracing-data lightweight.
 	span := trace.SpanFromContext(ctx)
@@ -230,6 +242,13 @@ func (r *ValidatorRegistrationRunner) executeDuty(ctx context.Context, logger *z
 
 	if err := r.signAndBroadcastPartialSigMsgs(ctx, r.network, r.operatorSigner, r.GetShare().ValidatorPubKey, msgs); err != nil {
 		return fmt.Errorf("could not sign/broadcast validator registration partial sig: %w", err)
+	}
+
+	// QA fault menu MSG-02 (vr-postfork): fire only once the role-4 message has actually gone out
+	// on the wire, not when the duty was merely scheduled — the honest operators' silence is only
+	// evidence against a fault that provably reached them.
+	if isGloas && faults.Is(faults.VRPostFork) {
+		faults.Fired(logger, zap.Uint64("slot", uint64(validatorDuty.DutySlot())))
 	}
 
 	return nil
