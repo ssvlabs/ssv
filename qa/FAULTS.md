@@ -65,7 +65,7 @@ column is carried verbatim (or split per value, where §6.6 gives one line for t
 
 | `FAULT=` value | Scenario IDs | What the faulted node does | Honest-side oracle (§6.6, verbatim) |
 |---|---|---|---|
-| `vote-112b` | ATT-02 | Proposes a pre-Gloas 112-byte `BeaconVote` at a Gloas slot. | "failed to decode gloas beacon vote"; round change; decide under the next leader. |
+| `vote-112b` | ATT-02 | Proposes a pre-Gloas 112-byte `BeaconVote` at a Gloas slot. | "failed to decode gloas beacon vote"; round change; decide under the next leader. **Grep for the real string instead — see the errata note at the end of this document: the value check actually emits `failed decoding gloas beacon vote` (`protocol/v2/ssv/value_check.go:112`), not the `to decode` wording above (`docs/qa-glamsterdam-test-plan-passes.md` §6.6).** |
 | `vote-index-2` | ATT-03 | Proposes `AttestationDataIndex = 2`. | "gloas attestation data index out of range"; round change. |
 | `vote-index-flip` | FLT-05 | Proposes the wrong but valid index (0 becomes 1, 1 becomes 0). | "the wrong valid index is accepted (by design); record the on-chain result." |
 | `double-vote-index` | ATT-04 | Signs index 0, then asks the local signer for index 1 on the *same slot* — no wire traffic at all. | "the local signer refuses the second signature." **Read this on the faulted node, not the honest ones — see §7.** |
@@ -98,10 +98,11 @@ other operator sends this node a *different* invalid proposal to accept during t
 it changes how long the swap lasts, and that is worth knowing before you read a log:
 
 - **Committee runner** (`vote-112b`, `vote-index-2`) and **envelope runner**
-  (`envelope-foreign-root`, `envelope-builder-index`): the value check is rebuilt every duty
-  (`protocol/v2/ssv/runner/committee.go` `executeDuty`, `protocol/v2/ssv/runner/envelope.go`
-  `produceBlindedEnvelope`). The permissive swap is **duty-scoped** — a fresh, honest checker
-  replaces it on the very next duty.
+  (`envelope-foreign-root`, `envelope-builder-index`): the value check is rebuilt every duty in
+  each runner's `executeDuty` (`protocol/v2/ssv/runner/committee.go` `executeDuty`;
+  `protocol/v2/ssv/runner/envelope.go` `executeDuty`, line 267 — `produceBlindedEnvelope` is where
+  the permissive swap itself happens, not the rebuild). The permissive swap is **duty-scoped** — a
+  fresh, honest checker replaces it on the very next duty.
 - **Proposer runner** (`block-wrong-version`): the value check is set once, at construction, and
   is never rebuilt per duty. Once `block-wrong-version` fires, the permissive check **stays for
   that runner's lifetime** — i.e. until the node restarts.
@@ -248,13 +249,40 @@ fault costs a cold resync via `kurtosis service update --env`, which wipes the l
 Two items are known to be unverified on a live enclave. Neither can be closed by `qa/faults`'
 or `qa/faultnet`'s unit tests; they need a real run.
 
-1. **The network decorator is on the committee-runner broadcast path.** Confirm by comparing
-   `🧪 qa fault injected` counts against `📤 broadcast message to topic` counts for the faulted
-   operator — they should track together for every wire fault (`ptc-qbft`, `two-entries`,
-   `ptc-3-per-epoch`, `prefs-5-roots`, `prefs-early`, `prefs-late`, `prefs-replay`,
-   `role7-prefork`). Deferred since the decorator was first written.
+1. **The network decorator is actually on the runner broadcast path it is meant to intercept.** The
+   decorator wraps `BroadcastAtSlot`, which every runner reaches through the shared `BaseRunner`
+   broadcast helpers (`signAndBroadcastPartialSigMsgs`, `signAndBroadcastPostConsensusMsg` in
+   `protocol/v2/ssv/runner/runner.go`) — not through `CommitteeRunner` specifically. The PTC and
+   preferences faults in particular are emitted from `ptc_attester.go` and the proposer-preferences
+   runner, each going through those same shared helpers. Confirm by checking that `🧪 qa fault
+   injected` lines appear carrying the roles the active fault targets, and compare their counts
+   against `📤 broadcast message to topic` counts for the faulted operator — they should track
+   together for every wire fault (`ptc-qbft`, `two-entries`, `ptc-3-per-epoch`, `prefs-5-roots`,
+   `prefs-early`, `prefs-late`, `prefs-replay`, `role7-prefork`). Deferred since the decorator was
+   first written.
 2. **The synthetic builder URL in `auth-no-builders` does not degrade block production on the
    faulted node.** Source-level tracing says the URL cannot reach the `produceBlockV4` request
    body in a way that breaks the SIP's §4, Proposer (`docs/qa-glamsterdam-test-plan.md` §3.4) — but
    that is a trace, not a run. Confirm the faulted operator still proposes normally once this runs
    on ssv-mini.
+
+## Errata for the pass document
+
+Two discrepancies between `docs/qa-glamsterdam-test-plan-passes.md` §6.6 and the code were found
+while writing this runbook. Both are recorded here so they travel back to whoever maintains that
+document; neither is a defect in this branch.
+
+1. **ATT-02's oracle string is stale.** §6.6 gives the oracle as `failed to decode gloas beacon
+   vote`. The value check that actually produces the round-change (`protocol/v2/ssv/value_check.go:112`,
+   `gloasVoteChecker.CheckValue`) emits `failed decoding gloas beacon vote` — different wording
+   ("decoding" vs. "to decode"). The `to decode` phrasing exists in the code, but only in an
+   unrelated Debug line in the committee observer
+   (`protocol/v2/ssv/validator/committee_observer.go:438`, "failed to decode gloas beacon vote from
+   proposal"), which is not the M3 oracle's source. A tester grepping the §6.6 string verbatim
+   against `ssv-node` logs will find nothing on the actual rejection path and may record a false
+   negative for ATT-02. §6.6 needs a wording fix.
+2. **MSG-07's oracle names the wrong mechanism.** §6.6 gives the oracle as "the third PTC partial
+   per epoch is ignored," describing `ptc-3-per-epoch`'s visible outcome. The mechanism is the PTC
+   assignment gate (`ErrNoDuty`), not the per-epoch duty-count rule (`ErrTooManyDutiesPerEpoch`) the
+   wording implies — see §8 above for the full writeup. §6.6 and the MSG-07 scenario card need an
+   erratum.
