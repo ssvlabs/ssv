@@ -78,8 +78,8 @@ var menu = []Entry{
 	{AuthNoBuilders, "MSG-10", "broadcast request-auth partials that the receivers have no Builders for", "cli/operator/node.go newNode"},
 	{EnvelopeForeignRoot, "EPE-04, FLT-06", "propose an envelope with a foreign BeaconBlockRoot", "protocol/v2/ssv/runner/envelope.go produceBlindedEnvelope"},
 	{EnvelopeBuilderIndex, "EPE-04", "propose an envelope with a non-self-build BuilderIndex", "protocol/v2/ssv/runner/envelope.go produceBlindedEnvelope"},
-	{Role7PreFork, "MSG-02", "send role 7, 8 and 9 messages for pre-fork slots", "qa/faultnet"},
-	{VRPostFork, "MSG-02", "keep the validator-registration heartbeat running at Gloas slots", "operator/duties/validator_registration.go processExecution"},
+	{Role7PreFork, "MSG-02", "send role 7, 8 and 9 messages for a fixed pre-fork slot, cloned from any outgoing partial-signature message", "qa/faultnet"},
+	{VRPostFork, "MSG-02", "keep the validator-registration heartbeat running at Gloas slots", "operator/duties/validator_registration.go (scheduling) + protocol/v2/ssv/runner/validator_registration.go executeDuty (fires once broadcast)"},
 }
 
 // active holds the Fault selected at boot. It is written once, before any goroutine that reads it
