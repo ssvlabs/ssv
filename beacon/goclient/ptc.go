@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/jellydator/ttlcache/v3"
 
 	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 )
@@ -45,11 +46,34 @@ func (gc *GoClient) PayloadAttestationDuties(ctx context.Context, epoch phase0.E
 	})
 }
 
-// PayloadAttestationData returns the PayloadAttestationData to attest to for the slot, from the first
-// beacon client that responds, or (nil, nil) if that node reports no block for the slot (204). A 204 is
-// an answer, not an error, so it stops the client fallback — the operator abstains on its own node's
-// view rather than polling the rest for a block.
+// PayloadAttestationData returns the PayloadAttestationData to attest to for the slot, or (nil, nil) if
+// the beacon node reports no block for the slot (204) — the SIP #94 §3 abstain signal. The data is
+// slot-level and every PTC member of the slot asks for it at the same cutoff, so calls for a slot that are
+// in flight together are joined into one request, and a fetched result is reused for the slot's later
+// callers (issue #3031). The abstain signal is not cached: a block may still arrive for a later caller.
 func (gc *GoClient) PayloadAttestationData(ctx context.Context, slot phase0.Slot) (*gloas.PayloadAttestationData, error) {
+	data, err, _ := gc.payloadAttestationReqInflight.Do(slot, func() (*gloas.PayloadAttestationData, error) {
+		if cached := gc.payloadAttestationDataCache.Get(slot); cached != nil {
+			return cached.Value(), nil
+		}
+		// Detach from the leader caller's ctx so its cancellation doesn't fail the callers joined into this
+		// request; the fetch carries its own per-client timeout.
+		data, err := gc.fetchPayloadAttestationDataFunc(context.WithoutCancel(ctx), slot)
+		if err != nil {
+			return nil, err
+		}
+		if data != nil {
+			gc.payloadAttestationDataCache.Set(slot, data, ttlcache.DefaultTTL)
+		}
+		return data, nil
+	})
+	return data, err
+}
+
+// fetchPayloadAttestationData fetches the slot's payload-attestation data from the first beacon client
+// that responds. A 204 is an answer, not an error, so it stops the client fallback — the operator abstains
+// on its own node's view rather than polling the rest for a block.
+func (gc *GoClient) fetchPayloadAttestationData(ctx context.Context, slot phase0.Slot) (*gloas.PayloadAttestationData, error) {
 	return firstClientResult(ctx, gc, "PayloadAttestationData", http.MethodGet, func(ctx context.Context, addr string) (*gloas.PayloadAttestationData, error) {
 		return requestPayloadAttestationData(ctx, gloasHTTPClient, addr, slot)
 	})

@@ -63,7 +63,7 @@ func (gc *GoClient) AttesterDuties(ctx context.Context, epoch phase0.Epoch, vali
 
 // GetAttestationData returns attestation data for a given slot.
 // Multiple calls for the same slot are joined into a single request, after which
-// the result is cached for a short duration, deep copied and returned.
+// the result is cached for a short duration and shared with later callers.
 // It also verifies the returned head against cached HeadEvent root and re-fetches if stale.
 func (gc *GoClient) GetAttestationData(ctx context.Context, slot phase0.Slot) (*phase0.AttestationData, spec.DataVersion, error) {
 	result, err, _ := gc.attestationReqInflight.Do(slot, func() (*phase0.AttestationData, error) {
