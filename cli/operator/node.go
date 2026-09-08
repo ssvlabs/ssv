@@ -262,6 +262,8 @@ func newNode(
 
 	usingSSVSigner := res.usingSSVSigner
 
+	// Must run AFTER applyBuilderFault: a remote-signing operator must end up with no builders either
+	// way (RAU-03), including under FAULT=auth-no-builders — reversed, the synthetic entry would survive.
 	if len(cfg.Builders.Entries) > 0 && usingSSVSigner {
 		// Web3Signer has no request-auth type, so this operator could never contribute an auth
 		// partial — warn once here instead of once per builder per emission in the runner.
