@@ -199,8 +199,20 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 }
 
 // gloasVRDeprecated reports whether the validator-registration heartbeat must stop, given whether
-// the slot or epoch in question is Gloas. QA fault menu MSG-02 (vr-postfork) keeps the heartbeat
-// running past the fork so the honest operators must refuse role-4 messages at Gloas slots.
+// the slot or epoch in question is Gloas. Validator registration is deprecated from the Gloas fork
+// (SIP #94 §5): fee recipient and gas limit travel in the proposer preferences instead. THREE gates
+// must all agree to stop it — the next reader touching any one of them should check the other two:
+//  1. HandleDuties (this file) — the event-driven enqueue gate, keyed on the duty slot.
+//  2. processExecution (this file) — the periodic scheduling gate, keyed on the current epoch.
+//  3. ValidatorRegistrationRunner.executeDuty
+//     (protocol/v2/ssv/runner/validator_registration.go) — the runner-side belt, keyed on the duty
+//     slot. It lives in a different package, so it mirrors this function's fault check rather than
+//     calling it.
+//
+// QA fault menu MSG-02 (vr-postfork) needs all three gates suppressed at once to keep role-4
+// messages reaching the wire past the fork — the honest operators must refuse them there. Missing
+// any one of the three keeps the heartbeat scheduled but throws the message away downstream, which
+// looks like a fired fault with no wire evidence behind it.
 func gloasVRDeprecated(isGloas bool) bool {
 	if faults.Is(faults.VRPostFork) {
 		return false
@@ -216,9 +228,13 @@ func (h *ValidatorRegistrationHandler) processExecution(ctx context.Context, epo
 
 	// Validator registration is deprecated at the Gloas fork — superseded by proposer preferences (§5).
 	// Drop any entries that didn't drain before the fork; nothing more is enqueued past it.
-	if faults.Is(faults.VRPostFork) && h.netCfg.IsGloas(epoch) {
-		faults.Fired(h.logger, zap.Uint64("epoch", uint64(epoch)))
-	}
+	//
+	// QA fault menu MSG-02 (vr-postfork): faults.Fired for this fault is emitted from
+	// ValidatorRegistrationRunner.executeDuty (protocol/v2/ssv/runner/validator_registration.go),
+	// once the role-4 message is actually signed and broadcast — not here, where the duty is merely
+	// scheduled. A fired-here line would outrun the wire: the runner has its own copy of this gate
+	// (see gloasVRDeprecated's doc comment) and used to still throw the message away even when the
+	// scheduler let it through, so the honest side's silence proved nothing.
 	if gloasVRDeprecated(h.netCfg.IsGloas(epoch)) {
 		h.eventQueue = nil
 		return

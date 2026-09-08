@@ -29,6 +29,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/qa/faults"
 )
 
 const (
@@ -192,6 +193,17 @@ func (r *ValidatorRegistrationRunner) expectedPostConsensusRootsAndDomain(contex
 	return nil, spectypes.DomainError, fmt.Errorf("no post consensus roots for validator registration")
 }
 
+// vrDeprecatedAtSlot is the runner-side (third) gate in the "is VR deprecated here" decision — see
+// operator/duties/validator_registration.go gloasVRDeprecated for the other two gates and the full
+// set of three. Duplicated rather than imported: the two packages must not depend on each other,
+// and the logic is one line, so a shared helper would cost more than it saves.
+func vrDeprecatedAtSlot(isGloas bool) bool {
+	if faults.Is(faults.VRPostFork) {
+		return false
+	}
+	return isGloas
+}
+
 func (r *ValidatorRegistrationRunner) executeDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty) error {
 	// Reuse the existing span instead of generating new one to keep tracing-data lightweight.
 	span := trace.SpanFromContext(ctx)
@@ -204,7 +216,17 @@ func (r *ValidatorRegistrationRunner) executeDuty(ctx context.Context, logger *z
 	// From Gloas the validator registration duty is deprecated: fee recipient and gas limit travel
 	// in the §5 proposer preferences instead (SIP #94 §5). The scheduler drains the duty and message
 	// validation rejects it on the wire; this runner-side guard is the belt matching ssv-spec's.
-	if r.NetworkConfig.IsGloasAtSlot(validatorDuty.DutySlot()) {
+	//
+	// This is the THIRD of three gates that must all agree "is VR deprecated here" — see
+	// operator/duties/validator_registration.go gloasVRDeprecated for the other two (the
+	// event-driven enqueue and the periodic scheduler) and the full QA fault menu MSG-02
+	// (vr-postfork) rationale. vrDeprecatedAtSlot below mirrors that function's fault check rather
+	// than calling it, since the two live in different packages: without this guard the scheduler
+	// would keep sending role-4 messages past the fork while this gate silently threw every one of
+	// them away, so the honest side's silence proved nothing about the message-validation rule
+	// under test.
+	isGloas := r.NetworkConfig.IsGloasAtSlot(validatorDuty.DutySlot())
+	if vrDeprecatedAtSlot(isGloas) {
 		return spectypes.NewError(spectypes.ValidatorRegistrationDeprecatedErrorCode,
 			"validator registration is deprecated from Gloas; use proposer preferences")
 	}
@@ -239,6 +261,13 @@ func (r *ValidatorRegistrationRunner) executeDuty(ctx context.Context, logger *z
 
 	if err := r.signAndBroadcastPartialSigMsgs(ctx, r.network, r.operatorSigner, r.GetShare().ValidatorPubKey, msgs); err != nil {
 		return fmt.Errorf("could not sign/broadcast validator registration partial sig: %w", err)
+	}
+
+	// QA fault menu MSG-02 (vr-postfork): fire only once the role-4 message has actually gone out
+	// on the wire, not when the duty was merely scheduled — the honest operators' silence is only
+	// evidence against a fault that provably reached them.
+	if isGloas && faults.Is(faults.VRPostFork) {
+		faults.Fired(logger, zap.Uint64("slot", uint64(validatorDuty.DutySlot())))
 	}
 
 	return nil
