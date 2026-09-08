@@ -68,7 +68,7 @@ func Plan(f faults.Fault, msg *spectypes.SignedSSVMessage, slot, now, preForkSlo
 	case faults.PTC3PerEpoch:
 		return ptcExtraSlots(msg, slot)
 	case faults.Role7PreFork:
-		return forgeGloasRoles(msg, slot, preForkSlot)
+		return forgeGloasRoles(msg, slot, now, preForkSlot)
 	default:
 		return identity
 	}
@@ -450,9 +450,35 @@ func ptcExtraSlots(msg *spectypes.SignedSSVMessage, slot phase0.Slot) []Outgoing
 //
 // preForkSlot is computed by the decorator from the network config (GLOAS_FORK_EPOCH *
 // SlotsPerEpoch, minus one) and passed in — Plan itself never reads a config.
-func forgeGloasRoles(msg *spectypes.SignedSSVMessage, slot, preForkSlot phase0.Slot) []Outgoing {
+//
+// now is the decorator's own wall-clock slot (the same value Plan already receives as its `now`
+// argument), used only for a sanity bound: GloasForkEpoch() reports ok for an unscheduled
+// far-future epoch by design (networkconfig/beacon.go), and multiplying that sentinel epoch by
+// SlotsPerEpoch wraps a uint64 into an arbitrary value — the decorator's own epoch==0 guard only
+// covers one degenerate input, not this one. A genuine pre-fork slot is always comfortably below
+// the current wall clock, so preForkSlot >= now can only mean the multiplication wrapped; forging
+// against that slot would target nothing meaningful, so treat the fault as inapplicable instead.
+func forgeGloasRoles(msg *spectypes.SignedSSVMessage, slot, now, preForkSlot phase0.Slot) []Outgoing {
 	identity := []Outgoing{{Msg: msg, Slot: slot}}
 	if partialBody(msg) == nil {
+		return identity
+	}
+	if preForkSlot >= now {
+		return identity
+	}
+	// A committee-role partial's MsgID executor is 16 zero bytes plus the 32-byte committee ID, not
+	// a validator pubkey. The clone below rewrites MsgID with a validator-role runner but keeps the
+	// executor bytes as-is, so the publish path takes the validator branch and
+	// ValidatorStore().Validator(executorID) fails to resolve a validator that was never encoded
+	// there — nothing reaches the wire, and the injection log fires anyway (faults.Fired runs in
+	// send, before the inner broadcast), leaving three "injected" lines and three failed-send
+	// warnings per committee partial with no corresponding wire traffic. Even if it somehow
+	// published, the honest side resolves the executor before the role check, so it would answer
+	// unknown-validator rather than the ErrInvalidRole this fault targets. Skip both committee-
+	// shaped roles (plain committee and the Gloas aggregator-committee combination) and let them
+	// through untouched; validator-role partials (proposer, preferences, PTC, aggregator,
+	// validator registration) remain the trigger.
+	if r := role(msg); r == spectypes.RoleCommittee || r == spectypes.RoleAggregatorCommittee {
 		return identity
 	}
 

@@ -309,6 +309,39 @@ func TestPlanRole7PreFork(t *testing.T) {
 		require.Len(t, out, 1)
 		require.Same(t, msg, out[0].Msg)
 	})
+
+	// FIX B (second review cycle): a committee-role partial's MsgID executor is 16 zero bytes plus
+	// the 32-byte committee ID, not a validator pubkey (see NewCommitteeMsgID in ssv-spec). Forging
+	// it into a validator-role clone sends the publish path down the validator branch
+	// (network/p2p/p2p_pubsub.go's BroadcastAtSlot), where ValidatorStore().Validator(executorID)
+	// can never resolve those bytes — nothing would reach the wire, only three failed-send warnings
+	// per committee partial alongside three "injected" lines that outrun them. Both committee-shaped
+	// roles must return identity, untouched, one Outgoing, same pointer, unsigned.
+	t.Run("skips a committee-role partial: its executor is not a validator pubkey", func(t *testing.T) {
+		for _, r := range []spectypes.RunnerRole{spectypes.RoleCommittee, spectypes.RoleAggregatorCommittee} {
+			msg := partialMsg(t, r, 500)
+			out := Plan(faults.Role7PreFork, msg, 500, 500, preForkSlot)
+			require.Len(t, out, 1, "role %v must yield identity only", r)
+			require.Same(t, msg, out[0].Msg, "role %v must return the same pointer", r)
+			require.False(t, out[0].Resign, "role %v must not be resigned", r)
+		}
+	})
+
+	// "Also (cheap)": GloasForkEpoch() reports ok for an unscheduled far-future epoch by design
+	// (networkconfig/beacon.go), pinned to FarFutureEpoch = math.MaxUint64
+	// (beacon/goclient/types.go). Multiplying that by SlotsPerEpoch wraps a uint64 into a slot with
+	// no relation to any real pre-fork boundary — a slot that is not, in fact, below the current
+	// wall clock. Standing in for that wrapped value directly (rather than reproducing the
+	// multiplication here) keeps this test about Plan's guard, not about the wraparound arithmetic
+	// itself, which TestRole7PreForkSlot below does not (and should not) reproduce either.
+	t.Run("treats a wrapped pre-fork slot as inapplicable and returns identity", func(t *testing.T) {
+		msg := partialMsg(t, spectypes.RolePTCAttester, 500)
+		wrappedPreForkSlot := phase0.Slot(500) // not below now(500): exactly the wraparound symptom
+		out := Plan(faults.Role7PreFork, msg, 500, 500, wrappedPreForkSlot)
+		require.Len(t, out, 1, "a pre-fork slot that is not below now must not be forged against")
+		require.Same(t, msg, out[0].Msg)
+		require.False(t, out[0].Resign)
+	})
 }
 
 // TestPerturbForRepeat pins the FIX 3 fix directly: perturbForRepeat is called by the decorator

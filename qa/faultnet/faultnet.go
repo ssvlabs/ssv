@@ -50,6 +50,13 @@ func (n *Network) BroadcastAtSlot(msg *spectypes.SignedSSVMessage, slot phase0.S
 // Falls back to slot 0 when there is no scheduled Gloas fork (pre-Gloas network config) or the fork
 // is scheduled at epoch 0 (unreachable in practice, but would otherwise underflow the subtraction) —
 // either way, 0 is still a slot below any real Gloas fork boundary.
+//
+// This guard does NOT cover an unscheduled far-future fork: GloasForkEpoch() reports ok for that
+// case too (by design, networkconfig/beacon.go), with epoch pinned to FarFutureEpoch
+// (math.MaxUint64, beacon/goclient/types.go), and multiplying that by SlotsPerEpoch wraps a
+// uint64 into a value nowhere near a real pre-fork slot. Plan's forgeGloasRoles is where that gets
+// caught — it already receives `now` and can compare, and "return identity" is Plan's own
+// vocabulary — rather than duplicating a wall-clock-aware guard here.
 func (n *Network) role7PreForkSlot() phase0.Slot {
 	epoch, ok := n.netCfg.GloasForkEpoch()
 	if !ok || epoch == 0 {
