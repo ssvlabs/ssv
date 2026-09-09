@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/libp2p/go-libp2p/core/peer"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
 const (
@@ -41,6 +42,17 @@ type identityJSON struct {
 	Addresses []string `json:"addresses"`
 	Subnets   string   `json:"subnets"`
 	Version   string   `json:"version"`
+	NetworkID string   `json:"network_id"`
+
+	// This node's operator identity, as opposed to the network identity above. These are
+	// omitted rather than zeroed because their absence is meaningful. A node running
+	// without an operator key (exporter mode) has none of them. OperatorID and
+	// OwnerAddress additionally stay absent until this operator's registration event has
+	// been synced, so a public key with no id means "registered but not yet observed, or
+	// not registered at all" - the public key is known from config at startup either way.
+	OperatorID        spectypes.OperatorID `json:"operator_id,omitempty"`
+	OperatorPublicKey string               `json:"operator_public_key,omitempty"`
+	OwnerAddress      string               `json:"owner_address,omitempty"`
 }
 
 type healthStatus struct{ err error }
