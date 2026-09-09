@@ -52,6 +52,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 	"github.com/ssvlabs/ssv/qa/faultnet"
 	"github.com/ssvlabs/ssv/qa/faults"
+	"github.com/ssvlabs/ssv/qa/faultval"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/ssvsigner"
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
@@ -249,6 +250,12 @@ func newNode(
 ) (_ *node, err error) {
 	// QA instrumentation (branch qa/gloas-m3-fault-menu). Parse before anything else is built so an
 	// unknown value fails the boot instead of quietly producing a clean node.
+	noLocalValidation, err := faults.ParseNoLocalValidation(cfg.QANoLocalValidation)
+	if err != nil {
+		return nil, err
+	}
+	faults.InitNoLocalValidation(noLocalValidation)
+
 	fault, err := faults.Parse(cfg.QAFault)
 	if err != nil {
 		return nil, fmt.Errorf("qa fault menu: %w", err)
@@ -355,7 +362,10 @@ func newNode(
 		validation.WithLogger(logger),
 	)
 
-	cfg.P2pNetworkConfig.MessageValidator = messageValidator
+	// QA modifier FAULT_NO_LOCAL_VALIDATION wraps ONLY this pubsub gate — never valOpts'
+	// MessageValidator below, whose runner-level rejections ("no duty assigned",
+	// "no builders configured") are themselves M3 oracles. No-op when the modifier is unset.
+	cfg.P2pNetworkConfig.MessageValidator = faultval.Wrap(messageValidator, logger)
 
 	p2pNetwork, err := setupP2P(ctx, logger, cfg, db, res.isExporter(), operatorPrivKey, ssvSignerClient)
 	if err != nil {

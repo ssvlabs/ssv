@@ -37,6 +37,61 @@ An **unknown** `FAULT` value aborts startup with `qa fault menu: unknown FAULT "
 values: ...`. This is deliberate (`qa/faults/faults.go` `Parse`): a typo must fail loudly, not
 quietly run a clean node that gets recorded as a passing fault run.
 
+## 2b. The `FAULT_NO_LOCAL_VALIDATION` modifier — making the honest side observable
+
+Set `FAULT_NO_LOCAL_VALIDATION=true` (config field `QANoLocalValidation`) alongside any `FAULT`
+value. It is a **modifier, not a menu value**: `FAULT` selects exactly one misbehaviour, so a 20th
+menu entry would force a choice between running `prefs-early` and observing the honest reaction to
+it. As a separate variable it composes with all 19.
+
+**Why it exists.** The 2026-09-09 M3 ladder found six values whose rule fired ONLY on the faulted
+operator, with all three honest operators silent:
+
+| value | rejections on the faulted node | on the honest operators |
+|---|---|---|
+| `prefs-early` | 11 / 11 injections | 0 |
+| `prefs-late` | 15 / 15 | 0 |
+| `ptc-qbft` | 20 / 20 | 0 |
+| `two-entries` | 19 / 19 | 0 |
+| `role7-prefork` | 3006 / 3009 | 0 |
+| `prefs-replay` | 75,512 | 0 |
+
+For every one of those, `docs/qa-glamsterdam-test-plan-passes.md` §6.6 states the oracle as an
+"Expected result on the honest operators" — and there was nothing there to read. The rule was proven
+enforced at the **sender**; the receivers were never tested. This modifier removes the sender's
+pubsub validation gate so the forged message reaches the mesh and the honest operators' own
+enforcement becomes observable.
+
+Note `prefs-5-roots` behaved differently again — it fired on BOTH sides (16 locally, 3 on each
+honest operator), so local rejection does not always prevent propagation. Why that value propagates
+and `ptc-qbft` does not is still unexplained; this modifier is the tool for settling it.
+
+**Boot banner.** With the modifier on, the node logs, before the fault banner:
+
+```
+🧪 QA MODIFIER: LOCAL PUBSUB VALIDATION DISABLED — this node does not validate messages on the
+gossip path, so its own forged messages reach the mesh and it also stops rejecting invalid INBOUND
+messages. Do not read this node's receive path as evidence.
+```
+
+Both banners also carry a `no_local_validation` boolean, so a run's logs always state which mode
+produced them. An unrecognised value aborts startup, exactly as an unknown `FAULT` does.
+
+**Scope, and the two limits that matter when reading results.**
+
+1. It wraps **only** the pubsub gate (`cli/operator/node.go`'s
+   `cfg.P2pNetworkConfig.MessageValidator`), never the runner's own validator. Runner-level
+   rejections stay live — `no duty assigned` (`ptc-3-per-epoch`, MSG-07) and
+   `no builders configured` (`auth-no-builders`, MSG-10) are real M3 oracles and must keep firing.
+2. It is **accept-all**, not accept-own. The faulted operator therefore also stops rejecting
+   invalid **inbound** messages from peers. Harmless in a QA enclave where it is the only
+   misbehaving sender, but it means **that node's receive path is not a valid observation point
+   while the modifier is on** — read the honest operators only.
+
+With the modifier unset, `Wrap` returns the production validator unchanged (asserted by identity in
+`qa/faultval`'s tests), so a node without it behaves identically to one built without the package —
+the same guarantee `FAULT=none` gives for the menu.
+
 ## 3. Confirming a fault fired
 
 Every injection site calls `faults.Fired`, which logs:
@@ -271,6 +326,12 @@ to chase, and a silent honest side is not itself reason to suspect either one.
    count of zero for those. That is now fixed at the source (`qa/faultnet/plan.go`'s
    `forgeGloasRoles` skips `RoleCommittee` and `RoleAggregatorCommittee`), so `role7-prefork` tracks
    like every other wire fault above and needs no separate caveat.
+
+   `auth-no-builders` is also excluded, and for a different reason: it works by CONFIGURATION (it
+   grants the node one synthetic direct-builder entry at startup) rather than by per-message
+   injection, so it logs **zero** `🧪` lines. Measured 2026-09-09: 0 injections, while the honest
+   operators logged its oracle 11 times each. A reader following §13(1) literally would read that
+   zero as a broken decorator.
 
    `prefs-replay` is excluded from that list, by design, not by bug: only the first send of its
    series announces a `🧪 qa fault injected` line, with every further repeat silent until the

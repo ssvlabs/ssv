@@ -14,6 +14,7 @@
   "ProposerDelay": "0s",
   "ProposerDelayEPBS": "0s",
   "QAFault": "",
+  "QANoLocalValidation": "",
   "SSVAPIAddress": "",
   "SSVAPIPort": "0",
   "SSVSigner.Endpoint": "",

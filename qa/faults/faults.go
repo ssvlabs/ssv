@@ -132,6 +132,50 @@ func Enabled() bool { return Active() != None }
 // Is reports whether f is the active fault. This is the guard used at every injection site.
 func Is(f Fault) bool { return Active() == f }
 
+// ── Modifier: FAULT_NO_LOCAL_VALIDATION ─────────────────────────────────────────────────────────
+//
+// This is a MODIFIER, not a menu value, and that distinction is the point. FAULT selects exactly
+// one misbehaviour; a 20th menu value would force a choice between (say) prefs-early AND seeing
+// the honest side's reaction to it, which is precisely the combination the M3 run showed we need.
+// As a separate variable it composes with any of the 19.
+//
+// Why it exists: the 2026-09-09 M3 ladder found SIX values whose rule fired only on the FAULTED
+// operator, with the honest side silent — prefs-early (11/11), prefs-late (15/15), ptc-qbft
+// (20/20), two-entries (19/19), role7-prefork (3006/3009) and prefs-replay (75,512). For those the
+// passes doc's §6.6 oracle ("expected result on the honest operators") could not be evidenced at
+// all: we proved the sender enforces the rule and never tested the receivers. Setting this
+// modifier removes the sender's pubsub validation gate so the forged message reaches the mesh and
+// the honest operators' own enforcement becomes observable.
+//
+// Scope, deliberately: it wraps ONLY the pubsub gate (cli/operator/node.go's
+// cfg.P2pNetworkConfig.MessageValidator), not the runner's own validator use. Runner-level
+// rejections — "no duty assigned" (ptc-3-per-epoch), "no builders configured" (auth-no-builders) —
+// are real M3 results and must keep working. It is also accept-ALL rather than accept-own: the
+// faulted operator therefore stops validating INBOUND peer messages too. Harmless in a QA enclave
+// where it is the only misbehaving sender, and cheaper than plumbing an own-signer check, but it
+// means this node's receive path is NOT a valid observation point while the modifier is on.
+var noLocalValidation atomic.Bool
+
+// ParseNoLocalValidation resolves FAULT_NO_LOCAL_VALIDATION. Empty means off. Anything
+// unrecognised is an error rather than a silent false, for the same reason Parse rejects an unknown
+// FAULT: a typo must abort startup, not hand back a node that quietly still validates locally
+// while the tester records the run as having bypassed it.
+func ParseNoLocalValidation(s string) (bool, error) {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "", "false", "0", "no", "off":
+		return false, nil
+	case "true", "1", "yes", "on":
+		return true, nil
+	}
+	return false, fmt.Errorf("unknown FAULT_NO_LOCAL_VALIDATION %q, want one of: true, false (empty means false)", s)
+}
+
+// InitNoLocalValidation sets the modifier. Call once at startup, before the network is built.
+func InitNoLocalValidation(b bool) { noLocalValidation.Store(b) }
+
+// NoLocalValidation reports whether the sender's pubsub validation gate is disabled.
+func NoLocalValidation() bool { return noLocalValidation.Load() }
+
 // Fired records that an injection happened. Every site must call it: the M3 oracles read the
 // honest operators, so a silent honest side is only evidence when the fault provably fired.
 func Fired(logger *zap.Logger, fields ...zap.Field) {
@@ -140,8 +184,16 @@ func Fired(logger *zap.Logger, fields ...zap.Field) {
 
 // Banner logs the boot state of the instrumentation, loudly when a fault is active.
 func Banner(logger *zap.Logger) {
+	if NoLocalValidation() {
+		logger.Warn("🧪 QA MODIFIER: LOCAL PUBSUB VALIDATION DISABLED — this node does not validate "+
+			"messages on the gossip path, so its own forged messages reach the mesh and it also "+
+			"stops rejecting invalid INBOUND messages. Do not read this node's receive path as evidence.",
+			zap.Bool("no_local_validation", true))
+	}
 	if !Enabled() {
-		logger.Info("qa fault instrumentation present, no fault active", zap.String("qa_fault", string(None)))
+		logger.Info("qa fault instrumentation present, no fault active",
+			zap.String("qa_fault", string(None)),
+			zap.Bool("no_local_validation", NoLocalValidation()))
 		return
 	}
 	for _, e := range menu {
@@ -150,7 +202,8 @@ func Banner(logger *zap.Logger) {
 				zap.String("qa_fault", string(e.Fault)),
 				zap.String("behaviour", e.Behaviour),
 				zap.String("site", e.Site),
-				zap.String("scenarios", e.Scenarios))
+				zap.String("scenarios", e.Scenarios),
+				zap.Bool("no_local_validation", NoLocalValidation()))
 			return
 		}
 	}

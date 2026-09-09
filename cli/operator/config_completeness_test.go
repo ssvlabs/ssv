@@ -25,7 +25,11 @@ func Test_config_defaults_complete(t *testing.T) {
 		"eth2.WithWeightedAttestationData", "p2p.DisableIPRateLimit", "p2p.DiscoveryTrace",
 		"p2p.Libp2pTrace", "p2p.PubSubTrace", "ssv.ValidatorOptions.FullNode",
 		// optional values / paths / keys (no default)
-		"LocalEventsPath", "NetworkPrivateKey", "OperatorPrivateKey", "QAFault", "SSVAPIAddress",
+		"LocalEventsPath", "NetworkPrivateKey", "OperatorPrivateKey", "QAFault",
+		// QA modifier, opt-in: empty means the pubsub validation gate stays ON, which is the
+		// correct production behaviour. Grouped with QAFault rather than the flags above because
+		// it is a string (an unrecognised value must abort startup, so it cannot be a bool).
+		"QANoLocalValidation", "SSVAPIAddress",
 		"KeyStore.PasswordFile", "KeyStore.PrivateKeyFile", "SSVSigner.Endpoint", "SSVSigner.KeystoreFile",
 		"SSVSigner.KeystorePasswordFile", "SSVSigner.ServerCertFile", "p2p.Bootnodes", "p2p.HostAddress",
 		"p2p.HostDNS", "p2p.Subnets", "p2p.TrustedPeers", "ssv.CustomDomainType", "ssv.CustomNetwork",
