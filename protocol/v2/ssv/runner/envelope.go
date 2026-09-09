@@ -154,22 +154,24 @@ func (r *EnvelopeProposerRunner) executeDuty(ctx context.Context, logger *zap.Lo
 	produced := r.proposedBlocks.TakeProducedEnvelope(slot)
 	if produced == nil {
 		// A self-build produce response is BlockContents (include_payload=true), so this is a beacon-node
-		// fault; the builder operator is the only one that can disseminate, so the cluster misses the
-		// slot's reveal (bounded, non-slashable; SIP #94 Security Considerations).
-		return errors.New("produced the decided self-build block but its produceBlockV4 response carried no payload (include_payload=true not honored)")
+		// fault — or the slot's reveal data was already taken, which the start guard rules out today. The
+		// builder operator is the only one that can disseminate, so the cluster misses the slot's reveal
+		// (bounded, non-slashable; SIP #94 Security Considerations).
+		return errors.New("no reveal data for the decided self-build block: produceBlockV4 returned no payload (include_payload=true not honored) or the slot's reveal data was already taken")
 	}
 
 	blinded, err := gloas.Blinded(produced.Envelope)
 	if err != nil {
 		return fmt.Errorf("blind execution payload envelope: %w", err)
 	}
-	r.produced, r.producedBlinded = produced, blinded
 
-	// The builder operator's own envelope binds by construction; anything else is a beacon-node fault,
-	// failed before disseminating so it does not spend the one dissemination each peer admits per slot.
+	// The builder operator's own envelope binds by construction; anything else is a beacon-node fault. It
+	// fails before disseminating, so no peer's one-per-slot budget is spent, and before the runner holds
+	// the reveal data, so the failed duty keeps no blobs.
 	if !proposal.Binds(blinded) {
 		return errors.New("own execution payload envelope does not bind to the decided block")
 	}
+	r.produced, r.producedBlinded = produced, blinded
 
 	if err := r.disseminate(ctx, slot, blinded); err != nil {
 		return fmt.Errorf("disseminate envelope: %w", err)
@@ -291,7 +293,8 @@ func (r *EnvelopeProposerRunner) ProcessPreConsensus(ctx context.Context, logger
 
 // releaseEnvelopes drops the slot's envelopes — the produced reveal data, blobs included, its blinded form
 // and the selected envelope — once the duty concluded or a new one starts, so they do not outlive their
-// slot until the validator's next self-build proposal.
+// slot until the validator's next self-build proposal. A duty that never reaches quorum is the residual:
+// it keeps its envelopes until the next accepted start.
 func (r *EnvelopeProposerRunner) releaseEnvelopes() {
 	r.produced, r.producedBlinded, r.selectedEnvelope = nil, nil, nil
 }
