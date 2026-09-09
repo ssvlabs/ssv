@@ -266,6 +266,7 @@ func TestEnvelopeProposerRunner_BuilderNonBindingEnvelopeFailsBeforeDisseminatin
 	err := r.StartNewDuty(context.Background(), zap.NewNop(), envelopeDuty(slot), 3)
 	require.ErrorContains(t, err, "does not bind")
 	require.Empty(t, broadcastMsgs(r))
+	requireEnvelopesReleased(t, r)
 }
 
 // A start the duty guard rejects (a duplicate for the running slot) must not touch the in-flight slot's
