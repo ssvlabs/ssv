@@ -22,7 +22,7 @@ func (mv *messageValidator) validateEnvelopeDisseminationMessage(
 	signedSSVMessage *spectypes.SignedSSVMessage,
 	committeeInfo CommitteeInfo,
 	topic string,
-	receivedFrom peer.ID,
+	_ peer.ID, // the relaying peer plays no part: a repeat is IGNORE'd whichever peer relays it
 	receivedAt time.Time,
 ) (
 	*spectypes.EnvelopeDissemination,
@@ -128,19 +128,20 @@ func (mv *messageValidator) validateEnvelopeDisseminationMessage(
 		return dissemination, e
 	}
 
-	mv.recordEnvelopeDissemination(slot, receivedFrom, operatorState)
+	mv.recordEnvelopeDissemination(slot, operatorState)
 
 	return dissemination, nil
 }
 
 // recordEnvelopeDissemination records the signer's accepted dissemination for the slot, creating the
-// slot's signer state (and counting the duty) when the dissemination is the duty's first message.
-func (mv *messageValidator) recordEnvelopeDissemination(slot phase0.Slot, receivedFrom peer.ID, operatorState *OperatorState) {
+// slot's signer state (and counting the duty) when the dissemination is the duty's first message. Only
+// the signer-wide record is kept: a repeat is IGNORE'd whichever peer relays it (see the dedup rule), so a
+// per-peer record would have no reader.
+func (mv *messageValidator) recordEnvelopeDissemination(slot phase0.Slot, operatorState *OperatorState) {
 	signerState := operatorState.GetSignerStateForSlot(slot)
 	if signerState == nil {
 		signerState = newSignerState(slot, specqbft.FirstRound)
 		operatorState.SetSignerStateForSlot(slot, mv.netCfg.EstimatedEpochAtSlot(slot), signerState)
 	}
-	signerState.Peer(receivedFrom).SeenEnvelopeDissemination = true
 	signerState.World.SeenEnvelopeDissemination = true
 }

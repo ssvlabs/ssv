@@ -117,10 +117,6 @@ func (r *EnvelopeProposerRunner) StartNewDuty(ctx context.Context, logger *zap.L
 	if err != nil {
 		return err
 	}
-	// Single-slot runner: a new duty replaces the previous slot's envelopes (executeDuty re-derives them,
-	// so a non-builder stays nil). A slot's envelope is due by half the slot (SIP #94 §6) and a stale
-	// dissemination is dropped, so a validator's back-to-back self-build proposals never overlap here.
-	r.produced, r.producedBlinded, r.selectedEnvelope = nil, nil, nil
 	return r.baseStartNewNonBeaconDuty(ctx, logger, r, validatorDuty, quorum)
 }
 
@@ -135,6 +131,12 @@ func (r *EnvelopeProposerRunner) executeDuty(ctx context.Context, logger *zap.Lo
 	}
 	slot := validatorDuty.DutySlot()
 
+	// Single-slot runner: an accepted duty replaces the previous slot's envelopes (a non-builder stays
+	// nil). This runs only once the duty passed the start guard, so a rejected duplicate start cannot
+	// wipe an in-flight slot. A slot's envelope is due by half the slot (SIP #94 §6) and a stale
+	// dissemination is dropped, so a validator's back-to-back self-build proposals never overlap here.
+	r.releaseEnvelopes()
+
 	proposal, ok := r.proposedBlocks.Get(slot)
 	if !ok {
 		// The duty is started by the proposer after the §4 decision, so this is unexpected; stay running
@@ -147,28 +149,33 @@ func (r *EnvelopeProposerRunner) executeDuty(ctx context.Context, logger *zap.Lo
 		logger.Debug("not the builder operator for this slot, waiting for the builder's dissemination", fields.Slot(slot))
 		return nil
 	}
-	if proposal.ProducedEnvelope == nil {
+	// The runner takes the reveal data over from the store, so the blobs live in one place and are released
+	// when this duty concludes rather than when the store's retention window evicts the decision.
+	produced := r.proposedBlocks.TakeProducedEnvelope(slot)
+	if produced == nil {
 		// A self-build produce response is BlockContents (include_payload=true), so this is a beacon-node
 		// fault; the builder operator is the only one that can disseminate, so the cluster misses the
 		// slot's reveal (bounded, non-slashable; SIP #94 Security Considerations).
 		return errors.New("produced the decided self-build block but its produceBlockV4 response carried no payload (include_payload=true not honored)")
 	}
 
-	blinded, err := gloas.Blinded(proposal.ProducedEnvelope.Envelope)
+	blinded, err := gloas.Blinded(produced.Envelope)
 	if err != nil {
 		return fmt.Errorf("blind execution payload envelope: %w", err)
 	}
-	r.produced, r.producedBlinded = proposal.ProducedEnvelope, blinded
+	r.produced, r.producedBlinded = produced, blinded
+
+	// The builder operator's own envelope binds by construction; anything else is a beacon-node fault,
+	// failed before disseminating so it does not spend the one dissemination each peer admits per slot.
+	if !proposal.Binds(blinded) {
+		return errors.New("own execution payload envelope does not bind to the decided block")
+	}
 
 	if err := r.disseminate(ctx, slot, blinded); err != nil {
 		return fmt.Errorf("disseminate envelope: %w", err)
 	}
 	logger.Debug("disseminated execution payload envelope", fields.Slot(slot))
 
-	// The builder operator's own envelope binds by construction; anything else is a beacon-node fault.
-	if !proposal.Binds(blinded) {
-		return errors.New("own execution payload envelope does not bind to the decided block")
-	}
 	return r.selectAndSign(ctx, logger, validatorDuty, blinded)
 }
 
@@ -215,9 +222,11 @@ func (r *EnvelopeProposerRunner) ProcessEnvelopeDissemination(ctx context.Contex
 // signatures over the selected envelope's root and, on quorum, reconstructs the signature. Only the
 // builder operator, whose produced envelope blinds to the selected one, publishes the reveal.
 func (r *EnvelopeProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) (err error) {
-	if r.hasDutyAssigned() && !r.hasDutySucceeded() && r.selectedEnvelope == nil {
-		// A peer's partial can arrive before this operator has selected an envelope to validate it
-		// against (its dissemination or §4 decision is still in flight): retry rather than drop.
+	if r.hasDutyAssigned() && !r.hasDutySucceeded() && r.selectedEnvelope == nil && signedMsg.Slot == r.State.CurrentDuty.DutySlot() {
+		// A peer's partial for this slot can arrive before this operator has selected an envelope to
+		// validate it against (its dissemination or §4 decision is still in flight): retry rather than
+		// drop. Partials for other slots take the base slot check below — a stale one is dropped, a
+		// future one is retried on its own account.
 		return NewRetryableError(errNoSelectedEnvelope)
 	}
 
@@ -263,6 +272,7 @@ func (r *EnvelopeProposerRunner) ProcessPreConsensus(ctx context.Context, logger
 	if !built {
 		logger.Debug("envelope signature reconstructed; this operator did not build the envelope, not publishing", fields.Slot(duty.Slot))
 		r.markDutySucceeded()
+		r.releaseEnvelopes()
 		return nil
 	}
 
@@ -274,8 +284,16 @@ func (r *EnvelopeProposerRunner) ProcessPreConsensus(ctx context.Context, logger
 	}
 	recordSuccessfulSubmission(ctx, 1, r.NetworkConfig.EstimatedEpochAtSlot(duty.Slot), spectypes.BNRoleEnvelopeProposer)
 	r.markDutySucceeded()
+	r.releaseEnvelopes()
 	logger.Info("✅ published execution payload envelope", fields.Slot(duty.Slot))
 	return nil
+}
+
+// releaseEnvelopes drops the slot's envelopes — the produced reveal data, blobs included, its blinded form
+// and the selected envelope — once the duty concluded or a new one starts, so they do not outlive their
+// slot until the validator's next self-build proposal.
+func (r *EnvelopeProposerRunner) releaseEnvelopes() {
+	r.produced, r.producedBlinded, r.selectedEnvelope = nil, nil, nil
 }
 
 func (r *EnvelopeProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.SignedSSVMessage) error {
@@ -322,7 +340,11 @@ func (r *EnvelopeProposerRunner) selectAndSign(ctx context.Context, logger *zap.
 }
 
 // disseminate broadcasts the blinded envelope as an SSVEnvelopeDisseminationMsgType message, operator-signed
-// and routed like the role's partial-signature traffic (SIP #94 §6).
+// and routed like the role's partial-signature traffic (SIP #94 §6). The carrier rides SSVMessage.Data,
+// which the spec caps (currently 726932 bytes; message validation enforces it on receipt). The blinded
+// envelope is small except for ExecutionRequests, whose SSZ ceiling — 8192 deposit requests of 192 bytes —
+// would exceed the cap; in practice every deposit request costs the deposit contract's gas, so a block's
+// gas limit holds the list to the low thousands at most, a few hundred kilobytes and well under the cap.
 func (r *EnvelopeProposerRunner) disseminate(ctx context.Context, slot phase0.Slot, envelope *gloas.BlindedExecutionPayloadEnvelope) error {
 	dissemination := &spectypes.EnvelopeDissemination{Slot: slot, Envelope: envelope}
 	data, err := dissemination.Encode()

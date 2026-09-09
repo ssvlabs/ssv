@@ -190,6 +190,8 @@ func TestEnvelopeProposerRunner_BuilderDisseminatesAndSigns(t *testing.T) {
 	require.Same(t, proposal.ProducedEnvelope, r.produced)
 	require.NotNil(t, r.selectedEnvelope)
 	require.True(t, r.builtSelectedEnvelope())
+	left, _ := r.proposedBlocks.Get(slot)
+	require.Nil(t, left.ProducedEnvelope, "the runner took the reveal data over from the store")
 
 	broadcast := broadcastMsgs(r)
 	require.Len(t, broadcast, 2, "one dissemination, then one partial signature")
@@ -250,6 +252,37 @@ func TestEnvelopeProposerRunner_BuilderWithoutRevealDataFailsDuty(t *testing.T) 
 	err := r.StartNewDuty(context.Background(), zap.NewNop(), envelopeDuty(slot), 3)
 	require.ErrorContains(t, err, "include_payload=true not honored")
 	require.Empty(t, broadcastMsgs(r))
+}
+
+// A builder operator whose own envelope does not bind to the decided block — a beacon-node fault — fails
+// the duty before disseminating, so it spends no peer's one-per-slot dissemination budget on it.
+func TestEnvelopeProposerRunner_BuilderNonBindingEnvelopeFailsBeforeDisseminating(t *testing.T) {
+	const slot = phase0.Slot(8)
+	r, _ := newEnvelopeProposerRunnerForTest(t, newEnvelopeTestBeacon())
+	proposal := proposalFor(t, sampleEnvelope(), true)
+	proposal.BlockRoot = phase0.Root{0xff} // a decided block other than the one the produced envelope commits to
+	r.proposedBlocks.Record(slot, proposal)
+
+	err := r.StartNewDuty(context.Background(), zap.NewNop(), envelopeDuty(slot), 3)
+	require.ErrorContains(t, err, "does not bind")
+	require.Empty(t, broadcastMsgs(r))
+}
+
+// A start the duty guard rejects (a duplicate for the running slot) must not touch the in-flight slot's
+// envelopes: the reset happens only once a duty is accepted.
+func TestEnvelopeProposerRunner_RejectedDuplicateStartKeepsInFlightState(t *testing.T) {
+	const slot = phase0.Slot(8)
+	ctx, logger := context.Background(), zap.NewNop()
+	r, _ := newEnvelopeProposerRunnerForTest(t, newEnvelopeTestBeacon())
+	r.proposedBlocks.Record(slot, proposalFor(t, sampleEnvelope(), true))
+	require.NoError(t, r.StartNewDuty(ctx, logger, envelopeDuty(slot), 3))
+	require.NotNil(t, r.produced)
+
+	require.Error(t, r.StartNewDuty(ctx, logger, envelopeDuty(slot), 3))
+
+	require.NotNil(t, r.produced)
+	require.NotNil(t, r.selectedEnvelope)
+	require.True(t, r.builtSelectedEnvelope())
 }
 
 // Content-based selection: the first dissemination that binds to the §4 decision is signed; non-binding
@@ -345,6 +378,24 @@ func TestEnvelopeProposerRunner_PartialSignatureBeforeSelectionRetries(t *testin
 	require.ErrorIs(t, err, errNoSelectedEnvelope)
 }
 
+// The before-selection retry is scoped to the running slot: a partial for a slot already behind the duty
+// is dropped by the slot check instead of being replayed until the retry budget runs out.
+func TestEnvelopeProposerRunner_StalePartialWhileUnselectedIsDropped(t *testing.T) {
+	const slot = phase0.Slot(8)
+	ctx, logger := context.Background(), zap.NewNop()
+	envelope := sampleEnvelope()
+	blinded, err := gloas.Blinded(envelope)
+	require.NoError(t, err)
+	r, keySet := newEnvelopeProposerRunnerForTest(t, newEnvelopeTestBeacon())
+	r.proposedBlocks.Record(slot, proposalFor(t, envelope, false))
+	require.NoError(t, r.StartNewDuty(ctx, logger, envelopeDuty(slot), 3))
+
+	err = r.ProcessPreConsensus(ctx, logger, envelopePartialSig(t, keySet, blinded, slot-1, 2))
+	require.Error(t, err)
+	require.False(t, IsRetryable(err))
+	require.NotErrorIs(t, err, errNoSelectedEnvelope)
+}
+
 // On quorum the builder operator reconstructs the signature and publishes the reveal: the full envelope
 // carrying it, with the blobs and KZG proofs from its produce response.
 func TestEnvelopeProposerRunner_QuorumBuilderPublishes(t *testing.T) {
@@ -368,6 +419,7 @@ func TestEnvelopeProposerRunner_QuorumBuilderPublishes(t *testing.T) {
 	require.Equal(t, proposal.ProducedEnvelope.KZGProofs, published.KZGProofs)
 	require.Equal(t, proposal.ProducedEnvelope.Blobs, published.Blobs)
 	require.True(t, r.State.Succeeded)
+	requireEnvelopesReleased(t, r)
 }
 
 // A non-builder completes the duty on quorum without publishing: it holds no reveal data behind the root.
@@ -391,6 +443,16 @@ func TestEnvelopeProposerRunner_QuorumNonBuilderDoesNotPublish(t *testing.T) {
 	require.Empty(t, bn.submitted)
 	require.False(t, r.builtSelectedEnvelope())
 	require.True(t, r.State.Succeeded)
+	requireEnvelopesReleased(t, r)
+}
+
+// requireEnvelopesReleased checks the runner dropped the slot's envelopes once the duty concluded, so the
+// reveal data does not outlive its slot.
+func requireEnvelopesReleased(t *testing.T, r *EnvelopeProposerRunner) {
+	t.Helper()
+	require.Nil(t, r.produced)
+	require.Nil(t, r.producedBlinded)
+	require.Nil(t, r.selectedEnvelope)
 }
 
 // The signing target is the selected blinded envelope's root under DOMAIN_BEACON_BUILDER — equal to the
