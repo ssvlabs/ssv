@@ -86,7 +86,7 @@ func (b *BaseRunner) validatePartialSigMsg(
 		))
 	}
 	if psigMsgs.Slot > expectedSlot {
-		return NewRetryableError(spectypes.WrapError(spectypes.PartialSigMessageFutureSlotErrorCode, fmt.Errorf(
+		return NewRetryableError(withCode(spectypes.PartialSigMessageFutureSlotErrorCode, fmt.Errorf(
 			"%w: message slot: %d, expected slot: %d",
 			ErrFuturePartialSigMsg,
 			psigMsgs.Slot,

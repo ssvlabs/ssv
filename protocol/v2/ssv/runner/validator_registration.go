@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"sync"
 
@@ -94,11 +93,6 @@ func (r *ValidatorRegistrationRunner) ProcessPreConsensus(ctx context.Context, l
 	span := trace.SpanFromContext(ctx)
 
 	hasQuorum, roots, err := r.basePreConsensusMsgProcessing(ctx, logger, r, signedMsg)
-	if errors.Is(err, ErrNoDutyAssigned) || errors.Is(err, ErrRunningDutySucceeded) {
-		// Since we are re-using the same runner for different duties, ErrRunningDutySucceeded error
-		// also needs to be retried.
-		err = NewRetryableError(err)
-	}
 	if err != nil {
 		return fmt.Errorf("failed processing validator registration message: %w", err)
 	}

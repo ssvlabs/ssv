@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
+	"github.com/jellydator/ttlcache/v3"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel/trace"
@@ -34,6 +36,24 @@ type messageProcessingState struct {
 }
 
 type messageKey string
+
+// messageStateTTL bounds how long a message's processing state outlives its last attempt: long enough
+// for a retried message parked in the queue to keep its retry count and span across a realistic wait,
+// short enough that the cache does not grow without bound.
+const messageStateTTL = 10 * time.Minute
+
+// newMessageStates returns the per-message processing-state cache the queue consumers share. A state
+// normally ends its span when the message is processed or dropped; one that expires instead — a retried
+// message still parked in the queue — ends it here, so the span is exported rather than lost.
+func newMessageStates(ttl time.Duration) *ttlcache.Cache[messageKey, *messageProcessingState] {
+	states := ttlcache.New(ttlcache.WithTTL[messageKey, *messageProcessingState](ttl))
+	states.OnEviction(func(_ context.Context, reason ttlcache.EvictionReason, item *ttlcache.Item[messageKey, *messageProcessingState]) {
+		if reason == ttlcache.EvictionReasonExpired {
+			item.Value().span.End()
+		}
+	})
+	return states
+}
 
 const maxInt64DecimalLen = 20 // enough for uint64 max or int64 min in base 10
 
