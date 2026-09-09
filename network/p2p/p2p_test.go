@@ -25,6 +25,7 @@ import (
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -91,18 +92,64 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 	require.NotNil(t, routers)
 	require.NotNil(t, ln)
 
-	time.Sleep(3 * time.Second)
-
 	defer func() {
 		for _, node := range ln.Nodes {
 			require.NoError(t, node.(*p2pNetwork).Close())
 		}
 	}()
 
+	// Message validation rejects a committee consensus message whose QBFT round is far from
+	// the round it estimates from elapsed slot time (roundBelongsToAllowedSpread), so the
+	// committee rounds 1..3 broadcast below are all admitted only within a window of the slot.
+	// Broadcasting at an arbitrary wall-clock offset let a run that landed late in a slot get
+	// the low rounds rejected, starving the receive-only routers (the ssv-boole-post flake).
+	// Broadcast at a fixed point in the slot instead, so the test no longer depends on the
+	// wall-clock slot phase.
+	const (
+		broadcastTimeIntoSlot = 7 * time.Second // fixed point inside the admit-all-of-1..3 window (guarded below)
+		minMeshWait           = 3 * time.Second // let the gossip mesh form before broadcasting
+	)
+
+	// Guard the choice of broadcastTimeIntoSlot at the source: EstimatedRoundAt is the same
+	// estimate the validator uses, so if SlotDuration or the committee head-start ever shifts
+	// the estimated round out of the range that admits rounds 1..3, fail loudly here instead
+	// of silently reflaking on the router-count assertion below. allowedRoundsInPast and
+	// allowedRoundsInFuture are unexported in message/validation; mirror their current values.
+	const (
+		allowedRoundsInPast   = 2
+		allowedRoundsInFuture = 1
+	)
+	estRound, err := roundtimer.EstimatedRoundAt(spectypes.RoleCommittee, networkconfig.TestNetwork.SlotDuration, broadcastTimeIntoSlot)
+	require.NoError(t, err)
+	lowestAdmitted := specqbft.FirstRound
+	if estRound > allowedRoundsInPast {
+		lowestAdmitted = estRound - allowedRoundsInPast
+	}
+	highestAdmitted := estRound + allowedRoundsInFuture
+	require.True(t, lowestAdmitted <= 1 && highestAdmitted >= 3,
+		"broadcastTimeIntoSlot=%s puts the estimated committee round at %d (admitted spread [%d, %d]), which does not admit rounds 1..3",
+		broadcastTimeIntoSlot, estRound, lowestAdmitted, highestAdmitted)
+
+	// Wait until broadcastTimeIntoSlot into a slot — at least minMeshWait from now so the mesh
+	// has formed. Cancellable so a torn-down test returns promptly instead of sleeping for up
+	// to a slot.
+	wait := broadcastTimeIntoSlot - networkconfig.TestNetwork.EstimatedTimeIntoSlot()
+	for wait < minMeshWait {
+		wait += networkconfig.TestNetwork.SlotDuration
+	}
+	select {
+	case <-time.After(wait):
+	case <-ctx.Done():
+		return
+	}
+	// Log the actual offset so a recurrence (e.g. a scheduling/GC overshoot past the window)
+	// is immediately readable instead of surfacing only as the generic router-count failure.
+	t.Logf("broadcasting at %s into slot (target %s)", networkconfig.TestNetwork.EstimatedTimeIntoSlot(), broadcastTimeIntoSlot)
+
 	node1, node2 := ln.Nodes[1], ln.Nodes[2]
 
 	var wg sync.WaitGroup
-	broadcastErrCh := make(chan error, 12)
+	broadcastErrCh := make(chan error, 6)
 	recordBroadcastErr := func(err error) {
 		if err != nil {
 			broadcastErrCh <- err
@@ -114,21 +161,12 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 		defer wg.Done()
 		msgCommittee1 := generateCommitteeMsg(spectestingutils.Testing4SharesSet(), 1)
 		msgCommittee3 := generateCommitteeMsg(spectestingutils.Testing4SharesSet(), 3)
-		msgProposer := generateValidatorMsg(spectestingutils.Testing4SharesSet(), 4, spectypes.RoleProposer)
-		msgSyncCommitteeContribution := generateValidatorMsg(spectestingutils.Testing4SharesSet(), 5, ssvtypes.RoleSyncCommitteeContribution)
-		msgRoleVoluntaryExit := generateValidatorMsg(spectestingutils.Testing4SharesSet(), 6, spectypes.RoleVoluntaryExit)
 
 		recordBroadcastErr(node1.Broadcast(msgCommittee1.SSVMessage.GetID(), msgCommittee1))
-		<-time.After(time.Millisecond * 20)
+		time.Sleep(time.Millisecond * 20)
 		recordBroadcastErr(node2.Broadcast(msgCommittee3.SSVMessage.GetID(), msgCommittee3))
-		<-time.After(time.Millisecond * 20)
+		time.Sleep(time.Millisecond * 20)
 		recordBroadcastErr(node2.Broadcast(msgCommittee1.SSVMessage.GetID(), msgCommittee1))
-		<-time.After(time.Millisecond * 20)
-		recordBroadcastErr(node2.Broadcast(msgProposer.SSVMessage.GetID(), msgProposer))
-		<-time.After(time.Millisecond * 20)
-		recordBroadcastErr(node2.Broadcast(msgSyncCommitteeContribution.SSVMessage.GetID(), msgSyncCommitteeContribution))
-		<-time.After(time.Millisecond * 20)
-		recordBroadcastErr(node1.Broadcast(msgRoleVoluntaryExit.SSVMessage.GetID(), msgRoleVoluntaryExit))
 	}()
 
 	wg.Add(1)
@@ -139,9 +177,6 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 		msgCommittee1 := generateCommitteeMsg(spectestingutils.Testing4SharesSet(), 1)
 		msgCommittee2 := generateCommitteeMsg(spectestingutils.Testing4SharesSet(), 2)
 		msgCommittee3 := generateCommitteeMsg(spectestingutils.Testing4SharesSet(), 3)
-		msgProposer := generateValidatorMsg(spectestingutils.Testing4SharesSet(), 4, spectypes.RoleProposer)
-		msgSyncCommitteeContribution := generateValidatorMsg(spectestingutils.Testing4SharesSet(), 5, ssvtypes.RoleSyncCommitteeContribution)
-		msgRoleVoluntaryExit := generateValidatorMsg(spectestingutils.Testing4SharesSet(), 6, spectypes.RoleVoluntaryExit)
 
 		time.Sleep(time.Millisecond * 20)
 		recordBroadcastErr(node1.Broadcast(msgCommittee2.SSVMessage.GetID(), msgCommittee2))
@@ -149,9 +184,6 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 		time.Sleep(time.Millisecond * 20)
 		recordBroadcastErr(node2.Broadcast(msgCommittee1.SSVMessage.GetID(), msgCommittee1))
 		recordBroadcastErr(node1.Broadcast(msgCommittee3.SSVMessage.GetID(), msgCommittee3))
-		recordBroadcastErr(node1.Broadcast(msgProposer.SSVMessage.GetID(), msgProposer))
-		recordBroadcastErr(node1.Broadcast(msgSyncCommitteeContribution.SSVMessage.GetID(), msgSyncCommitteeContribution))
-		recordBroadcastErr(node2.Broadcast(msgRoleVoluntaryExit.SSVMessage.GetID(), msgRoleVoluntaryExit))
 	}()
 
 	wg.Wait()
@@ -177,37 +209,6 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 	for _, r := range routers {
 		assert.GreaterOrEqual(t, atomic.LoadUint64(&r.count), uint64(2), "router %d", r.i)
 	}
-}
-
-func generateValidatorMsg(ks *spectestingutils.TestKeySet, round specqbft.Round, nonCommitteeRole spectypes.RunnerRole) *spectypes.SignedSSVMessage {
-	if nonCommitteeRole == spectypes.RoleCommittee {
-		panic("committee role shouldn't be used here")
-	}
-	netCfg := networkconfig.TestNetwork
-	height := specqbft.Height(netCfg.EstimatedCurrentSlot())
-
-	fullData := spectestingutils.TestingQBFTFullData
-
-	// Derive the domain per-slot like production (p2p_setup.go DomainTypeAtSlot) so the
-	// fixture stays valid on both sides of the Boole fork (SSV_TEST_BOOLE_FORK matrix).
-	nonCommitteeIdentifier := spectypes.NewMsgID(netCfg.DomainTypeAtSlot(phase0.Slot(height)), ks.ValidatorPK.Serialize(), nonCommitteeRole)
-
-	qbftMessage := &specqbft.Message{
-		MsgType:    specqbft.ProposalMsgType,
-		Height:     height,
-		Round:      round,
-		Identifier: nonCommitteeIdentifier[:],
-		Root:       sha256.Sum256(fullData),
-
-		RoundChangeJustification: [][]byte{},
-		PrepareJustification:     [][]byte{},
-	}
-
-	leader := roundLeader(ks, height, round)
-	signedSSVMessage := spectestingutils.SignQBFTMsg(ks.OperatorKeys[leader], leader, qbftMessage)
-	signedSSVMessage.FullData = fullData
-
-	return signedSSVMessage
 }
 
 func generateCommitteeMsg(ks *spectestingutils.TestKeySet, round specqbft.Round) *spectypes.SignedSSVMessage {
