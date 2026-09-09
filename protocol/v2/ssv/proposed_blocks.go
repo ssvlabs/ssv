@@ -18,7 +18,8 @@ const proposedBlockRetention = 4
 // ProducedLocally marks the operator whose own produceBlockV4 response is the decided block — the
 // builder operator, the only one that disseminates and publishes — and ProducedEnvelope is the reveal
 // data that response carried: the envelope, blobs, and KZG proofs of a self-build, nil for everyone else
-// and for an external build.
+// and for an external build. The §6 envelope runner takes it over when its duty starts
+// (TakeProducedEnvelope), so the blobs live in one place.
 type ProposedBlock struct {
 	BlockRoot             phase0.Root
 	ParentRoot            phase0.Root
@@ -83,4 +84,20 @@ func (s *ProposedBlocks) Get(slot phase0.Slot) (ProposedBlock, bool) {
 	defer s.mu.Unlock()
 	block, ok := s.blocks[slot]
 	return block, ok
+}
+
+// TakeProducedEnvelope hands the slot's reveal data to its only consumer, the §6 envelope runner, and
+// drops the store's reference: the blobs then live in the runner alone and go when its duty concludes
+// rather than when the retention window evicts the decision. It returns nil when the slot has none left.
+func (s *ProposedBlocks) TakeProducedEnvelope(slot phase0.Slot) *gloas.ProducedEnvelope {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	block, ok := s.blocks[slot]
+	if !ok || block.ProducedEnvelope == nil {
+		return nil
+	}
+	produced := block.ProducedEnvelope
+	block.ProducedEnvelope = nil
+	s.blocks[slot] = block
+	return produced
 }

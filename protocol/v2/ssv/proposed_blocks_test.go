@@ -30,6 +30,17 @@ func TestProposedBlocks(t *testing.T) {
 	got, ok = s.Get(20)
 	require.True(t, ok)
 	require.Equal(t, phase0.Root{0x04}, got.BlockRoot)
+
+	// The reveal data is handed over once: the store forgets it, the decision itself stays.
+	produced := &gloas.ProducedEnvelope{}
+	s.Record(21, ProposedBlock{BlockRoot: phase0.Root{0x05}, ProducedLocally: true, ProducedEnvelope: produced})
+	require.Same(t, produced, s.TakeProducedEnvelope(21))
+	require.Nil(t, s.TakeProducedEnvelope(21))
+	got, ok = s.Get(21)
+	require.True(t, ok)
+	require.Nil(t, got.ProducedEnvelope)
+	require.Equal(t, phase0.Root{0x05}, got.BlockRoot)
+	require.Nil(t, s.TakeProducedEnvelope(22), "unknown slot")
 }
 
 // Binds is the §6 binding check (SIP #94 §6): the envelope must be self-build and commit to the decided

@@ -32,7 +32,11 @@ const (
 // it back as retryable. Dropping early is fatal for the duties that open with a single-shot
 // pre-consensus round — proposer RANDAO, selection proofs, registration, exit — since a dropped partial
 // is never re-sent: a transient clock error just past clockErrorTolerance on the sender's slot tick
-// would cost the whole duty, for the proposer the block (issue #3026).
+// would cost the whole duty, for the proposer the block (issue #3026). For the monotonic-slot roles
+// (monotonicSlotRole) the margin has one side effect: a signer's message for slot N+1 accepted this early
+// advances its slot, so its remaining slot-N messages are dropped as already advanced
+// (ErrSlotAlreadyAdvanced) that much sooner — a straggler behind the signer's own later message, which
+// sequential sending rules out barring network reordering.
 const earlyMessageMargin = time.Second
 
 // proposerPreferencesEarlyEpochs is the proposer-lookahead span in epochs (the current epoch plus

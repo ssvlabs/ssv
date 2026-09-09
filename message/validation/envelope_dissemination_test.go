@@ -175,6 +175,21 @@ func TestValidateEnvelopeDissemination_Verdicts(t *testing.T) {
 		_, err := f.validate(f.message(t, role, f.slot, []spectypes.OperatorID{3}, phase0.Root{0x01}), f.slot, peerA, f.netCfg.SlotStartTime(f.slot+10))
 		requireIgnore(t, err, ErrLateSlotMessage)
 	})
+	t.Run("slot must not regress once the signer advanced", func(t *testing.T) {
+		_, err := f.validate(f.message(t, role, f.slot, []spectypes.OperatorID{4}, phase0.Root{0x01}), f.slot, peerA, receivedAt)
+		require.NoError(t, err)
+		_, err = f.validate(f.message(t, role, f.slot-1, []spectypes.OperatorID{4}, phase0.Root{0x02}), f.slot-1, peerA, f.netCfg.SlotStartTime(f.slot-1))
+		requireIgnore(t, err, ErrSlotAlreadyAdvanced)
+	})
+	t.Run("a dissemination every slot of an epoch stays within the duty-count cap", func(t *testing.T) {
+		// The cap is SlotsPerEpoch and the count is over distinct slots, so one per slot is the most a
+		// signer can send in an epoch and must all be admitted.
+		first := f.netCfg.FirstSlotAtEpoch(f.gloasEpoch + 1)
+		for slot := first; slot < first+phase0.Slot(f.netCfg.SlotsPerEpoch); slot++ {
+			_, err := f.validate(f.message(t, role, slot, []spectypes.OperatorID{2}, phase0.Root{byte(slot)}), slot, peerA, f.netCfg.SlotStartTime(slot))
+			require.NoError(t, err, "slot %d", slot)
+		}
+	})
 }
 
 // Recording follows the signature check (SIP #94 §7): a forged carrier claiming another operator's
