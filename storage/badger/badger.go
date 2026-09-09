@@ -130,14 +130,14 @@ func (b *DB) SetMany(prefix []byte, n int, next func(int) (basedb.Obj, error)) e
 	return wb.Flush()
 }
 
-// Get return value for specified key
+// Get returns value for specified key
 func (b *DB) Get(prefix []byte, key []byte) (basedb.Obj, bool, error) {
 	txn := b.db.NewTransaction(false)
 	defer txn.Discard()
 	return newTxn(txn, b).Get(prefix, key)
 }
 
-// GetMany return values for the given keys
+// GetMany returns values for the given keys
 func (b *DB) GetMany(prefix []byte, keys [][]byte, iterator func(basedb.Obj) error) error {
 	if len(keys) == 0 {
 		return nil
@@ -146,7 +146,7 @@ func (b *DB) GetMany(prefix []byte, keys [][]byte, iterator func(basedb.Obj) err
 	return err
 }
 
-// Delete key in specific prefix
+// Delete deletes key in specific prefix
 func (b *DB) Delete(prefix []byte, key []byte) error {
 	return b.db.Update(func(txn *badger.Txn) error {
 		return newTxn(txn, b).Delete(prefix, key)
@@ -162,7 +162,7 @@ func (b *DB) GetAll(prefix []byte, handler func(int, basedb.Obj) error) error {
 	return err
 }
 
-// CountPrefix return the object count for all keys under specified prefix(bucket)
+// CountPrefix returns the object count for all keys under specified prefix(bucket)
 func (b *DB) CountPrefix(prefix []byte) (int64, error) {
 	var res int64
 	err := b.db.View(func(txn *badger.Txn) error {

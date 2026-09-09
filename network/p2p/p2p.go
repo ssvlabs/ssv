@@ -518,7 +518,7 @@ func (n *p2pNetwork) choosePeersToTrim(trimCnt int, trimInboundOnly bool) map[pe
 
 // bootstrapDiscovery starts the required services
 // it will try to bootstrap discovery service, and inject a connect function.
-// the connect function checks if we can connect to the given peer and if so passing it to the backoff connector.
+// the connect function checks if we can connect to the given peer and if so, passes it to the backoff connector.
 func (n *p2pNetwork) bootstrapDiscovery(connector chan peer.AddrInfo) {
 	defer close(connector)
 	err := tasks.Retry(func() error {
