@@ -33,7 +33,7 @@ require (
 	github.com/oleiade/lane/v2 v2.0.0
 	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/prometheus/client_golang v1.23.2
-	github.com/prysmaticlabs/go-bitfield v0.0.0-20240618144021-706c95b2dd15
+	github.com/prysmaticlabs/go-bitfield v0.0.0-20260504143531-5cbb6d0f5f2e
 	github.com/prysmaticlabs/prysm/v4 v4.0.8
 	github.com/rs/zerolog v1.32.0
 	github.com/sanity-io/litter v1.5.6

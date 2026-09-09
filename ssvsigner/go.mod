@@ -27,7 +27,7 @@ require (
 	github.com/holiman/uint256 v1.3.2
 	github.com/lib/pq v1.10.9
 	github.com/microsoft/go-crypto-openssl v0.2.9
-	github.com/prysmaticlabs/go-bitfield v0.0.0-20240618144021-706c95b2dd15
+	github.com/prysmaticlabs/go-bitfield v0.0.0-20260504143531-5cbb6d0f5f2e
 	github.com/sourcegraph/conc v0.3.0
 	github.com/ssvlabs/eth2-key-manager v1.5.6
 	github.com/ssvlabs/ssv-spec v1.2.3-0.20260305184636-289c93aa4c12
