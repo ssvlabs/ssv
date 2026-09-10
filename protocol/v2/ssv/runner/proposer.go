@@ -721,8 +721,7 @@ func (r *ProposerRunner) submitGloasBlock(ctx context.Context, logger *zap.Logge
 // the reveal — but only on the builder operator, the one whose own produceBlockV4 response holds the
 // decided block, so that its produced envelope is the one the decided value commits to. Every other
 // operator reconstructs and publishes nothing (SIP #94 §6). The duty's outcome is the block's, already
-// recorded; a failure here is logged and counted against the proposer's submissions but does not
-// re-conclude the duty.
+// recorded; a failure here is logged and counted (recordEnvelopePublish) but does not re-conclude the duty.
 func (r *ProposerRunner) publishEnvelope(ctx context.Context, logger *zap.Logger, cd *spectypes.ProposerConsensusData, signingRoot [32]byte) error {
 	sig, err := r.reconstructPostConsensusSig(signingRoot)
 	if err != nil {
@@ -740,11 +739,12 @@ func (r *ProposerRunner) publishEnvelope(ctx context.Context, logger *zap.Logger
 	}
 
 	if err := r.GetBeaconNode().SubmitExecutionPayloadEnvelope(ctx, r.gloasProducedEnvelope.Signed(sig)); err != nil {
-		recordFailedSubmission(ctx, spectypes.BNRoleProposer)
+		recordEnvelopePublish(ctx, false)
 		const errMsg = "could not submit execution payload envelope"
 		logger.Error(errMsg, fields.Slot(cd.Duty.Slot), zap.Error(err))
 		return fmt.Errorf("%s: %w", errMsg, err)
 	}
+	recordEnvelopePublish(ctx, true)
 	logger.Info("✅ published execution payload envelope", fields.Slot(cd.Duty.Slot))
 	return nil
 }

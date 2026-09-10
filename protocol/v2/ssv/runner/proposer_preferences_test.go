@@ -129,7 +129,8 @@ func TestProposerPreferencesRunner_ProcessPreConsensus_unknownSlot(t *testing.T)
 	require.NoError(t, err)
 
 	err = r.ProcessPreConsensus(context.Background(), zap.NewNop(), &spectypes.PartialSignatureMessages{Slot: 999})
-	require.Error(t, err)
+	require.ErrorIs(t, err, ErrNoDutyAssigned)
+	requireSpecCode(t, err, spectypes.NoRunningDutyErrorCode)
 	require.False(t, IsRetryable(err))
 }
 
