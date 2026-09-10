@@ -22,7 +22,7 @@ type SSVMessage struct {
 	*spectypes.SSVMessage
 
 	// Body is the decoded Data.
-	Body any // *specqbft.Message | *spectypes.PartialSignatureMessages | *spectypes.EnvelopeDissemination | *EventMsg
+	Body any // *specqbft.Message | *spectypes.PartialSignatureMessages | *EventMsg
 }
 
 func (d *SSVMessage) DecodedSSVMessage() {}
@@ -41,11 +41,6 @@ func (d *SSVMessage) Slot() (phase0.Slot, error) {
 		}
 		return phase0.Slot(m.Height), nil
 	case *spectypes.PartialSignatureMessages:
-		if m == nil {
-			return 0, errNilMessageBody
-		}
-		return m.Slot, nil
-	case *spectypes.EnvelopeDissemination:
 		if m == nil {
 			return 0, errNilMessageBody
 		}
@@ -116,13 +111,6 @@ func ExtractMsgBody(m *spectypes.SSVMessage) (any, error) {
 			return nil, fmt.Errorf("failed to decode SignedPartialSignatureMessage: %w", err)
 		}
 		body = sm
-	case spectypes.SSVEnvelopeDisseminationMsgType:
-		// The §6 envelope dissemination carrier (SIP #94 §6): the blinded envelope the cluster signs.
-		sm := &spectypes.EnvelopeDissemination{}
-		if err := sm.Decode(m.Data); err != nil {
-			return nil, fmt.Errorf("failed to decode EnvelopeDissemination: %w", err)
-		}
-		body = sm
 	case ssvmessage.SSVEventMsgType:
 		msg := &ssvtypes.EventMsg{}
 		if err := msg.Decode(m.Data); err != nil {
@@ -155,13 +143,6 @@ func compareHeightOrSlot(state *State, m *SSVMessage) int {
 			return 0
 		}
 		if pms.Slot > state.Slot {
-			return 1
-		}
-	} else if d, ok := m.Body.(*spectypes.EnvelopeDissemination); ok && d != nil {
-		if d.Slot == state.Slot {
-			return 0
-		}
-		if d.Slot > state.Slot {
 			return 1
 		}
 	}
@@ -220,12 +201,6 @@ func classifyMessage(m *SSVMessage) messageClassification {
 		if mm != nil {
 			classification.isPostConsensusMessage = mm.Type == spectypes.PostConsensusPartialSig
 			classification.isPreConsensusMessage = !classification.isPostConsensusMessage
-		}
-	case *spectypes.EnvelopeDissemination:
-		// The dissemination precedes the envelope's single (pre-consensus-class) signing round, so it is
-		// ordered with the pre-consensus messages.
-		if mm != nil {
-			classification.isPreConsensusMessage = true
 		}
 	}
 	return classification

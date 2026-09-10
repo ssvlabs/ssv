@@ -1330,12 +1330,8 @@ func (r *AggregatorCommitteeRunner) expectedPreConsensusRootsAndDomain() ([]spec
 
 // This function signature returns only one domain type... but we can have mixed domains
 // instead we rely on expectedPostConsensusRootsAndBeaconObjects that is called later
-func (r *AggregatorCommitteeRunner) expectedPostConsensusRootsAndDomain(context.Context) (
-	[]spectypes.HashRoot,
-	phase0.DomainType,
-	error,
-) {
-	return nil, spectypes.DomainError, errors.New("unexpected expectedPostConsensusRootsAndDomain func call")
+func (r *AggregatorCommitteeRunner) expectedPostConsensusRootsAndDomains(context.Context) ([]PostConsensusRoot, error) {
+	return nil, errors.New("unexpected expectedPostConsensusRootsAndDomains func call")
 }
 
 // expectedPreConsensusRoots returns the expected roots for the pre-consensus phase.

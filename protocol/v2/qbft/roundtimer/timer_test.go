@@ -571,7 +571,6 @@ func TestRoundRelativeRole(t *testing.T) {
 
 	for _, role := range []spectypes.RunnerRole{
 		spectypes.RoleCommittee,
-		spectypes.RoleEnvelopeProposer, // no QBFT at all since SIP #94 §6 moved to dissemination + signing
 		ssvtypes.RoleAggregator,
 		ssvtypes.RoleSyncCommitteeContribution,
 		spectypes.RoleAggregatorCommittee,

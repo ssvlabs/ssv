@@ -1388,7 +1388,6 @@ func TestValidatorDutyTrace_toBNRole(t *testing.T) {
 		// (no trace-store schema yet), so reaching this error would mean the skip regressed.
 		{spectypes.RolePTCAttester, spectypes.BNRoleUnknown, true},
 		{spectypes.RoleProposerPreferences, spectypes.BNRoleUnknown, true},
-		{spectypes.RoleEnvelopeProposer, spectypes.BNRoleUnknown, true},
 	}
 
 	for _, test := range tests {

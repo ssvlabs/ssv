@@ -823,19 +823,7 @@ func (c *Controller) onShareInit(share *ssvtypes.SSVShare) (v *validator.Validat
 		// so that when the validator is stopped, the runners are stopped as well.
 		validatorCtx, validatorCancel := context.WithCancel(c.ctx)
 
-		// startEnvelopeDuty lets the proposer kick off the §6 envelope duty after a self-build §4 block. It
-		// dispatches async on the validator-scoped context (not the proposer's post-consensus ctx, which ends
-		// with the block duty); c.ExecuteDuty routes by pubkey back to this validator.
-		startEnvelopeDuty := func(slot phase0.Slot) {
-			go c.ExecuteDuty(validatorCtx, c.logger, &spectypes.ValidatorDuty{
-				Type:           spectypes.BNRoleEnvelopeProposer,
-				PubKey:         phase0.BLSPubKey(share.ValidatorPubKey),
-				Slot:           slot,
-				ValidatorIndex: share.ValidatorIndex,
-			})
-		}
-
-		dutyRunners, err := SetupRunners(validatorCtx, share, operator, c.validatorRegistrationSubmitter, c.validatorStore, c.validatorCommonOpts, startEnvelopeDuty)
+		dutyRunners, err := SetupRunners(validatorCtx, share, operator, c.validatorRegistrationSubmitter, c.validatorStore, c.validatorCommonOpts)
 		if err != nil {
 			validatorCancel()
 			return nil, true, fmt.Errorf("could not setup runners: %w", err)
@@ -1214,7 +1202,6 @@ func SetupRunners(
 	validatorRegistrationSubmitter runner.ValidatorRegistrationSubmitter,
 	validatorStore registrystorage.ValidatorStore,
 	options *validator.CommonOptions,
-	startEnvelopeDuty func(phase0.Slot),
 ) (runner.ValidatorDutyRunners, error) {
 	if options.ExporterMode {
 		return nil, fmt.Errorf("cannot set up duty runners in exporter mode")
@@ -1222,7 +1209,6 @@ func SetupRunners(
 
 	runnersType := []spectypes.RunnerRole{
 		spectypes.RoleProposer,
-		spectypes.RoleEnvelopeProposer,
 		ssvtypes.RoleAggregator,
 		ssvtypes.RoleSyncCommitteeContribution,
 		spectypes.RoleValidatorRegistration,
@@ -1262,10 +1248,6 @@ func SetupRunners(
 		OperatorSigner: options.OperatorSigner,
 	}
 
-	// proposedBlocks is the §4→§6 linkage store shared between this validator's proposer runner (which
-	// records its §4 decision) and the §6 envelope runner (which binds disseminated envelopes against it).
-	proposedBlocks := ssv.NewProposedBlocks()
-
 	// requestAuthCache holds this validator's threshold-reconstructed builder request auths (issue #2962):
 	// the proposer-preferences runner writes each reconstruction, and the proposer runner's §4 produce path
 	// reads the slot's auths into the produceBlockV4 POST body.
@@ -1286,18 +1268,8 @@ func SetupRunners(
 				Graffiti:            options.Graffiti,
 				ProposerDelay:       options.ProposerDelay,
 				ProposerDelayEPBS:   options.ProposerDelayEPBS,
-				ProposedBlocks:      proposedBlocks,
-				StartEnvelopeDuty:   startEnvelopeDuty,
 				Builders:            options.Builders,
 				RequestAuthCache:    requestAuthCache,
-			})
-		case spectypes.RoleEnvelopeProposer:
-			// The §6 envelope runner runs no QBFT (SIP #94 §6): it binds the builder operator's disseminated
-			// envelope against the §4 decision the proposer records in proposedBlocks and threshold-signs it.
-			// The proposer starts this duty via the StartEnvelopeDuty callback wired in the RoleProposer case above.
-			runners[role], err = runner.NewEnvelopeProposerRunner(runner.EnvelopeProposerRunnerOptions{
-				BaseRunnerOptions: baseOpts,
-				ProposedBlocks:    proposedBlocks,
 			})
 		case ssvtypes.RoleAggregator:
 			// Post-Boole, aggregator duties route through the merged AggregatorCommitteeRunner

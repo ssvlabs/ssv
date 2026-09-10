@@ -491,28 +491,28 @@ func (r *SyncCommitteeAggregatorRunner) expectedPreConsensusRootsAndDomain() ([]
 	return sszIndexes, spectypes.DomainSyncCommitteeSelectionProof, nil
 }
 
-// expectedPostConsensusRootsAndDomain an INTERNAL function, returns the expected post-consensus roots to sign
-func (r *SyncCommitteeAggregatorRunner) expectedPostConsensusRootsAndDomain(ctx context.Context) ([]spectypes.HashRoot, phase0.DomainType, error) {
+// expectedPostConsensusRootsAndDomains an INTERNAL function, returns the expected post-consensus roots to sign
+func (r *SyncCommitteeAggregatorRunner) expectedPostConsensusRootsAndDomains(ctx context.Context) ([]PostConsensusRoot, error) {
 	// get contributions
 	validatorConsensusData := &spectypes.ProposerConsensusData{}
 	err := validatorConsensusData.Decode(r.State.DecidedValue)
 	if err != nil {
-		return nil, spectypes.DomainError, fmt.Errorf("could not create consensus data: %w", err)
+		return nil, fmt.Errorf("could not create consensus data: %w", err)
 	}
 	contributions, err := ssvtypes.GetSyncCommitteeContributions(validatorConsensusData)
 	if err != nil {
-		return nil, phase0.DomainType{}, fmt.Errorf("could not get contributions: %w", err)
+		return nil, fmt.Errorf("could not get contributions: %w", err)
 	}
 
 	ret := make([]spectypes.HashRoot, 0)
 	for _, contrib := range contributions {
 		contribAndProof, _, err := r.generateContributionAndProof(ctx, contrib.Contribution, contrib.SelectionProofSig)
 		if err != nil {
-			return nil, spectypes.DomainError, fmt.Errorf("could not generate contribution and proof: %w", err)
+			return nil, fmt.Errorf("could not generate contribution and proof: %w", err)
 		}
 		ret = append(ret, contribAndProof)
 	}
-	return ret, spectypes.DomainContributionAndProof, nil
+	return singleDomainPostConsensusRoots(spectypes.DomainContributionAndProof, ret...), nil
 }
 
 // executeDuty steps:

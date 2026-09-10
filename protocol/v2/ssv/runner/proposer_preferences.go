@@ -237,14 +237,14 @@ func (r *ProposerPreferencesRunner) GetOperatorSigner() ssvtypes.OperatorSigner 
 	return r.opts.OperatorSigner
 }
 
-// expectedPreConsensusRootsAndDomain / expectedPostConsensusRootsAndDomain / executeDuty are part of
+// expectedPreConsensusRootsAndDomain / expectedPostConsensusRootsAndDomains / executeDuty are part of
 // the Runner interface but run on the per-slot sub-runners, never the dispatcher.
 func (r *ProposerPreferencesRunner) expectedPreConsensusRootsAndDomain() ([]spectypes.HashRoot, phase0.DomainType, error) {
 	return nil, spectypes.DomainError, fmt.Errorf("proposer preferences dispatcher has no frozen preference")
 }
 
-func (r *ProposerPreferencesRunner) expectedPostConsensusRootsAndDomain(context.Context) ([]spectypes.HashRoot, phase0.DomainType, error) {
-	return nil, spectypes.DomainError, fmt.Errorf("no post-consensus roots for proposer preferences")
+func (r *ProposerPreferencesRunner) expectedPostConsensusRootsAndDomains(context.Context) ([]PostConsensusRoot, error) {
+	return nil, fmt.Errorf("no post-consensus roots for proposer preferences")
 }
 
 func (r *ProposerPreferencesRunner) executeDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty) error {
@@ -479,8 +479,8 @@ func (r *proposerPreferencesSlotRunner) expectedPreConsensusRootsAndDomain() ([]
 	return []spectypes.HashRoot{r.proposerPreferences}, phase0.DomainType(spectypes.DomainProposerPreferences), nil
 }
 
-func (r *proposerPreferencesSlotRunner) expectedPostConsensusRootsAndDomain(context.Context) ([]spectypes.HashRoot, phase0.DomainType, error) {
-	return nil, spectypes.DomainError, fmt.Errorf("no post-consensus roots for proposer preferences")
+func (r *proposerPreferencesSlotRunner) expectedPostConsensusRootsAndDomains(context.Context) ([]PostConsensusRoot, error) {
+	return nil, fmt.Errorf("no post-consensus roots for proposer preferences")
 }
 
 func (r *proposerPreferencesSlotRunner) executeDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty) error {

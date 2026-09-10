@@ -194,11 +194,11 @@ func recordProposalBuildSource(ctx context.Context, source proposalBuildSource) 
 }
 
 // recordEnvelopeBuildMatch counts a threshold-signed §6 envelope by whether this operator's produced
-// envelope content-matches the selected one ("self") or not ("other"). Only the matching operator holds
-// the full payload bytes and publishes, so per operator an "other" share is expected and benign — the
-// signal is cluster-wide: a signed envelope no operator matched is a reveal miss (the cluster signed a
-// forged or lost root and nobody can publish), which this makes countable instead of inferable only from
-// the absence of a publish log. Deliberately independent of whether the subsequent submit succeeded —
+// envelope is the one the decided value commits to ("self") or not ("other"). Only the matching operator
+// holds the full payload bytes and publishes, so per operator an "other" share is expected and benign —
+// the signal is cluster-wide: a signed envelope no operator matched is a reveal miss (the cluster decided
+// a payload_root nobody can publish the payload for), which this makes countable instead of inferable only
+// from the absence of a publish log. Deliberately independent of whether the subsequent submit succeeded —
 // that failure is already counted by ssv.runner.submissions.failed.
 func recordEnvelopeBuildMatch(ctx context.Context, self bool) {
 	match := "other"

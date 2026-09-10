@@ -162,9 +162,9 @@ func (r *VoluntaryExitRunner) expectedPreConsensusRootsAndDomain() ([]spectypes.
 	return []spectypes.HashRoot{vr}, spectypes.DomainVoluntaryExit, nil
 }
 
-// expectedPostConsensusRootsAndDomain an INTERNAL function, returns the expected post-consensus roots to sign
-func (r *VoluntaryExitRunner) expectedPostConsensusRootsAndDomain(context.Context) ([]spectypes.HashRoot, phase0.DomainType, error) {
-	return nil, spectypes.DomainError, errors.New("no post consensus roots for voluntary exit")
+// expectedPostConsensusRootsAndDomains an INTERNAL function, returns the expected post-consensus roots to sign
+func (r *VoluntaryExitRunner) expectedPostConsensusRootsAndDomains(context.Context) ([]PostConsensusRoot, error) {
+	return nil, errors.New("no post consensus roots for voluntary exit")
 }
 
 func (r *VoluntaryExitRunner) executeDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty) error {

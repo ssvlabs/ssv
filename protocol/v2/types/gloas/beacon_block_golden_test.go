@@ -61,12 +61,13 @@ func TestGloasBlockHashTreeRootMatchesChain(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, mustHex(t, devnet8GoldenBlockRoot), got[:], "block hash_tree_root must match the chain's header root")
 
-	// The proposer signs (and the §6 envelope keys on) the root of the block decoded from the QBFT value.
-	blockSSZ, err := signed.Message.MarshalSSZ()
+	// The proposer signs (and the §6 envelope keys on) the root of the block decoded from the QBFT value,
+	// which carries it inside the §4 GloasProposalData wrapper.
+	valueSSZ, err := (&GloasProposalData{Block: signed.Message, PayloadRoot: phase0.Root{0x01}}).Encode()
 	require.NoError(t, err)
-	decoded, err := DecodeBeaconBlock(blockSSZ)
+	decoded, err := DecodeGloasProposalData(valueSSZ)
 	require.NoError(t, err)
-	decodedRoot, err := decoded.HashTreeRoot()
+	decodedRoot, err := decoded.Block.HashTreeRoot()
 	require.NoError(t, err)
 	require.Equal(t, got, decodedRoot)
 }

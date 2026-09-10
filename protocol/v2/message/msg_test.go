@@ -57,7 +57,6 @@ func TestRunnerRoleFromString(t *testing.T) {
 		{name: "voluntary exit", input: "VOLUNTARY_EXIT", expected: spectypes.RoleVoluntaryExit},
 		{name: "ptc attester", input: "PTC_ATTESTER", expected: spectypes.RolePTCAttester},
 		{name: "proposer preferences", input: "PROPOSER_PREFERENCES", expected: spectypes.RoleProposerPreferences},
-		{name: "envelope proposer", input: "ENVELOPE_PROPOSER", expected: spectypes.RoleEnvelopeProposer},
 		{name: "sync committee (deprecated bare role) errors", input: "SYNC_COMMITTEE", hasError: true},
 		{name: "unknown role errors", input: "NOT_A_ROLE", hasError: true},
 		{name: "empty string errors", input: "", hasError: true},
@@ -91,7 +90,6 @@ func TestRunnerRoleToString(t *testing.T) {
 		{name: "voluntary exit", role: spectypes.RoleVoluntaryExit, expected: "VOLUNTARY_EXIT"},
 		{name: "ptc attester", role: spectypes.RolePTCAttester, expected: "PTC_ATTESTER"},
 		{name: "proposer preferences", role: spectypes.RoleProposerPreferences, expected: "PROPOSER_PREFERENCES"},
-		{name: "envelope proposer", role: spectypes.RoleEnvelopeProposer, expected: "ENVELOPE_PROPOSER"},
 		{name: "unknown role", role: spectypes.RunnerRole(999), expected: "unknown(999)"},
 	}
 

@@ -12,16 +12,15 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/types/ssvtestingutils"
 )
 
-// The three Gloas runner roles must pass the fork-independent validRoleUnion gate in
+// The two Gloas runner roles must pass the fork-independent validRoleUnion gate in
 // validateSSVMessage (issue #2999: they were REJECTed there — with a peer penalty — before the
-// per-slot validRoleAtSlot ever ran, so no §3/§5/§6 duty could reach quorum while every node's
+// per-slot validRoleAtSlot ever ran, so no §3/§5 duty could reach quorum while every node's
 // own messages looked healthy via the validateSelf bypass).
 func TestValidateSSVMessage_GloasRolesPassRoleUnion(t *testing.T) {
 	mv := &messageValidator{}
 	for _, role := range []spectypes.RunnerRole{
 		spectypes.RolePTCAttester,
 		spectypes.RoleProposerPreferences,
-		spectypes.RoleEnvelopeProposer,
 	} {
 		msg := &spectypes.SSVMessage{
 			MsgType: spectypes.SSVPartialSignatureMsgType,

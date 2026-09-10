@@ -1024,10 +1024,10 @@ func (r *CommitteeRunner) expectedPreConsensusRootsAndDomain() ([]spectypes.Hash
 	return nil, spectypes.DomainError, errors.New("no pre consensus roots for committee runner")
 }
 
-// expectedPostConsensusRootsAndDomain signature returns only one domain type... but we can have mixed domains
+// expectedPostConsensusRootsAndDomains is unused: the committee runner validates its mixed-domain roots itself
 // instead we rely on expectedPostConsensusRootsAndBeaconObjects that is called later
-func (r *CommitteeRunner) expectedPostConsensusRootsAndDomain(context.Context) ([]spectypes.HashRoot, phase0.DomainType, error) {
-	return nil, spectypes.DomainError, errors.New("unexpected expectedPostConsensusRootsAndDomain func call")
+func (r *CommitteeRunner) expectedPostConsensusRootsAndDomains(context.Context) ([]PostConsensusRoot, error) {
+	return nil, errors.New("unexpected expectedPostConsensusRootsAndDomains func call")
 }
 
 func (r *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(ctx context.Context, logger *zap.Logger) (

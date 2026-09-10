@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
@@ -214,9 +215,15 @@ func gloasProposerConsensusData(t *testing.T, dataSSZ []byte) []byte {
 	return out
 }
 
-func gloasBlockSSZ(t *testing.T, slot phase0.Slot) []byte {
+// gloasProposalSSZ is a self-build §4 value for the slot: the test block plus a payload_root.
+func gloasProposalSSZ(t *testing.T, slot phase0.Slot) []byte {
 	t.Helper()
-	dataSSZ, err := gloas.TestingBeaconBlock(slot).MarshalSSZ()
+	return encodeGloasProposal(t, &gloas.GloasProposalData{Block: gloas.TestingBeaconBlock(slot), PayloadRoot: phase0.Root{0x50, 0x51, 0x52}})
+}
+
+func encodeGloasProposal(t *testing.T, proposal *gloas.GloasProposalData) []byte {
+	t.Helper()
+	dataSSZ, err := proposal.Encode()
 	require.NoError(t, err)
 	return dataSSZ
 }
@@ -226,19 +233,19 @@ func newGloasProposerChecker(signer ekm.BeaconSigner) ValueChecker {
 	return NewProposerChecker(signer, cfg.Beacon, spectypes.ValidatorPK(gloasProposerPK), 7, phase0.BLSPubKey{})
 }
 
-// A Gloas proposer value validates via the node-side block decode (there is no spectypes Gloas block
-// version); the decoded block's slot drives the slashing check.
+// A Gloas proposer value validates via the node-side decode of the §4 wrapper (there is no spectypes
+// Gloas block version); the decoded block's slot drives the slashing check.
 func TestProposerChecker_GloasValid(t *testing.T) {
 	checker := newGloasProposerChecker(fakeSlashingSigner{})
-	require.NoError(t, checker.CheckValue(gloasProposerConsensusData(t, gloasBlockSSZ(t, gloasProposerSlot))))
+	require.NoError(t, checker.CheckValue(gloasProposerConsensusData(t, gloasProposalSSZ(t, gloasProposerSlot))))
 }
 
 func TestProposerChecker_GloasSlashable(t *testing.T) {
 	checker := newGloasProposerChecker(fakeSlashingSigner{slashable: fmt.Errorf("slashable")})
-	require.Error(t, checker.CheckValue(gloasProposerConsensusData(t, gloasBlockSSZ(t, gloasProposerSlot))))
+	require.Error(t, checker.CheckValue(gloasProposerConsensusData(t, gloasProposalSSZ(t, gloasProposerSlot))))
 }
 
-// DataSSZ that is not a valid Gloas block fails the node-side validity check.
+// DataSSZ that is not a valid Gloas proposal value fails the node-side validity check.
 func TestProposerChecker_GloasDecodeError(t *testing.T) {
 	checker := newGloasProposerChecker(fakeSlashingSigner{})
 	require.Error(t, checker.CheckValue(gloasProposerConsensusData(t, []byte{0x00, 0x01, 0x02})))
@@ -248,29 +255,48 @@ func TestProposerChecker_GloasDecodeError(t *testing.T) {
 // checkValidatorConsensusData (SIP #94 §4).
 func TestProposerChecker_GloasBlockSlotMismatch(t *testing.T) {
 	checker := newGloasProposerChecker(fakeSlashingSigner{})
-	err := checker.CheckValue(gloasProposerConsensusData(t, gloasBlockSSZ(t, gloasProposerSlot+1)))
+	err := checker.CheckValue(gloasProposerConsensusData(t, gloasProposalSSZ(t, gloasProposerSlot+1)))
 	require.ErrorContains(t, err, "does not match duty slot")
 }
 
-// A value on a Gloas slot carrying a pre-Gloas Version is rejected: our slot-based branch and ssv-spec's
+// payload_root MUST be zero iff the bid is not self-build (SIP #94 §4): a self-build value without one
+// cannot be revealed, an external bid with one is malformed. Both directions are rejected; both honest
+// shapes pass.
+func TestProposerChecker_GloasPayloadRootPresence(t *testing.T) {
+	checker := newGloasProposerChecker(fakeSlashingSigner{})
+
+	selfBuildZero := encodeGloasProposal(t, &gloas.GloasProposalData{Block: gloas.TestingBeaconBlock(gloasProposerSlot)})
+	require.ErrorContains(t, checker.CheckValue(gloasProposerConsensusData(t, selfBuildZero)), "payload_root presence")
+
+	external := gloas.TestingBeaconBlock(gloasProposerSlot)
+	external.Body.SignedExecutionPayloadBid.Message.BuilderIndex = 3
+	externalZero := encodeGloasProposal(t, &gloas.GloasProposalData{Block: external})
+	require.NoError(t, checker.CheckValue(gloasProposerConsensusData(t, externalZero)))
+	externalNonZero := encodeGloasProposal(t, &gloas.GloasProposalData{Block: external, PayloadRoot: phase0.Root{0x01}})
+	require.ErrorContains(t, checker.CheckValue(gloasProposerConsensusData(t, externalNonZero)), "payload_root presence")
+}
+
+// A value on a Gloas slot carrying any other Version is rejected: our slot-based branch and ssv-spec's
 // version-based ProposerValueCheckF must agree on the fork, so a Byzantine leader can't split the value
 // check across a mixed cluster. Honest proposers always stamp Version == the slot's fork; here only the
-// Version is wrong (the block itself is a valid Gloas block for the duty slot).
+// Version is wrong (the value itself is a valid Gloas value for the duty slot).
 func TestProposerChecker_GloasVersionMismatch(t *testing.T) {
 	checker := newGloasProposerChecker(fakeSlashingSigner{})
-	cd := &spectypes.ProposerConsensusData{
-		Duty: spectypes.ValidatorDuty{
-			Type:           spectypes.BNRoleProposer,
-			PubKey:         gloasProposerPK,
-			ValidatorIndex: 7,
-			Slot:           gloasProposerSlot,
-		},
-		Version: networkconfig.DataVersionGloas - 1, // Fulu on a Gloas slot
-		DataSSZ: gloasBlockSSZ(t, gloasProposerSlot),
+	for _, version := range []spec.DataVersion{networkconfig.DataVersionGloas - 1, networkconfig.DataVersionGloas + 1} {
+		cd := &spectypes.ProposerConsensusData{
+			Duty: spectypes.ValidatorDuty{
+				Type:           spectypes.BNRoleProposer,
+				PubKey:         gloasProposerPK,
+				ValidatorIndex: 7,
+				Slot:           gloasProposerSlot,
+			},
+			Version: version,
+			DataSSZ: gloasProposalSSZ(t, gloasProposerSlot),
+		}
+		value, err := cd.Encode()
+		require.NoError(t, err)
+		require.ErrorContains(t, checker.CheckValue(value), "does not match slot fork", "version %d", version)
 	}
-	value, err := cd.Encode()
-	require.NoError(t, err)
-	require.ErrorContains(t, checker.CheckValue(value), "does not match slot fork")
 }
 
 // ekm.GloasDataVersion is a hand-kept mirror of networkconfig.DataVersionGloas (the ssvsigner module has

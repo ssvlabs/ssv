@@ -26,7 +26,7 @@ func TestValidateSlotTime_Earliness(t *testing.T) {
 	roles := []spectypes.RunnerRole{
 		spectypes.RoleCommittee, spectypes.RoleAggregatorCommittee, spectypes.RoleProposer, ssvtypes.RoleAggregator,
 		ssvtypes.RoleSyncCommitteeContribution, spectypes.RoleValidatorRegistration, spectypes.RoleVoluntaryExit,
-		spectypes.RolePTCAttester, spectypes.RoleEnvelopeProposer,
+		spectypes.RolePTCAttester,
 	}
 	for _, role := range roles {
 		t.Run(message.RunnerRoleToString(role), func(t *testing.T) {

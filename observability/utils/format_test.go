@@ -64,11 +64,6 @@ func TestFormatRunnerRole(t *testing.T) {
 			want: "PROPOSER_PREFERENCES",
 		},
 		{
-			name: "envelope proposer role",
-			role: spectypes.RoleEnvelopeProposer,
-			want: "ENVELOPE_PROPOSER",
-		},
-		{
 			name: "unknown role",
 			role: spectypes.RoleUnknown,
 			want: "UNDEFINED",
@@ -115,7 +110,6 @@ func TestRunnerRoleStringMappersLockstep(t *testing.T) {
 		ssvtypes.RoleSyncCommitteeContribution,
 		spectypes.RolePTCAttester,
 		spectypes.RoleProposerPreferences,
-		spectypes.RoleEnvelopeProposer,
 	}
 
 	for _, role := range roles {
