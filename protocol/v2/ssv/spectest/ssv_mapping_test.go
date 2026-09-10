@@ -71,7 +71,7 @@ type runnable struct {
 // here for now. The ssv-spec epbs-gloas-types head added spec-side Gloas runners with spec tests,
 // plus Gloas-era variants of the shared runner/committee vectors. Neither class is runnable yet:
 //   - the new Gloas runner roles — the node's implementations deliberately differ in internals
-//     (multi-slot preferences dispatcher, abstaining PTC attester, §6 envelope windows);
+//     (multi-slot preferences dispatcher, abstaining PTC attester);
 //   - Gloas-era variants of pre-existing vectors — their post-state roots embed the network
 //     config, which the ssvtesting runner constructors cannot schedule Gloas into without
 //     diverging those roots, and the testing beacon-node wrapper has no Gloas produce surface.
@@ -98,7 +98,7 @@ func isUnmappedGloasRunnerTest(m map[string]any) bool {
 		return false
 	}
 	switch spectypes.RunnerRole(role) {
-	case spectypes.RolePTCAttester, spectypes.RoleProposerPreferences, spectypes.RoleEnvelopeProposer:
+	case spectypes.RolePTCAttester, spectypes.RoleProposerPreferences:
 		return true
 	default: // every other role: unmapped only when the vector is Gloas-era (below)
 	}

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -15,6 +16,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/protocol/v2/types/ssvtestingutils"
 )
 
 // While a runner has no running duty, its consumer takes only duty-start events from the queue: a
@@ -28,7 +30,7 @@ func TestConsumeQueue_HoldsMessagesUntilDutyStarts(t *testing.T) {
 
 	netCfg := networkconfig.TestNetwork
 	duty := &spectypes.ValidatorDuty{Type: spectypes.BNRoleProposer, Slot: phase0.Slot(10)}
-	msgID := spectypes.NewMsgID(netCfg.DomainType, duty.PubKey[:], spectypes.RoleProposer)
+	msgID := ssvtestingutils.NewMsgID(netCfg.DomainType, duty.PubKey[:], spectypes.RoleProposer)
 	proposer := &runner.ProposerRunner{BaseRunner: &runner.BaseRunner{RunnerRoleType: spectypes.RoleProposer}}
 
 	v := &Validator{
@@ -84,4 +86,49 @@ func receiveDelivered(t *testing.T, delivered <-chan *queue.SSVMessage) *queue.S
 		t.Fatal("no message delivered")
 		return nil
 	}
+}
+
+// plainRunnerStub is a runner that never awaits post-consensus packets once its duty is done.
+type plainRunnerStub struct{ runner.Runner }
+
+// awaitingRunnerStub is a runner whose finished duty may still expect post-consensus packets.
+type awaitingRunnerStub struct {
+	runner.Runner
+	slot     phase0.Slot
+	awaiting bool
+}
+
+func (s awaitingRunnerStub) AwaitingPostConsensus() (phase0.Slot, bool) { return s.slot, s.awaiting }
+
+// The hold above has one exception: a finished duty still expecting post-consensus packets (the Gloas
+// proposer's §6 envelope root) gets that slot's post-consensus packets, and nothing else.
+func TestNoRunningDutyFilter(t *testing.T) {
+	executeDuty := &queue.SSVMessage{Body: &ssvtypes.EventMsg{Type: ssvtypes.ExecuteDuty}}
+	timeout := &queue.SSVMessage{Body: &ssvtypes.EventMsg{Type: ssvtypes.Timeout}}
+	consensus := &queue.SSVMessage{Body: &specqbft.Message{Height: 8}}
+	preConsensus := &queue.SSVMessage{Body: &spectypes.PartialSignatureMessages{Type: spectypes.RandaoPartialSig, Slot: 8}}
+	postConsensus := &queue.SSVMessage{Body: &spectypes.PartialSignatureMessages{Type: spectypes.PostConsensusPartialSig, Slot: 8}}
+	nextSlotPostConsensus := &queue.SSVMessage{Body: &spectypes.PartialSignatureMessages{Type: spectypes.PostConsensusPartialSig, Slot: 9}}
+
+	for name, r := range map[string]runner.Runner{
+		"plain runner":         plainRunnerStub{},
+		"awaiter not awaiting": awaitingRunnerStub{slot: 8, awaiting: false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			filter := noRunningDutyFilter(r)
+			require.True(t, filter(executeDuty))
+			for _, held := range []*queue.SSVMessage{timeout, consensus, preConsensus, postConsensus, nextSlotPostConsensus} {
+				require.False(t, filter(held))
+			}
+		})
+	}
+
+	t.Run("awaiting post-consensus", func(t *testing.T) {
+		filter := noRunningDutyFilter(awaitingRunnerStub{slot: 8, awaiting: true})
+		require.True(t, filter(executeDuty))
+		require.True(t, filter(postConsensus))
+		for _, held := range []*queue.SSVMessage{timeout, consensus, preConsensus, nextSlotPostConsensus} {
+			require.False(t, filter(held))
+		}
+	})
 }

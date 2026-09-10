@@ -68,10 +68,38 @@ type Runner interface {
 
 	// expectedPreConsensusRootsAndDomain an INTERNAL function, returns the expected pre-consensus roots to sign
 	expectedPreConsensusRootsAndDomain() ([]spectypes.HashRoot, phase0.DomainType, error)
-	// expectedPostConsensusRootsAndDomain an INTERNAL function, returns the expected post-consensus roots to sign
-	expectedPostConsensusRootsAndDomain(ctx context.Context) ([]spectypes.HashRoot, phase0.DomainType, error)
+	// expectedPostConsensusRootsAndDomains an INTERNAL function, returns the expected post-consensus roots to
+	// sign, each with its domain
+	expectedPostConsensusRootsAndDomains(ctx context.Context) ([]PostConsensusRoot, error)
 	// executeDuty an INTERNAL function, executes a duty.
 	executeDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty) error
+}
+
+// PostConsensusAwaiter is implemented by a runner whose finished duty still expects post-consensus packets:
+// the Gloas proposer, until the §6 envelope root reconstructs (SIP #94 §4). The validator's queue consumer
+// keeps popping that slot's post-consensus packets for it while no duty is running.
+type PostConsensusAwaiter interface {
+	AwaitingPostConsensus() (phase0.Slot, bool)
+}
+
+// PostConsensusRoot pairs a post-consensus signing root with the domain it is signed under and whether a
+// packet may omit it. Every runner signs all of its roots under one domain and requires each of them; the
+// Gloas proposer adds the §6 blinded-envelope root under DomainBeaconBuilder, optional because a peer may
+// sign the block alone (SIP #94 §4).
+type PostConsensusRoot struct {
+	Root     spectypes.HashRoot
+	Domain   phase0.DomainType
+	Optional bool
+}
+
+// singleDomainPostConsensusRoots pairs each root with one domain, all required — the shape of every runner
+// but the Gloas proposer.
+func singleDomainPostConsensusRoots(domain phase0.DomainType, roots ...spectypes.HashRoot) []PostConsensusRoot {
+	ret := make([]PostConsensusRoot, 0, len(roots))
+	for _, root := range roots {
+		ret = append(ret, PostConsensusRoot{Root: root, Domain: domain})
+	}
+	return ret
 }
 
 type DoppelgangerProvider interface {

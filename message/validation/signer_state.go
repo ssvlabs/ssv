@@ -55,7 +55,6 @@ func (s *SignerStateForSlotRound) Reset(slot phase0.Slot, round specqbft.Round) 
 	s.World.SeenDecidedMsgSignersCount = 0
 	s.World.SeenProposerPreferencesRoots = nil
 	s.World.SeenRequestAuthRoots = nil
-	s.World.SeenEnvelopeDissemination = false
 }
 
 // SignerState represents the state of a signer (an Operator running a Runner that performs partial-signing for
@@ -81,11 +80,6 @@ type SignerState struct {
 	// (issue #2962) — root-capped like the §5 preference roots above, up to
 	// maxRequestAuthDistinctRoots. nil until the first such message.
 	SeenRequestAuthRoots seenRootSet
-
-	// SeenEnvelopeDissemination records that an EnvelopeDissemination from this signer was accepted for
-	// the slot (SIP #94 §7): one per (MessageID, signer, slot), further ones are IGNORE'd regardless of
-	// content or peer.
-	SeenEnvelopeDissemination bool
 }
 
 // seenRootSet tracks the distinct signing roots seen from a signer for a root-budgeted message

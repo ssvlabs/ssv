@@ -319,7 +319,7 @@ func (r *AggregatorRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 	r.measurements.EndPostConsensus()
 	recordPostConsensusDuration(ctx, r.measurements.PostConsensusTime(), ssvtypes.RoleAggregator)
 
-	// only 1 root, verified by expectedPostConsensusRootsAndDomain
+	// only 1 root, verified by expectedPostConsensusRootsAndDomains
 	root := roots[0]
 
 	span.AddEvent("reconstructing beacon signature", trace.WithAttributes(observability.BeaconBlockRootAttribute(root)))
@@ -393,19 +393,19 @@ func (r *AggregatorRunner) expectedPreConsensusRootsAndDomain() ([]spectypes.Has
 	return []spectypes.HashRoot{spectypes.SSZUint64(currentDutySlot)}, spectypes.DomainSelectionProof, nil
 }
 
-// expectedPostConsensusRootsAndDomain an INTERNAL function, returns the expected post-consensus roots to sign
-func (r *AggregatorRunner) expectedPostConsensusRootsAndDomain(context.Context) ([]spectypes.HashRoot, phase0.DomainType, error) {
+// expectedPostConsensusRootsAndDomains an INTERNAL function, returns the expected post-consensus roots to sign
+func (r *AggregatorRunner) expectedPostConsensusRootsAndDomains(context.Context) ([]PostConsensusRoot, error) {
 	cd := &spectypes.ProposerConsensusData{}
 	err := cd.Decode(r.State.DecidedValue)
 	if err != nil {
-		return nil, spectypes.DomainError, fmt.Errorf("could not create consensus data: %w", err)
+		return nil, fmt.Errorf("could not create consensus data: %w", err)
 	}
 	_, hashRoot, err := ssvtypes.GetAggregateAndProof(cd)
 	if err != nil {
-		return nil, phase0.DomainType{}, fmt.Errorf("could not get aggregate and proof: %w", err)
+		return nil, fmt.Errorf("could not get aggregate and proof: %w", err)
 	}
 
-	return []spectypes.HashRoot{hashRoot}, spectypes.DomainAggregateAndProof, nil
+	return singleDomainPostConsensusRoots(spectypes.DomainAggregateAndProof, hashRoot), nil
 }
 
 // executeDuty steps:

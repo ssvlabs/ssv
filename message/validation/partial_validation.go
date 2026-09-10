@@ -123,7 +123,6 @@ func (mv *messageValidator) validatePartialSignatureMessageSemantics(
 	// - VoluntaryExitPartialSig for Voluntary Exit
 	// - PTCAttesterPartialSig for PTC attestation
 	// - ProposerPreferencesPartialSig or RequestAuthPartialSig for Proposer Preferences
-	// - EnvelopePartialSig for the self-build envelope
 	if !mv.partialSignatureTypeMatchesRole(partialSignatureMessages.Type, role) {
 		return ErrPartialSignatureTypeRoleMismatch
 	}
@@ -203,7 +202,6 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 		// - 1 PTCAttesterPartialSig for PTC attestation
 		// - 1 ProposerPreferencesPartialSig for Proposer Preferences (distinct-root budget), plus
 		//   RequestAuthPartialSig up to its own distinct-root budget (issue #2962)
-		// - 1 EnvelopePartialSig for the self-build envelope
 		if err := validatePartialSignatureMessageLimit(partialSignatureMessages, receivedFrom, signerState); err != nil {
 			return err
 		}
@@ -266,15 +264,27 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 			e.want = maxSignatures
 			return e
 		}
-	} else if partialSignatureMessageCount > 1 {
-		// Rule: The number of signatures must be 1 for the other types of duties
+	} else if limit := mv.maxValidatorRoleSignatures(role, partialSignatureMessages.Type, messageSlot); partialSignatureMessageCount > limit {
+		// Rule: The number of signatures must be 1 for the other types of duties, except the Gloas
+		// proposer's post-consensus packet, which carries up to 2 (see maxValidatorRoleSignatures).
 		e := ErrTooManySignaturesInPartialSigMessage
 		e.got = partialSignatureMessageCount
-		e.want = 1
+		e.want = limit
 		return e
 	}
 
 	return nil
+}
+
+// maxValidatorRoleSignatures bounds the entries of a validator-role (non-committee, non-contribution)
+// partial-signature packet: one, except the proposer's post-consensus packet at a Gloas slot, which
+// carries the block root and — on the self-build path — the §6 blinded-envelope root, so up to two (SIP
+// #94 §7). The runner pins each entry to its expected root; validation only bounds the count.
+func (mv *messageValidator) maxValidatorRoleSignatures(role spectypes.RunnerRole, msgType spectypes.PartialSigMsgType, slot phase0.Slot) int {
+	if role == spectypes.RoleProposer && msgType == spectypes.PostConsensusPartialSig && mv.netCfg.IsGloasAtSlot(slot) {
+		return 2
+	}
+	return 1
 }
 
 // validatePartialSignatureMessageLimit checks if the provided partial signature message exceeds the set limits.
@@ -287,7 +297,7 @@ func validatePartialSignatureMessageLimit(
 	switch m.Type {
 	case spectypes.RandaoPartialSig, ssvtypes.SelectionProofPartialSig, ssvtypes.ContributionProofs,
 		spectypes.ValidatorRegistrationPartialSig, spectypes.VoluntaryExitPartialSig,
-		spectypes.AggregatorCommitteePartialSig, spectypes.PTCAttesterPartialSig, spectypes.EnvelopePartialSig:
+		spectypes.AggregatorCommitteePartialSig, spectypes.PTCAttesterPartialSig:
 		if signerState.Peer(receivedFrom).SeenMsgTypes.reachedPreConsensusLimit() {
 			// Check if the same peer is sending us a "logical duplicate" message, reject message to punish.
 			e := ErrTooManyPartialSigMessage
@@ -412,8 +422,7 @@ func (mv *messageValidator) validPartialSigMsgType(msgType spectypes.PartialSigM
 		spectypes.AggregatorCommitteePartialSig,
 		spectypes.PTCAttesterPartialSig,
 		spectypes.ProposerPreferencesPartialSig,
-		spectypes.RequestAuthPartialSig,
-		spectypes.EnvelopePartialSig:
+		spectypes.RequestAuthPartialSig:
 		return true
 	default:
 		return false
@@ -428,9 +437,6 @@ func (mv *messageValidator) partialSignatureTypeMatchesRole(msgType spectypes.Pa
 		return msgType == spectypes.PostConsensusPartialSig || msgType == ssvtypes.SelectionProofPartialSig
 	case spectypes.RoleProposer:
 		return msgType == spectypes.PostConsensusPartialSig || msgType == spectypes.RandaoPartialSig
-	case spectypes.RoleEnvelopeProposer:
-		// The §6 envelope duty runs no QBFT; its single signing round is the EnvelopePartialSig (SIP #94 §6).
-		return msgType == spectypes.EnvelopePartialSig
 	case ssvtypes.RoleSyncCommitteeContribution:
 		return msgType == spectypes.PostConsensusPartialSig || msgType == ssvtypes.ContributionProofs
 	case spectypes.RoleValidatorRegistration:

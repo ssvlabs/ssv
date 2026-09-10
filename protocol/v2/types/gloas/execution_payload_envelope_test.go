@@ -37,9 +37,8 @@ func sampleExecutionPayload() *ExecutionPayload {
 }
 
 // The blinding property §6 relies on: the full envelope's root equals the blinded envelope's when
-// PayloadRoot = hash_tree_root(Payload), so a signature over the blinded root is valid for the full one.
-// The blinded form is ssv-spec's wire type, so this also pins that re-typing the request lists into it
-// preserves their root.
+// PayloadRoot = hash_tree_root(Payload) and ExecutionRequestsRoot = hash_tree_root(ExecutionRequests), so a
+// signature over the blinded root is valid for the full one.
 func TestExecutionPayloadEnvelopeBlindsToSameRoot(t *testing.T) {
 	full := &ExecutionPayloadEnvelope{
 		Payload: sampleExecutionPayload(),
@@ -69,9 +68,7 @@ func TestExecutionPayloadEnvelopeBlindsToSameRoot(t *testing.T) {
 
 	fullRequestsRoot, err := full.ExecutionRequests.HashTreeRoot()
 	require.NoError(t, err)
-	blindedRequestsRoot, err := blinded.ExecutionRequests.HashTreeRoot()
-	require.NoError(t, err)
-	require.Equal(t, fullRequestsRoot, blindedRequestsRoot, "re-typed request lists must keep their root")
+	require.Equal(t, phase0.Root(fullRequestsRoot), blinded.ExecutionRequestsRoot)
 
 	fullRoot, err := full.HashTreeRoot()
 	require.NoError(t, err)
@@ -122,21 +119,22 @@ func TestBlindedExecutionPayloadEnvelopeFixedRootMatchesAnchor(t *testing.T) {
 	require.Equal(t, blindedRoot, fullRoot)
 }
 
-// The wire type survives an SSZ round trip with a stable root.
+// The signing type survives an SSZ round trip with a stable root.
 func TestBlindedExecutionPayloadEnvelopeRoundTrip(t *testing.T) {
 	in := &BlindedExecutionPayloadEnvelope{
 		PayloadRoot:           phase0.Root{0x01},
-		ExecutionRequests:     &specgloas.ExecutionRequests{},
+		ExecutionRequestsRoot: phase0.Root{0x04},
 		BuilderIndex:          specgloas.BuilderIndexSelfBuild,
 		BeaconBlockRoot:       phase0.Root{0x02},
 		ParentBeaconBlockRoot: phase0.Root{0x03},
 	}
-	b, err := in.Encode()
+	b, err := in.MarshalSSZ()
 	require.NoError(t, err)
 
 	out := &BlindedExecutionPayloadEnvelope{}
-	require.NoError(t, out.Decode(b))
+	require.NoError(t, out.UnmarshalSSZ(b))
 	require.Equal(t, in.PayloadRoot, out.PayloadRoot)
+	require.Equal(t, in.ExecutionRequestsRoot, out.ExecutionRequestsRoot)
 	require.Equal(t, specgloas.BuilderIndexSelfBuild, out.BuilderIndex)
 	require.Equal(t, in.BeaconBlockRoot, out.BeaconBlockRoot)
 	require.Equal(t, in.ParentBeaconBlockRoot, out.ParentBeaconBlockRoot)

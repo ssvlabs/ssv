@@ -498,7 +498,7 @@ func TestBuildLoggerFields_DutyID(t *testing.T) {
 		for _, role := range []spectypes.RunnerRole{
 			spectypes.RoleProposer, spectypes.RoleValidatorRegistration, spectypes.RoleVoluntaryExit,
 			ssvtypes.RoleAggregator, ssvtypes.RoleSyncCommitteeContribution,
-			spectypes.RolePTCAttester, spectypes.RoleProposerPreferences, spectypes.RoleEnvelopeProposer,
+			spectypes.RolePTCAttester, spectypes.RoleProposerPreferences,
 		} {
 			dutyID := mv.buildLoggerFields(newConsensusMsg(role, pubKey, phase0.Slot(200))).DutyID
 			require.Equal(t, logfields.BuildDutyID(6, 200, role, 77), dutyID)

@@ -53,8 +53,7 @@ func (n *p2pNetwork) Broadcast(msgID spectypes.MessageID, msg *spectypes.SignedS
 }
 
 // broadcastMessageSlot resolves the slot of a message that's about to be broadcast, decoding only
-// the message body type actually sent over the wire (consensus, partial-signature, or envelope
-// dissemination), rather than
+// the message body type actually sent over the wire (consensus or partial-signature), rather than
 // building a full queue.DecodedSSVMessage wrapper that Broadcast has no other use for.
 func broadcastMessageSlot(msg *spectypes.SignedSSVMessage) (phase0.Slot, error) {
 	switch msg.SSVMessage.MsgType {
@@ -70,12 +69,6 @@ func broadcastMessageSlot(msg *spectypes.SignedSSVMessage) (phase0.Slot, error) 
 			return 0, fmt.Errorf("failed to decode PartialSignatureMessages: %w", err)
 		}
 		return psMsg.Slot, nil
-	case spectypes.SSVEnvelopeDisseminationMsgType:
-		dissemination := &spectypes.EnvelopeDissemination{}
-		if err := dissemination.Decode(msg.SSVMessage.Data); err != nil {
-			return 0, fmt.Errorf("failed to decode EnvelopeDissemination: %w", err)
-		}
-		return dissemination.Slot, nil
 	default:
 		// Unlike queue.DecodeSignedSSVMessage, SSVEventMsgType lands here: event messages are
 		// internal loopback and never reach Broadcast.

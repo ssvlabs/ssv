@@ -32,11 +32,11 @@ type (
 	SignedProposerPreferences      = eth2gloas.SignedProposerPreferences
 	BuilderIndex                   = eth2gloas.BuilderIndex
 
-	// BlindedExecutionPayloadEnvelope is the §6 dissemination value (SIP #94 §6): the full envelope with
-	// the payload replaced by its hash_tree_root, whose progressive root equals the full envelope's, so
-	// the threshold signature over it is valid for the full SignedExecutionPayloadEnvelope. It is
-	// ssv-spec's wire type — it rides inside spectypes.EnvelopeDissemination — so the node signs and
-	// disseminates exactly the bytes the spec fixtures and Anchor encode.
+	// BlindedExecutionPayloadEnvelope is the §6 signing input (SIP #94 §6): the envelope with the payload
+	// and the execution requests replaced by their roots, whose progressive root equals the full
+	// envelope's, so the threshold signature over it is valid for the full SignedExecutionPayloadEnvelope.
+	// Every operator derives it from the §4-decided value (GloasProposalData.DeriveBlindedEnvelope); it is
+	// ssv-spec's type so the node hashes exactly what the spec fixtures and Anchor hash.
 	BlindedExecutionPayloadEnvelope = specgloas.BlindedExecutionPayloadEnvelope
 )
 
@@ -50,72 +50,28 @@ const BuilderIndexSelfBuild = BuilderIndex(^uint64(0))
 // (slot, signer); the §5 dispatcher sizes its pending stash from it.
 const MaxProposerPreferencesDistinctRoots = 4
 
-// Blinded converts a full execution-payload envelope into the §6 blinded envelope, swapping the
-// execution payload for its hash_tree_root. The request lists are re-typed into ssv-spec's
-// ExecutionRequests, the same Gloas five-list container with an identical SSZ layout, so the blinded
-// envelope's requests root equals the full envelope's and the two hash to the same root.
+// Blinded converts a full execution-payload envelope into the §6 blinded envelope: the payload and the
+// execution requests are replaced by their roots. Every SSZ field subtree commits to hash_tree_root(field),
+// so the blinded envelope's progressive root equals the full envelope's, and a signature over the blinded
+// signing root is valid for the full SignedExecutionPayloadEnvelope. The builder operator compares this
+// form of its own produced envelope with the one derived from the decided value (SIP #94 §6).
 func Blinded(e *ExecutionPayloadEnvelope) (*BlindedExecutionPayloadEnvelope, error) {
-	if e == nil || e.Payload == nil {
+	if e == nil || e.Payload == nil || e.ExecutionRequests == nil {
 		return nil, fmt.Errorf("nil execution payload envelope")
 	}
 	payloadRoot, err := e.Payload.HashTreeRoot()
 	if err != nil {
 		return nil, fmt.Errorf("hash tree root of execution payload: %w", err)
 	}
-	requests, err := specExecutionRequests(e.ExecutionRequests)
+	requestsRoot, err := e.ExecutionRequests.HashTreeRoot()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("hash tree root of execution requests: %w", err)
 	}
 	return &BlindedExecutionPayloadEnvelope{
 		PayloadRoot:           payloadRoot,
-		ExecutionRequests:     requests,
+		ExecutionRequestsRoot: requestsRoot,
 		BuilderIndex:          specgloas.BuilderIndex(e.BuilderIndex),
 		BeaconBlockRoot:       e.BeaconBlockRoot,
 		ParentBeaconBlockRoot: e.ParentBeaconBlockRoot,
 	}, nil
-}
-
-// specExecutionRequests re-types go-eth2-client's Gloas ExecutionRequests as ssv-spec's. The three
-// Electra request lists share their element types; the EIP-8282 builder lists are copied field by
-// field (ssv-spec fixes the withdrawal credentials at 32 bytes where go-eth2-client keeps a slice).
-func specExecutionRequests(r *ExecutionRequests) (*specgloas.ExecutionRequests, error) {
-	if r == nil {
-		return nil, fmt.Errorf("nil execution requests")
-	}
-	out := &specgloas.ExecutionRequests{
-		Deposits:        r.Deposits,
-		Withdrawals:     r.Withdrawals,
-		Consolidations:  r.Consolidations,
-		BuilderDeposits: make([]*specgloas.BuilderDepositRequest, 0, len(r.BuilderDeposits)),
-		BuilderExits:    make([]*specgloas.BuilderExitRequest, 0, len(r.BuilderExits)),
-	}
-	for _, d := range r.BuilderDeposits {
-		if d == nil {
-			return nil, fmt.Errorf("nil builder deposit request")
-		}
-		sd := &specgloas.BuilderDepositRequest{Pubkey: d.Pubkey, Amount: d.Amount, Signature: d.Signature}
-		if len(d.WithdrawalCredentials) != len(sd.WithdrawalCredentials) {
-			return nil, fmt.Errorf("builder deposit withdrawal credentials: got %d bytes, want %d", len(d.WithdrawalCredentials), len(sd.WithdrawalCredentials))
-		}
-		copy(sd.WithdrawalCredentials[:], d.WithdrawalCredentials)
-		out.BuilderDeposits = append(out.BuilderDeposits, sd)
-	}
-	for _, x := range r.BuilderExits {
-		if x == nil {
-			return nil, fmt.Errorf("nil builder exit request")
-		}
-		out.BuilderExits = append(out.BuilderExits, &specgloas.BuilderExitRequest{SourceAddress: x.SourceAddress, Pubkey: x.Pubkey})
-	}
-	return out, nil
-}
-
-// DecodeBeaconBlock unmarshals a Gloas BeaconBlock from QBFT consensus DataSSZ. It is the proposer
-// path's node-side replacement for spectypes.ProposerConsensusData.GetBlockData, which has no Gloas
-// version; the returned block doubles as the HashRoot the proposer signs.
-func DecodeBeaconBlock(dataSSZ []byte) (*BeaconBlock, error) {
-	b := &BeaconBlock{}
-	if err := b.UnmarshalSSZ(dataSSZ); err != nil {
-		return nil, err
-	}
-	return b, nil
 }

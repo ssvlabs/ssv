@@ -64,7 +64,7 @@ func (mv *messageValidator) earlySlotAllowance(role spectypes.RunnerRole) time.D
 func (mv *messageValidator) messageLateness(slot phase0.Slot, role spectypes.RunnerRole, receivedAt time.Time) time.Duration {
 	var ttl uint64
 	switch role {
-	case spectypes.RoleProposer, spectypes.RoleEnvelopeProposer, spectypes.RolePTCAttester, ssvtypes.RoleSyncCommitteeContribution:
+	case spectypes.RoleProposer, spectypes.RolePTCAttester, ssvtypes.RoleSyncCommitteeContribution:
 		ttl = 1 + LateSlotAllowance
 	case spectypes.RoleCommittee, spectypes.RoleAggregatorCommittee, ssvtypes.RoleAggregator:
 		ttl = mv.maxStoredSlots()
@@ -157,9 +157,8 @@ func (mv *messageValidator) dutyLimit(msgID spectypes.MessageID, slot phase0.Slo
 
 		return min(slotsPerEpoch, 2*validatorIndexCount), true
 
-	case spectypes.RoleProposerPreferences, spectypes.RoleEnvelopeProposer:
-		// A validator proposes at most once per slot, so at most SlotsPerEpoch preferences (and likewise
-		// self-build envelopes) per epoch.
+	case spectypes.RoleProposerPreferences:
+		// A validator proposes at most once per slot, so at most SlotsPerEpoch preferences per epoch.
 		return mv.netCfg.SlotsPerEpoch, true
 
 	default:
@@ -200,13 +199,13 @@ func (mv *messageValidator) validateBeaconDuty(
 		}
 	}
 
-	// Rule: For a proposer-preferences or self-build envelope message, require a real proposer assignment
-	// for the validator at the slot — but only from a fetched AND fresh epoch. Both ride a proposal slot
-	// whose epoch may still be in flight (tolerated; the earliness/lateness window bounds the slot), and
-	// an epoch fetched before the latest indices change is equally unusable for rejection: dropping a
-	// just-added validator's one-shot partial on a stale view starves its quorum permanently — an
-	// identical re-broadcast can't pass the gossip seen-cache (SIP #94 §5, §7).
-	if role == spectypes.RoleProposerPreferences || role == spectypes.RoleEnvelopeProposer {
+	// Rule: For a proposer-preferences message, require a real proposer assignment for the validator at
+	// the slot — but only from a fetched AND fresh epoch. It rides a proposal slot whose epoch may still
+	// be in flight (tolerated; the earliness/lateness window bounds the slot), and an epoch fetched before
+	// the latest indices change is equally unusable for rejection: dropping a just-added validator's
+	// one-shot partial on a stale view starves its quorum permanently — an identical re-broadcast can't
+	// pass the gossip seen-cache (SIP #94 §5, §7).
+	if role == spectypes.RoleProposerPreferences {
 		validatorIndex := indices[0]
 		if mv.dutyStore.Proposer.IsEpochSet(epoch) && !mv.dutyStore.Proposer.IsEpochStale(epoch) &&
 			mv.dutyStore.Proposer.ValidatorDuty(epoch, slot, validatorIndex) == nil {

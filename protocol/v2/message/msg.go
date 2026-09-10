@@ -24,7 +24,6 @@ const (
 	roleAggregatorCommittee       = "AGGREGATOR_COMMITTEE"
 	rolePTCAttester               = "PTC_ATTESTER"
 	roleProposerPreferences       = "PROPOSER_PREFERENCES"
-	roleEnvelopeProposer          = "ENVELOPE_PROPOSER"
 )
 
 // MsgTypeToString extension for spec msg type. convert spec msg type to string
@@ -34,8 +33,6 @@ func MsgTypeToString(mt spectypes.MsgType) string {
 		return "consensus"
 	case spectypes.SSVPartialSignatureMsgType:
 		return "partial_signature"
-	case spectypes.SSVEnvelopeDisseminationMsgType:
-		return "envelope_dissemination"
 	case SSVEventMsgType:
 		return "event"
 	default:
@@ -101,8 +98,6 @@ func RunnerRoleFromString(s string) (spectypes.RunnerRole, error) {
 		return spectypes.RolePTCAttester, nil
 	case roleProposerPreferences:
 		return spectypes.RoleProposerPreferences, nil
-	case roleEnvelopeProposer:
-		return spectypes.RoleEnvelopeProposer, nil
 	default:
 		return 0, fmt.Errorf("unknown role: %s", s)
 	}
@@ -149,8 +144,6 @@ func RunnerRoleToString(r spectypes.RunnerRole) string {
 		return rolePTCAttester
 	case spectypes.RoleProposerPreferences:
 		return roleProposerPreferences
-	case spectypes.RoleEnvelopeProposer:
-		return roleEnvelopeProposer
 	default:
 		return fmt.Sprintf("unknown(%d)", r)
 	}

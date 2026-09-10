@@ -8,7 +8,6 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	specgloas "github.com/ssvlabs/ssv-spec/types/gloas"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ssvlabs/ssv/network/commons"
@@ -235,36 +234,6 @@ func TestBroadcastMessageSlot(t *testing.T) {
 		slot, err := broadcastMessageSlot(msg)
 		require.NoError(t, err)
 		require.Equal(t, phase0.Slot(456), slot)
-
-		decoded, err := queue.DecodeSignedSSVMessage(msg)
-		require.NoError(t, err)
-		wantSlot, err := decoded.Slot()
-		require.NoError(t, err)
-		require.Equal(t, wantSlot, slot)
-	})
-
-	t.Run("envelope dissemination message", func(t *testing.T) {
-		dissemination := &spectypes.EnvelopeDissemination{
-			Slot: 789,
-			Envelope: &specgloas.BlindedExecutionPayloadEnvelope{
-				ExecutionRequests: &specgloas.ExecutionRequests{},
-				BuilderIndex:      specgloas.BuilderIndexSelfBuild,
-			},
-		}
-		data, err := dissemination.Encode()
-		require.NoError(t, err)
-
-		msg := &spectypes.SignedSSVMessage{
-			SSVMessage: &spectypes.SSVMessage{
-				MsgType: spectypes.SSVEnvelopeDisseminationMsgType,
-				MsgID:   spectypes.MessageID(make([]byte, 56)),
-				Data:    data,
-			},
-		}
-
-		slot, err := broadcastMessageSlot(msg)
-		require.NoError(t, err)
-		require.Equal(t, phase0.Slot(789), slot)
 
 		decoded, err := queue.DecodeSignedSSVMessage(msg)
 		require.NoError(t, err)

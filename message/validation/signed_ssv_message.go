@@ -107,7 +107,7 @@ func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage)
 	}
 
 	switch ssvMessage.MsgType {
-	case spectypes.SSVConsensusMsgType, spectypes.SSVPartialSignatureMsgType, spectypes.SSVEnvelopeDisseminationMsgType:
+	case spectypes.SSVConsensusMsgType, spectypes.SSVPartialSignatureMsgType:
 		break
 	case ssvmessage.SSVEventMsgType:
 		// Rule: Event message
@@ -146,8 +146,7 @@ func (mv *messageValidator) validRoleUnion(roleType spectypes.RunnerRole) bool {
 		ssvtypes.RoleAggregator,
 		ssvtypes.RoleSyncCommitteeContribution,
 		spectypes.RolePTCAttester,
-		spectypes.RoleProposerPreferences,
-		spectypes.RoleEnvelopeProposer:
+		spectypes.RoleProposerPreferences:
 		return true
 	default:
 		return false
@@ -167,7 +166,7 @@ func (mv *messageValidator) validRoleAtSlot(roleType spectypes.RunnerRole, slot 
 		return isInBooleFork
 	case ssvtypes.RoleAggregator, ssvtypes.RoleSyncCommitteeContribution:
 		return !isInBooleFork
-	case spectypes.RolePTCAttester, spectypes.RoleProposerPreferences, spectypes.RoleEnvelopeProposer:
+	case spectypes.RolePTCAttester, spectypes.RoleProposerPreferences:
 		return isInGloas
 	default:
 		return false

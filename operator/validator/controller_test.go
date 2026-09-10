@@ -159,7 +159,6 @@ func TestSetupRunnersExporter(t *testing.T) {
 		&validator.CommonOptions{
 			ExporterMode: true,
 		},
-		nil, // startEnvelopeDuty
 	)
 	require.Nil(t, runners)
 	require.ErrorContains(t, err, "cannot set up duty runners in exporter mode")
@@ -1563,7 +1562,7 @@ func TestSetupRunnersProposerF(t *testing.T) {
 		NetworkConfig: netCfg,
 	}
 
-	runners, err := SetupRunners(t.Context(), share, operator, nil, nil, options, nil)
+	runners, err := SetupRunners(t.Context(), share, operator, nil, nil, options)
 	require.NoError(t, err)
 	require.Contains(t, runners, types.RoleAggregator)
 
@@ -1607,7 +1606,7 @@ func TestSetupRunnersProposerFPostBooleFork(t *testing.T) {
 		NetworkConfig: netCfg,
 	}
 
-	runners, err := SetupRunners(t.Context(), share, operator, nil, nil, options, nil)
+	runners, err := SetupRunners(t.Context(), share, operator, nil, nil, options)
 	require.NoError(t, err)
 
 	// Post-Boole the standalone aggregator runner is not built (SetupRunners gates it behind

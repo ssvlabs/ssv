@@ -129,8 +129,6 @@ func ValidatorMsgTypeAttribute(msgType spectypes.MsgType) attribute.KeyValue {
 		return attribute.String(attrKey, "SSVConsensusMsgType")
 	case spectypes.SSVPartialSignatureMsgType:
 		return attribute.String(attrKey, "SSVPartialSignatureMsgType")
-	case spectypes.SSVEnvelopeDisseminationMsgType:
-		return attribute.String(attrKey, "SSVEnvelopeDisseminationMsgType")
 	case message.SSVEventMsgType:
 		return attribute.String(attrKey, "SSVEventMsgType")
 	default:

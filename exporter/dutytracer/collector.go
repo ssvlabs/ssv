@@ -873,7 +873,7 @@ func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 	// explicitly instead of erroring per message in toBNRole now that message validation admits
 	// the roles on the wire (issue #2999). Tracing them is deliberate future exporter work.
 	switch msg.MsgID.GetRoleType() {
-	case spectypes.RolePTCAttester, spectypes.RoleProposerPreferences, spectypes.RoleEnvelopeProposer:
+	case spectypes.RolePTCAttester, spectypes.RoleProposerPreferences:
 		return nil
 	default:
 		// Other roles fall through to tracing below.

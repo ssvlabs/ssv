@@ -74,7 +74,11 @@ func (b *BaseRunner) ValidatePostConsensusMsg(ctx context.Context, runner Runner
 		return withCode(spectypes.NoRunningDutyErrorCode, ErrNoDutyAssigned)
 	}
 	if b.hasDutySucceeded() {
-		return withCode(spectypes.NoRunningDutyErrorCode, ErrRunningDutySucceeded)
+		// A finished Gloas proposer keeps accepting post-consensus packets while the decided value's §6
+		// envelope root is still expected (SIP #94 §4) — see ProposerRunner.awaitingEnvelope.
+		if p, ok := runner.(*ProposerRunner); !ok || !p.awaitingEnvelope() {
+			return withCode(spectypes.NoRunningDutyErrorCode, ErrRunningDutySucceeded)
+		}
 	}
 
 	// slotIsRelevant ensures the post-consensus message is even remotely relevant (eg. we might have already
@@ -135,12 +139,12 @@ func (b *BaseRunner) ValidatePostConsensusMsg(ctx context.Context, runner Runner
 			return err
 		}
 
-		roots, domain, err := runner.expectedPostConsensusRootsAndDomain(ctx)
+		expected, err := runner.expectedPostConsensusRootsAndDomains(ctx)
 		if err != nil {
 			return err
 		}
 
-		return b.verifyExpectedRoot(ctx, runner, psigMsgs, roots, domain)
+		return b.verifyExpectedPostConsensusRoots(ctx, runner, psigMsgs, expected)
 	}
 	if runner.GetRole() == spectypes.RoleCommittee {
 		validateMsg = func() error {
@@ -246,4 +250,77 @@ func (b *BaseRunner) verifyExpectedRoot(
 		}
 	}
 	return nil
+}
+
+// verifyExpectedPostConsensusRoots checks a post-consensus packet against the runner's expected roots, each
+// under its own domain: no more entries than expected, every entry one of the expected signing roots, and
+// every required root present. An optional root — the Gloas proposer's §6 envelope root — may be missing,
+// so the entry count may fall below the expected count; the upper bound is also §7's ≤2 rule for that packet.
+func (b *BaseRunner) verifyExpectedPostConsensusRoots(
+	ctx context.Context,
+	runner Runner,
+	psigMsgs *spectypes.PartialSignatureMessages,
+	expected []PostConsensusRoot,
+) error {
+	if len(psigMsgs.Messages) > len(expected) {
+		return spectypes.NewError(spectypes.WrongRootsCountErrorCode, "wrong expected roots count")
+	}
+
+	signingRoots, err := b.resolvePostConsensusSigningRoots(ctx, runner, expected)
+	if err != nil {
+		return err
+	}
+	required := 0
+	for _, sr := range signingRoots {
+		if !sr.Optional {
+			required++
+		}
+	}
+
+	requiredCovered := make(map[[32]byte]struct{})
+	for _, msg := range psigMsgs.Messages {
+		matched := false
+		for _, sr := range signingRoots {
+			if sr.SigningRoot == msg.SigningRoot {
+				matched = true
+				if !sr.Optional {
+					requiredCovered[sr.SigningRoot] = struct{}{}
+				}
+				break
+			}
+		}
+		if !matched {
+			return spectypes.NewError(spectypes.WrongSigningRootErrorCode, "unexpected signing root")
+		}
+	}
+	if len(requiredCovered) != required {
+		return spectypes.NewError(spectypes.WrongRootsCountErrorCode, "missing required signing root")
+	}
+	return nil
+}
+
+// expectedSigningRoot is an expected post-consensus root resolved to the signing root a packet entry
+// carries for it.
+type expectedSigningRoot struct {
+	PostConsensusRoot
+	SigningRoot [32]byte
+}
+
+// resolvePostConsensusSigningRoots computes each expected root's signing root under its own domain at the
+// current duty's epoch.
+func (b *BaseRunner) resolvePostConsensusSigningRoots(ctx context.Context, runner Runner, expected []PostConsensusRoot) ([]expectedSigningRoot, error) {
+	epoch := b.NetworkConfig.EstimatedEpochAtSlot(b.State.CurrentDuty.DutySlot())
+	resolved := make([]expectedSigningRoot, 0, len(expected))
+	for _, e := range expected {
+		domain, err := runner.GetBeaconNode().DomainData(ctx, epoch, e.Domain)
+		if err != nil {
+			return nil, fmt.Errorf("could not get post consensus root domain: %w", err)
+		}
+		signingRoot, err := spectypes.ComputeETHSigningRoot(e.Root, domain)
+		if err != nil {
+			return nil, fmt.Errorf("could not compute ETH signing root: %w", err)
+		}
+		resolved = append(resolved, expectedSigningRoot{PostConsensusRoot: e, SigningRoot: signingRoot})
+	}
+	return resolved, nil
 }
