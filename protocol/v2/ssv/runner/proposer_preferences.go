@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
-	"errors"
 	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -164,7 +163,7 @@ func (r *ProposerPreferencesRunner) ProcessPreConsensus(ctx context.Context, log
 		// No sub-runner for this proposal slot — it hasn't executed here yet, or it already concluded and
 		// was evicted. Not retryable: the stash above is what replays the partial once the slot's duty
 		// starts here (StartNewDuty), so a queue retry would only churn until it gave up.
-		return spectypes.WrapError(spectypes.NoRunningDutyErrorCode, ErrNoDutyAssigned)
+		return withCode(spectypes.NoRunningDutyErrorCode, ErrNoDutyAssigned)
 	}
 	return sub.ProcessPreConsensus(ctx, logger, signedMsg)
 }
@@ -410,10 +409,6 @@ func (r *proposerPreferencesSlotRunner) ProcessPreConsensus(ctx context.Context,
 	}
 
 	hasQuorum, roots, err := r.basePreConsensusMsgProcessing(ctx, logger, r, signedMsg)
-	if errors.Is(err, ErrNoDutyAssigned) || errors.Is(err, ErrRunningDutySucceeded) {
-		// A late message for a concluded slot is retryable (the sub-runner lingers until evicted).
-		err = NewRetryableError(err)
-	}
 	if err != nil {
 		return fmt.Errorf("failed processing proposer preferences message: %w", err)
 	}

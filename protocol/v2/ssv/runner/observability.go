@@ -137,6 +137,12 @@ var (
 			metric.WithUnit("{envelope}"),
 			metric.WithDescription("threshold-signed Gloas execution-payload envelopes by whether this operator is the one that built them")))
 
+	envelopePublishCounter = metrics.New(
+		meter.Int64Counter(
+			observability.InstrumentName(observabilityNamespace, "envelope.publishes"),
+			metric.WithUnit("{publish}"),
+			metric.WithDescription("Gloas execution-payload envelope publishes by the builder operator (SIP #94 §6), by outcome")))
+
 	requestAuthReconstructionCounter = metrics.New(
 		meter.Int64Counter(
 			observability.InstrumentName(observabilityNamespace, "request_auth.reconstructions"),
@@ -198,14 +204,25 @@ func recordProposalBuildSource(ctx context.Context, source proposalBuildSource) 
 // holds the full payload bytes and publishes, so per operator an "other" share is expected and benign —
 // the signal is cluster-wide: a signed envelope no operator matched is a reveal miss (the cluster decided
 // a payload_root nobody can publish the payload for), which this makes countable instead of inferable only
-// from the absence of a publish log. Deliberately independent of whether the subsequent submit succeeded —
-// that failure is already counted by ssv.runner.submissions.failed.
+// from the absence of a publish log. Deliberately independent of whether the subsequent publish succeeded —
+// that is counted by ssv.runner.envelope.publishes.
 func recordEnvelopeBuildMatch(ctx context.Context, self bool) {
 	match := "other"
 	if self {
 		match = "self"
 	}
 	envelopeBuildMatchCounter.Add(ctx, 1, metric.WithAttributes(observability.EnvelopeBuildMatchAttribute(match)))
+}
+
+// recordEnvelopePublish counts the builder operator's §6 envelope publish by outcome. It is kept apart from
+// the proposer's submission metrics: the block and the envelope are two publishes of one duty, and a
+// reveal that fails after the block landed is its own signal.
+func recordEnvelopePublish(ctx context.Context, success bool) {
+	outcome := "failure"
+	if success {
+		outcome = "success"
+	}
+	envelopePublishCounter.Add(ctx, 1, metric.WithAttributes(attribute.String("outcome", outcome)))
 }
 
 // recordRequestAuthReconstruction counts a threshold-reconstructed request-auth signing root

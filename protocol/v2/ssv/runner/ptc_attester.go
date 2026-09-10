@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
-	"errors"
 	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -77,10 +76,6 @@ func (r *PTCAttesterRunner) StartNewDuty(ctx context.Context, logger *zap.Logger
 
 func (r *PTCAttesterRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) (err error) {
 	hasQuorum, roots, err := r.basePreConsensusMsgProcessing(ctx, logger, r, signedMsg)
-	if errors.Is(err, ErrNoDutyAssigned) || errors.Is(err, ErrRunningDutySucceeded) {
-		// The runner is reused across duties, so a late message for a concluded duty is retryable.
-		err = NewRetryableError(err)
-	}
 	if err != nil {
 		return fmt.Errorf("failed processing payload attestation message: %w", err)
 	}

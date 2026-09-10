@@ -101,7 +101,7 @@ func (r *proposerPreferencesSlotRunner) runRequestAuthRound(ctx context.Context,
 // collection, which legitimately runs until the sub-runner is evicted.
 func (r *proposerPreferencesSlotRunner) processRequestAuthPartial(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
 	if !r.hasDutyAssigned() {
-		return NewRetryableError(spectypes.WrapError(spectypes.NoRunningDutyErrorCode, ErrNoDutyAssigned))
+		return NewRetryableError(withCode(spectypes.NoRunningDutyErrorCode, ErrNoDutyAssigned))
 	}
 	if err := r.validatePartialSigMsg(signedMsg, r.State.CurrentDuty.DutySlot()); err != nil {
 		return fmt.Errorf("invalid request-auth partial: %w", err)
@@ -124,7 +124,7 @@ func (r *proposerPreferencesSlotRunner) processRequestAuthPartial(ctx context.Co
 		}
 		// Duty assigned but not executed here yet: retryable, so a partial racing the duty start
 		// also lands via the queue replay and the dispatcher stash.
-		return NewRetryableError(spectypes.WrapError(spectypes.NoRunningDutyErrorCode, errors.New("no frozen request auths")))
+		return NewRetryableError(withCode(spectypes.NoRunningDutyErrorCode, errors.New("no frozen request auths")))
 	}
 	frozen, ok := r.requestAuths[msg.SigningRoot]
 	if !ok {
