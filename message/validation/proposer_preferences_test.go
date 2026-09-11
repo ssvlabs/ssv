@@ -193,10 +193,10 @@ func TestValidateBeaconDuty_ProposerPreferencesRequiresAssignment(t *testing.T) 
 	require.ErrorIs(t, mv.validateBeaconDuty(spectypes.RoleProposerPreferences, slot+1, indices, false), ErrNoDuty)
 }
 
-// SignerState tracks distinct ProposerPreferences signing roots (SIP #94 §5): recording is idempotent
-// per root, and the set reflects the distinct roots.
+// A signer's slot state tracks distinct ProposerPreferences signing roots (SIP #94 §5): recording is
+// idempotent per root, and the set reflects the distinct roots.
 func TestSignerState_ProposerPreferencesRoots(t *testing.T) {
-	s := &SignerState{}
+	s := &SignerStateForSlotRound{}
 	r1 := [32]byte{1}
 	r2 := [32]byte{2}
 
@@ -217,8 +217,8 @@ func TestSignerState_ProposerPreferencesRoots(t *testing.T) {
 }
 
 // ProposerPreferences pre-consensus admits up to maxProposerPreferencesDistinctRoots distinct signing
-// roots per (slot, signer) — a dependent_root refresh re-emits under a new root (SIP #94 §5). Only a
-// same-peer repeat of a seen root is REJECT'd; a relayed repeat or a distinct root past the cap is IGNORE'd.
+// roots per (slot, signer) — a dependent_root refresh re-emits under a new root (SIP #94 §5). A repeat
+// of a recorded root, whichever peer relays it, and a distinct root past the cap are both IGNORE'd (§7).
 func TestValidatePartialSignatureMessageLimit_ProposerPreferences(t *testing.T) {
 	ppMsg := func(root [32]byte) *spectypes.PartialSignatureMessages {
 		return &spectypes.PartialSignatureMessages{
@@ -227,9 +227,8 @@ func TestValidatePartialSignatureMessageLimit_ProposerPreferences(t *testing.T) 
 			Messages: []*spectypes.PartialSignatureMessage{{SigningRoot: root}},
 		}
 	}
-	record := func(ss *SignerStateForSlotRound, from peer.ID, root [32]byte) {
-		ss.Peer(from).SeenProposerPreferencesRoots.record(root)
-		ss.World.SeenProposerPreferencesRoots.record(root)
+	record := func(ss *SignerStateForSlotRound, root [32]byte) {
+		ss.SeenProposerPreferencesRoots.record(root) // as updatePartialSignatureState records on ACCEPT
 	}
 	root := func(b byte) [32]byte { return [32]byte{b} }
 
@@ -241,7 +240,7 @@ func TestValidatePartialSignatureMessageLimit_ProposerPreferences(t *testing.T) 
 		for i := 0; i < maxProposerPreferencesDistinctRoots; i++ {
 			r := root(byte(i + 1))
 			require.NoError(t, validatePartialSignatureMessageLimit(ppMsg(r), peerA, ss))
-			record(ss, peerA, r)
+			record(ss, r)
 		}
 
 		// A distinct root beyond the cap is rate-limited (IGNORE), not a provable violation (REJECT).
@@ -252,28 +251,27 @@ func TestValidatePartialSignatureMessageLimit_ProposerPreferences(t *testing.T) 
 		require.False(t, valErr.reject)
 	})
 
-	t.Run("same-peer duplicate root is rejected, a relayed duplicate is ignored", func(t *testing.T) {
+	// The sender itself repeats a root after a restart, once the recipient's gossip duplicate cache
+	// has expired (issue #3016); a relay repeats it whenever meshes overlap. Neither proves peer fault.
+	t.Run("a repeated root is ignored whichever peer relays it", func(t *testing.T) {
 		ss := newSignerState(1, specqbft.FirstRound)
 		r := root(1)
 		require.NoError(t, validatePartialSignatureMessageLimit(ppMsg(r), peerA, ss))
-		record(ss, peerA, r)
+		record(ss, r)
 
-		var valErr Error
-		err := validatePartialSignatureMessageLimit(ppMsg(r), peerA, ss)
-		require.ErrorIs(t, err, ErrTooManyPartialSigMessage)
-		require.True(t, errors.As(err, &valErr))
-		require.True(t, valErr.reject)
-
-		err = validatePartialSignatureMessageLimit(ppMsg(r), peerB, ss)
-		require.ErrorIs(t, err, ErrTooManyPartialSigMessage)
-		require.True(t, errors.As(err, &valErr))
-		require.False(t, valErr.reject)
+		for _, from := range []peer.ID{peerA, peerB} {
+			var valErr Error
+			err := validatePartialSignatureMessageLimit(ppMsg(r), from, ss)
+			require.ErrorIs(t, err, ErrTooManyPartialSigMessage)
+			require.True(t, errors.As(err, &valErr))
+			require.False(t, valErr.reject, "peer %s", from)
+		}
 	})
 
-	t.Run("a fresh peer's new distinct root is ignored once the world budget is spent", func(t *testing.T) {
+	t.Run("a fresh peer's new distinct root is ignored once the signer's budget is spent", func(t *testing.T) {
 		ss := newSignerState(1, specqbft.FirstRound)
 		for i := 0; i < maxProposerPreferencesDistinctRoots; i++ {
-			record(ss, peerA, root(byte(i+1)))
+			record(ss, root(byte(i+1)))
 		}
 
 		var valErr Error

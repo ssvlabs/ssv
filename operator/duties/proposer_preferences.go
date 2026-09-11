@@ -133,8 +133,7 @@ func (h *ProposerPreferencesHandler) emitForTick(ctx context.Context, slot phase
 // emitForEpoch emits one proposer-preferences duty per still-upcoming local proposal assignment in
 // the epoch, to be broadcast immediately. It emits once per (epoch, dependent_root): a steady-state tick skips an
 // already-emitted epoch, and a post-reorg recheck re-emits only when the epoch's dependent_root changed —
-// re-emitting under an unchanged root would just duplicate the preference and get the operator
-// gossip-penalized (SIP #94 §5).
+// re-emitting under an unchanged root would just duplicate the preference, which peers drop (SIP #94 §5, §7).
 func (h *ProposerPreferencesHandler) emitForEpoch(ctx context.Context, epoch phase0.Epoch, currentSlot phase0.Slot, recheck bool) {
 	if _, done := h.emitted[epoch]; done && !recheck {
 		return

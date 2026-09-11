@@ -26,6 +26,15 @@ type SignerStateForSlotRound struct {
 	// World is the world-state, it's the aggregate state across all peers our operator received messages from.
 	// It is used to ensure the logical integrity of the ssv-protocol.
 	World SignerState
+
+	// SeenProposerPreferencesRoots and SeenRequestAuthRoots record the distinct signing roots seen from the
+	// signer for the root-budgeted types — ProposerPreferences (SIP #94 §5, up to
+	// maxProposerPreferencesDistinctRoots) and BuilderRequestAuth (issue #2962, up to
+	// maxRequestAuthDistinctRoots) — which are capped by distinct root rather than by the single
+	// pre-consensus bit in SeenMsgTypes. Kept once per signer, not per peer: a repeat is IGNORE'd whichever
+	// peer relays it (§7). nil until the first such message.
+	SeenProposerPreferencesRoots seenRootSet
+	SeenRequestAuthRoots         seenRootSet
 }
 
 func (s *SignerStateForSlotRound) Peer(peerID peer.ID) *SignerState {
@@ -53,8 +62,8 @@ func (s *SignerStateForSlotRound) Reset(slot phase0.Slot, round specqbft.Round) 
 	s.World.SeenMsgTypes = SeenMsgTypes{}
 	s.World.HashedProposalData = nil
 	s.World.SeenDecidedMsgSignersCount = 0
-	s.World.SeenProposerPreferencesRoots = nil
-	s.World.SeenRequestAuthRoots = nil
+	s.SeenProposerPreferencesRoots = nil
+	s.SeenRequestAuthRoots = nil
 }
 
 // SignerState represents the state of a signer (an Operator running a Runner that performs partial-signing for
@@ -70,16 +79,6 @@ type SignerState struct {
 
 	// SeenDecidedMsgSignersCount records the max number of signers we've seen with a decided message.
 	SeenDecidedMsgSignersCount int
-
-	// SeenProposerPreferencesRoots records the distinct ProposerPreferences signing roots seen from this
-	// signer (SIP #94 §5): that type is capped by distinct root (up to maxProposerPreferencesDistinctRoots),
-	// not by the single pre-consensus bit in SeenMsgTypes. nil until the first such message.
-	SeenProposerPreferencesRoots seenRootSet
-
-	// SeenRequestAuthRoots records the distinct BuilderRequestAuth signing roots seen from this signer
-	// (issue #2962) — root-capped like the §5 preference roots above, up to
-	// maxRequestAuthDistinctRoots. nil until the first such message.
-	SeenRequestAuthRoots seenRootSet
 }
 
 // seenRootSet tracks the distinct signing roots seen from a signer for a root-budgeted message
@@ -97,7 +96,7 @@ func (s *seenRootSet) record(root [32]byte) {
 
 // seenRootsFor returns the signer's seen-root set for a root-budgeted message type; nil for types
 // without one.
-func seenRootsFor(s *SignerState, t spectypes.PartialSigMsgType) *seenRootSet {
+func seenRootsFor(s *SignerStateForSlotRound, t spectypes.PartialSigMsgType) *seenRootSet {
 	switch t {
 	case spectypes.ProposerPreferencesPartialSig:
 		return &s.SeenProposerPreferencesRoots
