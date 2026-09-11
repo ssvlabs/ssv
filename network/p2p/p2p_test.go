@@ -112,15 +112,17 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 	)
 
 	// Guard the choice of broadcastTimeIntoSlot at the source: EstimatedRoundAt is the same
-	// estimate the validator uses, so if SlotDuration or the committee head-start ever shifts
-	// the estimated round out of the range that admits rounds 1..3, fail loudly here instead
-	// of silently reflaking on the router-count assertion below. allowedRoundsInPast and
+	// estimate the validator uses, so if the slot's interval duration or the committee head-start
+	// ever shifts the estimated round out of the range that admits rounds 1..3, fail loudly here
+	// instead of silently reflaking on the router-count assertion below. allowedRoundsInPast and
 	// allowedRoundsInFuture are unexported in message/validation; mirror their current values.
+	// The test network has no Gloas fork, so the interval is the same at the broadcast slot.
 	const (
 		allowedRoundsInPast   = 2
 		allowedRoundsInFuture = 1
 	)
-	estRound, err := roundtimer.EstimatedRoundAt(spectypes.RoleCommittee, networkconfig.TestNetwork.SlotDuration, broadcastTimeIntoSlot)
+	intervalDuration := networkconfig.TestNetwork.IntervalDuration(networkconfig.TestNetwork.EstimatedCurrentSlot())
+	estRound, err := roundtimer.EstimatedRoundAt(spectypes.RoleCommittee, intervalDuration, broadcastTimeIntoSlot)
 	require.NoError(t, err)
 	lowestAdmitted := specqbft.FirstRound
 	if estRound > allowedRoundsInPast {

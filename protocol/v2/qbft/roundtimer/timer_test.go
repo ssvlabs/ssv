@@ -150,13 +150,13 @@ func TestEstimatedRoundAt(t *testing.T) {
 	}
 
 	// Discriminating regression guard for the missing RoleAggregatorCommittee head start.
-	// At a realistic 12s slot, aggregation data arrives ~2/3 in (8s). With the fix (2/3-slot head
-	// start) the round is still 1 there; without it (head start 0) EstimatedRoundAt resolves to
-	// round 5 (1 + 8s/QuickTimeout), starting consensus mid-round. Unlike the 600ms table cases
-	// above, this assertion fails against the unpatched code.
+	// At a realistic 12s slot (4s intervals), aggregation data arrives two intervals in (8s). With
+	// the fix (two-interval head start) the round is still 1 there; without it (head start 0)
+	// EstimatedRoundAt resolves to round 5 (1 + 8s/QuickTimeout), starting consensus mid-round.
+	// Unlike the 600ms table cases above, this assertion fails against the unpatched code.
 	t.Run("aggregator-committee resolves round 1 at two-thirds of a realistic 12s slot", func(t *testing.T) {
-		const realisticSlot = 12 * time.Second
-		round, err := EstimatedRoundAt(spectypes.RoleAggregatorCommittee, realisticSlot, realisticSlot/3*2)
+		const realisticInterval = 12 * time.Second / 3
+		round, err := EstimatedRoundAt(spectypes.RoleAggregatorCommittee, realisticInterval, 2*realisticInterval)
 		require.NoError(t, err)
 		require.Equal(t, specqbft.FirstRound, round)
 	})
