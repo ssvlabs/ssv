@@ -25,10 +25,10 @@ func TestValidPartialSigMsgType_RequestAuth(t *testing.T) {
 	require.True(t, mv.validPartialSigMsgType(spectypes.RequestAuthPartialSig))
 }
 
-// SignerState tracks distinct BuilderRequestAuth signing roots independently of the §5 preference roots:
-// recording is idempotent per root, the two sets never bleed into each other's budgets.
+// A signer's slot state tracks distinct BuilderRequestAuth signing roots independently of the §5
+// preference roots: recording is idempotent per root, the two sets never bleed into each other's budgets.
 func TestSignerState_RequestAuthRoots(t *testing.T) {
-	s := &SignerState{}
+	s := &SignerStateForSlotRound{}
 	r1 := [32]byte{1}
 	r2 := [32]byte{2}
 
@@ -53,9 +53,9 @@ func TestSignerState_RequestAuthRoots(t *testing.T) {
 }
 
 // RequestAuth pre-consensus admits up to maxRequestAuthDistinctRoots distinct signing roots per
-// (slot, signer) — one per configured builder (issue #2962) — with the §5 two-tier handling: only a
-// same-peer repeat of a seen root is REJECT'd; a relayed repeat or a distinct root past the cap is
-// IGNORE'd. The budget is separate from the §5 preference budget.
+// (slot, signer) — one per configured builder (issue #2962) — with the §5 dedup: a repeat of a
+// recorded root, whichever peer relays it, and a distinct root past the cap are both IGNORE'd
+// (SIP #94 §7). The budget is separate from the §5 preference budget.
 func TestValidatePartialSignatureMessageLimit_RequestAuth(t *testing.T) {
 	raMsg := func(root [32]byte) *spectypes.PartialSignatureMessages {
 		return &spectypes.PartialSignatureMessages{
@@ -64,9 +64,8 @@ func TestValidatePartialSignatureMessageLimit_RequestAuth(t *testing.T) {
 			Messages: []*spectypes.PartialSignatureMessage{{SigningRoot: root}},
 		}
 	}
-	record := func(ss *SignerStateForSlotRound, from peer.ID, root [32]byte) {
-		ss.Peer(from).SeenRequestAuthRoots.record(root)
-		ss.World.SeenRequestAuthRoots.record(root)
+	record := func(ss *SignerStateForSlotRound, root [32]byte) {
+		ss.SeenRequestAuthRoots.record(root) // as updatePartialSignatureState records on ACCEPT
 	}
 	root := func(b byte) [32]byte { return [32]byte{b} }
 
@@ -78,7 +77,7 @@ func TestValidatePartialSignatureMessageLimit_RequestAuth(t *testing.T) {
 		for i := 0; i < maxRequestAuthDistinctRoots; i++ {
 			r := root(byte(i + 1))
 			require.NoError(t, validatePartialSignatureMessageLimit(raMsg(r), peerA, ss))
-			record(ss, peerA, r)
+			record(ss, r)
 		}
 
 		var valErr Error
@@ -88,36 +87,34 @@ func TestValidatePartialSignatureMessageLimit_RequestAuth(t *testing.T) {
 		require.False(t, valErr.reject)
 	})
 
-	t.Run("same-peer duplicate root is rejected, a relayed duplicate is ignored", func(t *testing.T) {
+	// Honest re-triggers reproduce identical auth roots by design, so the IGNORE rationale is strictly
+	// stronger here than for the preference roots.
+	t.Run("a repeated root is ignored whichever peer relays it", func(t *testing.T) {
 		ss := newSignerState(1, specqbft.FirstRound)
 		r := root(1)
 		require.NoError(t, validatePartialSignatureMessageLimit(raMsg(r), peerA, ss))
-		record(ss, peerA, r)
+		record(ss, r)
 
-		var valErr Error
-		err := validatePartialSignatureMessageLimit(raMsg(r), peerA, ss)
-		require.ErrorIs(t, err, ErrTooManyPartialSigMessage)
-		require.True(t, errors.As(err, &valErr))
-		require.True(t, valErr.reject)
-
-		err = validatePartialSignatureMessageLimit(raMsg(r), peerB, ss)
-		require.ErrorIs(t, err, ErrTooManyPartialSigMessage)
-		require.True(t, errors.As(err, &valErr))
-		require.False(t, valErr.reject)
+		for _, from := range []peer.ID{peerA, peerB} {
+			var valErr Error
+			err := validatePartialSignatureMessageLimit(raMsg(r), from, ss)
+			require.ErrorIs(t, err, ErrTooManyPartialSigMessage)
+			require.True(t, errors.As(err, &valErr))
+			require.False(t, valErr.reject, "peer %s", from)
+		}
 	})
 
 	t.Run("§5 preference roots do not consume the request-auth budget (and vice versa)", func(t *testing.T) {
 		ss := newSignerState(1, specqbft.FirstRound)
 		for i := 0; i < maxProposerPreferencesDistinctRoots; i++ {
-			ss.Peer(peerA).SeenProposerPreferencesRoots.record(root(byte(100 + i)))
-			ss.World.SeenProposerPreferencesRoots.record(root(byte(100 + i)))
+			ss.SeenProposerPreferencesRoots.record(root(byte(100 + i)))
 		}
 		// The §5 budget is spent; a request-auth root is still admitted.
 		require.NoError(t, validatePartialSignatureMessageLimit(raMsg(root(1)), peerA, ss))
-		record(ss, peerA, root(1))
+		record(ss, root(1))
 		// And the request-auth root did not consume the §5 budget's tracking.
-		require.Len(t, ss.World.SeenRequestAuthRoots, 1)
-		require.Len(t, ss.World.SeenProposerPreferencesRoots, maxProposerPreferencesDistinctRoots)
+		require.Len(t, ss.SeenRequestAuthRoots, 1)
+		require.Len(t, ss.SeenProposerPreferencesRoots, maxProposerPreferencesDistinctRoots)
 	})
 }
 

@@ -334,9 +334,9 @@ type proposerPreferencesSlotRunner struct {
 	// broadcastPreferences is the preference this proposal slot already broadcast a partial signature
 	// for, carried across sub-runner replacements like submittedPreferences. It covers the in-flight
 	// case (broadcast, quorum still converging): a re-emission that rebuilds it byte-identically keeps
-	// converging without re-signing — peers would reject the identical re-broadcast as a same-peer
-	// duplicate, penalizing this operator's gossip score for nothing (issue #2934); the dispatcher's
-	// stash replay re-seeds the replacement instead, our own first partial included.
+	// converging without re-signing — peers IGNORE an identical re-broadcast as a repeated root (SIP #94
+	// §7), so it could only spend bandwidth (issue #2934); the dispatcher's stash replay re-seeds the
+	// replacement instead, our own first partial included.
 	broadcastPreferences *gloas.ProposerPreferences
 
 	// builders is the cluster's resolved direct-builder entry list (issue #2962 B1): for each entry
@@ -359,13 +359,12 @@ type proposerPreferencesSlotRunner struct {
 
 	// broadcastAuthRoots and reconstructedAuthRoots carry across sub-runner replacements like
 	// broadcastPreferences: auth roots are re-emission-invariant, so a replacement must neither
-	// re-broadcast a root already out (a same-peer duplicate, issue #2934) nor redo a
+	// re-broadcast a root already out (peers IGNORE the repeat, issue #2934) nor redo a
 	// reconstruction its stash replay would re-reach quorum for.
 	//
-	// TODO(gloas): the markers are in-memory, so a restart mid-lookahead re-broadcasts every auth
-	// root and peers REJECT the same-peer duplicates — up to entry-cap+1 penalized messages per
-	// pending slot (§5 preference included), vs 1 pre-overlay. Gauge on a builders-configured
-	// devnet before considering persistence.
+	// Both markers are in-memory: a restart mid-lookahead re-broadcasts every pending root, which peers
+	// IGNORE as recorded (SIP #94 §7, issue #3016) — bandwidth, not a penalty. Persisting them would save
+	// that traffic but also suppress the retry a peer that missed the original broadcast still needs.
 	broadcastAuthRoots     map[[32]byte]struct{}
 	reconstructedAuthRoots map[[32]byte]struct{}
 }
@@ -521,10 +520,9 @@ func (r *proposerPreferencesSlotRunner) executeDuty(ctx context.Context, logger 
 
 	if r.broadcastPreferences != nil && *preferences == *r.broadcastPreferences {
 		// A prior incarnation of this slot already broadcast this exact preference (quorum still
-		// converging): a re-broadcast would be rejected by peers as a same-peer duplicate and only
-		// self-inflict a gossip-scoring penalty (issue #2934) — and it is useless anyway, since peers
-		// stash the first copy. Keep the duty running so the stash replay (see StartNewDuty) and live
-		// partials complete the quorum against the frozen preference above.
+		// converging): a re-broadcast is useless — peers stash the first copy and IGNORE the repeat as a
+		// recorded root (SIP #94 §7, issue #2934). Keep the duty running so the stash replay (see
+		// StartNewDuty) and live partials complete the quorum against the frozen preference above.
 		logger.Debug("proposer preferences unchanged since last broadcast; skipping re-broadcast",
 			fields.Slot(proposalSlot))
 		return nil
