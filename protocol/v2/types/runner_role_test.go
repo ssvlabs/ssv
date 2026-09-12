@@ -74,3 +74,13 @@ func TestRunnerRoleForDuty_CommitteeDuty(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, spectypes.RoleAggregatorCommittee, role)
 }
+
+func TestRunnerRoleForValidatorDuty_Gloas(t *testing.T) {
+	duty := &spectypes.ValidatorDuty{Type: spectypes.BNRolePTCAttester}
+	require.Equal(t, spectypes.RolePTCAttester, RunnerRoleForValidatorDuty(duty, true))
+	require.Equal(t, spectypes.RoleUnknown, RunnerRoleForValidatorDuty(nil, true))
+
+	// Non-Gloas roles still resolve via ssv-spec's RunnerRole().
+	proposer := &spectypes.ValidatorDuty{Type: spectypes.BNRoleProposer}
+	require.Equal(t, spectypes.RoleProposer, RunnerRoleForValidatorDuty(proposer, true))
+}

@@ -27,6 +27,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 )
 
@@ -427,8 +428,20 @@ func (ncv *CommitteeObserver) SaveRoots(ctx context.Context, msg *queue.SSVMessa
 
 	switch msg.MsgID.GetRoleType() {
 	case spectypes.RoleCommittee:
+		// On Gloas slots the decided value is a GloasBeaconVote (120B) carrying the attestation index;
+		// before Gloas it is a plain BeaconVote (112B). Decode into the matching type.
 		beaconVote := &spectypes.BeaconVote{}
-		if err := beaconVote.Decode(msg.SignedSSVMessage.FullData); err != nil {
+		var gloasIndex *phase0.CommitteeIndex
+		if ncv.beaconConfig.IsGloas(epoch) {
+			gv := &gloas.GloasBeaconVote{}
+			if err := gv.Decode(msg.SignedSSVMessage.FullData); err != nil {
+				ncv.logger.Debug("❗ failed to decode gloas beacon vote from proposal", zap.Error(err))
+				return err
+			}
+			beaconVote = &spectypes.BeaconVote{BlockRoot: gv.BlockRoot, Source: gv.Source, Target: gv.Target}
+			index := gv.AttestationDataIndex
+			gloasIndex = &index
+		} else if err := beaconVote.Decode(msg.SignedSSVMessage.FullData); err != nil {
 			ncv.logger.Debug("❗ failed to decode beacon vote from proposal", zap.Error(err))
 			return err
 		}
@@ -439,7 +452,7 @@ func (ncv *CommitteeObserver) SaveRoots(ctx context.Context, msg *queue.SSVMessa
 			return nil
 		}
 
-		if err := ncv.saveAttesterRoots(ctx, epoch, beaconVote, qbftMsg); err != nil {
+		if err := ncv.saveAttesterRoots(ctx, epoch, beaconVote, gloasIndex, qbftMsg); err != nil {
 			return err
 		}
 		if err := ncv.saveSyncCommRoots(ctx, epoch, beaconVote); err != nil {
@@ -483,20 +496,32 @@ func (ncv *CommitteeObserver) SaveRoots(ctx context.Context, msg *queue.SSVMessa
 	}
 }
 
-func (ncv *CommitteeObserver) saveAttesterRoots(ctx context.Context, epoch phase0.Epoch, beaconVote *spectypes.BeaconVote, qbftMsg *specqbft.Message) error {
+func (ncv *CommitteeObserver) saveAttesterRoots(ctx context.Context, epoch phase0.Epoch, beaconVote *spectypes.BeaconVote, gloasIndex *phase0.CommitteeIndex, qbftMsg *specqbft.Message) error {
 	attesterDomain, err := ncv.domainCache.Get(ctx, epoch, spectypes.DomainAttester)
 	if err != nil {
 		return err
 	}
 
-	for committeeIndex := phase0.CommitteeIndex(0); committeeIndex < 64; committeeIndex++ {
+	saveRoot := func(committeeIndex phase0.CommitteeIndex) error {
 		attestationData := constructAttestationData(beaconVote, phase0.Slot(qbftMsg.Height), committeeIndex)
 		attesterRoot, err := spectypes.ComputeETHSigningRoot(attestationData, attesterDomain)
 		if err != nil {
 			return err
 		}
-
 		ncv.attesterRoots.Set(attesterRoot, struct{}{}, ttlcache.DefaultTTL)
+		return nil
+	}
+
+	// On Gloas the index is the single decided payload-status value (0/1), shared by every validator in
+	// the slot, so there is exactly one attester root. Before Gloas the observer doesn't know each
+	// validator's committee, so it precomputes the root for every committee index 0..63.
+	if gloasIndex != nil {
+		return saveRoot(*gloasIndex)
+	}
+	for committeeIndex := phase0.CommitteeIndex(0); committeeIndex < 64; committeeIndex++ {
+		if err := saveRoot(committeeIndex); err != nil {
+			return err
+		}
 	}
 
 	return nil

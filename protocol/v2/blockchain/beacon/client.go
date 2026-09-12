@@ -9,6 +9,8 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
+
+	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 )
 
 //go:generate go tool -modfile=../../../../tool.mod mockgen -package=beacon -destination=./mock_client.go -source=./client.go
@@ -17,6 +19,10 @@ import (
 type AttesterCalls interface {
 	// GetAttestationData returns attestation data by the given slot and committee index
 	GetAttestationData(ctx context.Context, slot phase0.Slot) (*phase0.AttestationData, spec.DataVersion, error)
+	// HeadRootAtSlot returns the block root a head event named for slot, if one has arrived — the
+	// operator's own knowledge that the block at that root has that slot, which the committee runner's
+	// SIP #94 §2 same-slot check relies on.
+	HeadRootAtSlot(slot phase0.Slot) (phase0.Root, bool)
 	// SubmitAttestations submits the attestation to the node
 	SubmitAttestations(ctx context.Context, attestations []*spec.VersionedAttestation) error
 }
@@ -76,6 +82,58 @@ type VoluntaryExitCalls interface {
 	SubmitVoluntaryExit(ctx context.Context, voluntaryExit *phase0.SignedVoluntaryExit) error
 }
 
+// PTCCalls is the beacon-node surface for Gloas (ePBS) Payload Timeliness Committee duties:
+// fetching assignments, producing the data to attest to, and submitting signed messages.
+type PTCCalls interface {
+	// PayloadAttestationDuties returns the PTC duties for the given validators at the epoch, with the
+	// dependent_root they were derived from.
+	PayloadAttestationDuties(ctx context.Context, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) (*gloas.PTCDuties, error)
+	// PayloadAttestationData returns the data to attest to for the slot, or (nil, nil) if the beacon
+	// node reports no block seen for the slot (HTTP 204) — the SIP-94 §3 signal to abstain.
+	PayloadAttestationData(ctx context.Context, slot phase0.Slot) (*gloas.PayloadAttestationData, error)
+	// SubmitPayloadAttestationMessages submits signed PTC messages to the beacon node's pool.
+	SubmitPayloadAttestationMessages(ctx context.Context, messages []*gloas.PayloadAttestationMessage) error
+}
+
+// ProposerPreferencesCalls is the beacon-node surface for Gloas (ePBS) proposer preferences (SIP #94 §5)
+// and the direct-builder preferences the §5 dispatcher submits (issue #2962 phase 3). go-eth2-client has
+// no calls for these endpoints, so they are hand-rolled over HTTP.
+type ProposerPreferencesCalls interface {
+	// ProposerDutiesDependentRoot returns the proposer-duties dependent root for the epoch — the
+	// seed the proposer-lookahead is pinned to. go-eth2-client drops it, so it's fetched via raw HTTP.
+	ProposerDutiesDependentRoot(ctx context.Context, epoch phase0.Epoch) (phase0.Root, error)
+	// SubmitProposerPreferences broadcasts signed proposer preferences for upcoming proposal slots.
+	SubmitProposerPreferences(ctx context.Context, preferences []*gloas.SignedProposerPreferences) error
+	// SubmitBuilderPreferences submits ahead-of-time per-builder preferences; the beacon node forwards
+	// each entry to its builder (beacon-APIs#630, issue #2962 phase 3).
+	SubmitBuilderPreferences(ctx context.Context, preferences []*gloas.BuilderPreferencesEntry) error
+}
+
+// GloasProposerCalls is the beacon-node surface for producing and publishing Gloas (ePBS) blocks
+// (SIP #94 §4). These are hand-rolled over HTTP against the merged produce-block-v4 / publish endpoints
+// (beacon-APIs#580) plus the direct-builder produceBlockV4 POST (beacon-APIs#630): go-eth2-client's ePBS
+// proposal call is the pre-#630 GET, with no typed equivalent for the POST body or the Eth-Builder-Url echo.
+type GloasProposerCalls interface {
+	// GetGloasBeaconBlock produces a Gloas beacon block for the slot via produceBlockV4 with
+	// include_payload=true (SIP #94 §6): a self-build response also carries the envelope, blobs, and KZG
+	// proofs the operator reveals in §6, an external-build one only the bid-carrying block. builderConfig
+	// is sent as the POST body (beacon-APIs#630) — the direct-builder overlay when configured, else a
+	// neutral local-build config — with a GET fallback for beacon nodes that predate it; the result's
+	// BuilderURL is the Eth-Builder-Url of the winning builder-API bid, empty when
+	// self-built or won by a p2p bid.
+	GetGloasBeaconBlock(ctx context.Context, slot phase0.Slot, graffiti, randao []byte, builderConfig *gloas.ProduceBuilderConfig) (*gloas.ProducedBlock, error)
+	// SubmitGloasBeaconBlock publishes a signed Gloas block. A non-empty builderURL is echoed as the
+	// Eth-Builder-Url header so the beacon node forwards the block to the winning builder (beacon-APIs#630).
+	SubmitGloasBeaconBlock(ctx context.Context, block *gloas.SignedBeaconBlock, builderURL string) error
+}
+
+// GloasEnvelopeCalls is the beacon-node surface for publishing the §6 reveal (SIP #94 §6). Like the block
+// calls, it is hand-rolled over HTTP against the merged beacon-APIs#624 endpoint.
+type GloasEnvelopeCalls interface {
+	// SubmitExecutionPayloadEnvelope publishes the threshold-signed envelope with its blobs and KZG proofs.
+	SubmitExecutionPayloadEnvelope(ctx context.Context, contents *gloas.SignedExecutionPayloadEnvelopeContents) error
+}
+
 type DomainCalls interface {
 	DomainData(ctx context.Context, epoch phase0.Epoch, domain phase0.DomainType) (phase0.Domain, error)
 }
@@ -125,6 +183,10 @@ type BeaconNode interface {
 	SyncCommitteeContributionCalls
 	ValidatorRegistrationCalls
 	VoluntaryExitCalls
+	PTCCalls
+	ProposerPreferencesCalls
+	GloasProposerCalls
+	GloasEnvelopeCalls
 	DomainCalls
 
 	beaconDuties

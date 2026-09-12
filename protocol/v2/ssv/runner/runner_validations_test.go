@@ -51,6 +51,12 @@ func TestDutyStateSentinels_NotRetried(t *testing.T) {
 		{"committee post-consensus", func(b *BaseRunner) error {
 			return (&CommitteeRunner{BaseRunner: b}).ProcessPostConsensus(ctx, logger, msgs)
 		}},
+		{"PTC attester pre-consensus", func(b *BaseRunner) error {
+			return (&PTCAttesterRunner{BaseRunner: b}).ProcessPreConsensus(ctx, logger, msgs)
+		}},
+		{"proposer-preferences slot pre-consensus", func(b *BaseRunner) error {
+			return (&proposerPreferencesSlotRunner{BaseRunner: b}).ProcessPreConsensus(ctx, logger, msgs)
+		}},
 	}
 	for _, r := range runners {
 		t.Run(r.name, func(t *testing.T) {

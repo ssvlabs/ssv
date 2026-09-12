@@ -146,7 +146,7 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 				// if we are still early into the slot (1 slot-interval is just a guesstimate), otherwise we might
 				// be delaying the next tick (the duties that need to be executed on the next slot).
 
-				indicesChangeDeadline := h.netCfg.SlotStartTime(currentSlot).Add(h.netCfg.IntervalDuration())
+				indicesChangeDeadline := h.netCfg.SlotStartTime(currentSlot).Add(h.netCfg.IntervalDuration(currentSlot))
 				select {
 				case <-h.indicesChangeCh:
 					logger.Info("🔁 indices change received")
@@ -281,17 +281,16 @@ func (h *SyncCommitteeHandler) prepareCurrentPeriod(
 	defer span.End()
 
 	if fulfilled, ok := h.dutyFetchIntents[currentPeriod]; ok && !fulfilled {
-		logger.Debug("fetching duties for the current period")
-
-		err := h.fetchAndProcessDuties(ctx, logger, currentPeriod, currentEpoch, currentSlot, waitForInit)
+		fetched, err := h.fetchAndProcessDuties(ctx, logger, currentPeriod, currentEpoch, currentSlot, waitForInit)
 		if err != nil {
 			logger.Error("fetching duties for the current period failed", zap.Error(err))
 			span.SetStatus(codes.Error, err.Error())
 			return
 		}
-		h.dutyFetchIntents[currentPeriod] = true
-
-		logger.Debug("fetching duties for the current period succeeded")
+		// Fulfill the intent only if a fetch actually ran; a not-yet-eligible period stays pending so a later tick retries.
+		if fetched {
+			h.dutyFetchIntents[currentPeriod] = true
+		}
 	}
 
 	span.SetStatus(codes.Ok, "")
@@ -316,17 +315,16 @@ func (h *SyncCommitteeHandler) prepareNextPeriod(
 
 	// Delaying the duty fetch until it's a "good time" allows us to do it when the beacon node should be less busy.
 	if fulfilled, ok := h.dutyFetchIntents[currentPeriod+1]; ok && !fulfilled && h.shouldFetchNextPeriod(currentSlot) {
-		logger.Debug("fetching duties for the next period")
-
-		err := h.fetchAndProcessDuties(ctx, logger, currentPeriod+1, currentEpoch, currentSlot, waitForInit)
+		fetched, err := h.fetchAndProcessDuties(ctx, logger, currentPeriod+1, currentEpoch, currentSlot, waitForInit)
 		if err != nil {
 			logger.Error("fetching duties for the next period failed", zap.Error(err))
 			span.SetStatus(codes.Error, err.Error())
 			return
 		}
-		h.dutyFetchIntents[currentPeriod+1] = true
-
-		logger.Debug("fetching duties for the next period succeeded")
+		// Fulfill the intent only if a fetch actually ran; a not-yet-eligible period stays pending so a later tick retries.
+		if fetched {
+			h.dutyFetchIntents[currentPeriod+1] = true
+		}
 	}
 
 	span.SetStatus(codes.Ok, "")
@@ -371,9 +369,11 @@ func (h *SyncCommitteeHandler) processExecution(ctx context.Context, period uint
 	span.SetStatus(codes.Ok, "")
 }
 
-// fetchAndProcessDuties fetches & stores the sync committee duties for the given period (current or future).
-// The passed epoch must be the current epoch; for a future period the target epoch is resolved to that
-// period's first epoch.
+// fetchAndProcessDuties fetches & stores the given period's sync-committee duties. The period may be current
+// or future; the passed epoch must be the current epoch, and for a future period the target epoch resolves to
+// that period's first epoch. It returns fetched=false (with a nil error) when no validators are eligible yet —
+// a not-ready state (e.g. beacon metadata not synced) the caller must retry rather than treat as fulfilled;
+// fetched=true means a beacon fetch actually ran.
 func (h *SyncCommitteeHandler) fetchAndProcessDuties(
 	ctx context.Context,
 	logger *zap.Logger,
@@ -381,7 +381,7 @@ func (h *SyncCommitteeHandler) fetchAndProcessDuties(
 	epoch phase0.Epoch,
 	currentSlot phase0.Slot,
 	waitForInit bool,
-) error {
+) (fetched bool, err error) {
 	start := time.Now()
 	ctx, span := tracer.Start(ctx,
 		observability.InstrumentName(observabilityNamespace, "sync_committee.fetch_and_store"),
@@ -412,13 +412,14 @@ func (h *SyncCommitteeHandler) fetchAndProcessDuties(
 		logger.Debug(eventMsg)
 		span.AddEvent(eventMsg)
 		span.SetStatus(codes.Ok, "")
-		return nil
+		// No eligible validators yet — not a fulfilled fetch; caller retries on a later tick.
+		return false, nil
 	}
 
 	span.AddEvent("fetching duties from beacon node", trace.WithAttributes(observability.ValidatorCountAttribute(len(eligibleIndices))))
 	duties, err := h.beaconNode.SyncCommitteeDuties(ctx, epoch, eligibleIndices)
 	if err != nil {
-		return traces.Errorf(span, "failed to fetch sync committee duties: %w", err)
+		return false, traces.Errorf(span, "failed to fetch sync committee duties: %w", err)
 	}
 
 	selfShares := h.validatorProvider.SelfParticipatingValidators(epoch)
@@ -448,7 +449,7 @@ func (h *SyncCommitteeHandler) fetchAndProcessDuties(
 	// and avoids unnecessary log noise
 	if h.exporterMode {
 		span.SetStatus(codes.Ok, "")
-		return nil
+		return true, nil
 	}
 
 	// lastEpoch + 1 because the subscription's "until" epoch is exclusive
@@ -458,7 +459,7 @@ func (h *SyncCommitteeHandler) fetchAndProcessDuties(
 	if len(subscriptions) == 0 {
 		span.AddEvent("no subscriptions available")
 		span.SetStatus(codes.Ok, "")
-		return nil
+		return true, nil
 	}
 
 	span.AddEvent("submitting beacon sync committee subscriptions", trace.WithAttributes(
@@ -480,7 +481,7 @@ func (h *SyncCommitteeHandler) fetchAndProcessDuties(
 	}()
 
 	span.SetStatus(codes.Ok, "")
-	return nil
+	return true, nil
 }
 
 func (h *SyncCommitteeHandler) logDutiesFetched(

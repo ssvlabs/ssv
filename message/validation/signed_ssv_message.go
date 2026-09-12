@@ -144,7 +144,9 @@ func (mv *messageValidator) validRoleUnion(roleType spectypes.RunnerRole) bool {
 		spectypes.RoleVoluntaryExit,
 		spectypes.RoleAggregatorCommittee,
 		ssvtypes.RoleAggregator,
-		ssvtypes.RoleSyncCommitteeContribution:
+		ssvtypes.RoleSyncCommitteeContribution,
+		spectypes.RolePTCAttester,
+		spectypes.RoleProposerPreferences:
 		return true
 	default:
 		return false
@@ -153,13 +155,19 @@ func (mv *messageValidator) validRoleUnion(roleType spectypes.RunnerRole) bool {
 
 func (mv *messageValidator) validRoleAtSlot(roleType spectypes.RunnerRole, slot phase0.Slot) bool {
 	isInBooleFork := mv.netCfg.BooleForkAtSlot(slot)
+	isInGloas := mv.netCfg.IsGloasAtSlot(slot)
 	switch roleType {
-	case spectypes.RoleCommittee, spectypes.RoleProposer, spectypes.RoleValidatorRegistration, spectypes.RoleVoluntaryExit:
+	case spectypes.RoleCommittee, spectypes.RoleProposer, spectypes.RoleVoluntaryExit:
 		return true
+	case spectypes.RoleValidatorRegistration:
+		// Deprecated at the Gloas fork — superseded by proposer preferences (§5). Pre-Gloas unchanged.
+		return !isInGloas
 	case spectypes.RoleAggregatorCommittee:
 		return isInBooleFork
 	case ssvtypes.RoleAggregator, ssvtypes.RoleSyncCommitteeContribution:
 		return !isInBooleFork
+	case spectypes.RolePTCAttester, spectypes.RoleProposerPreferences:
+		return isInGloas
 	default:
 		return false
 	}

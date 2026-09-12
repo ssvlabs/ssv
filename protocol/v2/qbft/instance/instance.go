@@ -29,8 +29,10 @@ type Instance struct {
 	config qbft.IConfig
 	signer ssvtypes.OperatorSigner
 
-	State        *specqbft.State
-	processMsgF  *spectypes.ThreadSafeF
+	State       *specqbft.State
+	processMsgF *spectypes.ThreadSafeF
+	// StartValue is the value this node proposes when it leads a round with no prepared value to
+	// re-propose. The controller admits only a value that passed the value check, so it is never empty.
 	StartValue   []byte
 	ValueChecker ssv.ValueChecker `json:"-"`
 	roundTimer   ssv.QBFTRoundTimer

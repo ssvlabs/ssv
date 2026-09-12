@@ -162,7 +162,6 @@ func mKey(msg *queue.SSVMessage) (messageKey, error) {
 		writeUint64(&b, ssvtypes.PartialSigMsgSigner(psm))
 		return messageKey(b.String()), nil
 	}
-
 	return "", fmt.Errorf("unexpected message type (expected types: event, qbft, partial-sig): %d", msg.MsgType)
 }
 

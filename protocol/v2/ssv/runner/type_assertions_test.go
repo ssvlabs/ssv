@@ -3,9 +3,12 @@ package runner
 import (
 	"testing"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/stretchr/testify/require"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
+	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 )
 
 func TestValidatorDutyFromDuty(t *testing.T) {
@@ -82,20 +85,38 @@ func TestCurrentDutySlot(t *testing.T) {
 	require.Equal(t, aggregatorCommitteeDuty.DutySlot(), slot)
 }
 
-func TestBeaconVoteFromEncoder(t *testing.T) {
+func TestDecidedAttestationVote(t *testing.T) {
 	beaconVote := &spectypes.BeaconVote{}
 
-	gotBeaconVote, err := beaconVoteFromEncoder(beaconVote)
+	gotVote, gotIndex, err := decidedAttestationVote(beaconVote)
 	require.NoError(t, err)
-	require.Same(t, beaconVote, gotBeaconVote)
+	require.Same(t, beaconVote, gotVote)
+	require.Nil(t, gotIndex) // no attestation index before Gloas
 
-	_, err = beaconVoteFromEncoder(nil)
+	// Gloas: the BeaconVote half is extracted and the carried attestation index is returned (non-nil).
+	gloasVote := &gloas.GloasBeaconVote{
+		BlockRoot:            phase0.Root{0x01},
+		Source:               &phase0.Checkpoint{},
+		Target:               &phase0.Checkpoint{Epoch: 1},
+		AttestationDataIndex: 1,
+	}
+	gotVote, gotIndex, err = decidedAttestationVote(gloasVote)
+	require.NoError(t, err)
+	require.Equal(t, gloasVote.BlockRoot, gotVote.BlockRoot)
+	require.NotNil(t, gotIndex)
+	require.Equal(t, phase0.CommitteeIndex(1), *gotIndex)
+
+	_, _, err = decidedAttestationVote(nil)
 	require.ErrorContains(t, err, "decided value is nil")
 
 	var nilBeaconVote *spectypes.BeaconVote
-	_, err = beaconVoteFromEncoder(nilBeaconVote)
+	_, _, err = decidedAttestationVote(nilBeaconVote)
 	require.ErrorContains(t, err, "beacon vote is nil")
 
-	_, err = beaconVoteFromEncoder(&spectypes.ProposerConsensusData{})
-	require.ErrorContains(t, err, "decided value is not a BeaconVote")
+	var nilGloasVote *gloas.GloasBeaconVote
+	_, _, err = decidedAttestationVote(nilGloasVote)
+	require.ErrorContains(t, err, "gloas beacon vote is nil")
+
+	_, _, err = decidedAttestationVote(&spectypes.ProposerConsensusData{})
+	require.ErrorContains(t, err, "decided value is not a beacon vote")
 }
