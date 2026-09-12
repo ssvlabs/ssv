@@ -75,6 +75,71 @@ func TestConsumeQueue_HoldsMessagesUntilDutyStarts(t *testing.T) {
 	require.Equal(t, spectypes.SSVPartialSignatureMsgType, receiveDelivered(t, delivered).MsgType, "the held partial follows once the duty runs")
 }
 
+// A duty start purges what is still queued for earlier slots: the tail of the concluded duty (and any
+// message for a duty this operator never ran) is dropped without reaching the runner, while a message
+// that arrived early for the starting duty is still delivered once the duty runs (issue #3037).
+func TestConsumeQueue_DropsStaleMessagesAtDutyStart(t *testing.T) {
+	logger := zap.NewNop()
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	netCfg := networkconfig.TestNetwork
+	duty := &spectypes.ValidatorDuty{Type: spectypes.BNRoleProposer, Slot: phase0.Slot(10)}
+	msgID := spectypes.NewMsgID(netCfg.DomainType, duty.PubKey[:], spectypes.RoleProposer)
+	proposer := &runner.ProposerRunner{BaseRunner: &runner.BaseRunner{RunnerRoleType: spectypes.RoleProposer}}
+
+	v := &Validator{
+		logger:        logger,
+		ctx:           ctx,
+		cancel:        cancel,
+		NetworkConfig: netCfg,
+		Operator:      &spectypes.CommitteeMember{},
+		Share:         &ssvtypes.SSVShare{},
+		Queues:        map[spectypes.RunnerRole]queue.Queue{spectypes.RoleProposer: queue.New(logger, 16)},
+		DutyRunners:   runner.ValidatorDutyRunners{spectypes.RoleProposer: proposer},
+	}
+
+	partialAt := func(slot phase0.Slot) *queue.SSVMessage {
+		return makeTestSSVMessage(t, spectypes.SSVPartialSignatureMsgType, msgID, &spectypes.PartialSignatureMessages{
+			Type:     spectypes.PostConsensusPartialSig,
+			Slot:     slot,
+			Messages: []*spectypes.PartialSignatureMessage{{PartialSignature: make([]byte, 96), Signer: 1, ValidatorIndex: 1}},
+		})
+	}
+	// The tail of the duty at slot 5 that concluded before these arrived, and an early partial for slot 10.
+	require.True(t, v.Queues[spectypes.RoleProposer].TryPush(partialAt(5)))
+	require.True(t, v.Queues[spectypes.RoleProposer].TryPush(partialAt(10)))
+
+	delivered := make(chan *queue.SSVMessage, 4)
+	v.StartQueueConsumer(msgID, func(_ context.Context, _ *zap.Logger, msg *queue.SSVMessage) error {
+		if event, ok := msg.Body.(*ssvtypes.EventMsg); ok && event.Type == ssvtypes.ExecuteDuty {
+			proposer.State = runner.NewRunnerState(3, duty)
+		}
+		delivered <- msg
+		return nil
+	})
+
+	executeDuty, err := createDutyExecuteMsg(duty, duty.PubKey, netCfg.DomainType, spectypes.RoleProposer)
+	require.NoError(t, err)
+	decoded, err := queue.DecodeSSVMessage(executeDuty)
+	require.NoError(t, err)
+	require.True(t, v.Queues[spectypes.RoleProposer].TryPush(decoded))
+
+	require.Equal(t, message.SSVEventMsgType, receiveDelivered(t, delivered).MsgType, "the duty-start event goes first")
+	early := receiveDelivered(t, delivered)
+	earlySlot, err := early.Slot()
+	require.NoError(t, err)
+	require.Equal(t, duty.Slot, earlySlot, "the early partial for the starting duty follows")
+
+	select {
+	case msg := <-delivered:
+		slot, _ := msg.Slot()
+		t.Fatalf("stale message for slot %d reached the handler", slot)
+	case <-time.After(200 * time.Millisecond):
+	}
+	require.True(t, v.Queues[spectypes.RoleProposer].Empty(), "the stale tail is purged, not retained")
+}
+
 func receiveDelivered(t *testing.T, delivered <-chan *queue.SSVMessage) *queue.SSVMessage {
 	t.Helper()
 	select {

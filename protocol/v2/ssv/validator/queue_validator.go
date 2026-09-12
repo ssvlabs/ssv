@@ -126,8 +126,9 @@ func (v *Validator) StartQueueConsumer(
 			rState.Slot = phase0.Slot(r.GetLastHeight())
 			rState.Round = r.GetLastRound()
 
+			idle := !r.HasRunningDuty()
 			filter := queue.FilterAny
-			if !r.HasRunningDuty() {
+			if idle {
 				// If no duty is running, pop only ExecuteDuty messages.
 				filter = func(m *queue.SSVMessage) bool {
 					e, ok := m.Body.(*types.EventMsg)
@@ -161,6 +162,17 @@ func (v *Validator) StartQueueConsumer(
 			if msg == nil {
 				v.logger.Error("❗ got nil message from queue, but context is not done!")
 				return nil
+			}
+
+			// An idle runner starting a duty raises its slot floor: whatever is still queued for an earlier
+			// slot — the tail of the concluded duty, or messages for a duty this operator never ran — can no
+			// longer be processed, and would otherwise be handed to the new duty one by one only to be
+			// rejected (issue #3037). Drop it before the duty runs.
+			if dutySlot, ok := executeDutySlot(msg); ok && idle {
+				if dropped := q.Purge(slotBelow(dutySlot), queue.DropReasonStale); dropped > 0 {
+					v.logger.Debug("dropped stale messages queued for slots before the starting duty",
+						fields.RunnerRole(msgID.GetRoleType()), fields.Slot(dutySlot), fields.Count(dropped))
+				}
 			}
 
 			msgLogger, err := v.logWithMessageFields(v.logger, msg)
@@ -335,4 +347,24 @@ func (v *Validator) logWithMessageFields(logger *zap.Logger, msg *queue.SSVMessa
 	}
 
 	return logger, nil
+}
+
+// executeDutySlot returns the slot of the duty a duty-start event carries, if msg is one.
+func executeDutySlot(msg *queue.SSVMessage) (phase0.Slot, bool) {
+	event, ok := msg.Body.(*types.EventMsg)
+	if !ok || event == nil || event.Type != types.ExecuteDuty {
+		return 0, false
+	}
+	slot, err := msg.Slot()
+	return slot, err == nil
+}
+
+// slotBelow matches messages whose slot is below floor. A validator runner moves through its duties in
+// slot order and never returns to a lower slot, so once a duty at floor starts such messages have no
+// duty left to serve.
+func slotBelow(floor phase0.Slot) queue.Filter {
+	return func(m *queue.SSVMessage) bool {
+		slot, err := m.Slot()
+		return err == nil && slot < floor
+	}
 }
