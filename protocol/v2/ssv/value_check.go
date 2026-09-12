@@ -85,24 +85,30 @@ type gloasVoteChecker struct {
 	slot            phase0.Slot
 	sharePublicKeys []phase0.BLSPubKey
 	expectedVote    *gloas.GloasBeaconVote
+	// sameSlotBlockRoot is the block this operator's beacon node named for the duty slot, fixed when the
+	// instance started; nil when no block for the slot had been seen. See CheckValue.
+	sameSlotBlockRoot *phase0.Root
 }
 
 // NewGloasVoteChecker validates the committee runner's consensus value on Gloas-and-later slots
 // (SIP #94 §2). It mirrors NewVoteChecker — slashing protection plus epoch-only majority-fork
-// protection — and adds the one Gloas rule: AttestationDataIndex, the BN-supplied payload-status
-// index, must be 0 or 1. That index is trusted from the QBFT leader, not compared against the
-// operator's own view, exactly as the runner already trusts the leader's block root.
+// protection — and adds the Gloas rules on AttestationDataIndex, the BN-supplied payload-status index:
+// it must be 0 or 1, and not 1 for the block the operator's own view knows to be this slot's
+// (sameSlotBlockRoot; nil without such a view). Otherwise the index is trusted from the QBFT leader,
+// exactly as the runner already trusts the leader's block root.
 func NewGloasVoteChecker(
 	signer ekm.BeaconSigner,
 	slot phase0.Slot,
 	sharePublicKeys []phase0.BLSPubKey,
 	expectedVote *gloas.GloasBeaconVote,
+	sameSlotBlockRoot *phase0.Root,
 ) ValueChecker {
 	return &gloasVoteChecker{
-		signer:          signer,
-		slot:            slot,
-		sharePublicKeys: sharePublicKeys,
-		expectedVote:    expectedVote,
+		signer:            signer,
+		slot:              slot,
+		sharePublicKeys:   sharePublicKeys,
+		expectedVote:      expectedVote,
+		sameSlotBlockRoot: sameSlotBlockRoot,
 	}
 }
 
@@ -117,10 +123,19 @@ func (v *gloasVoteChecker) CheckValue(value []byte) error {
 	}
 
 	// SIP #94 §2: AttestationDataIndex carries the attester's payload-status view (0 = EMPTY,
-	// 1 = FULL), so it must be 0 or 1. The same-slot "index = 0" rule is BN/gossip-enforced — it needs
-	// the attested block's slot — so it is not checked here.
+	// 1 = FULL), so it must be 0 or 1.
 	if bv.AttestationDataIndex > 1 {
 		return spectypes.NewError(spectypes.GloasBeaconVoteInvalidIndexErrorCode, "gloas attestation data index out of range")
+	}
+
+	// A same-slot block cannot have its payload present at attestation time: an honest beacon node never
+	// yields index 1 for it, and the network rejects such an attestation outright. When this operator's own
+	// view names the value's block root as this slot's block, reject the value so the round changes instead
+	// of the cluster signing an attestation the network drops. The view is fixed at instance start — QBFT
+	// re-runs this check on re-proposals and the decided value — and without one the check is skipped
+	// (SIP #94 §2, issue #3035).
+	if bv.AttestationDataIndex == 1 && v.sameSlotBlockRoot != nil && bv.BlockRoot == *v.sameSlotBlockRoot {
+		return spectypes.NewError(spectypes.GloasBeaconVoteInvalidIndexErrorCode, "gloas attestation data index 1 for a same-slot block")
 	}
 
 	attestationData := &phase0.AttestationData{

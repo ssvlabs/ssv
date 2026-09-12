@@ -146,7 +146,25 @@ func encodeGloasVote(t *testing.T, v *gloas.GloasBeaconVote) []byte {
 }
 
 func newGloasChecker(signer ekm.BeaconSigner, expected *gloas.GloasBeaconVote) ValueChecker {
-	return NewGloasVoteChecker(signer, 64, []phase0.BLSPubKey{{}}, expected)
+	return NewGloasVoteChecker(signer, 64, []phase0.BLSPubKey{{}}, expected, nil)
+}
+
+// SIP #94 §2 same-slot check: with the operator's own view naming the value's block root as this slot's
+// block, index 1 is rejected — the network would reject that attestation outright — while index 0, index 1
+// for another block, and index 1 without any view all pass.
+func TestGloasVoteChecker_SameSlotIndex(t *testing.T) {
+	expected := gloasVote(1, 2, 0)
+	sameSlot := expected.BlockRoot
+	checker := NewGloasVoteChecker(fakeSlashingSigner{}, 64, []phase0.BLSPubKey{{}}, expected, &sameSlot)
+
+	require.ErrorContains(t, checker.CheckValue(encodeGloasVote(t, gloasVote(1, 2, 1))), "same-slot block")
+	require.NoError(t, checker.CheckValue(encodeGloasVote(t, gloasVote(1, 2, 0))))
+
+	otherBlock := gloasVote(1, 2, 1)
+	otherBlock.BlockRoot = phase0.Root{0x02}
+	require.NoError(t, checker.CheckValue(encodeGloasVote(t, otherBlock)))
+
+	require.NoError(t, newGloasChecker(fakeSlashingSigner{}, expected).CheckValue(encodeGloasVote(t, gloasVote(1, 2, 1))))
 }
 
 // Both payload-status indices (0 = EMPTY, 1 = FULL) pass when source < target, the epochs match the

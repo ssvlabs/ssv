@@ -19,6 +19,10 @@ import (
 type AttesterCalls interface {
 	// GetAttestationData returns attestation data by the given slot and committee index
 	GetAttestationData(ctx context.Context, slot phase0.Slot) (*phase0.AttestationData, spec.DataVersion, error)
+	// HeadRootAtSlot returns the block root a head event named for slot, if one has arrived — the
+	// operator's own knowledge that the block at that root has that slot, which the committee runner's
+	// SIP #94 §2 same-slot check relies on.
+	HeadRootAtSlot(slot phase0.Slot) (phase0.Root, bool)
 	// SubmitAttestations submits the attestation to the node
 	SubmitAttestations(ctx context.Context, attestations []*spec.VersionedAttestation) error
 }

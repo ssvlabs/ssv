@@ -63,6 +63,21 @@ func (mr *MockAttesterCallsMockRecorder) GetAttestationData(ctx, slot any) *gomo
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAttestationData", reflect.TypeOf((*MockAttesterCalls)(nil).GetAttestationData), ctx, slot)
 }
 
+// HeadRootAtSlot mocks base method.
+func (m *MockAttesterCalls) HeadRootAtSlot(slot phase0.Slot) (phase0.Root, bool) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "HeadRootAtSlot", slot)
+	ret0, _ := ret[0].(phase0.Root)
+	ret1, _ := ret[1].(bool)
+	return ret0, ret1
+}
+
+// HeadRootAtSlot indicates an expected call of HeadRootAtSlot.
+func (mr *MockAttesterCallsMockRecorder) HeadRootAtSlot(slot any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HeadRootAtSlot", reflect.TypeOf((*MockAttesterCalls)(nil).HeadRootAtSlot), slot)
+}
+
 // SubmitAttestations mocks base method.
 func (m *MockAttesterCalls) SubmitAttestations(ctx context.Context, attestations []*spec.VersionedAttestation) error {
 	m.ctrl.T.Helper()
@@ -1100,6 +1115,21 @@ func (m *MockBeaconNode) GetValidatorData(ctx context.Context, validatorPubKeys 
 func (mr *MockBeaconNodeMockRecorder) GetValidatorData(ctx, validatorPubKeys any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetValidatorData", reflect.TypeOf((*MockBeaconNode)(nil).GetValidatorData), ctx, validatorPubKeys)
+}
+
+// HeadRootAtSlot mocks base method.
+func (m *MockBeaconNode) HeadRootAtSlot(slot phase0.Slot) (phase0.Root, bool) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "HeadRootAtSlot", slot)
+	ret0, _ := ret[0].(phase0.Root)
+	ret1, _ := ret[1].(bool)
+	return ret0, ret1
+}
+
+// HeadRootAtSlot indicates an expected call of HeadRootAtSlot.
+func (mr *MockBeaconNodeMockRecorder) HeadRootAtSlot(slot any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HeadRootAtSlot", reflect.TypeOf((*MockBeaconNode)(nil).HeadRootAtSlot), slot)
 }
 
 // IsAggregator mocks base method.
