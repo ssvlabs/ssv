@@ -623,6 +623,36 @@ func TestPriorityQueue_TryPushDropMetric_RecordsAttributes(t *testing.T) {
 	requireQueueDropCounter(t, queueType, queueID, DropReasonBufferFull, 2)
 }
 
+// Purge removes the matching messages wherever they sit — still in the inbox or already in the backlog —
+// keeps the rest in order, and counts each removal as a drop under the given reason.
+func TestPriorityQueue_Purge(t *testing.T) {
+	t.Parallel()
+
+	gauge := newTestGauge(t)
+	const queueType = ValidatorQueueMetricType
+	queueID := uniqueQueueID(t)
+
+	q := New(log.TestLogger(t), 8, WithQueueMetrics(gauge, queueType, queueID)).(*priorityQueue)
+	decodeAndPush(t, q, mockConsensusMessage{Height: 100, Type: specqbft.PrepareMsgType}, mockState)
+	decodeAndPush(t, q, mockConsensusMessage{Height: 101, Type: specqbft.PrepareMsgType}, mockState)
+	q.readInbox() // the first two are in the backlog, the next two still in the inbox
+	decodeAndPush(t, q, mockConsensusMessage{Height: 102, Type: specqbft.PrepareMsgType}, mockState)
+	kept := decodeAndPush(t, q, mockConsensusMessage{Height: 103, Type: specqbft.PrepareMsgType}, mockState)
+
+	below103 := func(m *SSVMessage) bool {
+		slot, err := m.Slot()
+		require.NoError(t, err)
+		return slot < 103
+	}
+	require.Equal(t, 3, q.Purge(below103, DropReasonStale))
+	require.Equal(t, 1, q.Len())
+	require.Equal(t, kept, q.TryPop(NewMessagePrioritizer(mockState), FilterAny))
+	require.True(t, q.Empty())
+	require.Equal(t, 0, q.Purge(FilterAny, DropReasonStale))
+
+	requireQueueDropCounter(t, queueType, queueID, DropReasonStale, 3)
+}
+
 func TestMetricsQueueObserver_RecordDrop_FallbackForUnregisteredReason(t *testing.T) {
 	t.Parallel()
 

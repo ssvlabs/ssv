@@ -47,6 +47,8 @@ const (
 	AggregatorCommitteeQueueMetricType = "aggregator_committee"
 
 	DropReasonBufferFull = "buffer_full"
+	// DropReasonStale marks a queued message purged because its slot fell below the runner's floor.
+	DropReasonStale = "stale"
 )
 
 // ValidatorMetricID returns a queue identifier to differentiate validator-related queues (in metrics).

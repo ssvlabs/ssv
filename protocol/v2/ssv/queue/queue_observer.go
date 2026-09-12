@@ -39,14 +39,15 @@ func WithQueueMetrics(inboxSizeMetric metric.Int64Gauge, queueType, queueID stri
 		attribute.String("ssv.queue.id", queueID),
 	)
 
-	dropAddOpsByReason := map[string][]metric.AddOption{
-		DropReasonBufferFull: {
+	dropAddOpsByReason := make(map[string][]metric.AddOption)
+	for _, reason := range []string{DropReasonBufferFull, DropReasonStale} {
+		dropAddOpsByReason[reason] = []metric.AddOption{
 			metric.WithAttributeSet(attribute.NewSet(
 				attribute.String("ssv.queue.type", queueType),
 				attribute.String("ssv.queue.id", queueID),
-				attribute.String("ssv.queue.drop_reason", DropReasonBufferFull),
+				attribute.String("ssv.queue.drop_reason", reason),
 			)),
-		},
+		}
 	}
 
 	return func(q *priorityQueue) {

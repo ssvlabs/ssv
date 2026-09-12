@@ -36,6 +36,10 @@ type Queue interface {
 	// TryPop returns immediately with the next message in the queue, or nil if there is none.
 	TryPop(MessagePrioritizer, Filter) *SSVMessage
 
+	// Purge removes every queued message the filter matches, records each as a drop under dropReason,
+	// and returns how many were removed. Like Pop, it must not run concurrently with Pop or TryPop.
+	Purge(shouldDrop Filter, dropReason string) int
+
 	// Empty returns true if the queue is empty.
 	Empty() bool
 
@@ -199,6 +203,27 @@ func (q *priorityQueue) pop(prioritizer MessagePrioritizer, filter Filter) *SSVM
 		prior.next = highest.next
 	}
 	return highest.message
+}
+
+func (q *priorityQueue) Purge(shouldDrop Filter, dropReason string) int {
+	q.readInbox()
+
+	removed := 0
+	var prior *item
+	for current := q.head; current != nil; current = current.next {
+		if !shouldDrop(current.message) {
+			prior = current
+			continue
+		}
+		if prior == nil {
+			q.head = current.next
+		} else {
+			prior.next = current.next
+		}
+		q.observer.recordDrop(dropReason)
+		removed++
+	}
+	return removed
 }
 
 func (q *priorityQueue) Empty() bool {
