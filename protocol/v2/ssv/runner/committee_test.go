@@ -23,6 +23,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
+	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
@@ -323,6 +324,51 @@ func TestCommitteeRunnerExecuteDuty_FetchesAttestationDataAndStartsConsensus(t *
 	expectedVoteBytes, err := expectedVote.Encode()
 	require.NoError(t, err)
 	require.NoError(t, env.runner.ValCheck.CheckValue(expectedVoteBytes))
+}
+
+// sameSlotBeacon models an attestation slot whose block has arrived: a head event named root for the
+// slot, and the beacon node attests to that block with payload status EMPTY — a same-slot block cannot
+// have its payload yet.
+type sameSlotBeacon struct {
+	*protocoltesting.BeaconNodeWrapped
+	root phase0.Root
+}
+
+func (b *sameSlotBeacon) GetAttestationData(ctx context.Context, slot phase0.Slot) (*phase0.AttestationData, spec.DataVersion, error) {
+	data, version, err := b.BeaconNodeWrapped.GetAttestationData(ctx, slot)
+	if err != nil {
+		return nil, version, err
+	}
+	data.BeaconBlockRoot, data.Index = b.root, 0
+	return data, version, nil
+}
+
+// At a Gloas slot whose block has arrived, the runner fixes its own view at instance start (SIP #94 §2):
+// its own value (payload EMPTY for the same-slot block) passes, a leader's value claiming the payload
+// present for that block is rejected so the round changes, and another block's payload status stays the
+// leader's call.
+func TestCommitteeRunnerExecuteDuty_GloasSameSlotIndexCheck(t *testing.T) {
+	duty := spectestingutils.TestingAttesterDuty(spec.DataVersionElectra)
+	root := phase0.Root{0xaa}
+	beacon := &sameSlotBeacon{BeaconNodeWrapped: protocoltesting.NewTestingBeaconNodeWrapped().(*protocoltesting.BeaconNodeWrapped), root: root}
+	beacon.HeadRoots = map[phase0.Slot]phase0.Root{duty.Slot: root}
+	env := newCommitteeRunnerEnvWithBeacon(t, []int{1}, beacon)
+	env.runner.NetworkConfig = networkconfig.TestNetworkWithGloas(0)
+	env.runner.State = NewRunnerState(env.sampleKey.Threshold, duty)
+
+	require.NoError(t, env.runner.executeDuty(context.Background(), env.logger, duty))
+	require.NotNil(t, env.runner.State.RunningInstance)
+
+	attData, _, err := beacon.GetAttestationData(context.Background(), duty.Slot)
+	require.NoError(t, err)
+	vote := func(index phase0.CommitteeIndex, blockRoot phase0.Root) []byte {
+		b, err := (&gloas.GloasBeaconVote{BlockRoot: blockRoot, Source: attData.Source, Target: attData.Target, AttestationDataIndex: index}).Encode()
+		require.NoError(t, err)
+		return b
+	}
+	require.NoError(t, env.runner.ValCheck.CheckValue(vote(0, root)))
+	require.ErrorContains(t, env.runner.ValCheck.CheckValue(vote(1, root)), "same-slot block")
+	require.NoError(t, env.runner.ValCheck.CheckValue(vote(1, phase0.Root{0xbb})))
 }
 
 func TestCommitteeRunnerProcessConsensus_UsesWorkerPoolForMoreThan30SyncDuties(t *testing.T) {

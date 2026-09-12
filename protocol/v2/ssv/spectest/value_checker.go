@@ -111,6 +111,7 @@ func (test *ValCheckSpecTest) valCheckF(signer ekm.BeaconSigner) func([]byte) er
 				test.DutySlot,
 				sharePubKeys,
 				&gloas.GloasBeaconVote{Source: &test.ExpectedSource, Target: &test.ExpectedTarget},
+				nil, // the vectors carry no head events, so no own view for the same-slot check
 			)
 			return checker.CheckValue
 		}

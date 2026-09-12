@@ -1181,7 +1181,13 @@ func (r *CommitteeRunner) executeDuty(ctx context.Context, logger *zap.Logger, d
 			AttestationDataIndex: attData.Index,
 		}
 		input = gloasVote
-		r.ValCheck = ssv.NewGloasVoteChecker(r.signer, slot, r.attestingValidators, gloasVote)
+		// The operator's own view for the §2 same-slot check, fixed here at instance start: the block its
+		// beacon node's head events named for this slot, if it has arrived.
+		var sameSlotBlockRoot *phase0.Root
+		if root, ok := r.GetBeaconNode().HeadRootAtSlot(slot); ok {
+			sameSlotBlockRoot = &root
+		}
+		r.ValCheck = ssv.NewGloasVoteChecker(r.signer, slot, r.attestingValidators, gloasVote, sameSlotBlockRoot)
 		logger.Debug("built gloas attestation vote",
 			fields.Slot(slot),
 			zap.Uint64("payload_status_index", uint64(attData.Index)))

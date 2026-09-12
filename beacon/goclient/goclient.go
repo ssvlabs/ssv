@@ -197,7 +197,8 @@ type GoClient struct {
 	// activatedClients tracks which clients have been activated before (for reconnection detection)
 	activatedClients *hashmap.Map[string, struct{}]
 
-	// headCache maps Slot → Root from HeadEvents to detect stale attestation data.
+	// headCache maps Slot → Root from HeadEvents, to detect stale attestation data and to answer
+	// HeadRootAtSlot.
 	headCache *ttlcache.Cache[phase0.Slot, phase0.Root]
 
 	// fetchAttestationDataFunc allows overriding fetchAttestationData for testing.

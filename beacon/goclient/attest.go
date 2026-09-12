@@ -137,6 +137,16 @@ func requestGloasAttestationData(ctx context.Context, httpClient *http.Client, a
 	return resp.Data, nil
 }
 
+// HeadRootAtSlot returns the block root a head event named for slot, if one arrived within the cache's
+// window — the operator's own knowledge that the block at that root has that slot (SIP #94 §2).
+func (gc *GoClient) HeadRootAtSlot(slot phase0.Slot) (phase0.Root, bool) {
+	item := gc.headCache.Get(slot)
+	if item == nil {
+		return phase0.Root{}, false
+	}
+	return item.Value(), true
+}
+
 // verifyAndRefetchIfStale checks attestation data against cached head root.
 // If mismatch detected, waits briefly then re-fetches.
 // Returns (attestationData, stale) where stale=true means data may be outdated.

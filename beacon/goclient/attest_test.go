@@ -744,6 +744,23 @@ func TestVerifyAndRefetchIfStale_CacheMiss(t *testing.T) {
 	require.True(t, stale, "unverified data should be marked stale on cache miss")
 }
 
+// HeadRootAtSlot exposes the head-event cache as the operator's own view for the same-slot check: the
+// root a head event named for the slot, or no view.
+func TestHeadRootAtSlot(t *testing.T) {
+	gc := &GoClient{
+		headCache: ttlcache.New[phase0.Slot, phase0.Root](),
+		log:       zap.NewNop(),
+	}
+	gc.headCache.Set(100, phase0.Root{0x01}, ttlcache.DefaultTTL)
+
+	root, ok := gc.HeadRootAtSlot(100)
+	require.True(t, ok)
+	require.Equal(t, phase0.Root{0x01}, root)
+
+	_, ok = gc.HeadRootAtSlot(101)
+	require.False(t, ok)
+}
+
 func TestVerifyAndRefetchIfStale_CacheHit_Match(t *testing.T) {
 	expectedRoot := phase0.Root{0x01, 0x02, 0x03}
 
