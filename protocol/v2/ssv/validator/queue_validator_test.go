@@ -65,11 +65,7 @@ func TestConsumeQueue_HoldsMessagesUntilDutyStarts(t *testing.T) {
 	case <-time.After(200 * time.Millisecond):
 	}
 
-	executeDuty, err := createDutyExecuteMsg(duty, duty.PubKey, netCfg.DomainType, spectypes.RoleProposer)
-	require.NoError(t, err)
-	decoded, err := queue.DecodeSSVMessage(executeDuty)
-	require.NoError(t, err)
-	require.True(t, v.Queues[spectypes.RoleProposer].TryPush(decoded))
+	require.True(t, v.Queues[spectypes.RoleProposer].TryPush(executeDutyMsg(t, netCfg.DomainType, duty.Slot)))
 
 	require.Equal(t, message.SSVEventMsgType, receiveDelivered(t, delivered).MsgType, "the duty-start event goes first")
 	require.Equal(t, spectypes.SSVPartialSignatureMsgType, receiveDelivered(t, delivered).MsgType, "the held partial follows once the duty runs")
@@ -99,16 +95,9 @@ func TestConsumeQueue_DropsStaleMessagesAtDutyStart(t *testing.T) {
 		DutyRunners:   runner.ValidatorDutyRunners{spectypes.RoleProposer: proposer},
 	}
 
-	partialAt := func(slot phase0.Slot) *queue.SSVMessage {
-		return makeTestSSVMessage(t, spectypes.SSVPartialSignatureMsgType, msgID, &spectypes.PartialSignatureMessages{
-			Type:     spectypes.PostConsensusPartialSig,
-			Slot:     slot,
-			Messages: []*spectypes.PartialSignatureMessage{{PartialSignature: make([]byte, 96), Signer: 1, ValidatorIndex: 1}},
-		})
-	}
 	// The tail of the duty at slot 5 that concluded before these arrived, and an early partial for slot 10.
-	require.True(t, v.Queues[spectypes.RoleProposer].TryPush(partialAt(5)))
-	require.True(t, v.Queues[spectypes.RoleProposer].TryPush(partialAt(10)))
+	require.True(t, v.Queues[spectypes.RoleProposer].TryPush(partialSigMsg(t, msgID, 5)))
+	require.True(t, v.Queues[spectypes.RoleProposer].TryPush(partialSigMsg(t, msgID, 10)))
 
 	delivered := make(chan *queue.SSVMessage, 4)
 	v.StartQueueConsumer(msgID, func(_ context.Context, _ *zap.Logger, msg *queue.SSVMessage) error {
@@ -119,11 +108,7 @@ func TestConsumeQueue_DropsStaleMessagesAtDutyStart(t *testing.T) {
 		return nil
 	})
 
-	executeDuty, err := createDutyExecuteMsg(duty, duty.PubKey, netCfg.DomainType, spectypes.RoleProposer)
-	require.NoError(t, err)
-	decoded, err := queue.DecodeSSVMessage(executeDuty)
-	require.NoError(t, err)
-	require.True(t, v.Queues[spectypes.RoleProposer].TryPush(decoded))
+	require.True(t, v.Queues[spectypes.RoleProposer].TryPush(executeDutyMsg(t, netCfg.DomainType, duty.Slot)))
 
 	require.Equal(t, message.SSVEventMsgType, receiveDelivered(t, delivered).MsgType, "the duty-start event goes first")
 	early := receiveDelivered(t, delivered)
@@ -138,6 +123,73 @@ func TestConsumeQueue_DropsStaleMessagesAtDutyStart(t *testing.T) {
 	case <-time.After(200 * time.Millisecond):
 	}
 	require.True(t, v.Queues[spectypes.RoleProposer].Empty(), "the stale tail is purged, not retained")
+}
+
+// The stale purge drops whatever slotBelow matches, so it must never match a duty-start: dropping one
+// would silently skip a duty (issue #3037). Any other message below the floor is fair game to drop.
+func TestSlotBelow_NeverMatchesDutyStart(t *testing.T) {
+	domain := networkconfig.TestNetwork.DomainType
+	var pk phase0.BLSPubKey
+	msgID := spectypes.NewMsgID(domain, pk[:], spectypes.RoleProposer)
+
+	belowFloor := slotBelow(phase0.Slot(12))
+	require.False(t, belowFloor(executeDutyMsg(t, domain, 10)), "a duty-start below the floor is kept")
+	require.False(t, belowFloor(executeDutyMsg(t, domain, 20)), "a duty-start above the floor is kept")
+	require.True(t, belowFloor(partialSigMsg(t, msgID, 9)), "a stale partial below the floor is purged")
+	require.False(t, belowFloor(partialSigMsg(t, msgID, 12)), "the floor is exclusive")
+	require.False(t, belowFloor(partialSigMsg(t, msgID, 15)), "a partial above the floor is kept")
+}
+
+// A higher-slot duty-start can be popped before a lower-slot one still queued: duty-starts race in from
+// per-duty goroutines and tie in the prioritizer. The purge must keep that lower-slot duty-start and
+// drop only the genuinely stale tail, else a duty is silently skipped (issue #3037).
+func TestPurgeAtDutyStart_KeepsAConcurrentDutyStart(t *testing.T) {
+	domain := networkconfig.TestNetwork.DomainType
+	var pk phase0.BLSPubKey
+	msgID := spectypes.NewMsgID(domain, pk[:], spectypes.RoleProposer)
+
+	q := queue.New(zap.NewNop(), 16)
+	require.True(t, q.TryPush(executeDutyMsg(t, domain, 12))) // higher-slot duty-start enqueued first...
+	require.True(t, q.TryPush(executeDutyMsg(t, domain, 10))) // ...its goroutine won the race
+	require.True(t, q.TryPush(partialSigMsg(t, msgID, 9)))    // a genuinely stale tail message
+
+	// The idle consumer pops a duty-start; the tie-break returns the first-enqueued one (slot 12).
+	popped := q.TryPop(queue.NewMessagePrioritizer(&queue.State{}), isExecuteDuty)
+	require.NotNil(t, popped)
+	floor, ok := executeDutySlot(popped)
+	require.True(t, ok)
+	require.Equal(t, phase0.Slot(12), floor, "the higher-slot duty-start is popped first")
+
+	require.Equal(t, 1, q.Purge(slotBelow(floor), queue.DropReasonStale), "only the stale partial is dropped")
+
+	remaining := q.TryPop(queue.NewMessagePrioritizer(&queue.State{}), queue.FilterAny)
+	require.NotNil(t, remaining, "the lower-slot duty-start survives the purge")
+	require.True(t, isExecuteDuty(remaining))
+	remainingSlot, err := remaining.Slot()
+	require.NoError(t, err)
+	require.Equal(t, phase0.Slot(10), remainingSlot)
+	require.True(t, q.Empty())
+}
+
+// executeDutyMsg builds a decoded proposer duty-start event for the given slot.
+func executeDutyMsg(t *testing.T, domain spectypes.DomainType, slot phase0.Slot) *queue.SSVMessage {
+	t.Helper()
+	duty := &spectypes.ValidatorDuty{Type: spectypes.BNRoleProposer, Slot: slot}
+	raw, err := createDutyExecuteMsg(duty, duty.PubKey, domain, spectypes.RoleProposer)
+	require.NoError(t, err)
+	decoded, err := queue.DecodeSSVMessage(raw)
+	require.NoError(t, err)
+	return decoded
+}
+
+// partialSigMsg builds a post-consensus partial-signature message for the given slot.
+func partialSigMsg(t *testing.T, msgID spectypes.MessageID, slot phase0.Slot) *queue.SSVMessage {
+	t.Helper()
+	return makeTestSSVMessage(t, spectypes.SSVPartialSignatureMsgType, msgID, &spectypes.PartialSignatureMessages{
+		Type:     spectypes.PostConsensusPartialSig,
+		Slot:     slot,
+		Messages: []*spectypes.PartialSignatureMessage{{PartialSignature: make([]byte, 96), Signer: 1, ValidatorIndex: 1}},
+	})
 }
 
 func receiveDelivered(t *testing.T, delivered <-chan *queue.SSVMessage) *queue.SSVMessage {

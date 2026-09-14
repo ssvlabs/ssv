@@ -164,10 +164,10 @@ func (v *Validator) StartQueueConsumer(
 				return nil
 			}
 
-			// An idle runner starting a duty raises its slot floor: whatever is still queued for an earlier
-			// slot — the tail of the concluded duty, or messages for a duty this operator never ran — can no
-			// longer be processed, and would otherwise be handed to the new duty one by one only to be
-			// rejected (issue #3037). Drop it before the duty runs.
+			// An idle runner starting a duty raises its slot floor: the stale tail still queued for an earlier
+			// slot — leftovers of the concluded duty, or messages for a duty this operator never ran — can no
+			// longer be processed, and would otherwise be handed to the new duty one by one only to be rejected
+			// (issue #3037). Purge it before the duty runs (slotBelow spares duty-starts, so none is skipped).
 			if dutySlot, ok := executeDutySlot(msg); ok && idle {
 				if dropped := q.Purge(slotBelow(dutySlot), queue.DropReasonStale); dropped > 0 {
 					v.logger.Debug("dropped stale messages queued for slots before the starting duty",
@@ -349,21 +349,33 @@ func (v *Validator) logWithMessageFields(logger *zap.Logger, msg *queue.SSVMessa
 	return logger, nil
 }
 
+// isExecuteDuty reports whether msg is a duty-start event.
+func isExecuteDuty(msg *queue.SSVMessage) bool {
+	event, ok := msg.Body.(*types.EventMsg)
+	return ok && event != nil && event.Type == types.ExecuteDuty
+}
+
 // executeDutySlot returns the slot of the duty a duty-start event carries, if msg is one.
 func executeDutySlot(msg *queue.SSVMessage) (phase0.Slot, bool) {
-	event, ok := msg.Body.(*types.EventMsg)
-	if !ok || event == nil || event.Type != types.ExecuteDuty {
+	if !isExecuteDuty(msg) {
 		return 0, false
 	}
 	slot, err := msg.Slot()
 	return slot, err == nil
 }
 
-// slotBelow matches messages whose slot is below floor. A validator runner moves through its duties in
-// slot order and never returns to a lower slot, so once a duty at floor starts such messages have no
-// duty left to serve.
+// slotBelow matches messages stranded below floor. A validator runner moves through its duties in slot
+// order and never returns to a lower slot, so once the duty at floor starts, nothing below it has a duty
+// left to serve it.
+//
+// Duty-start events are the exception and are never matched: dropping one would silently skip a duty.
+// Duties are enqueued from racing per-duty goroutines (scheduler.executeDuties), so a higher-slot
+// duty-start can be popped while a lower-slot one still waits in the queue — and that one must survive.
 func slotBelow(floor phase0.Slot) queue.Filter {
 	return func(m *queue.SSVMessage) bool {
+		if isExecuteDuty(m) {
+			return false
+		}
 		slot, err := m.Slot()
 		return err == nil && slot < floor
 	}
