@@ -176,8 +176,10 @@ func classifyDiscard(err error) (discardKind, string) {
 }
 
 // routineSelfIgnores are the ignore-classified errors that are benign for our own outbound
-// publishes: our validator's own state dedup (ErrDuplicatedMessage, ErrDecidedMessageWithTooFewSigners)
-// and slot/round-timing races between building a message and validating it. These stay at debug.
+// publishes: our validator's own state dedup (ErrDuplicatedMessage, ErrDecidedMessageWithTooFewSigners),
+// slot/round-timing races between building a message and validating it, and a QBFT instance that
+// keeps changing rounds past its role's round cap (ErrRoundTooHigh) - a round-progression condition
+// like the timing races, not a malformed message. These stay at debug.
 //
 // Reject-vs-ignore is inbound peer-scoring policy, not how bad a drop is for us, so it can't level
 // our own drops: any other self-ignore means we published something our own validation won't pass
@@ -191,6 +193,7 @@ var routineSelfIgnores = []error{
 	ErrEarlySlotMessage,
 	ErrLateSlotMessage,
 	ErrEstimatedRoundNotInAllowedSpread,
+	ErrRoundTooHigh,
 }
 
 // isRoutineSelfIgnore reports whether err is one of the benign self-ignores in routineSelfIgnores.

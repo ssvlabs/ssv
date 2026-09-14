@@ -14,14 +14,21 @@ import (
 
 // TestHandleValidationError_SelfDiscardLeveling pins the logging contract for validation discards:
 // our own outbound messages (peerID == selfPID) are leveled by what the discard says about this
-// node — a routine self-ignore (own dedup / benign slot-timing race, see routineSelfIgnores) and a
-// cancellation (shutdown) at debug, while a reject, a timeout, or any non-routine ignore is at warn
-// (own message refused by own validation, or never published because validation was too slow) —
-// while messages received from peers keep their existing debug logging. It also pins that the topic
-// threaded in by the caller is logged even when the message never decoded (nil decodedMessage).
+// node — a routine self-ignore (own dedup / benign slot- or round-progression condition, see
+// routineSelfIgnores) and a cancellation (shutdown) at debug, while a reject, a timeout, or any
+// non-routine ignore is at warn (own message refused by own validation, or never published because
+// validation was too slow) — while messages received from peers keep their existing debug logging.
+// It also pins that the topic threaded in by the caller is logged even when the message never
+// decoded (nil decodedMessage).
 func TestHandleValidationError_SelfDiscardLeveling(t *testing.T) {
 	const self = peer.ID("self")
 	const other = peer.ID("other")
+
+	// A parameterised copy, as validateConsensusMessageSemantics returns it: the routine match must
+	// hold on the error text alone.
+	roundTooHigh := ErrRoundTooHigh
+	roundTooHigh.got = "3 (PROPOSER role)"
+	roundTooHigh.want = "2 (PROPOSER role)"
 
 	tests := []struct {
 		name       string
@@ -38,6 +45,15 @@ func TestHandleValidationError_SelfDiscardLeveling(t *testing.T) {
 			selfPID:    self,
 			peerID:     self,
 			err:        ErrDecidedMessageWithTooFewSigners, // non-reject, routine -> ignore/debug
+			wantResult: pubsub.ValidationIgnore,
+			wantLevel:  zapcore.DebugLevel,
+			wantMsg:    "own outbound message ignored by local validation",
+		},
+		{
+			name:       "own round above the role cap is quiet (debug)",
+			selfPID:    self,
+			peerID:     self,
+			err:        roundTooHigh, // instance outliving the proposer's round cap -> ignore/debug
 			wantResult: pubsub.ValidationIgnore,
 			wantLevel:  zapcore.DebugLevel,
 			wantMsg:    "own outbound message ignored by local validation",
