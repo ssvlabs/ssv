@@ -68,6 +68,23 @@ func TestRequestPayloadAttestationData(t *testing.T) {
 	require.Equal(t, data, got)
 }
 
+// Data for another slot is refused rather than cached: the runner signs the observation under the duty
+// slot's domain, so a beacon node answering for the wrong slot must surface here (SIP #94 §3).
+func TestRequestPayloadAttestationData_SlotMismatch(t *testing.T) {
+	data := &gloas.PayloadAttestationData{BeaconBlockRoot: phase0.Root{0xaa}, Slot: 10, PayloadPresent: true}
+	dataJSON, err := json.Marshal(data)
+	require.NoError(t, err)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = fmt.Fprintf(w, `{"version":"gloas","data":%s}`, dataJSON)
+	}))
+	defer srv.Close()
+
+	got, err := requestPayloadAttestationData(context.Background(), srv.Client(), srv.URL, 9)
+	require.ErrorContains(t, err, "payload attestation data slot mismatch: got 10, want 9")
+	require.Nil(t, got)
+}
+
 // A 204 No Content is the beacon-APIs "no block seen" signal: requestPayloadAttestationData surfaces
 // it as (nil, nil), not an error, so the PTC member abstains.
 func TestRequestPayloadAttestationData_NoContent(t *testing.T) {

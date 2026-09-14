@@ -153,6 +153,11 @@ func requestPayloadAttestationData(ctx context.Context, httpClient *http.Client,
 	if resp.Data == nil {
 		return nil, errors.New("no payload attestation data in response")
 	}
+	// SIP #94 §3 takes the slot from the duty: data for another slot would be signed under this slot's
+	// domain and refused on submit, so refuse it here, before it is cached.
+	if resp.Data.Slot != slot {
+		return nil, fmt.Errorf("payload attestation data slot mismatch: got %d, want %d", resp.Data.Slot, slot)
+	}
 	return resp.Data, nil
 }
 

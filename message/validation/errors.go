@@ -112,6 +112,7 @@ var (
 	ErrSignerNotLeader                                 = Error{text: "signer is not leader", reject: true}
 	ErrSignersNotSorted                                = Error{text: "signers are not sorted", reject: true}
 	ErrInconsistentSigners                             = Error{text: "signer is not expected", reject: true}
+	ErrInconsistentValidatorIndex                      = Error{text: "validator index differs across partial signatures", reject: true}
 	ErrInvalidHash                                     = Error{text: "root doesn't match full data hash", reject: true}
 	ErrFullDataHash                                    = Error{text: "couldn't hash root", reject: true}
 	ErrUndecodableMessageData                          = Error{text: "message data could not be decoded", reject: true}
