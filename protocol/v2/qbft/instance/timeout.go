@@ -38,10 +38,10 @@ func (i *Instance) UponRoundTimeout(ctx context.Context, logger *zap.Logger) err
 	// for whatever reason.
 	//
 	// We bump *before* the broadcast (unlike ssv-spec, which defers it). At the cutoff boundary
-	// (prevRound == CutOffRound-1) this advances State.Round into CutOffRound, so the Broadcast below sees
+	// (prevRound == cutoff-1) this advances State.Round into the cutoff round, so the Broadcast below sees
 	// !IsRelevant() and rejects the final round-change, and UponRoundTimeout returns an error. That is
-	// intentional and inert: CutOffRound is the cluster-wide give-up round (no instance can decide at or
-	// past it), so the dropped round-change carries no liveness value.
+	// intentional and inert: the cutoff is the role's give-up round (roundtimer.CutOffRoundFor: no
+	// instance can decide at or past it), so the dropped round-change carries no liveness value.
 	i.bumpToRound(newRound)
 
 	roundChange, err := i.CreateRoundChange(newRound)

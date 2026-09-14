@@ -39,6 +39,7 @@ import (
 	"github.com/ssvlabs/ssv/operator/validators"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	"github.com/ssvlabs/ssv/protocol/v2/queue/worker"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
@@ -194,6 +195,8 @@ func TestSetupCommitteeRunners(t *testing.T) {
 		r, err := committeeRunnerFunc(&spectypes.CommitteeDuty{}, shares, nil, nil)
 		require.NoError(t, err)
 		require.IsType(t, &runner.CommitteeRunner{}, r)
+		// The committee's round cap is not below the cluster-wide cutoff, so its instances keep it.
+		require.Equal(t, roundtimer.CutOffRound, r.(*runner.CommitteeRunner).QBFTController.GetConfig().GetCutOffRound())
 	})
 
 	t.Run("AggregatorCommitteeDuty builds an AggregatorCommitteeRunner", func(t *testing.T) {
@@ -1621,6 +1624,42 @@ func TestSetupRunnersProposerFPostBooleFork(t *testing.T) {
 
 	expected := qbft.Proposer(state.Height, specqbft.FirstRound, types.OperatorIDsFromOperators(committee), netCfg)
 	require.Equal(t, expected, proposerF(state, specqbft.FirstRound))
+}
+
+// TestSetupRunnersCutOffRoundPerRole pins that a runner's QBFT instances give up at the role's cutoff
+// (roundtimer.CutOffRoundFor): right after the proposer's round cap, and at the cluster-wide CutOffRound
+// for a role whose cap is not below it.
+func TestSetupRunnersCutOffRoundPerRole(t *testing.T) {
+	netCfg := buildProposerFTestNetworkConfig(t, phase0.Epoch(math.MaxUint64)) // pre-Boole-fork, so the aggregator runner is built too
+	committee := buildProposerFTestCommittee()
+
+	share := &types.SSVShare{
+		Share: spectypes.Share{
+			ValidatorIndex:  1,
+			ValidatorPubKey: createPubKey(byte('3')),
+			SharePubKey:     make([]byte, 48),
+		},
+	}
+	operator := &spectypes.CommitteeMember{
+		OperatorID: 1,
+		Committee:  committee,
+	}
+	options := &validator.CommonOptions{
+		NetworkConfig: netCfg,
+	}
+
+	runners, err := SetupRunners(t.Context(), share, operator, nil, nil, options)
+	require.NoError(t, err)
+
+	proposerRunner, ok := runners[spectypes.RoleProposer].(*runner.ProposerRunner)
+	require.True(t, ok, "expected *runner.ProposerRunner")
+	proposerCutOff := proposerRunner.QBFTController.GetConfig().GetCutOffRound()
+	require.Equal(t, roundtimer.CutOffRoundFor(spectypes.RoleProposer), proposerCutOff)
+	require.Equal(t, specqbft.Round(3), proposerCutOff, "proposer instances give up right after the proposer round cap of 2")
+
+	aggregatorRunner, ok := runners[types.RoleAggregator].(*runner.AggregatorRunner)
+	require.True(t, ok, "expected *runner.AggregatorRunner")
+	require.Equal(t, roundtimer.CutOffRound, aggregatorRunner.QBFTController.GetConfig().GetCutOffRound())
 }
 
 func TestSetupCommitteeRunnersProposerF(t *testing.T) {

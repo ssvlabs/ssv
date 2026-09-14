@@ -23,7 +23,36 @@ const (
 	SlowTimeout           = 2 * time.Minute
 )
 
+// CutOffRound is the cluster-wide give-up round: an instance at or past it neither processes messages
+// nor changes rounds any further.
 var CutOffRound specqbft.Round = specqbft.Round(specqbft.CutoffRound)
+
+// MaxRound returns the highest consensus round message validation accepts for the role, and so the
+// highest round at which an instance of the role can still decide. ok is false for roles without a
+// consensus phase.
+func MaxRound(role spectypes.RunnerRole) (maxRound specqbft.Round, ok bool) {
+	switch role {
+	case spectypes.RoleCommittee, spectypes.RoleAggregatorCommittee, ssvtypes.RoleAggregator: // TODO: check if value for aggregator is correct as there are messages on stage exceeding the limit
+		return 12, true // TODO: consider calculating based on quick timeout and slow timeout
+	case spectypes.RoleProposer:
+		return 2, true
+	case ssvtypes.RoleSyncCommitteeContribution:
+		return 6, true
+	default:
+		return 0, false
+	}
+}
+
+// CutOffRoundFor returns the round at which an instance of the role gives up. Every node's
+// validation ignores the rounds above MaxRound, so an instance working through them only changes
+// rounds, signs and broadcasts for nothing: it gives up right after its cap, or at CutOffRound when
+// the cap is not below it (and for roles without a consensus phase).
+func CutOffRoundFor(role spectypes.RunnerRole) specqbft.Round {
+	if maxRound, ok := MaxRound(role); ok && maxRound+1 < CutOffRound {
+		return maxRound + 1
+	}
+	return CutOffRound
+}
 
 // roundTimeoutForRound returns the time-into-slot at which the given round will time out
 // (i.e. transition to round+1) for the given role:

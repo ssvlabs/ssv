@@ -573,3 +573,37 @@ func testTimeoutForRoundMulti(t *testing.T, role spectypes.RunnerRole) {
 	}
 	mu.Unlock()
 }
+
+// TestCutOffRoundFor pins the per-role give-up round against the round cap message validation
+// enforces: an instance must never work in a round validation would refuse (its last working round,
+// cutoff-1, is at most MaxRound), and no role gives up later than the cluster-wide CutOffRound.
+func TestCutOffRoundFor(t *testing.T) {
+	tests := []struct {
+		name         string
+		role         spectypes.RunnerRole
+		wantMaxRound specqbft.Round
+		wantCapped   bool
+		wantCutOff   specqbft.Round
+	}{
+		{name: "committee keeps the cluster-wide cutoff", role: spectypes.RoleCommittee, wantMaxRound: 12, wantCapped: true, wantCutOff: CutOffRound},
+		{name: "aggregator committee keeps the cluster-wide cutoff", role: spectypes.RoleAggregatorCommittee, wantMaxRound: 12, wantCapped: true, wantCutOff: CutOffRound},
+		{name: "aggregator keeps the cluster-wide cutoff", role: ssvtypes.RoleAggregator, wantMaxRound: 12, wantCapped: true, wantCutOff: CutOffRound},
+		{name: "proposer gives up right after its cap", role: spectypes.RoleProposer, wantMaxRound: 2, wantCapped: true, wantCutOff: 3},
+		{name: "sync committee contribution gives up right after its cap", role: ssvtypes.RoleSyncCommitteeContribution, wantMaxRound: 6, wantCapped: true, wantCutOff: 7},
+		{name: "role without consensus keeps the cluster-wide cutoff", role: spectypes.RoleValidatorRegistration, wantCapped: false, wantCutOff: CutOffRound},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			maxRound, ok := MaxRound(tt.role)
+			require.Equal(t, tt.wantCapped, ok)
+			require.Equal(t, tt.wantMaxRound, maxRound)
+
+			cutOff := CutOffRoundFor(tt.role)
+			require.Equal(t, tt.wantCutOff, cutOff)
+			require.LessOrEqual(t, cutOff, CutOffRound)
+			if ok {
+				require.LessOrEqual(t, cutOff-1, maxRound, "an instance must not work in a round validation refuses")
+			}
+		})
+	}
+}
