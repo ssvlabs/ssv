@@ -94,12 +94,12 @@ func createDutyExecuteMsg(
 		return nil, fmt.Errorf("failed to marshal execute duty data: %w", err)
 	}
 
-	return dutyDataToSSVMsg(domain, pubKey[:], runnerRole, data)
+	return dutyDataToSSVMsg(domain, spectypes.ValidatorPK(pubKey), runnerRole, data)
 }
 
 func dutyDataToSSVMsg(
 	domain spectypes.DomainType,
-	msgIdentifier []byte,
+	validatorPK spectypes.ValidatorPK,
 	runnerRole spectypes.RunnerRole,
 	data []byte,
 ) (*spectypes.SSVMessage, error) {
@@ -114,7 +114,7 @@ func dutyDataToSSVMsg(
 
 	return &spectypes.SSVMessage{
 		MsgType: message.SSVEventMsgType,
-		MsgID:   spectypes.NewMsgID(domain, msgIdentifier, runnerRole),
+		MsgID:   spectypes.NewValidatorMsgID(domain, validatorPK, runnerRole),
 		Data:    msgData,
 	}, nil
 }

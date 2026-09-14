@@ -399,9 +399,10 @@ func (mv *messageValidator) validatorState(key spectypes.MessageID, committeeInf
 	}
 
 	cs := &ValidatorState{
-		committeeID:     committeeInfo.committeeID,
-		operators:       make([]*OperatorState, len(committeeInfo.committee)),
-		storedSlotCount: mv.maxStoredSlots(),
+		committeeID:      committeeInfo.committeeID,
+		operators:        make([]*OperatorState, len(committeeInfo.committee)),
+		storedSlotCount:  mv.storedSlotCount(key.GetRoleType()),
+		storedEpochCount: mv.storedEpochCount(key.GetRoleType()),
 	}
 	mv.states.Set(key, cs, ttlcache.DefaultTTL)
 	return cs
@@ -410,4 +411,33 @@ func (mv *messageValidator) validatorState(key spectypes.MessageID, committeeInf
 // maxStoredSlots stores max amount of slots message validation stores.
 func (mv *messageValidator) maxStoredSlots() uint64 {
 	return mv.netCfg.SlotsPerEpoch + LateSlotAllowance
+}
+
+// storedSlotCount returns how many recent slots of per-signer state a role retains. Proposer
+// preferences are broadcast across the whole proposer lookahead, so their ring must span it (on top
+// of the normal recent-slots buffer) to give every lookahead slot a distinct ring slot and keep
+// per-slot dedup exact; every other role only ever sees roughly the current slot.
+func (mv *messageValidator) storedSlotCount(role spectypes.RunnerRole) uint64 {
+	if role == spectypes.RoleProposerPreferences {
+		return proposerPreferencesEarlyEpochs*mv.netCfg.SlotsPerEpoch + mv.maxStoredSlots()
+	}
+	return mv.maxStoredSlots()
+}
+
+// storedEpochCount returns how many epochs of per-signer duty counts a role retains. Counts must live as
+// long as any message they gate is acceptable (SIP #94 §7). Proposer preferences ride proposal slots up to
+// proposerPreferencesEarlyEpochs ahead and two slots behind, so their acceptable slots span the current
+// epoch, the lookahead epochs, and the tail of the previous one — four consecutive epochs at any instant.
+// The roles with the long lateness TTL (maxStoredSlots: an epoch plus LateSlotAllowance) can still accept
+// a slot two epochs back while the current epoch's arrive — three epochs. Every other role's TTL crosses
+// at most one epoch boundary — two.
+func (mv *messageValidator) storedEpochCount(role spectypes.RunnerRole) uint64 {
+	switch role {
+	case spectypes.RoleProposerPreferences:
+		return proposerPreferencesEarlyEpochs + 2
+	case spectypes.RoleCommittee, spectypes.RoleAggregatorCommittee, ssvtypes.RoleAggregator:
+		return 3
+	default:
+		return 2
+	}
 }

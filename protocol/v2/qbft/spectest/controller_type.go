@@ -5,20 +5,17 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
-	"os"
-	"path/filepath"
 	"reflect"
 	"testing"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectests "github.com/ssvlabs/ssv-spec/qbft/spectest/tests"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
-	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
@@ -190,12 +187,8 @@ func runInstanceWithData(
 }
 
 func overrideStateComparisonForControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {
-	specDir, err := storage.GetSpecDir("", filepath.Join("qbft", "spectest"))
-	require.NoError(t, err)
-	specDir = filepath.Join(specDir, "generate")
-	dir := typescomparable.GetSCDir(specDir, reflect.TypeFor[*spectests.ControllerSpecTest]().String())
-	path := filepath.Join(dir, fmt.Sprintf("%s.json", test.TestName()))
-	byteValue, err := os.ReadFile(filepath.Clean(path))
+	byteValue, err := storage.ReadStateComparisonFile("qbft", test.TestName(),
+		reflect.TypeFor[*spectests.ControllerSpecTest]().String())
 	require.NoError(t, err)
 	sc := make([]*controller.Controller, len(test.RunInstanceData))
 	require.NoError(t, json.Unmarshal(byteValue, &sc))

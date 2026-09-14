@@ -128,14 +128,7 @@ func (v *Validator) StartQueueConsumer(
 
 			filter := queue.FilterAny
 			if !r.HasRunningDuty() {
-				// If no duty is running, pop only ExecuteDuty messages.
-				filter = func(m *queue.SSVMessage) bool {
-					e, ok := m.Body.(*types.EventMsg)
-					if !ok || e == nil {
-						return false
-					}
-					return e.Type == types.ExecuteDuty
-				}
+				filter = noRunningDutyFilter(r)
 			} else if rState.HasRunningInstance && !r.HasAcceptedProposalForCurrentRound() {
 				// If no proposal was accepted for the current round, skip prepare & commit messages
 				// for the current height and round.
@@ -335,4 +328,25 @@ func (v *Validator) logWithMessageFields(logger *zap.Logger, msg *queue.SSVMessa
 	}
 
 	return logger, nil
+}
+
+// noRunningDutyFilter selects what the consumer pops for a runner with no running duty: ExecuteDuty events
+// and, for a finished duty that still expects post-consensus packets (the Gloas proposer's §6 envelope
+// root), that slot's post-consensus packets. Everything else waits for the next duty to start.
+func noRunningDutyFilter(r runner.Runner) queue.Filter {
+	var awaitingSlot phase0.Slot
+	awaiting := false
+	if awaiter, ok := r.(runner.PostConsensusAwaiter); ok {
+		awaitingSlot, awaiting = awaiter.AwaitingPostConsensus()
+	}
+	return func(m *queue.SSVMessage) bool {
+		switch body := m.Body.(type) {
+		case *types.EventMsg:
+			return body != nil && body.Type == types.ExecuteDuty
+		case *spectypes.PartialSignatureMessages:
+			return awaiting && body != nil && body.Type == spectypes.PostConsensusPartialSig && body.Slot == awaitingSlot
+		default:
+			return false
+		}
+	}
 }

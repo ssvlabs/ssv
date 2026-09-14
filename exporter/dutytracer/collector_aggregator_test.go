@@ -16,6 +16,7 @@ import (
 
 	"github.com/ssvlabs/ssv/networkconfig"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/protocol/v2/types/ssvtestingutils"
 	"github.com/ssvlabs/ssv/registry/storage"
 	registrystoragemocks "github.com/ssvlabs/ssv/registry/storage/mocks"
 )
@@ -192,7 +193,7 @@ func TestCollector_AggregatorCommitteeDuty_PostConsensusQuorum(t *testing.T) {
 		operator4   = spectypes.OperatorID(4)
 	)
 
-	identifier := spectypes.NewMsgID([4]byte{}, []byte("agg_committee_pk"), spectypes.RoleAggregatorCommittee)
+	identifier := ssvtestingutils.NewMsgID([4]byte{}, []byte("agg_committee_pk"), spectypes.RoleAggregatorCommittee)
 	var committeeID spectypes.CommitteeID
 	copy(committeeID[:], identifier.GetDutyExecutorID()[16:])
 
@@ -321,7 +322,7 @@ func TestCollector_AggregatorCommitteeDuty_PreConsensusQuorum(t *testing.T) {
 		operator4   = spectypes.OperatorID(4)
 	)
 
-	identifier := spectypes.NewMsgID([4]byte{}, []byte("agg_committee_pk_pre"), spectypes.RoleAggregatorCommittee)
+	identifier := ssvtestingutils.NewMsgID([4]byte{}, []byte("agg_committee_pk_pre"), spectypes.RoleAggregatorCommittee)
 	var committeeID spectypes.CommitteeID
 	copy(committeeID[:], identifier.GetDutyExecutorID()[16:])
 
@@ -411,7 +412,7 @@ func TestCollector_AggregatorCommitteeDuty_UnknownRootBuffersUntilProposal(t *te
 	t.Cleanup(ctrl.Finish)
 
 	const slot = phase0.Slot(2)
-	identifier := spectypes.NewMsgID([4]byte{}, []byte("agg_committee_pk_2"), spectypes.RoleAggregatorCommittee)
+	identifier := ssvtestingutils.NewMsgID([4]byte{}, []byte("agg_committee_pk_2"), spectypes.RoleAggregatorCommittee)
 	var committeeID spectypes.CommitteeID
 	copy(committeeID[:], identifier.GetDutyExecutorID()[16:])
 

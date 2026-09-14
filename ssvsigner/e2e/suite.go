@@ -8,7 +8,6 @@ import (
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	ssz "github.com/ferranbt/fastssz"
 	"github.com/sourcegraph/conc/pool"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/suite"
@@ -143,7 +142,7 @@ func (s *E2ETestSuite) RequireSlashingError(err error, operation string) {
 // SignWeb3Signer calls Web3Signer directly, bypassing SSV protection
 func (s *E2ETestSuite) SignWeb3Signer(
 	ctx context.Context,
-	obj ssz.HashRoot,
+	obj spectypes.HashRoot,
 	domain phase0.Domain,
 	pubKey phase0.BLSPubKey,
 	slot phase0.Slot,
@@ -241,7 +240,7 @@ func (s *E2ETestSuite) AddValidator(ctx context.Context) *common.ValidatorKeyPai
 // RequireValidSigning verifies that all three signing methods (local, remote, web3signer) produce identical signatures
 func (s *E2ETestSuite) RequireValidSigning(
 	ctx context.Context,
-	obj ssz.HashRoot,
+	obj spectypes.HashRoot,
 	pubKey phase0.BLSPubKey,
 	slot phase0.Slot,
 	domainType phase0.DomainType,
@@ -277,7 +276,7 @@ func (s *E2ETestSuite) RequireValidSigning(
 // RequireFailedSigning verifies that all three signing methods properly reject slashable operations
 func (s *E2ETestSuite) RequireFailedSigning(
 	ctx context.Context,
-	obj ssz.HashRoot,
+	obj spectypes.HashRoot,
 	pubKey phase0.BLSPubKey,
 	slot phase0.Slot,
 	domainType phase0.DomainType,

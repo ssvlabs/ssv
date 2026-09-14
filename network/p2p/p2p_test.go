@@ -27,6 +27,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/protocol/v2/types/ssvtestingutils"
 )
 
 func TestGetMaxPeers(t *testing.T) {
@@ -111,15 +112,17 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 	)
 
 	// Guard the choice of broadcastTimeIntoSlot at the source: EstimatedRoundAt is the same
-	// estimate the validator uses, so if SlotDuration or the committee head-start ever shifts
-	// the estimated round out of the range that admits rounds 1..3, fail loudly here instead
-	// of silently reflaking on the router-count assertion below. allowedRoundsInPast and
+	// estimate the validator uses, so if the slot's interval duration or the committee head-start
+	// ever shifts the estimated round out of the range that admits rounds 1..3, fail loudly here
+	// instead of silently reflaking on the router-count assertion below. allowedRoundsInPast and
 	// allowedRoundsInFuture are unexported in message/validation; mirror their current values.
+	// The test network has no Gloas fork, so the interval is the same at the broadcast slot.
 	const (
 		allowedRoundsInPast   = 2
 		allowedRoundsInFuture = 1
 	)
-	estRound, err := roundtimer.EstimatedRoundAt(spectypes.RoleCommittee, networkconfig.TestNetwork.SlotDuration, broadcastTimeIntoSlot)
+	intervalDuration := networkconfig.TestNetwork.IntervalDuration(networkconfig.TestNetwork.EstimatedCurrentSlot())
+	estRound, err := roundtimer.EstimatedRoundAt(spectypes.RoleCommittee, intervalDuration, broadcastTimeIntoSlot)
 	require.NoError(t, err)
 	lowestAdmitted := specqbft.FirstRound
 	if estRound > allowedRoundsInPast {
@@ -225,7 +228,7 @@ func generateCommitteeMsg(ks *spectestingutils.TestKeySet, round specqbft.Round)
 	fullData := spectestingutils.TestingQBFTFullData
 
 	encodedCommitteeID := append(bytes.Repeat([]byte{0}, 16), committeeID[:]...)
-	committeeIdentifier := spectypes.NewMsgID(netCfg.DomainTypeAtSlot(phase0.Slot(height)), encodedCommitteeID, spectypes.RoleCommittee)
+	committeeIdentifier := ssvtestingutils.NewMsgID(netCfg.DomainTypeAtSlot(phase0.Slot(height)), encodedCommitteeID, spectypes.RoleCommittee)
 
 	qbftMessage := &specqbft.Message{
 		MsgType:    specqbft.ProposalMsgType,
@@ -268,7 +271,7 @@ func dummyMsg(t *testing.T, pkHex string, height int, role spectypes.RunnerRole)
 		committeeID := ssvtypes.ComputeCommitteeID([]spectypes.OperatorID{1, 2, 3, 4})
 		dutyExecutorID = append(bytes.Repeat([]byte{0}, 16), committeeID[:]...)
 	}
-	id := spectypes.NewMsgID(networkconfig.TestNetwork.DomainTypeAtSlot(phase0.Slot(height)), dutyExecutorID, role)
+	id := ssvtestingutils.NewMsgID(networkconfig.TestNetwork.DomainTypeAtSlot(phase0.Slot(height)), dutyExecutorID, role)
 
 	qbftMessage := &specqbft.Message{
 		MsgType:    specqbft.CommitMsgType,

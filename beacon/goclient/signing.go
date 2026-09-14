@@ -9,8 +9,8 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	ssz "github.com/ferranbt/fastssz"
 	"github.com/jellydator/ttlcache/v3"
+
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
@@ -54,9 +54,12 @@ func (gc *GoClient) DomainData(
 	domain phase0.DomainType,
 ) (phase0.Domain, error) {
 	switch domain {
-	case spectypes.DomainApplicationBuilder:
-		// DomainApplicationBuilder is constructed based on what Ethereum network we are connected
-		// to (Mainnet, Hoodi, etc.)
+	case spectypes.DomainApplicationBuilder, spectypes.DomainBuilderRequestAuth:
+		// Application-namespace domains derive from the network's genesis fork version with a zero
+		// genesis-validators root (compute_domain with defaults), never from a fork-versioned
+		// state: DomainApplicationBuilder (pre-Gloas validator registrations) and DomainBuilderRequestAuth
+		// (the Gloas direct-builder request auth — 0x0b000001, not the beacon DomainBeaconBuilder
+		// 0x0b000000).
 		var appDomain phase0.Domain
 		forkData := phase0.ForkData{
 			CurrentVersion:        gc.getBeaconConfig().GenesisForkVersion,
@@ -117,7 +120,7 @@ func (gc *GoClient) ComputeSigningRoot(object any, domain phase0.Domain) ([32]by
 		return [32]byte{}, errors.New("cannot compute signing root of nil")
 	}
 	return gc.signingData(func() ([32]byte, error) {
-		if v, ok := object.(ssz.HashRoot); ok {
+		if v, ok := object.(spectypes.HashRoot); ok {
 			return v.HashTreeRoot()
 		}
 		return [32]byte{}, errors.New("cannot compute signing root")
