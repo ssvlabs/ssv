@@ -317,3 +317,13 @@ func (i *Instance) bumpToRound(round specqbft.Round) {
 func (i *Instance) IsRelevant() bool {
 	return !i.markedIrrelevant && i.State.Round < i.config.GetCutOffRound()
 }
+
+// recordCutoffGiveUp records — as a trace event and debug log — that the instance has reached its cutoff
+// round (roundtimer.CutOffRoundFor) and given up. A round-advancing handler calls this once a bump lands on
+// the cutoff (IsRelevant is false) and returns without broadcasting: no node acts at or past the cutoff, so
+// the message would be rejected and carries no liveness value — a normal end, not an error.
+func (i *Instance) recordCutoffGiveUp(ctx context.Context, logger *zap.Logger) {
+	const eventMsg = "instance reached its cutoff round, giving up"
+	trace.SpanFromContext(ctx).AddEvent(eventMsg)
+	logger.Debug(eventMsg, zap.Uint64("qbft_round", uint64(i.State.Round)))
+}

@@ -37,13 +37,9 @@ func (i *Instance) UponRoundTimeout(ctx context.Context, logger *zap.Logger) err
 	// without ours). We bump *before* the broadcast, unlike ssv-spec which defers it.
 	i.bumpToRound(newRound)
 
-	// If the bump reached the role's give-up round (roundtimer.CutOffRoundFor), the instance stops here:
-	// no timer was armed and we broadcast no round-change (worthless past the cutoff, where no node
-	// decides). This is a normal end, not an error, so return nil rather than redden the surrounding spans.
+	// If that bump reached the cutoff round, give up rather than broadcast a round-change no node accepts.
 	if !i.IsRelevant() {
-		const eventMsg = "instance reached its cutoff round, giving up"
-		span.AddEvent(eventMsg)
-		logger.Debug(eventMsg, zap.Uint64("qbft_round", uint64(i.State.Round)))
+		i.recordCutoffGiveUp(ctx, logger)
 		return nil
 	}
 
