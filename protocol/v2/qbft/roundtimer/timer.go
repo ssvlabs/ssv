@@ -27,9 +27,9 @@ const (
 // nor changes rounds any further.
 var CutOffRound specqbft.Round = specqbft.Round(specqbft.CutoffRound)
 
-// MaxRound returns the highest consensus round message validation accepts for the role, and so the
-// highest round at which an instance of the role can still decide. ok is false for roles without a
-// consensus phase.
+// MaxRound returns the highest consensus round message validation accepts for the role; higher rounds
+// are refused. ok is false for roles without a consensus phase. This is the validation cap, not the round
+// an instance stops at — that is CutOffRoundFor(role).
 func MaxRound(role spectypes.RunnerRole) (maxRound specqbft.Round, ok bool) {
 	switch role {
 	case spectypes.RoleCommittee, spectypes.RoleAggregatorCommittee, ssvtypes.RoleAggregator: // TODO: check if value for aggregator is correct as there are messages on stage exceeding the limit
@@ -43,10 +43,10 @@ func MaxRound(role spectypes.RunnerRole) (maxRound specqbft.Round, ok bool) {
 	}
 }
 
-// CutOffRoundFor returns the round at which an instance of the role gives up. Every node's
-// validation ignores the rounds above MaxRound, so an instance working through them only changes
-// rounds, signs and broadcasts for nothing: it gives up right after its cap, or at CutOffRound when
-// the cap is not below it (and for roles without a consensus phase).
+// CutOffRoundFor returns the round at which an instance of the role gives up (IsRelevant is round <
+// cutoff, so the last round it works in is one below). Validation ignores rounds above MaxRound, so an
+// instance running past its cap only changes rounds, signs and broadcasts for nothing: it gives up right
+// after the cap, or at CutOffRound when the cap is not below it (and for roles without a consensus phase).
 func CutOffRoundFor(role spectypes.RunnerRole) specqbft.Round {
 	if maxRound, ok := MaxRound(role); ok && maxRound+1 < CutOffRound {
 		return maxRound + 1

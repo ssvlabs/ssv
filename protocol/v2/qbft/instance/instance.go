@@ -300,12 +300,16 @@ func (i *Instance) Decode(data []byte) error {
 	return json.Unmarshal(data, &i)
 }
 
-// bumpToRound pushes this instance to a higher round, also scheduling a timeout for it.
+// bumpToRound pushes this instance to a higher round, arming its round timer only while the instance is
+// still relevant. At or past the cutoff it has given up (IsRelevant is false) and processes nothing more,
+// so a timer would only fire later to produce a spurious give-up error.
 func (i *Instance) bumpToRound(round specqbft.Round) {
 	if round > i.State.Round {
 		i.State.ProposalAcceptedForCurrentRound = nil
 		i.State.Round = round
-		i.roundTimer.TimeoutForRound(round)
+		if i.IsRelevant() {
+			i.roundTimer.TimeoutForRound(round)
+		}
 	}
 }
 

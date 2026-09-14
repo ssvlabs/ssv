@@ -33,16 +33,19 @@ func (i *Instance) UponRoundTimeout(ctx context.Context, logger *zap.Logger) err
 
 	logger.Debug("⌛ round timed out")
 
-	// Always move on to the next round. The round-change message broadcast is a best-effort thing, the QBFT
-	// cluster as a whole can progress further even if our round-change message cannot be created/broadcast
-	// for whatever reason.
-	//
-	// We bump *before* the broadcast (unlike ssv-spec, which defers it). At the cutoff boundary
-	// (prevRound == cutoff-1) this advances State.Round into the cutoff round, so the Broadcast below sees
-	// !IsRelevant() and rejects the final round-change, and UponRoundTimeout returns an error. That is
-	// intentional and inert: the cutoff is the role's give-up round (roundtimer.CutOffRoundFor: no
-	// instance can decide at or past it), so the dropped round-change carries no liveness value.
+	// Move on to the next round; the round-change broadcast below is best-effort (the cluster can progress
+	// without ours). We bump *before* the broadcast, unlike ssv-spec which defers it.
 	i.bumpToRound(newRound)
+
+	// If the bump reached the role's give-up round (roundtimer.CutOffRoundFor), the instance stops here:
+	// no timer was armed and we broadcast no round-change (worthless past the cutoff, where no node
+	// decides). This is a normal end, not an error, so return nil rather than redden the surrounding spans.
+	if !i.IsRelevant() {
+		const eventMsg = "instance reached its cutoff round, giving up"
+		span.AddEvent(eventMsg)
+		logger.Debug(eventMsg, zap.Uint64("qbft_round", uint64(i.State.Round)))
+		return nil
+	}
 
 	roundChange, err := i.CreateRoundChange(newRound)
 	if err != nil {

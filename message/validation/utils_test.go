@@ -9,6 +9,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -28,6 +29,12 @@ func TestMessageValidator_maxRound(t *testing.T) {
 		{
 			name: "Aggregator role",
 			role: ssvtypes.RoleAggregator,
+			want: 12,
+			err:  nil,
+		},
+		{
+			name: "AggregatorCommittee role",
+			role: spectypes.RoleAggregatorCommittee,
 			want: 12,
 			err:  nil,
 		},
@@ -61,6 +68,31 @@ func TestMessageValidator_maxRound(t *testing.T) {
 				require.NoError(t, err)
 			}
 			require.Equal(t, tc.want, got)
+		})
+	}
+}
+
+// TestCutOffRoundWithinMaxRound pins the cross-package agreement between the QBFT instance cutoff and this
+// validator: an instance must never work in a round the validator refuses. It gives up at
+// roundtimer.CutOffRoundFor(role), so its last working round (cutoff-1) must not exceed mv.maxRound.
+// roundtimer owns both limits today; asserting from the validation side catches a future drift.
+func TestCutOffRoundWithinMaxRound(t *testing.T) {
+	consensusRoles := []spectypes.RunnerRole{
+		spectypes.RoleCommittee,
+		spectypes.RoleAggregatorCommittee,
+		ssvtypes.RoleAggregator,
+		spectypes.RoleProposer,
+		ssvtypes.RoleSyncCommitteeContribution,
+	}
+
+	mv := &messageValidator{}
+	for _, role := range consensusRoles {
+		t.Run(ssvtypes.RunnerRoleToString(role), func(t *testing.T) {
+			maxRound, err := mv.maxRound(role)
+			require.NoError(t, err)
+
+			cutOff := roundtimer.CutOffRoundFor(role)
+			require.LessOrEqual(t, cutOff-1, maxRound, "an instance must not work in a round validation refuses")
 		})
 	}
 }

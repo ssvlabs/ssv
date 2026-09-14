@@ -166,10 +166,8 @@ func (mv *messageValidator) validateConsensusMessageSemantics(
 		return e
 	}
 
-	// Rule: Round cut-offs for roles (roundtimer.MaxRound, shared with the instance cutoff):
-	// - 12 (committee, aggregator, and aggregator committee)
-	// - 2 (proposer)
-	// - 6 (other types)
+	// Rule: reject consensus rounds above the role's cap (defined in roundtimer.MaxRound, shared with the
+	// instance cutoff so the two cannot drift).
 	maxRound, err := mv.maxRound(role)
 	if err != nil {
 		return fmt.Errorf("failed to get max round: %w", err)

@@ -62,16 +62,17 @@ func TestUponRoundTimeoutKilledInstance(t *testing.T) {
 func TestUponRoundTimeoutStopsProcessingAfterReachingCutOffRound(t *testing.T) {
 	env := newInstanceTestEnv(t, 2)
 	env.inst.StartValue = []byte("start-value")
-	// CutOffRound == State.Round+1, so the first timeout fires at the last relevant round and bumps the
-	// instance *into* the cutoff round. Because the bump runs before Broadcast, the final round-change is
-	// intentionally dropped and UponRoundTimeout returns the "no longer relevant" error (CutOffRound is the
-	// cluster-wide give-up point, so that RC has no liveness value). The second call then exercises the
-	// plain already-at-cutoff path.
+	// CutOffRound == State.Round+1, so the first timeout bumps the instance *into* the cutoff round — its
+	// give-up point. It stops there quietly: no timer armed, no round-change broadcast, and it returns nil
+	// rather than an error (which would redden spans on every failed duty). The second call then hits the
+	// plain already-at-cutoff path, which still reports the instance as no longer relevant.
 	env.config.CutOffRound = env.inst.State.Round + 1
 
 	err := env.inst.UponRoundTimeout(t.Context(), zap.NewNop())
-	require.ErrorContains(t, err, "instance is no longer considered relevant")
+	require.NoError(t, err)
 	require.Equal(t, env.config.CutOffRound, env.inst.State.Round)
+	require.Zero(t, env.roundTimer.State.Timeouts, "no timer armed once the instance gives up at the cutoff")
+	require.Empty(t, env.network.BroadcastedMsgs, "no round-change broadcast at the cutoff")
 
 	err = env.inst.UponRoundTimeout(t.Context(), zap.NewNop())
 	require.ErrorContains(t, err, "instance is no longer considered relevant")
