@@ -36,9 +36,16 @@ type Queue interface {
 	// TryPop returns immediately with the next message in the queue, or nil if there is none.
 	TryPop(MessagePrioritizer, Filter) *SSVMessage
 
-	// Purge removes every queued message the filter matches, records each as a drop under dropReason,
-	// and returns how many were removed. Like Pop, it must not run concurrently with Pop or TryPop.
-	Purge(shouldDrop Filter, dropReason string) int
+	// Purge removes every queued message the filter matches, records each as a purge under reason, and
+	// returns how many were removed. onRemoved, when non-nil, is called for each removed message so the
+	// caller can close out any state it holds for it. Like Pop, it must not run concurrently with Pop
+	// or TryPop.
+	Purge(shouldDrop Filter, reason string, onRemoved func(*SSVMessage)) int
+
+	// RecordPurge records a single purge under reason against this queue's metrics, so the consumer can
+	// account for a message it dropped as stale after popping it — which Purge cannot see — on the same
+	// instrument as the bulk purge.
+	RecordPurge(reason string)
 
 	// Empty returns true if the queue is empty.
 	Empty() bool
@@ -205,7 +212,7 @@ func (q *priorityQueue) pop(prioritizer MessagePrioritizer, filter Filter) *SSVM
 	return highest.message
 }
 
-func (q *priorityQueue) Purge(shouldDrop Filter, dropReason string) int {
+func (q *priorityQueue) Purge(shouldDrop Filter, reason string, onRemoved func(*SSVMessage)) int {
 	q.readInbox()
 
 	removed := 0
@@ -220,10 +227,17 @@ func (q *priorityQueue) Purge(shouldDrop Filter, dropReason string) int {
 		} else {
 			prior.next = current.next
 		}
-		q.observer.recordDrop(dropReason)
+		q.observer.recordPurge(reason)
+		if onRemoved != nil {
+			onRemoved(current.message)
+		}
 		removed++
 	}
 	return removed
+}
+
+func (q *priorityQueue) RecordPurge(reason string) {
+	q.observer.recordPurge(reason)
 }
 
 func (q *priorityQueue) Empty() bool {

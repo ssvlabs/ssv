@@ -11,6 +11,8 @@ import (
 	"github.com/jellydator/ttlcache/v3"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
@@ -53,6 +55,28 @@ func newMessageStates(ttl time.Duration) *ttlcache.Cache[messageKey, *messagePro
 		}
 	})
 	return states
+}
+
+// endStaleMessageState closes out the in-flight state of a message dropped as stale — whether purged
+// from the queue at a duty start or dropped by the consumer after being popped. It ends the message's
+// span with a terminal status and removes the state, so the span is exported promptly instead of
+// lingering until the TTL evicts it with no status. A message never popped has no state, so it no-ops.
+func endStaleMessageState(msgStates *ttlcache.Cache[messageKey, *messageProcessingState], logger *zap.Logger, msg *queue.SSVMessage) {
+	msgKey, err := mKey(msg)
+	if err != nil {
+		logger.Debug("couldn't build msgKey to close out stale message state", zap.Error(err))
+		return
+	}
+	item := msgStates.Get(msgKey)
+	if item == nil {
+		return
+	}
+	const eventMsg = "message purged as stale before processing"
+	span := item.Value().span
+	span.AddEvent(eventMsg, trace.WithAttributes(attribute.String("drop_reason", queue.PurgeReasonStale)))
+	span.SetStatus(codes.Error, eventMsg)
+	span.End()
+	msgStates.Delete(msgKey)
 }
 
 const maxInt64DecimalLen = 20 // enough for uint64 max or int64 min in base 10

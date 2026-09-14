@@ -9,6 +9,8 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest/observer"
 
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
@@ -125,6 +127,63 @@ func TestConsumeQueue_DropsStaleMessagesAtDutyStart(t *testing.T) {
 	require.True(t, v.Queues[spectypes.RoleProposer].Empty(), "the stale tail is purged, not retained")
 }
 
+// The bulk purge at duty start cannot catch a stale message that is not in the queue at that moment —
+// one parked in a retry goroutine, or one that simply arrives afterwards. When such a message reaches
+// the consumer below the floor, the consumer drops it rather than handing it to the runner, which would
+// reject it with the exact "invalid partial sig slot" error the purge exists to prevent (issue #3037).
+func TestConsumeQueue_DropsStaleMessageArrivingAfterDutyStart(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	// An observed logger lets the test see the consumer drop the stale message without racing on the
+	// queue's single-consumer internals (Empty/Len are not safe to call while the consumer runs).
+	core, logs := observer.New(zapcore.DebugLevel)
+	logger := zap.New(core)
+
+	netCfg := networkconfig.TestNetwork
+	duty := &spectypes.ValidatorDuty{Type: spectypes.BNRoleProposer, Slot: phase0.Slot(10)}
+	msgID := spectypes.NewMsgID(netCfg.DomainType, duty.PubKey[:], spectypes.RoleProposer)
+	proposer := &runner.ProposerRunner{BaseRunner: &runner.BaseRunner{RunnerRoleType: spectypes.RoleProposer}}
+
+	v := &Validator{
+		logger:        logger,
+		ctx:           ctx,
+		cancel:        cancel,
+		NetworkConfig: netCfg,
+		Operator:      &spectypes.CommitteeMember{},
+		Share:         &ssvtypes.SSVShare{},
+		Queues:        map[spectypes.RunnerRole]queue.Queue{spectypes.RoleProposer: queue.New(logger, 16)},
+		DutyRunners:   runner.ValidatorDutyRunners{spectypes.RoleProposer: proposer},
+	}
+
+	delivered := make(chan *queue.SSVMessage, 4)
+	v.StartQueueConsumer(msgID, func(_ context.Context, _ *zap.Logger, msg *queue.SSVMessage) error {
+		if event, ok := msg.Body.(*ssvtypes.EventMsg); ok && event.Type == ssvtypes.ExecuteDuty {
+			proposer.State = runner.NewRunnerState(3, duty)
+		}
+		delivered <- msg
+		return nil
+	})
+
+	// The duty starts, raising the floor to slot 10.
+	require.True(t, v.Queues[spectypes.RoleProposer].TryPush(executeDutyMsg(t, netCfg.DomainType, duty.Slot)))
+	require.Equal(t, message.SSVEventMsgType, receiveDelivered(t, delivered).MsgType, "the duty-start event goes first")
+
+	// A stale message for an earlier slot now arrives, after the bulk purge already ran. The consumer
+	// drops it rather than handing it to the runner.
+	require.True(t, v.Queues[spectypes.RoleProposer].TryPush(partialSigMsg(t, msgID, 5)))
+	require.Eventually(t, func() bool {
+		return logs.FilterMessage("dropped a stale message that reached the consumer after the purge").Len() == 1
+	}, 2*time.Second, 10*time.Millisecond, "the late stale message is dropped by the consumer")
+
+	select {
+	case msg := <-delivered:
+		slot, _ := msg.Slot()
+		t.Fatalf("stale message for slot %d reached the handler", slot)
+	case <-time.After(50 * time.Millisecond):
+	}
+}
+
 // The stale purge drops whatever slotBelow matches, so it must never match a duty-start: dropping one
 // would silently skip a duty (issue #3037). Any other message below the floor is fair game to drop.
 func TestSlotBelow_NeverMatchesDutyStart(t *testing.T) {
@@ -160,7 +219,7 @@ func TestPurgeAtDutyStart_KeepsAConcurrentDutyStart(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, phase0.Slot(12), floor, "the higher-slot duty-start is popped first")
 
-	require.Equal(t, 1, q.Purge(slotBelow(floor), queue.DropReasonStale), "only the stale partial is dropped")
+	require.Equal(t, 1, q.Purge(slotBelow(floor), queue.PurgeReasonStale, nil), "only the stale partial is dropped")
 
 	remaining := q.TryPop(queue.NewMessagePrioritizer(&queue.State{}), queue.FilterAny)
 	require.NotNil(t, remaining, "the lower-slot duty-start survives the purge")

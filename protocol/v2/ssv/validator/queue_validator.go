@@ -114,6 +114,11 @@ func (v *Validator) StartQueueConsumer(
 			Quorum: v.Operator.GetQuorum(), // never changes for duty runner
 		}
 
+		// floor is the slot of the duty the runner is currently serving; anything queued below it is stale
+		// (a validator runner advances through its duties in slot order). It is set at each idle duty start
+		// and read only here, in this single consumer goroutine.
+		var floor phase0.Slot
+
 		for ctx.Err() == nil {
 			r := v.DutyRunners.DutyRunnerForMsgID(msgID)
 			if r == nil {
@@ -167,12 +172,29 @@ func (v *Validator) StartQueueConsumer(
 			// An idle runner starting a duty raises its slot floor: the stale tail still queued for an earlier
 			// slot — leftovers of the concluded duty, or messages for a duty this operator never ran — can no
 			// longer be processed, and would otherwise be handed to the new duty one by one only to be rejected
-			// (issue #3037). Purge it before the duty runs (slotBelow spares duty-starts, so none is skipped).
+			// (issue #3037). Purge it before the duty runs (slotBelow spares duty-starts, so none is skipped),
+			// closing out any in-flight state each purged message still holds from an earlier attempt.
 			if dutySlot, ok := executeDutySlot(msg); ok && idle {
-				if dropped := q.Purge(slotBelow(dutySlot), queue.DropReasonStale); dropped > 0 {
+				floor = dutySlot
+				dropped := q.Purge(slotBelow(dutySlot), queue.PurgeReasonStale, func(removed *queue.SSVMessage) {
+					endStaleMessageState(msgStates, v.logger, removed)
+				})
+				if dropped > 0 {
 					v.logger.Debug("dropped stale messages queued for slots before the starting duty",
 						fields.RunnerRole(msgID.GetRoleType()), fields.Slot(dutySlot), fields.Count(dropped))
 				}
+			}
+
+			// A message can still sit below the floor after the bulk purge — a straggler re-pushed by a
+			// retry goroutine that was parked during the purge, or one that simply arrived later. Handing
+			// it to the runner would draw the exact "invalid partial sig slot" rejection the purge prevents
+			// (issue #3037), so drop it here too. slotBelow spares duty-starts and matches nothing at floor 0.
+			if slotBelow(floor)(msg) {
+				endStaleMessageState(msgStates, v.logger, msg)
+				q.RecordPurge(queue.PurgeReasonStale)
+				v.logger.Debug("dropped a stale message that reached the consumer after the purge",
+					fields.RunnerRole(msgID.GetRoleType()), fields.Slot(floor))
+				continue
 			}
 
 			msgLogger, err := v.logWithMessageFields(v.logger, msg)
