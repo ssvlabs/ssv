@@ -132,6 +132,7 @@ func (mv *messageValidator) validatePartialSignatureMessageSemantics(
 		return ErrNoMessagesInPartialSigMessage
 	}
 
+	firstValidatorIndex := partialSignatureMessages.Messages[0].ValidatorIndex
 	for _, message := range partialSignatureMessages.Messages {
 		// Rule: Partial signature must have expected length. Already enforced by ssz.
 
@@ -143,11 +144,21 @@ func (mv *messageValidator) validatePartialSignatureMessageSemantics(
 			return e
 		}
 
-		// Rule: (only for Validator duties) Validator index must match with validatorPK
-		// For Committee duties, we don't assume that operators are synced on the validators set
-		// So, we can't make this assertion
-		// Deliberate relaxation — rationale and blast radius: ssvlabs/knowledge-base#2
-		if !mv.committeeRole(signedSSVMessage.SSVMessage.GetID().GetRoleType()) {
+		if !mv.committeeRole(role) {
+			// Rule: (only for Validator duties) every entry carries the same validator index — SIP #94 §7
+			// for the Gloas proposer's two-entry packet, REJECT otherwise. Unlike the membership check
+			// below, this needs no knowledge of the validator set: a mismatch is a malformed packet.
+			if message.ValidatorIndex != firstValidatorIndex {
+				e := ErrInconsistentValidatorIndex
+				e.got = message.ValidatorIndex
+				e.want = firstValidatorIndex
+				return e
+			}
+
+			// Rule: (only for Validator duties) Validator index must match with validatorPK
+			// For Committee duties, we don't assume that operators are synced on the validators set
+			// So, we can't make this assertion
+			// Deliberate relaxation — rationale and blast radius: ssvlabs/knowledge-base#2
 			if !slices.Contains(validatorIndices, message.ValidatorIndex) {
 				e := ErrValidatorIndexMismatch
 				e.got = message.ValidatorIndex
