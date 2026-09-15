@@ -53,6 +53,9 @@ type Validator struct {
 	Signer         ekm.BeaconSigner
 	OperatorSigner ssvtypes.OperatorSigner
 
+	// Queues holds one message queue per runner role, living as long as the validator. While a role's
+	// runner has no running duty, its consumer pops only duty starts, so early messages for the next duty
+	// wait here; whatever is left for earlier slots is purged when that duty starts (see StartQueueConsumer).
 	Queues map[spectypes.RunnerRole]queue.Queue
 
 	DutyRunners runner.ValidatorDutyRunners
