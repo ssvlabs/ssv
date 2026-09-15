@@ -1,11 +1,20 @@
 """Reference values for TestGetAggregateAndProofGloasFixedVector, from the consensus-specs pyspec.
 
-Run against a consensus-specs checkout at the SIP #94 pin (v1.7.0-alpha.14), Python >= 3.12:
+Run against a consensus-specs checkout at the commit SIP #94 pins,
+a5a1bc630401eedbe2f3d87934c99012578c113b (past the v1.7.0-alpha.14 tag), with Python >= 3.12:
 
-    pip install ".[test]" && python -m pysetup.generate_specs --fork gloas
+    pip install ".[test]" && python -m pysetup.generate_specs --all-forks
     PYTHONPATH=tests/core/pyspec python gloas_aggregate_and_proof_fixture.py
 
-The fixture must stay byte-identical to the Go test's; the printed ssz_sha256 checks that.
+Output at that commit, pinned by the Go test:
+
+    ssz_sha256 a3010361b4058e8668275075d425c0bee5cb704851eaf94b0dceb411802929bb
+    attestation_root c67fcdd0fc5173cea66fa19b4b2fc26c6c5de463c9d7358fdad7952341931372
+    root 25d7a728d9874ba5baf1087c0cefcbf97fa9daa39d8e62fbd7a699042f068c06
+    domain 06000000d620b8f54e1c0237c64157679dd01e643a0911ba1344e568ee73e279
+    signing_root 3934b9a7a7c92a7329790a8fe2ed98d15a9884a6425bc58b406c9450478429a0
+
+The fixture must stay byte-identical to the Go test's; ssz_sha256 checks that.
 """
 
 import hashlib

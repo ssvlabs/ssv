@@ -111,17 +111,25 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 		minMeshWait           = 3 * time.Second // let the gossip mesh form before broadcasting
 	)
 
+	// The broadcast lands broadcastTimeIntoSlot into a slot — at least minMeshWait from now so the
+	// mesh has formed — so first settle which slot that is.
+	wait := broadcastTimeIntoSlot - networkconfig.TestNetwork.EstimatedTimeIntoSlot()
+	for wait < minMeshWait {
+		wait += networkconfig.TestNetwork.SlotDuration
+	}
+	broadcastSlot := networkconfig.TestNetwork.EstimatedSlotAtTime(time.Now().Add(wait))
+
 	// Guard the choice of broadcastTimeIntoSlot at the source: EstimatedRoundAt is the same
-	// estimate the validator uses, so if the slot's interval duration or the committee head-start
-	// ever shifts the estimated round out of the range that admits rounds 1..3, fail loudly here
-	// instead of silently reflaking on the router-count assertion below. allowedRoundsInPast and
-	// allowedRoundsInFuture are unexported in message/validation; mirror their current values.
-	// The test network has no Gloas fork, so the interval is the same at the broadcast slot.
+	// estimate the validator uses, so if the broadcast slot's interval duration or the committee
+	// head-start ever shifts the estimated round out of the range that admits rounds 1..3, fail
+	// loudly here instead of silently reflaking on the router-count assertion below.
+	// allowedRoundsInPast and allowedRoundsInFuture are unexported in message/validation; mirror
+	// their current values.
 	const (
 		allowedRoundsInPast   = 2
 		allowedRoundsInFuture = 1
 	)
-	intervalDuration := networkconfig.TestNetwork.IntervalDuration(networkconfig.TestNetwork.EstimatedCurrentSlot())
+	intervalDuration := networkconfig.TestNetwork.IntervalDuration(broadcastSlot)
 	estRound, err := roundtimer.EstimatedRoundAt(spectypes.RoleCommittee, intervalDuration, broadcastTimeIntoSlot)
 	require.NoError(t, err)
 	lowestAdmitted := specqbft.FirstRound
@@ -133,13 +141,7 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 		"broadcastTimeIntoSlot=%s puts the estimated committee round at %d (admitted spread [%d, %d]), which does not admit rounds 1..3",
 		broadcastTimeIntoSlot, estRound, lowestAdmitted, highestAdmitted)
 
-	// Wait until broadcastTimeIntoSlot into a slot — at least minMeshWait from now so the mesh
-	// has formed. Cancellable so a torn-down test returns promptly instead of sleeping for up
-	// to a slot.
-	wait := broadcastTimeIntoSlot - networkconfig.TestNetwork.EstimatedTimeIntoSlot()
-	for wait < minMeshWait {
-		wait += networkconfig.TestNetwork.SlotDuration
-	}
+	// Cancellable so a torn-down test returns promptly instead of sleeping for up to a slot.
 	select {
 	case <-time.After(wait):
 	case <-ctx.Done():

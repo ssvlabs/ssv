@@ -205,7 +205,8 @@ func recordProposalBuildSource(ctx context.Context, source proposalBuildSource) 
 // the signal is cluster-wide: a signed envelope no operator matched is a reveal miss (the cluster decided
 // a payload_root nobody can publish the payload for), which this makes countable instead of inferable only
 // from the absence of a publish log. Deliberately independent of whether the subsequent publish succeeded —
-// that is counted by ssv.runner.envelope.publishes.
+// that is counted by ssv.runner.envelope.publishes. A match that could not be established is not counted
+// either way (see matchProducedEnvelope).
 func recordEnvelopeBuildMatch(ctx context.Context, self bool) {
 	match := "other"
 	if self {
@@ -218,11 +219,7 @@ func recordEnvelopeBuildMatch(ctx context.Context, self bool) {
 // the proposer's submission metrics: the block and the envelope are two publishes of one duty, and a
 // reveal that fails after the block landed is its own signal.
 func recordEnvelopePublish(ctx context.Context, success bool) {
-	outcome := "failure"
-	if success {
-		outcome = "success"
-	}
-	envelopePublishCounter.Add(ctx, 1, metric.WithAttributes(attribute.String("outcome", outcome)))
+	envelopePublishCounter.Add(ctx, 1, metric.WithAttributes(observability.SubmitOutcomeAttribute(success)))
 }
 
 // recordRequestAuthReconstruction counts a threshold-reconstructed request-auth signing root
@@ -246,11 +243,7 @@ func recordProposalAuthUnavailable(ctx context.Context, count int) {
 // accepted) books the whole call a failure; the per-entry IndexedErrorMessage rides the caller's warn log.
 // Best-effort at the caller, so a failure is a health signal, not a duty failure.
 func recordBuilderPreferencesSubmit(ctx context.Context, success bool) {
-	outcome := "failure"
-	if success {
-		outcome = "success"
-	}
-	builderPreferencesSubmitCounter.Add(ctx, 1, metric.WithAttributes(attribute.String("outcome", outcome)))
+	builderPreferencesSubmitCounter.Add(ctx, 1, metric.WithAttributes(observability.SubmitOutcomeAttribute(success)))
 }
 
 func recordPreConsensusDuration(ctx context.Context, duration time.Duration, role spectypes.RunnerRole) {

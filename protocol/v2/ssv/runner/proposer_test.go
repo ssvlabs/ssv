@@ -16,6 +16,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -773,11 +774,38 @@ func TestProposerRunnerProcessConsensusGloasSignsBlockAndEnvelope(t *testing.T) 
 	}
 	require.NotNil(t, packet)
 	require.Len(t, packet.Messages, 2)
-	blockRoot, envelopeRoot, err := runner.gloasPostConsensusSigningRoots(ctx)
+	blockRoot, envelopeRoot, err := runner.gloasPostConsensusSigningRoots(ctx, proposal)
 	require.NoError(t, err)
 	require.Equal(t, blockRoot, packet.Messages[0].SigningRoot)
 	require.Equal(t, envelopeRoot, packet.Messages[1].SigningRoot)
 	require.NotEqual(t, blockRoot, envelopeRoot)
+}
+
+// A quorum whose roots cannot be resolved is lost, since a quorum fires once. While the duty still runs it was
+// the block's — terminal for the duty — but the envelope's may still fire, so the builder operator keeps its
+// reveal data; once the duty has finished it can only have been the envelope's, so the reveal data goes.
+func TestProposerRunnerGloasPostConsensusLostQuorum(t *testing.T) {
+	t.Parallel()
+
+	ctx, logger := context.Background(), zap.NewNop()
+	proposal, produced := gloasSelfBuildProposal(t, 8)
+	undecodable := gloasConsensusData(t, proposal)
+	undecodable.DataSSZ = []byte{0xff}
+
+	for _, finished := range []bool{false, true} {
+		runner, _ := newGloasProposerForPostConsensus(t, newProposerTestBeacon(nil), &stubDoppelganger{canSign: true}, proposal)
+		runner.gloasProducedEnvelope = produced
+		runner.State.Succeeded = finished
+
+		err := runner.processGloasPostConsensusQuorum(ctx, logger, trace.SpanFromContext(ctx), undecodable, nil)
+		require.ErrorContains(t, err, "could not decode decided gloas proposal data")
+		if finished {
+			require.Nil(t, runner.gloasProducedEnvelope, "the lost quorum was the envelope's: nothing left to reveal")
+		} else {
+			require.False(t, runner.State.Succeeded, "the lost block quorum is terminal for the duty")
+			require.NotNil(t, runner.gloasProducedEnvelope, "the envelope quorum may still fire")
+		}
+	}
 }
 
 // On a Gloas decision the reveal data stays only on the builder operator, whose produced envelope is the one
@@ -815,8 +843,10 @@ func TestProposerRunnerProcessConsensusGloasReleasesReveal(t *testing.T) {
 
 			if tt.kept {
 				require.Same(t, tt.produced, runner.gloasProducedEnvelope)
+				require.Equal(t, envelopeMatchBuilder, runner.gloasEnvelopeMatch)
 			} else {
 				require.Nil(t, runner.gloasProducedEnvelope)
+				require.Equal(t, envelopeMatchOther, runner.gloasEnvelopeMatch)
 			}
 		})
 	}
@@ -937,6 +967,7 @@ func TestProposerRunnerStartNewDutyResetsGloasProduceMarkers(t *testing.T) {
 	runner.gloasProducedRoot = [32]byte{0xaa}
 	runner.gloasBuilderURL = "https://stale.example"
 	runner.gloasProducedEnvelope = &gloas.ProducedEnvelope{}
+	runner.gloasEnvelopeMatch = envelopeMatchBuilder
 	runner.gloasEnvelopeSigningRoot = [32]byte{0xbb}
 
 	require.NoError(t, runner.StartNewDuty(context.Background(), zap.NewNop(), spectestingutils.TestingProposerDutyV(version), 3))
@@ -944,6 +975,7 @@ func TestProposerRunnerStartNewDutyResetsGloasProduceMarkers(t *testing.T) {
 	require.Equal(t, [32]byte{}, runner.gloasProducedRoot)
 	require.Empty(t, runner.gloasBuilderURL)
 	require.Nil(t, runner.gloasProducedEnvelope)
+	require.Equal(t, envelopeMatchPending, runner.gloasEnvelopeMatch)
 	require.Equal(t, [32]byte{}, runner.gloasEnvelopeSigningRoot)
 }
 

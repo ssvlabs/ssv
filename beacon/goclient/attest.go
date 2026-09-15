@@ -157,12 +157,11 @@ func (gc *GoClient) verifyAndRefetchIfStale(
 ) (result *phase0.AttestationData, stale bool) {
 	attestationDataHeadVerifyCounter.Add(ctx, 1)
 
-	item := gc.headCache.Get(slot)
-	if item == nil {
+	expectedRoot, ok := gc.HeadRootAtSlot(slot)
+	if !ok {
 		attestationDataHeadCacheMissCounter.Add(ctx, 1)
 		return attData, true
 	}
-	expectedRoot := item.Value()
 
 	if attData.BeaconBlockRoot == expectedRoot {
 		attestationDataHeadMatchCounter.Add(ctx, 1)

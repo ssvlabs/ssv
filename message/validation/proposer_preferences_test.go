@@ -193,9 +193,9 @@ func TestValidateBeaconDuty_ProposerPreferencesRequiresAssignment(t *testing.T) 
 	require.ErrorIs(t, mv.validateBeaconDuty(spectypes.RoleProposerPreferences, slot+1, indices, false), ErrNoDuty)
 }
 
-// A signer's slot state tracks distinct ProposerPreferences signing roots (SIP #94 §5): recording is
-// idempotent per root, and the set reflects the distinct roots.
-func TestSignerState_ProposerPreferencesRoots(t *testing.T) {
+// A signer's slot-round state tracks distinct ProposerPreferences signing roots (SIP #94 §5): recording
+// is idempotent per root, and the set reflects the distinct roots.
+func TestSlotRoundState_ProposerPreferencesRoots(t *testing.T) {
 	s := &SignerStateForSlotRound{}
 	r1 := [32]byte{1}
 	r2 := [32]byte{2}
