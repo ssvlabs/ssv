@@ -515,7 +515,7 @@ func (b *BaseRunner) basePostConsensusMsgProcessing(
 	return hasQuorum, slices.Collect(maps.Keys(quorumRoots)), nil
 }
 
-// basePartialSigMsgProcessing adds a validated (without signature verification) validated partial msg to the container, checks for quorum and returns true (and roots) if quorum exists
+// basePartialSigMsgProcessing adds a validated (without signature verification) partial msg to the container, checks for quorum and returns true (and roots) if quorum exists
 func (b *BaseRunner) basePartialSigMsgProcessing(
 	signedMsg *spectypes.PartialSignatureMessages,
 	container *ssv.PartialSigContainer,
