@@ -53,7 +53,8 @@ func (v *Validator) newQBFTRoundTimerF(runnerIdentifier spectypes.MessageID) ssv
 				return
 			}
 		}
-		return roundtimer.New(ctx, v.NetworkConfig.Beacon, runnerIdentifier.GetRoleType(), slot, callback)
+		return roundtimer.New(ctx, v.NetworkConfig.Beacon, runnerIdentifier.GetRoleType(), slot, callback,
+			roundtimer.WithProposerQuickTimeout(v.proposerQuickTimeout))
 	}
 }
 
@@ -122,6 +123,9 @@ func (c *Committee) newQBFTRoundTimerF(runnerIdentifier spectypes.MessageID) ssv
 				logger.Error("❗️ dropping timeout message because the queue is full", fields.RunnerRole(runnerIdentifier.GetRoleType()))
 			}
 		}
+		// No WithProposerQuickTimeout here, unlike the Validator factory above: this one only ever
+		// serves RoleCommittee and RoleAggregatorCommittee, and the option is a no-op for any role
+		// but the proposer. A new role added to the Committee switch would want revisiting.
 		return roundtimer.New(ctx, c.networkConfig.Beacon, runnerIdentifier.GetRoleType(), slot, callback)
 	}
 }
