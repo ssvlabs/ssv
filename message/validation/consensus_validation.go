@@ -166,10 +166,8 @@ func (mv *messageValidator) validateConsensusMessageSemantics(
 		return e
 	}
 
-	// Rule: Round cut-offs for roles:
-	// - 12 (committee, aggregator, and aggregator committee)
-	// - 2 (proposer)
-	// - 6 (other types)
+	// Rule: reject consensus rounds above the role's cap (defined in roundtimer.MaxRound, shared with the
+	// instance cutoff so the two cannot drift).
 	maxRound, err := mv.maxRound(role)
 	if err != nil {
 		return fmt.Errorf("failed to get max round: %w", err)
@@ -425,16 +423,11 @@ func (mv *messageValidator) validateJustifications(message *specqbft.Message) er
 }
 
 func (mv *messageValidator) maxRound(role spectypes.RunnerRole) (specqbft.Round, error) {
-	switch role {
-	case spectypes.RoleCommittee, spectypes.RoleAggregatorCommittee, ssvtypes.RoleAggregator: // TODO: check if value for aggregator is correct as there are messages on stage exceeding the limit
-		return 12, nil // TODO: consider calculating based on quick timeout and slow timeout
-	case spectypes.RoleProposer:
-		return 2, nil
-	case ssvtypes.RoleSyncCommitteeContribution:
-		return 6, nil
-	default:
+	maxRound, ok := roundtimer.MaxRound(role)
+	if !ok {
 		return 0, fmt.Errorf("unknown role")
 	}
+	return maxRound, nil
 }
 
 func (mv *messageValidator) estimatedRoundAt(role spectypes.RunnerRole, timeIntoSlot time.Duration) (specqbft.Round, error) {

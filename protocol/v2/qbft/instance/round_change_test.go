@@ -176,6 +176,20 @@ func TestUponRoundChangeWithPartialQuorumBumpsRoundAndBroadcastsRoundChange(t *t
 	require.Equal(t, []spectypes.OperatorID{2}, msg.SignedMessage.OperatorIDs)
 }
 
+func TestUponChangeRoundPartialQuorumGivesUpQuietlyAtCutOffRound(t *testing.T) {
+	env := newInstanceTestEnv(t, 2)
+	// A role whose cap equals CutOffRound validates round-change messages at the cap but gives up there.
+	// A partial-quorum jump to the cap bumps the instance into the cutoff, so it gives up quietly, no error.
+	env.config.CutOffRound = env.inst.State.Round + 1
+	cutOffRound := env.config.CutOffRound
+
+	err := env.inst.uponChangeRoundPartialQuorum(context.Background(), zap.NewNop(), cutOffRound)
+	require.NoError(t, err)
+	require.Equal(t, cutOffRound, env.inst.State.Round)
+	require.Zero(t, env.roundTimer.State.Timeouts, "no timer armed once the instance gives up at the cutoff")
+	require.Empty(t, env.network.BroadcastedMsgs, "no round-change broadcast at the cutoff")
+}
+
 func TestUponRoundChangeReturnsEarlyOnDuplicate(t *testing.T) {
 	env := newInstanceTestEnv(t, 2)
 	msg := env.roundChange(2, 1, specqbft.NoRound, [32]byte{}, nil, nil)
