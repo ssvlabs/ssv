@@ -2,6 +2,7 @@ package runner
 
 import (
 	"context"
+	"errors"
 	"maps"
 	"testing"
 	"time"
@@ -568,6 +569,7 @@ func TestProposerRunnerGloasPostConsensusSubmitsBlockAndPublishesEnvelope(t *tes
 	require.Equal(t, []phase0.ValidatorIndex{runner.GetShare().ValidatorIndex}, dg.reportQuorum)
 	require.True(t, runner.State.Succeeded)
 	requireNotAwaitingPostConsensus(t, runner)
+	require.Nil(t, runner.gloasProducedEnvelope, "the reveal data is released once published")
 }
 
 // An operator whose own produce is not the decided block reconstructs the envelope signature like everyone
@@ -592,6 +594,7 @@ func TestProposerRunnerGloasPostConsensusNonBuilderDoesNotPublish(t *testing.T) 
 	require.Empty(t, beacon.submittedEnvelopes)
 	require.True(t, runner.State.Succeeded)
 	requireNotAwaitingPostConsensus(t, runner)
+	require.Nil(t, runner.gloasProducedEnvelope, "a non-builder has nothing to publish, so it releases the reveal data")
 }
 
 // The envelope root is optional per packet and reconstructs independently: when the block reaches quorum
@@ -619,6 +622,7 @@ func TestProposerRunnerGloasPostConsensusLateEnvelope(t *testing.T) {
 	awaitingSlot, awaiting := runner.AwaitingPostConsensus()
 	require.True(t, awaiting)
 	require.Equal(t, phase0.Slot(8), awaitingSlot)
+	require.NotNil(t, runner.gloasProducedEnvelope, "the reveal data is kept while its quorum is pending")
 
 	require.NoError(t, runner.ProcessPostConsensus(ctx, logger, gloasPostConsensusMsg(t, keySet, 4, proposal, true)))
 
@@ -626,6 +630,33 @@ func TestProposerRunnerGloasPostConsensusLateEnvelope(t *testing.T) {
 	require.Len(t, beacon.submittedEnvelopes, 1)
 	require.Equal(t, produced.Envelope, beacon.submittedEnvelopes[0].SignedExecutionPayloadEnvelope.Message)
 	requireNotAwaitingPostConsensus(t, runner)
+	require.Nil(t, runner.gloasProducedEnvelope)
+}
+
+// A failed block submit does not end the reveal: other operators submit the block too, so the builder
+// operator keeps its reveal data for the envelope quorum, and publishes on it.
+func TestProposerRunnerGloasPostConsensusBlockSubmitFailureKeepsReveal(t *testing.T) {
+	t.Parallel()
+
+	ctx, logger := context.Background(), zap.NewNop()
+	proposal, produced := gloasSelfBuildProposal(t, 8)
+	beacon := newProposerTestBeacon(nil)
+	beacon.submitErr = errors.New("beacon node down")
+	runner, keySet := newGloasProposerForPostConsensus(t, beacon, &stubDoppelganger{canSign: true}, proposal)
+	runner.gloasProducedEnvelope = produced
+
+	require.NoError(t, runner.ProcessPostConsensus(ctx, logger, gloasPostConsensusMsg(t, keySet, 1, proposal, true)))
+	require.NoError(t, runner.ProcessPostConsensus(ctx, logger, gloasPostConsensusMsg(t, keySet, 2, proposal, true)))
+	err := runner.ProcessPostConsensus(ctx, logger, gloasPostConsensusMsg(t, keySet, 3, proposal, false)) // block alone
+	require.ErrorContains(t, err, "could not submit gloas beacon block")
+	require.False(t, runner.State.Succeeded)
+	require.NotNil(t, runner.gloasProducedEnvelope, "the envelope quorum can still publish")
+
+	require.NoError(t, runner.ProcessPostConsensus(ctx, logger, gloasPostConsensusMsg(t, keySet, 4, proposal, true)))
+
+	require.Len(t, beacon.submittedEnvelopes, 1)
+	require.Equal(t, produced.Envelope, beacon.submittedEnvelopes[0].SignedExecutionPayloadEnvelope.Message)
+	require.Nil(t, runner.gloasProducedEnvelope)
 }
 
 // requireNotAwaitingPostConsensus checks the runner expects no further post-consensus packets.
@@ -747,6 +778,48 @@ func TestProposerRunnerProcessConsensusGloasSignsBlockAndEnvelope(t *testing.T) 
 	require.Equal(t, blockRoot, packet.Messages[0].SigningRoot)
 	require.Equal(t, envelopeRoot, packet.Messages[1].SigningRoot)
 	require.NotEqual(t, blockRoot, envelopeRoot)
+}
+
+// On a Gloas decision the reveal data stays only on the builder operator, whose produced envelope is the one
+// the decided value commits to; every other operator releases its own produce's payload and blobs at once
+// rather than holding them until its next proposal.
+func TestProposerRunnerProcessConsensusGloasReleasesReveal(t *testing.T) {
+	t.Parallel()
+
+	const slot = phase0.Slot(8)
+	ctx, logger := context.Background(), zap.NewNop()
+	proposal, produced := gloasSelfBuildProposal(t, slot)
+	other, _ := gloasSelfBuildProposal(t, slot)
+	other.Block.ProposerIndex = 99
+
+	tests := []struct {
+		name     string
+		produced *gloas.ProducedEnvelope
+		kept     bool
+	}{
+		{name: "builder operator keeps the reveal data", produced: produced, kept: true},
+		{name: "other operator releases its own produce", produced: gloasTestEnvelope(t, other.Block), kept: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			runner, keySet, _ := newProposerRunnerForTest(t, newProposerTestBeacon(nil), &stubDoppelganger{canSign: true}, 0, gloasTestConfig(slot))
+			require.NoError(t, runner.StartNewDuty(ctx, logger, gloasProposerDuty(slot), keySet.Threshold))
+			runner.gloasProducedEnvelope = tt.produced
+
+			consensusData := gloasConsensusData(t, proposal)
+			runner.measurements.StartConsensus()
+			require.NoError(t, runner.decide(ctx, logger, slot, consensusData, runner.ValCheck))
+			for _, msg := range spectestingutils.SSVDecidingMsgsForHeight(consensusData, runner.QBFTController.GetIdentifier(), specqbft.Height(slot), keySet) {
+				require.NoError(t, runner.ProcessConsensus(ctx, logger, msg))
+			}
+
+			if tt.kept {
+				require.Same(t, tt.produced, runner.gloasProducedEnvelope)
+			} else {
+				require.Nil(t, runner.gloasProducedEnvelope)
+			}
+		})
+	}
 }
 
 // The expected post-consensus roots: the block under DomainProposer always; on a self-build value also the

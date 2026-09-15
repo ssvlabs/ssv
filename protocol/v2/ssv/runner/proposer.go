@@ -75,6 +75,8 @@ type ProposerRunner struct {
 	// At publish, Eth-Builder-Url is echoed only when the decided block matches gloasProducedRoot
 	// (owner-match — see decidedBuilderURL), and the reveal is published only when the produced envelope is
 	// the one the decided value commits to — this operator is then the builder operator (see publishEnvelope).
+	// The reveal data is the bulk of the duty's state (payload, blobs, proofs), so it is released as soon as
+	// this operator can no longer publish it (releaseProducedEnvelope); the markers stay until the next duty.
 	gloasProducedRoot     [32]byte
 	gloasBuilderURL       string
 	gloasProducedEnvelope *gloas.ProducedEnvelope
@@ -168,10 +170,11 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 	}
 
 	// We have quorum and are committed to completing this duty here. The quorum above fires only once,
-	// so a terminal failure below won't be retried.
+	// so a terminal failure below won't be retried, and no reveal can follow it.
 	defer func() {
 		if err != nil {
 			r.markDutyFailed(err)
+			r.releaseProducedEnvelope()
 		}
 	}()
 
@@ -409,6 +412,18 @@ func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logge
 		}
 		blkRootToSign = proposalData.Block
 		span.AddEvent("decided has a gloas block")
+
+		// Only the builder operator can publish the reveal: unless the decided value commits to this
+		// operator's own produced envelope, let the payload and blobs go now rather than at the next proposal.
+		if r.gloasProducedEnvelope != nil {
+			built, matchErr := r.builtDecidedEnvelope(proposalData)
+			if matchErr != nil {
+				logger.Warn("could not match the produced envelope to the decided value, not publishing it", zap.Error(matchErr))
+			}
+			if matchErr != nil || !built {
+				r.releaseProducedEnvelope()
+			}
+		}
 	} else {
 		versionedBlock, signingRoot, err := cd.GetBlockData()
 		if err != nil {
@@ -631,6 +646,7 @@ func (r *ProposerRunner) processGloasPostConsensusQuorum(ctx context.Context, lo
 			// A quorum fires only once, so a block quorum lost here is terminal for the duty.
 			r.markDutyFailed(err)
 		}
+		r.releaseProducedEnvelope() // no quorum can be acted on, so no reveal
 		return err
 	}
 	// Recorded before the block's quorum can finish the duty, so awaitingEnvelope holds from then on.
@@ -728,37 +744,49 @@ func (r *ProposerRunner) publishEnvelope(ctx context.Context, logger *zap.Logger
 		return err
 	}
 
-	built, err := r.builtDecidedEnvelope(cd)
+	proposalData, err := gloas.DecodeGloasProposalData(cd.DataSSZ)
+	if err != nil {
+		return fmt.Errorf("could not decode decided gloas proposal data: %w", err)
+	}
+	built, err := r.builtDecidedEnvelope(proposalData)
 	if err != nil {
 		return err
 	}
 	recordEnvelopeBuildMatch(ctx, built)
 	if !built {
+		r.releaseProducedEnvelope()
 		logger.Debug("envelope signature reconstructed; this operator did not build the envelope, not publishing", fields.Slot(cd.Duty.Slot))
 		return nil
 	}
 
-	if err := r.GetBeaconNode().SubmitExecutionPayloadEnvelope(ctx, r.gloasProducedEnvelope.Signed(sig)); err != nil {
+	// The quorum fires once, so this attempt is the reveal data's last use either way.
+	submitErr := r.GetBeaconNode().SubmitExecutionPayloadEnvelope(ctx, r.gloasProducedEnvelope.Signed(sig))
+	r.releaseProducedEnvelope()
+	if submitErr != nil {
 		recordEnvelopePublish(ctx, false)
 		const errMsg = "could not submit execution payload envelope"
-		logger.Error(errMsg, fields.Slot(cd.Duty.Slot), zap.Error(err))
-		return fmt.Errorf("%s: %w", errMsg, err)
+		logger.Error(errMsg, fields.Slot(cd.Duty.Slot), zap.Error(submitErr))
+		return fmt.Errorf("%s: %w", errMsg, submitErr)
 	}
 	recordEnvelopePublish(ctx, true)
 	logger.Info("✅ published execution payload envelope", fields.Slot(cd.Duty.Slot))
 	return nil
 }
 
+// releaseProducedEnvelope drops the reveal data — the payload, blobs and proofs behind a self-build
+// produce — once this operator can no longer publish it: the decided value is not its own, the reveal has
+// been attempted, or the duty failed with no reveal to follow. A duty that never concludes keeps it until
+// the next proposal resets the runner (#3043 tracks a slot-end release for that case).
+func (r *ProposerRunner) releaseProducedEnvelope() {
+	r.gloasProducedEnvelope = nil
+}
+
 // builtDecidedEnvelope reports whether this operator's own produced envelope is the one the decided value
 // commits to — its blinded form hashes to the envelope derived from the decided value — which makes this
 // operator the builder operator, the only holder of the payload behind the reconstructed signature.
-func (r *ProposerRunner) builtDecidedEnvelope(cd *spectypes.ProposerConsensusData) (bool, error) {
+func (r *ProposerRunner) builtDecidedEnvelope(proposalData *gloas.GloasProposalData) (bool, error) {
 	if r.gloasProducedEnvelope == nil {
 		return false, nil
-	}
-	proposalData, err := gloas.DecodeGloasProposalData(cd.DataSSZ)
-	if err != nil {
-		return false, fmt.Errorf("could not decode decided gloas proposal data: %w", err)
 	}
 	derived, err := proposalData.DeriveBlindedEnvelope()
 	if err != nil {
