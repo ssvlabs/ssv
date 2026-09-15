@@ -11,6 +11,7 @@
       - [Build](#build)
       - [Test](#test)
       - [Lint](#lint)
+      - [Pre-push Hook](#pre-push-hook)
       - [Specify Version](#specify-version)
       - [Splitting a Validator Key](#splitting-a-validator-key)
       - [Generating an Operator Key](#generating-an-operator-key)
@@ -51,6 +52,20 @@ $ make full-test
 $ make lint-prepare
 $ make lint
 ```
+
+#### Pre-push Hook
+
+Optional: run the lints that gate the PR on the changed files before each push,
+so a typo or a staticcheck finding surfaces in seconds instead of on CI.
+
+```bash
+$ make install-hooks
+```
+
+This points `core.hooksPath` at `scripts/git-hooks`, which **replaces**
+`.git/hooks` — git reads hooks from one location only, so any hook you already
+keep there stops firing. Undo with `git config --unset core.hooksPath`, and skip
+the check for a single push with `git push --no-verify`.
 
 #### Specify Version
 
