@@ -71,9 +71,9 @@ func TestGetAggregateAndProofGloas(t *testing.T) {
 // TestGetAggregateAndProofGloasFixedVector pins the Gloas aggregate's roots to values from an independent
 // implementation: the self-consistency checks above pass even when both sides share a wrong merkleization,
 // the "mixed merkleization" hazard SIP #94 §2 calls consensus-critical. The values come from the
-// consensus-specs pyspec at the SIP's pin (v1.7.0-alpha.14); testdata/gloas_aggregate_and_proof_fixture.py
-// rebuilds the fixture there. Its 700-bit aggregation bitlist spans three chunks, so the progressive
-// bitlist padding is exercised as well as the progressive container.
+// consensus-specs pyspec at the commit SIP #94 pins; testdata/gloas_aggregate_and_proof_fixture.py rebuilds
+// the fixture there and records that run's output. Its 700-bit aggregation bitlist spans three chunks, so
+// the progressive bitlist padding is exercised as well as the progressive container.
 func TestGetAggregateAndProofGloasFixedVector(t *testing.T) {
 	const (
 		wantSSZSHA256       = "a3010361b4058e8668275075d425c0bee5cb704851eaf94b0dceb411802929bb"

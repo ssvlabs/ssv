@@ -25,9 +25,9 @@ func TestValidPartialSigMsgType_RequestAuth(t *testing.T) {
 	require.True(t, mv.validPartialSigMsgType(spectypes.RequestAuthPartialSig))
 }
 
-// A signer's slot state tracks distinct BuilderRequestAuth signing roots independently of the §5
+// A signer's slot-round state tracks distinct BuilderRequestAuth signing roots independently of the §5
 // preference roots: recording is idempotent per root, the two sets never bleed into each other's budgets.
-func TestSignerState_RequestAuthRoots(t *testing.T) {
+func TestSlotRoundState_RequestAuthRoots(t *testing.T) {
 	s := &SignerStateForSlotRound{}
 	r1 := [32]byte{1}
 	r2 := [32]byte{2}
