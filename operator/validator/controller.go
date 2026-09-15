@@ -88,6 +88,7 @@ type ControllerOptions struct {
 	Graffiti                       []byte
 	ProposerDelay                  time.Duration
 	ProposerDelayEPBS              time.Duration
+	ProposerQuickTimeout           time.Duration
 	Builders                       gloas.BuilderConfig
 
 	// worker flags
@@ -198,22 +199,23 @@ func NewController(logger *zap.Logger, options ControllerOptions) *Controller {
 		Buffer:       options.QueueBufferSize,
 	}
 	validatorCommonOpts := validator.NewCommonOptions(validator.CommonOptions{
-		NetworkConfig:       options.NetworkConfig,
-		Network:             options.Network,
-		Beacon:              options.Beacon,
-		Storage:             options.StorageMap,
-		Signer:              options.BeaconSigner,
-		OperatorSigner:      options.OperatorSigner,
-		DoppelgangerHandler: options.DoppelgangerHandler,
-		NewDecidedHandler:   options.NewDecidedHandler,
-		FullNode:            options.FullNode,
-		ExporterMode:        options.ExporterMode,
-		GasLimit:            options.GasLimit,
-		MessageValidator:    options.MessageValidator,
-		Graffiti:            options.Graffiti,
-		ProposerDelay:       options.ProposerDelay,
-		ProposerDelayEPBS:   options.ProposerDelayEPBS,
-		Builders:            options.Builders,
+		NetworkConfig:        options.NetworkConfig,
+		Network:              options.Network,
+		Beacon:               options.Beacon,
+		Storage:              options.StorageMap,
+		Signer:               options.BeaconSigner,
+		OperatorSigner:       options.OperatorSigner,
+		DoppelgangerHandler:  options.DoppelgangerHandler,
+		NewDecidedHandler:    options.NewDecidedHandler,
+		FullNode:             options.FullNode,
+		ExporterMode:         options.ExporterMode,
+		GasLimit:             options.GasLimit,
+		MessageValidator:     options.MessageValidator,
+		Graffiti:             options.Graffiti,
+		ProposerDelay:        options.ProposerDelay,
+		ProposerDelayEPBS:    options.ProposerDelayEPBS,
+		ProposerQuickTimeout: options.ProposerQuickTimeout,
+		Builders:             options.Builders,
 	}, options.HistorySyncBatchSize)
 
 	cacheTTL := 2 * options.NetworkConfig.EpochDuration() // #nosec G115

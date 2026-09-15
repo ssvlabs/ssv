@@ -641,3 +641,55 @@ func Test_startupErrorLogFields(t *testing.T) {
 		require.NotContains(t, m, "ssv_signer_endpoint")
 	})
 }
+
+// Test_resolveAndValidate_proposerQuickTimeout covers the operator-configurable proposer QBFT round
+// budget (SIP-102). Unset means "use the default"; anything outside the supported range is rejected
+// outright, with no acknowledge-and-proceed override (see validateProposerQuickTimeout).
+func Test_resolveAndValidate_proposerQuickTimeout(t *testing.T) {
+	t.Run("unset passes silently", func(t *testing.T) {
+		core, recorded := observer.New(zapcore.InfoLevel)
+		c := config{}
+		c.OperatorPrivateKey = testOperatorKey
+
+		_, err := c.resolveAndValidate(zap.New(core))
+		require.NoError(t, err)
+		require.Len(t, recorded.All(), 0)
+	})
+
+	t.Run("in-range values pass and are logged", func(t *testing.T) {
+		for _, timeout := range []time.Duration{1148 * time.Millisecond, 1250 * time.Millisecond, 1500 * time.Millisecond, 2000 * time.Millisecond} {
+			t.Run(timeout.String(), func(t *testing.T) {
+				core, recorded := observer.New(zapcore.InfoLevel)
+				c := config{}
+				c.OperatorPrivateKey = testOperatorKey
+				c.ProposerQuickTimeout = timeout
+
+				_, err := c.resolveAndValidate(zap.New(core))
+				require.NoError(t, err)
+
+				logs := recorded.All()
+				require.Len(t, logs, 1)
+				require.Contains(t, logs[0].Message, "non-default ProposerQuickTimeout")
+				require.Equal(t, timeout, logs[0].ContextMap()["proposer_quick_timeout"])
+			})
+		}
+	})
+
+	t.Run("outside the supported range errors, with no override available", func(t *testing.T) {
+		// 1000ms is the value SIP-102 explicitly rejected: it would have timed out 5-12 real duties a
+		// month. AllowDangerousProposerDelay must not buy a way past it.
+		for _, timeout := range []time.Duration{time.Millisecond, 1000 * time.Millisecond, 1147 * time.Millisecond, 2001 * time.Millisecond, 10 * time.Second} {
+			t.Run(timeout.String(), func(t *testing.T) {
+				c := config{}
+				c.OperatorPrivateKey = testOperatorKey
+				c.ProposerQuickTimeout = timeout
+				c.AllowDangerousProposerDelay = true
+
+				_, err := c.resolveAndValidate(zap.NewNop())
+				require.Error(t, err)
+				require.Contains(t, err.Error(), "ProposerQuickTimeout value")
+				require.Contains(t, err.Error(), "outside the supported range")
+			})
+		}
+	})
+}
