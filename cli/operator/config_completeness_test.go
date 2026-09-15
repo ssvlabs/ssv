@@ -31,6 +31,10 @@ func Test_config_defaults_complete(t *testing.T) {
 		"p2p.HostDNS", "p2p.Subnets", "p2p.TrustedPeers", "ssv.CustomDomainType", "ssv.CustomNetwork",
 		// optional ports / sizes / timeouts (0 = disabled, or a library/runtime default applies later)
 		"MetricsAPIPort", "SSVAPIPort", "WebSocketAPIPort", "ProposerDelay", "ProposerDelayEPBS",
+		// ProposerQuickTimeout: 0 means "use roundtimer.DefaultProposerQuickTimeout". The default is
+		// deliberately NOT seeded here — it belongs next to the SIP-102 measurements that justify it,
+		// not duplicated as a literal in cli defaults where the two could drift.
+		"ProposerQuickTimeout",
 		"eth2.CommonTimeout", "eth2.LongTimeout", "eth2.ProposalSoftTimeout",
 		"p2p.PubsubMsgCacheTTL", "p2p.PubsubOutQueueSize", "p2p.PubsubValidateThrottle",
 		"p2p.PubsubValidationQueueSize", "ssv.ValidatorOptions.ExperimentalGasLimit",
