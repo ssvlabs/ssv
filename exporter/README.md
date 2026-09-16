@@ -163,6 +163,15 @@ Some examples:
   ```
 
 
+### Glamsterdam (Gloas) duties
+
+From the Gloas fork the exporter records two more validator duties, under their own roles in `/v1/exporter/traces/validator` and `/v1/exporter/decideds`:
+
+- `PTC_ATTESTER` — the payload-timeliness attestation (SIP #94 §3): one partial-signature round, no consensus. Participants are the operators that signed.
+- `PROPOSER_PREFERENCES` — the proposer's preferences for an upcoming proposal (SIP #94 §5), recorded under the proposal slot even though operators broadcast them up to two epochs early. In archive mode the trace also holds the builder request-auth signatures (`type: REQUEST_AUTH`), which do not count as participation.
+
+Partial-signature entries carry a `type` (`POST_CONSENSUS`, `PTC_ATTESTER`, `PROPOSER_PREFERENCES`, `REQUEST_AUTH`, ...), and every entry of a packet is recorded: at a Gloas slot a self-build proposer's post-consensus packet has two, the block root and the §6 envelope root. Participation in `PROPOSER` counts the block root's quorum only. At Gloas slots a proposer trace's `proposalData` is the decided `GloasProposalData` (block plus `payload_root`) rather than a versioned block.
+
 ### Explore API
 
 Use a tool for WebSockets (such as [wscat](https://www.npmjs.com/package/wscat)) to interact with the API.
