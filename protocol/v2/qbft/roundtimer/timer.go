@@ -38,13 +38,22 @@ const (
 	// 1.5s. SIP-102 sizes this for clusters starting "by ~1.3s" and does not claim to save the slow
 	// end of the 1.1–1.5s range — see TestProposerQuickTimeoutBounds, which pins both bounds.
 	//
-	// Not fork-gated: there is no message, signature or domain change, so this is not a fork, and the
-	// pre-Gloas effect is a strict improvement (round 2 starts at ~2.8s instead of ~3.3s, both well
-	// inside the 4s deadline). During rollout a mixed cluster is never worse than today — upgraded
-	// operators round-change at 1.5s, the rest at 2s, and once f+1 have upgraded the partial-quorum
-	// rule pulls the rest along. It is not perfectly seamless either: a pulled-along operator arms its
-	// own 2s timer, so upgraded and non-upgraded operators leave round 2 half a second apart. Nothing
-	// decided in that gap was going to land inside the deadline anyway.
+	// The 1148ms figure is a round 1 measurement, and this same budget is applied to round 2, which
+	// additionally carries round-change justification work. That is deliberate and not an oversight:
+	// under the Glamsterdam deadline a round 2 that needs longer than this has already missed, so
+	// sizing round 2 independently would buy nothing.
+	//
+	// Not fork-gated: there is no message, signature or domain change, so this is not a fork. Pre-Gloas
+	// the effect is a trade rather than a strict improvement. Round 2 starts earlier (~2.8s instead of
+	// ~3.3s, both well inside the 4s deadline), which helps, but a round 1 that would have decided
+	// between 1.5s and 2.0s is now cut off where it previously succeeded. The 1148ms measurement is
+	// what makes that unlikely, not impossible.
+	//
+	// During rollout a mixed cluster is not worse than today on the same 30 days of data, by the same
+	// argument: upgraded operators round-change at 1.5s, the rest at 2s, and once f+1 have upgraded the
+	// partial-quorum rule pulls the rest along. It is not perfectly seamless either: a pulled-along
+	// operator arms its own 2s timer, so upgraded and non-upgraded operators leave round 2 half a
+	// second apart. Nothing decided in that gap was going to land inside the deadline anyway.
 	DefaultProposerQuickTimeout = 1500 * time.Millisecond
 	SlowTimeout                 = 2 * time.Minute
 )
