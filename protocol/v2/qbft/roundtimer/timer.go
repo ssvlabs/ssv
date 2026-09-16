@@ -24,7 +24,7 @@ const (
 	// slot-synchronized roles absorb the retimed beacon deadlines through their head start instead,
 	// which is expressed in IntervalDuration (see round1HeadStart).
 	QuickTimeout = 2 * time.Second
-	// ProposerQuickTimeout is the proposer's per-round budget (SIP-102). Glamsterdam moves the
+	// DefaultProposerQuickTimeout is the proposer's per-round budget (SIP-102). Glamsterdam moves the
 	// attestation deadline from 4s to 3s into the slot, and a proposer instance starts ~1.1–1.5s in
 	// (RANDAO pre-consensus, ProposerDelay, block retrieval), so with the 2s QuickTimeout a round
 	// change would start round 2 past the deadline and turn a recoverable event into a missed block.
