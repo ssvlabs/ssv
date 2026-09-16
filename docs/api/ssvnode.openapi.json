@@ -69,7 +69,9 @@
                                 "AGGREGATOR",
                                 "PROPOSER",
                                 "SYNC_COMMITTEE",
-                                "SYNC_COMMITTEE_CONTRIBUTION"
+                                "SYNC_COMMITTEE_CONTRIBUTION",
+                                "PTC_ATTESTER",
+                                "PROPOSER_PREFERENCES"
                             ],
                             "type": "string"
                         },
@@ -172,7 +174,9 @@
                                 "AGGREGATOR",
                                 "PROPOSER",
                                 "SYNC_COMMITTEE",
-                                "SYNC_COMMITTEE_CONTRIBUTION"
+                                "SYNC_COMMITTEE_CONTRIBUTION",
+                                "PTC_ATTESTER",
+                                "PROPOSER_PREFERENCES"
                             ],
                             "type": "string"
                         },
@@ -458,7 +462,9 @@
                                 "AGGREGATOR",
                                 "PROPOSER",
                                 "SYNC_COMMITTEE",
-                                "SYNC_COMMITTEE_CONTRIBUTION"
+                                "SYNC_COMMITTEE_CONTRIBUTION",
+                                "PTC_ATTESTER",
+                                "PROPOSER_PREFERENCES"
                             ],
                             "type": "string"
                         },
@@ -563,7 +569,9 @@
                                 "AGGREGATOR",
                                 "PROPOSER",
                                 "SYNC_COMMITTEE",
-                                "SYNC_COMMITTEE_CONTRIBUTION"
+                                "SYNC_COMMITTEE_CONTRIBUTION",
+                                "PTC_ATTESTER",
+                                "PROPOSER_PREFERENCES"
                             ],
                             "type": "string"
                         },
@@ -981,7 +989,9 @@
                             "AGGREGATOR",
                             "PROPOSER",
                             "SYNC_COMMITTEE",
-                            "SYNC_COMMITTEE_CONTRIBUTION"
+                            "SYNC_COMMITTEE_CONTRIBUTION",
+                            "PTC_ATTESTER",
+                            "PROPOSER_PREFERENCES"
                         ]
                     }
                 },
@@ -1014,6 +1024,11 @@
                     "description": "ReceivedTime is when the message was observed.",
                     "type": "string",
                     "format": "date-time"
+                },
+                "type": {
+                    "description": "Type is the partial-signature message type; absent on QBFT messages.",
+                    "type": "string",
+                    "example": "POST_CONSENSUS"
                 }
             }
         },
@@ -1123,6 +1138,11 @@
                     "description": "ReceivedTime is when the message was observed.",
                     "type": "string",
                     "format": "date-time"
+                },
+                "type": {
+                    "description": "Type is the partial-signature message type; absent on QBFT messages.",
+                    "type": "string",
+                    "example": "POST_CONSENSUS"
                 }
             }
         },
@@ -1270,7 +1290,9 @@
                             "AGGREGATOR",
                             "PROPOSER",
                             "SYNC_COMMITTEE",
-                            "SYNC_COMMITTEE_CONTRIBUTION"
+                            "SYNC_COMMITTEE_CONTRIBUTION",
+                            "PTC_ATTESTER",
+                            "PROPOSER_PREFERENCES"
                         ]
                     }
                 },

@@ -362,6 +362,8 @@ func newNode(
 		spectypes.BNRoleSyncCommitteeContribution,
 		spectypes.BNRoleValidatorRegistration,
 		spectypes.BNRoleVoluntaryExit,
+		spectypes.BNRolePTCAttester,
+		spectypes.BNRoleProposerPreferences,
 	}
 
 	storageMap := ibftstorage.NewStores()
