@@ -83,21 +83,25 @@ func CutOffRoundFor(role spectypes.RunnerRole) specqbft.Round {
 // Bounds on the operator-configurable proposer round budget (see WithProposerQuickTimeout and the
 // ProposerQuickTimeout config key). The node validates against these at startup.
 const (
-	// MinProposerQuickTimeout is the slowest round 1 that went on to decide across 30 days of mainnet
-	// proposer duties. Below it the timer starts cutting off round 1s that would have succeeded:
-	// SIP-102 measured 5-12 such duties a month at 1000ms, which is why it rejected that value.
+	// MinProposerQuickTimeout is the lowest budget the node accepts from config. It is SIP-102's own
+	// alternative to the 1500ms default, and it keeps 102ms of margin over the 1148ms slowest round 1
+	// that went on to decide across 30 days of mainnet proposer duties.
+	//
+	// The margin is the point, not spare precision. SIP-102's design goal is that the budget stay
+	// above the observed maximum *with margin*, so a floor set at the observation itself would admit
+	// a configuration the SIP rules out: at exactly 1148ms the expiry and the consensus message reach
+	// the same queue with no rule that the message wins a tie, making that round a coin flip rather
+	// than a decide. Every accepted value clears the observation outright, which is what lets
+	// TestProposerQuickTimeoutBounds assert the same strict inequality for the floor as for the
+	// default.
+	//
+	// Below the floor the timer starts cutting off round 1s that would have succeeded: SIP-102
+	// measured 5-12 such duties a month at 1000ms, which is why it rejected that value.
 	//
 	// This is a hard floor with no acknowledge-and-proceed override, following ProposerDelayEPBS
 	// rather than ProposerDelay. Under the Glamsterdam deadline there is no band here that is merely
 	// risky, so there is nothing for an operator to knowingly accept.
-	//
-	// The floor is the edge of the measured band, not a value that carries margin of its own. An
-	// operator who configures exactly this is racing the slowest round 1 we observed: the expiry and
-	// the consensus message reach the same queue with no rule that the message wins a tie, so such a
-	// round is a coin flip rather than a decide. The margin lives in DefaultProposerQuickTimeout,
-	// which clears the observation by 352ms; pick the floor only to deliberately trade that margin
-	// away.
-	MinProposerQuickTimeout = 1148 * time.Millisecond
+	MinProposerQuickTimeout = 1250 * time.Millisecond
 	// MaxProposerQuickTimeout is the pre-SIP-102 budget, so an operator can roll back to the previous
 	// behavior in-band. Above it a Glamsterdam round change cannot land at all.
 	MaxProposerQuickTimeout = 2 * time.Second

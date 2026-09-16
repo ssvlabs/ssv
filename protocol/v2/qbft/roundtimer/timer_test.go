@@ -693,9 +693,13 @@ func TestProposerQuickTimeoutBounds(t *testing.T) {
 	const slowestSuccessfulRound1 = 1148 * time.Millisecond
 	require.Greater(t, DefaultProposerQuickTimeout, slowestSuccessfulRound1,
 		"proposer round 1 must outlast the slowest round 1 observed to succeed")
-	// That measurement is also the hard floor the node accepts from config, so an operator cannot tune
-	// their way below it.
-	require.Equal(t, slowestSuccessfulRound1, MinProposerQuickTimeout)
+	// The configurable floor clears that measurement too, by SIP-102's own alternative value. The
+	// design goal is stated "with margin", so the lowest budget an operator can select has to satisfy
+	// the same strict inequality the default does, not merely tie the observation.
+	require.Greater(t, MinProposerQuickTimeout, slowestSuccessfulRound1,
+		"the lowest configurable budget must also outlast the slowest round 1 observed to succeed")
+	require.Less(t, MinProposerQuickTimeout, DefaultProposerQuickTimeout,
+		"the floor must leave room to tune downward from the default")
 
 	// Upper bound: Glamsterdam moves the attestation deadline to a quarter of the slot
 	// (ATTESTATION_DUE_BPS_GLOAS = 2500, so 3s of 12s). Round 2 must begin before that deadline,
