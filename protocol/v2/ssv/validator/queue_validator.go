@@ -386,15 +386,6 @@ func isExecuteDuty(msg *queue.SSVMessage) bool {
 	return ok && event != nil && event.Type == types.ExecuteDuty
 }
 
-// executeDutySlot returns the slot of the duty a duty-start event carries, if msg is one.
-func executeDutySlot(msg *queue.SSVMessage) (phase0.Slot, bool) {
-	if !isExecuteDuty(msg) {
-		return 0, false
-	}
-	slot, err := msg.Slot()
-	return slot, err == nil
-}
-
 // slotBelow matches messages stranded below floor — the slot of the duty the runner is currently serving.
 // The consumer keeps floor in sync with the runner, so a message below it targets a slot the runner has
 // already moved past and has no live duty left to serve it.

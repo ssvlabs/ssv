@@ -344,8 +344,8 @@ func TestPurgeAtDutyStart_KeepsAConcurrentDutyStart(t *testing.T) {
 	// The idle consumer pops a duty-start; the tie-break returns the first-enqueued one (slot 12).
 	popped := q.TryPop(queue.NewMessagePrioritizer(&queue.State{}), isExecuteDuty)
 	require.NotNil(t, popped)
-	floor, ok := executeDutySlot(popped)
-	require.True(t, ok)
+	floor, err := popped.Slot()
+	require.NoError(t, err)
 	require.Equal(t, phase0.Slot(12), floor, "the higher-slot duty-start is popped first")
 
 	require.Equal(t, 1, q.Purge(slotBelow(floor), queue.PurgeReasonStale, nil), "only the stale partial is dropped")
