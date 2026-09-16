@@ -97,8 +97,8 @@ func (v *ValidatorDutyTrace) MarshalSSZTo(buf []byte) (dst []byte, err error) {
 	dst = append(dst, v.ProposalData...)
 
 	// Field (6) 'Pre'
-	if size := len(v.Pre); size > 13 {
-		err = ssz.ErrListTooBigFn("ValidatorDutyTrace.Pre", size, 13)
+	if size := len(v.Pre); size > 256 {
+		err = ssz.ErrListTooBigFn("ValidatorDutyTrace.Pre", size, 256)
 		return
 	}
 	for ii := 0; ii < len(v.Pre); ii++ {
@@ -108,8 +108,8 @@ func (v *ValidatorDutyTrace) MarshalSSZTo(buf []byte) (dst []byte, err error) {
 	}
 
 	// Field (7) 'Post'
-	if size := len(v.Post); size > 13 {
-		err = ssz.ErrListTooBigFn("ValidatorDutyTrace.Post", size, 13)
+	if size := len(v.Post); size > 256 {
+		err = ssz.ErrListTooBigFn("ValidatorDutyTrace.Post", size, 256)
 		return
 	}
 	for ii := 0; ii < len(v.Post); ii++ {
@@ -229,7 +229,7 @@ func (v *ValidatorDutyTrace) UnmarshalSSZ(buf []byte) error {
 	// Field (6) 'Pre'
 	{
 		buf = tail[o6:o7]
-		num, err := ssz.DivideInt2(len(buf), 56, 13)
+		num, err := ssz.DivideInt2(len(buf), 56, 256)
 		if err != nil {
 			return err
 		}
@@ -247,7 +247,7 @@ func (v *ValidatorDutyTrace) UnmarshalSSZ(buf []byte) error {
 	// Field (7) 'Post'
 	{
 		buf = tail[o7:]
-		num, err := ssz.DivideInt2(len(buf), 56, 13)
+		num, err := ssz.DivideInt2(len(buf), 56, 256)
 		if err != nil {
 			return err
 		}
@@ -358,7 +358,7 @@ func (v *ValidatorDutyTrace) HashTreeRootWith(hh ssz.HashWalker) (err error) {
 	{
 		subIndx := hh.Index()
 		num := uint64(len(v.Pre))
-		if num > 13 {
+		if num > 256 {
 			err = ssz.ErrIncorrectListSize
 			return
 		}
@@ -367,14 +367,14 @@ func (v *ValidatorDutyTrace) HashTreeRootWith(hh ssz.HashWalker) (err error) {
 				return
 			}
 		}
-		hh.MerkleizeWithMixin(subIndx, num, 13)
+		hh.MerkleizeWithMixin(subIndx, num, 256)
 	}
 
 	// Field (7) 'Post'
 	{
 		subIndx := hh.Index()
 		num := uint64(len(v.Post))
-		if num > 13 {
+		if num > 256 {
 			err = ssz.ErrIncorrectListSize
 			return
 		}
@@ -383,7 +383,7 @@ func (v *ValidatorDutyTrace) HashTreeRootWith(hh ssz.HashWalker) (err error) {
 				return
 			}
 		}
-		hh.MerkleizeWithMixin(subIndx, num, 13)
+		hh.MerkleizeWithMixin(subIndx, num, 256)
 	}
 
 	hh.Merkleize(indx)

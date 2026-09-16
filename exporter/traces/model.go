@@ -24,8 +24,12 @@ type ValidatorDutyTrace struct {
 
 	ProposalData []byte `ssz-max:"4194532"`
 
-	Pre  []*PartialSigTrace `ssz-max:"13"`
-	Post []*PartialSigTrace `ssz-max:"13"`
+	// Pre and Post hold one entry per partial signature per signer, so a packet with several entries
+	// (the Gloas proposer's block and envelope roots, a sync-committee contribution's subnets) and a
+	// signer that re-emits under new roots (proposer preferences, request auth) all fit: the maxima by
+	// message validation are 156 for preferences and 169 for contributions, on 13 signers.
+	Pre  []*PartialSigTrace `ssz-max:"256"`
+	Post []*PartialSigTrace `ssz-max:"256"`
 }
 
 type ConsensusTrace struct {
