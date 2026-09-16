@@ -16,7 +16,10 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
+	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 	"github.com/ssvlabs/ssv/protocol/v2/types/ssvtestingutils"
 	registrystoragemocks "github.com/ssvlabs/ssv/registry/storage/mocks"
 )
@@ -110,4 +113,89 @@ func TestCommitteeObserver_saveAttesterRoots_GloasSingleRoot(t *testing.T) {
 	preGloasObserver := newObserver()
 	require.NoError(t, preGloasObserver.saveAttesterRoots(context.Background(), epoch, beaconVote, nil, qbftMsg))
 	require.Equal(t, 64, preGloasObserver.attesterRoots.Len())
+}
+
+// The observer records participation from post-consensus quorums and from the single signing round of
+// the duties without a consensus phase; a request-auth packet is skipped without error, every other
+// pre-consensus type is refused as before.
+func TestRecordsParticipation(t *testing.T) {
+	for _, msgType := range []spectypes.PartialSigMsgType{spectypes.PostConsensusPartialSig, spectypes.PTCAttesterPartialSig, spectypes.ProposerPreferencesPartialSig} {
+		record, err := recordsParticipation(msgType)
+		require.NoError(t, err)
+		require.True(t, record, "type %d", msgType)
+	}
+
+	record, err := recordsParticipation(spectypes.RequestAuthPartialSig)
+	require.NoError(t, err)
+	require.False(t, record)
+
+	_, err = recordsParticipation(spectypes.RandaoPartialSig)
+	require.ErrorContains(t, err, "not processing message type")
+}
+
+// The two Gloas duties map to their own beacon roles.
+func TestCommitteeObserver_getBeaconRoles_GloasRoles(t *testing.T) {
+	ncv := &CommitteeObserver{}
+	msgFor := func(role spectypes.RunnerRole) *queue.SSVMessage {
+		return &queue.SSVMessage{SSVMessage: &spectypes.SSVMessage{MsgID: ssvtestingutils.NewMsgID([4]byte{}, []byte("pk"), role)}}
+	}
+	require.Equal(t, []spectypes.BeaconRole{spectypes.BNRolePTCAttester}, ncv.getBeaconRoles(msgFor(spectypes.RolePTCAttester), phase0.Root{}))
+	require.Equal(t, []spectypes.BeaconRole{spectypes.BNRoleProposerPreferences}, ncv.getBeaconRoles(msgFor(spectypes.RoleProposerPreferences), phase0.Root{}))
+}
+
+// A Gloas self-build proposal teaches the observer its §6 envelope signing root, so that root's
+// quorum is told apart from the block's; an external bid and a pre-Gloas proposal teach nothing.
+func TestCommitteeObserver_SaveRoots_GloasProposerEnvelopeRoot(t *testing.T) {
+	const slot = phase0.Slot(40)
+	gloasConfig := networkconfig.TestNetworkWithGloas(0).Beacon
+	epoch := gloasConfig.EstimatedEpochAtSlot(slot)
+	builderDomain := phase0.Domain{0x0b}
+
+	domainCache := &DomainCache{cache: ttlcache.New(ttlcache.WithTTL[domainCacheKey, phase0.Domain](time.Hour))}
+	domainCache.cache.Set(domainCacheKey{Epoch: epoch, DomainType: phase0.DomainType(spectypes.DomainBeaconBuilder)}, builderDomain, ttlcache.DefaultTTL)
+
+	newObserver := func(cfg *networkconfig.Beacon) *CommitteeObserver {
+		return &CommitteeObserver{
+			beaconConfig:  cfg,
+			domainCache:   domainCache,
+			envelopeRoots: ttlcache.New(ttlcache.WithTTL[phase0.Root, struct{}](time.Hour)),
+		}
+	}
+	proposalMsg := func(proposal *gloas.GloasProposalData) *queue.SSVMessage {
+		dataSSZ, err := proposal.Encode()
+		require.NoError(t, err)
+		consData := &spectypes.ProposerConsensusData{
+			Duty:    spectypes.ValidatorDuty{Type: spectypes.BNRoleProposer, Slot: slot, ValidatorIndex: 1},
+			Version: networkconfig.DataVersionGloas,
+			DataSSZ: dataSSZ,
+		}
+		fullData, err := consData.Encode()
+		require.NoError(t, err)
+		return &queue.SSVMessage{
+			SSVMessage:       &spectypes.SSVMessage{MsgID: ssvtestingutils.NewMsgID([4]byte{}, []byte("pk"), spectypes.RoleProposer)},
+			SignedSSVMessage: &spectypes.SignedSSVMessage{FullData: fullData},
+			Body:             &specqbft.Message{MsgType: specqbft.ProposalMsgType, Height: specqbft.Height(slot)},
+		}
+	}
+
+	selfBuild := &gloas.GloasProposalData{Block: gloas.TestingBeaconBlock(slot), PayloadRoot: phase0.Root{0x99}}
+	envelope, err := selfBuild.DeriveBlindedEnvelope()
+	require.NoError(t, err)
+	wantRoot, err := spectypes.ComputeETHSigningRoot(envelope, builderDomain)
+	require.NoError(t, err)
+
+	observer := newObserver(gloasConfig)
+	require.NoError(t, observer.SaveRoots(context.Background(), proposalMsg(selfBuild)))
+	require.True(t, observer.isEnvelopeRoot(wantRoot))
+	require.False(t, observer.isEnvelopeRoot(phase0.Root{0x01}))
+
+	external := &gloas.GloasProposalData{Block: gloas.TestingBeaconBlock(slot)}
+	external.Block.Body.SignedExecutionPayloadBid.Message.BuilderIndex = 5
+	observer = newObserver(gloasConfig)
+	require.NoError(t, observer.SaveRoots(context.Background(), proposalMsg(external)))
+	require.Equal(t, 0, observer.envelopeRoots.Len())
+
+	observer = newObserver(networkconfig.TestNetwork.Beacon) // no Gloas fork: the value is not a Gloas one
+	require.NoError(t, observer.SaveRoots(context.Background(), proposalMsg(selfBuild)))
+	require.Equal(t, 0, observer.envelopeRoots.Len())
 }
