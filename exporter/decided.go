@@ -91,6 +91,9 @@ func (e *Exporter) DecidedsCore(request *DecidedsQuery) (*TraceDecidedsResult, e
 
 	for _, role := range request.Roles {
 		store := e.participantStores.Get(role)
+		if store == nil {
+			return nil, &ValidationError{Err: fmt.Errorf("role %s has no participant store", role)}
+		}
 
 		var participantsRange []storage.ParticipantsRangeEntry
 

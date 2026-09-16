@@ -24,6 +24,8 @@ func TestBeaconRoleFromString(t *testing.T) {
 		{name: "sync committee contribution", input: "SYNC_COMMITTEE_CONTRIBUTION", expected: spectypes.BNRoleSyncCommitteeContribution},
 		{name: "validator registration", input: "VALIDATOR_REGISTRATION", expected: spectypes.BNRoleValidatorRegistration},
 		{name: "voluntary exit", input: "VOLUNTARY_EXIT", expected: spectypes.BNRoleVoluntaryExit},
+		{name: "ptc attester", input: "PTC_ATTESTER", expected: spectypes.BNRolePTCAttester},
+		{name: "proposer preferences", input: "PROPOSER_PREFERENCES", expected: spectypes.BNRoleProposerPreferences},
 		{name: "unknown role errors", input: "COMMITTEE", hasError: true},
 		{name: "empty string errors", input: "", hasError: true},
 	}
@@ -39,6 +41,26 @@ func TestBeaconRoleFromString(t *testing.T) {
 			assert.Equal(t, tc.expected, role)
 		})
 	}
+}
+
+// Every partial-signature type the node handles has a name, so API consumers never see a number.
+func TestPartialSigMsgTypeToString(t *testing.T) {
+	names := map[spectypes.PartialSigMsgType]string{
+		spectypes.PostConsensusPartialSig:         "POST_CONSENSUS",
+		spectypes.RandaoPartialSig:                "RANDAO",
+		ssvtypes.SelectionProofPartialSig:         "SELECTION_PROOF",
+		ssvtypes.ContributionProofs:               "CONTRIBUTION_PROOFS",
+		spectypes.ValidatorRegistrationPartialSig: roleValidatorRegistration,
+		spectypes.VoluntaryExitPartialSig:         roleVoluntaryExit,
+		spectypes.AggregatorCommitteePartialSig:   roleAggregatorCommittee,
+		spectypes.PTCAttesterPartialSig:           rolePTCAttester,
+		spectypes.ProposerPreferencesPartialSig:   roleProposerPreferences,
+		spectypes.RequestAuthPartialSig:           "REQUEST_AUTH",
+	}
+	for msgType, want := range names {
+		assert.Equal(t, want, PartialSigMsgTypeToString(msgType))
+	}
+	assert.Equal(t, "unknown(42)", PartialSigMsgTypeToString(spectypes.PartialSigMsgType(42)))
 }
 
 func TestRunnerRoleFromString(t *testing.T) {
