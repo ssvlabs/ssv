@@ -114,9 +114,11 @@ func (v *Validator) StartQueueConsumer(
 			Quorum: v.Operator.GetQuorum(), // never changes for duty runner
 		}
 
-		// floor is the slot of the duty the runner is currently serving; anything queued below it is stale (a
-		// validator runner advances through its duties in slot order). It only ever rises — at an idle duty
-		// start or a mid-duty re-seat — and is written and read only here, in this single consumer goroutine.
+		// floor is the slot of the duty the runner is currently serving; anything queued below it is stale and
+		// must not reach the runner. It is synced to the runner's own current-duty slot right after each
+		// duty-start is handled — the runner, not the popped event, is authoritative on which duty it accepted
+		// (it may accept a lower slot, or reject the start) — and is written and read only here, in this single
+		// consumer goroutine.
 		var floor phase0.Slot
 
 		for ctx.Err() == nil {
@@ -169,34 +171,11 @@ func (v *Validator) StartQueueConsumer(
 				return nil
 			}
 
-			// A duty-start moves the runner up to its slot, so raise the floor to match — an idle start and a
-			// mid-duty re-seat by a later overlapping duty are the same forward move (a validator runner only
-			// advances). Anything left queued below the new floor — the concluded duty's tail, or messages for a
-			// duty this operator never ran — is stale and would otherwise reach the runner one by one only to be
-			// rejected (issue #3037). A duty-start above the floor is always accepted — the floor never trails the
-			// runner's instance height, and ShouldProcessDuty rejects only at or below that height — so raising
-			// the floor before the handler runs stays in step with the runner.
-			if dutySlot, ok := executeDutySlot(msg); ok && dutySlot > floor {
-				floor = dutySlot
-				if idle {
-					// Only an idle start bulk-purges the tail up front (slotBelow spares duty-starts, so none is
-					// skipped), closing out any in-flight state each purged message holds. Mid-duty leaves the
-					// pop-guard below to drain stragglers one by one, keeping the busy hot path light.
-					dropped := q.Purge(slotBelow(dutySlot), queue.PurgeReasonStale, func(removed *queue.SSVMessage) {
-						endStaleMessageState(msgStates, v.logger, removed)
-					})
-					if dropped > 0 {
-						v.logger.Debug("dropped stale messages queued for slots before the starting duty",
-							fields.RunnerRole(msgID.GetRoleType()), fields.Slot(dutySlot), fields.Count(dropped))
-					}
-				}
-			}
-
-			// A message can still sit below the floor when it reaches the consumer: a straggler re-pushed by a
-			// retry goroutine parked during the bulk purge, one that arrived late, or — after a mid-duty re-seat,
-			// which skips the purge — the superseded duty's tail draining through here. Handing any of them to the
-			// runner would draw the exact "invalid partial sig slot" rejection the floor prevents (issue #3037),
-			// so drop it here. slotBelow spares duty-starts and matches nothing at floor 0.
+			// A message can still sit below the floor when it reaches the consumer — a straggler re-pushed by a
+			// retry goroutine, one that arrived late, or the tail of a duty the runner has since moved past (a
+			// mid-duty re-seat skips the bulk purge). Handing any of them to the runner would draw the exact
+			// "invalid partial sig slot" rejection the floor prevents (issue #3037), so drop it here. slotBelow
+			// spares duty-starts and matches nothing at floor 0.
 			if slotBelow(floor)(msg) {
 				endStaleMessageState(msgStates, v.logger, msg)
 				q.RecordPurge(queue.PurgeReasonStale)
@@ -322,6 +301,28 @@ func (v *Validator) StartQueueConsumer(
 				msgState.span.End()
 				msgStates.Delete(msgKey)
 			}
+
+			// A duty-start may have moved the runner onto a new duty. Sync the floor to the slot the runner
+			// actually accepted — the runner is authoritative here, not the popped event: while its instance
+			// height is still 0 it accepts a duty for any slot, so it can re-seat to a slot below the floor, and
+			// it can reject the start outright; either way the popped slot can't be trusted. Everything queued
+			// below the new floor is stale (issue #3037). If the runner had been idle, bulk-purge that tail up
+			// front (slotBelow spares duty-starts, so none is skipped), closing out each purged message's
+			// in-flight state; mid-duty the pop-guard above drains it one at a time, sparing the busy hot path.
+			if isExecuteDuty(msg) {
+				if dutySlot, ok := r.CurrentDutySlot(); ok {
+					floor = dutySlot
+					if idle {
+						dropped := q.Purge(slotBelow(floor), queue.PurgeReasonStale, func(removed *queue.SSVMessage) {
+							endStaleMessageState(msgStates, v.logger, removed)
+						})
+						if dropped > 0 {
+							v.logger.Debug("dropped stale messages queued for slots before the starting duty",
+								fields.RunnerRole(msgID.GetRoleType()), fields.Slot(floor), fields.Count(dropped))
+						}
+					}
+				}
+			}
 		}
 
 		return nil
@@ -394,9 +395,9 @@ func executeDutySlot(msg *queue.SSVMessage) (phase0.Slot, bool) {
 	return slot, err == nil
 }
 
-// slotBelow matches messages stranded below floor. A validator runner moves through its duties in slot
-// order and never returns to a lower slot, so once the duty at floor starts, nothing below it has a duty
-// left to serve it.
+// slotBelow matches messages stranded below floor — the slot of the duty the runner is currently serving.
+// The consumer keeps floor in sync with the runner, so a message below it targets a slot the runner has
+// already moved past and has no live duty left to serve it.
 //
 // Duty-start events are the exception and are never matched: dropping one would silently skip a duty.
 // Duties are enqueued from racing per-duty goroutines (scheduler.executeDuties), so a higher-slot

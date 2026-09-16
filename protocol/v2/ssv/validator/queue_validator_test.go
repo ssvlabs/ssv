@@ -252,6 +252,67 @@ func TestConsumeQueue_RaisesFloorOnMidDutyReseat(t *testing.T) {
 	}
 }
 
+// A duty-start can be accepted for a slot below the floor: a runner whose duties have not started a QBFT
+// instance keeps LatestInstanceHeight at 0, so ShouldProcessDuty accepts any slot. The floor must follow the
+// runner down to the slot it actually accepted, or that duty's own messages are dropped and it silently
+// starves. Here the slot-20 duty runs first (floor rises to 20) and concludes without an instance, then the
+// slot-10 duty-start is accepted from idle — its messages must still reach the runner (issue #3037).
+func TestConsumeQueue_LowerSlotDutyAcceptedAfterFloorRoseIsNotStarved(t *testing.T) {
+	logger := zap.NewNop()
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	netCfg := networkconfig.TestNetwork
+	var pk phase0.BLSPubKey
+	msgID := spectypes.NewMsgID(netCfg.DomainType, pk[:], spectypes.RoleProposer)
+	proposer := &runner.ProposerRunner{BaseRunner: &runner.BaseRunner{RunnerRoleType: spectypes.RoleProposer}}
+
+	v := &Validator{
+		logger:        logger,
+		ctx:           ctx,
+		cancel:        cancel,
+		NetworkConfig: netCfg,
+		Operator:      &spectypes.CommitteeMember{},
+		Share:         &ssvtypes.SSVShare{},
+		Queues:        map[spectypes.RunnerRole]queue.Queue{spectypes.RoleProposer: queue.New(logger, 16)},
+		DutyRunners:   runner.ValidatorDutyRunners{spectypes.RoleProposer: proposer},
+	}
+
+	delivered := make(chan *queue.SSVMessage, 8)
+	v.StartQueueConsumer(msgID, func(_ context.Context, _ *zap.Logger, msg *queue.SSVMessage) error {
+		if event, ok := msg.Body.(*ssvtypes.EventMsg); ok && event.Type == ssvtypes.ExecuteDuty {
+			slot, err := msg.Slot()
+			require.NoError(t, err)
+			proposer.State = runner.NewRunnerState(3, &spectypes.ValidatorDuty{Type: spectypes.BNRoleProposer, Slot: slot})
+			// The slot-20 duty concludes without ever starting an instance, so the runner returns to idle with
+			// LatestInstanceHeight still 0 — and the later slot-10 start is then accepted rather than rejected.
+			if slot == 20 {
+				proposer.State.Succeeded = true
+			}
+		}
+		delivered <- msg
+		return nil
+	})
+
+	// Slot 20 runs first and concludes, raising the floor to 20.
+	require.True(t, v.Queues[spectypes.RoleProposer].TryPush(executeDutyMsg(t, netCfg.DomainType, 20)))
+	first, err := receiveDelivered(t, delivered).Slot()
+	require.NoError(t, err)
+	require.Equal(t, phase0.Slot(20), first, "the slot-20 duty runs first")
+
+	// The slot-10 duty-start is accepted from idle, re-seating the runner below the floor.
+	require.True(t, v.Queues[spectypes.RoleProposer].TryPush(executeDutyMsg(t, netCfg.DomainType, 10)))
+	second, err := receiveDelivered(t, delivered).Slot()
+	require.NoError(t, err)
+	require.Equal(t, phase0.Slot(10), second, "the slot-10 duty-start is accepted from idle")
+
+	// Its own message must reach the runner: the floor followed the runner down to 10.
+	require.True(t, v.Queues[spectypes.RoleProposer].TryPush(partialSigMsg(t, msgID, 10)))
+	third, err := receiveDelivered(t, delivered).Slot()
+	require.NoError(t, err)
+	require.Equal(t, phase0.Slot(10), third, "the accepted slot-10 duty is not starved by a stale floor")
+}
+
 // The stale purge drops whatever slotBelow matches, so it must never match a duty-start: dropping one
 // would silently skip a duty (issue #3037). Any other message below the floor is fair game to drop.
 func TestSlotBelow_NeverMatchesDutyStart(t *testing.T) {

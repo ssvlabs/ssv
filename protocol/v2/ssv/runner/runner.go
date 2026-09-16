@@ -32,6 +32,7 @@ type Getters interface {
 	HasRunningDuty() bool
 	HasRunningQBFTInstance() bool
 	HasAcceptedProposalForCurrentRound() bool
+	CurrentDutySlot() (phase0.Slot, bool)
 	GetShares() map[phase0.ValidatorIndex]*spectypes.Share
 	GetShare() *spectypes.Share
 	GetRole() spectypes.RunnerRole
@@ -147,6 +148,18 @@ func (b *BaseRunner) HasAcceptedProposalForCurrentRound() bool {
 		}
 	}
 	return false
+}
+
+// CurrentDutySlot returns the slot of the duty the runner is handling and whether it has one. Unlike
+// GetLastHeight — the latest QBFT instance height, which only advances once consensus starts — it reflects
+// the duty from the moment the runner accepts it, through pre-consensus and after the duty concludes, so a
+// caller can tell which slot the runner is actually on.
+func (b *BaseRunner) CurrentDutySlot() (phase0.Slot, bool) {
+	if !b.hasDutyAssigned() {
+		return 0, false
+	}
+	// CurrentDuty is not nil when State is not nil, by construction.
+	return b.State.CurrentDuty.DutySlot(), true
 }
 
 func (b *BaseRunner) GetShares() map[phase0.ValidatorIndex]*spectypes.Share {
