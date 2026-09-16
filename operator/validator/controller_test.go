@@ -107,6 +107,45 @@ func TestNewController(t *testing.T) {
 	require.IsType(t, &Controller{}, control)
 }
 
+// TestNewControllerPropagatesProposerQuickTimeout pins the ControllerOptions -> CommonOptions hop of
+// the ProposerQuickTimeout chain (SIP-102). That hop is a field-by-field struct copy, so a field
+// dropped there is silently the default with every other test still green.
+//
+// The rest of the chain (CommonOptions -> Options -> NewValidator -> roundtimer.New) is covered by
+// TestValidatorRoundTimerUsesConfiguredProposerQuickTimeout in protocol/v2/ssv/validator.
+func TestNewControllerPropagatesProposerQuickTimeout(t *testing.T) {
+	const configured = 1400 * time.Millisecond
+
+	operatorDataStore := operatordatastore.New(buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811"))
+
+	operatorSigner, err := keys.GeneratePrivateKey()
+	require.NoError(t, err)
+
+	_, logger, _, network, _, bc := setupCommonTestComponents(t, operatorSigner)
+	db, err := getBaseStorage(logger)
+	require.NoError(t, err)
+
+	registryStorage, newStorageErr := storage.NewNodeStorage(networkconfig.TestNetwork.Beacon, logger, db)
+	require.NoError(t, newStorageErr)
+
+	controllerOptions := ControllerOptions{
+		NetworkConfig:        networkconfig.TestNetwork,
+		Beacon:               bc,
+		FullNode:             true,
+		Network:              network,
+		OperatorDataStore:    operatorDataStore,
+		OperatorSigner:       types.NewSsvOperatorSigner(operatorSigner, operatorDataStore.GetOperatorID),
+		RegistryStorage:      registryStorage,
+		Context:              t.Context(),
+		ProposerQuickTimeout: configured,
+	}
+	control := NewController(logger, controllerOptions)
+	// NewController starts ttlcache cleanup goroutines; stop them so they don't leak across tests.
+	defer control.Stop()
+
+	require.Equal(t, configured, control.validatorCommonOpts.ProposerQuickTimeout)
+}
+
 func TestNewControllerRouterConcurrencyOverride(t *testing.T) {
 	operatorDataStore := operatordatastore.New(buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811"))
 

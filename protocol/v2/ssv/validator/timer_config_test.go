@@ -21,10 +21,11 @@ import (
 //
 // Without this, deleting any assignment along
 //
-//	ControllerOptions -> CommonOptions -> Validator.proposerQuickTimeout -> roundtimer.New
+//	CommonOptions -> Options -> Validator.proposerQuickTimeout -> roundtimer.New
 //
 // leaves every other test green while the operator's configured value is silently discarded and the
-// default is armed instead.
+// default is armed instead. The preceding ControllerOptions -> CommonOptions hop is outside this
+// package and is pinned by TestNewControllerPropagatesProposerQuickTimeout in operator/validator.
 func TestValidatorRoundTimerUsesConfiguredProposerQuickTimeout(t *testing.T) {
 	netCfg := networkconfig.TestNetwork
 
