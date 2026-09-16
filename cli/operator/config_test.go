@@ -657,7 +657,7 @@ func Test_resolveAndValidate_proposerQuickTimeout(t *testing.T) {
 	})
 
 	t.Run("in-range values pass and are logged", func(t *testing.T) {
-		for _, timeout := range []time.Duration{1148 * time.Millisecond, 1250 * time.Millisecond, 1500 * time.Millisecond, 2000 * time.Millisecond} {
+		for _, timeout := range []time.Duration{1250 * time.Millisecond, 1400 * time.Millisecond, 1500 * time.Millisecond, 2000 * time.Millisecond} {
 			t.Run(timeout.String(), func(t *testing.T) {
 				core, recorded := observer.New(zapcore.InfoLevel)
 				c := config{}
@@ -677,8 +677,10 @@ func Test_resolveAndValidate_proposerQuickTimeout(t *testing.T) {
 
 	t.Run("outside the supported range errors, with no override available", func(t *testing.T) {
 		// 1000ms is the value SIP-102 explicitly rejected: it would have timed out 5-12 real duties a
-		// month. AllowDangerousProposerDelay must not buy a way past it.
-		for _, timeout := range []time.Duration{time.Millisecond, 1000 * time.Millisecond, 1147 * time.Millisecond, 2001 * time.Millisecond, 10 * time.Second} {
+		// month. 1148ms is the slowest observed successful round 1 itself, rejected because the design
+		// goal asks for margin over that observation rather than a tie with it.
+		// AllowDangerousProposerDelay must not buy a way past any of them.
+		for _, timeout := range []time.Duration{time.Millisecond, 1000 * time.Millisecond, 1148 * time.Millisecond, 1249 * time.Millisecond, 2001 * time.Millisecond, 10 * time.Second} {
 			t.Run(timeout.String(), func(t *testing.T) {
 				c := config{}
 				c.OperatorPrivateKey = testOperatorKey

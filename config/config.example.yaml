@@ -60,7 +60,7 @@ OperatorPrivateKey:
 
 # QBFT round budget for the proposer duty (SIP-102). Leave unset for the default of 1.5s, which is
 # sized so that a round change still leaves round 2 able to decide before the Glamsterdam attestation
-# deadline. Accepted range is 1148ms to 2s, enforced with no override: below the floor the timer starts
+# deadline. Accepted range is 1250ms to 2s, enforced with no override: below the floor the timer starts
 # cutting off round 1 attempts that would have succeeded, above it a round change cannot land at all.
 # Setting 2s restores the pre-SIP-102 behavior.
 # This is a committee-wide protocol parameter, not a local performance knob. Operators in a shared
