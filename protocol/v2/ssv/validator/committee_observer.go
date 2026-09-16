@@ -170,7 +170,7 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
 			return fmt.Errorf("could not find share for validator with index %d", key.ValidatorIndex)
 		}
 
-		if ncv.isEnvelopeRoot(key.Root) {
+		if role == spectypes.RoleProposer && ncv.isEnvelopeRoot(key.Root) {
 			// The §6 envelope's quorum rides the proposer's packet; the proposal's participation is the
 			// block root's quorum alone (SIP #94 §4). The root is learnt from the proposal (SaveRoots),
 			// which precedes the quorum by a consensus round trip; should a quorum still overtake it in

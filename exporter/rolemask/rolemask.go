@@ -12,6 +12,8 @@ import (
 //
 //	0: ATTESTER, 1: AGGREGATOR, 2: PROPOSER, 3: SYNC_COMMITTEE,
 //	4: SYNC_COMMITTEE_CONTRIBUTION, 5: PTC_ATTESTER, 6: PROPOSER_PREFERENCES
+//
+// One bit is left; the role after the next needs a wider type and a schedule re-encode.
 type Mask = uint8
 
 const (
