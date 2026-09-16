@@ -1384,10 +1384,8 @@ func TestValidatorDutyTrace_toBNRole(t *testing.T) {
 		{spectypes.RoleValidatorRegistration, spectypes.BNRoleValidatorRegistration, false},
 		{spectypes.RoleVoluntaryExit, spectypes.BNRoleVoluntaryExit, false},
 		{spectypes.RoleCommittee, spectypes.BNRoleUnknown, true},
-		// The Gloas duty types are intentionally unmapped: collect skips them before toBNRole
-		// (no trace-store schema yet), so reaching this error would mean the skip regressed.
-		{spectypes.RolePTCAttester, spectypes.BNRoleUnknown, true},
-		{spectypes.RoleProposerPreferences, spectypes.BNRoleUnknown, true},
+		{spectypes.RolePTCAttester, spectypes.BNRolePTCAttester, false},
+		{spectypes.RoleProposerPreferences, spectypes.BNRoleProposerPreferences, false},
 	}
 
 	for _, test := range tests {
@@ -1399,6 +1397,128 @@ func TestValidatorDutyTrace_toBNRole(t *testing.T) {
 			require.Equal(t, test.want, got)
 		})
 	}
+}
+
+// typedPartialSigMessage encodes a validator-role packet of the given type with one entry per root.
+func typedPartialSigMessage(identifier spectypes.MessageID, msgType spectypes.PartialSigMsgType, slot phase0.Slot, vIdx phase0.ValidatorIndex, signer spectypes.OperatorID, roots ...phase0.Root) *queue.SSVMessage {
+	fakeSig := [96]byte{}
+	msgs := &spectypes.PartialSignatureMessages{Type: msgType, Slot: slot}
+	for _, root := range roots {
+		msgs.Messages = append(msgs.Messages, &spectypes.PartialSignatureMessage{
+			ValidatorIndex:   vIdx,
+			Signer:           signer,
+			PartialSignature: fakeSig[:],
+			SigningRoot:      root,
+		})
+	}
+	data, _ := msgs.Encode()
+	return buildPartialSigMessage(identifier, data)
+}
+
+// The Gloas duties without a consensus phase are traced from their partial signatures alone: a PTC
+// attestation under PTC_ATTESTER; a proposer's preferences, re-emissions included, and its builder
+// request-auth under PROPOSER_PREFERENCES, told apart by type. Their participants are the
+// pre-consensus signers, request-auth aside.
+func TestValidatorDuty_GloasPartialSignatures(t *testing.T) {
+	const (
+		slot   = phase0.Slot(7)
+		vIndex = phase0.ValidatorIndex(55)
+	)
+	collector := New(zap.NewNop(), nil, nil, nil, networkconfig.TestNetworkWithGloas(0).Beacon, nil, nil)
+
+	ptcID := ssvtestingutils.NewMsgID([4]byte{}, []byte("pk"), spectypes.RolePTCAttester)
+	require.NoError(t, collector.Collect(t.Context(), typedPartialSigMessage(ptcID, spectypes.PTCAttesterPartialSig, slot, vIndex, 1, phase0.Root{0xa}), dummyVerify))
+
+	ptc, err := collector.GetValidatorDuty(spectypes.BNRolePTCAttester, slot, vIndex)
+	require.NoError(t, err)
+	require.Equal(t, vIndex, ptc.Validator)
+	require.Len(t, ptc.Pre, 1)
+	require.Equal(t, spectypes.PTCAttesterPartialSig, ptc.Pre[0].Type)
+	require.Equal(t, phase0.Root{0xa}, ptc.Pre[0].BeaconRoot)
+	require.Equal(t, spectypes.OperatorID(1), ptc.Pre[0].Signer)
+	require.Empty(t, ptc.Post)
+
+	prefsID := ssvtestingutils.NewMsgID([4]byte{}, []byte("pk"), spectypes.RoleProposerPreferences)
+	require.NoError(t, collector.Collect(t.Context(), typedPartialSigMessage(prefsID, spectypes.ProposerPreferencesPartialSig, slot, vIndex, 1, phase0.Root{0xb}), dummyVerify))
+	require.NoError(t, collector.Collect(t.Context(), typedPartialSigMessage(prefsID, spectypes.ProposerPreferencesPartialSig, slot, vIndex, 1, phase0.Root{0xc}), dummyVerify)) // re-emission
+	require.NoError(t, collector.Collect(t.Context(), typedPartialSigMessage(prefsID, spectypes.RequestAuthPartialSig, slot, vIndex, 2, phase0.Root{0xd}), dummyVerify))
+
+	prefs, err := collector.GetValidatorDuty(spectypes.BNRoleProposerPreferences, slot, vIndex)
+	require.NoError(t, err)
+	require.Len(t, prefs.Pre, 3)
+	require.Equal(t, spectypes.ProposerPreferencesPartialSig, prefs.Pre[0].Type)
+	require.Equal(t, spectypes.ProposerPreferencesPartialSig, prefs.Pre[1].Type)
+	require.Equal(t, spectypes.RequestAuthPartialSig, prefs.Pre[2].Type)
+
+	participants, err := collector.GetValidatorDecideds(spectypes.BNRoleProposerPreferences, slot, []phase0.ValidatorIndex{vIndex})
+	require.NoError(t, err)
+	require.Len(t, participants, 1)
+	require.Equal(t, []spectypes.OperatorID{1}, participants[0].Signers, "a signer seen on request-auth alone did not take part in the preferences duty")
+
+	participants, err = collector.GetValidatorDecideds(spectypes.BNRolePTCAttester, slot, []phase0.ValidatorIndex{vIndex})
+	require.NoError(t, err)
+	require.Equal(t, []spectypes.OperatorID{1}, participants[0].Signers)
+}
+
+// A Gloas proposer's post-consensus packet carries two roots, the block's and the envelope's; both are
+// traced, one entry each, under one signer.
+func TestValidatorDuty_GloasProposerTwoRootPacket(t *testing.T) {
+	const (
+		slot   = phase0.Slot(7)
+		vIndex = phase0.ValidatorIndex(55)
+	)
+	collector := New(zap.NewNop(), nil, nil, nil, networkconfig.TestNetworkWithGloas(0).Beacon, nil, nil)
+	proposerID := ssvtestingutils.NewMsgID([4]byte{}, []byte("pk"), spectypes.RoleProposer)
+	blockRoot, envelopeRoot := phase0.Root{0xb1}, phase0.Root{0xe1}
+
+	require.NoError(t, collector.Collect(t.Context(), typedPartialSigMessage(proposerID, spectypes.PostConsensusPartialSig, slot, vIndex, 3, blockRoot, envelopeRoot), dummyVerify))
+
+	duty, err := collector.GetValidatorDuty(spectypes.BNRoleProposer, slot, vIndex)
+	require.NoError(t, err)
+	require.Len(t, duty.Post, 2)
+	require.Equal(t, blockRoot, duty.Post[0].BeaconRoot)
+	require.Equal(t, envelopeRoot, duty.Post[1].BeaconRoot)
+	for _, post := range duty.Post {
+		require.Equal(t, spectypes.OperatorID(3), post.Signer)
+	}
+
+	participants, err := collector.GetValidatorDecideds(spectypes.BNRoleProposer, slot, []phase0.ValidatorIndex{vIndex})
+	require.NoError(t, err)
+	require.Equal(t, []spectypes.OperatorID{3}, participants[0].Signers)
+}
+
+// A preferences trace is keyed by its proposal slot, which the messages precede by up to a lookahead:
+// it stays in memory through the evictions of earlier slots and is flushed to disk once its own slot
+// passes.
+func TestCollector_FutureSlotTraceOutlivesEarlierEvictions(t *testing.T) {
+	db, err := kv.NewInMemory(zap.NewNop(), basedb.Options{})
+	require.NoError(t, err)
+	dutyStore := store.New(db)
+	_, vstore, _ := storage.NewSharesStorage(networkconfig.TestNetwork.Beacon, db, dummyGetFeeRecipient, nil)
+	collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetworkWithGloas(0).Beacon, nil, nil)
+
+	const (
+		current = phase0.Slot(100)
+		future  = current + 64
+		vIndex  = phase0.ValidatorIndex(55)
+	)
+	prefsID := ssvtestingutils.NewMsgID([4]byte{}, []byte("pk"), spectypes.RoleProposerPreferences)
+	require.NoError(t, collector.Collect(t.Context(), typedPartialSigMessage(prefsID, spectypes.ProposerPreferencesPartialSig, future, vIndex, 1, phase0.Root{0xb}), dummyVerify))
+
+	collector.evict(current)
+	slots, found := collector.validatorTraces.Get(vIndex)
+	require.True(t, found)
+	_, inMemory := slots.Get(future)
+	require.True(t, inMemory, "a future-slot trace survives the eviction of earlier slots")
+	_, err = dutyStore.GetValidatorDuty(future, spectypes.BNRoleProposerPreferences, vIndex)
+	require.ErrorIs(t, err, store.ErrNotFound)
+
+	collector.evict(future + slotTTL)
+	_, inMemory = slots.Get(future)
+	require.False(t, inMemory)
+	saved, err := dutyStore.GetValidatorDuty(future, spectypes.BNRoleProposerPreferences, vIndex)
+	require.NoError(t, err)
+	require.Len(t, saved.Pre, 1)
 }
 
 func TestCollector_newPartialSigVerifyCtx_EmptyMessages(t *testing.T) {

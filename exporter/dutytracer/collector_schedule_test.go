@@ -15,6 +15,7 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/utils/hashmap"
 )
@@ -132,6 +133,34 @@ func TestCollectorComputeAndPersistScheduleForSlot(t *testing.T) {
 	assert.Equal(t, rolemask.BitAttester, saved[3]&rolemask.BitAttester)
 	assert.Equal(t, rolemask.BitProposer, saved[5]&rolemask.BitProposer)
 	assert.Equal(t, rolemask.BitSyncCommittee, saved[7]&rolemask.BitSyncCommittee)
+}
+
+// At a Gloas slot the schedule carries the two new duties: PTC membership from the PTC duty store, and
+// proposer preferences for every proposer of the slot (SIP #94 §3, §5).
+func TestCollectorComputeAndPersistScheduleGloas(t *testing.T) {
+	t.Parallel()
+
+	cfg := *networkconfig.TestNetworkWithGloas(0).Beacon
+	slot := phase0.Slot(96)
+	epoch := cfg.EstimatedEpochAtSlot(slot)
+
+	duties := dutystore.New()
+	duties.Proposer.Set(epoch, []dutystore.StoreDuty[eth2apiv1.ProposerDuty]{
+		{Slot: slot, ValidatorIndex: 5, Duty: &eth2apiv1.ProposerDuty{Slot: slot, ValidatorIndex: 5}},
+	})
+	duties.PTC.Set(epoch, []dutystore.StoreDuty[gloas.PTCDuty]{
+		{Slot: slot, ValidatorIndex: 9, Duty: &gloas.PTCDuty{Slot: slot, ValidatorIndex: 9}},
+	})
+
+	store := &mockDutyTraceStore{}
+	collector := New(zap.NewNop(), &mockValidatorStore{}, nil, store, &cfg, nil, duties)
+
+	require.NoError(t, collector.computeAndPersistScheduleForSlot(slot))
+
+	saved := store.scheduled[slot]
+	require.NotNil(t, saved)
+	assert.Equal(t, rolemask.BitProposer|rolemask.BitProposerPreferences, saved[5])
+	assert.Equal(t, rolemask.BitPTCAttester, saved[9])
 }
 
 func TestCollectorComputeAndPersistScheduleEmpty(t *testing.T) {
