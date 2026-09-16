@@ -46,17 +46,20 @@ func TestBeaconRoleFromString(t *testing.T) {
 // Every partial-signature type the node handles has a name, so API consumers never see a number.
 func TestPartialSigMsgTypeToString(t *testing.T) {
 	names := map[spectypes.PartialSigMsgType]string{
-		spectypes.PostConsensusPartialSig:         "POST_CONSENSUS",
-		spectypes.RandaoPartialSig:                "RANDAO",
-		ssvtypes.SelectionProofPartialSig:         "SELECTION_PROOF",
-		ssvtypes.ContributionProofs:               "CONTRIBUTION_PROOFS",
-		spectypes.ValidatorRegistrationPartialSig: roleValidatorRegistration,
-		spectypes.VoluntaryExitPartialSig:         roleVoluntaryExit,
-		spectypes.AggregatorCommitteePartialSig:   roleAggregatorCommittee,
-		spectypes.PTCAttesterPartialSig:           rolePTCAttester,
-		spectypes.ProposerPreferencesPartialSig:   roleProposerPreferences,
-		spectypes.RequestAuthPartialSig:           "REQUEST_AUTH",
+		spectypes.PostConsensusPartialSig:         PartialSigPostConsensus,
+		spectypes.RandaoPartialSig:                PartialSigRandao,
+		ssvtypes.SelectionProofPartialSig:         PartialSigSelectionProof,
+		ssvtypes.ContributionProofs:               PartialSigContributionProofs,
+		spectypes.ValidatorRegistrationPartialSig: PartialSigValidatorRegistration,
+		spectypes.VoluntaryExitPartialSig:         PartialSigVoluntaryExit,
+		spectypes.AggregatorCommitteePartialSig:   PartialSigAggregatorCommittee,
+		spectypes.PTCAttesterPartialSig:           PartialSigPTCAttester,
+		spectypes.ProposerPreferencesPartialSig:   PartialSigProposerPreferences,
+		spectypes.RequestAuthPartialSig:           PartialSigRequestAuth,
 	}
+	// The duty-bound types are named after their duty's role, so the two vocabularies agree.
+	assert.Equal(t, spectypes.BNRolePTCAttester.String(), PartialSigPTCAttester)
+	assert.Equal(t, spectypes.BNRoleProposerPreferences.String(), PartialSigProposerPreferences)
 	for msgType, want := range names {
 		assert.Equal(t, want, PartialSigMsgTypeToString(msgType))
 	}
