@@ -114,9 +114,9 @@ func (v *Validator) StartQueueConsumer(
 			Quorum: v.Operator.GetQuorum(), // never changes for duty runner
 		}
 
-		// floor is the slot of the duty the runner is currently serving; anything queued below it is stale
-		// (a validator runner advances through its duties in slot order). It is set at each idle duty start
-		// and read only here, in this single consumer goroutine.
+		// floor is the slot of the duty the runner is currently serving; anything queued below it is stale (a
+		// validator runner advances through its duties in slot order). It only ever rises — at an idle duty
+		// start or a mid-duty re-seat — and is written and read only here, in this single consumer goroutine.
 		var floor phase0.Slot
 
 		for ctx.Err() == nil {
@@ -169,30 +169,38 @@ func (v *Validator) StartQueueConsumer(
 				return nil
 			}
 
-			// An idle runner starting a duty raises its slot floor: the stale tail still queued for an earlier
-			// slot — leftovers of the concluded duty, or messages for a duty this operator never ran — can no
-			// longer be processed, and would otherwise be handed to the new duty one by one only to be rejected
-			// (issue #3037). Purge it before the duty runs (slotBelow spares duty-starts, so none is skipped),
-			// closing out any in-flight state each purged message still holds from an earlier attempt.
-			if dutySlot, ok := executeDutySlot(msg); ok && idle {
+			// A duty-start moves the runner up to its slot, so raise the floor to match — an idle start and a
+			// mid-duty re-seat by a later overlapping duty are the same forward move (a validator runner only
+			// advances). Anything left queued below the new floor — the concluded duty's tail, or messages for a
+			// duty this operator never ran — is stale and would otherwise reach the runner one by one only to be
+			// rejected (issue #3037). A duty-start above the floor is always accepted — the floor never trails the
+			// runner's instance height, and ShouldProcessDuty rejects only at or below that height — so raising
+			// the floor before the handler runs stays in step with the runner.
+			if dutySlot, ok := executeDutySlot(msg); ok && dutySlot > floor {
 				floor = dutySlot
-				dropped := q.Purge(slotBelow(dutySlot), queue.PurgeReasonStale, func(removed *queue.SSVMessage) {
-					endStaleMessageState(msgStates, v.logger, removed)
-				})
-				if dropped > 0 {
-					v.logger.Debug("dropped stale messages queued for slots before the starting duty",
-						fields.RunnerRole(msgID.GetRoleType()), fields.Slot(dutySlot), fields.Count(dropped))
+				if idle {
+					// Only an idle start bulk-purges the tail up front (slotBelow spares duty-starts, so none is
+					// skipped), closing out any in-flight state each purged message holds. Mid-duty leaves the
+					// pop-guard below to drain stragglers one by one, keeping the busy hot path light.
+					dropped := q.Purge(slotBelow(dutySlot), queue.PurgeReasonStale, func(removed *queue.SSVMessage) {
+						endStaleMessageState(msgStates, v.logger, removed)
+					})
+					if dropped > 0 {
+						v.logger.Debug("dropped stale messages queued for slots before the starting duty",
+							fields.RunnerRole(msgID.GetRoleType()), fields.Slot(dutySlot), fields.Count(dropped))
+					}
 				}
 			}
 
-			// A message can still sit below the floor after the bulk purge — a straggler re-pushed by a
-			// retry goroutine that was parked during the purge, or one that simply arrived later. Handing
-			// it to the runner would draw the exact "invalid partial sig slot" rejection the purge prevents
-			// (issue #3037), so drop it here too. slotBelow spares duty-starts and matches nothing at floor 0.
+			// A message can still sit below the floor when it reaches the consumer: a straggler re-pushed by a
+			// retry goroutine parked during the bulk purge, one that arrived late, or — after a mid-duty re-seat,
+			// which skips the purge — the superseded duty's tail draining through here. Handing any of them to the
+			// runner would draw the exact "invalid partial sig slot" rejection the floor prevents (issue #3037),
+			// so drop it here. slotBelow spares duty-starts and matches nothing at floor 0.
 			if slotBelow(floor)(msg) {
 				endStaleMessageState(msgStates, v.logger, msg)
 				q.RecordPurge(queue.PurgeReasonStale)
-				v.logger.Debug("dropped a stale message that reached the consumer after the purge",
+				v.logger.Debug("dropped a stale message that reached the consumer below the slot floor",
 					fields.RunnerRole(msgID.GetRoleType()), fields.Slot(floor))
 				continue
 			}

@@ -173,13 +173,81 @@ func TestConsumeQueue_DropsStaleMessageArrivingAfterDutyStart(t *testing.T) {
 	// drops it rather than handing it to the runner.
 	require.True(t, v.Queues[spectypes.RoleProposer].TryPush(partialSigMsg(t, msgID, 5)))
 	require.Eventually(t, func() bool {
-		return logs.FilterMessage("dropped a stale message that reached the consumer after the purge").Len() == 1
+		return logs.FilterMessage("dropped a stale message that reached the consumer below the slot floor").Len() == 1
 	}, 2*time.Second, 10*time.Millisecond, "the late stale message is dropped by the consumer")
 
 	select {
 	case msg := <-delivered:
 		slot, _ := msg.Slot()
 		t.Fatalf("stale message for slot %d reached the handler", slot)
+	case <-time.After(50 * time.Millisecond):
+	}
+}
+
+// A later, higher-slot duty can re-seat a runner still busy with an earlier one: its duty-start is popped
+// mid-duty (the non-idle filter passes events through) and accepted, so the runner advances and the earlier
+// duty's tail turns stale. Raising the floor only on the idle path would leave that tail to reach the runner
+// and draw the same rejection the purge prevents (issue #3037); the mid-duty re-seat raises the floor too, so
+// the pop-guard drops the superseded tail without a bulk purge.
+func TestConsumeQueue_RaisesFloorOnMidDutyReseat(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	core, logs := observer.New(zapcore.DebugLevel)
+	logger := zap.New(core)
+
+	netCfg := networkconfig.TestNetwork
+	var pk phase0.BLSPubKey
+	msgID := spectypes.NewMsgID(netCfg.DomainType, pk[:], spectypes.RoleProposer)
+	proposer := &runner.ProposerRunner{BaseRunner: &runner.BaseRunner{RunnerRoleType: spectypes.RoleProposer}}
+
+	v := &Validator{
+		logger:        logger,
+		ctx:           ctx,
+		cancel:        cancel,
+		NetworkConfig: netCfg,
+		Operator:      &spectypes.CommitteeMember{},
+		Share:         &ssvtypes.SSVShare{},
+		Queues:        map[spectypes.RunnerRole]queue.Queue{spectypes.RoleProposer: queue.New(logger, 16)},
+		DutyRunners:   runner.ValidatorDutyRunners{spectypes.RoleProposer: proposer},
+	}
+
+	delivered := make(chan *queue.SSVMessage, 4)
+	v.StartQueueConsumer(msgID, func(_ context.Context, _ *zap.Logger, msg *queue.SSVMessage) error {
+		// Each duty-start re-seats the runner to its own slot, so a higher-slot duty-start popped while a
+		// duty runs advances the runner without it ever going idle.
+		if event, ok := msg.Body.(*ssvtypes.EventMsg); ok && event.Type == ssvtypes.ExecuteDuty {
+			slot, err := msg.Slot()
+			require.NoError(t, err)
+			proposer.State = runner.NewRunnerState(3, &spectypes.ValidatorDuty{Type: spectypes.BNRoleProposer, Slot: slot})
+		}
+		delivered <- msg
+		return nil
+	})
+
+	// The runner starts the duty at slot 10 from idle, raising the floor to 10.
+	require.True(t, v.Queues[spectypes.RoleProposer].TryPush(executeDutyMsg(t, netCfg.DomainType, 10)))
+	require.Equal(t, message.SSVEventMsgType, receiveDelivered(t, delivered).MsgType, "the slot-10 duty-start starts the duty")
+
+	// While that duty is still running, the slot-20 duty-start is popped and re-seats the runner. It is a
+	// duty-start, so it is delivered (never dropped) and raises the floor to 20.
+	require.True(t, v.Queues[spectypes.RoleProposer].TryPush(executeDutyMsg(t, netCfg.DomainType, 20)))
+	reseat := receiveDelivered(t, delivered)
+	reseatSlot, err := reseat.Slot()
+	require.NoError(t, err)
+	require.Equal(t, phase0.Slot(20), reseatSlot, "the higher-slot duty-start re-seats the busy runner")
+
+	// The tail of the superseded slot-10 duty now reaches the consumer. With the floor at 20 it is dropped
+	// rather than handed to the runner, which would reject it with "invalid partial sig slot".
+	require.True(t, v.Queues[spectypes.RoleProposer].TryPush(partialSigMsg(t, msgID, 10)))
+	require.Eventually(t, func() bool {
+		return logs.FilterMessage("dropped a stale message that reached the consumer below the slot floor").Len() == 1
+	}, 2*time.Second, 10*time.Millisecond, "the superseded duty's tail is dropped after the mid-duty re-seat")
+
+	select {
+	case msg := <-delivered:
+		slot, _ := msg.Slot()
+		t.Fatalf("stale message for slot %d reached the handler after the re-seat", slot)
 	case <-time.After(50 * time.Millisecond):
 	}
 }
