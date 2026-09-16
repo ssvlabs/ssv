@@ -72,8 +72,40 @@ func BeaconRoleFromString(s string) (spectypes.BeaconRole, error) {
 		return spectypes.BNRoleValidatorRegistration, nil
 	case roleVoluntaryExit:
 		return spectypes.BNRoleVoluntaryExit, nil
+	case rolePTCAttester:
+		return spectypes.BNRolePTCAttester, nil
+	case roleProposerPreferences:
+		return spectypes.BNRoleProposerPreferences, nil
 	default:
 		return 0, fmt.Errorf("unknown role: %s", s)
+	}
+}
+
+// PartialSigMsgTypeToString names a partial-signature message type for API responses.
+func PartialSigMsgTypeToString(t spectypes.PartialSigMsgType) string {
+	switch t {
+	case spectypes.PostConsensusPartialSig:
+		return "POST_CONSENSUS"
+	case spectypes.RandaoPartialSig:
+		return "RANDAO"
+	case ssvtypes.SelectionProofPartialSig:
+		return "SELECTION_PROOF"
+	case ssvtypes.ContributionProofs:
+		return "CONTRIBUTION_PROOFS"
+	case spectypes.ValidatorRegistrationPartialSig:
+		return roleValidatorRegistration
+	case spectypes.VoluntaryExitPartialSig:
+		return roleVoluntaryExit
+	case spectypes.AggregatorCommitteePartialSig:
+		return roleAggregatorCommittee
+	case spectypes.PTCAttesterPartialSig:
+		return rolePTCAttester
+	case spectypes.ProposerPreferencesPartialSig:
+		return roleProposerPreferences
+	case spectypes.RequestAuthPartialSig:
+		return "REQUEST_AUTH"
+	default:
+		return fmt.Sprintf("unknown(%d)", t)
 	}
 }
 
