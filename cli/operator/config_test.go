@@ -653,7 +653,9 @@ func Test_resolveAndValidate_proposerQuickTimeout(t *testing.T) {
 
 		_, err := c.resolveAndValidate(zap.New(core))
 		require.NoError(t, err)
-		require.Len(t, recorded.All(), 0)
+		// Filtered to this log rather than asserting resolveAndValidate is silent overall, so an
+		// unrelated Info added elsewhere in it cannot fail this test under a misleading name.
+		require.Len(t, recorded.FilterMessageSnippet("ProposerQuickTimeout").All(), 0)
 	})
 
 	t.Run("in-range values pass and are logged", func(t *testing.T) {
@@ -667,9 +669,8 @@ func Test_resolveAndValidate_proposerQuickTimeout(t *testing.T) {
 				_, err := c.resolveAndValidate(zap.New(core))
 				require.NoError(t, err)
 
-				logs := recorded.All()
+				logs := recorded.FilterMessageSnippet("non-default ProposerQuickTimeout").All()
 				require.Len(t, logs, 1)
-				require.Contains(t, logs[0].Message, "non-default ProposerQuickTimeout")
 				require.Equal(t, timeout, logs[0].ContextMap()["proposer_quick_timeout"])
 			})
 		}
