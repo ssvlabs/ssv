@@ -97,16 +97,25 @@ const blockSubmissionTime = 1000 * time.Millisecond
 const proposerDelay = 4*time.Second - randaoTime - mevBoostRelayTimeout - qbftTime - blockSubmissionTime - miscellaneousTime
 ```
 but on top of that, another consideration Operator needs to take into account is QBFT round timeout, specifically 
-round 1 timeout. For proposer duty round 1 times out at ~2s after slot start time (so that proposer duty can execute 2
-QBFT rounds, if necessary, and still complete before that desirable 4s after slot start deadline). To avoid round 1 timing out
-we'd want the following equation to hold:
+round 1 timeout. Since SIP-102 the proposer duty gets its own round budget of ~1.5s, shorter than the ~2s every other 
+role uses, so that a round change still leaves round 2 able to decide before the attestation deadline that Glamsterdam 
+moves from 4s to 3s into the slot. To avoid round 1 timing out we'd want the following equation to hold:
 ```go
-RANDAOTime + ProposerDelay + MEVBoostRelayTimeout + QBFTTime + MiscellaneousTime < 2s
+RANDAOTime + ProposerDelay + MEVBoostRelayTimeout + QBFTTime + MiscellaneousTime < 1.5s
 ```
-and with the values listed above this gives us `ProposerDelay` value of ~1.2s.
+and with the values listed above this gives us `ProposerDelay` value of ~700ms.
 
-Therefore, we consider ~1.2s to be the maximum reasonable value for `ProposerDelay`, going beyond that value might 
-result in missed block proposal.
+Therefore, we consider ~700ms to be the maximum reasonable value for `ProposerDelay`, going beyond that value might 
+result in missed block proposal. This number moved down from ~1.2s when the proposer round budget was shortened from 
+2s to 1.5s; an Operator who tuned `ProposerDelay` against the older guidance should retune.
+
+Note the budget is measured from QBFT instance start rather than from slot start, so the equation above is an 
+approximation that folds the pre-consensus work into one deadline. An Operator who has raised `ProposerQuickTimeout` 
+above the 1.5s default should substitute their configured value; the accepted range is 1250ms to 2s, and setting 2s 
+restores the pre-SIP-102 arithmetic along with the pre-SIP-102 behavior.
 
 **To enforce proposer safety limits, the SSV node will automatically prevent startup if ProposerDelay exceeds 1s 
-unless the Operator explicitly acknowledges the risk by setting `AllowDangerousProposerDelay: true`.**
+unless the Operator explicitly acknowledges the risk by setting `AllowDangerousProposerDelay: true`.** That 1s gate is 
+deliberately left where it is: it is a hard stop against clearly-broken configurations, not the recommended ceiling, and 
+lowering it to ~700ms would refuse startup for nodes running a value that is merely suboptimal. Treat the ~700ms above 
+as the guidance and the 1s gate as the backstop.
