@@ -1731,22 +1731,26 @@ func (c *Collector) computeAndPersistScheduleForSlot(slot phase0.Slot) error {
 		}
 	}
 
-	// Proposer indices for this slot; at a Gloas slot every proposer also has a proposer-preferences duty
-	// for it (SIP #94 §5), emitted across the lookahead but recorded under the proposal slot.
+	// Proposer indices for this slot
 	if c.duties.Proposer != nil {
-		gloasSlot := c.beacon.IsGloasAtSlot(slot)
 		for _, idx := range c.duties.Proposer.SlotIndices(epoch, slot) {
 			schedule[idx] |= rolemask.BitProposer
-			if gloasSlot {
-				schedule[idx] |= rolemask.BitProposerPreferences
-			}
 		}
 	}
 
-	// PTC members for this slot (SIP #94 §3)
-	if c.duties.PTC != nil {
-		for _, idx := range c.duties.PTC.SlotIndices(epoch, slot) {
-			schedule[idx] |= rolemask.BitPTCAttester
+	// The Gloas duties (SIP #94): every proposer of the slot also has a proposer-preferences duty for it,
+	// emitted across the lookahead but recorded under the proposal slot (§5), and the slot's PTC members
+	// come from the PTC duty store (§3). Both gated on the fork; the PTC store is empty before it anyway.
+	if c.beacon.IsGloasAtSlot(slot) {
+		if c.duties.Proposer != nil {
+			for _, idx := range c.duties.Proposer.SlotIndices(epoch, slot) {
+				schedule[idx] |= rolemask.BitProposerPreferences
+			}
+		}
+		if c.duties.PTC != nil {
+			for _, idx := range c.duties.PTC.SlotIndices(epoch, slot) {
+				schedule[idx] |= rolemask.BitPTCAttester
+			}
 		}
 	}
 
