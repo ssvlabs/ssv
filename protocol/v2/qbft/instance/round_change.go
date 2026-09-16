@@ -67,6 +67,12 @@ func (i *Instance) uponRoundChange(
 		// Kept as defense-in-depth in case the message-processing flow changes.
 		i.bumpToRound(justifiedRoundChangeMsg.QBFTMessage.Round)
 
+		// If that bump ever reaches the cutoff round, give up rather than broadcast a proposal no node accepts.
+		if !i.IsRelevant() {
+			i.recordCutoffGiveUp(ctx, logger)
+			return nil
+		}
+
 		roundChangeJustificationSignedMessages, _ := justifiedRoundChangeMsg.QBFTMessage.GetRoundChangeJustifications() // no need to check error, check on isValidRoundChange
 
 		roundChangeJustification := make([]*specqbft.ProcessingMessage, 0)
