@@ -80,6 +80,13 @@ type Option func(*RoundTimer)
 //
 // Only the proposer's budget is tunable: the other roles are slot-synchronized, so their round
 // boundaries are derived from the beacon deadlines rather than chosen by the operator.
+//
+// This is a committee-wide protocol parameter, not a local performance knob. Operators sharing a
+// committee that disagree on it leave round 1 at different times, so it must be configured
+// identically across every operator of every shared committee, or left unset everywhere. The
+// rollout window is the one sanctioned exception, and only because the partial-quorum rule pulls
+// the laggards along (see DefaultProposerQuickTimeout). The same warning is on the
+// ProposerQuickTimeout key in config.example.yaml and in its env-description.
 func WithProposerQuickTimeout(d time.Duration) Option {
 	return func(t *RoundTimer) {
 		if d > 0 {
