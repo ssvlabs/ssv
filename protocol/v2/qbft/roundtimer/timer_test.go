@@ -102,7 +102,7 @@ func TestEstimatedRoundAt(t *testing.T) {
 		{
 			name:         "proposer starts quick round timing at slot start",
 			role:         spectypes.RoleProposer,
-			timeIntoSlot: QuickTimeout,
+			timeIntoSlot: DefaultProposerQuickTimeout,
 			want:         specqbft.FirstRound + 1,
 		},
 		{
@@ -789,7 +789,9 @@ func TestGloasHeadStartsTrackRetimedDeadlines(t *testing.T) {
 // TestWithProposerQuickTimeout covers the operator override: a configured budget replaces the
 // default for the proposer, an unset one does not, and no override reaches the other roles.
 func TestWithProposerQuickTimeout(t *testing.T) {
-	const configured = 1200 * time.Millisecond
+	// An operator-selectable value: the option itself does not validate, but using one the node
+	// would actually accept keeps the test honest about what it demonstrates.
+	const configured = 1400 * time.Millisecond
 
 	t.Run("override applies to the proposer", func(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {

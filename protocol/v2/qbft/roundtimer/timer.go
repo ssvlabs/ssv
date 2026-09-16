@@ -103,8 +103,9 @@ const (
 	// risky, so there is nothing for an operator to knowingly accept.
 	MinProposerQuickTimeout = 1250 * time.Millisecond
 	// MaxProposerQuickTimeout is the pre-SIP-102 budget, so an operator can roll back to the previous
-	// behavior in-band. Above it a Glamsterdam round change cannot land at all.
-	MaxProposerQuickTimeout = 2 * time.Second
+	// behavior in-band. Above it a Glamsterdam round change cannot land at all. Derived from
+	// QuickTimeout rather than restated, so "the pre-SIP-102 budget" stays true if that moves.
+	MaxProposerQuickTimeout = QuickTimeout
 )
 
 // Option customizes a RoundTimer at construction.

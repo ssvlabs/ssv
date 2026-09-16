@@ -54,7 +54,7 @@ func TestValidatorRoundTimerUsesConfiguredProposerQuickTimeout(t *testing.T) {
 	}
 
 	t.Run("configured value reaches the proposer timer", func(t *testing.T) {
-		const configured = 1200 * time.Millisecond
+		const configured = 1400 * time.Millisecond
 		timer := newTimerForRole(t, configured, spectypes.RoleProposer)
 		require.Equal(t, configured, timer.RoundTimeout(specqbft.FirstRound))
 	})
