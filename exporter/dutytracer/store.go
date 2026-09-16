@@ -395,23 +395,10 @@ func (c *Collector) GetValidatorDecideds(role spectypes.BeaconRole, slot phase0.
 			continue
 		}
 
-		signers := make([]spectypes.OperatorID, 0, len(duty.Decideds)+len(duty.Post))
-
-		for _, d := range duty.Decideds {
-			signers = append(signers, d.Signers...)
-		}
-
-		for _, post := range duty.Post {
-			signers = append(signers, post.Signer)
-		}
-
-		slices.Sort(signers)
-		signers = slices.Compact(signers)
-
 		out = append(out, ParticipantsRangeIndexEntry{
 			Slot:    slot,
 			Index:   index,
-			Signers: signers,
+			Signers: validatorDutySigners(duty),
 		})
 	}
 
@@ -427,27 +414,49 @@ func (c *Collector) GetAllValidatorDecideds(role spectypes.BeaconRole, slot phas
 	out := make([]ParticipantsRangeIndexEntry, 0, len(duties))
 
 	for _, duty := range duties {
-		signers := make([]spectypes.OperatorID, 0, len(duty.Decideds)+len(duty.Post))
-
-		for _, d := range duty.Decideds {
-			signers = append(signers, d.Signers...)
-		}
-
-		for _, post := range duty.Post {
-			signers = append(signers, post.Signer)
-		}
-
-		slices.Sort(signers)
-		signers = slices.Compact(signers)
-
 		out = append(out, ParticipantsRangeIndexEntry{
 			Slot:    slot,
 			Index:   duty.Validator,
-			Signers: signers,
+			Signers: validatorDutySigners(duty),
 		})
 	}
 
 	return out, errs.ErrorOrNil()
+}
+
+// validatorDutySigners lists the operators that took part in a validator duty: the consensus decideds'
+// signers and the post-consensus signers, plus the pre-consensus signers for the duties without a
+// consensus phase, where the pre-consensus round is the duty itself. Request-auth entries are left
+// out: signing a builder token is not the preferences duty.
+func validatorDutySigners(duty *traces.ValidatorDutyTrace) []spectypes.OperatorID {
+	signers := make([]spectypes.OperatorID, 0, len(duty.Decideds)+len(duty.Post)+len(duty.Pre))
+	for _, d := range duty.Decideds {
+		signers = append(signers, d.Signers...)
+	}
+	for _, post := range duty.Post {
+		signers = append(signers, post.Signer)
+	}
+	if preConsensusIsTheDuty(duty.Role) {
+		for _, pre := range duty.Pre {
+			if pre.Type != spectypes.RequestAuthPartialSig {
+				signers = append(signers, pre.Signer)
+			}
+		}
+	}
+	slices.Sort(signers)
+	return slices.Compact(signers)
+}
+
+// preConsensusIsTheDuty reports the roles whose duty is a single partial-signature round, with no
+// consensus or post-consensus to record participation from.
+func preConsensusIsTheDuty(role spectypes.BeaconRole) bool {
+	switch role {
+	case spectypes.BNRolePTCAttester, spectypes.BNRoleProposerPreferences,
+		spectypes.BNRoleValidatorRegistration, spectypes.BNRoleVoluntaryExit:
+		return true
+	default:
+		return false
+	}
 }
 
 func (c *Collector) getCommitteeIDBySlotAndIndex(slot phase0.Slot, index phase0.ValidatorIndex) (spectypes.CommitteeID, error) {
