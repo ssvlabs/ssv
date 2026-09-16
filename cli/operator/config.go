@@ -169,8 +169,15 @@ func (c *config) resolveAndValidate(logger *zap.Logger) (resolved, error) {
 			c.ProposerDelayEPBS, maxSafeProposerDelay)
 	}
 
-	if err := validateProposerQuickTimeout(c.ProposerQuickTimeout, logger); err != nil {
+	if err := validateProposerQuickTimeout(c.ProposerQuickTimeout); err != nil {
 		return resolved{}, err
+	}
+	if c.ProposerQuickTimeout != 0 {
+		// Reachable only after validateProposerQuickTimeout passed, i.e. the value is in range.
+		// Record the override so a cross-operator postmortem can reconstruct which budget this node armed.
+		logger.Info("Using a non-default ProposerQuickTimeout for proposer QBFT rounds",
+			zap.Duration("proposer_quick_timeout", c.ProposerQuickTimeout),
+			zap.Duration("default_proposer_quick_timeout", roundtimer.DefaultProposerQuickTimeout))
 	}
 
 	if err := gloas.ValidateBuilderConfig(c.Builders); err != nil {
@@ -207,7 +214,7 @@ func validateProposerDelay(proposerDelay time.Duration, allowDangerous bool) err
 // ProposerDelayEPBS rather than ProposerDelay, because below the floor the budget measurably times
 // out proposer rounds that would have decided, and above the ceiling a Glamsterdam round change
 // cannot land at all. Neither is a risk an operator can usefully accept.
-func validateProposerQuickTimeout(proposerQuickTimeout time.Duration, logger *zap.Logger) error {
+func validateProposerQuickTimeout(proposerQuickTimeout time.Duration) error {
 	if proposerQuickTimeout == 0 {
 		return nil
 	}
@@ -215,10 +222,6 @@ func validateProposerQuickTimeout(proposerQuickTimeout time.Duration, logger *za
 		return fmt.Errorf("ProposerQuickTimeout value %v is outside the supported range [%v, %v]",
 			proposerQuickTimeout, roundtimer.MinProposerQuickTimeout, roundtimer.MaxProposerQuickTimeout)
 	}
-	// Record the override so a cross-operator postmortem can reconstruct which budget this node armed.
-	logger.Info("Using a non-default ProposerQuickTimeout for proposer QBFT rounds",
-		zap.Duration("proposer_quick_timeout", proposerQuickTimeout),
-		zap.Duration("default_proposer_quick_timeout", roundtimer.DefaultProposerQuickTimeout))
 	return nil
 }
 
