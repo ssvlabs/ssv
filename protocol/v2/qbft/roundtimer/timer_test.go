@@ -220,7 +220,7 @@ func TestRoundTimeoutOffset(t *testing.T) {
 	}
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
-			got := roundTimeoutForRound(tc.role, slotDuration/3, tc.round)
+			got := roundTimeoutForRound(tc.role, slotDuration/3, defaultQuickTimeoutForRole(tc.role), tc.round)
 			require.Equal(t, tc.want, got)
 		})
 	}
@@ -245,7 +245,7 @@ func TestRoundTimeoutOffsetGloasInterval(t *testing.T) {
 	}
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
-			require.Equal(t, tc.want, roundTimeoutForRound(tc.role, gloasInterval, specqbft.FirstRound))
+			require.Equal(t, tc.want, roundTimeoutForRound(tc.role, gloasInterval, defaultQuickTimeoutForRole(tc.role), specqbft.FirstRound))
 		})
 	}
 }
@@ -280,7 +280,7 @@ func TestEstimatedRoundAtBoundaries(t *testing.T) {
 			// "late message" territory but EstimatedRoundAt is still defined and should
 			// keep incrementing with the same rules.
 			for round := specqbft.Round(1); round <= CutOffRound+2; round++ {
-				offset := roundTimeoutForRound(rc.role, slotDuration/3, round)
+				offset := roundTimeoutForRound(rc.role, slotDuration/3, defaultQuickTimeoutForRole(rc.role), round)
 
 				// 1 ns before the boundary: round r has not yet timed out.
 				got, err := EstimatedRoundAt(rc.role, slotDuration/3, offset-time.Nanosecond)
@@ -344,7 +344,7 @@ func TestEstimatedRoundAtEdgeCases(t *testing.T) {
 // TestRoundTimeoutMatchesRoundTimeoutOffset is a regression guard for RoundTimeout vs the
 // shared roundTimeoutForRound helper. Non-proposer RoundTimeout is defined as
 //
-//	time.Until(slotStart + roundTimeoutForRound(role, slotDuration, round))
+//	time.Until(slotStart + roundTimeoutForRound(role, slotDuration, quick, round))
 //
 // so with GenesisTime pinned to `time.Now()` under synctest (frozen clock), slot 0 starts
 // "now" and the returned duration must exactly equal roundTimeoutForRound. If anyone changes
@@ -370,7 +370,7 @@ func TestRoundTimeoutMatchesRoundTimeoutOffset(t *testing.T) {
 				timer := New(t.Context(), beaconConfig, rc.role, 0, func(round specqbft.Round) {})
 
 				for round := specqbft.Round(1); round <= CutOffRound; round++ {
-					expected := roundTimeoutForRound(rc.role, beaconConfig.IntervalDuration(0), round)
+					expected := roundTimeoutForRound(rc.role, beaconConfig.IntervalDuration(0), defaultQuickTimeoutForRole(rc.role), round)
 					got := timer.RoundTimeout(round)
 					require.Equal(t, expected, got, "round %d", round)
 				}
