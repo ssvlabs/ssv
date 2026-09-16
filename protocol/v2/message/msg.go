@@ -81,29 +81,44 @@ func BeaconRoleFromString(s string) (spectypes.BeaconRole, error) {
 	}
 }
 
+// Partial-signature message type names, as the API's `type` field reports them. Where a type belongs to
+// one duty the name is the duty's role name, so the two vocabularies agree.
+const (
+	PartialSigPostConsensus         = "POST_CONSENSUS"
+	PartialSigRandao                = "RANDAO"
+	PartialSigSelectionProof        = "SELECTION_PROOF"
+	PartialSigContributionProofs    = "CONTRIBUTION_PROOFS"
+	PartialSigValidatorRegistration = "VALIDATOR_REGISTRATION"
+	PartialSigVoluntaryExit         = "VOLUNTARY_EXIT"
+	PartialSigAggregatorCommittee   = "AGGREGATOR_COMMITTEE"
+	PartialSigPTCAttester           = "PTC_ATTESTER"
+	PartialSigProposerPreferences   = "PROPOSER_PREFERENCES"
+	PartialSigRequestAuth           = "REQUEST_AUTH"
+)
+
 // PartialSigMsgTypeToString names a partial-signature message type for API responses.
 func PartialSigMsgTypeToString(t spectypes.PartialSigMsgType) string {
 	switch t {
 	case spectypes.PostConsensusPartialSig:
-		return "POST_CONSENSUS"
+		return PartialSigPostConsensus
 	case spectypes.RandaoPartialSig:
-		return "RANDAO"
+		return PartialSigRandao
 	case ssvtypes.SelectionProofPartialSig:
-		return "SELECTION_PROOF"
+		return PartialSigSelectionProof
 	case ssvtypes.ContributionProofs:
-		return "CONTRIBUTION_PROOFS"
+		return PartialSigContributionProofs
 	case spectypes.ValidatorRegistrationPartialSig:
-		return roleValidatorRegistration
+		return PartialSigValidatorRegistration
 	case spectypes.VoluntaryExitPartialSig:
-		return roleVoluntaryExit
+		return PartialSigVoluntaryExit
 	case spectypes.AggregatorCommitteePartialSig:
-		return roleAggregatorCommittee
+		return PartialSigAggregatorCommittee
 	case spectypes.PTCAttesterPartialSig:
-		return rolePTCAttester
+		return PartialSigPTCAttester
 	case spectypes.ProposerPreferencesPartialSig:
-		return roleProposerPreferences
+		return PartialSigProposerPreferences
 	case spectypes.RequestAuthPartialSig:
-		return "REQUEST_AUTH"
+		return PartialSigRequestAuth
 	default:
 		return fmt.Sprintf("unknown(%d)", t)
 	}
