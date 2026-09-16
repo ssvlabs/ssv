@@ -174,7 +174,7 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
 			// The §6 envelope's quorum rides the proposer's packet; the proposal's participation is the
 			// block root's quorum alone (SIP #94 §4). The root is learnt from the proposal (SaveRoots),
 			// which precedes the quorum by a consensus round trip; should a quorum still overtake it in
-			// the worker pool, the envelope counts as the proposal's — the behaviour before this filter,
+			// the worker pool, the envelope counts as the proposal's — the behavior before this filter,
 			// and the same proposal-first dependence the committee roots rely on above.
 			continue
 		}
