@@ -90,6 +90,13 @@ const (
 	// This is a hard floor with no acknowledge-and-proceed override, following ProposerDelayEPBS
 	// rather than ProposerDelay. Under the Glamsterdam deadline there is no band here that is merely
 	// risky, so there is nothing for an operator to knowingly accept.
+	//
+	// The floor is the edge of the measured band, not a value that carries margin of its own. An
+	// operator who configures exactly this is racing the slowest round 1 we observed: the expiry and
+	// the consensus message reach the same queue with no rule that the message wins a tie, so such a
+	// round is a coin flip rather than a decide. The margin lives in DefaultProposerQuickTimeout,
+	// which clears the observation by 352ms; pick the floor only to deliberately trade that margin
+	// away.
 	MinProposerQuickTimeout = 1148 * time.Millisecond
 	// MaxProposerQuickTimeout is the pre-SIP-102 budget, so an operator can roll back to the previous
 	// behavior in-band. Above it a Glamsterdam round change cannot land at all.
