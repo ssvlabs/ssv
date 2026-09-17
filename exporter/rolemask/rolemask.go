@@ -11,15 +11,19 @@ import (
 // Bits (LSB first):
 //
 //	0: ATTESTER, 1: AGGREGATOR, 2: PROPOSER, 3: SYNC_COMMITTEE,
-//	4: SYNC_COMMITTEE_CONTRIBUTION
+//	4: SYNC_COMMITTEE_CONTRIBUTION, 5: PTC_ATTESTER, 6: PROPOSER_PREFERENCES
+//
+// One bit is left; the role after the next needs a wider type and a schedule re-encode.
 type Mask = uint8
 
 const (
-	BitAttester         Mask = 1 << 0
-	BitAggregator       Mask = 1 << 1
-	BitProposer         Mask = 1 << 2
-	BitSyncCommittee    Mask = 1 << 3
-	BitSyncContribution Mask = 1 << 4
+	BitAttester            Mask = 1 << 0
+	BitAggregator          Mask = 1 << 1
+	BitProposer            Mask = 1 << 2
+	BitSyncCommittee       Mask = 1 << 3
+	BitSyncContribution    Mask = 1 << 4
+	BitPTCAttester         Mask = 1 << 5
+	BitProposerPreferences Mask = 1 << 6
 )
 
 // roleToBit maps supported beacon roles to their bit in the schedule mask.
@@ -29,6 +33,8 @@ var roleToBit = map[spectypes.BeaconRole]Mask{
 	spectypes.BNRoleProposer:                  BitProposer,
 	spectypes.BNRoleSyncCommittee:             BitSyncCommittee,
 	spectypes.BNRoleSyncCommitteeContribution: BitSyncContribution,
+	spectypes.BNRolePTCAttester:               BitPTCAttester,
+	spectypes.BNRoleProposerPreferences:       BitProposerPreferences,
 }
 
 // allRoles is the canonical collection of roles represented in the mask.
@@ -39,6 +45,8 @@ var allRoles = []spectypes.BeaconRole{
 	spectypes.BNRoleProposer,
 	spectypes.BNRoleSyncCommittee,
 	spectypes.BNRoleSyncCommitteeContribution,
+	spectypes.BNRolePTCAttester,
+	spectypes.BNRoleProposerPreferences,
 }
 
 // All returns the canonical list of roles represented in the mask.

@@ -31,9 +31,11 @@ type DutyTraceStore interface {
 	SaveCommitteeDutyLink(slot phase0.Slot, index phase0.ValidatorIndex, id spectypes.CommitteeID) error
 	SaveCommitteeDutyLinks(slot phase0.Slot, linkMap map[phase0.ValidatorIndex]spectypes.CommitteeID) error
 	SaveCommitteeDuty(role spectypes.RunnerRole, duty *traces.CommitteeDutyTrace) error
-	SaveCommitteeDuties(slot phase0.Slot, role spectypes.RunnerRole, duties []*traces.CommitteeDutyTrace) error
+	// SaveCommitteeDuties and SaveValidatorDuties report how many of the duties reached disk: a duty that
+	// cannot be encoded is left out and named in the error, a failed batch write saves nothing.
+	SaveCommitteeDuties(slot phase0.Slot, role spectypes.RunnerRole, duties []*traces.CommitteeDutyTrace) (saved int, err error)
 	SaveValidatorDuty(duty *traces.ValidatorDutyTrace) error
-	SaveValidatorDuties(duties []*traces.ValidatorDutyTrace) error
+	SaveValidatorDuties(duties []*traces.ValidatorDutyTrace) (saved int, err error)
 	GetCommitteeDuty(slot phase0.Slot, role spectypes.RunnerRole, committeeID spectypes.CommitteeID) (*traces.CommitteeDutyTrace, error)
 	GetCommitteeDuties(slot phase0.Slot, roles ...spectypes.RunnerRole) ([]*traces.CommitteeDutyTrace, error)
 	GetCommitteeDutyLink(slot phase0.Slot, index phase0.ValidatorIndex) (spectypes.CommitteeID, error)
@@ -395,23 +397,10 @@ func (c *Collector) GetValidatorDecideds(role spectypes.BeaconRole, slot phase0.
 			continue
 		}
 
-		signers := make([]spectypes.OperatorID, 0, len(duty.Decideds)+len(duty.Post))
-
-		for _, d := range duty.Decideds {
-			signers = append(signers, d.Signers...)
-		}
-
-		for _, post := range duty.Post {
-			signers = append(signers, post.Signer)
-		}
-
-		slices.Sort(signers)
-		signers = slices.Compact(signers)
-
 		out = append(out, ParticipantsRangeIndexEntry{
 			Slot:    slot,
 			Index:   index,
-			Signers: signers,
+			Signers: validatorDutySigners(duty),
 		})
 	}
 
@@ -427,27 +416,52 @@ func (c *Collector) GetAllValidatorDecideds(role spectypes.BeaconRole, slot phas
 	out := make([]ParticipantsRangeIndexEntry, 0, len(duties))
 
 	for _, duty := range duties {
-		signers := make([]spectypes.OperatorID, 0, len(duty.Decideds)+len(duty.Post))
-
-		for _, d := range duty.Decideds {
-			signers = append(signers, d.Signers...)
-		}
-
-		for _, post := range duty.Post {
-			signers = append(signers, post.Signer)
-		}
-
-		slices.Sort(signers)
-		signers = slices.Compact(signers)
-
 		out = append(out, ParticipantsRangeIndexEntry{
 			Slot:    slot,
 			Index:   duty.Validator,
-			Signers: signers,
+			Signers: validatorDutySigners(duty),
 		})
 	}
 
 	return out, errs.ErrorOrNil()
+}
+
+// validatorDutySigners lists the operators observed taking part in a validator duty: the consensus
+// decideds' signers and the post-consensus signers, plus the pre-consensus signers for the Gloas duties
+// without a consensus phase, where the pre-consensus round is the duty itself. Request-auth entries are
+// left out: signing a builder token is not the preferences duty. This is the archive mode's notion of
+// participation — every signer seen, with no quorum test — as it has always been for post-consensus
+// signers; standard mode records a duty only once a root reaches the committee's quorum.
+func validatorDutySigners(duty *traces.ValidatorDutyTrace) []spectypes.OperatorID {
+	signers := make([]spectypes.OperatorID, 0, len(duty.Decideds)+len(duty.Post)+len(duty.Pre))
+	for _, d := range duty.Decideds {
+		signers = append(signers, d.Signers...)
+	}
+	for _, post := range duty.Post {
+		signers = append(signers, post.Signer)
+	}
+	if preConsensusIsTheDuty(duty.Role) {
+		for _, pre := range duty.Pre {
+			if pre.Type != spectypes.RequestAuthPartialSig {
+				signers = append(signers, pre.Signer)
+			}
+		}
+	}
+	slices.Sort(signers)
+	return slices.Compact(signers)
+}
+
+// preConsensusIsTheDuty reports the Gloas roles whose duty is a single partial-signature round, with no
+// consensus or post-consensus to record participation from. Validator registration and voluntary exit
+// are the same shape but stay out: their messages are exempt from the lateness bound, so a stale partial
+// would surface as participation at an arbitrary slot, and their participants have always been empty.
+func preConsensusIsTheDuty(role spectypes.BeaconRole) bool {
+	switch role {
+	case spectypes.BNRolePTCAttester, spectypes.BNRoleProposerPreferences:
+		return true
+	default:
+		return false
+	}
 }
 
 func (c *Collector) getCommitteeIDBySlotAndIndex(slot phase0.Slot, index phase0.ValidatorIndex) (spectypes.CommitteeID, error) {
