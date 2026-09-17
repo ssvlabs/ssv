@@ -5,6 +5,25 @@ import (
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
+	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
+)
+
+const (
+	// MaxPartialSigEntries bounds ValidatorDutyTrace.Pre and .Post, which hold one entry per partial
+	// signature per signer. The checks below tie it to the worst cases message validation admits on
+	// the largest committee, so a limit that outgrows the bound fails the build rather than leaving a
+	// trace that cannot be encoded at eviction.
+	MaxPartialSigEntries = 256
+	// maxSigners is the largest committee.
+	maxSigners = 13
+)
+
+var (
+	// Proposer preferences: distinct preference roots plus one request-auth root per builder, per signer.
+	_ [MaxPartialSigEntries - maxSigners*(gloas.MaxProposerPreferencesDistinctRoots+gloas.MaxRequestAuthDistinctRoots)]struct{}
+	// Sync-committee contribution: up to maxSigners entries per packet, per signer.
+	_ [MaxPartialSigEntries - maxSigners*maxSigners]struct{}
 )
 
 // NOTE: model_encoding.go is HAND-MAINTAINED — `go generate` cannot regenerate it.
@@ -24,10 +43,11 @@ type ValidatorDutyTrace struct {
 
 	ProposalData []byte `ssz-max:"4194532"`
 
-	// Pre and Post hold one entry per partial signature per signer, so a packet with several entries
-	// (the Gloas proposer's block and envelope roots, a sync-committee contribution's subnets) and a
-	// signer that re-emits under new roots (proposer preferences, request auth) all fit: the maxima by
-	// message validation are 156 for preferences and 169 for contributions, on 13 signers.
+	// Pre and Post hold one entry per partial signature per signer (MaxPartialSigEntries), so a packet
+	// with several entries (the Gloas proposer's block and envelope roots, a sync-committee contribution's
+	// subnets) and a signer that re-emits under new roots (proposer preferences, request auth) all fit.
+	// Traces with more than one entry per operator are unreadable by binaries before store format 2
+	// (see store.FormatVersion).
 	Pre  []*PartialSigTrace `ssz-max:"256"`
 	Post []*PartialSigTrace `ssz-max:"256"`
 }

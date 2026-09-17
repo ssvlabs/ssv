@@ -88,8 +88,8 @@ func (c *Collector) dumpCommitteeToDBPeriodically(slot phase0.Slot) (totalSaved 
 			continue
 		}
 		if err := c.store.SaveCommitteeDuties(slot, role, duties); err != nil {
-			c.logger.Error("save committee duties to disk", zap.Error(err), fields.RunnerRole(role))
-			continue
+			// A duty that could not be encoded is named in the error; the role's other traces are on disk.
+			c.logger.Error("couldn't save every committee duty to disk", zap.Error(err), fields.RunnerRole(role))
 		}
 		totalSaved += len(duties)
 	}
@@ -123,8 +123,8 @@ func (c *Collector) dumpValidatorToDBPeriodically(slot phase0.Slot) (totalSaved 
 	})
 
 	if err := c.store.SaveValidatorDuties(duties); err != nil {
-		c.logger.Error("couldn't save validator duties to disk", zap.Error(err))
-		return 0
+		// A duty that could not be encoded is named in the error; the slot's other traces are on disk.
+		c.logger.Error("couldn't save every validator duty to disk", zap.Error(err))
 	}
 
 	return len(duties)
