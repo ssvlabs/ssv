@@ -2136,8 +2136,11 @@ type mockDutyTraceStore struct {
 	scheduled               map[phase0.Slot]map[phase0.ValidatorIndex]rolemask.Mask
 }
 
-func (m *mockDutyTraceStore) SaveCommitteeDuties(slot phase0.Slot, role spectypes.RunnerRole, duties []*traces.CommitteeDutyTrace) error {
-	return m.err
+func (m *mockDutyTraceStore) SaveCommitteeDuties(slot phase0.Slot, role spectypes.RunnerRole, duties []*traces.CommitteeDutyTrace) (int, error) {
+	if m.err != nil {
+		return 0, m.err
+	}
+	return len(duties), nil
 }
 
 func (m *mockDutyTraceStore) SaveCommitteeDutyLink(slot phase0.Slot, index phase0.ValidatorIndex, id spectypes.CommitteeID) error {
@@ -2166,8 +2169,11 @@ func (m *mockDutyTraceStore) GetCommitteeDuties(slot phase0.Slot, roles ...spect
 	return nil, m.err
 }
 
-func (m *mockDutyTraceStore) SaveValidatorDuties(duties []*traces.ValidatorDutyTrace) error {
-	return m.err
+func (m *mockDutyTraceStore) SaveValidatorDuties(duties []*traces.ValidatorDutyTrace) (int, error) {
+	if m.err != nil {
+		return 0, m.err
+	}
+	return len(duties), nil
 }
 
 func (m *mockDutyTraceStore) SaveValidatorDuty(duty *traces.ValidatorDutyTrace) error {

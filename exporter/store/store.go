@@ -107,9 +107,10 @@ func (s *DutyTraceStore) SaveValidatorDuty(dto *traces.ValidatorDutyTrace) error
 	return nil
 }
 
-// SaveValidatorDuties writes a slot's validator duties in one batch. A duty that cannot be encoded is
-// left out and reported, so it does not cost the slot its other traces; the returned error names it.
-func (s *DutyTraceStore) SaveValidatorDuties(duties []*traces.ValidatorDutyTrace) error {
+// SaveValidatorDuties writes the duties in one batch and reports how many are on disk afterwards. A duty
+// that cannot be encoded is left out and named in the error while the rest are still saved; if the batch
+// write itself fails nothing is saved, and saved is 0.
+func (s *DutyTraceStore) SaveValidatorDuties(duties []*traces.ValidatorDutyTrace) (saved int, err error) {
 	objs := make([]basedb.Obj, 0, len(duties))
 	var skipped error
 	for _, duty := range duties {
@@ -124,9 +125,9 @@ func (s *DutyTraceStore) SaveValidatorDuties(duties []*traces.ValidatorDutyTrace
 		})
 	}
 	if err := s.db.SetMany(nil, len(objs), func(i int) (basedb.Obj, error) { return objs[i], nil }); err != nil {
-		return errors.Join(skipped, fmt.Errorf("save validator duties: %w", err))
+		return 0, errors.Join(skipped, fmt.Errorf("save validator duties: %w", err))
 	}
-	return skipped
+	return len(objs), skipped
 }
 
 func (s *DutyTraceStore) GetValidatorDuty(slot phase0.Slot, role spectypes.BeaconRole, index phase0.ValidatorIndex) (*traces.ValidatorDutyTrace, error) {
@@ -246,14 +247,15 @@ func (s *DutyTraceStore) SaveCommitteeDutyLinks(slot phase0.Slot, linkMap map[ph
 	})
 }
 
-func (s *DutyTraceStore) SaveCommitteeDuties(slot phase0.Slot, role spectypes.RunnerRole, duties []*traces.CommitteeDutyTrace) error {
+// SaveCommitteeDuties writes the duties in one batch under the slot and role and reports how many are on
+// disk afterwards; a duty that cannot be encoded, or carries another role, is left out and named in the
+// error, and a failed batch write saves nothing (see SaveValidatorDuties).
+func (s *DutyTraceStore) SaveCommitteeDuties(slot phase0.Slot, role spectypes.RunnerRole, duties []*traces.CommitteeDutyTrace) (saved int, err error) {
 	prefix, err := s.makeCommitteeSlotRolePrefix(slot, role)
 	if err != nil {
-		return fmt.Errorf("make committee slot-role prefix (slot=%d role=%d): %w", slot, role, err)
+		return 0, fmt.Errorf("make committee slot-role prefix (slot=%d role=%d): %w", slot, role, err)
 	}
 
-	// As in SaveValidatorDuties, a duty that cannot be encoded is left out and reported rather than
-	// failing the slot's batch.
 	objs := make([]basedb.Obj, 0, len(duties))
 	var skipped error
 	for _, duty := range duties {
@@ -273,9 +275,9 @@ func (s *DutyTraceStore) SaveCommitteeDuties(slot phase0.Slot, role spectypes.Ru
 		})
 	}
 	if err := s.db.SetMany(prefix, len(objs), func(i int) (basedb.Obj, error) { return objs[i], nil }); err != nil {
-		return errors.Join(skipped, fmt.Errorf("save committee duties: %w", err))
+		return 0, errors.Join(skipped, fmt.Errorf("save committee duties: %w", err))
 	}
-	return skipped
+	return len(objs), skipped
 }
 
 func (s *DutyTraceStore) SaveCommitteeDuty(role spectypes.RunnerRole, duty *traces.CommitteeDutyTrace) error {
