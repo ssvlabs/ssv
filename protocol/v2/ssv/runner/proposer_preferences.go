@@ -21,6 +21,7 @@ import (
 )
 
 var _ Runner = (*ProposerPreferencesRunner)(nil)
+var _ MultiSlotRunner = (*ProposerPreferencesRunner)(nil)
 
 // ProposerPreferencesRunner is the registered proposer-preferences runner for a validator (SIP #94
 // §5). Unlike the single-duty runners (PTC, validator registration, ...), a validator can hold several
@@ -210,9 +211,11 @@ func (r *ProposerPreferencesRunner) HasRunningDuty() bool {
 	return false
 }
 
-// CurrentDutySlot reports no duty slot: the dispatcher serves every upcoming proposal slot at once, so
-// no single slot is "the current one" and the queue consumer's stale-message floor, which keys on it,
-// must not apply — a message for a lower proposal slot is still live while a higher slot's duty starts.
+// ServesMultipleSlots implements MultiSlotRunner: one sub-runner per upcoming proposal slot, all live at once.
+func (r *ProposerPreferencesRunner) ServesMultipleSlots() {}
+
+// CurrentDutySlot reports no duty slot: with every upcoming proposal slot served at once, no single slot is
+// "the current one" (see MultiSlotRunner).
 func (r *ProposerPreferencesRunner) CurrentDutySlot() (phase0.Slot, bool) {
 	return 0, false
 }

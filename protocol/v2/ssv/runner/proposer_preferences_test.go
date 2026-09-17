@@ -97,8 +97,8 @@ func TestProposerPreferencesRunner_ConcurrentSlotsTracked(t *testing.T) {
 	require.Len(t, disp.bySlot, 2)               // both slots tracked, neither overwrote/rejected the other
 	require.Contains(t, disp.bySlot, current+10) // the lower slot, started second, survived
 
-	// No single current slot: the consumer's stale-message floor must never apply to the dispatcher, or
-	// the lower slot's partials would be purged when the higher slot's duty starts.
+	// No single current slot: the dispatcher is a MultiSlotRunner, which keeps the consumer's stale-message
+	// floor off it — or the lower slot's partials would be purged when the higher slot's duty starts.
 	_, hasSlot := disp.CurrentDutySlot()
 	require.False(t, hasSlot)
 }

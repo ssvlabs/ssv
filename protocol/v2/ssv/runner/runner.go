@@ -83,6 +83,15 @@ type PostConsensusAwaiter interface {
 	AwaitingPostConsensus() (phase0.Slot, bool)
 }
 
+// MultiSlotRunner is implemented by a runner that serves duties for several slots at once — the proposer
+// preferences dispatcher, one sub-runner per upcoming proposal slot — so no single slot is "the current one".
+// The validator's queue consumer keeps its stale-message floor, a single-duty notion, off such a runner: a
+// message for a lower slot is still live while a higher slot's duty starts.
+type MultiSlotRunner interface {
+	// ServesMultipleSlots is a marker with no behavior of its own.
+	ServesMultipleSlots()
+}
+
 // PostConsensusRoot pairs a post-consensus signing root with the domain it is signed under and whether a
 // packet may omit it. Every runner signs all of its roots under one domain and requires each of them; the
 // Gloas proposer adds the §6 blinded-envelope root under DomainBeaconBuilder, optional because a peer may
