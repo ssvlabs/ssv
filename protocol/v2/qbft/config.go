@@ -18,7 +18,7 @@ type IConfig interface {
 	GetProposerF() specqbft.ProposerF
 	// GetNetwork returns a p2p Network instance
 	GetNetwork() protocolp2p.Network
-	// GetCutOffRound returns the round cut off
+	// GetCutOffRound returns the round at which an instance gives up (see roundtimer.CutOffRoundFor)
 	GetCutOffRound() specqbft.Round
 }
 

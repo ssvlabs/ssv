@@ -300,16 +300,30 @@ func (i *Instance) Decode(data []byte) error {
 	return json.Unmarshal(data, &i)
 }
 
-// bumpToRound pushes this instance to a higher round, also scheduling a timeout for it.
+// bumpToRound pushes this instance to a higher round, arming its round timer only while the instance is
+// still relevant. At or past the cutoff it has given up (IsRelevant is false) and processes nothing more,
+// so a timer would only fire later to produce a spurious give-up error.
 func (i *Instance) bumpToRound(round specqbft.Round) {
 	if round > i.State.Round {
 		i.State.ProposalAcceptedForCurrentRound = nil
 		i.State.Round = round
-		i.roundTimer.TimeoutForRound(round)
+		if i.IsRelevant() {
+			i.roundTimer.TimeoutForRound(round)
+		}
 	}
 }
 
 // IsRelevant will return true if instance can process messages
 func (i *Instance) IsRelevant() bool {
 	return !i.markedIrrelevant && i.State.Round < i.config.GetCutOffRound()
+}
+
+// recordCutoffGiveUp records — as a trace event and debug log — that the instance has reached its cutoff
+// round (roundtimer.CutOffRoundFor) and given up. A round-advancing handler calls this once a bump lands on
+// the cutoff (IsRelevant is false) and returns without broadcasting: no node acts at or past the cutoff, so
+// the message would be rejected and carries no liveness value — a normal end, not an error.
+func (i *Instance) recordCutoffGiveUp(ctx context.Context, logger *zap.Logger) {
+	const eventMsg = "instance reached its cutoff round, giving up"
+	trace.SpanFromContext(ctx).AddEvent(eventMsg)
+	logger.Debug(eventMsg, zap.Uint64("qbft_round", uint64(i.State.Round)))
 }

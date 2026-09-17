@@ -67,6 +67,12 @@ func (i *Instance) uponRoundChange(
 		// Kept as defense-in-depth in case the message-processing flow changes.
 		i.bumpToRound(justifiedRoundChangeMsg.QBFTMessage.Round)
 
+		// If that bump ever reaches the cutoff round, give up rather than broadcast a proposal no node accepts.
+		if !i.IsRelevant() {
+			i.recordCutoffGiveUp(ctx, logger)
+			return nil
+		}
+
 		roundChangeJustificationSignedMessages, _ := justifiedRoundChangeMsg.QBFTMessage.GetRoundChangeJustifications() // no need to check error, check on isValidRoundChange
 
 		roundChangeJustification := make([]*specqbft.ProcessingMessage, 0)
@@ -121,10 +127,15 @@ func (i *Instance) uponChangeRoundPartialQuorum(ctx context.Context, logger *zap
 	i.metrics.StartStage(stageRoundChange)
 	i.metrics.RecordRoundChange(ctx, prevRound, reasonPartialQuorum)
 
-	// Always move on to the next round. The round-change message broadcast is a best-effort thing, the QBFT
-	// cluster as a whole can progress further even if our round-change message cannot be created/broadcast
-	// for whatever reason.
+	// Move on to the next round; the round-change broadcast below is best-effort (the cluster can progress
+	// without ours).
 	i.bumpToRound(newRound)
+
+	// If that bump reached the cutoff round, give up rather than broadcast a round-change no node accepts.
+	if !i.IsRelevant() {
+		i.recordCutoffGiveUp(ctx, logger)
+		return nil
+	}
 
 	startValueRoot := qbft.HashDataRoot(i.StartValue)
 	logger = logger.With(zap.String("qbft_start_value_root", hex.EncodeToString(startValueRoot[:])))

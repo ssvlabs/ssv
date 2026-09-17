@@ -1094,7 +1094,7 @@ func SetupCommitteeRunners(
 				return qbft.Proposer(state.Height, round, committee, options.NetworkConfig)
 			},
 			Network:     options.Network,
-			CutOffRound: roundtimer.CutOffRound,
+			CutOffRound: roundtimer.CutOffRoundFor(role),
 		}
 
 		committeeID := options.Operator.CommitteeID
@@ -1182,7 +1182,7 @@ func SetupRunners(
 				return qbft.Proposer(state.Height, round, committee, options.NetworkConfig)
 			},
 			Network:     options.Network,
-			CutOffRound: roundtimer.CutOffRound,
+			CutOffRound: roundtimer.CutOffRoundFor(role),
 		}
 
 		validatorPubKey := share.ValidatorPubKey
