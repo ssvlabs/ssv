@@ -153,13 +153,14 @@ func (c *Config) configureAddrs(logger *zap.Logger, opts []libp2p.Option) ([]lib
 		return opts, fmt.Errorf("could not build multi address for zero address: %w", err)
 	}
 	addrs = append(addrs, maZero)
-	ipAddr, err := commons.IPAddr()
-	if err != nil {
-		return opts, fmt.Errorf("could not get ip addr: %w", err)
-	}
 
-	// The explicit IP listener is what discv5 advertises; the other modes have nothing to advertise.
+	// The explicit IP listener is what discv5 advertises; the other modes have nothing to advertise, so they
+	// need no external IP at all.
 	if c.Discovery == discv5Discovery {
+		ipAddr, err := commons.IPAddr()
+		if err != nil {
+			return opts, fmt.Errorf("could not get ip addr: %w", err)
+		}
 		maIP, err := commons.BuildMultiAddress(ipAddr.String(), "tcp", uint(c.TCPPort), "")
 		if err != nil {
 			return opts, fmt.Errorf("could not build multi address for zero address: %w", err)
