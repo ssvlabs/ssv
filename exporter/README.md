@@ -170,7 +170,11 @@ From the Gloas fork the exporter records two more validator duties, under their 
 - `PTC_ATTESTER` — the payload-timeliness attestation (SIP #94 §3): one partial-signature round, no consensus. Participants are the operators that signed.
 - `PROPOSER_PREFERENCES` — the proposer's preferences for an upcoming proposal (SIP #94 §5), recorded under the proposal slot even though operators broadcast them up to two epochs early. In archive mode the trace also holds the builder request-auth signatures (`type: REQUEST_AUTH`), which do not count as participation.
 
-Partial-signature entries carry a `type` (`POST_CONSENSUS`, `PTC_ATTESTER`, `PROPOSER_PREFERENCES`, `REQUEST_AUTH`, ...), and every entry of a packet is recorded: at a Gloas slot a self-build proposer's post-consensus packet has two, the block root and the §6 envelope root. Participation in `PROPOSER` counts the block root's quorum only. At Gloas slots a proposer trace's `proposalData` is the decided `GloasProposalData` (block plus `payload_root`) rather than a versioned block.
+Partial-signature entries carry a `type` (`POST_CONSENSUS`, `PTC_ATTESTER`, `PROPOSER_PREFERENCES`, `REQUEST_AUTH`, ...), and every entry of a validator-role packet is recorded, Gloas or not: a self-build proposer's post-consensus packet at a Gloas slot has two entries, the block root and the §6 envelope root, and a sync-committee contribution has one per subnet. Participation in `PROPOSER` counts the block root's quorum only. At Gloas slots a proposer trace's `proposalData` is the decided `GloasProposalData` (block plus `payload_root`) rather than a versioned block.
+
+Two things to know about the modes. In archive mode, `signers` in `/v1/exporter/decideds` lists the operators observed signing (request auth aside), not a quorum, as it always has for post-consensus signers; standard mode records a duty's participants only once a signing root reaches the committee's quorum. And a `PROPOSER_PREFERENCES` trace is keyed by its proposal slot, up to two epochs ahead of the messages, and is written to disk only when that slot is evicted, so an exporter restarted before then loses it, where every other role loses at most four slots.
+
+Traces written by this version can hold more than one entry per operator, which an older exporter cannot read. The store records its format version, and a newer store is refused at startup rather than read partially.
 
 ### Explore API
 
