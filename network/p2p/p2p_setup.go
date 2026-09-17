@@ -298,14 +298,18 @@ func (n *p2pNetwork) setupDiscovery() error {
 	logger := n.logger
 
 	var disc discovery.Service
-	if n.cfg.Discovery == localDiscvery {
+	switch n.cfg.Discovery {
+	case mdnsDiscovery:
 		logger.Info("discovery: using mdns (local)")
 		var err error
-		disc, err = discovery.NewLocalDiscovery(n.ctx, logger, n.Host(), n.cfg.MdnsDiscoveryTag)
+		disc, err = discovery.NewLocalDiscovery(n.ctx, logger, n.Host())
 		if err != nil {
 			return err
 		}
-	} else {
+	case noDiscovery:
+		logger.Info("discovery: disabled, keeping only trusted and inbound peers")
+		disc = discovery.Disabled{}
+	default:
 		ipAddr, err := p2pcommons.IPAddr()
 		if err != nil {
 			return fmt.Errorf("could not get ip addr: %w", err)

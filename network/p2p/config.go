@@ -26,7 +26,11 @@ import (
 )
 
 const (
-	localDiscvery  = "mdns"
+	discv5Discovery = "discv5"
+	mdnsDiscovery   = "mdns"
+	// noDiscovery runs no peer discovery: the node has only its TrustedPeers, the peers that dial it, and any
+	// peers the embedding code connects directly (the test harness wires its mesh that way).
+	noDiscovery    = "none"
 	minPeersBuffer = 10
 )
 
@@ -34,7 +38,7 @@ const (
 type Config struct {
 	Ctx          context.Context
 	Bootnodes    string   `yaml:"Bootnodes" env:"BOOTNODES" env-description:"Bootnodes to use for discovery (semicolon-separated ENRs, e.g. 'enr:-abc123;enr:-def456')" `
-	Discovery    string   `yaml:"Discovery" env:"P2P_DISCOVERY" env-description:"Discovery protocol to use (discv5, mdns)" `
+	Discovery    string   `yaml:"Discovery" env:"P2P_DISCOVERY" env-description:"Discovery protocol to use (discv5, mdns, or none to run without discovery)" `
 	TrustedPeers []string `yaml:"TrustedPeers" env:"TRUSTED_PEERS" env-description:"List of peer IDs to always connect to"`
 
 	TCPPort     uint16 `yaml:"TcpPort" env:"TCP_PORT" env-description:"TCP port for P2P transport"`
@@ -95,15 +99,10 @@ type Config struct {
 
 	// PeerScoreInspectorInterval is the interval at which the PeerScoreInspector is called.
 	PeerScoreInspectorInterval time.Duration
-
-	// MdnsDiscoveryTag overrides the mDNS service tag used by local discovery.
-	// Empty falls back to discovery.LocalDiscoveryServiceTag. Tests set this to
-	// a unique value so concurrent test processes don't cross-discover peers.
-	MdnsDiscoveryTag string
 }
 
 func (c *Config) ApplyDefaults() {
-	c.Discovery = "discv5"
+	c.Discovery = discv5Discovery
 	c.TCPPort = 13001
 	c.UDPPort = 12001
 	c.RequestTimeout = 10 * time.Second
@@ -159,7 +158,8 @@ func (c *Config) configureAddrs(logger *zap.Logger, opts []libp2p.Option) ([]lib
 		return opts, fmt.Errorf("could not get ip addr: %w", err)
 	}
 
-	if c.Discovery != localDiscvery {
+	// The explicit IP listener is what discv5 advertises; the other modes have nothing to advertise.
+	if c.Discovery == discv5Discovery {
 		maIP, err := commons.BuildMultiAddress(ipAddr.String(), "tcp", uint(c.TCPPort), "")
 		if err != nil {
 			return opts, fmt.Errorf("could not build multi address for zero address: %w", err)
