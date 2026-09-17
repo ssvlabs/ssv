@@ -210,6 +210,13 @@ func (r *ProposerPreferencesRunner) HasRunningDuty() bool {
 	return false
 }
 
+// CurrentDutySlot reports no duty slot: the dispatcher serves every upcoming proposal slot at once, so
+// no single slot is "the current one" and the queue consumer's stale-message floor, which keys on it,
+// must not apply — a message for a lower proposal slot is still live while a higher slot's duty starts.
+func (r *ProposerPreferencesRunner) CurrentDutySlot() (phase0.Slot, bool) {
+	return 0, false
+}
+
 // evictPastSlots drops sub-runners (and stashed partials) whose proposal slot has passed; the
 // preference is moot once the proposal slot arrives, and convergence completes well before it.
 func (r *ProposerPreferencesRunner) evictPastSlots() {

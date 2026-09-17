@@ -85,7 +85,7 @@ func TestConsumeQueue_DropsStaleMessagesAtDutyStart(t *testing.T) {
 
 	netCfg := networkconfig.TestNetwork
 	duty := &spectypes.ValidatorDuty{Type: spectypes.BNRoleProposer, Slot: phase0.Slot(10)}
-	msgID := spectypes.NewMsgID(netCfg.DomainType, duty.PubKey[:], spectypes.RoleProposer)
+	msgID := ssvtestingutils.NewMsgID(netCfg.DomainType, duty.PubKey[:], spectypes.RoleProposer)
 	proposer := &runner.ProposerRunner{BaseRunner: &runner.BaseRunner{RunnerRoleType: spectypes.RoleProposer}}
 
 	v := &Validator{
@@ -144,7 +144,7 @@ func TestConsumeQueue_DropsStaleMessageArrivingAfterDutyStart(t *testing.T) {
 
 	netCfg := networkconfig.TestNetwork
 	duty := &spectypes.ValidatorDuty{Type: spectypes.BNRoleProposer, Slot: phase0.Slot(10)}
-	msgID := spectypes.NewMsgID(netCfg.DomainType, duty.PubKey[:], spectypes.RoleProposer)
+	msgID := ssvtestingutils.NewMsgID(netCfg.DomainType, duty.PubKey[:], spectypes.RoleProposer)
 	proposer := &runner.ProposerRunner{BaseRunner: &runner.BaseRunner{RunnerRoleType: spectypes.RoleProposer}}
 
 	v := &Validator{
@@ -200,7 +200,7 @@ func TestConsumeQueue_RaisesFloorOnMidDutyReseat(t *testing.T) {
 
 	netCfg := networkconfig.TestNetwork
 	var pk phase0.BLSPubKey
-	msgID := spectypes.NewMsgID(netCfg.DomainType, pk[:], spectypes.RoleProposer)
+	msgID := ssvtestingutils.NewMsgID(netCfg.DomainType, pk[:], spectypes.RoleProposer)
 	proposer := &runner.ProposerRunner{BaseRunner: &runner.BaseRunner{RunnerRoleType: spectypes.RoleProposer}}
 
 	v := &Validator{
@@ -266,7 +266,7 @@ func TestConsumeQueue_LowerSlotDutyAcceptedAfterFloorRoseIsNotStarved(t *testing
 
 	netCfg := networkconfig.TestNetwork
 	var pk phase0.BLSPubKey
-	msgID := spectypes.NewMsgID(netCfg.DomainType, pk[:], spectypes.RoleProposer)
+	msgID := ssvtestingutils.NewMsgID(netCfg.DomainType, pk[:], spectypes.RoleProposer)
 	proposer := &runner.ProposerRunner{BaseRunner: &runner.BaseRunner{RunnerRoleType: spectypes.RoleProposer}}
 
 	v := &Validator{
@@ -320,7 +320,7 @@ func TestConsumeQueue_LowerSlotDutyAcceptedAfterFloorRoseIsNotStarved(t *testing
 func TestSlotBelow_NeverMatchesDutyStart(t *testing.T) {
 	domain := networkconfig.TestNetwork.DomainType
 	var pk phase0.BLSPubKey
-	msgID := spectypes.NewMsgID(domain, pk[:], spectypes.RoleProposer)
+	msgID := ssvtestingutils.NewMsgID(domain, pk[:], spectypes.RoleProposer)
 
 	belowFloor := slotBelow(phase0.Slot(12))
 	require.False(t, belowFloor(executeDutyMsg(t, domain, 10)), "a duty-start below the floor is kept")
@@ -336,7 +336,7 @@ func TestSlotBelow_NeverMatchesDutyStart(t *testing.T) {
 func TestPurgeAtDutyStart_KeepsAConcurrentDutyStart(t *testing.T) {
 	domain := networkconfig.TestNetwork.DomainType
 	var pk phase0.BLSPubKey
-	msgID := spectypes.NewMsgID(domain, pk[:], spectypes.RoleProposer)
+	msgID := ssvtestingutils.NewMsgID(domain, pk[:], spectypes.RoleProposer)
 
 	q := queue.New(zap.NewNop(), 16)
 	require.True(t, q.TryPush(executeDutyMsg(t, domain, 12))) // higher-slot duty-start enqueued first...
