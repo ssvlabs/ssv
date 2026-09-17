@@ -44,8 +44,10 @@ type CommitteeObserver struct {
 	aggregatorRoots      *ttlcache.Cache[phase0.Root, struct{}]
 	syncCommRoots        *ttlcache.Cache[phase0.Root, struct{}]
 	syncCommContribRoots *ttlcache.Cache[phase0.Root, struct{}]
-	// envelopeRoots holds the §6 envelope signing roots of decided Gloas self-build proposals: their
-	// quorum rides the proposer's post-consensus packet and is not the proposal's participation.
+	// envelopeRoots holds the §6 envelope signing roots of proposed Gloas self-build values — every
+	// round's proposal, decided or not; a root that never decides never meets a quorum root — since
+	// the envelope's quorum rides the proposer's post-consensus packet and is not the proposal's
+	// participation.
 	envelopeRoots *ttlcache.Cache[phase0.Root, struct{}]
 	domainCache   *DomainCache
 
@@ -296,8 +298,8 @@ func recordsParticipation(msgType spectypes.PartialSigMsgType) (bool, error) {
 	}
 }
 
-// isEnvelopeRoot reports whether root is a §6 envelope signing root learnt from a decided Gloas
-// self-build proposal (see SaveRoots).
+// isEnvelopeRoot reports whether root is a §6 envelope signing root learnt from a proposed Gloas
+// self-build value (see SaveRoots).
 func (ncv *CommitteeObserver) isEnvelopeRoot(root phase0.Root) bool {
 	return ncv.envelopeRoots != nil && ncv.envelopeRoots.Has(root)
 }
@@ -537,7 +539,7 @@ func (ncv *CommitteeObserver) SaveRoots(ctx context.Context, msg *queue.SSVMessa
 		return nil
 	case spectypes.RoleProposer:
 		// At a Gloas slot a self-build proposal's post-consensus packet also carries the §6 envelope
-		// root; learn it from the decided value so its quorum is not counted as the proposal's.
+		// root; learn it from the proposed value so its quorum is not counted as the proposal's.
 		if !ncv.beaconConfig.IsGloasAtSlot(phase0.Slot(qbftMsg.Height)) || ncv.envelopeRoots == nil {
 			return nil
 		}
@@ -547,8 +549,8 @@ func (ncv *CommitteeObserver) SaveRoots(ctx context.Context, msg *queue.SSVMessa
 	}
 }
 
-// saveEnvelopeRoot records the §6 envelope signing root the decided Gloas value commits to, when the
-// decided bid is self-build (SIP #94 §6).
+// saveEnvelopeRoot records the §6 envelope signing root a proposed Gloas value commits to, when its bid
+// is self-build (SIP #94 §6).
 func (ncv *CommitteeObserver) saveEnvelopeRoot(ctx context.Context, epoch phase0.Epoch, fullData []byte) error {
 	consData := &spectypes.ProposerConsensusData{}
 	if err := consData.Decode(fullData); err != nil {

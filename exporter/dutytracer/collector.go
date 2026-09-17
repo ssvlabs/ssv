@@ -178,6 +178,11 @@ func (c *Collector) Start(ctx context.Context, tickerProvider slotticker.Provide
 
 const slotTTL = 4
 
+// evict flushes the traces of the slot slotTTL behind currentSlot to disk. Traces are keyed by their duty
+// slot, so a duty recorded ahead of the chain — proposer preferences, up to two epochs before their
+// proposal slot — stays in memory until its own slot is evicted; an exporter restarted before then loses
+// it, where every other role loses at most slotTTL slots. Flushing earlier would need the in-memory
+// trace to merge with the disk copy at eviction, so the gap is accepted for now.
 func (c *Collector) evict(currentSlot phase0.Slot) {
 	// evict committee traces
 	start := time.Now()

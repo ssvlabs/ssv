@@ -84,7 +84,7 @@ func TestValidatorDutyTrace_MarshallSSZ_WideLists(t *testing.T) {
 	_, err = trace.HashTreeRoot()
 	require.NoError(t, err)
 
-	trace.Pre = wide(257)
+	trace.Pre = wide(MaxPartialSigEntries + 1)
 	_, err = trace.MarshalSSZ()
 	require.Error(t, err)
 }

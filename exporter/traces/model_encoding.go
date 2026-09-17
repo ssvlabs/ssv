@@ -97,8 +97,8 @@ func (v *ValidatorDutyTrace) MarshalSSZTo(buf []byte) (dst []byte, err error) {
 	dst = append(dst, v.ProposalData...)
 
 	// Field (6) 'Pre'
-	if size := len(v.Pre); size > 256 {
-		err = ssz.ErrListTooBigFn("ValidatorDutyTrace.Pre", size, 256)
+	if size := len(v.Pre); size > MaxPartialSigEntries {
+		err = ssz.ErrListTooBigFn("ValidatorDutyTrace.Pre", size, MaxPartialSigEntries)
 		return
 	}
 	for ii := 0; ii < len(v.Pre); ii++ {
@@ -108,8 +108,8 @@ func (v *ValidatorDutyTrace) MarshalSSZTo(buf []byte) (dst []byte, err error) {
 	}
 
 	// Field (7) 'Post'
-	if size := len(v.Post); size > 256 {
-		err = ssz.ErrListTooBigFn("ValidatorDutyTrace.Post", size, 256)
+	if size := len(v.Post); size > MaxPartialSigEntries {
+		err = ssz.ErrListTooBigFn("ValidatorDutyTrace.Post", size, MaxPartialSigEntries)
 		return
 	}
 	for ii := 0; ii < len(v.Post); ii++ {
@@ -229,7 +229,7 @@ func (v *ValidatorDutyTrace) UnmarshalSSZ(buf []byte) error {
 	// Field (6) 'Pre'
 	{
 		buf = tail[o6:o7]
-		num, err := ssz.DivideInt2(len(buf), 56, 256)
+		num, err := ssz.DivideInt2(len(buf), 56, MaxPartialSigEntries)
 		if err != nil {
 			return err
 		}
@@ -247,7 +247,7 @@ func (v *ValidatorDutyTrace) UnmarshalSSZ(buf []byte) error {
 	// Field (7) 'Post'
 	{
 		buf = tail[o7:]
-		num, err := ssz.DivideInt2(len(buf), 56, 256)
+		num, err := ssz.DivideInt2(len(buf), 56, MaxPartialSigEntries)
 		if err != nil {
 			return err
 		}
@@ -358,7 +358,7 @@ func (v *ValidatorDutyTrace) HashTreeRootWith(hh ssz.HashWalker) (err error) {
 	{
 		subIndx := hh.Index()
 		num := uint64(len(v.Pre))
-		if num > 256 {
+		if num > MaxPartialSigEntries {
 			err = ssz.ErrIncorrectListSize
 			return
 		}
@@ -367,14 +367,14 @@ func (v *ValidatorDutyTrace) HashTreeRootWith(hh ssz.HashWalker) (err error) {
 				return
 			}
 		}
-		hh.MerkleizeWithMixin(subIndx, num, 256)
+		hh.MerkleizeWithMixin(subIndx, num, MaxPartialSigEntries)
 	}
 
 	// Field (7) 'Post'
 	{
 		subIndx := hh.Index()
 		num := uint64(len(v.Post))
-		if num > 256 {
+		if num > MaxPartialSigEntries {
 			err = ssz.ErrIncorrectListSize
 			return
 		}
@@ -383,7 +383,7 @@ func (v *ValidatorDutyTrace) HashTreeRootWith(hh ssz.HashWalker) (err error) {
 				return
 			}
 		}
-		hh.MerkleizeWithMixin(subIndx, num, 256)
+		hh.MerkleizeWithMixin(subIndx, num, MaxPartialSigEntries)
 	}
 
 	hh.Merkleize(indx)
