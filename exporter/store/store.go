@@ -19,7 +19,42 @@ import (
 
 var ErrNotFound = errors.New("duty not found")
 
+// FormatVersion is the trace store's on-disk format. It rises whenever a persisted shape changes so that
+// an older binary can no longer read it, and EnsureFormat then makes a downgrade fail at startup rather
+// than lose records to decode errors one by one. 1 is the original layout; 2 lets a validator duty's Pre
+// and Post lists hold more than one entry per operator.
+const FormatVersion uint32 = 2
+
+// EnsureFormat records this binary's FormatVersion in the store and refuses a store written by a newer
+// binary. A store without a recorded version is at version 1, which every binary reads.
+func EnsureFormat(db basedb.Database) error {
+	obj, found, err := db.Get([]byte(traceFormatKey), nil)
+	if err != nil {
+		return fmt.Errorf("read trace store format: %w", err)
+	}
+	stored := uint32(1)
+	if found {
+		if len(obj.Value) != 4 {
+			return fmt.Errorf("trace store format record has %d bytes, want 4", len(obj.Value))
+		}
+		stored = binary.LittleEndian.Uint32(obj.Value)
+	}
+	if stored > FormatVersion {
+		return fmt.Errorf("trace store format %d was written by a newer exporter than this binary's format %d; refusing to read it partially", stored, FormatVersion)
+	}
+	if stored == FormatVersion {
+		return nil
+	}
+	value := make([]byte, 4)
+	binary.LittleEndian.PutUint32(value, FormatVersion)
+	if err := db.Set([]byte(traceFormatKey), nil, value); err != nil {
+		return fmt.Errorf("record trace store format: %w", err)
+	}
+	return nil
+}
+
 const (
+	traceFormatKey             = "tf"
 	validatorDutyTraceKey      = "vd"
 	committeeDutyTraceKey      = "cd"
 	validatorCommitteeIndexKey = "vc"
@@ -72,23 +107,26 @@ func (s *DutyTraceStore) SaveValidatorDuty(dto *traces.ValidatorDutyTrace) error
 	return nil
 }
 
+// SaveValidatorDuties writes a slot's validator duties in one batch. A duty that cannot be encoded is
+// left out and reported, so it does not cost the slot its other traces; the returned error names it.
 func (s *DutyTraceStore) SaveValidatorDuties(duties []*traces.ValidatorDutyTrace) error {
-	return s.db.SetMany(nil, len(duties), func(i int) (basedb.Obj, error) {
-		role := duties[i].Role
-		slot := duties[i].Slot
-		index := duties[i].Validator
-		ctx := fmt.Sprintf("role=%s slot=%d index=%d", role, slot, index)
-		value, err := duties[i].MarshalSSZ()
+	objs := make([]basedb.Obj, 0, len(duties))
+	var skipped error
+	for _, duty := range duties {
+		value, err := duty.MarshalSSZ()
 		if err != nil {
-			return basedb.Obj{}, fmt.Errorf("marshal validator duty (%s): %w", ctx, err)
+			skipped = errors.Join(skipped, fmt.Errorf("marshal validator duty (role=%s slot=%d index=%d): %w", duty.Role, duty.Slot, duty.Validator, err))
+			continue
 		}
-
-		key := s.makeValidatorPrefix(slot, role, index)
-		return basedb.Obj{
-			Key:   key,
+		objs = append(objs, basedb.Obj{
+			Key:   s.makeValidatorPrefix(duty.Slot, duty.Role, duty.Validator),
 			Value: value,
-		}, nil
-	})
+		})
+	}
+	if err := s.db.SetMany(nil, len(objs), func(i int) (basedb.Obj, error) { return objs[i], nil }); err != nil {
+		return errors.Join(skipped, fmt.Errorf("save validator duties: %w", err))
+	}
+	return skipped
 }
 
 func (s *DutyTraceStore) GetValidatorDuty(slot phase0.Slot, role spectypes.BeaconRole, index phase0.ValidatorIndex) (*traces.ValidatorDutyTrace, error) {
@@ -214,20 +252,30 @@ func (s *DutyTraceStore) SaveCommitteeDuties(slot phase0.Slot, role spectypes.Ru
 		return fmt.Errorf("make committee slot-role prefix (slot=%d role=%d): %w", slot, role, err)
 	}
 
-	return s.db.SetMany(prefix, len(duties), func(i int) (basedb.Obj, error) {
-		ctx := fmt.Sprintf("slot=%d role=%d committeeID=%x", duties[i].Slot, role, duties[i].CommitteeID)
-		if duties[i].Role != role {
-			return basedb.Obj{}, fmt.Errorf("duty role %d != keyed role %d (%s)", duties[i].Role, role, ctx)
+	// As in SaveValidatorDuties, a duty that cannot be encoded is left out and reported rather than
+	// failing the slot's batch.
+	objs := make([]basedb.Obj, 0, len(duties))
+	var skipped error
+	for _, duty := range duties {
+		ctx := fmt.Sprintf("slot=%d role=%d committeeID=%x", duty.Slot, role, duty.CommitteeID)
+		if duty.Role != role {
+			skipped = errors.Join(skipped, fmt.Errorf("duty role %d != keyed role %d (%s)", duty.Role, role, ctx))
+			continue
 		}
-		value, err := duties[i].MarshalSSZ()
+		value, err := duty.MarshalSSZ()
 		if err != nil {
-			return basedb.Obj{}, fmt.Errorf("marshal committee duty (%s): %w", ctx, err)
+			skipped = errors.Join(skipped, fmt.Errorf("marshal committee duty (%s): %w", ctx, err))
+			continue
 		}
-		return basedb.Obj{
+		objs = append(objs, basedb.Obj{
 			Value: value,
-			Key:   duties[i].CommitteeID[:],
-		}, nil
-	})
+			Key:   duty.CommitteeID[:],
+		})
+	}
+	if err := s.db.SetMany(prefix, len(objs), func(i int) (basedb.Obj, error) { return objs[i], nil }); err != nil {
+		return errors.Join(skipped, fmt.Errorf("save committee duties: %w", err))
+	}
+	return skipped
 }
 
 func (s *DutyTraceStore) SaveCommitteeDuty(role spectypes.RunnerRole, duty *traces.CommitteeDutyTrace) error {
