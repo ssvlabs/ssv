@@ -252,6 +252,9 @@ func (gc *GoClient) getForkData(specResponse map[string]any) (map[spec.DataVersi
 		return nil, err
 	}
 
+	// GLOAS_FORK_EPOCH is optional, unlike every earlier fork's epoch: a beacon node that predates
+	// Gloas keeps serving the node, and its Gloas entry stands for "not scheduled" (far-future epoch,
+	// zero version) — which is how AssertSame reads it when the other client names the fork.
 	gloasEpoch, err := getForkEpoch("GLOAS_FORK_EPOCH", false)
 	if err != nil {
 		return nil, err

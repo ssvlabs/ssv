@@ -66,3 +66,30 @@ func TestBeacon_IntervalDuration(t *testing.T) {
 	require.Equal(t, netCfg.SlotDuration/3, netCfg.IntervalDuration(netCfg.FirstSlotAtEpoch(gloasEpoch)-1))
 	require.Equal(t, netCfg.SlotDuration/4, netCfg.IntervalDuration(netCfg.FirstSlotAtEpoch(gloasEpoch)))
 }
+
+// Two beacon configs agree on their forks when every scheduled fork matches; an unscheduled fork is the
+// same whether the client names it far-future or predates it and omits it, so a staggered upgrade where
+// one client advertises GLOAS_FORK_EPOCH and one does not runs. Scheduling it on one client only, or at
+// different epochs, is a real misalignment.
+func TestBeacon_AssertSame_Forks(t *testing.T) {
+	base := func(gloas *phase0.Fork) *Beacon {
+		b := *TestNetwork.Beacon
+		b.Forks = map[spec.DataVersion]phase0.Fork{spec.DataVersionPhase0: {}, spec.DataVersionAltair: {Epoch: 1}}
+		if gloas != nil {
+			b.Forks[DataVersionGloas] = *gloas
+		}
+		return &b
+	}
+	omitted := base(nil)
+	unscheduled := base(&phase0.Fork{Epoch: FarFutureEpoch, CurrentVersion: phase0.Version{0x80}})
+	scheduled := base(&phase0.Fork{Epoch: 100, CurrentVersion: phase0.Version{0x80}})
+	scheduledLater := base(&phase0.Fork{Epoch: 200, CurrentVersion: phase0.Version{0x80}})
+
+	require.NoError(t, omitted.AssertSame(unscheduled))
+	require.NoError(t, unscheduled.AssertSame(omitted))
+	require.NoError(t, scheduled.AssertSame(scheduled))
+
+	require.ErrorContains(t, scheduled.AssertSame(omitted), "scheduled on one client and not on the other")
+	require.ErrorContains(t, unscheduled.AssertSame(scheduled), "scheduled on one client and not on the other")
+	require.ErrorContains(t, scheduled.AssertSame(scheduledLater), "at epoch 100/200")
+}
