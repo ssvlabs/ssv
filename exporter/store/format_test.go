@@ -62,12 +62,13 @@ func TestSaveValidatorDuties_SkipsUnencodableDuty(t *testing.T) {
 		oversized.Pre = append(oversized.Pre, &traces.PartialSigTrace{Signer: 1})
 	}
 
-	err = s.SaveValidatorDuties([]*traces.ValidatorDutyTrace{good, oversized})
+	saved, err := s.SaveValidatorDuties([]*traces.ValidatorDutyTrace{good, oversized})
 	require.ErrorContains(t, err, "index=2")
+	require.Equal(t, 1, saved, "only the encodable duty counts as saved")
 
-	saved, err := s.GetValidatorDuty(slot, spectypes.BNRoleProposerPreferences, 1)
+	got, err := s.GetValidatorDuty(slot, spectypes.BNRoleProposerPreferences, 1)
 	require.NoError(t, err)
-	require.Equal(t, good.Validator, saved.Validator)
+	require.Equal(t, good.Validator, got.Validator)
 	_, err = s.GetValidatorDuty(slot, spectypes.BNRoleProposerPreferences, 2)
 	require.ErrorIs(t, err, ErrNotFound)
 }

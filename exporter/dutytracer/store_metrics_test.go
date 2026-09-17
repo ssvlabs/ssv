@@ -64,7 +64,9 @@ func TestDutyTraceStoreMetrics_SaveCommitteeDutiesDelegation(t *testing.T) {
 		{Slot: slot, Role: spectypes.RoleCommittee, CommitteeID: spectypes.CommitteeID{2}},
 	}
 
-	require.NoError(t, metricsStore.SaveCommitteeDuties(slot, spectypes.RoleCommittee, duties))
+	saved, err := metricsStore.SaveCommitteeDuties(slot, spectypes.RoleCommittee, duties)
+	require.NoError(t, err)
+	require.Equal(t, len(duties), saved)
 
 	got, err := metricsStore.GetCommitteeDuties(slot, spectypes.RoleCommittee)
 	require.NoError(t, err)
