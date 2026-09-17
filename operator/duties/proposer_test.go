@@ -10,10 +10,13 @@ import (
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
+	"go.uber.org/zap"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/utils/hashmap"
@@ -1046,19 +1049,9 @@ func TestScheduler_Proposer_Indices_Changed_Too_Late_In_Slot(t *testing.T) {
 			dutiesMap     = hashmap.New[phase0.Epoch, []*eth2apiv1.ProposerDuty]()
 			waitForDuties = &SafeValue[bool]{}
 		)
-		// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
-		// This deadline needs to be large enough to not prevent tests from executing their intended flow.
-		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
-		scheduler, ticker := setupSchedulerAndMocks(ctx, t, []dutyHandler{handler})
-		fetchDutiesCall, executeDutiesCall := setupProposerDutiesMock(scheduler, dutiesMap, waitForDuties)
-		require.NoError(t, scheduler.Start(ctx))
-
-		// STEP 1: slot 0 has no duties and no action.
-		ticker.Send(phase0.Slot(0))
-		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
-
-		// STEP 2: arrange for indices change to arrive too late for slot 0 processing.
-		waitForDuties.Set(true)
+		// A duty exists from the start, so there's an eligible validator (proposer shares are derived from the
+		// duties map) and the silent startup fetch fulfills the current-epoch intent. That settles the epoch
+		// before the indices change, isolating what we test: a late indices change is the only slot-1 re-fetch.
 		dutiesMap.Set(phase0.Epoch(0), []*eth2apiv1.ProposerDuty{
 			{
 				PubKey:         phase0.BLSPubKey{1, 2, 3},
@@ -1066,15 +1059,28 @@ func TestScheduler_Proposer_Indices_Changed_Too_Late_In_Slot(t *testing.T) {
 				ValidatorIndex: phase0.ValidatorIndex(1),
 			},
 		})
+		// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
+		// This deadline needs to be large enough to not prevent tests from executing their intended flow.
+		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
+		scheduler, ticker := setupSchedulerAndMocks(ctx, t, []dutyHandler{handler})
+		fetchDutiesCall, executeDutiesCall := setupProposerDutiesMock(scheduler, dutiesMap, waitForDuties)
+		require.NoError(t, scheduler.Start(ctx))
+
+		// STEP 1: the startup fetch already fulfilled the current-epoch intent, so slot 0 has no action.
+		ticker.Send(phase0.Slot(0))
+		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
+
+		// STEP 2: arrange for indices change to arrive too late for slot 0 processing.
+		waitForDuties.Set(true)
 		go func() {
-			time.Sleep(scheduler.netCfg.IntervalDuration() + 1*time.Millisecond)
+			time.Sleep(scheduler.netCfg.IntervalDuration(0) + 1*time.Millisecond)
 			scheduler.indicesChgCh <- struct{}{}
 		}()
 
 		// No fetching should happen on slot 0 because the indices change arrived too late in the slot.
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
-		// STEP 3: on slot 1 the deferred indices change is processed and duties are fetched.
+		// STEP 3: on slot 1 the deferred indices change is processed and duties are re-fetched.
 		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(1))
 		ticker.Send(phase0.Slot(1))
 		waitForDutiesFetch(t, fetchDutiesCall, timeout)
@@ -1212,7 +1218,7 @@ func TestScheduler_Proposer_Reorg_Previous_Epoch_Transition(t *testing.T) {
 	})
 }
 
-func TestScheduler_Proposer_No_Eligible_Validators_Does_Not_Retry_Current_Epoch_Fetch(t *testing.T) {
+func TestScheduler_Proposer_No_Eligible_Validators_Leaves_Current_Epoch_Fetch_Pending(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		var (
 			handler       = NewProposerHandler(dutystore.NewDuties[eth2apiv1.ProposerDuty](), false)
@@ -1228,13 +1234,17 @@ func TestScheduler_Proposer_No_Eligible_Validators_Does_Not_Retry_Current_Epoch_
 		waitForDuties.Set(true)
 		require.NoError(t, scheduler.Start(ctx))
 
-		// Startup fetch completes as a successful no-op because there are no eligible validators.
-		require.True(t, handler.dutyFetchIntents[phase0.Epoch(0)])
+		// With no eligible validators, the startup fetch is a no-op that must NOT mark the intent fulfilled —
+		// otherwise the duty would never be fetched once a validator becomes eligible (e.g. after a metadata
+		// sync that lands without an accompanying indices-change event). The intent stays pending.
+		require.False(t, handler.dutyFetchIntents[phase0.Epoch(0)])
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
-		// The next tick must not retry the current-epoch fetch.
+		// The next tick re-evaluates the pending intent. There are still no eligible validators, so it
+		// short-circuits before any fetch and the intent remains pending (ready to be retried later).
 		ticker.Send(phase0.Slot(0))
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
+		require.False(t, handler.dutyFetchIntents[phase0.Epoch(0)])
 
 		// Stop scheduler & wait for graceful exit.
 		cancel()
@@ -1577,4 +1587,46 @@ func TestScheduler_Proposer_Fetch_Execute_Next_Epoch_Duty(t *testing.T) {
 		require.NoError(t, scheduler.Wait())
 		ticker.WaitShutdown()
 	})
+}
+
+// idleTicker never ticks: Next blocks forever, pinning the handler loop to its event cases.
+type idleTicker struct{}
+
+func (idleTicker) Next() <-chan time.Time { return nil }
+func (idleTicker) Slot() phase0.Slot      { return 0 }
+
+// An indices change received while the loop is idle (between ticks) marks the current and next
+// epochs' cached duty views stale immediately — at event time, not at the next tick — so
+// freshness-aware §5/§6 message validation starts tolerating right away. The refetch intents are
+// declared for the next tick to process; no fetch happens from the idle path itself.
+func TestProposerHandler_IndicesChangeMarksStaleImmediately(t *testing.T) {
+	netCfg := networkconfig.TestNetwork
+	store := dutystore.NewDuties[eth2apiv1.ProposerDuty]()
+	currentEpoch := netCfg.EstimatedCurrentEpoch()
+	store.Set(currentEpoch, nil) // a pre-change view exists for the current epoch
+
+	h := NewProposerHandler(store, false)
+	h.logger = zap.NewNop()
+	h.netCfg = netCfg
+	h.ticker = idleTicker{}
+	h.indicesChangeCh = make(chan struct{}, 1)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	done := make(chan struct{})
+	go func() { defer close(done); h.HandleDuties(ctx) }()
+
+	h.indicesChangeCh <- struct{}{}
+
+	require.Eventually(t, func() bool {
+		return store.IsEpochStale(currentEpoch) && store.IsEpochStale(currentEpoch+1)
+	}, time.Second, 5*time.Millisecond, "stale marking must happen on event receipt, without a tick")
+
+	// Stop the loop before reading its unsynchronized intents map.
+	cancel()
+	<-done
+	require.Contains(t, h.dutyFetchIntents, currentEpoch)
+	require.False(t, h.dutyFetchIntents[currentEpoch], "current-epoch intent must be declared unfulfilled")
+	require.Contains(t, h.dutyFetchIntents, currentEpoch+1)
+	require.False(t, h.dutyFetchIntents[currentEpoch+1], "next-epoch intent must be declared unfulfilled")
 }

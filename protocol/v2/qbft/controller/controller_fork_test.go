@@ -18,6 +18,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
+	"github.com/ssvlabs/ssv/protocol/v2/types/ssvtestingutils"
 )
 
 // TestController_IdentifierAtHeight verifies that identifierAtHeight switches the SSV domain
@@ -78,12 +79,12 @@ func TestController_ProcessMsg_ForkDomainCheck(t *testing.T) {
 
 	identifierFn := func(height specqbft.Height) []byte {
 		domain := midBooleCfg.DomainTypeAtSlot(phase0.Slot(height))
-		id := spectypes.NewMsgID(domain, committeeID[:], role)
+		id := ssvtestingutils.NewMsgID(domain, committeeID[:], role)
 		return id[:]
 	}
 
 	// Static identifier frozen at pre-fork domain (simulates old code path).
-	staticID := spectypes.NewMsgID(alanDomain, committeeID[:], role)
+	staticID := ssvtestingutils.NewMsgID(alanDomain, committeeID[:], role)
 
 	logger := zap.NewNop()
 
@@ -105,7 +106,7 @@ func TestController_ProcessMsg_ForkDomainCheck(t *testing.T) {
 		ctrl.IdentifierFn = identifierFn
 		advanceTo(ctrl, postForkHeight)
 
-		booleID := spectypes.NewMsgID(booleDomain, committeeID[:], role)
+		booleID := ssvtestingutils.NewMsgID(booleDomain, committeeID[:], role)
 		signedMsg := makeSignedQBFTMsg(ks, booleID[:], postForkHeight)
 
 		_, err := ctrl.ProcessMsg(context.Background(), logger, signedMsg, nil)
@@ -120,7 +121,7 @@ func TestController_ProcessMsg_ForkDomainCheck(t *testing.T) {
 		ctrl.IdentifierFn = identifierFn
 		advanceTo(ctrl, preForkHeight)
 
-		alanID := spectypes.NewMsgID(alanDomain, committeeID[:], role)
+		alanID := ssvtestingutils.NewMsgID(alanDomain, committeeID[:], role)
 		signedMsg := makeSignedQBFTMsg(ks, alanID[:], preForkHeight)
 
 		_, err := ctrl.ProcessMsg(context.Background(), logger, signedMsg, nil)
@@ -135,7 +136,7 @@ func TestController_ProcessMsg_ForkDomainCheck(t *testing.T) {
 		ctrl.IdentifierFn = identifierFn
 		advanceTo(ctrl, postForkHeight)
 
-		staleAlanID := spectypes.NewMsgID(alanDomain, committeeID[:], role)
+		staleAlanID := ssvtestingutils.NewMsgID(alanDomain, committeeID[:], role)
 		signedMsg := makeSignedQBFTMsg(ks, staleAlanID[:], postForkHeight)
 
 		_, err := ctrl.ProcessMsg(context.Background(), logger, signedMsg, nil)
@@ -153,7 +154,7 @@ func TestController_ProcessMsg_ForkDomainCheck(t *testing.T) {
 		ctrl.IdentifierFn = identifierFn
 		advanceTo(ctrl, preForkHeight)
 
-		wrongBooleID := spectypes.NewMsgID(booleDomain, committeeID[:], role)
+		wrongBooleID := ssvtestingutils.NewMsgID(booleDomain, committeeID[:], role)
 		signedMsg := makeSignedQBFTMsg(ks, wrongBooleID[:], preForkHeight)
 
 		_, err := ctrl.ProcessMsg(context.Background(), logger, signedMsg, nil)
@@ -175,7 +176,7 @@ func TestController_NilIdentifierFn_ByteIdenticalToStatic(t *testing.T) {
 	committeeID := member.CommitteeID
 
 	preBooleCfg := networkconfig.TestNetwork // Boole at MaxUint64
-	staticID := spectypes.NewMsgID(preBooleCfg.DomainType, committeeID[:], role)
+	staticID := ssvtestingutils.NewMsgID(preBooleCfg.DomainType, committeeID[:], role)
 
 	ctrl := NewController(staticID[:], member, nil, nil, false)
 	// IdentifierFn intentionally left nil.
@@ -223,7 +224,7 @@ func newForkTestHarness() *forkTestHarness {
 
 	identifierFn := func(height specqbft.Height) []byte {
 		domain := midBooleCfg.DomainTypeAtSlot(phase0.Slot(height))
-		id := spectypes.NewMsgID(domain, committeeID[:], role)
+		id := ssvtestingutils.NewMsgID(domain, committeeID[:], role)
 		return id[:]
 	}
 
@@ -234,7 +235,7 @@ func newForkTestHarness() *forkTestHarness {
 		preForkHeight:  specqbft.Height(phase0.Slot(forkEpoch)*slotsPerEpoch - 1),
 		postForkHeight: specqbft.Height(phase0.Slot(forkEpoch) * slotsPerEpoch),
 		identifierFn:   identifierFn,
-		staticID:       spectypes.NewMsgID(midBooleCfg.DomainType, committeeID[:], role),
+		staticID:       ssvtestingutils.NewMsgID(midBooleCfg.DomainType, committeeID[:], role),
 		roundTimerF: func(ctx context.Context, logger *zap.Logger, slot phase0.Slot) ssv.QBFTRoundTimer {
 			return roundtimer.NewTestingTimer()
 		},

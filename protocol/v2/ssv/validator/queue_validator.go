@@ -134,34 +134,12 @@ func (v *Validator) StartQueueConsumer(
 			rState.Round = r.GetLastRound()
 
 			idle := !r.HasRunningDuty()
-			filter := queue.FilterAny
-			if idle {
-				// If no duty is running, pop only ExecuteDuty messages.
-				filter = func(m *queue.SSVMessage) bool {
-					e, ok := m.Body.(*types.EventMsg)
-					if !ok || e == nil {
-						return false
-					}
-					return e.Type == types.ExecuteDuty
-				}
-			} else if rState.HasRunningInstance && !r.HasAcceptedProposalForCurrentRound() {
-				// If no proposal was accepted for the current round, skip prepare & commit messages
-				// for the current height and round.
-				filter = func(m *queue.SSVMessage) bool {
-					qbftMsg, ok := m.Body.(*specqbft.Message)
-					if !ok || qbftMsg == nil {
-						return true
-					}
+			// The stale floor is a single-duty notion; a runner serving several slots at once has no current
+			// slot to key it on, so for it the floor stays at zero and nothing is ever stale.
+			_, multiSlot := r.(runner.MultiSlotRunner)
 
-					if qbftMsg.Height != specqbft.Height(rState.Slot) || qbftMsg.Round != rState.Round {
-						return true
-					}
-					return qbftMsg.MsgType != specqbft.PrepareMsgType && qbftMsg.MsgType != specqbft.CommitMsgType
-				}
-			}
-
-			// Pop the highest priority message for the current state.
-			msg := q.Pop(ctx, queue.NewMessagePrioritizer(&rState), filter)
+			// Pop the highest priority message the runner can use in its current state.
+			msg := q.Pop(ctx, queue.NewMessagePrioritizer(&rState), popFilter(r, idle, &rState))
 			if ctx.Err() != nil {
 				// Optimization: terminate fast if we can.
 				return nil
@@ -309,7 +287,7 @@ func (v *Validator) StartQueueConsumer(
 			// below the new floor is stale (issue #3037). If the runner had been idle, bulk-purge that tail up
 			// front (slotBelow spares duty-starts, so none is skipped), closing out each purged message's
 			// in-flight state; mid-duty the pop-guard above drains it one at a time, sparing the busy hot path.
-			if isExecuteDuty(msg) {
+			if isExecuteDuty(msg) && !multiSlot {
 				if dutySlot, ok := r.CurrentDutySlot(); ok {
 					floor = dutySlot
 					if idle {
@@ -400,5 +378,53 @@ func slotBelow(floor phase0.Slot) queue.Filter {
 		}
 		slot, err := m.Slot()
 		return err == nil && slot < floor
+	}
+}
+
+// popFilter selects what the consumer may pop for the runner in its current state. Idle, it takes only
+// duty-starts (and any post-consensus packets a finished duty still awaits, see noRunningDutyFilter). With an
+// instance running but no proposal accepted for its round yet, it leaves that round's prepares and commits
+// queued — they cannot be processed before the proposal. Otherwise anything goes.
+func popFilter(r runner.Runner, idle bool, rState *queue.State) queue.Filter {
+	switch {
+	case idle:
+		return noRunningDutyFilter(r)
+	case rState.HasRunningInstance && !r.HasAcceptedProposalForCurrentRound():
+		return awaitingProposalFilter(specqbft.Height(rState.Slot), rState.Round)
+	default:
+		return queue.FilterAny
+	}
+}
+
+// awaitingProposalFilter holds back the prepares and commits of the given height and round until a proposal
+// is accepted for it; everything else passes.
+func awaitingProposalFilter(height specqbft.Height, round specqbft.Round) queue.Filter {
+	return func(m *queue.SSVMessage) bool {
+		qbftMsg, ok := m.Body.(*specqbft.Message)
+		if !ok || qbftMsg == nil || qbftMsg.Height != height || qbftMsg.Round != round {
+			return true
+		}
+		return qbftMsg.MsgType != specqbft.PrepareMsgType && qbftMsg.MsgType != specqbft.CommitMsgType
+	}
+}
+
+// noRunningDutyFilter selects what the consumer pops for a runner with no running duty: ExecuteDuty events
+// and, for a finished duty that still expects post-consensus packets (the Gloas proposer's §6 envelope
+// root), that slot's post-consensus packets. Everything else waits for the next duty to start.
+func noRunningDutyFilter(r runner.Runner) queue.Filter {
+	var awaitingSlot phase0.Slot
+	awaiting := false
+	if awaiter, ok := r.(runner.PostConsensusAwaiter); ok {
+		awaitingSlot, awaiting = awaiter.AwaitingPostConsensus()
+	}
+	return func(m *queue.SSVMessage) bool {
+		switch body := m.Body.(type) {
+		case *types.EventMsg:
+			return body != nil && body.Type == types.ExecuteDuty
+		case *spectypes.PartialSignatureMessages:
+			return awaiting && body != nil && body.Type == spectypes.PostConsensusPartialSig && body.Slot == awaitingSlot
+		default:
+			return false
+		}
 	}
 }

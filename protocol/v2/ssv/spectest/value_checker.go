@@ -7,18 +7,20 @@ import (
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/herumi/bls-eth-go-binary/bls"
+	"github.com/stretchr/testify/require"
+
 	spectests "github.com/ssvlabs/ssv-spec/qbft/spectest/tests"
 	"github.com/ssvlabs/ssv-spec/ssv/spectest/tests/valcheck"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
-	"github.com/stretchr/testify/require"
-
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 )
 
 // ValCheckSpecTest wraps valcheck.SpecTest but uses our implementation's value checkers
@@ -70,7 +72,8 @@ func (test *ValCheckSpecTest) Run(t *testing.T) {
 
 // valCheckF creates value checker using our implementation
 func (test *ValCheckSpecTest) valCheckF(signer ekm.BeaconSigner) func([]byte) error {
-	beaconConfig := networkconfig.TestNetwork.Beacon
+	// The Gloas-scheduled test config, so Gloas-era vectors resolve to the Gloas checkers.
+	beaconConfig := gloasTestBeaconConfig()
 	pubKeyBytes := spectypes.ValidatorPK(spectestingutils.TestingValidatorPubKey)
 
 	// ShareValidatorsPK contains serialized secret keys, we need public keys
@@ -100,6 +103,18 @@ func (test *ValCheckSpecTest) valCheckF(signer ekm.BeaconSigner) func([]byte) er
 
 	switch test.RunnerRole {
 	case spectypes.RoleCommittee:
+		// From Gloas the committee value is a GloasBeaconVote with its own checker (SIP #94 §2);
+		// select by the duty slot's fork, exactly as the committee runner does in production.
+		if beaconConfig.IsGloasAtSlot(test.DutySlot) {
+			checker := ssv.NewGloasVoteChecker(
+				signer,
+				test.DutySlot,
+				sharePubKeys,
+				&gloas.GloasBeaconVote{Source: &test.ExpectedSource, Target: &test.ExpectedTarget},
+				nil, // the vectors carry no head events, so no own view for the same-slot check
+			)
+			return checker.CheckValue
+		}
 		expectedVote := &spectypes.BeaconVote{
 			Source: &test.ExpectedSource,
 			Target: &test.ExpectedTarget,

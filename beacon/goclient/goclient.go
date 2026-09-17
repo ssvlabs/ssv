@@ -26,6 +26,7 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/observability/log/fields"
+	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 	"github.com/ssvlabs/ssv/utils/hashmap"
 )
 
@@ -118,6 +119,12 @@ type GoClient struct {
 	clients     []Client
 	multiClient MultiClient
 
+	// clientAddresses holds each client's unmasked address for the hand-rolled Gloas requests (ptc.go,
+	// gloas_proposer.go, gloas_envelope.go, proposer_preferences.go, builder_preferences.go) —
+	// Client.Address() is log-masked and unusable for real requests. Drop when those endpoints become
+	// typed go-eth2-client calls.
+	clientAddresses map[Client]string
+
 	syncDistanceTolerance phase0.Slot
 
 	// attestationReqInflight helps prevent duplicate attestation data requests
@@ -132,6 +139,13 @@ type GoClient struct {
 	// Unlike attestationDataCache — this node's local, pre-consensus view — this is the value
 	// the cluster attested with, which is the one an aggregate must match.
 	attestedDataRootCache *ttlcache.Cache[attestedDataRootKey, phase0.Root]
+	// payloadAttestationReqInflight joins the simultaneous fetches of a slot's payload-attestation data —
+	// one per PTC member of the slot, all at the PTC cutoff — into a single request (issue #3031).
+	payloadAttestationReqInflight singleflight.Group[phase0.Slot, *gloas.PayloadAttestationData]
+	// payloadAttestationDataCache reuses a slot's fetched payload-attestation data, so every PTC member of
+	// this node signs the same observation. The data is slot-level; nil — the beacon node's "no block seen"
+	// abstain signal — is never cached, since a block may still arrive.
+	payloadAttestationDataCache *ttlcache.Cache[phase0.Slot, *gloas.PayloadAttestationData]
 	// domainDataReqInflight joins parallel requests for the same epoch/domain pair.
 	domainDataReqInflight singleflight.Group[domainDataCacheKey, phase0.Domain]
 	// domainDataCache helps reuse recently fetched domains. Domains change only at epoch boundaries,
@@ -155,6 +169,13 @@ type GoClient struct {
 	// committeesCache caches Beacon committees by epoch to avoid repeated fetching
 	committeesCache *ttlcache.Cache[phase0.Epoch, []*eth2apiv1.BeaconCommittee]
 
+	// proposerDutiesDependentRootInflight collapses the per-epoch dependent_root GETs that the
+	// proposer-preferences runners issue concurrently — one per local proposing validator in the epoch
+	// (SIP #94 §5) — into a single request. Deliberately not TTL-cached: a reorg re-emission must
+	// observe a fresh dependent_root, and the duplication removed here is a same-instant burst across
+	// the epoch's proposers, not reuse over time.
+	proposerDutiesDependentRootInflight singleflight.Group[phase0.Epoch, phase0.Root]
+
 	commonTimeout time.Duration
 	longTimeout   time.Duration
 
@@ -176,11 +197,14 @@ type GoClient struct {
 	// activatedClients tracks which clients have been activated before (for reconnection detection)
 	activatedClients *hashmap.Map[string, struct{}]
 
-	// headCache maps Slot → Root from HeadEvents to detect stale attestation data.
+	// headCache maps Slot → Root from HeadEvents, to detect stale attestation data and to answer
+	// HeadRootAtSlot.
 	headCache *ttlcache.Cache[phase0.Slot, phase0.Root]
 
 	// fetchAttestationDataFunc allows overriding fetchAttestationData for testing.
 	fetchAttestationDataFunc func(ctx context.Context, slot phase0.Slot) (*phase0.AttestationData, error)
+	// fetchPayloadAttestationDataFunc allows overriding fetchPayloadAttestationData for testing.
+	fetchPayloadAttestationDataFunc func(ctx context.Context, slot phase0.Slot) (*gloas.PayloadAttestationData, error)
 }
 
 type domainDataCacheKey struct {
@@ -208,6 +232,7 @@ func New(ctx context.Context, logger *zap.Logger, opt Options) (*GoClient, error
 		proposalSoftTimeout:                opt.ProposalSoftTimeout,
 		supportedTopics:                    []eventTopic{eventTopicHead, eventTopicBlock},
 		activatedClients:                   hashmap.New[string, struct{}](),
+		clientAddresses:                    make(map[Client]string),
 	}
 
 	// First error stops the loop on purpose. addSingleClient sets WithAllowDelayedStart(true), so a valid
@@ -264,6 +289,12 @@ func New(ctx context.Context, logger *zap.Logger, opt Options) (*GoClient, error
 	)
 	go client.attestedDataRootCache.Start()
 
+	client.payloadAttestationDataCache = ttlcache.New(
+		// PTC members fetch at their slot's cutoff and never later, so two slots is plenty.
+		ttlcache.WithTTL[phase0.Slot, *gloas.PayloadAttestationData](2 * config.SlotDuration),
+	)
+	go client.payloadAttestationDataCache.Start()
+
 	// Domain data and committee assignments change at epoch boundaries, so keep both caches
 	// for approximately two epochs.
 	twoEpochTTL := config.SlotDuration * time.Duration(config.SlotsPerEpoch) * 2 //nolint:gosec
@@ -281,6 +312,7 @@ func New(ctx context.Context, logger *zap.Logger, opt Options) (*GoClient, error
 
 	// Set default fetch function (can be overridden in tests).
 	client.fetchAttestationDataFunc = client.fetchAttestationData
+	client.fetchPayloadAttestationDataFunc = client.fetchPayloadAttestationData
 
 	client.log.Debug("starting event listener")
 
@@ -327,7 +359,19 @@ func (gc *GoClient) initMultiClient(ctx context.Context) error {
 	return nil
 }
 
+// normalizeBeaconAddr ensures the configured beacon address carries an http(s) scheme, mirroring
+// go-eth2-client's parseAddress. eth2clienthttp normalizes internally, but the hand-rolled Gloas/PTC
+// requests concatenate this stored address into request URLs, so a scheme-less config (e.g. "host:port")
+// would otherwise fail http.NewRequest. Basic-auth credentials and any path prefix are preserved.
+func normalizeBeaconAddr(addr string) string {
+	if !strings.HasPrefix(addr, "http://") && !strings.HasPrefix(addr, "https://") {
+		addr = "http://" + addr
+	}
+	return strings.TrimSuffix(addr, "/")
+}
+
 func (gc *GoClient) addSingleClient(ctx context.Context, addr string) error {
+	addr = normalizeBeaconAddr(addr)
 	httpClient, err := eth2clienthttp.New(
 		ctx,
 		// WithAddress supplies the address of the beacon node, in host:port format.
@@ -348,7 +392,9 @@ func (gc *GoClient) addSingleClient(ctx context.Context, addr string) error {
 		return fmt.Errorf("create http client: %w", err)
 	}
 
-	gc.clients = append(gc.clients, httpClient.(*eth2clienthttp.Service))
+	svc := httpClient.(*eth2clienthttp.Service)
+	gc.clients = append(gc.clients, svc)
+	gc.clientAddresses[svc] = addr
 
 	return nil
 }

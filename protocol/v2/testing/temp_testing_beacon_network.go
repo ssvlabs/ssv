@@ -18,6 +18,9 @@ import (
 type BeaconNodeWrapped struct {
 	beacon.BeaconNode
 	Bn *spectestingutils.TestingBeaconNode
+	// HeadRoots is what HeadRootAtSlot answers: the block root a head event named for the slot. Unset
+	// slots have no view.
+	HeadRoots map[phase0.Slot]phase0.Root
 }
 
 func (bn *BeaconNodeWrapped) SetSyncCommitteeAggregatorRootHexes(roots map[string]bool) {
@@ -34,6 +37,10 @@ func (bn *BeaconNodeWrapped) GetBeaconNode() *spectestingutils.TestingBeaconNode
 
 func (bn *BeaconNodeWrapped) GetAttestationData(ctx context.Context, slot phase0.Slot) (*phase0.AttestationData, spec.DataVersion, error) {
 	return bn.Bn.GetAttestationData(slot)
+}
+func (bn *BeaconNodeWrapped) HeadRootAtSlot(slot phase0.Slot) (phase0.Root, bool) {
+	root, ok := bn.HeadRoots[slot]
+	return root, ok
 }
 func (bn *BeaconNodeWrapped) DomainData(ctx context.Context, epoch phase0.Epoch, domain phase0.DomainType) (phase0.Domain, error) {
 	return bn.Bn.DomainData(epoch, domain)
