@@ -3,7 +3,6 @@ package networkconfig
 import (
 	"encoding/json"
 	"fmt"
-	"maps"
 	"math"
 	"time"
 
@@ -256,9 +255,44 @@ func (b *Beacon) AssertSame(other *Beacon) error {
 	if b.GenesisValidatorsRoot != other.GenesisValidatorsRoot {
 		return fmt.Errorf("different GenesisValidatorsRoot")
 	}
-	if !maps.Equal(b.Forks, other.Forks) {
-		return fmt.Errorf("different Forks")
+	if err := assertSameForks(b.Forks, other.Forks); err != nil {
+		return err
 	}
 
+	return nil
+}
+
+// FarFutureEpoch marks a fork the beacon node names but has not scheduled.
+const FarFutureEpoch = phase0.Epoch(math.MaxUint64)
+
+// assertSameForks compares two fork schedules by what matters for signing: a fork scheduled on either
+// side must be scheduled on both, at the same epoch with the same versions. An unscheduled fork is the
+// same whether the beacon node names it (far-future epoch, any version) or predates it and omits it —
+// GLOAS_FORK_EPOCH is optional for that reason — since it never selects a signing domain. Two clients
+// disagreeing on whether a fork is scheduled is a real misalignment: they would part ways at the fork.
+func assertSameForks(ours, theirs map[spec.DataVersion]phase0.Fork) error {
+	scheduled := func(forks map[spec.DataVersion]phase0.Fork, version spec.DataVersion) (phase0.Fork, bool) {
+		fork, ok := forks[version]
+		return fork, ok && fork.Epoch != FarFutureEpoch
+	}
+	versions := make(map[spec.DataVersion]struct{}, len(ours)+len(theirs))
+	for version := range ours {
+		versions[version] = struct{}{}
+	}
+	for version := range theirs {
+		versions[version] = struct{}{}
+	}
+	for version := range versions {
+		mine, mineScheduled := scheduled(ours, version)
+		other, otherScheduled := scheduled(theirs, version)
+		switch {
+		case !mineScheduled && !otherScheduled:
+			continue
+		case mineScheduled != otherScheduled:
+			return fmt.Errorf("different Forks: %s is scheduled on one client and not on the other", version)
+		case mine != other:
+			return fmt.Errorf("different Forks: %s at epoch %d/%d", version, mine.Epoch, other.Epoch)
+		}
+	}
 	return nil
 }
