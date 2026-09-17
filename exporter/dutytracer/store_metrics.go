@@ -63,7 +63,7 @@ func (d *DutyTraceStoreMetrics) GetCommitteeDutyLinks(slot phase0.Slot) ([]*trac
 	return d.Store.GetCommitteeDutyLinks(slot)
 }
 
-func (d *DutyTraceStoreMetrics) SaveCommitteeDuties(slot phase0.Slot, role spectypes.RunnerRole, duties []*traces.CommitteeDutyTrace) error {
+func (d *DutyTraceStoreMetrics) SaveCommitteeDuties(slot phase0.Slot, role spectypes.RunnerRole, duties []*traces.CommitteeDutyTrace) (saved int, err error) {
 	start := time.Now()
 	defer func() {
 		record("committee", "save_all", start)
@@ -111,7 +111,7 @@ func (d *DutyTraceStoreMetrics) GetScheduled(slot phase0.Slot) (map[phase0.Valid
 	return d.Store.GetScheduled(slot)
 }
 
-func (d *DutyTraceStoreMetrics) SaveValidatorDuties(duties []*traces.ValidatorDutyTrace) error {
+func (d *DutyTraceStoreMetrics) SaveValidatorDuties(duties []*traces.ValidatorDutyTrace) (saved int, err error) {
 	start := time.Now()
 	defer func() {
 		record("validator", "save_all", start)
