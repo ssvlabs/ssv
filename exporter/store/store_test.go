@@ -170,7 +170,7 @@ func TestSaveCommitteeDuties_UnsupportedRole(t *testing.T) {
 	defer db.Close()
 
 	s := store.New(db)
-	err = s.SaveCommitteeDuties(phase0.Slot(1), spectypes.RoleValidatorRegistration, []*traces.CommitteeDutyTrace{makeCTrace(1, 'a')})
+	_, err = s.SaveCommitteeDuties(phase0.Slot(1), spectypes.RoleValidatorRegistration, []*traces.CommitteeDutyTrace{makeCTrace(1, 'a')})
 	require.Error(t, err)
 }
 
@@ -280,7 +280,9 @@ func TestSaveCommitteeDuties(t *testing.T) {
 	cDuties := []*traces.CommitteeDutyTrace{makeCTrace(1, 'a'), makeCTrace(1, 'b')}
 
 	store := store.New(db)
-	require.NoError(t, store.SaveCommitteeDuties(phase0.Slot(1), spectypes.RoleCommittee, cDuties))
+	saved, err := store.SaveCommitteeDuties(phase0.Slot(1), spectypes.RoleCommittee, cDuties)
+	require.NoError(t, err)
+	require.Equal(t, len(cDuties), saved)
 
 	duty, err := store.GetCommitteeDuty(phase0.Slot(1), spectypes.RoleCommittee, [32]byte{'a'})
 	require.NoError(t, err)
@@ -342,7 +344,9 @@ func TestSaveValidatorDuties(t *testing.T) {
 	trace2 := makeVTrace(2)
 
 	store := store.New(db)
-	require.NoError(t, store.SaveValidatorDuties([]*traces.ValidatorDutyTrace{trace1, trace2}))
+	saved, err := store.SaveValidatorDuties([]*traces.ValidatorDutyTrace{trace1, trace2})
+	require.NoError(t, err)
+	require.Equal(t, 2, saved)
 
 	trace, err := store.GetValidatorDuty(phase0.Slot(1), spectypes.BNRoleAttester, phase0.ValidatorIndex(39393))
 	require.NoError(t, err)

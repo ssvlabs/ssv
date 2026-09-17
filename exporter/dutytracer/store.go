@@ -31,9 +31,11 @@ type DutyTraceStore interface {
 	SaveCommitteeDutyLink(slot phase0.Slot, index phase0.ValidatorIndex, id spectypes.CommitteeID) error
 	SaveCommitteeDutyLinks(slot phase0.Slot, linkMap map[phase0.ValidatorIndex]spectypes.CommitteeID) error
 	SaveCommitteeDuty(role spectypes.RunnerRole, duty *traces.CommitteeDutyTrace) error
-	SaveCommitteeDuties(slot phase0.Slot, role spectypes.RunnerRole, duties []*traces.CommitteeDutyTrace) error
+	// SaveCommitteeDuties and SaveValidatorDuties report how many of the duties reached disk: a duty that
+	// cannot be encoded is left out and named in the error, a failed batch write saves nothing.
+	SaveCommitteeDuties(slot phase0.Slot, role spectypes.RunnerRole, duties []*traces.CommitteeDutyTrace) (saved int, err error)
 	SaveValidatorDuty(duty *traces.ValidatorDutyTrace) error
-	SaveValidatorDuties(duties []*traces.ValidatorDutyTrace) error
+	SaveValidatorDuties(duties []*traces.ValidatorDutyTrace) (saved int, err error)
 	GetCommitteeDuty(slot phase0.Slot, role spectypes.RunnerRole, committeeID spectypes.CommitteeID) (*traces.CommitteeDutyTrace, error)
 	GetCommitteeDuties(slot phase0.Slot, roles ...spectypes.RunnerRole) ([]*traces.CommitteeDutyTrace, error)
 	GetCommitteeDutyLink(slot phase0.Slot, index phase0.ValidatorIndex) (spectypes.CommitteeID, error)
