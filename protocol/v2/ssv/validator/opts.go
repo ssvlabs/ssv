@@ -53,7 +53,9 @@ type CommonOptions struct {
 	Graffiti            []byte
 	ProposerDelay       time.Duration
 	ProposerDelayEPBS   time.Duration
-	Builders            gloas.BuilderConfig
+	// ProposerQuickTimeout overrides the proposer QBFT round budget; 0 means the SIP-102 default.
+	ProposerQuickTimeout time.Duration
+	Builders             gloas.BuilderConfig
 }
 
 // NewCommonOptions finalizes a CommonOptions literal: it owns QueueSize (any caller-set value is
