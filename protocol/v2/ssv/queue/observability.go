@@ -39,6 +39,17 @@ var (
 			metric.WithDescription("total number of dropped queue messages by queue and reason"),
 		),
 	)
+
+	// purgedMessagesMetric counts stale-purged messages, kept separate from droppedMessagesMetric so
+	// that counter stays a pure fault signal: purges happen routinely at duty starts, so folding them
+	// into messages.dropped would make any alert summing it fire continuously on a healthy node.
+	purgedMessagesMetric = metrics.New(
+		meter.Int64Counter(
+			observability.InstrumentName(observabilityNamespace, "messages.purged"),
+			metric.WithUnit("{message}"),
+			metric.WithDescription("total number of purged (stale) queue messages by queue and reason"),
+		),
+	)
 )
 
 const (
@@ -46,7 +57,12 @@ const (
 	CommitteeQueueMetricType           = "committee"
 	AggregatorCommitteeQueueMetricType = "aggregator_committee"
 
+	// DropReasonBufferFull marks a message dropped because the queue was full — a fault/overload
+	// signal, counted under messages.dropped.
 	DropReasonBufferFull = "buffer_full"
+	// PurgeReasonStale marks a queued message purged because its slot fell below the runner's floor.
+	// Counted under messages.purged (not messages.dropped), see purgedMessagesMetric.
+	PurgeReasonStale = "stale"
 )
 
 // ValidatorMetricID returns a queue identifier to differentiate validator-related queues (in metrics).
