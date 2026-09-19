@@ -26,7 +26,7 @@ The `generate-config` command allows you to generate a YAML configuration file b
 | `--output-path`                      | string | `./config/config.local.yaml`      | Output path for the generated configuration file.                          |
 | `--log-level`                        | string | `info`                            | Sets the logging level (e.g., `debug`, `info`, `warn`, `error`).           |
 | `--db-path`                          | string | `./data/db`                       | Path to the database directory.                                            |
-| `--discovery`                        | string | `mdns`                            | Discovery method.                                                          |
+| `--discovery`                        | string | `mdns`                            | Discovery method (`discv5`, `mdns`, or `none`).                            |
 | `--consensus-client`                 | string | _Mandatory_                       | Address of the consensus client (e.g., `http://localhost:9000`).           |
 | `--execution-client`                 | string | _Mandatory_                       | Address of the execution client (e.g., `http://localhost:8545`).           |
 | `--operator-private-key`             | string |                                   | Secret key for the operator.                                               |
@@ -142,7 +142,7 @@ MetricsAPIPort: 8080
     - `ETH1Addr`: Address of the execution client (ETH1 Node).
 
 - **p2p**
-    - `Discovery`: Peer-to-peer discovery method (e.g., `mdns`).
+    - `Discovery`: Peer-to-peer discovery method: `discv5` (default), `mdns`, or `none`. A `none` node runs no discovery and, without `TrustedPeers`, connects to nobody but inbound dialers.
 
 - **ssv**
     - `Network`: Name of the network.

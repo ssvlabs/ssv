@@ -84,8 +84,9 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 	}
 
 	ln, routers, err := createNetworkAndSubscribe(t, ctx, LocalNetOptions{
-		Nodes:        n,
-		MinConnected: n/2 - 1,
+		Nodes: n,
+		// connectMesh wires a full mesh, so assert on it: every node must reach all n-1 others.
+		MinConnected: n - 1,
 		Shares:       shares,
 	})
 	require.NoError(t, err)

@@ -54,7 +54,12 @@ func CreateAndStartLocalNet(pCtx context.Context, logger *zap.Logger, options Lo
 				return ln, fmt.Errorf("could not start node %d: %w", i, err)
 			}
 		}
-		if err := connectMesh(pCtx, ln.Nodes); err != nil {
+		// Bound the dial phase so a stalled dial can't burn libp2p's 60s per-edge DialPeerTimeout with
+		// no shorter escape (pCtx carries no deadline); 15s matches the settle-wait budget below.
+		connectCtx, cancelConnect := context.WithTimeout(pCtx, 15*time.Second)
+		err = connectMesh(connectCtx, ln.Nodes)
+		cancelConnect()
+		if err != nil {
 			return ln, err
 		}
 
@@ -66,8 +71,13 @@ func CreateAndStartLocalNet(pCtx context.Context, logger *zap.Logger, options Lo
 				defer cancel()
 
 				var peers []peer.ID
-				for len(peers) < options.MinConnected {
+				for {
 					peers = node.(HostProvider).Host().Network().Peers()
+					// Break on a satisfying read before the select, so a node that already has enough
+					// peers is never failed by a sibling canceling ctx first.
+					if len(peers) >= options.MinConnected {
+						break
+					}
 					select {
 					case <-ctx.Done():
 						return fmt.Errorf("could not find enough peers for node %d, nodes quantity = %d, found = %d: %w", i, options.Nodes, len(peers), ctx.Err())
@@ -118,8 +128,9 @@ func CreateAndStartLocalNet(pCtx context.Context, logger *zap.Logger, options Lo
 }
 
 // connectMesh dials the nodes into a full mesh by address, so the local network forms without discovery.
-// Node i dials the nodes up to half a ring ahead of it: every edge is dialed exactly once, and no node takes
-// more than half of its edges inbound, which is what the connection gater's inbound limit allows.
+// Node i dials the nodes up to half a ring ahead of it, so every edge is dialed exactly once and inbound
+// edges spread evenly (no node takes more than half). NewNetConfig sets DisableIPRateLimit, so the mesh is
+// not bounded by the connection gater's per-IP burst or inbound-limit ceiling and forms for any node count.
 func connectMesh(ctx context.Context, nodes []network.P2PNetwork) error {
 	hosts := make([]host.Host, len(nodes))
 	for i, node := range nodes {
@@ -336,5 +347,10 @@ func NewNetConfig(keys testing.NodeKeys, bn *discovery.Bootnode, tcpPort, udpPor
 		NetworkPrivateKey: keys.NetKey,
 		UserAgent:         ua,
 		Discovery:         discT,
+		// Every mesh edge is dialed from 127.0.0.1, so a node's inbound edges all share one IP. Leaving IP
+		// rate limiting on caps inbound at ipLimitBurst (8) per IP and at inboundLimit (MaxPeers/2), which
+		// breaks the mesh past ~18 nodes and couples it to MaxPeers. Disabling it also drops the pubsub
+		// IP-colocation penalty that would otherwise punish every node for sharing 127.0.0.1.
+		DisableIPRateLimit: true,
 	}
 }
