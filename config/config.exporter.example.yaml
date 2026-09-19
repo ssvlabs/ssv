@@ -17,7 +17,8 @@ p2p:
 #  HostAddress: example.ip
 #  TcpPort:
 #  UdpPort:
-# mdns for local network setup
+# Discovery mode: discv5 (default), mdns for local network setup, or none to run without discovery.
+# A "none" node keeps only its TrustedPeers and peers that dial it, so without TrustedPeers it stays peerless.
 #  Discovery: mdns
 
 ssv:

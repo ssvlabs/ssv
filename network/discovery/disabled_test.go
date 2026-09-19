@@ -11,7 +11,11 @@ import (
 func TestDisabled(t *testing.T) {
 	var d Service = Disabled{}
 
-	require.NoError(t, d.Bootstrap(func(PeerEvent) { t.Fatal("no peer is ever discovered") }))
+	// Bootstrap ignores its handler by construction, so assert on observed state: count calls and
+	// require none, which also catches a regression that started handing peers to the handler.
+	var handlerCalls int
+	require.NoError(t, d.Bootstrap(func(PeerEvent) { handlerCalls++ }))
+	require.Zero(t, handlerCalls, "Bootstrap must never hand a peer to the handler")
 
 	peers, err := d.FindPeers(t.Context(), "ns")
 	require.NoError(t, err)
