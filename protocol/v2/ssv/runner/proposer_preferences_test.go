@@ -103,6 +103,26 @@ func TestProposerPreferencesRunner_ConcurrentSlotsTracked(t *testing.T) {
 	require.False(t, hasSlot)
 }
 
+// Once a validator's only started preference reaches quorum, the dispatcher reports no running duty while the
+// slot's sub-runner stays assigned and its request-auth path (no succeeded-gate) still accepts partials. The
+// queue consumer must therefore not hold the dispatcher's partials while it looks idle — which is what the
+// MultiSlotRunner marker tells it (TestConsumeQueue_MultiSlotRunnerIsNotHeldWhileIdle).
+func TestProposerPreferencesRunner_IdleAfterPreferenceSuccessKeepsSubRunner(t *testing.T) {
+	sub := &proposerPreferencesSlotRunner{BaseRunner: &BaseRunner{RunnerRoleType: spectypes.RoleProposerPreferences}}
+	sub.State = NewRunnerState(3, &spectypes.ValidatorDuty{Type: spectypes.BNRoleProposerPreferences, Slot: 100})
+	sub.markDutySucceeded() // the preference reached quorum and was submitted
+
+	dispatcher := &ProposerPreferencesRunner{
+		BaseRunner: &BaseRunner{RunnerRoleType: spectypes.RoleProposerPreferences},
+		bySlot:     map[phase0.Slot]*proposerPreferencesSlotRunner{100: sub},
+	}
+
+	require.True(t, sub.hasDutyAssigned(), "the sub-runner stays assigned: its request-auth path still accepts partials")
+	require.False(t, dispatcher.HasRunningDuty(), "yet the dispatcher reports no running duty")
+	_, multiSlot := Runner(dispatcher).(MultiSlotRunner)
+	require.True(t, multiSlot, "so it declares itself multi-slot, and the consumer keeps its idle hold off it")
+}
+
 // evictPastSlots drops sub-runners whose proposal slot has already passed.
 func TestProposerPreferencesRunner_evictPastSlots(t *testing.T) {
 	netCfg := networkconfig.TestNetwork

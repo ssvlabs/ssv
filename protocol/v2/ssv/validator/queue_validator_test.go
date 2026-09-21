@@ -465,17 +465,77 @@ func TestPopFilter(t *testing.T) {
 	}
 
 	t.Run("idle: duty-starts only", func(t *testing.T) {
-		check(t, popFilter(plainRunnerStub{}, true, instanceAtRound2), func(m *queue.SSVMessage) bool { return m == executeDuty })
+		check(t, popFilter(plainRunnerStub{}, true, false, instanceAtRound2), func(m *queue.SSVMessage) bool { return m == executeDuty })
+	})
+	t.Run("idle multi-slot runner: anything goes", func(t *testing.T) {
+		check(t, popFilter(multiSlotRunnerStub{}, true, true, noInstance), func(*queue.SSVMessage) bool { return true })
 	})
 	t.Run("instance running, no proposal accepted: its round's prepares and commits wait", func(t *testing.T) {
-		check(t, popFilter(proposalRunnerStub{accepted: false}, false, instanceAtRound2), func(m *queue.SSVMessage) bool { return m != prepare && m != commit })
+		check(t, popFilter(proposalRunnerStub{accepted: false}, false, false, instanceAtRound2), func(m *queue.SSVMessage) bool { return m != prepare && m != commit })
 	})
 	t.Run("proposal accepted: anything goes", func(t *testing.T) {
-		check(t, popFilter(proposalRunnerStub{accepted: true}, false, instanceAtRound2), func(*queue.SSVMessage) bool { return true })
+		check(t, popFilter(proposalRunnerStub{accepted: true}, false, false, instanceAtRound2), func(*queue.SSVMessage) bool { return true })
 	})
 	t.Run("duty running before its instance: anything goes", func(t *testing.T) {
-		check(t, popFilter(proposalRunnerStub{accepted: false}, false, noInstance), func(*queue.SSVMessage) bool { return true })
+		check(t, popFilter(proposalRunnerStub{accepted: false}, false, false, noInstance), func(*queue.SSVMessage) bool { return true })
 	})
+}
+
+// A runner that serves several slots at once (runner.MultiSlotRunner) is never held on the idle filter: its
+// partials go through while it reports no running duty, where a single-duty runner's wait for the next
+// duty-start (TestConsumeQueue_HoldsMessagesUntilDutyStarts). The hold starved the preferences dispatcher after
+// its first quorum: it reports no running duty as soon as its only started slot's preference concludes, yet
+// that slot's sub-runner still collects request-auth partials, so a peer's share arriving after our quorum sat
+// in the queue until the next preference duty, epochs later, and its auth root never reconstructed.
+func TestConsumeQueue_MultiSlotRunnerIsNotHeldWhileIdle(t *testing.T) {
+	logger := zap.NewNop()
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	netCfg := networkconfig.TestNetwork
+	const slot = phase0.Slot(100)
+	var pk phase0.BLSPubKey
+	msgID := ssvtestingutils.NewMsgID(netCfg.DomainType, pk[:], spectypes.RoleProposerPreferences)
+	// The real dispatcher with no running sub-runner, the state a concluded preference leaves it in.
+	dispatcher := &runner.ProposerPreferencesRunner{BaseRunner: &runner.BaseRunner{RunnerRoleType: spectypes.RoleProposerPreferences}}
+	require.False(t, dispatcher.HasRunningDuty())
+
+	v := &Validator{
+		logger:        logger,
+		ctx:           ctx,
+		cancel:        cancel,
+		NetworkConfig: netCfg,
+		Operator:      &spectypes.CommitteeMember{},
+		Share:         &ssvtypes.SSVShare{},
+		Queues:        map[spectypes.RunnerRole]queue.Queue{spectypes.RoleProposerPreferences: queue.New(logger, 16)},
+		DutyRunners:   runner.ValidatorDutyRunners{spectypes.RoleProposerPreferences: dispatcher},
+	}
+
+	// A peer's request-auth share and another peer's late preference share for the slot whose preference we
+	// already concluded.
+	for _, typ := range []spectypes.PartialSigMsgType{spectypes.RequestAuthPartialSig, spectypes.ProposerPreferencesPartialSig} {
+		partial := makeTestSSVMessage(t, spectypes.SSVPartialSignatureMsgType, msgID, &spectypes.PartialSignatureMessages{
+			Type:     typ,
+			Slot:     slot,
+			Messages: []*spectypes.PartialSignatureMessage{{PartialSignature: make([]byte, 96), Signer: 3, ValidatorIndex: 1}},
+		})
+		require.True(t, v.Queues[spectypes.RoleProposerPreferences].TryPush(partial))
+	}
+
+	delivered := make(chan *queue.SSVMessage, 4)
+	v.StartQueueConsumer(msgID, func(_ context.Context, _ *zap.Logger, msg *queue.SSVMessage) error {
+		delivered <- msg
+		return nil
+	})
+
+	got := map[spectypes.PartialSigMsgType]bool{}
+	for range 2 {
+		partial, ok := receiveDelivered(t, delivered).Body.(*spectypes.PartialSignatureMessages)
+		require.True(t, ok, "a partial is delivered while the dispatcher reports no running duty")
+		got[partial.Type] = true
+	}
+	require.True(t, got[spectypes.RequestAuthPartialSig], "the request-auth share reaches the dispatcher")
+	require.True(t, got[spectypes.ProposerPreferencesPartialSig], "so does the preference share")
 }
 
 // plainRunnerStub is a runner that never awaits post-consensus packets once its duty is done.

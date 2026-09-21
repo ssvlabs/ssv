@@ -85,8 +85,10 @@ type PostConsensusAwaiter interface {
 
 // MultiSlotRunner is implemented by a runner that serves duties for several slots at once — the proposer
 // preferences dispatcher, one sub-runner per upcoming proposal slot — so no single slot is "the current one".
-// The validator's queue consumer keeps its stale-message floor, a single-duty notion, off such a runner: a
-// message for a lower slot is still live while a higher slot's duty starts.
+// The validator's queue consumer keeps its single-duty notions off such a runner: the stale-message floor (a
+// message for a lower slot is still live while a higher slot's duty starts) and the hold of everything but
+// duty-starts while no duty runs (one slot's duty concluding says nothing about the others', and the runner
+// stashes partials for slots it has not started itself).
 type MultiSlotRunner interface {
 	// ServesMultipleSlots is a marker with no behavior of its own.
 	ServesMultipleSlots()

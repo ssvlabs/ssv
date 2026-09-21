@@ -134,12 +134,13 @@ func (v *Validator) StartQueueConsumer(
 			rState.Round = r.GetLastRound()
 
 			idle := !r.HasRunningDuty()
-			// The stale floor is a single-duty notion; a runner serving several slots at once has no current
-			// slot to key it on, so for it the floor stays at zero and nothing is ever stale.
+			// A runner serving several slots at once is outside the consumer's single-duty notions: the idle
+			// hold below (one slot's duty concluding says nothing about the others'), and the stale floor,
+			// which has no current slot to key on and so stays at zero for it.
 			_, multiSlot := r.(runner.MultiSlotRunner)
 
 			// Pop the highest priority message the runner can use in its current state.
-			msg := q.Pop(ctx, queue.NewMessagePrioritizer(&rState), popFilter(r, idle, &rState))
+			msg := q.Pop(ctx, queue.NewMessagePrioritizer(&rState), popFilter(r, idle, multiSlot, &rState))
 			if ctx.Err() != nil {
 				// Optimization: terminate fast if we can.
 				return nil
@@ -382,12 +383,15 @@ func slotBelow(floor phase0.Slot) queue.Filter {
 }
 
 // popFilter selects what the consumer may pop for the runner in its current state. Idle, it takes only
-// duty-starts (and any post-consensus packets a finished duty still awaits, see noRunningDutyFilter). With an
-// instance running but no proposal accepted for its round yet, it leaves that round's prepares and commits
-// queued — they cannot be processed before the proposal. Otherwise anything goes.
-func popFilter(r runner.Runner, idle bool, rState *queue.State) queue.Filter {
+// duty-starts (and any post-consensus packets a finished duty still awaits, see noRunningDutyFilter) — unless
+// the runner serves several slots at once (runner.MultiSlotRunner): it reports no running duty the moment its
+// last started slot concludes while it still serves that slot and stashes partials for the ones it has not
+// started, so holding its partials would only starve it until the next duty-start. With an instance running
+// but no proposal accepted for its round yet, it leaves that round's prepares and commits queued — they cannot
+// be processed before the proposal. Otherwise anything goes.
+func popFilter(r runner.Runner, idle, multiSlot bool, rState *queue.State) queue.Filter {
 	switch {
-	case idle:
+	case idle && !multiSlot:
 		return noRunningDutyFilter(r)
 	case rState.HasRunningInstance && !r.HasAcceptedProposalForCurrentRound():
 		return awaitingProposalFilter(specqbft.Height(rState.Slot), rState.Round)
