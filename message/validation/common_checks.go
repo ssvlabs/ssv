@@ -25,10 +25,10 @@ func (mv *messageValidator) monotonicSlotRole(role spectypes.RunnerRole) bool {
 }
 
 // validateSlotTime bounds a message's arrival against its slot: no earlier than clockErrorTolerance plus
-// earlyMessageMargin plus the role's early allowance, and no later than the role's TTL plus
-// lateMessageMargin (see messageLateness).
+// earlyMessageMargin before the moment a message for the slot is expected (see messageEarliness), and no
+// later than the role's TTL plus lateMessageMargin (see messageLateness).
 func (mv *messageValidator) validateSlotTime(messageSlot phase0.Slot, role spectypes.RunnerRole, receivedAt time.Time) error {
-	if earliness := mv.messageEarliness(messageSlot, receivedAt); earliness > clockErrorTolerance+earlyMessageMargin+mv.earlySlotAllowance(role) {
+	if earliness := mv.messageEarliness(messageSlot, role, receivedAt); earliness > clockErrorTolerance+earlyMessageMargin {
 		e := ErrEarlySlotMessage
 		e.got = fmt.Sprintf("early by %v", earliness)
 		return e
@@ -43,21 +43,25 @@ func (mv *messageValidator) validateSlotTime(messageSlot phase0.Slot, role spect
 	return nil
 }
 
-// messageEarliness returns how early message is or 0 if it's not
-func (mv *messageValidator) messageEarliness(slot phase0.Slot, receivedAt time.Time) time.Duration {
-	return mv.netCfg.SlotStartTime(slot).Sub(receivedAt)
-}
-
-// earlySlotAllowance returns how far ahead of its slot a message for the role may arrive beyond the
-// margin every message gets. Proposer preferences are broadcast across the proposer lookahead — the
-// current epoch plus MIN_SEED_LOOKAHEAD — so their proposal-slot messages are expected up to that far
-// in the future; every other role acts at (or after) its slot, so the default is none.
-func (mv *messageValidator) earlySlotAllowance(role spectypes.RunnerRole) time.Duration {
+// messageEarliness returns how early the message is, or 0 if it is not: the time from its arrival to the
+// earliest moment a message for its slot is expected. That is the slot's own start for every role that acts
+// at or after its slot. Proposer preferences are broadcast across the proposer lookahead — the current epoch
+// and the next (MIN_SEED_LOOKAHEAD) — so one for a slot in epoch E is expected from the start of epoch E-1;
+// one further out is early: no honest operator holds a proposer assignment that far ahead, and the proposer
+// gate in validateBeaconDuty could not check it against duties not fetched yet.
+func (mv *messageValidator) messageEarliness(slot phase0.Slot, role spectypes.RunnerRole, receivedAt time.Time) time.Duration {
+	expectedFrom := mv.netCfg.SlotStartTime(slot)
 	if role == spectypes.RoleProposerPreferences {
-		// #nosec G115 -- a small epoch count times slots-per-epoch cannot overflow int64.
-		return time.Duration(proposerPreferencesEarlyEpochs*mv.netCfg.SlotsPerEpoch) * mv.netCfg.SlotDuration
+		epoch := mv.netCfg.EstimatedEpochAtSlot(slot)
+		const lookback = phase0.Epoch(proposerPreferencesEarlyEpochs - 1)
+		if epoch >= lookback {
+			epoch -= lookback
+		} else {
+			epoch = 0
+		}
+		expectedFrom = mv.netCfg.SlotStartTime(mv.netCfg.FirstSlotAtEpoch(epoch))
 	}
-	return 0
+	return expectedFrom.Sub(receivedAt)
 }
 
 // messageLateness returns how late message is or 0 if it's not

@@ -413,28 +413,29 @@ func (mv *messageValidator) maxStoredSlots() uint64 {
 	return mv.netCfg.SlotsPerEpoch + LateSlotAllowance
 }
 
-// storedSlotCount returns how many recent slots of per-signer state a role retains. Proposer
-// preferences are broadcast across the whole proposer lookahead, so their ring must span it (on top
-// of the normal recent-slots buffer) to give every lookahead slot a distinct ring slot and keep
-// per-slot dedup exact; every other role only ever sees roughly the current slot.
+// storedSlotCount returns how many recent slots of per-signer state a role retains. Proposer preferences
+// ride proposal slots across the proposer lookahead — through the end of the next epoch, so up to
+// proposerPreferencesEarlyEpochs*SlotsPerEpoch-1 slots ahead at an epoch's first slot — and LateSlotAllowance
+// behind; the ring spans that many slots so every acceptable slot has a distinct ring slot and per-slot dedup
+// stays exact. Every other role only ever sees roughly the current slot.
 func (mv *messageValidator) storedSlotCount(role spectypes.RunnerRole) uint64 {
 	if role == spectypes.RoleProposerPreferences {
-		return proposerPreferencesEarlyEpochs*mv.netCfg.SlotsPerEpoch + mv.maxStoredSlots()
+		return proposerPreferencesEarlyEpochs*mv.netCfg.SlotsPerEpoch + LateSlotAllowance
 	}
 	return mv.maxStoredSlots()
 }
 
 // storedEpochCount returns how many epochs of per-signer duty counts a role retains. Counts must live as
-// long as any message they gate is acceptable (SIP #94 §7). Proposer preferences ride proposal slots up to
-// proposerPreferencesEarlyEpochs ahead and two slots behind, so their acceptable slots span the current
-// epoch, the lookahead epochs, and the tail of the previous one — four consecutive epochs at any instant.
-// The roles with the long lateness TTL (maxStoredSlots: an epoch plus LateSlotAllowance) can still accept
-// a slot two epochs back while the current epoch's arrive — three epochs. Every other role's TTL crosses
-// at most one epoch boundary — two.
+// long as any message they gate is acceptable (SIP #94 §7). Proposer preferences ride proposal slots through
+// the next epoch and LateSlotAllowance slots behind, so their acceptable slots span the previous epoch's tail,
+// the current epoch and the next — three consecutive epochs at any instant (the current, the next and the one
+// after in the moments before an epoch turns). The roles with the long lateness TTL (maxStoredSlots: an epoch
+// plus LateSlotAllowance) can still accept a slot two epochs back while the current epoch's arrive — three
+// epochs. Every other role's TTL crosses at most one epoch boundary — two.
 func (mv *messageValidator) storedEpochCount(role spectypes.RunnerRole) uint64 {
 	switch role {
 	case spectypes.RoleProposerPreferences:
-		return proposerPreferencesEarlyEpochs + 2
+		return proposerPreferencesEarlyEpochs + 1
 	case spectypes.RoleCommittee, spectypes.RoleAggregatorCommittee, ssvtypes.RoleAggregator:
 		return 3
 	default:

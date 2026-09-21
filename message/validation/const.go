@@ -39,9 +39,11 @@ const (
 // sequential sending rules out barring network reordering.
 const earlyMessageMargin = time.Second
 
-// proposerPreferencesEarlyEpochs is the proposer-lookahead span in epochs (the current epoch plus
-// MIN_SEED_LOOKAHEAD=1): preferences are broadcast up to this far ahead of their proposal slot. It
-// bounds both how early such a message may arrive and how many slots of per-signer state to retain.
+// proposerPreferencesEarlyEpochs is the proposer-lookahead span in epochs — the current epoch plus
+// MIN_SEED_LOOKAHEAD=1 — that preferences are broadcast across: a preference for a slot in epoch E is
+// expected from the start of epoch E-(proposerPreferencesEarlyEpochs-1) on. It bounds how early such a
+// message may arrive (messageEarliness) and how much per-signer state the role retains (storedSlotCount,
+// storedEpochCount).
 const proposerPreferencesEarlyEpochs = 2
 
 // maxProposerPreferencesDistinctRoots bounds the distinct ProposerPreferences signing roots one

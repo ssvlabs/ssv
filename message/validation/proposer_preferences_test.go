@@ -47,7 +47,7 @@ func TestStoredSlotCount_ProposerPreferences(t *testing.T) {
 
 	require.Equal(t, mv.maxStoredSlots(), mv.storedSlotCount(spectypes.RoleProposer))
 	require.Equal(t,
-		proposerPreferencesEarlyEpochs*netCfg.SlotsPerEpoch+mv.maxStoredSlots(),
+		proposerPreferencesEarlyEpochs*netCfg.SlotsPerEpoch+LateSlotAllowance,
 		mv.storedSlotCount(spectypes.RoleProposerPreferences))
 }
 
@@ -55,7 +55,7 @@ func TestStoredSlotCount_ProposerPreferences(t *testing.T) {
 // proposer lookahead for preferences, three epochs for the roles with the epoch-long TTL, two for the rest.
 func TestStoredEpochCount(t *testing.T) {
 	mv := &messageValidator{netCfg: networkconfig.TestNetwork}
-	require.Equal(t, uint64(4), mv.storedEpochCount(spectypes.RoleProposerPreferences))
+	require.Equal(t, uint64(3), mv.storedEpochCount(spectypes.RoleProposerPreferences))
 	for _, role := range []spectypes.RunnerRole{spectypes.RoleCommittee, spectypes.RoleAggregatorCommittee, ssvtypes.RoleAggregator} {
 		require.Equal(t, uint64(3), mv.storedEpochCount(role), role.String())
 	}
@@ -65,9 +65,10 @@ func TestStoredEpochCount(t *testing.T) {
 }
 
 // The per-epoch duty limit must count each epoch on its own when a lookahead epoch's preferences arrive
-// before the current epoch's (SIP #94 §7). With only a current and a previous bucket, every epoch older
-// than the newest but one shared the previous bucket, so a busy cluster's epoch-N preferences inflated
-// epoch N+1's count once N+2 had been seen, and honest N+1 preferences were IGNORE'd as over the limit.
+// before the current epoch's (SIP #94 §7). With only a current and a previous bucket, the previous epoch's
+// tail would share a bucket with the current epoch once the lookahead epoch had been seen, so a busy
+// cluster's epoch-N preferences inflated epoch N-1's count and honest preferences were IGNORE'd as over the
+// limit. Three consecutive epochs are live at once: the previous epoch's tail, the current and the next.
 func TestValidateDutyCount_ProposerPreferencesAcrossLookaheadEpochs(t *testing.T) {
 	netCfg := networkconfig.TestNetwork
 	mv := &messageValidator{netCfg: netCfg}
@@ -86,21 +87,19 @@ func TestValidateDutyCount_ProposerPreferencesAcrossLookaheadEpochs(t *testing.T
 
 	// A cluster proposing in every slot: the lookahead epoch fills first, then the current epoch.
 	for i := range netCfg.SlotsPerEpoch {
-		accept(firstSlot(base+2) + phase0.Slot(i))
+		accept(firstSlot(base+1) + phase0.Slot(i))
 	}
 	for i := range netCfg.SlotsPerEpoch {
 		accept(firstSlot(base) + phase0.Slot(i))
 	}
-	require.Equal(t, netCfg.SlotsPerEpoch, os.DutyCount(base+2))
+	require.Equal(t, netCfg.SlotsPerEpoch, os.DutyCount(base+1))
 	require.Equal(t, netCfg.SlotsPerEpoch, os.DutyCount(base))
-	require.Zero(t, os.DutyCount(base+1))
 
-	// The epoch in between still has its whole budget, and the tail of the previous epoch counts too.
-	accept(firstSlot(base + 1))
+	// The tail of the previous epoch still counts on its own, leaving both later epochs' counts untouched.
 	accept(firstSlot(base) - 1)
-	require.Equal(t, uint64(1), os.DutyCount(base+1))
 	require.Equal(t, uint64(1), os.DutyCount(base-1))
 	require.Equal(t, netCfg.SlotsPerEpoch, os.DutyCount(base))
+	require.Equal(t, netCfg.SlotsPerEpoch, os.DutyCount(base+1))
 }
 
 // Two proposal slots exactly one default-ring apart collide in the default ring but stay distinct in
