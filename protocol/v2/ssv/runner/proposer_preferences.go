@@ -115,20 +115,29 @@ func (r *ProposerPreferencesRunner) StartNewDuty(ctx context.Context, logger *za
 	// broadcast or beacon-node submit; see executeDuty).
 	slot := validatorDuty.DutySlot()
 	sub := newProposerPreferencesSlotRunner(r.opts, r.builders)
-	if prev, ok := r.bySlot[slot]; ok {
+	prev, replacing := r.bySlot[slot]
+	if replacing {
 		sub.submittedPreferences = prev.submittedPreferences
 		sub.broadcastPreferences = prev.broadcastPreferences
 		// The auth markers carry over too — roots are re-emission-invariant (see the field docs).
 		sub.broadcastAuthRoots = prev.broadcastAuthRoots
 		sub.reconstructedAuthRoots = prev.reconstructedAuthRoots
-		if prev.hasDutyRunning() {
-			prev.markDutyNotRequired() // superseded by the re-emission, not stuck
-		}
+	}
+
+	// The replacement takes the slot over once its duty is ASSIGNED — the same gate as the stash replay
+	// below — whether or not its start then failed: a sub-runner that executed at all has run its
+	// request-auth round (which never fails the duty) and frozen its preference before signing it, so it
+	// still takes this slot's partials; the base has already recorded the failed attempt as this duty's
+	// outcome. The rare start that fails before assignment leaves the prior incarnation in place,
+	// containers and outcome intact. Either way the error goes back to the caller.
+	startErr := sub.StartNewDuty(ctx, logger, duty, quorum)
+	if !sub.hasDutyAssigned() {
+		return startErr
+	}
+	if replacing && prev.hasDutyRunning() {
+		prev.markDutyNotRequired() // superseded by the re-emission, not stuck
 	}
 	r.bySlot[slot] = sub
-	if err := sub.StartNewDuty(ctx, logger, duty, quorum); err != nil {
-		return err
-	}
 
 	// Replay the stashed partials for this proposal slot. Peers broadcast their §5-role partials
 	// once, at their own emission tick, so they may predate this (re)start; the stash is the only
@@ -137,20 +146,18 @@ func (r *ProposerPreferencesRunner) StartNewDuty(ctx context.Context, logger *za
 	// fails signature verification inside the sub-runner and is skipped; a stashed request-auth
 	// partial outside the freshly frozen auth-root set is skipped the same way.
 	//
-	// The gate is duty-ASSIGNED, not running: a re-emission that concluded immediately (unchanged
-	// preference → not-required sets State.Succeeded) still must replay auth partials into its
-	// fresh container, or a yet-unreconstructed auth could never reach quorum again. Preference
-	// partials replayed into a concluded duty bounce off the succeeded-gate harmlessly; the auth
-	// rounds have no such gate by design.
-	if sub.hasDutyAssigned() {
-		for _, stashed := range r.pending[slot] {
-			if err := sub.ProcessPreConsensus(ctx, logger, stashed); err != nil {
-				logger.Debug("skipped stashed proposer-preferences partial on replay",
-					fields.Slot(slot), zap.Error(err))
-			}
+	// The gate is duty-ASSIGNED, not running or started cleanly: a re-emission that concluded
+	// immediately (unchanged preference → not-required sets State.Succeeded) or failed after freezing
+	// its roots still must replay auth partials into its fresh container, or a yet-unreconstructed
+	// auth could never reach quorum again. Preference partials replayed into a concluded duty bounce
+	// off the succeeded-gate harmlessly; the auth rounds have no such gate by design.
+	for _, stashed := range r.pending[slot] {
+		if err := sub.ProcessPreConsensus(ctx, logger, stashed); err != nil {
+			logger.Debug("skipped stashed proposer-preferences partial on replay",
+				fields.Slot(slot), zap.Error(err))
 		}
 	}
-	return nil
+	return startErr
 }
 
 func (r *ProposerPreferencesRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {

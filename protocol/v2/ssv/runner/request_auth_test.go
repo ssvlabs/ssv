@@ -2,6 +2,7 @@ package runner
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
@@ -11,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
+	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
@@ -433,4 +435,106 @@ func TestProposerPreferencesRunner_requestAuthSurvivesConcludedReemission(t *tes
 	require.NoError(t, disp.ProcessPreConsensus(ctx, logger, peerAuthPartial(t, 4)))
 	require.Len(t, cache.Get(proposalSlot), 1,
 		"stash replay into the concluded replacement must let the auth quorum complete")
+}
+
+// failingBroadcastNetwork is the testing network with a switch to make every broadcast fail.
+type failingBroadcastNetwork struct {
+	protocolp2p.Network
+	fail bool
+}
+
+func (n *failingBroadcastNetwork) BroadcastAtSlot(msg *spectypes.SignedSSVMessage, slot phase0.Slot) error {
+	if n.fail {
+		return errors.New("broadcast failed")
+	}
+	return n.Network.BroadcastAtSlot(msg, slot)
+}
+
+// A re-emission whose start fails after its duty is assigned — here the new preference cannot be broadcast —
+// still takes the slot over, and the stash replays into it as after a clean start: its request-auth round ran
+// first and froze the roots, so the replacement collects auth partials where the failed-then-dropped
+// replacement of before left the slot with empty containers and the predecessor's partials discarded. The
+// predecessor is concluded as superseded, the failed attempt is reported by the base, and the error still
+// reaches the caller.
+func TestProposerPreferencesRunner_failedReemissionStillTakesOverAndReplays(t *testing.T) {
+	keySet := spectestingutils.Testing4SharesSet()
+	share := spectestingutils.TestingShare(keySet, spectestingutils.TestingValidatorIndex)
+	cfg := cloneTestNetworkConfig()
+	const quorum = 3
+
+	bn := &prefsTestBeacon{BeaconNode: protocoltesting.NewTestingBeaconNodeWrapped(), dependentRoot: phase0.Root{0xaa}}
+	network := &failingBroadcastNetwork{Network: protocoltesting.NewTestingNetwork(1, keySet.OperatorKeys[1])}
+	cache := ssv.NewRequestAuthCache(cfg.EstimatedCurrentSlot)
+	builders := []gloas.BuilderEntry{{URL: "https://builder-a.example.com"}}
+
+	runnerIface, err := NewProposerPreferencesRunner(ProposerPreferencesRunnerOptions{
+		BaseRunnerOptions: BaseRunnerOptions{
+			NetworkConfig:  cfg,
+			Share:          map[phase0.ValidatorIndex]*spectypes.Share{share.ValidatorIndex: share},
+			Beacon:         bn,
+			Network:        network,
+			Signer:         ekm.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager()),
+			OperatorSigner: spectestingutils.NewOperatorSigner(keySet, 1),
+		},
+		FeeRecipientProvider: fixedFeeRecipientProvider{addr: bellatrix.ExecutionAddress{0xfe}},
+		GasLimit:             36_000_000,
+		Builders:             gloas.BuilderConfig{Entries: builders},
+		RequestAuthCache:     cache,
+	})
+	require.NoError(t, err)
+	disp := runnerIface.(*ProposerPreferencesRunner)
+
+	proposalSlot := cfg.EstimatedCurrentSlot() + 5
+	duty := &spectypes.ValidatorDuty{
+		Type:           spectypes.BNRoleProposerPreferences,
+		PubKey:         spectestingutils.TestingValidatorPubKey,
+		Slot:           proposalSlot,
+		ValidatorIndex: share.ValidatorIndex,
+	}
+	ctx := context.Background()
+	logger := zap.NewNop()
+
+	peerAuthPartial := func(t *testing.T, opID spectypes.OperatorID) *spectypes.PartialSignatureMessages {
+		t.Helper()
+		auth := &gloas.BuilderRequestAuth{Data: []byte("https://builder-a.example.com"), Slot: proposalSlot}
+		domain, err := bn.DomainData(ctx, cfg.EstimatedEpochAtSlot(proposalSlot), phase0.DomainType(spectypes.DomainBuilderRequestAuth))
+		require.NoError(t, err)
+		root, err := spectypes.ComputeETHSigningRoot(auth, domain)
+		require.NoError(t, err)
+		sig := keySet.Shares[opID].SignByte(root[:])
+		return &spectypes.PartialSignatureMessages{
+			Type: spectypes.RequestAuthPartialSig,
+			Slot: proposalSlot,
+			Messages: []*spectypes.PartialSignatureMessage{{
+				PartialSignature: sig.Serialize(),
+				SigningRoot:      root,
+				Signer:           opID,
+				ValidatorIndex:   share.ValidatorIndex,
+			}},
+		}
+	}
+
+	// The first emission starts cleanly; two peer auth partials arrive, one short of quorum (and are stashed).
+	require.NoError(t, disp.StartNewDuty(ctx, logger, duty, quorum))
+	first := disp.bySlot[proposalSlot]
+	for _, op := range []spectypes.OperatorID{2, 3} {
+		require.NoError(t, disp.ProcessPreConsensus(ctx, logger, peerAuthPartial(t, op)))
+	}
+	require.Empty(t, cache.Get(proposalSlot))
+
+	// The dependent root moves, so the re-emission must sign a new preference — and its broadcast fails.
+	bn.dependentRoot = phase0.Root{0xbb}
+	network.fail = true
+	err = disp.StartNewDuty(ctx, logger, duty, quorum)
+	require.ErrorContains(t, err, "broadcast failed")
+	network.fail = false
+
+	replacement := disp.bySlot[proposalSlot]
+	require.NotSame(t, first, replacement, "the replacement took the slot over")
+	require.True(t, replacement.hasDutyAssigned())
+	require.False(t, first.hasDutyRunning(), "the predecessor is concluded as superseded")
+
+	// The stash replayed into the replacement: the third auth partial completes the quorum there.
+	require.NoError(t, disp.ProcessPreConsensus(ctx, logger, peerAuthPartial(t, 4)))
+	require.Len(t, cache.Get(proposalSlot), 1, "the auth root reconstructed from the replayed partials")
 }
