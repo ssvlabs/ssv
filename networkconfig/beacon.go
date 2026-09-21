@@ -3,7 +3,9 @@ package networkconfig
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"math"
+	"slices"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec"
@@ -255,7 +257,7 @@ func (b *Beacon) AssertSame(other *Beacon) error {
 	if b.GenesisValidatorsRoot != other.GenesisValidatorsRoot {
 		return fmt.Errorf("different GenesisValidatorsRoot")
 	}
-	if err := assertSameForks(b.Forks, other.Forks); err != nil {
+	if err := assertSameForks(b.Forks, other.Forks, b.EstimatedCurrentEpoch()); err != nil {
 		return err
 	}
 
@@ -265,15 +267,41 @@ func (b *Beacon) AssertSame(other *Beacon) error {
 // FarFutureEpoch marks a fork the beacon node names but has not scheduled.
 const FarFutureEpoch = phase0.Epoch(math.MaxUint64)
 
-// assertSameForks compares two fork schedules by what matters for signing: a fork scheduled on either
-// side must be scheduled on both, at the same epoch with the same versions. An unscheduled fork is the
-// same whether the beacon node names it (far-future epoch, any version) or predates it and omits it —
-// GLOAS_FORK_EPOCH is optional for that reason — since it never selects a signing domain. Two clients
-// disagreeing on whether a fork is scheduled is a real misalignment: they would part ways at the fork.
-func assertSameForks(ours, theirs map[spec.DataVersion]phase0.Fork) error {
-	scheduled := func(forks map[spec.DataVersion]phase0.Fork, version spec.DataVersion) (phase0.Fork, bool) {
+// ForkScheduleLagError reports two beacon configs that agree on the chain so far and disagree only about a
+// fork still ahead of both: one schedules it and the other does not, or they schedule it at different epochs.
+// Same genesis and same forks to date means the same chain, so such a disagreement is one client lagging its
+// network's configuration — the normal state of a staggered client upgrade, until the lagging client is
+// upgraded (or parts ways at the fork). Callers decide how loudly to say so; AssertSame returns it as is.
+type ForkScheduleLagError struct {
+	Version spec.DataVersion
+	// Ours and Theirs are the two schedules; an unscheduled side carries FarFutureEpoch.
+	Ours, Theirs phase0.Fork
+}
+
+func (e *ForkScheduleLagError) Error() string {
+	return fmt.Sprintf("fork schedules differ ahead of the chain: %s is %s on one client and %s on the other",
+		e.Version, DescribeForkSchedule(e.Ours), DescribeForkSchedule(e.Theirs))
+}
+
+// DescribeForkSchedule words a fork's schedule for logs and errors.
+func DescribeForkSchedule(fork phase0.Fork) string {
+	if fork.Epoch == FarFutureEpoch {
+		return "not scheduled"
+	}
+	return fmt.Sprintf("scheduled at epoch %d (version %#x)", fork.Epoch, fork.CurrentVersion)
+}
+
+// assertSameForks compares two fork schedules. A fork unscheduled on both is the same whether a client names it
+// (far-future epoch, any version) or omits it. Every fork active on either client at currentEpoch must be
+// scheduled identically on both: they are on different chains otherwise. A disagreement confined to forks
+// still ahead of both is a *ForkScheduleLagError.
+func assertSameForks(ours, theirs map[spec.DataVersion]phase0.Fork, currentEpoch phase0.Epoch) error {
+	schedule := func(forks map[spec.DataVersion]phase0.Fork, version spec.DataVersion) (phase0.Fork, bool) {
 		fork, ok := forks[version]
-		return fork, ok && fork.Epoch != FarFutureEpoch
+		if !ok || fork.Epoch == FarFutureEpoch {
+			return phase0.Fork{Epoch: FarFutureEpoch}, false
+		}
+		return fork, true
 	}
 	versions := make(map[spec.DataVersion]struct{}, len(ours)+len(theirs))
 	for version := range ours {
@@ -282,17 +310,24 @@ func assertSameForks(ours, theirs map[spec.DataVersion]phase0.Fork) error {
 	for version := range theirs {
 		versions[version] = struct{}{}
 	}
-	for version := range versions {
-		mine, mineScheduled := scheduled(ours, version)
-		other, otherScheduled := scheduled(theirs, version)
-		switch {
-		case !mineScheduled && !otherScheduled:
+	var lag *ForkScheduleLagError
+	for _, version := range slices.Sorted(maps.Keys(versions)) {
+		mine, mineScheduled := schedule(ours, version)
+		other, otherScheduled := schedule(theirs, version)
+		if (!mineScheduled && !otherScheduled) || mine == other {
 			continue
-		case mineScheduled != otherScheduled:
-			return fmt.Errorf("different Forks: %s is scheduled on one client and not on the other", version)
-		case mine != other:
-			return fmt.Errorf("different Forks: %s at epoch %d/%d", version, mine.Epoch, other.Epoch)
 		}
+		active := (mineScheduled && mine.Epoch <= currentEpoch) || (otherScheduled && other.Epoch <= currentEpoch)
+		if active {
+			return fmt.Errorf("different Forks: %s is %s on one client and %s on the other",
+				version, DescribeForkSchedule(mine), DescribeForkSchedule(other))
+		}
+		if lag == nil {
+			lag = &ForkScheduleLagError{Version: version, Ours: mine, Theirs: other}
+		}
+	}
+	if lag != nil {
+		return lag
 	}
 	return nil
 }

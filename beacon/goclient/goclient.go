@@ -115,6 +115,9 @@ type GoClient struct {
 	beaconConfigMu   sync.RWMutex
 	beaconConfig     *networkconfig.Beacon
 	beaconConfigInit chan struct{}
+	// beaconConfigSource is the address of the client beaconConfig was taken from, named when another
+	// client's fork schedule lags or leads it.
+	beaconConfigSource string
 
 	clients     []Client
 	multiClient MultiClient
@@ -473,6 +476,7 @@ func (gc *GoClient) applyBeaconConfig(nodeAddress string, beaconConfig *networkc
 
 	if gc.beaconConfig == nil {
 		gc.beaconConfig = beaconConfig
+		gc.beaconConfigSource = nodeAddress
 		close(gc.beaconConfigInit)
 
 		gc.log.Info("beacon config has been initialized",
@@ -483,6 +487,22 @@ func (gc *GoClient) applyBeaconConfig(nodeAddress string, beaconConfig *networkc
 	}
 
 	if err := gc.beaconConfig.AssertSame(beaconConfig); err != nil {
+		var lag *networkconfig.ForkScheduleLagError
+		if errors.As(err, &lag) {
+			// The two clients agree on the chain so far and differ only about a fork ahead of it: one lags its
+			// network's configuration, the normal state of a staggered client upgrade. The node keeps the
+			// schedule it started with and keeps serving from both clients; the lagging one must be upgraded
+			// before the fork — and if that is the client this node's config came from, the node restarted
+			// against an upgraded one, since it cannot change its fork schedule while running.
+			gc.log.Warn("beacon config: clients disagree about a future fork; upgrade the lagging client before that fork",
+				zap.String("fork", lag.Version.String()),
+				zap.String("node_config", networkconfig.DescribeForkSchedule(lag.Ours)),
+				zap.String("node_config_source", gc.beaconConfigSource),
+				zap.String("client", networkconfig.DescribeForkSchedule(lag.Theirs)),
+				fields.Address(nodeAddress),
+			)
+			return gc.beaconConfig, nil
+		}
 		return gc.beaconConfig, fmt.Errorf("beacon config misalign: %w", err)
 	}
 

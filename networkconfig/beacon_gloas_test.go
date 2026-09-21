@@ -1,6 +1,8 @@
 package networkconfig
 
 import (
+	"errors"
+	"fmt"
 	"math"
 	"testing"
 
@@ -72,6 +74,7 @@ func TestBeacon_IntervalDuration(t *testing.T) {
 // one client advertises GLOAS_FORK_EPOCH and one does not runs. Scheduling it on one client only, or at
 // different epochs, is a real misalignment.
 func TestBeacon_AssertSame_Forks(t *testing.T) {
+	now := TestNetwork.EstimatedCurrentEpoch()
 	base := func(gloas *phase0.Fork) *Beacon {
 		b := *TestNetwork.Beacon
 		b.Forks = map[spec.DataVersion]phase0.Fork{spec.DataVersionPhase0: {}, spec.DataVersionAltair: {Epoch: 1}}
@@ -82,14 +85,36 @@ func TestBeacon_AssertSame_Forks(t *testing.T) {
 	}
 	omitted := base(nil)
 	unscheduled := base(&phase0.Fork{Epoch: FarFutureEpoch, CurrentVersion: phase0.Version{0x80}})
-	scheduled := base(&phase0.Fork{Epoch: 100, CurrentVersion: phase0.Version{0x80}})
-	scheduledLater := base(&phase0.Fork{Epoch: 200, CurrentVersion: phase0.Version{0x80}})
+	ahead := base(&phase0.Fork{Epoch: now + 100, CurrentVersion: phase0.Version{0x80}})
+	aheadLater := base(&phase0.Fork{Epoch: now + 200, CurrentVersion: phase0.Version{0x80}})
+	active := base(&phase0.Fork{Epoch: now, CurrentVersion: phase0.Version{0x80}})
+	activeEarlier := base(&phase0.Fork{Epoch: now - 1, CurrentVersion: phase0.Version{0x80}})
 
+	// Unscheduled is unscheduled, whether the client names the fork or not.
 	require.NoError(t, omitted.AssertSame(unscheduled))
 	require.NoError(t, unscheduled.AssertSame(omitted))
-	require.NoError(t, scheduled.AssertSame(scheduled))
+	require.NoError(t, ahead.AssertSame(ahead))
 
-	require.ErrorContains(t, scheduled.AssertSame(omitted), "scheduled on one client and not on the other")
-	require.ErrorContains(t, unscheduled.AssertSame(scheduled), "scheduled on one client and not on the other")
-	require.ErrorContains(t, scheduled.AssertSame(scheduledLater), "at epoch 100/200")
+	// A disagreement about a fork still ahead of both clients is a lag, reported as such either way round.
+	var lag *ForkScheduleLagError
+	require.ErrorAs(t, ahead.AssertSame(omitted), &lag)
+	require.Equal(t, DataVersionGloas, lag.Version)
+	require.Equal(t, now+100, lag.Ours.Epoch)
+	require.Equal(t, FarFutureEpoch, lag.Theirs.Epoch)
+	require.ErrorAs(t, unscheduled.AssertSame(ahead), &lag)
+	require.ErrorAs(t, omitted.AssertSame(ahead), &lag)
+	require.ErrorAs(t, ahead.AssertSame(aheadLater), &lag)
+	require.ErrorContains(t, ahead.AssertSame(aheadLater), fmt.Sprintf("scheduled at epoch %d", now+200))
+
+	// A fork active on either client must match exactly: the clients are on different chains otherwise.
+	for name, err := range map[string]error{
+		"active vs omitted":       active.AssertSame(omitted),
+		"omitted vs active":       omitted.AssertSame(active),
+		"active vs unscheduled":   active.AssertSame(unscheduled),
+		"active at another epoch": active.AssertSame(activeEarlier),
+		"active vs ahead":         active.AssertSame(ahead),
+	} {
+		require.ErrorContains(t, err, "different Forks", name)
+		require.False(t, errors.As(err, &lag), "%s is not a lag", name)
+	}
 }
