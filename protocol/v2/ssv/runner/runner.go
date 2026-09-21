@@ -390,12 +390,23 @@ func (b *BaseRunner) watchDutyOutcome(ctx context.Context, logger *zap.Logger) {
 	b.dutyConcluded = concluded
 
 	deadline := b.NetworkConfig.SlotStartTime(b.NetworkConfig.EstimatedCurrentSlot() + 1)
-	// A proposer-preferences duty emits ahead of its proposal slot and legitimately keeps converging
-	// across the gap — operators broadcast their partials at their own emission ticks — so its outcome
-	// horizon is the proposal slot's start (the preference is moot once that slot arrives), not the
-	// end of the emission slot.
-	if b.RunnerRoleType == spectypes.RoleProposerPreferences && b.State != nil {
+	switch {
+	case b.RunnerRoleType == spectypes.RoleProposerPreferences && b.State != nil:
+		// A proposer-preferences duty emits ahead of its proposal slot and legitimately keeps converging
+		// across the gap — operators broadcast their partials at their own emission ticks — so its outcome
+		// horizon is the proposal slot's start (the preference is moot once that slot arrives), not the
+		// end of the emission slot.
 		if d := b.NetworkConfig.SlotStartTime(b.State.CurrentDuty.DutySlot()); d.After(deadline) {
+			deadline = d
+		}
+	case b.RunnerRoleType == spectypes.RolePTCAttester && b.State != nil:
+		// A PTC attestation (SIP #94 §3) starts at the payload-attestation cutoff, three quarters into its
+		// slot, and its message goes into the next slot's block, so its horizon runs to that slot's end: the
+		// quarter slot left in its own is no time to fetch, sign, gather partials and submit, and writing the
+		// duty off at slot end while its partials still arrive would under-report §3 success. Message
+		// validation admits those partials a little longer still; a quorum after this horizon is one the
+		// beacon node refuses anyway, and that surfaces as failed on its own.
+		if d := b.NetworkConfig.SlotStartTime(b.State.CurrentDuty.DutySlot() + 2); d.After(deadline) {
 			deadline = d
 		}
 	}
@@ -418,7 +429,7 @@ func (b *BaseRunner) watchDutyOutcome(ctx context.Context, logger *zap.Logger) {
 		case dutyOutcomeStuck:
 			logger.Warn("⚠️ duty did not complete before slot end (likely stuck)")
 		case dutyOutcomeNoQuorum:
-			logger.Warn("⚠️ duty did not reach signature quorum before slot end (operators did not converge)")
+			logger.Warn("⚠️ duty did not reach signature quorum in time (operators did not converge)")
 		case dutyOutcomeSucceeded, dutyOutcomeNotRequired:
 			logger.Debug("duty concluded", zap.String("outcome", string(c.outcome)))
 		}

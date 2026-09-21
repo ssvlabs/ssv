@@ -22,7 +22,7 @@ import (
 // a duty that concluded successfully.
 func TestBaseRunner_watchDutyOutcome(t *testing.T) {
 	const deadlineSnippet = "did not complete before slot end"
-	const noQuorumSnippet = "did not reach signature quorum before slot end"
+	const noQuorumSnippet = "did not reach signature quorum in time"
 	const failedSnippet = "duty failed"
 
 	// Genesis is set to now so the watcher starts at the beginning of slot 0 and its deadline
@@ -81,6 +81,24 @@ func TestBaseRunner_watchDutyOutcome(t *testing.T) {
 			return logs.FilterMessageSnippet(noQuorumSnippet).Len() == 1
 		}, time.Second, 5*time.Millisecond, "expected the quorum-miss warning")
 		require.Zero(t, logs.FilterMessageSnippet(deadlineSnippet).Len(), "PTC must not fall back to the generic stuck warning")
+	})
+
+	t.Run("PTC: the outcome horizon runs through the next slot", func(t *testing.T) {
+		core, logs := observer.New(zapcore.WarnLevel)
+		b := newRunner()
+		b.RunnerRoleType = spectypes.RolePTCAttester
+		// The duty runs at slot 0 (starting at the payload-attestation cutoff, late in the slot) and its
+		// message goes into slot 1's block, so the quorum miss is called only when slot 1 ends too.
+		b.State = &State{CurrentDuty: &spectypes.ValidatorDuty{Slot: 0}}
+
+		b.watchDutyOutcome(context.Background(), zap.New(core))
+
+		time.Sleep(70 * time.Millisecond) // past the duty slot's end, inside the next slot
+		require.Zero(t, logs.FilterMessageSnippet(noQuorumSnippet).Len(), "§3 must not be written off at its own slot's end")
+
+		require.Eventually(t, func() bool {
+			return logs.FilterMessageSnippet(noQuorumSnippet).Len() == 1
+		}, time.Second, 5*time.Millisecond, "expected the quorum-miss warning once the next slot ends")
 	})
 
 	t.Run("PTC: a concluded duty is reported on its own terms", func(t *testing.T) {
