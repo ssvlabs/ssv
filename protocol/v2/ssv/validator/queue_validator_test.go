@@ -169,6 +169,15 @@ func TestConsumeQueue_DropsStaleMessageArrivingAfterDutyStart(t *testing.T) {
 	require.True(t, v.Queues[spectypes.RoleProposer].TryPush(executeDutyMsg(t, netCfg.DomainType, duty.Slot)))
 	require.Equal(t, message.SSVEventMsgType, receiveDelivered(t, delivered).MsgType, "the duty-start event goes first")
 
+	// The duty-start is delivered from inside the handler, before the consumer raises the floor and runs the
+	// bulk purge; a stale message pushed right now could still meet that purge instead of the pop guard.
+	// A live partial for the duty's own slot settles the order: it is delivered only by the next iteration,
+	// so by the time it arrives the duty-start iteration — floor and purge included — is over.
+	require.True(t, v.Queues[spectypes.RoleProposer].TryPush(partialSigMsg(t, msgID, duty.Slot)))
+	liveSlot, err := receiveDelivered(t, delivered).Slot()
+	require.NoError(t, err)
+	require.Equal(t, duty.Slot, liveSlot, "a partial for the running duty's slot is delivered")
+
 	// A stale message for an earlier slot now arrives, after the bulk purge already ran. The consumer
 	// drops it rather than handing it to the runner.
 	require.True(t, v.Queues[spectypes.RoleProposer].TryPush(partialSigMsg(t, msgID, 5)))
