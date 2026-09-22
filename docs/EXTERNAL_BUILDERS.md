@@ -17,8 +17,9 @@ bid requests and per-builder bid preferences, per the Gloas
 [builder-specs](https://github.com/ethereum/builder-specs/blob/master/specs/gloas/validator.md) and
 [beacon-APIs#630](https://github.com/ethereum/beacon-APIs/pull/630). This is an **opt-in enhancement, not
 on the critical path**: a cluster that never configures it still proposes valid blocks, and the enshrined
-path stays the fallback whenever the overlay fails or a builder is unavailable. Design and rollout are
-tracked in [issue #2962](https://github.com/ssvlabs/ssv/issues/2962).
+path stays the fallback whenever the overlay fails or a builder is unavailable. The design record is
+[issue #2962](https://github.com/ssvlabs/ssv/issues/2962); coverage of the overlay on the local Gloas
+testnet is tracked in [ssvlabs/aetheria#173](https://github.com/ssvlabs/aetheria/issues/173).
 
 Configuration is the `Builders` block (see `config.example.yaml`), using the ecosystem's
 [keymanager-APIs#88](https://github.com/ethereum/keymanager-APIs/pull/88) `BuilderConfig` vocabulary:
