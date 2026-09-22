@@ -27,6 +27,7 @@ import (
 	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
+	"github.com/ssvlabs/ssv/utils/async"
 	"github.com/ssvlabs/ssv/utils/hashmap"
 )
 
@@ -323,6 +324,9 @@ func New(ctx context.Context, logger *zap.Logger, opt Options) (*GoClient, error
 		return nil, fmt.Errorf("failed to launch event listener: %w", err)
 	}
 
+	// The node's fork schedule is fixed from here on; keep checking the clients' for drift from it.
+	async.Interval(ctx, forkScheduleRecheckInterval, func() { client.recheckForkSchedules(ctx) })
+
 	return client, nil
 }
 
@@ -489,24 +493,86 @@ func (gc *GoClient) applyBeaconConfig(nodeAddress string, beaconConfig *networkc
 	if err := gc.beaconConfig.AssertSame(beaconConfig); err != nil {
 		var lag *networkconfig.ForkScheduleLagError
 		if errors.As(err, &lag) {
-			// The two clients agree on the chain so far and differ only about a fork ahead of it: one lags its
-			// network's configuration, the normal state of a staggered client upgrade. The node keeps the
-			// schedule it started with and keeps serving from both clients; the lagging one must be upgraded
-			// before the fork — and if that is the client this node's config came from, the node restarted
-			// against an upgraded one, since it cannot change its fork schedule while running.
-			gc.log.Warn("beacon config: clients disagree about a future fork; upgrade the lagging client before that fork",
-				zap.String("fork", lag.Version.String()),
-				zap.String("node_config", networkconfig.DescribeForkSchedule(lag.Ours)),
-				zap.String("node_config_source", gc.beaconConfigSource),
-				zap.String("client", networkconfig.DescribeForkSchedule(lag.Theirs)),
-				fields.Address(nodeAddress),
-			)
+			// The client and the node agree on the chain so far and differ only about a fork ahead of it: the
+			// same network at different configuration versions, the normal state of a staggered client
+			// upgrade. The node keeps the schedule it started with and keeps serving from the client.
+			gc.reportForkScheduleLag(nodeAddress, lag)
 			return gc.beaconConfig, nil
 		}
 		return gc.beaconConfig, fmt.Errorf("beacon config misalign: %w", err)
 	}
 
 	return gc.beaconConfig, nil
+}
+
+// forkScheduleRecheckInterval paces recheckForkSchedules. go-eth2-client serves the spec from a cache it
+// clears every five minutes, so a faster poll would only re-read the cached copy.
+const forkScheduleRecheckInterval = 5 * time.Minute
+
+// recheckForkSchedules re-reads every active client's config and reports any fork-schedule drift from the
+// node's. The node's schedule is fixed when its config is first taken and cannot change while it runs, so a
+// client that learns of a fork later — the only client upgraded, or every client, while the connection came
+// back within one probe so the activation hook never re-read it — would otherwise carry the node across
+// that fork on the old schedule, failing every duty from then on with nothing in the logs naming the fork.
+func (gc *GoClient) recheckForkSchedules(ctx context.Context) {
+	for _, c := range gc.clients {
+		if !c.IsActive() {
+			continue
+		}
+		cfg, err := gc.fetchBeaconConfig(ctx, c)
+		if err != nil {
+			gc.log.Debug("couldn't re-read a client's beacon config for the fork-schedule recheck", fields.Address(c.Address()), zap.Error(err))
+			continue
+		}
+		gc.checkForkSchedule(c.Address(), cfg)
+	}
+}
+
+// checkForkSchedule compares a client's freshly read config with the node's: a fork-schedule lag on either
+// side goes through reportForkScheduleLag; any other difference is reported as an error and the node carries
+// on (the activation hook, which admits a client, fatals on it instead).
+func (gc *GoClient) checkForkSchedule(clientAddr string, cfg *networkconfig.Beacon) {
+	err := gc.getBeaconConfig().AssertSame(cfg)
+	if err == nil {
+		return
+	}
+	var lag *networkconfig.ForkScheduleLagError
+	if errors.As(err, &lag) {
+		gc.reportForkScheduleLag(clientAddr, lag)
+		return
+	}
+	gc.log.Error("beacon config: a client's config no longer matches the node's", fields.Address(clientAddr), zap.Error(err))
+}
+
+// reportForkScheduleLag says which side of a fork-schedule disagreement has to move. Ours is the node's
+// schedule, taken from the first client at start and fixed since. When it lacks a fork the client
+// schedules, the node is the stale side and only a restart can adopt the fork — an error, since crossing
+// the fork on the old schedule fails every duty from then on. When the client lacks a fork the node
+// schedules, the client is the stale side and needs upgrading before the fork — a warning, as the node
+// keeps serving from it until then. Two schedules that both name the fork but differ (epoch or version)
+// cannot be told apart from here, so that is an error too, with the restart advice conditional on the
+// client being the one that is right.
+func (gc *GoClient) reportForkScheduleLag(clientAddr string, lag *networkconfig.ForkScheduleLagError) {
+	logFields := []zap.Field{
+		zap.String("fork", lag.Version.String()),
+		zap.String("node_config", networkconfig.DescribeForkSchedule(lag.Ours)),
+		zap.String("node_config_source", gc.beaconConfigSource),
+		zap.String("client", networkconfig.DescribeForkSchedule(lag.Theirs)),
+		fields.Address(clientAddr),
+	}
+	nodeScheduled := lag.Ours.Epoch != networkconfig.FarFutureEpoch
+	clientScheduled := lag.Theirs.Epoch != networkconfig.FarFutureEpoch
+	switch {
+	case clientScheduled && !nodeScheduled:
+		gc.log.Error("beacon config: a client schedules a fork the node started without, which the node cannot adopt while running; restart the node before that fork",
+			append(logFields, fields.Epoch(lag.Theirs.Epoch))...)
+	case nodeScheduled && !clientScheduled:
+		gc.log.Warn("beacon config: a client has not scheduled a fork the node's config schedules; upgrade the client before that fork",
+			append(logFields, fields.Epoch(lag.Ours.Epoch))...)
+	default:
+		gc.log.Error("beacon config: a client and the node's config schedule a fork differently; if the client is right, restart the node before that fork",
+			logFields...)
+	}
 }
 
 var (
