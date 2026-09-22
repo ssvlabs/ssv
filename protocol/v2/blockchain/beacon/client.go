@@ -102,6 +102,11 @@ type ProposerPreferencesCalls interface {
 	// ProposerDutiesDependentRoot returns the proposer-duties dependent root for the epoch — the
 	// seed the proposer-lookahead is pinned to. go-eth2-client drops it, so it's fetched via raw HTTP.
 	ProposerDutiesDependentRoot(ctx context.Context, epoch phase0.Epoch) (phase0.Root, error)
+	// LastProposerDutiesDependentRoot returns the root the epoch's last successful
+	// ProposerDutiesDependentRoot call returned, while it is still remembered (the proposer lookahead).
+	// The §5 runner builds under it when its own fetch fails: the scheduler emitted the duty moments
+	// earlier under that very root, and a one-shot emission must not fail over a transient fetch error.
+	LastProposerDutiesDependentRoot(epoch phase0.Epoch) (phase0.Root, bool)
 	// SubmitProposerPreferences broadcasts signed proposer preferences for upcoming proposal slots.
 	SubmitProposerPreferences(ctx context.Context, preferences []*gloas.SignedProposerPreferences) error
 	// SubmitBuilderPreferences submits ahead-of-time per-builder preferences; the beacon node forwards

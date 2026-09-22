@@ -505,7 +505,7 @@ func (r *proposerPreferencesSlotRunner) executeDuty(ctx context.Context, logger 
 	// none of its early-return paths can skip it; it never fails the duty.
 	r.runRequestAuthRound(ctx, logger, validatorDuty, proposalSlot)
 
-	preferences, err := r.buildProposerPreferences(ctx, proposalSlot)
+	preferences, err := r.buildProposerPreferences(ctx, logger, proposalSlot)
 	if err != nil {
 		// Building hits the beacon node (dependent-root fetch) and validator config (fee recipient);
 		// a failure there is operational, so record a failed duty to surface it in metrics.
@@ -567,7 +567,7 @@ func (r *proposerPreferencesSlotRunner) executeDuty(ctx context.Context, logger 
 // view: fee recipient and target gas limit from validator config (matching validator registration),
 // and the dependent_root of the proposer duties for the proposal slot's epoch — the seed that fixed
 // this proposal assignment (SIP #94 §5), fetched per-operator so convergence is over identical roots.
-func (r *proposerPreferencesSlotRunner) buildProposerPreferences(ctx context.Context, proposalSlot phase0.Slot) (*gloas.ProposerPreferences, error) {
+func (r *proposerPreferencesSlotRunner) buildProposerPreferences(ctx context.Context, logger *zap.Logger, proposalSlot phase0.Slot) (*gloas.ProposerPreferences, error) {
 	validatorPubKey := r.GetShare().ValidatorPubKey
 
 	feeRecipient, err := r.feeRecipientProvider.GetFeeRecipient(validatorPubKey)
@@ -583,7 +583,17 @@ func (r *proposerPreferencesSlotRunner) buildProposerPreferences(ctx context.Con
 	epoch := r.NetworkConfig.EstimatedEpochAtSlot(proposalSlot)
 	dependentRoot, err := r.beacon.ProposerDutiesDependentRoot(ctx, epoch)
 	if err != nil {
-		return nil, fmt.Errorf("could not fetch proposer-duties dependent root for epoch %d: %w", epoch, err)
+		// The scheduler emitted this duty moments ago under a root it fetched through the same beacon
+		// client, which remembers it: build under that root rather than fail the emission over a transient
+		// fetch error — the scheduler re-emits an epoch only when its root changes (or the validator set
+		// does), so a failed build here would leave the slot without this operator's preference for good.
+		last, ok := r.beacon.LastProposerDutiesDependentRoot(epoch)
+		if !ok {
+			return nil, fmt.Errorf("could not fetch proposer-duties dependent root for epoch %d: %w", epoch, err)
+		}
+		logger.Warn("proposer preferences: dependent-root fetch failed, building under the root last seen for the epoch",
+			fields.Epoch(epoch), zap.String("dependent_root", last.String()), zap.Error(err))
+		dependentRoot = last
 	}
 
 	// KNOWN ISSUE (SIP-94 §5 publish-finality — pending): dependent_root/fee_recipient/target_gas_limit are

@@ -147,6 +147,7 @@ func (h *ProposerPreferencesHandler) emitForEpoch(ctx context.Context, epoch pha
 	dependentRoot, err := h.beaconNode.ProposerDutiesDependentRoot(ctx, epoch)
 	if err != nil {
 		h.logger.Warn("failed to fetch proposer-duties dependent root", fields.Epoch(epoch), zap.Error(err))
+		h.keepRecheck(recheck)
 		return // retry on the next tick
 	}
 	if prev, done := h.emitted[epoch]; done && prev == dependentRoot {
@@ -156,6 +157,7 @@ func (h *ProposerPreferencesHandler) emitForEpoch(ctx context.Context, epoch pha
 	duties, err := h.beaconNode.ProposerDuties(ctx, epoch, indices)
 	if err != nil {
 		h.logger.Warn("failed to fetch proposer duties", fields.Epoch(epoch), zap.Error(err))
+		h.keepRecheck(recheck)
 		return // retry on the next tick
 	}
 
@@ -193,6 +195,15 @@ func (h *ProposerPreferencesHandler) emitForEpoch(ctx context.Context, epoch pha
 		fields.Count(len(preferenceDuties)),
 		zap.String("dependent_root", dependentRoot.String()),
 	)
+}
+
+// keepRecheck re-arms a reorg recheck that a failed fetch could not carry out: emitForTick consumed the
+// flag before calling in, and an emitted epoch is otherwise skipped on every later tick, so without this the
+// root the reorg changed would never be re-emitted.
+func (h *ProposerPreferencesHandler) keepRecheck(recheck bool) {
+	if recheck {
+		h.recheckLookahead = true
+	}
 }
 
 // evictOutdated drops emitted-epoch markers for epochs before the current one.

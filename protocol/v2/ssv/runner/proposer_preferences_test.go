@@ -38,13 +38,24 @@ func (p fixedFeeRecipientProvider) GetFeeRecipient(spectypes.ValidatorPK) (bella
 // surface: a settable dependent root and a capture of submitted preferences.
 type prefsTestBeacon struct {
 	beacon.BeaconNode
-	dependentRoot         phase0.Root
+	dependentRoot phase0.Root
+	// dependentRootErr makes the fresh dependent-root fetch fail; lastDependentRoot is what the client then
+	// still remembers for the epoch (zero: nothing).
+	dependentRootErr      error
+	lastDependentRoot     phase0.Root
 	submitted             [][]*gloas.SignedProposerPreferences
 	submittedBuilderPrefs [][]*gloas.BuilderPreferencesEntry
 }
 
 func (b *prefsTestBeacon) ProposerDutiesDependentRoot(context.Context, phase0.Epoch) (phase0.Root, error) {
+	if b.dependentRootErr != nil {
+		return phase0.Root{}, b.dependentRootErr
+	}
 	return b.dependentRoot, nil
+}
+
+func (b *prefsTestBeacon) LastProposerDutiesDependentRoot(phase0.Epoch) (phase0.Root, bool) {
+	return b.lastDependentRoot, b.lastDependentRoot != phase0.Root{}
 }
 
 func (b *prefsTestBeacon) SubmitProposerPreferences(_ context.Context, prefs []*gloas.SignedProposerPreferences) error {
@@ -331,4 +342,63 @@ func TestProposerPreferencesSlotRunner_ExpectedPreConsensusRootsAndDomain(t *tes
 	require.NoError(t, err)
 	require.Equal(t, []spectypes.HashRoot{prefs}, roots)
 	require.Equal(t, phase0.DomainType(spectypes.DomainProposerPreferences), domain)
+}
+
+// A dependent-root fetch that fails at emission does not fail the one-shot §5 duty while the beacon client
+// still remembers the root the scheduler emitted under: the preference is built under that root and
+// broadcast. With nothing remembered the duty fails as before, and no preference goes out.
+func TestProposerPreferencesSlotRunner_buildFallsBackToLastDependentRoot(t *testing.T) {
+	keySet := spectestingutils.Testing4SharesSet()
+	share := spectestingutils.TestingShare(keySet, spectestingutils.TestingValidatorIndex)
+	cfg := cloneTestNetworkConfig()
+	proposalSlot := cfg.EstimatedCurrentSlot() + 5
+	duty := &spectypes.ValidatorDuty{
+		Type:           spectypes.BNRoleProposerPreferences,
+		PubKey:         spectestingutils.TestingValidatorPubKey,
+		Slot:           proposalSlot,
+		ValidatorIndex: share.ValidatorIndex,
+	}
+
+	newDispatcher := func(t *testing.T, bn *prefsTestBeacon) (*ProposerPreferencesRunner, *protocoltesting.TestingNetwork) {
+		t.Helper()
+		network := protocoltesting.NewTestingNetwork(1, keySet.OperatorKeys[1])
+		runnerIface, err := NewProposerPreferencesRunner(ProposerPreferencesRunnerOptions{
+			BaseRunnerOptions: BaseRunnerOptions{
+				NetworkConfig:  cfg,
+				Share:          map[phase0.ValidatorIndex]*spectypes.Share{share.ValidatorIndex: share},
+				Beacon:         bn,
+				Network:        network,
+				Signer:         ekm.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager()),
+				OperatorSigner: spectestingutils.NewOperatorSigner(keySet, 1),
+			},
+			FeeRecipientProvider: fixedFeeRecipientProvider{addr: bellatrix.ExecutionAddress{0xfe}},
+			GasLimit:             36_000_000,
+		})
+		require.NoError(t, err)
+		return runnerIface.(*ProposerPreferencesRunner), network
+	}
+
+	t.Run("a remembered root: built and broadcast under it", func(t *testing.T) {
+		bn := &prefsTestBeacon{
+			BeaconNode:        protocoltesting.NewTestingBeaconNodeWrapped(),
+			dependentRootErr:  fmt.Errorf("beacon node down"),
+			lastDependentRoot: phase0.Root{0xaa},
+		}
+		disp, network := newDispatcher(t, bn)
+		require.NoError(t, disp.StartNewDuty(context.Background(), zap.NewNop(), duty, 3))
+
+		sub := disp.bySlot[proposalSlot]
+		require.NotNil(t, sub.proposerPreferences, "the preference was built")
+		require.Equal(t, phase0.Root{0xaa}, sub.proposerPreferences.DependentRoot, "under the remembered root")
+		require.Equal(t, 1, broadcastPartialSigTypes(t, network.BroadcastedMsgs)[spectypes.ProposerPreferencesPartialSig], "and broadcast")
+	})
+
+	t.Run("nothing remembered: the duty fails and nothing goes out", func(t *testing.T) {
+		bn := &prefsTestBeacon{BeaconNode: protocoltesting.NewTestingBeaconNodeWrapped(), dependentRootErr: fmt.Errorf("beacon node down")}
+		disp, network := newDispatcher(t, bn)
+		require.NoError(t, disp.StartNewDuty(context.Background(), zap.NewNop(), duty, 3), "a build failure is recorded as a failed duty, not returned")
+
+		require.Nil(t, disp.bySlot[proposalSlot].proposerPreferences)
+		require.Empty(t, network.BroadcastedMsgs)
+	})
 }

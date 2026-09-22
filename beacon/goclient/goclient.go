@@ -119,6 +119,9 @@ type GoClient struct {
 	// beaconConfigSource is the address of the client beaconConfig was taken from, named when another
 	// client's fork schedule lags or leads it.
 	beaconConfigSource string
+	// proposerDutiesDependentRoots remembers the dependent root each epoch's last successful
+	// ProposerDutiesDependentRoot call returned, for LastProposerDutiesDependentRoot.
+	proposerDutiesDependentRoots *ttlcache.Cache[phase0.Epoch, phase0.Root]
 
 	clients     []Client
 	multiClient MultiClient
@@ -309,6 +312,10 @@ func New(ctx context.Context, logger *zap.Logger, opt Options) (*GoClient, error
 
 	client.committeesCache = ttlcache.New(ttlcache.WithTTL[phase0.Epoch, []*eth2apiv1.BeaconCommittee](twoEpochTTL))
 	go client.committeesCache.Start()
+
+	// A proposal slot's preference is emitted up to the proposer lookahead (two epochs) ahead of it.
+	client.proposerDutiesDependentRoots = ttlcache.New(ttlcache.WithTTL[phase0.Epoch, phase0.Root](twoEpochTTL))
+	go client.proposerDutiesDependentRoots.Start()
 
 	// Initialize before startEventListener to capture HeadEvents.
 	client.headCache = ttlcache.New[phase0.Slot, phase0.Root](ttlcache.WithTTL[phase0.Slot, phase0.Root](2 * config.SlotDuration))

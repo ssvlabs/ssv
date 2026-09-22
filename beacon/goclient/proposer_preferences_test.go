@@ -3,15 +3,20 @@ package goclient
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/beacon/goclient/mocks"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 )
@@ -102,4 +107,44 @@ func TestRequestProposerDutiesDependentRootRejectsMalformed(t *testing.T) {
 
 	_, err := requestProposerDutiesDependentRoot(context.Background(), srv.Client(), srv.URL, 3)
 	require.Error(t, err)
+}
+
+// The client remembers the dependent root of each epoch's last successful fetch, so a §5 runner whose own
+// fetch fails can still build under the root the scheduler emitted for.
+func TestProposerDutiesDependentRoot_RemembersLastRoot(t *testing.T) {
+	const epoch = phase0.Epoch(7)
+	root := phase0.Root{0xaa}
+	var down atomic.Bool
+	// The fake beacon node has no fixture for the v2 proposer-duties route, so the response — status
+	// included — is built here.
+	srv := mocks.NewServerWithHandler(func(r *http.Request, resp mocks.Response) (mocks.Response, error) {
+		if r.URL.Path == "/eth/v2/validator/duties/proposer/7" {
+			if down.Load() {
+				return mocks.Response{}, errors.New("beacon node down")
+			}
+			return mocks.NewResponse(json.RawMessage(`{"dependent_root":"` + root.String() + `","execution_optimistic":false,"data":[]}`)), nil
+		}
+		return resp, nil
+	})
+	defer srv.Close()
+
+	client, err := New(t.Context(), zap.NewNop(), Options{BeaconNodeAddr: srv.URL, CommonTimeout: 400 * time.Millisecond, LongTimeout: 500 * time.Millisecond})
+	require.NoError(t, err)
+
+	_, ok := client.LastProposerDutiesDependentRoot(epoch)
+	require.False(t, ok, "nothing remembered before a fetch")
+
+	got, err := client.ProposerDutiesDependentRoot(t.Context(), epoch)
+	require.NoError(t, err)
+	require.Equal(t, root, got)
+
+	down.Store(true)
+	_, err = client.ProposerDutiesDependentRoot(t.Context(), epoch)
+	require.Error(t, err, "the fresh fetch fails while the beacon node is down")
+
+	last, ok := client.LastProposerDutiesDependentRoot(epoch)
+	require.True(t, ok)
+	require.Equal(t, root, last, "the last successful fetch is remembered")
+	_, ok = client.LastProposerDutiesDependentRoot(epoch + 1)
+	require.False(t, ok, "only for the epochs actually fetched")
 }

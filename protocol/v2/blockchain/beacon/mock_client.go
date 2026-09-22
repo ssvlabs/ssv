@@ -518,6 +518,21 @@ func (m *MockProposerPreferencesCalls) EXPECT() *MockProposerPreferencesCallsMoc
 	return m.recorder
 }
 
+// LastProposerDutiesDependentRoot mocks base method.
+func (m *MockProposerPreferencesCalls) LastProposerDutiesDependentRoot(epoch phase0.Epoch) (phase0.Root, bool) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "LastProposerDutiesDependentRoot", epoch)
+	ret0, _ := ret[0].(phase0.Root)
+	ret1, _ := ret[1].(bool)
+	return ret0, ret1
+}
+
+// LastProposerDutiesDependentRoot indicates an expected call of LastProposerDutiesDependentRoot.
+func (mr *MockProposerPreferencesCallsMockRecorder) LastProposerDutiesDependentRoot(epoch any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LastProposerDutiesDependentRoot", reflect.TypeOf((*MockProposerPreferencesCalls)(nil).LastProposerDutiesDependentRoot), epoch)
+}
+
 // ProposerDutiesDependentRoot mocks base method.
 func (m *MockProposerPreferencesCalls) ProposerDutiesDependentRoot(ctx context.Context, epoch phase0.Epoch) (phase0.Root, error) {
 	m.ctrl.T.Helper()
@@ -1158,6 +1173,21 @@ func (m *MockBeaconNode) IsSyncCommitteeAggregator(proof []byte) bool {
 func (mr *MockBeaconNodeMockRecorder) IsSyncCommitteeAggregator(proof any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsSyncCommitteeAggregator", reflect.TypeOf((*MockBeaconNode)(nil).IsSyncCommitteeAggregator), proof)
+}
+
+// LastProposerDutiesDependentRoot mocks base method.
+func (m *MockBeaconNode) LastProposerDutiesDependentRoot(epoch phase0.Epoch) (phase0.Root, bool) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "LastProposerDutiesDependentRoot", epoch)
+	ret0, _ := ret[0].(phase0.Root)
+	ret1, _ := ret[1].(bool)
+	return ret0, ret1
+}
+
+// LastProposerDutiesDependentRoot indicates an expected call of LastProposerDutiesDependentRoot.
+func (mr *MockBeaconNodeMockRecorder) LastProposerDutiesDependentRoot(epoch any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LastProposerDutiesDependentRoot", reflect.TypeOf((*MockBeaconNode)(nil).LastProposerDutiesDependentRoot), epoch)
 }
 
 // PayloadAttestationData mocks base method.

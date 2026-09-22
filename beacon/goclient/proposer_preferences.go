@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/jellydator/ttlcache/v3"
 
 	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 )
@@ -30,11 +31,28 @@ func (gc *GoClient) ProposerDutiesDependentRoot(ctx context.Context, epoch phase
 		detached := context.WithoutCancel(ctx)
 		dctx, cancel := context.WithTimeout(detached, gc.commonTimeout)
 		defer cancel()
-		return firstClientResult(dctx, gc, "ProposerDutiesDependentRoot", http.MethodGet, func(ctx context.Context, addr string) (phase0.Root, error) {
+		root, err := firstClientResult(dctx, gc, "ProposerDutiesDependentRoot", http.MethodGet, func(ctx context.Context, addr string) (phase0.Root, error) {
 			return requestProposerDutiesDependentRoot(ctx, gloasHTTPClient, addr, epoch)
 		})
+		if err == nil && gc.proposerDutiesDependentRoots != nil {
+			gc.proposerDutiesDependentRoots.Set(epoch, root, ttlcache.DefaultTTL)
+		}
+		return root, err
 	})
 	return root, err
+}
+
+// LastProposerDutiesDependentRoot returns the root the epoch's last successful ProposerDutiesDependentRoot
+// call returned, if it is still remembered (see the BeaconNode interface).
+func (gc *GoClient) LastProposerDutiesDependentRoot(epoch phase0.Epoch) (phase0.Root, bool) {
+	if gc.proposerDutiesDependentRoots == nil {
+		return phase0.Root{}, false
+	}
+	item := gc.proposerDutiesDependentRoots.Get(epoch)
+	if item == nil {
+		return phase0.Root{}, false
+	}
+	return item.Value(), true
 }
 
 // requestProposerDutiesDependentRoot GETs the v2 proposer-duties response and returns its dependent_root.

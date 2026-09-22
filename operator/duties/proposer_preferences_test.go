@@ -2,6 +2,7 @@ package duties
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -343,4 +344,64 @@ func TestProposerPreferencesHandler_recheckReEmitsOnlyOnDependentRootChange(t *t
 	require.Equal(t, rootB, h.emitted[epoch])
 
 	require.Len(t, executed, 2) // first emit + changed-root re-emit only
+}
+
+// A reorg recheck whose fetch fails is not lost. emitForTick consumes the recheck flag before calling in,
+// and an emitted epoch is skipped on every later tick, so a failed fetch used to leave the epoch pinned to
+// the root the reorg changed: the flag is re-armed instead, and the next tick rechecks again.
+func TestProposerPreferencesHandler_recheckSurvivesFetchFailure(t *testing.T) {
+	ctrl := gomock.NewController(t)
+
+	epoch := phase0.Epoch(5)
+	idx := phase0.ValidatorIndex(7)
+	proposalSlot := phase0.Slot(60)
+	currentSlot := phase0.Slot(40)
+	pk := phase0.BLSPubKey{1, 2, 3}
+	rootA := phase0.Root{0xaa}
+	rootB := phase0.Root{0xbb}
+
+	vp := NewMockValidatorProvider(ctrl)
+	vp.EXPECT().SelfParticipatingValidators(epoch).
+		Return([]*types.SSVShare{{Share: spectypes.Share{ValidatorIndex: idx, ValidatorPubKey: spectypes.ValidatorPK(pk)}}}).
+		AnyTimes()
+
+	duty := []*eth2apiv1.ProposerDuty{{PubKey: pk, ValidatorIndex: idx, Slot: proposalSlot}}
+	bn := NewMockBeaconNode(ctrl)
+	gomock.InOrder(
+		bn.EXPECT().ProposerDutiesDependentRoot(gomock.Any(), epoch).Return(rootA, nil), // first emit
+		bn.EXPECT().ProposerDuties(gomock.Any(), epoch, []phase0.ValidatorIndex{idx}).Return(duty, nil),
+		bn.EXPECT().ProposerDutiesDependentRoot(gomock.Any(), epoch).Return(phase0.Root{}, errors.New("beacon node down")),        // recheck: the root fetch fails
+		bn.EXPECT().ProposerDutiesDependentRoot(gomock.Any(), epoch).Return(rootB, nil),                                           // recheck retried: the root changed...
+		bn.EXPECT().ProposerDuties(gomock.Any(), epoch, []phase0.ValidatorIndex{idx}).Return(nil, errors.New("beacon node down")), // ...but the duties fetch fails
+		bn.EXPECT().ProposerDutiesDependentRoot(gomock.Any(), epoch).Return(rootB, nil),                                           // recheck retried again: re-emit
+		bn.EXPECT().ProposerDuties(gomock.Any(), epoch, []phase0.ValidatorIndex{idx}).Return(duty, nil),
+	)
+
+	executed := make(chan []*spectypes.ValidatorDuty, 2)
+	h := NewProposerPreferencesHandler()
+	h.logger = zap.NewNop()
+	h.netCfg = networkconfig.TestNetwork
+	h.validatorProvider = vp
+	h.beaconNode = bn
+	h.dutiesExecutor = &captureExecutor{executed: executed}
+
+	h.emitForEpoch(context.Background(), epoch, currentSlot, false) // first emit → root A
+	require.Equal(t, rootA, h.emitted[epoch])
+	require.False(t, h.recheckLookahead)
+
+	// The reorg recheck (emitForTick has consumed the flag and passes recheck=true): the root fetch fails.
+	h.emitForEpoch(context.Background(), epoch, currentSlot, true)
+	require.True(t, h.recheckLookahead, "a failed root fetch re-arms the recheck")
+	require.Equal(t, rootA, h.emitted[epoch])
+
+	h.recheckLookahead = false
+	h.emitForEpoch(context.Background(), epoch, currentSlot, true) // the changed root is seen, the duties fetch fails
+	require.True(t, h.recheckLookahead, "a failed duties fetch re-arms the recheck")
+	require.Equal(t, rootA, h.emitted[epoch], "the marker moves only with an emission")
+
+	h.recheckLookahead = false
+	h.emitForEpoch(context.Background(), epoch, currentSlot, true) // the retried recheck re-emits under root B
+	require.False(t, h.recheckLookahead, "a completed recheck re-arms nothing")
+	require.Equal(t, rootB, h.emitted[epoch])
+	require.Len(t, executed, 2, "the first emit and the changed-root re-emit")
 }
