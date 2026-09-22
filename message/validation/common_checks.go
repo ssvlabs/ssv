@@ -229,7 +229,11 @@ func (mv *messageValidator) validateBeaconDuty(
 
 	// Rule: For a PTC attestation message, require a real PTC assignment for the validator at the slot,
 	// but only once the slot's epoch is fetched — PTC duties are fetched per epoch, so a not-yet-fetched
-	// epoch (e.g. at startup) must be tolerated rather than rejected.
+	// epoch (e.g. at startup) must be tolerated rather than rejected. A validator-set change clears the
+	// PTC store outright (SIP #94 §3: the refetch replaces the cache rather than merging into it), so until
+	// the next tick refetches — one slot at most — the epoch reads as not yet fetched and is tolerated the
+	// same way: the tolerance the proposer-preferences branch above takes from IsEpochStale, reached here
+	// through the store's own replace semantics.
 	if role == spectypes.RolePTCAttester {
 		// Non-committee roles always have one validator index.
 		validatorIndex := indices[0]
