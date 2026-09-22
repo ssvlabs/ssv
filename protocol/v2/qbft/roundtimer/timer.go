@@ -306,11 +306,11 @@ func RoundRelativeRole(role spectypes.RunnerRole) bool {
 //   - rounds >  QuickTimeoutThreshold → SlowTimeout
 //
 // The proposer is the only round-relative role today. Message validation caps proposer messages at
-// round 2, but that cap only makes peers drop them on receipt: nothing stops the local instance, so
-// UponRoundTimeout keeps bumping and rebroadcasting until IsRelevant() flips at the role-independent
-// CutOffRound of 12. A proposer instance therefore does arm rounds 3 through 11, including the
-// two-minute SlowTimeout for 9 through 11. Those rounds are wasted work rather than unreachable code,
-// and stopping the instance at the cap is ssvlabs/ssv#3041, not this change.
+// round 2 (MaxRound), and since ssvlabs/ssv#3041 the local instance stops there too:
+// CutOffRoundFor(RoleProposer) is 3, so IsRelevant() flips as soon as a bump lands on round 3. A
+// proposer instance therefore only ever arms rounds 1 and 2 — both on the configurable quick budget.
+// It never reaches QuickTimeoutThreshold (8), so the SlowTimeout branch below is unreachable for it;
+// the branch stays because RoundRelativeRole is a role predicate, not a proposer-only one.
 //
 // For all other roles, the timeout is slot-synchronized via roundTimeoutForRound:
 // it returns time.Until(slotStart + roundTimeoutForRound(role, IntervalDuration(slot), quick, round)),
