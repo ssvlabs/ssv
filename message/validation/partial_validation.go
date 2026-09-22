@@ -182,7 +182,9 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 	role := signedSSVMessage.SSVMessage.GetID().GetRoleType()
 	messageSlot := partialSignatureMessages.Slot
 	signer := signedSSVMessage.OperatorIDs[0]
-	operatorState := state.OperatorState(committeeInfo.signerIndex(signer))
+	// The signature is verified after these checks, so read the operator's state without allocating it:
+	// updatePartialSignatureState allocates once the message is verified.
+	operatorState := state.peekOperatorState(committeeInfo.signerIndex(signer))
 
 	// Rule: Height must not be "old" — a monotonic-slot signer must not regress to an earlier slot
 	// once it has advanced (see monotonicSlotRole for the exemptions).

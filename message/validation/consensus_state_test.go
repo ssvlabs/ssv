@@ -127,3 +127,23 @@ func TestOperatorState(t *testing.T) {
 		require.Equal(t, uint64(0), os.DutyCount(base-1))
 	})
 }
+
+// The checks that run before a message's signature is verified read an operator's state through
+// peekOperatorState, which never allocates: an operator that has sent nothing has no state, and the read
+// methods answer for it as for an empty one. Only OperatorState, on the path that records a verified
+// message, allocates.
+func TestValidatorState_PeekDoesNotAllocate(t *testing.T) {
+	cs := &ValidatorState{operators: make([]*OperatorState, 4), storedSlotCount: 66, storedEpochCount: 3}
+
+	var none *OperatorState
+	require.Nil(t, cs.peekOperatorState(1))
+	require.Equal(t, phase0.Slot(0), none.MaxSlot())
+	require.Nil(t, none.GetSignerStateForSlot(5))
+	require.Zero(t, none.DutyCount(1))
+	require.Nil(t, cs.peekOperatorState(1), "reading allocated nothing")
+
+	allocated := cs.OperatorState(1)
+	require.NotNil(t, allocated)
+	require.Same(t, allocated, cs.peekOperatorState(1))
+	require.Nil(t, cs.peekOperatorState(2), "only the recorded operator has state")
+}

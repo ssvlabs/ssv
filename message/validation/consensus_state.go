@@ -19,11 +19,22 @@ type ValidatorState struct {
 	storedEpochCount uint64
 }
 
+// OperatorState returns the operator's state, allocating it on first use. It belongs on the path that
+// records a verified message; the checks before signature verification read through peekOperatorState.
 func (cs *ValidatorState) OperatorState(operatorIdx int) *OperatorState {
 	if cs.operators[operatorIdx] == nil {
 		cs.operators[operatorIdx] = newOperatorState(cs.storedSlotCount, cs.storedEpochCount)
 	}
 
+	return cs.operators[operatorIdx]
+}
+
+// peekOperatorState returns the operator's state without allocating it: nil until the operator's first
+// verified message is recorded. OperatorState's read methods take a nil receiver and answer as for an
+// operator that has sent nothing, so a message whose signature never verifies costs no per-operator state
+// — otherwise an unauthenticated peer could have the node allocate the role's per-signer ring (66 slots
+// for proposer preferences) for every signer index of every validator it names.
+func (cs *ValidatorState) peekOperatorState(operatorIdx int) *OperatorState {
 	return cs.operators[operatorIdx]
 }
 
@@ -51,7 +62,12 @@ func newOperatorState(slotCount, epochCount uint64) *OperatorState {
 	}
 }
 
+// GetSignerStateForSlot returns the signer state recorded for the slot, or nil; nil for an operator with
+// no state yet (see peekOperatorState).
 func (os *OperatorState) GetSignerStateForSlot(slot phase0.Slot) *SignerStateForSlotRound {
+	if os == nil {
+		return nil
+	}
 	s := os.signers[(uint64(slot) % uint64(len(os.signers)))]
 	if s == nil || s.Slot != slot {
 		return nil
@@ -84,13 +100,20 @@ func (os *OperatorState) countDuty(epoch phase0.Epoch) {
 	}
 }
 
+// MaxSlot returns the highest slot the operator has been recorded at; 0 for an operator with no state yet.
 func (os *OperatorState) MaxSlot() phase0.Slot {
+	if os == nil {
+		return 0
+	}
 	return os.maxSlot
 }
 
 // DutyCount returns the signer's distinct duty slots counted for the epoch; 0 for an epoch the ring no
-// longer (or never) holds.
+// longer (or never) holds, and for an operator with no state yet.
 func (os *OperatorState) DutyCount(epoch phase0.Epoch) uint64 {
+	if os == nil {
+		return 0
+	}
 	entry := os.duties[uint64(epoch)%uint64(len(os.duties))]
 	if entry.count == 0 || entry.epoch != epoch {
 		return 0

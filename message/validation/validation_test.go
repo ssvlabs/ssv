@@ -1071,6 +1071,39 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.NoError(t, err)
 	})
 
+	// A message whose operator signature does not verify costs the node no per-operator state: the checks
+	// before verification read that state without allocating it, and it is allocated only once a verified
+	// message is recorded. An unauthenticated peer could otherwise have the node allocate the role's
+	// per-signer ring — 66 slots for proposer preferences — for every signer of every validator it names.
+	t.Run("unverified message allocates no per-operator state", func(t *testing.T) {
+		ds := dutystore.New()
+		messages := generateRandaoMsg(ks.Shares[1], 1, netCfgEpoch1.EstimatedCurrentEpoch(), netCfgEpoch1.EstimatedCurrentSlot())
+		encodedMessages, err := messages.Encode()
+		require.NoError(t, err)
+		ssvMessage := &spectypes.SSVMessage{
+			MsgType: spectypes.SSVPartialSignatureMsgType,
+			MsgID:   ssvtestingutils.NewMsgID(netCfgEpoch1.DomainType, shares.active.ValidatorPubKey[:], spectypes.RoleProposer),
+			Data:    encodedMessages,
+		}
+		signedSSVMessage := spectestingutils.SignedSSVMessageWithSigner(1, ks.OperatorKeys[1], ssvMessage)
+		receivedAt := netCfgEpoch1.SlotStartTime(netCfgEpoch1.EstimatedCurrentSlot())
+		topicID := commons.GetTopicFullName(commons.CommitteeTopicID(committeeID)[0])
+
+		rejecting := New(netCfgEpoch1, validatorStore, operators, ds, wrongSignatureVerifier).(*messageValidator)
+		_, err = rejecting.handleSignedSSVMessage(context.Background(), signedSSVMessage, topicID, peerID, receivedAt)
+		require.ErrorContains(t, err, ErrSignatureVerification.Error())
+		state := rejecting.states.Get(ssvMessage.MsgID)
+		require.NotNil(t, state, "the validator's own entry is small and precedes verification")
+		for i, operatorState := range state.Value().operators {
+			require.Nil(t, operatorState, "operator %d: no per-operator state before a verified message", i)
+		}
+
+		accepting := New(netCfgEpoch1, validatorStore, operators, ds, signatureVerifier).(*messageValidator)
+		_, err = accepting.handleSignedSSVMessage(context.Background(), signedSSVMessage, topicID, peerID, receivedAt)
+		require.NoError(t, err)
+		require.NotNil(t, accepting.states.Get(ssvMessage.MsgID).Value().operators[0], "the verified signer's state is allocated")
+	})
+
 	t.Run("reject pre-consensus randao message when epoch duties are set", func(t *testing.T) {
 		ds := dutystore.New()
 		ds.Proposer.Set(netCfgEpoch1.EstimatedCurrentEpoch(), make([]dutystore.StoreDuty[eth2apiv1.ProposerDuty], 0))

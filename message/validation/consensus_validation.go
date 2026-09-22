@@ -286,10 +286,13 @@ func (mv *messageValidator) validateQBFTMessageByDutyLogic(
 ) error {
 	role := signedSSVMessage.SSVMessage.GetID().GetRoleType()
 
+	// The signatures are verified after these checks, so read each signer's state without allocating it:
+	// updateConsensusState allocates once the message is verified.
+
 	// Rule: Height must not be "old". I.e., signer must not have already advanced to a later slot.
 	if !mv.committeeRole(role) { // Rule only for validator runners
 		for _, signer := range signedSSVMessage.OperatorIDs {
-			operatorState := state.OperatorState(committeeInfo.signerIndex(signer))
+			operatorState := state.peekOperatorState(committeeInfo.signerIndex(signer))
 			if maxSlot := operatorState.MaxSlot(); maxSlot > phase0.Slot(consensusMessage.Height) {
 				e := ErrSlotAlreadyAdvanced
 				e.got = consensusMessage.Height
@@ -323,7 +326,7 @@ func (mv *messageValidator) validateQBFTMessageByDutyLogic(
 	}
 
 	for _, signer := range signedSSVMessage.OperatorIDs {
-		operatorState := state.OperatorState(committeeInfo.signerIndex(signer))
+		operatorState := state.peekOperatorState(committeeInfo.signerIndex(signer))
 		if err := mv.validateDutyCount(signedSSVMessage.SSVMessage.GetID(), msgSlot, committeeInfo.validatorIndices, operatorState); err != nil {
 			return err
 		}
