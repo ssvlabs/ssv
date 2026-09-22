@@ -382,16 +382,20 @@ func slotBelow(floor phase0.Slot) queue.Filter {
 	}
 }
 
-// popFilter selects what the consumer may pop for the runner in its current state. Idle, it takes only
-// duty-starts (and any post-consensus packets a finished duty still awaits, see noRunningDutyFilter) — unless
-// the runner serves several slots at once (runner.MultiSlotRunner): it reports no running duty the moment its
-// last started slot concludes while it still serves that slot and stashes partials for the ones it has not
-// started, so holding its partials would only starve it until the next duty-start. With an instance running
-// but no proposal accepted for its round yet, it leaves that round's prepares and commits queued — they cannot
-// be processed before the proposal. Otherwise anything goes.
+// popFilter selects what the consumer may pop for the runner in its current state. A runner that serves
+// several slots at once (runner.MultiSlotRunner) takes anything: the consumer's single-duty notions do not
+// hold for it — it reports no running duty the moment its last started slot concludes while it still serves
+// that slot and stashes partials for the ones it has not started, so holding its partials would only starve
+// it until the next duty-start, and were it ever to run a QBFT instance, one slot's round would say nothing
+// about the others'. For every other runner: idle, only duty-starts (and any post-consensus packets a finished
+// duty still awaits, see noRunningDutyFilter); an instance running but no proposal accepted for its round yet,
+// that round's prepares and commits stay queued — they cannot be processed before the proposal; otherwise
+// anything goes.
 func popFilter(r runner.Runner, idle, multiSlot bool, rState *queue.State) queue.Filter {
 	switch {
-	case idle && !multiSlot:
+	case multiSlot:
+		return queue.FilterAny
+	case idle:
 		return noRunningDutyFilter(r)
 	case rState.HasRunningInstance && !r.HasAcceptedProposalForCurrentRound():
 		return awaitingProposalFilter(specqbft.Height(rState.Slot), rState.Round)

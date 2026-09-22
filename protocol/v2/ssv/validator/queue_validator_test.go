@@ -470,6 +470,9 @@ func TestPopFilter(t *testing.T) {
 	t.Run("idle multi-slot runner: anything goes", func(t *testing.T) {
 		check(t, popFilter(multiSlotRunnerStub{}, true, true, noInstance), func(*queue.SSVMessage) bool { return true })
 	})
+	t.Run("multi-slot runner with an instance and no accepted proposal: anything goes", func(t *testing.T) {
+		check(t, popFilter(multiSlotRunnerStub{proposalRunnerStub{accepted: false}}, false, true, instanceAtRound2), func(*queue.SSVMessage) bool { return true })
+	})
 	t.Run("instance running, no proposal accepted: its round's prepares and commits wait", func(t *testing.T) {
 		check(t, popFilter(proposalRunnerStub{accepted: false}, false, false, instanceAtRound2), func(m *queue.SSVMessage) bool { return m != prepare && m != commit })
 	})
