@@ -86,15 +86,19 @@ type gloasDutyState struct {
 	producedEnvelope *gloas.ProducedEnvelope
 	// envelopeMatch caches matchProducedEnvelope's outcome, set once the value is decided.
 	envelopeMatch envelopeMatch
-	// envelopeSigningRoot is the decided value's §6 envelope signing root, zero when none is expected
-	// (external bid). It is recorded at the first post-consensus quorum because awaitingEnvelope, which reads
-	// it, has no context for the domain lookup that deriving it takes.
+	// decidedProposal, blockSigningRoot and envelopeSigningRoot are the decided value and its post-consensus
+	// signing roots, resolved at the first post-consensus quorum and reused by later ones. The envelope root
+	// is zero when none is expected (external bid); awaitingEnvelope reads it, having no context for the
+	// domain lookup that deriving it takes.
+	decidedProposal     *gloas.GloasProposalData
+	blockSigningRoot    [32]byte
 	envelopeSigningRoot [32]byte
 	// blockSubmitAttempted is set once the block's signature reconstructs and the block is submitted,
 	// whatever the beacon nodes answer. The reveal waits for it, as a beacon node ignores an envelope whose
 	// block it hasn't seen (SIP #94 §6).
 	blockSubmitAttempted bool
-	// envelopeHandled is set once the envelope's signature reconstructs, so the reveal runs once.
+	// envelopeHandled is set once the reveal is settled: its signature reconstructed, or failed in a way no
+	// later share can fix. The reveal runs at most once.
 	envelopeHandled bool
 }
 
@@ -180,27 +184,27 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 		return nil
 	}
 
-	// We have quorum and are committed to completing this duty here. The quorum above fires only once,
-	// so a terminal failure below won't be retried, and no reveal can follow it.
+	// We have quorum and are committed to completing this duty here, so a failure below fails it, and no
+	// reveal can follow. The exception is a recoverable reconstruct failure (see reconstructQuorumSig): a later
+	// share brings the root back to quorum and re-enters here.
 	defer func() {
-		if err != nil {
+		if err != nil && !isRecoverableReconstructError(err) {
 			r.markDutyFailed(err)
 			r.releaseProducedEnvelope()
 		}
 	}()
 
-	r.measurements.EndPreConsensus()
-	recordPreConsensusDuration(ctx, r.measurements.PreConsensusTime(), spectypes.RoleProposer)
-
 	// only 1 root, verified in expectedPreConsensusRootsAndDomain
 	root := roots[0]
 
-	fullSig, err := r.State.ReconstructBeaconSig(r.State.PreConsensusContainer, root, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
+	randao, err := r.reconstructQuorumSig(r.State.PreConsensusContainer, root, "pre-consensus")
 	if err != nil {
-		// If the reconstructed signature verification failed, fall back to verifying each partial signature
-		r.FallBackAndVerifyEachSignature(r.State.PreConsensusContainer, root, r.GetShare().Committee, r.GetShare().ValidatorIndex)
-		return fmt.Errorf("got pre-consensus quorum but it has invalid signatures: %w", err)
+		return err
 	}
+	fullSig := randao[:]
+
+	r.measurements.EndPreConsensus()
+	recordPreConsensusDuration(ctx, r.measurements.PreConsensusTime(), spectypes.RoleProposer)
 
 	duty, err := r.currentValidatorDuty()
 	if err != nil {
@@ -534,22 +538,21 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 		return r.processGloasPostConsensusQuorum(ctx, logger, span, validatorConsensusData, roots)
 	}
 
-	// We have quorum and are committed to completing this duty here. The quorum above fires only once,
-	// so a terminal failure below won't be retried.
+	// We have quorum and are committed to completing this duty here, so a failure below fails it, except a
+	// recoverable reconstruct failure (see reconstructQuorumSig).
 	defer func() {
-		if err != nil {
+		if err != nil && !isRecoverableReconstructError(err) {
 			r.markDutyFailed(err)
 		}
 	}()
-
-	r.measurements.EndPostConsensus()
-	recordPostConsensusDuration(ctx, r.measurements.PostConsensusTime(), spectypes.RoleProposer)
 
 	// only 1 root, verified by expectedPostConsensusRootsAndDomains
 	specSig, err := r.reconstructPostConsensusSig(roots[0])
 	if err != nil {
 		return err
 	}
+	r.measurements.EndPostConsensus()
+	recordPostConsensusDuration(ctx, r.measurements.PostConsensusTime(), spectypes.RoleProposer)
 
 	r.doppelgangerHandler.ReportQuorum(r.GetShare().ValidatorIndex)
 
@@ -630,17 +633,37 @@ func (r *ProposerRunner) finishSubmittedProposal(ctx context.Context, logger *za
 }
 
 // reconstructPostConsensusSig reconstructs the validator's signature over root from the post-consensus
-// quorum. If the reconstructed signature does not verify, each partial signature is verified in turn to
-// surface the faulty signer.
+// quorum (see reconstructQuorumSig).
 func (r *ProposerRunner) reconstructPostConsensusSig(root [32]byte) (phase0.BLSSignature, error) {
-	sig, err := r.State.ReconstructBeaconSig(r.State.PostConsensusContainer, root, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
-	if err != nil {
-		r.FallBackAndVerifyEachSignature(r.State.PostConsensusContainer, root, r.GetShare().Committee, r.GetShare().ValidatorIndex)
-		return phase0.BLSSignature{}, fmt.Errorf("got post-consensus quorum but it has invalid signatures: %w", err)
+	return r.reconstructQuorumSig(r.State.PostConsensusContainer, root, "post-consensus")
+}
+
+// reconstructQuorumSig reconstructs the validator's signature over root from container's quorum. The
+// reconstruction combines every share of the root, so on failure each share is verified and the bad ones
+// dropped. If that leaves the root below quorum, the failure is recoverable (recoverableReconstructError): a
+// later share brings it back. If the root is still at quorum, the reconstruction is retried on the remaining
+// shares, as no later share would cross its quorum again. With no bad share to drop, more shares can't fix
+// it, and the failure is terminal.
+func (r *ProposerRunner) reconstructQuorumSig(container *ssv.PartialSigContainer, root [32]byte, phase string) (phase0.BLSSignature, error) {
+	share := r.GetShare()
+	for {
+		sig, err := r.State.ReconstructBeaconSig(container, root, share.ValidatorPubKey[:], share.ValidatorIndex)
+		if err == nil {
+			var specSig phase0.BLSSignature
+			copy(specSig[:], sig)
+			return specSig, nil
+		}
+		err = fmt.Errorf("got %s quorum but it has invalid signatures: %w", phase, err)
+
+		shares := len(container.GetSignatures(share.ValidatorIndex, root))
+		r.FallBackAndVerifyEachSignature(container, root, share.Committee, share.ValidatorIndex)
+		if hasQuorum, _ := container.HasQuorum(share.ValidatorIndex, root); !hasQuorum {
+			return phase0.BLSSignature{}, recoverableReconstructError{err}
+		}
+		if len(container.GetSignatures(share.ValidatorIndex, root)) == shares {
+			return phase0.BLSSignature{}, err
+		}
 	}
-	specSig := phase0.BLSSignature{}
-	copy(specSig[:], sig)
-	return specSig, nil
 }
 
 // processGloasPostConsensusQuorum handles the roots that just reached post-consensus quorum at a Gloas
@@ -650,16 +673,21 @@ func (r *ProposerRunner) reconstructPostConsensusSig(root [32]byte) (phase0.BLSS
 // beacon node ignores an envelope whose block it hasn't seen. A failed submit doesn't hold it back, unlike
 // in ssv-spec: other operators submit the block too.
 func (r *ProposerRunner) processGloasPostConsensusQuorum(ctx context.Context, logger *zap.Logger, span trace.Span, cd *spectypes.ProposerConsensusData, roots [][32]byte) error {
-	proposalData, err := gloas.DecodeGloasProposalData(cd.DataSSZ)
-	if err != nil {
-		return r.loseGloasQuorum(fmt.Errorf("could not decode decided gloas proposal data: %w", err))
+	if r.gloasDuty.decidedProposal == nil {
+		proposalData, err := gloas.DecodeGloasProposalData(cd.DataSSZ)
+		if err != nil {
+			return r.loseGloasQuorum(fmt.Errorf("could not decode decided gloas proposal data: %w", err))
+		}
+		blockSigningRoot, envelopeSigningRoot, err := r.gloasPostConsensusSigningRoots(ctx, proposalData)
+		if err != nil {
+			return r.loseGloasQuorum(err)
+		}
+		// Recorded before the block's quorum can finish the duty, so awaitingEnvelope holds from then on.
+		r.gloasDuty.decidedProposal = proposalData
+		r.gloasDuty.blockSigningRoot, r.gloasDuty.envelopeSigningRoot = blockSigningRoot, envelopeSigningRoot
 	}
-	blockSigningRoot, envelopeSigningRoot, err := r.gloasPostConsensusSigningRoots(ctx, proposalData)
-	if err != nil {
-		return r.loseGloasQuorum(err)
-	}
-	// Recorded before the block's quorum can finish the duty, so awaitingEnvelope holds from then on.
-	r.gloasDuty.envelopeSigningRoot = envelopeSigningRoot
+	proposalData := r.gloasDuty.decidedProposal
+	blockSigningRoot, envelopeSigningRoot := r.gloasDuty.blockSigningRoot, r.gloasDuty.envelopeSigningRoot
 
 	var blockErr error
 	if slices.Contains(roots, blockSigningRoot) {
@@ -718,22 +746,21 @@ func (r *ProposerRunner) gloasPostConsensusSigningRoots(ctx context.Context, pro
 // submitGloasBlock reconstructs the block signature from the quorum over signingRoot and publishes the
 // decided Gloas (ePBS) block, finishing the duty. Every operator submits it — the ePBS block is bid-only so
 // all hold it, keeping the pre-Gloas all-submit redundancy. That relies on the BN deduping duplicate
-// submissions by root (battle-tested pre-Gloas; still to be confirmed against a real Gloas BN). The quorum
-// fires only once, so a terminal failure here fails the duty and is not retried.
+// submissions by root (battle-tested pre-Gloas; still to be confirmed against a real Gloas BN). A failure
+// here fails the duty, except a recoverable reconstruct failure (see reconstructQuorumSig).
 func (r *ProposerRunner) submitGloasBlock(ctx context.Context, logger *zap.Logger, span trace.Span, cd *spectypes.ProposerConsensusData, proposalData *gloas.GloasProposalData, signingRoot [32]byte) (err error) {
 	defer func() {
-		if err != nil {
+		if err != nil && !isRecoverableReconstructError(err) {
 			r.markDutyFailed(err)
 		}
 	}()
-
-	r.measurements.EndPostConsensus()
-	recordPostConsensusDuration(ctx, r.measurements.PostConsensusTime(), spectypes.RoleProposer)
 
 	sig, err := r.reconstructPostConsensusSig(signingRoot)
 	if err != nil {
 		return err
 	}
+	r.measurements.EndPostConsensus()
+	recordPostConsensusDuration(ctx, r.measurements.PostConsensusTime(), spectypes.RoleProposer)
 	r.doppelgangerHandler.ReportQuorum(r.GetShare().ValidatorIndex)
 	r.gloasDuty.blockSubmitAttempted = true
 
@@ -766,7 +793,12 @@ func (r *ProposerRunner) submitGloasBlock(ctx context.Context, logger *zap.Logge
 func (r *ProposerRunner) publishEnvelope(ctx context.Context, logger *zap.Logger, cd *spectypes.ProposerConsensusData, proposalData *gloas.GloasProposalData, signingRoot [32]byte) error {
 	sig, err := r.reconstructPostConsensusSig(signingRoot)
 	if err != nil {
-		return err // the bad shares are dropped; an honest share can restore the quorum
+		if !isRecoverableReconstructError(err) {
+			// No bad share to drop, so no later share can fix it: the reveal is lost.
+			r.gloasDuty.envelopeHandled = true
+			r.releaseProducedEnvelope()
+		}
+		return err
 	}
 	r.gloasDuty.envelopeHandled = true
 
@@ -881,8 +913,8 @@ func (r *ProposerRunner) awaitingEnvelope() bool {
 }
 
 // RunningDutySlot is the slot of the duty this runner last started, finished or not, or 0 before its first
-// duty (or on a nil runner). It feeds the value check's running-slot check, which skips on 0. A finished duty
-// keeps its slot: its instance still processes later-round proposals, which must still be checked.
+// duty (or on a nil runner). It feeds the value check's running-slot check, which skips on 0; like
+// ssv-spec's, it keeps a finished duty's slot.
 func (r *ProposerRunner) RunningDutySlot() phase0.Slot {
 	if r == nil || r.BaseRunner == nil {
 		return 0
