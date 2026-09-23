@@ -1058,27 +1058,33 @@ func TestProposerRunnerGloasProposalInput(t *testing.T) {
 	})
 }
 
-// StartNewDuty clears the previous duty's Gloas state, so a stale owner-match can't echo an old
-// Eth-Builder-Url and a stale envelope root can't hold the new duty open.
+// StartNewDuty clears the previous duty's state, including when doppelganger protection keeps the new duty
+// from signing, so a stale owner-match can't echo an old Eth-Builder-Url, a stale envelope root can't hold the
+// new duty open, and the old reveal data isn't kept.
 func TestProposerRunnerStartNewDutyResetsGloasDutyState(t *testing.T) {
 	t.Parallel()
 
-	version := spec.DataVersionDeneb
-	beacon := newProposerTestBeacon(spectestingutils.TestingBeaconBlockV(version))
-	runner, _, _ := newProposerRunnerForTest(t, beacon, &stubDoppelganger{canSign: true}, 0, nil)
-	runner.gloasDuty = gloasDutyState{
-		producedRoot:         [32]byte{0xaa},
-		builderURL:           "https://stale.example",
-		producedEnvelope:     &gloas.ProducedEnvelope{},
-		envelopeMatch:        envelopeMatchBuilder,
-		envelopeSigningRoot:  [32]byte{0xbb},
-		blockSubmitAttempted: true,
-		envelopeHandled:      true,
+	for _, canSign := range []bool{true, false} {
+		version := spec.DataVersionDeneb
+		beacon := newProposerTestBeacon(spectestingutils.TestingBeaconBlockV(version))
+		runner, _, _ := newProposerRunnerForTest(t, beacon, &stubDoppelganger{canSign: canSign}, 0, nil)
+		runner.cachedFullBlock, runner.cachedBlindedBlockSSZ = &api.VersionedProposal{}, []byte{0x01}
+		runner.gloasDuty = gloasDutyState{
+			producedRoot:         [32]byte{0xaa},
+			builderURL:           "https://stale.example",
+			producedEnvelope:     &gloas.ProducedEnvelope{},
+			envelopeMatch:        envelopeMatchBuilder,
+			envelopeSigningRoot:  [32]byte{0xbb},
+			blockSubmitAttempted: true,
+			envelopeHandled:      true,
+		}
+
+		require.NoError(t, runner.StartNewDuty(context.Background(), zap.NewNop(), spectestingutils.TestingProposerDutyV(version), 3))
+
+		require.Zero(t, runner.gloasDuty, "can sign: %v", canSign)
+		require.Nil(t, runner.cachedFullBlock, "can sign: %v", canSign)
+		require.Nil(t, runner.cachedBlindedBlockSSZ, "can sign: %v", canSign)
 	}
-
-	require.NoError(t, runner.StartNewDuty(context.Background(), zap.NewNop(), spectestingutils.TestingProposerDutyV(version), 3))
-
-	require.Zero(t, runner.gloasDuty)
 }
 
 func newProposerRunnerForTest(

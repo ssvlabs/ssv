@@ -984,6 +984,13 @@ func gloasPostConsensusRoots(proposalData *gloas.GloasProposalData) ([]PostConse
 // 4) Once consensus decides, sign partial block and broadcast
 // 5) collect 2f+1 partial sigs, reconstruct and broadcast valid block sig to the BN
 func (r *ProposerRunner) executeDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty) error {
+	// Drop the previous duty's state first, even if this duty can't sign: a stale owner-match must not echo an
+	// old Eth-Builder-Url, a stale envelope root must not hold the new duty open (awaitingEnvelope), and the
+	// old reveal data shouldn't wait for the next duty that signs.
+	r.cachedFullBlock = nil
+	r.cachedBlindedBlockSSZ = nil
+	r.gloasDuty = gloasDutyState{}
+
 	// Reuse the existing span instead of generating new one to keep tracing-data lightweight.
 	span := trace.SpanFromContext(ctx)
 
@@ -997,12 +1004,6 @@ func (r *ProposerRunner) executeDuty(ctx context.Context, logger *zap.Logger, du
 		logger.Warn("Signing not permitted due to Doppelganger protection", fields.ValidatorIndex(proposerDuty.ValidatorIndex))
 		return nil
 	}
-
-	// Drop the previous duty's state: a stale owner-match must not echo an old Eth-Builder-Url, and a stale
-	// envelope root must not hold the new duty open (awaitingEnvelope).
-	r.cachedFullBlock = nil
-	r.cachedBlindedBlockSSZ = nil
-	r.gloasDuty = gloasDutyState{}
 
 	// sign partial randao
 	span.AddEvent("signing beacon object")
