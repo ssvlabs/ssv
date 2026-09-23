@@ -218,7 +218,7 @@ func (mv *messageValidator) validateQBFTLogic(
 
 	msgSlot := phase0.Slot(consensusMessage.Height)
 	for _, signer := range signedSSVMessage.OperatorIDs {
-		signerState := state.OperatorState(committeeInfo.signerIndex(signer)).GetSignerStateForSlot(msgSlot)
+		signerState := state.peekOperatorState(committeeInfo.signerIndex(signer)).GetSignerStateForSlot(msgSlot)
 		if signerState == nil {
 			continue
 		}

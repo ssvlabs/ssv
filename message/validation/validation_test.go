@@ -1104,6 +1104,29 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.NotNil(t, accepting.states.Get(ssvMessage.MsgID).Value().operators[0], "the verified signer's state is allocated")
 	})
 
+	// The same holds for a consensus message: the QBFT checks before verification read the signer's state
+	// without allocating it.
+	t.Run("unverified consensus message allocates no per-operator state", func(t *testing.T) {
+		slot := netCfg.FirstSlotAtEpoch(1)
+		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
+		receivedAt := netCfg.SlotStartTime(slot)
+		topicID := commons.GetTopicFullName(commons.CommitteeTopicID(committeeID)[0])
+
+		rejecting := New(netCfg, validatorStore, operators, dutyStore, wrongSignatureVerifier).(*messageValidator)
+		_, err := rejecting.handleSignedSSVMessage(context.Background(), signedSSVMessage, topicID, peerID, receivedAt)
+		require.ErrorContains(t, err, ErrSignatureVerification.Error())
+		state := rejecting.states.Get(committeeIdentifier)
+		require.NotNil(t, state, "the committee's own entry is small and precedes verification")
+		for i, operatorState := range state.Value().operators {
+			require.Nil(t, operatorState, "operator %d: no per-operator state before a verified message", i)
+		}
+
+		accepting := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
+		_, err = accepting.handleSignedSSVMessage(context.Background(), signedSSVMessage, topicID, peerID, receivedAt)
+		require.NoError(t, err)
+		require.NotNil(t, accepting.states.Get(committeeIdentifier).Value().operators[0], "the verified signer's state is allocated")
+	})
+
 	t.Run("reject pre-consensus randao message when epoch duties are set", func(t *testing.T) {
 		ds := dutystore.New()
 		ds.Proposer.Set(netCfgEpoch1.EstimatedCurrentEpoch(), make([]dutystore.StoreDuty[eth2apiv1.ProposerDuty], 0))
