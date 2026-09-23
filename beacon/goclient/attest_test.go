@@ -19,9 +19,11 @@ import (
 	"github.com/jellydator/ttlcache/v3"
 	"github.com/sourcegraph/conc/pool"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/utils/hashmap"
 )
 
@@ -963,9 +965,11 @@ func newStaleAttestationDataClient(slot phase0.Slot, onFetch func(ctx context.Co
 }
 
 // Through GetAttestationData the caller's deadline reaches the refetch guard: with too little time left the
-// refetch is skipped rather than waited out.
+// refetch is skipped, and counted as skipped, rather than waited out.
 func TestGetAttestationData_DeadlineReachesRefetchGuard(t *testing.T) {
 	gc, fetches := newStaleAttestationDataClient(100, nil)
+	skipped := observability.InstrumentName(observabilityNamespace, "attestation_data.refetch_skipped")
+	skippedBefore := int64CounterValue(t, skipped)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	defer cancel()
@@ -975,6 +979,28 @@ func TestGetAttestationData_DeadlineReachesRefetchGuard(t *testing.T) {
 	require.NoError(t, err)
 	require.Less(t, time.Since(start), refetchDelay, "the refetch delay is not waited out")
 	require.EqualValues(t, 1, fetches.Load(), "no refetch without time for it")
+	require.EqualValues(t, 1, int64CounterValue(t, skipped)-skippedBefore, "the skip is counted")
+}
+
+// int64CounterValue is the cumulative value of a package-global Int64 counter, summed over its attributes.
+func int64CounterValue(t *testing.T, name string) int64 {
+	t.Helper()
+	var rm metricdata.ResourceMetrics
+	require.NoError(t, pkgTestMetricReader.Collect(t.Context(), &rm))
+	var total int64
+	for _, sm := range rm.ScopeMetrics {
+		for _, m := range sm.Metrics {
+			if m.Name != name {
+				continue
+			}
+			sum, ok := m.Data.(metricdata.Sum[int64])
+			require.True(t, ok, "%s is not an int64 counter", name)
+			for _, dp := range sum.DataPoints {
+				total += dp.Value
+			}
+		}
+	}
+	return total
 }
 
 // A caller that is already done starts no fetch.
