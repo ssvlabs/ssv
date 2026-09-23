@@ -17,7 +17,6 @@ import (
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/network"
 	p2pcommons "github.com/ssvlabs/ssv/network/commons"
-	"github.com/ssvlabs/ssv/network/discovery"
 	"github.com/ssvlabs/ssv/network/testing"
 	"github.com/ssvlabs/ssv/networkconfig"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
@@ -34,14 +33,12 @@ import (
 // LocalNet holds the nodes in the local network
 type LocalNet struct {
 	NodeKeys []testing.NodeKeys
-	Bootnode *discovery.Bootnode
 	Nodes    []network.P2PNetwork
 }
 
-// CreateAndStartLocalNet creates a LocalNet, starts its nodes and wires them into a full mesh by dialing each
-// other directly (connectMesh) — no discovery is involved, so the network forms the same way on every
-// machine. The whole setup is retried (up to maxAttempts) should the mesh still not settle in time on a
-// loaded machine.
+// CreateAndStartLocalNet creates a LocalNet, starts its nodes and dials them into a full mesh (connectMesh). No
+// discovery is involved, so the mesh forms the same way on every machine; the setup is retried (up to maxAttempts)
+// should it still not settle in time on a loaded machine.
 func CreateAndStartLocalNet(pCtx context.Context, logger *zap.Logger, options LocalNetOptions) (*LocalNet, error) {
 	attempt := func(pCtx context.Context) (*LocalNet, error) {
 		ln, err := NewLocalNet(pCtx, logger, options)
@@ -53,9 +50,11 @@ func CreateAndStartLocalNet(pCtx context.Context, logger *zap.Logger, options Lo
 			if err := node.Start(); err != nil {
 				return ln, fmt.Errorf("could not start node %d: %w", i, err)
 			}
+			// As an operator node does, keep the node's current subnets set: peer trimming disconnects every
+			// peer sharing none of them, so with none set it would disconnect them all. Stops when the node closes.
+			go node.UpdateSubnets()
 		}
-		// Bound the dial phase so a stalled dial can't burn libp2p's 60s per-edge DialPeerTimeout with
-		// no shorter escape (pCtx carries no deadline); 15s matches the settle-wait budget below.
+		// pCtx has no deadline, so bound the dials to the settle wait's 15s rather than libp2p's 60s dial timeout.
 		connectCtx, cancelConnect := context.WithTimeout(pCtx, 15*time.Second)
 		err = connectMesh(connectCtx, ln.Nodes)
 		cancelConnect()
@@ -63,7 +62,7 @@ func CreateAndStartLocalNet(pCtx context.Context, logger *zap.Logger, options Lo
 			return ln, err
 		}
 
-		// The dials above return connected; this only lets the connection notifications settle.
+		// Connect returns once the dialer is connected; this waits for the dialed side to register it too.
 		eg, ctx := errgroup.WithContext(pCtx)
 		for i, node := range ln.Nodes {
 			eg.Go(func() error {
@@ -73,8 +72,7 @@ func CreateAndStartLocalNet(pCtx context.Context, logger *zap.Logger, options Lo
 				var peers []peer.ID
 				for {
 					peers = node.(HostProvider).Host().Network().Peers()
-					// Break on a satisfying read before the select, so a node that already has enough
-					// peers is never failed by a sibling canceling ctx first.
+					// Check before the select, so a sibling canceling ctx can't fail a node that has enough peers.
 					if len(peers) >= options.MinConnected {
 						break
 					}
@@ -105,8 +103,8 @@ func CreateAndStartLocalNet(pCtx context.Context, logger *zap.Logger, options Lo
 			ln, err := attempt(pCtx)
 			if err != nil {
 				lastErr = err
-				// attempt returns a nil ln when NewLocalNet itself fails (e.g. CreateKeys or a node factory
-				// error). Only this failure path closes nodes; a successful start returns them open.
+				// ln is nil when NewLocalNet itself failed. Only a failed attempt closes its nodes; a successful
+				// one returns them open.
 				if ln != nil {
 					for _, node := range ln.Nodes {
 						if closeErr := node.Close(); closeErr != nil {
@@ -127,10 +125,8 @@ func CreateAndStartLocalNet(pCtx context.Context, logger *zap.Logger, options Lo
 	}
 }
 
-// connectMesh dials the nodes into a full mesh by address, so the local network forms without discovery.
-// Node i dials the nodes up to half a ring ahead of it, so every edge is dialed exactly once and inbound
-// edges spread evenly (no node takes more than half). NewNetConfig sets DisableIPRateLimit, so the mesh is
-// not bounded by the connection gater's per-IP burst or inbound-limit ceiling and forms for any node count.
+// connectMesh dials the nodes into a full mesh by address. Node i dials the nodes up to half a ring ahead of it,
+// so every edge is dialed exactly once and inbound edges spread evenly.
 func connectMesh(ctx context.Context, nodes []network.P2PNetwork) error {
 	hosts := make([]host.Host, len(nodes))
 	for i, node := range nodes {
@@ -203,22 +199,13 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex uint64, key
 	dutyStore := dutystore.New()
 	signatureVerifier := &mockSignatureVerifier{}
 
-	// Use TCP/UDP port 0 so the kernel picks free ports atomically at bind time.
-	cfg := NewNetConfig(keys, ln.Bootnode, 0, 0, options.Nodes)
+	// Use TCP/UDP port 0 so the kernel picks free ports atomically at bind time. Peer trimming kicks in within
+	// maxPeersToDrop of MaxPeers, so MaxPeers keeps that much room above the full mesh.
+	cfg := NewNetConfig(keys, 0, 0, options.Nodes+maxPeersToDrop)
 	cfg.Ctx = ctx
 	testSubnets := fixedTestSubnets(options.Shares)
 	cfg.Subnets = testSubnets.StringHex()
 	cfg.NodeStorage = nodeStorage
-	cfg.MessageValidator = validation.New(
-		networkconfig.TestNetwork,
-		nodeStorage.ValidatorStore(),
-		nodeStorage,
-		dutyStore,
-		signatureVerifier,
-		// Surface verdicts (rejecting/ignoring invalid message) in test output — validation
-		// defaults to a nop logger, which makes CI failures undiagnosable from logs.
-		validation.WithLogger(logger),
-	)
 	cfg.NetworkConfig = networkconfig.TestNetwork
 	if options.TotalValidators > 0 {
 		cfg.GetValidatorStats = func() (uint64, uint64, uint64, error) {
@@ -245,6 +232,7 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex uint64, key
 			dutyStore,
 			signatureVerifier,
 			validation.WithSelfAccept(selfPeerID, true),
+			// Validation logs nothing by default; surface its verdicts in the test output.
 			validation.WithLogger(logger),
 		)
 	}
@@ -323,18 +311,9 @@ func fixedTestSubnets(shares []*ssvtypes.SSVShare) p2pcommons.Subnets {
 }
 
 // NewNetConfig creates a new config for tests
-func NewNetConfig(keys testing.NodeKeys, bn *discovery.Bootnode, tcpPort, udpPort uint16, maxPeers int) *Config {
-	bns := ""
-	discT := discv5Discovery
-	if bn != nil {
-		bns = bn.ENR
-	} else {
-		// No bootnode: the harness wires the mesh itself (connectMesh), so the nodes run no discovery.
-		discT = noDiscovery
-	}
+func NewNetConfig(keys testing.NodeKeys, tcpPort, udpPort uint16, maxPeers int) *Config {
 	ua := ""
 	return &Config{
-		Bootnodes:         bns,
 		TCPPort:           tcpPort,
 		UDPPort:           udpPort,
 		HostAddress:       "",
@@ -346,11 +325,10 @@ func NewNetConfig(keys testing.NodeKeys, bn *discovery.Bootnode, tcpPort, udpPor
 		PubSubScoring:     true,
 		NetworkPrivateKey: keys.NetKey,
 		UserAgent:         ua,
-		Discovery:         discT,
-		// Every mesh edge is dialed from 127.0.0.1, so a node's inbound edges all share one IP. Leaving IP
-		// rate limiting on caps inbound at ipLimitBurst (8) per IP and at inboundLimit (MaxPeers/2), which
-		// breaks the mesh past ~18 nodes and couples it to MaxPeers. Disabling it also drops the pubsub
-		// IP-colocation penalty that would otherwise punish every node for sharing 127.0.0.1.
+		// connectMesh wires the nodes together, so they run no discovery.
+		Discovery: noDiscovery,
+		// Every node dials from 127.0.0.1, so the connection gater's per-IP rate limit would refuse a large mesh
+		// and pubsub's IP-colocation penalty would punish every node.
 		DisableIPRateLimit: true,
 	}
 }
