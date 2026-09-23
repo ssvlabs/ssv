@@ -646,9 +646,9 @@ func (r *ProposerRunner) reconstructPostConsensusSig(root [32]byte) (phase0.BLSS
 // processGloasPostConsensusQuorum handles the roots that just reached post-consensus quorum at a Gloas
 // slot: the block root and, on the self-build path, the §6 blinded-envelope root, which reach quorum
 // independently (SIP #94 §4/§6). The block's quorum submits the block and finishes the duty. The reveal
-// follows once this operator has attempted the block, as a beacon node ignores an envelope whose block it
-// hasn't seen, and the envelope root has quorum, in either order. A failed block submit doesn't hold the
-// reveal back: other operators submit the block too.
+// waits for both the envelope root's quorum and this operator's block submit, in either order, since a
+// beacon node ignores an envelope whose block it hasn't seen. A failed submit doesn't hold it back, unlike
+// in ssv-spec: other operators submit the block too.
 func (r *ProposerRunner) processGloasPostConsensusQuorum(ctx context.Context, logger *zap.Logger, span trace.Span, cd *spectypes.ProposerConsensusData, roots [][32]byte) error {
 	proposalData, err := gloas.DecodeGloasProposalData(cd.DataSSZ)
 	if err != nil {

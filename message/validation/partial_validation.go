@@ -255,7 +255,6 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 	clusterValidatorCount := len(committeeInfo.validatorIndices)
 	partialSignatureMessageCount := len(partialSignatureMessages.Messages)
 
-	role = signedSSVMessage.SSVMessage.MsgID.GetRoleType()
 	if mv.committeeRole(role) {
 		scSubnets := 1
 		if role == spectypes.RoleAggregatorCommittee {
