@@ -9,9 +9,9 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"golang.org/x/mod/modfile"
@@ -380,21 +380,9 @@ func GetSpecDir(path, module string) (string, error) {
 }
 
 func GetModulePath(name, version string) (string, error) {
-	// first we need GOMODCACHE
-	cache, ok := os.LookupEnv("GOMODCACHE")
-	if !ok || cache == "" {
-		if goPath := os.Getenv("GOPATH"); goPath != "" {
-			cache = path.Join(goPath, "pkg", "mod")
-		} else {
-			out, err := exec.Command("go", "env", "GOMODCACHE").Output()
-			if err != nil {
-				return "", fmt.Errorf("could not resolve GOMODCACHE: %w", err)
-			}
-			cache = strings.TrimSpace(string(out))
-		}
-	}
-	if cache == "" {
-		return "", errors.New("could not resolve module cache path")
+	cache, err := moduleCacheDir()
+	if err != nil {
+		return "", err
 	}
 
 	// then we need to escape path
@@ -409,7 +397,51 @@ func GetModulePath(name, version string) (string, error) {
 		return "", err
 	}
 
-	return path.Join(cache, escapedPath+"@"+escapedVersion), nil
+	return filepath.Join(cache, escapedPath+"@"+escapedVersion), nil
+}
+
+// moduleCache holds the module cache directory once moduleCacheDir has resolved it.
+var moduleCache struct {
+	sync.Mutex
+	dir string
+}
+
+// moduleCacheDir resolves the module cache directory (from the environment, see moduleCacheDirFromEnv, else
+// through `go env GOMODCACHE`) once per process. Every spec test reads its vectors through here, and forking
+// `go env` from each of them at once has hung -race runs on macOS, where a child stalled before exec keeps the
+// others' pipes open. A failed lookup isn't kept, so the next caller retries it.
+func moduleCacheDir() (string, error) {
+	moduleCache.Lock()
+	defer moduleCache.Unlock()
+	if moduleCache.dir != "" {
+		return moduleCache.dir, nil
+	}
+
+	dir, ok := moduleCacheDirFromEnv(os.Getenv("GOMODCACHE"), os.Getenv("GOPATH"))
+	if !ok {
+		out, err := exec.Command("go", "env", "GOMODCACHE").Output()
+		if err != nil {
+			return "", fmt.Errorf("could not resolve GOMODCACHE: %w", err)
+		}
+		dir = strings.TrimSpace(string(out))
+	}
+	if dir == "" {
+		return "", errors.New("could not resolve module cache path")
+	}
+	moduleCache.dir = dir
+	return dir, nil
+}
+
+// moduleCacheDirFromEnv applies the go command's default for the module cache: GOMODCACHE, else pkg/mod
+// under the first GOPATH entry. It reports false when neither applies, leaving the answer to `go env`.
+func moduleCacheDirFromEnv(goModCache, goPath string) (string, bool) {
+	if goModCache != "" {
+		return goModCache, true
+	}
+	if list := filepath.SplitList(goPath); len(list) > 0 && list[0] != "" {
+		return filepath.Join(list[0], "pkg", "mod"), true
+	}
+	return "", false
 }
 
 // findGoModDir walks up from path to the directory containing the module file.
