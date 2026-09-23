@@ -28,8 +28,8 @@ import (
 const (
 	discv5Discovery = "discv5"
 	mdnsDiscovery   = "mdns"
-	// noDiscovery runs no peer discovery: the node has only its TrustedPeers, the peers that dial it, and any
-	// peers the embedding code connects directly (the test harness wires its mesh that way).
+	// noDiscovery runs no peer discovery: the node has only its TrustedPeers, the peers that dial it, and peers
+	// connected to it directly (as the test harness does).
 	noDiscovery    = "none"
 	minPeersBuffer = 10
 )
@@ -114,6 +114,15 @@ func (c *Config) ApplyDefaults() {
 	c.PubSubScoring = true
 }
 
+// discoveryMode returns the discovery mode to run: Discovery, or discv5 when it is unset. Read the mode only
+// through it, so an unset Discovery means discv5 everywhere.
+func (c *Config) discoveryMode() string {
+	if c.Discovery == "" {
+		return discv5Discovery
+	}
+	return c.Discovery
+}
+
 // Libp2pOptions creates options list for the libp2p host
 // these are the most basic options required to start a network instance,
 // other options and libp2p components can be configured on top
@@ -154,16 +163,16 @@ func (c *Config) configureAddrs(logger *zap.Logger, opts []libp2p.Option) ([]lib
 	}
 	addrs = append(addrs, maZero)
 
-	// The explicit IP listener is what discv5 advertises; the other modes have nothing to advertise, so they
-	// need no external IP at all.
-	if c.Discovery == discv5Discovery {
+	// discv5 advertises the node's IP, so only it keeps a listener on that IP; the other modes need no external
+	// IP at all.
+	if c.discoveryMode() == discv5Discovery {
 		ipAddr, err := commons.IPAddr()
 		if err != nil {
 			return opts, fmt.Errorf("could not get ip addr: %w", err)
 		}
 		maIP, err := commons.BuildMultiAddress(ipAddr.String(), "tcp", uint(c.TCPPort), "")
 		if err != nil {
-			return opts, fmt.Errorf("could not build multi address for zero address: %w", err)
+			return opts, fmt.Errorf("could not build multi address for ip address: %w", err)
 		}
 		addrs = append(addrs, maIP)
 	}

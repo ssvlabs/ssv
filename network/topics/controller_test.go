@@ -360,8 +360,7 @@ func newPeers(ctx context.Context, logger *zap.Logger, t *testing.T, n int, msgV
 		peers[i] = newPeer(t, ctx, logger, msgValidator, msgID, scoreInspector)
 	}
 	t.Logf("%d peers were created", n)
-	// Wire the peers into a full mesh directly, by address: no discovery, so the mesh forms the same way on
-	// every machine.
+	// Wire a full mesh by address: with no discovery involved, it forms the same way on every machine.
 	for i, p := range peers {
 		for _, other := range peers[i+1:] {
 			require.NoError(t, p.host.Connect(ctx, peer.AddrInfo{ID: other.host.ID(), Addrs: other.host.Addrs()}))

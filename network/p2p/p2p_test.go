@@ -84,8 +84,7 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 	}
 
 	ln, routers, err := createNetworkAndSubscribe(t, ctx, LocalNetOptions{
-		Nodes: n,
-		// connectMesh wires a full mesh, so assert on it: every node must reach all n-1 others.
+		Nodes:        n,
 		MinConnected: n - 1,
 		Shares:       shares,
 	})
@@ -209,6 +208,49 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 
 	for _, r := range routers {
 		assert.GreaterOrEqual(t, atomic.LoadUint64(&r.count), uint64(2), "router %d", r.i)
+	}
+}
+
+// TestLocalNet_MeshSurvivesPeerTrimming checks that peer trimming leaves the local net's full mesh intact: the net
+// runs no discovery, so nothing would re-dial a peer that trimming dropped.
+func TestLocalNet_MeshSurvivesPeerTrimming(t *testing.T) {
+	const n = 4
+	shares := []*ssvtypes.SSVShare{{
+		Share:  *spectestingutils.TestingShare(spectestingutils.Testing4SharesSet(), spectestingutils.TestingValidatorIndex),
+		Status: eth2apiv1.ValidatorStateActiveOngoing,
+	}}
+	ln, _, err := createNetworkAndSubscribe(t, t.Context(), LocalNetOptions{Nodes: n, MinConnected: n - 1, Shares: shares})
+	require.NoError(t, err)
+	nodes := make([]*p2pNetwork, n)
+	for i, node := range ln.Nodes {
+		nodes[i] = node.(*p2pNetwork)
+		t.Cleanup(func() { require.NoError(t, node.Close()) })
+	}
+
+	// Trimming compares each peer's subnets, learned in the handshake, with the node's own, which UpdateSubnets
+	// sets. Both are in place by the time trimming first runs, so wait for them.
+	require.Eventually(t, func() bool {
+		for _, node := range nodes {
+			if node.currentSubnetsSnapshot() == commons.ZeroSubnets {
+				return false
+			}
+			for _, pid := range node.Host().Network().Peers() {
+				if _, known := node.idx.GetPeerSubnets(pid); !known {
+					return false
+				}
+			}
+		}
+		return true
+	}, 10*time.Second, 50*time.Millisecond, "the nodes' own or their peers' subnets were never set")
+
+	// Run the trimming rounds directly instead of waiting peersTrimmingInterval for each.
+	for range 3 {
+		for _, node := range nodes {
+			node.peersTrimming()()
+		}
+	}
+	for i, node := range nodes {
+		require.Len(t, node.Host().Network().Peers(), n-1, "node %d lost peers to trimming", i)
 	}
 }
 

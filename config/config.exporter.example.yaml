@@ -18,7 +18,7 @@ p2p:
 #  TcpPort:
 #  UdpPort:
 # Discovery mode: discv5 (default), mdns for local network setup, or none to run without discovery.
-# A "none" node keeps only its TrustedPeers and peers that dial it, so without TrustedPeers it stays peerless.
+# A "none" node has only its TrustedPeers and the peers that dial it.
 #  Discovery: mdns
 
 ssv:
