@@ -27,16 +27,19 @@ func gloasScheduledAt(epoch phase0.Epoch) *networkconfig.Beacon {
 	return &b
 }
 
-// newLagTestClient is a client that took its config from "first" and observes logs from Warn up.
+// newLagTestClient is a client that took its config from "first" and observes logs from Warn up; a Fatal log
+// panics instead of exiting.
 func newLagTestClient(node *networkconfig.Beacon) (*GoClient, *observer.ObservedLogs) {
 	core, logs := observer.New(zapcore.WarnLevel)
-	return &GoClient{log: zap.New(core), beaconConfig: node, beaconConfigSource: "http://first:5052", beaconConfigInit: make(chan struct{})}, logs
+	logger := zap.New(core, zap.WithFatalHook(zapcore.WriteThenPanic))
+	return &GoClient{log: logger, beaconConfig: node, beaconConfigSource: "http://first:5052", beaconConfigInit: make(chan struct{})}, logs
 }
 
 // A client whose fork schedule differs from the node's only about a fork ahead of the chain is not a client
 // on another network: the node keeps its own schedule, keeps serving from the client, and says which side
 // has to move — the client, to be upgraded (a warning), or the node, which cannot adopt a fork while running
-// and has to be restarted (an error). A disagreement about a fork already active still fails.
+// and has to be restarted once every client schedules it (an error, and a stop close to the fork). A
+// disagreement about a fork already active still fails.
 func TestApplyBeaconConfig_ForkScheduleLag(t *testing.T) {
 	now := networkconfig.TestNetwork.EstimatedCurrentEpoch()
 
@@ -66,10 +69,32 @@ func TestApplyBeaconConfig_ForkScheduleLag(t *testing.T) {
 		require.Zero(t, logs.FilterLevelExact(zapcore.WarnLevel).Len())
 		alarms := logs.FilterMessageSnippet("restart the node before that fork")
 		require.Equal(t, 1, alarms.Len())
+		require.Equal(t, zapcore.ErrorLevel, alarms.All()[0].Level)
+		require.Contains(t, alarms.All()[0].Message, "the node's config source included", "a restart reads the schedule from that source")
 		fields := alarms.All()[0].ContextMap()
 		require.Equal(t, "http://upgraded:5052", fields["address"])
+		require.Equal(t, "http://first:5052", fields["node_config_source"])
 		require.Equal(t, "not scheduled", fields["node_config"])
 		require.Contains(t, fields["client"], "scheduled at epoch")
+	})
+
+	// Crossing the fork on the old schedule would fail every duty, so close to it the node stops, to be
+	// restarted onto the new schedule before the pre-fork windows open.
+	t.Run("the node lags close to the fork: stop", func(t *testing.T) {
+		gc, logs := newLagTestClient(gloasScheduledAt(networkconfig.FarFutureEpoch))
+
+		require.Panics(t, func() {
+			_, _ = gc.applyBeaconConfig("http://upgraded:5052", gloasScheduledAt(now+forkScheduleLagStopEpochs))
+		})
+		stops := logs.FilterLevelExact(zapcore.FatalLevel)
+		require.Equal(t, 1, stops.Len())
+		require.Contains(t, stops.All()[0].Message, "stopping, as the fork is too close")
+
+		gc, logs = newLagTestClient(gloasScheduledAt(networkconfig.FarFutureEpoch))
+		_, err := gc.applyBeaconConfig("http://upgraded:5052", gloasScheduledAt(now+forkScheduleLagStopEpochs+1))
+		require.NoError(t, err, "an epoch further out, it's an error only")
+		require.Equal(t, 1, logs.FilterLevelExact(zapcore.ErrorLevel).Len())
+		require.Zero(t, logs.FilterLevelExact(zapcore.FatalLevel).Len())
 	})
 
 	t.Run("both schedule the fork, differently: error, naming both", func(t *testing.T) {
@@ -80,6 +105,7 @@ func TestApplyBeaconConfig_ForkScheduleLag(t *testing.T) {
 		alarms := logs.FilterMessageSnippet("schedule a fork differently")
 		require.Equal(t, 1, alarms.Len())
 		require.Equal(t, zapcore.ErrorLevel, alarms.All()[0].Level)
+		require.Contains(t, alarms.All()[0].Message, "the node's config source included")
 	})
 
 	t.Run("a fork active on one side only is a different chain", func(t *testing.T) {
@@ -102,6 +128,7 @@ func TestCheckForkSchedule(t *testing.T) {
 
 	gc.checkForkSchedule("http://upgraded:5052", gloasScheduledAt(now+100))
 	require.Equal(t, 1, logs.FilterMessageSnippet("restart the node before that fork").Len(), "a fork the node started without is the node's to adopt")
+	require.Panics(t, func() { gc.checkForkSchedule("http://upgraded:5052", gloasScheduledAt(now+1)) }, "and close to it the node stops")
 
 	other := gloasScheduledAt(networkconfig.FarFutureEpoch)
 	other.Name = "another network"

@@ -502,8 +502,9 @@ func (gc *GoClient) applyBeaconConfig(nodeAddress string, beaconConfig *networkc
 		if errors.As(err, &lag) {
 			// The client and the node agree on the chain so far and differ only about a fork ahead of it: the
 			// same network at different configuration versions, the normal state of a staggered client
-			// upgrade. The node keeps the schedule it started with and keeps serving from the client.
-			gc.reportForkScheduleLag(nodeAddress, lag)
+			// upgrade. The node keeps the schedule it started with and keeps serving from the client, until
+			// it gets close to a fork its schedule lacks (see reportForkScheduleLag).
+			gc.reportForkScheduleLag(nodeAddress, gc.beaconConfig, lag)
 			return gc.beaconConfig, nil
 		}
 		return gc.beaconConfig, fmt.Errorf("beacon config misalign: %w", err)
@@ -539,27 +540,38 @@ func (gc *GoClient) recheckForkSchedules(ctx context.Context) {
 // side goes through reportForkScheduleLag; any other difference is reported as an error and the node carries
 // on (the activation hook, which admits a client, fatals on it instead).
 func (gc *GoClient) checkForkSchedule(clientAddr string, cfg *networkconfig.Beacon) {
-	err := gc.getBeaconConfig().AssertSame(cfg)
+	node := gc.getBeaconConfig()
+	err := node.AssertSame(cfg)
 	if err == nil {
 		return
 	}
 	var lag *networkconfig.ForkScheduleLagError
 	if errors.As(err, &lag) {
-		gc.reportForkScheduleLag(clientAddr, lag)
+		gc.reportForkScheduleLag(clientAddr, node, lag)
 		return
 	}
 	gc.log.Error("beacon config: a client's config no longer matches the node's", fields.Address(clientAddr), zap.Error(err))
 }
 
+// forkScheduleLagStopEpochs is how close to a fork the node stops when its schedule lacks the fork: two
+// epochs, so the restarted node has the new schedule before the one-epoch pre-fork windows open (Boole's
+// dual-topic subscription, Gloas' preference pre-emission).
+const forkScheduleLagStopEpochs = 2
+
 // reportForkScheduleLag says which side of a fork-schedule disagreement has to move. Ours is the node's
-// schedule, taken from the first client at start and fixed since. When it lacks a fork the client
-// schedules, the node is the stale side and only a restart can adopt the fork — an error, since crossing
-// the fork on the old schedule fails every duty from then on. When the client lacks a fork the node
-// schedules, the client is the stale side and needs upgrading before the fork — a warning, as the node
-// keeps serving from it until then. Two schedules that both name the fork but differ (epoch or version)
-// cannot be told apart from here, so that is an error too, with the restart advice conditional on the
-// client being the one that is right.
-func (gc *GoClient) reportForkScheduleLag(clientAddr string, lag *networkconfig.ForkScheduleLagError) {
+// schedule, taken at start from the first client to connect (node_config_source) and fixed since.
+//
+// When it lacks a fork the client schedules, the node is the stale side: it adopts the fork only on a
+// restart, which reads the schedule from whichever client connects first, so every client has to schedule
+// the fork by then, the config source included. Crossing the fork on the old schedule fails every duty, so
+// this is an error, and within forkScheduleLagStopEpochs of the fork the node stops; restarted, it stops
+// again for as long as the client it reads from still lacks the fork.
+//
+// When the client lacks a fork the node schedules, the client is the stale side and needs upgrading before
+// the fork: a warning, as the node keeps serving from it until then. Two schedules that both name the fork
+// but differ (epoch or version) can't be told apart from here, so that is an error, with the restart
+// advice conditional on the client being right.
+func (gc *GoClient) reportForkScheduleLag(clientAddr string, node *networkconfig.Beacon, lag *networkconfig.ForkScheduleLagError) {
 	logFields := []zap.Field{
 		zap.String("fork", lag.Version.String()),
 		zap.String("node_config", networkconfig.DescribeForkSchedule(lag.Ours)),
@@ -571,13 +583,20 @@ func (gc *GoClient) reportForkScheduleLag(clientAddr string, lag *networkconfig.
 	clientScheduled := lag.Theirs.Epoch != networkconfig.FarFutureEpoch
 	switch {
 	case clientScheduled && !nodeScheduled:
-		gc.log.Error("beacon config: a client schedules a fork the node started without, which the node cannot adopt while running; restart the node before that fork",
-			append(logFields, fields.Epoch(lag.Theirs.Epoch))...)
+		const nodeLags = "beacon config: a client schedules a fork the node started without, which the node cannot adopt while running; " +
+			"upgrade every client that lacks it, the node's config source included, then restart the node before that fork"
+		logFields = append(logFields, fields.Epoch(lag.Theirs.Epoch))
+		if node.EstimatedCurrentEpoch()+forkScheduleLagStopEpochs >= lag.Theirs.Epoch {
+			gc.log.Fatal(nodeLags+"; stopping, as the fork is too close to cross on the old schedule", logFields...)
+			return // tests may override Fatal's behavior
+		}
+		gc.log.Error(nodeLags, logFields...)
 	case nodeScheduled && !clientScheduled:
 		gc.log.Warn("beacon config: a client has not scheduled a fork the node's config schedules; upgrade the client before that fork",
 			append(logFields, fields.Epoch(lag.Ours.Epoch))...)
 	default:
-		gc.log.Error("beacon config: a client and the node's config schedule a fork differently; if the client is right, restart the node before that fork",
+		gc.log.Error("beacon config: a client and the node's config schedule a fork differently; "+
+			"if the client is right, fix every client that disagrees with it, the node's config source included, then restart the node before that fork",
 			logFields...)
 	}
 }
