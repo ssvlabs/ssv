@@ -123,13 +123,9 @@ func (b *BaseRunner) ValidatePostConsensusMsg(ctx context.Context, runner Runner
 
 	// Validate the post-consensus message differently depending on a message type.
 	validateMsg := func() error {
-		// The decided value is decoded to reject a malformed one, but partials are validated against the
-		// running duty's slot rather than the value's own Duty.Slot, so the check never trusts the decided
-		// value's contents (SIP #94 §4).
-		decidedValue := &spectypes.ProposerConsensusData{}
-		if err := decidedValue.Decode(decidedValueBytes); err != nil {
-			return fmt.Errorf("failed to parse decided value to ValidatorConsensusData: %w", err)
-		}
+		// Partials are validated against the running duty's slot rather than the decided value's own
+		// Duty.Slot, so the check never trusts the value's contents (SIP #94 §4). The runner's
+		// expectedPostConsensusRootsAndDomains decodes the value, rejecting a malformed one.
 		if err := b.validatePartialSigMsg(psigMsgs, b.State.CurrentDuty.DutySlot()); err != nil {
 			return err
 		}
