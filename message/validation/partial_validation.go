@@ -234,8 +234,8 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 		// - 1 ValidatorRegistrationPartialSig for Validator Registration
 		// - 1 VoluntaryExitPartialSig for Voluntary Exit
 		// - 1 PTCAttesterPartialSig for PTC attestation
-		// - 1 ProposerPreferencesPartialSig for Proposer Preferences (distinct-root budget), plus
-		//   RequestAuthPartialSig up to its own distinct-root budget (issue #2962)
+		// - ProposerPreferencesPartialSig and RequestAuthPartialSig for Proposer Preferences, each up to
+		//   its own distinct-root budget
 		if err := validatePartialSignatureMessageLimit(partialSignatureMessages, receivedFrom, signerState); err != nil {
 			return err
 		}
@@ -357,7 +357,7 @@ func validatePartialSignatureMessageLimit(
 		// distinct signing root instead of the usual ≤1 pre-consensus cap.
 		return validateDistinctRootBudget(m, signerState, "proposer-preferences", maxProposerPreferencesDistinctRoots)
 	case spectypes.RequestAuthPartialSig:
-		// Issue #2962 (§5 request-auth extension): one root per configured builder, same budget scheme.
+		// SIP #94 §5: one root per configured builder, under the same budget scheme.
 		return validateDistinctRootBudget(m, signerState, "request-auth", maxRequestAuthDistinctRoots)
 	case spectypes.PostConsensusPartialSig:
 		if signerState.Peer(receivedFrom).SeenMsgTypes.reachedPostConsensusLimit() {
@@ -494,8 +494,8 @@ func (mv *messageValidator) partialSignatureTypeMatchesRole(msgType spectypes.Pa
 	case spectypes.RolePTCAttester:
 		return msgType == spectypes.PTCAttesterPartialSig
 	case spectypes.RoleProposerPreferences:
-		// The role carries both the §5 preference round and the issue #2962 request-auth rounds —
-		// same duty cadence, distinct signing domains, so distinct partial-sig types.
+		// The role carries both the §5 preference round and its request-auth rounds — same duty cadence,
+		// distinct signing domains, so distinct partial-sig types.
 		return msgType == spectypes.ProposerPreferencesPartialSig || msgType == spectypes.RequestAuthPartialSig
 	default:
 		return false

@@ -14,7 +14,7 @@ import (
 // has no call for it, so SubmitBuilderPreferences is a hand-rolled JSON POST.
 const builderPreferencesPath = "/eth/v1/validator/builder_preferences"
 
-// SubmitBuilderPreferences submits the ahead-of-time per-builder preferences (issue #2962 phase 3) to
+// SubmitBuilderPreferences submits the ahead-of-time per-builder preferences (beacon-APIs#630) to
 // every beacon client, succeeding if at least one accepts them; each beacon node forwards every entry to
 // its builder's submitBuilderPreferences. The call is synchronous (bounded by commonTimeout) but
 // best-effort: callers do not gate on the outcome — a failure only surfaces in metrics and logs.

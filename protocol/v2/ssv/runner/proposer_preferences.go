@@ -68,9 +68,9 @@ type ProposerPreferencesRunnerOptions struct {
 	FeeRecipientProvider feeRecipientProvider
 	GasLimit             uint64
 
-	// Builders is the cluster's direct-builder config (issue #2962, validated at startup): for each
-	// entry the slot sub-runners additionally threshold-sign a BuilderRequestAuth per upcoming
-	// proposal slot. Empty Entries disables the overlay entirely.
+	// Builders is the cluster's direct-builder config (validated at startup): for each entry the slot
+	// sub-runners additionally threshold-sign a BuilderRequestAuth per upcoming proposal slot. Empty
+	// Entries disables the overlay entirely.
 	Builders gloas.BuilderConfig
 	// RequestAuthCache receives each reconstructed SignedBuilderRequestAuth for the §4 produce path.
 	RequestAuthCache *ssv.RequestAuthCache
@@ -366,9 +366,9 @@ type proposerPreferencesSlotRunner struct {
 	// replacement instead, our own first partial included.
 	broadcastPreferences *gloas.ProposerPreferences
 
-	// builders is the cluster's resolved direct-builder entry list (issue #2962 B1): for each entry
-	// executeDuty freezes and threshold-signs a BuilderRequestAuth{data, proposal_slot} alongside the §5
-	// preference. Empty disables the request-auth round entirely.
+	// builders is the cluster's resolved direct-builder entry list: for each entry executeDuty freezes and
+	// threshold-signs a BuilderRequestAuth{data, proposal_slot} alongside the §5 preference. Empty disables
+	// the request-auth round entirely.
 	builders         []gloas.ResolvedBuilderEntry
 	requestAuthCache *ssv.RequestAuthCache
 

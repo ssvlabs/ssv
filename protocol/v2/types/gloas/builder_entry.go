@@ -11,7 +11,7 @@ import (
 	specssv "github.com/ssvlabs/ssv-spec/ssv"
 )
 
-// MaxBuilderEntries caps the configured direct-builder list (issue #2962 D2). It is SSV's own
+// MaxBuilderEntries caps the configured direct-builder list (SIP #94 §5). It is SSV's own
 // sub-cap of the beacon-API's MAX_BUILDER_ENTRIES (64); the tighter bound also sizes
 // MaxRequestAuthDistinctRoots, the wire budget that config implies.
 const MaxBuilderEntries = 8
@@ -46,9 +46,9 @@ func BuilderIdentity(url string, authData []byte) string {
 }
 
 // BuilderConfig is the cluster's direct-builder configuration for the ePBS (Gloas) external-builder
-// overlay (issue #2962), in keymanager-APIs#88's BuilderConfig vocabulary. The top-level MinBid and
-// BuilderBoostFactor apply to p2p (gossiped) bids and, per #88, double as the default for any Entry
-// that omits its own; each Entry names one builder to solicit a builder-API bid from.
+// overlay, in keymanager-APIs#88's BuilderConfig vocabulary. The top-level MinBid and BuilderBoostFactor
+// apply to p2p (gossiped) bids and, per #88, double as the default for any Entry that omits its own;
+// each Entry names one builder to solicit a builder-API bid from.
 //
 // The whole config MUST be identical across ALL operators of every cluster sharing a validator:
 // AuthData is threshold-signed into BuilderRequestAuth, so any byte divergence splits the quorum and

@@ -1248,8 +1248,8 @@ func SetupRunners(
 		OperatorSigner: options.OperatorSigner,
 	}
 
-	// requestAuthCache holds this validator's threshold-reconstructed builder request auths (issue #2962):
-	// the proposer-preferences runner writes each reconstruction, and the proposer runner's §4 produce path
+	// requestAuthCache holds this validator's threshold-reconstructed builder request auths: the
+	// proposer-preferences runner writes each reconstruction, and the proposer runner's §4 produce path
 	// reads the slot's auths into the produceBlockV4 POST body.
 	requestAuthCache := ssv.NewRequestAuthCache(options.NetworkConfig.EstimatedCurrentSlot)
 

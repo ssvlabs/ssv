@@ -147,19 +147,19 @@ var (
 		meter.Int64Counter(
 			observability.InstrumentName(observabilityNamespace, "request_auth.reconstructions"),
 			metric.WithUnit("{root}"),
-			metric.WithDescription("threshold-reconstructed Gloas direct-builder request-auth signing roots (issue #2962); token-sharing builders share a root and count once")))
+			metric.WithDescription("threshold-reconstructed Gloas direct-builder request-auth signing roots; token-sharing builders share a root and count once")))
 
 	requestAuthUnavailableCounter = metrics.New(
 		meter.Int64Counter(
 			observability.InstrumentName(observabilityNamespace, "request_auth.unavailable"),
 			metric.WithUnit("{builder}"),
-			metric.WithDescription("configured Gloas direct-builders with no reconstructed request-auth at §4 produce time (issue #2962 E1); omitted from the produceBlockV4 body, degrading to the enshrined flow")))
+			metric.WithDescription("configured Gloas direct-builders with no reconstructed request-auth at §4 produce time; omitted from the produceBlockV4 body, degrading to the enshrined flow")))
 
 	builderPreferencesSubmitCounter = metrics.New(
 		meter.Int64Counter(
 			observability.InstrumentName(observabilityNamespace, "builder_preferences.submits"),
 			metric.WithUnit("{submit}"),
-			metric.WithDescription("ahead-of-time Gloas builder-preferences submit calls to the beacon node (issue #2962 phase 3), by outcome — batch-level, one call per reconstructed auth root")))
+			metric.WithDescription("ahead-of-time Gloas builder-preferences submit calls to the beacon node, by outcome — batch-level, one call per reconstructed auth root")))
 )
 
 func recordSuccessfulSubmission(ctx context.Context, count int64, epoch phase0.Epoch, role spectypes.BeaconRole) {
@@ -178,11 +178,11 @@ func recordDutyOutcome(ctx context.Context, role spectypes.RunnerRole, outcome d
 		))
 }
 
-// proposalBuildSource is a submitted Gloas proposal's build source (issue #2962 E1): whether the decided
-// bid commits to an external builder or to self-build. The decided block cannot reveal why the BN
-// self-built (economics vs. a builder being unreachable), so the auth-unavailable dimension is surfaced
-// separately, at produce time, by recordProposalAuthUnavailable — a configured builder with no auth this
-// slot is a concrete, countable cause independent of this outcome classification.
+// proposalBuildSource is a submitted Gloas proposal's build source: whether the decided bid commits to
+// an external builder or to self-build. The decided block cannot reveal why the BN self-built (economics
+// vs. a builder being unreachable), so the auth-unavailable dimension is surfaced separately, at produce
+// time, by recordProposalAuthUnavailable — a configured builder with no auth this slot is a concrete,
+// countable cause independent of this outcome classification.
 type proposalBuildSource string
 
 const (
@@ -223,25 +223,25 @@ func recordEnvelopePublish(ctx context.Context, success bool) {
 }
 
 // recordRequestAuthReconstruction counts a threshold-reconstructed request-auth signing root
-// (issue #2962; token-sharing builders share a root and count once). Its inverse — an auth that never
-// reached quorum — is measured where it bites, by recordProposalAuthUnavailable at the §4 produce path.
+// (token-sharing builders share a root and count once). Its inverse — an auth that never reached
+// quorum — is measured where it bites, by recordProposalAuthUnavailable at the §4 produce path.
 func recordRequestAuthReconstruction(ctx context.Context) {
 	requestAuthReconstructionCounter.Add(ctx, 1)
 }
 
 // recordProposalAuthUnavailable counts configured direct-builders that had no reconstructed request-auth
-// for the slot at §4 produce time (issue #2962 E1) — the inverse of recordRequestAuthReconstruction and
-// the auth dimension of the build-source telemetry: these builders are omitted from the produceBlockV4
-// body, so the proposal silently degrades to gossiped bids / self-build for them.
+// for the slot at §4 produce time — the inverse of recordRequestAuthReconstruction and the auth
+// dimension of the build-source telemetry: these builders are omitted from the produceBlockV4 body, so
+// the proposal silently degrades to gossiped bids / self-build for them.
 func recordProposalAuthUnavailable(ctx context.Context, count int) {
 	requestAuthUnavailableCounter.Add(ctx, int64(count))
 }
 
-// recordBuilderPreferencesSubmit counts an ahead-of-time builder-preferences submit call (issue #2962
-// phase 3) by outcome. It is batch-level — one call per reconstructed auth root, across the builders
-// sharing it — so a non-2xx (including a beacon-APIs#630 partial 400, where the other entries were still
-// accepted) books the whole call a failure; the per-entry IndexedErrorMessage rides the caller's warn log.
-// Best-effort at the caller, so a failure is a health signal, not a duty failure.
+// recordBuilderPreferencesSubmit counts an ahead-of-time builder-preferences submit call by outcome. It
+// is batch-level — one call per reconstructed auth root, across the builders sharing it — so a non-2xx
+// (including a beacon-APIs#630 partial 400, where the other entries were still accepted) books the whole
+// call a failure; the per-entry IndexedErrorMessage rides the caller's warn log. Best-effort at the
+// caller, so a failure is a health signal, not a duty failure.
 func recordBuilderPreferencesSubmit(ctx context.Context, success bool) {
 	builderPreferencesSubmitCounter.Add(ctx, 1, metric.WithAttributes(observability.SubmitOutcomeAttribute(success)))
 }

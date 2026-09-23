@@ -29,7 +29,7 @@ type SignerStateForSlotRound struct {
 
 	// SeenProposerPreferencesRoots and SeenRequestAuthRoots record the distinct signing roots seen from the
 	// signer for the root-budgeted types — ProposerPreferences (SIP #94 §5, up to
-	// maxProposerPreferencesDistinctRoots) and BuilderRequestAuth (issue #2962, up to
+	// maxProposerPreferencesDistinctRoots) and BuilderRequestAuth (SIP #94 §5, up to
 	// maxRequestAuthDistinctRoots) — which are capped by distinct root rather than by the single
 	// pre-consensus bit in SeenMsgTypes. Kept once per signer, not per peer: a repeat is IGNORE'd whichever
 	// peer relays it (§7). nil until the first such message.

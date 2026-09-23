@@ -14,7 +14,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 )
 
-// The §5 dispatcher's request-auth rounds (issue #2962 B1): threshold-signing one BuilderRequestAuth
+// The §5 dispatcher's request-auth rounds (SIP #94 §5): threshold-signing one BuilderRequestAuth
 // per configured builder, riding the proposer-preferences duty. The per-slot auth state lives on
 // proposerPreferencesSlotRunner (proposer_preferences.go); this file holds the round logic.
 
@@ -30,8 +30,8 @@ type frozenRequestAuth struct {
 // frozenBuilderRef names one configured builder relationship covered by a frozen auth.
 type frozenBuilderRef struct {
 	identity            string // gloas.BuilderIdentity — the RequestAuthCache key
-	url                 string // the builder URL, for logging and the phase-3 preferences submit
-	maxExecutionPayment uint64 // the configured cap, forwarded via submitBuilderPreferences (phase 3)
+	url                 string // the builder URL, for logging and the builder-preferences submit
+	maxExecutionPayment uint64 // the configured cap, forwarded via submitBuilderPreferences
 }
 
 // runRequestAuthRound freezes one BuilderRequestAuth{data, proposal_slot} per configured builder,
@@ -211,12 +211,12 @@ func (r *proposerPreferencesSlotRunner) reconstructRequestAuth(ctx context.Conte
 }
 
 // submitBuilderPreferences forwards the reconstructed auth as the ahead-of-time per-builder preference
-// (issue #2962 phase 3, beacon-APIs#630): one BuilderPreferencesEntry per builder sharing the auth, each
-// carrying the proposer pubkey, the builder URL, and the configured max-execution-payment cap. Every
-// operator submits via its own beacon node — the builder dedupes per proposer per slot. Best-effort: a
-// failure never disturbs the §5/auth flow, only its metric and log. The submit runs inline on the §5
-// message-queue path; the wait is bounded by commonTimeout, per-validator, and epoch-ahead of the
-// proposal, so it stays off the critical path.
+// (beacon-APIs#630): one BuilderPreferencesEntry per builder sharing the auth, each carrying the
+// proposer pubkey, the builder URL, and the configured max-execution-payment cap. Every operator submits
+// via its own beacon node — the builder dedupes per proposer per slot. Best-effort: a failure never
+// disturbs the §5/auth flow, only its metric and log. The submit runs inline on the §5 message-queue
+// path; the wait is bounded by commonTimeout, per-validator, and epoch-ahead of the proposal, so it
+// stays off the critical path.
 func (r *proposerPreferencesSlotRunner) submitBuilderPreferences(ctx context.Context, logger *zap.Logger, signed *gloas.SignedBuilderRequestAuth, builders []frozenBuilderRef) {
 	pubkey := phase0.BLSPubKey(r.GetShare().ValidatorPubKey)
 	entries := make([]*gloas.BuilderPreferencesEntry, 0, len(builders))

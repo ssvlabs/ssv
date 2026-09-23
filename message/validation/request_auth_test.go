@@ -15,7 +15,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/types/ssvtestingutils"
 )
 
-// RequestAuth partials ride the RoleProposerPreferences wire (issue #2962): the role admits both
+// RequestAuth partials ride the RoleProposerPreferences wire (SIP #94 §5): the role admits both
 // partial-sig types, and no other role admits RequestAuthPartialSig.
 func TestPartialSignatureTypeMatchesRole_RequestAuth(t *testing.T) {
 	mv := &messageValidator{}
@@ -57,9 +57,9 @@ func TestSlotRoundState_RequestAuthRoots(t *testing.T) {
 }
 
 // RequestAuth pre-consensus admits up to maxRequestAuthDistinctRoots distinct signing roots per
-// (slot, signer) — one per configured builder (issue #2962) — with the §5 dedup: a repeat of a
-// recorded root, whichever peer relays it, and a distinct root past the cap are both IGNORE'd
-// (SIP #94 §7). The budget is separate from the §5 preference budget.
+// (slot, signer) — one per configured builder — with the §5 dedup: a repeat of a recorded root,
+// whichever peer relays it, and a distinct root past the cap are both IGNORE'd (SIP #94 §7). The budget
+// is separate from the §5 preference budget.
 func TestValidatePartialSignatureMessageLimit_RequestAuth(t *testing.T) {
 	raMsg := func(root [32]byte) *spectypes.PartialSignatureMessages {
 		return &spectypes.PartialSignatureMessages{

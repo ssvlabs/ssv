@@ -75,7 +75,7 @@ func (c *ProduceBuilderConfig) MarshalJSON() ([]byte, error) {
 // per-slot reconstructed auths: one entry per configured builder that has a reconstructed auth (auth-less
 // builders are omitted — beacon-APIs#630 requires an auth per entry), carrying the resolved per-entry and
 // top-level knobs. It also returns the number of configured builders with no reconstructed auth for the
-// slot — the E1 auth-unavailable signal.
+// slot, which the proposer reports as its auth-unavailable metric.
 func BuildProduceConfig(cfg ResolvedBuilderConfig, auths map[string]*SignedBuilderRequestAuth) (ProduceBuilderConfig, int) {
 	out := ProduceBuilderConfig{
 		MinBid:             cfg.MinBid,

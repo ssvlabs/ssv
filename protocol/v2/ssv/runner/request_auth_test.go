@@ -45,13 +45,12 @@ func broadcastRequestAuthEntries(t *testing.T, msgs []*spectypes.SignedSSVMessag
 	return entries
 }
 
-// End-to-end request-auth convergence riding the §5 duty (issue #2962 B1): executing the duty
-// freezes the auth roots and broadcasts one packet with a partial per distinct root (token-sharing
-// builders share one);
-// stashed peer partials replay into the round; quorum reconstructs the SignedBuilderRequestAuth into the
-// shared cache; re-emissions never re-broadcast (auth roots are re-emission-invariant); and a root
-// outside the frozen set (config divergence) is a hard error. The §5 preference flow must conclude
-// exactly as without builders.
+// End-to-end request-auth convergence riding the §5 duty: executing the duty freezes the auth roots and
+// broadcasts one packet with a partial per distinct root (token-sharing builders share one); stashed
+// peer partials replay into the round; quorum reconstructs the SignedBuilderRequestAuth into the shared
+// cache; re-emissions never re-broadcast (auth roots are re-emission-invariant); and a root outside the
+// frozen set (config divergence) is a hard error. The §5 preference flow must conclude exactly as
+// without builders.
 func TestProposerPreferencesRunner_requestAuthConvergence(t *testing.T) {
 	keySet := spectestingutils.Testing4SharesSet()
 	share := spectestingutils.TestingShare(keySet, spectestingutils.TestingValidatorIndex)

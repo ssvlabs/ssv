@@ -63,9 +63,9 @@ type ProposerRunner struct {
 	// for efficient validation (so we re-use it instead of re-calculating).
 	cachedBlindedBlockSSZ []byte
 
-	// builders is the cluster's direct-builder config, resolved once at construction (issue #2962, phase 2):
-	// the produceBlockV4 POST body is assembled from it plus the per-slot reconstructed auths. Not
-	// Configured() -> a neutral local-build POST body.
+	// builders is the cluster's direct-builder config, resolved once at construction: the produceBlockV4
+	// POST body is assembled from it plus the per-slot reconstructed auths. Not Configured() -> a neutral
+	// local-build POST body.
 	builders gloas.ResolvedBuilderConfig
 	// requestAuthCache holds the per-slot reconstructed builder auths this operator attaches to the
 	// produceBlockV4 POST. Shared with the §5 dispatcher that writes it; nil pre-Gloas / no overlay.
@@ -115,7 +115,7 @@ type ProposerRunnerOptions struct {
 	ProposerDelay     time.Duration
 	ProposerDelayEPBS time.Duration
 
-	// Builders / RequestAuthCache feed the phase-2 produceBlockV4 POST body (issue #2962). Optional
+	// Builders / RequestAuthCache feed the produceBlockV4 POST body (beacon-APIs#630). Optional
 	// (empty / nil pre-Gloas or when the direct-builder overlay is unconfigured).
 	Builders         gloas.BuilderConfig
 	RequestAuthCache *ssv.RequestAuthCache
@@ -368,7 +368,7 @@ func (r *ProposerRunner) gloasProposalInput(ctx context.Context, logger *zap.Log
 // gloasBuilderConfig assembles the produceBlockV4 POST body from the cluster's direct-builder config and
 // the per-slot reconstructed auths (beacon-APIs#630), or nil when nothing is configured (the goclient then
 // POSTs a neutral local-build config). Builders whose auth missed quorum this slot are omitted and counted
-// for the E1 auth-unavailable signal; the top-level p2p knobs are always carried. The goclient falls back
+// by the auth-unavailable metric; the top-level p2p knobs are always carried. The goclient falls back
 // to GET per beacon node that predates #630.
 func (r *ProposerRunner) gloasBuilderConfig(ctx context.Context, slot phase0.Slot) *gloas.ProduceBuilderConfig {
 	if !r.builders.Configured() {
@@ -919,7 +919,7 @@ func (r *ProposerRunner) decidedBuilderURL(block *gloas.BeaconBlock) string {
 	return r.gloasDuty.builderURL
 }
 
-// gloasBuildSource classifies a decided Gloas value for the build-source telemetry (issue #2962 E1).
+// gloasBuildSource classifies a decided Gloas value for the build-source metric.
 func gloasBuildSource(proposalData *gloas.GloasProposalData) proposalBuildSource {
 	if proposalData.SelfBuild() {
 		return buildSourceLocal

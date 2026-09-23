@@ -53,8 +53,8 @@ const proposerPreferencesEarlyEpochs = 2
 const maxProposerPreferencesDistinctRoots = gloas.MaxProposerPreferencesDistinctRoots
 
 // maxRequestAuthDistinctRoots bounds the distinct BuilderRequestAuth signing roots one (slot, signer)
-// may contribute (issue #2962): exactly one per configured direct-builder entry. Derivation at the
-// shared constant.
+// may contribute (SIP #94 §7): at most one per configured direct-builder entry. Derivation at the shared
+// constant.
 const maxRequestAuthDistinctRoots = gloas.MaxRequestAuthDistinctRoots
 
 // maxRequestAuthEntries bounds the entries of one RequestAuthPartialSig packet. Derivation at the shared
