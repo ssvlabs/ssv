@@ -152,9 +152,51 @@ func TestSyncCommitteeAggregatorProcessPreConsensusSortsSubnetsForBeaconCall(t *
 	}
 }
 
+// Consensus runs once, on every subnet's contribution. A bad share in one subnet's selection-proof quorum
+// doesn't fail the duty, and doesn't leave that subnet out: the fallback drops it, the decision waits, and once
+// an honest share brings the root back to quorum the runner decides on all four subnets.
+func TestSyncCommitteeAggregatorProcessPreConsensusWaitsForEverySubnet(t *testing.T) {
+	t.Parallel()
+
+	ctx, logger := t.Context(), zap.NewNop()
+	testBeacon := newSyncCommitteeContributionPreConsensusCaptureBeacon()
+	runner, keySet := newSyncCommitteeAggregatorRunnerForTest(t, testBeacon)
+	duty := &spectypes.ValidatorDuty{
+		Type:                          spectypes.BNRoleSyncCommitteeContribution,
+		PubKey:                        spectestingutils.TestingValidatorPubKey,
+		Slot:                          spectestingutils.TestingDutySlot,
+		ValidatorIndex:                spectestingutils.TestingValidatorIndex,
+		ValidatorSyncCommitteeIndices: syncCommitteeContributionValidatorSyncCommitteeIndices,
+	}
+	require.NoError(t, runner.StartNewDuty(ctx, logger, duty, keySet.Threshold))
+	concluded := observeDutyConclusion(runner.BaseRunner)
+	msg := func(op spectypes.OperatorID) *spectypes.PartialSignatureMessages {
+		return spectestingutils.PreConsensusContributionProofWithValidatorSyncCommitteeIndices(
+			keySet.Shares[op], keySet.Shares[op], op, op, syncCommitteeContributionValidatorSyncCommitteeIndices,
+		)
+	}
+
+	// Operator 1's share for subnet 2 carries operator 2's signature, so it fails verification.
+	bad := msg(1)
+	bad.Messages[2].PartialSignature = msg(2).Messages[2].PartialSignature
+	require.NoError(t, runner.ProcessPreConsensus(ctx, logger, bad))
+	require.NoError(t, runner.ProcessPreConsensus(ctx, logger, msg(2)))
+	err := runner.ProcessPreConsensus(ctx, logger, msg(3))
+	require.ErrorContains(t, err, "invalid signatures")
+	require.True(t, isRecoverableReconstructError(err))
+	require.Zero(t, testBeacon.getContributionCalls, "the other subnets don't go to consensus without subnet 2")
+	require.Nil(t, runner.State.RunningInstance)
+	require.Empty(t, concluded, "the failed reconstruct is recoverable, so the duty is not concluded failed")
+
+	require.NoError(t, runner.ProcessPreConsensus(ctx, logger, msg(4)))
+	require.Equal(t, 1, testBeacon.getContributionCalls)
+	require.Equal(t, []uint64{0, 1, 2, 3}, testBeacon.capturedSubnets)
+	require.NotNil(t, runner.State.RunningInstance)
+}
+
 func newSyncCommitteeAggregatorRunnerForTest(
 	t *testing.T,
-	testBeacon *syncCommitteeContributionPreConsensusCaptureBeacon,
+	testBeacon beacon.BeaconNode,
 ) (*SyncCommitteeAggregatorRunner, *spectestingutils.TestKeySet) {
 	t.Helper()
 
