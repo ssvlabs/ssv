@@ -372,8 +372,8 @@ func TestScheduler_Proposer_Reorg_Previous(t *testing.T) {
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 4: trigger reorg on previous dependent root change (same epoch, no epoch transition).
-		// Proposer duties depend on the current duty dependent root, not the previous one,
-		// so no refetch should happen for the current epoch.
+		// The current epoch is refetched only on a current dependent root change, which a real reorg of the
+		// previous root always brings too (the current root descends from it), so no refetch should happen here.
 		e = &eth2apiv1.Event{
 			Data: &eth2apiv1.HeadEvent{
 				Slot:                      testSlotsPerEpoch + 1,
@@ -449,8 +449,8 @@ func TestScheduler_Proposer_Reorg_Previous_Indices_Changed(t *testing.T) {
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 4: trigger reorg on previous dependent root change (same epoch, no epoch transition).
-		// Proposer duties depend on the current duty dependent root, not the previous one,
-		// so no refetch should happen for the current epoch.
+		// The current epoch is refetched only on a current dependent root change, which a real reorg of the
+		// previous root always brings too (the current root descends from it), so no refetch should happen here.
 		e = &eth2apiv1.Event{
 			Data: &eth2apiv1.HeadEvent{
 				Slot:                      testSlotsPerEpoch + 1,
@@ -761,7 +761,8 @@ func TestScheduler_Proposer_Reorg_Current(t *testing.T) {
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 4: trigger reorg on current dependent root change.
-		// Proposer duties depend on the current duty dependent root, so a refetch should happen immediately.
+		// The current epoch is refetched immediately, and the next epoch on the next tick. Until its refetch
+		// lands, the next epoch's cached view is marked stale, so message validation doesn't check against it.
 		e = &eth2apiv1.Event{
 			Data: &eth2apiv1.HeadEvent{
 				Slot:                     testSlotsPerEpoch + testSlotsPerEpoch/2 + 1,
@@ -777,11 +778,16 @@ func TestScheduler_Proposer_Reorg_Current(t *testing.T) {
 		})
 		scheduler.HandleHeadEvent()(t.Context(), e.Data.(*eth2apiv1.HeadEvent))
 		waitForDutiesFetch(t, fetchDutiesCall, timeout)
+		synctest.Wait()
+		require.False(t, handler.duties.IsEpochStale(1), "the current epoch's refetch has landed")
+		require.True(t, handler.duties.IsEpochStale(2), "the next epoch's refetch is still pending")
 
 		// STEP 5: wait for proposer duties to be fetched for the next epoch
 		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(testSlotsPerEpoch+testSlotsPerEpoch/2+2))
 		ticker.Send(phase0.Slot(testSlotsPerEpoch + testSlotsPerEpoch/2 + 2))
 		waitForDutiesFetch(t, fetchDutiesCall, timeout)
+		synctest.Wait()
+		require.False(t, handler.duties.IsEpochStale(2), "the next epoch's refetch has landed")
 
 		// STEP 6: skip to the next epoch
 		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(testSlotsPerEpoch+testSlotsPerEpoch/2+3))
@@ -804,6 +810,58 @@ func TestScheduler_Proposer_Reorg_Current(t *testing.T) {
 
 		ticker.Send(phase0.Slot(testSlotsPerEpoch*2 + 1))
 		waitForDutiesExecution(t, fetchDutiesCall, executeDutiesCall, timeout, expected)
+
+		// Stop scheduler & wait for graceful exit.
+		cancel()
+		require.NoError(t, scheduler.Wait())
+		ticker.WaitShutdown()
+	})
+}
+
+// At an epoch's last slot a reorg doesn't refetch the current epoch, so it doesn't mark it stale either: no refetch
+// would clear the flag. The next epoch is refetched right away, which clears its own.
+func TestScheduler_Proposer_Reorg_Current_Last_Slot(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		var (
+			handler       = NewProposerHandler(dutystore.NewDuties[eth2apiv1.ProposerDuty](), false)
+			dutiesMap     = hashmap.New[phase0.Epoch, []*eth2apiv1.ProposerDuty]()
+			waitForDuties = &SafeValue[bool]{}
+			lastSlot      = phase0.Slot(testSlotsPerEpoch*2 - 1)
+		)
+		// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
+		// This deadline needs to be large enough to not prevent tests from executing their intended flow.
+		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
+		scheduler, ticker := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{handler}, lastSlot-1)
+		waitForSlotN(scheduler.netCfg.Beacon, lastSlot-1)
+		fetchDutiesCall, executeDutiesCall := setupProposerDutiesMock(scheduler, dutiesMap, waitForDuties)
+
+		dutiesMap.Set(phase0.Epoch(2), []*eth2apiv1.ProposerDuty{
+			{
+				PubKey:         phase0.BLSPubKey{1, 2, 3},
+				Slot:           phase0.Slot(testSlotsPerEpoch*2 + 1),
+				ValidatorIndex: phase0.ValidatorIndex(1),
+			},
+		})
+
+		// STEP 1: (on startup) wait for proposer duties to be fetched for the current epoch
+		waitForDuties.Set(true)
+		require.NoError(t, scheduler.Start(ctx))
+		waitForDutiesFetch(t, fetchDutiesCall, timeout)
+
+		// STEP 2: record the dependent roots, and fetch the next epoch on the tick
+		scheduler.HandleHeadEvent()(t.Context(), &eth2apiv1.HeadEvent{Slot: lastSlot - 1, CurrentDutyDependentRoot: phase0.Root{0x01}})
+		ticker.Send(lastSlot - 1)
+		waitForDutiesFetch(t, fetchDutiesCall, timeout)
+
+		// STEP 3: at the epoch's last slot, trigger reorg on current dependent root change
+		waitForSlotN(scheduler.netCfg.Beacon, lastSlot)
+		ticker.Send(lastSlot)
+		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
+		scheduler.HandleHeadEvent()(t.Context(), &eth2apiv1.HeadEvent{Slot: lastSlot, CurrentDutyDependentRoot: phase0.Root{0x02}})
+		waitForDutiesFetch(t, fetchDutiesCall, timeout) // the next epoch, right away
+		synctest.Wait()
+		require.False(t, handler.duties.IsEpochStale(1), "the current epoch isn't refetched, so it isn't marked")
+		require.False(t, handler.duties.IsEpochStale(2), "the next epoch's refetch has landed")
 
 		// Stop scheduler & wait for graceful exit.
 		cancel()
@@ -871,7 +929,7 @@ func TestScheduler_Proposer_Reorg_Current_Indices_Changed(t *testing.T) {
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 4: trigger reorg on current dependent root change.
-		// Proposer duties depend on the current duty dependent root, so a refetch should happen immediately.
+		// The current epoch is refetched immediately.
 		e = &eth2apiv1.Event{
 			Data: &eth2apiv1.HeadEvent{
 				Slot:                     testSlotsPerEpoch + testSlotsPerEpoch/2 + 1,
@@ -1597,7 +1655,7 @@ func (idleTicker) Slot() phase0.Slot      { return 0 }
 
 // An indices change received while the loop is idle (between ticks) marks the current and next
 // epochs' cached duty views stale immediately — at event time, not at the next tick — so
-// freshness-aware §5/§6 message validation starts tolerating right away. The refetch intents are
+// freshness-aware §5 message validation starts tolerating right away. The refetch intents are
 // declared for the next tick to process; no fetch happens from the idle path itself.
 func TestProposerHandler_IndicesChangeMarksStaleImmediately(t *testing.T) {
 	netCfg := networkconfig.TestNetwork

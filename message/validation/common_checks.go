@@ -206,9 +206,9 @@ func (mv *messageValidator) validateBeaconDuty(
 	// Rule: For a proposer-preferences message, require a real proposer assignment for the validator at
 	// the slot — but only from a fetched AND fresh epoch. It rides a proposal slot whose epoch may still
 	// be in flight (tolerated; the earliness/lateness window bounds the slot), and an epoch fetched before
-	// the latest indices change is equally unusable for rejection: dropping a just-added validator's
-	// one-shot partial on a stale view starves its quorum permanently — an identical re-broadcast can't
-	// pass the gossip seen-cache (SIP #94 §5, §7).
+	// the latest indices change, or before a reorg that may have moved its proposers, is equally unusable
+	// for rejection: dropping an honest one-shot partial on a stale view starves its quorum permanently — an
+	// identical re-broadcast can't pass the gossip seen-cache (SIP #94 §5, §7).
 	if role == spectypes.RoleProposerPreferences {
 		validatorIndex := indices[0]
 		if mv.dutyStore.Proposer.IsEpochSet(epoch) && !mv.dutyStore.Proposer.IsEpochStale(epoch) &&

@@ -53,8 +53,9 @@ func (h *ProposerHandler) WaitShutdown() {}
 //  3. Duties will be executed on the very next slot-tick.
 //
 // On Re-org:
-//  1. Declare intents to fetch duties for the epochs affected by the reorg (depending on whether the
-//     previous or current dependent root changed).
+//  1. Declare intents to fetch duties for the epochs affected by the reorg (the current epoch if the current
+//     dependent root changed, the next epoch always), and mark their cached duty views stale until the refetch
+//     lands, as on an indices change.
 //  2. If necessary, fetch duties for the current/next epochs so they can be processed on the next slot-tick.
 //  3. Duties will be executed on the very next slot-tick.
 //
@@ -202,9 +203,11 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 				zap.Uint64("current_slot", uint64(currentSlot)),
 			)
 
-			// Proposer duties for the current epoch are determined by the "current duty dependent root",
-			// so we re-fetch the current epoch only if it has changed. The next epoch is always re-fetched
-			// on any reorg to ensure we have the up-to-date duties for all validators.
+			// Under the proposer lookahead an epoch's proposers are fixed at the end of the epoch two back: the
+			// current epoch's by the previous duty dependent root, the next epoch's by the current one. The current
+			// root descends from the previous one and changes whenever it does, so we re-fetch the current epoch
+			// only if the current root has changed. The next epoch is always re-fetched on any reorg to ensure we
+			// have the up-to-date duties for all validators.
 			refetchCurrentEpoch := reorgEvent.CurrentDutyDependentRootChanged
 
 			logger.Info("🔀 reorg event received",
@@ -220,11 +223,18 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 				reorgCtx, cancel := context.WithDeadline(ctx, h.netCfg.SlotStartTime(currentSlot+2))
 				defer cancel()
 
-				// 1) Declare intents.
+				// 1) Declare intents, and mark their epochs stale until the refetch lands, as on an indices change:
+				// the reorg may have moved their proposers (SIP #94 §7). At the epoch's last slot the current epoch
+				// isn't refetched (2), so it isn't marked either.
+				stale := []phase0.Epoch{nextEpoch}
 				if refetchCurrentEpoch {
 					h.dutyFetchIntents[currentEpoch] = false
+					if !h.atLastSlotOfCurrentEpoch(currentSlot) {
+						stale = append(stale, currentEpoch)
+					}
 				}
 				h.dutyFetchIntents[nextEpoch] = false
+				h.duties.MarkEpochsStale(stale...)
 
 				// 2) Process certain intents immediately.
 				// When at epoch boundary, we only care about pre-fetching & preparing the duties for the next epoch

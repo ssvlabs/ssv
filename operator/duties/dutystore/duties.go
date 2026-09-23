@@ -23,9 +23,9 @@ type StoreDuty[D Duty] struct {
 type Duties[D Duty] struct {
 	mu sync.RWMutex
 	m  map[phase0.Epoch]map[phase0.Slot]map[phase0.ValidatorIndex]StoreDuty[D]
-	// stale flags epochs whose cached duties were fetched before the latest validator-set change.
-	// The data keeps being served — only freshness-aware checks consult the flag via IsEpochStale —
-	// and Set (a completed refetch) clears it.
+	// stale flags epochs whose cached duties were fetched before the latest validator-set change, or before a
+	// reorg that may have moved them. The data keeps being served — only freshness-aware checks consult the
+	// flag via IsEpochStale — and Set (a completed refetch) clears it.
 	stale map[phase0.Epoch]struct{}
 }
 
@@ -181,11 +181,11 @@ func (d *Duties[D]) IsEpochSet(epoch phase0.Epoch) bool {
 	return exists
 }
 
-// MarkEpochsStale flags the epochs' cached duties as fetched before the latest validator-set change.
-// The data keeps being served (checks that must always enforce assignment still do), but
-// freshness-aware duty-existence checks — §5 proposer preferences and the §6 self-build envelope —
-// treat a stale epoch like a not-yet-fetched one until a refetch (Set) replaces it: a view predating
-// a just-added validator must not permanently reject that validator's honest one-shot messages.
+// MarkEpochsStale flags the epochs' cached duties as fetched before the latest validator-set change, or
+// before a reorg that may have moved them. The data keeps being served (checks that must always enforce
+// assignment still do), but the freshness-aware duty-existence check of §5 proposer preferences treats a
+// stale epoch like a not-yet-fetched one until a refetch (Set) replaces it: a view predating the change
+// must not permanently reject a validator's honest one-shot messages.
 func (d *Duties[D]) MarkEpochsStale(epochs ...phase0.Epoch) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -195,7 +195,8 @@ func (d *Duties[D]) MarkEpochsStale(epochs ...phase0.Epoch) {
 	}
 }
 
-// IsEpochStale reports whether the epoch's cached duties predate the latest validator-set change.
+// IsEpochStale reports whether the epoch's cached duties predate the latest validator-set change, or a
+// reorg that may have moved them.
 func (d *Duties[D]) IsEpochStale(epoch phase0.Epoch) bool {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
