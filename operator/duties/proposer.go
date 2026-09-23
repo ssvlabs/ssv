@@ -67,7 +67,7 @@ func (h *ProposerHandler) WaitShutdown() {}
 //
 // On Indices change (received while idle, i.e. between ticks):
 //  1. Mark the current/next epochs' cached duty views stale immediately, at event time — freshness-aware
-//     message validation (§5 proposer preferences, §6 envelope) must start tolerating before any refetch lands.
+//     message validation (§5 proposer preferences) must start tolerating before any refetch lands.
 //  2. Declare the refetch intents; the next tick processes them first thing (before duty execution).
 //     A change arriving while a tick is being processed is caught by the tick's own indices-change wait
 //     instead, which additionally refetches in the same slot when early enough.
@@ -141,9 +141,9 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 					logger.Info("🔁 indices change received")
 
 					// Mark the affected epochs' cached duties stale right away: until a refetch replaces
-					// them, freshness-aware message-validation checks (§5 proposer preferences, §6 envelope)
-					// treat them like not-yet-fetched epochs, so a view predating the change doesn't reject
-					// a just-added validator's honest messages (their one-shot broadcasts have no redelivery).
+					// them, the freshness-aware message-validation check (§5 proposer preferences) treats
+					// them like not-yet-fetched epochs, so a view predating the change doesn't reject a
+					// just-added validator's honest messages (their one-shot broadcasts have no redelivery).
 					h.duties.MarkEpochsStale(currentEpoch, nextEpoch)
 
 					// 1) Declare intents.

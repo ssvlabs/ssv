@@ -115,7 +115,7 @@ func (mv *messageValidator) validateDutyCount(
 	// - 2 for aggregation, validator registration and PTC attestation
 	// - the tracked exit-duty count for voluntary exit
 	// - 2*V for Committee and AggregatorCommittee duty (where V is the number of validators in the cluster) (if no validator is doing sync committee in this epoch)
-	// - SlotsPerEpoch for proposer preferences and self-build envelopes
+	// - SlotsPerEpoch for proposer preferences
 	// - else, accept
 	if dutyCount > dutyLimit {
 		e := ErrTooManyDutiesPerEpoch

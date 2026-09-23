@@ -85,6 +85,8 @@ func (gc *GoClient) DomainData(
 			return cached.Value(), nil
 		}
 
+		// Detach from the leader caller's ctx so its cancellation doesn't fail the callers joined into this
+		// request; the multi-client call carries its own timeout.
 		fetchCtx := context.WithoutCancel(ctx)
 		start := time.Now()
 		data, err := gc.multiClient.Domain(fetchCtx, domain, epoch)
