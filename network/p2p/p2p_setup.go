@@ -298,7 +298,7 @@ func (n *p2pNetwork) setupDiscovery() error {
 	logger := n.logger
 
 	var disc discovery.Service
-	switch n.cfg.Discovery {
+	switch n.cfg.discoveryMode() {
 	case mdnsDiscovery:
 		logger.Info("discovery: using mdns (local)")
 		var err error
@@ -313,8 +313,7 @@ func (n *p2pNetwork) setupDiscovery() error {
 			logger.Info("discovery: disabled, keeping only trusted and inbound peers")
 		}
 		disc = discovery.Disabled{}
-	case discv5Discovery, "":
-		// Empty means unset — default to discv5 rather than erroring.
+	case discv5Discovery:
 		ipAddr, err := p2pcommons.IPAddr()
 		if err != nil {
 			return fmt.Errorf("could not get ip addr: %w", err)
