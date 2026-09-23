@@ -9,18 +9,18 @@ import (
 )
 
 func TestBuildProduceConfig(t *testing.T) {
-	authA := &SignedBuilderRequestAuth{Message: &BuilderRequestAuth{Data: []byte("https://a.example"), Slot: 7}}
+	authA := &SignedBuilderRequestAuth{Message: &BuilderRequestAuth{Data: []byte("a.example"), Slot: 7}}
 	ten := uint64(10)
 	cfg := BuilderConfig{
 		MinBid:             5,
 		BuilderBoostFactor: nil, // -> neutral 100
 		Entries: []BuilderEntry{
-			{URL: "https://a.example"},               // auth data defaults to the URL bytes; has an auth
+			{URL: "https://a.example"},               // auth data defaults to the URL's hostname; has an auth
 			{URL: "https://b.example", MinBid: &ten}, // no auth this slot -> omitted
 		},
 	}
 	auths := map[string]*SignedBuilderRequestAuth{
-		BuilderIdentity("https://a.example", []byte("https://a.example")): authA,
+		BuilderIdentity("https://a.example", []byte("a.example")): authA,
 	}
 
 	resolved, err := ResolveBuilderConfig(cfg)

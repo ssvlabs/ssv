@@ -133,6 +133,8 @@ func (test *ValCheckSpecTest) valCheckF(signer ekm.BeaconSigner) func([]byte) er
 			pubKeyBytes,
 			spectestingutils.TestingValidatorIndex,
 			sharePubKeys[0],
+			// The vector's running duty slot; 0 (unset) skips the running-slot check, as in the spec.
+			func() phase0.Slot { return test.DutySlot },
 		)
 		return checker.CheckValue
 	case ssvtypes.RoleAggregator:
@@ -217,6 +219,7 @@ func createValueChecker(r runner.Runner, signerSource ...runner.Runner) ssv.Valu
 			share.ValidatorPubKey,
 			share.ValidatorIndex,
 			phase0.BLSPubKey(share.SharePubKey),
+			typedRunner.RunningDutySlot,
 		)
 
 	case *runner.AggregatorRunner:

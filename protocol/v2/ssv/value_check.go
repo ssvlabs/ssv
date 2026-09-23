@@ -234,31 +234,38 @@ func validateNoDuplicateAggregatorCommittee(cd *spectypes.AggregatorCommitteeCon
 }
 
 type proposerChecker struct {
-	signer         ekm.BeaconSigner
-	beaconConfig   *networkconfig.Beacon
-	validatorPK    spectypes.ValidatorPK
-	validatorIndex phase0.ValidatorIndex
-	sharePublicKey phase0.BLSPubKey
+	signer          ekm.BeaconSigner
+	beaconConfig    *networkconfig.Beacon
+	validatorPK     spectypes.ValidatorPK
+	validatorIndex  phase0.ValidatorIndex
+	sharePublicKey  phase0.BLSPubKey
+	runningDutySlot func() phase0.Slot
 }
 
+// NewProposerChecker validates the proposer's consensus value. runningDutySlot reports the slot of the duty
+// the runner is running, so a value for any other slot is rejected before consensus can commit it (SIP #94
+// §4); it reports 0 before the runner's first duty, and a nil runningDutySlot skips that check (isolated
+// value checks with no runner behind them).
 func NewProposerChecker(
 	signer ekm.BeaconSigner,
 	beaconConfig *networkconfig.Beacon,
 	validatorPK spectypes.ValidatorPK,
 	validatorIndex phase0.ValidatorIndex,
 	sharePublicKey phase0.BLSPubKey,
+	runningDutySlot func() phase0.Slot,
 ) ValueChecker {
 	return &proposerChecker{
-		signer:         signer,
-		beaconConfig:   beaconConfig,
-		validatorPK:    validatorPK,
-		validatorIndex: validatorIndex,
-		sharePublicKey: sharePublicKey,
+		signer:          signer,
+		beaconConfig:    beaconConfig,
+		validatorPK:     validatorPK,
+		validatorIndex:  validatorIndex,
+		sharePublicKey:  sharePublicKey,
+		runningDutySlot: runningDutySlot,
 	}
 }
 
 func (v *proposerChecker) CheckValue(value []byte) error {
-	cd, gloasProposal, err := checkValidatorConsensusData(value, v.beaconConfig, spectypes.BNRoleProposer, v.validatorPK, v.validatorIndex)
+	cd, gloasProposal, err := checkValidatorConsensusData(value, v.beaconConfig, spectypes.BNRoleProposer, v.validatorPK, v.validatorIndex, v.runningDutySlot)
 	if err != nil {
 		return err
 	}
@@ -300,7 +307,7 @@ func NewAggregatorChecker(
 }
 
 func (v *aggregatorChecker) CheckValue(value []byte) error {
-	_, _, err := checkValidatorConsensusData(value, v.beaconConfig, spectypes.BNRoleAggregator, v.validatorPK, v.validatorIndex)
+	_, _, err := checkValidatorConsensusData(value, v.beaconConfig, spectypes.BNRoleAggregator, v.validatorPK, v.validatorIndex, nil)
 	return err
 }
 
@@ -323,23 +330,34 @@ func NewSyncCommitteeContributionChecker(
 }
 
 func (v *syncCommitteeContributionChecker) CheckValue(value []byte) error {
-	_, _, err := checkValidatorConsensusData(value, v.beaconConfig, spectypes.BNRoleSyncCommitteeContribution, v.validatorPK, v.validatorIndex)
+	_, _, err := checkValidatorConsensusData(value, v.beaconConfig, spectypes.BNRoleSyncCommitteeContribution, v.validatorPK, v.validatorIndex, nil)
 	return err
 }
 
 // checkValidatorConsensusData decodes and validates a ProposerConsensusData value. On the Gloas
 // proposer path it also decodes the node-side block and returns it (nil otherwise) so callers reuse it
-// instead of decoding the ~MB block a second time.
+// instead of decoding the ~MB block a second time. A non-nil runningDutySlot ties the value to the running
+// duty's slot (see NewProposerChecker).
 func checkValidatorConsensusData(
 	value []byte,
 	beaconConfig *networkconfig.Beacon,
 	expectedType spectypes.BeaconRole,
 	validatorPK spectypes.ValidatorPK,
 	validatorIndex phase0.ValidatorIndex,
+	runningDutySlot func() phase0.Slot,
 ) (*spectypes.ProposerConsensusData, *gloas.GloasProposalData, error) {
 	cd := &spectypes.ProposerConsensusData{}
 	if err := cd.Decode(value); err != nil {
 		return nil, nil, fmt.Errorf("failed decoding consensus data: %w", err)
+	}
+
+	// QBFT decides whatever the round leader proposes, so a value for another slot would let the instance
+	// finish on it: the running duty could then never complete, and operators would sign a block for a slot
+	// they aren't running (SIP #94 §4). Checked first, as ssv-spec's ProposerValueCheckF does.
+	if runningDutySlot != nil {
+		if want := runningDutySlot(); want != 0 && cd.Duty.Slot != want {
+			return cd, nil, spectypes.NewError(spectypes.ProposerDutySlotMismatchErrorCode, "consensus data duty slot does not match running duty slot")
+		}
 	}
 
 	var gloasProposal *gloas.GloasProposalData

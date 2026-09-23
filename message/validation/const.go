@@ -57,6 +57,10 @@ const maxProposerPreferencesDistinctRoots = gloas.MaxProposerPreferencesDistinct
 // shared constant.
 const maxRequestAuthDistinctRoots = gloas.MaxRequestAuthDistinctRoots
 
+// maxRequestAuthEntries bounds the entries of one RequestAuthPartialSig packet. Derivation at the shared
+// constant.
+const maxRequestAuthEntries = gloas.MaxRequestAuthEntries
+
 const (
 	signatureSize    = 256
 	signatureOffset  = 0

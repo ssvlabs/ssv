@@ -132,6 +132,19 @@ func (mv *messageValidator) validatePartialSignatureMessageSemantics(
 		return ErrNoMessagesInPartialSigMessage
 	}
 
+	// Rule: a validator-role packet carries at most maxValidatorRoleSignatures entries (committee and
+	// contribution packets are bounded in validatePartialSigMessagesByDutyLogic, which knows the committee's
+	// size). Checked with the structural rules, so an over-long packet is rejected before a duty-logic budget
+	// could ignore it.
+	if !mv.committeeRole(role) && role != ssvtypes.RoleSyncCommitteeContribution {
+		if count, limit := len(partialSignatureMessages.Messages), mv.maxValidatorRoleSignatures(role, partialSignatureMessages.Type, slot); count > limit {
+			e := ErrTooManySignaturesInPartialSigMessage
+			e.got = count
+			e.want = limit
+			return e
+		}
+	}
+
 	firstValidatorIndex := partialSignatureMessages.Messages[0].ValidatorIndex
 	for _, message := range partialSignatureMessages.Messages {
 		// Rule: Partial signature must have expected length. Already enforced by ssz.
@@ -182,6 +195,14 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 	role := signedSSVMessage.SSVMessage.GetID().GetRoleType()
 	messageSlot := partialSignatureMessages.Slot
 	signer := signedSSVMessage.OperatorIDs[0]
+
+	// Rule: validator registrations end at the Gloas fork (SIP #94 §5). One with a Gloas slot is rejected by
+	// validRoleAtSlot; from the epoch after the fork, one with any slot can only be a replay, as registrations
+	// have no lateness limit. IGNORE, not REJECT: the condition comes from the local clock, not the message.
+	if role == spectypes.RoleValidatorRegistration && mv.registrationsRetired(receivedAt) {
+		return ErrValidatorRegistrationRetired
+	}
+
 	// The signature is verified after these checks, so read the operator's state without allocating it:
 	// updatePartialSignatureState allocates once the message is verified.
 	operatorState := state.peekOperatorState(committeeInfo.signerIndex(signer))
@@ -277,27 +298,33 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 			e.want = maxSignatures
 			return e
 		}
-	} else if limit := mv.maxValidatorRoleSignatures(role, partialSignatureMessages.Type, messageSlot); partialSignatureMessageCount > limit {
-		// Rule: The number of signatures must be 1 for the other types of duties, except the Gloas
-		// proposer's post-consensus packet, which carries up to 2 (see maxValidatorRoleSignatures).
-		e := ErrTooManySignaturesInPartialSigMessage
-		e.got = partialSignatureMessageCount
-		e.want = limit
-		return e
 	}
+	// Other validator roles' entry limit is checked in validatePartialSignatureMessageSemantics.
 
 	return nil
 }
 
+// registrationsRetired reports whether receivedAt is past the Gloas fork epoch, from which no validator
+// registration is accepted. The fork epoch itself still admits those in flight from the last pre-fork slots.
+func (mv *messageValidator) registrationsRetired(receivedAt time.Time) bool {
+	epoch := mv.netCfg.EstimatedEpochAtSlot(mv.netCfg.EstimatedSlotAtTime(receivedAt))
+	return epoch > 0 && mv.netCfg.IsGloas(epoch-1)
+}
+
 // maxValidatorRoleSignatures bounds the entries of a validator-role (non-committee, non-contribution)
-// partial-signature packet: one, except the proposer's post-consensus packet at a Gloas slot, which
-// carries the block root and — on the self-build path — the §6 blinded-envelope root, so up to two (SIP
-// #94 §7). The runner pins each entry to its expected root; validation only bounds the count.
+// partial-signature packet (SIP #94 §7): one, with two exceptions. The proposer's post-consensus packet at
+// a Gloas slot carries the block root and, on the self-build path, the §6 blinded-envelope root, so up to
+// two; a request-auth packet carries one entry per auth root, up to maxRequestAuthEntries. The runner
+// matches each entry to its expected roots; validation only bounds the count.
 func (mv *messageValidator) maxValidatorRoleSignatures(role spectypes.RunnerRole, msgType spectypes.PartialSigMsgType, slot phase0.Slot) int {
-	if role == spectypes.RoleProposer && msgType == spectypes.PostConsensusPartialSig && mv.netCfg.IsGloasAtSlot(slot) {
+	switch {
+	case role == spectypes.RoleProposer && msgType == spectypes.PostConsensusPartialSig && mv.netCfg.IsGloasAtSlot(slot):
 		return 2
+	case role == spectypes.RoleProposerPreferences && msgType == spectypes.RequestAuthPartialSig:
+		return maxRequestAuthEntries
+	default:
+		return 1
 	}
-	return 1
 }
 
 // validatePartialSignatureMessageLimit checks if the provided partial signature message exceeds the set limits.
@@ -354,27 +381,34 @@ func validatePartialSignatureMessageLimit(
 	return nil
 }
 
-// validateDistinctRootBudget applies the shared dedup for root-budgeted types (§5 preferences and
-// #2962 request auths). Both failures are IGNORE (SIP #94 §7): a repeat of a recorded root, whichever
-// peer relays it — an honest sender's retry or restart repeats its roots once the gossip duplicate
-// cache has expired, so repetition proves no peer fault (issue #3016) — and a distinct root beyond the
-// budget, which is rate-limiting, not a provable violation.
+// validateDistinctRootBudget applies the dedup for the root-budgeted types (§5 preferences and request
+// auths), per (slot, signer) and type (SIP #94 §7). A packet is IGNOREd when it adds no new root, whichever
+// peer relays it — an honest sender's retry or restart repeats its roots once the gossip duplicate cache has
+// expired, so a repeat proves no fault — or when its new roots would take the signer past the budget, which
+// is rate-limiting, not a provable violation. A packet mixing recorded and new roots within the budget
+// passes. A root repeated within the packet counts once here, though each entry counts toward the packet's
+// entry limit.
 func validateDistinctRootBudget(
 	m *spectypes.PartialSignatureMessages,
 	signerState *SignerStateForSlotRound,
 	label string,
 	budget int,
 ) error {
-	root := m.Messages[0].SigningRoot // exactly one message for these types (enforced by semantics + count rules)
 	seen := seenRootsFor(signerState, m.Type)
-	if seen.has(root) {
+	fresh := make(map[[32]byte]struct{}, len(m.Messages))
+	for _, msg := range m.Messages {
+		if !seen.has(msg.SigningRoot) {
+			fresh[msg.SigningRoot] = struct{}{}
+		}
+	}
+	if len(fresh) == 0 {
 		e := ErrTooManyPartialSigMessage
-		e.got = label + ", repeated signing root"
+		e.got = label + ", no new signing root"
 		return e
 	}
-	if len(*seen) >= budget {
+	if len(*seen)+len(fresh) > budget {
 		e := ErrTooManyPartialSigMessage
-		e.got = fmt.Sprintf("%s, %d distinct root(s) seen", label, len(*seen))
+		e.got = fmt.Sprintf("%s, %d distinct root(s) seen and %d new", label, len(*seen), len(fresh))
 		return e
 	}
 	return nil
@@ -407,14 +441,15 @@ func (mv *messageValidator) updatePartialSignatureState(
 		return err
 	}
 
-	// SIP #94 §5 (and its issue #2962 request-auth extension): record the distinct signing root so a
-	// legitimate re-emission — a dependent_root refresh for preferences, another configured builder
-	// for request auths — is admitted up to its bound (see validatePartialSignatureMessageLimit). Kept
-	// once per signer, not per peer: a repeat is IGNORE'd whichever peer relays it (§7). Exactly one
-	// signature for these types (validated earlier), so Messages[0] holds the root.
+	// Record the packet's signing roots per signer, not per peer, so a legitimate re-emission (a
+	// dependent_root refresh, a changed builder list) is admitted up to its budget and a repeat is IGNOREd
+	// whichever peer relays it (SIP #94 §5/§7, validateDistinctRootBudget).
 	switch t := partialSignatureMessages.Type; t {
 	case spectypes.ProposerPreferencesPartialSig, spectypes.RequestAuthPartialSig:
-		seenRootsFor(signerState, t).record(partialSignatureMessages.Messages[0].SigningRoot)
+		roots := seenRootsFor(signerState, t)
+		for _, msg := range partialSignatureMessages.Messages {
+			roots.record(msg.SigningRoot)
+		}
 	default:
 		// Every other type is capped by the SeenMsgTypes bits recorded above, not by root.
 	}

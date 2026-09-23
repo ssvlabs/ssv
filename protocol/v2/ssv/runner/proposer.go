@@ -70,24 +70,32 @@ type ProposerRunner struct {
 	// requestAuthCache holds the per-slot reconstructed builder auths this operator attaches to the
 	// produceBlockV4 POST. Shared with the §5 dispatcher that writes it; nil pre-Gloas / no overlay.
 	requestAuthCache *ssv.RequestAuthCache
-	// gloasProducedRoot / gloasBuilderURL / gloasProducedEnvelope record this operator's own §4 produce
-	// output for the slot: the produced block root, any winning builder URL, and a self-build's reveal data.
-	// At publish, Eth-Builder-Url is echoed only when the decided block matches gloasProducedRoot
-	// (owner-match — see decidedBuilderURL), and the reveal is published only when the produced envelope is
-	// the one the decided value commits to — this operator is then the builder operator (see publishEnvelope).
-	// The reveal data is the bulk of the duty's state (payload, blobs, proofs), so it is released as soon as
-	// this operator can no longer publish it (releaseProducedEnvelope); the markers stay until the next duty.
-	gloasProducedRoot     [32]byte
-	gloasBuilderURL       string
-	gloasProducedEnvelope *gloas.ProducedEnvelope
-	// gloasEnvelopeMatch caches matchProducedEnvelope's outcome for the duty: computed once the value is
-	// decided, read again at publish.
-	gloasEnvelopeMatch envelopeMatch
-	// gloasEnvelopeSigningRoot is the decided value's §6 envelope signing root, recorded at the duty's first
-	// post-consensus quorum at a Gloas slot and zero when no envelope root is expected (pre-Gloas, external
-	// bid). awaitingEnvelope reads it: it runs on the queue consumer's path, without a context for the beacon
-	// domain lookup that deriving the root from the decided value needs, and the root is fixed once decided.
-	gloasEnvelopeSigningRoot [32]byte
+	// gloasDuty is the running duty's Gloas state, reset as a whole when a duty starts.
+	gloasDuty gloasDutyState
+}
+
+// gloasDutyState is a proposer duty's Gloas (ePBS) state.
+type gloasDutyState struct {
+	// producedRoot, builderURL and producedEnvelope are this operator's own §4 produce output: the block
+	// root, the winning builder's URL, and a self-build's reveal data. Eth-Builder-Url is echoed only when
+	// the decided block is this operator's own (decidedBuilderURL), and only the operator whose envelope the
+	// decided value commits to publishes the reveal (publishEnvelope). The reveal data (payload, blobs,
+	// proofs) is released once it can no longer be published (releaseProducedEnvelope).
+	producedRoot     [32]byte
+	builderURL       string
+	producedEnvelope *gloas.ProducedEnvelope
+	// envelopeMatch caches matchProducedEnvelope's outcome, set once the value is decided.
+	envelopeMatch envelopeMatch
+	// envelopeSigningRoot is the decided value's §6 envelope signing root, zero when none is expected
+	// (external bid). It is recorded at the first post-consensus quorum because awaitingEnvelope, which reads
+	// it, has no context for the domain lookup that deriving it takes.
+	envelopeSigningRoot [32]byte
+	// blockSubmitAttempted is set once the block's signature reconstructs and the block is submitted,
+	// whatever the beacon nodes answer. The reveal waits for it, as a beacon node ignores an envelope whose
+	// block it hasn't seen (SIP #94 §6).
+	blockSubmitAttempted bool
+	// envelopeHandled is set once the envelope's signature reconstructs, so the reveal runs once.
+	envelopeHandled bool
 }
 
 var _ PostConsensusAwaiter = (*ProposerRunner)(nil)
@@ -315,7 +323,7 @@ func (r *ProposerRunner) gloasProposalInput(ctx context.Context, logger *zap.Log
 	if err != nil {
 		return nil, fmt.Errorf("hash tree root of produced gloas block: %w", err)
 	}
-	r.gloasProducedRoot, r.gloasBuilderURL, r.gloasProducedEnvelope = root, produced.BuilderURL, nil
+	r.gloasDuty.producedRoot, r.gloasDuty.builderURL, r.gloasDuty.producedEnvelope = root, produced.BuilderURL, nil
 
 	if proposalData.SelfBuild() {
 		if produced.Envelope == nil || produced.Envelope.Envelope == nil || produced.Envelope.Envelope.Payload == nil {
@@ -331,7 +339,7 @@ func (r *ProposerRunner) gloasProposalInput(ctx context.Context, logger *zap.Log
 		proposalData.PayloadRoot = payloadRoot
 		// The reveal data belongs to the builder operator alone: it is published only if this block is
 		// decided (see publishEnvelope).
-		r.gloasProducedEnvelope = produced.Envelope
+		r.gloasDuty.producedEnvelope = produced.Envelope
 	}
 
 	byts, err := proposalData.Encode()
@@ -401,6 +409,17 @@ func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logge
 		observability.ValidatorPublicKeyAttribute(cd.Duty.PubKey),
 	)
 
+	duty, err := r.currentValidatorDuty()
+	if err != nil {
+		return fmt.Errorf("current validator duty: %w", err)
+	}
+	// Backstop for the value check's running-slot check (SIP #94 §4): if a value for another slot is decided
+	// anyway (more than f Byzantine operators, or an injected decided message), don't sign a block for a duty
+	// this runner isn't running.
+	if cd.Duty.Slot != duty.Slot {
+		return spectypes.NewError(spectypes.ProposerDutySlotMismatchErrorCode, "decided value duty slot does not match running duty slot")
+	}
+
 	var (
 		blkRootToSign spectypes.HashRoot
 		// proposalData is the decided Gloas value; its self-build payload_root adds the §6 envelope entry.
@@ -432,10 +451,6 @@ func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logge
 		}
 	}
 
-	duty, err := r.currentValidatorDuty()
-	if err != nil {
-		return fmt.Errorf("current validator duty: %w", err)
-	}
 	if !r.doppelgangerHandler.CanSign(duty.ValidatorIndex) {
 		logger.Warn("Signing not permitted due to Doppelganger protection", fields.ValidatorIndex(duty.ValidatorIndex))
 		return nil
@@ -629,11 +644,11 @@ func (r *ProposerRunner) reconstructPostConsensusSig(root [32]byte) (phase0.BLSS
 }
 
 // processGloasPostConsensusQuorum handles the roots that just reached post-consensus quorum at a Gloas
-// slot. The packet carries the block root and, on the self-build path, the §6 blinded-envelope root; each
-// reconstructs independently, in the same packet or a later one (SIP #94 §4/§6). The block root's quorum
-// submits the block and finishes the duty; the envelope root's quorum publishes the reveal. The block goes
-// first when both arrive together — the beacon node needs it before it accepts its envelope — and an
-// envelope quorum is still acted on when the block submit failed: other operators submit the block too.
+// slot: the block root and, on the self-build path, the §6 blinded-envelope root, which reach quorum
+// independently (SIP #94 §4/§6). The block's quorum submits the block and finishes the duty. The reveal
+// follows once this operator has attempted the block, as a beacon node ignores an envelope whose block it
+// hasn't seen, and the envelope root has quorum, in either order. A failed block submit doesn't hold the
+// reveal back: other operators submit the block too.
 func (r *ProposerRunner) processGloasPostConsensusQuorum(ctx context.Context, logger *zap.Logger, span trace.Span, cd *spectypes.ProposerConsensusData, roots [][32]byte) error {
 	proposalData, err := gloas.DecodeGloasProposalData(cd.DataSSZ)
 	if err != nil {
@@ -644,16 +659,22 @@ func (r *ProposerRunner) processGloasPostConsensusQuorum(ctx context.Context, lo
 		return r.loseGloasQuorum(err)
 	}
 	// Recorded before the block's quorum can finish the duty, so awaitingEnvelope holds from then on.
-	r.gloasEnvelopeSigningRoot = envelopeSigningRoot
+	r.gloasDuty.envelopeSigningRoot = envelopeSigningRoot
 
 	var blockErr error
 	if slices.Contains(roots, blockSigningRoot) {
 		blockErr = r.submitGloasBlock(ctx, logger, span, cd, proposalData, blockSigningRoot)
 	}
-	if envelopeSigningRoot != [32]byte{} && slices.Contains(roots, envelopeSigningRoot) {
-		if err := r.publishEnvelope(ctx, logger, cd, proposalData, envelopeSigningRoot); err != nil {
-			return errors.Join(blockErr, err)
-		}
+	if envelopeSigningRoot == [32]byte{} || !r.gloasDuty.blockSubmitAttempted || r.gloasDuty.envelopeHandled {
+		return blockErr
+	}
+	// The envelope may have reached quorum in an earlier packet, before the block was submitted, so ask the
+	// container.
+	if hasQuorum, _ := r.State.PostConsensusContainer.HasQuorum(r.GetShare().ValidatorIndex, envelopeSigningRoot); !hasQuorum {
+		return blockErr
+	}
+	if err := r.publishEnvelope(ctx, logger, cd, proposalData, envelopeSigningRoot); err != nil {
+		return errors.Join(blockErr, err)
 	}
 	return blockErr
 }
@@ -714,6 +735,7 @@ func (r *ProposerRunner) submitGloasBlock(ctx context.Context, logger *zap.Logge
 		return err
 	}
 	r.doppelgangerHandler.ReportQuorum(r.GetShare().ValidatorIndex)
+	r.gloasDuty.blockSubmitAttempted = true
 
 	const submittingBlockProposalEvent = "submitting block proposal"
 	span.AddEvent(submittingBlockProposalEvent)
@@ -744,8 +766,9 @@ func (r *ProposerRunner) submitGloasBlock(ctx context.Context, logger *zap.Logge
 func (r *ProposerRunner) publishEnvelope(ctx context.Context, logger *zap.Logger, cd *spectypes.ProposerConsensusData, proposalData *gloas.GloasProposalData, signingRoot [32]byte) error {
 	sig, err := r.reconstructPostConsensusSig(signingRoot)
 	if err != nil {
-		return err
+		return err // the bad shares are dropped; an honest share can restore the quorum
 	}
+	r.gloasDuty.envelopeHandled = true
 
 	switch r.matchProducedEnvelope(logger, proposalData) {
 	case envelopeMatchBuilder:
@@ -759,7 +782,7 @@ func (r *ProposerRunner) publishEnvelope(ctx context.Context, logger *zap.Logger
 	}
 
 	// The quorum fires once, so this attempt is the reveal data's last use either way.
-	submitErr := r.GetBeaconNode().SubmitExecutionPayloadEnvelope(ctx, r.gloasProducedEnvelope.Signed(sig))
+	submitErr := r.GetBeaconNode().SubmitExecutionPayloadEnvelope(ctx, r.gloasDuty.producedEnvelope.Signed(sig))
 	r.releaseProducedEnvelope()
 	if submitErr != nil {
 		recordEnvelopePublish(ctx, false)
@@ -787,23 +810,23 @@ const (
 // and releases the reveal data when it is not, or cannot be shown to be. Evaluated when the value is
 // decided; publishEnvelope reads the cached outcome.
 func (r *ProposerRunner) matchProducedEnvelope(logger *zap.Logger, proposalData *gloas.GloasProposalData) envelopeMatch {
-	if r.gloasEnvelopeMatch != envelopeMatchPending {
-		return r.gloasEnvelopeMatch
+	if r.gloasDuty.envelopeMatch != envelopeMatchPending {
+		return r.gloasDuty.envelopeMatch
 	}
 	built, err := r.builtDecidedEnvelope(proposalData)
 	switch {
 	case err != nil:
 		logger.Warn("could not match the produced envelope to the decided value, not publishing it", zap.Error(err))
-		r.gloasEnvelopeMatch = envelopeMatchFailed
+		r.gloasDuty.envelopeMatch = envelopeMatchFailed
 	case built:
-		r.gloasEnvelopeMatch = envelopeMatchBuilder
+		r.gloasDuty.envelopeMatch = envelopeMatchBuilder
 	default:
-		r.gloasEnvelopeMatch = envelopeMatchOther
+		r.gloasDuty.envelopeMatch = envelopeMatchOther
 	}
-	if r.gloasEnvelopeMatch != envelopeMatchBuilder {
+	if r.gloasDuty.envelopeMatch != envelopeMatchBuilder {
 		r.releaseProducedEnvelope()
 	}
-	return r.gloasEnvelopeMatch
+	return r.gloasDuty.envelopeMatch
 }
 
 // releaseProducedEnvelope drops the reveal data — the payload, blobs and proofs behind a self-build
@@ -811,14 +834,14 @@ func (r *ProposerRunner) matchProducedEnvelope(logger *zap.Logger, proposalData 
 // been attempted, or the duty failed with no reveal to follow. A duty that never concludes keeps it until
 // the next proposal resets the runner (#3043 tracks a slot-end release for that case).
 func (r *ProposerRunner) releaseProducedEnvelope() {
-	r.gloasProducedEnvelope = nil
+	r.gloasDuty.producedEnvelope = nil
 }
 
 // builtDecidedEnvelope reports whether this operator's own produced envelope is the one the decided value
 // commits to — its blinded form hashes to the envelope derived from the decided value — which makes this
 // operator the builder operator, the only holder of the payload behind the reconstructed signature.
 func (r *ProposerRunner) builtDecidedEnvelope(proposalData *gloas.GloasProposalData) (bool, error) {
-	if r.gloasProducedEnvelope == nil {
+	if r.gloasDuty.producedEnvelope == nil {
 		return false, nil
 	}
 	derived, err := proposalData.DeriveBlindedEnvelope()
@@ -829,7 +852,7 @@ func (r *ProposerRunner) builtDecidedEnvelope(proposalData *gloas.GloasProposalD
 	if err != nil {
 		return false, fmt.Errorf("hash tree root of derived blinded envelope: %w", err)
 	}
-	produced, err := gloas.Blinded(r.gloasProducedEnvelope.Envelope)
+	produced, err := gloas.Blinded(r.gloasDuty.producedEnvelope.Envelope)
 	if err != nil {
 		return false, fmt.Errorf("blind produced execution payload envelope: %w", err)
 	}
@@ -846,15 +869,29 @@ func (r *ProposerRunner) builtDecidedEnvelope(proposalData *gloas.GloasProposalD
 // The window closes with the duty's slot, a reveal after it being useless. False pre-Gloas, on an external
 // bid (no envelope root), and once the envelope reconstructs.
 func (r *ProposerRunner) awaitingEnvelope() bool {
-	if !r.hasDutySucceeded() || r.gloasEnvelopeSigningRoot == [32]byte{} {
+	if !r.hasDutySucceeded() || r.gloasDuty.envelopeSigningRoot == [32]byte{} {
 		return false
 	}
 	slot, err := r.currentDutySlot()
 	if err != nil || r.NetworkConfig.EstimatedCurrentSlot() > slot {
 		return false
 	}
-	hasQuorum, _ := r.State.PostConsensusContainer.HasQuorum(r.GetShare().ValidatorIndex, r.gloasEnvelopeSigningRoot)
+	hasQuorum, _ := r.State.PostConsensusContainer.HasQuorum(r.GetShare().ValidatorIndex, r.gloasDuty.envelopeSigningRoot)
 	return !hasQuorum
+}
+
+// RunningDutySlot is the slot of the duty this runner last started, finished or not, or 0 before its first
+// duty (or on a nil runner). It feeds the value check's running-slot check, which skips on 0. A finished duty
+// keeps its slot: its instance still processes later-round proposals, which must still be checked.
+func (r *ProposerRunner) RunningDutySlot() phase0.Slot {
+	if r == nil || r.BaseRunner == nil {
+		return 0
+	}
+	slot, err := r.currentDutySlot()
+	if err != nil {
+		return 0
+	}
+	return slot
 }
 
 // AwaitingPostConsensus implements PostConsensusAwaiter: the finished duty's slot while awaitingEnvelope
@@ -872,14 +909,14 @@ func (r *ProposerRunner) AwaitingPostConsensus() (phase0.Slot, bool) {
 // follower publishing another operator's decided block echoes nothing — its beacon node did not solicit
 // that bid and holds no forwarding target for it.
 func (r *ProposerRunner) decidedBuilderURL(block *gloas.BeaconBlock) string {
-	if r.gloasBuilderURL == "" {
+	if r.gloasDuty.builderURL == "" {
 		return ""
 	}
 	root, err := block.HashTreeRoot()
-	if err != nil || root != r.gloasProducedRoot {
+	if err != nil || root != r.gloasDuty.producedRoot {
 		return ""
 	}
-	return r.gloasBuilderURL
+	return r.gloasDuty.builderURL
 }
 
 // gloasBuildSource classifies a decided Gloas value for the build-source telemetry (issue #2962 E1).
@@ -961,14 +998,11 @@ func (r *ProposerRunner) executeDuty(ctx context.Context, logger *zap.Logger, du
 		return nil
 	}
 
-	// reset the cached original block, and this operator's own Gloas produce markers, at the beginning of a
-	// new duty — a stale owner-match must not echo a previous slot's Eth-Builder-Url, and a stale envelope
-	// root must not hold the new duty open (awaitingEnvelope)
+	// Drop the previous duty's state: a stale owner-match must not echo an old Eth-Builder-Url, and a stale
+	// envelope root must not hold the new duty open (awaitingEnvelope).
 	r.cachedFullBlock = nil
 	r.cachedBlindedBlockSSZ = nil
-	r.gloasProducedRoot, r.gloasBuilderURL, r.gloasProducedEnvelope = [32]byte{}, "", nil
-	r.gloasEnvelopeMatch = envelopeMatchPending
-	r.gloasEnvelopeSigningRoot = [32]byte{}
+	r.gloasDuty = gloasDutyState{}
 
 	// sign partial randao
 	span.AddEvent("signing beacon object")

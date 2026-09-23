@@ -68,9 +68,8 @@ func (r *PTCAttesterRunner) StartNewDuty(ctx context.Context, logger *zap.Logger
 	if err != nil {
 		return err
 	}
-	// Clear any prior observation; executeDuty re-freezes it only if this operator attests, so an
-	// abstained or not-yet-executed duty stays nil.
-	r.payloadAttestationData = nil
+	// The prior observation is cleared in executeDuty, once this duty is accepted: clearing it here would let
+	// a rejected duplicate or past duty wipe the running duty's.
 	return r.baseStartNewNonBeaconDuty(ctx, logger, r, validatorDuty, quorum)
 }
 
@@ -151,6 +150,10 @@ func (r *PTCAttesterRunner) executeDuty(ctx context.Context, logger *zap.Logger,
 		return err
 	}
 	slot := validatorDuty.DutySlot()
+
+	// A new duty starts without an observation; it is frozen below only if this operator attests, so an
+	// abstained duty stays nil.
+	r.payloadAttestationData = nil
 
 	// Observe the slot's payload-attestation data from our own beacon node. Per SIP #94 §3, an
 	// operator that has seen no beacon block for the slot abstains (signs and submits nothing).

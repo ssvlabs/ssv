@@ -35,8 +35,13 @@ byte-identical `data`:
 - `AuthData` divergence on a builder entry splits the signing quorum and **silently disables that builder**
   for the affected proposal slots — proposals still succeed via gossiped bids or self-build, so watch the
   build-source metrics rather than proposal failures.
-- `AuthData` defaults to the UTF-8 bytes of `URL` exactly as configured — so even trailing-slash or case
-  differences between operators' `URL` values break the quorum unless an explicit shared `AuthData` is set.
+- `AuthData` defaults to the `URL`'s hostname — lowercased, with scheme, userinfo, port, path, query and
+  fragment dropped, and an IPv6 literal in compressed hex-only form inside brackets (builder-specs'
+  `get_default_auth_data`, the same rule other clients apply). So operators' `URL`s that differ only in a
+  trailing slash, letter case, port or path still sign the same default. An internationalized hostname must
+  be given in punycode, and a URL with an IPv6 zone needs an explicit `AuthData`. Entries whose URLs share a
+  hostname share the default, and so one signed auth; builders that need distinct identities on one host
+  agree an explicit `AuthData` instead.
 - The unsigned knobs (`MinBid`, `BuilderBoostFactor`, `MaxExecutionPayment`) don't affect signing, but
   divergence makes the cluster's effective bid policy depend on which operator leads the round — keep them
   identical too. They are sent on the `produceBlockV4` POST and honored by beacon nodes that implement it

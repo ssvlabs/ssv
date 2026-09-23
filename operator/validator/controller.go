@@ -1258,7 +1258,11 @@ func SetupRunners(
 	for _, role := range runnersType {
 		switch role {
 		case spectypes.RoleProposer:
-			proposedValueCheck := ssv.NewProposerChecker(options.Signer, options.NetworkConfig.Beacon, share.ValidatorPubKey, share.ValidatorIndex, phase0.BLSPubKey(share.SharePubKey))
+			// The value check reads the runner's running slot, but the runner is built from the check, so the
+			// closure resolves the runner once it exists.
+			var proposerRunner *runner.ProposerRunner
+			proposedValueCheck := ssv.NewProposerChecker(options.Signer, options.NetworkConfig.Beacon, share.ValidatorPubKey, share.ValidatorIndex, phase0.BLSPubKey(share.SharePubKey),
+				func() phase0.Slot { return proposerRunner.RunningDutySlot() })
 			runners[role], err = runner.NewProposerRunner(runner.ProposerRunnerOptions{
 				BaseRunnerOptions:   baseOpts,
 				QBFTController:      buildController(spectypes.RoleProposer),
@@ -1271,6 +1275,9 @@ func SetupRunners(
 				Builders:            options.Builders,
 				RequestAuthCache:    requestAuthCache,
 			})
+			if err == nil {
+				proposerRunner = runners[role].(*runner.ProposerRunner)
+			}
 		case ssvtypes.RoleAggregator:
 			// Post-Boole, aggregator duties route through the merged AggregatorCommitteeRunner
 			// (committee-scoped) instead of this legacy per-validator runner.

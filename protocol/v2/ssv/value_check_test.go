@@ -248,7 +248,7 @@ func encodeGloasProposal(t *testing.T, proposal *gloas.GloasProposalData) []byte
 
 func newGloasProposerChecker(signer ekm.BeaconSigner) ValueChecker {
 	cfg := networkconfig.TestNetworkWithGloas(0)
-	return NewProposerChecker(signer, cfg.Beacon, spectypes.ValidatorPK(gloasProposerPK), 7, phase0.BLSPubKey{})
+	return NewProposerChecker(signer, cfg.Beacon, spectypes.ValidatorPK(gloasProposerPK), 7, phase0.BLSPubKey{}, nil)
 }
 
 // A Gloas proposer value validates via the node-side decode of the §4 wrapper (there is no spectypes
@@ -261,6 +261,29 @@ func TestProposerChecker_GloasValid(t *testing.T) {
 func TestProposerChecker_GloasSlashable(t *testing.T) {
 	checker := newGloasProposerChecker(fakeSlashingSigner{slashable: fmt.Errorf("slashable")})
 	require.Error(t, checker.CheckValue(gloasProposerConsensusData(t, gloasProposalSSZ(t, gloasProposerSlot))))
+}
+
+// The value must be for the duty the runner is running (SIP #94 §4): another slot's value is rejected with
+// ProposerDutySlotMismatchErrorCode before anything else is checked, the running slot passes, and 0 (no duty
+// started yet) skips the check.
+func TestProposerChecker_RunningDutySlot(t *testing.T) {
+	cfg := networkconfig.TestNetworkWithGloas(0)
+	value := gloasProposerConsensusData(t, gloasProposalSSZ(t, gloasProposerSlot))
+	check := func(running phase0.Slot) error {
+		checker := NewProposerChecker(fakeSlashingSigner{}, cfg.Beacon, spectypes.ValidatorPK(gloasProposerPK), 7,
+			phase0.BLSPubKey{}, func() phase0.Slot { return running })
+		return checker.CheckValue(value)
+	}
+
+	require.NoError(t, check(gloasProposerSlot))
+	require.NoError(t, check(0))
+
+	for _, running := range []phase0.Slot{gloasProposerSlot - 1, gloasProposerSlot + 1} {
+		err := check(running)
+		var specErr *spectypes.Error
+		require.ErrorAs(t, err, &specErr, "running slot %d", running)
+		require.Equal(t, spectypes.ProposerDutySlotMismatchErrorCode, specErr.Code, "running slot %d", running)
+	}
 }
 
 // DataSSZ that is not a valid Gloas proposal value fails the node-side validity check.

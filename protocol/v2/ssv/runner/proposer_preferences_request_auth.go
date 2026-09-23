@@ -36,9 +36,9 @@ type frozenBuilderRef struct {
 
 // runRequestAuthRound freezes one BuilderRequestAuth{data, proposal_slot} per configured builder,
 // records its signing root so incoming partials can be admitted, and broadcasts this operator's
-// partial — once per root, across re-emissions. Per-builder failures are logged and skipped, never
-// failing the §5 duty: a builder whose auth misses quorum is simply not contactable for the slot,
-// and the enshrined flow (gossip bids, self-build) stays available.
+// partials in one packet — each root once, across re-emissions. Per-builder failures are logged and
+// skipped, never failing the §5 duty: a builder whose auth misses quorum is simply not contactable for
+// the slot, and the enshrined flow (gossip bids, self-build) stays available.
 func (r *proposerPreferencesSlotRunner) runRequestAuthRound(ctx context.Context, logger *zap.Logger, validatorDuty *spectypes.ValidatorDuty, proposalSlot phase0.Slot) {
 	if len(r.builders) == 0 {
 		return
@@ -55,6 +55,10 @@ func (r *proposerPreferencesSlotRunner) runRequestAuthRound(ctx context.Context,
 	}
 
 	r.requestAuths = make(map[[32]byte]*frozenRequestAuth, len(r.builders))
+	var (
+		batch      []*spectypes.PartialSignatureMessage
+		batchRoots [][32]byte
+	)
 	for i := range r.builders {
 		entry := &r.builders[i]
 		auth := &gloas.BuilderRequestAuth{Data: entry.AuthData, Slot: proposalSlot}
@@ -81,24 +85,37 @@ func (r *proposerPreferencesSlotRunner) runRequestAuthRound(ctx context.Context,
 				fields.Slot(proposalSlot), zap.String("builder_url", entry.URL), zap.Error(err))
 			continue
 		}
-		msgs := &spectypes.PartialSignatureMessages{
-			Type:     spectypes.RequestAuthPartialSig,
-			Slot:     proposalSlot,
-			Messages: []*spectypes.PartialSignatureMessage{msg},
-		}
-		if err := r.signAndBroadcastPartialSigMsgs(ctx, r.network, r.operatorSigner, r.GetShare().ValidatorPubKey, msgs); err != nil {
-			logger.Warn("request auth skipped: could not broadcast partial",
-				fields.Slot(proposalSlot), zap.String("builder_url", entry.URL), zap.Error(err))
-			continue
-		}
+		batch = append(batch, msg)
+		batchRoots = append(batchRoots, root)
+	}
+	if len(batch) == 0 {
+		return
+	}
+
+	// One packet for every root not broadcast yet; the configured-entry cap keeps it within
+	// MaxRequestAuthEntries (SIP #94 §5).
+	msgs := &spectypes.PartialSignatureMessages{
+		Type:     spectypes.RequestAuthPartialSig,
+		Slot:     proposalSlot,
+		Messages: batch,
+	}
+	if err := r.signAndBroadcastPartialSigMsgs(ctx, r.network, r.operatorSigner, r.GetShare().ValidatorPubKey, msgs); err != nil {
+		// Nothing is marked broadcast, so a re-emission of this slot retries every root.
+		logger.Warn("request auth skipped: could not broadcast partials",
+			fields.Slot(proposalSlot), zap.Int("roots", len(batch)), zap.Error(err))
+		return
+	}
+	for _, root := range batchRoots {
 		r.broadcastAuthRoots[root] = struct{}{}
 	}
 }
 
-// processRequestAuthPartial collects request-auth partials into their own container and, on the
-// first quorum for a root, reconstructs the builder-facing SignedBuilderRequestAuth into the shared
-// cache. No succeeded-gate: the preference submission concluding the duty must not stop auth
-// collection, which legitimately runs until the sub-runner is evicted.
+// processRequestAuthPartial collects a request-auth packet's partials, up to MaxRequestAuthEntries roots,
+// into their own container and reconstructs the builder-facing SignedBuilderRequestAuth into the shared cache
+// for every root that reaches quorum. Entries for roots this operator didn't freeze (the sender's builder list
+// or auth data differs) are skipped without costing the ones that match (SIP #94 §5). No succeeded-gate: auth
+// collection continues past the preference submission that concludes the duty, until the sub-runner is
+// evicted.
 func (r *proposerPreferencesSlotRunner) processRequestAuthPartial(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
 	if !r.hasDutyAssigned() {
 		return NewRetryableError(withCode(spectypes.NoRunningDutyErrorCode, ErrNoDutyAssigned))
@@ -111,10 +128,9 @@ func (r *proposerPreferencesSlotRunner) processRequestAuthPartial(ctx context.Co
 	if err := r.validateValidatorIndexInPartialSigMsg(signedMsg); err != nil {
 		return err
 	}
-	if len(signedMsg.Messages) != 1 {
-		return errors.New("request-auth partial must carry exactly one message")
+	if n := len(signedMsg.Messages); n > gloas.MaxRequestAuthEntries {
+		return fmt.Errorf("request-auth packet carries %d entries, more than %d", n, gloas.MaxRequestAuthEntries)
 	}
-	msg := signedMsg.Messages[0]
 
 	if r.requestAuths == nil {
 		if len(r.builders) == 0 {
@@ -126,32 +142,57 @@ func (r *proposerPreferencesSlotRunner) processRequestAuthPartial(ctx context.Co
 		// also lands via the queue replay and the dispatcher stash.
 		return NewRetryableError(withCode(spectypes.NoRunningDutyErrorCode, errors.New("no frozen request auths")))
 	}
-	frozen, ok := r.requestAuths[msg.SigningRoot]
-	if !ok {
-		// The sender's builder list or auth-data bytes diverge from ours; whatever quorum this root
-		// can reach forms on the operators that share its config.
-		return fmt.Errorf("unknown request-auth signing root %x", msg.SigningRoot)
-	}
-	if _, done := r.reconstructedAuthRoots[msg.SigningRoot]; done {
-		return nil // reconstructed and cached, possibly by a prior incarnation; late partials add nothing
-	}
 
-	// quorum returns true only once per root (the first time it is reached).
-	hasQuorum, _ := r.basePartialSigMsgProcessing(signedMsg, r.requestAuthContainer)
-	if !hasQuorum {
+	// Keep the entries for roots frozen here and not reconstructed yet.
+	matched := &spectypes.PartialSignatureMessages{Type: signedMsg.Type, Slot: signedMsg.Slot}
+	unknown := 0
+	for _, msg := range signedMsg.Messages {
+		if _, ok := r.requestAuths[msg.SigningRoot]; !ok {
+			unknown++
+			continue
+		}
+		if _, done := r.reconstructedAuthRoots[msg.SigningRoot]; done {
+			continue // reconstructed and cached, possibly by a prior incarnation; late partials add nothing
+		}
+		matched.Messages = append(matched.Messages, msg)
+	}
+	if unknown > 0 {
+		// The sender's builder list or auth-data bytes diverge from ours; whatever quorum those roots can
+		// reach forms on the operators that share their config.
+		if len(matched.Messages) == 0 {
+			return fmt.Errorf("unknown request-auth signing root: %d of the packet's %d entries match no root frozen here", unknown, len(signedMsg.Messages))
+		}
+		logger.Debug("skipping request-auth partials for roots not frozen here",
+			fields.Slot(signedMsg.Slot), fields.OperatorID(signedMsg.Messages[0].Signer), zap.Int("unknown_roots", unknown))
+	}
+	if len(matched.Messages) == 0 {
 		return nil
 	}
 
-	fullSig, err := r.State.ReconstructBeaconSig(r.requestAuthContainer, msg.SigningRoot, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
+	// Quorum is reported once per root, the first time that root reaches it.
+	_, quorumRoots := r.basePartialSigMsgProcessing(matched, r.requestAuthContainer)
+	var errs error
+	for root := range quorumRoots {
+		errs = errors.Join(errs, r.reconstructRequestAuth(ctx, logger, root))
+	}
+	return errs
+}
+
+// reconstructRequestAuth reconstructs the SignedBuilderRequestAuth for a root that has just reached quorum,
+// stores it in the shared cache for every builder the root serves, and forwards it as their ahead-of-time
+// builder preferences.
+func (r *proposerPreferencesSlotRunner) reconstructRequestAuth(ctx context.Context, logger *zap.Logger, root [32]byte) error {
+	frozen := r.requestAuths[root]
+	fullSig, err := r.State.ReconstructBeaconSig(r.requestAuthContainer, root, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
 	if err != nil {
 		// If the reconstructed signature is invalid, surface which partial signatures were at fault.
-		r.FallBackAndVerifyEachSignature(r.requestAuthContainer, msg.SigningRoot, r.GetShare().Committee, r.GetShare().ValidatorIndex)
+		r.FallBackAndVerifyEachSignature(r.requestAuthContainer, root, r.GetShare().Committee, r.GetShare().ValidatorIndex)
 		return fmt.Errorf("got request-auth quorum but it has invalid signatures: %w", err)
 	}
 	var signature phase0.BLSSignature
 	copy(signature[:], fullSig)
 
-	r.reconstructedAuthRoots[msg.SigningRoot] = struct{}{}
+	r.reconstructedAuthRoots[root] = struct{}{}
 	signed := &gloas.SignedBuilderRequestAuth{Message: frozen.auth, Signature: signature}
 	urls := make([]string, 0, len(frozen.builders))
 	for _, ref := range frozen.builders {

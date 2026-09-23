@@ -51,6 +51,46 @@ func TestStoredSlotCount_ProposerPreferences(t *testing.T) {
 		mv.storedSlotCount(spectypes.RoleProposerPreferences))
 }
 
+// Proposer-preferences validation state is kept for the role's whole acceptance window (SIP #94 §7). A
+// preference emitted early in an epoch for a slot late in the next stays acceptable for about two epochs,
+// longer than the cache's default TTL, and dropping its state earlier would reopen its dedup and duty budgets.
+func TestValidatorState_ProposerPreferencesOutlivesDefaultTTL(t *testing.T) {
+	base := networkconfig.TestNetwork
+	beacon := *base.Beacon
+	beacon.SlotDuration = 10 * time.Millisecond // shrink time; the ratio is what matters
+	netCfg := &networkconfig.Network{Beacon: &beacon, SSV: base.SSV}
+	mv := New(netCfg, nil, nil, nil, nil).(*messageValidator)
+	ci := CommitteeInfo{committee: []spectypes.OperatorID{1, 2, 3, 4}}
+
+	const slot = phase0.Slot(100)
+	root := [32]byte{1}
+	recorded := newSignerState(slot, specqbft.FirstRound)
+	recorded.SeenProposerPreferencesRoots.record(root)
+
+	prefsKey := ssvtestingutils.NewMsgID(spectypes.DomainType{}, make([]byte, 48), spectypes.RoleProposerPreferences)
+	proposerKey := ssvtestingutils.NewMsgID(spectypes.DomainType{}, make([]byte, 48), spectypes.RoleProposer)
+	mv.validatorState(prefsKey, ci).OperatorState(0).SetSignerStateForSlot(slot, netCfg.EstimatedEpochAtSlot(slot), recorded)
+	mv.validatorState(proposerKey, ci)
+
+	// Idle past the default TTL (maxStoredSlots, 34 slots) but well inside the preferences window (66 slots).
+	time.Sleep(45 * beacon.SlotDuration)
+	prefs := mv.states.Get(prefsKey)
+	require.NotNil(t, prefs, "preferences state outlives the default TTL")
+	require.Nil(t, mv.states.Get(proposerKey), "other roles keep the default TTL")
+
+	// The retained state still IGNOREs a repeat of the recorded root.
+	repeat := &spectypes.PartialSignatureMessages{
+		Type:     spectypes.ProposerPreferencesPartialSig,
+		Slot:     slot,
+		Messages: []*spectypes.PartialSignatureMessage{{SigningRoot: root}},
+	}
+	err := validatePartialSignatureMessageLimit(repeat, "", prefs.Value().OperatorState(0).GetSignerStateForSlot(slot))
+	require.ErrorIs(t, err, ErrTooManyPartialSigMessage)
+	var valErr Error
+	require.ErrorAs(t, err, &valErr)
+	require.False(t, valErr.Reject())
+}
+
 // The duty-count ring spans every epoch a role's lateness window can still accept (SIP #94 §7): the
 // proposer lookahead for preferences, three epochs for the roles with the epoch-long TTL, two for the rest.
 func TestStoredEpochCount(t *testing.T) {
@@ -148,6 +188,50 @@ func TestValidRoleAtSlot_ValidatorRegistrationDeprecatedAtGloas(t *testing.T) {
 
 	require.True(t, mv.validRoleAtSlot(spectypes.RoleValidatorRegistration, preGloasSlot))
 	require.False(t, mv.validRoleAtSlot(spectypes.RoleValidatorRegistration, gloasSlot))
+}
+
+// Registrations end at the Gloas fork (SIP #94 §5): from the epoch after it every registration message is
+// ignored, whatever its slot, since no honest node sends one any more and registrations have no lateness
+// limit. The fork epoch itself still admits pre-fork registrations in flight, and a network without a
+// scheduled fork is unaffected.
+func TestRegistrationsRetiredAfterGloas(t *testing.T) {
+	const gloasEpoch = 100
+	netCfg := networkconfig.TestNetworkWithGloas(gloasEpoch)
+	mv := &messageValidator{netCfg: netCfg}
+	at := func(epoch phase0.Epoch) time.Time { return netCfg.SlotStartTime(netCfg.FirstSlotAtEpoch(epoch)) }
+
+	require.False(t, mv.registrationsRetired(at(gloasEpoch-1)))
+	require.False(t, mv.registrationsRetired(at(gloasEpoch)))
+	require.True(t, mv.registrationsRetired(at(gloasEpoch+1)))
+	require.True(t, mv.registrationsRetired(at(gloasEpoch+1000)))
+	require.False(t, (&messageValidator{netCfg: networkconfig.TestNetwork}).registrationsRetired(at(gloasEpoch+1)))
+
+	// Through the duty-logic checks: a registration stamped with a pre-fork slot passes during the fork epoch
+	// and is ignored (not rejected: the condition comes from the local clock) from the epoch after.
+	msgs := &spectypes.PartialSignatureMessages{
+		Type:     spectypes.ValidatorRegistrationPartialSig,
+		Slot:     netCfg.FirstSlotAtEpoch(gloasEpoch - 1),
+		Messages: []*spectypes.PartialSignatureMessage{{Signer: 1, ValidatorIndex: 1}},
+	}
+	signed := &spectypes.SignedSSVMessage{
+		OperatorIDs: []spectypes.OperatorID{1},
+		SSVMessage: &spectypes.SSVMessage{
+			MsgType: spectypes.SSVPartialSignatureMsgType,
+			MsgID:   ssvtestingutils.NewMsgID(netCfg.DomainType, make([]byte, 48), spectypes.RoleValidatorRegistration),
+		},
+	}
+	ci := newCommitteeInfo(spectypes.CommitteeID{}, []spectypes.OperatorID{1, 2, 3, 4}, []phase0.ValidatorIndex{1}, 0, 0)
+	newState := func() *ValidatorState {
+		return &ValidatorState{operators: make([]*OperatorState, 4), storedSlotCount: mv.maxStoredSlots(), storedEpochCount: 2}
+	}
+
+	require.NoError(t, mv.validatePartialSigMessagesByDutyLogic(signed, msgs, ci, "", at(gloasEpoch), newState()))
+
+	err := mv.validatePartialSigMessagesByDutyLogic(signed, msgs, ci, "", at(gloasEpoch+1), newState())
+	require.ErrorIs(t, err, ErrValidatorRegistrationRetired)
+	var valErr Error
+	require.ErrorAs(t, err, &valErr)
+	require.False(t, valErr.Reject(), "IGNORE, not REJECT")
 }
 
 func TestDutyLimit_ProposerPreferences(t *testing.T) {

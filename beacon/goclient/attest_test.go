@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -935,6 +936,91 @@ func TestVerifyAndRefetchIfStale_ContextCancelledDuringDelay(t *testing.T) {
 	require.Equal(t, staleData, result, "should return original data when canceled during delay")
 	require.True(t, stale, "data is stale when context canceled")
 	require.False(t, fetchCalled, "should not have called fetch when canceled during delay")
+}
+
+// newStaleAttestationDataClient is a client whose head-event cache names one root for the slot while its beacon
+// node keeps answering with another, so every GetAttestationData call takes the stale-data refetch path. onFetch,
+// if set, runs inside each fetch and its error fails it.
+func newStaleAttestationDataClient(slot phase0.Slot, onFetch func(ctx context.Context) error) (*GoClient, *atomic.Int32) {
+	gc := &GoClient{
+		headCache:            ttlcache.New[phase0.Slot, phase0.Root](),
+		attestationDataCache: ttlcache.New[phase0.Slot, *phase0.AttestationData](),
+		log:                  zap.NewNop(),
+	}
+	gc.headCache.Set(slot, phase0.Root{0x01}, ttlcache.DefaultTTL)
+
+	var fetches atomic.Int32
+	gc.fetchAttestationDataFunc = func(ctx context.Context, s phase0.Slot) (*phase0.AttestationData, error) {
+		fetches.Add(1)
+		if onFetch != nil {
+			if err := onFetch(ctx); err != nil {
+				return nil, err
+			}
+		}
+		return &phase0.AttestationData{Slot: s, BeaconBlockRoot: phase0.Root{0xAA}}, nil
+	}
+	return gc, &fetches
+}
+
+// Through GetAttestationData the caller's deadline reaches the refetch guard: with too little time left the
+// refetch is skipped rather than waited out.
+func TestGetAttestationData_DeadlineReachesRefetchGuard(t *testing.T) {
+	gc, fetches := newStaleAttestationDataClient(100, nil)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+	_, _, err := gc.GetAttestationData(ctx, 100)
+	require.NoError(t, err)
+	require.Less(t, time.Since(start), refetchDelay, "the refetch delay is not waited out")
+	require.EqualValues(t, 1, fetches.Load(), "no refetch without time for it")
+}
+
+// A caller that is already done starts no fetch.
+func TestGetAttestationData_DoneCallerStartsNoFetch(t *testing.T) {
+	gc, fetches := newStaleAttestationDataClient(100, nil)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, _, err := gc.GetAttestationData(ctx, 100)
+	require.ErrorIs(t, err, context.Canceled)
+	require.Zero(t, fetches.Load())
+}
+
+// The leader's cancellation doesn't fail the callers joined into its request, which is what the fetch runs
+// detached from.
+func TestGetAttestationData_LeaderCancellationDoesNotFailJoinedCaller(t *testing.T) {
+	started, release := make(chan struct{}, 1), make(chan struct{})
+	gc, _ := newStaleAttestationDataClient(100, func(ctx context.Context) error {
+		select {
+		case started <- struct{}{}:
+		default:
+		}
+		<-release
+		return ctx.Err()
+	})
+
+	leaderCtx, cancelLeader := context.WithCancel(context.Background())
+	leaderDone := make(chan error, 1)
+	go func() {
+		_, _, err := gc.GetAttestationData(leaderCtx, 100)
+		leaderDone <- err
+	}()
+	<-started // the leader's fetch is in flight
+
+	joinedDone := make(chan error, 1)
+	go func() {
+		_, _, err := gc.GetAttestationData(context.Background(), 100)
+		joinedDone <- err
+	}()
+	time.Sleep(50 * time.Millisecond) // let the second caller join the in-flight request
+
+	cancelLeader()
+	close(release)
+	require.NoError(t, <-joinedDone)
+	require.NoError(t, <-leaderDone)
 }
 
 // scaleToAttestationWindow keeps fetch budgets proportional to the attestation window: unchanged

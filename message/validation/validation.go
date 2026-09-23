@@ -404,8 +404,20 @@ func (mv *messageValidator) validatorState(key spectypes.MessageID, committeeInf
 		storedSlotCount:  mv.storedSlotCount(key.GetRoleType()),
 		storedEpochCount: mv.storedEpochCount(key.GetRoleType()),
 	}
-	mv.states.Set(key, cs, ttlcache.DefaultTTL)
+	mv.states.Set(key, cs, mv.stateTTL(key.GetRoleType()))
 	return cs
+}
+
+// stateTTL is how long a role's validation state outlives the last message that touched it. It must cover
+// every message the state still gates, or the role's dedup and duty-count budgets reopen (SIP #94 §7).
+// Proposer preferences arrive in sparse bursts yet stay acceptable from the epoch before their proposal slot
+// until 2 slots after it, past the cache's default TTL, so their state lives for their slot ring's span plus
+// a slot of margin. Every other role fits the default.
+func (mv *messageValidator) stateTTL(role spectypes.RunnerRole) time.Duration {
+	if role == spectypes.RoleProposerPreferences {
+		return time.Duration(mv.storedSlotCount(role)+1) * mv.netCfg.SlotDuration // #nosec G115 -- slot counts are small
+	}
+	return ttlcache.DefaultTTL
 }
 
 // maxStoredSlots stores max amount of slots message validation stores.

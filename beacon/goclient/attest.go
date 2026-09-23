@@ -66,15 +66,25 @@ func (gc *GoClient) AttesterDuties(ctx context.Context, epoch phase0.Epoch, vali
 // the result is cached for a short duration and shared with later callers.
 // It also verifies the returned head against cached HeadEvent root and re-fetches if stale.
 func (gc *GoClient) GetAttestationData(ctx context.Context, slot phase0.Slot) (*phase0.AttestationData, spec.DataVersion, error) {
+	// A caller that is already done would only start or join a fetch nobody waits for.
+	if err := ctx.Err(); err != nil {
+		return nil, DataVersionNil, err
+	}
+
 	result, err, _ := gc.attestationReqInflight.Do(slot, func() (*phase0.AttestationData, error) {
 		if cachedResult := gc.attestationDataCache.Get(slot); cachedResult != nil {
 			return cachedResult.Value(), nil
 		}
 
-		// Detach from the leader caller's ctx so its cancellation doesn't fail the other callers
-		// whose requests were collapsed into this one (mirrors domainDataReqInflight); the
-		// underlying multi-client fetch carries its own timeout.
+		// Detach from the leader's cancellation so it doesn't fail the callers joined into this request (as
+		// with domainDataReqInflight), but keep its deadline: it bounds the fetch, and verifyAndRefetchIfStale
+		// skips the stale-data refetch when too little time is left. Joined callers share that deadline.
 		fetchCtx := context.WithoutCancel(ctx)
+		if deadline, ok := ctx.Deadline(); ok {
+			var cancel context.CancelFunc
+			fetchCtx, cancel = context.WithDeadline(fetchCtx, deadline)
+			defer cancel()
+		}
 
 		// Via the hook (defaults to fetchAttestationData) so it matches the stale-refetch call below and
 		// stays overridable in tests — needed now that Gloas routes to a hand-rolled fetch, not go-eth2-client.

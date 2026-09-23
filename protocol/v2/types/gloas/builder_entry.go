@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+
+	specssv "github.com/ssvlabs/ssv-spec/ssv"
 )
 
 // MaxBuilderEntries caps the configured direct-builder list (issue #2962 D2). It is SSV's own
@@ -23,6 +25,14 @@ const MaxBuilderEntries = 8
 // slot passes (self-healing as the lookahead rolls). Message validation enforces the bound per
 // (slot, signer); the §5 dispatcher sizes its pending stash from it.
 const MaxRequestAuthDistinctRoots = MaxBuilderEntries
+
+// MaxRequestAuthEntries bounds the entries of one RequestAuthPartialSig packet (SIP #94 §5/§7: 1 to 8): an
+// operator batches a slot's auth partials, at most one per configured entry, into one packet.
+const MaxRequestAuthEntries = MaxBuilderEntries
+
+// MaxBuilderURLSize is the beacon-API's MAX_BUILDER_URL_SIZE: the longest builder URL a produceBlockV4
+// BuilderEntry may carry.
+const MaxBuilderURLSize = 2048
 
 // defaultBuilderBoostFactor is the neutral bid multiplier (keymanager-APIs#88 / beacon-APIs#630).
 const defaultBuilderBoostFactor = 100
@@ -68,8 +78,8 @@ type BuilderEntry struct {
 	// Required and non-empty.
 	URL string `yaml:"URL"`
 	// AuthData is the 0x-hex form of the exact bytes signed into BuilderRequestAuth.Data — the token
-	// agreed with the builder out of band. When omitted it defaults to the UTF-8 bytes of URL,
-	// exactly as configured (the builder-specs default; no canonicalization anywhere).
+	// agreed with the builder out of band. When omitted it defaults to the URL's hostname (see
+	// DefaultAuthData).
 	AuthData string `yaml:"AuthData"`
 	// BuilderPubKeys optionally pins the BLS public keys (0x-hex) that bids from this builder must be
 	// signed with (keymanager-APIs#88). Empty accepts a bid from any builder.
@@ -103,10 +113,10 @@ func (c *BuilderConfig) Configured() bool {
 }
 
 // AuthDataBytes returns the exact bytes signed into BuilderRequestAuth.Data for this builder: the
-// decoded AuthData, or the UTF-8 bytes of URL when AuthData is omitted.
+// decoded AuthData, or the URL's default auth data when AuthData is omitted.
 func (e *BuilderEntry) AuthDataBytes() ([]byte, error) {
 	if e.AuthData == "" {
-		return []byte(e.URL), nil
+		return DefaultAuthData(e.URL)
 	}
 	b, err := hex.DecodeString(strings.TrimPrefix(e.AuthData, "0x"))
 	if err != nil {
@@ -116,6 +126,19 @@ func (e *BuilderEntry) AuthDataBytes() ([]byte, error) {
 		return nil, fmt.Errorf("AuthData is %d bytes, exceeding the %d limit", len(b), MaxBuilderAuthDataSize)
 	}
 	return b, nil
+}
+
+// DefaultAuthData derives a builder URL's default BuilderRequestAuth.Data, builder-specs'
+// get_default_auth_data (SIP #94 §5): the URL's hostname, lowercased ASCII, with an IPv6 literal in
+// compressed hex-only form inside brackets; scheme, userinfo, port, path, query and fragment are dropped. It
+// delegates to ssv-spec's BuilderEntry.AuthData, so the node and the reference derive identical bytes, and
+// fails where that derives none: an unparsable URL, a non-ASCII hostname or a zoned IPv6 literal.
+func DefaultAuthData(rawURL string) ([]byte, error) {
+	data := specssv.BuilderEntry{URL: rawURL}.AuthData()
+	if len(data) == 0 {
+		return nil, fmt.Errorf("no default auth data for URL %q: use an ASCII hostname (punycode for an internationalized one) without an IPv6 zone, or set AuthData", rawURL)
+	}
+	return data, nil
 }
 
 // EffectiveMinBid resolves this entry's MinBid, inheriting the config default (keymanager-APIs#88)
@@ -187,16 +210,15 @@ func ResolveBuilderConfig(cfg BuilderConfig) (ResolvedBuilderConfig, error) {
 		if (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
 			return ResolvedBuilderConfig{}, fmt.Errorf("builder entry %d: URL must be http(s) with a host, got %q", i, e.URL)
 		}
-		// The URL's bytes are signed when they serve as the default auth data.
-		if e.AuthData == "" && len(e.URL) > MaxBuilderAuthDataSize {
-			return ResolvedBuilderConfig{}, fmt.Errorf("builder entry %d: URL is %d bytes, exceeding the %d auth-data limit its bytes default to", i, len(e.URL), MaxBuilderAuthDataSize)
+		if len(e.URL) > MaxBuilderURLSize {
+			return ResolvedBuilderConfig{}, fmt.Errorf("builder entry %d: URL is %d bytes, exceeding the %d limit", i, len(e.URL), MaxBuilderURLSize)
 		}
 		data, err := e.AuthDataBytes()
 		if err != nil {
 			return ResolvedBuilderConfig{}, fmt.Errorf("builder entry %d: %w", i, err)
 		}
 		if len(data) == 0 {
-			return ResolvedBuilderConfig{}, fmt.Errorf("builder entry %d: AuthData decodes to zero bytes — omit it to default to the URL bytes", i)
+			return ResolvedBuilderConfig{}, fmt.Errorf("builder entry %d: AuthData decodes to zero bytes — omit it to default to the URL's hostname", i)
 		}
 		identity := BuilderIdentity(e.URL, data)
 		if _, dup := seen[identity]; dup {

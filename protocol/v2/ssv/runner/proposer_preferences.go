@@ -176,17 +176,23 @@ func (r *ProposerPreferencesRunner) ProcessPreConsensus(ctx context.Context, log
 	return sub.ProcessPreConsensus(ctx, logger, signedMsg)
 }
 
-// stashPending records a §5-role partial for its proposal slot so StartNewDuty can replay it.
-// Duplicates by (signer, signing root) are skipped — roots are globally distinct across the two
-// message types (different signing domains), so one keyspace serves both; a slot's stash is capped
-// at the committee size times the wire's combined per-signer distinct-root budget, so a full stash
-// can only mean noise.
+// stashPending records a §5-role packet's partials for its proposal slot so StartNewDuty can replay them.
+// Each entry is stashed as its own single-entry packet, skipping (signer, signing root) duplicates: the two
+// message types sign under different domains, so one keyspace serves both. A slot's stash is capped at the
+// committee size times the wire's combined per-signer distinct-root budget, so a full stash can only mean
+// noise.
 func (r *ProposerPreferencesRunner) stashPending(signedMsg *spectypes.PartialSignatureMessages) {
-	if signedMsg == nil || len(signedMsg.Messages) != 1 {
-		return // §5-role partials (preference and request-auth alike) carry exactly one message
+	if signedMsg == nil {
+		return
 	}
-	msg := signedMsg.Messages[0]
-	stash := r.pending[signedMsg.Slot]
+	for _, msg := range signedMsg.Messages {
+		r.stashEntry(signedMsg, msg)
+	}
+}
+
+// stashEntry records one partial of a §5-role packet as a single-entry packet (see stashPending).
+func (r *ProposerPreferencesRunner) stashEntry(packet *spectypes.PartialSignatureMessages, msg *spectypes.PartialSignatureMessage) {
+	stash := r.pending[packet.Slot]
 	for _, existing := range stash {
 		e := existing.Messages[0]
 		if e.Signer == msg.Signer && e.SigningRoot == msg.SigningRoot {
@@ -196,7 +202,11 @@ func (r *ProposerPreferencesRunner) stashPending(signedMsg *spectypes.PartialSig
 	if len(stash) >= len(r.GetShare().Committee)*maxPendingRootsPerSigner {
 		return
 	}
-	r.pending[signedMsg.Slot] = append(stash, signedMsg)
+	r.pending[packet.Slot] = append(stash, &spectypes.PartialSignatureMessages{
+		Type:     packet.Type,
+		Slot:     packet.Slot,
+		Messages: []*spectypes.PartialSignatureMessage{msg},
+	})
 }
 
 func (r *ProposerPreferencesRunner) ProcessConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.SignedSSVMessage) error {

@@ -81,3 +81,20 @@ func TestPTCAttesterRunner_ExecuteDutyAbstains(t *testing.T) {
 		})
 	}
 }
+
+// A duplicate or past duty is rejected before it touches the running duty: the running duty's frozen
+// observation stays, so the peers' partials for it still reconstruct.
+func TestPTCAttesterRunner_RejectedDutyKeepsObservation(t *testing.T) {
+	data := &gloas.PayloadAttestationData{BeaconBlockRoot: phase0.Root{0x01}, Slot: 9}
+	r := &PTCAttesterRunner{
+		BaseRunner:             &BaseRunner{RunnerRoleType: spectypes.RolePTCAttester},
+		payloadAttestationData: data,
+	}
+	r.State = NewRunnerState(1, &spectypes.ValidatorDuty{Type: spectypes.BNRolePTCAttester, Slot: 9})
+
+	for _, slot := range []phase0.Slot{9, 8} {
+		duty := &spectypes.ValidatorDuty{Type: spectypes.BNRolePTCAttester, Slot: slot}
+		require.Error(t, r.StartNewDuty(context.Background(), zap.NewNop(), duty, 1), "slot %d", slot)
+		require.Same(t, data, r.payloadAttestationData, "slot %d", slot)
+	}
+}

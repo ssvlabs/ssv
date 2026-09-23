@@ -30,6 +30,7 @@ func TestMaxValidatorRoleSignatures(t *testing.T) {
 	require.Equal(t, 1, mv.maxValidatorRoleSignatures(ssvtypes.RoleAggregator, spectypes.PostConsensusPartialSig, gloasSlot))
 	require.Equal(t, 1, mv.maxValidatorRoleSignatures(spectypes.RolePTCAttester, spectypes.PTCAttesterPartialSig, gloasSlot))
 	require.Equal(t, 1, mv.maxValidatorRoleSignatures(spectypes.RoleProposerPreferences, spectypes.ProposerPreferencesPartialSig, gloasSlot))
+	require.Equal(t, 8, mv.maxValidatorRoleSignatures(spectypes.RoleProposerPreferences, spectypes.RequestAuthPartialSig, gloasSlot))
 }
 
 // SIP #94 §7: every entry of a validator-role packet carries the same validator index (REJECT otherwise).

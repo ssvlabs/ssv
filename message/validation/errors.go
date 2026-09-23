@@ -90,6 +90,7 @@ var (
 	ErrTooManyPartialSigMessage         = Error{text: "got more partial signature messages of a certain type than allowed"}
 	ErrDifferentProposalData            = Error{text: "got different proposal data"}
 	ErrDecidedMessageWithTooFewSigners  = Error{text: "got decided message with too few signers (same number or less)"}
+	ErrValidatorRegistrationRetired     = Error{text: "validator registrations ended with the Gloas fork"}
 )
 
 // Messages with these errors are rejected (regardless of what peer they come from).

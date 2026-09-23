@@ -103,7 +103,7 @@ var ConstructBaseRunner = func(
 	case spectypes.RoleProposer:
 		valCheck = ssv.NewProposerChecker(km, networkconfig.TestNetwork.Beacon,
 			(spectypes.ValidatorPK)(spectestingutils.TestingValidatorPubKey), spectestingutils.TestingValidatorIndex,
-			phase0.BLSPubKey(share.SharePubKey))
+			phase0.BLSPubKey(share.SharePubKey), nil)
 	case ssvtypes.RoleAggregator:
 		valCheck = ssv.NewAggregatorChecker(networkconfig.TestNetwork.Beacon,
 			(spectypes.ValidatorPK)(spectestingutils.TestingValidatorPubKey), spectestingutils.TestingValidatorIndex)
@@ -286,7 +286,7 @@ var ConstructBaseRunnerWithShareMap = func(
 			valCheck = ssv.NewAggregatorCommitteeChecker()
 		case spectypes.RoleProposer:
 			valCheck = ssv.NewProposerChecker(km, networkconfig.TestNetwork.Beacon,
-				shareInstance.ValidatorPubKey, shareInstance.ValidatorIndex, phase0.BLSPubKey(shareInstance.SharePubKey))
+				shareInstance.ValidatorPubKey, shareInstance.ValidatorIndex, phase0.BLSPubKey(shareInstance.SharePubKey), nil)
 		case ssvtypes.RoleAggregator:
 			valCheck = ssv.NewAggregatorChecker(networkconfig.TestNetwork.Beacon,
 				shareInstance.ValidatorPubKey, shareInstance.ValidatorIndex)

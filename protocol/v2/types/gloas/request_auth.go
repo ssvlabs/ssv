@@ -15,12 +15,12 @@ import (
 const MaxBuilderAuthDataSize = 4096
 
 // BuilderRequestAuth is builder-specs' request-authentication message: Data is the opaque per-builder
-// token agreed out of band (defaulting to the UTF-8 bytes of the builder's advertised URL, exactly
-// as advertised — never canonicalized, signed exactly as serialized), and Slot is the proposal slot
-// the request is authorized for, not the slot at which it is signed or sent. One signed auth covers
-// both builder channels (getExecutionPayloadBid and submitBuilderPreferences). Signed under
-// DomainBuilderRequestAuth — a genesis-style compute_domain (fork-agnostic); the wire type is
-// nonetheless fork-versioned for decoding, so hops carrying the body set Eth-Consensus-Version.
+// token agreed out of band (defaulting to the builder URL's hostname, see DefaultAuthData; configured
+// bytes are signed exactly as given), and Slot is the proposal slot the request is authorized for, not
+// the slot at which it is signed or sent. One signed auth covers both builder channels
+// (getExecutionPayloadBid and submitBuilderPreferences). Signed under DomainBuilderRequestAuth — a
+// genesis-style compute_domain (fork-agnostic); the wire type is nonetheless fork-versioned for decoding,
+// so hops carrying the body set Eth-Consensus-Version.
 // Variable-size SSZ.
 type BuilderRequestAuth struct {
 	Data []byte `ssz-max:"4096"`

@@ -9,11 +9,11 @@ import (
 )
 
 func TestBuilderEntry_AuthDataBytes(t *testing.T) {
-	// Omitted AuthData defaults to the UTF-8 bytes of the URL, exactly as configured.
+	// Omitted AuthData defaults to the URL's hostname.
 	e := &BuilderEntry{URL: "https://builder.example.com"}
 	b, err := e.AuthDataBytes()
 	require.NoError(t, err)
-	require.Equal(t, []byte("https://builder.example.com"), b)
+	require.Equal(t, []byte("builder.example.com"), b)
 
 	// Explicit AuthData decodes as 0x-hex.
 	e = &BuilderEntry{URL: "https://builder.example.com", AuthData: "0x1234567890abcdef"}
@@ -26,6 +26,37 @@ func TestBuilderEntry_AuthDataBytes(t *testing.T) {
 
 	_, err = (&BuilderEntry{URL: "https://x.example", AuthData: "0x" + strings.Repeat("00", MaxBuilderAuthDataSize+1)}).AuthDataBytes()
 	require.ErrorContains(t, err, "exceeding")
+}
+
+// The default auth data is builder-specs' get_default_auth_data (SIP #94 §5), derived through ssv-spec so the
+// node signs the bytes every other client derives: the upstream table verbatim, plus cases it only implies.
+func TestDefaultAuthData(t *testing.T) {
+	for url, want := range map[string]string{
+		// builder-specs' table.
+		"https://builder.example.com/":             "builder.example.com",
+		"HTTPS://Builder.Example.com:443/bids?x=1": "builder.example.com",
+		"https://builder.example.com:8080":         "builder.example.com",
+		"https://user:pw@builder.example.com/":     "builder.example.com",
+		"https://10.0.0.5:18550/eth/v1/builder":    "10.0.0.5",
+		"https://[0:0:0:0:0:0:0:1]:8443/":          "[::1]",
+		"https://[::ffff:192.0.2.1]/":              "[::ffff:c000:201]",
+		// Implied: the fragment goes too, and IPv6 hex is lowercased.
+		"https://builder.example.com/bids#top": "builder.example.com",
+		"https://[2001:DB8::1]/":               "[2001:db8::1]",
+	} {
+		got, err := DefaultAuthData(url)
+		require.NoError(t, err, url)
+		require.Equal(t, want, string(got), url)
+	}
+
+	for _, url := range []string{
+		"https://exämple.com/",           // an internationalized hostname must be given in punycode
+		"https://[fe80::1%25eth0]:8443/", // a zoned IPv6 literal: Go and Python render the zone differently
+		"not a url at all",
+	} {
+		_, err := DefaultAuthData(url)
+		require.ErrorContains(t, err, "no default auth data", url)
+	}
 }
 
 func TestBuilderEntry_Effective(t *testing.T) {
@@ -62,7 +93,7 @@ func TestResolveBuilderConfig(t *testing.T) {
 		MinBid:             5,
 		BuilderBoostFactor: &nine,
 		Entries: []BuilderEntry{
-			{URL: "https://a.example", MaxExecutionPayment: 250},                                                                     // AuthData -> URL bytes; knobs inherited
+			{URL: "https://a.example", MaxExecutionPayment: 250},                                                                     // AuthData -> the URL's hostname; knobs inherited
 			{URL: "https://b.example", AuthData: "0x0102", MinBid: &five, BuilderPubKeys: []string{"0x" + strings.Repeat("ab", 48)}}, // explicit auth + pinned key
 		},
 	}
@@ -74,8 +105,8 @@ func TestResolveBuilderConfig(t *testing.T) {
 	require.Len(t, resolved.Entries, 2)
 
 	a := resolved.Entries[0]
-	require.Equal(t, BuilderIdentity("https://a.example", []byte("https://a.example")), a.Identity)
-	require.Equal(t, []byte("https://a.example"), a.AuthData, "omitted AuthData -> URL bytes")
+	require.Equal(t, BuilderIdentity("https://a.example", []byte("a.example")), a.Identity)
+	require.Equal(t, []byte("a.example"), a.AuthData, "omitted AuthData -> the URL's hostname")
 	require.Equal(t, uint64(250), a.MaxExecutionPayment)
 	require.Equal(t, uint64(5), a.MinBid, "inherits config MinBid")
 	require.Equal(t, uint64(9), a.BoostFactor, "inherits config BoostFactor")
@@ -122,8 +153,17 @@ func TestValidateBuilderConfig(t *testing.T) {
 	// Same identity via explicit auth data equal to another entry's URL-derived default.
 	require.ErrorContains(t, validate(
 		BuilderEntry{URL: "https://x.example"},
-		BuilderEntry{URL: "https://x.example", AuthData: "0x" + hex.EncodeToString([]byte("https://x.example"))},
+		BuilderEntry{URL: "https://x.example", AuthData: "0x" + hex.EncodeToString([]byte("x.example"))},
 	), "duplicate")
+	// Different URLs on one host are distinct identities that default to the same auth data (and so share
+	// one signed auth).
+	require.NoError(t, validate(
+		BuilderEntry{URL: "https://x.example/relay-a"},
+		BuilderEntry{URL: "https://x.example:8443/relay-b"},
+	))
+	// A URL with no default auth data needs AuthData set explicitly.
+	require.ErrorContains(t, validate(BuilderEntry{URL: "https://exämple.com"}), "no default auth data")
+	require.NoError(t, validate(BuilderEntry{URL: "https://exämple.com", AuthData: "0x0102"}))
 
 	// BuilderPubKeys is a list; each must be 48-byte 0x-hex; empty accepts any builder.
 	require.ErrorContains(t, validate(BuilderEntry{URL: "https://x.example", BuilderPubKeys: []string{"0x01"}}), "48 bytes")
@@ -133,8 +173,10 @@ func TestValidateBuilderConfig(t *testing.T) {
 		BuilderPubKeys: []string{"0x" + strings.Repeat("ab", 48), "0x" + strings.Repeat("cd", 48)},
 	}))
 
-	// A URL longer than the auth-data limit only matters when its bytes ARE the auth data.
-	longURL := "https://x.example/" + strings.Repeat("a", MaxBuilderAuthDataSize)
+	// URLs are bounded by the beacon-API's MAX_BUILDER_URL_SIZE, whatever the auth data.
+	prefix := "https://x.example/"
+	require.NoError(t, validate(BuilderEntry{URL: prefix + strings.Repeat("a", MaxBuilderURLSize-len(prefix))}))
+	longURL := prefix + strings.Repeat("a", MaxBuilderURLSize-len(prefix)+1)
 	require.ErrorContains(t, validate(BuilderEntry{URL: longURL}), "exceeding")
-	require.NoError(t, validate(BuilderEntry{URL: longURL, AuthData: "0x0102"}))
+	require.ErrorContains(t, validate(BuilderEntry{URL: longURL, AuthData: "0x0102"}), "exceeding")
 }
