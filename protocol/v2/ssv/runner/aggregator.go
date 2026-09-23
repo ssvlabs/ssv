@@ -109,7 +109,7 @@ func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.
 	if err != nil {
 		return fmt.Errorf("failed processing selection proof message: %w", err)
 	}
-	// quorum returns true only once (first time quorum achieved)
+	// hasQuorum is set only when a root just reached quorum.
 	if !hasQuorum {
 		return nil
 	}
@@ -127,20 +127,18 @@ func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.
 		}
 	}()
 
-	r.measurements.EndPreConsensus()
-	recordPreConsensusDuration(ctx, r.measurements.PreConsensusTime(), ssvtypes.RoleAggregator)
-
 	// only 1 root, verified by expectedPreConsensusRootsAndDomain
 	root := roots[0]
 
 	// reconstruct selection proof sig
 	span.AddEvent("reconstructing beacon signature", trace.WithAttributes(observability.BeaconBlockRootAttribute(root)))
-	fullSig, err := r.State.ReconstructBeaconSig(r.State.PreConsensusContainer, root, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
+	selectionProof, err := r.reconstructQuorumSig(r.State.PreConsensusContainer, root, r.GetShare(), "pre-consensus")
 	if err != nil {
-		// If the reconstructed signature verification failed, fall back to verifying each partial signature
-		r.FallBackAndVerifyEachSignature(r.State.PreConsensusContainer, root, r.GetShare().Committee, r.GetShare().ValidatorIndex)
-		return recoverableReconstructError{fmt.Errorf("got pre-consensus quorum but it has invalid signatures: %w", err)}
+		return err
 	}
+
+	r.measurements.EndPreConsensus()
+	recordPreConsensusDuration(ctx, r.measurements.PreConsensusTime(), ssvtypes.RoleAggregator)
 
 	duty, err := r.currentValidatorDuty()
 	if err != nil {
@@ -153,7 +151,7 @@ func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.
 
 	// this is the earliest in aggregator runner flow where we get to know whether we are meant
 	// to perform this aggregation duty or not
-	ok := r.IsAggregator(r.NetworkConfig.TargetAggregatorsPerCommittee, duty.CommitteeLength, fullSig)
+	ok := r.IsAggregator(r.NetworkConfig.TargetAggregatorsPerCommittee, duty.CommitteeLength, selectionProof[:])
 	if !ok {
 		r.markDutyNotRequired()
 		r.measurements.EndDutyFlow()
@@ -166,7 +164,7 @@ func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.
 			observability.CommitteeIndexAttribute(duty.CommitteeIndex),
 			observability.ValidatorIndexAttribute(duty.ValidatorIndex)),
 	)
-	res, ver, err := r.beacon.SubmitAggregateSelectionProof(ctx, duty.Slot, duty.CommitteeIndex, duty.CommitteeLength, duty.ValidatorIndex, fullSig)
+	res, ver, err := r.beacon.SubmitAggregateSelectionProof(ctx, duty.Slot, duty.CommitteeIndex, duty.CommitteeLength, duty.ValidatorIndex, selectionProof[:])
 	if err != nil {
 		return fmt.Errorf("failed to submit aggregate and proof: %w", err)
 	}
@@ -316,21 +314,17 @@ func (r *AggregatorRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 		}
 	}()
 
-	r.measurements.EndPostConsensus()
-	recordPostConsensusDuration(ctx, r.measurements.PostConsensusTime(), ssvtypes.RoleAggregator)
-
 	// only 1 root, verified by expectedPostConsensusRootsAndDomains
 	root := roots[0]
 
 	span.AddEvent("reconstructing beacon signature", trace.WithAttributes(observability.BeaconBlockRootAttribute(root)))
-	sig, err := r.State.ReconstructBeaconSig(r.State.PostConsensusContainer, root, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
+	specSig, err := r.reconstructQuorumSig(r.State.PostConsensusContainer, root, r.GetShare(), "post-consensus")
 	if err != nil {
-		// If the reconstructed signature verification failed, fall back to verifying each partial signature
-		r.FallBackAndVerifyEachSignature(r.State.PostConsensusContainer, root, r.GetShare().Committee, r.GetShare().ValidatorIndex)
-		return recoverableReconstructError{fmt.Errorf("got post-consensus quorum but it has invalid signatures: %w", err)}
+		return err
 	}
-	specSig := phase0.BLSSignature{}
-	copy(specSig[:], sig)
+
+	r.measurements.EndPostConsensus()
+	recordPostConsensusDuration(ctx, r.measurements.PostConsensusTime(), ssvtypes.RoleAggregator)
 
 	cd := &spectypes.ProposerConsensusData{}
 	err = cd.Decode(r.State.DecidedValue)

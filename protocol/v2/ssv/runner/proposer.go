@@ -179,7 +179,7 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 	if err != nil {
 		return fmt.Errorf("failed processing randao message: %w", err)
 	}
-	// quorum returns true only once (first time quorum achieved)
+	// hasQuorum is set only when a root just reached quorum.
 	if !hasQuorum {
 		return nil
 	}
@@ -197,7 +197,7 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 	// only 1 root, verified in expectedPreConsensusRootsAndDomain
 	root := roots[0]
 
-	randao, err := r.reconstructQuorumSig(r.State.PreConsensusContainer, root, "pre-consensus")
+	randao, err := r.reconstructQuorumSig(r.State.PreConsensusContainer, root, r.GetShare(), "pre-consensus")
 	if err != nil {
 		return err
 	}
@@ -635,35 +635,7 @@ func (r *ProposerRunner) finishSubmittedProposal(ctx context.Context, logger *za
 // reconstructPostConsensusSig reconstructs the validator's signature over root from the post-consensus
 // quorum (see reconstructQuorumSig).
 func (r *ProposerRunner) reconstructPostConsensusSig(root [32]byte) (phase0.BLSSignature, error) {
-	return r.reconstructQuorumSig(r.State.PostConsensusContainer, root, "post-consensus")
-}
-
-// reconstructQuorumSig reconstructs the validator's signature over root from container's quorum. The
-// reconstruction combines every share of the root, so on failure each share is verified and the bad ones
-// dropped. If that leaves the root below quorum, the failure is recoverable (recoverableReconstructError): a
-// later share brings it back. If the root is still at quorum, the reconstruction is retried on the remaining
-// shares, as no later share would cross its quorum again. With no bad share to drop, more shares can't fix
-// it, and the failure is terminal.
-func (r *ProposerRunner) reconstructQuorumSig(container *ssv.PartialSigContainer, root [32]byte, phase string) (phase0.BLSSignature, error) {
-	share := r.GetShare()
-	for {
-		sig, err := r.State.ReconstructBeaconSig(container, root, share.ValidatorPubKey[:], share.ValidatorIndex)
-		if err == nil {
-			var specSig phase0.BLSSignature
-			copy(specSig[:], sig)
-			return specSig, nil
-		}
-		err = fmt.Errorf("got %s quorum but it has invalid signatures: %w", phase, err)
-
-		shares := len(container.GetSignatures(share.ValidatorIndex, root))
-		r.FallBackAndVerifyEachSignature(container, root, share.Committee, share.ValidatorIndex)
-		if hasQuorum, _ := container.HasQuorum(share.ValidatorIndex, root); !hasQuorum {
-			return phase0.BLSSignature{}, recoverableReconstructError{err}
-		}
-		if len(container.GetSignatures(share.ValidatorIndex, root)) == shares {
-			return phase0.BLSSignature{}, err
-		}
-	}
+	return r.reconstructQuorumSig(r.State.PostConsensusContainer, root, r.GetShare(), "post-consensus")
 }
 
 // processGloasPostConsensusQuorum handles the roots that just reached post-consensus quorum at a Gloas

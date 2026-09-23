@@ -77,16 +77,15 @@ func (e *codedSentinel) Error() string { return e.sentinel.Error() }
 
 func (e *codedSentinel) Unwrap() []error { return []error{e.coded, e.sentinel} }
 
-// recoverableReconstructError tags a post-consensus BLS-reconstruction failure as recoverable.
-// It is attached at the push site inside the reconstruct goroutine, which has by construction
-// already run FallBackAndVerifyEachSignature to drop the offending partial sig(s) — so a later
-// partial-sig message can re-cross quorum and retry the pending roots. Classifying by this tag
-// (rather than by the spec ReconstructSignatureErrorCode) covers the whole recoverable subclass:
-// VerifyReconstructedSignature attaches the code, but the earlier BLS Deserialize/Recover step
-// (e.g. 96 garbage bytes from a byzantine operator) returns an uncoded error that is equally
-// recoverable. Errors reaching the classifier without this tag stay terminal by default.
-// Unwrap keeps the wrapped chain (including any code-tagged *spectypes.Error) reachable via
-// errors.As so the committee role still observably emits the reconstruct error code.
+// recoverableReconstructError tags a BLS-reconstruction failure as recoverable: FallBackAndVerifyEachSignature
+// has dropped the offending partial sig(s), so a later partial-sig message re-crosses quorum and retries. It is
+// attached by reconstructQuorumSig when the drop left the root below quorum, and by the CommitteeRunner's
+// reconstruct goroutines, which have always run the fallback by then. Classifying by this tag (rather than by
+// the spec ReconstructSignatureErrorCode) covers the whole recoverable subclass: VerifyReconstructedSignature
+// attaches the code, but the earlier BLS Deserialize/Recover step (e.g. 96 garbage bytes from a byzantine
+// operator) returns an uncoded error that is equally recoverable. Errors without this tag stay terminal.
+// Unwrap keeps the wrapped chain (including any code-tagged *spectypes.Error) reachable via errors.As, so the
+// reconstruct error code is still observable.
 type recoverableReconstructError struct {
 	err error
 }

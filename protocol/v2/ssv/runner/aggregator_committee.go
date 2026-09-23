@@ -391,7 +391,7 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(
 	if err != nil {
 		return fmt.Errorf("failed processing selection proof message: %w", err)
 	}
-	// quorum returns true only once (first time quorum achieved)
+	// hasNewQuorum is set only when a root just reached quorum.
 	if !hasNewQuorum {
 		// If didn't get any new quorum, didn't yet start QBFT (checked above), and has received the last message, then terminate.
 		if r.HasSeenAllPreConsensusSigners() {

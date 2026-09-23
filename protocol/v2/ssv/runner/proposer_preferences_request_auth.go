@@ -183,14 +183,10 @@ func (r *proposerPreferencesSlotRunner) processRequestAuthPartial(ctx context.Co
 // builder preferences.
 func (r *proposerPreferencesSlotRunner) reconstructRequestAuth(ctx context.Context, logger *zap.Logger, root [32]byte) error {
 	frozen := r.requestAuths[root]
-	fullSig, err := r.State.ReconstructBeaconSig(r.requestAuthContainer, root, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
+	signature, err := r.reconstructQuorumSig(r.requestAuthContainer, root, r.GetShare(), "request-auth")
 	if err != nil {
-		// If the reconstructed signature is invalid, surface which partial signatures were at fault.
-		r.FallBackAndVerifyEachSignature(r.requestAuthContainer, root, r.GetShare().Committee, r.GetShare().ValidatorIndex)
-		return fmt.Errorf("got request-auth quorum but it has invalid signatures: %w", err)
+		return err
 	}
-	var signature phase0.BLSSignature
-	copy(signature[:], fullSig)
 
 	r.reconstructedAuthRoots[root] = struct{}{}
 	signed := &gloas.SignedBuilderRequestAuth{Message: frozen.auth, Signature: signature}

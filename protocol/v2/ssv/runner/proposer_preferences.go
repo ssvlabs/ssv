@@ -439,15 +439,15 @@ func (r *proposerPreferencesSlotRunner) ProcessPreConsensus(ctx context.Context,
 		return fmt.Errorf("failed processing proposer preferences message: %w", err)
 	}
 
-	// quorum returns true only once (the first time it is reached).
+	// hasQuorum is set only when a root just reached quorum.
 	if !hasQuorum {
 		return nil
 	}
 
-	// We have quorum and are committed to completing this duty here; the quorum fires only once,
-	// so a terminal failure below won't be retried.
+	// We have quorum and are committed to completing this duty here, so a failure below fails it, except a
+	// recoverable reconstruct failure (see reconstructQuorumSig).
 	defer func() {
-		if err != nil {
+		if err != nil && !isRecoverableReconstructError(err) {
 			r.markDutyFailed(err)
 		}
 	}()
@@ -458,14 +458,10 @@ func (r *proposerPreferencesSlotRunner) ProcessPreConsensus(ctx context.Context,
 
 	// only 1 root, verified in basePreConsensusMsgProcessing
 	root := roots[0]
-	fullSig, err := r.State.ReconstructBeaconSig(r.State.PreConsensusContainer, root, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
+	signature, err := r.reconstructQuorumSig(r.State.PreConsensusContainer, root, r.GetShare(), "pre-consensus")
 	if err != nil {
-		// If the reconstructed signature is invalid, surface which partial signatures were at fault.
-		r.FallBackAndVerifyEachSignature(r.State.PreConsensusContainer, root, r.GetShare().Committee, r.GetShare().ValidatorIndex)
-		return fmt.Errorf("got pre-consensus quorum but it has invalid signatures: %w", err)
+		return err
 	}
-	var signature phase0.BLSSignature
-	copy(signature[:], fullSig)
 
 	signed := &gloas.SignedProposerPreferences{
 		Message:   r.proposerPreferences,

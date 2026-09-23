@@ -68,6 +68,33 @@ func (b *BaseRunner) FallBackAndVerifyEachSignature(container *ssv.PartialSigCon
 	}
 }
 
+// reconstructQuorumSig reconstructs share's validator signature over root from container's quorum. The
+// reconstruction combines every share of the root, so on failure each share is verified and the bad ones
+// dropped. If that leaves the root below quorum, the failure is recoverable (recoverableReconstructError): a
+// later share brings it back. If the root is still at quorum, the reconstruction is retried on the remaining
+// shares, as no later share would cross its quorum again. With no bad share to drop, more shares can't fix
+// it, and the failure is terminal.
+func (b *BaseRunner) reconstructQuorumSig(container *ssv.PartialSigContainer, root [32]byte, share *spectypes.Share, phase string) (phase0.BLSSignature, error) {
+	for {
+		sig, err := b.State.ReconstructBeaconSig(container, root, share.ValidatorPubKey[:], share.ValidatorIndex)
+		if err == nil {
+			var specSig phase0.BLSSignature
+			copy(specSig[:], sig)
+			return specSig, nil
+		}
+		err = fmt.Errorf("got %s quorum but it has invalid signatures: %w", phase, err)
+
+		shares := len(container.GetSignatures(share.ValidatorIndex, root))
+		b.FallBackAndVerifyEachSignature(container, root, share.Committee, share.ValidatorIndex)
+		if hasQuorum, _ := container.HasQuorum(share.ValidatorIndex, root); !hasQuorum {
+			return phase0.BLSSignature{}, recoverableReconstructError{err}
+		}
+		if len(container.GetSignatures(share.ValidatorIndex, root)) == shares {
+			return phase0.BLSSignature{}, err
+		}
+	}
+}
+
 func (b *BaseRunner) ValidatePostConsensusMsg(ctx context.Context, runner Runner, psigMsgs *spectypes.PartialSignatureMessages) error {
 	// Not retried; see ValidatePreConsensusMsg.
 	if !b.hasDutyAssigned() {

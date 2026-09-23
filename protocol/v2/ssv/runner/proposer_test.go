@@ -12,7 +12,6 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/deneb"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
-	"github.com/herumi/bls-eth-go-binary/bls"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
@@ -651,7 +650,7 @@ func TestProposerRunnerGloasPostConsensusEnvelopeWaitsForBlock(t *testing.T) {
 	runner, keySet := newGloasProposerForPostConsensus(t, beacon, &stubDoppelganger{canSign: true}, proposal)
 	runner.gloasDuty.producedEnvelope = produced // the builder operator
 
-	concluded := observeDutyConclusion(runner)
+	concluded := observeDutyConclusion(runner.BaseRunner)
 
 	// Operator 1's block share carries operator 2's signature, so it fails verification; its envelope share is valid.
 	bad := gloasPostConsensusMsg(t, keySet, 1, proposal, true)
@@ -739,7 +738,7 @@ func TestProposerRunnerProcessPostConsensusRecoversFromBadShare(t *testing.T) {
 	runner, keySet, _ := newProposerRunnerForTest(t, beacon, &stubDoppelganger{canSign: true}, 0, nil)
 	setupRunnerForPostConsensus(t, runner, keySet, spectestingutils.TestingProposerDutyV(version),
 		spectestingutils.TestProposerBlindedBlockConsensusDataV(version), 1)
-	concluded := observeDutyConclusion(runner)
+	concluded := observeDutyConclusion(runner.BaseRunner)
 
 	bad := spectestingutils.PostConsensusProposerMsgV(keySet.Shares[1], 1, version)
 	bad.Messages[0].PartialSignature = spectestingutils.PostConsensusProposerMsgV(keySet.Shares[2], 2, version).Messages[0].PartialSignature
@@ -752,88 +751,6 @@ func TestProposerRunnerProcessPostConsensusRecoversFromBadShare(t *testing.T) {
 	require.NoError(t, runner.ProcessPostConsensus(ctx, logger, spectestingutils.PostConsensusProposerMsgV(keySet.Shares[4], 4, version)))
 	require.Len(t, beacon.submittedBlocks, 1)
 	requireConcluded(t, concluded, dutyOutcomeSucceeded)
-}
-
-// After a failed reconstruct the bad shares are dropped. A root that fell below quorum is recoverable, one still
-// at quorum is retried on the remaining shares, and with no bad share to drop the failure is terminal.
-func TestProposerRunnerReconstructQuorumSig(t *testing.T) {
-	t.Parallel()
-
-	root := [32]byte{0x42}
-	partial := func(keySet *spectestingutils.TestKeySet, op spectypes.OperatorID, signed [32]byte) *spectypes.PartialSignatureMessage {
-		return &spectypes.PartialSignatureMessage{
-			PartialSignature: keySet.Shares[op].SignByte(signed[:]).Serialize(),
-			SigningRoot:      root,
-			Signer:           op,
-			ValidatorIndex:   spectestingutils.TestingValidatorIndex,
-		}
-	}
-	// withShares is a runner whose post-consensus container holds valid shares of root from the good
-	// operators and, from the bad ones, shares over another root, which fail verification.
-	withShares := func(t *testing.T, good, bad []spectypes.OperatorID) (*ProposerRunner, *ssv.PartialSigContainer) {
-		runner, keySet, _ := newProposerRunnerForTest(t, newProposerTestBeacon(nil), &stubDoppelganger{canSign: true}, 0, nil)
-		runner.State = NewRunnerState(keySet.Threshold, spectestingutils.TestingProposerDutyV(spec.DataVersionDeneb))
-		container := runner.State.PostConsensusContainer
-		for _, op := range bad {
-			container.AddSignature(partial(keySet, op, [32]byte{0xff}))
-		}
-		for _, op := range good {
-			container.AddSignature(partial(keySet, op, root))
-		}
-		return runner, container
-	}
-	shares := func(runner *ProposerRunner, container *ssv.PartialSigContainer) int {
-		return len(container.GetSignatures(runner.GetShare().ValidatorIndex, root))
-	}
-
-	t.Run("still at quorum after the drop: retried on the remaining shares", func(t *testing.T) {
-		runner, container := withShares(t, []spectypes.OperatorID{2, 3, 4}, []spectypes.OperatorID{1})
-		sig, err := runner.reconstructPostConsensusSig(root)
-		require.NoError(t, err)
-		require.NotEqual(t, phase0.BLSSignature{}, sig)
-		require.Equal(t, 3, shares(runner, container))
-	})
-
-	t.Run("below quorum after the drop: recoverable", func(t *testing.T) {
-		runner, container := withShares(t, []spectypes.OperatorID{2, 3}, []spectypes.OperatorID{1})
-		_, err := runner.reconstructPostConsensusSig(root)
-		require.ErrorContains(t, err, "got post-consensus quorum but it has invalid signatures")
-		require.True(t, isRecoverableReconstructError(err))
-		require.Equal(t, 2, shares(runner, container))
-	})
-
-	t.Run("no bad share to drop: terminal", func(t *testing.T) {
-		runner, container := withShares(t, []spectypes.OperatorID{1, 2, 3}, nil)
-		// Every share verifies, but they combine to another validator's key than the one the runner expects.
-		var other bls.SecretKey
-		other.SetByCSPRNG()
-		share := *runner.GetShare()
-		share.ValidatorPubKey = spectypes.ValidatorPK(other.GetPublicKey().Serialize())
-		runner.Share = map[phase0.ValidatorIndex]*spectypes.Share{share.ValidatorIndex: &share}
-		_, err := runner.reconstructPostConsensusSig(root)
-		require.Error(t, err)
-		require.False(t, isRecoverableReconstructError(err))
-		require.Equal(t, 3, shares(runner, container))
-	})
-}
-
-// observeDutyConclusion arms a buffered conclusion channel on runner, so a test reads the duty's outcome
-// directly rather than through the deadline watcher.
-func observeDutyConclusion(runner *ProposerRunner) chan dutyConclusion {
-	concluded := make(chan dutyConclusion, 1)
-	runner.dutyConcluded = concluded
-	return concluded
-}
-
-// requireConcluded checks that the duty has concluded with the want outcome.
-func requireConcluded(t *testing.T, concluded chan dutyConclusion, want dutyOutcome) {
-	t.Helper()
-	select {
-	case c := <-concluded:
-		require.Equal(t, want, c.outcome, "reason: %v", c.reason)
-	default:
-		t.Fatalf("the duty has not concluded, want %s", want)
-	}
 }
 
 // requireNotAwaitingPostConsensus checks the runner expects no further post-consensus packets.

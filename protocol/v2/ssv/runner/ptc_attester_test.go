@@ -15,6 +15,23 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 )
 
+// ptcTestBeacon embeds the spec testing beacon (so DomainData resolves) while stubbing the PTC surface: the
+// observed payload-attestation data and a capture of the submitted messages.
+type ptcTestBeacon struct {
+	beacon.BeaconNode
+	data      *gloas.PayloadAttestationData
+	submitted []*gloas.PayloadAttestationMessage
+}
+
+func (b *ptcTestBeacon) PayloadAttestationData(context.Context, phase0.Slot) (*gloas.PayloadAttestationData, error) {
+	return b.data, nil
+}
+
+func (b *ptcTestBeacon) SubmitPayloadAttestationMessages(_ context.Context, msgs []*gloas.PayloadAttestationMessage) error {
+	b.submitted = append(b.submitted, msgs...)
+	return nil
+}
+
 func TestNewPTCAttesterRunner_RequiresSingleShare(t *testing.T) {
 	_, err := NewPTCAttesterRunner(PTCAttesterRunnerOptions{})
 	require.Error(t, err)
