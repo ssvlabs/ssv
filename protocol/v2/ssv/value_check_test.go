@@ -212,9 +212,19 @@ func TestGloasVoteChecker_DecodeError(t *testing.T) {
 
 // --- proposer checker, Gloas (ePBS) ---
 
-const gloasProposerSlot = phase0.Slot(8)
+const (
+	gloasProposerSlot  = phase0.Slot(8)
+	gloasProposerIndex = phase0.ValidatorIndex(7)
+)
 
 var gloasProposerPK = phase0.BLSPubKey{0x42}
+
+// gloasProposerBlock is the test block for the slot, proposed by the duty's validator.
+func gloasProposerBlock(slot phase0.Slot) *gloas.BeaconBlock {
+	block := gloas.TestingBeaconBlock(slot)
+	block.ProposerIndex = gloasProposerIndex
+	return block
+}
 
 func gloasProposerConsensusData(t *testing.T, dataSSZ []byte) []byte {
 	t.Helper()
@@ -222,7 +232,7 @@ func gloasProposerConsensusData(t *testing.T, dataSSZ []byte) []byte {
 		Duty: spectypes.ValidatorDuty{
 			Type:           spectypes.BNRoleProposer,
 			PubKey:         gloasProposerPK,
-			ValidatorIndex: 7,
+			ValidatorIndex: gloasProposerIndex,
 			Slot:           gloasProposerSlot,
 		},
 		Version: networkconfig.DataVersionGloas,
@@ -236,7 +246,7 @@ func gloasProposerConsensusData(t *testing.T, dataSSZ []byte) []byte {
 // gloasProposalSSZ is a self-build §4 value for the slot: the test block plus a payload_root.
 func gloasProposalSSZ(t *testing.T, slot phase0.Slot) []byte {
 	t.Helper()
-	return encodeGloasProposal(t, &gloas.GloasProposalData{Block: gloas.TestingBeaconBlock(slot), PayloadRoot: phase0.Root{0x50, 0x51, 0x52}})
+	return encodeGloasProposal(t, &gloas.GloasProposalData{Block: gloasProposerBlock(slot), PayloadRoot: phase0.Root{0x50, 0x51, 0x52}})
 }
 
 func encodeGloasProposal(t *testing.T, proposal *gloas.GloasProposalData) []byte {
@@ -248,7 +258,7 @@ func encodeGloasProposal(t *testing.T, proposal *gloas.GloasProposalData) []byte
 
 func newGloasProposerChecker(signer ekm.BeaconSigner) ValueChecker {
 	cfg := networkconfig.TestNetworkWithGloas(0)
-	return NewProposerChecker(signer, cfg.Beacon, spectypes.ValidatorPK(gloasProposerPK), 7, phase0.BLSPubKey{}, nil)
+	return NewProposerChecker(signer, cfg.Beacon, spectypes.ValidatorPK(gloasProposerPK), gloasProposerIndex, phase0.BLSPubKey{}, nil)
 }
 
 // A Gloas proposer value validates via the node-side decode of the §4 wrapper (there is no spectypes
@@ -270,7 +280,7 @@ func TestProposerChecker_RunningDutySlot(t *testing.T) {
 	cfg := networkconfig.TestNetworkWithGloas(0)
 	value := gloasProposerConsensusData(t, gloasProposalSSZ(t, gloasProposerSlot))
 	check := func(running phase0.Slot) error {
-		checker := NewProposerChecker(fakeSlashingSigner{}, cfg.Beacon, spectypes.ValidatorPK(gloasProposerPK), 7,
+		checker := NewProposerChecker(fakeSlashingSigner{}, cfg.Beacon, spectypes.ValidatorPK(gloasProposerPK), gloasProposerIndex,
 			phase0.BLSPubKey{}, func() phase0.Slot { return running })
 		return checker.CheckValue(value)
 	}
@@ -300,16 +310,28 @@ func TestProposerChecker_GloasBlockSlotMismatch(t *testing.T) {
 	require.ErrorContains(t, err, "does not match duty slot")
 }
 
+// The block's proposer must be the duty's validator (SIP #94 §4): a block stamped with another index is rejected.
+func TestProposerChecker_GloasProposerIndexMismatch(t *testing.T) {
+	checker := newGloasProposerChecker(fakeSlashingSigner{})
+	block := gloasProposerBlock(gloasProposerSlot)
+	block.ProposerIndex++
+	value := encodeGloasProposal(t, &gloas.GloasProposalData{Block: block, PayloadRoot: phase0.Root{0x50}})
+
+	var specErr *spectypes.Error
+	require.ErrorAs(t, checker.CheckValue(gloasProposerConsensusData(t, value)), &specErr)
+	require.Equal(t, spectypes.ProposerBlockProposerIndexMismatchErrorCode, specErr.Code)
+}
+
 // payload_root MUST be zero iff the bid is not self-build (SIP #94 §4): a self-build value without one
 // cannot be revealed, an external bid with one is malformed. Both directions are rejected; both honest
 // shapes pass.
 func TestProposerChecker_GloasPayloadRootPresence(t *testing.T) {
 	checker := newGloasProposerChecker(fakeSlashingSigner{})
 
-	selfBuildZero := encodeGloasProposal(t, &gloas.GloasProposalData{Block: gloas.TestingBeaconBlock(gloasProposerSlot)})
+	selfBuildZero := encodeGloasProposal(t, &gloas.GloasProposalData{Block: gloasProposerBlock(gloasProposerSlot)})
 	require.ErrorContains(t, checker.CheckValue(gloasProposerConsensusData(t, selfBuildZero)), "payload_root presence")
 
-	external := gloas.TestingBeaconBlock(gloasProposerSlot)
+	external := gloasProposerBlock(gloasProposerSlot)
 	external.Body.SignedExecutionPayloadBid.Message.BuilderIndex = 3
 	externalZero := encodeGloasProposal(t, &gloas.GloasProposalData{Block: external})
 	require.NoError(t, checker.CheckValue(gloasProposerConsensusData(t, externalZero)))
@@ -328,7 +350,7 @@ func TestProposerChecker_GloasVersionMismatch(t *testing.T) {
 			Duty: spectypes.ValidatorDuty{
 				Type:           spectypes.BNRoleProposer,
 				PubKey:         gloasProposerPK,
-				ValidatorIndex: 7,
+				ValidatorIndex: gloasProposerIndex,
 				Slot:           gloasProposerSlot,
 			},
 			Version: version,

@@ -382,6 +382,12 @@ func checkValidatorConsensusData(
 		if proposal.Block.Slot != cd.Duty.Slot {
 			return cd, nil, spectypes.NewError(spectypes.ProposerBlockSlotMismatchErrorCode, "gloas block slot does not match duty slot")
 		}
+		// Pin the block's proposer to the duty's validator, whose key every operator signs the block root with: a
+		// leader stamping another index would have the cluster sign a block the beacon node rejects, losing the
+		// slot, so the value fails consensus instead (SIP #94 §4).
+		if proposal.Block.ProposerIndex != cd.Duty.ValidatorIndex {
+			return cd, nil, spectypes.NewError(spectypes.ProposerBlockProposerIndexMismatchErrorCode, "gloas block proposer index does not match duty validator index")
+		}
 		// payload_root MUST be zero iff the bid is not self-build (SIP #94 §4): a self-build value carries
 		// the §6 payload_root every operator derives the envelope to sign from, an external bid carries
 		// none. An honest leader never trips it.

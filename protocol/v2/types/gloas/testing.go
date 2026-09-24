@@ -17,6 +17,9 @@ func TestingBeaconBlock(slot phase0.Slot) *BeaconBlock {
 	}
 	return &BeaconBlock{
 		Slot: slot,
+		// ssv-spec's testing validator index, the testing duties' validator: the value check pins the block's
+		// proposer to it (SIP #94 §4).
+		ProposerIndex: 1,
 		Body: &BeaconBlockBody{
 			ETH1Data:      &phase0.ETH1Data{BlockHash: make([]byte, 32)},
 			SyncAggregate: &altair.SyncAggregate{SyncCommitteeBits: bitfield.NewBitvector512()},

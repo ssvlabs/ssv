@@ -85,6 +85,15 @@ func (r *ValidatorRegistrationRunner) StartNewDuty(ctx context.Context, logger *
 		return err
 	}
 
+	// From Gloas the validator registration duty is deprecated: fee recipient and gas limit travel in the §5
+	// proposer preferences instead (SIP #94 §5). The scheduler drains the duty and message validation rejects
+	// it on the wire; this runner-side guard is the belt matching ssv-spec's. It runs before the duty starts,
+	// so a rejected duty leaves no running state behind.
+	if r.NetworkConfig.IsGloasAtSlot(validatorDuty.DutySlot()) {
+		return spectypes.NewError(spectypes.ValidatorRegistrationDeprecatedErrorCode,
+			"validator registration is deprecated from Gloas; use proposer preferences")
+	}
+
 	return r.baseStartNewNonBeaconDuty(ctx, logger, r, validatorDuty, quorum)
 }
 
@@ -189,14 +198,6 @@ func (r *ValidatorRegistrationRunner) executeDuty(ctx context.Context, logger *z
 	validatorDuty, err := validatorDutyFromDuty(duty)
 	if err != nil {
 		return err
-	}
-
-	// From Gloas the validator registration duty is deprecated: fee recipient and gas limit travel
-	// in the §5 proposer preferences instead (SIP #94 §5). The scheduler drains the duty and message
-	// validation rejects it on the wire; this runner-side guard is the belt matching ssv-spec's.
-	if r.NetworkConfig.IsGloasAtSlot(validatorDuty.DutySlot()) {
-		return spectypes.NewError(spectypes.ValidatorRegistrationDeprecatedErrorCode,
-			"validator registration is deprecated from Gloas; use proposer preferences")
 	}
 
 	vr, err := r.buildValidatorRegistration(validatorDuty.DutySlot())

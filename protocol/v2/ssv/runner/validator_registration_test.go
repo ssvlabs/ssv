@@ -2,7 +2,6 @@ package runner
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
@@ -15,12 +14,12 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 )
 
-// TestValidatorRegistrationRunner_ExecuteDutyDeprecatedFromGloas pins the runner-side SIP #94 §5
-// guard (matching ssv-spec's): executing a validator-registration duty at a Gloas-era slot fails
-// with ValidatorRegistrationDeprecatedErrorCode before touching the beacon node — from the fork on,
-// fee recipient and gas limit travel in the proposer preferences instead. The scheduler drains the
-// duty and message validation rejects it on the wire; this is the runner-side belt.
-func TestValidatorRegistrationRunner_ExecuteDutyDeprecatedFromGloas(t *testing.T) {
+// TestValidatorRegistrationRunner_StartNewDutyDeprecatedFromGloas pins the runner-side SIP #94 §5 guard
+// (matching ssv-spec's): starting a validator-registration duty at a Gloas-era slot fails with
+// ValidatorRegistrationDeprecatedErrorCode before the duty starts, leaving no running state behind —
+// from the fork on, fee recipient and gas limit travel in the proposer preferences instead. The
+// scheduler drains the duty and message validation rejects it on the wire; this is the runner-side belt.
+func TestValidatorRegistrationRunner_StartNewDutyDeprecatedFromGloas(t *testing.T) {
 	cfg := cloneTestNetworkConfig()
 	gloasEpoch := phase0.Epoch(100)
 	cfg.Beacon.Forks[networkconfig.DataVersionGloas] = phase0.Fork{Epoch: gloasEpoch}
@@ -33,13 +32,12 @@ func TestValidatorRegistrationRunner_ExecuteDutyDeprecatedFromGloas(t *testing.T
 		},
 	}
 	duty := &spectypes.ValidatorDuty{Type: spectypes.BNRoleValidatorRegistration, Slot: gloasSlot}
-	r.State = NewRunnerState(1, duty)
 
-	err := r.executeDuty(context.Background(), zap.NewNop(), duty)
-	require.Error(t, err)
+	err := r.StartNewDuty(context.Background(), zap.NewNop(), duty, 1)
 	var specErr *spectypes.Error
-	require.True(t, errors.As(err, &specErr))
+	require.ErrorAs(t, err, &specErr)
 	require.Equal(t, spectypes.ValidatorRegistrationDeprecatedErrorCode, specErr.Code)
+	require.Nil(t, r.State, "a rejected duty leaves no running state")
 }
 
 // TestVRSubmitter_StartStopsOnCtxCancel pins the constructor/Start split: NewVRSubmitter returns
