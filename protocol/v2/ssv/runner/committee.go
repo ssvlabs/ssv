@@ -627,10 +627,8 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 
 		span.AddEvent("constructing sync-committee and attestations signature messages", trace.WithAttributes(observability.BeaconBlockRootAttribute(root)))
 		for _, validator := range validators {
-			// As per the comments below, the quorums (for root+validator pairs) we got from basePostConsensusMsgProcessing
-			// call above are optimistic - some of these quorums might have been invalidated now, hence, to avoid an
-			// unnecessary unsuccessful BLS signature reconstruction attempt we need to check if root+validator pair
-			// still has quorum.
+			// Re-check the quorum: the drops after a failed reconstruction (below) may have taken this root+validator
+			// pair below quorum since basePostConsensusMsgProcessing reported it.
 			gotQuorum, quorumSigners := r.State.PostConsensusContainer.HasQuorum(validator, root)
 			if !gotQuorum {
 				continue
@@ -665,15 +663,14 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 				sig, err := r.reconstructQuorumSig(r.State.PostConsensusContainer, root, share, "post-consensus")
 				if err != nil {
 					// Verify the validator's partial signatures for the roots still ahead too, dropping a bad
-					// signer's shares before they cost a failed reconstruction each. Drops can take root+validator
-					// pairs below quorum, hence the quorum re-check before each reconstruction. No pair is verified
-					// by two goroutines at once: the work is split by validator, and the roots are taken in turn.
+					// signer's shares before they cost a failed reconstruction each. No pair is verified by two
+					// goroutines at once: the work is split by validator, and the roots are taken in turn.
 					for _, root := range roots[i+1:] {
 						r.FallBackAndVerifyEachSignature(r.State.PostConsensusContainer, root, share.Committee, validatorIndex)
 					}
 					const eventMsg = "got post-consensus quorum but it has invalid signatures"
 					span.AddEvent(eventMsg)
-					vLogger.Error(eventMsg, zap.Error(err))
+					vLogger.Error(eventMsg, zap.Bool("recoverable", isRecoverableReconstructError(err)), zap.Error(err))
 
 					errCh <- err
 					return

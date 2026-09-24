@@ -462,12 +462,10 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(
 			}
 			pubKey := share.ValidatorPubKey
 
-			// As per the comments below, the quorums (for root+validator pairs) we got from basePostConsensusMsgProcessing
-			// call above are optimistic - some of these quorums might have been invalidated now, hence, to avoid an
-			// unnecessary unsuccessful BLS signature reconstruction attempt we need to check if root+validator pair
-			// still has quorum.
+			// Re-check the quorum: the drops after a failed reconstruction (below) may have taken this root+validator
+			// pair below quorum since basePreConsensusMsgProcessing reported it
+			// (https://github.com/ssvlabs/ssv/pull/2503#discussion_r2658112575).
 			gotQuorum, quorumSigners := r.State.PreConsensusContainer.HasQuorum(validatorIndex, root)
-			// Explanation on why we need this check: https://github.com/ssvlabs/ssv/pull/2503#discussion_r2658112575
 			if !gotQuorum {
 				continue
 			}
@@ -479,29 +477,14 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(
 				zap.Uint64s("quorum_signers", quorumSigners),
 			)
 
-			// Reconstruct signature
-			fullSig, err := r.State.ReconstructBeaconSig(
-				r.State.PreConsensusContainer,
-				root,
-				share.ValidatorPubKey[:],
-				validatorIndex,
-			)
+			// On failure the root's partial signatures have been verified and the invalid ones dropped; the error is
+			// recoverable only if that left the root below quorum (see reconstructQuorumSig).
+			blsSig, err := r.reconstructQuorumSig(r.State.PreConsensusContainer, root, share, "pre-consensus")
 			if err != nil {
-				// If the reconstructed signature verification failed, fall back to verifying each individual
-				// partial signature + discarding the invalid ones. This should not happen often in practice,
-				// but it's a very desirable optimization to have because when it does happen - we wouldn't
-				// want to reconstruct lots of BLS signatures only to discover most of them being invalid.
-				// Notes:
-				// 1) FallBackAndVerifyEachSignature call may also lead to a certain root+validator pairs
-				//    in PostConsensusContainer not having quorum anymore since it previously was computed
-				//    optimistically.
-				// 2) we need to verify partial signatures only for the roots we haven't tried reconstructing
-				//    signatures for (hence roots[i:])
-				// 3) since this code is running a bunch of concurrent go-routines, we need to be careful to
-				//    not call FallBackAndVerifyEachSignature for the same root+validator pair multiple times -
-				//    this is why we are parallelizing by validators only (and not by root+validator), processing
-				//    each root sequentially
-				for _, root := range roots[i:] {
+				// Verify the validator's partial signatures for the roots still ahead too, dropping a bad signer's
+				// shares before they cost a failed reconstruction each. A failure only skips this validator: the duty
+				// goes on with the others.
+				for _, root := range roots[i+1:] {
 					r.FallBackAndVerifyEachSignature(
 						r.State.PreConsensusContainer,
 						root,
@@ -512,14 +495,11 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(
 
 				const eventMsg = "got pre-consensus quorum but it has invalid signatures"
 				span.AddEvent(eventMsg)
-				vLogger.Error(eventMsg, zap.Error(err))
+				vLogger.Error(eventMsg, zap.Bool("recoverable", isRecoverableReconstructError(err)), zap.Error(err))
 
 				anyErr = err
 				continue
 			}
-
-			var blsSig phase0.BLSSignature
-			copy(blsSig[:], fullSig)
 
 			switch metadata.Role {
 			case spectypes.BNRoleAggregator:
@@ -962,10 +942,8 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 		span.AddEvent("constructing sync committee contribution and aggregations signature messages",
 			trace.WithAttributes(observability.BeaconBlockRootAttribute(root)))
 		for _, validator := range validators {
-			// As per the comments below, the quorums (for root+validator pairs) we got from basePostConsensusMsgProcessing
-			// call above are optimistic - some of these quorums might have been invalidated now, hence, to avoid an
-			// unnecessary unsuccessful BLS signature reconstruction attempt we need to check if root+validator pair
-			// still has quorum.
+			// Re-check the quorum: the drops after a failed reconstruction (below) may have taken this root+validator
+			// pair below quorum since basePostConsensusMsgProcessing reported it.
 			gotQuorum, quorumSigners := r.State.PostConsensusContainer.HasQuorum(validator, root)
 			if !gotQuorum {
 				continue
@@ -1000,9 +978,8 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 				sig, err := r.reconstructQuorumSig(r.State.PostConsensusContainer, root, share, "post-consensus")
 				if err != nil {
 					// Verify the validator's partial signatures for the roots still ahead too, dropping a bad
-					// signer's shares before they cost a failed reconstruction each. Drops can take root+validator
-					// pairs below quorum, hence the quorum re-check before each reconstruction. No pair is verified
-					// by two goroutines at once: the work is split by validator, and the roots are taken in turn.
+					// signer's shares before they cost a failed reconstruction each. No pair is verified by two
+					// goroutines at once: the work is split by validator, and the roots are taken in turn.
 					for _, root := range roots[i+1:] {
 						r.FallBackAndVerifyEachSignature(
 							r.State.PostConsensusContainer,
@@ -1013,7 +990,7 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 					}
 					const eventMsg = "got post-consensus quorum but it has invalid signatures"
 					span.AddEvent(eventMsg)
-					vlogger.Error(eventMsg, zap.Error(err))
+					vlogger.Error(eventMsg, zap.Bool("recoverable", isRecoverableReconstructError(err)), zap.Error(err))
 
 					// classify reads recoverability from this spec code, not the tag, so only a recoverable failure
 					// carries it.

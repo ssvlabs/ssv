@@ -12,7 +12,9 @@ import (
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest"
+	"go.uber.org/zap/zaptest/observer"
 
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
@@ -341,6 +343,38 @@ func TestAggregatorCommitteeRunnerProcessPostConsensus_MarksFailedWhenNoShareToD
 		"a terminal failure must not carry the recoverable spec code")
 	requireConcluded(t, concluded, dutyOutcomeFailed)
 	require.Empty(t, base.GetBroadcastedRoots())
+}
+
+// A selection proof that fails to reconstruct with no bad share to drop only skips its validator, like any
+// pre-consensus failure, and the failure is logged as not recoverable.
+func TestAggregatorCommitteeRunnerProcessPreConsensus_NoShareToDropSkipsValidator(t *testing.T) {
+	ctx := t.Context()
+	const version = spec.DataVersionElectra
+
+	base := protocoltesting.NewTestingBeaconNodeWrapped().(*protocoltesting.BeaconNodeWrapped)
+	env := newAggregatorCommitteeRunnerEnv(t, []int{1}, base)
+	duty := spectestingutils.TestingAggregatorCommitteeDutyForValidators([]int{1}, []int{}, version)
+	require.NoError(t, env.runner.StartNewDuty(ctx, env.logger, duty, env.sampleKey.Threshold))
+	concluded := observeDutyConclusion(env.runner.BaseRunner)
+	env.runner.Share[1] = withUnrelatedValidatorKey(env.runner.Share[1])
+
+	core, logs := observer.New(zapcore.ErrorLevel)
+	var preConsensusErr error
+	for _, msg := range spectestingutils.AggregatorCommitteeInputForDuty(duty, env.keySetMap, version) {
+		psig := &spectypes.PartialSignatureMessages{}
+		if msg.SSVMessage.MsgType != spectypes.SSVPartialSignatureMsgType || psig.Decode(msg.SSVMessage.Data) != nil ||
+			psig.Type == spectypes.PostConsensusPartialSig {
+			continue
+		}
+		preConsensusErr = env.runner.ProcessPreConsensus(ctx, zap.New(core), psig)
+	}
+
+	require.ErrorContains(t, preConsensusErr, "invalid signatures")
+	require.False(t, isRecoverableReconstructError(preConsensusErr))
+	require.Empty(t, concluded, "the duty goes on without the validator")
+	failures := logs.FilterMessage("got pre-consensus quorum but it has invalid signatures").All()
+	require.Len(t, failures, 1)
+	require.Equal(t, false, failures[0].ContextMap()["recoverable"])
 }
 
 // TestAggregatorCommitteeRunnerProcessPostConsensus_TerminalWinsOverConcurrentRecoverable is the
