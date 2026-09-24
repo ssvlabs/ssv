@@ -624,6 +624,10 @@ func (r *proposerPreferencesSlotRunner) buildProposerPreferences(ctx context.Con
 	// scheduler re-emits only on a real change and message validation admits the new signing root — but a
 	// preference already published under a soon-to-change root is not retracted. Low severity (reorg-gated,
 	// §5 is observational); add a finality hold only if it bites on devnet.
+	//
+	// Likewise, a re-emission that can't build its preference keeps the one already broadcast (executeDuty):
+	// if a dependent_root change triggered it, that preference is stale, peers converge on the new root without
+	// this operator, and the duty is reported stuck at the proposal slot.
 	return &gloas.ProposerPreferences{
 		DependentRoot:  dependentRoot,
 		ProposalSlot:   proposalSlot,

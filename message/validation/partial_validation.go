@@ -333,15 +333,16 @@ func validatePartialSignatureMessageLimit(
 	receivedFrom peer.ID,
 	signerState *SignerStateForSlotRound,
 ) error {
+	peerState := signerState.peekPeer(receivedFrom)
 	switch m.Type {
 	case spectypes.RandaoPartialSig, ssvtypes.SelectionProofPartialSig, ssvtypes.ContributionProofs,
 		spectypes.ValidatorRegistrationPartialSig, spectypes.VoluntaryExitPartialSig,
 		spectypes.AggregatorCommitteePartialSig, spectypes.PTCAttesterPartialSig:
-		if signerState.peekPeer(receivedFrom).SeenMsgTypes.reachedPreConsensusLimit() {
+		if peerState.SeenMsgTypes.reachedPreConsensusLimit() {
 			// Check if the same peer is sending us a "logical duplicate" message, reject message to punish.
 			e := ErrTooManyPartialSigMessage
 			e.reject = true
-			e.got = fmt.Sprintf("pre-consensus, having %v", signerState.peekPeer(receivedFrom).SeenMsgTypes.String())
+			e.got = fmt.Sprintf("pre-consensus, having %v", peerState.SeenMsgTypes.String())
 			return e
 		}
 		if signerState.World.SeenMsgTypes.reachedPreConsensusLimit() {
@@ -359,11 +360,11 @@ func validatePartialSignatureMessageLimit(
 		// SIP #94 §5: one root per configured builder, under the same budget scheme.
 		return validateDistinctRootBudget(m, signerState, "request-auth", maxRequestAuthDistinctRoots)
 	case spectypes.PostConsensusPartialSig:
-		if signerState.peekPeer(receivedFrom).SeenMsgTypes.reachedPostConsensusLimit() {
+		if peerState.SeenMsgTypes.reachedPostConsensusLimit() {
 			// Check if the same peer is sending us a "logical duplicate" message, reject message to punish.
 			e := ErrTooManyPartialSigMessage
 			e.reject = true
-			e.got = fmt.Sprintf("post-consensus, having %v", signerState.peekPeer(receivedFrom).SeenMsgTypes.String())
+			e.got = fmt.Sprintf("post-consensus, having %v", peerState.SeenMsgTypes.String())
 			return e
 		}
 		if signerState.World.SeenMsgTypes.reachedPostConsensusLimit() {

@@ -401,10 +401,10 @@ listener:
 	)
 
 	if totalAttestations == 0 && totalSyncCommittee == 0 {
-		// A canceled context also lands here with zero counts: the duty feeder and the workers bail
-		// out on ctx.Err() before incrementing any counter. That is shutdown — the duty was abandoned,
-		// not completed-with-nothing-to-do — so return without concluding an outcome, mirroring
-		// markDutyFailed's context.Canceled filter (cancellation is never an outcome).
+		// A done context also lands here with zero counts: the duty feeder and the workers bail out on
+		// ctx.Err() before incrementing any counter. The duty was abandoned, not left with nothing to do,
+		// so return the context's error rather than conclude not_required: the defer above drops a
+		// cancellation (shutdown is never an outcome) and concludes an expired duty deadline as failed.
 		if err := ctx.Err(); err != nil {
 			return err
 		}

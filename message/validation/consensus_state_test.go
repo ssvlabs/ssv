@@ -167,6 +167,6 @@ func TestSignerStateForSlotRound_PeekPeerDoesNotAdd(t *testing.T) {
 
 	s.Peer(verified).SeenMsgTypes.recordPostConsensus()
 	require.Len(t, s.Peers, 1)
-	require.Same(t, s.Peers[verified], s.peekPeer(verified))
+	require.Equal(t, *s.Peers[verified], s.peekPeer(verified))
 	require.Error(t, validatePartialSignatureMessageLimit(partial, verified, s), "the recorded peer's state is read")
 }

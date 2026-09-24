@@ -6,6 +6,7 @@ import (
 	"errors"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -290,29 +291,46 @@ func TestCommitteeRunnerProcessConsensus_MarksNotRequiredOnNoValidDuties(t *test
 	require.True(t, env.runner.State.Succeeded, "not_required is a correct completion")
 }
 
-// TestCommitteeRunnerProcessConsensus_CancelledContextDoesNotConcludeNotRequired guards the
-// consensus-phase zero-duties branch against shutdown: a canceled context also reaches it with zero
-// counts (the duty feeder and workers bail out before counting), but an abandoned duty must not be
-// recorded as a not_required completion — cancellation is never an outcome, mirroring
-// markDutyFailed's context.Canceled filter.
-func TestCommitteeRunnerProcessConsensus_CancelledContextDoesNotConcludeNotRequired(t *testing.T) {
-	env := newCommitteeRunnerEnv(t, []int{1}, &committeeDutyGuardStub{}, &doppelgangerStub{})
-	duty := spectestingutils.TestingCommitteeDuty([]int{1}, nil, spec.DataVersionElectra)
+// TestCommitteeRunnerProcessConsensus_DoneContextDoesNotConcludeNotRequired guards the consensus-phase
+// zero-duties branch against a done context, which also reaches it with zero counts (the duty feeder and
+// workers bail out before counting). An abandoned duty must not be recorded as a not_required completion: a
+// cancellation (shutdown) concludes no outcome, as markDutyFailed drops it, and an expired duty deadline
+// concludes the duty failed.
+func TestCommitteeRunnerProcessConsensus_DoneContextDoesNotConcludeNotRequired(t *testing.T) {
+	// decideUnder starts a duty and feeds it the messages that decide it under ctx, returning the conclusion
+	// channel and the last error ProcessConsensus returned.
+	decideUnder := func(t *testing.T, ctx context.Context) (chan dutyConclusion, error) {
+		t.Helper()
+		env := newCommitteeRunnerEnv(t, []int{1}, &committeeDutyGuardStub{}, &doppelgangerStub{})
+		duty := spectestingutils.TestingCommitteeDuty([]int{1}, nil, spec.DataVersionElectra)
+		require.NoError(t, env.runner.StartNewDuty(t.Context(), env.logger, duty, env.sampleKey.Threshold))
+		concluded := observeDutyConclusion(env.runner.BaseRunner)
 
-	require.NoError(t, env.runner.StartNewDuty(t.Context(), env.logger, duty, env.sampleKey.Threshold))
-	concluded := observeDutyConclusion(env.runner.BaseRunner)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-
-	var consensusErr error
-	for _, msg := range spectestingutils.CommitteeInputForDuty(duty, duty.Slot, env.keySetMap, false) {
-		if err := env.runner.ProcessConsensus(ctx, env.logger, msg); err != nil {
-			consensusErr = err
+		var consensusErr error
+		for _, msg := range spectestingutils.CommitteeInputForDuty(duty, duty.Slot, env.keySetMap, false) {
+			if err := env.runner.ProcessConsensus(ctx, env.logger, msg); err != nil {
+				consensusErr = err
+			}
 		}
+		require.False(t, env.runner.State.Succeeded, "an abandoned duty is not a completion")
+		return concluded, consensusErr
 	}
 
-	require.ErrorIs(t, consensusErr, context.Canceled, "shutdown must surface the cancellation, not the benign sentinel")
-	require.Empty(t, concluded, "an abandoned duty must not conclude any outcome")
-	require.False(t, env.runner.State.Succeeded, "an abandoned duty is not a completion")
+	t.Run("canceled", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+
+		concluded, err := decideUnder(t, ctx)
+		require.ErrorIs(t, err, context.Canceled, "shutdown must surface the cancellation, not the benign sentinel")
+		require.Empty(t, concluded, "an abandoned duty must not conclude any outcome")
+	})
+
+	t.Run("deadline exceeded", func(t *testing.T) {
+		ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+		defer cancel()
+
+		concluded, err := decideUnder(t, ctx)
+		require.ErrorIs(t, err, context.DeadlineExceeded)
+		requireConcluded(t, concluded, dutyOutcomeFailed)
+	})
 }
