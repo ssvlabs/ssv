@@ -192,17 +192,23 @@ func newCommitteeRunnerEnvInternal(
 	}
 }
 
-func (e *committeeRunnerEnv) startAndDecideCommitteeDuty(t *testing.T, duty *spectypes.CommitteeDuty) {
+// startAndDecideCommitteeDuty starts duty and feeds the runner the consensus messages that decide it. It returns
+// a channel that observes the duty's conclusion and the first error ProcessConsensus returns.
+func (e *committeeRunnerEnv) startAndDecideCommitteeDuty(t *testing.T, duty *spectypes.CommitteeDuty) (chan dutyConclusion, error) {
 	t.Helper()
 
 	// t.Context: StartNewDuty spawns a deadline watcher that may log at slot end; the test-scoped
 	// context releases it before the zaptest logger becomes invalid.
 	ctx := t.Context()
 	require.NoError(t, e.runner.StartNewDuty(ctx, e.logger, duty, e.sampleKey.Threshold))
+	concluded := observeDutyConclusion(e.runner.BaseRunner)
 
 	for _, msg := range spectestingutils.CommitteeInputForDuty(duty, duty.Slot, e.keySetMap, false) {
-		require.NoError(t, e.runner.ProcessConsensus(ctx, e.logger, msg))
+		if err := e.runner.ProcessConsensus(ctx, e.logger, msg); err != nil {
+			return concluded, err
+		}
 	}
+	return concluded, nil
 }
 
 func decodeBroadcastedPartialSig(t *testing.T, msg *spectypes.SignedSSVMessage) *spectypes.PartialSignatureMessages {
@@ -379,7 +385,8 @@ func TestCommitteeRunnerProcessConsensus_UsesWorkerPoolForMoreThan30SyncDuties(t
 	env := newCommitteeRunnerEnv(t, validatorIndices, &committeeDutyGuardStub{}, &doppelgangerStub{})
 	duty := spectestingutils.TestingCommitteeDuty(nil, validatorIndices, spec.DataVersionPhase0)
 
-	env.startAndDecideCommitteeDuty(t, duty)
+	_, err := env.startAndDecideCommitteeDuty(t, duty)
+	require.NoError(t, err)
 
 	partialSigMsgs := partialSigBroadcasts(env.network.BroadcastedMsgs)
 	require.Len(t, partialSigMsgs, 1)
@@ -411,7 +418,8 @@ func TestCommitteeRunnerProcessConsensus_DoppelgangerAndDutyBranching(t *testing
 		env := newCommitteeRunnerEnv(t, []int{1, 2, 3}, &committeeDutyGuardStub{}, doppelganger)
 		duty := spectestingutils.TestingCommitteeDuty([]int{1, 2, 3}, nil, spec.DataVersionPhase0)
 
-		env.startAndDecideCommitteeDuty(t, duty)
+		_, err := env.startAndDecideCommitteeDuty(t, duty)
+		require.NoError(t, err)
 
 		require.Empty(t, partialSigBroadcasts(env.network.BroadcastedMsgs))
 	})
@@ -425,7 +433,8 @@ func TestCommitteeRunnerProcessConsensus_DoppelgangerAndDutyBranching(t *testing
 		env := newCommitteeRunnerEnv(t, []int{1, 2}, &committeeDutyGuardStub{}, doppelganger)
 		duty := spectestingutils.TestingCommitteeDuty([]int{1}, []int{2}, spec.DataVersionPhase0)
 
-		env.startAndDecideCommitteeDuty(t, duty)
+		_, err := env.startAndDecideCommitteeDuty(t, duty)
+		require.NoError(t, err)
 
 		partialSigMsgs := partialSigBroadcasts(env.network.BroadcastedMsgs)
 		require.Len(t, partialSigMsgs, 1)
@@ -440,7 +449,8 @@ func TestCommitteeRunnerProcessPostConsensus_SubmitsElectraObjectsAndDeduplicate
 	env := newCommitteeRunnerEnv(t, []int{1, 2}, &committeeDutyGuardStub{}, doppelganger)
 	duty := spectestingutils.TestingCommitteeDuty([]int{1}, []int{2}, spec.DataVersionElectra)
 
-	env.startAndDecideCommitteeDuty(t, duty)
+	_, err := env.startAndDecideCommitteeDuty(t, duty)
+	require.NoError(t, err)
 
 	postConsensusMsgs := []*spectypes.PartialSignatureMessages{
 		spectestingutils.PostConsensusCommitteeMsgForDuty(duty, env.keySetMap, 1),

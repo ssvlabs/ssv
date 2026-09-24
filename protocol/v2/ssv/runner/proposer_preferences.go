@@ -125,11 +125,13 @@ func (r *ProposerPreferencesRunner) StartNewDuty(ctx context.Context, logger *za
 	}
 
 	// The replacement takes the slot over once its duty is ASSIGNED — the same gate as the stash replay
-	// below — whether or not its start then failed: a sub-runner that executed at all has run its
-	// request-auth round (which never fails the duty) and frozen its preference before signing it, so it
-	// still takes this slot's partials; the base has already recorded the failed attempt as this duty's
-	// outcome. The rare start that fails before assignment leaves the prior incarnation in place,
-	// containers and outcome intact. Either way the error goes back to the caller.
+	// below — whether or not its start then failed. A sub-runner that executed at all has run its
+	// request-auth round (which never fails the duty) and, before signing, frozen a preference: the one it
+	// built, or the one this slot already broadcast if it couldn't build one. So it still takes this slot's
+	// partials, and a failed start is already this duty's recorded outcome. It freezes none only when the
+	// preference is already submitted, or when it couldn't build one and this slot never broadcast one.
+	// The rare start that fails before assignment leaves the prior incarnation in place, containers and
+	// outcome intact. Either way the error goes back to the caller.
 	startErr := sub.StartNewDuty(ctx, logger, duty, quorum)
 	if !sub.hasDutyAssigned() {
 		return startErr
@@ -175,10 +177,10 @@ func (r *ProposerPreferencesRunner) ProcessPreConsensus(ctx context.Context, log
 
 	sub, ok := r.bySlot[signedMsg.Slot]
 	if !ok {
-		// No sub-runner for this proposal slot — it hasn't executed here yet, or it already concluded and
-		// was evicted. Not retryable: the stash above is what replays the partial once the slot's duty
-		// starts here (StartNewDuty), so a queue retry would only churn until it gave up.
-		return withCode(spectypes.NoRunningDutyErrorCode, ErrNoDutyAssigned)
+		// No sub-runner for this proposal slot: its duty hasn't started here yet (StartNewDuty replays the
+		// stash above once it does), or its slot has passed (the stash goes with it). Neither is a failure for
+		// the queue to retry or report.
+		return nil
 	}
 	return sub.ProcessPreConsensus(ctx, logger, signedMsg)
 }
@@ -367,10 +369,10 @@ type proposerPreferencesSlotRunner struct {
 
 	// broadcastPreferences is the preference this proposal slot already broadcast a partial signature
 	// for, carried across sub-runner replacements like submittedPreferences. It covers the in-flight
-	// case (broadcast, quorum still converging): a re-emission that rebuilds it byte-identically keeps
-	// converging without re-signing — peers IGNORE an identical re-broadcast as a repeated root (SIP #94
-	// §7), so it could only spend bandwidth (issue #2934); the dispatcher's stash replay re-seeds the
-	// replacement instead, our own first partial included.
+	// case (broadcast, quorum still converging): a re-emission that rebuilds it byte-identically, or
+	// can't rebuild at all, keeps converging on it without re-signing — peers IGNORE an identical
+	// re-broadcast as a repeated root (SIP #94 §7), so it could only spend bandwidth (issue #2934); the
+	// dispatcher's stash replay re-seeds the replacement instead, our own first partial included.
 	broadcastPreferences *gloas.ProposerPreferences
 
 	// builders is the cluster's resolved direct-builder entry list: for each entry executeDuty freezes and
@@ -519,7 +521,20 @@ func (r *proposerPreferencesSlotRunner) executeDuty(ctx context.Context, logger 
 	r.runRequestAuthRound(ctx, logger, validatorDuty, proposalSlot)
 
 	preferences, err := r.buildProposerPreferences(ctx, logger, proposalSlot)
-	if err != nil {
+	switch {
+	case err == nil:
+		logger.Debug("built proposer preferences",
+			fields.Slot(proposalSlot),
+			zap.String("dependent_root", preferences.DependentRoot.String()),
+			fields.FeeRecipient(preferences.FeeRecipient[:]),
+			zap.Uint64("target_gas_limit", preferences.TargetGasLimit))
+	case r.broadcastPreferences != nil:
+		// A re-emission that can't rebuild keeps converging on the preference this slot already broadcast:
+		// taking the slot over with nothing frozen would drop the partials gathered for it.
+		logger.Warn("proposer preferences: could not rebuild preferences, keeping the one already broadcast",
+			fields.Slot(proposalSlot), zap.Error(err))
+		preferences = r.broadcastPreferences
+	default:
 		// Building hits the beacon node (dependent-root fetch) and validator config (fee recipient);
 		// a failure there is operational, so record a failed duty to surface it in metrics.
 		logger.Warn("proposer preferences failed: could not build preferences", fields.Slot(proposalSlot), zap.Error(err))
@@ -541,12 +556,6 @@ func (r *proposerPreferencesSlotRunner) executeDuty(ctx context.Context, logger 
 	// this object's signing root, so only operators that converged on identical preferences (same
 	// dependent_root, fee recipient, gas limit) reach quorum.
 	r.proposerPreferences = preferences
-
-	logger.Debug("built proposer preferences",
-		fields.Slot(proposalSlot),
-		zap.String("dependent_root", preferences.DependentRoot.String()),
-		fields.FeeRecipient(preferences.FeeRecipient[:]),
-		zap.Uint64("target_gas_limit", preferences.TargetGasLimit))
 
 	if r.broadcastPreferences != nil && *preferences == *r.broadcastPreferences {
 		// A prior incarnation of this slot already broadcast this exact preference (quorum still

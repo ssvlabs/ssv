@@ -93,15 +93,17 @@ func newAggregatorRunnerEnv(t *testing.T, beaconNode beacon.BeaconNode) *aggrega
 // carried to a decision using the generic SSVDecidingMsgsV consensus-message builder (role !=
 // RoleProposer, so it emits no pre-consensus messages, only proposal/prepare/commit). Feeding those
 // messages through the real ProcessConsensus exercises the same code path production traffic would.
+// It returns a channel that observes the duty's conclusion and the first error ProcessConsensus returns.
 func (e *aggregatorRunnerEnv) startAndDecideAggregatorDuty(
 	t *testing.T,
 	ctx context.Context,
 	duty *spectypes.ValidatorDuty,
 	version spec.DataVersion,
-) {
+) (chan dutyConclusion, error) {
 	t.Helper()
 
 	require.NoError(t, e.runner.StartNewDuty(ctx, e.logger, duty, e.keySet.Threshold))
+	concluded := observeDutyConclusion(e.runner.BaseRunner)
 
 	aggData := spectestingutils.TestingAggregateAndProofV(version, duty.ValidatorIndex)
 	dataSSZ, err := aggData.MarshalSSZ()
@@ -115,8 +117,11 @@ func (e *aggregatorRunnerEnv) startAndDecideAggregatorDuty(
 	require.NoError(t, e.runner.decide(ctx, e.logger, duty.Slot, consensusData, dummyValueChecker{}))
 
 	for _, msg := range spectestingutils.SSVDecidingMsgsV(consensusData, e.keySet, ssvtypes.RoleAggregator) {
-		require.NoError(t, e.runner.ProcessConsensus(ctx, e.logger, msg))
+		if err := e.runner.ProcessConsensus(ctx, e.logger, msg); err != nil {
+			return concluded, err
+		}
 	}
+	return concluded, nil
 }
 
 // aggregatorPostConsensusMsgs returns the (valid) post-consensus PartialSignatureMessages from
@@ -148,10 +153,8 @@ func TestAggregatorRunnerProcessPostConsensus_MarksFailedOnSubmitError(t *testin
 		ValidatorIndex: spectestingutils.TestingValidatorIndex,
 	}
 
-	env.startAndDecideAggregatorDuty(t, ctx, duty, version)
-
-	concluded := make(chan dutyConclusion, 1)
-	env.runner.dutyConcluded = concluded
+	concluded, err := env.startAndDecideAggregatorDuty(t, ctx, duty, version)
+	require.NoError(t, err)
 
 	var postConsensusErr error
 	for _, psig := range aggregatorPostConsensusMsgs(env.keySet, version) {
@@ -172,6 +175,25 @@ func TestAggregatorRunnerProcessPostConsensus_MarksFailedOnSubmitError(t *testin
 	require.False(t, env.runner.State.Succeeded, "a failed duty must not be marked succeeded")
 }
 
+// An error after the instance decides — here the aggregate can't be signed — concludes the duty failed: the
+// instance never decides again, so nothing can retry it.
+func TestAggregatorRunnerProcessConsensus_MarksFailedAfterDecision(t *testing.T) {
+	const version = spec.DataVersionPhase0
+
+	env := newAggregatorRunnerEnv(t, protocoltesting.NewTestingBeaconNodeWrapped())
+	env.runner.signer = failingDomainSigner{BeaconSigner: env.runner.signer, domain: spectypes.DomainAggregateAndProof}
+	duty := &spectypes.ValidatorDuty{
+		Type:           spectypes.BNRoleAggregator,
+		PubKey:         spectestingutils.TestingValidatorPubKey,
+		Slot:           spectestingutils.TestingDutySlotV(version),
+		ValidatorIndex: spectestingutils.TestingValidatorIndex,
+	}
+
+	concluded, err := env.startAndDecideAggregatorDuty(t, t.Context(), duty, version)
+	require.ErrorContains(t, err, "signing failed")
+	requireConcluded(t, concluded, dutyOutcomeFailed)
+}
+
 // TestAggregatorRunnerProcessPostConsensus_DoesNotMarkFailedOnInvalidSigs is the regression test for
 // the legacy AggregatorRunner side of #2919: a recoverable reconstruct-invalid-signatures failure
 // (tagged recoverableReconstructError by reconstructQuorumSig) must NOT conclude the duty failed,
@@ -189,10 +211,8 @@ func TestAggregatorRunnerProcessPostConsensus_DoesNotMarkFailedOnInvalidSigs(t *
 		ValidatorIndex: spectestingutils.TestingValidatorIndex,
 	}
 
-	env.startAndDecideAggregatorDuty(t, ctx, duty, version)
-
-	concluded := make(chan dutyConclusion, 1)
-	env.runner.dutyConcluded = concluded
+	concluded, err := env.startAndDecideAggregatorDuty(t, ctx, duty, version)
+	require.NoError(t, err)
 
 	// Corrupt the beacon partial signatures. ValidatePostConsensusMsg only checks message structure
 	// (not the beacon sig), so these still reach optimistic quorum, then ReconstructBeaconSig fails

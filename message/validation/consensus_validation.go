@@ -238,11 +238,11 @@ func (mv *messageValidator) validateQBFTLogic(
 			if consensusMessage.Round == signerState.Round {
 				// Rule: Ignore proposals with different data in the same round
 				if len(signedSSVMessage.FullData) != 0 {
-					if signerState.Peer(receivedFrom).HashedProposalData != nil && *signerState.Peer(receivedFrom).HashedProposalData != consensusMessage.Root {
+					if signerState.peekPeer(receivedFrom).HashedProposalData != nil && *signerState.peekPeer(receivedFrom).HashedProposalData != consensusMessage.Root {
 						// Check if the same peer is sending us a "logical duplicate" message, reject message to punish.
 						e := ErrDifferentProposalData
 						e.reject = true
-						e.want = hexutil.Bytes((*signerState.Peer(receivedFrom).HashedProposalData)[:]).String()
+						e.want = hexutil.Bytes((*signerState.peekPeer(receivedFrom).HashedProposalData)[:]).String()
 						e.got = hexutil.Bytes(consensusMessage.Root[:]).String()
 						return e
 					}
@@ -458,11 +458,11 @@ func validateConsensusMessageLimit(
 ) error {
 	switch msg.MsgType {
 	case specqbft.ProposalMsgType:
-		if signerState.Peer(receivedFrom).SeenMsgTypes.reachedProposalLimit() {
+		if signerState.peekPeer(receivedFrom).SeenMsgTypes.reachedProposalLimit() {
 			// Check if the same peer is sending us a "logical duplicate" message, reject message to punish.
 			e := ErrDuplicatedMessage
 			e.reject = true
-			e.got = fmt.Sprintf("proposal, having %v", signerState.Peer(receivedFrom).SeenMsgTypes.String())
+			e.got = fmt.Sprintf("proposal, having %v", signerState.peekPeer(receivedFrom).SeenMsgTypes.String())
 			return e
 		}
 		if signerState.World.SeenMsgTypes.reachedProposalLimit() {
@@ -473,11 +473,11 @@ func validateConsensusMessageLimit(
 			return e
 		}
 	case specqbft.PrepareMsgType:
-		if signerState.Peer(receivedFrom).SeenMsgTypes.reachedPrepareLimit() {
+		if signerState.peekPeer(receivedFrom).SeenMsgTypes.reachedPrepareLimit() {
 			// Check if the same peer is sending us a "logical duplicate" message, reject message to punish.
 			e := ErrDuplicatedMessage
 			e.reject = true
-			e.got = fmt.Sprintf("prepare, having %v", signerState.Peer(receivedFrom).SeenMsgTypes.String())
+			e.got = fmt.Sprintf("prepare, having %v", signerState.peekPeer(receivedFrom).SeenMsgTypes.String())
 			return e
 		}
 		if signerState.World.SeenMsgTypes.reachedPrepareLimit() {
@@ -489,11 +489,11 @@ func validateConsensusMessageLimit(
 		}
 	case specqbft.CommitMsgType:
 		if len(signedSSVMessage.OperatorIDs) == 1 {
-			if signerState.Peer(receivedFrom).SeenMsgTypes.reachedCommitLimit() {
+			if signerState.peekPeer(receivedFrom).SeenMsgTypes.reachedCommitLimit() {
 				// Check if the same peer is sending us a "logical duplicate" message, reject message to punish.
 				e := ErrDuplicatedMessage
 				e.reject = true
-				e.got = fmt.Sprintf("commit, having %v", signerState.Peer(receivedFrom).SeenMsgTypes.String())
+				e.got = fmt.Sprintf("commit, having %v", signerState.peekPeer(receivedFrom).SeenMsgTypes.String())
 				return e
 			}
 			if signerState.World.SeenMsgTypes.reachedCommitLimit() {
@@ -505,11 +505,11 @@ func validateConsensusMessageLimit(
 			}
 		}
 	case specqbft.RoundChangeMsgType:
-		if signerState.Peer(receivedFrom).SeenMsgTypes.reachedRoundChangeLimit() {
+		if signerState.peekPeer(receivedFrom).SeenMsgTypes.reachedRoundChangeLimit() {
 			// Check if the same peer is sending us a "logical duplicate" message, reject message to punish.
 			e := ErrDuplicatedMessage
 			e.reject = true
-			e.got = fmt.Sprintf("round change, having %v", signerState.Peer(receivedFrom).SeenMsgTypes.String())
+			e.got = fmt.Sprintf("round change, having %v", signerState.peekPeer(receivedFrom).SeenMsgTypes.String())
 			return e
 		}
 		if signerState.World.SeenMsgTypes.reachedRoundChangeLimit() {

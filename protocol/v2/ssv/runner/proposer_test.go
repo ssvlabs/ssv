@@ -333,27 +333,18 @@ func TestProposerRunnerProcessConsensusSkipsPostConsensusSigningWhenDoppelganger
 
 	err := runner.StartNewDuty(context.Background(), zap.NewNop(), duty, keySet.Threshold)
 	require.NoError(t, err)
+	concluded := observeDutyConclusion(runner.BaseRunner)
 
 	dg.canSign = false
 
 	consensusData := spectestingutils.TestProposerBlindedBlockConsensusDataV(version)
-	runner.measurements.StartConsensus()
-	require.NoError(t, runner.decide(context.Background(), zap.NewNop(), duty.Slot, consensusData, runner.ValCheck))
-	consensusMsgs := spectestingutils.SSVDecidingMsgsForHeight(
-		consensusData,
-		runner.QBFTController.GetIdentifier(),
-		specqbft.Height(consensusData.Duty.Slot),
-		keySet,
-	)
-
-	for _, msg := range consensusMsgs {
-		require.NoError(t, runner.ProcessConsensus(context.Background(), zap.NewNop(), msg))
-	}
+	require.NoError(t, decideProposerDuty(t, runner, keySet, duty.Slot, consensusData))
 
 	require.NotNil(t, runner.State.DecidedValue)
 	require.Equal(t, 0, countPartialSignatureBroadcastsByType(t, network, spectypes.PostConsensusPartialSig))
 	require.Equal(t, 1, countPartialSignatureBroadcastsByType(t, network, spectypes.RandaoPartialSig))
 	require.False(t, runner.State.Succeeded)
+	require.Empty(t, concluded, "the duty stays open for the other operators' partials")
 }
 
 func TestProposerRunnerProcessPostConsensusLeaderUsesCachedFullBlockWhenDecisionMatches(t *testing.T) {
@@ -854,11 +845,7 @@ func TestProposerRunnerProcessConsensusGloasSignsBlockAndEnvelope(t *testing.T) 
 
 	proposal, _ := gloasSelfBuildProposal(t, slot)
 	consensusData := gloasConsensusData(t, proposal)
-	runner.measurements.StartConsensus()
-	require.NoError(t, runner.decide(ctx, logger, slot, consensusData, runner.ValCheck))
-	for _, msg := range spectestingutils.SSVDecidingMsgsForHeight(consensusData, runner.QBFTController.GetIdentifier(), specqbft.Height(slot), keySet) {
-		require.NoError(t, runner.ProcessConsensus(ctx, logger, msg))
-	}
+	require.NoError(t, decideProposerDuty(t, runner, keySet, slot, consensusData))
 
 	var packet *spectypes.PartialSignatureMessages
 	for _, msg := range network.BroadcastedMsgs {
@@ -905,22 +892,38 @@ func TestProposerRunnerProcessConsensusRejectsDecidedValueForAnotherSlot(t *test
 	ctx, logger := context.Background(), zap.NewNop()
 	runner, keySet, network := newProposerRunnerForTest(t, newProposerTestBeacon(nil), &stubDoppelganger{canSign: true}, 0, gloasTestConfig(slot))
 	require.NoError(t, runner.StartNewDuty(ctx, logger, gloasProposerDuty(slot), keySet.Threshold))
+	concluded := observeDutyConclusion(runner.BaseRunner)
 
 	proposal, _ := gloasSelfBuildProposal(t, slot+1) // a valid Gloas value, but for the next slot
-	consensusData := gloasConsensusData(t, proposal)
-	runner.measurements.StartConsensus()
-	require.NoError(t, runner.decide(ctx, logger, slot, consensusData, runner.ValCheck))
-
-	var decideErr error
-	for _, msg := range spectestingutils.SSVDecidingMsgsForHeight(consensusData, runner.QBFTController.GetIdentifier(), specqbft.Height(slot), keySet) {
-		if err := runner.ProcessConsensus(ctx, logger, msg); err != nil {
-			decideErr = err
-		}
-	}
+	err := decideProposerDuty(t, runner, keySet, slot, gloasConsensusData(t, proposal))
 	var specErr *spectypes.Error
-	require.ErrorAs(t, decideErr, &specErr)
+	require.ErrorAs(t, err, &specErr)
 	require.Equal(t, spectypes.ProposerDutySlotMismatchErrorCode, specErr.Code)
 	require.Zero(t, countPartialSignatureBroadcastsByType(t, network, spectypes.PostConsensusPartialSig), "nothing signed")
+	requireConcluded(t, concluded, dutyOutcomeFailed)
+}
+
+// rejectingValueChecker rejects every value.
+type rejectingValueChecker struct{}
+
+func (rejectingValueChecker) CheckValue([]byte) error { return errors.New("value rejected") }
+
+// A decided value the runner can't take up — its own value check rejects it — concludes the duty failed: the
+// instance never decides again.
+func TestProposerRunnerProcessConsensusRejectedDecidedValueFailsDuty(t *testing.T) {
+	t.Parallel()
+
+	const slot = phase0.Slot(8)
+	ctx, logger := context.Background(), zap.NewNop()
+	runner, keySet, _ := newProposerRunnerForTest(t, newProposerTestBeacon(nil), &stubDoppelganger{canSign: true}, 0, gloasTestConfig(slot))
+	require.NoError(t, runner.StartNewDuty(ctx, logger, gloasProposerDuty(slot), keySet.Threshold))
+	concluded := observeDutyConclusion(runner.BaseRunner)
+
+	proposal, _ := gloasSelfBuildProposal(t, slot)
+	consensusData := gloasConsensusData(t, proposal)
+	runner.ValCheck = rejectingValueChecker{} // the instance takes the proposal; the decided value's check fails
+	require.ErrorContains(t, decideProposerDuty(t, runner, keySet, slot, consensusData), "decided ValidatorConsensusData invalid")
+	requireConcluded(t, concluded, dutyOutcomeFailed)
 }
 
 // RunningDutySlot is the slot of the last started duty, finished or not, and 0 before the first duty or on a
@@ -995,12 +998,7 @@ func TestProposerRunnerProcessConsensusGloasReleasesReveal(t *testing.T) {
 			require.NoError(t, runner.StartNewDuty(ctx, logger, gloasProposerDuty(slot), keySet.Threshold))
 			runner.gloasDuty.producedEnvelope = tt.produced
 
-			consensusData := gloasConsensusData(t, proposal)
-			runner.measurements.StartConsensus()
-			require.NoError(t, runner.decide(ctx, logger, slot, consensusData, runner.ValCheck))
-			for _, msg := range spectestingutils.SSVDecidingMsgsForHeight(consensusData, runner.QBFTController.GetIdentifier(), specqbft.Height(slot), keySet) {
-				require.NoError(t, runner.ProcessConsensus(ctx, logger, msg))
-			}
+			require.NoError(t, decideProposerDuty(t, runner, keySet, slot, gloasConsensusData(t, proposal)))
 
 			if tt.kept {
 				require.Same(t, tt.produced, runner.gloasDuty.producedEnvelope)
@@ -1143,6 +1141,23 @@ func TestProposerRunnerStartNewDutyResetsGloasDutyState(t *testing.T) {
 		require.Nil(t, runner.cachedFullBlock, "can sign: %v", canSign)
 		require.Nil(t, runner.cachedBlindedBlockSSZ, "can sign: %v", canSign)
 	}
+}
+
+// decideProposerDuty decides consensusData at height on runner's started duty, feeding it the consensus messages
+// that decide it, and returns the first error ProcessConsensus returns. The instance takes the proposal as is;
+// the decided value then goes through the runner's ValCheck, as every decided value does.
+func decideProposerDuty(t *testing.T, runner *ProposerRunner, keySet *spectestingutils.TestKeySet, height phase0.Slot, consensusData *spectypes.ProposerConsensusData) error {
+	t.Helper()
+
+	ctx, logger := t.Context(), zap.NewNop()
+	runner.measurements.StartConsensus()
+	require.NoError(t, runner.decide(ctx, logger, height, consensusData, dummyValueChecker{}))
+	for _, msg := range spectestingutils.SSVDecidingMsgsForHeight(consensusData, runner.QBFTController.GetIdentifier(), specqbft.Height(height), keySet) {
+		if err := runner.ProcessConsensus(ctx, logger, msg); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func newProposerRunnerForTest(

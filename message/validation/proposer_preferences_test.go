@@ -41,14 +41,36 @@ func TestMonotonicSlotRole_ProposerPreferences(t *testing.T) {
 	require.False(t, mv.monotonicSlotRole(spectypes.RoleCommittee))
 }
 
+// Every proposal slot a preference is accepted for at one moment has its own ring slot. The widest moment is an
+// epoch's last slot, where the early margin admits the epoch after next; with 4s slots the late and early margins
+// together exceed a slot, so it still admits LateSlotAllowance slots back too — the case the spare slot is for.
 func TestStoredSlotCount_ProposerPreferences(t *testing.T) {
-	netCfg := networkconfig.TestNetwork
-	mv := &messageValidator{netCfg: netCfg}
+	require.Equal(t, (&messageValidator{netCfg: networkconfig.TestNetwork}).maxStoredSlots(),
+		(&messageValidator{netCfg: networkconfig.TestNetwork}).storedSlotCount(spectypes.RoleProposer))
 
-	require.Equal(t, mv.maxStoredSlots(), mv.storedSlotCount(spectypes.RoleProposer))
-	require.Equal(t,
-		proposerPreferencesEarlyEpochs*netCfg.SlotsPerEpoch+LateSlotAllowance,
-		mv.storedSlotCount(spectypes.RoleProposerPreferences))
+	for _, slotDuration := range []time.Duration{12 * time.Second, 4 * time.Second} {
+		t.Run(slotDuration.String(), func(t *testing.T) {
+			beacon := *networkconfig.TestNetwork.Beacon
+			beacon.SlotDuration = slotDuration
+			netCfg := &networkconfig.Network{Beacon: &beacon, SSV: networkconfig.TestNetwork.SSV}
+			mv := &messageValidator{netCfg: netCfg}
+			role := spectypes.RoleProposerPreferences
+
+			// Every moment of the two slots around the turn into epoch 11, against the slots of epochs 9 to 13.
+			turn := netCfg.SlotStartTime(netCfg.FirstSlotAtEpoch(11))
+			var widest uint64
+			for at := turn.Add(-slotDuration); at.Before(turn.Add(slotDuration)); at = at.Add(10 * time.Millisecond) {
+				var accepted uint64
+				for slot := netCfg.FirstSlotAtEpoch(9); slot < netCfg.FirstSlotAtEpoch(14); slot++ {
+					if mv.validateSlotTime(slot, role, at) == nil {
+						accepted++
+					}
+				}
+				widest = max(widest, accepted)
+			}
+			require.LessOrEqual(t, widest, mv.storedSlotCount(role))
+		})
+	}
 }
 
 // Proposer-preferences validation state is kept for the role's whole acceptance window (SIP #94 §7). A
@@ -72,7 +94,7 @@ func TestValidatorState_ProposerPreferencesOutlivesDefaultTTL(t *testing.T) {
 	mv.validatorState(prefsKey, ci).OperatorState(0).SetSignerStateForSlot(slot, netCfg.EstimatedEpochAtSlot(slot), recorded)
 	mv.validatorState(proposerKey, ci)
 
-	// Idle past the default TTL (maxStoredSlots, 34 slots) but well inside the preferences window (66 slots).
+	// Idle past the default TTL (maxStoredSlots, 34 slots) but well inside the preferences state's (68 slots).
 	time.Sleep(45 * beacon.SlotDuration)
 	prefs := mv.states.Get(prefsKey)
 	require.NotNil(t, prefs, "preferences state outlives the default TTL")

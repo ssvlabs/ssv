@@ -4,7 +4,11 @@ import (
 	"testing"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/stretchr/testify/require"
+
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
 func TestOperatorState(t *testing.T) {
@@ -146,4 +150,23 @@ func TestValidatorState_PeekDoesNotAllocate(t *testing.T) {
 	require.NotNil(t, allocated)
 	require.Same(t, allocated, cs.peekOperatorState(1))
 	require.Nil(t, cs.peekOperatorState(2), "only the recorded operator has state")
+}
+
+// The limit checks that run before a message's signature is verified read peer state through peekPeer, which adds
+// nothing: an unknown peer reads as empty, so a message that then fails verification leaves no peer behind. Only
+// Peer, which records a verified message, adds one.
+func TestSignerStateForSlotRound_PeekPeerDoesNotAdd(t *testing.T) {
+	s := newSignerState(5, specqbft.FirstRound)
+	const unverified, verified = peer.ID("unverified"), peer.ID("verified")
+
+	partial := &spectypes.PartialSignatureMessages{Type: spectypes.PostConsensusPartialSig}
+	require.NoError(t, validatePartialSignatureMessageLimit(partial, unverified, s))
+	proposal := &specqbft.Message{MsgType: specqbft.ProposalMsgType}
+	require.NoError(t, validateConsensusMessageLimit(&spectypes.SignedSSVMessage{}, proposal, unverified, s))
+	require.Empty(t, s.Peers, "the checks added no peer")
+
+	s.Peer(verified).SeenMsgTypes.recordPostConsensus()
+	require.Len(t, s.Peers, 1)
+	require.Same(t, s.Peers[verified], s.peekPeer(verified))
+	require.Error(t, validatePartialSignatureMessageLimit(partial, verified, s), "the recorded peer's state is read")
 }

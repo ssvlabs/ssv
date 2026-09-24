@@ -216,7 +216,7 @@ func (r *CommitteeRunner) ProcessPreConsensus(ctx context.Context, logger *zap.L
 	return errors.New("no pre consensus phase for committee runner")
 }
 
-func (r *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Logger, msg *spectypes.SignedSSVMessage) error {
+func (r *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Logger, msg *spectypes.SignedSSVMessage) (err error) {
 	// Reuse the existing span instead of generating new one to keep tracing-data lightweight.
 	span := trace.SpanFromContext(ctx)
 
@@ -242,6 +242,16 @@ func (r *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Logg
 	if !decided {
 		return nil
 	}
+
+	// A decided instance never decides again, so an error from here on is final: conclude the duty failed
+	// rather than leave the watcher to report it stuck. The no-valid-duties sentinel below is concluded
+	// not_required first, and concludeDuty keeps the first outcome.
+	defer func() {
+		if err != nil {
+			r.markDutyFailed(err)
+		}
+	}()
+
 	if dutyErr != nil {
 		return fmt.Errorf("current committee duty: %w", dutyErr)
 	}
@@ -532,7 +542,7 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 	// We have quorum and are committed to submitting. Pre-quorum waiting, full success
 	// (markDutySucceeded) and partial progress all return nil, so this only fires on a terminal
 	// post-quorum error — report it as failed instead of letting it fall through to a false "stuck".
-	// Unlike the consensus phase, a failure here is final: submission is the duty's last step.
+	// A failure here is final: submission is the duty's last step.
 	// The one exception is a recoverable BLS-reconstruction failure: the offending partial sig has
 	// already been dropped by the fallback, so a later message can re-cross quorum and retry — those
 	// are tagged recoverableReconstructError and must not be recorded as failed.

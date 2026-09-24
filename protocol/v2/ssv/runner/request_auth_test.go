@@ -119,12 +119,9 @@ func TestProposerPreferencesRunner_requestAuthConvergence(t *testing.T) {
 	ctx := context.Background()
 	logger := zap.NewNop()
 
-	// Builder A's peer partials arrive before our duty (emission skew): stashed, with a plain error (the
-	// stash replays them; a queue retry would only churn).
+	// Builder A's peer partials arrive before our duty (emission skew) and are stashed.
 	for _, op := range []spectypes.OperatorID{2, 3, 4} {
-		err := disp.ProcessPreConsensus(ctx, logger, peerAuthPartial(t, op, builderAData))
-		require.Error(t, err)
-		require.False(t, IsRetryable(err))
+		require.NoError(t, disp.ProcessPreConsensus(ctx, logger, peerAuthPartial(t, op, builderAData)))
 	}
 
 	// Our emission: one preference partial plus one auth partial per distinct auth root goes out —
@@ -645,7 +642,7 @@ func TestProposerPreferencesRunner_requestAuthBatches(t *testing.T) {
 	t.Run("batches before the duty are stashed and replayed", func(t *testing.T) {
 		disp, bn, cache, duty := newRunner(t)
 		for _, op := range []spectypes.OperatorID{2, 3, 4} {
-			require.Error(t, disp.ProcessPreConsensus(ctx, logger, batch(t, bn, op, duty.Slot, dataA, dataB)), "no sub-runner yet")
+			require.NoError(t, disp.ProcessPreConsensus(ctx, logger, batch(t, bn, op, duty.Slot, dataA, dataB)), "stashed: no sub-runner yet")
 		}
 		require.Len(t, disp.pending[duty.Slot], 6, "stashed entry by entry")
 		require.NoError(t, disp.StartNewDuty(ctx, logger, duty, quorum))

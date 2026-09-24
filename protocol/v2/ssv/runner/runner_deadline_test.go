@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -81,24 +82,6 @@ func TestBaseRunner_watchDutyOutcome(t *testing.T) {
 			return logs.FilterMessageSnippet(noQuorumSnippet).Len() == 1
 		}, time.Second, 5*time.Millisecond, "expected the quorum-miss warning")
 		require.Zero(t, logs.FilterMessageSnippet(deadlineSnippet).Len(), "PTC must not fall back to the generic stuck warning")
-	})
-
-	t.Run("PTC: the outcome horizon runs through the next slot", func(t *testing.T) {
-		core, logs := observer.New(zapcore.WarnLevel)
-		b := newRunner()
-		b.RunnerRoleType = spectypes.RolePTCAttester
-		// The duty runs at slot 0 (starting at the payload-attestation cutoff, late in the slot) and its
-		// message goes into slot 1's block, so the quorum miss is called only when slot 1 ends too.
-		b.State = &State{CurrentDuty: &spectypes.ValidatorDuty{Slot: 0}}
-
-		b.watchDutyOutcome(context.Background(), zap.New(core))
-
-		time.Sleep(70 * time.Millisecond) // past the duty slot's end, inside the next slot
-		require.Zero(t, logs.FilterMessageSnippet(noQuorumSnippet).Len(), "§3 must not be written off at its own slot's end")
-
-		require.Eventually(t, func() bool {
-			return logs.FilterMessageSnippet(noQuorumSnippet).Len() == 1
-		}, time.Second, 5*time.Millisecond, "expected the quorum-miss warning once the next slot ends")
 	})
 
 	t.Run("PTC: a concluded duty is reported on its own terms", func(t *testing.T) {
@@ -227,4 +210,25 @@ func TestBaseRunner_markDutyOutcomes(t *testing.T) {
 		b.markDutyFailed(errors.New("first"))
 		require.NotPanics(t, func() { b.markDutyFailed(errors.New("second")) }, "second conclusion must not send again")
 	})
+}
+
+// The outcome deadline is the end of the current wall-clock slot, except for a proposer-preferences duty (its
+// proposal slot's start) and a PTC duty (its own slot's end plus the gossip clock allowance, well before the
+// next slot's end).
+func TestBaseRunner_dutyOutcomeDeadline(t *testing.T) {
+	const slotDuration = 12 * time.Second
+	genesis := time.Now().Add(-(10*slotDuration + 9*time.Second)) // 9s into slot 10, past the PTC cutoff
+	slotStart := func(slot phase0.Slot) time.Time { return genesis.Add(time.Duration(slot) * slotDuration) }
+	deadline := func(role spectypes.RunnerRole, dutySlot phase0.Slot) time.Time {
+		b := &BaseRunner{
+			RunnerRoleType: role,
+			NetworkConfig:  &networkconfig.Network{Beacon: &networkconfig.Beacon{GenesisTime: genesis, SlotDuration: slotDuration}},
+			State:          &State{CurrentDuty: &spectypes.ValidatorDuty{Slot: dutySlot}},
+		}
+		return b.dutyOutcomeDeadline()
+	}
+
+	require.WithinDuration(t, slotStart(11), deadline(spectypes.RoleProposer, 10), 0)
+	require.WithinDuration(t, slotStart(40), deadline(spectypes.RoleProposerPreferences, 40), 0)
+	require.WithinDuration(t, slotStart(11).Add(maxGossipClockDisparity), deadline(spectypes.RolePTCAttester, 10), 0)
 }

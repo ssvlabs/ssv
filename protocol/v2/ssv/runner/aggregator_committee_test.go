@@ -102,21 +102,20 @@ func newAggregatorCommitteeRunnerEnv(
 
 // startAndFeedThroughConsensus starts the duty and feeds the pre-consensus and consensus messages from
 // the spec fixtures (everything except post-consensus), leaving the runner decided and ready to process
-// post-consensus. It swaps in a fresh conclusion channel so the caller can observe the duty outcome
-// deterministically instead of racing the deadline-watcher goroutine StartNewDuty spawned. It returns
-// that channel.
-func (e *aggregatorCommitteeRunnerEnv) startAndFeedThroughConsensus(t *testing.T, ctx context.Context, duty *spectypes.AggregatorCommitteeDuty, version spec.DataVersion) chan dutyConclusion {
+// post-consensus. It returns a channel that observes the duty's conclusion and the first error
+// ProcessConsensus returns.
+func (e *aggregatorCommitteeRunnerEnv) startAndFeedThroughConsensus(t *testing.T, ctx context.Context, duty *spectypes.AggregatorCommitteeDuty, version spec.DataVersion) (chan dutyConclusion, error) {
 	t.Helper()
 
 	require.NoError(t, e.runner.StartNewDuty(ctx, e.logger, duty, e.sampleKey.Threshold))
-
-	concluded := make(chan dutyConclusion, 1)
-	e.runner.dutyConcluded = concluded
+	concluded := observeDutyConclusion(e.runner.BaseRunner)
 
 	for _, msg := range spectestingutils.AggregatorCommitteeInputForDuty(duty, e.keySetMap, version) {
 		switch msg.SSVMessage.MsgType {
 		case spectypes.SSVConsensusMsgType:
-			require.NoError(t, e.runner.ProcessConsensus(ctx, e.logger, msg))
+			if err := e.runner.ProcessConsensus(ctx, e.logger, msg); err != nil {
+				return concluded, err
+			}
 		case spectypes.SSVPartialSignatureMsgType:
 			psig := &spectypes.PartialSignatureMessages{}
 			require.NoError(t, psig.Decode(msg.SSVMessage.Data))
@@ -126,7 +125,21 @@ func (e *aggregatorCommitteeRunnerEnv) startAndFeedThroughConsensus(t *testing.T
 		default:
 		}
 	}
-	return concluded
+	return concluded, nil
+}
+
+// An error after the instance decides — here an aggregate can't be signed — concludes the duty failed: the
+// instance never decides again, so nothing can retry it.
+func TestAggregatorCommitteeRunnerProcessConsensus_MarksFailedAfterDecision(t *testing.T) {
+	const version = spec.DataVersionElectra
+
+	env := newAggregatorCommitteeRunnerEnv(t, []int{1}, protocoltesting.NewTestingBeaconNodeWrapped())
+	env.runner.signer = failingDomainSigner{BeaconSigner: env.runner.signer, domain: spectypes.DomainAggregateAndProof}
+	duty := spectestingutils.TestingAggregatorCommitteeDutyForValidators([]int{1}, []int{}, version)
+
+	concluded, err := env.startAndFeedThroughConsensus(t, t.Context(), duty, version)
+	require.ErrorContains(t, err, "signing failed")
+	requireConcluded(t, concluded, dutyOutcomeFailed)
 }
 
 // postConsensusMsgsFromFixture returns the (valid) post-consensus PartialSignatureMessages from signers
@@ -153,7 +166,8 @@ func TestAggregatorCommitteeRunnerProcessPostConsensus_MarksFailedOnSubmitError(
 	env := newAggregatorCommitteeRunnerEnv(t, []int{1}, faulty)
 	duty := spectestingutils.TestingAggregatorCommitteeDutyForValidators([]int{1}, []int{}, version)
 
-	concluded := env.startAndFeedThroughConsensus(t, ctx, duty, version)
+	concluded, err := env.startAndFeedThroughConsensus(t, ctx, duty, version)
+	require.NoError(t, err)
 
 	var postConsensusErr error
 	for _, psig := range postConsensusMsgsFromFixture(duty, env.keySetMap, version) {
@@ -190,7 +204,8 @@ func TestAggregatorCommitteeRunnerProcessPostConsensus_MarksFailedOnNoBeaconObje
 	env := newAggregatorCommitteeRunnerEnv(t, []int{1}, base)
 	duty := spectestingutils.TestingAggregatorCommitteeDutyForValidators([]int{1}, []int{}, version)
 
-	concluded := env.startAndFeedThroughConsensus(t, ctx, duty, version)
+	concluded, err := env.startAndFeedThroughConsensus(t, ctx, duty, version)
+	require.NoError(t, err)
 
 	emptyDecided := &spectypes.AggregatorCommitteeConsensusData{Version: version}
 	encoded, err := emptyDecided.Encode()
@@ -229,7 +244,8 @@ func TestAggregatorCommitteeRunnerProcessPostConsensus_DoesNotMarkFailedOnInvali
 	env := newAggregatorCommitteeRunnerEnv(t, []int{1}, base)
 	duty := spectestingutils.TestingAggregatorCommitteeDutyForValidators([]int{1}, []int{}, version)
 
-	concluded := env.startAndFeedThroughConsensus(t, ctx, duty, version)
+	concluded, err := env.startAndFeedThroughConsensus(t, ctx, duty, version)
+	require.NoError(t, err)
 
 	// Corrupt the beacon partial signatures. For the aggregator role, ValidatePostConsensusMsg only
 	// checks message structure (not the beacon sigs), so these still reach optimistic quorum, then
@@ -273,7 +289,8 @@ func TestAggregatorCommitteeRunnerProcessPostConsensus_RecoverableInvalidSigsThe
 	env := newAggregatorCommitteeRunnerEnv(t, []int{1}, base)
 	duty := spectestingutils.TestingAggregatorCommitteeDutyForValidators([]int{1}, []int{}, version)
 
-	concluded := env.startAndFeedThroughConsensus(t, ctx, duty, version)
+	concluded, err := env.startAndFeedThroughConsensus(t, ctx, duty, version)
+	require.NoError(t, err)
 
 	// Round 1: signers 1 and 2 send valid post-consensus partial sigs; signer 3 sends a
 	// non-deserializable one. ValidatePostConsensusMsg only checks message structure (not the beacon
@@ -327,7 +344,8 @@ func TestAggregatorCommitteeRunnerProcessPostConsensus_MarksFailedWhenNoShareToD
 	env := newAggregatorCommitteeRunnerEnv(t, []int{1}, base)
 	duty := spectestingutils.TestingAggregatorCommitteeDutyForValidators([]int{1}, []int{}, version)
 
-	concluded := env.startAndFeedThroughConsensus(t, ctx, duty, version)
+	concluded, err := env.startAndFeedThroughConsensus(t, ctx, duty, version)
+	require.NoError(t, err)
 	env.runner.Share[1] = withUnrelatedValidatorKey(env.runner.Share[1])
 
 	var postConsensusErr error
@@ -400,7 +418,8 @@ func TestAggregatorCommitteeRunnerProcessPostConsensus_TerminalWinsOverConcurren
 	env := newAggregatorCommitteeRunnerEnv(t, []int{1, 2}, faulty)
 	duty := spectestingutils.TestingAggregatorCommitteeDutyForValidators([]int{1, 2}, []int{}, version)
 
-	concluded := env.startAndFeedThroughConsensus(t, ctx, duty, version)
+	concluded, err := env.startAndFeedThroughConsensus(t, ctx, duty, version)
+	require.NoError(t, err)
 
 	var postConsensusErr error
 	for _, psig := range postConsensusMsgsFromFixture(duty, env.keySetMap, version) {
@@ -453,7 +472,8 @@ func TestAggregatorCommitteeRunnerProcessPostConsensus_DrainsBufferedErrCh(t *te
 		env := newAggregatorCommitteeRunnerEnv(t, aggValidators, base)
 		duty := spectestingutils.TestingAggregatorCommitteeDutyForValidators(aggValidators, []int{}, version)
 
-		env.startAndFeedThroughConsensus(t, ctx, duty, version)
+		_, err := env.startAndFeedThroughConsensus(t, ctx, duty, version)
+		require.NoError(t, err)
 
 		var postConsensusErr error
 		for _, psig := range postConsensusMsgsFromFixture(duty, env.keySetMap, version) {

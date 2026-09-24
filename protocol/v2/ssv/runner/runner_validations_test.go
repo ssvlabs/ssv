@@ -2,6 +2,7 @@ package runner
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
@@ -311,6 +312,27 @@ func observeDutyConclusion(b *BaseRunner) chan dutyConclusion {
 	concluded := make(chan dutyConclusion, 1)
 	b.dutyConcluded = concluded
 	return concluded
+}
+
+// failingDomainSigner fails every signature under domain and passes the others to the embedded signer, so a test
+// can fail one step of a duty, such as its post-consensus signature, and leave the rest intact.
+type failingDomainSigner struct {
+	ekm.BeaconSigner
+	domain phase0.DomainType
+}
+
+func (s failingDomainSigner) SignBeaconObject(
+	ctx context.Context,
+	obj spectypes.HashRoot,
+	domain phase0.Domain,
+	pubKey phase0.BLSPubKey,
+	slot phase0.Slot,
+	signatureDomain phase0.DomainType,
+) (spectypes.Signature, phase0.Root, error) {
+	if signatureDomain == s.domain {
+		return nil, phase0.Root{}, errors.New("signing failed")
+	}
+	return s.BeaconSigner.SignBeaconObject(ctx, obj, domain, pubKey, slot, signatureDomain)
 }
 
 // requireConcluded checks that the duty has concluded with the want outcome.

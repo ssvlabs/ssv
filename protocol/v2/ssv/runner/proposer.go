@@ -389,7 +389,7 @@ func (r *ProposerRunner) gloasBuilderConfig(ctx context.Context, slot phase0.Slo
 	return &cfg
 }
 
-func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.SignedSSVMessage) error {
+func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.SignedSSVMessage) (err error) {
 	// Reuse the existing span instead of generating new one to keep tracing-data lightweight.
 	span := trace.SpanFromContext(ctx)
 
@@ -403,6 +403,14 @@ func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logge
 	if !decided {
 		return nil
 	}
+
+	// A decided instance never decides again, so an error from here on is final: conclude the duty failed
+	// rather than leave the watcher to report it stuck.
+	defer func() {
+		if err != nil {
+			r.markDutyFailed(err)
+		}
+	}()
 
 	r.measurements.EndConsensus()
 	recordConsensusDuration(ctx, r.measurements.ConsensusTime(), spectypes.RoleProposer)
@@ -456,6 +464,8 @@ func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logge
 	}
 
 	if !r.doppelgangerHandler.CanSign(duty.ValidatorIndex) {
+		// The duty stays open: from the other operators' partials this operator can still submit the block
+		// and, on Gloas, publish the reveal if it built it.
 		logger.Warn("Signing not permitted due to Doppelganger protection", fields.ValidatorIndex(duty.ValidatorIndex))
 		return nil
 	}

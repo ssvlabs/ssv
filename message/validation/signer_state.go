@@ -37,12 +37,23 @@ type SignerStateForSlotRound struct {
 	SeenRequestAuthRoots         seenRootSet
 }
 
+// Peer returns the state recorded for messages from peerID, adding it on first use. Only recording a verified
+// message calls it; the checks that run before verification read through peekPeer.
 func (s *SignerStateForSlotRound) Peer(peerID peer.ID) *SignerState {
 	state := s.Peers[peerID]
 	if state == nil {
 		s.Peers[peerID] = &SignerState{}
 	}
 	return s.Peers[peerID]
+}
+
+// peekPeer returns the state recorded for messages from peerID without adding one: an unknown peer reads as an
+// empty state, so a message that fails verification leaves no trace here.
+func (s *SignerStateForSlotRound) peekPeer(peerID peer.ID) *SignerState {
+	if state := s.Peers[peerID]; state != nil {
+		return state
+	}
+	return &SignerState{}
 }
 
 func newSignerState(slot phase0.Slot, round specqbft.Round) *SignerStateForSlotRound {

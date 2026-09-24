@@ -379,37 +379,11 @@ type dutyConclusion struct {
 // message loop. It MUST be started before executeDuty so a duty that concludes synchronously is still
 // reported. Each duty gets its own channel: starting the next duty overwrites the field, and the
 // previous duty's watcher (if still pending) reports its own duty and is reaped by its own timer.
-//
-// The deadline is the end of the current wall-clock slot rather than duty.Slot's end because some
-// duties are stamped with a slot in the past (a voluntary-exit duty carries blockSlot+4 but
-// executes at blockSlot+12); for beacon duties the two coincide. Proposer preferences are the
-// opposite case — duty.Slot is a future proposal slot and the duty executes at emission, so their
-// horizon extends to that slot's start instead (see below).
 func (b *BaseRunner) watchDutyOutcome(ctx context.Context, logger *zap.Logger) {
 	concluded := make(chan dutyConclusion, 1)
 	b.dutyConcluded = concluded
 
-	deadline := b.NetworkConfig.SlotStartTime(b.NetworkConfig.EstimatedCurrentSlot() + 1)
-	switch {
-	case b.RunnerRoleType == spectypes.RoleProposerPreferences && b.State != nil:
-		// A proposer-preferences duty emits ahead of its proposal slot and legitimately keeps converging
-		// across the gap — operators broadcast their partials at their own emission ticks — so its outcome
-		// horizon is the proposal slot's start (the preference is moot once that slot arrives), not the
-		// end of the emission slot.
-		if d := b.NetworkConfig.SlotStartTime(b.State.CurrentDuty.DutySlot()); d.After(deadline) {
-			deadline = d
-		}
-	case b.RunnerRoleType == spectypes.RolePTCAttester && b.State != nil:
-		// A PTC attestation (SIP #94 §3) starts at the payload-attestation cutoff, three quarters into its
-		// slot, and its message goes into the next slot's block, so its horizon runs to that slot's end: the
-		// quarter slot left in its own is no time to fetch, sign, gather partials and submit, and writing the
-		// duty off at slot end while its partials still arrive would under-report §3 success. Message
-		// validation admits those partials a little longer still; a quorum after this horizon is one the
-		// beacon node refuses anyway, and that surfaces as failed on its own.
-		if d := b.NetworkConfig.SlotStartTime(b.State.CurrentDuty.DutySlot() + 2); d.After(deadline) {
-			deadline = d
-		}
-	}
+	deadline := b.dutyOutcomeDeadline()
 
 	// A PTC attestation (SIP #94 §3) has no consensus phase, and every other way it can end already
 	// marks the duty — abstain → not_required, beacon-node/sign/broadcast failure → failed. So
@@ -451,6 +425,37 @@ func (b *BaseRunner) watchDutyOutcome(ctx context.Context, logger *zap.Logger) {
 			}
 		}
 	}()
+}
+
+// maxGossipClockDisparity is the consensus p2p spec's MAXIMUM_GOSSIP_CLOCK_DISPARITY: how far past a slot's
+// end gossip still takes a message that must be for the current slot.
+const maxGossipClockDisparity = 500 * time.Millisecond
+
+// dutyOutcomeDeadline is when watchDutyOutcome stops waiting for the current duty to conclude. It is the end
+// of the current wall-clock slot rather than duty.Slot's end, because some duties are stamped with a slot in
+// the past (a voluntary-exit duty carries blockSlot+4 but executes at blockSlot+12); for beacon duties the two
+// coincide. Two roles move it later.
+func (b *BaseRunner) dutyOutcomeDeadline() time.Time {
+	deadline := b.NetworkConfig.SlotStartTime(b.NetworkConfig.EstimatedCurrentSlot() + 1)
+	switch {
+	case b.RunnerRoleType == spectypes.RoleProposerPreferences && b.State != nil:
+		// A proposer-preferences duty emits ahead of its proposal slot and legitimately keeps converging
+		// across the gap — operators broadcast their partials at their own emission ticks — so its outcome
+		// horizon is the proposal slot's start (the preference is moot once that slot arrives), not the
+		// end of the emission slot.
+		if d := b.NetworkConfig.SlotStartTime(b.State.CurrentDuty.DutySlot()); d.After(deadline) {
+			deadline = d
+		}
+	case b.RunnerRoleType == spectypes.RolePTCAttester && b.State != nil:
+		// A PTC attestation (SIP #94 §3) counts only while gossip still takes it: peers ignore a payload
+		// attestation once its slot is over, allowing maxGossipClockDisparity, and only the next slot's block,
+		// built as that slot starts, can include it. So its horizon is its own slot's end plus that allowance;
+		// a quorum later than that is too late to count, even if the beacon node accepts the submit.
+		if d := b.NetworkConfig.SlotStartTime(b.State.CurrentDuty.DutySlot() + 1).Add(maxGossipClockDisparity); d.After(deadline) {
+			deadline = d
+		}
+	}
+	return deadline
 }
 
 // signAndBroadcastPartialSigMsgs encodes msgs into an SSVMessage, signs it with opSigner,
@@ -604,17 +609,24 @@ func (b *BaseRunner) baseConsensusMsgProcessing(ctx context.Context, logger *zap
 		return false, nil, err
 	}
 
+	// The instance decides once, so a decided value this runner can't take up leaves its duty nothing to
+	// wait for: conclude it failed.
+	failDecided := func(err error) (bool, spectypes.Encoder, error) {
+		b.markDutyFailed(err)
+		return true, nil, err
+	}
+
 	if err := decidedValue.Decode(decidedMsg.FullData); err != nil {
-		return true, nil, fmt.Errorf("failed to parse decided value to ValidatorConsensusData: %w", err)
+		return failDecided(fmt.Errorf("failed to parse decided value to ValidatorConsensusData: %w", err))
 	}
 
 	if err := b.validateDecidedConsensusData(valueCheckFn, decidedValue); err != nil {
-		return true, nil, fmt.Errorf("decided ValidatorConsensusData invalid: %w", err)
+		return failDecided(fmt.Errorf("decided ValidatorConsensusData invalid: %w", err))
 	}
 
 	decidedValueEncoded, err := decidedValue.Encode()
 	if err != nil {
-		return true, nil, fmt.Errorf("could not encode decided value: %w", err)
+		return failDecided(fmt.Errorf("could not encode decided value: %w", err))
 	}
 
 	const qbftInstanceIsDecidedEvent = "QBFT instance is decided"
@@ -625,7 +637,7 @@ func (b *BaseRunner) baseConsensusMsgProcessing(ctx context.Context, logger *zap
 	b.State.DecidedValue = decidedValueEncoded
 	currentDutySlot, err := b.currentDutySlot()
 	if err != nil {
-		return true, nil, fmt.Errorf("current duty slot: %w", err)
+		return failDecided(fmt.Errorf("current duty slot: %w", err))
 	}
 	b.highestDecidedSlot = currentDutySlot
 

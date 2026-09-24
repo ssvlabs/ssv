@@ -29,17 +29,6 @@ func (b *faultyAttestationSubmitBeacon) SubmitAttestations(_ context.Context, _ 
 	return b.submitErr
 }
 
-// observeConclusion swaps in a fresh, buffered conclusion channel so a test can read the duty's
-// terminal outcome deterministically instead of racing the deadline-watcher goroutine StartNewDuty
-// spawned. markDuty{Failed,Succeeded} send on the current dutyConcluded field, so the swap must
-// happen after StartNewDuty (which spawned the watcher on the original channel) and before the
-// ProcessPostConsensus call that concludes the duty.
-func observeConclusion(env *committeeRunnerEnv) chan dutyConclusion {
-	concluded := make(chan dutyConclusion, 1)
-	env.runner.dutyConcluded = concluded
-	return concluded
-}
-
 // TestCommitteeRunnerProcessPostConsensus_MarksFailedOnSubmitError asserts that a beacon submit
 // failure (a terminal post-quorum error) concludes the duty as failed — not left to surface as a
 // false "stuck". This is the terminal branch of the terminalErr/recoverableErr split.
@@ -51,8 +40,8 @@ func TestCommitteeRunnerProcessPostConsensus_MarksFailedOnSubmitError(t *testing
 	env := newCommitteeRunnerEnvWithBeacon(t, []int{1}, faulty)
 	duty := spectestingutils.TestingCommitteeDuty([]int{1}, nil, spec.DataVersionElectra)
 
-	env.startAndDecideCommitteeDuty(t, duty)
-	concluded := observeConclusion(env)
+	concluded, err := env.startAndDecideCommitteeDuty(t, duty)
+	require.NoError(t, err)
 
 	var postConsensusErr error
 	for id := spectypes.OperatorID(1); id <= 3; id++ {
@@ -84,8 +73,8 @@ func TestCommitteeRunnerProcessPostConsensus_RecoverableInvalidSigsThenSucceeds(
 	env := newCommitteeRunnerEnv(t, []int{1}, &committeeDutyGuardStub{}, &doppelgangerStub{})
 	duty := spectestingutils.TestingCommitteeDuty([]int{1}, nil, spec.DataVersionElectra)
 
-	env.startAndDecideCommitteeDuty(t, duty)
-	concluded := observeConclusion(env)
+	concluded, err := env.startAndDecideCommitteeDuty(t, duty)
+	require.NoError(t, err)
 
 	// Signers 1 and 2 send valid post-consensus partial sigs; signer 3 sends a non-deserializable one.
 	// Post-consensus validation only checks message structure (not the beacon sig), so all three enter
@@ -131,8 +120,8 @@ func TestCommitteeRunnerProcessPostConsensus_MarksFailedWhenNoShareToDrop(t *tes
 	env := newCommitteeRunnerEnv(t, []int{1}, &committeeDutyGuardStub{}, &doppelgangerStub{})
 	duty := spectestingutils.TestingCommitteeDuty([]int{1}, nil, spec.DataVersionElectra)
 
-	env.startAndDecideCommitteeDuty(t, duty)
-	concluded := observeConclusion(env)
+	concluded, err := env.startAndDecideCommitteeDuty(t, duty)
+	require.NoError(t, err)
 	env.runner.Share[1] = withUnrelatedValidatorKey(env.runner.Share[1])
 
 	var postConsensusErr error
@@ -171,8 +160,8 @@ func TestCommitteeRunnerProcessPostConsensus_MarksNotRequiredOnNoBeaconObjects(t
 	env := newCommitteeRunnerEnv(t, []int{1}, guard, &doppelgangerStub{})
 	duty := spectestingutils.TestingCommitteeDuty([]int{1}, nil, spec.DataVersionElectra)
 
-	env.startAndDecideCommitteeDuty(t, duty)
-	concluded := observeConclusion(env)
+	concluded, err := env.startAndDecideCommitteeDuty(t, duty)
+	require.NoError(t, err)
 
 	invalidateDutiesInGuard(guard, duty)
 
@@ -226,8 +215,8 @@ func TestCommitteeRunnerProcessPostConsensus_MarksFailedOnAllConstructionFailure
 	env := newCommitteeRunnerEnvWithBeacon(t, []int{1}, faulty)
 	duty := spectestingutils.TestingCommitteeDuty([]int{1}, nil, spec.DataVersionElectra)
 
-	env.startAndDecideCommitteeDuty(t, duty)
-	concluded := observeConclusion(env)
+	concluded, err := env.startAndDecideCommitteeDuty(t, duty)
+	require.NoError(t, err)
 
 	// Consensus-phase signing has already fetched domain data successfully; from here on every
 	// post-consensus object construction fails, emptying the beacon-objects map for a duty this
@@ -255,6 +244,18 @@ func TestCommitteeRunnerProcessPostConsensus_MarksFailedOnAllConstructionFailure
 	require.False(t, env.runner.State.Succeeded, "a missed submission must not be marked succeeded")
 }
 
+// An error after the instance decides — here an attestation can't be signed — concludes the duty failed: the
+// instance never decides again, so nothing can retry it.
+func TestCommitteeRunnerProcessConsensus_MarksFailedAfterDecision(t *testing.T) {
+	env := newCommitteeRunnerEnv(t, []int{1}, &committeeDutyGuardStub{}, &doppelgangerStub{})
+	env.runner.signer = failingDomainSigner{BeaconSigner: env.runner.signer, domain: spectypes.DomainAttester}
+	duty := spectestingutils.TestingCommitteeDuty([]int{1}, nil, spec.DataVersionElectra)
+
+	concluded, err := env.startAndDecideCommitteeDuty(t, duty)
+	require.ErrorContains(t, err, "signing failed")
+	requireConcluded(t, concluded, dutyOutcomeFailed)
+}
+
 // TestCommitteeRunnerProcessConsensus_MarksNotRequiredOnNoValidDuties covers the consensus-phase
 // sibling of the #2903 sentinel: a committee that decides while this operator has zero valid duties
 // to sign (all invalidated in the guard before consensus) previously concluded via no marker at
@@ -266,7 +267,7 @@ func TestCommitteeRunnerProcessConsensus_MarksNotRequiredOnNoValidDuties(t *test
 
 	ctx := t.Context()
 	require.NoError(t, env.runner.StartNewDuty(ctx, env.logger, duty, env.sampleKey.Threshold))
-	concluded := observeConclusion(env)
+	concluded := observeDutyConclusion(env.runner.BaseRunner)
 
 	invalidateDutiesInGuard(guard, duty)
 
@@ -299,7 +300,7 @@ func TestCommitteeRunnerProcessConsensus_CancelledContextDoesNotConcludeNotRequi
 	duty := spectestingutils.TestingCommitteeDuty([]int{1}, nil, spec.DataVersionElectra)
 
 	require.NoError(t, env.runner.StartNewDuty(t.Context(), env.logger, duty, env.sampleKey.Threshold))
-	concluded := observeConclusion(env)
+	concluded := observeDutyConclusion(env.runner.BaseRunner)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()

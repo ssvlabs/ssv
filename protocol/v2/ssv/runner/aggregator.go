@@ -190,7 +190,7 @@ func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.
 	return nil
 }
 
-func (r *AggregatorRunner) ProcessConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.SignedSSVMessage) error {
+func (r *AggregatorRunner) ProcessConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.SignedSSVMessage) (err error) {
 	// Reuse the existing span instead of generating new one to keep tracing-data lightweight.
 	span := trace.SpanFromContext(ctx)
 
@@ -204,6 +204,14 @@ func (r *AggregatorRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 	if !decided {
 		return nil
 	}
+
+	// A decided instance never decides again, so an error from here on is final: conclude the duty failed
+	// rather than leave the watcher to report it stuck.
+	defer func() {
+		if err != nil {
+			r.markDutyFailed(err)
+		}
+	}()
 
 	r.measurements.EndConsensus()
 	recordConsensusDuration(ctx, r.measurements.ConsensusTime(), ssvtypes.RoleAggregator)

@@ -117,7 +117,8 @@ type GoClient struct {
 	beaconConfig     *networkconfig.Beacon
 	beaconConfigInit chan struct{}
 	// beaconConfigSource is the address of the client beaconConfig was taken from, named when another
-	// client's fork schedule lags or leads it.
+	// client's fork schedule lags or leads it. It is written once, with beaconConfig and under
+	// beaconConfigMu, so a reader that has seen a non-nil beaconConfig reads it without the lock.
 	beaconConfigSource string
 	// proposerDutiesDependentRoots remembers the dependent root each epoch's last successful
 	// ProposerDutiesDependentRoot call returned, for LastProposerDutiesDependentRoot.
@@ -554,8 +555,8 @@ func (gc *GoClient) checkForkSchedule(clientAddr string, cfg *networkconfig.Beac
 }
 
 // forkScheduleLagStopEpochs is how close to a fork the node stops when its schedule lacks the fork: two
-// epochs, so the restarted node has the new schedule before the one-epoch pre-fork windows open (Boole's
-// dual-topic subscription, Gloas' preference pre-emission).
+// epochs, so the restarted node has the new schedule before the fork's one-epoch pre-fork window opens
+// (Gloas' preference pre-emission).
 const forkScheduleLagStopEpochs = 2
 
 // reportForkScheduleLag says which side of a fork-schedule disagreement has to move. Ours is the node's

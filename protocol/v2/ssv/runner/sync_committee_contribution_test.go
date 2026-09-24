@@ -80,8 +80,9 @@ func (b *syncCommitteeContributionSubmitCaptureBeacon) SubmitSignedContributionA
 }
 
 // decideSyncCommitteeContributions starts a duty on runner and decides the three contributions the
-// post-consensus fixtures sign, skipping pre-consensus.
-func decideSyncCommitteeContributions(t *testing.T, runner *SyncCommitteeAggregatorRunner, keySet *spectestingutils.TestKeySet) {
+// post-consensus fixtures sign, skipping pre-consensus. It returns a channel that observes the duty's conclusion
+// and the first error ProcessConsensus returns.
+func decideSyncCommitteeContributions(t *testing.T, runner *SyncCommitteeAggregatorRunner, keySet *spectestingutils.TestKeySet) (chan dutyConclusion, error) {
 	t.Helper()
 
 	ctx, logger := t.Context(), zap.NewNop()
@@ -93,6 +94,7 @@ func decideSyncCommitteeContributions(t *testing.T, runner *SyncCommitteeAggrega
 		ValidatorSyncCommitteeIndices: spectestingutils.TestingContributionProofIndexes,
 	}
 	require.NoError(t, runner.StartNewDuty(ctx, logger, duty, keySet.Threshold))
+	concluded := observeDutyConclusion(runner.BaseRunner)
 
 	consensusData := &spectypes.ProposerConsensusData{
 		Duty:    *duty,
@@ -101,8 +103,24 @@ func decideSyncCommitteeContributions(t *testing.T, runner *SyncCommitteeAggrega
 	}
 	require.NoError(t, runner.decide(ctx, logger, duty.Slot, consensusData, runner.ValCheck))
 	for _, msg := range spectestingutils.SSVDecidingMsgsV(consensusData, keySet, ssvtypes.RoleSyncCommitteeContribution) {
-		require.NoError(t, runner.ProcessConsensus(ctx, logger, msg))
+		if err := runner.ProcessConsensus(ctx, logger, msg); err != nil {
+			return concluded, err
+		}
 	}
+	return concluded, nil
+}
+
+// An error after the instance decides — here a contribution can't be signed — concludes the duty failed: the
+// instance never decides again, so nothing can retry it.
+func TestSyncCommitteeAggregatorProcessConsensusMarksFailedAfterDecision(t *testing.T) {
+	t.Parallel()
+
+	runner, keySet := newSyncCommitteeAggregatorRunnerForTest(t, protocoltesting.NewTestingBeaconNodeWrapped())
+	runner.signer = failingDomainSigner{BeaconSigner: runner.signer, domain: spectypes.DomainContributionAndProof}
+
+	concluded, err := decideSyncCommitteeContributions(t, runner, keySet)
+	require.ErrorContains(t, err, "signing failed")
+	requireConcluded(t, concluded, dutyOutcomeFailed)
 }
 
 // Each root's contribution is submitted once the root reconstructs. A bad share in one root's quorum doesn't hold
@@ -114,8 +132,8 @@ func TestSyncCommitteeAggregatorProcessPostConsensusSubmitsEachRoot(t *testing.T
 	ctx, logger := t.Context(), zap.NewNop()
 	testBeacon := &syncCommitteeContributionSubmitCaptureBeacon{BeaconNode: protocoltesting.NewTestingBeaconNodeWrapped()}
 	runner, keySet := newSyncCommitteeAggregatorRunnerForTest(t, testBeacon)
-	decideSyncCommitteeContributions(t, runner, keySet)
-	concluded := observeDutyConclusion(runner.BaseRunner)
+	concluded, err := decideSyncCommitteeContributions(t, runner, keySet)
+	require.NoError(t, err)
 	msg := func(op spectypes.OperatorID) *spectypes.PartialSignatureMessages {
 		return spectestingutils.PostConsensusSyncCommitteeContributionMsg(keySet.Shares[op], op, keySet)
 	}
@@ -125,7 +143,7 @@ func TestSyncCommitteeAggregatorProcessPostConsensusSubmitsEachRoot(t *testing.T
 	bad.Messages[2].PartialSignature = msg(2).Messages[2].PartialSignature
 	require.NoError(t, runner.ProcessPostConsensus(ctx, logger, bad))
 	require.NoError(t, runner.ProcessPostConsensus(ctx, logger, msg(2)))
-	err := runner.ProcessPostConsensus(ctx, logger, msg(3))
+	err = runner.ProcessPostConsensus(ctx, logger, msg(3))
 	require.ErrorContains(t, err, "invalid signatures")
 	require.True(t, isRecoverableReconstructError(err))
 	requireSpecCode(t, err, spectypes.PostConsensusQuorumWithInvalidSignatures)
@@ -147,15 +165,15 @@ func TestSyncCommitteeAggregatorProcessPostConsensusSubmitsPastARejection(t *tes
 		rejectedSubnets: []uint64{1},
 	}
 	runner, keySet := newSyncCommitteeAggregatorRunnerForTest(t, testBeacon)
-	decideSyncCommitteeContributions(t, runner, keySet)
-	concluded := observeDutyConclusion(runner.BaseRunner)
+	concluded, err := decideSyncCommitteeContributions(t, runner, keySet)
+	require.NoError(t, err)
 	msg := func(op spectypes.OperatorID) *spectypes.PartialSignatureMessages {
 		return spectestingutils.PostConsensusSyncCommitteeContributionMsg(keySet.Shares[op], op, keySet)
 	}
 
 	require.NoError(t, runner.ProcessPostConsensus(ctx, logger, msg(1)))
 	require.NoError(t, runner.ProcessPostConsensus(ctx, logger, msg(2)))
-	err := runner.ProcessPostConsensus(ctx, logger, msg(3))
+	err = runner.ProcessPostConsensus(ctx, logger, msg(3))
 	require.ErrorContains(t, err, "contribution rejected")
 	require.ElementsMatch(t, []uint64{0, 2}, testBeacon.submittedSubnets)
 	requireConcluded(t, concluded, dutyOutcomeFailed)

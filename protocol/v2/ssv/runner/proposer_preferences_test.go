@@ -156,21 +156,20 @@ func TestProposerPreferencesRunner_evictPastSlots(t *testing.T) {
 	require.Contains(t, disp.bySlot, current+10)
 }
 
-// An incoming partial signature for a slot with no sub-runner is a plain (non-retryable) error: the
-// dispatcher's stash, not a queue retry, is what replays it once the slot's duty starts here.
+// A partial for a slot with no sub-runner is stashed, which is no error: StartNewDuty replays it once the
+// slot's duty starts here, so the queue has nothing to retry or report as dropped.
 func TestProposerPreferencesRunner_ProcessPreConsensus_unknownSlot(t *testing.T) {
 	r, err := NewProposerPreferencesRunner(ProposerPreferencesRunnerOptions{
-		BaseRunnerOptions: BaseRunnerOptions{Share: map[phase0.ValidatorIndex]*spectypes.Share{0: {}}},
+		BaseRunnerOptions: BaseRunnerOptions{Share: map[phase0.ValidatorIndex]*spectypes.Share{0: {Committee: make([]*spectypes.ShareMember, 4)}}},
 	})
 	require.NoError(t, err)
 
-	err = r.ProcessPreConsensus(context.Background(), zap.NewNop(), &spectypes.PartialSignatureMessages{
-		Type: spectypes.ProposerPreferencesPartialSig,
-		Slot: 999,
-	})
-	require.ErrorIs(t, err, ErrNoDutyAssigned)
-	requireSpecCode(t, err, spectypes.NoRunningDutyErrorCode)
-	require.False(t, IsRetryable(err))
+	require.NoError(t, r.ProcessPreConsensus(context.Background(), zap.NewNop(), &spectypes.PartialSignatureMessages{
+		Type:     spectypes.ProposerPreferencesPartialSig,
+		Slot:     999,
+		Messages: []*spectypes.PartialSignatureMessage{{Signer: 1, SigningRoot: [32]byte{0xaa}}},
+	}))
+	require.Len(t, r.(*ProposerPreferencesRunner).pending[999], 1)
 }
 
 // A partial of any type other than the §5 duty's two is rejected with the spec's code, before it is
@@ -307,12 +306,9 @@ func TestProposerPreferencesRunner_stashReplayConvergence(t *testing.T) {
 	ctx := context.Background()
 	logger := zap.NewNop()
 
-	// Peers 2..4 emitted before us: their one-shot partials arrive with no local duty and are stashed
-	// (a plain error, not a retryable one — the stash replays them, a queue retry would only churn).
+	// Peers 2..4 emitted before us: their one-shot partials arrive with no local duty and are stashed.
 	for _, op := range []spectypes.OperatorID{2, 3, 4} {
-		err := disp.ProcessPreConsensus(ctx, logger, peerPartial(t, op, bn.dependentRoot))
-		require.Error(t, err)
-		require.False(t, IsRetryable(err))
+		require.NoError(t, disp.ProcessPreConsensus(ctx, logger, peerPartial(t, op, bn.dependentRoot)))
 	}
 
 	// Our own (late) emission: the replay of the stashed partials completes quorum and submits.
@@ -346,6 +342,104 @@ func TestProposerPreferencesRunner_stashReplayConvergence(t *testing.T) {
 	}
 	require.Len(t, bn.submitted, 2, "the re-emitted preference must submit once its quorum forms")
 	require.Equal(t, phase0.Root{0xbb}, bn.submitted[1][0].Message.DependentRoot)
+}
+
+// switchableFeeRecipientProvider returns addr until fail is set.
+type switchableFeeRecipientProvider struct {
+	addr bellatrix.ExecutionAddress
+	fail bool
+}
+
+func (p *switchableFeeRecipientProvider) GetFeeRecipient(spectypes.ValidatorPK) (bellatrix.ExecutionAddress, error) {
+	if p.fail {
+		return bellatrix.ExecutionAddress{}, fmt.Errorf("no fee recipient")
+	}
+	return p.addr, nil
+}
+
+// A re-emission that can't rebuild its preference keeps converging on the one already broadcast: the stash
+// replays the partials gathered for it into the replacement, and the next one completes the quorum.
+func TestProposerPreferencesRunner_reemissionThatCannotRebuildKeepsBroadcastPreference(t *testing.T) {
+	keySet := spectestingutils.Testing4SharesSet()
+	share := spectestingutils.TestingShare(keySet, spectestingutils.TestingValidatorIndex)
+	cfg := cloneTestNetworkConfig()
+	const quorum = 3
+	const gasLimit = 36_000_000
+
+	bn := &prefsTestBeacon{BeaconNode: protocoltesting.NewTestingBeaconNodeWrapped(), dependentRoot: phase0.Root{0xaa}}
+	network := protocoltesting.NewTestingNetwork(1, keySet.OperatorKeys[1])
+	feeRecipients := &switchableFeeRecipientProvider{addr: bellatrix.ExecutionAddress{0xfe}}
+
+	runnerIface, err := NewProposerPreferencesRunner(ProposerPreferencesRunnerOptions{
+		BaseRunnerOptions: BaseRunnerOptions{
+			NetworkConfig:  cfg,
+			Share:          map[phase0.ValidatorIndex]*spectypes.Share{share.ValidatorIndex: share},
+			Beacon:         bn,
+			Network:        network,
+			Signer:         ekm.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager()),
+			OperatorSigner: spectestingutils.NewOperatorSigner(keySet, 1),
+		},
+		FeeRecipientProvider: feeRecipients,
+		GasLimit:             gasLimit,
+	})
+	require.NoError(t, err)
+	disp := runnerIface.(*ProposerPreferencesRunner)
+
+	proposalSlot := cfg.EstimatedCurrentSlot() + 5
+	duty := &spectypes.ValidatorDuty{
+		Type:           spectypes.BNRoleProposerPreferences,
+		PubKey:         spectestingutils.TestingValidatorPubKey,
+		Slot:           proposalSlot,
+		ValidatorIndex: share.ValidatorIndex,
+	}
+
+	peerPartial := func(t *testing.T, opID spectypes.OperatorID) *spectypes.PartialSignatureMessages {
+		t.Helper()
+		prefs := &gloas.ProposerPreferences{
+			DependentRoot:  bn.dependentRoot,
+			ProposalSlot:   proposalSlot,
+			ValidatorIndex: share.ValidatorIndex,
+			FeeRecipient:   feeRecipients.addr,
+			TargetGasLimit: gasLimit,
+		}
+		domain, err := bn.DomainData(context.Background(), cfg.EstimatedEpochAtSlot(proposalSlot), phase0.DomainType(spectypes.DomainProposerPreferences))
+		require.NoError(t, err)
+		root, err := spectypes.ComputeETHSigningRoot(prefs, domain)
+		require.NoError(t, err)
+		sig := keySet.Shares[opID].SignByte(root[:])
+		return &spectypes.PartialSignatureMessages{
+			Type: spectypes.ProposerPreferencesPartialSig,
+			Slot: proposalSlot,
+			Messages: []*spectypes.PartialSignatureMessage{{
+				PartialSignature: sig.Serialize(),
+				SigningRoot:      root,
+				Signer:           opID,
+				ValidatorIndex:   share.ValidatorIndex,
+			}},
+		}
+	}
+
+	ctx := context.Background()
+	logger := zap.NewNop()
+
+	// Our emission broadcasts the preference, and two peers' partials follow: one short of quorum.
+	require.NoError(t, disp.StartNewDuty(ctx, logger, duty, quorum))
+	for _, op := range []spectypes.OperatorID{2, 3} {
+		require.NoError(t, disp.ProcessPreConsensus(ctx, logger, peerPartial(t, op)))
+	}
+	require.Empty(t, bn.submitted)
+
+	// The re-emission can't build a preference, so it keeps the broadcast one without re-signing it.
+	feeRecipients.fail = true
+	require.NoError(t, disp.StartNewDuty(ctx, logger, duty, quorum))
+	concluded := observeDutyConclusion(disp.bySlot[proposalSlot].BaseRunner)
+	require.Len(t, network.BroadcastedMsgs, 1, "the kept preference is not re-broadcast")
+
+	// The third peer's partial completes the quorum on the replayed two.
+	require.NoError(t, disp.ProcessPreConsensus(ctx, logger, peerPartial(t, 4)))
+	require.Len(t, bn.submitted, 1)
+	require.Equal(t, phase0.Root{0xaa}, bn.submitted[0][0].Message.DependentRoot)
+	requireConcluded(t, concluded, dutyOutcomeSucceeded)
 }
 
 // Proposer preferences have no consensus or post-consensus phase; those entry points must reject.
