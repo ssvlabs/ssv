@@ -161,6 +161,13 @@ func (r *ProposerPreferencesRunner) StartNewDuty(ctx context.Context, logger *za
 }
 
 func (r *ProposerPreferencesRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
+	// The §5 duty runs two pre-consensus rounds, preference and request-auth. Reject any other type before
+	// the stash, so it neither takes stash room nor reaches the preference path.
+	if signedMsg.Type != spectypes.ProposerPreferencesPartialSig && signedMsg.Type != spectypes.RequestAuthPartialSig {
+		return spectypes.NewError(spectypes.ProposerPreferencesUnexpectedPartialSigTypeErrorCode,
+			fmt.Sprintf("unexpected pre-consensus partial signature type %d for proposer-preferences runner", signedMsg.Type))
+	}
+
 	// Stash every §5-role partial — preference and request-auth alike (bounded, deduplicated) — even
 	// when a sub-runner exists: a later re-emission replaces the sub-runner and its containers, and
 	// peers won't re-broadcast, so the stash is what re-seeds the replacement (see StartNewDuty).

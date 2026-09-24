@@ -86,7 +86,7 @@ func TestCurrentDutySlot(t *testing.T) {
 }
 
 func TestDecidedAttestationVote(t *testing.T) {
-	beaconVote := &spectypes.BeaconVote{}
+	beaconVote := &spectypes.BeaconVote{Source: &phase0.Checkpoint{}, Target: &phase0.Checkpoint{Epoch: 1}}
 
 	gotVote, gotIndex, err := decidedAttestationVote(beaconVote)
 	require.NoError(t, err)
@@ -111,12 +111,21 @@ func TestDecidedAttestationVote(t *testing.T) {
 
 	var nilBeaconVote *spectypes.BeaconVote
 	_, _, err = decidedAttestationVote(nilBeaconVote)
-	require.ErrorContains(t, err, "beacon vote is nil")
+	requireSpecCode(t, err, spectypes.BeaconVoteNilCheckpointErrorCode)
 
 	var nilGloasVote *gloas.GloasBeaconVote
 	_, _, err = decidedAttestationVote(nilGloasVote)
-	require.ErrorContains(t, err, "gloas beacon vote is nil")
+	requireSpecCode(t, err, spectypes.BeaconVoteNilCheckpointErrorCode)
 
 	_, _, err = decidedAttestationVote(&spectypes.ProposerConsensusData{})
 	require.ErrorContains(t, err, "decided value is not a beacon vote")
+
+	// Both forms are validated, whichever path decoded them.
+	_, _, err = decidedAttestationVote(&spectypes.BeaconVote{Source: &phase0.Checkpoint{Epoch: 1}, Target: &phase0.Checkpoint{Epoch: 1}})
+	requireSpecCode(t, err, spectypes.AttestationSourceNotLessThanTargetErrorCode)
+
+	outOfRange := *gloasVote
+	outOfRange.AttestationDataIndex = 2
+	_, _, err = decidedAttestationVote(&outOfRange)
+	requireSpecCode(t, err, spectypes.GloasBeaconVoteInvalidIndexErrorCode)
 }

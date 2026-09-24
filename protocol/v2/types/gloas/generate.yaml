@@ -2,8 +2,6 @@ package: .
 legacy: true
 without-dynamic-expressions: true
 types:
-  - name: GloasBeaconVote
-    output: gloasbeaconvote_ssz.go
   - name: BlockContents
     output: blockcontents_ssz.go
   - name: SignedExecutionPayloadEnvelopeContents

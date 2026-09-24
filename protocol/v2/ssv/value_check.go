@@ -47,8 +47,8 @@ func (v *voteChecker) CheckValue(value []byte) error {
 		return spectypes.WrapError(spectypes.DecodeBeaconVoteErrorCode, fmt.Errorf("failed decoding beacon vote: %w", err))
 	}
 
-	if bv.Source.Epoch >= bv.Target.Epoch {
-		return spectypes.NewError(spectypes.AttestationSourceNotLessThanTargetErrorCode, "attestation data source >= target")
+	if err := bv.Validate(); err != nil {
+		return err
 	}
 
 	attestationData := &phase0.AttestationData{
@@ -118,14 +118,8 @@ func (v *gloasVoteChecker) CheckValue(value []byte) error {
 		return spectypes.WrapError(spectypes.DecodeGloasBeaconVoteErrorCode, fmt.Errorf("failed decoding gloas beacon vote: %w", err))
 	}
 
-	if bv.Source.Epoch >= bv.Target.Epoch {
-		return spectypes.NewError(spectypes.AttestationSourceNotLessThanTargetErrorCode, "attestation data source >= target")
-	}
-
-	// SIP #94 §2: AttestationDataIndex carries the attester's payload-status view (0 = EMPTY,
-	// 1 = FULL), so it must be 0 or 1.
-	if bv.AttestationDataIndex > 1 {
-		return spectypes.NewError(spectypes.GloasBeaconVoteInvalidIndexErrorCode, "gloas attestation data index out of range")
+	if err := bv.Validate(); err != nil {
+		return err
 	}
 
 	// A same-slot block cannot have its payload present at attestation time: an honest beacon node never

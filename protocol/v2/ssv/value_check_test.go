@@ -177,17 +177,21 @@ func TestGloasVoteChecker_Valid(t *testing.T) {
 	}
 }
 
-// The one Gloas-specific rule: AttestationDataIndex outside {0, 1} is rejected.
+// AttestationDataIndex outside {0, 1} is rejected.
 func TestGloasVoteChecker_IndexOutOfRange(t *testing.T) {
 	expected := gloasVote(1, 2, 0)
 	checker := newGloasChecker(fakeSlashingSigner{}, expected)
-	require.Error(t, checker.CheckValue(encodeGloasVote(t, gloasVote(1, 2, 2))))
+	var specErr *spectypes.Error
+	require.ErrorAs(t, checker.CheckValue(encodeGloasVote(t, gloasVote(1, 2, 2))), &specErr)
+	require.Equal(t, spectypes.GloasBeaconVoteInvalidIndexErrorCode, specErr.Code)
 }
 
 func TestGloasVoteChecker_SourceNotBeforeTarget(t *testing.T) {
 	expected := gloasVote(2, 2, 0)
 	checker := newGloasChecker(fakeSlashingSigner{}, expected)
-	require.Error(t, checker.CheckValue(encodeGloasVote(t, gloasVote(2, 2, 0))))
+	var specErr *spectypes.Error
+	require.ErrorAs(t, checker.CheckValue(encodeGloasVote(t, gloasVote(2, 2, 0))), &specErr)
+	require.Equal(t, spectypes.AttestationSourceNotLessThanTargetErrorCode, specErr.Code)
 }
 
 // Epoch-only majority-fork protection: a vote whose target epoch differs from the operator's expected

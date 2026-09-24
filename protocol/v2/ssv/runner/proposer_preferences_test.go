@@ -164,10 +164,38 @@ func TestProposerPreferencesRunner_ProcessPreConsensus_unknownSlot(t *testing.T)
 	})
 	require.NoError(t, err)
 
-	err = r.ProcessPreConsensus(context.Background(), zap.NewNop(), &spectypes.PartialSignatureMessages{Slot: 999})
+	err = r.ProcessPreConsensus(context.Background(), zap.NewNop(), &spectypes.PartialSignatureMessages{
+		Type: spectypes.ProposerPreferencesPartialSig,
+		Slot: 999,
+	})
 	require.ErrorIs(t, err, ErrNoDutyAssigned)
 	requireSpecCode(t, err, spectypes.NoRunningDutyErrorCode)
 	require.False(t, IsRetryable(err))
+}
+
+// A partial of any type other than the §5 duty's two is rejected with the spec's code, before it is
+// stashed or routed to the slot's sub-runner.
+func TestProposerPreferencesRunner_ProcessPreConsensus_unexpectedType(t *testing.T) {
+	netCfg := networkconfig.TestNetwork
+	r, err := NewProposerPreferencesRunner(ProposerPreferencesRunnerOptions{
+		BaseRunnerOptions: BaseRunnerOptions{
+			NetworkConfig: netCfg,
+			Share:         map[phase0.ValidatorIndex]*spectypes.Share{0: {Committee: make([]*spectypes.ShareMember, 4)}},
+		},
+	})
+	require.NoError(t, err)
+	disp := r.(*ProposerPreferencesRunner)
+
+	slot := netCfg.EstimatedCurrentSlot() + 10
+	disp.bySlot[slot] = newProposerPreferencesSlotRunner(disp.opts, disp.builders)
+
+	err = r.ProcessPreConsensus(context.Background(), zap.NewNop(), &spectypes.PartialSignatureMessages{
+		Type:     spectypes.PTCAttesterPartialSig,
+		Slot:     slot,
+		Messages: []*spectypes.PartialSignatureMessage{{Signer: 1, SigningRoot: [32]byte{0xaa}}},
+	})
+	requireSpecCode(t, err, spectypes.ProposerPreferencesUnexpectedPartialSigTypeErrorCode)
+	require.Empty(t, disp.pending[slot])
 }
 
 // stashPending dedups by (signer, signing root), caps a slot's stash at committee size times the

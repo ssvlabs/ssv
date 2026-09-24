@@ -5,14 +5,15 @@ import (
 
 	eth2gloas "github.com/attestantio/go-eth2-client/spec/gloas"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	specgloas "github.com/ssvlabs/ssv-spec/types/gloas"
 )
 
 // The Gloas beacon-chain types are sourced from go-eth2-client's spec/gloas — the canonical,
 // fork-maintained Ethereum types (progressive-SSZ correct) — rather than hand-rolled here, and the
-// SSV wire type shared with other implementations (the §6 blinded envelope) from ssv-spec. Only the
-// SSV-protocol consensus value (GloasBeaconVote) and the SSV-node types (BuilderConfig, PTCDuty,
-// BuilderRequestAuth, ...) live in this package.
+// SSV wire types shared with other implementations (the §2 consensus value and the §6 blinded
+// envelope) from ssv-spec. Only the §4 consensus value (GloasProposalData) and the SSV-node types
+// (BuilderConfig, PTCDuty, BuilderRequestAuth, ...) live in this package.
 type (
 	BeaconBlock                    = eth2gloas.BeaconBlock
 	BeaconBlockBody                = eth2gloas.BeaconBlockBody
@@ -31,6 +32,11 @@ type (
 	ProposerPreferences            = eth2gloas.ProposerPreferences
 	SignedProposerPreferences      = eth2gloas.SignedProposerPreferences
 	BuilderIndex                   = eth2gloas.BuilderIndex
+
+	// GloasBeaconVote is the committee runner's consensus value on Gloas slots (SIP #94 §2): BeaconVote
+	// plus the BN-supplied payload-status AttestationData.Index, in a fixed 120-byte encoding, so a
+	// pre-Gloas 112-byte BeaconVote never decodes as one (or vice versa).
+	GloasBeaconVote = spectypes.GloasBeaconVote
 
 	// BlindedExecutionPayloadEnvelope is the §6 signing input (SIP #94 §6): the envelope with the payload
 	// and the execution requests replaced by their roots, whose progressive root equals the full
