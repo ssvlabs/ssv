@@ -660,35 +660,22 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 					zap.Uint64s("quorum_signers", quorumSigners),
 				)
 
-				sig, err := r.State.ReconstructBeaconSig(r.State.PostConsensusContainer, root, pubKey[:], validatorIndex)
+				// On failure the root's partial signatures have been verified and the invalid ones dropped; the
+				// error is recoverable only if that left the root below quorum (see reconstructQuorumSig).
+				sig, err := r.reconstructQuorumSig(r.State.PostConsensusContainer, root, share, "post-consensus")
 				if err != nil {
-					// If the reconstructed signature verification failed, fall back to verifying each individual
-					// partial signature + discarding the invalid ones. This should not happen often in practice,
-					// but it's a very desirable optimization to have because when it does happen - we wouldn't
-					// want to reconstruct lots of BLS signatures only to discover most of them being invalid.
-					// Notes:
-					// 1) FallBackAndVerifyEachSignature call may also lead to a certain root+validator pairs
-					//    in PostConsensusContainer not having quorum anymore since it previously was computed
-					//    optimistically.
-					// 2) we need to verify partial signatures only for the roots we haven't tried reconstructing
-					//    signatures for (hence roots[i:])
-					// 3) since this code is running a bunch of concurrent go-routines, we need to be careful to
-					//    not call FallBackAndVerifyEachSignature for the same root+validator pair multiple times -
-					//    this is why we are parallelizing by validators only (and not by root+validator), processing
-					//    each root sequentially
-					for _, root := range roots[i:] {
+					// Verify the validator's partial signatures for the roots still ahead too, dropping a bad
+					// signer's shares before they cost a failed reconstruction each. Drops can take root+validator
+					// pairs below quorum, hence the quorum re-check before each reconstruction. No pair is verified
+					// by two goroutines at once: the work is split by validator, and the roots are taken in turn.
+					for _, root := range roots[i+1:] {
 						r.FallBackAndVerifyEachSignature(r.State.PostConsensusContainer, root, share.Committee, validatorIndex)
 					}
 					const eventMsg = "got post-consensus quorum but it has invalid signatures"
 					span.AddEvent(eventMsg)
 					vLogger.Error(eventMsg, zap.Error(err))
 
-					// FallBackAndVerifyEachSignature ran above for any reconstruct error, so this is
-					// recoverable by construction: tag it at the push site rather than inferring
-					// recoverability from a spec error code at the receive site (the code is only
-					// attached by VerifyReconstructedSignature — the earlier Deserialize/Recover step
-					// returns an uncoded but equally recoverable error).
-					errCh <- recoverableReconstructError{fmt.Errorf("%s: %w", eventMsg, err)}
+					errCh <- err
 					return
 				}
 
@@ -696,7 +683,7 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 
 				signatureCh <- signatureResult{
 					validatorIndex: validatorIndex,
-					signature:      (phase0.BLSSignature)(sig),
+					signature:      sig,
 				}
 			}(validator, root)
 		}
@@ -757,10 +744,8 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 
 		// Drain any error still buffered on errCh: when signatureCh closes in the same iteration the select
 		// may take the close branch and skip it. All workers have finished (signatureCh closes only after
-		// wg.Wait), so this non-blocking drain is complete. Today errCh carries only the recoverable
-		// reconstruct error (the sole producer above), and dropping one is benign (the duty stays open for
-		// retry). The drain is defensive: it classifies that error for completeness and future-proofs the
-		// path should a terminal error ever be pushed here.
+		// wg.Wait), so this non-blocking drain is complete. errCh carries the reconstruct errors, recoverable
+		// or terminal, and a skipped terminal one would leave the failed duty unrecorded.
 	drainErrCh:
 		for {
 			select {

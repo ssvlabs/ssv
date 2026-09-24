@@ -143,12 +143,7 @@ func TestReconstructQuorumSig(t *testing.T) {
 
 	t.Run("no bad share to drop: terminal", func(t *testing.T) {
 		b, container := withShares([]spectypes.OperatorID{1, 2, 3}, nil)
-		// Every share verifies, but they combine to another validator's key than the share's.
-		var other bls.SecretKey
-		other.SetByCSPRNG()
-		otherShare := *share
-		otherShare.ValidatorPubKey = spectypes.ValidatorPK(other.GetPublicKey().Serialize())
-		_, err := b.reconstructQuorumSig(container, root, &otherShare, "post-consensus")
+		_, err := b.reconstructQuorumSig(container, root, withUnrelatedValidatorKey(share), "post-consensus")
 		require.Error(t, err)
 		require.False(t, isRecoverableReconstructError(err))
 		require.Equal(t, 3, shares(container))
@@ -298,6 +293,16 @@ func TestProcessPreConsensusRecoversFromBadShare(t *testing.T) {
 			requireConcluded(t, concluded, dutyOutcomeSucceeded)
 		})
 	}
+}
+
+// withUnrelatedValidatorKey returns a copy of share with an unrelated validator key: the partial signatures still
+// verify against their shares, but no longer combine to the share's validator key.
+func withUnrelatedValidatorKey(share *spectypes.Share) *spectypes.Share {
+	var other bls.SecretKey
+	other.SetByCSPRNG()
+	unrelated := *share
+	unrelated.ValidatorPubKey = spectypes.ValidatorPK(other.GetPublicKey().Serialize())
+	return &unrelated
 }
 
 // observeDutyConclusion arms a buffered conclusion channel on b, so a test reads the duty's outcome directly

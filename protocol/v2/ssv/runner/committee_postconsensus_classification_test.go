@@ -78,7 +78,7 @@ func TestCommitteeRunnerProcessPostConsensus_MarksFailedOnSubmitError(t *testing
 // for the mis-classification fix: a quorum that contains one non-deserializable partial signature
 // must NOT conclude the duty failed (the offending sig is dropped by the fallback, so the root can
 // re-cross quorum), and a subsequent valid partial signature that re-crosses quorum must let the duty
-// conclude succeeded. This pins both the push-site recoverable tagging and the defer exclusion in a
+// conclude succeeded. This pins both the recoverable classification and the defer exclusion in a
 // single flow.
 func TestCommitteeRunnerProcessPostConsensus_RecoverableInvalidSigsThenSucceeds(t *testing.T) {
 	env := newCommitteeRunnerEnv(t, []int{1}, &committeeDutyGuardStub{}, &doppelgangerStub{})
@@ -123,6 +123,30 @@ func TestCommitteeRunnerProcessPostConsensus_RecoverableInvalidSigsThenSucceeds(
 	default:
 		t.Fatal("expected a succeeded duty conclusion after recovery, got none")
 	}
+}
+
+// A reconstruction that fails with no bad share to drop can't be fixed by more shares, so it concludes the duty
+// failed with the reason, rather than leaving it to surface as stuck at the slot's end.
+func TestCommitteeRunnerProcessPostConsensus_MarksFailedWhenNoShareToDrop(t *testing.T) {
+	env := newCommitteeRunnerEnv(t, []int{1}, &committeeDutyGuardStub{}, &doppelgangerStub{})
+	duty := spectestingutils.TestingCommitteeDuty([]int{1}, nil, spec.DataVersionElectra)
+
+	env.startAndDecideCommitteeDuty(t, duty)
+	concluded := observeConclusion(env)
+	env.runner.Share[1] = withUnrelatedValidatorKey(env.runner.Share[1])
+
+	var postConsensusErr error
+	for id := spectypes.OperatorID(1); id <= 3; id++ {
+		msg := spectestingutils.PostConsensusCommitteeMsgForDuty(duty, env.keySetMap, id)
+		if err := env.runner.ProcessPostConsensus(context.Background(), env.logger, msg); err != nil {
+			postConsensusErr = err
+		}
+	}
+
+	require.ErrorContains(t, postConsensusErr, "invalid signatures")
+	require.False(t, isRecoverableReconstructError(postConsensusErr))
+	requireConcluded(t, concluded, dutyOutcomeFailed)
+	require.Empty(t, env.beacon.GetBroadcastedRoots())
 }
 
 // invalidateDutiesInGuard marks every validator duty of the committee duty invalid in the guard

@@ -174,8 +174,8 @@ func TestAggregatorRunnerProcessPostConsensus_MarksFailedOnSubmitError(t *testin
 
 // TestAggregatorRunnerProcessPostConsensus_DoesNotMarkFailedOnInvalidSigs is the regression test for
 // the legacy AggregatorRunner side of #2919: a recoverable reconstruct-invalid-signatures failure
-// (wrapped in recoverableReconstructError at the push site in aggregator.go) must NOT conclude the
-// duty failed, mirroring the CommitteeRunner fix from #2918/#2912.
+// (tagged recoverableReconstructError by reconstructQuorumSig) must NOT conclude the duty failed,
+// mirroring the CommitteeRunner fix from #2918/#2912.
 func TestAggregatorRunnerProcessPostConsensus_DoesNotMarkFailedOnInvalidSigs(t *testing.T) {
 	ctx := t.Context()
 	const version = spec.DataVersionPhase0

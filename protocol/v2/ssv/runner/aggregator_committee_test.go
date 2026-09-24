@@ -315,6 +315,34 @@ func TestAggregatorCommitteeRunnerProcessPostConsensus_RecoverableInvalidSigsThe
 	}
 }
 
+// A reconstruction that fails with no bad share to drop can't be fixed by more shares, so it goes without the
+// recoverable spec code and concludes the duty failed with the reason, rather than leaving it to surface as stuck.
+func TestAggregatorCommitteeRunnerProcessPostConsensus_MarksFailedWhenNoShareToDrop(t *testing.T) {
+	ctx := t.Context()
+	const version = spec.DataVersionElectra
+
+	base := protocoltesting.NewTestingBeaconNodeWrapped().(*protocoltesting.BeaconNodeWrapped)
+	env := newAggregatorCommitteeRunnerEnv(t, []int{1}, base)
+	duty := spectestingutils.TestingAggregatorCommitteeDutyForValidators([]int{1}, []int{}, version)
+
+	concluded := env.startAndFeedThroughConsensus(t, ctx, duty, version)
+	env.runner.Share[1] = withUnrelatedValidatorKey(env.runner.Share[1])
+
+	var postConsensusErr error
+	for _, psig := range postConsensusMsgsFromFixture(duty, env.keySetMap, version) {
+		if err := env.runner.ProcessPostConsensus(ctx, env.logger, psig); err != nil {
+			postConsensusErr = err
+		}
+	}
+
+	require.ErrorContains(t, postConsensusErr, "invalid signatures")
+	var specErr *spectypes.Error
+	require.False(t, errors.As(postConsensusErr, &specErr) && specErr.Code == spectypes.PostConsensusQuorumWithInvalidSignatures,
+		"a terminal failure must not carry the recoverable spec code")
+	requireConcluded(t, concluded, dutyOutcomeFailed)
+	require.Empty(t, base.GetBroadcastedRoots())
+}
+
 // TestAggregatorCommitteeRunnerProcessPostConsensus_TerminalWinsOverConcurrentRecoverable is the
 // regression test for the terminalErr/recoverableErr split: within a single ProcessPostConsensus
 // call, one validator's post-consensus signatures reconstruct fine but then fail to submit (terminal,

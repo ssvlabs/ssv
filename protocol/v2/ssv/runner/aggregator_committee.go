@@ -904,7 +904,7 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 
 	// Unlike the sibling CommitteeRunner (which tags recoverable reconstruct failures with the
 	// recoverableReconstructError sentinel), this runner classifies them by the
-	// PostConsensusQuorumWithInvalidSignatures spec code: every reconstruct error is force-wrapped
+	// PostConsensusQuorumWithInvalidSignatures spec code: every recoverable reconstruct error is wrapped
 	// with that code at the push site below, so there is no uncoded-BLS blind spot here, and tagging
 	// instead would break this runner's spectest fixtures. The divergence is deliberate — see the
 	// reciprocal note in committee.go. A single last-write-wins error made terminal-vs-recoverable
@@ -912,8 +912,8 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 	var terminalErr, recoverableErr error
 	// classify is the single source of truth for the terminal/recoverable split, shared by the listener
 	// receive site and the post-listener drain so the two can never drift apart. The reconstruct
-	// goroutine force-wraps its (recoverable, post-fallback) error with the
-	// PostConsensusQuorumWithInvalidSignatures code; anything arriving without that code is terminal.
+	// goroutine wraps a recoverable failure with the PostConsensusQuorumWithInvalidSignatures code;
+	// anything arriving without that code is terminal.
 	classify := func(err error) {
 		var specErr *spectypes.Error
 		if errors.As(err, &specErr) && specErr.Code == spectypes.PostConsensusQuorumWithInvalidSignatures {
@@ -995,23 +995,15 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 					zap.Uint64s("quorum_signers", quorumSigners),
 				)
 
-				sig, err := r.State.ReconstructBeaconSig(r.State.PostConsensusContainer, root, pubKey[:], validatorIndex)
+				// On failure the root's partial signatures have been verified and the invalid ones dropped; the
+				// error is recoverable only if that left the root below quorum (see reconstructQuorumSig).
+				sig, err := r.reconstructQuorumSig(r.State.PostConsensusContainer, root, share, "post-consensus")
 				if err != nil {
-					// If the reconstructed signature verification failed, fall back to verifying each individual
-					// partial signature + discarding the invalid ones. This should not happen often in practice,
-					// but it's a very desirable optimization to have because when it does happen - we wouldn't
-					// want to reconstruct lots of BLS signatures only to discover most of them being invalid.
-					// Notes:
-					// 1) FallBackAndVerifyEachSignature call may also lead to a certain root+validator pairs
-					//    in PostConsensusContainer not having quorum anymore since it previously was computed
-					//    optimistically.
-					// 2) we need to verify partial signatures only for the roots we haven't tried reconstructing
-					//    signatures for (hence roots[i:])
-					// 3) since this code is running a bunch of concurrent go-routines, we need to be careful to
-					//    not call FallBackAndVerifyEachSignature for the same root+validator pair multiple times -
-					//    this is why we are parallelizing by validators only (and not by root+validator), processing
-					//    each root sequentially
-					for _, root := range roots[i:] {
+					// Verify the validator's partial signatures for the roots still ahead too, dropping a bad
+					// signer's shares before they cost a failed reconstruction each. Drops can take root+validator
+					// pairs below quorum, hence the quorum re-check before each reconstruction. No pair is verified
+					// by two goroutines at once: the work is split by validator, and the roots are taken in turn.
+					for _, root := range roots[i+1:] {
 						r.FallBackAndVerifyEachSignature(
 							r.State.PostConsensusContainer,
 							root,
@@ -1023,10 +1015,12 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 					span.AddEvent(eventMsg)
 					vlogger.Error(eventMsg, zap.Error(err))
 
-					errCh <- spectypes.WrapError(
-						spectypes.PostConsensusQuorumWithInvalidSignatures,
-						fmt.Errorf("%s: %w", eventMsg, err),
-					)
+					// classify reads recoverability from this spec code, not the tag, so only a recoverable failure
+					// carries it.
+					if isRecoverableReconstructError(err) {
+						err = spectypes.WrapError(spectypes.PostConsensusQuorumWithInvalidSignatures, err)
+					}
+					errCh <- err
 					return
 				}
 
@@ -1034,7 +1028,7 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 
 				signatureCh <- signatureResult{
 					validatorIndex: validatorIndex,
-					signature:      (phase0.BLSSignature)(sig),
+					signature:      sig,
 				}
 			}(validator, root)
 		}
@@ -1107,11 +1101,9 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 
 		// When signatureCh closes in the same iteration the select may take the close branch and skip an
 		// error still buffered on errCh. All workers have finished (signatureCh is closed only after
-		// wg.Wait), so no further sends occur and this non-blocking drain is complete. Today errCh carries
-		// only the recoverable reconstruct error (the sole producer above), and dropping one is benign —
-		// the root stays un-submitted and the duty stays open for a later retry rather than falsely
-		// succeeding. The drain is defensive: it classifies that error for completeness and future-proofs
-		// the path should a terminal error ever be pushed here.
+		// wg.Wait), so no further sends occur and this non-blocking drain is complete. errCh carries the
+		// reconstruct errors, recoverable or terminal, and a skipped terminal one would leave the failed
+		// duty unrecorded.
 	drainErrCh:
 		for {
 			select {
