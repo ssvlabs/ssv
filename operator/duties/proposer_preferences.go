@@ -18,9 +18,8 @@ import (
 type ProposerPreferencesHandler struct {
 	baseHandler
 
-	// emitted records the dependent_root last emitted for each epoch (SIP #94 §5). An epoch emits once
-	// per dependent_root: a steady-state tick skips an already-emitted epoch, while a post-reorg recheck
-	// re-emits only if the root actually changed. Accessed only from the HandleDuties goroutine.
+	// emitted records the dependent_root each epoch was last emitted under, so emitForEpoch emits an epoch
+	// once per root (SIP #94 §5). Accessed only from the HandleDuties goroutine.
 	emitted map[phase0.Epoch]phase0.Root
 
 	// recheckLookahead is set by a reorg so the next tick re-evaluates each lookahead epoch's

@@ -168,7 +168,7 @@ func TestProposerPreferencesHandler_firstGloasTickRechecksBoundaryEpoch(t *testi
 	ctrl := gomock.NewController(t)
 	idx := phase0.ValidatorIndex(7)
 	pk := phase0.BLSPubKey{1, 2, 3}
-	proposalSlot := phase0.Slot(uint64(gloasEpoch)*netCfg.SlotsPerEpoch) + 10
+	proposalSlot := netCfg.FirstSlotAtEpoch(gloasEpoch) + 10
 	rootA, rootB := phase0.Root{0xaa}, phase0.Root{0xbb}
 
 	vp := NewMockValidatorProvider(ctrl)
@@ -193,7 +193,7 @@ func TestProposerPreferencesHandler_firstGloasTickRechecksBoundaryEpoch(t *testi
 	h.dutiesExecutor = &captureExecutor{executed: executed}
 
 	preForkSlot := preForkEmissionSlot(netCfg, gloasEpoch)
-	forkSlot := phase0.Slot(uint64(gloasEpoch) * netCfg.SlotsPerEpoch)
+	forkSlot := netCfg.FirstSlotAtEpoch(gloasEpoch)
 
 	h.emitForTick(context.Background(), preForkSlot) // pre-fork window: emits under rootA
 	require.Equal(t, rootA, h.emitted[phase0.Epoch(gloasEpoch)])
@@ -222,7 +222,7 @@ func TestProposerPreferencesHandler_emitGraceAfterIndicesChange(t *testing.T) {
 	h.beaconNode = NewMockBeaconNode(ctrl) // no expectations: any fetch during the grace fails the test
 	h.dutiesExecutor = &captureExecutor{executed: make(chan []*spectypes.ValidatorDuty, 1)}
 
-	slot := phase0.Slot(uint64(gloasEpoch)*netCfg.SlotsPerEpoch) + 3
+	slot := netCfg.FirstSlotAtEpoch(gloasEpoch) + 3
 	h.emitAfterSlot = slot + indicesChangeEmitGraceSlots
 	h.recheckLookahead = true
 
@@ -264,7 +264,7 @@ func TestProposerPreferencesHandler_emitForTick(t *testing.T) {
 		slot phase0.Slot
 	}{
 		{"pre-fork window emits the first Gloas epoch", preForkEmissionSlot(netCfg, gloasEpoch)},
-		{"steady state emits the current Gloas epoch", phase0.Slot(uint64(gloasEpoch) * netCfg.SlotsPerEpoch)},
+		{"steady state emits the current Gloas epoch", netCfg.FirstSlotAtEpoch(gloasEpoch)},
 	}
 
 	for _, tc := range tt {
@@ -274,7 +274,7 @@ func TestProposerPreferencesHandler_emitForTick(t *testing.T) {
 			pk := phase0.BLSPubKey{1, 2, 3}
 			// A still-upcoming slot in the Gloas fork epoch: the steady-state tick sits on the epoch's
 			// first slot, and an assignment at the tick slot itself is filtered as already reached.
-			proposalSlot := phase0.Slot(uint64(gloasEpoch)*netCfg.SlotsPerEpoch) + 1
+			proposalSlot := netCfg.FirstSlotAtEpoch(gloasEpoch) + 1
 
 			vp := NewMockValidatorProvider(ctrl)
 			vp.EXPECT().SelfParticipatingValidators(phase0.Epoch(gloasEpoch)).

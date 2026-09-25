@@ -28,7 +28,7 @@ func TestValidatorRegistrationHandler_processExecution_skippedAtGloas(t *testing
 	h.netCfg = netCfg
 	h.dutiesExecutor = &captureExecutor{executed: executed}
 
-	h.processExecution(context.Background(), gloasEpoch, phase0.Slot(uint64(gloasEpoch)*netCfg.SlotsPerEpoch))
+	h.processExecution(context.Background(), gloasEpoch, netCfg.FirstSlotAtEpoch(gloasEpoch))
 
 	require.Len(t, executed, 0)
 }
