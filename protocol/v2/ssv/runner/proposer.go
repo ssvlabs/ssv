@@ -425,12 +425,6 @@ func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logge
 	if err != nil {
 		return fmt.Errorf("current validator duty: %w", err)
 	}
-	// Backstop for the value check's running-slot check (SIP #94 §4): if a value for another slot is decided
-	// anyway (more than f Byzantine operators, or an injected decided message), don't sign a block for a duty
-	// this runner isn't running.
-	if cd.Duty.Slot != duty.Slot {
-		return spectypes.NewError(spectypes.ProposerDutySlotMismatchErrorCode, "decided value duty slot does not match running duty slot")
-	}
 
 	var (
 		blkRootToSign spectypes.HashRoot

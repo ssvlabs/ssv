@@ -882,15 +882,18 @@ func TestProposerRunnerPostConsensusValidatesRunningSlot(t *testing.T) {
 	require.ErrorContains(t, err, "invalid partial sig slot: 7, expected slot: 8")
 }
 
-// If a value for another slot is decided anyway, the proposer refuses to sign it: the post-decide backstop for
-// the value check's running-slot check (SIP #94 §4). This runner's value check skips that check, so the
-// decision goes through and only the backstop stands between it and a signature.
+// A value decided for another slot anyway (more than f Byzantine operators, or an injected decided message) is
+// refused before anything is signed: the runner re-runs its value check on the decided value, and that check's
+// running-slot bind (SIP #94 §4) is the only slot guard, as in ssv-spec.
 func TestProposerRunnerProcessConsensusRejectsDecidedValueForAnotherSlot(t *testing.T) {
 	t.Parallel()
 
 	const slot = phase0.Slot(8)
 	ctx, logger := context.Background(), zap.NewNop()
 	runner, keySet, network := newProposerRunnerForTest(t, newProposerTestBeacon(nil), &stubDoppelganger{canSign: true}, 0, gloasTestConfig(slot))
+	share := runner.GetShare()
+	runner.ValCheck = ssv.NewProposerChecker(runner.signer, runner.NetworkConfig.Beacon, share.ValidatorPubKey, share.ValidatorIndex,
+		phase0.BLSPubKey(share.SharePubKey), runner.RunningDutySlot) // wired as the validator controller wires it
 	require.NoError(t, runner.StartNewDuty(ctx, logger, gloasProposerDuty(slot), keySet.Threshold))
 	concluded := observeDutyConclusion(runner.BaseRunner)
 
