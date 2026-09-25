@@ -57,8 +57,8 @@ func (h *ProposerPreferencesHandler) WaitShutdown() {}
 
 // HandleDuties emits proposer-preferences duties across the proposer lookahead (current + next epoch,
 // MIN_SEED_LOOKAHEAD=1). In the epoch immediately before the Gloas fork it pre-emits the first Gloas
-// epoch's preferences (SIP #94 §5) so builders have them before the fork. Reorg/indices-change re-emission
-// is handled below.
+// epoch's preferences, from the same mid-epoch slot as any next-epoch emission (SIP #94 §5), so builders
+// have them before the fork. Reorg/indices-change re-emission is handled below.
 func (h *ProposerPreferencesHandler) HandleDuties(ctx context.Context) {
 	h.logger.Info("starting duty handler")
 	defer h.logger.Info("duty handler exited")
@@ -92,11 +92,12 @@ func (h *ProposerPreferencesHandler) HandleDuties(ctx context.Context) {
 	}
 }
 
-// emitForTick emits the lookahead's preferences for the tick's slot: the current epoch (plus the next,
-// once it's a good time to fetch) in steady state, or the first Gloas epoch when in the pre-fork
-// window. Outside both it does nothing (pre-Gloas, no preferences yet). Ticks within the grace after
-// a validator-set change are skipped entirely. A reorg recheck flagged since the last tick is
-// consumed here, forcing the lookahead's dependent roots to be re-evaluated.
+// emitForTick emits the lookahead's preferences for the tick's slot: the current epoch in steady state, and
+// the next epoch from slot SLOTS_PER_EPOCH/2 - 1, once that epoch's dependent_root block has settled (SIP #94
+// §5). In the pre-fork window only the next-epoch emission runs, for the first Gloas epoch, from the same slot.
+// Outside both it does nothing (pre-Gloas, no preferences yet). Ticks within the grace after a validator-set
+// change are skipped entirely. A reorg recheck flagged since the last tick is consumed here, forcing the
+// lookahead's dependent roots to be re-evaluated.
 func (h *ProposerPreferencesHandler) emitForTick(ctx context.Context, slot phase0.Slot) {
 	// Within the post-indices-change grace, don't emit (and don't consume a pending recheck): the
 	// committee is still converging on the new validator set, and partials broadcast now would be
@@ -124,7 +125,7 @@ func (h *ProposerPreferencesHandler) emitForTick(ctx context.Context, slot phase
 			h.emitForEpoch(ctx, epoch+1, slot, recheck)
 		}
 		h.evictOutdated(epoch)
-	case h.netCfg.InGloasPriorWindow(slot):
+	case h.netCfg.InGloasPriorWindow(slot) && h.shouldFetchNextEpoch(slot):
 		// epoch+1 is GLOAS_FORK_EPOCH throughout the prior window (MIN_SEED_LOOKAHEAD=1).
 		h.emitForEpoch(ctx, epoch+1, slot, recheck)
 	}
