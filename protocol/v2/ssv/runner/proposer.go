@@ -396,6 +396,11 @@ func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logge
 	span.AddEvent("processing QBFT consensus msg")
 	decided, decidedValue, err := r.baseConsensusMsgProcessing(ctx, logger, r.ValCheck.CheckValue, signedMsg, &spectypes.ProposerConsensusData{})
 	if err != nil {
+		if decided {
+			// The duty concluded failed on a decided value this runner can't take up. Post-consensus packets are
+			// validated against a taken-up value, so none reach quorum and no reveal can follow.
+			r.releaseProducedEnvelope()
+		}
 		return fmt.Errorf("failed processing consensus message: %w", err)
 	}
 
@@ -683,16 +688,13 @@ func (r *ProposerRunner) processGloasPostConsensusQuorum(ctx context.Context, lo
 	return blockErr
 }
 
-// loseGloasQuorum records a post-consensus quorum whose roots could not be resolved. A quorum fires once:
-// while the duty is still running the lost quorum was the block's, which is terminal for the duty, but the
-// envelope's may still fire, so the reveal data stays; once the duty has finished it can only have been the
-// envelope's, so the reveal is lost and its data released.
+// loseGloasQuorum records a post-consensus quorum whose roots could not be resolved. Every packet carries the
+// block root, so the first quorum includes the block's, and a quorum fires once: this operator can no longer
+// submit the block, which fails the duty, nor publish the reveal, which waits for that submit, so the reveal
+// data is released.
 func (r *ProposerRunner) loseGloasQuorum(err error) error {
-	if r.hasDutySucceeded() {
-		r.releaseProducedEnvelope()
-	} else {
-		r.markDutyFailed(err)
-	}
+	r.markDutyFailed(err)
+	r.releaseProducedEnvelope()
 	return err
 }
 
@@ -733,6 +735,11 @@ func (r *ProposerRunner) submitGloasBlock(ctx context.Context, logger *zap.Logge
 
 	sig, err := r.reconstructPostConsensusSig(signingRoot)
 	if err != nil {
+		if !isRecoverableReconstructError(err) {
+			// The block's quorum won't fire again, so this operator never submits the block, and the reveal
+			// waits for that submit.
+			r.releaseProducedEnvelope()
+		}
 		return err
 	}
 	r.measurements.EndPostConsensus()
