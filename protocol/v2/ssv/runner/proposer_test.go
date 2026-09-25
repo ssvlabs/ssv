@@ -884,7 +884,7 @@ func TestProposerRunnerPostConsensusValidatesRunningSlot(t *testing.T) {
 
 // A value decided for another slot anyway (more than f Byzantine operators, or an injected decided message) is
 // refused before anything is signed: the runner re-runs its value check on the decided value, and that check's
-// running-slot bind (SIP #94 §4) is the only slot guard, as in ssv-spec.
+// running-slot bind (SIP #94 §4) is its only guard on the value's slot, as in ssv-spec.
 func TestProposerRunnerProcessConsensusRejectsDecidedValueForAnotherSlot(t *testing.T) {
 	t.Parallel()
 

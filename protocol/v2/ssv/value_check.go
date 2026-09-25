@@ -237,10 +237,10 @@ type proposerChecker struct {
 }
 
 // NewProposerChecker validates the proposer's consensus value. runningDutySlot reports the slot of the duty
-// the runner is running (0 before its first duty), so a value for any other slot is rejected before consensus
-// can commit it (SIP #94 §4). The runner re-runs this check on the decided value and has no other slot guard,
-// so its checker must get a runningDutySlot; nil skips the check, for isolated value checks with no runner
-// behind them.
+// the runner is running, so a value for any other slot is rejected before consensus can commit it (SIP #94
+// §4). The runner re-runs this check on the decided value, its only guard on that value's slot, so its
+// checker must get a runningDutySlot. The slot check is skipped when runningDutySlot is nil (isolated value
+// checks, with no runner behind them) or reports 0 (no duty started yet).
 func NewProposerChecker(
 	signer ekm.BeaconSigner,
 	beaconConfig *networkconfig.Beacon,

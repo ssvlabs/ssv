@@ -152,6 +152,12 @@ func TestProposerPreferencesHandler_emitForEpoch_skipsReachedSlotsAndBoundsPerDu
 		"each duty's execution window runs to the end of its own proposal slot")
 }
 
+// preForkEmissionSlot is the slot the first Gloas epoch's preferences are emitted from: slot
+// SLOTS_PER_EPOCH/2 - 1 of the epoch before the fork, as for any next-epoch emission (SIP #94 §5).
+func preForkEmissionSlot(netCfg *networkconfig.Network, gloasEpoch phase0.Epoch) phase0.Slot {
+	return netCfg.FirstSlotAtEpoch(gloasEpoch-1) + phase0.Slot(netCfg.SlotsPerEpoch/2-1)
+}
+
 // The first Gloas tick forces a one-time lookahead recheck: a boundary epoch emitted pre-fork under
 // a dependent_root that shifts at the fork transition is re-emitted under the fresh root; later
 // Gloas ticks don't recheck again (the pinned mock call order fails on any extra fetch).
@@ -186,7 +192,7 @@ func TestProposerPreferencesHandler_firstGloasTickRechecksBoundaryEpoch(t *testi
 	h.beaconNode = bn
 	h.dutiesExecutor = &captureExecutor{executed: executed}
 
-	preForkSlot := phase0.Slot(uint64(gloasEpoch-1)*netCfg.SlotsPerEpoch + netCfg.SlotsPerEpoch/2 - 1)
+	preForkSlot := preForkEmissionSlot(netCfg, gloasEpoch)
 	forkSlot := phase0.Slot(uint64(gloasEpoch) * netCfg.SlotsPerEpoch)
 
 	h.emitForTick(context.Background(), preForkSlot) // pre-fork window: emits under rootA
@@ -248,7 +254,7 @@ func TestProposerPreferencesHandler_evictOutdated(t *testing.T) {
 }
 
 // emitForTick emits the first Gloas epoch's preferences both in steady state (a slot in that epoch)
-// and pre-fork (from the mid-epoch slot of the epoch immediately before the fork).
+// and pre-fork (at preForkEmissionSlot).
 func TestProposerPreferencesHandler_emitForTick(t *testing.T) {
 	const gloasEpoch = 100
 	netCfg := networkconfig.TestNetworkWithGloas(gloasEpoch)
@@ -257,7 +263,7 @@ func TestProposerPreferencesHandler_emitForTick(t *testing.T) {
 		name string
 		slot phase0.Slot
 	}{
-		{"pre-fork window emits the first Gloas epoch", phase0.Slot(uint64(gloasEpoch-1)*netCfg.SlotsPerEpoch + netCfg.SlotsPerEpoch/2 - 1)},
+		{"pre-fork window emits the first Gloas epoch", preForkEmissionSlot(netCfg, gloasEpoch)},
 		{"steady state emits the current Gloas epoch", phase0.Slot(uint64(gloasEpoch) * netCfg.SlotsPerEpoch)},
 	}
 
@@ -298,9 +304,9 @@ func TestProposerPreferencesHandler_emitForTick(t *testing.T) {
 	}
 }
 
-// The pre-fork emission waits for slot SLOTS_PER_EPOCH/2 - 1 of the epoch before the fork, like any next-epoch
-// emission (SIP #94 §5): before it, the fork epoch's dependent_root block is still exposed to a late-block
-// reorg. The mocks expect no call, so any emission, or even a fetch for one, fails the test.
+// The pre-fork emission waits for preForkEmissionSlot, like any next-epoch emission: until then, the
+// fork epoch's dependent_root block is still exposed to a late-block reorg (SIP #94 §5). The mocks
+// expect no call, so any emission, or even a fetch for one, fails the test.
 func TestProposerPreferencesHandler_preForkEmissionWaitsForMidEpoch(t *testing.T) {
 	const gloasEpoch = 100
 	netCfg := networkconfig.TestNetworkWithGloas(gloasEpoch)
@@ -313,8 +319,7 @@ func TestProposerPreferencesHandler_preForkEmissionWaitsForMidEpoch(t *testing.T
 	h.beaconNode = NewMockBeaconNode(ctrl)
 	h.dutiesExecutor = &captureExecutor{executed: make(chan []*spectypes.ValidatorDuty, 1)}
 
-	firstPreForkSlot := phase0.Slot(uint64(gloasEpoch-1) * netCfg.SlotsPerEpoch)
-	for slot := firstPreForkSlot; slot < firstPreForkSlot+phase0.Slot(netCfg.SlotsPerEpoch/2-1); slot++ {
+	for slot := netCfg.FirstSlotAtEpoch(gloasEpoch - 1); slot < preForkEmissionSlot(netCfg, gloasEpoch); slot++ {
 		h.emitForTick(context.Background(), slot)
 	}
 	require.Empty(t, h.emitted)
