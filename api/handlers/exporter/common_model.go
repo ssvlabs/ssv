@@ -10,6 +10,7 @@ import (
 
 	"github.com/ssvlabs/ssv/api"
 	"github.com/ssvlabs/ssv/exporter/traces"
+	"github.com/ssvlabs/ssv/protocol/v2/message"
 )
 
 // Decided represents a decided message within a duty trace.
@@ -61,10 +62,12 @@ type RoundChange struct {
 	PrepareMessages []Message `json:"prepareMessages"`
 }
 
-// Message represents a QBFT message trace entry.
+// Message represents a QBFT message trace entry, or a partial-signature entry (then Type is set).
 type Message struct {
 	// Round is the round associated with this message.
 	Round uint64 `json:"round,omitempty" format:"int64"`
+	// Type is the partial-signature message type; absent on QBFT messages.
+	Type string `json:"type,omitempty" example:"POST_CONSENSUS"`
 	// BeaconRoot is the message root value (hex-encoded).
 	BeaconRoot phase0.Root `json:"ssvRoot" swaggertype:"string" format:"hex"`
 	// Signer is the operator ID that sent the message.
@@ -155,6 +158,7 @@ func toTime(t uint64) time.Time { return time.UnixMilli(int64(t)) }
 func toMessageTrace(m []*traces.PartialSigTrace) (out []Message) {
 	for _, mt := range m {
 		out = append(out, Message{
+			Type:         message.PartialSigMsgTypeToString(mt.Type),
 			BeaconRoot:   mt.BeaconRoot,
 			Signer:       mt.Signer,
 			ReceivedTime: toTime(mt.ReceivedTime),

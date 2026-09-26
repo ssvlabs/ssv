@@ -670,3 +670,50 @@ func encodeLittleEndian(i phase0.ValidatorIndex) []byte {
 	binary.LittleEndian.PutUint64(value, uint64(i))
 	return value
 }
+
+// Eviction counts only what the store confirms is on disk. The traces are already out of memory when the
+// batch is written, so an unencodable duty is left out of the count and a failed batch write counts nothing,
+// rather than the whole input being reported as evicted to disk.
+func TestDumpValidatorToDB_CountsOnlySavedDuties(t *testing.T) {
+	const slot = phase0.Slot(30)
+	const role = spectypes.BNRoleProposerPreferences
+
+	t.Run("unencodable duty is left out of the count", func(t *testing.T) {
+		db, err := kv.NewInMemory(zap.NewNop(), basedb.Options{})
+		require.NoError(t, err)
+		defer db.Close()
+		dutyStore := store.New(db)
+		_, vstore, _ := registrystorage.NewSharesStorage(networkconfig.TestNetwork.Beacon, db, dummyGetFeeRecipient, nil)
+		collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.Beacon, nil, nil)
+
+		_, _, err = collector.getOrCreateValidatorTrace(slot, role, 1)
+		require.NoError(t, err)
+		oversized, _, err := collector.getOrCreateValidatorTrace(slot, role, 2)
+		require.NoError(t, err)
+		roleTrace := oversized.getOrCreate(slot, role)
+		for i := 0; i < traces.MaxPartialSigEntries+1; i++ {
+			roleTrace.Pre = append(roleTrace.Pre, &traces.PartialSigTrace{Signer: 1})
+		}
+
+		require.Equal(t, 1, collector.dumpValidatorToDBPeriodically(slot), "only the encodable duty is counted")
+		_, err = dutyStore.GetValidatorDuty(slot, role, 1)
+		require.NoError(t, err, "the encodable duty is on disk")
+		_, err = dutyStore.GetValidatorDuty(slot, role, 2)
+		require.ErrorIs(t, err, store.ErrNotFound, "the oversized duty is not")
+	})
+
+	t.Run("failed batch write counts nothing", func(t *testing.T) {
+		db, err := kv.NewInMemory(zap.NewNop(), basedb.Options{})
+		require.NoError(t, err)
+		defer db.Close()
+		_, vstore, _ := registrystorage.NewSharesStorage(networkconfig.TestNetwork.Beacon, db, dummyGetFeeRecipient, nil)
+		collector := New(zap.NewNop(), vstore, nil, &mockDutyTraceStore{err: assert.AnError}, networkconfig.TestNetwork.Beacon, nil, nil)
+
+		_, _, err = collector.getOrCreateValidatorTrace(slot, role, 1)
+		require.NoError(t, err)
+		_, _, err = collector.getOrCreateValidatorTrace(slot, role, 2)
+		require.NoError(t, err)
+
+		require.Zero(t, collector.dumpValidatorToDBPeriodically(slot), "nothing reached disk, nothing is counted")
+	})
+}

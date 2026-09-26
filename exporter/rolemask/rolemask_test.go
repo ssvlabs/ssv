@@ -15,6 +15,8 @@ func TestAllContainsCanonicalRoles(t *testing.T) {
 		spectypes.BNRoleProposer,
 		spectypes.BNRoleSyncCommittee,
 		spectypes.BNRoleSyncCommitteeContribution,
+		spectypes.BNRolePTCAttester,
+		spectypes.BNRoleProposerPreferences,
 	}, roles)
 }
 
@@ -23,10 +25,12 @@ func TestBitOfAndHas(t *testing.T) {
 	assert.True(t, ok)
 	assert.Equal(t, BitAttester, bit)
 
-	mask := BitAttester | BitProposer
+	mask := BitAttester | BitProposer | BitProposerPreferences
 	assert.True(t, Has(mask, spectypes.BNRoleAttester))
 	assert.True(t, Has(mask, spectypes.BNRoleProposer))
+	assert.True(t, Has(mask, spectypes.BNRoleProposerPreferences))
 	assert.False(t, Has(mask, spectypes.BNRoleAggregator))
+	assert.False(t, Has(mask, spectypes.BNRolePTCAttester))
 
 	_, ok = BitOf(spectypes.BeaconRole(255))
 	assert.False(t, ok)

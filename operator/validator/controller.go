@@ -172,6 +172,7 @@ type Controller struct {
 	aggregatorRoots      *ttlcache.Cache[phase0.Root, struct{}]
 	syncCommRoots        *ttlcache.Cache[phase0.Root, struct{}]
 	syncCommContribRoots *ttlcache.Cache[phase0.Root, struct{}]
+	envelopeRoots        *ttlcache.Cache[phase0.Root, struct{}]
 	beaconVoteRoots      *ttlcache.Cache[validator.BeaconVoteCacheKey, struct{}]
 	aggregatorCommRoots  *ttlcache.Cache[validator.AggregatorCommitteeCacheKey, struct{}]
 
@@ -261,6 +262,9 @@ func NewController(logger *zap.Logger, options ControllerOptions) *Controller {
 		syncCommContribRoots: ttlcache.New(
 			ttlcache.WithTTL[phase0.Root, struct{}](cacheTTL),
 		),
+		envelopeRoots: ttlcache.New(
+			ttlcache.WithTTL[phase0.Root, struct{}](cacheTTL),
+		),
 		domainCache: validator.NewDomainCache(options.Beacon, cacheTTL),
 		beaconVoteRoots: ttlcache.New(
 			ttlcache.WithTTL[validator.BeaconVoteCacheKey, struct{}](cacheTTL),
@@ -290,6 +294,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) *Controller {
 	go ctrl.aggregatorRoots.Start()
 	go ctrl.syncCommRoots.Start()
 	go ctrl.syncCommContribRoots.Start()
+	go ctrl.envelopeRoots.Start()
 	go ctrl.domainCache.Start()
 	go ctrl.beaconVoteRoots.Start()
 	go ctrl.aggregatorCommRoots.Start()
@@ -306,6 +311,7 @@ func (c *Controller) Stop() {
 	c.aggregatorRoots.Stop()
 	c.syncCommRoots.Stop()
 	c.syncCommContribRoots.Stop()
+	c.envelopeRoots.Stop()
 	c.domainCache.Stop()
 	c.beaconVoteRoots.Stop()
 	c.aggregatorCommRoots.Stop()
@@ -422,6 +428,9 @@ var nonCommitteeValidatorTTLs = map[spectypes.RunnerRole]int{
 	ssvtypes.RoleAggregator:           4,
 	//spectypes.BNRoleSyncCommittee:             4,
 	ssvtypes.RoleSyncCommitteeContribution: 4,
+	spectypes.RolePTCAttester:              4,
+	// Preferences for a proposal slot arrive across the proposer lookahead, up to two epochs early.
+	spectypes.RoleProposerPreferences: 64,
 }
 
 func (c *Controller) handleWorkerMessages(ctx context.Context, msg network.DecodedSSVMessage) error {
@@ -444,6 +453,7 @@ func (c *Controller) handleWorkerMessages(ctx context.Context, msg network.Decod
 			AggregatorRoots:      c.aggregatorRoots,
 			SyncCommRoots:        c.syncCommRoots,
 			SyncCommContribRoots: c.syncCommContribRoots,
+			EnvelopeRoots:        c.envelopeRoots,
 			DomainCache:          c.domainCache,
 			BeaconVoteRoots:      c.beaconVoteRoots,
 			AggregatorCommRoots:  c.aggregatorCommRoots,
@@ -475,10 +485,10 @@ func (c *Controller) handleNonCommitteeMessages(
 	defer c.committeesObserversMutex.Unlock()
 
 	if msg.MsgType == spectypes.SSVConsensusMsgType {
-		// Process proposal messages for committee (and aggregator-committee) consensus only to
-		// get the roots
+		// Only proposal messages are of interest, for the roots they carry: the committee roles'
+		// per-role roots, and the Gloas proposer's §6 envelope root.
 		role := msg.MsgID.GetRoleType()
-		if role != spectypes.RoleCommittee && role != spectypes.RoleAggregatorCommittee {
+		if role != spectypes.RoleCommittee && role != spectypes.RoleAggregatorCommittee && role != spectypes.RoleProposer {
 			return nil
 		}
 

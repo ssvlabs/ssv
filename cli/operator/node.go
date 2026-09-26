@@ -362,6 +362,8 @@ func newNode(
 		spectypes.BNRoleSyncCommitteeContribution,
 		spectypes.BNRoleValidatorRegistration,
 		spectypes.BNRoleVoluntaryExit,
+		spectypes.BNRolePTCAttester,
+		spectypes.BNRoleProposerPreferences,
 	}
 
 	storageMap := ibftstorage.NewStores()
@@ -405,6 +407,9 @@ func newNode(
 	switch res.mode {
 	case modeExporterArchive:
 		logger.Info("exporter mode: archive")
+		if err := dutytracestore.EnsureFormat(db); err != nil {
+			return nil, fmt.Errorf("exporter trace store: %w", err)
+		}
 		dstore := &dutytracer.DutyTraceStoreMetrics{
 			Store: dutytracestore.New(db),
 		}

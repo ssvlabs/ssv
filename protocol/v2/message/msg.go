@@ -72,8 +72,55 @@ func BeaconRoleFromString(s string) (spectypes.BeaconRole, error) {
 		return spectypes.BNRoleValidatorRegistration, nil
 	case roleVoluntaryExit:
 		return spectypes.BNRoleVoluntaryExit, nil
+	case rolePTCAttester:
+		return spectypes.BNRolePTCAttester, nil
+	case roleProposerPreferences:
+		return spectypes.BNRoleProposerPreferences, nil
 	default:
 		return 0, fmt.Errorf("unknown role: %s", s)
+	}
+}
+
+// Partial-signature message type names, as the API's `type` field reports them. Where a type belongs to
+// one duty the name is the duty's role name, so the two vocabularies agree.
+const (
+	PartialSigPostConsensus         = "POST_CONSENSUS"
+	PartialSigRandao                = "RANDAO"
+	PartialSigSelectionProof        = "SELECTION_PROOF"
+	PartialSigContributionProofs    = "CONTRIBUTION_PROOFS"
+	PartialSigValidatorRegistration = "VALIDATOR_REGISTRATION"
+	PartialSigVoluntaryExit         = "VOLUNTARY_EXIT"
+	PartialSigAggregatorCommittee   = "AGGREGATOR_COMMITTEE"
+	PartialSigPTCAttester           = "PTC_ATTESTER"
+	PartialSigProposerPreferences   = "PROPOSER_PREFERENCES"
+	PartialSigRequestAuth           = "REQUEST_AUTH"
+)
+
+// PartialSigMsgTypeToString names a partial-signature message type for API responses.
+func PartialSigMsgTypeToString(t spectypes.PartialSigMsgType) string {
+	switch t {
+	case spectypes.PostConsensusPartialSig:
+		return PartialSigPostConsensus
+	case spectypes.RandaoPartialSig:
+		return PartialSigRandao
+	case ssvtypes.SelectionProofPartialSig:
+		return PartialSigSelectionProof
+	case ssvtypes.ContributionProofs:
+		return PartialSigContributionProofs
+	case spectypes.ValidatorRegistrationPartialSig:
+		return PartialSigValidatorRegistration
+	case spectypes.VoluntaryExitPartialSig:
+		return PartialSigVoluntaryExit
+	case spectypes.AggregatorCommitteePartialSig:
+		return PartialSigAggregatorCommittee
+	case spectypes.PTCAttesterPartialSig:
+		return PartialSigPTCAttester
+	case spectypes.ProposerPreferencesPartialSig:
+		return PartialSigProposerPreferences
+	case spectypes.RequestAuthPartialSig:
+		return PartialSigRequestAuth
+	default:
+		return fmt.Sprintf("unknown(%d)", t)
 	}
 }
 
