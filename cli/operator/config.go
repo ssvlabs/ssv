@@ -15,6 +15,7 @@ import (
 	p2pv1 "github.com/ssvlabs/ssv/network/p2p"
 	"github.com/ssvlabs/ssv/operator"
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
@@ -50,6 +51,7 @@ type config struct {
 	ProposerDelay                time.Duration           `yaml:"ProposerDelay" env:"PROPOSER_DELAY" env-description:"Duration to wait out before requesting Ethereum block to propose if this Operator is proposer-duty Leader (eg. 300ms). See https://github.com/ssvlabs/ssv/blob/main/docs/MEV_CONSIDERATIONS.md#getting-started-with-mev-configuration for detailed instructions on how to use it."`
 	AllowDangerousProposerDelay  bool                    `yaml:"AllowDangerousProposerDelay" env:"ALLOW_DANGEROUS_PROPOSER_DELAY" env-description:"Allow ProposerDelay values higher than 1s (dangerous, may cause missed block proposals)"`
 	ProposerDelayEPBS            time.Duration           `yaml:"ProposerDelayEPBS" env:"PROPOSER_DELAY_EPBS" env-description:"Post-ePBS (Gloas) counterpart of ProposerDelay, applied from the Gloas fork on (ProposerDelay applies before it). Hard-capped at 1s with no dangerous override. Default 0 (opt-in)."`
+	ProposerQuickTimeout         time.Duration           `yaml:"ProposerQuickTimeout" env:"PROPOSER_QUICK_TIMEOUT" env-description:"QBFT round budget for the proposer duty (eg. 1500ms). Leave unset for the SIP-102 default of 1.5s. Must be between 1250ms and 2s. This is a committee-wide protocol parameter, not a local performance knob: configure it identically across all operators of every shared committee, or leave it unset."`
 	Builders                     gloas.BuilderConfig     `yaml:"Builders" env-description:"Gloas (ePBS) direct-builder connections (opt-in overlay, YAML only). Entries must be configured identically across all operators of every shared committee; see docs/EXTERNAL_BUILDERS.md"`
 	OperatorPrivateKey           string                  `yaml:"OperatorPrivateKey" env:"OPERATOR_KEY" env-description:"Operator private key for contract event decryption"`
 	MetricsAPIPort               int                     `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"Port for metrics API server"`
@@ -167,6 +169,17 @@ func (c *config) resolveAndValidate(logger *zap.Logger) (resolved, error) {
 			c.ProposerDelayEPBS, maxSafeProposerDelay)
 	}
 
+	if err := validateProposerQuickTimeout(c.ProposerQuickTimeout); err != nil {
+		return resolved{}, err
+	}
+	if c.ProposerQuickTimeout != 0 {
+		// Reachable only after validateProposerQuickTimeout passed, i.e. the value is in range.
+		// Record the override so a cross-operator postmortem can reconstruct which budget this node armed.
+		logger.Info("Using a non-default ProposerQuickTimeout for proposer QBFT rounds",
+			zap.Duration("proposer_quick_timeout", c.ProposerQuickTimeout),
+			zap.Duration("default_proposer_quick_timeout", roundtimer.DefaultProposerQuickTimeout))
+	}
+
 	if err := gloas.ValidateBuilderConfig(c.Builders); err != nil {
 		return resolved{}, fmt.Errorf("invalid Builders configuration: %w", err)
 	}
@@ -190,6 +203,24 @@ func validateProposerDelay(proposerDelay time.Duration, allowDangerous bool) err
 			"This may cause missed block proposals. "+
 			"If you understand the risks and want to proceed, set AllowDangerousProposerDelay to true or use the ALLOW_DANGEROUS_PROPOSER_DELAY environment variable",
 			proposerDelay, maxSafeProposerDelay)
+	}
+	return nil
+}
+
+// validateProposerQuickTimeout bounds the operator-configured proposer QBFT round budget. Unset (0)
+// means "use the SIP-102 default" and is always valid.
+//
+// The bounds are enforced unconditionally, with no acknowledge-and-proceed override: this follows
+// ProposerDelayEPBS rather than ProposerDelay, because below the floor the budget measurably times
+// out proposer rounds that would have decided, and above the ceiling a Glamsterdam round change
+// cannot land at all. Neither is a risk an operator can usefully accept.
+func validateProposerQuickTimeout(proposerQuickTimeout time.Duration) error {
+	if proposerQuickTimeout == 0 {
+		return nil
+	}
+	if proposerQuickTimeout < roundtimer.MinProposerQuickTimeout || proposerQuickTimeout > roundtimer.MaxProposerQuickTimeout {
+		return fmt.Errorf("ProposerQuickTimeout value %v is outside the supported range [%v, %v]",
+			proposerQuickTimeout, roundtimer.MinProposerQuickTimeout, roundtimer.MaxProposerQuickTimeout)
 	}
 	return nil
 }
