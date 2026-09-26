@@ -574,7 +574,11 @@ func (b *BaseRunner) basePreConsensusMsgProcessing(ctx context.Context, logger *
 	return hasQuorum, slices.Collect(maps.Keys(quorumRoots)), nil
 }
 
-// baseConsensusMsgProcessing is a base func that all runner implementation can call for processing a consensus msg
+// baseConsensusMsgProcessing is a base func that all runner implementation can call for processing a consensus msg.
+// It returns decided, with the decided value, for the message that decides the running instance. decided also comes
+// with an error in two cases: a message for an instance that already decided, a benign skip
+// (SkipConsensusMessageAsConsensusHasFinishedErrorCode, as in ssv-spec), and a decided value this runner can't take
+// up, which concludes the duty failed.
 func (b *BaseRunner) baseConsensusMsgProcessing(ctx context.Context, logger *zap.Logger, valueCheckFn specqbft.ProposedValueCheckF, msg *spectypes.SignedSSVMessage, decidedValue spectypes.Encoder) (bool, spectypes.Encoder, error) {
 	// Reuse the existing span instead of generating new one to keep tracing-data lightweight.
 	span := trace.SpanFromContext(ctx)

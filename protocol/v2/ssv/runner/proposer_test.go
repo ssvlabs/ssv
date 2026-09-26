@@ -931,6 +931,49 @@ func TestProposerRunnerProcessConsensusRejectedDecidedValueFailsDuty(t *testing.
 	require.Nil(t, runner.gloasDuty.producedEnvelope)
 }
 
+// A consensus message that lands after the instance decided is skipped, and leaves the builder operator's reveal
+// data alone: the post-consensus quorum still submits the block and publishes the reveal. The skip also comes
+// back decided with an error, and was once taken for a decided value the runner can't take up: that released the
+// data under a cached builder match, and the publish dereferenced nil.
+func TestProposerRunnerGloasLateConsensusMessageKeepsReveal(t *testing.T) {
+	t.Parallel()
+
+	const slot = phase0.Slot(8)
+	ctx, logger := context.Background(), zap.NewNop()
+	beacon := newProposerTestBeacon(nil)
+	runner, keySet, _ := newProposerRunnerForTest(t, beacon, &stubDoppelganger{canSign: true}, 0, gloasTestConfig(slot))
+	require.NoError(t, runner.StartNewDuty(ctx, logger, gloasProposerDuty(slot), keySet.Threshold))
+
+	proposal, produced := gloasSelfBuildProposal(t, slot)
+	runner.gloasDuty.producedEnvelope = produced // the builder operator
+	consensusData := gloasConsensusData(t, proposal)
+	require.NoError(t, decideProposerDuty(t, runner, keySet, slot, consensusData))
+
+	// The instance decided on the first Threshold commits; the last operator's commit comes in after.
+	encoded, err := consensusData.Encode()
+	require.NoError(t, err)
+	root, err := specqbft.HashDataRoot(encoded)
+	require.NoError(t, err)
+	lateOperator := spectypes.OperatorID(len(keySet.OperatorKeys))
+	late := spectestingutils.SignQBFTMsg(keySet.OperatorKeys[lateOperator], lateOperator, &specqbft.Message{
+		MsgType:    specqbft.CommitMsgType,
+		Height:     specqbft.Height(slot),
+		Round:      specqbft.FirstRound,
+		Identifier: runner.QBFTController.GetIdentifier(),
+		Root:       root,
+	})
+	var specErr *spectypes.Error
+	require.ErrorAs(t, runner.ProcessConsensus(ctx, logger, late), &specErr)
+	require.Equal(t, spectypes.SkipConsensusMessageAsConsensusHasFinishedErrorCode, specErr.Code)
+	require.Same(t, produced, runner.gloasDuty.producedEnvelope)
+
+	for opID := spectypes.OperatorID(1); opID <= keySet.Threshold; opID++ {
+		require.NoError(t, runner.ProcessPostConsensus(ctx, logger, gloasPostConsensusMsg(t, keySet, opID, proposal, true)))
+	}
+	require.Len(t, beacon.submittedGloasBlocks, 1)
+	require.Len(t, beacon.submittedEnvelopes, 1)
+}
+
 // RunningDutySlot is the slot of the last started duty, finished or not, and 0 before the first duty or on a
 // nil runner.
 func TestProposerRunnerRunningDutySlot(t *testing.T) {
@@ -997,6 +1040,28 @@ func TestProposerRunnerGloasPostConsensusTerminalBlockReconstruct(t *testing.T) 
 	requireConcluded(t, concluded, dutyOutcomeFailed)
 	require.Empty(t, beacon.submittedGloasBlocks)
 	require.Nil(t, runner.gloasDuty.producedEnvelope)
+}
+
+// Reveal data released while the cached match still makes this operator the builder is a bug elsewhere; the
+// publish fails with an error rather than dereferencing nil, which would take the whole node down.
+func TestProposerRunnerGloasPublishWithReleasedRevealDataFails(t *testing.T) {
+	t.Parallel()
+
+	ctx, logger := context.Background(), zap.NewNop()
+	proposal, _ := gloasSelfBuildProposal(t, 8)
+	beacon := newProposerTestBeacon(nil)
+	runner, keySet := newGloasProposerForPostConsensus(t, beacon, &stubDoppelganger{canSign: true}, proposal)
+	runner.gloasDuty.envelopeMatch = envelopeMatchBuilder // matched at the decision, and the data released since
+
+	var err error
+	for opID := spectypes.OperatorID(1); opID <= keySet.Threshold; opID++ {
+		if msgErr := runner.ProcessPostConsensus(ctx, logger, gloasPostConsensusMsg(t, keySet, opID, proposal, true)); msgErr != nil {
+			err = msgErr
+		}
+	}
+	require.ErrorContains(t, err, "reveal data released")
+	require.Len(t, beacon.submittedGloasBlocks, 1, "the block is still submitted")
+	require.Empty(t, beacon.submittedEnvelopes)
 }
 
 // On a Gloas decision the reveal data stays only on the builder operator, whose produced envelope is the one

@@ -396,9 +396,10 @@ func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logge
 	span.AddEvent("processing QBFT consensus msg")
 	decided, decidedValue, err := r.baseConsensusMsgProcessing(ctx, logger, r.ValCheck.CheckValue, signedMsg, &spectypes.ProposerConsensusData{})
 	if err != nil {
-		if decided {
-			// The duty concluded failed on a decided value this runner can't take up. Post-consensus packets are
-			// validated against a taken-up value, so none reach quorum and no reveal can follow.
+		// Of the two ways decided comes with an error (see baseConsensusMsgProcessing), only a decided value this
+		// runner can't take up leaves no taken-up value to validate post-consensus packets against, so only it rules
+		// the reveal out.
+		if decided && len(r.State.DecidedValue) == 0 {
 			r.releaseProducedEnvelope()
 		}
 		return fmt.Errorf("failed processing consensus message: %w", err)
@@ -794,6 +795,15 @@ func (r *ProposerRunner) publishEnvelope(ctx context.Context, logger *zap.Logger
 		recordEnvelopeBuildMatch(ctx, false)
 		logger.Debug("envelope signature reconstructed; this operator did not build the envelope, not publishing", fields.Slot(cd.Duty.Slot))
 		return nil
+	}
+
+	if r.gloasDuty.producedEnvelope == nil {
+		// The cached match makes this operator the builder, so its reveal data can only be missing if something
+		// released it too early: a bug, which should cost this reveal rather than the node.
+		const errMsg = "reveal data released before the builder operator's envelope publish"
+		recordEnvelopePublish(ctx, false)
+		logger.Error(errMsg, fields.Slot(cd.Duty.Slot))
+		return errors.New(errMsg)
 	}
 
 	// The quorum fires once, so this attempt is the reveal data's last use either way.
