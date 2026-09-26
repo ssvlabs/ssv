@@ -59,34 +59,32 @@ func IsRetryable(err error) bool {
 	return errors.As(err, &retryableErr)
 }
 
-// codedSentinel pairs one of the sentinels above with the spec error code it reports. spectypes.WrapError
-// alone cannot carry a sentinel: the spec's Error type has no Unwrap, so anything it wraps is invisible
-// to errors.Is. Unwrap exposes both — the coded error for errors.As (spec tests, observability) and the
-// sentinel for errors.Is — under the sentinel's own message text.
-type codedSentinel struct {
-	coded    *spectypes.Error
-	sentinel error
+// codedError pairs an error with the spec error code it reports. spectypes.WrapError alone would hide the
+// error: the spec's Error type has no Unwrap, so a sentinel it wraps is invisible to errors.Is, and a tag
+// such as recoverableReconstructError to errors.As. Unwrap exposes both — the coded error for errors.As
+// (spec tests, observability) and the error itself — under the error's own message text.
+type codedError struct {
+	coded *spectypes.Error
+	err   error
 }
 
-// withCode tags a sentinel (or an error wrapping one) with a spec error code; see codedSentinel.
-func withCode(code int, sentinel error) error {
-	return &codedSentinel{coded: spectypes.WrapError(code, sentinel), sentinel: sentinel}
+// withCode tags err with a spec error code; see codedError.
+func withCode(code int, err error) error {
+	return &codedError{coded: spectypes.WrapError(code, err), err: err}
 }
 
-func (e *codedSentinel) Error() string { return e.sentinel.Error() }
+func (e *codedError) Error() string { return e.err.Error() }
 
-func (e *codedSentinel) Unwrap() []error { return []error{e.coded, e.sentinel} }
+func (e *codedError) Unwrap() []error { return []error{e.coded, e.err} }
 
-// recoverableReconstructError tags a post-consensus BLS-reconstruction failure as recoverable.
-// It is attached at the push site inside the reconstruct goroutine, which has by construction
-// already run FallBackAndVerifyEachSignature to drop the offending partial sig(s) — so a later
-// partial-sig message can re-cross quorum and retry the pending roots. Classifying by this tag
+// recoverableReconstructError tags a BLS-reconstruction failure as recoverable: FallBackAndVerifyEachSignature
+// has dropped the offending partial sig(s), so a later partial-sig message re-crosses quorum and retries. It is
+// attached by reconstructQuorumSig, only when the drop left the root below quorum. Classifying by this tag
 // (rather than by the spec ReconstructSignatureErrorCode) covers the whole recoverable subclass:
-// VerifyReconstructedSignature attaches the code, but the earlier BLS Deserialize/Recover step
-// (e.g. 96 garbage bytes from a byzantine operator) returns an uncoded error that is equally
-// recoverable. Errors reaching the classifier without this tag stay terminal by default.
-// Unwrap keeps the wrapped chain (including any code-tagged *spectypes.Error) reachable via
-// errors.As so the committee role still observably emits the reconstruct error code.
+// VerifyReconstructedSignature attaches the code, but the earlier BLS Deserialize/Recover step (e.g. 96 garbage
+// bytes from a byzantine operator) returns an uncoded error that is equally recoverable. Errors without this tag
+// stay terminal. Unwrap keeps the wrapped chain (including any code-tagged *spectypes.Error) reachable via
+// errors.As, so the reconstruct error code is still observable.
 type recoverableReconstructError struct {
 	err error
 }

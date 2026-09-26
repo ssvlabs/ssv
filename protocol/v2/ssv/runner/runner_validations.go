@@ -7,12 +7,13 @@ import (
 	"sort"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	ssz "github.com/ferranbt/fastssz"
+
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
+	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 )
 
 func (b *BaseRunner) ValidatePreConsensusMsg(
@@ -67,13 +68,44 @@ func (b *BaseRunner) FallBackAndVerifyEachSignature(container *ssv.PartialSigCon
 	}
 }
 
+// reconstructQuorumSig reconstructs share's validator signature over root from container's quorum. The
+// reconstruction combines every share of the root, so on failure each share is verified and the bad ones
+// dropped. If that leaves the root below quorum, the failure is recoverable (recoverableReconstructError): a
+// later share brings it back. If the root is still at quorum, the reconstruction is retried on the remaining
+// shares, as no later share would cross its quorum again. With no bad share to drop, more shares can't fix
+// it, and the failure is terminal.
+func (b *BaseRunner) reconstructQuorumSig(container *ssv.PartialSigContainer, root [32]byte, share *spectypes.Share, phase string) (phase0.BLSSignature, error) {
+	for {
+		sig, err := b.State.ReconstructBeaconSig(container, root, share.ValidatorPubKey[:], share.ValidatorIndex)
+		if err == nil {
+			var specSig phase0.BLSSignature
+			copy(specSig[:], sig)
+			return specSig, nil
+		}
+		err = fmt.Errorf("got %s quorum but it has invalid signatures: %w", phase, err)
+
+		shares := len(container.GetSignatures(share.ValidatorIndex, root))
+		b.FallBackAndVerifyEachSignature(container, root, share.Committee, share.ValidatorIndex)
+		if hasQuorum, _ := container.HasQuorum(share.ValidatorIndex, root); !hasQuorum {
+			return phase0.BLSSignature{}, recoverableReconstructError{err}
+		}
+		if len(container.GetSignatures(share.ValidatorIndex, root)) == shares {
+			return phase0.BLSSignature{}, err
+		}
+	}
+}
+
 func (b *BaseRunner) ValidatePostConsensusMsg(ctx context.Context, runner Runner, psigMsgs *spectypes.PartialSignatureMessages) error {
 	// Not retried; see ValidatePreConsensusMsg.
 	if !b.hasDutyAssigned() {
 		return withCode(spectypes.NoRunningDutyErrorCode, ErrNoDutyAssigned)
 	}
 	if b.hasDutySucceeded() {
-		return withCode(spectypes.NoRunningDutyErrorCode, ErrRunningDutySucceeded)
+		// A finished Gloas proposer keeps accepting post-consensus packets while the decided value's §6
+		// envelope root is still expected (SIP #94 §4) — see ProposerRunner.awaitingEnvelope.
+		if p, ok := runner.(*ProposerRunner); !ok || !p.awaitingEnvelope() {
+			return withCode(spectypes.NoRunningDutyErrorCode, ErrRunningDutySucceeded)
+		}
 	}
 
 	// slotIsRelevant ensures the post-consensus message is even remotely relevant (eg. we might have already
@@ -118,15 +150,10 @@ func (b *BaseRunner) ValidatePostConsensusMsg(ctx context.Context, runner Runner
 
 	// Validate the post-consensus message differently depending on a message type.
 	validateMsg := func() error {
-		decidedValue := &spectypes.ProposerConsensusData{}
-		if err := decidedValue.Decode(decidedValueBytes); err != nil {
-			return fmt.Errorf("failed to parse decided value to ValidatorConsensusData: %w", err)
-		}
-
-		// Use the slot we have in decidedValue since b.State.CurrentDuty might have already moved on
-		// to another duty (hence we shouldn't be using it).
-		expectedSlot := decidedValue.Duty.Slot
-		if err := b.validatePartialSigMsg(psigMsgs, expectedSlot); err != nil {
+		// Partials are validated against the running duty's slot rather than the decided value's own
+		// Duty.Slot, so the check never trusts the value's contents (SIP #94 §4). The runner's
+		// expectedPostConsensusRootsAndDomains decodes the value, rejecting a malformed one.
+		if err := b.validatePartialSigMsg(psigMsgs, b.State.CurrentDuty.DutySlot()); err != nil {
 			return err
 		}
 
@@ -134,23 +161,29 @@ func (b *BaseRunner) ValidatePostConsensusMsg(ctx context.Context, runner Runner
 			return err
 		}
 
-		roots, domain, err := runner.expectedPostConsensusRootsAndDomain(ctx)
+		expected, err := runner.expectedPostConsensusRootsAndDomains(ctx)
 		if err != nil {
 			return err
 		}
 
-		return b.verifyExpectedRoot(ctx, runner, psigMsgs, roots, domain)
+		return b.verifyExpectedPostConsensusRoots(ctx, runner, psigMsgs, expected)
 	}
 	if runner.GetRole() == spectypes.RoleCommittee {
 		validateMsg = func() error {
-			decidedValue := &spectypes.BeaconVote{}
-			if err := decidedValue.Decode(decidedValueBytes); err != nil {
-				return fmt.Errorf("failed to parse decided value to BeaconVote: %w", err)
-			}
-
 			// Use b.State.CurrentDuty.DutySlot() since CurrentDuty never changes for CommitteeRunner
 			// by design, hence there is no need to store slot number on decidedValue for CommitteeRunner.
 			expectedSlot := b.State.CurrentDuty.DutySlot()
+
+			// Parse-check the decided value against the slot's fork: a GloasBeaconVote (120B) on Gloas,
+			// a BeaconVote (112B) before. The two reject on length, so a wrong-fork value fails here.
+			decidedValue := spectypes.Encoder(&spectypes.BeaconVote{})
+			if b.NetworkConfig.IsGloasAtSlot(expectedSlot) {
+				decidedValue = &gloas.GloasBeaconVote{}
+			}
+			if err := decidedValue.Decode(decidedValueBytes); err != nil {
+				return fmt.Errorf("failed to parse decided beacon vote: %w", err)
+			}
+
 			return b.validatePartialSigMsg(psigMsgs, expectedSlot)
 		}
 	}
@@ -187,7 +220,7 @@ func (b *BaseRunner) verifyExpectedRoot(
 	ctx context.Context,
 	runner Runner,
 	psigMsgs *spectypes.PartialSignatureMessages,
-	expectedRootObjs []ssz.HashRoot,
+	expectedRootObjs []spectypes.HashRoot,
 	domain phase0.DomainType,
 ) error {
 	if len(expectedRootObjs) != len(psigMsgs.Messages) {
@@ -195,7 +228,7 @@ func (b *BaseRunner) verifyExpectedRoot(
 	}
 
 	// convert expected roots to map and mark unique roots when verified
-	sortedExpectedRoots, err := func(expectedRootObjs []ssz.HashRoot) ([][32]byte, error) {
+	sortedExpectedRoots, err := func(expectedRootObjs []spectypes.HashRoot) ([][32]byte, error) {
 		epoch := b.NetworkConfig.EstimatedEpochAtSlot(b.State.CurrentDuty.DutySlot())
 		d, err := runner.GetBeaconNode().DomainData(ctx, epoch, domain)
 		if err != nil {
@@ -239,4 +272,78 @@ func (b *BaseRunner) verifyExpectedRoot(
 		}
 	}
 	return nil
+}
+
+// verifyExpectedPostConsensusRoots checks a post-consensus packet against the runner's expected roots, each
+// under its own domain: every entry matches one of the expected signing roots, no expected root is matched
+// twice, and every required root is present. An optional root — the Gloas proposer's §6 envelope root — may
+// be missing, so the entry count may fall below the expected count; the upper bound is also §7's ≤2 rule
+// for that packet.
+func (b *BaseRunner) verifyExpectedPostConsensusRoots(
+	ctx context.Context,
+	runner Runner,
+	psigMsgs *spectypes.PartialSignatureMessages,
+	expected []PostConsensusRoot,
+) error {
+	if len(psigMsgs.Messages) > len(expected) {
+		return spectypes.NewError(spectypes.WrongRootsCountErrorCode, "wrong expected roots count")
+	}
+
+	signingRoots, err := b.resolvePostConsensusSigningRoots(ctx, runner, expected)
+	if err != nil {
+		return err
+	}
+
+	// Match each entry to an expected root, covering each root at most once: an unexpected root, or a second
+	// entry for a root already covered, rejects the packet.
+	covered := make(map[[32]byte]struct{}, len(signingRoots))
+	for _, msg := range psigMsgs.Messages {
+		matched := false
+		for _, sr := range signingRoots {
+			if sr.SigningRoot != msg.SigningRoot {
+				continue
+			}
+			if _, dup := covered[sr.SigningRoot]; dup {
+				return spectypes.NewError(spectypes.WrongRootsCountErrorCode, "duplicate expected signing root")
+			}
+			covered[sr.SigningRoot] = struct{}{}
+			matched = true
+			break
+		}
+		if !matched {
+			return spectypes.NewError(spectypes.WrongSigningRootErrorCode, "unexpected signing root")
+		}
+	}
+	for _, sr := range signingRoots {
+		if _, ok := covered[sr.SigningRoot]; !sr.Optional && !ok {
+			return spectypes.NewError(spectypes.WrongRootsCountErrorCode, "missing required signing root")
+		}
+	}
+	return nil
+}
+
+// expectedSigningRoot is an expected post-consensus root resolved to the signing root a packet entry
+// carries for it.
+type expectedSigningRoot struct {
+	PostConsensusRoot
+	SigningRoot [32]byte
+}
+
+// resolvePostConsensusSigningRoots computes each expected root's signing root under its own domain at the
+// current duty's epoch.
+func (b *BaseRunner) resolvePostConsensusSigningRoots(ctx context.Context, runner Runner, expected []PostConsensusRoot) ([]expectedSigningRoot, error) {
+	epoch := b.NetworkConfig.EstimatedEpochAtSlot(b.State.CurrentDuty.DutySlot())
+	resolved := make([]expectedSigningRoot, 0, len(expected))
+	for _, e := range expected {
+		domain, err := runner.GetBeaconNode().DomainData(ctx, epoch, e.Domain)
+		if err != nil {
+			return nil, fmt.Errorf("could not get post consensus root domain: %w", err)
+		}
+		signingRoot, err := spectypes.ComputeETHSigningRoot(e.Root, domain)
+		if err != nil {
+			return nil, fmt.Errorf("could not compute ETH signing root: %w", err)
+		}
+		resolved = append(resolved, expectedSigningRoot{PostConsensusRoot: e, SigningRoot: signingRoot})
+	}
+	return resolved, nil
 }

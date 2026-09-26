@@ -1,6 +1,7 @@
 package common
 
 import (
+	"github.com/OffchainLabs/go-bitfield"
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/capella"
@@ -8,7 +9,6 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/electra"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/holiman/uint256"
-	"github.com/prysmaticlabs/go-bitfield"
 )
 
 // NewTestAttestationData creates a standard test attestation with the given epochs and slot

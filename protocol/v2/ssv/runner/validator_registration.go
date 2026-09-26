@@ -14,10 +14,10 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/cespare/xxhash/v2"
-	ssz "github.com/ferranbt/fastssz"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
+
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
@@ -85,6 +85,15 @@ func (r *ValidatorRegistrationRunner) StartNewDuty(ctx context.Context, logger *
 		return err
 	}
 
+	// From Gloas the validator registration duty is deprecated: fee recipient and gas limit travel in the §5
+	// proposer preferences instead (SIP #94 §5). The scheduler drains the duty and message validation rejects
+	// it on the wire; this runner-side guard is the belt matching ssv-spec's. It runs before the duty starts,
+	// so a rejected duty leaves no running state behind.
+	if r.NetworkConfig.IsGloasAtSlot(validatorDuty.DutySlot()) {
+		return spectypes.NewError(spectypes.ValidatorRegistrationDeprecatedErrorCode,
+			"validator registration is deprecated from Gloas; use proposer preferences")
+	}
+
 	return r.baseStartNewNonBeaconDuty(ctx, logger, r, validatorDuty, quorum)
 }
 
@@ -97,15 +106,15 @@ func (r *ValidatorRegistrationRunner) ProcessPreConsensus(ctx context.Context, l
 		return fmt.Errorf("failed processing validator registration message: %w", err)
 	}
 
-	// quorum returns true only once (first time quorum achieved)
+	// hasQuorum is set only when a root just reached quorum.
 	if !hasQuorum {
 		return nil
 	}
 
-	// We have quorum and are committed to completing this duty here. The quorum above fires only once,
-	// so a terminal failure below won't be retried.
+	// We have quorum and are committed to completing this duty here, so a failure below fails it, except a
+	// recoverable reconstruct failure (see reconstructQuorumSig).
 	defer func() {
-		if err != nil {
+		if err != nil && !isRecoverableReconstructError(err) {
 			r.markDutyFailed(err)
 		}
 	}()
@@ -114,14 +123,10 @@ func (r *ValidatorRegistrationRunner) ProcessPreConsensus(ctx context.Context, l
 	root := roots[0]
 
 	span.AddEvent("reconstructing beacon signature", trace.WithAttributes(observability.BeaconBlockRootAttribute(root)))
-	fullSig, err := r.State.ReconstructBeaconSig(r.State.PreConsensusContainer, root, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
+	specSig, err := r.reconstructQuorumSig(r.State.PreConsensusContainer, root, r.GetShare(), "pre-consensus")
 	if err != nil {
-		// If the reconstructed signature verification failed, fall back to verifying each partial signature
-		r.FallBackAndVerifyEachSignature(r.State.PreConsensusContainer, root, r.GetShare().Committee, r.GetShare().ValidatorIndex)
-		return fmt.Errorf("got pre-consensus quorum but it has invalid signatures: %w", err)
+		return err
 	}
-	specSig := phase0.BLSSignature{}
-	copy(specSig[:], fullSig)
 
 	validatorDuty, err := r.currentValidatorDuty()
 	if err != nil {
@@ -169,7 +174,7 @@ func (r *ValidatorRegistrationRunner) ProcessPostConsensus(ctx context.Context, 
 	return spectypes.NewError(spectypes.ValidatorRegistrationNoPostConsensusPhaseErrorCode, "no post consensus phase for validator registration")
 }
 
-func (r *ValidatorRegistrationRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
+func (r *ValidatorRegistrationRunner) expectedPreConsensusRootsAndDomain() ([]spectypes.HashRoot, phase0.DomainType, error) {
 	currentDutySlot, err := r.currentDutySlot()
 	if err != nil {
 		return nil, spectypes.DomainError, fmt.Errorf("current duty slot: %w", err)
@@ -178,12 +183,12 @@ func (r *ValidatorRegistrationRunner) expectedPreConsensusRootsAndDomain() ([]ss
 	if err != nil {
 		return nil, spectypes.DomainError, fmt.Errorf("could not calculate validator registration: %w", err)
 	}
-	return []ssz.HashRoot{vr}, spectypes.DomainApplicationBuilder, nil
+	return []spectypes.HashRoot{vr}, spectypes.DomainApplicationBuilder, nil
 }
 
-// expectedPostConsensusRootsAndDomain an INTERNAL function, returns the expected post-consensus roots to sign
-func (r *ValidatorRegistrationRunner) expectedPostConsensusRootsAndDomain(context.Context) ([]ssz.HashRoot, phase0.DomainType, error) {
-	return nil, [4]byte{}, fmt.Errorf("no post consensus roots for validator registration")
+// expectedPostConsensusRootsAndDomains an INTERNAL function, returns the expected post-consensus roots to sign
+func (r *ValidatorRegistrationRunner) expectedPostConsensusRootsAndDomains(context.Context) ([]PostConsensusRoot, error) {
+	return nil, fmt.Errorf("no post consensus roots for validator registration")
 }
 
 func (r *ValidatorRegistrationRunner) executeDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty) error {
@@ -223,7 +228,7 @@ func (r *ValidatorRegistrationRunner) executeDuty(ctx context.Context, logger *z
 
 	logger.Debug("signing and broadcasting validator registration partial sig", zap.Any("validator_registration", vr))
 
-	if err := r.signAndBroadcastPartialSigMsgs(ctx, r.network, r.operatorSigner, r.GetShare().ValidatorPubKey[:], msgs); err != nil {
+	if err := r.signAndBroadcastPartialSigMsgs(ctx, r.network, r.operatorSigner, r.GetShare().ValidatorPubKey, msgs); err != nil {
 		return fmt.Errorf("could not sign/broadcast validator registration partial sig: %w", err)
 	}
 
@@ -377,6 +382,10 @@ func (s *VRSubmitter) start(ctx context.Context, ticker slotticker.SlotTicker) {
 
 			currentSlot := ticker.Slot()
 			currentEpoch := config.EstimatedEpochAtSlot(currentSlot)
+			// Validator registration is deprecated at the Gloas fork; stop submitting once it's active.
+			if config.IsGloas(currentEpoch) {
+				continue
+			}
 			slotInEpoch := uint64(currentSlot) % config.SlotsPerEpoch
 
 			// Select registrations to submit.

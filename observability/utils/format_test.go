@@ -54,6 +54,16 @@ func TestFormatRunnerRole(t *testing.T) {
 			want: "AGGREGATOR_COMMITTEE",
 		},
 		{
+			name: "PTC attester role",
+			role: spectypes.RolePTCAttester,
+			want: "PTC_ATTESTER",
+		},
+		{
+			name: "proposer preferences role",
+			role: spectypes.RoleProposerPreferences,
+			want: "PROPOSER_PREFERENCES",
+		},
+		{
 			name: "unknown role",
 			role: spectypes.RoleUnknown,
 			want: "UNDEFINED",
@@ -98,6 +108,8 @@ func TestRunnerRoleStringMappersLockstep(t *testing.T) {
 		spectypes.RoleVoluntaryExit,
 		ssvtypes.RoleAggregator,
 		ssvtypes.RoleSyncCommitteeContribution,
+		spectypes.RolePTCAttester,
+		spectypes.RoleProposerPreferences,
 	}
 
 	for _, role := range roles {
@@ -108,7 +120,7 @@ func TestRunnerRoleStringMappersLockstep(t *testing.T) {
 	// Sweep beyond the explicit list so a role added to the spec — which FormatRunnerRole
 	// picks up automatically via (RunnerRole).String() but message.RunnerRoleToString's
 	// hand-written switch would miss — fails here instead of drifting silently. The bound
-	// 15 is headroom over the spec's current max role value (6): roles are appended
+	// 15 is headroom over the spec's current max role value (9): roles are appended
 	// sequentially, so sweeping a few values past the end catches additions without the
 	// spec exporting a count. Roles the spec does not know return "UNDEFINED" and are
 	// skipped: divergence on genuinely unknown values is intentional (the deprecated Alan

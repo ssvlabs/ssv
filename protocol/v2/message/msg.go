@@ -22,6 +22,8 @@ const (
 	roleVoluntaryExit             = "VOLUNTARY_EXIT"
 	roleCommittee                 = "COMMITTEE"
 	roleAggregatorCommittee       = "AGGREGATOR_COMMITTEE"
+	rolePTCAttester               = "PTC_ATTESTER"
+	roleProposerPreferences       = "PROPOSER_PREFERENCES"
 )
 
 // MsgTypeToString extension for spec msg type. convert spec msg type to string
@@ -92,6 +94,10 @@ func RunnerRoleFromString(s string) (spectypes.RunnerRole, error) {
 		return spectypes.RoleValidatorRegistration, nil
 	case roleVoluntaryExit:
 		return spectypes.RoleVoluntaryExit, nil
+	case rolePTCAttester:
+		return spectypes.RolePTCAttester, nil
+	case roleProposerPreferences:
+		return spectypes.RoleProposerPreferences, nil
 	default:
 		return 0, fmt.Errorf("unknown role: %s", s)
 	}
@@ -134,6 +140,10 @@ func RunnerRoleToString(r spectypes.RunnerRole) string {
 		return roleValidatorRegistration
 	case spectypes.RoleVoluntaryExit:
 		return roleVoluntaryExit
+	case spectypes.RolePTCAttester:
+		return rolePTCAttester
+	case spectypes.RoleProposerPreferences:
+		return roleProposerPreferences
 	default:
 		return fmt.Sprintf("unknown(%d)", r)
 	}

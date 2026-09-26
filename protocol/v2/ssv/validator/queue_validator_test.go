@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -17,6 +18,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/protocol/v2/types/ssvtestingutils"
 )
 
 // While a runner has no running duty, its consumer takes only duty-start events from the queue: a
@@ -30,7 +32,7 @@ func TestConsumeQueue_HoldsMessagesUntilDutyStarts(t *testing.T) {
 
 	netCfg := networkconfig.TestNetwork
 	duty := &spectypes.ValidatorDuty{Type: spectypes.BNRoleProposer, Slot: phase0.Slot(10)}
-	msgID := spectypes.NewMsgID(netCfg.DomainType, duty.PubKey[:], spectypes.RoleProposer)
+	msgID := ssvtestingutils.NewMsgID(netCfg.DomainType, duty.PubKey[:], spectypes.RoleProposer)
 	proposer := &runner.ProposerRunner{BaseRunner: &runner.BaseRunner{RunnerRoleType: spectypes.RoleProposer}}
 
 	v := &Validator{
@@ -83,7 +85,7 @@ func TestConsumeQueue_DropsStaleMessagesAtDutyStart(t *testing.T) {
 
 	netCfg := networkconfig.TestNetwork
 	duty := &spectypes.ValidatorDuty{Type: spectypes.BNRoleProposer, Slot: phase0.Slot(10)}
-	msgID := spectypes.NewMsgID(netCfg.DomainType, duty.PubKey[:], spectypes.RoleProposer)
+	msgID := ssvtestingutils.NewMsgID(netCfg.DomainType, duty.PubKey[:], spectypes.RoleProposer)
 	proposer := &runner.ProposerRunner{BaseRunner: &runner.BaseRunner{RunnerRoleType: spectypes.RoleProposer}}
 
 	v := &Validator{
@@ -142,7 +144,7 @@ func TestConsumeQueue_DropsStaleMessageArrivingAfterDutyStart(t *testing.T) {
 
 	netCfg := networkconfig.TestNetwork
 	duty := &spectypes.ValidatorDuty{Type: spectypes.BNRoleProposer, Slot: phase0.Slot(10)}
-	msgID := spectypes.NewMsgID(netCfg.DomainType, duty.PubKey[:], spectypes.RoleProposer)
+	msgID := ssvtestingutils.NewMsgID(netCfg.DomainType, duty.PubKey[:], spectypes.RoleProposer)
 	proposer := &runner.ProposerRunner{BaseRunner: &runner.BaseRunner{RunnerRoleType: spectypes.RoleProposer}}
 
 	v := &Validator{
@@ -198,7 +200,7 @@ func TestConsumeQueue_RaisesFloorOnMidDutyReseat(t *testing.T) {
 
 	netCfg := networkconfig.TestNetwork
 	var pk phase0.BLSPubKey
-	msgID := spectypes.NewMsgID(netCfg.DomainType, pk[:], spectypes.RoleProposer)
+	msgID := ssvtestingutils.NewMsgID(netCfg.DomainType, pk[:], spectypes.RoleProposer)
 	proposer := &runner.ProposerRunner{BaseRunner: &runner.BaseRunner{RunnerRoleType: spectypes.RoleProposer}}
 
 	v := &Validator{
@@ -264,7 +266,7 @@ func TestConsumeQueue_LowerSlotDutyAcceptedAfterFloorRoseIsNotStarved(t *testing
 
 	netCfg := networkconfig.TestNetwork
 	var pk phase0.BLSPubKey
-	msgID := spectypes.NewMsgID(netCfg.DomainType, pk[:], spectypes.RoleProposer)
+	msgID := ssvtestingutils.NewMsgID(netCfg.DomainType, pk[:], spectypes.RoleProposer)
 	proposer := &runner.ProposerRunner{BaseRunner: &runner.BaseRunner{RunnerRoleType: spectypes.RoleProposer}}
 
 	v := &Validator{
@@ -318,7 +320,7 @@ func TestConsumeQueue_LowerSlotDutyAcceptedAfterFloorRoseIsNotStarved(t *testing
 func TestSlotBelow_NeverMatchesDutyStart(t *testing.T) {
 	domain := networkconfig.TestNetwork.DomainType
 	var pk phase0.BLSPubKey
-	msgID := spectypes.NewMsgID(domain, pk[:], spectypes.RoleProposer)
+	msgID := ssvtestingutils.NewMsgID(domain, pk[:], spectypes.RoleProposer)
 
 	belowFloor := slotBelow(phase0.Slot(12))
 	require.False(t, belowFloor(executeDutyMsg(t, domain, 10)), "a duty-start below the floor is kept")
@@ -334,7 +336,7 @@ func TestSlotBelow_NeverMatchesDutyStart(t *testing.T) {
 func TestPurgeAtDutyStart_KeepsAConcurrentDutyStart(t *testing.T) {
 	domain := networkconfig.TestNetwork.DomainType
 	var pk phase0.BLSPubKey
-	msgID := spectypes.NewMsgID(domain, pk[:], spectypes.RoleProposer)
+	msgID := ssvtestingutils.NewMsgID(domain, pk[:], spectypes.RoleProposer)
 
 	q := queue.New(zap.NewNop(), 16)
 	require.True(t, q.TryPush(executeDutyMsg(t, domain, 12))) // higher-slot duty-start enqueued first...
@@ -389,4 +391,210 @@ func receiveDelivered(t *testing.T, delivered <-chan *queue.SSVMessage) *queue.S
 		t.Fatal("no message delivered")
 		return nil
 	}
+}
+
+// The stale floor is a single-duty notion. A runner that serves several slots at once (runner.MultiSlotRunner)
+// never raises it: a message for a lower slot stays live after a higher slot's duty-start, where a single-duty
+// runner would have it dropped (compare TestConsumeQueue_DropsStaleMessageArrivingAfterDutyStart).
+func TestConsumeQueue_MultiSlotRunnerNeverRaisesTheFloor(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	core, logs := observer.New(zapcore.DebugLevel)
+	logger := zap.New(core)
+
+	netCfg := networkconfig.TestNetwork
+	var pk phase0.BLSPubKey
+	msgID := ssvtestingutils.NewMsgID(netCfg.DomainType, pk[:], spectypes.RoleProposer)
+	proposer := &runner.ProposerRunner{BaseRunner: &runner.BaseRunner{RunnerRoleType: spectypes.RoleProposer}}
+
+	v := &Validator{
+		logger:        logger,
+		ctx:           ctx,
+		cancel:        cancel,
+		NetworkConfig: netCfg,
+		Operator:      &spectypes.CommitteeMember{},
+		Share:         &ssvtypes.SSVShare{},
+		Queues:        map[spectypes.RunnerRole]queue.Queue{spectypes.RoleProposer: queue.New(logger, 16)},
+		DutyRunners:   runner.ValidatorDutyRunners{spectypes.RoleProposer: multiSlotRunnerStub{proposer}},
+	}
+
+	delivered := make(chan *queue.SSVMessage, 4)
+	v.StartQueueConsumer(msgID, func(_ context.Context, _ *zap.Logger, msg *queue.SSVMessage) error {
+		if event, ok := msg.Body.(*ssvtypes.EventMsg); ok && event.Type == ssvtypes.ExecuteDuty {
+			slot, err := msg.Slot()
+			require.NoError(t, err)
+			proposer.State = runner.NewRunnerState(3, &spectypes.ValidatorDuty{Type: spectypes.BNRoleProposer, Slot: slot})
+		}
+		delivered <- msg
+		return nil
+	})
+
+	// The slot-20 duty starts; a single-duty runner would now have its floor at 20.
+	require.True(t, v.Queues[spectypes.RoleProposer].TryPush(executeDutyMsg(t, netCfg.DomainType, 20)))
+	require.Equal(t, message.SSVEventMsgType, receiveDelivered(t, delivered).MsgType, "the duty-start event goes first")
+
+	// A slot-10 message still reaches the runner: for it that slot is as live as slot 20.
+	require.True(t, v.Queues[spectypes.RoleProposer].TryPush(partialSigMsg(t, msgID, 10)))
+	got, err := receiveDelivered(t, delivered).Slot()
+	require.NoError(t, err)
+	require.Equal(t, phase0.Slot(10), got, "the lower slot's message is delivered, not dropped as stale")
+	require.Zero(t, logs.FilterMessage("dropped a stale message that reached the consumer below the slot floor").Len())
+}
+
+// popFilter is the consumer's whole pop policy: idle, only duty-starts; an instance running without an accepted
+// proposal for its round, that round's prepares and commits stay queued; otherwise anything goes.
+func TestPopFilter(t *testing.T) {
+	executeDuty := &queue.SSVMessage{Body: &ssvtypes.EventMsg{Type: ssvtypes.ExecuteDuty}}
+	proposal := &queue.SSVMessage{Body: &specqbft.Message{MsgType: specqbft.ProposalMsgType, Height: 8, Round: 2}}
+	prepare := &queue.SSVMessage{Body: &specqbft.Message{MsgType: specqbft.PrepareMsgType, Height: 8, Round: 2}}
+	commit := &queue.SSVMessage{Body: &specqbft.Message{MsgType: specqbft.CommitMsgType, Height: 8, Round: 2}}
+	roundChange := &queue.SSVMessage{Body: &specqbft.Message{MsgType: specqbft.RoundChangeMsgType, Height: 8, Round: 2}}
+	nextRoundPrepare := &queue.SSVMessage{Body: &specqbft.Message{MsgType: specqbft.PrepareMsgType, Height: 8, Round: 3}}
+	nextHeightCommit := &queue.SSVMessage{Body: &specqbft.Message{MsgType: specqbft.CommitMsgType, Height: 9, Round: 2}}
+	postConsensus := &queue.SSVMessage{Body: &spectypes.PartialSignatureMessages{Type: spectypes.PostConsensusPartialSig, Slot: 8}}
+	all := []*queue.SSVMessage{executeDuty, proposal, prepare, commit, roundChange, nextRoundPrepare, nextHeightCommit, postConsensus}
+
+	instanceAtRound2 := &queue.State{HasRunningInstance: true, Slot: 8, Round: 2}
+	noInstance := &queue.State{HasRunningInstance: false, Slot: 8, Round: 2}
+
+	check := func(t *testing.T, filter queue.Filter, pass func(m *queue.SSVMessage) bool) {
+		for i, m := range all {
+			require.Equalf(t, pass(m), filter(m), "message %d (%T)", i, m.Body)
+		}
+	}
+
+	t.Run("idle: duty-starts only", func(t *testing.T) {
+		check(t, popFilter(plainRunnerStub{}, true, false, instanceAtRound2), func(m *queue.SSVMessage) bool { return m == executeDuty })
+	})
+	t.Run("idle multi-slot runner: anything goes", func(t *testing.T) {
+		check(t, popFilter(multiSlotRunnerStub{}, true, true, noInstance), func(*queue.SSVMessage) bool { return true })
+	})
+	t.Run("multi-slot runner with an instance and no accepted proposal: anything goes", func(t *testing.T) {
+		check(t, popFilter(multiSlotRunnerStub{proposalRunnerStub{accepted: false}}, false, true, instanceAtRound2), func(*queue.SSVMessage) bool { return true })
+	})
+	t.Run("instance running, no proposal accepted: its round's prepares and commits wait", func(t *testing.T) {
+		check(t, popFilter(proposalRunnerStub{accepted: false}, false, false, instanceAtRound2), func(m *queue.SSVMessage) bool { return m != prepare && m != commit })
+	})
+	t.Run("proposal accepted: anything goes", func(t *testing.T) {
+		check(t, popFilter(proposalRunnerStub{accepted: true}, false, false, instanceAtRound2), func(*queue.SSVMessage) bool { return true })
+	})
+	t.Run("duty running before its instance: anything goes", func(t *testing.T) {
+		check(t, popFilter(proposalRunnerStub{accepted: false}, false, false, noInstance), func(*queue.SSVMessage) bool { return true })
+	})
+}
+
+// A runner that serves several slots at once (runner.MultiSlotRunner) is never held on the idle filter: its
+// partials go through while it reports no running duty, where a single-duty runner's wait for the next
+// duty-start (TestConsumeQueue_HoldsMessagesUntilDutyStarts). The hold starved the preferences dispatcher after
+// its first quorum: it reports no running duty as soon as its only started slot's preference concludes, yet
+// that slot's sub-runner still collects request-auth partials, so a peer's share arriving after our quorum sat
+// in the queue until the next preference duty, epochs later, and its auth root never reconstructed.
+func TestConsumeQueue_MultiSlotRunnerIsNotHeldWhileIdle(t *testing.T) {
+	logger := zap.NewNop()
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	netCfg := networkconfig.TestNetwork
+	const slot = phase0.Slot(100)
+	var pk phase0.BLSPubKey
+	msgID := ssvtestingutils.NewMsgID(netCfg.DomainType, pk[:], spectypes.RoleProposerPreferences)
+	// The real dispatcher with no running sub-runner, the state a concluded preference leaves it in.
+	dispatcher := &runner.ProposerPreferencesRunner{BaseRunner: &runner.BaseRunner{RunnerRoleType: spectypes.RoleProposerPreferences}}
+	require.False(t, dispatcher.HasRunningDuty())
+
+	v := &Validator{
+		logger:        logger,
+		ctx:           ctx,
+		cancel:        cancel,
+		NetworkConfig: netCfg,
+		Operator:      &spectypes.CommitteeMember{},
+		Share:         &ssvtypes.SSVShare{},
+		Queues:        map[spectypes.RunnerRole]queue.Queue{spectypes.RoleProposerPreferences: queue.New(logger, 16)},
+		DutyRunners:   runner.ValidatorDutyRunners{spectypes.RoleProposerPreferences: dispatcher},
+	}
+
+	// A peer's request-auth share and another peer's late preference share for the slot whose preference we
+	// already concluded.
+	for _, typ := range []spectypes.PartialSigMsgType{spectypes.RequestAuthPartialSig, spectypes.ProposerPreferencesPartialSig} {
+		partial := makeTestSSVMessage(t, spectypes.SSVPartialSignatureMsgType, msgID, &spectypes.PartialSignatureMessages{
+			Type:     typ,
+			Slot:     slot,
+			Messages: []*spectypes.PartialSignatureMessage{{PartialSignature: make([]byte, 96), Signer: 3, ValidatorIndex: 1}},
+		})
+		require.True(t, v.Queues[spectypes.RoleProposerPreferences].TryPush(partial))
+	}
+
+	delivered := make(chan *queue.SSVMessage, 4)
+	v.StartQueueConsumer(msgID, func(_ context.Context, _ *zap.Logger, msg *queue.SSVMessage) error {
+		delivered <- msg
+		return nil
+	})
+
+	got := map[spectypes.PartialSigMsgType]bool{}
+	for range 2 {
+		partial, ok := receiveDelivered(t, delivered).Body.(*spectypes.PartialSignatureMessages)
+		require.True(t, ok, "a partial is delivered while the dispatcher reports no running duty")
+		got[partial.Type] = true
+	}
+	require.True(t, got[spectypes.RequestAuthPartialSig], "the request-auth share reaches the dispatcher")
+	require.True(t, got[spectypes.ProposerPreferencesPartialSig], "so does the preference share")
+}
+
+// plainRunnerStub is a runner that never awaits post-consensus packets once its duty is done.
+type plainRunnerStub struct{ runner.Runner }
+
+// proposalRunnerStub is a runner whose current round may or may not have an accepted proposal.
+type proposalRunnerStub struct {
+	runner.Runner
+	accepted bool
+}
+
+func (s proposalRunnerStub) HasAcceptedProposalForCurrentRound() bool { return s.accepted }
+
+// multiSlotRunnerStub serves several slots at once, like the proposer-preferences dispatcher.
+type multiSlotRunnerStub struct{ runner.Runner }
+
+func (multiSlotRunnerStub) ServesMultipleSlots() {}
+
+// awaitingRunnerStub is a runner whose finished duty may still expect post-consensus packets.
+type awaitingRunnerStub struct {
+	runner.Runner
+	slot     phase0.Slot
+	awaiting bool
+}
+
+func (s awaitingRunnerStub) AwaitingPostConsensus() (phase0.Slot, bool) { return s.slot, s.awaiting }
+
+// The hold above has one exception: a finished duty still expecting post-consensus packets (the Gloas
+// proposer's §6 envelope root) gets that slot's post-consensus packets, and nothing else.
+func TestNoRunningDutyFilter(t *testing.T) {
+	executeDuty := &queue.SSVMessage{Body: &ssvtypes.EventMsg{Type: ssvtypes.ExecuteDuty}}
+	timeout := &queue.SSVMessage{Body: &ssvtypes.EventMsg{Type: ssvtypes.Timeout}}
+	consensus := &queue.SSVMessage{Body: &specqbft.Message{Height: 8}}
+	preConsensus := &queue.SSVMessage{Body: &spectypes.PartialSignatureMessages{Type: spectypes.RandaoPartialSig, Slot: 8}}
+	postConsensus := &queue.SSVMessage{Body: &spectypes.PartialSignatureMessages{Type: spectypes.PostConsensusPartialSig, Slot: 8}}
+	nextSlotPostConsensus := &queue.SSVMessage{Body: &spectypes.PartialSignatureMessages{Type: spectypes.PostConsensusPartialSig, Slot: 9}}
+
+	for name, r := range map[string]runner.Runner{
+		"plain runner":         plainRunnerStub{},
+		"awaiter not awaiting": awaitingRunnerStub{slot: 8, awaiting: false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			filter := noRunningDutyFilter(r)
+			require.True(t, filter(executeDuty))
+			for _, held := range []*queue.SSVMessage{timeout, consensus, preConsensus, postConsensus, nextSlotPostConsensus} {
+				require.False(t, filter(held))
+			}
+		})
+	}
+
+	t.Run("awaiting post-consensus", func(t *testing.T) {
+		filter := noRunningDutyFilter(awaitingRunnerStub{slot: 8, awaiting: true})
+		require.True(t, filter(executeDuty))
+		require.True(t, filter(postConsensus))
+		for _, held := range []*queue.SSVMessage{timeout, consensus, preConsensus, nextSlotPostConsensus} {
+			require.False(t, filter(held))
+		}
+	})
 }

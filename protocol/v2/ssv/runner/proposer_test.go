@@ -2,18 +2,21 @@ package runner
 
 import (
 	"context"
+	"errors"
 	"maps"
 	"testing"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/api"
 	"github.com/attestantio/go-eth2-client/spec"
+	"github.com/attestantio/go-eth2-client/spec/deneb"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -23,6 +26,8 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
+	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
+	"github.com/ssvlabs/ssv/protocol/v2/types/ssvtestingutils"
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
@@ -38,6 +43,13 @@ type proposerTestBeacon struct {
 	submittedBlocks []*api.VersionedProposal
 	submittedSig    []phase0.BLSSignature
 	submitErr       error
+
+	getGloasBlock        *gloas.BeaconBlock
+	getGloasBuilderURL   string                  // the Eth-Builder-Url the produce returns; empty = self-build / p2p win
+	getGloasEnvelope     *gloas.ProducedEnvelope // the reveal data a self-build produce returns; nil = external build
+	submittedGloasBlocks []*gloas.SignedBeaconBlock
+	submittedEnvelopes   []*gloas.SignedExecutionPayloadEnvelopeContents
+	submitOrder          []string // "block" / "envelope", in submission order
 }
 
 func newProposerTestBeacon(proposal *api.VersionedProposal) *proposerTestBeacon {
@@ -59,6 +71,46 @@ func (b *proposerTestBeacon) SubmitBeaconBlock(_ context.Context, block *api.Ver
 	b.submittedBlocks = append(b.submittedBlocks, block)
 	b.submittedSig = append(b.submittedSig, sig)
 	return b.submitErr
+}
+
+func (b *proposerTestBeacon) GetGloasBeaconBlock(_ context.Context, slot phase0.Slot, graffiti, randao []byte, _ *gloas.ProduceBuilderConfig) (*gloas.ProducedBlock, error) {
+	b.getCalls++
+	b.lastGetSlot = slot
+	b.lastGetGraffiti = append([]byte(nil), graffiti...)
+	b.lastGetRandao = append([]byte(nil), randao...)
+	return &gloas.ProducedBlock{Block: b.getGloasBlock, BuilderURL: b.getGloasBuilderURL, Envelope: b.getGloasEnvelope}, nil
+}
+
+func (b *proposerTestBeacon) SubmitGloasBeaconBlock(_ context.Context, block *gloas.SignedBeaconBlock, _ string) error {
+	b.submittedGloasBlocks = append(b.submittedGloasBlocks, block)
+	b.submitOrder = append(b.submitOrder, "block")
+	return b.submitErr
+}
+
+func (b *proposerTestBeacon) SubmitExecutionPayloadEnvelope(_ context.Context, contents *gloas.SignedExecutionPayloadEnvelopeContents) error {
+	b.submittedEnvelopes = append(b.submittedEnvelopes, contents)
+	b.submitOrder = append(b.submitOrder, "envelope")
+	return nil
+}
+
+// decidedBuilderURL echoes this operator's produce Eth-Builder-Url on publish only when the decided block
+// is the one this operator produced (owner-match) and a builder bid actually won.
+func TestProposerRunner_decidedBuilderURL(t *testing.T) {
+	block := gloas.TestingBeaconBlock(7)
+	root, err := block.HashTreeRoot()
+	require.NoError(t, err)
+
+	// This operator produced the decided block and its BN returned a builder URL -> echo it.
+	owner := &ProposerRunner{gloasDuty: gloasDutyState{builderURL: "https://b.example", producedRoot: root}}
+	require.Equal(t, "https://b.example", owner.decidedBuilderURL(block))
+
+	// Another operator's block won QBFT (root mismatch) -> no echo; this BN never solicited that bid.
+	mismatch := &ProposerRunner{gloasDuty: gloasDutyState{builderURL: "https://b.example", producedRoot: [32]byte{0xff}}}
+	require.Empty(t, mismatch.decidedBuilderURL(block))
+
+	// Self-build / p2p win (no builder URL) -> no echo even on an owner match.
+	noURL := &ProposerRunner{gloasDuty: gloasDutyState{builderURL: "", producedRoot: root}}
+	require.Empty(t, noURL.decidedBuilderURL(block))
 }
 
 type stubDoppelganger struct {
@@ -233,6 +285,23 @@ func TestRemainingProposerDelay(t *testing.T) {
 	}
 }
 
+// proposerDelayForSlot is fork-gated: pre-Gloas uses ProposerDelay, Gloas-on uses ProposerDelayEPBS.
+func TestProposerDelayForSlot(t *testing.T) {
+	const gloasEpoch = 5
+	netCfg := networkconfig.TestNetworkWithGloas(gloasEpoch)
+	r := &ProposerRunner{
+		BaseRunner:        &BaseRunner{NetworkConfig: netCfg},
+		proposerDelay:     300 * time.Millisecond,
+		proposerDelayEPBS: 100 * time.Millisecond,
+	}
+
+	preGloasSlot := phase0.Slot(uint64(gloasEpoch-1) * netCfg.SlotsPerEpoch)
+	gloasSlot := phase0.Slot(uint64(gloasEpoch) * netCfg.SlotsPerEpoch)
+
+	require.Equal(t, 300*time.Millisecond, r.proposerDelayForSlot(preGloasSlot))
+	require.Equal(t, 100*time.Millisecond, r.proposerDelayForSlot(gloasSlot))
+}
+
 func TestProposerRunnerStartNewDutySkipsRandaoSigningWhenDoppelgangerBlocks(t *testing.T) {
 	t.Parallel()
 
@@ -264,27 +333,18 @@ func TestProposerRunnerProcessConsensusSkipsPostConsensusSigningWhenDoppelganger
 
 	err := runner.StartNewDuty(context.Background(), zap.NewNop(), duty, keySet.Threshold)
 	require.NoError(t, err)
+	concluded := observeDutyConclusion(runner.BaseRunner)
 
 	dg.canSign = false
 
 	consensusData := spectestingutils.TestProposerBlindedBlockConsensusDataV(version)
-	runner.measurements.StartConsensus()
-	require.NoError(t, runner.decide(context.Background(), zap.NewNop(), duty.Slot, consensusData, runner.ValCheck))
-	consensusMsgs := spectestingutils.SSVDecidingMsgsForHeight(
-		consensusData,
-		runner.QBFTController.GetIdentifier(),
-		specqbft.Height(consensusData.Duty.Slot),
-		keySet,
-	)
-
-	for _, msg := range consensusMsgs {
-		require.NoError(t, runner.ProcessConsensus(context.Background(), zap.NewNop(), msg))
-	}
+	require.NoError(t, decideProposerDuty(t, runner, keySet, duty.Slot, consensusData))
 
 	require.NotNil(t, runner.State.DecidedValue)
 	require.Equal(t, 0, countPartialSignatureBroadcastsByType(t, network, spectypes.PostConsensusPartialSig))
 	require.Equal(t, 1, countPartialSignatureBroadcastsByType(t, network, spectypes.RandaoPartialSig))
 	require.False(t, runner.State.Succeeded)
+	require.Empty(t, concluded, "the duty stays open for the other operators' partials")
 }
 
 func TestProposerRunnerProcessPostConsensusLeaderUsesCachedFullBlockWhenDecisionMatches(t *testing.T) {
@@ -297,7 +357,7 @@ func TestProposerRunnerProcessPostConsensusLeaderUsesCachedFullBlockWhenDecision
 	dg := &stubDoppelganger{canSign: true}
 	runner, keySet, _ := newProposerRunnerForTest(t, beacon, dg, 0, nil)
 
-	setupRunnerForPostConsensus(t, runner, keySet, consensusData, 1)
+	setupRunnerForPostConsensus(t, runner, keySet, spectestingutils.TestingProposerDutyV(version), consensusData, 1)
 	runner.cachedFullBlock = fullBlock
 	runner.cachedBlindedBlockSSZ = append([]byte(nil), consensusData.DataSSZ...)
 
@@ -320,7 +380,7 @@ func TestProposerRunnerProcessPostConsensusLeaderFallsBackToDecidedBlindedBlockO
 	dg := &stubDoppelganger{canSign: true}
 	runner, keySet, _ := newProposerRunnerForTest(t, beacon, dg, 0, nil)
 
-	setupRunnerForPostConsensus(t, runner, keySet, consensusData, 1)
+	setupRunnerForPostConsensus(t, runner, keySet, spectestingutils.TestingProposerDutyV(version), consensusData, 1)
 	runner.cachedFullBlock = spectestingutils.TestingBeaconBlockV(version)
 	runner.cachedBlindedBlockSSZ = []byte("different-blinded-block")
 
@@ -341,7 +401,7 @@ func TestProposerRunnerProcessPostConsensusNonLeaderKeepsDecidedBlindedBlock(t *
 	dg := &stubDoppelganger{canSign: true}
 	runner, keySet, _ := newProposerRunnerForTest(t, beacon, dg, 0, nil)
 
-	setupRunnerForPostConsensus(t, runner, keySet, consensusData, 1)
+	setupRunnerForPostConsensus(t, runner, keySet, spectestingutils.TestingProposerDutyV(version), consensusData, 1)
 	runner.operatorSigner = fixedOperatorSigner{id: 2}
 	runner.cachedFullBlock = spectestingutils.TestingBeaconBlockV(version)
 	runner.cachedBlindedBlockSSZ = append([]byte(nil), consensusData.DataSSZ...)
@@ -352,6 +412,861 @@ func TestProposerRunnerProcessPostConsensusNonLeaderKeepsDecidedBlindedBlock(t *
 	require.True(t, beacon.submittedBlocks[0].Blinded)
 	require.Equal(t, []phase0.ValidatorIndex{runner.GetShare().ValidatorIndex}, dg.reportQuorum)
 	require.True(t, runner.State.Succeeded)
+}
+
+func gloasProposerDuty(slot phase0.Slot) *spectypes.ValidatorDuty {
+	return &spectypes.ValidatorDuty{
+		Type:                    spectypes.BNRoleProposer,
+		PubKey:                  spectestingutils.TestingValidatorPubKey,
+		Slot:                    slot,
+		ValidatorIndex:          spectestingutils.TestingValidatorIndex,
+		CommitteeIndex:          3,
+		CommitteesAtSlot:        36,
+		CommitteeLength:         128,
+		ValidatorCommitteeIndex: 11,
+	}
+}
+
+// gloasTestConfig schedules Gloas from genesis and puts the wall clock inside slot, so a duty at that slot
+// runs on the Gloas path with its awaiting-envelope window (bounded to the slot) open.
+func gloasTestConfig(slot phase0.Slot) *networkconfig.Network {
+	cfg := networkconfig.TestNetworkWithGloas(0)
+	cfg.GenesisTime = time.Now().Add(-time.Duration(slot)*cfg.SlotDuration - time.Second)
+	return cfg
+}
+
+// gloasTestEnvelope is the reveal data the builder operator's produce response carried for block: an
+// envelope whose empty requests hash to the bid's requests root, with its blobs and KZG proofs.
+func gloasTestEnvelope(t *testing.T, block *gloas.BeaconBlock) *gloas.ProducedEnvelope {
+	t.Helper()
+	blockRoot, err := block.HashTreeRoot()
+	require.NoError(t, err)
+	return &gloas.ProducedEnvelope{
+		Envelope: &gloas.ExecutionPayloadEnvelope{
+			Payload:               &gloas.ExecutionPayload{BlockNumber: 42},
+			ExecutionRequests:     &gloas.ExecutionRequests{},
+			BuilderIndex:          gloas.BuilderIndexSelfBuild,
+			BeaconBlockRoot:       blockRoot,
+			ParentBeaconBlockRoot: block.ParentRoot,
+		},
+		KZGProofs: []deneb.KZGProof{{0x01}},
+		Blobs:     []deneb.Blob{{0x02}},
+	}
+}
+
+// gloasSelfBuildProposal is the §4 value for a self-build block at slot — the block plus its envelope's
+// payload_root — together with the reveal data the builder operator holds for it.
+func gloasSelfBuildProposal(t *testing.T, slot phase0.Slot) (*gloas.GloasProposalData, *gloas.ProducedEnvelope) {
+	t.Helper()
+	block := gloas.TestingBeaconBlock(slot)
+	produced := gloasTestEnvelope(t, block)
+	payloadRoot, err := produced.Envelope.Payload.HashTreeRoot()
+	require.NoError(t, err)
+	return &gloas.GloasProposalData{Block: block, PayloadRoot: payloadRoot}, produced
+}
+
+// gloasExternalBuildProposal is the §4 value for a block won by an external builder: zero payload_root.
+func gloasExternalBuildProposal(slot phase0.Slot) *gloas.GloasProposalData {
+	block := gloas.TestingBeaconBlock(slot)
+	block.Body.SignedExecutionPayloadBid.Message.BuilderIndex = 5 // an external builder, not self-build
+	return &gloas.GloasProposalData{Block: block}
+}
+
+func gloasConsensusData(t *testing.T, proposal *gloas.GloasProposalData) *spectypes.ProposerConsensusData {
+	t.Helper()
+	dataSSZ, err := proposal.Encode()
+	require.NoError(t, err)
+	return &spectypes.ProposerConsensusData{
+		Duty:    *gloasProposerDuty(proposal.Block.Slot),
+		Version: networkconfig.DataVersionGloas,
+		DataSSZ: dataSSZ,
+	}
+}
+
+// gloasPartialSig is operator opID's partial signature over obj under domainType with its share key. The
+// testing beacon's domain is epoch-invariant, so it matches the domain the runner derives at the duty's epoch.
+func gloasPartialSig(t *testing.T, keySet *spectestingutils.TestKeySet, opID spectypes.OperatorID, obj spectypes.HashRoot, domainType phase0.DomainType) *spectypes.PartialSignatureMessage {
+	t.Helper()
+	domain, err := spectestingutils.NewTestingBeaconNode().DomainData(1, domainType)
+	require.NoError(t, err)
+	sig, signingRoot, err := spectestingutils.NewTestingKeyManager().SignBeaconObject(obj, domain, keySet.Shares[opID].GetPublicKey().Serialize(), domainType)
+	require.NoError(t, err)
+	return &spectypes.PartialSignatureMessage{
+		PartialSignature: sig,
+		SigningRoot:      signingRoot,
+		Signer:           opID,
+		ValidatorIndex:   spectestingutils.TestingValidatorIndex,
+	}
+}
+
+// gloasPostConsensusMsg is operator opID's post-consensus packet for the decided Gloas value: the block root
+// under DomainProposer and, when withEnvelope, the derived §6 envelope root under DomainBeaconBuilder.
+func gloasPostConsensusMsg(t *testing.T, keySet *spectestingutils.TestKeySet, opID spectypes.OperatorID, proposal *gloas.GloasProposalData, withEnvelope bool) *spectypes.PartialSignatureMessages {
+	t.Helper()
+	entries := []*spectypes.PartialSignatureMessage{gloasPartialSig(t, keySet, opID, proposal.Block, spectypes.DomainProposer)}
+	if withEnvelope {
+		envelope, err := proposal.DeriveBlindedEnvelope()
+		require.NoError(t, err)
+		entries = append(entries, gloasPartialSig(t, keySet, opID, envelope, phase0.DomainType(spectypes.DomainBeaconBuilder)))
+	}
+	return &spectypes.PartialSignatureMessages{Type: spectypes.PostConsensusPartialSig, Slot: proposal.Block.Slot, Messages: entries}
+}
+
+// requireSameRoot compares two SSZ objects by hash tree root: an SSZ-decoded block carries empty lists where
+// the constructed fixture has nil ones, so struct equality does not hold even for identical values.
+func requireSameRoot(t *testing.T, want, got spectypes.HashRoot) {
+	t.Helper()
+	wantRoot, err := want.HashTreeRoot()
+	require.NoError(t, err)
+	gotRoot, err := got.HashTreeRoot()
+	require.NoError(t, err)
+	require.Equal(t, wantRoot, gotRoot)
+}
+
+// newGloasProposerForPostConsensus is a proposer runner whose Gloas duty at the value's slot has decided
+// on it, ready to process post-consensus packets.
+func newGloasProposerForPostConsensus(t *testing.T, beacon *proposerTestBeacon, dg *stubDoppelganger, proposal *gloas.GloasProposalData) (*ProposerRunner, *spectestingutils.TestKeySet) {
+	t.Helper()
+	slot := proposal.Block.Slot
+	runner, keySet, _ := newProposerRunnerForTest(t, beacon, dg, 0, gloasTestConfig(slot))
+	setupRunnerForPostConsensus(t, runner, keySet, gloasProposerDuty(slot), gloasConsensusData(t, proposal), 1)
+	return runner, keySet
+}
+
+// At a Gloas self-build slot the packet carries the block root and the §6 envelope root. When both reach
+// quorum, every operator submits the block (it is bid-only, so all hold it and the BN dedupes), and the
+// builder operator — whose produced envelope is the one the decided value commits to — publishes the
+// reveal with its blobs and KZG proofs. The duty is finished, with no envelope left to wait for.
+func TestProposerRunnerGloasPostConsensusSubmitsBlockAndPublishesEnvelope(t *testing.T) {
+	t.Parallel()
+
+	ctx, logger := context.Background(), zap.NewNop()
+	proposal, produced := gloasSelfBuildProposal(t, 8)
+	beacon := newProposerTestBeacon(nil)
+	dg := &stubDoppelganger{canSign: true}
+	runner, keySet := newGloasProposerForPostConsensus(t, beacon, dg, proposal)
+	runner.gloasDuty.producedEnvelope = produced // the builder operator
+
+	for opID := spectypes.OperatorID(1); opID <= keySet.Threshold; opID++ {
+		require.NoError(t, runner.ProcessPostConsensus(ctx, logger, gloasPostConsensusMsg(t, keySet, opID, proposal, true)))
+	}
+
+	require.Len(t, beacon.submittedGloasBlocks, 1)
+	requireSameRoot(t, proposal.Block, beacon.submittedGloasBlocks[0].Message)
+	require.NotEqual(t, phase0.BLSSignature{}, beacon.submittedGloasBlocks[0].Signature)
+	require.Len(t, beacon.submittedEnvelopes, 1)
+	published := beacon.submittedEnvelopes[0]
+	require.Equal(t, produced.Envelope, published.SignedExecutionPayloadEnvelope.Message)
+	require.NotEqual(t, phase0.BLSSignature{}, published.SignedExecutionPayloadEnvelope.Signature)
+	require.NotEqual(t, beacon.submittedGloasBlocks[0].Signature, published.SignedExecutionPayloadEnvelope.Signature)
+	require.Equal(t, produced.KZGProofs, published.KZGProofs)
+	require.Equal(t, produced.Blobs, published.Blobs)
+	require.Equal(t, []phase0.ValidatorIndex{runner.GetShare().ValidatorIndex}, dg.reportQuorum)
+	require.True(t, runner.State.Succeeded)
+	requireNotAwaitingPostConsensus(t, runner)
+	require.Nil(t, runner.gloasDuty.producedEnvelope, "the reveal data is released once published")
+}
+
+// An operator whose own produce is not the decided block reconstructs the envelope signature like everyone
+// else but holds no payload behind it, so it publishes nothing.
+func TestProposerRunnerGloasPostConsensusNonBuilderDoesNotPublish(t *testing.T) {
+	t.Parallel()
+
+	ctx, logger := context.Background(), zap.NewNop()
+	proposal, _ := gloasSelfBuildProposal(t, 8)
+	beacon := newProposerTestBeacon(nil)
+	runner, keySet := newGloasProposerForPostConsensus(t, beacon, &stubDoppelganger{canSign: true}, proposal)
+	// This operator produced another block: its envelope blinds to a different root.
+	other, _ := gloasSelfBuildProposal(t, 8)
+	other.Block.ProposerIndex = 99
+	runner.gloasDuty.producedEnvelope = gloasTestEnvelope(t, other.Block)
+
+	for opID := spectypes.OperatorID(1); opID <= keySet.Threshold; opID++ {
+		require.NoError(t, runner.ProcessPostConsensus(ctx, logger, gloasPostConsensusMsg(t, keySet, opID, proposal, true)))
+	}
+
+	require.Len(t, beacon.submittedGloasBlocks, 1)
+	require.Empty(t, beacon.submittedEnvelopes)
+	require.True(t, runner.State.Succeeded)
+	requireNotAwaitingPostConsensus(t, runner)
+	require.Nil(t, runner.gloasDuty.producedEnvelope, "a non-builder has nothing to publish, so it releases the reveal data")
+}
+
+// The envelope root is optional per packet and reconstructs independently: when the block reaches quorum
+// first (a peer signed the block alone), the duty finishes but keeps accepting post-consensus packets until
+// the envelope reconstructs, so the reveal is not lost (SIP #94 §4).
+func TestProposerRunnerGloasPostConsensusLateEnvelope(t *testing.T) {
+	t.Parallel()
+
+	ctx, logger := context.Background(), zap.NewNop()
+	proposal, produced := gloasSelfBuildProposal(t, 8)
+	beacon := newProposerTestBeacon(nil)
+	runner, keySet := newGloasProposerForPostConsensus(t, beacon, &stubDoppelganger{canSign: true}, proposal)
+	runner.gloasDuty.producedEnvelope = produced
+
+	require.NoError(t, runner.ProcessPostConsensus(ctx, logger, gloasPostConsensusMsg(t, keySet, 1, proposal, true)))
+	require.NoError(t, runner.ProcessPostConsensus(ctx, logger, gloasPostConsensusMsg(t, keySet, 2, proposal, true)))
+	require.NoError(t, runner.ProcessPostConsensus(ctx, logger, gloasPostConsensusMsg(t, keySet, 3, proposal, false))) // block alone
+
+	// Block quorum: submitted and finished, envelope still one short — the duty keeps that slot's
+	// post-consensus packets flowing from the queue.
+	require.Len(t, beacon.submittedGloasBlocks, 1)
+	require.Empty(t, beacon.submittedEnvelopes)
+	require.True(t, runner.State.Succeeded)
+	require.False(t, runner.HasRunningDuty())
+	awaitingSlot, awaiting := runner.AwaitingPostConsensus()
+	require.True(t, awaiting)
+	require.Equal(t, phase0.Slot(8), awaitingSlot)
+	require.NotNil(t, runner.gloasDuty.producedEnvelope, "the reveal data is kept while its quorum is pending")
+
+	require.NoError(t, runner.ProcessPostConsensus(ctx, logger, gloasPostConsensusMsg(t, keySet, 4, proposal, true)))
+
+	require.Len(t, beacon.submittedGloasBlocks, 1, "the block quorum fires once")
+	require.Len(t, beacon.submittedEnvelopes, 1)
+	require.Equal(t, produced.Envelope, beacon.submittedEnvelopes[0].SignedExecutionPayloadEnvelope.Message)
+	requireNotAwaitingPostConsensus(t, runner)
+	require.Nil(t, runner.gloasDuty.producedEnvelope)
+}
+
+// A bad block share next to a good envelope share makes the block's reconstruction fail in a packet where the
+// envelope's succeeds. The reveal must not go out first, since a beacon node ignores an envelope whose block
+// it hasn't seen (SIP #94 §6). It waits, and follows the block as soon as an honest share brings the block
+// back to quorum.
+func TestProposerRunnerGloasPostConsensusEnvelopeWaitsForBlock(t *testing.T) {
+	t.Parallel()
+
+	ctx, logger := context.Background(), zap.NewNop()
+	proposal, produced := gloasSelfBuildProposal(t, 8)
+	beacon := newProposerTestBeacon(nil)
+	runner, keySet := newGloasProposerForPostConsensus(t, beacon, &stubDoppelganger{canSign: true}, proposal)
+	runner.gloasDuty.producedEnvelope = produced // the builder operator
+
+	concluded := observeDutyConclusion(runner.BaseRunner)
+
+	// Operator 1's block share carries operator 2's signature, so it fails verification; its envelope share is valid.
+	bad := gloasPostConsensusMsg(t, keySet, 1, proposal, true)
+	bad.Messages[0].PartialSignature = gloasPartialSig(t, keySet, 2, proposal.Block, spectypes.DomainProposer).PartialSignature
+
+	require.NoError(t, runner.ProcessPostConsensus(ctx, logger, bad))
+	require.NoError(t, runner.ProcessPostConsensus(ctx, logger, gloasPostConsensusMsg(t, keySet, 2, proposal, true)))
+	require.ErrorContains(t, runner.ProcessPostConsensus(ctx, logger, gloasPostConsensusMsg(t, keySet, 3, proposal, true)),
+		"invalid signatures", "the block's reconstruction fails on operator 1's share")
+	require.Empty(t, beacon.submitOrder, "neither the block nor, ahead of it, the envelope")
+	require.NotNil(t, runner.gloasDuty.producedEnvelope, "the reveal data is kept for the envelope that is still to come")
+	require.Empty(t, concluded, "the failed reconstruct is recoverable, so the duty is not concluded failed")
+
+	require.NoError(t, runner.ProcessPostConsensus(ctx, logger, gloasPostConsensusMsg(t, keySet, 4, proposal, true)))
+	require.Equal(t, []string{"block", "envelope"}, beacon.submitOrder)
+	requireConcluded(t, concluded, dutyOutcomeSucceeded)
+	require.Equal(t, produced.Envelope, beacon.submittedEnvelopes[0].SignedExecutionPayloadEnvelope.Message)
+	require.True(t, runner.State.Succeeded)
+	requireNotAwaitingPostConsensus(t, runner)
+	require.Nil(t, runner.gloasDuty.producedEnvelope)
+}
+
+// A failed block submit does not end the reveal: other operators submit the block too, so the builder
+// operator keeps its reveal data for the envelope quorum, and publishes on it.
+func TestProposerRunnerGloasPostConsensusBlockSubmitFailureKeepsReveal(t *testing.T) {
+	t.Parallel()
+
+	ctx, logger := context.Background(), zap.NewNop()
+	proposal, produced := gloasSelfBuildProposal(t, 8)
+	beacon := newProposerTestBeacon(nil)
+	beacon.submitErr = errors.New("beacon node down")
+	runner, keySet := newGloasProposerForPostConsensus(t, beacon, &stubDoppelganger{canSign: true}, proposal)
+	runner.gloasDuty.producedEnvelope = produced
+
+	require.NoError(t, runner.ProcessPostConsensus(ctx, logger, gloasPostConsensusMsg(t, keySet, 1, proposal, true)))
+	require.NoError(t, runner.ProcessPostConsensus(ctx, logger, gloasPostConsensusMsg(t, keySet, 2, proposal, true)))
+	err := runner.ProcessPostConsensus(ctx, logger, gloasPostConsensusMsg(t, keySet, 3, proposal, false)) // block alone
+	require.ErrorContains(t, err, "could not submit gloas beacon block")
+	require.False(t, runner.State.Succeeded)
+	require.NotNil(t, runner.gloasDuty.producedEnvelope, "the envelope quorum can still publish")
+
+	require.NoError(t, runner.ProcessPostConsensus(ctx, logger, gloasPostConsensusMsg(t, keySet, 4, proposal, true)))
+
+	require.Len(t, beacon.submittedEnvelopes, 1)
+	require.Equal(t, produced.Envelope, beacon.submittedEnvelopes[0].SignedExecutionPayloadEnvelope.Message)
+	require.Nil(t, runner.gloasDuty.producedEnvelope)
+}
+
+// The envelope root can hold more shares than its quorum by the time the reveal runs. A bad one among them fails
+// the reconstruct and is dropped; the root stays at quorum, so no later share would cross it again, and the
+// reconstruct is retried on the remaining shares right away.
+func TestProposerRunnerGloasPostConsensusEnvelopeRetriesOnRemainingShares(t *testing.T) {
+	t.Parallel()
+
+	ctx, logger := context.Background(), zap.NewNop()
+	proposal, produced := gloasSelfBuildProposal(t, 8)
+	beacon := newProposerTestBeacon(nil)
+	runner, keySet := newGloasProposerForPostConsensus(t, beacon, &stubDoppelganger{canSign: true}, proposal)
+	runner.gloasDuty.producedEnvelope = produced // the builder operator
+	envelope, err := proposal.DeriveBlindedEnvelope()
+	require.NoError(t, err)
+
+	// Both of operator 1's shares carry operator 2's signatures, so neither verifies.
+	bad := gloasPostConsensusMsg(t, keySet, 1, proposal, true)
+	bad.Messages[0].PartialSignature = gloasPartialSig(t, keySet, 2, proposal.Block, spectypes.DomainProposer).PartialSignature
+	bad.Messages[1].PartialSignature = gloasPartialSig(t, keySet, 2, envelope, phase0.DomainType(spectypes.DomainBeaconBuilder)).PartialSignature
+
+	require.NoError(t, runner.ProcessPostConsensus(ctx, logger, bad))
+	require.NoError(t, runner.ProcessPostConsensus(ctx, logger, gloasPostConsensusMsg(t, keySet, 2, proposal, true)))
+	require.ErrorContains(t, runner.ProcessPostConsensus(ctx, logger, gloasPostConsensusMsg(t, keySet, 3, proposal, true)), "invalid signatures")
+
+	// Operator 4 brings the block back to quorum, and the reveal then runs on four envelope shares, one bad.
+	require.NoError(t, runner.ProcessPostConsensus(ctx, logger, gloasPostConsensusMsg(t, keySet, 4, proposal, true)))
+	require.Equal(t, []string{"block", "envelope"}, beacon.submitOrder)
+}
+
+// Before Gloas too, a bad share in the block's quorum doesn't fail the duty: the fallback drops it, an honest
+// share brings the block back to quorum, and the duty concludes succeeded.
+func TestProposerRunnerProcessPostConsensusRecoversFromBadShare(t *testing.T) {
+	t.Parallel()
+
+	ctx, logger := context.Background(), zap.NewNop()
+	version := spec.DataVersionDeneb
+	beacon := newProposerTestBeacon(nil)
+	runner, keySet, _ := newProposerRunnerForTest(t, beacon, &stubDoppelganger{canSign: true}, 0, nil)
+	setupRunnerForPostConsensus(t, runner, keySet, spectestingutils.TestingProposerDutyV(version),
+		spectestingutils.TestProposerBlindedBlockConsensusDataV(version), 1)
+	concluded := observeDutyConclusion(runner.BaseRunner)
+
+	bad := spectestingutils.PostConsensusProposerMsgV(keySet.Shares[1], 1, version)
+	bad.Messages[0].PartialSignature = spectestingutils.PostConsensusProposerMsgV(keySet.Shares[2], 2, version).Messages[0].PartialSignature
+	require.NoError(t, runner.ProcessPostConsensus(ctx, logger, bad))
+	require.NoError(t, runner.ProcessPostConsensus(ctx, logger, spectestingutils.PostConsensusProposerMsgV(keySet.Shares[2], 2, version)))
+	err := runner.ProcessPostConsensus(ctx, logger, spectestingutils.PostConsensusProposerMsgV(keySet.Shares[3], 3, version))
+	require.ErrorContains(t, err, "invalid signatures")
+	require.Empty(t, concluded, "the failed reconstruct is recoverable, so the duty is not concluded failed")
+
+	require.NoError(t, runner.ProcessPostConsensus(ctx, logger, spectestingutils.PostConsensusProposerMsgV(keySet.Shares[4], 4, version)))
+	require.Len(t, beacon.submittedBlocks, 1)
+	requireConcluded(t, concluded, dutyOutcomeSucceeded)
+}
+
+// requireNotAwaitingPostConsensus checks the runner expects no further post-consensus packets.
+func requireNotAwaitingPostConsensus(t *testing.T, runner *ProposerRunner) {
+	t.Helper()
+	require.False(t, runner.awaitingEnvelope())
+	_, awaiting := runner.AwaitingPostConsensus()
+	require.False(t, awaiting)
+}
+
+// The awaiting-envelope window closes with the duty's slot: a reveal after it is useless, so the finished
+// duty goes back to rejecting post-consensus packets.
+func TestProposerRunnerGloasAwaitingEnvelopeClosesWithSlot(t *testing.T) {
+	t.Parallel()
+
+	ctx, logger := context.Background(), zap.NewNop()
+	proposal, produced := gloasSelfBuildProposal(t, 8)
+	runner, keySet := newGloasProposerForPostConsensus(t, newProposerTestBeacon(nil), &stubDoppelganger{canSign: true}, proposal)
+	runner.gloasDuty.producedEnvelope = produced
+
+	for opID := spectypes.OperatorID(1); opID <= keySet.Threshold; opID++ {
+		require.NoError(t, runner.ProcessPostConsensus(ctx, logger, gloasPostConsensusMsg(t, keySet, opID, proposal, false)))
+	}
+	require.True(t, runner.State.Succeeded)
+	require.True(t, runner.awaitingEnvelope())
+
+	// The clock moves into the next slot.
+	runner.NetworkConfig.GenesisTime = runner.NetworkConfig.GenesisTime.Add(-runner.NetworkConfig.SlotDuration)
+	requireNotAwaitingPostConsensus(t, runner)
+
+	err := runner.ProcessPostConsensus(ctx, logger, gloasPostConsensusMsg(t, keySet, 4, proposal, true))
+	require.ErrorContains(t, err, ErrRunningDutySucceeded.Error())
+}
+
+// An external bid expects the block root alone: no envelope is awaited once the block is submitted, and a
+// packet carrying a second entry is rejected.
+func TestProposerRunnerGloasPostConsensusExternalBuild(t *testing.T) {
+	t.Parallel()
+
+	ctx, logger := context.Background(), zap.NewNop()
+	proposal := gloasExternalBuildProposal(8)
+	beacon := newProposerTestBeacon(nil)
+	runner, keySet := newGloasProposerForPostConsensus(t, beacon, &stubDoppelganger{canSign: true}, proposal)
+
+	twoEntries := gloasPostConsensusMsg(t, keySet, 1, proposal, false)
+	twoEntries.Messages = append(twoEntries.Messages, gloasPartialSig(t, keySet, 1, spectypes.SSZ32Bytes{0xee}, phase0.DomainType(spectypes.DomainBeaconBuilder)))
+	require.ErrorContains(t, runner.ProcessPostConsensus(ctx, logger, twoEntries), "wrong expected roots count")
+
+	for opID := spectypes.OperatorID(1); opID <= keySet.Threshold; opID++ {
+		require.NoError(t, runner.ProcessPostConsensus(ctx, logger, gloasPostConsensusMsg(t, keySet, opID, proposal, false)))
+	}
+
+	require.Len(t, beacon.submittedGloasBlocks, 1)
+	require.Empty(t, beacon.submittedEnvelopes)
+	require.True(t, runner.State.Succeeded)
+	requireNotAwaitingPostConsensus(t, runner)
+}
+
+// A self-build packet must carry the block root, may carry the envelope root, and nothing else (SIP #94 §4/§7).
+func TestProposerRunnerGloasPostConsensusRejectsMalformedPackets(t *testing.T) {
+	t.Parallel()
+
+	ctx, logger := context.Background(), zap.NewNop()
+	proposal, _ := gloasSelfBuildProposal(t, 8)
+	runner, keySet := newGloasProposerForPostConsensus(t, newProposerTestBeacon(nil), &stubDoppelganger{canSign: true}, proposal)
+	envelope, err := proposal.DeriveBlindedEnvelope()
+	require.NoError(t, err)
+	builderDomain := phase0.DomainType(spectypes.DomainBeaconBuilder)
+
+	envelopeOnly := &spectypes.PartialSignatureMessages{
+		Type:     spectypes.PostConsensusPartialSig,
+		Slot:     8,
+		Messages: []*spectypes.PartialSignatureMessage{gloasPartialSig(t, keySet, 1, envelope, builderDomain)},
+	}
+	require.ErrorContains(t, runner.ProcessPostConsensus(ctx, logger, envelopeOnly), "missing required signing root")
+
+	threeEntries := gloasPostConsensusMsg(t, keySet, 1, proposal, true)
+	threeEntries.Messages = append(threeEntries.Messages, gloasPartialSig(t, keySet, 1, spectypes.SSZ32Bytes{0xee}, builderDomain))
+	require.ErrorContains(t, runner.ProcessPostConsensus(ctx, logger, threeEntries), "wrong expected roots count")
+
+	unexpectedRoot := gloasPostConsensusMsg(t, keySet, 1, proposal, false)
+	unexpectedRoot.Messages = append(unexpectedRoot.Messages, gloasPartialSig(t, keySet, 1, spectypes.SSZ32Bytes{0xee}, builderDomain))
+	require.ErrorContains(t, runner.ProcessPostConsensus(ctx, logger, unexpectedRoot), "unexpected signing root")
+
+	// Two entries for the block root fit the self-build packet's two-entry bound, but each expected root is
+	// matched at most once.
+	blockTwice := gloasPostConsensusMsg(t, keySet, 1, proposal, false)
+	blockTwice.Messages = append(blockTwice.Messages, gloasPartialSig(t, keySet, 1, proposal.Block, spectypes.DomainProposer))
+	require.ErrorContains(t, runner.ProcessPostConsensus(ctx, logger, blockTwice), "duplicate expected signing root")
+}
+
+// On a Gloas self-build decision the proposer signs the block root under DomainProposer and the derived §6
+// envelope root under DomainBeaconBuilder, in one post-consensus packet (SIP #94 §4/§6).
+func TestProposerRunnerProcessConsensusGloasSignsBlockAndEnvelope(t *testing.T) {
+	t.Parallel()
+
+	const slot = phase0.Slot(8)
+	ctx, logger := context.Background(), zap.NewNop()
+	runner, keySet, network := newProposerRunnerForTest(t, newProposerTestBeacon(nil), &stubDoppelganger{canSign: true}, 0, gloasTestConfig(slot))
+	require.NoError(t, runner.StartNewDuty(ctx, logger, gloasProposerDuty(slot), keySet.Threshold))
+
+	proposal, _ := gloasSelfBuildProposal(t, slot)
+	consensusData := gloasConsensusData(t, proposal)
+	require.NoError(t, decideProposerDuty(t, runner, keySet, slot, consensusData))
+
+	var packet *spectypes.PartialSignatureMessages
+	for _, msg := range network.BroadcastedMsgs {
+		if msg.SSVMessage == nil || msg.SSVMessage.MsgType != spectypes.SSVPartialSignatureMsgType {
+			continue
+		}
+		decoded := &spectypes.PartialSignatureMessages{}
+		require.NoError(t, decoded.Decode(msg.SSVMessage.Data))
+		if decoded.Type == spectypes.PostConsensusPartialSig {
+			packet = decoded
+		}
+	}
+	require.NotNil(t, packet)
+	require.Len(t, packet.Messages, 2)
+	blockRoot, envelopeRoot, err := runner.gloasPostConsensusSigningRoots(ctx, proposal)
+	require.NoError(t, err)
+	require.Equal(t, blockRoot, packet.Messages[0].SigningRoot)
+	require.Equal(t, envelopeRoot, packet.Messages[1].SigningRoot)
+	require.NotEqual(t, blockRoot, envelopeRoot)
+}
+
+// Post-consensus partials are validated against the running duty's slot, not the decided value's own
+// Duty.Slot (SIP #94 §4): should a value for another slot be decided, its partials are rejected, so no quorum
+// forms on it.
+func TestProposerRunnerPostConsensusValidatesRunningSlot(t *testing.T) {
+	t.Parallel()
+
+	const slot = phase0.Slot(8)
+	proposal, _ := gloasSelfBuildProposal(t, slot-1) // decided, but for the previous slot
+	runner, keySet, _ := newProposerRunnerForTest(t, newProposerTestBeacon(nil), &stubDoppelganger{canSign: true}, 0, gloasTestConfig(slot))
+	setupRunnerForPostConsensus(t, runner, keySet, gloasProposerDuty(slot), gloasConsensusData(t, proposal), 1)
+
+	err := runner.ProcessPostConsensus(context.Background(), zap.NewNop(), gloasPostConsensusMsg(t, keySet, 1, proposal, true))
+	require.ErrorContains(t, err, "invalid partial sig slot: 7, expected slot: 8")
+}
+
+// A value decided for another slot anyway (more than f Byzantine operators, or an injected decided message) is
+// refused before anything is signed: the runner re-runs its value check on the decided value, and that check's
+// running-slot bind (SIP #94 §4) is its only guard on the value's slot, as in ssv-spec.
+func TestProposerRunnerProcessConsensusRejectsDecidedValueForAnotherSlot(t *testing.T) {
+	t.Parallel()
+
+	const slot = phase0.Slot(8)
+	ctx, logger := context.Background(), zap.NewNop()
+	runner, keySet, network := newProposerRunnerForTest(t, newProposerTestBeacon(nil), &stubDoppelganger{canSign: true}, 0, gloasTestConfig(slot))
+	share := runner.GetShare()
+	runner.ValCheck = ssv.NewProposerChecker(runner.signer, runner.NetworkConfig.Beacon, share.ValidatorPubKey, share.ValidatorIndex,
+		phase0.BLSPubKey(share.SharePubKey), runner.RunningDutySlot) // wired as the validator controller wires it
+	require.NoError(t, runner.StartNewDuty(ctx, logger, gloasProposerDuty(slot), keySet.Threshold))
+	concluded := observeDutyConclusion(runner.BaseRunner)
+
+	proposal, _ := gloasSelfBuildProposal(t, slot+1) // a valid Gloas value, but for the next slot
+	err := decideProposerDuty(t, runner, keySet, slot, gloasConsensusData(t, proposal))
+	var specErr *spectypes.Error
+	require.ErrorAs(t, err, &specErr)
+	require.Equal(t, spectypes.ProposerDutySlotMismatchErrorCode, specErr.Code)
+	require.Zero(t, countPartialSignatureBroadcastsByType(t, network, spectypes.PostConsensusPartialSig), "nothing signed")
+	requireConcluded(t, concluded, dutyOutcomeFailed)
+}
+
+// rejectingValueChecker rejects every value.
+type rejectingValueChecker struct{}
+
+func (rejectingValueChecker) CheckValue([]byte) error { return errors.New("value rejected") }
+
+// A decided value the runner can't take up — its own value check rejects it — concludes the duty failed: the
+// instance never decides again. No post-consensus quorum can follow either, so the reveal data is released.
+func TestProposerRunnerProcessConsensusRejectedDecidedValueFailsDuty(t *testing.T) {
+	t.Parallel()
+
+	const slot = phase0.Slot(8)
+	ctx, logger := context.Background(), zap.NewNop()
+	runner, keySet, _ := newProposerRunnerForTest(t, newProposerTestBeacon(nil), &stubDoppelganger{canSign: true}, 0, gloasTestConfig(slot))
+	require.NoError(t, runner.StartNewDuty(ctx, logger, gloasProposerDuty(slot), keySet.Threshold))
+	concluded := observeDutyConclusion(runner.BaseRunner)
+
+	proposal, produced := gloasSelfBuildProposal(t, slot)
+	runner.gloasDuty.producedEnvelope = produced // the builder operator
+	consensusData := gloasConsensusData(t, proposal)
+	runner.ValCheck = rejectingValueChecker{} // the instance takes the proposal; the decided value's check fails
+	require.ErrorContains(t, decideProposerDuty(t, runner, keySet, slot, consensusData), "decided ValidatorConsensusData invalid")
+	requireConcluded(t, concluded, dutyOutcomeFailed)
+	require.Nil(t, runner.gloasDuty.producedEnvelope)
+}
+
+// A consensus message that lands after the instance decided is skipped, and leaves the builder operator's reveal
+// data alone: the post-consensus quorum still submits the block and publishes the reveal. The skip also comes
+// back decided with an error, and was once taken for a decided value the runner can't take up: that released the
+// data under a cached builder match, and the publish dereferenced nil.
+func TestProposerRunnerGloasLateConsensusMessageKeepsReveal(t *testing.T) {
+	t.Parallel()
+
+	const slot = phase0.Slot(8)
+	ctx, logger := context.Background(), zap.NewNop()
+	beacon := newProposerTestBeacon(nil)
+	runner, keySet, _ := newProposerRunnerForTest(t, beacon, &stubDoppelganger{canSign: true}, 0, gloasTestConfig(slot))
+	require.NoError(t, runner.StartNewDuty(ctx, logger, gloasProposerDuty(slot), keySet.Threshold))
+
+	proposal, produced := gloasSelfBuildProposal(t, slot)
+	runner.gloasDuty.producedEnvelope = produced // the builder operator
+	consensusData := gloasConsensusData(t, proposal)
+	require.NoError(t, decideProposerDuty(t, runner, keySet, slot, consensusData))
+
+	// The instance decided on the first Threshold commits; the last operator's commit comes in after.
+	encoded, err := consensusData.Encode()
+	require.NoError(t, err)
+	root, err := specqbft.HashDataRoot(encoded)
+	require.NoError(t, err)
+	lateOperator := spectypes.OperatorID(len(keySet.OperatorKeys))
+	late := spectestingutils.SignQBFTMsg(keySet.OperatorKeys[lateOperator], lateOperator, &specqbft.Message{
+		MsgType:    specqbft.CommitMsgType,
+		Height:     specqbft.Height(slot),
+		Round:      specqbft.FirstRound,
+		Identifier: runner.QBFTController.GetIdentifier(),
+		Root:       root,
+	})
+	var specErr *spectypes.Error
+	require.ErrorAs(t, runner.ProcessConsensus(ctx, logger, late), &specErr)
+	require.Equal(t, spectypes.SkipConsensusMessageAsConsensusHasFinishedErrorCode, specErr.Code)
+	require.Same(t, produced, runner.gloasDuty.producedEnvelope)
+
+	for opID := spectypes.OperatorID(1); opID <= keySet.Threshold; opID++ {
+		require.NoError(t, runner.ProcessPostConsensus(ctx, logger, gloasPostConsensusMsg(t, keySet, opID, proposal, true)))
+	}
+	require.Len(t, beacon.submittedGloasBlocks, 1)
+	require.Len(t, beacon.submittedEnvelopes, 1)
+}
+
+// RunningDutySlot is the slot of the last started duty, finished or not, and 0 before the first duty or on a
+// nil runner.
+func TestProposerRunnerRunningDutySlot(t *testing.T) {
+	t.Parallel()
+
+	var nilRunner *ProposerRunner
+	require.Zero(t, nilRunner.RunningDutySlot())
+
+	const slot = phase0.Slot(8)
+	runner, keySet, _ := newProposerRunnerForTest(t, newProposerTestBeacon(nil), &stubDoppelganger{canSign: true}, 0, gloasTestConfig(slot))
+	require.Zero(t, runner.RunningDutySlot())
+
+	require.NoError(t, runner.StartNewDuty(context.Background(), zap.NewNop(), gloasProposerDuty(slot), keySet.Threshold))
+	require.Equal(t, slot, runner.RunningDutySlot())
+
+	runner.State.Succeeded = true
+	require.Equal(t, slot, runner.RunningDutySlot(), "a finished duty keeps its slot")
+}
+
+// A quorum whose roots cannot be resolved is lost, since a quorum fires once, and every packet carries the block
+// root, so the block's quorum is lost with it: the duty fails, and the builder operator releases its reveal
+// data, as the reveal waits for a block submit that can no longer happen.
+func TestProposerRunnerGloasPostConsensusLostQuorum(t *testing.T) {
+	t.Parallel()
+
+	ctx, logger := context.Background(), zap.NewNop()
+	proposal, produced := gloasSelfBuildProposal(t, 8)
+	undecodable := gloasConsensusData(t, proposal)
+	undecodable.DataSSZ = []byte{0xff}
+
+	runner, _ := newGloasProposerForPostConsensus(t, newProposerTestBeacon(nil), &stubDoppelganger{canSign: true}, proposal)
+	runner.gloasDuty.producedEnvelope = produced
+	concluded := observeDutyConclusion(runner.BaseRunner)
+
+	err := runner.processGloasPostConsensusQuorum(ctx, logger, trace.SpanFromContext(ctx), undecodable, nil)
+	require.ErrorContains(t, err, "could not decode decided gloas proposal data")
+	requireConcluded(t, concluded, dutyOutcomeFailed)
+	require.Nil(t, runner.gloasDuty.producedEnvelope)
+}
+
+// A block signature that fails to reconstruct with no bad share to drop is terminal: the block's quorum won't
+// fire again, so the block is never submitted and the reveal, which waits for that submit, can't follow. The
+// duty fails and the builder operator releases its reveal data.
+func TestProposerRunnerGloasPostConsensusTerminalBlockReconstruct(t *testing.T) {
+	t.Parallel()
+
+	ctx, logger := context.Background(), zap.NewNop()
+	proposal, produced := gloasSelfBuildProposal(t, 8)
+	beacon := newProposerTestBeacon(nil)
+	runner, keySet := newGloasProposerForPostConsensus(t, beacon, &stubDoppelganger{canSign: true}, proposal)
+	runner.gloasDuty.producedEnvelope = produced // the builder operator
+	share := runner.GetShare()
+	runner.Share[share.ValidatorIndex] = withUnrelatedValidatorKey(share)
+	concluded := observeDutyConclusion(runner.BaseRunner)
+
+	var err error
+	for opID := spectypes.OperatorID(1); opID <= keySet.Threshold; opID++ {
+		if msgErr := runner.ProcessPostConsensus(ctx, logger, gloasPostConsensusMsg(t, keySet, opID, proposal, true)); msgErr != nil {
+			err = msgErr
+		}
+	}
+	require.ErrorContains(t, err, "invalid signatures")
+	require.False(t, isRecoverableReconstructError(err))
+	requireConcluded(t, concluded, dutyOutcomeFailed)
+	require.Empty(t, beacon.submittedGloasBlocks)
+	require.Nil(t, runner.gloasDuty.producedEnvelope)
+}
+
+// Reveal data released while the cached match still makes this operator the builder is a bug elsewhere; the
+// publish fails with an error rather than dereferencing nil, which would take the whole node down.
+func TestProposerRunnerGloasPublishWithReleasedRevealDataFails(t *testing.T) {
+	t.Parallel()
+
+	ctx, logger := context.Background(), zap.NewNop()
+	proposal, _ := gloasSelfBuildProposal(t, 8)
+	beacon := newProposerTestBeacon(nil)
+	runner, keySet := newGloasProposerForPostConsensus(t, beacon, &stubDoppelganger{canSign: true}, proposal)
+	runner.gloasDuty.envelopeMatch = envelopeMatchBuilder // matched at the decision, and the data released since
+
+	var err error
+	for opID := spectypes.OperatorID(1); opID <= keySet.Threshold; opID++ {
+		if msgErr := runner.ProcessPostConsensus(ctx, logger, gloasPostConsensusMsg(t, keySet, opID, proposal, true)); msgErr != nil {
+			err = msgErr
+		}
+	}
+	require.ErrorContains(t, err, "reveal data released")
+	require.Len(t, beacon.submittedGloasBlocks, 1, "the block is still submitted")
+	require.Empty(t, beacon.submittedEnvelopes)
+}
+
+// On a Gloas decision the reveal data stays only on the builder operator, whose produced envelope is the one
+// the decided value commits to; every other operator releases its own produce's payload and blobs at once
+// rather than holding them until its next proposal.
+func TestProposerRunnerProcessConsensusGloasReleasesReveal(t *testing.T) {
+	t.Parallel()
+
+	const slot = phase0.Slot(8)
+	ctx, logger := context.Background(), zap.NewNop()
+	proposal, produced := gloasSelfBuildProposal(t, slot)
+	other, _ := gloasSelfBuildProposal(t, slot)
+	other.Block.ProposerIndex = 99
+
+	tests := []struct {
+		name     string
+		produced *gloas.ProducedEnvelope
+		kept     bool
+	}{
+		{name: "builder operator keeps the reveal data", produced: produced, kept: true},
+		{name: "other operator releases its own produce", produced: gloasTestEnvelope(t, other.Block), kept: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			runner, keySet, _ := newProposerRunnerForTest(t, newProposerTestBeacon(nil), &stubDoppelganger{canSign: true}, 0, gloasTestConfig(slot))
+			require.NoError(t, runner.StartNewDuty(ctx, logger, gloasProposerDuty(slot), keySet.Threshold))
+			runner.gloasDuty.producedEnvelope = tt.produced
+
+			require.NoError(t, decideProposerDuty(t, runner, keySet, slot, gloasConsensusData(t, proposal)))
+
+			if tt.kept {
+				require.Same(t, tt.produced, runner.gloasDuty.producedEnvelope)
+				require.Equal(t, envelopeMatchBuilder, runner.gloasDuty.envelopeMatch)
+			} else {
+				require.Nil(t, runner.gloasDuty.producedEnvelope)
+				require.Equal(t, envelopeMatchOther, runner.gloasDuty.envelopeMatch)
+			}
+		})
+	}
+}
+
+// The expected post-consensus roots: the block under DomainProposer always; on a self-build value also the
+// derived §6 envelope under DomainBeaconBuilder, optional; a single required root pre-Gloas.
+func TestProposerRunnerExpectedPostConsensusRootsAndDomains(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	proposal, _ := gloasSelfBuildProposal(t, 8)
+	runner, _ := newGloasProposerForPostConsensus(t, newProposerTestBeacon(nil), &stubDoppelganger{canSign: true}, proposal)
+
+	roots, err := runner.expectedPostConsensusRootsAndDomains(ctx)
+	require.NoError(t, err)
+	require.Len(t, roots, 2)
+	requireSameRoot(t, proposal.Block, roots[0].Root)
+	require.Equal(t, phase0.DomainType(spectypes.DomainProposer), roots[0].Domain)
+	require.False(t, roots[0].Optional)
+	envelope, err := proposal.DeriveBlindedEnvelope()
+	require.NoError(t, err)
+	requireSameRoot(t, envelope, roots[1].Root)
+	require.Equal(t, phase0.DomainType(spectypes.DomainBeaconBuilder), roots[1].Domain)
+	require.True(t, roots[1].Optional)
+
+	external := gloasExternalBuildProposal(8)
+	runner, _ = newGloasProposerForPostConsensus(t, newProposerTestBeacon(nil), &stubDoppelganger{canSign: true}, external)
+	roots, err = runner.expectedPostConsensusRootsAndDomains(ctx)
+	require.NoError(t, err)
+	require.Len(t, roots, 1)
+	requireSameRoot(t, external.Block, roots[0].Root)
+	require.Equal(t, phase0.DomainType(spectypes.DomainProposer), roots[0].Domain)
+	require.False(t, roots[0].Optional)
+
+	version := spec.DataVersionDeneb
+	preGloas, keySet, _ := newProposerRunnerForTest(t, newProposerTestBeacon(spectestingutils.TestingBeaconBlockV(version)), &stubDoppelganger{canSign: true}, 0, nil)
+	setupRunnerForPostConsensus(t, preGloas, keySet, spectestingutils.TestingProposerDutyV(version), spectestingutils.TestProposerBlindedBlockConsensusDataV(version), 1)
+	roots, err = preGloas.expectedPostConsensusRootsAndDomains(ctx)
+	require.NoError(t, err)
+	require.Len(t, roots, 1)
+	require.Equal(t, phase0.DomainType(spectypes.DomainProposer), roots[0].Domain)
+	require.False(t, roots[0].Optional)
+}
+
+// gloasProposalInput wraps the produced block as the §4 value: on a self-build produce the payload_root is
+// the envelope payload's root and the reveal data is kept for publishEnvelope; on an external bid the
+// payload_root is zero and only the builder URL is kept (for decidedBuilderURL).
+func TestProposerRunnerGloasProposalInput(t *testing.T) {
+	t.Parallel()
+
+	const slot = phase0.Slot(8)
+	ctx, logger := context.Background(), zap.NewNop()
+
+	t.Run("self-build", func(t *testing.T) {
+		beacon := newProposerTestBeacon(nil)
+		beacon.getGloasBlock = gloas.TestingBeaconBlock(slot)
+		beacon.getGloasEnvelope = gloasTestEnvelope(t, beacon.getGloasBlock)
+		runner, _, _ := newProposerRunnerForTest(t, beacon, &stubDoppelganger{canSign: true}, 0, nil)
+
+		input, err := runner.gloasProposalInput(ctx, logger, gloasProposerDuty(slot), []byte("randao"))
+		require.NoError(t, err)
+		require.Equal(t, networkconfig.DataVersionGloas, input.Version)
+		require.Equal(t, slot, beacon.lastGetSlot)
+		require.Equal(t, []byte("graffiti"), beacon.lastGetGraffiti)
+		require.Equal(t, []byte("randao"), beacon.lastGetRandao)
+
+		decoded, err := gloas.DecodeGloasProposalData(input.DataSSZ)
+		require.NoError(t, err)
+		requireSameRoot(t, beacon.getGloasBlock, decoded.Block)
+		payloadRoot, err := beacon.getGloasEnvelope.Envelope.Payload.HashTreeRoot()
+		require.NoError(t, err)
+		require.Equal(t, phase0.Root(payloadRoot), decoded.PayloadRoot)
+
+		expectedRoot, err := beacon.getGloasBlock.HashTreeRoot()
+		require.NoError(t, err)
+		require.Equal(t, expectedRoot, runner.gloasDuty.producedRoot)
+		require.Empty(t, runner.gloasDuty.builderURL)
+		require.Same(t, beacon.getGloasEnvelope, runner.gloasDuty.producedEnvelope)
+	})
+
+	t.Run("external bid", func(t *testing.T) {
+		beacon := newProposerTestBeacon(nil)
+		beacon.getGloasBlock = gloasExternalBuildProposal(slot).Block
+		beacon.getGloasBuilderURL = "https://b.example"
+		runner, _, _ := newProposerRunnerForTest(t, beacon, &stubDoppelganger{canSign: true}, 0, nil)
+
+		input, err := runner.gloasProposalInput(ctx, logger, gloasProposerDuty(slot), []byte("randao"))
+		require.NoError(t, err)
+		decoded, err := gloas.DecodeGloasProposalData(input.DataSSZ)
+		require.NoError(t, err)
+		require.Equal(t, phase0.Root{}, decoded.PayloadRoot)
+		require.Equal(t, "https://b.example", runner.gloasDuty.builderURL)
+		require.Nil(t, runner.gloasDuty.producedEnvelope)
+	})
+
+	// A beacon node answering an external bid with an envelope contradicts itself. The envelope is ignored, so
+	// the value keeps a zero payload_root and can still be proposed (ssv-spec takes the envelope's root instead,
+	// and its own value check then rejects the value).
+	t.Run("external bid with a stray envelope", func(t *testing.T) {
+		beacon := newProposerTestBeacon(nil)
+		beacon.getGloasBlock = gloasExternalBuildProposal(slot).Block
+		beacon.getGloasEnvelope = gloasTestEnvelope(t, beacon.getGloasBlock)
+		runner, _, _ := newProposerRunnerForTest(t, beacon, &stubDoppelganger{canSign: true}, 0, nil)
+
+		input, err := runner.gloasProposalInput(ctx, logger, gloasProposerDuty(slot), []byte("randao"))
+		require.NoError(t, err)
+		decoded, err := gloas.DecodeGloasProposalData(input.DataSSZ)
+		require.NoError(t, err)
+		require.Equal(t, phase0.Root{}, decoded.PayloadRoot)
+		require.Nil(t, runner.gloasDuty.producedEnvelope)
+	})
+
+	// A self-build produce without its payload has no payload_root to decide on; the value check would
+	// reject such a value, so the produce fails instead.
+	t.Run("self-build without payload", func(t *testing.T) {
+		beacon := newProposerTestBeacon(nil)
+		beacon.getGloasBlock = gloas.TestingBeaconBlock(slot)
+		runner, _, _ := newProposerRunnerForTest(t, beacon, &stubDoppelganger{canSign: true}, 0, nil)
+
+		_, err := runner.gloasProposalInput(ctx, logger, gloasProposerDuty(slot), []byte("randao"))
+		require.ErrorContains(t, err, "without its payload")
+	})
+}
+
+// StartNewDuty clears the previous duty's state, including when doppelganger protection keeps the new duty
+// from signing, so a stale owner-match can't echo an old Eth-Builder-Url, a stale envelope root can't hold the
+// new duty open, and the old reveal data isn't kept.
+func TestProposerRunnerStartNewDutyResetsGloasDutyState(t *testing.T) {
+	t.Parallel()
+
+	for _, canSign := range []bool{true, false} {
+		version := spec.DataVersionDeneb
+		beacon := newProposerTestBeacon(spectestingutils.TestingBeaconBlockV(version))
+		runner, _, _ := newProposerRunnerForTest(t, beacon, &stubDoppelganger{canSign: canSign}, 0, nil)
+		runner.cachedFullBlock, runner.cachedBlindedBlockSSZ = &api.VersionedProposal{}, []byte{0x01}
+		runner.gloasDuty = gloasDutyState{
+			producedRoot:         [32]byte{0xaa},
+			builderURL:           "https://stale.example",
+			producedEnvelope:     &gloas.ProducedEnvelope{},
+			envelopeMatch:        envelopeMatchBuilder,
+			envelopeSigningRoot:  [32]byte{0xbb},
+			blockSubmitAttempted: true,
+			envelopeHandled:      true,
+		}
+
+		require.NoError(t, runner.StartNewDuty(context.Background(), zap.NewNop(), spectestingutils.TestingProposerDutyV(version), 3))
+
+		require.Zero(t, runner.gloasDuty, "can sign: %v", canSign)
+		require.Nil(t, runner.cachedFullBlock, "can sign: %v", canSign)
+		require.Nil(t, runner.cachedBlindedBlockSSZ, "can sign: %v", canSign)
+	}
+}
+
+// decideProposerDuty decides consensusData at height on runner's started duty, feeding it the consensus messages
+// that decide it, and returns the first error ProcessConsensus returns. The instance takes the proposal as is;
+// the decided value then goes through the runner's ValCheck, as every decided value does.
+func decideProposerDuty(t *testing.T, runner *ProposerRunner, keySet *spectestingutils.TestKeySet, height phase0.Slot, consensusData *spectypes.ProposerConsensusData) error {
+	t.Helper()
+
+	ctx, logger := t.Context(), zap.NewNop()
+	runner.measurements.StartConsensus()
+	require.NoError(t, runner.decide(ctx, logger, height, consensusData, dummyValueChecker{}))
+	for _, msg := range spectestingutils.SSVDecidingMsgsForHeight(consensusData, runner.QBFTController.GetIdentifier(), specqbft.Height(height), keySet) {
+		if err := runner.ProcessConsensus(ctx, logger, msg); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func newProposerRunnerForTest(
@@ -370,7 +1285,7 @@ func newProposerRunnerForTest(
 	logger := zap.NewNop()
 	keySet := spectestingutils.Testing4SharesSet()
 	share := spectestingutils.TestingShare(keySet, spectestingutils.TestingValidatorIndex)
-	identifier := spectypes.NewMsgID(spectypes.JatoTestnet, spectestingutils.TestingValidatorPubKey[:], spectypes.RoleProposer)
+	identifier := ssvtestingutils.NewMsgID(spectypes.JatoTestnet, spectestingutils.TestingValidatorPubKey[:], spectypes.RoleProposer)
 	network := protocoltesting.NewTestingNetwork(1, keySet.OperatorKeys[1])
 	km := ekm.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager())
 	operator := spectestingutils.TestingCommitteeMember(keySet)
@@ -381,6 +1296,7 @@ func newProposerRunnerForTest(
 		spectypes.ValidatorPK(spectestingutils.TestingValidatorPubKey),
 		spectestingutils.TestingValidatorIndex,
 		phase0.BLSPubKey(share.SharePubKey),
+		nil,
 	)
 
 	qbftConfig := protocoltesting.TestingConfig(logger, keySet)
@@ -429,12 +1345,12 @@ func setupRunnerForPostConsensus(
 	t *testing.T,
 	runner *ProposerRunner,
 	keySet *spectestingutils.TestKeySet,
+	duty *spectypes.ValidatorDuty,
 	consensusData *spectypes.ProposerConsensusData,
 	leaderID spectypes.OperatorID,
 ) {
 	t.Helper()
 
-	duty := spectestingutils.TestingProposerDutyV(consensusData.Version)
 	runner.State = NewRunnerState(keySet.Threshold, duty)
 	runner.measurements.StartDutyFlow()
 	runner.measurements.StartConsensus()
@@ -445,7 +1361,7 @@ func setupRunnerForPostConsensus(
 	require.NoError(t, err)
 	runner.State.DecidedValue = encodedDecidedValue
 
-	msgID := spectypes.NewMsgID(runner.NetworkConfig.DomainType, runner.GetShare().ValidatorPubKey[:], runner.RunnerRoleType)
+	msgID := ssvtestingutils.NewMsgID(runner.NetworkConfig.DomainType, runner.GetShare().ValidatorPubKey[:], runner.RunnerRoleType)
 	qbftConfig := protocoltesting.TestingConfig(zap.NewNop(), keySet)
 	qbftConfig.ProposerF = func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
 		return leaderID

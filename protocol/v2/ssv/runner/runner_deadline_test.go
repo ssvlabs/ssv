@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -21,6 +23,7 @@ import (
 // a duty that concluded successfully.
 func TestBaseRunner_watchDutyOutcome(t *testing.T) {
 	const deadlineSnippet = "did not complete before slot end"
+	const noQuorumSnippet = "did not reach signature quorum in time"
 	const failedSnippet = "duty failed"
 
 	// Genesis is set to now so the watcher starts at the beginning of slot 0 and its deadline
@@ -46,6 +49,53 @@ func TestBaseRunner_watchDutyOutcome(t *testing.T) {
 		require.Eventually(t, func() bool {
 			return logs.FilterMessageSnippet(deadlineSnippet).Len() == 1
 		}, time.Second, 5*time.Millisecond, "expected exactly one deadline warning")
+	})
+
+	t.Run("proposer preferences: stuck horizon extends to the proposal slot start", func(t *testing.T) {
+		core, logs := observer.New(zapcore.WarnLevel)
+		b := newRunner()
+		b.RunnerRoleType = spectypes.RoleProposerPreferences
+		// duty.Slot is a future proposal slot (slot 4 → its start is 4 slots away); the §5 duty keeps
+		// converging until then, so the current slot's end must not report it stuck.
+		b.State = &State{CurrentDuty: &spectypes.ValidatorDuty{Slot: 4}}
+
+		b.watchDutyOutcome(context.Background(), zap.New(core))
+
+		time.Sleep(120 * time.Millisecond) // two slots past the emission slot's end
+		require.Zero(t, logs.FilterMessageSnippet(deadlineSnippet).Len(), "§5 must not report stuck before its proposal slot")
+
+		require.Eventually(t, func() bool {
+			return logs.FilterMessageSnippet(deadlineSnippet).Len() == 1
+		}, time.Second, 5*time.Millisecond, "expected the stuck warning at the proposal slot's start")
+	})
+
+	t.Run("PTC: an unconcluded duty is reported as a quorum miss, not a generic stall", func(t *testing.T) {
+		core, logs := observer.New(zapcore.WarnLevel)
+		b := newRunner()
+		b.RunnerRoleType = spectypes.RolePTCAttester
+
+		b.watchDutyOutcome(context.Background(), zap.New(core))
+
+		// §3 has no consensus phase and marks every other terminal path, so reaching the deadline
+		// unmarked can only mean the honest-convergence quorum never formed.
+		require.Eventually(t, func() bool {
+			return logs.FilterMessageSnippet(noQuorumSnippet).Len() == 1
+		}, time.Second, 5*time.Millisecond, "expected the quorum-miss warning")
+		require.Zero(t, logs.FilterMessageSnippet(deadlineSnippet).Len(), "PTC must not fall back to the generic stuck warning")
+	})
+
+	t.Run("PTC: a concluded duty is reported on its own terms", func(t *testing.T) {
+		core, logs := observer.New(zapcore.WarnLevel)
+		b := newRunner()
+		b.RunnerRoleType = spectypes.RolePTCAttester
+
+		// The deadline reclassification must not leak into duties that did conclude — an abstention
+		// (markDutyNotRequired) stays silent rather than being counted as a convergence failure.
+		b.watchDutyOutcome(context.Background(), zap.New(core))
+		b.dutyConcluded <- dutyConclusion{outcome: dutyOutcomeNotRequired}
+
+		time.Sleep(100 * time.Millisecond) // well past the slot end
+		require.Zero(t, logs.Len(), "an abstaining PTC duty must not warn")
 	})
 
 	t.Run("warns when the duty fails before slot end", func(t *testing.T) {
@@ -160,4 +210,25 @@ func TestBaseRunner_markDutyOutcomes(t *testing.T) {
 		b.markDutyFailed(errors.New("first"))
 		require.NotPanics(t, func() { b.markDutyFailed(errors.New("second")) }, "second conclusion must not send again")
 	})
+}
+
+// The outcome deadline is the end of the current wall-clock slot, except for a proposer-preferences duty (its
+// proposal slot's start) and a PTC duty (its own slot's end plus the gossip clock allowance, well before the
+// next slot's end).
+func TestBaseRunner_dutyOutcomeDeadline(t *testing.T) {
+	const slotDuration = 12 * time.Second
+	genesis := time.Now().Add(-(10*slotDuration + 9*time.Second)) // 9s into slot 10, past the PTC cutoff
+	slotStart := func(slot phase0.Slot) time.Time { return genesis.Add(time.Duration(slot) * slotDuration) }
+	deadline := func(role spectypes.RunnerRole, dutySlot phase0.Slot) time.Time {
+		b := &BaseRunner{
+			RunnerRoleType: role,
+			NetworkConfig:  &networkconfig.Network{Beacon: &networkconfig.Beacon{GenesisTime: genesis, SlotDuration: slotDuration}},
+			State:          &State{CurrentDuty: &spectypes.ValidatorDuty{Slot: dutySlot}},
+		}
+		return b.dutyOutcomeDeadline()
+	}
+
+	require.WithinDuration(t, slotStart(11), deadline(spectypes.RoleProposer, 10), 0)
+	require.WithinDuration(t, slotStart(40), deadline(spectypes.RoleProposerPreferences, 40), 0)
+	require.WithinDuration(t, slotStart(11).Add(maxGossipClockDisparity), deadline(spectypes.RolePTCAttester, 10), 0)
 }

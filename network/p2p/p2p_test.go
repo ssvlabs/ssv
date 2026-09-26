@@ -27,6 +27,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/protocol/v2/types/ssvtestingutils"
 )
 
 func TestGetMaxPeers(t *testing.T) {
@@ -110,16 +111,26 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 		minMeshWait           = 3 * time.Second // let the gossip mesh form before broadcasting
 	)
 
+	// The broadcast lands broadcastTimeIntoSlot into a slot — at least minMeshWait from now so the
+	// mesh has formed — so first settle which slot that is.
+	wait := broadcastTimeIntoSlot - networkconfig.TestNetwork.EstimatedTimeIntoSlot()
+	for wait < minMeshWait {
+		wait += networkconfig.TestNetwork.SlotDuration
+	}
+	broadcastSlot := networkconfig.TestNetwork.EstimatedSlotAtTime(time.Now().Add(wait))
+
 	// Guard the choice of broadcastTimeIntoSlot at the source: EstimatedRoundAt is the same
-	// estimate the validator uses, so if SlotDuration or the committee head-start ever shifts
-	// the estimated round out of the range that admits rounds 1..3, fail loudly here instead
-	// of silently reflaking on the router-count assertion below. allowedRoundsInPast and
-	// allowedRoundsInFuture are unexported in message/validation; mirror their current values.
+	// estimate the validator uses, so if the broadcast slot's interval duration or the committee
+	// head-start ever shifts the estimated round out of the range that admits rounds 1..3, fail
+	// loudly here instead of silently reflaking on the router-count assertion below.
+	// allowedRoundsInPast and allowedRoundsInFuture are unexported in message/validation; mirror
+	// their current values.
 	const (
 		allowedRoundsInPast   = 2
 		allowedRoundsInFuture = 1
 	)
-	estRound, err := roundtimer.EstimatedRoundAt(spectypes.RoleCommittee, networkconfig.TestNetwork.SlotDuration, broadcastTimeIntoSlot)
+	intervalDuration := networkconfig.TestNetwork.IntervalDuration(broadcastSlot)
+	estRound, err := roundtimer.EstimatedRoundAt(spectypes.RoleCommittee, intervalDuration, broadcastTimeIntoSlot)
 	require.NoError(t, err)
 	lowestAdmitted := specqbft.FirstRound
 	if estRound > allowedRoundsInPast {
@@ -130,13 +141,7 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 		"broadcastTimeIntoSlot=%s puts the estimated committee round at %d (admitted spread [%d, %d]), which does not admit rounds 1..3",
 		broadcastTimeIntoSlot, estRound, lowestAdmitted, highestAdmitted)
 
-	// Wait until broadcastTimeIntoSlot into a slot — at least minMeshWait from now so the mesh
-	// has formed. Cancellable so a torn-down test returns promptly instead of sleeping for up
-	// to a slot.
-	wait := broadcastTimeIntoSlot - networkconfig.TestNetwork.EstimatedTimeIntoSlot()
-	for wait < minMeshWait {
-		wait += networkconfig.TestNetwork.SlotDuration
-	}
+	// Cancellable so a torn-down test returns promptly instead of sleeping for up to a slot.
 	select {
 	case <-time.After(wait):
 	case <-ctx.Done():
@@ -225,7 +230,7 @@ func generateCommitteeMsg(ks *spectestingutils.TestKeySet, round specqbft.Round)
 	fullData := spectestingutils.TestingQBFTFullData
 
 	encodedCommitteeID := append(bytes.Repeat([]byte{0}, 16), committeeID[:]...)
-	committeeIdentifier := spectypes.NewMsgID(netCfg.DomainTypeAtSlot(phase0.Slot(height)), encodedCommitteeID, spectypes.RoleCommittee)
+	committeeIdentifier := ssvtestingutils.NewMsgID(netCfg.DomainTypeAtSlot(phase0.Slot(height)), encodedCommitteeID, spectypes.RoleCommittee)
 
 	qbftMessage := &specqbft.Message{
 		MsgType:    specqbft.ProposalMsgType,
@@ -268,7 +273,7 @@ func dummyMsg(t *testing.T, pkHex string, height int, role spectypes.RunnerRole)
 		committeeID := ssvtypes.ComputeCommitteeID([]spectypes.OperatorID{1, 2, 3, 4})
 		dutyExecutorID = append(bytes.Repeat([]byte{0}, 16), committeeID[:]...)
 	}
-	id := spectypes.NewMsgID(networkconfig.TestNetwork.DomainTypeAtSlot(phase0.Slot(height)), dutyExecutorID, role)
+	id := ssvtestingutils.NewMsgID(networkconfig.TestNetwork.DomainTypeAtSlot(phase0.Slot(height)), dutyExecutorID, role)
 
 	qbftMessage := &specqbft.Message{
 		MsgType:    specqbft.CommitMsgType,

@@ -10,11 +10,11 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	ssz "github.com/ferranbt/fastssz"
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
+
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
@@ -68,11 +68,50 @@ type Runner interface {
 	OnQBFTRoundTimeout(ctx context.Context, logger *zap.Logger, timeoutData *ssvtypes.TimeoutData) error
 
 	// expectedPreConsensusRootsAndDomain an INTERNAL function, returns the expected pre-consensus roots to sign
-	expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error)
-	// expectedPostConsensusRootsAndDomain an INTERNAL function, returns the expected post-consensus roots to sign
-	expectedPostConsensusRootsAndDomain(ctx context.Context) ([]ssz.HashRoot, phase0.DomainType, error)
+	expectedPreConsensusRootsAndDomain() ([]spectypes.HashRoot, phase0.DomainType, error)
+	// expectedPostConsensusRootsAndDomains an INTERNAL function, returns the expected post-consensus roots to
+	// sign, each with its domain
+	expectedPostConsensusRootsAndDomains(ctx context.Context) ([]PostConsensusRoot, error)
 	// executeDuty an INTERNAL function, executes a duty.
 	executeDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty) error
+}
+
+// PostConsensusAwaiter is implemented by a runner whose finished duty still expects post-consensus packets:
+// the Gloas proposer, until the §6 envelope root reconstructs (SIP #94 §4). The validator's queue consumer
+// keeps popping that slot's post-consensus packets for it while no duty is running.
+type PostConsensusAwaiter interface {
+	AwaitingPostConsensus() (phase0.Slot, bool)
+}
+
+// MultiSlotRunner is implemented by a runner that serves duties for several slots at once — the proposer
+// preferences dispatcher, one sub-runner per upcoming proposal slot — so no single slot is "the current one".
+// The validator's queue consumer keeps its single-duty notions off such a runner: the stale-message floor (a
+// message for a lower slot is still live while a higher slot's duty starts) and the hold of everything but
+// duty-starts while no duty runs (one slot's duty concluding says nothing about the others', and the runner
+// stashes partials for slots it has not started itself).
+type MultiSlotRunner interface {
+	// ServesMultipleSlots is a marker with no behavior of its own.
+	ServesMultipleSlots()
+}
+
+// PostConsensusRoot pairs a post-consensus signing root with the domain it is signed under and whether a
+// packet may omit it. Every runner signs all of its roots under one domain and requires each of them; the
+// Gloas proposer adds the §6 blinded-envelope root under DomainBeaconBuilder, optional because a peer may
+// sign the block alone (SIP #94 §4).
+type PostConsensusRoot struct {
+	Root     spectypes.HashRoot
+	Domain   phase0.DomainType
+	Optional bool
+}
+
+// singleDomainPostConsensusRoots pairs each root with one domain, all required — the shape of every runner
+// but the Gloas proposer.
+func singleDomainPostConsensusRoots(domain phase0.DomainType, roots ...spectypes.HashRoot) []PostConsensusRoot {
+	ret := make([]PostConsensusRoot, 0, len(roots))
+	for _, root := range roots {
+		ret = append(ret, PostConsensusRoot{Root: root, Domain: domain})
+	}
+	return ret
 }
 
 type DoppelgangerProvider interface {
@@ -200,6 +239,9 @@ func (b *BaseRunner) GetLastRound() specqbft.Round {
 }
 
 func (b *BaseRunner) GetStateRoot() ([32]byte, error) {
+	if b.State == nil {
+		return [32]byte{}, errors.New("runner state is not initialized")
+	}
 	return b.State.GetRoot()
 }
 
@@ -249,6 +291,32 @@ func (b *BaseRunner) MarshalJSON() ([]byte, error) {
 	return byts, err
 }
 
+// marshalRunnerStateJSON encodes a runner whose persisted state is just its BaseRunner. ValCheck is a
+// runtime-only dependency but is kept in the JSON as null to preserve the historical runner-state shape
+// (and thus the state roots spec tests pin); runners restore it via unmarshalRunnerStateJSON.
+func marshalRunnerStateJSON(b *BaseRunner) ([]byte, error) {
+	return json.Marshal(&struct {
+		BaseRunner *BaseRunner `json:"BaseRunner"`
+		ValCheck   any         `json:"ValCheck"`
+	}{BaseRunner: b})
+}
+
+// unmarshalRunnerStateJSON restores the BaseRunner written by marshalRunnerStateJSON; ValCheck is left
+// nil for the caller to rehydrate.
+func unmarshalRunnerStateJSON(data []byte) (*BaseRunner, error) {
+	aux := &struct {
+		BaseRunner *BaseRunner     `json:"BaseRunner"`
+		ValCheck   json.RawMessage `json:"ValCheck"`
+	}{}
+	if err := json.Unmarshal(data, aux); err != nil {
+		return nil, err
+	}
+	if aux.BaseRunner == nil {
+		return nil, fmt.Errorf("missing BaseRunner")
+	}
+	return aux.BaseRunner, nil
+}
+
 // baseStartNewDuty is a base func that all runner implementation can call to start a duty
 func (b *BaseRunner) baseStartNewDuty(ctx context.Context, logger *zap.Logger, runner Runner, duty spectypes.Duty, quorum uint64) error {
 	if err := b.ShouldProcessDuty(duty); err != nil {
@@ -294,6 +362,7 @@ const (
 	dutyOutcomeNotRequired dutyOutcome = "not_required" // completed with nothing to submit (e.g. not selected as aggregator)
 	dutyOutcomeFailed      dutyOutcome = "failed"       // terminated by a non-recoverable error
 	dutyOutcomeStuck       dutyOutcome = "stuck"        // not concluded before the end of the current wall-clock slot
+	dutyOutcomeNoQuorum    dutyOutcome = "no_quorum"    // reached the deadline having executed, but the signature quorum never formed
 )
 
 // dutyConclusion is handed by a marker (markDutySucceeded / markDutyNotRequired / markDutyFailed) to
@@ -304,29 +373,39 @@ type dutyConclusion struct {
 }
 
 // watchDutyOutcome reports a duty's terminal outcome exactly once: it records the
-// ssv.runner.duty.outcome metric and warns for the outcomes worth an operator's attention (failed
-// and stuck). It knows nothing about how duties complete — the outcome is delivered by a marker
+// ssv.runner.duty.outcome metric and warns for the outcomes worth an operator's attention (failed,
+// stuck, no_quorum). It knows nothing about how duties complete — the outcome is delivered by a marker
 // over dutyConcluded, not by reading runner state — so it's safe alongside the single-threaded
 // message loop. It MUST be started before executeDuty so a duty that concludes synchronously is still
 // reported. Each duty gets its own channel: starting the next duty overwrites the field, and the
 // previous duty's watcher (if still pending) reports its own duty and is reaped by its own timer.
-//
-// The deadline is the end of the current wall-clock slot rather than duty.Slot's end because some
-// duties are stamped with a slot in the past (a voluntary-exit envelope carries blockSlot+4 but
-// executes at blockSlot+12); for beacon duties the two coincide.
 func (b *BaseRunner) watchDutyOutcome(ctx context.Context, logger *zap.Logger) {
 	concluded := make(chan dutyConclusion, 1)
 	b.dutyConcluded = concluded
 
-	deadline := b.NetworkConfig.SlotStartTime(b.NetworkConfig.EstimatedCurrentSlot() + 1)
+	deadline := b.dutyOutcomeDeadline()
+
+	// A PTC attestation (SIP #94 §3) has no consensus phase, and every other way it can end already
+	// marks the duty — abstain → not_required, beacon-node/sign/broadcast failure → failed. So
+	// reaching the deadline unmarked means exactly one thing: the honest-convergence quorum never
+	// formed. Report that as its own outcome so §3 convergence health is gaugeable, rather than
+	// hiding inside the generic "likely stuck" that every role shares.
+	deadlineOutcome := dutyOutcomeStuck
+	if b.RunnerRoleType == spectypes.RolePTCAttester {
+		deadlineOutcome = dutyOutcomeNoQuorum
+	}
 
 	report := func(c dutyConclusion) {
 		recordDutyOutcome(ctx, b.GetRole(), c.outcome)
-		if c.outcome == dutyOutcomeFailed {
+		switch c.outcome {
+		case dutyOutcomeFailed:
 			logger.Warn("⚠️ duty failed", zap.Error(c.reason))
-		}
-		if c.outcome == dutyOutcomeStuck {
+		case dutyOutcomeStuck:
 			logger.Warn("⚠️ duty did not complete before slot end (likely stuck)")
+		case dutyOutcomeNoQuorum:
+			logger.Warn("⚠️ duty did not reach signature quorum in time (operators did not converge)")
+		case dutyOutcomeSucceeded, dutyOutcomeNotRequired:
+			logger.Debug("duty concluded", zap.String("outcome", string(c.outcome)))
 		}
 	}
 
@@ -342,10 +421,41 @@ func (b *BaseRunner) watchDutyOutcome(ctx context.Context, logger *zap.Logger) {
 			case c := <-concluded:
 				report(c)
 			default:
-				report(dutyConclusion{outcome: dutyOutcomeStuck})
+				report(dutyConclusion{outcome: deadlineOutcome})
 			}
 		}
 	}()
+}
+
+// maxGossipClockDisparity is the consensus p2p spec's MAXIMUM_GOSSIP_CLOCK_DISPARITY: how far past a slot's
+// end gossip still takes a message that must be for the current slot.
+const maxGossipClockDisparity = 500 * time.Millisecond
+
+// dutyOutcomeDeadline is when watchDutyOutcome stops waiting for the current duty to conclude. It is the end
+// of the current wall-clock slot rather than duty.Slot's end, because some duties are stamped with a slot in
+// the past (a voluntary-exit duty carries blockSlot+4 but executes at blockSlot+12); for beacon duties the two
+// coincide. Two roles move it later.
+func (b *BaseRunner) dutyOutcomeDeadline() time.Time {
+	deadline := b.NetworkConfig.SlotStartTime(b.NetworkConfig.EstimatedCurrentSlot() + 1)
+	switch {
+	case b.RunnerRoleType == spectypes.RoleProposerPreferences && b.State != nil:
+		// A proposer-preferences duty emits ahead of its proposal slot and legitimately keeps converging
+		// across the gap — operators broadcast their partials at their own emission ticks — so its outcome
+		// horizon is the proposal slot's start (the preference is moot once that slot arrives), not the
+		// end of the emission slot.
+		if d := b.NetworkConfig.SlotStartTime(b.State.CurrentDuty.DutySlot()); d.After(deadline) {
+			deadline = d
+		}
+	case b.RunnerRoleType == spectypes.RolePTCAttester && b.State != nil:
+		// A PTC attestation (SIP #94 §3) counts only while gossip still takes it: peers ignore a payload
+		// attestation once its slot is over, allowing maxGossipClockDisparity, and only the next slot's block,
+		// built as that slot starts, can include it. So its horizon is its own slot's end plus that allowance;
+		// a quorum later than that is too late to count, even if the beacon node accepts the submit.
+		if d := b.NetworkConfig.SlotStartTime(b.State.CurrentDuty.DutySlot() + 1).Add(maxGossipClockDisparity); d.After(deadline) {
+			deadline = d
+		}
+	}
+	return deadline
 }
 
 // signAndBroadcastPartialSigMsgs encodes msgs into an SSVMessage, signs it with opSigner,
@@ -355,7 +465,7 @@ func (b *BaseRunner) signAndBroadcastPartialSigMsgs(
 	ctx context.Context,
 	network protocolp2p.Network,
 	opSigner ssvtypes.OperatorSigner,
-	validatorPubKey []byte,
+	validatorPubKey spectypes.ValidatorPK,
 	msgs *spectypes.PartialSignatureMessages,
 ) error {
 	// Reuse the existing span instead of generating new one to keep tracing-data lightweight.
@@ -364,7 +474,7 @@ func (b *BaseRunner) signAndBroadcastPartialSigMsgs(
 	// Use the fork-aware domain so the pubsub message validator accepts the message after the
 	// Boole fork activates (post-fork it checks NextDomainType). Mirrors CommitteeRunner and
 	// QBFT domain selection. Fixes #2915.
-	msgID := spectypes.NewMsgID(b.NetworkConfig.DomainTypeAtSlot(msgs.Slot), validatorPubKey, b.RunnerRoleType)
+	msgID := spectypes.NewValidatorMsgID(b.NetworkConfig.DomainTypeAtSlot(msgs.Slot), validatorPubKey, b.RunnerRoleType)
 	encodedMsg, err := msgs.Encode()
 	if err != nil {
 		return fmt.Errorf("could not encode partial signature messages: %w", err)
@@ -394,6 +504,42 @@ func (b *BaseRunner) signAndBroadcastPartialSigMsgs(
 	}
 
 	return nil
+}
+
+// signAndBroadcastPostConsensusMsg signs a post-consensus partial-signature message as the operator and
+// broadcasts it on its slot's subnet. Unlike signAndBroadcastPartialSigMsgs (pre-consensus), it keys the
+// message id by the slot's fork domain and uses BroadcastAtSlot.
+func (b *BaseRunner) signAndBroadcastPostConsensusMsg(
+	network protocolp2p.Network,
+	opSigner ssvtypes.OperatorSigner,
+	validatorPubKey spectypes.ValidatorPK,
+	msgs *spectypes.PartialSignatureMessages,
+) error {
+	domain := b.NetworkConfig.DomainTypeAtSlot(msgs.Slot)
+	msgID := spectypes.NewValidatorMsgID(domain, validatorPubKey, b.RunnerRoleType)
+	encodedMsg, err := msgs.Encode()
+	if err != nil {
+		return fmt.Errorf("could not encode post-consensus partial signature message: %w", err)
+	}
+
+	ssvMsg := &spectypes.SSVMessage{
+		MsgType: spectypes.SSVPartialSignatureMsgType,
+		MsgID:   msgID,
+		Data:    encodedMsg,
+	}
+
+	sig, err := opSigner.SignSSVMessage(ssvMsg)
+	if err != nil {
+		return fmt.Errorf("could not sign post-consensus SSV message: %w", err)
+	}
+
+	signed := &spectypes.SignedSSVMessage{
+		Signatures:  [][]byte{sig},
+		OperatorIDs: []spectypes.OperatorID{opSigner.GetOperatorID()},
+		SSVMessage:  ssvMsg,
+	}
+
+	return network.BroadcastAtSlot(signed, msgs.Slot)
 }
 
 // basePreConsensusMsgProcessing is a base func that all runner implementation can call for processing a pre-consensus msg
@@ -428,7 +574,11 @@ func (b *BaseRunner) basePreConsensusMsgProcessing(ctx context.Context, logger *
 	return hasQuorum, slices.Collect(maps.Keys(quorumRoots)), nil
 }
 
-// baseConsensusMsgProcessing is a base func that all runner implementation can call for processing a consensus msg
+// baseConsensusMsgProcessing is a base func that all runner implementation can call for processing a consensus msg.
+// It returns decided, with the decided value, for the message that decides the running instance. decided also comes
+// with an error in two cases: a message for an instance that already decided, a benign skip
+// (SkipConsensusMessageAsConsensusHasFinishedErrorCode, as in ssv-spec), and a decided value this runner can't take
+// up, which concludes the duty failed.
 func (b *BaseRunner) baseConsensusMsgProcessing(ctx context.Context, logger *zap.Logger, valueCheckFn specqbft.ProposedValueCheckF, msg *spectypes.SignedSSVMessage, decidedValue spectypes.Encoder) (bool, spectypes.Encoder, error) {
 	// Reuse the existing span instead of generating new one to keep tracing-data lightweight.
 	span := trace.SpanFromContext(ctx)
@@ -463,17 +613,24 @@ func (b *BaseRunner) baseConsensusMsgProcessing(ctx context.Context, logger *zap
 		return false, nil, err
 	}
 
+	// The instance decides once, so a decided value this runner can't take up leaves its duty nothing to
+	// wait for: conclude it failed.
+	failDecided := func(err error) (bool, spectypes.Encoder, error) {
+		b.markDutyFailed(err)
+		return true, nil, err
+	}
+
 	if err := decidedValue.Decode(decidedMsg.FullData); err != nil {
-		return true, nil, fmt.Errorf("failed to parse decided value to ValidatorConsensusData: %w", err)
+		return failDecided(fmt.Errorf("failed to parse decided value to ValidatorConsensusData: %w", err))
 	}
 
 	if err := b.validateDecidedConsensusData(valueCheckFn, decidedValue); err != nil {
-		return true, nil, fmt.Errorf("decided ValidatorConsensusData invalid: %w", err)
+		return failDecided(fmt.Errorf("decided ValidatorConsensusData invalid: %w", err))
 	}
 
 	decidedValueEncoded, err := decidedValue.Encode()
 	if err != nil {
-		return true, nil, fmt.Errorf("could not encode decided value: %w", err)
+		return failDecided(fmt.Errorf("could not encode decided value: %w", err))
 	}
 
 	const qbftInstanceIsDecidedEvent = "QBFT instance is decided"
@@ -484,7 +641,7 @@ func (b *BaseRunner) baseConsensusMsgProcessing(ctx context.Context, logger *zap
 	b.State.DecidedValue = decidedValueEncoded
 	currentDutySlot, err := b.currentDutySlot()
 	if err != nil {
-		return true, nil, fmt.Errorf("current duty slot: %w", err)
+		return failDecided(fmt.Errorf("current duty slot: %w", err))
 	}
 	b.highestDecidedSlot = currentDutySlot
 

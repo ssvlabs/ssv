@@ -26,6 +26,8 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/observability/log/fields"
+	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
+	"github.com/ssvlabs/ssv/utils/async"
 	"github.com/ssvlabs/ssv/utils/hashmap"
 )
 
@@ -114,9 +116,22 @@ type GoClient struct {
 	beaconConfigMu   sync.RWMutex
 	beaconConfig     *networkconfig.Beacon
 	beaconConfigInit chan struct{}
+	// beaconConfigSource is the address of the client beaconConfig was taken from, named when another
+	// client's fork schedule lags or leads it. It is written once, with beaconConfig and under
+	// beaconConfigMu, so a reader that has seen a non-nil beaconConfig reads it without the lock.
+	beaconConfigSource string
+	// proposerDutiesDependentRoots remembers the dependent root each epoch's last successful
+	// ProposerDutiesDependentRoot call returned, for LastProposerDutiesDependentRoot.
+	proposerDutiesDependentRoots *ttlcache.Cache[phase0.Epoch, phase0.Root]
 
 	clients     []Client
 	multiClient MultiClient
+
+	// clientAddresses holds each client's unmasked address for the hand-rolled Gloas requests (ptc.go,
+	// gloas_proposer.go, gloas_envelope.go, proposer_preferences.go, builder_preferences.go) —
+	// Client.Address() is log-masked and unusable for real requests. Drop when those endpoints become
+	// typed go-eth2-client calls.
+	clientAddresses map[Client]string
 
 	syncDistanceTolerance phase0.Slot
 
@@ -132,6 +147,13 @@ type GoClient struct {
 	// Unlike attestationDataCache — this node's local, pre-consensus view — this is the value
 	// the cluster attested with, which is the one an aggregate must match.
 	attestedDataRootCache *ttlcache.Cache[attestedDataRootKey, phase0.Root]
+	// payloadAttestationReqInflight joins the simultaneous fetches of a slot's payload-attestation data —
+	// one per PTC member of the slot, all at the PTC cutoff — into a single request (issue #3031).
+	payloadAttestationReqInflight singleflight.Group[phase0.Slot, *gloas.PayloadAttestationData]
+	// payloadAttestationDataCache reuses a slot's fetched payload-attestation data, so every PTC member of
+	// this node signs the same observation. The data is slot-level; nil — the beacon node's "no block seen"
+	// abstain signal — is never cached, since a block may still arrive.
+	payloadAttestationDataCache *ttlcache.Cache[phase0.Slot, *gloas.PayloadAttestationData]
 	// domainDataReqInflight joins parallel requests for the same epoch/domain pair.
 	domainDataReqInflight singleflight.Group[domainDataCacheKey, phase0.Domain]
 	// domainDataCache helps reuse recently fetched domains. Domains change only at epoch boundaries,
@@ -155,6 +177,13 @@ type GoClient struct {
 	// committeesCache caches Beacon committees by epoch to avoid repeated fetching
 	committeesCache *ttlcache.Cache[phase0.Epoch, []*eth2apiv1.BeaconCommittee]
 
+	// proposerDutiesDependentRootInflight collapses the per-epoch dependent_root GETs that the
+	// proposer-preferences runners issue concurrently — one per local proposing validator in the epoch
+	// (SIP #94 §5) — into a single request. Deliberately not TTL-cached: a reorg re-emission must
+	// observe a fresh dependent_root, and the duplication removed here is a same-instant burst across
+	// the epoch's proposers, not reuse over time.
+	proposerDutiesDependentRootInflight singleflight.Group[phase0.Epoch, phase0.Root]
+
 	commonTimeout time.Duration
 	longTimeout   time.Duration
 
@@ -176,11 +205,14 @@ type GoClient struct {
 	// activatedClients tracks which clients have been activated before (for reconnection detection)
 	activatedClients *hashmap.Map[string, struct{}]
 
-	// headCache maps Slot → Root from HeadEvents to detect stale attestation data.
+	// headCache maps Slot → Root from HeadEvents, to detect stale attestation data and to answer
+	// HeadRootAtSlot.
 	headCache *ttlcache.Cache[phase0.Slot, phase0.Root]
 
 	// fetchAttestationDataFunc allows overriding fetchAttestationData for testing.
 	fetchAttestationDataFunc func(ctx context.Context, slot phase0.Slot) (*phase0.AttestationData, error)
+	// fetchPayloadAttestationDataFunc allows overriding fetchPayloadAttestationData for testing.
+	fetchPayloadAttestationDataFunc func(ctx context.Context, slot phase0.Slot) (*gloas.PayloadAttestationData, error)
 }
 
 type domainDataCacheKey struct {
@@ -208,6 +240,7 @@ func New(ctx context.Context, logger *zap.Logger, opt Options) (*GoClient, error
 		proposalSoftTimeout:                opt.ProposalSoftTimeout,
 		supportedTopics:                    []eventTopic{eventTopicHead, eventTopicBlock},
 		activatedClients:                   hashmap.New[string, struct{}](),
+		clientAddresses:                    make(map[Client]string),
 	}
 
 	// First error stops the loop on purpose. addSingleClient sets WithAllowDelayedStart(true), so a valid
@@ -264,6 +297,12 @@ func New(ctx context.Context, logger *zap.Logger, opt Options) (*GoClient, error
 	)
 	go client.attestedDataRootCache.Start()
 
+	client.payloadAttestationDataCache = ttlcache.New(
+		// PTC members fetch at their slot's cutoff and never later, so two slots is plenty.
+		ttlcache.WithTTL[phase0.Slot, *gloas.PayloadAttestationData](2 * config.SlotDuration),
+	)
+	go client.payloadAttestationDataCache.Start()
+
 	// Domain data and committee assignments change at epoch boundaries, so keep both caches
 	// for approximately two epochs.
 	twoEpochTTL := config.SlotDuration * time.Duration(config.SlotsPerEpoch) * 2 //nolint:gosec
@@ -275,18 +314,26 @@ func New(ctx context.Context, logger *zap.Logger, opt Options) (*GoClient, error
 	client.committeesCache = ttlcache.New(ttlcache.WithTTL[phase0.Epoch, []*eth2apiv1.BeaconCommittee](twoEpochTTL))
 	go client.committeesCache.Start()
 
+	// A proposal slot's preference is emitted up to the proposer lookahead (two epochs) ahead of it.
+	client.proposerDutiesDependentRoots = ttlcache.New(ttlcache.WithTTL[phase0.Epoch, phase0.Root](twoEpochTTL))
+	go client.proposerDutiesDependentRoots.Start()
+
 	// Initialize before startEventListener to capture HeadEvents.
 	client.headCache = ttlcache.New[phase0.Slot, phase0.Root](ttlcache.WithTTL[phase0.Slot, phase0.Root](2 * config.SlotDuration))
 	go client.headCache.Start()
 
 	// Set default fetch function (can be overridden in tests).
 	client.fetchAttestationDataFunc = client.fetchAttestationData
+	client.fetchPayloadAttestationDataFunc = client.fetchPayloadAttestationData
 
 	client.log.Debug("starting event listener")
 
 	if err := client.startEventListener(ctx); err != nil {
 		return nil, fmt.Errorf("failed to launch event listener: %w", err)
 	}
+
+	// The node's fork schedule is fixed from here on; keep checking the clients' for drift from it.
+	async.Interval(ctx, forkScheduleRecheckInterval, func() { client.recheckForkSchedules(ctx) })
 
 	return client, nil
 }
@@ -327,7 +374,19 @@ func (gc *GoClient) initMultiClient(ctx context.Context) error {
 	return nil
 }
 
+// normalizeBeaconAddr ensures the configured beacon address carries an http(s) scheme, mirroring
+// go-eth2-client's parseAddress. eth2clienthttp normalizes internally, but the hand-rolled Gloas/PTC
+// requests concatenate this stored address into request URLs, so a scheme-less config (e.g. "host:port")
+// would otherwise fail http.NewRequest. Basic-auth credentials and any path prefix are preserved.
+func normalizeBeaconAddr(addr string) string {
+	if !strings.HasPrefix(addr, "http://") && !strings.HasPrefix(addr, "https://") {
+		addr = "http://" + addr
+	}
+	return strings.TrimSuffix(addr, "/")
+}
+
 func (gc *GoClient) addSingleClient(ctx context.Context, addr string) error {
+	addr = normalizeBeaconAddr(addr)
 	httpClient, err := eth2clienthttp.New(
 		ctx,
 		// WithAddress supplies the address of the beacon node, in host:port format.
@@ -348,7 +407,9 @@ func (gc *GoClient) addSingleClient(ctx context.Context, addr string) error {
 		return fmt.Errorf("create http client: %w", err)
 	}
 
-	gc.clients = append(gc.clients, httpClient.(*eth2clienthttp.Service))
+	svc := httpClient.(*eth2clienthttp.Service)
+	gc.clients = append(gc.clients, svc)
+	gc.clientAddresses[svc] = addr
 
 	return nil
 }
@@ -427,6 +488,7 @@ func (gc *GoClient) applyBeaconConfig(nodeAddress string, beaconConfig *networkc
 
 	if gc.beaconConfig == nil {
 		gc.beaconConfig = beaconConfig
+		gc.beaconConfigSource = nodeAddress
 		close(gc.beaconConfigInit)
 
 		gc.log.Info("beacon config has been initialized",
@@ -437,10 +499,107 @@ func (gc *GoClient) applyBeaconConfig(nodeAddress string, beaconConfig *networkc
 	}
 
 	if err := gc.beaconConfig.AssertSame(beaconConfig); err != nil {
+		var lag *networkconfig.ForkScheduleLagError
+		if errors.As(err, &lag) {
+			// The client and the node agree on the chain so far and differ only about a fork ahead of it: the
+			// same network at different configuration versions, the normal state of a staggered client
+			// upgrade. The node keeps the schedule it started with and keeps serving from the client, until
+			// it gets close to a fork its schedule lacks (see reportForkScheduleLag).
+			gc.reportForkScheduleLag(nodeAddress, gc.beaconConfig, lag)
+			return gc.beaconConfig, nil
+		}
 		return gc.beaconConfig, fmt.Errorf("beacon config misalign: %w", err)
 	}
 
 	return gc.beaconConfig, nil
+}
+
+// forkScheduleRecheckInterval paces recheckForkSchedules. go-eth2-client serves the spec from a cache it
+// clears every five minutes, so a faster poll would only re-read the cached copy.
+const forkScheduleRecheckInterval = 5 * time.Minute
+
+// recheckForkSchedules re-reads every active client's config and reports any fork-schedule drift from the
+// node's. The node's schedule is fixed when its config is first taken and cannot change while it runs, so a
+// client that learns of a fork later — the only client upgraded, or every client, while the connection came
+// back within one probe so the activation hook never re-read it — would otherwise carry the node across
+// that fork on the old schedule, failing every duty from then on with nothing in the logs naming the fork.
+func (gc *GoClient) recheckForkSchedules(ctx context.Context) {
+	for _, c := range gc.clients {
+		if !c.IsActive() {
+			continue
+		}
+		cfg, err := gc.fetchBeaconConfig(ctx, c)
+		if err != nil {
+			gc.log.Debug("couldn't re-read a client's beacon config for the fork-schedule recheck", fields.Address(c.Address()), zap.Error(err))
+			continue
+		}
+		gc.checkForkSchedule(c.Address(), cfg)
+	}
+}
+
+// checkForkSchedule compares a client's freshly read config with the node's: a fork-schedule lag on either
+// side goes through reportForkScheduleLag; any other difference is reported as an error and the node carries
+// on (the activation hook, which admits a client, fatals on it instead).
+func (gc *GoClient) checkForkSchedule(clientAddr string, cfg *networkconfig.Beacon) {
+	node := gc.getBeaconConfig()
+	err := node.AssertSame(cfg)
+	if err == nil {
+		return
+	}
+	var lag *networkconfig.ForkScheduleLagError
+	if errors.As(err, &lag) {
+		gc.reportForkScheduleLag(clientAddr, node, lag)
+		return
+	}
+	gc.log.Error("beacon config: a client's config no longer matches the node's", fields.Address(clientAddr), zap.Error(err))
+}
+
+// forkScheduleLagStopEpochs is how close to a fork the node stops when its schedule lacks the fork: two
+// epochs, so the restarted node has the new schedule before the fork's one-epoch pre-fork window opens
+// (Gloas' preference pre-emission).
+const forkScheduleLagStopEpochs = 2
+
+// reportForkScheduleLag says which side of a fork-schedule disagreement has to move. Ours is the node's
+// schedule, taken at start from the first client to connect (node_config_source) and fixed since.
+//
+// When it lacks a fork the client schedules, the node is the stale side: it adopts the fork only on a
+// restart, which reads the schedule from whichever client connects first, so every client has to schedule
+// the fork by then, the config source included. Crossing the fork on the old schedule fails every duty, so
+// this is an error, and within forkScheduleLagStopEpochs of the fork the node stops; restarted, it stops
+// again for as long as the client it reads from still lacks the fork.
+//
+// When the client lacks a fork the node schedules, the client is the stale side and needs upgrading before
+// the fork: a warning, as the node keeps serving from it until then. Two schedules that both name the fork
+// but differ (epoch or version) can't be told apart from here, so that is an error, with the restart
+// advice conditional on the client being right.
+func (gc *GoClient) reportForkScheduleLag(clientAddr string, node *networkconfig.Beacon, lag *networkconfig.ForkScheduleLagError) {
+	logFields := []zap.Field{
+		zap.String("fork", lag.Version.String()),
+		zap.String("node_config", networkconfig.DescribeForkSchedule(lag.Ours)),
+		zap.String("node_config_source", gc.beaconConfigSource),
+		zap.String("client", networkconfig.DescribeForkSchedule(lag.Theirs)),
+		fields.Address(clientAddr),
+	}
+	nodeScheduled := lag.Ours.Epoch != networkconfig.FarFutureEpoch
+	clientScheduled := lag.Theirs.Epoch != networkconfig.FarFutureEpoch
+	switch {
+	case clientScheduled && !nodeScheduled:
+		const nodeLags = "beacon config: a client schedules a fork the node started without, which the node cannot adopt while running; " +
+			"upgrade every client that lacks it, the node's config source included, then restart the node before that fork"
+		logFields = append(logFields, fields.Epoch(lag.Theirs.Epoch))
+		if node.EstimatedCurrentEpoch()+forkScheduleLagStopEpochs >= lag.Theirs.Epoch {
+			gc.log.Fatal(nodeLags+"; stopping, as the fork is too close to cross on the old schedule", logFields...)
+			return // tests may override Fatal's behavior
+		}
+		gc.log.Error(nodeLags, logFields...)
+	case nodeScheduled && !clientScheduled:
+		gc.log.Warn("beacon config: a client has not scheduled a fork the node's config schedules; upgrade the client before that fork",
+			append(logFields, fields.Epoch(lag.Ours.Epoch))...)
+	default:
+		gc.log.Error("beacon config: a client and the node's config schedule a fork differently; "+
+			"if the client is right, fix every client that disagrees with it, the node's config source included, then restart the node before that fork",
+			logFields...)
+	}
 }
 
 var (

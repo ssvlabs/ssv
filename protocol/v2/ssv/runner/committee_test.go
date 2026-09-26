@@ -23,6 +23,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
+	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
@@ -191,17 +192,23 @@ func newCommitteeRunnerEnvInternal(
 	}
 }
 
-func (e *committeeRunnerEnv) startAndDecideCommitteeDuty(t *testing.T, duty *spectypes.CommitteeDuty) {
+// startAndDecideCommitteeDuty starts duty and feeds the runner the consensus messages that decide it. It returns
+// a channel that observes the duty's conclusion and the first error ProcessConsensus returns.
+func (e *committeeRunnerEnv) startAndDecideCommitteeDuty(t *testing.T, duty *spectypes.CommitteeDuty) (chan dutyConclusion, error) {
 	t.Helper()
 
 	// t.Context: StartNewDuty spawns a deadline watcher that may log at slot end; the test-scoped
 	// context releases it before the zaptest logger becomes invalid.
 	ctx := t.Context()
 	require.NoError(t, e.runner.StartNewDuty(ctx, e.logger, duty, e.sampleKey.Threshold))
+	concluded := observeDutyConclusion(e.runner.BaseRunner)
 
 	for _, msg := range spectestingutils.CommitteeInputForDuty(duty, duty.Slot, e.keySetMap, false) {
-		require.NoError(t, e.runner.ProcessConsensus(ctx, e.logger, msg))
+		if err := e.runner.ProcessConsensus(ctx, e.logger, msg); err != nil {
+			return concluded, err
+		}
 	}
+	return concluded, nil
 }
 
 func decodeBroadcastedPartialSig(t *testing.T, msg *spectypes.SignedSSVMessage) *spectypes.PartialSignatureMessages {
@@ -254,15 +261,24 @@ func TestConstructAttestationData(t *testing.T) {
 	}
 
 	t.Run("pre electra keeps committee index", func(t *testing.T) {
-		attData := constructAttestationData(vote, duty, spec.DataVersionDeneb)
+		attData := constructAttestationData(vote, duty, spec.DataVersionDeneb, nil)
 		require.Equal(t, spectestingutils.TestingCommitteeIndex, attData.Index)
 		require.Equal(t, duty.Slot, attData.Slot)
 		require.Equal(t, vote.BlockRoot, attData.BeaconBlockRoot)
 	})
 
 	t.Run("electra zeros committee index", func(t *testing.T) {
-		attData := constructAttestationData(vote, duty, spec.DataVersionElectra)
+		attData := constructAttestationData(vote, duty, spec.DataVersionElectra, nil)
 		require.Zero(t, attData.Index)
+		require.Equal(t, duty.Slot, attData.Slot)
+		require.Equal(t, vote.BlockRoot, attData.BeaconBlockRoot)
+	})
+
+	t.Run("gloas uses the decided payload-status index", func(t *testing.T) {
+		index := phase0.CommitteeIndex(1)
+		// The Gloas index overrides the Electra zero (SIP #94 §2) — it is the value that gets signed.
+		attData := constructAttestationData(vote, duty, spec.DataVersionFulu, &index)
+		require.Equal(t, index, attData.Index)
 		require.Equal(t, duty.Slot, attData.Slot)
 		require.Equal(t, vote.BlockRoot, attData.BeaconBlockRoot)
 	})
@@ -316,6 +332,51 @@ func TestCommitteeRunnerExecuteDuty_FetchesAttestationDataAndStartsConsensus(t *
 	require.NoError(t, env.runner.ValCheck.CheckValue(expectedVoteBytes))
 }
 
+// sameSlotBeacon models an attestation slot whose block has arrived: a head event named root for the
+// slot, and the beacon node attests to that block with payload status EMPTY — a same-slot block cannot
+// have its payload yet.
+type sameSlotBeacon struct {
+	*protocoltesting.BeaconNodeWrapped
+	root phase0.Root
+}
+
+func (b *sameSlotBeacon) GetAttestationData(ctx context.Context, slot phase0.Slot) (*phase0.AttestationData, spec.DataVersion, error) {
+	data, version, err := b.BeaconNodeWrapped.GetAttestationData(ctx, slot)
+	if err != nil {
+		return nil, version, err
+	}
+	data.BeaconBlockRoot, data.Index = b.root, 0
+	return data, version, nil
+}
+
+// At a Gloas slot whose block has arrived, the runner fixes its own view at instance start (SIP #94 §2):
+// its own value (payload EMPTY for the same-slot block) passes, a leader's value claiming the payload
+// present for that block is rejected so the round changes, and another block's payload status stays the
+// leader's call.
+func TestCommitteeRunnerExecuteDuty_GloasSameSlotIndexCheck(t *testing.T) {
+	duty := spectestingutils.TestingAttesterDuty(spec.DataVersionElectra)
+	root := phase0.Root{0xaa}
+	beacon := &sameSlotBeacon{BeaconNodeWrapped: protocoltesting.NewTestingBeaconNodeWrapped().(*protocoltesting.BeaconNodeWrapped), root: root}
+	beacon.HeadRoots = map[phase0.Slot]phase0.Root{duty.Slot: root}
+	env := newCommitteeRunnerEnvWithBeacon(t, []int{1}, beacon)
+	env.runner.NetworkConfig = networkconfig.TestNetworkWithGloas(0)
+	env.runner.State = NewRunnerState(env.sampleKey.Threshold, duty)
+
+	require.NoError(t, env.runner.executeDuty(context.Background(), env.logger, duty))
+	require.NotNil(t, env.runner.State.RunningInstance)
+
+	attData, _, err := beacon.GetAttestationData(context.Background(), duty.Slot)
+	require.NoError(t, err)
+	vote := func(index phase0.CommitteeIndex, blockRoot phase0.Root) []byte {
+		b, err := (&gloas.GloasBeaconVote{BlockRoot: blockRoot, Source: attData.Source, Target: attData.Target, AttestationDataIndex: index}).Encode()
+		require.NoError(t, err)
+		return b
+	}
+	require.NoError(t, env.runner.ValCheck.CheckValue(vote(0, root)))
+	require.ErrorContains(t, env.runner.ValCheck.CheckValue(vote(1, root)), "same-slot block")
+	require.NoError(t, env.runner.ValCheck.CheckValue(vote(1, phase0.Root{0xbb})))
+}
+
 func TestCommitteeRunnerProcessConsensus_UsesWorkerPoolForMoreThan30SyncDuties(t *testing.T) {
 	validatorIndices := make([]int, 35)
 	for i := range validatorIndices {
@@ -324,7 +385,8 @@ func TestCommitteeRunnerProcessConsensus_UsesWorkerPoolForMoreThan30SyncDuties(t
 	env := newCommitteeRunnerEnv(t, validatorIndices, &committeeDutyGuardStub{}, &doppelgangerStub{})
 	duty := spectestingutils.TestingCommitteeDuty(nil, validatorIndices, spec.DataVersionPhase0)
 
-	env.startAndDecideCommitteeDuty(t, duty)
+	_, err := env.startAndDecideCommitteeDuty(t, duty)
+	require.NoError(t, err)
 
 	partialSigMsgs := partialSigBroadcasts(env.network.BroadcastedMsgs)
 	require.Len(t, partialSigMsgs, 1)
@@ -356,7 +418,8 @@ func TestCommitteeRunnerProcessConsensus_DoppelgangerAndDutyBranching(t *testing
 		env := newCommitteeRunnerEnv(t, []int{1, 2, 3}, &committeeDutyGuardStub{}, doppelganger)
 		duty := spectestingutils.TestingCommitteeDuty([]int{1, 2, 3}, nil, spec.DataVersionPhase0)
 
-		env.startAndDecideCommitteeDuty(t, duty)
+		_, err := env.startAndDecideCommitteeDuty(t, duty)
+		require.NoError(t, err)
 
 		require.Empty(t, partialSigBroadcasts(env.network.BroadcastedMsgs))
 	})
@@ -370,7 +433,8 @@ func TestCommitteeRunnerProcessConsensus_DoppelgangerAndDutyBranching(t *testing
 		env := newCommitteeRunnerEnv(t, []int{1, 2}, &committeeDutyGuardStub{}, doppelganger)
 		duty := spectestingutils.TestingCommitteeDuty([]int{1}, []int{2}, spec.DataVersionPhase0)
 
-		env.startAndDecideCommitteeDuty(t, duty)
+		_, err := env.startAndDecideCommitteeDuty(t, duty)
+		require.NoError(t, err)
 
 		partialSigMsgs := partialSigBroadcasts(env.network.BroadcastedMsgs)
 		require.Len(t, partialSigMsgs, 1)
@@ -385,7 +449,8 @@ func TestCommitteeRunnerProcessPostConsensus_SubmitsElectraObjectsAndDeduplicate
 	env := newCommitteeRunnerEnv(t, []int{1, 2}, &committeeDutyGuardStub{}, doppelganger)
 	duty := spectestingutils.TestingCommitteeDuty([]int{1}, []int{2}, spec.DataVersionElectra)
 
-	env.startAndDecideCommitteeDuty(t, duty)
+	_, err := env.startAndDecideCommitteeDuty(t, duty)
+	require.NoError(t, err)
 
 	postConsensusMsgs := []*spectypes.PartialSignatureMessages{
 		spectestingutils.PostConsensusCommitteeMsgForDuty(duty, env.keySetMap, 1),

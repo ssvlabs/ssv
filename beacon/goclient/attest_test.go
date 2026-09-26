@@ -3,12 +3,14 @@ package goclient
 import (
 	"context"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"math/rand"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -17,8 +19,11 @@ import (
 	"github.com/jellydator/ttlcache/v3"
 	"github.com/sourcegraph/conc/pool"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/utils/hashmap"
 )
 
@@ -92,6 +97,36 @@ var (
 		}`),
 	}
 )
+
+func TestRequestGloasAttestationData(t *testing.T) {
+	// Gloas payload-status index FULL (1). go-eth2-client's validated path rejects data.Index != 0
+	// post-Electra with ErrInconsistentResult; the hand-rolled Gloas fetch must accept it and keep the
+	// index (the signed §2 value) so attestations don't fail whenever the payload is present.
+	data := &phase0.AttestationData{
+		Slot:            9,
+		Index:           1,
+		BeaconBlockRoot: phase0.Root{0xaa},
+		Source:          &phase0.Checkpoint{Epoch: 1, Root: phase0.Root{0x01}},
+		Target:          &phase0.Checkpoint{Epoch: 2, Root: phase0.Root{0x02}},
+	}
+	dataJSON, err := json.Marshal(data)
+	require.NoError(t, err)
+
+	var gotMethod, gotPath, gotQuery string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod, gotPath, gotQuery = r.Method, r.URL.Path, r.URL.RawQuery
+		_, _ = fmt.Fprintf(w, `{"data":%s}`, dataJSON)
+	}))
+	defer srv.Close()
+
+	got, err := requestGloasAttestationData(context.Background(), srv.Client(), srv.URL, 9)
+	require.NoError(t, err)
+	require.Equal(t, http.MethodGet, gotMethod)
+	require.Equal(t, "/eth/v1/validator/attestation_data", gotPath)
+	require.Equal(t, "slot=9&committee_index=0", gotQuery)
+	require.Equal(t, data, got)
+	require.EqualValues(t, 1, got.Index) // payload-status index survived (not zeroed or rejected)
+}
 
 func TestGoClient_GetAttestationData_Simple(t *testing.T) {
 	const withWeightedAttestationData = false
@@ -712,6 +747,23 @@ func TestVerifyAndRefetchIfStale_CacheMiss(t *testing.T) {
 	require.True(t, stale, "unverified data should be marked stale on cache miss")
 }
 
+// HeadRootAtSlot exposes the head-event cache as the operator's own view for the same-slot check: the
+// root a head event named for the slot, or no view.
+func TestHeadRootAtSlot(t *testing.T) {
+	gc := &GoClient{
+		headCache: ttlcache.New[phase0.Slot, phase0.Root](),
+		log:       zap.NewNop(),
+	}
+	gc.headCache.Set(100, phase0.Root{0x01}, ttlcache.DefaultTTL)
+
+	root, ok := gc.HeadRootAtSlot(100)
+	require.True(t, ok)
+	require.Equal(t, phase0.Root{0x01}, root)
+
+	_, ok = gc.HeadRootAtSlot(101)
+	require.False(t, ok)
+}
+
 func TestVerifyAndRefetchIfStale_CacheHit_Match(t *testing.T) {
 	expectedRoot := phase0.Root{0x01, 0x02, 0x03}
 
@@ -886,4 +938,131 @@ func TestVerifyAndRefetchIfStale_ContextCancelledDuringDelay(t *testing.T) {
 	require.Equal(t, staleData, result, "should return original data when canceled during delay")
 	require.True(t, stale, "data is stale when context canceled")
 	require.False(t, fetchCalled, "should not have called fetch when canceled during delay")
+}
+
+// newStaleAttestationDataClient is a client whose head-event cache names one root for the slot while its beacon
+// node keeps answering with another, so every GetAttestationData call takes the stale-data refetch path. onFetch,
+// if set, runs inside each fetch and its error fails it.
+func newStaleAttestationDataClient(slot phase0.Slot, onFetch func(ctx context.Context) error) (*GoClient, *atomic.Int32) {
+	gc := &GoClient{
+		headCache:            ttlcache.New[phase0.Slot, phase0.Root](),
+		attestationDataCache: ttlcache.New[phase0.Slot, *phase0.AttestationData](),
+		log:                  zap.NewNop(),
+	}
+	gc.headCache.Set(slot, phase0.Root{0x01}, ttlcache.DefaultTTL)
+
+	var fetches atomic.Int32
+	gc.fetchAttestationDataFunc = func(ctx context.Context, s phase0.Slot) (*phase0.AttestationData, error) {
+		fetches.Add(1)
+		if onFetch != nil {
+			if err := onFetch(ctx); err != nil {
+				return nil, err
+			}
+		}
+		return &phase0.AttestationData{Slot: s, BeaconBlockRoot: phase0.Root{0xAA}}, nil
+	}
+	return gc, &fetches
+}
+
+// Through GetAttestationData the caller's deadline reaches the refetch guard: with too little time left the
+// refetch is skipped, and counted as skipped, rather than waited out.
+func TestGetAttestationData_DeadlineReachesRefetchGuard(t *testing.T) {
+	gc, fetches := newStaleAttestationDataClient(100, nil)
+	skipped := observability.InstrumentName(observabilityNamespace, "attestation_data.refetch_skipped")
+	skippedBefore := int64CounterValue(t, skipped)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+	_, _, err := gc.GetAttestationData(ctx, 100)
+	require.NoError(t, err)
+	require.Less(t, time.Since(start), refetchDelay, "the refetch delay is not waited out")
+	require.EqualValues(t, 1, fetches.Load(), "no refetch without time for it")
+	require.EqualValues(t, 1, int64CounterValue(t, skipped)-skippedBefore, "the skip is counted")
+}
+
+// int64CounterValue is the cumulative value of a package-global Int64 counter, summed over its attributes.
+func int64CounterValue(t *testing.T, name string) int64 {
+	t.Helper()
+	var rm metricdata.ResourceMetrics
+	require.NoError(t, pkgTestMetricReader.Collect(t.Context(), &rm))
+	var total int64
+	for _, sm := range rm.ScopeMetrics {
+		for _, m := range sm.Metrics {
+			if m.Name != name {
+				continue
+			}
+			sum, ok := m.Data.(metricdata.Sum[int64])
+			require.True(t, ok, "%s is not an int64 counter", name)
+			for _, dp := range sum.DataPoints {
+				total += dp.Value
+			}
+		}
+	}
+	return total
+}
+
+// A caller that is already done starts no fetch.
+func TestGetAttestationData_DoneCallerStartsNoFetch(t *testing.T) {
+	gc, fetches := newStaleAttestationDataClient(100, nil)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, _, err := gc.GetAttestationData(ctx, 100)
+	require.ErrorIs(t, err, context.Canceled)
+	require.Zero(t, fetches.Load())
+}
+
+// The leader's cancellation doesn't fail the callers joined into its request, which is what the fetch runs
+// detached from.
+func TestGetAttestationData_LeaderCancellationDoesNotFailJoinedCaller(t *testing.T) {
+	started, release := make(chan struct{}, 1), make(chan struct{})
+	gc, _ := newStaleAttestationDataClient(100, func(ctx context.Context) error {
+		select {
+		case started <- struct{}{}:
+		default:
+		}
+		<-release
+		return ctx.Err()
+	})
+
+	leaderCtx, cancelLeader := context.WithCancel(context.Background())
+	leaderDone := make(chan error, 1)
+	go func() {
+		_, _, err := gc.GetAttestationData(leaderCtx, 100)
+		leaderDone <- err
+	}()
+	<-started // the leader's fetch is in flight
+
+	joinedDone := make(chan error, 1)
+	go func() {
+		_, _, err := gc.GetAttestationData(context.Background(), 100)
+		joinedDone <- err
+	}()
+	time.Sleep(50 * time.Millisecond) // let the second caller join the in-flight request
+
+	cancelLeader()
+	close(release)
+	require.NoError(t, <-joinedDone)
+	require.NoError(t, <-leaderDone)
+}
+
+// scaleToAttestationWindow keeps fetch budgets proportional to the attestation window: unchanged
+// pre-Gloas (1/3 of the slot), x3/4 from Gloas (1/4 of the slot).
+func TestScaleToAttestationWindow(t *testing.T) {
+	const gloasEpoch = 5
+	netCfg := networkconfig.TestNetworkWithGloas(gloasEpoch)
+	gc := &GoClient{beaconConfig: netCfg.Beacon}
+
+	preGloasSlot := phase0.Slot(uint64(gloasEpoch-1) * netCfg.SlotsPerEpoch)
+	gloasSlot := phase0.Slot(uint64(gloasEpoch) * netCfg.SlotsPerEpoch)
+
+	// Pre-Gloas (1/3 window): unchanged.
+	require.Equal(t, 2*time.Second, gc.scaleToAttestationWindow(2*time.Second, preGloasSlot))
+	require.Equal(t, 5*time.Second, gc.scaleToAttestationWindow(5*time.Second, preGloasSlot))
+	// Gloas (1/4 window): x3/4.
+	require.Equal(t, 1500*time.Millisecond, gc.scaleToAttestationWindow(2*time.Second, gloasSlot))
+	require.Equal(t, 3750*time.Millisecond, gc.scaleToAttestationWindow(5*time.Second, gloasSlot))
 }

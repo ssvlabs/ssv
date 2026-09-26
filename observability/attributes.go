@@ -64,6 +64,23 @@ func DutyOutcomeAttribute(outcome string) attribute.KeyValue {
 	return attribute.String("ssv.validator.duty.outcome", outcome)
 }
 
+// SubmitOutcomeAttribute labels a submission to the beacon node by whether it succeeded.
+func SubmitOutcomeAttribute(success bool) attribute.KeyValue {
+	outcome := "failure"
+	if success {
+		outcome = "success"
+	}
+	return attribute.String("ssv.beacon.submit.outcome", outcome)
+}
+
+func BuildSourceAttribute(source string) attribute.KeyValue {
+	return attribute.String("ssv.validator.duty.build_source", source)
+}
+
+func EnvelopeBuildMatchAttribute(match string) attribute.KeyValue {
+	return attribute.String("ssv.validator.duty.envelope_build_match", match)
+}
+
 func BeaconPeriodAttribute(period uint64) attribute.KeyValue {
 	return attribute.KeyValue{
 		Key:   "ssv.beacon.period",

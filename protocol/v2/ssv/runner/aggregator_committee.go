@@ -14,13 +14,13 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/altair"
-	"github.com/attestantio/go-eth2-client/spec/electra"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
+
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
@@ -232,9 +232,9 @@ func (r *AggregatorCommitteeRunner) findValidatorDuty(
 	return nil
 }
 
-// waitTwoThirdsIntoSlot waits until two-thirds of the slot has passed.
-func (r *AggregatorCommitteeRunner) waitTwoThirdsIntoSlot(ctx context.Context, slot phase0.Slot) error {
-	finalTime := r.NetworkConfig.SlotStartTime(slot).Add(2 * r.NetworkConfig.IntervalDuration())
+// waitTwoIntervalsIntoSlot waits until the aggregation deadline — 2/3 of the slot before Gloas, 1/2 from Gloas on.
+func (r *AggregatorCommitteeRunner) waitTwoIntervalsIntoSlot(ctx context.Context, slot phase0.Slot) error {
+	finalTime := r.NetworkConfig.SlotStartTime(slot).Add(2 * r.NetworkConfig.IntervalDuration(slot))
 	wait := time.Until(finalTime)
 	if wait <= 0 {
 		return nil
@@ -391,7 +391,7 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(
 	if err != nil {
 		return fmt.Errorf("failed processing selection proof message: %w", err)
 	}
-	// quorum returns true only once (first time quorum achieved)
+	// hasNewQuorum is set only when a root just reached quorum.
 	if !hasNewQuorum {
 		// If didn't get any new quorum, didn't yet start QBFT (checked above), and has received the last message, then terminate.
 		if r.HasSeenAllPreConsensusSigners() {
@@ -462,12 +462,10 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(
 			}
 			pubKey := share.ValidatorPubKey
 
-			// As per the comments below, the quorums (for root+validator pairs) we got from basePostConsensusMsgProcessing
-			// call above are optimistic - some of these quorums might have been invalidated now, hence, to avoid an
-			// unnecessary unsuccessful BLS signature reconstruction attempt we need to check if root+validator pair
-			// still has quorum.
+			// Re-check the quorum: the drops after a failed reconstruction (below) may have taken this root+validator
+			// pair below quorum since basePreConsensusMsgProcessing reported it
+			// (https://github.com/ssvlabs/ssv/pull/2503#discussion_r2658112575).
 			gotQuorum, quorumSigners := r.State.PreConsensusContainer.HasQuorum(validatorIndex, root)
-			// Explanation on why we need this check: https://github.com/ssvlabs/ssv/pull/2503#discussion_r2658112575
 			if !gotQuorum {
 				continue
 			}
@@ -479,29 +477,14 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(
 				zap.Uint64s("quorum_signers", quorumSigners),
 			)
 
-			// Reconstruct signature
-			fullSig, err := r.State.ReconstructBeaconSig(
-				r.State.PreConsensusContainer,
-				root,
-				share.ValidatorPubKey[:],
-				validatorIndex,
-			)
+			// On failure the root's partial signatures have been verified and the invalid ones dropped; the error is
+			// recoverable only if that left the root below quorum (see reconstructQuorumSig).
+			blsSig, err := r.reconstructQuorumSig(r.State.PreConsensusContainer, root, share, "pre-consensus")
 			if err != nil {
-				// If the reconstructed signature verification failed, fall back to verifying each individual
-				// partial signature + discarding the invalid ones. This should not happen often in practice,
-				// but it's a very desirable optimization to have because when it does happen - we wouldn't
-				// want to reconstruct lots of BLS signatures only to discover most of them being invalid.
-				// Notes:
-				// 1) FallBackAndVerifyEachSignature call may also lead to a certain root+validator pairs
-				//    in PostConsensusContainer not having quorum anymore since it previously was computed
-				//    optimistically.
-				// 2) we need to verify partial signatures only for the roots we haven't tried reconstructing
-				//    signatures for (hence roots[i:])
-				// 3) since this code is running a bunch of concurrent go-routines, we need to be careful to
-				//    not call FallBackAndVerifyEachSignature for the same root+validator pair multiple times -
-				//    this is why we are parallelizing by validators only (and not by root+validator), processing
-				//    each root sequentially
-				for _, root := range roots[i:] {
+				// Verify the validator's partial signatures for the roots still ahead too, dropping a bad signer's
+				// shares before they cost a failed reconstruction each. A failure only skips this validator: the duty
+				// goes on with the others.
+				for _, root := range roots[i+1:] {
 					r.FallBackAndVerifyEachSignature(
 						r.State.PreConsensusContainer,
 						root,
@@ -512,14 +495,11 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(
 
 				const eventMsg = "got pre-consensus quorum but it has invalid signatures"
 				span.AddEvent(eventMsg)
-				vLogger.Error(eventMsg, zap.Error(err))
+				vLogger.Error(eventMsg, zap.Bool("recoverable", isRecoverableReconstructError(err)), zap.Error(err))
 
 				anyErr = err
 				continue
 			}
-
-			var blsSig phase0.BLSSignature
-			copy(blsSig[:], fullSig)
 
 			switch metadata.Role {
 			case spectypes.BNRoleAggregator:
@@ -589,8 +569,8 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(
 	}
 
 	if len(aggregatorSelections) > 0 {
-		// Wait once per duty before fetching aggregate attestations (spec: 2/3 into slot).
-		if err := r.waitTwoThirdsIntoSlot(ctx, duty.DutySlot()); err != nil {
+		// Wait once per duty until the spec's aggregation deadline before fetching aggregate attestations.
+		if err := r.waitTwoIntervalsIntoSlot(ctx, duty.DutySlot()); err != nil {
 			// Only reachable on shutdown (ctx canceled) within this short wait — markDutyFailed
 			// would drop a context.Canceled reason anyway, so there is nothing to record here.
 			return err
@@ -692,7 +672,7 @@ func (r *AggregatorCommitteeRunner) ProcessConsensus(
 	ctx context.Context,
 	logger *zap.Logger,
 	msg *spectypes.SignedSSVMessage,
-) error {
+) (err error) {
 	// Reuse the existing span instead of generating new one to keep tracing-data lightweight.
 	span := trace.SpanFromContext(ctx)
 
@@ -713,6 +693,14 @@ func (r *AggregatorCommitteeRunner) ProcessConsensus(
 		span.AddEvent("instance is not decided")
 		return nil
 	}
+
+	// A decided instance never decides again, so an error from here on is final: conclude the duty failed
+	// rather than leave the watcher to report it stuck.
+	defer func() {
+		if err != nil {
+			r.markDutyFailed(err)
+		}
+	}()
 
 	r.measurements.EndConsensus()
 	recordConsensusDuration(ctx, r.measurements.ConsensusTime(), spectypes.RoleAggregatorCommittee)
@@ -820,9 +808,9 @@ func (r *AggregatorCommitteeRunner) ProcessConsensus(
 
 	ssvMsg := &spectypes.SSVMessage{
 		MsgType: spectypes.SSVPartialSignatureMsgType,
-		MsgID: spectypes.NewMsgID(
+		MsgID: spectypes.NewCommitteeMsgID(
 			r.NetworkConfig.DomainTypeAtSlot(duty.DutySlot()),
-			r.QBFTController.CommitteeMember.CommitteeID[:],
+			r.QBFTController.CommitteeMember.CommitteeID,
 			r.RunnerRoleType,
 		),
 	}
@@ -904,7 +892,7 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 
 	// Unlike the sibling CommitteeRunner (which tags recoverable reconstruct failures with the
 	// recoverableReconstructError sentinel), this runner classifies them by the
-	// PostConsensusQuorumWithInvalidSignatures spec code: every reconstruct error is force-wrapped
+	// PostConsensusQuorumWithInvalidSignatures spec code: every recoverable reconstruct error is wrapped
 	// with that code at the push site below, so there is no uncoded-BLS blind spot here, and tagging
 	// instead would break this runner's spectest fixtures. The divergence is deliberate — see the
 	// reciprocal note in committee.go. A single last-write-wins error made terminal-vs-recoverable
@@ -912,8 +900,8 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 	var terminalErr, recoverableErr error
 	// classify is the single source of truth for the terminal/recoverable split, shared by the listener
 	// receive site and the post-listener drain so the two can never drift apart. The reconstruct
-	// goroutine force-wraps its (recoverable, post-fallback) error with the
-	// PostConsensusQuorumWithInvalidSignatures code; anything arriving without that code is terminal.
+	// goroutine wraps a recoverable failure with the PostConsensusQuorumWithInvalidSignatures code;
+	// anything arriving without that code is terminal.
 	classify := func(err error) {
 		var specErr *spectypes.Error
 		if errors.As(err, &specErr) && specErr.Code == spectypes.PostConsensusQuorumWithInvalidSignatures {
@@ -962,10 +950,8 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 		span.AddEvent("constructing sync committee contribution and aggregations signature messages",
 			trace.WithAttributes(observability.BeaconBlockRootAttribute(root)))
 		for _, validator := range validators {
-			// As per the comments below, the quorums (for root+validator pairs) we got from basePostConsensusMsgProcessing
-			// call above are optimistic - some of these quorums might have been invalidated now, hence, to avoid an
-			// unnecessary unsuccessful BLS signature reconstruction attempt we need to check if root+validator pair
-			// still has quorum.
+			// Re-check the quorum: the drops after a failed reconstruction (below) may have taken this root+validator
+			// pair below quorum since basePostConsensusMsgProcessing reported it.
 			gotQuorum, quorumSigners := r.State.PostConsensusContainer.HasQuorum(validator, root)
 			if !gotQuorum {
 				continue
@@ -995,23 +981,14 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 					zap.Uint64s("quorum_signers", quorumSigners),
 				)
 
-				sig, err := r.State.ReconstructBeaconSig(r.State.PostConsensusContainer, root, pubKey[:], validatorIndex)
+				// On failure the root's partial signatures have been verified and the invalid ones dropped; the
+				// error is recoverable only if that left the root below quorum (see reconstructQuorumSig).
+				sig, err := r.reconstructQuorumSig(r.State.PostConsensusContainer, root, share, "post-consensus")
 				if err != nil {
-					// If the reconstructed signature verification failed, fall back to verifying each individual
-					// partial signature + discarding the invalid ones. This should not happen often in practice,
-					// but it's a very desirable optimization to have because when it does happen - we wouldn't
-					// want to reconstruct lots of BLS signatures only to discover most of them being invalid.
-					// Notes:
-					// 1) FallBackAndVerifyEachSignature call may also lead to a certain root+validator pairs
-					//    in PostConsensusContainer not having quorum anymore since it previously was computed
-					//    optimistically.
-					// 2) we need to verify partial signatures only for the roots we haven't tried reconstructing
-					//    signatures for (hence roots[i:])
-					// 3) since this code is running a bunch of concurrent go-routines, we need to be careful to
-					//    not call FallBackAndVerifyEachSignature for the same root+validator pair multiple times -
-					//    this is why we are parallelizing by validators only (and not by root+validator), processing
-					//    each root sequentially
-					for _, root := range roots[i:] {
+					// Verify the validator's partial signatures for the roots still ahead too, dropping a bad
+					// signer's shares before they cost a failed reconstruction each. No pair is verified by two
+					// goroutines at once: the work is split by validator, and the roots are taken in turn.
+					for _, root := range roots[i+1:] {
 						r.FallBackAndVerifyEachSignature(
 							r.State.PostConsensusContainer,
 							root,
@@ -1021,12 +998,14 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 					}
 					const eventMsg = "got post-consensus quorum but it has invalid signatures"
 					span.AddEvent(eventMsg)
-					vlogger.Error(eventMsg, zap.Error(err))
+					vlogger.Error(eventMsg, zap.Bool("recoverable", isRecoverableReconstructError(err)), zap.Error(err))
 
-					errCh <- spectypes.WrapError(
-						spectypes.PostConsensusQuorumWithInvalidSignatures,
-						fmt.Errorf("%s: %w", eventMsg, err),
-					)
+					// classify reads recoverability from this spec code, not the tag, so only a recoverable failure
+					// carries it.
+					if isRecoverableReconstructError(err) {
+						err = spectypes.WrapError(spectypes.PostConsensusQuorumWithInvalidSignatures, err)
+					}
+					errCh <- err
 					return
 				}
 
@@ -1034,7 +1013,7 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 
 				signatureCh <- signatureResult{
 					validatorIndex: validatorIndex,
-					signature:      (phase0.BLSSignature)(sig),
+					signature:      sig,
 				}
 			}(validator, root)
 		}
@@ -1073,7 +1052,7 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 				switch role {
 				case spectypes.BNRoleAggregator:
 					aggregateAndProof := sszObject.(*spec.VersionedAggregateAndProof)
-					signedAgg, err := r.constructSignedAggregateAndProof(aggregateAndProof, signatureResult.signature)
+					signedAgg, err := constructVersionedSignedAggregateAndProof(aggregateAndProof, signatureResult.signature)
 					if err != nil {
 						terminalErr = fmt.Errorf("failed to construct signed aggregate and proof: %w", err)
 						continue
@@ -1107,11 +1086,9 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 
 		// When signatureCh closes in the same iteration the select may take the close branch and skip an
 		// error still buffered on errCh. All workers have finished (signatureCh is closed only after
-		// wg.Wait), so no further sends occur and this non-blocking drain is complete. Today errCh carries
-		// only the recoverable reconstruct error (the sole producer above), and dropping one is benign —
-		// the root stays un-submitted and the duty stays open for a later retry rather than falsely
-		// succeeding. The drain is defensive: it classifies that error for completeness and future-proofs
-		// the path should a terminal error ever be pushed here.
+		// wg.Wait), so no further sends occur and this non-blocking drain is complete. errCh carries the
+		// reconstruct errors, recoverable or terminal, and a skipped terminal one would leave the failed
+		// duty unrecorded.
 	drainErrCh:
 		for {
 			select {
@@ -1323,19 +1300,15 @@ func (r *AggregatorCommitteeRunner) HasSubmitted(
 
 // This function signature returns only one domain type... but we can have mixed domains
 // instead we rely on expectedPreConsensusRoots that is called later
-func (r *AggregatorCommitteeRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
+func (r *AggregatorCommitteeRunner) expectedPreConsensusRootsAndDomain() ([]spectypes.HashRoot, phase0.DomainType, error) {
 	return nil, spectypes.DomainError,
 		fmt.Errorf("unexpected expectedPreConsensusRootsAndDomain func call, runner role %v", r.GetRole())
 }
 
 // This function signature returns only one domain type... but we can have mixed domains
 // instead we rely on expectedPostConsensusRootsAndBeaconObjects that is called later
-func (r *AggregatorCommitteeRunner) expectedPostConsensusRootsAndDomain(context.Context) (
-	[]ssz.HashRoot,
-	phase0.DomainType,
-	error,
-) {
-	return nil, spectypes.DomainError, errors.New("unexpected expectedPostConsensusRootsAndDomain func call")
+func (r *AggregatorCommitteeRunner) expectedPostConsensusRootsAndDomains(context.Context) ([]PostConsensusRoot, error) {
+	return nil, errors.New("unexpected expectedPostConsensusRootsAndDomains func call")
 }
 
 // expectedPreConsensusRoots returns the expected roots for the pre-consensus phase.
@@ -1601,64 +1574,6 @@ func (r *AggregatorCommitteeRunner) findValidatorsForPostConsensusRoot(
 	return spectypes.BNRoleUnknown, nil, false
 }
 
-// constructSignedAggregateAndProof constructs a signed aggregate and proof from versioned data
-func (r *AggregatorCommitteeRunner) constructSignedAggregateAndProof(
-	aggregateAndProof *spec.VersionedAggregateAndProof,
-	signature phase0.BLSSignature,
-) (*spec.VersionedSignedAggregateAndProof, error) {
-	ret := &spec.VersionedSignedAggregateAndProof{
-		Version: aggregateAndProof.Version,
-	}
-
-	switch ret.Version {
-	case spec.DataVersionPhase0:
-		ret.Phase0 = &phase0.SignedAggregateAndProof{
-			Message:   aggregateAndProof.Phase0,
-			Signature: signature,
-		}
-	case spec.DataVersionAltair:
-		ret.Altair = &phase0.SignedAggregateAndProof{
-			Message:   aggregateAndProof.Altair,
-			Signature: signature,
-		}
-	case spec.DataVersionBellatrix:
-		ret.Bellatrix = &phase0.SignedAggregateAndProof{
-			Message:   aggregateAndProof.Bellatrix,
-			Signature: signature,
-		}
-	case spec.DataVersionCapella:
-		ret.Capella = &phase0.SignedAggregateAndProof{
-			Message:   aggregateAndProof.Capella,
-			Signature: signature,
-		}
-	case spec.DataVersionDeneb:
-		ret.Deneb = &phase0.SignedAggregateAndProof{
-			Message:   aggregateAndProof.Deneb,
-			Signature: signature,
-		}
-	case spec.DataVersionElectra:
-		if aggregateAndProof.Electra == nil {
-			return nil, errors.New("nil Electra aggregate and proof")
-		}
-		ret.Electra = &electra.SignedAggregateAndProof{
-			Message:   aggregateAndProof.Electra,
-			Signature: signature,
-		}
-	case spec.DataVersionFulu:
-		if aggregateAndProof.Fulu == nil {
-			return nil, errors.New("nil Fulu aggregate and proof")
-		}
-		ret.Fulu = &electra.SignedAggregateAndProof{
-			Message:   aggregateAndProof.Fulu,
-			Signature: signature,
-		}
-	default:
-		return nil, fmt.Errorf("unknown version %s", ret.Version.String())
-	}
-
-	return ret, nil
-}
-
 // ValidateAggregatorCommitteeDuty checks that:
 // - all slots values are equal
 // - BeaconRole is either BNRoleAggregator or BNRoleSyncCommitteeContribution
@@ -1782,9 +1697,9 @@ func (r *AggregatorCommitteeRunner) executeDuty(ctx context.Context, logger *zap
 		return nil
 	}
 
-	msgID := spectypes.NewMsgID(
+	msgID := spectypes.NewCommitteeMsgID(
 		r.NetworkConfig.DomainTypeAtSlot(duty.DutySlot()),
-		r.QBFTController.CommitteeMember.CommitteeID[:],
+		r.QBFTController.CommitteeMember.CommitteeID,
 		r.RunnerRoleType,
 	)
 	encodedMsg, err := msg.Encode()

@@ -5,7 +5,10 @@ import (
 	"os"
 
 	"go.opentelemetry.io/otel/sdk/resource"
-	semconv "go.opentelemetry.io/otel/semconv/v1.37.0"
+	// Keep aligned with the schema version used by otel/sdk's resource.Default()
+	// (it advances when otel/sdk is bumped); a mismatch makes the resource.Merge
+	// below fail with ErrSchemaURLConflict and aborts node startup (issue #3020).
+	semconv "go.opentelemetry.io/otel/semconv/v1.39.0"
 	"go.uber.org/zap"
 )
 
@@ -20,7 +23,7 @@ func buildResources(appName, appVersion string, logger *zap.Logger) (*resource.R
 		hostName = defaultHostname
 	}
 
-	const errMsg = "failed to merge OTeL Resources"
+	const errMsg = "failed to merge OTel Resources"
 	resources, err := resource.Merge(resource.Default(), resource.NewWithAttributes(
 		semconv.SchemaURL,
 		semconv.ServiceName(appName),

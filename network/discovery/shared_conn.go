@@ -16,7 +16,7 @@ const (
 	// unhandledChanSize is the handoff capacity between go-ethereum's forwarding
 	// send and drain. It stays small because drain is always receptive; bursts
 	// are absorbed by unhandledBufferSize instead.
-	// Size taken from https://github.com/ethereum/go-ethereum/blob/v1.16.4/p2p/server.go#L465
+	// Size taken from https://github.com/ethereum/go-ethereum/blob/v1.17.5/p2p/server.go#L465
 	unhandledChanSize = 100
 
 	// unhandledBufferSize bounds how many forwarded packets are held for the
@@ -31,7 +31,7 @@ const (
 // SharedUDPConn implements a shared connection: writes go to the underlying
 // socket, and reads return the packets the primary listener could not decode
 // and forwarded to Unhandled, minus any dropped under load.
-// Adapted from go-ethereum's sharedUDPConn: https://github.com/ethereum/go-ethereum/blob/v1.16.4/p2p/server.go#L335
+// Adapted from go-ethereum's sharedUDPConn: https://github.com/ethereum/go-ethereum/blob/v1.17.5/p2p/server.go#L335
 //
 // Unlike upstream, reads are served from an internal buffer filled by drain,
 // not from Unhandled directly. That decoupling is load-bearing: go-ethereum
