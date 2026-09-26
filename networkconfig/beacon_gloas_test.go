@@ -43,6 +43,16 @@ func TestBeacon_GloasForkEpoch(t *testing.T) {
 	require.Equal(t, phase0.Epoch(100), epoch)
 }
 
+func TestBeacon_GloasScheduled(t *testing.T) {
+	gloasAt := func(epoch phase0.Epoch) *Beacon {
+		return &Beacon{Forks: map[spec.DataVersion]phase0.Fork{DataVersionGloas: {Epoch: epoch}}}
+	}
+	require.False(t, (&Beacon{Forks: map[spec.DataVersion]phase0.Fork{}}).GloasScheduled(), "absent")
+	require.False(t, gloasAt(FarFutureEpoch).GloasScheduled(), "named but unscheduled")
+	require.True(t, gloasAt(100).GloasScheduled())
+	require.True(t, gloasAt(0).GloasScheduled(), "active from genesis")
+}
+
 func TestNetwork_InGloasPriorWindow(t *testing.T) {
 	const gloasEpoch = 100
 	netCfg := TestNetworkWithGloas(gloasEpoch)

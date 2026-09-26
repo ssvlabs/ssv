@@ -1213,8 +1213,12 @@ func SetupRunners(
 		ssvtypes.RoleSyncCommitteeContribution,
 		spectypes.RoleValidatorRegistration,
 		spectypes.RoleVoluntaryExit,
-		spectypes.RolePTCAttester,
-		spectypes.RoleProposerPreferences,
+	}
+	// The Gloas roles get no duty or message until the fork is scheduled, and the node's fork schedule is fixed
+	// while it runs, so their runners, and the queue consumers the validator starts for them, exist only on a
+	// Gloas-scheduled network. Scheduled, not active: §5 emits the first Gloas epoch's preferences before the fork.
+	if options.NetworkConfig.GloasScheduled() {
+		runnersType = append(runnersType, spectypes.RolePTCAttester, spectypes.RoleProposerPreferences)
 	}
 
 	buildController := func(role spectypes.RunnerRole) *qbftcontroller.Controller {

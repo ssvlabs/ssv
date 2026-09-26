@@ -217,10 +217,18 @@ func (b *Beacon) IsGloasAtSlot(slot phase0.Slot) bool {
 
 // GloasForkEpoch returns the scheduled Gloas (ePBS) fork epoch and whether a Gloas fork is present in
 // the schedule. An unscheduled far-future epoch is returned as-is; callers that gate on it (IsGloas,
-// InGloasPriorWindow) treat it as never active via the epoch comparison.
+// InGloasPriorWindow) treat it as never active via the epoch comparison. GloasScheduled reports whether the
+// fork is scheduled at all.
 func (b *Beacon) GloasForkEpoch() (phase0.Epoch, bool) {
 	fork, ok := b.Forks[DataVersionGloas]
 	return fork.Epoch, ok
+}
+
+// GloasScheduled reports whether a Gloas (ePBS) fork is scheduled: present in the schedule, and not at the
+// far-future epoch a beacon node gives a fork it names but hasn't scheduled.
+func (b *Beacon) GloasScheduled() bool {
+	epoch, ok := b.GloasForkEpoch()
+	return ok && epoch != FarFutureEpoch
 }
 
 func (b *Beacon) AssertSame(other *Beacon) error {

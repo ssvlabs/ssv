@@ -1666,6 +1666,38 @@ func TestSetupRunnersCutOffRoundPerRole(t *testing.T) {
 	require.Equal(t, roundtimer.CutOffRound, aggregatorRunner.QBFTController.GetConfig().GetCutOffRound())
 }
 
+// The PTC-attester and proposer-preferences runners exist only on a Gloas-scheduled network, already before the
+// fork; a network whose Gloas fork is absent, or named but unscheduled (far-future), gets neither.
+func TestSetupRunnersGloasRoles(t *testing.T) {
+	tests := []struct {
+		name   string
+		netCfg *networkconfig.Network
+		want   bool
+	}{
+		{"gloas absent", networkconfig.TestNetwork, false},
+		{"gloas unscheduled", networkconfig.TestNetworkWithGloas(networkconfig.FarFutureEpoch), false},
+		{"gloas scheduled, not yet active", networkconfig.TestNetworkWithGloas(networkconfig.TestNetwork.EstimatedCurrentEpoch() + 10), true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			share := &types.SSVShare{Share: spectypes.Share{
+				ValidatorIndex:  1,
+				ValidatorPubKey: createPubKey(byte('1')),
+				SharePubKey:     make([]byte, 48),
+			}}
+			operator := &spectypes.CommitteeMember{OperatorID: 1, Committee: buildProposerFTestCommittee()}
+
+			runners, err := SetupRunners(t.Context(), share, operator, nil, nil, &validator.CommonOptions{NetworkConfig: tt.netCfg})
+			require.NoError(t, err)
+			require.Contains(t, runners, spectypes.RoleProposer)
+			_, ptc := runners[spectypes.RolePTCAttester]
+			_, preferences := runners[spectypes.RoleProposerPreferences]
+			require.Equal(t, tt.want, ptc, "PTC attester runner")
+			require.Equal(t, tt.want, preferences, "proposer preferences runner")
+		})
+	}
+}
+
 func TestSetupCommitteeRunnersProposerF(t *testing.T) {
 	netCfg := buildProposerFTestNetworkConfig(t, phase0.Epoch(math.MaxUint64)) // pre-Boole-fork
 	committee := buildProposerFTestCommittee()
