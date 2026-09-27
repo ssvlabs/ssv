@@ -2,6 +2,7 @@ package storage
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/hex"
 	"encoding/json"
@@ -593,8 +594,8 @@ func generateRandomValidatorStorageShare(splitKeys map[uint64]*bls.SecretKey) *S
 			PubKey:     sk.Serialize(),
 		})
 	}
-	sort.Slice(ibftCommittee, func(i, j int) bool {
-		return ibftCommittee[i].OperatorID < ibftCommittee[j].OperatorID
+	slices.SortFunc(ibftCommittee, func(a, b *storageOperator) int {
+		return cmp.Compare(a.OperatorID, b.OperatorID)
 	})
 
 	return &Share{
