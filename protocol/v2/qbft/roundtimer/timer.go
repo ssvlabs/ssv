@@ -112,9 +112,7 @@ type Option func(*RoundTimer)
 // ShortProposerRoundTimeout key in config.example.yaml and in its env-description.
 func WithLegacyProposerRoundTimeout(legacy bool) Option {
 	return func(t *RoundTimer) {
-		if legacy {
-			t.proposerQuickTimeout = QuickTimeout
-		}
+		t.legacyProposerRoundTimeout = legacy
 	}
 }
 
@@ -222,9 +220,9 @@ type RoundTimer struct {
 	role         spectypes.RunnerRole
 	beaconConfig *networkconfig.Beacon
 
-	// proposerQuickTimeout is the per-round budget used when role is the proposer. Defaults to
-	// DefaultProposerQuickTimeout; overridden by WithLegacyProposerRoundTimeout.
-	proposerQuickTimeout time.Duration
+	// legacyProposerRoundTimeout arms the pre-SIP-102 QuickTimeout budget for the proposer when
+	// true; set by WithLegacyProposerRoundTimeout. False (the default) keeps DefaultProposerQuickTimeout.
+	legacyProposerRoundTimeout bool
 
 	// callback is a func called when currently stored round times out.
 	callback OnRoundTimeoutF
@@ -241,16 +239,15 @@ func New(ctx context.Context, beaconConfig *networkconfig.Beacon, role spectypes
 	ctx, cancel := context.WithCancel(ctx)
 
 	t := &RoundTimer{
-		ctx:                  ctx,
-		cancel:               cancel,
-		beaconConfig:         beaconConfig,
-		role:                 role,
-		callback:             callback,
-		proposerQuickTimeout: DefaultProposerQuickTimeout,
-		mtx:                  &sync.RWMutex{},
-		slot:                 slot,
-		round:                specqbft.NoRound, // set in TimeoutForRound
-		timer:                nil,              // set in TimeoutForRound
+		ctx:          ctx,
+		cancel:       cancel,
+		beaconConfig: beaconConfig,
+		role:         role,
+		callback:     callback,
+		mtx:          &sync.RWMutex{},
+		slot:         slot,
+		round:        specqbft.NoRound, // set in TimeoutForRound
+		timer:        nil,              // set in TimeoutForRound
 	}
 	for _, opt := range opts {
 		opt(t)
@@ -262,10 +259,10 @@ func New(ctx context.Context, beaconConfig *networkconfig.Beacon, role spectypes
 // this operator's armed proposer budget when the role is the proposer, the protocol default
 // otherwise.
 func (t *RoundTimer) quickTimeout() time.Duration {
-	if t.role == spectypes.RoleProposer {
-		return t.proposerQuickTimeout
+	if t.role == spectypes.RoleProposer && t.legacyProposerRoundTimeout {
+		return QuickTimeout
 	}
-	return QuickTimeout
+	return defaultQuickTimeoutForRole(t.role)
 }
 
 // RoundRelativeRole reports whether the role's QBFT round timeouts are relative to the instance's
