@@ -189,10 +189,9 @@ func TestRoundTimeoutOffset(t *testing.T) {
 		// round-relative roles, and EstimatedRoundAt calls defaultQuickTimeoutForRole directly; the real
 		// coverage is TestProposerRoundTimeoutArmsProposerQuickTimeout. And rounds 3+ carry nothing on
 		// the wire: message validation caps proposer messages at round 2, so peers drop them on
-		// receipt, though the instance does still reach those rounds and broadcast them until #3041
-		// stops it at the cap. The rows stay because roundTimeoutForRound is a pure function defined
-		// for any round, and the cross-check in TestEstimatedRoundAtMatchesRoundTimeout needs the
-		// whole curve.
+		// receipt, and since #3041 the instance itself stops after round 2 too (CutOffRoundFor(RoleProposer)
+		// is 3). The rows stay because roundTimeoutForRound is a pure function defined for any round, and
+		// TestEstimatedRoundAtBoundaries walks the whole curve via it.
 		{name: "proposer, round 1 (first quick)", role: spectypes.RoleProposer, round: 1, want: DefaultProposerQuickTimeout},
 		{name: "proposer, round 2", role: spectypes.RoleProposer, round: 2, want: 2 * DefaultProposerQuickTimeout},
 		{name: "proposer, round 8 (= quickThreshold)", role: spectypes.RoleProposer, round: QuickTimeoutThreshold, want: proposerQuickPhase},

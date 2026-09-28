@@ -45,7 +45,7 @@ const (
 	//
 	// Not fork-gated: there is no message, signature or domain change, so this is not a fork. Pre-Gloas
 	// the effect is a trade rather than a strict improvement. Round 2 starts earlier (~2.8s instead of
-	// ~3.3s, both well inside the 4s deadline), which helps, but a round 1 that would have decided
+	// ~3.3s, both before the 4s deadline), which helps, but a round 1 that would have decided
 	// between 1.5s and 2.0s is now cut off where it previously succeeded. The 1148ms measurement is
 	// what makes that unlikely, not impossible.
 	//
@@ -94,8 +94,9 @@ type Option func(*RoundTimer)
 
 // WithLegacyProposerRoundTimeout arms the pre-SIP-102 proposer round budget (QuickTimeout) for this
 // timer instead of DefaultProposerQuickTimeout, when legacy is true. legacy false is a no-op, so
-// the zero value of the operator switch it's built from (ShortProposerRoundTimeout, inverted at the
-// cli boundary) leaves the SIP-102 default in place.
+// the zero value of LegacyProposerRoundTimeout (validator.CommonOptions) keeps the SIP-102 default
+// in place. The operator-facing ShortProposerRoundTimeout is its inverse, whose zero value would
+// mean legacy, which is why the cli config seeds it true in ApplyDefaults.
 //
 // Only the proposer's budget is tunable: the other roles are slot-synchronized, so their round
 // boundaries are derived from the beacon deadlines rather than chosen by the operator.
@@ -120,7 +121,7 @@ func WithLegacyProposerRoundTimeout(legacy bool) Option {
 // defaultQuickTimeoutForRole returns the protocol's per-round budget for rounds at or below
 // QuickTimeoutThreshold. The proposer runs a shorter round than everyone else (SIP-102).
 //
-// This deliberately returns the DEFAULT, not this operator's configured value, because its callers
+// This deliberately returns the DEFAULT, not this operator's armed budget, because its callers
 // reason about other nodes rather than about us: EstimatedRoundAt estimates the round a *peer* is in,
 // and a peer runs its own configuration. This operator's own timer takes its budget from
 // RoundTimer.quickTimeout instead. (The split is safe for the proposer specifically: message
@@ -143,9 +144,9 @@ func defaultQuickTimeoutForRole(role spectypes.RunnerRole) time.Duration {
 //
 // quick is a parameter rather than derived from role, so every caller has to say whose budget it
 // means: our own timer passes RoundTimer.quickTimeout(), anything reasoning about a peer passes
-// defaultQuickTimeoutForRole. Deriving it here made the function silently ignore an operator's
-// armed proposer budget, which is inert only while RoundRelativeRole keeps the proposer out of
-// this path - exactly the assumption ssvlabs/ssv#2429 is expected to change.
+// defaultQuickTimeoutForRole. Deriving it here would silently ignore an operator's armed proposer
+// budget; production never reaches this path for the proposer today, since RoundRelativeRole keeps
+// it out, but the parameter keeps the function correct regardless.
 func roundTimeoutForRound(role spectypes.RunnerRole, intervalDuration, quick time.Duration, round specqbft.Round) time.Duration {
 	headStart := round1HeadStart(role, intervalDuration)
 	if round <= QuickTimeoutThreshold {
@@ -258,7 +259,7 @@ func New(ctx context.Context, beaconConfig *networkconfig.Beacon, role spectypes
 }
 
 // quickTimeout returns this timer's per-round budget for rounds at or below QuickTimeoutThreshold:
-// this operator's configured proposer budget when the role is the proposer, the protocol default
+// this operator's armed proposer budget when the role is the proposer, the protocol default
 // otherwise.
 func (t *RoundTimer) quickTimeout() time.Duration {
 	if t.role == spectypes.RoleProposer {

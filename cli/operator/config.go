@@ -137,9 +137,10 @@ func (c *config) load(configPath, shareConfigPath string) error {
 	return nil
 }
 
-// resolveAndValidate validates the operator configuration, emits advisory warnings, and returns
+// resolveAndValidate validates the operator configuration, emits advisory logs, and returns
 // the derived state (operating mode + signing flags). A returned error is fatal — the caller logs
-// it once. logger is used only for warnings, never for fatal conditions.
+// it once. logger is used only for advisory logs (warnings and the ShortProposerRoundTimeout
+// rollback notice), never for fatal conditions.
 func (c *config) resolveAndValidate(logger *zap.Logger) (resolved, error) {
 	// Resolve signing before the proposer-delay check so a doubly-misconfigured node surfaces
 	// the signing error first.
