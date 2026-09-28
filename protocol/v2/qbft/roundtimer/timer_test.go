@@ -187,7 +187,7 @@ func TestRoundTimeoutOffset(t *testing.T) {
 		// Two caveats, so nobody reads these rows as coverage of the live proposer timer. Production
 		// never calls roundTimeoutForRound for the proposer at all — RoundTimeout returns early for
 		// round-relative roles, and EstimatedRoundAt calls defaultQuickTimeoutForRole directly; the real
-		// coverage is TestProposerRoundTimeoutArmsProposerQuickTimeout. And rounds 3+ carry nothing on
+		// coverage is TestWithLegacyProposerRoundTimeout. And rounds 3+ carry nothing on
 		// the wire: message validation caps proposer messages at round 2, so peers drop them on
 		// receipt, and since #3041 the instance itself stops after round 2 too (CutOffRoundFor(RoleProposer)
 		// is 3). The rows stay because roundTimeoutForRound is a pure function defined for any round, and
@@ -228,6 +228,12 @@ func TestRoundTimeoutOffset(t *testing.T) {
 // TestRoundTimeoutOffsetGloasInterval verifies the head starts track IntervalDuration: passing the
 // Gloas interval (1/4 of the slot, vs 1/3 pre-Gloas) shrinks the committee/aggregator head starts
 // accordingly, so a stalled round 1 falls back to round 2 in step with the retimed deadlines.
+//
+// That is the answer to "do the other duties need retiming too" raised on SIP-102, but only for the
+// head start: no constant in this package changes for the slot-anchored roles. It deliberately does
+// NOT claim their round timing is sound: committee round 1 ends at headStart + QuickTimeout, so 5s
+// under Gloas against a 3s attestation deadline, the same 2s overshoot it has today against 4s.
+// Whether that overshoot is itself a problem is the separate SIP the Open Questions defer.
 func TestRoundTimeoutOffsetGloasInterval(t *testing.T) {
 	slotDuration := networkconfig.TestNetwork.SlotDuration
 	gloasInterval := slotDuration / 4
@@ -240,6 +246,7 @@ func TestRoundTimeoutOffsetGloasInterval(t *testing.T) {
 		{name: "committee head start = 1 interval", role: spectypes.RoleCommittee, want: slotDuration/4 + QuickTimeout},
 		{name: "aggregator head start = 2 intervals", role: ssvtypes.RoleAggregator, want: slotDuration/2 + QuickTimeout},
 		{name: "sync_committee_contribution head start = 2 intervals", role: ssvtypes.RoleSyncCommitteeContribution, want: slotDuration/2 + QuickTimeout},
+		{name: "aggregator_committee head start = 2 intervals", role: spectypes.RoleAggregatorCommittee, want: slotDuration/2 + QuickTimeout},
 		{name: "proposer head start = 0", role: spectypes.RoleProposer, want: DefaultProposerQuickTimeout},
 	}
 	for _, tc := range tt {
@@ -712,7 +719,7 @@ func TestProposerQuickTimeoutBounds(t *testing.T) {
 		"round 2 must start before the Glamsterdam attestation deadline for the clusters SIP-102 targets")
 
 	// The break-even start for this budget: above it, a round change cannot start round 2 before the deadline.
-	require.Equal(t, gloasAttestationDeadline-DefaultProposerQuickTimeout, 1500*time.Millisecond)
+	require.Equal(t, 1500*time.Millisecond, gloasAttestationDeadline-DefaultProposerQuickTimeout)
 
 	// The 2s budget the proposer used to share with every other role misses the bound even at the
 	// target start. That gap is the entire reason the proposer's quick timeout is now its own constant.
@@ -740,45 +747,6 @@ func TestDefaultQuickTimeoutForRole(t *testing.T) {
 	}
 }
 
-// TestProposerRoundTimeoutArmsProposerQuickTimeout covers what the timer actually arms for the two
-// rounds a proposer can reach, through the public RoundTimeout rather than the helper.
-func TestProposerRoundTimeoutArmsProposerQuickTimeout(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		timer := New(t.Context(), setupTestBeaconConfig(), spectypes.RoleProposer, 0, func(specqbft.Round) {})
-
-		require.Equal(t, DefaultProposerQuickTimeout, timer.RoundTimeout(specqbft.FirstRound))
-		require.Equal(t, DefaultProposerQuickTimeout, timer.RoundTimeout(specqbft.FirstRound+1))
-	})
-}
-
-// TestGloasHeadStartsTrackRetimedDeadlines pins one narrow property: the slot-anchored roles express
-// their head start in IntervalDuration, so it follows the retimed beacon deadlines automatically when
-// IntervalDuration goes from slot/3 to slot/4 at Gloas. No constant in this package changes for them.
-//
-// That is the answer to "do the other duties need retiming too" raised on SIP-102, but only for the
-// head start. It deliberately does NOT claim the other duties' round timing is sound: committee round 1
-// ends at headStart + QuickTimeout, so 5s under Gloas against a 3s attestation deadline — the same 2s
-// overshoot it has today against 4s. Whether that overshoot is itself a problem is the separate SIP the
-// Open Questions defer, and nothing here answers it.
-func TestGloasHeadStartsTrackRetimedDeadlines(t *testing.T) {
-	const slot = 12 * time.Second
-	preGloas, gloas := slot/3, slot/4
-
-	// Attestation and sync-committee message due: 4s → 3s (ATTESTATION_DUE_BPS_GLOAS = 2500).
-	require.Equal(t, 4*time.Second, round1HeadStart(spectypes.RoleCommittee, preGloas))
-	require.Equal(t, 3*time.Second, round1HeadStart(spectypes.RoleCommittee, gloas))
-
-	// Aggregate and sync contribution due: 8s → 6s (AGGREGATE_DUE_BPS_GLOAS = 5000).
-	require.Equal(t, 8*time.Second, round1HeadStart(ssvtypes.RoleAggregator, preGloas))
-	require.Equal(t, 6*time.Second, round1HeadStart(ssvtypes.RoleAggregator, gloas))
-	require.Equal(t, 6*time.Second, round1HeadStart(ssvtypes.RoleSyncCommitteeContribution, gloas))
-	require.Equal(t, 6*time.Second, round1HeadStart(spectypes.RoleAggregatorCommittee, gloas))
-
-	// The proposer has no head start in either fork: its timer is instance-relative, not slot-anchored.
-	require.Zero(t, round1HeadStart(spectypes.RoleProposer, preGloas))
-	require.Zero(t, round1HeadStart(spectypes.RoleProposer, gloas))
-}
-
 // TestWithLegacyProposerRoundTimeout covers the operator switch: true arms the pre-SIP-102 budget for
 // the proposer, false does not, and neither reaches the other roles.
 func TestWithLegacyProposerRoundTimeout(t *testing.T) {
@@ -800,10 +768,11 @@ func TestWithLegacyProposerRoundTimeout(t *testing.T) {
 		})
 	})
 
-	t.Run("no option keeps the default", func(t *testing.T) {
+	t.Run("no option keeps the default, rounds 1 and 2", func(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
 			timer := New(t.Context(), setupTestBeaconConfig(), spectypes.RoleProposer, 0, func(specqbft.Round) {})
 			require.Equal(t, DefaultProposerQuickTimeout, timer.RoundTimeout(specqbft.FirstRound))
+			require.Equal(t, DefaultProposerQuickTimeout, timer.RoundTimeout(specqbft.FirstRound+1))
 		})
 	})
 

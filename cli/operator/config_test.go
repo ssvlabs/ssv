@@ -688,6 +688,7 @@ func Test_resolveAndValidate_legacyProposerRoundTimeout(t *testing.T) {
 	t.Run("on resolves OK and logs the armed and SIP-102 budgets", func(t *testing.T) {
 		core, recorded := observer.New(zapcore.InfoLevel)
 		c := config{}
+		c.ApplyDefaults()
 		c.OperatorPrivateKey = testOperatorKey
 		c.LegacyProposerRoundTimeout = true
 
