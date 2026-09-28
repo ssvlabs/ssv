@@ -30,8 +30,8 @@ const (
 	// change would start round 2 past the deadline and turn a recoverable event into a missed block.
 	//
 	// 1500ms is bounded below by measurement, not by taste: across 30 days of mainnet proposer duties
-	// the slowest round 1 that went on to succeed took 1,148ms, so this never fires on a round 1 that
-	// would have decided, while 1000ms would have fired on 5–12 real duties a month.
+	// the slowest round 1 that went on to succeed took 1,148ms, so over that window it would not have
+	// cut off a single round 1 that decided, while 1000ms would have fired on 5–12 real duties a month.
 	//
 	// It is bounded above by the deadline, and that bound is tight rather than comfortable: round 2
 	// starts at instanceStart + 1.5s, so it clears a 3s deadline only for instances starting before
@@ -95,7 +95,7 @@ type Option func(*RoundTimer)
 // WithLegacyProposerRoundTimeout arms the pre-SIP-102 proposer round budget (QuickTimeout) for this
 // timer instead of DefaultProposerQuickTimeout, when legacy is true. legacy false is a no-op, so
 // the zero value of LegacyProposerRoundTimeout keeps the SIP-102 default in place at every layer,
-// from validator.CommonOptions down to the operator-facing cli config.
+// from the operator-facing cli config down to validator.CommonOptions.
 //
 // Only the proposer's budget has a switch: the other roles are slot-synchronized, so their round
 // boundaries are derived from the beacon deadlines rather than chosen by the operator.
