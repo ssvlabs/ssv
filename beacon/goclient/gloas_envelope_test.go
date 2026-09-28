@@ -29,11 +29,12 @@ func minimalExecutionPayloadEnvelope() *gloas.ExecutionPayloadEnvelope {
 }
 
 func TestSubmitExecutionPayloadEnvelope(t *testing.T) {
-	var gotMethod, gotPath, gotVersion, gotContentType, gotBlobDataIncluded string
+	var gotMethod, gotPath, gotVersion, gotAccept, gotContentType, gotBlobDataIncluded string
 	var gotBody []byte
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotMethod, gotPath = r.Method, r.URL.Path
 		gotVersion = r.Header.Get("Eth-Consensus-Version")
+		gotAccept = r.Header.Get("Accept")
 		gotContentType = r.Header.Get("Content-Type")
 		gotBlobDataIncluded = r.Header.Get("Eth-Blob-Data-Included")
 		gotBody, _ = io.ReadAll(r.Body)
@@ -48,6 +49,8 @@ func TestSubmitExecutionPayloadEnvelope(t *testing.T) {
 	require.Equal(t, consensusVersionGloas, gotVersion)
 	// the blobs-carrying Contents form — the required beacon-APIs#624 header (SIP #94 §6).
 	require.Equal(t, "true", gotBlobDataIncluded)
+	// the route answers with no content and JSON errors; Prysm refuses an SSZ-only Accept with 406.
+	require.Equal(t, "application/json", gotAccept)
 	require.Equal(t, "application/octet-stream", gotContentType)
 	require.Equal(t, []byte{0x01, 0x02}, gotBody)
 }
@@ -99,7 +102,7 @@ func TestSubmitExecutionPayloadEnvelope_PublishesContents(t *testing.T) {
 func TestSubmitExecutionPayloadEnvelope_AlreadyKnownIsSuccess(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
-		_, _ = io.WriteString(w, `{"code":500,"message":"EXECUTION_PAYLOAD_ENVELOPE_ERROR_ALREADY_KNOWN"}`) // Lodestar's response
+		_, _ = io.WriteString(w, `{"code":500,"message":"EXECUTION_PAYLOAD_ENVELOPE_ERROR_ALREADY_KNOWN"}`) // Lodestar's response before v1.46
 	}))
 	defer srv.Close()
 

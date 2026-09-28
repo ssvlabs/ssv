@@ -104,9 +104,8 @@ func TestRequestGloasBeaconBlock_ContentsWithoutHeaderFails(t *testing.T) {
 	require.ErrorContains(t, err, "Eth-Execution-Payload-Included")
 }
 
-// The common transitional path: an unconfigured cluster against a beacon node that still serves only the
-// GET (Lighthouse/Lodestar/Prysm today). The neutral POST is rejected (405) and the fallback GET carries
-// the neutral boost factor (100).
+// An unconfigured cluster against a beacon node that predates the produceBlockV4 POST (beacon-APIs#630):
+// the neutral POST is rejected (405) and the fallback GET carries the neutral boost factor (100).
 func TestRequestGloasBeaconBlock_UnconfiguredFallbackToGET(t *testing.T) {
 	blockSSZ, err := gloas.TestingBeaconBlock(7).MarshalSSZ()
 	require.NoError(t, err)
@@ -174,7 +173,7 @@ func TestRequestGloasBeaconBlock_POSTFallbackToGET(t *testing.T) {
 	require.NoError(t, err)
 
 	var methods []string
-	var getBoost string
+	var getBoost, getAccept string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		methods = append(methods, r.Method)
 		if r.Method == http.MethodPost {
@@ -182,6 +181,7 @@ func TestRequestGloasBeaconBlock_POSTFallbackToGET(t *testing.T) {
 			return
 		}
 		getBoost = r.URL.Query().Get("builder_boost_factor")
+		getAccept = r.Header.Get("Accept")
 		_, _ = w.Write(blockSSZ)
 	}))
 	defer srv.Close()
@@ -191,6 +191,7 @@ func TestRequestGloasBeaconBlock_POSTFallbackToGET(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []string{http.MethodPost, http.MethodGet}, methods, "POST 404 falls back to GET")
 	require.Equal(t, "150", getBoost, "the fallback GET carries the configured builder_boost_factor")
+	require.Equal(t, "application/octet-stream", getAccept, "the fallback GET still asks for the SSZ block")
 	require.Equal(t, phase0.Slot(7), got.Block.Slot)
 	require.Empty(t, got.BuilderURL)
 }
@@ -211,11 +212,12 @@ func TestRequestGloasBeaconBlock_WrongConsensusVersion(t *testing.T) {
 }
 
 func TestSubmitGloasBeaconBlock(t *testing.T) {
-	var gotMethod, gotPath, gotVersion, gotContentType string
+	var gotMethod, gotPath, gotVersion, gotAccept, gotContentType string
 	var gotBody []byte
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotMethod, gotPath = r.Method, r.URL.Path
 		gotVersion = r.Header.Get("Eth-Consensus-Version")
+		gotAccept = r.Header.Get("Accept")
 		gotContentType = r.Header.Get("Content-Type")
 		gotBody, _ = io.ReadAll(r.Body)
 		w.WriteHeader(http.StatusOK)
@@ -227,6 +229,8 @@ func TestSubmitGloasBeaconBlock(t *testing.T) {
 	require.Equal(t, http.MethodPost, gotMethod)
 	require.Equal(t, "/eth/v2/beacon/blocks", gotPath)
 	require.Equal(t, consensusVersionGloas, gotVersion)
+	// the route answers with no content and JSON errors; Prysm refuses an SSZ-only Accept with 406.
+	require.Equal(t, "application/json", gotAccept)
 	require.Equal(t, "application/octet-stream", gotContentType)
 	require.Equal(t, []byte{0x01, 0x02}, gotBody)
 }
@@ -247,23 +251,23 @@ func TestSubmitGloasBeaconBlock_EchoesBuilderURL(t *testing.T) {
 	require.Equal(t, "https://builder.example.com", gotBuilderURL)
 }
 
-func TestGloasOctetStreamHTTP_Non2xxIsError(t *testing.T) {
+func TestGloasPublishSSZ_Non2xxIsError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		_, _ = w.Write([]byte("bad block"))
 	}))
 	defer srv.Close()
 
-	_, err := gloasOctetStreamHTTP(context.Background(), http.MethodGet, srv.URL, nil, nil)
+	err := gloasPublishSSZ(context.Background(), srv.URL, []byte{0x01}, nil)
 	require.ErrorContains(t, err, "status 400")
 }
 
-// A block the beacon node already knows (canonical) is treated as a successful submit: every operator
-// submits the decided block for redundancy, so non-leader duplicates must not surface as errors.
+// A block the beacon node already knows is treated as a successful submit: every operator submits the
+// decided block for redundancy, so non-leader duplicates must not surface as errors.
 func TestSubmitGloasBeaconBlock_AlreadyKnownIsSuccess(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
-		_, _ = io.WriteString(w, `{"code":500,"message":"BLOCK_ERROR_ALREADY_KNOWN"}`) // Lodestar's response
+		_, _ = io.WriteString(w, `{"code":500,"message":"BLOCK_ERROR_ALREADY_KNOWN"}`) // Lodestar's response before v1.47
 	}))
 	defer srv.Close()
 
@@ -288,4 +292,6 @@ func TestIsAlreadyKnown(t *testing.T) {
 	require.True(t, isAlreadyKnown(&httpStatusError{status: http.StatusInternalServerError, body: `{"message":"BLOCK_ERROR_ALREADY_KNOWN"}`}))
 	require.True(t, isAlreadyKnown(&httpStatusError{status: http.StatusInternalServerError, body: `{"message":"EXECUTION_PAYLOAD_ENVELOPE_ERROR_ALREADY_KNOWN"}`}))
 	require.True(t, isAlreadyKnown(&httpStatusError{status: http.StatusAccepted, body: "block already known"}))
+	// Lighthouse with --http-duplicate-block-status set to a non-2xx.
+	require.True(t, isAlreadyKnown(&httpStatusError{status: http.StatusConflict, body: `{"code":409,"message":"duplicate block","stacktraces":[]}`}))
 }
