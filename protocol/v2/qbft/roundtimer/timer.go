@@ -97,7 +97,7 @@ type Option func(*RoundTimer)
 // the zero value of LegacyProposerRoundTimeout keeps the SIP-102 default in place at every layer,
 // from validator.CommonOptions down to the operator-facing cli config.
 //
-// Only the proposer's budget is tunable: the other roles are slot-synchronized, so their round
+// Only the proposer's budget has a switch: the other roles are slot-synchronized, so their round
 // boundaries are derived from the beacon deadlines rather than chosen by the operator.
 //
 // This is a committee-wide protocol parameter, not a local performance knob. Operators sharing a

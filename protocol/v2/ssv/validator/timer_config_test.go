@@ -29,7 +29,7 @@ import (
 func TestValidatorRoundTimerHonorsLegacyProposerRoundTimeout(t *testing.T) {
 	netCfg := networkconfig.TestNetwork
 
-	newTimerForRole := func(t *testing.T, legacy bool, role spectypes.RunnerRole) *roundtimer.RoundTimer {
+	newProposerTimer := func(t *testing.T, legacy bool) *roundtimer.RoundTimer {
 		t.Helper()
 
 		// Build through the real options chain rather than setting the field directly, so the
@@ -46,7 +46,7 @@ func TestValidatorRoundTimerHonorsLegacyProposerRoundTimeout(t *testing.T) {
 		)
 
 		v := NewValidator(t.Context(), func() {}, zap.NewNop(), opts)
-		id := spectypes.NewValidatorMsgID(netCfg.DomainType, pk, role)
+		id := spectypes.NewValidatorMsgID(netCfg.DomainType, pk, spectypes.RoleProposer)
 
 		timer, ok := v.newQBFTRoundTimerF(id)(t.Context(), zap.NewNop(), phase0.Slot(1)).(*roundtimer.RoundTimer)
 		require.True(t, ok)
@@ -54,12 +54,12 @@ func TestValidatorRoundTimerHonorsLegacyProposerRoundTimeout(t *testing.T) {
 	}
 
 	t.Run("legacy=true arms the pre-SIP-102 budget on the proposer timer", func(t *testing.T) {
-		timer := newTimerForRole(t, true, spectypes.RoleProposer)
+		timer := newProposerTimer(t, true)
 		require.Equal(t, roundtimer.QuickTimeout, timer.RoundTimeout(specqbft.FirstRound))
 	})
 
 	t.Run("legacy=false (zero value) keeps the SIP-102 default", func(t *testing.T) {
-		timer := newTimerForRole(t, false, spectypes.RoleProposer)
+		timer := newProposerTimer(t, false)
 		require.Equal(t, roundtimer.DefaultProposerQuickTimeout, timer.RoundTimeout(specqbft.FirstRound))
 	})
 }
