@@ -251,17 +251,6 @@ func TestSubmitGloasBeaconBlock_EchoesBuilderURL(t *testing.T) {
 	require.Equal(t, "https://builder.example.com", gotBuilderURL)
 }
 
-func TestGloasPublishSSZ_Non2xxIsError(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusBadRequest)
-		_, _ = w.Write([]byte("bad block"))
-	}))
-	defer srv.Close()
-
-	err := gloasPublishSSZ(context.Background(), srv.URL, []byte{0x01}, nil)
-	require.ErrorContains(t, err, "status 400")
-}
-
 // A block the beacon node already knows is treated as a successful submit: every operator submits the
 // decided block for redundancy, so non-leader duplicates must not surface as errors.
 func TestSubmitGloasBeaconBlock_AlreadyKnownIsSuccess(t *testing.T) {

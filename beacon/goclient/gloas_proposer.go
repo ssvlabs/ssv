@@ -198,27 +198,3 @@ func isMethodOrPathMissing(err error) bool {
 	var httpErr *httpStatusError
 	return errors.As(err, &httpErr) && (httpErr.status == http.StatusNotFound || httpErr.status == http.StatusMethodNotAllowed)
 }
-
-// gloasHTTPDo issues a request to a Gloas endpoint and returns the response body and headers on a 2xx (see
-// httpDo). accept sets the Accept header; a non-nil body is sent with the given contentType; extraHeaders are
-// applied last, except Eth-Consensus-Version, which is always the Gloas version on requests with a body.
-func gloasHTTPDo(ctx context.Context, method, url string, body []byte, accept, contentType string, extraHeaders map[string]string) ([]byte, http.Header, error) {
-	if body != nil {
-		merged := make(map[string]string, len(extraHeaders)+1)
-		for k, v := range extraHeaders {
-			merged[k] = v
-		}
-		merged[consensusVersionHeader] = consensusVersionGloas
-		extraHeaders = merged
-	}
-	respBody, header, _, err := httpDo(ctx, gloasHTTPClient, method, url, body, accept, contentType, extraHeaders)
-	return respBody, header, err
-}
-
-// gloasPublishSSZ POSTs an SSZ body to a Gloas publish endpoint, returning nil on a 2xx; extraHeaders are
-// applied as in gloasHTTPDo. It accepts JSON: a publish route answers a 2xx with no content and errors as
-// JSON, so a beacon node that enforces Accept (Prysm) refuses an SSZ-only one with 406.
-func gloasPublishSSZ(ctx context.Context, url string, body []byte, extraHeaders map[string]string) error {
-	_, _, err := gloasHTTPDo(ctx, http.MethodPost, url, body, "application/json", "application/octet-stream", extraHeaders)
-	return err
-}
