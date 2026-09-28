@@ -42,28 +42,26 @@ func Test_config_load(t *testing.T) {
 }
 
 // Test_config_load_trueDefaultBools is the regression for #2868: the true-default p2p bools
-// (DynamicMaxPeers, PubSubScoring) and the top-level ShortProposerRoundTimeout must honor an
-// explicit `false` from YAML or env instead of reverting to true. The defaults are now seeded in
-// code by config.ApplyDefaults before ReadConfig.
+// (DynamicMaxPeers, PubSubScoring) must honor an explicit `false` from YAML or env instead of
+// reverting to true. The defaults are now seeded in code by config.ApplyDefaults before ReadConfig.
 func Test_config_load_trueDefaultBools(t *testing.T) {
 	// Minimal base with the env-required eth1/eth2 addresses so ReadConfig succeeds; each case
-	// appends its own body.
+	// appends its own p2p section.
 	const requiredBase = "eth1:\n  ETH1Addr: ws://localhost:8546\neth2:\n  BeaconNodeAddr: http://localhost:5052\n"
 
-	writeConfig := func(t *testing.T, body string) string {
+	writeConfig := func(t *testing.T, p2pBody string) string {
 		t.Helper()
 		path := filepath.Join(t.TempDir(), "config.yaml")
-		require.NoError(t, os.WriteFile(path, []byte(requiredBase+body), 0o600))
+		require.NoError(t, os.WriteFile(path, []byte(requiredBase+p2pBody), 0o600))
 		return path
 	}
 
 	t.Run("explicit false in YAML is honored", func(t *testing.T) {
 		var c config
-		path := writeConfig(t, "p2p:\n  DynamicMaxPeers: false\n  PubSubScoring: false\nShortProposerRoundTimeout: false\n")
+		path := writeConfig(t, "p2p:\n  DynamicMaxPeers: false\n  PubSubScoring: false\n")
 		require.NoError(t, c.load(path, ""))
 		require.False(t, c.P2pNetworkConfig.DynamicMaxPeers)
 		require.False(t, c.P2pNetworkConfig.PubSubScoring)
-		require.False(t, c.ShortProposerRoundTimeout)
 	})
 
 	t.Run("omitted keys default to true", func(t *testing.T) {
@@ -72,28 +70,24 @@ func Test_config_load_trueDefaultBools(t *testing.T) {
 		require.NoError(t, c.load(path, ""))
 		require.True(t, c.P2pNetworkConfig.DynamicMaxPeers)
 		require.True(t, c.P2pNetworkConfig.PubSubScoring)
-		require.True(t, c.ShortProposerRoundTimeout)
 	})
 
 	t.Run("explicit true in YAML stays true", func(t *testing.T) {
 		var c config
-		path := writeConfig(t, "p2p:\n  DynamicMaxPeers: true\n  PubSubScoring: true\nShortProposerRoundTimeout: true\n")
+		path := writeConfig(t, "p2p:\n  DynamicMaxPeers: true\n  PubSubScoring: true\n")
 		require.NoError(t, c.load(path, ""))
 		require.True(t, c.P2pNetworkConfig.DynamicMaxPeers)
 		require.True(t, c.P2pNetworkConfig.PubSubScoring)
-		require.True(t, c.ShortProposerRoundTimeout)
 	})
 
 	t.Run("env var false overrides the seeded default", func(t *testing.T) {
 		t.Setenv("P2P_DYNAMIC_MAX_PEERS", "false")
 		t.Setenv("PUBSUB_SCORING", "false")
-		t.Setenv("SHORT_PROPOSER_ROUND_TIMEOUT", "false")
 		var c config
 		path := writeConfig(t, "p2p:\n  TcpPort: 13001\n")
 		require.NoError(t, c.load(path, ""))
 		require.False(t, c.P2pNetworkConfig.DynamicMaxPeers)
 		require.False(t, c.P2pNetworkConfig.PubSubScoring)
-		require.False(t, c.ShortProposerRoundTimeout)
 	})
 
 	t.Run("explicit false in main config survives the share-config read", func(t *testing.T) {
@@ -101,13 +95,12 @@ func Test_config_load_trueDefaultBools(t *testing.T) {
 		// re-applied env-default:"true" and clobbered a false set by the first. With defaults now in code,
 		// a share config that omits the keys must leave the main config's explicit false intact.
 		var c config
-		mainPath := writeConfig(t, "p2p:\n  DynamicMaxPeers: false\n  PubSubScoring: false\nShortProposerRoundTimeout: false\n")
+		mainPath := writeConfig(t, "p2p:\n  DynamicMaxPeers: false\n  PubSubScoring: false\n")
 		sharePath := filepath.Join(t.TempDir(), "share.yaml")
 		require.NoError(t, os.WriteFile(sharePath, []byte("p2p:\n  TcpPort: 13002\n"), 0o600))
 		require.NoError(t, c.load(mainPath, sharePath))
 		require.False(t, c.P2pNetworkConfig.DynamicMaxPeers)
 		require.False(t, c.P2pNetworkConfig.PubSubScoring)
-		require.False(t, c.ShortProposerRoundTimeout)
 	})
 }
 
@@ -650,17 +643,17 @@ func Test_startupErrorLogFields(t *testing.T) {
 	})
 }
 
-// Test_resolveAndValidate_shortProposerRoundTimeout covers the operator switch for the proposer QBFT
-// round budget (SIP-102): on (the default) is silent, off logs exactly one Info recording both the
-// armed pre-SIP-102 budget and the SIP-102 default it replaces.
-func Test_resolveAndValidate_shortProposerRoundTimeout(t *testing.T) {
-	t.Run("default (on) passes silently", func(t *testing.T) {
+// Test_resolveAndValidate_legacyProposerRoundTimeout covers the operator switch for the proposer
+// QBFT round budget (SIP-102): off (the default) is silent, on logs exactly one Info recording both
+// the armed pre-SIP-102 budget and the SIP-102 default it replaces.
+func Test_resolveAndValidate_legacyProposerRoundTimeout(t *testing.T) {
+	t.Run("default (off) passes silently", func(t *testing.T) {
 		core, recorded := observer.New(zapcore.InfoLevel)
 		c := config{}
 		c.ApplyDefaults()
 		c.OperatorPrivateKey = testOperatorKey
 
-		require.True(t, c.ShortProposerRoundTimeout)
+		require.False(t, c.LegacyProposerRoundTimeout)
 
 		_, err := c.resolveAndValidate(zap.New(core))
 		require.NoError(t, err)
@@ -669,16 +662,16 @@ func Test_resolveAndValidate_shortProposerRoundTimeout(t *testing.T) {
 		require.Len(t, recorded.FilterMessageSnippet("proposer round timeout").All(), 0)
 	})
 
-	t.Run("off resolves OK and logs the armed and SIP-102 budgets", func(t *testing.T) {
+	t.Run("on resolves OK and logs the armed and SIP-102 budgets", func(t *testing.T) {
 		core, recorded := observer.New(zapcore.InfoLevel)
 		c := config{}
 		c.OperatorPrivateKey = testOperatorKey
-		c.ShortProposerRoundTimeout = false
+		c.LegacyProposerRoundTimeout = true
 
 		_, err := c.resolveAndValidate(zap.New(core))
 		require.NoError(t, err)
 
-		logs := recorded.FilterMessageSnippet("SIP-102 short proposer round timeout disabled").All()
+		logs := recorded.FilterMessageSnippet("legacy proposer round timeout enabled").All()
 		require.Len(t, logs, 1)
 		require.Equal(t, roundtimer.QuickTimeout, logs[0].ContextMap()["proposer_round_timeout"])
 		require.Equal(t, roundtimer.DefaultProposerQuickTimeout, logs[0].ContextMap()["sip102_proposer_round_timeout"])

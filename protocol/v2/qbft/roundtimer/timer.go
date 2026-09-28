@@ -94,9 +94,8 @@ type Option func(*RoundTimer)
 
 // WithLegacyProposerRoundTimeout arms the pre-SIP-102 proposer round budget (QuickTimeout) for this
 // timer instead of DefaultProposerQuickTimeout, when legacy is true. legacy false is a no-op, so
-// the zero value of LegacyProposerRoundTimeout (validator.CommonOptions) keeps the SIP-102 default
-// in place. The operator-facing ShortProposerRoundTimeout is its inverse, whose zero value would
-// mean legacy, which is why the cli config seeds it true in ApplyDefaults.
+// the zero value of LegacyProposerRoundTimeout keeps the SIP-102 default in place at every layer,
+// from validator.CommonOptions down to the operator-facing cli config.
 //
 // Only the proposer's budget is tunable: the other roles are slot-synchronized, so their round
 // boundaries are derived from the beacon deadlines rather than chosen by the operator.
@@ -109,7 +108,7 @@ type Option func(*RoundTimer)
 // lone rollback: an operator that switches to the legacy budget while f+1 committee peers still run
 // the short one is pulled into round 2 at their pace, so the rollback only takes effect once at most
 // f operators of the committee still run the short timeout. The same warning is on the
-// ShortProposerRoundTimeout key in config.example.yaml and in its env-description.
+// LegacyProposerRoundTimeout key in config.example.yaml and in its env-description.
 func WithLegacyProposerRoundTimeout(legacy bool) Option {
 	return func(t *RoundTimer) {
 		t.legacyProposerRoundTimeout = legacy

@@ -63,10 +63,10 @@ type config struct {
 	SSVAPIPort                   int                     `yaml:"SSVAPIPort" env:"SSV_API_PORT" env-description:"Port for SSV API server"`
 	LocalEventsPath              string                  `yaml:"LocalEventsPath" env:"EVENTS_PATH" env-description:"Path to local events file"`
 	EnableDoppelgangerProtection bool                    `yaml:"EnableDoppelgangerProtection" env:"ENABLE_DOPPELGANGER_PROTECTION" env-description:"Enable doppelganger protection for validators"`
-	// ShortProposerRoundTimeout enables the SIP-102 proposer round timeout (1.5s,
-	// roundtimer.DefaultProposerQuickTimeout). Disabling it is the rollback lever: it restores the
-	// pre-SIP-102 2s proposer QBFT round budget (roundtimer.QuickTimeout).
-	ShortProposerRoundTimeout bool `yaml:"ShortProposerRoundTimeout" env:"SHORT_PROPOSER_ROUND_TIMEOUT" env-description:"Enables the SIP-102 short (1.5s) proposer QBFT round timeout. Default true. Set false to restore the pre-SIP-102 2s proposer round budget. This is a committee-wide protocol parameter, not a local performance knob: configure it identically across all operators of every shared committee. A rollback only takes effect once at most f operators of a committee still run the short timeout."`
+	// LegacyProposerRoundTimeout defaults to false, which keeps the SIP-102 proposer round timeout
+	// (1.5s, roundtimer.DefaultProposerQuickTimeout). Setting it true is the rollback lever: it
+	// restores the pre-SIP-102 2s proposer QBFT round budget (roundtimer.QuickTimeout).
+	LegacyProposerRoundTimeout bool `yaml:"LegacyProposerRoundTimeout" env:"LEGACY_PROPOSER_ROUND_TIMEOUT" env-description:"Restores the pre-SIP-102 2s proposer QBFT round budget instead of the SIP-102 1.5s one. Default false. This is a committee-wide protocol parameter, not a local performance knob: configure it identically across all operators of every shared committee. A rollback only takes effect once at most f operators of a committee still run the SIP-102 budget."`
 }
 
 // maxSafeProposerDelay is the largest ProposerDelay considered safe. Above this, the
@@ -113,7 +113,6 @@ func (c *config) ApplyDefaults() {
 	c.ConsensusClient.ApplyDefaults()
 	c.P2pNetworkConfig.ApplyDefaults()
 	c.SSVSigner.ApplyDefaults()
-	c.ShortProposerRoundTimeout = true
 }
 
 // load reads the operator config (and optional share config) from the given paths. Paths are
@@ -139,7 +138,7 @@ func (c *config) load(configPath, shareConfigPath string) error {
 
 // resolveAndValidate validates the operator configuration, emits advisory logs, and returns
 // the derived state (operating mode + signing flags). A returned error is fatal — the caller logs
-// it once. logger is used only for advisory logs (warnings and the ShortProposerRoundTimeout
+// it once. logger is used only for advisory logs (warnings and the LegacyProposerRoundTimeout
 // rollback notice), never for fatal conditions.
 func (c *config) resolveAndValidate(logger *zap.Logger) (resolved, error) {
 	// Resolve signing before the proposer-delay check so a doubly-misconfigured node surfaces
@@ -174,9 +173,9 @@ func (c *config) resolveAndValidate(logger *zap.Logger) (resolved, error) {
 			c.ProposerDelayEPBS, maxSafeProposerDelay)
 	}
 
-	if !c.ShortProposerRoundTimeout {
+	if c.LegacyProposerRoundTimeout {
 		// Record the rollback so a cross-operator postmortem can reconstruct which budget this node armed.
-		logger.Info("SIP-102 short proposer round timeout disabled, using the pre-SIP-102 budget",
+		logger.Info("legacy proposer round timeout enabled, using the pre-SIP-102 budget",
 			zap.Duration("proposer_round_timeout", roundtimer.QuickTimeout),
 			zap.Duration("sip102_proposer_round_timeout", roundtimer.DefaultProposerQuickTimeout))
 	}

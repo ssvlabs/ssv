@@ -151,18 +151,18 @@ func (stubExecutionClient) Close() error { return nil }
 // (db → storage → keys → p2p → validator controller → operator node) must construct without
 // error. It exercises everything up to — but not including — start()'s network bring-up, which
 // performs real socket I/O. The doppelganger dimension covers buildDoppelganger's real-handler
-// path (enabled) alongside the no-op path (disabled). The shortProposerRoundTimeout dimension
-// pins the inversion at the cli boundary: cfg.ShortProposerRoundTimeout=true must clear
-// valOpts.LegacyProposerRoundTimeout, and false must set it.
+// path (enabled) alongside the no-op path (disabled). The legacyProposerRoundTimeout dimension
+// pins the wiring at the cli boundary: cfg.LegacyProposerRoundTimeout must be copied as-is into
+// valOpts.LegacyProposerRoundTimeout.
 func Test_newNode_wiresOperatorNode(t *testing.T) {
 	for _, tc := range []struct {
-		name                      string
-		doppelgangerOn            bool
-		shortProposerRoundTimeout bool
+		name                       string
+		doppelgangerOn             bool
+		legacyProposerRoundTimeout bool
 	}{
-		{name: "doppelganger disabled", doppelgangerOn: false, shortProposerRoundTimeout: true},
-		{name: "doppelganger enabled", doppelgangerOn: true, shortProposerRoundTimeout: true},
-		{name: "short proposer round timeout off", doppelgangerOn: false, shortProposerRoundTimeout: false},
+		{name: "doppelganger disabled", doppelgangerOn: false, legacyProposerRoundTimeout: false},
+		{name: "doppelganger enabled", doppelgangerOn: true, legacyProposerRoundTimeout: false},
+		{name: "legacy proposer round timeout on", doppelgangerOn: false, legacyProposerRoundTimeout: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
@@ -184,7 +184,7 @@ func Test_newNode_wiresOperatorNode(t *testing.T) {
 			cfg.SSVAPIPort = 0
 			cfg.WsAPIPort = 0
 			cfg.EnableDoppelgangerProtection = tc.doppelgangerOn
-			cfg.ShortProposerRoundTimeout = tc.shortProposerRoundTimeout
+			cfg.LegacyProposerRoundTimeout = tc.legacyProposerRoundTimeout
 
 			res := resolved{mode: modeOperator, usingPrivKey: true}
 
@@ -202,8 +202,8 @@ func Test_newNode_wiresOperatorNode(t *testing.T) {
 			_, isNoOp := a.doppelgangerHandler.(doppelganger.NoOpHandler)
 			require.Equal(t, !tc.doppelgangerOn, isNoOp, "doppelganger handler must match the configured protection")
 
-			require.Equal(t, !tc.shortProposerRoundTimeout, cfg.SSVOptions.ValidatorOptions.LegacyProposerRoundTimeout,
-				"newNode must invert ShortProposerRoundTimeout into LegacyProposerRoundTimeout")
+			require.Equal(t, tc.legacyProposerRoundTimeout, cfg.SSVOptions.ValidatorOptions.LegacyProposerRoundTimeout,
+				"newNode must copy LegacyProposerRoundTimeout into the validator options")
 
 			// Mirror production teardown ordering: cancel the ctx, then close. newNode starts no
 			// goroutines, so nothing is racing here — the p2p network was constructed but never

@@ -16,7 +16,7 @@ import (
 )
 
 // TestValidatorRoundTimerHonorsLegacyProposerRoundTimeout covers the middle hop of the chain
-// that wires the cli ShortProposerRoundTimeout switch into the roundtimer option:
+// that wires the cli LegacyProposerRoundTimeout switch into the roundtimer option:
 //
 //	CommonOptions -> Options -> Validator.legacyProposerRoundTimeout -> roundtimer.New
 //
@@ -24,7 +24,7 @@ import (
 // operator's switch is silently discarded and the SIP-102 default is armed instead regardless of
 // configuration. The preceding ControllerOptions -> CommonOptions hop is outside this package and
 // is pinned by TestNewControllerPropagatesLegacyProposerRoundTimeout in operator/validator; the cli
-// ShortProposerRoundTimeout inversion itself is pinned by Test_newNode_wiresOperatorNode in
+// LegacyProposerRoundTimeout wiring itself is pinned by Test_newNode_wiresOperatorNode in
 // cli/operator.
 func TestValidatorRoundTimerHonorsLegacyProposerRoundTimeout(t *testing.T) {
 	netCfg := networkconfig.TestNetwork
