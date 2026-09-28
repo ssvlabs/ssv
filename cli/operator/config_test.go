@@ -41,21 +41,20 @@ func Test_config_load(t *testing.T) {
 		"could not read share config needed for logger initialization")
 }
 
+// writeConfig writes a config file holding the env-required eth1/eth2 addresses, so ReadConfig
+// succeeds, followed by body, and returns its path.
+func writeConfig(t *testing.T, body string) string {
+	t.Helper()
+	const requiredBase = "eth1:\n  ETH1Addr: ws://localhost:8546\neth2:\n  BeaconNodeAddr: http://localhost:5052\n"
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	require.NoError(t, os.WriteFile(path, []byte(requiredBase+body), 0o600))
+	return path
+}
+
 // Test_config_load_trueDefaultBools is the regression for #2868: the true-default p2p bools
 // (DynamicMaxPeers, PubSubScoring) must honor an explicit `false` from YAML or env instead of
 // reverting to true. The defaults are now seeded in code by config.ApplyDefaults before ReadConfig.
 func Test_config_load_trueDefaultBools(t *testing.T) {
-	// Minimal base with the env-required eth1/eth2 addresses so ReadConfig succeeds; each case
-	// appends its own p2p section.
-	const requiredBase = "eth1:\n  ETH1Addr: ws://localhost:8546\neth2:\n  BeaconNodeAddr: http://localhost:5052\n"
-
-	writeConfig := func(t *testing.T, p2pBody string) string {
-		t.Helper()
-		path := filepath.Join(t.TempDir(), "config.yaml")
-		require.NoError(t, os.WriteFile(path, []byte(requiredBase+p2pBody), 0o600))
-		return path
-	}
-
 	t.Run("explicit false in YAML is honored", func(t *testing.T) {
 		var c config
 		path := writeConfig(t, "p2p:\n  DynamicMaxPeers: false\n  PubSubScoring: false\n")
@@ -101,6 +100,30 @@ func Test_config_load_trueDefaultBools(t *testing.T) {
 		require.NoError(t, c.load(mainPath, sharePath))
 		require.False(t, c.P2pNetworkConfig.DynamicMaxPeers)
 		require.False(t, c.P2pNetworkConfig.PubSubScoring)
+	})
+}
+
+// Test_config_load_legacyProposerRoundTimeout loads the rollback switch the way an operator sets
+// it. The key names are spelled out literally rather than read back from the struct tags, so a
+// typo in either tag fails here instead of leaving the rollback silently inert mid-incident.
+func Test_config_load_legacyProposerRoundTimeout(t *testing.T) {
+	t.Run("omitted key defaults to off", func(t *testing.T) {
+		var c config
+		require.NoError(t, c.load(writeConfig(t, ""), ""))
+		require.False(t, c.LegacyProposerRoundTimeout)
+	})
+
+	t.Run("YAML key turns it on", func(t *testing.T) {
+		var c config
+		require.NoError(t, c.load(writeConfig(t, "LegacyProposerRoundTimeout: true\n"), ""))
+		require.True(t, c.LegacyProposerRoundTimeout)
+	})
+
+	t.Run("env var turns it on", func(t *testing.T) {
+		t.Setenv("LEGACY_PROPOSER_ROUND_TIMEOUT", "true")
+		var c config
+		require.NoError(t, c.load(writeConfig(t, ""), ""))
+		require.True(t, c.LegacyProposerRoundTimeout)
 	})
 }
 
