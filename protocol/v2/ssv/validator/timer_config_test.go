@@ -15,17 +15,17 @@ import (
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
-// TestValidatorRoundTimerUsesConfiguredProposerQuickTimeout joins the two halves that are otherwise
-// only tested in isolation: the cli ShortProposerRoundTimeout switch, and the roundtimer option.
-//
-// Without this, deleting any assignment along
+// TestValidatorRoundTimerUsesConfiguredProposerQuickTimeout covers the middle hop of the chain
+// that wires the cli ShortProposerRoundTimeout switch into the roundtimer option:
 //
 //	CommonOptions -> Options -> Validator.legacyProposerRoundTimeout -> roundtimer.New
 //
-// leaves every other test green while the operator's switch is silently discarded and the SIP-102
-// default is armed instead regardless of configuration. The preceding ControllerOptions ->
-// CommonOptions hop is outside this package and is pinned by
-// TestNewControllerPropagatesLegacyProposerRoundTimeout in operator/validator.
+// Without this, deleting any assignment along that hop leaves every other test green while the
+// operator's switch is silently discarded and the SIP-102 default is armed instead regardless of
+// configuration. The preceding ControllerOptions -> CommonOptions hop is outside this package and
+// is pinned by TestNewControllerPropagatesLegacyProposerRoundTimeout in operator/validator; the cli
+// ShortProposerRoundTimeout inversion itself is pinned by Test_newNode_wiresOperatorNode in
+// cli/operator.
 func TestValidatorRoundTimerUsesConfiguredProposerQuickTimeout(t *testing.T) {
 	netCfg := networkconfig.TestNetwork
 
