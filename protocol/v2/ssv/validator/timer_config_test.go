@@ -15,7 +15,7 @@ import (
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
-// TestValidatorRoundTimerUsesConfiguredProposerQuickTimeout covers the middle hop of the chain
+// TestValidatorRoundTimerHonorsLegacyProposerRoundTimeout covers the middle hop of the chain
 // that wires the cli ShortProposerRoundTimeout switch into the roundtimer option:
 //
 //	CommonOptions -> Options -> Validator.legacyProposerRoundTimeout -> roundtimer.New
@@ -26,7 +26,7 @@ import (
 // is pinned by TestNewControllerPropagatesLegacyProposerRoundTimeout in operator/validator; the cli
 // ShortProposerRoundTimeout inversion itself is pinned by Test_newNode_wiresOperatorNode in
 // cli/operator.
-func TestValidatorRoundTimerUsesConfiguredProposerQuickTimeout(t *testing.T) {
+func TestValidatorRoundTimerHonorsLegacyProposerRoundTimeout(t *testing.T) {
 	netCfg := networkconfig.TestNetwork
 
 	newTimerForRole := func(t *testing.T, legacy bool, role spectypes.RunnerRole) *roundtimer.RoundTimer {

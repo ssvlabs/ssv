@@ -42,26 +42,28 @@ func Test_config_load(t *testing.T) {
 }
 
 // Test_config_load_trueDefaultBools is the regression for #2868: the true-default p2p bools
-// (DynamicMaxPeers, PubSubScoring) must honor an explicit `false` from YAML or env instead of
-// reverting to true. The defaults are now seeded in code by config.ApplyDefaults before ReadConfig.
+// (DynamicMaxPeers, PubSubScoring) and the top-level ShortProposerRoundTimeout must honor an
+// explicit `false` from YAML or env instead of reverting to true. The defaults are now seeded in
+// code by config.ApplyDefaults before ReadConfig.
 func Test_config_load_trueDefaultBools(t *testing.T) {
 	// Minimal base with the env-required eth1/eth2 addresses so ReadConfig succeeds; each case
-	// appends its own p2p section.
+	// appends its own body.
 	const requiredBase = "eth1:\n  ETH1Addr: ws://localhost:8546\neth2:\n  BeaconNodeAddr: http://localhost:5052\n"
 
-	writeConfig := func(t *testing.T, p2pBody string) string {
+	writeConfig := func(t *testing.T, body string) string {
 		t.Helper()
 		path := filepath.Join(t.TempDir(), "config.yaml")
-		require.NoError(t, os.WriteFile(path, []byte(requiredBase+p2pBody), 0o600))
+		require.NoError(t, os.WriteFile(path, []byte(requiredBase+body), 0o600))
 		return path
 	}
 
 	t.Run("explicit false in YAML is honored", func(t *testing.T) {
 		var c config
-		path := writeConfig(t, "p2p:\n  DynamicMaxPeers: false\n  PubSubScoring: false\n")
+		path := writeConfig(t, "p2p:\n  DynamicMaxPeers: false\n  PubSubScoring: false\nShortProposerRoundTimeout: false\n")
 		require.NoError(t, c.load(path, ""))
 		require.False(t, c.P2pNetworkConfig.DynamicMaxPeers)
 		require.False(t, c.P2pNetworkConfig.PubSubScoring)
+		require.False(t, c.ShortProposerRoundTimeout)
 	})
 
 	t.Run("omitted keys default to true", func(t *testing.T) {
@@ -70,24 +72,28 @@ func Test_config_load_trueDefaultBools(t *testing.T) {
 		require.NoError(t, c.load(path, ""))
 		require.True(t, c.P2pNetworkConfig.DynamicMaxPeers)
 		require.True(t, c.P2pNetworkConfig.PubSubScoring)
+		require.True(t, c.ShortProposerRoundTimeout)
 	})
 
 	t.Run("explicit true in YAML stays true", func(t *testing.T) {
 		var c config
-		path := writeConfig(t, "p2p:\n  DynamicMaxPeers: true\n  PubSubScoring: true\n")
+		path := writeConfig(t, "p2p:\n  DynamicMaxPeers: true\n  PubSubScoring: true\nShortProposerRoundTimeout: true\n")
 		require.NoError(t, c.load(path, ""))
 		require.True(t, c.P2pNetworkConfig.DynamicMaxPeers)
 		require.True(t, c.P2pNetworkConfig.PubSubScoring)
+		require.True(t, c.ShortProposerRoundTimeout)
 	})
 
 	t.Run("env var false overrides the seeded default", func(t *testing.T) {
 		t.Setenv("P2P_DYNAMIC_MAX_PEERS", "false")
 		t.Setenv("PUBSUB_SCORING", "false")
+		t.Setenv("SHORT_PROPOSER_ROUND_TIMEOUT", "false")
 		var c config
 		path := writeConfig(t, "p2p:\n  TcpPort: 13001\n")
 		require.NoError(t, c.load(path, ""))
 		require.False(t, c.P2pNetworkConfig.DynamicMaxPeers)
 		require.False(t, c.P2pNetworkConfig.PubSubScoring)
+		require.False(t, c.ShortProposerRoundTimeout)
 	})
 
 	t.Run("explicit false in main config survives the share-config read", func(t *testing.T) {
@@ -95,12 +101,13 @@ func Test_config_load_trueDefaultBools(t *testing.T) {
 		// re-applied env-default:"true" and clobbered a false set by the first. With defaults now in code,
 		// a share config that omits the keys must leave the main config's explicit false intact.
 		var c config
-		mainPath := writeConfig(t, "p2p:\n  DynamicMaxPeers: false\n  PubSubScoring: false\n")
+		mainPath := writeConfig(t, "p2p:\n  DynamicMaxPeers: false\n  PubSubScoring: false\nShortProposerRoundTimeout: false\n")
 		sharePath := filepath.Join(t.TempDir(), "share.yaml")
 		require.NoError(t, os.WriteFile(sharePath, []byte("p2p:\n  TcpPort: 13002\n"), 0o600))
 		require.NoError(t, c.load(mainPath, sharePath))
 		require.False(t, c.P2pNetworkConfig.DynamicMaxPeers)
 		require.False(t, c.P2pNetworkConfig.PubSubScoring)
+		require.False(t, c.ShortProposerRoundTimeout)
 	})
 }
 
@@ -675,41 +682,5 @@ func Test_resolveAndValidate_shortProposerRoundTimeout(t *testing.T) {
 		require.Len(t, logs, 1)
 		require.Equal(t, roundtimer.QuickTimeout, logs[0].ContextMap()["proposer_round_timeout"])
 		require.Equal(t, roundtimer.DefaultProposerQuickTimeout, logs[0].ContextMap()["sip102_proposer_round_timeout"])
-	})
-}
-
-// Test_config_load_shortProposerRoundTimeout is the ShortProposerRoundTimeout regression counterpart
-// of Test_config_load_trueDefaultBools: an explicit `false` from YAML or env must override the seeded
-// `true` default rather than being silently reverted.
-func Test_config_load_shortProposerRoundTimeout(t *testing.T) {
-	const requiredBase = "eth1:\n  ETH1Addr: ws://localhost:8546\neth2:\n  BeaconNodeAddr: http://localhost:5052\n"
-
-	writeConfig := func(t *testing.T, body string) string {
-		t.Helper()
-		path := filepath.Join(t.TempDir(), "config.yaml")
-		require.NoError(t, os.WriteFile(path, []byte(requiredBase+body), 0o600))
-		return path
-	}
-
-	t.Run("explicit false in YAML is honored", func(t *testing.T) {
-		var c config
-		path := writeConfig(t, "ShortProposerRoundTimeout: false\n")
-		require.NoError(t, c.load(path, ""))
-		require.False(t, c.ShortProposerRoundTimeout)
-	})
-
-	t.Run("omitted key defaults to true", func(t *testing.T) {
-		var c config
-		path := writeConfig(t, "p2p:\n  TcpPort: 13001\n")
-		require.NoError(t, c.load(path, ""))
-		require.True(t, c.ShortProposerRoundTimeout)
-	})
-
-	t.Run("env var false overrides the seeded default", func(t *testing.T) {
-		t.Setenv("SHORT_PROPOSER_ROUND_TIMEOUT", "false")
-		var c config
-		path := writeConfig(t, "p2p:\n  TcpPort: 13001\n")
-		require.NoError(t, c.load(path, ""))
-		require.False(t, c.ShortProposerRoundTimeout)
 	})
 }

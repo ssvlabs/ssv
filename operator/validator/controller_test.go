@@ -112,7 +112,7 @@ func TestNewController(t *testing.T) {
 // a field dropped there is silently the default with every other test still green.
 //
 // The rest of the chain (CommonOptions -> Options -> NewValidator -> roundtimer.New) is covered by
-// TestValidatorRoundTimerUsesConfiguredProposerQuickTimeout in protocol/v2/ssv/validator.
+// TestValidatorRoundTimerHonorsLegacyProposerRoundTimeout in protocol/v2/ssv/validator.
 func TestNewControllerPropagatesLegacyProposerRoundTimeout(t *testing.T) {
 	operatorDataStore := operatordatastore.New(buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811"))
 

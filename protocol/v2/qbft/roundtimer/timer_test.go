@@ -703,7 +703,7 @@ func TestProposerQuickTimeoutBounds(t *testing.T) {
 	// Note what this does and does not establish. SIP-102's design goal is stated for clusters that
 	// start consensus "by ~1.3s", and that is the bound asserted here. It is NOT satisfied across the
 	// whole 1.1-1.5s start range the SIP quotes as typical: at a 1.5s start, round 2 begins at exactly
-	// 3.0s, on the deadline rather than before it. The budget buys back 500ms of a 900ms shortfall; it
+	// 3.0s, on the deadline rather than before it. The shorter budget moves round 2 500ms earlier; it
 	// does not cover the slowest starters, and a cluster running ProposerDelay near the 1s cap is past
 	// saving under a 3s deadline either way.
 	gloasAttestationDeadline := networkconfig.TestNetwork.SlotDuration / 4
@@ -711,7 +711,7 @@ func TestProposerQuickTimeoutBounds(t *testing.T) {
 	require.Less(t, targetInstanceStart+DefaultProposerQuickTimeout, gloasAttestationDeadline,
 		"round 2 must start before the Glamsterdam attestation deadline for the clusters SIP-102 targets")
 
-	// The break-even start: above this, no round change can land regardless of the budget.
+	// The break-even start for this budget: above it, a round change cannot start round 2 before the deadline.
 	require.Equal(t, gloasAttestationDeadline-DefaultProposerQuickTimeout, 1500*time.Millisecond)
 
 	// The 2s budget the proposer used to share with every other role misses the bound even at the
@@ -719,8 +719,8 @@ func TestProposerQuickTimeoutBounds(t *testing.T) {
 	require.Greater(t, targetInstanceStart+QuickTimeout, gloasAttestationDeadline)
 }
 
-// TestQuickTimeoutForRole pins the split: only the proposer gets the shorter budget.
-func TestQuickTimeoutForRole(t *testing.T) {
+// TestDefaultQuickTimeoutForRole pins the split: only the proposer gets the shorter budget.
+func TestDefaultQuickTimeoutForRole(t *testing.T) {
 	require.Equal(t, DefaultProposerQuickTimeout, defaultQuickTimeoutForRole(spectypes.RoleProposer))
 
 	// Every other role keeps the 2s budget, including the roles with no consensus phase — they fall
@@ -828,7 +828,6 @@ func TestWithLegacyProposerRoundTimeout(t *testing.T) {
 				WithLegacyProposerRoundTimeout(true))
 
 			require.Equal(t, QuickTimeout, timer.RoundTimeout(specqbft.FirstRound))
-			require.Equal(t, DefaultProposerQuickTimeout, defaultQuickTimeoutForRole(spectypes.RoleProposer))
 
 			// Between the SIP-102 default and the legacy budget, our own timer (armed for the legacy
 			// QuickTimeout) is still on round 1, but the estimator, which always uses the default, has
