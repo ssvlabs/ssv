@@ -58,6 +58,17 @@ OperatorPrivateKey:
 # mainnet yet; tune only after validating on a Gloas network. See docs/MEV_CONSIDERATIONS.md.
 # ProposerDelayEPBS: 0
 
+# The SIP-102 1.5s proposer QBFT round budget is the default, sized so that, for clusters that start
+# consensus by ~1.3s into the slot, a round change still starts round 2 before the Glamsterdam
+# attestation deadline.
+# Set true to restore the pre-SIP-102 2s proposer round budget. As a rollback it only takes effect in
+# a committee once at most f of its operators still run the SIP-102 budget, so coordinate it across the
+# committee.
+# This is a committee-wide protocol parameter, not a local performance knob. Operators in a shared
+# committee that disagree leave round 1 at different times, so configure it identically across all
+# operators of every shared committee.
+# LegacyProposerRoundTimeout: false
+
 # Post-ePBS (Gloas) direct-builder connections — an opt-in overlay on top of the enshrined builder flow
 # (which needs no configuration and stays the fallback). The whole block MUST be configured identically
 # across ALL operators of every committee sharing a validator: AuthData (defaulting to the URL's hostname,

@@ -19,12 +19,43 @@ type OnRoundTimeoutF func(round specqbft.Round)
 
 const (
 	QuickTimeoutThreshold = specqbft.Round(8)
-	// QuickTimeout is the per-round budget — a fixed network-round-trip allowance, not a slot fraction.
-	// It is intentionally NOT retimed for Gloas: under the tighter ~quarter-slot proposer deadline two
-	// 2s rounds no longer fit, so the Gloas proposer is effectively round-1-must-succeed (a deliberate
-	// choice, pending real-network round-trip data). Pre-Gloas behavior is unchanged.
+	// QuickTimeout is the per-round budget for every role except the proposer — a fixed
+	// network-round-trip allowance, not a slot fraction, so it is not retimed across forks. The
+	// slot-synchronized roles absorb the retimed beacon deadlines through their head start instead,
+	// which is expressed in IntervalDuration (see round1HeadStart).
 	QuickTimeout = 2 * time.Second
-	SlowTimeout  = 2 * time.Minute
+	// DefaultProposerQuickTimeout is the proposer's per-round budget (SIP-102). Glamsterdam moves the
+	// attestation deadline from 4s to 3s into the slot, and a proposer instance starts ~1.1–1.5s in
+	// (RANDAO pre-consensus, ProposerDelay, block retrieval), so with the 2s QuickTimeout a round
+	// change would start round 2 past the deadline and turn a recoverable event into a missed block.
+	//
+	// 1500ms is bounded below by measurement, not by taste: across 30 days of mainnet proposer duties
+	// the slowest round 1 that went on to succeed took 1,148ms, so over that window it would not have
+	// cut off a single round 1 that decided, while 1000ms would have fired on 5–12 real duties a month.
+	//
+	// It is bounded above by the deadline, and that bound is tight rather than comfortable: round 2
+	// starts at instanceStart + 1.5s, so it clears a 3s deadline only for instances starting before
+	// 1.5s. SIP-102 sizes this for clusters starting "by ~1.3s" and does not claim to save the slow
+	// end of the 1.1–1.5s range — see TestProposerQuickTimeoutBounds, which pins both bounds.
+	//
+	// The 1148ms figure is a round 1 measurement, and this same budget is applied to round 2, which
+	// additionally carries round-change justification work. That is deliberate and not an oversight:
+	// under the Glamsterdam deadline a round 2 that needs longer than this has already missed, so
+	// sizing round 2 independently would buy nothing.
+	//
+	// Not fork-gated: there is no message, signature or domain change, so this is not a fork. Pre-Gloas
+	// the effect is a trade rather than a strict improvement. Round 2 starts earlier (~2.8s instead of
+	// ~3.3s, both before the 4s deadline), which helps, but a round 1 that would have decided
+	// between 1.5s and 2.0s is now cut off where it previously succeeded. The 1148ms measurement is
+	// what makes that unlikely, not impossible.
+	//
+	// During rollout a mixed cluster is not worse than today on the same 30 days of data, by the same
+	// argument: upgraded operators round-change at 1.5s, the rest at 2s, and once f+1 have upgraded the
+	// partial-quorum rule pulls the rest along. It is not perfectly seamless either: a pulled-along
+	// operator arms its own 2s timer, so upgraded and non-upgraded operators leave round 2 half a
+	// second apart. Nothing decided in that gap was going to land inside the deadline anyway.
+	DefaultProposerQuickTimeout = 1500 * time.Millisecond
+	SlowTimeout                 = 2 * time.Minute
 )
 
 // CutOffRound is the cluster-wide give-up round: an instance at or past it neither processes messages
@@ -58,6 +89,48 @@ func CutOffRoundFor(role spectypes.RunnerRole) specqbft.Round {
 	return CutOffRound
 }
 
+// Option customizes a RoundTimer at construction.
+type Option func(*RoundTimer)
+
+// WithLegacyProposerRoundTimeout arms the pre-SIP-102 proposer round budget (QuickTimeout) for this
+// timer instead of DefaultProposerQuickTimeout, when legacy is true. legacy false is a no-op, so
+// the zero value of LegacyProposerRoundTimeout keeps the SIP-102 default in place at every layer,
+// from the operator-facing cli config down to validator.CommonOptions.
+//
+// Only the proposer's budget has a switch: the other roles are slot-synchronized, so their round
+// boundaries are derived from the beacon deadlines rather than chosen by the operator.
+//
+// This is a committee-wide protocol parameter, not a local performance knob. Operators sharing a
+// committee that disagree on it leave round 1 at different times, so it must be configured
+// identically across every operator of every shared committee, or left at the default everywhere.
+// The rollout window is the one sanctioned exception, and only because the partial-quorum rule
+// pulls the laggards along (see DefaultProposerQuickTimeout). The same rule also works against a
+// lone rollback: an operator that switches to the legacy budget while f+1 committee peers still run
+// the short one is pulled into round 2 at their pace, so the rollback only takes effect once at most
+// f operators of the committee still run the short timeout. The same warning is on the
+// LegacyProposerRoundTimeout key in config.example.yaml and in its env-description.
+func WithLegacyProposerRoundTimeout(legacy bool) Option {
+	return func(t *RoundTimer) {
+		t.legacyProposerRoundTimeout = legacy
+	}
+}
+
+// defaultQuickTimeoutForRole returns the protocol's per-round budget for rounds at or below
+// QuickTimeoutThreshold. The proposer runs a shorter round than everyone else (SIP-102).
+//
+// This deliberately returns the DEFAULT, not this operator's armed budget, because its callers
+// reason about other nodes rather than about us: EstimatedRoundAt estimates the round a *peer* is in,
+// and a peer runs its own configuration. This operator's own timer takes its budget from
+// RoundTimer.quickTimeout instead. (The split is safe for the proposer specifically: message
+// validation exempts the proposer from the round-spread check, and production never reaches
+// roundTimeoutForRound for it either — so nothing estimates a proposer round from a clock at all.)
+func defaultQuickTimeoutForRole(role spectypes.RunnerRole) time.Duration {
+	if role == spectypes.RoleProposer {
+		return DefaultProposerQuickTimeout
+	}
+	return QuickTimeout
+}
+
 // roundTimeoutForRound returns the time-into-slot at which the given round will time out
 // (i.e. transition to round+1) for the given role:
 //
@@ -65,12 +138,18 @@ func CutOffRoundFor(role spectypes.RunnerRole) specqbft.Round {
 //	Round r >  T:  headStart + T * quick + (r - T) * slow     (T = quickThreshold)
 //
 // Every role has its own dedicated headStart duration.
-func roundTimeoutForRound(role spectypes.RunnerRole, intervalDuration time.Duration, round specqbft.Round) time.Duration {
+//
+// quick is a parameter rather than derived from role, so every caller has to say whose budget it
+// means: our own timer passes RoundTimer.quickTimeout(), anything reasoning about a peer passes
+// defaultQuickTimeoutForRole. Deriving it here would silently ignore an operator's armed proposer
+// budget; production never reaches this path for the proposer today, since RoundRelativeRole keeps
+// it out, but the parameter keeps the function correct regardless.
+func roundTimeoutForRound(role spectypes.RunnerRole, intervalDuration, quick time.Duration, round specqbft.Round) time.Duration {
 	headStart := round1HeadStart(role, intervalDuration)
 	if round <= QuickTimeoutThreshold {
-		return headStart + casts.DurationFromUint64(uint64(round))*QuickTimeout
+		return headStart + casts.DurationFromUint64(uint64(round))*quick
 	}
-	quickPortion := casts.DurationFromUint64(uint64(QuickTimeoutThreshold)) * QuickTimeout
+	quickPortion := casts.DurationFromUint64(uint64(QuickTimeoutThreshold)) * quick
 	slowPortion := casts.DurationFromUint64(uint64(round-QuickTimeoutThreshold)) * SlowTimeout
 	return headStart + quickPortion + slowPortion
 }
@@ -102,6 +181,12 @@ func round1HeadStart(role spectypes.RunnerRole, intervalDuration time.Duration) 
 // Round 1, Round 2, ... Round QuickTimeoutThreshold are considered "quick" (aka short rounds).
 // Round QuickTimeoutThreshold+1, Round QuickTimeoutThreshold+2, ... are considered "slow" (aka long rounds).
 //
+// It answers for a PEER, not for us: it uses the protocol default budget (defaultQuickTimeoutForRole),
+// never this operator's armed proposer round budget, because a peer runs its own configuration.
+// For our own timer use RoundTimer.RoundTimeout. Passing RoleProposer here is not a supported
+// production path in any case: message validation exempts the proposer from the round-spread check,
+// so nothing estimates a proposer round from a clock.
+//
 // IMPORTANT: the calculations in this func must be aligned with those in RoundTimeout, those funcs should re-use
 // the same code/algo - they currently don't since that would make one of them quite slow, instead the alignment
 // is enforced by unit-tests.
@@ -114,9 +199,10 @@ func EstimatedRoundAt(role spectypes.RunnerRole, intervalDuration, timeIntoSlot 
 		return specqbft.FirstRound, nil
 	}
 
-	quickEnd := casts.DurationFromUint64(uint64(QuickTimeoutThreshold)) * QuickTimeout
+	quick := defaultQuickTimeoutForRole(role)
+	quickEnd := casts.DurationFromUint64(uint64(QuickTimeoutThreshold)) * quick
 	if elapsed < quickEnd {
-		return specqbft.FirstRound + specqbft.Round(elapsed/QuickTimeout), nil // #nosec G115 -- elapsed is non-negative (guarded above)
+		return specqbft.FirstRound + specqbft.Round(elapsed/quick), nil // #nosec G115 -- elapsed is non-negative (guarded above)
 	}
 
 	slowElapsed := elapsed - quickEnd
@@ -133,6 +219,10 @@ type RoundTimer struct {
 	role         spectypes.RunnerRole
 	beaconConfig *networkconfig.Beacon
 
+	// legacyProposerRoundTimeout arms the pre-SIP-102 QuickTimeout budget for the proposer when
+	// true; set by WithLegacyProposerRoundTimeout. False (the default) keeps DefaultProposerQuickTimeout.
+	legacyProposerRoundTimeout bool
+
 	// callback is a func called when currently stored round times out.
 	callback OnRoundTimeoutF
 
@@ -144,10 +234,10 @@ type RoundTimer struct {
 
 // New creates a per-duty RoundTimer with the callback wired at construction.
 // callback must not be nil.
-func New(ctx context.Context, beaconConfig *networkconfig.Beacon, role spectypes.RunnerRole, slot phase0.Slot, callback OnRoundTimeoutF) *RoundTimer {
+func New(ctx context.Context, beaconConfig *networkconfig.Beacon, role spectypes.RunnerRole, slot phase0.Slot, callback OnRoundTimeoutF, opts ...Option) *RoundTimer {
 	ctx, cancel := context.WithCancel(ctx)
 
-	return &RoundTimer{
+	t := &RoundTimer{
 		ctx:          ctx,
 		cancel:       cancel,
 		beaconConfig: beaconConfig,
@@ -158,6 +248,20 @@ func New(ctx context.Context, beaconConfig *networkconfig.Beacon, role spectypes
 		round:        specqbft.NoRound, // set in TimeoutForRound
 		timer:        nil,              // set in TimeoutForRound
 	}
+	for _, opt := range opts {
+		opt(t)
+	}
+	return t
+}
+
+// quickTimeout returns this timer's per-round budget for rounds at or below QuickTimeoutThreshold:
+// this operator's armed proposer budget when the role is the proposer, the protocol default
+// otherwise.
+func (t *RoundTimer) quickTimeout() time.Duration {
+	if t.role == spectypes.RoleProposer && t.legacyProposerRoundTimeout {
+		return QuickTimeout
+	}
+	return defaultQuickTimeoutForRole(t.role)
 }
 
 // RoundRelativeRole reports whether the role's QBFT round timeouts are relative to the instance's
@@ -171,11 +275,19 @@ func RoundRelativeRole(role spectypes.RunnerRole) bool {
 // RoundTimeout returns the duration to wait before timing out the given round.
 //
 // For the round-relative roles (RoundRelativeRole), the timeout is not slot-synchronized:
-//   - rounds <= QuickTimeoutThreshold → QuickTimeout
+//   - rounds <= QuickTimeoutThreshold → this timer's quick timeout (RoundTimer.quickTimeout), which
+//     for the proposer is the operator-configurable budget
 //   - rounds >  QuickTimeoutThreshold → SlowTimeout
 //
+// The proposer is the only round-relative role today. Message validation caps proposer messages at
+// round 2 (MaxRound), and since ssvlabs/ssv#3041 the local instance stops there too:
+// CutOffRoundFor(RoleProposer) is 3, so IsRelevant() flips as soon as a bump lands on round 3. A
+// proposer instance therefore only ever arms rounds 1 and 2 — both on the configurable quick budget.
+// It never reaches QuickTimeoutThreshold (8), so the SlowTimeout branch below is unreachable for it;
+// the branch stays because RoundRelativeRole is a role predicate, not a proposer-only one.
+//
 // For all other roles, the timeout is slot-synchronized via roundTimeoutForRound:
-// it returns time.Until(slotStart + roundTimeoutForRound(role, IntervalDuration(slot), round)),
+// it returns time.Until(slotStart + roundTimeoutForRound(role, IntervalDuration(slot), quick, round)),
 // so the result can be negative for duties that started late. The base timeout is one interval
 // (attester/sync-committee) or two intervals (aggregator/sync-contribution/aggregator-committee);
 // IntervalDuration is 1/3 of the slot before Gloas, 1/4 from Gloas on (SIP #94 §1).
@@ -184,14 +296,14 @@ func (t *RoundTimer) RoundTimeout(round specqbft.Round) time.Duration {
 	// RoundRelativeRole).
 	if RoundRelativeRole(t.role) {
 		if round <= QuickTimeoutThreshold {
-			return QuickTimeout
+			return t.quickTimeout()
 		}
 		return SlowTimeout
 	}
 
 	// Slot-synchronized roles: timeout happens at slot start + roundTimeoutForRound(...).
 	dutyStartTime := t.beaconConfig.SlotStartTime(t.slot)
-	return time.Until(dutyStartTime.Add(roundTimeoutForRound(t.role, t.beaconConfig.IntervalDuration(t.slot), round)))
+	return time.Until(dutyStartTime.Add(roundTimeoutForRound(t.role, t.beaconConfig.IntervalDuration(t.slot), t.quickTimeout(), round)))
 }
 
 // TimeoutForRound implements specqbft.Timer.

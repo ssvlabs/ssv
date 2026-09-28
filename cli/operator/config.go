@@ -15,6 +15,7 @@ import (
 	p2pv1 "github.com/ssvlabs/ssv/network/p2p"
 	"github.com/ssvlabs/ssv/operator"
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
@@ -62,6 +63,10 @@ type config struct {
 	SSVAPIPort                   int                     `yaml:"SSVAPIPort" env:"SSV_API_PORT" env-description:"Port for SSV API server"`
 	LocalEventsPath              string                  `yaml:"LocalEventsPath" env:"EVENTS_PATH" env-description:"Path to local events file"`
 	EnableDoppelgangerProtection bool                    `yaml:"EnableDoppelgangerProtection" env:"ENABLE_DOPPELGANGER_PROTECTION" env-description:"Enable doppelganger protection for validators"`
+	// LegacyProposerRoundTimeout defaults to false, which keeps the SIP-102 proposer round timeout
+	// (1.5s, roundtimer.DefaultProposerQuickTimeout). Setting it true is the rollback lever: it
+	// restores the pre-SIP-102 2s proposer QBFT round budget (roundtimer.QuickTimeout).
+	LegacyProposerRoundTimeout bool `yaml:"LegacyProposerRoundTimeout" env:"LEGACY_PROPOSER_ROUND_TIMEOUT" env-description:"Restores the pre-SIP-102 2s proposer QBFT round budget instead of the SIP-102 1.5s one. Default false. This is a committee-wide protocol parameter, not a local performance knob: configure it identically across all operators of every shared committee. A rollback only takes effect once at most f operators of a committee still run the SIP-102 budget."`
 }
 
 // maxSafeProposerDelay is the largest ProposerDelay considered safe. Above this, the
@@ -131,9 +136,10 @@ func (c *config) load(configPath, shareConfigPath string) error {
 	return nil
 }
 
-// resolveAndValidate validates the operator configuration, emits advisory warnings, and returns
+// resolveAndValidate validates the operator configuration, emits advisory logs, and returns
 // the derived state (operating mode + signing flags). A returned error is fatal — the caller logs
-// it once. logger is used only for warnings, never for fatal conditions.
+// it once. logger is used only for advisory logs (warnings and the LegacyProposerRoundTimeout
+// rollback notice), never for fatal conditions.
 func (c *config) resolveAndValidate(logger *zap.Logger) (resolved, error) {
 	// Resolve signing before the proposer-delay check so a doubly-misconfigured node surfaces
 	// the signing error first.
@@ -165,6 +171,13 @@ func (c *config) resolveAndValidate(logger *zap.Logger) (resolved, error) {
 	if c.ProposerDelayEPBS > maxSafeProposerDelay {
 		return resolved{}, fmt.Errorf("ProposerDelayEPBS value %v exceeds maximum safe delay of %v (no override is available for the post-ePBS delay)",
 			c.ProposerDelayEPBS, maxSafeProposerDelay)
+	}
+
+	if c.LegacyProposerRoundTimeout {
+		// Record the rollback so a cross-operator postmortem can reconstruct which budget this node armed.
+		logger.Info("legacy proposer round timeout enabled, using the pre-SIP-102 budget",
+			zap.Duration("proposer_round_timeout", roundtimer.QuickTimeout),
+			zap.Duration("sip102_proposer_round_timeout", roundtimer.DefaultProposerQuickTimeout))
 	}
 
 	if err := gloas.ValidateBuilderConfig(c.Builders); err != nil {

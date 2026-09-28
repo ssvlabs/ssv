@@ -53,7 +53,10 @@ type CommonOptions struct {
 	Graffiti            []byte
 	ProposerDelay       time.Duration
 	ProposerDelayEPBS   time.Duration
-	Builders            gloas.BuilderConfig
+	// LegacyProposerRoundTimeout: true restores the pre-SIP-102 2s proposer QBFT round budget; false
+	// (zero value) keeps the SIP-102 default.
+	LegacyProposerRoundTimeout bool
+	Builders                   gloas.BuilderConfig
 }
 
 // NewCommonOptions finalizes a CommonOptions literal: it owns QueueSize (any caller-set value is

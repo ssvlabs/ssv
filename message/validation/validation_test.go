@@ -2248,6 +2248,13 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 				topicID := commons.GetTopicFullName(commons.CommitteeTopicID(committeeID)[0])
 
+				// Search for a time-into-slot at which the estimator reports the target round, stepping
+				// by a granularity smaller than any role's quick timeout rather than by QuickTimeout
+				// itself. The proposer advances by DefaultProposerQuickTimeout (1.5s), so a 2s step
+				// visits rounds 1,2,3,5,6,7,9,... for it - skipping 4 and 8, which would spin forever
+				// if the target for this role were ever one of those.
+				const searchStep = 100 * time.Millisecond
+				const searchLimit = 2 * time.Hour
 				timeIntoSlot := time.Duration(0)
 				for {
 					currentRound, err := validator.estimatedRoundAt(role, slot, timeIntoSlot)
@@ -2255,7 +2262,9 @@ func Test_ValidateSSVMessage(t *testing.T) {
 					if currentRound == round {
 						break
 					}
-					timeIntoSlot += roundtimer.QuickTimeout
+					timeIntoSlot += searchStep
+					require.Less(t, timeIntoSlot, searchLimit,
+						"no time-into-slot yields round %d for role %s", round, message.RunnerRoleToString(role))
 				}
 
 				receivedAt := netCfg.SlotStartTime(slot).Add(timeIntoSlot)

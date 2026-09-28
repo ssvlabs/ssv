@@ -6,6 +6,7 @@
   "Graffiti": "ssv.network",
   "KeyStore.PasswordFile": "",
   "KeyStore.PrivateKeyFile": "",
+  "LegacyProposerRoundTimeout": "false",
   "LocalEventsPath": "",
   "MetricsAPIPort": "0",
   "NetworkPrivateKey": "",

@@ -17,6 +17,7 @@ import (
 	exporterconfig "github.com/ssvlabs/ssv/exporter/config"
 	"github.com/ssvlabs/ssv/networkconfig"
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
@@ -40,21 +41,20 @@ func Test_config_load(t *testing.T) {
 		"could not read share config needed for logger initialization")
 }
 
+// writeConfig writes a config file holding the env-required eth1/eth2 addresses, so ReadConfig
+// succeeds, followed by body, and returns its path.
+func writeConfig(t *testing.T, body string) string {
+	t.Helper()
+	const requiredBase = "eth1:\n  ETH1Addr: ws://localhost:8546\neth2:\n  BeaconNodeAddr: http://localhost:5052\n"
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	require.NoError(t, os.WriteFile(path, []byte(requiredBase+body), 0o600))
+	return path
+}
+
 // Test_config_load_trueDefaultBools is the regression for #2868: the true-default p2p bools
 // (DynamicMaxPeers, PubSubScoring) must honor an explicit `false` from YAML or env instead of
 // reverting to true. The defaults are now seeded in code by config.ApplyDefaults before ReadConfig.
 func Test_config_load_trueDefaultBools(t *testing.T) {
-	// Minimal base with the env-required eth1/eth2 addresses so ReadConfig succeeds; each case
-	// appends its own p2p section.
-	const requiredBase = "eth1:\n  ETH1Addr: ws://localhost:8546\neth2:\n  BeaconNodeAddr: http://localhost:5052\n"
-
-	writeConfig := func(t *testing.T, p2pBody string) string {
-		t.Helper()
-		path := filepath.Join(t.TempDir(), "config.yaml")
-		require.NoError(t, os.WriteFile(path, []byte(requiredBase+p2pBody), 0o600))
-		return path
-	}
-
 	t.Run("explicit false in YAML is honored", func(t *testing.T) {
 		var c config
 		path := writeConfig(t, "p2p:\n  DynamicMaxPeers: false\n  PubSubScoring: false\n")
@@ -100,6 +100,30 @@ func Test_config_load_trueDefaultBools(t *testing.T) {
 		require.NoError(t, c.load(mainPath, sharePath))
 		require.False(t, c.P2pNetworkConfig.DynamicMaxPeers)
 		require.False(t, c.P2pNetworkConfig.PubSubScoring)
+	})
+}
+
+// Test_config_load_legacyProposerRoundTimeout loads the rollback switch the way an operator sets
+// it. The key names are spelled out literally rather than read back from the struct tags, so a
+// typo in either tag fails here instead of leaving the rollback silently inert mid-incident.
+func Test_config_load_legacyProposerRoundTimeout(t *testing.T) {
+	t.Run("omitted key defaults to off", func(t *testing.T) {
+		var c config
+		require.NoError(t, c.load(writeConfig(t, ""), ""))
+		require.False(t, c.LegacyProposerRoundTimeout)
+	})
+
+	t.Run("YAML key turns it on", func(t *testing.T) {
+		var c config
+		require.NoError(t, c.load(writeConfig(t, "LegacyProposerRoundTimeout: true\n"), ""))
+		require.True(t, c.LegacyProposerRoundTimeout)
+	})
+
+	t.Run("env var turns it on", func(t *testing.T) {
+		t.Setenv("LEGACY_PROPOSER_ROUND_TIMEOUT", "true")
+		var c config
+		require.NoError(t, c.load(writeConfig(t, ""), ""))
+		require.True(t, c.LegacyProposerRoundTimeout)
 	})
 }
 
@@ -639,5 +663,41 @@ func Test_startupErrorLogFields(t *testing.T) {
 		m := recorded.All()[0].ContextMap()
 		require.Contains(t, m, "error")
 		require.NotContains(t, m, "ssv_signer_endpoint")
+	})
+}
+
+// Test_resolveAndValidate_legacyProposerRoundTimeout covers the operator switch for the proposer
+// QBFT round budget (SIP-102): off (the default) is silent, on logs exactly one Info recording both
+// the armed pre-SIP-102 budget and the SIP-102 default it replaces.
+func Test_resolveAndValidate_legacyProposerRoundTimeout(t *testing.T) {
+	t.Run("default (off) passes silently", func(t *testing.T) {
+		core, recorded := observer.New(zapcore.InfoLevel)
+		c := config{}
+		c.ApplyDefaults()
+		c.OperatorPrivateKey = testOperatorKey
+
+		require.False(t, c.LegacyProposerRoundTimeout)
+
+		_, err := c.resolveAndValidate(zap.New(core))
+		require.NoError(t, err)
+		// Filtered to this log rather than asserting resolveAndValidate is silent overall, so an
+		// unrelated Info added elsewhere in it cannot fail this test under a misleading name.
+		require.Len(t, recorded.FilterMessageSnippet("proposer round timeout").All(), 0)
+	})
+
+	t.Run("on resolves OK and logs the armed and SIP-102 budgets", func(t *testing.T) {
+		core, recorded := observer.New(zapcore.InfoLevel)
+		c := config{}
+		c.ApplyDefaults()
+		c.OperatorPrivateKey = testOperatorKey
+		c.LegacyProposerRoundTimeout = true
+
+		_, err := c.resolveAndValidate(zap.New(core))
+		require.NoError(t, err)
+
+		logs := recorded.FilterMessageSnippet("legacy proposer round timeout enabled").All()
+		require.Len(t, logs, 1)
+		require.Equal(t, roundtimer.QuickTimeout, logs[0].ContextMap()["proposer_round_timeout"])
+		require.Equal(t, roundtimer.DefaultProposerQuickTimeout, logs[0].ContextMap()["sip102_proposer_round_timeout"])
 	})
 }
