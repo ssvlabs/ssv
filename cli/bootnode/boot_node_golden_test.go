@@ -23,19 +23,57 @@ func Test_config_defaults_golden(t *testing.T) {
 	var c config
 	c.ApplyDefaults()
 
-	assertDefaultsGolden(t, filepath.Join("testdata", "defaults.golden.json"), &c)
+	assertDescribeGolden(t, filepath.Join("testdata", "defaults.golden.json"), &c,
+		func(d globalcfg.FieldDoc) string { return d.Default })
 }
 
-// assertDefaultsGolden snapshots the env-backed scalar fields of a config (via the shared describer)
-// and compares them to the committed golden, or rewrites the golden when UPDATE_GOLDEN is set. Kept
-// self-contained so cli/operator and cli/bootnode stay independent packages.
-func assertDefaultsGolden(t *testing.T, goldenPath string, cfg any) {
+// Test_config_envNames_golden pins every env var name. The names otherwise live only in struct tags,
+// so a typo or rename there would silently stop an operator's env var from applying, and a test that
+// reads the name back from the tag would read the typo too. With the names in a reviewed file, any
+// change shows up as a golden diff.
+//
+// Regenerate intentionally, only when an env var is deliberately added or renamed, with:
+//
+//	UPDATE_GOLDEN=1 go test ./cli/bootnode -run Test_config_envNames_golden
+func Test_config_envNames_golden(t *testing.T) {
+	var c config
+	c.ApplyDefaults()
+
+	assertDescribeGolden(t, filepath.Join("testdata", "envnames.golden.json"), &c,
+		func(d globalcfg.FieldDoc) string { return d.EnvName })
+}
+
+// Test_config_fields_wellFormed checks two invariants the goldens don't: no two fields share an env
+// var (cleanenv would set both from one variable), and every env-backed field has an
+// env-description (it is what --help and the generated config docs print).
+func Test_config_fields_wellFormed(t *testing.T) {
+	var c config
+	c.ApplyDefaults()
+
+	fieldByEnv := map[string]string{}
+	for _, d := range globalcfg.Describe(&c) {
+		if d.EnvName == "" {
+			continue // nested-struct container, not a field
+		}
+		if other, dup := fieldByEnv[d.EnvName]; dup {
+			t.Errorf("env var %s is shared by %s and %s", d.EnvName, other, d.YAMLPath)
+		}
+		fieldByEnv[d.EnvName] = d.YAMLPath
+		require.NotEmpty(t, d.Description, "%s has no env-description", d.YAMLPath)
+	}
+}
+
+// assertDescribeGolden snapshots one column of the env-backed scalar fields of a config (via the
+// shared describer), keyed by YAML path, and compares it to the committed golden, or rewrites the
+// golden when UPDATE_GOLDEN is set. Kept self-contained so cli/operator and cli/bootnode stay
+// independent packages.
+func assertDescribeGolden(t *testing.T, goldenPath string, cfg any, column func(globalcfg.FieldDoc) string) {
 	t.Helper()
 
 	snapshot := map[string]string{}
 	for _, d := range globalcfg.Describe(cfg) {
 		if d.EnvName != "" { // skip nested-struct container rows
-			snapshot[d.YAMLPath] = d.Default
+			snapshot[d.YAMLPath] = column(d)
 		}
 	}
 	data, err := json.MarshalIndent(snapshot, "", "  ")
