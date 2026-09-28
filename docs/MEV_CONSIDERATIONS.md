@@ -110,9 +110,9 @@ result in missed block proposal. This number moved down from ~1.2s when the prop
 2s to 1.5s; an Operator who tuned `ProposerDelay` against the older guidance should retune.
 
 Note the budget is measured from QBFT instance start rather than from slot start, so the equation above is an 
-approximation that folds the pre-consensus work into one deadline. An Operator who has raised `ProposerQuickTimeout` 
-above the 1.5s default should substitute their configured value; the accepted range is 1250ms to 2s, and setting 2s 
-restores the pre-SIP-102 arithmetic along with the pre-SIP-102 behavior.
+approximation that folds the pre-consensus work into one deadline. An Operator who turned `ShortProposerRoundTimeout` 
+off runs the pre-SIP-102 2s budget instead of the 1.5s default, and should substitute 2s in the equation above; that 
+also restores the pre-SIP-102 arithmetic along with the pre-SIP-102 behavior.
 
 **To enforce proposer safety limits, the SSV node will automatically prevent startup if ProposerDelay exceeds 1s 
 unless the Operator explicitly acknowledges the risk by setting `AllowDangerousProposerDelay: true`.** That 1s gate is 

@@ -17,6 +17,7 @@ import (
 	exporterconfig "github.com/ssvlabs/ssv/exporter/config"
 	"github.com/ssvlabs/ssv/networkconfig"
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
@@ -642,57 +643,73 @@ func Test_startupErrorLogFields(t *testing.T) {
 	})
 }
 
-// Test_resolveAndValidate_proposerQuickTimeout covers the operator-configurable proposer QBFT round
-// budget (SIP-102). Unset means "use the default"; anything outside the supported range is rejected
-// outright, with no acknowledge-and-proceed override (see validateProposerQuickTimeout).
-func Test_resolveAndValidate_proposerQuickTimeout(t *testing.T) {
-	t.Run("unset passes silently", func(t *testing.T) {
+// Test_resolveAndValidate_shortProposerRoundTimeout covers the operator switch for the proposer QBFT
+// round budget (SIP-102): on (the default) is silent, off logs exactly one Info recording both the
+// armed pre-SIP-102 budget and the SIP-102 default it replaces.
+func Test_resolveAndValidate_shortProposerRoundTimeout(t *testing.T) {
+	t.Run("default (on) passes silently", func(t *testing.T) {
 		core, recorded := observer.New(zapcore.InfoLevel)
 		c := config{}
+		c.ApplyDefaults()
 		c.OperatorPrivateKey = testOperatorKey
+
+		require.True(t, c.ShortProposerRoundTimeout)
 
 		_, err := c.resolveAndValidate(zap.New(core))
 		require.NoError(t, err)
 		// Filtered to this log rather than asserting resolveAndValidate is silent overall, so an
 		// unrelated Info added elsewhere in it cannot fail this test under a misleading name.
-		require.Len(t, recorded.FilterMessageSnippet("ProposerQuickTimeout").All(), 0)
+		require.Len(t, recorded.FilterMessageSnippet("proposer round timeout").All(), 0)
 	})
 
-	t.Run("in-range values pass and are logged", func(t *testing.T) {
-		for _, timeout := range []time.Duration{1250 * time.Millisecond, 1400 * time.Millisecond, 1500 * time.Millisecond, 2000 * time.Millisecond} {
-			t.Run(timeout.String(), func(t *testing.T) {
-				core, recorded := observer.New(zapcore.InfoLevel)
-				c := config{}
-				c.OperatorPrivateKey = testOperatorKey
-				c.ProposerQuickTimeout = timeout
+	t.Run("off resolves OK and logs the armed and SIP-102 budgets", func(t *testing.T) {
+		core, recorded := observer.New(zapcore.InfoLevel)
+		c := config{}
+		c.OperatorPrivateKey = testOperatorKey
+		c.ShortProposerRoundTimeout = false
 
-				_, err := c.resolveAndValidate(zap.New(core))
-				require.NoError(t, err)
+		_, err := c.resolveAndValidate(zap.New(core))
+		require.NoError(t, err)
 
-				logs := recorded.FilterMessageSnippet("non-default ProposerQuickTimeout").All()
-				require.Len(t, logs, 1)
-				require.Equal(t, timeout, logs[0].ContextMap()["proposer_quick_timeout"])
-			})
-		}
+		logs := recorded.FilterMessageSnippet("SIP-102 short proposer round timeout disabled").All()
+		require.Len(t, logs, 1)
+		require.Equal(t, roundtimer.QuickTimeout, logs[0].ContextMap()["proposer_round_timeout"])
+		require.Equal(t, roundtimer.DefaultProposerQuickTimeout, logs[0].ContextMap()["sip102_proposer_round_timeout"])
+	})
+}
+
+// Test_config_load_shortProposerRoundTimeout is the ShortProposerRoundTimeout regression counterpart
+// of Test_config_load_trueDefaultBools: an explicit `false` from YAML or env must override the seeded
+// `true` default rather than being silently reverted.
+func Test_config_load_shortProposerRoundTimeout(t *testing.T) {
+	const requiredBase = "eth1:\n  ETH1Addr: ws://localhost:8546\neth2:\n  BeaconNodeAddr: http://localhost:5052\n"
+
+	writeConfig := func(t *testing.T, body string) string {
+		t.Helper()
+		path := filepath.Join(t.TempDir(), "config.yaml")
+		require.NoError(t, os.WriteFile(path, []byte(requiredBase+body), 0o600))
+		return path
+	}
+
+	t.Run("explicit false in YAML is honored", func(t *testing.T) {
+		var c config
+		path := writeConfig(t, "ShortProposerRoundTimeout: false\n")
+		require.NoError(t, c.load(path, ""))
+		require.False(t, c.ShortProposerRoundTimeout)
 	})
 
-	t.Run("outside the supported range errors, with no override available", func(t *testing.T) {
-		// 1000ms is the value SIP-102 explicitly rejected: it would have timed out 5-12 real duties a
-		// month. 1148ms is the slowest observed successful round 1 itself, rejected because the design
-		// goal asks for margin over that observation rather than a tie with it.
-		// AllowDangerousProposerDelay must not buy a way past any of them.
-		for _, timeout := range []time.Duration{time.Millisecond, 1000 * time.Millisecond, 1148 * time.Millisecond, 1249 * time.Millisecond, 2001 * time.Millisecond, 10 * time.Second} {
-			t.Run(timeout.String(), func(t *testing.T) {
-				c := config{}
-				c.OperatorPrivateKey = testOperatorKey
-				c.ProposerQuickTimeout = timeout
-				c.AllowDangerousProposerDelay = true
+	t.Run("omitted key defaults to true", func(t *testing.T) {
+		var c config
+		path := writeConfig(t, "p2p:\n  TcpPort: 13001\n")
+		require.NoError(t, c.load(path, ""))
+		require.True(t, c.ShortProposerRoundTimeout)
+	})
 
-				_, err := c.resolveAndValidate(zap.NewNop())
-				require.Error(t, err)
-				require.Contains(t, err.Error(), "ProposerQuickTimeout value")
-				require.Contains(t, err.Error(), "outside the supported range")
-			})
-		}
+	t.Run("env var false overrides the seeded default", func(t *testing.T) {
+		t.Setenv("SHORT_PROPOSER_ROUND_TIMEOUT", "false")
+		var c config
+		path := writeConfig(t, "p2p:\n  TcpPort: 13001\n")
+		require.NoError(t, c.load(path, ""))
+		require.False(t, c.ShortProposerRoundTimeout)
 	})
 }

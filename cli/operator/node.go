@@ -449,7 +449,7 @@ func newNode(
 	valOpts.Graffiti = []byte(cfg.Graffiti)
 	valOpts.ProposerDelay = cfg.ProposerDelay
 	valOpts.ProposerDelayEPBS = cfg.ProposerDelayEPBS
-	valOpts.ProposerQuickTimeout = cfg.ProposerQuickTimeout
+	valOpts.LegacyProposerRoundTimeout = !cfg.ShortProposerRoundTimeout
 	valOpts.Builders = cfg.Builders
 	valOpts.ValidatorSyncer = metadataSyncer
 	valOpts.ExporterMode = res.isExporter()

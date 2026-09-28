@@ -686,8 +686,9 @@ func TestCutOffRoundFor(t *testing.T) {
 	}
 }
 
-// TestProposerQuickTimeoutBounds pins DefaultProposerQuickTimeout to the two bounds SIP-102 derives it
-// from, so a future edit has to argue with the measurements rather than just move the number.
+// TestProposerQuickTimeoutBounds pins DefaultProposerQuickTimeout to the measurement and deadline
+// SIP-102 derives it from, so a future edit has to argue with the measurements rather than just move
+// the number.
 func TestProposerQuickTimeoutBounds(t *testing.T) {
 	// Lower bound: across 30 days of mainnet proposer duties the slowest round 1 that went on to
 	// succeed took 1,148ms. The budget must sit above that, or the timer fires on rounds that would
@@ -695,13 +696,6 @@ func TestProposerQuickTimeoutBounds(t *testing.T) {
 	const slowestSuccessfulRound1 = 1148 * time.Millisecond
 	require.Greater(t, DefaultProposerQuickTimeout, slowestSuccessfulRound1,
 		"proposer round 1 must outlast the slowest round 1 observed to succeed")
-	// The configurable floor clears that measurement too, by SIP-102's own alternative value. The
-	// design goal is stated "with margin", so the lowest budget an operator can select has to satisfy
-	// the same strict inequality the default does, not merely tie the observation.
-	require.Greater(t, MinProposerQuickTimeout, slowestSuccessfulRound1,
-		"the lowest configurable budget must also outlast the slowest round 1 observed to succeed")
-	require.Less(t, MinProposerQuickTimeout, DefaultProposerQuickTimeout,
-		"the floor must leave room to tune downward from the default")
 
 	// Upper bound: Glamsterdam moves the attestation deadline to a quarter of the slot
 	// (ATTESTATION_DUE_BPS_GLOAS = 2500, so 3s of 12s). Round 2 must begin before that deadline,
@@ -786,20 +780,24 @@ func TestGloasHeadStartsTrackRetimedDeadlines(t *testing.T) {
 	require.Zero(t, round1HeadStart(spectypes.RoleProposer, gloas))
 }
 
-// TestWithProposerQuickTimeout covers the operator override: a configured budget replaces the
-// default for the proposer, an unset one does not, and no override reaches the other roles.
-func TestWithProposerQuickTimeout(t *testing.T) {
-	// An operator-selectable value: the option itself does not validate, but using one the node
-	// would actually accept keeps the test honest about what it demonstrates.
-	const configured = 1400 * time.Millisecond
-
-	t.Run("override applies to the proposer", func(t *testing.T) {
+// TestWithLegacyProposerRoundTimeout covers the operator switch: true arms the pre-SIP-102 budget for
+// the proposer, false does not, and neither reaches the other roles.
+func TestWithLegacyProposerRoundTimeout(t *testing.T) {
+	t.Run("true arms the pre-SIP-102 budget for the proposer, rounds 1 and 2", func(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
 			timer := New(t.Context(), setupTestBeaconConfig(), spectypes.RoleProposer, 0, func(specqbft.Round) {},
-				WithProposerQuickTimeout(configured))
+				WithLegacyProposerRoundTimeout(true))
 
-			require.Equal(t, configured, timer.RoundTimeout(specqbft.FirstRound))
-			require.Equal(t, configured, timer.RoundTimeout(specqbft.FirstRound+1))
+			require.Equal(t, QuickTimeout, timer.RoundTimeout(specqbft.FirstRound))
+			require.Equal(t, QuickTimeout, timer.RoundTimeout(specqbft.FirstRound+1))
+		})
+	})
+
+	t.Run("false keeps the SIP-102 default", func(t *testing.T) {
+		synctest.Test(t, func(t *testing.T) {
+			timer := New(t.Context(), setupTestBeaconConfig(), spectypes.RoleProposer, 0, func(specqbft.Round) {},
+				WithLegacyProposerRoundTimeout(false))
+			require.Equal(t, DefaultProposerQuickTimeout, timer.RoundTimeout(specqbft.FirstRound))
 		})
 	})
 
@@ -810,48 +808,36 @@ func TestWithProposerQuickTimeout(t *testing.T) {
 		})
 	})
 
-	t.Run("a non-positive override is not an override", func(t *testing.T) {
-		synctest.Test(t, func(t *testing.T) {
-			for _, d := range []time.Duration{0, -time.Second} {
-				timer := New(t.Context(), setupTestBeaconConfig(), spectypes.RoleProposer, 0, func(specqbft.Round) {},
-					WithProposerQuickTimeout(d))
-				require.Equal(t, DefaultProposerQuickTimeout, timer.RoundTimeout(specqbft.FirstRound))
-			}
-		})
-	})
-
 	t.Run("slot-synchronized roles ignore it", func(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
 			beaconConfig := setupTestBeaconConfig()
 			for _, role := range []spectypes.RunnerRole{spectypes.RoleCommittee, ssvtypes.RoleAggregator} {
-				withOpt := New(t.Context(), beaconConfig, role, 0, func(specqbft.Round) {}, WithProposerQuickTimeout(configured))
+				withOpt := New(t.Context(), beaconConfig, role, 0, func(specqbft.Round) {}, WithLegacyProposerRoundTimeout(true))
 				plain := New(t.Context(), beaconConfig, role, 0, func(specqbft.Round) {})
 				require.Equal(t, plain.RoundTimeout(specqbft.FirstRound), withOpt.RoundTimeout(specqbft.FirstRound), "role %s", role)
 			}
 		})
 	})
 
-	t.Run("the default stays within the bounds the node validates against", func(t *testing.T) {
-		require.GreaterOrEqual(t, DefaultProposerQuickTimeout, MinProposerQuickTimeout)
-		require.LessOrEqual(t, DefaultProposerQuickTimeout, MaxProposerQuickTimeout)
-	})
-
-	// A configured budget deliberately does NOT reach EstimatedRoundAt: that function answers for a
-	// peer, which runs its own configuration. This pins the divergence so a future "consistency"
-	// cleanup that wires the configured value into the estimator fails here instead of silently
-	// reversing the decision documented on defaultQuickTimeoutForRole.
-	t.Run("a configured budget does not move the peer-round estimate", func(t *testing.T) {
+	// A legacy budget deliberately does NOT reach EstimatedRoundAt: that function answers for a peer,
+	// which runs its own configuration. This pins the divergence so a future "consistency" cleanup that
+	// wires the operator's switch into the estimator fails here instead of silently reversing the
+	// decision documented on defaultQuickTimeoutForRole.
+	t.Run("a legacy budget does not move the peer-round estimate", func(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
 			timer := New(t.Context(), setupTestBeaconConfig(), spectypes.RoleProposer, 0, func(specqbft.Round) {},
-				WithProposerQuickTimeout(configured))
+				WithLegacyProposerRoundTimeout(true))
 
-			require.Equal(t, configured, timer.RoundTimeout(specqbft.FirstRound))
+			require.Equal(t, QuickTimeout, timer.RoundTimeout(specqbft.FirstRound))
 			require.Equal(t, DefaultProposerQuickTimeout, defaultQuickTimeoutForRole(spectypes.RoleProposer))
 
-			// At one configured budget past round 1, our timer has moved on but the estimator has not.
-			got, err := EstimatedRoundAt(spectypes.RoleProposer, setupTestBeaconConfig().IntervalDuration(0), configured)
+			// Between the SIP-102 default and the legacy budget, our own timer (armed for the legacy
+			// QuickTimeout) is still on round 1, but the estimator, which always uses the default, has
+			// already moved past it — it never sees this operator's legacy switch.
+			const betweenDefaultAndLegacy = 1700 * time.Millisecond
+			got, err := EstimatedRoundAt(spectypes.RoleProposer, setupTestBeaconConfig().IntervalDuration(0), betweenDefaultAndLegacy)
 			require.NoError(t, err)
-			require.Equal(t, specqbft.FirstRound, got, "the estimator still uses the default budget")
+			require.Equal(t, specqbft.FirstRound+1, got, "the estimator still uses the default budget")
 		})
 	})
 }

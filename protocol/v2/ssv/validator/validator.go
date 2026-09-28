@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"sync"
-	"time"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -63,9 +62,10 @@ type Validator struct {
 
 	messageValidator validation.MessageValidator
 
-	// proposerQuickTimeout is the operator's configured proposer QBFT round budget, passed to every
-	// RoundTimer this validator builds. 0 means the SIP-102 default.
-	proposerQuickTimeout time.Duration
+	// legacyProposerRoundTimeout is the operator's switch for the proposer QBFT round budget, passed
+	// to every RoundTimer this validator builds. true restores the pre-SIP-102 2s budget; false (zero
+	// value) keeps the SIP-102 default.
+	legacyProposerRoundTimeout bool
 }
 
 // NewValidator creates a new instance of Validator.
@@ -84,7 +84,7 @@ func NewValidator(ctx context.Context, cancel func(), logger *zap.Logger, option
 		Queues:           make(map[spectypes.RunnerRole]queue.Queue),
 		messageValidator: options.MessageValidator,
 
-		proposerQuickTimeout: options.ProposerQuickTimeout,
+		legacyProposerRoundTimeout: options.LegacyProposerRoundTimeout,
 	}
 
 	// some additional steps to prepare duty runners for handling duties
