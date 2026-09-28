@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -18,14 +19,12 @@ const (
 )
 
 // gloasHTTPClient issues the hand-rolled Gloas requests; per-call deadlines come from the request context.
-// Basic-auth in the (unmasked) beacon address is applied by net/http; custom TLS/client-cert is not — but
-// the main eth2clienthttp path doesn't configure it either (system-CA https + basic-auth only), so no
-// regression. Interim surface, retired once these requests move onto the fork's typed calls.
+// Like the main eth2clienthttp path, it applies basic-auth from the (unmasked) beacon address and uses no
+// custom TLS or client certificate. Interim: retired once these requests move onto the fork's typed calls.
 var gloasHTTPClient = &http.Client{}
 
-// httpStatusError is a non-2xx response to a hand-rolled Gloas request. It keeps the status code
-// so callers can tell a missing route (404 — a BN build without the endpoint) from a transient
-// failure. The "METHOD URL: status N: body" message format is pinned by tests.
+// httpStatusError is a non-2xx response to a hand-rolled Gloas request. It keeps the status and body so
+// callers can classify the failure (isNotFound, isMethodOrPathMissing, isAlreadyKnown).
 type httpStatusError struct {
 	method string
 	url    string
@@ -40,7 +39,7 @@ func (e *httpStatusError) Error() string {
 // httpDo issues a hand-rolled Gloas HTTP request and returns the response body, headers, and status
 // code on a 2xx, or a *httpStatusError otherwise. accept sets the Accept header; a non-nil body is
 // sent with contentType; extraHeaders are applied last. The status lets a 2xx caller tell a 200 from
-// a 204. Shared core of the JSON (jsonDo) and SSZ (gloasHTTPDo) helpers.
+// a 204. Shared core of jsonDo and gloasHTTPDo.
 func httpDo(ctx context.Context, httpClient *http.Client, method, url string, body []byte, accept, contentType string, extraHeaders map[string]string) ([]byte, http.Header, int, error) {
 	var reader io.Reader
 	if body != nil {
@@ -90,9 +89,8 @@ func jsonDo(ctx context.Context, httpClient *http.Client, method, url string, bo
 	return nil
 }
 
-// gloasHTTPDo issues a request to a Gloas endpoint and returns the response body and headers on a 2xx (see
-// httpDo). accept sets the Accept header; a non-nil body is sent with the given contentType; extraHeaders are
-// applied last, except Eth-Consensus-Version, which is always the Gloas version on requests with a body.
+// gloasHTTPDo is httpDo on gloasHTTPClient, returning the response body and headers on a 2xx. A request
+// with a body always carries the Gloas Eth-Consensus-Version, whatever extraHeaders say.
 func gloasHTTPDo(ctx context.Context, method, url string, body []byte, accept, contentType string, extraHeaders map[string]string) ([]byte, http.Header, error) {
 	if body != nil {
 		merged := make(map[string]string, len(extraHeaders)+1)
@@ -106,10 +104,29 @@ func gloasHTTPDo(ctx context.Context, method, url string, body []byte, accept, c
 	return respBody, header, err
 }
 
-// gloasPublishSSZ POSTs an SSZ body to a Gloas publish endpoint, returning nil on a 2xx; extraHeaders are
-// applied as in gloasHTTPDo. It accepts JSON: a publish route answers a 2xx with no content and errors as
-// JSON, so a beacon node that enforces Accept (Prysm) refuses an SSZ-only one with 406.
+// gloasPublishSSZ POSTs an SSZ body to a Gloas publish endpoint, returning nil on a 2xx or when the beacon
+// node already has the object (see isAlreadyKnown); extraHeaders are applied as in gloasHTTPDo. It accepts
+// JSON: a publish route answers a 2xx with no content and errors as JSON, so a beacon node that enforces
+// Accept (Prysm) refuses an SSZ-only one with 406.
 func gloasPublishSSZ(ctx context.Context, url string, body []byte, extraHeaders map[string]string) error {
 	_, _, err := gloasHTTPDo(ctx, http.MethodPost, url, body, "application/json", "application/octet-stream", extraHeaders)
+	if isAlreadyKnown(err) {
+		return nil
+	}
 	return err
+}
+
+// isAlreadyKnown reports whether err is a beacon node refusing a published object it already has. Most
+// beacon nodes answer a repeat with a 2xx, and beacon-APIs has no standard code for those that don't, so
+// match on the message: Lodestar's 500 "BLOCK_ERROR_ALREADY_KNOWN" (before v1.47) and
+// "EXECUTION_PAYLOAD_ENVELOPE_ERROR_ALREADY_KNOWN" (before v1.46), and Lighthouse's "duplicate block" when
+// --http-duplicate-block-status is not a 2xx.
+func isAlreadyKnown(err error) bool {
+	var httpErr *httpStatusError
+	if !errors.As(err, &httpErr) {
+		return false
+	}
+	body := strings.ToLower(httpErr.body)
+	return strings.Contains(body, "already known") || strings.Contains(body, "already_known") ||
+		strings.Contains(body, "duplicate block")
 }

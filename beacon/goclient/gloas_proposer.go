@@ -164,32 +164,11 @@ func decodeGloasBlock(ssz []byte) (*gloas.BeaconBlock, error) {
 }
 
 // submitGloasBeaconBlock POSTs an SSZ-marshaled signed Gloas block to the publish endpoint, echoing any
-// Eth-Builder-Url in extraHeaders. A response signaling the block is already known is treated as success:
-// every operator submits the decided block for liveness redundancy, so a non-leader's submit legitimately
-// races the canonical one, and some beacon nodes report that duplicate as an error rather than deduping
-// silently (see isAlreadyKnown).
+// Eth-Builder-Url in extraHeaders. An already-known answer counts as success (see gloasPublishSSZ): every
+// operator submits the decided block for liveness redundancy, so a non-leader's submit legitimately races
+// the canonical one.
 func submitGloasBeaconBlock(ctx context.Context, addr string, blockSSZ []byte, extraHeaders map[string]string) error {
-	err := gloasPublishSSZ(ctx, addr+gloasPublishBlockPath, blockSSZ, extraHeaders)
-	if isAlreadyKnown(err) {
-		return nil
-	}
-	return err
-}
-
-// isAlreadyKnown reports whether err is a beacon node rejecting an object it already has, on the §4 block
-// and §6 envelope publishes, where the same object can arrive more than once. Most beacon nodes answer a
-// repeat with a 2xx, and beacon-APIs has no standard code for those that don't, so match on the message:
-// Lodestar's 500 "BLOCK_ERROR_ALREADY_KNOWN" (before v1.47) and
-// "EXECUTION_PAYLOAD_ENVELOPE_ERROR_ALREADY_KNOWN" (before v1.46), and Lighthouse's "duplicate block" when
-// --http-duplicate-block-status is not a 2xx.
-func isAlreadyKnown(err error) bool {
-	var httpErr *httpStatusError
-	if !errors.As(err, &httpErr) {
-		return false
-	}
-	body := strings.ToLower(httpErr.body)
-	return strings.Contains(body, "already known") || strings.Contains(body, "already_known") ||
-		strings.Contains(body, "duplicate block")
+	return gloasPublishSSZ(ctx, addr+gloasPublishBlockPath, blockSSZ, extraHeaders)
 }
 
 // isMethodOrPathMissing reports whether err is a 404/405 — the beacon node does not implement the endpoint
