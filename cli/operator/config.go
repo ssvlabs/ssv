@@ -66,7 +66,7 @@ type config struct {
 	// ShortProposerRoundTimeout enables the SIP-102 proposer round timeout (1.5s,
 	// roundtimer.DefaultProposerQuickTimeout). Disabling it is the rollback lever: it restores the
 	// pre-SIP-102 2s proposer QBFT round budget (roundtimer.QuickTimeout).
-	ShortProposerRoundTimeout bool `yaml:"ShortProposerRoundTimeout" env:"SHORT_PROPOSER_ROUND_TIMEOUT" env-description:"Enables the SIP-102 short (1.5s) proposer QBFT round timeout. Default true. Set false to restore the pre-SIP-102 2s proposer round budget. This is a committee-wide protocol parameter, not a local performance knob: configure it identically across all operators of every shared committee."`
+	ShortProposerRoundTimeout bool `yaml:"ShortProposerRoundTimeout" env:"SHORT_PROPOSER_ROUND_TIMEOUT" env-description:"Enables the SIP-102 short (1.5s) proposer QBFT round timeout. Default true. Set false to restore the pre-SIP-102 2s proposer round budget. This is a committee-wide protocol parameter, not a local performance knob: configure it identically across all operators of every shared committee. A rollback only takes effect once at most f operators of a committee still run the short timeout."`
 }
 
 // maxSafeProposerDelay is the largest ProposerDelay considered safe. Above this, the

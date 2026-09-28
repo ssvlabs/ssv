@@ -6,7 +6,7 @@ file (or `PROPOSER_DELAY` environment variable):
 ProposerDelay: 300ms
 ```
 
-As per our own estimates the max reasonable value of `ProposerDelay` for Ethereum mainnet is around ~1.2s, 
+As per our own estimates the max reasonable value of `ProposerDelay` for Ethereum mainnet is around ~700ms, 
 although we recommend starting with something like 300ms gradually increasing it up - the higher 
 `ProposerDelay` value is the higher the chance of missing Ethereum block proposal will be.
 
@@ -96,23 +96,28 @@ const miscellaneousTime = 150 * time.Millisecond
 const blockSubmissionTime = 1000 * time.Millisecond
 const proposerDelay = 4*time.Second - randaoTime - mevBoostRelayTimeout - qbftTime - blockSubmissionTime - miscellaneousTime
 ```
-but on top of that, another consideration Operator needs to take into account is QBFT round timeout, specifically 
-round 1 timeout. Since SIP-102 the proposer duty gets its own round budget of ~1.5s, shorter than the ~2s every other 
-role uses, so that a round change still leaves round 2 able to decide before the attestation deadline that Glamsterdam 
-moves from 4s to 3s into the slot. To avoid round 1 timing out we'd want the following equation to hold:
+but on top of that, another consideration Operator needs to take into account is the QBFT round timeout. The proposer's
+round timer starts with its QBFT instance, i.e. after RANDAO, `ProposerDelay` and block retrieval, so `ProposerDelay`
+does not eat into round 1 itself. What it limits is recovery from a round change: in the worst case round 1 times out,
+and round 2 still has to decide and the block still has to be submitted before the 4s deadline:
 ```go
-RANDAOTime + ProposerDelay + MEVBoostRelayTimeout + QBFTTime + MiscellaneousTime < 1.5s
+RANDAOTime + ProposerDelay + MEVBoostRelayTimeout + ProposerRoundBudget + QBFTTime + MiscellaneousTime + BlockSubmissionTime < 4s
 ```
-and with the values listed above this gives us `ProposerDelay` value of ~700ms.
+Since SIP-102 the proposer's round budget is 1.5s (previously the 2s every other role uses), and with the values listed
+above this gives us `ProposerDelay` value of ~700ms.
 
-Therefore, we consider ~700ms to be the maximum reasonable value for `ProposerDelay`, going beyond that value might 
-result in missed block proposal. This number moved down from ~1.2s when the proposer round budget was shortened from 
-2s to 1.5s; an Operator who tuned `ProposerDelay` against the older guidance should retune.
+Therefore, we consider ~700ms to be the maximum reasonable value for `ProposerDelay`, going beyond that value might
+result in a missed block proposal whenever a round change happens. An Operator running with `ShortProposerRoundTimeout`
+off uses the pre-SIP-102 2s budget, which tightens the same bound to ~200ms.
 
-Note the budget is measured from QBFT instance start rather than from slot start, so the equation above is an 
-approximation that folds the pre-consensus work into one deadline. An Operator who turned `ShortProposerRoundTimeout` 
-off runs the pre-SIP-102 2s budget instead of the 1.5s default, and should substitute 2s in the equation above; that 
-also restores the pre-SIP-102 arithmetic along with the pre-SIP-102 behavior.
+`ShortProposerRoundTimeout` is a committee-wide setting. Once f+1 operators of a committee round-change at 1.5s, the
+QBFT partial-quorum rule pulls the rest into round 2 with them, so an operator that switches it off alone keeps running
+the 1.5s schedule in practice. A rollback takes effect in a committee only once at most f of its operators still run the
+short timeout, so it has to be coordinated across the committee.
+
+This section covers `ProposerDelay`, which applies before the Gloas fork. From Gloas on the node applies
+`ProposerDelayEPBS` against a 3s attestation deadline instead; guidance for it is pending in
+https://github.com/ssvlabs/ssv/issues/3058.
 
 **To enforce proposer safety limits, the SSV node will automatically prevent startup if ProposerDelay exceeds 1s 
 unless the Operator explicitly acknowledges the risk by setting `AllowDangerousProposerDelay: true`.** That 1s gate is 

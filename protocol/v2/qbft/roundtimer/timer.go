@@ -104,7 +104,10 @@ type Option func(*RoundTimer)
 // committee that disagree on it leave round 1 at different times, so it must be configured
 // identically across every operator of every shared committee, or left at the default everywhere.
 // The rollout window is the one sanctioned exception, and only because the partial-quorum rule
-// pulls the laggards along (see DefaultProposerQuickTimeout). The same warning is on the
+// pulls the laggards along (see DefaultProposerQuickTimeout). The same rule also works against a
+// lone rollback: an operator that switches to the legacy budget while f+1 committee peers still run
+// the short one is pulled into round 2 at their pace, so the rollback only takes effect once at most
+// f operators of the committee still run the short timeout. The same warning is on the
 // ShortProposerRoundTimeout key in config.example.yaml and in its env-description.
 func WithLegacyProposerRoundTimeout(legacy bool) Option {
 	return func(t *RoundTimer) {

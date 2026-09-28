@@ -58,12 +58,15 @@ OperatorPrivateKey:
 # mainnet yet; tune only after validating on a Gloas network. See docs/MEV_CONSIDERATIONS.md.
 # ProposerDelayEPBS: 0
 
-# Enables the SIP-102 short (1.5s) QBFT round budget for the proposer duty. Sized so that a round
-# change still leaves round 2 able to decide before the Glamsterdam attestation deadline. Default true.
-# Set false to restore the pre-SIP-102 2s proposer round budget (rollback lever).
+# Enables the SIP-102 short (1.5s) QBFT round budget for the proposer duty. Sized so that, for
+# clusters that start consensus by ~1.3s into the slot, a round change still starts round 2 before the
+# Glamsterdam attestation deadline. Default true.
+# Set false to restore the pre-SIP-102 2s proposer round budget. As a rollback it only takes effect in
+# a committee once at most f of its operators still run the short timeout, so coordinate it across the
+# committee.
 # This is a committee-wide protocol parameter, not a local performance knob. Operators in a shared
-# committee that disagree leave round 1 at different times, so configure it identically across every
-# shared committee.
+# committee that disagree leave round 1 at different times, so configure it identically across all
+# operators of every shared committee.
 # ShortProposerRoundTimeout: true
 
 # Post-ePBS (Gloas) direct-builder connections — an opt-in overlay on top of the enshrined builder flow
