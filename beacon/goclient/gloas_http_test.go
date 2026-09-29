@@ -25,6 +25,8 @@ func TestIsAlreadyKnown(t *testing.T) {
 	require.False(t, isAlreadyKnown(nil))
 	require.False(t, isAlreadyKnown(errors.New("some other error")))
 	require.False(t, isAlreadyKnown(&httpStatusError{status: http.StatusBadRequest, body: "invalid block"}))
+	// Lighthouse's equivocation rejection: a conflicting block, not a repeat, so it must stay an error.
+	require.False(t, isAlreadyKnown(&httpStatusError{status: http.StatusBadRequest, body: `{"code":400,"message":"BAD_REQUEST: proposal for this slot and proposer has already been seen","stacktraces":[]}`}))
 	require.True(t, isAlreadyKnown(&httpStatusError{status: http.StatusInternalServerError, body: `{"message":"BLOCK_ERROR_ALREADY_KNOWN"}`}))
 	require.True(t, isAlreadyKnown(&httpStatusError{status: http.StatusInternalServerError, body: `{"message":"EXECUTION_PAYLOAD_ENVELOPE_ERROR_ALREADY_KNOWN"}`}))
 	require.True(t, isAlreadyKnown(&httpStatusError{status: http.StatusBadRequest, body: "block already known"}))
