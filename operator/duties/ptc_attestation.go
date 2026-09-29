@@ -93,22 +93,30 @@ func (h *PTCAttestationHandler) handleTick(ctx context.Context, slot phase0.Slot
 
 	h.reconcileDuties(ctx, slot, epoch)
 	h.fetchDuties(fetchCtx, epoch)
+	h.eraseBefore(epoch)
+	h.scheduleSlotDuties(ctx, slot, epoch)
+	// The look-ahead only prepares the next epoch, so it runs once this slot's duties are scheduled: a slow
+	// answer can't hold them past the cutoff, on this tick or any later one it is retried at.
 	if h.shouldFetchNextEpoch(slot) {
 		h.fetchLookahead(fetchCtx, epoch+1)
 	}
-	h.eraseBefore(epoch)
+}
 
-	// Exporter records duties for message validation but does not execute them.
+// scheduleSlotDuties schedules this node's duties in the slot. The exporter records duties for message
+// validation but doesn't execute them.
+func (h *PTCAttestationHandler) scheduleSlotDuties(ctx context.Context, slot phase0.Slot, epoch phase0.Epoch) {
 	if h.exporterMode {
 		return
 	}
-	if ptcDuties := h.duties.CommitteeSlotDuties(epoch, slot); len(ptcDuties) > 0 {
-		specDuties := make([]*spectypes.ValidatorDuty, 0, len(ptcDuties))
-		for _, d := range ptcDuties {
-			specDuties = append(specDuties, h.toSpecDuty(d))
-		}
-		h.scheduleExecution(ctx, slot, specDuties)
+	ptcDuties := h.duties.CommitteeSlotDuties(epoch, slot)
+	if len(ptcDuties) == 0 {
+		return
 	}
+	specDuties := make([]*spectypes.ValidatorDuty, 0, len(ptcDuties))
+	for _, d := range ptcDuties {
+		specDuties = append(specDuties, h.toSpecDuty(d))
+	}
+	h.scheduleExecution(ctx, slot, specDuties)
 }
 
 // HandleInitialDuties populates the store on startup, before the first tick, so the message validator

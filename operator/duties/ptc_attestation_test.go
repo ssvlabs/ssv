@@ -353,6 +353,45 @@ func TestPTCAttestationHandler_handleTick_reconcilesLookaheadAtFirstTick(t *test
 	})
 }
 
+// timedExecutor records when duties are handed over for execution.
+type timedExecutor struct{ at chan time.Time }
+
+func (e timedExecutor) ExecuteDuties(context.Context, []*spectypes.ValidatorDuty, time.Time) {
+	e.at <- time.Now()
+}
+
+func (e timedExecutor) ExecuteCommitteeDuties(context.Context, committeeDutiesMap, time.Time) {}
+
+// A slow look-ahead doesn't hold back the slot's own duty: the duty is scheduled before the next epoch is
+// fetched, so it fires at the cutoff even while the look-ahead's beacon node hangs until slot end.
+func TestPTCAttestationHandler_handleTick_schedulesBeforeLookahead(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+
+		selfIdx := phase0.ValidatorIndex(7)
+		epoch := phase0.Epoch(6)
+		slot := networkconfig.TestNetwork.FirstSlotAtEpoch(epoch) + phase0.Slot(networkconfig.TestNetwork.SlotsPerEpoch/2) // second half: the look-ahead runs
+		netCfg := gloasTestNetwork(0, slot)
+
+		bn := NewMockBeaconNode(ctrl)
+		bn.EXPECT().PayloadAttestationDuties(gomock.Any(), epoch, gomock.Any()).
+			Return(&gloas.PTCDuties{Duties: []*gloas.PTCDuty{{ValidatorIndex: selfIdx, Slot: slot}}}, nil).Times(1)
+		bn.EXPECT().PayloadAttestationDuties(gomock.Any(), epoch+1, gomock.Any()).
+			DoAndReturn(func(ctx context.Context, _ phase0.Epoch, _ []phase0.ValidatorIndex) (*gloas.PTCDuties, error) {
+				<-ctx.Done() // hangs until the fetch's slot-end deadline
+				return nil, ctx.Err()
+			}).Times(1)
+
+		h := newTestPTCHandler(ctrl, netCfg, dutystore.NewDuties[gloas.PTCDuty](), bn, selfIdx)
+		executedAt := make(chan time.Time, 1)
+		h.dutiesExecutor = timedExecutor{at: executedAt}
+
+		h.handleTick(context.Background(), slot)
+		synctest.Wait()
+		require.WithinDuration(t, netCfg.PayloadAttestationCutoff(slot), <-executedAt, 0)
+	})
+}
+
 // A failed reconciliation keeps the look-ahead view in use and is retried at the next tick.
 func TestPTCAttestationHandler_handleTick_reconcileFailureKeepsLookahead(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
