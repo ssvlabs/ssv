@@ -19,10 +19,10 @@ import (
 
 var ErrNotFound = errors.New("duty not found")
 
-// FormatVersion is the trace store's on-disk format. It rises whenever a persisted shape changes so that
-// an older binary can no longer read it, and EnsureFormat then makes a downgrade fail at startup rather
-// than lose records to decode errors one by one. 1 is the original layout; 2 lets a validator duty's Pre
-// and Post lists hold more than one entry per operator.
+// FormatVersion is the trace store's on-disk format, raised whenever a persisted shape changes in a way an
+// older binary can't read, so that EnsureFormat fails a downgrade at startup instead of records failing to
+// decode one by one. 1 is the original layout; 2 lets a validator duty's Pre and Post hold more than one
+// entry per operator.
 const FormatVersion uint32 = 2
 
 // EnsureFormat records this binary's FormatVersion in the store and refuses a store written by a newer
@@ -107,9 +107,8 @@ func (s *DutyTraceStore) SaveValidatorDuty(dto *traces.ValidatorDutyTrace) error
 	return nil
 }
 
-// SaveValidatorDuties writes the duties in one batch and reports how many are on disk afterwards. A duty
-// that cannot be encoded is left out and named in the error while the rest are still saved; if the batch
-// write itself fails nothing is saved, and saved is 0.
+// SaveValidatorDuties writes the duties in one batch and reports how many it saved. A duty that can't be
+// encoded is left out and named in the error, the rest still saved; a failed batch write saves nothing.
 func (s *DutyTraceStore) SaveValidatorDuties(duties []*traces.ValidatorDutyTrace) (saved int, err error) {
 	objs := make([]basedb.Obj, 0, len(duties))
 	var skipped error
@@ -247,9 +246,8 @@ func (s *DutyTraceStore) SaveCommitteeDutyLinks(slot phase0.Slot, linkMap map[ph
 	})
 }
 
-// SaveCommitteeDuties writes the duties in one batch under the slot and role and reports how many are on
-// disk afterwards; a duty that cannot be encoded, or carries another role, is left out and named in the
-// error, and a failed batch write saves nothing (see SaveValidatorDuties).
+// SaveCommitteeDuties writes the duties in one batch under the slot and role and reports how many it saved,
+// as SaveValidatorDuties does; a duty carrying another role is left out too.
 func (s *DutyTraceStore) SaveCommitteeDuties(slot phase0.Slot, role spectypes.RunnerRole, duties []*traces.CommitteeDutyTrace) (saved int, err error) {
 	prefix, err := s.makeCommitteeSlotRolePrefix(slot, role)
 	if err != nil {
