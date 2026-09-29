@@ -8,6 +8,7 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
+	"github.com/ssvlabs/ssv/networkconfig"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -53,7 +54,7 @@ func (mv *messageValidator) messageEarliness(slot phase0.Slot, role spectypes.Ru
 	expectedFrom := mv.netCfg.SlotStartTime(slot)
 	if role == spectypes.RoleProposerPreferences {
 		epoch := mv.netCfg.EstimatedEpochAtSlot(slot)
-		const lookback = phase0.Epoch(proposerPreferencesEarlyEpochs - 1)
+		const lookback = phase0.Epoch(networkconfig.MinSeedLookahead)
 		if epoch >= lookback {
 			epoch -= lookback
 		} else {
