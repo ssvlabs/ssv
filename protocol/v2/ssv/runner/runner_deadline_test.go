@@ -111,6 +111,32 @@ func TestBaseRunner_watchDutyOutcome(t *testing.T) {
 		require.Zero(t, logs.FilterMessageSnippet(deadlineSnippet).Len(), "a reported duty must not also warn about a deadline")
 	})
 
+	t.Run("reports a noted failure at the deadline instead of stuck", func(t *testing.T) {
+		core, logs := observer.New(zapcore.WarnLevel)
+		b := newRunner()
+
+		b.watchDutyOutcome(context.Background(), zap.New(core))
+		b.noteDutyFailure(errors.New("own partial not signed"))
+
+		require.Eventually(t, func() bool {
+			return logs.FilterMessageSnippet(failedSnippet).Len() == 1
+		}, time.Second, 5*time.Millisecond, "expected the noted failure at the deadline")
+		require.Equal(t, "own partial not signed", logs.FilterMessageSnippet(failedSnippet).All()[0].ContextMap()["error"])
+		require.Zero(t, logs.FilterMessageSnippet(deadlineSnippet).Len(), "a noted failure replaces the stuck warning")
+	})
+
+	t.Run("a conclusion overrides a noted failure", func(t *testing.T) {
+		core, logs := observer.New(zapcore.WarnLevel)
+		b := newRunner()
+
+		b.watchDutyOutcome(context.Background(), zap.New(core))
+		b.noteDutyFailure(errors.New("own partial not signed"))
+		b.dutyConcluded <- dutyConclusion{outcome: dutyOutcomeSucceeded} // the other operators completed the duty
+
+		time.Sleep(100 * time.Millisecond) // well past the slot end
+		require.Zero(t, logs.Len(), "a duty the other operators completed must not warn")
+	})
+
 	t.Run("stays silent when the duty succeeds before slot end", func(t *testing.T) {
 		core, logs := observer.New(zapcore.WarnLevel)
 		b := newRunner()
@@ -148,6 +174,19 @@ func TestBaseRunner_watchDutyOutcome(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 		require.Zero(t, logs.Len(), "a duty aborted by cancellation must not be reported")
 	})
+}
+
+// noteDutyFailure keeps the first failure it is given, drops a cancellation, and is a no-op before the watcher
+// starts.
+func TestBaseRunner_noteDutyFailure(t *testing.T) {
+	(&BaseRunner{}).noteDutyFailure(errors.New("before the watcher")) // nil channel: must not block
+
+	b := &BaseRunner{dutyFailureNoted: make(chan error, 1)}
+	b.noteDutyFailure(context.Canceled)
+	b.noteDutyFailure(errors.New("first"))
+	b.noteDutyFailure(errors.New("second"))
+	require.EqualError(t, <-b.dutyFailureNoted, "first")
+	require.Empty(t, b.dutyFailureNoted)
 }
 
 // TestBaseRunner_markDutyOutcomes pins what each marker records: succeeded/not_required are full

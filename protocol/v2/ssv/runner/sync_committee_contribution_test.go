@@ -110,9 +110,9 @@ func decideSyncCommitteeContributions(t *testing.T, runner *SyncCommitteeAggrega
 	return concluded, nil
 }
 
-// An error after the instance decides — here a contribution can't be signed — concludes the duty failed: the
-// instance never decides again, so nothing can retry it.
-func TestSyncCommitteeAggregatorProcessConsensusMarksFailedAfterDecision(t *testing.T) {
+// An error after the instance decides — here a contribution can't be signed — leaves the duty open with the failure
+// noted: the other operators' partials can still complete it, and the watcher reports the failure only if not.
+func TestSyncCommitteeAggregatorProcessConsensusNotesFailureAfterDecision(t *testing.T) {
 	t.Parallel()
 
 	runner, keySet := newSyncCommitteeAggregatorRunnerForTest(t, protocoltesting.NewTestingBeaconNodeWrapped())
@@ -120,7 +120,7 @@ func TestSyncCommitteeAggregatorProcessConsensusMarksFailedAfterDecision(t *test
 
 	concluded, err := decideSyncCommitteeContributions(t, runner, keySet)
 	require.ErrorContains(t, err, "signing failed")
-	requireConcluded(t, concluded, dutyOutcomeFailed)
+	requireNotedFailure(t, runner.BaseRunner, concluded, "signing failed")
 }
 
 // Each root's contribution is submitted once the root reconstructs. A bad share in one root's quorum doesn't hold

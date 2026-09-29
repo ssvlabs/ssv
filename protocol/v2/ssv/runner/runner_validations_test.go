@@ -307,11 +307,28 @@ func withUnrelatedValidatorKey(share *spectypes.Share) *spectypes.Share {
 }
 
 // observeDutyConclusion arms a buffered conclusion channel on b, so a test reads the duty's outcome directly
-// rather than through the deadline watcher.
+// rather than through the deadline watcher. It arms the noted-failure channel too (see requireNotedFailure).
 func observeDutyConclusion(b *BaseRunner) chan dutyConclusion {
 	concluded := make(chan dutyConclusion, 1)
 	b.dutyConcluded = concluded
+	b.dutyFailureNoted = make(chan error, 1)
 	return concluded
+}
+
+// requireNotedFailure checks that the duty is still open, with a failure containing want noted for the watcher.
+func requireNotedFailure(t *testing.T, b *BaseRunner, concluded chan dutyConclusion, want string) {
+	t.Helper()
+	select {
+	case c := <-concluded:
+		t.Fatalf("the duty concluded %s (reason: %v), want it open with a noted failure", c.outcome, c.reason)
+	default:
+	}
+	select {
+	case reason := <-b.dutyFailureNoted:
+		require.ErrorContains(t, reason, want)
+	default:
+		t.Fatal("no failure noted for the watcher")
+	}
 }
 
 // failingDomainSigner fails every signature under domain and passes the others to the embedded signer, so a test

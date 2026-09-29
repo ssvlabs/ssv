@@ -175,9 +175,9 @@ func TestAggregatorRunnerProcessPostConsensus_MarksFailedOnSubmitError(t *testin
 	require.False(t, env.runner.State.Succeeded, "a failed duty must not be marked succeeded")
 }
 
-// An error after the instance decides — here the aggregate can't be signed — concludes the duty failed: the
-// instance never decides again, so nothing can retry it.
-func TestAggregatorRunnerProcessConsensus_MarksFailedAfterDecision(t *testing.T) {
+// An error after the instance decides — here the aggregate can't be signed — leaves the duty open with the failure
+// noted: the other operators' partials can still complete it, and the watcher reports the failure only if not.
+func TestAggregatorRunnerProcessConsensus_NotesFailureAfterDecision(t *testing.T) {
 	const version = spec.DataVersionPhase0
 
 	env := newAggregatorRunnerEnv(t, protocoltesting.NewTestingBeaconNodeWrapped())
@@ -191,7 +191,7 @@ func TestAggregatorRunnerProcessConsensus_MarksFailedAfterDecision(t *testing.T)
 
 	concluded, err := env.startAndDecideAggregatorDuty(t, t.Context(), duty, version)
 	require.ErrorContains(t, err, "signing failed")
-	requireConcluded(t, concluded, dutyOutcomeFailed)
+	requireNotedFailure(t, env.runner.BaseRunner, concluded, "signing failed")
 }
 
 // TestAggregatorRunnerProcessPostConsensus_DoesNotMarkFailedOnInvalidSigs is the regression test for

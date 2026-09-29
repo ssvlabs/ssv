@@ -410,11 +410,12 @@ func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logge
 		return nil
 	}
 
-	// A decided instance never decides again, so an error from here on is final: conclude the duty failed
-	// rather than leave the watcher to report it stuck.
+	// An error from here on doesn't end the duty: the other operators' partials can still reach quorum on the
+	// decided value, and this operator then completes the duty anyway. Note it for the watcher, which reports
+	// it as the failure if nothing concludes the duty by its deadline.
 	defer func() {
 		if err != nil {
-			r.markDutyFailed(err)
+			r.noteDutyFailure(err)
 		}
 	}()
 

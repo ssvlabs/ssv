@@ -157,6 +157,10 @@ type BaseRunner struct {
 	// marker never blocks even if the watcher already exited. Set and sent-on only from the single
 	// message-processing goroutine (the watcher reads its own captured copy), so it needs no lock.
 	dutyConcluded chan dutyConclusion `json:"-"`
+	// dutyFailureNoted carries a failure that leaves the duty open (see noteDutyFailure) to the same watcher,
+	// which reports it only if nothing concludes the duty by its deadline. Buffered(1) and handled like
+	// dutyConcluded.
+	dutyFailureNoted chan error `json:"-"`
 
 	// highestDecidedSlot holds the highest decided duty slot and gets updated after each decided is reached
 	highestDecidedSlot phase0.Slot
@@ -375,13 +379,16 @@ type dutyConclusion struct {
 // watchDutyOutcome reports a duty's terminal outcome exactly once: it records the
 // ssv.runner.duty.outcome metric and warns for the outcomes worth an operator's attention (failed,
 // stuck, no_quorum). It knows nothing about how duties complete — the outcome is delivered by a marker
-// over dutyConcluded, not by reading runner state — so it's safe alongside the single-threaded
-// message loop. It MUST be started before executeDuty so a duty that concludes synchronously is still
-// reported. Each duty gets its own channel: starting the next duty overwrites the field, and the
-// previous duty's watcher (if still pending) reports its own duty and is reaped by its own timer.
+// over dutyConcluded, or at the deadline by a failure noted over dutyFailureNoted, not by reading runner
+// state — so it's safe alongside the single-threaded message loop. It MUST be started before executeDuty
+// so a duty that concludes synchronously is still reported. Each duty gets its own channels: starting the
+// next duty overwrites the fields, and the previous duty's watcher (if still pending) reports its own duty
+// and is reaped by its own timer.
 func (b *BaseRunner) watchDutyOutcome(ctx context.Context, logger *zap.Logger) {
 	concluded := make(chan dutyConclusion, 1)
 	b.dutyConcluded = concluded
+	noted := make(chan error, 1)
+	b.dutyFailureNoted = noted
 
 	deadline := b.dutyOutcomeDeadline()
 
@@ -416,12 +423,18 @@ func (b *BaseRunner) watchDutyOutcome(ctx context.Context, logger *zap.Logger) {
 		case <-ctx.Done():
 			return // node/validator shutting down
 		case <-time.After(time.Until(deadline)):
-			// Prefer a conclusion that landed right at the deadline over reporting a false miss.
+			// Prefer a conclusion that landed right at the deadline over reporting a false miss, and a noted
+			// failure's reason over the generic miss.
 			select {
 			case c := <-concluded:
 				report(c)
 			default:
-				report(dutyConclusion{outcome: deadlineOutcome})
+				select {
+				case reason := <-noted:
+					report(dutyConclusion{outcome: dutyOutcomeFailed, reason: reason})
+				default:
+					report(dutyConclusion{outcome: deadlineOutcome})
+				}
 			}
 		}
 	}()
@@ -829,6 +842,21 @@ func (b *BaseRunner) markDutyFailed(reason error) {
 		return
 	}
 	b.concludeDuty(dutyOutcomeFailed, reason)
+}
+
+// noteDutyFailure records a failure that doesn't end the duty: an error after the decision, such as this
+// operator failing to sign or broadcast its own partial, when the other operators' partials can still reach
+// quorum and complete the duty here. The watcher reports it as the duty's failure only if nothing concludes
+// the duty by its deadline; the first failure noted is kept, and a cancellation is dropped as in
+// markDutyFailed.
+func (b *BaseRunner) noteDutyFailure(reason error) {
+	if errors.Is(reason, context.Canceled) {
+		return
+	}
+	select {
+	case b.dutyFailureNoted <- reason: // never ready on a nil channel, so a no-op before the watcher starts
+	default:
+	}
 }
 
 // concludeDuty hands the duty's terminal outcome to its watcher (watchDutyOutcome), which reports it

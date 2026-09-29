@@ -243,12 +243,13 @@ func (r *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Logg
 		return nil
 	}
 
-	// A decided instance never decides again, so an error from here on is final: conclude the duty failed
-	// rather than leave the watcher to report it stuck. The no-valid-duties sentinel below is concluded
-	// not_required first, and concludeDuty keeps the first outcome.
+	// An error from here on doesn't end the duty: the other operators' partials can still reach quorum on the
+	// decided value, and this operator then completes the duty anyway. Note it for the watcher, which reports
+	// it as the failure if nothing concludes the duty by its deadline. The no-valid-duties sentinel below is
+	// concluded not_required first, which the watcher reports instead.
 	defer func() {
 		if err != nil {
-			r.markDutyFailed(err)
+			r.noteDutyFailure(err)
 		}
 	}()
 
@@ -404,7 +405,7 @@ listener:
 		// A done context also lands here with zero counts: the duty feeder and the workers bail out on
 		// ctx.Err() before incrementing any counter. The duty was abandoned, not left with nothing to do,
 		// so return the context's error rather than conclude not_required: the defer above drops a
-		// cancellation (shutdown is never an outcome) and concludes an expired duty deadline as failed.
+		// cancellation (shutdown is never an outcome) and notes an expired duty deadline as the failure.
 		if err := ctx.Err(); err != nil {
 			return err
 		}

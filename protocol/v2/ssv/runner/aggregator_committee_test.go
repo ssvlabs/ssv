@@ -128,9 +128,9 @@ func (e *aggregatorCommitteeRunnerEnv) startAndFeedThroughConsensus(t *testing.T
 	return concluded, nil
 }
 
-// An error after the instance decides — here an aggregate can't be signed — concludes the duty failed: the
-// instance never decides again, so nothing can retry it.
-func TestAggregatorCommitteeRunnerProcessConsensus_MarksFailedAfterDecision(t *testing.T) {
+// An error after the instance decides — here an aggregate can't be signed — leaves the duty open with the failure
+// noted: the other operators' partials can still complete it, and the watcher reports the failure only if not.
+func TestAggregatorCommitteeRunnerProcessConsensus_NotesFailureAfterDecision(t *testing.T) {
 	const version = spec.DataVersionElectra
 
 	env := newAggregatorCommitteeRunnerEnv(t, []int{1}, protocoltesting.NewTestingBeaconNodeWrapped())
@@ -139,7 +139,7 @@ func TestAggregatorCommitteeRunnerProcessConsensus_MarksFailedAfterDecision(t *t
 
 	concluded, err := env.startAndFeedThroughConsensus(t, t.Context(), duty, version)
 	require.ErrorContains(t, err, "signing failed")
-	requireConcluded(t, concluded, dutyOutcomeFailed)
+	requireNotedFailure(t, env.runner.BaseRunner, concluded, "signing failed")
 }
 
 // postConsensusMsgsFromFixture returns the (valid) post-consensus PartialSignatureMessages from signers
