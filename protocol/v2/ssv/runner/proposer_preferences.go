@@ -172,7 +172,9 @@ func (r *ProposerPreferencesRunner) ProcessPreConsensus(ctx context.Context, log
 
 	// Stash every §5-role partial — preference and request-auth alike (bounded, deduplicated) — even
 	// when a sub-runner exists: a later re-emission replaces the sub-runner and its containers, and
-	// peers won't re-broadcast, so the stash is what re-seeds the replacement (see StartNewDuty).
+	// peers won't re-broadcast, so the stash is what re-seeds the replacement (see StartNewDuty). Past
+	// slots go first, so whatever a peer sends, the stash never outgrows the lookahead.
+	r.evictPastSlots()
 	r.stashPending(signedMsg)
 
 	sub, ok := r.bySlot[signedMsg.Slot]
@@ -189,9 +191,9 @@ func (r *ProposerPreferencesRunner) ProcessPreConsensus(ctx context.Context, log
 // Each entry is stashed as its own single-entry packet, skipping (signer, signing root) duplicates: the two
 // message types sign under different domains, so one keyspace serves both. A slot's stash is capped at the
 // committee size times the wire's combined per-signer distinct-root budget, so a full stash can only mean
-// noise.
+// noise, and only slots in the lookahead are stashed at all (inLookahead).
 func (r *ProposerPreferencesRunner) stashPending(signedMsg *spectypes.PartialSignatureMessages) {
-	if signedMsg == nil {
+	if signedMsg == nil || !r.inLookahead(signedMsg.Slot) {
 		return
 	}
 	for _, msg := range signedMsg.Messages {
@@ -246,8 +248,22 @@ func (r *ProposerPreferencesRunner) CurrentDutySlot() (phase0.Slot, bool) {
 	return 0, false
 }
 
+// preferencesLookaheadEpochs is MIN_SEED_LOOKAHEAD: preferences are broadcast, and accepted (SIP #94 §7), for
+// proposal slots up to the end of the next epoch.
+const preferencesLookaheadEpochs = 1
+
+// inLookahead reports whether a partial for proposal slot can still be of use here: the slot hasn't passed, and
+// is no further out than preferences are broadcast for. A peer sending partials for any other slot can't grow
+// the stash with them.
+func (r *ProposerPreferencesRunner) inLookahead(slot phase0.Slot) bool {
+	current := r.NetworkConfig.EstimatedCurrentSlot()
+	return slot >= current &&
+		r.NetworkConfig.EstimatedEpochAtSlot(slot) <= r.NetworkConfig.EstimatedEpochAtSlot(current)+preferencesLookaheadEpochs
+}
+
 // evictPastSlots drops sub-runners (and stashed partials) whose proposal slot has passed; the
-// preference is moot once the proposal slot arrives, and convergence completes well before it.
+// preference is moot once the proposal slot arrives, and convergence completes well before it. It runs
+// when a duty starts and on every partial the dispatcher handles.
 func (r *ProposerPreferencesRunner) evictPastSlots() {
 	current := r.NetworkConfig.EstimatedCurrentSlot()
 	for slot := range r.bySlot {

@@ -156,20 +156,82 @@ func TestProposerPreferencesRunner_evictPastSlots(t *testing.T) {
 	require.Contains(t, disp.bySlot, current+10)
 }
 
+// Only slots in the lookahead are stashed, so a peer can't grow the stash with partials for slots that will
+// never get a sub-runner here: a passed slot, or one beyond the next epoch.
+func TestProposerPreferencesRunner_stashesOnlyTheLookahead(t *testing.T) {
+	netCfg := networkconfig.TestNetwork
+	r, err := NewProposerPreferencesRunner(ProposerPreferencesRunnerOptions{
+		BaseRunnerOptions: BaseRunnerOptions{
+			NetworkConfig: netCfg,
+			Share:         map[phase0.ValidatorIndex]*spectypes.Share{0: {Committee: []*spectypes.ShareMember{{Signer: 1}}}},
+		},
+	})
+	require.NoError(t, err)
+	disp := r.(*ProposerPreferencesRunner)
+
+	current := netCfg.EstimatedCurrentSlot()
+	beyond := netCfg.FirstSlotAtEpoch(netCfg.EstimatedEpochAtSlot(current) + preferencesLookaheadEpochs + 1)
+	for _, slot := range []phase0.Slot{current - 1, current, beyond - 1, beyond} {
+		disp.stashPending(&spectypes.PartialSignatureMessages{
+			Type:     spectypes.ProposerPreferencesPartialSig,
+			Slot:     slot,
+			Messages: []*spectypes.PartialSignatureMessage{{Signer: 1, SigningRoot: [32]byte{0xaa}}},
+		})
+	}
+
+	require.NotContains(t, disp.pending, current-1, "a passed slot")
+	require.Contains(t, disp.pending, current)
+	require.Contains(t, disp.pending, beyond-1, "the next epoch's last slot")
+	require.NotContains(t, disp.pending, beyond, "beyond the next epoch")
+}
+
+// A passed slot's stash and sub-runner go as soon as the dispatcher handles any partial, rather than waiting for
+// the validator's next duty.
+func TestProposerPreferencesRunner_partialEvictsPastSlots(t *testing.T) {
+	netCfg := networkconfig.TestNetwork
+	r, err := NewProposerPreferencesRunner(ProposerPreferencesRunnerOptions{
+		BaseRunnerOptions: BaseRunnerOptions{
+			NetworkConfig: netCfg,
+			Share:         map[phase0.ValidatorIndex]*spectypes.Share{0: {Committee: []*spectypes.ShareMember{{Signer: 1}}}},
+		},
+	})
+	require.NoError(t, err)
+	disp := r.(*ProposerPreferencesRunner)
+
+	current := netCfg.EstimatedCurrentSlot()
+	disp.bySlot[current-1] = newProposerPreferencesSlotRunner(disp.opts, disp.builders)
+	disp.pending[current-1] = []*spectypes.PartialSignatureMessages{{Slot: current - 1}}
+
+	require.NoError(t, disp.ProcessPreConsensus(t.Context(), zap.NewNop(), &spectypes.PartialSignatureMessages{
+		Type:     spectypes.ProposerPreferencesPartialSig,
+		Slot:     current + 5,
+		Messages: []*spectypes.PartialSignatureMessage{{Signer: 1, SigningRoot: [32]byte{0xaa}}},
+	}))
+
+	require.NotContains(t, disp.bySlot, current-1)
+	require.NotContains(t, disp.pending, current-1)
+	require.Contains(t, disp.pending, current+5)
+}
+
 // A partial for a slot with no sub-runner is stashed, which is no error: StartNewDuty replays it once the
 // slot's duty starts here, so the queue has nothing to retry or report as dropped.
 func TestProposerPreferencesRunner_ProcessPreConsensus_unknownSlot(t *testing.T) {
+	netCfg := networkconfig.TestNetwork
 	r, err := NewProposerPreferencesRunner(ProposerPreferencesRunnerOptions{
-		BaseRunnerOptions: BaseRunnerOptions{Share: map[phase0.ValidatorIndex]*spectypes.Share{0: {Committee: make([]*spectypes.ShareMember, 4)}}},
+		BaseRunnerOptions: BaseRunnerOptions{
+			NetworkConfig: netCfg,
+			Share:         map[phase0.ValidatorIndex]*spectypes.Share{0: {Committee: make([]*spectypes.ShareMember, 4)}},
+		},
 	})
 	require.NoError(t, err)
 
+	slot := netCfg.EstimatedCurrentSlot() + 10
 	require.NoError(t, r.ProcessPreConsensus(context.Background(), zap.NewNop(), &spectypes.PartialSignatureMessages{
 		Type:     spectypes.ProposerPreferencesPartialSig,
-		Slot:     999,
+		Slot:     slot,
 		Messages: []*spectypes.PartialSignatureMessage{{Signer: 1, SigningRoot: [32]byte{0xaa}}},
 	}))
-	require.Len(t, r.(*ProposerPreferencesRunner).pending[999], 1)
+	require.Len(t, r.(*ProposerPreferencesRunner).pending[slot], 1)
 }
 
 // A partial of any type other than the §5 duty's two is rejected with the spec's code, before it is
