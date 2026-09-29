@@ -1460,6 +1460,40 @@ func TestValidatorDuty_GloasPartialSignatures(t *testing.T) {
 	require.Equal(t, []spectypes.OperatorID{1}, participants[0].Signers)
 }
 
+// Validation admits request-auth packets that repeat recorded roots, next to a new one or within the
+// packet: each signer's root is traced once, at its first sighting.
+func TestValidatorDuty_RequestAuthRootsTracedOncePerSigner(t *testing.T) {
+	const (
+		slot   = phase0.Slot(7)
+		vIndex = phase0.ValidatorIndex(55)
+	)
+	collector := New(zap.NewNop(), nil, nil, nil, networkconfig.TestNetworkWithGloas(0).Beacon, nil, nil)
+	prefsID := ssvtestingutils.NewMsgID([4]byte{}, []byte("pk"), spectypes.RoleProposerPreferences)
+	rootA, rootB, rootC, rootD := phase0.Root{0xa}, phase0.Root{0xb}, phase0.Root{0xc}, phase0.Root{0xd}
+
+	for _, roots := range [][]phase0.Root{
+		{rootA, rootB},        // the batch
+		{rootA, rootC},        // a recorded root next to a new one
+		{rootD, rootD, rootB}, // a root repeated within the packet, and a recorded one
+	} {
+		require.NoError(t, collector.Collect(t.Context(), typedPartialSigMessage(prefsID, spectypes.RequestAuthPartialSig, slot, vIndex, 2, roots...), dummyVerify))
+	}
+	require.NoError(t, collector.Collect(t.Context(), typedPartialSigMessage(prefsID, spectypes.RequestAuthPartialSig, slot, vIndex, 3, rootA), dummyVerify))
+
+	duty, err := collector.GetValidatorDuty(spectypes.BNRoleProposerPreferences, slot, vIndex)
+	require.NoError(t, err)
+	type traced struct {
+		signer spectypes.OperatorID
+		root   phase0.Root
+	}
+	got := make([]traced, 0, len(duty.Pre))
+	for _, pre := range duty.Pre {
+		require.Equal(t, spectypes.RequestAuthPartialSig, pre.Type)
+		got = append(got, traced{pre.Signer, pre.BeaconRoot})
+	}
+	require.Equal(t, []traced{{2, rootA}, {2, rootB}, {2, rootC}, {2, rootD}, {3, rootA}}, got)
+}
+
 // A Gloas proposer's post-consensus packet carries two roots, the block's and the envelope's; both are
 // traced, one entry each, under one signer.
 func TestValidatorDuty_GloasProposerTwoRootPacket(t *testing.T) {

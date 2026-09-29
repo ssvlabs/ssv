@@ -48,9 +48,8 @@ func TestValidatorDutyTrace_MarshallSSZ(t *testing.T) {
 	require.NotNil(t, root)
 }
 
-// Pre and Post carry one entry per partial signature per signer, so they must hold more than one
-// entry per operator: the Gloas proposer packet's two roots and a preferences signer's re-emissions
-// round-trip up to the 256 bound, and the bound is enforced on encode.
+// Pre and Post hold one entry per signing root per signer, so more than one per operator: lists of the
+// worst-case sizes round-trip, and MaxPartialSigEntries is enforced on encode.
 func TestValidatorDutyTrace_MarshallSSZ_WideLists(t *testing.T) {
 	wide := func(n int) []*PartialSigTrace {
 		out := make([]*PartialSigTrace, 0, n)

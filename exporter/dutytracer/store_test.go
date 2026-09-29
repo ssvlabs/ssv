@@ -671,9 +671,8 @@ func encodeLittleEndian(i phase0.ValidatorIndex) []byte {
 	return value
 }
 
-// Eviction counts only what the store confirms is on disk. The traces are already out of memory when the
-// batch is written, so an unencodable duty is left out of the count and a failed batch write counts nothing,
-// rather than the whole input being reported as evicted to disk.
+// Eviction counts only the duties the store saved: an unencodable duty is left out, and a failed batch
+// write counts nothing.
 func TestDumpValidatorToDB_CountsOnlySavedDuties(t *testing.T) {
 	const slot = phase0.Slot(30)
 	const role = spectypes.BNRoleProposerPreferences

@@ -120,8 +120,8 @@ func TestCommitteeObserver_saveAttesterRoots_GloasSingleRoot(t *testing.T) {
 }
 
 // The observer records participation from post-consensus quorums and from the single signing round of
-// the duties without a consensus phase; a request-auth packet is skipped without error, every other
-// pre-consensus type is refused as before.
+// the duties without a consensus phase; a request-auth packet is skipped without error, and any other
+// pre-consensus type is refused.
 func TestRecordsParticipation(t *testing.T) {
 	for _, msgType := range []spectypes.PartialSigMsgType{spectypes.PostConsensusPartialSig, spectypes.PTCAttesterPartialSig, spectypes.ProposerPreferencesPartialSig} {
 		record, err := recordsParticipation(msgType)
