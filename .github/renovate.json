@@ -1,15 +1,66 @@
 {
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
     "github>ssvlabs/shared-configs//renovate/renovate.json"
   ],
-  "baseBranches": ["stage"],
+  "baseBranchPatterns": ["stage"],
+  "schedule": ["before 6am on monday"],
+  "prConcurrentLimit": 5,
+  "vulnerabilityAlerts": {
+    "schedule": ["at any time"],
+    "labels": ["security"]
+  },
   "packageRules": [
     {
       "matchManagers": ["gomod"],
-      "postUpdateOptions": [
-        "gomodTidy",
-        "gomodUpdateImportPaths"
-      ]
+      "postUpdateOptions": ["gomodTidy", "gomodUpdateImportPaths"]
+    },
+    {
+      "description": "Own modules are wired via replace directives, so version bumps are no-ops",
+      "matchPackageNames": ["github.com/ssvlabs/ssv", "github.com/ssvlabs/ssv/**"],
+      "enabled": false
+    },
+    {
+      "description": "ssv-spec is pinned to feature branches on purpose and bumped manually",
+      "matchPackageNames": ["github.com/ssvlabs/ssv-spec"],
+      "enabled": false
+    },
+    {
+      "description": "go-bitfield moved to github.com/OffchainLabs; migrate together with the go-eth2-client fork",
+      "matchPackageNames": ["github.com/prysmaticlabs/go-bitfield"],
+      "enabled": false
+    },
+    {
+      "description": "gddo is archived; to be removed rather than bumped",
+      "matchPackageNames": ["github.com/golang/gddo"],
+      "enabled": false
+    },
+    {
+      "matchManagers": ["gomod"],
+      "matchUpdateTypes": ["minor", "patch", "digest"],
+      "groupName": "go modules (non-major)"
+    },
+    {
+      "description": "Wide surface (eth, discovery, p2p); keep separate so it can be soaked alone",
+      "matchPackageNames": ["github.com/ethereum/go-ethereum"],
+      "groupName": "go-ethereum"
+    },
+    {
+      "matchPackageNames": ["github.com/libp2p/**", "github.com/multiformats/**", "github.com/quic-go/**"],
+      "groupName": "libp2p stack"
+    },
+    {
+      "matchManagers": ["github-actions"],
+      "groupName": "github actions"
+    },
+    {
+      "matchManagers": ["dockerfile"],
+      "groupName": "docker base images"
+    },
+    {
+      "description": "differ UI is a dev-only tool, not shipped",
+      "matchFileNames": ["scripts/differ/ui/**"],
+      "groupName": "differ ui (npm)"
     }
   ]
 }
