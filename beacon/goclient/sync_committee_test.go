@@ -356,6 +356,42 @@ func TestGetSyncCommitteeContributionFetchesHeadRoot(t *testing.T) {
 	require.Equal(t, headRoot, (*contributions)[0].Contribution.BeaconBlockRoot)
 }
 
+// TestGetSyncCommitteeContributionPropagatesCanceledContext locks in the cancellation
+// path of the sync-message-deadline wait. With a future slot (so the wait blocks instead
+// of early-returning) and an already-canceled context, GetSyncCommitteeContribution must
+// return the wrapped wait error and DataVersionNil, without ever querying the beacon node.
+func TestGetSyncCommitteeContributionPropagatesCanceledContext(t *testing.T) {
+	t.Parallel()
+
+	cfg := *networkconfig.TestNetwork.Beacon
+	// A slot well into the future so waitIntoSlot blocks rather than early-returning.
+	slot := cfg.EstimatedCurrentSlot() + 1_000_000
+	selectionProofs := []phase0.BLSSignature{signatureWithFirstByte(1)}
+	subnetIDs := []uint64{7}
+
+	client := &syncCommitteeClientMock{
+		beaconBlockRootFunc: func(_ context.Context, _ *api.BeaconBlockRootOpts) (*api.Response[*phase0.Root], error) {
+			t.Error("beacon node must not be queried when the context is canceled before the wait completes")
+			return nil, errors.New("unexpected call")
+		},
+	}
+
+	goClient := &GoClient{
+		log:          zap.NewNop(),
+		beaconConfig: &cfg,
+		multiClient:  client,
+	}
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	got, version, err := goClient.GetSyncCommitteeContribution(ctx, slot, selectionProofs, subnetIDs)
+	require.ErrorContains(t, err, "wait for sync message deadline")
+	require.ErrorIs(t, err, context.Canceled)
+	require.Equal(t, DataVersionNil, version)
+	require.Nil(t, got)
+}
+
 func TestIsSyncCommitteeAggregatorHandlesZeroModulo(t *testing.T) {
 	t.Parallel()
 

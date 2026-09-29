@@ -2,15 +2,17 @@ package ekm
 
 import (
 	"encoding/hex"
+	"math"
 	"testing"
 	"time"
 
+	bitfield "github.com/OffchainLabs/go-bitfield"
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
+	eth2gloas "github.com/attestantio/go-eth2-client/spec/gloas"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/herumi/bls-eth-go-binary/bls"
-	"github.com/prysmaticlabs/go-bitfield"
 	"github.com/ssvlabs/eth2-key-manager/core"
 	"github.com/ssvlabs/eth2-key-manager/wallets/hd"
 	"github.com/stretchr/testify/require"
@@ -311,6 +313,113 @@ func TestSignBeaconObject(t *testing.T) {
 		require.NotNil(t, sig)
 		require.NotEqual(t, [32]byte{}, sig)
 	})
+	// The Gloas (ePBS) domains sign a generic SSZ root via signSSZRoot (no slashing protection); the obj
+	// type is incidental — the point is each domain is handled, not falling through to "domain unknown".
+	for _, tc := range []struct {
+		name   string
+		domain phase0.DomainType
+	}{
+		{"DomainBeaconBuilder", spectypes.DomainBeaconBuilder},
+		{"DomainPTCAttester", spectypes.DomainPTCAttester},
+		{"DomainProposerPreferences", spectypes.DomainProposerPreferences},
+		{"DomainBuilderRequestAuth", spectypes.DomainBuilderRequestAuth},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, sig, err := km.(*LocalKeyManager).SignBeaconObject(
+				ctx,
+				spectypes.SSZUint64(1),
+				phase0.Domain{},
+				phase0.BLSPubKey(sk1.GetPublicKey().Serialize()),
+				currentSlot,
+				tc.domain,
+			)
+			require.NoError(t, err)
+			require.NotNil(t, sig)
+			require.NotEqual(t, [32]byte{}, sig)
+		})
+	}
+}
+
+// gloasTestBlock builds a minimal HTR-able Gloas block for these tests. signBeaconObject now type-switches
+// on go-eth2-client's spec/gloas block directly (the node aliases that type), so the tests exercise its
+// Gloas arm with the real type. Only the fixed-size body pointers SSZ needs to merkleize are populated.
+func gloasTestBlock(slot phase0.Slot) *eth2gloas.BeaconBlock {
+	return &eth2gloas.BeaconBlock{
+		Slot: slot,
+		Body: &eth2gloas.BeaconBlockBody{
+			ETH1Data:                  &phase0.ETH1Data{BlockHash: make([]byte, 32)},
+			SyncAggregate:             &altair.SyncAggregate{SyncCommitteeBits: bitfield.NewBitvector512()},
+			SignedExecutionPayloadBid: &eth2gloas.SignedExecutionPayloadBid{Message: &eth2gloas.ExecutionPayloadBid{}},
+			ParentExecutionRequests:   &eth2gloas.ExecutionRequests{},
+		},
+	}
+}
+
+// newLocalKeyManagerWithShare returns a LocalKeyManager with sk1 added as a share, plus its public key.
+func newLocalKeyManagerWithShare(t *testing.T) (*LocalKeyManager, phase0.BLSPubKey) {
+	operatorPrivateKey, err := keys.GeneratePrivateKey()
+	require.NoError(t, err)
+	km := testKeyManager(t, operatorPrivateKey)
+
+	sk1 := &bls.SecretKey{}
+	require.NoError(t, sk1.SetHexString(sk1Str))
+	encryptedSK1, err := operatorPrivateKey.Public().Encrypt([]byte(sk1.SerializeToHexStr()))
+	require.NoError(t, err)
+	pk := phase0.BLSPubKey(sk1.GetPublicKey().Serialize())
+	require.NoError(t, km.AddShare(t.Context(), nil, encryptedSK1, pk))
+
+	return km.(*LocalKeyManager), pk
+}
+
+func TestSignBeaconObjectGloasBlockSlashingProtection(t *testing.T) {
+	ctx := t.Context()
+	lkm, pk := newLocalKeyManagerWithShare(t)
+
+	// A Gloas block reaches signBeaconObject's *eth2gloas.BeaconBlock arm, which must key slashing
+	// protection to the block's OWN slot, not the plumbed duty slot, so pass a different plumbed slot and
+	// assert the recorded highest proposal is the block's.
+	blockSlot := testBeaconConfig().EstimatedCurrentSlot() + minSPProposalSlotGap + 10
+	block := gloasTestBlock(blockSlot)
+	plumbedSlot := blockSlot - 5 // deliberately different; the Gloas arm must ignore it
+
+	// First proposal signs and records the highest proposal keyed to the block's own slot.
+	_, root, err := lkm.SignBeaconObject(ctx, block, phase0.Domain{}, pk, plumbedSlot, spectypes.DomainProposer)
+	require.NoError(t, err)
+	require.NotEqual(t, phase0.Root{}, root)
+
+	highest, found, err := lkm.RetrieveHighestProposal(pk)
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Equal(t, blockSlot, highest, "slashing protection must record the block's own slot, not the plumbed slot")
+
+	// Re-proposing the same block slot is slashable → rejected (proves the highest-proposal record + the
+	// IsBeaconBlockSlashable guard that the direct signSSZRoot path used to skip).
+	_, _, err = lkm.SignBeaconObject(ctx, block, phase0.Domain{}, pk, plumbedSlot, spectypes.DomainProposer)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "slashable")
+}
+
+func TestSignBeaconObjectGloasRejectsUnknownProposerObject(t *testing.T) {
+	ctx := t.Context()
+	lkm, pk := newLocalKeyManagerWithShare(t)
+
+	// A proposer-domain object that is not one of the recognized go-eth2-client block types is a routing
+	// bug: the signer must fail loud rather than sign an unrecognized object without slashing protection.
+	// A bare header is not *eth2gloas.BeaconBlock, so it falls through to the default arm.
+	slot := testBeaconConfig().EstimatedCurrentSlot() + minSPProposalSlotGap + 10
+	_, _, err := lkm.SignBeaconObject(ctx, &phase0.BeaconBlockHeader{Slot: slot}, phase0.Domain{}, pk, slot, spectypes.DomainProposer)
+	require.ErrorContains(t, err, "unexpected object type")
+}
+
+func TestSignBeaconObjectGloasRejectsFarFutureSlot(t *testing.T) {
+	ctx := t.Context()
+	lkm, pk := newLocalKeyManagerWithShare(t)
+
+	// Keying slashing protection to the block's own slot means the Gloas arm must guard the far-future
+	// bound itself (the plumbed slot is no longer the bound). An absurd block slot is rejected before signing.
+	block := gloasTestBlock(math.MaxUint64 / 2)
+	_, _, err := lkm.SignBeaconObject(ctx, block, phase0.Domain{}, pk, testBeaconConfig().EstimatedCurrentSlot(), spectypes.DomainProposer)
+	require.ErrorContains(t, err, "too far into the future")
 }
 
 func TestRemoveShare(t *testing.T) {

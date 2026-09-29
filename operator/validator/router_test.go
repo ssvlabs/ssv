@@ -16,6 +16,7 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
+	"github.com/ssvlabs/ssv/protocol/v2/types/ssvtestingutils"
 )
 
 func TestRouter(t *testing.T) {
@@ -50,7 +51,7 @@ func TestRouter(t *testing.T) {
 		msg := &queue.SSVMessage{
 			SSVMessage: &spectypes.SSVMessage{
 				MsgType: spectypes.MsgType(i % 3),
-				MsgID:   spectypes.NewMsgID(networkconfig.TestNetwork.DomainType, []byte{1, 1, 1, 1, 1}, spectypes.RoleCommittee),
+				MsgID:   ssvtestingutils.NewMsgID(networkconfig.TestNetwork.DomainType, []byte{1, 1, 1, 1, 1}, spectypes.RoleCommittee),
 				Data:    fmt.Appendf(nil, "data-%d", i),
 			},
 		}
@@ -78,7 +79,7 @@ func TestRouter_DropsWhenContextCanceled(t *testing.T) {
 	msg := &queue.SSVMessage{
 		SSVMessage: &spectypes.SSVMessage{
 			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(networkconfig.TestNetwork.DomainType, []byte{1, 1, 1, 1, 1}, spectypes.RoleCommittee),
+			MsgID:   ssvtestingutils.NewMsgID(networkconfig.TestNetwork.DomainType, []byte{1, 1, 1, 1, 1}, spectypes.RoleCommittee),
 			Data:    []byte("data"),
 		},
 	}
@@ -98,7 +99,7 @@ func TestRouter_DropsWhenBufferFull(t *testing.T) {
 	msg := &queue.SSVMessage{
 		SSVMessage: &spectypes.SSVMessage{
 			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(networkconfig.TestNetwork.DomainType, []byte{1, 1, 1, 1, 1}, spectypes.RoleCommittee),
+			MsgID:   ssvtestingutils.NewMsgID(networkconfig.TestNetwork.DomainType, []byte{1, 1, 1, 1, 1}, spectypes.RoleCommittee),
 			Data:    []byte("data"),
 		},
 	}
@@ -177,7 +178,7 @@ func TestRouter_ConcurrentRoute_RecordsAllBufferFullDrops(t *testing.T) {
 	msg := &queue.SSVMessage{
 		SSVMessage: &spectypes.SSVMessage{
 			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(networkconfig.TestNetwork.DomainType, []byte{1, 1, 1, 1, 1}, spectypes.RoleCommittee),
+			MsgID:   ssvtestingutils.NewMsgID(networkconfig.TestNetwork.DomainType, []byte{1, 1, 1, 1, 1}, spectypes.RoleCommittee),
 			Data:    []byte("data"),
 		},
 	}

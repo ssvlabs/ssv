@@ -9,6 +9,8 @@ import (
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
+	"github.com/ssvlabs/ssv/protocol/v2/types/ssvtestingutils"
 )
 
 func TestValidatorDutyTrace_MarshallSSZ(t *testing.T) {
@@ -236,14 +238,14 @@ func TestDiskMsg_MarshallSSZ(t *testing.T) {
 			OperatorIDs: []spectypes.OperatorID{1, 2, 3},
 			SSVMessage: &spectypes.SSVMessage{
 				MsgType: spectypes.SSVConsensusMsgType,
-				MsgID:   spectypes.NewMsgID(spectypes.GenesisMainnet, []byte{1, 2, 3}, spectypes.RoleProposer),
+				MsgID:   ssvtestingutils.NewMsgID(spectypes.GenesisMainnet, []byte{1, 2, 3}, spectypes.RoleProposer),
 				Data:    []byte{1, 2, 3},
 			},
 			FullData: []byte{1, 2, 3},
 		},
 		Spec: spectypes.SSVMessage{
 			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(spectypes.GenesisMainnet, []byte{1, 2, 3}, spectypes.RoleProposer),
+			MsgID:   ssvtestingutils.NewMsgID(spectypes.GenesisMainnet, []byte{1, 2, 3}, spectypes.RoleProposer),
 			Data:    []byte{1, 2, 3},
 		},
 		Qbft: specqbft.Message{
@@ -498,14 +500,14 @@ func TestDiskMsg_UnmarshalSSZ_Errors(t *testing.T) {
 			OperatorIDs: []spectypes.OperatorID{1, 2, 3},
 			SSVMessage: &spectypes.SSVMessage{
 				MsgType: spectypes.SSVConsensusMsgType,
-				MsgID:   spectypes.NewMsgID(spectypes.GenesisMainnet, []byte{1, 2, 3}, spectypes.RoleProposer),
+				MsgID:   ssvtestingutils.NewMsgID(spectypes.GenesisMainnet, []byte{1, 2, 3}, spectypes.RoleProposer),
 				Data:    []byte{1, 2, 3},
 			},
 			FullData: []byte{1, 2, 3},
 		},
 		Spec: spectypes.SSVMessage{
 			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(spectypes.GenesisMainnet, []byte{1, 2, 3}, spectypes.RoleProposer),
+			MsgID:   ssvtestingutils.NewMsgID(spectypes.GenesisMainnet, []byte{1, 2, 3}, spectypes.RoleProposer),
 			Data:    []byte{1, 2, 3},
 		},
 		Qbft: specqbft.Message{

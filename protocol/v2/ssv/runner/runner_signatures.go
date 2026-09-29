@@ -6,8 +6,8 @@ import (
 	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	ssz "github.com/ferranbt/fastssz"
 	"github.com/herumi/bls-eth-go-binary/bls"
+
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -20,7 +20,7 @@ func signBeaconObject(
 	runner Runner,
 	networkConfig *networkconfig.Network,
 	duty *spectypes.ValidatorDuty,
-	obj ssz.HashRoot,
+	obj spectypes.HashRoot,
 	slot phase0.Slot,
 	signatureDomain phase0.DomainType,
 ) (*spectypes.PartialSignatureMessage, error) {
@@ -39,7 +39,7 @@ func signAsValidator(
 	ctx context.Context,
 	runner Runner,
 	validatorIndex phase0.ValidatorIndex,
-	obj ssz.HashRoot,
+	obj spectypes.HashRoot,
 	slot phase0.Slot,
 	signatureDomain phase0.DomainType,
 	domain phase0.Domain,

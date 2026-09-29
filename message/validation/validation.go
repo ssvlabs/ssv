@@ -399,15 +399,60 @@ func (mv *messageValidator) validatorState(key spectypes.MessageID, committeeInf
 	}
 
 	cs := &ValidatorState{
-		committeeID:     committeeInfo.committeeID,
-		operators:       make([]*OperatorState, len(committeeInfo.committee)),
-		storedSlotCount: mv.maxStoredSlots(),
+		committeeID:      committeeInfo.committeeID,
+		operators:        make([]*OperatorState, len(committeeInfo.committee)),
+		storedSlotCount:  mv.storedSlotCount(key.GetRoleType()),
+		storedEpochCount: mv.storedEpochCount(key.GetRoleType()),
 	}
-	mv.states.Set(key, cs, ttlcache.DefaultTTL)
+	mv.states.Set(key, cs, mv.stateTTL(key.GetRoleType()))
 	return cs
+}
+
+// stateTTL is how long a role's validation state outlives the last message that touched it: every read or
+// write of the state restarts it. It must cover every message the state still gates, or the role's dedup and
+// duty-count budgets reopen (SIP #94 §7). Proposer preferences arrive in sparse bursts yet stay acceptable from
+// the epoch before their proposal slot until 2 slots after it, past the cache's default TTL, so their state
+// lives for their slot ring's span plus a slot of margin. Every other role fits the default.
+func (mv *messageValidator) stateTTL(role spectypes.RunnerRole) time.Duration {
+	if role == spectypes.RoleProposerPreferences {
+		return time.Duration(mv.storedSlotCount(role)+1) * mv.netCfg.SlotDuration // #nosec G115 -- slot counts are small
+	}
+	return ttlcache.DefaultTTL
 }
 
 // maxStoredSlots stores max amount of slots message validation stores.
 func (mv *messageValidator) maxStoredSlots() uint64 {
 	return mv.netCfg.SlotsPerEpoch + LateSlotAllowance
+}
+
+// storedSlotCount returns how many recent slots of per-signer state a role retains, so that every slot the role
+// accepts at once has its own ring slot and per-slot dedup stays exact. Proposer preferences ride proposal slots
+// across the proposer lookahead — through the end of the next epoch, so up to
+// proposerPreferencesEarlyEpochs*SlotsPerEpoch-1 slots ahead at an epoch's first slot — and LateSlotAllowance
+// behind. One more slot is spare: where the late and early margins together exceed a slot, as on short-slot
+// devnets, an epoch's last slot already admits the epoch after next while still admitting LateSlotAllowance
+// slots back. Every other role only ever sees roughly the current slot.
+func (mv *messageValidator) storedSlotCount(role spectypes.RunnerRole) uint64 {
+	if role == spectypes.RoleProposerPreferences {
+		return proposerPreferencesEarlyEpochs*mv.netCfg.SlotsPerEpoch + LateSlotAllowance + 1
+	}
+	return mv.maxStoredSlots()
+}
+
+// storedEpochCount returns how many epochs of per-signer duty counts a role retains. Counts must live as
+// long as any message they gate is acceptable (SIP #94 §7). Proposer preferences ride proposal slots through
+// the next epoch and LateSlotAllowance slots behind, so their acceptable slots span the previous epoch's tail,
+// the current epoch and the next — three consecutive epochs at any instant (the current, the next and the one
+// after in the moments before an epoch turns). The roles with the long lateness TTL (maxStoredSlots: an epoch
+// plus LateSlotAllowance) can still accept a slot two epochs back while the current epoch's arrive — three
+// epochs. Every other role's TTL crosses at most one epoch boundary — two.
+func (mv *messageValidator) storedEpochCount(role spectypes.RunnerRole) uint64 {
+	switch role {
+	case spectypes.RoleProposerPreferences:
+		return proposerPreferencesEarlyEpochs + 1
+	case spectypes.RoleCommittee, spectypes.RoleAggregatorCommittee, ssvtypes.RoleAggregator:
+		return 3
+	default:
+		return 2
+	}
 }

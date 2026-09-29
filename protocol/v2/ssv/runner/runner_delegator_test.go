@@ -9,6 +9,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// GetStateRoot guards against a nil State (e.g. the duty dispatcher never sets one) instead of panicking.
+func TestBaseRunnerGetStateRootNilStateReturnsError(t *testing.T) {
+	_, err := (&BaseRunner{}).GetStateRoot()
+	require.Error(t, err)
+}
+
 func TestVoluntaryExitRunnerDecodePreservesEmbeddedBaseRunnerMethods(t *testing.T) {
 	t.Parallel()
 

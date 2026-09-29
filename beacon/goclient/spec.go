@@ -63,9 +63,11 @@ func (gc *GoClient) specForClient(ctx context.Context, provider client.Service) 
 	return specResponse.Data, nil
 }
 
-// fetchBeaconConfig must be called once on GoClient's initialization.
-func (gc *GoClient) fetchBeaconConfig(ctx context.Context, client *eth2clienthttp.Service) (*networkconfig.Beacon, error) {
-	specResponse, err := gc.specForClient(ctx, client)
+// fetchBeaconConfig reads a client's beacon config: when the client activates, to take the node's config or
+// check the client against it (applyBeaconConfig), and on the periodic fork-schedule recheck
+// (recheckForkSchedules).
+func (gc *GoClient) fetchBeaconConfig(ctx context.Context, provider client.Service) (*networkconfig.Beacon, error) {
+	specResponse, err := gc.specForClient(ctx, provider)
 	if err != nil {
 		return nil, fmt.Errorf("fetch spec: %w", err)
 	}
@@ -152,7 +154,7 @@ func (gc *GoClient) fetchBeaconConfig(ctx context.Context, client *eth2clienthtt
 		return nil, fmt.Errorf("extract fork data: %w", err)
 	}
 
-	gen, err := gc.genesisForClient(ctx, client)
+	gen, err := gc.genesisForClient(ctx, provider)
 	if err != nil {
 		return nil, fmt.Errorf("fetch genesis: %w", err)
 	}
@@ -252,7 +254,17 @@ func (gc *GoClient) getForkData(specResponse map[string]any) (map[spec.DataVersi
 		return nil, err
 	}
 
-	// TODO: Add GLOAS_FORK_EPOCH as non-required once fork specs are available
+	// GLOAS_FORK_EPOCH is optional, unlike every earlier fork's epoch: a beacon node that predates
+	// Gloas keeps serving the node, and its Gloas entry stands for "not scheduled" (far-future epoch,
+	// zero version) — the same answer a node that knows the fork but has not scheduled it gives. Two
+	// clients that disagree on whether the fork is scheduled are the same network at different
+	// configuration versions: AssertSame reports it as a networkconfig.ForkScheduleLagError, and
+	// reportForkScheduleLag says which side has to move (recheckForkSchedules keeps looking, since the
+	// node's own schedule is fixed at start).
+	gloasEpoch, err := getForkEpoch("GLOAS_FORK_EPOCH", false)
+	if err != nil {
+		return nil, err
+	}
 
 	// Only get fork version if the fork is scheduled (not FarFutureEpoch)
 	var fuluForkVersion phase0.Version
@@ -261,6 +273,20 @@ func (gc *GoClient) getForkData(specResponse map[string]any) (map[spec.DataVersi
 		if err != nil {
 			return nil, err
 		}
+	}
+
+	var gloasForkVersion phase0.Version
+	if gloasEpoch != FarFutureEpoch {
+		gloasForkVersion, err = getForkVersion("GLOAS_FORK_VERSION")
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if gloasEpoch == FarFutureEpoch {
+		gc.log.Debug("Gloas (ePBS) fork not scheduled by the beacon node")
+	} else {
+		gc.log.Info("Gloas (ePBS) fork scheduled", zap.Uint64("epoch", uint64(gloasEpoch)))
 	}
 
 	forkEpochs := map[spec.DataVersion]phase0.Fork{
@@ -298,6 +324,11 @@ func (gc *GoClient) getForkData(specResponse map[string]any) (map[spec.DataVersi
 			PreviousVersion: electraForkVersion,
 			CurrentVersion:  fuluForkVersion,
 			Epoch:           fuluEpoch,
+		},
+		networkconfig.DataVersionGloas: {
+			PreviousVersion: fuluForkVersion,
+			CurrentVersion:  gloasForkVersion,
+			Epoch:           gloasEpoch,
 		},
 	}
 

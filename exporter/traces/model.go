@@ -7,7 +7,14 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
-//go:generate sszgen -include ../../vendor/github.com/attestantio/go-eth2-client/spec/phase0,../../vendor/github.com/ssvlabs/ssv-spec/types,../../vendor/github.com/ssvlabs/ssv-spec/qbft --path model.go --objs ValidatorDutyTrace,CommitteeDutyTrace,DiskMsg
+// NOTE: model_encoding.go is HAND-MAINTAINED — `go generate` cannot regenerate it.
+// Every available sszgen (ferranbt/fastssz v1.0.0 in tool.mod, public v0.1.3, and the
+// prysmaticlabs fork) rejects CommitteeDutyTrace.Role (spectypes.RunnerRole is int32, and
+// SSZ has no signed-int type) and mishandles SignerData.ValidatorIdx
+// ([]phase0.ValidatorIndex, a named-uint64 slice the current tool emits as []uint64).
+// The committed encoding came from an older/custom generator (int32->uint64 cast,
+// make([]NamedType, n)); edit model_encoding.go by hand when these structs change.
+// Objects, once a compatible sszgen exists again: ValidatorDutyTrace, CommitteeDutyTrace, DiskMsg.
 type ValidatorDutyTrace struct {
 	ConsensusTrace
 

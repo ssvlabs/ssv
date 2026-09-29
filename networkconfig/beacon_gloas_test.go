@@ -1,0 +1,130 @@
+package networkconfig
+
+import (
+	"errors"
+	"fmt"
+	"math"
+	"testing"
+
+	"github.com/attestantio/go-eth2-client/spec"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/stretchr/testify/require"
+)
+
+func TestBeacon_IsGloas(t *testing.T) {
+	// No Gloas entry in the fork map → never Gloas.
+	none := &Beacon{Forks: map[spec.DataVersion]phase0.Fork{}}
+	require.False(t, none.IsGloas(0))
+	require.False(t, none.IsGloas(1_000_000))
+
+	// Unscheduled Gloas (far-future sentinel) → never Gloas.
+	farFuture := &Beacon{Forks: map[spec.DataVersion]phase0.Fork{
+		DataVersionGloas: {Epoch: phase0.Epoch(math.MaxUint64)},
+	}}
+	require.False(t, farFuture.IsGloas(1_000_000))
+
+	// Scheduled at epoch 100.
+	scheduled := &Beacon{Forks: map[spec.DataVersion]phase0.Fork{
+		DataVersionGloas: {Epoch: 100},
+	}}
+	require.False(t, scheduled.IsGloas(99))
+	require.True(t, scheduled.IsGloas(100))
+	require.True(t, scheduled.IsGloas(101))
+}
+
+func TestBeacon_GloasForkEpoch(t *testing.T) {
+	_, ok := (&Beacon{Forks: map[spec.DataVersion]phase0.Fork{}}).GloasForkEpoch()
+	require.False(t, ok)
+
+	epoch, ok := (&Beacon{Forks: map[spec.DataVersion]phase0.Fork{
+		DataVersionGloas: {Epoch: 100},
+	}}).GloasForkEpoch()
+	require.True(t, ok)
+	require.Equal(t, phase0.Epoch(100), epoch)
+}
+
+func TestBeacon_GloasScheduled(t *testing.T) {
+	gloasAt := func(epoch phase0.Epoch) *Beacon {
+		return &Beacon{Forks: map[spec.DataVersion]phase0.Fork{DataVersionGloas: {Epoch: epoch}}}
+	}
+	require.False(t, (&Beacon{Forks: map[spec.DataVersion]phase0.Fork{}}).GloasScheduled(), "absent")
+	require.False(t, gloasAt(FarFutureEpoch).GloasScheduled(), "named but unscheduled")
+	require.True(t, gloasAt(100).GloasScheduled())
+	require.True(t, gloasAt(0).GloasScheduled(), "active from genesis")
+}
+
+func TestNetwork_InGloasPriorWindow(t *testing.T) {
+	const gloasEpoch = 100
+	netCfg := TestNetworkWithGloas(gloasEpoch)
+	slotInEpoch := func(e phase0.Epoch) phase0.Slot { return phase0.Slot(uint64(e) * netCfg.SlotsPerEpoch) }
+
+	require.False(t, netCfg.InGloasPriorWindow(slotInEpoch(gloasEpoch-2)), "outside the lookahead window")
+	require.True(t, netCfg.InGloasPriorWindow(slotInEpoch(gloasEpoch-1)), "the prior window")
+	require.False(t, netCfg.InGloasPriorWindow(slotInEpoch(gloasEpoch)), "already at the fork")
+
+	// No Gloas fork scheduled → never in the window.
+	require.False(t, TestNetwork.InGloasPriorWindow(slotInEpoch(gloasEpoch-1)))
+}
+
+// IntervalDuration is a third of the slot before Gloas, a quarter from the fork on (SIP #94 §1).
+func TestBeacon_IntervalDuration(t *testing.T) {
+	// No Gloas fork → always thirds.
+	require.Equal(t, TestNetwork.SlotDuration/3, TestNetwork.IntervalDuration(0))
+	require.Equal(t, TestNetwork.SlotDuration/3, TestNetwork.IntervalDuration(1_000_000))
+
+	// Gloas at epoch 100: thirds before the fork, quarters from it on.
+	const gloasEpoch = 100
+	netCfg := TestNetworkWithGloas(gloasEpoch)
+	require.Equal(t, netCfg.SlotDuration/3, netCfg.IntervalDuration(netCfg.FirstSlotAtEpoch(gloasEpoch)-1))
+	require.Equal(t, netCfg.SlotDuration/4, netCfg.IntervalDuration(netCfg.FirstSlotAtEpoch(gloasEpoch)))
+}
+
+// Two beacon configs agree on their forks when every scheduled fork matches; an unscheduled fork is the
+// same whether the client names it far-future or predates it and omits it, so a staggered upgrade where
+// one client advertises GLOAS_FORK_EPOCH and one does not runs. Scheduling it on one client only, or at
+// different epochs, is a real misalignment.
+func TestBeacon_AssertSame_Forks(t *testing.T) {
+	now := TestNetwork.EstimatedCurrentEpoch()
+	base := func(gloas *phase0.Fork) *Beacon {
+		b := *TestNetwork.Beacon
+		b.Forks = map[spec.DataVersion]phase0.Fork{spec.DataVersionPhase0: {}, spec.DataVersionAltair: {Epoch: 1}}
+		if gloas != nil {
+			b.Forks[DataVersionGloas] = *gloas
+		}
+		return &b
+	}
+	omitted := base(nil)
+	unscheduled := base(&phase0.Fork{Epoch: FarFutureEpoch, CurrentVersion: phase0.Version{0x80}})
+	ahead := base(&phase0.Fork{Epoch: now + 100, CurrentVersion: phase0.Version{0x80}})
+	aheadLater := base(&phase0.Fork{Epoch: now + 200, CurrentVersion: phase0.Version{0x80}})
+	active := base(&phase0.Fork{Epoch: now, CurrentVersion: phase0.Version{0x80}})
+	activeEarlier := base(&phase0.Fork{Epoch: now - 1, CurrentVersion: phase0.Version{0x80}})
+
+	// Unscheduled is unscheduled, whether the client names the fork or not.
+	require.NoError(t, omitted.AssertSame(unscheduled))
+	require.NoError(t, unscheduled.AssertSame(omitted))
+	require.NoError(t, ahead.AssertSame(ahead))
+
+	// A disagreement about a fork still ahead of both clients is a lag, reported as such either way round.
+	var lag *ForkScheduleLagError
+	require.ErrorAs(t, ahead.AssertSame(omitted), &lag)
+	require.Equal(t, DataVersionGloas, lag.Version)
+	require.Equal(t, now+100, lag.Ours.Epoch)
+	require.Equal(t, FarFutureEpoch, lag.Theirs.Epoch)
+	require.ErrorAs(t, unscheduled.AssertSame(ahead), &lag)
+	require.ErrorAs(t, omitted.AssertSame(ahead), &lag)
+	require.ErrorAs(t, ahead.AssertSame(aheadLater), &lag)
+	require.ErrorContains(t, ahead.AssertSame(aheadLater), fmt.Sprintf("scheduled at epoch %d", now+200))
+
+	// A fork active on either client must match exactly: the clients are on different chains otherwise.
+	for name, err := range map[string]error{
+		"active vs omitted":       active.AssertSame(omitted),
+		"omitted vs active":       omitted.AssertSame(active),
+		"active vs unscheduled":   active.AssertSame(unscheduled),
+		"active at another epoch": active.AssertSame(activeEarlier),
+		"active vs ahead":         active.AssertSame(ahead),
+	} {
+		require.ErrorContains(t, err, "different Forks", name)
+		require.False(t, errors.As(err, &lag), "%s is not a lag", name)
+	}
+}

@@ -33,9 +33,6 @@ const (
 	//
 	// This is NOT when this operator broadcasts its own partial-sig; see
 	// voluntaryExitExecutionSlotsToPostpone for that.
-	//
-	// Note: shares its numeric value (4) with voluntaryExitSchedulingSlack
-	// below by coincidence — the two are independent.
 	voluntaryExitDutySlotsToPostpone = 4
 
 	// voluntaryExitSchedulingSlack absorbs per-operator timing variance once an
@@ -49,7 +46,7 @@ const (
 	// — which the inbound message-validation path checks via dutyCount.
 	//
 	// Independent of voluntaryExitDutySlotsToPostpone despite happening to
-	// share the same numeric value (4); see the note on that constant.
+	// share the same numeric value (4).
 	voluntaryExitSchedulingSlack = 4
 
 	// voluntaryExitExecutionSlotsToPostpone is the earliest slot, expressed as
@@ -141,22 +138,11 @@ func (h *VoluntaryExitHandler) HandleDuties(ctx context.Context) {
 				return
 			}
 
-			// Derive dutySlot deterministically from the EL event's block slot
-			// so every operator arrives at the same value regardless of when
-			// they personally received the event, and regardless of code version.
-			// This matters because dutySlot feeds dutyStore (used by inbound
-			// message-validation's dutyCount check), the outbound partial-sig
-			// envelope's Slot field, and VoluntaryExit.Epoch via
-			// EstimatedEpochAtSlot (see VoluntaryExitRunner.calculateVoluntaryExit).
-			// Divergent slots — across operators or across versions — would
-			// either drop messages at validation or break BLS partial-signature
-			// aggregation near epoch boundaries, silently failing the exit.
-			//
-			// earliestExecutionSlot is a separate, local-only gate that defers
-			// our own broadcast until peers' EL streaming pipelines have
-			// plausibly caught up. The two slots are deliberately decoupled so
-			// this operator's wire behavior stays interoperable with pre-#2851
-			// operators in mixed clusters.
+			// Derive dutySlot deterministically from the EL event's block slot so
+			// every operator arrives at the same value regardless of receipt time
+			// or code version; earliestExecutionSlot is a separate, local-only gate
+			// deferring our own broadcast until peers' EL pipelines have plausibly
+			// caught up. See both constants' docstrings for the full rationale.
 			blockSlot, err := h.blockSlot(ctx, exitDescriptor.BlockNumber)
 			if err != nil {
 				h.logger.Warn(

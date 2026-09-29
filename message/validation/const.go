@@ -2,6 +2,8 @@ package validation
 
 import (
 	"time"
+
+	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 )
 
 // To add some encoding overhead for ssz, we use (N + N/encodingOverheadDivisor + 4) for a structure with expected size N
@@ -23,6 +25,41 @@ const (
 	maxSignatures           = 13
 	encodingOverheadDivisor = 20 // Divisor for message size to get encoding overhead, e.g. 10 for 10%, 20 for 5%. Done this way to keep const int.
 )
+
+// earlyMessageMargin is how far before its slot a message may arrive, on top of clockErrorTolerance —
+// the early-side counterpart of lateMessageMargin. Accepting early costs nothing: the duty queues hold
+// the message until the local duty for that slot starts, and a runner still on the previous slot hands
+// it back as retryable. Dropping early is fatal for the duties that open with a single-shot
+// pre-consensus round — proposer RANDAO, selection proofs, registration, exit — since a dropped partial
+// is never re-sent: a transient clock error just past clockErrorTolerance on the sender's slot tick
+// would cost the whole duty, for the proposer the block (issue #3026). For the monotonic-slot roles
+// (monotonicSlotRole) the margin has one side effect: a signer's message for slot N+1 accepted this early
+// advances its slot, so its remaining slot-N messages are dropped as already advanced
+// (ErrSlotAlreadyAdvanced) that much sooner — a straggler behind the signer's own later message, which
+// sequential sending rules out barring network reordering.
+const earlyMessageMargin = time.Second
+
+// proposerPreferencesEarlyEpochs is the proposer-lookahead span in epochs — the current epoch plus
+// MIN_SEED_LOOKAHEAD=1 — that preferences are broadcast across: a preference for a slot in epoch E is
+// expected from the start of epoch E-(proposerPreferencesEarlyEpochs-1) on. It bounds how early such a
+// message may arrive (messageEarliness) and how much per-signer state the role retains (storedSlotCount,
+// storedEpochCount).
+const proposerPreferencesEarlyEpochs = 2
+
+// maxProposerPreferencesDistinctRoots bounds the distinct ProposerPreferences signing roots one
+// (slot, signer) may contribute (SIP #94 §5): unlike other pre-consensus messages (capped at 1), a
+// proposer re-emits under a new root when the slot's dependent_root changes. Derivation at the
+// shared constant.
+const maxProposerPreferencesDistinctRoots = gloas.MaxProposerPreferencesDistinctRoots
+
+// maxRequestAuthDistinctRoots bounds the distinct BuilderRequestAuth signing roots one (slot, signer)
+// may contribute (SIP #94 §7): at most one per configured direct-builder entry. Derivation at the shared
+// constant.
+const maxRequestAuthDistinctRoots = gloas.MaxRequestAuthDistinctRoots
+
+// maxRequestAuthEntries bounds the entries of one RequestAuthPartialSig packet. Derivation at the shared
+// constant.
+const maxRequestAuthEntries = gloas.MaxRequestAuthEntries
 
 const (
 	signatureSize    = 256

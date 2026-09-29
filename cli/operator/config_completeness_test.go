@@ -20,7 +20,7 @@ func Test_config_defaults_complete(t *testing.T) {
 	intentionallyZero := map[string]struct{}{}
 	for _, p := range []string{
 		// opt-in / disable flags (default off)
-		"AllowDangerousProposerDelay", "EnableDoppelgangerProtection", "EnableProfile", "EnableTraces",
+		"AllowDangerousProposerDelay", "LegacyProposerRoundTimeout", "EnableDoppelgangerProtection", "EnableProfile", "EnableTraces",
 		"WithPing", "db.Reporting", "exporter.Enabled", "eth2.WithParallelSubmissions",
 		"eth2.WithWeightedAttestationData", "p2p.DisableIPRateLimit", "p2p.DiscoveryTrace",
 		"p2p.Libp2pTrace", "p2p.PubSubTrace", "ssv.ValidatorOptions.FullNode",
@@ -30,7 +30,7 @@ func Test_config_defaults_complete(t *testing.T) {
 		"SSVSigner.KeystorePasswordFile", "SSVSigner.ServerCertFile", "p2p.Bootnodes", "p2p.HostAddress",
 		"p2p.HostDNS", "p2p.Subnets", "p2p.TrustedPeers", "ssv.CustomDomainType", "ssv.CustomNetwork",
 		// optional ports / sizes / timeouts (0 = disabled, or a library/runtime default applies later)
-		"MetricsAPIPort", "SSVAPIPort", "WebSocketAPIPort", "ProposerDelay",
+		"MetricsAPIPort", "SSVAPIPort", "WebSocketAPIPort", "ProposerDelay", "ProposerDelayEPBS",
 		"eth2.CommonTimeout", "eth2.LongTimeout", "eth2.ProposalSoftTimeout",
 		"p2p.PubsubMsgCacheTTL", "p2p.PubsubOutQueueSize", "p2p.PubsubValidateThrottle",
 		"p2p.PubsubValidationQueueSize", "ssv.ValidatorOptions.ExperimentalGasLimit",

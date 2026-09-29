@@ -51,15 +51,21 @@ func recordDutyScheduled(ctx context.Context, role types.RunnerRole, slotDelay t
 // dutySlotIsExecutionSlot reports whether duty.Slot for the given role
 // represents the wall-clock slot at which this operator intends to execute
 // its duty. True for most roles (attester, proposer, etc.); false for roles
-// where duty.Slot is a shared coordination point intentionally held in the
-// past (the operator executes later than duty.Slot) — see
-// voluntaryExitDutySlotsToPostpone and validatorRegistrationDutySlotsToPostpone
-// for the canonical rationale.
+// where duty.Slot is a shared coordination point that does not coincide with
+// execution, so measuring slotDelay against it is meaningless and the lateness
+// check is skipped. This happens in either direction:
+//   - voluntary-exit and validator-registration hold duty.Slot in the past and
+//     execute later (see voluntaryExitDutySlotsToPostpone and
+//     validatorRegistrationDutySlotsToPostpone for the canonical rationale);
+//   - proposer-preferences sets duty.Slot to the future proposal slot the
+//     preference targets and emits earlier, near the current slot.
 //
 // For validator-registration this returns false for both the event-driven
 // path (where the deferred-broadcast trade-off applies) and the periodic
 // path (where slotDelay would be ~0 anyway) — keeping the role-level check
 // simple is preferable to distinguishing the two paths in the duty.
 func dutySlotIsExecutionSlot(role types.RunnerRole) bool {
-	return role != types.RoleVoluntaryExit && role != types.RoleValidatorRegistration
+	return role != types.RoleVoluntaryExit &&
+		role != types.RoleValidatorRegistration &&
+		role != types.RoleProposerPreferences
 }

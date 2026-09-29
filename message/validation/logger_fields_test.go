@@ -11,8 +11,10 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/networkconfig"
+	logfields "github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/protocol/v2/types/ssvtestingutils"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 )
 
@@ -402,7 +404,9 @@ func TestAsZapFields(t *testing.T) {
 
 // TestBuildLoggerFields_DutyID covers addDutyIDField, which buildLoggerFields only invokes at
 // debug log level. It must build a duty ID for both the committee and aggregator-committee
-// roles (using the committee lookup), and for per-validator roles (using the validator lookup).
+// roles (using the committee lookup), and for per-validator roles (using the validator lookup) —
+// in both cases through the shared builders, so a duty carries one duty_id across the scheduler,
+// the runners and message validation (issue #3022).
 func TestBuildLoggerFields_DutyID(t *testing.T) {
 	debugLogger, err := zap.NewDevelopment()
 	require.NoError(t, err)
@@ -418,7 +422,7 @@ func TestBuildLoggerFields_DutyID(t *testing.T) {
 		}
 		ssvMsg := &spectypes.SSVMessage{
 			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(spectypes.DomainType{}, dutyExecutorID, role),
+			MsgID:   ssvtestingutils.NewMsgID(spectypes.DomainType{}, dutyExecutorID, role),
 		}
 		return &queue.SSVMessage{
 			SignedSSVMessage: &spectypes.SignedSSVMessage{SSVMessage: ssvMsg},
@@ -486,10 +490,20 @@ func TestBuildLoggerFields_DutyID(t *testing.T) {
 			},
 		}
 
-		msg := newConsensusMsg(ssvtypes.RoleAggregator, pubKey, phase0.Slot(200))
-		fields := mv.buildLoggerFields(msg)
+		require.Equal(t, "AGGREGATOR-e6-s200-v77", mv.buildLoggerFields(newConsensusMsg(ssvtypes.RoleAggregator, pubKey, phase0.Slot(200))).DutyID)
+		require.Equal(t, "PROPOSER-e6-s200-v77", mv.buildLoggerFields(newConsensusMsg(spectypes.RoleProposer, pubKey, phase0.Slot(200))).DutyID)
 
-		require.Equal(t, "AGGREGATOR-e6-s200-v77", fields.DutyID)
+		// Every per-validator role of validRoleUnion renders exactly what the duty scheduler and the runners
+		// render — the shared builder's form, never the spec's _RUNNER-suffixed role name.
+		for _, role := range []spectypes.RunnerRole{
+			spectypes.RoleProposer, spectypes.RoleValidatorRegistration, spectypes.RoleVoluntaryExit,
+			ssvtypes.RoleAggregator, ssvtypes.RoleSyncCommitteeContribution,
+			spectypes.RolePTCAttester, spectypes.RoleProposerPreferences,
+		} {
+			dutyID := mv.buildLoggerFields(newConsensusMsg(role, pubKey, phase0.Slot(200))).DutyID
+			require.Equal(t, logfields.BuildDutyID(6, 200, role, 77), dutyID)
+			require.NotContains(t, dutyID, "_RUNNER")
+		}
 	})
 
 	t.Run("per-validator role with unknown validator leaves duty ID empty", func(t *testing.T) {

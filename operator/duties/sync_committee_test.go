@@ -705,7 +705,7 @@ func TestScheduler_SyncCommittee_Indices_Changed_Too_Late_In_Slot(t *testing.T) 
 			},
 		})
 		go func() {
-			time.Sleep(scheduler.netCfg.IntervalDuration() + 1*time.Millisecond)
+			time.Sleep(scheduler.netCfg.IntervalDuration(0) + 1*time.Millisecond)
 			scheduler.indicesChgCh <- struct{}{}
 		}()
 
@@ -893,7 +893,7 @@ func TestScheduler_SyncCommittee_Retry_Current_Period_Fetch_On_Next_Tick(t *test
 	})
 }
 
-func TestScheduler_SyncCommittee_No_Eligible_Validators_Does_Not_Retry_Current_Period_Fetch(t *testing.T) {
+func TestScheduler_SyncCommittee_No_Eligible_Validators_Leaves_Current_Period_Fetch_Pending(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		var (
 			handler       = NewSyncCommitteeHandler(dutystore.NewSyncCommitteeDuties(), false)
@@ -909,13 +909,17 @@ func TestScheduler_SyncCommittee_No_Eligible_Validators_Does_Not_Retry_Current_P
 		waitForDuties.Set(true)
 		require.NoError(t, scheduler.Start(ctx))
 
-		// Startup fetch completes as a successful no-op because there are no eligible validators.
-		require.True(t, handler.dutyFetchIntents[0])
+		// With no eligible validators, the startup fetch is a no-op that must NOT mark the intent fulfilled —
+		// otherwise the duty would never be fetched once a validator becomes eligible (e.g. after a metadata
+		// sync that lands without an accompanying indices-change event). The intent stays pending.
+		require.False(t, handler.dutyFetchIntents[0])
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
-		// The next tick must not retry the current-period fetch.
+		// The next tick re-evaluates the pending intent. There are still no eligible validators, so it
+		// short-circuits before any fetch and the intent remains pending (ready to be retried later).
 		ticker.Send(phase0.Slot(0))
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
+		require.False(t, handler.dutyFetchIntents[0])
 
 		// Stop scheduler & wait for graceful exit.
 		cancel()

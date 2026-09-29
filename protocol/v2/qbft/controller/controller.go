@@ -104,6 +104,20 @@ func (c *Controller) StartNewInstance(
 		return nil, traces.Errorf(span, "value invalid: %w", err)
 	}
 
+	return c.startInstance(ctx, span, logger, height, value, valueChecker, roundTimerF)
+}
+
+// startInstance creates, starts and records a new instance for the height. value is what this node
+// proposes when it leads a round.
+func (c *Controller) startInstance(
+	ctx context.Context,
+	span trace.Span,
+	logger *zap.Logger,
+	height specqbft.Height,
+	value []byte,
+	valueChecker ssv.ValueChecker,
+	roundTimerF ssv.QBFTRoundTimerF,
+) (*instance.Instance, error) {
 	if height < c.LatestInstanceHeight {
 		return nil, spectypes.WrapError(spectypes.StartInstanceErrorCode, traces.Errorf(
 			span,

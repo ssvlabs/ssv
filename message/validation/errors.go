@@ -90,6 +90,7 @@ var (
 	ErrTooManyPartialSigMessage         = Error{text: "got more partial signature messages of a certain type than allowed"}
 	ErrDifferentProposalData            = Error{text: "got different proposal data"}
 	ErrDecidedMessageWithTooFewSigners  = Error{text: "got decided message with too few signers (same number or less)"}
+	ErrValidatorRegistrationRetired     = Error{text: "validator registrations ended with the Gloas fork"}
 )
 
 // Messages with these errors are rejected (regardless of what peer they come from).
@@ -112,6 +113,7 @@ var (
 	ErrSignerNotLeader                                 = Error{text: "signer is not leader", reject: true}
 	ErrSignersNotSorted                                = Error{text: "signers are not sorted", reject: true}
 	ErrInconsistentSigners                             = Error{text: "signer is not expected", reject: true}
+	ErrInconsistentValidatorIndex                      = Error{text: "validator index differs across partial signatures", reject: true}
 	ErrInvalidHash                                     = Error{text: "root doesn't match full data hash", reject: true}
 	ErrFullDataHash                                    = Error{text: "couldn't hash root", reject: true}
 	ErrUndecodableMessageData                          = Error{text: "message data could not be decoded", reject: true}

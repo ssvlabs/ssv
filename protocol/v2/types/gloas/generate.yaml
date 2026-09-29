@@ -1,0 +1,10 @@
+package: .
+legacy: true
+without-dynamic-expressions: true
+types:
+  - name: BuilderRequestAuth
+    output: builderrequestauth_ssz.go
+  - name: SignedBuilderRequestAuth
+    output: signedbuilderrequestauth_ssz.go
+  - name: GloasProposalData
+    output: gloasproposaldata_ssz.go

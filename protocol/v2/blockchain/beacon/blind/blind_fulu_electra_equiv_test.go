@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"testing"
 
+	bitfield "github.com/OffchainLabs/go-bitfield"
 	"github.com/attestantio/go-eth2-client/api"
 	apiv1electra "github.com/attestantio/go-eth2-client/api/v1/electra"
 	apiv1fulu "github.com/attestantio/go-eth2-client/api/v1/fulu"
@@ -15,7 +16,6 @@ import (
 	electraspec "github.com/attestantio/go-eth2-client/spec/electra"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/holiman/uint256"
-	bitfield "github.com/prysmaticlabs/go-bitfield"
 	"github.com/stretchr/testify/require"
 )
 
