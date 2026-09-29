@@ -21,6 +21,9 @@ type Network struct {
 	signer ssvtypes.OperatorSigner
 	netCfg *networkconfig.Network
 	logger *zap.Logger
+
+	// gate holds the forged-send budget of the throttled values (budget.go).
+	gate gate
 }
 
 // Wrap returns inner unchanged when no fault is active, so a FAULT=none node is byte-for-byte the
@@ -38,10 +41,13 @@ func Wrap(inner network.P2PNetwork, signer ssvtypes.OperatorSigner, netCfg *netw
 // embedded interface keeps it byte-identical; a fault that ever needs this path must decode the
 // body for the slot, never the wall clock.
 func (n *Network) BroadcastAtSlot(msg *spectypes.SignedSSVMessage, slot phase0.Slot) error {
-	return n.dispatch(Plan(faults.Active(), msg, slot, n.netCfg.EstimatedCurrentSlot(), n.role7PreForkSlot()))
+	f := faults.Active()
+	now := n.netCfg.EstimatedCurrentSlot()
+	return n.dispatch(n.throttle(f, msg, slot, now, Plan(f, msg, slot, now, n.role7PreForkSlot())))
 }
 
-// role7PreForkSlot returns a slot below the Gloas fork boundary, for role7-prefork (MSG-02). Plan
+// role7PreForkSlot returns the last slot below the Gloas fork boundary, for role7-prefork and
+// vr-prefork-slot-replay (MSG-02). Plan
 // must stay pure — it never reads a network config — so the decorator computes this here, where
 // n.netCfg is already in scope, the same way DelaySlots is turned into a duration below. Computed
 // on every broadcast regardless of which fault is active; cheap, and keeps Plan's signature the
@@ -149,10 +155,27 @@ func (n *Network) send(o Outgoing, announce bool) error {
 		o.Msg.Signatures = [][]byte{sig}
 		o.Msg.OperatorIDs = []spectypes.OperatorID{n.signer.GetOperatorID()}
 		if announce {
-			faults.Fired(n.logger,
-				zap.Uint64("slot", uint64(o.Slot)),
-				zap.String("role", o.Msg.SSVMessage.GetID().GetRoleType().String()))
+			faults.Fired(n.logger, firedFields(o)...)
 		}
 	}
 	return n.P2PNetwork.BroadcastAtSlot(o.Msg, o.Slot)
+}
+
+// firedFields describes a forged send on its 🧪 line: the topic slot and role always; for a
+// partial-signature body also its own payload slot and entry count (MSG-02 needs payload_slot below
+// the fork; the topic slot alone is the live slot), and the row label when Plan set one.
+func firedFields(o Outgoing) []zap.Field {
+	fs := []zap.Field{
+		zap.Uint64("slot", uint64(o.Slot)),
+		zap.String("role", o.Msg.SSVMessage.GetID().GetRoleType().String()),
+	}
+	if body := partialBody(o.Msg); body != nil {
+		fs = append(fs,
+			zap.Uint64("payload_slot", uint64(body.Slot)),
+			zap.Int("entries", len(body.Messages)))
+	}
+	if o.Label != "" {
+		fs = append(fs, zap.String("label", o.Label))
+	}
+	return fs
 }

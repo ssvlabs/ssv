@@ -347,6 +347,20 @@ func (r *ProposerRunner) gloasProposalInput(ctx context.Context, logger *zap.Log
 		r.gloasDuty.producedEnvelope = produced.Envelope
 	}
 
+	// QA fault menu (branch qa/gloas-m3-fault-menu): the §4 block values reshape the value before it is
+	// encoded. The checker swap is unconditional on leadership: decide checks the local input on every
+	// operator, so a follower with an honest check and a pin-tripping input would never start its instance.
+	// No §4 value changes the bid, so the self_build logged below is still the beacon node's.
+	switch pf := applyProposalFault(proposalData, duty); {
+	case pf.fired != nil:
+		if pf.override == faults.PermissiveCheck {
+			r.ValCheck = faults.PermissiveValueCheck{}
+		}
+		faults.Fired(logger, append([]zap.Field{fields.Slot(duty.Slot)}, pf.fired...)...)
+	case pf.notApplicable != "":
+		faults.NotApplicable(logger, pf.notApplicable, fields.Slot(duty.Slot))
+	}
+
 	byts, err := proposalData.Encode()
 	if err != nil {
 		return nil, fmt.Errorf("could not marshal gloas proposal data: %w", err)
@@ -364,7 +378,8 @@ func (r *ProposerRunner) gloasProposalInput(ctx context.Context, logger *zap.Log
 	trace.SpanFromContext(ctx).AddEvent(eventMsg)
 
 	if faults.Is(faults.BlockWrongVersion) {
-		// The leader validates its own proposal, so drop this node's check for the run.
+		// Every operator checks its own input before it starts the instance (decide), leader or not, so drop
+		// this node's check. The proposer checker is built once per runner, so the swap lasts for the run.
 		r.ValCheck = faults.PermissiveValueCheck{}
 		faults.Fired(logger, fields.Slot(duty.Slot), zap.String("stamped_version", spec.DataVersionFulu.String()))
 	}
@@ -377,8 +392,9 @@ func (r *ProposerRunner) gloasProposalInput(ctx context.Context, logger *zap.Log
 }
 
 // gloasBlockVersion returns the data version stamped on a Gloas consensus value. QA fault menu
-// PRO-07 (block-wrong-version) stamps the previous fork instead, so the honest value check refuses
-// the proposal with a version-mismatch and the round changes.
+// PRO-07 (block-wrong-version) stamps the previous fork instead. The node branches to Gloas on the slot,
+// not the version, so an honest follower reaches pin 2 and refuses the proposal with "value version does
+// not match slot fork" (protocol/v2/ssv/value_check.go), and the round changes.
 func gloasBlockVersion() spec.DataVersion {
 	if faults.Is(faults.BlockWrongVersion) {
 		return spec.DataVersionFulu
@@ -526,16 +542,20 @@ func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logge
 		entries = append(entries, envelopeMsg)
 	}
 
-	postConsensusMsg := &spectypes.PartialSignatureMessages{
-		Type:     spectypes.PostConsensusPartialSig,
-		Slot:     cd.Duty.Slot,
-		Messages: entries,
-	}
+	// QA fault menu section 6: with FAULT=none this is exactly [][]{entries}.
+	packets := qaPostconsPackets(logger, cd.Duty.Slot, proposalData != nil, proposalData != nil && proposalData.SelfBuild(), entries)
 
 	r.measurements.StartPostConsensus()
 	span.AddEvent("broadcasting post consensus partial signature message")
-	if err := r.signAndBroadcastPostConsensusMsg(r.GetNetwork(), r.operatorSigner, r.GetShare().ValidatorPubKey, postConsensusMsg); err != nil {
-		return fmt.Errorf("can't broadcast partial post consensus sig: %w", err)
+	for _, packet := range packets {
+		postConsensusMsg := &spectypes.PartialSignatureMessages{
+			Type:     spectypes.PostConsensusPartialSig,
+			Slot:     cd.Duty.Slot,
+			Messages: packet,
+		}
+		if err := r.signAndBroadcastPostConsensusMsg(r.GetNetwork(), r.operatorSigner, r.GetShare().ValidatorPubKey, postConsensusMsg); err != nil {
+			return fmt.Errorf("can't broadcast partial post consensus sig: %w", err)
+		}
 	}
 	const broadcastedPostConsensusMsgEvent = "broadcasted post-consensus partial signature message"
 	logger.Debug(broadcastedPostConsensusMsgEvent)

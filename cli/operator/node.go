@@ -221,9 +221,11 @@ type node struct {
 
 // applyBuilderFault gives the faulted operator one synthetic direct-builder entry so it broadcasts
 // request-auth partials (type 9) that the rest of the cluster, which has none configured, must
-// hard-fail with "no builders configured" (MSG-10). A real configuration is never overwritten.
+// hard-fail with "no builders configured" (MSG-10). The qa/faultnet request-auth values
+// (auth-9-entries, auth-mixed-signer, auth-repeat-root-in-packet) need the same honest one-entry
+// type-9 packet as their trigger. A real configuration is never overwritten.
 func applyBuilderFault(cfg *gloas.BuilderConfig) bool {
-	if !faults.Is(faults.AuthNoBuilders) || len(cfg.Entries) > 0 {
+	if !needsSyntheticBuilder() || len(cfg.Entries) > 0 {
 		return false
 	}
 	cfg.Entries = []gloas.BuilderEntry{{
@@ -231,6 +233,13 @@ func applyBuilderFault(cfg *gloas.BuilderConfig) bool {
 		AuthData: "0x0102030405060708",
 	}}
 	return true
+}
+
+// needsSyntheticBuilder reports whether the active fault needs this operator to emit type-9
+// request-auth packets.
+func needsSyntheticBuilder() bool {
+	return faults.Is(faults.AuthNoBuilders) || faults.Is(faults.Auth9Entries) ||
+		faults.Is(faults.AuthMixedSigner) || faults.Is(faults.AuthRepeatRootInPacket)
 }
 
 // newNode wires the node's components from config + the injected beacon/EL clients. On any

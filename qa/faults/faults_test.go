@@ -10,16 +10,30 @@ import (
 // it. The test below pins the code to the document: a value added on one side and not the other is
 // a test failure, not a silent drift.
 var specMenu = []string{
-	"vote-112b", "vote-index-2", "vote-index-flip", "double-vote-index",
+	"vote-112b", "vote-index-2", "vote-index-flip", "vote-index-1-same-slot", "double-vote-index",
 	"ptc-qbft", "block-wrong-version",
-	"envelope-foreign-root", "envelope-builder-index",
-	"prefs-5-roots", "prefs-conflict", "prefs-early", "prefs-late", "prefs-34-apart", "prefs-replay",
+	"prefs-5-roots", "prefs-conflict", "prefs-early", "prefs-early-epoch", "prefs-late", "prefs-34-apart", "prefs-replay",
 	"ptc-3-per-epoch", "role7-prefork", "vr-postfork", "two-entries", "auth-no-builders",
+	"block-wrong-slot", "block-wrong-proposer-index",
+	"payload-root-on-external", "payload-root-zero-selfbuild", "payload-root-fabricated",
+	"postcons-block-only", "postcons-3-entries", "postcons-mixed-index", "postcons-foreign-root",
+	"auth-9-entries", "auth-mixed-signer", "auth-repeat-root-in-packet",
+	"proposer-round-3", "vr-prefork-slot-replay",
 }
+
+// retired are values that existed on an earlier base and must now abort startup.
+var retired = []string{"envelope-foreign-root", "envelope-builder-index", "envelope-round-3"}
 
 func TestMenuMatchesSpec(t *testing.T) {
 	require.ElementsMatch(t, specMenu, Names())
-	require.Len(t, Names(), 19)
+	require.Len(t, Names(), 33)
+}
+
+func TestRetiredValuesAbortStartup(t *testing.T) {
+	for _, v := range retired {
+		_, err := Parse(v)
+		require.Error(t, err, "retired value %q must not parse", v)
+	}
 }
 
 func TestEveryEntryIsDocumented(t *testing.T) {

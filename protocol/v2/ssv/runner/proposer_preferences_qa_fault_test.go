@@ -25,12 +25,10 @@ func TestApplyPreferenceFault(t *testing.T) {
 		require.Equal(t, got, applyPreferenceFault(honest, 220))
 	})
 
-	t.Run("prefs-34-apart gives slots 34 apart different roots", func(t *testing.T) {
+	// prefs-34-apart moved to qa/faultnet (TestPlanPrefs34Apart); the runner leaves it honest.
+	t.Run("prefs-34-apart no longer touches the fee recipient", func(t *testing.T) {
 		faults.SetForTest(t, faults.Prefs34Apart)
-		a := applyPreferenceFault(honest, phase0.Slot(100))
-		b := applyPreferenceFault(honest, phase0.Slot(134))
-		require.NotEqual(t, a, b)
-		// Deterministic per slot, so a re-emission for the same slot keeps its root.
-		require.Equal(t, a, applyPreferenceFault(honest, phase0.Slot(100)))
+		require.Equal(t, honest, applyPreferenceFault(honest, phase0.Slot(100)))
+		require.Equal(t, honest, applyPreferenceFault(honest, phase0.Slot(134)))
 	})
 }

@@ -1204,16 +1204,30 @@ func (r *CommitteeRunner) executeDuty(ctx context.Context, logger *zap.Logger, d
 		if root, ok := r.GetBeaconNode().HeadRootAtSlot(slot); ok {
 			sameSlotBlockRoot = &root
 		}
-		r.ValCheck = ssv.NewGloasVoteChecker(r.signer, slot, r.attestingValidators, gloasVote, sameSlotBlockRoot)
+		// The checker keeps its own copy of the honest vote: a QA fault below mutates gloasVote in place, and
+		// the checker's expected vote must stay the honest one whatever it reads from it.
+		expected := gloas.GloasBeaconVote{
+			BlockRoot:            gloasVote.BlockRoot,
+			Source:               cloneCheckpoint(gloasVote.Source),
+			Target:               cloneCheckpoint(gloasVote.Target),
+			AttestationDataIndex: gloasVote.AttestationDataIndex,
+		}
+		r.ValCheck = ssv.NewGloasVoteChecker(r.signer, slot, r.attestingValidators, &expected, sameSlotBlockRoot)
 		logger.Debug("built gloas attestation vote",
 			fields.Slot(slot),
 			zap.Uint64("payload_status_index", uint64(attData.Index)))
 
-		// QA fault menu (branch qa/gloas-m3-fault-menu): may replace the value and drop the check.
-		var dropCheck bool
-		input, dropCheck = applyGloasVoteFault(logger, gloasVote, slot)
-		if dropCheck {
+		// QA fault menu (branch qa/gloas-m3-fault-menu): may replace the value and weaken this node's own
+		// check, which decide runs on the local input on every operator, leader or not.
+		var override faults.ValueCheckOverride
+		input, override = applyGloasVoteFault(logger, gloasVote, slot, sameSlotBlockRoot)
+		switch override {
+		case faults.PermissiveCheck:
 			r.ValCheck = faults.PermissiveValueCheck{}
+		case faults.DropSameSlotView:
+			// An honest checker without the operator's own same-slot view (SIP #94 §2): index 1 on the
+			// head passes, every other rule still holds.
+			r.ValCheck = ssv.NewGloasVoteChecker(r.signer, slot, r.attestingValidators, &expected, nil)
 		}
 	} else {
 		vote := &spectypes.BeaconVote{
@@ -1264,10 +1278,12 @@ func constructAttestationData(vote *spectypes.BeaconVote, duty *spectypes.Valida
 }
 
 // applyGloasVoteFault applies the section 2 QA faults to the consensus value this operator is about
-// to propose (menu vote-112b, vote-index-2, vote-index-flip). It returns the value to propose and
-// whether the runner must drop its own value check: a leader validates its own proposal, so a value
-// the checker refuses would never reach the wire. logger may be nil in tests.
-func applyGloasVoteFault(logger *zap.Logger, vote *gloas.GloasBeaconVote, slot phase0.Slot) (spectypes.Encoder, bool) {
+// to start its instance with (menu vote-112b, vote-index-2, vote-index-flip, vote-index-1-same-slot). It
+// returns the value to propose and how this node's own value check must be weakened: decide checks the
+// local input on every operator before the instance starts, leader or not, so a value the honest checker
+// refuses would never reach the wire. sameSlotBlockRoot is the operator's own same-slot view, fixed at
+// instance start (nil without one). vote may be mutated in place. logger may be nil in tests.
+func applyGloasVoteFault(logger *zap.Logger, vote *gloas.GloasBeaconVote, slot phase0.Slot, sameSlotBlockRoot *phase0.Root) (spectypes.Encoder, faults.ValueCheckOverride) {
 	fired := func(extra ...zap.Field) {
 		if logger != nil {
 			faults.Fired(logger, append([]zap.Field{fields.Slot(slot)}, extra...)...)
@@ -1283,23 +1299,63 @@ func applyGloasVoteFault(logger *zap.Logger, vote *gloas.GloasBeaconVote, slot p
 			BlockRoot: vote.BlockRoot,
 			Source:    vote.Source,
 			Target:    vote.Target,
-		}, true
+		}, faults.PermissiveCheck
 
 	case faults.Is(faults.VoteIndex2):
-		// ATT-03: an index above the 0/1 range SIP-94 section 2 allows.
+		// ATT-03: an index above the 0/1 range SIP-94 section 2 allows ("attestation data index 2 must be
+		// 0 or 1").
 		vote.AttestationDataIndex = 2
 		fired(zap.Uint64("attestation_data_index", 2))
-		return vote, true
+		return vote, faults.PermissiveCheck
 
 	case faults.Is(faults.VoteIndexFlip):
-		// FLT-05: the wrong but valid index. The honest nodes must accept it by design, so the honest
-		// value check stays in place — this fault measures the on-chain consequence, not a rejection.
-		vote.AttestationDataIndex = flipAttestationIndex(vote.AttestationDataIndex)
-		fired(zap.Uint64("attestation_data_index", uint64(vote.AttestationDataIndex)))
-		return vote, false
+		// FLT-05: the wrong but in-range index. On a same-slot head (leg A; every slot on ssv-mini) the
+		// honest operators' own view refuses index 1, and so would this node's, so its check drops the view.
+		// On an older head (leg B) the index is trusted from the leader and nothing rejects it.
+		honest := vote.AttestationDataIndex
+		vote.AttestationDataIndex = flipAttestationIndex(honest)
+		fired(
+			zap.Uint64("honest_index", uint64(honest)),
+			zap.Uint64("attestation_data_index", uint64(vote.AttestationDataIndex)),
+			zap.Stringer("block_root", vote.BlockRoot),
+			zap.Bool("same_slot_view", sameSlotBlockRoot != nil && *sameSlotBlockRoot == vote.BlockRoot),
+		)
+		return vote, faults.DropSameSlotView
+
+	case faults.Is(faults.VoteIndex1SameSlot):
+		// ATT-10: index 1 for the block this operator's own view knows to be the duty slot's — the value
+		// every honest operator with that view refuses. It fires on every slot, applied or not, so a
+		// missing line still means a broken rig.
+		if sameSlotBlockRoot == nil {
+			// No view: nothing to pin, and nothing a follower could reject on.
+			fired(zap.Bool("applied", false), zap.String("reason", "no same-slot view"),
+				zap.Uint64("honest_index", uint64(vote.AttestationDataIndex)), zap.Stringer("block_root", vote.BlockRoot))
+			return vote, faults.KeepHonestCheck
+		}
+		honest := vote.AttestationDataIndex
+		substituted := vote.BlockRoot != *sameSlotBlockRoot
+		vote.BlockRoot = *sameSlotBlockRoot
+		vote.AttestationDataIndex = 1
+		fired(
+			zap.Bool("applied", true),
+			zap.Uint64("honest_index", uint64(honest)),
+			zap.Uint64("attestation_data_index", 1),
+			zap.Stringer("block_root", vote.BlockRoot),
+			zap.Bool("root_substituted", substituted),
+		)
+		return vote, faults.DropSameSlotView
 	}
 
-	return vote, false
+	return vote, faults.KeepHonestCheck
+}
+
+// cloneCheckpoint copies c, keeping nil as nil.
+func cloneCheckpoint(c *phase0.Checkpoint) *phase0.Checkpoint {
+	if c == nil {
+		return nil
+	}
+	cp := *c
+	return &cp
 }
 
 // flipAttestationIndex returns the other valid payload-status index.

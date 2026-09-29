@@ -51,6 +51,9 @@ func (a acceptAll) Validate(_ context.Context, _ peer.ID, _ *pubsub.Message) pub
 }
 
 // ValidatorForTopic returns the same accept-all function for every topic.
+// SetSelfPID forwards to the wrapped validator so its own-message recognition keeps working.
+func (a acceptAll) SetSelfPID(pid peer.ID) { a.inner.SetSelfPID(pid) }
+
 func (a acceptAll) ValidatorForTopic(string) func(context.Context, peer.ID, *pubsub.Message) pubsub.ValidationResult {
 	return a.Validate
 }

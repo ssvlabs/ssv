@@ -192,10 +192,12 @@ func (r *ValidatorRegistrationRunner) expectedPostConsensusRootsAndDomains(conte
 	return nil, fmt.Errorf("no post consensus roots for validator registration")
 }
 
-// vrDeprecatedAtSlot is the runner-side (third) gate in the "is VR deprecated here" decision — see
-// operator/duties/validator_registration.go gloasVRDeprecated for the other two gates and the full
-// set of three. Duplicated rather than imported: the two packages must not depend on each other,
-// and the logic is one line, so a shared helper would cost more than it saves.
+// vrDeprecatedAtSlot is the runner-package seam for gates 3 and 4 of the "is VR deprecated here"
+// decision — see operator/duties/validator_registration.go gloasVRDeprecated for the full set of
+// four. Gate 3 is StartNewDuty (keyed on the duty slot, before the duty starts); gate 4 is
+// VRSubmitter.start (keyed on the current epoch, BN submission only — downstream of the wire).
+// Duplicated rather than imported: the two packages must not depend on each other, and the logic is
+// one line, so a shared helper would cost more than it saves.
 func vrDeprecatedAtSlot(isGloas bool) bool {
 	if faults.Is(faults.VRPostFork) {
 		return false
@@ -402,7 +404,9 @@ func (s *VRSubmitter) start(ctx context.Context, ticker slotticker.SlotTicker) {
 			currentSlot := ticker.Slot()
 			currentEpoch := config.EstimatedEpochAtSlot(currentSlot)
 			// Validator registration is deprecated at the Gloas fork; stop submitting once it's active.
-			if config.IsGloas(currentEpoch) {
+			// This is the fourth Gloas gate (see gloasVRDeprecated in operator/duties); vrDeprecatedAtSlot
+			// is the identity outside QA fault vr-postfork.
+			if vrDeprecatedAtSlot(config.IsGloas(currentEpoch)) {
 				continue
 			}
 			slotInEpoch := uint64(currentSlot) % config.SlotsPerEpoch

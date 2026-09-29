@@ -22,6 +22,8 @@ func (r *rejectAll) Validate(context.Context, peer.ID, *pubsub.Message) pubsub.V
 	return pubsub.ValidationReject
 }
 
+func (r *rejectAll) SetSelfPID(peer.ID) {}
+
 func (r *rejectAll) ValidatorForTopic(string) func(context.Context, peer.ID, *pubsub.Message) pubsub.ValidationResult {
 	return r.Validate
 }

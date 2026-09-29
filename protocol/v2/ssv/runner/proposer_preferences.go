@@ -648,7 +648,7 @@ func (r *proposerPreferencesSlotRunner) buildProposerPreferences(ctx context.Con
 	// if a dependent_root change triggered it, that preference is stale, peers converge on the new root without
 	// this operator, and the duty is reported stuck at the proposal slot.
 
-	if faults.Is(faults.PrefsConflict) || faults.Is(faults.Prefs34Apart) {
+	if faults.Is(faults.PrefsConflict) {
 		faults.Fired(logger, fields.Slot(proposalSlot), fields.FeeRecipient(feeRecipient[:]))
 	}
 
@@ -661,22 +661,16 @@ func (r *proposerPreferencesSlotRunner) buildProposerPreferences(ctx context.Con
 	}, nil
 }
 
-// applyPreferenceFault rewrites the fee recipient for the section 5 QA faults. Changing the fee
-// recipient changes the preference's signing root while keeping the message well formed and
-// genuinely signed, which is what PRF-07, FLT-07 and MSG-06 need.
-func applyPreferenceFault(fee bellatrix.ExecutionAddress, proposalSlot phase0.Slot) bellatrix.ExecutionAddress {
+// applyPreferenceFault rewrites the fee recipient for prefs-conflict. Changing the fee recipient
+// changes the preference's signing root while keeping the message well formed and genuinely
+// signed, which is what PRF-07 and FLT-07 need. MSG-06 (prefs-34-apart) is no longer served here:
+// it moved to qa/faultnet, which sequences the P / P+34 rows on the wire.
+func applyPreferenceFault(fee bellatrix.ExecutionAddress, _ phase0.Slot) bellatrix.ExecutionAddress {
 	switch {
 	case faults.Is(faults.PrefsConflict):
 		// PRF-07, FLT-07: one fixed, obviously different address, so this operator's root never
 		// matches the cluster's and never reaches quorum.
 		fee[0] ^= 0xff
-		return fee
-
-	case faults.Is(faults.Prefs34Apart):
-		// MSG-06: derive the address from the proposal slot, so every proposal slot carries a distinct
-		// root and in particular two slots 34 apart differ. Deterministic, so a re-emission for the same
-		// slot keeps the same root and does not itself burn root budget.
-		fee[19] = byte(proposalSlot % 256)
 		return fee
 	}
 

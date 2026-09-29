@@ -16,6 +16,7 @@ import (
 	"github.com/ssvlabs/ssv/eth/executionclient"
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/observability/log/fields"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/qa/faults"
 )
 
@@ -202,24 +203,57 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 
 // gloasVRDeprecated reports whether the validator-registration heartbeat must stop, given whether
 // the slot or epoch in question is Gloas. Validator registration is deprecated from the Gloas fork
-// (SIP #94 §5): fee recipient and gas limit travel in the proposer preferences instead. THREE gates
-// must all agree to stop it — the next reader touching any one of them should check the other two:
+// (SIP #94 §5): fee recipient and gas limit travel in the proposer preferences instead. FOUR gates
+// must all agree to stop it — the next reader touching any one of them should check the others:
 //  1. HandleDuties (this file) — the event-driven enqueue gate, keyed on the duty slot.
 //  2. processExecution (this file) — the periodic scheduling gate, keyed on the current epoch.
-//  3. ValidatorRegistrationRunner.executeDuty
-//     (protocol/v2/ssv/runner/validator_registration.go) — the runner-side belt, keyed on the duty
-//     slot. It lives in a different package, so it mirrors this function's fault check rather than
-//     calling it.
+//  3. ValidatorRegistrationRunner.StartNewDuty
+//     (protocol/v2/ssv/runner/validator_registration.go) — the runner-side belt matching
+//     ssv-spec, keyed on the duty slot, before the duty starts.
+//  4. VRSubmitter.start (same runner file) — BN submission of registrations reconstructed after a
+//     pre-consensus quorum, keyed on the current epoch. DOWNSTREAM of the wire: it neither
+//     schedules duties nor broadcasts partials.
 //
-// QA fault menu MSG-02 (vr-postfork) needs all three gates suppressed at once to keep role-4
-// messages reaching the wire past the fork — the honest operators must refuse them there. Missing
-// any one of the three keeps the heartbeat scheduled but throws the message away downstream, which
-// looks like a fired fault with no wire evidence behind it.
+// Gates 3 and 4 live in a different package, so they mirror this function's fault check
+// (vrDeprecatedAtSlot) rather than calling it.
+//
+// QA fault menu MSG-02 (vr-postfork) needs gates 1-3 suppressed at once to keep role-4 messages
+// reaching the wire past the fork — the honest operators must refuse them there. Missing any one of
+// them keeps the heartbeat scheduled but throws the message away before the wire, which looks like
+// a fired fault with no wire evidence behind it. Gate 4 is suppressed too, for consistency only:
+// honest operators reject role 4 post-fork, so the faulted node never reconstructs a quorum and
+// gate 4 has nothing to submit. The cadence under the fault is set by vrPostForkCadenceShare.
 func gloasVRDeprecated(isGloas bool) bool {
 	if faults.Is(faults.VRPostFork) {
 		return false
 	}
 	return isGloas
+}
+
+// vrPostForkCadenceShare returns the single self share that QA fault vr-postfork registers at a
+// Gloas epoch, or nil (stock behaviour) when the fault is off or the epoch is pre-Gloas.
+//
+// Why (decision D4, 2026-09-28): the stock periodic schedule fires each validator once per
+// SlotsPerEpoch*frequencyEpochs = 320 slots (~64 min), at slot%320 == validatorIndex%320, which
+// can fall wholly outside a 2-epoch M3 window — the likely cause of 0 vr-postfork injections in
+// the 2026-09 run (errata #137 blamed VRSubmitter.start, which is downstream of the wire and so
+// could not have held them at 0). Under the fault the modulus becomes SlotsPerEpoch, so the chosen
+// validator fires once every epoch. Only the lowest-index attesting share is used, to keep the
+// honest operators' REJECT volume low (#139) and to stay within the receivers' dutyLimit of 2.
+func vrPostForkCadenceShare(isGloas bool, shares []*types.SSVShare, epoch phase0.Epoch) *types.SSVShare {
+	if !isGloas || !faults.Is(faults.VRPostFork) {
+		return nil
+	}
+	var chosen *types.SSVShare
+	for _, share := range shares {
+		if !share.IsAttesting(epoch + phase0.Epoch(frequencyEpochs)) {
+			continue
+		}
+		if chosen == nil || share.ValidatorIndex < chosen.ValidatorIndex {
+			chosen = share
+		}
+	}
+	return chosen
 }
 
 func (h *ValidatorRegistrationHandler) processExecution(ctx context.Context, epoch phase0.Epoch, slot phase0.Slot) {
@@ -233,10 +267,13 @@ func (h *ValidatorRegistrationHandler) processExecution(ctx context.Context, epo
 	//
 	// QA fault menu MSG-02 (vr-postfork): faults.Fired for this fault is emitted from
 	// ValidatorRegistrationRunner.executeDuty (protocol/v2/ssv/runner/validator_registration.go),
-	// once the role-4 message is actually signed and broadcast — not here, where the duty is merely
-	// scheduled. A fired-here line would outrun the wire: the runner has its own copy of this gate
-	// (see gloasVRDeprecated's doc comment) and used to still throw the message away even when the
-	// scheduler let it through, so the honest side's silence proved nothing.
+	// once the role-4 message is signed and handed to the network — not here, where the duty is
+	// merely scheduled. A fired-here line would outrun the wire: the runner has its own copy of this
+	// gate (see gloasVRDeprecated's doc comment) and used to still throw the message away even when
+	// the scheduler let it through, so the honest side's silence proved nothing. Note the broadcast
+	// is asynchronous, so even the runner's Fired does not prove the message left the node: without
+	// FAULT_NO_LOCAL_VALIDATION the sender-side evidence is this node's own
+	// "own outbound message rejected by local validation" Warn.
 	if gloasVRDeprecated(h.netCfg.IsGloas(epoch)) {
 		h.eventQueue = nil
 		return
@@ -260,9 +297,19 @@ func (h *ValidatorRegistrationHandler) processExecution(ctx context.Context, epo
 	// validator should be registered within frequencyEpochs epochs time in a corresponding slot
 	registrationSlots := h.netCfg.SlotsPerEpoch * frequencyEpochs
 
+	// QA fault menu MSG-02 (vr-postfork), decision D4: at Gloas epochs register ONE validator per
+	// epoch (see vrPostForkCadenceShare). nil on every other path, so FAULT=none is unchanged.
+	qaShare := vrPostForkCadenceShare(h.netCfg.IsGloas(epoch), shares, epoch)
+	if qaShare != nil {
+		registrationSlots = h.netCfg.SlotsPerEpoch
+	}
+
 	for _, share := range shares {
 		if !share.IsAttesting(epoch + phase0.Epoch(frequencyEpochs)) {
 			// Only attesting validators are eligible for registration duties.
+			continue
+		}
+		if qaShare != nil && share != qaShare {
 			continue
 		}
 		if uint64(share.ValidatorIndex)%registrationSlots != uint64(slot)%registrationSlots {

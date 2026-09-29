@@ -3,6 +3,7 @@ package faultnet
 import (
 	"encoding/binary"
 	"testing"
+	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
@@ -103,18 +104,176 @@ func TestPlanPrefs5Roots(t *testing.T) {
 
 	out := Plan(faults.Prefs5Roots, msg, 200, 150, 0)
 
-	require.Len(t, out, 5, "the honest message plus four extra roots")
+	require.Len(t, out, 6, "the honest message, four extra roots, and one repeat of the honest root")
 	require.Same(t, msg, out[0].Msg)
 	require.False(t, out[0].Resign)
 
-	seen := map[[32]byte]bool{decodePartial(t, msg).Messages[0].SigningRoot: true}
-	for _, o := range out[1:] {
+	honest := decodePartial(t, msg).Messages[0]
+	seen := map[[32]byte]bool{honest.SigningRoot: true}
+	for i, o := range out[1:5] {
 		require.True(t, o.Resign)
+		require.Equal(t, time.Duration(i+1)*100*time.Millisecond, o.Delay,
+			"the clones are staggered so the honest root is always recorded first")
 		root := decodePartial(t, o.Msg).Messages[0].SigningRoot
 		require.False(t, seen[root], "each extra message must carry a distinct root")
 		seen[root] = true
 	}
 	require.Len(t, seen, 5)
+
+	// MSG-05 clause 3: a byte-distinct repeat of the accepted honest root, well after the fifth root.
+	repeat := out[5]
+	require.True(t, repeat.Resign)
+	require.Equal(t, 2*time.Second, repeat.Delay)
+	require.Equal(t, "repeat", repeat.Label)
+	body := decodePartial(t, repeat.Msg).Messages[0]
+	require.Equal(t, honest.SigningRoot, body.SigningRoot, "the repeat carries the honest, accepted root")
+	require.NotEqual(t, honest.PartialSignature, body.PartialSignature,
+		"the bytes must differ or the gossip seen-cache drops the repeat before validation")
+	for _, o := range out {
+		require.Equal(t, phase0.Slot(200), o.Slot, "the topic follows the original slot")
+	}
+}
+
+// prefs-34-apart (MSG-06), addendum D.2: P = 357 is in epoch 11 (352..383) at k = 5; the honest
+// emission tick now = 335 is slot 15 of epoch 10, so d0 = 352 - 335 = 17.
+func TestPlanPrefs34Apart(t *testing.T) {
+	const p, now = phase0.Slot(357), phase0.Slot(335)
+
+	t.Run("fires the full sequence for a next-epoch proposal slot", func(t *testing.T) {
+		msg := prefsMsg(t, p)
+		honest := decodePartial(t, msg).Messages[0]
+
+		out := Plan(faults.Prefs34Apart, msg, p, now, 0)
+
+		require.Len(t, out, 7)
+		require.Same(t, msg, out[0].Msg)
+		require.False(t, out[0].Resign)
+		for _, o := range out {
+			require.Equal(t, p, o.Slot, "the topic stays P for every row")
+		}
+
+		// Rows 0-3 and 5 are at payload slot P and carry five distinct roots.
+		roots := map[[32]byte]bool{}
+		for _, i := range []int{0, 1, 2, 3, 5} {
+			b := decodePartial(t, out[i].Msg)
+			require.Equal(t, p, b.Slot, "row %d", i)
+			roots[b.Messages[0].SigningRoot] = true
+		}
+		require.Len(t, roots, 5)
+
+		for i := 1; i <= 3; i++ {
+			require.True(t, out[i].Resign)
+			require.Equal(t, time.Duration(i)*100*time.Millisecond, out[i].Delay)
+			require.Zero(t, out[i].DelaySlots)
+			require.Equal(t, "p", out[i].Label)
+		}
+
+		q1 := decodePartial(t, out[4].Msg)
+		require.Equal(t, p+34, q1.Slot)
+		require.Equal(t, 18, out[4].DelaySlots, "slot 1 of epoch(P)")
+		require.Equal(t, "p+34", out[4].Label)
+		require.False(t, roots[q1.Messages[0].SigningRoot], "q1 is a root of its own")
+
+		require.Equal(t, 19, out[5].DelaySlots, "slot 2 of epoch(P)")
+		require.Equal(t, "p-5th", out[5].Label)
+
+		rep := decodePartial(t, out[6].Msg)
+		require.Equal(t, p+34, rep.Slot)
+		require.Equal(t, q1.Messages[0].SigningRoot, rep.Messages[0].SigningRoot, "the repeat keeps q1's root")
+		require.NotEqual(t, q1.Messages[0].PartialSignature, rep.Messages[0].PartialSignature)
+		require.Equal(t, 20, out[6].DelaySlots)
+		require.Equal(t, "p+34-repeat", out[6].Label)
+
+		for _, o := range out[1:] {
+			require.True(t, o.Resign)
+			require.Equal(t, honest.Signer, decodePartial(t, o.Msg).Messages[0].Signer)
+		}
+	})
+
+	identityCases := []struct {
+		name string
+		msg  func(t *testing.T) *spectypes.SignedSSVMessage
+		slot phase0.Slot
+		now  phase0.Slot
+	}{
+		{"same-epoch emission (restart tick)", func(t *testing.T) *spectypes.SignedSSVMessage { return prefsMsg(t, 340) }, 340, now},
+		{"k = 30: P+34 would leave epoch(P)+1", func(t *testing.T) *spectypes.SignedSSVMessage { return prefsMsg(t, 382) }, 382, now},
+		{"k = 31", func(t *testing.T) *spectypes.SignedSSVMessage { return prefsMsg(t, 383) }, 383, now},
+		{"two epochs ahead", func(t *testing.T) *spectypes.SignedSSVMessage { return prefsMsg(t, 390) }, 390, now},
+		{"a type-9 packet", func(t *testing.T) *spectypes.SignedSSVMessage { return authMsg(t, p, 1) }, p, now},
+		{"a non-role-8 message", func(t *testing.T) *spectypes.SignedSSVMessage {
+			return partialMsg(t, spectypes.RolePTCAttester, p)
+		}, p, now},
+	}
+	for _, tc := range identityCases {
+		t.Run("identity: "+tc.name, func(t *testing.T) {
+			msg := tc.msg(t)
+			out := Plan(faults.Prefs34Apart, msg, tc.slot, tc.now, 0)
+			require.Len(t, out, 1)
+			require.Same(t, msg, out[0].Msg)
+		})
+	}
+}
+
+// prefs-early-epoch (MSG-04), addendum D.4: the bound for T = FirstSlotAtEpoch(epoch(now)+2) is
+// the start of epoch(now)+1.
+func TestPlanPrefsEarlyEpoch(t *testing.T) {
+	t.Run("steady-state emission at j = 15", func(t *testing.T) {
+		msg := prefsMsg(t, 357)
+		honest := decodePartial(t, msg).Messages[0]
+
+		out := Plan(faults.PrefsEarlyEpoch, msg, 357, 335, 0)
+
+		require.Len(t, out, 4, "honest, probe, control, control proof")
+		require.Same(t, msg, out[0].Msg)
+
+		probe, control, proof := out[1], out[2], out[3]
+		for _, o := range out[1:] {
+			require.True(t, o.Resign)
+			require.Equal(t, phase0.Slot(357), o.Slot, "the topic follows the original slot")
+			require.Equal(t, phase0.Slot(384), decodePartial(t, o.Msg).Slot, "T = first slot of epoch 12")
+		}
+		require.Equal(t, 16, probe.DelaySlots, "arrives in slot 31 of epoch 10, one slot before the bound")
+		require.Zero(t, probe.Delay)
+		require.Equal(t, "probe", probe.Label)
+		require.Equal(t, 17, control.DelaySlots, "arrives at slot 0 of epoch 11, exactly the bound")
+		require.Zero(t, control.Delay)
+		require.Equal(t, "control", control.Label)
+		require.Equal(t, 17, proof.DelaySlots)
+		require.Equal(t, 2*time.Second, proof.Delay)
+		require.Equal(t, "control-proof", proof.Label)
+
+		pr := decodePartial(t, probe.Msg).Messages[0]
+		cr := decodePartial(t, control.Msg).Messages[0]
+		rr := decodePartial(t, proof.Msg).Messages[0]
+		require.NotEqual(t, honest.SigningRoot, pr.SigningRoot)
+		require.NotEqual(t, honest.SigningRoot, cr.SigningRoot)
+		require.NotEqual(t, pr.SigningRoot, cr.SigningRoot, "probe and control are distinct roots")
+		require.Equal(t, cr.SigningRoot, rr.SigningRoot, "the proof repeats the control root")
+		require.NotEqual(t, cr.PartialSignature, rr.PartialSignature, "and differs in bytes")
+	})
+
+	t.Run("emission at j = 31 sends the probe now", func(t *testing.T) {
+		msg := prefsMsg(t, 360)
+		out := Plan(faults.PrefsEarlyEpoch, msg, 360, 351, 0)
+		require.Len(t, out, 4)
+		require.Equal(t, phase0.Slot(384), decodePartial(t, out[1].Msg).Slot)
+		require.Zero(t, out[1].DelaySlots)
+		require.Equal(t, 1, out[2].DelaySlots)
+	})
+
+	t.Run("identity for a non-preferences message", func(t *testing.T) {
+		msg := partialMsg(t, spectypes.RolePTCAttester, 357)
+		out := Plan(faults.PrefsEarlyEpoch, msg, 357, 335, 0)
+		require.Len(t, out, 1)
+		require.Same(t, msg, out[0].Msg)
+	})
+
+	t.Run("identity for a type-9 packet", func(t *testing.T) {
+		msg := authMsg(t, 357, 1)
+		out := Plan(faults.PrefsEarlyEpoch, msg, 357, 335, 0)
+		require.Len(t, out, 1)
+	})
 }
 
 func TestPlanPrefsEarlyAndLate(t *testing.T) {
@@ -210,13 +369,74 @@ func TestPlanTwoEntries(t *testing.T) {
 
 	out := Plan(faults.TwoEntries, msg, 200, 200, 0)
 
-	// Only the forged clone is sent: sending the honest 1-entry message first would create signer
-	// state for (signer, slot) that trips the pre-consensus message-limit rule before the entry-count
-	// rule under test is ever reached. See dupEntry's doc comment.
-	require.Len(t, out, 1)
-	require.NotSame(t, msg, out[0].Msg, "must be a clone, not the original")
-	require.Len(t, decodePartial(t, out[0].Msg).Messages, 2)
-	require.True(t, out[0].Resign)
+	// The honest message goes out too: the entry-count rule is structural (semantics) and runs
+	// before any signer state or message-limit check, so the honest partial cannot pre-empt it.
+	// See dupEntry's doc comment.
+	require.Len(t, out, 2)
+	require.Same(t, msg, out[0].Msg, "the honest message is sent unchanged")
+	require.False(t, out[0].Resign)
+	require.NotSame(t, msg, out[1].Msg, "must be a clone, not the original")
+	require.Len(t, decodePartial(t, out[1].Msg).Messages, 2)
+	require.True(t, out[1].Resign)
+}
+
+// vr-prefork-slot-replay (MSG-02 gate 3): the fork is at epoch 3, so preForkSlot = 95.
+func TestPlanVRPreForkSlotReplay(t *testing.T) {
+	const preForkSlot = phase0.Slot(95)
+
+	t.Run("a role-7 partial in epoch fork+1 is cloned as a pre-fork role-4 partial", func(t *testing.T) {
+		msg := partialMsg(t, spectypes.RolePTCAttester, 130)
+		honest := decodePartial(t, msg).Messages[0]
+
+		out := Plan(faults.VRPreForkSlotReplay, msg, 130, 130, preForkSlot)
+
+		require.Len(t, out, 2)
+		require.Same(t, msg, out[0].Msg)
+		require.False(t, out[0].Resign)
+
+		c := out[1]
+		require.True(t, c.Resign)
+		require.Equal(t, phase0.Slot(130), c.Slot, "the topic follows the live slot")
+		id := c.Msg.SSVMessage.GetID()
+		require.Equal(t, spectypes.RoleValidatorRegistration, id.GetRoleType())
+		require.Equal(t, msg.SSVMessage.GetID().GetDutyExecutorID(), id.GetDutyExecutorID(), "same validator")
+		require.Equal(t, msg.SSVMessage.GetID().GetDomain(), id.GetDomain())
+		body := decodePartial(t, c.Msg)
+		require.Equal(t, spectypes.ValidatorRegistrationPartialSig, body.Type)
+		require.Equal(t, preForkSlot, body.Slot)
+		require.Len(t, body.Messages, 1)
+		require.Equal(t, honest.ValidatorIndex, body.Messages[0].ValidatorIndex)
+		require.Equal(t, honest.Signer, body.Messages[0].Signer)
+		require.Equal(t, honest.SigningRoot, body.Messages[0].SigningRoot)
+	})
+
+	t.Run("identity in the fork epoch itself", func(t *testing.T) {
+		msg := partialMsg(t, spectypes.RolePTCAttester, 100)
+		out := Plan(faults.VRPreForkSlotReplay, msg, 100, 100, preForkSlot)
+		require.Len(t, out, 1)
+		require.Same(t, msg, out[0].Msg)
+	})
+
+	t.Run("identity for a non-role-7 input", func(t *testing.T) {
+		for _, r := range []spectypes.RunnerRole{spectypes.RoleProposerPreferences, spectypes.RoleProposer, spectypes.RoleCommittee} {
+			msg := partialMsg(t, r, 130)
+			out := Plan(faults.VRPreForkSlotReplay, msg, 130, 130, preForkSlot)
+			require.Len(t, out, 1, "role %v", r)
+		}
+	})
+
+	t.Run("identity for a role-7 consensus message", func(t *testing.T) {
+		msg := partialMsg(t, spectypes.RolePTCAttester, 130)
+		msg.SSVMessage.MsgType = spectypes.SSVConsensusMsgType
+		out := Plan(faults.VRPreForkSlotReplay, msg, 130, 130, preForkSlot)
+		require.Len(t, out, 1)
+	})
+
+	t.Run("identity when preForkSlot is not below now (far-future wrap)", func(t *testing.T) {
+		msg := partialMsg(t, spectypes.RolePTCAttester, 130)
+		out := Plan(faults.VRPreForkSlotReplay, msg, 130, 130, 500)
+		require.Len(t, out, 1)
+	})
 }
 
 // The two forged copies below are refused by the §7 PTC assignment gate (ErrNoDuty), not by the
@@ -266,17 +486,16 @@ func TestPlanRole7PreFork(t *testing.T) {
 
 	assertForged := func(t *testing.T, out []Outgoing, msg *spectypes.SignedSSVMessage) {
 		t.Helper()
-		require.Len(t, out, 4, "the honest message plus roles 7, 8 and 9")
+		require.Len(t, out, 3, "the honest message plus roles 7 and 8")
 		require.Same(t, msg, out[0].Msg)
 		require.False(t, out[0].Resign)
 
 		roles := []spectypes.RunnerRole{
 			out[1].Msg.SSVMessage.GetID().GetRoleType(),
 			out[2].Msg.SSVMessage.GetID().GetRoleType(),
-			out[3].Msg.SSVMessage.GetID().GetRoleType(),
 		}
 		require.ElementsMatch(t, []spectypes.RunnerRole{
-			spectypes.RolePTCAttester, spectypes.RoleProposerPreferences, spectypes.RoleEnvelopeProposer,
+			spectypes.RolePTCAttester, spectypes.RoleProposerPreferences,
 		}, roles)
 		for _, o := range out[1:] {
 			require.True(t, o.Resign)
