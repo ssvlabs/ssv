@@ -44,10 +44,9 @@ type CommitteeObserver struct {
 	aggregatorRoots      *ttlcache.Cache[phase0.Root, struct{}]
 	syncCommRoots        *ttlcache.Cache[phase0.Root, struct{}]
 	syncCommContribRoots *ttlcache.Cache[phase0.Root, struct{}]
-	// envelopeRoots holds the §6 envelope signing roots of proposed Gloas self-build values — every
-	// round's proposal, decided or not; a root that never decides never meets a quorum root — since
-	// the envelope's quorum rides the proposer's post-consensus packet and is not the proposal's
-	// participation.
+	// envelopeRoots holds the §6 envelope signing roots of proposed Gloas self-build values, so that their
+	// quorum, which rides the proposer's post-consensus packet, isn't counted as the proposal's. Every
+	// round's proposal is learnt; an undecided one's root never reaches quorum.
 	envelopeRoots *ttlcache.Cache[phase0.Root, struct{}]
 	domainCache   *DomainCache
 
@@ -173,11 +172,10 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
 		}
 
 		if role == spectypes.RoleProposer && ncv.isEnvelopeRoot(key.Root) {
-			// The §6 envelope's quorum rides the proposer's packet; the proposal's participation is the
-			// block root's quorum alone (SIP #94 §4). The root is learnt from the proposal (SaveRoots),
-			// which precedes the quorum by a consensus round trip; should a quorum still overtake it in
-			// the worker pool, the envelope counts as the proposal's — the behavior before this filter,
-			// and the same proposal-first dependence the committee roots rely on above.
+			// The proposal's participation is the block root's quorum alone (SIP #94 §4). The envelope root
+			// is learnt from the proposal (SaveRoots), a consensus round trip ahead of the quorum; should the
+			// worker pool still let the quorum overtake it, the envelope counts as the proposal's, the same
+			// proposal-first dependence the committee roots have.
 			continue
 		}
 
@@ -283,10 +281,9 @@ func (ncv *CommitteeObserver) getBeaconRoles(msg *queue.SSVMessage, root phase0.
 }
 
 // recordsParticipation reports whether a partial-signature packet of this type records participation:
-// a post-consensus quorum, or the single signing round of a duty without a consensus phase — the PTC
-// attestation and the proposer preferences (SIP #94 §3, §5). A request-auth packet is skipped
-// silently: signing a builder token is not the preferences duty. Every other pre-consensus type is
-// not the observer's business and stays an error, as before.
+// a post-consensus quorum, or the single signing round of a duty without a consensus phase (the PTC
+// attestation and the proposer preferences, SIP #94 §3, §5). A request-auth packet records nothing, as
+// signing a builder token is not the preferences duty; any other pre-consensus type is an error.
 func recordsParticipation(msgType spectypes.PartialSigMsgType) (bool, error) {
 	switch msgType {
 	case spectypes.PostConsensusPartialSig, spectypes.PTCAttesterPartialSig, spectypes.ProposerPreferencesPartialSig:
