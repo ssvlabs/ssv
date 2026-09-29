@@ -89,7 +89,7 @@ func requestGloasBeaconBlock(ctx context.Context, addr string, slot phase0.Slot,
 	// are POST-only — with the same semantics: bids weighed against the local payload at 100.
 	url += fmt.Sprintf("&builder_boost_factor=%d", builderConfig.BuilderBoostFactor)
 
-	respBody, header, err := gloasHTTPDo(ctx, http.MethodGet, url, nil, "", nil)
+	respBody, header, err := gloasHTTPDo(ctx, http.MethodGet, url, nil, "application/octet-stream", "", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -103,7 +103,7 @@ func requestGloasBeaconBlockPOST(ctx context.Context, url string, builderConfig 
 	if err != nil {
 		return nil, fmt.Errorf("marshal builder config: %w", err)
 	}
-	respBody, header, err := gloasHTTPDo(ctx, http.MethodPost, url, jsonBody, "application/json", nil)
+	respBody, header, err := gloasHTTPDo(ctx, http.MethodPost, url, jsonBody, "application/octet-stream", "application/json", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -164,30 +164,11 @@ func decodeGloasBlock(ssz []byte) (*gloas.BeaconBlock, error) {
 }
 
 // submitGloasBeaconBlock POSTs an SSZ-marshaled signed Gloas block to the publish endpoint, echoing any
-// Eth-Builder-Url in extraHeaders. A response signaling the block is already known is treated as success:
-// every operator submits the decided block for liveness redundancy, so a non-leader's submit legitimately
-// races the canonical one, and some beacon nodes (e.g. Lodestar) report that duplicate as an error rather
-// than deduping silently.
+// Eth-Builder-Url in extraHeaders. An already-known answer counts as success (see gloasPublishSSZ): every
+// operator submits the decided block for liveness redundancy, so a non-leader's submit legitimately races
+// the canonical one.
 func submitGloasBeaconBlock(ctx context.Context, addr string, blockSSZ []byte, extraHeaders map[string]string) error {
-	_, err := gloasOctetStreamHTTP(ctx, http.MethodPost, addr+gloasPublishBlockPath, blockSSZ, extraHeaders)
-	if isAlreadyKnown(err) {
-		return nil
-	}
-	return err
-}
-
-// isAlreadyKnown reports whether err is a beacon-node response signaling the submitted object is already
-// known (i.e. already canonical) — for both the §4 block and the §6 envelope publish, where every operator
-// redundantly submits the same object and the non-winning ones race the canonical one. Beacon-APIs has no
-// standard code for this, so match on the message: Lodestar returns 500 "BLOCK_ERROR_ALREADY_KNOWN" and
-// "EXECUTION_PAYLOAD_ENVELOPE_ERROR_ALREADY_KNOWN".
-func isAlreadyKnown(err error) bool {
-	var httpErr *httpStatusError
-	if !errors.As(err, &httpErr) {
-		return false
-	}
-	body := strings.ToLower(httpErr.body)
-	return strings.Contains(body, "already known") || strings.Contains(body, "already_known")
+	return gloasPublishSSZ(ctx, addr+gloasPublishBlockPath, blockSSZ, extraHeaders)
 }
 
 // isMethodOrPathMissing reports whether err is a 404/405 — the beacon node does not implement the endpoint
@@ -195,29 +176,4 @@ func isAlreadyKnown(err error) bool {
 func isMethodOrPathMissing(err error) bool {
 	var httpErr *httpStatusError
 	return errors.As(err, &httpErr) && (httpErr.status == http.StatusNotFound || httpErr.status == http.StatusMethodNotAllowed)
-}
-
-// gloasHTTPDo issues an SSZ-accepting request to a Gloas endpoint and returns the response body and headers
-// on a 2xx (see httpDo). A non-nil body is sent with the given contentType; extraHeaders are applied last,
-// except Eth-Consensus-Version, which is always the Gloas version on requests with a body.
-func gloasHTTPDo(ctx context.Context, method, url string, body []byte, contentType string, extraHeaders map[string]string) ([]byte, http.Header, error) {
-	if body != nil {
-		merged := make(map[string]string, len(extraHeaders)+1)
-		for k, v := range extraHeaders {
-			merged[k] = v
-		}
-		merged[consensusVersionHeader] = consensusVersionGloas
-		extraHeaders = merged
-	}
-	respBody, header, _, err := httpDo(ctx, gloasHTTPClient, method, url, body, "application/octet-stream", contentType, extraHeaders)
-	return respBody, header, err
-}
-
-// gloasOctetStreamHTTP issues an octet-stream (SSZ) request to a Gloas produce/publish endpoint and returns
-// the response body on a 2xx. A nil body GETs; a non-nil body POSTs SSZ tagged with the Gloas consensus
-// version. extraHeaders (e.g. Eth-Builder-Url on the §4 block publish, Eth-Blob-Data-Included on the §6
-// envelope publish) are applied last.
-func gloasOctetStreamHTTP(ctx context.Context, method, url string, body []byte, extraHeaders map[string]string) ([]byte, error) {
-	respBody, _, err := gloasHTTPDo(ctx, method, url, body, "application/octet-stream", extraHeaders)
-	return respBody, err
 }

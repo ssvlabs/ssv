@@ -3,7 +3,6 @@ package goclient
 import (
 	"context"
 	"fmt"
-	"net/http"
 
 	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 )
@@ -37,15 +36,10 @@ func (gc *GoClient) SubmitExecutionPayloadEnvelope(ctx context.Context, contents
 }
 
 // submitExecutionPayloadEnvelope POSTs the SSZ contents tagged Eth-Blob-Data-Included: true. An
-// already-known response is treated as success: the builder operator publishes to each of its beacon nodes,
-// and operators sharing a beacon node both publish the identical reveal, so a repeat gets
-// EXECUTION_PAYLOAD_ENVELOPE_ERROR_ALREADY_KNOWN — the §6 analog of the §4 block submit (see
-// submitGloasBeaconBlock).
+// already-known answer counts as success (see gloasPublishSSZ): the builder operator publishes to each of
+// its beacon nodes, and operators sharing a beacon node both publish the identical reveal, so a node can
+// receive it twice.
 func submitExecutionPayloadEnvelope(ctx context.Context, addr string, contentsSSZ []byte) error {
 	headers := map[string]string{blobDataIncludedHeader: "true"}
-	_, err := gloasOctetStreamHTTP(ctx, http.MethodPost, addr+gloasPublishEnvelopePath, contentsSSZ, headers)
-	if isAlreadyKnown(err) {
-		return nil
-	}
-	return err
+	return gloasPublishSSZ(ctx, addr+gloasPublishEnvelopePath, contentsSSZ, headers)
 }
