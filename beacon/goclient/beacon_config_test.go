@@ -123,17 +123,81 @@ func TestCheckForkSchedule(t *testing.T) {
 	ours := gloasScheduledAt(networkconfig.FarFutureEpoch)
 	gc, logs := newLagTestClient(ours)
 
-	gc.checkForkSchedule("http://same:5052", gloasScheduledAt(networkconfig.FarFutureEpoch))
+	gc.checkForkSchedule("http://same:5052", gloasScheduledAt(networkconfig.FarFutureEpoch), true)
 	require.Zero(t, logs.Len(), "an unchanged schedule reports nothing")
 
-	gc.checkForkSchedule("http://upgraded:5052", gloasScheduledAt(now+100))
+	gc.checkForkSchedule("http://upgraded:5052", gloasScheduledAt(now+100), true)
 	require.Equal(t, 1, logs.FilterMessageSnippet("restart the node before that fork").Len(), "a fork the node started without is the node's to adopt")
-	require.Panics(t, func() { gc.checkForkSchedule("http://upgraded:5052", gloasScheduledAt(now+1)) }, "and close to it the node stops")
+	require.Panics(t, func() { gc.checkForkSchedule("http://upgraded:5052", gloasScheduledAt(now+1), true) }, "and close to it the node stops")
 
 	other := gloasScheduledAt(networkconfig.FarFutureEpoch)
 	other.Name = "another network"
-	gc.checkForkSchedule("http://other:5052", other)
+	gc.checkForkSchedule("http://other:5052", other, true)
 	require.Equal(t, 1, logs.FilterMessageSnippet("no longer matches the node's").Len(), "anything but a fork-schedule lag is an error of its own")
+}
+
+// A fork the node schedules that no active client still schedules the same way moved or was dropped after the
+// node started, so the node is the stale side: an error, and close to the earlier of the two epochs a stop, as
+// crossing it on a schedule no client shares fails every duty. While another client still shares the node's
+// schedule, the disagreeing one is the likely stale side and gets the usual warning.
+func TestCheckForkSchedule_NoClientSharesTheNodesSchedule(t *testing.T) {
+	now := networkconfig.TestNetwork.EstimatedCurrentEpoch()
+	const nodeStale = "no client schedules a fork as the node's config does"
+
+	t.Run("dropped, far off: error", func(t *testing.T) {
+		gc, logs := newLagTestClient(gloasScheduledAt(now + 100))
+
+		gc.checkForkSchedule("http://only:5052", gloasScheduledAt(networkconfig.FarFutureEpoch), false)
+		alarms := logs.FilterMessageSnippet(nodeStale)
+		require.Equal(t, 1, alarms.Len())
+		require.Equal(t, zapcore.ErrorLevel, alarms.All()[0].Level)
+		require.EqualValues(t, now+100, alarms.All()[0].ContextMap()["epoch"])
+	})
+
+	t.Run("postponed, close to the node's epoch: stop", func(t *testing.T) {
+		gc, logs := newLagTestClient(gloasScheduledAt(now + forkScheduleLagStopEpochs))
+
+		require.Panics(t, func() { gc.checkForkSchedule("http://only:5052", gloasScheduledAt(now+100), false) })
+		require.Equal(t, 1, logs.FilterLevelExact(zapcore.FatalLevel).Len())
+	})
+
+	t.Run("moved earlier, close to the client's epoch: stop", func(t *testing.T) {
+		gc, _ := newLagTestClient(gloasScheduledAt(now + 100))
+
+		require.Panics(t, func() {
+			gc.checkForkSchedule("http://only:5052", gloasScheduledAt(now+forkScheduleLagStopEpochs), false)
+		})
+	})
+
+	t.Run("another client shares the node's schedule: warn about this one", func(t *testing.T) {
+		gc, logs := newLagTestClient(gloasScheduledAt(now + forkScheduleLagStopEpochs))
+
+		gc.checkForkSchedule("http://lagging:5052", gloasScheduledAt(networkconfig.FarFutureEpoch), true)
+		require.Equal(t, 1, logs.FilterMessageSnippet("upgrade the client before that fork").Len())
+		require.Zero(t, logs.FilterMessageSnippet(nodeStale).Len())
+	})
+}
+
+// Through a real client whose beacon node no longer schedules a fork the node's config does, with no other client
+// to share the node's schedule, the recheck stops the node close to the fork.
+func TestRecheckForkSchedules_StopsWhenNoClientSharesTheNodesSchedule(t *testing.T) {
+	core, logs := observer.New(zapcore.WarnLevel)
+	srv := mocks.NewServer(nil) // its spec leaves Gloas unscheduled
+	defer srv.Close()
+
+	logger := zap.New(core, zap.WithFatalHook(zapcore.WriteThenPanic))
+	client, err := New(t.Context(), logger, Options{BeaconNodeAddr: srv.URL, CommonTimeout: 400 * time.Millisecond, LongTimeout: 500 * time.Millisecond})
+	require.NoError(t, err)
+
+	node := *client.getBeaconConfig()
+	node.Forks = maps.Clone(node.Forks)
+	node.Forks[networkconfig.DataVersionGloas] = phase0.Fork{Epoch: node.EstimatedCurrentEpoch() + forkScheduleLagStopEpochs, CurrentVersion: phase0.Version{0x80}}
+	client.beaconConfigMu.Lock()
+	client.beaconConfig = &node // the node started with Gloas scheduled; its only beacon node has since dropped it
+	client.beaconConfigMu.Unlock()
+
+	require.Panics(t, func() { client.recheckForkSchedules(t.Context()) })
+	require.Equal(t, 1, logs.FilterMessageSnippet("no client schedules a fork as the node's config does").Len())
 }
 
 // Through a real client against a fake beacon node whose spec does not change, the recheck reads the config
