@@ -29,7 +29,7 @@ require (
 	github.com/lib/pq v1.10.9
 	github.com/microsoft/go-crypto-openssl v0.2.9
 	github.com/sourcegraph/conc v0.3.0
-	github.com/ssvlabs/eth2-key-manager v1.5.7-0.20260901124029-39a18877e131
+	github.com/ssvlabs/eth2-key-manager v1.5.7-0.20260923093501-05becdf7bb5a
 	github.com/ssvlabs/ssv-spec v1.2.3-0.20260924161701-0c82ee096544
 	github.com/stretchr/testify v1.11.1
 	github.com/testcontainers/testcontainers-go v0.37.0
