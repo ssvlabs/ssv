@@ -7,8 +7,7 @@
   "schedule": ["before 6am on monday"],
   "prConcurrentLimit": 5,
   "vulnerabilityAlerts": {
-    "schedule": ["at any time"],
-    "labels": ["security"]
+    "addLabels": ["security"]
   },
   "packageRules": [
     {
@@ -64,7 +63,9 @@
       "groupName": "github actions"
     },
     {
+      "description": "Base-image refreshes only; a Go minor bump arrives on its own so it can move with go.mod",
       "matchManagers": ["dockerfile"],
+      "matchUpdateTypes": ["patch", "digest", "pinDigest"],
       "groupName": "docker base images"
     },
     {
