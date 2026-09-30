@@ -18,7 +18,7 @@ require (
 	github.com/alecthomas/kong v1.8.1
 	github.com/attestantio/go-eth2-client v0.27.0
 	github.com/carlmjohnson/requests v0.24.3
-	github.com/docker/docker v28.3.3+incompatible
+	github.com/docker/docker v28.5.2+incompatible
 	github.com/docker/go-connections v0.5.0
 	github.com/ethereum/go-ethereum v1.17.5
 	github.com/fasthttp/router v1.5.4
@@ -70,7 +70,6 @@ require (
 	github.com/go-ole/go-ole v1.3.0 // indirect
 	github.com/go-playground/validator/v10 v10.13.0 // indirect
 	github.com/goccy/go-yaml v1.12.0 // indirect
-	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/klauspost/compress v1.18.0 // indirect
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
