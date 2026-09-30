@@ -74,6 +74,13 @@
       "groupName": "docker base images"
     },
     {
+      "description": "A Go minor bump also needs the go directive bumped, which Renovate leaves alone",
+      "matchManagers": ["dockerfile"],
+      "matchPackageNames": ["golang"],
+      "matchUpdateTypes": ["major", "minor"],
+      "prBodyNotes": ["Before merging, bump the `go` directive in `go.mod`, `ssvsigner/go.mod` and `scripts/differ/go.mod` to this Go minor on this branch. CI installs Go from `go.mod`, so without it the images ship a Go version CI never ran."]
+    },
+    {
       "description": "differ UI is a dev-only tool, not shipped",
       "matchFileNames": ["scripts/differ/ui/**"],
       "groupName": "differ ui (npm)"
