@@ -1,0 +1,257 @@
+<title>Attester QBFT Decision Timing</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..48,600;12..48,700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+:root{
+  --bg:#eaeef2;--surface:#ffffff;--surface-2:#f4f7f9;--inset:#eef2f5;
+  --ink:#0f151c;--ink-2:#33404f;--muted:#5c6a7c;--faint:#8a97a7;--line:#dbe2ea;--grid:#e7edf2;
+  --r1:#0090a3;--r2:#b8621b;--crit:#b3182a;--good:#1c7a4d;--accent:#0090a3;--accent-ink:#046374;
+  --r2-wash:#b8621b1a;--crit-wash:#b3182a12;--good-wash:#1c7a4d14;--shadow:0 1px 2px rgba(15,21,28,.05),0 4px 16px rgba(15,21,28,.05);
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0b1118;--surface:#131b24;--surface-2:#182230;--inset:#0f1720;
+  --ink:#e8eef4;--ink-2:#bcc9d6;--muted:#93a2b4;--faint:#67788b;--line:#243141;--grid:#1d2836;
+  --r1:#2ba4b2;--r2:#cc8033;--crit:#e5636f;--good:#4bbb83;--accent:#2ba4b2;--accent-ink:#7fd3dd;
+  --r2-wash:#cc80331f;--crit-wash:#e5636f18;--good-wash:#4bbb8318;--shadow:0 1px 2px rgba(0,0,0,.3),0 6px 22px rgba(0,0,0,.35);
+}}
+:root[data-theme="dark"]{
+  --bg:#0b1118;--surface:#131b24;--surface-2:#182230;--inset:#0f1720;
+  --ink:#e8eef4;--ink-2:#bcc9d6;--muted:#93a2b4;--faint:#67788b;--line:#243141;--grid:#1d2836;
+  --r1:#2ba4b2;--r2:#cc8033;--crit:#e5636f;--good:#4bbb83;--accent:#2ba4b2;--accent-ink:#7fd3dd;
+  --r2-wash:#cc80331f;--crit-wash:#e5636f18;--good-wash:#4bbb8318;--shadow:0 1px 2px rgba(0,0,0,.3),0 6px 22px rgba(0,0,0,.35);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"IBM Plex Sans",system-ui,sans-serif;font-size:16px;line-height:1.55;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1000px;margin:0 auto;padding:0 20px}
+h1,h2,h3{font-family:"Bricolage Grotesque","IBM Plex Sans",sans-serif;font-weight:700;letter-spacing:-.01em;text-wrap:balance;margin:0;line-height:1.13}
+.mono{font-family:"IBM Plex Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;font-weight:500;letter-spacing:.16em;text-transform:uppercase;color:var(--accent-ink)}
+header{padding:52px 0 26px;border-bottom:1px solid var(--line)}
+.kicker{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:18px}
+.chip{font-family:"IBM Plex Mono",monospace;font-size:11.5px;letter-spacing:.04em;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:3px 10px;background:var(--surface)}
+h1{font-size:clamp(28px,5vw,48px)}
+.sub{margin:20px 0 0;font-size:clamp(16px,2.3vw,20px);color:var(--ink-2);max-width:66ch;line-height:1.5}
+.sub b{color:var(--ink);font-weight:600}
+.tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:30px 0 4px}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px 15px 14px;box-shadow:var(--shadow)}
+.tile .n{font-family:"IBM Plex Mono",monospace;font-weight:600;font-size:28px;letter-spacing:-.02em;line-height:1}
+.tile .n.crit{color:var(--crit)}.tile .n.warn{color:var(--r2)}.tile .n.good{color:var(--good)}.tile .n.teal{color:var(--accent-ink)}
+.tile .l{margin-top:8px;font-size:12px;color:var(--muted);line-height:1.35}
+section{padding:44px 0;border-bottom:1px solid var(--line)}
+.sec-head{max-width:72ch}
+h2{font-size:clamp(21px,3vw,27px)}
+.sec-head p{color:var(--ink-2);margin:12px 0 0;font-size:16px}.lede b{color:var(--ink);font-weight:600}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:22px 22px 16px;box-shadow:var(--shadow);margin-top:22px}
+.panel h3{font-size:15px;font-weight:600;margin:0}.panel .cap{font-size:13px;color:var(--muted);margin:5px 0 14px;max-width:80ch}
+.chart-scroll{overflow-x:auto}
+svg text{font-family:"IBM Plex Mono",monospace;fill:var(--muted);font-size:11px}
+svg .grid{stroke:var(--grid);stroke-width:1}svg .axis{stroke:var(--line);stroke-width:1}
+svg .thr{stroke:var(--crit);stroke-dasharray:4 4;stroke-width:1.3;opacity:.8}svg .thr2{stroke:var(--r2);stroke-dasharray:4 4;stroke-width:1.2;opacity:.75}
+svg .val{fill:var(--ink);font-weight:600}
+.legend{display:flex;gap:16px;flex-wrap:wrap;margin-top:10px;font-size:12.5px;color:var(--ink-2)}
+.legend span{display:inline-flex;gap:7px;align-items:center}.sw{width:11px;height:11px;border-radius:3px}
+.tbl-scroll{overflow-x:auto;margin-top:22px}
+table{border-collapse:collapse;width:100%;font-size:13.5px;min-width:560px}
+th,td{text-align:right;padding:10px 12px;border-bottom:1px solid var(--line)}
+th:first-child,td:first-child{text-align:left}
+thead th{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--ink-2)}
+tbody td{font-family:"IBM Plex Mono",monospace;color:var(--ink-2)}tbody tr td:first-child{color:var(--ink);font-family:"IBM Plex Sans",sans-serif;font-weight:500}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.note{border-radius:14px;padding:18px 20px;margin-top:24px;font-size:14.5px;line-height:1.55}
+.note.good{background:var(--good-wash)}.note.warn{background:var(--r2-wash)}.note.flat{background:var(--surface-2);border:1px solid var(--line)}
+.note h4{margin:0 0 7px;font-family:"IBM Plex Sans";font-size:13px;font-weight:600;letter-spacing:.02em;text-transform:uppercase;color:var(--ink)}
+.note.good h4{color:var(--good)}.note.warn h4{color:var(--r2)}.note ul{margin:8px 0 0;padding-left:18px}.note li{margin:5px 0;color:var(--ink-2)}.note b{color:var(--ink);font-weight:600}
+code{font-family:"IBM Plex Mono",monospace;font-size:.88em;background:var(--inset);padding:1px 5px;border-radius:5px;color:var(--ink-2)}
+footer{padding:32px 0 64px;color:var(--muted);font-size:12.5px}
+.themebtn{position:fixed;top:14px;right:14px;z-index:40;font-family:"IBM Plex Mono",monospace;font-size:11px;background:var(--surface);color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:6px 12px;cursor:pointer}
+.themebtn:hover{color:var(--ink)}:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+@media(max-width:680px){.tiles{grid-template-columns:repeat(2,1fr)}.two{grid-template-columns:1fr}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+<button class="themebtn" id="themebtn" aria-label="Toggle theme">&#9680; theme</button>
+<div class="wrap">
+<header>
+  <div class="kicker">
+    <span class="eyebrow">SSV &middot; Exporter forensics</span>
+    <span class="chip">prod-mainnet</span><span class="chip">30 epochs sampled (1/day)</span>
+    <span class="chip" id="nchip">1.84M attestations</span>
+  </div>
+  <h1>Attester QBFT decides late &mdash; and it barely matters</h1>
+  <p class="sub">SSV runs one QBFT per committee&#8209;slot for attestations. Its round&#8209;1 timer runs to <b>6s</b> (a 4s head&#8209;start), so committee decisions land <b>late by design</b> &mdash; 30% after 3s. Unlike a block proposal, that lateness costs <b>almost nothing</b>: a decided attestation still lands on&#8209;chain essentially always. The only casualty is head&#8209;vote quality, and only right at the 4s deadline.</p>
+  <div class="tiles" id="tiles"></div>
+</header>
+
+<section id="dist">
+  <div class="sec-head">
+    <span class="eyebrow">Phase 1 &middot; when the committee decides</span>
+    <h2 style="margin-top:10px">Late by design &mdash; the committee timer allows 6s</h2>
+    <p class="lede">Committee decision time (Exporter's aggregated&#8209;decided message, into slot) peaks at ~2.5s and spreads to 4&ndash;6s, because the committee round&#8209;1 timer is slot&#8209;anchored at <b>6s</b> (a <code>slotDuration/3</code> head&#8209;start), vs the proposer's 2s. So a third of committee duties decide after 3s and 8% after the 4s attestation deadline &mdash; timings that would be catastrophic for a proposal.</p>
+  </div>
+  <div class="panel">
+    <h3>Committee decision time into slot &mdash; 111,470 duties</h3>
+    <p class="cap">250ms bins. Dashed lines: the 4s attestation deadline and the 6s round&#8209;1 timeout (past which it's round&nbsp;2).</p>
+    <div class="chart-scroll"><svg id="hist" viewBox="0 0 900 340" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Committee decision-time distribution, peaked near 2.5s spreading to 6s"></svg></div>
+  </div>
+</section>
+
+<section id="outcome">
+  <div class="sec-head">
+    <span class="eyebrow">Phase 1 &middot; does it hurt?</span>
+    <h2 style="margin-top:10px">A decided attestation always lands; only head&#8209;vote quality dips, right at 4s</h2>
+    <p class="lede">Every one of 1.84M <b>decided</b> committee&#8209;attestations was included on&#8209;chain &mdash; at every decision time, even past 6s. (Overall ~<b>0.06%</b> of attestations do miss, but each of those is a committee that never reached a decided attestation &mdash; a failure mode upstream of, and independent of, decision timing; see method.) What deciding late actually correlates with is <b>head&#8209;vote correctness</b>: it holds at ~100% until 4s, drops sharply to <b>~95.5%</b> in the 4&ndash;5.5s window (a late decision usually means a late block, so the vote recorded a stale head), then <b>recovers past 6s</b> as round&#8209;2 refetches fresh data.</p>
+  </div>
+  <div class="panel">
+    <h3>Head&#8209;vote correctness vs decision time</h3>
+    <p class="cap">500ms bins, validator&#8209;weighted, Wilson 95% intervals. The flat line at top is inclusion (100% throughout). Note the y&#8209;axis starts at 94%.</p>
+    <div class="chart-scroll"><svg id="head" viewBox="0 0 900 360" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Head-vote correctness by decision time, dropping to 95.5% at 4-5s then recovering"></svg></div>
+    <div class="legend"><span><i class="sw" style="background:var(--good)"></i>inclusion (100%)</span><span><i class="sw" style="background:var(--r2)"></i>head-vote correctness</span><span><i class="sw" style="background:var(--crit);width:2px;height:12px"></i>4s deadline</span></div>
+  </div>
+  <div class="note good">
+    <h4>Why inclusion survives what would kill a proposal</h4>
+    <p>A block that lands after ~4s loses the fork&#8209;choice race and is orphaned. An attestation has no such cliff &mdash; it can be included up to 32 slots later, and here it essentially always makes the very next block. So the committee can decide at 5s, even 6s, and the attestation still lands on&#8209;chain; it just may have recorded a stale head vote if it decided in the 4&ndash;6s round&#8209;1&#8209;late window.</p>
+  </div>
+</section>
+
+<section id="anatomy">
+  <div class="sec-head">
+    <span class="eyebrow">Phase 1 &middot; round-1 anatomy</span>
+    <h2 style="margin-top:10px">Late start, near&#8209;instant consensus</h2>
+    <p class="lede">The lateness is entirely in the <b>start</b>, not the consensus. Once the round&#8209;1 leader proposes &mdash; median <b>2.3s</b> into the slot, waiting on the block and attestation data &mdash; the committee reaches a decided quorum in a median of just <b>44ms</b>: 60% land within 100ms of the proposal, 89% within 250ms. A committee&#8209;duty's decision time is therefore essentially its <i>start</i> time plus a near&#8209;zero tail &mdash; the QBFT rounds themselves are cheap.</p>
+  </div>
+  <div class="panel">
+    <h3>How long a successful round&#8209;1 lasts &mdash; proposal to decided</h3>
+    <p class="cap">Round&#8209;1 duties only (n=110,244). Exporter&#8209;observed span from the round&#8209;1 proposal to the aggregated decided message. Log&#8209;ish bins (ms).</p>
+    <div class="chart-scroll"><svg id="dur" viewBox="0 0 900 320" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Round-1 duration distribution, peaked at 20-40ms with a tail to over a second"></svg></div>
+    <div class="legend"><span class="mono">median 44ms</span><span class="mono">p90 267ms</span><span class="mono">p95 367ms</span><span class="mono">p99 712ms</span></div>
+  </div>
+  <div class="panel">
+    <h3>Zoom: the p99&ndash;max tail (round&#8209;1 &gt; 700ms)</h3>
+    <p class="cap">The slowest ~1% of round&#8209;1s (n=1,139). The genuine tail decays smoothly to a real max of <b>~3.3s</b>. The detached clump past 3.4s is 62 duties from just <b>3 epoch&#8209;boundary slots</b> where the Exporter batch&#8209;stamped dozens of committees within ~8ms of each other &mdash; a measurement artifact, not consensus latency. Linear y&#8209;axis; the 700ms bin (271) sets the scale.</p>
+    <div class="chart-scroll"><svg id="tailz" viewBox="0 0 900 300" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Round-1 duration tail from 700ms, smooth decay to 3.3s plus a detached epoch-boundary artifact clump near 3.8s"></svg></div>
+    <div class="legend"><span><i class="sw" style="background:var(--r1)"></i>genuine slow round&#8209;1</span><span><i class="sw" style="background:var(--crit)"></i>epoch&#8209;boundary artifact (3 slots, 62 duties)</span></div>
+  </div>
+  <div class="note flat">
+    <h4>Two kinds of slow committee</h4>
+    <p>The genuine tail splits in two. Some slow committees are the same <b>chronic round&#8209;changers</b> (e.g. af171fec: 74 slow round&#8209;1s <i>and</i> 61 round&#8209;changes) &mdash; they crawl and often tip over the 6s edge into round 2. Others are <b>slow but steady</b> (5862a52a: 75 slow round&#8209;1s but <b>0</b> round&#8209;changes across 936 duties; d40e914: 70 and 0) &mdash; a persistently&#8209;slow&#8209;but&#8209;alive operator that always drags round&#8209;1 out to 1&ndash;2s yet still lands inside the budget. Neither costs inclusion.</p>
+  </div>
+</section>
+
+<section id="round">
+  <div class="sec-head"><span class="eyebrow">Rounds</span>
+  <h2 style="margin-top:10px">Round 2 is benign here &mdash; the opposite of proposer</h2>
+  <p class="lede">Round changes are more common than for proposals (~1.1% vs 0.17%), but for attestations they're <b>harmless and even helpful</b>: round&#8209;2 duties still hit 100% inclusion and their round&#8209;2 refetch <b>restores</b> head&#8209;vote correctness. For a proposer, round&nbsp;2 meant a 14% miss rate.</p></div>
+  <div class="tbl-scroll"><table>
+    <thead><tr><th>Duty type</th><th>median decide</th><th>decide &gt;3s</th><th>round&#8209;2 rate</th><th>round&#8209;2 outcome</th><th>4s deadline</th></tr></thead>
+    <tbody>
+      <tr><td>Proposer</td><td>1,437ms</td><td>0.11%</td><td>0.17%</td><td class="mono" style="color:var(--crit)">14.3% miss</td><td>hard cliff (100% miss &gt;4s)</td></tr>
+      <tr><td>Attester (committee)</td><td>2,430ms</td><td>30.6%</td><td>1.07%</td><td class="mono" style="color:var(--good)">100% included</td><td>soft (head&#8209;vote dip only)</td></tr>
+    </tbody>
+  </table></div>
+  <div class="note warn">
+    <h4>Why round changes are ~6&times; more common than for proposals</h4>
+    <ul>
+      <li><b>A few unhealthy committees dominate.</b> The 1.09% rate is not uniform: 113 of 331 committees ever round&#8209;change, and the <b>worst 10 account for 60%</b> of all round changes &mdash; several sit at <b>25&ndash;29%</b> (e.g. 61/210, 240/959 of their own duties). This is operator health in specific clusters, not a network&#8209;wide property.</li>
+      <li><b>A structural timer difference makes committee round&#8209;1 tighter.</b> In the SSV code the committee round&#8209;1 timer fires at a fixed <code>slotStart + 6s</code>, whereas the proposer's is instance&#8209;relative &mdash; a full 2s from consensus start (SSV issue #2429). Committees start consensus late (median 2.3s, p99 4.2s into slot), so their effective round&#8209;1 budget is only <code>6s &minus; start</code>: ~3.7s typically, but under 2s and shrinking for late starters. The same operator slowness blows a shrinking budget far more easily than the proposer's always&#8209;fresh 2s.</li>
+      <li><b>Late blocks add a systemic nudge.</b> The round&#8209;change rate roughly doubles (1.0% &rarr; ~2.0%) at slots where committees decide late, and clusters &mdash; up to 13% of a slot's committees round&#8209;change together. A late or contested block leaves operators transiently disagreeing on the head, so round&#8209;1 misses its prepare&#8209;quorum; round&#8209;2's refetch then agrees &mdash; which is exactly why head&#8209;vote correctness recovers past 6s.</li>
+    </ul>
+  </div>
+</section>
+
+<section id="method" style="border-bottom:none">
+  <div class="note flat">
+    <h4>Method &amp; caveats</h4>
+    <ul>
+      <li><b>Unit.</b> One QBFT per <code>(committee, slot)</code> from the Exporter committee trace (decided round + time); on&#8209;chain outcome (inclusion, head vote, inclusion distance) per validator from E2M, rolled up per committee&#8209;duty. <b>111,470</b> committee&#8209;duties, <b>1.84M</b> validator&#8209;attestations.</li>
+      <li><b>Sampling.</b> Stratified one epoch per day over 30 days (seeded) &mdash; attester duties are ~1000&times; proposer volume, so full enumeration isn't practical. This mirrors the committee sampling in ssvlabs/ssv #2883.</li>
+      <li><b>Decision time</b> is the Exporter's receive&#8209;time of the aggregated decided message, relative to slot start. The committee round&#8209;1 timer is slot&#8209;anchored at <code>slotDuration/3 + 2s = 6s</code>; round 2 at 8s.</li>
+      <li><b>No ProposerDelay / no drift lens.</b> ProposerDelay is proposer&#8209;only, and committee duties do no MEV block&#8209;fetch, so operator&#8209;start drift is smaller and less interesting here &mdash; round&#8209;1 consensus itself is fast (median <b>44ms</b>). The late decisions are late <i>starts</i> (waiting on attestation data / head&#8209;start), not slow consensus.</li>
+      <li><b>Head vote</b> reflects the head the committee saw when it built the attestation data; a late decision correlates with late data and a stale head. The 4&ndash;5s dip is therefore a <i>common&#8209;cause</i> effect (a late/absent block drives both), not the QBFT decision itself corrupting the vote. Inclusion and inclusion&#8209;distance come from E2M's on&#8209;chain view.</li>
+      <li><b>Inclusion is conditional on a decided trace.</b> The dataset is keyed on Exporter committee traces, so it contains only attestations the committee actually decided and submitted &mdash; hence 0 non&#8209;inclusions among the 1.84M analysed. Measured directly from E2M over the same 30 epochs, the <i>overall</i> attestation rate is <b>99.937% included / 0.063% missed</b> (1,169 of 1,855,047) and <b>99.65%</b> correct head vote. Every one of those 1,169 misses is absent from the decided traces &mdash; i.e. the committee never produced a decided attestation, a failure mode upstream of and independent of decision timing. So "a decided attestation always lands" is the precise claim, not "no attestation was ever missed."</li>
+    </ul>
+  </div>
+</section>
+
+<footer><div class="wrap" style="padding:0">
+  <div class="mono" style="color:var(--faint)">SSV Scout &middot; Exporter + E2M &middot; prod-mainnet &middot; 30 epochs sampled from the 465250&ndash;472000 window</div>
+  <div style="margin-top:6px">Companion to the proposer QBFT decision-timing analysis. The contrast is the point: for attestations, timing is nearly free; for proposals, it's everything.</div>
+</div></footer>
+</div>
+<script>
+const D={"duties":111470,"attest":1839878,"incl":1839878,"head":1835656,"opt":1833387,"gt3":34091,"gt4":9281,"gt5":1648,"gt6":1307,"ndec":111470,"r2":1192,"hist":[[0,0],[250,0],[500,63],[750,461],[1000,915],[1250,597],[1500,1445],[1750,12904],[2000,24362],[2250,19517],[2500,10702],[2750,6393],[3000,5533],[3250,5401],[3500,7240],[3750,6631],[4000,6111],[4250,1090],[4500,325],[4750,131],[5000,94],[5250,159],[5500,51],[5750,38],[6000,905],[6250,228],[6500,42],[6750,132]],"fine":[{"lo":500,"nv":9157,"incl":100.0,"head":100.0,"head_lo":99.958,"head_hi":100,"opt":100.0},{"lo":1000,"nv":26336,"incl":100.0,"head":100.0,"head_lo":99.985,"head_hi":100,"opt":100.0},{"lo":1500,"nv":273118,"incl":100.0,"head":99.999,"head_lo":99.997,"head_hi":100.0,"opt":99.488},{"lo":2000,"nv":755945,"incl":100.0,"head":99.996,"head_lo":99.994,"head_hi":99.997,"opt":99.456},{"lo":2500,"nv":255849,"incl":100.0,"head":99.975,"head_lo":99.968,"head_hi":99.98,"opt":99.861},{"lo":3000,"nv":179111,"incl":100.0,"head":99.966,"head_lo":99.956,"head_hi":99.973,"opt":99.988},{"lo":3500,"nv":241170,"incl":100.0,"head":99.993,"head_lo":99.989,"head_hi":99.996,"opt":99.998},{"lo":4000,"nv":81103,"incl":100.0,"head":95.469,"head_lo":95.323,"head_hi":95.61,"opt":99.408},{"lo":4500,"nv":5619,"incl":100.0,"head":96.797,"head_lo":96.303,"head_hi":97.226,"opt":99.253},{"lo":5000,"nv":3991,"incl":100.0,"head":97.068,"head_lo":96.498,"head_hi":97.548,"opt":98.772},{"lo":5500,"nv":1155,"incl":100.0,"head":96.19,"head_lo":94.925,"head_hi":97.15,"opt":99.913},{"lo":6000,"nv":5338,"incl":100.0,"head":99.457,"head_lo":99.221,"head_hi":99.621,"opt":99.813}],"epochs":30,"r1dur":{"labels":["<20","20-40","40-60","60-100","100-150","150-250","250-400","400-700","700-1.2k","1.2k+"],"counts":[23103,27893,14746,10857,8844,12329,7992,3341,551,588],"pct":{"50":44,"90":267,"95":367,"99":712},"n":110244,"start_pct":{"50":2313,"90":3748,"99":4221}},"rc":{"rate":1.086,"n_comm_rc":113,"n_comm":331,"worst":[{"pct":29.0,"rc":61,"tot":210},{"pct":28.5,"rc":63,"tot":221},{"pct":27.6,"rc":76,"tot":275},{"pct":25.0,"rc":240,"tot":959},{"pct":25.0,"rc":48,"tot":192}],"share_top10":60.0},"tailz":{"edges":[700,850,1000,1150,1300,1450,1600,1750,1900,2050,2200,2350,2500,2650,2800,2950,3100,3250,3400,3550,3700,3850,4000],"gen":[271,131,111,99,61,82,71,67,71,54,33,12,4,2,1,2,4,1,0,0,0,0],"art":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,4,22,35],"w":150,"n_tail":1139,"genuine_max":3293,"artifact_n":62,"artifact_slots":3,"gt3s_gen":6}}, NS="http://www.w3.org/2000/svg";
+function el(n,a){var e=document.createElementNS(NS,n);for(var k in a)e.setAttribute(k,a[k]);return e;}
+const $=s=>document.querySelector(s);
+$("#nchip").textContent=(D.attest/1e6).toFixed(2)+"M attestations";
+const tiles=[
+ ["warn",(100*D.gt3/D.ndec).toFixed(1)+"%","of committee duties decide after 3s (proposer: 0.11%)"],
+ ["good","0","of "+(D.attest/1e6).toFixed(2)+"M decided attestations failed inclusion &mdash; late deciding never costs it"],
+ ["crit","95.5%","head-vote correctness at 4&ndash;5s (vs ~100% before the 4s deadline)"],
+ ["good","100%","round-2 attestations still included (proposer round-2: 14% miss)"]];
+$("#tiles").innerHTML=tiles.map(t=>`<div class="tile"><div class="n ${t[0]} mono">${t[1]}</div><div class="l">${t[2]}</div></div>`).join("");
+// histogram
+(function(){const s=$("#hist"),W=900,H=340,L=44,R=16,T=16,B=42,iw=W-L-R,ih=H-T-B;
+ const data=D.hist, maxv=Math.max(...data.map(d=>d[1])), n=data.length, bw=iw/n, sx=v=>L+iw*(v/7000);
+ [0,Math.round(maxv/2),maxv].forEach(v=>{const y=T+ih*(1-v/maxv);s.appendChild(el("line",{class:"grid",x1:L,y1:y,x2:W-R,y2:y}));
+   const t=el("text",{x:L-6,y:y+3,"text-anchor":"end"});t.textContent=v>=1000?(v/1000).toFixed(0)+"k":v;s.appendChild(t);});
+ data.forEach(d=>{const [ms,c]=d;if(c<=0)return;const x=L+iw*(ms/7000),h=ih*(c/maxv),y=T+ih-h,w=bw-2;
+   const late=ms>=4000; s.appendChild(el("rect",{x:x+1,y:y,width:Math.max(w,1),height:Math.max(h,1),rx:2,fill:late?"var(--r2)":"var(--r1)",opacity:.9}));});
+ s.appendChild(el("line",{class:"axis",x1:L,y1:T+ih,x2:W-R,y2:T+ih}));
+ [1,2,3,4,5,6].forEach(sec=>{const x=sx(sec*1000);const t=el("text",{x:x,y:H-B+18,"text-anchor":"middle"});t.textContent=sec+"s";s.appendChild(t);});
+ [[4000,"4s deadline","thr"],[6000,"6s r1 timeout","thr2"]].forEach(m=>{const x=sx(m[0]);
+   s.appendChild(el("line",{class:m[2],x1:x,y1:T,x2:x,y2:T+ih}));
+   const t=el("text",{x:x+4,y:T+11});t.setAttribute("fill",m[2]==="thr"?"var(--crit)":"var(--r2)");t.textContent=m[1];s.appendChild(t);});
+})();
+// head-vote curve (y 94-100), inclusion flat 100
+(function(){const s=$("#head"),W=900,H=360,L=52,R=18,T=18,B=44,iw=W-L-R,ih=H-T-B;
+ const f=D.fine, ymin=94,ymax=100.3, sy=v=>T+ih*(1-(v-ymin)/(ymax-ymin)), sx=lo=>L+iw*((lo+250)/6500);
+ [94,96,98,100].forEach(v=>{const y=sy(v);s.appendChild(el("line",{class:"grid",x1:L,y1:y,x2:W-R,y2:y}));
+   const t=el("text",{x:L-6,y:y+3,"text-anchor":"end"});t.textContent=v+"%";s.appendChild(t);});
+ // inclusion reference (flat 100)
+ s.appendChild(el("line",{x1:L,y1:sy(100),x2:W-R,y2:sy(100),stroke:"var(--good)","stroke-width":2,opacity:.55}));
+ // 4s marker
+ const x4=L+iw*(4000/6500);s.appendChild(el("line",{class:"thr",x1:x4,y1:T,x2:x4,y2:T+ih}));
+ const t4=el("text",{x:x4+4,y:T+11});t4.setAttribute("fill","var(--crit)");t4.textContent="4s deadline";s.appendChild(t4);
+ // head-vote points + line + CI
+ let path="";
+ f.forEach((d,i)=>{const x=sx(d.lo),y=sy(Math.max(d.head,ymin));
+   path+=(i?"L":"M")+x+" "+y+" ";
+   s.appendChild(el("line",{x1:x,y1:sy(Math.max(d.head_lo,ymin)),x2:x,y2:sy(Math.min(d.head_hi,ymax)),stroke:"var(--r2)","stroke-width":1.3,opacity:.55}));});
+ s.appendChild(el("path",{d:path,fill:"none",stroke:"var(--r2)","stroke-width":2}));
+ f.forEach(d=>{const x=sx(d.lo),y=sy(Math.max(d.head,ymin));s.appendChild(el("circle",{cx:x,cy:y,r:3.4,fill:"var(--r2)"}));
+   if(d.head<99){const t=el("text",{class:"val",x:x,y:y+16,"text-anchor":"middle"});t.setAttribute("font-size","10");t.textContent=d.head.toFixed(1);s.appendChild(t);}});
+ s.appendChild(el("line",{class:"axis",x1:L,y1:T+ih,x2:W-R,y2:T+ih}));
+ [1,2,3,4,5,6].forEach(sec=>{const x=L+iw*(sec*1000/6500);const t=el("text",{x:x,y:H-B+18,"text-anchor":"middle"});t.textContent=sec+"s";s.appendChild(t);});
+})();
+// round-1 duration histogram
+(function(){const s=$("#dur"),W=900,H=320,L=46,R=16,T=20,B=52,iw=W-L-R,ih=H-T-B;
+ const lab=D.r1dur.labels, c=D.r1dur.counts, n=lab.length, maxv=Math.max(...c), bw=iw/n;
+ [0,Math.round(maxv/2),maxv].forEach(v=>{const y=T+ih*(1-v/maxv);s.appendChild(el("line",{class:"grid",x1:L,y1:y,x2:W-R,y2:y}));
+   const t=el("text",{x:L-6,y:y+3,"text-anchor":"end"});t.textContent=v>=1000?(v/1000).toFixed(0)+"k":v;s.appendChild(t);});
+ c.forEach((v,i)=>{const x=L+bw*i,h=ih*(v/maxv),y=T+ih-h;
+   s.appendChild(el("rect",{x:x+3,y:y,width:bw-6,height:Math.max(h,1),rx:2,fill:"var(--r1)",opacity:.9}));
+   const t=el("text",{x:x+bw/2,y:H-B+16,"text-anchor":"middle"});t.setAttribute("font-size","10");t.textContent=lab[i];s.appendChild(t);
+   if(v>maxv*0.04){const vt=el("text",{x:x+bw/2,y:y-4,"text-anchor":"middle"});vt.setAttribute("font-size","9.5");vt.setAttribute("fill","var(--muted)");vt.textContent=(v/1000).toFixed(1)+"k";s.appendChild(vt);}});
+ s.appendChild(el("line",{class:"axis",x1:L,y1:T+ih,x2:W-R,y2:T+ih}));
+ const xl=el("text",{x:L+iw/2,y:H-6,"text-anchor":"middle"});xl.setAttribute("fill","var(--faint)");xl.textContent="round-1 duration: proposal to decided (ms)";s.appendChild(xl);
+})();
+// round-1 duration tail zoom (genuine + epoch-boundary artifact)
+(function(){const s=$("#tailz");if(!s||!D.tailz)return;const W=900,H=300,L=44,R=18,T=24,B=46,iw=W-L-R,ih=H-T-B;
+ const tz=D.tailz, edges=tz.edges, nb=edges.length-1, x0=edges[0], x1=edges[nb], bw=iw/nb;
+ const maxv=Math.max(...tz.gen.map((g,i)=>g+tz.art[i]));
+ const sx=v=>L+iw*((v-x0)/(x1-x0));
+ [0,Math.round(maxv/2),maxv].forEach(v=>{const y=T+ih*(1-v/maxv);s.appendChild(el("line",{class:"grid",x1:L,y1:y,x2:W-R,y2:y}));
+   const t=el("text",{x:L-6,y:y+3,"text-anchor":"end"});t.textContent=v;s.appendChild(t);});
+ for(let i=0;i<nb;i++){const x=L+bw*i,g=tz.gen[i],a=tz.art[i];
+   if(g>0){const h=ih*(g/maxv);s.appendChild(el("rect",{x:x+2,y:T+ih-h,width:Math.max(bw-4,1),height:Math.max(h,1),rx:1.5,fill:"var(--r1)",opacity:.9}));}
+   if(a>0){const h=ih*(a/maxv);s.appendChild(el("rect",{x:x+2,y:T+ih-h,width:Math.max(bw-4,1),height:Math.max(h,1),rx:1.5,fill:"var(--crit)",opacity:.85}));}}
+ s.appendChild(el("line",{class:"axis",x1:L,y1:T+ih,x2:W-R,y2:T+ih}));
+ [1000,1500,2000,2500,3000,3500,4000].forEach(ms=>{const x=sx(ms);const t=el("text",{x:x,y:H-B+18,"text-anchor":"middle"});t.textContent=(ms/1000).toFixed(1)+"s";s.appendChild(t);});
+ const xm=sx(tz.genuine_max);s.appendChild(el("line",{class:"thr2",x1:xm,y1:T,x2:xm,y2:T+ih}));
+ const tm=el("text",{x:xm-4,y:T+ih-6,"text-anchor":"end"});tm.setAttribute("fill","var(--r2)");tm.textContent="genuine max "+(tz.genuine_max/1000).toFixed(1)+"s";s.appendChild(tm);
+ const ta=el("text",{x:sx(3775),y:T-8,"text-anchor":"middle"});ta.setAttribute("fill","var(--crit)");ta.setAttribute("font-size","10");ta.textContent="3 epoch-boundary slots";s.appendChild(ta);
+})();
+(function(){var b=$("#themebtn"),root=document.documentElement;b.addEventListener("click",function(){
+  var cur=root.getAttribute("data-theme"),sd=matchMedia("(prefers-color-scheme:dark)").matches;
+  root.setAttribute("data-theme",cur?(cur==="dark"?"light":"dark"):(sd?"light":"dark"));});})();
+</script>
