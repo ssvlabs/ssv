@@ -182,8 +182,8 @@ github.com/sirupsen/logrus v1.9.3 h1:dueUQJ1C2q9oE3F7wvmSGAaVtTmUizReu6fjN8uqzbQ
 github.com/sirupsen/logrus v1.9.3/go.mod h1:naHLuLoDiP4jHNo9R0sCBMtWGeIprob74mVsIT4qYEQ=
 github.com/sourcegraph/conc v0.3.0 h1:OQTbbt6P72L20UqAkXXuLOj79LfEanQ+YQFNpLA9ySo=
 github.com/sourcegraph/conc v0.3.0/go.mod h1:Sdozi7LEKbFPqYX2/J+iBAM6HpqSLTASQIKqDmF7Mt0=
-github.com/ssvlabs/eth2-key-manager v1.5.7-0.20260901124029-39a18877e131 h1:qafgob3ZWLi/m0ABHKYW+E3UCWaNF0NIwujUxb0fufs=
-github.com/ssvlabs/eth2-key-manager v1.5.7-0.20260901124029-39a18877e131/go.mod h1:tjzhmMzrc0Lzc/OMW1h9Mz8AhmKH7FQC/nFiMNJ0bd8=
+github.com/ssvlabs/eth2-key-manager v1.5.7-0.20260923093501-05becdf7bb5a h1:FLyGO/S/JKlWPCU5VEqJbOjIlFn0lQbw0QjcIiR0j9k=
+github.com/ssvlabs/eth2-key-manager v1.5.7-0.20260923093501-05becdf7bb5a/go.mod h1:tjzhmMzrc0Lzc/OMW1h9Mz8AhmKH7FQC/nFiMNJ0bd8=
 github.com/ssvlabs/go-eth2-client v0.6.31-0.20260831132123-66dd18fc8288 h1:OTiNcXOCVXpTNTR0x5IVnzYgXNUZzAQ8oC94KOMFkOg=
 github.com/ssvlabs/go-eth2-client v0.6.31-0.20260831132123-66dd18fc8288/go.mod h1:yhVnKAzIsFhtawbq6k/rA/Dy4vsPpu2Z2cGdQVrIjd0=
 github.com/ssvlabs/ssv-spec v1.2.3-0.20260924161701-0c82ee096544 h1:R3IaYBAWnuyImBScok23hqUaofQAwoTiErm0jXMH+RQ=
