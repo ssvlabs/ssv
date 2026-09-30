@@ -11,9 +11,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ethereum/go-ethereum/common"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	ma "github.com/multiformats/go-multiaddr"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
@@ -21,7 +23,18 @@ import (
 	"github.com/ssvlabs/ssv/hprobe"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/records"
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 )
+
+const (
+	testOperatorID     = 7
+	testOperatorPubKey = "LS0tLS1CRUdJTiBSU0EgUFVCTElDIEtFWS0tLS0t"
+	testOwnerAddress   = "0x0000000000000000000000000000000000000abc"
+	// hex of testDomainType, as the handler renders it
+	testNetworkID = "0x00000503"
+)
+
+var testDomainType = spectypes.DomainType{0x0, 0x0, 0x5, 0x3}
 
 // CreateTestNode builds a test Node using a local network.
 func CreateTestNode(t *testing.T) *Node {
@@ -89,6 +102,14 @@ func CreateTestNode(t *testing.T) *Node {
 		},
 	}
 
+	opDataStore := &MockOperatorDataStore{
+		OperatorDataValue: &registrystorage.OperatorData{
+			ID:           testOperatorID,
+			PublicKey:    testOperatorPubKey,
+			OwnerAddress: common.HexToAddress(testOwnerAddress),
+		},
+	}
+
 	return NewNode(
 		[]string{
 			fmt.Sprintf("tcp://%s:%d", "localhost", 3030),
@@ -97,6 +118,8 @@ func CreateTestNode(t *testing.T) *Node {
 		pIndex,
 		net,
 		tIndex,
+		opDataStore,
+		func() spectypes.DomainType { return testDomainType },
 		healthProber,
 		component1,
 		component2,
@@ -143,6 +166,10 @@ func TestNodeHandlers(t *testing.T) {
 
 				require.NoError(t, json.Unmarshal(body, &resp))
 				require.NotEmpty(t, resp.PeerID)
+				require.Equal(t, testNetworkID, resp.NetworkID)
+				require.Equal(t, spectypes.OperatorID(testOperatorID), resp.OperatorID)
+				require.Equal(t, testOperatorPubKey, resp.OperatorPublicKey)
+				require.Equal(t, common.HexToAddress(testOwnerAddress).String(), resp.OwnerAddress)
 			},
 		},
 		{
@@ -285,4 +312,100 @@ func TestHealthCheckJSONString(t *testing.T) {
 	require.Equal(t, float64(3), advanced["inbound_conns"])
 	require.Equal(t, float64(0), advanced["outbound_conns"])
 	require.Equal(t, []any{"127.0.0.1:8000"}, advanced["p2p_listen_addresses"])
+}
+
+// TestIdentity_OperatorIdentity covers the three states this node's operator identity
+// can be in: registration synced, registration not yet synced, and a node running with
+// no operator key at all. The distinction matters to a caller trying to confirm which
+// operator a given node is - the public key answers that in every state, the id cannot.
+func TestIdentity_OperatorIdentity(t *testing.T) {
+	tests := []struct {
+		name           string
+		store          *MockOperatorDataStore
+		wantPublicKey  string
+		wantIdentified bool // operator_id and owner_address reported
+	}{
+		{
+			name: "registration synced",
+			store: &MockOperatorDataStore{
+				OperatorDataValue: &registrystorage.OperatorData{
+					ID:           testOperatorID,
+					PublicKey:    testOperatorPubKey,
+					OwnerAddress: common.HexToAddress(testOwnerAddress),
+				},
+			},
+			wantPublicKey:  testOperatorPubKey,
+			wantIdentified: true,
+		},
+		{
+			// setupOperatorDataStore builds an OperatorData holding only the configured
+			// public key when the operator is not found in storage, so the key is
+			// available before the registration event has been synced - and the id is not.
+			name: "registration not yet synced",
+			store: &MockOperatorDataStore{
+				OperatorDataValue: &registrystorage.OperatorData{PublicKey: testOperatorPubKey},
+			},
+			wantPublicKey:  testOperatorPubKey,
+			wantIdentified: false,
+		},
+		{
+			// A zero id is what makes an operator unidentified, not a missing owner
+			// address: reading readiness separately from the data could pair an unsynced
+			// snapshot with a raised ready flag and publish the zero address as real.
+			name: "zero id is not identified even with an owner address",
+			store: &MockOperatorDataStore{
+				OperatorDataValue: &registrystorage.OperatorData{
+					PublicKey:    testOperatorPubKey,
+					OwnerAddress: common.HexToAddress(testOwnerAddress),
+				},
+			},
+			wantPublicKey:  testOperatorPubKey,
+			wantIdentified: false,
+		},
+		{
+			// Exporter mode runs without an operator key and is given an empty
+			// OperatorData, so it reports no operator identity at all.
+			name:           "no operator key",
+			store:          &MockOperatorDataStore{OperatorDataValue: &registrystorage.OperatorData{}},
+			wantPublicKey:  "",
+			wantIdentified: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			node := CreateTestNode(t)
+			node.operatorDataStore = tt.store
+
+			req, err := http.NewRequest("GET", "/v1/node/identity", nil)
+			require.NoError(t, err)
+
+			rr := httptest.NewRecorder()
+			api.Handler(node.Identity).ServeHTTP(rr, req)
+			require.Equal(t, http.StatusOK, rr.Code)
+
+			var resp nodeIdentity
+			require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
+
+			// decoded as a map too, so an omitted field is distinguishable from a zero one
+			var raw map[string]any
+			require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &raw))
+
+			require.Equal(t, tt.wantPublicKey, resp.OperatorPublicKey)
+			if tt.wantPublicKey == "" {
+				require.NotContains(t, raw, "operator_public_key")
+			}
+
+			if tt.wantIdentified {
+				require.Equal(t, spectypes.OperatorID(testOperatorID), resp.OperatorID)
+				require.Equal(t, common.HexToAddress(testOwnerAddress).String(), resp.OwnerAddress)
+			} else {
+				require.NotContains(t, raw, "operator_id")
+				require.NotContains(t, raw, "owner_address")
+			}
+
+			// the network id is independent of operator state and always reported
+			require.Equal(t, testNetworkID, resp.NetworkID)
+		})
+	}
 }
