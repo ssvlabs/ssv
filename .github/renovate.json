@@ -26,8 +26,18 @@
       "enabled": false
     },
     {
-      "description": "go-bitfield moved to github.com/OffchainLabs; migrate together with the go-eth2-client fork",
-      "matchPackageNames": ["github.com/prysmaticlabs/go-bitfield"],
+      "description": "go-bitfield (now github.com/OffchainLabs); bump together with the go-eth2-client fork",
+      "matchPackageNames": ["github.com/OffchainLabs/go-bitfield"],
+      "enabled": false
+    },
+    {
+      "description": "Held by replace directives in go.mod, so a require bump is a no-op and a replace bump breaks the pin; bump by hand",
+      "matchPackageNames": [
+        "github.com/google/flatbuffers",
+        "github.com/dgraph-io/ristretto",
+        "github.com/attestantio/go-eth2-client",
+        "github.com/ssvlabs/go-eth2-client"
+      ],
       "enabled": false
     },
     {
