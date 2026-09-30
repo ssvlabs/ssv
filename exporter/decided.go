@@ -91,6 +91,11 @@ func (e *Exporter) DecidedsCore(request *DecidedsQuery) (*TraceDecidedsResult, e
 
 	for _, role := range request.Roles {
 		store := e.participantStores.Get(role)
+		if store == nil {
+			// Every role the API parses has a store (cli/operator/node.go); a miss is a wiring gap, not a
+			// bad request.
+			return nil, fmt.Errorf("no participant store for role %s", role)
+		}
 
 		var participantsRange []storage.ParticipantsRangeEntry
 

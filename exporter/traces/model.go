@@ -5,6 +5,26 @@ import (
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
+	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
+)
+
+const (
+	// MaxPartialSigEntries bounds ValidatorDutyTrace.Pre and .Post. The checks below tie it to the worst
+	// cases message validation admits on the largest committee, so a limit that outgrows it fails the
+	// build rather than leaving a trace that can't be encoded at eviction.
+	MaxPartialSigEntries = 256
+	// maxSigners is the largest committee.
+	maxSigners = 13
+)
+
+var (
+	// Proposer preferences: the distinct preference and request-auth roots validation admits per signer.
+	// Request-auth packets may repeat recorded roots, so this holds because the collector records a
+	// signer's root once.
+	_ [MaxPartialSigEntries - maxSigners*(gloas.MaxProposerPreferencesDistinctRoots+gloas.MaxRequestAuthDistinctRoots)]struct{}
+	// Sync-committee contribution: up to maxSigners entries per packet, per signer.
+	_ [MaxPartialSigEntries - maxSigners*maxSigners]struct{}
 )
 
 // NOTE: model_encoding.go is HAND-MAINTAINED — `go generate` cannot regenerate it.
@@ -24,8 +44,11 @@ type ValidatorDutyTrace struct {
 
 	ProposalData []byte `ssz-max:"4194532"`
 
-	Pre  []*PartialSigTrace `ssz-max:"13"`
-	Post []*PartialSigTrace `ssz-max:"13"`
+	// Pre and Post hold one entry per signing root per signer, up to MaxPartialSigEntries: a packet may
+	// carry several roots, and a signer may re-emit under new ones. Traces with more than one entry per
+	// operator need store format 2 (see store.FormatVersion).
+	Pre  []*PartialSigTrace `ssz-max:"256"`
+	Post []*PartialSigTrace `ssz-max:"256"`
 }
 
 type ConsensusTrace struct {

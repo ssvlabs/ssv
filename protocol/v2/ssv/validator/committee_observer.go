@@ -44,7 +44,11 @@ type CommitteeObserver struct {
 	aggregatorRoots      *ttlcache.Cache[phase0.Root, struct{}]
 	syncCommRoots        *ttlcache.Cache[phase0.Root, struct{}]
 	syncCommContribRoots *ttlcache.Cache[phase0.Root, struct{}]
-	domainCache          *DomainCache
+	// envelopeRoots holds the §6 envelope signing roots of proposed Gloas self-build values, so that their
+	// quorum, which rides the proposer's post-consensus packet, isn't counted as the proposal's. Every
+	// round's proposal is learnt; an undecided one's root never reaches quorum.
+	envelopeRoots *ttlcache.Cache[phase0.Root, struct{}]
+	domainCache   *DomainCache
 
 	// cache to identify and skip duplicate computations of attester/sync committee roots
 	beaconVoteRoots *ttlcache.Cache[BeaconVoteCacheKey, struct{}]
@@ -82,6 +86,7 @@ type CommitteeObserverOptions struct {
 	AggregatorRoots      *ttlcache.Cache[phase0.Root, struct{}]
 	SyncCommRoots        *ttlcache.Cache[phase0.Root, struct{}]
 	SyncCommContribRoots *ttlcache.Cache[phase0.Root, struct{}]
+	EnvelopeRoots        *ttlcache.Cache[phase0.Root, struct{}]
 	BeaconVoteRoots      *ttlcache.Cache[BeaconVoteCacheKey, struct{}]
 	AggregatorCommRoots  *ttlcache.Cache[AggregatorCommitteeCacheKey, struct{}]
 	DomainCache          *DomainCache
@@ -101,6 +106,7 @@ func NewCommitteeObserver(msgID spectypes.MessageID, opts CommitteeObserverOptio
 		aggregatorRoots:          opts.AggregatorRoots,
 		syncCommRoots:            opts.SyncCommRoots,
 		syncCommContribRoots:     opts.SyncCommContribRoots,
+		envelopeRoots:            opts.EnvelopeRoots,
 		domainCache:              opts.DomainCache,
 		beaconVoteRoots:          opts.BeaconVoteRoots,
 		aggregatorCommitteeRoots: opts.AggregatorCommRoots,
@@ -127,8 +133,12 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
 	if err := partialSigMessages.Decode(msg.GetData()); err != nil {
 		return fmt.Errorf("failed to get partial signature message from network message %w", err)
 	}
-	if partialSigMessages.Type != spectypes.PostConsensusPartialSig {
-		return fmt.Errorf("not processing message type %d", partialSigMessages.Type)
+	record, err := recordsParticipation(partialSigMessages.Type)
+	if err != nil {
+		return err
+	}
+	if !record {
+		return nil
 	}
 
 	slot := partialSigMessages.Slot
@@ -159,6 +169,14 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
 		validator, exists := ncv.ValidatorStore.ValidatorByIndex(key.ValidatorIndex)
 		if !exists {
 			return fmt.Errorf("could not find share for validator with index %d", key.ValidatorIndex)
+		}
+
+		if role == spectypes.RoleProposer && ncv.isEnvelopeRoot(key.Root) {
+			// The proposal's participation is the block root's quorum alone (SIP #94 §4). The envelope root
+			// is learnt from the proposal (SaveRoots), a consensus round trip ahead of the quorum; should the
+			// worker pool still let the quorum overtake it, the envelope counts as the proposal's, the same
+			// proposal-first dependence the committee roots have.
+			continue
 		}
 
 		beaconRoles := ncv.getBeaconRoles(msg, key.Root)
@@ -253,9 +271,34 @@ func (ncv *CommitteeObserver) getBeaconRoles(msg *queue.SSVMessage, root phase0.
 		return []spectypes.BeaconRole{spectypes.BNRoleValidatorRegistration}
 	case spectypes.RoleVoluntaryExit:
 		return []spectypes.BeaconRole{spectypes.BNRoleVoluntaryExit}
+	case spectypes.RolePTCAttester:
+		return []spectypes.BeaconRole{spectypes.BNRolePTCAttester}
+	case spectypes.RoleProposerPreferences:
+		return []spectypes.BeaconRole{spectypes.BNRoleProposerPreferences}
 	default:
 		return nil
 	}
+}
+
+// recordsParticipation reports whether a partial-signature packet of this type records participation:
+// a post-consensus quorum, or the single signing round of a duty without a consensus phase (the PTC
+// attestation and the proposer preferences, SIP #94 §3, §5). A request-auth packet records nothing, as
+// signing a builder token is not the preferences duty; any other pre-consensus type is an error.
+func recordsParticipation(msgType spectypes.PartialSigMsgType) (bool, error) {
+	switch msgType {
+	case spectypes.PostConsensusPartialSig, spectypes.PTCAttesterPartialSig, spectypes.ProposerPreferencesPartialSig:
+		return true, nil
+	case spectypes.RequestAuthPartialSig:
+		return false, nil
+	default:
+		return false, fmt.Errorf("not processing message type %d", msgType)
+	}
+}
+
+// isEnvelopeRoot reports whether root is a §6 envelope signing root learnt from a proposed Gloas
+// self-build value (see SaveRoots).
+func (ncv *CommitteeObserver) isEnvelopeRoot(root phase0.Root) bool {
+	return ncv.envelopeRoots != nil && ncv.envelopeRoots.Has(root)
 }
 
 type validatorIndexAndRoot struct {
@@ -491,9 +534,46 @@ func (ncv *CommitteeObserver) SaveRoots(ctx context.Context, msg *queue.SSVMessa
 		// cache the roots for this consensus data and height
 		ncv.aggregatorCommitteeRoots.Set(aggCacheKey, struct{}{}, ttlcache.DefaultTTL)
 		return nil
+	case spectypes.RoleProposer:
+		// At a Gloas slot a self-build proposal's post-consensus packet also carries the §6 envelope
+		// root; learn it from the proposed value so its quorum is not counted as the proposal's.
+		if !ncv.beaconConfig.IsGloasAtSlot(phase0.Slot(qbftMsg.Height)) || ncv.envelopeRoots == nil {
+			return nil
+		}
+		return ncv.saveEnvelopeRoot(ctx, epoch, msg.SignedSSVMessage.FullData)
 	default:
 		return nil
 	}
+}
+
+// saveEnvelopeRoot records the §6 envelope signing root a proposed Gloas value commits to, when its bid
+// is self-build (SIP #94 §6).
+func (ncv *CommitteeObserver) saveEnvelopeRoot(ctx context.Context, epoch phase0.Epoch, fullData []byte) error {
+	consData := &spectypes.ProposerConsensusData{}
+	if err := consData.Decode(fullData); err != nil {
+		return fmt.Errorf("decode proposer consensus data from proposal: %w", err)
+	}
+	proposalData, err := gloas.DecodeGloasProposalData(consData.DataSSZ)
+	if err != nil {
+		return fmt.Errorf("decode gloas proposal data from proposal: %w", err)
+	}
+	if !proposalData.SelfBuild() {
+		return nil
+	}
+	envelope, err := proposalData.DeriveBlindedEnvelope()
+	if err != nil {
+		return fmt.Errorf("derive blinded envelope: %w", err)
+	}
+	domain, err := ncv.domainCache.Get(ctx, epoch, phase0.DomainType(spectypes.DomainBeaconBuilder))
+	if err != nil {
+		return fmt.Errorf("get beacon builder domain: %w", err)
+	}
+	root, err := spectypes.ComputeETHSigningRoot(envelope, domain)
+	if err != nil {
+		return fmt.Errorf("compute envelope signing root: %w", err)
+	}
+	ncv.envelopeRoots.Set(root, struct{}{}, ttlcache.DefaultTTL)
+	return nil
 }
 
 func (ncv *CommitteeObserver) saveAttesterRoots(ctx context.Context, epoch phase0.Epoch, beaconVote *spectypes.BeaconVote, gloasIndex *phase0.CommitteeIndex, qbftMsg *specqbft.Message) error {

@@ -24,6 +24,8 @@ func TestBeaconRoleFromString(t *testing.T) {
 		{name: "sync committee contribution", input: "SYNC_COMMITTEE_CONTRIBUTION", expected: spectypes.BNRoleSyncCommitteeContribution},
 		{name: "validator registration", input: "VALIDATOR_REGISTRATION", expected: spectypes.BNRoleValidatorRegistration},
 		{name: "voluntary exit", input: "VOLUNTARY_EXIT", expected: spectypes.BNRoleVoluntaryExit},
+		{name: "ptc attester", input: "PTC_ATTESTER", expected: spectypes.BNRolePTCAttester},
+		{name: "proposer preferences", input: "PROPOSER_PREFERENCES", expected: spectypes.BNRoleProposerPreferences},
 		{name: "unknown role errors", input: "COMMITTEE", hasError: true},
 		{name: "empty string errors", input: "", hasError: true},
 	}
@@ -39,6 +41,29 @@ func TestBeaconRoleFromString(t *testing.T) {
 			assert.Equal(t, tc.expected, role)
 		})
 	}
+}
+
+// Every partial-signature type the node handles has a name, so API consumers never see a number.
+func TestPartialSigMsgTypeToString(t *testing.T) {
+	names := map[spectypes.PartialSigMsgType]string{
+		spectypes.PostConsensusPartialSig:         PartialSigPostConsensus,
+		spectypes.RandaoPartialSig:                PartialSigRandao,
+		ssvtypes.SelectionProofPartialSig:         PartialSigSelectionProof,
+		ssvtypes.ContributionProofs:               PartialSigContributionProofs,
+		spectypes.ValidatorRegistrationPartialSig: PartialSigValidatorRegistration,
+		spectypes.VoluntaryExitPartialSig:         PartialSigVoluntaryExit,
+		spectypes.AggregatorCommitteePartialSig:   PartialSigAggregatorCommittee,
+		spectypes.PTCAttesterPartialSig:           PartialSigPTCAttester,
+		spectypes.ProposerPreferencesPartialSig:   PartialSigProposerPreferences,
+		spectypes.RequestAuthPartialSig:           PartialSigRequestAuth,
+	}
+	// The duty-bound types are named after their duty's role, so the two vocabularies agree.
+	assert.Equal(t, spectypes.BNRolePTCAttester.String(), PartialSigPTCAttester)
+	assert.Equal(t, spectypes.BNRoleProposerPreferences.String(), PartialSigProposerPreferences)
+	for msgType, want := range names {
+		assert.Equal(t, want, PartialSigMsgTypeToString(msgType))
+	}
+	assert.Equal(t, "unknown(42)", PartialSigMsgTypeToString(spectypes.PartialSigMsgType(42)))
 }
 
 func TestRunnerRoleFromString(t *testing.T) {

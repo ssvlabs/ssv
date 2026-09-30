@@ -235,6 +235,8 @@ definitions:
           - PROPOSER
           - SYNC_COMMITTEE
           - SYNC_COMMITTEE_CONTRIBUTION
+          - PTC_ATTESTER
+          - PROPOSER_PREFERENCES
           type: string
         type: array
       to:
@@ -261,6 +263,10 @@ definitions:
       time:
         description: ReceivedTime is when the message was observed.
         format: date-time
+        type: string
+      type:
+        description: Type is the partial-signature message type; absent on QBFT messages.
+        example: POST_CONSENSUS
         type: string
     type: object
   exporter.ProposalTrace:
@@ -343,6 +349,10 @@ definitions:
       time:
         description: ReceivedTime is when the message was observed.
         format: date-time
+        type: string
+      type:
+        description: Type is the partial-signature message type; absent on QBFT messages.
+        example: POST_CONSENSUS
         type: string
     type: object
   exporter.TraceDecidedsResponse:
@@ -455,6 +465,8 @@ definitions:
           - PROPOSER
           - SYNC_COMMITTEE
           - SYNC_COMMITTEE_CONTRIBUTION
+          - PTC_ATTESTER
+          - PROPOSER_PREFERENCES
           type: string
         type: array
       to:
@@ -626,6 +638,8 @@ paths:
           - PROPOSER
           - SYNC_COMMITTEE
           - SYNC_COMMITTEE_CONTRIBUTION
+          - PTC_ATTESTER
+          - PROPOSER_PREFERENCES
           type: string
         name: roles
         required: true
@@ -700,6 +714,8 @@ paths:
           - PROPOSER
           - SYNC_COMMITTEE
           - SYNC_COMMITTEE_CONTRIBUTION
+          - PTC_ATTESTER
+          - PROPOSER_PREFERENCES
           type: string
         name: roles
         required: true
@@ -915,6 +931,8 @@ paths:
           - PROPOSER
           - SYNC_COMMITTEE
           - SYNC_COMMITTEE_CONTRIBUTION
+          - PTC_ATTESTER
+          - PROPOSER_PREFERENCES
           type: string
         name: roles
         required: true
@@ -997,6 +1015,8 @@ paths:
           - PROPOSER
           - SYNC_COMMITTEE
           - SYNC_COMMITTEE_CONTRIBUTION
+          - PTC_ATTESTER
+          - PROPOSER_PREFERENCES
           type: string
         name: roles
         required: true

@@ -178,6 +178,10 @@ func (c *Collector) Start(ctx context.Context, tickerProvider slotticker.Provide
 
 const slotTTL = 4
 
+// evict flushes the traces of the slot slotTTL behind currentSlot to disk. A proposer-preferences trace is
+// keyed by its proposal slot, up to two epochs ahead of its messages, so it stays in memory that long and is
+// lost to a restart in between; every other role loses at most slotTTL slots. Flushing earlier would need
+// eviction to merge the in-memory trace with the disk copy.
 func (c *Collector) evict(currentSlot phase0.Slot) {
 	// evict committee traces
 	start := time.Now()
@@ -868,17 +872,6 @@ func (c *Collector) wrapVerifyPartialSigErr(ctx partialSigVerifyCtx, pSigMessage
 }
 
 func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySig func(*spectypes.PartialSignatureMessages) error) error {
-	// The three Gloas duty types (SIP #94 §3 PTC, §5 proposer preferences, §6 payload envelope)
-	// are not traced yet — the trace store has no schema for them — so skip their messages
-	// explicitly instead of erroring per message in toBNRole now that message validation admits
-	// the roles on the wire (issue #2999). Tracing them is deliberate future exporter work.
-	switch msg.MsgID.GetRoleType() {
-	case spectypes.RolePTCAttester, spectypes.RoleProposerPreferences:
-		return nil
-	default:
-		// Other roles fall through to tracing below.
-	}
-
 	start := time.Now()
 	//nolint:gosec
 	startTime := uint64(start.UnixMilli())
@@ -1118,17 +1111,28 @@ func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 			roleDutyTrace.Validator = pSigMessages.Messages[0].ValidatorIndex
 		}
 
-		tr := &traces.PartialSigTrace{
-			Type:         pSigMessages.Type,
-			BeaconRoot:   pSigMessages.Messages[0].SigningRoot,
-			Signer:       ssvtypes.PartialSigMsgSigner(pSigMessages),
-			ReceivedTime: startTime,
-		}
-
+		// One entry per root per signer. A packet may carry several roots: the Gloas proposer's block and
+		// envelope roots (SIP #94 §4), a sync-committee contribution's subnets, a request-auth packet's
+		// builders (§5). A root the signer already has keeps its first sighting: validation admits
+		// request-auth packets that repeat recorded roots, and recording the repeats could outgrow
+		// traces.MaxPartialSigEntries.
+		signer := ssvtypes.PartialSigMsgSigner(pSigMessages)
+		entries := &roleDutyTrace.Pre
 		if pSigMessages.Type == spectypes.PostConsensusPartialSig {
-			roleDutyTrace.Post = append(roleDutyTrace.Post, tr)
-		} else {
-			roleDutyTrace.Pre = append(roleDutyTrace.Pre, tr)
+			entries = &roleDutyTrace.Post
+		}
+		for _, entry := range pSigMessages.Messages {
+			if slices.ContainsFunc(*entries, func(tr *traces.PartialSigTrace) bool {
+				return tr.Type == pSigMessages.Type && tr.Signer == signer && tr.BeaconRoot == entry.SigningRoot
+			}) {
+				continue
+			}
+			*entries = append(*entries, &traces.PartialSigTrace{
+				Type:         pSigMessages.Type,
+				BeaconRoot:   entry.SigningRoot,
+				Signer:       signer,
+				ReceivedTime: startTime,
+			})
 		}
 
 		if late {
@@ -1159,6 +1163,10 @@ func toBNRole(r spectypes.RunnerRole) (bnRole spectypes.BeaconRole, err error) {
 		bnRole = spectypes.BNRoleValidatorRegistration
 	case spectypes.RoleVoluntaryExit:
 		bnRole = spectypes.BNRoleVoluntaryExit
+	case spectypes.RolePTCAttester:
+		bnRole = spectypes.BNRolePTCAttester
+	case spectypes.RoleProposerPreferences:
+		bnRole = spectypes.BNRoleProposerPreferences
 	default:
 		return spectypes.BNRoleUnknown, fmt.Errorf("unexpected runner role %d", r)
 	}
@@ -1717,10 +1725,11 @@ func (c *Collector) startScheduleFiller(ctx context.Context, tickerProvider slot
 	}
 }
 
-// computeAndPersistScheduleForSlot builds a per-slot role mask map from dutystore
-// for (ATTESTER, PROPOSER, SYNC_COMMITTEE). Idempotent and best-effort.
+// computeAndPersistScheduleForSlot builds the slot's per-validator role masks from the duty store and
+// persists them. Idempotent and best-effort.
 func (c *Collector) computeAndPersistScheduleForSlot(slot phase0.Slot) error {
 	epoch := c.beacon.EstimatedEpochAtSlot(slot)
+	isGloas := c.beacon.IsGloasAtSlot(slot)
 	schedule := make(map[phase0.ValidatorIndex]rolemask.Mask)
 
 	// Attester indices for this slot (InCommittee only)
@@ -1733,10 +1742,22 @@ func (c *Collector) computeAndPersistScheduleForSlot(slot phase0.Slot) error {
 		}
 	}
 
-	// Proposer indices for this slot
+	// Proposer indices for this slot. At Gloas slots each proposer also has the slot's preferences duty,
+	// broadcast ahead but recorded under the proposal slot (SIP #94 §5).
 	if c.duties.Proposer != nil {
+		bits := rolemask.BitProposer
+		if isGloas {
+			bits |= rolemask.BitProposerPreferences
+		}
 		for _, idx := range c.duties.Proposer.SlotIndices(epoch, slot) {
-			schedule[idx] |= rolemask.BitProposer
+			schedule[idx] |= bits
+		}
+	}
+
+	// PTC members for this slot (SIP #94 §3)
+	if isGloas && c.duties.PTC != nil {
+		for _, idx := range c.duties.PTC.SlotIndices(epoch, slot) {
+			schedule[idx] |= rolemask.BitPTCAttester
 		}
 	}
 
