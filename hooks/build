@@ -20,7 +20,7 @@ echo "  Commit: ${COMMIT}"
 echo "  Version: ${APP_VERSION}"
 
 docker buildx rm ssv-multiplatform-builder 2>/dev/null || true
-docker buildx create --name ssv-multiplatform-builder --driver docker-container --driver-opt image=moby/buildkit:v0.31.2 --use
+docker buildx create --name ssv-multiplatform-builder --driver docker-container --driver-opt image=moby/buildkit:v0.30.0 --use
 
 docker buildx build \
   --platform linux/amd64,linux/arm64 \
