@@ -46,7 +46,10 @@ const boolePriorWindowEpochs = phase0.Epoch(1) // epochs before Boole to subscri
 // long or those messages are dropped by the subscription filter before validation ever sees them.
 const booleSubsequentWindowLateSlots = phase0.Slot(2)
 
-const gloasPriorWindowEpochs = phase0.Epoch(1) // MIN_SEED_LOOKAHEAD: epochs before Gloas to pre-emit proposer preferences
+// MinSeedLookahead is the consensus specs' MIN_SEED_LOOKAHEAD, 1 in every preset: how many epochs past the
+// current one the proposer lookahead reaches. Gloas proposer preferences are broadcast across that lookahead
+// (SIP #94 §5), so it also sets their pre-fork emission window and how early §7 accepts them.
+const MinSeedLookahead = 1
 
 // StorageName returns a config name used to make sure the stored network doesn't differ.
 // It combines the network name with the storage-compatibility token.
@@ -186,8 +189,8 @@ func (n Network) InGloasPriorWindow(slot phase0.Slot) bool {
 		return false
 	}
 	priorWindowStart := phase0.Epoch(0)
-	if gloasPriorWindowEpochs <= gloasEpoch {
-		priorWindowStart = gloasEpoch - gloasPriorWindowEpochs
+	if MinSeedLookahead <= gloasEpoch {
+		priorWindowStart = gloasEpoch - MinSeedLookahead
 	}
 	epoch := n.EstimatedEpochAtSlot(slot)
 	return epoch >= priorWindowStart && epoch < gloasEpoch
