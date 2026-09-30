@@ -55,6 +55,11 @@
       "groupName": "go-ethereum"
     },
     {
+      "description": "Signing and slashing protection; keep separate so it can be reviewed alone",
+      "matchPackageNames": ["github.com/ssvlabs/eth2-key-manager"],
+      "groupName": "eth2-key-manager"
+    },
+    {
       "matchPackageNames": ["github.com/libp2p/**", "github.com/multiformats/**", "github.com/quic-go/**"],
       "groupName": "libp2p stack"
     },
