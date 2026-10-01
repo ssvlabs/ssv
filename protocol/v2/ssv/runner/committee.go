@@ -588,8 +588,6 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 
 	// Recoverable reconstruct failures are discriminated by the recoverableReconstructError tag rather
 	// than by a spec error code — the tag also covers the uncoded BLS Deserialize/Recover failures.
-	// The sibling AggregatorCommitteeRunner instead classifies by the PostConsensusQuorumWithInvalidSignatures
-	// code; the divergence is deliberate (tagging with that code there breaks its spectest fixtures).
 	var recoverableErr, terminalErr error
 	// classify is the single source of truth for the terminal/recoverable split, shared by the listener
 	// receive site and the post-listener drain so the two can never drift apart. Recoverable failures
