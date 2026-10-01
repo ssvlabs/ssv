@@ -170,6 +170,8 @@ github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 h1:Jamvg5psRI
 github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/power-devops/perfstat v0.0.0-20210106213030-5aafc221ea8c h1:ncq/mPwQF4JjgDlrVEn3C11VoGHZN7m8qihwgMEtzYw=
 github.com/power-devops/perfstat v0.0.0-20210106213030-5aafc221ea8c/go.mod h1:OmDBASR4679mdNQnz2pUhc2G8CO2JrUAVFDRBDP/hJE=
+github.com/prysmaticlabs/go-bitfield v0.0.0-20240618144021-706c95b2dd15 h1:lC8kiphgdOBTcbTvo8MwkvpKjO0SlAgjv4xIK5FGJ94=
+github.com/prysmaticlabs/go-bitfield v0.0.0-20240618144021-706c95b2dd15/go.mod h1:8svFBIKKu31YriBG/pNizo9N0Jr9i5PQ+dFkxWg3x5k=
 github.com/prysmaticlabs/gohashtree v0.0.4-beta h1:H/EbCuXPeTV3lpKeXGPpEV9gsUpkqOOVnWapUyeWro4=
 github.com/prysmaticlabs/gohashtree v0.0.4-beta/go.mod h1:BFdtALS+Ffhg3lGQIHv9HDWuHS8cTvHZzrHWxwOtGOs=
 github.com/rogpeppe/go-internal v1.14.1 h1:UQB4HGPB6osV0SQTLymcB4TgvyWu6ZyliaW0tI/otEQ=
@@ -186,8 +188,8 @@ github.com/ssvlabs/eth2-key-manager v1.5.7-0.20260901124029-39a18877e131 h1:qafg
 github.com/ssvlabs/eth2-key-manager v1.5.7-0.20260901124029-39a18877e131/go.mod h1:tjzhmMzrc0Lzc/OMW1h9Mz8AhmKH7FQC/nFiMNJ0bd8=
 github.com/ssvlabs/go-eth2-client v0.6.31-0.20260831132123-66dd18fc8288 h1:OTiNcXOCVXpTNTR0x5IVnzYgXNUZzAQ8oC94KOMFkOg=
 github.com/ssvlabs/go-eth2-client v0.6.31-0.20260831132123-66dd18fc8288/go.mod h1:yhVnKAzIsFhtawbq6k/rA/Dy4vsPpu2Z2cGdQVrIjd0=
-github.com/ssvlabs/ssv-spec v1.2.3-0.20260924161701-0c82ee096544 h1:R3IaYBAWnuyImBScok23hqUaofQAwoTiErm0jXMH+RQ=
-github.com/ssvlabs/ssv-spec v1.2.3-0.20260924161701-0c82ee096544/go.mod h1:/fb7Okhw5vhldMlMhcXePMSgyBn6uCICqp5L3RtLcLw=
+github.com/ssvlabs/ssv-spec v1.2.3-0.20261001080614-d73e1b140949 h1:j+Vq0QOyRidnQscoQzGNWWGW8ML9C4jHe2YipvT11KQ=
+github.com/ssvlabs/ssv-spec v1.2.3-0.20261001080614-d73e1b140949/go.mod h1:GedhFYGHVJRYYH3nEp05Gn14tyvg6VbTbaIxrMtI7Cg=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
 github.com/stretchr/objx v0.5.2 h1:xuMeJ0Sdp5ZMRXx/aWO6RZxdr3beISkG5/G/aIRr3pY=
 github.com/stretchr/objx v0.5.2/go.mod h1:FRsXN1f5AsAjCGJKqEizvkpNtU+EGNCLh3NxZ/8L+MA=
