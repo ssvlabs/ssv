@@ -134,6 +134,16 @@ func aggregatorPostConsensusMsgs(keySet *spectestingutils.TestKeySet, version sp
 	return msgs
 }
 
+// testingAggregatorDuty returns the aggregator duty the PostConsensusAggregatorMsg fixtures sign for.
+func testingAggregatorDuty(version spec.DataVersion) *spectypes.ValidatorDuty {
+	return &spectypes.ValidatorDuty{
+		Type:           spectypes.BNRoleAggregator,
+		PubKey:         spectestingutils.TestingValidatorPubKey,
+		Slot:           spectestingutils.TestingDutySlotV(version),
+		ValidatorIndex: spectestingutils.TestingValidatorIndex,
+	}
+}
+
 // TestAggregatorRunnerProcessPostConsensus_MarksFailedOnSubmitError asserts that a beacon submit
 // failure (a terminal post-quorum error) concludes the duty as failed for the legacy AggregatorRunner
 // — the counterpart of the AggregatorCommitteeRunner and CommitteeRunner regressions already covered.
@@ -146,12 +156,7 @@ func TestAggregatorRunnerProcessPostConsensus_MarksFailedOnSubmitError(t *testin
 	faulty := &faultyAggregateSubmitBeacon{BeaconNodeWrapped: base, submitErr: submitErr}
 
 	env := newAggregatorRunnerEnv(t, faulty)
-	duty := &spectypes.ValidatorDuty{
-		Type:           spectypes.BNRoleAggregator,
-		PubKey:         spectestingutils.TestingValidatorPubKey,
-		Slot:           spectestingutils.TestingDutySlotV(version),
-		ValidatorIndex: spectestingutils.TestingValidatorIndex,
-	}
+	duty := testingAggregatorDuty(version)
 
 	concluded, err := env.startAndDecideAggregatorDuty(t, ctx, duty, version)
 	require.NoError(t, err)
@@ -182,12 +187,7 @@ func TestAggregatorRunnerProcessConsensus_NotesFailureAfterDecision(t *testing.T
 
 	env := newAggregatorRunnerEnv(t, protocoltesting.NewTestingBeaconNodeWrapped())
 	env.runner.signer = failingDomainSigner{BeaconSigner: env.runner.signer, domain: spectypes.DomainAggregateAndProof}
-	duty := &spectypes.ValidatorDuty{
-		Type:           spectypes.BNRoleAggregator,
-		PubKey:         spectestingutils.TestingValidatorPubKey,
-		Slot:           spectestingutils.TestingDutySlotV(version),
-		ValidatorIndex: spectestingutils.TestingValidatorIndex,
-	}
+	duty := testingAggregatorDuty(version)
 
 	concluded, err := env.startAndDecideAggregatorDuty(t, t.Context(), duty, version)
 	require.ErrorContains(t, err, "signing failed")
@@ -204,12 +204,7 @@ func TestAggregatorRunnerProcessPostConsensus_DoesNotMarkFailedOnInvalidSigs(t *
 
 	base := protocoltesting.NewTestingBeaconNodeWrapped().(*protocoltesting.BeaconNodeWrapped)
 	env := newAggregatorRunnerEnv(t, base)
-	duty := &spectypes.ValidatorDuty{
-		Type:           spectypes.BNRoleAggregator,
-		PubKey:         spectestingutils.TestingValidatorPubKey,
-		Slot:           spectestingutils.TestingDutySlotV(version),
-		ValidatorIndex: spectestingutils.TestingValidatorIndex,
-	}
+	duty := testingAggregatorDuty(version)
 
 	concluded, err := env.startAndDecideAggregatorDuty(t, ctx, duty, version)
 	require.NoError(t, err)
@@ -233,4 +228,78 @@ func TestAggregatorRunnerProcessPostConsensus_DoesNotMarkFailedOnInvalidSigs(t *
 
 	require.Empty(t, concluded, "a recoverable invalid-sigs error must NOT conclude the duty")
 	require.False(t, env.runner.State.Succeeded)
+}
+
+// TestAggregatorRunnerProcessPostConsensus_RecoverableInvalidSigsThenSucceeds completes
+// TestAggregatorRunnerProcessPostConsensus_DoesNotMarkFailedOnInvalidSigs with the retry half: once the
+// offending signer is dropped and the root falls back below quorum, a later valid partial signature
+// re-crosses quorum and the duty concludes succeeded. Mirrors the CommitteeRunner and
+// AggregatorCommitteeRunner tests of the same name.
+func TestAggregatorRunnerProcessPostConsensus_RecoverableInvalidSigsThenSucceeds(t *testing.T) {
+	ctx := t.Context()
+	const version = spec.DataVersionPhase0
+
+	base := protocoltesting.NewTestingBeaconNodeWrapped().(*protocoltesting.BeaconNodeWrapped)
+	env := newAggregatorRunnerEnv(t, base)
+	duty := testingAggregatorDuty(version)
+
+	concluded, err := env.startAndDecideAggregatorDuty(t, ctx, duty, version)
+	require.NoError(t, err)
+
+	// Signers 1 and 2 send valid post-consensus partial sigs; signer 3 sends a non-deserializable one.
+	// Post-consensus validation only checks message structure (not the beacon sig), so all three enter
+	// the container and cross quorum optimistically — then ReconstructBeaconSig fails on the garbage
+	// sig, FallBackAndVerifyEachSignature drops only signer 3, and the root falls back below quorum.
+	for _, signer := range []spectypes.OperatorID{1, 2} {
+		msg := spectestingutils.PostConsensusAggregatorMsg(env.keySet.Shares[signer], signer, version)
+		require.NoError(t, env.runner.ProcessPostConsensus(ctx, env.logger, msg))
+	}
+
+	badMsg := spectestingutils.PostConsensusAggregatorMsg(env.keySet.Shares[3], 3, version)
+	for _, m := range badMsg.Messages {
+		m.PartialSignature = bytes.Repeat([]byte{0xEE}, len(m.PartialSignature))
+	}
+	recoverableErr := env.runner.ProcessPostConsensus(ctx, env.logger, badMsg)
+	require.Error(t, recoverableErr, "a quorum with invalid signatures should surface an error")
+	require.True(t, isRecoverableReconstructError(recoverableErr))
+
+	require.Empty(t, concluded, "a recoverable invalid-sigs error must NOT conclude the duty")
+	require.False(t, env.runner.State.Succeeded)
+	require.Empty(t, base.GetBroadcastedRoots(), "nothing should have been submitted yet")
+
+	// A subsequent valid partial signature from signer 4 re-crosses quorum with three good sigs
+	// (1, 2, 4) → reconstruction succeeds → the duty submits and concludes succeeded.
+	msg4 := spectestingutils.PostConsensusAggregatorMsg(env.keySet.Shares[4], 4, version)
+	require.NoError(t, env.runner.ProcessPostConsensus(ctx, env.logger, msg4))
+
+	require.True(t, env.runner.State.Succeeded, "a valid quorum after recovery must conclude succeeded")
+	require.Len(t, base.GetBroadcastedRoots(), 1)
+	requireConcluded(t, concluded, dutyOutcomeSucceeded)
+}
+
+// A reconstruction that fails with no bad share to drop can't be fixed by more shares, so it concludes the duty
+// failed with the reason, rather than leaving it to surface as stuck at the slot's end.
+func TestAggregatorRunnerProcessPostConsensus_MarksFailedWhenNoShareToDrop(t *testing.T) {
+	ctx := t.Context()
+	const version = spec.DataVersionPhase0
+
+	base := protocoltesting.NewTestingBeaconNodeWrapped().(*protocoltesting.BeaconNodeWrapped)
+	env := newAggregatorRunnerEnv(t, base)
+	duty := testingAggregatorDuty(version)
+
+	concluded, err := env.startAndDecideAggregatorDuty(t, ctx, duty, version)
+	require.NoError(t, err)
+	env.runner.Share[duty.ValidatorIndex] = withUnrelatedValidatorKey(env.runner.Share[duty.ValidatorIndex])
+
+	var postConsensusErr error
+	for _, psig := range aggregatorPostConsensusMsgs(env.keySet, version) {
+		if err := env.runner.ProcessPostConsensus(ctx, env.logger, psig); err != nil {
+			postConsensusErr = err
+		}
+	}
+
+	require.ErrorContains(t, postConsensusErr, "invalid signatures")
+	require.False(t, isRecoverableReconstructError(postConsensusErr))
+	requireConcluded(t, concluded, dutyOutcomeFailed)
+	require.Empty(t, base.GetBroadcastedRoots())
 }

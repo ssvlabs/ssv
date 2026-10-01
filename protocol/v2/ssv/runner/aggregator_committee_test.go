@@ -265,6 +265,8 @@ func TestAggregatorCommitteeRunnerProcessPostConsensus_DoesNotMarkFailedOnInvali
 	require.ErrorAs(t, postConsensusErr, &specErr)
 	require.Equal(t, spectypes.PostConsensusQuorumWithInvalidSignatures, specErr.Code,
 		"invalid-sigs must carry the recoverable spec code")
+	require.True(t, isRecoverableReconstructError(postConsensusErr),
+		"the spec code must not hide the recoverableReconstructError tag")
 
 	require.Empty(t, concluded, "a recoverable invalid-sigs error must NOT conclude the duty")
 	require.False(t, env.runner.State.Succeeded)
@@ -314,6 +316,8 @@ func TestAggregatorCommitteeRunnerProcessPostConsensus_RecoverableInvalidSigsThe
 	require.ErrorAs(t, recoverableErr, &specErr)
 	require.Equal(t, spectypes.PostConsensusQuorumWithInvalidSignatures, specErr.Code,
 		"invalid-sigs must carry the recoverable spec code")
+	require.True(t, isRecoverableReconstructError(recoverableErr),
+		"the spec code must not hide the recoverableReconstructError tag")
 
 	// The recoverable case must NOT conclude the duty: nothing has been sent on the conclusion channel.
 	require.Empty(t, concluded, "a recoverable invalid-sigs error must NOT conclude the duty")
@@ -359,6 +363,7 @@ func TestAggregatorCommitteeRunnerProcessPostConsensus_MarksFailedWhenNoShareToD
 	var specErr *spectypes.Error
 	require.False(t, errors.As(postConsensusErr, &specErr) && specErr.Code == spectypes.PostConsensusQuorumWithInvalidSignatures,
 		"a terminal failure must not carry the recoverable spec code")
+	require.False(t, isRecoverableReconstructError(postConsensusErr))
 	requireConcluded(t, concluded, dutyOutcomeFailed)
 	require.Empty(t, base.GetBroadcastedRoots())
 }

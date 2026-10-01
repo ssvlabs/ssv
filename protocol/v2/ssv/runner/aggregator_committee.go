@@ -891,21 +891,16 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 		return bytes.Compare(roots[i][:], roots[j][:]) < 0
 	})
 
-	// Unlike the sibling CommitteeRunner (which tags recoverable reconstruct failures with the
-	// recoverableReconstructError sentinel), this runner classifies them by the
-	// PostConsensusQuorumWithInvalidSignatures spec code: every recoverable reconstruct error is wrapped
-	// with that code at the push site below, so there is no uncoded-BLS blind spot here, and tagging
-	// instead would break this runner's spectest fixtures. The divergence is deliberate — see the
-	// reciprocal note in committee.go. A single last-write-wins error made terminal-vs-recoverable
-	// classification depend on goroutine/root ordering; splitting keeps it deterministic (terminal wins).
+	// Recoverable reconstruct failures are discriminated by the recoverableReconstructError tag rather
+	// than by a spec error code — the tag also covers the uncoded BLS Deserialize/Recover failures.
+	// A single last-write-wins error made terminal-vs-recoverable classification depend on
+	// goroutine/root ordering; splitting keeps it deterministic (terminal wins).
 	var terminalErr, recoverableErr error
 	// classify is the single source of truth for the terminal/recoverable split, shared by the listener
-	// receive site and the post-listener drain so the two can never drift apart. The reconstruct
-	// goroutine wraps a recoverable failure with the PostConsensusQuorumWithInvalidSignatures code;
-	// anything arriving without that code is terminal.
+	// receive site and the post-listener drain so the two can never drift apart. Recoverable failures
+	// carry the recoverableReconstructError tag; anything arriving without it is treated as terminal.
 	classify := func(err error) {
-		var specErr *spectypes.Error
-		if errors.As(err, &specErr) && specErr.Code == spectypes.PostConsensusQuorumWithInvalidSignatures {
+		if isRecoverableReconstructError(err) {
 			recoverableErr = err
 		} else {
 			terminalErr = err
@@ -1001,10 +996,9 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 					span.AddEvent(eventMsg)
 					vlogger.Error(eventMsg, zap.Bool("recoverable", isRecoverableReconstructError(err)), zap.Error(err))
 
-					// classify reads recoverability from this spec code, not the tag, so only a recoverable failure
-					// carries it.
+					// Only a recoverable failure reports this spec code; withCode keeps its tag reachable for classify.
 					if isRecoverableReconstructError(err) {
-						err = spectypes.WrapError(spectypes.PostConsensusQuorumWithInvalidSignatures, err)
+						err = withCode(spectypes.PostConsensusQuorumWithInvalidSignatures, err)
 					}
 					errCh <- err
 					return
