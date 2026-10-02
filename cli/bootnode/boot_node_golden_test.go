@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -42,6 +44,23 @@ func Test_config_envNames_golden(t *testing.T) {
 
 	assertDescribeGolden(t, filepath.Join("testdata", "envnames.golden.json"), &c,
 		func(d globalcfg.FieldDoc) string { return d.EnvName })
+}
+
+// Test_config_envNames_matchCleanenv checks that the names the goldens pin are the names cleanenv
+// reads. Describe works the names out on its own, and it differs from cleanenv in two ways no field
+// hits today: it only recurses into nested structs that carry a yaml tag, and it treats an
+// `env:"A,B"` alias list as one name.
+func Test_config_envNames_matchCleanenv(t *testing.T) {
+	var c config
+	c.ApplyDefaults()
+
+	var described []string
+	for _, d := range globalcfg.Describe(&c) {
+		if d.EnvName != "" {
+			described = append(described, d.EnvName)
+		}
+	}
+	assert.ElementsMatch(t, cleanenvEnvNames(t, &c), described)
 }
 
 // Test_config_fields_wellFormed checks two invariants the goldens don't: no two fields share an env
@@ -91,4 +110,24 @@ func assertDescribeGolden(t *testing.T, goldenPath string, cfg any, column func(
 	want, err := os.ReadFile(goldenPath)
 	require.NoError(t, err, "missing golden file; regenerate with UPDATE_GOLDEN=1")
 	require.JSONEq(t, string(want), string(data))
+}
+
+// cleanenvEnvNames lists the env vars cleanenv reads for cfg. cleanenv doesn't export its field
+// metadata, so the names are parsed out of its help text, where each variable is a two-space
+// indented "NAME kind" line.
+func cleanenvEnvNames(t *testing.T, cfg any) []string {
+	t.Helper()
+
+	header := ""
+	help, err := cleanenv.GetDescription(cfg, &header)
+	require.NoError(t, err)
+
+	var names []string
+	for _, line := range strings.Split(help, "\n") {
+		if strings.HasPrefix(line, "  ") && !strings.HasPrefix(line, "   ") {
+			names = append(names, strings.Fields(line)[0])
+		}
+	}
+	require.NotEmpty(t, names)
+	return names
 }
