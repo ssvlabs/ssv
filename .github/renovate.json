@@ -1,15 +1,89 @@
 {
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
     "github>ssvlabs/shared-configs//renovate/renovate.json"
   ],
-  "baseBranches": ["stage"],
+  "baseBranchPatterns": ["stage"],
+  "schedule": ["before 6am on monday"],
+  "prConcurrentLimit": 5,
+  "vulnerabilityAlerts": {
+    "addLabels": ["security"]
+  },
   "packageRules": [
     {
       "matchManagers": ["gomod"],
-      "postUpdateOptions": [
-        "gomodTidy",
-        "gomodUpdateImportPaths"
-      ]
+      "postUpdateOptions": ["gomodTidy", "gomodUpdateImportPaths"]
+    },
+    {
+      "description": "Own modules are wired via replace directives, so version bumps are no-ops",
+      "matchPackageNames": ["github.com/ssvlabs/ssv", "github.com/ssvlabs/ssv/**"],
+      "enabled": false
+    },
+    {
+      "description": "ssv-spec is pinned to feature branches on purpose and bumped manually",
+      "matchPackageNames": ["github.com/ssvlabs/ssv-spec"],
+      "enabled": false
+    },
+    {
+      "description": "go-bitfield (now github.com/OffchainLabs); bump together with the go-eth2-client fork",
+      "matchPackageNames": ["github.com/OffchainLabs/go-bitfield"],
+      "enabled": false
+    },
+    {
+      "description": "Held by replace directives in go.mod, so a require bump is a no-op and a replace bump breaks the pin; bump by hand",
+      "matchPackageNames": [
+        "github.com/google/flatbuffers",
+        "github.com/dgraph-io/ristretto",
+        "github.com/attestantio/go-eth2-client",
+        "github.com/ssvlabs/go-eth2-client"
+      ],
+      "enabled": false
+    },
+    {
+      "description": "gddo is archived; to be removed rather than bumped",
+      "matchPackageNames": ["github.com/golang/gddo"],
+      "enabled": false
+    },
+    {
+      "matchManagers": ["gomod"],
+      "matchUpdateTypes": ["minor", "patch", "digest"],
+      "groupName": "go modules (non-major)"
+    },
+    {
+      "description": "Wide surface (eth, discovery, p2p); keep separate so it can be soaked alone",
+      "matchPackageNames": ["github.com/ethereum/go-ethereum"],
+      "groupName": "go-ethereum"
+    },
+    {
+      "description": "Signing and slashing protection; keep separate so it can be reviewed alone",
+      "matchPackageNames": ["github.com/ssvlabs/eth2-key-manager"],
+      "groupName": "eth2-key-manager"
+    },
+    {
+      "matchPackageNames": ["github.com/libp2p/**", "github.com/multiformats/**", "github.com/quic-go/**"],
+      "groupName": "libp2p stack"
+    },
+    {
+      "matchManagers": ["github-actions"],
+      "groupName": "github actions"
+    },
+    {
+      "description": "Base-image refreshes only; a Go minor bump arrives on its own so it can move with go.mod",
+      "matchManagers": ["dockerfile"],
+      "matchUpdateTypes": ["patch", "digest", "pinDigest"],
+      "groupName": "docker base images"
+    },
+    {
+      "description": "A Go minor bump also needs the go directive bumped, which Renovate leaves alone",
+      "matchManagers": ["dockerfile"],
+      "matchPackageNames": ["golang"],
+      "matchUpdateTypes": ["major", "minor"],
+      "prBodyNotes": ["Before merging, bump the `go` directive in `go.mod`, `ssvsigner/go.mod` and `scripts/differ/go.mod` to this Go minor on this branch. CI installs Go from `go.mod`, so without it the images ship a Go version CI never ran."]
+    },
+    {
+      "description": "differ UI is a dev-only tool, not shipped",
+      "matchFileNames": ["scripts/differ/ui/**"],
+      "groupName": "differ ui (npm)"
     }
   ]
 }
