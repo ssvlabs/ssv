@@ -360,7 +360,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(ctx context.Context
 		span.AddEvent("reconstructing beacon signature", trace.WithAttributes(observability.BeaconBlockRootAttribute(root)))
 		sig, err := r.reconstructQuorumSig(r.State.PostConsensusContainer, root, r.GetShare(), "post-consensus")
 		if err != nil {
-			if err = withCode(spectypes.PostConsensusQuorumWithInvalidSignatures, err); isRecoverableReconstructError(err) {
+			if isRecoverableReconstructError(err) {
 				recoverableErr = err
 			} else {
 				terminalErr = err
