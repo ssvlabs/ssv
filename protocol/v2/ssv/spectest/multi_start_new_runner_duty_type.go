@@ -46,8 +46,7 @@ func (test *StartNewRunnerDutySpecTest) overrideStateComparison(t *testing.T) {
 
 func (test *StartNewRunnerDutySpecTest) RunAsPartOfMultiTest(t *testing.T, logger *zap.Logger) {
 	err := test.runPreTesting(logger)
-	actualErr := adjustActualErrorForRunner(adjustActualError(err), test.Runner)
-	spectests.AssertErrorCode(t, adjustExpectedErrorCode(test.ExpectedErrorCode), actualErr)
+	spectests.AssertErrorCode(t, adjustExpectedErrorCode(test.ExpectedErrorCode), err)
 
 	// test output message
 	broadcastedSignedMsgs := test.Runner.GetNetwork().(*protocoltesting.TestingNetwork).BroadcastedMsgs

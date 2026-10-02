@@ -54,7 +54,7 @@ func (test *CommitteeSpecTest) FullName() string {
 func (test *CommitteeSpecTest) RunAsPartOfMultiTest(t *testing.T) {
 	logger := log.TestLogger(t)
 	lastErr := test.runPreTesting(logger)
-	spectests.AssertErrorCode(t, adjustExpectedErrorCode(test.ExpectedErrorCode), adjustActualError(lastErr))
+	spectests.AssertErrorCode(t, adjustExpectedErrorCode(test.ExpectedErrorCode), lastErr)
 
 	broadcastedMsgs, broadcastedRoots := collectCommitteeBroadcasts(test.Committee)
 
