@@ -21,7 +21,7 @@ import (
 //
 // Regenerate intentionally with:
 //
-//	UPDATE_GOLDEN=1 go test ./cli/bootnode -run Test_config_defaults_golden
+//	UPDATE_GOLDEN=1 go test ./cli/bootnode -run _golden
 func Test_config_defaults_golden(t *testing.T) {
 	var c config
 	c.ApplyDefaults()
@@ -35,9 +35,12 @@ func Test_config_defaults_golden(t *testing.T) {
 // reads the name back from the tag would read the typo too. With the names in a reviewed file, any
 // change shows up as a golden diff.
 //
+// It guards existing names only: a typo in a new field's tag goes into the golden with the regen, so
+// the golden diff is where it has to be caught.
+//
 // Regenerate intentionally, only when an env var is deliberately added or renamed, with:
 //
-//	UPDATE_GOLDEN=1 go test ./cli/bootnode -run Test_config_envNames_golden
+//	UPDATE_GOLDEN=1 go test ./cli/bootnode -run _golden
 func Test_config_envNames_golden(t *testing.T) {
 	var c config
 	c.ApplyDefaults()
