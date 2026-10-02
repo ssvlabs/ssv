@@ -996,11 +996,9 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 					span.AddEvent(eventMsg)
 					vlogger.Error(eventMsg, zap.Bool("recoverable", isRecoverableReconstructError(err)), zap.Error(err))
 
-					// Only a recoverable failure reports this spec code; withCode keeps its tag reachable for classify.
-					if isRecoverableReconstructError(err) {
-						err = withCode(spectypes.PostConsensusQuorumWithInvalidSignatures, err)
-					}
-					errCh <- err
+					// The spec reports every post-consensus reconstruct failure with this code; withCode keeps a
+					// recoverable one's tag reachable for classify.
+					errCh <- withCode(spectypes.PostConsensusQuorumWithInvalidSignatures, err)
 					return
 				}
 
