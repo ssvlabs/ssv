@@ -3,55 +3,27 @@
 package spectest
 
 import (
-	"encoding/hex"
 	"testing"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ssvlabs/ssv-spec/ssv/spectest/tests/runner/duties/synccommitteeaggregator"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv-spec/types/testingutils"
-	"github.com/stretchr/testify/require"
 
 	"github.com/ssvlabs/ssv/observability/log"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	ssvtesting "github.com/ssvlabs/ssv/protocol/v2/ssv/testing"
-	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 // RunSyncCommitteeAggProof runs an Alan (pre-Boole) sync committee aggregator proof vector through a
 // Validator's SyncCommitteeAggregatorRunner, the flow the node runs before the Boole fork.
 func RunSyncCommitteeAggProof(t *testing.T, test *synccommitteeaggregator.SyncCommitteeAggregatorProofSpecTest) {
-	overrideStateComparisonForSyncCommitteeAggregatorProofSpecTest(t, test, test.Name)
-
 	ks := testingutils.Testing4SharesSet()
 	logger := log.TestLogger(t)
 	v := ssvtesting.BaseValidator(logger, ks)
-	r := v.DutyRunners[ssvtypes.RoleSyncCommitteeContribution]
-	require.NotNil(t, r, "sync committee contribution runner is missing")
-	r.GetBeaconNode().(*protocoltesting.BeaconNodeWrapped).SetSyncCommitteeAggregatorRootHexes(test.ProofRootsMap)
 
-	lastErr := v.StartDuty(t.Context(), logger, alanSyncCommitteeContributionDuty(t, v.Share))
-	for _, msg := range test.Messages {
-		dmsg, err := queue.DecodeSignedSSVMessage(msg)
-		if err != nil {
-			lastErr = err
-			continue
-		}
-		err = v.ProcessMessage(t.Context(), logger, dmsg)
-		if err != nil {
-			lastErr = err
-		}
-	}
-	if test.ExpectedError != "" {
-		require.EqualError(t, lastErr, test.ExpectedError)
-	} else {
-		require.NoError(t, lastErr)
-	}
-
-	postRoot, err := r.GetStateRoot()
-	require.NoError(t, err)
-	require.EqualValues(t, test.PostDutyRunnerStateRoot, hex.EncodeToString(postRoot[:]))
+	err := v.StartDuty(t.Context(), logger, alanSyncCommitteeContributionDuty(t, v.Share))
+	runSyncCommitteeAggProofMessages(t, logger, test, v.DutyRunners[ssvtypes.RoleSyncCommitteeContribution], err, v.ProcessMessage)
 }
 
 // alanSyncCommitteeContributionDuty returns the validator duty the Alan vectors run for share's validator.
