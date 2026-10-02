@@ -402,14 +402,14 @@ func TestAggregatorCommitteeRunnerProcessPreConsensus_NoShareToDropSkipsValidato
 }
 
 // TestAggregatorCommitteeRunnerProcessPostConsensus_TerminalWinsOverConcurrentRecoverable is the
-// regression test for the terminalErr/recoverableErr split: within a single ProcessPostConsensus
+// regression test for the terminal/recoverable split (batchErrs): within a single ProcessPostConsensus
 // call, one validator's post-consensus signatures reconstruct fine but then fail to submit (terminal,
 // set from the submit loop after the roots loop), while a second validator's signatures are corrupted
-// and reconstruct-fails recoverably (set from the errCh receive site during the roots loop). Both land in the same call, so which one is observed
-// first by the listener select is not controlled by the test. Before the split, a single
-// last-write-wins `executionErr` made the final classification depend on that arrival order; the
-// fixed code always classifies the duty failed here because terminalErr is checked first,
-// independent of goroutine/channel scheduling. We assert on the conclusion outcome, not on which
+// and reconstruct-fails recoverably (set from the errCh receive site during the roots loop). Both land
+// in the same call, so which one is observed first by the listener select is not controlled by the
+// test. Before the split, a single last-write-wins `executionErr` made the final classification depend
+// on that arrival order; the fixed code always classifies the duty failed here because a terminal
+// failure wins, independent of goroutine/channel scheduling. We assert on the conclusion outcome, not on which
 // error message ends up attached (that part is still last-write-wins by design for same-class
 // errors).
 func TestAggregatorCommitteeRunnerProcessPostConsensus_TerminalWinsOverConcurrentRecoverable(t *testing.T) {

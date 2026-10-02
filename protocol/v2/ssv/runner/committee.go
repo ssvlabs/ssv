@@ -586,19 +586,9 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 	attestationsToSubmit := make(map[phase0.ValidatorIndex]*spec.VersionedAttestation)
 	syncCommitteeMessagesToSubmit := make(map[phase0.ValidatorIndex]*altair.SyncCommitteeMessage)
 
-	// Recoverable reconstruct failures are discriminated by the recoverableReconstructError tag rather
-	// than by a spec error code — the tag also covers the uncoded BLS Deserialize/Recover failures.
-	var recoverableErr, terminalErr error
-	// classify is the single source of truth for the terminal/recoverable split, shared by the listener
-	// receive site and the post-listener drain so the two can never drift apart. Recoverable failures
-	// carry the recoverableReconstructError tag; anything arriving without it is treated as terminal.
-	classify := func(err error) {
-		if isRecoverableReconstructError(err) {
-			recoverableErr = err
-		} else {
-			terminalErr = err
-		}
-	}
+	// The listener and the post-listener drain both add errCh's reconstruct failures to errs, which tells
+	// recoverable ones apart by their recoverableReconstructError tag (see batchErrs).
+	var errs batchErrs
 
 	span.SetAttributes(observability.BeaconBlockRootCountAttribute(len(roots)))
 	// For each root that got at least one quorum, find the duties associated to it and try to submit
@@ -707,7 +697,7 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 				// isn't recorded as a failure.
 				return ctx.Err()
 			case err := <-errCh:
-				classify(err)
+				errs.add(err)
 			case signatureResult, ok := <-signatureCh:
 				if !ok {
 					break listener
@@ -715,12 +705,12 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 
 				validatorObjects, exists := beaconObjects[signatureResult.validatorIndex]
 				if !exists {
-					terminalErr = fmt.Errorf("could not find beacon object for validator index: %d", signatureResult.validatorIndex)
+					errs.terminal = fmt.Errorf("could not find beacon object for validator index: %d", signatureResult.validatorIndex)
 					continue
 				}
 				sszObject, exists := validatorObjects[root]
 				if !exists {
-					terminalErr = fmt.Errorf("could not find ssz object for root: %s", root)
+					errs.terminal = fmt.Errorf("could not find ssz object for root: %s", root)
 					continue
 				}
 
@@ -739,7 +729,7 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 					att := sszObject.(*spec.VersionedAttestation)
 					att, err = specssv.VersionedAttestationWithSignature(att, signatureResult.signature)
 					if err != nil {
-						terminalErr = fmt.Errorf("could not insert signature in versioned attestation")
+						errs.terminal = fmt.Errorf("could not insert signature in versioned attestation")
 						continue
 					}
 
@@ -756,7 +746,7 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 		for {
 			select {
 			case err := <-errCh:
-				classify(err)
+				errs.add(err)
 			default:
 				break drainErrCh
 			}
@@ -882,20 +872,13 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 		}
 	}
 
-	// A terminal error on any root wins over a recoverable one. executionErr used to be a single
-	// last-write-wins variable, so when a genuine failure and a recoverable reconstruct error happened
-	// in the same round, classification depended on goroutine/root ordering. Splitting the two keeps it
-	// deterministic — a real failure is always recorded as failed, never mislabeled as recoverable/stuck.
-	// The defer classifies both: terminalErr → markDutyFailed; recoverableErr carries its tag → excluded.
-	if terminalErr != nil {
-		return terminalErr
-	}
-	if recoverableErr != nil {
-		// Reconstruct-invalid-sigs is recoverable: FallBackAndVerifyEachSignature can drop the root
-		// below quorum, so a later partial-sig message re-crosses quorum and re-enters this loop to
-		// retry pending roots (already-submitted roots are skipped via HasSubmitted). Returned with its
-		// recoverableReconstructError tag so the defer does not record the duty as failed.
-		return recoverableErr
+	// A terminal error on any root wins over a recoverable one, and the defer records it as failed. A
+	// recoverable reconstruct failure keeps its recoverableReconstructError tag so the defer leaves the
+	// duty open: FallBackAndVerifyEachSignature can drop the root below quorum, so a later partial-sig
+	// message re-crosses quorum and re-enters this loop to retry pending roots (already-submitted roots
+	// are skipped via HasSubmitted).
+	if err := errs.err(); err != nil {
+		return err
 	}
 
 	if r.HasSubmittedAllValidatorDuties(attestationMap, committeeMap) {
