@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	globalcfg "github.com/ssvlabs/ssv/cli/config"
@@ -59,7 +60,7 @@ func Test_config_fields_wellFormed(t *testing.T) {
 			t.Errorf("env var %s is shared by %s and %s", d.EnvName, other, d.YAMLPath)
 		}
 		fieldByEnv[d.EnvName] = d.YAMLPath
-		require.NotEmpty(t, d.Description, "%s has no env-description", d.YAMLPath)
+		assert.NotEmptyf(t, d.Description, "%s has no env-description", d.YAMLPath)
 	}
 }
 
