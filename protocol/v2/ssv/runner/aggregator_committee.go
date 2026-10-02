@@ -845,7 +845,7 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 	ctx context.Context,
 	logger *zap.Logger,
 	signedMsg *spectypes.PartialSignatureMessages,
-) error {
+) (err error) {
 	// Reuse the existing span instead of generating new one to keep tracing-data lightweight.
 	span := trace.SpanFromContext(ctx)
 
@@ -859,6 +859,18 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 		return nil
 	}
 
+	// We have quorum and are committed to submitting, so this defer reports a terminal failure below as
+	// failed rather than letting it fall through to a false "stuck". The one exception is a recoverable
+	// BLS-reconstruction failure: the offending partial sig has already been dropped by the fallback, so a
+	// later message can re-cross quorum and retry — those are tagged recoverableReconstructError and must
+	// not be recorded as failed. Shutdown needs no special-casing — markDutyFailed drops a
+	// context.Canceled reason.
+	defer func() {
+		if err != nil && !isRecoverableReconstructError(err) {
+			r.markDutyFailed(err)
+		}
+	}()
+
 	r.measurements.EndPostConsensus()
 	recordPostConsensusDuration(ctx, r.measurements.PostConsensusTime(), spectypes.RoleAggregatorCommittee)
 
@@ -866,8 +878,6 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 	// Get validator-root maps for attestations and sync committees, and the root-beacon object map
 	aggregatorMap, contributionMap, beaconObjects, err := r.expectedPostConsensusRootsAndBeaconObjects(ctx)
 	if err != nil {
-		// terminal post-quorum failure → classify as failed, not stuck
-		r.markDutyFailed(err)
 		return fmt.Errorf("could not get expected post consensus roots and beacon objects: %w", err)
 	}
 	if len(beaconObjects) == 0 {
@@ -881,10 +891,8 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 		// classify as failed. The sentinel is preserved in the chain so committee_queue still drops the
 		// message and terminates the runner; ErrDutyInvariantViolation rides alongside it so the queue can
 		// tell this loud terminal apart from the benign zero-duties ones and keep the trace span red.
-		err := fmt.Errorf("no beacon objects from decided data, decided-value validation should have rejected it: %w: %w",
+		return fmt.Errorf("no beacon objects from decided data, decided-value validation should have rejected it: %w: %w",
 			ErrDutyInvariantViolation, ErrNoValidDutiesToExecute)
-		r.markDutyFailed(err)
-		return err
 	}
 
 	sort.Slice(roots, func(i, j int) bool {
@@ -1009,7 +1017,8 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 			select {
 			case <-ctx.Done():
 				// Only reachable on shutdown (ctx canceled) — the listener completes in ms and the
-				// duty deadline is ~1 epoch out — and markDutyFailed drops context.Canceled anyway.
+				// duty deadline is ~1 epoch out — and markDutyFailed (via the defer) drops
+				// context.Canceled, so shutdown isn't recorded as a failure.
 				return ctx.Err()
 			case err := <-errCh:
 				errs.add(err)
@@ -1057,10 +1066,8 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 					contributionsToSubmit[signatureResult.validatorIndex][root] = signedContrib
 
 				default:
-					// deterministic terminal invariant violation → classify as failed, not stuck
-					err := fmt.Errorf("unexpected role type in post-consensus: %v", role)
-					r.markDutyFailed(err)
-					return err
+					// deterministic terminal invariant violation → classified failed by the defer, not stuck
+					return fmt.Errorf("unexpected role type in post-consensus: %v", role)
 				}
 			}
 		}
@@ -1145,17 +1152,15 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 		}
 	}
 
-	// A terminal error on any root wins over a recoverable one. Submit/construct/missing-object failures:
-	// reconstruction already succeeded so the root keeps its quorum and is never re-reported (runner.go
-	// reports only on first quorum crossing), so the submit loop never revisits it and the duty never
-	// concludes → mark failed, not a false stuck. Reconstruct-invalid-sigs is recoverable:
+	// A terminal error on any root wins over a recoverable one, and the defer records it as failed.
+	// Submit/construct/missing-object failures: reconstruction already succeeded so the root keeps its
+	// quorum and is never re-reported (runner.go reports only on first quorum crossing), so the submit
+	// loop never revisits it and the duty never concludes → failed, not a false stuck.
+	// Reconstruct-invalid-sigs is recoverable and keeps its tag, so the defer leaves the duty open:
 	// FallBackAndVerifyEachSignature can drop the root below quorum, so a later partial-sig message
 	// re-crosses quorum and re-enters this loop to retry pending roots (already-submitted roots are
-	// skipped via HasSubmitted) → not markDutyFailed.
+	// skipped via HasSubmitted).
 	if err := errs.err(); err != nil {
-		if !isRecoverableReconstructError(err) {
-			r.markDutyFailed(err)
-		}
 		return err
 	}
 
