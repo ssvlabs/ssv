@@ -6,6 +6,7 @@
   "Graffiti": "GRAFFITI",
   "KeyStore.PasswordFile": "PASSWORD_FILE",
   "KeyStore.PrivateKeyFile": "PRIVATE_KEY_FILE",
+  "LegacyProposerRoundTimeout": "LEGACY_PROPOSER_ROUND_TIMEOUT",
   "LocalEventsPath": "EVENTS_PATH",
   "MetricsAPIPort": "METRICS_API_PORT",
   "NetworkPrivateKey": "NETWORK_PRIVATE_KEY",
