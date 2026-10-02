@@ -97,3 +97,28 @@ func isRecoverableReconstructError(err error) bool {
 	var rec recoverableReconstructError
 	return errors.As(err, &rec)
 }
+
+// batchErrs collects the failures of a batch of roots (or validators) processed in one call, keeping the
+// terminal and the recoverable ones apart, so that the call's outcome doesn't depend on the order they came
+// in: a terminal failure, which fails the duty, wins over a recoverable one, which leaves the duty open for
+// a later message to complete.
+type batchErrs struct {
+	terminal, recoverable error
+}
+
+// add records err as the batch's terminal or recoverable failure, by its recoverableReconstructError tag.
+func (e *batchErrs) add(err error) {
+	if isRecoverableReconstructError(err) {
+		e.recoverable = err
+	} else {
+		e.terminal = err
+	}
+}
+
+// err returns the batch's outcome: its terminal failure if it has one, otherwise its recoverable one.
+func (e *batchErrs) err() error {
+	if e.terminal != nil {
+		return e.terminal
+	}
+	return e.recoverable
+}

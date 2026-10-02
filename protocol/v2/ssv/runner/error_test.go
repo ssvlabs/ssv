@@ -77,8 +77,9 @@ func TestIsRecoverableReconstructError(t *testing.T) {
 	})
 
 	// Defends the tag-based design (as opposed to classifying by spec error code): an untagged error
-	// is terminal by default even when it happens to carry a spec code, including the recoverable
-	// PostConsensusQuorumWithInvalidSignatures code the AggregatorCommitteeRunner push-site uses.
+	// is terminal by default even when it happens to carry a spec code, including the
+	// PostConsensusQuorumWithInvalidSignatures code the AggregatorCommitteeRunner reports every
+	// post-consensus reconstruct failure with.
 	// Only the recoverableReconstructError wrapper — attached once FallBackAndVerifyEachSignature has
 	// run — makes an error recoverable.
 	t.Run("untagged error with an unrelated spec code stays terminal", func(t *testing.T) {
@@ -91,4 +92,36 @@ func TestIsRecoverableReconstructError(t *testing.T) {
 		require.False(t, isRecoverableReconstructError(coded),
 			"classification must key off the recoverableReconstructError tag, not the spec code")
 	})
+}
+
+// TestBatchErrs pins the outcome rule the post-consensus (and sync-committee pre-consensus) batches share: a
+// terminal failure wins over a recoverable one whichever comes first, and a recoverable one keeps its tag.
+func TestBatchErrs(t *testing.T) {
+	terminal := errors.New("terminal")
+	recoverable := withCode(spectypes.PostConsensusQuorumWithInvalidSignatures, recoverableReconstructError{errors.New("recoverable")})
+
+	t.Run("no failure", func(t *testing.T) {
+		var errs batchErrs
+		require.NoError(t, errs.err())
+	})
+
+	t.Run("recoverable only", func(t *testing.T) {
+		var errs batchErrs
+		errs.add(recoverable)
+		require.Equal(t, recoverable, errs.err())
+		require.True(t, isRecoverableReconstructError(errs.err()))
+	})
+
+	for name, order := range map[string][]error{
+		"terminal first":    {terminal, recoverable},
+		"recoverable first": {recoverable, terminal},
+	} {
+		t.Run("terminal wins, "+name, func(t *testing.T) {
+			var errs batchErrs
+			for _, err := range order {
+				errs.add(err)
+			}
+			require.Equal(t, terminal, errs.err())
+		})
+	}
 }
