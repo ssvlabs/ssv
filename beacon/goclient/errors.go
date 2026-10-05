@@ -25,6 +25,13 @@ func isNotFound(err error) bool {
 	return responseStatusCode(err) == http.StatusNotFound
 }
 
+// isMethodOrPathMissing reports whether err is a 404 or 405: the beacon node lacks the endpoint or method,
+// so produce falls back from the POST to the legacy GET.
+func isMethodOrPathMissing(err error) bool {
+	status := responseStatusCode(err)
+	return status == http.StatusNotFound || status == http.StatusMethodNotAllowed
+}
+
 // responseStatusCode returns the HTTP status of a beacon-API error response, or 0 when err carries none.
 // It reads both transports this package speaks: go-eth2-client's typed *api.Error, and the
 // *httpStatusError of the hand-rolled Gloas requests.
