@@ -1555,6 +1555,39 @@ func TestCollector_FutureSlotTraceOutlivesEarlierEvictions(t *testing.T) {
 	require.Len(t, saved.Pre, 1)
 }
 
+// The request-auth round runs ahead of the preferences and outlives a failed build, so a preferences trace
+// may hold request auth alone. Such a duty reports no participants entry, in memory or on disk, rather
+// than an empty one.
+func TestValidatorDecideds_RequestAuthOnlyPreferencesReportNothing(t *testing.T) {
+	db, err := kv.NewInMemory(zap.NewNop(), basedb.Options{})
+	require.NoError(t, err)
+	_, vstore, _ := storage.NewSharesStorage(networkconfig.TestNetwork.Beacon, db, dummyGetFeeRecipient, nil)
+	collector := New(zap.NewNop(), vstore, nil, store.New(db), networkconfig.TestNetworkWithGloas(0).Beacon, nil, nil)
+
+	const (
+		slot          = phase0.Slot(7)
+		authOnly      = phase0.ValidatorIndex(55)
+		withPrefs     = phase0.ValidatorIndex(56)
+		prefsSigner   = spectypes.OperatorID(1)
+		builderSigner = spectypes.OperatorID(2)
+	)
+	prefsID := ssvtestingutils.NewMsgID([4]byte{}, []byte("pk"), spectypes.RoleProposerPreferences)
+	require.NoError(t, collector.Collect(t.Context(), typedPartialSigMessage(prefsID, spectypes.RequestAuthPartialSig, slot, authOnly, builderSigner, phase0.Root{0xa}), dummyVerify))
+	require.NoError(t, collector.Collect(t.Context(), typedPartialSigMessage(prefsID, spectypes.RequestAuthPartialSig, slot, withPrefs, builderSigner, phase0.Root{0xb}), dummyVerify))
+	require.NoError(t, collector.Collect(t.Context(), typedPartialSigMessage(prefsID, spectypes.ProposerPreferencesPartialSig, slot, withPrefs, prefsSigner, phase0.Root{0xc}), dummyVerify))
+
+	want := []ParticipantsRangeIndexEntry{{Slot: slot, Index: withPrefs, Signers: []spectypes.OperatorID{prefsSigner}}}
+
+	inMemory, err := collector.GetValidatorDecideds(spectypes.BNRoleProposerPreferences, slot, []phase0.ValidatorIndex{authOnly, withPrefs})
+	require.NoError(t, err)
+	require.Equal(t, want, inMemory)
+
+	collector.evict(slot + slotTTL)
+	onDisk, err := collector.GetAllValidatorDecideds(spectypes.BNRoleProposerPreferences, slot)
+	require.NoError(t, err)
+	require.Equal(t, want, onDisk)
+}
+
 func TestCollector_newPartialSigVerifyCtx_EmptyMessages(t *testing.T) {
 	collector := &Collector{logger: zap.NewNop()}
 	msg := &queue.SSVMessage{

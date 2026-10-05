@@ -503,11 +503,6 @@ func (c *Controller) handleNonCommitteeMessages(
 	}
 
 	if msg.MsgType == spectypes.SSVPartialSignatureMsgType {
-		pSigMessages := &spectypes.PartialSignatureMessages{}
-		if err := pSigMessages.Decode(msg.SignedSSVMessage.SSVMessage.GetData()); err != nil {
-			return err
-		}
-
 		return ncv.ProcessMessage(msg)
 	}
 

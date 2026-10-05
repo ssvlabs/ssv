@@ -397,10 +397,17 @@ func (c *Collector) GetValidatorDecideds(role spectypes.BeaconRole, slot phase0.
 			continue
 		}
 
+		signers := validatorDutySigners(duty)
+		if len(signers) == 0 && preConsensusIsTheDuty(duty.Role) {
+			// Request auth alone: its round runs ahead of the preferences and outlives a failed build, so the
+			// operators signed builder tokens but took no part in the duty. Nothing to report.
+			continue
+		}
+
 		out = append(out, ParticipantsRangeIndexEntry{
 			Slot:    slot,
 			Index:   index,
-			Signers: validatorDutySigners(duty),
+			Signers: signers,
 		})
 	}
 
@@ -416,10 +423,15 @@ func (c *Collector) GetAllValidatorDecideds(role spectypes.BeaconRole, slot phas
 	out := make([]ParticipantsRangeIndexEntry, 0, len(duties))
 
 	for _, duty := range duties {
+		signers := validatorDutySigners(duty)
+		if len(signers) == 0 && preConsensusIsTheDuty(duty.Role) {
+			continue // request auth alone, as in GetValidatorDecideds
+		}
+
 		out = append(out, ParticipantsRangeIndexEntry{
 			Slot:    slot,
 			Index:   duty.Validator,
-			Signers: validatorDutySigners(duty),
+			Signers: signers,
 		})
 	}
 

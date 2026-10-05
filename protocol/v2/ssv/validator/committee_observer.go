@@ -306,6 +306,10 @@ type validatorIndexAndRoot struct {
 	Root           phase0.Root
 }
 
+// VerifySig records a post-consensus packet's partial signatures in the slot's container, for archive
+// mode's tracing. Despite the name, a signature is BLS-verified only when it collides with one already held
+// for the same signer and root (resolveDuplicateSignature); a new one is taken as is, message validation
+// having authenticated its sender.
 func (ncv *CommitteeObserver) VerifySig(partialMsgs *spectypes.PartialSignatureMessages) error {
 	ncv.Lock()
 	defer ncv.Unlock()

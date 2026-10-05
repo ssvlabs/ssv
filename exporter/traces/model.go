@@ -10,9 +10,11 @@ import (
 )
 
 const (
-	// MaxPartialSigEntries bounds ValidatorDutyTrace.Pre and .Post. The checks below tie it to the worst
-	// cases message validation admits on the largest committee, so a limit that outgrows it fails the
-	// build rather than leaving a trace that can't be encoded at eviction.
+	// MaxPartialSigEntries bounds ValidatorDutyTrace.Pre and .Post. The checks below hold it against the
+	// worst cases message validation admits on the largest committee, so a limit that outgrows them fails
+	// the build rather than leaving a trace that can't be encoded at eviction. The preferences budgets are
+	// validation's own constants; the committee size and the contribution packet's entry count mirror
+	// validation's unexported maxSignatures by value.
 	MaxPartialSigEntries = 256
 	// maxSigners is the largest committee.
 	maxSigners = 13
@@ -23,7 +25,7 @@ var (
 	// Request-auth packets may repeat recorded roots, so this holds because the collector records a
 	// signer's root once.
 	_ [MaxPartialSigEntries - maxSigners*(gloas.MaxProposerPreferencesDistinctRoots+gloas.MaxRequestAuthDistinctRoots)]struct{}
-	// Sync-committee contribution: up to maxSigners entries per packet, per signer.
+	// Sync-committee contribution: one packet per signer and type, of up to maxSigners entries.
 	_ [MaxPartialSigEntries - maxSigners*maxSigners]struct{}
 )
 
