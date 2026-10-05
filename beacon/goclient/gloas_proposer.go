@@ -33,7 +33,7 @@ const (
 // requestGloasBeaconBlock). It is hand-rolled because go-eth2-client's ePBS proposal call is the pre-#630
 // GET, with no typed equivalent for the POST body, the BlockContents response, or the response headers.
 func (gc *GoClient) GetGloasBeaconBlock(ctx context.Context, slot phase0.Slot, graffiti, randao []byte, builderConfig *gloas.ProduceBuilderConfig) (*gloas.ProducedBlock, error) {
-	return firstClientResultRecorded(ctx, gc, "GetGloasBeaconBlock", func(ctx context.Context, addr string, record requestRecorder) (*gloas.ProducedBlock, error) {
+	return firstClientResultWithRecorder(ctx, gc, "GetGloasBeaconBlock", func(ctx context.Context, addr string, record requestRecorder) (*gloas.ProducedBlock, error) {
 		return requestGloasBeaconBlock(ctx, addr, slot, graffiti, randao, builderConfig, record)
 	})
 }
@@ -176,11 +176,4 @@ func decodeGloasBlock(ssz []byte) (*gloas.BeaconBlock, error) {
 // the canonical one.
 func submitGloasBeaconBlock(ctx context.Context, addr string, blockSSZ []byte, extraHeaders map[string]string) error {
 	return gloasPublishSSZ(ctx, addr+gloasPublishBlockPath, blockSSZ, extraHeaders)
-}
-
-// isMethodOrPathMissing reports whether err is a 404 or 405: the beacon node lacks the endpoint or method,
-// so produce falls back from the POST to the legacy GET.
-func isMethodOrPathMissing(err error) bool {
-	status := responseStatusCode(err)
-	return status == http.StatusNotFound || status == http.StatusMethodNotAllowed
 }
