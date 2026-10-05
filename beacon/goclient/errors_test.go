@@ -11,7 +11,7 @@ import (
 )
 
 // responseStatusCode reads the status over both transports, through wrapping, and is 0 for an error
-// without one.
+// without one; isNotFound follows it.
 func TestResponseStatusCode(t *testing.T) {
 	tests := []struct {
 		name string
