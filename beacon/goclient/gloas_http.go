@@ -37,12 +37,12 @@ func (a unmaskedAddr) UnmaskedAddress() string { return a.addr }
 // String returns the address masked by RedactBeaconAddr.
 func (a unmaskedAddr) String() string { return RedactBeaconAddr(a.addr) }
 
-// requestRecorder records one request a route made to the beacon node at hand, under its HTTP method.
+// requestRecorder records one HTTP request a route made to a beacon node.
 type requestRecorder func(httpMethod string, took time.Duration, err error)
 
 // firstClientResult runs fn against each beacon client in turn, each under its own common-timeout
-// budget, returning the first success; on all failures it joins the per-client errors. Each beacon node's
-// request is recorded under httpMethod.
+// budget, returning the first success; on all failures it joins the per-client errors. Each attempt is
+// recorded as one request under httpMethod.
 func firstClientResult[T any](ctx context.Context, gc *GoClient, routeName, httpMethod string, fn func(ctx context.Context, addr unmaskedAddr) (T, error)) (T, error) {
 	return firstClientResultRecorded(ctx, gc, routeName, func(ctx context.Context, addr unmaskedAddr, record requestRecorder) (T, error) {
 		start := time.Now()
@@ -74,8 +74,8 @@ func firstClientResultRecorded[T any](ctx context.Context, gc *GoClient, routeNa
 	return zero, errs
 }
 
-// httpStatusError is a non-2xx response to a hand-rolled Gloas request. It keeps the status and body so
-// callers can classify the failure (isNotFound, isMethodOrPathMissing, isAlreadyKnown).
+// httpStatusError is a non-2xx response to a hand-rolled Gloas request. It keeps the status (read through
+// responseStatusCode) and the body (read by isAlreadyKnown) so callers can classify the failure.
 type httpStatusError struct {
 	method string
 	path   string
