@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
-	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/jellydator/ttlcache/v3"
@@ -17,7 +16,8 @@ import (
 
 // Gloas (ePBS) Payload Timeliness Committee endpoints. These hand-rolled HTTP requests predate the
 // go-eth2-client fork's typed PTC calls (PTCDuties, PayloadAttestationData,
-// SubmitPayloadAttestationMessages); moving onto those, like the rest of GoClient, is a follow-up.
+// SubmitPayloadAttestationMessages); moving onto those, like the rest of GoClient, is a follow-up
+// (issue #3014).
 const (
 	ptcDutiesPath              = "/eth/v1/validator/duties/ptc/%d"                    // epoch
 	payloadAttestationDataPath = "/eth/v1/validator/payload_attestation_data?slot=%d" // slot
@@ -74,27 +74,6 @@ func (gc *GoClient) SubmitPayloadAttestationMessages(ctx context.Context, messag
 	return gc.multiClientSubmit(ctx, "SubmitPayloadAttestationMessages", func(ctx context.Context, client Client) error {
 		return submitPayloadAttestationMessages(ctx, gloasHTTPClient, gc.clientAddresses[client], messages)
 	})
-}
-
-// firstClientResult runs fn against each beacon client in turn, each under its own common-timeout
-// budget, returning the first success; on all failures it joins the per-client errors.
-func firstClientResult[T any](ctx context.Context, gc *GoClient, routeName, httpMethod string, fn func(ctx context.Context, addr string) (T, error)) (T, error) {
-	var zero T
-	var errs error
-	for _, client := range gc.clients {
-		// Per-client timeout so a hung primary doesn't starve the fallbacks.
-		clientCtx, cancel := context.WithTimeout(ctx, gc.commonTimeout)
-		start := time.Now()
-		res, err := fn(clientCtx, gc.clientAddresses[client])
-		recordRequest(clientCtx, gc.log, routeName, client, httpMethod, false, time.Since(start), err)
-		cancel()
-		if err != nil {
-			errs = errors.Join(errs, errSingleClient(err, client.Address(), routeName))
-			continue
-		}
-		return res, nil
-	}
-	return zero, errs
 }
 
 // requestPTCDuties POSTs the validator indices and returns their PTC duties for the epoch, with the

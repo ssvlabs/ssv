@@ -10,6 +10,17 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// With no beacon clients, firstClientResult fails instead of returning the zero result as a success.
+func TestFirstClientResult_NoClients(t *testing.T) {
+	called := false
+	_, err := firstClientResult(context.Background(), &GoClient{}, "Route", http.MethodGet, func(context.Context, string) (int, error) {
+		called = true
+		return 1, nil
+	})
+	require.ErrorContains(t, err, "no clients available")
+	require.False(t, called)
+}
+
 func TestGloasPublishSSZ_Non2xxIsError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
