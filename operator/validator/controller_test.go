@@ -47,6 +47,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 	"github.com/ssvlabs/ssv/protocol/v2/types/ssvtestingutils"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	storagemocks "github.com/ssvlabs/ssv/registry/storage/mocks"
@@ -280,12 +281,56 @@ func TestHandleNonCommitteeMessages_RoleGuard(t *testing.T) {
 		}
 	}
 
-	t.Run("non-committee, non-aggregator-committee roles are ignored", func(t *testing.T) {
+	t.Run("roles without proposal-derived roots are ignored", func(t *testing.T) {
 		msg := newConsensusMsg(types.RoleAggregator, &specqbft.Message{MsgType: specqbft.ProposalMsgType})
 
 		// ncv is nil: if the role guard didn't short-circuit before touching ncv, this would panic.
 		err := ctr.handleNonCommitteeMessages(t.Context(), msg, nil)
 		require.NoError(t, err)
+	})
+
+	t.Run("proposer role with non-proposal consensus message is ignored", func(t *testing.T) {
+		msg := newConsensusMsg(spectypes.RoleProposer, &specqbft.Message{MsgType: specqbft.CommitMsgType})
+
+		err := ctr.handleNonCommitteeMessages(t.Context(), msg, nil)
+		require.NoError(t, err)
+	})
+
+	t.Run("gloas proposer proposal teaches the observer its envelope root", func(t *testing.T) {
+		// The envelope quorum riding the proposer's post-consensus packet is told apart from the block's
+		// only if the proposal reached SaveRoots first.
+		const slot = phase0.Slot(40)
+		builderDomain := phase0.Domain{0x0b}
+		beaconNode := beacon.NewMockBeaconNode(gomock.NewController(t))
+		beaconNode.EXPECT().DomainData(gomock.Any(), gomock.Any(), phase0.DomainType(spectypes.DomainBeaconBuilder)).Return(builderDomain, nil)
+
+		envelopeRoots := ttlcache.New(ttlcache.WithTTL[phase0.Root, struct{}](time.Hour))
+		msg := newConsensusMsg(spectypes.RoleProposer, &specqbft.Message{MsgType: specqbft.ProposalMsgType, Height: specqbft.Height(slot)})
+		ncv := validator.NewCommitteeObserver(msg.MsgID, validator.CommitteeObserverOptions{
+			Logger:        logger,
+			BeaconConfig:  networkconfig.TestNetworkWithGloas(0).Beacon,
+			EnvelopeRoots: envelopeRoots,
+			DomainCache:   validator.NewDomainCache(beaconNode, time.Hour),
+		})
+
+		proposal := &gloas.GloasProposalData{Block: gloas.TestingBeaconBlock(slot), PayloadRoot: phase0.Root{0x99}}
+		dataSSZ, err := proposal.Encode()
+		require.NoError(t, err)
+		fullData, err := (&spectypes.ProposerConsensusData{
+			Duty:    spectypes.ValidatorDuty{Type: spectypes.BNRoleProposer, Slot: slot, ValidatorIndex: 1},
+			Version: networkconfig.DataVersionGloas,
+			DataSSZ: dataSSZ,
+		}).Encode()
+		require.NoError(t, err)
+		msg.SignedSSVMessage = &spectypes.SignedSSVMessage{FullData: fullData}
+
+		require.NoError(t, ctr.handleNonCommitteeMessages(t.Context(), msg, ncv))
+
+		envelope, err := proposal.DeriveBlindedEnvelope()
+		require.NoError(t, err)
+		envelopeRoot, err := spectypes.ComputeETHSigningRoot(envelope, builderDomain)
+		require.NoError(t, err)
+		require.True(t, envelopeRoots.Has(envelopeRoot))
 	})
 
 	t.Run("aggregator-committee role with non-proposal consensus message is ignored", func(t *testing.T) {
