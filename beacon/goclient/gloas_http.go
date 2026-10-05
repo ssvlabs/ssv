@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 )
 
 // consensusVersionHeader is the beacon-APIs consensus-version header; consensusVersionGloas is its
@@ -22,6 +23,43 @@ const (
 // Like the main eth2clienthttp path, it applies basic-auth from the (unmasked) beacon address and uses no
 // custom TLS or client certificate. Interim: retired once these requests move onto the fork's typed calls.
 var gloasHTTPClient = &http.Client{}
+
+// requestRecorder records one request a route made to the beacon node at hand, under its HTTP method.
+type requestRecorder func(httpMethod string, took time.Duration, err error)
+
+// firstClientResult runs fn against each beacon client in turn, each under its own common-timeout
+// budget, returning the first success; on all failures it joins the per-client errors. Each beacon node's
+// request is recorded under httpMethod.
+func firstClientResult[T any](ctx context.Context, gc *GoClient, routeName, httpMethod string, fn func(ctx context.Context, addr string) (T, error)) (T, error) {
+	return firstClientResultRecorded(ctx, gc, routeName, func(ctx context.Context, addr string, record requestRecorder) (T, error) {
+		start := time.Now()
+		res, err := fn(ctx, addr)
+		record(httpMethod, time.Since(start), err)
+		return res, err
+	})
+}
+
+// firstClientResultRecorded is firstClientResult for a route that can make more than one request to a
+// beacon node, such as a POST with a GET fallback: fn records each request it makes through record.
+func firstClientResultRecorded[T any](ctx context.Context, gc *GoClient, routeName string, fn func(ctx context.Context, addr string, record requestRecorder) (T, error)) (T, error) {
+	var zero T
+	var errs error
+	for _, client := range gc.clients {
+		// Per-client timeout so a hung primary doesn't starve the fallbacks.
+		clientCtx, cancel := context.WithTimeout(ctx, gc.commonTimeout)
+		record := func(httpMethod string, took time.Duration, err error) {
+			recordRequest(clientCtx, gc.log, routeName, client, httpMethod, false, took, err)
+		}
+		res, err := fn(clientCtx, gc.clientAddresses[client], record)
+		cancel()
+		if err != nil {
+			errs = errors.Join(errs, errSingleClient(err, client.Address(), routeName))
+			continue
+		}
+		return res, nil
+	}
+	return zero, errs
+}
 
 // httpStatusError is a non-2xx response to a hand-rolled Gloas request. It keeps the status and body so
 // callers can classify the failure (isNotFound, isMethodOrPathMissing, isAlreadyKnown).

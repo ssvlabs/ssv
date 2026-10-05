@@ -24,10 +24,19 @@ func errMultiClient(err error, routeName string) error {
 // such resource (a missing route, or no aggregate under a given root), as opposed to a transport or
 // beacon-node failure worth retrying.
 func isNotFound(err error) bool {
+	return responseStatusCode(err) == http.StatusNotFound
+}
+
+// responseStatusCode returns the HTTP status of a beacon-API error response, over either transport (see
+// isNotFound), or 0 when err carries none.
+func responseStatusCode(err error) int {
 	var apiErr *api.Error
 	if errors.As(err, &apiErr) {
-		return apiErr.StatusCode == http.StatusNotFound
+		return apiErr.StatusCode
 	}
 	var statusErr *httpStatusError
-	return errors.As(err, &statusErr) && statusErr.status == http.StatusNotFound
+	if errors.As(err, &statusErr) {
+		return statusErr.status
+	}
+	return 0
 }

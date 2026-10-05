@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"time"
 
-	eth2api "github.com/attestantio/go-eth2-client/api"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -172,14 +171,8 @@ func recordRequest(
 		attribute.String("http.route_name", routeName),
 	}
 	if err != nil && !errors.Is(err, context.Canceled) {
-		// Error code of 0 signifies the presence of some error, see if we can clarify if further by using
-		// api error codes.
-		errCode := 0
-		var apiErr *eth2api.Error
-		if errors.As(err, &apiErr) {
-			errCode = apiErr.StatusCode
-		}
-		attr = append(attr, attribute.Int("http.response.error_status_code", errCode))
+		// Error code of 0 signifies the presence of some error that carries no HTTP status to clarify it.
+		attr = append(attr, attribute.Int("http.response.error_status_code", responseStatusCode(err)))
 	}
 	// Record the request as a metric.
 	requestDurationHistogram.Record(
