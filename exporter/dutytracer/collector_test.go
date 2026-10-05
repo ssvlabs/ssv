@@ -1416,9 +1416,9 @@ func typedPartialSigMessage(identifier spectypes.MessageID, msgType spectypes.Pa
 }
 
 // The Gloas duties without a consensus phase are traced from their partial signatures alone: a PTC
-// attestation under PTC_ATTESTER; a proposer's preferences, re-emissions included, and its builder
-// request-auth under PROPOSER_PREFERENCES, told apart by type. Their participants are the
-// pre-consensus signers, request-auth aside.
+// attestation under PTC_ATTESTER; a proposer's preferences, re-emissions included, and its builder request
+// auth under PROPOSER_PREFERENCES, told apart by type. Their participants are the pre-consensus signers,
+// request auth aside.
 func TestValidatorDuty_GloasPartialSignatures(t *testing.T) {
 	const (
 		slot   = phase0.Slot(7)
@@ -1521,9 +1521,8 @@ func TestValidatorDuty_GloasProposerTwoRootPacket(t *testing.T) {
 	require.Equal(t, []spectypes.OperatorID{3}, participants[0].Signers)
 }
 
-// A preferences trace is keyed by its proposal slot, which the messages precede by up to a lookahead:
-// it stays in memory through the evictions of earlier slots and is flushed to disk once its own slot
-// passes.
+// A preferences trace, keyed by its proposal slot up to a lookahead ahead of its messages, survives the
+// evictions of earlier slots and is flushed to disk once its own slot is evicted.
 func TestCollector_FutureSlotTraceOutlivesEarlierEvictions(t *testing.T) {
 	db, err := kv.NewInMemory(zap.NewNop(), basedb.Options{})
 	require.NoError(t, err)

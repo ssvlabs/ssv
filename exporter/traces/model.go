@@ -10,20 +10,19 @@ import (
 )
 
 const (
-	// MaxPartialSigEntries bounds ValidatorDutyTrace.Pre and .Post. The checks below hold it against the
-	// worst cases message validation admits on the largest committee, so a limit that outgrows them fails
-	// the build rather than leaving a trace that can't be encoded at eviction. The preferences budgets are
-	// validation's own constants; the committee size and the contribution packet's entry count mirror
-	// validation's unexported maxSignatures by value.
+	// MaxPartialSigEntries bounds ValidatorDutyTrace.Pre and .Post. The checks below fail the build when a
+	// worst case message validation admits on the largest committee exceeds it, rather than leaving traces
+	// that can't be encoded at eviction. The preferences budgets are validation's own constants; maxSigners
+	// and the contribution packet size mirror validation's maxSignatures by value.
 	MaxPartialSigEntries = 256
 	// maxSigners is the largest committee.
 	maxSigners = 13
 )
 
 var (
-	// Proposer preferences: the distinct preference and request-auth roots validation admits per signer.
-	// Request-auth packets may repeat recorded roots, so this holds because the collector records a
-	// signer's root once.
+	// Proposer preferences: the distinct preference and request-auth roots validation admits per signer,
+	// each recorded once by the collector. This holds per committee: a reshare inside the lookahead resets
+	// validation's budgets but not the trace, which could then exceed the bound and be skipped at eviction.
 	_ [MaxPartialSigEntries - maxSigners*(gloas.MaxProposerPreferencesDistinctRoots+gloas.MaxRequestAuthDistinctRoots)]struct{}
 	// Sync-committee contribution: one packet per signer and type, of up to maxSigners entries.
 	_ [MaxPartialSigEntries - maxSigners*maxSigners]struct{}
@@ -47,8 +46,8 @@ type ValidatorDutyTrace struct {
 	ProposalData []byte `ssz-max:"4194532"`
 
 	// Pre and Post hold one entry per signing root per signer, up to MaxPartialSigEntries: a packet may
-	// carry several roots, and a signer may re-emit under new ones. Traces with more than one entry per
-	// operator need store format 2 (see store.FormatVersion).
+	// carry several roots, and a signer may re-emit under new ones. Lists over 13 entries need store format
+	// 2 (store.FormatVersion).
 	Pre  []*PartialSigTrace `ssz-max:"256"`
 	Post []*PartialSigTrace `ssz-max:"256"`
 }

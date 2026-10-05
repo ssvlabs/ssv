@@ -19,10 +19,10 @@ import (
 
 var ErrNotFound = errors.New("duty not found")
 
-// FormatVersion is the trace store's on-disk format, raised whenever a persisted shape changes in a way an
-// older binary can't read, so that EnsureFormat fails a downgrade at startup instead of records failing to
-// decode one by one. 1 is the original layout; 2 lets a validator duty's Pre and Post hold more than one
-// entry per operator.
+// FormatVersion is the trace store's on-disk format, raised when a persisted shape changes in a way an older
+// binary can't read, so EnsureFormat fails a downgrade at startup rather than records failing one by one.
+// 1 is the original layout; 2 lets a validator duty's Pre and Post exceed 13 entries (traces within 13
+// still decode under 1).
 const FormatVersion uint32 = 2
 
 // EnsureFormat records this binary's FormatVersion in the store and refuses a store written by a newer
@@ -107,8 +107,8 @@ func (s *DutyTraceStore) SaveValidatorDuty(dto *traces.ValidatorDutyTrace) error
 	return nil
 }
 
-// SaveValidatorDuties writes the duties in one batch and reports how many it saved. A duty that can't be
-// encoded is left out and named in the error, the rest still saved; a failed batch write saves nothing.
+// SaveValidatorDuties writes the duties in one batch and reports how many it saved: a duty that can't be
+// encoded is left out and named in the error; a failed batch write saves none.
 func (s *DutyTraceStore) SaveValidatorDuties(duties []*traces.ValidatorDutyTrace) (saved int, err error) {
 	objs := make([]basedb.Obj, 0, len(duties))
 	var skipped error
@@ -246,8 +246,8 @@ func (s *DutyTraceStore) SaveCommitteeDutyLinks(slot phase0.Slot, linkMap map[ph
 	})
 }
 
-// SaveCommitteeDuties writes the duties in one batch under the slot and role and reports how many it saved,
-// as SaveValidatorDuties does; a duty carrying another role is left out too.
+// SaveCommitteeDuties is SaveValidatorDuties for committee duties keyed under one slot and role; a duty of
+// another role is left out too.
 func (s *DutyTraceStore) SaveCommitteeDuties(slot phase0.Slot, role spectypes.RunnerRole, duties []*traces.CommitteeDutyTrace) (saved int, err error) {
 	prefix, err := s.makeCommitteeSlotRolePrefix(slot, role)
 	if err != nil {

@@ -178,10 +178,9 @@ func (c *Collector) Start(ctx context.Context, tickerProvider slotticker.Provide
 
 const slotTTL = 4
 
-// evict flushes the traces of the slot slotTTL behind currentSlot to disk. A proposer-preferences trace is
-// keyed by its proposal slot, up to two epochs ahead of its messages, so it stays in memory that long and is
-// lost to a restart in between; every other role loses at most slotTTL slots. Flushing earlier would need
-// eviction to merge the in-memory trace with the disk copy.
+// evict flushes the slot slotTTL behind currentSlot to disk. A proposer-preferences trace is keyed by its
+// proposal slot, up to two epochs ahead of its messages, so a restart before then loses it (other roles
+// lose at most slotTTL slots); flushing it earlier would need eviction to merge with the disk copy.
 func (c *Collector) evict(currentSlot phase0.Slot) {
 	// evict committee traces
 	start := time.Now()
@@ -1111,10 +1110,9 @@ func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 			roleDutyTrace.Validator = pSigMessages.Messages[0].ValidatorIndex
 		}
 
-		// One entry per root per signer. A packet may carry several roots: the Gloas proposer's block and
-		// envelope roots (SIP #94 §4), a sync-committee contribution's subnets, a request-auth packet's
-		// builders (§5). A root the signer already has keeps its first sighting: validation admits
-		// request-auth packets that repeat recorded roots, and recording the repeats could outgrow
+		// One entry per signer per root, at its first sighting. A packet may carry several roots (the Gloas
+		// proposer's block and envelope, a contribution's subnets, a request-auth packet's builders), and
+		// validation admits request-auth packets repeating recorded roots, which would otherwise outgrow
 		// traces.MaxPartialSigEntries.
 		signer := ssvtypes.PartialSigMsgSigner(pSigMessages)
 		entries := &roleDutyTrace.Pre
@@ -1742,8 +1740,8 @@ func (c *Collector) computeAndPersistScheduleForSlot(slot phase0.Slot) error {
 		}
 	}
 
-	// Proposer indices for this slot. At Gloas slots each proposer also has the slot's preferences duty,
-	// broadcast ahead but recorded under the proposal slot (SIP #94 §5).
+	// Proposers of this slot, and at Gloas slots their preferences duty, recorded under the proposal slot
+	// (SIP #94 §5).
 	if c.duties.Proposer != nil {
 		bits := rolemask.BitProposer
 		if isGloas {

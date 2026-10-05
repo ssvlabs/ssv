@@ -399,8 +399,8 @@ func (c *Collector) GetValidatorDecideds(role spectypes.BeaconRole, slot phase0.
 
 		signers := validatorDutySigners(duty)
 		if len(signers) == 0 && preConsensusIsTheDuty(duty.Role) {
-			// Request auth alone: its round runs ahead of the preferences and outlives a failed build, so the
-			// operators signed builder tokens but took no part in the duty. Nothing to report.
+			// Request auth alone (its round runs first and outlives a failed preferences build): no
+			// participation to report.
 			continue
 		}
 
@@ -438,10 +438,9 @@ func (c *Collector) GetAllValidatorDecideds(role spectypes.BeaconRole, slot phas
 	return out, errs.ErrorOrNil()
 }
 
-// validatorDutySigners lists the operators seen taking part in a validator duty: the decideds' and
-// post-consensus signers, plus the pre-consensus signers of the Gloas duties whose pre-consensus round is
-// the duty itself, request auth aside (signing a builder token is not the preferences duty). Archive mode
-// counts every signer seen, with no quorum test; standard mode records a duty once a root reaches quorum.
+// validatorDutySigners lists the operators seen taking part in a validator duty, with no quorum test: the
+// decideds' and post-consensus signers, plus the signers of a duty that is a single pre-consensus round
+// (preConsensusIsTheDuty), request auth aside since signing a builder token isn't the duty.
 func validatorDutySigners(duty *traces.ValidatorDutyTrace) []spectypes.OperatorID {
 	signers := make([]spectypes.OperatorID, 0, len(duty.Decideds)+len(duty.Post)+len(duty.Pre))
 	for _, d := range duty.Decideds {
@@ -461,10 +460,9 @@ func validatorDutySigners(duty *traces.ValidatorDutyTrace) []spectypes.OperatorI
 	return slices.Compact(signers)
 }
 
-// preConsensusIsTheDuty reports the Gloas roles whose duty is a single partial-signature round, with no
-// consensus or post-consensus. Validator registration and voluntary exit have the same shape but keep
-// empty participants: their messages are exempt from the lateness bound, so a stale partial would
-// surface as participation at an arbitrary slot.
+// preConsensusIsTheDuty reports the Gloas roles whose duty is a single partial-signature round. Validator
+// registration and voluntary exit share that shape but are left out: their messages are exempt from the
+// lateness bound, so a stale partial would show as participation at an arbitrary slot.
 func preConsensusIsTheDuty(role spectypes.BeaconRole) bool {
 	switch role {
 	case spectypes.BNRolePTCAttester, spectypes.BNRoleProposerPreferences:
