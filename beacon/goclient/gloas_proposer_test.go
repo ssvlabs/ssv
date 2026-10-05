@@ -242,7 +242,23 @@ func TestRequestGloasBeaconBlock_WrongConsensusVersion(t *testing.T) {
 		"a wrong-fork response is recorded as a failed POST and does not fall back to GET")
 }
 
-// A fallback GET that fails too is recorded as a second, failed request.
+// Only a missing route or method (404/405) falls back: a POST the beacon node fails is returned as is.
+func TestRequestGloasBeaconBlock_POSTServerErrorDoesNotFallBack(t *testing.T) {
+	var methods []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		methods = append(methods, r.Method)
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	var requests requestLog
+	_, err := requestGloasBeaconBlock(context.Background(), srv.URL, 7, []byte{0x02}, []byte{0x01}, nil, requests.record)
+	require.Equal(t, http.StatusInternalServerError, responseStatusCode(err))
+	require.Equal(t, []string{http.MethodPost}, methods, "a 500 is no reason to retry as GET")
+	require.Equal(t, requestLog{{method: http.MethodPost, failed: true, status: http.StatusInternalServerError}}, requests)
+}
+
+// A fallback GET that fails too is recorded as a second, failed request, and its error is returned.
 func TestRequestGloasBeaconBlock_FallbackGETFailure(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost {

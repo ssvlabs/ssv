@@ -171,7 +171,7 @@ func recordRequest(
 		attribute.String("http.route_name", routeName),
 	}
 	if err != nil && !errors.Is(err, context.Canceled) {
-		// Error code of 0 signifies the presence of some error that carries no HTTP status to clarify it.
+		// An error without an HTTP status is recorded with code 0.
 		attr = append(attr, attribute.Int("http.response.error_status_code", responseStatusCode(err)))
 	}
 	// Record the request as a metric.

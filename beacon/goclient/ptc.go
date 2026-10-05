@@ -16,7 +16,8 @@ import (
 
 // Gloas (ePBS) Payload Timeliness Committee endpoints. These hand-rolled HTTP requests predate the
 // go-eth2-client fork's typed PTC calls (PTCDuties, PayloadAttestationData,
-// SubmitPayloadAttestationMessages); moving onto those, like the rest of GoClient, is a follow-up.
+// SubmitPayloadAttestationMessages); moving onto those, like the rest of GoClient, is a follow-up
+// (issue #3014).
 const (
 	ptcDutiesPath              = "/eth/v1/validator/duties/ptc/%d"                    // epoch
 	payloadAttestationDataPath = "/eth/v1/validator/payload_attestation_data?slot=%d" // slot
