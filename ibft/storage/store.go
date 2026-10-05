@@ -26,7 +26,6 @@ const (
 type ParticipantStorage struct {
 	logger         *zap.Logger
 	prefix         []byte
-	oldPrefix      string // kept back for cleanup
 	db             basedb.Database
 	participantsMu sync.Mutex
 }
@@ -35,10 +34,9 @@ type ParticipantStorage struct {
 func New(logger *zap.Logger, db basedb.Database, prefix spectypes.BeaconRole) *ParticipantStorage {
 	role := byte(prefix & 0xff)
 	return &ParticipantStorage{
-		logger:    logger,
-		prefix:    []byte{role},
-		oldPrefix: prefix.String(),
-		db:        db,
+		logger: logger,
+		prefix: []byte{role},
+		db:     db,
 	}
 }
 
@@ -149,15 +147,6 @@ func (i *ParticipantStorage) removeSlotsOlderThan(slot phase0.Slot) int {
 	}
 
 	return total
-}
-
-// CleanAllInstances removes all records in old format.
-func (i *ParticipantStorage) CleanAllInstances() error {
-	if err := i.db.DropPrefix([]byte(i.oldPrefix)); err != nil {
-		return fmt.Errorf("failed to drop all records: %w", err)
-	}
-
-	return nil
 }
 
 func (i *ParticipantStorage) SaveParticipants(pk spectypes.ValidatorPK, slot phase0.Slot, newParticipants []spectypes.OperatorID) (updated bool, err error) {
