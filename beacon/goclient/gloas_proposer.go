@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 
@@ -32,11 +33,11 @@ const (
 // It is hand-rolled because go-eth2-client's ePBS proposal call is the pre-#630 GET, with no typed
 // equivalent for the POST body, the BlockContents response, or the response headers. It POSTs a
 // BuilderConfig body (beacon-APIs#630): builderConfig when the direct-builder overlay is configured, else a
-// neutral local-build config. It falls back per beacon node to the legacy GET for nodes that predate the POST.
+// neutral local-build config. It falls back per beacon node to the legacy GET for nodes that predate the POST,
+// recording the rejected POST and the GET as two requests.
 func (gc *GoClient) GetGloasBeaconBlock(ctx context.Context, slot phase0.Slot, graffiti, randao []byte, builderConfig *gloas.ProduceBuilderConfig) (*gloas.ProducedBlock, error) {
-	// A per-node GET fallback (a pre-#630 node) is still counted under this POST label — a transitional inaccuracy.
-	return firstClientResult(ctx, gc, "GetGloasBeaconBlock", http.MethodPost, func(ctx context.Context, addr string) (*gloas.ProducedBlock, error) {
-		return requestGloasBeaconBlock(ctx, addr, slot, graffiti, randao, builderConfig)
+	return firstClientResultRecorded(ctx, gc, "GetGloasBeaconBlock", func(ctx context.Context, addr string, record requestRecorder) (*gloas.ProducedBlock, error) {
+		return requestGloasBeaconBlock(ctx, addr, slot, graffiti, randao, builderConfig, record)
 	})
 }
 
@@ -67,8 +68,8 @@ func (gc *GoClient) SubmitGloasBeaconBlock(ctx context.Context, block *gloas.Sig
 // requestGloasBeaconBlock produces one Gloas block from a single beacon node. It POSTs the beacon-APIs#630
 // BuilderConfig body — a neutral local-build config when builderConfig is nil — and, only on a 404/405 (the
 // node predates the POST), retries as the legacy GET carrying builder_boost_factor (the sole knob the
-// pre-#630 GET also honors).
-func requestGloasBeaconBlock(ctx context.Context, addr string, slot phase0.Slot, graffiti, randao []byte, builderConfig *gloas.ProduceBuilderConfig) (*gloas.ProducedBlock, error) {
+// pre-#630 GET also honors). Each request it makes is recorded through record.
+func requestGloasBeaconBlock(ctx context.Context, addr string, slot phase0.Slot, graffiti, randao []byte, builderConfig *gloas.ProduceBuilderConfig, record requestRecorder) (*gloas.ProducedBlock, error) {
 	if builderConfig == nil {
 		builderConfig = gloas.NeutralProduceBuilderConfig()
 	}
@@ -78,7 +79,9 @@ func requestGloasBeaconBlock(ctx context.Context, addr string, slot phase0.Slot,
 	copy(g[:], graffiti)
 	url := addr + fmt.Sprintf(gloasProduceBlockPath, slot, "0x"+hex.EncodeToString(randao), "0x"+hex.EncodeToString(g[:]))
 
+	start := time.Now()
 	res, err := requestGloasBeaconBlockPOST(ctx, url, builderConfig)
+	record(http.MethodPost, time.Since(start), err)
 	if err == nil {
 		return res, nil
 	}
@@ -89,11 +92,10 @@ func requestGloasBeaconBlock(ctx context.Context, addr string, slot phase0.Slot,
 	// are POST-only — with the same semantics: bids weighed against the local payload at 100.
 	url += fmt.Sprintf("&builder_boost_factor=%d", builderConfig.BuilderBoostFactor)
 
-	respBody, header, err := gloasHTTPDo(ctx, http.MethodGet, url, nil, "application/octet-stream", "", nil)
-	if err != nil {
-		return nil, err
-	}
-	return decodeGloasProduceResponse(respBody, header)
+	start = time.Now()
+	res, err = requestGloasBeaconBlockGET(ctx, url)
+	record(http.MethodGet, time.Since(start), err)
+	return res, err
 }
 
 // requestGloasBeaconBlockPOST sends the builder config as the produceBlockV4 JSON body and decodes the SSZ
@@ -104,6 +106,15 @@ func requestGloasBeaconBlockPOST(ctx context.Context, url string, builderConfig 
 		return nil, fmt.Errorf("marshal builder config: %w", err)
 	}
 	respBody, header, err := gloasHTTPDo(ctx, http.MethodPost, url, jsonBody, "application/octet-stream", "application/json", nil)
+	if err != nil {
+		return nil, err
+	}
+	return decodeGloasProduceResponse(respBody, header)
+}
+
+// requestGloasBeaconBlockGET sends the legacy produceBlockV4 GET and decodes the SSZ response.
+func requestGloasBeaconBlockGET(ctx context.Context, url string) (*gloas.ProducedBlock, error) {
+	respBody, header, err := gloasHTTPDo(ctx, http.MethodGet, url, nil, "application/octet-stream", "", nil)
 	if err != nil {
 		return nil, err
 	}
