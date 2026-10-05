@@ -13,9 +13,8 @@ import (
 //	0: ATTESTER, 1: AGGREGATOR, 2: PROPOSER, 3: SYNC_COMMITTEE,
 //	4: SYNC_COMMITTEE_CONTRIBUTION, 5: PTC_ATTESTER, 6: PROPOSER_PREFERENCES
 //
-// Bit 7 is the last one free. A ninth role needs a wider type and a new key discriminator for its schedule
-// record: the store keys each role's schedule by its bit as one byte (store.makeScheduledRolePrefix), so
-// existing records keep their keys.
+// Bit 7 is the last free one. A ninth role needs a wider type and a new key byte for its schedule record
+// (store.makeScheduledRolePrefix keys each role by its bit); existing records keep their keys.
 type Mask = uint8
 
 const (

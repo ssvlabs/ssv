@@ -487,8 +487,8 @@ func (c *Controller) handleNonCommitteeMessages(
 	defer c.committeesObserversMutex.Unlock()
 
 	if msg.MsgType == spectypes.SSVConsensusMsgType {
-		// Only proposal messages are of interest, for the roots they carry: the committee roles'
-		// per-role roots, and the Gloas proposer's §6 envelope root.
+		// Only proposals matter, for the roots they carry: the committee roles' per-role roots and the
+		// Gloas proposer's §6 envelope root.
 		role := msg.MsgID.GetRoleType()
 		if role != spectypes.RoleCommittee && role != spectypes.RoleAggregatorCommittee && role != spectypes.RoleProposer {
 			return nil

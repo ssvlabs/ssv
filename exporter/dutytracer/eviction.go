@@ -87,7 +87,7 @@ func (c *Collector) dumpCommitteeToDBPeriodically(slot phase0.Slot) (totalSaved 
 		if len(duties) == 0 {
 			continue
 		}
-		// The traces are already out of memory, so what the store didn't save is lost: count only what it saved.
+		// The traces are already out of memory, so count only what the store saved.
 		saved, err := c.store.SaveCommitteeDuties(slot, role, duties)
 		if err != nil {
 			c.logger.Error("couldn't save every committee duty to disk", zap.Error(err), fields.RunnerRole(role),
@@ -124,7 +124,7 @@ func (c *Collector) dumpValidatorToDBPeriodically(slot phase0.Slot) (totalSaved 
 		return true
 	})
 
-	// The traces are already out of memory, so what the store didn't save is lost: count only what it saved.
+	// The traces are already out of memory, so count only what the store saved.
 	saved, err := c.store.SaveValidatorDuties(duties)
 	if err != nil {
 		c.logger.Error("couldn't save every validator duty to disk", zap.Error(err),

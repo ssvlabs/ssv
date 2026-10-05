@@ -48,8 +48,8 @@ func TestValidatorDutyTrace_MarshallSSZ(t *testing.T) {
 	require.NotNil(t, root)
 }
 
-// Pre and Post hold one entry per signing root per signer, so more than one per operator: lists of the
-// worst-case sizes round-trip, and MaxPartialSigEntries is enforced on encode.
+// Pre and Post may exceed 13 entries: worst-case lists round-trip, and MaxPartialSigEntries is enforced on
+// encode.
 func TestValidatorDutyTrace_MarshallSSZ_WideLists(t *testing.T) {
 	wide := func(n int) []*PartialSigTrace {
 		out := make([]*PartialSigTrace, 0, n)

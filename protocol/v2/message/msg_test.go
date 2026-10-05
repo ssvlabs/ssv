@@ -57,9 +57,13 @@ func TestPartialSigMsgTypeToString(t *testing.T) {
 		spectypes.ProposerPreferencesPartialSig:   PartialSigProposerPreferences,
 		spectypes.RequestAuthPartialSig:           PartialSigRequestAuth,
 	}
-	// The duty-bound types are named after their duty's role, so the two vocabularies agree.
+	// The duty-bound types are named after their duty's role as the API reports it: the beacon role for a
+	// validator duty, the runner role for a committee duty.
+	assert.Equal(t, spectypes.BNRoleValidatorRegistration.String(), PartialSigValidatorRegistration)
+	assert.Equal(t, spectypes.BNRoleVoluntaryExit.String(), PartialSigVoluntaryExit)
 	assert.Equal(t, spectypes.BNRolePTCAttester.String(), PartialSigPTCAttester)
 	assert.Equal(t, spectypes.BNRoleProposerPreferences.String(), PartialSigProposerPreferences)
+	assert.Equal(t, RunnerRoleToString(spectypes.RoleAggregatorCommittee), PartialSigAggregatorCommittee)
 	for msgType, want := range names {
 		assert.Equal(t, want, PartialSigMsgTypeToString(msgType))
 	}

@@ -81,8 +81,9 @@ func BeaconRoleFromString(s string) (spectypes.BeaconRole, error) {
 	}
 }
 
-// Partial-signature message type names, as the API's `type` field reports them. Where a type belongs to
-// one duty the name is the duty's role name, so the two vocabularies agree.
+// Partial-signature message type names for the API's `type` field. A type that belongs to one duty is named
+// after that duty's role as the API reports it: the beacon role for a validator duty, the runner role
+// (AGGREGATOR_COMMITTEE) for a committee duty.
 const (
 	PartialSigPostConsensus         = "POST_CONSENSUS"
 	PartialSigRandao                = "RANDAO"

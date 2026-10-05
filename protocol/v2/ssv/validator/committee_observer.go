@@ -44,9 +44,9 @@ type CommitteeObserver struct {
 	aggregatorRoots      *ttlcache.Cache[phase0.Root, struct{}]
 	syncCommRoots        *ttlcache.Cache[phase0.Root, struct{}]
 	syncCommContribRoots *ttlcache.Cache[phase0.Root, struct{}]
-	// envelopeRoots holds the §6 envelope signing roots of proposed Gloas self-build values, so that their
-	// quorum, which rides the proposer's post-consensus packet, isn't counted as the proposal's. Every
-	// round's proposal is learnt; an undecided one's root never reaches quorum.
+	// envelopeRoots holds the §6 envelope signing roots of proposed Gloas self-build values, so the envelope
+	// quorum riding the proposer's post-consensus packet isn't counted as the proposal's. Roots of undecided
+	// rounds never reach quorum.
 	envelopeRoots *ttlcache.Cache[phase0.Root, struct{}]
 	domainCache   *DomainCache
 
@@ -172,10 +172,9 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
 		}
 
 		if role == spectypes.RoleProposer && ncv.isEnvelopeRoot(key.Root) {
-			// The proposal's participation is the block root's quorum alone (SIP #94 §4). The envelope root
-			// is learnt from the proposal (SaveRoots), a consensus round trip ahead of the quorum; should the
-			// worker pool still let the quorum overtake it, the envelope counts as the proposal's, the same
-			// proposal-first dependence the committee roots have.
+			// The proposal's participation is the block root's quorum alone (SIP #94 §4). SaveRoots learns the
+			// envelope root from the proposal, a consensus round trip before this quorum; if the worker pool
+			// reorders the two, the envelope counts as the proposal's (the committee roots share this dependence).
 			continue
 		}
 
@@ -280,10 +279,9 @@ func (ncv *CommitteeObserver) getBeaconRoles(msg *queue.SSVMessage, root phase0.
 	}
 }
 
-// recordsParticipation reports whether a partial-signature packet of this type records participation:
-// a post-consensus quorum, or the single signing round of a duty without a consensus phase (the PTC
-// attestation and the proposer preferences, SIP #94 §3, §5). A request-auth packet records nothing, as
-// signing a builder token is not the preferences duty; any other pre-consensus type is an error.
+// recordsParticipation reports whether a packet of this type records participation: a post-consensus one,
+// or the single signing round of the PTC attestation or the proposer preferences (SIP #94 §3, §5). Request
+// auth records nothing, as signing a builder token isn't the preferences duty; any other type is an error.
 func recordsParticipation(msgType spectypes.PartialSigMsgType) (bool, error) {
 	switch msgType {
 	case spectypes.PostConsensusPartialSig, spectypes.PTCAttesterPartialSig, spectypes.ProposerPreferencesPartialSig:
@@ -307,9 +305,8 @@ type validatorIndexAndRoot struct {
 }
 
 // VerifySig records a post-consensus packet's partial signatures in the slot's container, for archive
-// mode's tracing. Despite the name, a signature is BLS-verified only when it collides with one already held
-// for the same signer and root (resolveDuplicateSignature); a new one is taken as is, message validation
-// having authenticated its sender.
+// mode's tracing. Despite the name, it BLS-verifies a signature only when one is already held for the same
+// signer and root (resolveDuplicateSignature); message validation has authenticated the sender.
 func (ncv *CommitteeObserver) VerifySig(partialMsgs *spectypes.PartialSignatureMessages) error {
 	ncv.Lock()
 	defer ncv.Unlock()
@@ -539,8 +536,7 @@ func (ncv *CommitteeObserver) SaveRoots(ctx context.Context, msg *queue.SSVMessa
 		ncv.aggregatorCommitteeRoots.Set(aggCacheKey, struct{}{}, ttlcache.DefaultTTL)
 		return nil
 	case spectypes.RoleProposer:
-		// At a Gloas slot a self-build proposal's post-consensus packet also carries the §6 envelope
-		// root; learn it from the proposed value so its quorum is not counted as the proposal's.
+		// Learn a Gloas self-build value's §6 envelope root (see envelopeRoots).
 		if !ncv.beaconConfig.IsGloasAtSlot(phase0.Slot(qbftMsg.Height)) || ncv.envelopeRoots == nil {
 			return nil
 		}
