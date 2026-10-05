@@ -5,15 +5,17 @@ import (
 )
 
 // Mask is a compact bitfield used to record which Beacon roles
-// are scheduled for a validator at a given slot. It is intentionally
-// a tiny type (one byte) to keep on‑disk schedule encoding small.
+// are scheduled for a validator at a given slot. On disk a slot's schedule
+// is one bitmap of validator indices per role, keyed by the role's bit.
 //
 // Bits (LSB first):
 //
 //	0: ATTESTER, 1: AGGREGATOR, 2: PROPOSER, 3: SYNC_COMMITTEE,
 //	4: SYNC_COMMITTEE_CONTRIBUTION, 5: PTC_ATTESTER, 6: PROPOSER_PREFERENCES
 //
-// Bit 7 is the last one free; a ninth role needs a wider type and a re-encode of the stored schedules.
+// Bit 7 is the last one free. A ninth role needs a wider type and a new key discriminator for its schedule
+// record: the store keys each role's schedule by its bit as one byte (store.makeScheduledRolePrefix), so
+// existing records keep their keys.
 type Mask = uint8
 
 const (
