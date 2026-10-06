@@ -21,6 +21,7 @@ type ConnManager interface {
 	// DisconnectFromBadPeers will disconnect from bad peers according to their Gossip scores. It returns the number of disconnected peers.
 	DisconnectFromBadPeers(net libp2pnetwork.Network, allPeers []peer.ID) int
 	// DisconnectFromIrrelevantPeers will disconnect from at most [disconnectQuota] peers that doesn't share any subnet in common. It returns the number of disconnected peers.
+	// It disconnects no one while mySubnets has no active subnet.
 	DisconnectFromIrrelevantPeers(disconnectQuota int, net libp2pnetwork.Network, allPeers []peer.ID, mySubnets commons.Subnets) int
 }
 
@@ -88,7 +89,13 @@ func (c connManager) DisconnectFromBadPeers(net libp2pnetwork.Network, allPeers 
 }
 
 // DisconnectFromIrrelevantPeers will disconnect from at most [disconnectQuota] peers that doesn't share any subnet in common. It returns the number of disconnected peers.
+// It disconnects no one while mySubnets has no active subnet, e.g. on a node with no validators yet: every peer
+// would count as irrelevant, so each trimming round would drop peers the node may need once it has validators.
 func (c connManager) DisconnectFromIrrelevantPeers(disconnectQuota int, net libp2pnetwork.Network, allPeers []peer.ID, mySubnets commons.Subnets) int {
+	if !mySubnets.HasActive() {
+		return 0
+	}
+
 	disconnectedPeers := 0
 	for _, peerID := range allPeers {
 		var sharedSubnets []uint64
