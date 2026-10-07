@@ -13,8 +13,6 @@ import (
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
-//go:generate go tool -modfile=../../tool.mod mockgen -package=mocks -destination=./mocks/recipients.go -source=./recipients.go
-
 var (
 	recipientsPrefix = []byte("recipients")
 )
