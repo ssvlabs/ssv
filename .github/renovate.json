@@ -10,6 +10,13 @@
         "gomodTidy",
         "gomodUpdateImportPaths"
       ]
+    },
+    {
+      "description": "Go version: go.mod's toolchain line is what CI and the release image (Dockerfile.multiarch, GOTOOLCHAIN=auto) build with. Bump it together with the golang images, and keep patch releases in their own PR so security fixes don't wait on a Go minor upgrade or behind the open-PR limit.",
+      "matchDepNames": ["go", "golang"],
+      "groupName": "Go",
+      "separateMinorPatch": true,
+      "prPriority": 10
     }
   ]
 }
