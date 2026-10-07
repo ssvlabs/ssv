@@ -11,7 +11,9 @@
 // - GOWORK=off make lint
 module github.com/ssvlabs/ssv/ssvsigner
 
-go 1.26
+go 1.26.0
+
+toolchain go1.26.8
 
 require (
 	github.com/OffchainLabs/go-bitfield v0.0.0-20251031151322-f427d04d8506
@@ -38,7 +40,7 @@ require (
 	go.opentelemetry.io/otel v1.41.0
 	go.opentelemetry.io/otel/metric v1.41.0
 	go.uber.org/zap v1.27.0
-	golang.org/x/crypto v0.55.0
+	golang.org/x/crypto v0.56.0
 )
 
 require (
