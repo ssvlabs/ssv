@@ -13,6 +13,11 @@ ARG TARGETARCH
 #
 FROM --platform=$BUILDPLATFORM golang:1.26.8@sha256:eb36c1664dd974cde625f736e02c204383deebe03977365caaec5bf49f794348 AS base
 
+# Build with the Go version from go.mod's `toolchain` line, not the one bundled in this image (the
+# official golang images set GOTOOLCHAIN=local). Bumping Go is then a go.mod change that CI and this
+# image both follow; the toolchain is fetched via the Go proxy and verified against the checksum DB.
+ENV GOTOOLCHAIN=auto
+
 # Install essential build tools
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -yq --no-install-recommends \
