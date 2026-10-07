@@ -2,6 +2,8 @@ module github.com/ssvlabs/ssv
 
 go 1.26
 
+toolchain go1.26.8
+
 require (
 	github.com/OffchainLabs/go-bitfield v0.0.0-20251031151322-f427d04d8506
 	github.com/RoaringBitmap/roaring/v2 v2.10.0
