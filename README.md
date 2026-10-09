@@ -50,6 +50,16 @@ The following documents contain instructions and information on how to get start
 - [Developers' Guide](./docs/DEV_GUIDE.md)
 - [SSV API Docs](https://ssvlabs.github.io/ssv/)
 
+### Using SSV as a Go library
+
+```bash
+go get github.com/ssvlabs/ssv/v2@<version>
+```
+
+SSV builds against a fork of `go-eth2-client`. Go ignores `replace` directives of dependencies, so copy the
+`replace github.com/attestantio/go-eth2-client => github.com/ssvlabs/go-eth2-client ...` line from this repository's
+[go.mod](./go.mod) (at the version you depend on) into your own `go.mod`.
+
 ## <img src="https://github.com/Anmol-Baranwal/Cool-GIFs-For-GitHub/assets/74038190/fa83eeb9-f4e2-4d85-93f0-688af11babf8" width="35">&nbsp; Contribution
 
 Thank you for considering a contribution to the source code.
