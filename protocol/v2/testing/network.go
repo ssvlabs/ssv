@@ -7,7 +7,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 
-	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
+	protocolp2p "github.com/ssvlabs/ssv/v2/protocol/v2/p2p"
 )
 
 // TestingNetwork wraps the spec testing network to satisfy protocolp2p.Network, which adds

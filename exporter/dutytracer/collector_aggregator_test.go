@@ -14,11 +14,11 @@ import (
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/networkconfig"
-	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
-	"github.com/ssvlabs/ssv/protocol/v2/types/ssvtestingutils"
-	"github.com/ssvlabs/ssv/registry/storage"
-	registrystoragemocks "github.com/ssvlabs/ssv/registry/storage/mocks"
+	"github.com/ssvlabs/ssv/v2/networkconfig"
+	ssvtypes "github.com/ssvlabs/ssv/v2/protocol/v2/types"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/types/ssvtestingutils"
+	"github.com/ssvlabs/ssv/v2/registry/storage"
+	registrystoragemocks "github.com/ssvlabs/ssv/v2/registry/storage/mocks"
 )
 
 // buildAggregatorCommitteeConsensusData builds a minimal, structurally valid

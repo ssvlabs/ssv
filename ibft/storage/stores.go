@@ -3,7 +3,7 @@ package storage
 import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/utils/hashmap"
+	"github.com/ssvlabs/ssv/v2/utils/hashmap"
 )
 
 // ParticipantStores wraps sync map with cast functions to qbft store

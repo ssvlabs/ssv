@@ -14,7 +14,7 @@ import (
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 
-	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
+	protocoltesting "github.com/ssvlabs/ssv/v2/protocol/v2/testing"
 )
 
 // faultyAttestationSubmitBeacon wraps the testing beacon node and forces attestation submission to

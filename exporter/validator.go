@@ -11,10 +11,10 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/exporter/rolemask"
-	"github.com/ssvlabs/ssv/exporter/traces"
-	"github.com/ssvlabs/ssv/observability/log/fields"
-	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/v2/exporter/rolemask"
+	"github.com/ssvlabs/ssv/v2/exporter/traces"
+	"github.com/ssvlabs/ssv/v2/observability/log/fields"
+	ssvtypes "github.com/ssvlabs/ssv/v2/protocol/v2/types"
 )
 
 // ErrPostForkCommitteeDutyNote marks the non-fatal note appended when a

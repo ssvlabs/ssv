@@ -3,7 +3,7 @@ package goclient
 import (
 	"time"
 
-	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/v2/networkconfig"
 )
 
 // Various Client timeouts are defined below.

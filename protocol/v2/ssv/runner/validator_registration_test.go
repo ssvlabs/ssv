@@ -11,7 +11,7 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/v2/networkconfig"
 )
 
 // TestValidatorRegistrationRunner_StartNewDutyDeprecatedFromGloas pins the runner-side SIP #94 §5 guard

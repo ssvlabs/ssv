@@ -11,7 +11,7 @@ import (
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 
-	"github.com/ssvlabs/ssv/observability/log/fields"
+	"github.com/ssvlabs/ssv/v2/observability/log/fields"
 )
 
 // GetValidatorData returns metadata (balance, index, status, more) for each pubkey from the node

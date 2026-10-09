@@ -8,16 +8,16 @@ import (
 	"github.com/ilyakaznacheev/cleanenv"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/beacon/goclient"
-	globalcfg "github.com/ssvlabs/ssv/cli/config"
-	"github.com/ssvlabs/ssv/eth/executionclient"
-	exporterconfig "github.com/ssvlabs/ssv/exporter/config"
-	p2pv1 "github.com/ssvlabs/ssv/network/p2p"
-	"github.com/ssvlabs/ssv/operator"
-	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
-	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
-	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
-	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/v2/beacon/goclient"
+	globalcfg "github.com/ssvlabs/ssv/v2/cli/config"
+	"github.com/ssvlabs/ssv/v2/eth/executionclient"
+	exporterconfig "github.com/ssvlabs/ssv/v2/exporter/config"
+	p2pv1 "github.com/ssvlabs/ssv/v2/network/p2p"
+	"github.com/ssvlabs/ssv/v2/operator"
+	operatorstorage "github.com/ssvlabs/ssv/v2/operator/storage"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/qbft/roundtimer"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/types/gloas"
+	"github.com/ssvlabs/ssv/v2/storage/basedb"
 )
 
 type KeyStore struct {

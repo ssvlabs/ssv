@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	exporterconfig "github.com/ssvlabs/ssv/exporter/config"
+	exporterconfig "github.com/ssvlabs/ssv/v2/exporter/config"
 )
 
 func TestShouldRunDutyScheduler(t *testing.T) {

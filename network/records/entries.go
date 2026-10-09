@@ -11,7 +11,7 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/v2/network/commons"
 )
 
 type ENRKey string

@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	globalcfg "github.com/ssvlabs/ssv/cli/config"
+	globalcfg "github.com/ssvlabs/ssv/v2/cli/config"
 )
 
 // Test_config_defaults_complete makes default-completeness automatic going forward. It fails if any

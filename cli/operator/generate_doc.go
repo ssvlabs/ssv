@@ -6,7 +6,7 @@ import (
 	"github.com/aquasecurity/table"
 	"github.com/spf13/cobra"
 
-	globalcfg "github.com/ssvlabs/ssv/cli/config"
+	globalcfg "github.com/ssvlabs/ssv/v2/cli/config"
 )
 
 // GenerateDocCmd prints a table documenting every config field with its YAML path, env var, default

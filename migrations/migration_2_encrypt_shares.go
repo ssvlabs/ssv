@@ -10,7 +10,7 @@ import (
 
 	"github.com/ssvlabs/ssv/ssvsigner/keys/rsaencryption"
 
-	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/v2/storage/basedb"
 )
 
 var migration_2_encrypt_shares = Migration{

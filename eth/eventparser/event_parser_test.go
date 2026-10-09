@@ -10,8 +10,8 @@ import (
 	"github.com/status-im/keycard-go/hexutils"
 	"github.com/stretchr/testify/require"
 
-	"github.com/ssvlabs/ssv/eth/contract"
-	"github.com/ssvlabs/ssv/eth/eventparser"
+	"github.com/ssvlabs/ssv/v2/eth/contract"
+	"github.com/ssvlabs/ssv/v2/eth/eventparser"
 )
 
 func TestEventParser(t *testing.T) {

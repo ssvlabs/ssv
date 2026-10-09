@@ -23,12 +23,12 @@ import (
 	"go.uber.org/zap"
 	"tailscale.com/util/singleflight"
 
-	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/observability/log"
-	"github.com/ssvlabs/ssv/observability/log/fields"
-	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
-	"github.com/ssvlabs/ssv/utils/async"
-	"github.com/ssvlabs/ssv/utils/hashmap"
+	"github.com/ssvlabs/ssv/v2/networkconfig"
+	"github.com/ssvlabs/ssv/v2/observability/log"
+	"github.com/ssvlabs/ssv/v2/observability/log/fields"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/types/gloas"
+	"github.com/ssvlabs/ssv/v2/utils/async"
+	"github.com/ssvlabs/ssv/v2/utils/hashmap"
 )
 
 const (

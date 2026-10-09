@@ -6,9 +6,9 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
-	"github.com/ssvlabs/ssv/storage/basedb"
+	registrystorage "github.com/ssvlabs/ssv/v2/registry/storage"
+	"github.com/ssvlabs/ssv/v2/storage/basedb"
 )
 
 //go:generate go tool -modfile=../../tool.mod mockgen -package=signatureverifier -destination=./mock.go -source=./signature_verifier.go

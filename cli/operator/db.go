@@ -8,13 +8,13 @@ import (
 	cockroachdb "github.com/cockroachdb/pebble"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/migrations"
-	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
-	"github.com/ssvlabs/ssv/storage/badger"
-	"github.com/ssvlabs/ssv/storage/basedb"
-	"github.com/ssvlabs/ssv/storage/pebble"
+	"github.com/ssvlabs/ssv/v2/migrations"
+	"github.com/ssvlabs/ssv/v2/networkconfig"
+	"github.com/ssvlabs/ssv/v2/observability/log/fields"
+	"github.com/ssvlabs/ssv/v2/storage/badger"
+	"github.com/ssvlabs/ssv/v2/storage/basedb"
+	"github.com/ssvlabs/ssv/v2/storage/pebble"
 )
 
 func setupBadgerDB(

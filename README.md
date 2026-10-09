@@ -5,7 +5,7 @@
 
 # SSV Node
 
-[![API Reference](https://img.shields.io/badge/API%20Reference-blue)](https://pkg.go.dev/github.com/ssvlabs/ssv)
+[![API Reference](https://img.shields.io/badge/API%20Reference-blue)](https://pkg.go.dev/github.com/ssvlabs/ssv/v2)
 [![Github Actions](https://github.com/ssvlabs/ssv/actions/workflows/unit-test.yml/badge.svg?branch=main)](https://github.com/ssvlabs/ssv/actions/workflows/unit-test.yml)
 [![Github Actions](https://github.com/ssvlabs/ssv/actions/workflows/lint.yml/badge.svg?branch=main)](https://github.com/ssvlabs/ssv/actions/workflows/lint.yml)
 [![Coverage Status](https://codecov.io/gh/ssvlabs/ssv/branch/main/graph/badge.svg)](https://codecov.io/gh/ssvlabs/ssv/tree/main)
@@ -49,6 +49,16 @@ The following documents contain instructions and information on how to get start
 - [Operator Node Installation](https://docs.ssv.network/operators/operator-node/node-setup/)
 - [Developers' Guide](./docs/DEV_GUIDE.md)
 - [SSV API Docs](https://ssvlabs.github.io/ssv/)
+
+### Using SSV as a Go library
+
+```bash
+go get github.com/ssvlabs/ssv/v2@<version>
+```
+
+SSV builds against a fork of `go-eth2-client`. Go ignores `replace` directives of dependencies, so copy the
+`replace github.com/attestantio/go-eth2-client => github.com/ssvlabs/go-eth2-client ...` line from this repository's
+[go.mod](./go.mod) (at the version you depend on) into your own `go.mod`.
 
 ## <img src="https://github.com/Anmol-Baranwal/Cool-GIFs-For-GitHub/assets/74038190/fa83eeb9-f4e2-4d85-93f0-688af11babf8" width="35">&nbsp; Contribution
 

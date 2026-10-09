@@ -3,7 +3,7 @@ package exporter
 import (
 	"net/http"
 
-	"github.com/ssvlabs/ssv/api"
+	"github.com/ssvlabs/ssv/v2/api"
 )
 
 // Decideds is the backward-compatible handler for exporter-v1 "decideds" endpoint.

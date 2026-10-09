@@ -7,13 +7,13 @@ import (
 	"github.com/patrickmn/go-cache"
 	"go.uber.org/zap"
 
-	dutytracer "github.com/ssvlabs/ssv/exporter/dutytracer"
-	"github.com/ssvlabs/ssv/exporter/v1/api"
-	qbftstorage "github.com/ssvlabs/ssv/ibft/storage"
-	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/observability/log/fields"
-	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
-	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	dutytracer "github.com/ssvlabs/ssv/v2/exporter/dutytracer"
+	"github.com/ssvlabs/ssv/v2/exporter/v1/api"
+	qbftstorage "github.com/ssvlabs/ssv/v2/ibft/storage"
+	"github.com/ssvlabs/ssv/v2/networkconfig"
+	"github.com/ssvlabs/ssv/v2/observability/log/fields"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/qbft/controller"
+	registrystorage "github.com/ssvlabs/ssv/v2/registry/storage"
 )
 
 // NewStreamPublisher handles incoming newly decided messages.

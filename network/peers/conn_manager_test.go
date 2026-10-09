@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/v2/network/commons"
 )
 
 var errTestClosePeer = errors.New("test close peer error")

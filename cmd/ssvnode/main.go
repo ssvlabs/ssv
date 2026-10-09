@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/ssvlabs/ssv/cli"
+	"github.com/ssvlabs/ssv/v2/cli"
 )
 
 // AppName is the application name

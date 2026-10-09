@@ -6,8 +6,8 @@ import (
 
 	"github.com/hashicorp/go-multierror"
 
-	"github.com/ssvlabs/ssv/api"
-	exportercore "github.com/ssvlabs/ssv/exporter"
+	"github.com/ssvlabs/ssv/v2/api"
+	exportercore "github.com/ssvlabs/ssv/v2/exporter"
 )
 
 // ValidatorTraces godoc

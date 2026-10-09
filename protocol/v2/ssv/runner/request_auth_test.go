@@ -12,11 +12,11 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv"
-	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
-	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+	protocolp2p "github.com/ssvlabs/ssv/v2/protocol/v2/p2p"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/ssv"
+	protocoltesting "github.com/ssvlabs/ssv/v2/protocol/v2/testing"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/types/gloas"
 )
 
 // broadcastPartialSigTypes decodes the captured broadcasts into their partial-sig message types.

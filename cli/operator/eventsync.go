@@ -8,16 +8,16 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/eth/eventhandler"
-	"github.com/ssvlabs/ssv/eth/eventparser"
-	"github.com/ssvlabs/ssv/eth/eventsyncer"
-	"github.com/ssvlabs/ssv/eth/executionclient"
-	"github.com/ssvlabs/ssv/eth/localevents"
-	"github.com/ssvlabs/ssv/networkconfig"
-	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
-	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
-	"github.com/ssvlabs/ssv/operator/validator"
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+	"github.com/ssvlabs/ssv/v2/eth/eventhandler"
+	"github.com/ssvlabs/ssv/v2/eth/eventparser"
+	"github.com/ssvlabs/ssv/v2/eth/eventsyncer"
+	"github.com/ssvlabs/ssv/v2/eth/executionclient"
+	"github.com/ssvlabs/ssv/v2/eth/localevents"
+	"github.com/ssvlabs/ssv/v2/networkconfig"
+	operatordatastore "github.com/ssvlabs/ssv/v2/operator/datastore"
+	operatorstorage "github.com/ssvlabs/ssv/v2/operator/storage"
+	"github.com/ssvlabs/ssv/v2/operator/validator"
 )
 
 // syncContractEvents blocks until historical events are synced, then returns the event syncer plus a

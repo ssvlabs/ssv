@@ -3,8 +3,8 @@ package qbft
 import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 
-	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+	protocolp2p "github.com/ssvlabs/ssv/v2/protocol/v2/p2p"
 )
 
 type signing interface {

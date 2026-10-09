@@ -14,12 +14,12 @@ import (
 
 	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
 	types "github.com/ssvlabs/ssv-spec/types"
-	network "github.com/ssvlabs/ssv/network"
-	commons "github.com/ssvlabs/ssv/network/commons"
-	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
-	types0 "github.com/ssvlabs/ssv/protocol/v2/types"
-	storage "github.com/ssvlabs/ssv/registry/storage"
-	basedb "github.com/ssvlabs/ssv/storage/basedb"
+	network "github.com/ssvlabs/ssv/v2/network"
+	commons "github.com/ssvlabs/ssv/v2/network/commons"
+	protocolp2p "github.com/ssvlabs/ssv/v2/protocol/v2/p2p"
+	types0 "github.com/ssvlabs/ssv/v2/protocol/v2/types"
+	storage "github.com/ssvlabs/ssv/v2/registry/storage"
+	basedb "github.com/ssvlabs/ssv/v2/storage/basedb"
 	gomock "go.uber.org/mock/gomock"
 )
 

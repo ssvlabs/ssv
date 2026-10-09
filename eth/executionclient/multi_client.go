@@ -15,7 +15,7 @@ import (
 	"github.com/sourcegraph/conc/pool"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/eth/contract"
+	"github.com/ssvlabs/ssv/v2/eth/contract"
 )
 
 var _ Provider = &MultiClient{}
