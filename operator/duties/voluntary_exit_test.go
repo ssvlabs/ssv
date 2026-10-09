@@ -14,8 +14,8 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/eth/executionclient"
-	"github.com/ssvlabs/ssv/operator/duties/dutystore"
+	"github.com/ssvlabs/ssv/v2/eth/executionclient"
+	"github.com/ssvlabs/ssv/v2/operator/duties/dutystore"
 )
 
 // TestVoluntaryExitDutySlotPinned guards a wire-format invariant: pre-#2851

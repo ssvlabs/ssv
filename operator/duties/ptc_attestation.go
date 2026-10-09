@@ -8,9 +8,9 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/observability/log/fields"
-	"github.com/ssvlabs/ssv/operator/duties/dutystore"
-	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
+	"github.com/ssvlabs/ssv/v2/observability/log/fields"
+	"github.com/ssvlabs/ssv/v2/operator/duties/dutystore"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/types/gloas"
 )
 
 // PTCAttestationHandler schedules the Gloas (ePBS) Payload Timeliness Committee attestation duty

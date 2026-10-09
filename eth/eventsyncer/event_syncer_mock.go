@@ -15,7 +15,7 @@ import (
 	reflect "reflect"
 
 	types "github.com/ethereum/go-ethereum/core/types"
-	executionclient "github.com/ssvlabs/ssv/eth/executionclient"
+	executionclient "github.com/ssvlabs/ssv/v2/eth/executionclient"
 	gomock "go.uber.org/mock/gomock"
 )
 

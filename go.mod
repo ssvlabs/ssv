@@ -1,4 +1,4 @@
-module github.com/ssvlabs/ssv
+module github.com/ssvlabs/ssv/v2
 
 go 1.26
 

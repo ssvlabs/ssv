@@ -8,7 +8,7 @@ import (
 
 	"go.uber.org/zap"
 
-	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
+	protocoltesting "github.com/ssvlabs/ssv/v2/protocol/v2/testing"
 )
 
 type MultiMsgProcessingSpecTest struct {

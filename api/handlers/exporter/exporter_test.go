@@ -21,16 +21,16 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/api"
-	dutytracer "github.com/ssvlabs/ssv/exporter/dutytracer"
-	"github.com/ssvlabs/ssv/exporter/rolemask"
-	estore "github.com/ssvlabs/ssv/exporter/store"
-	"github.com/ssvlabs/ssv/exporter/traces"
-	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
-	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/operator/slotticker"
-	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
-	"github.com/ssvlabs/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/v2/api"
+	dutytracer "github.com/ssvlabs/ssv/v2/exporter/dutytracer"
+	"github.com/ssvlabs/ssv/v2/exporter/rolemask"
+	estore "github.com/ssvlabs/ssv/v2/exporter/store"
+	"github.com/ssvlabs/ssv/v2/exporter/traces"
+	ibftstorage "github.com/ssvlabs/ssv/v2/ibft/storage"
+	"github.com/ssvlabs/ssv/v2/networkconfig"
+	"github.com/ssvlabs/ssv/v2/operator/slotticker"
+	ssvtypes "github.com/ssvlabs/ssv/v2/protocol/v2/types"
+	"github.com/ssvlabs/ssv/v2/registry/storage"
 )
 
 // mockParticipantStore is a basic mock for ibftstorage.ParticipantStore.

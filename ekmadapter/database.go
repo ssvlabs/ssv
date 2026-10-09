@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
-	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/v2/storage/basedb"
 )
 
 // NewDatabaseAdapter bridges node's basedb.Database to ekm.Database.

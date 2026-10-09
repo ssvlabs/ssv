@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/v2/network/commons"
 )
 
 func TestSubFilter(t *testing.T) {

@@ -11,16 +11,16 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/observability/log"
-	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
-	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
-	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
-	ssvtesting "github.com/ssvlabs/ssv/protocol/v2/ssv/testing"
-	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
-	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/v2/networkconfig"
+	"github.com/ssvlabs/ssv/v2/observability/log"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/qbft/controller"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/qbft/instance"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/qbft/roundtimer"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/ssv"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/ssv/runner"
+	ssvtesting "github.com/ssvlabs/ssv/v2/protocol/v2/ssv/testing"
+	protocoltesting "github.com/ssvlabs/ssv/v2/protocol/v2/testing"
+	ssvtypes "github.com/ssvlabs/ssv/v2/protocol/v2/types"
 )
 
 // fixRunnerForRun, and the helpers it depends on, live in this non-test file (rather than

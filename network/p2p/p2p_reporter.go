@@ -6,9 +6,9 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	ssvpeers "github.com/ssvlabs/ssv/network/peers"
-	"github.com/ssvlabs/ssv/observability/log/fields"
-	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
+	ssvpeers "github.com/ssvlabs/ssv/v2/network/peers"
+	"github.com/ssvlabs/ssv/v2/observability/log/fields"
+	protocolp2p "github.com/ssvlabs/ssv/v2/protocol/v2/p2p"
 )
 
 // ReportValidation reports the result for the given message

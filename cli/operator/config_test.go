@@ -14,12 +14,12 @@ import (
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
 
-	exporterconfig "github.com/ssvlabs/ssv/exporter/config"
-	"github.com/ssvlabs/ssv/networkconfig"
-	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
-	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
-	kv "github.com/ssvlabs/ssv/storage/badger"
-	"github.com/ssvlabs/ssv/storage/basedb"
+	exporterconfig "github.com/ssvlabs/ssv/v2/exporter/config"
+	"github.com/ssvlabs/ssv/v2/networkconfig"
+	operatorstorage "github.com/ssvlabs/ssv/v2/operator/storage"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/qbft/roundtimer"
+	kv "github.com/ssvlabs/ssv/v2/storage/badger"
+	"github.com/ssvlabs/ssv/v2/storage/basedb"
 )
 
 const (

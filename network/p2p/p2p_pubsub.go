@@ -15,13 +15,13 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/network"
-	"github.com/ssvlabs/ssv/network/commons"
-	"github.com/ssvlabs/ssv/network/topics"
-	"github.com/ssvlabs/ssv/observability/log/fields"
-	p2pprotocol "github.com/ssvlabs/ssv/protocol/v2/p2p"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
-	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/v2/network"
+	"github.com/ssvlabs/ssv/v2/network/commons"
+	"github.com/ssvlabs/ssv/v2/network/topics"
+	"github.com/ssvlabs/ssv/v2/observability/log/fields"
+	p2pprotocol "github.com/ssvlabs/ssv/v2/protocol/v2/p2p"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/ssv/queue"
+	ssvtypes "github.com/ssvlabs/ssv/v2/protocol/v2/types"
 )
 
 // committeeSubscriptionStatus reflects the state of committee subscription (whether we are subscribed to the

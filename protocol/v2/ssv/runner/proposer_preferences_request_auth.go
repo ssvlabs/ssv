@@ -10,8 +10,8 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/observability/log/fields"
-	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
+	"github.com/ssvlabs/ssv/v2/observability/log/fields"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/types/gloas"
 )
 
 // The §5 dispatcher's request-auth rounds (SIP #94 §5): threshold-signing one BuilderRequestAuth

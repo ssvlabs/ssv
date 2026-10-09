@@ -9,15 +9,15 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/api"
-	exportercore "github.com/ssvlabs/ssv/exporter"
-	"github.com/ssvlabs/ssv/exporter/rolemask"
-	"github.com/ssvlabs/ssv/exporter/traces"
-	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
-	"github.com/ssvlabs/ssv/networkconfig"
-	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/v2/api"
+	exportercore "github.com/ssvlabs/ssv/v2/exporter"
+	"github.com/ssvlabs/ssv/v2/exporter/rolemask"
+	"github.com/ssvlabs/ssv/v2/exporter/traces"
+	ibftstorage "github.com/ssvlabs/ssv/v2/ibft/storage"
+	"github.com/ssvlabs/ssv/v2/networkconfig"
+	registrystorage "github.com/ssvlabs/ssv/v2/registry/storage"
 
-	dutytracer "github.com/ssvlabs/ssv/exporter/dutytracer"
+	dutytracer "github.com/ssvlabs/ssv/v2/exporter/dutytracer"
 )
 
 type Exporter struct {

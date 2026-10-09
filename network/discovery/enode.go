@@ -11,7 +11,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	ma "github.com/multiformats/go-multiaddr"
 
-	"github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/v2/network/commons"
 )
 
 // createLocalNode create a new enode.LocalNode instance

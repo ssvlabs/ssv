@@ -3,7 +3,7 @@ package validation
 import (
 	"time"
 
-	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/types/gloas"
 )
 
 // To add some encoding overhead for ssz, we use (N + N/encodingOverheadDivisor + 4) for a structure with expected size N

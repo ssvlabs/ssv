@@ -15,10 +15,10 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/eth/executionclient"
-	"github.com/ssvlabs/ssv/networkconfig"
-	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
-	"github.com/ssvlabs/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/v2/eth/executionclient"
+	"github.com/ssvlabs/ssv/v2/networkconfig"
+	ssvtypes "github.com/ssvlabs/ssv/v2/protocol/v2/types"
+	"github.com/ssvlabs/ssv/v2/registry/storage"
 )
 
 // const rawOperatorAdded = `{

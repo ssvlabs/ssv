@@ -10,9 +10,9 @@ import (
 
 	"github.com/ssvlabs/ssv/ssvsigner"
 
-	"github.com/ssvlabs/ssv/eth/contract"
-	"github.com/ssvlabs/ssv/networkconfig"
-	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/v2/eth/contract"
+	"github.com/ssvlabs/ssv/v2/networkconfig"
+	registrystorage "github.com/ssvlabs/ssv/v2/registry/storage"
 )
 
 // TestHandleValidatorAddedUndecryptableShareIsMalformed drives the real handleValidatorAdded ->

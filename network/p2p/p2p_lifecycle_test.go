@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	p2pprotocol "github.com/ssvlabs/ssv/protocol/v2/p2p"
+	p2pprotocol "github.com/ssvlabs/ssv/v2/protocol/v2/p2p"
 )
 
 // TestSubscribeRequiresStartedNetwork locks in the invariant that a constructed-but-not-Started

@@ -9,9 +9,9 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/observability/log"
-	"github.com/ssvlabs/ssv/observability/metrics"
-	"github.com/ssvlabs/ssv/observability/traces"
+	"github.com/ssvlabs/ssv/v2/observability/log"
+	"github.com/ssvlabs/ssv/v2/observability/metrics"
+	"github.com/ssvlabs/ssv/v2/observability/traces"
 )
 
 func init() {

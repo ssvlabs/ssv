@@ -9,7 +9,7 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/utils/hashmap"
+	"github.com/ssvlabs/ssv/v2/utils/hashmap"
 )
 
 // component is an interface a component needs to implement for HealthProber to be able to probe it.

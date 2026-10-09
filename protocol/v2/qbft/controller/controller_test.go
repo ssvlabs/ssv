@@ -14,13 +14,13 @@ import (
 
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
-	"github.com/ssvlabs/ssv/observability/log"
-	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
-	"github.com/ssvlabs/ssv/protocol/v2/qbft"
-	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
-	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv"
-	"github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/v2/observability/log"
+	protocolp2p "github.com/ssvlabs/ssv/v2/protocol/v2/p2p"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/qbft"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/qbft/instance"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/qbft/roundtimer"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/ssv"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/types"
 )
 
 // testingNetwork wraps the spec testing network to satisfy protocolp2p.Network. Defined

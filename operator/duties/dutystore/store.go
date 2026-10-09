@@ -3,7 +3,7 @@ package dutystore
 import (
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 
-	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/types/gloas"
 )
 
 type Store struct {

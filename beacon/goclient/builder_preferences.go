@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/types/gloas"
 )
 
 // builderPreferencesPath is the beacon-APIs#630 endpoint through which the beacon node forwards a

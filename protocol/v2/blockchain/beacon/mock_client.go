@@ -19,7 +19,7 @@ import (
 	altair "github.com/attestantio/go-eth2-client/spec/altair"
 	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
-	gloas "github.com/ssvlabs/ssv/protocol/v2/types/gloas"
+	gloas "github.com/ssvlabs/ssv/v2/protocol/v2/types/gloas"
 	gomock "go.uber.org/mock/gomock"
 )
 

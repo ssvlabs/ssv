@@ -11,13 +11,13 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	dutytracer "github.com/ssvlabs/ssv/exporter/dutytracer"
-	"github.com/ssvlabs/ssv/exporter/rolemask"
-	"github.com/ssvlabs/ssv/exporter/store"
-	"github.com/ssvlabs/ssv/exporter/traces"
-	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
-	"github.com/ssvlabs/ssv/networkconfig"
-	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	dutytracer "github.com/ssvlabs/ssv/v2/exporter/dutytracer"
+	"github.com/ssvlabs/ssv/v2/exporter/rolemask"
+	"github.com/ssvlabs/ssv/v2/exporter/store"
+	"github.com/ssvlabs/ssv/v2/exporter/traces"
+	ibftstorage "github.com/ssvlabs/ssv/v2/ibft/storage"
+	"github.com/ssvlabs/ssv/v2/networkconfig"
+	registrystorage "github.com/ssvlabs/ssv/v2/registry/storage"
 )
 
 type Exporter struct {

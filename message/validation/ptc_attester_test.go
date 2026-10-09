@@ -8,10 +8,10 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 
-	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/operator/duties/dutystore"
-	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
-	"github.com/ssvlabs/ssv/protocol/v2/types/ssvtestingutils"
+	"github.com/ssvlabs/ssv/v2/networkconfig"
+	"github.com/ssvlabs/ssv/v2/operator/duties/dutystore"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/types/gloas"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/types/ssvtestingutils"
 )
 
 // A PTC member is drawn from a beacon committee, and a validator sits on exactly one beacon committee

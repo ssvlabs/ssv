@@ -6,7 +6,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/stretchr/testify/require"
 
-	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/types/gloas"
 )
 
 func TestRequestAuthCache(t *testing.T) {

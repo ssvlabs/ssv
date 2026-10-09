@@ -28,8 +28,8 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
 
-	"github.com/ssvlabs/ssv/eth/simulator"
-	"github.com/ssvlabs/ssv/eth/simulator/simcontract"
+	"github.com/ssvlabs/ssv/v2/eth/simulator"
+	"github.com/ssvlabs/ssv/v2/eth/simulator/simcontract"
 )
 
 var (

@@ -10,7 +10,7 @@ import (
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/stretchr/testify/require"
 
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/blockchain/beacon"
 )
 
 // flakyAggregateBeacon fails GetAggregateAttestation a set number of times before succeeding. Only

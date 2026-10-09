@@ -11,7 +11,7 @@ import (
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/observability/log/fields"
+	"github.com/ssvlabs/ssv/v2/observability/log/fields"
 )
 
 // verifyLogsWithBloom cross-checks the logs returned by FilterLogs against each block's
