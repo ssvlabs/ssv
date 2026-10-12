@@ -146,12 +146,11 @@ func runHealthyTest(
 		longTimeout = 5 * time.Second
 	)
 
-	mockResponses := mocks.ServerResponses()
 	replaceSyncing := atomic.Bool{}
 	urls := make([]string, 0, len(syncResponseList))
 
 	for _, syncResp := range syncResponseList {
-		mockServer := mocks.NewServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
+		mockServer := mocks.NewServerWithHandler(func(r *http.Request, resp mocks.Response) (mocks.Response, error) {
 			if r.URL.Path == syncingPath && replaceSyncing.Load() {
 				output := struct {
 					Data *v1.SyncState `json:"data"`
@@ -160,18 +159,16 @@ func runHealthyTest(
 				}
 				rawData, err := json.Marshal(output)
 				if err != nil {
-					return nil, err
+					return mocks.Response{}, err
 				}
 
-				if syncResp.delay > 0 {
-					time.Sleep(syncResp.delay)
-				}
-
-				return rawData, nil
+				// Unlike a sleep, the delay ends once the client gives up on the request.
+				return mocks.NewResponse(rawData, mocks.WithDelay(syncResp.delay)), nil
 			}
 
-			return mockResponses[r.URL.Path], nil
+			return resp, nil
 		})
+		t.Cleanup(mockServer.Close)
 
 		urls = append(urls, mockServer.URL)
 	}

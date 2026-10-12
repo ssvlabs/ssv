@@ -206,32 +206,25 @@ func TestDomainDataCoalescedFetchSurvivesWinnerCancellation(t *testing.T) {
 	}
 	client.multiClient = countingClient
 
-	firstCtx, cancelFirst := context.WithCancel(ctx)
-	firstResultCh := make(chan struct {
+	type domainResult struct {
 		domain phase0.Domain
 		err    error
-	}, 1)
+	}
+
+	firstCtx, cancelFirst := context.WithCancel(ctx)
+	firstResultCh := make(chan domainResult, 1)
 	go func() {
 		domain, err := client.DomainData(firstCtx, 555, spectypes.DomainAttester)
-		firstResultCh <- struct {
-			domain phase0.Domain
-			err    error
-		}{domain: domain, err: err}
+		firstResultCh <- domainResult{domain: domain, err: err}
 	}()
 
 	<-started
 	cancelFirst()
 
-	secondResultCh := make(chan struct {
-		domain phase0.Domain
-		err    error
-	}, 1)
+	secondResultCh := make(chan domainResult, 1)
 	go func() {
 		domain, err := client.DomainData(ctx, 555, spectypes.DomainAttester)
-		secondResultCh <- struct {
-			domain phase0.Domain
-			err    error
-		}{domain: domain, err: err}
+		secondResultCh <- domainResult{domain: domain, err: err}
 	}()
 
 	close(release)
