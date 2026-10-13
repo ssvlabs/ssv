@@ -99,58 +99,54 @@ func (pst *psTracer) log(logger *zap.Logger, evt *ps_pb.TraceEvent) {
 		if err == nil {
 			fields = append(fields, zap.String("targetPeer", pid.String()))
 		}
-		if meta := msg.GetMeta(); meta != nil {
-			if ctrl := meta.Control; ctrl != nil {
-				fields = appendIHave(fields, ctrl.GetIhave())
-				fields = appendIWant(fields, ctrl.GetIwant())
-			}
-			var subs []string
-			for _, sub := range meta.Subscription {
-				subs = append(subs, sub.GetTopic())
-			}
-			fields = append(fields, zap.Int("subsCount", len(subs)))
-			fields = append(fields, zap.Strings("subs", subs))
-		}
+		fields = appendRPCMeta(fields, msg.GetMeta())
 	case ps_pb.TraceEvent_DROP_RPC:
 		msg := evt.GetDropRPC()
 		pid, err := peer.IDFromBytes(msg.GetSendTo())
 		if err == nil {
 			fields = append(fields, zap.String("targetPeer", pid.String()))
 		}
-		if meta := msg.GetMeta(); meta != nil {
-			if ctrl := meta.Control; ctrl != nil {
-				fields = appendIHave(fields, ctrl.GetIhave())
-				fields = appendIWant(fields, ctrl.GetIwant())
-			}
-			var subs []string
-			for _, sub := range meta.Subscription {
-				subs = append(subs, sub.GetTopic())
-			}
-			fields = append(fields, zap.Int("subsCount", len(subs)))
-			fields = append(fields, zap.Strings("subs", subs))
-		}
+		fields = appendRPCMeta(fields, msg.GetMeta())
 	case ps_pb.TraceEvent_RECV_RPC:
 		msg := evt.GetRecvRPC()
 		pid, err := peer.IDFromBytes(msg.GetReceivedFrom())
 		if err == nil {
 			fields = append(fields, zap.String("receivedFrom", pid.String()))
 		}
-		if meta := msg.GetMeta(); meta != nil {
-			if ctrl := meta.Control; ctrl != nil {
-				fields = appendIHave(fields, ctrl.GetIhave())
-				fields = appendIWant(fields, ctrl.GetIwant())
-			}
-			var subs []string
-			for _, sub := range meta.Subscription {
-				subs = append(subs, sub.GetTopic())
-			}
-			fields = append(fields, zap.Int("subsCount", len(subs)))
-			fields = append(fields, zap.Strings("subs", subs))
-		}
+		fields = appendRPCMeta(fields, msg.GetMeta())
 	default:
 		return
 	}
 	logger.Debug("pubsub event", fields...)
+}
+
+// appendRPCMeta adds the RPC's payload message ids, gossip control ids (IHAVE/IWANT) and
+// subscription changes. The payload ids matter most: they record which messages were actually
+// forwarded to/by a peer, which is what lets a message's path (or the hop where it vanished) be
+// reconstructed across nodes from their traces.
+func appendRPCMeta(fields []zap.Field, meta *ps_pb.TraceEvent_RPCMeta) []zap.Field {
+	if meta == nil {
+		return fields
+	}
+	if msgs := meta.GetMessages(); len(msgs) > 0 {
+		mids := make([]string, 0, len(msgs))
+		for _, m := range msgs {
+			mids = append(mids, hex.EncodeToString(m.GetMessageID()))
+		}
+		fields = append(fields, zap.Int("msgsCount", len(mids)))
+		fields = append(fields, zap.Strings("msgIDs", mids))
+	}
+	if ctrl := meta.Control; ctrl != nil {
+		fields = appendIHave(fields, ctrl.GetIhave())
+		fields = appendIWant(fields, ctrl.GetIwant())
+	}
+	var subs []string
+	for _, sub := range meta.Subscription {
+		subs = append(subs, sub.GetTopic())
+	}
+	fields = append(fields, zap.Int("subsCount", len(subs)))
+	fields = append(fields, zap.Strings("subs", subs))
+	return fields
 }
 
 func appendIHave(fields []zap.Field, ihave []*ps_pb.TraceEvent_ControlIHaveMeta) []zap.Field {

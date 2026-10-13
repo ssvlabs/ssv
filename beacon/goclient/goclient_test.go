@@ -84,8 +84,8 @@ func TestHealthy(t *testing.T) {
 		{
 			name: "multi client: both time out",
 			syncResponseList: []syncResponse{
-				{state: &v1.SyncState{SyncDistance: 0, IsSyncing: false}, delay: 2 * time.Second},
-				{state: &v1.SyncState{SyncDistance: 0, IsSyncing: false}, delay: 2 * time.Second},
+				{state: &v1.SyncState{SyncDistance: 0, IsSyncing: false}, delay: syncResponseTimeoutDelay},
+				{state: &v1.SyncState{SyncDistance: 0, IsSyncing: false}, delay: syncResponseTimeoutDelay},
 			},
 			syncDistanceTolerance: 2,
 			expectedErr:           context.DeadlineExceeded,
@@ -93,7 +93,7 @@ func TestHealthy(t *testing.T) {
 		{
 			name: "multi client: first times out",
 			syncResponseList: []syncResponse{
-				{state: &v1.SyncState{SyncDistance: 0, IsSyncing: false}, delay: 2 * time.Second},
+				{state: &v1.SyncState{SyncDistance: 0, IsSyncing: false}, delay: syncResponseTimeoutDelay},
 				{state: &v1.SyncState{SyncDistance: 0, IsSyncing: false}},
 			},
 			syncDistanceTolerance: 2,
@@ -103,7 +103,7 @@ func TestHealthy(t *testing.T) {
 			name: "multi client: second times out",
 			syncResponseList: []syncResponse{
 				{state: &v1.SyncState{SyncDistance: 0, IsSyncing: false}},
-				{state: &v1.SyncState{SyncDistance: 0, IsSyncing: false}, delay: 2 * time.Second},
+				{state: &v1.SyncState{SyncDistance: 0, IsSyncing: false}, delay: syncResponseTimeoutDelay},
 			},
 			syncDistanceTolerance: 2,
 			expectedErr:           nil,
@@ -124,6 +124,10 @@ func TestHealthy(t *testing.T) {
 	}
 }
 
+// syncResponseTimeoutDelay delays the sync response in the cases that must time out, well past
+// runHealthyTest's commonTimeout.
+const syncResponseTimeoutDelay = 6 * time.Second
+
 type syncResponse struct {
 	state *v1.SyncState
 	delay time.Duration
@@ -135,8 +139,11 @@ func runHealthyTest(
 	syncDistanceTolerance uint64,
 ) error {
 	const (
-		commonTimeout = 400 * time.Millisecond
-		longTimeout   = 500 * time.Millisecond
+		// commonTimeout also bounds the requests the client makes while initializing, so it needs
+		// headroom on a loaded CI runner. It must stay below syncResponseTimeoutDelay.
+		commonTimeout = 2 * time.Second
+		// longTimeout only bounds client initialization, which no test case delays.
+		longTimeout = 5 * time.Second
 	)
 
 	mockResponses := mocks.ServerResponses()
@@ -194,6 +201,12 @@ func TestTimeouts(t *testing.T) {
 	)
 
 	// CLs unresponsive at startup: New must wait under ctx, not fatal eagerly with "client is not active".
+	//
+	// The mock sleeps longer than commonTimeout on every request, so each activation ping times out at
+	// commonTimeout (well before the server would respond) and the client never becomes active - forcing New
+	// to wait out ctx and return DeadlineExceeded rather than eager ErrNotActive. The ctx deadline only needs
+	// to exceed commonTimeout; it does not race the server response, since the per-request commonTimeout fires
+	// first (here ctx and the mock sleep share a value only for convenience, not because they're timed to race).
 	{
 		undialableServer := mocks.NewServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
 			time.Sleep(commonTimeout + timeoutMargin)

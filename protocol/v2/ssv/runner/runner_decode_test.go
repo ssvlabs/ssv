@@ -7,6 +7,8 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
+
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 type dummyValueChecker struct{}
@@ -69,7 +71,7 @@ func TestAggregatorRunnerDecodeIgnoresValCheck(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, beforeRoot, afterRoot)
-	require.Equal(t, spectypes.RoleAggregator, decoded.GetRole())
+	require.Equal(t, ssvtypes.RoleAggregator, decoded.GetRole())
 	require.Len(t, decoded.GetShares(), 1)
 	require.Nil(t, decoded.ValCheck)
 	require.False(t, decoded.hasDutyRunning())
@@ -147,7 +149,7 @@ func TestSyncCommitteeAggregatorRunnerDecodeIgnoresValCheck(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, beforeRoot, afterRoot)
-	require.Equal(t, spectypes.RoleSyncCommitteeContribution, decoded.GetRole())
+	require.Equal(t, ssvtypes.RoleSyncCommitteeContribution, decoded.GetRole())
 	require.Len(t, decoded.GetShares(), 1)
 	require.Nil(t, decoded.ValCheck)
 	require.False(t, decoded.hasDutyRunning())

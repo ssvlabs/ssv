@@ -188,7 +188,9 @@ func TestDomainDataCoalescedFetchSurvivesWinnerCancellation(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	started := make(chan struct{})
+	// Buffered: the fetch signals with a non-blocking send, which would be dropped if the test isn't
+	// receiving yet, leaving the test waiting forever.
+	started := make(chan struct{}, 1)
 	release := make(chan struct{})
 
 	countingClient := &countingMultiClient{

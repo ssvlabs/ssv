@@ -1,7 +1,6 @@
 package testing
 
 import (
-	"bytes"
 	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec"
@@ -21,6 +20,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/testing/mocks"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 var TestingHighestDecidedSlot = phase0.Slot(0)
@@ -33,16 +33,24 @@ var CommitteeRunnerWithShareMap = func(logger *zap.Logger, shareMap map[phase0.V
 	return baseRunnerWithShareMap(logger, spectypes.RoleCommittee, shareMap)
 }
 
+var AggregatorCommitteeRunner = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet) runner.Runner {
+	return baseRunner(logger, spectypes.RoleAggregatorCommittee, keySet)
+}
+
+var AggregatorCommitteeRunnerWithShareMap = func(logger *zap.Logger, shareMap map[phase0.ValidatorIndex]*spectypes.Share) runner.Runner {
+	return baseRunnerWithShareMap(logger, spectypes.RoleAggregatorCommittee, shareMap)
+}
+
 var ProposerRunner = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet) runner.Runner {
 	return baseRunner(logger, spectypes.RoleProposer, keySet)
 }
 
 var AggregatorRunner = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet) runner.Runner {
-	return baseRunner(logger, spectypes.RoleAggregator, keySet)
+	return baseRunner(logger, ssvtypes.RoleAggregator, keySet)
 }
 
 var SyncCommitteeContributionRunner = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet) runner.Runner {
-	return baseRunner(logger, spectypes.RoleSyncCommitteeContribution, keySet)
+	return baseRunner(logger, ssvtypes.RoleSyncCommitteeContribution, keySet)
 }
 
 var ValidatorRegistrationRunner = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet) runner.Runner {
@@ -78,8 +86,8 @@ var ConstructBaseRunner = func(
 	keySet *spectestingutils.TestKeySet,
 ) (runner.Runner, error) {
 	share := spectestingutils.TestingShare(keySet, spectestingutils.TestingValidatorIndex)
-	identifier := spectypes.NewMsgID(spectypes.JatoTestnet, spectestingutils.TestingValidatorPubKey[:], role)
-	net := spectestingutils.NewTestingNetwork(1, keySet.OperatorKeys[1])
+	identifier := spectypes.NewValidatorMsgID(spectypes.JatoTestnet, spectypes.ValidatorPK(spectestingutils.TestingValidatorPubKey), role)
+	net := protocoltesting.NewTestingNetwork(1, keySet.OperatorKeys[1])
 	km := ekm.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager())
 	operator := spectestingutils.TestingCommitteeMember(keySet)
 	opSigner := spectestingutils.NewOperatorSigner(keySet, 1)
@@ -90,14 +98,16 @@ var ConstructBaseRunner = func(
 	case spectypes.RoleCommittee:
 		valCheck = ssv.NewVoteChecker(km, spectestingutils.TestingDutySlot,
 			[]phase0.BLSPubKey{phase0.BLSPubKey(share.SharePubKey)}, vote)
+	case spectypes.RoleAggregatorCommittee:
+		valCheck = ssv.NewAggregatorCommitteeChecker()
 	case spectypes.RoleProposer:
 		valCheck = ssv.NewProposerChecker(km, networkconfig.TestNetwork.Beacon,
 			(spectypes.ValidatorPK)(spectestingutils.TestingValidatorPubKey), spectestingutils.TestingValidatorIndex,
-			phase0.BLSPubKey(share.SharePubKey))
-	case spectypes.RoleAggregator:
+			phase0.BLSPubKey(share.SharePubKey), nil)
+	case ssvtypes.RoleAggregator:
 		valCheck = ssv.NewAggregatorChecker(networkconfig.TestNetwork.Beacon,
 			(spectypes.ValidatorPK)(spectestingutils.TestingValidatorPubKey), spectestingutils.TestingValidatorIndex)
-	case spectypes.RoleSyncCommitteeContribution:
+	case ssvtypes.RoleSyncCommitteeContribution:
 		valCheck = ssv.NewSyncCommitteeContributionChecker(networkconfig.TestNetwork.Beacon,
 			(spectypes.ValidatorPK)(spectestingutils.TestingValidatorPubKey), spectestingutils.TestingValidatorIndex)
 	default:
@@ -144,7 +154,16 @@ var ConstructBaseRunner = func(
 			DutyGuard:           dutyGuard,
 			DoppelgangerHandler: dgHandler,
 		})
-	case spectypes.RoleAggregator:
+	case spectypes.RoleAggregatorCommittee:
+		rnr, err := runner.NewAggregatorCommitteeRunner(runner.AggregatorCommitteeRunnerOptions{
+			BaseRunnerOptions: baseOpts,
+			QBFTController:    contr,
+		})
+		if err != nil {
+			return nil, err
+		}
+		r = rnr
+	case ssvtypes.RoleAggregator:
 		rnr, err := runner.NewAggregatorRunner(runner.AggregatorRunnerOptions{
 			BaseRunnerOptions:  baseOpts,
 			QBFTController:     contr,
@@ -168,7 +187,7 @@ var ConstructBaseRunner = func(
 			Graffiti:            []byte("graffiti"),
 			ProposerDelay:       0,
 		})
-	case spectypes.RoleSyncCommitteeContribution:
+	case ssvtypes.RoleSyncCommitteeContribution:
 		r, err = runner.NewSyncCommitteeAggregatorRunner(runner.SyncCommitteeAggregatorRunnerOptions{
 			BaseRunnerOptions:  baseOpts,
 			QBFTController:     contr,
@@ -216,7 +235,7 @@ var ConstructBaseRunnerWithShareMap = func(
 ) (runner.Runner, error) {
 
 	var identifier spectypes.MessageID
-	var net *spectestingutils.TestingNetwork
+	var net *protocoltesting.TestingNetwork
 	var opSigner *spectypes.OperatorSigner
 	var valCheck ssv.ValueChecker
 	var contr *controller.Controller
@@ -239,22 +258,21 @@ var ConstructBaseRunnerWithShareMap = func(
 			sharePubKeys = append(sharePubKeys, phase0.BLSPubKey(share.SharePubKey))
 		}
 
-		// Identifier
-		var ownerID []byte
-		if role == spectypes.RoleCommittee {
+		// Identifier: committee and aggregator-committee runners key by CommitteeID; all others by validator pubkey.
+		switch role {
+		case spectypes.RoleCommittee, spectypes.RoleAggregatorCommittee:
 			ops := keySetInstance.Committee()
 			committee := make([]uint64, 0, len(ops))
 			for _, op := range ops {
 				committee = append(committee, op.Signer)
 			}
 			committeeID := spectypes.GetCommitteeID(committee)
-			ownerID = bytes.Clone(committeeID[:])
-		} else {
-			ownerID = spectestingutils.TestingValidatorPubKey[:]
+			identifier = spectypes.NewCommitteeMsgID(spectestingutils.TestingSSVDomainType, committeeID, role)
+		default:
+			identifier = spectypes.NewValidatorMsgID(spectestingutils.TestingSSVDomainType, spectypes.ValidatorPK(spectestingutils.TestingValidatorPubKey), role)
 		}
-		identifier = spectypes.NewMsgID(spectestingutils.TestingSSVDomainType, ownerID, role)
 
-		net = spectestingutils.NewTestingNetwork(1, keySetInstance.OperatorKeys[1])
+		net = protocoltesting.NewTestingNetwork(1, keySetInstance.OperatorKeys[1])
 
 		km = ekm.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager())
 		committeeMember := spectestingutils.TestingCommitteeMember(keySetInstance)
@@ -264,13 +282,15 @@ var ConstructBaseRunnerWithShareMap = func(
 		case spectypes.RoleCommittee:
 			valCheck = ssv.NewVoteChecker(km, spectestingutils.TestingDutySlot,
 				sharePubKeys, vote)
+		case spectypes.RoleAggregatorCommittee:
+			valCheck = ssv.NewAggregatorCommitteeChecker()
 		case spectypes.RoleProposer:
 			valCheck = ssv.NewProposerChecker(km, networkconfig.TestNetwork.Beacon,
-				shareInstance.ValidatorPubKey, shareInstance.ValidatorIndex, phase0.BLSPubKey(shareInstance.SharePubKey))
-		case spectypes.RoleAggregator:
+				shareInstance.ValidatorPubKey, shareInstance.ValidatorIndex, phase0.BLSPubKey(shareInstance.SharePubKey), nil)
+		case ssvtypes.RoleAggregator:
 			valCheck = ssv.NewAggregatorChecker(networkconfig.TestNetwork.Beacon,
 				shareInstance.ValidatorPubKey, shareInstance.ValidatorIndex)
-		case spectypes.RoleSyncCommitteeContribution:
+		case ssvtypes.RoleSyncCommitteeContribution:
 			valCheck = ssv.NewSyncCommitteeContributionChecker(networkconfig.TestNetwork.Beacon,
 				shareInstance.ValidatorPubKey, shareInstance.ValidatorIndex)
 		default:
@@ -313,7 +333,16 @@ var ConstructBaseRunnerWithShareMap = func(
 			DutyGuard:           dutyGuard,
 			DoppelgangerHandler: dgHandler,
 		})
-	case spectypes.RoleAggregator:
+	case spectypes.RoleAggregatorCommittee:
+		rnr, err := runner.NewAggregatorCommitteeRunner(runner.AggregatorCommitteeRunnerOptions{
+			BaseRunnerOptions: baseOpts,
+			QBFTController:    contr,
+		})
+		if err != nil {
+			return nil, err
+		}
+		r = rnr
+	case ssvtypes.RoleAggregator:
 		rnr, err := runner.NewAggregatorRunner(runner.AggregatorRunnerOptions{
 			BaseRunnerOptions:  baseOpts,
 			QBFTController:     contr,
@@ -337,7 +366,7 @@ var ConstructBaseRunnerWithShareMap = func(
 			Graffiti:            []byte("graffiti"),
 			ProposerDelay:       0,
 		})
-	case spectypes.RoleSyncCommitteeContribution:
+	case ssvtypes.RoleSyncCommitteeContribution:
 		r, err = runner.NewSyncCommitteeAggregatorRunner(runner.SyncCommitteeAggregatorRunnerOptions{
 			BaseRunnerOptions:  baseOpts,
 			QBFTController:     contr,

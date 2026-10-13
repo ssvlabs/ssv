@@ -7,7 +7,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/api"
-	exporter2 "github.com/ssvlabs/ssv/exporter2"
+	exportercore "github.com/ssvlabs/ssv/exporter"
 	"github.com/ssvlabs/ssv/ibft/storage"
 )
 
@@ -46,7 +46,7 @@ type TraceDecidedsResponse struct {
 }
 
 // TraceDecidedsResponseFromParticipants builds a TraceDecidedsResponse from the core result and aggregated errors.
-func TraceDecidedsResponseFromParticipants(result *exporter2.TraceDecidedsResult, errs *multierror.Error) TraceDecidedsResponse {
+func TraceDecidedsResponseFromParticipants(result *exportercore.TraceDecidedsResult, errs *multierror.Error) TraceDecidedsResponse {
 	resp := TraceDecidedsResponse{
 		Data:   make([]*DecidedParticipant, 0),
 		Errors: toStrings(errs),
@@ -76,7 +76,7 @@ type DecidedsResponse struct {
 	Errors []string `json:"errors,omitempty" swaggertype:"array,string" example:"error getting participants: timeout"`
 }
 
-func DecidedsResponseFromResult(result *exporter2.TraceDecidedsResult) *DecidedsResponse {
+func DecidedsResponseFromResult(result *exportercore.TraceDecidedsResult) *DecidedsResponse {
 	resp := &DecidedsResponse{
 		Data: make([]*DecidedParticipant, 0),
 	}
@@ -114,8 +114,8 @@ func (r *DecidedsRequest) pubKeys() []spectypes.ValidatorPK {
 	return parsePubkeysSlice(r.PubKeys)
 }
 
-func toDecidedsQuery(r *DecidedsRequest) (*exporter2.DecidedsQuery, *PubKeyLengthError) {
-	q := &exporter2.DecidedsQuery{
+func toDecidedsQuery(r *DecidedsRequest) (*exportercore.DecidedsQuery, *PubKeyLengthError) {
+	q := &exportercore.DecidedsQuery{
 		From:  r.From,
 		To:    r.To,
 		Roles: toBeaconRoles(r.Roles),

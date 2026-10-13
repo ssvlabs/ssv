@@ -20,6 +20,7 @@ import (
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/observability/traces"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
+	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
@@ -45,18 +46,26 @@ type Validator struct {
 	cancel context.CancelFunc
 
 	NetworkConfig *networkconfig.Network
-	Network       specqbft.Network
+	Network       protocolp2p.Network
 
 	Operator       *spectypes.CommitteeMember
 	Share          *ssvtypes.SSVShare
 	Signer         ekm.BeaconSigner
 	OperatorSigner ssvtypes.OperatorSigner
 
+	// Queues holds one message queue per runner role, living as long as the validator. While a role's
+	// runner has no running duty, its consumer pops only duty starts, so early messages for the next duty
+	// wait here; whatever is left for earlier slots is purged when that duty starts (see StartQueueConsumer).
 	Queues map[spectypes.RunnerRole]queue.Queue
 
 	DutyRunners runner.ValidatorDutyRunners
 
 	messageValidator validation.MessageValidator
+
+	// legacyProposerRoundTimeout is the operator's switch for the proposer QBFT round budget, passed
+	// to every RoundTimer this validator builds. true restores the pre-SIP-102 2s budget; false (zero
+	// value) keeps the SIP-102 default.
+	legacyProposerRoundTimeout bool
 }
 
 // NewValidator creates a new instance of Validator.
@@ -74,11 +83,13 @@ func NewValidator(ctx context.Context, cancel func(), logger *zap.Logger, option
 		OperatorSigner:   options.OperatorSigner,
 		Queues:           make(map[spectypes.RunnerRole]queue.Queue),
 		messageValidator: options.MessageValidator,
+
+		legacyProposerRoundTimeout: options.LegacyProposerRoundTimeout,
 	}
 
 	// some additional steps to prepare duty runners for handling duties
 	for role, dutyRunner := range options.DutyRunners {
-		runnerIdentifier := spectypes.NewMsgID(v.NetworkConfig.DomainType, v.Share.ValidatorPubKey[:], role)
+		runnerIdentifier := spectypes.NewValidatorMsgID(v.NetworkConfig.DomainType, v.Share.ValidatorPubKey, role)
 		dutyRunner.SetQBFTRoundTimerF(v.newQBFTRoundTimerF(runnerIdentifier))
 		v.Queues[role] = queue.New(
 			logger,
@@ -96,10 +107,11 @@ func NewValidator(ctx context.Context, cancel func(), logger *zap.Logger, option
 
 // StartDuty starts a duty for the validator
 func (v *Validator) StartDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty) error {
+	role := ssvtypes.RunnerRoleForDuty(duty, v.NetworkConfig.BooleForkAtSlot(duty.DutySlot()))
 	ctx, span := tracer.Start(ctx,
 		observability.InstrumentName(observabilityNamespace, "start_duty"),
 		trace.WithAttributes(
-			observability.RunnerRoleAttribute(duty.RunnerRole()),
+			observability.RunnerRoleAttribute(role),
 			observability.BeaconSlotAttribute(duty.DutySlot())),
 	)
 	defer span.End()
@@ -109,7 +121,7 @@ func (v *Validator) StartDuty(ctx context.Context, logger *zap.Logger, duty spec
 		return traces.Errorf(span, "expected ValidatorDuty, got %T", duty)
 	}
 
-	dutyRunner := v.DutyRunners[spectypes.MapDutyToRunnerRole(vDuty.Type)]
+	dutyRunner := v.DutyRunners[role]
 	if dutyRunner == nil {
 		return traces.Errorf(span, "no duty runner for role %s", vDuty.Type.String())
 	}

@@ -12,9 +12,11 @@ package mocks
 import (
 	reflect "reflect"
 
+	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
 	types "github.com/ssvlabs/ssv-spec/types"
 	network "github.com/ssvlabs/ssv/network"
 	commons "github.com/ssvlabs/ssv/network/commons"
+	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
 	types0 "github.com/ssvlabs/ssv/protocol/v2/types"
 	storage "github.com/ssvlabs/ssv/registry/storage"
 	basedb "github.com/ssvlabs/ssv/storage/basedb"
@@ -143,6 +145,20 @@ func (mr *MockP2PNetworkMockRecorder) Broadcast(id, message any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Broadcast", reflect.TypeOf((*MockP2PNetwork)(nil).Broadcast), id, message)
 }
 
+// BroadcastAtSlot mocks base method.
+func (m *MockP2PNetwork) BroadcastAtSlot(message *types.SignedSSVMessage, slot phase0.Slot) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "BroadcastAtSlot", message, slot)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// BroadcastAtSlot indicates an expected call of BroadcastAtSlot.
+func (mr *MockP2PNetworkMockRecorder) BroadcastAtSlot(message, slot any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BroadcastAtSlot", reflect.TypeOf((*MockP2PNetwork)(nil).BroadcastAtSlot), message, slot)
+}
+
 // FixedSubnets mocks base method.
 func (m *MockP2PNetwork) FixedSubnets() commons.Subnets {
 	m.ctrl.T.Helper()
@@ -157,6 +173,32 @@ func (mr *MockP2PNetworkMockRecorder) FixedSubnets() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FixedSubnets", reflect.TypeOf((*MockP2PNetwork)(nil).FixedSubnets))
 }
 
+// ReportValidation mocks base method.
+func (m *MockP2PNetwork) ReportValidation(message *types.SSVMessage, res protocolp2p.MsgValidationResult) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "ReportValidation", message, res)
+}
+
+// ReportValidation indicates an expected call of ReportValidation.
+func (mr *MockP2PNetworkMockRecorder) ReportValidation(message, res any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReportValidation", reflect.TypeOf((*MockP2PNetwork)(nil).ReportValidation), message, res)
+}
+
+// Subscribe mocks base method.
+func (m *MockP2PNetwork) Subscribe(vpk types.ValidatorPK) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Subscribe", vpk)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Subscribe indicates an expected call of Subscribe.
+func (mr *MockP2PNetworkMockRecorder) Subscribe(vpk any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Subscribe", reflect.TypeOf((*MockP2PNetwork)(nil).Subscribe), vpk)
+}
+
 // SubscribeRandoms mocks base method.
 func (m *MockP2PNetwork) SubscribeRandoms(numSubnets int) error {
 	m.ctrl.T.Helper()
@@ -169,6 +211,20 @@ func (m *MockP2PNetwork) SubscribeRandoms(numSubnets int) error {
 func (mr *MockP2PNetworkMockRecorder) SubscribeRandoms(numSubnets any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubscribeRandoms", reflect.TypeOf((*MockP2PNetwork)(nil).SubscribeRandoms), numSubnets)
+}
+
+// Unsubscribe mocks base method.
+func (m *MockP2PNetwork) Unsubscribe(pk types.ValidatorPK) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Unsubscribe", pk)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Unsubscribe indicates an expected call of Unsubscribe.
+func (mr *MockP2PNetworkMockRecorder) Unsubscribe(pk any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Unsubscribe", reflect.TypeOf((*MockP2PNetwork)(nil).Unsubscribe), pk)
 }
 
 // UseMessageRouter mocks base method.

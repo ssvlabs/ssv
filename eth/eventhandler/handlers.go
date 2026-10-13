@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -12,7 +13,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+	"github.com/ssvlabs/ssv/ssvsigner"
 
 	"github.com/ssvlabs/ssv/eth/contract"
 	"github.com/ssvlabs/ssv/observability/log/fields"
@@ -187,6 +188,13 @@ func (eh *EventHandler) handleValidatorAdded(
 		return nil, &MalformedEventError{Err: ErrSignatureVerification}
 	}
 
+	if err := ssvtypes.ValidateSharePublicKeys(event.PublicKey, event.OperatorIds, sharePublicKeys); err != nil {
+		selfOperatorID := eh.operatorDataStore.GetOperatorID()
+		ownValidator := selfOperatorID != 0 && slices.Contains(event.OperatorIds, selfOperatorID)
+		logger.Warn("malformed event: invalid share public keys", zap.Bool("own_validator", ownValidator), zap.Error(err))
+		return nil, &MalformedEventError{Err: err}
+	}
+
 	validatorShare, exists := eh.nodeStorage.Shares().Get(txn, event.PublicKey)
 	if !exists {
 		shareCreated, err := eh.handleShareCreation(ctx, txn, event, sharePublicKeys, encryptedKeys)
@@ -194,7 +202,6 @@ func (eh *EventHandler) handleValidatorAdded(
 			var malformedEventError *MalformedEventError
 			if errors.As(err, &malformedEventError) {
 				logger.Warn("malformed event", zap.Error(err))
-				return nil, err
 			}
 			return nil, err
 		}
@@ -242,8 +249,8 @@ func (eh *EventHandler) handleShareCreation(
 
 	if share.BelongsToOperator(eh.operatorDataStore.GetOperatorID()) {
 		if err := eh.keyManager.AddShare(ctx, txn, encryptedKey, phase0.BLSPubKey(share.SharePubKey)); err != nil {
-			var shareDecryptionEKMError ekm.ShareDecryptionError
-			if errors.As(err, &shareDecryptionEKMError) {
+			var shareDecryptionError ssvsigner.ShareDecryptionError
+			if errors.As(err, &shareDecryptionError) {
 				return nil, &MalformedEventError{Err: err}
 			}
 			return nil, fmt.Errorf("could not add share encrypted key: %w", err)
@@ -504,6 +511,7 @@ func (eh *EventHandler) handleValidatorExited(txn basedb.Txn, event *contract.Co
 	}
 
 	if !share.HasBeaconMetadata() {
+		logger.Debug("share has no beacon metadata, voluntary exit duty won't be scheduled")
 		return nil, nil
 	}
 

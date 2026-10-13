@@ -1,0 +1,126 @@
+package operator
+
+import (
+	"context"
+	"errors"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/hprobe"
+)
+
+// wedgedComponent is a hprobe component that never responds: its Healthy blocks until the
+// health-check ctx times out, surfacing as DeadlineExceeded — the realistic "hung EL/CL" case the
+// watchdog must catch.
+type wedgedComponent struct{}
+
+func (wedgedComponent) Healthy(ctx context.Context) error {
+	<-ctx.Done()
+	return ctx.Err()
+}
+
+// Test_startHealthProber_tripsOnUnhealthyComponent verifies the watchdog returns the unhealth error
+// (so the node terminates non-zero and the orchestrator restarts it) when a component is persistently
+// unhealthy while the ctx is still live — here a wedged component whose failure surfaces as a probe
+// DeadlineExceeded. This is the liveness property the watchdog exists for, and it must trip off the
+// parent ctx state rather than the error value (a DeadlineExceeded must not be mistaken for a cancel).
+func Test_startHealthProber_tripsOnUnhealthyComponent(t *testing.T) {
+	p := hprobe.NewHealthProber(zap.NewNop())
+	// Wedged component: blocks until its 20ms health-check ctx times out -> DeadlineExceeded. No
+	// retries, so the watchdog trips on the first tick.
+	p.AddComponent("el", wedgedComponent{}, 20*time.Millisecond, 0, 0)
+
+	err := startHealthProber(context.Background(), zap.NewNop(), p)
+	require.ErrorContains(t, err, componentsUnhealthyErrorMsg)
+}
+
+// cancelMaskingComponent mimics a real client that surfaces ctx cancellation as its own transport
+// error instead of ctx.Err(): hprobe forgives a bare context.Canceled (not a component failure), so
+// only a masked error makes a probe round fail because of a shutdown — reaching the watchdog as
+// ordinary unhealth that only its own ctx.Err() guard can classify correctly.
+type cancelMaskingComponent struct{}
+
+func (cancelMaskingComponent) Healthy(ctx context.Context) error {
+	<-ctx.Done()
+	return errors.New("connection reset")
+}
+
+// Test_startHealthProber_returnsNilOnCancelMidProbe verifies the shutdown-vs-unhealth race: the
+// parent ctx is canceled while a probe is in flight, so the round fails (with a non-ctx error, as
+// real clients produce) at the same time as ctx.Err() != nil. The watchdog must classify that as a
+// clean shutdown (nil), not unhealth — pinning the ctx.Err() guard ahead of the error return.
+func Test_startHealthProber_returnsNilOnCancelMidProbe(t *testing.T) {
+	p := hprobe.NewHealthProber(zap.NewNop())
+	// Generous healthcheck timeout: the probe must still be in flight when cancel lands, so its
+	// failure is cancellation-caused — not a timeout, which must keep tripping the watchdog.
+	p.AddComponent("el", cancelMaskingComponent{}, 10*time.Second, 0, 0)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		cancel()
+	}()
+
+	err := startHealthProber(ctx, zap.NewNop(), p)
+	require.NoError(t, err, "a probe failure caused by shutdown cancellation must not trip the watchdog")
+}
+
+// Test_startHealthProber_returnsNilOnCtxCancel verifies a clean ctx cancellation (normal shutdown)
+// returns nil rather than tripping the watchdog.
+func Test_startHealthProber_returnsNilOnCtxCancel(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	p := hprobe.NewHealthProber(zap.NewNop()) // no components -> ProbeAll is a no-op
+
+	done := make(chan error, 1)
+	go func() { done <- startHealthProber(ctx, zap.NewNop(), p) }()
+
+	cancel()
+
+	select {
+	case err := <-done:
+		require.NoError(t, err, "startHealthProber must return nil on a clean ctx cancellation")
+	case <-time.After(5 * time.Second):
+		t.Fatal("startHealthProber did not return after ctx cancellation")
+	}
+}
+
+// fixedComponent is a hprobe component whose health is a fixed result — nil for healthy, a non-nil
+// error for unhealthy — answered immediately (no ctx dependence). Enough to drive the bring-up gate.
+type fixedComponent struct{ err error }
+
+func (c fixedComponent) Healthy(context.Context) error { return c.err }
+
+// Test_ensureComponentsHealthy_passesWhenHealthy: a healthy component clears the gate (nil).
+func Test_ensureComponentsHealthy_passesWhenHealthy(t *testing.T) {
+	p := hprobe.NewHealthProber(zap.NewNop())
+	p.AddComponent("el", fixedComponent{nil}, 10*time.Second, 0, 0)
+	require.NoError(t, ensureComponentsHealthy(context.Background(), zap.NewNop(), p))
+}
+
+// Test_ensureComponentsHealthy_failsWhenUnhealthy: an unhealthy component fails the gate (so the
+// node restarts) — the error carries componentsUnhealthyErrorMsg.
+func Test_ensureComponentsHealthy_failsWhenUnhealthy(t *testing.T) {
+	p := hprobe.NewHealthProber(zap.NewNop())
+	p.AddComponent("el", fixedComponent{errors.New("el down")}, 10*time.Second, 0, 0)
+	err := ensureComponentsHealthy(context.Background(), zap.NewNop(), p)
+	require.ErrorContains(t, err, componentsUnhealthyErrorMsg)
+}
+
+// Test_ensureComponentsHealthy_doesNotReportUnhealthOnCancel: a canceled parent (a deliberate stop)
+// is never classified as component unhealth. The gate returns nil or the ctx error — depending on
+// whether the probe surfaced its failure before the cancel was observed — but never the unhealthy
+// verdict, which would trip a restart for the wrong reason.
+func Test_ensureComponentsHealthy_doesNotReportUnhealthOnCancel(t *testing.T) {
+	p := hprobe.NewHealthProber(zap.NewNop())
+	p.AddComponent("el", fixedComponent{errors.New("el down")}, 10*time.Second, 0, 0)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	err := ensureComponentsHealthy(ctx, zap.NewNop(), p)
+	if err != nil {
+		require.ErrorIs(t, err, context.Canceled, "a deliberate stop must surface the ctx error, never unhealth")
+	}
+}

@@ -4,10 +4,10 @@ import (
 	"errors"
 	"io"
 
+	"github.com/OffchainLabs/go-bitfield"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
 	"github.com/ethereum/go-ethereum/rlp"
-	"github.com/prysmaticlabs/go-bitfield"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 

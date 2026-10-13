@@ -31,11 +31,10 @@ func (TestingValueChecker) CheckValue(data []byte) error {
 var TestingConfig = func(logger *zap.Logger, keySet *testingutils.TestKeySet) *qbft.Config {
 	return &qbft.Config{
 		BeaconSigner: ekm.NewTestingKeyManagerAdapter(testingutils.NewTestingKeyManager()),
-		Domain:       testingutils.TestingSSVDomainType,
 		ProposerF: func(state *specqbft.State, round specqbft.Round) types.OperatorID {
 			return 1
 		},
-		Network:     testingutils.NewTestingNetwork(1, keySet.OperatorKeys[1]),
+		Network:     NewTestingNetwork(1, keySet.OperatorKeys[1]),
 		CutOffRound: testingutils.TestingCutOffRound,
 	}
 }

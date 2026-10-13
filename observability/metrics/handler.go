@@ -1,9 +1,12 @@
 package metrics
 
 import (
+	"context"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	http_pprof "net/http/pprof"
 	"runtime"
@@ -45,7 +48,11 @@ func NewHandler(logger *zap.Logger, db basedb.Database, enableProf bool, healthC
 	return &mh
 }
 
-func (h *Handler) Start(mux *http.ServeMux, addr string) error {
+// Start binds a listener on addr and serves the metrics, health and (optionally) pprof endpoints
+// in the background. It returns the bound address once the listener is ready and a channel that
+// emits a non-graceful serve error (the channel is closed silently when ctx-driven shutdown
+// completes). The server shuts down when ctx is canceled.
+func (h *Handler) Start(ctx context.Context, mux *http.ServeMux, addr string) (string, <-chan error, error) {
 	h.logger.Info("setup collection", fields.Address(addr), zap.Bool("enableProf", h.enableProf))
 
 	if h.enableProf {
@@ -69,21 +76,39 @@ func (h *Handler) Start(mux *http.ServeMux, addr string) error {
 	mux.HandleFunc("/database/count-by-collection", h.handleCountByCollection)
 	mux.HandleFunc("/health", h.handleHealth)
 
+	l, err := net.Listen("tcp", addr)
+	if err != nil {
+		return "", nil, fmt.Errorf("listen on %s: %w", addr, err)
+	}
+	boundAddr := l.Addr().String()
+
 	// Set a high timeout to allow for long-running pprof requests.
 	const timeout = 600 * time.Second
 
 	httpServer := &http.Server{
-		Addr:         addr,
 		Handler:      mux,
 		ReadTimeout:  timeout,
 		WriteTimeout: timeout,
 	}
 
-	if err := httpServer.ListenAndServe(); err != nil {
-		return fmt.Errorf("listen to %s: %w", addr, err)
-	}
+	go func() {
+		<-ctx.Done()
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := httpServer.Shutdown(shutdownCtx); err != nil {
+			h.logger.Error("shutdown failed", zap.Error(err))
+		}
+	}()
 
-	return nil
+	serveErr := make(chan error, 1)
+	go func() {
+		defer close(serveErr)
+		if err := httpServer.Serve(l); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			serveErr <- err
+		}
+	}()
+
+	return boundAddr, serveErr, nil
 }
 
 // handleCountByCollection responds with the number of key in the database by collection.

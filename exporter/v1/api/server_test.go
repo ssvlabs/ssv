@@ -1,0 +1,156 @@
+package api
+
+import (
+	"context"
+	"fmt"
+	"net/http"
+	"testing"
+	"time"
+
+	"github.com/gorilla/websocket"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest"
+
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+)
+
+func TestHandleQuery(t *testing.T) {
+	logger := zaptest.NewLogger(t)
+	ctx, cancelServerCtx := context.WithCancel(t.Context())
+	defer cancelServerCtx()
+	mux := http.NewServeMux()
+	ws := NewWsServer(zap.NewNop(), func(nm *NetworkMessage) {
+		nm.Msg.Data = []registrystorage.OperatorData{
+			{PublicKey: fmt.Sprintf("pubkey-%d", nm.Msg.Filter.From)},
+		}
+	}, mux, false, "127.0.0.1:0")
+	addr, _, err := ws.Start(ctx)
+	require.NoError(t, err)
+
+	clientCtx, cancelClientCtx := context.WithCancel(ctx)
+	client := NewWSClient(clientCtx, logger)
+	clientErrCh := make(chan error, 1)
+	go func() {
+		clientErrCh <- client.StartQuery(addr, "/query")
+	}()
+
+	client.out <- Message{
+		Type:   TypeOperator,
+		Filter: MessageFilter{From: 1, To: 1},
+	}
+	client.out <- Message{
+		Type:   TypeOperator,
+		Filter: MessageFilter{From: 2, To: 2},
+	}
+	cancelClientCtx()
+
+	select {
+	case err := <-clientErrCh:
+		require.NoError(t, err)
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for query client to finish")
+	}
+
+	// make sure the connection got 2 responses
+	require.Equal(t, 2, client.MessageCount())
+}
+
+// TestHandleQuery_ServerCtxCancelClosesIdleConn pins the wrappedHandler ctx
+// watcher: an idle /query connection (blocked in ReadJSON server-side) must
+// be torn down when the server ctx is canceled, otherwise the handler
+// goroutine leaks past shutdown.
+func TestHandleQuery_ServerCtxCancelClosesIdleConn(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	mux := http.NewServeMux()
+	ws := NewWsServer(zap.NewNop(), func(nm *NetworkMessage) {}, mux, false, "127.0.0.1:0")
+	addr, _, err := ws.Start(ctx)
+	require.NoError(t, err)
+
+	conn, _, err := websocket.DefaultDialer.Dial("ws://"+addr+"/query", nil)
+	require.NoError(t, err)
+	defer conn.Close()
+
+	cancel()
+
+	require.NoError(t, conn.SetReadDeadline(time.Now().Add(2*time.Second)))
+	_, _, err = conn.ReadMessage()
+	require.Error(t, err, "client read should fail once server ctx is canceled")
+}
+
+func TestHandleStream(t *testing.T) {
+	logger := zaptest.NewLogger(t)
+	ctx := t.Context()
+	mux := http.NewServeMux()
+	ws := NewWsServer(zap.NewNop(), nil, mux, false, "127.0.0.1:0")
+	addr, _, err := ws.Start(ctx)
+	require.NoError(t, err)
+
+	testCtx, cancelCtx := context.WithCancel(ctx)
+	defer cancelCtx()
+
+	client := NewWSClient(testCtx, logger)
+	clientErrCh := make(chan error, 1)
+	go func() {
+		clientErrCh <- client.StartStream(addr, "/stream")
+	}()
+
+	// Wait until one stream client is connected and registered.
+	waitForCondition(t, 2*time.Second, func() bool {
+		b := ws.(*wsServer).broadcaster.(*broadcaster)
+		b.mut.Lock()
+		defer b.mut.Unlock()
+		return len(b.connections) == 1
+	})
+	select {
+	case err := <-clientErrCh:
+		require.NoError(t, err)
+		t.Fatal("stream client exited unexpectedly")
+	default:
+	}
+
+	// send 3 messages in the stream channel
+	ws.BroadcastFeed().Send(newTestMessage())
+
+	msg2 := newTestMessage()
+	msg2.Data = []registrystorage.OperatorData{
+		{PublicKey: "pubkey-operator"},
+	}
+	ws.BroadcastFeed().Send(msg2)
+
+	msg3 := newTestMessage()
+	msg3.Type = TypeValidator
+	msg3.Data = map[string]string{"PublicKey": "pubkey3"}
+	ws.BroadcastFeed().Send(msg3)
+
+	waitForCondition(t, 2*time.Second, func() bool { return client.MessageCount() == 3 })
+
+	cancelCtx()
+}
+
+func waitForCondition(t *testing.T, timeout time.Duration, check func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for {
+		if check() {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("condition not met before timeout")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func newTestMessage() Message {
+	return Message{
+		Type:   TypeValidator,
+		Filter: MessageFilter{From: 0},
+		Data: []map[string]string{
+			{"PublicKey": "pubkey1"},
+			{"PublicKey": "pubkey3"},
+		},
+	}
+}

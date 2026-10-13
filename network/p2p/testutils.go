@@ -2,8 +2,8 @@ package p2pv1
 
 import (
 	"context"
-	"encoding/hex"
 	"fmt"
+	"math/rand"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -37,38 +37,20 @@ type LocalNet struct {
 	Bootnode *discovery.Bootnode
 	Nodes    []network.P2PNetwork
 
-	udpRand testing.UDPPortsRandomizer
+	// mdnsTag is a per-LocalNet mDNS service tag so concurrently-running
+	// test processes don't discover each other's peers.
+	mdnsTag string
 }
 
-// WithBootnode adds a bootnode to the network
-func (ln *LocalNet) WithBootnode(ctx context.Context, logger *zap.Logger) error {
-	bnSk, err := testing.GenNetworkKey()
-	if err != nil {
-		return err
-	}
-	isk, err := p2pcommons.ECDSAPrivToInterface(bnSk)
-	if err != nil {
-		return err
-	}
-	b, err := isk.Raw()
-	if err != nil {
-		return err
-	}
-	bn, err := discovery.NewBootnode(ctx, logger, networkconfig.TestNetwork.SSV, &discovery.BootnodeOptions{
-		PrivateKey: hex.EncodeToString(b),
-		ExternalIP: "127.0.0.1",
-		Port:       ln.udpRand.Next(13001, 13999),
-	})
-	if err != nil {
-		return err
-	}
-	ln.Bootnode = bn
-	return nil
+// randomMdnsTag returns a unique mDNS service tag for a test LocalNet.
+func randomMdnsTag() string {
+	return fmt.Sprintf("ssv.test.%016x", rand.Uint64()) //nolint: gosec // G404 is acceptable here
 }
 
-// CreateAndStartLocalNet creates a new local network and starts it
-// if any errors occurs during starting local network CreateAndStartLocalNet trying
-// to create and start local net one more time until pCtx is not Done()
+// CreateAndStartLocalNet creates a LocalNet and starts its nodes, retrying the whole setup
+// (up to maxAttempts) when the mesh doesn't form in time — discovery can be slow on a loaded
+// machine. Bounding the retries makes an environment where the nodes can never connect (mDNS
+// discovery needs multicast) fail fast instead of hanging until the go-test timeout.
 func CreateAndStartLocalNet(pCtx context.Context, logger *zap.Logger, options LocalNetOptions) (*LocalNet, error) {
 	attempt := func(pCtx context.Context) (*LocalNet, error) {
 		ln, err := NewLocalNet(pCtx, logger, options)
@@ -77,8 +59,12 @@ func CreateAndStartLocalNet(pCtx context.Context, logger *zap.Logger, options Lo
 		}
 
 		eg, ctx := errgroup.WithContext(pCtx)
+		// errgroup, not bare goroutines: eg.Wait() aggregates node failures so
+		// a failed attempt returns an error and the loop below retries, and the
+		// shared ctx cancels the siblings on the first failure so they don't
+		// each block the full 15s peer-wait first.
 		for i, node := range ln.Nodes {
-			eg.Go(func() error { //if replace EG to regular goroutines round don't change to second in test
+			eg.Go(func() error {
 				if err := node.Start(); err != nil {
 					return fmt.Errorf("could not start node %d: %w", i, err)
 				}
@@ -106,23 +92,64 @@ func CreateAndStartLocalNet(pCtx context.Context, logger *zap.Logger, options Lo
 		return ln, eg.Wait()
 	}
 
-	for {
+	const maxAttempts = 3
+	var lastErr error
+	for attemptNum := 1; ; attemptNum++ {
 		select {
 		case <-pCtx.Done():
+			if lastErr != nil {
+				return nil, fmt.Errorf("network didn't start on time: %w", lastErr)
+			}
 			return nil, fmt.Errorf("context is done, network didn't start on time")
 		default:
 			ln, err := attempt(pCtx)
 			if err != nil {
-				for _, node := range ln.Nodes {
-					_ = node.Close()
+				lastErr = err
+				// attempt returns a nil ln when NewLocalNet itself fails
+				// (e.g. CreateKeys or a node factory error), so guard before
+				// ranging to avoid a nil-pointer panic that would mask err.
+				if ln != nil {
+					// Close the failed attempt's nodes with a timeout so a wedged
+					// Close can't stall the retry loop: zeroconf's mDNS
+					// Server.Shutdown can block indefinitely on a multicast socket
+					// write. Only this failure path closes nodes; a successful
+					// start returns them open.
+					closeNodesWithTimeout(logger, ln.Nodes, 10*time.Second)
 				}
 
+				if attemptNum == maxAttempts {
+					return nil, fmt.Errorf("network didn't start after %d attempts: %w", maxAttempts, lastErr)
+				}
 				logger.Debug("trying to relaunch local network", zap.Error(err))
 				continue
 			}
 
 			return ln, nil
 		}
+	}
+}
+
+// closeNodesWithTimeout closes every node concurrently and waits up to timeout
+// for them to finish. A node whose Close() wedges must not stall the retry loop
+// in CreateAndStartLocalNet — zeroconf's mDNS Server.Shutdown can block
+// indefinitely on a multicast socket write — so once the timeout elapses we stop
+// waiting and let the next attempt proceed with fresh hosts and ports; an
+// abandoned Close is reclaimed when the test process exits.
+func closeNodesWithTimeout(logger *zap.Logger, nodes []network.P2PNetwork, timeout time.Duration) {
+	var eg errgroup.Group
+	for _, node := range nodes {
+		eg.Go(func() error { return node.Close() })
+	}
+	done := make(chan struct{})
+	go func() {
+		_ = eg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(timeout):
+		logger.Debug("timed out closing nodes on retry; abandoning a wedged Close (likely mDNS shutdown)",
+			zap.Duration("timeout", timeout))
 	}
 }
 
@@ -178,9 +205,12 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex uint64, key
 	dutyStore := dutystore.New()
 	signatureVerifier := &mockSignatureVerifier{}
 
-	cfg := NewNetConfig(keys, ln.Bootnode, testing.RandomTCPPort(12001, 12999), ln.udpRand.Next(13001, 13999), options.Nodes)
+	// Use TCP/UDP port 0 so the kernel picks free ports atomically at bind time.
+	cfg := NewNetConfig(keys, ln.Bootnode, 0, 0, options.Nodes)
 	cfg.Ctx = ctx
-	cfg.Subnets = "00000000000000000100000400000400" // calculated for topics 64, 90, 114; PAY ATTENTION for future test scenarios which use more than one eth-validator we need to make this field dynamically changing
+	cfg.MdnsDiscoveryTag = ln.mdnsTag
+	testSubnets := fixedTestSubnets(options.Shares)
+	cfg.Subnets = testSubnets.StringHex()
 	cfg.NodeStorage = nodeStorage
 	cfg.MessageValidator = validation.New(
 		networkconfig.TestNetwork,
@@ -188,6 +218,9 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex uint64, key
 		nodeStorage,
 		dutyStore,
 		signatureVerifier,
+		// Surface verdicts (rejecting/ignoring invalid message) in test output — validation
+		// defaults to a nop logger, which makes CI failures undiagnosable from logs.
+		validation.WithLogger(logger),
 	)
 	cfg.NetworkConfig = networkconfig.TestNetwork
 	if options.TotalValidators > 0 {
@@ -215,6 +248,7 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex uint64, key
 			dutyStore,
 			signatureVerifier,
 			validation.WithSelfAccept(selfPeerID, true),
+			validation.WithLogger(logger),
 		)
 	}
 
@@ -242,7 +276,6 @@ type LocalNetOptions struct {
 	MessageValidatorProvider                        func(uint64) validation.MessageValidator
 	Nodes                                           int
 	MinConnected                                    int
-	UseDiscv5                                       bool
 	TotalValidators, ActiveValidators, MyValidators uint64
 	PeerScoreInspector                              func(selfPeer peer.ID, peerMap map[peer.ID]*pubsub.PeerScoreSnapshot)
 	PeerScoreInspectorInterval                      time.Duration
@@ -252,19 +285,13 @@ type LocalNetOptions struct {
 // NewLocalNet creates a new mdns network
 func NewLocalNet(ctx context.Context, logger *zap.Logger, options LocalNetOptions) (*LocalNet, error) {
 	ln := &LocalNet{}
-	ln.udpRand = make(testing.UDPPortsRandomizer)
-	if options.UseDiscv5 {
-		if err := ln.WithBootnode(ctx, logger); err != nil {
-			return nil, err
-		}
-	}
-	nodes, keys, err := testing.NewLocalTestnet(ctx, options.Nodes, func(pctx context.Context, nodeIndex uint64, keys testing.NodeKeys) network.P2PNetwork {
+	ln.mdnsTag = randomMdnsTag()
+	nodes, keys, err := testing.NewLocalTestnet(ctx, options.Nodes, func(pctx context.Context, nodeIndex uint64, keys testing.NodeKeys) (network.P2PNetwork, error) {
 		logger := logger.Named(fmt.Sprintf("node-%d", nodeIndex))
-		p, err := ln.NewTestP2pNetwork(pctx, nodeIndex, keys, logger, options)
-		if err != nil {
-			logger.Error("could not setup network", zap.Error(err))
-		}
-		return p
+		// The error propagates: NewLocalTestnet wraps it with the node index
+		// and CreateAndStartLocalNet logs it before retrying, so there's no
+		// separate error log here.
+		return ln.NewTestP2pNetwork(pctx, nodeIndex, keys, logger, options)
 	})
 	if err != nil {
 		return nil, err
@@ -273,6 +300,30 @@ func NewLocalNet(ctx context.Context, logger *zap.Logger, options LocalNetOption
 	ln.Nodes = nodes
 
 	return ln, nil
+}
+
+// fixedTestSubnets returns the persistent subnet set used by local test networks: two fixed
+// subnets (64, 90) unrelated to any share - bit positions carried over from the legacy fixture
+// constant this function replaced, kept so every node also stays subscribed to subnets with no
+// local committee - plus - for every configured share's committee - both
+// its Alan-fork subnet (CommitteeID-hash based) and its Boole-fork subnet (lowest-operator-hash
+// based). persistentSubnets is a raw, fork-agnostic bit vector (see initCfg), so covering both
+// mappings here is what keeps the committee's subnet persistently subscribed on either side of
+// the Boole fork, rather than depending solely on the later Subscribe(vpk) path.
+func fixedTestSubnets(shares []*ssvtypes.SSVShare) p2pcommons.Subnets {
+	subnets := p2pcommons.ZeroSubnets
+	subnets.Set(64)
+	subnets.Set(90)
+	for _, share := range shares {
+		subnets.Set(p2pcommons.AlanCommitteeSubnet(share.CommitteeID()))
+
+		operators := make([]spectypes.OperatorID, 0, len(share.Committee))
+		for _, member := range share.Committee {
+			operators = append(operators, member.Signer)
+		}
+		subnets.Set(p2pcommons.BooleCommitteeSubnet(operators))
+	}
+	return subnets
 }
 
 // NewNetConfig creates a new config for tests

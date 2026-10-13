@@ -1,6 +1,7 @@
 package networkconfig
 
 import (
+	"math"
 	"math/big"
 
 	ethcommon "github.com/ethereum/go-ethereum/common"
@@ -11,6 +12,7 @@ import (
 var HoodiSSV = &SSV{
 	Name:                 "hoodi",
 	DomainType:           spectypes.DomainType{0x0, 0x0, 0x5, 0x3},
+	NextDomainType:       spectypes.DomainType{0x0, 0x0, 0x5, 0x4},
 	RegistrySyncOffset:   new(big.Int).SetInt64(1065),
 	RegistryContractAddr: ethcommon.HexToAddress("0x58410Bef803ECd7E63B23664C586A6DB72DAf59c"),
 	DiscoveryProtocolID:  [6]byte{'s', 's', 'v', 'd', 'v', '5'},
@@ -19,5 +21,7 @@ var HoodiSSV = &SSV{
 		"enr:-Ja4QIKlyNFuFtTOnVoavqwmpgSJXfhSmhpdSDOUhf5-FBr7bBxQRvG6VrpUvlkr8MtpNNuMAkM33AseduSaOhd9IeWGAZWjRbnvgmlkgnY0gmlwhCNVVTCJc2VjcDI1NmsxoQNTTyiJPoZh502xOZpHSHAfR-94NaXLvi5J4CNHMh2tjoNzc3YBg3RjcIITioN1ZHCCD6I",
 	},
 	TotalEthereumValidators: 1107955, // active_validators from https://hoodi.beaconcha.in/index/data on Apr 18, 2025
-	Forks:                   SSVForks{},
+	Forks: SSVForks{
+		Boole: math.MaxUint64,
+	},
 }

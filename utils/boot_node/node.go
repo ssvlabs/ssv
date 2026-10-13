@@ -27,10 +27,17 @@ import (
 type Options struct {
 	PrivateKey string `yaml:"PrivateKey" env:"BOOT_NODE_PRIVATE_KEY" env-description:"Private key for bootnode identity (generated if empty)"`
 	ExternalIP string `yaml:"ExternalIP" env:"BOOT_NODE_EXTERNAL_IP" env-description:"Override bootnode's external IP address"`
-	TCPPort    uint16 `yaml:"TcpPort" env:"TCP_PORT" env-default:"5000" env-description:"TCP port for P2P transport"`
-	UDPPort    uint16 `yaml:"UdpPort" env:"UDP_PORT" env-default:"4000" env-description:"UDP port for discovery"`
-	DbPath     string `yaml:"DbPath" env:"BOOT_NODE_DB_PATH" env-default:"/data/bootnode" env-description:"Path to bootnode database directory"`
-	Network    string `yaml:"Network" env:"NETWORK" env-default:"mainnet" env-description:"Ethereum network to connect to"`
+	TCPPort    uint16 `yaml:"TcpPort" env:"TCP_PORT" env-description:"TCP port for P2P transport"`
+	UDPPort    uint16 `yaml:"UdpPort" env:"UDP_PORT" env-description:"UDP port for discovery"`
+	DbPath     string `yaml:"DbPath" env:"BOOT_NODE_DB_PATH" env-description:"Path to bootnode database directory"`
+	Network    string `yaml:"Network" env:"NETWORK" env-description:"Ethereum network to connect to"`
+}
+
+func (o *Options) ApplyDefaults() {
+	o.TCPPort = 5000
+	o.UDPPort = 4000
+	o.DbPath = "/data/bootnode"
+	o.Network = "mainnet"
 }
 
 // Node represents the behavior of boot node
@@ -81,12 +88,12 @@ func (h *handler) httpHandler() func(w http.ResponseWriter, _ *http.Request) {
 		allNodes := h.listener.AllNodes()
 		write(w, []byte("Nodes stored in the table:\n"))
 		for i, n := range allNodes {
-			write(w, []byte(fmt.Sprintf("Node %d\n", i)))
+			write(w, fmt.Appendf(nil, "Node %d\n", i))
 			write(w, []byte(n.String()+"\n"))
 			write(w, []byte("Node ID: "+n.ID().String()+"\n"))
 			write(w, []byte("IP: "+n.IP().String()+"\n"))
-			write(w, []byte(fmt.Sprintf("UDP Port: %d", n.UDP())+"\n"))
-			write(w, []byte(fmt.Sprintf("TCP Port: %d", n.TCP())+"\n\n"))
+			write(w, fmt.Appendf(nil, "UDP Port: %d\n", n.UDP()))
+			write(w, fmt.Appendf(nil, "TCP Port: %d\n\n", n.TCP()))
 		}
 	}
 }

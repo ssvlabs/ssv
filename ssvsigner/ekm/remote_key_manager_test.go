@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"sync"
 	"testing"
 	"time"
@@ -13,6 +15,7 @@ import (
 	apiv1capella "github.com/attestantio/go-eth2-client/api/v1/capella"
 	apiv1deneb "github.com/attestantio/go-eth2-client/api/v1/deneb"
 	apiv1electra "github.com/attestantio/go-eth2-client/api/v1/electra"
+	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/capella"
@@ -1165,8 +1168,7 @@ func (s *RemoteKeyManagerTestSuite) TestAddShareErrorCases() {
 		pubKey := phase0.BLSPubKey{1, 2, 3}
 		encShare := []byte("encrypted_share_data")
 
-		slashingMock.On("BumpSlashingProtectionTxn", nil, pubKey).Return(nil).Once()
-
+		// Bump runs only after AddValidators succeeds, so a signer error means it is never called.
 		clientMock.On("AddValidators", mock.Anything, ssvsigner.ShareKeys{
 			PubKey:           pubKey,
 			EncryptedPrivKey: encShare,
@@ -1176,6 +1178,73 @@ func (s *RemoteKeyManagerTestSuite) TestAddShareErrorCases() {
 
 		s.ErrorContains(err, "add validator")
 		clientMock.AssertExpectations(s.T())
+		slashingMock.AssertExpectations(s.T())
+	})
+
+	s.Run("ShareDecryptionError", func() {
+		clientMock := new(MockRemoteSigner)
+		slashingMock := new(MockSlashingProtector)
+
+		rmTest := &RemoteKeyManager{
+			logger:            s.logger,
+			beaconConfig:      testNetCfg,
+			genesisRoot:       testNetCfg.GenesisValidatorsRoot,
+			signerClient:      clientMock,
+			getOperatorId:     func() spectypes.OperatorID { return 1 },
+			operatorPubKey:    &MockOperatorPublicKey{},
+			slashingProtector: slashingMock,
+			signLocks:         map[signKey]*sync.RWMutex{},
+		}
+
+		pubKey := phase0.BLSPubKey{1, 2, 3}
+		encShare := []byte("encrypted_share_data")
+
+		// The signer rejects a malformed share with a 422, which ssvsigner.Client surfaces
+		// as a ShareDecryptionError. Bump runs only after a successful add, so it is never called.
+		clientMock.On("AddValidators", mock.Anything, ssvsigner.ShareKeys{
+			PubKey:           pubKey,
+			EncryptedPrivKey: encShare,
+		}).Return(nil, ssvsigner.ShareDecryptionError{
+			Err: errors.New("decrypt: crypto/rsa: decryption error"),
+		}).Once()
+
+		err := rmTest.AddShare(s.T().Context(), nil, encShare, pubKey)
+
+		// AddShare must surface this as a ShareDecryptionError (through its fmt.Errorf wrap)
+		// so the event handler classifies it as a malformed (skippable) event.
+		var decErr ssvsigner.ShareDecryptionError
+		s.ErrorAs(err, &decErr)
+		clientMock.AssertExpectations(s.T())
+		slashingMock.AssertExpectations(s.T())
+	})
+
+	s.Run("ShareDecryptionError from real client 422", func() {
+		slashingMock := new(MockSlashingProtector)
+
+		// Drive a real ssv-signer 422 (empty body) through the real client, exercising the
+		// 422 -> ShareDecryptionError mapping and the AddShare wrap end to end (not a mock).
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusUnprocessableEntity)
+		}))
+		defer srv.Close()
+
+		rmTest := &RemoteKeyManager{
+			logger:            s.logger,
+			beaconConfig:      testNetCfg,
+			genesisRoot:       testNetCfg.GenesisValidatorsRoot,
+			signerClient:      ssvsigner.NewClient(srv.URL),
+			getOperatorId:     func() spectypes.OperatorID { return 1 },
+			operatorPubKey:    &MockOperatorPublicKey{},
+			slashingProtector: slashingMock,
+			signLocks:         map[signKey]*sync.RWMutex{},
+		}
+
+		err := rmTest.AddShare(s.T().Context(), nil, []byte("enc"), phase0.BLSPubKey{1, 2, 3})
+
+		// AddShare must preserve the ShareDecryptionError and, per the validate-first order, never bump.
+		var decErr ssvsigner.ShareDecryptionError
+		s.ErrorAs(err, &decErr)
+		slashingMock.AssertExpectations(s.T())
 	})
 
 	s.Run("BumpSlashingProtectionError", func() {
@@ -1195,6 +1264,13 @@ func (s *RemoteKeyManagerTestSuite) TestAddShareErrorCases() {
 
 		pubKey := phase0.BLSPubKey{1, 2, 3}
 		encShare := []byte("encrypted_share_data")
+
+		// Bump runs only after AddValidators succeeds, so the signer call must succeed here even
+		// though this case exercises the bump failure.
+		clientMock.On("AddValidators", mock.Anything, ssvsigner.ShareKeys{
+			PubKey:           pubKey,
+			EncryptedPrivKey: encShare,
+		}).Return([]web3signer.Status{web3signer.StatusImported}, nil).Once()
 
 		slashingMock.On("BumpSlashingProtectionTxn", nil, pubKey).Return(errors.New("bump slashing protection error")).Once()
 
@@ -1223,8 +1299,8 @@ func (s *RemoteKeyManagerTestSuite) TestAddShareErrorCases() {
 		pubKey := phase0.BLSPubKey{1, 2, 3}
 		encShare := []byte("encrypted_share_data")
 
-		slashingMock.On("BumpSlashingProtectionTxn", nil, pubKey).Return(nil).Once()
-
+		// Bump runs only after all statuses are accepted, so an unexpected status means it is
+		// never called.
 		clientMock.On("AddValidators", mock.Anything, ssvsigner.ShareKeys{
 			PubKey:           pubKey,
 			EncryptedPrivKey: encShare,
@@ -1444,18 +1520,78 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectAdditionalDomains() {
 	slot := phase0.Slot(123)
 
 	s.Run("SignVoluntaryExit", func() {
+		// Use a post-Capella slot (epoch 6 = Fulu in the test config) so the current
+		// fork differs from Capella — that difference is what makes the EIP-7044
+		// pinning observable. Signing an exit must use the Capella fork regardless.
+		exitSlot := phase0.Slot(6 * testNetCfg.SlotsPerEpoch)
+		exitEpoch := testNetCfg.EstimatedEpochAtSlot(exitSlot)
+
 		voluntaryExit := &phase0.VoluntaryExit{
-			Epoch:          123,
+			Epoch:          exitEpoch,
 			ValidatorIndex: 456,
 		}
 
-		s.client.On("Sign", mock.Anything, pubKey, mock.Anything).Return(expectedSignature, nil).Once()
+		var capturedReq web3signer.SignRequest
+		s.client.On("Sign", mock.Anything, pubKey, mock.Anything).
+			Run(func(args mock.Arguments) {
+				capturedReq = args.Get(2).(web3signer.SignRequest)
+			}).
+			Return(expectedSignature, nil).Once()
 
-		signature, root, err := rm.SignBeaconObject(ctx, voluntaryExit, domain, pubKey, slot, spectypes.DomainVoluntaryExit)
+		signature, root, err := rm.SignBeaconObject(ctx, voluntaryExit, domain, pubKey, exitSlot, spectypes.DomainVoluntaryExit)
 
 		s.NoError(err)
 		s.EqualValues(expectedSignature[:], signature)
 		s.NotEqual([32]byte{}, root)
+
+		// EIP-7044: the exit must be signed with the Capella fork, not the current one.
+		s.Equal(web3signer.TypeVoluntaryExit, capturedReq.Type)
+		s.Require().NotNil(capturedReq.ForkInfo.Fork)
+		capellaFork, ok := testNetCfg.ForkAtVersion(spec.DataVersionCapella)
+		s.Require().True(ok)
+		s.Equal(capellaFork.CurrentVersion, capturedReq.ForkInfo.Fork.CurrentVersion)
+		_, currentFork := testNetCfg.ForkAtEpoch(exitEpoch)
+		s.NotEqual(currentFork.CurrentVersion, capturedReq.ForkInfo.Fork.CurrentVersion)
+
+		s.client.AssertExpectations(s.T())
+	})
+
+	s.Run("SignValidatorRegistration", func() {
+		// Validator registration uses the application-builder domain, fixed to the
+		// genesis fork version regardless of the current fork. Use a post-genesis slot
+		// (epoch 6 = Fulu in the test config) so the current fork differs from genesis;
+		// the request must carry the pinned genesis fork and an empty genesis root.
+		registrationSlot := phase0.Slot(6 * testNetCfg.SlotsPerEpoch)
+
+		registration := &eth2api.ValidatorRegistration{
+			FeeRecipient: bellatrix.ExecutionAddress{1, 2, 3},
+			GasLimit:     30000000,
+			Timestamp:    time.Unix(1700000000, 0),
+			Pubkey:       pubKey,
+		}
+
+		var capturedReq web3signer.SignRequest
+		s.client.On("Sign", mock.Anything, pubKey, mock.Anything).
+			Run(func(args mock.Arguments) {
+				capturedReq = args.Get(2).(web3signer.SignRequest)
+			}).
+			Return(expectedSignature, nil).Once()
+
+		signature, root, err := rm.SignBeaconObject(ctx, registration, domain, pubKey, registrationSlot, spectypes.DomainApplicationBuilder)
+
+		s.NoError(err)
+		s.EqualValues(expectedSignature[:], signature)
+		s.NotEqual([32]byte{}, root)
+
+		s.Equal(web3signer.TypeValidatorRegistration, capturedReq.Type)
+		s.Require().NotNil(capturedReq.ForkInfo.Fork)
+		genesisFork, ok := testNetCfg.ForkAtVersion(spec.DataVersionPhase0)
+		s.Require().True(ok)
+		s.Equal(genesisFork.CurrentVersion, capturedReq.ForkInfo.Fork.CurrentVersion)
+		_, currentFork := testNetCfg.ForkAtEpoch(testNetCfg.EstimatedEpochAtSlot(registrationSlot))
+		s.NotEqual(currentFork.CurrentVersion, capturedReq.ForkInfo.Fork.CurrentVersion)
+		s.Equal(phase0.Root{}, capturedReq.ForkInfo.GenesisValidatorsRoot)
+
 		s.client.AssertExpectations(s.T())
 	})
 
@@ -1511,6 +1647,34 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectAdditionalDomains() {
 		s.Nil(signature)
 		s.Equal(phase0.Root{}, root)
 	})
+}
+
+func (s *RemoteKeyManagerTestSuite) TestGetForkInfoUsesGloasForkOnGloasEpoch() {
+	// testBeaconConfig tops out at Fulu (epoch 6); schedule a Gloas fork after it. On a Gloas epoch,
+	// fork_info must carry the Gloas fork — sending the Fulu version would make Web3Signer derive the
+	// wrong domain and reject/mis-sign every remote duty (RS-1).
+	cfg := testBeaconConfig()
+	const gloasEpoch = phase0.Epoch(7)
+	gloasVersion := phase0.Version{7, 0, 0, 0}
+	cfg.Forks[GloasDataVersion] = phase0.Fork{
+		Epoch:           gloasEpoch,
+		PreviousVersion: phase0.Version{6, 0, 0, 0},
+		CurrentVersion:  gloasVersion,
+	}
+	rm := &RemoteKeyManager{beaconConfig: cfg, genesisRoot: cfg.GenesisValidatorsRoot}
+
+	gloasFI := rm.GetForkInfo(gloasEpoch)
+	s.Require().NotNil(gloasFI.Fork)
+	s.Equal(gloasVersion, gloasFI.Fork.CurrentVersion)
+	version, gloasFork := cfg.ForkAtEpoch(gloasEpoch) // ForkAtEpoch resolves the scheduled Gloas fork itself
+	s.Equal(GloasDataVersion, version)
+	s.Equal(*gloasFork, *gloasFI.Fork)
+	s.Equal(cfg.GenesisValidatorsRoot, gloasFI.GenesisValidatorsRoot)
+
+	// A pre-Gloas epoch is unaffected — still the current (Fulu) fork.
+	fuluFI := rm.GetForkInfo(6)
+	s.Require().NotNil(fuluFI.Fork)
+	s.Equal(phase0.Version{6, 0, 0, 0}, fuluFI.Fork.CurrentVersion)
 }
 
 func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectMoreDomains() {

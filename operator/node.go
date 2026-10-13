@@ -2,46 +2,39 @@ package operator
 
 import (
 	"context"
-	"encoding/hex"
 	"errors"
 	"fmt"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
-	"github.com/hashicorp/go-multierror"
 	"go.uber.org/zap"
-
-	"github.com/attestantio/go-eth2-client/spec/phase0"
-
-	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/ssvlabs/ssv/eth/executionclient"
-	"github.com/ssvlabs/ssv/exporter"
-	"github.com/ssvlabs/ssv/exporter/api"
-	exporterstore "github.com/ssvlabs/ssv/exporter/store"
-	"github.com/ssvlabs/ssv/exporter2"
-	qbftstorage "github.com/ssvlabs/ssv/ibft/storage"
+	exporterconfig "github.com/ssvlabs/ssv/exporter/config"
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/operator/duties"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
-	dutytracer "github.com/ssvlabs/ssv/operator/dutytracer"
 	"github.com/ssvlabs/ssv/operator/fee_recipient"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	"github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/operator/validator"
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
-	"github.com/ssvlabs/ssv/protocol/v2/message"
 	storage2 "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
+type webSocketServer interface {
+	Start(ctx context.Context) (string, <-chan error, error)
+}
+
 // Options contains options to create the node
 type Options struct {
-	NetworkName         string             `yaml:"Network" env:"NETWORK" env-default:"mainnet" env-description:"Ethereum network to connect to (mainnet, holesky, sepolia, etc.). For backwards compatibility it's ignored if CustomNetwork is set"`
+	NetworkName         string             `yaml:"Network" env:"NETWORK" env-description:"Ethereum network to connect to (mainnet, holesky, sepolia, etc.). For backwards compatibility it's ignored if CustomNetwork is set"`
 	CustomNetwork       *networkconfig.SSV `yaml:"CustomNetwork" env:"CUSTOM_NETWORK" env-description:"Custom SSV network configuration"`
-	CustomDomainType    string             `yaml:"CustomDomainType" env:"CUSTOM_DOMAIN_TYPE" env-default:"" env-description:"Override SSV domain type for network isolation. Warning: Please modify only if you are certain of the implications. This would be incremented by 1 after Alan fork (e.g., 0x01020304 → 0x01020305 post-fork)"` // DEPRECATED: use CustomNetwork instead.
+	CustomDomainType    string             `yaml:"CustomDomainType" env:"CUSTOM_DOMAIN_TYPE" env-description:"Override SSV domain type for network isolation. Warning: Please modify only if you are certain of the implications. This would be incremented by 1 after Alan fork (e.g., 0x01020304 → 0x01020305 post-fork)"` // DEPRECATED: use CustomNetwork instead.
 	NetworkConfig       *networkconfig.Network
 	BeaconNode          beaconprotocol.BeaconNode // TODO: consider renaming to ConsensusClient
 	ExecutionClient     executionclient.Provider
@@ -52,38 +45,36 @@ type Options struct {
 	ValidatorStore      storage2.ValidatorStore
 	ValidatorOptions    validator.ControllerOptions `yaml:"ValidatorOptions"`
 	DutyStore           *dutystore.Store
-	ExporterRead        *exporter2.Exporter
-	WS                  api.WebSocketServer
-	WsAPIPort           int
+	WS                  webSocketServer
+}
+
+func (o *Options) ApplyDefaults() {
+	o.NetworkName = "mainnet"
+	o.ValidatorOptions.ApplyDefaults()
 }
 
 type Node struct {
 	logger *zap.Logger
 
-	network          *networkconfig.Network
 	validatorsCtrl   *validator.Controller
 	validatorOptions validator.ControllerOptions
-	exporterOptions  exporter.Options
+	exporterOptions  exporterconfig.Options
 	consensusClient  beaconprotocol.BeaconNode
 	executionClient  executionclient.Provider
 	net              network.P2PNetwork
 	storage          storage.Storage
-	qbftStorage      *qbftstorage.ParticipantStores
 	dutyScheduler    *duties.Scheduler
 	feeRecipientCtrl fee_recipient.RecipientController
 
-	ws        api.WebSocketServer
-	wsAPIPort int
-
-	exporterRead *exporter2.Exporter
+	ws webSocketServer
 }
 
-func shouldRunDutyScheduler(exporterOpts exporter.Options) bool {
-	return !exporterOpts.Enabled || exporterOpts.Mode == exporter.ModeArchive
+func shouldRunDutyScheduler(exporterOpts exporterconfig.Options) bool {
+	return !exporterOpts.Enabled || exporterOpts.Mode == exporterconfig.ModeArchive
 }
 
 // New is the constructor of Node
-func New(logger *zap.Logger, opts Options, exporterOpts exporter.Options, slotTickerProvider slotticker.Provider, qbftStorage *qbftstorage.ParticipantStores) *Node {
+func New(logger *zap.Logger, opts Options, exporterOpts exporterconfig.Options, slotTickerProvider slotticker.Provider) *Node {
 	selfValidatorStore := opts.ValidatorStore.WithOperatorID(opts.ValidatorOptions.OperatorDataStore.GetOperatorID)
 
 	var (
@@ -121,7 +112,7 @@ func New(logger *zap.Logger, opts Options, exporterOpts exporter.Options, slotTi
 			Ctx:                     opts.Context,
 			BeaconNode:              schedulerBeacon,
 			ExecutionClient:         opts.ExecutionClient,
-			BeaconConfig:            opts.NetworkConfig.Beacon,
+			NetworkConfig:           opts.NetworkConfig,
 			ValidatorProvider:       validatorProvider,
 			ValidatorController:     opts.ValidatorController,
 			DutyExecutor:            dutyExecutor,
@@ -140,18 +131,14 @@ func New(logger *zap.Logger, opts Options, exporterOpts exporter.Options, slotTi
 		validatorsCtrl:   opts.ValidatorController,
 		validatorOptions: opts.ValidatorOptions,
 		exporterOptions:  exporterOpts,
-		network:          opts.NetworkConfig,
 		consensusClient:  opts.BeaconNode,
 		executionClient:  opts.ExecutionClient,
 		net:              opts.P2PNetwork,
 		storage:          opts.ValidatorOptions.RegistryStorage,
-		qbftStorage:      qbftStorage,
 		dutyScheduler:    dutyScheduler,
 		feeRecipientCtrl: feeRecipientCtrl,
 
-		ws:           opts.WS,
-		wsAPIPort:    opts.WsAPIPort,
-		exporterRead: opts.ExporterRead,
+		ws: opts.WS,
 	}
 
 	if feeRecipientCtrl != nil {
@@ -170,20 +157,49 @@ func New(logger *zap.Logger, opts Options, exporterOpts exporter.Options, slotTi
 func (n *Node) Start(ctx context.Context) error {
 	n.logger.Info("starting operator node")
 
-	go func() {
-		err := n.startWSServer()
-		if err != nil {
-			return
-		}
-	}()
+	// On an early return, defer cancel() signals the early-joined members (the WS serve loop and the
+	// scheduler wait) to stop; it doesn't await them — they unwind in the background.
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	g, gctx := errgroup.WithContext(ctx)
 
-	// Start the duty scheduler in modes that use it.
-	if n.dutyScheduler != nil {
-		if err := n.dutyScheduler.Start(ctx); err != nil {
+	// Plain receive is safe: the WS server takes gctx (via startWSServer), so its Shutdown closes
+	// serveErr on cancel and this can't wedge g.Wait().
+	if n.ws != nil {
+		wsServeErr, err := n.startWSServer(gctx)
+		if err != nil {
+			return fmt.Errorf("start WS server: %w", err)
+		}
+		g.Go(func() error {
+			if err := <-wsServeErr; err != nil {
+				return fmt.Errorf("WS server serve loop exited: %w", err)
+			}
+			return nil
+		})
+	}
+
+	// Exporter-standard runs no duties — it just stays up until shutdown. dutyScheduler is nil only for
+	// that mode; any other mode reaching the default is a wiring bug.
+	switch {
+	case n.dutyScheduler != nil:
+		if err := n.dutyScheduler.Start(gctx); err != nil {
 			return fmt.Errorf("failed to run duty scheduler: %w", err)
 		}
-	} else {
-		n.logger.Info("exporter standard mode: skipping duty scheduler")
+		g.Go(func() error {
+			// Always nil today (tasks exit on gctx cancel), but propagate any future error rather than
+			// swallowing it.
+			if err := n.dutyScheduler.Wait(); err != nil {
+				return fmt.Errorf("duty scheduler exited with error: %w", err)
+			}
+			return nil
+		})
+	case n.exporterOptions.Enabled && n.exporterOptions.Mode == exporterconfig.ModeStandard:
+		g.Go(func() error {
+			<-gctx.Done()
+			return nil
+		})
+	default:
+		return errors.New("duty scheduler is nil for non-exporter-standard node")
 	}
 
 	n.validatorsCtrl.StartNetworkHandlers()
@@ -251,22 +267,7 @@ func (n *Node) Start(ctx context.Context) error {
 
 	n.logger.Info("operator node has been started", fields.OperatorID(n.validatorOptions.OperatorDataStore.GetOperatorID()))
 
-	if n.dutyScheduler != nil {
-		if err := n.dutyScheduler.Wait(); err != nil {
-			n.logger.Fatal("duty scheduler exited with error", zap.Error(err))
-		}
-	} else {
-		if !n.exporterOptions.Enabled || n.exporterOptions.Mode != exporter.ModeStandard {
-			n.logger.Fatal("duty scheduler is nil for non-exporter-standard node")
-		}
-		<-ctx.Done()
-	}
-
-	if err := n.net.Close(); err != nil {
-		n.logger.Error("could not close network", zap.Error(err))
-	}
-
-	return nil
+	return g.Wait()
 }
 
 // HealthCheck returns a list of issues regards the state of the operator node
@@ -277,175 +278,18 @@ func (n *Node) HealthCheck() error {
 	return nil
 }
 
-// handleQueryRequests waits for incoming messages and
-func (n *Node) handleQueryRequests(nm *api.NetworkMessage) {
-	if nm.Err != nil {
-		nm.Msg = api.Message{
-			Type: api.TypeError,
-			Data: []string{fmt.Sprintf("could not parse network message: %v", nm.Err)},
-		}
-	}
-	n.logger.Debug("got incoming export request",
-		zap.String("type", string(nm.Msg.Type)))
+// startWSServer starts the WS API server and returns its serve-error channel. A serve failure
+// propagates via the channel — bringing the node down gracefully through Close — rather than
+// os.Exit-ing from a goroutine. Requires n.ws != nil.
+func (n *Node) startWSServer(ctx context.Context) (<-chan error, error) {
+	n.logger.Info("starting WS server")
 
-	h := api.NewHandler(n.logger)
-
-	switch nm.Msg.Type {
-	case api.TypeDecided:
-		// In exporter v2 (archive) mode we serve decided queries via exporter2 core.
-		// Fall back to legacy qbft storage when exporter2 isn't wired.
-		if n.exporterRead != nil {
-			n.handleDecidedViaExporter(nm)
-			break
-		}
-		h.HandleParticipantsQuery(n.qbftStorage, nm, n.network.DomainType)
-	case api.TypeError:
-		h.HandleErrorQuery(nm)
-	default:
-		h.HandleUnknownQuery(nm)
-	}
-}
-
-func (n *Node) handleDecidedViaExporter(nm *api.NetworkMessage) {
-	res := api.Message{Type: nm.Msg.Type, Filter: nm.Msg.Filter}
-
-	pkBytes, err := hex.DecodeString(nm.Msg.Filter.PublicKey)
+	_, serveErr, err := n.ws.Start(ctx)
 	if err != nil {
-		n.logger.Warn("failed to decode validator public key", zap.Error(err))
-		res.Type = api.TypeError
-		res.Data = []string{fmt.Sprintf("invalid publicKey %q: %v", nm.Msg.Filter.PublicKey, err)}
-		nm.Msg = res
-		return
+		return nil, err
 	}
 
-	var pk spectypes.ValidatorPK
-	copy(pk[:], pkBytes)
-
-	idx, ok := n.validatorOptions.ValidatorStore.ValidatorIndex(pk)
-	if !ok {
-		n.logger.Warn("validator not found for public key", zap.String("validator_pubkey", hex.EncodeToString(pk[:])))
-		res.Type = api.TypeError
-		res.Data = []string{fmt.Sprintf("validator not found for public key %s", nm.Msg.Filter.PublicKey)}
-		nm.Msg = res
-		return
-	}
-
-	role, err := message.BeaconRoleFromString(nm.Msg.Filter.Role)
-	if err != nil {
-		n.logger.Warn("failed to parse role", zap.Error(err))
-		res.Type = api.TypeError
-		res.Data = []string{fmt.Sprintf("role doesn't exist: %q", nm.Msg.Filter.Role)}
-		nm.Msg = res
-		return
-	}
-
-	coreQuery := &exporter2.DecidedsQuery{
-		From:    nm.Msg.Filter.From,
-		To:      nm.Msg.Filter.To,
-		Roles:   []spectypes.BeaconRole{role},
-		Indices: []phase0.ValidatorIndex{idx},
-	}
-
-	result, errs := n.exporterRead.TraceDecidedsCore(coreQuery)
-	participations := wsParticipationsFromCore(result)
-
-	var unexpectedErr error
-	filtered := filterOutDutyNotFoundErrors(errs)
-	if filtered.ErrorOrNil() != nil {
-		for _, e := range filtered.Errors {
-			// Preserve legacy WS leniency: treat validation errors as "no messages".
-			if isExporterValidationError(e) {
-				continue
-			}
-			unexpectedErr = e
-		}
-	}
-
-	if len(participations) == 0 {
-		if unexpectedErr != nil {
-			n.logger.Warn("failed to build participants api data due to exporter errors", zap.Error(unexpectedErr), fields.ValidatorIndex(idx))
-			res.Type = api.TypeError
-			res.Data = []string{fmt.Sprintf("internal error - could not build response: %v", unexpectedErr)}
-		} else {
-			// Mirror legacy exporter behavior: empty range returns "no messages" as a decided response.
-			res.Data = []string{"no messages"}
-		}
-		nm.Msg = res
-		return
-	}
-
-	data, err := api.ParticipantsAPIData(n.network.DomainType, participations...)
-	if err != nil {
-		n.logger.Warn("failed to build participants api data", zap.Error(err))
-		res.Type = api.TypeError
-		res.Data = []string{fmt.Sprintf("internal error - could not build response: %v", err)}
-		nm.Msg = res
-		return
-	}
-
-	res.Data = data
-	nm.Msg = res
-}
-
-func wsParticipationsFromCore(result *exporter2.TraceDecidedsResult) []qbftstorage.Participation {
-	out := make([]qbftstorage.Participation, 0)
-	if result == nil {
-		return out
-	}
-	for _, p := range result.Participants {
-		out = append(out, qbftstorage.Participation{
-			ParticipantsRangeEntry: qbftstorage.ParticipantsRangeEntry{
-				Slot:    p.Slot,
-				PubKey:  p.PubKey,
-				Signers: p.Signers,
-			},
-			Role:   p.Role,
-			PubKey: p.PubKey,
-		})
-	}
-	return out
-}
-
-func isExporterValidationError(err error) bool {
-	var ve *exporter2.ValidationError
-	return errors.As(err, &ve)
-}
-
-// isNotFoundError returns true if the error represents an expected "no duty"
-// condition, either from the duty tracer or the underlying exporter store.
-// It mirrors the semantics in exporter2 helpers to ease future refactoring.
-func isNotFoundError(err error) bool {
-	return errors.Is(err, dutytracer.ErrNotFound) || errors.Is(err, exporterstore.ErrNotFound)
-}
-
-// filterOutDutyNotFoundErrors removes not-found duty errors from a multierror,
-// returning nil if nothing remains. It mirrors exporter2.filterOutDutyNotFoundErrors
-// to make future WS refactoring simpler.
-func filterOutDutyNotFoundErrors(e *multierror.Error) *multierror.Error {
-	if e == nil || e.ErrorOrNil() == nil {
-		return nil
-	}
-	var filtered *multierror.Error
-	for _, err := range e.Errors {
-		if err != nil && !isNotFoundError(err) {
-			filtered = multierror.Append(filtered, err)
-		}
-	}
-	return filtered
-}
-
-func (n *Node) startWSServer() error {
-	if n.ws != nil {
-		n.logger.Info("starting WS server")
-
-		n.ws.UseQueryHandler(n.handleQueryRequests)
-
-		if err := n.ws.Start(fmt.Sprintf(":%d", n.wsAPIPort)); err != nil {
-			return err
-		}
-	}
-
-	return nil
+	return serveErr, nil
 }
 
 func (n *Node) reportOperators() {

@@ -29,6 +29,7 @@ import (
 	"github.com/ssvlabs/ssv/network/records"
 	"github.com/ssvlabs/ssv/network/streams"
 	"github.com/ssvlabs/ssv/network/topics"
+	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/utils/commons"
 )
 
@@ -66,6 +67,14 @@ func (n *p2pNetwork) Setup() error {
 		return fmt.Errorf("init config: %w", err)
 	}
 
+	if n.cfg.Libp2pTrace {
+		if err := log.HookLibp2pLogging(); err != nil {
+			logger.Warn("could not route go-libp2p logs through SSV logger", zap.Error(err))
+		} else {
+			logger.Info("routing go-libp2p logs through SSV logger (swarm2,basichost=debug)")
+		}
+	}
+
 	err := n.SetupHost()
 	if err != nil {
 		return err
@@ -73,6 +82,13 @@ func (n *p2pNetwork) Setup() error {
 
 	logger = logger.With(zap.String("selfPeer", n.Host().ID().String()))
 	logger.Debug("host configured")
+
+	// Let the message validator recognize the messages we publish ourselves: gossipsub validates
+	// outbound messages locally, and self-discards should be logged as such rather than as publish
+	// failures. Must run before SetupServices wires the validator into pubsub.
+	if n.msgValidator != nil {
+		n.msgValidator.SetSelfPID(n.Host().ID())
+	}
 
 	err = n.SetupServices()
 	if err != nil {
@@ -151,7 +167,7 @@ func (n *p2pNetwork) SetupHost() error {
 		backoffExponentBase,
 		rand.NewSource(time.Now().UnixNano()),
 	)
-	backoffConnector, err := libp2pdiscbackoff.NewBackoffConnector(h, backoffConnectorCacheSize, connectTimeout, backoffFactory)
+	backoffConnector, err := newBackoffConnector(n.logger, h, backoffConnectorCacheSize, connectTimeout, backoffFactory)
 	if err != nil {
 		return fmt.Errorf("could not create backoff connector: %w", err)
 	}
@@ -194,7 +210,7 @@ func (n *p2pNetwork) setupPeerServices() error {
 	if err != nil {
 		return err
 	}
-	d := n.cfg.NetworkConfig.DomainType
+	d := n.cfg.NetworkConfig.CurrentDomainType()
 	domain := "0x" + hex.EncodeToString(d[:])
 	self := records.NewNodeInfo(domain)
 	self.Metadata = &records.NodeMetadata{
@@ -224,10 +240,23 @@ func (n *p2pNetwork) setupPeerServices() error {
 
 	// Handshake filters
 	filters := func() []connections.HandshakeFilter {
-		newDomain := n.cfg.NetworkConfig.DomainType
-		newDomainString := "0x" + hex.EncodeToString(newDomain[:])
+		currentSlot := n.cfg.NetworkConfig.EstimatedCurrentSlot()
+		currentDomain := n.cfg.NetworkConfig.DomainTypeAtSlot(currentSlot)
+		allowedDomains := []string{"0x" + hex.EncodeToString(currentDomain[:])}
+		if n.cfg.NetworkConfig.InBooleTransitionWindow(currentSlot) {
+			// During transition we accept both configured fork domains for peer compatibility.
+			domainString := "0x" + hex.EncodeToString(n.cfg.NetworkConfig.DomainType[:])
+			nextDomainString := "0x" + hex.EncodeToString(n.cfg.NetworkConfig.NextDomainType[:])
+			if domainString == nextDomainString {
+				allowedDomains = []string{domainString}
+			} else {
+				allowedDomains = []string{domainString, nextDomainString}
+			}
+		}
+
+		networkFilter := connections.NetworkIDFilter(allowedDomains...)
 		return []connections.HandshakeFilter{
-			connections.NetworkIDFilter(newDomainString),
+			networkFilter,
 			connections.BadPeerFilter(n.idx),
 		}
 	}
@@ -243,7 +272,7 @@ func (n *p2pNetwork) setupPeerServices() error {
 			SubnetsIdx:      n.idx,
 			IDService:       ids,
 			Network:         h.Network(),
-			DomainType:      n.cfg.NetworkConfig.DomainType,
+			DomainTypeFn:    n.cfg.NetworkConfig.CurrentDomainType,
 			SubnetsProvider: n.ActiveSubnets,
 		}, filters)
 
@@ -268,13 +297,21 @@ func (n *p2pNetwork) FixedSubnets() p2pcommons.Subnets {
 func (n *p2pNetwork) setupDiscovery() error {
 	logger := n.logger
 
-	ipAddr, err := p2pcommons.IPAddr()
-	if err != nil {
-		return fmt.Errorf("could not get ip addr: %w", err)
-	}
-	var discV5Opts *discovery.DiscV5Options
-	if n.cfg.Discovery != localDiscvery { // otherwise, we are in local scenario
-		discV5Opts = &discovery.DiscV5Options{
+	var disc discovery.Service
+	if n.cfg.Discovery == localDiscvery {
+		logger.Info("discovery: using mdns (local)")
+		var err error
+		disc, err = discovery.NewLocalDiscovery(n.ctx, logger, n.Host(), n.cfg.MdnsDiscoveryTag)
+		if err != nil {
+			return err
+		}
+	} else {
+		ipAddr, err := p2pcommons.IPAddr()
+		if err != nil {
+			return fmt.Errorf("could not get ip addr: %w", err)
+		}
+
+		discV5Opts := &discovery.DiscV5Options{
 			IP:            ipAddr.String(),
 			BindIP:        net.IPv4zero.String(),
 			Port:          n.cfg.UDPPort,
@@ -291,23 +328,22 @@ func (n *p2pNetwork) setupDiscovery() error {
 			zap.Strings("bootnodes", discV5Opts.Bootnodes),
 			zap.String("ip", discV5Opts.IP),
 		)
-	} else {
-		logger.Info("discovery: using mdns (local)")
-	}
-	discOpts := discovery.Options{
-		Host:                n.Host(),
-		DiscV5Opts:          discV5Opts,
-		ConnIndex:           n.idx,
-		SubnetsIdx:          n.idx,
-		HostAddress:         n.cfg.HostAddress,
-		HostDNS:             n.cfg.HostDNS,
-		SSVConfig:           n.cfg.NetworkConfig.SSV,
-		DiscoveredPeersPool: n.discoveredPeersPool,
-		TrimmedRecently:     n.trimmedRecently,
-	}
-	disc, err := discovery.NewService(n.ctx, logger, discOpts)
-	if err != nil {
-		return err
+
+		discOpts := &discovery.Options{
+			Host:                n.Host(),
+			DiscV5Opts:          discV5Opts,
+			ConnIndex:           n.idx,
+			SubnetsIdx:          n.idx,
+			HostAddress:         n.cfg.HostAddress,
+			HostDNS:             n.cfg.HostDNS,
+			SSVConfig:           n.cfg.NetworkConfig.SSV,
+			DiscoveredPeersPool: n.discoveredPeersPool,
+			TrimmedRecently:     n.trimmedRecently,
+		}
+		disc, err = discovery.NewDiscV5Service(n.ctx, logger, discOpts)
+		if err != nil {
+			return err
+		}
 	}
 	n.disc = disc
 

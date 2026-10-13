@@ -6,9 +6,13 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
+	"github.com/jellydator/ttlcache/v3"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
@@ -34,6 +38,46 @@ type messageProcessingState struct {
 }
 
 type messageKey string
+
+// messageStateTTL bounds how long a message's processing state outlives its last attempt: long enough
+// for a retried message parked in the queue to keep its retry count and span across a realistic wait,
+// short enough that the cache does not grow without bound.
+const messageStateTTL = 10 * time.Minute
+
+// newMessageStates returns the per-message processing-state cache the queue consumers share. A state
+// normally ends its span when the message is processed or dropped; one that expires instead — a retried
+// message still parked in the queue — ends it here, so the span is exported rather than lost.
+func newMessageStates(ttl time.Duration) *ttlcache.Cache[messageKey, *messageProcessingState] {
+	states := ttlcache.New(ttlcache.WithTTL[messageKey, *messageProcessingState](ttl))
+	states.OnEviction(func(_ context.Context, reason ttlcache.EvictionReason, item *ttlcache.Item[messageKey, *messageProcessingState]) {
+		if reason == ttlcache.EvictionReasonExpired {
+			item.Value().span.End()
+		}
+	})
+	return states
+}
+
+// endStaleMessageState closes out the in-flight state of a message dropped as stale — whether purged
+// from the queue at a duty start or dropped by the consumer after being popped. It ends the message's
+// span with a terminal status and removes the state, so the span is exported promptly instead of
+// lingering until the TTL evicts it with no status. A message never popped has no state, so it no-ops.
+func endStaleMessageState(msgStates *ttlcache.Cache[messageKey, *messageProcessingState], logger *zap.Logger, msg *queue.SSVMessage) {
+	msgKey, err := mKey(msg)
+	if err != nil {
+		logger.Debug("couldn't build msgKey to close out stale message state", zap.Error(err))
+		return
+	}
+	item := msgStates.Get(msgKey)
+	if item == nil {
+		return
+	}
+	const eventMsg = "message purged as stale before processing"
+	span := item.Value().span
+	span.AddEvent(eventMsg, trace.WithAttributes(attribute.String("drop_reason", queue.PurgeReasonStale)))
+	span.SetStatus(codes.Error, eventMsg)
+	span.End()
+	msgStates.Delete(msgKey)
+}
 
 const maxInt64DecimalLen = 20 // enough for uint64 max or int64 min in base 10
 
@@ -142,7 +186,6 @@ func mKey(msg *queue.SSVMessage) (messageKey, error) {
 		writeUint64(&b, ssvtypes.PartialSigMsgSigner(psm))
 		return messageKey(b.String()), nil
 	}
-
 	return "", fmt.Errorf("unexpected message type (expected types: event, qbft, partial-sig): %d", msg.MsgType)
 }
 

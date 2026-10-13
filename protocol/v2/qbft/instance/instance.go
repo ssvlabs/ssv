@@ -29,8 +29,10 @@ type Instance struct {
 	config qbft.IConfig
 	signer ssvtypes.OperatorSigner
 
-	State        *specqbft.State
-	processMsgF  *spectypes.ThreadSafeF
+	State       *specqbft.State
+	processMsgF *spectypes.ThreadSafeF
+	// StartValue is the value this node proposes when it leads a round with no prepared value to
+	// re-propose. The controller admits only a value that passed the value check, so it is never empty.
 	StartValue   []byte
 	ValueChecker ssv.ValueChecker `json:"-"`
 	roundTimer   ssv.QBFTRoundTimer
@@ -51,7 +53,7 @@ func NewInstance(
 	signer ssvtypes.OperatorSigner,
 	roundTimerF ssv.QBFTRoundTimerF,
 ) *Instance {
-	runnerRole := spectypes.RunnerRole(spectypes.RoleUnknown) // RoleUnknown is of int type, hence have to type-cast
+	runnerRole := spectypes.RoleUnknown
 	if len(identifier) == 56 {
 		runnerRole = spectypes.MessageID(identifier).GetRoleType()
 	}
@@ -121,12 +123,7 @@ func (i *Instance) Start(
 			// TODO align spec to add else to avoid broadcast errored proposal
 		}
 
-		startValueRoot, err := specqbft.HashDataRoot(i.StartValue)
-		if err != nil {
-			logger.Warn("❗ failed to hash instance start value", zap.Error(err))
-			span.SetStatus(codes.Error, err.Error())
-			return
-		}
+		startValueRoot := qbft.HashDataRoot(i.StartValue)
 		logger = logger.With(zap.String("qbft_start_value_root", hex.EncodeToString(startValueRoot[:])))
 
 		const eventMsg = "📢 leader broadcasting proposal message"
@@ -172,11 +169,12 @@ func (i *Instance) MarkIrrelevant() {
 }
 
 func (i *Instance) Broadcast(msg *spectypes.SignedSSVMessage) error {
-	if !i.CanProcessMessages() {
-		return spectypes.NewError(spectypes.InstanceStoppedProcessingMessagesErrorCode, "instance stopped processing messages")
+	if !i.IsRelevant() {
+		return spectypes.NewError(spectypes.InstanceStoppedProcessingMessagesErrorCode, "instance is no longer considered relevant")
 	}
 
-	return i.GetConfig().GetNetwork().Broadcast(msg.SSVMessage.GetID(), msg)
+	net := i.GetConfig().GetNetwork()
+	return net.BroadcastAtSlot(msg, phase0.Slot(i.State.Height))
 }
 
 func allSigners(all []*specqbft.ProcessingMessage) []spectypes.OperatorID {
@@ -191,8 +189,8 @@ func allSigners(all []*specqbft.ProcessingMessage) []spectypes.OperatorID {
 // The returned bool/value pair reports whether this call newly decided the
 // instance. Callers that need the post-call state should inspect State/IsDecided.
 func (i *Instance) ProcessMsg(ctx context.Context, logger *zap.Logger, msg *specqbft.ProcessingMessage) (decided bool, decidedValue []byte, aggregatedCommit *spectypes.SignedSSVMessage, err error) {
-	if !i.CanProcessMessages() {
-		return false, nil, nil, spectypes.NewError(spectypes.InstanceStoppedProcessingMessagesErrorCode, "instance stopped processing messages")
+	if !i.IsRelevant() {
+		return false, nil, nil, spectypes.NewError(spectypes.InstanceStoppedProcessingMessagesErrorCode, "instance is no longer considered relevant")
 	}
 
 	if err := i.BaseMsgValidation(msg); err != nil {
@@ -304,12 +302,30 @@ func (i *Instance) Decode(data []byte) error {
 	return json.Unmarshal(data, &i)
 }
 
-// bumpToRound sets round and sends current round metrics.
+// bumpToRound pushes this instance to a higher round, arming its round timer only while the instance is
+// still relevant. At or past the cutoff it has given up (IsRelevant is false) and processes nothing more,
+// so a timer would only fire later to produce a spurious give-up error.
 func (i *Instance) bumpToRound(round specqbft.Round) {
-	i.State.Round = round
+	if round > i.State.Round {
+		i.State.ProposalAcceptedForCurrentRound = nil
+		i.State.Round = round
+		if i.IsRelevant() {
+			i.roundTimer.TimeoutForRound(round)
+		}
+	}
 }
 
-// CanProcessMessages will return true if instance can process messages
-func (i *Instance) CanProcessMessages() bool {
+// IsRelevant will return true if instance can process messages
+func (i *Instance) IsRelevant() bool {
 	return !i.markedIrrelevant && i.State.Round < i.config.GetCutOffRound()
+}
+
+// recordCutoffGiveUp records — as a trace event and debug log — that the instance has reached its cutoff
+// round (roundtimer.CutOffRoundFor) and given up. A round-advancing handler calls this once a bump lands on
+// the cutoff (IsRelevant is false) and returns without broadcasting: no node acts at or past the cutoff, so
+// the message would be rejected and carries no liveness value — a normal end, not an error.
+func (i *Instance) recordCutoffGiveUp(ctx context.Context, logger *zap.Logger) {
+	const eventMsg = "instance reached its cutoff round, giving up"
+	trace.SpanFromContext(ctx).AddEvent(eventMsg)
+	logger.Debug(eventMsg, zap.Uint64("qbft_round", uint64(i.State.Round)))
 }

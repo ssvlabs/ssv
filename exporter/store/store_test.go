@@ -10,9 +10,9 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/exporter"
 	"github.com/ssvlabs/ssv/exporter/rolemask"
 	store "github.com/ssvlabs/ssv/exporter/store"
+	"github.com/ssvlabs/ssv/exporter/traces"
 	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
@@ -87,16 +87,188 @@ func TestSaveCommitteeDutyTrace(t *testing.T) {
 	trace2 := makeCTrace(2, 'b')
 
 	store := store.New(db)
-	require.NoError(t, store.SaveCommitteeDuty(trace1))
-	require.NoError(t, store.SaveCommitteeDuty(trace2))
+	require.NoError(t, store.SaveCommitteeDuty(spectypes.RoleCommittee, trace1))
+	require.NoError(t, store.SaveCommitteeDuty(spectypes.RoleCommittee, trace2))
 
-	duty, err := store.GetCommitteeDuty(phase0.Slot(1), [32]byte{'a'})
+	duty, err := store.GetCommitteeDuty(phase0.Slot(1), spectypes.RoleCommittee, [32]byte{'a'})
 	require.NoError(t, err)
 	assert.True(t, committeeDutiesAreEqual(trace1, duty))
 
-	duty, err = store.GetCommitteeDuty(phase0.Slot(2), [32]byte{'b'})
+	duty, err = store.GetCommitteeDuty(phase0.Slot(2), spectypes.RoleCommittee, [32]byte{'b'})
 	require.NoError(t, err)
 	assert.True(t, committeeDutiesAreEqual(trace2, duty))
+}
+
+func TestSaveCommitteeDutyTrace_NoCollisionAcrossRunnerRoles(t *testing.T) {
+	logger := zap.NewNop()
+	db, err := kv.NewInMemory(logger, basedb.Options{})
+	require.NoError(t, err)
+	defer db.Close()
+
+	s := store.New(db)
+	slot := phase0.Slot(5)
+	committeeID := [32]byte{'x'}
+
+	committeeDuty := makeCTrace(slot, 'x')
+	committeeDuty.Role = spectypes.RoleCommittee
+	committeeDuty.Attester = []*traces.SignerData{{Signer: 1}}
+
+	aggCommitteeDuty := makeCTrace(slot, 'x')
+	aggCommitteeDuty.Role = spectypes.RoleAggregatorCommittee
+	aggCommitteeDuty.SyncCommittee = []*traces.SignerData{{Signer: 2}}
+
+	require.NoError(t, s.SaveCommitteeDuty(spectypes.RoleCommittee, committeeDuty))
+	require.NoError(t, s.SaveCommitteeDuty(spectypes.RoleAggregatorCommittee, aggCommitteeDuty))
+
+	gotCommittee, err := s.GetCommitteeDuty(slot, spectypes.RoleCommittee, committeeID)
+	require.NoError(t, err)
+	require.Equal(t, spectypes.RoleCommittee, gotCommittee.Role)
+	require.Len(t, gotCommittee.Attester, 1)
+	require.Len(t, gotCommittee.SyncCommittee, 0)
+
+	gotAggregatorCommittee, err := s.GetCommitteeDuty(slot, spectypes.RoleAggregatorCommittee, committeeID)
+	require.NoError(t, err)
+	require.Equal(t, spectypes.RoleAggregatorCommittee, gotAggregatorCommittee.Role)
+	require.Len(t, gotAggregatorCommittee.Attester, 0)
+	require.Len(t, gotAggregatorCommittee.SyncCommittee, 1)
+}
+
+func TestCommitteeRunnerRoleToPrefix(t *testing.T) {
+	t.Run("RoleCommittee maps to a stable prefix byte", func(t *testing.T) {
+		b, err := store.CommitteeRunnerRoleToPrefix(spectypes.RoleCommittee)
+		require.NoError(t, err)
+		assert.Equal(t, byte(0x00), b)
+	})
+
+	t.Run("RoleAggregatorCommittee maps to a stable prefix byte", func(t *testing.T) {
+		b, err := store.CommitteeRunnerRoleToPrefix(spectypes.RoleAggregatorCommittee)
+		require.NoError(t, err)
+		assert.Equal(t, byte(0x06), b)
+	})
+
+	t.Run("unsupported role returns an error", func(t *testing.T) {
+		_, err := store.CommitteeRunnerRoleToPrefix(spectypes.RoleValidatorRegistration)
+		require.Error(t, err)
+	})
+}
+
+func TestSaveCommitteeDuty_UnsupportedRole(t *testing.T) {
+	logger := zap.NewNop()
+	db, err := kv.NewInMemory(logger, basedb.Options{})
+	require.NoError(t, err)
+	defer db.Close()
+
+	s := store.New(db)
+	err = s.SaveCommitteeDuty(spectypes.RoleValidatorRegistration, makeCTrace(1, 'a'))
+	require.Error(t, err)
+}
+
+func TestSaveCommitteeDuties_UnsupportedRole(t *testing.T) {
+	logger := zap.NewNop()
+	db, err := kv.NewInMemory(logger, basedb.Options{})
+	require.NoError(t, err)
+	defer db.Close()
+
+	s := store.New(db)
+	err = s.SaveCommitteeDuties(phase0.Slot(1), spectypes.RoleValidatorRegistration, []*traces.CommitteeDutyTrace{makeCTrace(1, 'a')})
+	require.Error(t, err)
+}
+
+func TestGetCommitteeDuty_UnsupportedRole(t *testing.T) {
+	logger := zap.NewNop()
+	db, err := kv.NewInMemory(logger, basedb.Options{})
+	require.NoError(t, err)
+	defer db.Close()
+
+	s := store.New(db)
+	_, err = s.GetCommitteeDuty(phase0.Slot(1), spectypes.RoleValidatorRegistration, [32]byte{'a'})
+	require.Error(t, err)
+}
+
+func TestGetCommitteeDuties_DefaultsToBothCommitteeRoles(t *testing.T) {
+	logger := zap.NewNop()
+	db, err := kv.NewInMemory(logger, basedb.Options{})
+	require.NoError(t, err)
+	defer db.Close()
+
+	s := store.New(db)
+	slot := phase0.Slot(7)
+
+	committeeDuty := makeCTrace(slot, 'c')
+	committeeDuty.Role = spectypes.RoleCommittee
+	aggregatorDuty := makeCTrace(slot, 'g')
+	aggregatorDuty.Role = spectypes.RoleAggregatorCommittee
+
+	require.NoError(t, s.SaveCommitteeDuty(spectypes.RoleCommittee, committeeDuty))
+	require.NoError(t, s.SaveCommitteeDuty(spectypes.RoleAggregatorCommittee, aggregatorDuty))
+
+	// No roles arg: must return entries from BOTH RoleCommittee and RoleAggregatorCommittee.
+	duties, err := s.GetCommitteeDuties(slot)
+	require.NoError(t, err)
+	require.Len(t, duties, 2)
+
+	gotRoles := map[spectypes.RunnerRole]bool{}
+	for _, d := range duties {
+		gotRoles[d.Role] = true
+	}
+	assert.True(t, gotRoles[spectypes.RoleCommittee])
+	assert.True(t, gotRoles[spectypes.RoleAggregatorCommittee])
+}
+
+func TestGetCommitteeDuties_FilteredByExplicitRole(t *testing.T) {
+	logger := zap.NewNop()
+	db, err := kv.NewInMemory(logger, basedb.Options{})
+	require.NoError(t, err)
+	defer db.Close()
+
+	s := store.New(db)
+	slot := phase0.Slot(8)
+
+	committeeDuty := makeCTrace(slot, 'c')
+	committeeDuty.Role = spectypes.RoleCommittee
+	aggregatorDuty := makeCTrace(slot, 'g')
+	aggregatorDuty.Role = spectypes.RoleAggregatorCommittee
+
+	require.NoError(t, s.SaveCommitteeDuty(spectypes.RoleCommittee, committeeDuty))
+	require.NoError(t, s.SaveCommitteeDuty(spectypes.RoleAggregatorCommittee, aggregatorDuty))
+
+	duties, err := s.GetCommitteeDuties(slot, spectypes.RoleCommittee)
+	require.NoError(t, err)
+	require.Len(t, duties, 1)
+	assert.Equal(t, spectypes.RoleCommittee, duties[0].Role)
+}
+
+func TestGetCommitteeDuties_UnsupportedRoleReturnsError(t *testing.T) {
+	logger := zap.NewNop()
+	db, err := kv.NewInMemory(logger, basedb.Options{})
+	require.NoError(t, err)
+	defer db.Close()
+
+	s := store.New(db)
+	_, err = s.GetCommitteeDuties(phase0.Slot(1), spectypes.RoleValidatorRegistration)
+	require.Error(t, err)
+}
+
+func TestGetCommitteeDuties_CorruptedEntryReturnsError(t *testing.T) {
+	logger := zap.NewNop()
+	db, err := kv.NewInMemory(logger, basedb.Options{})
+	require.NoError(t, err)
+	defer db.Close()
+
+	s := store.New(db)
+	slot := phase0.Slot(9)
+	committeeID := spectypes.CommitteeID{'z'}
+
+	// Directly write a corrupted (non-SSZ-decodable) value under the same key layout
+	// SaveCommitteeDuty uses: "cd" + little-endian slot(4) + role-prefix-byte, keyed by committeeID.
+	prefix := append([]byte("cd"), 0, 0, 0, 0)
+	prefix[2] = byte(slot)
+	prefix = append(prefix, 0x00) // RoleCommittee prefix byte
+	require.NoError(t, db.Set(prefix, committeeID[:], []byte{0x01, 0x02}))
+
+	duties, err := s.GetCommitteeDuties(slot, spectypes.RoleCommittee)
+	require.Error(t, err)
+	require.Empty(t, duties)
 }
 
 func TestSaveCommitteeDuties(t *testing.T) {
@@ -105,24 +277,24 @@ func TestSaveCommitteeDuties(t *testing.T) {
 	require.NoError(t, err)
 	defer db.Close()
 
-	traces := []*exporter.CommitteeDutyTrace{makeCTrace(1, 'a'), makeCTrace(1, 'b')}
+	cDuties := []*traces.CommitteeDutyTrace{makeCTrace(1, 'a'), makeCTrace(1, 'b')}
 
 	store := store.New(db)
-	require.NoError(t, store.SaveCommitteeDuties(phase0.Slot(1), traces))
+	require.NoError(t, store.SaveCommitteeDuties(phase0.Slot(1), spectypes.RoleCommittee, cDuties))
 
-	duty, err := store.GetCommitteeDuty(phase0.Slot(1), [32]byte{'a'})
+	duty, err := store.GetCommitteeDuty(phase0.Slot(1), spectypes.RoleCommittee, [32]byte{'a'})
 	require.NoError(t, err)
-	assert.True(t, committeeDutiesAreEqual(traces[0], duty))
+	assert.True(t, committeeDutiesAreEqual(cDuties[0], duty))
 
-	duty, err = store.GetCommitteeDuty(phase0.Slot(1), [32]byte{'b'})
+	duty, err = store.GetCommitteeDuty(phase0.Slot(1), spectypes.RoleCommittee, [32]byte{'b'})
 	require.NoError(t, err)
-	assert.True(t, committeeDutiesAreEqual(traces[1], duty))
+	assert.True(t, committeeDutiesAreEqual(cDuties[1], duty))
 
-	duties, err := store.GetCommitteeDuties(phase0.Slot(1))
+	duties, err := store.GetCommitteeDuties(phase0.Slot(1), spectypes.RoleCommittee)
 	require.NoError(t, err)
 	require.Len(t, duties, 2)
-	require.True(t, committeeDutiesAreEqual(traces[0], duties[0]))
-	require.True(t, committeeDutiesAreEqual(traces[1], duties[1]))
+	require.True(t, committeeDutiesAreEqual(cDuties[0], duties[0]))
+	require.True(t, committeeDutiesAreEqual(cDuties[1], duties[1]))
 }
 
 func TestSaveValidatorDutyTrace(t *testing.T) {
@@ -170,7 +342,7 @@ func TestSaveValidatorDuties(t *testing.T) {
 	trace2 := makeVTrace(2)
 
 	store := store.New(db)
-	require.NoError(t, store.SaveValidatorDuties([]*exporter.ValidatorDutyTrace{trace1, trace2}))
+	require.NoError(t, store.SaveValidatorDuties([]*traces.ValidatorDutyTrace{trace1, trace2}))
 
 	trace, err := store.GetValidatorDuty(phase0.Slot(1), spectypes.BNRoleAttester, phase0.ValidatorIndex(39393))
 	require.NoError(t, err)
@@ -305,23 +477,23 @@ func TestGetScheduledRoleMissing(t *testing.T) {
 	assert.ErrorIs(t, err, store.ErrNotFound)
 }
 
-func makeVTrace(slot phase0.Slot) *exporter.ValidatorDutyTrace {
-	return &exporter.ValidatorDutyTrace{
+func makeVTrace(slot phase0.Slot) *traces.ValidatorDutyTrace {
+	return &traces.ValidatorDutyTrace{
 		Slot:      slot,
 		Role:      spectypes.BNRoleAttester,
 		Validator: phase0.ValidatorIndex(39393),
 	}
 }
 
-func makeCTrace(slot phase0.Slot, committee byte) *exporter.CommitteeDutyTrace {
-	return &exporter.CommitteeDutyTrace{
+func makeCTrace(slot phase0.Slot, committee byte) *traces.CommitteeDutyTrace {
+	return &traces.CommitteeDutyTrace{
 		Slot:        slot,
 		CommitteeID: [32]byte{committee},
 		OperatorIDs: nil,
 	}
 }
 
-func partialSigTracesAreEqual(a []*exporter.PartialSigTrace, b []*exporter.PartialSigTrace) bool {
+func partialSigTracesAreEqual(a []*traces.PartialSigTrace, b []*traces.PartialSigTrace) bool {
 	if len(a) != len(b) {
 		return false
 	}
@@ -336,7 +508,7 @@ func partialSigTracesAreEqual(a []*exporter.PartialSigTrace, b []*exporter.Parti
 	return true
 }
 
-func partialSigTraceAreEqual(a *exporter.PartialSigTrace, b *exporter.PartialSigTrace) bool {
+func partialSigTraceAreEqual(a *traces.PartialSigTrace, b *traces.PartialSigTrace) bool {
 	if a == nil && b == nil {
 		return true
 	}
@@ -356,7 +528,7 @@ func partialSigTraceAreEqual(a *exporter.PartialSigTrace, b *exporter.PartialSig
 	return true
 }
 
-func qBFTTracesAreEqual(a []*exporter.QBFTTrace, b []*exporter.QBFTTrace) bool {
+func qBFTTracesAreEqual(a []*traces.QBFTTrace, b []*traces.QBFTTrace) bool {
 	if len(a) != len(b) {
 		return false
 	}
@@ -371,7 +543,7 @@ func qBFTTracesAreEqual(a []*exporter.QBFTTrace, b []*exporter.QBFTTrace) bool {
 	return true
 }
 
-func qBFTTraceAreEqual(a *exporter.QBFTTrace, b *exporter.QBFTTrace) bool {
+func qBFTTraceAreEqual(a *traces.QBFTTrace, b *traces.QBFTTrace) bool {
 	if a == nil && b == nil {
 		return true
 	}
@@ -393,7 +565,7 @@ func qBFTTraceAreEqual(a *exporter.QBFTTrace, b *exporter.QBFTTrace) bool {
 	return true
 }
 
-func proposalTraceAreEqual(a *exporter.ProposalTrace, b *exporter.ProposalTrace) bool {
+func proposalTraceAreEqual(a *traces.ProposalTrace, b *traces.ProposalTrace) bool {
 	if a == nil && b == nil {
 		return true
 	}
@@ -412,7 +584,7 @@ func proposalTraceAreEqual(a *exporter.ProposalTrace, b *exporter.ProposalTrace)
 	return true
 }
 
-func roundChangeTracesAreEqual(a []*exporter.RoundChangeTrace, b []*exporter.RoundChangeTrace) bool {
+func roundChangeTracesAreEqual(a []*traces.RoundChangeTrace, b []*traces.RoundChangeTrace) bool {
 	if len(a) != len(b) {
 		return false
 	}
@@ -427,7 +599,7 @@ func roundChangeTracesAreEqual(a []*exporter.RoundChangeTrace, b []*exporter.Rou
 	return true
 }
 
-func roundChangeTraceAreEqual(a *exporter.RoundChangeTrace, b *exporter.RoundChangeTrace) bool {
+func roundChangeTraceAreEqual(a *traces.RoundChangeTrace, b *traces.RoundChangeTrace) bool {
 	if a == nil && b == nil {
 		return true
 	}
@@ -446,7 +618,7 @@ func roundChangeTraceAreEqual(a *exporter.RoundChangeTrace, b *exporter.RoundCha
 	return true
 }
 
-func roundTracesAreEqual(a []*exporter.RoundTrace, b []*exporter.RoundTrace) bool {
+func roundTracesAreEqual(a []*traces.RoundTrace, b []*traces.RoundTrace) bool {
 	if len(a) != len(b) {
 		return false
 	}
@@ -461,7 +633,7 @@ func roundTracesAreEqual(a []*exporter.RoundTrace, b []*exporter.RoundTrace) boo
 	return true
 }
 
-func roundTraceAreEqual(a *exporter.RoundTrace, b *exporter.RoundTrace) bool {
+func roundTraceAreEqual(a *traces.RoundTrace, b *traces.RoundTrace) bool {
 	if a == nil && b == nil {
 		return true
 	}
@@ -486,7 +658,7 @@ func roundTraceAreEqual(a *exporter.RoundTrace, b *exporter.RoundTrace) bool {
 	return true
 }
 
-func decidedTracesAreEqual(a []*exporter.DecidedTrace, b []*exporter.DecidedTrace) bool {
+func decidedTracesAreEqual(a []*traces.DecidedTrace, b []*traces.DecidedTrace) bool {
 	if len(a) != len(b) {
 		return false
 	}
@@ -501,7 +673,7 @@ func decidedTracesAreEqual(a []*exporter.DecidedTrace, b []*exporter.DecidedTrac
 	return true
 }
 
-func decidedTraceAreEqual(a *exporter.DecidedTrace, b *exporter.DecidedTrace) bool {
+func decidedTraceAreEqual(a *traces.DecidedTrace, b *traces.DecidedTrace) bool {
 	if a == nil && b == nil {
 		return true
 	}
@@ -525,7 +697,7 @@ func decidedTraceAreEqual(a *exporter.DecidedTrace, b *exporter.DecidedTrace) bo
 	return true
 }
 
-func consensusTracesAreEqual(a *exporter.ConsensusTrace, b *exporter.ConsensusTrace) bool {
+func consensusTracesAreEqual(a *traces.ConsensusTrace, b *traces.ConsensusTrace) bool {
 	if a == nil && b == nil {
 		return true
 	}
@@ -541,7 +713,7 @@ func consensusTracesAreEqual(a *exporter.ConsensusTrace, b *exporter.ConsensusTr
 	return true
 }
 
-func validatorDutiesAreEqual(a *exporter.ValidatorDutyTrace, b *exporter.ValidatorDutyTrace) bool {
+func validatorDutiesAreEqual(a *traces.ValidatorDutyTrace, b *traces.ValidatorDutyTrace) bool {
 	if a == nil && b == nil {
 		return true
 	}
@@ -576,7 +748,7 @@ func validatorDutiesAreEqual(a *exporter.ValidatorDutyTrace, b *exporter.Validat
 	return true
 }
 
-func committeeDutiesAreEqual(a, b *exporter.CommitteeDutyTrace) bool {
+func committeeDutiesAreEqual(a, b *traces.CommitteeDutyTrace) bool {
 	if a == nil && b == nil {
 		return true
 	}
@@ -611,7 +783,7 @@ func committeeDutiesAreEqual(a, b *exporter.CommitteeDutyTrace) bool {
 	return true
 }
 
-func compareConsensusTrace(a, b *exporter.ConsensusTrace) bool {
+func compareConsensusTrace(a, b *traces.ConsensusTrace) bool {
 	if a == nil && b == nil {
 		return true
 	}
@@ -628,7 +800,7 @@ func compareConsensusTrace(a, b *exporter.ConsensusTrace) bool {
 	return true
 }
 
-func compareRoundTraceSlices(a, b []*exporter.RoundTrace) bool {
+func compareRoundTraceSlices(a, b []*traces.RoundTrace) bool {
 	if len(a) != len(b) {
 		return false
 	}
@@ -640,7 +812,7 @@ func compareRoundTraceSlices(a, b []*exporter.RoundTrace) bool {
 	return true
 }
 
-func compareRoundTrace(a, b *exporter.RoundTrace) bool {
+func compareRoundTrace(a, b *traces.RoundTrace) bool {
 	if a == nil && b == nil {
 		return true
 	}
@@ -665,7 +837,7 @@ func compareRoundTrace(a, b *exporter.RoundTrace) bool {
 	return true
 }
 
-func compareProposalTrace(a, b *exporter.ProposalTrace) bool {
+func compareProposalTrace(a, b *traces.ProposalTrace) bool {
 	if a == nil && b == nil {
 		return true
 	}
@@ -684,7 +856,7 @@ func compareProposalTrace(a, b *exporter.ProposalTrace) bool {
 	return true
 }
 
-func compareRoundChangeTraceSlices(a, b []*exporter.RoundChangeTrace) bool {
+func compareRoundChangeTraceSlices(a, b []*traces.RoundChangeTrace) bool {
 	if len(a) != len(b) {
 		return false
 	}
@@ -695,7 +867,7 @@ func compareRoundChangeTraceSlices(a, b []*exporter.RoundChangeTrace) bool {
 	}
 	return true
 }
-func compareRoundChangeTrace(a, b *exporter.RoundChangeTrace) bool {
+func compareRoundChangeTrace(a, b *traces.RoundChangeTrace) bool {
 	if a == nil && b == nil {
 		return true
 	}
@@ -714,7 +886,7 @@ func compareRoundChangeTrace(a, b *exporter.RoundChangeTrace) bool {
 	return true
 }
 
-func compareDecidedTraceSlices(a, b []*exporter.DecidedTrace) bool {
+func compareDecidedTraceSlices(a, b []*traces.DecidedTrace) bool {
 	if len(a) != len(b) {
 		return false
 	}
@@ -726,7 +898,7 @@ func compareDecidedTraceSlices(a, b []*exporter.DecidedTrace) bool {
 	return true
 }
 
-func compareDecidedTrace(a, b *exporter.DecidedTrace) bool {
+func compareDecidedTrace(a, b *traces.DecidedTrace) bool {
 	if a == nil && b == nil {
 		return true
 	}
@@ -748,7 +920,7 @@ func compareDecidedTrace(a, b *exporter.DecidedTrace) bool {
 	return true
 }
 
-func compareQBFTTraceSlices(a, b []*exporter.QBFTTrace) bool {
+func compareQBFTTraceSlices(a, b []*traces.QBFTTrace) bool {
 	if len(a) != len(b) {
 		return false
 	}
@@ -760,7 +932,7 @@ func compareQBFTTraceSlices(a, b []*exporter.QBFTTrace) bool {
 	return true
 }
 
-func compareQBFTTrace(a, b *exporter.QBFTTrace) bool {
+func compareQBFTTrace(a, b *traces.QBFTTrace) bool {
 	if a == nil && b == nil {
 		return true
 	}
@@ -782,7 +954,7 @@ func compareQBFTTrace(a, b *exporter.QBFTTrace) bool {
 	return true
 }
 
-func compareSignerDataSlices(a, b []*exporter.SignerData) bool {
+func compareSignerDataSlices(a, b []*traces.SignerData) bool {
 	if len(a) != len(b) {
 		return false
 	}
@@ -804,7 +976,7 @@ func compareSignerDataSlices(a, b []*exporter.SignerData) bool {
 	return true
 }
 
-func compareSignerData(a, b *exporter.SignerData) bool {
+func compareSignerData(a, b *traces.SignerData) bool {
 	if a == nil && b == nil {
 		return true
 	}

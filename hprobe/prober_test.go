@@ -96,6 +96,18 @@ func TestProber(t *testing.T) {
 		require.ErrorContains(t, err, "deadline exceeded")
 	})
 
+	t.Run("1 component, probe canceled is not an error", func(t *testing.T) {
+		clComponent := &stuckComponentMock{}
+
+		p := NewHealthProber(log.TestLogger(t))
+		p.AddComponent(clComponentName, clComponent, 10*time.Second, 5, 0)
+
+		probeCtx, cancel := context.WithCancel(ctx)
+		cancel()
+		err := p.Probe(probeCtx, clComponentName)
+		require.NoError(t, err)
+	})
+
 	t.Run("all components are healthy", func(t *testing.T) {
 		clComponent := &componentMock{}
 		clComponent.healthy.Store(nil)
@@ -253,6 +265,42 @@ func TestProber(t *testing.T) {
 		cancel()
 		err := p.ProbeAll(probeCtx)
 		require.NoError(t, err)
+	})
+
+	t.Run("wedged component cannot stall the round past its deadline", func(t *testing.T) {
+		// A Healthy impl that ignores its ctx never returns; the round must still end at the ctx
+		// deadline with a timeout verdict — otherwise a single wedged component would hang every
+		// ProbeAll caller forever. The wedged probe goroutine leaks and is reaped at process exit.
+		clComponent := &ctxIgnoringComponentMock{}
+
+		p := NewHealthProber(log.TestLogger(t))
+		p.AddComponent(clComponentName, clComponent, 10*time.Millisecond, 0, 0)
+
+		probeCtx, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
+		defer cancel()
+		err := p.ProbeAll(probeCtx)
+		require.ErrorContains(t, err, "deadline exceeded")
+	})
+
+	t.Run("sibling cut short by early-cancel is not part of the verdict", func(t *testing.T) {
+		// The CL fails outright; its failure early-cancels the round while the EL is parked in its
+		// retry-delay. The EL's cut-short probe must contribute nothing: the verdict carries only the
+		// genuine failure and must not be classifiable as a cancellation (#2880).
+		clComponent := &componentMock{}
+		clDownErr := fmt.Errorf("some error")
+		clComponent.healthy.Store(&clDownErr)
+
+		elComponent := newGlitchyComponentMock(1) // first attempt fails -> parks in retry-delay
+
+		p := NewHealthProber(log.TestLogger(t))
+		p.AddComponent(clComponentName, clComponent, 10*time.Second, 0, 0)
+		p.AddComponent(elComponentName, elComponent, 10*time.Second, 5, 10*time.Second)
+
+		err := p.ProbeAll(ctx)
+		require.ErrorContains(t, err, clComponentName)
+		require.ErrorContains(t, err, clDownErr.Error())
+		require.NotErrorIs(t, err, context.Canceled)
+		require.NotContains(t, err.Error(), elComponentName)
 	})
 
 	t.Run("component glitches survived via retries", func(t *testing.T) {

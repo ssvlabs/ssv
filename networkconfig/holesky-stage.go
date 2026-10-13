@@ -1,14 +1,19 @@
 package networkconfig
 
 import (
+	"math"
 	"math/big"
 
 	ethcommon "github.com/ethereum/go-ethereum/common"
 )
 
 var HoleskyStageSSV = &SSV{
-	Name:                 "holesky-stage",
-	DomainType:           [4]byte{0x00, 0x00, 0x31, 0x13},
+	Name:       "holesky-stage",
+	DomainType: [4]byte{0x00, 0x00, 0x31, 0x13},
+	// Naive Boole domain (Alan+1 = {0,0,0x31,0x14}) collides with hoodi-stage's live Alan
+	// DomainType in this shared 0x31 lane; move it clear of the 0x13–0x15 cluster. Safe while
+	// Boole is unscheduled here. Enforced by TestBuiltinNetworkDomainsAreUnique.
+	NextDomainType:       [4]byte{0x00, 0x00, 0x31, 0x23},
 	RegistrySyncOffset:   new(big.Int).SetInt64(84599),
 	RegistryContractAddr: ethcommon.HexToAddress("0x0d33801785340072C452b994496B19f196b7eE15"),
 	DiscoveryProtocolID:  [6]byte{'s', 's', 'v', 'd', 'v', '5'},
@@ -20,5 +25,7 @@ var HoleskyStageSSV = &SSV{
 		"enr:-Ja4QDRUBjWOvVfGxpxvv3FqaCy3psm7IsKu5ETb1GXiexGYDFppD33t7AHRfmQddoAkBiyb7pt4t7ZN0sNB9CsW4I-GAZGOmChMgmlkgnY0gmlwhAorXxuJc2VjcDI1NmsxoQP_bBE-ZYvaXKBR3dRYMN5K_lZP-q-YsBzDZEtxH_4T_YNzc3YBg3RjcIITioN1ZHCCD6I",
 	},
 	TotalEthereumValidators: HoleskySSV.TotalEthereumValidators,
-	Forks:                   SSVForks{},
+	Forks: SSVForks{
+		Boole: math.MaxUint64,
+	},
 }

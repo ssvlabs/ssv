@@ -19,6 +19,11 @@ type config struct {
 	Options          bootnode.Options `yaml:"bootnode"`
 }
 
+func (c *config) ApplyDefaults() {
+	c.Global.ApplyDefaults()
+	c.Options.ApplyDefaults()
+}
+
 var cfg config
 
 var globalArgs globalcfg.Args

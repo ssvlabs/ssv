@@ -14,7 +14,7 @@ import (
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"go.opentelemetry.io/otel/metric"
-	semconv "go.opentelemetry.io/otel/semconv/v1.37.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.39.0"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/eth/contract"
@@ -279,7 +279,9 @@ func (ec *ExecutionClient) subdivideLogFetch(ctx context.Context, q ethereum.Fil
 			return nil, fmt.Errorf("insufficient blocks to subdivide (fromBlock: %d, toBlock: %d): %w", fromBlock, toBlock, err)
 		}
 
-		ec.logger.Warn("execution client query limit exceeded, subdividing query",
+		// Query-limit subdivision is an expected, self-healing fallback that recurses,
+		// so log at debug; a genuine failure to fetch surfaces as an error upstream.
+		ec.logger.Debug("execution client query limit exceeded, subdividing query",
 			zap.String("method", "eth_getLogs"),
 			fields.FromBlock(fromBlock),
 			fields.ToBlock(toBlock),
@@ -310,7 +312,7 @@ func (ec *ExecutionClient) subdivideLogFetch(ctx context.Context, q ethereum.Fil
 		combinedLogs = append(combinedLogs, leftLogs...)
 		combinedLogs = append(combinedLogs, rightLogs...)
 
-		ec.logger.Info("successfully fetched logs after subdivision",
+		ec.logger.Debug("successfully fetched logs after subdivision",
 			fields.FromBlock(fromBlock),
 			fields.ToBlock(toBlock),
 			zap.Int("total_logs", totalLogs))

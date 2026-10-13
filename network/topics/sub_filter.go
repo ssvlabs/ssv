@@ -4,7 +4,6 @@ import (
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	ps_pb "github.com/libp2p/go-libp2p-pubsub/pb"
 	"github.com/libp2p/go-libp2p/core/peer"
-	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/utils/hashmap"
@@ -15,25 +14,30 @@ type SubFilter interface {
 	// SubscriptionFilter allows controlling what topics the node will subscribe to
 	// otherwise it might subscribe to irrelevant topics that were suggested by other peers
 	pubsub.SubscriptionFilter
-	// Whitelist
+	// Whitelist maintains the dynamic topic whitelist consulted by CanSubscribe. Embedding it
+	// makes the whitelist part of the compile-time contract, so callers (topic controller
+	// register/deregister paths) don't need runtime type assertions.
+	Whitelist
 }
 
 type subFilter struct {
 	whitelist *dynamicWhitelist
-	subsLimit int
 }
 
-func newSubFilter(logger *zap.Logger, subsLimit int) SubFilter {
+func newSubFilter() SubFilter {
 	return &subFilter{
 		whitelist: newWhitelist(),
-		subsLimit: subsLimit,
 	}
 }
 
-// CanSubscribe returns true if the topic is of interest and we can subscribe to it
+// CanSubscribe returns true if the topic is of interest and we can subscribe to it.
+// A topic is "of interest" only if it parses as a valid subnet topic for a known fork
+// scheme — Alan ("ssv.v2.<subnet>") or Boole ("/ssv/<network>/boole/<subnet>"). Topics
+// from another fork/network or malformed ones are rejected outright. Recognized topics
+// still have to be present in the dynamic whitelist.
 func (sf *subFilter) CanSubscribe(topic string) bool {
-	if commons.GetTopicBaseName(topic) == topic {
-		// not of the same fork
+	if _, _, err := commons.ParseTopicSubnet(topic); err != nil {
+		// not a recognized subnet topic (wrong fork/network or malformed)
 		return false
 	}
 	return sf.Whitelisted(topic)

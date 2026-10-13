@@ -275,8 +275,8 @@ func TestSubmitProposal(t *testing.T) {
 			owner := common.HexToAddress(fmt.Sprintf("0x%040x", i))
 			share := &types.SSVShare{
 				Share: spectypes.Share{
-					ValidatorPubKey: spectypes.ValidatorPK([]byte(fmt.Sprintf("pk%046d", i))),
-					SharePubKey:     []byte(fmt.Sprintf("pk%046d", i)),
+					ValidatorPubKey: spectypes.ValidatorPK(fmt.Appendf(nil, "pk%046d", i)),
+					SharePubKey:     fmt.Appendf(nil, "pk%046d", i),
 					ValidatorIndex:  phase0.ValidatorIndex(i),
 					Committee:       []*spectypes.ShareMember{{Signer: operatorData.ID}},
 				},
@@ -336,8 +336,8 @@ func populateStorage(t *testing.T, storage registrystorage.Shares, operatorData 
 		ownerAddr := common.HexToAddress(fmt.Sprintf("0x%040x", index))
 		return &types.SSVShare{
 			Share: spectypes.Share{
-				ValidatorPubKey: spectypes.ValidatorPK([]byte(fmt.Sprintf("pk%046d", index))),
-				SharePubKey:     []byte(fmt.Sprintf("pk%046d", index)),
+				ValidatorPubKey: spectypes.ValidatorPK(fmt.Appendf(nil, "pk%046d", index)),
+				SharePubKey:     fmt.Appendf(nil, "pk%046d", index),
 				ValidatorIndex:  phase0.ValidatorIndex(index),
 				Committee:       []*spectypes.ShareMember{{Signer: operatorID}},
 			},

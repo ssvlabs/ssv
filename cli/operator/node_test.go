@@ -1,512 +1,384 @@
 package operator
 
 import (
-	"bytes"
 	"context"
-	"io"
-	"net"
-	"net/http"
-	"net/http/httptest"
-	"strconv"
+	"fmt"
 	"testing"
-	"time"
 
+	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
-	"go.uber.org/zap/zaptest/observer"
 
+	"github.com/ssvlabs/ssv/doppelganger"
+	"github.com/ssvlabs/ssv/eth/executionclient"
+	exporterconfig "github.com/ssvlabs/ssv/exporter/config"
+	"github.com/ssvlabs/ssv/hprobe"
+	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
+	"github.com/ssvlabs/ssv/network"
+	networkcommons "github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/networkconfig"
-	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
-	"github.com/ssvlabs/ssv/ssvsigner"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
-func newTestSSVSignerClient(t *testing.T, register func(mux *http.ServeMux)) *ssvsigner.Client {
-	mux := http.NewServeMux()
-	if register != nil {
-		register(mux)
+// shareWithCommittee builds a minimal SSVShare whose committee is the given operator IDs — enough
+// to exercise BooleCommitteeSubnet/AlanCommitteeSubnet, which derive solely from the committee.
+func shareWithCommittee(operatorIDs ...spectypes.OperatorID) *ssvtypes.SSVShare {
+	committee := make([]*spectypes.ShareMember, len(operatorIDs))
+	for i, id := range operatorIDs {
+		committee[i] = &spectypes.ShareMember{Signer: id}
 	}
-
-	server := httptest.NewServer(mux)
-	t.Cleanup(server.Close)
-
-	return ssvsigner.NewClient(server.URL, ssvsigner.WithLogger(zap.NewNop()))
+	return &ssvtypes.SSVShare{
+		Share: spectypes.Share{Committee: committee},
+	}
 }
 
-func Test_warnIfSSVAPIAddressUnset(t *testing.T) {
-	t.Parallel()
+// Test_operatorActiveSubnets locks in the fork-gated subnet-counting behavior extracted from
+// applyDynamicMaxPeers: with no fork scheduled only Alan subnets count, from scheduling to
+// activation both Alan and Boole subnets count in independent bitmaps, post-fork only Boole —
+// and validators landing on an already-seen subnet don't inflate the count. It also pins the two
+// cases iurii-ssv flagged: a Boole/Alan subnet-number collision must not under-count, and an empty
+// committee (BooleCommitteeSubnet -> UnknownSubnetId) must not inflate.
+func TestOperatorActiveSubnets(t *testing.T) {
+	shareA := shareWithCommittee(1, 2, 3, 4)
+	shareB := shareWithCommittee(5, 6, 7, 8)
+	shareADup := shareWithCommittee(1, 2, 3, 4) // same committee as shareA => same subnets
 
-	t.Run("warns when address is empty", func(t *testing.T) {
-		core, recorded := observer.New(zapcore.WarnLevel)
-		logger := zap.New(core)
+	t.Run("unscheduled fork counts only Alan subnets", func(t *testing.T) {
+		validators := []*ssvtypes.SSVShare{shareA, shareB}
 
-		warnIfSSVAPIAddressUnset(logger, "", 16000)
-
-		logs := recorded.All()
-		require.Len(t, logs, 1)
-		require.Equal(t, zapcore.WarnLevel, logs[0].Level)
-		require.Equal(t, "SSV API address not configured; listening on all interfaces", logs[0].Message)
-		require.EqualValues(t, 16000, logs[0].ContextMap()["port"])
-		require.Equal(t, "SSVAPIAddress", logs[0].ContextMap()["config_key"])
-		require.Equal(t, "127.0.0.1", logs[0].ContextMap()["recommended_address"])
+		require.Equal(t, 2, operatorActiveSubnets(validators, false, false))
 	})
 
-	t.Run("does not warn when address is set", func(t *testing.T) {
-		core, recorded := observer.New(zapcore.WarnLevel)
-		logger := zap.New(core)
+	t.Run("post-fork counts only distinct Boole subnets", func(t *testing.T) {
+		validators := []*ssvtypes.SSVShare{shareA, shareB}
 
-		warnIfSSVAPIAddressUnset(logger, "127.0.0.1", 16000)
-
-		require.Len(t, recorded.All(), 0)
-	})
-}
-
-func TestDecideNetworkKeyProtectors(t *testing.T) {
-	t.Run("exporter ignores operator key", func(t *testing.T) {
-		operatorPrivKey, err := keys.GeneratePrivateKey()
-		require.NoError(t, err)
-
-		protectFn, unprotectFn, err := decideNetworkKeyProtectors(context.Background(), zap.NewNop(), nil, true, operatorPrivKey, nil)
-		require.NoError(t, err)
-		require.Nil(t, protectFn)
-		require.Nil(t, unprotectFn)
+		require.Equal(t, 2, operatorActiveSubnets(validators, true, true))
 	})
 
-	t.Run("exporter ignores ssv-signer config", func(t *testing.T) {
-		client := newTestSSVSignerClient(t, nil)
+	t.Run("scheduled pre-fork counts both Alan and Boole subnets", func(t *testing.T) {
+		validators := []*ssvtypes.SSVShare{shareA, shareB}
 
-		protectFn, unprotectFn, err := decideNetworkKeyProtectors(context.Background(), zap.NewNop(), nil, true, nil, client)
-		require.NoError(t, err)
-		require.Nil(t, protectFn)
-		require.Nil(t, unprotectFn)
+		require.Equal(t, 4, operatorActiveSubnets(validators, true, false))
 	})
 
-	t.Run("non-exporter keeps local operator key", func(t *testing.T) {
-		operatorPrivKey, err := keys.GeneratePrivateKey()
-		require.NoError(t, err)
+	t.Run("validators sharing a committee dedupe to a single subnet", func(t *testing.T) {
+		validators := []*ssvtypes.SSVShare{shareA, shareADup}
 
-		protectFn, unprotectFn, err := decideNetworkKeyProtectors(context.Background(), zap.NewNop(), nil, false, operatorPrivKey, nil)
-		require.NoError(t, err)
-		require.NotNil(t, protectFn)
-		require.NotNil(t, unprotectFn)
-
-		plaintext := []byte("local-protected-payload")
-		protectedValue, err := protectFn(context.Background(), plaintext)
-		require.NoError(t, err)
-		require.NotEqual(t, plaintext, protectedValue)
-
-		decryptedValue, err := unprotectFn(context.Background(), protectedValue)
-		require.NoError(t, err)
-		require.Equal(t, plaintext, decryptedValue)
+		require.Equal(t, 1, operatorActiveSubnets(validators, true, true))
 	})
 
-	t.Run("non-exporter keeps ssv-signer client", func(t *testing.T) {
-		probeClient := newTestSSVSignerClient(t, func(mux *http.ServeMux) {
-			mux.HandleFunc(ssvsigner.PathOperatorEncrypt, func(w http.ResponseWriter, r *http.Request) {
-				payload, err := io.ReadAll(r.Body)
-				require.NoError(t, err)
-				_, err = w.Write(append([]byte("encrypted:"), payload...))
-				require.NoError(t, err)
-			})
-			mux.HandleFunc(ssvsigner.PathOperatorDecrypt, func(w http.ResponseWriter, r *http.Request) {
-				payload, err := io.ReadAll(r.Body)
-				require.NoError(t, err)
-				_, err = w.Write(bytes.TrimPrefix(payload, []byte("encrypted:")))
-				require.NoError(t, err)
-			})
-		})
+	t.Run("scheduled pre-fork counts Boole and Alan sets independently on subnet collision", func(t *testing.T) {
+		// A validator whose Alan subnet coincides with its own Boole subnet must still be counted
+		// once per set (2), not deduped to 1 by a shared bitmap.
+		v := findSubnetCollision(t)
+		require.Equal(t, v.BooleCommitteeSubnet(), v.AlanCommitteeSubnet())
 
-		protectFn, unprotectFn, err := decideNetworkKeyProtectors(context.Background(), zap.NewNop(), nil, false, nil, probeClient)
-		require.NoError(t, err)
-		require.NotNil(t, protectFn)
-		require.NotNil(t, unprotectFn)
+		require.Equal(t, 2, operatorActiveSubnets([]*ssvtypes.SSVShare{v}, true, false))
+	})
 
-		plaintext := []byte("remote-protected-payload")
-		protectedValue, err := protectFn(context.Background(), plaintext)
-		require.NoError(t, err)
-		require.Equal(t, []byte("encrypted:"+string(plaintext)), protectedValue)
+	t.Run("empty committee does not inflate the count", func(t *testing.T) {
+		empty := shareWithCommittee() // BooleCommitteeSubnet => UnknownSubnetId
+		require.Equal(t, uint64(networkcommons.UnknownSubnetId), empty.BooleCommitteeSubnet())
 
-		decryptedValue, err := unprotectFn(context.Background(), protectedValue)
-		require.NoError(t, err)
-		require.Equal(t, plaintext, decryptedValue)
+		validators := []*ssvtypes.SSVShare{empty, empty, shareA}
+		require.Equal(t, 1, operatorActiveSubnets(validators, true, true))
+	})
+
+	t.Run("no validators yields no active subnets", func(t *testing.T) {
+		require.Equal(t, 0, operatorActiveSubnets(nil, true, true))
 	})
 }
 
-func Test_ssvAPIListenAddress(t *testing.T) {
-	t.Parallel()
+// findSubnetCollision returns a share whose Boole and Alan committee subnets land on the same subnet
+// number, so a shared bitmap would wrongly dedupe them. Searches committees deterministically and
+// skips the test if none is found within the bound (both are mod-128 hashes, so a hit is expected).
+func findSubnetCollision(t *testing.T) *ssvtypes.SSVShare {
+	t.Helper()
+	for id := spectypes.OperatorID(1); id <= 4096; id++ {
+		v := shareWithCommittee(id, id+1, id+2, id+3)
+		if v.BooleCommitteeSubnet() == v.AlanCommitteeSubnet() {
+			return v
+		}
+	}
+	t.Skip("no Boole/Alan subnet collision found within search bound")
+	return nil
+}
 
-	testCases := []struct {
-		name    string
-		address string
-		port    int
-		want    string
+// Test_buildNode_invalidConfigReturns verifies buildNode() returns the configuration error instead of
+// calling logger.Fatal (which would os.Exit the test process) when resolveAndValidate fails.
+// A conflicting signing config trips resolveAndValidate — the first thing buildNode() does — before
+// any network I/O, so the call is safe to make in-process.
+func Test_buildNode_invalidConfigReturns(t *testing.T) {
+	c := config{}
+	c.SSVSigner.Endpoint = testSignerEndpoint
+	c.OperatorPrivateKey = testOperatorKey // remote + local signing => rejected by resolveAndValidate
+
+	_, err := buildNode(context.Background(), &c, zap.NewNop())
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "cannot enable both remote signing")
+}
+
+// stubBeaconClient satisfies the in-package beaconClient interface by embedding it (nil): it
+// promotes every method so the type compiles as a beaconClient, while implementing only what the
+// test path actually invokes. newNode() starts no goroutines and — with Doppelganger disabled —
+// invokes only one beacon method synchronously during assembly (SetProposalPreparationsProvider),
+// so that's the sole override needed.
+type stubBeaconClient struct {
+	beaconClient
+}
+
+// SetProposalPreparationsProvider is the one beacon method invoked synchronously during assembly
+// (operator.New wires it into the fee-recipient controller); a no-op satisfies the smoke test.
+func (stubBeaconClient) SetProposalPreparationsProvider(func() ([]*eth2apiv1.ProposalPreparation, error)) {
+}
+
+// stubExecutionClient satisfies executionclient.Provider the same way. newNode() only stores the
+// EL client (it is consumed in start(), not here), so no method is invoked during assembly.
+type stubExecutionClient struct {
+	executionclient.Provider
+}
+
+// Close is a no-op: node.close() (invoked by the smoke tests during teardown) calls it, so it must
+// not fall through to the nil embedded Provider.
+func (stubExecutionClient) Close() error { return nil }
+
+// Test_newNode_wiresOperatorNode is the in-process smoke test for the newNode() seam: with
+// stubbed beacon/EL clients and a minimal operator-mode config, the full wiring graph
+// (db → storage → keys → p2p → validator controller → operator node) must construct without
+// error. It exercises everything up to — but not including — start()'s network bring-up, which
+// performs real socket I/O. The doppelganger dimension covers buildDoppelganger's real-handler
+// path (enabled) alongside the no-op path (disabled). The legacyProposerRoundTimeout dimension
+// pins the wiring at the cli boundary: cfg.LegacyProposerRoundTimeout must be copied as-is into
+// valOpts.LegacyProposerRoundTimeout.
+func Test_newNode_wiresOperatorNode(t *testing.T) {
+	for _, tc := range []struct {
+		name                       string
+		doppelgangerOn             bool
+		legacyProposerRoundTimeout bool
 	}{
-		{
-			name: "empty address listens on all interfaces",
-			port: 16000,
-			want: ":16000",
-		},
-		{
-			name:    "ipv4 loopback",
-			address: "127.0.0.1",
-			port:    16000,
-			want:    "127.0.0.1:16000",
-		},
-		{
-			name:    "ipv6 loopback",
-			address: "::1",
-			port:    16000,
-			want:    "[::1]:16000",
-		},
-	}
-
-	for _, tc := range testCases {
+		{name: "doppelganger disabled", doppelgangerOn: false, legacyProposerRoundTimeout: false},
+		{name: "doppelganger enabled", doppelgangerOn: true, legacyProposerRoundTimeout: false},
+		{name: "legacy proposer round timeout on", doppelgangerOn: false, legacyProposerRoundTimeout: true},
+	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got := net.JoinHostPort(tc.address, strconv.Itoa(tc.port))
-			require.Equal(t, tc.want, got)
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			logger := zap.NewNop()
+
+			operatorPrivKey, err := keys.GeneratePrivateKey()
+			require.NoError(t, err)
+
+			netCfg := *networkconfig.TestNetwork
+			networkConfig := &netCfg
+
+			cfg := &config{}
+			cfg.OperatorPrivateKey = operatorPrivKey.Base64()
+			cfg.DBOptions.Path = t.TempDir()
+			// Keep all long-lived servers off; they only matter in start().
+			cfg.MetricsAPIPort = 0
+			cfg.SSVAPIPort = 0
+			cfg.WsAPIPort = 0
+			cfg.EnableDoppelgangerProtection = tc.doppelgangerOn
+			cfg.LegacyProposerRoundTimeout = tc.legacyProposerRoundTimeout
+
+			res := resolved{mode: modeOperator, usingPrivKey: true}
+
+			a, err := newNode(ctx, cfg, logger, res, networkConfig, stubBeaconClient{}, stubExecutionClient{})
+			require.NoError(t, err)
+			require.NotNil(t, a)
+			require.NotNil(t, a.db)
+			require.NotNil(t, a.nodeStorage)
+			require.NotNil(t, a.p2pNetwork)
+			require.NotNil(t, a.validatorCtrl)
+			require.NotNil(t, a.operatorNode)
+
+			// buildDoppelganger returns the no-op handler when protection is disabled and a real
+			// handler when enabled.
+			_, isNoOp := a.doppelgangerHandler.(doppelganger.NoOpHandler)
+			require.Equal(t, !tc.doppelgangerOn, isNoOp, "doppelganger handler must match the configured protection")
+
+			require.Equal(t, tc.legacyProposerRoundTimeout, cfg.SSVOptions.ValidatorOptions.LegacyProposerRoundTimeout,
+				"newNode must copy LegacyProposerRoundTimeout into the validator options")
+
+			// Mirror production teardown ordering: cancel the ctx, then close. newNode starts no
+			// goroutines, so nothing is racing here — the p2p network was constructed but never
+			// Setup/Start'd.
+			cancel()
+			require.NoError(t, a.close())
 		})
 	}
 }
 
-func Test_verifyConfig(t *testing.T) {
-	logger := zap.New(zapcore.NewNopCore(), zap.WithFatalHook(zapcore.WriteThenPanic))
+// Test_newNode_wiresExporterNode mirrors the operator smoke test for the exporter paths: with no
+// signing identity, it asserts newNode() wires the graph for both exporter modes and that the
+// mode-specific divergences hold — no key manager in either, and a duty-trace collector only in
+// archive mode.
+func Test_newNode_wiresExporterNode(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		mode          nodeMode
+		exporterMode  string
+		wantCollector bool
+	}{
+		{name: "standard", mode: modeExporterStandard, exporterMode: exporterconfig.ModeStandard, wantCollector: false},
+		{name: "archive", mode: modeExporterArchive, exporterMode: exporterconfig.ModeArchive, wantCollector: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
 
-	db, err := kv.NewInMemory(logger, basedb.Options{})
-	require.NoError(t, err)
+			logger := zap.NewNop()
 
-	netCfg := networkconfig.TestNetwork
-	nodeStorage, err := operatorstorage.NewNodeStorage(netCfg.Beacon, logger, db)
-	require.NoError(t, err)
+			netCfg := *networkconfig.TestNetwork
+			networkConfig := &netCfg
 
-	testNetworkName := netCfg.StorageName()
+			cfg := &config{}
+			cfg.DBOptions.Path = t.TempDir()
+			cfg.ExporterOptions.Enabled = true
+			cfg.ExporterOptions.Mode = tc.exporterMode
+			cfg.MetricsAPIPort = 0
+			cfg.SSVAPIPort = 0
+			cfg.WsAPIPort = 0
 
-	t.Run("no config in DB", func(t *testing.T) {
-		c := &operatorstorage.ConfigLock{
-			NetworkName:      testNetworkName,
-			UsingLocalEvents: true,
-			UsingSSVSigner:   true,
-		}
-		require.NoError(t, validateConfig(nodeStorage, c.NetworkName, c.UsingLocalEvents, c.UsingSSVSigner, false))
+			// Exporter mode resolves no signing flags; mode alone drives the divergence.
+			res := resolved{mode: tc.mode}
 
-		storedConfig, found, err := nodeStorage.GetConfig(nil)
-		require.NoError(t, err)
-		require.True(t, found)
-		require.Equal(t, c, storedConfig)
+			a, err := newNode(ctx, cfg, logger, res, networkConfig, stubBeaconClient{}, stubExecutionClient{})
+			require.NoError(t, err)
+			require.NotNil(t, a)
+			require.NotNil(t, a.db)
+			require.NotNil(t, a.nodeStorage)
+			require.NotNil(t, a.p2pNetwork)
+			require.NotNil(t, a.validatorCtrl)
+			require.NotNil(t, a.operatorNode)
+			require.Nil(t, a.keyManager, "exporter nodes have no key manager")
+			require.True(t, cfg.SSVOptions.ValidatorOptions.ExporterMode)
 
-		require.NoError(t, nodeStorage.DeleteConfig(nil))
-	})
+			if tc.wantCollector {
+				require.NotNil(t, a.collector, "archive mode wires a duty-trace collector")
+				require.NotNil(t, cfg.SSVOptions.ValidatorOptions.MessageTraceHandler, "archive mode wires the message trace handler")
+			} else {
+				require.Nil(t, a.collector, "standard mode has no duty-trace collector")
+				require.Nil(t, cfg.SSVOptions.ValidatorOptions.MessageTraceHandler, "standard mode has no message trace handler")
+			}
 
-	t.Run("has same config in DB", func(t *testing.T) {
-		c := &operatorstorage.ConfigLock{
-			NetworkName:      testNetworkName,
-			UsingLocalEvents: true,
-			UsingSSVSigner:   true,
-		}
-		require.NoError(t, nodeStorage.SaveConfig(nil, c))
-		require.NoError(t, validateConfig(nodeStorage, c.NetworkName, c.UsingLocalEvents, c.UsingSSVSigner, false))
-
-		storedConfig, found, err := nodeStorage.GetConfig(nil)
-		require.NoError(t, err)
-		require.True(t, found)
-		require.Equal(t, c, storedConfig)
-
-		require.NoError(t, nodeStorage.DeleteConfig(nil))
-	})
-
-	t.Run("has different network name, events type, and ssv signer in DB", func(t *testing.T) {
-		c := &operatorstorage.ConfigLock{
-			NetworkName:      testNetworkName + "1",
-			UsingLocalEvents: false,
-			UsingSSVSigner:   false,
-		}
-		require.NoError(t, nodeStorage.SaveConfig(nil, c))
-		require.ErrorContains(t,
-			validateConfig(nodeStorage, testNetworkName, true, true, false),
-			"incompatible config change: network mismatch. Stored network testnet:alan1 does not match current network testnet:alan. The database must be removed or reinitialized",
-		)
-
-		storedConfig, found, err := nodeStorage.GetConfig(nil)
-		require.NoError(t, err)
-		require.True(t, found)
-		require.Equal(t, c, storedConfig)
-
-		require.NoError(t, nodeStorage.DeleteConfig(nil))
-	})
-
-	t.Run("has different network name in DB", func(t *testing.T) {
-		c := &operatorstorage.ConfigLock{
-			NetworkName:      testNetworkName + "1",
-			UsingLocalEvents: true,
-			UsingSSVSigner:   true,
-		}
-		require.NoError(t, nodeStorage.SaveConfig(nil, c))
-		require.ErrorContains(t,
-			validateConfig(nodeStorage, testNetworkName, c.UsingLocalEvents, c.UsingSSVSigner, false),
-			"incompatible config change: network mismatch. Stored network testnet:alan1 does not match current network testnet:alan. The database must be removed or reinitialized",
-		)
-
-		storedConfig, found, err := nodeStorage.GetConfig(nil)
-		require.NoError(t, err)
-		require.True(t, found)
-		require.Equal(t, c, storedConfig)
-
-		require.NoError(t, nodeStorage.DeleteConfig(nil))
-	})
-
-	t.Run("has real events in DB but runs with local events", func(t *testing.T) {
-		c := &operatorstorage.ConfigLock{
-			NetworkName:      testNetworkName,
-			UsingLocalEvents: false,
-			UsingSSVSigner:   true,
-		}
-		require.NoError(t, nodeStorage.SaveConfig(nil, c))
-		require.ErrorContains(t,
-			validateConfig(nodeStorage, c.NetworkName, true, true, false),
-			"incompatible config change: enabling local events is not allowed. The database must be removed or reinitialized",
-		)
-
-		storedConfig, found, err := nodeStorage.GetConfig(nil)
-		require.NoError(t, err)
-		require.True(t, found)
-		require.Equal(t, c, storedConfig)
-
-		require.NoError(t, nodeStorage.DeleteConfig(nil))
-	})
-
-	t.Run("has local events in DB but runs with real events", func(t *testing.T) {
-		c := &operatorstorage.ConfigLock{
-			NetworkName:      testNetworkName,
-			UsingLocalEvents: true,
-			UsingSSVSigner:   true,
-		}
-		require.NoError(t, nodeStorage.SaveConfig(nil, c))
-		require.ErrorContains(t,
-			validateConfig(nodeStorage, c.NetworkName, false, true, false),
-			"incompatible config change: disabling local events is not allowed. The database must be removed or reinitialized",
-		)
-
-		storedConfig, found, err := nodeStorage.GetConfig(nil)
-		require.NoError(t, err)
-		require.True(t, found)
-		require.Equal(t, c, storedConfig)
-
-		require.NoError(t, nodeStorage.DeleteConfig(nil))
-	})
-
-	t.Run("has local signer in DB but runs with remote signer", func(t *testing.T) {
-		c := &operatorstorage.ConfigLock{
-			NetworkName:      testNetworkName,
-			UsingLocalEvents: true,
-			UsingSSVSigner:   true,
-		}
-		require.NoError(t, nodeStorage.SaveConfig(nil, c))
-		require.ErrorContains(t,
-			validateConfig(nodeStorage, c.NetworkName, true, false, false),
-			"incompatible config change: disabling ssv-signer is not allowed. The database must be removed or reinitialized",
-		)
-
-		storedConfig, found, err := nodeStorage.GetConfig(nil)
-		require.NoError(t, err)
-		require.True(t, found)
-		require.Equal(t, c, storedConfig)
-
-		require.NoError(t, nodeStorage.DeleteConfig(nil))
-	})
-
-	t.Run("has remote signer in DB but runs with local signer", func(t *testing.T) {
-		c := &operatorstorage.ConfigLock{
-			NetworkName:      testNetworkName,
-			UsingLocalEvents: true,
-			UsingSSVSigner:   false,
-		}
-		require.NoError(t, nodeStorage.SaveConfig(nil, c))
-		require.ErrorContains(t,
-			validateConfig(nodeStorage, c.NetworkName, true, true, false),
-			"incompatible config change: enabling ssv-signer is not allowed. The database must be removed or reinitialized",
-		)
-
-		storedConfig, found, err := nodeStorage.GetConfig(nil)
-		require.NoError(t, err)
-		require.True(t, found)
-		require.Equal(t, c, storedConfig)
-
-		require.NoError(t, nodeStorage.DeleteConfig(nil))
-	})
-
-	t.Run("exporter ignores stored signer mode", func(t *testing.T) {
-		c := &operatorstorage.ConfigLock{
-			NetworkName:      testNetworkName,
-			UsingLocalEvents: true,
-			UsingSSVSigner:   true,
-		}
-		require.NoError(t, nodeStorage.SaveConfig(nil, c))
-		require.NoError(t, validateConfig(nodeStorage, c.NetworkName, true, false, true))
-
-		storedConfig, found, err := nodeStorage.GetConfig(nil)
-		require.NoError(t, err)
-		require.True(t, found)
-		require.Equal(t, c, storedConfig)
-
-		require.NoError(t, nodeStorage.DeleteConfig(nil))
-	})
+			// Mirror production teardown ordering: cancel the ctx, then close (newNode starts no goroutines).
+			cancel()
+			require.NoError(t, a.close())
+		})
+	}
 }
 
-func Test_validateProposerDelayConfig(t *testing.T) {
-	t.Run("safe delay - no error", func(t *testing.T) {
-		// Test with safe delays
-		testCases := []time.Duration{
-			0 * time.Millisecond,    // Default value
-			100 * time.Millisecond,  // Small value
-			300 * time.Millisecond,  // Recommended starting value
-			1000 * time.Millisecond, // Exactly at the limit
-		}
+// Test_newNode_closesDBOnAssemblyFailure locks in newNode()'s error-only cleanup contract: when
+// assembly fails after the db is opened, the named-return-err defer must Close the db. It forces a
+// failure in setupP2P (an invalid NetworkPrivateKey) — which runs after openNodeDB — and proves the
+// db was closed by reopening the badger dir: a leaked handle would still hold the directory lock and
+// fail the reopen. Guards against a future `:=` shadow of the named err silently breaking cleanup.
+func Test_newNode_closesDBOnAssemblyFailure(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-		for _, delay := range testCases {
-			t.Run(delay.String(), func(t *testing.T) {
-				// Save original config
-				originalCfg := cfg
-				defer func() { cfg = originalCfg }()
+	logger := zap.NewNop()
 
-				// Setup test config
-				cfg.ProposerDelay = delay
-				cfg.AllowDangerousProposerDelay = false
+	operatorPrivKey, err := keys.GeneratePrivateKey()
+	require.NoError(t, err)
 
-				// Create logger with observer
-				core, recorded := observer.New(zapcore.WarnLevel)
-				logger := zap.New(core)
+	netCfg := *networkconfig.TestNetwork
+	networkConfig := &netCfg
 
-				// Should not return error
-				err := validateProposerDelayConfig(logger)
-				require.NoError(t, err)
+	cfg := &config{}
+	cfg.OperatorPrivateKey = operatorPrivKey.Base64()
+	cfg.DBOptions.Path = t.TempDir()
+	cfg.MetricsAPIPort = 0
+	cfg.SSVAPIPort = 0
+	cfg.WsAPIPort = 0
+	// An invalid network key makes setupP2P fail — but only after openNodeDB has run, so the
+	// failure exercises the db-close defer rather than failing before the db is even opened.
+	cfg.NetworkPrivateKey = "not-a-valid-network-key"
 
-				// Should not have any warning logs
-				logs := recorded.All()
-				require.Len(t, logs, 0)
-			})
-		}
-	})
+	res := resolved{mode: modeOperator, usingPrivKey: true}
 
-	t.Run("dangerous delay without flag - should error", func(t *testing.T) {
-		testCases := []time.Duration{
-			1001 * time.Millisecond, // Just over the limit
-			2000 * time.Millisecond, // 2 seconds
-			5000 * time.Millisecond, // 5 seconds
-		}
+	a, err := newNode(ctx, cfg, logger, res, networkConfig, stubBeaconClient{}, stubExecutionClient{})
+	require.Error(t, err)
+	require.ErrorContains(t, err, "failed to setup network private key") // i.e. failed in setupP2P, after db-open
+	require.Nil(t, a)
 
-		for _, delay := range testCases {
-			t.Run(delay.String(), func(t *testing.T) {
-				// Save original config
-				originalCfg := cfg
-				defer func() { cfg = originalCfg }()
-
-				// Setup test config
-				cfg.ProposerDelay = delay
-				cfg.AllowDangerousProposerDelay = false
-
-				// Create logger with observer to capture logs
-				core, recorded := observer.New(zapcore.WarnLevel)
-				logger := zap.New(core)
-
-				// Should return error
-				err := validateProposerDelayConfig(logger)
-				require.Error(t, err)
-				require.Contains(t, err.Error(), "ProposerDelay value")
-				require.Contains(t, err.Error(), "exceeds maximum safe delay")
-				require.Contains(t, err.Error(), "AllowDangerousProposerDelay")
-				require.Contains(t, err.Error(), "ALLOW_DANGEROUS_PROPOSER_DELAY")
-
-				// Should not have logged a warning
-				logs := recorded.All()
-				require.Len(t, logs, 0)
-			})
-		}
-	})
-
-	t.Run("dangerous delay with flag - should warn but pass", func(t *testing.T) {
-		testCases := []time.Duration{
-			1001 * time.Millisecond, // Just over the limit
-			2000 * time.Millisecond, // 2 seconds
-			5000 * time.Millisecond, // 5 seconds
-		}
-
-		for _, delay := range testCases {
-			t.Run(delay.String(), func(t *testing.T) {
-				// Save original config
-				originalCfg := cfg
-				defer func() { cfg = originalCfg }()
-
-				// Setup test config
-				cfg.ProposerDelay = delay
-				cfg.AllowDangerousProposerDelay = true
-
-				// Create logger with observer to capture logs
-				core, recorded := observer.New(zapcore.WarnLevel)
-				logger := zap.New(core)
-
-				// Should not return error
-				err := validateProposerDelayConfig(logger)
-				require.NoError(t, err)
-
-				// Should have logged a warning
-				logs := recorded.All()
-				require.Len(t, logs, 1)
-				require.Equal(t, zapcore.WarnLevel, logs[0].Level)
-				require.Contains(t, logs[0].Message, "Using dangerous ProposerDelay value")
-				require.Contains(t, logs[0].Message, "may cause missed block proposals")
-
-				// Check log fields
-				fields := logs[0].ContextMap()
-				require.Contains(t, fields, "proposer_delay")
-				require.Contains(t, fields, "max_safe_proposer_delay")
-				require.Equal(t, delay, fields["proposer_delay"])
-				require.Equal(t, 1000*time.Millisecond, fields["max_safe_proposer_delay"])
-			})
-		}
-	})
+	// newNode starts no goroutines, so the failed assembly leaves nothing running.
+	//
+	// The error-only defer must have closed the db: a fresh badger open of the same dir succeeds
+	// only if the previous handle released its directory lock.
+	reopened, err := kv.New(zap.NewNop(), basedb.Options{Path: cfg.DBOptions.Path, Ctx: context.Background()})
+	require.NoError(t, err, "newNode must Close the db on assembly failure; a leaked handle keeps the badger dir locked")
+	require.NoError(t, reopened.Close())
 }
 
-func Test_probeRemoteNetworkKeyProtector(t *testing.T) {
-	t.Run("uses remote signer encrypt and decrypt endpoints when supported", func(t *testing.T) {
-		client := newTestSSVSignerClient(t, func(mux *http.ServeMux) {
-			mux.HandleFunc(ssvsigner.PathOperatorEncrypt, func(w http.ResponseWriter, r *http.Request) {
-				require.Equal(t, http.MethodPost, r.Method)
-				payload, err := io.ReadAll(r.Body)
-				require.NoError(t, err)
-				_, err = w.Write(append([]byte("encrypted:"), payload...))
-				require.NoError(t, err)
-			})
-			mux.HandleFunc(ssvsigner.PathOperatorDecrypt, func(w http.ResponseWriter, r *http.Request) {
-				require.Equal(t, http.MethodPost, r.Method)
-				payload, err := io.ReadAll(r.Body)
-				require.NoError(t, err)
-				_, err = w.Write(bytes.TrimPrefix(payload, []byte("encrypted:")))
-				require.NoError(t, err)
-			})
+// recordingP2PNetwork is a stub network.P2PNetwork that records Setup/Start instead of performing
+// real socket I/O, and satisfies p2pv1.HealthChecker (via Healthy) so startNetwork's health-prober
+// registration — a.p2pNetwork.(p2pv1.HealthChecker) — succeeds.
+type recordingP2PNetwork struct {
+	network.P2PNetwork
+	setupCalled bool
+	startCalled bool
+}
+
+func (r *recordingP2PNetwork) Setup() error                  { r.setupCalled = true; return nil }
+func (r *recordingP2PNetwork) Start() error                  { r.startCalled = true; return nil }
+func (r *recordingP2PNetwork) Healthy(context.Context) error { return nil }
+
+// Test_node_startNetwork_wiresStatsRegardlessOfDynamicMaxPeers is the CLI-level regression for
+// the DynamicMaxPeers bug: GetValidatorStats must be wired and the p2p network Set up + Started
+// whether or not DynamicMaxPeers is enabled. Re-nesting these under the DynamicMaxPeers flag (the
+// original bug) would fail this test.
+func Test_node_startNetwork_wiresStatsRegardlessOfDynamicMaxPeers(t *testing.T) {
+	for _, dynamicMaxPeers := range []bool{false, true} {
+		t.Run(fmt.Sprintf("DynamicMaxPeers=%t", dynamicMaxPeers), func(t *testing.T) {
+			stubNet := &recordingP2PNetwork{}
+			cfg := &config{}
+			cfg.P2pNetworkConfig.DynamicMaxPeers = dynamicMaxPeers
+
+			a := &node{
+				logger:     zap.NewNop(),
+				cfg:        cfg,
+				p2pNetwork: stubNet,
+				// validatorCtrl stays nil: startNetwork only *assigns* the GetValidatorStats closure
+				// (pubsub invokes it later, not here), so a nil controller is never dereferenced.
+			}
+
+			require.NoError(t, a.startNetwork(hprobe.NewHealthProber(zap.NewNop())))
+
+			require.NotNil(t, cfg.P2pNetworkConfig.GetValidatorStats,
+				"GetValidatorStats must be wired regardless of DynamicMaxPeers")
+			require.True(t, stubNet.setupCalled, "p2p Setup must run regardless of DynamicMaxPeers")
+			require.True(t, stubNet.startCalled, "p2p Start must run regardless of DynamicMaxPeers")
 		})
+	}
+}
 
-		err := probeRemoteNetworkKeyProtector(context.Background(), client)
-		require.NoError(t, err)
-	})
+// Test_startSlotPruning_spawnsContinuousPrunerPerStore checks the wiring the goroutine-free refactor
+// introduced: the per-store background pruning is launched through spawn (one per store) rather than
+// a bare go, and the synchronous initial GC runs without hanging. The spawn here only counts — it
+// doesn't run the pruners — so this asserts the wiring, not the pruning semantics (those live in
+// ibft/storage).
+func Test_startSlotPruning_spawnsContinuousPrunerPerStore(t *testing.T) {
+	db, err := kv.New(zap.NewNop(), basedb.Options{Path: t.TempDir(), Ctx: context.Background()})
+	require.NoError(t, err)
+	defer func() { _ = db.Close() }()
 
-	t.Run("returns unsupported when remote signer does not support remote data protection", func(t *testing.T) {
-		client := newTestSSVSignerClient(t, nil)
+	stores := ibftstorage.NewStores()
+	stores.Add(spectypes.BNRoleAttester, ibftstorage.New(zap.NewNop(), db, spectypes.BNRoleAttester))
+	stores.Add(spectypes.BNRoleProposer, ibftstorage.New(zap.NewNop(), db, spectypes.BNRoleProposer))
 
-		err := probeRemoteNetworkKeyProtector(context.Background(), client)
-		require.ErrorIs(t, err, ssvsigner.ErrOperatorDataProtectionUnsupported)
-	})
+	spawned := 0
+	spawn := func(func() error) { spawned++ } // count, don't run — testing the wiring, not pruning
 
-	t.Run("fails instead of downgrading on transient remote signer fetch error", func(t *testing.T) {
-		client := newTestSSVSignerClient(t, func(mux *http.ServeMux) {
-			mux.HandleFunc(ssvsigner.PathOperatorEncrypt, func(w http.ResponseWriter, r *http.Request) {
-				http.Error(w, "temporary upstream failure", http.StatusInternalServerError)
-			})
-		})
+	// slot > retain so the initial-GC threshold doesn't underflow; the ticker provider is never
+	// invoked because spawn doesn't run the pruners.
+	startSlotPruning(context.Background(), spawn, stores, nil, 1000, 100)
 
-		err := probeRemoteNetworkKeyProtector(context.Background(), client)
-		require.ErrorContains(t, err, "probe remote data protector encrypt")
-		require.ErrorContains(t, err, "unexpected status: 500")
-	})
+	require.Equal(t, 2, spawned, "one continuous-pruner must be spawned per store")
 }

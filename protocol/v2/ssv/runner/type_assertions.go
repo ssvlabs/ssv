@@ -5,6 +5,8 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
+	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 )
 
 func validatorDutyFromDuty(duty spectypes.Duty) (*spectypes.ValidatorDuty, error) {
@@ -74,39 +76,39 @@ func (b *BaseRunner) currentDutySlot() (phase0.Slot, error) {
 			return 0, fmt.Errorf("committee duty is nil")
 		}
 		return duty.DutySlot(), nil
+	case *spectypes.AggregatorCommitteeDuty:
+		if duty == nil {
+			return 0, fmt.Errorf("aggregator committee duty is nil")
+		}
+		return duty.DutySlot(), nil
 	default:
 		return 0, fmt.Errorf("unsupported duty type: %T", b.State.CurrentDuty)
 	}
 }
 
-func validatorConsensusDataFromEncoder(value spectypes.Encoder) (*spectypes.ValidatorConsensusData, error) {
-	if value == nil {
-		return nil, fmt.Errorf("decided value is nil")
+// decidedAttestationVote extracts the committee runner's decided consensus value as the common
+// BeaconVote plus, on Gloas-and-later slots, the payload-status index it carries (SIP #94 §2). The
+// concrete type — fixed by the caller's decode prototype — selects the fork: a GloasBeaconVote yields
+// a non-nil index, a plain BeaconVote a nil one. The BeaconVote half (BlockRoot/Source/Target) is
+// identical across forks, so the attestation and sync-committee paths consume it unchanged. The vote
+// is validated too: the value check has already validated any decided value, so this only guards
+// against that check regressing.
+func decidedAttestationVote(value spectypes.Encoder) (*spectypes.BeaconVote, *phase0.CommitteeIndex, error) {
+	switch v := value.(type) {
+	case *gloas.GloasBeaconVote:
+		if err := v.Validate(); err != nil {
+			return nil, nil, err
+		}
+		index := v.AttestationDataIndex
+		return &spectypes.BeaconVote{BlockRoot: v.BlockRoot, Source: v.Source, Target: v.Target}, &index, nil
+	case *spectypes.BeaconVote:
+		if err := v.Validate(); err != nil {
+			return nil, nil, err
+		}
+		return v, nil, nil
+	case nil:
+		return nil, nil, fmt.Errorf("decided value is nil")
+	default:
+		return nil, nil, fmt.Errorf("decided value is not a beacon vote: %T", value)
 	}
-
-	consensusData, ok := value.(*spectypes.ValidatorConsensusData)
-	if !ok {
-		return nil, fmt.Errorf("decided value is not a ValidatorConsensusData: %T", value)
-	}
-	if consensusData == nil {
-		return nil, fmt.Errorf("validator consensus data is nil")
-	}
-
-	return consensusData, nil
-}
-
-func beaconVoteFromEncoder(value spectypes.Encoder) (*spectypes.BeaconVote, error) {
-	if value == nil {
-		return nil, fmt.Errorf("decided value is nil")
-	}
-
-	beaconVote, ok := value.(*spectypes.BeaconVote)
-	if !ok {
-		return nil, fmt.Errorf("decided value is not a BeaconVote: %T", value)
-	}
-	if beaconVote == nil {
-		return nil, fmt.Errorf("beacon vote is nil")
-	}
-
-	return beaconVote, nil
 }

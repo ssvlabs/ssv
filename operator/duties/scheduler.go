@@ -26,6 +26,7 @@ import (
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 )
 
 //go:generate go tool -modfile=../../tool.mod mockgen -package=duties -destination=./scheduler_mock.go -source=./scheduler.go
@@ -48,13 +49,15 @@ type DutiesExecutor interface {
 // DutyExecutor is an interface for executing duty.
 type DutyExecutor interface {
 	ExecuteDuty(ctx context.Context, logger *zap.Logger, duty *spectypes.ValidatorDuty)
-	ExecuteCommitteeDuty(ctx context.Context, logger *zap.Logger, committeeID spectypes.CommitteeID, duty *spectypes.CommitteeDuty)
+	ExecuteCommitteeDuty(ctx context.Context, logger *zap.Logger, committeeID spectypes.CommitteeID, duty spectypes.Duty)
 }
 
 type BeaconNode interface {
 	AttesterDuties(ctx context.Context, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*eth2apiv1.AttesterDuty, error)
 	ProposerDuties(ctx context.Context, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*eth2apiv1.ProposerDuty, error)
+	ProposerDutiesDependentRoot(ctx context.Context, epoch phase0.Epoch) (phase0.Root, error)
 	SyncCommitteeDuties(ctx context.Context, epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*eth2apiv1.SyncCommitteeDuty, error)
+	PayloadAttestationDuties(ctx context.Context, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) (*gloas.PTCDuties, error)
 	SubmitBeaconCommitteeSubscriptions(ctx context.Context, subscription []*eth2apiv1.BeaconCommitteeSubscription) error
 	SubmitSyncCommitteeSubscriptions(ctx context.Context, subscription []*eth2apiv1.SyncCommitteeSubscription) error
 	SubscribeToHeadEvents(ctx context.Context, subscriberIdentifier string, ch chan<- *eth2apiv1.HeadEvent) error
@@ -81,7 +84,7 @@ type SchedulerOptions struct {
 	Ctx                     context.Context
 	BeaconNode              BeaconNode
 	ExecutionClient         ExecutionClient
-	BeaconConfig            *networkconfig.Beacon
+	NetworkConfig           *networkconfig.Network
 	ValidatorProvider       ValidatorProvider
 	ValidatorController     ValidatorController
 	DutyExecutor            DutyExecutor
@@ -107,7 +110,7 @@ type Scheduler struct {
 
 	beaconNode          BeaconNode
 	executionClient     ExecutionClient
-	beaconConfig        *networkconfig.Beacon
+	netCfg              *networkconfig.Network
 	validatorProvider   ValidatorProvider
 	validatorController ValidatorController
 	slotTickerProvider  slotticker.Provider
@@ -148,7 +151,7 @@ func NewScheduler(logger *zap.Logger, opts *SchedulerOptions) *Scheduler {
 		logger:              logger.Named(log.NameDutyScheduler),
 		beaconNode:          opts.BeaconNode,
 		executionClient:     opts.ExecutionClient,
-		beaconConfig:        opts.BeaconConfig,
+		netCfg:              opts.NetworkConfig,
 		slotTickerProvider:  opts.SlotTickerProvider,
 		dutyExecutor:        opts.DutyExecutor,
 		validatorProvider:   opts.ValidatorProvider,
@@ -171,13 +174,16 @@ func NewScheduler(logger *zap.Logger, opts *SchedulerOptions) *Scheduler {
 		NewAttesterHandler(dutyStore.Attester, opts.ExporterMode),
 		NewProposerHandler(dutyStore.Proposer, opts.ExporterMode),
 		NewSyncCommitteeHandler(dutyStore.SyncCommittee, opts.ExporterMode),
+		NewPTCAttestationHandler(dutyStore.PTC, opts.ExporterMode),
 	)
 	// These handlers only execute duties and are not needed in exporter mode.
 	if !opts.ExporterMode {
 		s.dutyHandlers = append(s.dutyHandlers,
-			NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee),
+			NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee, false),
+			NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee, true),
 			NewValidatorRegistrationHandler(opts.ValidatorRegistrationCh),
 			NewVoluntaryExitHandler(dutyStore.VoluntaryExit, opts.ValidatorExitCh),
+			NewProposerPreferencesHandler(),
 		)
 	}
 	return s
@@ -219,7 +225,7 @@ func (s *Scheduler) Start(ctx context.Context) error {
 			Logger:              s.logger,
 			BeaconNode:          s.beaconNode,
 			ExecutionClient:     s.executionClient,
-			BeaconConfig:        s.beaconConfig,
+			NetworkConfig:       s.netCfg,
 			ValidatorProvider:   s.validatorProvider,
 			ValidatorController: s.validatorController,
 			DutiesExecutor:      s,
@@ -342,7 +348,7 @@ func (f *EventFeed[T]) FanOut(ctx context.Context, in <-chan T) {
 	}
 }
 
-// SlotTicker advances "head" slot every slot-tick once we are 1/3 of slot-time past slot start
+// SlotTicker advances "head" slot every slot-tick once we are one interval past slot start
 // and only if necessary. Normally Beacon node events would trigger "head" slot updates, but in
 // case event is delayed or didn't arrive for some reason we still need to advance "head" slot
 // for duties to keep executing normally - so SlotTicker is a secondary mechanism for that.
@@ -354,8 +360,8 @@ func (s *Scheduler) SlotTicker(ctx context.Context) {
 		case <-s.ticker.Next():
 			slot := s.ticker.Slot()
 
-			delay := s.beaconConfig.IntervalDuration()
-			finalTime := s.beaconConfig.SlotStartTime(slot).Add(delay)
+			delay := s.netCfg.IntervalDuration(slot)
+			finalTime := s.netCfg.SlotStartTime(slot).Add(delay)
 			waitDuration := time.Until(finalTime)
 			if waitDuration > 0 {
 				select {
@@ -374,17 +380,17 @@ func (s *Scheduler) SlotTicker(ctx context.Context) {
 func (s *Scheduler) HandleHeadEvent() func(ctx context.Context, event *eth2apiv1.HeadEvent) {
 	return func(ctx context.Context, event *eth2apiv1.HeadEvent) {
 		currentSlot := event.Slot
-		currentEpoch := s.beaconConfig.EstimatedEpochAtSlot(currentSlot)
-		slotNumber := uint64(currentSlot)%s.beaconConfig.SlotsPerEpoch + 1
+		currentEpoch := s.netCfg.EstimatedEpochAtSlot(currentSlot)
+		slotNumber := uint64(currentSlot)%s.netCfg.SlotsPerEpoch + 1
 
 		buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, currentSlot, slotNumber)
 		logger := s.logger.With(zap.String("epoch_slot_pos", buildStr))
 
-		if event.Slot < s.beaconConfig.EstimatedCurrentSlot() {
+		if event.Slot < s.netCfg.EstimatedCurrentSlot() {
 			// No need to process outdated events here.
 			return
 		}
-		if event.Slot > s.beaconConfig.EstimatedCurrentSlot() {
+		if event.Slot > s.netCfg.EstimatedCurrentSlot() {
 			// We don't handle future events to keep things simple.
 			logger.Warn("got future head event from EL, most likely cause is clock-skew between SSV node and EL")
 			return
@@ -436,10 +442,10 @@ func (s *Scheduler) HandleHeadEvent() func(ctx context.Context, event *eth2apiv1
 		s.currentDutyDependentRoot = event.CurrentDutyDependentRoot
 
 		currentTime := time.Now()
-		delay := s.beaconConfig.IntervalDuration()
-		slotStartTimeWithDelay := s.beaconConfig.SlotStartTime(event.Slot).Add(delay)
+		delay := s.netCfg.IntervalDuration(event.Slot)
+		slotStartTimeWithDelay := s.netCfg.SlotStartTime(event.Slot).Add(delay)
 		if currentTime.Before(slotStartTimeWithDelay) {
-			logger.Debug("🏁 Head event: Block arrived before 1/3 slot", zap.Duration("time_saved", slotStartTimeWithDelay.Sub(currentTime)))
+			logger.Debug("🏁 Head event: Block arrived before the attestation deadline", zap.Duration("time_saved", slotStartTimeWithDelay.Sub(currentTime)))
 
 			// We give the block some time to propagate around the rest of the
 			// nodes before kicking off duties for the block's slot.
@@ -470,14 +476,20 @@ func (s *Scheduler) ExecuteDuties(ctx context.Context, duties []*spectypes.Valid
 	defer span.End()
 
 	for _, duty := range duties {
+		role := types.RunnerRoleForValidatorDuty(duty, s.netCfg.BooleForkAtSlot(duty.Slot))
 		logger := s.loggerWithDutyContext(duty)
 
 		const eventMsg = "🔧 executing validator duty"
 		logger.Debug(eventMsg)
 		span.AddEvent(eventMsg)
 
-		role := duty.RunnerRole()
-		slotDelay := time.Since(s.beaconConfig.SlotStartTime(duty.Slot))
+		// PTC duties fire at the payload-attestation cutoff by design, so measure lateness from
+		// there, not slot start, to avoid a false "late execution" warning.
+		expectedStart := s.netCfg.SlotStartTime(duty.Slot)
+		if role == spectypes.RolePTCAttester {
+			expectedStart = s.netCfg.PayloadAttestationCutoff(duty.Slot)
+		}
+		slotDelay := time.Since(expectedStart)
 
 		// For roles where duty.Slot is a shared coordination point rather
 		// than the execution target (see dutySlotIsExecutionSlot), slotDelay
@@ -522,18 +534,23 @@ func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, duties committee
 
 	for _, committee := range duties {
 		duty := committee.duty
+		slot := duty.DutySlot()
+		role := types.RunnerRoleForDuty(duty, s.netCfg.BooleForkAtSlot(slot))
 
 		logger := s.loggerWithCommitteeDutyContext(committee)
 
 		const eventMsg = "🔧 executing committee duty"
-		dutyEpoch := s.beaconConfig.EstimatedEpochAtSlot(duty.Slot)
-		logger.Debug(eventMsg, fields.Duties(dutyEpoch, duty.ValidatorDuties, -1))
+		dutyEpoch := s.netCfg.EstimatedEpochAtSlot(slot)
+		logger.Debug(eventMsg, fields.Duties(dutyEpoch, committee.validatorDuties(), -1, func(duty *spectypes.ValidatorDuty) spectypes.RunnerRole {
+			return types.RunnerRoleForValidatorDuty(duty, s.netCfg.BooleForkAtSlot(duty.Slot))
+		}))
 		span.AddEvent(eventMsg, trace.WithAttributes(
+			observability.RunnerRoleAttribute(role),
 			observability.CommitteeIDAttribute(committee.id),
-			observability.DutyCountAttribute(len(duty.ValidatorDuties)),
+			observability.DutyCountAttribute(len(committee.validatorDuties())),
 		))
 
-		slotDelay := time.Since(s.beaconConfig.SlotStartTime(duty.Slot))
+		slotDelay := time.Since(s.netCfg.SlotStartTime(slot))
 		if slotDelay >= 100*time.Millisecond {
 			const eventMsg = "⚠️ late duty execution"
 			logger.Warn(eventMsg, zap.Duration("slot_delay", slotDelay))
@@ -542,7 +559,7 @@ func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, duties committee
 				attribute.Int64("ssv.beacon.slot_delay_ms", slotDelay.Milliseconds())))
 		}
 
-		recordDutyScheduled(ctx, duty.RunnerRole(), slotDelay)
+		recordDutyScheduled(ctx, role, slotDelay)
 
 		s.backgroundTasks.Add(1)
 		go func() {
@@ -553,7 +570,9 @@ func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, duties committee
 			dutyCtx, cancel := context.WithDeadline(s.ctx, dutyDeadline)
 			defer cancel()
 
-			s.waitOneThirdIntoSlotOrValidBlock(duty.Slot)
+			if role == spectypes.RoleCommittee {
+				s.waitOneIntervalIntoSlotOrValidBlock(slot)
+			}
 			s.dutyExecutor.ExecuteCommitteeDuty(dutyCtx, logger, committee.id, duty)
 		}()
 	}
@@ -563,33 +582,35 @@ func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, duties committee
 
 // loggerWithDutyContext returns an instance of logger with the given duty's information
 func (s *Scheduler) loggerWithDutyContext(duty *spectypes.ValidatorDuty) *zap.Logger {
-	dutyEpoch := s.beaconConfig.EstimatedEpochAtSlot(duty.Slot)
-	dutyID := fields.BuildDutyID(dutyEpoch, duty.Slot, duty.RunnerRole(), duty.ValidatorIndex)
+	dutyEpoch := s.netCfg.EstimatedEpochAtSlot(duty.Slot)
+	role := types.RunnerRoleForValidatorDuty(duty, s.netCfg.BooleForkAtSlot(duty.Slot))
+	dutyID := fields.BuildDutyID(dutyEpoch, duty.Slot, role, duty.ValidatorIndex)
 
 	return s.logger.
-		With(fields.RunnerRole(duty.RunnerRole())).
+		With(fields.RunnerRole(role)).
 		With(fields.Slot(duty.Slot)).
 		With(fields.DutyID(dutyID)).
 		With(fields.PubKey(duty.PubKey[:])).
 		With(fields.ValidatorIndex(duty.ValidatorIndex)).
-		With(fields.EstimatedCurrentEpoch(s.beaconConfig.EstimatedCurrentEpoch())).
-		With(fields.EstimatedCurrentSlot(s.beaconConfig.EstimatedCurrentSlot()))
+		With(fields.EstimatedCurrentEpoch(s.netCfg.EstimatedCurrentEpoch())).
+		With(fields.EstimatedCurrentSlot(s.netCfg.EstimatedCurrentSlot()))
 }
 
 // loggerWithCommitteeDutyContext returns an instance of logger with the given committee duty's information
 func (s *Scheduler) loggerWithCommitteeDutyContext(committeeDuty *committeeDuty) *zap.Logger {
-	duty := committeeDuty.duty
+	slot := committeeDuty.duty.DutySlot()
 
-	dutyEpoch := s.beaconConfig.EstimatedEpochAtSlot(duty.Slot)
-	committeeDutyID := fields.BuildCommitteeDutyID(committeeDuty.operatorIDs, dutyEpoch, duty.Slot)
+	dutyEpoch := s.netCfg.EstimatedEpochAtSlot(slot)
+	role := types.RunnerRoleForDuty(committeeDuty.duty, s.netCfg.BooleForkAtSlot(slot))
+	committeeDutyID := fields.BuildCommitteeDutyID(committeeDuty.operatorIDs, dutyEpoch, slot, role)
 
 	return s.logger.
-		With(fields.RunnerRole(duty.RunnerRole())).
-		With(fields.Slot(duty.Slot)).
+		With(fields.RunnerRole(role)).
+		With(fields.Slot(slot)).
 		With(fields.DutyID(committeeDutyID)).
 		With(fields.CommitteeID(committeeDuty.id)).
-		With(fields.EstimatedCurrentEpoch(s.beaconConfig.EstimatedCurrentEpoch())).
-		With(fields.EstimatedCurrentSlot(s.beaconConfig.EstimatedCurrentSlot()))
+		With(fields.EstimatedCurrentEpoch(s.netCfg.EstimatedCurrentEpoch())).
+		With(fields.EstimatedCurrentSlot(s.netCfg.EstimatedCurrentSlot()))
 }
 
 // advanceHeadSlot will set s.headSlot to the provided slot (but only if the provided slot is higher,
@@ -610,15 +631,15 @@ func (s *Scheduler) advanceHeadSlot(slot phase0.Slot) {
 	s.waitCond.L.Unlock()
 }
 
-// waitOneThirdIntoSlotOrValidBlock waits until one-third of the slot has passed (SECONDS_PER_SLOT / 3 seconds after
-// slot start time), or for a head block event that might come in even sooner than one-third of the slot passes.
-func (s *Scheduler) waitOneThirdIntoSlotOrValidBlock(slot phase0.Slot) {
-	s.logger.Debug("waiting 1/3 into slot (maybe)")
-	defer s.logger.Debug("waiting 1/3 into slot (done)")
+// waitOneIntervalIntoSlotOrValidBlock waits until the attestation deadline (one interval into the slot — 1/3
+// before Gloas, 1/4 from Gloas on), or for a head block event that might come in even sooner.
+func (s *Scheduler) waitOneIntervalIntoSlotOrValidBlock(slot phase0.Slot) {
+	s.logger.Debug("waiting one interval into slot (maybe)")
+	defer s.logger.Debug("waiting one interval into slot (done)")
 
 	s.waitCond.L.Lock()
 	for s.headSlot < slot {
-		s.logger.Debug("waiting 1/3 into slot",
+		s.logger.Debug("waiting one interval into slot",
 			zap.Uint64("current_head_slot", uint64(s.headSlot)),
 			zap.Uint64("slot", uint64(slot)),
 		)

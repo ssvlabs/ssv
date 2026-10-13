@@ -29,11 +29,8 @@ func (gc *GoClient) GetValidatorData(
 	if err != nil {
 		return nil, errMultiClient(fmt.Errorf("fetch validators: %w", err), "Validators")
 	}
-	if resp == nil {
-		return nil, errMultiClient(fmt.Errorf("validators response is nil"), "Validators")
-	}
-	if resp.Data == nil {
-		return nil, errMultiClient(fmt.Errorf("validators response data is nil"), "Validators")
+	if err := checkMapResponse(resp, "validators"); err != nil {
+		return nil, errMultiClient(err, "Validators")
 	}
 
 	return resp.Data, nil

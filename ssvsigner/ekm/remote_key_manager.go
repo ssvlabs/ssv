@@ -7,11 +7,12 @@ import (
 	"sync"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
+	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/electra"
+	eth2gloas "github.com/attestantio/go-eth2-client/spec/gloas"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common/hexutil"
-	ssz "github.com/ferranbt/fastssz"
 	"github.com/ssvlabs/eth2-key-manager/signer"
 	slashingprotection "github.com/ssvlabs/eth2-key-manager/slashing_protection"
 	"go.uber.org/zap"
@@ -95,20 +96,15 @@ func (km *RemoteKeyManager) AddShare(
 	encryptedPrivKey []byte,
 	pubKey phase0.BLSPubKey,
 ) error {
-	if err := km.BumpSlashingProtection(txn, pubKey); err != nil {
-		return fmt.Errorf("could not bump slashing protection: %w", err)
-	}
-
 	shareKeys := ssvsigner.ShareKeys{
 		EncryptedPrivKey: hexutil.Bytes(encryptedPrivKey),
 		PubKey:           pubKey,
 	}
 
-	// If txn gets rolled back after share is saved,
-	// there will be some inconsistency between syncer state and remote signer.
-	// However, syncer crashes node on an error and restarts the sync process from the failing block,
-	// so it will attempt to save the same share again, which won't be an issue
-	// because AddValidators doesn't fail if the same share exists.
+	// Register the share remotely first, then bump slashing protection (below). A malformed share
+	// fails here and returns before the bump, leaving no orphan slashing rows — matching
+	// LocalKeyManager's validate-first order. AddValidators is idempotent, so if the txn is later
+	// rolled back the node crashes, re-runs the block, and re-adds the same share harmlessly.
 	statuses, err := km.signerClient.AddValidators(ctx, shareKeys)
 	if err != nil {
 		return fmt.Errorf("add validator: %w", err)
@@ -117,6 +113,7 @@ func (km *RemoteKeyManager) AddShare(
 	for _, status := range statuses {
 		switch status {
 		case web3signer.StatusImported:
+			// Imported successfully; nothing to do.
 
 		case web3signer.StatusDuplicated:
 			// A failed request does not guarantee that the keys were not added.
@@ -131,6 +128,10 @@ func (km *RemoteKeyManager) AddShare(
 		default:
 			return fmt.Errorf("unexpected status %s", status)
 		}
+	}
+
+	if err := km.BumpSlashingProtection(txn, pubKey); err != nil {
+		return fmt.Errorf("could not bump slashing protection: %w", err)
 	}
 
 	return nil
@@ -228,7 +229,7 @@ func (km *RemoteKeyManager) removeHighestProposal(txn ReadWriteTxn, pubKey phase
 // Otherwise, forwards to the remote service. It returns signature as well as the computed signing root.
 func (km *RemoteKeyManager) SignBeaconObject(
 	ctx context.Context,
-	obj ssz.HashRoot,
+	obj spectypes.HashRoot,
 	domain phase0.Domain,
 	sharePubkey phase0.BLSPubKey,
 	slot phase0.Slot,
@@ -248,7 +249,7 @@ func (km *RemoteKeyManager) SignBeaconObject(
 }
 
 func (km *RemoteKeyManager) prepareSignRequest(
-	obj ssz.HashRoot,
+	obj spectypes.HashRoot,
 	domain phase0.Domain,
 	sharePubkey phase0.BLSPubKey,
 	slot phase0.Slot,
@@ -293,6 +294,15 @@ func (km *RemoteKeyManager) prepareSignRequest(
 			return web3signer.SignRequest{}, phase0.Root{}, errors.New("could not cast obj to VoluntaryExit")
 		}
 
+		// EIP-7044 pins voluntary exits to the Capella domain. Override the current fork
+		// (from GetForkInfo) with Capella to match the signing_root computed below; else a
+		// signer that doesn't apply EIP-7044 (e.g. a wrong Web3Signer --network) rejects it.
+		forkInfo, err := km.voluntaryExitForkInfo()
+		if err != nil {
+			return web3signer.SignRequest{}, phase0.Root{}, err
+		}
+		req.ForkInfo = forkInfo
+
 		req.Type = web3signer.TypeVoluntaryExit
 		req.VoluntaryExit = data
 
@@ -308,6 +318,12 @@ func (km *RemoteKeyManager) prepareSignRequest(
 			req.AggregateAndProof = &web3signer.AggregateAndProof{
 				Electra: v,
 			}
+		case *eth2gloas.AggregateAndProof:
+			// Web3Signer has no Gloas aggregate type, and its Electra-shaped request would sign the Electra
+			// root, which differs from the Gloas one. Bounded like the other Gloas domains: the cluster
+			// reconstructs while ≤ f operators are remote-signing, but those must sign this duty locally.
+			// TODO(gloas): route Gloas aggregate signing through Web3Signer once it adds the type (#3000).
+			return web3signer.SignRequest{}, phase0.Root{}, errors.New("gloas aggregate and proof signing is not supported by the remote signer: Web3Signer has no Gloas aggregate-and-proof type, use local signing for aggregator duties on Gloas")
 		default:
 			return web3signer.SignRequest{}, phase0.Root{}, fmt.Errorf("obj type is unknown: %T", obj)
 		}
@@ -381,8 +397,43 @@ func (km *RemoteKeyManager) prepareSignRequest(
 			return web3signer.SignRequest{}, phase0.Root{}, errors.New("could not cast obj to ValidatorRegistration")
 		}
 
+		// The application-builder domain is fixed to the genesis fork, independent of the
+		// current fork. Pin it to match the signing_root computed below, mirroring the
+		// voluntary-exit case (a no-op for a correct signer, which derives the domain itself).
+		forkInfo, err := km.validatorRegistrationForkInfo()
+		if err != nil {
+			return web3signer.SignRequest{}, phase0.Root{}, err
+		}
+		req.ForkInfo = forkInfo
+
 		req.Type = web3signer.TypeValidatorRegistration
 		req.ValidatorRegistration = data
+	case spectypes.DomainPTCAttester:
+		// Gloas (ePBS) PTC payload attestations have no Web3Signer request type, so a remote-signing
+		// operator can't participate in PTC. Bounded — the cluster reconstructs while ≤ f operators
+		// are remote-signing — but those operators must sign PTC-assigned validators locally.
+		// TODO(gloas): route PTC signing through Web3Signer once it adds a payload-attestation type (#3000).
+		return web3signer.SignRequest{}, phase0.Root{}, errors.New("payload attestation signing is not supported by the remote signer: Web3Signer has no payload-attestation type, use local signing for PTC-assigned validators")
+	case spectypes.DomainProposerPreferences:
+		// Gloas (ePBS) proposer preferences have no Web3Signer request type, so a remote-signing
+		// operator can't sign them — note this replaces the Web3Signer-supported ValidatorRegistration
+		// at the Gloas fork. Bounded (cluster reconstructs while ≤ f operators are remote-signing), but
+		// those operators must sign locally.
+		// TODO(gloas): route proposer-preferences signing through Web3Signer once it adds the type (#3000).
+		return web3signer.SignRequest{}, phase0.Root{}, errors.New("proposer preferences signing is not supported by the remote signer: Web3Signer has no proposer-preferences type, use local signing")
+	case spectypes.DomainBeaconBuilder:
+		// Gloas (ePBS) §6 execution-payload envelopes have no Web3Signer request type, so a remote-signing
+		// operator can't sign them. Bounded (the cluster reconstructs while ≤ f operators are remote-signing),
+		// but those operators must sign self-build envelopes locally.
+		// TODO(gloas): route envelope signing through Web3Signer once it adds an envelope type (#3000).
+		return web3signer.SignRequest{}, phase0.Root{}, errors.New("execution payload envelope signing is not supported by the remote signer: Web3Signer has no envelope type, use local signing for self-build envelopes")
+	case spectypes.DomainBuilderRequestAuth:
+		// The Gloas (ePBS) direct-builder request auth (builder-specs BuilderRequestAuth, SIP #94 §5) has no
+		// Web3Signer request type, so a remote-signing operator can't contribute auth partials. Bounded
+		// (the cluster reconstructs while ≤ f operators are remote-signing), but those operators must
+		// sign locally for the direct-builder overlay to keep its full fault tolerance.
+		// TODO(gloas): route request-auth signing through Web3Signer once it adds the type (#3000).
+		return web3signer.SignRequest{}, phase0.Root{}, errors.New("request auth signing is not supported by the remote signer: Web3Signer has no request-auth type, use local signing for the direct-builder overlay")
 	default:
 		return web3signer.SignRequest{}, phase0.Root{}, errors.New("domain unknown")
 	}
@@ -397,7 +448,7 @@ func (km *RemoteKeyManager) prepareSignRequest(
 }
 
 func (km *RemoteKeyManager) handleDomainAttester(
-	obj ssz.HashRoot,
+	obj spectypes.HashRoot,
 	sharePubkey phase0.BLSPubKey,
 ) (*phase0.AttestationData, error) {
 	data, ok := obj.(*phase0.AttestationData)
@@ -424,7 +475,7 @@ func (km *RemoteKeyManager) handleDomainAttester(
 }
 
 func (km *RemoteKeyManager) handleDomainProposer(
-	obj ssz.HashRoot,
+	obj spectypes.HashRoot,
 	slot phase0.Slot,
 	sharePubkey phase0.BLSPubKey,
 ) (*web3signer.BeaconBlockData, error) {
@@ -452,6 +503,21 @@ func (km *RemoteKeyManager) handleDomainProposer(
 	return ret, nil
 }
 
+// GloasDataVersion mirrors networkconfig.DataVersionGloas — the ssvsigner module has its own go.mod and
+// can't import the node-side name, so a node-side test asserts the two stay equal. Both are
+// go-eth2-client's spec.DataVersionGloas.
+const GloasDataVersion = spec.DataVersionGloas
+
+// GetForkInfo returns the ForkInfo for the epoch's active fork, Gloas included. Web3Signer derives the
+// signing domain from it, so a Gloas epoch must carry the Gloas fork.
+//
+// That suffices even against a Web3Signer without Gloas support: its domain derivation is generic over
+// the version bytes (BeaconStateAccessors.getDomain hands fork.current_version to
+// MiscHelpers.computeDomain, which only hashes it into a ForkData root; no milestone enum is consulted),
+// and its AttestationData schema has no post-Electra index == 0 check, so the §2 payload-status index
+// survives into the signing root. Established from the Web3Signer/Teku sources rather than a live
+// instance. What stays unsupported on Gloas are the duties Web3Signer has no request type for (the new
+// domains, the Gloas aggregate) and the Gloas block, which its BLOCK_V2 milestone enum rejects.
 func (km *RemoteKeyManager) GetForkInfo(epoch phase0.Epoch) web3signer.ForkInfo {
 	_, currentFork := km.beaconConfig.ForkAtEpoch(epoch)
 
@@ -459,6 +525,35 @@ func (km *RemoteKeyManager) GetForkInfo(epoch phase0.Epoch) web3signer.ForkInfo 
 		Fork:                  currentFork,
 		GenesisValidatorsRoot: km.genesisRoot,
 	}
+}
+
+// voluntaryExitForkInfo returns ForkInfo pinned to the Capella fork, as EIP-7044 requires for
+// voluntary exits. See the DomainVoluntaryExit case in prepareSignRequest.
+func (km *RemoteKeyManager) voluntaryExitForkInfo() (web3signer.ForkInfo, error) {
+	capellaFork, ok := km.beaconConfig.ForkAtVersion(spec.DataVersionCapella)
+	if !ok {
+		return web3signer.ForkInfo{}, errors.New("capella fork not configured")
+	}
+
+	return web3signer.ForkInfo{
+		Fork:                  &capellaFork,
+		GenesisValidatorsRoot: km.genesisRoot,
+	}, nil
+}
+
+// validatorRegistrationForkInfo returns ForkInfo pinned to the genesis fork and an empty
+// genesis validators root, matching the fixed application-builder domain. See the
+// DomainApplicationBuilder case in prepareSignRequest.
+func (km *RemoteKeyManager) validatorRegistrationForkInfo() (web3signer.ForkInfo, error) {
+	genesisFork, ok := km.beaconConfig.ForkAtVersion(spec.DataVersionPhase0)
+	if !ok {
+		return web3signer.ForkInfo{}, errors.New("genesis fork not configured")
+	}
+
+	return web3signer.ForkInfo{
+		Fork:                  &genesisFork,
+		GenesisValidatorsRoot: phase0.Root{},
+	}, nil
 }
 
 func (km *RemoteKeyManager) Sign(payload []byte) ([]byte, error) {

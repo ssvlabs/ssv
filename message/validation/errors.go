@@ -20,7 +20,6 @@ type Error struct {
 	want     any
 	innerErr error
 	reject   bool
-	silent   bool
 }
 
 func (e Error) Error() string {
@@ -49,10 +48,6 @@ func (e Error) Reject() bool {
 	return e.reject
 }
 
-func (e Error) Silent() bool {
-	return e.silent
-}
-
 func (e Error) Text() string {
 	return e.text
 }
@@ -78,7 +73,7 @@ var (
 	ErrValidatorLiquidated              = Error{text: "validator is liquidated"}
 	ErrValidatorNotAttesting            = Error{text: "validator is not attesting"}
 	ErrEarlySlotMessage                 = Error{text: "message was sent before slot starts"}
-	ErrLateSlotMessage                  = Error{text: "current time is above duty's start +34(committee and aggregator) or +3(else) slots"}
+	ErrLateSlotMessage                  = Error{text: "current time is above duty's start +34(committee, aggregator, and aggregator committee) or +3(proposer, sync committee contribution) slots"}
 	ErrSlotAlreadyAdvanced              = Error{text: "signer has already advanced to a later slot"}
 	ErrRoundAlreadyAdvanced             = Error{text: "signer has already advanced to a later round"}
 	ErrPubSubDataTooBig                 = Error{text: "pub-sub message data too big"}
@@ -95,96 +90,188 @@ var (
 	ErrTooManyPartialSigMessage         = Error{text: "got more partial signature messages of a certain type than allowed"}
 	ErrDifferentProposalData            = Error{text: "got different proposal data"}
 	ErrDecidedMessageWithTooFewSigners  = Error{text: "got decided message with too few signers (same number or less)"}
+	ErrValidatorRegistrationRetired     = Error{text: "validator registrations ended with the Gloas fork"}
 )
 
 // Messages with these errors are rejected (regardless of what peer they come from).
 var (
-	ErrEmptyData                               = Error{text: "empty data", reject: true}
-	ErrMismatchedIdentifier                    = Error{text: "identifier mismatch", reject: true}
-	ErrSignatureVerification                   = Error{text: "signature verification", reject: true}
-	ErrPubSubMessageHasNoData                  = Error{text: "pub-sub message has no data", reject: true}
-	ErrMalformedPubSubMessage                  = Error{text: "pub-sub message is malformed", reject: true}
-	ErrNilSignedSSVMessage                     = Error{text: "signed ssv message is nil", reject: true}
-	ErrNilSSVMessage                           = Error{text: "ssv message is nil", reject: true}
-	ErrSSVDataTooBig                           = Error{text: "ssv message data too big", reject: true}
-	ErrInvalidRole                             = Error{text: "invalid role", reject: true}
-	ErrUnexpectedConsensusMessage              = Error{text: "unexpected consensus message for this role", reject: true}
-	ErrNoSigners                               = Error{text: "no signers", reject: true}
-	ErrWrongRSASignatureSize                   = Error{text: "wrong RSA signature size", reject: true}
-	ErrZeroSigner                              = Error{text: "zero signer ID", reject: true}
-	ErrSignerNotInCommittee                    = Error{text: "signer is not in committee", reject: true}
-	ErrDuplicatedSigner                        = Error{text: "signer is duplicated", reject: true}
-	ErrSignerNotLeader                         = Error{text: "signer is not leader", reject: true}
-	ErrSignersNotSorted                        = Error{text: "signers are not sorted", reject: true}
-	ErrInconsistentSigners                     = Error{text: "signer is not expected", reject: true}
-	ErrInvalidHash                             = Error{text: "root doesn't match full data hash", reject: true}
-	ErrFullDataHash                            = Error{text: "couldn't hash root", reject: true}
-	ErrUndecodableMessageData                  = Error{text: "message data could not be decoded", reject: true}
-	ErrEventMessage                            = Error{text: "unexpected event message", reject: true}
-	ErrUnknownSSVMessageType                   = Error{text: "unknown SSV message type", reject: true}
-	ErrUnknownQBFTMessageType                  = Error{text: "unknown QBFT message type", reject: true}
-	ErrInvalidPartialSignatureType             = Error{text: "unknown partial signature message type", reject: true}
-	ErrPartialSignatureTypeRoleMismatch        = Error{text: "partial signature type and role don't match", reject: true}
-	ErrNonDecidedWithMultipleSigners           = Error{text: "non-decided with multiple signers", reject: true}
-	ErrDecidedNotEnoughSigners                 = Error{text: "not enough signers in decided message", reject: true}
-	ErrMalformedPrepareJustifications          = Error{text: "malformed prepare justifications", reject: true}
-	ErrUnexpectedPrepareJustifications         = Error{text: "prepare justifications unexpected for this message type", reject: true}
-	ErrMalformedRoundChangeJustifications      = Error{text: "malformed round change justifications", reject: true}
-	ErrUnexpectedRoundChangeJustifications     = Error{text: "round change justifications unexpected for this message type", reject: true}
-	ErrNoMessagesInPartialSigMessage           = Error{text: "no messages in partial signature messages", reject: true}
-	ErrNoValidators                            = Error{text: "no validators for this committee ID", reject: true}
-	ErrNoSignatures                            = Error{text: "no signatures", reject: true}
-	ErrTooManySignaturesInPartialSigMessage    = Error{text: "too many signatures in a partial-signature message", reject: true}
-	ErrSignersAndSignaturesWithDifferentLength = Error{text: "signature and operator ID length mismatch", reject: true}
-	ErrPartialSigMessageMustHaveOneSigner      = Error{text: "partial signature message must have exactly one signer", reject: true}
-	ErrPrepareOrCommitWithFullData             = Error{text: "prepare or commit with full data", reject: true}
-	ErrFullDataNotInConsensusMessage           = Error{text: "full data not in consensus message", reject: true}
-	ErrTripleValidatorIndexInPartialSignatures = Error{text: "triple validator index in partial signatures", reject: true}
-	ErrZeroRound                               = Error{text: "zero round", reject: true}
+	ErrEmptyData                                       = Error{text: "empty data", reject: true}
+	ErrMismatchedIdentifier                            = Error{text: "identifier mismatch", reject: true}
+	ErrSignatureVerification                           = Error{text: "signature verification", reject: true}
+	ErrPubSubMessageHasNoData                          = Error{text: "pub-sub message has no data", reject: true}
+	ErrMalformedPubSubMessage                          = Error{text: "pub-sub message is malformed", reject: true}
+	ErrNilSignedSSVMessage                             = Error{text: "signed ssv message is nil", reject: true}
+	ErrNilSSVMessage                                   = Error{text: "ssv message is nil", reject: true}
+	ErrSSVDataTooBig                                   = Error{text: "ssv message data too big", reject: true}
+	ErrInvalidRole                                     = Error{text: "invalid role", reject: true}
+	ErrUnexpectedConsensusMessage                      = Error{text: "unexpected consensus message for this role", reject: true}
+	ErrNoSigners                                       = Error{text: "no signers", reject: true}
+	ErrWrongRSASignatureSize                           = Error{text: "wrong RSA signature size", reject: true}
+	ErrZeroSigner                                      = Error{text: "zero signer ID", reject: true}
+	ErrSignerNotInCommittee                            = Error{text: "signer is not in committee", reject: true}
+	ErrDuplicatedSigner                                = Error{text: "signer is duplicated", reject: true}
+	ErrSignerNotLeader                                 = Error{text: "signer is not leader", reject: true}
+	ErrSignersNotSorted                                = Error{text: "signers are not sorted", reject: true}
+	ErrInconsistentSigners                             = Error{text: "signer is not expected", reject: true}
+	ErrInconsistentValidatorIndex                      = Error{text: "validator index differs across partial signatures", reject: true}
+	ErrInvalidHash                                     = Error{text: "root doesn't match full data hash", reject: true}
+	ErrFullDataHash                                    = Error{text: "couldn't hash root", reject: true}
+	ErrUndecodableMessageData                          = Error{text: "message data could not be decoded", reject: true}
+	ErrEventMessage                                    = Error{text: "unexpected event message", reject: true}
+	ErrUnknownSSVMessageType                           = Error{text: "unknown SSV message type", reject: true}
+	ErrUnknownQBFTMessageType                          = Error{text: "unknown QBFT message type", reject: true}
+	ErrInvalidPartialSignatureType                     = Error{text: "unknown partial signature message type", reject: true}
+	ErrPartialSignatureTypeRoleMismatch                = Error{text: "partial signature type and role don't match", reject: true}
+	ErrNonDecidedWithMultipleSigners                   = Error{text: "non-decided with multiple signers", reject: true}
+	ErrDecidedNotEnoughSigners                         = Error{text: "not enough signers in decided message", reject: true}
+	ErrMalformedPrepareJustifications                  = Error{text: "malformed prepare justifications", reject: true}
+	ErrUnexpectedPrepareJustifications                 = Error{text: "prepare justifications unexpected for this message type", reject: true}
+	ErrMalformedRoundChangeJustifications              = Error{text: "malformed round change justifications", reject: true}
+	ErrUnexpectedRoundChangeJustifications             = Error{text: "round change justifications unexpected for this message type", reject: true}
+	ErrNoMessagesInPartialSigMessage                   = Error{text: "no messages in partial signature messages", reject: true}
+	ErrNoValidators                                    = Error{text: "no validators for this committee ID", reject: true}
+	ErrNoSignatures                                    = Error{text: "no signatures", reject: true}
+	ErrTooManySignaturesInPartialSigMessage            = Error{text: "too many signatures in a partial-signature message", reject: true}
+	ErrSignersAndSignaturesWithDifferentLength         = Error{text: "signature and operator ID length mismatch", reject: true}
+	ErrPartialSigMessageMustHaveOneSigner              = Error{text: "partial signature message must have exactly one signer", reject: true}
+	ErrPrepareOrCommitWithFullData                     = Error{text: "prepare or commit with full data", reject: true}
+	ErrFullDataNotInConsensusMessage                   = Error{text: "full data not in consensus message", reject: true}
+	ErrTooManyEqualValidatorIndicesInPartialSignatures = Error{text: "validator index appears too many times in partial signatures", reject: true}
+	ErrZeroRound                                       = Error{text: "zero round", reject: true}
 )
 
-func (mv *messageValidator) handleValidationError(ctx context.Context, peerID peer.ID, decodedMessage *queue.SSVMessage, err error) pubsub.ValidationResult {
+// discardKind classifies why a message is being discarded. handleValidationError derives the
+// pubsub result, the metric, and the log level/message from it, so classification is decided
+// in exactly one place (classifyDiscard).
+type discardKind int
+
+const (
+	// discardIgnored is an ignore-classified validation verdict (or an unclassified error).
+	discardIgnored discardKind = iota
+	// discardTimeout means validation ran out of time and the message was dropped unvalidated.
+	discardTimeout
+	// discardCanceled means validation was interrupted, typically by node shutdown.
+	discardCanceled
+	// discardRejected is a reject-classified validation verdict.
+	discardRejected
+)
+
+// classifyDiscard maps a validation error to its discard kind and metric reason label. Context
+// sentinels take precedence over verdict classification: an error that descends from a
+// timeout/cancellation is a validation that didn't finish, not a verdict.
+func classifyDiscard(err error) (discardKind, string) {
+	switch {
+	case errors.Is(err, context.DeadlineExceeded):
+		return discardTimeout, validationTimeoutReason
+	case errors.Is(err, context.Canceled):
+		return discardCanceled, validationCanceledReason
+	}
+
+	var valErr Error
+	if !errors.As(err, &valErr) {
+		return discardIgnored, err.Error()
+	}
+	if valErr.Reject() {
+		return discardRejected, valErr.Text()
+	}
+	return discardIgnored, valErr.Text()
+}
+
+// routineSelfIgnores are the ignore-classified errors that are benign for our own outbound
+// publishes: our validator's own state dedup (ErrDuplicatedMessage, ErrDecidedMessageWithTooFewSigners),
+// slot/round-timing races between building a message and validating it, and a QBFT instance that
+// keeps changing rounds past its role's round cap (ErrRoundTooHigh) - a round-progression condition
+// like the timing races, not a malformed message. These stay at debug.
+//
+// Reject-vs-ignore is inbound peer-scoring policy, not how bad a drop is for us, so it can't level
+// our own drops: any other self-ignore means we published something our own validation won't pass
+// (wrong topic/domain, oversized, unknown validator/duty) and warrants a warn. Errors not listed
+// here default to warn.
+var routineSelfIgnores = []error{
+	ErrDuplicatedMessage,
+	ErrDecidedMessageWithTooFewSigners,
+	ErrSlotAlreadyAdvanced,
+	ErrRoundAlreadyAdvanced,
+	ErrEarlySlotMessage,
+	ErrLateSlotMessage,
+	ErrEstimatedRoundNotInAllowedSpread,
+	ErrRoundTooHigh,
+}
+
+// isRoutineSelfIgnore reports whether err is one of the benign self-ignores in routineSelfIgnores.
+func isRoutineSelfIgnore(err error) bool {
+	for _, benign := range routineSelfIgnores {
+		if errors.Is(err, benign) {
+			return true
+		}
+	}
+	return false
+}
+
+func (mv *messageValidator) handleValidationError(ctx context.Context, peerID peer.ID, topic string, decodedMessage *queue.SSVMessage, err error) pubsub.ValidationResult {
 	loggerFields := mv.buildLoggerFields(decodedMessage)
 
 	logger := mv.logger.
 		With(loggerFields.AsZapFields()...).
 		With(fields.PeerID(peerID))
-
-	switch {
-	case errors.Is(err, context.DeadlineExceeded):
-		recordIgnoredMessage(ctx, loggerFields.Role, validationTimeoutReason)
-		logger.Debug("ignoring message due to validation timeout", zap.Error(err))
-		return pubsub.ValidationIgnore
-	case errors.Is(err, context.Canceled):
-		recordIgnoredMessage(ctx, loggerFields.Role, validationCanceledReason)
-		logger.Debug("ignoring message due to validation cancellation", zap.Error(err))
-		return pubsub.ValidationIgnore
+	if topic != "" {
+		// On pre-decode discards decodedMessage is nil, so loggerFields carries no role/slot/duty
+		// and topic is the only field identifying what we dropped.
+		logger = logger.With(fields.Topic(topic))
 	}
 
-	var valErr Error
-	if !errors.As(err, &valErr) {
-		recordIgnoredMessage(ctx, loggerFields.Role, err.Error())
-		logger.Debug("ignoring invalid message", zap.Error(err))
-		return pubsub.ValidationIgnore
+	kind, reason := classifyDiscard(err)
+
+	result := pubsub.ValidationIgnore
+	if kind == discardRejected {
+		result = pubsub.ValidationReject
+		recordRejectedMessage(ctx, loggerFields.Role, reason)
+	} else {
+		recordIgnoredMessage(ctx, loggerFields.Role, reason)
 	}
 
-	if !valErr.Reject() {
-		if !valErr.Silent() {
-			logger.Debug("ignoring invalid message", zap.Error(valErr))
+	// A discard of one of our own outbound messages (see isSelfPeer) is leveled by what it says
+	// about this node: debug for the expected (a routine self-ignore or a shutdown cancellation),
+	// warn for the concerning (a reject or non-routine ignore means our own validation refuses a
+	// message we published; a timeout means it was never published). The reason is logged here
+	// because the publisher only sees a generic pubsub.ValidationError.
+	if mv.isSelfPeer(peerID) {
+		switch kind {
+		case discardRejected:
+			logger.Warn("own outbound message rejected by local validation", zap.Error(err))
+		case discardTimeout:
+			logger.Warn("own outbound message dropped by local validation timeout", zap.Error(err))
+		case discardCanceled:
+			logger.Debug("own outbound message discarded by local validation cancellation", zap.Error(err))
+		case discardIgnored:
+			if isRoutineSelfIgnore(err) {
+				logger.Debug("own outbound message ignored by local validation", zap.Error(err))
+			} else {
+				logger.Warn("own outbound message ignored by local validation (unexpected)", zap.Error(err))
+			}
+		default:
+			logger.Debug("own outbound message discarded by local validation", zap.Error(err))
 		}
-		recordIgnoredMessage(ctx, loggerFields.Role, valErr.Text())
-		return pubsub.ValidationIgnore
+		return result
 	}
 
-	if !valErr.Silent() {
-		logger.Debug("rejecting invalid message", zap.Error(valErr))
+	switch kind {
+	case discardTimeout:
+		logger.Debug("ignoring message due to validation timeout", zap.Error(err))
+	case discardCanceled:
+		logger.Debug("ignoring message due to validation cancellation", zap.Error(err))
+	case discardRejected:
+		logger.Debug("rejecting invalid message", zap.Error(err))
+	case discardIgnored:
+		logger.Debug("ignoring invalid message", zap.Error(err))
+	default:
+		logger.Debug("discarding invalid message", zap.Error(err))
 	}
-
-	recordRejectedMessage(ctx, loggerFields.Role, valErr.Text())
-	return pubsub.ValidationReject
+	return result
 }
 
 func (mv *messageValidator) handleValidationSuccess(ctx context.Context, decodedMessage *queue.SSVMessage) pubsub.ValidationResult {
 	recordAcceptedMessage(ctx, messageRole(decodedMessage))
+
 	return pubsub.ValidationAccept
 }

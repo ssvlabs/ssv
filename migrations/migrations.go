@@ -33,6 +33,7 @@ var (
 		migration_6_share_exit_epoch,
 		migration_7_derive_signer_key_with_hkdf,
 		migration_8_populate_validator_index_mapping,
+		migration_9_migrate_committee_duty_role_field,
 	}
 )
 

@@ -44,6 +44,13 @@ ssvsigner-golangci-lint:
 deadcode-lint:
 	./scripts/deadcode.sh
 
+.PHONY: install-hooks
+install-hooks:
+	git config core.hooksPath scripts/git-hooks
+	@echo "git hooks installed (core.hooksPath -> scripts/git-hooks)"
+	@echo "note: this replaces .git/hooks — any hook you keep there stops firing"
+	@echo "undo with: git config --unset core.hooksPath"
+
 .PHONY: ssvsigner-boundary-lint
 ssvsigner-boundary-lint:
 	./scripts/ssvsigner_boundary.sh
@@ -51,10 +58,7 @@ ssvsigner-boundary-lint:
 .PHONY: unit-test
 unit-test:
 	@echo "Running unit tests"
-	@go test -tags "blst_enabled lfs" -timeout 10m -race -covermode=atomic -coverprofile=coverage1.out -p 16 -parallel 256 `go list ./... | grep -ve "spectest\|ssv/scripts/\|/network/p2p"`
-	# running tests in `./network/p2p` separately because they get flaky when run concurrently with others for some reason
-	@go test -tags "blst_enabled lfs" -timeout 10m -race -covermode=atomic -coverprofile=coverage2.out -p 16 -parallel 256 ./network/p2p
-	@cat coverage1.out > coverage.out && tail -n +2 coverage2.out >> coverage.out
+	@go test -tags "blst_enabled lfs" -timeout 10m -race -covermode=atomic -coverprofile=coverage.out -p 16 -parallel 256 `go list ./... | grep -ve "spectest\|ssv/scripts/"`
 
 .PHONY: unit-test-all
 unit-test-all:
@@ -71,6 +75,18 @@ spec-test:
 	@echo "Running spec tests"
 	@go test -tags blst_enabled -timeout 10m ${COV_CMD} -race -p 16 -parallel 256 ./protocol/v2/qbft/spectest
 	@go test -tags blst_enabled -timeout 10m ${COV_CMD} -race -p 16 -parallel 256 ./protocol/v2/ssv/spectest
+
+.PHONY: spec-test-alan
+spec-test-alan:
+	@echo "Running spec tests against ssv-spec Alan"
+	@$(MAKE) spec-test-alan-deps
+	@go test -tags "blst_enabled alan_spec" -timeout 10m ${COV_CMD} -race -p 16 -parallel 256 ./protocol/v2/qbft/spectest
+	@go test -tags "blst_enabled alan_spec" -timeout 10m ${COV_CMD} -race -p 16 -parallel 256 ./protocol/v2/ssv/spectest
+
+.PHONY: spec-test-alan-deps
+spec-test-alan-deps:
+	@echo "Downloading Alan modfile dependencies"
+	@go mod download -modfile=go.spec.alan.mod
 
 .PHONY: benchmark
 benchmark:

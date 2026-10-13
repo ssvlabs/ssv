@@ -6,8 +6,8 @@ import (
 	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	ssz "github.com/ferranbt/fastssz"
 	"github.com/herumi/bls-eth-go-binary/bls"
+
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -20,7 +20,7 @@ func signBeaconObject(
 	runner Runner,
 	networkConfig *networkconfig.Network,
 	duty *spectypes.ValidatorDuty,
-	obj ssz.HashRoot,
+	obj spectypes.HashRoot,
 	slot phase0.Slot,
 	signatureDomain phase0.DomainType,
 ) (*spectypes.PartialSignatureMessage, error) {
@@ -39,7 +39,7 @@ func signAsValidator(
 	ctx context.Context,
 	runner Runner,
 	validatorIndex phase0.ValidatorIndex,
-	obj ssz.HashRoot,
+	obj spectypes.HashRoot,
 	slot phase0.Slot,
 	signatureDomain phase0.DomainType,
 	domain phase0.Domain,
@@ -86,7 +86,7 @@ func (b *BaseRunner) validatePartialSigMsg(
 		))
 	}
 	if psigMsgs.Slot > expectedSlot {
-		return NewRetryableError(spectypes.WrapError(spectypes.PartialSigMessageFutureSlotErrorCode, fmt.Errorf(
+		return NewRetryableError(withCode(spectypes.PartialSigMessageFutureSlotErrorCode, fmt.Errorf(
 			"%w: message slot: %d, expected slot: %d",
 			ErrFuturePartialSigMsg,
 			psigMsgs.Slot,
@@ -161,6 +161,17 @@ func (b *BaseRunner) verifyBeaconPartialSignature(signer spectypes.OperatorID, s
 
 // Stores the container's existing signature or the new one, depending on their validity. If both are invalid, remove the existing one
 func (b *BaseRunner) resolveDuplicateSignature(container *ssv.PartialSigContainer, msg *spectypes.PartialSignatureMessage) {
+	// For committee duties, message validation does not assert that a partial-signature
+	// validator index belongs to a validator this operator holds a share for (see
+	// knowledge-base#2), so a message can carry an index absent from b.Share. Without the
+	// validator's committee we cannot verify either signature, so drop any stored entry for
+	// it rather than dereferencing a nil share.
+	share, ok := b.Share[msg.ValidatorIndex]
+	if !ok {
+		container.Remove(msg.ValidatorIndex, msg.Signer, msg.SigningRoot)
+		return
+	}
+
 	// Check previous signature validity
 	previousSignature, err := container.GetSignature(msg.ValidatorIndex, msg.Signer, msg.SigningRoot)
 	if err == nil {
@@ -168,7 +179,7 @@ func (b *BaseRunner) resolveDuplicateSignature(container *ssv.PartialSigContaine
 			msg.Signer,
 			previousSignature,
 			msg.SigningRoot,
-			b.Share[msg.ValidatorIndex].Committee,
+			share.Committee,
 		)
 		if err == nil {
 			// Keep the previous signature since it's correct
@@ -184,7 +195,7 @@ func (b *BaseRunner) resolveDuplicateSignature(container *ssv.PartialSigContaine
 		msg.Signer,
 		msg.PartialSignature,
 		msg.SigningRoot,
-		b.Share[msg.ValidatorIndex].Committee,
+		share.Committee,
 	)
 	if err == nil {
 		container.AddSignature(msg)

@@ -29,8 +29,8 @@ func setupTxnWithData(t *testing.T, prefix []byte, keyCount int) (*DB, *badgerTx
 
 	// Populate with test data
 	for i := 0; i < keyCount; i++ {
-		key := []byte(fmt.Sprintf("key-%d", i))
-		value := []byte(fmt.Sprintf("value-%d", i))
+		key := fmt.Appendf(nil, "key-%d", i)
+		value := fmt.Appendf(nil, "value-%d", i)
 		err := txn.Set(prefix, key, value)
 
 		require.NoError(t, err)
@@ -155,8 +155,8 @@ func TestTxnSetMany(t *testing.T) {
 		itemCount := 10
 
 		err := txn.SetMany(prefix, itemCount, func(i int) (basedb.Obj, error) {
-			key := []byte(fmt.Sprintf("key-%d", i))
-			value := []byte(fmt.Sprintf("value-%d", i))
+			key := fmt.Appendf(nil, "key-%d", i)
+			value := fmt.Appendf(nil, "value-%d", i)
 
 			return basedb.Obj{Key: key, Value: value}, nil
 		})
@@ -164,8 +164,8 @@ func TestTxnSetMany(t *testing.T) {
 		require.NoError(t, err)
 
 		for i := 0; i < itemCount; i++ {
-			key := []byte(fmt.Sprintf("key-%d", i))
-			expectedValue := []byte(fmt.Sprintf("value-%d", i))
+			key := fmt.Appendf(nil, "key-%d", i)
+			expectedValue := fmt.Appendf(nil, "value-%d", i)
 
 			obj, found, err := txn.Get(prefix, key)
 
@@ -197,15 +197,15 @@ func TestTxnSetMany(t *testing.T) {
 
 		err := txnClosed.SetMany(prefix, 3, func(i int) (basedb.Obj, error) {
 			return basedb.Obj{
-				Key:   []byte(fmt.Sprintf("key-%d", i)),
-				Value: []byte(fmt.Sprintf("value-%d", i)),
+				Key:   fmt.Appendf(nil, "key-%d", i),
+				Value: fmt.Appendf(nil, "value-%d", i),
 			}, nil
 		})
 
 		require.Error(t, err)
 
 		for i := 0; i < 3; i++ {
-			key := []byte(fmt.Sprintf("key-%d", i))
+			key := fmt.Appendf(nil, "key-%d", i)
 			_, found, err := db.Get(prefix, key)
 
 			require.NoError(t, err)
@@ -225,8 +225,8 @@ func TestTxnGet(t *testing.T) {
 
 	t.Run("get existing key", func(t *testing.T) {
 		for i := 0; i < 3; i++ {
-			key := []byte(fmt.Sprintf("key-%d", i))
-			expectedValue := []byte(fmt.Sprintf("value-%d", i))
+			key := fmt.Appendf(nil, "key-%d", i)
+			expectedValue := fmt.Appendf(nil, "value-%d", i)
 
 			obj, found, err := txn.Get(prefix, key)
 
@@ -429,7 +429,7 @@ func TestTxnDelete(t *testing.T) {
 			if i == 2 {
 				continue // we skipped this key
 			}
-			key := []byte(fmt.Sprintf("key-%d", i))
+			key := fmt.Appendf(nil, "key-%d", i)
 			_, found, err := txn.Get(prefix, key)
 
 			require.NoError(t, err)

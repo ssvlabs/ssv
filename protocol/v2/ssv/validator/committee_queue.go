@@ -24,6 +24,11 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
+// queueContainer wraps a queue for a duty role.
+type queueContainer struct {
+	Q queue.Queue
+}
+
 // EnqueueMessage enqueues a spectypes.SSVMessage for processing.
 // TODO: accept DecodedSSVMessage once p2p is upgraded to decode messages during validation.
 func (c *Committee) EnqueueMessage(ctx context.Context, msg *queue.SSVMessage) {
@@ -40,7 +45,7 @@ func (c *Committee) EnqueueMessage(ctx context.Context, msg *queue.SSVMessage) {
 		logger.Error("❌ couldn't get message slot", zap.Error(err))
 		return
 	}
-	dutyID := fields.BuildCommitteeDutyID(types.OperatorIDsFromOperators(c.CommitteeMember.Committee), c.networkConfig.EstimatedEpochAtSlot(slot), slot)
+	dutyID := fields.BuildCommitteeDutyID(types.OperatorIDsFromOperators(c.CommitteeMember.Committee), c.networkConfig.EstimatedEpochAtSlot(slot), slot, msgID.GetRoleType())
 
 	logger = logger.
 		With(fields.Slot(slot)).
@@ -58,11 +63,13 @@ func (c *Committee) EnqueueMessage(ctx context.Context, msg *queue.SSVMessage) {
 	defer span.End()
 
 	c.mtx.Lock()
-	q := c.getQueue(logger, slot)
+	// Route to role-specific queue to avoid concurrent Pop calls on same queue
+	// when both committee and aggregator consumers are running for the slot.
+	q := c.getQueueForRole(logger, slot, msgID.GetRoleType())
 	c.mtx.Unlock()
 
 	span.AddEvent("pushing message to the queue")
-	if pushed := q.TryPush(msg); !pushed {
+	if pushed := q.Q.TryPush(msg); !pushed {
 		const errMsg = "❗ dropping message because the queue is full"
 		logger.Warn(errMsg, zap.String("drop_reason", queue.DropReasonBufferFull))
 		span.AddEvent(errMsg, trace.WithAttributes(attribute.String("drop_reason", queue.DropReasonBufferFull)))
@@ -78,20 +85,15 @@ func (c *Committee) EnqueueMessage(ctx context.Context, msg *queue.SSVMessage) {
 func (c *Committee) ConsumeQueue(
 	ctx context.Context,
 	logger *zap.Logger,
-	q queue.Queue,
+	q queueContainer,
 	handler MessageHandler, // should be c.ProcessMessage, it is a param so can be mocked out for testing
-	r *runner.CommitteeRunner,
+	r runner.Runner,
 ) {
 	logger.Debug("📬 queue consumer is running")
 	defer logger.Debug("📪 queue consumer is closed")
 
 	// msgStates keeps track of in-flight processing state (retry count + span context) per message.
-	// Since this map grows over time, we need to clean it up automatically. There is no specific TTL value
-	// to use for its entries - it just needs to be large enough to prevent unnecessary (but non-harmful)
-	// retries from happening.
-	msgStates := ttlcache.New(
-		ttlcache.WithTTL[messageKey, *messageProcessingState](10 * time.Minute),
-	)
+	msgStates := newMessageStates(messageStateTTL)
 	go msgStates.Start()
 	defer msgStates.Stop()
 
@@ -132,7 +134,7 @@ func (c *Committee) ConsumeQueue(
 		}
 
 		// Pop the highest priority message for the current state.
-		msg := q.Pop(ctx, queue.NewCommitteeQueuePrioritizer(&rState), filter)
+		msg := q.Q.Pop(ctx, queue.NewCommitteeQueuePrioritizer(&rState), filter)
 		if ctx.Err() != nil {
 			// Optimization: terminate fast if we can.
 			return
@@ -175,6 +177,7 @@ func (c *Committee) ConsumeQueue(
 					types.OperatorIDsFromOperators(c.CommitteeMember.Committee),
 					c.networkConfig.EstimatedEpochAtSlot(slot),
 					slot,
+					msg.GetID().GetRoleType(),
 				)
 				spanOpts = append(spanOpts, trace.WithAttributes(
 					observability.BeaconSlotAttribute(slot),
@@ -220,13 +223,26 @@ func (c *Committee) ConsumeQueue(
 			const couldNotHandleMsgLogPrefix = "could not handle message, "
 			switch {
 			case errors.Is(err, runner.ErrNoValidDutiesToExecute):
-				const droppingMsgDueToNoValidDutiesToExecuteEvent = "❗ " + couldNotHandleMsgLogPrefix + "dropping message and terminating committee-runner"
-				msgLogger.Error(droppingMsgDueToNoValidDutiesToExecuteEvent, zap.Error(err))
+				// Terminal, not a handling failure: the committee decided but this operator has no
+				// duties to execute, so the message is dropped and the runner terminated without
+				// error-level noise. The runner concluded the duty outcome before returning the
+				// sentinel (not_required for the benign zero-duties cases; failed for
+				// AggregatorCommitteeRunner's empty-decided-data invariant violation, which also
+				// warns via the outcome watcher), so nothing is lost by the quiet drop here.
+				const droppingMsgDueToNoValidDutiesToExecuteEvent = "no valid duties to execute, dropping message and terminating committee-runner"
+				msgLogger.Debug(droppingMsgDueToNoValidDutiesToExecuteEvent, zap.Error(err))
 				msgState.span.AddEvent(droppingMsgDueToNoValidDutiesToExecuteEvent, trace.WithAttributes(
 					attribute.String("drop_reason", err.Error()),
 					attribute.Int64("attempt", currentAttempt),
 				))
-				msgState.span.SetStatus(codes.Error, droppingMsgDueToNoValidDutiesToExecuteEvent)
+				// The drop is quiet either way, but the span status is a separate signal: an invariant
+				// violation rode in on the same sentinel and its duty was concluded failed, so it must
+				// not leave a green span behind for trace-based error alerting to miss.
+				if errors.Is(err, runner.ErrDutyInvariantViolation) {
+					msgState.span.SetStatus(codes.Error, err.Error())
+				} else {
+					msgState.span.SetStatus(codes.Ok, "")
+				}
 				msgState.span.End()
 				msgStates.Delete(msgKey)
 				return
@@ -245,7 +261,7 @@ func (c *Committee) ConsumeQueue(
 					case <-msgState.ctx.Done():
 						return
 					}
-					if pushed := q.TryPush(msg); !pushed {
+					if pushed := q.Q.TryPush(msg); !pushed {
 						const droppingMsgDueToQueueIsFullEvent = "❗ not gonna replay message because the queue is full"
 						msgLogger.Error(droppingMsgDueToQueueIsFullEvent)
 						msgState.span.AddEvent(droppingMsgDueToQueueIsFullEvent, trace.WithAttributes(

@@ -176,6 +176,20 @@ func TestUponRoundChangeWithPartialQuorumBumpsRoundAndBroadcastsRoundChange(t *t
 	require.Equal(t, []spectypes.OperatorID{2}, msg.SignedMessage.OperatorIDs)
 }
 
+func TestUponChangeRoundPartialQuorumGivesUpQuietlyAtCutOffRound(t *testing.T) {
+	env := newInstanceTestEnv(t, 2)
+	// A role whose cap equals CutOffRound validates round-change messages at the cap but gives up there.
+	// A partial-quorum jump to the cap bumps the instance into the cutoff, so it gives up quietly, no error.
+	env.config.CutOffRound = env.inst.State.Round + 1
+	cutOffRound := env.config.CutOffRound
+
+	err := env.inst.uponChangeRoundPartialQuorum(context.Background(), zap.NewNop(), cutOffRound)
+	require.NoError(t, err)
+	require.Equal(t, cutOffRound, env.inst.State.Round)
+	require.Zero(t, env.roundTimer.State.Timeouts, "no timer armed once the instance gives up at the cutoff")
+	require.Empty(t, env.network.BroadcastedMsgs, "no round-change broadcast at the cutoff")
+}
+
 func TestUponRoundChangeReturnsEarlyOnDuplicate(t *testing.T) {
 	env := newInstanceTestEnv(t, 2)
 	msg := env.roundChange(2, 1, specqbft.NoRound, [32]byte{}, nil, nil)
@@ -225,6 +239,40 @@ func TestUponRoundChangeAsLeaderBroadcastsProposalOnJustifiedQuorum(t *testing.T
 	require.Equal(t, specqbft.ProposalMsgType, msg.QBFTMessage.MsgType)
 	require.Equal(t, specqbft.Round(2), msg.QBFTMessage.Round)
 	require.Equal(t, env.hash(env.inst.StartValue), msg.QBFTMessage.Root)
+}
+
+func TestUponRoundChangeAsLeaderBroadcastsFutureRoundProposalOnJustifiedQuorum(t *testing.T) {
+	env := newInstanceTestEnv(t, 1)
+	env.setLeader(1)
+	env.inst.State.Round = 1
+	env.inst.StartValue = []byte("start-value")
+
+	// Preload container to exercise the future-round leader path; this path is unreachable via
+	// natural message flow (partial-quorum f+1 fires before full quorum 2f+1 in uponRoundChange),
+	// kept as defense-in-depth against future refactors.
+	env.addMessages(
+		env.inst.State.RoundChangeContainer,
+		env.roundChange(2, 2, specqbft.NoRound, [32]byte{}, nil, nil),
+		env.roundChange(2, 3, specqbft.NoRound, [32]byte{}, nil, nil),
+	)
+
+	err := env.inst.uponRoundChange(
+		context.Background(),
+		zap.NewNop(),
+		env.roundChange(2, 4, specqbft.NoRound, [32]byte{}, nil, nil),
+	)
+	require.NoError(t, err)
+
+	require.Equal(t, specqbft.Round(2), env.inst.State.Round)
+
+	msg := env.broadcastedProcessingMessage(0)
+	require.Equal(t, specqbft.ProposalMsgType, msg.QBFTMessage.MsgType)
+	require.Equal(t, specqbft.Round(2), msg.QBFTMessage.Round)
+	require.Equal(t, env.hash(env.inst.StartValue), msg.QBFTMessage.Root)
+
+	roundChangeJustifications, err := msg.QBFTMessage.GetRoundChangeJustifications()
+	require.NoError(t, err)
+	require.Len(t, roundChangeJustifications, 3)
 }
 
 func TestValidRoundChangeForDataIgnoreSignatureValidationBranches(t *testing.T) {

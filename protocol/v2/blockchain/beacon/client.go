@@ -2,7 +2,6 @@ package beacon
 
 import (
 	"context"
-	"time"
 
 	"github.com/attestantio/go-eth2-client/api"
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
@@ -10,6 +9,8 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
+
+	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 )
 
 //go:generate go tool -modfile=../../../../tool.mod mockgen -package=beacon -destination=./mock_client.go -source=./client.go
@@ -18,6 +19,10 @@ import (
 type AttesterCalls interface {
 	// GetAttestationData returns attestation data by the given slot and committee index
 	GetAttestationData(ctx context.Context, slot phase0.Slot) (*phase0.AttestationData, spec.DataVersion, error)
+	// HeadRootAtSlot returns the block root a head event named for slot, if one has arrived — the
+	// operator's own knowledge that the block at that root has that slot, which the committee runner's
+	// SIP #94 §2 same-slot check relies on.
+	HeadRootAtSlot(slot phase0.Slot) (phase0.Root, bool)
 	// SubmitAttestations submits the attestation to the node
 	SubmitAttestations(ctx context.Context, attestations []*spec.VersionedAttestation) error
 }
@@ -36,7 +41,12 @@ type ProposerCalls interface {
 
 // AggregatorCalls interface has all attestation aggregator duty specific calls
 type AggregatorCalls interface {
+	// IsAggregator returns true if the validator is selected as an aggregator
+	IsAggregator(ctx context.Context, slot phase0.Slot, committeeIndex phase0.CommitteeIndex, committeeLength uint64, slotSig []byte) bool
+	// GetAggregateAttestation returns the aggregate attestation for the given slot and committee
+	GetAggregateAttestation(ctx context.Context, slot phase0.Slot, committeeIndex phase0.CommitteeIndex) (ssz.Marshaler, spec.DataVersion, error)
 	// SubmitAggregateSelectionProof returns an AggregateAndProof object
+	// Deprecated: Use IsAggregator and GetAggregateAttestation instead. Kept for backward compatibility.
 	SubmitAggregateSelectionProof(ctx context.Context, slot phase0.Slot, committeeIndex phase0.CommitteeIndex, committeeLength uint64, index phase0.ValidatorIndex, slotSig []byte) (ssz.Marshaler, spec.DataVersion, error)
 	// SubmitSignedAggregateSelectionProof broadcasts a signed aggregator msg
 	SubmitSignedAggregateSelectionProof(ctx context.Context, msg *spec.VersionedSignedAggregateAndProof) error
@@ -70,6 +80,63 @@ type ValidatorRegistrationCalls interface {
 type VoluntaryExitCalls interface {
 	// SubmitVoluntaryExit submits a validator voluntary exit
 	SubmitVoluntaryExit(ctx context.Context, voluntaryExit *phase0.SignedVoluntaryExit) error
+}
+
+// PTCCalls is the beacon-node surface for Gloas (ePBS) Payload Timeliness Committee duties:
+// fetching assignments, producing the data to attest to, and submitting signed messages.
+type PTCCalls interface {
+	// PayloadAttestationDuties returns the PTC duties for the given validators at the epoch, with the
+	// dependent_root they were derived from.
+	PayloadAttestationDuties(ctx context.Context, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) (*gloas.PTCDuties, error)
+	// PayloadAttestationData returns the data to attest to for the slot, or (nil, nil) if the beacon
+	// node reports no block seen for the slot (HTTP 204) — the SIP-94 §3 signal to abstain.
+	PayloadAttestationData(ctx context.Context, slot phase0.Slot) (*gloas.PayloadAttestationData, error)
+	// SubmitPayloadAttestationMessages submits signed PTC messages to the beacon node's pool.
+	SubmitPayloadAttestationMessages(ctx context.Context, messages []*gloas.PayloadAttestationMessage) error
+}
+
+// ProposerPreferencesCalls is the beacon-node surface for Gloas (ePBS) proposer preferences (SIP #94 §5)
+// and the direct-builder preferences the §5 dispatcher submits (beacon-APIs#630). go-eth2-client has
+// no calls for these endpoints, so they are hand-rolled over HTTP.
+type ProposerPreferencesCalls interface {
+	// ProposerDutiesDependentRoot returns the proposer-duties dependent root for the epoch — the
+	// seed the proposer-lookahead is pinned to. go-eth2-client drops it, so it's fetched via raw HTTP.
+	ProposerDutiesDependentRoot(ctx context.Context, epoch phase0.Epoch) (phase0.Root, error)
+	// LastProposerDutiesDependentRoot returns the root the epoch's last successful
+	// ProposerDutiesDependentRoot call returned, while it is still remembered (the proposer lookahead).
+	// The §5 runner builds under it when its own fetch fails: the scheduler emitted the duty moments
+	// earlier under that very root, and a one-shot emission must not fail over a transient fetch error.
+	LastProposerDutiesDependentRoot(epoch phase0.Epoch) (phase0.Root, bool)
+	// SubmitProposerPreferences broadcasts signed proposer preferences for upcoming proposal slots.
+	SubmitProposerPreferences(ctx context.Context, preferences []*gloas.SignedProposerPreferences) error
+	// SubmitBuilderPreferences submits ahead-of-time per-builder preferences; the beacon node forwards
+	// each entry to its builder (beacon-APIs#630).
+	SubmitBuilderPreferences(ctx context.Context, preferences []*gloas.BuilderPreferencesEntry) error
+}
+
+// GloasProposerCalls is the beacon-node surface for producing and publishing Gloas (ePBS) blocks
+// (SIP #94 §4). These are hand-rolled over HTTP against the merged produce-block-v4 / publish endpoints
+// (beacon-APIs#580) plus the direct-builder produceBlockV4 POST (beacon-APIs#630): go-eth2-client's ePBS
+// proposal call is the pre-#630 GET, with no typed equivalent for the POST body or the Eth-Builder-Url echo.
+type GloasProposerCalls interface {
+	// GetGloasBeaconBlock produces a Gloas beacon block for the slot via produceBlockV4 with
+	// include_payload=true (SIP #94 §6): a self-build response also carries the envelope, blobs, and KZG
+	// proofs the operator reveals in §6, an external-build one only the bid-carrying block. builderConfig
+	// is sent as the POST body (beacon-APIs#630) — the direct-builder overlay when configured, else a
+	// neutral local-build config — with a GET fallback for beacon nodes that predate it; the result's
+	// BuilderURL is the Eth-Builder-Url of the winning builder-API bid, empty when
+	// self-built or won by a p2p bid.
+	GetGloasBeaconBlock(ctx context.Context, slot phase0.Slot, graffiti, randao []byte, builderConfig *gloas.ProduceBuilderConfig) (*gloas.ProducedBlock, error)
+	// SubmitGloasBeaconBlock publishes a signed Gloas block. A non-empty builderURL is echoed as the
+	// Eth-Builder-Url header so the beacon node forwards the block to the winning builder (beacon-APIs#630).
+	SubmitGloasBeaconBlock(ctx context.Context, block *gloas.SignedBeaconBlock, builderURL string) error
+}
+
+// GloasEnvelopeCalls is the beacon-node surface for publishing the §6 reveal (SIP #94 §6). Like the block
+// calls, it is hand-rolled over HTTP against the merged beacon-APIs#624 endpoint.
+type GloasEnvelopeCalls interface {
+	// SubmitExecutionPayloadEnvelope publishes the threshold-signed envelope with its blobs and KZG proofs.
+	SubmitExecutionPayloadEnvelope(ctx context.Context, contents *gloas.SignedExecutionPayloadEnvelopeContents) error
 }
 
 type DomainCalls interface {
@@ -121,6 +188,10 @@ type BeaconNode interface {
 	SyncCommitteeContributionCalls
 	ValidatorRegistrationCalls
 	VoluntaryExitCalls
+	PTCCalls
+	ProposerPreferencesCalls
+	GloasProposerCalls
+	GloasEnvelopeCalls
 	DomainCalls
 
 	beaconDuties
@@ -128,15 +199,4 @@ type BeaconNode interface {
 	beaconValidator
 	signer // TODO need to handle differently
 	proposalPreparations
-}
-
-// Options for controller struct creation
-type Options struct {
-	Context                     context.Context
-	BeaconNodeAddr              string `yaml:"BeaconNodeAddr" env:"BEACON_NODE_ADDR" env-required:"true" env-description:"Beacon node URL(s). Multiple nodes are supported via semicolon-separated URLs (e.g. 'http://localhost:5052;http://localhost:5053')"`
-	SyncDistanceTolerance       uint64 `yaml:"SyncDistanceTolerance" env:"BEACON_SYNC_DISTANCE_TOLERANCE" env-default:"4" env-description:"Maximum number of slots behind head considered in-sync"`
-	WithWeightedAttestationData bool   `yaml:"WithWeightedAttestationData" env:"WITH_WEIGHTED_ATTESTATION_DATA" env-default:"false" env-description:"Enable attestation data scoring across multiple beacon nodes"`
-
-	CommonTimeout time.Duration // Optional.
-	LongTimeout   time.Duration // Optional.
 }

@@ -605,6 +605,40 @@ func attrEquals(set attribute.Set, key, expected string) bool {
 	return ok && v.AsString() == expected
 }
 
+// requireQueuePurgeCounter is the messages.purged counterpart of requireQueueDropCounter: it asserts a
+// data point on the package-global purgedMessagesMetric for queueType/queueID/reason. Stale purges land
+// here, not on messages.dropped, so that counter stays a pure fault signal.
+func requireQueuePurgeCounter(t *testing.T, queueType, queueID, reason string, expected int64) {
+	t.Helper()
+
+	var rm metricdata.ResourceMetrics
+	require.NoError(t, pkgTestMetricReader.Collect(t.Context(), &rm))
+
+	for _, sm := range rm.ScopeMetrics {
+		for _, m := range sm.Metrics {
+			if m.Name != "ssv.queue.messages.purged" {
+				continue
+			}
+			sum, ok := m.Data.(metricdata.Sum[int64])
+			require.True(t, ok, "expected Sum[int64], got %T", m.Data)
+			for _, dp := range sum.DataPoints {
+				if !attrEquals(dp.Attributes, "ssv.queue.type", queueType) {
+					continue
+				}
+				if !attrEquals(dp.Attributes, "ssv.queue.id", queueID) {
+					continue
+				}
+				if !attrEquals(dp.Attributes, "ssv.queue.purge_reason", reason) {
+					continue
+				}
+				require.Equal(t, expected, dp.Value)
+				return
+			}
+		}
+	}
+	t.Fatalf("no purge counter data point found for queueType=%q queueID=%q reason=%q", queueType, queueID, reason)
+}
+
 func TestPriorityQueue_TryPushDropMetric_RecordsAttributes(t *testing.T) {
 	t.Parallel()
 
@@ -621,6 +655,82 @@ func TestPriorityQueue_TryPushDropMetric_RecordsAttributes(t *testing.T) {
 	require.False(t, q.TryPush(msg))
 
 	requireQueueDropCounter(t, queueType, queueID, DropReasonBufferFull, 2)
+}
+
+// Purge removes the matching messages wherever they sit — still in the inbox or already in the backlog —
+// keeps the rest in order, reports each removed message through the callback, and counts each removal as
+// a purge (not a drop) under the given reason.
+func TestPriorityQueue_Purge(t *testing.T) {
+	t.Parallel()
+
+	gauge := newTestGauge(t)
+	const queueType = ValidatorQueueMetricType
+	queueID := uniqueQueueID(t)
+
+	q := New(log.TestLogger(t), 8, WithQueueMetrics(gauge, queueType, queueID)).(*priorityQueue)
+	decodeAndPush(t, q, mockConsensusMessage{Height: 100, Type: specqbft.PrepareMsgType}, mockState)
+	decodeAndPush(t, q, mockConsensusMessage{Height: 101, Type: specqbft.PrepareMsgType}, mockState)
+	q.readInbox() // the first two are in the backlog, the next two still in the inbox
+	decodeAndPush(t, q, mockConsensusMessage{Height: 102, Type: specqbft.PrepareMsgType}, mockState)
+	kept := decodeAndPush(t, q, mockConsensusMessage{Height: 103, Type: specqbft.PrepareMsgType}, mockState)
+
+	below103 := func(m *SSVMessage) bool {
+		slot, err := m.Slot()
+		require.NoError(t, err)
+		return slot < 103
+	}
+	var removed []uint64
+	require.Equal(t, 3, q.Purge(below103, PurgeReasonStale, func(m *SSVMessage) {
+		slot, err := m.Slot()
+		require.NoError(t, err)
+		removed = append(removed, uint64(slot))
+	}))
+	require.Equal(t, []uint64{102, 101, 100}, removed, "the callback reports every removed message, in queue order")
+	require.Equal(t, 1, q.Len())
+	require.Equal(t, kept, q.TryPop(NewMessagePrioritizer(mockState), FilterAny))
+	require.True(t, q.Empty())
+	require.Equal(t, 0, q.Purge(FilterAny, PurgeReasonStale, nil))
+
+	requireQueuePurgeCounter(t, queueType, queueID, PurgeReasonStale, 3)
+}
+
+// Purge that removes the head must re-seat q.head onto the first survivor; a survivor behind the dropped
+// head exercises the prior == nil branch with something left to keep.
+func TestPriorityQueue_Purge_DropsHeadKeepsSurvivors(t *testing.T) {
+	t.Parallel()
+
+	q := New(log.TestLogger(t), 8).(*priorityQueue)
+	decodeAndPush(t, q, mockConsensusMessage{Height: 100, Type: specqbft.PrepareMsgType}, mockState)
+	decodeAndPush(t, q, mockConsensusMessage{Height: 101, Type: specqbft.PrepareMsgType}, mockState)
+	decodeAndPush(t, q, mockConsensusMessage{Height: 102, Type: specqbft.PrepareMsgType}, mockState)
+	decodeAndPush(t, q, mockConsensusMessage{Height: 103, Type: specqbft.PrepareMsgType}, mockState)
+	q.readInbox() // backlog is 103 -> 102 -> 101 -> 100, head first
+
+	// Drop the head (103) and a middle element (101); 102 and 100 survive. This drives both the
+	// prior == nil head re-seat and the prior != nil splice, and leaves survivors behind the head.
+	dropHeadAndMiddle := func(m *SSVMessage) bool {
+		slot, err := m.Slot()
+		require.NoError(t, err)
+		return slot == 103 || slot == 101
+	}
+	require.Equal(t, 2, q.Purge(dropHeadAndMiddle, PurgeReasonStale, nil))
+	require.Equal(t, []uint64{102, 100}, backlogSlots(t, q), "head is re-seated to the first survivor, order preserved")
+	require.Equal(t, 2, q.Len())
+}
+
+// Purging everything from a populated queue must drain it to nil, not just to an empty-looking state.
+func TestPriorityQueue_Purge_DrainsPopulatedToEmpty(t *testing.T) {
+	t.Parallel()
+
+	q := New(log.TestLogger(t), 8).(*priorityQueue)
+	decodeAndPush(t, q, mockConsensusMessage{Height: 100, Type: specqbft.PrepareMsgType}, mockState)
+	decodeAndPush(t, q, mockConsensusMessage{Height: 101, Type: specqbft.PrepareMsgType}, mockState)
+	decodeAndPush(t, q, mockConsensusMessage{Height: 102, Type: specqbft.PrepareMsgType}, mockState)
+
+	require.Equal(t, 3, q.Purge(FilterAny, PurgeReasonStale, nil))
+	require.Nil(t, q.head, "the backlog list is emptied to nil")
+	require.Equal(t, 0, q.Len())
+	require.True(t, q.Empty())
 }
 
 func TestMetricsQueueObserver_RecordDrop_FallbackForUnregisteredReason(t *testing.T) {
@@ -695,4 +805,16 @@ func decodeAndPush(t require.TestingT, queue Queue, msg mockMessage, state *Stat
 	require.NoError(t, err)
 	queue.Push(decoded)
 	return decoded
+}
+
+// backlogSlots returns the slots of the messages currently in the backlog list, head first. Purge reads
+// the inbox in first, so after a Purge the whole queue is in the backlog and this reflects it in order.
+func backlogSlots(t require.TestingT, q *priorityQueue) []uint64 {
+	var out []uint64
+	for it := q.head; it != nil; it = it.next {
+		slot, err := it.message.Slot()
+		require.NoError(t, err)
+		out = append(out, uint64(slot))
+	}
+	return out
 }

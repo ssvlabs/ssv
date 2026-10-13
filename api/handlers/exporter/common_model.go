@@ -9,7 +9,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/api"
-	"github.com/ssvlabs/ssv/exporter"
+	"github.com/ssvlabs/ssv/exporter/traces"
 )
 
 // Decided represents a decided message within a duty trace.
@@ -73,7 +73,7 @@ type Message struct {
 	ReceivedTime time.Time `json:"time" format:"date-time"`
 }
 
-func toDecideds(d []*exporter.DecidedTrace) (out []Decided) {
+func toDecideds(d []*traces.DecidedTrace) (out []Decided) {
 	for _, dt := range d {
 		out = append(out, Decided{
 			Round:        dt.Round,
@@ -85,7 +85,7 @@ func toDecideds(d []*exporter.DecidedTrace) (out []Decided) {
 	return
 }
 
-func toRounds(r []*exporter.RoundTrace) (out []Round) {
+func toRounds(r []*traces.RoundTrace) (out []Round) {
 	for _, rt := range r {
 		out = append(out, Round{
 			Proposal:     toProposalTrace(rt.ProposalTrace),
@@ -97,7 +97,7 @@ func toRounds(r []*exporter.RoundTrace) (out []Round) {
 	return
 }
 
-func toProposalTrace(rt *exporter.ProposalTrace) *ProposalTrace {
+func toProposalTrace(rt *traces.ProposalTrace) *ProposalTrace {
 	if rt == nil {
 		return nil
 	}
@@ -120,7 +120,7 @@ func toProposalTrace(rt *exporter.ProposalTrace) *ProposalTrace {
 	}
 }
 
-func toUIMessageTrace(m []*exporter.QBFTTrace) (out []Message) {
+func toUIMessageTrace(m []*traces.QBFTTrace) (out []Message) {
 	for _, mt := range m {
 		out = append(out, Message{
 			Round:        mt.Round,
@@ -132,7 +132,7 @@ func toUIMessageTrace(m []*exporter.QBFTTrace) (out []Message) {
 	return
 }
 
-func toUIRoundChangeTrace(m []*exporter.RoundChangeTrace) (out []RoundChange) {
+func toUIRoundChangeTrace(m []*traces.RoundChangeTrace) (out []RoundChange) {
 	for _, mt := range m {
 		out = append(out, RoundChange{
 			Message: Message{
@@ -152,7 +152,7 @@ func toUIRoundChangeTrace(m []*exporter.RoundChangeTrace) (out []RoundChange) {
 func toTime(t uint64) time.Time { return time.UnixMilli(int64(t)) }
 
 // toMessageTrace converts PartialSigTrace to API message trace model
-func toMessageTrace(m []*exporter.PartialSigTrace) (out []Message) {
+func toMessageTrace(m []*traces.PartialSigTrace) (out []Message) {
 	for _, mt := range m {
 		out = append(out, Message{
 			BeaconRoot:   mt.BeaconRoot,
@@ -180,6 +180,16 @@ func toBeaconRoles(rs []api.Role) []spectypes.BeaconRole {
 	out := make([]spectypes.BeaconRole, 0, len(rs))
 	for _, r := range rs {
 		out = append(out, spectypes.BeaconRole(r))
+	}
+	return out
+}
+
+// toRunnerRoles converts an API RunnerRoleSlice into a slice of runner roles.
+// It is used by HTTP adapters when constructing core query models.
+func toRunnerRoles(rs api.RunnerRoleSlice) []spectypes.RunnerRole {
+	out := make([]spectypes.RunnerRole, 0, len(rs))
+	for _, r := range rs {
+		out = append(out, spectypes.RunnerRole(r))
 	}
 	return out
 }

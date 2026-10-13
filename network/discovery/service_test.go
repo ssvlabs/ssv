@@ -53,6 +53,72 @@ func TestDiscV5Service_Close(t *testing.T) {
 
 	err := dvs.Close()
 	assert.NoError(t, err)
+
+	// A repeat close would panic re-closing sharedConn.Unhandled; Close guards
+	// against that. The production caller closes once, but tests reach it directly.
+	assert.NotPanics(t, func() {
+		assert.NoError(t, dvs.Close())
+	})
+}
+
+// producingListener stands in for the post-fork discv5 listener in a close-order
+// test: it forwards packets into unhandled until Close is called, and Close
+// blocks until that has stopped — the same guarantee go-ethereum's UDPv5.Close
+// gives (it joins its goroutines before returning). Only Close is exercised.
+type producingListener struct {
+	Listener
+	unhandled chan<- discover.ReadPacket
+	stop      chan struct{}
+	done      chan struct{}
+}
+
+func newProducingListener(unhandled chan<- discover.ReadPacket) *producingListener {
+	p := &producingListener{
+		unhandled: unhandled,
+		stop:      make(chan struct{}),
+		done:      make(chan struct{}),
+	}
+	go func() {
+		defer close(p.done)
+		for {
+			select {
+			case <-p.stop:
+				return
+			case p.unhandled <- discover.ReadPacket{Data: []byte{0}}:
+			}
+		}
+	}()
+	return p
+}
+
+func (p *producingListener) Close() {
+	close(p.stop)
+	<-p.done
+}
+
+// TestDiscV5Service_CloseStopsProducerBeforeClosingUnhandled pins the shutdown
+// order: close() must stop the listeners (the producers into Unhandled) before
+// closing Unhandled. If it ever reverts to closing Unhandled first, the still-live
+// producer panics with "send on closed channel" — which the idempotency test
+// above cannot catch, having no live producer.
+func TestDiscV5Service_CloseStopsProducerBeforeClosingUnhandled(t *testing.T) {
+	unhandled := make(chan discover.ReadPacket, unhandledChanSize)
+	sharedConn := NewSharedUDPConn(t.Context(), zap.NewNop(), nil, unhandled)
+	producer := newProducingListener(unhandled)
+
+	dvs := &DiscV5Service{
+		dv5Listener: producer,
+		sharedConn:  sharedConn,
+		cancel:      func() {},
+	}
+
+	// Let the producer get going so a wrong-order close would very likely catch
+	// it mid-send.
+	time.Sleep(20 * time.Millisecond)
+
+	assert.NotPanics(t, func() {
+		assert.NoError(t, dvs.Close())
+	})
 }
 
 func TestDiscV5Service_RegisterSubnets(t *testing.T) {
@@ -141,7 +207,7 @@ func checkLocalNodeDomainTypeAlignment(t *testing.T, localNode *enode.LocalNode,
 	}
 	err = localNode.Node().Record().Load(&nextDomainEntry)
 	require.NoError(t, err)
-	require.Equal(t, netConfig.DomainType, nextDomainEntry.DomainType)
+	require.Equal(t, netConfig.NextDomainType, nextDomainEntry.DomainType)
 }
 
 func TestDiscV5Service_PublishENR(t *testing.T) {
@@ -149,7 +215,7 @@ func TestDiscV5Service_PublishENR(t *testing.T) {
 	defer cancel()
 
 	opts := testingDiscoveryOptions(t, testNetConfig.SSV)
-	dvs, err := newDiscV5Service(ctx, testLogger, opts)
+	dvs, err := NewDiscV5Service(ctx, testLogger, opts)
 	require.NoError(t, err)
 
 	// Replace listener
@@ -176,7 +242,7 @@ func TestDiscV5Service_Bootstrap(t *testing.T) {
 
 	opts := testingDiscoveryOptions(t, testNetConfig.SSV)
 
-	dvs, err := newDiscV5Service(t.Context(), testLogger, opts)
+	dvs, err := NewDiscV5Service(t.Context(), testLogger, opts)
 	require.NoError(t, err)
 
 	// Replace listener
@@ -272,13 +338,18 @@ func TestDiscV5Service_checkPeer(t *testing.T) {
 	err = dvs.checkPeer(context.TODO(), ToPeerEvent(NodeWithCustomDomains(t, testNetConfig.DomainType, spectypes.DomainType{})))
 	require.NoError(t, err)
 
-	// Matching next domain
+	// Our next domain in the peer's main key (post-fork Anchor shape) is accepted
+	err = dvs.checkPeer(context.TODO(), ToPeerEvent(NodeWithCustomDomains(t, testNetConfig.NextDomainType, spectypes.DomainType{})))
+	require.NoError(t, err)
+
+	// The peer's next-domain key is ignored: a zero main domain is rejected even when
+	// the peer's next key matches our domain
 	err = dvs.checkPeer(context.TODO(), ToPeerEvent(NodeWithCustomDomains(t, spectypes.DomainType{}, testNetConfig.DomainType)))
-	require.ErrorContains(t, err, "domain type 00000000 doesn't match 00000302")
+	require.ErrorContains(t, err, "domain type 00000000 matches neither 00000302 nor 00000303")
 
 	// Mismatching domains
 	err = dvs.checkPeer(context.TODO(), ToPeerEvent(NodeWithCustomDomains(t, spectypes.DomainType{}, spectypes.DomainType{})))
-	require.ErrorContains(t, err, "domain type 00000000 doesn't match 00000302")
+	require.ErrorContains(t, err, "domain type 00000000 matches neither 00000302 nor 00000303")
 
 	// No subnets
 	err = dvs.checkPeer(context.TODO(), ToPeerEvent(NodeWithoutSubnets(t)))
@@ -415,7 +486,7 @@ func TestServiceAddressConfiguration(t *testing.T) {
 			opts.HostAddress = tc.hostAddress
 			opts.HostDNS = tc.hostDNS
 
-			service, err := NewService(ctx, zap.NewNop(), *opts)
+			service, err := NewDiscV5Service(ctx, zap.NewNop(), opts)
 			if tc.expectError {
 				require.Error(t, err)
 
@@ -429,12 +500,8 @@ func TestServiceAddressConfiguration(t *testing.T) {
 				}
 			})
 
-			// verify we got the expected service type
-			dv5Service, ok := service.(*DiscV5Service)
-			require.True(t, ok)
-
 			// check that the node has the expected IP configuration
-			localNode := dv5Service.Self()
+			localNode := service.Self()
 			ip := localNode.Node().IP()
 
 			if tc.expectedResult != "" {

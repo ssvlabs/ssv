@@ -92,7 +92,7 @@ func (v *Validator) StartQueueConsumer(
 			var ok bool
 			q, ok = v.Queues[msgID.GetRoleType()]
 			if !ok {
-				return fmt.Errorf("queue not found for role %s", msgID.GetRoleType().String())
+				return fmt.Errorf("queue not found for role %s", types.RunnerRoleToString(msgID.GetRoleType()))
 			}
 			return nil
 		}()
@@ -104,12 +104,7 @@ func (v *Validator) StartQueueConsumer(
 		defer v.logger.Debug("📪 queue consumer is closed")
 
 		// msgStates keeps track of in-flight processing state (retry count + span context) per message.
-		// Since this map grows over time, we need to clean it up automatically. There is no specific TTL value
-		// to use for its entries - it just needs to be large enough to prevent unnecessary (but non-harmful)
-		// retries from happening.
-		msgStates := ttlcache.New(
-			ttlcache.WithTTL[messageKey, *messageProcessingState](10 * time.Minute),
-		)
+		msgStates := newMessageStates(messageStateTTL)
 		go msgStates.Start()
 		defer msgStates.Stop()
 
@@ -118,6 +113,13 @@ func (v *Validator) StartQueueConsumer(
 		rState := queue.State{
 			Quorum: v.Operator.GetQuorum(), // never changes for duty runner
 		}
+
+		// floor is the slot of the duty the runner is currently serving; anything queued below it is stale and
+		// must not reach the runner. It is synced to the runner's own current-duty slot right after each
+		// duty-start is handled — the runner, not the popped event, is authoritative on which duty it accepted
+		// (it may accept a lower slot, or reject the start) — and is written and read only here, in this single
+		// consumer goroutine.
+		var floor phase0.Slot
 
 		for ctx.Err() == nil {
 			r := v.DutyRunners.DutyRunnerForMsgID(msgID)
@@ -131,34 +133,14 @@ func (v *Validator) StartQueueConsumer(
 			rState.Slot = phase0.Slot(r.GetLastHeight())
 			rState.Round = r.GetLastRound()
 
-			filter := queue.FilterAny
-			if !r.HasRunningDuty() {
-				// If no duty is running, pop only ExecuteDuty messages.
-				filter = func(m *queue.SSVMessage) bool {
-					e, ok := m.Body.(*types.EventMsg)
-					if !ok || e == nil {
-						return false
-					}
-					return e.Type == types.ExecuteDuty
-				}
-			} else if rState.HasRunningInstance && !r.HasAcceptedProposalForCurrentRound() {
-				// If no proposal was accepted for the current round, skip prepare & commit messages
-				// for the current height and round.
-				filter = func(m *queue.SSVMessage) bool {
-					qbftMsg, ok := m.Body.(*specqbft.Message)
-					if !ok || qbftMsg == nil {
-						return true
-					}
+			idle := !r.HasRunningDuty()
+			// A runner serving several slots at once is outside the consumer's single-duty notions: the idle
+			// hold below (one slot's duty concluding says nothing about the others'), and the stale floor,
+			// which has no current slot to key on and so stays at zero for it.
+			_, multiSlot := r.(runner.MultiSlotRunner)
 
-					if qbftMsg.Height != specqbft.Height(rState.Slot) || qbftMsg.Round != rState.Round {
-						return true
-					}
-					return qbftMsg.MsgType != specqbft.PrepareMsgType && qbftMsg.MsgType != specqbft.CommitMsgType
-				}
-			}
-
-			// Pop the highest priority message for the current state.
-			msg := q.Pop(ctx, queue.NewMessagePrioritizer(&rState), filter)
+			// Pop the highest priority message the runner can use in its current state.
+			msg := q.Pop(ctx, queue.NewMessagePrioritizer(&rState), popFilter(r, idle, multiSlot, &rState))
 			if ctx.Err() != nil {
 				// Optimization: terminate fast if we can.
 				return nil
@@ -166,6 +148,19 @@ func (v *Validator) StartQueueConsumer(
 			if msg == nil {
 				v.logger.Error("❗ got nil message from queue, but context is not done!")
 				return nil
+			}
+
+			// A message can still sit below the floor when it reaches the consumer — a straggler re-pushed by a
+			// retry goroutine, one that arrived late, or the tail of a duty the runner has since moved past (a
+			// mid-duty re-seat skips the bulk purge). Handing any of them to the runner would draw the exact
+			// "invalid partial sig slot" rejection the floor prevents (issue #3037), so drop it here. slotBelow
+			// spares duty-starts and matches nothing at floor 0.
+			if slotBelow(floor)(msg) {
+				endStaleMessageState(msgStates, v.logger, msg)
+				q.RecordPurge(queue.PurgeReasonStale)
+				v.logger.Debug("dropped a stale message that reached the consumer below the slot floor",
+					fields.RunnerRole(msgID.GetRoleType()), fields.Slot(floor))
+				continue
 			}
 
 			msgLogger, err := v.logWithMessageFields(v.logger, msg)
@@ -285,6 +280,28 @@ func (v *Validator) StartQueueConsumer(
 				msgState.span.End()
 				msgStates.Delete(msgKey)
 			}
+
+			// A duty-start may have moved the runner onto a new duty. Sync the floor to the slot the runner
+			// actually accepted — the runner is authoritative here, not the popped event: while its instance
+			// height is still 0 it accepts a duty for any slot, so it can re-seat to a slot below the floor, and
+			// it can reject the start outright; either way the popped slot can't be trusted. Everything queued
+			// below the new floor is stale (issue #3037). If the runner had been idle, bulk-purge that tail up
+			// front (slotBelow spares duty-starts, so none is skipped), closing out each purged message's
+			// in-flight state; mid-duty the pop-guard above drains it one at a time, sparing the busy hot path.
+			if isExecuteDuty(msg) && !multiSlot {
+				if dutySlot, ok := r.CurrentDutySlot(); ok {
+					floor = dutySlot
+					if idle {
+						dropped := q.Purge(slotBelow(floor), queue.PurgeReasonStale, func(removed *queue.SSVMessage) {
+							endStaleMessageState(msgStates, v.logger, removed)
+						})
+						if dropped > 0 {
+							v.logger.Debug("dropped stale messages queued for slots before the starting duty",
+								fields.RunnerRole(msgID.GetRoleType()), fields.Slot(floor), fields.Count(dropped))
+						}
+					}
+				}
+			}
 		}
 
 		return nil
@@ -340,4 +357,82 @@ func (v *Validator) logWithMessageFields(logger *zap.Logger, msg *queue.SSVMessa
 	}
 
 	return logger, nil
+}
+
+// isExecuteDuty reports whether msg is a duty-start event.
+func isExecuteDuty(msg *queue.SSVMessage) bool {
+	event, ok := msg.Body.(*types.EventMsg)
+	return ok && event != nil && event.Type == types.ExecuteDuty
+}
+
+// slotBelow matches messages stranded below floor — the slot of the duty the runner is currently serving.
+// The consumer keeps floor in sync with the runner, so a message below it targets a slot the runner has
+// already moved past and has no live duty left to serve it.
+//
+// Duty-start events are the exception and are never matched: dropping one would silently skip a duty.
+// Duties are enqueued from racing per-duty goroutines (scheduler.executeDuties), so a higher-slot
+// duty-start can be popped while a lower-slot one still waits in the queue — and that one must survive.
+func slotBelow(floor phase0.Slot) queue.Filter {
+	return func(m *queue.SSVMessage) bool {
+		if isExecuteDuty(m) {
+			return false
+		}
+		slot, err := m.Slot()
+		return err == nil && slot < floor
+	}
+}
+
+// popFilter selects what the consumer may pop for the runner in its current state. A runner that serves
+// several slots at once (runner.MultiSlotRunner) takes anything: the consumer's single-duty notions do not
+// hold for it — it reports no running duty the moment its last started slot concludes while it still serves
+// that slot and stashes partials for the ones it has not started, so holding its partials would only starve
+// it until the next duty-start, and were it ever to run a QBFT instance, one slot's round would say nothing
+// about the others'. For every other runner: idle, only duty-starts (and any post-consensus packets a finished
+// duty still awaits, see noRunningDutyFilter); an instance running but no proposal accepted for its round yet,
+// that round's prepares and commits stay queued — they cannot be processed before the proposal; otherwise
+// anything goes.
+func popFilter(r runner.Runner, idle, multiSlot bool, rState *queue.State) queue.Filter {
+	switch {
+	case multiSlot:
+		return queue.FilterAny
+	case idle:
+		return noRunningDutyFilter(r)
+	case rState.HasRunningInstance && !r.HasAcceptedProposalForCurrentRound():
+		return awaitingProposalFilter(specqbft.Height(rState.Slot), rState.Round)
+	default:
+		return queue.FilterAny
+	}
+}
+
+// awaitingProposalFilter holds back the prepares and commits of the given height and round until a proposal
+// is accepted for it; everything else passes.
+func awaitingProposalFilter(height specqbft.Height, round specqbft.Round) queue.Filter {
+	return func(m *queue.SSVMessage) bool {
+		qbftMsg, ok := m.Body.(*specqbft.Message)
+		if !ok || qbftMsg == nil || qbftMsg.Height != height || qbftMsg.Round != round {
+			return true
+		}
+		return qbftMsg.MsgType != specqbft.PrepareMsgType && qbftMsg.MsgType != specqbft.CommitMsgType
+	}
+}
+
+// noRunningDutyFilter selects what the consumer pops for a runner with no running duty: ExecuteDuty events
+// and, for a finished duty that still expects post-consensus packets (the Gloas proposer's §6 envelope
+// root), that slot's post-consensus packets. Everything else waits for the next duty to start.
+func noRunningDutyFilter(r runner.Runner) queue.Filter {
+	var awaitingSlot phase0.Slot
+	awaiting := false
+	if awaiter, ok := r.(runner.PostConsensusAwaiter); ok {
+		awaitingSlot, awaiting = awaiter.AwaitingPostConsensus()
+	}
+	return func(m *queue.SSVMessage) bool {
+		switch body := m.Body.(type) {
+		case *types.EventMsg:
+			return body != nil && body.Type == types.ExecuteDuty
+		case *spectypes.PartialSignatureMessages:
+			return awaiting && body != nil && body.Type == spectypes.PostConsensusPartialSig && body.Slot == awaitingSlot
+		default:
+			return false
+		}
+	}
 }

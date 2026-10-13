@@ -6,6 +6,7 @@ import (
 	"maps"
 	"slices"
 	"sync"
+	"sync/atomic"
 
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -13,6 +14,7 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
+	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
@@ -56,7 +58,44 @@ type Committee struct {
 	ID        spectypes.CommitteeID
 	Operators []spectypes.OperatorID
 	Shares    []*types.SSVShare
-	Indices   []phase0.ValidatorIndex
+
+	// Indices holds one entry per share in Shares, positionally aligned with it — not one
+	// entry per *known* validator index. buildCommittee appends share.ValidatorIndex
+	// unconditionally, so a share added by a contract event contributes a literal 0 until
+	// beacon metadata sync populates its real index. Consumers must not assume every entry
+	// is a live index, and must not filter the zeros out: the cardinality is relied upon by
+	// the committee duty limit (min(slotsPerEpoch, 2*len)) and by the len()==0 check in
+	// message validation, both of which would tighten against legitimate traffic if it shrank.
+	Indices []phase0.ValidatorIndex
+
+	// booleCommitteeSubnet is a cached value for committee subnet (post-Boole-fork) so we don't recompute it every time.
+	booleCommitteeSubnet atomic.Pointer[uint64]
+	// alanCommitteeSubnet is a cached value for committee subnet (Alan fork) so we don't recompute it every time.
+	alanCommitteeSubnet atomic.Pointer[uint64]
+}
+
+// BooleCommitteeSubnet safely retrieves or computes the committee subnet for the Boole fork.
+// Note: for a committee with no Operators this returns the UnknownSubnetId sentinel,
+// whereas AlanCommitteeSubnet derives from ID and always returns a real subnet.
+func (c *Committee) BooleCommitteeSubnet() uint64 {
+	if ptr := c.booleCommitteeSubnet.Load(); ptr != nil {
+		return *ptr
+	}
+
+	subnet := commons.BooleCommitteeSubnet(c.Operators)
+	c.booleCommitteeSubnet.Store(&subnet)
+	return subnet
+}
+
+// AlanCommitteeSubnet safely retrieves or computes the committee subnet for the Alan fork.
+func (c *Committee) AlanCommitteeSubnet() uint64 {
+	if ptr := c.alanCommitteeSubnet.Load(); ptr != nil {
+		return *ptr
+	}
+
+	subnet := commons.AlanCommitteeSubnet(c.ID)
+	c.alanCommitteeSubnet.Store(&subnet)
+	return subnet
 }
 
 // IsParticipating returns whether any validator in the committee should participate in the given epoch.
@@ -226,22 +265,35 @@ func (c *validatorStore) OperatorCommittees(id spectypes.OperatorID) []*Committe
 }
 
 func (c *validatorStore) WithOperatorID(operatorID func() spectypes.OperatorID) SelfValidatorStore {
+	c.mu.Lock()
 	c.operatorID = operatorID
+	c.mu.Unlock()
 	return c
 }
 
+// operatorIDFunc returns the configured operator-ID accessor under the store lock, so the Self*
+// readers can snapshot it without racing a concurrent WithOperatorID. The func is invoked outside
+// the lock, since OperatorValidators/OperatorCommittees take the lock themselves.
+func (c *validatorStore) operatorIDFunc() func() spectypes.OperatorID {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.operatorID
+}
+
 func (c *validatorStore) SelfValidators() []*types.SSVShare {
-	if c.operatorID == nil {
+	operatorID := c.operatorIDFunc()
+	if operatorID == nil {
 		return nil
 	}
-	return c.OperatorValidators(c.operatorID())
+	return c.OperatorValidators(operatorID())
 }
 
 func (c *validatorStore) SelfParticipatingValidators(epoch phase0.Epoch) []*types.SSVShare {
-	if c.operatorID == nil {
+	operatorID := c.operatorIDFunc()
+	if operatorID == nil {
 		return nil
 	}
-	shares := c.OperatorValidators(c.operatorID())
+	shares := c.OperatorValidators(operatorID())
 	var participating []*types.SSVShare
 	for _, share := range shares {
 		if share.IsParticipating(c.beaconCfg, epoch) {
@@ -253,17 +305,19 @@ func (c *validatorStore) SelfParticipatingValidators(epoch phase0.Epoch) []*type
 }
 
 func (c *validatorStore) SelfCommittees() []*Committee {
-	if c.operatorID == nil {
+	operatorID := c.operatorIDFunc()
+	if operatorID == nil {
 		return nil
 	}
-	return c.OperatorCommittees(c.operatorID())
+	return c.OperatorCommittees(operatorID())
 }
 
 func (c *validatorStore) SelfParticipatingCommittees(epoch phase0.Epoch) []*Committee {
-	if c.operatorID == nil {
+	operatorID := c.operatorIDFunc()
+	if operatorID == nil {
 		return nil
 	}
-	committees := c.OperatorCommittees(c.operatorID())
+	committees := c.OperatorCommittees(operatorID())
 	var participating []*Committee
 	for _, committee := range committees {
 		if committee.IsParticipating(c.beaconCfg, epoch) {

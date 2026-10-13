@@ -21,11 +21,8 @@ func (gc *GoClient) ValidatorLiveness(ctx context.Context, epoch phase0.Epoch, v
 	if err != nil {
 		return nil, errMultiClient(fmt.Errorf("fetch validator liveness: %w", err), "ValidatorLiveness")
 	}
-	if resp == nil {
-		return nil, errMultiClient(fmt.Errorf("validator liveness response is nil"), "ValidatorLiveness")
-	}
-	if resp.Data == nil {
-		return nil, errMultiClient(fmt.Errorf("validator liveness response data is nil"), "ValidatorLiveness")
+	if err := checkSliceResponse(resp, "validator liveness"); err != nil {
+		return nil, errMultiClient(err, "ValidatorLiveness")
 	}
 
 	return resp.Data, nil

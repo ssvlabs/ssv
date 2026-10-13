@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"math/rand"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -34,6 +35,7 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
+	"github.com/ssvlabs/ssv/protocol/v2/types/ssvtestingutils"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/registry/storage/mocks"
 	kv "github.com/ssvlabs/ssv/storage/badger"
@@ -168,11 +170,11 @@ func baseTest(t *testing.T, ctx context.Context, logger *zap.Logger, peers []*P,
 				defer wg.Done()
 				for _, p := range peers {
 					// wait for messages
-					for ctxReadMessages.Err() == nil && p.getCount(commons.GetTopicFullName(committeeTopic(cid))) < minMsgCount {
+					for ctxReadMessages.Err() == nil && p.getCount(committeeTopic(cid)) < minMsgCount {
 						time.Sleep(time.Millisecond * 400)
 					}
 					require.NoError(t, ctxReadMessages.Err())
-					c := p.getCount(commons.GetTopicFullName(committeeTopic(cid)))
+					c := p.getCount(committeeTopic(cid))
 					require.GreaterOrEqual(t, c, minMsgCount)
 					// require.LessOrEqual(t, c, maxMsgCount)
 				}
@@ -190,7 +192,7 @@ func baseTest(t *testing.T, ctx context.Context, logger *zap.Logger, peers []*P,
 				defer wg.Done()
 
 				topic := committeeTopic(cid)
-				topicFullName := commons.GetTopicFullName(topic)
+				topicFullName := topic
 
 				err := p.tm.Unsubscribe(topic, false)
 				require.NoError(t, err)
@@ -231,7 +233,7 @@ func banningTest(t *testing.T, logger *zap.Logger, peers []*P, cids []string, sc
 	t.Log("checking initial scores")
 	for _, pk := range cids {
 		for _, p := range peers {
-			peerList, err := p.tm.Peers(pk)
+			peerList, err := p.tm.Peers(committeeTopic(pk))
 			require.NoError(t, err)
 
 			for _, pid := range peerList {
@@ -276,7 +278,7 @@ func banningTest(t *testing.T, logger *zap.Logger, peers []*P, cids []string, sc
 	t.Log("checking final scores")
 	for _, pk := range cids {
 		for _, p := range peers {
-			peerList, err := p.tm.Peers(pk)
+			peerList, err := p.tm.Peers(committeeTopic(pk))
 			require.NoError(t, err)
 
 			for _, pid := range peerList {
@@ -317,7 +319,7 @@ func committeeTopic(cidHex string) string {
 		return "invalid"
 	}
 
-	return commons.CommitteeTopicID(spectypes.CommitteeID(cid))[0]
+	return commons.GetTopicFullName(commons.CommitteeTopicID(spectypes.CommitteeID(cid))[0])
 }
 
 type P struct {
@@ -356,32 +358,49 @@ func (p *P) saveMsg(t string, msg *pubsub.Message) {
 
 // TODO: use p2p/testing
 func newPeers(ctx context.Context, logger *zap.Logger, t *testing.T, n int, msgValidator validation.MessageValidator, msgID bool, scoreInspector pubsub.ExtendedPeerScoreInspectFn) []*P {
+	// Per-call random mDNS tag so concurrent test processes running the same
+	// test don't cross-discover each other's peers.
+	mdnsTag := fmt.Sprintf("ssv.test.%016x", rand.Uint64()) //nolint: gosec // G404 is acceptable here
 	peers := make([]*P, n)
 	for i := 0; i < n; i++ {
-		peers[i] = newPeer(ctx, logger, t, msgValidator, msgID, scoreInspector)
+		peers[i] = newPeer(t, ctx, logger, mdnsTag, msgValidator, msgID, scoreInspector)
 	}
 	t.Logf("%d peers were created", n)
 	th := uint64(n/2) + uint64(n/4)
-	for ctx.Err() == nil {
-		done := 0
+	require.Eventually(t, func() bool {
 		for _, p := range peers {
-			if atomic.LoadUint64(&p.connsCount) >= th {
-				done++
+			if atomic.LoadUint64(&p.connsCount) < th {
+				return false
 			}
 		}
-		if done == len(peers) {
-			break
-		}
-	}
+		return true
+	}, 30*time.Second, 100*time.Millisecond, "peers never reached connection threshold %d", th)
 	t.Log("peers are connected")
 	return peers
 }
 
-func newPeer(ctx context.Context, logger *zap.Logger, t *testing.T, msgValidator validation.MessageValidator, msgID bool, scoreInspector pubsub.ExtendedPeerScoreInspectFn) *P {
+func newPeer(t *testing.T, ctx context.Context, logger *zap.Logger, mdnsTag string, msgValidator validation.MessageValidator, msgID bool, scoreInspector pubsub.ExtendedPeerScoreInspectFn) *P {
 	h, err := libp2p.New(libp2p.ListenAddrStrings("/ip4/0.0.0.0/tcp/0"))
 	require.NoError(t, err)
-	ds, err := discovery.NewLocalDiscovery(ctx, logger, h)
+	t.Cleanup(func() { _ = h.Close() })
+
+	ds, err := discovery.NewLocalDiscovery(ctx, logger, h, mdnsTag)
 	require.NoError(t, err)
+	t.Cleanup(func() {
+		// ds.Close → mdnsService.Close → zeroconf.Server.Shutdown blocks
+		// waiting to multicast an unregister, which on a broken mDNS
+		// environment doesn't return — and that's exactly the timeout
+		// case this cleanup is meant to keep diagnosable. Cap it so the
+		// real failure (e.g. the newPeers connection wait) surfaces
+		// cleanly instead of the test hitting -timeout.
+		done := make(chan struct{})
+		go func() { _ = ds.Close(); close(done) }()
+		select {
+		case <-done:
+		case <-time.After(2 * time.Second):
+			t.Log("ds.Close timed out; leaking mdns goroutines")
+		}
+	})
 
 	var p *P
 	var midHandler topics.MsgIDHandler
@@ -390,9 +409,10 @@ func newPeer(ctx context.Context, logger *zap.Logger, t *testing.T, msgValidator
 		go midHandler.Start()
 	}
 	cfg := &topics.PubSubConfig{
-		Host:         h,
-		TraceLog:     false,
-		MsgIDHandler: midHandler,
+		NetworkConfig: networkconfig.TestNetwork,
+		Host:          h,
+		TraceLog:      false,
+		MsgIDHandler:  midHandler,
 		MsgHandler: func(_ context.Context, topic string, msg *pubsub.Message) error {
 			p.saveMsg(topic, msg)
 			return nil
@@ -459,7 +479,7 @@ func dummyMsg(pkHex string, height int, malformed bool) (*spectypes.SignedSSVMes
 		return nil, err
 	}
 
-	id := spectypes.NewMsgID(networkconfig.TestNetwork.DomainType, pk, spectypes.RoleCommittee)
+	id := ssvtestingutils.NewMsgID(networkconfig.TestNetwork.DomainType, pk, spectypes.RoleCommittee)
 	signature, err := base64.StdEncoding.DecodeString("sVV0fsvqQlqliKv/ussGIatxpe8LDWhc9uoaM5WpjbiYvvxUr1eCpz0ja7UT1PGNDdmoGi6xbMC1g/ozhAt4uCdpy0Xdfqbv2hMf2iRL5ZPKOSmMifHbd8yg4PeeceyN")
 	if err != nil {
 		return nil, err
@@ -508,3 +528,5 @@ func (m *DummyMessageValidator) ValidatorForTopic(topic string) func(ctx context
 func (m *DummyMessageValidator) Validate(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
 	return pubsub.ValidationAccept
 }
+
+func (m *DummyMessageValidator) SetSelfPID(peer.ID) {}

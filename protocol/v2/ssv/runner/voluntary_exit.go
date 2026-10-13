@@ -9,17 +9,17 @@ import (
 	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	ssz "github.com/ferranbt/fastssz"
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
+
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -30,7 +30,7 @@ type VoluntaryExitRunner struct {
 	*BaseRunner
 
 	beacon         beacon.BeaconNode
-	network        specqbft.Network
+	network        protocolp2p.Network
 	signer         ekm.BeaconSigner
 	operatorSigner ssvtypes.OperatorSigner
 
@@ -74,7 +74,7 @@ func (r *VoluntaryExitRunner) StartNewDuty(ctx context.Context, logger *zap.Logg
 
 // ProcessPreConsensus Check for quorum of partial signatures over VoluntaryExit and,
 // if has quorum, constructs SignedVoluntaryExit and submits to BeaconNode
-func (r *VoluntaryExitRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
+func (r *VoluntaryExitRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) (err error) {
 	// Reuse the existing span instead of generating new one to keep tracing-data lightweight.
 	span := trace.SpanFromContext(ctx)
 
@@ -85,31 +85,30 @@ func (r *VoluntaryExitRunner) ProcessPreConsensus(ctx context.Context, logger *z
 	}
 
 	hasQuorum, roots, err := r.basePreConsensusMsgProcessing(ctx, logger, r, signedMsg)
-	if errors.Is(err, ErrNoDutyAssigned) || errors.Is(err, ErrRunningDutyFinished) {
-		// Since we are re-using the same runner for different duties, ErrRunningDutyFinished error
-		// also needs to be retried.
-		err = NewRetryableError(err)
-	}
 	if err != nil {
 		return fmt.Errorf("failed processing voluntary exit message: %w", err)
 	}
 
-	// quorum returns true only once (first time quorum achieved)
+	// hasQuorum is set only when a root just reached quorum.
 	if !hasQuorum {
 		return nil
 	}
 
+	// We have quorum and are committed to completing this duty here, so a failure below fails it, except a
+	// recoverable reconstruct failure (see reconstructQuorumSig).
+	defer func() {
+		if err != nil && !isRecoverableReconstructError(err) {
+			r.markDutyFailed(err)
+		}
+	}()
+
 	// only 1 root, verified in basePreConsensusMsgProcessing
 	root := roots[0]
 	span.AddEvent("reconstructing beacon signature", trace.WithAttributes(observability.BeaconBlockRootAttribute(root)))
-	fullSig, err := r.State.ReconstructBeaconSig(r.State.PreConsensusContainer, root, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
+	specSig, err := r.reconstructQuorumSig(r.State.PreConsensusContainer, root, r.GetShare(), "pre-consensus")
 	if err != nil {
-		// If the reconstructed signature verification failed, fall back to verifying each partial signature
-		r.FallBackAndVerifyEachSignature(r.State.PreConsensusContainer, root, r.GetShare().Committee, r.GetShare().ValidatorIndex)
-		return fmt.Errorf("got pre-consensus quorum but it has invalid signatures: %w", err)
+		return err
 	}
-	specSig := phase0.BLSSignature{}
-	copy(specSig[:], fullSig)
 
 	// create SignedVoluntaryExit using VoluntaryExit created on r.executeDuty() and reconstructed signature
 	signedVoluntaryExit := &phase0.SignedVoluntaryExit{
@@ -130,7 +129,7 @@ func (r *VoluntaryExitRunner) ProcessPreConsensus(ctx context.Context, logger *z
 		zap.String("signature", hex.EncodeToString(specSig[:])),
 	)
 
-	r.markDutyFinished()
+	r.markDutySucceeded()
 	const dutyFinishedEvent = "✔️successfully finished duty processing"
 	logger.Info(dutyFinishedEvent)
 	span.AddEvent(dutyFinishedEvent)
@@ -146,7 +145,7 @@ func (r *VoluntaryExitRunner) ProcessPostConsensus(ctx context.Context, logger *
 	return spectypes.NewError(spectypes.ValidatorExitNoPostConsensusPhaseErrorCode, "no post consensus phase for voluntary exit")
 }
 
-func (r *VoluntaryExitRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
+func (r *VoluntaryExitRunner) expectedPreConsensusRootsAndDomain() ([]spectypes.HashRoot, phase0.DomainType, error) {
 	validatorDuty, err := r.currentValidatorDuty()
 	if err != nil {
 		return nil, spectypes.DomainError, fmt.Errorf("current validator duty: %w", err)
@@ -156,12 +155,12 @@ func (r *VoluntaryExitRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRo
 	if err != nil {
 		return nil, spectypes.DomainError, fmt.Errorf("could not calculate voluntary exit: %w", err)
 	}
-	return []ssz.HashRoot{vr}, spectypes.DomainVoluntaryExit, nil
+	return []spectypes.HashRoot{vr}, spectypes.DomainVoluntaryExit, nil
 }
 
-// expectedPostConsensusRootsAndDomain an INTERNAL function, returns the expected post-consensus roots to sign
-func (r *VoluntaryExitRunner) expectedPostConsensusRootsAndDomain(context.Context) ([]ssz.HashRoot, phase0.DomainType, error) {
-	return nil, [4]byte{}, errors.New("no post consensus roots for voluntary exit")
+// expectedPostConsensusRootsAndDomains an INTERNAL function, returns the expected post-consensus roots to sign
+func (r *VoluntaryExitRunner) expectedPostConsensusRootsAndDomains(context.Context) ([]PostConsensusRoot, error) {
+	return nil, errors.New("no post consensus roots for voluntary exit")
 }
 
 func (r *VoluntaryExitRunner) executeDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty) error {
@@ -190,7 +189,9 @@ func (r *VoluntaryExitRunner) executeDuty(ctx context.Context, logger *zap.Logge
 		spectypes.DomainVoluntaryExit,
 	)
 	if err != nil {
-		return fmt.Errorf("could not sign VoluntaryExit object: %w", err)
+		// EIP-7044 pins exits to the Capella domain, so a signer that disagrees on the fork
+		// rejects exits while other duties still sign (e.g. a remote Web3Signer with the wrong --network).
+		return fmt.Errorf("could not sign voluntary exit (if signing remotely, check the signer config, e.g. the Web3Signer --network): %w", err)
 	}
 
 	msgs := &spectypes.PartialSignatureMessages{
@@ -201,7 +202,7 @@ func (r *VoluntaryExitRunner) executeDuty(ctx context.Context, logger *zap.Logge
 
 	logger.Debug("signing and broadcasting voluntary exit partial sig", fields.Slot(duty.DutySlot()))
 
-	if err := r.signAndBroadcastPartialSigMsgs(ctx, r.network, r.operatorSigner, r.GetShare().ValidatorPubKey[:], msgs); err != nil {
+	if err := r.signAndBroadcastPartialSigMsgs(ctx, r.network, r.operatorSigner, r.GetShare().ValidatorPubKey, msgs); err != nil {
 		return fmt.Errorf("could not sign/broadcast voluntary exit partial sig: %w", err)
 	}
 
@@ -223,7 +224,7 @@ func (r *VoluntaryExitRunner) calculateVoluntaryExit(duty *spectypes.ValidatorDu
 	}, nil
 }
 
-func (r *VoluntaryExitRunner) GetNetwork() specqbft.Network {
+func (r *VoluntaryExitRunner) GetNetwork() protocolp2p.Network {
 	return r.network
 }
 

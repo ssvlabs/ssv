@@ -25,19 +25,17 @@ import (
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
 )
 
-// TODO: The routes are currently custom and adhere DESIGN.md.
-//
-//	However, web3signer and eth remote signer APIs use different ones (prefixed with /api/v1/):
-//	- https://consensys.github.io/web3signer/web3signer-eth2.html
-//	- https://github.com/ethereum/remote-signing-api
-//	We need to decide if we need to match them.
+// The routes are custom, per DESIGN.md, and differ from the web3signer
+// (https://consensys.github.io/web3signer/web3signer-eth2.html) and eth remote-signing
+// (https://github.com/ethereum/remote-signing-api) APIs, which prefix theirs with /api/v1/.
+// Deployed nodes and signers depend on these paths, so renaming them would be a breaking change.
 const (
-	PathValidators       = "/v1/validators"        // TODO: /api/v1/eth2/publicKeys ?
-	PathValidatorsSign   = "/v1/validators/sign/"  // TODO: /api/v1/eth2/sign/ ?
-	PathOperatorIdentity = "/v1/operator/identity" // TODO: /api/v1/ssv/identity ?
-	PathOperatorSign     = "/v1/operator/sign"     // TODO: /api/v1/ssv/sign ?
-	PathOperatorEncrypt  = "/v1/operator/encrypt"  // TODO: /api/v1/ssv/encrypt ?
-	PathOperatorDecrypt  = "/v1/operator/decrypt"  // TODO: /api/v1/ssv/decrypt ?
+	PathValidators       = "/v1/validators"
+	PathValidatorsSign   = "/v1/validators/sign/"
+	PathOperatorIdentity = "/v1/operator/identity"
+	PathOperatorSign     = "/v1/operator/sign"
+	PathOperatorEncrypt  = "/v1/operator/encrypt"
+	PathOperatorDecrypt  = "/v1/operator/decrypt"
 )
 
 const (
@@ -156,7 +154,7 @@ func (s *Server) handleListValidators(ctx *fasthttp.RequestCtx) {
 	recordRemoteSignerOperation(ctx, opRemoteSignerListKeys, err, time.Since(start))
 	logger = logger.With(zap.Duration("took", time.Since(start)))
 	if err != nil {
-		s.handleWeb3SignerErr(ctx, logger, resp, err)
+		s.handleWeb3SignerErr(ctx, logger, err)
 		return
 	}
 
@@ -192,11 +190,13 @@ func (s *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 		// So, there's no need to store the password. We can just generate a random password for each keystore.
 		keystorePassword, err := s.generateRandomPassword(16)
 		if err != nil {
-			logger.Warn("failed to generate random password", zap.Error(err))
+			// Internal (transient) failure, not a bad share -> 500 (see errMalformedShare). Log at
+			// error to match the node-fatal reply.
+			logger.Error("failed to generate random password", zap.Error(err))
 			s.writeJSONErr(
 				ctx,
 				logger,
-				fasthttp.StatusUnprocessableEntity,
+				fasthttp.StatusInternalServerError,
 				fmt.Errorf("failed to generate random password: %w", err),
 			)
 			return
@@ -208,11 +208,19 @@ func (s *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 			keystorePassword,
 		)
 		if err != nil {
-			logger.Warn("failed to get keystore from encrypted share", zap.Error(err))
+			// 422 only for a malformed share; anything else defaults to 500 (see errMalformedShare).
+			// Log level follows the reply: warn for the skippable 422, error for a node-fatal 500.
+			status := fasthttp.StatusInternalServerError
+			logAt := logger.Error
+			if errors.Is(err, errMalformedShare) {
+				status = fasthttp.StatusUnprocessableEntity
+				logAt = logger.Warn
+			}
+			logAt("failed to get keystore from encrypted share", zap.Error(err))
 			s.writeJSONErr(
 				ctx,
 				logger,
-				fasthttp.StatusUnprocessableEntity,
+				status,
 				fmt.Errorf("failed to get keystore from encrypted share index %d: %w", i, err),
 			)
 			return
@@ -227,7 +235,7 @@ func (s *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 	recordRemoteSignerOperation(ctx, opRemoteSignerImportKeystore, err, time.Since(start))
 	logger = logger.With(zap.Duration("took", time.Since(start)))
 	if err != nil {
-		s.handleWeb3SignerErr(ctx, logger, resp, err)
+		s.handleImportKeystoreErr(ctx, logger, err)
 		return
 	}
 
@@ -250,8 +258,16 @@ func (s *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 	s.writeJSON(ctx, logger, resp)
 }
 
-// keystoreJSONFromEncryptedShare doesn't pass errors through intentionally
-// to prevent exposing information related to private key.
+// errMalformedShare tags the keystoreJSONFromEncryptedShare failures caused by a bad share
+// (undecryptable, bad hex, invalid BLS key, or pubkey mismatch). handleAddValidator replies 422
+// for these — which the node skips as a malformed event — and 500 for everything else. Making 422
+// opt-in keeps the "silently skip" path explicit: an untagged internal failure crash-retries
+// instead of dropping a valid validator.
+var errMalformedShare = errors.New("malformed share")
+
+// keystoreJSONFromEncryptedShare withholds the cause of share-data failures (tagged
+// errMalformedShare) so a bad share can't leak private-key material. Failures after the share
+// validates are internal, carry no key bytes, and pass their cause through for diagnosis.
 func (s *Server) keystoreJSONFromEncryptedShare(
 	encryptedPrivKey hexutil.Bytes,
 	sharePubKey phase0.BLSPubKey,
@@ -259,26 +275,27 @@ func (s *Server) keystoreJSONFromEncryptedShare(
 ) (string, error) {
 	sharePrivKeyHex, err := s.operatorPrivKey.Decrypt(encryptedPrivKey)
 	if err != nil {
-		return "", fmt.Errorf("failed to decrypt share")
+		return "", fmt.Errorf("%w: decrypt share", errMalformedShare)
 	}
 
 	sharePrivKey, err := hex.DecodeString(strings.TrimPrefix(string(sharePrivKeyHex), "0x"))
 	if err != nil {
-		return "", fmt.Errorf("failed to decode share private key from hex for pubkey %s", sharePubKey.String())
+		return "", fmt.Errorf("%w: decode share private key from hex for pubkey %s", errMalformedShare, sharePubKey.String())
 	}
 
 	sharePrivBLS := &bls.SecretKey{}
 	if err = sharePrivBLS.Deserialize(sharePrivKey); err != nil {
-		return "", fmt.Errorf("failed to deserialize share private key")
+		return "", fmt.Errorf("%w: deserialize share private key", errMalformedShare)
 	}
 
 	if !bytes.Equal(sharePrivBLS.GetPublicKey().Serialize(), sharePubKey[:]) {
-		return "", errors.New("derived public key does not match expected public key")
+		return "", fmt.Errorf("%w: derived public key does not match expected public key", errMalformedShare)
 	}
 
+	// Past this point the share is valid; remaining failures are internal (untagged -> 500).
 	shareKeystore, err := keystore.GenerateShareKeystore(sharePrivBLS, sharePubKey, keystorePassword)
 	if err != nil {
-		return "", fmt.Errorf("failed to generate share keystore")
+		return "", fmt.Errorf("generate share keystore: %w", err)
 	}
 
 	keystoreJSON, err := json.Marshal(shareKeystore)
@@ -321,7 +338,7 @@ func (s *Server) handleRemoveValidator(ctx *fasthttp.RequestCtx) {
 	recordRemoteSignerOperation(ctx, opRemoteSignerDeleteKeystore, err, time.Since(start))
 	logger = logger.With(zap.Duration("took", time.Since(start)))
 	if err != nil {
-		s.handleWeb3SignerErr(ctx, logger, resp, err)
+		s.handleWeb3SignerErr(ctx, logger, err)
 		return
 	}
 
@@ -372,7 +389,7 @@ func (s *Server) handleSignValidator(ctx *fasthttp.RequestCtx) {
 	recordRemoteSignerOperation(ctx, opRemoteSignerValidatorSign, err, time.Since(start))
 	logger = logger.With(zap.Duration("took", time.Since(start)))
 	if err != nil {
-		s.handleWeb3SignerErr(ctx, logger, resp, err)
+		s.handleWeb3SignerErr(ctx, logger, err)
 		return
 	}
 
@@ -511,19 +528,44 @@ func (s *Server) handleOperatorDecrypt(ctx *fasthttp.RequestCtx) {
 	s.writeBytes(ctx, logger, decrypted)
 }
 
-func (s *Server) handleWeb3SignerErr(ctx *fasthttp.RequestCtx, logger *zap.Logger, resp any, err error) {
-	statusCode := fasthttp.StatusInternalServerError
-	if he := new(web3signer.HTTPResponseError); errors.As(err, &he) {
-		statusCode = he.Status
+// web3SignerErrStatus returns the HTTP status to surface for a failed Web3Signer request:
+// the upstream status when known, or 500 for transport failures (connection errors, timeouts).
+func web3SignerErrStatus(err error) int {
+	var he web3signer.HTTPResponseError
+	if errors.As(err, &he) {
+		return he.Status
 	}
+	return fasthttp.StatusInternalServerError
+}
 
+// handleWeb3SignerErr responds with the Web3Signer failure's status and an error body
+// describing the reason, so clients can log the actual cause instead of a bare status code.
+func (s *Server) handleWeb3SignerErr(ctx *fasthttp.RequestCtx, logger *zap.Logger, err error) {
+	statusCode := web3SignerErrStatus(err)
 	logger.Error("web3signer request failed",
 		zap.Error(err),
 		zap.Int("status_code", statusCode),
-		zap.Any("resp", resp),
 	)
-	ctx.SetStatusCode(statusCode)
-	s.writeJSON(ctx, logger, resp)
+	s.writeJSONErr(ctx, logger, statusCode, err)
+}
+
+// handleImportKeystoreErr handles a failed keystore import. Unlike handleWeb3SignerErr it never
+// relays the upstream error body: the import request carries the share keystore JSON and its
+// plaintext password, so a server that echoes the request back in an error could leak recoverable
+// key material to the node — the reason keystoreJSONFromEncryptedShare also withholds its errors.
+// The upstream status is still forwarded, except a 422, which is remapped to 502 so it can't be
+// read as ssv-signer's own share-decryption failure (see Client.AddValidators). The full error is
+// still logged locally.
+func (s *Server) handleImportKeystoreErr(ctx *fasthttp.RequestCtx, logger *zap.Logger, err error) {
+	statusCode := web3SignerErrStatus(err)
+	if statusCode == fasthttp.StatusUnprocessableEntity {
+		statusCode = fasthttp.StatusBadGateway
+	}
+	logger.Error("web3signer request failed",
+		zap.Error(err),
+		zap.Int("status_code", statusCode),
+	)
+	s.writeJSONErr(ctx, logger, statusCode, errors.New("keystore import failed"))
 }
 
 func (s *Server) writeString(ctx *fasthttp.RequestCtx, logger *zap.Logger, str string) {

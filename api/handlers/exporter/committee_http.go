@@ -10,7 +10,7 @@ import (
 
 // CommitteeTraces godoc
 // @Summary Retrieve committee duty traces
-// @Description Returns consensus and post-consensus traces for requested committees.
+// @Description Returns consensus and post-consensus traces for requested committees. Without a 'roles' filter, the response contains one trace per (slot, committeeID, role) - up to two rows per (slot, committeeID), distinguished by the 'role' field.
 // @Tags Exporter
 // @Accept json
 // @Produce json

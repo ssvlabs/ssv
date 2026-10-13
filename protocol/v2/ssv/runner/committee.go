@@ -15,24 +15,25 @@ import (
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	ssz "github.com/ferranbt/fastssz"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	"go.uber.org/zap"
+
 	specssv "github.com/ssvlabs/ssv-spec/ssv"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 )
 
 type CommitteeDutyGuard interface {
@@ -46,7 +47,7 @@ type CommitteeRunner struct {
 	// attestingValidators is a list of validator this committee-runner will be processing attestation duties for.
 	attestingValidators []phase0.BLSPubKey
 
-	network             specqbft.Network
+	network             protocolp2p.Network
 	beacon              beacon.BeaconNode
 	signer              ekm.BeaconSigner
 	operatorSigner      ssvtypes.OperatorSigner
@@ -148,7 +149,7 @@ func (r *CommitteeRunner) MarshalJSON() ([]byte, error) {
 	type CommitteeRunnerAlias struct {
 		BaseRunner     *BaseRunner
 		beacon         beacon.BeaconNode
-		network        specqbft.Network
+		network        protocolp2p.Network
 		signer         ekm.BeaconSigner
 		operatorSigner ssvtypes.OperatorSigner
 		valCheck       ssv.ValueChecker
@@ -173,7 +174,7 @@ func (r *CommitteeRunner) UnmarshalJSON(data []byte) error {
 	type CommitteeRunnerAlias struct {
 		BaseRunner     *BaseRunner
 		beacon         beacon.BeaconNode
-		network        specqbft.Network
+		network        protocolp2p.Network
 		signer         ekm.BeaconSigner
 		operatorSigner ssvtypes.OperatorSigner
 		valCheck       ssv.ValueChecker
@@ -203,7 +204,7 @@ func (r *CommitteeRunner) GetBeaconNode() beacon.BeaconNode {
 	return r.beacon
 }
 
-func (r *CommitteeRunner) GetNetwork() specqbft.Network {
+func (r *CommitteeRunner) GetNetwork() protocolp2p.Network {
 	return r.network
 }
 
@@ -215,12 +216,24 @@ func (r *CommitteeRunner) ProcessPreConsensus(ctx context.Context, logger *zap.L
 	return errors.New("no pre consensus phase for committee runner")
 }
 
-func (r *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Logger, msg *spectypes.SignedSSVMessage) error {
+func (r *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Logger, msg *spectypes.SignedSSVMessage) (err error) {
 	// Reuse the existing span instead of generating new one to keep tracing-data lightweight.
 	span := trace.SpanFromContext(ctx)
 
+	// Fetch the running duty once: it fixes both the decode prototype's fork and, post-decide, the
+	// committee slot. A consensus message with no running duty can't decide, so the fetch error only
+	// matters once we know we decided.
+	committeeDuty, dutyErr := r.currentCommitteeDuty()
+
+	// The decided value is a GloasBeaconVote (which carries the attestation index) on Gloas slots, a
+	// plain BeaconVote before; decode into the matching prototype.
+	decidedPrototype := spectypes.Encoder(&spectypes.BeaconVote{})
+	if dutyErr == nil && r.NetworkConfig.IsGloasAtSlot(committeeDuty.DutySlot()) {
+		decidedPrototype = &gloas.GloasBeaconVote{}
+	}
+
 	span.AddEvent("processing QBFT consensus msg")
-	decided, decidedValue, err := r.baseConsensusMsgProcessing(ctx, logger, r.ValCheck.CheckValue, msg, &spectypes.BeaconVote{})
+	decided, decidedValue, err := r.baseConsensusMsgProcessing(ctx, logger, r.ValCheck.CheckValue, msg, decidedPrototype)
 	if err != nil {
 		return fmt.Errorf("failed processing consensus message: %w", err)
 	}
@@ -230,15 +243,24 @@ func (r *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Logg
 		return nil
 	}
 
+	// An error from here on doesn't end the duty: the other operators' partials can still reach quorum on the
+	// decided value, and this operator then completes the duty anyway. Note it for the watcher, which reports
+	// it as the failure if nothing concludes the duty by its deadline. The no-valid-duties sentinel below is
+	// concluded not_required first, which the watcher reports instead.
+	defer func() {
+		if err != nil {
+			r.noteDutyFailure(err)
+		}
+	}()
+
+	if dutyErr != nil {
+		return fmt.Errorf("current committee duty: %w", dutyErr)
+	}
+
 	r.measurements.EndConsensus()
 	recordConsensusDuration(ctx, r.measurements.ConsensusTime(), spectypes.RoleCommittee)
 
-	committeeDuty, err := r.currentCommitteeDuty()
-	if err != nil {
-		return fmt.Errorf("current committee duty: %w", err)
-	}
 	committeeDutySlot := committeeDuty.DutySlot()
-
 	postConsensusMsg := &spectypes.PartialSignatureMessages{
 		Type:     spectypes.PostConsensusPartialSig,
 		Slot:     committeeDutySlot,
@@ -273,7 +295,7 @@ func (r *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Logg
 		blockedAttesterDuties atomic.Uint32
 	)
 
-	beaconVote, err := beaconVoteFromEncoder(decidedValue)
+	beaconVote, gloasAttestationIndex, err := decidedAttestationVote(decidedValue)
 	if err != nil {
 		return fmt.Errorf("beacon vote: %w", err)
 	}
@@ -317,7 +339,7 @@ func (r *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Logg
 				switch validatorDuty.Type {
 				case spectypes.BNRoleAttester:
 					totalAttesterDuties.Add(1)
-					isAttesterDutyBlocked, partialSigMsg, err := r.signAttesterDuty(ctx, validatorDuty, beaconVote, version, logger)
+					isAttesterDutyBlocked, partialSigMsg, err := r.signAttesterDuty(ctx, validatorDuty, beaconVote, version, gloasAttestationIndex, logger)
 					if err != nil {
 						errCh <- fmt.Errorf("failed signing attestation data: %w", err)
 						return
@@ -380,6 +402,20 @@ listener:
 	)
 
 	if totalAttestations == 0 && totalSyncCommittee == 0 {
+		// A done context also lands here with zero counts: the duty feeder and the workers bail out on
+		// ctx.Err() before incrementing any counter. The duty was abandoned, not left with nothing to do,
+		// so return the context's error rather than conclude not_required: the defer above drops a
+		// cancellation (shutdown is never an outcome) and notes an expired duty deadline as the failure.
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		// Benign terminal: the committee decided but this operator ended up with zero valid duties to
+		// sign. Conclude as not_required so the watcher doesn't report a false "stuck"; the sentinel
+		// still tells committee_queue to drop the message and terminate the runner.
+		r.markDutyNotRequired()
+		const dutyFinishedNoValidDutiesEvent = "✔️successfully finished duty processing (no valid duties to sign)"
+		r.concludeDutyFlow(ctx, logger, dutyFinishedNoValidDutiesEvent)
+		span.AddEvent(dutyFinishedNoValidDutiesEvent)
 		return ErrNoValidDutiesToExecute
 	}
 
@@ -400,9 +436,9 @@ listener:
 
 	ssvMsg := &spectypes.SSVMessage{
 		MsgType: spectypes.SSVPartialSignatureMsgType,
-		MsgID: spectypes.NewMsgID(
-			r.NetworkConfig.DomainType,
-			r.QBFTController.CommitteeMember.CommitteeID[:],
+		MsgID: spectypes.NewCommitteeMsgID(
+			r.NetworkConfig.DomainTypeAtSlot(r.State.CurrentDuty.DutySlot()),
+			r.QBFTController.CommitteeMember.CommitteeID,
 			r.RunnerRoleType,
 		),
 	}
@@ -424,7 +460,7 @@ listener:
 	}
 
 	r.measurements.StartPostConsensus()
-	if err := r.GetNetwork().Broadcast(ssvMsg.MsgID, msgToBroadcast); err != nil {
+	if err := r.GetNetwork().BroadcastAtSlot(msgToBroadcast, postConsensusMsg.Slot); err != nil {
 		return fmt.Errorf("can't broadcast partial post consensus sig: %w", err)
 	}
 	const broadcastedPostConsensusMsgEvent = "broadcasted post-consensus partial signature message"
@@ -439,6 +475,7 @@ func (r *CommitteeRunner) signAttesterDuty(
 	validatorDuty *spectypes.ValidatorDuty,
 	beaconVote *spectypes.BeaconVote,
 	version spec.DataVersion,
+	gloasAttestationIndex *phase0.CommitteeIndex,
 	logger *zap.Logger) (isBlocked bool, partialSig *spectypes.PartialSignatureMessage, err error) {
 	// Reuse the existing span instead of generating new one to keep tracing-data lightweight.
 	span := trace.SpanFromContext(ctx)
@@ -454,7 +491,7 @@ func (r *CommitteeRunner) signAttesterDuty(
 		return true, nil, nil
 	}
 
-	attestationData := constructAttestationData(beaconVote, validatorDuty, version)
+	attestationData := constructAttestationData(beaconVote, validatorDuty, version, gloasAttestationIndex)
 
 	span.AddEvent("signing beacon object")
 	partialMsg, err := signBeaconObject(
@@ -489,15 +526,12 @@ func (r *CommitteeRunner) signAttesterDuty(
 	return false, partialMsg, nil
 }
 
-func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
+func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) (err error) {
 	// Reuse the existing span instead of generating new one to keep tracing-data lightweight.
 	span := trace.SpanFromContext(ctx)
 
 	span.AddEvent("base post consensus message processing")
 	hasQuorum, roots, err := r.basePostConsensusMsgProcessing(ctx, logger, r, signedMsg)
-	if errors.Is(err, ErrNoDutyAssigned) {
-		err = NewRetryableError(err)
-	}
 	if err != nil {
 		return fmt.Errorf("failed processing post consensus message: %w", err)
 	}
@@ -505,6 +539,24 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 	if !hasQuorum {
 		return nil
 	}
+
+	// We have quorum and are committed to submitting. Pre-quorum waiting, full success
+	// (markDutySucceeded) and partial progress all return nil, so this only fires on a terminal
+	// post-quorum error — report it as failed instead of letting it fall through to a false "stuck".
+	// A failure here is final: submission is the duty's last step.
+	// The one exception is a recoverable BLS-reconstruction failure: the offending partial sig has
+	// already been dropped by the fallback, so a later message can re-cross quorum and retry — those
+	// are tagged recoverableReconstructError and must not be recorded as failed.
+	// Shutdown (context cancellation) needs no special-casing — markDutyFailed drops a context.Canceled
+	// reason, so a submission aborted by shutdown isn't recorded as a failure.
+	// The benign no-beacon-objects sentinel (ErrNoValidDutiesToExecute) pre-concludes the duty as
+	// not_required before returning, which makes this deferred markDutyFailed a no-op (concludeDuty
+	// is idempotent) — it must not be recorded as failed either.
+	defer func() {
+		if err != nil && !isRecoverableReconstructError(err) {
+			r.markDutyFailed(err)
+		}
+	}()
 
 	r.measurements.EndPostConsensus()
 	recordPostConsensusDuration(ctx, r.measurements.PostConsensusTime(), spectypes.RoleCommittee)
@@ -515,13 +567,40 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 		return fmt.Errorf("could not get expected post consensus roots and beacon objects: %w", err)
 	}
 	if len(beaconObjects) == 0 {
+		// Benign terminal: the committee reached consensus but this operator has no beacon objects to
+		// submit (divergent validator sets across the committee's operators — every duty was skipped
+		// as guard-invalid). An empty map here is guaranteed benign: an all-construction-failure empty
+		// result is surfaced as an error by expectedPostConsensusRootsAndBeaconObjects above and
+		// classified failed by the defer. Conclude as not_required before returning the sentinel;
+		// concludeDuty is idempotent, so the deferred markDutyFailed becomes a no-op. The sentinel
+		// still tells committee_queue to drop the message and terminate the runner.
+		r.markDutyNotRequired()
+		const dutyFinishedNoBeaconObjectsEvent = "✔️successfully finished duty processing (no beacon objects to submit)"
+		r.concludeDutyFlow(ctx, logger, dutyFinishedNoBeaconObjectsEvent,
+			fields.PostConsensusTime(r.measurements.PostConsensusTime()),
+		)
+		span.AddEvent(dutyFinishedNoBeaconObjectsEvent)
 		return ErrNoValidDutiesToExecute
 	}
 
 	attestationsToSubmit := make(map[phase0.ValidatorIndex]*spec.VersionedAttestation)
 	syncCommitteeMessagesToSubmit := make(map[phase0.ValidatorIndex]*altair.SyncCommitteeMessage)
 
-	var executionErr error
+	// Recoverable reconstruct failures are discriminated by the recoverableReconstructError tag rather
+	// than by a spec error code — the tag also covers the uncoded BLS Deserialize/Recover failures.
+	// The sibling AggregatorCommitteeRunner instead classifies by the PostConsensusQuorumWithInvalidSignatures
+	// code; the divergence is deliberate (tagging with that code there breaks its spectest fixtures).
+	var recoverableErr, terminalErr error
+	// classify is the single source of truth for the terminal/recoverable split, shared by the listener
+	// receive site and the post-listener drain so the two can never drift apart. Recoverable failures
+	// carry the recoverableReconstructError tag; anything arriving without it is treated as terminal.
+	classify := func(err error) {
+		if isRecoverableReconstructError(err) {
+			recoverableErr = err
+		} else {
+			terminalErr = err
+		}
+	}
 
 	span.SetAttributes(observability.BeaconBlockRootCountAttribute(len(roots)))
 	// For each root that got at least one quorum, find the duties associated to it and try to submit
@@ -559,10 +638,8 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 
 		span.AddEvent("constructing sync-committee and attestations signature messages", trace.WithAttributes(observability.BeaconBlockRootAttribute(root)))
 		for _, validator := range validators {
-			// As per the comments below, the quorums (for root+validator pairs) we got from basePostConsensusMsgProcessing
-			// call above are optimistic - some of these quorums might have been invalidated now, hence, to avoid an
-			// unnecessary unsuccessful BLS signature reconstruction attempt we need to check if root+validator pair
-			// still has quorum.
+			// Re-check the quorum: the drops after a failed reconstruction (below) may have taken this root+validator
+			// pair below quorum since basePostConsensusMsgProcessing reported it.
 			gotQuorum, quorumSigners := r.State.PostConsensusContainer.HasQuorum(validator, root)
 			if !gotQuorum {
 				continue
@@ -577,6 +654,12 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 				defer wg.Done()
 
 				share := r.Share[validatorIndex]
+				// Operators might have diverging views on which validators they have in a committee
+				// (e.g., an operator might have not yet seen an ValidatorAdded event,
+				// or failed to process it and moved on). Hence, we need to check for this explicitly every time.
+				if share == nil {
+					return
+				}
 				pubKey := share.ValidatorPubKey
 
 				vLogger := logger.With(
@@ -586,30 +669,21 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 					zap.Uint64s("quorum_signers", quorumSigners),
 				)
 
-				sig, err := r.State.ReconstructBeaconSig(r.State.PostConsensusContainer, root, pubKey[:], validatorIndex)
+				// On failure the root's partial signatures have been verified and the invalid ones dropped; the
+				// error is recoverable only if that left the root below quorum (see reconstructQuorumSig).
+				sig, err := r.reconstructQuorumSig(r.State.PostConsensusContainer, root, share, "post-consensus")
 				if err != nil {
-					// If the reconstructed signature verification failed, fall back to verifying each individual
-					// partial signature + discarding the invalid ones. This should not happen often in practice,
-					// but it's a very desirable optimization to have because when it does happen - we wouldn't
-					// want to reconstruct lots of BLS signatures only to discover most of them being invalid.
-					// Notes:
-					// 1) FallBackAndVerifyEachSignature call may also lead to a certain root+validator pairs
-					//    in PostConsensusContainer not having quorum anymore since it previously was computed
-					//    optimistically.
-					// 2) we need to verify partial signatures only for the roots we haven't tried reconstructing
-					//    signatures for (hence roots[i:])
-					// 3) since this code is running a bunch of concurrent go-routines, we need to be careful to
-					//    not call FallBackAndVerifyEachSignature for the same root+validator pair multiple times -
-					//    this is why we are parallelizing by validators only (and not by root+validator), processing
-					//    each root sequentially
-					for _, root := range roots[i:] {
+					// Verify the validator's partial signatures for the roots still ahead too, dropping a bad
+					// signer's shares before they cost a failed reconstruction each. No pair is verified by two
+					// goroutines at once: the work is split by validator, and the roots are taken in turn.
+					for _, root := range roots[i+1:] {
 						r.FallBackAndVerifyEachSignature(r.State.PostConsensusContainer, root, share.Committee, validatorIndex)
 					}
 					const eventMsg = "got post-consensus quorum but it has invalid signatures"
 					span.AddEvent(eventMsg)
-					vLogger.Error(eventMsg, zap.Error(err))
+					vLogger.Error(eventMsg, zap.Bool("recoverable", isRecoverableReconstructError(err)), zap.Error(err))
 
-					errCh <- fmt.Errorf("%s: %w", eventMsg, err)
+					errCh <- err
 					return
 				}
 
@@ -617,7 +691,7 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 
 				signatureCh <- signatureResult{
 					validatorIndex: validatorIndex,
-					signature:      (phase0.BLSSignature)(sig),
+					signature:      sig,
 				}
 			}(validator, root)
 		}
@@ -631,9 +705,11 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 		for {
 			select {
 			case <-ctx.Done():
+				// markDutyFailed (via the defer) drops context.Canceled internally, so shutdown
+				// isn't recorded as a failure.
 				return ctx.Err()
 			case err := <-errCh:
-				executionErr = err
+				classify(err)
 			case signatureResult, ok := <-signatureCh:
 				if !ok {
 					break listener
@@ -641,12 +717,12 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 
 				validatorObjects, exists := beaconObjects[signatureResult.validatorIndex]
 				if !exists {
-					executionErr = fmt.Errorf("could not find beacon object for validator index: %d", signatureResult.validatorIndex)
+					terminalErr = fmt.Errorf("could not find beacon object for validator index: %d", signatureResult.validatorIndex)
 					continue
 				}
 				sszObject, exists := validatorObjects[root]
 				if !exists {
-					executionErr = fmt.Errorf("could not find ssz object for root: %s", root)
+					terminalErr = fmt.Errorf("could not find ssz object for root: %s", root)
 					continue
 				}
 
@@ -665,12 +741,26 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 					att := sszObject.(*spec.VersionedAttestation)
 					att, err = specssv.VersionedAttestationWithSignature(att, signatureResult.signature)
 					if err != nil {
-						executionErr = fmt.Errorf("could not insert signature in versioned attestation")
+						terminalErr = fmt.Errorf("could not insert signature in versioned attestation")
 						continue
 					}
 
 					attestationsToSubmit[signatureResult.validatorIndex] = att
 				}
+			}
+		}
+
+		// Drain any error still buffered on errCh: when signatureCh closes in the same iteration the select
+		// may take the close branch and skip it. All workers have finished (signatureCh closes only after
+		// wg.Wait), so this non-blocking drain is complete. errCh carries the reconstruct errors, recoverable
+		// or terminal, and a skipped terminal one would leave the failed duty unrecorded.
+	drainErrCh:
+		for {
+			select {
+			case err := <-errCh:
+				classify(err)
+			default:
+				break drainErrCh
 			}
 		}
 
@@ -794,21 +884,28 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 		}
 	}
 
-	if executionErr != nil {
-		return executionErr
+	// A terminal error on any root wins over a recoverable one. executionErr used to be a single
+	// last-write-wins variable, so when a genuine failure and a recoverable reconstruct error happened
+	// in the same round, classification depended on goroutine/root ordering. Splitting the two keeps it
+	// deterministic — a real failure is always recorded as failed, never mislabeled as recoverable/stuck.
+	// The defer classifies both: terminalErr → markDutyFailed; recoverableErr carries its tag → excluded.
+	if terminalErr != nil {
+		return terminalErr
+	}
+	if recoverableErr != nil {
+		// Reconstruct-invalid-sigs is recoverable: FallBackAndVerifyEachSignature can drop the root
+		// below quorum, so a later partial-sig message re-crosses quorum and re-enters this loop to
+		// retry pending roots (already-submitted roots are skipped via HasSubmitted). Returned with its
+		// recoverableReconstructError tag so the defer does not record the duty as failed.
+		return recoverableErr
 	}
 
 	if r.HasSubmittedAllValidatorDuties(attestationMap, committeeMap) {
-		r.markDutyFinished()
-		r.measurements.EndDutyFlow()
-		recordTotalDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.RoleCommittee, r.State.RunningInstance.State.Round)
+		r.markDutySucceeded()
 		const dutyFinishedEvent = "✔️finished duty processing (100% success)"
-		logger.Info(dutyFinishedEvent,
-			fields.ConsensusTime(r.measurements.ConsensusTime()),
-			fields.ConsensusRounds(uint64(r.State.RunningInstance.State.Round)),
+		r.concludeDutyFlow(ctx, logger, dutyFinishedEvent,
 			fields.PostConsensusTime(r.measurements.PostConsensusTime()),
 			fields.TotalConsensusTime(r.measurements.TotalConsensusTime()),
-			fields.TotalDutyTime(r.measurements.TotalDutyTime()),
 		)
 		span.AddEvent(dutyFinishedEvent)
 		span.SetStatus(codes.Ok, "")
@@ -825,6 +922,28 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 	span.AddEvent(dutyFinishedEvent)
 
 	return nil
+}
+
+// concludeDutyFlow closes out a finished duty flow: it stops the duty-flow measurement, records the
+// total-duty-duration sample and logs the operator-visible completion line. Only the terminals that
+// conclude the duty correctly — the success one and both not_required ones — route through here;
+// failed and stuck duties are counted in duty.outcome but deliberately record no duration, so the
+// duration histogram covers correct completions only. The caller marks the outcome and adds the span
+// event; extraFields carries the per-terminal timings (post-consensus, total-consensus) that sit
+// between the always-present consensus fields and the total duty time.
+func (r *CommitteeRunner) concludeDutyFlow(ctx context.Context, logger *zap.Logger, event string, extraFields ...zap.Field) {
+	r.measurements.EndDutyFlow()
+	recordTotalDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.RoleCommittee, r.State.RunningInstance.State.Round)
+
+	logFields := make([]zap.Field, 0, len(extraFields)+3)
+	logFields = append(logFields,
+		fields.ConsensusTime(r.measurements.ConsensusTime()),
+		fields.ConsensusRounds(uint64(r.State.RunningInstance.State.Round)),
+	)
+	logFields = append(logFields, extraFields...)
+	logFields = append(logFields, fields.TotalDutyTime(r.measurements.TotalDutyTime()))
+
+	logger.Info(event, logFields...)
 }
 
 // HasSubmittedAllValidatorDuties -- Returns true if the runner has done submissions for all validators for the given slot
@@ -894,14 +1013,14 @@ func findValidators(
 }
 
 // expectedPreConsensusRootsAndDomain is not needed because there is no pre-consensus phase.
-func (r *CommitteeRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
+func (r *CommitteeRunner) expectedPreConsensusRootsAndDomain() ([]spectypes.HashRoot, phase0.DomainType, error) {
 	return nil, spectypes.DomainError, errors.New("no pre consensus roots for committee runner")
 }
 
-// expectedPostConsensusRootsAndDomain signature returns only one domain type... but we can have mixed domains
+// expectedPostConsensusRootsAndDomains is unused: the committee runner validates its mixed-domain roots itself
 // instead we rely on expectedPostConsensusRootsAndBeaconObjects that is called later
-func (r *CommitteeRunner) expectedPostConsensusRootsAndDomain(context.Context) ([]ssz.HashRoot, phase0.DomainType, error) {
-	return nil, spectypes.DomainError, errors.New("unexpected expectedPostConsensusRootsAndDomain func call")
+func (r *CommitteeRunner) expectedPostConsensusRootsAndDomains(context.Context) ([]PostConsensusRoot, error) {
+	return nil, errors.New("unexpected expectedPostConsensusRootsAndDomains func call")
 }
 
 func (r *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(ctx context.Context, logger *zap.Logger) (
@@ -916,15 +1035,32 @@ func (r *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(ctx context
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("current committee duty: %w", err)
 	}
-	beaconVoteData := r.State.DecidedValue
-	beaconVote := &spectypes.BeaconVote{}
-	if err := beaconVote.Decode(beaconVoteData); err != nil {
-		return nil, nil, nil, fmt.Errorf("could not decode beacon vote: %w", err)
-	}
-
 	slot := committeeDuty.DutySlot()
 	epoch := r.NetworkConfig.EstimatedEpochAtSlot(slot)
 	dataVersion, _ := r.NetworkConfig.ForkAtEpoch(epoch)
+
+	// Decode into the slot's fork prototype (GloasBeaconVote carries the attestation index on Gloas).
+	decidedVote := spectypes.Encoder(&spectypes.BeaconVote{})
+	if r.NetworkConfig.IsGloas(epoch) {
+		decidedVote = &gloas.GloasBeaconVote{}
+	}
+	if err := decidedVote.Decode(r.State.DecidedValue); err != nil {
+		return nil, nil, nil, fmt.Errorf("could not decode beacon vote: %w", err)
+	}
+	beaconVote, gloasAttestationIndex, err := decidedAttestationVote(decidedVote)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	// Skips fall into two classes: guard invalidations are benign (the #2903 divergent-validator-sets
+	// case — the duty is genuinely not this operator's to submit), while construction / domain-data /
+	// signing-root failures mean a submission was missed. The distinction only matters when NOTHING
+	// could be built: partial failures keep the per-validator debug-and-continue behavior so one
+	// validator's failure never blocks the others' submissions, but an all-failure empty result must
+	// surface as an error — otherwise the caller's len(beaconObjects)==0 branch would conclude the
+	// duty not_required, masking the miss (the sibling AggregatorCommitteeRunner surfaces these
+	// errors for the same reason).
+	var constructionErr error
 
 	for _, validatorDuty := range committeeDuty.ValidatorDuties {
 		if validatorDuty == nil {
@@ -940,10 +1076,11 @@ func (r *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(ctx context
 		switch validatorDuty.Type {
 		case spectypes.BNRoleAttester:
 			// Attestation object
-			attestationData := constructAttestationData(beaconVote, validatorDuty, dataVersion)
+			attestationData := constructAttestationData(beaconVote, validatorDuty, dataVersion, gloasAttestationIndex)
 			attestationResponse, err := specssv.ConstructVersionedAttestationWithoutSignature(attestationData, dataVersion, validatorDuty)
 			if err != nil {
 				logger.Debug("failed to construct attestation", zap.Error(err))
+				constructionErr = errors.Join(constructionErr, fmt.Errorf("construct attestation (validator %d): %w", validatorDuty.ValidatorIndex, err))
 				continue
 			}
 
@@ -951,12 +1088,14 @@ func (r *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(ctx context
 			domain, err := r.GetBeaconNode().DomainData(ctx, epoch, spectypes.DomainAttester)
 			if err != nil {
 				logger.Debug("failed to get attester domain", zap.Error(err))
+				constructionErr = errors.Join(constructionErr, fmt.Errorf("get attester domain (validator %d): %w", validatorDuty.ValidatorIndex, err))
 				continue
 			}
 
 			root, err := spectypes.ComputeETHSigningRoot(attestationData, domain)
 			if err != nil {
 				logger.Debug("failed to compute attester root", zap.Error(err))
+				constructionErr = errors.Join(constructionErr, fmt.Errorf("compute attester root (validator %d): %w", validatorDuty.ValidatorIndex, err))
 				continue
 			}
 
@@ -978,6 +1117,7 @@ func (r *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(ctx context
 			domain, err := r.GetBeaconNode().DomainData(ctx, epoch, spectypes.DomainSyncCommittee)
 			if err != nil {
 				logger.Debug("failed to get sync committee domain", zap.Error(err))
+				constructionErr = errors.Join(constructionErr, fmt.Errorf("get sync committee domain (validator %d): %w", validatorDuty.ValidatorIndex, err))
 				continue
 			}
 			// Eth root
@@ -985,6 +1125,7 @@ func (r *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(ctx context
 			root, err := spectypes.ComputeETHSigningRoot(blockRoot, domain)
 			if err != nil {
 				logger.Debug("failed to compute sync committee root", zap.Error(err))
+				constructionErr = errors.Join(constructionErr, fmt.Errorf("compute sync committee root (validator %d): %w", validatorDuty.ValidatorIndex, err))
 				continue
 			}
 
@@ -998,16 +1139,14 @@ func (r *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(ctx context
 			return nil, nil, nil, fmt.Errorf("invalid duty type: %s", validatorDuty.Type)
 		}
 	}
+	if len(beaconObjects) == 0 && constructionErr != nil {
+		return nil, nil, nil, fmt.Errorf("no beacon objects could be built: %w", constructionErr)
+	}
 	return attestationMap, syncCommitteeMap, beaconObjects, nil
 }
 
 func (r *CommitteeRunner) executeDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty) error {
-	ctx, span := tracer.Start(ctx,
-		observability.InstrumentName(observabilityNamespace, "execute_committee_duty"),
-		trace.WithAttributes(
-			observability.RunnerRoleAttribute(duty.RunnerRole()),
-			observability.BeaconSlotAttribute(duty.DutySlot())))
-	defer span.End()
+	span := trace.SpanFromContext(ctx)
 
 	r.measurements.StartDutyFlow()
 
@@ -1023,20 +1162,40 @@ func (r *CommitteeRunner) executeDuty(ctx context.Context, logger *zap.Logger, d
 	logger.Debug(attestationDataFetchedEvent, fields.Took(time.Since(start)))
 	span.AddEvent(attestationDataFetchedEvent)
 
-	vote := &spectypes.BeaconVote{
-		BlockRoot: attData.BeaconBlockRoot,
-		Source:    attData.Source,
-		Target:    attData.Target,
+	// On Gloas slots the consensus value is a GloasBeaconVote carrying the BN-supplied attestation
+	// index (SIP #94 §2); before Gloas it is a plain BeaconVote. Both implement spectypes.Encoder, so
+	// the QBFT plumbing is identical — only the value type and its checker differ.
+	var input spectypes.Encoder
+	if r.NetworkConfig.IsGloasAtSlot(slot) {
+		gloasVote := &gloas.GloasBeaconVote{
+			BlockRoot:            attData.BeaconBlockRoot,
+			Source:               attData.Source,
+			Target:               attData.Target,
+			AttestationDataIndex: attData.Index,
+		}
+		input = gloasVote
+		// The operator's own view for the §2 same-slot check, fixed here at instance start: the block its
+		// beacon node's head events named for this slot, if it has arrived.
+		var sameSlotBlockRoot *phase0.Root
+		if root, ok := r.GetBeaconNode().HeadRootAtSlot(slot); ok {
+			sameSlotBlockRoot = &root
+		}
+		r.ValCheck = ssv.NewGloasVoteChecker(r.signer, slot, r.attestingValidators, gloasVote, sameSlotBlockRoot)
+		logger.Debug("built gloas attestation vote",
+			fields.Slot(slot),
+			zap.Uint64("payload_status_index", uint64(attData.Index)))
+	} else {
+		vote := &spectypes.BeaconVote{
+			BlockRoot: attData.BeaconBlockRoot,
+			Source:    attData.Source,
+			Target:    attData.Target,
+		}
+		input = vote
+		r.ValCheck = ssv.NewVoteChecker(r.signer, slot, r.attestingValidators, vote)
 	}
 
 	r.measurements.StartConsensus()
-	r.ValCheck = ssv.NewVoteChecker(
-		r.signer,
-		slot,
-		r.attestingValidators,
-		vote,
-	)
-	if err := r.decide(ctx, logger, duty.DutySlot(), vote, r.ValCheck); err != nil {
+	if err := r.decide(ctx, logger, duty.DutySlot(), input, r.ValCheck); err != nil {
 		return fmt.Errorf("qbft-decide: %w", err)
 	}
 
@@ -1055,7 +1214,7 @@ func (r *CommitteeRunner) GetDoppelgangerHandler() DoppelgangerProvider {
 	return r.doppelgangerHandler
 }
 
-func constructAttestationData(vote *spectypes.BeaconVote, duty *spectypes.ValidatorDuty, version spec.DataVersion) *phase0.AttestationData {
+func constructAttestationData(vote *spectypes.BeaconVote, duty *spectypes.ValidatorDuty, version spec.DataVersion, gloasIndex *phase0.CommitteeIndex) *phase0.AttestationData {
 	attData := &phase0.AttestationData{
 		Slot:            duty.Slot,
 		Index:           duty.CommitteeIndex,
@@ -1063,7 +1222,11 @@ func constructAttestationData(vote *spectypes.BeaconVote, duty *spectypes.Valida
 		Source:          vote.Source,
 		Target:          vote.Target,
 	}
-	if version >= spec.DataVersionElectra {
+	switch {
+	case gloasIndex != nil:
+		// SIP #94 §2: under Gloas the index is the decided payload-status value (0/1), not a committee index.
+		attData.Index = *gloasIndex
+	case version >= spec.DataVersionElectra:
 		attData.Index = 0 // EIP-7549: Index should be set to 0
 	}
 	return attData

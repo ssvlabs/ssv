@@ -10,9 +10,14 @@ type Options struct {
 	Ctx context.Context
 	// TODO: support pebble for regular node operators after testing
 	//Engine     string        `yaml:"Engine" env:"DB_ENGINE" env-default:"badger" env-description:"Database engine (badger or pebble)"`
-	Path       string        `yaml:"Path" env:"DB_PATH" env-default:"./data/db" env-description:"Database storage directory path"`
-	Reporting  bool          `yaml:"Reporting" env:"DB_REPORTING" env-default:"false" env-description:"Enable database size reporting"`
-	GCInterval time.Duration `yaml:"GCInterval" env:"DB_GC_INTERVAL" env-default:"6m" env-description:"Interval between garbage collection runs (0 to disable)"`
+	Path       string        `yaml:"Path" env:"DB_PATH" env-description:"Database storage directory path"`
+	Reporting  bool          `yaml:"Reporting" env:"DB_REPORTING" env-description:"Enable database size reporting"`
+	GCInterval time.Duration `yaml:"GCInterval" env:"DB_GC_INTERVAL" env-description:"Interval between garbage collection runs (0 to disable)"`
+}
+
+func (o *Options) ApplyDefaults() {
+	o.Path = "./data/db"
+	o.GCInterval = 6 * time.Minute
 }
 
 // Reader is a read-only accessor to the database.

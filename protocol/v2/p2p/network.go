@@ -3,6 +3,7 @@ package protocolp2p
 import (
 	"errors"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ssvlabs/ssv-spec/p2p"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
@@ -23,6 +24,9 @@ type Subscriber interface {
 // Broadcaster enables to broadcast messages
 type Broadcaster interface {
 	Broadcast(id spectypes.MessageID, message *spectypes.SignedSSVMessage) error
+	// BroadcastAtSlot behaves like Broadcast but takes the message's slot explicitly, which
+	// determines whether it's sent on Alan or Boole topics (see networkconfig.Network.BooleForkAtSlot).
+	BroadcastAtSlot(message *spectypes.SignedSSVMessage, slot phase0.Slot) error
 }
 
 // MsgValidationResult helps other components to report message validation with a generic results scheme

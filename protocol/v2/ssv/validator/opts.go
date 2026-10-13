@@ -3,19 +3,19 @@ package validator
 import (
 	"time"
 
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
-	"github.com/ssvlabs/ssv/exporter"
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
 	qbftctrl "github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 )
 
 // defaultValidatorQueueSize is the default capacity of the per-validator-per-role
@@ -38,7 +38,7 @@ type Options struct {
 // CommonOptions represents options that all validators share.
 type CommonOptions struct {
 	NetworkConfig       *networkconfig.Network
-	Network             specqbft.Network
+	Network             protocolp2p.Network
 	Beacon              beacon.BeaconNode
 	Storage             *storage.ParticipantStores
 	Signer              ekm.BeaconSigner
@@ -46,55 +46,27 @@ type CommonOptions struct {
 	DoppelgangerHandler runner.DoppelgangerProvider
 	NewDecidedHandler   qbftctrl.NewDecidedHandler
 	FullNode            bool
-	ExporterOptions     exporter.Options
+	ExporterMode        bool
 	QueueSize           int
 	GasLimit            uint64
 	MessageValidator    validation.MessageValidator
 	Graffiti            []byte
 	ProposerDelay       time.Duration
+	ProposerDelayEPBS   time.Duration
+	// LegacyProposerRoundTimeout: true restores the pre-SIP-102 2s proposer QBFT round budget; false
+	// (zero value) keeps the SIP-102 default.
+	LegacyProposerRoundTimeout bool
+	Builders                   gloas.BuilderConfig
 }
 
-func NewCommonOptions(
-	networkConfig *networkconfig.Network,
-	network specqbft.Network,
-	beacon beacon.BeaconNode,
-	storage *storage.ParticipantStores,
-	signer ekm.BeaconSigner,
-	operatorSigner ssvtypes.OperatorSigner,
-	doppelgangerHandler runner.DoppelgangerProvider,
-	newDecidedHandler qbftctrl.NewDecidedHandler,
-	fullNode bool,
-	exporterOptions exporter.Options,
-	historySyncBatchSize int,
-	gasLimit uint64,
-	messageValidator validation.MessageValidator,
-	graffiti []byte,
-	proposerDelay time.Duration,
-) *CommonOptions {
-	result := &CommonOptions{
-		NetworkConfig:       networkConfig,
-		Network:             network,
-		Beacon:              beacon,
-		Storage:             storage,
-		Signer:              signer,
-		OperatorSigner:      operatorSigner,
-		DoppelgangerHandler: doppelgangerHandler,
-		NewDecidedHandler:   newDecidedHandler,
-		FullNode:            fullNode,
-		ExporterOptions:     exporterOptions,
-		QueueSize:           defaultValidatorQueueSize,
-		GasLimit:            gasLimit,
-		MessageValidator:    messageValidator,
-		Graffiti:            graffiti,
-		ProposerDelay:       proposerDelay,
+// NewCommonOptions finalizes a CommonOptions literal: it owns QueueSize (any caller-set value is
+// overwritten with the default, bumped for full nodes so history-sync batches can be pushed whole).
+func NewCommonOptions(opts CommonOptions, historySyncBatchSize int) *CommonOptions {
+	opts.QueueSize = defaultValidatorQueueSize
+	if opts.FullNode {
+		opts.QueueSize = max(opts.QueueSize, historySyncBatchSize*2)
 	}
-
-	// If full node, increase the queue size to make enough room for history sync batches to be pushed whole.
-	if fullNode {
-		result.QueueSize = max(result.QueueSize, historySyncBatchSize*2)
-	}
-
-	return result
+	return &opts
 }
 
 func (o *CommonOptions) NewOptions(

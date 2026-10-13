@@ -9,6 +9,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 )
@@ -35,7 +36,7 @@ func (c *Controller) UponDecided(
 			logger,
 			c.GetConfig(),
 			c.CommitteeMember,
-			c.Identifier,
+			c.identifierAtHeight(msg.QBFTMessage.Height),
 			msg.QBFTMessage.Height,
 			c.OperatorSigner,
 			roundTimerF,
@@ -97,10 +98,7 @@ func (c *Controller) ValidateDecided(msg *specqbft.ProcessingMessage) error {
 		return fmt.Errorf("invalid decided msg: %w", err)
 	}
 
-	r, err := specqbft.HashDataRoot(msg.SignedMessage.FullData)
-	if err != nil {
-		return fmt.Errorf("could not hash input data: %w", err)
-	}
+	r := qbft.HashDataRoot(msg.SignedMessage.FullData)
 	if !bytes.Equal(r[:], msg.QBFTMessage.Root[:]) {
 		return spectypes.NewError(spectypes.RootHashInvalidErrorCode, "H(data) != root")
 	}

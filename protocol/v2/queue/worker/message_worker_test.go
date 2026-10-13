@@ -17,6 +17,8 @@ import (
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/protocol/v2/types/ssvtestingutils"
 )
 
 func TestWorker(t *testing.T) {
@@ -171,7 +173,7 @@ func TestMessageContextFields(t *testing.T) {
 	})
 
 	t.Run("committee message includes slot and committee id", func(t *testing.T) {
-		msgID := spectypes.NewMsgID([4]byte{}, []byte("committee_pk"), spectypes.RoleCommittee)
+		msgID := ssvtestingutils.NewMsgID([4]byte{}, []byte("committee_pk"), spectypes.RoleCommittee)
 		fields := messageContextFields(&queue.SSVMessage{
 			SSVMessage: &spectypes.SSVMessage{
 				MsgID:   msgID,
@@ -188,7 +190,7 @@ func TestMessageContextFields(t *testing.T) {
 	})
 
 	t.Run("validator message omits slot and committee id when slot unavailable", func(t *testing.T) {
-		msgID := spectypes.NewMsgID([4]byte{}, []byte("validator_pk"), spectypes.RoleAggregator)
+		msgID := ssvtestingutils.NewMsgID([4]byte{}, []byte("validator_pk"), ssvtypes.RoleAggregator)
 		fields := messageContextFields(&queue.SSVMessage{
 			SSVMessage: &spectypes.SSVMessage{
 				MsgID:   msgID,
@@ -207,7 +209,7 @@ func TestMessageContextFields(t *testing.T) {
 func TestWorkerProcess_LogsMessageContextOnError(t *testing.T) {
 	core, recorded := observer.New(zap.DebugLevel)
 	logger := zap.New(core)
-	msgID := spectypes.NewMsgID([4]byte{}, []byte("committee_pk"), spectypes.RoleCommittee)
+	msgID := ssvtestingutils.NewMsgID([4]byte{}, []byte("committee_pk"), spectypes.RoleCommittee)
 
 	worker := &Worker{
 		handler: func(context.Context, network.DecodedSSVMessage) error {

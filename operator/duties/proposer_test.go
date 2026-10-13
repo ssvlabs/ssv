@@ -10,10 +10,13 @@ import (
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
+	"go.uber.org/zap"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/utils/hashmap"
@@ -129,7 +132,7 @@ func TestScheduler_Proposer_Same_Slot(t *testing.T) {
 		// This deadline needs to be large enough to not prevent tests from executing their intended flow.
 		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 		scheduler, ticker := setupSchedulerAndMocks(ctx, t, []dutyHandler{handler})
-		waitForSlotN(scheduler.beaconConfig, 1)
+		waitForSlotN(scheduler.netCfg.Beacon, 1)
 		fetchDutiesCall, executeDutiesCall := setupProposerDutiesMock(scheduler, dutiesMap, &SafeValue[bool]{})
 		require.NoError(t, scheduler.Start(ctx))
 
@@ -172,11 +175,11 @@ func TestScheduler_Proposer_Diff_Slots(t *testing.T) {
 		ticker.Send(phase0.Slot(0))
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
-		waitForSlotN(scheduler.beaconConfig, phase0.Slot(1))
+		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(1))
 		ticker.Send(phase0.Slot(1))
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
-		waitForSlotN(scheduler.beaconConfig, phase0.Slot(2))
+		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(2))
 		duties, _ := dutiesMap.Get(phase0.Epoch(0))
 		expected := expectedExecutedProposerDuties(handler, duties)
 		setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
@@ -234,7 +237,7 @@ func TestScheduler_Proposer_Indices_Changed(t *testing.T) {
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 3: wait for proposer duties to be executed on slot 1
-		waitForSlotN(scheduler.beaconConfig, phase0.Slot(1))
+		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(1))
 		duties, _ := dutiesMap.Get(phase0.Epoch(0))
 		expected := expectedExecutedProposerDuties(handler, []*eth2apiv1.ProposerDuty{duties[1]})
 		setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
@@ -269,7 +272,7 @@ func TestScheduler_Proposer_Multiple_Indices_Changed_Same_Slot(t *testing.T) {
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 2: wait for no action to be taken
-		waitForSlotN(scheduler.beaconConfig, phase0.Slot(1))
+		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(1))
 		ticker.Send(phase0.Slot(1))
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
@@ -294,13 +297,13 @@ func TestScheduler_Proposer_Multiple_Indices_Changed_Same_Slot(t *testing.T) {
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 5: wait for proposer duties to be fetched
-		waitForSlotN(scheduler.beaconConfig, phase0.Slot(2))
+		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(2))
 		waitForDuties.Set(true)
 		ticker.Send(phase0.Slot(2))
 		waitForDutiesFetch(t, fetchDutiesCall, timeout)
 
 		// STEP 6: wait for proposer duties to be executed
-		waitForSlotN(scheduler.beaconConfig, phase0.Slot(3))
+		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(3))
 		duties, _ = dutiesMap.Get(phase0.Epoch(0))
 		expected := expectedExecutedProposerDuties(handler, []*eth2apiv1.ProposerDuty{duties[0]})
 		setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
@@ -309,7 +312,7 @@ func TestScheduler_Proposer_Multiple_Indices_Changed_Same_Slot(t *testing.T) {
 		waitForDutiesExecution(t, fetchDutiesCall, executeDutiesCall, timeout, expected)
 
 		// STEP 7: wait for proposer duties to be executed
-		waitForSlotN(scheduler.beaconConfig, phase0.Slot(4))
+		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(4))
 		duties, _ = dutiesMap.Get(phase0.Epoch(0))
 		expected = expectedExecutedProposerDuties(handler, []*eth2apiv1.ProposerDuty{duties[1]})
 		setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
@@ -345,7 +348,7 @@ func TestScheduler_Proposer_Reorg_Previous(t *testing.T) {
 		// This deadline needs to be large enough to not prevent tests from executing their intended flow.
 		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 		scheduler, ticker := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{handler}, testSlotsPerEpoch)
-		waitForSlotN(scheduler.beaconConfig, testSlotsPerEpoch)
+		waitForSlotN(scheduler.netCfg.Beacon, testSlotsPerEpoch)
 		fetchDutiesCall, executeDutiesCall := setupProposerDutiesMock(scheduler, dutiesMap, waitForDuties)
 		require.NoError(t, scheduler.Start(ctx))
 
@@ -363,14 +366,14 @@ func TestScheduler_Proposer_Reorg_Previous(t *testing.T) {
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 3: Ticker with no action
-		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch+1))
+		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(testSlotsPerEpoch+1))
 		waitForDuties.Set(true)
 		ticker.Send(phase0.Slot(testSlotsPerEpoch + 1))
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 4: trigger reorg on previous dependent root change (same epoch, no epoch transition).
-		// Proposer duties depend on the current duty dependent root, not the previous one,
-		// so no refetch should happen for the current epoch.
+		// The current epoch is refetched only on a current dependent root change, which a real reorg of the
+		// previous root always brings too (the current root descends from it), so no refetch should happen here.
 		e = &eth2apiv1.Event{
 			Data: &eth2apiv1.HeadEvent{
 				Slot:                      testSlotsPerEpoch + 1,
@@ -381,12 +384,12 @@ func TestScheduler_Proposer_Reorg_Previous(t *testing.T) {
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 5: wait for no action to be taken
-		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch+2))
+		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(testSlotsPerEpoch+2))
 		ticker.Send(phase0.Slot(testSlotsPerEpoch + 2))
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 6: The originally assigned duty should be executed (no refetch happened, original duties remain)
-		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch+3))
+		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(testSlotsPerEpoch+3))
 		duties, _ := dutiesMap.Get(phase0.Epoch(1))
 		expected := expectedExecutedProposerDuties(handler, duties)
 		setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
@@ -422,7 +425,7 @@ func TestScheduler_Proposer_Reorg_Previous_Indices_Changed(t *testing.T) {
 		// This deadline needs to be large enough to not prevent tests from executing their intended flow.
 		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 		scheduler, ticker := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{handler}, testSlotsPerEpoch)
-		waitForSlotN(scheduler.beaconConfig, testSlotsPerEpoch)
+		waitForSlotN(scheduler.netCfg.Beacon, testSlotsPerEpoch)
 		fetchDutiesCall, executeDutiesCall := setupProposerDutiesMock(scheduler, dutiesMap, waitForDuties)
 		require.NoError(t, scheduler.Start(ctx))
 
@@ -440,14 +443,14 @@ func TestScheduler_Proposer_Reorg_Previous_Indices_Changed(t *testing.T) {
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 3: Ticker with no action
-		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch+1))
+		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(testSlotsPerEpoch+1))
 		waitForDuties.Set(true)
 		ticker.Send(phase0.Slot(testSlotsPerEpoch + 1))
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 4: trigger reorg on previous dependent root change (same epoch, no epoch transition).
-		// Proposer duties depend on the current duty dependent root, not the previous one,
-		// so no refetch should happen for the current epoch.
+		// The current epoch is refetched only on a current dependent root change, which a real reorg of the
+		// previous root always brings too (the current root descends from it), so no refetch should happen here.
 		e = &eth2apiv1.Event{
 			Data: &eth2apiv1.HeadEvent{
 				Slot:                      testSlotsPerEpoch + 1,
@@ -475,21 +478,20 @@ func TestScheduler_Proposer_Reorg_Previous_Indices_Changed(t *testing.T) {
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 6: wait for proposer duties to be re-fetched for the current epoch
-		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch+2))
+		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(testSlotsPerEpoch+2))
 		ticker.Send(phase0.Slot(testSlotsPerEpoch + 2))
 		waitForDutiesFetch(t, fetchDutiesCall, timeout)
 
 		// STEP 7: The first assigned duty should not be executed
-		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch+3))
+		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(testSlotsPerEpoch+3))
 		ticker.Send(phase0.Slot(testSlotsPerEpoch + 3))
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 8: The second and new from indices change assigned duties should be executed
-		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch+4))
+		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(testSlotsPerEpoch+4))
 		duties, _ = dutiesMap.Get(phase0.Epoch(1))
 		expected := expectedExecutedProposerDuties(handler, duties)
 		setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
-
 		ticker.Send(phase0.Slot(testSlotsPerEpoch + 4))
 		waitForDutiesExecution(t, fetchDutiesCall, executeDutiesCall, timeout, expected)
 
@@ -514,7 +516,7 @@ func TestScheduler_Proposer_Reorg_Epoch_Transition(t *testing.T) {
 		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 
 		scheduler, ticker := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{handler}, testSlotsPerEpoch*2-1)
-		waitForSlotN(scheduler.beaconConfig, testSlotsPerEpoch*2-1)
+		waitForSlotN(scheduler.netCfg.Beacon, testSlotsPerEpoch*2-1)
 		fetchDutiesCall, executeDutiesCall := setupProposerDutiesMock(scheduler, dutiesMap, waitForDuties)
 
 		dutiesMap.Set(phase0.Epoch(2), []*eth2apiv1.ProposerDuty{
@@ -543,7 +545,7 @@ func TestScheduler_Proposer_Reorg_Epoch_Transition(t *testing.T) {
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 3: Ticker with no action (currently at the Epoch Transition Slot, i.e the 1st slot of Epoch 2)
-		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch*2))
+		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(testSlotsPerEpoch*2))
 		ticker.Send(phase0.Slot(testSlotsPerEpoch * 2))
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
@@ -571,17 +573,17 @@ func TestScheduler_Proposer_Reorg_Epoch_Transition(t *testing.T) {
 		waitForDutiesFetch(t, fetchDutiesCall, timeout)
 
 		// STEP 5: wait for proposer duties to be re-fetched for the current epoch
-		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch*2+1))
+		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(testSlotsPerEpoch*2+1))
 		ticker.Send(phase0.Slot(testSlotsPerEpoch*2 + 1))
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 6: The first assigned duty should not be executed
-		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch*2+2))
+		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(testSlotsPerEpoch*2+2))
 		ticker.Send(phase0.Slot(testSlotsPerEpoch*2 + 2))
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 7: The second assigned duty should be executed
-		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch*2+3))
+		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(testSlotsPerEpoch*2+3))
 		duties, _ := dutiesMap.Get(phase0.Epoch(2))
 		expected := expectedExecutedProposerDuties(handler, duties)
 		setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
@@ -608,7 +610,7 @@ func TestScheduler_Proposer_Reorg_Epoch_Transition_Indices_Changed(t *testing.T)
 		// This deadline needs to be large enough to not prevent tests from executing their intended flow.
 		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 		scheduler, ticker := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{handler}, testSlotsPerEpoch*2-1)
-		waitForSlotN(scheduler.beaconConfig, testSlotsPerEpoch*2-1)
+		waitForSlotN(scheduler.netCfg.Beacon, testSlotsPerEpoch*2-1)
 		fetchDutiesCall, executeDutiesCall := setupProposerDutiesMock(scheduler, dutiesMap, waitForDuties)
 
 		dutiesMap.Set(phase0.Epoch(2), []*eth2apiv1.ProposerDuty{
@@ -638,7 +640,7 @@ func TestScheduler_Proposer_Reorg_Epoch_Transition_Indices_Changed(t *testing.T)
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 3: Ticker with no action (currently at the Epoch Transition Slot, i.e the 1st slot of Epoch 2)
-		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch*2))
+		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(testSlotsPerEpoch*2))
 		ticker.Send(phase0.Slot(testSlotsPerEpoch * 2))
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
@@ -676,17 +678,17 @@ func TestScheduler_Proposer_Reorg_Epoch_Transition_Indices_Changed(t *testing.T)
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 6: wait for proposer duties to be re-fetched for the current epoch
-		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch*2+1))
+		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(testSlotsPerEpoch*2+1))
 		ticker.Send(phase0.Slot(testSlotsPerEpoch*2 + 1))
 		waitForDutiesFetch(t, fetchDutiesCall, timeout)
 
 		// STEP 7: The first assigned duty should not be executed
-		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch*2+2))
+		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(testSlotsPerEpoch*2+2))
 		ticker.Send(phase0.Slot(testSlotsPerEpoch*2 + 2))
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 8: The second assigned duty should be executed
-		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch*2+3))
+		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(testSlotsPerEpoch*2+3))
 		duties, _ = dutiesMap.Get(phase0.Epoch(2))
 		expected := expectedExecutedProposerDuties(handler, duties)
 		setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
@@ -712,7 +714,7 @@ func TestScheduler_Proposer_Reorg_Current(t *testing.T) {
 		// This deadline needs to be large enough to not prevent tests from executing their intended flow.
 		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 		scheduler, ticker := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{handler}, testSlotsPerEpoch+testSlotsPerEpoch/2)
-		waitForSlotN(scheduler.beaconConfig, testSlotsPerEpoch+testSlotsPerEpoch/2)
+		waitForSlotN(scheduler.netCfg.Beacon, testSlotsPerEpoch+testSlotsPerEpoch/2)
 		fetchDutiesCall, executeDutiesCall := setupProposerDutiesMock(scheduler, dutiesMap, waitForDuties)
 
 		dutiesMap.Set(phase0.Epoch(0), []*eth2apiv1.ProposerDuty{
@@ -753,13 +755,14 @@ func TestScheduler_Proposer_Reorg_Current(t *testing.T) {
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 3: tick with no duty-execution + duty-fetch for the next epoch
-		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch+testSlotsPerEpoch/2+1))
+		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(testSlotsPerEpoch+testSlotsPerEpoch/2+1))
 		ticker.Send(phase0.Slot(testSlotsPerEpoch + testSlotsPerEpoch/2 + 1))
 		waitForDutiesFetch(t, fetchDutiesCall, timeout)
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 4: trigger reorg on current dependent root change.
-		// Proposer duties depend on the current duty dependent root, so a refetch should happen immediately.
+		// The current epoch is refetched immediately, and the next epoch on the next tick. Until its refetch
+		// lands, the next epoch's cached view is marked stale, so message validation doesn't check against it.
 		e = &eth2apiv1.Event{
 			Data: &eth2apiv1.HeadEvent{
 				Slot:                     testSlotsPerEpoch + testSlotsPerEpoch/2 + 1,
@@ -775,18 +778,23 @@ func TestScheduler_Proposer_Reorg_Current(t *testing.T) {
 		})
 		scheduler.HandleHeadEvent()(t.Context(), e.Data.(*eth2apiv1.HeadEvent))
 		waitForDutiesFetch(t, fetchDutiesCall, timeout)
+		synctest.Wait()
+		require.False(t, handler.duties.IsEpochStale(1), "the current epoch's refetch has landed")
+		require.True(t, handler.duties.IsEpochStale(2), "the next epoch's refetch is still pending")
 
 		// STEP 5: wait for proposer duties to be fetched for the next epoch
-		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch+testSlotsPerEpoch/2+2))
+		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(testSlotsPerEpoch+testSlotsPerEpoch/2+2))
 		ticker.Send(phase0.Slot(testSlotsPerEpoch + testSlotsPerEpoch/2 + 2))
 		waitForDutiesFetch(t, fetchDutiesCall, timeout)
+		synctest.Wait()
+		require.False(t, handler.duties.IsEpochStale(2), "the next epoch's refetch has landed")
 
 		// STEP 6: skip to the next epoch
-		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch+testSlotsPerEpoch/2+3))
+		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(testSlotsPerEpoch+testSlotsPerEpoch/2+3))
 		for slot := phase0.Slot(testSlotsPerEpoch + testSlotsPerEpoch/2 + 3); slot < testSlotsPerEpoch*2; slot++ {
 			ticker.Send(slot)
 			waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
-			waitForSlotN(scheduler.beaconConfig, slot+1)
+			waitForSlotN(scheduler.netCfg.Beacon, slot+1)
 		}
 
 		// STEP 7: The first assigned duty should not be executed
@@ -795,13 +803,65 @@ func TestScheduler_Proposer_Reorg_Current(t *testing.T) {
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 8: The second assigned duty should be executed
-		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch*2+1))
+		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(testSlotsPerEpoch*2+1))
 		duties, _ := dutiesMap.Get(phase0.Epoch(2))
 		expected := expectedExecutedProposerDuties(handler, duties)
 		setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
 
 		ticker.Send(phase0.Slot(testSlotsPerEpoch*2 + 1))
 		waitForDutiesExecution(t, fetchDutiesCall, executeDutiesCall, timeout, expected)
+
+		// Stop scheduler & wait for graceful exit.
+		cancel()
+		require.NoError(t, scheduler.Wait())
+		ticker.WaitShutdown()
+	})
+}
+
+// At an epoch's last slot a reorg doesn't refetch the current epoch, so it doesn't mark it stale either: no refetch
+// would clear the flag. The next epoch is refetched right away, which clears its own.
+func TestScheduler_Proposer_Reorg_Current_Last_Slot(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		var (
+			handler       = NewProposerHandler(dutystore.NewDuties[eth2apiv1.ProposerDuty](), false)
+			dutiesMap     = hashmap.New[phase0.Epoch, []*eth2apiv1.ProposerDuty]()
+			waitForDuties = &SafeValue[bool]{}
+			lastSlot      = phase0.Slot(testSlotsPerEpoch*2 - 1)
+		)
+		// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
+		// This deadline needs to be large enough to not prevent tests from executing their intended flow.
+		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
+		scheduler, ticker := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{handler}, lastSlot-1)
+		waitForSlotN(scheduler.netCfg.Beacon, lastSlot-1)
+		fetchDutiesCall, executeDutiesCall := setupProposerDutiesMock(scheduler, dutiesMap, waitForDuties)
+
+		dutiesMap.Set(phase0.Epoch(2), []*eth2apiv1.ProposerDuty{
+			{
+				PubKey:         phase0.BLSPubKey{1, 2, 3},
+				Slot:           phase0.Slot(testSlotsPerEpoch*2 + 1),
+				ValidatorIndex: phase0.ValidatorIndex(1),
+			},
+		})
+
+		// STEP 1: (on startup) wait for proposer duties to be fetched for the current epoch
+		waitForDuties.Set(true)
+		require.NoError(t, scheduler.Start(ctx))
+		waitForDutiesFetch(t, fetchDutiesCall, timeout)
+
+		// STEP 2: record the dependent roots, and fetch the next epoch on the tick
+		scheduler.HandleHeadEvent()(t.Context(), &eth2apiv1.HeadEvent{Slot: lastSlot - 1, CurrentDutyDependentRoot: phase0.Root{0x01}})
+		ticker.Send(lastSlot - 1)
+		waitForDutiesFetch(t, fetchDutiesCall, timeout)
+
+		// STEP 3: at the epoch's last slot, trigger reorg on current dependent root change
+		waitForSlotN(scheduler.netCfg.Beacon, lastSlot)
+		ticker.Send(lastSlot)
+		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
+		scheduler.HandleHeadEvent()(t.Context(), &eth2apiv1.HeadEvent{Slot: lastSlot, CurrentDutyDependentRoot: phase0.Root{0x02}})
+		waitForDutiesFetch(t, fetchDutiesCall, timeout) // the next epoch, right away
+		synctest.Wait()
+		require.False(t, handler.duties.IsEpochStale(1), "the current epoch isn't refetched, so it isn't marked")
+		require.False(t, handler.duties.IsEpochStale(2), "the next epoch's refetch has landed")
 
 		// Stop scheduler & wait for graceful exit.
 		cancel()
@@ -822,7 +882,7 @@ func TestScheduler_Proposer_Reorg_Current_Indices_Changed(t *testing.T) {
 		// This deadline needs to be large enough to not prevent tests from executing their intended flow.
 		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 		scheduler, ticker := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{handler}, testSlotsPerEpoch+testSlotsPerEpoch/2)
-		waitForSlotN(scheduler.beaconConfig, testSlotsPerEpoch+testSlotsPerEpoch/2)
+		waitForSlotN(scheduler.netCfg.Beacon, testSlotsPerEpoch+testSlotsPerEpoch/2)
 		fetchDutiesCall, executeDutiesCall := setupProposerDutiesMock(scheduler, dutiesMap, waitForDuties)
 
 		dutiesMap.Set(phase0.Epoch(0), []*eth2apiv1.ProposerDuty{
@@ -863,13 +923,13 @@ func TestScheduler_Proposer_Reorg_Current_Indices_Changed(t *testing.T) {
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 3: tick with no duty-execution + duty-fetch for the next epoch
-		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch+testSlotsPerEpoch/2+1))
+		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(testSlotsPerEpoch+testSlotsPerEpoch/2+1))
 		ticker.Send(phase0.Slot(testSlotsPerEpoch + testSlotsPerEpoch/2 + 1))
 		waitForDutiesFetch(t, fetchDutiesCall, timeout)
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 4: trigger reorg on current dependent root change.
-		// Proposer duties depend on the current duty dependent root, so a refetch should happen immediately.
+		// The current epoch is refetched immediately.
 		e = &eth2apiv1.Event{
 			Data: &eth2apiv1.HeadEvent{
 				Slot:                     testSlotsPerEpoch + testSlotsPerEpoch/2 + 1,
@@ -885,7 +945,7 @@ func TestScheduler_Proposer_Reorg_Current_Indices_Changed(t *testing.T) {
 		})
 		scheduler.HandleHeadEvent()(t.Context(), e.Data.(*eth2apiv1.HeadEvent))
 		waitForDutiesFetch(t, fetchDutiesCall, timeout)
-		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch+testSlotsPerEpoch/2+2))
+		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(testSlotsPerEpoch+testSlotsPerEpoch/2+2))
 		ticker.Send(phase0.Slot(testSlotsPerEpoch + testSlotsPerEpoch/2 + 2))
 		waitForDutiesFetch(t, fetchDutiesCall, timeout)
 
@@ -899,16 +959,16 @@ func TestScheduler_Proposer_Reorg_Current_Indices_Changed(t *testing.T) {
 			ValidatorIndex: phase0.ValidatorIndex(2),
 		}))
 		scheduler.indicesChgCh <- struct{}{}
-		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch+testSlotsPerEpoch/2+3))
+		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(testSlotsPerEpoch+testSlotsPerEpoch/2+3))
 		ticker.Send(phase0.Slot(testSlotsPerEpoch + testSlotsPerEpoch/2 + 3))
 		waitForDutiesFetch(t, fetchDutiesCall, timeout)
-		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch+testSlotsPerEpoch/2+4))
+		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(testSlotsPerEpoch+testSlotsPerEpoch/2+4))
 		ticker.Send(phase0.Slot(testSlotsPerEpoch + testSlotsPerEpoch/2 + 4))
 		waitForDutiesFetch(t, fetchDutiesCall, timeout)
 
 		// STEP 6: skip to the next epoch
 		for slot := phase0.Slot(testSlotsPerEpoch + testSlotsPerEpoch/2 + 5); slot < testSlotsPerEpoch*2; slot++ {
-			waitForSlotN(scheduler.beaconConfig, slot)
+			waitForSlotN(scheduler.netCfg.Beacon, slot)
 			ticker.Send(slot)
 			waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 		}
@@ -919,7 +979,7 @@ func TestScheduler_Proposer_Reorg_Current_Indices_Changed(t *testing.T) {
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 8: The second assigned duty should be executed
-		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch*2+1))
+		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(testSlotsPerEpoch*2+1))
 		duties, _ = dutiesMap.Get(phase0.Epoch(2))
 		expected := expectedExecutedProposerDuties(handler, duties)
 		setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
@@ -960,13 +1020,13 @@ func TestScheduler_Proposer_Early_Block(t *testing.T) {
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 2: wait for no action to be taken
-		waitForSlotN(scheduler.beaconConfig, phase0.Slot(1))
+		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(1))
 		ticker.Send(phase0.Slot(1))
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 3: wait for proposer duties to be executed faster than 1/3 of the slot duration when
 		// Beacon head event is observed (block arrival)
-		waitForSlotN(scheduler.beaconConfig, phase0.Slot(2))
+		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(2))
 		duties, _ := dutiesMap.Get(phase0.Epoch(0))
 		expected := expectedExecutedProposerDuties(handler, duties)
 		setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
@@ -981,7 +1041,7 @@ func TestScheduler_Proposer_Early_Block(t *testing.T) {
 		}
 		scheduler.HandleHeadEvent()(t.Context(), e.Data.(*eth2apiv1.HeadEvent))
 		waitForDutiesExecution(t, fetchDutiesCall, executeDutiesCall, timeout, expected)
-		require.Less(t, time.Since(slotStartTime), scheduler.beaconConfig.SlotDuration/3)
+		require.Less(t, time.Since(slotStartTime), scheduler.netCfg.SlotDuration/3)
 
 		// Stop scheduler & wait for graceful exit.
 		cancel()
@@ -1001,7 +1061,7 @@ func TestScheduler_Proposer_Start_At_The_Last_Slot_Of_The_Epoch(t *testing.T) {
 		// This deadline needs to be large enough to not prevent tests from executing their intended flow.
 		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 		scheduler, ticker := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{handler}, testSlotsPerEpoch-1)
-		waitForSlotN(scheduler.beaconConfig, testSlotsPerEpoch-1)
+		waitForSlotN(scheduler.netCfg.Beacon, testSlotsPerEpoch-1)
 		fetchDutiesCall, executeDutiesCall := setupProposerDutiesMock(scheduler, dutiesMap, waitForDuties)
 
 		dutiesMap.Set(phase0.Epoch(0), []*eth2apiv1.ProposerDuty{
@@ -1025,7 +1085,7 @@ func TestScheduler_Proposer_Start_At_The_Last_Slot_Of_The_Epoch(t *testing.T) {
 		waitForDutiesFetch(t, fetchDutiesCall, timeout) // next epoch fetch-call
 
 		// STEP 2: wait for proposer duties to be executed
-		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch))
+		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(testSlotsPerEpoch))
 		duties, _ := dutiesMap.Get(phase0.Epoch(1))
 		expected := expectedExecutedProposerDuties(handler, duties)
 		setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
@@ -1047,19 +1107,9 @@ func TestScheduler_Proposer_Indices_Changed_Too_Late_In_Slot(t *testing.T) {
 			dutiesMap     = hashmap.New[phase0.Epoch, []*eth2apiv1.ProposerDuty]()
 			waitForDuties = &SafeValue[bool]{}
 		)
-		// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
-		// This deadline needs to be large enough to not prevent tests from executing their intended flow.
-		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
-		scheduler, ticker := setupSchedulerAndMocks(ctx, t, []dutyHandler{handler})
-		fetchDutiesCall, executeDutiesCall := setupProposerDutiesMock(scheduler, dutiesMap, waitForDuties)
-		require.NoError(t, scheduler.Start(ctx))
-
-		// STEP 1: slot 0 has no duties and no action.
-		ticker.Send(phase0.Slot(0))
-		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
-
-		// STEP 2: arrange for indices change to arrive too late for slot 0 processing.
-		waitForDuties.Set(true)
+		// A duty exists from the start, so there's an eligible validator (proposer shares are derived from the
+		// duties map) and the silent startup fetch fulfills the current-epoch intent. That settles the epoch
+		// before the indices change, isolating what we test: a late indices change is the only slot-1 re-fetch.
 		dutiesMap.Set(phase0.Epoch(0), []*eth2apiv1.ProposerDuty{
 			{
 				PubKey:         phase0.BLSPubKey{1, 2, 3},
@@ -1067,22 +1117,35 @@ func TestScheduler_Proposer_Indices_Changed_Too_Late_In_Slot(t *testing.T) {
 				ValidatorIndex: phase0.ValidatorIndex(1),
 			},
 		})
+		// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
+		// This deadline needs to be large enough to not prevent tests from executing their intended flow.
+		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
+		scheduler, ticker := setupSchedulerAndMocks(ctx, t, []dutyHandler{handler})
+		fetchDutiesCall, executeDutiesCall := setupProposerDutiesMock(scheduler, dutiesMap, waitForDuties)
+		require.NoError(t, scheduler.Start(ctx))
+
+		// STEP 1: the startup fetch already fulfilled the current-epoch intent, so slot 0 has no action.
+		ticker.Send(phase0.Slot(0))
+		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
+
+		// STEP 2: arrange for indices change to arrive too late for slot 0 processing.
+		waitForDuties.Set(true)
 		go func() {
-			time.Sleep(scheduler.beaconConfig.IntervalDuration() + 1*time.Millisecond)
+			time.Sleep(scheduler.netCfg.IntervalDuration(0) + 1*time.Millisecond)
 			scheduler.indicesChgCh <- struct{}{}
 		}()
 
 		// No fetching should happen on slot 0 because the indices change arrived too late in the slot.
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
-		// STEP 3: on slot 1 the deferred indices change is processed and duties are fetched.
-		waitForSlotN(scheduler.beaconConfig, phase0.Slot(1))
+		// STEP 3: on slot 1 the deferred indices change is processed and duties are re-fetched.
+		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(1))
 		ticker.Send(phase0.Slot(1))
 		waitForDutiesFetch(t, fetchDutiesCall, timeout)
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 4: on slot 2 the fetched duty executes.
-		waitForSlotN(scheduler.beaconConfig, phase0.Slot(2))
+		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(2))
 		duties, _ := dutiesMap.Get(phase0.Epoch(0))
 		expected := expectedExecutedProposerDuties(handler, duties)
 		setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
@@ -1125,7 +1188,7 @@ func TestScheduler_Proposer_Reorg_Previous_Epoch_Transition(t *testing.T) {
 		// This deadline needs to be large enough to not prevent tests from executing their intended flow.
 		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 		scheduler, ticker := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{handler}, testSlotsPerEpoch*2-1)
-		waitForSlotN(scheduler.beaconConfig, testSlotsPerEpoch*2-1)
+		waitForSlotN(scheduler.netCfg.Beacon, testSlotsPerEpoch*2-1)
 		fetchedEpochs := make(chan phase0.Epoch, 100)
 		fetchDutiesCall, executeDutiesCall := setupProposerDutiesMockWithFetcher(
 			scheduler,
@@ -1156,7 +1219,7 @@ func TestScheduler_Proposer_Reorg_Previous_Epoch_Transition(t *testing.T) {
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 3: enter the new epoch with no extra action.
-		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch*2))
+		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(testSlotsPerEpoch*2))
 		ticker.Send(phase0.Slot(testSlotsPerEpoch * 2))
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
@@ -1188,7 +1251,7 @@ func TestScheduler_Proposer_Reorg_Previous_Epoch_Transition(t *testing.T) {
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 5: the already-fetched current-epoch duty still executes on slot 25, proving no current-epoch refetch.
-		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch*2+1))
+		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(testSlotsPerEpoch*2+1))
 		expectedCurrent := expectedExecutedProposerDuties(handler, initialEpoch2Duties)
 		setExecuteDutyFunc(scheduler, executeDutiesCall, len(expectedCurrent))
 
@@ -1197,11 +1260,11 @@ func TestScheduler_Proposer_Reorg_Previous_Epoch_Transition(t *testing.T) {
 
 		// STEP 6: next-epoch refetch still happens later at the normal prefetch point.
 		for slot := phase0.Slot(testSlotsPerEpoch*2 + 2); slot < phase0.Slot(testSlotsPerEpoch*2+5); slot++ {
-			waitForSlotN(scheduler.beaconConfig, slot)
+			waitForSlotN(scheduler.netCfg.Beacon, slot)
 			ticker.Send(slot)
 			waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 		}
-		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch*2+5))
+		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(testSlotsPerEpoch*2+5))
 		ticker.Send(phase0.Slot(testSlotsPerEpoch*2 + 5))
 		waitForFetchedProposerEpoch(t, fetchDutiesCall, fetchedEpochs, timeout, phase0.Epoch(3))
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
@@ -1213,7 +1276,7 @@ func TestScheduler_Proposer_Reorg_Previous_Epoch_Transition(t *testing.T) {
 	})
 }
 
-func TestScheduler_Proposer_No_Eligible_Validators_Does_Not_Retry_Current_Epoch_Fetch(t *testing.T) {
+func TestScheduler_Proposer_No_Eligible_Validators_Leaves_Current_Epoch_Fetch_Pending(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		var (
 			handler       = NewProposerHandler(dutystore.NewDuties[eth2apiv1.ProposerDuty](), false)
@@ -1229,13 +1292,17 @@ func TestScheduler_Proposer_No_Eligible_Validators_Does_Not_Retry_Current_Epoch_
 		waitForDuties.Set(true)
 		require.NoError(t, scheduler.Start(ctx))
 
-		// Startup fetch completes as a successful no-op because there are no eligible validators.
-		require.True(t, handler.dutyFetchIntents[phase0.Epoch(0)])
+		// With no eligible validators, the startup fetch is a no-op that must NOT mark the intent fulfilled —
+		// otherwise the duty would never be fetched once a validator becomes eligible (e.g. after a metadata
+		// sync that lands without an accompanying indices-change event). The intent stays pending.
+		require.False(t, handler.dutyFetchIntents[phase0.Epoch(0)])
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
-		// The next tick must not retry the current-epoch fetch.
+		// The next tick re-evaluates the pending intent. There are still no eligible validators, so it
+		// short-circuits before any fetch and the intent remains pending (ready to be retried later).
 		ticker.Send(phase0.Slot(0))
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
+		require.False(t, handler.dutyFetchIntents[phase0.Epoch(0)])
 
 		// Stop scheduler & wait for graceful exit.
 		cancel()
@@ -1288,13 +1355,13 @@ func TestScheduler_Proposer_Retry_Current_Epoch_Fetch_On_Next_Tick(t *testing.T)
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 3: fail the retry on slot 1.
-		waitForSlotN(scheduler.beaconConfig, phase0.Slot(1))
+		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(1))
 		ticker.Send(phase0.Slot(1))
 		waitForDutiesFetch(t, fetchDutiesCall, timeout)
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 4: retry again on slot 2, succeed, and execute the duty in the same slot.
-		waitForSlotN(scheduler.beaconConfig, phase0.Slot(2))
+		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(2))
 		duties, _ := dutiesMap.Get(phase0.Epoch(0))
 		expected := expectedExecutedProposerDuties(handler, duties)
 		setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
@@ -1330,7 +1397,7 @@ func TestScheduler_Proposer_Retry_Next_Epoch_Fetch_On_Next_Tick_Mid_Epoch(t *tes
 		// This deadline needs to be large enough to not prevent tests from executing their intended flow.
 		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 		scheduler, ticker := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{handler}, testSlotsPerEpoch/2)
-		waitForSlotN(scheduler.beaconConfig, testSlotsPerEpoch/2)
+		waitForSlotN(scheduler.netCfg.Beacon, testSlotsPerEpoch/2)
 		fetchedEpochs := make(chan phase0.Epoch, 100)
 		fetchDutiesCall, executeDutiesCall := setupProposerDutiesMockWithFetcher(
 			scheduler,
@@ -1357,19 +1424,19 @@ func TestScheduler_Proposer_Retry_Next_Epoch_Fetch_On_Next_Tick_Mid_Epoch(t *tes
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 3: retry on the next tick and fail again.
-		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch/2+1))
+		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(testSlotsPerEpoch/2+1))
 		ticker.Send(phase0.Slot(testSlotsPerEpoch/2 + 1))
 		waitForFetchedProposerEpoch(t, fetchDutiesCall, fetchedEpochs, timeout, phase0.Epoch(1))
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 4: retry on the next tick and fail again.
-		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch/2+2))
+		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(testSlotsPerEpoch/2+2))
 		ticker.Send(phase0.Slot(testSlotsPerEpoch/2 + 2))
 		waitForFetchedProposerEpoch(t, fetchDutiesCall, fetchedEpochs, timeout, phase0.Epoch(1))
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 5: retry on the next tick and succeed.
-		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch/2+3))
+		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(testSlotsPerEpoch/2+3))
 		ticker.Send(phase0.Slot(testSlotsPerEpoch/2 + 3))
 		waitForFetchedProposerEpoch(t, fetchDutiesCall, fetchedEpochs, timeout, phase0.Epoch(1))
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
@@ -1401,7 +1468,7 @@ func TestScheduler_Proposer_Retry_Next_Epoch_Fetch_On_Next_Tick_Epoch_Transition
 		// This deadline needs to be large enough to not prevent tests from executing their intended flow.
 		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 		scheduler, ticker := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{handler}, testSlotsPerEpoch-3)
-		waitForSlotN(scheduler.beaconConfig, testSlotsPerEpoch-3)
+		waitForSlotN(scheduler.netCfg.Beacon, testSlotsPerEpoch-3)
 		fetchedEpochs := make(chan phase0.Epoch, 100)
 		fetchDutiesCall, executeDutiesCall := setupProposerDutiesMockWithFetcher(
 			scheduler,
@@ -1428,19 +1495,19 @@ func TestScheduler_Proposer_Retry_Next_Epoch_Fetch_On_Next_Tick_Epoch_Transition
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 3: retry on the next tick and fail again.
-		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch-2))
+		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(testSlotsPerEpoch-2))
 		ticker.Send(phase0.Slot(testSlotsPerEpoch - 2))
 		waitForFetchedProposerEpoch(t, fetchDutiesCall, fetchedEpochs, timeout, phase0.Epoch(1))
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 4: retry on the next tick and fail again.
-		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch-1))
+		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(testSlotsPerEpoch-1))
 		ticker.Send(phase0.Slot(testSlotsPerEpoch - 1))
 		waitForFetchedProposerEpoch(t, fetchDutiesCall, fetchedEpochs, timeout, phase0.Epoch(1))
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 5: on the next tick, the previously next epoch becomes current, fetch succeeds, and the duty executes.
-		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch))
+		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(testSlotsPerEpoch))
 		duties, _ := dutiesMap.Get(phase0.Epoch(1))
 		expected := expectedExecutedProposerDuties(handler, duties)
 		setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
@@ -1476,7 +1543,7 @@ func TestScheduler_Proposer_Retry_Next_Epoch_Fetch_On_Next_Tick_Epoch_Transition
 		// This deadline needs to be large enough to not prevent tests from executing their intended flow.
 		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 		scheduler, ticker := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{handler}, testSlotsPerEpoch-1)
-		waitForSlotN(scheduler.beaconConfig, testSlotsPerEpoch-1)
+		waitForSlotN(scheduler.netCfg.Beacon, testSlotsPerEpoch-1)
 		fetchedEpochs := make(chan phase0.Epoch, 100)
 		fetchDutiesCall, executeDutiesCall := setupProposerDutiesMockWithFetcher(
 			scheduler,
@@ -1498,19 +1565,19 @@ func TestScheduler_Proposer_Retry_Next_Epoch_Fetch_On_Next_Tick_Epoch_Transition
 		waitForFetchedProposerEpoch(t, fetchDutiesCall, fetchedEpochs, timeout, phase0.Epoch(1))
 
 		// STEP 2: on the epoch transition tick, retry the previously next epoch as the now current epoch and fail.
-		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch))
+		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(testSlotsPerEpoch))
 		ticker.Send(phase0.Slot(testSlotsPerEpoch))
 		waitForFetchedProposerEpoch(t, fetchDutiesCall, fetchedEpochs, timeout, phase0.Epoch(1))
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 3: retry on the next tick and fail again.
-		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch+1))
+		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(testSlotsPerEpoch+1))
 		ticker.Send(phase0.Slot(testSlotsPerEpoch + 1))
 		waitForFetchedProposerEpoch(t, fetchDutiesCall, fetchedEpochs, timeout, phase0.Epoch(1))
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 4: retry on the next tick, succeed, and execute the duty in the same slot.
-		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch+2))
+		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(testSlotsPerEpoch+2))
 		duties, _ := dutiesMap.Get(phase0.Epoch(1))
 		expected := expectedExecutedProposerDuties(handler, duties)
 		setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
@@ -1537,7 +1604,7 @@ func TestScheduler_Proposer_Fetch_Execute_Next_Epoch_Duty(t *testing.T) {
 		// This deadline needs to be large enough to not prevent tests from executing their intended flow.
 		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 		scheduler, ticker := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{handler}, testSlotsPerEpoch/2-3)
-		waitForSlotN(scheduler.beaconConfig, testSlotsPerEpoch/2-3)
+		waitForSlotN(scheduler.netCfg.Beacon, testSlotsPerEpoch/2-3)
 		fetchDutiesCall, executeDutiesCall := setupProposerDutiesMock(scheduler, dutiesMap, waitForDuties)
 		require.NoError(t, scheduler.Start(ctx))
 
@@ -1554,18 +1621,18 @@ func TestScheduler_Proposer_Fetch_Execute_Next_Epoch_Duty(t *testing.T) {
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 2: wait for no action to be taken
-		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch/2-2))
+		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(testSlotsPerEpoch/2-2))
 		ticker.Send(phase0.Slot(testSlotsPerEpoch/2 - 2))
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 3: wait for duties to be fetched for the next epoch
-		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch/2-1))
+		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(testSlotsPerEpoch/2-1))
 		waitForDuties.Set(true)
 		ticker.Send(phase0.Slot(testSlotsPerEpoch/2 - 1))
 		waitForDutiesFetch(t, fetchDutiesCall, timeout)
 
 		// STEP 4: wait for proposer duties to be executed
-		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch))
+		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(testSlotsPerEpoch))
 		duties, _ := dutiesMap.Get(phase0.Epoch(1))
 		expected := expectedExecutedProposerDuties(handler, duties)
 		setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
@@ -1578,4 +1645,46 @@ func TestScheduler_Proposer_Fetch_Execute_Next_Epoch_Duty(t *testing.T) {
 		require.NoError(t, scheduler.Wait())
 		ticker.WaitShutdown()
 	})
+}
+
+// idleTicker never ticks: Next blocks forever, pinning the handler loop to its event cases.
+type idleTicker struct{}
+
+func (idleTicker) Next() <-chan time.Time { return nil }
+func (idleTicker) Slot() phase0.Slot      { return 0 }
+
+// An indices change received while the loop is idle (between ticks) marks the current and next
+// epochs' cached duty views stale immediately — at event time, not at the next tick — so
+// freshness-aware §5 message validation starts tolerating right away. The refetch intents are
+// declared for the next tick to process; no fetch happens from the idle path itself.
+func TestProposerHandler_IndicesChangeMarksStaleImmediately(t *testing.T) {
+	netCfg := networkconfig.TestNetwork
+	store := dutystore.NewDuties[eth2apiv1.ProposerDuty]()
+	currentEpoch := netCfg.EstimatedCurrentEpoch()
+	store.Set(currentEpoch, nil) // a pre-change view exists for the current epoch
+
+	h := NewProposerHandler(store, false)
+	h.logger = zap.NewNop()
+	h.netCfg = netCfg
+	h.ticker = idleTicker{}
+	h.indicesChangeCh = make(chan struct{}, 1)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	done := make(chan struct{})
+	go func() { defer close(done); h.HandleDuties(ctx) }()
+
+	h.indicesChangeCh <- struct{}{}
+
+	require.Eventually(t, func() bool {
+		return store.IsEpochStale(currentEpoch) && store.IsEpochStale(currentEpoch+1)
+	}, time.Second, 5*time.Millisecond, "stale marking must happen on event receipt, without a tick")
+
+	// Stop the loop before reading its unsynchronized intents map.
+	cancel()
+	<-done
+	require.Contains(t, h.dutyFetchIntents, currentEpoch)
+	require.False(t, h.dutyFetchIntents[currentEpoch], "current-epoch intent must be declared unfulfilled")
+	require.Contains(t, h.dutyFetchIntents, currentEpoch+1)
+	require.False(t, h.dutyFetchIntents[currentEpoch+1], "next-epoch intent must be declared unfulfilled")
 }

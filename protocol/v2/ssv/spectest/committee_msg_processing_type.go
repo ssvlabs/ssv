@@ -3,24 +3,26 @@ package spectest
 import (
 	"context"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+
 	spectests "github.com/ssvlabs/ssv-spec/qbft/spectest/tests"
 	spec "github.com/ssvlabs/ssv-spec/ssv"
 	stests "github.com/ssvlabs/ssv-spec/ssv/spectest/tests"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
-	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/ibft/storage"
-	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
@@ -37,6 +39,7 @@ type CommitteeSpecTest struct {
 	OutputMessages         []*spectypes.PartialSignatureMessages
 	BeaconBroadcastedRoots []string
 	ExpectedErrorCode      int
+	NeedsAggRunners        bool
 }
 
 func (test *CommitteeSpecTest) TestName() string {
@@ -49,32 +52,15 @@ func (test *CommitteeSpecTest) FullName() string {
 
 // RunAsPartOfMultiTest runs the test as part of a MultiCommitteeSpecTest
 func (test *CommitteeSpecTest) RunAsPartOfMultiTest(t *testing.T) {
-	logger := protocoltesting.SpectestLogger(t)
+	logger := log.TestLogger(t)
 	lastErr := test.runPreTesting(logger)
-	spectests.AssertErrorCode(t, test.ExpectedErrorCode, lastErr)
+	spectests.AssertErrorCode(t, adjustExpectedErrorCode(test.ExpectedErrorCode), adjustActualError(lastErr))
 
-	broadcastedMsgsCap := 0
-	broadcastedRootsCap := 0
-	for _, runner := range test.Committee.Runners {
-		network := runner.GetNetwork().(*spectestingutils.TestingNetwork)
-		beaconNetwork := runner.GetBeaconNode().(*protocoltesting.BeaconNodeWrapped)
-		broadcastedMsgsCap += len(network.BroadcastedMsgs)
-		broadcastedRootsCap += len(beaconNetwork.GetBroadcastedRoots())
-	}
-
-	broadcastedMsgs := make([]*spectypes.SignedSSVMessage, 0, broadcastedMsgsCap)
-	broadcastedRoots := make([]phase0.Root, 0, broadcastedRootsCap)
-	for _, runner := range test.Committee.Runners {
-		network := runner.GetNetwork().(*spectestingutils.TestingNetwork)
-		beaconNetwork := runner.GetBeaconNode().(*protocoltesting.BeaconNodeWrapped)
-		broadcastedMsgs = append(broadcastedMsgs, network.BroadcastedMsgs...)
-		broadcastedRoots = append(broadcastedRoots, beaconNetwork.GetBroadcastedRoots()...)
-	}
+	broadcastedMsgs, broadcastedRoots := collectCommitteeBroadcasts(test.Committee)
 
 	// test output message (in asynchronous order)
 	spectestingutils.ComparePartialSignatureOutputMessagesInAsynchronousOrder(t, test.OutputMessages, broadcastedMsgs, test.Committee.CommitteeMember.Committee)
 
-	// test beacon broadcasted msgs
 	spectestingutils.CompareBroadcastedBeaconMsgs(t, test.BeaconBroadcastedRoots, broadcastedRoots)
 
 	// post root
@@ -100,7 +86,7 @@ func (test *CommitteeSpecTest) runPreTesting(logger *zap.Logger) error {
 		var err error
 		switch input := input.(type) {
 		case spectypes.Duty:
-			_, _, err = test.Committee.StartDuty(context.TODO(), logger, input.(*spectypes.CommitteeDuty))
+			_, _, err = test.Committee.StartDuty(context.TODO(), logger, input)
 			if err != nil {
 				lastErr = err
 			}
@@ -109,6 +95,7 @@ func (test *CommitteeSpecTest) runPreTesting(logger *zap.Logger) error {
 			if err != nil {
 				return fmt.Errorf("failed to decode SignedSSVMessage: %w", err)
 			}
+
 			err = test.Committee.ProcessMessage(context.TODO(), logger, msg)
 			if err != nil {
 				lastErr = err
@@ -186,28 +173,94 @@ func (tests *MultiCommitteeSpecTest) GetPostState(logger *zap.Logger) (any, erro
 
 func overrideStateComparisonCommitteeSpecTest(t *testing.T, test *CommitteeSpecTest, name string, testType string) {
 	specCommittee := &spec.Committee{}
-	specDir, err := storage.GetSpecDir("", filepath.Join("ssv", "spectest"))
-	require.NoError(t, err)
-	specCommittee, err = typescomparable.UnmarshalStateComparison(specDir, name, testType, specCommittee)
-
+	specCommittee, err := storage.UnmarshalStateComparison("ssv", name, testType, specCommittee)
 	require.NoError(t, err)
 	committee := &validator.Committee{}
-	committee, err = typescomparable.UnmarshalStateComparison(specDir, name, testType, committee)
+	committee, err = storage.UnmarshalStateComparison("ssv", name, testType, committee)
 	require.NoError(t, err)
 
 	committee.Shares = specCommittee.Share
 	committee.CommitteeMember = &specCommittee.CommitteeMember
-	for slot := range committee.Runners {
-		committee.Runners[slot].NetworkConfig = networkconfig.TestNetwork
-		// Use test runner as signer source since deserialized runner has no signer
+
+	netCfg := testNetworkConfig(test.NeedsAggRunners)
+
+	stateMap, err := readStateComparisonMap(name, testType)
+	require.NoError(t, err)
+
+	committeeRunnersMap, _ := stateMap["CommitteeRunners"].(map[string]any)
+	aggregatorRunnersMap, _ := stateMap["AggregatorCommitteeRunners"].(map[string]any)
+	if committeeRunnersMap != nil || aggregatorRunnersMap != nil {
+		ks := keySetFromShares(committee.Shares)
+		require.NotNil(t, ks, "no shares for runner keyset")
+
+		if committeeRunnersMap != nil {
+			if committee.Runners == nil {
+				committee.Runners = make(map[phase0.Slot]*runner.CommitteeRunner, len(committeeRunnersMap))
+			}
+			for slotStr, rawRunner := range committeeRunnersMap {
+				runnerMap, ok := rawRunner.(map[string]any)
+				require.True(t, ok, "committee runner entry is not a map")
+
+				slot, err := strconv.ParseUint(slotStr, 10, 64)
+				require.NoError(t, err)
+
+				fixedRunner := fixRunnerForRun(t, runnerMap, ks, netCfg)
+				if cr, ok := fixedRunner.(*runner.CommitteeRunner); ok {
+					committee.Runners[phase0.Slot(slot)] = cr
+				}
+			}
+		}
+
+		if aggregatorRunnersMap != nil {
+			if committee.AggregatorRunners == nil {
+				committee.AggregatorRunners = make(map[phase0.Slot]*runner.AggregatorCommitteeRunner, len(aggregatorRunnersMap))
+			}
+			for slotStr, rawRunner := range aggregatorRunnersMap {
+				runnerMap, ok := rawRunner.(map[string]any)
+				require.True(t, ok, "aggregator committee runner entry is not a map")
+
+				slot, err := strconv.ParseUint(slotStr, 10, 64)
+				require.NoError(t, err)
+
+				fixedRunner := fixRunnerForRun(t, runnerMap, ks, netCfg)
+				if acr, ok := fixedRunner.(*runner.AggregatorCommitteeRunner); ok {
+					committee.AggregatorRunners[phase0.Slot(slot)] = acr
+				}
+			}
+		}
+	}
+
+	for slot, cr := range committee.Runners {
+		if cr == nil || cr.BaseRunner == nil {
+			continue
+		}
+		applyRunnerNetworkConfig(cr, netCfg)
 		var signerSource runner.Runner
 		if testRunner, ok := test.Committee.Runners[slot]; ok {
 			signerSource = testRunner
 		}
-		committee.Runners[slot].ValCheck = createValueChecker(committee.Runners[slot], signerSource)
+		setRunnerValCheck(cr, createValueChecker(cr, signerSource))
 	}
-	for slot := range test.Committee.Runners {
-		test.Committee.Runners[slot].ValCheck = createValueChecker(test.Committee.Runners[slot])
+	for _, ar := range committee.AggregatorRunners {
+		if ar == nil || ar.BaseRunner == nil {
+			continue
+		}
+		applyRunnerNetworkConfig(ar, netCfg)
+		ar.ValCheck = createValueChecker(ar)
+	}
+	for _, cr := range test.Committee.Runners {
+		if cr == nil {
+			continue
+		}
+		applyRunnerNetworkConfig(cr, netCfg)
+		setRunnerValCheck(cr, createValueChecker(cr))
+	}
+	for _, ar := range test.Committee.AggregatorRunners {
+		if ar == nil {
+			continue
+		}
+		applyRunnerNetworkConfig(ar, netCfg)
+		ar.ValCheck = createValueChecker(ar)
 	}
 
 	root, err := committee.GetRoot()
@@ -216,4 +269,51 @@ func overrideStateComparisonCommitteeSpecTest(t *testing.T, test *CommitteeSpecT
 	test.PostDutyCommitteeRoot = hex.EncodeToString(root[:])
 
 	test.PostDutyCommittee = committee
+}
+
+func readStateComparisonMap(testName, testType string) (map[string]any, error) {
+	byteValue, err := storage.ReadStateComparisonFile("ssv", testName, testType)
+	if err != nil {
+		return nil, err
+	}
+	var result map[string]any
+	if err := json.Unmarshal(byteValue, &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+func collectCommitteeBroadcasts(committee *validator.Committee) ([]*spectypes.SignedSSVMessage, []phase0.Root) {
+	broadcastedMsgsCap := 0
+	broadcastedRootsCap := 0
+
+	for _, runner := range committee.Runners {
+		network := runner.GetNetwork().(*protocoltesting.TestingNetwork)
+		beaconNetwork := runner.GetBeaconNode().(*protocoltesting.BeaconNodeWrapped)
+		broadcastedMsgsCap += len(network.BroadcastedMsgs)
+		broadcastedRootsCap += len(beaconNetwork.GetBroadcastedRoots())
+	}
+	for _, runner := range committee.AggregatorRunners {
+		network := runner.GetNetwork().(*protocoltesting.TestingNetwork)
+		beaconNetwork := runner.GetBeaconNode().(*protocoltesting.BeaconNodeWrapped)
+		broadcastedMsgsCap += len(network.BroadcastedMsgs)
+		broadcastedRootsCap += len(beaconNetwork.GetBroadcastedRoots())
+	}
+
+	broadcastedMsgs := make([]*spectypes.SignedSSVMessage, 0, broadcastedMsgsCap)
+	broadcastedRoots := make([]phase0.Root, 0, broadcastedRootsCap)
+	for _, r := range committee.Runners {
+		network := r.GetNetwork().(*protocoltesting.TestingNetwork)
+		beaconNetwork := r.GetBeaconNode().(*protocoltesting.BeaconNodeWrapped)
+		broadcastedMsgs = append(broadcastedMsgs, network.BroadcastedMsgs...)
+		broadcastedRoots = append(broadcastedRoots, beaconNetwork.GetBroadcastedRoots()...)
+	}
+	for _, r := range committee.AggregatorRunners {
+		network := r.GetNetwork().(*protocoltesting.TestingNetwork)
+		beaconNetwork := r.GetBeaconNode().(*protocoltesting.BeaconNodeWrapped)
+		broadcastedMsgs = append(broadcastedMsgs, network.BroadcastedMsgs...)
+		broadcastedRoots = append(broadcastedRoots, beaconNetwork.GetBroadcastedRoots()...)
+	}
+
+	return broadcastedMsgs, broadcastedRoots
 }

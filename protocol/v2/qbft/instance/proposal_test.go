@@ -31,6 +31,25 @@ func TestUponProposalFutureRoundBumpsAndBroadcastsPrepare(t *testing.T) {
 	require.Equal(t, []spectypes.OperatorID{2}, prepare.SignedMessage.OperatorIDs)
 }
 
+func TestUponProposalGivesUpQuietlyAtCutOffRound(t *testing.T) {
+	env := newInstanceTestEnv(t, 2)
+	env.setLeader(1)
+	// A role whose cap equals CutOffRound validates a proposal at the cap but its instance gives up there.
+	// Accepting one bumps the instance into the cutoff, so it gives up without preparing — quietly, no error.
+	env.config.CutOffRound = env.inst.State.Round + 1
+	cutOffRound := env.config.CutOffRound
+
+	fullData := []byte("proposal-value")
+	proposal := env.proposal(cutOffRound, 1, fullData, env.hash(fullData), nil, nil)
+
+	err := env.inst.uponProposal(t.Context(), zap.NewNop(), proposal)
+	require.NoError(t, err)
+	require.Equal(t, cutOffRound, env.inst.State.Round)
+	require.Nil(t, env.inst.State.ProposalAcceptedForCurrentRound)
+	require.Zero(t, env.roundTimer.State.Timeouts, "no timer armed once the instance gives up at the cutoff")
+	require.Empty(t, env.network.BroadcastedMsgs, "no prepare broadcast at the cutoff")
+}
+
 func TestUponProposalDuplicateIgnored(t *testing.T) {
 	env := newInstanceTestEnv(t, 2)
 	env.setLeader(1)

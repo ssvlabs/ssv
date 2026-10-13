@@ -24,7 +24,7 @@ In case the node misses messages, you can increase the amount of goroutines that
 ```yaml
 ssv:
   ValidatorOptions:
-    MsgWorkersCount: 2048 # default is 1024
+    MsgWorkersCount: 2048 # default is 256
 ```
 
 With environment variables:

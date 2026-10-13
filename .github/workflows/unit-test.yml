@@ -51,6 +51,43 @@ jobs:
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
+  # Second matrix leg: the same unit suite with the global test config flipped post-Boole-fork,
+  # mirroring how spec-test.yml gained its spec-test-boole-post pass. No codecov upload — the
+  # primary ssv job owns the core-flagged coverage report.
+  ssv-boole-post:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6.0.2
+        with:
+          lfs: true
+
+      - name: Setup Go
+        id: setup-go
+        uses: actions/setup-go@v6.3.0
+        with:
+          go-version-file: go.mod
+          # Keep setup-go cache disabled and use explicit actions/cache below so keying/restore
+          # behavior is consistent across workflows.
+          cache: false
+
+      - name: Restore Go cache (ssv boole-post)
+        uses: actions/cache@v5.0.4
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: ${{ runner.os }}-go-${{ steps.setup-go.outputs.go-version }}-unit-ssv-boole-post-${{ hashFiles('go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-${{ steps.setup-go.outputs.go-version }}-unit-ssv-boole-post-
+            ${{ runner.os }}-go-${{ steps.setup-go.outputs.go-version }}-unit-ssv-
+            ${{ runner.os }}-go-${{ steps.setup-go.outputs.go-version }}-
+
+      - name: Run unit tests (post-Boole fork config)
+        run: make unit-test
+        env:
+          SSV_TEST_BOOLE_FORK: post
+
   ssvsigner:
     runs-on: ubuntu-latest
 

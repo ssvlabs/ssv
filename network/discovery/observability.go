@@ -59,7 +59,17 @@ var (
 			observability.InstrumentName(observabilityNamespace, "peers.accepted"),
 			metric.WithUnit("{peer}"),
 			metric.WithDescription("total number of peers accepted during discovery")))
+
+	unhandledPacketsDroppedCounter = metrics.New(
+		meter.Int64Counter(
+			observability.InstrumentName(observabilityNamespace, "unhandled_packets.dropped"),
+			metric.WithUnit("{packet}"),
+			metric.WithDescription("total number of packets forwarded to the pre-fork listener that were dropped because its buffer was full")))
 )
+
+func recordUnhandledPacketDropped(ctx context.Context) {
+	unhandledPacketsDroppedCounter.Add(ctx, 1)
+}
 
 func recordPeerSkipped(ctx context.Context, reason skipReason) {
 	peerRejectionsCounter.Add(ctx, 1, metric.WithAttributes(peerSkipReasonAttribute(reason)))

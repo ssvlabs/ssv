@@ -33,9 +33,6 @@ const (
 	//
 	// This is NOT when this operator broadcasts its own partial-sig; see
 	// voluntaryExitExecutionSlotsToPostpone for that.
-	//
-	// Note: shares its numeric value (4) with voluntaryExitSchedulingSlack
-	// below by coincidence — the two are independent.
 	voluntaryExitDutySlotsToPostpone = 4
 
 	// voluntaryExitSchedulingSlack absorbs per-operator timing variance once an
@@ -49,7 +46,7 @@ const (
 	// — which the inbound message-validation path checks via dutyCount.
 	//
 	// Independent of voluntaryExitDutySlotsToPostpone despite happening to
-	// share the same numeric value (4); see the note on that constant.
+	// share the same numeric value (4).
 	voluntaryExitSchedulingSlack = 4
 
 	// voluntaryExitExecutionSlotsToPostpone is the earliest slot, expressed as
@@ -120,9 +117,9 @@ func (h *VoluntaryExitHandler) HandleDuties(ctx context.Context) {
 		case <-next:
 			currentSlot := h.ticker.Slot()
 			next = h.ticker.Next()
-			currentEpoch := h.beaconConfig.EstimatedEpochAtSlot(currentSlot)
+			currentEpoch := h.netCfg.EstimatedEpochAtSlot(currentSlot)
 
-			slotNumber := uint64(currentSlot)%h.beaconConfig.SlotsPerEpoch + 1
+			slotNumber := uint64(currentSlot)%h.netCfg.SlotsPerEpoch + 1
 			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, currentSlot, slotNumber)
 			h.logger.Debug("🛠 ticker event", zap.String("epoch_slot_pos", buildStr))
 
@@ -130,7 +127,7 @@ func (h *VoluntaryExitHandler) HandleDuties(ctx context.Context) {
 				// tickCtx ensures we never take too long to process ticks (otherwise we might not be able to catch up
 				// with the latest tick for a while, if ever). Since the ticker always fires at around slot start-time,
 				// setting the deadline to currentSlot+1 gives us about ~1 full slot (12s) to process the tick.
-				tickCtx, cancel := context.WithDeadline(ctx, h.beaconConfig.SlotStartTime(currentSlot+1))
+				tickCtx, cancel := context.WithDeadline(ctx, h.netCfg.SlotStartTime(currentSlot+1))
 				defer cancel()
 
 				h.processExecution(tickCtx, currentSlot)
@@ -141,22 +138,11 @@ func (h *VoluntaryExitHandler) HandleDuties(ctx context.Context) {
 				return
 			}
 
-			// Derive dutySlot deterministically from the EL event's block slot
-			// so every operator arrives at the same value regardless of when
-			// they personally received the event, and regardless of code version.
-			// This matters because dutySlot feeds dutyStore (used by inbound
-			// message-validation's dutyCount check), the outbound partial-sig
-			// envelope's Slot field, and VoluntaryExit.Epoch via
-			// EstimatedEpochAtSlot (see VoluntaryExitRunner.calculateVoluntaryExit).
-			// Divergent slots — across operators or across versions — would
-			// either drop messages at validation or break BLS partial-signature
-			// aggregation near epoch boundaries, silently failing the exit.
-			//
-			// earliestExecutionSlot is a separate, local-only gate that defers
-			// our own broadcast until peers' EL streaming pipelines have
-			// plausibly caught up. The two slots are deliberately decoupled so
-			// this operator's wire behavior stays interoperable with pre-#2851
-			// operators in mixed clusters.
+			// Derive dutySlot deterministically from the EL event's block slot so
+			// every operator arrives at the same value regardless of receipt time
+			// or code version; earliestExecutionSlot is a separate, local-only gate
+			// deferring our own broadcast until peers' EL pipelines have plausibly
+			// caught up. See both constants' docstrings for the full rationale.
 			blockSlot, err := h.blockSlot(ctx, exitDescriptor.BlockNumber)
 			if err != nil {
 				h.logger.Warn(
@@ -175,6 +161,9 @@ func (h *VoluntaryExitHandler) HandleDuties(ctx context.Context) {
 				ValidatorIndex: exitDescriptor.ValidatorIndex,
 			}
 
+			// Register the duty even for validators that are not ours: inbound p2p message validation consults this
+			// store (dutyCount), so without this our node would ignore a p2p message for this validator (and refuse
+			// to relay it).
 			h.duties.AddDuty(dutySlot, exitDescriptor.PubKey)
 			if !exitDescriptor.OwnValidator {
 				continue
@@ -219,7 +208,7 @@ func (h *VoluntaryExitHandler) processExecution(ctx context.Context, slot phase0
 	}
 
 	h.dutyQueue = pendingItems
-	h.duties.RemoveSlot(slot - phase0.Slot(h.beaconConfig.SlotsPerEpoch))
+	h.duties.RemoveSlot(slot - phase0.Slot(h.netCfg.SlotsPerEpoch))
 
 	span.SetAttributes(observability.DutyCountAttribute(len(dutiesForExecution)))
 	if dutyCount := len(dutiesForExecution); dutyCount != 0 {
@@ -246,7 +235,7 @@ func (h *VoluntaryExitHandler) blockSlot(ctx context.Context, blockNumber uint64
 		return 0, fmt.Errorf("request block %d from execution client: %w", blockNumber, err)
 	}
 
-	blockSlot = h.beaconConfig.EstimatedSlotAtTime(time.Unix(int64(header.Time), 0)) // #nosec G115
+	blockSlot = h.netCfg.EstimatedSlotAtTime(time.Unix(int64(header.Time), 0)) // #nosec G115
 
 	h.blockSlots[blockNumber] = blockSlot
 
@@ -263,6 +252,6 @@ func (h *VoluntaryExitHandler) blockSlot(ctx context.Context, blockNumber uint64
 
 func (h *VoluntaryExitHandler) dutyExecutionDeadline(slot phase0.Slot) time.Time {
 	// 1 wall-clock slot from execution should be sufficient for this duty-type.
-	dutyDeadline := h.beaconConfig.SlotStartTime(slot + 1)
+	dutyDeadline := h.netCfg.SlotStartTime(slot + 1)
 	return dutyDeadline
 }

@@ -8,8 +8,9 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/api"
-	"github.com/ssvlabs/ssv/exporter"
-	exporter2 "github.com/ssvlabs/ssv/exporter2"
+	exportercore "github.com/ssvlabs/ssv/exporter"
+	"github.com/ssvlabs/ssv/exporter/traces"
+	"github.com/ssvlabs/ssv/protocol/v2/message"
 )
 
 type CommitteeIDLengthError struct {
@@ -23,6 +24,8 @@ type CommitteeTracesRequest struct {
 	From uint64 `json:"from" format:"int64" minimum:"0"`
 	// To is the ending slot (inclusive).
 	To uint64 `json:"to" format:"int64" minimum:"0"`
+	// Roles is a comma-separated list of committee runner roles to include.
+	Roles api.RunnerRoleSlice `json:"roles" swaggertype:"array,string" enums:"COMMITTEE,AGGREGATOR_COMMITTEE"`
 	// CommitteeIDs is a comma-separated list of committee IDs (hex, 64 chars per ID).
 	CommitteeIDs api.HexSlice `json:"committeeIDs" swaggertype:"array,string" format:"hex" minLength:"64" maxLength:"64" pattern:"^[0-9a-f]{64}$"`
 }
@@ -35,7 +38,7 @@ func (req *CommitteeTracesRequest) parseCommitteeIds() []spectypes.CommitteeID {
 	return committeeIDs
 }
 
-func toCommitteeTracesQuery(r *CommitteeTracesRequest) (*exporter2.CommitteeTracesQuery, *CommitteeIDLengthError) {
+func toCommitteeTracesQuery(r *CommitteeTracesRequest) (*exportercore.CommitteeTracesQuery, *CommitteeIDLengthError) {
 	requiredLength := len(spectypes.CommitteeID{})
 	for _, cmt := range r.CommitteeIDs {
 		if len(cmt) != requiredLength {
@@ -43,9 +46,10 @@ func toCommitteeTracesQuery(r *CommitteeTracesRequest) (*exporter2.CommitteeTrac
 		}
 	}
 
-	q := &exporter2.CommitteeTracesQuery{
+	q := &exportercore.CommitteeTracesQuery{
 		From:         r.From,
 		To:           r.To,
+		Roles:        toRunnerRoles(r.Roles),
 		CommitteeIDs: r.parseCommitteeIds(),
 	}
 
@@ -63,7 +67,7 @@ type CommitteeTracesResponse struct {
 	Errors []string `json:"errors,omitempty" swaggertype:"array,string" example:"committee duty missing for slot 123456"`
 }
 
-func toCommitteeTraceResponse(result *exporter2.CommitteeTracesResult, errs *multierror.Error) *CommitteeTracesResponse {
+func toCommitteeTraceResponse(result *exportercore.CommitteeTracesResult, errs *multierror.Error) *CommitteeTracesResponse {
 	r := new(CommitteeTracesResponse)
 	r.Data = make([]CommitteeTrace, 0)
 	for _, duty := range result.Traces {
@@ -78,14 +82,18 @@ func toCommitteeTraceResponse(result *exporter2.CommitteeTracesResult, errs *mul
 type CommitteeTrace struct {
 	// Slot is the duty slot for this committee trace.
 	Slot uint64 `json:"slot" format:"int64"`
+	// Role is the committee runner role for this duty (e.g., COMMITTEE).
+	Role string `json:"role" example:"COMMITTEE" enums:"COMMITTEE,AGGREGATOR_COMMITTEE"`
 	// Consensus lists per-round QBFT messages observed for this committee.
 	Consensus []Round `json:"consensus"`
 	// Decideds lists decided messages emitted for this duty.
 	Decideds []Decided `json:"decideds"`
 
-	// SyncCommittee contains post-consensus messages for sync-committee duties.
+	// SyncCommittee contains post-consensus messages for sync-committee duties,
+	// including sync committee contribution signers.
 	SyncCommittee []CommitteeMessage `json:"sync_committee"`
-	// Attester contains post-consensus messages for attester duties.
+	// Attester contains post-consensus messages for attester duties,
+	// including aggregator signers.
 	Attester []CommitteeMessage `json:"attester"`
 
 	// CommitteeID is the 32-byte committee identifier (hex).
@@ -104,10 +112,11 @@ type CommitteeMessage struct {
 	ReceivedTime time.Time `json:"time" format:"date-time"`
 }
 
-func toCommitteeTrace(t *exporter.CommitteeDutyTrace) CommitteeTrace {
+func toCommitteeTrace(t *traces.CommitteeDutyTrace) CommitteeTrace {
 	return CommitteeTrace{
 		// consensus trace
 		Slot:          uint64(t.Slot),
+		Role:          message.RunnerRoleToString(t.Role),
 		Consensus:     toRounds(t.Rounds),
 		Decideds:      toDecideds(t.Decideds),
 		SyncCommittee: toCommitteePost(t.SyncCommittee),
@@ -117,7 +126,7 @@ func toCommitteeTrace(t *exporter.CommitteeDutyTrace) CommitteeTrace {
 	}
 }
 
-func toCommitteePost(m []*exporter.SignerData) (out []CommitteeMessage) {
+func toCommitteePost(m []*traces.SignerData) (out []CommitteeMessage) {
 	for _, mt := range m {
 		out = append(out, CommitteeMessage{
 			Signer:       mt.Signer,
@@ -135,7 +144,7 @@ type CommitteeSchedule struct {
 	Roles       map[string][]uint64 `json:"roles"`
 }
 
-func toCommitteeSchedule(entries []exporter2.CommitteeScheduleEntry) []CommitteeSchedule {
+func toCommitteeSchedule(entries []exportercore.CommitteeScheduleEntry) []CommitteeSchedule {
 	out := make([]CommitteeSchedule, 0, len(entries))
 	for _, e := range entries {
 		roles := make(map[string][]uint64, len(e.Roles))

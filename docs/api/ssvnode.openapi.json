@@ -229,7 +229,7 @@
         },
         "/v1/exporter/traces/committee": {
             "get": {
-                "description": "Returns consensus and post-consensus traces for requested committees.",
+                "description": "Returns consensus and post-consensus traces for requested committees. Without a 'roles' filter, the response contains one trace per (slot, committeeID, role) - up to two rows per (slot, committeeID), distinguished by the 'role' field.",
                 "consumes": [
                     "application/json"
                 ],
@@ -257,6 +257,20 @@
                         "format": "int64",
                         "description": "From is the starting slot (inclusive).",
                         "name": "from",
+                        "in": "query"
+                    },
+                    {
+                        "type": "array",
+                        "items": {
+                            "enum": [
+                                "COMMITTEE",
+                                "AGGREGATOR_COMMITTEE"
+                            ],
+                            "type": "string"
+                        },
+                        "collectionFormat": "csv",
+                        "description": "Roles is a comma-separated list of committee runner roles to include.",
+                        "name": "roles",
                         "in": "query"
                     },
                     {
@@ -304,7 +318,7 @@
                 }
             },
             "post": {
-                "description": "Returns consensus and post-consensus traces for requested committees.",
+                "description": "Returns consensus and post-consensus traces for requested committees. Without a 'roles' filter, the response contains one trace per (slot, committeeID, role) - up to two rows per (slot, committeeID), distinguished by the 'role' field.",
                 "consumes": [
                     "application/json"
                 ],
@@ -332,6 +346,20 @@
                         "format": "int64",
                         "description": "From is the starting slot (inclusive).",
                         "name": "from",
+                        "in": "query"
+                    },
+                    {
+                        "type": "array",
+                        "items": {
+                            "enum": [
+                                "COMMITTEE",
+                                "AGGREGATOR_COMMITTEE"
+                            ],
+                            "type": "string"
+                        },
+                        "collectionFormat": "csv",
+                        "description": "Roles is a comma-separated list of committee runner roles to include.",
+                        "name": "roles",
                         "in": "query"
                     },
                     {
@@ -381,7 +409,7 @@
         },
         "/v1/exporter/traces/validator": {
             "get": {
-                "description": "Returns consensus, decided, and message traces for the requested validator duties.",
+                "description": "Returns consensus, decided, and message traces for the requested validator duties.\nFor AGGREGATOR and SYNC_COMMITTEE_CONTRIBUTION the fork state is evaluated at 'from': a range whose\n'from' is post-Boole and that supplies no 'pubkeys'/'indices' is rejected with 400, while a range whose\n'from' is pre-Boole is accepted and served partially — post-Boole slots are omitted from 'data' and\nreported as one note per role in 'errors' with the text \"committee duty post-fork\". Such a response is\na 200 even when 'data' is empty; clients must inspect 'errors' to detect partial coverage, and should\nsupply 'indices'/'pubkeys' or use /traces/committee to retrieve the post-fork portion.",
                 "consumes": [
                     "application/json"
                 ],
@@ -486,7 +514,7 @@
                 }
             },
             "post": {
-                "description": "Returns consensus, decided, and message traces for the requested validator duties.",
+                "description": "Returns consensus, decided, and message traces for the requested validator duties.\nFor AGGREGATOR and SYNC_COMMITTEE_CONTRIBUTION the fork state is evaluated at 'from': a range whose\n'from' is post-Boole and that supplies no 'pubkeys'/'indices' is rejected with 400, while a range whose\n'from' is pre-Boole is accepted and served partially — post-Boole slots are omitted from 'data' and\nreported as one note per role in 'errors' with the text \"committee duty post-fork\". Such a response is\na 200 even when 'data' is empty; clients must inspect 'errors' to detect partial coverage, and should\nsupply 'indices'/'pubkeys' or use /traces/committee to retrieve the post-fork portion.",
                 "consumes": [
                     "application/json"
                 ],
@@ -733,7 +761,7 @@
             "type": "object",
             "properties": {
                 "attester": {
-                    "description": "Attester contains post-consensus messages for attester duties.",
+                    "description": "Attester contains post-consensus messages for attester duties,\nincluding aggregator signers.",
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/exporter.CommitteeMessage"
@@ -763,13 +791,22 @@
                     "type": "string",
                     "format": "hex"
                 },
+                "role": {
+                    "description": "Role is the committee runner role for this duty (e.g., COMMITTEE).",
+                    "type": "string",
+                    "enum": [
+                        "COMMITTEE",
+                        "AGGREGATOR_COMMITTEE"
+                    ],
+                    "example": "COMMITTEE"
+                },
                 "slot": {
                     "description": "Slot is the duty slot for this committee trace.",
                     "type": "integer",
                     "format": "int64"
                 },
                 "sync_committee": {
-                    "description": "SyncCommittee contains post-consensus messages for sync-committee duties.",
+                    "description": "SyncCommittee contains post-consensus messages for sync-committee duties,\nincluding sync committee contribution signers.",
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/exporter.CommitteeMessage"
@@ -795,6 +832,17 @@
                     "type": "integer",
                     "format": "int64",
                     "minimum": 0
+                },
+                "roles": {
+                    "description": "Roles is a comma-separated list of committee runner roles to include.",
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "enum": [
+                            "COMMITTEE",
+                            "AGGREGATOR_COMMITTEE"
+                        ]
+                    }
                 },
                 "to": {
                     "description": "To is the ending slot (inclusive).",

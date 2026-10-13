@@ -3,9 +3,12 @@ package runner
 import (
 	"testing"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/stretchr/testify/require"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
+	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 )
 
 func TestValidatorDutyFromDuty(t *testing.T) {
@@ -72,36 +75,57 @@ func TestCurrentDutySlot(t *testing.T) {
 	slot, err = (&BaseRunner{State: &State{CurrentDuty: committeeDuty}}).currentDutySlot()
 	require.NoError(t, err)
 	require.Equal(t, committeeDuty.DutySlot(), slot)
+
+	aggregatorCommitteeDuty := &spectypes.AggregatorCommitteeDuty{
+		Slot:            17,
+		ValidatorDuties: []*spectypes.ValidatorDuty{{Slot: 17}},
+	}
+	slot, err = (&BaseRunner{State: &State{CurrentDuty: aggregatorCommitteeDuty}}).currentDutySlot()
+	require.NoError(t, err)
+	require.Equal(t, aggregatorCommitteeDuty.DutySlot(), slot)
 }
 
-func TestDecidedValueTypeAssertions(t *testing.T) {
-	consensusData := &spectypes.ValidatorConsensusData{}
-	gotConsensusData, err := validatorConsensusDataFromEncoder(consensusData)
+func TestDecidedAttestationVote(t *testing.T) {
+	beaconVote := &spectypes.BeaconVote{Source: &phase0.Checkpoint{}, Target: &phase0.Checkpoint{Epoch: 1}}
+
+	gotVote, gotIndex, err := decidedAttestationVote(beaconVote)
 	require.NoError(t, err)
-	require.Same(t, consensusData, gotConsensusData)
+	require.Same(t, beaconVote, gotVote)
+	require.Nil(t, gotIndex) // no attestation index before Gloas
 
-	_, err = validatorConsensusDataFromEncoder(nil)
-	require.ErrorContains(t, err, "decided value is nil")
-
-	var nilConsensusData *spectypes.ValidatorConsensusData
-	_, err = validatorConsensusDataFromEncoder(nilConsensusData)
-	require.ErrorContains(t, err, "validator consensus data is nil")
-
-	beaconVote := &spectypes.BeaconVote{}
-	gotBeaconVote, err := beaconVoteFromEncoder(beaconVote)
+	// Gloas: the BeaconVote half is extracted and the carried attestation index is returned (non-nil).
+	gloasVote := &gloas.GloasBeaconVote{
+		BlockRoot:            phase0.Root{0x01},
+		Source:               &phase0.Checkpoint{},
+		Target:               &phase0.Checkpoint{Epoch: 1},
+		AttestationDataIndex: 1,
+	}
+	gotVote, gotIndex, err = decidedAttestationVote(gloasVote)
 	require.NoError(t, err)
-	require.Same(t, beaconVote, gotBeaconVote)
+	require.Equal(t, gloasVote.BlockRoot, gotVote.BlockRoot)
+	require.NotNil(t, gotIndex)
+	require.Equal(t, phase0.CommitteeIndex(1), *gotIndex)
 
-	_, err = beaconVoteFromEncoder(nil)
+	_, _, err = decidedAttestationVote(nil)
 	require.ErrorContains(t, err, "decided value is nil")
 
 	var nilBeaconVote *spectypes.BeaconVote
-	_, err = beaconVoteFromEncoder(nilBeaconVote)
-	require.ErrorContains(t, err, "beacon vote is nil")
+	_, _, err = decidedAttestationVote(nilBeaconVote)
+	requireSpecCode(t, err, spectypes.BeaconVoteNilCheckpointErrorCode)
 
-	_, err = validatorConsensusDataFromEncoder(beaconVote)
-	require.ErrorContains(t, err, "decided value is not a ValidatorConsensusData")
+	var nilGloasVote *gloas.GloasBeaconVote
+	_, _, err = decidedAttestationVote(nilGloasVote)
+	requireSpecCode(t, err, spectypes.BeaconVoteNilCheckpointErrorCode)
 
-	_, err = beaconVoteFromEncoder(consensusData)
-	require.ErrorContains(t, err, "decided value is not a BeaconVote")
+	_, _, err = decidedAttestationVote(&spectypes.ProposerConsensusData{})
+	require.ErrorContains(t, err, "decided value is not a beacon vote")
+
+	// Both forms are validated, whichever path decoded them.
+	_, _, err = decidedAttestationVote(&spectypes.BeaconVote{Source: &phase0.Checkpoint{Epoch: 1}, Target: &phase0.Checkpoint{Epoch: 1}})
+	requireSpecCode(t, err, spectypes.AttestationSourceNotLessThanTargetErrorCode)
+
+	outOfRange := *gloasVote
+	outOfRange.AttestationDataIndex = 2
+	_, _, err = decidedAttestationVote(&outOfRange)
+	requireSpecCode(t, err, spectypes.GloasBeaconVoteInvalidIndexErrorCode)
 }

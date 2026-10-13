@@ -16,6 +16,7 @@ import (
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/observability/traces"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 type ProposerHandler struct {
@@ -52,8 +53,9 @@ func (h *ProposerHandler) WaitShutdown() {}
 //  3. Duties will be executed on the very next slot-tick.
 //
 // On Re-org:
-//  1. Declare intents to fetch duties for the epochs affected by the reorg (depending on whether the
-//     previous or current dependent root changed).
+//  1. Declare intents to fetch duties for the epochs affected by the reorg (the current epoch if the current
+//     dependent root changed, the next epoch always), and mark their cached duty views stale until the refetch
+//     lands, as on an indices change.
 //  2. If necessary, fetch duties for the current/next epochs so they can be processed on the next slot-tick.
 //  3. Duties will be executed on the very next slot-tick.
 //
@@ -63,6 +65,13 @@ func (h *ProposerHandler) WaitShutdown() {}
 //  3. If necessary, fetch duties for the next epoch.
 //  4. If necessary, process validator-indices changes by declaring the intents to fetch duties for the epochs
 //     affected by it, also potentially pre-fetching duties so they are ready for processing on the next slot-tick.
+//
+// On Indices change (received while idle, i.e. between ticks):
+//  1. Mark the current/next epochs' cached duty views stale immediately, at event time — freshness-aware
+//     message validation (§5 proposer preferences) must start tolerating before any refetch lands.
+//  2. Declare the refetch intents; the next tick processes them first thing (before duty execution).
+//     A change arriving while a tick is being processed is caught by the tick's own indices-change wait
+//     instead, which additionally refetches in the same slot when early enough.
 func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 	h.logger.Info("starting duty handler")
 	defer h.logger.Info("duty handler exited")
@@ -76,10 +85,10 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 		case <-next:
 			currentSlot := h.ticker.Slot()
 			next = h.ticker.Next() // advances h.ticker
-			currentEpoch := h.beaconConfig.EstimatedEpochAtSlot(currentSlot)
+			currentEpoch := h.netCfg.EstimatedEpochAtSlot(currentSlot)
 			nextEpoch := currentEpoch + 1
 
-			slotNumber := uint64(currentSlot)%h.beaconConfig.SlotsPerEpoch + 1
+			slotNumber := uint64(currentSlot)%h.netCfg.SlotsPerEpoch + 1
 			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, currentSlot, slotNumber)
 			logger := h.logger.With(
 				zap.String("epoch_slot_pos", buildStr),
@@ -93,7 +102,7 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 				// tickCtx ensures we never take too long to process ticks (otherwise we might not be able to catch up
 				// with the latest tick for a while, if ever). Since the ticker always fires at around slot start-time,
 				// setting the deadline to currentSlot+1 gives us about ~1 full slot (12s) to process the tick.
-				tickCtx, cancel := context.WithDeadline(ctx, h.beaconConfig.SlotStartTime(currentSlot+1))
+				tickCtx, cancel := context.WithDeadline(ctx, h.netCfg.SlotStartTime(currentSlot+1))
 				defer cancel()
 
 				// 1. Process the duty execution & fetching.
@@ -113,20 +122,36 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 					delete(h.dutyFetchIntents, currentEpoch-1)
 				}
 
-				// 2. Process validator indices changes (if any). We want to process it on the current slot only
-				// if we are still early into the slot (1 slot-interval is just a guesstimate), otherwise we might
-				// be delaying the next tick (the duties that need to be executed on the next slot).
+				// 2. Schedule the next-epoch duty-fetch intent (only if absent, so a pending or fulfilled one is
+				// left untouched). We register it before the indices-change handling below, which can return early
+				// on tickCtx.Done - so even a tick that overruns its deadline still records the intent, and the
+				// next-epoch pre-fetch can't be deferred indefinitely at an epoch boundary under sustained slowness.
+				if _, ok := h.dutyFetchIntents[nextEpoch]; !ok {
+					h.dutyFetchIntents[nextEpoch] = false
+				}
 
-				indicesChangeDeadline := h.beaconConfig.SlotStartTime(currentSlot).Add(h.beaconConfig.IntervalDuration())
+				// 3. Process validator indices changes that land while this tick is being processed (changes
+				// arriving between ticks are consumed immediately by the dedicated top-level case). We want to
+				// process it on the current slot only if we are still early into the slot (1 slot-interval is
+				// just a guesstimate), otherwise we might be delaying the next tick (the duties that need to be
+				// executed on the next slot).
+
+				indicesChangeDeadline := h.netCfg.SlotStartTime(currentSlot).Add(h.netCfg.IntervalDuration(currentSlot))
 				select {
 				case <-h.indicesChangeCh:
 					logger.Info("🔁 indices change received")
 
+					// Mark the affected epochs' cached duties stale right away: until a refetch replaces
+					// them, the freshness-aware message-validation check (§5 proposer preferences) treats
+					// them like not-yet-fetched epochs, so a view predating the change doesn't reject a
+					// just-added validator's honest messages (their one-shot broadcasts have no redelivery).
+					h.duties.MarkEpochsStale(currentEpoch, nextEpoch)
+
 					// 1) Declare intents.
-					// Some validator-related state has updated, means we need to re-fetch the duties for the current
-					// and next epoch to ensure we have the up-to-date duties for all validators for both epochs.
-					h.dutyFetchIntents[nextEpoch] = false
+					// Some validator-related state has changed, so re-fetch the duties for the current and next
+					// epoch to keep them up to date for all validators.
 					h.dutyFetchIntents[currentEpoch] = false
+					h.dutyFetchIntents[nextEpoch] = false
 
 					// 2) Process certain intents immediately.
 					// When at epoch boundary, we only care about pre-fetching & preparing the duties for the next
@@ -143,20 +168,33 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 				case <-tickCtx.Done():
 					return
 				}
-
-				// 3. Schedule the duty-fetch for the next epoch, but only if it hasn't been scheduled already (also,
-				// already fulfilled intents need not be re-scheduled).
-				if _, ok := h.dutyFetchIntents[nextEpoch]; !ok {
-					h.dutyFetchIntents[nextEpoch] = false
-				}
 			}()
 
-		case reorgEvent := <-h.reorgEventsCh:
-			currentSlot := h.beaconConfig.EstimatedCurrentSlot()
-			currentEpoch := h.beaconConfig.EstimatedEpochAtSlot(currentSlot)
+		case <-h.indicesChangeCh:
+			// Received while idle (between ticks): mark the cached duty views stale at event time — not
+			// at the next tick — and declare the refetch intents (processed first thing on the next
+			// tick, before duty execution). No fetch here: it stays tick-driven. A change arriving
+			// mid-tick is consumed by the tick's own indices-change wait below, which also refetches
+			// within the same slot when early enough.
+			currentSlot := h.netCfg.EstimatedCurrentSlot()
+			currentEpoch := h.netCfg.EstimatedEpochAtSlot(currentSlot)
 			nextEpoch := currentEpoch + 1
 
-			slotNumber := uint64(currentSlot)%h.beaconConfig.SlotsPerEpoch + 1
+			h.logger.Info("🔁 indices change received",
+				zap.Uint64("current_epoch", uint64(currentEpoch)),
+				zap.Uint64("current_slot", uint64(currentSlot)),
+			)
+
+			h.duties.MarkEpochsStale(currentEpoch, nextEpoch)
+			h.dutyFetchIntents[currentEpoch] = false
+			h.dutyFetchIntents[nextEpoch] = false
+
+		case reorgEvent := <-h.reorgEventsCh:
+			currentSlot := h.netCfg.EstimatedCurrentSlot()
+			currentEpoch := h.netCfg.EstimatedEpochAtSlot(currentSlot)
+			nextEpoch := currentEpoch + 1
+
+			slotNumber := uint64(currentSlot)%h.netCfg.SlotsPerEpoch + 1
 			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, currentSlot, slotNumber)
 
 			logger := h.logger.With(
@@ -165,9 +203,11 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 				zap.Uint64("current_slot", uint64(currentSlot)),
 			)
 
-			// Proposer duties for the current epoch are determined by the "current duty dependent root",
-			// so we re-fetch the current epoch only if it has changed. The next epoch is always re-fetched
-			// on any reorg to ensure we have the up-to-date duties for all validators.
+			// Under the proposer lookahead an epoch's proposers are fixed at the end of the epoch two back: the
+			// current epoch's by the previous duty dependent root, the next epoch's by the current one. The current
+			// root descends from the previous one and changes whenever it does, so we re-fetch the current epoch
+			// only if the current root has changed. The next epoch is always re-fetched on any reorg to ensure we
+			// have the up-to-date duties for all validators.
 			refetchCurrentEpoch := reorgEvent.CurrentDutyDependentRootChanged
 
 			logger.Info("🔀 reorg event received",
@@ -180,25 +220,35 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 				// slot-ticker from executing duties even if some of them might not be up to date). Since the
 				// reorg can happen closer to the end of the current slot we wouldn't want to set the deadline
 				// to currentSlot+1 as that might be too short (hence setting it to currentSlot+2).
-				reorgCtx, cancel := context.WithDeadline(ctx, h.beaconConfig.SlotStartTime(currentSlot+2))
+				reorgCtx, cancel := context.WithDeadline(ctx, h.netCfg.SlotStartTime(currentSlot+2))
 				defer cancel()
 
-				// 1) Declare intents.
+				// 1) Declare intents, and mark their epochs stale until the refetch lands, as on an indices change:
+				// the reorg may have moved their proposers (SIP #94 §7). At the epoch's last slot the current epoch
+				// isn't refetched (2), so it isn't marked either.
+				stale := []phase0.Epoch{nextEpoch}
 				if refetchCurrentEpoch {
 					h.dutyFetchIntents[currentEpoch] = false
+					if !h.atLastSlotOfCurrentEpoch(currentSlot) {
+						stale = append(stale, currentEpoch)
+					}
 				}
 				h.dutyFetchIntents[nextEpoch] = false
+				h.duties.MarkEpochsStale(stale...)
 
 				// 2) Process certain intents immediately.
 				// When at epoch boundary, we only care about pre-fetching & preparing the duties for the next epoch
-				// since the current epoch will have been passed upon the next slot-tick. Otherwise, we might need to
-				// pre-fetch & prepare the duties for the current epoch immediately since those might have been
-				// affected by this reorg (the next tick(s) will take care of the pre-fetch & prepare for the next
-				// epoch, if it was also affected by this reorg).
+				// since the current epoch will have been passed upon the next slot-tick. Otherwise, if this reorg
+				// changed the current dependent root, pre-fetch & prepare the duties for the current epoch
+				// immediately since those were affected by it (the next tick(s) will take care of the pre-fetch &
+				// prepare for the next epoch, if it was also affected by this reorg). A reorg that left the current
+				// root unchanged fetches nothing here: an intent pending for another reason (an indices change
+				// consumed between ticks, an earlier fetch with no eligible validators) is the next tick's to
+				// process, which keeps this path's fetches attributable to the reorg alone.
 				if h.atLastSlotOfCurrentEpoch(currentSlot) {
 					delete(h.dutyFetchIntents, currentEpoch) // optimization: prune irrelevant intent
 					h.prepareNextEpoch(reorgCtx, logger, currentEpoch, currentSlot)
-				} else {
+				} else if refetchCurrentEpoch {
 					h.prepareCurrentEpoch(reorgCtx, logger, currentEpoch, currentSlot)
 				}
 			}()
@@ -209,14 +259,14 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 // HandleInitialDuties fetches & prepares the duties for the current and next epochs.
 func (h *ProposerHandler) HandleInitialDuties(ctx context.Context) {
 	// initCtx ensures we don't block indefinitely in case we can't fetch the duties on startup.
-	initCtx, cancel := context.WithTimeout(ctx, h.beaconConfig.SlotDuration)
+	initCtx, cancel := context.WithTimeout(ctx, h.netCfg.SlotDuration)
 	defer cancel()
 
-	currentSlot := h.beaconConfig.EstimatedCurrentSlot()
-	currentEpoch := h.beaconConfig.EstimatedEpochAtSlot(currentSlot)
+	currentSlot := h.netCfg.EstimatedCurrentSlot()
+	currentEpoch := h.netCfg.EstimatedEpochAtSlot(currentSlot)
 	nextEpoch := currentEpoch + 1
 
-	slotNumber := uint64(currentSlot)%h.beaconConfig.SlotsPerEpoch + 1
+	slotNumber := uint64(currentSlot)%h.netCfg.SlotsPerEpoch + 1
 	buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, currentSlot, slotNumber)
 	logger := h.logger.With(
 		zap.String("epoch_slot_pos", buildStr),
@@ -252,17 +302,16 @@ func (h *ProposerHandler) prepareCurrentEpoch(ctx context.Context, logger *zap.L
 	defer span.End()
 
 	if fulfilled, ok := h.dutyFetchIntents[currentEpoch]; ok && !fulfilled {
-		logger.Debug("fetching duties for the current epoch")
-
-		err := h.fetchAndProcessDuties(ctx, logger, currentEpoch, currentSlot)
+		fetched, err := h.fetchAndProcessDuties(ctx, logger, currentEpoch, currentSlot)
 		if err != nil {
 			logger.Error("fetching duties for the current epoch failed", zap.Error(err))
 			span.SetStatus(codes.Error, err.Error())
 			return
 		}
-		h.dutyFetchIntents[currentEpoch] = true // the intent has been fulfilled
-
-		logger.Debug("fetching duties for the current epoch succeeded")
+		// Fulfill the intent only if a fetch actually ran; a not-yet-eligible epoch stays pending so a later tick retries.
+		if fetched {
+			h.dutyFetchIntents[currentEpoch] = true
+		}
 	}
 
 	span.SetStatus(codes.Ok, "")
@@ -280,17 +329,16 @@ func (h *ProposerHandler) prepareNextEpoch(ctx context.Context, logger *zap.Logg
 
 	// Delaying the duty fetch until it's a "good time" allows us to do it when the beacon node should be less busy.
 	if fulfilled, ok := h.dutyFetchIntents[currentEpoch+1]; ok && !fulfilled && h.shouldFetchNextEpoch(currentSlot) {
-		logger.Debug("fetching duties for the next epoch")
-
-		err := h.fetchAndProcessDuties(ctx, logger, currentEpoch+1, currentSlot)
+		fetched, err := h.fetchAndProcessDuties(ctx, logger, currentEpoch+1, currentSlot)
 		if err != nil {
 			logger.Error("fetching duties for the next epoch failed", zap.Error(err))
 			span.SetStatus(codes.Error, err.Error())
 			return
 		}
-		h.dutyFetchIntents[currentEpoch+1] = true // the intent has been fulfilled
-
-		logger.Debug("fetching duties for the next epoch succeeded")
+		// Fulfill the intent only if a fetch actually ran; a not-yet-eligible epoch stays pending so a later tick retries.
+		if fetched {
+			h.dutyFetchIntents[currentEpoch+1] = true
+		}
 	}
 
 	span.SetStatus(codes.Ok, "")
@@ -311,6 +359,9 @@ func (h *ProposerHandler) processExecution(ctx context.Context, epoch phase0.Epo
 	defer span.End()
 
 	duties := h.duties.CommitteeSlotDuties(epoch, slot)
+
+	h.logProposerSlotDispatch(epoch, slot, duties)
+
 	if duties == nil {
 		span.AddEvent("no duties available")
 		span.SetStatus(codes.Ok, "")
@@ -329,13 +380,16 @@ func (h *ProposerHandler) processExecution(ctx context.Context, epoch phase0.Epo
 
 	// Proposals need to be made within ~4s since the current slot start to be included on-chain, we'll make the
 	// deadline to be 1 slot for simplicity.
-	dutyDeadline := h.beaconConfig.SlotStartTime(slot + 1)
+	dutyDeadline := h.netCfg.SlotStartTime(slot + 1)
 	h.dutiesExecutor.ExecuteDuties(ctx, toExecute, dutyDeadline)
 
 	span.SetStatus(codes.Ok, "")
 }
 
-func (h *ProposerHandler) fetchAndProcessDuties(ctx context.Context, logger *zap.Logger, targetEpoch phase0.Epoch, currentSlot phase0.Slot) error {
+// fetchAndProcessDuties fetches and stores the epoch's proposer duties. It returns fetched=false (with a
+// nil error) when no validators are eligible yet — a not-ready state (e.g. beacon metadata not synced) the
+// caller must retry rather than treat as fulfilled; fetched=true means a beacon fetch actually ran.
+func (h *ProposerHandler) fetchAndProcessDuties(ctx context.Context, logger *zap.Logger, targetEpoch phase0.Epoch, currentSlot phase0.Slot) (fetched bool, err error) {
 	ctx, span := tracer.Start(ctx,
 		observability.InstrumentName(observabilityNamespace, "proposer.fetch_and_store"),
 		trace.WithAttributes(
@@ -357,10 +411,11 @@ func (h *ProposerHandler) fetchAndProcessDuties(ctx context.Context, logger *zap
 	}
 	if len(allEligibleIndices) == 0 {
 		const eventMsg = "no eligible validators for epoch"
-		logger.Debug(eventMsg)
+		h.logNoEligibleValidators(logger, targetEpoch)
 		span.AddEvent(eventMsg)
 		span.SetStatus(codes.Ok, "")
-		return nil
+		// No eligible validators yet — not a fulfilled fetch; caller retries on a later tick.
+		return false, nil
 	}
 
 	selfEligibleIndices := map[phase0.ValidatorIndex]struct{}{}
@@ -373,7 +428,7 @@ func (h *ProposerHandler) fetchAndProcessDuties(ctx context.Context, logger *zap
 	span.AddEvent("fetching duties from beacon node", trace.WithAttributes(observability.ValidatorCountAttribute(len(allEligibleIndices))))
 	duties, err := h.beaconNode.ProposerDuties(ctx, targetEpoch, allEligibleIndices)
 	if err != nil {
-		return traces.Errorf(span, "failed to fetch proposer duties: %w", err)
+		return false, traces.Errorf(span, "failed to fetch proposer duties: %w", err)
 	}
 
 	specDuties := make([]*spectypes.ValidatorDuty, 0, len(duties))
@@ -393,18 +448,124 @@ func (h *ProposerHandler) fetchAndProcessDuties(ctx context.Context, logger *zap
 	span.AddEvent("storing duties", trace.WithAttributes(observability.DutyCountAttribute(len(storeDuties))))
 	h.duties.Set(targetEpoch, storeDuties)
 
+	h.logProposerFetchOutcome(logger, targetEpoch, currentSlot, storeDuties)
+
 	truncate := -1
 	if h.exporterMode {
 		truncate = 10
 	}
 	logger.Debug("📚 got duties",
 		fields.Count(len(duties)),
-		fields.Duties(targetEpoch, specDuties, truncate),
+		fields.Duties(targetEpoch, specDuties, truncate, func(duty *spectypes.ValidatorDuty) spectypes.RunnerRole {
+			return types.RunnerRoleForValidatorDuty(duty, h.netCfg.BooleForkAtSlot(duty.Slot))
+		}),
 		fields.Took(time.Since(start)),
 	)
 
 	span.SetStatus(codes.Ok, "")
-	return nil
+	return true, nil
+}
+
+// logNoEligibleValidators logs (Debug) the validator-set counts behind a "no eligible validators for
+// epoch" outcome — total known validators vs this node's own, and how many of those are attesting — to
+// tell "shares present but metadata not synced yet" (recovers on retry) apart from "this node has
+// attesting validators yet none are eligible" (a different cause the retry would not fix).
+func (h *ProposerHandler) logNoEligibleValidators(logger *zap.Logger, targetEpoch phase0.Epoch) {
+	all := h.validatorProvider.Validators()
+	self := h.validatorProvider.SelfValidators()
+
+	selfAttesting := 0
+	for _, s := range self {
+		if s.IsAttesting(targetEpoch) {
+			selfAttesting++
+		}
+	}
+
+	logger.Debug("no eligible validators for epoch",
+		zap.Uint64("target_epoch", uint64(targetEpoch)),
+		zap.Int("validators_total", len(all)),
+		zap.Int("self_validators", len(self)),
+		zap.Int("self_attesting", selfAttesting),
+	)
+}
+
+// logProposerSlotDispatch logs (Debug) how this node's stored proposer duty for a slot flows through the
+// two execution gates — InCommittee (CommitteeSlotDuties) and shouldExecute's one-slot window:
+//
+//	stored_any>0, in_committee=0 → stored but dropped by the InCommittee flag
+//	in_committee>0, executable=0 → in-committee but outside the one-slot window (resolved/fetched too late)
+//	executable>0                 → dispatched to the runner (any further loss is downstream)
+//
+// It fires only on slots that carry a stored duty (SlotIndices short-circuits otherwise), so it is not
+// per-slot noise.
+func (h *ProposerHandler) logProposerSlotDispatch(epoch phase0.Epoch, slot phase0.Slot, inCommittee []*eth2apiv1.ProposerDuty) {
+	storedAny := h.duties.SlotIndices(epoch, slot)
+	if len(storedAny) == 0 {
+		return // no proposer duty stored for this slot — nothing was assigned to us here
+	}
+
+	// Mirror shouldExecute's window (currentSlot == or +1 == duty.Slot) WITHOUT its warnMisalignedSlotAndDuty
+	// side effect, so this never double-logs the misalignment warning the real dispatch loop emits.
+	currentSlot := h.netCfg.EstimatedCurrentSlot()
+	executable := 0
+	for _, d := range inCommittee {
+		if currentSlot == d.Slot || currentSlot+1 == d.Slot {
+			executable++
+		}
+	}
+
+	storedIdx := make([]uint64, len(storedAny))
+	for i, idx := range storedAny {
+		storedIdx[i] = uint64(idx)
+	}
+
+	h.logger.Debug("proposer slot dispatch",
+		zap.Uint64("epoch", uint64(epoch)),
+		zap.Uint64("slot", uint64(slot)),
+		zap.Uint64("current_slot", uint64(currentSlot)),
+		zap.Int("stored_any", len(storedAny)),
+		zap.Int("in_committee", len(inCommittee)),
+		zap.Int("executable", executable),
+		zap.Uint64s("stored_indices", storedIdx),
+	)
+}
+
+// logProposerFetchOutcome logs (Debug), right after a fetch stores an epoch's proposer duties, two
+// outcomes worth tracing: duties were stored but none are this node's (in_committee=0), and in-committee
+// duties for slots that already passed at fetch time — a guaranteed miss on a first fetch, benign on
+// routine reorg / validator-indices re-fetches.
+func (h *ProposerHandler) logProposerFetchOutcome(logger *zap.Logger, targetEpoch phase0.Epoch, currentSlot phase0.Slot, stored []dutystore.StoreDuty[eth2apiv1.ProposerDuty]) {
+	inCommittee := 0
+	alreadyPassed := make([]uint64, 0)
+	for _, d := range stored {
+		if !d.InCommittee {
+			continue
+		}
+		inCommittee++
+		if d.Slot < currentSlot {
+			alreadyPassed = append(alreadyPassed, uint64(d.Slot))
+		}
+	}
+
+	// Fetched some duties, but none belong to this node.
+	if len(stored) > 0 && inCommittee == 0 {
+		logger.Debug("proposer fetch: stored duties but none in-committee",
+			zap.Uint64("target_epoch", uint64(targetEpoch)),
+			zap.Int("stored_total", len(stored)),
+		)
+	}
+
+	// Fetched in-committee duties for slots that already passed — a guaranteed miss only on a first fetch;
+	// on routine re-fetches (reorg, validator-indices change) it is expected, hence Debug, not Warn.
+	if len(alreadyPassed) > 0 {
+		logger.Debug("proposer fetch: in-committee duties for already-passed slots",
+			zap.Uint64("target_epoch", uint64(targetEpoch)),
+			zap.Uint64("current_slot", uint64(currentSlot)),
+			zap.Int("in_committee_total", inCommittee),
+			zap.Int("already_passed", len(alreadyPassed)),
+			zap.Uint64s("passed_slots", alreadyPassed),
+		)
+	}
 }
 
 func (h *ProposerHandler) toSpecDuty(duty *eth2apiv1.ProposerDuty, role spectypes.BeaconRole) *spectypes.ValidatorDuty {
@@ -417,7 +578,7 @@ func (h *ProposerHandler) toSpecDuty(duty *eth2apiv1.ProposerDuty, role spectype
 }
 
 func (h *ProposerHandler) shouldExecute(duty *eth2apiv1.ProposerDuty) bool {
-	currentSlot := h.beaconConfig.EstimatedCurrentSlot()
+	currentSlot := h.netCfg.EstimatedCurrentSlot()
 	// execute task if slot already began and not pass 1 slot
 	if currentSlot == duty.Slot {
 		return true

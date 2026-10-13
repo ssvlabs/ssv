@@ -25,6 +25,14 @@ func (m *stuckComponentMock) Healthy(ctx context.Context) error {
 	return ctx.Err()
 }
 
+// ctxIgnoringComponentMock simulates a buggy component whose Healthy ignores its ctx entirely
+// (stuck mutex, broken client): it never returns, leaking its probe goroutine by design.
+type ctxIgnoringComponentMock struct{}
+
+func (m *ctxIgnoringComponentMock) Healthy(context.Context) error {
+	select {} // blocks forever
+}
+
 type glitchyComponentMock struct {
 	calledCnt        atomic.Uint64
 	glitchedCallsCnt uint64

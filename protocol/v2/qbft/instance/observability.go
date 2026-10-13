@@ -31,7 +31,6 @@ type roundChangeReason string
 const (
 	reasonTimeout       roundChangeReason = "timeout"
 	reasonPartialQuorum roundChangeReason = "partial-quorum"
-	reasonJustified     roundChangeReason = "justified"
 )
 
 var (

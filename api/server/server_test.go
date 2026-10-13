@@ -2,14 +2,12 @@ package server
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"runtime"
-	"strings"
 	"testing"
 	"time"
 
@@ -148,129 +146,81 @@ func TestNew(t *testing.T) {
 	require.Equal(t, ":8080", server.addr)
 }
 
-// TestRun_ActualExecution tests that the Run method starts a server.
-func TestRun_ActualExecution(t *testing.T) {
+// TestStart_ActualExecution verifies Start binds a listener, serves the API,
+// and shuts down cleanly when the context is canceled.
+func TestStart_ActualExecution(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping test in short mode")
 	}
 
-	listener, err := net.Listen("tcp", "localhost:0")
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
 
-	require.NoError(t, err)
-
-	port := listener.Addr().(*net.TCPAddr).Port
-	addr := fmt.Sprintf("localhost:%d", port)
-
-	err = listener.Close()
-	require.NoError(t, err)
-
-	logger := zaptest.NewLogger(t)
 	srv := New(
-		logger,
-		addr,
+		zaptest.NewLogger(t),
+		"127.0.0.1:0",
 		&hnode.Node{},
 		&hvalidators.Validators{},
 		&hexporter.Exporter{},
 		false,
 	)
 
-	errCh := make(chan error, 1)
-	go func() {
-		errCh <- srv.Run()
-	}()
+	addr, _, err := srv.Start(ctx)
+	require.NoError(t, err)
+	require.NotEmpty(t, addr)
 
-	var conn net.Conn
-	var connectErr error
-	for i := 0; i < 10; i++ {
-		conn, connectErr = net.DialTimeout("tcp", addr, 500*time.Millisecond)
-		if connectErr == nil {
-			break
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
-	require.NoError(t, connectErr, "failed to connect to server after multiple attempts")
+	conn, err := net.DialTimeout("tcp", addr, 2*time.Second)
+	require.NoError(t, err)
 	require.NoError(t, conn.Close())
 
-	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
-	defer cancel()
+	cancel()
 
-	err = srv.httpServer.Shutdown(ctx)
-	if err != nil {
-		t.Logf("error shutting down server: %v", err)
-	}
-
-	select {
-	case err := <-errCh:
-		if err != nil && !errors.Is(err, http.ErrServerClosed) && !strings.Contains(err.Error(), "closed") {
-			t.Logf("server exited with unexpected error: %v", err)
+	require.Eventually(t, func() bool {
+		conn, err := net.DialTimeout("tcp", addr, 200*time.Millisecond)
+		if err != nil {
+			return true
 		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("server did not exit in time")
-	}
+		_ = conn.Close()
+		return false
+	}, 3*time.Second, 50*time.Millisecond, "server did not stop accepting connections after ctx cancel")
 }
 
-// TestRun_ActualExecutionFullMode tests that the Run method starts a server in full exporter mode.
-func TestRun_ActualExecutionFullMode(t *testing.T) {
+// TestStart_ActualExecutionFullMode verifies Start works in full exporter mode.
+func TestStart_ActualExecutionFullMode(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping test in short mode")
 	}
 
-	listener, err := net.Listen("tcp", "localhost:0")
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
 
-	require.NoError(t, err)
-
-	port := listener.Addr().(*net.TCPAddr).Port
-	addr := fmt.Sprintf("localhost:%d", port)
-
-	err = listener.Close()
-	require.NoError(t, err)
-
-	logger := zaptest.NewLogger(t)
 	srv := New(
-		logger,
-		addr,
+		zaptest.NewLogger(t),
+		"127.0.0.1:0",
 		&hnode.Node{},
 		&hvalidators.Validators{},
 		&hexporter.Exporter{},
 		true,
 	)
 
-	errCh := make(chan error, 1)
-	go func() {
-		errCh <- srv.Run()
-	}()
+	addr, _, err := srv.Start(ctx)
+	require.NoError(t, err)
+	require.NotEmpty(t, addr)
 
-	var conn net.Conn
-	var connectErr error
+	conn, err := net.DialTimeout("tcp", addr, 2*time.Second)
+	require.NoError(t, err)
+	require.NoError(t, conn.Close())
 
-	for range 10 {
-		conn, connectErr = net.DialTimeout("tcp", addr, 500*time.Millisecond)
-		if connectErr == nil {
-			break
+	cancel()
+
+	require.Eventually(t, func() bool {
+		conn, err := net.DialTimeout("tcp", addr, 200*time.Millisecond)
+		if err != nil {
+			return true
 		}
-		time.Sleep(100 * time.Millisecond)
-	}
-
-	require.NoError(t, connectErr, "failed to connect to server after multiple attempts")
-
-	conn.Close()
-
-	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
-	defer cancel()
-
-	err = srv.httpServer.Shutdown(ctx)
-	if err != nil {
-		t.Logf("error shutting down server: %v", err)
-	}
-
-	select {
-	case err := <-errCh:
-		if err != nil && !errors.Is(err, http.ErrServerClosed) && !strings.Contains(err.Error(), "closed") {
-			t.Logf("server exited with unexpected error: %v", err)
-		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("server did not exit in time")
-	}
+		_ = conn.Close()
+		return false
+	}, 3*time.Second, 50*time.Millisecond, "server did not stop accepting connections after ctx cancel")
 }
 
 // TestMiddlewareLogger tests the logger middleware.

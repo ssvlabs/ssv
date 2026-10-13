@@ -12,13 +12,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/OffchainLabs/go-bitfield"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/p2p/discover/v5wire"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/prysmaticlabs/go-bitfield"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
@@ -78,7 +78,7 @@ func testingDiscoveryOptions(t *testing.T, ssvConfig *networkconfig.SSV) *Option
 // Testing discovery service
 func testingDiscovery(t *testing.T) *DiscV5Service {
 	opts := testingDiscoveryOptions(t, testNetConfig.SSV)
-	dvs, err := newDiscV5Service(t.Context(), testLogger, opts)
+	dvs, err := NewDiscV5Service(t.Context(), testLogger, opts)
 	require.NoError(t, err)
 	require.NotNil(t, dvs)
 	return dvs

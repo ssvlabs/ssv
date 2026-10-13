@@ -185,11 +185,21 @@ func TestController_ReactivateCluster(t *testing.T) {
 
 		byteShare := share[1].GetPublicKey().Serialize()
 
+		// Shares are evaluated at operator IDs 1..4.
+		committee := make([]*spectypes.ShareMember, 0, len(share))
+		for operatorID := uint64(1); operatorID <= uint64(len(share)); operatorID++ {
+			committee = append(committee, &spectypes.ShareMember{
+				Signer:      operatorID,
+				SharePubKey: share[operatorID].GetPublicKey().Serialize(),
+			})
+		}
+
 		shareToReactivate := types.SSVShare{
 			Share: spectypes.Share{
 				ValidatorIndex:  phase0.ValidatorIndex(i + 1),
 				ValidatorPubKey: spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize()),
 				SharePubKey:     byteShare,
+				Committee:       committee,
 			},
 			Status:          v1.ValidatorStateActiveOngoing,
 			ActivationEpoch: 1,
@@ -258,20 +268,9 @@ func TestController_ReactivateCluster(t *testing.T) {
 	require.Equal(t, mockValidatorsMap.SizeValidators(), 0)
 
 	operatorIDs := []spectypes.OperatorID{1, 2, 3, 4}
-	committee := make([]*spectypes.ShareMember, 0, len(operatorIDs))
-
-	for i, share := range toReactivate {
-		committee = append(committee, &spectypes.ShareMember{
-			Signer:      operatorIDs[i],
-			SharePubKey: share.SharePubKey,
-		})
-
-		_, err := operatorStore.SaveOperatorData(nil, &storage.OperatorData{ID: operatorIDs[i]})
+	for _, operatorID := range operatorIDs {
+		_, err := operatorStore.SaveOperatorData(nil, &storage.OperatorData{ID: operatorID})
 		require.NoError(t, err)
-	}
-
-	for _, share := range toReactivate {
-		share.Committee = committee
 	}
 
 	indiciesUpdate := make(chan struct{})
@@ -280,15 +279,32 @@ func TestController_ReactivateCluster(t *testing.T) {
 		indiciesUpdate <- struct{}{}
 	}()
 
-	err = ctr.ReactivateCluster(common.HexToAddress("0x1231231"), operatorIDs, toReactivate)
+	// A share whose committee is a split of a different key: reactivation must skip it and still
+	// start the others.
+	otherKey := &bls.SecretKey{}
+	otherKey.SetByCSPRNG()
+	invalidShare := &types.SSVShare{
+		Share: spectypes.Share{
+			ValidatorIndex:  phase0.ValidatorIndex(numberOfValidators + 1),
+			ValidatorPubKey: spectypes.ValidatorPK(otherKey.GetPublicKey().Serialize()),
+			SharePubKey:     toReactivate[0].SharePubKey,
+			Committee:       toReactivate[0].Committee,
+		},
+		Status:          v1.ValidatorStateActiveOngoing,
+		ActivationEpoch: 1,
+	}
 
-	require.NoError(t, err)
+	err = ctr.ReactivateCluster(common.HexToAddress("0x1231231"), operatorIDs, append(toReactivate, invalidShare))
+
+	require.ErrorIs(t, err, types.ErrInvalidSharePublicKeys)
 	require.Equal(t, 4, mockValidatorsMap.SizeValidators())
 
 	for _, key := range secretKeys {
 		_, ok := mockValidatorsMap.GetValidator(spectypes.ValidatorPK(key.GetPublicKey().Serialize()))
 		require.True(t, ok, "validator not found")
 	}
+	_, ok := mockValidatorsMap.GetValidator(invalidShare.ValidatorPubKey)
+	require.False(t, ok, "validator with an invalid share must not be started")
 
 	select {
 	case <-indiciesUpdate:

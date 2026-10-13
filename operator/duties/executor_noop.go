@@ -15,7 +15,7 @@ func NewNoopExecutor() *noopExecutor { return &noopExecutor{} }
 func (n *noopExecutor) ExecuteDuty(ctx context.Context, logger *zap.Logger, duty *spectypes.ValidatorDuty) {
 }
 
-func (n *noopExecutor) ExecuteCommitteeDuty(ctx context.Context, logger *zap.Logger, _ spectypes.CommitteeID, _ *spectypes.CommitteeDuty) {
+func (n *noopExecutor) ExecuteCommitteeDuty(ctx context.Context, logger *zap.Logger, _ spectypes.CommitteeID, _ spectypes.Duty) {
 }
 
 // Ensure interface conformance.

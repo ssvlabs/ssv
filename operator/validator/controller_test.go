@@ -8,24 +8,28 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"math"
 	"testing"
 	"time"
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/herumi/bls-eth-go-binary/bls"
+	"github.com/jellydator/ttlcache/v3"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest/observer"
 
 	"github.com/ssvlabs/ssv/ekmadapter"
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 
 	"github.com/ssvlabs/ssv/beacon/goclient"
-	"github.com/ssvlabs/ssv/exporter"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -37,14 +41,19 @@ import (
 	"github.com/ssvlabs/ssv/operator/validator/mocks"
 	"github.com/ssvlabs/ssv/operator/validators"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	"github.com/ssvlabs/ssv/protocol/v2/queue/worker"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/protocol/v2/types/ssvtestingutils"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	storagemocks "github.com/ssvlabs/ssv/registry/storage/mocks"
 	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/utils/threshold"
 )
 
 var secretKeyStrings = []string{
@@ -94,8 +103,47 @@ func TestNewController(t *testing.T) {
 		RegistryStorage:   registryStorage,
 		Context:           t.Context(),
 	}
-	control := NewController(logger, controllerOptions, exporter.Options{})
+	control := NewController(logger, controllerOptions)
+	// NewController starts ttlcache cleanup goroutines; stop them so they don't leak across tests.
+	defer control.Stop()
 	require.IsType(t, &Controller{}, control)
+}
+
+// TestNewControllerPropagatesLegacyProposerRoundTimeout pins the ControllerOptions -> CommonOptions
+// hop of the LegacyProposerRoundTimeout chain (SIP-102). That hop is a field-by-field struct copy, so
+// a field dropped there is silently the default with every other test still green.
+//
+// The rest of the chain (CommonOptions -> Options -> NewValidator -> roundtimer.New) is covered by
+// TestValidatorRoundTimerHonorsLegacyProposerRoundTimeout in protocol/v2/ssv/validator.
+func TestNewControllerPropagatesLegacyProposerRoundTimeout(t *testing.T) {
+	operatorDataStore := operatordatastore.New(buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811"))
+
+	operatorSigner, err := keys.GeneratePrivateKey()
+	require.NoError(t, err)
+
+	_, logger, _, network, _, bc := setupCommonTestComponents(t, operatorSigner)
+	db, err := getBaseStorage(logger)
+	require.NoError(t, err)
+
+	registryStorage, newStorageErr := storage.NewNodeStorage(networkconfig.TestNetwork.Beacon, logger, db)
+	require.NoError(t, newStorageErr)
+
+	controllerOptions := ControllerOptions{
+		NetworkConfig:              networkconfig.TestNetwork,
+		Beacon:                     bc,
+		FullNode:                   true,
+		Network:                    network,
+		OperatorDataStore:          operatorDataStore,
+		OperatorSigner:             types.NewSsvOperatorSigner(operatorSigner, operatorDataStore.GetOperatorID),
+		RegistryStorage:            registryStorage,
+		Context:                    t.Context(),
+		LegacyProposerRoundTimeout: true,
+	}
+	control := NewController(logger, controllerOptions)
+	// NewController starts ttlcache cleanup goroutines; stop them so they don't leak across tests.
+	defer control.Stop()
+
+	require.True(t, control.validatorCommonOpts.LegacyProposerRoundTimeout)
 }
 
 func TestNewControllerRouterConcurrencyOverride(t *testing.T) {
@@ -122,7 +170,9 @@ func TestNewControllerRouterConcurrencyOverride(t *testing.T) {
 		Context:              t.Context(),
 		MsgRouterConcurrency: 24,
 	}
-	control := NewController(logger, controllerOptions, exporter.Options{})
+	control := NewController(logger, controllerOptions)
+	// NewController starts ttlcache cleanup goroutines; stop them so they don't leak across tests.
+	defer control.Stop()
 	require.Equal(t, 24, control.msgRouterConcurrency)
 }
 
@@ -130,9 +180,7 @@ func TestSetupValidatorsExporter(t *testing.T) {
 	logger := log.TestLogger(t)
 	controllerOptions := MockControllerOptions{
 		validatorCommonOpts: &validator.CommonOptions{
-			ExporterOptions: exporter.Options{
-				Enabled: true,
-			},
+			ExporterMode: true,
 		},
 	}
 	ctr := setupController(t, logger, controllerOptions)
@@ -149,9 +197,7 @@ func TestSetupRunnersExporter(t *testing.T) {
 		nil,
 		nil,
 		&validator.CommonOptions{
-			ExporterOptions: exporter.Options{
-				Enabled: true,
-			},
+			ExporterMode: true,
 		},
 	)
 	require.Nil(t, runners)
@@ -161,15 +207,204 @@ func TestSetupRunnersExporter(t *testing.T) {
 func TestSetupCommitteeRunnersExporter(t *testing.T) {
 	committeeRunnerFunc := SetupCommitteeRunners(t.Context(), &validator.Options{
 		CommonOptions: validator.CommonOptions{
-			ExporterOptions: exporter.Options{
-				Enabled: true,
-			},
+			ExporterMode: true,
 		},
 	})
 
-	runner, err := committeeRunnerFunc(0, nil, nil, nil)
+	runner, err := committeeRunnerFunc(&spectypes.CommitteeDuty{}, nil, nil, nil)
 	require.Nil(t, runner)
 	require.ErrorContains(t, err, "cannot set up committee runners in exporter mode")
+}
+
+func TestSetupCommitteeRunners(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mockBeaconNode := beacon.NewMockBeaconNode(ctrl)
+
+	options := &validator.Options{
+		CommonOptions: validator.CommonOptions{
+			NetworkConfig: networkconfig.TestNetwork,
+			Beacon:        mockBeaconNode,
+		},
+		Operator: &spectypes.CommitteeMember{},
+	}
+
+	committeeRunnerFunc := SetupCommitteeRunners(t.Context(), options)
+
+	shares := map[phase0.ValidatorIndex]*spectypes.Share{
+		0: {},
+	}
+
+	t.Run("CommitteeDuty builds a CommitteeRunner", func(t *testing.T) {
+		r, err := committeeRunnerFunc(&spectypes.CommitteeDuty{}, shares, nil, nil)
+		require.NoError(t, err)
+		require.IsType(t, &runner.CommitteeRunner{}, r)
+		// The committee's round cap is not below the cluster-wide cutoff, so its instances keep it.
+		require.Equal(t, roundtimer.CutOffRound, r.(*runner.CommitteeRunner).QBFTController.GetConfig().GetCutOffRound())
+	})
+
+	t.Run("AggregatorCommitteeDuty builds an AggregatorCommitteeRunner", func(t *testing.T) {
+		r, err := committeeRunnerFunc(&spectypes.AggregatorCommitteeDuty{}, shares, nil, nil)
+		require.NoError(t, err)
+		require.IsType(t, &runner.AggregatorCommitteeRunner{}, r)
+	})
+
+	t.Run("unsupported duty type errors", func(t *testing.T) {
+		r, err := committeeRunnerFunc(&spectypes.ValidatorDuty{}, shares, nil, nil)
+		require.Nil(t, r)
+		require.ErrorContains(t, err, "unsupported committee duty type")
+	})
+
+	t.Run("no shares errors regardless of duty type", func(t *testing.T) {
+		r, err := committeeRunnerFunc(&spectypes.CommitteeDuty{}, nil, nil, nil)
+		require.Nil(t, r)
+		require.ErrorContains(t, err, "no shares")
+
+		r, err = committeeRunnerFunc(&spectypes.AggregatorCommitteeDuty{}, nil, nil, nil)
+		require.Nil(t, r)
+		require.ErrorContains(t, err, "no shares")
+	})
+}
+
+func TestHandleNonCommitteeMessages_RoleGuard(t *testing.T) {
+	logger := log.TestLogger(t)
+	controllerOptions := MockControllerOptions{
+		validatorCommonOpts: &validator.CommonOptions{},
+	}
+	ctr := setupController(t, logger, controllerOptions)
+
+	newConsensusMsg := func(role spectypes.RunnerRole, body any) *queue.SSVMessage {
+		return &queue.SSVMessage{
+			SSVMessage: &spectypes.SSVMessage{
+				MsgType: spectypes.SSVConsensusMsgType,
+				MsgID:   ssvtestingutils.NewMsgID(spectypes.DomainType{}, make([]byte, 48), role),
+			},
+			Body: body,
+		}
+	}
+
+	t.Run("non-committee, non-aggregator-committee roles are ignored", func(t *testing.T) {
+		msg := newConsensusMsg(types.RoleAggregator, &specqbft.Message{MsgType: specqbft.ProposalMsgType})
+
+		// ncv is nil: if the role guard didn't short-circuit before touching ncv, this would panic.
+		err := ctr.handleNonCommitteeMessages(t.Context(), msg, nil)
+		require.NoError(t, err)
+	})
+
+	t.Run("aggregator-committee role with non-proposal consensus message is ignored", func(t *testing.T) {
+		msg := newConsensusMsg(spectypes.RoleAggregatorCommittee, &specqbft.Message{MsgType: specqbft.CommitMsgType})
+
+		err := ctr.handleNonCommitteeMessages(t.Context(), msg, nil)
+		require.NoError(t, err)
+	})
+
+	t.Run("committee role with non-proposal consensus message is ignored", func(t *testing.T) {
+		msg := newConsensusMsg(spectypes.RoleCommittee, &specqbft.Message{MsgType: specqbft.CommitMsgType})
+
+		err := ctr.handleNonCommitteeMessages(t.Context(), msg, nil)
+		require.NoError(t, err)
+	})
+
+	t.Run("unrelated message types are ignored", func(t *testing.T) {
+		msg := &queue.SSVMessage{
+			SSVMessage: &spectypes.SSVMessage{
+				MsgType: spectypes.DKGMsgType,
+				MsgID:   ssvtestingutils.NewMsgID(spectypes.DomainType{}, make([]byte, 48), spectypes.RoleCommittee),
+			},
+		}
+
+		err := ctr.handleNonCommitteeMessages(t.Context(), msg, nil)
+		require.NoError(t, err)
+	})
+}
+
+func TestExecuteDuty(t *testing.T) {
+	t.Run("validator not found logs and returns without panicking", func(t *testing.T) {
+		logger := log.TestLogger(t)
+		controllerOptions := MockControllerOptions{
+			validatorsMap:       validators.New(t.Context()),
+			validatorCommonOpts: &validator.CommonOptions{},
+		}
+		ctr := setupController(t, logger, controllerOptions)
+
+		// No validator registered for this pubkey. This also exercises the real
+		// c.networkConfig.BooleForkAtSlot(duty.Slot) role computation (replacing the previous
+		// hard-coded `false`) on the way to the early-return.
+		duty := &spectypes.ValidatorDuty{
+			Type:           spectypes.BNRoleAttester,
+			PubKey:         phase0.BLSPubKey{1, 2, 3},
+			Slot:           1,
+			ValidatorIndex: 7,
+		}
+		ctr.ExecuteDuty(t.Context(), logger, duty)
+	})
+}
+
+func TestExecuteCommitteeDuty(t *testing.T) {
+	t.Run("committee not found logs and returns without panicking", func(t *testing.T) {
+		logger := log.TestLogger(t)
+		controllerOptions := MockControllerOptions{
+			validatorsMap:       validators.New(t.Context()),
+			validatorCommonOpts: &validator.CommonOptions{},
+		}
+		ctr := setupController(t, logger, controllerOptions)
+
+		// No committee registered for this ID — must not panic despite the duty carrying no
+		// runner-role information the caller can rely on ahead of time.
+		ctr.ExecuteCommitteeDuty(t.Context(), logger, spectypes.CommitteeID{1, 2, 3}, &spectypes.CommitteeDuty{Slot: 1})
+	})
+
+	t.Run("committee found but duty preparation fails is handled without panicking", func(t *testing.T) {
+		logger := log.TestLogger(t)
+		vmap := validators.New(t.Context())
+		controllerOptions := MockControllerOptions{
+			validatorsMap:       vmap,
+			validatorCommonOpts: &validator.CommonOptions{NetworkConfig: networkconfig.TestNetwork},
+		}
+		ctr := setupController(t, logger, controllerOptions)
+
+		committeeID := spectypes.CommitteeID{9, 9, 9}
+		cm := validator.NewCommittee(
+			logger,
+			networkconfig.TestNetwork,
+			&spectypes.CommitteeMember{CommitteeID: committeeID, Committee: []*spectypes.Operator{{OperatorID: 1}}},
+			nil, // CreateRunnerFn is never invoked: prepareDuty fails before createRunner runs.
+			nil,
+			nil,
+		)
+		vmap.PutCommittee(committeeID, cm)
+
+		// An empty ValidatorDuties list makes the committee's StartDuty fail fast with
+		// "no beacon duties" — this exercises ExecuteCommitteeDuty's new
+		// duty.DutySlot()/RunnerRoleForDuty(duty, ...) plumbing (replacing the old
+		// *spectypes.CommitteeDuty-only signature) down the error-handling path, without
+		// needing a fully wired runner stack.
+		ctr.ExecuteCommitteeDuty(t.Context(), logger, committeeID, &spectypes.CommitteeDuty{Slot: 1, ValidatorDuties: nil})
+	})
+
+	t.Run("aggregator-committee duty found but duty preparation fails is handled without panicking", func(t *testing.T) {
+		logger := log.TestLogger(t)
+		vmap := validators.New(t.Context())
+		controllerOptions := MockControllerOptions{
+			validatorsMap:       vmap,
+			validatorCommonOpts: &validator.CommonOptions{NetworkConfig: networkconfig.TestNetwork},
+		}
+		ctr := setupController(t, logger, controllerOptions)
+
+		committeeID := spectypes.CommitteeID{4, 5, 6}
+		cm := validator.NewCommittee(
+			logger,
+			networkconfig.TestNetwork,
+			&spectypes.CommitteeMember{CommitteeID: committeeID, Committee: []*spectypes.Operator{{OperatorID: 1}}},
+			nil,
+			nil,
+			nil,
+		)
+		vmap.PutCommittee(committeeID, cm)
+
+		// Same as above but for the new AggregatorCommitteeDuty type, so RunnerRoleForDuty
+		// resolves to RoleAggregatorCommittee instead of RoleCommittee.
+		ctr.ExecuteCommitteeDuty(t.Context(), logger, committeeID, &spectypes.AggregatorCommitteeDuty{Slot: 1, ValidatorDuties: nil})
+	})
 }
 
 func TestHandleNonCommitteeMessages(t *testing.T) {
@@ -182,7 +417,7 @@ func TestHandleNonCommitteeMessages(t *testing.T) {
 	ctr := setupController(t, logger, controllerOptions) // non-committee
 
 	// Only exporter handles non-committee messages
-	ctr.validatorCommonOpts.ExporterOptions.Enabled = true
+	ctr.validatorCommonOpts.ExporterMode = true
 
 	go ctr.handleRouterMessages()
 
@@ -194,7 +429,7 @@ func TestHandleNonCommitteeMessages(t *testing.T) {
 
 	logger.Debug("starting to send messages")
 
-	identifier := spectypes.NewMsgID(networkconfig.TestNetwork.DomainType, []byte("pk"), spectypes.RoleCommittee)
+	identifier := ssvtestingutils.NewMsgID(networkconfig.TestNetwork.DomainType, []byte("pk"), spectypes.RoleCommittee)
 
 	ctr.messageRouter.Route(t.Context(), &queue.SSVMessage{
 		SSVMessage: &spectypes.SSVMessage{
@@ -251,6 +486,48 @@ func TestHandleNonCommitteeMessages(t *testing.T) {
 	}
 }
 
+func TestHandleWorkerMessagesUsesMessageTraceHandler(t *testing.T) {
+	logger := log.TestLogger(t)
+	ctr := setupController(t, logger, MockControllerOptions{
+		validatorCommonOpts: &validator.CommonOptions{},
+	})
+	ctr.committeesObservers = ttlcache.New(
+		ttlcache.WithTTL[spectypes.MessageID, *validator.CommitteeObserver](time.Minute),
+	)
+
+	sentinelErr := errors.New("message trace handler called")
+	var calls int
+	var gotCtx context.Context
+	var gotMsg *queue.SSVMessage
+	var gotVerifySig func(*spectypes.PartialSignatureMessages) error
+	ctr.messageTraceHandler = func(ctx context.Context, msg *queue.SSVMessage, verifySig func(*spectypes.PartialSignatureMessages) error) error {
+		calls++
+		gotCtx = ctx
+		gotMsg = msg
+		gotVerifySig = verifySig
+		return sentinelErr
+	}
+
+	msgID := ssvtestingutils.NewMsgID(networkconfig.TestNetwork.DomainType, []byte("pk"), spectypes.RoleCommittee)
+	ssvMsg := &spectypes.SSVMessage{
+		MsgType: spectypes.SSVPartialSignatureMsgType,
+		MsgID:   msgID,
+		Data:    []byte("invalid partial signature payload"),
+	}
+	msg := &queue.SSVMessage{
+		SignedSSVMessage: &spectypes.SignedSSVMessage{SSVMessage: ssvMsg},
+		SSVMessage:       ssvMsg,
+	}
+
+	err := ctr.handleWorkerMessages(t.Context(), msg)
+
+	require.ErrorIs(t, err, sentinelErr)
+	require.Equal(t, 1, calls)
+	require.True(t, gotCtx == ctr.ctx)
+	require.Same(t, msg, gotMsg)
+	require.NotNil(t, gotVerifySig)
+}
+
 func TestSetupValidators(t *testing.T) {
 	// Setup logger and mock controller
 	logger := log.TestLogger(t)
@@ -258,36 +535,23 @@ func TestSetupValidators(t *testing.T) {
 	// Init global variables
 	activationEpoch, exitEpoch := phase0.Epoch(1), goclient.FarFutureEpoch
 	operatorIds := []uint64{1, 2, 3, 4}
-	var validatorPublicKey phase0.BLSPubKey
 
-	validatorKey, err := createKey()
-	require.NoError(t, err)
-
-	// Check the length before copying
-	if len(validatorKey) == len(validatorPublicKey) {
-		copy(validatorPublicKey[:], validatorKey)
-	} else {
-		t.Fatalf("Length mismatch: validatorKey has length %d, but expected %d", len(validatorKey), len(validatorPublicKey))
-	}
+	// Split a real validator key so that shares pass share public key validation.
+	validatorPK, operators := buildValidCommittee(t, operatorIds)
 
 	metadataLastMap := make(map[spectypes.ValidatorPK]time.Time)
-	metadataLastMap[spectypes.ValidatorPK(validatorPublicKey)] = time.Now()
+	metadataLastMap[validatorPK] = time.Now()
 
-	operators := make([]*spectypes.ShareMember, len(operatorIds))
-	for i, id := range operatorIds {
-		operatorKey, keyError := createKey()
-		require.NoError(t, keyError)
-		operators[i] = &spectypes.ShareMember{Signer: id, SharePubKey: operatorKey}
-	}
+	shareKey := operators[0].SharePubKey
 
-	shareKey, err := createKey()
-	require.NoError(t, err)
+	// A valid validator public key that the committee's shares don't reconstruct.
+	otherValidatorPK, _ := buildValidCommittee(t, operatorIds)
 
 	shareWithMetaData := &types.SSVShare{
 		Share: spectypes.Share{
 			ValidatorIndex:  1,
-			Committee:       operators[:1],
-			ValidatorPubKey: spectypes.ValidatorPK(validatorKey),
+			Committee:       operators[:],
+			ValidatorPubKey: validatorPK,
 			SharePubKey:     shareKey,
 		},
 		Status:                    v1.ValidatorStateActiveOngoing,
@@ -298,8 +562,8 @@ func TestSetupValidators(t *testing.T) {
 
 	shareWithoutMetaData := &types.SSVShare{
 		Share: spectypes.Share{
-			Committee:       operators[:1],
-			ValidatorPubKey: spectypes.ValidatorPK(validatorKey),
+			Committee:       operators[:],
+			ValidatorPubKey: validatorPK,
 			SharePubKey:     shareKey,
 		},
 		OwnerAddress: common.BytesToAddress([]byte("62Ce5c69260bd819B4e0AD13f4b873074D479811")),
@@ -308,7 +572,16 @@ func TestSetupValidators(t *testing.T) {
 	const (
 		ownerAddr    = "67Ce5c69260bd819B4e0AD13f4b873074D479811"
 		feeRecipient = "45E668aba4b7fc8761331EC3CE77584B7A99A51A"
+
+		allErroredInitErr = "all 1 validators errored during initialization"
 	)
+
+	allOperatorData := []*registrystorage.OperatorData{
+		buildOperatorData(1, ownerAddr),
+		buildOperatorData(2, ownerAddr),
+		buildOperatorData(3, ownerAddr),
+		buildOperatorData(4, ownerAddr),
+	}
 
 	operatorDataStore := operatordatastore.New(buildOperatorData(1, ownerAddr))
 	ownerAddressBytes := decodeHex(t, ownerAddr, "Failed to decode owner address")
@@ -341,7 +614,7 @@ func TestSetupValidators(t *testing.T) {
 			validatorStartFunc: func(validator *validator.Validator) (bool, error) {
 				return true, nil
 			},
-			operatorData: []*registrystorage.OperatorData{buildOperatorData(1, ownerAddr)},
+			operatorData: allOperatorData,
 		},
 		{
 			name:              "setting fee recipient to owner address",
@@ -355,7 +628,7 @@ func TestSetupValidators(t *testing.T) {
 			validatorStartFunc: func(validator *validator.Validator) (bool, error) {
 				return true, nil
 			},
-			operatorData: []*registrystorage.OperatorData{buildOperatorData(1, ownerAddr)},
+			operatorData: allOperatorData,
 		},
 		{
 			name:              "start validator with metadata",
@@ -369,7 +642,7 @@ func TestSetupValidators(t *testing.T) {
 			validatorStartFunc: func(validator *validator.Validator) (bool, error) {
 				return true, nil
 			},
-			operatorData: []*registrystorage.OperatorData{buildOperatorData(1, ownerAddr)},
+			operatorData: allOperatorData,
 		},
 		{
 			name:              "start validator without validator metadata",
@@ -383,7 +656,7 @@ func TestSetupValidators(t *testing.T) {
 			validatorStartFunc: func(validator *validator.Validator) (bool, error) {
 				return true, nil
 			},
-			operatorData: []*registrystorage.OperatorData{buildOperatorData(1, ownerAddr)},
+			operatorData: allOperatorData,
 		},
 		{
 			name:              "failed to start validator",
@@ -397,7 +670,7 @@ func TestSetupValidators(t *testing.T) {
 			validatorStartFunc: func(validator *validator.Validator) (bool, error) {
 				return true, errors.New("some error")
 			},
-			operatorData: []*registrystorage.OperatorData{buildOperatorData(1, ownerAddr)},
+			operatorData: allOperatorData,
 		},
 		{
 			name: "operator data removed - enough for quorum committee members",
@@ -406,7 +679,7 @@ func TestSetupValidators(t *testing.T) {
 					Share: spectypes.Share{
 						ValidatorIndex:  1,
 						Committee:       operators[:],
-						ValidatorPubKey: spectypes.ValidatorPK(validatorKey),
+						ValidatorPubKey: validatorPK,
 						SharePubKey:     shareKey,
 					},
 					Status:                    v1.ValidatorStateActiveOngoing,
@@ -431,13 +704,13 @@ func TestSetupValidators(t *testing.T) {
 			},
 		},
 		{
-			name: "operator data removed - not enough for quorum committee members",
+			name: "share public keys do not reconstruct validator public key",
 			shares: []*types.SSVShare{
 				{
 					Share: spectypes.Share{
 						ValidatorIndex:  1,
 						Committee:       operators[:],
-						ValidatorPubKey: spectypes.ValidatorPK(validatorKey),
+						ValidatorPubKey: otherValidatorPK,
 						SharePubKey:     shareKey,
 					},
 					Status:                    v1.ValidatorStateActiveOngoing,
@@ -448,7 +721,117 @@ func TestSetupValidators(t *testing.T) {
 			},
 			recipientFound:    false,
 			initedValidators:  0,
-			initErr:           "all 1 validators errored during initialization",
+			initErr:           "",
+			startedValidators: 0,
+			startErrs:         0,
+			bcMockTimes:       0,
+			validatorStartFunc: func(validator *validator.Validator) (bool, error) {
+				return true, nil
+			},
+			operatorData: allOperatorData,
+		},
+		{
+			name: "operator data removed - not enough for quorum committee members",
+			shares: []*types.SSVShare{
+				{
+					Share: spectypes.Share{
+						ValidatorIndex:  1,
+						Committee:       operators[:],
+						ValidatorPubKey: validatorPK,
+						SharePubKey:     shareKey,
+					},
+					Status:                    v1.ValidatorStateActiveOngoing,
+					ActivationEpoch:           activationEpoch,
+					ExitEpoch:                 exitEpoch,
+					BeaconMetadataLastUpdated: time.Now(),
+				},
+			},
+			recipientFound:    false,
+			initedValidators:  0,
+			initErr:           allErroredInitErr,
+			startedValidators: 0,
+			startErrs:         0,
+			bcMockTimes:       0,
+			validatorStartFunc: func(validator *validator.Validator) (bool, error) {
+				return true, nil
+			},
+			operatorData: []*registrystorage.OperatorData{
+				buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811"),
+				buildOperatorData(2, "67Ce5c69260bd819B4e0AD13f4b873074D479812"),
+			},
+		},
+		{
+			// The invalid share is skipped and the other one fails (not enough operators for quorum),
+			// so every share that could be initialized errored.
+			name: "invalid share skipped and every other share errors",
+			shares: []*types.SSVShare{
+				{
+					Share: spectypes.Share{
+						ValidatorIndex:  1,
+						Committee:       operators[:],
+						ValidatorPubKey: otherValidatorPK,
+						SharePubKey:     shareKey,
+					},
+					Status:                    v1.ValidatorStateActiveOngoing,
+					ActivationEpoch:           activationEpoch,
+					ExitEpoch:                 exitEpoch,
+					BeaconMetadataLastUpdated: time.Now(),
+				},
+				{
+					Share: spectypes.Share{
+						ValidatorIndex:  2,
+						Committee:       operators[:],
+						ValidatorPubKey: validatorPK,
+						SharePubKey:     shareKey,
+					},
+					Status:                    v1.ValidatorStateActiveOngoing,
+					ActivationEpoch:           activationEpoch,
+					ExitEpoch:                 exitEpoch,
+					BeaconMetadataLastUpdated: time.Now(),
+				},
+			},
+			recipientFound:    false,
+			initedValidators:  0,
+			initErr:           allErroredInitErr,
+			startedValidators: 0,
+			startErrs:         0,
+			bcMockTimes:       0,
+			validatorStartFunc: func(validator *validator.Validator) (bool, error) {
+				return true, nil
+			},
+			operatorData: []*registrystorage.OperatorData{
+				buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811"),
+				buildOperatorData(2, "67Ce5c69260bd819B4e0AD13f4b873074D479812"),
+			},
+		},
+		{
+			// Same as above, but the invalid share has no metadata yet: it's still skipped as invalid,
+			// not as missing metadata, so every other share errored.
+			name: "invalid share without metadata skipped and every other share errors",
+			shares: []*types.SSVShare{
+				{
+					Share: spectypes.Share{
+						Committee:       operators[:],
+						ValidatorPubKey: otherValidatorPK,
+						SharePubKey:     shareKey,
+					},
+				},
+				{
+					Share: spectypes.Share{
+						ValidatorIndex:  2,
+						Committee:       operators[:],
+						ValidatorPubKey: validatorPK,
+						SharePubKey:     shareKey,
+					},
+					Status:                    v1.ValidatorStateActiveOngoing,
+					ActivationEpoch:           activationEpoch,
+					ExitEpoch:                 exitEpoch,
+					BeaconMetadataLastUpdated: time.Now(),
+				},
+			},
+			recipientFound:    false,
+			initedValidators:  0,
+			initErr:           allErroredInitErr,
 			startedValidators: 0,
 			startErrs:         0,
 			bcMockTimes:       0,
@@ -479,7 +862,7 @@ func TestSetupValidators(t *testing.T) {
 			committeeMap := make(map[spectypes.CommitteeID]*validator.Committee)
 			mockValidatorsMap := validators.New(t.Context(), validators.WithInitialState(testValidatorsMap, committeeMap))
 
-			err = opStorage.DropOperators()
+			err := opStorage.DropOperators()
 			require.NoError(t, err)
 			for _, data := range tc.operatorData {
 				_, err := opStorage.SaveOperatorData(nil, data)
@@ -986,6 +1369,27 @@ func buildOperators(t *testing.T) []*spectypes.ShareMember {
 	return operators
 }
 
+// buildValidCommittee splits a fresh validator key into shares for the given operators
+// so that the resulting committee passes share public key validation.
+func buildValidCommittee(t *testing.T, operatorIDs []uint64) (spectypes.ValidatorPK, []*spectypes.ShareMember) {
+	threshold.Init()
+	quorum, _ := types.ComputeQuorumAndPartialQuorum(uint64(len(operatorIDs)))
+	poly := make([]bls.SecretKey, quorum)
+	for i := range poly {
+		poly[i].SetByCSPRNG()
+	}
+
+	committee := make([]*spectypes.ShareMember, len(operatorIDs))
+	for i, id := range operatorIDs {
+		var blsID bls.ID
+		require.NoError(t, blsID.SetDecString(fmt.Sprintf("%d", id)))
+		var share bls.SecretKey
+		require.NoError(t, share.Set(poly, &blsID))
+		committee[i] = &spectypes.ShareMember{Signer: id, SharePubKey: share.GetPublicKey().Serialize()}
+	}
+	return spectypes.ValidatorPK(poly[0].GetPublicKey().Serialize()), committee
+}
+
 func createPubKey(input byte) spectypes.ValidatorPK {
 	var byteArray [48]byte
 	for i := range byteArray {
@@ -1014,6 +1418,7 @@ func TestHandleMetadataUpdates(t *testing.T) {
 		metadataBefore          beacon.ValidatorMetadataMap
 		metadataAfter           beacon.ValidatorMetadataMap
 		expectIndicesChange     bool
+		invalidShares           bool
 		mockSharesStorageExpect func(mockSharesStorage *mocks.MockSharesStorage)
 	}{
 		{
@@ -1130,6 +1535,22 @@ func TestHandleMetadataUpdates(t *testing.T) {
 				mockSharesStorage.EXPECT().List(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return([]*types.SSVShare{}).AnyTimes()
 			},
 		},
+		{
+			name: "no report indices change - invalid share is not started (Unknown → ActiveOngoing)",
+			metadataBefore: beacon.ValidatorMetadataMap{
+				spectypes.ValidatorPK{0x01}: {
+					Status: v1.ValidatorStateUnknown,
+				},
+			},
+			metadataAfter: beacon.ValidatorMetadataMap{
+				spectypes.ValidatorPK{0x01}: {
+					Index:  1,
+					Status: v1.ValidatorStateActiveOngoing,
+				},
+			},
+			expectIndicesChange: false,
+			invalidShares:       true,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -1142,22 +1563,13 @@ func TestHandleMetadataUpdates(t *testing.T) {
 				shares := make([]*types.SSVShare, 0, len(tc.metadataAfter))
 				for _, metadata := range tc.metadataAfter {
 					share := &types.SSVShare{}
-					share.SharePubKey = make([]byte, 48)
-					share.SetBeaconMetadata(metadata)
-					share.Committee = []*spectypes.ShareMember{
-						{
-							Signer: 1,
-						},
-						{
-							Signer: 2,
-						},
-						{
-							Signer: 3,
-						},
-						{
-							Signer: 4,
-						},
+					share.ValidatorPubKey, share.Committee = buildValidCommittee(t, []uint64{1, 2, 3, 4})
+					if tc.invalidShares {
+						// A valid validator public key that the committee's shares don't reconstruct.
+						share.ValidatorPubKey, _ = buildValidCommittee(t, []uint64{1, 2, 3, 4})
 					}
+					share.SharePubKey = share.Committee[0].SharePubKey
+					share.SetBeaconMetadata(metadata)
 					shares = append(shares, share)
 				}
 				mockSharesStorage.EXPECT().List(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(shares).AnyTimes()
@@ -1286,4 +1698,282 @@ func (m mockShares) Delete(_ basedb.ReadWriter, pubKey []byte) error           {
 func (m mockShares) Drop() error                                               { return nil }
 func (m mockShares) UpdateValidatorsMetadata(metadataMap beacon.ValidatorMetadataMap) (beacon.ValidatorMetadataMap, error) {
 	return nil, nil
+}
+
+func buildProposerFTestNetworkConfig(t *testing.T, booleForkEpoch phase0.Epoch) *networkconfig.Network {
+	t.Helper()
+
+	ssvCopy := *networkconfig.TestNetwork.SSV
+	ssvCopy.Forks.Boole = booleForkEpoch
+
+	netCfg := *networkconfig.TestNetwork
+	netCfg.SSV = &ssvCopy
+	return &netCfg
+}
+
+func buildProposerFTestCommittee() []*spectypes.Operator {
+	return []*spectypes.Operator{
+		{OperatorID: 1, SSVOperatorPubKey: []byte("op-1")},
+		{OperatorID: 2, SSVOperatorPubKey: []byte("op-2")},
+		{OperatorID: 3, SSVOperatorPubKey: []byte("op-3")},
+		{OperatorID: 4, SSVOperatorPubKey: []byte("op-4")},
+	}
+}
+
+func TestSetupRunnersProposerF(t *testing.T) {
+	netCfg := buildProposerFTestNetworkConfig(t, phase0.Epoch(math.MaxUint64)) // pre-Boole-fork
+	committee := buildProposerFTestCommittee()
+
+	share := &types.SSVShare{
+		Share: spectypes.Share{
+			ValidatorIndex:  1,
+			ValidatorPubKey: createPubKey(byte('1')),
+			SharePubKey:     make([]byte, 48),
+		},
+	}
+	operator := &spectypes.CommitteeMember{
+		OperatorID: 1,
+		Committee:  committee,
+	}
+	options := &validator.CommonOptions{
+		NetworkConfig: netCfg,
+	}
+
+	runners, err := SetupRunners(t.Context(), share, operator, nil, nil, options)
+	require.NoError(t, err)
+	require.Contains(t, runners, types.RoleAggregator)
+
+	aggregatorRunner, ok := runners[types.RoleAggregator].(*runner.AggregatorRunner)
+	require.True(t, ok, "expected *runner.AggregatorRunner")
+	require.NotNil(t, aggregatorRunner.QBFTController)
+
+	proposerF := aggregatorRunner.QBFTController.GetConfig().GetProposerF()
+	require.NotNil(t, proposerF)
+
+	state := &specqbft.State{
+		CommitteeMember: &spectypes.CommitteeMember{Committee: committee},
+		Height:          specqbft.FirstHeight,
+	}
+
+	expected := qbft.Proposer(state.Height, specqbft.FirstRound, types.OperatorIDsFromOperators(committee), netCfg)
+	require.Equal(t, expected, proposerF(state, specqbft.FirstRound))
+
+	// A different round should be able to select a different proposer (round-robin).
+	nextRound := specqbft.FirstRound + 1
+	expectedNextRound := qbft.Proposer(state.Height, nextRound, types.OperatorIDsFromOperators(committee), netCfg)
+	require.Equal(t, expectedNextRound, proposerF(state, nextRound))
+}
+
+func TestSetupRunnersProposerFPostBooleFork(t *testing.T) {
+	netCfg := buildProposerFTestNetworkConfig(t, phase0.Epoch(0)) // post-Boole-fork from genesis
+	committee := buildProposerFTestCommittee()
+
+	share := &types.SSVShare{
+		Share: spectypes.Share{
+			ValidatorIndex:  1,
+			ValidatorPubKey: createPubKey(byte('2')),
+			SharePubKey:     make([]byte, 48),
+		},
+	}
+	operator := &spectypes.CommitteeMember{
+		OperatorID: 1,
+		Committee:  committee,
+	}
+	options := &validator.CommonOptions{
+		NetworkConfig: netCfg,
+	}
+
+	runners, err := SetupRunners(t.Context(), share, operator, nil, nil, options)
+	require.NoError(t, err)
+
+	// Post-Boole the standalone aggregator runner is not built (SetupRunners gates it behind
+	// !BooleFork); the proposer runner exists in every fork and shares the same ProposerF closure.
+	proposerRunner, ok := runners[spectypes.RoleProposer].(*runner.ProposerRunner)
+	require.True(t, ok, "expected *runner.ProposerRunner")
+
+	proposerF := proposerRunner.QBFTController.GetConfig().GetProposerF()
+
+	// Pick a height whose slot lands well after genesis so BooleForkAtSlot is true.
+	state := &specqbft.State{
+		CommitteeMember: &spectypes.CommitteeMember{Committee: committee},
+		Height:          specqbft.Height(netCfg.SlotsPerEpoch) * 10,
+	}
+	require.True(t, netCfg.BooleForkAtSlot(phase0.Slot(state.Height)), "expected height to be post-Boole-fork for this assertion to be meaningful")
+
+	expected := qbft.Proposer(state.Height, specqbft.FirstRound, types.OperatorIDsFromOperators(committee), netCfg)
+	require.Equal(t, expected, proposerF(state, specqbft.FirstRound))
+}
+
+// TestSetupRunnersCutOffRoundPerRole pins that a runner's QBFT instances give up at the role's cutoff
+// (roundtimer.CutOffRoundFor): right after the proposer's round cap, and at the cluster-wide CutOffRound
+// for a role whose cap is not below it.
+func TestSetupRunnersCutOffRoundPerRole(t *testing.T) {
+	netCfg := buildProposerFTestNetworkConfig(t, phase0.Epoch(math.MaxUint64)) // pre-Boole-fork, so the aggregator runner is built too
+	committee := buildProposerFTestCommittee()
+
+	share := &types.SSVShare{
+		Share: spectypes.Share{
+			ValidatorIndex:  1,
+			ValidatorPubKey: createPubKey(byte('3')),
+			SharePubKey:     make([]byte, 48),
+		},
+	}
+	operator := &spectypes.CommitteeMember{
+		OperatorID: 1,
+		Committee:  committee,
+	}
+	options := &validator.CommonOptions{
+		NetworkConfig: netCfg,
+	}
+
+	runners, err := SetupRunners(t.Context(), share, operator, nil, nil, options)
+	require.NoError(t, err)
+
+	proposerRunner, ok := runners[spectypes.RoleProposer].(*runner.ProposerRunner)
+	require.True(t, ok, "expected *runner.ProposerRunner")
+	proposerCutOff := proposerRunner.QBFTController.GetConfig().GetCutOffRound()
+	require.Equal(t, roundtimer.CutOffRoundFor(spectypes.RoleProposer), proposerCutOff)
+	require.Equal(t, specqbft.Round(3), proposerCutOff, "proposer instances give up right after the proposer round cap of 2")
+
+	aggregatorRunner, ok := runners[types.RoleAggregator].(*runner.AggregatorRunner)
+	require.True(t, ok, "expected *runner.AggregatorRunner")
+	require.Equal(t, roundtimer.CutOffRound, aggregatorRunner.QBFTController.GetConfig().GetCutOffRound())
+}
+
+// The PTC-attester and proposer-preferences runners exist only on a Gloas-scheduled network, already before the
+// fork; a network whose Gloas fork is absent, or named but unscheduled (far-future), gets neither.
+func TestSetupRunnersGloasRoles(t *testing.T) {
+	tests := []struct {
+		name   string
+		netCfg *networkconfig.Network
+		want   bool
+	}{
+		{"gloas absent", networkconfig.TestNetwork, false},
+		{"gloas unscheduled", networkconfig.TestNetworkWithGloas(networkconfig.FarFutureEpoch), false},
+		{"gloas scheduled, not yet active", networkconfig.TestNetworkWithGloas(networkconfig.TestNetwork.EstimatedCurrentEpoch() + 10), true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			share := &types.SSVShare{Share: spectypes.Share{
+				ValidatorIndex:  1,
+				ValidatorPubKey: createPubKey(byte('1')),
+				SharePubKey:     make([]byte, 48),
+			}}
+			operator := &spectypes.CommitteeMember{OperatorID: 1, Committee: buildProposerFTestCommittee()}
+
+			runners, err := SetupRunners(t.Context(), share, operator, nil, nil, &validator.CommonOptions{NetworkConfig: tt.netCfg})
+			require.NoError(t, err)
+			require.Contains(t, runners, spectypes.RoleProposer)
+			_, ptc := runners[spectypes.RolePTCAttester]
+			_, preferences := runners[spectypes.RoleProposerPreferences]
+			require.Equal(t, tt.want, ptc, "PTC attester runner")
+			require.Equal(t, tt.want, preferences, "proposer preferences runner")
+		})
+	}
+}
+
+func TestSetupCommitteeRunnersProposerF(t *testing.T) {
+	netCfg := buildProposerFTestNetworkConfig(t, phase0.Epoch(math.MaxUint64)) // pre-Boole-fork
+	committee := buildProposerFTestCommittee()
+
+	options := &validator.Options{
+		CommonOptions: validator.CommonOptions{
+			NetworkConfig: netCfg,
+		},
+		Operator: &spectypes.CommitteeMember{
+			OperatorID: 1,
+			Committee:  committee,
+		},
+	}
+
+	committeeRunnerFunc := SetupCommitteeRunners(t.Context(), options)
+
+	shareMap := map[phase0.ValidatorIndex]*spectypes.Share{
+		1: {ValidatorIndex: 1},
+	}
+	r, err := committeeRunnerFunc(&spectypes.CommitteeDuty{}, shareMap, nil, nil)
+	require.NoError(t, err)
+	crunner, ok := r.(*runner.CommitteeRunner)
+	require.True(t, ok, "expected *runner.CommitteeRunner")
+	require.NotNil(t, crunner.QBFTController)
+
+	proposerF := crunner.QBFTController.GetConfig().GetProposerF()
+	require.NotNil(t, proposerF)
+
+	state := &specqbft.State{
+		CommitteeMember: &spectypes.CommitteeMember{Committee: committee},
+		Height:          specqbft.FirstHeight,
+	}
+
+	expected := qbft.Proposer(state.Height, specqbft.FirstRound, types.OperatorIDsFromOperators(committee), netCfg)
+	require.Equal(t, expected, proposerF(state, specqbft.FirstRound))
+
+	// A different round should be able to select a different proposer (round-robin).
+	nextRound := specqbft.FirstRound + 1
+	expectedNextRound := qbft.Proposer(state.Height, nextRound, types.OperatorIDsFromOperators(committee), netCfg)
+	require.Equal(t, expectedNextRound, proposerF(state, nextRound))
+}
+
+// A message routed to one of our own validators that has no running local instance is dropped by
+// design, but must leave a diagnosable debug line — a one-shot broadcast lost there (e.g. a §5
+// proposer-preferences partial racing validator startup) has no redelivery. Foreign-validator
+// messages from shared subnets stay silent.
+func TestHandleRouterMessages_LogsOwnValidatorDrop(t *testing.T) {
+	core, observed := observer.New(zapcore.DebugLevel)
+	logger := zap.New(core)
+	const dropSnippet = "dropping message for own validator with no running instance"
+
+	ctrl := gomock.NewController(t)
+	ownOperatorID := spectypes.OperatorID(1)
+
+	ownPK := bytes.Repeat([]byte{0xaa}, 48)
+	foreignPK := bytes.Repeat([]byte{0xbb}, 48)
+	unknownPK := bytes.Repeat([]byte{0xcc}, 48)
+
+	shareFor := func(signer spectypes.OperatorID) *types.SSVShare {
+		return &types.SSVShare{Share: spectypes.Share{Committee: []*spectypes.ShareMember{{Signer: signer}}}}
+	}
+	validatorStore := storagemocks.NewMockValidatorStore(ctrl)
+	validatorStore.EXPECT().Validator(gomock.Any()).DoAndReturn(func(pk []byte) (*types.SSVShare, bool) {
+		switch {
+		case bytes.Equal(pk, ownPK):
+			return shareFor(ownOperatorID), true // ours, instance not started
+		case bytes.Equal(pk, foreignPK):
+			return shareFor(99), true // another operator's validator (shared subnet)
+		default:
+			return nil, false
+		}
+	}).AnyTimes()
+
+	ctr := setupController(t, logger, MockControllerOptions{
+		validatorsMap:       validators.New(t.Context()), // empty: no started instances
+		validatorStore:      validatorStore,
+		operatorDataStore:   operatordatastore.New(buildOperatorData(ownOperatorID, "67Ce5c69260bd819B4e0AD13f4b873074D479811")),
+		validatorCommonOpts: &validator.CommonOptions{}, // exporter disabled: the fall-through branch
+	})
+	go ctr.handleRouterMessages()
+
+	route := func(pk []byte, body any) {
+		msgID := ssvtestingutils.NewMsgID(networkconfig.TestNetwork.DomainType, pk, spectypes.RoleProposerPreferences)
+		ctr.messageRouter.Route(t.Context(), &queue.SSVMessage{
+			SSVMessage: &spectypes.SSVMessage{MsgType: spectypes.SSVPartialSignatureMsgType, MsgID: msgID, Data: []byte("data")},
+			Body:       body,
+		})
+	}
+
+	// Foreign and unknown validators first, own validator last: the router loop is FIFO, so once the
+	// own-validator line appears, the silent cases have already been processed.
+	route(foreignPK, nil)
+	route(unknownPK, nil)
+	route(ownPK, &spectypes.PartialSignatureMessages{Slot: 42, Messages: []*spectypes.PartialSignatureMessage{{Signer: 2}}})
+
+	require.Eventually(t, func() bool {
+		return observed.FilterMessageSnippet(dropSnippet).Len() == 1
+	}, time.Second, 5*time.Millisecond, "own-validator drop must be logged")
+
+	entries := observed.FilterMessageSnippet(dropSnippet).All()
+	require.Len(t, entries, 1, "foreign/unknown validator drops must stay silent")
+	fieldsByKey := entries[0].ContextMap()
+	require.EqualValues(t, 42, fieldsByKey["slot"], "partial-sig drops carry the slot")
+	require.EqualValues(t, 2, fieldsByKey["signer"])
 }

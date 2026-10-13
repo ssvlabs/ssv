@@ -1,11 +1,13 @@
 package operator
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/exporter"
+	exporterconfig "github.com/ssvlabs/ssv/exporter/config"
 )
 
 func TestShouldRunDutyScheduler(t *testing.T) {
@@ -13,27 +15,27 @@ func TestShouldRunDutyScheduler(t *testing.T) {
 
 	tests := []struct {
 		name         string
-		exporterOpts exporter.Options
+		exporterOpts exporterconfig.Options
 		expected     bool
 	}{
 		{
 			name:         "regular operator",
-			exporterOpts: exporter.Options{},
+			exporterOpts: exporterconfig.Options{},
 			expected:     true,
 		},
 		{
 			name: "exporter standard",
-			exporterOpts: exporter.Options{
+			exporterOpts: exporterconfig.Options{
 				Enabled: true,
-				Mode:    exporter.ModeStandard,
+				Mode:    exporterconfig.ModeStandard,
 			},
 			expected: false,
 		},
 		{
 			name: "exporter archive",
-			exporterOpts: exporter.Options{
+			exporterOpts: exporterconfig.Options{
 				Enabled: true,
-				Mode:    exporter.ModeArchive,
+				Mode:    exporterconfig.ModeArchive,
 			},
 			expected: true,
 		},
@@ -45,4 +47,29 @@ func TestShouldRunDutyScheduler(t *testing.T) {
 			require.Equal(t, tc.expected, shouldRunDutyScheduler(tc.exporterOpts))
 		})
 	}
+}
+
+type recordingWebSocketServer struct {
+	started bool
+}
+
+func (s *recordingWebSocketServer) Start(context.Context) (string, <-chan error, error) {
+	s.started = true
+	serveErr := make(chan error)
+	close(serveErr)
+	return "", serveErr, nil
+}
+
+func TestStartWSServerStartsConfiguredServer(t *testing.T) {
+	ws := &recordingWebSocketServer{}
+
+	n := &Node{
+		logger: zap.NewNop(),
+		ws:     ws,
+	}
+
+	serveErr, err := n.startWSServer(context.Background())
+	require.NoError(t, err)
+	require.NotNil(t, serveErr)
+	require.True(t, ws.started)
 }

@@ -19,6 +19,7 @@ import (
 	"github.com/ssvlabs/ssv/operator/validators"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	validatorprotocol "github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
+	"github.com/ssvlabs/ssv/protocol/v2/types/ssvtestingutils"
 )
 
 const (
@@ -183,7 +184,7 @@ func benchmarkCommitteeFixture(
 
 	warmupMsg := benchmarkRouterMessage(committeeID, slot)
 	committee.EnqueueMessage(ctx, warmupMsg)
-	committeeQueue := committee.Queues[slot]
+	committeeQueue := committee.Queues[slot].Q
 	committeeQueue.TryPop(queue.NewCommitteeQueuePrioritizer(&queue.State{
 		Slot:   slot,
 		Quorum: 3,
@@ -193,7 +194,7 @@ func benchmarkCommitteeFixture(
 }
 
 func benchmarkRouterMessage(committeeID spectypes.CommitteeID, slot phase0.Slot) *queue.SSVMessage {
-	msgID := spectypes.NewMsgID(networkconfig.TestNetwork.DomainType, committeeID[:], spectypes.RoleCommittee)
+	msgID := ssvtestingutils.NewMsgID(networkconfig.TestNetwork.DomainType, committeeID[:], spectypes.RoleCommittee)
 
 	qbftMsg := &specqbft.Message{
 		Height:     specqbft.Height(slot),

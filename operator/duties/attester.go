@@ -85,10 +85,10 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 		case <-next:
 			currentSlot := h.ticker.Slot()
 			next = h.ticker.Next() // advances h.ticker
-			currentEpoch := h.beaconConfig.EstimatedEpochAtSlot(currentSlot)
+			currentEpoch := h.netCfg.EstimatedEpochAtSlot(currentSlot)
 			nextEpoch := currentEpoch + 1
 
-			slotNumber := uint64(currentSlot)%h.beaconConfig.SlotsPerEpoch + 1
+			slotNumber := uint64(currentSlot)%h.netCfg.SlotsPerEpoch + 1
 			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, currentSlot, slotNumber)
 			logger := h.logger.With(
 				zap.String("epoch_slot_pos", buildStr),
@@ -102,7 +102,7 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 				// tickCtx ensures we never take too long to process ticks (otherwise we might not be able to catch up
 				// with the latest tick for a while, if ever). Since the ticker always fires at around slot start-time,
 				// setting the deadline to currentSlot+1 gives us about ~1 full slot (12s) to process the tick.
-				tickCtx, cancel := context.WithDeadline(ctx, h.beaconConfig.SlotStartTime(currentSlot+1))
+				tickCtx, cancel := context.WithDeadline(ctx, h.netCfg.SlotStartTime(currentSlot+1))
 				defer cancel()
 
 				// 1. Process the duty execution & fetching.
@@ -110,7 +110,9 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 				// Process intents (if any): fetch & prepare the duties for the current epoch.
 				h.prepareCurrentEpoch(tickCtx, logger, currentEpoch, currentSlot)
 
-				h.executeAggregatorDuties(tickCtx, currentEpoch, currentSlot)
+				if !h.netCfg.BooleForkAtSlot(currentSlot) {
+					h.executeAggregatorDuties(tickCtx, currentEpoch, currentSlot)
+				}
 
 				// Process intents (if any): fetch & prepare the duties for the next epoch.
 				h.prepareNextEpoch(tickCtx, logger, currentEpoch, currentSlot)
@@ -122,20 +124,28 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 					delete(h.dutyFetchIntents, currentEpoch-1)
 				}
 
-				// 2. Process validator indices changes (if any). We want to process it on the current slot only
+				// 2. Schedule the next-epoch duty-fetch intent (only if absent, so a pending or fulfilled one is
+				// left untouched). We register it before the indices-change handling below, which can return early
+				// on tickCtx.Done - so even a tick that overruns its deadline still records the intent, and the
+				// next-epoch pre-fetch can't be deferred indefinitely at an epoch boundary under sustained slowness.
+				if _, ok := h.dutyFetchIntents[nextEpoch]; !ok {
+					h.dutyFetchIntents[nextEpoch] = false
+				}
+
+				// 3. Process validator indices changes (if any). We want to process it on the current slot only
 				// if we are still early into the slot (1 slot-interval is just a guesstimate), otherwise we might
 				// be delaying the next tick (the duties that need to be executed on the next slot).
 
-				indicesChangeDeadline := h.beaconConfig.SlotStartTime(currentSlot).Add(h.beaconConfig.IntervalDuration())
+				indicesChangeDeadline := h.netCfg.SlotStartTime(currentSlot).Add(h.netCfg.IntervalDuration(currentSlot))
 				select {
 				case <-h.indicesChangeCh:
 					logger.Info("🔁 indices change received")
 
 					// 1) Declare intents.
-					// Some validator-related state has updated, means we need to re-fetch the duties for the current
-					// and next epoch to ensure we have the up-to-date duties for all validators for both epochs.
-					h.dutyFetchIntents[nextEpoch] = false
+					// Some validator-related state has changed, so re-fetch the duties for the current and next
+					// epoch to keep them up to date for all validators.
 					h.dutyFetchIntents[currentEpoch] = false
+					h.dutyFetchIntents[nextEpoch] = false
 
 					// 2) Process certain intents immediately.
 					// When at epoch boundary, we only care about pre-fetching & preparing the duties for the next
@@ -152,20 +162,14 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 				case <-tickCtx.Done():
 					return
 				}
-
-				// 3. Schedule the duty-fetch for the next epoch, but only if it hasn't been scheduled already (also,
-				// already fulfilled intents need not be re-scheduled).
-				if _, ok := h.dutyFetchIntents[nextEpoch]; !ok {
-					h.dutyFetchIntents[nextEpoch] = false
-				}
 			}()
 
 		case reorgEvent := <-h.reorgEventsCh:
-			currentSlot := h.beaconConfig.EstimatedCurrentSlot()
-			currentEpoch := h.beaconConfig.EstimatedEpochAtSlot(currentSlot)
+			currentSlot := h.netCfg.EstimatedCurrentSlot()
+			currentEpoch := h.netCfg.EstimatedEpochAtSlot(currentSlot)
 			nextEpoch := currentEpoch + 1
 
-			slotNumber := uint64(currentSlot)%h.beaconConfig.SlotsPerEpoch + 1
+			slotNumber := uint64(currentSlot)%h.netCfg.SlotsPerEpoch + 1
 			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, currentSlot, slotNumber)
 
 			logger := h.logger.With(
@@ -189,7 +193,7 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 				// slot-ticker from executing duties even if some of them might not be up to date). Since the
 				// reorg can happen closer to the end of the current slot we wouldn't want to set the deadline
 				// to currentSlot+1 as that might be too short (hence setting it to currentSlot+2).
-				reorgCtx, cancel := context.WithDeadline(ctx, h.beaconConfig.SlotStartTime(currentSlot+2))
+				reorgCtx, cancel := context.WithDeadline(ctx, h.netCfg.SlotStartTime(currentSlot+2))
 				defer cancel()
 
 				// 1) Declare intents.
@@ -218,14 +222,14 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 // HandleInitialDuties fetches & prepares the duties for the current and next epochs.
 func (h *AttesterHandler) HandleInitialDuties(ctx context.Context) {
 	// initCtx ensures we don't block indefinitely in case we can't fetch the duties on startup.
-	initCtx, cancel := context.WithTimeout(ctx, h.beaconConfig.SlotDuration)
+	initCtx, cancel := context.WithTimeout(ctx, h.netCfg.SlotDuration)
 	defer cancel()
 
-	currentSlot := h.beaconConfig.EstimatedCurrentSlot()
-	currentEpoch := h.beaconConfig.EstimatedEpochAtSlot(currentSlot)
+	currentSlot := h.netCfg.EstimatedCurrentSlot()
+	currentEpoch := h.netCfg.EstimatedEpochAtSlot(currentSlot)
 	nextEpoch := currentEpoch + 1
 
-	slotNumber := uint64(currentSlot)%h.beaconConfig.SlotsPerEpoch + 1
+	slotNumber := uint64(currentSlot)%h.netCfg.SlotsPerEpoch + 1
 	buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, currentSlot, slotNumber)
 	logger := h.logger.With(
 		zap.String("epoch_slot_pos", buildStr),
@@ -250,7 +254,6 @@ func (h *AttesterHandler) HandleInitialDuties(ctx context.Context) {
 	}
 }
 
-// executeAggregatorDuties is only processing aggregator-duties after Alan fork.
 func (h *AttesterHandler) executeAggregatorDuties(ctx context.Context, epoch phase0.Epoch, slot phase0.Slot) {
 	if h.exporterMode {
 		return
@@ -291,8 +294,8 @@ func (h *AttesterHandler) executeAggregatorDuties(ctx context.Context, epoch pha
 	// See https://eth2book.info/latest/part2/incentives/rewards/#attestation-rewards
 	// Sync committee duties have to use the same deadline because they are part of the committee role.
 	// We set the deadline to target slot + SLOTS_PER_EPOCH + 1 (since the deadline slot itself is excluded).
-	slotsPerEpoch := phase0.Slot(h.beaconConfig.SlotsPerEpoch)
-	dutyDeadline := h.beaconConfig.SlotStartTime(slot + slotsPerEpoch + 1)
+	slotsPerEpoch := phase0.Slot(h.netCfg.SlotsPerEpoch)
+	dutyDeadline := h.netCfg.SlotStartTime(slot + slotsPerEpoch + 1)
 	h.dutiesExecutor.ExecuteDuties(ctx, toExecute, dutyDeadline)
 
 	span.SetStatus(codes.Ok, "")
@@ -309,17 +312,16 @@ func (h *AttesterHandler) prepareCurrentEpoch(ctx context.Context, logger *zap.L
 	defer span.End()
 
 	if fulfilled, ok := h.dutyFetchIntents[currentEpoch]; ok && !fulfilled {
-		logger.Debug("fetching duties for the current epoch")
-
-		err := h.fetchAndProcessDuties(ctx, logger, currentEpoch, currentSlot)
+		fetched, err := h.fetchAndProcessDuties(ctx, logger, currentEpoch, currentSlot)
 		if err != nil {
 			logger.Error("fetching duties for the current epoch failed", zap.Error(err))
 			span.SetStatus(codes.Error, err.Error())
 			return
 		}
-		h.dutyFetchIntents[currentEpoch] = true // the intent has been fulfilled
-
-		logger.Debug("fetching duties for the current epoch succeeded")
+		// Fulfill the intent only if a fetch actually ran; a not-yet-eligible epoch stays pending so a later tick retries.
+		if fetched {
+			h.dutyFetchIntents[currentEpoch] = true
+		}
 	}
 
 	span.SetStatus(codes.Ok, "")
@@ -337,23 +339,25 @@ func (h *AttesterHandler) prepareNextEpoch(ctx context.Context, logger *zap.Logg
 
 	// Delaying the duty fetch until it's a "good time" allows us to do it when the beacon node should be less busy.
 	if fulfilled, ok := h.dutyFetchIntents[currentEpoch+1]; ok && !fulfilled && h.shouldFetchNextEpoch(currentSlot) {
-		logger.Debug("fetching duties for the next epoch")
-
-		err := h.fetchAndProcessDuties(ctx, logger, currentEpoch+1, currentSlot)
+		fetched, err := h.fetchAndProcessDuties(ctx, logger, currentEpoch+1, currentSlot)
 		if err != nil {
 			logger.Error("fetching duties for the next epoch failed", zap.Error(err))
 			span.SetStatus(codes.Error, err.Error())
 			return
 		}
-		h.dutyFetchIntents[currentEpoch+1] = true // the intent has been fulfilled
-
-		logger.Debug("fetching duties for the next epoch succeeded")
+		// Fulfill the intent only if a fetch actually ran; a not-yet-eligible epoch stays pending so a later tick retries.
+		if fetched {
+			h.dutyFetchIntents[currentEpoch+1] = true
+		}
 	}
 
 	span.SetStatus(codes.Ok, "")
 }
 
-func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, logger *zap.Logger, targetEpoch phase0.Epoch, currentSlot phase0.Slot) error {
+// fetchAndProcessDuties fetches and stores the epoch's attester duties. It returns fetched=false (with a
+// nil error) when no validators are eligible yet — a not-ready state (e.g. beacon metadata not synced) the
+// caller must retry rather than treat as fulfilled; fetched=true means a beacon fetch actually ran.
+func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, logger *zap.Logger, targetEpoch phase0.Epoch, currentSlot phase0.Slot) (fetched bool, err error) {
 	ctx, span := tracer.Start(ctx,
 		observability.InstrumentName(observabilityNamespace, "attester.fetch_and_store"),
 		trace.WithAttributes(
@@ -380,13 +384,14 @@ func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, logger *zap
 		logger.Debug(eventMsg)
 		span.AddEvent(eventMsg)
 		span.SetStatus(codes.Ok, "")
-		return nil
+		// No eligible validators yet — not a fulfilled fetch; caller retries on a later tick.
+		return false, nil
 	}
 
 	span.AddEvent("fetching duties from beacon node", trace.WithAttributes(observability.ValidatorCountAttribute(len(eligibleIndices))))
 	duties, err := h.beaconNode.AttesterDuties(ctx, targetEpoch, eligibleIndices)
 	if err != nil {
-		return traces.Errorf(span, "failed to fetch attester duties: %w", err)
+		return false, traces.Errorf(span, "failed to fetch attester duties: %w", err)
 	}
 
 	specDuties := make([]*spectypes.ValidatorDuty, 0, len(duties))
@@ -412,7 +417,9 @@ func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, logger *zap
 	}
 	logger.Debug("🗂 got duties",
 		fields.Count(len(duties)),
-		fields.Duties(targetEpoch, specDuties, truncate),
+		fields.Duties(targetEpoch, specDuties, truncate, func(duty *spectypes.ValidatorDuty) spectypes.RunnerRole {
+			return types.RunnerRoleForValidatorDuty(duty, h.netCfg.BooleForkAtSlot(duty.Slot))
+		}),
 		fields.Took(time.Since(start)),
 	)
 
@@ -421,7 +428,7 @@ func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, logger *zap
 	// and avoids unnecessary log noise
 	if h.exporterMode {
 		span.SetStatus(codes.Ok, "")
-		return nil
+		return true, nil
 	}
 
 	// calculate subscriptions
@@ -429,7 +436,7 @@ func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, logger *zap
 	if len(subscriptions) == 0 {
 		span.AddEvent("no subscriptions available")
 		span.SetStatus(codes.Ok, "")
-		return nil
+		return true, nil
 	}
 
 	span.AddEvent("submitting beacon committee subscriptions", trace.WithAttributes(
@@ -451,7 +458,7 @@ func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, logger *zap
 	}()
 
 	span.SetStatus(codes.Ok, "")
-	return nil
+	return true, nil
 }
 
 func (h *AttesterHandler) toSpecDuty(duty *eth2apiv1.AttesterDuty, role spectypes.BeaconRole) *spectypes.ValidatorDuty {
@@ -468,8 +475,8 @@ func (h *AttesterHandler) toSpecDuty(duty *eth2apiv1.AttesterDuty, role spectype
 }
 
 func (h *AttesterHandler) shouldExecute(duty *eth2apiv1.AttesterDuty) bool {
-	currentSlot := h.beaconConfig.EstimatedCurrentSlot()
-	currentEpoch := h.beaconConfig.EstimatedEpochAtSlot(currentSlot)
+	currentSlot := h.netCfg.EstimatedCurrentSlot()
+	currentEpoch := h.netCfg.EstimatedEpochAtSlot(currentSlot)
 
 	v, exists := h.validatorProvider.Validator(duty.PubKey[:])
 	if !exists {
@@ -487,7 +494,7 @@ func (h *AttesterHandler) shouldExecute(duty *eth2apiv1.AttesterDuty) bool {
 	}
 
 	// execute task if slot already began and not pass 1 epoch
-	maxAttestationPropagationDelay := h.beaconConfig.SlotsPerEpoch
+	maxAttestationPropagationDelay := h.netCfg.SlotsPerEpoch
 	if currentSlot >= duty.Slot && uint64(currentSlot-duty.Slot) <= maxAttestationPropagationDelay {
 		return true
 	}
