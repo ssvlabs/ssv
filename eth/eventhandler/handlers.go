@@ -209,14 +209,6 @@ func (eh *EventHandler) handleValidatorAdded(
 
 		validatorShare = shareCreated
 
-		if shareCreated.BelongsToOperator(eh.operatorDataStore.GetOperatorID()) {
-			if other, found := eh.otherShareUsingKey(txn, shareCreated.SharePubKey, shareCreated.ValidatorPubKey); found {
-				logger.Warn("share public key is already used by another validator",
-					zap.String("share_pubkey", hex.EncodeToString(shareCreated.SharePubKey)),
-					zap.String("other_validator_pubkey", hex.EncodeToString(other.ValidatorPubKey[:])))
-			}
-		}
-
 		logger.Debug("share not found, created a new one")
 	} else if event.Owner != validatorShare.OwnerAddress {
 		// Prevent multiple registration of the same validator with different owner address
@@ -232,6 +224,14 @@ func (eh *EventHandler) handleValidatorAdded(
 	if validatorShare.BelongsToOperator(eh.operatorDataStore.GetOperatorID()) {
 		ownShare = validatorShare
 		logger = logger.With(zap.Bool("own_validator", true))
+
+		if !exists {
+			if other, found := eh.otherShareUsingKey(txn, ownShare.SharePubKey, ownShare.ValidatorPubKey); found {
+				logger.Warn("share public key is already used by another validator",
+					zap.String("share_pubkey", hex.EncodeToString(ownShare.SharePubKey)),
+					zap.String("other_validator_pubkey", hex.EncodeToString(other.ValidatorPubKey[:])))
+			}
+		}
 	}
 
 	logger.Debug("processed event")

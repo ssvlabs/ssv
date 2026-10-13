@@ -2,6 +2,7 @@ package eventhandler
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 	"slices"
 	"strconv"
@@ -307,6 +308,16 @@ func TestHandleValidatorRemovedKeepsShareKeyInUse(t *testing.T) {
 			sharePubKey := first.operatorsShares[0].pub.Serialize()
 			require.Equal(t, sharePubKey, second.operatorsShares[0].pub.Serialize())
 
+			// requireWarning checks that msg was logged once, naming the shared key and the other validator.
+			requireWarning := func(msg string, other *testValidatorData) {
+				t.Helper()
+				entries := logs.FilterMessage(msg).All()
+				require.Len(t, entries, 1, msg)
+				logFields := entries[0].ContextMap()
+				require.Equal(t, hex.EncodeToString(sharePubKey), logFields["share_pubkey"])
+				require.Equal(t, hex.EncodeToString(other.masterPubKey.Serialize()), logFields["other_validator_pubkey"])
+			}
+
 			type registration struct {
 				validator *testValidatorData
 				owner     ethcommon.Address
@@ -331,7 +342,7 @@ func TestHandleValidatorRemovedKeepsShareKeyInUse(t *testing.T) {
 			}
 			require.NoError(t, txn.Commit())
 
-			require.Equal(t, 1, logs.FilterMessage(reusedKeyMsg).Len(), "the second registration must warn")
+			requireWarning(reusedKeyMsg, first)
 			requireShareKeyStored(t, km, sharePubKey, true)
 
 			removed, remaining := registrations[1], registrations[0]
@@ -363,7 +374,7 @@ func TestHandleValidatorRemovedKeepsShareKeyInUse(t *testing.T) {
 			}
 
 			remove(removed)
-			require.Equal(t, 1, logs.FilterMessage(keptKeyMsg).Len(), "the first removal must warn")
+			requireWarning(keptKeyMsg, remaining.validator)
 			if tc.sameTxn {
 				// Only the key can be checked before the commit: slashing protection data is written in txn.
 				accounts, err := km.ListAccounts()
@@ -379,7 +390,7 @@ func TestHandleValidatorRemovedKeepsShareKeyInUse(t *testing.T) {
 			remove(remaining)
 			require.NoError(t, txn.Commit())
 
-			require.Equal(t, 1, logs.FilterMessage(keptKeyMsg).Len(), "the last removal must not warn")
+			requireWarning(keptKeyMsg, remaining.validator) // the last removal doesn't warn again
 			requireShareKeyStored(t, km, sharePubKey, false)
 		})
 	}
