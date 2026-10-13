@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	ssz "github.com/ferranbt/fastssz"
 	"github.com/sourcegraph/conc/pool"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/suite"
@@ -520,7 +519,7 @@ func (s *AttestationSlashingTestSuite) TestConcurrentSigningStress() {
 
 	keyManagers := []struct {
 		name     string
-		signFunc func(ctx context.Context, obj ssz.HashRoot, domain phase0.Domain, pubKey phase0.BLSPubKey, slot phase0.Slot, domainType phase0.DomainType) (spectypes.Signature, phase0.Root, error)
+		signFunc func(ctx context.Context, obj spectypes.HashRoot, domain phase0.Domain, pubKey phase0.BLSPubKey, slot phase0.Slot, domainType phase0.DomainType) (spectypes.Signature, phase0.Root, error)
 	}{
 		{"LocalKeyManager", s.GetEnv().GetLocalKeyManager().SignBeaconObject},
 		{"RemoteKeyManager", s.GetEnv().GetRemoteKeyManager().SignBeaconObject},

@@ -56,6 +56,9 @@ func (b *Config) EpochDuration() time.Duration {
 	return b.SlotDuration * time.Duration(b.SlotsPerEpoch) // #nosec G115
 }
 
+// ForkAtEpoch returns the beacon fork active at the epoch, Gloas included, mirroring the node's
+// networkconfig.Beacon.ForkAtEpoch so remote signing derives the same fork and domain as local signing.
+// Forks absent from the map are skipped.
 func (b *Config) ForkAtEpoch(epoch phase0.Epoch) (spec.DataVersion, *phase0.Fork) {
 	versions := []spec.DataVersion{
 		spec.DataVersionPhase0,
@@ -65,6 +68,7 @@ func (b *Config) ForkAtEpoch(epoch phase0.Epoch) (spec.DataVersion, *phase0.Fork
 		spec.DataVersionDeneb,
 		spec.DataVersionElectra,
 		spec.DataVersionFulu,
+		spec.DataVersionGloas,
 	}
 
 	var (

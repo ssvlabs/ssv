@@ -18,8 +18,8 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/capella"
 	"github.com/attestantio/go-eth2-client/spec/deneb"
 	"github.com/attestantio/go-eth2-client/spec/electra"
+	eth2gloas "github.com/attestantio/go-eth2-client/spec/gloas"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	ssz "github.com/ferranbt/fastssz"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	eth2keymanager "github.com/ssvlabs/eth2-key-manager"
 	"github.com/ssvlabs/eth2-key-manager/core"
@@ -56,6 +56,12 @@ type LocalKeyManager struct {
 	signer            signer.ValidatorSigner
 	operatorDecrypter keys.OperatorDecrypter
 	slashingProtector slashingProtector
+	beaconConfig      BeaconNetwork
+
+	// blockProposalLock serializes the manual slashing check→record→sign for Gloas blocks, which can't go
+	// through the lib's atomic SignBeaconBlock (see signBeaconObject's Gloas case). walletLock is only
+	// RLocked during signing, so without this two concurrent same-validator block signs could both pass.
+	blockProposalLock sync.Mutex
 }
 
 // NewLocalKeyManager returns a new LocalKeyManager.
@@ -103,6 +109,7 @@ func NewLocalKeyManager(
 		signer:            beaconSigner,
 		slashingProtector: NewSlashingProtector(logger, beacon, signerStore, protection),
 		operatorDecrypter: operatorPrivKey,
+		beaconConfig:      beacon,
 	}, nil
 }
 
@@ -114,12 +121,14 @@ func NewLocalKeyManager(
 // It returns the signature and the computed root on success.
 func (km *LocalKeyManager) SignBeaconObject(
 	_ context.Context,
-	obj ssz.HashRoot,
+	obj spectypes.HashRoot,
 	domain phase0.Domain,
 	pubKey phase0.BLSPubKey,
 	_ phase0.Slot,
 	signatureDomain phase0.DomainType,
 ) (spectypes.Signature, phase0.Root, error) {
+	// slot is unused: the local signer derives the proposal slot it protects from the block object itself
+	// (see signBeaconObject's Gloas case); the other domains don't need it.
 	sig, rootSlice, err := km.signBeaconObject(obj, domain, pubKey, signatureDomain)
 	if err != nil {
 		return nil, phase0.Root{}, err
@@ -130,7 +139,7 @@ func (km *LocalKeyManager) SignBeaconObject(
 }
 
 func (km *LocalKeyManager) signBeaconObject(
-	obj ssz.HashRoot,
+	obj spectypes.HashRoot,
 	domain phase0.Domain,
 	pubKey phase0.BLSPubKey,
 	signatureDomain phase0.DomainType,
@@ -189,8 +198,28 @@ func (km *LocalKeyManager) signBeaconObject(
 				Electra: v,
 			}
 			return km.signer.SignBlindedBeaconBlock(vBlindedBlock, domain, pubKey[:])
+		case *eth2gloas.BeaconBlock:
+			// Gloas (ePBS) block: eth2-key-manager's slashing-protected SignBeaconBlock has no Gloas arm, so
+			// replicate it here. A block proposal is slashable but signSSZRoot doesn't protect it, so check +
+			// record the highest proposal, then sign. Key it to the block's own slot (what we sign), not the
+			// plumbed duty slot, so the slashing DB reflects the signed content — and guard the far-future
+			// bound here, since the plumbed slot no longer does. blockProposalLock makes check→record→sign
+			// atomic (walletLock is only RLocked). Mirrors the remote handleDomainProposer.
+			blockSlot := v.Slot
+			if !signer.IsValidFarFutureSlot(km.beaconConfig, blockSlot) {
+				return nil, nil, fmt.Errorf("proposed block slot too far into the future")
+			}
+			km.blockProposalLock.Lock()
+			defer km.blockProposalLock.Unlock()
+			if err := km.slashingProtector.IsBeaconBlockSlashable(pubKey, blockSlot); err != nil {
+				return nil, nil, err
+			}
+			if err := km.slashingProtector.UpdateHighestProposal(pubKey, blockSlot); err != nil {
+				return nil, nil, err
+			}
+			return signSSZRoot(km.signer, obj, domain, pubKey[:])
 		default:
-			return nil, nil, fmt.Errorf("obj type is unknown: %T", obj)
+			return nil, nil, fmt.Errorf("unexpected object type for proposer domain: %T", obj)
 		}
 
 	case spectypes.DomainVoluntaryExit:
@@ -245,9 +274,24 @@ func (km *LocalKeyManager) signBeaconObject(
 			return nil, nil, fmt.Errorf("obj type is unknown: %T", obj)
 		}
 		return km.signer.SignRegistration(data, domain, pubKey[:])
+	case spectypes.DomainPTCAttester, spectypes.DomainProposerPreferences, spectypes.DomainBeaconBuilder, spectypes.DomainBuilderRequestAuth:
+		// Gloas (ePBS) domains — a plain BLS signature over the SSZ root, no slashing protection (none is
+		// in the slashing predicate): DomainPTCAttester (PTC payload attestation), DomainProposerPreferences
+		// (proposer preferences), DomainBeaconBuilder (§6 blinded execution-payload envelope), and
+		// DomainBuilderRequestAuth (builder-specs BuilderRequestAuth, the direct-builder request auth).
+		return signSSZRoot(km.signer, obj, domain, pubKey[:])
 	default:
 		return nil, nil, errors.New("domain unknown")
 	}
+}
+
+// signSSZRoot BLS-signs obj's SSZ signing root under domain, with no slashing protection. The
+// underlying signer exposes only typed methods; SignAggregateAndProof is its generic HashRoot
+// signer (it hashes any object), so it backs this until eth2-key-manager grows a dedicated root
+// signer.
+// TODO(gloas): swap to a purpose-named eth2-key-manager root signer once one exists.
+func signSSZRoot(s signer.ValidatorSigner, obj spectypes.HashRoot, domain phase0.Domain, pubKey []byte) ([]byte, []byte, error) {
+	return s.SignAggregateAndProof(obj, domain, pubKey)
 }
 
 func (km *LocalKeyManager) IsAttestationSlashable(pubKey phase0.BLSPubKey, attData *phase0.AttestationData) error {

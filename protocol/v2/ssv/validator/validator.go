@@ -61,6 +61,11 @@ type Validator struct {
 	DutyRunners runner.ValidatorDutyRunners
 
 	messageValidator validation.MessageValidator
+
+	// legacyProposerRoundTimeout is the operator's switch for the proposer QBFT round budget, passed
+	// to every RoundTimer this validator builds. true restores the pre-SIP-102 2s budget; false (zero
+	// value) keeps the SIP-102 default.
+	legacyProposerRoundTimeout bool
 }
 
 // NewValidator creates a new instance of Validator.
@@ -78,11 +83,13 @@ func NewValidator(ctx context.Context, cancel func(), logger *zap.Logger, option
 		OperatorSigner:   options.OperatorSigner,
 		Queues:           make(map[spectypes.RunnerRole]queue.Queue),
 		messageValidator: options.MessageValidator,
+
+		legacyProposerRoundTimeout: options.LegacyProposerRoundTimeout,
 	}
 
 	// some additional steps to prepare duty runners for handling duties
 	for role, dutyRunner := range options.DutyRunners {
-		runnerIdentifier := spectypes.NewMsgID(v.NetworkConfig.DomainType, v.Share.ValidatorPubKey[:], role)
+		runnerIdentifier := spectypes.NewValidatorMsgID(v.NetworkConfig.DomainType, v.Share.ValidatorPubKey, role)
 		dutyRunner.SetQBFTRoundTimerF(v.newQBFTRoundTimerF(runnerIdentifier))
 		v.Queues[role] = queue.New(
 			logger,

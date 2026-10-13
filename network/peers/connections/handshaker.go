@@ -243,10 +243,8 @@ func (h *handshaker) updatePeerInfo(pid peer.ID, handshakeErr error) {
 
 // updateNodeSubnets tries to update the subnets of the given peer
 func (h *handshaker) updateNodeSubnets(logger *zap.Logger, pid peer.ID, ni *records.NodeInfo) {
-	// invariant: verifyTheirNodeInfo rejects nil-Metadata before calling this,
-	// so ni.Metadata is non-nil on the live handshake path. Kept as
-	// belt-and-suspenders in case the invariant is weakened or this helper is
-	// reused from another call site.
+	// verifyTheirNodeInfo rejects nil-Metadata before calling this, so the check
+	// below is defensive — covering a weakened invariant or a new call site.
 	if ni.Metadata != nil {
 		subnets, err := commons.SubnetsFromString(ni.Metadata.Subnets)
 		if err == nil {

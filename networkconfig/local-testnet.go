@@ -1,6 +1,7 @@
 package networkconfig
 
 import (
+	"math"
 	"math/big"
 
 	ethcommon "github.com/ethereum/go-ethereum/common"
@@ -19,6 +20,9 @@ var LocalTestnetSSV = &SSV{
 	}, DiscoveryProtocolID: [6]byte{'s', 's', 'v', 'd', 'v', '5'},
 	TotalEthereumValidators: TestNetwork.TotalEthereumValidators,
 	Forks: SSVForks{
-		Boole: 0,
+		// Boole is unscheduled by default, as on all production networks, so it stays dormant
+		// through the Glamsterdam (Gloas/ePBS) transition. Set an explicit epoch in a custom
+		// config to exercise the post-Boole (consolidated-roles) path locally.
+		Boole: math.MaxUint64,
 	},
 }

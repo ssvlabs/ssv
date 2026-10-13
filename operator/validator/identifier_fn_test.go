@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/protocol/v2/types/ssvtestingutils"
 )
 
 // TestNewIdentifierFn_ForkDomain verifies that the identifier resolver wired into QBFT
@@ -41,8 +42,8 @@ func TestNewIdentifierFn_ForkDomain(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			identifierFn := newIdentifierFn(cfg, tc.executorID, tc.role)
 
-			expectedPreFork := spectypes.NewMsgID(cfg.DomainType, tc.executorID, tc.role)
-			expectedPostFork := spectypes.NewMsgID(cfg.NextDomainType, tc.executorID, tc.role)
+			expectedPreFork := ssvtestingutils.NewMsgID(cfg.DomainType, tc.executorID, tc.role)
+			expectedPostFork := ssvtestingutils.NewMsgID(cfg.NextDomainType, tc.executorID, tc.role)
 			require.NotEqual(t, expectedPreFork, expectedPostFork,
 				"sanity: pre- and post-fork identifiers must differ in domain")
 

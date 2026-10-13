@@ -35,6 +35,7 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
+	"github.com/ssvlabs/ssv/protocol/v2/types/ssvtestingutils"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/registry/storage/mocks"
 	kv "github.com/ssvlabs/ssv/storage/badger"
@@ -478,7 +479,7 @@ func dummyMsg(pkHex string, height int, malformed bool) (*spectypes.SignedSSVMes
 		return nil, err
 	}
 
-	id := spectypes.NewMsgID(networkconfig.TestNetwork.DomainType, pk, spectypes.RoleCommittee)
+	id := ssvtestingutils.NewMsgID(networkconfig.TestNetwork.DomainType, pk, spectypes.RoleCommittee)
 	signature, err := base64.StdEncoding.DecodeString("sVV0fsvqQlqliKv/ussGIatxpe8LDWhc9uoaM5WpjbiYvvxUr1eCpz0ja7UT1PGNDdmoGi6xbMC1g/ozhAt4uCdpy0Xdfqbv2hMf2iRL5ZPKOSmMifHbd8yg4PeeceyN")
 	if err != nil {
 		return nil, err

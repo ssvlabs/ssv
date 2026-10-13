@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -187,6 +188,13 @@ func (eh *EventHandler) handleValidatorAdded(
 		return nil, &MalformedEventError{Err: ErrSignatureVerification}
 	}
 
+	if err := ssvtypes.ValidateSharePublicKeys(event.PublicKey, event.OperatorIds, sharePublicKeys); err != nil {
+		selfOperatorID := eh.operatorDataStore.GetOperatorID()
+		ownValidator := selfOperatorID != 0 && slices.Contains(event.OperatorIds, selfOperatorID)
+		logger.Warn("malformed event: invalid share public keys", zap.Bool("own_validator", ownValidator), zap.Error(err))
+		return nil, &MalformedEventError{Err: err}
+	}
+
 	validatorShare, exists := eh.nodeStorage.Shares().Get(txn, event.PublicKey)
 	if !exists {
 		shareCreated, err := eh.handleShareCreation(ctx, txn, event, sharePublicKeys, encryptedKeys)
@@ -194,7 +202,6 @@ func (eh *EventHandler) handleValidatorAdded(
 			var malformedEventError *MalformedEventError
 			if errors.As(err, &malformedEventError) {
 				logger.Warn("malformed event", zap.Error(err))
-				return nil, err
 			}
 			return nil, err
 		}

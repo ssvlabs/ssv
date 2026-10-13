@@ -2,14 +2,13 @@ package spectest
 
 import (
 	"encoding/hex"
-	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
 
-	"github.com/ssvlabs/ssv-spec/ssv/spectest/tests/runner/duties/synccommitteeaggregator"
-	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
 	"github.com/stretchr/testify/require"
+
+	"github.com/ssvlabs/ssv-spec/ssv/spectest/tests/runner/duties/synccommitteeaggregator"
 
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
@@ -20,9 +19,7 @@ func overrideStateComparisonForSyncCommitteeAggregatorProofSpecTest(t *testing.T
 	testType = strings.Replace(testType, "spectest.", "synccommitteeaggregator.", 1)
 
 	runnerState := &runner.State{}
-	specDir, err := storage.GetSpecDir("", filepath.Join("ssv", "spectest"))
-	require.NoError(t, err)
-	runnerState, err = typescomparable.UnmarshalStateComparison(specDir, name, testType, runnerState)
+	runnerState, err := storage.UnmarshalStateComparison("ssv", name, testType, runnerState)
 	require.NoError(t, err)
 
 	root, err := runnerState.GetRoot()

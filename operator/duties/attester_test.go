@@ -1106,19 +1106,9 @@ func TestScheduler_Attester_Indices_Changed_Too_Late_In_Slot(t *testing.T) {
 			dutiesMap     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
 			waitForDuties = &SafeValue[bool]{}
 		)
-		// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
-		// This deadline needs to be large enough to not prevent tests from executing their intended flow.
-		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
-		scheduler, ticker := setupSchedulerAndMocks(ctx, t, []dutyHandler{handler})
-		fetchDutiesCall, executeDutiesCall := setupAttesterDutiesMock(scheduler, dutiesMap, waitForDuties)
-		require.NoError(t, scheduler.Start(ctx))
-
-		// STEP 1: slot 0 has no duties and no action.
-		ticker.Send(phase0.Slot(0))
-		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
-
-		// STEP 2: arrange for indices change to arrive too late for slot 0 processing.
-		waitForDuties.Set(true)
+		// A duty exists from the start, so there's an eligible validator (attester shares are derived from the
+		// duties map) and the silent startup fetch fulfills the current-epoch intent. That settles the epoch
+		// before the indices change, isolating what we test: a late indices change is the only slot-1 re-fetch.
 		dutiesMap.Set(phase0.Epoch(0), []*eth2apiv1.AttesterDuty{
 			{
 				PubKey:         phase0.BLSPubKey{1, 2, 3},
@@ -1126,15 +1116,28 @@ func TestScheduler_Attester_Indices_Changed_Too_Late_In_Slot(t *testing.T) {
 				ValidatorIndex: phase0.ValidatorIndex(1),
 			},
 		})
+		// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
+		// This deadline needs to be large enough to not prevent tests from executing their intended flow.
+		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
+		scheduler, ticker := setupSchedulerAndMocks(ctx, t, []dutyHandler{handler})
+		fetchDutiesCall, executeDutiesCall := setupAttesterDutiesMock(scheduler, dutiesMap, waitForDuties)
+		require.NoError(t, scheduler.Start(ctx))
+
+		// STEP 1: the startup fetch already fulfilled the current-epoch intent, so slot 0 has no action.
+		ticker.Send(phase0.Slot(0))
+		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
+
+		// STEP 2: arrange for indices change to arrive too late for slot 0 processing.
+		waitForDuties.Set(true)
 		go func() {
-			time.Sleep(scheduler.netCfg.IntervalDuration() + 1*time.Millisecond)
+			time.Sleep(scheduler.netCfg.IntervalDuration(0) + 1*time.Millisecond)
 			scheduler.indicesChgCh <- struct{}{}
 		}()
 
 		// No fetching should happen on slot 0 because the indices change arrived too late in the slot.
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
-		// STEP 3: on slot 1 the deferred indices change is processed and duties are fetched.
+		// STEP 3: on slot 1 the deferred indices change is processed and duties are re-fetched.
 		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(1))
 		ticker.Send(phase0.Slot(1))
 		waitForDutiesFetch(t, fetchDutiesCall, timeout)
@@ -1338,7 +1341,7 @@ func TestScheduler_Attester_Retry_Current_Epoch_Fetch_On_Next_Tick(t *testing.T)
 	})
 }
 
-func TestScheduler_Attester_No_Eligible_Validators_Does_Not_Retry_Current_Epoch_Fetch(t *testing.T) {
+func TestScheduler_Attester_No_Eligible_Validators_Leaves_Current_Epoch_Fetch_Pending(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		var (
 			handler       = NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty](), false)
@@ -1354,13 +1357,17 @@ func TestScheduler_Attester_No_Eligible_Validators_Does_Not_Retry_Current_Epoch_
 		waitForDuties.Set(true)
 		require.NoError(t, scheduler.Start(ctx))
 
-		// Startup fetch completes as a successful no-op because there are no eligible validators.
-		require.True(t, handler.dutyFetchIntents[phase0.Epoch(0)])
+		// With no eligible validators, the startup fetch is a no-op that must NOT mark the intent fulfilled —
+		// otherwise the duty would never be fetched once a validator becomes eligible (e.g. after a metadata
+		// sync that lands without an accompanying indices-change event). The intent stays pending.
+		require.False(t, handler.dutyFetchIntents[phase0.Epoch(0)])
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
-		// The next tick must not retry the current-epoch fetch.
+		// The next tick re-evaluates the pending intent. There are still no eligible validators, so it
+		// short-circuits before any fetch and the intent remains pending (ready to be retried later).
 		ticker.Send(phase0.Slot(0))
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
+		require.False(t, handler.dutyFetchIntents[phase0.Epoch(0)])
 
 		// Stop scheduler & wait for graceful exit.
 		cancel()

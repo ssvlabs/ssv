@@ -84,8 +84,8 @@ func TestHealthy(t *testing.T) {
 		{
 			name: "multi client: both time out",
 			syncResponseList: []syncResponse{
-				{state: &v1.SyncState{SyncDistance: 0, IsSyncing: false}, delay: 2 * time.Second},
-				{state: &v1.SyncState{SyncDistance: 0, IsSyncing: false}, delay: 2 * time.Second},
+				{state: &v1.SyncState{SyncDistance: 0, IsSyncing: false}, delay: syncResponseTimeoutDelay},
+				{state: &v1.SyncState{SyncDistance: 0, IsSyncing: false}, delay: syncResponseTimeoutDelay},
 			},
 			syncDistanceTolerance: 2,
 			expectedErr:           context.DeadlineExceeded,
@@ -93,7 +93,7 @@ func TestHealthy(t *testing.T) {
 		{
 			name: "multi client: first times out",
 			syncResponseList: []syncResponse{
-				{state: &v1.SyncState{SyncDistance: 0, IsSyncing: false}, delay: 2 * time.Second},
+				{state: &v1.SyncState{SyncDistance: 0, IsSyncing: false}, delay: syncResponseTimeoutDelay},
 				{state: &v1.SyncState{SyncDistance: 0, IsSyncing: false}},
 			},
 			syncDistanceTolerance: 2,
@@ -103,7 +103,7 @@ func TestHealthy(t *testing.T) {
 			name: "multi client: second times out",
 			syncResponseList: []syncResponse{
 				{state: &v1.SyncState{SyncDistance: 0, IsSyncing: false}},
-				{state: &v1.SyncState{SyncDistance: 0, IsSyncing: false}, delay: 2 * time.Second},
+				{state: &v1.SyncState{SyncDistance: 0, IsSyncing: false}, delay: syncResponseTimeoutDelay},
 			},
 			syncDistanceTolerance: 2,
 			expectedErr:           nil,
@@ -124,6 +124,10 @@ func TestHealthy(t *testing.T) {
 	}
 }
 
+// syncResponseTimeoutDelay delays the sync response in the cases that must time out, well past
+// runHealthyTest's commonTimeout.
+const syncResponseTimeoutDelay = 6 * time.Second
+
 type syncResponse struct {
 	state *v1.SyncState
 	delay time.Duration
@@ -135,8 +139,11 @@ func runHealthyTest(
 	syncDistanceTolerance uint64,
 ) error {
 	const (
-		commonTimeout = 400 * time.Millisecond
-		longTimeout   = 500 * time.Millisecond
+		// commonTimeout also bounds the requests the client makes while initializing, so it needs
+		// headroom on a loaded CI runner. It must stay below syncResponseTimeoutDelay.
+		commonTimeout = 2 * time.Second
+		// longTimeout only bounds client initialization, which no test case delays.
+		longTimeout = 5 * time.Second
 	)
 
 	mockResponses := mocks.ServerResponses()

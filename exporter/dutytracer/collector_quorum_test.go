@@ -15,6 +15,7 @@ import (
 	"github.com/ssvlabs/ssv/exporter/traces"
 	"github.com/ssvlabs/ssv/networkconfig"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/protocol/v2/types/ssvtestingutils"
 	"github.com/ssvlabs/ssv/registry/storage"
 	registrystoragemocks "github.com/ssvlabs/ssv/registry/storage/mocks"
 )
@@ -35,7 +36,7 @@ func TestCollector_QuorumAfterFlush(t *testing.T) {
 		operator4 = spectypes.OperatorID(4)
 	)
 
-	identifier := spectypes.NewMsgID([4]byte{}, []byte("committee_pk"), spectypes.RoleCommittee)
+	identifier := ssvtestingutils.NewMsgID([4]byte{}, []byte("committee_pk"), spectypes.RoleCommittee)
 	var committeeID spectypes.CommitteeID
 	copy(committeeID[:], identifier.GetDutyExecutorID()[16:])
 
@@ -130,7 +131,7 @@ func TestCollector_RoleSpecificQuorum(t *testing.T) {
 		operator4 = spectypes.OperatorID(4)
 	)
 
-	identifier := spectypes.NewMsgID([4]byte{}, []byte("committee_pk"), spectypes.RoleCommittee)
+	identifier := ssvtestingutils.NewMsgID([4]byte{}, []byte("committee_pk"), spectypes.RoleCommittee)
 	var committeeID spectypes.CommitteeID
 	copy(committeeID[:], identifier.GetDutyExecutorID()[16:])
 
@@ -233,7 +234,7 @@ func TestCollector_MixedTimingQuorum(t *testing.T) {
 		operator4 = spectypes.OperatorID(4)
 	)
 
-	identifier := spectypes.NewMsgID([4]byte{}, []byte("committee_pk"), spectypes.RoleCommittee)
+	identifier := ssvtestingutils.NewMsgID([4]byte{}, []byte("committee_pk"), spectypes.RoleCommittee)
 	var committeeID spectypes.CommitteeID
 	copy(committeeID[:], identifier.GetDutyExecutorID()[16:])
 
@@ -342,7 +343,7 @@ func TestCollector_UnknownRootQuorum(t *testing.T) {
 		operator4 = spectypes.OperatorID(4)
 	)
 
-	identifier := spectypes.NewMsgID([4]byte{}, []byte("committee_pk"), spectypes.RoleCommittee)
+	identifier := ssvtestingutils.NewMsgID([4]byte{}, []byte("committee_pk"), spectypes.RoleCommittee)
 	var committeeID spectypes.CommitteeID
 	copy(committeeID[:], identifier.GetDutyExecutorID()[16:])
 
@@ -442,7 +443,7 @@ func TestCollector_MultipleValidatorsAndRoles(t *testing.T) {
 		operator4 = spectypes.OperatorID(4)
 	)
 
-	identifier := spectypes.NewMsgID([4]byte{}, []byte("committee_pk"), spectypes.RoleCommittee)
+	identifier := ssvtestingutils.NewMsgID([4]byte{}, []byte("committee_pk"), spectypes.RoleCommittee)
 	var committeeID spectypes.CommitteeID
 	copy(committeeID[:], identifier.GetDutyExecutorID()[16:])
 
@@ -539,7 +540,7 @@ func TestCollector_checkAndPublishQuorumForRoleByIndex(t *testing.T) {
 		operator4 = spectypes.OperatorID(4)
 	)
 
-	identifier := spectypes.NewMsgID([4]byte{}, []byte("committee_pk"), spectypes.RoleCommittee)
+	identifier := ssvtestingutils.NewMsgID([4]byte{}, []byte("committee_pk"), spectypes.RoleCommittee)
 	var committeeID spectypes.CommitteeID
 	copy(committeeID[:], identifier.GetDutyExecutorID()[16:])
 

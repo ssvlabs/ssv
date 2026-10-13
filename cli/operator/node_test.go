@@ -151,14 +151,18 @@ func (stubExecutionClient) Close() error { return nil }
 // (db → storage → keys → p2p → validator controller → operator node) must construct without
 // error. It exercises everything up to — but not including — start()'s network bring-up, which
 // performs real socket I/O. The doppelganger dimension covers buildDoppelganger's real-handler
-// path (enabled) alongside the no-op path (disabled).
+// path (enabled) alongside the no-op path (disabled). The legacyProposerRoundTimeout dimension
+// pins the wiring at the cli boundary: cfg.LegacyProposerRoundTimeout must be copied as-is into
+// valOpts.LegacyProposerRoundTimeout.
 func Test_newNode_wiresOperatorNode(t *testing.T) {
 	for _, tc := range []struct {
-		name           string
-		doppelgangerOn bool
+		name                       string
+		doppelgangerOn             bool
+		legacyProposerRoundTimeout bool
 	}{
-		{name: "doppelganger disabled", doppelgangerOn: false},
-		{name: "doppelganger enabled", doppelgangerOn: true},
+		{name: "doppelganger disabled", doppelgangerOn: false, legacyProposerRoundTimeout: false},
+		{name: "doppelganger enabled", doppelgangerOn: true, legacyProposerRoundTimeout: false},
+		{name: "legacy proposer round timeout on", doppelgangerOn: false, legacyProposerRoundTimeout: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
@@ -180,6 +184,7 @@ func Test_newNode_wiresOperatorNode(t *testing.T) {
 			cfg.SSVAPIPort = 0
 			cfg.WsAPIPort = 0
 			cfg.EnableDoppelgangerProtection = tc.doppelgangerOn
+			cfg.LegacyProposerRoundTimeout = tc.legacyProposerRoundTimeout
 
 			res := resolved{mode: modeOperator, usingPrivKey: true}
 
@@ -196,6 +201,9 @@ func Test_newNode_wiresOperatorNode(t *testing.T) {
 			// handler when enabled.
 			_, isNoOp := a.doppelgangerHandler.(doppelganger.NoOpHandler)
 			require.Equal(t, !tc.doppelgangerOn, isNoOp, "doppelganger handler must match the configured protection")
+
+			require.Equal(t, tc.legacyProposerRoundTimeout, cfg.SSVOptions.ValidatorOptions.LegacyProposerRoundTimeout,
+				"newNode must copy LegacyProposerRoundTimeout into the validator options")
 
 			// Mirror production teardown ordering: cancel the ctx, then close. newNode starts no
 			// goroutines, so nothing is racing here — the p2p network was constructed but never

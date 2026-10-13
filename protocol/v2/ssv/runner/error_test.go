@@ -58,6 +58,13 @@ func TestIsRecoverableReconstructError(t *testing.T) {
 		require.True(t, isRecoverableReconstructError(wrapped))
 	})
 
+	t.Run("tag survives a spec code added by withCode", func(t *testing.T) {
+		coded := withCode(spectypes.PostConsensusQuorumWithInvalidSignatures, recoverableReconstructError{errors.New("inner")})
+		require.True(t, isRecoverableReconstructError(coded))
+		requireSpecCode(t, coded, spectypes.PostConsensusQuorumWithInvalidSignatures)
+		require.Equal(t, "inner", coded.Error())
+	})
+
 	t.Run("wrapped coded spec error stays reachable via errors.As", func(t *testing.T) {
 		coded := spectypes.NewError(spectypes.ReconstructSignatureErrorCode, "could not reconstruct a valid signature")
 		tagged := recoverableReconstructError{fmt.Errorf("got post-consensus quorum but it has invalid signatures: %w", coded)}
@@ -72,8 +79,8 @@ func TestIsRecoverableReconstructError(t *testing.T) {
 	// Defends the tag-based design (as opposed to classifying by spec error code): an untagged error
 	// is terminal by default even when it happens to carry a spec code, including the recoverable
 	// PostConsensusQuorumWithInvalidSignatures code the AggregatorCommitteeRunner push-site uses.
-	// Only the recoverableReconstructError wrapper — attached at the push site after
-	// FallBackAndVerifyEachSignature has already run — makes an error recoverable.
+	// Only the recoverableReconstructError wrapper — attached once FallBackAndVerifyEachSignature has
+	// run — makes an error recoverable.
 	t.Run("untagged error with an unrelated spec code stays terminal", func(t *testing.T) {
 		coded := spectypes.NewError(spectypes.UnknownValidatorIndexErrorCode, "unknown validator index")
 		require.False(t, isRecoverableReconstructError(coded))

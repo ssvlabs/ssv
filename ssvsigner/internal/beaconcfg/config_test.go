@@ -1,6 +1,7 @@
 package beaconcfg
 
 import (
+	"math"
 	"testing"
 	"time"
 
@@ -65,6 +66,34 @@ func TestConfigForkAtEpoch(t *testing.T) {
 	require.Equal(t, spec.DataVersionElectra, version)
 
 	version, _ = cfg.ForkAtEpoch(80)
+	require.Equal(t, spec.DataVersionFulu, version)
+}
+
+func TestConfigForkAtEpochGloas(t *testing.T) {
+	cfg := &Config{
+		Forks: map[spec.DataVersion]phase0.Fork{
+			spec.DataVersionPhase0:  {Epoch: 0},
+			spec.DataVersionAltair:  {Epoch: 10},
+			spec.DataVersionElectra: {Epoch: 50},
+			spec.DataVersionFulu:    {Epoch: 60, CurrentVersion: phase0.Version{6}},
+			spec.DataVersionGloas:   {Epoch: 70, PreviousVersion: phase0.Version{6}, CurrentVersion: phase0.Version{7}},
+		},
+	}
+
+	version, fork := cfg.ForkAtEpoch(69)
+	require.Equal(t, spec.DataVersionFulu, version)
+	require.Equal(t, phase0.Version{6}, fork.CurrentVersion)
+
+	version, fork = cfg.ForkAtEpoch(70)
+	require.Equal(t, spec.DataVersionGloas, version)
+	require.Equal(t, phase0.Version{7}, fork.CurrentVersion)
+
+	version, _ = cfg.ForkAtEpoch(1_000_000)
+	require.Equal(t, spec.DataVersionGloas, version)
+
+	// An unscheduled (far-future) Gloas fork keeps Fulu as the latest fork.
+	cfg.Forks[spec.DataVersionGloas] = phase0.Fork{Epoch: math.MaxUint64}
+	version, _ = cfg.ForkAtEpoch(1_000_000)
 	require.Equal(t, spec.DataVersionFulu, version)
 }
 

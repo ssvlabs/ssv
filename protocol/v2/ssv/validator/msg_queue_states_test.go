@@ -15,6 +15,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/protocol/v2/types/ssvtestingutils"
 )
 
 // A message state that expires — its message retried and then parked in the queue past the TTL — ends
@@ -41,7 +42,7 @@ func TestEndStaleMessageState(t *testing.T) {
 	provider := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exporter))
 	t.Cleanup(func() { _ = provider.Shutdown(context.Background()) })
 
-	msgID := spectypes.NewMsgID(networkconfig.TestNetwork.DomainType, make([]byte, 48), spectypes.RoleProposer)
+	msgID := ssvtestingutils.NewMsgID(networkconfig.TestNetwork.DomainType, make([]byte, 48), spectypes.RoleProposer)
 	msg := partialSigMsg(t, msgID, phase0.Slot(5))
 	key, err := mKey(msg)
 	require.NoError(t, err)
