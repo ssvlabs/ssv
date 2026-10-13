@@ -1,6 +1,7 @@
 package eventhandler
 
 import (
+	"bytes"
 	"context"
 	"encoding/hex"
 	"errors"
@@ -208,6 +209,14 @@ func (eh *EventHandler) handleValidatorAdded(
 
 		validatorShare = shareCreated
 
+		if shareCreated.BelongsToOperator(eh.operatorDataStore.GetOperatorID()) {
+			if other, found := eh.otherShareUsingKey(txn, shareCreated.SharePubKey, shareCreated.ValidatorPubKey); found {
+				logger.Warn("share public key is already used by another validator",
+					zap.String("share_pubkey", hex.EncodeToString(shareCreated.SharePubKey)),
+					zap.String("other_validator_pubkey", hex.EncodeToString(other.ValidatorPubKey[:])))
+			}
+		}
+
 		logger.Debug("share not found, created a new one")
 	} else if event.Owner != validatorShare.OwnerAddress {
 		// Prevent multiple registration of the same validator with different owner address
@@ -347,7 +356,6 @@ func (eh *EventHandler) handleValidatorRemoved(ctx context.Context, txn basedb.T
 	)
 	logger.Debug("processing event")
 
-	// TODO: handle metrics
 	share, exists := eh.nodeStorage.Shares().Get(txn, event.PublicKey)
 	if !exists {
 		logger.Warn("malformed event: could not find validator share")
@@ -376,8 +384,12 @@ func (eh *EventHandler) handleValidatorRemoved(ctx context.Context, txn basedb.T
 		logger = logger.With(zap.String("validator_pubkey", hex.EncodeToString(share.ValidatorPubKey[:])))
 	}
 	if isOperatorShare {
-		err := eh.keyManager.RemoveShare(ctx, phase0.BLSPubKey(share.SharePubKey))
-		if err != nil {
+		// Another validator's share may use the same key, so remove the key only with its last share.
+		if other, found := eh.otherShareUsingKey(txn, share.SharePubKey, share.ValidatorPubKey); found {
+			logger.Warn("share public key is still used by another validator, keeping it in ekm storage",
+				zap.String("share_pubkey", hex.EncodeToString(share.SharePubKey)),
+				zap.String("other_validator_pubkey", hex.EncodeToString(other.ValidatorPubKey[:])))
+		} else if err := eh.keyManager.RemoveShare(ctx, phase0.BLSPubKey(share.SharePubKey)); err != nil {
 			return emptyPK, fmt.Errorf("could not remove share from ekm storage: %w", err)
 		}
 
@@ -393,6 +405,22 @@ func (eh *EventHandler) handleValidatorRemoved(ctx context.Context, txn basedb.T
 
 	logger.Debug("processed event")
 	return emptyPK, nil
+}
+
+// otherShareUsingKey returns a stored share, other than the given validator's, whose share public key
+// is sharePubKey. The key manager and its slashing protection data are keyed by share public key, so
+// one key can back the shares of several validators. Liquidated shares count, as they keep their key
+// for reactivation.
+func (eh *EventHandler) otherShareUsingKey(txn basedb.Reader, sharePubKey []byte, validatorPK spectypes.ValidatorPK) (*ssvtypes.SSVShare, bool) {
+	var other *ssvtypes.SSVShare
+	eh.nodeStorage.Shares().Range(txn, func(share *ssvtypes.SSVShare) bool {
+		if share.ValidatorPubKey != validatorPK && bytes.Equal(share.SharePubKey, sharePubKey) {
+			other = share
+			return false
+		}
+		return true
+	})
+	return other, other != nil
 }
 
 func (eh *EventHandler) handleClusterLiquidated(txn basedb.Txn, event *contract.ContractClusterLiquidated) ([]*ssvtypes.SSVShare, error) {
