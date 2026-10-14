@@ -257,7 +257,12 @@ func New(ctx context.Context, logger *zap.Logger, opt Options) (*GoClient, error
 
 	err := client.initMultiClient(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("initialize consensus client(s), address(es)=%s: %w", opt.BeaconNodeAddr, err)
+		// Name the clients by their masked addresses: opt.BeaconNodeAddr may carry credentials.
+		addrs := make([]string, 0, len(client.clients))
+		for _, c := range client.clients {
+			addrs = append(addrs, c.Address())
+		}
+		return nil, fmt.Errorf("initialize consensus client(s), address(es)=%s: %w", strings.Join(addrs, ";"), err)
 	}
 
 	client.log.Debug("connected successfully, fetching beacon config")
