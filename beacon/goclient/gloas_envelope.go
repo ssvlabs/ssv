@@ -41,5 +41,5 @@ func (gc *GoClient) SubmitExecutionPayloadEnvelope(ctx context.Context, contents
 // receive it twice.
 func submitExecutionPayloadEnvelope(ctx context.Context, addr string, contentsSSZ []byte) error {
 	headers := map[string]string{blobDataIncludedHeader: "true"}
-	return gloasPublishSSZ(ctx, addr+gloasPublishEnvelopePath, contentsSSZ, headers)
+	return gloasPublishSSZ(ctx, addr, gloasPublishEnvelopePath, contentsSSZ, headers)
 }

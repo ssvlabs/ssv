@@ -61,8 +61,8 @@ func requestProposerDutiesDependentRoot(ctx context.Context, httpClient *http.Cl
 	var resp struct {
 		DependentRoot phase0.Root `json:"dependent_root"`
 	}
-	url := addr + fmt.Sprintf("/eth/v2/validator/duties/proposer/%d", epoch)
-	if err := jsonDo(ctx, httpClient, http.MethodGet, url, nil, nil, &resp); err != nil {
+	path := fmt.Sprintf("/eth/v2/validator/duties/proposer/%d", epoch)
+	if err := jsonDo(ctx, httpClient, http.MethodGet, addr, path, nil, nil, &resp); err != nil {
 		return phase0.Root{}, err
 	}
 	return resp.DependentRoot, nil
@@ -89,7 +89,7 @@ func submitProposerPreferences(ctx context.Context, httpClient *http.Client, add
 		return fmt.Errorf("marshal proposer preferences: %w", err)
 	}
 	headers := map[string]string{consensusVersionHeader: consensusVersionGloas}
-	err = jsonDo(ctx, httpClient, http.MethodPost, addr+proposerPreferencesPath, body, headers, nil)
+	err = jsonDo(ctx, httpClient, http.MethodPost, addr, proposerPreferencesPath, body, headers, nil)
 	if isNotFound(err) {
 		return fmt.Errorf("beacon node lacks the gloas proposer_preferences endpoint (beacon-APIs#608): %w", err)
 	}

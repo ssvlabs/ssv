@@ -113,7 +113,7 @@ func requestPTCDuties(ctx context.Context, httpClient *http.Client, addr string,
 		DependentRoot phase0.Root      `json:"dependent_root"`
 		Data          []*gloas.PTCDuty `json:"data"`
 	}
-	if err := jsonDo(ctx, httpClient, http.MethodPost, addr+fmt.Sprintf(ptcDutiesPath, epoch), body, nil, &resp); err != nil {
+	if err := jsonDo(ctx, httpClient, http.MethodPost, addr, fmt.Sprintf(ptcDutiesPath, epoch), body, nil, &resp); err != nil {
 		return nil, err
 	}
 	return &gloas.PTCDuties{DependentRoot: resp.DependentRoot, Duties: resp.Data}, nil
@@ -123,7 +123,7 @@ func requestPTCDuties(ctx context.Context, httpClient *http.Client, addr string,
 // the beacon-APIs "no block seen" signal — returns (nil, nil) rather than a decode error on the
 // empty body.
 func requestPayloadAttestationData(ctx context.Context, httpClient *http.Client, addr string, slot phase0.Slot) (*gloas.PayloadAttestationData, error) {
-	respBody, _, status, err := httpDo(ctx, httpClient, http.MethodGet, addr+fmt.Sprintf(payloadAttestationDataPath, slot), nil, "application/json", "", nil)
+	respBody, _, status, err := httpDo(ctx, httpClient, http.MethodGet, addr, fmt.Sprintf(payloadAttestationDataPath, slot), nil, "application/json", "", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -154,5 +154,5 @@ func submitPayloadAttestationMessages(ctx context.Context, httpClient *http.Clie
 		return fmt.Errorf("marshal payload attestation messages: %w", err)
 	}
 	headers := map[string]string{consensusVersionHeader: consensusVersionGloas}
-	return jsonDo(ctx, httpClient, http.MethodPost, addr+payloadAttestationsPath, body, headers, nil)
+	return jsonDo(ctx, httpClient, http.MethodPost, addr, payloadAttestationsPath, body, headers, nil)
 }

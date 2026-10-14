@@ -138,7 +138,7 @@ func requestGloasAttestationData(ctx context.Context, httpClient *http.Client, a
 	var resp struct {
 		Data *phase0.AttestationData `json:"data"`
 	}
-	if err := jsonDo(ctx, httpClient, http.MethodGet, addr+fmt.Sprintf(gloasAttestationDataPath, slot), nil, nil, &resp); err != nil {
+	if err := jsonDo(ctx, httpClient, http.MethodGet, addr, fmt.Sprintf(gloasAttestationDataPath, slot), nil, nil, &resp); err != nil {
 		return nil, err
 	}
 	if resp.Data == nil {
