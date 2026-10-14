@@ -298,14 +298,22 @@ func (n *p2pNetwork) setupDiscovery() error {
 	logger := n.logger
 
 	var disc discovery.Service
-	if n.cfg.Discovery == localDiscvery {
+	switch n.cfg.discoveryMode() {
+	case mdnsDiscovery:
 		logger.Info("discovery: using mdns (local)")
 		var err error
-		disc, err = discovery.NewLocalDiscovery(n.ctx, logger, n.Host(), n.cfg.MdnsDiscoveryTag)
+		disc, err = discovery.NewLocalDiscovery(n.ctx, logger, n.Host())
 		if err != nil {
 			return err
 		}
-	} else {
+	case noDiscovery:
+		if len(n.cfg.TrustedPeers) == 0 {
+			logger.Warn("discovery: disabled and no trusted peers configured; this node will only keep peers that dial it")
+		} else {
+			logger.Info("discovery: disabled, keeping only trusted and inbound peers")
+		}
+		disc = discovery.Disabled{}
+	case discv5Discovery:
 		ipAddr, err := p2pcommons.IPAddr()
 		if err != nil {
 			return fmt.Errorf("could not get ip addr: %w", err)
@@ -344,6 +352,8 @@ func (n *p2pNetwork) setupDiscovery() error {
 		if err != nil {
 			return err
 		}
+	default:
+		return fmt.Errorf("unknown discovery mode %q (use discv5, mdns, or none)", n.cfg.Discovery)
 	}
 	n.disc = disc
 

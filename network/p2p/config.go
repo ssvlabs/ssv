@@ -26,7 +26,11 @@ import (
 )
 
 const (
-	localDiscvery  = "mdns"
+	discv5Discovery = "discv5"
+	mdnsDiscovery   = "mdns"
+	// noDiscovery runs no peer discovery: the node has only its TrustedPeers, the peers that dial it, and peers
+	// connected to it directly (as the test harness does).
+	noDiscovery    = "none"
 	minPeersBuffer = 10
 )
 
@@ -34,7 +38,7 @@ const (
 type Config struct {
 	Ctx          context.Context
 	Bootnodes    string   `yaml:"Bootnodes" env:"BOOTNODES" env-description:"Bootnodes to use for discovery (semicolon-separated ENRs, e.g. 'enr:-abc123;enr:-def456')" `
-	Discovery    string   `yaml:"Discovery" env:"P2P_DISCOVERY" env-description:"Discovery protocol to use (discv5, mdns)" `
+	Discovery    string   `yaml:"Discovery" env:"P2P_DISCOVERY" env-description:"Discovery protocol to use (discv5, mdns, or none to run without discovery)" `
 	TrustedPeers []string `yaml:"TrustedPeers" env:"TRUSTED_PEERS" env-description:"List of peer IDs to always connect to"`
 
 	TCPPort     uint16 `yaml:"TcpPort" env:"TCP_PORT" env-description:"TCP port for P2P transport"`
@@ -95,15 +99,10 @@ type Config struct {
 
 	// PeerScoreInspectorInterval is the interval at which the PeerScoreInspector is called.
 	PeerScoreInspectorInterval time.Duration
-
-	// MdnsDiscoveryTag overrides the mDNS service tag used by local discovery.
-	// Empty falls back to discovery.LocalDiscoveryServiceTag. Tests set this to
-	// a unique value so concurrent test processes don't cross-discover peers.
-	MdnsDiscoveryTag string
 }
 
 func (c *Config) ApplyDefaults() {
-	c.Discovery = "discv5"
+	c.Discovery = discv5Discovery
 	c.TCPPort = 13001
 	c.UDPPort = 12001
 	c.RequestTimeout = 10 * time.Second
@@ -113,6 +112,15 @@ func (c *Config) ApplyDefaults() {
 	c.DynamicMaxPeersLimit = 150
 	c.TopicMaxPeers = 10
 	c.PubSubScoring = true
+}
+
+// discoveryMode returns the discovery mode to run: Discovery, or discv5 when it is unset. Read the mode only
+// through it, so an unset Discovery means discv5 everywhere.
+func (c *Config) discoveryMode() string {
+	if c.Discovery == "" {
+		return discv5Discovery
+	}
+	return c.Discovery
 }
 
 // Libp2pOptions creates options list for the libp2p host
@@ -154,15 +162,17 @@ func (c *Config) configureAddrs(logger *zap.Logger, opts []libp2p.Option) ([]lib
 		return opts, fmt.Errorf("could not build multi address for zero address: %w", err)
 	}
 	addrs = append(addrs, maZero)
-	ipAddr, err := commons.IPAddr()
-	if err != nil {
-		return opts, fmt.Errorf("could not get ip addr: %w", err)
-	}
 
-	if c.Discovery != localDiscvery {
+	// discv5 advertises the node's IP, so only it keeps a listener on that IP; the other modes need no external
+	// IP at all.
+	if c.discoveryMode() == discv5Discovery {
+		ipAddr, err := commons.IPAddr()
+		if err != nil {
+			return opts, fmt.Errorf("could not get ip addr: %w", err)
+		}
 		maIP, err := commons.BuildMultiAddress(ipAddr.String(), "tcp", uint(c.TCPPort), "")
 		if err != nil {
-			return opts, fmt.Errorf("could not build multi address for zero address: %w", err)
+			return opts, fmt.Errorf("could not build multi address for ip address: %w", err)
 		}
 		addrs = append(addrs, maIP)
 	}

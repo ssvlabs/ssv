@@ -350,6 +350,12 @@ func (n *p2pNetwork) Start() (err error) {
 	return nil
 }
 
+// maxPeersToDrop value should be in the range of 3-5% of MaxPeers for trimming to work
+// fast enough so that our node finds good set of peers within 10-20 minutes after node
+// start; it shouldn't be too large because that would negatively affect Ethereum duty
+// execution quality
+const maxPeersToDrop = 4 // targeting MaxPeers in 60-90 range
+
 // Returns a function that trims currently connected peers if necessary, namely:
 //   - dropping peers with bad gossip score
 //   - dropping irrelevant peers that don't have any subnet in common with us
@@ -388,12 +394,6 @@ func (n *p2pNetwork) peersTrimming() func() {
 			// we can accept more peer connections now, no need to trim
 			return
 		}
-
-		// maxPeersToDrop value should be in the range of 3-5% of MaxPeers for trimming to work
-		// fast enough so that our node finds good set of peers within 10-20 minutes after node
-		// start; it shouldn't be too large because that would negatively affect Ethereum duty
-		// execution quality
-		const maxPeersToDrop = 4 // targeting MaxPeers in 60-90 range
 
 		trimInboundOnly := false
 
