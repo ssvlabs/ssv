@@ -193,6 +193,28 @@ func TestConnManagerDisconnectFromIrrelevantPeersDisconnectsPeersWithUnknownSubn
 	require.Equal(t, []peer.ID{unknownPeer, irrelevantPeer}, net.ClosedPeers())
 }
 
+func TestConnManagerDisconnectFromIrrelevantPeersKeepsPeersWithoutOwnSubnets(t *testing.T) {
+	knownPeer := peer.ID("peer-known")
+	unknownPeer := peer.ID("peer-unknown")
+
+	peerSubnets := commons.ZeroSubnets
+	peerSubnets.Set(1)
+
+	subnetsIdx := NewSubnetsIndex()
+	subnetsIdx.UpdatePeerSubnets(knownPeer, peerSubnets)
+
+	manager := connManager{
+		logger:     zap.NewNop(),
+		subnetsIdx: subnetsIdx,
+	}
+	net := &testNetwork{}
+
+	disconnected := manager.DisconnectFromIrrelevantPeers(2, net, []peer.ID{knownPeer, unknownPeer}, commons.ZeroSubnets)
+
+	require.Zero(t, disconnected)
+	require.Empty(t, net.ClosedPeers())
+}
+
 func TestConnManagerDisconnectFromIrrelevantPeersDoesNotCountCloseErrorsAgainstQuota(t *testing.T) {
 	p1 := peer.ID("peer-1")
 	p2 := peer.ID("peer-2")
