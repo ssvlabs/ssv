@@ -1,0 +1,317 @@
+<title>Late QBFT Decides</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..48,600;12..48,700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+:root{
+  --bg:#eaeef2; --surface:#ffffff; --surface-2:#f4f7f9; --inset:#eef2f5;
+  --ink:#0f151c; --ink-2:#33404f; --muted:#5c6a7c; --faint:#8a97a7;
+  --line:#dbe2ea;
+  --r1:#0090a3; --r2:#b8621b; --crit:#b3182a; --good:#1c7a4d;
+  --accent:#0090a3; --accent-ink:#046374;
+  --r2-wash:#b8621b1a; --crit-wash:#b3182a12;
+  --shadow:0 1px 2px rgba(15,21,28,.05),0 4px 16px rgba(15,21,28,.05);
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0b1118; --surface:#131b24; --surface-2:#182230; --inset:#0f1720;
+  --ink:#e8eef4; --ink-2:#bcc9d6; --muted:#93a2b4; --faint:#67788b;
+  --line:#243141;
+  --r1:#2ba4b2; --r2:#cc8033; --crit:#e5636f; --good:#4bbb83;
+  --accent:#2ba4b2; --accent-ink:#7fd3dd;
+  --r2-wash:#cc80331f; --crit-wash:#e5636f18;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 6px 22px rgba(0,0,0,.35);
+}}
+:root[data-theme="dark"]{
+  --bg:#0b1118; --surface:#131b24; --surface-2:#182230; --inset:#0f1720;
+  --ink:#e8eef4; --ink-2:#bcc9d6; --muted:#93a2b4; --faint:#67788b;
+  --line:#243141;
+  --r1:#2ba4b2; --r2:#cc8033; --crit:#e5636f; --good:#4bbb83;
+  --accent:#2ba4b2; --accent-ink:#7fd3dd;
+  --r2-wash:#cc80331f; --crit-wash:#e5636f18;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 6px 22px rgba(0,0,0,.35);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"IBM Plex Sans",system-ui,sans-serif;font-size:16px;line-height:1.55;-webkit-font-smoothing:antialiased}
+.wrap{max-width:900px;margin:0 auto;padding:0 20px}
+h1,h2,h3{font-family:"Bricolage Grotesque","IBM Plex Sans",sans-serif;font-weight:700;letter-spacing:-.01em;text-wrap:balance;margin:0;line-height:1.13}
+.mono{font-family:"IBM Plex Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;font-weight:500;letter-spacing:.16em;text-transform:uppercase;color:var(--accent-ink)}
+
+header{padding:52px 0 26px;border-bottom:1px solid var(--line)}
+.kicker{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:18px}
+.chip{font-family:"IBM Plex Mono",monospace;font-size:11.5px;letter-spacing:.04em;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:3px 10px;background:var(--surface)}
+h1{font-size:clamp(28px,5vw,44px)}
+.sub{margin:18px 0 0;font-size:clamp(15.5px,2vw,17.5px);color:var(--ink-2);max-width:70ch}
+.sub b{color:var(--ink);font-weight:600}
+
+section{padding:38px 0;border-bottom:1px solid var(--line)}
+.caseh{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:4px}
+h2{font-size:clamp(20px,3vw,26px)}
+.caseh .thr{font-family:"IBM Plex Mono",monospace;color:var(--accent-ink);font-size:15px;font-weight:500}
+.caseh p, .lead{color:var(--ink-2);font-size:15px;margin:8px 0 0;max-width:74ch}
+
+.tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:22px 0 4px}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:15px 15px 13px;box-shadow:var(--shadow)}
+.tile .n{font-family:"IBM Plex Mono",monospace;font-weight:600;font-size:26px;letter-spacing:-.02em;line-height:1}
+.tile .n.warn{color:var(--r2)} .tile .n.crit{color:var(--crit)} .tile .n.teal{color:var(--accent-ink)}
+.tile .l{margin-top:8px;font-size:12px;color:var(--muted);line-height:1.35}
+
+.cbar-wrap{margin:24px 0 6px}
+.cbar-lbl{display:flex;justify-content:space-between;font-size:11.5px;color:var(--muted);font-family:"IBM Plex Mono",monospace;margin-bottom:6px}
+.cbar{display:flex;height:32px;border-radius:8px;overflow:hidden;border:1px solid var(--line);background:var(--surface)}
+.cbar > span{display:flex;align-items:center;justify-content:center;font-family:"IBM Plex Mono",monospace;font-size:10px;font-weight:600;color:#fff;box-shadow:inset -1px 0 0 rgba(255,255,255,.35);overflow:hidden;white-space:nowrap}
+.cbar > span.grey{color:var(--ink-2);box-shadow:inset -1px 0 0 var(--surface)}
+.leg{display:flex;gap:16px;flex-wrap:wrap;margin-top:10px;font-size:11.5px;color:var(--ink-2)}
+.leg span{display:inline-flex;gap:6px;align-items:center} .sw{width:10px;height:10px;border-radius:3px}
+
+.tbl-scroll{overflow-x:auto;margin-top:22px}
+table{border-collapse:collapse;width:100%;font-size:13.5px;min-width:600px}
+th,td{text-align:right;padding:9px 12px;border-bottom:1px solid var(--line)}
+th:first-child,td:first-child{text-align:left}
+thead th{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--ink-2)}
+tbody td{font-family:"IBM Plex Mono",monospace;color:var(--ink-2)}
+tbody tr td:first-child{color:var(--ink)}
+tbody tr.misser td:first-child{color:var(--crit);font-weight:600}
+td.red{color:var(--crit);font-weight:600}
+td.zero{color:var(--faint)}
+tr.sumrow td{border-top:1px solid var(--ink-2);color:var(--muted);font-style:italic}
+.tag{font-family:"IBM Plex Mono",monospace;font-size:10px;padding:2px 7px;border-radius:999px;white-space:nowrap}
+.tag.miss{background:var(--crit-wash);color:var(--crit)}
+.tag.rc{background:var(--r2-wash);color:var(--r2)}
+.tag.bg{background:var(--inset);color:var(--muted)}
+.tag.sml{background:var(--inset);color:var(--faint)}
+.foot-note{font-size:12px;color:var(--muted);margin-top:12px}
+
+.note{border-radius:13px;padding:16px 18px;margin-top:26px;font-size:14px;line-height:1.5;background:var(--surface-2);border:1px solid var(--line)}
+.note h4{margin:0 0 8px;font-family:"IBM Plex Sans",sans-serif;font-size:12px;font-weight:600;letter-spacing:.02em;text-transform:uppercase;color:var(--ink)}
+.note ul{margin:0;padding-left:18px} .note li{margin:5px 0;color:var(--ink-2)} .note b{color:var(--ink);font-weight:600}
+code{font-family:"IBM Plex Mono",monospace;font-size:.88em;background:var(--inset);padding:1px 5px;border-radius:5px;color:var(--ink-2)}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:22px}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px 18px 14px;box-shadow:var(--shadow)}
+.panel h3{font-size:14px;font-weight:600;margin:0;font-family:"IBM Plex Sans",sans-serif}
+.panel .cap{font-size:12px;color:var(--muted);margin:5px 0 12px}
+.chart-scroll{overflow-x:auto}
+svg.hist text{font-family:"IBM Plex Mono",monospace;fill:var(--muted);font-size:10.5px}
+svg.hist .grid{stroke:var(--line);opacity:.55;stroke-width:1}
+svg.hist .axis{stroke:var(--line);stroke-width:1}
+svg.hist .thr{stroke:var(--crit);stroke-dasharray:4 4;stroke-width:1.3;opacity:.8}
+svg.hist .thr-t{fill:var(--crit)} svg.hist .mk{stroke:var(--accent-ink);stroke-width:1.2;stroke-dasharray:3 3} svg.hist .mk-t{fill:var(--accent-ink)}
+@media(max-width:640px){.two{grid-template-columns:1fr}}
+footer{padding:32px 0 64px;color:var(--muted);font-size:12.5px}
+footer a{color:var(--accent-ink)}
+.themebtn{position:fixed;top:14px;right:14px;z-index:40;font-family:"IBM Plex Mono",monospace;font-size:11px;background:var(--surface);color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:6px 12px;cursor:pointer}
+.themebtn:hover{color:var(--ink)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+@media (max-width:640px){.tiles{grid-template-columns:repeat(2,1fr)}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<button class="themebtn" id="themebtn" aria-label="Toggle theme">&#9680; theme</button>
+
+<div class="wrap">
+<header>
+  <div class="kicker">
+    <span class="eyebrow">SSV &middot; Exporter forensics</span>
+    <span class="chip">prod-mainnet</span>
+    <span class="chip">30 days</span>
+    <span class="chip">25,030 proposer duties</span>
+    <span class="chip" style="color:var(--good);border-color:var(--good)">&#10003; misses chain-verified</span>
+  </div>
+  <h1>Late QBFT decides &mdash; who concentrates them</h1>
+  <p class="sub">Proposer duties whose QBFT consensus is decided late in the slot (when the Exporter receives each cluster's aggregated <i>decided</i> message, relative to slot start). Late decides are almost entirely <b>round changes</b>, they cluster in a handful of chronic operators, and <b>on-chain misses only begin past ~3.5s</b> &mdash; so a late decide is usually a warning sign, not a failure.</p>
+</header>
+
+<section id="c3000">
+  <div class="caseh">
+    <h2>Case A</h2><span class="thr">decide &gt; 3000ms</span>
+  </div>
+  <p class="lead">The "scary" zone &mdash; approaching the 4s attestation deadline. Rare, and <b>27 of 28 are round&nbsp;2</b> (round 1 can't survive this long).</p>
+  <div class="tiles">
+    <div class="tile"><div class="n teal mono">28</div><div class="l">duties &middot; 0.11% of all decided</div></div>
+    <div class="tile"><div class="n warn mono">27</div><div class="l">of 28 are QBFT round 2</div></div>
+    <div class="tile"><div class="n crit mono">6</div><div class="l">missed on-chain</div></div>
+    <div class="tile"><div class="n mono">15</div><div class="l">distinct clusters</div></div>
+  </div>
+
+  <div class="cbar-wrap">
+    <div class="cbar-lbl"><span>share of the 28 late decides</span><span>top 2 = 39% &middot; top 6 = 68%</span></div>
+    <div class="cbar" role="img" aria-label="Concentration of late decides across clusters">
+      <span style="width:25.0%;background:var(--r2)" title="op 2143-2146: 7 (round-changer, 0 miss)">2143&middot;7</span>
+      <span style="width:14.3%;background:var(--crit)" title="op 491/770/1002/1003: 4 (all missed)">491&middot;4</span>
+      <span style="width:7.1%;background:var(--accent)" title="op 6/13/16/20: 2 (tiny cluster)"></span>
+      <span style="width:7.1%;background:var(--accent)" title="op 2119-2122: 2 (1 miss)"></span>
+      <span style="width:7.1%;background:var(--accent)" title="op 1716-1719: 2"></span>
+      <span style="width:7.1%;background:var(--accent)" title="op 80/425/688/737: 2"></span>
+      <span class="grey" style="width:32.3%;background:var(--inset)" title="9 clusters with 1 late decide each">9 singletons</span>
+    </div>
+    <div class="leg">
+      <span><i class="sw" style="background:var(--r2)"></i>round-changer (lands)</span>
+      <span><i class="sw" style="background:var(--crit)"></i>chronic misser</span>
+      <span><i class="sw" style="background:var(--accent)"></i>other concentrators</span>
+      <span><i class="sw" style="background:var(--inset);border:1px solid var(--line)"></i>one-off</span>
+    </div>
+  </div>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead><tr><th>Cluster (operator set)</th><th>Late</th><th>Missed</th><th>Duties / mo</th><th>Late-rate</th><th>Pattern</th></tr></thead>
+    <tbody>
+      <tr><td>2143, 2144, 2145, 2146</td><td>7</td><td class="zero">0</td><td>485</td><td>1.4%</td><td><span class="tag rc">round-changer</span></td></tr>
+      <tr class="misser"><td>491, 770, 1002, 1003</td><td>4</td><td class="red">4</td><td>24</td><td>16.7%</td><td><span class="tag miss">chronic misser</span></td></tr>
+      <tr><td>6, 13, 16, 20</td><td>2</td><td class="zero">0</td><td>2</td><td>&mdash;<sup>*</sup></td><td><span class="tag sml">small (noise)</span></td></tr>
+      <tr><td>2119, 2120, 2121, 2122</td><td>2</td><td class="red">1</td><td>1,450</td><td>0.1%</td><td><span class="tag bg">background</span></td></tr>
+      <tr><td>1716, 1717, 1718, 1719</td><td>2</td><td class="zero">0</td><td>1,597</td><td>0.1%</td><td><span class="tag bg">background</span></td></tr>
+      <tr><td>80, 425, 688, 737</td><td>2</td><td class="zero">0</td><td>139</td><td>1.4%</td><td><span class="tag bg">background</span></td></tr>
+      <tr class="sumrow"><td>+ 9 more clusters</td><td>9</td><td class="zero">0</td><td>&mdash;</td><td>1 late each</td><td>one-off</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="foot-note"><sup>*</sup> late-rate is meaningless for clusters with only 1&ndash;3 proposals all month; shown as &mdash;. All 6 misses sit above ~3.5s; <b>4 of them are one cluster</b> (491&hellip;).</p>
+</section>
+
+<section id="c2500">
+  <div class="caseh">
+    <h2>Case B</h2><span class="thr">decide &gt; 2500ms</span>
+  </div>
+  <p class="lead">A wider net &mdash; an early-warning line. Doubles the population to 48 but adds <b>zero new misses</b>: the extra duties are a <i>second</i> chronic round-changer landing just under 3s.</p>
+  <div class="tiles">
+    <div class="tile"><div class="n teal mono">48</div><div class="l">duties &middot; 0.19% of all decided</div></div>
+    <div class="tile"><div class="n warn mono">41</div><div class="l">of 48 are QBFT round 2</div></div>
+    <div class="tile"><div class="n crit mono">6</div><div class="l">missed on-chain <span style="color:var(--faint)">(same 6)</span></div></div>
+    <div class="tile"><div class="n mono">19</div><div class="l">distinct clusters</div></div>
+  </div>
+
+  <div class="cbar-wrap">
+    <div class="cbar-lbl"><span>share of the 48 late decides</span><span>top 2 = 44% &middot; top 6 = 69%</span></div>
+    <div class="cbar" role="img" aria-label="Concentration of late decides across clusters, 2500ms threshold">
+      <span style="width:29.2%;background:var(--r2)" title="op 1150-1153: 14 (round-changer, 0 miss)">1150&middot;14</span>
+      <span style="width:14.6%;background:var(--r2)" title="op 2143-2146: 7 (round-changer, 0 miss)">2143&middot;7</span>
+      <span style="width:8.3%;background:var(--crit)" title="op 491/770/1002/1003: 4 (all missed)">491&middot;4</span>
+      <span style="width:6.25%;background:var(--accent)" title="op 2119-2122: 3 (1 miss)"></span>
+      <span style="width:6.25%;background:var(--accent)" title="op 1716-1719: 3"></span>
+      <span style="width:4.17%;background:var(--accent)" title="op 419/420/692/694: 2 (1 miss)"></span>
+      <span style="width:4.17%;background:var(--accent)" title="op 6/13/16/20: 2 (tiny)"></span>
+      <span style="width:4.17%;background:var(--accent)" title="op 80/425/688/737: 2"></span>
+      <span class="grey" style="width:22.9%;background:var(--inset)" title="11 clusters with 1 late decide each">11 singletons</span>
+    </div>
+    <div class="leg">
+      <span><i class="sw" style="background:var(--r2)"></i>round-changer (lands)</span>
+      <span><i class="sw" style="background:var(--crit)"></i>chronic misser</span>
+      <span><i class="sw" style="background:var(--accent)"></i>other concentrators</span>
+      <span><i class="sw" style="background:var(--inset);border:1px solid var(--line)"></i>one-off</span>
+    </div>
+  </div>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead><tr><th>Cluster (operator set)</th><th>Late</th><th>Missed</th><th>Duties / mo</th><th>Late-rate</th><th>Pattern</th></tr></thead>
+    <tbody>
+      <tr><td>1150, 1151, 1152, 1153</td><td>14</td><td class="zero">0</td><td>64</td><td>21.9%</td><td><span class="tag rc">round-changer</span></td></tr>
+      <tr><td>2143, 2144, 2145, 2146</td><td>7</td><td class="zero">0</td><td>485</td><td>1.4%</td><td><span class="tag rc">round-changer</span></td></tr>
+      <tr class="misser"><td>491, 770, 1002, 1003</td><td>4</td><td class="red">4</td><td>24</td><td>16.7%</td><td><span class="tag miss">chronic misser</span></td></tr>
+      <tr><td>2119, 2120, 2121, 2122</td><td>3</td><td class="red">1</td><td>1,450</td><td>0.2%</td><td><span class="tag bg">background</span></td></tr>
+      <tr><td>1716, 1717, 1718, 1719</td><td>3</td><td class="zero">0</td><td>1,597</td><td>0.2%</td><td><span class="tag bg">background</span></td></tr>
+      <tr><td>419, 420, 692, 694</td><td>2</td><td class="red">1</td><td>38</td><td>5.3%</td><td><span class="tag bg">background</span></td></tr>
+      <tr><td>6, 13, 16, 20</td><td>2</td><td class="zero">0</td><td>2</td><td>&mdash;<sup>*</sup></td><td><span class="tag sml">small (noise)</span></td></tr>
+      <tr><td>80, 425, 688, 737</td><td>2</td><td class="zero">0</td><td>139</td><td>1.4%</td><td><span class="tag bg">background</span></td></tr>
+      <tr class="sumrow"><td>+ 11 more clusters</td><td>11</td><td class="zero">0</td><td>&mdash;</td><td>1 late each</td><td>one-off</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="foot-note"><sup>*</sup> late-rate meaningless for 1&ndash;3-proposal clusters. The 20 duties added by lowering 3000&rarr;2500ms carry <b>0 misses</b> &mdash; 14 are the single cluster 1150&hellip; round-changing and landing at ~2.5&ndash;3s.</p>
+</section>
+
+<section id="read">
+  <div class="note">
+    <h4>How to read both cases</h4>
+    <ul>
+      <li><b>Late decide = round change.</b> 27/28 (&gt;3s) and 41/48 (&gt;2.5s) are round 2. Round 1 essentially never crosses these lines.</li>
+      <li><b>Concentrated in chronic round-changers.</b> Two clusters own ~40%; both round-change often yet <b>land every time</b> (0 misses) because they still decide under ~3.3s.</li>
+      <li><b>Misses are essentially one cluster.</b> All 6 misses (identical at both thresholds) sit above ~3.5s and are <b>confirmed empty slots on the canonical chain</b>; <code>491, 770, 1002, 1003</code> &mdash; tiny (24 duties), 16.7% late, 100% of its lates missed &mdash; causes 4 of them.</li>
+      <li><b>Not a ProposerDelay effect.</b> Zero late decides come from clusters running &gt;1000ms ProposerDelay at either threshold; the driver is consensus round changes (operator health), not delay.</li>
+    </ul>
+  </div>
+</section>
+
+<section id="dur" style="border-bottom:none">
+  <div class="caseh"><h2>Round-1 duration</h2><span class="thr">QBFT itself &middot; not time-into-slot</span></div>
+  <p class="lead">How long round 1 takes from proposal to the decided message, for the 24,984 duties that decided in round 1 (round changes excluded). The proposer's round-1 timer allows <b>2000ms from consensus start</b> &mdash; but successful round 1s finish nowhere near it.</p>
+  <div class="tiles">
+    <div class="tile"><div class="n teal mono">59ms</div><div class="l">median round-1 duration</div></div>
+    <div class="tile"><div class="n mono">191ms</div><div class="l">p99 &mdash; 99% finish under this</div></div>
+    <div class="tile"><div class="n warn mono">1148ms</div><div class="l">slowest round-1 success (max)</div></div>
+    <div class="tile"><div class="n mono">0</div><div class="l">in the final 850ms before the 2s timeout</div></div>
+  </div>
+  <div class="two">
+    <div class="panel">
+      <h3>Typical round 1 &mdash; 0 to 200ms</h3>
+      <p class="cap">25ms bins, linear. 99% of all round-1 decides live here.</p>
+      <div class="chart-scroll"><svg id="durA" class="hist" viewBox="0 0 470 300" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Histogram of round-1 duration 0 to 200ms, peaked near 60ms"></svg></div>
+    </div>
+    <div class="panel">
+      <h3>The tail &mdash; 200ms to the 2s timeout</h3>
+      <p class="cap">100ms bins, linear. Bars die by ~1.15s; the rest is headroom.</p>
+      <div class="chart-scroll"><svg id="durB" class="hist" viewBox="0 0 470 300" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Histogram of round-1 duration tail, ending at 1148ms with headroom to the 2000ms timeout"></svg></div>
+    </div>
+  </div>
+  <div class="note">
+    <h4>What the tail says</h4>
+    <ul>
+      <li><b>Round 1 finishes fast, or not at all.</b> 89% decide within 100ms and 99% within ~190ms; only 0.02% (5 duties) exceed 1s.</li>
+      <li><b>Nothing approaches the 2s deadline.</b> The slowest round-1 success was 1148ms &mdash; a ~850ms dead zone (1.15&ndash;2.0s) holds zero decides. Past ~1.1s a stalled round doesn't "just barely" recover; it times out into round 2 instead.</li>
+      <li><span style="color:var(--muted)">Measured as the Exporter's decided-message receive-time minus the round-1 proposal receive-time, so slot timing cancels; it includes the decided broadcast + one network hop, and sub-~30ms values sit near the Exporter's timing resolution. 4 duties with out-of-order timestamps dropped.</span></li>
+    </ul>
+  </div>
+</section>
+
+<footer>
+  <div class="mono" style="color:var(--faint)">SSV Scout &middot; Exporter + E2M &middot; prod-mainnet &middot; epochs 465250&ndash;472000</div>
+  <div style="margin-top:6px">Decision time is the Exporter's receive-time of each duty's aggregated <i>decided</i> message (a commit carrying a quorum of signers), so it trails the operators' own decision by the decided broadcast + one network hop. Miss = E2M on-chain outcome, <b>cross-validated against the canonical beacon chain</b> &mdash; all 6 misses are empty slots (no block), and late-but-landed blocks were confirmed canonical by the assigned proposer. Companion to the full <b>QBFT Decision Timing</b> analysis.</div>
+</footer>
+</div>
+
+<script>
+(function(){var b=document.getElementById("themebtn"),root=document.documentElement;
+ b.addEventListener("click",function(){var cur=root.getAttribute("data-theme");
+   var sysDark=matchMedia("(prefers-color-scheme:dark)").matches;
+   root.setAttribute("data-theme", cur? (cur==="dark"?"light":"dark") : (sysDark?"light":"dark"));});})();
+
+(function(){
+  var NS="http://www.w3.org/2000/svg";
+  function el(n,a){var e=document.createElementNS(NS,n);for(var k in a)e.setAttribute(k,a[k]);return e;}
+  function hist(id,o){
+    var s=document.getElementById(id); if(!s)return;
+    var W=470,H=300,L=42,R=16,T=18,B=40,iw=W-L-R,ih=H-T-B;
+    var data=o.data, x0=o.x0, x1=o.x1, maxv=o.maxv, barw=iw/data.length;
+    if(o.shade){var xa=L+iw*((o.shade[0]-x0)/(x1-x0)),xb=L+iw*((o.shade[1]-x0)/(x1-x0));
+      s.appendChild(el("rect",{x:xa,y:T,width:Math.max(xb-xa,0),height:ih,fill:"var(--crit-wash)"}));}
+    o.yticks.forEach(function(v){var y=T+ih*(1-v/maxv);
+      s.appendChild(el("line",{class:"grid",x1:L,y1:y,x2:W-R,y2:y}));
+      var t=el("text",{x:L-6,y:y+3,"text-anchor":"end"});t.textContent=v>=1000?(v/1000)+"k":v;s.appendChild(t);});
+    data.forEach(function(c,i){ if(c<=0)return;
+      var x=L+i*barw,h=ih*(c/maxv),y=T+ih-h;
+      s.appendChild(el("rect",{x:x+1,y:y,width:Math.max(barw-2,1),height:Math.max(h,1),rx:2,fill:o.color,opacity:.9}));
+      if(o.labelBars){var t=el("text",{x:x+barw/2,y:y-4,"text-anchor":"middle"});t.setAttribute("font-size","9");t.textContent=c;s.appendChild(t);}
+    });
+    s.appendChild(el("line",{class:"axis",x1:L,y1:T+ih,x2:W-R,y2:T+ih}));
+    o.xlabels.forEach(function(xl){var xx=L+iw*((xl-x0)/(x1-x0));
+      var t=el("text",{x:xx,y:H-B+18,"text-anchor":"middle"});t.textContent=o.xfmt(xl);s.appendChild(t);});
+    (o.markers||[]).forEach(function(m){var xx=L+iw*((m.x-x0)/(x1-x0));
+      s.appendChild(el("line",{class:m.thr?"thr":"mk",x1:xx,y1:T,x2:xx,y2:T+ih}));
+      var t=el("text",{class:m.thr?"thr-t":"mk-t",x:xx+(m.right?4:-4),y:T+11,"text-anchor":m.right?"start":"end"});t.textContent=m.label;s.appendChild(t);});
+    if(o.shadeLabel){var xa2=L+iw*((o.shade[0]-x0)/(x1-x0)),xb2=L+iw*((o.shade[1]-x0)/(x1-x0));
+      var t=el("text",{x:(xa2+xb2)/2,y:T+ih/2,"text-anchor":"middle"});t.setAttribute("fill","var(--muted)");t.textContent=o.shadeLabel;s.appendChild(t);}
+    var xt=el("text",{x:W-R,y:H-6,"text-anchor":"end"});xt.textContent=o.xunit;s.appendChild(xt);
+  }
+  hist("durA",{data:[5465,5874,5964,4973,1541,667,210,57],x0:0,x1:200,maxv:6200,
+    color:"var(--accent)",yticks:[0,2000,4000,6000],
+    xlabels:[0,50,100,150,200],xfmt:function(v){return v;},xunit:"ms",
+    markers:[{x:59,label:"med 59"},{x:191,label:"p99 191",right:true}]});
+  hist("durB",{data:[52,51,46,26,15,18,14,6,3,2,0,0,0,0,0,0,0,0],x0:200,x1:2000,maxv:56,
+    color:"var(--r2)",yticks:[0,25,50],labelBars:true,
+    xlabels:[200,600,1000,1400,1800,2000],xfmt:function(v){return (v/1000).toFixed(1);},xunit:"seconds",
+    markers:[{x:1148,label:"max 1148"},{x:2000,label:"2s timeout",thr:true,right:true}],
+    shade:[1148,2000],shadeLabel:"~850ms headroom"});
+})();
+</script>
