@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -247,9 +248,9 @@ func New(ctx context.Context, logger *zap.Logger, opt Options) (*GoClient, error
 	// but currently-unreachable CL does not error here - it's tolerated and connected to later. Only a genuine
 	// construction error (e.g. a malformed address) surfaces, and that must reach the operator rather than be
 	// silently skipped.
-	for _, beaconAddr := range beaconAddrList {
+	for i, beaconAddr := range beaconAddrList {
 		if err := client.addSingleClient(ctx, beaconAddr); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("beacon node address #%d: %w", i+1, err)
 		}
 	}
 
@@ -390,6 +391,36 @@ func normalizeBeaconAddr(addr string) string {
 	return strings.TrimSuffix(addr, "/")
 }
 
+// RedactBeaconAddr masks what may be a credential in a BeaconNodeAddr value (one address, or several separated
+// by ";") for logging, as go-eth2-client masks Client.Address(): the password, the path and the query values.
+// An address that doesn't parse is replaced whole, since its parts can't be told apart.
+func RedactBeaconAddr(addrs string) string {
+	const masked = "xxxxx"
+	redacted := strings.Split(addrs, ";")
+	for i, addr := range redacted {
+		u, err := url.Parse(normalizeBeaconAddr(addr))
+		if err != nil {
+			redacted[i] = "<malformed>"
+			continue
+		}
+		if _, ok := u.User.Password(); ok {
+			u.User = url.UserPassword(u.User.Username(), masked)
+		}
+		if u.Path != "" {
+			u.Path, u.RawPath = masked, ""
+		}
+		if u.RawQuery != "" {
+			query := u.Query()
+			for key := range query {
+				query[key] = []string{masked}
+			}
+			u.RawQuery = query.Encode()
+		}
+		redacted[i] = u.String()
+	}
+	return strings.Join(redacted, ";")
+}
+
 func (gc *GoClient) addSingleClient(ctx context.Context, addr string) error {
 	addr = normalizeBeaconAddr(addr)
 	httpClient, err := eth2clienthttp.New(
@@ -404,8 +435,10 @@ func (gc *GoClient) addSingleClient(ctx context.Context, addr string) error {
 		eth2clienthttp.WithHooks(gc.singleClientHooks()),
 	)
 	if err != nil {
+		// A malformed address fails here, and the error quotes it raw (see withoutRequestURL).
+		err = withoutRequestURL(err)
 		gc.log.Error("Consensus http client initialization failed",
-			zap.String("address", addr),
+			fields.Address(RedactBeaconAddr(addr)),
 			zap.Error(err),
 		)
 
