@@ -11,6 +11,7 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
@@ -248,17 +249,13 @@ func (r *ProposerPreferencesRunner) CurrentDutySlot() (phase0.Slot, bool) {
 	return 0, false
 }
 
-// preferencesLookaheadEpochs is MIN_SEED_LOOKAHEAD: preferences are broadcast, and accepted (SIP #94 §7), for
-// proposal slots up to the end of the next epoch.
-const preferencesLookaheadEpochs = 1
-
 // inLookahead reports whether a partial for proposal slot can still be of use here: the slot hasn't passed, and
 // is no further out than preferences are broadcast for. A peer sending partials for any other slot can't grow
 // the stash with them.
 func (r *ProposerPreferencesRunner) inLookahead(slot phase0.Slot) bool {
 	current := r.NetworkConfig.EstimatedCurrentSlot()
 	return slot >= current &&
-		r.NetworkConfig.EstimatedEpochAtSlot(slot) <= r.NetworkConfig.EstimatedEpochAtSlot(current)+preferencesLookaheadEpochs
+		r.NetworkConfig.EstimatedEpochAtSlot(slot) <= r.NetworkConfig.EstimatedEpochAtSlot(current)+networkconfig.MinSeedLookahead
 }
 
 // evictPastSlots drops sub-runners (and stashed partials) whose proposal slot has passed; the

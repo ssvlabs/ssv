@@ -170,7 +170,7 @@ func TestProposerPreferencesRunner_stashesOnlyTheLookahead(t *testing.T) {
 	disp := r.(*ProposerPreferencesRunner)
 
 	current := netCfg.EstimatedCurrentSlot()
-	beyond := netCfg.FirstSlotAtEpoch(netCfg.EstimatedEpochAtSlot(current) + preferencesLookaheadEpochs + 1)
+	beyond := netCfg.FirstSlotAtEpoch(netCfg.EstimatedEpochAtSlot(current) + networkconfig.MinSeedLookahead + 1)
 	for _, slot := range []phase0.Slot{current - 1, current, beyond - 1, beyond} {
 		disp.stashPending(&spectypes.PartialSignatureMessages{
 			Type:     spectypes.ProposerPreferencesPartialSig,
