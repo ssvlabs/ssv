@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"sync"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -867,6 +868,22 @@ func (b *BaseRunner) concludeDuty(outcome dutyOutcome, reason error) {
 	if b.dutyConcluded != nil {
 		b.dutyConcluded <- dutyConclusion{outcome: outcome, reason: reason}
 		b.dutyConcluded = nil
+	}
+}
+
+// takeDutyConclusion hands the current duty's conclusion to whatever concludes it off the message loop, such
+// as a background retry: the markers become no-ops for the duty, and the returned func reports its outcome to
+// the watcher, at most once, from any goroutine.
+func (b *BaseRunner) takeDutyConclusion() func(outcome dutyOutcome, reason error) {
+	concluded := b.dutyConcluded
+	b.dutyConcluded = nil
+	var once sync.Once
+	return func(outcome dutyOutcome, reason error) {
+		once.Do(func() {
+			if concluded != nil {
+				concluded <- dutyConclusion{outcome: outcome, reason: reason}
+			}
+		})
 	}
 }
 

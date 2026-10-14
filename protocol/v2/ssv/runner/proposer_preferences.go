@@ -4,7 +4,10 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"sync/atomic"
+	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"go.uber.org/zap"
@@ -117,7 +120,7 @@ func (r *ProposerPreferencesRunner) StartNewDuty(ctx context.Context, logger *za
 	sub := newProposerPreferencesSlotRunner(r.opts, r.builders)
 	prev, replacing := r.bySlot[slot]
 	if replacing {
-		sub.submittedPreferences = prev.submittedPreferences
+		sub.submittedPreferences = prev.submitted()
 		sub.broadcastPreferences = prev.broadcastPreferences
 		// The auth markers carry over too — roots are re-emission-invariant (see the field docs).
 		sub.broadcastAuthRoots = prev.broadcastAuthRoots
@@ -137,7 +140,7 @@ func (r *ProposerPreferencesRunner) StartNewDuty(ctx context.Context, logger *za
 		return startErr
 	}
 	if replacing && prev.hasDutyRunning() {
-		prev.markDutyNotRequired() // superseded by the re-emission, not stuck
+		prev.markSuperseded()
 	}
 	r.bySlot[slot] = sub
 
@@ -383,6 +386,12 @@ type proposerPreferencesSlotRunner struct {
 	// (peers dedup it by signing root) and the beacon-node submit.
 	submittedPreferences *gloas.ProposerPreferences
 
+	// retrySubmitted is the preference that the background retry of a failed submit (retrySubmit) went on
+	// to submit: the one field written off the message loop, read through submitted(). stopSubmitRetry
+	// stops that retry, and is nil when none was started.
+	retrySubmitted  atomic.Pointer[gloas.ProposerPreferences]
+	stopSubmitRetry context.CancelCauseFunc
+
 	// broadcastPreferences is the preference this proposal slot already broadcast a partial signature
 	// for, carried across sub-runner replacements like submittedPreferences. It covers the in-flight
 	// case (broadcast, quorum still converging): a re-emission that rebuilds it byte-identically, or
@@ -494,9 +503,10 @@ func (r *proposerPreferencesSlotRunner) ProcessPreConsensus(ctx context.Context,
 	}
 	if err := r.beacon.SubmitProposerPreferences(ctx, []*gloas.SignedProposerPreferences{signed}); err != nil {
 		recordFailedSubmission(ctx, spectypes.BNRoleProposerPreferences)
-		const errMsg = "could not submit proposer preferences"
-		logger.Error(errMsg, fields.Slot(r.proposerPreferences.ProposalSlot), zap.Error(err))
-		return fmt.Errorf("%s: %w", errMsg, err)
+		logger.Warn("could not submit proposer preferences, retrying until the proposal slot",
+			fields.Slot(r.proposerPreferences.ProposalSlot), zap.Error(err))
+		r.retrySubmit(ctx, logger, signed, fmt.Errorf("could not submit proposer preferences: %w", err))
+		return nil
 	}
 
 	recordSuccessfulSubmission(ctx, 1, r.NetworkConfig.EstimatedEpochAtSlot(r.proposerPreferences.ProposalSlot), spectypes.BNRoleProposerPreferences)
@@ -504,6 +514,85 @@ func (r *proposerPreferencesSlotRunner) ProcessPreConsensus(ctx context.Context,
 	r.markDutySucceeded()
 	logger.Info("✔️ successfully submitted proposer preferences", fields.Slot(r.proposerPreferences.ProposalSlot))
 	return nil
+}
+
+// preferencesSubmitRetryDelay is how long retrySubmit first waits before resubmitting; the wait doubles
+// per attempt, up to a slot.
+var preferencesSubmitRetryDelay = 500 * time.Millisecond
+
+// errSuperseded stops a slot runner's submit retry when a re-emission replaces the slot runner.
+var errSuperseded = errors.New("superseded by a re-emission")
+
+// retrySubmit keeps resubmitting signed after its first submit failed. Nothing else would submit it
+// again: the quorum is reported once, and ssv-spec leaves this retry to the node. It resubmits this exact
+// object, never a rebuilt one, since gossip keeps only the first preference per (dependent_root,
+// proposal_slot) (SIP #94 §5).
+//
+// The retry runs in the background, using only the beacon client and the duty's conclusion, which it
+// takes over, until one of:
+//   - a submit lands: the duty concludes succeeded;
+//   - a re-emission replaces this slot runner (markSuperseded): the duty concludes not required, as any
+//     replaced running duty does;
+//   - the proposal slot starts, where the preference is moot: the watcher reports firstErr, noted here.
+func (r *proposerPreferencesSlotRunner) retrySubmit(ctx context.Context, logger *zap.Logger, signed *gloas.SignedProposerPreferences, firstErr error) {
+	r.noteDutyFailure(firstErr)
+	conclude := r.takeDutyConclusion()
+
+	proposalSlot := signed.Message.ProposalSlot
+	epoch := r.NetworkConfig.EstimatedEpochAtSlot(proposalSlot)
+	beaconNode := r.beacon
+	delay, maxDelay := preferencesSubmitRetryDelay, r.NetworkConfig.SlotDuration
+
+	retryCtx, stop := context.WithCancelCause(ctx)
+	r.stopSubmitRetry = stop
+	retryCtx, cancel := context.WithDeadline(retryCtx, r.NetworkConfig.SlotStartTime(proposalSlot))
+
+	go func() {
+		defer func() {
+			cancel()
+			stop(nil)
+		}()
+		for attempt := 1; ; attempt++ {
+			select {
+			case <-retryCtx.Done():
+				if errors.Is(context.Cause(retryCtx), errSuperseded) {
+					conclude(dutyOutcomeNotRequired, nil)
+				}
+				return
+			case <-time.After(delay):
+			}
+			delay = min(2*delay, maxDelay)
+
+			if err := beaconNode.SubmitProposerPreferences(retryCtx, []*gloas.SignedProposerPreferences{signed}); err != nil {
+				logger.Debug("proposer preferences submit retry failed",
+					fields.Slot(proposalSlot), zap.Int("attempt", attempt), zap.Error(err))
+				continue
+			}
+			r.retrySubmitted.Store(signed.Message)
+			recordSuccessfulSubmission(retryCtx, 1, epoch, spectypes.BNRoleProposerPreferences)
+			conclude(dutyOutcomeSucceeded, nil)
+			logger.Info("✔️ successfully submitted proposer preferences on retry",
+				fields.Slot(proposalSlot), zap.Int("attempt", attempt))
+			return
+		}
+	}()
+}
+
+// markSuperseded concludes a running duty that a re-emission replaced as not required rather than stuck.
+// A submit retry owns that conclusion by then (see retrySubmit), so it is stopped and concludes it instead.
+func (r *proposerPreferencesSlotRunner) markSuperseded() {
+	r.markDutyNotRequired()
+	if r.stopSubmitRetry != nil {
+		r.stopSubmitRetry(errSuperseded)
+	}
+}
+
+// submitted is the preference this slot already submitted, on quorum or by retrySubmit; nil if none.
+func (r *proposerPreferencesSlotRunner) submitted() *gloas.ProposerPreferences {
+	if p := r.retrySubmitted.Load(); p != nil {
+		return p
+	}
+	return r.submittedPreferences
 }
 
 func (r *proposerPreferencesSlotRunner) ProcessConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.SignedSSVMessage) error {
