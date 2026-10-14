@@ -38,7 +38,14 @@ type OperatorEvidence struct {
 	Candidates []Candidate
 }
 
-type bucket map[spectypes.OperatorID]map[peer.ID]uint64
+// operatorCounts holds one operator's first-delivery counts within a bucket. total counts every
+// observation, including those whose peer was later evicted from peers.
+type operatorCounts struct {
+	total uint64
+	peers map[peer.ID]uint64
+}
+
+type bucket map[spectypes.OperatorID]*operatorCounts
 
 // Tracker counts (first-delivering peer, signer operator) pairs in two rotating buckets.
 // It is safe for concurrent use.
@@ -80,15 +87,16 @@ func (t *Tracker) Observe(p peer.ID, op spectypes.OperatorID) {
 	defer t.mu.Unlock()
 	t.rotateLocked()
 
-	peers, ok := t.current[op]
+	counts, ok := t.current[op]
 	if !ok {
-		peers = make(map[peer.ID]uint64, 1)
-		t.current[op] = peers
+		counts = &operatorCounts{peers: make(map[peer.ID]uint64, 1)}
+		t.current[op] = counts
 	}
-	if _, tracked := peers[p]; !tracked && len(peers) >= t.maxCandidates {
-		evictLowest(peers)
+	counts.total++
+	if _, tracked := counts.peers[p]; !tracked && len(counts.peers) >= t.maxCandidates {
+		evictLowest(counts.peers)
 	}
-	peers[p]++
+	counts.peers[p]++
 }
 
 // Snapshot returns the evidence for the given operators (every operator when ops is empty),
@@ -102,11 +110,11 @@ func (t *Tracker) Snapshot(ops []spectypes.OperatorID) []OperatorEvidence {
 		}
 	}
 
-	merged := make(map[spectypes.OperatorID]map[peer.ID]uint64)
+	merged := make(map[spectypes.OperatorID]*operatorCounts)
 	t.mu.Lock()
 	t.rotateLocked()
 	for _, b := range []bucket{t.previous, t.current} {
-		for op, peers := range b {
+		for op, counts := range b {
 			if want != nil {
 				if _, ok := want[op]; !ok {
 					continue
@@ -114,29 +122,31 @@ func (t *Tracker) Snapshot(ops []spectypes.OperatorID) []OperatorEvidence {
 			}
 			m, ok := merged[op]
 			if !ok {
-				m = make(map[peer.ID]uint64, len(peers))
+				m = &operatorCounts{peers: make(map[peer.ID]uint64, len(counts.peers))}
 				merged[op] = m
 			}
-			for p, c := range peers {
-				m[p] += c
+			m.total += counts.total
+			for p, c := range counts.peers {
+				m.peers[p] += c
 			}
 		}
 	}
 	t.mu.Unlock()
 
 	out := make([]OperatorEvidence, 0, len(merged))
-	for op, peers := range merged {
-		out = append(out, evidenceFor(op, peers))
+	for op, counts := range merged {
+		out = append(out, evidenceFor(op, counts))
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].OperatorID < out[j].OperatorID })
 	return out
 }
 
-func evidenceFor(op spectypes.OperatorID, peers map[peer.ID]uint64) OperatorEvidence {
-	ev := OperatorEvidence{OperatorID: op}
-	candidates := make([]Candidate, 0, len(peers))
-	for p, c := range peers {
-		ev.Samples += c
+// evidenceFor builds an operator's evidence. Samples is the total number of observations in the
+// window, so each Share is a fraction of every observation, not only of the surviving peers.
+func evidenceFor(op spectypes.OperatorID, counts *operatorCounts) OperatorEvidence {
+	ev := OperatorEvidence{OperatorID: op, Samples: counts.total}
+	candidates := make([]Candidate, 0, len(counts.peers))
+	for p, c := range counts.peers {
 		candidates = append(candidates, Candidate{PeerID: p, Count: c})
 	}
 	sort.Slice(candidates, func(i, j int) bool {

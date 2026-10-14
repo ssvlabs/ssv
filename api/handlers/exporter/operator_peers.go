@@ -72,7 +72,7 @@ func (h *OperatorPeers) List(w http.ResponseWriter, r *http.Request) error {
 
 	evidence := h.source.Snapshot(ops)
 	resp := operatorPeersResponse{
-		GeneratedAt:   h.now().UTC(),
+		GeneratedAt:   h.now().UTC().Truncate(time.Second),
 		WindowSeconds: int64(h.source.WindowDuration() / time.Second),
 		Operators:     make([]operatorEvidenceJSON, 0, len(evidence)),
 	}

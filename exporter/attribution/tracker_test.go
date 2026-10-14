@@ -1,6 +1,7 @@
 package attribution
 
 import (
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -60,7 +61,7 @@ func TestSnapshot_ReportsAtMostThreeCandidates(t *testing.T) {
 	got := tr.Snapshot(nil)
 
 	require.Len(t, got, 1)
-	require.Equal(t, uint64(10), got[0].Samples, "samples count every tracked peer, not only reported ones")
+	require.Equal(t, uint64(10), got[0].Samples, "samples count every observation, not only reported candidates")
 	require.Len(t, got[0].Candidates, 3)
 	require.Equal(t, []peer.ID{peerA, peerB, peerC}, []peer.ID{
 		got[0].Candidates[0].PeerID, got[0].Candidates[1].PeerID, got[0].Candidates[2].PeerID,
@@ -116,11 +117,32 @@ func TestObserve_EvictsLowestWhenFull(t *testing.T) {
 	got := tr.Snapshot(nil)
 
 	require.Len(t, got, 1)
+	require.Equal(t, uint64(9), got[0].Samples, "evicted counts still count towards samples")
 	require.Len(t, got[0].Candidates, 2)
 	require.Equal(t, peerA, got[0].Candidates[0].PeerID, "the dominant peer must survive eviction")
 	require.Equal(t, uint64(5), got[0].Candidates[0].Count)
+	require.InDelta(t, 5.0/9.0, got[0].Candidates[0].Share, 1e-9)
 	require.Equal(t, peerC, got[0].Candidates[1].PeerID)
-	require.InDelta(t, 5.0/6.0, got[0].Candidates[0].Share, 1e-9)
+	require.Equal(t, uint64(1), got[0].Candidates[1].Count)
+	require.InDelta(t, 1.0/9.0, got[0].Candidates[1].Share, 1e-9)
+}
+
+func TestSnapshot_SamplesIncludeEvictedPeers(t *testing.T) {
+	tr, _ := newTestTracker(2)
+	const dominantCount, distinctPeers = 20, 50
+	observeN(tr, peerA, 3, dominantCount)
+	for i := 0; i < distinctPeers; i++ {
+		tr.Observe(peer.ID(fmt.Sprintf("peer-%d", i)), 3)
+	}
+	const calls = dominantCount + distinctPeers
+
+	got := tr.Snapshot(nil)
+
+	require.Len(t, got, 1)
+	require.Equal(t, uint64(calls), got[0].Samples, "samples must equal the number of Observe calls")
+	require.Equal(t, peerA, got[0].Candidates[0].PeerID)
+	require.Equal(t, uint64(dominantCount), got[0].Candidates[0].Count)
+	require.InDelta(t, float64(dominantCount)/float64(calls), got[0].Candidates[0].Share, 1e-9)
 }
 
 func TestTracker_ConcurrentUse(t *testing.T) {

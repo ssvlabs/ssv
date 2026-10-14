@@ -95,6 +95,41 @@ func TestOperatorPeers_EmptyTracker(t *testing.T) {
 	require.JSONEq(t, `{"generated_at":"2026-10-15T09:00:00Z","window_seconds":3600,"operators":[]}`, rec.Body.String())
 }
 
+// TestOperatorPeers_JSONContract pins the exact response shape and tag names that the rollout
+// tracker's Python consumer depends on.
+func TestOperatorPeers_JSONContract(t *testing.T) {
+	p, err := libp2ptest.RandPeerID()
+	require.NoError(t, err)
+
+	source := &fakeEvidenceSource{evidence: []attribution.OperatorEvidence{{
+		OperatorID: 185,
+		Samples:    412,
+		Candidates: []attribution.Candidate{{PeerID: p, Count: 400, Share: 0.5}},
+	}}}
+	peers := fakePeerInfo{p: {version: "v2.5.0-41069c1f", connected: true}}
+	subSecond := time.Date(2026, 10, 15, 9, 0, 0, 987654321, time.UTC)
+	h := newOperatorPeers(source, peers, func() time.Time { return subSecond })
+
+	rec := callList(t, h, "")
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.JSONEq(t, `{
+		"generated_at": "2026-10-15T09:00:00Z",
+		"window_seconds": 3600,
+		"operators": [{
+			"operator_id": 185,
+			"samples": 412,
+			"candidates": [{
+				"peer_id": "`+p.String()+`",
+				"count": 400,
+				"share": 0.5,
+				"version": "v2.5.0-41069c1f",
+				"connected": true
+			}]
+		}]
+	}`, rec.Body.String())
+}
+
 func TestOperatorPeers_BadOperatorIDs(t *testing.T) {
 	h := newOperatorPeers(&fakeEvidenceSource{}, fakePeerInfo{}, func() time.Time { return fixedNow })
 
