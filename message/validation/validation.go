@@ -75,6 +75,10 @@ type messageValidator struct {
 
 	selfPID    peer.ID
 	selfAccept bool
+
+	// attribution, when set (exporter mode only), is told which peer first delivered each
+	// accepted single-signer message.
+	attribution AttributionObserver
 }
 
 // New returns a new MessageValidator with the given network configuration and options.
@@ -154,6 +158,7 @@ func (mv *messageValidator) Validate(ctx context.Context, peerID peer.ID, pmsg *
 	}
 
 	pmsg.ValidatorData = decodedMessage
+	mv.observeAccepted(peerID, decodedMessage)
 
 	return mv.handleValidationSuccess(ctx, decodedMessage)
 }
