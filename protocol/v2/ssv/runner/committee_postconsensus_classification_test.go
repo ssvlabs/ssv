@@ -32,7 +32,7 @@ func (b *faultyAttestationSubmitBeacon) SubmitAttestations(_ context.Context, _ 
 
 // TestCommitteeRunnerProcessPostConsensus_MarksFailedOnSubmitError asserts that a beacon submit
 // failure (a terminal post-quorum error) concludes the duty as failed — not left to surface as a
-// false "stuck". This is the terminal branch of the terminalErr/recoverableErr split.
+// false "stuck". This is the terminal branch of the terminal/recoverable split (batchErrs).
 func TestCommitteeRunnerProcessPostConsensus_MarksFailedOnSubmitError(t *testing.T) {
 	base := protocoltesting.NewTestingBeaconNodeWrapped().(*protocoltesting.BeaconNodeWrapped)
 	submitErr := errors.New("beacon rejected attestations")

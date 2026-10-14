@@ -122,17 +122,13 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(ctx context.Context,
 	// subnet and proof together by construction — there's no second slice to fall out
 	// of sync, so no length invariant to guard.
 	pairs := make([]subnetSelectionProof, 0, len(pending))
-	var recoverableErr, terminalErr error
+	var errs batchErrs
 	for _, root := range pending {
 		// reconstruct selection proof sig
 		span.AddEvent("reconstructing beacon signature", trace.WithAttributes(observability.BeaconBlockRootAttribute(root)))
 		blsSigSelectionProof, err := r.reconstructQuorumSig(r.State.PreConsensusContainer, root, r.GetShare(), "pre-consensus")
 		if err != nil {
-			if isRecoverableReconstructError(err) {
-				recoverableErr = err
-			} else {
-				terminalErr = err
-			}
+			errs.add(err)
 			continue
 		}
 
@@ -153,11 +149,8 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(ctx context.Context,
 	}
 	// Consensus runs once, on every subnet's contribution, so a root waiting to come back to quorum holds
 	// the decision rather than being left out of it.
-	if terminalErr != nil {
-		return terminalErr
-	}
-	if recoverableErr != nil {
-		return recoverableErr
+	if err := errs.err(); err != nil {
+		return err
 	}
 
 	r.measurements.EndPreConsensus()
@@ -355,21 +348,17 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(ctx context.Context
 	// Each root's contribution is submitted on its own, so a root that fails to reconstruct or submit doesn't
 	// hold the others back; a recoverable one is submitted once a later share brings it back to quorum.
 	sigs := make(map[[32]byte]phase0.BLSSignature, len(roots))
-	var recoverableErr, terminalErr error
+	var errs batchErrs
 	for _, root := range roots {
 		span.AddEvent("reconstructing beacon signature", trace.WithAttributes(observability.BeaconBlockRootAttribute(root)))
 		sig, err := r.reconstructQuorumSig(r.State.PostConsensusContainer, root, r.GetShare(), "post-consensus")
 		if err != nil {
-			if err = withCode(spectypes.PostConsensusQuorumWithInvalidSignatures, err); isRecoverableReconstructError(err) {
-				recoverableErr = err
-			} else {
-				terminalErr = err
-			}
+			errs.add(err)
 			continue
 		}
 		sigs[root] = sig
 	}
-	if recoverableErr == nil && terminalErr == nil {
+	if errs.err() == nil {
 		r.measurements.EndPostConsensus()
 		recordPostConsensusDuration(ctx, r.measurements.PostConsensusTime(), ssvtypes.RoleSyncCommitteeContribution)
 	}
@@ -424,7 +413,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(ctx context.Context
 					fields.Took(time.Since(reqStart)),
 					zap.Error(err),
 				)
-				terminalErr = fmt.Errorf("could not submit to Beacon chain reconstructed contribution and proof: %w", err)
+				errs.terminal = fmt.Errorf("could not submit to Beacon chain reconstructed contribution and proof: %w", err)
 				break
 			}
 
@@ -443,11 +432,8 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(ctx context.Context
 	}
 	recordSuccessfulSubmission(ctx, successfullySubmittedContributions, r.NetworkConfig.EstimatedEpochAtSlot(currentDutySlot), spectypes.BNRoleSyncCommitteeContribution)
 	// A recoverable root is submitted, and the duty completed, by the call that brings it back to quorum.
-	if terminalErr != nil {
-		return terminalErr
-	}
-	if recoverableErr != nil {
-		return recoverableErr
+	if err := errs.err(); err != nil {
+		return err
 	}
 	const submittedSyncCommitteeEvent = "✅ successfully submitted sync committee contributions"
 	span.AddEvent(submittedSyncCommitteeEvent)

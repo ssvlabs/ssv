@@ -845,7 +845,7 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 	ctx context.Context,
 	logger *zap.Logger,
 	signedMsg *spectypes.PartialSignatureMessages,
-) error {
+) (err error) {
 	// Reuse the existing span instead of generating new one to keep tracing-data lightweight.
 	span := trace.SpanFromContext(ctx)
 
@@ -859,6 +859,18 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 		return nil
 	}
 
+	// We have quorum and are committed to submitting, so this defer reports a terminal failure below as
+	// failed rather than letting it fall through to a false "stuck". The one exception is a recoverable
+	// BLS-reconstruction failure: the offending partial sig has already been dropped by the fallback, so a
+	// later message can re-cross quorum and retry — those are tagged recoverableReconstructError and must
+	// not be recorded as failed. Shutdown needs no special-casing — markDutyFailed drops a
+	// context.Canceled reason.
+	defer func() {
+		if err != nil && !isRecoverableReconstructError(err) {
+			r.markDutyFailed(err)
+		}
+	}()
+
 	r.measurements.EndPostConsensus()
 	recordPostConsensusDuration(ctx, r.measurements.PostConsensusTime(), spectypes.RoleAggregatorCommittee)
 
@@ -866,8 +878,6 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 	// Get validator-root maps for attestations and sync committees, and the root-beacon object map
 	aggregatorMap, contributionMap, beaconObjects, err := r.expectedPostConsensusRootsAndBeaconObjects(ctx)
 	if err != nil {
-		// terminal post-quorum failure → classify as failed, not stuck
-		r.markDutyFailed(err)
 		return fmt.Errorf("could not get expected post consensus roots and beacon objects: %w", err)
 	}
 	if len(beaconObjects) == 0 {
@@ -881,36 +891,17 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 		// classify as failed. The sentinel is preserved in the chain so committee_queue still drops the
 		// message and terminates the runner; ErrDutyInvariantViolation rides alongside it so the queue can
 		// tell this loud terminal apart from the benign zero-duties ones and keep the trace span red.
-		err := fmt.Errorf("no beacon objects from decided data, decided-value validation should have rejected it: %w: %w",
+		return fmt.Errorf("no beacon objects from decided data, decided-value validation should have rejected it: %w: %w",
 			ErrDutyInvariantViolation, ErrNoValidDutiesToExecute)
-		r.markDutyFailed(err)
-		return err
 	}
 
 	sort.Slice(roots, func(i, j int) bool {
 		return bytes.Compare(roots[i][:], roots[j][:]) < 0
 	})
 
-	// Unlike the sibling CommitteeRunner (which tags recoverable reconstruct failures with the
-	// recoverableReconstructError sentinel), this runner classifies them by the
-	// PostConsensusQuorumWithInvalidSignatures spec code: every recoverable reconstruct error is wrapped
-	// with that code at the push site below, so there is no uncoded-BLS blind spot here, and tagging
-	// instead would break this runner's spectest fixtures. The divergence is deliberate — see the
-	// reciprocal note in committee.go. A single last-write-wins error made terminal-vs-recoverable
-	// classification depend on goroutine/root ordering; splitting keeps it deterministic (terminal wins).
-	var terminalErr, recoverableErr error
-	// classify is the single source of truth for the terminal/recoverable split, shared by the listener
-	// receive site and the post-listener drain so the two can never drift apart. The reconstruct
-	// goroutine wraps a recoverable failure with the PostConsensusQuorumWithInvalidSignatures code;
-	// anything arriving without that code is terminal.
-	classify := func(err error) {
-		var specErr *spectypes.Error
-		if errors.As(err, &specErr) && specErr.Code == spectypes.PostConsensusQuorumWithInvalidSignatures {
-			recoverableErr = err
-		} else {
-			terminalErr = err
-		}
-	}
+	// The listener and the post-listener drain both add errCh's reconstruct failures to errs, which tells
+	// recoverable ones apart by their recoverableReconstructError tag (see batchErrs).
+	var errs batchErrs
 	aggregatesToSubmit := make(map[phase0.ValidatorIndex]map[[32]byte]*spec.VersionedSignedAggregateAndProof)
 	contributionsToSubmit := make(map[phase0.ValidatorIndex]map[[32]byte]*altair.SignedContributionAndProof)
 
@@ -1001,12 +992,9 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 					span.AddEvent(eventMsg)
 					vlogger.Error(eventMsg, zap.Bool("recoverable", isRecoverableReconstructError(err)), zap.Error(err))
 
-					// classify reads recoverability from this spec code, not the tag, so only a recoverable failure
-					// carries it.
-					if isRecoverableReconstructError(err) {
-						err = spectypes.WrapError(spectypes.PostConsensusQuorumWithInvalidSignatures, err)
-					}
-					errCh <- err
+					// The spec reports every post-consensus reconstruct failure with this code; withCode keeps a
+					// recoverable one's tag reachable for errs.
+					errCh <- withCode(spectypes.PostConsensusQuorumWithInvalidSignatures, err)
 					return
 				}
 
@@ -1029,10 +1017,11 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 			select {
 			case <-ctx.Done():
 				// Only reachable on shutdown (ctx canceled) — the listener completes in ms and the
-				// duty deadline is ~1 epoch out — and markDutyFailed drops context.Canceled anyway.
+				// duty deadline is ~1 epoch out — and markDutyFailed (via the defer) drops
+				// context.Canceled, so shutdown isn't recorded as a failure.
 				return ctx.Err()
 			case err := <-errCh:
-				classify(err)
+				errs.add(err)
 			case signatureResult, ok := <-signatureCh:
 				if !ok {
 					break listener
@@ -1040,13 +1029,13 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 
 				validatorObjects, exists := beaconObjects[signatureResult.validatorIndex]
 				if !exists {
-					terminalErr = fmt.Errorf("could not find beacon object for validator index: %d",
+					errs.terminal = fmt.Errorf("could not find beacon object for validator index: %d",
 						signatureResult.validatorIndex)
 					continue
 				}
 				sszObject, exists := validatorObjects[root]
 				if !exists {
-					terminalErr = fmt.Errorf("could not find ssz object for root: %s", root)
+					errs.terminal = fmt.Errorf("could not find ssz object for root: %s", root)
 					continue
 				}
 
@@ -1055,7 +1044,7 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 					aggregateAndProof := sszObject.(*spec.VersionedAggregateAndProof)
 					signedAgg, err := constructVersionedSignedAggregateAndProof(aggregateAndProof, signatureResult.signature)
 					if err != nil {
-						terminalErr = fmt.Errorf("failed to construct signed aggregate and proof: %w", err)
+						errs.terminal = fmt.Errorf("failed to construct signed aggregate and proof: %w", err)
 						continue
 					}
 
@@ -1077,10 +1066,8 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 					contributionsToSubmit[signatureResult.validatorIndex][root] = signedContrib
 
 				default:
-					// deterministic terminal invariant violation → classify as failed, not stuck
-					err := fmt.Errorf("unexpected role type in post-consensus: %v", role)
-					r.markDutyFailed(err)
-					return err
+					// deterministic terminal invariant violation → classified failed by the defer, not stuck
+					return fmt.Errorf("unexpected role type in post-consensus: %v", role)
 				}
 			}
 		}
@@ -1094,7 +1081,7 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 		for {
 			select {
 			case err := <-errCh:
-				classify(err)
+				errs.add(err)
 			default:
 				break drainErrCh
 			}
@@ -1110,7 +1097,7 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 			start := time.Now()
 			if err := r.beacon.SubmitSignedAggregateSelectionProof(ctx, signedAgg); err != nil {
 				recordFailedSubmission(ctx, spectypes.BNRoleAggregator)
-				terminalErr = fmt.Errorf("failed to submit signed aggregate and proof: %w", err)
+				errs.terminal = fmt.Errorf("failed to submit signed aggregate and proof: %w", err)
 				continue
 			}
 
@@ -1140,7 +1127,7 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 			start := time.Now()
 			if err := r.beacon.SubmitSignedContributionAndProof(ctx, signedContrib); err != nil {
 				recordFailedSubmission(ctx, spectypes.BNRoleSyncCommitteeContribution)
-				terminalErr = fmt.Errorf("failed to submit signed contribution and proof: %w", err)
+				errs.terminal = fmt.Errorf("failed to submit signed contribution and proof: %w", err)
 				continue
 			}
 
@@ -1165,19 +1152,16 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 		}
 	}
 
-	// Terminal wins deterministically over a concurrent recoverable error in the same round.
+	// A terminal error on any root wins over a recoverable one, and the defer records it as failed.
 	// Submit/construct/missing-object failures: reconstruction already succeeded so the root keeps its
 	// quorum and is never re-reported (runner.go reports only on first quorum crossing), so the submit
-	// loop never revisits it and the duty never concludes → mark failed, not a false stuck.
-	if terminalErr != nil {
-		r.markDutyFailed(terminalErr)
-		return terminalErr
-	}
-	// Reconstruct-invalid-sigs is recoverable: FallBackAndVerifyEachSignature can drop the root below
-	// quorum, so a later partial-sig message re-crosses quorum and re-enters this loop to retry pending
-	// roots (already-submitted roots are skipped via HasSubmitted). Not markDutyFailed.
-	if recoverableErr != nil {
-		return recoverableErr
+	// loop never revisits it and the duty never concludes → failed, not a false stuck.
+	// Reconstruct-invalid-sigs is recoverable and keeps its tag, so the defer leaves the duty open:
+	// FallBackAndVerifyEachSignature can drop the root below quorum, so a later partial-sig message
+	// re-crosses quorum and re-enters this loop to retry pending roots (already-submitted roots are
+	// skipped via HasSubmitted).
+	if err := errs.err(); err != nil {
+		return err
 	}
 
 	// Check if duty has terminated (runner has submitted for all duties). Reuse the expected-root
