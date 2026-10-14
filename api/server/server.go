@@ -35,6 +35,7 @@ func New(
 	node *nodeHandlers.Node,
 	validators *validatorsHandlers.Validators,
 	exporter *exporterHandlers.Exporter,
+	operatorPeers *exporterHandlers.OperatorPeers,
 	fullExporter bool,
 ) *Server {
 	router := chi.NewRouter()
@@ -101,6 +102,12 @@ func New(
 		router.Get("/v1/exporter/decideds", api.Handler(exporter.Decideds))
 
 		router.Post("/v1/exporter/decideds", api.Handler(exporter.Decideds))
+	}
+
+	// Operator→peer attribution is exporter-only and opt-in: the route exists only when the
+	// node created an attribution tracker.
+	if operatorPeers != nil {
+		router.Get("/v1/exporter/operator_peers", api.Handler(operatorPeers.List))
 	}
 
 	return &Server{

@@ -23,6 +23,7 @@ import (
 	"github.com/ssvlabs/ssv/doppelganger"
 	"github.com/ssvlabs/ssv/eth/executionclient"
 	exportercore "github.com/ssvlabs/ssv/exporter"
+	"github.com/ssvlabs/ssv/exporter/attribution"
 	dutytracer "github.com/ssvlabs/ssv/exporter/dutytracer"
 	dutytracestore "github.com/ssvlabs/ssv/exporter/store"
 	exporterapi "github.com/ssvlabs/ssv/exporter/v1/api"
@@ -209,6 +210,7 @@ type node struct {
 	metadataSyncer      *metadata.Syncer
 	storageMap          *ibftstorage.ParticipantStores
 	collector           *dutytracer.Collector
+	attributionTracker  *attribution.Tracker
 	vrSubmitter         *runner.VRSubmitter
 	slotTickerProvider  slotticker.Provider
 	p2pNetwork          network.P2PNetwork
@@ -314,13 +316,22 @@ func newNode(
 
 	signatureVerifier := signatureverifier.NewSignatureVerifier(nodeStorage)
 
+	validationOpts := []validation.Option{validation.WithLogger(logger)}
+	// Exporters attribute peers to operators from accepted single-signer messages; operator
+	// nodes don't track anything.
+	var attributionTracker *attribution.Tracker
+	if res.isExporter() {
+		attributionTracker = attribution.New()
+		validationOpts = append(validationOpts, validation.WithAttribution(attributionTracker))
+	}
+
 	messageValidator := validation.New(
 		networkConfig,
 		nodeStorage.ValidatorStore(),
 		nodeStorage,
 		dutyStore,
 		signatureVerifier,
-		validation.WithLogger(logger),
+		validationOpts...,
 	)
 
 	cfg.P2pNetworkConfig.MessageValidator = messageValidator
@@ -488,6 +499,7 @@ func newNode(
 		metadataSyncer:      metadataSyncer,
 		storageMap:          storageMap,
 		collector:           collector,
+		attributionTracker:  attributionTracker,
 		vrSubmitter:         vrSubmitter,
 		slotTickerProvider:  slotTickerProvider,
 		p2pNetwork:          p2pNetwork,
@@ -599,6 +611,16 @@ func (n *node) start(ctx context.Context, spawn func(func() error)) error {
 
 	if n.cfg.SSVAPIPort > 0 {
 		warnIfSSVAPIAddressUnset(n.logger, n.cfg.SSVAPIAddress, n.cfg.SSVAPIPort)
+		var operatorPeers *hexporter.OperatorPeers
+		if n.attributionTracker != nil {
+			operatorPeers = hexporter.NewOperatorPeers(
+				n.attributionTracker,
+				hexporter.NewPeerInfoResolver(
+					n.p2pNetwork.(p2pv1.PeersIndexProvider).PeersIndex(),
+					n.p2pNetwork.(p2pv1.HostProvider).Host().Network(),
+				),
+			)
+		}
 		apiServer := apiserver.New(
 			n.logger,
 			net.JoinHostPort(n.cfg.SSVAPIAddress, strconv.Itoa(n.cfg.SSVAPIPort)),
@@ -617,6 +639,7 @@ func (n *node) start(ctx context.Context, spawn func(func() error)) error {
 				Shares: n.nodeStorage.Shares(),
 			},
 			hexporter.NewExporter(n.logger, n.storageMap, n.collector, n.nodeStorage.ValidatorStore(), n.networkConfig),
+			operatorPeers,
 			n.mode == modeExporterArchive,
 		)
 		_, apiServeErr, err := apiServer.Start(ctx)
