@@ -37,6 +37,7 @@
   "eth2.WithWeightedAttestationData": "false",
   "exporter.Enabled": "false",
   "exporter.Mode": "standard",
+  "exporter.ProbePeerVersions": "false",
   "exporter.RetainSlots": "50400",
   "global.LogFileBackups": "3",
   "global.LogFilePath": "./data/debug.log",
