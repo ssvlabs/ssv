@@ -14,6 +14,7 @@ import (
 	"github.com/libp2p/go-libp2p/p2p/security/noise"
 	libp2ptcp "github.com/libp2p/go-libp2p/p2p/transport/tcp"
 	ma "github.com/multiformats/go-multiaddr"
+	manet "github.com/multiformats/go-multiaddr/net"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/message/validation"
@@ -172,6 +173,7 @@ func (c *Config) configureAddrs(logger *zap.Logger, opts []libp2p.Option) ([]lib
 	if c.HostDNS != "" {
 		// AddrFactory for DNS address if provided
 		opts = append(opts, libp2p.AddrsFactory(func(addrs []ma.Multiaddr) []ma.Multiaddr {
+			addrs = publicAddrs(addrs)
 			external, err := ma.NewMultiaddr(fmt.Sprintf("/dns4/%s/tcp/%d", c.HostDNS, c.TCPPort))
 			if err != nil {
 				logger.Error("unable to create external multiaddress", zap.Error(err))
@@ -183,6 +185,7 @@ func (c *Config) configureAddrs(logger *zap.Logger, opts []libp2p.Option) ([]lib
 	} else if c.HostAddress != "" {
 		// AddrFactory for host address if provided
 		opts = append(opts, libp2p.AddrsFactory(func(addrs []ma.Multiaddr) []ma.Multiaddr {
+			addrs = publicAddrs(addrs)
 			external, err := commons.BuildMultiAddress(c.HostAddress, "tcp", uint(c.TCPPort), "")
 			if err != nil {
 				logger.Error("unable to create external multiaddress", zap.Error(err))
@@ -194,6 +197,20 @@ func (c *Config) configureAddrs(logger *zap.Logger, opts []libp2p.Option) ([]lib
 	}
 
 	return opts, nil
+}
+
+// publicAddrs returns the public addresses in addrs. go-libp2p resolves the 0.0.0.0 listen address
+// to every interface address (docker bridges, VPNs, ...), and identify and the signed peer record
+// advertise what the AddrsFactory returns. With an external address configured, peers reach us
+// through it, so announcing the private ones would only leak our internal addresses.
+func publicAddrs(addrs []ma.Multiaddr) []ma.Multiaddr {
+	public := make([]ma.Multiaddr, 0, len(addrs))
+	for _, addr := range addrs {
+		if manet.IsPublicAddr(addr) {
+			public = append(public, addr)
+		}
+	}
+	return public
 }
 
 // TransformBootnodes converts bootnodes string and convert it to slice
