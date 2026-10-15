@@ -17,7 +17,7 @@ func WithLogger(logger *zap.Logger) Option {
 	}
 }
 
-// AttributionObserver receives (first-delivering peer, signer operator) pairs for accepted
+// AttributionObserver receives (authoring peer, signer operator) pairs for accepted
 // single-signer messages. Exporters use it to attribute peers to operators.
 type AttributionObserver interface {
 	Observe(p peer.ID, op spectypes.OperatorID)

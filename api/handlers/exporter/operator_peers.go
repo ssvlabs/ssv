@@ -15,7 +15,7 @@ import (
 	"github.com/ssvlabs/ssv/exporter/attribution"
 )
 
-// OperatorEvidenceSource provides per-operator first-delivery evidence.
+// OperatorEvidenceSource provides per-operator authorship evidence.
 type OperatorEvidenceSource interface {
 	Snapshot(ops []spectypes.OperatorID) []attribution.OperatorEvidence
 	WindowDuration() time.Duration
@@ -27,7 +27,7 @@ type PeerInfoResolver interface {
 }
 
 // OperatorPeers serves GET /v1/exporter/operator_peers: for each operator, the peers that most
-// often first-delivered its signed messages, with each peer's handshake version.
+// often authored its signed messages, with each peer's handshake version.
 type OperatorPeers struct {
 	source OperatorEvidenceSource
 	peers  PeerInfoResolver

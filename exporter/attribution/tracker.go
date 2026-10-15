@@ -1,7 +1,6 @@
-// Package attribution records which libp2p peer first delivered each operator's signed
-// messages to this node. Over a window, an operator's own node is usually the most frequent
-// first deliverer of its messages, which lets an exporter attribute peers (and their node
-// versions) to operator IDs.
+// Package attribution records which libp2p peer authored each operator's signed messages, as
+// stamped in the pubsub From field. Over a window, an operator's own node authors its messages,
+// which lets an exporter attribute peers (and their node versions) to operator IDs.
 package attribution
 
 import (
@@ -24,21 +23,21 @@ const (
 	maxReportedCandidates = 3
 )
 
-// Candidate is a peer that first-delivered some of an operator's messages.
+// Candidate is a peer that authored some of an operator's messages.
 type Candidate struct {
 	PeerID peer.ID
 	Count  uint64
 	Share  float64
 }
 
-// OperatorEvidence summarizes the first deliveries of one operator's messages over the window.
+// OperatorEvidence summarizes the authors of one operator's messages over the window.
 type OperatorEvidence struct {
 	OperatorID spectypes.OperatorID
 	Samples    uint64
 	Candidates []Candidate
 }
 
-// operatorCounts holds one operator's first-delivery counts within a bucket. total counts every
+// operatorCounts holds one operator's per-author counts within a bucket. total counts every
 // observation, including those whose peer was later evicted from peers.
 type operatorCounts struct {
 	total uint64
@@ -47,7 +46,7 @@ type operatorCounts struct {
 
 type bucket map[spectypes.OperatorID]*operatorCounts
 
-// Tracker counts (first-delivering peer, signer operator) pairs in two rotating buckets.
+// Tracker counts (authoring peer, signer operator) pairs in two rotating buckets.
 // It is safe for concurrent use.
 type Tracker struct {
 	mu             sync.Mutex
