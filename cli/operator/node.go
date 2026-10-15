@@ -865,7 +865,7 @@ func (n *node) startVersionProber(ctx context.Context, spawn func(func() error))
 		return
 	}
 	host := n.p2pNetwork.(p2pv1.HostProvider).Host()
-	n.versionProber = versionprobe.New(versionprobe.Config{
+	prober, err := versionprobe.New(versionprobe.Config{
 		Logger:   n.logger.Named("version_probe"),
 		Evidence: n.attributionTracker,
 		Peers:    versionprobe.NewPeerState(n.p2pNetwork.(p2pv1.PeersIndexProvider).PeersIndex(), host.Network()),
@@ -885,7 +885,11 @@ func (n *node) startVersionProber(ctx context.Context, spawn func(func() error))
 			return versionprobe.Request{NetworkID: "0x" + hex.EncodeToString(d[:]), NodeVersion: commons.GetNodeVersion()}
 		},
 	})
-	prober := n.versionProber
+	if err != nil {
+		n.logger.Warn("version probe disabled: could not create probe identity", zap.Error(err))
+		return
+	}
+	n.versionProber = prober
 	spawn(func() error { return prober.Run(ctx) })
-	n.logger.Info("exporter version probe enabled")
+	n.logger.Info("exporter version probe enabled", zap.String("probe_peer_id", prober.PeerID().String()))
 }

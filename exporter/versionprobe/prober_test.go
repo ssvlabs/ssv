@@ -2,11 +2,13 @@ package versionprobe
 
 import (
 	"context"
+	"crypto/rand"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	ma "github.com/multiformats/go-multiaddr"
@@ -52,27 +54,27 @@ func TestTargetsThresholdAndTopOnly(t *testing.T) {
 		ev(2, pid(2), 19), // below minTargetCount
 		{OperatorID: 3, Samples: 50, Candidates: []attribution.Candidate{{PeerID: pid(3), Count: 30}, {PeerID: pid(4), Count: 20}}},
 	}
-	p := New(Config{Logger: zap.NewNop(), Evidence: e, Peers: fakePeers{}, Sources: staticSource(a1), Request: func() Request { return testReq }})
+	p := mustNew(t, Config{Logger: zap.NewNop(), Evidence: e, Peers: fakePeers{}, Sources: staticSource(a1), Request: func() Request { return testReq }})
 	require.Equal(t, []peer.ID{pid(1), pid(3)}, p.Targets(t0))
 }
 
 func TestTargetsSkipConnectedAndVersioned(t *testing.T) {
 	e := fakeEvidence{ev(1, pid(1), 30), ev(2, pid(2), 30), ev(3, pid(3), 30)}
 	peers := fakePeers{connected: map[peer.ID]bool{pid(1): true}, versions: map[peer.ID]string{pid(2): "v2.4.3"}}
-	p := New(Config{Logger: zap.NewNop(), Evidence: e, Peers: peers, Sources: staticSource(a1), Request: func() Request { return testReq }})
+	p := mustNew(t, Config{Logger: zap.NewNop(), Evidence: e, Peers: peers, Sources: staticSource(a1), Request: func() Request { return testReq }})
 	require.Equal(t, []peer.ID{pid(3)}, p.Targets(t0))
 }
 
 func TestTargetsSkipNotDue(t *testing.T) {
 	c := NewCache(10)
 	c.Record(pid(1), Result{Outcome: OutcomeTimeout}, t0)
-	p := New(Config{Logger: zap.NewNop(), Evidence: fakeEvidence{ev(1, pid(1), 30)}, Peers: fakePeers{}, Cache: c, Sources: staticSource(a1), Request: func() Request { return testReq }})
+	p := mustNew(t, Config{Logger: zap.NewNop(), Evidence: fakeEvidence{ev(1, pid(1), 30)}, Peers: fakePeers{}, Cache: c, Sources: staticSource(a1), Request: func() Request { return testReq }})
 	require.Empty(t, p.Targets(t0.Add(time.Minute)))
 	require.Equal(t, []peer.ID{pid(1)}, p.Targets(t0.Add(15*time.Minute)))
 }
 
 func TestTargetsDeduplicate(t *testing.T) {
-	p := New(Config{Logger: zap.NewNop(), Evidence: fakeEvidence{ev(1, pid(7), 30), ev(2, pid(7), 30)}, Peers: fakePeers{}, Sources: staticSource(a1), Request: func() Request { return testReq }})
+	p := mustNew(t, Config{Logger: zap.NewNop(), Evidence: fakeEvidence{ev(1, pid(7), 30), ev(2, pid(7), 30)}, Peers: fakePeers{}, Sources: staticSource(a1), Request: func() Request { return testReq }})
 	require.Equal(t, []peer.ID{pid(7)}, p.Targets(t0))
 }
 
@@ -85,7 +87,7 @@ func TestRunCycleRecordsResultsAndNoAddr(t *testing.T) {
 		}
 		return []ma.Multiaddr{a1}, nil
 	}}}
-	p := New(Config{
+	p := mustNew(t, Config{
 		Logger: zap.NewNop(), Evidence: fakeEvidence{ev(1, pid(1), 30), ev(2, pid(2), 30)}, Peers: fakePeers{},
 		Sources: sources, Request: func() Request { return testReq },
 		Probe: func(_ context.Context, target peer.AddrInfo, _ Request) Result {
@@ -112,7 +114,7 @@ func TestRunCycleSpacingAndConcurrency(t *testing.T) {
 	var waits []time.Duration
 	var inFlight, peak atomic.Int32
 	e := fakeEvidence{ev(1, pid(1), 30), ev(2, pid(2), 30), ev(3, pid(3), 30), ev(4, pid(4), 30)}
-	p := New(Config{
+	p := mustNew(t, Config{
 		Logger: zap.NewNop(), Evidence: e, Peers: fakePeers{}, Sources: staticSource(a1), Request: func() Request { return testReq },
 		Probe: func(context.Context, peer.AddrInfo, Request) Result {
 			n := inFlight.Add(1)
@@ -137,7 +139,7 @@ func TestRunCycleSpacingAndConcurrency(t *testing.T) {
 func TestRunStopsOnCancel(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	started := make(chan struct{}, 1)
-	p := New(Config{
+	p := mustNew(t, Config{
 		Logger: zap.NewNop(), Evidence: fakeEvidence{ev(1, pid(1), 30)}, Peers: fakePeers{}, Sources: staticSource(a1), Request: func() Request { return testReq },
 		Probe: func(ctx context.Context, _ peer.AddrInfo, _ Request) Result {
 			started <- struct{}{}
@@ -161,7 +163,7 @@ func TestRunStopsOnCancel(t *testing.T) {
 func TestRunCycleCancelledProbeNotRecorded(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	started := make(chan struct{}, 1)
-	p := New(Config{
+	p := mustNew(t, Config{
 		Logger: zap.NewNop(), Evidence: fakeEvidence{ev(1, pid(1), 30)}, Peers: fakePeers{}, Sources: staticSource(a1), Request: func() Request { return testReq },
 		Probe: func(ctx context.Context, _ peer.AddrInfo, _ Request) Result {
 			started <- struct{}{}
@@ -195,7 +197,7 @@ func TestNewPeerState(t *testing.T) {
 // A panicking probe is recorded as bad_response and doesn't take RunCycle (or the node) down.
 func TestRunCyclePanickingProbeRecordedAsBadResponse(t *testing.T) {
 	var probed atomic.Int32
-	p := New(Config{
+	p := mustNew(t, Config{
 		Logger: zap.NewNop(), Evidence: fakeEvidence{ev(1, pid(1), 30), ev(2, pid(2), 30)}, Peers: fakePeers{},
 		Sources: staticSource(a1), Request: func() Request { return testReq },
 		Probe: func(_ context.Context, target peer.AddrInfo, _ Request) Result {
@@ -244,7 +246,7 @@ func TestRunCycleSkipsPeerConnectedAfterTargets(t *testing.T) {
 	peers := &flippingPeers{connected: map[peer.ID]bool{}}
 	var mu sync.Mutex
 	var probed []peer.ID
-	p := New(Config{
+	p := mustNew(t, Config{
 		Logger: zap.NewNop(), Evidence: fakeEvidence{ev(1, pid(1), 30), ev(2, pid(2), 30), ev(3, pid(3), 30)}, Peers: peers,
 		Sources: staticSource(a1), Request: func() Request { return testReq },
 		Probe: func(_ context.Context, target peer.AddrInfo, _ Request) Result {
@@ -278,7 +280,7 @@ func TestRunCycleRecordsAddrSourceAndAddrs(t *testing.T) {
 		{Name: "peerstore", Lookup: func(context.Context, peer.ID) ([]ma.Multiaddr, error) { return addrs, nil }},
 	}
 	var dialed []ma.Multiaddr
-	p := New(Config{
+	p := mustNew(t, Config{
 		Logger: zap.NewNop(), Evidence: fakeEvidence{ev(1, pid(1), 30)}, Peers: fakePeers{},
 		Sources: sources, Request: func() Request { return testReq },
 		Probe: func(_ context.Context, target peer.AddrInfo, _ Request) Result {
@@ -296,4 +298,58 @@ func TestRunCycleRecordsAddrSourceAndAddrs(t *testing.T) {
 	require.Equal(t, []string{
 		"/ip4/1.1.1.1/tcp/13001", "/ip4/1.1.1.2/tcp/13001", "/ip4/1.1.1.3/tcp/13001", "/ip4/1.1.1.4/tcp/13001",
 	}, es[0].Addrs)
+}
+
+func mustNew(t *testing.T, cfg Config) *Prober {
+	t.Helper()
+	p, err := New(cfg)
+	require.NoError(t, err)
+	return p
+}
+
+func TestProberUsesOneKeyPerProcess(t *testing.T) {
+	var mu sync.Mutex
+	var keys []crypto.PrivKey
+	p := mustNew(t, Config{
+		Logger: zap.NewNop(), Evidence: fakeEvidence{ev(1, pid(1), 30), ev(2, pid(2), 30)}, Peers: fakePeers{},
+		Sources: staticSource(a1), Request: func() Request { return testReq },
+		Probe: func(_ context.Context, _ peer.AddrInfo, req Request) Result {
+			mu.Lock()
+			keys = append(keys, req.Key)
+			mu.Unlock()
+			return Result{Outcome: OutcomeOK, Version: "v2.5.0"}
+		},
+		Now:  func() time.Time { return t0 },
+		Wait: func(context.Context, time.Duration) error { return nil },
+	})
+	p.RunCycle(context.Background())
+	require.Len(t, keys, 2)
+	require.NotNil(t, keys[0])
+	require.NotNil(t, keys[1])
+	require.True(t, keys[0].Equals(keys[1]))
+	id, err := peer.IDFromPrivateKey(keys[0])
+	require.NoError(t, err)
+	require.Equal(t, id, p.PeerID())
+}
+
+func TestProberConfigKeyHonoured(t *testing.T) {
+	key, _, err := crypto.GenerateSecp256k1Key(rand.Reader)
+	require.NoError(t, err)
+	var got crypto.PrivKey
+	p := mustNew(t, Config{
+		Logger: zap.NewNop(), Evidence: fakeEvidence{ev(1, pid(1), 30)}, Peers: fakePeers{},
+		Sources: staticSource(a1), Request: func() Request { return testReq }, Key: key,
+		Probe: func(_ context.Context, _ peer.AddrInfo, req Request) Result {
+			got = req.Key
+			return Result{Outcome: OutcomeOK, Version: "v2.5.0"}
+		},
+		Now:  func() time.Time { return t0 },
+		Wait: func(context.Context, time.Duration) error { return nil },
+	})
+	p.RunCycle(context.Background())
+	require.NotNil(t, got)
+	require.True(t, key.Equals(got))
+	want, err := peer.IDFromPrivateKey(key)
+	require.NoError(t, err)
+	require.Equal(t, want, p.PeerID())
 }

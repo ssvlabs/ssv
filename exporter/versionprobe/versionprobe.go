@@ -1,10 +1,16 @@
 // Package versionprobe learns the node version of identified sender peers that the exporter
 // isn't connected to. It dials them from a throwaway libp2p host, sends one SSV handshake
 // request (/ssv/info/0.0.1), reads the remote's NodeInfo and disconnects. The main host's
-// connections, peer slots and gossipsub mesh are never touched.
+// connections, peer slots and gossipsub mesh are never touched. Every throwaway host uses the
+// same probe identity (one key per process), so a remote keeps at most one peer-index and
+// keybook entry for the probes and can recognize them as a single peer.
 package versionprobe
 
-import "time"
+import (
+	"time"
+
+	"github.com/libp2p/go-libp2p/core/crypto"
+)
 
 const (
 	pickInterval   = 30 * time.Second
@@ -39,6 +45,8 @@ const (
 type Request struct {
 	NetworkID   string
 	NodeVersion string
+	// Key is the probe identity; one per process. If nil, Probe generates a fresh key (tests only).
+	Key crypto.PrivKey
 }
 
 // Result is the outcome of one probe attempt.

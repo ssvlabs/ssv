@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -31,6 +32,12 @@ import (
 // read the request (same framing as network/streams), reply with its own sealed NodeInfo.
 func newResponder(t *testing.T, version string, meta bool) host.Host {
 	t.Helper()
+	return newRecordingResponder(t, version, meta, nil)
+}
+
+// newRecordingResponder is newResponder that also calls onPeer with each caller's peer ID.
+func newRecordingResponder(t *testing.T, version string, meta bool, onPeer func(peer.ID)) host.Host {
+	t.Helper()
 	priv, _, err := crypto.GenerateSecp256k1Key(rand.Reader)
 	require.NoError(t, err)
 	h, err := libp2p.New(libp2p.Identity(priv), libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))
@@ -42,6 +49,9 @@ func newResponder(t *testing.T, version string, meta bool) host.Host {
 		defer done()
 		if herr != nil {
 			return
+		}
+		if onPeer != nil {
+			onPeer(s.Conn().RemotePeer())
 		}
 		var theirs records.NodeInfo
 		_ = theirs.Consume(req) // the real handler verifies only AFTER responding
@@ -62,6 +72,30 @@ func newResponder(t *testing.T, version string, meta bool) host.Host {
 func addrInfo(h host.Host) peer.AddrInfo { return peer.AddrInfo{ID: h.ID(), Addrs: h.Addrs()} }
 
 var testReq = Request{NetworkID: "0x00000502", NodeVersion: "v2.5.0-test"}
+
+// Probes given the same Request.Key present the same identity to the remote.
+func TestProbeUsesRequestKey(t *testing.T) {
+	key, _, err := crypto.GenerateSecp256k1Key(rand.Reader)
+	require.NoError(t, err)
+	want, err := peer.IDFromPrivateKey(key)
+	require.NoError(t, err)
+
+	var mu sync.Mutex
+	var remotes []peer.ID
+	r := newRecordingResponder(t, "v2.5.0", true, func(id peer.ID) {
+		mu.Lock()
+		remotes = append(remotes, id)
+		mu.Unlock()
+	})
+	req := Request{NetworkID: testReq.NetworkID, NodeVersion: testReq.NodeVersion, Key: key}
+	for range 2 {
+		res := Probe(context.Background(), addrInfo(r), req)
+		require.Equal(t, OutcomeOK, res.Outcome, res.Err)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	require.Equal(t, []peer.ID{want, want}, remotes)
+}
 
 func TestProbeOK(t *testing.T) {
 	r := newResponder(t, "v2.5.0", true)

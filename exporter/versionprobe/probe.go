@@ -37,10 +37,10 @@ const (
 	phaseStream = "stream"
 )
 
-// Probe dials target from a fresh, throwaway libp2p host, sends one SSV handshake request
-// (/ssv/info/0.0.1) and returns the version the remote reports in its NodeInfo. The host is
-// closed, with all its connections, before Probe returns, whatever the outcome. The caller's
-// own host is never used. Result.AddrSource is left for the caller to fill.
+// Probe dials target from a throwaway libp2p host that uses the probe identity req.Key, sends
+// one SSV handshake request (/ssv/info/0.0.1) and returns the version the remote reports in
+// its NodeInfo. The host is closed, with all its connections, before Probe returns, whatever
+// the outcome. The caller's own host is never used. Result.AddrSource is left for the caller to fill.
 func Probe(ctx context.Context, target peer.AddrInfo, req Request) (res Result) {
 	start := time.Now()
 	defer func() {
@@ -129,13 +129,17 @@ func failure(err error, phase string) Result {
 	return Result{Outcome: classify(err, phase), Err: err.Error()}
 }
 
-// newProbeHost builds an isolated, dial-only libp2p host with a fresh identity: no listen
-// addresses, no relay, no NAT traversal, no metrics, a null connection manager and a small
-// resource budget.
+// newProbeHost builds an isolated, dial-only libp2p host with the probe identity req.Key (a
+// fresh key when nil, for tests): no listen addresses, no relay, no NAT traversal, no metrics,
+// a null connection manager and a small resource budget.
 func newProbeHost(req Request) (host.Host, crypto.PrivKey, error) {
-	priv, _, err := crypto.GenerateSecp256k1Key(rand.Reader)
-	if err != nil {
-		return nil, nil, fmt.Errorf("generate key: %w", err)
+	priv := req.Key
+	if priv == nil {
+		var err error
+		priv, _, err = crypto.GenerateSecp256k1Key(rand.Reader)
+		if err != nil {
+			return nil, nil, fmt.Errorf("generate key: %w", err)
+		}
 	}
 
 	small := rcmgr.ResourceLimits{
