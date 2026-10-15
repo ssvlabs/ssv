@@ -848,11 +848,14 @@ func versionProbeMode(isExporter, flag bool) (enable bool, warn string) {
 	return true, ""
 }
 
+// STAGE-ONLY (drop before merge): stage's deploy template can't set EXPORTER_PROBE_PEER_VERSIONS, so the probe is on by default for the stage run. See ssvlabs/ssv#3125.
+const stageProbeDefaultOn = true
+
 // startVersionProber builds and spawns the version prober when exporter mode and
 // EXPORTER_PROBE_PEER_VERSIONS both apply. It must run after startNetwork and before the API
 // handlers are built, since they read the prober's cache.
 func (n *node) startVersionProber(ctx context.Context, spawn func(func() error)) {
-	enable, warn := versionProbeMode(n.attributionTracker != nil, n.cfg.ExporterOptions.ProbePeerVersions)
+	enable, warn := versionProbeMode(n.attributionTracker != nil, n.cfg.ExporterOptions.ProbePeerVersions || stageProbeDefaultOn)
 	if warn != "" {
 		n.logger.Warn(warn)
 	}
