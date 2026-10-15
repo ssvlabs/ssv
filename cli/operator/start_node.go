@@ -22,8 +22,13 @@ var cfg config
 
 var globalArgs globalcfg.Args
 
+// friendsMode runs the node as a distributed KMS instead of a staking operator (see friends.go).
+var friendsMode bool
+
 func init() {
 	globalcfg.ProcessArgs(&cfg, &globalArgs, StartNodeCmd)
+	StartNodeCmd.PersistentFlags().BoolVar(&friendsMode, "friends", os.Getenv("FRIENDS") == "true",
+		"Run as a friends-mode distributed KMS (threshold ECDSA signing, no beacon chain); env FRIENDS=true")
 }
 
 // StartNodeCmd is the command to start SSV node
@@ -32,6 +37,11 @@ var StartNodeCmd = &cobra.Command{
 	Short: "Starts an instance of SSV node",
 	Run: func(cmd *cobra.Command, args []string) {
 		commons.SetBuildData(cmd.Parent().Short, cmd.Parent().Version)
+
+		if friendsMode {
+			startFriendsNode(cmd)
+			return
+		}
 
 		if err := cfg.load(globalArgs.ConfigPath, globalArgs.ShareConfigPath); err != nil {
 			log.Fatal(err)
@@ -125,4 +135,38 @@ func buildObservabilityOptions(cfg *config) []observability.Option {
 		opts = append(opts, observability.WithTraces())
 	}
 	return opts
+}
+
+// startFriendsNode is StartNodeCmd in friends mode: its own config (no beacon or registry settings)
+// and runFriendsNode instead of the staking node.
+func startFriendsNode(cmd *cobra.Command) {
+	var fcfg friendsConfig
+	if err := globalcfg.Prepare(&fcfg, &globalArgs); err != nil {
+		log.Fatal(err)
+	}
+	observabilityShutdown, err := observability.Initialize(cmd.Context(), cmd.Parent().Short, cmd.Parent().Version,
+		observability.WithLogger(fcfg.LogLevel, fcfg.LogLevelFormat, fcfg.LogFormat, fcfg.LogFilePath, fcfg.LogFileSize, fcfg.LogFileBackups))
+	if err != nil {
+		log.Fatalf("could not initialize observability configuration: %v", err)
+	}
+	logger := zap.L()
+	defer ssvlog.CapturePanic(logger)
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		_ = observabilityShutdown(shutdownCtx)
+	}()
+	logger.Info(fmt.Sprintf("starting %v", commons.GetBuildData()))
+
+	ctx, cancel := context.WithCancel(cmd.Context())
+	defer cancel()
+	sigC := make(chan os.Signal, 2)
+	signal.Notify(sigC, os.Interrupt, syscall.SIGTERM)
+	go handleShutdownSignals(sigC, logger, cancel, func(sig os.Signal) {
+		logger.Fatal("received second shutdown signal, exiting immediately", zap.String("signal", sig.String()))
+	})
+
+	if err := runFriendsNode(ctx, logger, &fcfg); err != nil && ctx.Err() == nil {
+		logger.Fatal("friends node stopped", zap.Error(err))
+	}
 }

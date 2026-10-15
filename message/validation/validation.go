@@ -75,6 +75,9 @@ type messageValidator struct {
 
 	selfPID    peer.ID
 	selfAccept bool
+
+	// kms resolves friends-mode dKMS key committees; nil when the dKMS is not enabled.
+	kms KMSCommittees
 }
 
 // New returns a new MessageValidator with the given network configuration and options.
@@ -202,6 +205,10 @@ func (mv *messageValidator) handleSignedSSVMessage(
 	}
 
 	decodedMessage.SSVMessage = signedSSVMessage.SSVMessage
+
+	if signedSSVMessage.SSVMessage.GetID().GetRoleType() == ssvtypes.RoleKMS {
+		return mv.validateKMSMessage(signedSSVMessage, decodedMessage)
+	}
 
 	if err := mv.validateSSVMessage(signedSSVMessage.SSVMessage); err != nil {
 		return decodedMessage, err

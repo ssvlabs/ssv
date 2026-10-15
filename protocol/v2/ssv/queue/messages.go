@@ -7,6 +7,7 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
+	"github.com/ssvlabs/ssv/kms/kmstypes"
 	ssvmessage "github.com/ssvlabs/ssv/protocol/v2/message"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
@@ -115,6 +116,12 @@ func ExtractMsgBody(m *spectypes.SSVMessage) (any, error) {
 		msg := &ssvtypes.EventMsg{}
 		if err := msg.Decode(m.Data); err != nil {
 			return nil, fmt.Errorf("failed to decode EventMsg: %w", err)
+		}
+		body = msg
+	case ssvmessage.SSVKMSMsgType:
+		msg := &kmstypes.Message{}
+		if err := msg.Decode(m.Data); err != nil {
+			return nil, fmt.Errorf("failed to decode dKMS message: %w", err)
 		}
 		body = msg
 	default:

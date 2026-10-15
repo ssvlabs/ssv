@@ -12,6 +12,9 @@ import (
 const (
 	// SSVEventMsgType extends spec msg type
 	SSVEventMsgType spectypes.MsgType = 200
+	// SSVKMSMsgType carries friends-mode dKMS messages that are not QBFT: signing requests,
+	// presigning rounds and signature shares (see package kms/kmstypes).
+	SSVKMSMsgType spectypes.MsgType = 201
 
 	roleAttester                  = "ATTESTER"
 	roleAggregator                = "AGGREGATOR"
@@ -35,6 +38,8 @@ func MsgTypeToString(mt spectypes.MsgType) string {
 		return "partial_signature"
 	case SSVEventMsgType:
 		return "event"
+	case SSVKMSMsgType:
+		return "kms"
 	default:
 		return fmt.Sprintf("unknown(%d)", mt)
 	}

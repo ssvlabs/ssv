@@ -7,6 +7,10 @@ import (
 const (
 	RoleAggregator                = spectypes.RunnerRole(1) // Deprecated
 	RoleSyncCommitteeContribution = spectypes.RunnerRole(3) // Deprecated
+
+	// RoleKMS is the friends-mode distributed KMS: QBFT over signing requests for a threshold key
+	// (see package kms). Its duty executor ID is the key ID, not a validator public key.
+	RoleKMS = spectypes.RunnerRole(100)
 )
 
 // CommitteeSignerBucket identifies the committee-duty signer slice that should
@@ -87,6 +91,8 @@ func RunnerRoleToString(r spectypes.RunnerRole) string {
 		return "AGGREGATOR"
 	case RoleSyncCommitteeContribution:
 		return "SYNC_COMMITTEE_CONTRIBUTION"
+	case RoleKMS:
+		return "KMS"
 	default:
 		return r.String()
 	}

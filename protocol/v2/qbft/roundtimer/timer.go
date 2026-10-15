@@ -73,6 +73,8 @@ func MaxRound(role spectypes.RunnerRole) (maxRound specqbft.Round, ok bool) {
 		return 2, true
 	case ssvtypes.RoleSyncCommitteeContribution:
 		return 6, true
+	case ssvtypes.RoleKMS:
+		return 6, true
 	default:
 		return 0, false
 	}
@@ -269,7 +271,8 @@ func (t *RoundTimer) quickTimeout() time.Duration {
 // https://github.com/ssvlabs/ssv/issues/2429). Message validation keys its round-spread exemption off
 // this same predicate, so the two stay in step.
 func RoundRelativeRole(role spectypes.RunnerRole) bool {
-	return role == spectypes.RoleProposer
+	// The friends-mode dKMS has no slots: its heights are request sequence numbers.
+	return role == spectypes.RoleProposer || role == ssvtypes.RoleKMS
 }
 
 // RoundTimeout returns the duration to wait before timing out the given round.

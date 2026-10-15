@@ -44,6 +44,7 @@ require (
 	github.com/ssvlabs/ssv/ssvsigner v0.0.0-20260415125841-05316f77d5e5
 	github.com/status-im/keycard-go v0.2.0
 	github.com/stretchr/testify v1.11.1
+	github.com/taurusgroup/multi-party-sig v0.7.0-alpha-2025-01-28
 	github.com/wealdtech/go-eth2-types/v2 v2.8.2
 	github.com/wealdtech/go-eth2-util v1.8.2
 	go.opentelemetry.io/contrib/exporters/autoexport v0.61.0
@@ -51,7 +52,7 @@ require (
 	go.opentelemetry.io/otel/sdk/metric v1.41.0
 	go.uber.org/mock v0.5.2
 	go.uber.org/multierr v1.11.0
-	go.uber.org/zap v1.27.0
+	go.uber.org/zap v1.27.1
 	golang.org/x/exp v0.0.0-20250911091902-df9299821621
 	golang.org/x/mod v0.32.0
 	golang.org/x/sync v0.19.0
@@ -71,12 +72,14 @@ require (
 	github.com/cockroachdb/pebble/v2 v2.1.4 // indirect
 	github.com/cockroachdb/swiss v0.0.0-20251224182025-b0f6560f979b // indirect
 	github.com/crate-crypto/go-eth-kzg v1.5.0 // indirect
+	github.com/cronokirby/saferith v0.33.0 // indirect
 	github.com/dchest/siphash v1.2.3 // indirect
 	github.com/emicklei/dot v1.6.4 // indirect
 	github.com/ethereum/c-kzg-4844/v2 v2.1.8 // indirect
 	github.com/ethereum/go-bigmodexpfix v0.0.0-20250911101455-f9e208c548ab // indirect
 	github.com/filecoin-project/go-clock v0.1.0 // indirect
 	github.com/fjl/jsonw v0.1.0 // indirect
+	github.com/fxamacker/cbor/v2 v2.6.0 // indirect
 	github.com/grafana/pyroscope-go v1.2.7 // indirect
 	github.com/grafana/pyroscope-go/godeltaprof v0.1.9 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.28.0 // indirect
@@ -95,6 +98,8 @@ require (
 	github.com/pk910/hashtree-bindings v0.2.2 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/wealdtech/go-eth2-wallet-encryptor-keystorev4 v1.4.1 // indirect
+	github.com/x448/float16 v0.8.4 // indirect
+	github.com/zeebo/blake3 v0.2.3 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/contrib/bridges/prometheus v0.61.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc v0.12.2 // indirect
@@ -246,6 +251,7 @@ require (
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/spaolacci/murmur3 v1.1.0 // indirect
 	github.com/spf13/pflag v1.0.6 // indirect
+	github.com/ssvlabs/ssv-dkg/pkgs/kms v0.0.0-00010101000000-000000000000
 	github.com/stretchr/objx v0.5.2 // indirect
 	github.com/supranational/blst v0.3.16 // indirect
 	github.com/syndtr/goleveldb v1.0.1-0.20220721030215-126854af5e6d // indirect
@@ -292,3 +298,6 @@ replace github.com/dgraph-io/ristretto => github.com/dgraph-io/ristretto v0.1.1-
 replace github.com/attestantio/go-eth2-client => github.com/ssvlabs/go-eth2-client v0.6.31-0.20260831132123-66dd18fc8288
 
 replace github.com/ssvlabs/ssv/ssvsigner => ./ssvsigner
+
+// The friends-mode dKMS shares its key ceremony and threshold scheme code with ssv-dkg.
+replace github.com/ssvlabs/ssv-dkg/pkgs/kms => ../ssv-dkg/pkgs/kms
