@@ -6,7 +6,6 @@ import (
 	"github.com/libp2p/go-libp2p"
 	ma "github.com/multiformats/go-multiaddr"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 )
 
 // TestConfig_ApplyDefaults checks ApplyDefaults seeds the in-code p2p defaults, spot-checking the
@@ -61,7 +60,7 @@ func TestConfig_AddrsFactory(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := Config{TCPPort: 13001, HostAddress: tt.hostAddress, HostDNS: tt.hostDNS}
-			opts, err := c.configureAddrs(zap.NewNop(), nil)
+			opts, err := c.configureAddrs(nil)
 			require.NoError(t, err)
 
 			var hostCfg libp2p.Config
@@ -79,4 +78,16 @@ func TestConfig_AddrsFactory(t *testing.T) {
 			require.Equal(t, tt.want, advertised)
 		})
 	}
+}
+
+// TestConfig_InvalidExternalAddress checks that a HostAddress or HostDNS that doesn't make a valid
+// multiaddr fails the libp2p setup, rather than leaving the host to advertise no external address.
+func TestConfig_InvalidExternalAddress(t *testing.T) {
+	c := Config{TCPPort: 13001, HostAddress: "not-an-ip"}
+	_, err := c.configureAddrs(nil)
+	require.ErrorContains(t, err, "could not build external multi address")
+
+	c = Config{TCPPort: 13001, HostDNS: "not/a/name"}
+	_, err = c.configureAddrs(nil)
+	require.ErrorContains(t, err, "could not build external multi address")
 }
