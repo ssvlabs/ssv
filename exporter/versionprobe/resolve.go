@@ -37,12 +37,18 @@ func Resolve(ctx context.Context, id peer.ID, sources []AddrSource) (addrs []ma.
 }
 
 // Throttled wraps src so that at most n of its lookups run at once (n < 1 is treated as 1).
-// Waiting for a slot respects ctx.
+// Both waiting for a slot and waiting for the lookup respect ctx: the lookup runs in its own
+// goroutine (src.Lookup may ignore ctx and block), and the slot is released only when that
+// goroutine finishes, so the in-flight cap holds even after a caller gave up.
 func Throttled(src AddrSource, n int) AddrSource {
 	if n < 1 {
 		n = 1
 	}
 	sem := make(chan struct{}, n)
+	type lookupResult struct {
+		addrs []ma.Multiaddr
+		err   error
+	}
 	return AddrSource{
 		Name: src.Name,
 		Lookup: func(ctx context.Context, id peer.ID) ([]ma.Multiaddr, error) {
@@ -51,8 +57,18 @@ func Throttled(src AddrSource, n int) AddrSource {
 			case <-ctx.Done():
 				return nil, ctx.Err()
 			}
-			defer func() { <-sem }()
-			return src.Lookup(ctx, id)
+			out := make(chan lookupResult, 1)
+			go func() {
+				defer func() { <-sem }()
+				addrs, err := src.Lookup(ctx, id)
+				out <- lookupResult{addrs, err}
+			}()
+			select {
+			case r := <-out:
+				return r.addrs, r.err
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
 		},
 	}
 }

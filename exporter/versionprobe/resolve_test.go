@@ -85,3 +85,26 @@ func TestThrottledCapsConcurrency(t *testing.T) {
 	wg.Wait()
 	require.Equal(t, int32(1), peak.Load())
 }
+
+func TestThrottledReturnsOnCancel(t *testing.T) {
+	release := make(chan struct{})
+	finished := make(chan struct{})
+	blocking := AddrSource{Name: "discv5", Lookup: func(context.Context, peer.ID) ([]ma.Multiaddr, error) {
+		<-release
+		close(finished)
+		return nil, nil
+	}}
+	th := Throttled(blocking, 1)
+	ctx, cancel := context.WithCancel(context.Background())
+	time.AfterFunc(50*time.Millisecond, cancel)
+	start := time.Now()
+	_, err := th.Lookup(ctx, pid(1))
+	require.ErrorIs(t, err, context.Canceled)
+	require.Less(t, time.Since(start), 200*time.Millisecond)
+	close(release) // unblock the underlying lookup so nothing leaks
+	select {
+	case <-finished:
+	case <-time.After(time.Second):
+		t.Fatal("underlying lookup did not finish")
+	}
+}

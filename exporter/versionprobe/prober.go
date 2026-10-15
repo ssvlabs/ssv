@@ -1,0 +1,225 @@
+package versionprobe
+
+import (
+	"context"
+	"sync"
+	"time"
+
+	"github.com/libp2p/go-libp2p/core/network"
+	"github.com/libp2p/go-libp2p/core/peer"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/exporter/attribution"
+	"github.com/ssvlabs/ssv/network/records"
+)
+
+// EvidenceSource provides the attribution tracker's per-operator sender evidence.
+type EvidenceSource interface {
+	Snapshot(ops []spectypes.OperatorID) []attribution.OperatorEvidence
+}
+
+// PeerState answers what the main node already knows about a peer.
+type PeerState interface {
+	Connected(id peer.ID) bool
+	HandshakeVersion(id peer.ID) string
+}
+
+// Config configures a Prober. Logger, Evidence, Peers, Sources and Request are required.
+type Config struct {
+	Logger   *zap.Logger
+	Evidence EvidenceSource
+	Peers    PeerState
+	Sources  []AddrSource
+	Request  func() Request // evaluated per probe (the domain can fork)
+
+	// Optional, for tests:
+	Probe func(ctx context.Context, target peer.AddrInfo, req Request) Result // default Probe
+	Cache *Cache                                                              // default NewCache(maxEntries)
+	Now   func() time.Time                                                    // default time.Now
+	Wait  func(ctx context.Context, d time.Duration) error                    // default: timer + ctx
+}
+
+// Prober picks probe targets from the attribution tracker and probes them at a gentle pace.
+type Prober struct {
+	cfg       Config
+	cache     *Cache
+	started   bool // whether any probe has been started in this Prober's lifetime
+	lastStart time.Time
+}
+
+// New returns a Prober, filling in defaults for the optional Config fields.
+func New(cfg Config) *Prober {
+	if cfg.Probe == nil {
+		cfg.Probe = Probe
+	}
+	if cfg.Cache == nil {
+		cfg.Cache = NewCache(maxEntries)
+	}
+	if cfg.Now == nil {
+		cfg.Now = time.Now
+	}
+	if cfg.Wait == nil {
+		cfg.Wait = wait
+	}
+	if cfg.Logger == nil {
+		cfg.Logger = zap.NewNop()
+	}
+	return &Prober{cfg: cfg, cache: cfg.Cache}
+}
+
+// wait sleeps for d or until ctx is done, returning ctx.Err() in the latter case.
+func wait(ctx context.Context, d time.Duration) error {
+	if d <= 0 {
+		return nil
+	}
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-t.C:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+// Cache returns the probe result cache.
+func (p *Prober) Cache() *Cache { return p.cache }
+
+// Targets returns the peers worth probing at now: the top sender candidate of each operator
+// (when seen often enough) that the node isn't connected to, has no handshake version for, and
+// whose backoff has elapsed. Peers are de-duplicated, in first-seen order.
+func (p *Prober) Targets(now time.Time) []peer.ID {
+	var out []peer.ID
+	seen := make(map[peer.ID]struct{})
+	for _, ev := range p.cfg.Evidence.Snapshot(nil) {
+		if len(ev.Candidates) == 0 {
+			continue
+		}
+		top := ev.Candidates[0]
+		if top.Count < minTargetCount {
+			continue
+		}
+		id := top.PeerID
+		if _, dup := seen[id]; dup {
+			continue
+		}
+		seen[id] = struct{}{}
+		if p.cfg.Peers.Connected(id) || p.cfg.Peers.HandshakeVersion(id) != "" || !p.cache.Due(id, now) {
+			continue
+		}
+		out = append(out, id)
+	}
+	return out
+}
+
+// RunCycle probes the current targets, spaced at least minSpacing apart and at most
+// maxConcurrent at a time. It returns when all probes finished or ctx is done.
+func (p *Prober) RunCycle(ctx context.Context) {
+	targets := p.Targets(p.cfg.Now())
+	p.cfg.Logger.Debug("version probe cycle", zap.Int("targets", len(targets)), zap.Int("cache_entries", len(p.cache.Entries())))
+
+	sem := make(chan struct{}, maxConcurrent)
+	var wg sync.WaitGroup
+	defer wg.Wait()
+
+	for _, id := range targets {
+		if p.started {
+			if d := minSpacing - p.cfg.Now().Sub(p.lastStart); d > 0 {
+				if err := p.cfg.Wait(ctx, d); err != nil {
+					return
+				}
+			}
+		}
+		select {
+		case sem <- struct{}{}:
+		case <-ctx.Done():
+			return
+		}
+		if ctx.Err() != nil {
+			<-sem
+			return
+		}
+		p.started = true
+		p.lastStart = p.cfg.Now()
+
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			defer func() { <-sem }()
+			p.probeOne(ctx, id)
+		}()
+	}
+}
+
+func (p *Prober) probeOne(ctx context.Context, id peer.ID) {
+	var res Result
+	addrs, source, err := Resolve(ctx, id, p.cfg.Sources)
+	if ctx.Err() == nil {
+		if len(addrs) == 0 {
+			res = Result{Outcome: OutcomeNoAddr}
+			if err != nil {
+				res.Err = err.Error()
+			}
+		} else {
+			res = p.cfg.Probe(ctx, peer.AddrInfo{ID: id, Addrs: addrs}, p.cfg.Request())
+			res.AddrSource = source
+		}
+	}
+	if ctx.Err() != nil {
+		// Shutdown is not a peer failure: don't record it (that would start a backoff).
+		p.cfg.Logger.Debug("version probe interrupted", zap.String("peer", id.String()))
+		return
+	}
+	p.cache.Record(id, res, p.cfg.Now())
+	p.cfg.Logger.Info("version probe",
+		zap.String("peer", id.String()),
+		zap.String("outcome", string(res.Outcome)),
+		zap.String("version", res.Version),
+		zap.String("addr_source", res.AddrSource),
+		zap.Duration("duration", res.Duration),
+		zap.String("error", res.Err),
+	)
+}
+
+// Run probes in cycles every pickInterval until ctx is done. It returns nil on cancel.
+func (p *Prober) Run(ctx context.Context) error {
+	for {
+		p.RunCycle(ctx)
+		if err := p.cfg.Wait(ctx, pickInterval); err != nil {
+			return nil
+		}
+	}
+}
+
+// NodeInfoIndex is the main node's handshake index.
+type NodeInfoIndex interface {
+	NodeInfo(id peer.ID) *records.NodeInfo
+}
+
+// ConnectednessProvider is the main host's network.
+type ConnectednessProvider interface {
+	Connectedness(id peer.ID) network.Connectedness
+}
+
+type peerState struct {
+	index NodeInfoIndex
+	net   ConnectednessProvider
+}
+
+// NewPeerState adapts the main node's handshake index and host network to PeerState.
+func NewPeerState(index NodeInfoIndex, net ConnectednessProvider) PeerState {
+	return peerState{index: index, net: net}
+}
+
+func (s peerState) Connected(id peer.ID) bool {
+	return s.net.Connectedness(id) == network.Connected
+}
+
+func (s peerState) HandshakeVersion(id peer.ID) string {
+	info := s.index.NodeInfo(id)
+	if info == nil || info.Metadata == nil {
+		return ""
+	}
+	return info.Metadata.NodeVersion
+}
