@@ -7,8 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/libp2p/go-libp2p/core/peer"
-
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/api"
@@ -19,11 +17,6 @@ import (
 type OperatorEvidenceSource interface {
 	Snapshot(ops []spectypes.OperatorID) []attribution.OperatorEvidence
 	WindowDuration() time.Duration
-}
-
-// PeerInfoResolver describes a peer as currently known to this node.
-type PeerInfoResolver interface {
-	PeerInfo(id peer.ID) (version string, connected bool)
 }
 
 // OperatorPeers serves GET /v1/exporter/operator_peers: for each operator, the peers that most
@@ -56,11 +49,13 @@ type operatorEvidenceJSON struct {
 }
 
 type candidateJSON struct {
-	PeerID    string  `json:"peer_id"`
-	Count     uint64  `json:"count"`
-	Share     float64 `json:"share"`
-	Version   string  `json:"version"`
-	Connected bool    `json:"connected"`
+	PeerID        string     `json:"peer_id"`
+	Count         uint64     `json:"count"`
+	Share         float64    `json:"share"`
+	Version       string     `json:"version"`
+	VersionSource string     `json:"version_source"`
+	ProbedAt      *time.Time `json:"probed_at,omitempty"`
+	Connected     bool       `json:"connected"`
 }
 
 // List handles GET /v1/exporter/operator_peers[?operator_ids=1,2,3].
@@ -83,13 +78,15 @@ func (h *OperatorPeers) List(w http.ResponseWriter, r *http.Request) error {
 			Candidates: make([]candidateJSON, 0, len(ev.Candidates)),
 		}
 		for _, c := range ev.Candidates {
-			version, connected := h.peers.PeerInfo(c.PeerID)
+			info := h.peers.PeerInfo(c.PeerID)
 			item.Candidates = append(item.Candidates, candidateJSON{
-				PeerID:    c.PeerID.String(),
-				Count:     c.Count,
-				Share:     c.Share,
-				Version:   version,
-				Connected: connected,
+				PeerID:        c.PeerID.String(),
+				Count:         c.Count,
+				Share:         c.Share,
+				Version:       info.Version,
+				VersionSource: info.VersionSource,
+				ProbedAt:      utcSecondPtr(info.ProbedAt),
+				Connected:     info.Connected,
 			})
 		}
 		resp.Operators = append(resp.Operators, item)
@@ -112,4 +109,13 @@ func parseOperatorIDs(raw string) ([]spectypes.OperatorID, error) {
 		ids = append(ids, id)
 	}
 	return ids, nil
+}
+
+// utcSecondPtr returns t in UTC truncated to the second, or nil when t is zero.
+func utcSecondPtr(t time.Time) *time.Time {
+	if t.IsZero() {
+		return nil
+	}
+	u := t.UTC().Truncate(time.Second)
+	return &u
 }

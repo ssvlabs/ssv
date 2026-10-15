@@ -36,6 +36,7 @@ func New(
 	validators *validatorsHandlers.Validators,
 	exporter *exporterHandlers.Exporter,
 	operatorPeers *exporterHandlers.OperatorPeers,
+	versionProbes *exporterHandlers.VersionProbes,
 	fullExporter bool,
 ) *Server {
 	router := chi.NewRouter()
@@ -108,6 +109,12 @@ func New(
 	// node created an attribution tracker.
 	if operatorPeers != nil {
 		router.Get("/v1/exporter/operator_peers", api.Handler(operatorPeers.List))
+	}
+
+	// Probed-version diagnostics are exporter-only and opt-in: the route exists only when the
+	// node runs the peer version prober.
+	if versionProbes != nil {
+		router.Get("/v1/exporter/version_probes", api.Handler(versionProbes.List))
 	}
 
 	return &Server{

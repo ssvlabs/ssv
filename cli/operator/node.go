@@ -618,6 +618,7 @@ func (n *node) start(ctx context.Context, spawn func(func() error)) error {
 				hexporter.NewPeerInfoResolver(
 					n.p2pNetwork.(p2pv1.PeersIndexProvider).PeersIndex(),
 					n.p2pNetwork.(p2pv1.HostProvider).Host().Network(),
+					nil,
 				),
 			)
 		}
@@ -640,6 +641,7 @@ func (n *node) start(ctx context.Context, spawn func(func() error)) error {
 			},
 			hexporter.NewExporter(n.logger, n.storageMap, n.collector, n.nodeStorage.ValidatorStore(), n.networkConfig),
 			operatorPeers,
+			nil,
 			n.mode == modeExporterArchive,
 		)
 		_, apiServeErr, err := apiServer.Start(ctx)

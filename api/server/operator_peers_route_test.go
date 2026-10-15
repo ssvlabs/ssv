@@ -14,6 +14,7 @@ import (
 
 	exporterHandlers "github.com/ssvlabs/ssv/api/handlers/exporter"
 	"github.com/ssvlabs/ssv/exporter/attribution"
+	"github.com/ssvlabs/ssv/exporter/versionprobe"
 )
 
 type emptySource struct{}
@@ -23,7 +24,7 @@ func (emptySource) WindowDuration() time.Duration                               
 
 type noPeers struct{}
 
-func (noPeers) PeerInfo(peer.ID) (string, bool) { return "", false }
+func (noPeers) PeerInfo(peer.ID) exporterHandlers.PeerInfo { return exporterHandlers.PeerInfo{} }
 
 func get(s *Server, path string) int {
 	rec := httptest.NewRecorder()
@@ -32,9 +33,21 @@ func get(s *Server, path string) int {
 }
 
 func TestServer_OperatorPeersRouteOnlyWhenEnabled(t *testing.T) {
-	disabled := New(zap.NewNop(), "", nil, nil, nil, nil, false)
+	disabled := New(zap.NewNop(), "", nil, nil, nil, nil, nil, false)
 	require.Equal(t, http.StatusNotFound, get(disabled, "/v1/exporter/operator_peers"))
 
-	enabled := New(zap.NewNop(), "", nil, nil, nil, exporterHandlers.NewOperatorPeers(emptySource{}, noPeers{}), false)
+	enabled := New(zap.NewNop(), "", nil, nil, nil, exporterHandlers.NewOperatorPeers(emptySource{}, noPeers{}), nil, false)
 	require.Equal(t, http.StatusOK, get(enabled, "/v1/exporter/operator_peers"))
+}
+
+type noProbes struct{}
+
+func (noProbes) Entries() []versionprobe.Entry { return nil }
+
+func TestServer_VersionProbesRouteOnlyWhenEnabled(t *testing.T) {
+	disabled := New(zap.NewNop(), "", nil, nil, nil, nil, nil, false)
+	require.Equal(t, http.StatusNotFound, get(disabled, "/v1/exporter/version_probes"))
+
+	enabled := New(zap.NewNop(), "", nil, nil, nil, nil, exporterHandlers.NewVersionProbes(noProbes{}), false)
+	require.Equal(t, http.StatusOK, get(enabled, "/v1/exporter/version_probes"))
 }

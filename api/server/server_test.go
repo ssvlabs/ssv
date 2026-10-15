@@ -139,6 +139,7 @@ func TestNew(t *testing.T) {
 		validators,
 		exporter,
 		nil,
+		nil,
 		false,
 	)
 
@@ -163,6 +164,7 @@ func TestStart_ActualExecution(t *testing.T) {
 		&hnode.Node{},
 		&hvalidators.Validators{},
 		&hexporter.Exporter{},
+		nil,
 		nil,
 		false,
 	)
@@ -202,6 +204,7 @@ func TestStart_ActualExecutionFullMode(t *testing.T) {
 		&hnode.Node{},
 		&hvalidators.Validators{},
 		&hexporter.Exporter{},
+		nil,
 		nil,
 		true,
 	)
