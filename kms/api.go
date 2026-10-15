@@ -20,7 +20,7 @@ const maxBodyBytes = 4 << 20
 
 // Routes mounts the dKMS HTTP API:
 //
-//	GET  /v1/kms/config          chain and policy contract
+//	GET  /v1/kms/config          policy chain and contract, chains this operator signs for
 //	GET  /v1/kms/keys            keys this operator holds a share of
 //	POST /v1/kms/keys            load a key from an ssv-dkg kms_key.json
 //	POST /v1/kms/sign[?wait=1]   submit a signing request (optionally wait for the signature)
@@ -30,6 +30,7 @@ func (s *Service) Routes(r chi.Router) {
 		writeJSON(w, http.StatusOK, map[string]any{
 			"operator_id":          s.operatorID(),
 			"chain_id":             s.chain.ChainID(),
+			"chains":               s.Chains(),
 			"policy_contract":      s.policy.Hex(),
 			"policy_confirmations": s.confs,
 			"schemes":              []string{string(dkgkms.SchemeECDSASecp256k1)},

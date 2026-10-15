@@ -8,7 +8,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math/big"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -18,6 +19,7 @@ import (
 
 	dkgkms "github.com/ssvlabs/ssv-dkg/pkgs/kms"
 
+	"github.com/ssvlabs/ssv/kms/chains"
 	"github.com/ssvlabs/ssv/kms/kmstypes"
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -49,7 +51,10 @@ type Options struct {
 	Signer        ssvtypes.OperatorSigner
 	OperatorKey   keys.OperatorPrivateKey
 	OperatorKeys  OperatorKeys
-	Chain         Chain
+	// PolicyChain is where SSVKMSPolicy lives (one chain for all keys and target chains).
+	PolicyChain PolicyChain
+	// Executors are the chains this operator signs for, by CAIP-2 identifier (e.g. "eip155:1").
+	Executors map[string]Executor
 	// PolicyContract is the SSVKMSPolicy contract the chain's policy reads come from.
 	PolicyContract common.Address
 	// BroadcastTxs makes every operator submit signed transactions to the chain.
@@ -76,6 +81,7 @@ type Result struct {
 	Signature string                `json:"signature,omitempty"`
 	RawTx     string                `json:"raw_tx,omitempty"`
 	TxHash    string                `json:"tx_hash,omitempty"`
+	Chain     string                `json:"chain,omitempty"`
 	Error     string                `json:"error,omitempty"`
 	Request   *kmstypes.SignRequest `json:"request,omitempty"`
 }
@@ -90,7 +96,8 @@ type Service struct {
 	signer       ssvtypes.OperatorSigner
 	operatorKey  keys.OperatorPrivateKey
 	operatorKeys OperatorKeys
-	chain        Chain
+	chain        PolicyChain
+	executors    map[string]Executor
 	policy       common.Address
 	broadcastTxs bool
 	confs        uint64
@@ -116,7 +123,8 @@ func New(opts Options) (*Service, error) {
 		signer:       opts.Signer,
 		operatorKey:  opts.OperatorKey,
 		operatorKeys: opts.OperatorKeys,
-		chain:        opts.Chain,
+		chain:        opts.PolicyChain,
+		executors:    opts.Executors,
 		policy:       opts.PolicyContract,
 		broadcastTxs: opts.BroadcastTxs,
 		confs:        opts.Confirmations,
@@ -137,7 +145,7 @@ func (s *Service) Start(ctx context.Context) error {
 			s.logger.Error("could not load dKMS key", zap.String("key", kf.KeyID), zap.Error(err))
 		}
 	}
-	s.logger.Info("dKMS started", zap.Int("keys", len(files)), zap.Uint64("chain_id", s.chain.ChainID()))
+	s.logger.Info("dKMS started", zap.Int("keys", len(files)), zap.Uint64("policy_chain_id", s.chain.ChainID()), zap.Strings("chains", s.Chains()))
 	return nil
 }
 
@@ -264,10 +272,10 @@ func (s *Service) Submit(ctx context.Context, req *kmstypes.SignRequest) (string
 	if err := s.checkRequest(ctx, r, req, block); err != nil {
 		return "", err
 	}
-	s.putResult(&Result{ID: id, KeyID: r.key.IDHex, Status: StatusPending, Request: req})
+	s.putResult(&Result{ID: id, KeyID: r.key.IDHex, Chain: req.Chain, Status: StatusPending, Request: req})
 	r.do(func() { r.enqueue(req) })
 	r.send(&kmstypes.Message{Kind: kmstypes.KindRequest, Request: req})
-	r.logger.Info("dKMS request accepted", zap.String("request", id), zap.String("requester", req.Requester.Hex()), zap.String("to", req.Tx.To.Hex()))
+	r.logger.Info("dKMS request accepted", zap.String("request", id), zap.String("chain", req.Chain), zap.String("requester", req.Requester.Hex()))
 	return id, nil
 }
 
@@ -283,50 +291,55 @@ func (s *Service) policyBlock(ctx context.Context) (uint64, error) {
 	return head - s.confs, nil
 }
 
-// checkRequest is the policy gate, evaluated against the chain at block.
+// checkRequest is the policy gate: the request's own checks, the target chain's account sequence,
+// and the policy contract on the policy chain at block.
 func (s *Service) checkRequest(ctx context.Context, r *keyRunner, req *kmstypes.SignRequest, block uint64) error {
 	if len(req.KeyID) != 32 || [32]byte(req.KeyID) != r.key.ID {
 		return &RejectedError{"request is for another key"}
 	}
+	chain, tx, err := req.Parse()
+	if err != nil {
+		return &RejectedError{err.Error()}
+	}
+	_, family, _ := chains.ParseID(req.Chain)
+	if family.Scheme() != string(r.key.File.Scheme) {
+		return &RejectedError{fmt.Sprintf("a %s key can't sign for %s chains", r.key.File.Scheme, chain.Namespace)}
+	}
+	ex, ok := s.executors[chain.String()]
+	if !ok {
+		return &RejectedError{fmt.Sprintf("chain %s is not supported by this operator (supported: %s)", chain, strings.Join(s.Chains(), ", "))}
+	}
 	if err := req.VerifyRequester(); err != nil {
 		return &RejectedError{err.Error()}
 	}
-	if req.Tx.ChainID != s.chain.ChainID() {
-		return &RejectedError{fmt.Sprintf("chain id %d is not supported (only %d)", req.Tx.ChainID, s.chain.ChainID())}
-	}
-	tx, err := req.Tx.Transaction()
+	id, err := req.ID()
 	if err != nil {
 		return &RejectedError{err.Error()}
 	}
-	if tx.Value().Cmp(maxUint256) > 0 {
-		return &RejectedError{"value too large"}
-	}
-	digest, err := req.Tx.Digest()
-	if err != nil {
-		return &RejectedError{err.Error()}
-	}
-	nonce, err := s.chain.NonceAt(ctx, r.key.Address, block)
-	if err != nil {
-		return fmt.Errorf("nonce: %w", err)
-	}
-	if req.Tx.Nonce < nonce {
-		return &RejectedError{fmt.Sprintf("nonce %d already used (account nonce %d)", req.Tx.Nonce, nonce)}
-	}
-	r.stateMu.RLock()
-	other, ok := r.state.Nonces[req.Tx.Nonce]
-	r.stateMu.RUnlock()
-	if ok {
-		if id, _ := req.ID(); other != id {
-			return &RejectedError{fmt.Sprintf("nonce %d already signed for another request", req.Tx.Nonce)}
+	if seq, ok := tx.Sequence(); ok {
+		next, err := ex.AccountSequence(ctx, r.key)
+		if err != nil {
+			return fmt.Errorf("account nonce: %w", err)
+		}
+		if seq < next {
+			return &RejectedError{fmt.Sprintf("nonce %d already used (account nonce %d on %s)", seq, next, chain)}
+		}
+		r.stateMu.RLock()
+		other, signed := r.state.Nonces[sequenceKey(chain, seq)]
+		r.stateMu.RUnlock()
+		if signed && other != id {
+			return &RejectedError{fmt.Sprintf("nonce %d already signed for another request on %s", seq, chain)}
 		}
 	}
+	pf := tx.Policy()
 	ok, reason, err := s.chain.CheckPolicy(ctx, block, PolicyQuery{
-		Key:       r.key.Address,
-		Requester: req.Requester,
-		To:        req.Tx.To,
-		Value:     new(big.Int).Set(tx.Value()),
-		Data:      req.Tx.Data,
-		Digest:    [32]byte(digest),
+		Key:         r.key.Address,
+		Requester:   req.Requester,
+		Chain:       chain.Hash(),
+		Target:      pf.Target,
+		Value:       pf.Value,
+		Data:        pf.Data,
+		RequestHash: common.HexToHash(id),
 	})
 	if err != nil {
 		return err
@@ -336,6 +349,21 @@ func (s *Service) checkRequest(ctx context.Context, r *keyRunner, req *kmstypes.
 	}
 	return nil
 }
+
+// sequenceKey names a transaction sequence (nonce) on a chain in the runner state.
+func sequenceKey(chain chains.ID, seq uint64) string { return fmt.Sprintf("%s/%d", chain, seq) }
+
+// Chains lists the chains this operator signs for.
+func (s *Service) Chains() []string {
+	out := make([]string, 0, len(s.executors))
+	for c := range s.executors {
+		out = append(out, c)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func (s *Service) executor(chain chains.ID) Executor { return s.executors[chain.String()] }
 
 func (s *Service) putResult(res *Result) {
 	s.mu.Lock()

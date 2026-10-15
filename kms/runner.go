@@ -7,14 +7,12 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"math/big"
 	"slices"
 	"sync"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common/hexutil"
-	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
@@ -57,6 +55,7 @@ type keyRunner struct {
 	logger *zap.Logger
 	msgID  spectypes.MessageID
 	ctrl   *controller.Controller
+	member *spectypes.CommitteeMember
 	pool   *presignPool
 	events chan func()
 
@@ -112,23 +111,31 @@ func newKeyRunner(s *Service, key *Key) (*keyRunner, error) {
 		lastSeen:   map[spectypes.OperatorID]time.Time{},
 		checkCache: map[[32]byte]error{},
 	}
-	committee := slices.Clone(key.Committee)
+	r.member = member
+	r.resetController()
+	r.pool = newPresignPool(r)
+	if err := r.pool.load(st.Consumed); err != nil {
+		return nil, err
+	}
+	return r, nil
+}
+
+// resetController starts a fresh QBFT controller at the current height. An instance that gave up
+// without deciding can't be restarted in its controller; a fresh one can run the same height again,
+// so an operator never moves past a height the committee hasn't decided.
+func (r *keyRunner) resetController() {
+	committee := slices.Clone(r.key.Committee)
 	cfg := &qbft.Config{
 		ProposerF: func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
 			// Round robin over the committee, shifted by one per height.
 			idx := (uint64(state.Height) + uint64(round) - uint64(specqbft.FirstRound)) % uint64(len(committee))
 			return committee[idx]
 		},
-		Network:     &committeeNetwork{s: s, committee: committee},
+		Network:     &committeeNetwork{s: r.s, committee: committee},
 		CutOffRound: roundtimer.CutOffRoundFor(ssvtypes.RoleKMS),
 	}
-	r.ctrl = controller.NewController(r.msgID[:], member, cfg, s.signer, false)
-	r.ctrl.LatestInstanceHeight = specqbft.Height(st.Height)
-	r.pool = newPresignPool(r)
-	if err := r.pool.load(st.Consumed); err != nil {
-		return nil, err
-	}
-	return r, nil
+	r.ctrl = controller.NewController(r.msgID[:], r.member, cfg, r.s.signer, false)
+	r.ctrl.LatestInstanceHeight = specqbft.Height(r.height)
 }
 
 func (r *keyRunner) run(ctx context.Context) {
@@ -275,8 +282,16 @@ func (r *keyRunner) onConsensus(ctx context.Context, msg *queue.SSVMessage, qm *
 		}
 	}
 
-	if _, err := r.ctrl.ProcessMsg(ctx, r.logger, signed, r.timerF()); err != nil {
+	decided, err := r.ctrl.ProcessMsg(ctx, r.logger, signed, r.timerF())
+	if err != nil {
 		r.logger.Debug("qbft message not processed", zap.Uint64("height", h), zap.Error(err))
+	}
+	if decided != nil && !isDecided {
+		// Our instance just decided: share the aggregated commit, so operators that missed this
+		// height (or gave up on it) can apply the decision too.
+		if err := r.s.net.BroadcastToOperators(r.key.Committee, decided); err != nil {
+			r.logger.Debug("could not broadcast decided message", zap.Error(err))
+		}
 	}
 	r.checkDecided(ctx, h)
 }
@@ -290,7 +305,7 @@ func (r *keyRunner) checkDecided(ctx context.Context, h uint64) {
 	if !decided {
 		return
 	}
-	if _, done := r.signing[h]; done || h < r.height {
+	if _, done := r.signing[h]; done {
 		return
 	}
 	r.onDecided(ctx, h, value)
@@ -308,14 +323,12 @@ func (r *keyRunner) onTimeout(ctx context.Context, h uint64, round specqbft.Roun
 		r.logger.Debug("round timeout", zap.Error(err))
 	}
 	if !inst.IsRelevant() && r.running && r.height == h {
-		// The instance gave up without deciding: move on, its requests stay queued.
-		r.logger.Warn("dKMS height gave up without a decision", zap.Uint64("height", h))
+		// The instance gave up without deciding. Stay at this height (only a decision moves it, or
+		// the committee would drift apart) and run it again with a fresh controller; the requests
+		// stay queued.
+		r.logger.Warn("dKMS height gave up without a decision, retrying it", zap.Uint64("height", h))
 		r.running = false
-		r.height = h + 1
-		r.stateMu.Lock()
-		r.state.Height = r.height
-		r.stateMu.Unlock()
-		r.persist()
+		r.resetController()
 	}
 }
 
@@ -426,6 +439,14 @@ func (r *keyRunner) checkValue(data []byte) error {
 	return err
 }
 
+// clearCheckCache forgets cached value checks: they depend on the decided state (requests, nonces,
+// presignatures), which just changed.
+func (r *keyRunner) clearCheckCache() {
+	r.checkMu.Lock()
+	r.checkCache = map[[32]byte]error{}
+	r.checkMu.Unlock()
+}
+
 func (r *keyRunner) verifyValue(data []byte) error {
 	v := &kmstypes.ConsensusValue{}
 	if err := v.Decode(data); err != nil {
@@ -476,8 +497,12 @@ func (r *keyRunner) verifyValue(data []byte) error {
 // ---------- post-consensus ----------
 
 func (r *keyRunner) onDecided(ctx context.Context, h uint64, data []byte) {
-	r.running = false
-	r.height = h + 1
+	// A decision for an earlier height (learned late, from its decided message) is applied too, but
+	// never moves the height back.
+	if h >= r.height {
+		r.running = false
+		r.height = h + 1
+	}
 	for fh := range r.future {
 		if fh <= h {
 			delete(r.future, fh)
@@ -492,26 +517,36 @@ func (r *keyRunner) onDecided(ctx context.Context, h uint64, data []byte) {
 	if err != nil {
 		return
 	}
-	digest, err := v.Request.Tx.Digest()
-	if err != nil {
+	if _, applied := r.state.Decided[id]; applied {
 		return
 	}
+	r.clearCheckCache()
+	chain, tx, err := v.Request.Parse()
+	if err != nil {
+		r.logger.Error("decided an unparseable transaction", zap.Error(err))
+		return
+	}
+	digest := tx.Digest()
 	presigID := hex.EncodeToString(v.PresignID)
 
 	// Record the decision, and that the presignature is spent, before releasing any share.
 	r.stateMu.Lock()
-	r.state.Height = r.height
+	if r.state.Height < r.height {
+		r.state.Height = r.height
+	}
 	r.state.Decided[id] = h
 	r.state.Consumed[presigID] = true
-	r.state.Nonces[v.Request.Tx.Nonce] = id
+	if seq, ok := tx.Sequence(); ok {
+		r.state.Nonces[sequenceKey(chain, seq)] = id
+	}
 	r.stateMu.Unlock()
 	r.persist()
 	r.removePending(id)
-	r.logger.Info("✅ dKMS request decided", zap.Uint64("height", h), zap.String("request", id), zap.Uint64s("signers", v.Signers))
+	r.logger.Info("✅ dKMS request decided", zap.Uint64("height", h), zap.String("request", id), zap.String("chain", chain.String()), zap.Uint64s("signers", v.Signers))
 
 	ss := &signingState{height: h, id: id, value: v, digest: digest, shares: map[uint64][]byte{}, deadline: time.Now().Add(shareTimeout)}
 	r.signing[h] = ss
-	r.s.putResult(&Result{ID: id, KeyID: r.key.IDHex, Status: StatusSigning, Height: h, Signers: v.Signers, Request: &v.Request})
+	r.s.putResult(&Result{ID: id, KeyID: r.key.IDHex, Chain: v.Request.Chain, Status: StatusSigning, Height: h, Signers: v.Signers, Request: &v.Request})
 
 	if slices.Contains(v.Signers, uint64(r.self)) {
 		share, err := r.signShare(presigID, v, digest)
@@ -579,23 +614,18 @@ func (r *keyRunner) tryCombine(ctx context.Context, ss *signingState) {
 	for _, id := range ss.value.Signers {
 		shares = append(shares, ss.shares[id])
 	}
-	res := &Result{ID: ss.id, KeyID: r.key.IDHex, Height: ss.height, Signers: ss.value.Signers, Request: &ss.value.Request}
+	res := &Result{ID: ss.id, KeyID: r.key.IDHex, Chain: ss.value.Request.Chain, Height: ss.height, Signers: ss.value.Signers, Request: &ss.value.Request}
 	sig, err := r.key.Scheme.Combine(r.key.PublicKey, ss.value.Commitment, ss.digest, shares)
 	if err != nil {
 		r.fail(res, err.Error())
 		return
 	}
-	tx, err := ss.value.Request.Tx.Transaction()
+	chain, tx, err := ss.value.Request.Parse()
 	if err != nil {
 		r.fail(res, err.Error())
 		return
 	}
-	signedTx, err := tx.WithSignature(ethtypes.LatestSignerForChainID(tx.ChainId()), sig)
-	if err != nil {
-		r.fail(res, err.Error())
-		return
-	}
-	raw, err := signedTx.MarshalBinary()
+	raw, hash, err := tx.Assemble(sig)
 	if err != nil {
 		r.fail(res, err.Error())
 		return
@@ -603,16 +633,16 @@ func (r *keyRunner) tryCombine(ctx context.Context, ss *signingState) {
 	res.Status = StatusSigned
 	res.Signature = hexutil.Encode(sig)
 	res.RawTx = hexutil.Encode(raw)
-	res.TxHash = signedTx.Hash().Hex()
+	res.TxHash = hash
 	r.s.putResult(res)
-	r.logger.Info("🖋️ dKMS transaction signed", zap.String("request", ss.id), zap.String("tx", res.TxHash))
+	r.logger.Info("🖋️ dKMS transaction signed", zap.String("request", ss.id), zap.String("chain", chain.String()), zap.String("tx", res.TxHash))
 
-	if r.s.broadcastTxs {
+	if ex := r.s.executor(chain); r.s.broadcastTxs && ex != nil {
 		go func() {
 			bctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 			defer cancel()
-			if err := r.s.chain.SendRawTransaction(bctx, raw); err != nil {
-				r.logger.Warn("could not broadcast signed transaction", zap.String("tx", res.TxHash), zap.Error(err))
+			if err := ex.Broadcast(bctx, raw); err != nil {
+				r.logger.Warn("could not broadcast signed transaction", zap.String("chain", chain.String()), zap.String("tx", res.TxHash), zap.Error(err))
 			}
 		}()
 	}
@@ -625,11 +655,16 @@ func (r *keyRunner) fail(res *Result, reason string) {
 	// The request may be submitted again (with fresh presignatures).
 	r.stateMu.Lock()
 	delete(r.state.Decided, res.ID)
-	if res.Request != nil && r.state.Nonces[res.Request.Tx.Nonce] == res.ID {
-		delete(r.state.Nonces, res.Request.Tx.Nonce)
+	if res.Request != nil {
+		if chain, tx, err := res.Request.Parse(); err == nil {
+			if seq, ok := tx.Sequence(); ok && r.state.Nonces[sequenceKey(chain, seq)] == res.ID {
+				delete(r.state.Nonces, sequenceKey(chain, seq))
+			}
+		}
 	}
 	r.stateMu.Unlock()
 	r.persist()
+	r.clearCheckCache()
 	r.logger.Warn("dKMS signing failed", zap.String("request", res.ID), zap.String("reason", reason))
 }
 
@@ -699,6 +734,3 @@ func mustHex(s string) []byte {
 	b, _ := hex.DecodeString(s)
 	return b
 }
-
-// value bounds, used by checkRequest.
-var maxUint256 = new(big.Int).Sub(new(big.Int).Lsh(big.NewInt(1), 256), big.NewInt(1))

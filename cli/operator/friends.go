@@ -32,6 +32,7 @@ import (
 	globalcfg "github.com/ssvlabs/ssv/cli/config"
 	ssv_identity "github.com/ssvlabs/ssv/identity"
 	"github.com/ssvlabs/ssv/kms"
+	"github.com/ssvlabs/ssv/kms/chains"
 	"github.com/ssvlabs/ssv/message/signatureverifier"
 	"github.com/ssvlabs/ssv/message/validation"
 	networkcommons "github.com/ssvlabs/ssv/network/commons"
@@ -48,16 +49,23 @@ import (
 
 // FriendsOptions configures the dKMS.
 type FriendsOptions struct {
-	NetworkName    string `yaml:"NetworkName" env:"FRIENDS_NETWORK" env-description:"Friends network name (separates p2p topics)"`
-	OperatorsFile  string `yaml:"OperatorsFile" env:"FRIENDS_OPERATORS_FILE" env-description:"JSON file listing the network's operators: [{id, public_key}]"`
-	ExecutionAddr  string `yaml:"ExecutionAddr" env:"FRIENDS_ETH_RPC" env-description:"Execution client URL of the chain keys sign for (policy reads, nonces, broadcasting)"`
-	ChainID        uint64 `yaml:"ChainID" env:"FRIENDS_CHAIN_ID" env-description:"Chain ID keys sign for (1: Ethereum mainnet)"`
+	NetworkName   string `yaml:"NetworkName" env:"FRIENDS_NETWORK" env-description:"Friends network name (separates p2p topics)"`
+	OperatorsFile string `yaml:"OperatorsFile" env:"FRIENDS_OPERATORS_FILE" env-description:"JSON file listing the network's operators: [{id, public_key}]"`
+	ExecutionAddr string `yaml:"ExecutionAddr" env:"FRIENDS_ETH_RPC" env-description:"Execution client URL of the policy chain (policy reads; also signs for this chain)"`
+	ChainID       uint64 `yaml:"ChainID" env:"FRIENDS_CHAIN_ID" env-description:"Chain ID of the policy chain (1: Ethereum mainnet)"`
+	// Chains are more chains keys sign for, as "<CAIP-2 id>=<RPC URL>" pairs separated by commas,
+	// e.g. "eip155:8453=https://base.example,eip155:10=https://op.example". The policy chain
+	// (eip155:<ChainID>) is always included, through ExecutionAddr unless listed here.
+	Chains         string `yaml:"Chains" env:"FRIENDS_CHAINS" env-description:"Chains to sign for: <CAIP-2 id>=<RPC URL>, comma-separated"`
 	PolicyContract string `yaml:"PolicyContract" env:"FRIENDS_POLICY_CONTRACT" env-description:"Address of the SSVKMSPolicy contract"`
 	BroadcastTxs   bool   `yaml:"BroadcastTxs" env:"FRIENDS_BROADCAST_TXS" env-description:"Submit signed transactions to the chain"`
 	// PolicyConfirmations pins policy and nonce reads this many blocks behind the head: operators
 	// whose RPCs lag the proposer's by a block still agree, and a reorg of the newest blocks cannot
 	// change a verdict. 0 for a local chain, 2 on mainnet.
 	PolicyConfirmations uint64 `yaml:"PolicyConfirmations" env:"FRIENDS_POLICY_CONFIRMATIONS" env-description:"Blocks behind the head that policy checks read at"`
+	// CORSOrigins lets web apps call the signing API directly (e.g. an owner withdrawing while the
+	// app's backend is down). Comma-separated origins, "*" for any; empty disables CORS.
+	CORSOrigins string `yaml:"CORSOrigins" env:"FRIENDS_CORS_ORIGINS" env-description:"Origins allowed to call the dKMS signing API from a browser"`
 }
 
 type friendsConfig struct {
@@ -153,6 +161,10 @@ func runFriendsNode(ctx context.Context, logger *zap.Logger, cfg *friendsConfig)
 		return err
 	}
 
+	executors, err := chainExecutors(cfg.Friends)
+	if err != nil {
+		return err
+	}
 	svc, err := kms.New(kms.Options{
 		Logger:        logger,
 		DB:            db,
@@ -170,7 +182,8 @@ func runFriendsNode(ctx context.Context, logger *zap.Logger, cfg *friendsConfig)
 			}
 			return od.PublicKey, nil
 		},
-		Chain:          chain,
+		PolicyChain:    chain,
+		Executors:      executors,
 		PolicyContract: common.HexToAddress(cfg.Friends.PolicyContract),
 		BroadcastTxs:   cfg.Friends.BroadcastTxs,
 		Confirmations:  cfg.Friends.PolicyConfirmations,
@@ -235,6 +248,7 @@ func runFriendsNode(ctx context.Context, logger *zap.Logger, cfg *friendsConfig)
 
 	// API.
 	router := chi.NewRouter()
+	router.Use(corsMiddleware(cfg.Friends.CORSOrigins))
 	router.Get("/v1/node/health", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{"operator_id": operatorID, "peers": len(p2pNetwork.Host().Network().Peers())})
@@ -346,4 +360,68 @@ func redactURL(raw string) string {
 		return "<rpc>"
 	}
 	return u.Scheme + "://" + u.Host + "/…"
+}
+
+// corsMiddleware opens the read and signing endpoints to browsers from the allowed origins. Signing
+// requests carry their own authorization (the requester's signature); loading keys stays closed.
+func corsMiddleware(origins string) func(http.Handler) http.Handler {
+	allowed := map[string]bool{}
+	for _, o := range strings.Split(origins, ",") {
+		if o = strings.TrimSpace(o); o != "" {
+			allowed[o] = true
+		}
+	}
+	open := func(r *http.Request) bool {
+		if r.URL.Path == "/v1/kms/sign" || strings.HasPrefix(r.URL.Path, "/v1/kms/requests/") {
+			return true
+		}
+		return r.URL.Path != "/v1/kms/keys" && (r.Method == http.MethodGet || r.Method == http.MethodOptions)
+	}
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			origin := r.Header.Get("Origin")
+			if origin != "" && (allowed["*"] || allowed[origin]) && open(r) {
+				w.Header().Set("Access-Control-Allow-Origin", origin)
+				w.Header().Set("Vary", "Origin")
+				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+				w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+				if r.Method == http.MethodOptions {
+					w.WriteHeader(http.StatusNoContent)
+					return
+				}
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// chainExecutors builds an executor for every chain the node signs for. Executors dial lazily: a
+// chain whose RPC is down fails only its own requests.
+func chainExecutors(opts FriendsOptions) (map[string]kms.Executor, error) {
+	rpcs := map[string]string{fmt.Sprintf("eip155:%d", opts.ChainID): opts.ExecutionAddr}
+	for _, entry := range strings.Split(opts.Chains, ",") {
+		if entry = strings.TrimSpace(entry); entry == "" {
+			continue
+		}
+		chain, url, ok := strings.Cut(entry, "=")
+		if !ok || url == "" {
+			return nil, fmt.Errorf("chains: %q is not <CAIP-2 id>=<RPC URL>", entry)
+		}
+		rpcs[strings.TrimSpace(chain)] = strings.TrimSpace(url)
+	}
+	out := map[string]kms.Executor{}
+	for chain, url := range rpcs {
+		id, _, err := chains.ParseID(chain)
+		if err != nil {
+			return nil, fmt.Errorf("chains: %w", err)
+		}
+		switch id.Namespace {
+		case "eip155":
+			chainID, _ := strconv.ParseUint(id.Reference, 10, 64)
+			out[id.String()] = kms.NewEVMExecutor(url, chainID)
+		default:
+			return nil, fmt.Errorf("chains: no executor for %s chains yet", id.Namespace)
+		}
+	}
+	return out, nil
 }

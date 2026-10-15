@@ -14,33 +14,44 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 )
 
-// Chain is the chain a dKMS key signs for: where its policy lives and its transactions go.
-// Every read is pinned to a block so all operators evaluate a request against the same state.
-type Chain interface {
+// PolicyChain is the chain key policies live on (the SSVKMSPolicy contract). It is one chain for
+// all keys, whichever chains they sign for: every operator reads the policy there, pinned to the
+// block named in the QBFT proposal, so all reach the same verdict.
+type PolicyChain interface {
 	ChainID() uint64
 	HeadNumber(ctx context.Context) (uint64, error)
-	NonceAt(ctx context.Context, addr common.Address, block uint64) (uint64, error)
 	CheckPolicy(ctx context.Context, block uint64, q PolicyQuery) (ok bool, reason string, err error)
-	SendRawTransaction(ctx context.Context, raw []byte) error
+}
+
+// Executor is a chain keys sign transactions for: where account sequences (nonces) are read and
+// signed transactions are broadcast. One per CAIP-2 chain the operator serves.
+type Executor interface {
+	// AccountSequence is the next unused sequence (nonce) of the key's account on this chain.
+	AccountSequence(ctx context.Context, key *Key) (uint64, error)
+	Broadcast(ctx context.Context, raw []byte) error
 }
 
 // PolicyQuery asks the policy contract whether a key may sign a transaction for a requester.
 type PolicyQuery struct {
 	Key       common.Address
 	Requester common.Address
-	To        common.Address
-	Value     *big.Int
-	Data      []byte
-	Digest    [32]byte
+	// Chain is the CAIP-2 chain identifier's keccak256.
+	Chain [32]byte
+	// Target, Value and Data are the transaction as the chain adapter describes it.
+	Target []byte
+	Value  *big.Int
+	Data   []byte
+	// RequestHash is the request's ID (what an owner's one-off approval names).
+	RequestHash [32]byte
 }
 
 // policyABI is the read side of the SSVKMSPolicy contract (kms/contracts/src/SSVKMSPolicy.sol).
 const policyABI = `[{"type":"function","name":"check","stateMutability":"view",
-"inputs":[{"name":"key","type":"address"},{"name":"requester","type":"address"},{"name":"to","type":"address"},
-{"name":"value","type":"uint256"},{"name":"data","type":"bytes"},{"name":"digest","type":"bytes32"}],
+"inputs":[{"name":"key","type":"address"},{"name":"requester","type":"address"},{"name":"chain","type":"bytes32"},
+{"name":"target","type":"bytes"},{"name":"value","type":"uint256"},{"name":"data","type":"bytes"},{"name":"requestHash","type":"bytes32"}],
 "outputs":[{"name":"ok","type":"bool"},{"name":"reason","type":"string"}]}]`
 
-// EthChain reads policy and chain state from an execution client.
+// EthChain reads key policies from an EVM execution client.
 type EthChain struct {
 	client  *ethclient.Client
 	chainID uint64
@@ -55,7 +66,7 @@ type EthChain struct {
 
 const headCacheTTL = time.Second
 
-// NewEthChain connects to an execution client and checks it serves the expected chain.
+// NewEthChain connects to the policy chain's execution client and checks the contract is there.
 func NewEthChain(ctx context.Context, url string, chainID uint64, policy common.Address) (*EthChain, error) {
 	client, err := ethclient.DialContext(ctx, url)
 	if err != nil {
@@ -98,16 +109,12 @@ func (c *EthChain) HeadNumber(ctx context.Context) (uint64, error) {
 	return head, nil
 }
 
-func (c *EthChain) NonceAt(ctx context.Context, addr common.Address, block uint64) (uint64, error) {
-	return c.client.NonceAt(ctx, addr, new(big.Int).SetUint64(block))
-}
-
 func (c *EthChain) CheckPolicy(ctx context.Context, block uint64, q PolicyQuery) (bool, string, error) {
 	value := q.Value
 	if value == nil {
 		value = new(big.Int)
 	}
-	data, err := c.abi.Pack("check", q.Key, q.Requester, q.To, value, q.Data, q.Digest)
+	data, err := c.abi.Pack("check", q.Key, q.Requester, q.Chain, q.Target, value, q.Data, q.RequestHash)
 	if err != nil {
 		return false, "", err
 	}
@@ -124,9 +131,72 @@ func (c *EthChain) CheckPolicy(ctx context.Context, block uint64, q PolicyQuery)
 	return ok, reason, nil
 }
 
-func (c *EthChain) SendRawTransaction(ctx context.Context, raw []byte) error {
+// EVMExecutor serves one EVM chain through its JSON-RPC endpoint. It dials lazily and redials
+// after failures, so an unreachable chain only fails requests for that chain.
+type EVMExecutor struct {
+	url     string
+	chainID uint64
+
+	mu     sync.Mutex
+	client *ethclient.Client
+}
+
+func NewEVMExecutor(url string, chainID uint64) *EVMExecutor {
+	return &EVMExecutor{url: url, chainID: chainID}
+}
+
+func (e *EVMExecutor) dial(ctx context.Context) (*ethclient.Client, error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.client != nil {
+		return e.client, nil
+	}
+	client, err := ethclient.DialContext(ctx, e.url)
+	if err != nil {
+		return nil, err
+	}
+	id, err := client.ChainID(ctx)
+	if err != nil {
+		client.Close()
+		return nil, fmt.Errorf("read chain id: %w", err)
+	}
+	if id.Uint64() != e.chainID {
+		client.Close()
+		return nil, fmt.Errorf("RPC serves chain %d, expected %d", id.Uint64(), e.chainID)
+	}
+	e.client = client
+	return client, nil
+}
+
+func (e *EVMExecutor) drop() {
+	e.mu.Lock()
+	if e.client != nil {
+		e.client.Close()
+		e.client = nil
+	}
+	e.mu.Unlock()
+}
+
+func (e *EVMExecutor) AccountSequence(ctx context.Context, key *Key) (uint64, error) {
+	c, err := e.dial(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("chain eip155:%d: %w", e.chainID, err)
+	}
+	n, err := c.NonceAt(ctx, key.Address, nil)
+	if err != nil {
+		e.drop()
+		return 0, fmt.Errorf("chain eip155:%d: %w", e.chainID, err)
+	}
+	return n, nil
+}
+
+func (e *EVMExecutor) Broadcast(ctx context.Context, raw []byte) error {
+	c, err := e.dial(ctx)
+	if err != nil {
+		return err
+	}
 	var result any
-	err := c.client.Client().CallContext(ctx, &result, "eth_sendRawTransaction", "0x"+common.Bytes2Hex(raw))
+	err = c.Client().CallContext(ctx, &result, "eth_sendRawTransaction", "0x"+common.Bytes2Hex(raw))
 	if err != nil && isAlreadySubmitted(err) {
 		// Every operator of the key broadcasts the signed transaction; the first one wins.
 		return nil

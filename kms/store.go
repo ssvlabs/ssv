@@ -62,12 +62,12 @@ type runnerState struct {
 	Decided map[string]uint64 `json:"decided"`
 	// Consumed lists presignature IDs used by decided requests: never sign with them again.
 	Consumed map[string]bool `json:"consumed"`
-	// Nonces maps transaction nonces already signed to their request ID.
-	Nonces map[uint64]string `json:"nonces"`
+	// Nonces maps transaction sequences already signed ("<chain>/<nonce>") to their request ID.
+	Nonces map[string]string `json:"nonces"`
 }
 
 func (s *store) loadState(keyID string) (*runnerState, error) {
-	st := &runnerState{Decided: map[string]uint64{}, Consumed: map[string]bool{}, Nonces: map[uint64]string{}}
+	st := &runnerState{Decided: map[string]uint64{}, Consumed: map[string]bool{}, Nonces: map[string]string{}}
 	obj, found, err := s.db.Get(prefixState, []byte(keyID))
 	if err != nil || !found {
 		return st, err
