@@ -38,6 +38,8 @@ type versionProbeJSON struct {
 	Error       string     `json:"error,omitempty"`
 	Attempts    int        `json:"attempts"`
 	NextAttempt time.Time  `json:"next_attempt"`
+	AddrSource  string     `json:"addr_source,omitempty"`
+	Addrs       []string   `json:"addrs,omitempty"`
 }
 
 // List handles GET /v1/exporter/version_probes.
@@ -57,6 +59,8 @@ func (h *VersionProbes) List(w http.ResponseWriter, r *http.Request) error {
 			Error:       e.Error,
 			Attempts:    e.Attempts,
 			NextAttempt: e.NextAttempt.UTC().Truncate(time.Second),
+			AddrSource:  e.AddrSource,
+			Addrs:       e.Addrs,
 		})
 	}
 	return api.Render(w, r, resp)

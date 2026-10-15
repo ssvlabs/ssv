@@ -20,7 +20,8 @@ type OperatorEvidenceSource interface {
 }
 
 // OperatorPeers serves GET /v1/exporter/operator_peers: for each operator, the peers that most
-// often authored its signed messages, with each peer's handshake version.
+// often authored its signed messages, with each peer's version. The version comes from the
+// peer's handshake or, failing that, from a version probe; version_source says which.
 type OperatorPeers struct {
 	source OperatorEvidenceSource
 	peers  PeerInfoResolver

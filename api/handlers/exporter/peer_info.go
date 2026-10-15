@@ -25,7 +25,8 @@ type PeerInfo struct {
 	Connected     bool
 }
 
-// PeerInfoResolver describes a peer as currently known to this node.
+// PeerInfoResolver looks up what this node currently knows about a peer: its version (from the
+// handshake or a version probe) and whether it is connected.
 type PeerInfoResolver interface{ PeerInfo(id peer.ID) PeerInfo }
 
 // ProbedVersions provides versions learned by probing peers this node isn't connected to.

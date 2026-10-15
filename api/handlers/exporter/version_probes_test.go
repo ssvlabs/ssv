@@ -29,6 +29,7 @@ func TestVersionProbesList(t *testing.T) {
 		{
 			PeerID: p1, Version: "v2.5.0-abc", ProbedAt: at, LastAttempt: at,
 			Outcome: versionprobe.Outcome("ok"), Attempts: 2, NextAttempt: at.Add(time.Hour),
+			AddrSource: "discv5", Addrs: []string{"/ip4/1.2.3.4/tcp/13001"},
 		},
 		{
 			PeerID: p2, LastAttempt: at.Add(-time.Minute), Outcome: versionprobe.Outcome("no_addr"),
@@ -45,7 +46,8 @@ func TestVersionProbesList(t *testing.T) {
 		"generated_at": "2026-10-15T09:00:00Z",
 		"probes": [
 			{"peer_id": "`+p1.String()+`", "version": "v2.5.0-abc", "probed_at": "2026-10-15T11:59:00Z",
-			 "last_attempt": "2026-10-15T11:59:00Z", "outcome": "ok", "attempts": 2, "next_attempt": "2026-10-15T12:59:00Z"},
+			 "last_attempt": "2026-10-15T11:59:00Z", "outcome": "ok", "attempts": 2, "next_attempt": "2026-10-15T12:59:00Z",
+			 "addr_source": "discv5", "addrs": ["/ip4/1.2.3.4/tcp/13001"]},
 			{"peer_id": "`+p2.String()+`", "version": "", "last_attempt": "2026-10-15T11:58:00Z",
 			 "outcome": "no_addr", "error": "no address known", "attempts": 1, "next_attempt": "2026-10-15T12:14:00Z"}
 		]
@@ -57,6 +59,8 @@ func TestVersionProbesList(t *testing.T) {
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &raw))
 	require.NotContains(t, raw.Probes[1], "probed_at")
 	require.NotContains(t, raw.Probes[0], "error")
+	require.NotContains(t, raw.Probes[1], "addr_source")
+	require.NotContains(t, raw.Probes[1], "addrs")
 }
 
 func TestVersionProbesList_Empty(t *testing.T) {
