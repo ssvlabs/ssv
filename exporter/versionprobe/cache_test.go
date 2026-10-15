@@ -83,3 +83,18 @@ func TestCacheEntriesNewestFirst(t *testing.T) {
 	require.Equal(t, pid(2), es[0].PeerID)
 	require.Equal(t, pid(1), es[1].PeerID)
 }
+
+func TestCacheRecordsAddrSourceAndCappedAddrs(t *testing.T) {
+	c := NewCache(10)
+	in := []string{"/ip4/1.1.1.1/tcp/1", "/ip4/1.1.1.2/tcp/1", "/ip4/1.1.1.3/tcp/1", "/ip4/1.1.1.4/tcp/1", "/ip4/1.1.1.5/tcp/1"}
+	e := c.Record(pid(1), Result{Outcome: OutcomeOK, Version: "v2.5.0", AddrSource: "discv5", Addrs: in}, t0)
+	require.Equal(t, "discv5", e.AddrSource)
+	require.Equal(t, in[:maxRecordedAddrs], e.Addrs)
+	in[0] = "mutated" // the cache keeps its own copy
+	require.Equal(t, "/ip4/1.1.1.1/tcp/1", c.Entries()[0].Addrs[0])
+
+	// A later attempt without addresses clears them: the fields describe the last attempt.
+	e = c.Record(pid(1), Result{Outcome: OutcomeNoAddr}, t0.Add(time.Hour))
+	require.Empty(t, e.AddrSource)
+	require.Nil(t, e.Addrs)
+}

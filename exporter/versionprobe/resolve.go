@@ -2,9 +2,11 @@ package versionprobe
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/libp2p/go-libp2p/core/peer"
 	ma "github.com/multiformats/go-multiaddr"
+	manet "github.com/multiformats/go-multiaddr/net"
 )
 
 // AddrSource is one place to look up a peer's dialable addresses (e.g. the discovered-peers
@@ -14,10 +16,12 @@ type AddrSource struct {
 	Lookup func(ctx context.Context, id peer.ID) ([]ma.Multiaddr, error)
 }
 
-// Resolve tries sources in order and returns the first non-empty address list together with
-// the name of the source that produced it. Sources that fail or return no addresses are
-// skipped. If no source yields addresses, it returns the last error seen (nil when every
-// source was simply empty). It stops with ctx.Err() as soon as ctx is done.
+// Resolve tries sources in order and returns the first non-empty list of dialable addresses
+// together with the name of the source that produced it. Only public-IP TCP addresses with a
+// non-zero port are kept (see dialable); a source that fails, returns nothing, or returns
+// nothing dialable is skipped. If no source yields addresses, it returns the last error seen,
+// including "<source>: no public tcp address" when a source's addresses were all filtered out
+// (nil when every source was simply empty). It stops with ctx.Err() as soon as ctx is done.
 func Resolve(ctx context.Context, id peer.ID, sources []AddrSource) (addrs []ma.Multiaddr, source string, err error) {
 	var lastErr error
 	for _, s := range sources {
@@ -29,11 +33,45 @@ func Resolve(ctx context.Context, id peer.ID, sources []AddrSource) (addrs []ma.
 			lastErr = err
 			continue
 		}
-		if len(got) > 0 {
-			return got, s.Name, nil
+		if len(got) == 0 {
+			continue
 		}
+		var kept []ma.Multiaddr
+		for _, a := range got {
+			if dialable(a) {
+				kept = append(kept, a)
+			}
+		}
+		if len(kept) > 0 {
+			return kept, s.Name, nil
+		}
+		lastErr = fmt.Errorf("%s: no public tcp address", s.Name)
 	}
 	return nil, "", lastErr
+}
+
+// dialable reports whether the probe host (TCP transport only) can usefully dial a: an ip4/ip6
+// address with a non-zero TCP port, optionally followed by /p2p/<id>, whose IP is public.
+// Private, loopback, unspecified and other non-routable IPs are rejected so the probe never
+// dials into the exporter's own network.
+func dialable(a ma.Multiaddr) bool {
+	if len(a) < 2 {
+		return false
+	}
+	switch a[0].Protocol().Code {
+	case ma.P_IP4, ma.P_IP6:
+	default:
+		return false
+	}
+	if a[1].Protocol().Code != ma.P_TCP || a[1].Value() == "0" {
+		return false
+	}
+	for _, c := range a[2:] {
+		if c.Protocol().Code != ma.P_P2P {
+			return false
+		}
+	}
+	return manet.IsPublicAddr(a)
 }
 
 // Throttled wraps src so that at most n of its lookups run at once (n < 1 is treated as 1).

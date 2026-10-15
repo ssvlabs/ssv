@@ -2,6 +2,7 @@ package versionprobe
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
@@ -140,6 +141,13 @@ func (p *Prober) RunCycle(ctx context.Context) {
 			<-sem
 			return
 		}
+		// Targets were picked before the spacing waits: the peer may have connected to the main
+		// host (or completed a handshake) since. Probing it now would be redundant.
+		if p.cfg.Peers.Connected(id) || p.cfg.Peers.HandshakeVersion(id) != "" {
+			<-sem
+			p.cfg.Logger.Debug("version probe skipped: peer now known", zap.String("peer", id.String()))
+			continue
+		}
 		p.started = true
 		p.lastStart = p.cfg.Now()
 
@@ -147,9 +155,28 @@ func (p *Prober) RunCycle(ctx context.Context) {
 		go func() {
 			defer wg.Done()
 			defer func() { <-sem }()
+			defer p.recoverProbe(ctx, id)
 			p.probeOne(ctx, id)
 		}()
 	}
+}
+
+// recoverProbe turns a panic in a probe goroutine into a bad_response record, so one peer's
+// unexpected reply can't take the exporter down. Deferred directly by the probe goroutine.
+func (p *Prober) recoverProbe(ctx context.Context, id peer.ID) {
+	r := recover()
+	if r == nil {
+		return
+	}
+	p.cfg.Logger.Error("version probe panicked",
+		zap.String("peer", id.String()),
+		zap.Any("panic", r),
+		zap.Stack("stack"),
+	)
+	if ctx.Err() != nil {
+		return
+	}
+	p.cache.Record(id, Result{Outcome: OutcomeBadResponse, Err: fmt.Sprintf("panic: %v", r)}, p.cfg.Now())
 }
 
 func (p *Prober) probeOne(ctx context.Context, id peer.ID) {
@@ -164,6 +191,10 @@ func (p *Prober) probeOne(ctx context.Context, id peer.ID) {
 		} else {
 			res = p.cfg.Probe(ctx, peer.AddrInfo{ID: id, Addrs: addrs}, p.cfg.Request())
 			res.AddrSource = source
+			res.Addrs = make([]string, 0, min(len(addrs), maxRecordedAddrs))
+			for _, a := range addrs[:min(len(addrs), maxRecordedAddrs)] {
+				res.Addrs = append(res.Addrs, a.String())
+			}
 		}
 	}
 	if ctx.Err() != nil {
@@ -177,6 +208,7 @@ func (p *Prober) probeOne(ctx context.Context, id peer.ID) {
 		zap.String("outcome", string(res.Outcome)),
 		zap.String("version", res.Version),
 		zap.String("addr_source", res.AddrSource),
+		zap.Strings("addrs", res.Addrs),
 		zap.Duration("duration", res.Duration),
 		zap.String("error", res.Err),
 	)

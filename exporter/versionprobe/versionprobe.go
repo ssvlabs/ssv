@@ -15,6 +15,9 @@ const (
 	requestTimeout = 10 * time.Second
 	refreshAfter   = time.Hour
 	maxEntries     = 2048
+
+	// maxRecordedAddrs caps how many of the dialed addresses a cache entry keeps, for diagnostics.
+	maxRecordedAddrs = 4
 )
 
 // backoffSchedule is the wait after the 1st, 2nd, 3rd, 4th+ consecutive failure.
@@ -43,6 +46,7 @@ type Result struct {
 	Version    string
 	Outcome    Outcome
 	Err        string
-	AddrSource string
+	AddrSource string   // name of the AddrSource the dialed addresses came from
+	Addrs      []string // addresses passed to the probe (at most maxRecordedAddrs)
 	Duration   time.Duration
 }

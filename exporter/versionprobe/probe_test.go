@@ -131,7 +131,9 @@ func TestProbeStalledResponderHonoursCallerContext(t *testing.T) {
 	start := time.Now()
 	res := Probe(ctx, addrInfo(r), testReq)
 	require.Equal(t, OutcomeTimeout, res.Outcome, res.Err)
-	require.Less(t, time.Since(start), 2*time.Second)
+	// Generous for -race -p 16, yet well under requestTimeout (10s): a probe that ignored the
+	// caller's 1s deadline would only give up after a fresh 10s per-operation timeout.
+	require.Less(t, time.Since(start), 5*time.Second)
 }
 
 func TestProbeRefusedWhenProtocolUnsupported(t *testing.T) {

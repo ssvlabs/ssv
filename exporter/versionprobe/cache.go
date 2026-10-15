@@ -19,6 +19,8 @@ type Entry struct {
 	Attempts    int
 	failures    int // consecutive failures since the last success
 	NextAttempt time.Time
+	AddrSource  string   // where the last attempt's addresses came from ("" when none were found)
+	Addrs       []string // addresses dialed in the last attempt, at most maxRecordedAddrs
 }
 
 // Cache holds probe results per peer, bounded to max entries.
@@ -57,6 +59,11 @@ func (c *Cache) Record(id peer.ID, r Result, now time.Time) Entry {
 	e.LastAttempt = now
 	e.Outcome = r.Outcome
 	e.Error = r.Err
+	e.AddrSource = r.AddrSource
+	e.Addrs = nil
+	if len(r.Addrs) > 0 {
+		e.Addrs = append([]string(nil), r.Addrs[:min(len(r.Addrs), maxRecordedAddrs)]...)
+	}
 	if r.Outcome == OutcomeOK {
 		e.Version = r.Version
 		e.ProbedAt = now

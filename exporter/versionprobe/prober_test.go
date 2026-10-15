@@ -191,3 +191,109 @@ func TestNewPeerState(t *testing.T) {
 	require.Equal(t, "", ps.HandshakeVersion(pid(2))) // nil metadata
 	require.Equal(t, "", ps.HandshakeVersion(pid(3))) // unknown
 }
+
+// A panicking probe is recorded as bad_response and doesn't take RunCycle (or the node) down.
+func TestRunCyclePanickingProbeRecordedAsBadResponse(t *testing.T) {
+	var probed atomic.Int32
+	p := New(Config{
+		Logger: zap.NewNop(), Evidence: fakeEvidence{ev(1, pid(1), 30), ev(2, pid(2), 30)}, Peers: fakePeers{},
+		Sources: staticSource(a1), Request: func() Request { return testReq },
+		Probe: func(_ context.Context, target peer.AddrInfo, _ Request) Result {
+			probed.Add(1)
+			if target.ID == pid(1) {
+				panic("boom")
+			}
+			return Result{Outcome: OutcomeOK, Version: "v2.5.0"}
+		},
+		Now:  func() time.Time { return t0 },
+		Wait: func(context.Context, time.Duration) error { return nil },
+	})
+	require.NotPanics(t, func() { p.RunCycle(context.Background()) })
+	require.Equal(t, int32(2), probed.Load()) // the panic freed its slot: the next peer still ran
+	byID := map[peer.ID]Entry{}
+	for _, e := range p.Cache().Entries() {
+		byID[e.PeerID] = e
+	}
+	require.Equal(t, OutcomeBadResponse, byID[pid(1)].Outcome)
+	require.Equal(t, "panic: boom", byID[pid(1)].Error)
+	require.Equal(t, t0.Add(backoffSchedule[0]), byID[pid(1)].NextAttempt)
+	require.Equal(t, OutcomeOK, byID[pid(2)].Outcome)
+}
+
+// flippingPeers reports a peer as connected once Targets() has been computed.
+type flippingPeers struct {
+	mu        sync.Mutex
+	connected map[peer.ID]bool
+}
+
+func (f *flippingPeers) Connected(id peer.ID) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.connected[id]
+}
+func (f *flippingPeers) HandshakeVersion(peer.ID) string { return "" }
+func (f *flippingPeers) connect(id peer.ID) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.connected[id] = true
+}
+
+// A target that connects to the main host after Targets() was computed (e.g. during the spacing
+// wait) is skipped, not probed.
+func TestRunCycleSkipsPeerConnectedAfterTargets(t *testing.T) {
+	peers := &flippingPeers{connected: map[peer.ID]bool{}}
+	var mu sync.Mutex
+	var probed []peer.ID
+	p := New(Config{
+		Logger: zap.NewNop(), Evidence: fakeEvidence{ev(1, pid(1), 30), ev(2, pid(2), 30), ev(3, pid(3), 30)}, Peers: peers,
+		Sources: staticSource(a1), Request: func() Request { return testReq },
+		Probe: func(_ context.Context, target peer.AddrInfo, _ Request) Result {
+			mu.Lock()
+			probed = append(probed, target.ID)
+			mu.Unlock()
+			return Result{Outcome: OutcomeOK, Version: "v2.5.0"}
+		},
+		Now: func() time.Time { return t0 },
+		// The first spacing wait (before pid(2)) is when pid(2) connects.
+		Wait: func(context.Context, time.Duration) error { peers.connect(pid(2)); return nil },
+	})
+	require.Equal(t, []peer.ID{pid(1), pid(2), pid(3)}, p.Targets(t0))
+	p.RunCycle(context.Background())
+	require.ElementsMatch(t, []peer.ID{pid(1), pid(3)}, probed)
+	for _, e := range p.Cache().Entries() {
+		require.NotEqual(t, pid(2), e.PeerID, "skipped peer must not be recorded")
+	}
+}
+
+// The cache entry records where the dialed addresses came from and the first few of them.
+func TestRunCycleRecordsAddrSourceAndAddrs(t *testing.T) {
+	addrs := []ma.Multiaddr{
+		ma.StringCast("/ip4/1.1.1.1/tcp/13001"), ma.StringCast("/ip4/1.1.1.2/tcp/13001"), ma.StringCast("/ip4/1.1.1.3/tcp/13001"),
+		ma.StringCast("/ip4/1.1.1.4/tcp/13001"), ma.StringCast("/ip4/1.1.1.5/tcp/13001"),
+	}
+	sources := []AddrSource{
+		{Name: "discovered", Lookup: func(context.Context, peer.ID) ([]ma.Multiaddr, error) {
+			return []ma.Multiaddr{ma.StringCast("/ip4/10.0.0.1/tcp/13001")}, nil // filtered out
+		}},
+		{Name: "peerstore", Lookup: func(context.Context, peer.ID) ([]ma.Multiaddr, error) { return addrs, nil }},
+	}
+	var dialed []ma.Multiaddr
+	p := New(Config{
+		Logger: zap.NewNop(), Evidence: fakeEvidence{ev(1, pid(1), 30)}, Peers: fakePeers{},
+		Sources: sources, Request: func() Request { return testReq },
+		Probe: func(_ context.Context, target peer.AddrInfo, _ Request) Result {
+			dialed = target.Addrs
+			return Result{Outcome: OutcomeDialFailed, Err: "connection refused"}
+		},
+		Now:  func() time.Time { return t0 },
+		Wait: func(context.Context, time.Duration) error { return nil },
+	})
+	p.RunCycle(context.Background())
+	require.Equal(t, addrs, dialed) // the probe gets every address; only the record is capped
+	es := p.Cache().Entries()
+	require.Len(t, es, 1)
+	require.Equal(t, "peerstore", es[0].AddrSource)
+	require.Equal(t, []string{
+		"/ip4/1.1.1.1/tcp/13001", "/ip4/1.1.1.2/tcp/13001", "/ip4/1.1.1.3/tcp/13001", "/ip4/1.1.1.4/tcp/13001",
+	}, es[0].Addrs)
+}
