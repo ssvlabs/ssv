@@ -87,28 +87,42 @@ func Probe(ctx context.Context, target peer.AddrInfo, req Request) (res Result) 
 }
 
 // request opens one /ssv/info stream and runs the same exchange as streams.StreamController.Request
-// (write, close write, read, close), without the controller's node-wide metrics.
+// (write, close write, read, close), without the controller's node-wide metrics. The whole
+// exchange, not each step, is bounded by requestTimeout and by the caller's ctx: when either
+// ends, the stream is reset and the context's error is returned.
 func request(ctx context.Context, h host.Host, id peer.ID, msg []byte) ([]byte, error) {
 	streamCtx, cancel := context.WithTimeout(ctx, requestTimeout)
 	defer cancel()
 	raw, err := h.NewStream(streamCtx, id, peers.NodeInfoProtocol)
 	if err != nil {
-		return nil, err
+		return nil, ctxErrOr(streamCtx, err)
 	}
+	stop := context.AfterFunc(streamCtx, func() { _ = raw.Reset() })
+	defer stop()
 	s := streams.NewStream(raw)
 	defer func() { _ = s.Close() }()
 
+	// The per-operation deadlines are a backstop only; AfterFunc above enforces streamCtx.
 	if err := s.WriteWithTimeout(msg, requestTimeout); err != nil {
-		return nil, fmt.Errorf("write request: %w", err)
+		return nil, ctxErrOr(streamCtx, fmt.Errorf("write request: %w", err))
 	}
 	if err := s.CloseWrite(); err != nil {
-		return nil, fmt.Errorf("close write: %w", err)
+		return nil, ctxErrOr(streamCtx, fmt.Errorf("close write: %w", err))
 	}
 	data, err := s.ReadWithTimeout(requestTimeout)
 	if err != nil {
-		return nil, fmt.Errorf("read response: %w", err)
+		return nil, ctxErrOr(streamCtx, fmt.Errorf("read response: %w", err))
 	}
 	return data, nil
+}
+
+// ctxErrOr returns err, wrapped with ctx's error when ctx has ended, so that a stream reset
+// caused by the deadline or by cancellation is classified by its cause, not as "refused".
+func ctxErrOr(ctx context.Context, err error) error {
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return fmt.Errorf("%w: %w", ctxErr, err)
+	}
+	return err
 }
 
 func failure(err error, phase string) Result {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"fmt"
+	"io"
 	"net"
 	"strings"
 	"testing"
@@ -86,7 +87,51 @@ func TestProbeLeavesMainHostUntouched(t *testing.T) {
 func TestProbeBadResponseWithoutMetadata(t *testing.T) {
 	r := newResponder(t, "", false)
 	res := Probe(context.Background(), addrInfo(r), testReq)
-	require.Equal(t, OutcomeBadResponse, res.Outcome)
+	require.Equal(t, OutcomeBadResponse, res.Outcome, res.Err)
+	require.Contains(t, res.Err, "metadata")
+}
+
+// newRawResponder starts a loopback host whose /ssv/info handler is h itself.
+func newRawResponder(t *testing.T, handler network.StreamHandler) host.Host {
+	t.Helper()
+	h, err := libp2p.New(libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = h.Close() })
+	h.SetStreamHandler(peers.NodeInfoProtocol, handler)
+	return h
+}
+
+// A reply that is not a sealed NodeInfo envelope is a bad response (spec §8).
+func TestProbeBadResponseOnGarbage(t *testing.T) {
+	r := newRawResponder(t, func(raw network.Stream) {
+		s := streams.NewStream(raw) // same framing as StreamController.HandleStream
+		defer func() { _ = s.Close() }()
+		if _, err := s.ReadWithTimeout(5 * time.Second); err != nil {
+			return
+		}
+		_ = s.WriteWithTimeout([]byte("garbage"), 5*time.Second)
+	})
+	res := Probe(context.Background(), addrInfo(r), testReq)
+	require.Equal(t, OutcomeBadResponse, res.Outcome, res.Err)
+	require.Contains(t, res.Err, "envelope")
+}
+
+// The remote accepts /ssv/info, reads the request and never replies: the whole stream phase is
+// bounded by the caller's context, not by fresh per-operation deadlines (Review Focus 3 and 5).
+func TestProbeStalledResponderHonoursCallerContext(t *testing.T) {
+	release := make(chan struct{})
+	r := newRawResponder(t, func(s network.Stream) {
+		_, _ = io.ReadAll(s)
+		<-release
+		_ = s.Reset()
+	})
+	t.Cleanup(func() { close(release) }) // runs before the host's Close
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	start := time.Now()
+	res := Probe(ctx, addrInfo(r), testReq)
+	require.Equal(t, OutcomeTimeout, res.Outcome, res.Err)
+	require.Less(t, time.Since(start), 2*time.Second)
 }
 
 func TestProbeRefusedWhenProtocolUnsupported(t *testing.T) {
