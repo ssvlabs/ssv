@@ -8,10 +8,10 @@ import (
 	"os"
 	"time"
 
-	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/api/types/mount"
-	"github.com/docker/go-connections/nat"
 	_ "github.com/lib/pq"
+	"github.com/moby/moby/api/types/container"
+	"github.com/moby/moby/api/types/mount"
+	dockernetwork "github.com/moby/moby/api/types/network"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/network"
 	"github.com/testcontainers/testcontainers-go/wait"
@@ -85,7 +85,7 @@ func (env *TestEnvironment) startPostgreSQL() error {
 				"POSTGRES_USER":     postgresUser,
 				"POSTGRES_PASSWORD": postgresPassword,
 			},
-			WaitingFor: wait.ForSQL("5432/tcp", "postgres", func(host string, port nat.Port) string {
+			WaitingFor: wait.ForSQL("5432/tcp", "postgres", func(host string, port dockernetwork.Port) string {
 				return buildPostgresConnStr(host, port.Port())
 			}).WithStartupTimeout(30 * time.Second),
 		},
