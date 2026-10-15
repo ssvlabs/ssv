@@ -28,11 +28,14 @@ var (
 )
 
 // UnverifiedRange is a journalled block range awaiting background verification. Cursor is the
-// next block to verify; the range is fully verified (and removed) once Cursor exceeds To.
+// next block to verify; the range is fully verified (and removed) once Cursor exceeds To. Parked
+// means the block at Cursor couldn't be authoritatively verified yet, so the verifier re-checks it
+// alone before resuming the rest of the range.
 type UnverifiedRange struct {
 	From   uint64 `json:"from"`
 	To     uint64 `json:"to"`
 	Cursor uint64 `json:"cursor"`
+	Parked bool   `json:"parked,omitempty"`
 }
 
 func beUint64(n uint64) []byte {

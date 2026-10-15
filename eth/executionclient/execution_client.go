@@ -68,9 +68,10 @@ type ExecutionClient struct {
 	healthInvalidationInterval time.Duration
 	lastHealthyTime            atomic.Int64
 
-	// receiptsUnsupported remembers that the EL rejected eth_getBlockReceipts, so log
-	// verification doesn't re-attempt the method on every suspect block.
-	receiptsUnsupported atomic.Bool
+	// receiptsUnsupportedAt is when (unix seconds) the EL last rejected eth_getBlockReceipts, 0 if
+	// never. Log verification skips the method while that's recent, then probes it again, so an EL
+	// upgraded behind the same endpoint is picked up without a restart.
+	receiptsUnsupportedAt atomic.Int64
 }
 
 // New creates a new instance of ExecutionClient.

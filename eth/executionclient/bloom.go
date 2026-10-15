@@ -130,7 +130,7 @@ func (ec *ExecutionClient) verifyLogCompleteness(ctx context.Context, logs []eth
 // back to timed retries, which can only recover intermittent drops. Returns the recovered
 // logs, or nil when the block is presumed a false positive.
 func (ec *ExecutionClient) resolveSuspectBlock(ctx context.Context, blockNum uint64) ([]ethtypes.Log, error) {
-	if !ec.receiptsUnsupported.Load() {
+	if !ec.receiptsKnownUnsupported() {
 		blockLogs, err := ec.blockLogsFromReceipts(ctx, blockNum)
 		switch {
 		case err == nil:
@@ -151,14 +151,18 @@ func (ec *ExecutionClient) resolveSuspectBlock(ctx context.Context, blockNum uin
 			}
 			return blockLogs, nil
 		case isRPCMethodNotFoundError(err):
-			ec.receiptsUnsupported.Store(true)
-			ec.logger.Info("execution client does not support eth_getBlockReceipts, falling back to timed log re-requests for suspect blocks")
+			ec.rememberReceiptsUnsupported()
+			ec.logger.Info("execution client does not support eth_getBlockReceipts, falling back to timed log re-requests for suspect blocks",
+				zap.Duration("recheck_in", receiptsUnsupportedRecheckInterval))
 		case errors.Is(err, errInconsistentEmptyReceipts):
 			// A bloom-positive block with zero receipts is a self-inconsistent EL response; don't
-			// trust it as empty. Fall back to timed re-requests (a per-block glitch, so don't latch
-			// the receipts-unsupported memo).
-			ec.logger.Debug("block returned zero receipts for a bloom-positive block; retrying logs instead",
-				fields.BlockNumber(blockNum))
+			// trust it as empty. Fall back to timed re-requests (a per-block glitch, so don't set
+			// the receipts-unsupported memo). Warn, since an incomplete receipt store (e.g. pruned)
+			// sends every bloom false positive down this slow path.
+			ec.logger.Warn("block returned zero receipts though its bloom matches the contract; falling back to timed log re-requests",
+				fields.BlockNumber(blockNum),
+				zap.String("recommendation", "the EL's receipt store looks incomplete (e.g. pruned or still syncing), which slows log verification — consider checking your execution client"),
+			)
 		default:
 			return nil, fmt.Errorf("completeness check: fetch receipts for block %d: %w", blockNum, err)
 		}
@@ -227,6 +231,22 @@ func (ec *ExecutionClient) VerifyLogs(ctx context.Context, fromBlock, toBlock ui
 	return PackLogs(validLogs), nil
 }
 
+// receiptsUnsupportedRecheckInterval is how long the EL's rejection of eth_getBlockReceipts is
+// remembered before the method is probed again.
+const receiptsUnsupportedRecheckInterval = time.Hour
+
+// receiptsKnownUnsupported reports whether the EL rejected eth_getBlockReceipts within the last
+// receiptsUnsupportedRecheckInterval.
+func (ec *ExecutionClient) receiptsKnownUnsupported() bool {
+	at := ec.receiptsUnsupportedAt.Load()
+	return at != 0 && time.Since(time.Unix(at, 0)) < receiptsUnsupportedRecheckInterval
+}
+
+// rememberReceiptsUnsupported records that the EL just rejected eth_getBlockReceipts.
+func (ec *ExecutionClient) rememberReceiptsUnsupported() {
+	ec.receiptsUnsupportedAt.Store(time.Now().Unix())
+}
+
 // errInconsistentEmptyReceipts marks a block that returned zero receipts even though every
 // caller only consults receipts for a block already evidenced to hold logs (a bloom hit, or a
 // recorded/observed log). Zero receipts is then a self-inconsistent response — a broken receipt
@@ -263,17 +283,18 @@ func (ec *ExecutionClient) blockLogsFromReceipts(ctx context.Context, blockNum u
 // BlockContractLogs returns the contract's logs for a block derived from the block's receipts —
 // the index-independent source of truth, so it's authoritative regardless of the EL's log index.
 // receiptsAvailable is false when the EL can't authoritatively serve the block: it doesn't
-// support eth_getBlockReceipts (remembered so it isn't re-attempted), or its receipt store is
-// unreliable for the block (zero receipts where logs are evidenced).
+// support eth_getBlockReceipts (remembered for receiptsUnsupportedRecheckInterval), or its
+// receipt store is unreliable for the block (zero receipts where logs are evidenced).
 func (ec *ExecutionClient) BlockContractLogs(ctx context.Context, block uint64) ([]ethtypes.Log, bool, error) {
-	if ec.receiptsUnsupported.Load() {
+	if ec.receiptsKnownUnsupported() {
 		return nil, false, nil
 	}
 	logs, err := ec.blockLogsFromReceipts(ctx, block)
 	if err != nil {
 		if isRPCMethodNotFoundError(err) {
-			ec.receiptsUnsupported.Store(true)
-			ec.logger.Info("execution client does not support eth_getBlockReceipts; background verification can't authoritatively check blocks on it")
+			ec.rememberReceiptsUnsupported()
+			ec.logger.Info("execution client does not support eth_getBlockReceipts; background verification can't authoritatively check blocks on it",
+				zap.Duration("recheck_in", receiptsUnsupportedRecheckInterval))
 			return nil, false, nil
 		}
 		if errors.Is(err, errInconsistentEmptyReceipts) {

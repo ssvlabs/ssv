@@ -18,6 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 
 	"github.com/ssvlabs/ssv/observability/log"
 )
@@ -1272,11 +1273,14 @@ func TestMultiClient_BlockContractLogs_ReceiptsFailover(t *testing.T) {
 
 		c1.EXPECT().BlockContractLogs(gomock.Any(), block).Return(nil, false, nil).Times(1)
 		c2.EXPECT().BlockContractLogs(gomock.Any(), block).Return(nil, false, nil).Times(1)
+		errorLogs, recorded := observer.New(zap.ErrorLevel)
+		mc.logger = zap.New(errorLogs)
 
 		logs, available, err := mc.BlockContractLogs(t.Context(), block)
 		require.NoError(t, err)
 		require.False(t, available)
 		require.Nil(t, logs)
+		require.Zero(t, recorded.Len(), "a client that can't serve receipts is a routine failover, not an error")
 	})
 
 	t.Run("surfaces an error (does not park) when a client fails while another lacks receipts", func(t *testing.T) {

@@ -41,13 +41,15 @@ var (
 			observability.InstrumentName(observabilityNamespace, "misses"),
 			metric.WithDescription("registry-event completeness misses confirmed by the background verifier")))
 
-	// verifyParkedCounter counts ranges left pending because a disagreeing block couldn't be
-	// authoritatively resolved (eth_getBlockReceipts unavailable). Nonzero means verification is
-	// inconclusive — the node may be on incomplete state; investigate the execution client.
+	// verifyParkedCounter counts each time a pass parks a range: a disagreeing block couldn't be
+	// authoritatively resolved (no authoritative receipts, or a rate-limited repair). Parked ranges
+	// are re-checked periodically, so it keeps increasing while one stays unresolved. Nonzero means
+	// verification is inconclusive — the node may be on incomplete state; investigate the execution
+	// client.
 	verifyParkedCounter = metrics.New(
 		meter.Int64Counter(
 			observability.InstrumentName(observabilityNamespace, "parked"),
-			metric.WithDescription("ranges left pending because a block couldn't be authoritatively verified")))
+			metric.WithDescription("times a range was left pending because a block couldn't be authoritatively verified")))
 
 	// verifySuppressedCounter counts confirmed misses whose resync was suppressed by the rate
 	// limit. Nonzero means a repair is being deferred — investigate the execution client.

@@ -315,7 +315,7 @@ func TestReceiptsCrossCheck_RecoversPersistentlyDroppedLogs(t *testing.T) {
 	}
 	require.True(t, recoveredDropped, "the dropped block's event should be recovered from receipts")
 	require.GreaterOrEqual(t, receiptsCalls.Load(), int32(1), "expected a receipts fetch for the suspect block")
-	require.False(t, client.receiptsUnsupported.Load())
+	require.False(t, client.receiptsKnownUnsupported())
 }
 
 // TestReceiptsUnsupported_FallsBackToTimedRetry verifies that when the EL does not
@@ -377,7 +377,59 @@ func TestReceiptsUnsupported_FallsBackToTimedRetry(t *testing.T) {
 	require.NoError(t, <-errCh)
 
 	require.Equal(t, totalBlocks, len(allLogs), "timed retry fallback should recover the dropped log")
-	require.True(t, client.receiptsUnsupported.Load(), "unsupported eth_getBlockReceipts should be remembered")
+	require.True(t, client.receiptsKnownUnsupported(), "unsupported eth_getBlockReceipts should be remembered")
+}
+
+// TestBlockContractLogs_ReprobesUnsupportedReceipts verifies that a rejected eth_getBlockReceipts
+// isn't re-attempted while remembered, but is probed again once the memo ages out, so an EL
+// upgraded behind the same endpoint becomes an authoritative source without a restart.
+func TestBlockContractLogs_ReprobesUnsupportedReceipts(t *testing.T) {
+	env := setupTestEnv(t, 10*time.Second)
+	contract, err := env.deployCallableContract()
+	require.NoError(t, err)
+	// Contract deploy is block 1; this creates event block 2 with one contract log.
+	require.NoError(t, env.createBlocksWithLogs(contract, 1, 0))
+	const eventBlock uint64 = 2
+
+	rpcSrv, _ := env.sim.Node().RPCHandler()
+
+	// Reject eth_getBlockReceipts as an unsupported method until the EL is "upgraded".
+	var upgraded atomic.Bool
+	var receiptsCalls atomic.Int32
+	srv := newRPCProxy(t, rpcSrv, func(req jsonrpcMessage, forward forwardFunc) *jsonrpcMessage {
+		if req.Method != ethGetBlockReceiptsMethod {
+			return nil
+		}
+		receiptsCalls.Add(1)
+		if !upgraded.Load() {
+			return &jsonrpcMessage{Error: json.RawMessage(`{"code":-32601,"message":"the method eth_getBlockReceipts does not exist/is not available"}`)}
+		}
+		return nil
+	})
+
+	client, err := New(t.Context(), srv.URL, env.contractAddr, WithLogger(zaptest.NewLogger(t)))
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, client.Close()) })
+
+	_, available, err := client.BlockContractLogs(t.Context(), eventBlock)
+	require.NoError(t, err)
+	require.False(t, available)
+	require.True(t, client.receiptsKnownUnsupported())
+
+	// The EL gets upgraded, but while the memo is fresh the method isn't re-attempted.
+	upgraded.Store(true)
+	_, available, err = client.BlockContractLogs(t.Context(), eventBlock)
+	require.NoError(t, err)
+	require.False(t, available)
+	require.Equal(t, int32(1), receiptsCalls.Load(), "a fresh memo must not re-attempt eth_getBlockReceipts")
+
+	// Once the memo ages out, the method is probed again and the upgraded EL serves the block.
+	client.receiptsUnsupportedAt.Store(time.Now().Add(-receiptsUnsupportedRecheckInterval).Unix())
+	logs, available, err := client.BlockContractLogs(t.Context(), eventBlock)
+	require.NoError(t, err)
+	require.True(t, available)
+	require.Len(t, logs, 1)
+	require.Equal(t, int32(2), receiptsCalls.Load())
 }
 
 // TestBloomFalsePositive_ConfirmedByReceipts verifies that a block whose bloom matches
