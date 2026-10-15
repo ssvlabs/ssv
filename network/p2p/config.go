@@ -15,7 +15,6 @@ import (
 	libp2ptcp "github.com/libp2p/go-libp2p/p2p/transport/tcp"
 	ma "github.com/multiformats/go-multiaddr"
 	manet "github.com/multiformats/go-multiaddr/net"
-	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/network"
@@ -27,7 +26,7 @@ import (
 )
 
 const (
-	localDiscvery  = "mdns"
+	localDiscovery = "mdns"
 	minPeersBuffer = 10
 )
 
@@ -119,7 +118,7 @@ func (c *Config) ApplyDefaults() {
 // Libp2pOptions creates options list for the libp2p host
 // these are the most basic options required to start a network instance,
 // other options and libp2p components can be configured on top
-func (c *Config) Libp2pOptions(logger *zap.Logger) ([]libp2p.Option, error) {
+func (c *Config) Libp2pOptions() ([]libp2p.Option, error) {
 	if c.NetworkPrivateKey == nil {
 		return nil, errors.New("could not create options w/o network key")
 	}
@@ -135,7 +134,7 @@ func (c *Config) Libp2pOptions(logger *zap.Logger) ([]libp2p.Option, error) {
 		libp2p.UserAgent(c.UserAgent),
 	)
 
-	opts, err = c.configureAddrs(logger, opts)
+	opts, err = c.configureAddrs(opts)
 	if err != nil {
 		return opts, fmt.Errorf("could not setup addresses: %w", err)
 	}
@@ -148,53 +147,43 @@ func (c *Config) Libp2pOptions(logger *zap.Logger) ([]libp2p.Option, error) {
 	return opts, nil
 }
 
-func (c *Config) configureAddrs(logger *zap.Logger, opts []libp2p.Option) ([]libp2p.Option, error) {
+func (c *Config) configureAddrs(opts []libp2p.Option) ([]libp2p.Option, error) {
 	addrs := make([]ma.Multiaddr, 0)
 	maZero, err := commons.BuildMultiAddress("0.0.0.0", "tcp", uint(c.TCPPort), "")
 	if err != nil {
 		return opts, fmt.Errorf("could not build multi address for zero address: %w", err)
 	}
 	addrs = append(addrs, maZero)
-	ipAddr, err := commons.IPAddr()
-	if err != nil {
-		return opts, fmt.Errorf("could not get ip addr: %w", err)
-	}
 
-	if c.Discovery != localDiscvery {
+	if c.Discovery != localDiscovery {
+		ipAddr, err := commons.IPAddr()
+		if err != nil {
+			return opts, fmt.Errorf("could not get ip addr: %w", err)
+		}
 		maIP, err := commons.BuildMultiAddress(ipAddr.String(), "tcp", uint(c.TCPPort), "")
 		if err != nil {
-			return opts, fmt.Errorf("could not build multi address for zero address: %w", err)
+			return opts, fmt.Errorf("could not build multi address for ip address: %w", err)
 		}
 		addrs = append(addrs, maIP)
 	}
 	opts = append(opts, libp2p.ListenAddrs(addrs...))
 
 	// NOTE: only one of (HostDNS, HostAddress) can be used with libp2p
-	if c.HostDNS != "" {
-		// AddrFactory for DNS address if provided
-		opts = append(opts, libp2p.AddrsFactory(func(addrs []ma.Multiaddr) []ma.Multiaddr {
-			addrs = publicAddrs(addrs)
-			external, err := ma.NewMultiaddr(fmt.Sprintf("/dns4/%s/tcp/%d", c.HostDNS, c.TCPPort))
-			if err != nil {
-				logger.Error("unable to create external multiaddress", zap.Error(err))
-			} else {
-				addrs = append(addrs, external)
-			}
-			return addrs
-		}))
-	} else if c.HostAddress != "" {
-		// AddrFactory for host address if provided
-		opts = append(opts, libp2p.AddrsFactory(func(addrs []ma.Multiaddr) []ma.Multiaddr {
-			addrs = publicAddrs(addrs)
-			external, err := commons.BuildMultiAddress(c.HostAddress, "tcp", uint(c.TCPPort), "")
-			if err != nil {
-				logger.Error("unable to create external multiaddress", zap.Error(err))
-			} else {
-				addrs = append(addrs, external)
-			}
-			return addrs
-		}))
+	var external ma.Multiaddr
+	switch {
+	case c.HostDNS != "":
+		external, err = ma.NewMultiaddr(fmt.Sprintf("/dns4/%s/tcp/%d", c.HostDNS, c.TCPPort))
+	case c.HostAddress != "":
+		external, err = commons.BuildMultiAddress(c.HostAddress, "tcp", uint(c.TCPPort), "")
+	default:
+		return opts, nil
 	}
+	if err != nil {
+		return opts, fmt.Errorf("could not build external multi address: %w", err)
+	}
+	opts = append(opts, libp2p.AddrsFactory(func(addrs []ma.Multiaddr) []ma.Multiaddr {
+		return append(publicAddrs(addrs), external)
+	}))
 
 	return opts, nil
 }
