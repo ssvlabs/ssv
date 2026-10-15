@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"maps"
 	"slices"
-	"sync"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -156,7 +155,8 @@ type BaseRunner struct {
 	// dutyConcluded carries a duty's terminal outcome (success / not-required / failure) from the
 	// markers to its watcher (watchDutyOutcome), which reports it exactly once. Buffered(1) so a
 	// marker never blocks even if the watcher already exited. Set and sent-on only from the single
-	// message-processing goroutine (the watcher reads its own captured copy), so it needs no lock.
+	// message-processing goroutine (the watcher reads its own captured copy, and a channel handed out by
+	// takeDutyConclusion is sent on only by its taker), so it needs no lock.
 	dutyConcluded chan dutyConclusion `json:"-"`
 	// dutyFailureNoted carries a failure that leaves the duty open (see noteDutyFailure) to the same watcher,
 	// which reports it only if nothing concludes the duty by its deadline. Buffered(1) and handled like
@@ -871,20 +871,19 @@ func (b *BaseRunner) concludeDuty(outcome dutyOutcome, reason error) {
 	}
 }
 
-// takeDutyConclusion hands the current duty's conclusion to whatever concludes it off the message loop, such
-// as a background retry: the markers become no-ops for the duty, and the returned func reports its outcome to
-// the watcher, at most once, from any goroutine.
-func (b *BaseRunner) takeDutyConclusion() func(outcome dutyOutcome, reason error) {
+// takeDutyConclusion hands the current duty's conclusion channel to a goroutine that may conclude the duty off
+// the message loop, such as a background retry, which sends on it at most once (never blocking: it's buffered).
+// The markers are no-ops for the duty until returnDutyConclusion gives back a channel left unsent.
+func (b *BaseRunner) takeDutyConclusion() chan dutyConclusion {
 	concluded := b.dutyConcluded
 	b.dutyConcluded = nil
-	var once sync.Once
-	return func(outcome dutyOutcome, reason error) {
-		once.Do(func() {
-			if concluded != nil {
-				concluded <- dutyConclusion{outcome: outcome, reason: reason}
-			}
-		})
-	}
+	return concluded
+}
+
+// returnDutyConclusion gives the markers back a channel from takeDutyConclusion once its taker can no longer
+// send on it.
+func (b *BaseRunner) returnDutyConclusion(concluded chan dutyConclusion) {
+	b.dutyConcluded = concluded
 }
 
 func (b *BaseRunner) ShouldProcessDuty(duty spectypes.Duty) error {

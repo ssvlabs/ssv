@@ -4,9 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"sync/atomic"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -115,12 +113,15 @@ func (r *ProposerPreferencesRunner) StartNewDuty(ctx context.Context, logger *za
 	// indices-change re-emit) replaces the prior one so it freezes the current dependent_root. The
 	// replaced incarnation is concluded so its outcome watcher doesn't report a false "stuck", and its
 	// submitted preference carries over so an unchanged re-emission stays idempotent (no duplicate
-	// broadcast or beacon-node submit; see executeDuty).
+	// broadcast or beacon-node submit; see executeDuty). Its submit retry, if any, is stopped first, so a
+	// submit the retry landed carries over too; if none did, an unchanged replacement re-forms the quorum
+	// from the stash replay below and submits on its own.
 	slot := validatorDuty.DutySlot()
 	sub := newProposerPreferencesSlotRunner(r.opts, r.builders)
 	prev, replacing := r.bySlot[slot]
 	if replacing {
-		sub.submittedPreferences = prev.submitted()
+		prev.stopSubmitRetry()
+		sub.submittedPreferences = prev.submittedPreferences
 		sub.broadcastPreferences = prev.broadcastPreferences
 		// The auth markers carry over too — roots are re-emission-invariant (see the field docs).
 		sub.broadcastAuthRoots = prev.broadcastAuthRoots
@@ -134,13 +135,13 @@ func (r *ProposerPreferencesRunner) StartNewDuty(ctx context.Context, logger *za
 	// partials, and a failed start is already this duty's recorded outcome. It freezes none only when the
 	// preference is already submitted, or when it couldn't build one and this slot never broadcast one.
 	// The rare start that fails before assignment leaves the prior incarnation in place, containers and
-	// outcome intact. Either way the error goes back to the caller.
+	// outcome intact (only its submit retry stays stopped). Either way the error goes back to the caller.
 	startErr := sub.StartNewDuty(ctx, logger, duty, quorum)
 	if !sub.hasDutyAssigned() {
 		return startErr
 	}
 	if replacing && prev.hasDutyRunning() {
-		prev.markSuperseded()
+		prev.markDutyNotRequired() // superseded by the re-emission, not stuck
 	}
 	r.bySlot[slot] = sub
 
@@ -386,11 +387,9 @@ type proposerPreferencesSlotRunner struct {
 	// (peers dedup it by signing root) and the beacon-node submit.
 	submittedPreferences *gloas.ProposerPreferences
 
-	// retrySubmitted is the preference that the background retry of a failed submit (retrySubmit) went on
-	// to submit: the one field written off the message loop, read through submitted(). stopSubmitRetry
-	// stops that retry, and is nil when none was started.
-	retrySubmitted  atomic.Pointer[gloas.ProposerPreferences]
-	stopSubmitRetry context.CancelCauseFunc
+	// submitRetry is the background retry of this slot's failed submit (retrySubmit), kept until the message
+	// loop settles it (settleSubmitRetry); nil if none.
+	submitRetry *preferencesSubmitRetry
 
 	// broadcastPreferences is the preference this proposal slot already broadcast a partial signature
 	// for, carried across sub-runner replacements like submittedPreferences. It covers the in-flight
@@ -464,6 +463,8 @@ func (r *proposerPreferencesSlotRunner) StartNewDuty(ctx context.Context, logger
 }
 
 func (r *proposerPreferencesSlotRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) (err error) {
+	r.settleSubmitRetry()
+
 	if signedMsg.Type == spectypes.RequestAuthPartialSig {
 		return r.processRequestAuthPartial(ctx, logger, signedMsg)
 	}
@@ -479,7 +480,7 @@ func (r *proposerPreferencesSlotRunner) ProcessPreConsensus(ctx context.Context,
 	}
 
 	// We have quorum and are committed to completing this duty here, so a failure below fails it, except a
-	// recoverable reconstruct failure (see reconstructQuorumSig).
+	// recoverable reconstruct failure (see reconstructQuorumSig) and a failed submit, which is retried.
 	defer func() {
 		if err != nil && !isRecoverableReconstructError(err) {
 			r.markDutyFailed(err)
@@ -520,44 +521,50 @@ func (r *proposerPreferencesSlotRunner) ProcessPreConsensus(ctx context.Context,
 // per attempt, up to a slot.
 var preferencesSubmitRetryDelay = 500 * time.Millisecond
 
-// errSuperseded stops a slot runner's submit retry when a re-emission replaces the slot runner.
-var errSuperseded = errors.New("superseded by a re-emission")
+// preferencesSubmitRetry is a background retry of a failed submit (see retrySubmit). Its goroutine touches
+// only the beacon client and this struct; the message loop folds the outcome into the runner once done is
+// closed (settleSubmitRetry).
+type preferencesSubmitRetry struct {
+	signed    *gloas.SignedProposerPreferences
+	concluded chan dutyConclusion // the duty's conclusion, taken from the markers to report a landed submit on
+	cancel    context.CancelFunc
+	done      chan struct{} // closed when the goroutine exits
+	landed    bool          // set by the goroutine before it exits; read only once done is closed
+}
 
 // retrySubmit keeps resubmitting signed after its first submit failed. Nothing else would submit it
 // again: the quorum is reported once, and ssv-spec leaves this retry to the node. It resubmits this exact
 // object, never a rebuilt one, since gossip keeps only the first preference per (dependent_root,
 // proposal_slot) (SIP #94 §5).
 //
-// The retry runs in the background, using only the beacon client and the duty's conclusion, which it
-// takes over, until one of:
-//   - a submit lands: the duty concludes succeeded;
-//   - a re-emission replaces this slot runner (markSuperseded): the duty concludes not required, as any
-//     replaced running duty does;
+// The retry runs in the background until one of:
+//   - a submit lands: the retry reports the duty succeeded;
+//   - a re-emission replaces this slot runner: the dispatcher stops the retry (stopSubmitRetry) and
+//     concludes the duty not required, as for any replaced running duty;
 //   - the proposal slot starts, where the preference is moot: the watcher reports firstErr, noted here.
 func (r *proposerPreferencesSlotRunner) retrySubmit(ctx context.Context, logger *zap.Logger, signed *gloas.SignedProposerPreferences, firstErr error) {
 	r.noteDutyFailure(firstErr)
-	conclude := r.takeDutyConclusion()
 
 	proposalSlot := signed.Message.ProposalSlot
 	epoch := r.NetworkConfig.EstimatedEpochAtSlot(proposalSlot)
 	beaconNode := r.beacon
 	delay, maxDelay := preferencesSubmitRetryDelay, r.NetworkConfig.SlotDuration
 
-	retryCtx, stop := context.WithCancelCause(ctx)
-	r.stopSubmitRetry = stop
-	retryCtx, cancel := context.WithDeadline(retryCtx, r.NetworkConfig.SlotStartTime(proposalSlot))
+	retryCtx, cancel := context.WithDeadline(ctx, r.NetworkConfig.SlotStartTime(proposalSlot))
+	retry := &preferencesSubmitRetry{
+		signed:    signed,
+		concluded: r.takeDutyConclusion(),
+		cancel:    cancel,
+		done:      make(chan struct{}),
+	}
+	r.submitRetry = retry
 
 	go func() {
-		defer func() {
-			cancel()
-			stop(nil)
-		}()
+		defer close(retry.done)
+		defer cancel()
 		for attempt := 1; ; attempt++ {
 			select {
 			case <-retryCtx.Done():
-				if errors.Is(context.Cause(retryCtx), errSuperseded) {
-					conclude(dutyOutcomeNotRequired, nil)
-				}
 				return
 			case <-time.After(delay):
 			}
@@ -568,9 +575,11 @@ func (r *proposerPreferencesSlotRunner) retrySubmit(ctx context.Context, logger 
 					fields.Slot(proposalSlot), zap.Int("attempt", attempt), zap.Error(err))
 				continue
 			}
-			r.retrySubmitted.Store(signed.Message)
+			retry.landed = true
 			recordSuccessfulSubmission(retryCtx, 1, epoch, spectypes.BNRoleProposerPreferences)
-			conclude(dutyOutcomeSucceeded, nil)
+			if retry.concluded != nil {
+				retry.concluded <- dutyConclusion{outcome: dutyOutcomeSucceeded}
+			}
 			logger.Info("✔️ successfully submitted proposer preferences on retry",
 				fields.Slot(proposalSlot), zap.Int("attempt", attempt))
 			return
@@ -578,21 +587,43 @@ func (r *proposerPreferencesSlotRunner) retrySubmit(ctx context.Context, logger 
 	}()
 }
 
-// markSuperseded concludes a running duty that a re-emission replaced as not required rather than stuck.
-// A submit retry owns that conclusion by then (see retrySubmit), so it is stopped and concludes it instead.
-func (r *proposerPreferencesSlotRunner) markSuperseded() {
-	r.markDutyNotRequired()
-	if r.stopSubmitRetry != nil {
-		r.stopSubmitRetry(errSuperseded)
+// settleSubmitRetry folds a finished submit retry into the runner's state, on the message loop: a landed
+// submit becomes this slot's submitted preference and completes the duty; otherwise the duty's conclusion
+// goes back to the markers. A retry still running is left alone.
+func (r *proposerPreferencesSlotRunner) settleSubmitRetry() {
+	retry := r.submitRetry
+	if retry == nil {
+		return
 	}
+	select {
+	case <-retry.done:
+	default:
+		return
+	}
+	r.submitRetry = nil
+
+	if retry.landed {
+		r.submittedPreferences = retry.signed.Message
+		r.markDutySucceeded() // the retry already reported the conclusion, so this only records it
+		return
+	}
+	r.returnDutyConclusion(retry.concluded)
 }
 
-// submitted is the preference this slot already submitted, on quorum or by retrySubmit; nil if none.
-func (r *proposerPreferencesSlotRunner) submitted() *gloas.ProposerPreferences {
-	if p := r.retrySubmitted.Load(); p != nil {
-		return p
+// stopSubmitRetry stops the submit retry, if any, waits for it to exit and settles it.
+func (r *proposerPreferencesSlotRunner) stopSubmitRetry() {
+	if r.submitRetry == nil {
+		return
 	}
-	return r.submittedPreferences
+	r.submitRetry.cancel()
+	<-r.submitRetry.done
+	r.settleSubmitRetry()
+}
+
+// HasRunningDuty settles a finished submit retry first, so a duty the retry completed isn't reported running.
+func (r *proposerPreferencesSlotRunner) HasRunningDuty() bool {
+	r.settleSubmitRetry()
+	return r.hasDutyRunning()
 }
 
 func (r *proposerPreferencesSlotRunner) ProcessConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.SignedSSVMessage) error {
