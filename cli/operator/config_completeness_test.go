@@ -21,7 +21,7 @@ func Test_config_defaults_complete(t *testing.T) {
 	for _, p := range []string{
 		// opt-in / disable flags (default off)
 		"AllowDangerousProposerDelay", "LegacyProposerRoundTimeout", "EnableDoppelgangerProtection", "EnableProfile", "EnableTraces",
-		"WithPing", "db.Reporting", "exporter.Enabled", "eth2.WithParallelSubmissions",
+		"WithPing", "db.Reporting", "exporter.Enabled", "exporter.ProbePeerVersions", "eth2.WithParallelSubmissions",
 		"eth2.WithWeightedAttestationData", "p2p.DisableIPRateLimit", "p2p.DiscoveryTrace",
 		"p2p.Libp2pTrace", "p2p.PubSubTrace", "ssv.ValidatorOptions.FullNode",
 		// optional values / paths / keys (no default)

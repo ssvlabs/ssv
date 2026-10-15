@@ -2,6 +2,7 @@ package operator
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"net"
@@ -12,6 +13,8 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/libp2p/go-libp2p/core/peer"
+	ma "github.com/multiformats/go-multiaddr"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
@@ -28,6 +31,7 @@ import (
 	dutytracestore "github.com/ssvlabs/ssv/exporter/store"
 	exporterapi "github.com/ssvlabs/ssv/exporter/v1/api"
 	"github.com/ssvlabs/ssv/exporter/v1/api/decided"
+	"github.com/ssvlabs/ssv/exporter/versionprobe"
 	"github.com/ssvlabs/ssv/hprobe"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/message/signatureverifier"
@@ -54,6 +58,7 @@ import (
 	"github.com/ssvlabs/ssv/ssvsigner"
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/utils/commons"
 )
 
 // shutdownGraceTimeout bounds the whole graceful teardown — services unwinding plus the node close —
@@ -211,6 +216,7 @@ type node struct {
 	storageMap          *ibftstorage.ParticipantStores
 	collector           *dutytracer.Collector
 	attributionTracker  *attribution.Tracker
+	versionProber       *versionprobe.Prober
 	vrSubmitter         *runner.VRSubmitter
 	slotTickerProvider  slotticker.Provider
 	p2pNetwork          network.P2PNetwork
@@ -609,16 +615,26 @@ func (n *node) start(ctx context.Context, spawn func(func() error)) error {
 		return startHealthProber(ctx, n.logger, healthProber)
 	})
 
+	n.startVersionProber(ctx, spawn)
+
 	if n.cfg.SSVAPIPort > 0 {
 		warnIfSSVAPIAddressUnset(n.logger, n.cfg.SSVAPIAddress, n.cfg.SSVAPIPort)
 		var operatorPeers *hexporter.OperatorPeers
+		// Left as untyped nils unless the prober runs: a nil *Cache inside the ProbedVersions
+		// interface would not compare equal to nil in the resolver.
+		var versionProbes *hexporter.VersionProbes
 		if n.attributionTracker != nil {
+			var probed hexporter.ProbedVersions
+			if n.versionProber != nil {
+				probed = n.versionProber.Cache()
+				versionProbes = hexporter.NewVersionProbes(n.versionProber.Cache())
+			}
 			operatorPeers = hexporter.NewOperatorPeers(
 				n.attributionTracker,
 				hexporter.NewPeerInfoResolver(
 					n.p2pNetwork.(p2pv1.PeersIndexProvider).PeersIndex(),
 					n.p2pNetwork.(p2pv1.HostProvider).Host().Network(),
-					nil,
+					probed,
 				),
 			)
 		}
@@ -641,7 +657,7 @@ func (n *node) start(ctx context.Context, spawn func(func() error)) error {
 			},
 			hexporter.NewExporter(n.logger, n.storageMap, n.collector, n.nodeStorage.ValidatorStore(), n.networkConfig),
 			operatorPeers,
-			nil,
+			versionProbes,
 			n.mode == modeExporterArchive,
 		)
 		_, apiServeErr, err := apiServer.Start(ctx)
@@ -818,4 +834,58 @@ func buildDoppelganger(
 	}
 	logger.Info("Doppelganger protection disabled.")
 	return doppelganger.NoOpHandler{}
+}
+
+// versionProbeMode decides whether the exporter version prober runs. The prober needs exporter
+// mode (it reads the attribution tracker); setting the flag elsewhere yields a warning.
+func versionProbeMode(isExporter, flag bool) (enable bool, warn string) {
+	if !flag {
+		return false, ""
+	}
+	if !isExporter {
+		return false, "EXPORTER_PROBE_PEER_VERSIONS is set but the node is not in exporter mode; ignoring"
+	}
+	return true, ""
+}
+
+// startVersionProber builds and spawns the version prober when exporter mode and
+// EXPORTER_PROBE_PEER_VERSIONS both apply. It must run after startNetwork and before the API
+// handlers are built, since they read the prober's cache.
+func (n *node) startVersionProber(ctx context.Context, spawn func(func() error)) {
+	enable, warn := versionProbeMode(n.attributionTracker != nil, n.cfg.ExporterOptions.ProbePeerVersions)
+	if warn != "" {
+		n.logger.Warn(warn)
+	}
+	if !enable {
+		return
+	}
+	addrs, ok := n.p2pNetwork.(p2pv1.PeerAddrProvider)
+	if !ok {
+		n.logger.Warn("version probe disabled: network has no address provider")
+		return
+	}
+	host := n.p2pNetwork.(p2pv1.HostProvider).Host()
+	n.versionProber = versionprobe.New(versionprobe.Config{
+		Logger:   n.logger.Named("version_probe"),
+		Evidence: n.attributionTracker,
+		Peers:    versionprobe.NewPeerState(n.p2pNetwork.(p2pv1.PeersIndexProvider).PeersIndex(), host.Network()),
+		Sources: []versionprobe.AddrSource{
+			{Name: "discovered", Lookup: func(_ context.Context, id peer.ID) ([]ma.Multiaddr, error) {
+				return addrs.DiscoveredPeerAddrs(id), nil
+			}},
+			{Name: "peerstore", Lookup: func(_ context.Context, id peer.ID) ([]ma.Multiaddr, error) {
+				return addrs.PeerstoreAddrs(id), nil
+			}},
+			versionprobe.Throttled(versionprobe.AddrSource{Name: "discv5", Lookup: func(_ context.Context, id peer.ID) ([]ma.Multiaddr, error) {
+				return addrs.LookupPeerAddrs(n.logger, id)
+			}}, 1),
+		},
+		Request: func() versionprobe.Request {
+			d := n.networkConfig.CurrentDomainType()
+			return versionprobe.Request{NetworkID: "0x" + hex.EncodeToString(d[:]), NodeVersion: commons.GetNodeVersion()}
+		},
+	})
+	prober := n.versionProber
+	spawn(func() error { return prober.Run(ctx) })
+	n.logger.Info("exporter version probe enabled")
 }
