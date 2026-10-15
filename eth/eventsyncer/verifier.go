@@ -30,6 +30,11 @@ const (
 	defaultVerifyRetryInitialDelay = 10 * time.Second
 	defaultVerifyRetryMaxDelay     = 5 * time.Minute
 
+	// defaultVerifyParkedRecheckMaxDelay caps the backoff (starting at defaultVerifyRetryInitialDelay)
+	// for re-checking parked ranges. A re-check costs about one block's requests, so the cap mainly
+	// trades how often an unresolved range repeats its warnings for how soon a fix is noticed.
+	defaultVerifyParkedRecheckMaxDelay = time.Hour
+
 	// defaultResyncCooldown rate-limits automatic repair: after a resync is flagged, further
 	// confirmed misses within this window are suppressed (logged, not acted on). This bounds a
 	// fatal+wipe+resync loop on a persistently-broken EL and caps a correlated network-wide
@@ -48,38 +53,43 @@ var ErrResyncRequired = errors.New("registry resync required: background verific
 // because a resync was flagged too recently (rate-limited); the range is parked instead.
 var errResyncSuppressed = errors.New("resync suppressed by rate limit")
 
-// Verify checks, in the background, that every optimistically-synced range is complete with
-// respect to chain data. For each range it re-fetches the contract's logs (VerifyLogs) and
-// compares them, block by block, to the digests the optimistic sync recorded. Blocks that agree
-// are retired. On a disagreement it resolves the block against receipts — the index-independent
-// source of truth — and flags a resync (ErrResyncRequired) only when receipts confirm the sync
-// genuinely missed events; if receipts are unavailable it parks the range (leaves it pending and
-// visible on pending_ranges) rather than resyncing on unauthoritative evidence or claiming it
-// verified. Progress is persisted per chunk, so an interrupted run resumes where it left off.
-// Meant to run off the startup critical path.
+// Verify runs one background verification pass, checking that every optimistically-synced range
+// is complete with respect to chain data. For each range it re-fetches the contract's logs
+// (VerifyLogs) and compares them, block by block, to the digests the optimistic sync recorded.
+// Blocks that agree are retired. On a disagreement it resolves the block against receipts — the
+// index-independent source of truth — and flags a resync (ErrResyncRequired) only when receipts
+// confirm the sync genuinely missed events; without an authoritative source it parks the range on
+// that block (pending, visible on pending_ranges) rather than resyncing on unauthoritative evidence
+// or claiming it verified. Progress is persisted per chunk, so an interrupted pass resumes where it
+// left off. VerifyWithRetry is the long-running form; both run off the startup critical path.
 //
 // The residual blind spot: if the sync and the verify-time re-fetch drop the same logs, the
 // digests agree, no disagreement is raised, and receipts are never consulted — an identical
 // double-drop goes undetected. Resolving every block against receipts would close it but is far
 // more expensive, and the partial within-block drop it guards against has not been observed.
 func (es *EventSyncer) Verify(ctx context.Context) error {
+	_, err := es.verifyPass(ctx)
+	return err
+}
+
+// verifyPass is Verify, additionally reporting how many ranges it left parked.
+func (es *EventSyncer) verifyPass(ctx context.Context) (parked int, err error) {
 	ranges, err := es.nodeStorage.ListUnverifiedRanges(nil)
 	if err != nil {
-		return fmt.Errorf("list unverified ranges: %w", err)
+		return 0, fmt.Errorf("list unverified ranges: %w", err)
 	}
 	recordVerifyPendingRanges(ctx, len(ranges))
 	if len(ranges) == 0 {
-		return nil
+		return 0, nil
 	}
 
 	es.logger.Info("verifying completeness of optimistically-synced registry events",
 		zap.Int("pending_ranges", len(ranges)))
 
-	parked := 0
 	for _, r := range ranges {
 		wasParked, err := es.verifyRange(ctx, r)
 		if err != nil {
-			return err // ErrResyncRequired or a genuine failure; either way, stop verifying.
+			return parked, err // ErrResyncRequired or a genuine failure; either way, stop verifying.
 		}
 		if wasParked {
 			parked++
@@ -89,50 +99,65 @@ func (es *EventSyncer) Verify(ctx context.Context) error {
 	// Whatever remains in the journal is the parked ranges (couldn't be authoritatively verified).
 	remaining, err := es.nodeStorage.ListUnverifiedRanges(nil)
 	if err != nil {
-		return fmt.Errorf("list unverified ranges: %w", err)
+		return parked, fmt.Errorf("list unverified ranges: %w", err)
 	}
 	recordVerifyPendingRanges(ctx, len(remaining))
 
 	if parked > 0 {
-		es.logger.Warn("background verification could not fully verify some ranges; they remain pending and will be re-checked on the next node start (see earlier warnings)",
+		es.logger.Warn("background verification could not authoritatively verify some ranges; they remain pending and will be re-checked (see earlier warnings)",
 			zap.Int("parked_ranges", parked))
 	} else {
 		es.logger.Info("background verification complete: optimistically-synced registry events are consistent with chain data")
 	}
-	return nil
+	return parked, nil
 }
 
-// VerifyWithRetry runs Verify, retrying only a transient failure with capped exponential backoff
-// until Verify returns nil (every range verified or parked), a miss is found (ErrResyncRequired),
-// or ctx is canceled. Parked ranges make Verify return nil, so they aren't retried here — they're
-// re-checked on the next node start; this loop exists only so a transient execution-client error
-// doesn't leave a range unverified until then.
+// VerifyWithRetry runs verification passes until every journalled range is verified (nil), a miss
+// is confirmed (ErrResyncRequired), or ctx is canceled. Transient failures are retried with capped
+// exponential backoff; parked ranges are re-checked on a slower-capped one for as long as the node
+// runs, since what parked them (an inconsistent receipts response, an EL lacking
+// eth_getBlockReceipts, a rate-limited repair) can clear without a restart.
 func (es *EventSyncer) VerifyWithRetry(ctx context.Context) error {
-	backoff := es.verifyRetryInitialDelay
+	failureBackoff := es.verifyRetryInitialDelay
+	parkedBackoff := es.verifyRetryInitialDelay
 	for {
-		err := es.Verify(ctx)
-		if err == nil || errors.Is(err, ErrResyncRequired) || errors.Is(err, context.Canceled) {
+		parked, err := es.verifyPass(ctx)
+
+		var wait time.Duration
+		switch {
+		case errors.Is(err, ErrResyncRequired), errors.Is(err, context.Canceled):
 			return err
+		case err != nil:
+			wait = failureBackoff
+			failureBackoff = min(failureBackoff*2, es.verifyRetryMaxDelay)
+			es.logger.Warn("background verification failed; retrying",
+				zap.Duration("retry_in", wait), zap.Error(err))
+		case parked > 0:
+			wait = parkedBackoff
+			parkedBackoff = min(parkedBackoff*2, es.verifyParkedRecheckMaxDelay)
+			es.logger.Debug("re-checking parked ranges after a backoff",
+				zap.Int("parked_ranges", parked), zap.Duration("retry_in", wait))
+		default:
+			return nil
 		}
 
-		es.logger.Warn("background verification failed; retrying",
-			zap.Duration("retry_in", backoff), zap.Error(err))
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-time.After(backoff):
+		case <-time.After(wait):
 		}
-		backoff = min(backoff*2, es.verifyRetryMaxDelay)
 	}
 }
 
 // verifyRange verifies a single journalled range chunk by chunk, resuming from its persisted
-// cursor. It returns parked=true when it left the range pending because a disagreeing block
-// couldn't be authoritatively resolved (receipts unavailable, or a resync was rate-limited);
-// ErrResyncRequired when receipts confirm a miss; nil once the whole range verifies clean (having
-// removed it from the journal); or a wrapped error on RPC/storage failure.
+// cursor; a parked range first re-checks its parked block alone. It returns parked=true when it
+// left the range pending because a disagreeing block couldn't be authoritatively resolved (no
+// authoritative receipts, or a resync was rate-limited); ErrResyncRequired when receipts confirm a
+// miss; nil once the whole range verifies clean (having removed it from the journal); or a wrapped
+// error on RPC/storage failure.
 func (es *EventSyncer) verifyRange(ctx context.Context, r nodestorage.UnverifiedRange) (parked bool, err error) {
 	cursor := max(r.Cursor, r.From)
+	recheckParked := r.Parked
 	for cursor <= r.To {
 		select {
 		case <-ctx.Done():
@@ -141,6 +166,11 @@ func (es *EventSyncer) verifyRange(ctx context.Context, r nodestorage.Unverified
 		}
 
 		toBlock := min(cursor+es.verifyChunkSize-1, r.To)
+		if recheckParked {
+			// Likely still unresolved: re-check the parked block alone rather than a whole chunk.
+			toBlock = cursor
+			recheckParked = false
+		}
 
 		authoritative, err := es.executionClient.VerifyLogs(ctx, cursor, toBlock)
 		if err != nil {
@@ -174,9 +204,9 @@ func (es *EventSyncer) verifyRange(ctx context.Context, r nodestorage.Unverified
 			// different ELs), so resolve the block against receipts before doing anything drastic.
 			clean, err := es.resolveMismatch(ctx, block, stored, found)
 			if errors.Is(err, errRangeParked) {
-				// Couldn't authoritatively resolve it: commit progress up to here and leave the
-				// range pending (visible) rather than resyncing on unauthoritative evidence.
-				if err := es.commitVerifiedChunk(r, block, recorded); err != nil {
+				// No authoritative resolution: commit progress up to here and park the range on
+				// this block rather than resync on unauthoritative evidence.
+				if err := es.commitVerifiedChunk(r, block, recorded, true); err != nil {
 					return false, err
 				}
 				recordVerifyParked(ctx)
@@ -191,7 +221,7 @@ func (es *EventSyncer) verifyRange(ctx context.Context, r nodestorage.Unverified
 		}
 
 		nextCursor := toBlock + 1
-		if err := es.commitVerifiedChunk(r, nextCursor, recorded); err != nil {
+		if err := es.commitVerifiedChunk(r, nextCursor, recorded, false); err != nil {
 			return false, err
 		}
 		recordVerifyCursor(ctx, toBlock)
@@ -251,8 +281,9 @@ func (es *EventSyncer) resolveMismatch(ctx context.Context, block uint64, stored
 
 // commitVerifiedChunk advances the range's cursor past a clean chunk and drops that chunk's
 // now-checked digests in one transaction, so an interrupted run resumes without re-checking
-// (nor leaking) it. Once the cursor passes the range end, the range itself is removed.
-func (es *EventSyncer) commitVerifiedChunk(r nodestorage.UnverifiedRange, nextCursor uint64, recorded []uint64) error {
+// (nor leaking) it. Once the cursor passes the range end, the range itself is removed. parked
+// records that the block at nextCursor couldn't be authoritatively resolved.
+func (es *EventSyncer) commitVerifiedChunk(r nodestorage.UnverifiedRange, nextCursor uint64, recorded []uint64, parked bool) error {
 	txn := es.nodeStorage.Begin()
 	defer txn.Discard()
 
@@ -267,6 +298,7 @@ func (es *EventSyncer) commitVerifiedChunk(r nodestorage.UnverifiedRange, nextCu
 		}
 	} else {
 		r.Cursor = nextCursor
+		r.Parked = parked
 		if err := es.nodeStorage.SaveUnverifiedRange(txn, r); err != nil {
 			return fmt.Errorf("save verification cursor: %w", err)
 		}
@@ -279,7 +311,8 @@ func (es *EventSyncer) commitVerifiedChunk(r nodestorage.UnverifiedRange, nextCu
 // resync was already flagged within the cooldown it suppresses this one — returning
 // errResyncSuppressed so the caller parks the range — to bound a fatal+wipe+resync loop on a
 // persistently-broken EL and to cap a correlated network-wide resync from a common-mode fault.
-// During the cooldown the node keeps running on possibly-incomplete state.
+// During the cooldown the node keeps running on possibly-incomplete state; the first re-check of
+// the parked range after the cooldown flags the repair.
 func (es *EventSyncer) flagResync(ctx context.Context, block uint64, reason string) error {
 	last, found, err := es.nodeStorage.GetLastResyncTime(nil)
 	if err != nil {

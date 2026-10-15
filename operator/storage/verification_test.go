@@ -36,12 +36,13 @@ func TestUnverifiedRanges(t *testing.T) {
 		{From: 100, To: 200, Cursor: 100},
 	}, ranges)
 
-	// Saving a range with an existing From upserts it (used to persist cursor progress).
-	require.NoError(t, s.SaveUnverifiedRange(nil, UnverifiedRange{From: 10, To: 20, Cursor: 18}))
+	// Saving a range with an existing From upserts it (used to persist cursor progress, and to
+	// park the range on the block at its cursor).
+	require.NoError(t, s.SaveUnverifiedRange(nil, UnverifiedRange{From: 10, To: 20, Cursor: 18, Parked: true}))
 	ranges, err = s.ListUnverifiedRanges(nil)
 	require.NoError(t, err)
 	require.Len(t, ranges, 2)
-	require.Equal(t, uint64(18), ranges[0].Cursor)
+	require.Equal(t, UnverifiedRange{From: 10, To: 20, Cursor: 18, Parked: true}, ranges[0])
 
 	// Deleting removes just that range.
 	require.NoError(t, s.DeleteUnverifiedRange(nil, 10))

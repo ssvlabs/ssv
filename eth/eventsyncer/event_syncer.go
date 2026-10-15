@@ -50,11 +50,12 @@ type EventSyncer struct {
 	logger             *zap.Logger
 	stalenessThreshold time.Duration
 
-	verifyChunkSize         uint64
-	verifyChunkDelay        time.Duration
-	verifyRetryInitialDelay time.Duration
-	verifyRetryMaxDelay     time.Duration
-	resyncCooldown          time.Duration
+	verifyChunkSize             uint64
+	verifyChunkDelay            time.Duration
+	verifyRetryInitialDelay     time.Duration
+	verifyRetryMaxDelay         time.Duration
+	verifyParkedRecheckMaxDelay time.Duration
+	resyncCooldown              time.Duration
 
 	lastProcessedBlock       uint64
 	lastProcessedBlockChange time.Time
@@ -66,13 +67,14 @@ func New(nodeStorage nodestorage.Storage, executionClient ExecutionClient, event
 		executionClient: executionClient,
 		eventHandler:    eventHandler,
 
-		logger:                  zap.NewNop(),
-		stalenessThreshold:      defaultStalenessThreshold,
-		verifyChunkSize:         defaultVerifyChunkSize,
-		verifyChunkDelay:        defaultVerifyChunkDelay,
-		verifyRetryInitialDelay: defaultVerifyRetryInitialDelay,
-		verifyRetryMaxDelay:     defaultVerifyRetryMaxDelay,
-		resyncCooldown:          defaultResyncCooldown,
+		logger:                      zap.NewNop(),
+		stalenessThreshold:          defaultStalenessThreshold,
+		verifyChunkSize:             defaultVerifyChunkSize,
+		verifyChunkDelay:            defaultVerifyChunkDelay,
+		verifyRetryInitialDelay:     defaultVerifyRetryInitialDelay,
+		verifyRetryMaxDelay:         defaultVerifyRetryMaxDelay,
+		verifyParkedRecheckMaxDelay: defaultVerifyParkedRecheckMaxDelay,
+		resyncCooldown:              defaultResyncCooldown,
 	}
 
 	for _, opt := range opts {

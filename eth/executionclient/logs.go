@@ -8,7 +8,7 @@ import (
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 )
 
-// BlockLogsDigest returns a deterministic digest of the given logs' in-block identities
+// BlockLogsDigest returns an order-independent digest of the given logs' in-block identities
 // (transaction index + log index). Because eth_getLogs can only ever return a subset of a
 // block's logs — it drops, never invents — a digest that matches the one recomputed from
 // authoritative data (receipts) proves the original response was complete. The background

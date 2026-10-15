@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/accounts/abi"
@@ -314,13 +315,14 @@ func TestE2E_EmptyReceiptsNotTreatedAsAuthoritative(t *testing.T) {
 }
 
 // TestE2E_ParkedRangeResolvesWhenReceiptsReturn: a range parked because the receipt store was
-// transiently broken (returned empty) is re-checked and cleared once receipts come back. Unlike an
-// unsupported-method (-32601) park — which latches and only clears on restart — an empty-receipts
-// park doesn't latch, so a later Verify pass resolves it in-process. Here the recorded digest is
-// vindicated by the receipts (the drop was only in the log index), so the range retires with no resync.
+// transiently broken (returned empty) is re-checked in-process by VerifyWithRetry, without a
+// restart. Once receipts return they vindicate the recorded digest (the drop was only in the log
+// index), so the range retires with no resync.
 func TestE2E_ParkedRangeResolvesWhenReceiptsReturn(t *testing.T) {
 	ctx := t.Context()
-	es, nodeStorage, proxy, _ := setupVerifyE2E(t, ctx, 3)
+	es, nodeStorage, proxy, dropped := setupVerifyE2E(t, ctx, 3)
+	es.verifyRetryInitialDelay = 10 * time.Millisecond
+	es.verifyParkedRecheckMaxDelay = 10 * time.Millisecond
 
 	// Optimistic sync records all 3 operators.
 	_, err := es.SyncHistory(ctx, 0, false)
@@ -328,22 +330,29 @@ func TestE2E_ParkedRangeResolvesWhenReceiptsReturn(t *testing.T) {
 	require.Equal(t, 3, operatorCount(t, nodeStorage))
 
 	// Log index drops the middle block and the receipt store returns empty → the disagreeing block
-	// can't be resolved authoritatively, so the range parks (without latching receipts unsupported).
+	// can't be resolved authoritatively, so the range parks on it.
 	proxy.dropActive.Store(true)
 	proxy.receiptsEmpty.Store(true)
-	require.NoError(t, es.Verify(ctx))
-	ranges, err := nodeStorage.ListUnverifiedRanges(nil)
-	require.NoError(t, err)
-	require.NotEmpty(t, ranges, "range parked while the receipt store was broken")
+	verifyDone := make(chan error, 1)
+	go func() { verifyDone <- es.VerifyWithRetry(ctx) }()
+	require.Eventually(t, func() bool {
+		ranges, err := nodeStorage.ListUnverifiedRanges(nil)
+		return err == nil && len(ranges) == 1 && ranges[0].Parked && ranges[0].Cursor == dropped
+	}, 30*time.Second, 10*time.Millisecond, "range parks on the dropped block while the receipt store is broken")
 
-	// Receipts come back. The next Verify resolves the parked block against them; the recorded
-	// digest matches the receipts truth, so the range retires clean with no resync.
+	// Receipts come back: the next re-check resolves the parked block against them and the range
+	// retires clean.
 	proxy.receiptsEmpty.Store(false)
-	require.NoError(t, es.Verify(ctx))
+	select {
+	case err := <-verifyDone:
+		require.NoError(t, err)
+	case <-time.After(30 * time.Second):
+		t.Fatal("parked range was not re-checked in-process after receipts returned")
+	}
 	resync, err := nodeStorage.IsResyncRequired(nil)
 	require.NoError(t, err)
 	require.False(t, resync, "recorded digest vindicated by receipts → no resync")
-	ranges, err = nodeStorage.ListUnverifiedRanges(nil)
+	ranges, err := nodeStorage.ListUnverifiedRanges(nil)
 	require.NoError(t, err)
 	require.Empty(t, ranges, "parked range retired once receipts became available")
 }

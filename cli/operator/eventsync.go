@@ -181,10 +181,10 @@ func syncContractEvents(
 
 		// Verify any optimistically-synced ranges (large cold syncs) in the background, off the
 		// critical path, checking each block's recorded log digest against chain data. It runs
-		// concurrently with ongoing sync (below vs. above the last-processed marker) and retries
-		// transient failures in-process. If it finds the optimistic sync missed events it returns
-		// ErrResyncRequired: we surface that so the node terminates and restarts into the clean,
-		// inline-verified resync (the flag is already persisted).
+		// concurrently with ongoing sync (below vs. above the last-processed marker), retrying
+		// transient failures and re-checking parked ranges in-process. If it finds the optimistic
+		// sync missed events it returns ErrResyncRequired: we surface that so the node terminates
+		// and restarts into the clean, inline-verified resync (the flag is already persisted).
 		g.Go(func() error {
 			err := eventSyncer.VerifyWithRetry(ctx)
 			switch {
