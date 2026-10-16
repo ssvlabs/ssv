@@ -305,8 +305,9 @@ func (s *Service) checkRequest(ctx context.Context, r *keyRunner, req *kmstypes.
 	if family.Scheme() != string(r.key.File.Scheme) {
 		return &RejectedError{fmt.Sprintf("a %s key can't sign for %s chains", r.key.File.Scheme, chain.Namespace)}
 	}
+	// Messages (off-chain families) need no executor: they are not broadcast and have no nonce.
 	ex, ok := s.executors[chain.String()]
-	if !ok {
+	if !ok && !chains.IsOffchain(family) {
 		return &RejectedError{fmt.Sprintf("chain %s is not supported by this operator (supported: %s)", chain, strings.Join(s.Chains(), ", "))}
 	}
 	if err := req.VerifyRequester(); err != nil {
@@ -316,7 +317,7 @@ func (s *Service) checkRequest(ctx context.Context, r *keyRunner, req *kmstypes.
 	if err != nil {
 		return &RejectedError{err.Error()}
 	}
-	if seq, ok := tx.Sequence(); ok {
+	if seq, ok := tx.Sequence(); ok && ex != nil {
 		next, err := ex.AccountSequence(ctx, r.key)
 		if err != nil {
 			return fmt.Errorf("account nonce: %w", err)
@@ -353,13 +354,17 @@ func (s *Service) checkRequest(ctx context.Context, r *keyRunner, req *kmstypes.
 // sequenceKey names a transaction sequence (nonce) on a chain in the runner state.
 func sequenceKey(chain chains.ID, seq uint64) string { return fmt.Sprintf("%s/%d", chain, seq) }
 
-// Chains lists the chains this operator signs for.
+// Chains lists the chains this operator signs for: its transaction chains, and "<namespace>:*" for
+// each message family (messages are signed for any reference).
 func (s *Service) Chains() []string {
 	out := make([]string, 0, len(s.executors))
 	for c := range s.executors {
 		out = append(out, c)
 	}
 	sort.Strings(out)
+	for _, ns := range chains.OffchainNamespaces() {
+		out = append(out, ns+":*")
+	}
 	return out
 }
 

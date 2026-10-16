@@ -12,8 +12,16 @@ pragma solidity 0.8.28;
 /// raw address bytes, so non-EVM chains fit without changes.
 ///
 /// Per key: an owner, agents, a frozen flag. Per key and chain: whether the chain is enabled, a
-/// native-value limit per transaction, recipient allowlist, contract calls. The owner can also
-/// approve one exact request (its request hash, which binds key, chain and transaction).
+/// native-value limit per transaction, recipient allowlist, contract calls. Per key, chain and
+/// token: a token policy, which makes the operators read calls to that token (ERC-20 `transfer` and
+/// `approve` only, up to an amount per transaction, to allowlisted recipients). The owner can also
+/// approve exact requests (their request hashes, which bind key, chain and transaction).
+///
+/// Messages are "chains" too (CAIP-2-style namespaces the operators define): `eip191:<chain id>`
+/// for personal messages, whose target is a sign-in message's domain, and `eip712:<chain id>` for
+/// typed data, whose target is the domain separator followed by keccak256(primary type). An
+/// agent's message is checked like a transaction: chain enabled, target allowlisted (or any), and
+/// free-form text counts as call data.
 ///
 /// Keys are registered with a proof from the key itself: at the end of the key generation ceremony
 /// the operators sign `registrationDigest(key, owner, nonce)` with the new key. Every owner change
@@ -31,6 +39,15 @@ contract SSVKMSPolicy {
         uint256 maxValuePerTx;
     }
 
+    /// @notice How agents may use one token contract on one chain. When enabled, the only calls agents
+    /// may make to it are ERC-20 `transfer(to, amount)` and `approve(spender, amount)`, with no native
+    /// value, up to `maxAmountPerTx` (in the token's smallest unit), to recipients the chain policy
+    /// allows (`allowAnyTarget` or the allowlist).
+    struct TokenPolicy {
+        bool enabled;
+        uint256 maxAmountPerTx;
+    }
+
     /// @notice A batch of owner changes, signed once.
     struct Config {
         bool updateFrozen;
@@ -42,6 +59,9 @@ contract SSVKMSPolicy {
         bytes32[] targetChains; // allowlist changes: chain, recipient bytes, allowed
         bytes[] targets;
         bool[] targetAllowed;
+        bytes32[] tokenChains; // token policies to set: chain, token address bytes, policy
+        bytes[] tokens;
+        TokenPolicy[] tokenPolicies;
     }
 
     mapping(address key => address owner) public ownerOf;
@@ -49,6 +69,7 @@ contract SSVKMSPolicy {
     mapping(address key => mapping(address agent => bool)) public isAgent;
     mapping(address key => mapping(bytes32 chain => ChainPolicy)) internal chainPolicies;
     mapping(address key => mapping(bytes32 chain => mapping(bytes32 target => bool))) internal allowedTargets;
+    mapping(address key => mapping(bytes32 chain => mapping(bytes32 token => TokenPolicy))) internal tokenPolicies;
     // Owner co-signatures: an exact request (its request hash) the owner approved.
     mapping(address key => mapping(bytes32 requestHash => bool)) public isApproved;
     // Next nonce for each signer's signed messages.
@@ -56,18 +77,26 @@ contract SSVKMSPolicy {
 
     bytes32 public constant CHAIN_POLICY_TYPEHASH =
         keccak256("ChainPolicy(bool enabled,bool allowAnyTarget,bool allowContractCalls,uint256 maxValuePerTx)");
+    bytes32 public constant TOKEN_POLICY_TYPEHASH = keccak256("TokenPolicy(bool enabled,uint256 maxAmountPerTx)");
     bytes32 public constant CONFIGURE_TYPEHASH = keccak256(
-        "Configure(address key,bool updateFrozen,bool frozen,bytes32[] chains,ChainPolicy[] chainPolicies,address[] agents,bool[] agentAllowed,bytes32[] targetChains,bytes[] targets,bool[] targetAllowed,uint256 nonce,uint256 deadline)"
+        "Configure(address key,bool updateFrozen,bool frozen,bytes32[] chains,ChainPolicy[] chainPolicies,address[] agents,bool[] agentAllowed,bytes32[] targetChains,bytes[] targets,bool[] targetAllowed,bytes32[] tokenChains,bytes[] tokens,TokenPolicy[] tokenPolicies,uint256 nonce,uint256 deadline)"
         "ChainPolicy(bool enabled,bool allowAnyTarget,bool allowContractCalls,uint256 maxValuePerTx)"
+        "TokenPolicy(bool enabled,uint256 maxAmountPerTx)"
     );
     bytes32 public constant FREEZE_TYPEHASH = keccak256("Freeze(address key,address signer,uint256 nonce,uint256 deadline)");
     bytes32 public constant APPROVE_TYPEHASH =
         keccak256("Approve(address key,bytes32 requestHash,uint256 nonce,uint256 deadline)");
+    bytes32 public constant APPROVE_MANY_TYPEHASH =
+        keccak256("ApproveMany(address key,bytes32[] requestHashes,uint256 nonce,uint256 deadline)");
+
+    bytes4 internal constant ERC20_TRANSFER = 0xa9059cbb; // transfer(address,uint256)
+    bytes4 internal constant ERC20_APPROVE = 0x095ea7b3; // approve(address,uint256)
 
     event KeyRegistered(address indexed key, address indexed owner, uint256 nonce);
     event ChainPolicySet(address indexed key, bytes32 indexed chain, ChainPolicy policy);
     event AgentSet(address indexed key, address indexed agent, bool allowed);
     event TargetSet(address indexed key, bytes32 indexed chain, bytes target, bool allowed);
+    event TokenPolicySet(address indexed key, bytes32 indexed chain, bytes token, TokenPolicy policy);
     event Approved(address indexed key, bytes32 indexed requestHash);
     event FrozenSet(address indexed key, bool frozen, address by);
     event OwnershipTransferred(address indexed key, address indexed previousOwner, address indexed newOwner);
@@ -115,6 +144,10 @@ contract SSVKMSPolicy {
         return allowedTargets[key][chain][keccak256(target)];
     }
 
+    function tokenPolicyOf(address key, bytes32 chain, bytes calldata token) external view returns (TokenPolicy memory) {
+        return tokenPolicies[key][chain][keccak256(token)];
+    }
+
     /// @notice Whether `key` may sign, for `requester`, a transaction on `chain` sending `value` (the
     /// chain's base unit) to `target` (the chain's address bytes) with call `data`; `requestHash` is
     /// the dKMS request's hash. Evaluated by the SSV operators before signing.
@@ -137,9 +170,37 @@ contract SSVKMSPolicy {
         ChainPolicy memory p = chainPolicies[key][chain];
         if (!p.enabled) return (false, "chain not enabled for agents");
         if (value > p.maxValuePerTx) return (false, "value over the per-transaction limit");
+
+        TokenPolicy memory t = tokenPolicies[key][chain][keccak256(target)];
+        if (t.enabled) return _checkToken(key, chain, p, t, value, data);
+
         if (!p.allowAnyTarget && !allowedTargets[key][chain][keccak256(target)]) return (false, "target not allowlisted");
         if (data.length > 0 && !p.allowContractCalls) return (false, "contract calls not allowed");
         return (true, "within policy");
+    }
+
+    // A call to a token with a token policy: an ERC-20 transfer or approve within its limit, to an
+    // allowed recipient (or spender), with no native value.
+    function _checkToken(
+        address key,
+        bytes32 chain,
+        ChainPolicy memory p,
+        TokenPolicy memory t,
+        uint256 value,
+        bytes calldata data
+    ) internal view returns (bool, string memory) {
+        if (value != 0) return (false, "no native value with token calls");
+        if (data.length != 68 || (bytes4(data[0:4]) != ERC20_TRANSFER && bytes4(data[0:4]) != ERC20_APPROVE)) {
+            return (false, "only transfer and approve on this token");
+        }
+        // abi.decode would accept dirty high bits: the address word must be a clean 20-byte value.
+        uint256 word = uint256(bytes32(data[4:36]));
+        if (word >> 160 != 0) return (false, "only transfer and approve on this token");
+        uint256 amount = uint256(bytes32(data[36:68]));
+        if (amount > t.maxAmountPerTx) return (false, "token amount over the per-transaction limit");
+        bytes memory recipient = abi.encodePacked(address(uint160(word)));
+        if (!p.allowAnyTarget && !allowedTargets[key][chain][keccak256(recipient)]) return (false, "recipient not allowlisted");
+        return (true, "token transfer within policy");
     }
 
     // ---------- owner (sender) ----------
@@ -154,6 +215,10 @@ contract SSVKMSPolicy {
 
     function setAllowedTarget(address key, bytes32 chain, bytes calldata target, bool allowed) external onlyOwner(key) {
         _setTarget(key, chain, target, allowed);
+    }
+
+    function setTokenPolicy(address key, bytes32 chain, bytes calldata token, TokenPolicy calldata policy) external onlyOwner(key) {
+        _setTokenPolicy(key, chain, token, policy);
     }
 
     function setFrozen(address key, bool value) external onlyOwner(key) {
@@ -183,6 +248,7 @@ contract SSVKMSPolicy {
         if (
             c.chains.length != c.chainPolicies.length || c.agents.length != c.agentAllowed.length
                 || c.targetChains.length != c.targets.length || c.targets.length != c.targetAllowed.length
+                || c.tokenChains.length != c.tokens.length || c.tokens.length != c.tokenPolicies.length
         ) revert LengthMismatch();
         address owner = ownerOf[key];
         if (owner == address(0)) revert NotOwner();
@@ -191,6 +257,7 @@ contract SSVKMSPolicy {
         for (uint256 i; i < c.chains.length; i++) _setChainPolicy(key, c.chains[i], c.chainPolicies[i]);
         for (uint256 i; i < c.agents.length; i++) _setAgent(key, c.agents[i], c.agentAllowed[i]);
         for (uint256 i; i < c.targets.length; i++) _setTarget(key, c.targetChains[i], c.targets[i], c.targetAllowed[i]);
+        for (uint256 i; i < c.tokens.length; i++) _setTokenPolicy(key, c.tokenChains[i], c.tokens[i], c.tokenPolicies[i]);
     }
 
     /// @notice Freezes a key with the owner's or an agent's signature.
@@ -210,12 +277,26 @@ contract SSVKMSPolicy {
         _approve(key, requestHash);
     }
 
+    /// @notice Approves several exact requests with one owner signature (e.g. every transaction of
+    /// one task the owner agreed to).
+    function approveManyBySig(address key, bytes32[] calldata requestHashes, uint256 deadline, bytes calldata signature)
+        external
+    {
+        address owner = ownerOf[key];
+        if (owner == address(0)) revert NotOwner();
+        bytes32 structHash = keccak256(
+            abi.encode(APPROVE_MANY_TYPEHASH, key, keccak256(abi.encodePacked(requestHashes)), nonces[key][owner], deadline)
+        );
+        _useSignature(key, owner, structHash, deadline, signature);
+        for (uint256 i; i < requestHashes.length; i++) _approve(key, requestHashes[i]);
+    }
+
     function domainSeparator() public view returns (bytes32) {
         return keccak256(
             abi.encode(
                 keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"),
                 keccak256("SSVKMSPolicy"),
-                keccak256("2"),
+                keccak256("3"),
                 block.chainid,
                 address(this)
             )
@@ -229,35 +310,55 @@ contract SSVKMSPolicy {
         pure
         returns (bytes32)
     {
-        bytes32[] memory policyHashes = new bytes32[](c.chainPolicies.length);
-        for (uint256 i; i < c.chainPolicies.length; i++) {
-            ChainPolicy calldata p = c.chainPolicies[i];
-            policyHashes[i] = keccak256(
-                abi.encode(CHAIN_POLICY_TYPEHASH, p.enabled, p.allowAnyTarget, p.allowContractCalls, p.maxValuePerTx)
-            );
-        }
-        bytes32[] memory targetHashes = new bytes32[](c.targets.length);
-        for (uint256 i; i < c.targets.length; i++) {
-            targetHashes[i] = keccak256(c.targets[i]);
-        }
         return keccak256(
             bytes.concat(
                 abi.encode(CONFIGURE_TYPEHASH, key, c.updateFrozen, c.frozen),
                 abi.encode(
                     keccak256(abi.encodePacked(c.chains)),
-                    keccak256(abi.encodePacked(policyHashes)),
+                    _chainPoliciesHash(c.chainPolicies),
                     keccak256(abi.encodePacked(c.agents)),
                     keccak256(abi.encodePacked(c.agentAllowed))
                 ),
                 abi.encode(
                     keccak256(abi.encodePacked(c.targetChains)),
-                    keccak256(abi.encodePacked(targetHashes)),
-                    keccak256(abi.encodePacked(c.targetAllowed)),
+                    _bytesArrayHash(c.targets),
+                    keccak256(abi.encodePacked(c.targetAllowed))
+                ),
+                abi.encode(
+                    keccak256(abi.encodePacked(c.tokenChains)),
+                    _bytesArrayHash(c.tokens),
+                    _tokenPoliciesHash(c.tokenPolicies),
                     nonce,
                     deadline
                 )
             )
         );
+    }
+
+    function _chainPoliciesHash(ChainPolicy[] calldata ps) internal pure returns (bytes32) {
+        bytes32[] memory hs = new bytes32[](ps.length);
+        for (uint256 i; i < ps.length; i++) {
+            hs[i] = keccak256(
+                abi.encode(CHAIN_POLICY_TYPEHASH, ps[i].enabled, ps[i].allowAnyTarget, ps[i].allowContractCalls, ps[i].maxValuePerTx)
+            );
+        }
+        return keccak256(abi.encodePacked(hs));
+    }
+
+    function _tokenPoliciesHash(TokenPolicy[] calldata ps) internal pure returns (bytes32) {
+        bytes32[] memory hs = new bytes32[](ps.length);
+        for (uint256 i; i < ps.length; i++) {
+            hs[i] = keccak256(abi.encode(TOKEN_POLICY_TYPEHASH, ps[i].enabled, ps[i].maxAmountPerTx));
+        }
+        return keccak256(abi.encodePacked(hs));
+    }
+
+    function _bytesArrayHash(bytes[] calldata xs) internal pure returns (bytes32) {
+        bytes32[] memory hs = new bytes32[](xs.length);
+        for (uint256 i; i < xs.length; i++) {
+            hs[i] = keccak256(xs[i]);
+        }
+        return keccak256(abi.encodePacked(hs));
     }
 
     // Checks an EIP-712 signature by `signer` (an EOA, or an ERC-1271 contract wallet) and uses up
@@ -291,6 +392,11 @@ contract SSVKMSPolicy {
     function _setTarget(address key, bytes32 chain, bytes calldata target, bool allowed) internal {
         allowedTargets[key][chain][keccak256(target)] = allowed;
         emit TargetSet(key, chain, target, allowed);
+    }
+
+    function _setTokenPolicy(address key, bytes32 chain, bytes calldata token, TokenPolicy calldata policy) internal {
+        tokenPolicies[key][chain][keccak256(token)] = policy;
+        emit TokenPolicySet(key, chain, token, policy);
     }
 
     function _setFrozen(address key, bool value, address by) internal {

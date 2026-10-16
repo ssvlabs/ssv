@@ -17,6 +17,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/kms/chains"
 	"github.com/ssvlabs/ssv/kms/kmstypes"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
@@ -631,6 +632,14 @@ func (r *keyRunner) tryCombine(ctx context.Context, ss *signingState) {
 		return
 	}
 	res.Status = StatusSigned
+	if _, family, _ := chains.ParseID(chain.String()); family != nil && chains.IsOffchain(family) {
+		// A message: the signature is the result (V as 27/28, ready for the requesting app).
+		res.Signature = hexutil.Encode(raw)
+		res.TxHash = hash
+		r.s.putResult(res)
+		r.logger.Info("🖋️ dKMS message signed", zap.String("request", ss.id), zap.String("chain", chain.String()), zap.String("digest", hash))
+		return
+	}
 	res.Signature = hexutil.Encode(sig)
 	res.RawTx = hexutil.Encode(raw)
 	res.TxHash = hash
