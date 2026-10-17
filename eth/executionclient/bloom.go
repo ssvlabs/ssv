@@ -34,20 +34,25 @@ import (
 //     false negatives, so a non-matching bloom proves the block is genuinely empty.
 //  2. Re-request each remaining suspect block with a single-block query (all sent as one
 //     batched request). This recovers intermittent per-request drops (observed with geth).
-//  3. Resolve suspects that still return nothing via eth_getBlockReceipts. Receipts come
-//     from the EL's receipt store rather than its log index, so they settle the ambiguity
-//     decisively: either they contain the events a broken log index will never return
-//     (recovered directly from the receipts), or they prove the bloom hit was a false
-//     positive. ELs without eth_getBlockReceipts fall back to timed single-block retries.
+//  3. Resolve suspects that still return nothing via receipts: the client's own, else another
+//     client's (MultiClient). Receipts come from the EL's receipt store rather than its log
+//     index, so they settle the ambiguity decisively: either they contain the events a broken
+//     log index will never return (recovered directly from the receipts), or they prove the
+//     bloom hit was a false positive.
+//  4. Without receipts, re-request the remaining suspects on a timed schedule (one batched
+//     request per attempt), which can only recover intermittent drops.
 //
-// This is the inline verification path (streaming, and the resync-repair). Optimistic
-// historical sync skips it and is checked afterwards by the background verifier, which reuses
-// the same recovery via VerifyLogs.
+// Suspects none of this settles are returned as unsettled rather than assumed empty: without
+// receipts, a bloom false positive and a persistently dropped block look the same, so the caller
+// must record them for later verification.
+//
+// This is the inline verification path (streaming, restart catch-ups and the resync-repair), and
+// the background verifier reuses it via VerifyLogs.
 //
 // This is a block-level check only — it assumes all-or-nothing drops (an entire block's
 // logs are missing). Partial drops (some logs present, some missing within the same block)
 // have not been observed and are not handled here.
-func (ec *ExecutionClient) verifyLogCompleteness(ctx context.Context, logs []ethtypes.Log, fromBlock, toBlock uint64) ([]ethtypes.Log, error) {
+func (ec *ExecutionClient) verifyLogCompleteness(ctx context.Context, logs []ethtypes.Log, fromBlock, toBlock uint64) (_ []ethtypes.Log, unsettled []uint64, err error) {
 	// Build a set of blocks that already have logs in the result.
 	blocksWithLogs := make(map[uint64]bool)
 	for i := range logs {
@@ -61,14 +66,14 @@ func (ec *ExecutionClient) verifyLogCompleteness(ctx context.Context, logs []eth
 		}
 	}
 	if len(emptyBlocks) == 0 {
-		return logs, nil
+		return logs, nil, nil
 	}
 
 	start := time.Now()
 	headers, err := ec.client.HeadersByNumbers(ctx, emptyBlocks)
 	recordRequest(ctx, ec.logger, "HeadersByNumbers", ec, time.Since(start), err)
 	if err != nil {
-		return nil, fmt.Errorf("completeness check: fetch headers for blocks %d-%d: %w", fromBlock, toBlock, err)
+		return nil, nil, fmt.Errorf("completeness check: fetch headers for blocks %d-%d: %w", fromBlock, toBlock, err)
 	}
 
 	suspects := make([]uint64, 0, len(emptyBlocks))
@@ -78,7 +83,7 @@ func (ec *ExecutionClient) verifyLogCompleteness(ctx context.Context, logs []eth
 		}
 	}
 	if len(suspects) == 0 {
-		return logs, nil
+		return logs, nil, nil
 	}
 
 	// Bloom matched but FilterLogs returned nothing. This is inconclusive on its own: it
@@ -95,24 +100,65 @@ func (ec *ExecutionClient) verifyLogCompleteness(ctx context.Context, logs []eth
 	suspectLogs, err := ec.client.SingleBlockLogs(ctx, ec.contractAddress, suspects)
 	recordRequest(ctx, ec.logger, "SingleBlockLogs", ec, time.Since(start), err)
 	if err != nil {
-		return nil, fmt.Errorf("completeness check: re-request logs for suspect blocks: %w", err)
+		return nil, nil, fmt.Errorf("completeness check: re-request logs for suspect blocks: %w", err)
 	}
 
 	recovered := false
+	var noReceipts []uint64
 	for i, blockLogs := range suspectLogs {
-		if len(blockLogs) == 0 {
-			blockLogs, err = ec.resolveSuspectBlock(ctx, suspects[i])
-			if err != nil {
-				return nil, err
-			}
-			if len(blockLogs) == 0 {
-				continue
-			}
-		} else {
-			ec.reportOmittedLogsRecovery(ctx, suspects[i], len(blockLogs))
+		block := suspects[i]
+		if len(blockLogs) > 0 {
+			ec.reportOmittedLogsRecovery(ctx, block, len(blockLogs))
+			logs = append(logs, blockLogs...)
+			recovered = true
+			continue
 		}
-		logs = append(logs, blockLogs...)
-		recovered = true
+
+		receiptLogs, settled, err := ec.settleSuspect(ctx, block)
+		if err != nil {
+			return nil, nil, fmt.Errorf("completeness check: fetch receipts for block %d: %w", block, err)
+		}
+		switch {
+		case !settled:
+			noReceipts = append(noReceipts, block)
+		case len(receiptLogs) > 0:
+			// The log index keeps omitting events that the block's receipts prove exist.
+			// Unlike a transient drop, this cannot be fixed by retrying eth_getLogs — any
+			// range query over this block is silently incomplete.
+			ec.logger.Warn("recovered contract logs from block receipts that the execution client's log index did not return",
+				fields.BlockNumber(block),
+				zap.Int("recovered_events", len(receiptLogs)),
+				zap.String("contract", ec.contractAddress.Hex()),
+				zap.String("recommendation", "the EL omits events from eth_getLogs responses that its own receipts contain — its log index may be incomplete or corrupt, consider resyncing or updating your execution client"),
+			)
+			recordBloomReceiptsRecovery(ctx)
+			logs = append(logs, receiptLogs...)
+			recovered = true
+		default:
+			// Receipts confirm the block holds no contract events — bloom false positive.
+			recordBloomFalsePositive(ctx)
+		}
+	}
+
+	if len(noReceipts) > 0 {
+		retried, stillEmpty, err := ec.retrySuspects(ctx, noReceipts)
+		if err != nil {
+			return nil, nil, fmt.Errorf("completeness check: retry suspect blocks: %w", err)
+		}
+		for _, bl := range retried {
+			ec.reportOmittedLogsRecovery(ctx, bl.BlockNumber, len(bl.Logs))
+			logs = append(logs, bl.Logs...)
+			recovered = true
+		}
+		unsettled = stillEmpty
+	}
+	if len(unsettled) > 0 {
+		recordBloomUnsettled(ctx, len(unsettled))
+		ec.logger.Warn("no authoritative source for blocks whose bloom matches the contract but that returned no logs; leaving them unsettled",
+			zap.Uint64s("blocks", unsettled),
+			zap.String("contract", ec.contractAddress.Hex()),
+			zap.String("recommendation", "no execution client could serve these blocks' receipts (unsupported, pruned or still syncing), so a dropped event there can't be ruled out until one can — use an execution client that serves eth_getBlockReceipts"),
+		)
 	}
 
 	// Appending recovered logs above leaves the slice unsorted, so re-sort before returning.
@@ -120,66 +166,67 @@ func (ec *ExecutionClient) verifyLogCompleteness(ctx context.Context, logs []eth
 		sortLogsCanonical(logs)
 	}
 
-	return logs, nil
+	return logs, unsettled, nil
 }
 
-// resolveSuspectBlock settles a block whose bloom matches the contract but for which the
-// EL keeps returning no logs: either the bloom hit is a false positive, or the EL's log
-// index is persistently broken for that block. eth_getBlockReceipts distinguishes the two
-// (and directly yields the missing logs when it is the latter); ELs without the method fall
-// back to timed retries, which can only recover intermittent drops. Returns the recovered
-// logs, or nil when the block is presumed a false positive.
-func (ec *ExecutionClient) resolveSuspectBlock(ctx context.Context, blockNum uint64) ([]ethtypes.Log, error) {
-	if !ec.receiptsKnownUnsupported() {
-		blockLogs, err := ec.blockLogsFromReceipts(ctx, blockNum)
-		switch {
-		case err == nil:
-			if len(blockLogs) > 0 {
-				// The log index keeps omitting events that the block's receipts prove exist.
-				// Unlike a transient drop, this cannot be fixed by retrying eth_getLogs — any
-				// range query over this block is silently incomplete.
-				ec.logger.Warn("recovered contract logs from block receipts that the execution client's log index did not return",
-					fields.BlockNumber(blockNum),
-					zap.Int("recovered_events", len(blockLogs)),
-					zap.String("contract", ec.contractAddress.Hex()),
-					zap.String("recommendation", "the EL omits events from eth_getLogs responses that its own receipts contain — its log index may be incomplete or corrupt, consider resyncing or updating your execution client"),
-				)
-				recordBloomReceiptsRecovery(ctx)
-			} else {
-				// Receipts confirm the block holds no contract events — bloom false positive.
-				recordBloomFalsePositive(ctx)
-			}
-			return blockLogs, nil
-		case isRPCMethodNotFoundError(err):
-			ec.rememberReceiptsUnsupported()
-			ec.logger.Info("execution client does not support eth_getBlockReceipts, falling back to timed log re-requests for suspect blocks",
-				zap.Duration("recheck_in", receiptsUnsupportedRecheckInterval))
-		case errors.Is(err, errInconsistentEmptyReceipts):
-			// A bloom-positive block with zero receipts is a self-inconsistent EL response; don't
-			// trust it as empty. Fall back to timed re-requests (a per-block glitch, so don't set
-			// the receipts-unsupported memo). Warn, since an incomplete receipt store (e.g. pruned)
-			// sends every bloom false positive down this slow path.
-			ec.logger.Warn("block returned zero receipts though its bloom matches the contract; falling back to timed log re-requests",
-				fields.BlockNumber(blockNum),
-				zap.String("recommendation", "the EL's receipt store looks incomplete (e.g. pruned or still syncing), which slows log verification — consider checking your execution client"),
-			)
-		default:
-			return nil, fmt.Errorf("completeness check: fetch receipts for block %d: %w", blockNum, err)
-		}
+// settleSuspect resolves a suspect block against receipts: the client's own, else another
+// client's (MultiClient). settled is false when no client could serve them.
+func (ec *ExecutionClient) settleSuspect(ctx context.Context, block uint64) (logs []ethtypes.Log, settled bool, err error) {
+	logs, settled, err = ec.BlockContractLogs(ctx, block)
+	if err != nil || settled || ec.receiptsFallback == nil {
+		return logs, settled, err
 	}
 
-	blockLogs, err := ec.retryBlockLogs(ctx, blockNum)
+	logs, settled, err = ec.receiptsFallback(ctx, block)
 	if err != nil {
-		return nil, fmt.Errorf("completeness check: retry block %d logs: %w", blockNum, err)
+		if ctx.Err() != nil {
+			return nil, false, ctx.Err()
+		}
+		// Other clients failing leaves the block unsettled; it isn't this client's fetch failing.
+		ec.logger.Debug("other clients couldn't serve receipts for a suspect block",
+			fields.BlockNumber(block), zap.Error(err))
+		return nil, false, nil
 	}
-	if len(blockLogs) > 0 {
-		ec.reportOmittedLogsRecovery(ctx, blockNum, len(blockLogs))
-	} else {
-		// Presumed bloom false positive — the address was in the bloom, but the EL never
-		// produced logs for it and receipts were unavailable to prove it either way.
-		recordBloomFalsePositive(ctx)
+	return logs, settled, nil
+}
+
+// retrySuspects re-requests suspect blocks' logs on the timed-retry schedule, all of them in one
+// batched request per attempt (the re-request that left them suspect counts as the first). It
+// returns the blocks that turned up logs, and those still empty.
+func (ec *ExecutionClient) retrySuspects(ctx context.Context, blocks []uint64) (recovered []BlockLogs, empty []uint64, err error) {
+	for attempt := 2; attempt <= DefaultBloomRetryAttempts && len(blocks) > 0; attempt++ {
+		select {
+		case <-ctx.Done():
+			return nil, nil, ctx.Err()
+		case <-ec.closed:
+			return nil, nil, ErrClosed
+		case <-time.After(DefaultBloomRetryDelay):
+		}
+
+		start := time.Now()
+		perBlock, err := ec.client.SingleBlockLogs(ctx, ec.contractAddress, blocks)
+		recordRequest(ctx, ec.logger, "SingleBlockLogs", ec, time.Since(start), err)
+		if err != nil {
+			if attempt == DefaultBloomRetryAttempts {
+				return nil, nil, err
+			}
+			// Transient RPC failure the next attempt usually absorbs.
+			ec.logger.Debug("re-request of suspect blocks failed; retrying",
+				zap.Int("attempt", attempt), zap.Error(err))
+			continue
+		}
+
+		remaining := make([]uint64, 0, len(blocks))
+		for i, blockLogs := range perBlock {
+			if len(blockLogs) > 0 {
+				recovered = append(recovered, BlockLogs{BlockNumber: blocks[i], Logs: blockLogs})
+			} else {
+				remaining = append(remaining, blocks[i])
+			}
+		}
+		blocks = remaining
 	}
-	return blockLogs, nil
+	return recovered, blocks, nil
 }
 
 // reportOmittedLogsRecovery logs and counts the recovery of logs the EL omitted from an
@@ -200,7 +247,8 @@ func (ec *ExecutionClient) reportOmittedLogsRecovery(ctx context.Context, blockN
 // complete — running the exact same bloom/receipts completeness check as the inline path, so
 // only genuinely-omitted logs trigger receipts recovery (and the accurate recovery logging
 // and metrics). It is the background verifier's per-chunk operation for a range that was
-// synced optimistically. Returned BlockLogs are complete and ordered.
+// synced optimistically. Returned BlockLogs are ordered, with a log-less Unsettled entry for each
+// block the check couldn't settle.
 func (ec *ExecutionClient) VerifyLogs(ctx context.Context, fromBlock, toBlock uint64) ([]BlockLogs, error) {
 	if fromBlock > toBlock {
 		return nil, ErrBadInput
@@ -215,7 +263,7 @@ func (ec *ExecutionClient) VerifyLogs(ctx context.Context, fromBlock, toBlock ui
 		return nil, fmt.Errorf("verify logs [%d,%d]: fetch: %w", fromBlock, toBlock, err)
 	}
 
-	logs, err = ec.verifyLogCompleteness(ctx, logs, fromBlock, toBlock)
+	logs, unsettled, err := ec.verifyLogCompleteness(ctx, logs, fromBlock, toBlock)
 	if err != nil {
 		return nil, fmt.Errorf("verify logs [%d,%d]: completeness check: %w", fromBlock, toBlock, err)
 	}
@@ -228,7 +276,7 @@ func (ec *ExecutionClient) VerifyLogs(ctx context.Context, fromBlock, toBlock ui
 		validLogs = append(validLogs, log)
 	}
 
-	return PackLogs(validLogs), nil
+	return packWithUnsettled(validLogs, unsettled), nil
 }
 
 // receiptsUnsupportedRecheckInterval is how long the EL's rejection of eth_getBlockReceipts is
@@ -248,10 +296,10 @@ func (ec *ExecutionClient) rememberReceiptsUnsupported() {
 }
 
 // errInconsistentEmptyReceipts marks a block that returned zero receipts even though every
-// caller only consults receipts for a block already evidenced to hold logs (a bloom hit, or a
-// recorded/observed log). Zero receipts is then a self-inconsistent response — a broken receipt
-// store, not an authoritatively-empty block.
-var errInconsistentEmptyReceipts = errors.New("block returned zero receipts but was expected to hold logs")
+// caller only consults receipts for a block already evidenced to hold transactions (a bloom hit,
+// a recorded/observed log, or a non-empty transaction list). Zero receipts is then a
+// self-inconsistent response — a broken receipt store, not an authoritatively-empty block.
+var errInconsistentEmptyReceipts = errors.New("block returned zero receipts but is known to have transactions")
 
 // blockLogsFromReceipts fetches the given block's transaction receipts and extracts the logs
 // emitted by the contract. A block with no receipts at all yields errInconsistentEmptyReceipts.
@@ -283,74 +331,28 @@ func (ec *ExecutionClient) blockLogsFromReceipts(ctx context.Context, blockNum u
 // BlockContractLogs returns the contract's logs for a block derived from the block's receipts —
 // the index-independent source of truth, so it's authoritative regardless of the EL's log index.
 // receiptsAvailable is false when the EL can't authoritatively serve the block: it doesn't
-// support eth_getBlockReceipts (remembered for receiptsUnsupportedRecheckInterval), or its
-// receipt store is unreliable for the block (zero receipts where logs are evidenced).
+// support eth_getBlockReceipts (remembered for receiptsUnsupportedRecheckInterval), or it has no
+// usable receipts for the block (none at all, or not found).
 func (ec *ExecutionClient) BlockContractLogs(ctx context.Context, block uint64) ([]ethtypes.Log, bool, error) {
 	if ec.receiptsKnownUnsupported() {
 		return nil, false, nil
 	}
 	logs, err := ec.blockLogsFromReceipts(ctx, block)
-	if err != nil {
-		if isRPCMethodNotFoundError(err) {
-			ec.rememberReceiptsUnsupported()
-			ec.logger.Info("execution client does not support eth_getBlockReceipts; background verification can't authoritatively check blocks on it",
-				zap.Duration("recheck_in", receiptsUnsupportedRecheckInterval))
-			return nil, false, nil
-		}
-		if errors.Is(err, errInconsistentEmptyReceipts) {
-			// No authoritative source: report unavailable so the caller parks (or fails over
-			// under MultiClient) rather than reading a broken receipt store as an empty block
-			// and resyncing on it.
-			ec.logger.Warn("block returned zero receipts though it was expected to hold logs; no authoritative source for it",
-				fields.BlockNumber(block))
-			return nil, false, nil
-		}
+	switch {
+	case err == nil:
+		return logs, true, nil
+	case isRPCMethodNotFoundError(err):
+		ec.rememberReceiptsUnsupported()
+		ec.logger.Info("execution client does not support eth_getBlockReceipts, so it can't authoritatively verify blocks whose bloom matches the contract",
+			zap.Duration("recheck_in", receiptsUnsupportedRecheckInterval))
+		return nil, false, nil
+	case errors.Is(err, errInconsistentEmptyReceipts), errors.Is(err, ethereum.NotFound):
+		// No authoritative source: report unavailable rather than read a broken receipt store as
+		// an empty block. Callers report what stays unsettled, so the detail is debug.
+		ec.logger.Debug("no usable receipts for a block expected to hold transactions",
+			fields.BlockNumber(block), zap.Error(err))
+		return nil, false, nil
+	default:
 		return nil, false, fmt.Errorf("fetch receipts for block %d: %w", block, err)
 	}
-	return logs, true, nil
-}
-
-// retryBlockLogs retries FilterLogs for a single block up to DefaultBloomRetryAttempts times
-// with DefaultBloomRetryDelay between attempts. Returns recovered logs, nil (false positive),
-// or an error on RPC failure.
-func (ec *ExecutionClient) retryBlockLogs(ctx context.Context, blockNumber uint64) ([]ethtypes.Log, error) {
-	query := ethereum.FilterQuery{
-		Addresses: []ethcommon.Address{ec.contractAddress},
-		FromBlock: new(big.Int).SetUint64(blockNumber),
-		ToBlock:   new(big.Int).SetUint64(blockNumber),
-	}
-
-	for attempt := 1; attempt <= DefaultBloomRetryAttempts; attempt++ {
-		if attempt > 1 {
-			select {
-			case <-ctx.Done():
-				return nil, ctx.Err()
-			case <-ec.closed:
-				return nil, ErrClosed
-			case <-time.After(DefaultBloomRetryDelay):
-			}
-		}
-
-		logs, err := ec.FilterLogs(ctx, query)
-		if err != nil {
-			// Transient RPC failure the retry usually absorbs; only the final attempt's
-			// error propagates to the caller, which logs it — so debug here.
-			ec.logger.Debug("bloom retry: FilterLogs failed",
-				fields.BlockNumber(blockNumber),
-				zap.Int("attempt", attempt),
-				zap.Error(err),
-			)
-			if attempt == DefaultBloomRetryAttempts {
-				return nil, fmt.Errorf("bloom retry: filter logs for block %d: %w", blockNumber, err)
-			}
-			continue
-		}
-
-		if len(logs) > 0 {
-			return logs, nil
-		}
-	}
-
-	// All retries returned 0 logs — bloom false positive.
-	return nil, nil
 }

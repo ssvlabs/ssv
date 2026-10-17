@@ -1250,7 +1250,7 @@ func TestMultiClient_BlockContractLogs_ReceiptsFailover(t *testing.T) {
 		return c1, c2, newTestMultiClient(t, c1, c2)
 	}
 
-	t.Run("fails over to a client that has receipts", func(t *testing.T) {
+	t.Run("asks the next client when one lacks receipts, without moving routing", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 		c1, c2, mc := newClients(t, ctrl)
@@ -1263,10 +1263,24 @@ func TestMultiClient_BlockContractLogs_ReceiptsFailover(t *testing.T) {
 		require.NoError(t, err)
 		require.True(t, available)
 		require.Equal(t, wantLogs, logs)
-		require.Equal(t, int64(1), mc.currentClientIndex.Load(), "routing pins to the receipts-capable client")
+		require.Equal(t, int64(0), mc.currentClientIndex.Load(), "a capability gap doesn't reroute other traffic")
 	})
 
-	t.Run("reports unavailable (parks, no error) only when every client lacks receipts", func(t *testing.T) {
+	t.Run("skips the asking client", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		_, c2, mc := newClients(t, ctrl)
+
+		// Client 0 is the one asking (receipts fallback), so only client 1 is consulted.
+		c2.EXPECT().BlockContractLogs(gomock.Any(), block).Return(wantLogs, true, nil).Times(1)
+
+		logs, available, err := mc.receiptsFromAny(t.Context(), block, mc.clientAddrs[0])
+		require.NoError(t, err)
+		require.True(t, available)
+		require.Equal(t, wantLogs, logs)
+	})
+
+	t.Run("reports unavailable (no error) only when every client lacks receipts", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 		c1, c2, mc := newClients(t, ctrl)
@@ -1283,13 +1297,13 @@ func TestMultiClient_BlockContractLogs_ReceiptsFailover(t *testing.T) {
 		require.Zero(t, recorded.Len(), "a client that can't serve receipts is a routine failover, not an error")
 	})
 
-	t.Run("surfaces an error (does not park) when a client fails while another lacks receipts", func(t *testing.T) {
+	t.Run("surfaces an error when a client fails while another lacks receipts", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 		c1, c2, mc := newClients(t, ctrl)
 
 		// Client 1 errors (it may serve receipts once recovered); client 2 lacks receipts. The
-		// verifier must retry, not park on client 2's gap.
+		// verifier must retry rather than settle for client 2's gap.
 		c1.EXPECT().BlockContractLogs(gomock.Any(), block).Return(nil, false, errors.New("boom")).Times(1)
 		c2.EXPECT().BlockContractLogs(gomock.Any(), block).Return(nil, false, nil).Times(1)
 

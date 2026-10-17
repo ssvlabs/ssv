@@ -34,22 +34,20 @@ var (
 			observability.InstrumentName(observabilityNamespace, "cursor"),
 			metric.WithDescription("top block of the most recently verified chunk (jumps between ranges when several are pending)")))
 
-	// verifyMissCounter counts receipts-confirmed misses (a block whose recorded digest disagreed
-	// with the receipts truth). Any increment schedules a full resync — it should stay at zero.
+	// verifyMissCounter counts receipts-confirmed misses (a block whose receipts hold logs the sync
+	// never recorded). Any increment schedules a full resync — it should stay at zero.
 	verifyMissCounter = metrics.New(
 		meter.Int64Counter(
 			observability.InstrumentName(observabilityNamespace, "misses"),
 			metric.WithDescription("registry-event completeness misses confirmed by the background verifier")))
 
-	// verifyParkedCounter counts each time a pass parks a range: a disagreeing block couldn't be
-	// authoritatively resolved (no authoritative receipts, or a rate-limited repair). Parked ranges
-	// are re-checked periodically, so it keeps increasing while one stays unresolved. Nonzero means
-	// verification is inconclusive — the node may be on incomplete state; investigate the execution
-	// client.
-	verifyParkedCounter = metrics.New(
-		meter.Int64Counter(
-			observability.InstrumentName(observabilityNamespace, "parked"),
-			metric.WithDescription("times a range was left pending because a block couldn't be authoritatively verified")))
+	// verifyUnsettledBlocksGauge reports how many blocks no source has authoritatively verified
+	// yet. Nonzero means the node may be on incomplete state for those blocks — typically because
+	// no execution client can serve their receipts; investigate the execution client.
+	verifyUnsettledBlocksGauge = metrics.New(
+		meter.Int64Gauge(
+			observability.InstrumentName(observabilityNamespace, "unsettled_blocks"),
+			metric.WithDescription("blocks awaiting authoritative verification")))
 
 	// verifySuppressedCounter counts confirmed misses whose resync was suppressed by the rate
 	// limit. Nonzero means a repair is being deferred — investigate the execution client.
@@ -72,8 +70,8 @@ func recordVerifyMiss(ctx context.Context) {
 	verifyMissCounter.Add(ctx, 1)
 }
 
-func recordVerifyParked(ctx context.Context) {
-	verifyParkedCounter.Add(ctx, 1)
+func recordVerifyUnsettledBlocks(ctx context.Context, n int) {
+	verifyUnsettledBlocksGauge.Record(ctx, int64(n))
 }
 
 func recordVerifySuppressed(ctx context.Context) {

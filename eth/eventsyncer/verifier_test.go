@@ -19,7 +19,7 @@ import (
 )
 
 // verifierHarness wires the syncer's background verifier to a mocked execution client (so we
-// control the authoritative logs) and real in-memory storage (so digests/ranges round-trip).
+// control the authoritative logs) and real in-memory storage (so log IDs and ranges round-trip).
 type verifierHarness struct {
 	es      *EventSyncer
 	exec    *MockExecutionClient
@@ -50,20 +50,50 @@ func logsWith(ids ...[2]uint) []ethtypes.Log {
 	return logs
 }
 
-// expectReceipts mocks the authoritative (receipts-derived) logs for a block, used to resolve a
-// digest mismatch.
-func (h *verifierHarness) expectReceipts(block uint64, logs []ethtypes.Log) {
-	h.exec.EXPECT().BlockContractLogs(gomock.Any(), block).Return(logs, true, nil)
+// record stores the log IDs an optimistic sync would have recorded for a block.
+func (h *verifierHarness) record(t *testing.T, block uint64, logs []ethtypes.Log) {
+	ids := executionclient.EncodeLogIDs(executionclient.BlockLogIDs(logs))
+	require.NoError(t, h.storage.SaveBlockLogIDs(nil, block, ids))
 }
 
-// expectNoReceipts mocks the EL reporting eth_getBlockReceipts unavailable for a block.
-func (h *verifierHarness) expectNoReceipts(block uint64) {
-	h.exec.EXPECT().BlockContractLogs(gomock.Any(), block).Return(nil, false, nil)
+// expectReceipts mocks the authoritative (receipts-derived) logs for a block.
+func (h *verifierHarness) expectReceipts(block uint64, logs []ethtypes.Log) *gomock.Call {
+	return h.exec.EXPECT().BlockContractLogs(gomock.Any(), block).Return(logs, true, nil)
+}
+
+// expectNoReceipts mocks no client being able to serve a block's receipts.
+func (h *verifierHarness) expectNoReceipts(block uint64) *gomock.Call {
+	return h.exec.EXPECT().BlockContractLogs(gomock.Any(), block).Return(nil, false, nil)
+}
+
+// requireState asserts what verification left behind: pending ranges, unsettled blocks, and
+// whether a resync is flagged.
+func (h *verifierHarness) requireState(t *testing.T, ranges []operatorstorage.UnverifiedRange, unsettled []uint64, resync bool) {
+	t.Helper()
+
+	gotRanges, err := h.storage.ListUnverifiedRanges(nil)
+	require.NoError(t, err)
+	require.Equal(t, ranges, gotRanges, "pending ranges")
+
+	gotUnsettled, err := h.storage.ListUnsettledBlocks(nil)
+	require.NoError(t, err)
+	require.Equal(t, unsettled, gotUnsettled, "unsettled blocks")
+
+	gotResync, err := h.storage.IsResyncRequired(nil)
+	require.NoError(t, err)
+	require.Equal(t, resync, gotResync, "resync flagged")
+}
+
+func (h *verifierHarness) requireRecorded(t *testing.T, block uint64, want bool) {
+	t.Helper()
+	_, found, err := h.storage.GetBlockLogIDs(nil, block)
+	require.NoError(t, err)
+	require.Equal(t, want, found, "recorded log IDs for block %d", block)
 }
 
 func TestVerify_NoRanges(t *testing.T) {
 	h := newVerifierHarness(t)
-	// No ranges journalled: Verify is a no-op and must not touch the execution client.
+	// Nothing journalled: Verify is a no-op and must not touch the execution client.
 	require.NoError(t, h.es.Verify(t.Context()))
 }
 
@@ -72,11 +102,11 @@ func TestVerify_CleanRange(t *testing.T) {
 
 	logs12 := logsWith([2]uint{0, 0})
 	logs15 := logsWith([2]uint{0, 0}, [2]uint{1, 1})
-	require.NoError(t, h.storage.SaveBlockLogDigest(nil, 12, executionclient.BlockLogsDigest(logs12)))
-	require.NoError(t, h.storage.SaveBlockLogDigest(nil, 15, executionclient.BlockLogsDigest(logs15)))
+	h.record(t, 12, logs12)
+	h.record(t, 15, logs15)
 	require.NoError(t, h.storage.SaveUnverifiedRange(nil, operatorstorage.UnverifiedRange{From: 10, To: 20, Cursor: 10}))
 
-	// Authoritative logs match what the sync recorded, so the range is clean.
+	// The verify-time fetch matches what the sync recorded, so the range is clean.
 	h.exec.EXPECT().VerifyLogs(gomock.Any(), uint64(10), uint64(20)).Return([]executionclient.BlockLogs{
 		{BlockNumber: 12, Logs: logs12},
 		{BlockNumber: 15, Logs: logs15},
@@ -84,25 +114,17 @@ func TestVerify_CleanRange(t *testing.T) {
 
 	require.NoError(t, h.es.Verify(t.Context()))
 
-	// A clean range is removed along with its digests, and no resync is flagged.
-	ranges, err := h.storage.ListUnverifiedRanges(nil)
-	require.NoError(t, err)
-	require.Empty(t, ranges)
-	for _, block := range []uint64{12, 15} {
-		_, found, err := h.storage.GetBlockLogDigest(nil, block)
-		require.NoError(t, err)
-		require.False(t, found)
-	}
-	resync, err := h.storage.IsResyncRequired(nil)
-	require.NoError(t, err)
-	require.False(t, resync)
+	// A clean range is removed along with its recorded log IDs.
+	h.requireState(t, nil, nil, false)
+	h.requireRecorded(t, 12, false)
+	h.requireRecorded(t, 15, false)
 }
 
-func TestVerify_ReceiptsConfirmMissingDigest(t *testing.T) {
+func TestVerify_ReceiptsConfirmMissingLogs(t *testing.T) {
 	h := newVerifierHarness(t)
 
-	// The sync recorded no digest for block 15, VerifyLogs shows contract logs there, and receipts
-	// confirm those logs exist — the silent miss #2990 is about. Resync.
+	// The sync recorded nothing for block 15, the verify-time fetch shows contract logs there, and
+	// receipts confirm them — the silent miss #2990 is about. Resync.
 	logs := logsWith([2]uint{0, 0})
 	require.NoError(t, h.storage.SaveUnverifiedRange(nil, operatorstorage.UnverifiedRange{From: 15, To: 15, Cursor: 15}))
 	h.exec.EXPECT().VerifyLogs(gomock.Any(), uint64(15), uint64(15)).Return([]executionclient.BlockLogs{
@@ -120,11 +142,11 @@ func TestVerify_ReceiptsConfirmMissingDigest(t *testing.T) {
 func TestVerify_ReceiptsConfirmSubsetMiss(t *testing.T) {
 	h := newVerifierHarness(t)
 
-	// The sync recorded one log, VerifyLogs shows two, and receipts confirm two: the recorded
-	// response was an incomplete subset. Resync.
+	// The sync recorded one log, the verify-time fetch shows two, and receipts confirm two: the
+	// recorded response was an incomplete subset. Resync.
 	recorded := logsWith([2]uint{0, 0})
 	truth := logsWith([2]uint{0, 0}, [2]uint{1, 1})
-	require.NoError(t, h.storage.SaveBlockLogDigest(nil, 12, executionclient.BlockLogsDigest(recorded)))
+	h.record(t, 12, recorded)
 	require.NoError(t, h.storage.SaveUnverifiedRange(nil, operatorstorage.UnverifiedRange{From: 12, To: 12, Cursor: 12}))
 	h.exec.EXPECT().VerifyLogs(gomock.Any(), uint64(12), uint64(12)).Return([]executionclient.BlockLogs{
 		{BlockNumber: 12, Logs: truth},
@@ -141,105 +163,83 @@ func TestVerify_ReceiptsConfirmSubsetMiss(t *testing.T) {
 func TestVerify_ReceiptsVindicateVerifyTimeDrop(t *testing.T) {
 	h := newVerifierHarness(t)
 
-	// The sync recorded logs for block 12, but the verify-time VerifyLogs returns it empty (a
-	// verify-time getLogs blip, or a different EL under MultiClient). Receipts confirm the block
-	// really has those logs and the recorded digest matches — the sync was fine, no resync.
+	// The sync recorded logs for block 12, but the verify-time fetch returns it empty (a different
+	// EL under MultiClient, say). Receipts confirm the block really has those logs and they match
+	// the recorded IDs — the sync was fine, no resync.
 	logs := logsWith([2]uint{0, 0})
-	require.NoError(t, h.storage.SaveBlockLogDigest(nil, 12, executionclient.BlockLogsDigest(logs)))
+	h.record(t, 12, logs)
 	require.NoError(t, h.storage.SaveUnverifiedRange(nil, operatorstorage.UnverifiedRange{From: 12, To: 12, Cursor: 12}))
 	h.exec.EXPECT().VerifyLogs(gomock.Any(), uint64(12), uint64(12)).Return(nil, nil)
 	h.expectReceipts(12, logs)
 
 	require.NoError(t, h.es.Verify(t.Context()))
 
-	// No resync, and the range is retired clean (digest dropped).
-	resync, err := h.storage.IsResyncRequired(nil)
-	require.NoError(t, err)
-	require.False(t, resync)
-
-	ranges, err := h.storage.ListUnverifiedRanges(nil)
-	require.NoError(t, err)
-	require.Empty(t, ranges)
-
-	_, found, err := h.storage.GetBlockLogDigest(nil, 12)
-	require.NoError(t, err)
-	require.False(t, found)
+	h.requireState(t, nil, nil, false)
+	h.requireRecorded(t, 12, false)
 }
 
-func TestVerify_ParksWhenReceiptsUnavailable(t *testing.T) {
+func TestVerify_UnsettledWhenReceiptsUnavailable(t *testing.T) {
 	h := newVerifierHarness(t)
 
-	// A block disagrees, but the EL doesn't support eth_getBlockReceipts, so there's no
-	// authoritative source: don't resync, park the range (leave it pending and visible).
-	require.NoError(t, h.storage.SaveUnverifiedRange(nil, operatorstorage.UnverifiedRange{From: 15, To: 15, Cursor: 15}))
-	h.exec.EXPECT().VerifyLogs(gomock.Any(), uint64(15), uint64(15)).Return([]executionclient.BlockLogs{
+	// Block 15 disagrees with what the sync recorded, but no client can serve its receipts, so
+	// there's no authoritative source: no resync, no claim of verification. The block is recorded
+	// unsettled and the range moves on.
+	require.NoError(t, h.storage.SaveUnverifiedRange(nil, operatorstorage.UnverifiedRange{From: 10, To: 20, Cursor: 10}))
+	h.exec.EXPECT().VerifyLogs(gomock.Any(), uint64(10), uint64(20)).Return([]executionclient.BlockLogs{
 		{BlockNumber: 15, Logs: logsWith([2]uint{0, 0})},
 	}, nil)
 	h.expectNoReceipts(15)
 
 	require.NoError(t, h.es.Verify(t.Context()))
 
-	// No resync flagged, and the range stays pending, parked on the unresolved block, rather than
-	// being retired.
-	resync, err := h.storage.IsResyncRequired(nil)
-	require.NoError(t, err)
-	require.False(t, resync)
-
-	ranges, err := h.storage.ListUnverifiedRanges(nil)
-	require.NoError(t, err)
-	require.Equal(t, []operatorstorage.UnverifiedRange{{From: 15, To: 15, Cursor: 15, Parked: true}}, ranges)
+	h.requireState(t, nil, []uint64{15}, false)
 }
 
-func TestVerify_ParkedRangeRechecksParkedBlockFirst(t *testing.T) {
+func TestVerify_UnsettledSuspectIsNotRetiredAsVerified(t *testing.T) {
 	h := newVerifierHarness(t)
 
-	// A range parked on block 15 re-checks that block alone first. Here it now agrees with its
-	// recorded digest (e.g. the EL's log index healed), so it's retired like any agreeing block and
-	// the rest of the range resumes as a normal chunk.
+	// The verify-time fetch couldn't settle block 15 either (a bloom match with no logs and no
+	// receipts from any client), so "nothing recorded, nothing fetched" proves nothing there: the
+	// block stays unsettled, keeping whatever the sync recorded. VerifyLogs already asked every
+	// client for receipts, so the verifier doesn't ask again.
 	logs := logsWith([2]uint{0, 0})
-	require.NoError(t, h.storage.SaveBlockLogDigest(nil, 15, executionclient.BlockLogsDigest(logs)))
-	require.NoError(t, h.storage.SaveUnverifiedRange(nil, operatorstorage.UnverifiedRange{From: 10, To: 30, Cursor: 15, Parked: true}))
-	gomock.InOrder(
-		h.exec.EXPECT().VerifyLogs(gomock.Any(), uint64(15), uint64(15)).Return([]executionclient.BlockLogs{
-			{BlockNumber: 15, Logs: logs},
-		}, nil),
-		h.exec.EXPECT().VerifyLogs(gomock.Any(), uint64(16), uint64(30)).Return(nil, nil),
-	)
-
-	require.NoError(t, h.es.Verify(t.Context()))
-
-	ranges, err := h.storage.ListUnverifiedRanges(nil)
-	require.NoError(t, err)
-	require.Empty(t, ranges)
-	_, found, err := h.storage.GetBlockLogDigest(nil, 15)
-	require.NoError(t, err)
-	require.False(t, found)
-}
-
-func TestVerify_UnresolvedParkedRangeRechecksOnlyParkedBlock(t *testing.T) {
-	h := newVerifierHarness(t)
-
-	// Block 15 still disagrees and still has no authoritative source: the range stays parked on it,
-	// and the re-check fetched that block alone — no whole-chunk re-fetch (an unexpected
-	// VerifyLogs call would fail the test).
-	require.NoError(t, h.storage.SaveUnverifiedRange(nil, operatorstorage.UnverifiedRange{From: 10, To: 30, Cursor: 15, Parked: true}))
-	h.exec.EXPECT().VerifyLogs(gomock.Any(), uint64(15), uint64(15)).Return([]executionclient.BlockLogs{
-		{BlockNumber: 15, Logs: logsWith([2]uint{0, 0})},
+	h.record(t, 15, logs)
+	require.NoError(t, h.storage.SaveUnverifiedRange(nil, operatorstorage.UnverifiedRange{From: 10, To: 20, Cursor: 10}))
+	h.exec.EXPECT().VerifyLogs(gomock.Any(), uint64(10), uint64(20)).Return([]executionclient.BlockLogs{
+		{BlockNumber: 15, Unsettled: true},
 	}, nil)
-	h.expectNoReceipts(15)
 
 	require.NoError(t, h.es.Verify(t.Context()))
 
-	ranges, err := h.storage.ListUnverifiedRanges(nil)
-	require.NoError(t, err)
-	require.Equal(t, []operatorstorage.UnverifiedRange{{From: 10, To: 30, Cursor: 15, Parked: true}}, ranges)
+	h.requireState(t, nil, []uint64{15}, false)
+	h.requireRecorded(t, 15, true)
 }
 
-func TestVerify_RateLimitSuppressesResync(t *testing.T) {
+func TestVerify_InconsistentReceiptsStayUnsettled(t *testing.T) {
 	h := newVerifierHarness(t)
 
-	// A resync was flagged 1 minute ago (within the cooldown). A fresh confirmed miss is suppressed:
-	// no new resync is flagged and the range is parked, so the node doesn't fatal+wipe in a loop.
+	// The receipts lack a log the sync recorded (a truncated response, or one numbering logs
+	// differently). getLogs never invents logs, so it's the receipts that are inconsistent: the
+	// block stays unsettled instead of triggering a false wipe.
+	h.record(t, 12, logsWith([2]uint{0, 0}, [2]uint{0, 1}))
+	require.NoError(t, h.storage.SaveUnverifiedRange(nil, operatorstorage.UnverifiedRange{From: 12, To: 12, Cursor: 12}))
+	h.exec.EXPECT().VerifyLogs(gomock.Any(), uint64(12), uint64(12)).Return([]executionclient.BlockLogs{
+		{BlockNumber: 12, Logs: logsWith([2]uint{0, 0})},
+	}, nil)
+	h.expectReceipts(12, logsWith([2]uint{0, 0}))
+
+	require.NoError(t, h.es.Verify(t.Context()))
+
+	h.requireState(t, nil, []uint64{12}, false)
+	h.requireRecorded(t, 12, true)
+}
+
+func TestVerify_RateLimitedMissStaysUnsettled(t *testing.T) {
+	h := newVerifierHarness(t)
+
+	// A resync was flagged 1 minute ago (within the cooldown). A fresh confirmed miss is
+	// suppressed: no new resync is flagged and the block stays unsettled, so the node doesn't
+	// fatal+wipe in a loop.
 	require.NoError(t, h.storage.SetLastResyncTime(nil, time.Now().Add(-time.Minute)))
 	logs := logsWith([2]uint{0, 0})
 	require.NoError(t, h.storage.SaveUnverifiedRange(nil, operatorstorage.UnverifiedRange{From: 15, To: 15, Cursor: 15}))
@@ -250,13 +250,7 @@ func TestVerify_RateLimitSuppressesResync(t *testing.T) {
 
 	require.NoError(t, h.es.Verify(t.Context()))
 
-	resync, err := h.storage.IsResyncRequired(nil)
-	require.NoError(t, err)
-	require.False(t, resync, "resync should be suppressed within the cooldown")
-
-	ranges, err := h.storage.ListUnverifiedRanges(nil)
-	require.NoError(t, err)
-	require.Equal(t, []operatorstorage.UnverifiedRange{{From: 15, To: 15, Cursor: 15, Parked: true}}, ranges, "the range stays pending, parked")
+	h.requireState(t, nil, []uint64{15}, false)
 }
 
 func TestVerify_ResumesFromCursor(t *testing.T) {
@@ -269,9 +263,7 @@ func TestVerify_ResumesFromCursor(t *testing.T) {
 
 	require.NoError(t, h.es.Verify(t.Context()))
 
-	ranges, err := h.storage.ListUnverifiedRanges(nil)
-	require.NoError(t, err)
-	require.Empty(t, ranges)
+	h.requireState(t, nil, nil, false)
 }
 
 func TestVerify_ChunksRange(t *testing.T) {
@@ -288,9 +280,70 @@ func TestVerify_ChunksRange(t *testing.T) {
 
 	require.NoError(t, h.es.Verify(t.Context()))
 
-	ranges, err := h.storage.ListUnverifiedRanges(nil)
+	h.requireState(t, nil, nil, false)
+}
+
+func TestVerify_SettlesUnsettledBlocks(t *testing.T) {
+	h := newVerifierHarness(t)
+
+	// Receipts now serve unsettled block 15 and match what the sync recorded: it's retired.
+	logs := logsWith([2]uint{0, 0})
+	h.record(t, 15, logs)
+	require.NoError(t, h.storage.SaveUnsettledBlock(nil, 15))
+	h.expectReceipts(15, logs)
+
+	require.NoError(t, h.es.Verify(t.Context()))
+
+	h.requireState(t, nil, nil, false)
+	h.requireRecorded(t, 15, false)
+}
+
+func TestVerify_SettlingConfirmsMiss(t *testing.T) {
+	h := newVerifierHarness(t)
+
+	// An inline sync processed block 15 as empty for lack of receipts; now receipts show logs there.
+	require.NoError(t, h.storage.SaveUnsettledBlock(nil, 15))
+	h.expectReceipts(15, logsWith([2]uint{0, 0}))
+
+	require.ErrorIs(t, h.es.Verify(t.Context()), ErrResyncRequired)
+
+	resync, err := h.storage.IsResyncRequired(nil)
 	require.NoError(t, err)
-	require.Empty(t, ranges)
+	require.True(t, resync)
+}
+
+func TestVerify_StopsSettlingWhileNoReceiptsSource(t *testing.T) {
+	h := newVerifierHarness(t)
+
+	// No client can serve block 15's receipts, so the source is likely down: re-checking stops
+	// there instead of polling every unsettled block (an unexpected call for 20 fails the test).
+	require.NoError(t, h.storage.SaveUnsettledBlock(nil, 15))
+	require.NoError(t, h.storage.SaveUnsettledBlock(nil, 20))
+	h.expectNoReceipts(15)
+
+	require.NoError(t, h.es.Verify(t.Context()))
+
+	h.requireState(t, nil, []uint64{15, 20}, false)
+}
+
+func TestVerify_SettlingContinuesPastInconsistentReceipts(t *testing.T) {
+	h := newVerifierHarness(t)
+
+	// Receipts answer for block 15 but lack a recorded log, so it stays unsettled; the source is
+	// up, so re-checking moves on and settles block 20.
+	h.record(t, 15, logsWith([2]uint{0, 0}, [2]uint{0, 1}))
+	h.record(t, 20, logsWith([2]uint{0, 0}))
+	require.NoError(t, h.storage.SaveUnsettledBlock(nil, 15))
+	require.NoError(t, h.storage.SaveUnsettledBlock(nil, 20))
+	gomock.InOrder(
+		h.expectReceipts(15, logsWith([2]uint{0, 0})),
+		h.expectReceipts(20, logsWith([2]uint{0, 0})),
+	)
+
+	require.NoError(t, h.es.Verify(t.Context()))
+
+	h.requireState(t, nil, []uint64{15}, false)
+	h.requireRecorded(t, 20, false)
 }
 
 func TestVerifyWithRetry_RetriesTransientThenSucceeds(t *testing.T) {
@@ -308,9 +361,7 @@ func TestVerifyWithRetry_RetriesTransientThenSucceeds(t *testing.T) {
 
 	require.NoError(t, h.es.VerifyWithRetry(t.Context()))
 
-	ranges, err := h.storage.ListUnverifiedRanges(nil)
-	require.NoError(t, err)
-	require.Empty(t, ranges)
+	h.requireState(t, nil, nil, false)
 }
 
 func TestVerifyWithRetry_DoesNotRetryResyncRequired(t *testing.T) {
@@ -329,47 +380,37 @@ func TestVerifyWithRetry_DoesNotRetryResyncRequired(t *testing.T) {
 	require.ErrorIs(t, h.es.VerifyWithRetry(t.Context()), ErrResyncRequired)
 }
 
-func TestVerifyWithRetry_RechecksParkedRangeUntilResolved(t *testing.T) {
+func TestVerifyWithRetry_RechecksUnsettledUntilSettled(t *testing.T) {
 	h := newVerifierHarness(t)
 	h.es.verifyRetryInitialDelay = time.Millisecond
-	h.es.verifyParkedRecheckMaxDelay = time.Millisecond
+	h.es.verifyUnsettledRecheckMaxDelay = time.Millisecond
 
-	// The first pass parks the range on block 15: the verify-time fetch misses the logs the sync
-	// recorded there, and receipts are unavailable (e.g. a transient inconsistent response). The
-	// in-process re-check finds receipts vindicating the recorded digest, so the block retires
-	// clean and the rest of the range resumes — no resync, no restart.
+	// The first pass leaves block 15 unsettled: the verify-time fetch misses the logs the sync
+	// recorded there, and receipts are unavailable. A later in-process re-check finds receipts
+	// vindicating the recorded logs, so the block is retired — no resync, no restart.
 	logs := logsWith([2]uint{0, 0})
-	require.NoError(t, h.storage.SaveBlockLogDigest(nil, 15, executionclient.BlockLogsDigest(logs)))
+	h.record(t, 15, logs)
 	require.NoError(t, h.storage.SaveUnverifiedRange(nil, operatorstorage.UnverifiedRange{From: 10, To: 20, Cursor: 10}))
 	gomock.InOrder(
 		h.exec.EXPECT().VerifyLogs(gomock.Any(), uint64(10), uint64(20)).Return(nil, nil),
-		h.exec.EXPECT().BlockContractLogs(gomock.Any(), uint64(15)).Return(nil, false, nil),
-		h.exec.EXPECT().VerifyLogs(gomock.Any(), uint64(15), uint64(15)).Return(nil, nil),
-		h.exec.EXPECT().BlockContractLogs(gomock.Any(), uint64(15)).Return(logs, true, nil),
-		h.exec.EXPECT().VerifyLogs(gomock.Any(), uint64(16), uint64(20)).Return(nil, nil),
+		h.expectNoReceipts(15),
+		h.expectReceipts(15, logs),
 	)
 
 	require.NoError(t, h.es.VerifyWithRetry(t.Context()))
 
-	ranges, err := h.storage.ListUnverifiedRanges(nil)
-	require.NoError(t, err)
-	require.Empty(t, ranges)
-	resync, err := h.storage.IsResyncRequired(nil)
-	require.NoError(t, err)
-	require.False(t, resync)
+	h.requireState(t, nil, nil, false)
+	h.requireRecorded(t, 15, false)
 }
 
-func TestVerifyWithRetry_KeepsRecheckingParkedRange(t *testing.T) {
+func TestVerifyWithRetry_KeepsRecheckingUnsettled(t *testing.T) {
 	h := newVerifierHarness(t)
 	h.es.verifyRetryInitialDelay = time.Millisecond
-	h.es.verifyParkedRecheckMaxDelay = time.Millisecond
+	h.es.verifyUnsettledRecheckMaxDelay = time.Millisecond
 
-	// A range that stays unresolvable doesn't end verification (that would leave it unverified
-	// until a restart): it's re-checked pass after pass until ctx is canceled.
-	require.NoError(t, h.storage.SaveUnverifiedRange(nil, operatorstorage.UnverifiedRange{From: 15, To: 15, Cursor: 15}))
-	h.exec.EXPECT().VerifyLogs(gomock.Any(), uint64(15), uint64(15)).Return([]executionclient.BlockLogs{
-		{BlockNumber: 15, Logs: logsWith([2]uint{0, 0})},
-	}, nil).Times(3)
+	// A block that stays unsettled doesn't end verification (that would leave it unverified until
+	// a restart): it's re-checked pass after pass until ctx is canceled.
+	require.NoError(t, h.storage.SaveUnsettledBlock(nil, 15))
 
 	ctx, cancel := context.WithCancel(t.Context())
 	checks := 0
@@ -388,19 +429,16 @@ func TestVerifyWithRetry_KeepsRecheckingParkedRange(t *testing.T) {
 func TestVerifyWithRetry_FlagsSuppressedRepairOnceCooldownExpires(t *testing.T) {
 	h := newVerifierHarness(t)
 	h.es.verifyRetryInitialDelay = time.Millisecond
-	h.es.verifyParkedRecheckMaxDelay = time.Millisecond
+	h.es.verifyUnsettledRecheckMaxDelay = time.Millisecond
 
-	// A confirmed miss within the cooldown of an earlier resync is suppressed and its range parked.
-	// The re-check confirms the miss again and, the cooldown having expired by then, flags the
-	// repair in-process instead of leaving it for a restart.
+	// A confirmed miss within the cooldown of an earlier resync is suppressed and the block left
+	// unsettled. Its re-check confirms the miss again and, the cooldown having expired by then,
+	// flags the repair in-process instead of leaving it for a restart.
 	require.NoError(t, h.storage.SetLastResyncTime(nil, time.Now().Add(-time.Minute)))
+	require.NoError(t, h.storage.SaveUnsettledBlock(nil, 15))
 	logs := logsWith([2]uint{0, 0})
-	authoritative := []executionclient.BlockLogs{{BlockNumber: 15, Logs: logs}}
-	require.NoError(t, h.storage.SaveUnverifiedRange(nil, operatorstorage.UnverifiedRange{From: 15, To: 15, Cursor: 15}))
 	gomock.InOrder(
-		h.exec.EXPECT().VerifyLogs(gomock.Any(), uint64(15), uint64(15)).Return(authoritative, nil),
-		h.exec.EXPECT().BlockContractLogs(gomock.Any(), uint64(15)).Return(logs, true, nil),
-		h.exec.EXPECT().VerifyLogs(gomock.Any(), uint64(15), uint64(15)).Return(authoritative, nil),
+		h.expectReceipts(15, logs),
 		h.exec.EXPECT().BlockContractLogs(gomock.Any(), uint64(15)).DoAndReturn(
 			func(context.Context, uint64) ([]ethtypes.Log, bool, error) {
 				// By the re-check, the earlier resync is older than the cooldown.

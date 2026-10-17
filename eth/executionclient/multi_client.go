@@ -146,6 +146,9 @@ func (mc *MultiClient) connect(ctx context.Context, clientAddr string) (*Executi
 		WithReqTimeout(mc.reqTimeout),
 		WithHealthInvalidationInterval(mc.healthInvalidationInterval),
 		WithSyncDistanceTolerance(mc.syncDistanceTolerance),
+		withReceiptsFallback(func(ctx context.Context, block uint64) ([]ethtypes.Log, bool, error) {
+			return mc.receiptsFromAny(ctx, block, clientAddr)
+		}),
 	)
 	if err != nil {
 		recordClientInitStatus(ctx, clientAddr, false)
@@ -232,43 +235,51 @@ func (mc *MultiClient) VerifyLogs(ctx context.Context, fromBlock, toBlock uint64
 	return blockLogs, nil
 }
 
-// errReceiptsUnavailable signals, inside BlockContractLogs' failover, that a client couldn't serve
-// authoritative receipts, so mc.call moves on to a sibling that might.
-var errReceiptsUnavailable = errors.New("eth_getBlockReceipts unavailable on this client")
-
 // BlockContractLogs returns the contract's logs for a block from its receipts (authoritative, used
-// by the background verifier to resolve a disagreeing block). It tries the configured clients in
-// turn: the first that serves receipts wins (and routing pins to it). It reports
-// receiptsAvailable=false only when no client can serve authoritative receipts; if a client
-// instead errors or is unhealthy, that surfaces as an error so the verifier retries (it may have
-// receipts once recovered) rather than parking the range on another client's gap.
+// by the background verifier to settle a block). It asks the clients in turn for receipts; see
+// receiptsFromAny.
 func (mc *MultiClient) BlockContractLogs(ctx context.Context, block uint64) ([]ethtypes.Log, bool, error) {
-	var logs []ethtypes.Log
-	unavailable := 0
+	return mc.receiptsFromAny(ctx, block, "")
+}
 
-	f := func(client SingleClientProvider) (any, error) {
-		l, available, err := client.BlockContractLogs(ctx, block)
+// receiptsFromAny asks the clients, except the one at skipAddr, for a block's receipts-derived
+// contract logs until one serves them. It goes in routing order but doesn't move routing or count
+// a client switch: a client lacking receipts isn't failing, and pinning all traffic to whichever
+// client has them would reroute streaming too. It reports available=false only when every client
+// asked was reachable and healthy yet couldn't serve receipts; if one instead errored or was
+// unavailable, it returns that error so callers retry (it may have receipts once recovered)
+// rather than settle for another client's gap.
+func (mc *MultiClient) receiptsFromAny(ctx context.Context, block uint64, skipAddr string) (logs []ethtypes.Log, available bool, err error) {
+	start := int(mc.currentClientIndex.Load())
+	var errs error
+	for i := range mc.clients {
+		clientIndex := (start + i) % len(mc.clients)
+		if mc.clientAddrs[clientIndex] == skipAddr {
+			continue
+		}
+
+		client, err := mc.getClient(ctx, clientIndex)
 		if err != nil {
-			return nil, err
+			errs = errors.Join(errs, err)
+			continue
 		}
-		if !available {
-			unavailable++
-			return nil, errReceiptsUnavailable // fail over to a client that can serve receipts
+		if err := client.Healthy(ctx); err != nil {
+			errs = errors.Join(errs, err)
+			continue
 		}
-		logs = l
-		return nil, nil
+		logs, available, err := client.BlockContractLogs(ctx, block)
+		if isMultiClientInterruptedError(err) {
+			return nil, false, err
+		}
+		if err != nil {
+			errs = errors.Join(errs, err)
+			continue
+		}
+		if available {
+			return logs, true, nil
+		}
 	}
-
-	if _, err := mc.call(contextWithMethod(ctx, "BlockContractLogs"), f); err != nil {
-		// No client could serve authoritative receipts → report unavailable (the verifier parks).
-		// Otherwise some client errored or was unhealthy → surface it so the verifier retries.
-		if unavailable == len(mc.clients) {
-			return nil, false, nil
-		}
-		return nil, false, err
-	}
-
-	return logs, true, nil
+	return nil, false, errs
 }
 
 // StreamLogs subscribes to events emitted by the Ethereum SSV contract(s) starting at fromBlock.
@@ -500,17 +511,10 @@ func (mc *MultiClient) call(ctx context.Context, f func(client SingleClientProvi
 			return v, err
 		}
 		if err != nil {
-			if errors.Is(err, errReceiptsUnavailable) {
-				// Not a failure: the client can't serve receipts (it logs why), so try the next one.
-				logger.Debug("client can't serve receipts, switching to the next client",
-					zap.String("next_addr", mc.clientAddrs[nextClientIndex]),
-				)
-			} else {
-				logger.Error("call failed, switching to the next client",
-					zap.String("next_addr", mc.clientAddrs[nextClientIndex]),
-					zap.Error(err),
-				)
-			}
+			logger.Error("call failed, switching to the next client",
+				zap.String("next_addr", mc.clientAddrs[nextClientIndex]),
+				zap.Error(err),
+			)
 			allErrs = errors.Join(allErrs, err)
 			mc.currentClientIndex.Store(int64(nextClientIndex)) // Advance.
 			recordClientSwitch(ctx, mc.clientAddrs[clientIndex], mc.clientAddrs[nextClientIndex])

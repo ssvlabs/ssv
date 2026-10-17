@@ -38,14 +38,17 @@ type Storage interface {
 	GetLastProcessedBlock(r basedb.Reader) (*big.Int, bool, error)
 
 	// Background-verification state (see the verifier in eth/eventsyncer): ranges synced
-	// optimistically that await verification, per-block log digests to verify them against,
-	// and a flag requesting a full resync when a miss is found.
+	// optimistically that await verification, per-block log IDs to verify them against, blocks
+	// not yet authoritatively verified, and a flag requesting a full resync when a miss is found.
 	SaveUnverifiedRange(rw basedb.ReadWriter, r UnverifiedRange) error
 	ListUnverifiedRanges(r basedb.Reader) ([]UnverifiedRange, error)
 	DeleteUnverifiedRange(rw basedb.ReadWriter, from uint64) error
-	SaveBlockLogDigest(rw basedb.ReadWriter, block uint64, digest []byte) error
-	GetBlockLogDigest(r basedb.Reader, block uint64) ([]byte, bool, error)
-	DeleteBlockLogDigest(rw basedb.ReadWriter, block uint64) error
+	SaveBlockLogIDs(rw basedb.ReadWriter, block uint64, ids []byte) error
+	GetBlockLogIDs(r basedb.Reader, block uint64) ([]byte, bool, error)
+	DeleteBlockLogIDs(rw basedb.ReadWriter, block uint64) error
+	SaveUnsettledBlock(rw basedb.ReadWriter, block uint64) error
+	ListUnsettledBlocks(r basedb.Reader) ([]uint64, error)
+	DeleteUnsettledBlock(rw basedb.ReadWriter, block uint64) error
 	SetResyncRequired(rw basedb.ReadWriter) error
 	IsResyncRequired(r basedb.Reader) (bool, error)
 	ClearResyncRequired(rw basedb.ReadWriter) error

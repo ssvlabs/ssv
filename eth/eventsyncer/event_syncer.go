@@ -50,12 +50,12 @@ type EventSyncer struct {
 	logger             *zap.Logger
 	stalenessThreshold time.Duration
 
-	verifyChunkSize             uint64
-	verifyChunkDelay            time.Duration
-	verifyRetryInitialDelay     time.Duration
-	verifyRetryMaxDelay         time.Duration
-	verifyParkedRecheckMaxDelay time.Duration
-	resyncCooldown              time.Duration
+	verifyChunkSize                uint64
+	verifyChunkDelay               time.Duration
+	verifyRetryInitialDelay        time.Duration
+	verifyRetryMaxDelay            time.Duration
+	verifyUnsettledRecheckMaxDelay time.Duration
+	resyncCooldown                 time.Duration
 
 	lastProcessedBlock       uint64
 	lastProcessedBlockChange time.Time
@@ -67,14 +67,14 @@ func New(nodeStorage nodestorage.Storage, executionClient ExecutionClient, event
 		executionClient: executionClient,
 		eventHandler:    eventHandler,
 
-		logger:                      zap.NewNop(),
-		stalenessThreshold:          defaultStalenessThreshold,
-		verifyChunkSize:             defaultVerifyChunkSize,
-		verifyChunkDelay:            defaultVerifyChunkDelay,
-		verifyRetryInitialDelay:     defaultVerifyRetryInitialDelay,
-		verifyRetryMaxDelay:         defaultVerifyRetryMaxDelay,
-		verifyParkedRecheckMaxDelay: defaultVerifyParkedRecheckMaxDelay,
-		resyncCooldown:              defaultResyncCooldown,
+		logger:                         zap.NewNop(),
+		stalenessThreshold:             defaultStalenessThreshold,
+		verifyChunkSize:                defaultVerifyChunkSize,
+		verifyChunkDelay:               defaultVerifyChunkDelay,
+		verifyRetryInitialDelay:        defaultVerifyRetryInitialDelay,
+		verifyRetryMaxDelay:            defaultVerifyRetryMaxDelay,
+		verifyUnsettledRecheckMaxDelay: defaultVerifyUnsettledRecheckMaxDelay,
+		resyncCooldown:                 defaultResyncCooldown,
 	}
 
 	for _, opt := range opts {
@@ -167,14 +167,15 @@ func (es *EventSyncer) syncHistory(ctx context.Context, fromBlock uint64, journa
 }
 
 // SyncHistory reads and processes historical events since the given fromBlock. When verify is
-// false (the normal path) the sync is optimistic and fast: the handler journals an unverified
-// range and per-block digests as it advances the marker, for the background verifier to check
-// for completeness later. When true (the resync-repair path) each batch is verified inline, so
-// the result is guaranteed complete and nothing is journalled.
+// false (cold syncs and large catch-ups) the sync is optimistic and fast: the handler journals an
+// unverified range and per-block log IDs as it advances the marker, for the background verifier
+// to check for completeness later. When true (restart catch-ups and the resync repair) each batch
+// is verified inline, so no range is journalled; only blocks no client could settle are
+// recorded, as unsettled.
 func (es *EventSyncer) SyncHistory(ctx context.Context, fromBlock uint64, verify bool) (lastProcessedBlock uint64, errs error) {
 	// journalFrom keys the unverified range recorded during an optimistic sync; it stays fixed at
 	// the original start across retries so the range spans the whole optimistic span. A verified
-	// resync journals nothing (nil). It's a pointer, not a 0 sentinel, so an offset-0 network
+	// sync journals no range (nil). It's a pointer, not a 0 sentinel, so an offset-0 network
 	// (RegistrySyncOffset == 0) still journals block 0 instead of silently skipping verification.
 	// Journaling happens in the handler's marker transaction, so a crash can't advance the marker
 	// past a block the verifier won't later check.

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"net/http"
 	"sync/atomic"
 	"time"
 
@@ -139,14 +140,19 @@ func batchedByBlock[T any](
 
 // rememberBatchingUnsupported latches batchingUnsupported when a batch failed wholesale yet the
 // sequential fallback recovered — distinguishing a provider that rejects batching from a general
-// outage, where the sequential calls would have failed too. Timeouts and cancellations are
-// excluded: they mean slow or interrupted, not unsupported, so a batch-only timeout can't wrongly
-// pin a batching-capable provider to sequential. One-way, reset on reconnect.
+// outage, where the sequential calls would have failed too. Timeouts, cancellations and rate
+// limiting (HTTP 429) are excluded: they mean slow, interrupted or throttled, not unsupported, so
+// they can't wrongly pin a batching-capable provider to sequential requests (multiplying round
+// trips up to the batch size). One-way, reset on reconnect.
 func (c *ethClient) rememberBatchingUnsupported(attemptedBatch bool, batchErr error) {
 	if !attemptedBatch || batchErr == nil {
 		return
 	}
 	if errors.Is(batchErr, context.DeadlineExceeded) || errors.Is(batchErr, context.Canceled) {
+		return
+	}
+	var httpErr rpc.HTTPError
+	if errors.As(batchErr, &httpErr) && httpErr.StatusCode == http.StatusTooManyRequests {
 		return
 	}
 	if c.batchingUnsupported.CompareAndSwap(false, true) {

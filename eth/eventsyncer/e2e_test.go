@@ -146,8 +146,37 @@ func operatorCount(t *testing.T, s operatorstorage.Storage) int {
 // the follow distance, and wires the real pipeline through a drop-proxy targeting the middle
 // operator's block. It returns the syncer, storage, proxy, and that middle block number.
 func setupVerifyE2E(t *testing.T, ctx context.Context, operatorsN int) (*EventSyncer, operatorstorage.Storage, *dropProxy, uint64) {
-	logger := zaptest.NewLogger(t)
+	rpcServer, contractAddr, midBlock := newVerifyE2EChain(t, ctx, operatorsN)
+	proxyURL, proxy := newDropProxy(t, rpcServer, midBlock)
 
+	privateKey, err := keys.GeneratePrivateKey()
+	require.NoError(t, err)
+	es, nodeStorage := newVerifyE2EPipeline(t, ctx, newE2EExecutionClient(t, ctx, proxyURL.URL, contractAddr), privateKey)
+	return es, nodeStorage, proxy, midBlock
+}
+
+// setupVerifyE2EMulti is setupVerifyE2E over a MultiClient of two ELs serving the same chain,
+// each behind its own drop-proxy; the first is the one routed to.
+func setupVerifyE2EMulti(t *testing.T, ctx context.Context, operatorsN int) (*EventSyncer, operatorstorage.Storage, [2]*dropProxy, uint64) {
+	rpcServer, contractAddr, midBlock := newVerifyE2EChain(t, ctx, operatorsN)
+	urlA, proxyA := newDropProxy(t, rpcServer, midBlock)
+	urlB, proxyB := newDropProxy(t, rpcServer, midBlock)
+
+	multiClient, err := executionclient.NewMulti(ctx, []string{urlA.URL, urlB.URL}, contractAddr,
+		executionclient.WithLoggerMulti(zaptest.NewLogger(t)))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = multiClient.Close() })
+
+	privateKey, err := keys.GeneratePrivateKey()
+	require.NoError(t, err)
+	es, nodeStorage := newVerifyE2EPipeline(t, ctx, multiClient, privateKey)
+	return es, nodeStorage, [2]*dropProxy{proxyA, proxyB}, midBlock
+}
+
+// newVerifyE2EChain deploys the contract on a simulated chain, registers operatorsN operators
+// (one per block) and pads past the follow distance. It returns the chain's RPC handler, the
+// contract address and the middle operator's block.
+func newVerifyE2EChain(t *testing.T, ctx context.Context, operatorsN int) (http.Handler, ethcommon.Address, uint64) {
 	sim := simTestBackend(testAddr)
 	rpcServer, err := sim.Node().RPCHandler()
 	require.NoError(t, err)
@@ -184,25 +213,49 @@ func setupVerifyE2E(t *testing.T, ctx context.Context, operatorsN int) (*EventSy
 		sim.Commit()
 	}
 
-	proxyURL, proxy := newDropProxy(t, rpcServer, midBlock)
+	return rpcServer, contractAddr, midBlock
+}
 
-	db, err := kv.NewInMemory(logger, basedb.Options{Ctx: ctx})
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = db.Close() })
-	privateKey, err := keys.GeneratePrivateKey()
-	require.NoError(t, err)
-	nodeStorage, operatorData := setupOperatorStorage(logger, db, privateKey)
-	eh := setupEventHandler(t, ctx, logger, db, nodeStorage, operatorData, privateKey)
-
-	execClient, err := executionclient.New(ctx, proxyURL.URL, contractAddr, executionclient.WithLogger(logger))
+// newE2EExecutionClient connects a single execution client to url and checks it's healthy.
+func newE2EExecutionClient(t *testing.T, ctx context.Context, url string, contractAddr ethcommon.Address) *executionclient.ExecutionClient {
+	execClient, err := executionclient.New(ctx, url, contractAddr, executionclient.WithLogger(zaptest.NewLogger(t)))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = execClient.Close() })
 	require.NoError(t, execClient.Healthy(ctx))
+	return execClient
+}
+
+// newVerifyE2EPipeline wires the real handler and storage, for a node with the given operator
+// key, behind a syncer reading through the given execution client.
+func newVerifyE2EPipeline(t *testing.T, ctx context.Context, execClient ExecutionClient, privateKey keys.OperatorPrivateKey) (*EventSyncer, operatorstorage.Storage) {
+	logger := zaptest.NewLogger(t)
+	db, err := kv.NewInMemory(logger, basedb.Options{Ctx: ctx})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+	nodeStorage, operatorData := setupOperatorStorage(logger, db, privateKey)
+	eh := setupEventHandler(t, ctx, logger, db, nodeStorage, operatorData, privateKey)
 
 	es := New(nodeStorage, execClient, eh, WithLogger(logger))
 	es.verifyChunkDelay = 0
+	return es, nodeStorage
+}
 
-	return es, nodeStorage, proxy, midBlock
+// requireVerifyOutcome asserts verification got through every range, leaving exactly the given
+// unsettled blocks and resync flag.
+func requireVerifyOutcome(t *testing.T, s operatorstorage.Storage, unsettled []uint64, resync bool) {
+	t.Helper()
+
+	ranges, err := s.ListUnverifiedRanges(nil)
+	require.NoError(t, err)
+	require.Empty(t, ranges, "pending ranges")
+
+	gotUnsettled, err := s.ListUnsettledBlocks(nil)
+	require.NoError(t, err)
+	require.Equal(t, unsettled, gotUnsettled, "unsettled blocks")
+
+	gotResync, err := s.IsResyncRequired(nil)
+	require.NoError(t, err)
+	require.Equal(t, resync, gotResync, "resync flagged")
 }
 
 // TestE2E_HealthyEL_VerifiesClean is the no-regression baseline: against a healthy EL the
@@ -258,103 +311,139 @@ func TestE2E_DropDetectedAndRepaired(t *testing.T) {
 	require.NoError(t, es.Verify(ctx))
 }
 
-// TestE2E_ParksWhenReceiptsUnavailable: when a disagreement can't be resolved against receipts
-// (EL without eth_getBlockReceipts), the verifier parks the range — no resync on a guess, and the
-// range stays visible/pending rather than being retired as verified.
-func TestE2E_ParksWhenReceiptsUnavailable(t *testing.T) {
+// TestE2E_UnsettledWhenReceiptsUnavailable: when nothing can settle a block the sync recorded logs
+// for (its log index now drops them, and the EL lacks eth_getBlockReceipts), the verifier records
+// the block as unsettled — no resync on a guess, and no claim that the range verified.
+func TestE2E_UnsettledWhenReceiptsUnavailable(t *testing.T) {
 	ctx := t.Context()
-	es, nodeStorage, proxy, _ := setupVerifyE2E(t, ctx, 3)
+	es, nodeStorage, proxy, dropped := setupVerifyE2E(t, ctx, 3)
 
-	// Optimistic sync sees the full chain (all 3 operators recorded, digests written).
+	// Optimistic sync sees the full chain (all 3 operators recorded, log IDs written).
 	_, err := es.SyncHistory(ctx, 0, false)
 	require.NoError(t, err)
 	require.Equal(t, 3, operatorCount(t, nodeStorage))
 
-	// Now the EL's log index breaks for that block AND receipts become unavailable — so the
-	// verify-time fetch disagrees with the recorded digest and there's no authoritative source.
+	// Now the EL's log index breaks for that block AND receipts become unavailable, so there's no
+	// authoritative source for it.
 	proxy.dropActive.Store(true)
 	proxy.receiptsUnavailable.Store(true)
 
-	require.NoError(t, es.Verify(ctx), "unresolvable disagreement must not resync")
-
-	resync, err := nodeStorage.IsResyncRequired(nil)
-	require.NoError(t, err)
-	require.False(t, resync, "must not resync without an authoritative source")
-
-	ranges, err := nodeStorage.ListUnverifiedRanges(nil)
-	require.NoError(t, err)
-	require.NotEmpty(t, ranges, "range stays pending (parked), not retired as verified")
+	require.NoError(t, es.Verify(ctx), "an unresolvable block must not resync")
+	requireVerifyOutcome(t, nodeStorage, []uint64{dropped}, false)
 }
 
 // TestE2E_EmptyReceiptsNotTreatedAsAuthoritative: when eth_getBlockReceipts returns zero receipts
 // for a block the sync recorded logs for, that's a broken receipt store, not proof the block is
-// empty — the verifier must park (no authoritative source), not treat it as a confirmed miss and
-// trigger a false wipe+resync.
+// empty — the block stays unsettled rather than being treated as a confirmed miss and triggering
+// a false wipe+resync.
 func TestE2E_EmptyReceiptsNotTreatedAsAuthoritative(t *testing.T) {
 	ctx := t.Context()
-	es, nodeStorage, proxy, _ := setupVerifyE2E(t, ctx, 3)
+	es, nodeStorage, proxy, dropped := setupVerifyE2E(t, ctx, 3)
 
-	// Optimistic sync records all 3 operators (digests written).
+	// Optimistic sync records all 3 operators (log IDs written).
 	_, err := es.SyncHistory(ctx, 0, false)
 	require.NoError(t, err)
 	require.Equal(t, 3, operatorCount(t, nodeStorage))
 
-	// The log index drops the middle block AND receipts come back empty (a broken receipt store):
-	// the verify-time fetch disagrees with the recorded digest, and receipts can't authoritatively
-	// resolve it.
+	// The log index drops the middle block AND receipts come back empty (a broken receipt store).
 	proxy.dropActive.Store(true)
 	proxy.receiptsEmpty.Store(true)
 
 	require.NoError(t, es.Verify(ctx), "empty receipts must not be treated as an authoritative empty block")
-	resync, err := nodeStorage.IsResyncRequired(nil)
-	require.NoError(t, err)
-	require.False(t, resync, "an inconsistent empty-receipts response must not trigger a resync")
-	ranges, err := nodeStorage.ListUnverifiedRanges(nil)
-	require.NoError(t, err)
-	require.NotEmpty(t, ranges, "range parked (no authoritative source), not retired or resynced")
+	requireVerifyOutcome(t, nodeStorage, []uint64{dropped}, false)
 }
 
-// TestE2E_ParkedRangeResolvesWhenReceiptsReturn: a range parked because the receipt store was
-// transiently broken (returned empty) is re-checked in-process by VerifyWithRetry, without a
-// restart. Once receipts return they vindicate the recorded digest (the drop was only in the log
-// index), so the range retires with no resync.
-func TestE2E_ParkedRangeResolvesWhenReceiptsReturn(t *testing.T) {
+// TestE2E_UnsettledBlockSettlesWhenReceiptsReturn: a block left unsettled because the receipt
+// store was transiently broken (returned empty) is re-checked in-process by VerifyWithRetry,
+// without a restart. Once receipts return they vindicate the recorded logs (the drop was only in
+// the log index), so the block settles with no resync.
+func TestE2E_UnsettledBlockSettlesWhenReceiptsReturn(t *testing.T) {
 	ctx := t.Context()
 	es, nodeStorage, proxy, dropped := setupVerifyE2E(t, ctx, 3)
 	es.verifyRetryInitialDelay = 10 * time.Millisecond
-	es.verifyParkedRecheckMaxDelay = 10 * time.Millisecond
+	es.verifyUnsettledRecheckMaxDelay = 10 * time.Millisecond
 
 	// Optimistic sync records all 3 operators.
 	_, err := es.SyncHistory(ctx, 0, false)
 	require.NoError(t, err)
 	require.Equal(t, 3, operatorCount(t, nodeStorage))
 
-	// Log index drops the middle block and the receipt store returns empty → the disagreeing block
-	// can't be resolved authoritatively, so the range parks on it.
+	// Log index drops the middle block and the receipt store returns empty, so the block can't be
+	// settled authoritatively.
 	proxy.dropActive.Store(true)
 	proxy.receiptsEmpty.Store(true)
 	verifyDone := make(chan error, 1)
 	go func() { verifyDone <- es.VerifyWithRetry(ctx) }()
 	require.Eventually(t, func() bool {
-		ranges, err := nodeStorage.ListUnverifiedRanges(nil)
-		return err == nil && len(ranges) == 1 && ranges[0].Parked && ranges[0].Cursor == dropped
-	}, 30*time.Second, 10*time.Millisecond, "range parks on the dropped block while the receipt store is broken")
+		unsettled, err := nodeStorage.ListUnsettledBlocks(nil)
+		return err == nil && len(unsettled) == 1 && unsettled[0] == dropped
+	}, 30*time.Second, 10*time.Millisecond, "the dropped block is left unsettled while the receipt store is broken")
 
-	// Receipts come back: the next re-check resolves the parked block against them and the range
-	// retires clean.
+	// Receipts come back: the next re-check settles the block against them.
 	proxy.receiptsEmpty.Store(false)
 	select {
 	case err := <-verifyDone:
 		require.NoError(t, err)
 	case <-time.After(30 * time.Second):
-		t.Fatal("parked range was not re-checked in-process after receipts returned")
+		t.Fatal("unsettled block was not re-checked in-process after receipts returned")
 	}
-	resync, err := nodeStorage.IsResyncRequired(nil)
+	requireVerifyOutcome(t, nodeStorage, nil, false)
+}
+
+// TestE2E_PersistentDropWithoutReceiptsIsNotVerified: a block the EL drops both during the
+// optimistic sync and at verify time, with no usable receipts, is indistinguishable from a bloom
+// false positive — so it must stay unsettled, not pass as verified. Once receipts are available,
+// re-checking it confirms the miss, and the repair restores the dropped operator.
+func TestE2E_PersistentDropWithoutReceiptsIsNotVerified(t *testing.T) {
+	ctx := t.Context()
+	es, nodeStorage, proxy, dropped := setupVerifyE2E(t, ctx, 3)
+	proxy.dropActive.Store(true)
+	proxy.receiptsEmpty.Store(true)
+
+	_, err := es.SyncHistory(ctx, 0, false)
 	require.NoError(t, err)
-	require.False(t, resync, "recorded digest vindicated by receipts → no resync")
-	ranges, err := nodeStorage.ListUnverifiedRanges(nil)
+	require.Equal(t, 2, operatorCount(t, nodeStorage), "the optimistic sync silently missed one operator")
+
+	require.NoError(t, es.Verify(ctx))
+	requireVerifyOutcome(t, nodeStorage, []uint64{dropped}, false)
+
+	// Receipts become available: the re-check confirms the miss.
+	proxy.receiptsEmpty.Store(false)
+	require.ErrorIs(t, es.Verify(ctx), ErrResyncRequired)
+
+	// Repair, as the boot path does: drop registry + journal, then resync with inline verification.
+	require.NoError(t, nodeStorage.DropRegistryData())
+	require.NoError(t, nodeStorage.DropVerificationJournal())
+	_, err = es.SyncHistory(ctx, 0, true)
 	require.NoError(t, err)
-	require.Empty(t, ranges, "parked range retired once receipts became available")
+	require.Equal(t, 3, operatorCount(t, nodeStorage), "the repair recovered the dropped operator")
+}
+
+// TestE2E_MultiClientSettlesThroughOtherClientsReceipts: in a mixed fleet where client A (routed
+// to) persistently drops a block's logs and can't serve receipts while client B is healthy, the
+// verifier settles the block through B's receipts and flags the miss, and the repair — still
+// running on A — recovers the block through B's receipts instead of missing it a second time.
+func TestE2E_MultiClientSettlesThroughOtherClientsReceipts(t *testing.T) {
+	ctx := t.Context()
+	es, nodeStorage, proxies, _ := setupVerifyE2EMulti(t, ctx, 3)
+	proxies[0].dropActive.Store(true)
+	proxies[0].receiptsUnavailable.Store(true)
+
+	// The optimistic sync runs on A and silently misses the dropped block.
+	_, err := es.SyncHistory(ctx, 0, false)
+	require.NoError(t, err)
+	require.Equal(t, 2, operatorCount(t, nodeStorage))
+
+	// Verification, also on A, settles the block through B's receipts and confirms the miss.
+	require.ErrorIs(t, es.Verify(ctx), ErrResyncRequired)
+
+	// The repair on A recovers the block through B's receipts.
+	require.NoError(t, nodeStorage.DropRegistryData())
+	require.NoError(t, nodeStorage.DropVerificationJournal())
+	_, err = es.SyncHistory(ctx, 0, true)
+	require.NoError(t, err)
+	require.Equal(t, 3, operatorCount(t, nodeStorage), "the repair recovered the dropped operator")
+	requireVerifyOutcome(t, nodeStorage, nil, true)
 }
 
 // setupClusterDriftE2E builds the drift scenario from the #2990 field report
@@ -372,8 +461,6 @@ func TestE2E_ParkedRangeResolvesWhenReceiptsReturn(t *testing.T) {
 // It returns the syncer, storage, proxy (drop not yet active), the validator public key, and
 // the updated fee recipient.
 func setupClusterDriftE2E(t *testing.T, ctx context.Context) (*EventSyncer, operatorstorage.Storage, *dropProxy, []byte, ethcommon.Address) {
-	logger := zaptest.NewLogger(t)
-
 	sim := simTestBackend(testAddr)
 	rpcServer, err := sim.Node().RPCHandler()
 	require.NoError(t, err)
@@ -459,21 +546,7 @@ func setupClusterDriftE2E(t *testing.T, ctx context.Context) (*EventSyncer, oper
 	}
 
 	proxyURL, proxy := newDropProxy(t, rpcServer, dropBlock)
-
-	db, err := kv.NewInMemory(logger, basedb.Options{Ctx: ctx})
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = db.Close() })
-	nodeStorage, operatorData := setupOperatorStorage(logger, db, opKeys[0])
-	eh := setupEventHandler(t, ctx, logger, db, nodeStorage, operatorData, opKeys[0])
-
-	execClient, err := executionclient.New(ctx, proxyURL.URL, contractAddr, executionclient.WithLogger(logger))
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = execClient.Close() })
-	require.NoError(t, execClient.Healthy(ctx))
-
-	es := New(nodeStorage, execClient, eh, WithLogger(logger))
-	es.verifyChunkDelay = 0
-
+	es, nodeStorage := newVerifyE2EPipeline(t, ctx, newE2EExecutionClient(t, ctx, proxyURL.URL, contractAddr), opKeys[0])
 	return es, nodeStorage, proxy, masterPK.Serialize(), updatedRecipient
 }
 

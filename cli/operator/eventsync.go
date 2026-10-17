@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math/big"
 
+	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 
@@ -106,9 +107,9 @@ func syncContractEvents(
 	}
 
 	// Decide whether to verify the historical sync inline. A restart catch-up small enough to
-	// bloom-check cheaply is verified inline, so the node starts with guaranteed-complete state;
-	// a large cold sync from the registry offset stays optimistic and is checked afterwards by
-	// the background verifier. The resync-repair path always verifies inline.
+	// bloom-check cheaply is verified inline, so the node starts with verified state; a large cold
+	// sync from the registry offset stays optimistic and is checked afterwards by the background
+	// verifier. The resync-repair path always verifies inline.
 	verify := resyncing || shouldVerifyCatchUpInline(ctx, logger, executionClient, fromBlock.Uint64())
 
 	logger.Debug("syncing historical registry events",
@@ -179,12 +180,12 @@ func syncContractEvents(
 	startOngoingSync := func(ctx context.Context) error {
 		g, ctx := errgroup.WithContext(ctx)
 
-		// Verify any optimistically-synced ranges (large cold syncs) in the background, off the
-		// critical path, checking each block's recorded log digest against chain data. It runs
-		// concurrently with ongoing sync (below vs. above the last-processed marker), retrying
-		// transient failures and re-checking parked ranges in-process. If it finds the optimistic
-		// sync missed events it returns ErrResyncRequired: we surface that so the node terminates
-		// and restarts into the clean, inline-verified resync (the flag is already persisted).
+		// Verify in the background, off the critical path: optimistically-synced ranges (large cold
+		// syncs) are checked against chain data, and blocks no source could settle yet are re-checked
+		// until they settle. It runs concurrently with ongoing sync (below vs. above the
+		// last-processed marker) and retries transient failures in-process. If it finds the sync
+		// missed events it returns ErrResyncRequired: we surface that so the node terminates and
+		// restarts into the clean, inline-verified resync (the flag is already persisted).
 		g.Go(func() error {
 			err := eventSyncer.VerifyWithRetry(ctx)
 			switch {
@@ -265,15 +266,17 @@ func prepareRegistryResync(logger *zap.Logger, nodeStorage operatorstorage.Stora
 
 // maxInlineVerifyCatchUp is the largest historical catch-up (in blocks) we bloom-check inline
 // on startup rather than syncing optimistically. Sized at roughly a week of mainnet blocks: it
-// covers all but the most prolonged restarts — which then start with guaranteed-complete state
-// instead of an optimistic window — while a cold sync from the registry offset stays optimistic
+// covers all but the most prolonged restarts — which then start with verified state instead of
+// an optimistic window — while a cold sync from the registry offset stays optimistic
 // (background-verified) so a fresh node isn't blocked on it. Tunable.
 const maxInlineVerifyCatchUp = 50_000
 
 // shouldVerifyCatchUpInline reports whether the historical catch-up from fromBlock is small
-// enough to bloom-check inline (so the node starts with guaranteed-complete registry state)
-// rather than sync it optimistically and rely on the background verifier. On any error sizing
-// the range it returns false: optimistic is the safe, always-available default.
+// enough to bloom-check inline, so the node starts with verified registry state, rather than sync
+// it optimistically and rely on the background verifier. It also stays optimistic when no client
+// can serve receipts: inline verification would then fall back to slow timed re-requests for
+// every bloom match, delaying startup. On any error it returns false: optimistic is the safe,
+// always-available default.
 func shouldVerifyCatchUpInline(ctx context.Context, logger *zap.Logger, ec executionclient.Provider, fromBlock uint64) bool {
 	head, err := ec.HeaderByNumber(ctx, nil)
 	if err != nil || head == nil || head.Number == nil {
@@ -289,5 +292,17 @@ func shouldVerifyCatchUpInline(ctx context.Context, logger *zap.Logger, ec execu
 	if toBlock < fromBlock {
 		return true // nothing to sync
 	}
-	return toBlock-fromBlock+1 <= maxInlineVerifyCatchUp
+	if toBlock-fromBlock+1 > maxInlineVerifyCatchUp {
+		return false
+	}
+
+	// Probe for a receipts source on the head block, which (with transactions) must have receipts.
+	if head.TxHash != ethtypes.EmptyTxsHash {
+		if _, available, err := ec.BlockContractLogs(ctx, headBlock); err != nil || !available {
+			logger.Info("found no execution client serving receipts; syncing the catch-up optimistically for the background verifier to check",
+				zap.Error(err))
+			return false
+		}
+	}
+	return true
 }

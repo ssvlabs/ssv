@@ -107,39 +107,43 @@ func TestPackLogsOrdersByLogIndexWithinTransaction(t *testing.T) {
 	assert.Equal(t, []uint{3, 9, 10, 11}, gotIndexes)
 }
 
-func TestBlockLogsDigest(t *testing.T) {
+func TestBlockLogIDs(t *testing.T) {
 	logs := []types.Log{
-		{TxIndex: 0, Index: 0},
-		{TxIndex: 0, Index: 1},
 		{TxIndex: 2, Index: 5},
-	}
-
-	// Digesting is order-independent: it identifies logs by (TxIndex, Index), so the same set
-	// in any order yields the same digest.
-	shuffled := []types.Log{logs[2], logs[0], logs[1]}
-	assert.Equal(t, BlockLogsDigest(logs), BlockLogsDigest(shuffled))
-
-	// Dropping any log changes the digest — this is what lets the verifier detect a subset that
-	// an incomplete eth_getLogs response returned.
-	assert.NotEqual(t, BlockLogsDigest(logs), BlockLogsDigest(logs[:2]))
-
-	// Only the (TxIndex, Index) identity matters; other log fields don't affect the digest.
-	tagged := []types.Log{
-		{TxIndex: 0, Index: 0, BlockNumber: 99, Removed: true},
 		{TxIndex: 0, Index: 1},
-		{TxIndex: 2, Index: 5},
+		{TxIndex: 0, Index: 0, BlockNumber: 99, Removed: true}, // only (TxIndex, Index) identifies a log
+		{TxIndex: 0, Index: 1},                                 // a duplicate counts once
 	}
-	assert.Equal(t, BlockLogsDigest(logs), BlockLogsDigest(tagged))
+	want := []LogID{{TxIndex: 0, Index: 0}, {TxIndex: 0, Index: 1}, {TxIndex: 2, Index: 5}}
 
-	// A different identity yields a different digest.
-	moved := []types.Log{
-		{TxIndex: 0, Index: 0},
-		{TxIndex: 0, Index: 1},
-		{TxIndex: 2, Index: 6}, // was Index 5
+	// Sorted and deduplicated, so responses compare as sets regardless of order.
+	ids := BlockLogIDs(logs)
+	assert.Equal(t, want, ids)
+	assert.Empty(t, BlockLogIDs(nil))
+
+	// The journal encoding round-trips, including the empty set.
+	decoded, err := DecodeLogIDs(EncodeLogIDs(ids))
+	assert.NoError(t, err)
+	assert.Equal(t, want, decoded)
+	decoded, err = DecodeLogIDs(EncodeLogIDs(nil))
+	assert.NoError(t, err)
+	assert.Empty(t, decoded)
+
+	// A truncated encoding is rejected rather than misread.
+	encoded := EncodeLogIDs([]LogID{{TxIndex: 1 << 20, Index: 1 << 20}})
+	_, err = DecodeLogIDs(encoded[:len(encoded)-1])
+	assert.ErrorIs(t, err, errMalformedLogIDs)
+}
+
+func TestPackWithUnsettled(t *testing.T) {
+	logs := []types.Log{{BlockNumber: 7, TxIndex: 0, Index: 0}, {BlockNumber: 3, TxIndex: 1, Index: 2}}
+
+	packed := packWithUnsettled(logs, []uint64{5, 1})
+
+	got := make([]uint64, 0, len(packed))
+	for _, bl := range packed {
+		got = append(got, bl.BlockNumber)
+		assert.Equal(t, bl.Unsettled, len(bl.Logs) == 0, "only unsettled entries are log-less")
 	}
-	assert.NotEqual(t, BlockLogsDigest(logs), BlockLogsDigest(moved))
-
-	// Empty/no logs is stable and distinct from any non-empty set.
-	assert.Equal(t, BlockLogsDigest(nil), BlockLogsDigest([]types.Log{}))
-	assert.NotEqual(t, BlockLogsDigest(nil), BlockLogsDigest(logs))
+	assert.Equal(t, []uint64{1, 3, 5, 7}, got, "unsettled entries are merged in block order")
 }

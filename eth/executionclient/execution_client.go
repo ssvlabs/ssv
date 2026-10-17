@@ -72,6 +72,10 @@ type ExecutionClient struct {
 	// never. Log verification skips the method while that's recent, then probes it again, so an EL
 	// upgraded behind the same endpoint is picked up without a restart.
 	receiptsUnsupportedAt atomic.Int64
+
+	// receiptsFallback, set by MultiClient, serves a block's receipts-derived contract logs from the
+	// other clients when this one can't.
+	receiptsFallback func(ctx context.Context, block uint64) ([]ethtypes.Log, bool, error)
 }
 
 // New creates a new instance of ExecutionClient.
@@ -208,8 +212,9 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, e
 			// (once emitted, a block's number becomes the marker and is never revisited).
 			// When optimistic, this is skipped for speed and the background verifier checks
 			// the range afterwards.
+			var unsettled []uint64
 			if verify {
-				results, err = ec.verifyLogCompleteness(ctx, results, fromBlock, toBlock)
+				results, unsettled, err = ec.verifyLogCompleteness(ctx, results, fromBlock, toBlock)
 				if err != nil {
 					errCh <- err
 					return
@@ -247,7 +252,7 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, e
 					validLogs = append(validLogs, log)
 				}
 				var highestBlock uint64
-				for _, blockLogs := range PackLogs(validLogs) {
+				for _, blockLogs := range packWithUnsettled(validLogs, unsettled) {
 					logCh <- blockLogs
 					if blockLogs.BlockNumber > highestBlock {
 						highestBlock = blockLogs.BlockNumber
