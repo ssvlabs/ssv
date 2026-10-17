@@ -354,7 +354,7 @@ func TestE2E_EmptyReceiptsNotTreatedAsAuthoritative(t *testing.T) {
 }
 
 // TestE2E_UnsettledBlockSettlesWhenReceiptsReturn: a block left unsettled because the receipt
-// store was transiently broken (returned empty) is re-checked in-process by VerifyWithRetry,
+// store was transiently broken (returned empty) is re-checked in-process by verifyWithRetry,
 // without a restart. Once receipts return they vindicate the recorded logs (the drop was only in
 // the log index), so the block settles with no resync.
 func TestE2E_UnsettledBlockSettlesWhenReceiptsReturn(t *testing.T) {
@@ -373,7 +373,7 @@ func TestE2E_UnsettledBlockSettlesWhenReceiptsReturn(t *testing.T) {
 	proxy.dropActive.Store(true)
 	proxy.receiptsEmpty.Store(true)
 	verifyDone := make(chan error, 1)
-	go func() { verifyDone <- es.VerifyWithRetry(ctx) }()
+	go func() { verifyDone <- es.verifyWithRetry(ctx) }()
 	require.Eventually(t, func() bool {
 		unsettled, err := nodeStorage.ListUnsettledBlocks(nil)
 		return err == nil && len(unsettled) == 1 && unsettled[0] == dropped

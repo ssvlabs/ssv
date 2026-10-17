@@ -180,16 +180,17 @@ func syncContractEvents(
 	startOngoingSync := func(ctx context.Context) error {
 		g, ctx := errgroup.WithContext(ctx)
 
-		// Verify in the background, off the critical path: optimistically-synced ranges (large cold
-		// syncs) are checked against chain data, and blocks no source could settle yet are re-checked
+		// Verify in the background, off the critical path, for as long as the node runs:
+		// optimistically-synced ranges (large cold syncs) are checked against chain data, and blocks
+		// no source could settle yet — including ones streaming records later — are re-checked
 		// until they settle. It runs concurrently with ongoing sync (below vs. above the
 		// last-processed marker) and retries transient failures in-process. If it finds the sync
 		// missed events it returns ErrResyncRequired: we surface that so the node terminates and
 		// restarts into the clean, inline-verified resync (the flag is already persisted).
 		g.Go(func() error {
-			err := eventSyncer.VerifyWithRetry(ctx)
+			err := eventSyncer.RunVerifier(ctx)
 			switch {
-			case err == nil, errors.Is(err, context.Canceled):
+			case errors.Is(err, context.Canceled):
 				return nil
 			case errors.Is(err, eventsyncer.ErrResyncRequired):
 				return startupError{
@@ -197,8 +198,8 @@ func syncContractEvents(
 					fields: []zap.Field{zap.Uint64("last_processed_block", lastProcessedBlock)},
 				}
 			default:
-				// VerifyWithRetry only returns nil, a context error, or ErrResyncRequired, so this
-				// is unexpected; log it and let the node keep running rather than crash.
+				// RunVerifier only returns ErrResyncRequired or a context error, so this is
+				// unexpected; log it and let the node keep running rather than crash.
 				logger.Error("background verification stopped unexpectedly", zap.Error(err))
 				return nil
 			}

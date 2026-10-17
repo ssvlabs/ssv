@@ -9,7 +9,9 @@ import (
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
+	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
+	"go.uber.org/zap/zaptest/observer"
 
 	"github.com/ssvlabs/ssv/eth/executionclient"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -359,7 +361,7 @@ func TestVerifyWithRetry_RetriesTransientThenSucceeds(t *testing.T) {
 		h.exec.EXPECT().VerifyLogs(gomock.Any(), uint64(10), uint64(10)).Return(nil, nil),
 	)
 
-	require.NoError(t, h.es.VerifyWithRetry(t.Context()))
+	require.NoError(t, h.es.verifyWithRetry(t.Context()))
 
 	h.requireState(t, nil, nil, false)
 }
@@ -377,7 +379,7 @@ func TestVerifyWithRetry_DoesNotRetryResyncRequired(t *testing.T) {
 	}, nil).Times(1)
 	h.expectReceipts(15, logs)
 
-	require.ErrorIs(t, h.es.VerifyWithRetry(t.Context()), ErrResyncRequired)
+	require.ErrorIs(t, h.es.verifyWithRetry(t.Context()), ErrResyncRequired)
 }
 
 func TestVerifyWithRetry_RechecksUnsettledUntilSettled(t *testing.T) {
@@ -397,7 +399,7 @@ func TestVerifyWithRetry_RechecksUnsettledUntilSettled(t *testing.T) {
 		h.expectReceipts(15, logs),
 	)
 
-	require.NoError(t, h.es.VerifyWithRetry(t.Context()))
+	require.NoError(t, h.es.verifyWithRetry(t.Context()))
 
 	h.requireState(t, nil, nil, false)
 	h.requireRecorded(t, 15, false)
@@ -423,7 +425,7 @@ func TestVerifyWithRetry_KeepsRecheckingUnsettled(t *testing.T) {
 			return nil, false, nil
 		}).Times(3)
 
-	require.ErrorIs(t, h.es.VerifyWithRetry(ctx), context.Canceled)
+	require.ErrorIs(t, h.es.verifyWithRetry(ctx), context.Canceled)
 }
 
 func TestVerifyWithRetry_FlagsSuppressedRepairOnceCooldownExpires(t *testing.T) {
@@ -447,11 +449,43 @@ func TestVerifyWithRetry_FlagsSuppressedRepairOnceCooldownExpires(t *testing.T) 
 			}),
 	)
 
-	require.ErrorIs(t, h.es.VerifyWithRetry(t.Context()), ErrResyncRequired)
+	require.ErrorIs(t, h.es.verifyWithRetry(t.Context()), ErrResyncRequired)
 
 	resync, err := h.storage.IsResyncRequired(nil)
 	require.NoError(t, err)
 	require.True(t, resync)
+}
+
+func TestRunVerifier_SettlesBlocksRecordedWhileIdle(t *testing.T) {
+	h := newVerifierHarness(t)
+	h.es.verifyRetryInitialDelay = time.Millisecond
+	h.es.verifyUnsettledRecheckMaxDelay = time.Millisecond
+	core, logs := observer.New(zap.InfoLevel)
+	h.es.logger = zap.New(core)
+
+	// The first pass verifies a clean range and goes idle; streaming then records a block it
+	// couldn't settle. The idle verifier checks back and settles it (receipts show no contract
+	// logs there), with no restart.
+	require.NoError(t, h.storage.SaveUnverifiedRange(nil, operatorstorage.UnverifiedRange{From: 10, To: 10, Cursor: 10}))
+	h.exec.EXPECT().VerifyLogs(gomock.Any(), uint64(10), uint64(10)).Return(nil, nil)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { done <- h.es.RunVerifier(ctx) }()
+	require.Eventually(t, func() bool {
+		return logs.FilterMessageSnippet("background verification complete").Len() > 0
+	}, 10*time.Second, time.Millisecond, "the first pass completes and the verifier goes idle")
+
+	h.expectReceipts(15, nil)
+	require.NoError(t, h.storage.SaveUnsettledBlock(nil, 15))
+	require.Eventually(t, func() bool {
+		unsettled, err := h.storage.ListUnsettledBlocks(nil)
+		return err == nil && len(unsettled) == 0
+	}, 10*time.Second, time.Millisecond, "the idle verifier settles the block")
+
+	cancel()
+	require.ErrorIs(t, <-done, context.Canceled)
 }
 
 func TestVerifyWithRetry_StopsOnContextCancel(t *testing.T) {
@@ -469,5 +503,5 @@ func TestVerifyWithRetry_StopsOnContextCancel(t *testing.T) {
 			return nil, errors.New("transient")
 		})
 
-	require.ErrorIs(t, h.es.VerifyWithRetry(ctx), context.Canceled)
+	require.ErrorIs(t, h.es.verifyWithRetry(ctx), context.Canceled)
 }
