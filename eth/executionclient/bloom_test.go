@@ -2,8 +2,10 @@ package executionclient
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
+	"math/big"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -11,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	ethcommon "github.com/ethereum/go-ethereum/common"
@@ -380,6 +383,111 @@ func TestReceiptsUnsupported_FallsBackToTimedRetry(t *testing.T) {
 	require.True(t, client.receiptsKnownUnsupported(), "unsupported eth_getBlockReceipts should be remembered")
 }
 
+// TestVerifyLogs_UnsettledWithoutUsableReceipts verifies that a block the EL persistently drops
+// from eth_getLogs, on an EL that can't serve its receipts, comes back Unsettled — not presumed a
+// bloom false positive — whether receipts are unsupported, empty or not found. The timed
+// re-requests spend exactly the retry budget: the batched re-request that made it a suspect counts
+// as the first attempt.
+func TestVerifyLogs_UnsettledWithoutUsableReceipts(t *testing.T) {
+	receiptsResponses := map[string]jsonrpcMessage{
+		"unsupported": {Error: json.RawMessage(`{"code":-32601,"message":"the method eth_getBlockReceipts does not exist/is not available"}`)},
+		"empty":       {Result: json.RawMessage(`[]`)},
+		"not found":   {Result: json.RawMessage(`null`)},
+	}
+	for name, receiptsResponse := range receiptsResponses {
+		t.Run(name, func(t *testing.T) {
+			env := setupTestEnv(t, 15*time.Second)
+			contract, err := env.deployCallableContract()
+			require.NoError(t, err)
+			// Contract deploy is block 1; these create event blocks 2..4, one contract log each.
+			require.NoError(t, env.createBlocksWithLogs(contract, 3, 0))
+			const dropBlock uint64 = 3
+
+			rpcSrv, _ := env.sim.Node().RPCHandler()
+			var singleBlockRequests atomic.Int32
+			srv := newRPCProxy(t, rpcSrv, func(req jsonrpcMessage, forward forwardFunc) *jsonrpcMessage {
+				switch req.Method {
+				case ethGetLogsMethod:
+					if from, to := getLogsRange(t, req.Params); from == dropBlock && to == dropBlock {
+						singleBlockRequests.Add(1)
+					}
+					resp := forward(req)
+					resp.Result = dropLogsForBlock(t, resp.Result, dropBlock)
+					return &resp
+				case ethGetBlockReceiptsMethod:
+					resp := receiptsResponse
+					return &resp
+				}
+				return nil
+			})
+
+			client, err := New(t.Context(), srv.URL, env.contractAddr, WithLogger(zaptest.NewLogger(t)))
+			require.NoError(t, err)
+			t.Cleanup(func() { require.NoError(t, client.Close()) })
+
+			blockLogs, err := client.VerifyLogs(t.Context(), 2, 4)
+			require.NoError(t, err)
+
+			got := make([]BlockLogs, 0, len(blockLogs))
+			for _, bl := range blockLogs {
+				got = append(got, BlockLogs{BlockNumber: bl.BlockNumber, Unsettled: bl.Unsettled})
+			}
+			require.Equal(t, []BlockLogs{{BlockNumber: 2}, {BlockNumber: dropBlock, Unsettled: true}, {BlockNumber: 4}}, got)
+			require.Equal(t, int32(DefaultBloomRetryAttempts), singleBlockRequests.Load())
+		})
+	}
+}
+
+// TestVerifyLogCompleteness_SettlesSuspectViaReceiptsFallback verifies that a client that can't
+// serve receipts settles a suspect through the fallback (other clients' receipts, wired by
+// MultiClient) before resorting to timed re-requests, recovering a persistently dropped block.
+func TestVerifyLogCompleteness_SettlesSuspectViaReceiptsFallback(t *testing.T) {
+	env := setupTestEnv(t, 10*time.Second)
+	contract, err := env.deployCallableContract()
+	require.NoError(t, err)
+	require.NoError(t, env.createBlocksWithLogs(contract, 3, 0)) // event blocks 2..4
+	const dropBlock uint64 = 3
+
+	rpcSrv, _ := env.sim.Node().RPCHandler()
+	var singleBlockRequests atomic.Int32
+	srv := newRPCProxy(t, rpcSrv, func(req jsonrpcMessage, forward forwardFunc) *jsonrpcMessage {
+		switch req.Method {
+		case ethGetLogsMethod:
+			if from, to := getLogsRange(t, req.Params); from == dropBlock && to == dropBlock {
+				singleBlockRequests.Add(1)
+			}
+			resp := forward(req)
+			resp.Result = dropLogsForBlock(t, resp.Result, dropBlock)
+			return &resp
+		case ethGetBlockReceiptsMethod:
+			return &jsonrpcMessage{Error: json.RawMessage(`{"code":-32601,"message":"the method eth_getBlockReceipts does not exist/is not available"}`)}
+		}
+		return nil
+	})
+
+	client, err := New(t.Context(), srv.URL, env.contractAddr, WithLogger(zaptest.NewLogger(t)))
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, client.Close()) })
+
+	fromOthers := []ethtypes.Log{{Address: env.contractAddr, BlockNumber: dropBlock, TxIndex: 0, Index: 0}}
+	client.receiptsFallback = func(_ context.Context, block uint64) ([]ethtypes.Log, bool, error) {
+		require.Equal(t, dropBlock, block)
+		return fromOthers, true, nil
+	}
+
+	logs, err := client.FilterLogs(t.Context(), ethereum.FilterQuery{
+		Addresses: []ethcommon.Address{env.contractAddr},
+		FromBlock: big.NewInt(2),
+		ToBlock:   big.NewInt(4),
+	})
+	require.NoError(t, err)
+	logs, unsettled, err := client.verifyLogCompleteness(t.Context(), logs, 2, 4)
+	require.NoError(t, err)
+	require.Empty(t, unsettled)
+	require.Len(t, logs, 3, "the dropped block's log is recovered from the other client's receipts")
+	require.Equal(t, int32(1), singleBlockRequests.Load(), "settled before any timed re-request")
+}
+
 // TestBlockContractLogs_ReprobesUnsupportedReceipts verifies that a rejected eth_getBlockReceipts
 // isn't re-attempted while remembered, but is probed again once the memo ages out, so an EL
 // upgraded behind the same endpoint becomes an authoritative source without a restart.
@@ -550,8 +658,9 @@ func TestVerifyLogCompleteness_EmptyRange(t *testing.T) {
 	require.NoError(t, err)
 
 	// Call verifyLogCompleteness directly with empty logs.
-	result, err := env.client.verifyLogCompleteness(env.ctx, nil, 2, 6)
+	result, unsettled, err := env.client.verifyLogCompleteness(env.ctx, nil, 2, 6)
 	require.NoError(t, err)
+	require.Empty(t, unsettled)
 	require.Empty(t, result, "empty blocks should produce no logs even after the completeness check")
 }
 
@@ -660,8 +769,9 @@ func TestVerifyLogCompleteness_BlocksWithExistingLogs(t *testing.T) {
 	}
 
 	headerCalls.Store(0)
-	result, err := client.verifyLogCompleteness(t.Context(), fakeLogs, 2, 4)
+	result, unsettled, err := client.verifyLogCompleteness(t.Context(), fakeLogs, 2, 4)
 	require.NoError(t, err)
+	require.Empty(t, unsettled)
 	require.Equal(t, 3, len(result))
 
 	// No headers should have been fetched since all blocks already had logs.

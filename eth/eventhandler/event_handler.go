@@ -104,11 +104,13 @@ func New(
 
 // HandleBlockEventsStream processes each block's events, advancing the last-processed marker.
 // A non-nil journalFrom marks an optimistic historical sync: in the same transaction that
-// advances the marker, it records a per-block digest of the logs received and extends an
+// advances the marker, it records the IDs of the logs received per block and extends an
 // unverified range [*journalFrom, block], so the background verifier can later confirm the
 // getLogs responses were complete — and a crash can't leave a processed block outside the range
 // it checks. Streaming and verified resyncs pass nil. (It's a pointer, not a sentinel value, so
-// block 0 — e.g. a RegistrySyncOffset of 0 — is journalled rather than silently skipped.)
+// block 0 — e.g. a RegistrySyncOffset of 0 — is journalled rather than silently skipped.) A block
+// the inline verification couldn't settle (BlockLogs.Unsettled) is processed as empty and
+// recorded in the same transaction, for the background verifier to settle.
 func (eh *EventHandler) HandleBlockEventsStream(
 	ctx context.Context,
 	logStreamCh <-chan executionclient.BlockLogs,
@@ -192,22 +194,27 @@ func (eh *EventHandler) processBlockEvents(ctx context.Context, block executionc
 		return nil, fmt.Errorf("set last processed block: %w", err)
 	}
 
-	// For an optimistic sync, record the verifier's bookkeeping in this same transaction, so a
-	// crash can't advance the marker past a block the verifier won't later check (which would
-	// silently skip its events). The range [journalFrom, block] tells the verifier which blocks
-	// to check; the per-block digest lets it confirm the logs received there were complete. Only
-	// non-empty blocks get a digest — a block the verifier finds to have logs but no digest was
-	// missed entirely.
+	// Record the verifier's bookkeeping in this same transaction, so a crash can't advance the
+	// marker past a block the verifier won't later check (which would silently skip its events).
+	// For an optimistic sync, the range [journalFrom, block] tells the verifier which blocks to
+	// check, and the per-block log IDs let it confirm the logs received there were complete. Only
+	// non-empty blocks get IDs — a block the verifier finds to have logs but no IDs was missed
+	// entirely.
 	if journalFrom != nil {
 		if len(block.Logs) > 0 {
-			digest := executionclient.BlockLogsDigest(block.Logs)
-			if err := eh.nodeStorage.SaveBlockLogDigest(txn, block.BlockNumber, digest); err != nil {
-				return nil, fmt.Errorf("save block-log digest: %w", err)
+			ids := executionclient.EncodeLogIDs(executionclient.BlockLogIDs(block.Logs))
+			if err := eh.nodeStorage.SaveBlockLogIDs(txn, block.BlockNumber, ids); err != nil {
+				return nil, fmt.Errorf("save block log IDs: %w", err)
 			}
 		}
 		r := nodestorage.UnverifiedRange{From: *journalFrom, To: block.BlockNumber, Cursor: *journalFrom}
 		if err := eh.nodeStorage.SaveUnverifiedRange(txn, r); err != nil {
 			return nil, fmt.Errorf("extend unverified range: %w", err)
+		}
+	}
+	if block.Unsettled {
+		if err := eh.nodeStorage.SaveUnsettledBlock(txn, block.BlockNumber); err != nil {
+			return nil, fmt.Errorf("record unsettled block: %w", err)
 		}
 	}
 

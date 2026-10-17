@@ -1,8 +1,10 @@
 package executionclient
 
 import (
+	"context"
 	"time"
 
+	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/observability/log"
@@ -66,5 +68,13 @@ func WithSyncDistanceTolerance(count uint64) Option {
 func WithSyncDistanceToleranceMulti(count uint64) OptionMulti {
 	return func(s *MultiClient) {
 		s.syncDistanceTolerance = count
+	}
+}
+
+// withReceiptsFallback has the client settle suspect blocks through other clients' receipts when
+// it can't serve them itself (wired by MultiClient).
+func withReceiptsFallback(fallback func(ctx context.Context, block uint64) ([]ethtypes.Log, bool, error)) Option {
+	return func(ec *ExecutionClient) {
+		ec.receiptsFallback = fallback
 	}
 }

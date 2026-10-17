@@ -260,3 +260,9 @@ func recordBloomReceiptsRecovery(ctx context.Context) {
 func recordBloomFalsePositive(ctx context.Context) {
 	bloomCheckCounter.Add(ctx, 1, metric.WithAttributes(bloomOutcomeAttribute("false_positive")))
 }
+
+// recordBloomUnsettled counts suspect blocks no source could settle: no logs on re-request and no
+// usable receipts from any client.
+func recordBloomUnsettled(ctx context.Context, blocks int) {
+	bloomCheckCounter.Add(ctx, int64(blocks), metric.WithAttributes(bloomOutcomeAttribute("unsettled")))
+}

@@ -1386,11 +1386,11 @@ func TestHandleBlockEventsStreamReturnsErrInferiorBlock(t *testing.T) {
 	require.Equal(t, uint64(10), storedLastProcessedBlock.Uint64())
 }
 
-// TestHandleBlockEventsStreamRecordsDigests verifies the optimistic historical path (a non-nil
+// TestHandleBlockEventsStreamRecordsLogIDs verifies the optimistic historical path (a non-nil
 // journalFrom) persists the verifier's bookkeeping: an unverified range spanning journalFrom..lastBlock,
-// and a per-block digest for each non-empty block (empty progression blocks get none — the
+// and per-block log IDs for each non-empty block (empty progression blocks get none — the
 // verifier reads their absence as "no logs there").
-func TestHandleBlockEventsStreamRecordsDigests(t *testing.T) {
+func TestHandleBlockEventsStreamRecordsLogIDs(t *testing.T) {
 	logger, err := zap.NewDevelopment()
 	require.NoError(t, err)
 
@@ -1401,8 +1401,8 @@ func TestHandleBlockEventsStreamRecordsDigests(t *testing.T) {
 	eh, _, err := setupEventHandler(t, ctx, logger, networkconfig.TestNetwork, ops[0], false)
 	require.NoError(t, err)
 
-	// Unknown topics are fine: they parse to no task without error, and digesting is over each
-	// log's (TxIndex, Index) identity regardless of the event type.
+	// Unknown topics are fine: they parse to no task without error, and a log's ID is its
+	// (TxIndex, Index) regardless of the event type.
 	withLogs := executionclient.BlockLogs{
 		BlockNumber: 10,
 		Logs: []ethtypes.Log{
@@ -1428,14 +1428,48 @@ func TestHandleBlockEventsStreamRecordsDigests(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []operatorstorage.UnverifiedRange{{From: journalFrom, To: 11, Cursor: journalFrom}}, ranges)
 
-	got, found, err := eh.nodeStorage.GetBlockLogDigest(nil, 10)
+	got, found, err := eh.nodeStorage.GetBlockLogIDs(nil, 10)
 	require.NoError(t, err)
 	require.True(t, found)
-	require.Equal(t, executionclient.BlockLogsDigest(withLogs.Logs), got)
+	ids, err := executionclient.DecodeLogIDs(got)
+	require.NoError(t, err)
+	require.Equal(t, []executionclient.LogID{{TxIndex: 0, Index: 0}, {TxIndex: 1, Index: 3}}, ids)
 
-	_, found, err = eh.nodeStorage.GetBlockLogDigest(nil, 11)
+	_, found, err = eh.nodeStorage.GetBlockLogIDs(nil, 11)
 	require.NoError(t, err)
 	require.False(t, found)
+}
+
+// TestHandleBlockEventsStreamRecordsUnsettledBlocks verifies that a block the inline verification
+// couldn't settle is processed as empty and recorded as unsettled in the marker's transaction, on
+// paths that journal nothing else (streaming and verified resyncs pass a nil journalFrom).
+func TestHandleBlockEventsStreamRecordsUnsettledBlocks(t *testing.T) {
+	logger, err := zap.NewDevelopment()
+	require.NoError(t, err)
+
+	ctx := t.Context()
+	ops, err := createOperators(1, 0)
+	require.NoError(t, err)
+
+	eh, _, err := setupEventHandler(t, ctx, logger, networkconfig.TestNetwork, ops[0], false)
+	require.NoError(t, err)
+
+	eventsCh := make(chan executionclient.BlockLogs, 2)
+	eventsCh <- executionclient.BlockLogs{BlockNumber: 10, Unsettled: true}
+	eventsCh <- executionclient.BlockLogs{BlockNumber: 11}
+	close(eventsCh)
+
+	lastProcessedBlock, _, err := eh.HandleBlockEventsStream(ctx, eventsCh, false, nil)
+	require.NoError(t, err)
+	require.Equal(t, uint64(11), lastProcessedBlock)
+
+	unsettled, err := eh.nodeStorage.ListUnsettledBlocks(nil)
+	require.NoError(t, err)
+	require.Equal(t, []uint64{10}, unsettled)
+
+	ranges, err := eh.nodeStorage.ListUnverifiedRanges(nil)
+	require.NoError(t, err)
+	require.Empty(t, ranges, "an inline path journals no range")
 }
 
 // TestHandleBlockEventsStreamJournalsRangeOnFailure verifies the crash-atomicity property: the
@@ -1496,12 +1530,12 @@ func TestHandleBlockEventsStreamJournalsFromBlockZero(t *testing.T) {
 	_, _, err = eh.HandleBlockEventsStream(ctx, eventsCh, false, &journalFrom)
 	require.NoError(t, err)
 
-	// The range is journalled starting at block 0, and the block's digest is recorded.
+	// The range is journalled starting at block 0, and the block's log IDs are recorded.
 	ranges, err := eh.nodeStorage.ListUnverifiedRanges(nil)
 	require.NoError(t, err)
 	require.Equal(t, []operatorstorage.UnverifiedRange{{From: 0, To: 5, Cursor: 0}}, ranges)
 
-	_, found, err := eh.nodeStorage.GetBlockLogDigest(nil, 5)
+	_, found, err := eh.nodeStorage.GetBlockLogIDs(nil, 5)
 	require.NoError(t, err)
 	require.True(t, found)
 }

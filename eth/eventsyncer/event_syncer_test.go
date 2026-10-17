@@ -349,8 +349,8 @@ func closedErrChan() <-chan error {
 }
 
 // TestEventSyncer_RepairLoop exercises the whole seam end to end against the real event handler
-// and storage (only the execution client is mocked): an optimistic sync records an incomplete
-// digest, background verification reads it back, compares against authoritative logs, detects the
+// and storage (only the execution client is mocked): an optimistic sync records incomplete log
+// IDs, background verification reads them back, compares against authoritative logs, detects the
 // miss and flags a resync; then the repair (drop journal + registry, keep the flag) and a
 // verified resync rebuild clean state and clear the flag.
 func TestEventSyncer_RepairLoop(t *testing.T) {
@@ -369,7 +369,7 @@ func TestEventSyncer_RepairLoop(t *testing.T) {
 	es.verifyChunkDelay = 0
 
 	const fromBlock = 10
-	// Unknown topics: the handler records digests without needing decodable events.
+	// Unknown topics: the handler records log IDs without needing decodable events.
 	recordedLog := ethtypes.Log{BlockNumber: fromBlock, TxIndex: 0, Index: 0, Topics: []ethcommon.Hash{{0x1}}}
 	missedLog := ethtypes.Log{BlockNumber: fromBlock, TxIndex: 0, Index: 1, Topics: []ethcommon.Hash{{0x2}}}
 
@@ -378,7 +378,7 @@ func TestEventSyncer_RepairLoop(t *testing.T) {
 	execClient.EXPECT().HeaderByNumber(gomock.Any(), gomock.Any()).Return(recentHeader, nil).AnyTimes()
 
 	// Optimistic sync delivers only the recorded log; the handler journals the range and its
-	// (incomplete) digest.
+	// (incomplete) log IDs.
 	execClient.EXPECT().FetchHistoricalLogs(gomock.Any(), uint64(fromBlock), false).DoAndReturn(
 		func(context.Context, uint64, bool) (<-chan executionclient.BlockLogs, <-chan error, error) {
 			return blockLogsChan(executionclient.BlockLogs{BlockNumber: fromBlock, Logs: []ethtypes.Log{recordedLog}}), closedErrChan(), nil
@@ -387,7 +387,7 @@ func TestEventSyncer_RepairLoop(t *testing.T) {
 	require.NoError(t, err)
 
 	// Background verification: VerifyLogs shows both logs, and receipts confirm them → the recorded
-	// digest (one log) disagrees with receipts truth → resync flagged.
+	// log IDs (one log) fall short of the receipts truth → resync flagged.
 	execClient.EXPECT().VerifyLogs(gomock.Any(), uint64(fromBlock), uint64(fromBlock)).Return(
 		[]executionclient.BlockLogs{{BlockNumber: fromBlock, Logs: []ethtypes.Log{recordedLog, missedLog}}}, nil)
 	execClient.EXPECT().BlockContractLogs(gomock.Any(), uint64(fromBlock)).Return(
@@ -402,7 +402,7 @@ func TestEventSyncer_RepairLoop(t *testing.T) {
 	require.NoError(t, nodeStorage.DropVerificationJournal())
 	require.NoError(t, nodeStorage.DropRegistryData())
 
-	// Verified resync delivers the complete set; nothing is journalled (journalFrom=0).
+	// Verified resync delivers the complete set; no range is journalled (nil journalFrom).
 	execClient.EXPECT().FetchHistoricalLogs(gomock.Any(), uint64(fromBlock), true).DoAndReturn(
 		func(context.Context, uint64, bool) (<-chan executionclient.BlockLogs, <-chan error, error) {
 			return blockLogsChan(executionclient.BlockLogs{BlockNumber: fromBlock, Logs: []ethtypes.Log{recordedLog, missedLog}}), closedErrChan(), nil
