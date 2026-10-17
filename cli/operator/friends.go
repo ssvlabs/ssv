@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/rand/v2"
 	"net"
 	"net/http"
 	"net/url"
@@ -156,6 +157,18 @@ func runFriendsNode(ctx context.Context, logger *zap.Logger, cfg *friendsConfig)
 	if !common.IsHexAddress(cfg.Friends.PolicyContract) {
 		return fmt.Errorf("invalid policy contract address %q", cfg.Friends.PolicyContract)
 	}
+	// After a deploy every operator starts at once: spread their first chain reads, so they don't
+	// hit a hosted RPC provider's rate limit together.
+	if kms.HostedRPC(cfg.Friends.ExecutionAddr) {
+		stagger := time.Duration((operatorID-1)%8)*2*time.Second + time.Duration(rand.Float64()*float64(2*time.Second))
+		logger.Info("staggering startup chain reads", zap.Duration("wait", stagger))
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(stagger):
+		}
+	}
+	kms.StartRPCStats(ctx, logger)
 	chain, err := connectChain(ctx, logger, cfg.Friends)
 	if err != nil {
 		return err
@@ -338,7 +351,7 @@ func keepTrustedPeers(ctx context.Context, logger *zap.Logger, h host.Host, trus
 // connectChain waits for the execution client and the policy contract (in a local setup they may
 // still be starting).
 func connectChain(ctx context.Context, logger *zap.Logger, opts FriendsOptions) (*kms.EthChain, error) {
-	for {
+	for attempt := 0; ; attempt++ {
 		chain, err := kms.NewEthChain(ctx, opts.ExecutionAddr, opts.ChainID, common.HexToAddress(opts.PolicyContract))
 		if err == nil {
 			return chain, nil
@@ -348,9 +361,16 @@ func connectChain(ctx context.Context, logger *zap.Logger, opts FriendsOptions) 
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
-		case <-time.After(3 * time.Second):
+		case <-time.After(connectBackoff(attempt)):
 		}
 	}
+}
+
+// connectBackoff is the wait before connect attempt n+1: exponential with jitter, from 1.5-3s up to
+// 15-30s.
+func connectBackoff(n int) time.Duration {
+	ceil := min(30*time.Second, 3*time.Second<<min(n, 4))
+	return ceil/2 + time.Duration(rand.Float64()*float64(ceil/2))
 }
 
 // redactURL keeps only an RPC URL's scheme and host.

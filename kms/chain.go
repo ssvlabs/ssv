@@ -2,6 +2,8 @@ package kms
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/binary"
 	"fmt"
 	"math/big"
 	"strings"
@@ -62,9 +64,23 @@ type EthChain struct {
 	headMu   sync.Mutex
 	head     uint64
 	headRead time.Time
+
+	// A policy check at a pinned block always has the same answer: every operator checks a
+	// request at admission and again in consensus, so answers are kept (a bounded set).
+	policyMu    sync.Mutex
+	policyCache map[[32]byte]policyAnswer
 }
 
-const headCacheTTL = time.Second
+type policyAnswer struct {
+	ok     bool
+	reason string
+}
+
+const (
+	headCacheTTL    = 4 * time.Second
+	policyCacheSize = 512
+	nonceCacheTTL   = 2 * time.Second
+)
 
 // NewEthChain connects to the policy chain's execution client and checks the contract is there.
 func NewEthChain(ctx context.Context, url string, chainID uint64, policy common.Address) (*EthChain, error) {
@@ -118,6 +134,13 @@ func (c *EthChain) CheckPolicy(ctx context.Context, block uint64, q PolicyQuery)
 	if err != nil {
 		return false, "", err
 	}
+	key := sha256.Sum256(binary.BigEndian.AppendUint64(append([]byte(nil), data...), block))
+	c.policyMu.Lock()
+	a, hit := c.policyCache[key]
+	c.policyMu.Unlock()
+	if hit {
+		return a.ok, a.reason, nil
+	}
 	out, err := c.client.CallContract(ctx, ethereum.CallMsg{To: &c.policy, Data: data}, new(big.Int).SetUint64(block))
 	if err != nil {
 		return false, "", fmt.Errorf("policy call: %w", err)
@@ -128,6 +151,12 @@ func (c *EthChain) CheckPolicy(ctx context.Context, block uint64, q PolicyQuery)
 	}
 	ok, _ := res[0].(bool)
 	reason, _ := res[1].(string)
+	c.policyMu.Lock()
+	if c.policyCache == nil || len(c.policyCache) >= policyCacheSize {
+		c.policyCache = make(map[[32]byte]policyAnswer)
+	}
+	c.policyCache[key] = policyAnswer{ok, reason}
+	c.policyMu.Unlock()
 	return ok, reason, nil
 }
 
@@ -139,6 +168,15 @@ type EVMExecutor struct {
 
 	mu     sync.Mutex
 	client *ethclient.Client
+
+	// Account nonces, read once per request check by every operator: kept a moment.
+	nonceMu sync.Mutex
+	nonces  map[common.Address]nonceRead
+}
+
+type nonceRead struct {
+	n  uint64
+	at time.Time
 }
 
 func NewEVMExecutor(url string, chainID uint64) *EVMExecutor {
@@ -182,11 +220,23 @@ func (e *EVMExecutor) AccountSequence(ctx context.Context, key *Key) (uint64, er
 	if err != nil {
 		return 0, fmt.Errorf("chain eip155:%d: %w", e.chainID, err)
 	}
+	e.nonceMu.Lock()
+	if r, ok := e.nonces[key.Address]; ok && time.Since(r.at) < nonceCacheTTL {
+		e.nonceMu.Unlock()
+		return r.n, nil
+	}
+	e.nonceMu.Unlock()
 	n, err := c.NonceAt(ctx, key.Address, nil)
 	if err != nil {
 		e.drop()
 		return 0, fmt.Errorf("chain eip155:%d: %w", e.chainID, err)
 	}
+	e.nonceMu.Lock()
+	if e.nonces == nil {
+		e.nonces = make(map[common.Address]nonceRead)
+	}
+	e.nonces[key.Address] = nonceRead{n, time.Now()}
+	e.nonceMu.Unlock()
 	return n, nil
 }
 

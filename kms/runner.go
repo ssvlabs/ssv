@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"math/rand/v2"
 	"slices"
 	"sync"
 	"time"
@@ -75,6 +76,11 @@ type keyRunner struct {
 
 	checkMu    sync.Mutex
 	checkCache map[[32]byte]error
+
+	// After a transient chain error (an RPC down or rate-limited), maybeStart waits before reading
+	// the chain again instead of retrying on every tick.
+	chainFails int
+	chainRetry time.Time
 }
 
 type signingState struct {
@@ -353,13 +359,17 @@ func (r *keyRunner) maybeStart(ctx context.Context) {
 	if req == nil {
 		return
 	}
+	if time.Now().Before(r.chainRetry) {
+		return
+	}
 	sp := r.pool.pick(r.allLive, r.state.Consumed)
 	if sp == nil {
 		return // wait for presigning; another operator may lead in the meantime
 	}
 	block, err := r.s.policyBlock(ctx)
 	if err != nil {
-		r.logger.Warn("could not read chain head", zap.Error(err))
+		r.chainBackoff()
+		r.logger.Warn("could not read chain head", zap.Error(err), zap.Time("retry_at", r.chainRetry))
 		return
 	}
 	v := &kmstypes.ConsensusValue{Request: *req, BlockNumber: block, PresignID: mustHex(sp.ID), Signers: sp.Signers, Commitment: sp.Commitment}
@@ -370,16 +380,26 @@ func (r *keyRunner) maybeStart(ctx context.Context) {
 	if err := r.checkValue(data); err != nil {
 		var rejected *RejectedError
 		if !errors.As(err, &rejected) {
-			return // transient (chain, presignature): retry on the next tick
+			r.chainBackoff() // transient (chain, presignature): retry after a backoff
+			r.logger.Debug("could not check the request yet", zap.Error(err), zap.Time("retry_at", r.chainRetry))
+			return
 		}
 		// The request no longer passes the policy (it changed since admission): drop it.
 		r.pending = r.pending[1:]
 		r.reject(req, err)
 		return
 	}
+	r.chainFails, r.chainRetry = 0, time.Time{}
 	if !r.startInstance(ctx, data) {
 		r.pending = r.pending[1:]
 	}
+}
+
+// chainBackoff schedules the next chain read: exponential with jitter, from 1-2s up to 15-30s.
+func (r *keyRunner) chainBackoff() {
+	r.chainFails++
+	ceil := min(30*time.Second, 2*time.Second<<min(r.chainFails-1, 4))
+	r.chainRetry = time.Now().Add(ceil/2 + time.Duration(rand.Float64()*float64(ceil/2)))
 }
 
 // reject fails a queued request that will never be signed, so clients waiting on it get an answer.
