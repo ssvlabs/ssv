@@ -128,11 +128,9 @@ type GoClient struct {
 	clients     []Client
 	multiClient MultiClient
 
-	// clientAddresses holds each client's unmasked address for the hand-rolled Gloas requests (ptc.go,
-	// gloas_proposer.go, gloas_envelope.go, proposer_preferences.go, builder_preferences.go) —
-	// Client.Address() is log-masked and unusable for real requests. Drop when those endpoints become
-	// typed go-eth2-client calls.
-	clientAddresses map[Client]string
+	// clientAddresses holds each client's address for the hand-rolled Gloas requests, which can't be sent to
+	// the log-masked Client.Address(). Drop it once those requests become typed go-eth2-client calls.
+	clientAddresses map[Client]unmaskedAddr
 
 	syncDistanceTolerance phase0.Slot
 
@@ -241,7 +239,7 @@ func New(ctx context.Context, logger *zap.Logger, opt Options) (*GoClient, error
 		proposalSoftTimeout:                opt.ProposalSoftTimeout,
 		supportedTopics:                    []eventTopic{eventTopicHead, eventTopicBlock},
 		activatedClients:                   hashmap.New[string, struct{}](),
-		clientAddresses:                    make(map[Client]string),
+		clientAddresses:                    make(map[Client]unmaskedAddr),
 	}
 
 	// First error stops the loop on purpose. addSingleClient sets WithAllowDelayedStart(true), so a valid
@@ -447,7 +445,7 @@ func (gc *GoClient) addSingleClient(ctx context.Context, addr string) error {
 
 	svc := httpClient.(*eth2clienthttp.Service)
 	gc.clients = append(gc.clients, svc)
-	gc.clientAddresses[svc] = addr
+	gc.clientAddresses[svc] = unmaskedAddr{addr}
 
 	return nil
 }

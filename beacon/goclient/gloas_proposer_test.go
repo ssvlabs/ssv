@@ -39,7 +39,7 @@ func TestRequestGloasBeaconBlock(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	got, err := requestGloasBeaconBlock(context.Background(), srv.URL, 7, []byte{0x02}, []byte{0x01}, nil)
+	got, err := requestGloasBeaconBlock(context.Background(), unmaskedAddr{srv.URL}, 7, []byte{0x02}, []byte{0x01}, nil)
 	require.NoError(t, err)
 	require.Equal(t, http.MethodPost, gotMethod)
 	require.Equal(t, "/eth/v4/validator/blocks/7", gotPath)
@@ -74,7 +74,7 @@ func TestRequestGloasBeaconBlock_SelfBuildContents(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	got, err := requestGloasBeaconBlock(context.Background(), srv.URL, 7, []byte{0x02}, []byte{0x01}, nil)
+	got, err := requestGloasBeaconBlock(context.Background(), unmaskedAddr{srv.URL}, 7, []byte{0x02}, []byte{0x01}, nil)
 	require.NoError(t, err)
 	require.Equal(t, phase0.Slot(7), got.Block.Slot)
 	require.Empty(t, got.BuilderURL)
@@ -99,7 +99,7 @@ func TestRequestGloasBeaconBlock_ContentsWithoutHeaderFails(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, err = requestGloasBeaconBlock(context.Background(), srv.URL, 7, []byte{0x02}, []byte{0x01}, nil)
+	_, err = requestGloasBeaconBlock(context.Background(), unmaskedAddr{srv.URL}, 7, []byte{0x02}, []byte{0x01}, nil)
 	require.ErrorContains(t, err, "Eth-Execution-Payload-Included")
 }
 
@@ -122,7 +122,7 @@ func TestRequestGloasBeaconBlock_UnconfiguredFallbackToGET(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	got, err := requestGloasBeaconBlock(context.Background(), srv.URL, 7, []byte{0x02}, []byte{0x01}, nil)
+	got, err := requestGloasBeaconBlock(context.Background(), unmaskedAddr{srv.URL}, 7, []byte{0x02}, []byte{0x01}, nil)
 	require.NoError(t, err)
 	require.Equal(t, []string{http.MethodPost, http.MethodGet}, methods, "unconfigured POST 405 falls back to GET")
 	require.Equal(t, "100", getBoost, "the fallback GET carries the neutral builder_boost_factor")
@@ -155,7 +155,7 @@ func TestRequestGloasBeaconBlock_POST(t *testing.T) {
 			Auth: &gloas.SignedBuilderRequestAuth{Message: &gloas.BuilderRequestAuth{Data: []byte{0x01}, Slot: 7}},
 		}},
 	}
-	got, err := requestGloasBeaconBlock(context.Background(), srv.URL, 7, []byte{0x02}, []byte{0x01}, cfg)
+	got, err := requestGloasBeaconBlock(context.Background(), unmaskedAddr{srv.URL}, 7, []byte{0x02}, []byte{0x01}, cfg)
 	require.NoError(t, err)
 	require.Equal(t, http.MethodPost, gotMethod)
 	require.Equal(t, "application/json", gotContentType)
@@ -186,7 +186,7 @@ func TestRequestGloasBeaconBlock_POSTFallbackToGET(t *testing.T) {
 	defer srv.Close()
 
 	cfg := &gloas.ProduceBuilderConfig{BuilderBoostFactor: 150}
-	got, err := requestGloasBeaconBlock(context.Background(), srv.URL, 7, []byte{0x02}, []byte{0x01}, cfg)
+	got, err := requestGloasBeaconBlock(context.Background(), unmaskedAddr{srv.URL}, 7, []byte{0x02}, []byte{0x01}, cfg)
 	require.NoError(t, err)
 	require.Equal(t, []string{http.MethodPost, http.MethodGet}, methods, "POST 404 falls back to GET")
 	require.Equal(t, "150", getBoost, "the fallback GET carries the configured builder_boost_factor")
@@ -205,7 +205,7 @@ func TestRequestGloasBeaconBlock_WrongConsensusVersion(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, err = requestGloasBeaconBlock(context.Background(), srv.URL, 7, []byte{0x02}, []byte{0x01}, nil)
+	_, err = requestGloasBeaconBlock(context.Background(), unmaskedAddr{srv.URL}, 7, []byte{0x02}, []byte{0x01}, nil)
 	require.ErrorContains(t, err, "Eth-Consensus-Version")
 	require.ErrorContains(t, err, "fulu")
 }
@@ -223,7 +223,7 @@ func TestSubmitGloasBeaconBlock(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	err := submitGloasBeaconBlock(context.Background(), srv.URL, []byte{0x01, 0x02}, nil)
+	err := submitGloasBeaconBlock(context.Background(), unmaskedAddr{srv.URL}, []byte{0x01, 0x02}, nil)
 	require.NoError(t, err)
 	require.Equal(t, http.MethodPost, gotMethod)
 	require.Equal(t, "/eth/v2/beacon/blocks", gotPath)
@@ -244,7 +244,7 @@ func TestSubmitGloasBeaconBlock_EchoesBuilderURL(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	err := submitGloasBeaconBlock(context.Background(), srv.URL, []byte{0x01, 0x02},
+	err := submitGloasBeaconBlock(context.Background(), unmaskedAddr{srv.URL}, []byte{0x01, 0x02},
 		map[string]string{"Eth-Builder-Url": "https://builder.example.com"})
 	require.NoError(t, err)
 	require.Equal(t, "https://builder.example.com", gotBuilderURL)
@@ -259,7 +259,7 @@ func TestSubmitGloasBeaconBlock_AlreadyKnownIsSuccess(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	require.NoError(t, submitGloasBeaconBlock(context.Background(), srv.URL, []byte{0x01, 0x02}, nil))
+	require.NoError(t, submitGloasBeaconBlock(context.Background(), unmaskedAddr{srv.URL}, []byte{0x01, 0x02}, nil))
 }
 
 // A genuine rejection (not "already known") still propagates as an error.
@@ -270,5 +270,5 @@ func TestSubmitGloasBeaconBlock_RealErrorPropagates(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	require.Error(t, submitGloasBeaconBlock(context.Background(), srv.URL, []byte{0x01, 0x02}, nil))
+	require.Error(t, submitGloasBeaconBlock(context.Background(), unmaskedAddr{srv.URL}, []byte{0x01, 0x02}, nil))
 }

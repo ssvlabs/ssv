@@ -129,12 +129,12 @@ func (gc *GoClient) fetchAttestationData(ctx context.Context, slot phase0.Slot) 
 const gloasAttestationDataPath = "/eth/v1/validator/attestation_data?slot=%d&committee_index=0"
 
 func (gc *GoClient) gloasAttestationData(ctx context.Context, slot phase0.Slot) (*phase0.AttestationData, error) {
-	return firstClientResult(ctx, gc, "AttestationData", http.MethodGet, func(ctx context.Context, addr string) (*phase0.AttestationData, error) {
+	return firstClientResult(ctx, gc, "AttestationData", http.MethodGet, func(ctx context.Context, addr unmaskedAddr) (*phase0.AttestationData, error) {
 		return requestGloasAttestationData(ctx, gloasHTTPClient, addr, slot)
 	})
 }
 
-func requestGloasAttestationData(ctx context.Context, httpClient *http.Client, addr string, slot phase0.Slot) (*phase0.AttestationData, error) {
+func requestGloasAttestationData(ctx context.Context, httpClient *http.Client, addr unmaskedAddr, slot phase0.Slot) (*phase0.AttestationData, error) {
 	var resp struct {
 		Data *phase0.AttestationData `json:"data"`
 	}

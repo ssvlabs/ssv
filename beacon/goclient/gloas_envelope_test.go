@@ -42,7 +42,7 @@ func TestSubmitExecutionPayloadEnvelope(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	err := submitExecutionPayloadEnvelope(context.Background(), srv.URL, []byte{0x01, 0x02})
+	err := submitExecutionPayloadEnvelope(context.Background(), unmaskedAddr{srv.URL}, []byte{0x01, 0x02})
 	require.NoError(t, err)
 	require.Equal(t, http.MethodPost, gotMethod)
 	require.Equal(t, "/eth/v1/beacon/execution_payload_envelopes", gotPath)
@@ -80,7 +80,7 @@ func TestSubmitExecutionPayloadEnvelope_PublishesContents(t *testing.T) {
 	gc := &GoClient{
 		log:             zap.NewNop(),
 		clients:         []Client{client},
-		clientAddresses: map[Client]string{client: srv.URL},
+		clientAddresses: map[Client]unmaskedAddr{client: {srv.URL}},
 		commonTimeout:   time.Second,
 	}
 
@@ -106,5 +106,5 @@ func TestSubmitExecutionPayloadEnvelope_AlreadyKnownIsSuccess(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	require.NoError(t, submitExecutionPayloadEnvelope(context.Background(), srv.URL, []byte{0x01, 0x02}))
+	require.NoError(t, submitExecutionPayloadEnvelope(context.Background(), unmaskedAddr{srv.URL}, []byte{0x01, 0x02}))
 }

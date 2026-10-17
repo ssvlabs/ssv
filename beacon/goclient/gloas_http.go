@@ -24,6 +24,18 @@ const (
 // custom TLS or client certificate. Interim: retired once these requests move onto the fork's typed calls.
 var gloasHTTPClient = &http.Client{}
 
+// unmaskedAddr is the beacon address the hand-rolled requests are sent to, with the credentials it may
+// carry (a basic-auth password, an API key in its path or query) that the log-masked Client.Address()
+// hides. Its own type keeps it from being swapped with the route, and String masks it in case it is
+// formatted into an error or a log.
+type unmaskedAddr struct{ addr string }
+
+// UnmaskedAddress returns the address with its credentials, to build a request URL from.
+func (a unmaskedAddr) UnmaskedAddress() string { return a.addr }
+
+// String returns the address masked by RedactBeaconAddr.
+func (a unmaskedAddr) String() string { return RedactBeaconAddr(a.addr) }
+
 // httpStatusError is a non-2xx response to a hand-rolled Gloas request. It keeps the status and body so
 // callers can classify the failure (isNotFound, isMethodOrPathMissing, isAlreadyKnown).
 type httpStatusError struct {
@@ -42,14 +54,14 @@ func (e *httpStatusError) Error() string {
 // sent with contentType; extraHeaders are applied last. The status lets a 2xx caller tell a 200 from a
 // 204. Shared core of jsonDo and gloasHTTPDo.
 //
-// addr is the unmasked beacon address, which may carry basic-auth credentials or an API key in its path,
-// so errors name only the path: callers attribute them to the client by its masked Client.Address().
-func httpDo(ctx context.Context, httpClient *http.Client, method, addr, path string, body []byte, accept, contentType string, extraHeaders map[string]string) ([]byte, http.Header, int, error) {
+// Errors name the path but not addr, which may carry credentials: callers attribute them to the client by
+// its masked Client.Address().
+func httpDo(ctx context.Context, httpClient *http.Client, method string, addr unmaskedAddr, path string, body []byte, accept, contentType string, extraHeaders map[string]string) ([]byte, http.Header, int, error) {
 	var reader io.Reader
 	if body != nil {
 		reader = bytes.NewReader(body)
 	}
-	req, err := http.NewRequestWithContext(ctx, method, addr+path, reader)
+	req, err := http.NewRequestWithContext(ctx, method, addr.UnmaskedAddress()+path, reader)
 	if err != nil {
 		return nil, nil, 0, fmt.Errorf("new request %s %s: %w", method, path, withoutRequestURL(err))
 	}
@@ -90,7 +102,7 @@ func withoutRequestURL(err error) error {
 // jsonDo issues a JSON request to addr+path and, on a 2xx response, decodes the body into out (out may be
 // nil to ignore the body). A nil body sends no request payload; extraHeaders are applied last. Non-2xx
 // responses surface as *httpStatusError.
-func jsonDo(ctx context.Context, httpClient *http.Client, method, addr, path string, body []byte, extraHeaders map[string]string, out any) error {
+func jsonDo(ctx context.Context, httpClient *http.Client, method string, addr unmaskedAddr, path string, body []byte, extraHeaders map[string]string, out any) error {
 	respBody, _, _, err := httpDo(ctx, httpClient, method, addr, path, body, "application/json", "application/json", extraHeaders)
 	if err != nil {
 		return err
@@ -105,7 +117,7 @@ func jsonDo(ctx context.Context, httpClient *http.Client, method, addr, path str
 
 // gloasHTTPDo is httpDo on gloasHTTPClient, returning the response body and headers on a 2xx. A request
 // with a body always carries the Gloas Eth-Consensus-Version, whatever extraHeaders say.
-func gloasHTTPDo(ctx context.Context, method, addr, path string, body []byte, accept, contentType string, extraHeaders map[string]string) ([]byte, http.Header, error) {
+func gloasHTTPDo(ctx context.Context, method string, addr unmaskedAddr, path string, body []byte, accept, contentType string, extraHeaders map[string]string) ([]byte, http.Header, error) {
 	if body != nil {
 		merged := make(map[string]string, len(extraHeaders)+1)
 		for k, v := range extraHeaders {
@@ -122,7 +134,7 @@ func gloasHTTPDo(ctx context.Context, method, addr, path string, body []byte, ac
 // when the beacon node already has the object (see isAlreadyKnown); extraHeaders are applied as in
 // gloasHTTPDo. It accepts JSON: a publish route answers a 2xx with no content and errors as JSON, so a
 // beacon node that enforces Accept (Prysm) refuses an SSZ-only one with 406.
-func gloasPublishSSZ(ctx context.Context, addr, path string, body []byte, extraHeaders map[string]string) error {
+func gloasPublishSSZ(ctx context.Context, addr unmaskedAddr, path string, body []byte, extraHeaders map[string]string) error {
 	_, _, err := gloasHTTPDo(ctx, http.MethodPost, addr, path, body, "application/json", "application/octet-stream", extraHeaders)
 	if isAlreadyKnown(err) {
 		return nil

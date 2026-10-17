@@ -35,7 +35,7 @@ const (
 // neutral local-build config. It falls back per beacon node to the legacy GET for nodes that predate the POST.
 func (gc *GoClient) GetGloasBeaconBlock(ctx context.Context, slot phase0.Slot, graffiti, randao []byte, builderConfig *gloas.ProduceBuilderConfig) (*gloas.ProducedBlock, error) {
 	// A per-node GET fallback (a pre-#630 node) is still counted under this POST label — a transitional inaccuracy.
-	return firstClientResult(ctx, gc, "GetGloasBeaconBlock", http.MethodPost, func(ctx context.Context, addr string) (*gloas.ProducedBlock, error) {
+	return firstClientResult(ctx, gc, "GetGloasBeaconBlock", http.MethodPost, func(ctx context.Context, addr unmaskedAddr) (*gloas.ProducedBlock, error) {
 		return requestGloasBeaconBlock(ctx, addr, slot, graffiti, randao, builderConfig)
 	})
 }
@@ -68,7 +68,7 @@ func (gc *GoClient) SubmitGloasBeaconBlock(ctx context.Context, block *gloas.Sig
 // BuilderConfig body — a neutral local-build config when builderConfig is nil — and, only on a 404/405 (the
 // node predates the POST), retries as the legacy GET carrying builder_boost_factor (the sole knob the
 // pre-#630 GET also honors).
-func requestGloasBeaconBlock(ctx context.Context, addr string, slot phase0.Slot, graffiti, randao []byte, builderConfig *gloas.ProduceBuilderConfig) (*gloas.ProducedBlock, error) {
+func requestGloasBeaconBlock(ctx context.Context, addr unmaskedAddr, slot phase0.Slot, graffiti, randao []byte, builderConfig *gloas.ProduceBuilderConfig) (*gloas.ProducedBlock, error) {
 	if builderConfig == nil {
 		builderConfig = gloas.NeutralProduceBuilderConfig()
 	}
@@ -98,7 +98,7 @@ func requestGloasBeaconBlock(ctx context.Context, addr string, slot phase0.Slot,
 
 // requestGloasBeaconBlockPOST sends the builder config as the produceBlockV4 JSON body and decodes the SSZ
 // response.
-func requestGloasBeaconBlockPOST(ctx context.Context, addr, path string, builderConfig *gloas.ProduceBuilderConfig) (*gloas.ProducedBlock, error) {
+func requestGloasBeaconBlockPOST(ctx context.Context, addr unmaskedAddr, path string, builderConfig *gloas.ProduceBuilderConfig) (*gloas.ProducedBlock, error) {
 	jsonBody, err := json.Marshal(builderConfig)
 	if err != nil {
 		return nil, fmt.Errorf("marshal builder config: %w", err)
@@ -167,7 +167,7 @@ func decodeGloasBlock(ssz []byte) (*gloas.BeaconBlock, error) {
 // Eth-Builder-Url in extraHeaders. An already-known answer counts as success (see gloasPublishSSZ): every
 // operator submits the decided block for liveness redundancy, so a non-leader's submit legitimately races
 // the canonical one.
-func submitGloasBeaconBlock(ctx context.Context, addr string, blockSSZ []byte, extraHeaders map[string]string) error {
+func submitGloasBeaconBlock(ctx context.Context, addr unmaskedAddr, blockSSZ []byte, extraHeaders map[string]string) error {
 	return gloasPublishSSZ(ctx, addr, gloasPublishBlockPath, blockSSZ, extraHeaders)
 }
 

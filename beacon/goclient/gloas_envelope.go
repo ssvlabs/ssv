@@ -39,7 +39,7 @@ func (gc *GoClient) SubmitExecutionPayloadEnvelope(ctx context.Context, contents
 // already-known answer counts as success (see gloasPublishSSZ): the builder operator publishes to each of
 // its beacon nodes, and operators sharing a beacon node both publish the identical reveal, so a node can
 // receive it twice.
-func submitExecutionPayloadEnvelope(ctx context.Context, addr string, contentsSSZ []byte) error {
+func submitExecutionPayloadEnvelope(ctx context.Context, addr unmaskedAddr, contentsSSZ []byte) error {
 	headers := map[string]string{blobDataIncludedHeader: "true"}
 	return gloasPublishSSZ(ctx, addr, gloasPublishEnvelopePath, contentsSSZ, headers)
 }

@@ -16,6 +16,9 @@ import (
 // SubmitProposerPreferences is a hand-rolled JSON POST.
 const proposerPreferencesPath = "/eth/v1/validator/proposer_preferences"
 
+// proposerDutiesV2Path is the endpoint ProposerDutiesDependentRoot reads the dependent_root from.
+const proposerDutiesV2Path = "/eth/v2/validator/duties/proposer/%d" // epoch
+
 // ProposerDutiesDependentRoot returns the dependent root from the v2 proposer-duties response for the
 // given epoch — the proposer-lookahead seed a preference is pinned to (SIP #94 §5; callers pass the
 // proposal slot's epoch). Gloas's v2 endpoint computes this root under the new proposer-lookahead
@@ -31,7 +34,7 @@ func (gc *GoClient) ProposerDutiesDependentRoot(ctx context.Context, epoch phase
 		detached := context.WithoutCancel(ctx)
 		dctx, cancel := context.WithTimeout(detached, gc.commonTimeout)
 		defer cancel()
-		root, err := firstClientResult(dctx, gc, "ProposerDutiesDependentRoot", http.MethodGet, func(ctx context.Context, addr string) (phase0.Root, error) {
+		root, err := firstClientResult(dctx, gc, "ProposerDutiesDependentRoot", http.MethodGet, func(ctx context.Context, addr unmaskedAddr) (phase0.Root, error) {
 			return requestProposerDutiesDependentRoot(ctx, gloasHTTPClient, addr, epoch)
 		})
 		if err == nil && gc.proposerDutiesDependentRoots != nil {
@@ -57,12 +60,11 @@ func (gc *GoClient) LastProposerDutiesDependentRoot(epoch phase0.Epoch) (phase0.
 
 // requestProposerDutiesDependentRoot GETs the v2 proposer-duties response and returns its dependent_root.
 // phase0.Root.UnmarshalJSON parses and length-checks the "0x…" hex, so decode straight into it.
-func requestProposerDutiesDependentRoot(ctx context.Context, httpClient *http.Client, addr string, epoch phase0.Epoch) (phase0.Root, error) {
+func requestProposerDutiesDependentRoot(ctx context.Context, httpClient *http.Client, addr unmaskedAddr, epoch phase0.Epoch) (phase0.Root, error) {
 	var resp struct {
 		DependentRoot phase0.Root `json:"dependent_root"`
 	}
-	path := fmt.Sprintf("/eth/v2/validator/duties/proposer/%d", epoch)
-	if err := jsonDo(ctx, httpClient, http.MethodGet, addr, path, nil, nil, &resp); err != nil {
+	if err := jsonDo(ctx, httpClient, http.MethodGet, addr, fmt.Sprintf(proposerDutiesV2Path, epoch), nil, nil, &resp); err != nil {
 		return phase0.Root{}, err
 	}
 	return resp.DependentRoot, nil
@@ -83,7 +85,7 @@ func (gc *GoClient) SubmitProposerPreferences(ctx context.Context, preferences [
 // submitProposerPreferences POSTs the signed proposer preferences as a JSON array to the validator endpoint.
 // A 404 is flagged as a missing route — a BN build predating the merged beacon-APIs#608 endpoint (e.g.
 // Lodestar releases through v1.44.0 only serve a draft path) — rather than a transient failure.
-func submitProposerPreferences(ctx context.Context, httpClient *http.Client, addr string, preferences []*gloas.SignedProposerPreferences) error {
+func submitProposerPreferences(ctx context.Context, httpClient *http.Client, addr unmaskedAddr, preferences []*gloas.SignedProposerPreferences) error {
 	body, err := json.Marshal(preferences)
 	if err != nil {
 		return fmt.Errorf("marshal proposer preferences: %w", err)
