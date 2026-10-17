@@ -25,15 +25,16 @@ const (
 	defaultVerifyChunkDelay = 200 * time.Millisecond
 
 	// Backoff bounds for retrying a transient verification failure in-process (see
-	// VerifyWithRetry), so a brief EL hiccup doesn't leave a range unverified until the next
+	// verifyWithRetry), so a brief EL hiccup doesn't leave a range unverified until the next
 	// restart. Capped exponential: quick first retry, backing off to gentle steady polling.
 	defaultVerifyRetryInitialDelay = 10 * time.Second
 	defaultVerifyRetryMaxDelay     = 5 * time.Minute
 
 	// defaultVerifyUnsettledRecheckMaxDelay caps the backoff (starting at
-	// defaultVerifyRetryInitialDelay) for re-checking unsettled blocks. While no source can settle
-	// them a re-check costs about one request, so the cap mainly trades how often their warning
-	// repeats for how soon a fix is noticed.
+	// defaultVerifyRetryInitialDelay) for re-checking unsettled blocks, and is how often an idle
+	// verifier checks back for new ones. While no source can settle them a re-check costs about one
+	// request, so the cap mainly trades how often their warning repeats for how soon a fix is
+	// noticed.
 	defaultVerifyUnsettledRecheckMaxDelay = time.Hour
 
 	// defaultResyncCooldown rate-limits automatic repair: after a resync is flagged, further
@@ -63,7 +64,7 @@ var errResyncSuppressed = errors.New("resync suppressed by rate limit")
 // authoritative verdict (no usable receipts from any client, or a bloom match nothing could
 // settle) is recorded as unsettled rather than resynced or retired on unauthoritative evidence,
 // and the range moves on. Progress is persisted per chunk, so an interrupted pass resumes where it
-// left off. VerifyWithRetry is the long-running form; both run off the startup critical path.
+// left off. RunVerifier is the long-running form; both run off the startup critical path.
 //
 // The residual blind spot: if the sync and the verify-time re-fetch drop the same logs, their
 // log IDs agree, no disagreement is raised, and receipts are never consulted — an identical
@@ -118,13 +119,29 @@ func (es *EventSyncer) verifyPass(ctx context.Context) (unsettled int, progresse
 	return len(pending), progressed, nil
 }
 
-// VerifyWithRetry runs verification passes until no range or unsettled block remains (nil), a
+// RunVerifier runs background verification for as long as ctx lives. Once nothing is pending it
+// checks back every verifyUnsettledRecheckMaxDelay, since streaming can record unsettled blocks at
+// any time. It returns ErrResyncRequired when a miss is confirmed, or ctx's error once canceled.
+func (es *EventSyncer) RunVerifier(ctx context.Context) error {
+	for {
+		if err := es.verifyWithRetry(ctx); err != nil {
+			return err
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(es.verifyUnsettledRecheckMaxDelay):
+		}
+	}
+}
+
+// verifyWithRetry runs verification passes until no range or unsettled block remains (nil), a
 // miss is confirmed (ErrResyncRequired), or ctx is canceled. Transient failures are retried with
-// capped exponential backoff; unsettled blocks are re-checked on a slower-capped one for as long
-// as the node runs, since what left them unsettled (an EL lacking or pruning receipts, a client
-// being down, a rate-limited repair) can clear without a restart. The failure backoff resets after
-// an error-free pass, the unsettled one after a pass that made progress.
-func (es *EventSyncer) VerifyWithRetry(ctx context.Context) error {
+// capped exponential backoff; unsettled blocks are re-checked on a slower-capped one until they
+// settle, since what left them unsettled (an EL lacking or pruning receipts, a client being down,
+// a rate-limited repair) can clear without a restart. The failure backoff resets after an
+// error-free pass, the unsettled one after a pass that made progress.
+func (es *EventSyncer) verifyWithRetry(ctx context.Context) error {
 	failureBackoff := es.verifyRetryInitialDelay
 	unsettledBackoff := es.verifyRetryInitialDelay
 	for {
