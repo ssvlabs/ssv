@@ -68,7 +68,7 @@ const headCacheTTL = time.Second
 
 // NewEthChain connects to the policy chain's execution client and checks the contract is there.
 func NewEthChain(ctx context.Context, url string, chainID uint64, policy common.Address) (*EthChain, error) {
-	client, err := ethclient.DialContext(ctx, url)
+	client, err := dialRPC(ctx, url, chainID)
 	if err != nil {
 		return nil, fmt.Errorf("dial execution client: %w", err)
 	}
@@ -151,7 +151,7 @@ func (e *EVMExecutor) dial(ctx context.Context) (*ethclient.Client, error) {
 	if e.client != nil {
 		return e.client, nil
 	}
-	client, err := ethclient.DialContext(ctx, e.url)
+	client, err := dialRPC(ctx, e.url, e.chainID)
 	if err != nil {
 		return nil, err
 	}
