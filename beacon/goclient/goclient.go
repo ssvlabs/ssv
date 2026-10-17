@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -127,11 +128,9 @@ type GoClient struct {
 	clients     []Client
 	multiClient MultiClient
 
-	// clientAddresses holds each client's unmasked address for the hand-rolled Gloas requests (ptc.go,
-	// gloas_proposer.go, gloas_envelope.go, proposer_preferences.go, builder_preferences.go) —
-	// Client.Address() is log-masked and unusable for real requests. Drop when those endpoints become
-	// typed go-eth2-client calls.
-	clientAddresses map[Client]string
+	// clientAddresses holds each client's address for the hand-rolled Gloas requests, which can't be sent to
+	// the log-masked Client.Address(). Drop it once those requests become typed go-eth2-client calls.
+	clientAddresses map[Client]unmaskedAddr
 
 	syncDistanceTolerance phase0.Slot
 
@@ -240,16 +239,16 @@ func New(ctx context.Context, logger *zap.Logger, opt Options) (*GoClient, error
 		proposalSoftTimeout:                opt.ProposalSoftTimeout,
 		supportedTopics:                    []eventTopic{eventTopicHead, eventTopicBlock},
 		activatedClients:                   hashmap.New[string, struct{}](),
-		clientAddresses:                    make(map[Client]string),
+		clientAddresses:                    make(map[Client]unmaskedAddr),
 	}
 
 	// First error stops the loop on purpose. addSingleClient sets WithAllowDelayedStart(true), so a valid
 	// but currently-unreachable CL does not error here - it's tolerated and connected to later. Only a genuine
 	// construction error (e.g. a malformed address) surfaces, and that must reach the operator rather than be
 	// silently skipped.
-	for _, beaconAddr := range beaconAddrList {
+	for i, beaconAddr := range beaconAddrList {
 		if err := client.addSingleClient(ctx, beaconAddr); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("beacon node address #%d: %w", i+1, err)
 		}
 	}
 
@@ -257,7 +256,12 @@ func New(ctx context.Context, logger *zap.Logger, opt Options) (*GoClient, error
 
 	err := client.initMultiClient(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("initialize consensus client(s), address(es)=%s: %w", opt.BeaconNodeAddr, err)
+		// Name the clients by their masked addresses: opt.BeaconNodeAddr may carry credentials.
+		addrs := make([]string, 0, len(client.clients))
+		for _, c := range client.clients {
+			addrs = append(addrs, c.Address())
+		}
+		return nil, fmt.Errorf("initialize consensus client(s), address(es)=%s: %w", strings.Join(addrs, ";"), err)
 	}
 
 	client.log.Debug("connected successfully, fetching beacon config")
@@ -385,6 +389,36 @@ func normalizeBeaconAddr(addr string) string {
 	return strings.TrimSuffix(addr, "/")
 }
 
+// RedactBeaconAddr masks what may be a credential in a BeaconNodeAddr value (one address, or several separated
+// by ";") for logging, as go-eth2-client masks Client.Address(): the password, the path and the query values.
+// An address that doesn't parse is replaced whole, since its parts can't be told apart.
+func RedactBeaconAddr(addrs string) string {
+	const masked = "xxxxx"
+	redacted := strings.Split(addrs, ";")
+	for i, addr := range redacted {
+		u, err := url.Parse(normalizeBeaconAddr(addr))
+		if err != nil {
+			redacted[i] = "<malformed>"
+			continue
+		}
+		if _, ok := u.User.Password(); ok {
+			u.User = url.UserPassword(u.User.Username(), masked)
+		}
+		if u.Path != "" {
+			u.Path, u.RawPath = masked, ""
+		}
+		if u.RawQuery != "" {
+			query := u.Query()
+			for key := range query {
+				query[key] = []string{masked}
+			}
+			u.RawQuery = query.Encode()
+		}
+		redacted[i] = u.String()
+	}
+	return strings.Join(redacted, ";")
+}
+
 func (gc *GoClient) addSingleClient(ctx context.Context, addr string) error {
 	addr = normalizeBeaconAddr(addr)
 	httpClient, err := eth2clienthttp.New(
@@ -399,8 +433,10 @@ func (gc *GoClient) addSingleClient(ctx context.Context, addr string) error {
 		eth2clienthttp.WithHooks(gc.singleClientHooks()),
 	)
 	if err != nil {
+		// A malformed address fails here, and the error quotes it raw (see withoutRequestURL).
+		err = withoutRequestURL(err)
 		gc.log.Error("Consensus http client initialization failed",
-			zap.String("address", addr),
+			fields.Address(RedactBeaconAddr(addr)),
 			zap.Error(err),
 		)
 
@@ -409,7 +445,7 @@ func (gc *GoClient) addSingleClient(ctx context.Context, addr string) error {
 
 	svc := httpClient.(*eth2clienthttp.Service)
 	gc.clients = append(gc.clients, svc)
-	gc.clientAddresses[svc] = addr
+	gc.clientAddresses[svc] = unmaskedAddr{addr}
 
 	return nil
 }

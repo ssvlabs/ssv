@@ -80,8 +80,10 @@ func buildNode(ctx context.Context, cfg *config, logger *zap.Logger) (*node, err
 		return nil, fmt.Errorf("could not setup network: %w", err)
 	}
 
+	// The configured addresses may carry credentials, so they are only ever logged redacted.
+	clAddrs := goclient.RedactBeaconAddr(cfg.ConsensusClient.BeaconNodeAddr)
 	logger.Info("connecting CL(s)",
-		fields.Address(cfg.ConsensusClient.BeaconNodeAddr),
+		fields.Address(clAddrs),
 		zap.Bool("with_weighted_attestation_data", cfg.ConsensusClient.WithWeightedAttestationData),
 		zap.Bool("with_parallel_submissions", cfg.ConsensusClient.WithParallelSubmissions),
 	)
@@ -90,14 +92,14 @@ func buildNode(ctx context.Context, cfg *config, logger *zap.Logger) (*node, err
 	if err != nil {
 		return nil, startupError{
 			err:    fmt.Errorf("failed to create beacon client options: %w", err),
-			fields: []zap.Field{fields.Address(cfg.ConsensusClient.BeaconNodeAddr)},
+			fields: []zap.Field{fields.Address(clAddrs)},
 		}
 	}
 	consensusClient, err := goclient.New(ctx, logger, cliopt)
 	if err != nil {
 		return nil, startupError{
 			err:    fmt.Errorf("failed to create beacon go-client: %w", err),
-			fields: []zap.Field{fields.Address(cfg.ConsensusClient.BeaconNodeAddr)},
+			fields: []zap.Field{fields.Address(clAddrs)},
 		}
 	}
 
