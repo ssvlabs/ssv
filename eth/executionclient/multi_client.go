@@ -146,6 +146,9 @@ func (mc *MultiClient) connect(ctx context.Context, clientAddr string) (*Executi
 		WithReqTimeout(mc.reqTimeout),
 		WithHealthInvalidationInterval(mc.healthInvalidationInterval),
 		WithSyncDistanceTolerance(mc.syncDistanceTolerance),
+		withReceiptsFallback(func(ctx context.Context, block uint64) ([]ethtypes.Log, bool, error) {
+			return mc.receiptsFromAny(ctx, block, clientAddr)
+		}),
 	)
 	if err != nil {
 		recordClientInitStatus(ctx, clientAddr, false)
@@ -187,12 +190,12 @@ func (mc *MultiClient) assertSameChainID(chainID *big.Int) (*big.Int, bool) {
 // FetchHistoricalLogs retrieves historical logs emitted by the Ethereum SSV contract(s) starting at fromBlock.
 // It delegates the FetchHistoricalLogs call to clients MultiClient is configured with until one of them manages
 // to serve it without an error.
-func (mc *MultiClient) FetchHistoricalLogs(ctx context.Context, fromBlock uint64) (<-chan BlockLogs, <-chan error, error) {
+func (mc *MultiClient) FetchHistoricalLogs(ctx context.Context, fromBlock uint64, verify bool) (<-chan BlockLogs, <-chan error, error) {
 	var logCh <-chan BlockLogs
 	var errCh <-chan error
 
 	f := func(client SingleClientProvider) (any, error) {
-		singleLogsCh, singleErrCh, err := client.FetchHistoricalLogs(ctx, fromBlock)
+		singleLogsCh, singleErrCh, err := client.FetchHistoricalLogs(ctx, fromBlock, verify)
 		if err != nil {
 			return nil, err
 		}
@@ -208,6 +211,75 @@ func (mc *MultiClient) FetchHistoricalLogs(ctx context.Context, fromBlock uint64
 	}
 
 	return logCh, errCh, nil
+}
+
+// VerifyLogs returns the contract's logs for [fromBlock, toBlock] verified complete against
+// block blooms and receipts (used by the background verifier). It is delegated across the
+// configured clients until one serves it without an error.
+func (mc *MultiClient) VerifyLogs(ctx context.Context, fromBlock, toBlock uint64) ([]BlockLogs, error) {
+	var blockLogs []BlockLogs
+
+	f := func(client SingleClientProvider) (any, error) {
+		logs, err := client.VerifyLogs(ctx, fromBlock, toBlock)
+		if err != nil {
+			return nil, err
+		}
+		blockLogs = logs
+		return nil, nil
+	}
+
+	if _, err := mc.call(contextWithMethod(ctx, "VerifyLogs"), f); err != nil {
+		return nil, err
+	}
+
+	return blockLogs, nil
+}
+
+// BlockContractLogs returns the contract's logs for a block from its receipts (authoritative, used
+// by the background verifier to settle a block). It asks the clients in turn for receipts; see
+// receiptsFromAny.
+func (mc *MultiClient) BlockContractLogs(ctx context.Context, block uint64) ([]ethtypes.Log, bool, error) {
+	return mc.receiptsFromAny(ctx, block, "")
+}
+
+// receiptsFromAny asks the clients, except the one at skipAddr, for a block's receipts-derived
+// contract logs until one serves them. It goes in routing order but doesn't move routing or count
+// a client switch: a client lacking receipts isn't failing, and pinning all traffic to whichever
+// client has them would reroute streaming too. It reports available=false only when every client
+// asked was reachable and healthy yet couldn't serve receipts; if one instead errored or was
+// unavailable, it returns that error so callers retry (it may have receipts once recovered)
+// rather than settle for another client's gap.
+func (mc *MultiClient) receiptsFromAny(ctx context.Context, block uint64, skipAddr string) (logs []ethtypes.Log, available bool, err error) {
+	start := int(mc.currentClientIndex.Load())
+	var errs error
+	for i := range mc.clients {
+		clientIndex := (start + i) % len(mc.clients)
+		if mc.clientAddrs[clientIndex] == skipAddr {
+			continue
+		}
+
+		client, err := mc.getClient(ctx, clientIndex)
+		if err != nil {
+			errs = errors.Join(errs, err)
+			continue
+		}
+		if err := client.Healthy(ctx); err != nil {
+			errs = errors.Join(errs, err)
+			continue
+		}
+		logs, available, err := client.BlockContractLogs(ctx, block)
+		if isMultiClientInterruptedError(err) {
+			return nil, false, err
+		}
+		if err != nil {
+			errs = errors.Join(errs, err)
+			continue
+		}
+		if available {
+			return logs, true, nil
+		}
+	}
+	return nil, false, errs
 }
 
 // StreamLogs subscribes to events emitted by the Ethereum SSV contract(s) starting at fromBlock.
