@@ -74,6 +74,12 @@
       "groupName": "docker base images"
     },
     {
+      "description": "Raise Go patch bumps separately from a pending minor, so exact tags like golang:1.26.0 still get patch refreshes",
+      "matchManagers": ["dockerfile"],
+      "matchPackageNames": ["golang"],
+      "separateMinorPatch": true
+    },
+    {
       "description": "A Go minor bump also needs the go directive bumped, which Renovate leaves alone",
       "matchManagers": ["dockerfile"],
       "matchPackageNames": ["golang"],
