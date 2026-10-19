@@ -327,9 +327,12 @@ func (s *Service) checkRequest(ctx context.Context, r *keyRunner, req *kmstypes.
 		}
 		r.stateMu.RLock()
 		other, signed := r.state.Nonces[sequenceKey(chain, seq)]
+		at := r.state.NonceAt[sequenceKey(chain, seq)]
 		r.stateMu.RUnlock()
 		if signed && other != id {
-			return &RejectedError{fmt.Sprintf("nonce %d already signed for another request on %s", seq, chain)}
+			if wait := nonceReplaceWait(at, time.Now()); wait > 0 {
+				return &RejectedError{fmt.Sprintf("nonce %d on %s was just signed for another request; it can be signed again in %ds if that one doesn't reach the chain", seq, chain, int(wait.Seconds()+0.5))}
+			}
 		}
 	}
 	pf := tx.Policy()
@@ -349,6 +352,22 @@ func (s *Service) checkRequest(ctx context.Context, r *keyRunner, req *kmstypes.
 		return &RejectedError{"policy: " + reason}
 	}
 	return nil
+}
+
+// nonceReplaceAfter is how long a signed sequence (nonce) is held for its request. The account
+// nonce on the chain is the ground truth: while it hasn't passed the sequence, the transaction
+// signed for it hasn't landed (it was dropped, or is still waiting), and after this long another
+// request may take the sequence (a replacement: only one of them can ever land). Without it, a
+// transaction a chain dropped would block its account's nonce for good.
+const nonceReplaceAfter = 30 * time.Second
+
+// nonceReplaceWait is how long until a sequence signed at `at` (unix seconds; 0: unknown, from a
+// state saved before times were kept) may be signed for another request.
+func nonceReplaceWait(at int64, now time.Time) time.Duration {
+	if at == 0 {
+		return 0
+	}
+	return time.Unix(at, 0).Add(nonceReplaceAfter).Sub(now)
 }
 
 // sequenceKey names a transaction sequence (nonce) on a chain in the runner state.

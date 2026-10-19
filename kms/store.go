@@ -64,16 +64,22 @@ type runnerState struct {
 	Consumed map[string]bool `json:"consumed"`
 	// Nonces maps transaction sequences already signed ("<chain>/<nonce>") to their request ID.
 	Nonces map[string]string `json:"nonces"`
+	// NonceAt is when each of those was decided (unix seconds): a sequence signed for a transaction
+	// that never reached the chain may be signed again for another request after nonceReplaceAfter.
+	NonceAt map[string]int64 `json:"nonce_at,omitempty"`
 }
 
 func (s *store) loadState(keyID string) (*runnerState, error) {
-	st := &runnerState{Decided: map[string]uint64{}, Consumed: map[string]bool{}, Nonces: map[string]string{}}
+	st := &runnerState{Decided: map[string]uint64{}, Consumed: map[string]bool{}, Nonces: map[string]string{}, NonceAt: map[string]int64{}}
 	obj, found, err := s.db.Get(prefixState, []byte(keyID))
 	if err != nil || !found {
 		return st, err
 	}
 	if err := json.Unmarshal(obj.Value, st); err != nil {
 		return nil, err
+	}
+	if st.NonceAt == nil {
+		st.NonceAt = map[string]int64{}
 	}
 	return st, nil
 }

@@ -559,6 +559,7 @@ func (r *keyRunner) onDecided(ctx context.Context, h uint64, data []byte) {
 	r.state.Consumed[presigID] = true
 	if seq, ok := tx.Sequence(); ok {
 		r.state.Nonces[sequenceKey(chain, seq)] = id
+		r.state.NonceAt[sequenceKey(chain, seq)] = time.Now().Unix()
 	}
 	r.stateMu.Unlock()
 	r.persist()
@@ -688,6 +689,7 @@ func (r *keyRunner) fail(res *Result, reason string) {
 		if chain, tx, err := res.Request.Parse(); err == nil {
 			if seq, ok := tx.Sequence(); ok && r.state.Nonces[sequenceKey(chain, seq)] == res.ID {
 				delete(r.state.Nonces, sequenceKey(chain, seq))
+				delete(r.state.NonceAt, sequenceKey(chain, seq))
 			}
 		}
 	}
