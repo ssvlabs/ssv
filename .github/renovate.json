@@ -10,6 +10,11 @@
         "gomodTidy",
         "gomodUpdateImportPaths"
       ]
+    },
+    {
+      "description": "ssvsigner is a module in this repo; root go.mod pins it to the commit matching its tree, which Renovate's default-branch digest would undo",
+      "matchPackageNames": ["github.com/ssvlabs/ssv/ssvsigner"],
+      "enabled": false
     }
   ]
 }
