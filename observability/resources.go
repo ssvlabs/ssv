@@ -8,7 +8,7 @@ import (
 	// Keep aligned with the schema version used by otel/sdk's resource.Default()
 	// (it advances when otel/sdk is bumped); a mismatch makes the resource.Merge
 	// below fail with ErrSchemaURLConflict and aborts node startup (issue #3020).
-	semconv "go.opentelemetry.io/otel/semconv/v1.39.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.43.0"
 	"go.uber.org/zap"
 )
 

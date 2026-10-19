@@ -134,7 +134,7 @@ func (n *p2pNetwork) IsBadPeer(peerID peer.ID) bool {
 
 // SetupHost configures a libp2p host and backoff connector utility
 func (n *p2pNetwork) SetupHost() error {
-	opts, err := n.cfg.Libp2pOptions(n.logger)
+	opts, err := n.cfg.Libp2pOptions()
 	if err != nil {
 		return fmt.Errorf("could not create libp2p options: %w", err)
 	}
@@ -298,7 +298,7 @@ func (n *p2pNetwork) setupDiscovery() error {
 	logger := n.logger
 
 	var disc discovery.Service
-	if n.cfg.Discovery == localDiscvery {
+	if n.cfg.Discovery == localDiscovery {
 		logger.Info("discovery: using mdns (local)")
 		var err error
 		disc, err = discovery.NewLocalDiscovery(n.ctx, logger, n.Host(), n.cfg.MdnsDiscoveryTag)
