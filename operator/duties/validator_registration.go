@@ -13,9 +13,9 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/eth/executionclient"
-	"github.com/ssvlabs/ssv/observability"
-	"github.com/ssvlabs/ssv/observability/log/fields"
+	"github.com/ssvlabs/ssv/v2/eth/executionclient"
+	"github.com/ssvlabs/ssv/v2/observability"
+	"github.com/ssvlabs/ssv/v2/observability/log/fields"
 )
 
 const (

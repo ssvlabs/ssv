@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/hprobe"
+	"github.com/ssvlabs/ssv/v2/hprobe"
 )
 
 // wedgedComponent is a hprobe component that never responds: its Healthy blocks until the

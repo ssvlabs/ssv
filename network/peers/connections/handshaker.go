@@ -14,11 +14,11 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/network/commons"
-	"github.com/ssvlabs/ssv/network/peers"
-	"github.com/ssvlabs/ssv/network/records"
-	"github.com/ssvlabs/ssv/network/streams"
-	"github.com/ssvlabs/ssv/observability/log/fields"
+	"github.com/ssvlabs/ssv/v2/network/commons"
+	"github.com/ssvlabs/ssv/v2/network/peers"
+	"github.com/ssvlabs/ssv/v2/network/records"
+	"github.com/ssvlabs/ssv/v2/network/streams"
+	"github.com/ssvlabs/ssv/v2/observability/log/fields"
 )
 
 // errPeerWasFiltered is thrown when a peer is filtered during handshake

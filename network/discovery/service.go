@@ -10,9 +10,9 @@ import (
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
 
-	"github.com/ssvlabs/ssv/network/peers"
-	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/utils/ttl"
+	"github.com/ssvlabs/ssv/v2/network/peers"
+	"github.com/ssvlabs/ssv/v2/networkconfig"
+	"github.com/ssvlabs/ssv/v2/utils/ttl"
 )
 
 const (

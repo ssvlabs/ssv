@@ -9,11 +9,11 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	exportercore "github.com/ssvlabs/ssv/exporter"
-	"github.com/ssvlabs/ssv/ibft/storage"
-	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/observability/log/fields"
-	"github.com/ssvlabs/ssv/protocol/v2/message"
+	exportercore "github.com/ssvlabs/ssv/v2/exporter"
+	"github.com/ssvlabs/ssv/v2/ibft/storage"
+	"github.com/ssvlabs/ssv/v2/networkconfig"
+	"github.com/ssvlabs/ssv/v2/observability/log/fields"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/message"
 )
 
 type validatorIndexReader interface {

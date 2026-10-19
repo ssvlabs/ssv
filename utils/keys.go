@@ -9,8 +9,8 @@ import (
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/network/commons"
-	"github.com/ssvlabs/ssv/observability/log/fields"
+	"github.com/ssvlabs/ssv/v2/network/commons"
+	"github.com/ssvlabs/ssv/v2/observability/log/fields"
 )
 
 // ECDSAPrivateKey extracts the ecdsa.PrivateKey from the given string or generate a new key

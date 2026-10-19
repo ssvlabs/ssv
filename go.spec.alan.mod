@@ -2,7 +2,7 @@
 // downloads it and reads its spec-test vectors (see ibft/storage specGoModFilename). Nothing is built
 // against this file, so it lists ssv-spec only: requiring anything that depends on a newer ssv-spec
 // (e.g. ./ssvsigner) would make the go command raise this pin.
-module github.com/ssvlabs/ssv
+module github.com/ssvlabs/ssv/v2
 
 go 1.26.0
 

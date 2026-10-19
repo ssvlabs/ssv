@@ -9,7 +9,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 
-	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/v2/networkconfig"
 )
 
 // TestPartialSignatureSizeCapEnforcedInValidation drives validatePartialSignatureMessage

@@ -10,8 +10,8 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/network/commons"
-	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/v2/network/commons"
+	"github.com/ssvlabs/ssv/v2/networkconfig"
 )
 
 // oldValidateTopicAtSlot recomputes the subnet from scratch (SHA-256 over the committee for

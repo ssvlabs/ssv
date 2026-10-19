@@ -3,7 +3,7 @@ package badger
 import (
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/v2/storage/basedb"
 )
 
 // NewInMemory creates an in-memory DB instance.

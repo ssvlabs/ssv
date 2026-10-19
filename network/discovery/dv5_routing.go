@@ -9,8 +9,8 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/observability/log"
-	"github.com/ssvlabs/ssv/observability/log/fields"
+	"github.com/ssvlabs/ssv/v2/observability/log"
+	"github.com/ssvlabs/ssv/v2/observability/log/fields"
 )
 
 // implementing discovery.Discovery

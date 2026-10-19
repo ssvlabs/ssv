@@ -15,7 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/beacon/goclient/mocks"
+	"github.com/ssvlabs/ssv/v2/beacon/goclient/mocks"
 )
 
 func TestHealthy(t *testing.T) {

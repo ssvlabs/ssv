@@ -5,8 +5,8 @@ import (
 
 	"github.com/libp2p/go-libp2p/core/peer"
 
-	"github.com/ssvlabs/ssv/network/peers"
-	"github.com/ssvlabs/ssv/network/records"
+	"github.com/ssvlabs/ssv/v2/network/peers"
+	"github.com/ssvlabs/ssv/v2/network/records"
 )
 
 var _ peers.NodeInfoIndex = NodeInfoIndex{}

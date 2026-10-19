@@ -3,7 +3,7 @@ package casts
 import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	ssvtypes "github.com/ssvlabs/ssv/v2/protocol/v2/types"
 )
 
 func BeaconRoleToRunnerRole(runnerRole spectypes.BeaconRole) spectypes.RunnerRole {

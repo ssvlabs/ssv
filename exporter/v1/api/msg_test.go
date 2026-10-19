@@ -9,8 +9,8 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	qbftstorage "github.com/ssvlabs/ssv/ibft/storage"
-	"github.com/ssvlabs/ssv/networkconfig"
+	qbftstorage "github.com/ssvlabs/ssv/v2/ibft/storage"
+	"github.com/ssvlabs/ssv/v2/networkconfig"
 )
 
 // testNetCfgWithFork builds a Network whose domain type flips at booleEpoch, so tests can

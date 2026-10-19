@@ -8,9 +8,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/ssvlabs/ssv/beacon/goclient/mocks"
-	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/observability/log"
+	"github.com/ssvlabs/ssv/v2/beacon/goclient/mocks"
+	"github.com/ssvlabs/ssv/v2/networkconfig"
+	"github.com/ssvlabs/ssv/v2/observability/log"
 )
 
 const (

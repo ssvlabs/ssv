@@ -6,7 +6,7 @@ import (
 	"github.com/cockroachdb/pebble"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/v2/storage/basedb"
 )
 
 type txn struct {

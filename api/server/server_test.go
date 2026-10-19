@@ -19,11 +19,11 @@ import (
 	"go.uber.org/zap/zaptest"
 	"go.uber.org/zap/zaptest/observer"
 
-	"github.com/ssvlabs/ssv/api"
-	hexporter "github.com/ssvlabs/ssv/api/handlers/exporter"
-	hnode "github.com/ssvlabs/ssv/api/handlers/node"
-	hvalidators "github.com/ssvlabs/ssv/api/handlers/validators"
-	"github.com/ssvlabs/ssv/utils/commons"
+	"github.com/ssvlabs/ssv/v2/api"
+	hexporter "github.com/ssvlabs/ssv/v2/api/handlers/exporter"
+	hnode "github.com/ssvlabs/ssv/v2/api/handlers/node"
+	hvalidators "github.com/ssvlabs/ssv/v2/api/handlers/validators"
+	"github.com/ssvlabs/ssv/v2/utils/commons"
 )
 
 // setupTestServer creates and configures a test HTTP server with mock handlers.

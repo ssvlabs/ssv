@@ -6,9 +6,9 @@ import (
 	"github.com/hashicorp/go-multierror"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/api"
-	exportercore "github.com/ssvlabs/ssv/exporter"
-	"github.com/ssvlabs/ssv/ibft/storage"
+	"github.com/ssvlabs/ssv/v2/api"
+	exportercore "github.com/ssvlabs/ssv/v2/exporter"
+	"github.com/ssvlabs/ssv/v2/ibft/storage"
 )
 
 type PubKeyLengthError struct {

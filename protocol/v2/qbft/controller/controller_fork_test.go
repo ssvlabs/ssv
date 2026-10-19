@@ -14,11 +14,11 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/protocol/v2/qbft"
-	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv"
-	"github.com/ssvlabs/ssv/protocol/v2/types/ssvtestingutils"
+	"github.com/ssvlabs/ssv/v2/networkconfig"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/qbft"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/qbft/roundtimer"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/ssv"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/types/ssvtestingutils"
 )
 
 // TestController_IdentifierAtHeight verifies that identifierAtHeight switches the SSV domain

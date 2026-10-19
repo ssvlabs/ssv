@@ -21,13 +21,13 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 
-	"github.com/ssvlabs/ssv/network"
-	"github.com/ssvlabs/ssv/network/commons"
-	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/protocol/v2/qbft"
-	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
-	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
-	"github.com/ssvlabs/ssv/protocol/v2/types/ssvtestingutils"
+	"github.com/ssvlabs/ssv/v2/network"
+	"github.com/ssvlabs/ssv/v2/network/commons"
+	"github.com/ssvlabs/ssv/v2/networkconfig"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/qbft"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/qbft/roundtimer"
+	ssvtypes "github.com/ssvlabs/ssv/v2/protocol/v2/types"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/types/ssvtestingutils"
 )
 
 func TestGetMaxPeers(t *testing.T) {

@@ -13,12 +13,12 @@ import (
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
 
-	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/protocol/v2/message"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
-	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
-	"github.com/ssvlabs/ssv/protocol/v2/types/ssvtestingutils"
+	"github.com/ssvlabs/ssv/v2/networkconfig"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/message"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/ssv/queue"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/ssv/runner"
+	ssvtypes "github.com/ssvlabs/ssv/v2/protocol/v2/types"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/types/ssvtestingutils"
 )
 
 // While a runner has no running duty, its consumer takes only duty-start events from the queue: a

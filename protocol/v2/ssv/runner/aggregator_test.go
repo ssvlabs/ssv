@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/v2/networkconfig"
 )
 
 // Test_isAggregatorFn checks that the default IsAggregator func (delegating to the shared

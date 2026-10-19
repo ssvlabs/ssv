@@ -9,9 +9,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/observability/log"
-	kv "github.com/ssvlabs/ssv/storage/badger"
-	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/v2/observability/log"
+	kv "github.com/ssvlabs/ssv/v2/storage/badger"
+	"github.com/ssvlabs/ssv/v2/storage/basedb"
 )
 
 func setupOptions(ctx context.Context, t *testing.T) (Options, error) {

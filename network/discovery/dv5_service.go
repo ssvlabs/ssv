@@ -19,13 +19,13 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/network/commons"
-	"github.com/ssvlabs/ssv/network/peers"
-	"github.com/ssvlabs/ssv/network/records"
-	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/observability/log"
-	"github.com/ssvlabs/ssv/observability/log/fields"
-	"github.com/ssvlabs/ssv/utils/ttl"
+	"github.com/ssvlabs/ssv/v2/network/commons"
+	"github.com/ssvlabs/ssv/v2/network/peers"
+	"github.com/ssvlabs/ssv/v2/network/records"
+	"github.com/ssvlabs/ssv/v2/networkconfig"
+	"github.com/ssvlabs/ssv/v2/observability/log"
+	"github.com/ssvlabs/ssv/v2/observability/log/fields"
+	"github.com/ssvlabs/ssv/v2/utils/ttl"
 )
 
 const (

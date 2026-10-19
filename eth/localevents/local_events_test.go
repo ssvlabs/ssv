@@ -6,8 +6,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
 
-	"github.com/ssvlabs/ssv/eth/contract"
-	"github.com/ssvlabs/ssv/eth/localevents"
+	"github.com/ssvlabs/ssv/v2/eth/contract"
+	"github.com/ssvlabs/ssv/v2/eth/localevents"
 )
 
 func TestLocalEventsUnmarshalYAML(t *testing.T) {
