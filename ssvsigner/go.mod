@@ -13,7 +13,7 @@ module github.com/ssvlabs/ssv/ssvsigner
 
 go 1.26.0
 
-toolchain go1.26.8
+toolchain go1.26.10
 
 require (
 	github.com/OffchainLabs/go-bitfield v0.0.0-20251031151322-f427d04d8506
