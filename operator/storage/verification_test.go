@@ -86,6 +86,9 @@ func TestUnsettledBlocks(t *testing.T) {
 	blocks, err = s.ListUnsettledBlocks(nil)
 	require.NoError(t, err)
 	require.Equal(t, []uint64{7, 300, 1 << 40}, blocks)
+	count, err := s.CountUnsettledBlocks()
+	require.NoError(t, err)
+	require.Equal(t, 3, count)
 
 	require.NoError(t, s.DeleteUnsettledBlock(nil, 300))
 	blocks, err = s.ListUnsettledBlocks(nil)

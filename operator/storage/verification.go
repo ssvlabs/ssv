@@ -123,6 +123,16 @@ func (s *storage) ListUnsettledBlocks(r basedb.Reader) ([]uint64, error) {
 	return blocks, nil
 }
 
+// CountUnsettledBlocks returns how many blocks await authoritative verification, without loading
+// them.
+func (s *storage) CountUnsettledBlocks() (int, error) {
+	n, err := s.db.CountPrefix(unsettledBlockPrefix)
+	if err != nil {
+		return 0, fmt.Errorf("db: %w", err)
+	}
+	return int(n), nil
+}
+
 // DeleteUnsettledBlock clears a block's unsettled mark once it's verified.
 func (s *storage) DeleteUnsettledBlock(rw basedb.ReadWriter, block uint64) error {
 	return s.db.Using(rw).Delete(unsettledBlockPrefix, beUint64(block))

@@ -314,18 +314,63 @@ func TestVerify_SettlingConfirmsMiss(t *testing.T) {
 	require.True(t, resync)
 }
 
-func TestVerify_StopsSettlingWhileNoReceiptsSource(t *testing.T) {
+func TestVerify_UnansweredBlockDoesNotStarveOthers(t *testing.T) {
 	h := newVerifierHarness(t)
 
-	// No client can serve block 15's receipts, so the source is likely down: re-checking stops
-	// there instead of polling every unsettled block (an unexpected call for 20 fails the test).
+	// No client can answer for block 15 (its receipts are pruned, say), but that's no reason to
+	// stop: block 20's receipts show it was a bloom false positive, so it's retired.
 	require.NoError(t, h.storage.SaveUnsettledBlock(nil, 15))
 	require.NoError(t, h.storage.SaveUnsettledBlock(nil, 20))
-	h.expectNoReceipts(15)
+	gomock.InOrder(
+		h.expectNoReceipts(15),
+		h.expectReceipts(20, nil),
+	)
 
 	require.NoError(t, h.es.Verify(t.Context()))
 
-	h.requireState(t, nil, []uint64{15, 20}, false)
+	h.requireState(t, nil, []uint64{15}, false)
+}
+
+func TestVerify_RechecksRotateWithinBudget(t *testing.T) {
+	h := newVerifierHarness(t)
+	h.es.verifyUnansweredPerPass = 2
+
+	// With nothing answering, a pass stops after its budget of unanswered blocks, and the next one
+	// resumes after the last block tried (wrapping around) rather than starting over.
+	for _, block := range []uint64{15, 20, 25} {
+		require.NoError(t, h.storage.SaveUnsettledBlock(nil, block))
+	}
+	gomock.InOrder(
+		h.expectNoReceipts(15),
+		h.expectNoReceipts(20),
+		h.expectNoReceipts(25),
+		h.expectNoReceipts(15),
+	)
+
+	require.NoError(t, h.es.Verify(t.Context()))
+	require.NoError(t, h.es.Verify(t.Context()))
+
+	h.requireState(t, nil, []uint64{15, 20, 25}, false)
+}
+
+func TestVerify_FailedLookupLeavesBlockUnsettled(t *testing.T) {
+	h := newVerifierHarness(t)
+
+	// Receipts lookups for blocks 12 and 15 fail (a dead client under MultiClient, say). Neither
+	// stalls verification: unsettled block 15 stays unsettled, the range still gets verified, and
+	// its disagreeing block 12 is recorded unsettled too.
+	require.NoError(t, h.storage.SaveUnsettledBlock(nil, 15))
+	h.record(t, 12, logsWith([2]uint{0, 0}))
+	require.NoError(t, h.storage.SaveUnverifiedRange(nil, operatorstorage.UnverifiedRange{From: 10, To: 14, Cursor: 10}))
+	gomock.InOrder(
+		h.exec.EXPECT().BlockContractLogs(gomock.Any(), uint64(15)).Return(nil, false, errors.New("client down")),
+		h.exec.EXPECT().VerifyLogs(gomock.Any(), uint64(10), uint64(14)).Return(nil, nil),
+		h.exec.EXPECT().BlockContractLogs(gomock.Any(), uint64(12)).Return(nil, false, errors.New("client down")),
+	)
+
+	require.NoError(t, h.es.Verify(t.Context()))
+
+	h.requireState(t, nil, []uint64{12, 15}, false)
 }
 
 func TestVerify_SettlingContinuesPastInconsistentReceipts(t *testing.T) {

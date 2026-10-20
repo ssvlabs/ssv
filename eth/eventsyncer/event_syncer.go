@@ -55,10 +55,14 @@ type EventSyncer struct {
 	verifyRetryInitialDelay        time.Duration
 	verifyRetryMaxDelay            time.Duration
 	verifyUnsettledRecheckMaxDelay time.Duration
+	verifyUnansweredPerPass        int
 	resyncCooldown                 time.Duration
 
 	lastProcessedBlock       uint64
 	lastProcessedBlockChange time.Time
+
+	// unsettledCursor is where the next pass resumes re-checking unsettled blocks.
+	unsettledCursor uint64
 }
 
 func New(nodeStorage nodestorage.Storage, executionClient ExecutionClient, eventHandler EventHandler, opts ...Option) *EventSyncer {
@@ -74,6 +78,7 @@ func New(nodeStorage nodestorage.Storage, executionClient ExecutionClient, event
 		verifyRetryInitialDelay:        defaultVerifyRetryInitialDelay,
 		verifyRetryMaxDelay:            defaultVerifyRetryMaxDelay,
 		verifyUnsettledRecheckMaxDelay: defaultVerifyUnsettledRecheckMaxDelay,
+		verifyUnansweredPerPass:        defaultVerifyUnansweredPerPass,
 		resyncCooldown:                 defaultResyncCooldown,
 	}
 

@@ -48,6 +48,7 @@ type Storage interface {
 	DeleteBlockLogIDs(rw basedb.ReadWriter, block uint64) error
 	SaveUnsettledBlock(rw basedb.ReadWriter, block uint64) error
 	ListUnsettledBlocks(r basedb.Reader) ([]uint64, error)
+	CountUnsettledBlocks() (int, error)
 	DeleteUnsettledBlock(rw basedb.ReadWriter, block uint64) error
 	SetResyncRequired(rw basedb.ReadWriter) error
 	IsResyncRequired(r basedb.Reader) (bool, error)
