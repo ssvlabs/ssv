@@ -45,6 +45,12 @@
       "enabled": false
     },
     {
+      "description": "prysm moved to github.com/OffchainLabs/prysm, so a major bump under the old module path can't resolve; migrate by hand",
+      "matchPackageNames": ["github.com/prysmaticlabs/prysm/**"],
+      "matchUpdateTypes": ["major"],
+      "enabled": false
+    },
+    {
       "matchManagers": ["gomod"],
       "matchUpdateTypes": ["minor", "patch", "digest"],
       "groupName": "go modules (non-major)"
