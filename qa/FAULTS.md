@@ -8,7 +8,12 @@ against the message-validation and value-check rules pass M3 exists to exercise.
 `docs/superpowers/plans/2026-09-28-gloas-m3-fault-menu-v2-addendum.md` (ssv-scout repo). Code:
 `qa/faults/`, `qa/faultnet/`, `qa/faultval/`, plus the runner hooks named in §4.
 
-**Base.** `origin/epbs-gloas` @ `8d4f83fa7`, rebased 2026-09-28 from the now-orphaned `613dd52c9`
+**Base (v3, 2026-10-20).** `origin/stage` @ `f0d143543`, the build under test (`epbs-gloas` was
+deleted after its squash into stage as `89364be5e`). Branch `qa/gloas-m3-fault-menu-v3`: the 27 v2
+commits cherry-picked clean, plus `request-auth-late` (34 values). The v2 text below still names
+`8d4f83fa7`; the files the menu touches differ from it by 31 lines, none of them in a hook.
+
+**Base (v2).** `origin/epbs-gloas` @ `8d4f83fa7`, rebased 2026-09-28 from the now-orphaned `613dd52c9`
 (the v1 menu, executed 2026-09-08 as `97f7d5826`). Every `file:line` below is for this
 tree; line numbers drift, so grep the quoted string, not the line.
 
@@ -16,9 +21,9 @@ tree; line numbers drift, so grep the quoted string, not the line.
 honest operators are 0, 1, 2, 3, 4 and 6. Operator 4 (gas limit) and operator 6 (remote signer)
 are degraded at the start of §6.5 and restored in its steps 4 and 5.
 
-## 1. The menu is 33 values; three names are retired and abort startup
+## 1. The menu is 34 values; three names are retired and abort startup
 
-`qa/faults/faults.go` holds **33** values (`go run ./qa/faults/cmd/list` prints them, in menu
+`qa/faults/faults.go` holds **34** values (33 in v2; v3 adds `request-auth-late`, §4.4) (`go run ./qa/faults/cmd/list` prints them, in menu
 order). v1 had 19; the re-cut adds 16 and retires 2.
 
 **Retired, by design:** `envelope-foreign-root`, `envelope-builder-index` and `envelope-round-3`
@@ -208,6 +213,10 @@ proven only by the honest-side oracle (or, with the modifier off, disproven by t
   `proposer-round-3` hit an error and did **not** fire.
 - `qa fault: forged send failed, honest broadcast unaffected` (Warn) — a forged `faultnet` send
   failed; the honest message was still sent.
+- `request-auth-late` logs a **pair** of `🧪 qa fault injected` lines per held type-9 packet:
+  `label=held` when it is held (with `release_at` and `hold`, the wait) and `label=released` once it
+  is on the wire. `qa fault: held send failed` (Warn) replaces the `released` line if the late
+  broadcast fails (§4.4).
 
 ## 4. Fault menu
 
@@ -244,6 +253,7 @@ cost), or none (wire-valid; the rule is a value or runner check).
 | `auth-9-entries` | MSG-03, MSG-10 | 9-entry type-9 packet, then an 8-root packet, then a 9th root. Capped at 3 sets. | required | no | REJECT (3) |
 | `auth-mixed-signer` | MSG-03, MSG-10 | Type-9 packets with two validator indices, and with two signers. Capped at 3 sets. | required | no | REJECT (6) |
 | `auth-repeat-root-in-packet` | MSG-10 | Type-9 packets that repeat a root inside one packet, repeat an accepted root, overflow the budget. | required | no | IGNORE |
+| `request-auth-late` | BLD-B-04 | Holds its honest type-9 request-auth packet for proposal slot S and releases it unchanged at S start + 4 s, after S's produce. Run on 2 of 4 operators. | not needed | no | none |
 | `postcons-block-only` | EPE-09 | Self-build slot: replaces the proposer post-consensus packet with the block entry only. | **must be off** | no | none |
 | `postcons-3-entries` | EPE-09, MSG-03 | Every Gloas proposer slot: honest packet, then a second packet with three entries. | required | no | REJECT (unthrottled) |
 | `postcons-mixed-index` | EPE-09, MSG-03 | Every Gloas proposer slot: honest packet, then a 2-entry packet whose entry 1 has index + 1. | required | no | REJECT (unthrottled) |
@@ -463,6 +473,41 @@ appears but no type-9 packet is ever sent.
 
 Sender-side (modifier off): `own outbound message rejected by local validation` for the REJECT
 rows; `own outbound message ignored by local validation (unexpected)` for the budget rows.
+
+**`request-auth-late` (BLD-B-04 Fault C).** A timing fault, not a malformed message: the value sends
+nothing extra and changes no byte. `qa/faultnet/plan_auth.go` `requestAuthLate` marks this operator's
+honest type-9 packet — any entry count — as held until **start(S) + 4 s**, where S is the packet's
+payload slot (also its topic slot); the decorator (`qa/faultnet/faultnet.go` `hold`) logs the hold,
+sleeps, broadcasts the unchanged packet, and logs the release. Every other message passes through.
+
+*Rig.* The same real `Builders` block on **every** operator (the roots must match); no synthetic
+builder is installed, and no builder needs to be reachable. Run the value on **two** of four
+operators (more than f), both local-signer: a remote signer has its builders stripped (`node.go`,
+RAU-03) and so emits no type-9 at all. Gloas profile, 12 s slots. Leave the modifier off — the
+released packet is valid, so the local gate passes it.
+
+*Why it works.* The partials of the two honest operators cannot reach quorum (3 of 4) alone, so no
+operator holds the auth at its produce for S (`gloasBuilderConfig`, `protocol/v2/ssv/runner/proposer.go`),
+which happens right after the RANDAO quorum, well inside the first second of S. The release at
+S + 4 s is inside the role-8 lateness bound (start(S + 2) + 3 s) and inside slot S, so the §5
+sub-runner for S (evicted only once S has passed) still reconstructs the auth then.
+
+*Oracles, for a proposal slot S of a validator of this cluster:*
+
+| Check | Query | Expected |
+|---|---|---|
+| Fired | `--search "🧪 qa fault injected"` on the faulted operators, fields `label,slot,release_at,hold` | 1 `held` (emission tick, epoch before S) and 1 `released` (≈ S start + 4 s) per faulted operator |
+| No auth before produce | `--search "✔️ reconstructed builder request auth"` on all 4 | 0 for `slot=S` with `time` < the produce; 1 per operator after the release is fine |
+| Produce | `--search "🧊 got gloas beacon block proposal"` | present at S, before the `released` lines |
+| Builder omitted | Mimir/`/metrics` `ssv_runner_request_auth_unavailable_total` | +1 per producing operator |
+| Block submitted | `--search "✅ successfully submitted block proposal"` | present at S |
+| No duty failure | `--search "⚠️ duty failed"` | 0 |
+
+`hold` on the `held` line reads ≈ (S − emission slot) × 12 s + 4 s: the auth goes out with the §5
+emission, from slot 15 of the epoch before S, so a hold of several minutes is normal. A packet emitted
+after its release point (a restart inside slot S) logs `hold=0s` and is sent at once, still as a pair.
+Without a `Builders` block there is no type-9 packet and no `🧪` line at all — a broken rig, not a
+result.
 
 ### 4.5 §6 — the proposer post-consensus packet (`postcons-*`)
 
@@ -710,7 +755,7 @@ for f in envelope-foreign-root envelope-builder-index envelope-round-3; do
 done
 ```
 
-Expected: **33** banners, no `NO BANNER` line, and three `unknown FAULT` lines, no `RETIRED VALUE
+Expected: **34** banners (33 on v2), no `NO BANNER` line, and three `unknown FAULT` lines, no `RETIRED VALUE
 BOOTED`.
 
 **Status: done 2026-09-28 on a live enclave**, by the equivalent `make fault` path (a standalone

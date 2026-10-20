@@ -196,3 +196,36 @@ func authRepeatRootInPacket(msg *spectypes.SignedSSVMessage, slot phase0.Slot) [
 	}
 	return out
 }
+
+// requestAuthLateAfter is how far into its proposal slot S request-auth-late releases the held packet.
+// The proposer duty produces right after its RANDAO quorum, well inside the first second of S, and
+// gloasBuilderConfig reads the auth cache at that point; 4 s leaves a wide margin past the produce while
+// staying inside slot S, so the §5 sub-runner for S (evicted only once S has passed,
+// runner/proposer_preferences.go evictPastSlots) still reconstructs the auth after the produce. It also
+// stays well inside the role-8 lateness bound, start(S + LateSlotAllowance) + lateMessageMargin
+// (message/validation/common_checks.go messageLateness), so honest receivers accept the release.
+const requestAuthLateAfter = 4 * time.Second
+
+// requestAuthLate serves request-auth-late (BLD-B-04 Fault C). It holds this operator's honest
+// request-auth packet for proposal slot S — any entry count, unlike the other auth values, because the
+// scenario runs with a real Builders config identical on every operator — and releases it unchanged at
+// S start + requestAuthLateAfter:
+//
+//	#  packet            send                 honest verdict
+//	0  honest type 9     S start + 4 s        accept; quorum only now, after the produce
+//
+// With the fault on more than f operators (2 of 4), the remaining partials cannot reach quorum before
+// the release, so no operator holds an auth for S at its produce call: every producing operator omits
+// the builder and counts ssv.runner.request_auth.unavailable. The packet's payload slot is S (the topic
+// slot is too, runner.go signAndBroadcastPartialSigMsgs). Every other message passes unchanged.
+func requestAuthLate(msg *spectypes.SignedSSVMessage, slot phase0.Slot) []Outgoing {
+	identity := []Outgoing{{Msg: msg, Slot: slot}}
+	if role(msg) != spectypes.RoleProposerPreferences {
+		return identity
+	}
+	body := partialBody(msg)
+	if body == nil || body.Type != spectypes.RequestAuthPartialSig || len(body.Messages) == 0 {
+		return identity
+	}
+	return []Outgoing{{Msg: msg, Slot: slot, Hold: &Hold{Slot: body.Slot, After: requestAuthLateAfter}}}
+}

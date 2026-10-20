@@ -40,6 +40,17 @@ type Outgoing struct {
 	// Label names the row of a multi-message fault (prefs-34-apart, the auth-* values, ...). send
 	// logs it on the 🧪 line so the tester can confirm every row fired. Empty for single-row faults.
 	Label string
+	// Hold, when set, keeps this (honest, unmodified) message back until a wall-clock point named in
+	// slot terms, so Plan can say "release at slot S + 4 s" without reading the clock (request-auth-late).
+	// The decorator turns it into a delay and logs one 🧪 line when it holds the message and one when
+	// it releases it. Nil everywhere else.
+	Hold *Hold
+}
+
+// Hold names a release point: the start of Slot plus After.
+type Hold struct {
+	Slot  phase0.Slot
+	After time.Duration
 }
 
 // Plan returns what to send in place of msg. slot is the slot the caller passed to
@@ -85,6 +96,8 @@ func Plan(f faults.Fault, msg *spectypes.SignedSSVMessage, slot, now, preForkSlo
 		return authMixedSigner(msg, slot)
 	case faults.AuthRepeatRootInPacket:
 		return authRepeatRootInPacket(msg, slot)
+	case faults.RequestAuthLate:
+		return requestAuthLate(msg, slot)
 	default:
 		return identity
 	}

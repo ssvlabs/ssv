@@ -24,6 +24,9 @@ type Network struct {
 
 	// gate holds the forged-send budget of the throttled values (budget.go).
 	gate gate
+
+	// clock is the wall clock a Hold is measured against; nil means time.Now. Tests set it.
+	clock func() time.Time
 }
 
 // Wrap returns inner unchanged when no fault is active, so a FAULT=none node is byte-for-byte the
@@ -74,6 +77,10 @@ func (n *Network) role7PreForkSlot() phase0.Slot {
 func (n *Network) dispatch(out []Outgoing) error {
 	for i := range out {
 		o := out[i]
+		if o.Hold != nil {
+			n.hold(o)
+			continue
+		}
 		// Plan stays pure — it can compute a slot offset (ptc-3-per-epoch) but must never read the
 		// clock or a network config to turn that into a duration. The decorator does that
 		// conversion here, where n.netCfg is already in scope, and folds it into Delay so the rest
@@ -98,6 +105,40 @@ func (n *Network) dispatch(out []Outgoing) error {
 		}
 	}
 	return nil
+}
+
+// hold serves a held honest message (request-auth-late). It logs the hold, then, from its own
+// goroutine, waits until the release point and broadcasts the message unchanged — never re-signed, so
+// the bytes the peers receive are exactly the honest ones, only late — and logs the release. A release
+// point already past sends at once, still with both lines, so a held packet always shows as a pair.
+// The caller has already moved on, so a failed release is logged, never returned: the runner marks the
+// roots broadcast either way, the same as a delayed send.
+func (n *Network) hold(o Outgoing) {
+	releaseAt := n.netCfg.SlotStartTime(o.Hold.Slot).Add(o.Hold.After)
+	wait := max(releaseAt.Sub(n.now()), 0)
+	held := o
+	held.Label = "held"
+	faults.Fired(n.logger, append(firedFields(held),
+		zap.Time("release_at", releaseAt), zap.Duration("hold", wait))...)
+
+	go func() {
+		time.Sleep(wait)
+		if err := n.P2PNetwork.BroadcastAtSlot(o.Msg, o.Slot); err != nil {
+			n.logger.Warn("qa fault: held send failed",
+				zap.String("qa_fault", string(faults.Active())), zap.Uint64("slot", uint64(o.Slot)), zap.Error(err))
+			return
+		}
+		released := o
+		released.Label = "released"
+		faults.Fired(n.logger, firedFields(released)...)
+	}()
+}
+
+func (n *Network) now() time.Time {
+	if n.clock != nil {
+		return n.clock()
+	}
+	return time.Now()
 }
 
 // sendAsync serves the delayed and repeated sends. It is fire-and-forget: a failure is logged, not

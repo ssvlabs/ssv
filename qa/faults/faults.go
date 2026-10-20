@@ -52,6 +52,7 @@ const (
 	Auth9Entries           Fault = "auth-9-entries"
 	AuthMixedSigner        Fault = "auth-mixed-signer"
 	AuthRepeatRootInPacket Fault = "auth-repeat-root-in-packet"
+	RequestAuthLate        Fault = "request-auth-late"
 
 	// Section 6 — the proposer post-consensus packet (generation 3: block + envelope entries).
 	// envelope-foreign-root, envelope-builder-index and envelope-round-3 were retired on
@@ -102,6 +103,7 @@ var menu = []Entry{
 	{Auth9Entries, "MSG-03, MSG-10", "send nine entries in one type-9 request-auth packet", "qa/faultnet"},
 	{AuthMixedSigner, "MSG-03, MSG-10", "send type-9 entries with two validator indices", "qa/faultnet"},
 	{AuthRepeatRootInPacket, "MSG-10", "send a type-9 packet that repeats one root in two entries", "qa/faultnet"},
+	{RequestAuthLate, "BLD-B-04", "hold this operator's request-auth (type 9) packet for proposal slot S and release it at S start + 4 s, after S's produce call", "qa/faultnet"},
 	{PostConsBlockOnly, "EPE-09", "omit the envelope entry from the proposer post-consensus packet on self-build slots", "protocol/v2/ssv/runner/proposer.go ProcessConsensus"},
 	{PostCons3Entries, "EPE-09, MSG-03", "send, after the honest packet, a second proposer post-consensus packet with three entries at a Gloas slot", "protocol/v2/ssv/runner/proposer.go ProcessConsensus"},
 	{PostConsMixedIndex, "EPE-09, MSG-03", "send, after the honest packet, a second proposer post-consensus packet whose entries carry two validator indices", "protocol/v2/ssv/runner/proposer.go ProcessConsensus"},

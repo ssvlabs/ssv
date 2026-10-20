@@ -17,7 +17,7 @@ var specMenu = []string{
 	"block-wrong-slot", "block-wrong-proposer-index",
 	"payload-root-on-external", "payload-root-zero-selfbuild", "payload-root-fabricated",
 	"postcons-block-only", "postcons-3-entries", "postcons-mixed-index", "postcons-foreign-root",
-	"auth-9-entries", "auth-mixed-signer", "auth-repeat-root-in-packet",
+	"auth-9-entries", "auth-mixed-signer", "auth-repeat-root-in-packet", "request-auth-late",
 	"proposer-round-3", "vr-prefork-slot-replay",
 }
 
@@ -26,7 +26,7 @@ var retired = []string{"envelope-foreign-root", "envelope-builder-index", "envel
 
 func TestMenuMatchesSpec(t *testing.T) {
 	require.ElementsMatch(t, specMenu, Names())
-	require.Len(t, Names(), 33)
+	require.Len(t, Names(), 34)
 }
 
 func TestRetiredValuesAbortStartup(t *testing.T) {
