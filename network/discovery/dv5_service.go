@@ -79,11 +79,11 @@ type DiscV5Service struct {
 
 	conn       *net.UDPConn
 	sharedConn *SharedUDPConn
-	// socketConn wraps conn to time socket reads; the post-fork listener drains
-	// through it, so DiscoveryStale can detect a wedged socket.
+	// socketConn wraps conn to time the post-fork listener's reads (see
+	// DiscoveryStale).
 	socketConn *TimedConn
-	// stalenessReg is the read-staleness gauge callback for socketConn,
-	// unregistered on close.
+	// stalenessReg reports socketConn's read staleness as a gauge; unregistered
+	// on close.
 	stalenessReg metric.Registration
 
 	ssvConfig *networkconfig.SSV
@@ -145,7 +145,6 @@ func (dvs *DiscV5Service) close() error {
 		dvs.cancel()
 	}
 	if dvs.stalenessReg != nil {
-		// Stop reporting the read-staleness gauge for a closed service.
 		_ = dvs.stalenessReg.Unregister()
 	}
 	// Order matters. The post-fork listener produces into sharedConn.Unhandled,
@@ -170,11 +169,8 @@ func (dvs *DiscV5Service) close() error {
 	return nil
 }
 
-// DiscoveryStale reports whether the discv5 socket has gone unread for longer
-// than grace — the sign discovery has wedged. False before the listener is built
-// (or after a failed init), when there's nothing to judge. The read-staleness
-// gauge is sampled separately at scrape time (see observeDiscoveryReadStaleness),
-// keeping this a pure predicate.
+// DiscoveryStale reports whether the discv5 socket has wedged: read, then unread
+// for longer than grace (see TimedConn.StaleFor). False with no socket to judge.
 func (dvs *DiscV5Service) DiscoveryStale(grace time.Duration) bool {
 	if dvs.socketConn == nil {
 		return false
@@ -425,9 +421,8 @@ func (dvs *DiscV5Service) initDiscV5Listener(discOpts *Options) (err error) {
 	}
 	dvs.conn = udpConn
 
-	// Wrap the socket for liveness (see DiscoveryStale): only the post-fork
-	// listener drains it, so only it gets the wrapped conn — the pre-fork
-	// listener reads sharedConn's buffer, not the socket.
+	// Only the post-fork listener reads the socket, so only it gets the timed
+	// wrapper (see DiscoveryStale).
 	socketConn := NewTimedConn(udpConn)
 	dvs.socketConn = socketConn
 
@@ -454,7 +449,6 @@ func (dvs *DiscV5Service) initDiscV5Listener(discOpts *Options) (err error) {
 		protocolID = DefaultSSVProtocolID
 	}
 
-	// New discovery, with ProtocolID restriction, to be kept post-fork
 	unhandled := make(chan discover.ReadPacket, unhandledChanSize)
 	sharedConn := NewSharedUDPConn(dvs.ctx, dvs.logger, udpConn, unhandled)
 	dvs.sharedConn = sharedConn
@@ -478,6 +472,8 @@ func (dvs *DiscV5Service) initDiscV5Listener(discOpts *Options) (err error) {
 		dvs.sharedConn = nil
 	}()
 
+	// The post-fork listener speaks the SSV protocol ID: it reads the socket and
+	// forwards the packets it can't decode to unhandled.
 	dv5PostForkCfg, err := opts.DiscV5Cfg(dvs.logger, WithProtocolID(protocolID), WithUnhandled(unhandled))
 	if err != nil {
 		return err
@@ -497,7 +493,9 @@ func (dvs *DiscV5Service) initDiscV5Listener(discOpts *Options) (err error) {
 		fields.ProtocolID(protocolID),
 	)
 
-	// Previous discovery, without ProtocolID restriction, to be discontinued after the fork
+	// The pre-fork listener speaks go-ethereum's default protocol ID, reading what
+	// the post-fork one forwards via sharedConn; kept for nodes that predate the
+	// fork (see forkingDV5Listener).
 	dv5PreForkCfg, err := opts.DiscV5Cfg(dvs.logger)
 	if err != nil {
 		return err
@@ -518,9 +516,8 @@ func (dvs *DiscV5Service) initDiscV5Listener(discOpts *Options) (err error) {
 	dvs.dv5Listener = NewForkingDV5Listener(dvs.logger, dv5PreForkListener, dv5PostForkListener, 5*time.Second)
 	dvs.bootnodes = dv5PreForkCfg.Bootnodes // Just take bootnodes from one of the config since they're equal
 
-	// Registered last so the callback only outlives init if the service does.
-	// Registration fails only on instrument misuse and the gauge is optional,
-	// so a failure is logged, not returned.
+	// Registered last, so a failed init leaves no callback behind. It fails only
+	// on instrument misuse, and the gauge is optional: log rather than fail.
 	if reg, regErr := observeDiscoveryReadStaleness(socketConn); regErr != nil {
 		dvs.logger.Warn("could not register discovery read-staleness gauge", zap.Error(regErr))
 	} else {

@@ -14,14 +14,17 @@ import (
 // A discv5 listener drains its socket only through ReadFromUDPAddrPort, so a
 // wedged socket — bound but no longer read, leaving discovery silently dead —
 // shows up as a last-read timestamp that stops advancing. StaleFor turns that
-// into a liveness signal, used by both the operator and boot nodes.
+// into a liveness signal for both the operator and boot nodes.
 //
-// The signal is scoped to the socket. On the operator only the post-fork
-// listener reads it (through this wrapper); the pre-fork listener consumes
-// decode-rejected packets relayed via SharedUDPConn's buffer. A stall confined
-// to the pre-fork listener therefore moves neither this timestamp nor the
-// post-fork reader, whose relay into that buffer drops rather than blocks
-// (#2980). The boot node runs a single listener reading the socket directly.
+// The operator runs two discv5 listeners on one socket, named after the
+// protocol-ID fork that split them — historical names, as both run permanently
+// (see forkingDV5Listener). Only the post-fork one (SSV protocol ID) reads the
+// socket, through this wrapper; the pre-fork one (go-ethereum's default ID)
+// reads the packets the post-fork one couldn't decode, relayed via
+// SharedUDPConn. A stall confined to the pre-fork listener is therefore
+// invisible here, and can't back up into the socket reader: the relay drops
+// rather than blocks (#2980). The boot node's single listener reads the socket
+// directly.
 //
 // Only ReadFromUDPAddrPort is overridden; writes, Close and LocalAddr fall
 // through to the embedded conn.
@@ -29,15 +32,14 @@ type TimedConn struct {
 	discover.UDPConn
 
 	lastReadUnixNano atomic.Int64
-	read             atomic.Bool      // set once the socket has been read at least once
+	read             atomic.Bool      // set by the first successful read
 	now              func() time.Time // overridable in tests; nil means time.Now
 }
 
 var _ discover.UDPConn = (*TimedConn)(nil)
 
-// NewTimedConn wraps conn, seeding the last-read time so LastRead reports a
-// sensible value before the first read. Staleness only arms once the socket has
-// actually been read (see StaleFor).
+// NewTimedConn wraps conn, seeding the last-read time so LastRead is meaningful
+// before the first read. Staleness arms only on a read (see StaleFor).
 func NewTimedConn(conn *net.UDPConn) *TimedConn {
 	c := &TimedConn{UDPConn: conn}
 	c.lastReadUnixNano.Store(c.nowFn().UnixNano())
@@ -51,9 +53,8 @@ func (c *TimedConn) nowFn() time.Time {
 	return time.Now()
 }
 
-// ReadFromUDPAddrPort delegates and, on success, records the read time and marks
-// the socket as having been read. Errors leave both untouched, so a closed or
-// failing socket can't look freshly drained.
+// ReadFromUDPAddrPort delegates, stamping the read time on success. Errors don't
+// stamp, so a closed or failing socket can't look freshly drained.
 func (c *TimedConn) ReadFromUDPAddrPort(b []byte) (n int, addr netip.AddrPort, err error) {
 	n, addr, err = c.UDPConn.ReadFromUDPAddrPort(b)
 	if err == nil {
@@ -68,11 +69,8 @@ func (c *TimedConn) LastRead() time.Time {
 	return time.Unix(0, c.lastReadUnixNano.Load())
 }
 
-// ReadStaleness reports how long the socket has gone unread, and whether it has
-// ever been read. Before the first successful read there is nothing to measure,
-// so ok is false: a socket that has never delivered a packet is not wedged, it
-// has simply had no inbound discv5 traffic yet (unreachable bootnodes, blocked
-// UDP), which a restart cannot fix.
+// ReadStaleness reports how long the socket has gone unread; ok is false until
+// the first successful read, before which there is nothing to measure.
 func (c *TimedConn) ReadStaleness() (age time.Duration, ok bool) {
 	if !c.read.Load() {
 		return 0, false
@@ -80,11 +78,10 @@ func (c *TimedConn) ReadStaleness() (age time.Duration, ok bool) {
 	return c.nowFn().Sub(c.LastRead()), true
 }
 
-// StaleFor reports whether the socket has wedged: it was being drained, then
-// went unread for longer than d. A socket that has never been read is never
-// stale — a wedge can only arise after draining has started, so requiring a
-// prior read rules out the false positive (a healthy node that has simply had
-// no inbound traffic yet) without missing any real wedge.
+// StaleFor reports whether the socket has wedged: read at least once, then
+// unread for longer than d. A never-read socket is never stale: a wedge can only
+// arise once draining has started, and a node with no inbound discv5 traffic yet
+// (unreachable bootnodes, blocked UDP) is not something a restart can fix.
 func (c *TimedConn) StaleFor(d time.Duration) bool {
 	age, ok := c.ReadStaleness()
 	return ok && age > d

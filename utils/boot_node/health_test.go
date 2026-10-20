@@ -60,8 +60,7 @@ func TestBootNodeHealth_Check(t *testing.T) {
 		"socket not drained")
 
 	// Empty table + never-read socket, within cold-start grace → healthy: a quiet
-	// node with no peers produces no reads, so staleness must not flag it
-	// (regression for the "quiet socket looks wedged" false positive).
+	// node with no peers produces no reads, so staleness must not flag it.
 	require.NoError(t,
 		newTestHealth(fakeLister{count: 0}, neverReadSocket, fixed).check(),
 		"empty/quiet table must not trip the socket-staleness check")
@@ -102,7 +101,7 @@ func TestBootNodeHealth_EmptyTableButDrained(t *testing.T) {
 // TestBootNodeHealth_ClockIsSampleDriven: the empty-table clock follows the
 // sampler, not probe arrivals — a long probe-free stretch with a populated
 // table must not become an instant past-grace verdict when the table empties
-// and the next probe lands (the old probe-driven clock failed exactly here).
+// and the next probe lands.
 func TestBootNodeHealth_ClockIsSampleDriven(t *testing.T) {
 	base := time.Now()
 	now := base

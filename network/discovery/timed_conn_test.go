@@ -31,18 +31,8 @@ func (f *fakeUDPConn) WriteToUDPAddrPort(b []byte, _ netip.AddrPort) (int, error
 func (f *fakeUDPConn) Close() error        { return nil }
 func (f *fakeUDPConn) LocalAddr() net.Addr { return nil }
 
-// TestTimedConn_SeededNotStale: a freshly constructed conn is not stale — it has
-// not been read yet, so there is nothing to flag at startup.
-func TestTimedConn_SeededNotStale(t *testing.T) {
-	c := NewTimedConn(nil)
-	require.False(t, c.StaleFor(3*time.Minute))
-}
-
-// TestTimedConn_NeverReadNeverStale: a socket that has never delivered a packet
-// is not a wedge — it's a node with no inbound discv5 traffic (unreachable
-// bootnodes, blocked UDP), which a restart cannot fix — so it must never report
-// stale, however much time passes. Once it has been read, staleness arms as
-// usual.
+// TestTimedConn_NeverReadNeverStale: a never-read socket is never stale, however
+// long it sits (see StaleFor); the first read arms the signal.
 func TestTimedConn_NeverReadNeverStale(t *testing.T) {
 	c := NewTimedConn(nil)
 	t0 := c.LastRead()
@@ -96,8 +86,8 @@ func TestTimedConn_ReadStampsLastRead(t *testing.T) {
 	require.Equal(t, t0.Add(time.Hour).UnixNano(), c.LastRead().UnixNano())
 }
 
-// TestTimedConn_FailedReadDoesNotStamp: a read error must leave the timestamp
-// untouched, so a wedged/closed socket cannot look freshly drained.
+// TestTimedConn_FailedReadDoesNotStamp: a read error neither stamps nor arms the
+// signal, so a closed or failing socket can't look freshly drained.
 func TestTimedConn_FailedReadDoesNotStamp(t *testing.T) {
 	c := &TimedConn{UDPConn: &fakeUDPConn{readErr: errors.New("boom")}}
 	t0 := time.Now()
@@ -107,11 +97,12 @@ func TestTimedConn_FailedReadDoesNotStamp(t *testing.T) {
 	_, _, err := c.ReadFromUDPAddrPort(make([]byte, 16))
 	require.Error(t, err)
 	require.Equal(t, t0.UnixNano(), c.LastRead().UnixNano(), "errored read must not stamp")
+	_, ok := c.ReadStaleness()
+	require.False(t, ok, "errored read must not arm the signal")
 }
 
-// TestReadStalenessSeconds: the gauge flattening keeps never-read (-1) — the
-// state the health check deliberately ignores — distinguishable from a
-// just-read socket (0), and reports whole seconds once armed.
+// TestReadStalenessSeconds: the gauge reports -1 before the first read, distinct
+// from just-read (0), then whole seconds.
 func TestReadStalenessSeconds(t *testing.T) {
 	c := NewTimedConn(nil)
 	t0 := c.LastRead()

@@ -313,11 +313,10 @@ func TestInitDiscV5Listener_CleansUpOnError(t *testing.T) {
 }
 
 // TestInitDiscV5Listener_WrapsPostForkConn pins the wiring the wedge detector
-// depends on: the post-fork listener — the only one that drains the real socket —
-// must read through the TimedConn, and the pre-fork listener must read the
-// SharedUDPConn buffer. Every other test builds these conns by hand, so without
-// this a refactor that passed the wrong conn to ListenV5 would leave the detector
-// silently reporting "healthy" forever while the whole suite still passed.
+// rests on: the post-fork listener, the only one reading the socket, must get
+// the service's TimedConn, and the pre-fork one the SharedUDPConn. Other tests
+// build these conns by hand, so a wrong conn passed to ListenV5 would otherwise
+// leave the detector reporting healthy forever with the suite still green.
 //
 // Swaps the package-level listenV5, so the test must stay non-parallel.
 func TestInitDiscV5Listener_WrapsPostForkConn(t *testing.T) {

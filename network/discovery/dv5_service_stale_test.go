@@ -7,19 +7,17 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestDiscV5Service_DiscoveryStale covers the operator-side liveness accessor:
-// nil before the listener is built, never stale until the socket has actually
-// been read, and driven by the wrapped socket's last-read time thereafter.
+// TestDiscV5Service_DiscoveryStale covers the operator-side accessor: false with
+// no socket or before the first read, then driven by the last-read time.
 func TestDiscV5Service_DiscoveryStale(t *testing.T) {
-	// No socket wrapped yet (not-yet / failed init) → never stale.
+	// No socket → never stale.
 	require.False(t, (&DiscV5Service{}).DiscoveryStale(3*time.Minute))
 
 	sc := NewTimedConn(nil)
 	t0 := sc.LastRead()
 	dvs := &DiscV5Service{socketConn: sc}
 
-	// Never read → never stale, however long it sits idle: an operator that has
-	// simply had no inbound discv5 traffic yet must not be flagged as wedged.
+	// Never read → never stale, however long it sits idle.
 	sc.now = func() time.Time { return t0.Add(time.Hour) }
 	require.False(t, dvs.DiscoveryStale(3*time.Minute), "never-read socket is not a wedge")
 

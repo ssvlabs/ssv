@@ -12,17 +12,17 @@ import (
 )
 
 const (
-	// bootReadStaleGrace is how long the socket may go unread before /healthz
-	// fails. A boot node is queried continuously, so a wedge stops reads well
-	// inside this.
+	// bootReadStaleGrace is how long the socket may go unread before it counts as
+	// undrained. A live boot node reads far more often: inbound queries, plus
+	// pongs from revalidating its table every few seconds.
 	bootReadStaleGrace = 3 * time.Minute
 
-	// bootEmptyTableGrace tolerates cold start, when the table is briefly empty
-	// before the boot node discovers peers.
+	// bootEmptyTableGrace tolerates the empty table of a cold start, before peers
+	// reach the boot node.
 	bootEmptyTableGrace = 10 * time.Minute
 
-	// bootHealthSamplePeriod is how often the routing table is sampled; health
-	// verdicts read the samples (see sample).
+	// bootHealthSamplePeriod is how often the routing table is sampled (see
+	// sample).
 	bootHealthSamplePeriod = time.Second
 )
 
@@ -40,8 +40,8 @@ type socketDrainState interface {
 // bootNodeHealth backs /healthz. A boot node's whole job is discovery, so it is
 // broken when its socket has wedged or its routing table has been empty past
 // cold start; both fail /healthz closed so a liveness probe restarts the pod.
-// The one deliberate exception — an empty table while the socket is demonstrably
-// drained — is logged instead: see check.
+// The one exception, an empty table while the socket is still drained, is
+// logged instead (see check).
 type bootNodeHealth struct {
 	logger          *zap.Logger
 	lister          nodeLister
@@ -87,11 +87,10 @@ func (h *bootNodeHealth) start(ctx context.Context) {
 	}()
 }
 
-// sample records whether the routing table is currently populated. It is the
-// only place the table is consulted (AllNodes takes the discv5 table mutex and
-// allocates), keeping /healthz requests cheap and the empty-table clock
-// probe-independent: the clock advances with the table, not with whatever probe
-// cadence the endpoint happens to see.
+// sample records whether the routing table is populated. It is the only place
+// the table is consulted (AllNodes takes the table mutex and allocates), so
+// /healthz stays cheap and the empty-table clock advances with the table, not
+// with probe cadence.
 func (h *bootNodeHealth) sample() {
 	populated := len(h.lister.AllNodes()) > 0
 	h.tablePopulated.Store(populated)
@@ -100,29 +99,25 @@ func (h *bootNodeHealth) sample() {
 	}
 }
 
-// check returns a reason when discovery looks broken, or nil when healthy.
+// check returns why discovery looks broken, or nil when healthy.
 //
-// Socket staleness only counts while the routing table is populated: discv5
-// revalidates those peers and should be reading their responses, so a stale
-// socket then means the read loop has wedged. An empty table generates no such
-// traffic, so staleness there is expected (cold start, or a quiet node).
-//
-// An empty table past the grace is judged by the socket:
-//   - undrained (never read, or read then gone stale): fail closed — nothing
-//     arrives or the read path is dead, and a restart may recover it. This is
+// With a populated table, a stale socket is a wedge: discv5 revalidates those
+// peers and should be reading their responses. An empty table generates no
+// such traffic, so stale reads are expected there (cold start, quiet node)
+// until it has been empty past the grace; then the socket decides:
+//   - undrained (never read, or read then gone stale): fail closed. Nothing
+//     arrives or the read path is dead, and a restart may recover it; this is
 //     the definitional boot-node failure (#2979).
-//   - actively drained: healthy, with an error log — packets arrive and are
-//     read, yet nothing completes a handshake into the table. That is a
-//     config/compatibility mismatch (e.g. DiscoveryProtocolID) a restart cannot
-//     fix; failing would crash-loop the pod and take /p2p down with it.
+//   - drained: healthy, with an error log. Packets arrive and are read, yet
+//     none completes a handshake into the table: a config mismatch (e.g.
+//     DiscoveryProtocolID) a restart can't fix, and failing would crash-loop
+//     the pod and take /p2p down with it.
 //
 // Accepted blind spot: a table populated from persistent-DB seeds while the
-// socket has never been read. Normally revalidation ages such seeds out (its
-// pings time out, failed peers are dropped), emptying the table so the rules
-// above take over — but a dispatch loop wedged before the first socket read
-// stalls revalidation with the seeds in place, and this check stays green.
-// That takes a from-boot dispatch wedge with zero packets ever read (a single
-// read arms the staleness check); no known cause since #2980.
+// socket has never been read. Revalidation normally ages such seeds out,
+// emptying the table so the rules above apply, but a dispatch loop wedged
+// before the first read stalls it with the seeds in place and check stays
+// green. No known cause produces that since #2980.
 func (h *bootNodeHealth) check() error {
 	if h.tablePopulated.Load() {
 		if age, everRead := h.socket.ReadStaleness(); everRead && age > h.readStaleGrace {
@@ -142,9 +137,9 @@ func (h *bootNodeHealth) check() error {
 	return fmt.Errorf("discv5 routing table empty for >%s and socket undrained", h.emptyTableGrace)
 }
 
-// handler serves /healthz. The endpoint is reachable on the ENR-advertised TCP
-// port, so it stays cheap and opaque: sampled state only, and a fixed body —
-// the reason is logged, not disclosed.
+// handler serves /healthz. It is reachable on the ENR-advertised TCP port, so it
+// stays cheap and opaque: it reads sampled state only and returns a fixed body,
+// logging the reason instead.
 func (h *bootNodeHealth) handler() http.HandlerFunc {
 	return func(w http.ResponseWriter, _ *http.Request) {
 		if err := h.check(); err != nil {

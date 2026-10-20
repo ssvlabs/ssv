@@ -78,10 +78,8 @@ func recordUnhandledPacketDropped(ctx context.Context) {
 }
 
 // observeDiscoveryReadStaleness registers a callback reporting conn's read
-// staleness at scrape time. Async sampling keeps the series alive regardless of
-// the health-check path — a gauge recorded from Healthy goes quiet whenever an
-// earlier check short-circuits, i.e. exactly when discovery is broken. The
-// registration must be unregistered when the owning service closes.
+// staleness at scrape time, so the series keeps reporting even when the health
+// check short-circuits before reaching it. The caller unregisters it on close.
 func observeDiscoveryReadStaleness(conn *TimedConn) (metric.Registration, error) {
 	return meter.RegisterCallback(func(_ context.Context, observer metric.Observer) error {
 		observer.ObserveInt64(discoveryReadStalenessGauge, readStalenessSeconds(conn))
@@ -89,9 +87,8 @@ func observeDiscoveryReadStaleness(conn *TimedConn) (metric.Registration, error)
 	}, discoveryReadStalenessGauge)
 }
 
-// readStalenessSeconds flattens ReadStaleness for the gauge: never-read reports
-// -1 — the state the health check deliberately ignores, kept visible for
-// alerting — distinct from a just-read socket at 0.
+// readStalenessSeconds flattens ReadStaleness for the gauge, reporting -1 before
+// the first read so never-read stays distinct from just-read (0).
 func readStalenessSeconds(conn *TimedConn) int64 {
 	age, everRead := conn.ReadStaleness()
 	if !everRead {
