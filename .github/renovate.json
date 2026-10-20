@@ -68,23 +68,22 @@
       "groupName": "github actions"
     },
     {
-      "description": "Base-image refreshes only; a Go minor bump arrives on its own so it can move with go.mod",
+      "description": "Base-image refreshes only; Go version bumps are in the go toolchain group below",
       "matchManagers": ["dockerfile"],
       "matchUpdateTypes": ["patch", "digest", "pinDigest"],
       "groupName": "docker base images"
     },
     {
-      "description": "Raise Go patch bumps separately from a pending minor, so exact tags like golang:1.26.0 still get patch refreshes",
-      "matchManagers": ["dockerfile"],
-      "matchPackageNames": ["golang"],
+      "description": "Raise Go patch releases separately from a pending minor; read during lookup, so it can't sit in a rule with matchUpdateTypes",
+      "matchPackageNames": ["go", "golang"],
       "separateMinorPatch": true
     },
     {
-      "description": "A Go minor bump also needs the go directive bumped, which Renovate leaves alone",
-      "matchManagers": ["dockerfile"],
-      "matchPackageNames": ["golang"],
-      "matchUpdateTypes": ["major", "minor"],
-      "prBodyNotes": ["Before merging, bump the `go` directive in `go.mod`, `ssvsigner/go.mod` and `scripts/differ/go.mod` to this Go minor on this branch. CI installs Go from `go.mod`, so without it the images ship a Go version CI never ran."]
+      "description": "Bump go.mod's toolchain line (what CI and releases build with) and the golang images together; version updates only, as a pending minor would drop digest refreshes from a shared branch",
+      "matchPackageNames": ["go", "golang"],
+      "matchUpdateTypes": ["major", "minor", "patch"],
+      "groupName": "go toolchain",
+      "prPriority": 10
     },
     {
       "description": "differ UI is a dev-only tool, not shipped",
