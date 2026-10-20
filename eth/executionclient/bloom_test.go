@@ -385,14 +385,15 @@ func TestReceiptsUnsupported_FallsBackToTimedRetry(t *testing.T) {
 
 // TestVerifyLogs_UnsettledWithoutUsableReceipts verifies that a block the EL persistently drops
 // from eth_getLogs, on an EL that can't serve its receipts, comes back Unsettled — not presumed a
-// bloom false positive — whether receipts are unsupported, empty or not found. The timed
-// re-requests spend exactly the retry budget: the batched re-request that made it a suspect counts
-// as the first attempt.
+// bloom false positive, nor failing the whole check — whether receipts are unsupported, empty, not
+// found or the lookup errors. The timed re-requests spend exactly the retry budget: the batched
+// re-request that made it a suspect counts as the first attempt.
 func TestVerifyLogs_UnsettledWithoutUsableReceipts(t *testing.T) {
 	receiptsResponses := map[string]jsonrpcMessage{
-		"unsupported": {Error: json.RawMessage(`{"code":-32601,"message":"the method eth_getBlockReceipts does not exist/is not available"}`)},
-		"empty":       {Result: json.RawMessage(`[]`)},
-		"not found":   {Result: json.RawMessage(`null`)},
+		"unsupported":  {Error: json.RawMessage(`{"code":-32601,"message":"the method eth_getBlockReceipts does not exist/is not available"}`)},
+		"empty":        {Result: json.RawMessage(`[]`)},
+		"not found":    {Result: json.RawMessage(`null`)},
+		"lookup error": {Error: json.RawMessage(`{"code":-32000,"message":"internal error"}`)},
 	}
 	for name, receiptsResponse := range receiptsResponses {
 		t.Run(name, func(t *testing.T) {

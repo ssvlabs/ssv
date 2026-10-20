@@ -116,7 +116,7 @@ func (ec *ExecutionClient) verifyLogCompleteness(ctx context.Context, logs []eth
 
 		receiptLogs, settled, err := ec.settleSuspect(ctx, block)
 		if err != nil {
-			return nil, nil, fmt.Errorf("completeness check: fetch receipts for block %d: %w", block, err)
+			return nil, nil, err
 		}
 		switch {
 		case !settled:
@@ -155,10 +155,13 @@ func (ec *ExecutionClient) verifyLogCompleteness(ctx context.Context, logs []eth
 	if len(unsettled) > 0 {
 		recordBloomUnsettled(ctx, len(unsettled))
 		ec.logger.Warn("no authoritative source for blocks whose bloom matches the contract but that returned no logs; leaving them unsettled",
-			zap.Uint64s("blocks", unsettled),
+			fields.Count(len(unsettled)),
+			zap.Uint64("first_block", unsettled[0]),
+			zap.Uint64("last_block", unsettled[len(unsettled)-1]),
 			zap.String("contract", ec.contractAddress.Hex()),
 			zap.String("recommendation", "no execution client could serve these blocks' receipts (unsupported, pruned or still syncing), so a dropped event there can't be ruled out until one can — use an execution client that serves eth_getBlockReceipts"),
 		)
+		ec.logger.Debug("unsettled suspect blocks", zap.Uint64s("blocks", unsettled))
 	}
 
 	// Appending recovered logs above leaves the slice unsorted, so re-sort before returning.
@@ -170,24 +173,27 @@ func (ec *ExecutionClient) verifyLogCompleteness(ctx context.Context, logs []eth
 }
 
 // settleSuspect resolves a suspect block against receipts: the client's own, else another
-// client's (MultiClient). settled is false when no client could serve them.
-func (ec *ExecutionClient) settleSuspect(ctx context.Context, block uint64) (logs []ethtypes.Log, settled bool, err error) {
-	logs, settled, err = ec.BlockContractLogs(ctx, block)
-	if err != nil || settled || ec.receiptsFallback == nil {
-		return logs, settled, err
+// client's (MultiClient). It reports the block unsettled (false) when none could serve them,
+// including when a lookup failed, so one block's receipts error can't fail the whole check. Only
+// cancellation is returned as an error.
+func (ec *ExecutionClient) settleSuspect(ctx context.Context, block uint64) ([]ethtypes.Log, bool, error) {
+	sources := []func(context.Context, uint64) ([]ethtypes.Log, bool, error){ec.BlockContractLogs}
+	if ec.receiptsFallback != nil {
+		sources = append(sources, ec.receiptsFallback)
 	}
-
-	logs, settled, err = ec.receiptsFallback(ctx, block)
-	if err != nil {
-		if ctx.Err() != nil {
+	for _, source := range sources {
+		logs, settled, err := source(ctx, block)
+		switch {
+		case ctx.Err() != nil:
 			return nil, false, ctx.Err()
+		case err != nil:
+			ec.logger.Debug("couldn't fetch receipts for a suspect block",
+				fields.BlockNumber(block), zap.Error(err))
+		case settled:
+			return logs, true, nil
 		}
-		// Other clients failing leaves the block unsettled; it isn't this client's fetch failing.
-		ec.logger.Debug("other clients couldn't serve receipts for a suspect block",
-			fields.BlockNumber(block), zap.Error(err))
-		return nil, false, nil
 	}
-	return logs, settled, nil
+	return nil, false, nil
 }
 
 // retrySuspects re-requests suspect blocks' logs on the timed-retry schedule, all of them in one

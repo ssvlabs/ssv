@@ -245,10 +245,9 @@ func (mc *MultiClient) BlockContractLogs(ctx context.Context, block uint64) ([]e
 // receiptsFromAny asks the clients, except the one at skipAddr, for a block's receipts-derived
 // contract logs until one serves them. It goes in routing order but doesn't move routing or count
 // a client switch: a client lacking receipts isn't failing, and pinning all traffic to whichever
-// client has them would reroute streaming too. It reports available=false only when every client
-// asked was reachable and healthy yet couldn't serve receipts; if one instead errored or was
-// unavailable, it returns that error so callers retry (it may have receipts once recovered)
-// rather than settle for another client's gap.
+// client has them would reroute streaming too. available is false when none served them; the
+// error, if any, reports the clients that failed (unreachable, unhealthy or erroring) rather than
+// lacked receipts.
 func (mc *MultiClient) receiptsFromAny(ctx context.Context, block uint64, skipAddr string) (logs []ethtypes.Log, available bool, err error) {
 	start := int(mc.currentClientIndex.Load())
 	var errs error

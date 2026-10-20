@@ -32,10 +32,16 @@ const (
 
 	// defaultVerifyUnsettledRecheckMaxDelay caps the backoff (starting at
 	// defaultVerifyRetryInitialDelay) for re-checking unsettled blocks, and is how often an idle
-	// verifier checks back for new ones. While no source can settle them a re-check costs about one
-	// request, so the cap mainly trades how often their warning repeats for how soon a fix is
-	// noticed.
+	// verifier checks back for new ones. A pass's re-checks are bounded (see
+	// defaultVerifyUnansweredPerPass), so the cap mainly trades how often their warning repeats for
+	// how soon a fix is noticed.
 	defaultVerifyUnsettledRecheckMaxDelay = time.Hour
+
+	// defaultVerifyUnansweredPerPass is how many unsettled blocks a pass re-checks without getting an
+	// answer before it stops; the next pass resumes after the last one tried. It keeps a pass cheap
+	// when no source can answer (a try may wait out a request timeout on a dead client), while
+	// blocks no source will ever answer for can't starve the rest.
+	defaultVerifyUnansweredPerPass = 64
 
 	// defaultResyncCooldown rate-limits automatic repair: after a resync is flagged, further
 	// confirmed misses within this window are suppressed (logged, not acted on). This bounds a
@@ -101,22 +107,22 @@ func (es *EventSyncer) verifyPass(ctx context.Context) (unsettled int, progresse
 	}
 	recordVerifyPendingRanges(ctx, 0)
 
-	pending, err := es.nodeStorage.ListUnsettledBlocks(nil)
+	pending, err := es.nodeStorage.CountUnsettledBlocks()
 	if err != nil {
-		return 0, progressed, fmt.Errorf("list unsettled blocks: %w", err)
+		return 0, progressed, fmt.Errorf("count unsettled blocks: %w", err)
 	}
-	recordVerifyUnsettledBlocks(ctx, len(pending))
+	recordVerifyUnsettledBlocks(ctx, pending)
 
 	switch {
-	case len(pending) > 0:
+	case pending > 0:
 		es.logger.Warn("background verification couldn't authoritatively verify some blocks yet; they stay pending and will be re-checked",
-			zap.Int("unsettled_blocks", len(pending)),
+			zap.Int("unsettled_blocks", pending),
 			zap.String("recommendation", "usually no execution client can serve these blocks' receipts — use one that serves eth_getBlockReceipts"),
 		)
 	case progressed:
 		es.logger.Info("background verification complete: optimistically-synced registry events are consistent with chain data")
 	}
-	return len(pending), progressed, nil
+	return pending, progressed, nil
 }
 
 // RunVerifier runs background verification for as long as ctx lives. Once nothing is pending it
@@ -177,16 +183,23 @@ func (es *EventSyncer) verifyWithRetry(ctx context.Context) error {
 	}
 }
 
-// settleUnsettled re-checks unsettled blocks against receipts, oldest first, retiring those that
-// settle clean. It stops at the first block no client can serve receipts for, since the source is
-// likely still down, so polling a large backlog costs about one request. A confirmed miss returns
-// ErrResyncRequired.
+// settleUnsettled re-checks unsettled blocks against receipts, retiring those that settle clean,
+// and returns how many it retired. It resumes after the block the previous pass stopped at
+// (wrapping around) and stops once verifyUnansweredPerPass blocks got no answer, so blocks no
+// source will ever answer for (pruned receipts, say) cost a bounded number of requests per pass
+// and can't starve the rest. A confirmed miss returns ErrResyncRequired.
 func (es *EventSyncer) settleUnsettled(ctx context.Context) (settled int, err error) {
 	blocks, err := es.nodeStorage.ListUnsettledBlocks(nil)
 	if err != nil {
 		return 0, fmt.Errorf("list unsettled blocks: %w", err)
 	}
-	for _, block := range blocks {
+
+	start, _ := slices.BinarySearch(blocks, es.unsettledCursor)
+	unanswered := 0
+	for i := range blocks {
+		block := blocks[(start+i)%len(blocks)]
+		es.unsettledCursor = block + 1
+
 		recorded, err := es.recordedLogIDs(block)
 		if err != nil {
 			return settled, err
@@ -195,16 +208,18 @@ func (es *EventSyncer) settleUnsettled(ctx context.Context) (settled int, err er
 		if err != nil {
 			return settled, err
 		}
-		if !answered {
-			break
+		switch {
+		case !answered:
+			unanswered++
+			if unanswered >= es.verifyUnansweredPerPass {
+				return settled, nil
+			}
+		case clean:
+			if err := es.retireUnsettled(block); err != nil {
+				return settled, err
+			}
+			settled++
 		}
-		if !clean {
-			continue
-		}
-		if err := es.retireUnsettled(block); err != nil {
-			return settled, err
-		}
-		settled++
 	}
 	return settled, nil
 }
@@ -292,17 +307,22 @@ func (es *EventSyncer) verifyRange(ctx context.Context, r nodestorage.Unverified
 
 // settle checks a block against receipts, the index-independent source of truth, given the log
 // IDs the sync recorded for it (none if it saw no logs there). clean reports that they match;
-// answered is false when no client could serve authoritative receipts. Recorded IDs the receipts
+// answered is false when no client could serve authoritative receipts, including when the lookup
+// failed (often a client being down), so one block can't stall a pass. Recorded IDs the receipts
 // strictly contain are a confirmed miss: settle flags a resync and returns ErrResyncRequired,
 // unless the rate limit holds the repair back. Recorded IDs missing from the receipts mean the
 // receipts response is inconsistent (getLogs never invents logs), so the block stays unsettled
 // rather than triggering a wipe.
 func (es *EventSyncer) settle(ctx context.Context, block uint64, recorded []executionclient.LogID) (clean, answered bool, err error) {
 	receiptLogs, available, err := es.executionClient.BlockContractLogs(ctx, block)
-	if err != nil {
-		return false, false, fmt.Errorf("settle block %d against receipts: %w", block, err)
-	}
-	if !available {
+	switch {
+	case ctx.Err() != nil:
+		return false, false, ctx.Err()
+	case err != nil:
+		es.logger.Debug("couldn't fetch receipts to settle a block; it stays unsettled",
+			fields.BlockNumber(block), zap.Error(err))
+		return false, false, nil
+	case !available:
 		es.logger.Debug("no authoritative receipts to settle a block; it stays unsettled",
 			fields.BlockNumber(block))
 		return false, false, nil
