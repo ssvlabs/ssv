@@ -13,6 +13,10 @@ ARG TARGETARCH
 #
 FROM --platform=$BUILDPLATFORM golang:1.26.10@sha256:5c3f3f28a273c9b61698b2d34f18375929790ab1f1d3835d032d21e2b31eae0c AS base
 
+# Build with go.mod's toolchain line, as CI does, not this image's Go (official golang images set
+# GOTOOLCHAIN=local). auto never downgrades, so keep this tag in step; Renovate bumps both together.
+ENV GOTOOLCHAIN=auto
+
 # Install essential build tools
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -yq --no-install-recommends \
