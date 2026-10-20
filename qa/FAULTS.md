@@ -509,6 +509,19 @@ after its release point (a restart inside slot S) logs `hold=0s` and is sent at 
 Without a `Builders` block there is no type-9 packet and no `🧪` line at all — a broken rig, not a
 result.
 
+*Restart confound.* `make fault` restarts the node, which empties its in-memory auth cache, and its
+first tick after the resync re-emits (so holds) the auths for slots the other operators have already
+reconstructed. Those slots end with mixed produce bodies (auth on the unfaulted operators only). Judge
+the value only on slots whose emission tick, slot 15 of epoch(S) − 1, comes after both restarts.
+
+*Status: verified live 2026-10-20* on ssv-mini (`params-gloas-builder.yaml` with buildoor off, all 4 on
+`node/ssv-fault:v3-272812fa8`, the value on operators 2 and 3, Lodestar v1.49.0). On the four clean
+epoch-3 proposal slots, every oracle above held: `released` ≈ start(S) + 3.95 s, the produce at ≈ S + 0.5 s,
+the first reconstruction ≈ 20 ms after the release on all 4, `unavailable` +1 per slot on every
+operator, all 4 submitted, and no proposer or §5 `⚠️ duty failed`. The only duty failures were committee
+attestation submits that Lodestar refused with `PublishError.NoPeersSubscribedToTopic`, on the unfaulted
+operators too.
+
 ### 4.5 §6 — the proposer post-consensus packet (`postcons-*`)
 
 Site: one hook in `ProposerRunner.ProcessConsensus` (`protocol/v2/ssv/runner/proposer.go:545-555`),
