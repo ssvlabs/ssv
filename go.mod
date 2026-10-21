@@ -285,11 +285,15 @@ require (
 	olympos.io/encoding/edn v0.0.0-20201019073823-d3554ca0b0a3 // indirect
 )
 
+// Renovate is disabled for this module in .github/renovate.json; re-enable it there if this replace is removed.
 replace github.com/google/flatbuffers => github.com/google/flatbuffers v1.11.0
 
+// Renovate is disabled for this module in .github/renovate.json; re-enable it there if this replace is removed.
 replace github.com/dgraph-io/ristretto => github.com/dgraph-io/ristretto v0.1.1-0.20211108053508-297c39e6640f
 
 // SSV fork of go-eth2-client based on upstream v0.27.0 (includes Fulu support) with SSV-specific changes.
+// Renovate is disabled for both module paths in .github/renovate.json; re-enable them there if this replace is removed.
 replace github.com/attestantio/go-eth2-client => github.com/ssvlabs/go-eth2-client v0.6.31-0.20260831132123-66dd18fc8288
 
+// Renovate is disabled for own modules in .github/renovate.json; re-enable it there if this replace is removed.
 replace github.com/ssvlabs/ssv/ssvsigner => ./ssvsigner

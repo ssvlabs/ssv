@@ -120,4 +120,5 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
+// Renovate is disabled for both module paths in ../.github/renovate.json; re-enable them there if this replace is removed.
 replace github.com/attestantio/go-eth2-client => github.com/ssvlabs/go-eth2-client v0.6.31-0.20260831132123-66dd18fc8288
