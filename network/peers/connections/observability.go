@@ -12,6 +12,7 @@ import (
 )
 
 const (
+	// Pre-/v2 path on purpose: exported as the otel_scope_name metric label.
 	observabilityComponentName = "github.com/ssvlabs/ssv/network/peers/connections"
 	observabilityNamespace     = "ssv.p2p.connections"
 )

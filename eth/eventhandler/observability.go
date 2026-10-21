@@ -12,6 +12,7 @@ import (
 )
 
 const (
+	// Pre-/v2 path on purpose: exported as the otel_scope_name metric label.
 	observabilityName      = "github.com/ssvlabs/ssv/eth/eventhandler"
 	observabilityNamespace = "ssv.event_syncer.handler"
 )
