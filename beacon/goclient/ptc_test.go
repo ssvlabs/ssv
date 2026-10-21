@@ -40,7 +40,7 @@ func TestRequestPTCDuties(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	duties, err := requestPTCDuties(context.Background(), srv.Client(), srv.URL, 3, []phase0.ValidatorIndex{7, 8})
+	duties, err := requestPTCDuties(context.Background(), srv.Client(), unmaskedAddr{srv.URL}, 3, []phase0.ValidatorIndex{7, 8})
 	require.NoError(t, err)
 	require.Equal(t, http.MethodPost, gotMethod)
 	require.Equal(t, "/eth/v1/validator/duties/ptc/3", gotPath)
@@ -60,7 +60,7 @@ func TestRequestPayloadAttestationData(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	got, err := requestPayloadAttestationData(context.Background(), srv.Client(), srv.URL, 9)
+	got, err := requestPayloadAttestationData(context.Background(), srv.Client(), unmaskedAddr{srv.URL}, 9)
 	require.NoError(t, err)
 	require.Equal(t, http.MethodGet, gotMethod)
 	require.Equal(t, "/eth/v1/validator/payload_attestation_data", gotPath)
@@ -80,7 +80,7 @@ func TestRequestPayloadAttestationData_SlotMismatch(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	got, err := requestPayloadAttestationData(context.Background(), srv.Client(), srv.URL, 9)
+	got, err := requestPayloadAttestationData(context.Background(), srv.Client(), unmaskedAddr{srv.URL}, 9)
 	require.ErrorContains(t, err, "payload attestation data slot mismatch: got 10, want 9")
 	require.Nil(t, got)
 }
@@ -93,7 +93,7 @@ func TestRequestPayloadAttestationData_NoContent(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	got, err := requestPayloadAttestationData(context.Background(), srv.Client(), srv.URL, 9)
+	got, err := requestPayloadAttestationData(context.Background(), srv.Client(), unmaskedAddr{srv.URL}, 9)
 	require.NoError(t, err)
 	require.Nil(t, got)
 }
@@ -115,7 +115,7 @@ func TestSubmitPayloadAttestationMessages(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	require.NoError(t, submitPayloadAttestationMessages(context.Background(), srv.Client(), srv.URL, msgs))
+	require.NoError(t, submitPayloadAttestationMessages(context.Background(), srv.Client(), unmaskedAddr{srv.URL}, msgs))
 	require.Equal(t, http.MethodPost, gotMethod)
 	require.Equal(t, "/eth/v1/beacon/pool/payload_attestations", gotPath)
 	require.Equal(t, consensusVersionGloas, gotVersion)
@@ -130,7 +130,7 @@ func TestPTCDo_ErrorStatus(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, err := requestPayloadAttestationData(context.Background(), srv.Client(), srv.URL, 5)
+	_, err := requestPayloadAttestationData(context.Background(), srv.Client(), unmaskedAddr{srv.URL}, 5)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "503")
 }

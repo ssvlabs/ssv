@@ -119,7 +119,7 @@ func TestRequestGloasAttestationData(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	got, err := requestGloasAttestationData(context.Background(), srv.Client(), srv.URL, 9)
+	got, err := requestGloasAttestationData(context.Background(), srv.Client(), unmaskedAddr{srv.URL}, 9)
 	require.NoError(t, err)
 	require.Equal(t, http.MethodGet, gotMethod)
 	require.Equal(t, "/eth/v1/validator/attestation_data", gotPath)

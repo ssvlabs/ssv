@@ -2,10 +2,10 @@ module github.com/ssvlabs/ssv/v2
 
 go 1.26.0
 
-toolchain go1.26.8
+toolchain go1.26.10
 
 require (
-	github.com/OffchainLabs/go-bitfield v0.0.0-20251031151322-f427d04d8506
+	github.com/OffchainLabs/go-bitfield v0.0.0-20260504143531-5cbb6d0f5f2e
 	github.com/RoaringBitmap/roaring/v2 v2.10.0
 	github.com/aquasecurity/table v1.8.0
 	github.com/attestantio/go-eth2-client v0.27.0
@@ -54,10 +54,10 @@ require (
 	go.uber.org/mock v0.6.0
 	go.uber.org/multierr v1.11.0
 	go.uber.org/zap v1.28.0
-	golang.org/x/exp v0.0.0-20260718201538-764159d718ef
-	golang.org/x/mod v0.40.0
-	golang.org/x/sync v0.22.0
-	golang.org/x/text v0.41.0
+	golang.org/x/exp v0.0.0-20261014143641-f0251eb4aa3e
+	golang.org/x/mod v0.42.0
+	golang.org/x/sync v0.24.0
+	golang.org/x/text v0.43.0
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 	gopkg.in/yaml.v3 v3.0.1
 	tailscale.com v1.72.0
@@ -115,7 +115,7 @@ require (
 	go.opentelemetry.io/otel/log v0.21.0 // indirect
 	go.opentelemetry.io/otel/sdk/log v0.21.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.11.0 // indirect
-	golang.org/x/telemetry v0.0.0-20260811182544-a038080d80e5 // indirect
+	golang.org/x/telemetry v0.0.0-20261009151841-97e8ea77aa2a // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260803160001-6ac0973c030d // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260803160001-6ac0973c030d // indirect
 	google.golang.org/grpc v1.83.2 // indirect
@@ -270,12 +270,12 @@ require (
 	go.opentelemetry.io/otel/trace v1.45.0
 	go.uber.org/dig v1.19.0 // indirect
 	go.uber.org/fx v1.24.0 // indirect
-	golang.org/x/crypto v0.56.0 // indirect
-	golang.org/x/net v0.58.0 // indirect
-	golang.org/x/sys v0.47.0 // indirect
-	golang.org/x/term v0.45.0 // indirect
+	golang.org/x/crypto v0.58.0 // indirect
+	golang.org/x/net v0.61.0 // indirect
+	golang.org/x/sys v0.49.0 // indirect
+	golang.org/x/term v0.47.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
-	golang.org/x/tools v0.49.0 // indirect
+	golang.org/x/tools v0.52.0 // indirect
 	golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da // indirect
 	gonum.org/v1/gonum v0.17.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
@@ -285,13 +285,17 @@ require (
 	olympos.io/encoding/edn v0.0.0-20201019073823-d3554ca0b0a3 // indirect
 )
 
+// Renovate is disabled for this module in .github/renovate.json; re-enable it there if this replace is removed.
 replace github.com/google/flatbuffers => github.com/google/flatbuffers v1.11.0
 
+// Renovate is disabled for this module in .github/renovate.json; re-enable it there if this replace is removed.
 replace github.com/dgraph-io/ristretto => github.com/dgraph-io/ristretto v0.1.1-0.20211108053508-297c39e6640f
 
 // SSV fork of go-eth2-client based on upstream v0.27.0 (includes Fulu support) with SSV-specific changes.
+// Renovate is disabled for both module paths in .github/renovate.json; re-enable them there if this replace is removed.
 replace github.com/attestantio/go-eth2-client => github.com/ssvlabs/go-eth2-client v0.6.31-0.20260831132123-66dd18fc8288
 
+// Renovate is disabled for own modules in .github/renovate.json; re-enable it there if this replace is removed.
 replace github.com/ssvlabs/ssv/ssvsigner => ./ssvsigner
 
 // v2.0.0 through v2.5.0 were tagged while go.mod still declared github.com/ssvlabs/ssv,

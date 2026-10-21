@@ -32,7 +32,7 @@ func TestSubmitBuilderPreferences(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	require.NoError(t, submitBuilderPreferences(context.Background(), srv.Client(), srv.URL, prefs))
+	require.NoError(t, submitBuilderPreferences(context.Background(), srv.Client(), unmaskedAddr{srv.URL}, prefs))
 	require.Equal(t, http.MethodPost, gotMethod)
 	require.Equal(t, "/eth/v1/validator/builder_preferences", gotPath)
 	require.Equal(t, consensusVersionGloas, gotVersion)
@@ -51,7 +51,7 @@ func TestSubmitBuilderPreferencesMissingRoute(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	err := submitBuilderPreferences(context.Background(), srv.Client(), srv.URL, nil)
+	err := submitBuilderPreferences(context.Background(), srv.Client(), unmaskedAddr{srv.URL}, nil)
 	require.ErrorContains(t, err, "beacon node lacks the gloas builder_preferences endpoint")
 	require.ErrorContains(t, err, "status 404")
 }

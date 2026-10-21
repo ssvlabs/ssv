@@ -1,20 +1,100 @@
 {
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
     "github>ssvlabs/shared-configs//renovate/renovate.json"
   ],
-  "baseBranches": ["stage"],
+  "baseBranchPatterns": ["stage"],
+  "schedule": ["before 6am on monday"],
+  "prConcurrentLimit": 5,
+  "vulnerabilityAlerts": {
+    "addLabels": ["security"]
+  },
   "packageRules": [
     {
       "matchManagers": ["gomod"],
-      "postUpdateOptions": [
-        "gomodTidy",
-        "gomodUpdateImportPaths"
-      ]
+      "postUpdateOptions": ["gomodTidy", "gomodUpdateImportPaths"]
     },
     {
-      "description": "ssvsigner is a module in this repo; root go.mod pins it to the commit matching its tree, which Renovate's default-branch digest would undo",
-      "matchPackageNames": ["github.com/ssvlabs/ssv/ssvsigner"],
+      "description": "Own modules are wired via replace directives, so version bumps are no-ops. Consumers of /v2 ignore the replace, so the ssvsigner pin is kept in sync by hand (scripts/ssvsigner_pin.sh)",
+      "matchPackageNames": ["github.com/ssvlabs/ssv", "github.com/ssvlabs/ssv/**"],
       "enabled": false
+    },
+    {
+      "description": "ssv-spec is pinned to feature branches on purpose and bumped manually",
+      "matchPackageNames": ["github.com/ssvlabs/ssv-spec"],
+      "enabled": false
+    },
+    {
+      "description": "go-bitfield (now github.com/OffchainLabs); bump together with the go-eth2-client fork",
+      "matchPackageNames": ["github.com/OffchainLabs/go-bitfield"],
+      "enabled": false
+    },
+    {
+      "description": "Held by replace directives in go.mod, so a require bump is a no-op and a replace bump breaks the pin; bump by hand",
+      "matchPackageNames": [
+        "github.com/google/flatbuffers",
+        "github.com/dgraph-io/ristretto",
+        "github.com/attestantio/go-eth2-client",
+        "github.com/ssvlabs/go-eth2-client"
+      ],
+      "enabled": false
+    },
+    {
+      "description": "gddo is archived; to be removed rather than bumped",
+      "matchPackageNames": ["github.com/golang/gddo"],
+      "enabled": false
+    },
+    {
+      "description": "prysm moved to github.com/OffchainLabs/prysm, so a major bump under the old module path can't resolve; migrate by hand",
+      "matchPackageNames": ["github.com/prysmaticlabs/prysm/**"],
+      "matchUpdateTypes": ["major"],
+      "enabled": false
+    },
+    {
+      "matchManagers": ["gomod"],
+      "matchUpdateTypes": ["minor", "patch", "digest"],
+      "groupName": "go modules (non-major)"
+    },
+    {
+      "description": "Wide surface (eth, discovery, p2p); keep separate so it can be soaked alone",
+      "matchPackageNames": ["github.com/ethereum/go-ethereum"],
+      "groupName": "go-ethereum"
+    },
+    {
+      "description": "Signing and slashing protection; keep separate so it can be reviewed alone",
+      "matchPackageNames": ["github.com/ssvlabs/eth2-key-manager"],
+      "groupName": "eth2-key-manager"
+    },
+    {
+      "matchPackageNames": ["github.com/libp2p/**", "github.com/multiformats/**", "github.com/quic-go/**"],
+      "groupName": "libp2p stack"
+    },
+    {
+      "matchManagers": ["github-actions"],
+      "groupName": "github actions"
+    },
+    {
+      "description": "Base-image refreshes only; Go version bumps are in the go toolchain group below",
+      "matchManagers": ["dockerfile"],
+      "matchUpdateTypes": ["patch", "digest", "pinDigest"],
+      "groupName": "docker base images"
+    },
+    {
+      "description": "Raise Go patch releases separately from a pending minor; read during lookup, so it can't sit in a rule with matchUpdateTypes",
+      "matchPackageNames": ["go", "golang"],
+      "separateMinorPatch": true
+    },
+    {
+      "description": "Bump go.mod's toolchain line (what CI and releases build with) and the golang images together; version updates only, as a pending minor would drop digest refreshes from a shared branch",
+      "matchPackageNames": ["go", "golang"],
+      "matchUpdateTypes": ["major", "minor", "patch"],
+      "groupName": "go toolchain",
+      "prPriority": 10
+    },
+    {
+      "description": "differ UI is a dev-only tool, not shipped",
+      "matchFileNames": ["scripts/differ/ui/**"],
+      "groupName": "differ ui (npm)"
     }
   ]
 }

@@ -13,10 +13,10 @@ module github.com/ssvlabs/ssv/ssvsigner
 
 go 1.26.0
 
-toolchain go1.26.8
+toolchain go1.26.10
 
 require (
-	github.com/OffchainLabs/go-bitfield v0.0.0-20251031151322-f427d04d8506
+	github.com/OffchainLabs/go-bitfield v0.0.0-20260504143531-5cbb6d0f5f2e
 	github.com/alecthomas/kong v1.8.1
 	github.com/attestantio/go-eth2-client v0.27.0
 	github.com/carlmjohnson/requests v0.24.3
@@ -120,4 +120,5 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
+// Renovate is disabled for both module paths in ../.github/renovate.json; re-enable them there if this replace is removed.
 replace github.com/attestantio/go-eth2-client => github.com/ssvlabs/go-eth2-client v0.6.31-0.20260831132123-66dd18fc8288
