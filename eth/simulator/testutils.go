@@ -15,7 +15,7 @@
 // along with the go-ethereum library. If not, see <http://www.gnu.org/licenses/>.
 
 // Copy of go-ethereum's ethclient/simulated/backend.go, last synced with v1.17.8.
-// On each go-ethereum bump, diff it against upstream. Deliberate differences:
+// On each go-ethereum bump, sync it with upstream, keeping these deliberate differences:
 //   - Node() is added, so tests can reach the node (e.g. its RPC handler).
 //   - Rollback, Fork and AdjustTime are dropped as unused.
 

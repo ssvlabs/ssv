@@ -15,6 +15,7 @@ require (
 	github.com/cockroachdb/pebble v1.1.5
 	github.com/dgraph-io/badger/v4 v4.2.0
 	github.com/dgraph-io/ristretto v0.1.1
+	// eth/simulator/testutils.go is a copy of ethclient/simulated/backend.go: sync it on each bump.
 	github.com/ethereum/go-ethereum v1.17.8
 	github.com/ferranbt/fastssz v1.0.0
 	github.com/go-chi/chi/v5 v5.3.2
