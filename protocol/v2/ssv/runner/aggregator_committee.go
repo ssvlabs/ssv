@@ -638,7 +638,7 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(
 	}
 
 	// Else, if some aggregators or contributors were selected (even with an error for others), proceed to consensus
-	if err := consensusData.Validate(); err != nil {
+	if err := ssvtypes.ValidateAggregatorCommitteeConsensusData(consensusData); err != nil {
 		// Not markDutyFailed: this pre-consensus window is re-entrant until consensus starts
 		// (guarded by HasStartedConsensus). basePreConsensusMsgProcessing reports a new quorum
 		// per root, not once per duty, and a Validate error is non-retryable so the committee
@@ -714,7 +714,7 @@ func (r *AggregatorCommitteeRunner) ProcessConsensus(
 
 	consensusData := decidedValue.(*spectypes.AggregatorCommitteeConsensusData)
 
-	aggProofs, err := consensusData.GetAggregateAndProofs()
+	aggProofs, err := ssvtypes.GetAggregateAndProofs(consensusData)
 	if err != nil {
 		return fmt.Errorf("failed to get aggregate and proofs: %w", err)
 	}
@@ -737,7 +737,7 @@ func (r *AggregatorCommitteeRunner) ProcessConsensus(
 		}
 
 		// Sign the aggregate and proof
-		hashRoot, err := spectypes.GetAggregateAndProofHashRoot(aggProof)
+		hashRoot, err := ssvtypes.GetAggregateAndProofHashRoot(aggProof)
 		if err != nil {
 			return fmt.Errorf("failed to get aggregate and proof hash root: %w", err)
 		}
@@ -1422,7 +1422,7 @@ func (r *AggregatorCommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(
 
 	epoch := r.NetworkConfig.EstimatedEpochAtSlot(r.State.CurrentDuty.DutySlot())
 
-	aggregateAndProofs, err := consensusData.GetAggregateAndProofs()
+	aggregateAndProofs, err := ssvtypes.GetAggregateAndProofs(consensusData)
 	if err != nil {
 		return nil, nil, nil,
 			fmt.Errorf("could not get aggregate and proofs: %w", err)
@@ -1430,7 +1430,7 @@ func (r *AggregatorCommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(
 
 	for i, aggregateAndProof := range aggregateAndProofs {
 		validatorIndex := consensusData.Aggregators[i].ValidatorIndex
-		hashRoot, err := spectypes.GetAggregateAndProofHashRoot(aggregateAndProof)
+		hashRoot, err := ssvtypes.GetAggregateAndProofHashRoot(aggregateAndProof)
 		if err != nil {
 			// This runs on already-decided data, so a failure here is not a per-validator "no duty"
 			// condition — it is a malformed object or (for DomainData) a transient beacon error that

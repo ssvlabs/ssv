@@ -17,10 +17,10 @@ import (
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ssvlabs/ssv/observability/log"
+	"github.com/ssvlabs/ssv/protocol/v2/types/ssvtestingutils"
 	"github.com/ssvlabs/ssv/utils/hashmap"
 )
 
@@ -37,7 +37,7 @@ const (
 
 // getTestRANDAO returns a test RANDAO reveal for testing purposes
 func getTestRANDAO() []byte {
-	testBlock := spectestingutils.TestingBeaconBlockV(spec.DataVersionElectra)
+	testBlock := ssvtestingutils.TestingBeaconBlockV(spec.DataVersionElectra)
 	return testBlock.Electra.Block.Body.RANDAOReveal[:]
 }
 
@@ -132,7 +132,7 @@ func createProposalBeaconServer(t *testing.T, options beaconProposalServerOption
 func createProposalResponseSafe(slot phase0.Slot, feeRecipient bellatrix.ExecutionAddress, blinded bool) []byte {
 	if blinded {
 		// Get a blinded block from ssv-spec testing utilities
-		versionedBlinded := spectestingutils.TestingBlindedBeaconBlockV(spec.DataVersionElectra)
+		versionedBlinded := ssvtestingutils.TestingBlindedBeaconBlockV(spec.DataVersionElectra)
 		block := versionedBlinded.ElectraBlinded
 
 		// Modify the fields we need for our test
@@ -148,7 +148,7 @@ func createProposalResponseSafe(slot phase0.Slot, feeRecipient bellatrix.Executi
 	}
 
 	// Get a regular block from ssv-spec testing utilities
-	versioned := spectestingutils.TestingBeaconBlockV(spec.DataVersionElectra)
+	versioned := ssvtestingutils.TestingBeaconBlockV(spec.DataVersionElectra)
 	blockContents := versioned.Electra
 
 	// Modify the fields we need for our test

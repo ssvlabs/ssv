@@ -140,7 +140,7 @@ func (mv *messageValidator) validRoleUnion(roleType spectypes.RunnerRole) bool {
 	switch roleType {
 	case spectypes.RoleCommittee,
 		spectypes.RoleProposer,
-		spectypes.RoleValidatorRegistration,
+		ssvtypes.RoleValidatorRegistration,
 		spectypes.RoleVoluntaryExit,
 		spectypes.RoleAggregatorCommittee,
 		ssvtypes.RoleAggregator,
@@ -159,7 +159,7 @@ func (mv *messageValidator) validRoleAtSlot(roleType spectypes.RunnerRole, slot 
 	switch roleType {
 	case spectypes.RoleCommittee, spectypes.RoleProposer, spectypes.RoleVoluntaryExit:
 		return true
-	case spectypes.RoleValidatorRegistration:
+	case ssvtypes.RoleValidatorRegistration:
 		// Deprecated at the Gloas fork — superseded by proposer preferences (§5). Pre-Gloas unchanged.
 		return !isInGloas
 	case spectypes.RoleAggregatorCommittee:

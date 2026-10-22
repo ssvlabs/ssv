@@ -73,7 +73,7 @@ func (mv *messageValidator) messageLateness(slot phase0.Slot, role spectypes.Run
 		ttl = 1 + LateSlotAllowance
 	case spectypes.RoleCommittee, spectypes.RoleAggregatorCommittee, ssvtypes.RoleAggregator:
 		ttl = mv.maxStoredSlots()
-	case spectypes.RoleValidatorRegistration, spectypes.RoleVoluntaryExit:
+	case ssvtypes.RoleValidatorRegistration, spectypes.RoleVoluntaryExit:
 		// Deliberately exempt from the lateness bound: these duties aren't tied to a slot
 		// deadline, so only the early-message check and per-epoch duty limits apply.
 		return 0
@@ -120,7 +120,7 @@ func (mv *messageValidator) validateDutyCount(
 	// - else, accept
 	if dutyCount > dutyLimit {
 		e := ErrTooManyDutiesPerEpoch
-		e.got = fmt.Sprintf("%v (role %v)", dutyCount, msgID.GetRoleType())
+		e.got = fmt.Sprintf("%v (role %v)", dutyCount, ssvtypes.RunnerRoleToString(msgID.GetRoleType()))
 		e.want = fmt.Sprintf("<=%v", dutyLimit)
 		return e
 	}
@@ -136,7 +136,7 @@ func (mv *messageValidator) dutyLimit(msgID spectypes.MessageID, slot phase0.Slo
 
 		return mv.dutyStore.VoluntaryExit.GetDutyCount(slot, pk), true
 
-	case ssvtypes.RoleAggregator, spectypes.RoleValidatorRegistration, spectypes.RolePTCAttester:
+	case ssvtypes.RoleAggregator, ssvtypes.RoleValidatorRegistration, spectypes.RolePTCAttester:
 		// 2 = one duty per epoch plus a reorg margin. A PTC member is drawn from a beacon committee, and a
 		// validator sits on exactly one beacon committee per epoch, so it signs at most one payload
 		// attestation per epoch — the same bound as aggregation and validator registration.

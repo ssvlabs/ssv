@@ -674,7 +674,7 @@ func TestCutOffRoundFor(t *testing.T) {
 		{name: "aggregator keeps the cluster-wide cutoff", role: ssvtypes.RoleAggregator, wantMaxRound: 12, wantCapped: true, wantCutOff: CutOffRound},
 		{name: "proposer gives up right after its cap", role: spectypes.RoleProposer, wantMaxRound: 2, wantCapped: true, wantCutOff: 3},
 		{name: "sync committee contribution gives up right after its cap", role: ssvtypes.RoleSyncCommitteeContribution, wantMaxRound: 6, wantCapped: true, wantCutOff: 7},
-		{name: "role without consensus keeps the cluster-wide cutoff", role: spectypes.RoleValidatorRegistration, wantCapped: false, wantCutOff: CutOffRound},
+		{name: "role without consensus keeps the cluster-wide cutoff", role: ssvtypes.RoleValidatorRegistration, wantCapped: false, wantCutOff: CutOffRound},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -738,7 +738,7 @@ func TestDefaultQuickTimeoutForRole(t *testing.T) {
 		ssvtypes.RoleAggregator,
 		ssvtypes.RoleSyncCommitteeContribution,
 		spectypes.RoleAggregatorCommittee,
-		spectypes.RoleValidatorRegistration,
+		ssvtypes.RoleValidatorRegistration,
 		spectypes.RoleVoluntaryExit,
 		spectypes.RolePTCAttester,
 		spectypes.RoleProposerPreferences,

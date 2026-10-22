@@ -107,7 +107,7 @@ func (mv *messageValidator) validateConsensusMessageSemantics(
 	// Rule: If role is invalid
 	if !mv.validRoleAtSlot(role, slot) {
 		e := ErrInvalidRole
-		e.got = fmt.Sprintf("%v (%d) @ slot %v", role, role, slot)
+		e.got = fmt.Sprintf("%v (%d) @ slot %v", ssvtypes.RunnerRoleToString(role), role, slot)
 		return e
 	}
 
@@ -161,7 +161,7 @@ func (mv *messageValidator) validateConsensusMessageSemantics(
 
 	// Rule: Duty role has consensus (true except for ValidatorRegistration, VoluntaryExit, PTC
 	// attestation, and proposer preferences)
-	if role == spectypes.RoleValidatorRegistration || role == spectypes.RoleVoluntaryExit ||
+	if role == ssvtypes.RoleValidatorRegistration || role == spectypes.RoleVoluntaryExit ||
 		role == spectypes.RolePTCAttester || role == spectypes.RoleProposerPreferences {
 		e := ErrUnexpectedConsensusMessage
 		e.got = role

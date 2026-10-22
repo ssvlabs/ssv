@@ -452,7 +452,7 @@ func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logge
 		// operator's own produced envelope, the payload and blobs go now rather than at the next proposal.
 		r.matchProducedEnvelope(logger, proposalData)
 	} else {
-		versionedBlock, signingRoot, err := cd.GetBlockData()
+		versionedBlock, signingRoot, err := ssvtypes.PreGloasBlockData(cd)
 		if err != nil {
 			return fmt.Errorf("could not get block data from consensus data: %w", err)
 		}
@@ -578,7 +578,7 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 	// Other operators will keep submitting the blinded variant.
 	// TODO: should we send the block at all if we're not the leader? It's probably not effective but
 	//		I left it for now to keep backwards compatibility.
-	vBlk, _, err := validatorConsensusData.GetBlockData()
+	vBlk, _, err := ssvtypes.PreGloasBlockData(validatorConsensusData)
 	if err != nil {
 		return fmt.Errorf("could not get block data from consensus data: %w", err)
 	}
@@ -981,7 +981,7 @@ func (r *ProposerRunner) expectedPostConsensusRootsAndDomains(context.Context) (
 		return gloasPostConsensusRoots(proposalData)
 	}
 
-	_, root, err := validatorConsensusData.GetBlockData()
+	_, root, err := ssvtypes.PreGloasBlockData(validatorConsensusData)
 	if err != nil {
 		return nil, fmt.Errorf("could not get block data: %w", err)
 	}

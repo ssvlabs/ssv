@@ -11,6 +11,7 @@ import (
 
 	qbftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/networkconfig"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 // Message represents an exporter message
@@ -49,7 +50,7 @@ func NewParticipantsAPIMsg(netCfg *networkconfig.Network, msg qbftstorage.Partic
 			PublicKey: hex.EncodeToString(msg.PubKey[:]),
 			From:      uint64(msg.Slot),
 			To:        uint64(msg.Slot),
-			Role:      msg.Role.String(),
+			Role:      ssvtypes.BeaconRoleToString(msg.Role),
 		},
 		Data: data,
 	}
@@ -72,7 +73,7 @@ func ParticipantsAPIData(netCfg *networkconfig.Network, msgs ...qbftstorage.Part
 			Slot:        msg.Slot,
 			Identifier:  msgID[:],
 			ValidatorPK: hex.EncodeToString(msg.PubKey[:]),
-			Role:        msg.Role.String(),
+			Role:        ssvtypes.BeaconRoleToString(msg.Role),
 			Message: specqbft.Message{
 				MsgType:    specqbft.CommitMsgType,
 				Height:     specqbft.Height(msg.Slot),

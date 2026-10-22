@@ -21,6 +21,7 @@ import (
 	"github.com/ssvlabs/ssv-spec/types/testingutils"
 
 	"github.com/ssvlabs/ssv/ssvsigner"
+	"github.com/ssvlabs/ssv/ssvsigner/internal/ssvtestingutils"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 )
 
@@ -148,7 +149,7 @@ func TestSignBeaconObject(t *testing.T) {
 	highestProposal := currentSlot + minSPProposalSlotGap + 1
 
 	t.Run("Sign Deneb block", func(t *testing.T) {
-		beaconBlock := testingutils.TestingBlockContentsDeneb.Block
+		beaconBlock := ssvtestingutils.TestingBlockContentsDeneb.Block
 		beaconBlock.Slot = highestProposal
 
 		_, sig, err := km.(*LocalKeyManager).SignBeaconObject(
@@ -179,7 +180,7 @@ func TestSignBeaconObject(t *testing.T) {
 		require.NotEqual(t, [32]byte{}, sig)
 	})
 	t.Run("DomainAggregateAndProof", func(t *testing.T) {
-		aggregateAndProof := testingutils.TestingPhase0AggregateAndProof(testingutils.TestingValidatorIndex)
+		aggregateAndProof := ssvtestingutils.TestingPhase0AggregateAndProof(testingutils.TestingValidatorIndex)
 
 		_, sig, err := km.(*LocalKeyManager).SignBeaconObject(
 			ctx,

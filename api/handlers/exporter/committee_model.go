@@ -11,6 +11,7 @@ import (
 	exportercore "github.com/ssvlabs/ssv/exporter"
 	"github.com/ssvlabs/ssv/exporter/traces"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 type CommitteeIDLengthError struct {
@@ -153,7 +154,7 @@ func toCommitteeSchedule(entries []exportercore.CommitteeScheduleEntry) []Commit
 			for _, idx := range idxs {
 				indices = append(indices, uint64(idx))
 			}
-			roles[role.String()] = indices
+			roles[ssvtypes.BeaconRoleToString(role)] = indices
 		}
 		out = append(out, CommitteeSchedule{
 			Slot:        uint64(e.Slot),

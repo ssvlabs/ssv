@@ -502,9 +502,10 @@ func (c *Collector) processPartialSigCommittee(
 	}
 }
 
-// decodeCommitteeVote decodes committee FullData as the common BeaconVote plus, on Gloas slots, the
-// carried attestation index (nil before Gloas) — the duty tracer's mirror of the runner's fork-aware
-// decode, so the signing roots it derives match what operators actually signed.
+// decodeCommitteeVote decodes committee FullData as a BeaconVote holding the fields both forks' votes
+// share (its AttestationDataIndex is always zero) plus, on Gloas slots, the carried attestation index (nil
+// before Gloas) — the duty tracer's mirror of the runner's fork-aware decode, so the signing roots it
+// derives match what operators actually signed.
 func (c *Collector) decodeCommitteeVote(slot phase0.Slot, in []byte) (*spectypes.BeaconVote, *phase0.CommitteeIndex, error) {
 	if c.beacon.IsGloasAtSlot(slot) {
 		gv := &gloas.GloasBeaconVote{}
@@ -514,11 +515,11 @@ func (c *Collector) decodeCommitteeVote(slot phase0.Slot, in []byte) (*spectypes
 		index := gv.AttestationDataIndex
 		return &spectypes.BeaconVote{BlockRoot: gv.BlockRoot, Source: gv.Source, Target: gv.Target}, &index, nil
 	}
-	bv := new(spectypes.BeaconVote)
-	if err := bv.Decode(in); err != nil {
+	pv := new(ssvtypes.PreGloasBeaconVote)
+	if err := pv.Decode(in); err != nil {
 		return nil, nil, fmt.Errorf("decode beacon vote: %w", err)
 	}
-	return bv, nil, nil
+	return &spectypes.BeaconVote{BlockRoot: pv.BlockRoot, Source: pv.Source, Target: pv.Target}, nil, nil
 }
 
 func (c *Collector) getSyncCommitteeRoot(ctx context.Context, slot phase0.Slot, blockRoot phase0.Root) (phase0.Root, error) {
@@ -613,7 +614,7 @@ func (c *Collector) computeAggregatorCommitteePostConsensusRoles(
 	epoch := c.beacon.EstimatedEpochAtSlot(slot)
 	roleByRoot := make(map[phase0.Root]spectypes.BeaconRole)
 
-	aggregateAndProofs, err := data.GetAggregateAndProofs()
+	aggregateAndProofs, err := ssvtypes.GetAggregateAndProofs(data)
 	if err != nil {
 		return nil, fmt.Errorf("get aggregate and proofs: %w", err)
 	}
@@ -623,7 +624,7 @@ func (c *Collector) computeAggregatorCommitteePostConsensusRoles(
 		return nil, fmt.Errorf("get aggregate and proof domain data: %w", err)
 	}
 	for _, aggAndProof := range aggregateAndProofs {
-		hashRoot, err := spectypes.GetAggregateAndProofHashRoot(aggAndProof)
+		hashRoot, err := ssvtypes.GetAggregateAndProofHashRoot(aggAndProof)
 		if err != nil {
 			c.logger.Warn("failed to get aggregate-and-proof hash root",
 				zap.Error(err),
@@ -1155,8 +1156,8 @@ func toBNRole(r spectypes.RunnerRole) (bnRole spectypes.BeaconRole, err error) {
 		bnRole = spectypes.BNRoleAggregator
 	case ssvtypes.RoleSyncCommitteeContribution:
 		bnRole = spectypes.BNRoleSyncCommitteeContribution
-	case spectypes.RoleValidatorRegistration:
-		bnRole = spectypes.BNRoleValidatorRegistration
+	case ssvtypes.RoleValidatorRegistration:
+		bnRole = ssvtypes.BNRoleValidatorRegistration
 	case spectypes.RoleVoluntaryExit:
 		bnRole = spectypes.BNRoleVoluntaryExit
 	default:

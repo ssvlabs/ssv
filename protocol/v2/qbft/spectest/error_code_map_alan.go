@@ -2,7 +2,11 @@
 
 package qbft
 
-import spectypes "github.com/ssvlabs/ssv-spec/types"
+import (
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+)
 
 // maxShiftableLegacyErrorCode is the highest v1.2.2 error code eligible for the -2 shift below.
 // spectypes.TimeoutInstanceErrorCode is the last error code that existed in the spec before the
@@ -16,7 +20,7 @@ func adjustExpectedErrorCode(code int) int {
 	// members after code 9, so most legacy codes shift down by 2.
 	switch code {
 	case 10:
-		return spectypes.ValidatorRegistrationNoConsensusPhaseErrorCode
+		return ssvtypes.ValidatorRegistrationNoConsensusPhaseErrorCode
 	case 11:
 		return spectypes.ValidatorExitNoConsensusPhaseErrorCode
 	}

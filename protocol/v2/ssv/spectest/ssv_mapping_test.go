@@ -68,8 +68,9 @@ type runnable struct {
 }
 
 // gloasSpecRunnerSkipReason documents why the Gloas runner/committee spec vectors are skipped
-// here for now. The ssv-spec epbs-gloas-types head added spec-side Gloas runners with spec tests,
-// plus Gloas-era variants of the shared runner/committee vectors. Neither class is runnable yet:
+// here for now. The ssv-spec reference is Gloas-only: besides its Gloas runners' vectors, every
+// shared runner/committee vector is Gloas-era, whatever its slot (see specGloasForkEpoch).
+// Neither class is runnable yet:
 //   - the new Gloas runner roles — the node's implementations deliberately differ in internals
 //     (multi-slot preferences dispatcher, abstaining PTC attester);
 //   - Gloas-era variants of pre-existing vectors — their post-state roots embed the network
@@ -83,7 +84,8 @@ const gloasSpecRunnerSkipReason = "spec-side Gloas runner tests not yet mapped o
 
 // isUnmappedGloasRunnerTest reports whether the raw (untyped) runner spec test is one the mapping
 // harness cannot run yet — see gloasSpecRunnerSkipReason: a Gloas runner role outright, or a
-// Gloas-era variant of a shared vector.
+// Gloas-era variant of a shared vector. A voluntary exit maps at any fork: its runner has no
+// fork-dependent value.
 func isUnmappedGloasRunnerTest(m map[string]any) bool {
 	runnerMap, ok := m["Runner"].(map[string]any)
 	if !ok {
@@ -100,6 +102,8 @@ func isUnmappedGloasRunnerTest(m map[string]any) bool {
 	switch spectypes.RunnerRole(role) {
 	case spectypes.RolePTCAttester, spectypes.RoleProposerPreferences:
 		return true
+	case spectypes.RoleVoluntaryExit:
+		return false
 	default: // every other role: unmapped only when the vector is Gloas-era (below)
 	}
 	duty, err := decodeDutyFromMap(m)
@@ -238,6 +242,13 @@ func prepareTest(t *testing.T, logger *zap.Logger, name string, test any) *runna
 		require.NoError(t, err)
 		typedTest := &synccommitteeaggregator.SyncCommitteeAggregatorProofSpecTest{}
 		require.NoError(t, json.Unmarshal(byts, &typedTest))
+		// The test runs the spec's sync committee contribution duty — see gloasSpecRunnerSkipReason.
+		if gloasTestBeaconConfig().IsGloasAtSlot(spectestingutils.TestingSyncCommitteeContributionDuty.DutySlot()) {
+			return &runnable{
+				name: typedTest.TestName(),
+				test: func(t *testing.T) { t.Skip(gloasSpecRunnerSkipReason) },
+			}
+		}
 
 		return &runnable{
 			name: typedTest.TestName(),

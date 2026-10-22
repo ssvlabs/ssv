@@ -23,6 +23,7 @@ import (
 	"github.com/ssvlabs/ssv/observability/log/fields/stringer"
 	"github.com/ssvlabs/ssv/observability/utils"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/utils/format"
 )
 
@@ -170,7 +171,7 @@ func QBFTRound(round specqbft.Round) zap.Field {
 }
 
 func BeaconRole(val spectypes.BeaconRole) zap.Field {
-	return zap.Stringer(FieldBeaconRole, val)
+	return zap.String(FieldBeaconRole, ssvtypes.BeaconRoleToString(val))
 }
 
 func RunnerRole(val spectypes.RunnerRole) zap.Field {

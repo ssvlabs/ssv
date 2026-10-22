@@ -21,7 +21,6 @@ import (
 
 	"go.uber.org/zap"
 
-	specssv "github.com/ssvlabs/ssv-spec/ssv"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
@@ -226,8 +225,8 @@ func (r *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Logg
 	committeeDuty, dutyErr := r.currentCommitteeDuty()
 
 	// The decided value is a GloasBeaconVote (which carries the attestation index) on Gloas slots, a
-	// plain BeaconVote before; decode into the matching prototype.
-	decidedPrototype := spectypes.Encoder(&spectypes.BeaconVote{})
+	// PreGloasBeaconVote before; decode into the matching prototype.
+	decidedPrototype := spectypes.Encoder(&ssvtypes.PreGloasBeaconVote{})
 	if dutyErr == nil && r.NetworkConfig.IsGloasAtSlot(committeeDuty.DutySlot()) {
 		decidedPrototype = &gloas.GloasBeaconVote{}
 	}
@@ -739,7 +738,7 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 					r.doppelgangerHandler.ReportQuorum(signatureResult.validatorIndex)
 
 					att := sszObject.(*spec.VersionedAttestation)
-					att, err = specssv.VersionedAttestationWithSignature(att, signatureResult.signature)
+					att, err = ssvtypes.VersionedAttestationWithSignature(att, signatureResult.signature)
 					if err != nil {
 						terminalErr = fmt.Errorf("could not insert signature in versioned attestation")
 						continue
@@ -1040,7 +1039,7 @@ func (r *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(ctx context
 	dataVersion, _ := r.NetworkConfig.ForkAtEpoch(epoch)
 
 	// Decode into the slot's fork prototype (GloasBeaconVote carries the attestation index on Gloas).
-	decidedVote := spectypes.Encoder(&spectypes.BeaconVote{})
+	decidedVote := spectypes.Encoder(&ssvtypes.PreGloasBeaconVote{})
 	if r.NetworkConfig.IsGloas(epoch) {
 		decidedVote = &gloas.GloasBeaconVote{}
 	}
@@ -1077,7 +1076,7 @@ func (r *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(ctx context
 		case spectypes.BNRoleAttester:
 			// Attestation object
 			attestationData := constructAttestationData(beaconVote, validatorDuty, dataVersion, gloasAttestationIndex)
-			attestationResponse, err := specssv.ConstructVersionedAttestationWithoutSignature(attestationData, dataVersion, validatorDuty)
+			attestationResponse, err := ssvtypes.ConstructVersionedAttestationWithoutSignature(attestationData, dataVersion, validatorDuty)
 			if err != nil {
 				logger.Debug("failed to construct attestation", zap.Error(err))
 				constructionErr = errors.Join(constructionErr, fmt.Errorf("construct attestation (validator %d): %w", validatorDuty.ValidatorIndex, err))
@@ -1163,7 +1162,7 @@ func (r *CommitteeRunner) executeDuty(ctx context.Context, logger *zap.Logger, d
 	span.AddEvent(attestationDataFetchedEvent)
 
 	// On Gloas slots the consensus value is a GloasBeaconVote carrying the BN-supplied attestation
-	// index (SIP #94 §2); before Gloas it is a plain BeaconVote. Both implement spectypes.Encoder, so
+	// index (SIP #94 §2); before Gloas it is a PreGloasBeaconVote. Both implement spectypes.Encoder, so
 	// the QBFT plumbing is identical — only the value type and its checker differ.
 	var input spectypes.Encoder
 	if r.NetworkConfig.IsGloasAtSlot(slot) {
@@ -1185,7 +1184,7 @@ func (r *CommitteeRunner) executeDuty(ctx context.Context, logger *zap.Logger, d
 			fields.Slot(slot),
 			zap.Uint64("payload_status_index", uint64(attData.Index)))
 	} else {
-		vote := &spectypes.BeaconVote{
+		vote := &ssvtypes.PreGloasBeaconVote{
 			BlockRoot: attData.BeaconBlockRoot,
 			Source:    attData.Source,
 			Target:    attData.Target,

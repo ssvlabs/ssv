@@ -1311,7 +1311,7 @@ func setupTestValidator(t *testing.T, validatorPk spectypes.ValidatorPK, ownerAd
 		},
 
 		Queues: map[spectypes.RunnerRole]queue.Queue{
-			spectypes.RoleValidatorRegistration: queue.New(log.TestLogger(t), 1000),
+			types.RoleValidatorRegistration: queue.New(log.TestLogger(t), 1000),
 		},
 	}
 }

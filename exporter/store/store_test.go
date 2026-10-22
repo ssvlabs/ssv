@@ -13,6 +13,7 @@ import (
 	"github.com/ssvlabs/ssv/exporter/rolemask"
 	store "github.com/ssvlabs/ssv/exporter/store"
 	"github.com/ssvlabs/ssv/exporter/traces"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
@@ -147,7 +148,7 @@ func TestCommitteeRunnerRoleToPrefix(t *testing.T) {
 	})
 
 	t.Run("unsupported role returns an error", func(t *testing.T) {
-		_, err := store.CommitteeRunnerRoleToPrefix(spectypes.RoleValidatorRegistration)
+		_, err := store.CommitteeRunnerRoleToPrefix(ssvtypes.RoleValidatorRegistration)
 		require.Error(t, err)
 	})
 }
@@ -159,7 +160,7 @@ func TestSaveCommitteeDuty_UnsupportedRole(t *testing.T) {
 	defer db.Close()
 
 	s := store.New(db)
-	err = s.SaveCommitteeDuty(spectypes.RoleValidatorRegistration, makeCTrace(1, 'a'))
+	err = s.SaveCommitteeDuty(ssvtypes.RoleValidatorRegistration, makeCTrace(1, 'a'))
 	require.Error(t, err)
 }
 
@@ -170,7 +171,7 @@ func TestSaveCommitteeDuties_UnsupportedRole(t *testing.T) {
 	defer db.Close()
 
 	s := store.New(db)
-	err = s.SaveCommitteeDuties(phase0.Slot(1), spectypes.RoleValidatorRegistration, []*traces.CommitteeDutyTrace{makeCTrace(1, 'a')})
+	err = s.SaveCommitteeDuties(phase0.Slot(1), ssvtypes.RoleValidatorRegistration, []*traces.CommitteeDutyTrace{makeCTrace(1, 'a')})
 	require.Error(t, err)
 }
 
@@ -181,7 +182,7 @@ func TestGetCommitteeDuty_UnsupportedRole(t *testing.T) {
 	defer db.Close()
 
 	s := store.New(db)
-	_, err = s.GetCommitteeDuty(phase0.Slot(1), spectypes.RoleValidatorRegistration, [32]byte{'a'})
+	_, err = s.GetCommitteeDuty(phase0.Slot(1), ssvtypes.RoleValidatorRegistration, [32]byte{'a'})
 	require.Error(t, err)
 }
 
@@ -245,7 +246,7 @@ func TestGetCommitteeDuties_UnsupportedRoleReturnsError(t *testing.T) {
 	defer db.Close()
 
 	s := store.New(db)
-	_, err = s.GetCommitteeDuties(phase0.Slot(1), spectypes.RoleValidatorRegistration)
+	_, err = s.GetCommitteeDuties(phase0.Slot(1), ssvtypes.RoleValidatorRegistration)
 	require.Error(t, err)
 }
 

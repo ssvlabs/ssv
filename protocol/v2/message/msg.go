@@ -69,7 +69,7 @@ func BeaconRoleFromString(s string) (spectypes.BeaconRole, error) {
 	case roleSyncCommitteeContribution:
 		return spectypes.BNRoleSyncCommitteeContribution, nil
 	case roleValidatorRegistration:
-		return spectypes.BNRoleValidatorRegistration, nil
+		return ssvtypes.BNRoleValidatorRegistration, nil
 	case roleVoluntaryExit:
 		return spectypes.BNRoleVoluntaryExit, nil
 	default:
@@ -91,7 +91,7 @@ func RunnerRoleFromString(s string) (spectypes.RunnerRole, error) {
 	case roleSyncCommitteeContribution:
 		return ssvtypes.RoleSyncCommitteeContribution, nil
 	case roleValidatorRegistration:
-		return spectypes.RoleValidatorRegistration, nil
+		return ssvtypes.RoleValidatorRegistration, nil
 	case roleVoluntaryExit:
 		return spectypes.RoleVoluntaryExit, nil
 	case rolePTCAttester:
@@ -136,7 +136,7 @@ func RunnerRoleToString(r spectypes.RunnerRole) string {
 		return roleProposer
 	case ssvtypes.RoleSyncCommitteeContribution:
 		return roleSyncCommitteeContribution
-	case spectypes.RoleValidatorRegistration:
+	case ssvtypes.RoleValidatorRegistration:
 		return roleValidatorRegistration
 	case spectypes.RoleVoluntaryExit:
 		return roleVoluntaryExit

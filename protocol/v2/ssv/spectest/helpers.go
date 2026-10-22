@@ -42,17 +42,17 @@ func testNetworkConfig(needsAggregator bool) *networkconfig.Network {
 	return &netCfg
 }
 
-// gloasTestBeaconConfig returns TestNetwork's beacon config with the Gloas fork scheduled at the
-// spec's testing epoch, so the node's slot-keyed fork gating resolves the spec's Gloas-era vectors
-// the way the spec's VersionBySlot does (TestNetwork carries no Gloas entry — in production
-// GLOAS_FORK_EPOCH is read from the beacon node at runtime). Use it only where no state roots
-// embed the config — the valcheck wrappers and the Gloas-vector skip predicates; runner/committee
-// fixtures must keep the exact config the ssvtesting constructors build with, or the
-// config-embedding post-state roots diverge (see gloasSpecRunnerSkipReason).
+// gloasTestBeaconConfig returns TestNetwork's beacon config with the Gloas fork scheduled at
+// specGloasForkEpoch, so the node's slot-keyed fork gating resolves the spec's Gloas-era vectors
+// as Gloas (TestNetwork carries no Gloas entry — in production GLOAS_FORK_EPOCH is read from the
+// beacon node at runtime). Use it only where no state roots embed the config — the valcheck
+// wrappers and the Gloas-vector skip predicates; runner/committee fixtures must keep the exact
+// config the ssvtesting constructors build with, or the config-embedding post-state roots diverge
+// (see gloasSpecRunnerSkipReason).
 func gloasTestBeaconConfig() *networkconfig.Beacon {
 	beaconCfg := *networkconfig.TestNetwork.Beacon
 	beaconCfg.Forks = maps.Clone(beaconCfg.Forks)
-	beaconCfg.Forks[networkconfig.DataVersionGloas] = phase0.Fork{Epoch: phase0.Epoch(spectestingutils.ForkEpochGloas)}
+	beaconCfg.Forks[networkconfig.DataVersionGloas] = phase0.Fork{Epoch: specGloasForkEpoch}
 	return &beaconCfg
 }
 

@@ -168,8 +168,8 @@ github.com/ssvlabs/eth2-key-manager v1.5.7-0.20260901124029-39a18877e131 h1:qafg
 github.com/ssvlabs/eth2-key-manager v1.5.7-0.20260901124029-39a18877e131/go.mod h1:tjzhmMzrc0Lzc/OMW1h9Mz8AhmKH7FQC/nFiMNJ0bd8=
 github.com/ssvlabs/go-eth2-client v0.6.31-0.20261024112653-3b05b92b7bd2 h1:P/itIqu/3ptIjT4JwJm4LeEgXXPgeYZDJ783wC+QuH4=
 github.com/ssvlabs/go-eth2-client v0.6.31-0.20261024112653-3b05b92b7bd2/go.mod h1:IcbypY5iD/c/T5OLWVuZyWS8kM8HXkGc0ZW12uikfys=
-github.com/ssvlabs/ssv-spec v1.2.3-0.20260924161701-0c82ee096544 h1:R3IaYBAWnuyImBScok23hqUaofQAwoTiErm0jXMH+RQ=
-github.com/ssvlabs/ssv-spec v1.2.3-0.20260924161701-0c82ee096544/go.mod h1:/fb7Okhw5vhldMlMhcXePMSgyBn6uCICqp5L3RtLcLw=
+github.com/ssvlabs/ssv-spec v1.2.3-0.20261022131257-7391b4a057a3 h1:rAhPS68XcR2rmrlq9nTkfD+qcxhozsT83pbq6o1fCCk=
+github.com/ssvlabs/ssv-spec v1.2.3-0.20261022131257-7391b4a057a3/go.mod h1:21yIyz7OFz7t0w4K4EpQoFNuZc/s833F71mAyz3EhO4=
 github.com/stretchr/objx v0.5.3 h1:jmXUvGomnU1o3W/V5h2VEradbpJDwGrzugQQvL0POH4=
 github.com/stretchr/objx v0.5.3/go.mod h1:rDQraq+vQZU7Fde9LOZLr8Tax6zZvy4kuNKF+QYS+U0=
 github.com/stretchr/testify v1.12.1 h1:EuwCh5fleGS7H32xRwO3wRGT7DxrDhLAT6FF8MpWDWE=

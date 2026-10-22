@@ -21,6 +21,8 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/protocol/v2/types/ssvtestingutils"
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
@@ -110,7 +112,7 @@ func (e *aggregatorCommitteeRunnerEnv) startAndFeedThroughConsensus(t *testing.T
 	require.NoError(t, e.runner.StartNewDuty(ctx, e.logger, duty, e.sampleKey.Threshold))
 	concluded := observeDutyConclusion(e.runner.BaseRunner)
 
-	for _, msg := range spectestingutils.AggregatorCommitteeInputForDuty(duty, e.keySetMap, version) {
+	for _, msg := range ssvtestingutils.AggregatorCommitteeInputForDuty(duty, e.keySetMap, version) {
 		switch msg.SSVMessage.MsgType {
 		case spectypes.SSVConsensusMsgType:
 			if err := e.runner.ProcessConsensus(ctx, e.logger, msg); err != nil {
@@ -135,7 +137,7 @@ func TestAggregatorCommitteeRunnerProcessConsensus_NotesFailureAfterDecision(t *
 
 	env := newAggregatorCommitteeRunnerEnv(t, []int{1}, protocoltesting.NewTestingBeaconNodeWrapped())
 	env.runner.signer = failingDomainSigner{BeaconSigner: env.runner.signer, domain: spectypes.DomainAggregateAndProof}
-	duty := spectestingutils.TestingAggregatorCommitteeDutyForValidators([]int{1}, []int{}, version)
+	duty := ssvtestingutils.TestingAggregatorCommitteeDutyForValidators([]int{1}, []int{}, version)
 
 	concluded, err := env.startAndFeedThroughConsensus(t, t.Context(), duty, version)
 	require.ErrorContains(t, err, "signing failed")
@@ -147,7 +149,7 @@ func TestAggregatorCommitteeRunnerProcessConsensus_NotesFailureAfterDecision(t *
 func postConsensusMsgsFromFixture(duty *spectypes.AggregatorCommitteeDuty, ksMap map[phase0.ValidatorIndex]*spectestingutils.TestKeySet, version spec.DataVersion) []*spectypes.PartialSignatureMessages {
 	msgs := make([]*spectypes.PartialSignatureMessages, 0, 3)
 	for id := spectypes.OperatorID(1); id <= 3; id++ {
-		msgs = append(msgs, spectestingutils.PostConsensusAggregatorCommitteeMsgForDuty(duty, ksMap, id, version))
+		msgs = append(msgs, ssvtestingutils.PostConsensusAggregatorCommitteeMsgForDuty(duty, ksMap, id, version))
 	}
 	return msgs
 }
@@ -164,7 +166,7 @@ func TestAggregatorCommitteeRunnerProcessPostConsensus_MarksFailedOnSubmitError(
 	faulty := &faultyAggregateSubmitBeacon{BeaconNodeWrapped: base, submitErr: submitErr}
 
 	env := newAggregatorCommitteeRunnerEnv(t, []int{1}, faulty)
-	duty := spectestingutils.TestingAggregatorCommitteeDutyForValidators([]int{1}, []int{}, version)
+	duty := ssvtestingutils.TestingAggregatorCommitteeDutyForValidators([]int{1}, []int{}, version)
 
 	concluded, err := env.startAndFeedThroughConsensus(t, ctx, duty, version)
 	require.NoError(t, err)
@@ -191,7 +193,7 @@ func TestAggregatorCommitteeRunnerProcessPostConsensus_MarksFailedOnSubmitError(
 // TestAggregatorCommitteeRunnerProcessPostConsensus_MarksFailedOnNoBeaconObjects pins the
 // empty-objects terminal as an invariant violation, NOT a benign no-op: beaconObjects is built purely
 // from the decided value (every construction error surfaced), and a decided value with zero
-// aggregators and zero contributors is rejected by AggregatorCommitteeConsensusData.Validate() before
+// aggregators and zero contributors is rejected by ValidateAggregatorCommitteeConsensusData before
 // it can ever be stored as decided. So reaching the branch means decided-value validation was
 // bypassed or regressed — it must conclude failed (loud, via the outcome watcher's warn) while still
 // carrying the sentinel for the queue's terminal-drop handling. The test necessarily hand-installs
@@ -202,7 +204,7 @@ func TestAggregatorCommitteeRunnerProcessPostConsensus_MarksFailedOnNoBeaconObje
 
 	base := protocoltesting.NewTestingBeaconNodeWrapped().(*protocoltesting.BeaconNodeWrapped)
 	env := newAggregatorCommitteeRunnerEnv(t, []int{1}, base)
-	duty := spectestingutils.TestingAggregatorCommitteeDutyForValidators([]int{1}, []int{}, version)
+	duty := ssvtestingutils.TestingAggregatorCommitteeDutyForValidators([]int{1}, []int{}, version)
 
 	concluded, err := env.startAndFeedThroughConsensus(t, ctx, duty, version)
 	require.NoError(t, err)
@@ -242,7 +244,7 @@ func TestAggregatorCommitteeRunnerProcessPostConsensus_DoesNotMarkFailedOnInvali
 
 	base := protocoltesting.NewTestingBeaconNodeWrapped().(*protocoltesting.BeaconNodeWrapped)
 	env := newAggregatorCommitteeRunnerEnv(t, []int{1}, base)
-	duty := spectestingutils.TestingAggregatorCommitteeDutyForValidators([]int{1}, []int{}, version)
+	duty := ssvtestingutils.TestingAggregatorCommitteeDutyForValidators([]int{1}, []int{}, version)
 
 	concluded, err := env.startAndFeedThroughConsensus(t, ctx, duty, version)
 	require.NoError(t, err)
@@ -287,7 +289,7 @@ func TestAggregatorCommitteeRunnerProcessPostConsensus_RecoverableInvalidSigsThe
 	// A healthy (non-faulty) beacon node: submission on the retry round must actually succeed.
 	base := protocoltesting.NewTestingBeaconNodeWrapped().(*protocoltesting.BeaconNodeWrapped)
 	env := newAggregatorCommitteeRunnerEnv(t, []int{1}, base)
-	duty := spectestingutils.TestingAggregatorCommitteeDutyForValidators([]int{1}, []int{}, version)
+	duty := ssvtestingutils.TestingAggregatorCommitteeDutyForValidators([]int{1}, []int{}, version)
 
 	concluded, err := env.startAndFeedThroughConsensus(t, ctx, duty, version)
 	require.NoError(t, err)
@@ -298,13 +300,13 @@ func TestAggregatorCommitteeRunnerProcessPostConsensus_RecoverableInvalidSigsThe
 	// ReconstructBeaconSig fails on the garbage signature, FallBackAndVerifyEachSignature drops only
 	// signer 3, and the root falls back below quorum (2-of-4) — recoverable, nothing submitted, and
 	// the duty must NOT be concluded.
-	msg1 := spectestingutils.PostConsensusAggregatorCommitteeMsgForDuty(duty, env.keySetMap, 1, version)
+	msg1 := ssvtestingutils.PostConsensusAggregatorCommitteeMsgForDuty(duty, env.keySetMap, 1, version)
 	require.NoError(t, env.runner.ProcessPostConsensus(ctx, env.logger, msg1))
 
-	msg2 := spectestingutils.PostConsensusAggregatorCommitteeMsgForDuty(duty, env.keySetMap, 2, version)
+	msg2 := ssvtestingutils.PostConsensusAggregatorCommitteeMsgForDuty(duty, env.keySetMap, 2, version)
 	require.NoError(t, env.runner.ProcessPostConsensus(ctx, env.logger, msg2))
 
-	badMsg3 := spectestingutils.PostConsensusAggregatorCommitteeMsgForDuty(duty, env.keySetMap, 3, version)
+	badMsg3 := ssvtestingutils.PostConsensusAggregatorCommitteeMsgForDuty(duty, env.keySetMap, 3, version)
 	for _, m := range badMsg3.Messages {
 		m.PartialSignature = bytes.Repeat([]byte{0xEE}, len(m.PartialSignature))
 	}
@@ -321,7 +323,7 @@ func TestAggregatorCommitteeRunnerProcessPostConsensus_RecoverableInvalidSigsThe
 
 	// Round 2: a subsequent valid partial signature from signer 4 re-crosses quorum with three good
 	// sigs (1, 2, 4) → reconstruction succeeds → the duty submits and concludes succeeded.
-	msg4 := spectestingutils.PostConsensusAggregatorCommitteeMsgForDuty(duty, env.keySetMap, 4, version)
+	msg4 := ssvtestingutils.PostConsensusAggregatorCommitteeMsgForDuty(duty, env.keySetMap, 4, version)
 	require.NoError(t, env.runner.ProcessPostConsensus(ctx, env.logger, msg4))
 
 	require.True(t, env.runner.State.Succeeded, "a valid quorum after recovery must conclude succeeded")
@@ -342,7 +344,7 @@ func TestAggregatorCommitteeRunnerProcessPostConsensus_MarksFailedWhenNoShareToD
 
 	base := protocoltesting.NewTestingBeaconNodeWrapped().(*protocoltesting.BeaconNodeWrapped)
 	env := newAggregatorCommitteeRunnerEnv(t, []int{1}, base)
-	duty := spectestingutils.TestingAggregatorCommitteeDutyForValidators([]int{1}, []int{}, version)
+	duty := ssvtestingutils.TestingAggregatorCommitteeDutyForValidators([]int{1}, []int{}, version)
 
 	concluded, err := env.startAndFeedThroughConsensus(t, ctx, duty, version)
 	require.NoError(t, err)
@@ -371,14 +373,14 @@ func TestAggregatorCommitteeRunnerProcessPreConsensus_NoShareToDropSkipsValidato
 
 	base := protocoltesting.NewTestingBeaconNodeWrapped().(*protocoltesting.BeaconNodeWrapped)
 	env := newAggregatorCommitteeRunnerEnv(t, []int{1}, base)
-	duty := spectestingutils.TestingAggregatorCommitteeDutyForValidators([]int{1}, []int{}, version)
+	duty := ssvtestingutils.TestingAggregatorCommitteeDutyForValidators([]int{1}, []int{}, version)
 	require.NoError(t, env.runner.StartNewDuty(ctx, env.logger, duty, env.sampleKey.Threshold))
 	concluded := observeDutyConclusion(env.runner.BaseRunner)
 	env.runner.Share[1] = withUnrelatedValidatorKey(env.runner.Share[1])
 
 	core, logs := observer.New(zapcore.ErrorLevel)
 	var preConsensusErr error
-	for _, msg := range spectestingutils.AggregatorCommitteeInputForDuty(duty, env.keySetMap, version) {
+	for _, msg := range ssvtestingutils.AggregatorCommitteeInputForDuty(duty, env.keySetMap, version) {
 		psig := &spectypes.PartialSignatureMessages{}
 		if msg.SSVMessage.MsgType != spectypes.SSVPartialSignatureMsgType || psig.Decode(msg.SSVMessage.Data) != nil ||
 			psig.Type == spectypes.PostConsensusPartialSig {
@@ -416,7 +418,7 @@ func TestAggregatorCommitteeRunnerProcessPostConsensus_TerminalWinsOverConcurren
 	faulty := &faultyAggregateSubmitBeacon{BeaconNodeWrapped: base, submitErr: submitErr}
 
 	env := newAggregatorCommitteeRunnerEnv(t, []int{1, 2}, faulty)
-	duty := spectestingutils.TestingAggregatorCommitteeDutyForValidators([]int{1, 2}, []int{}, version)
+	duty := ssvtestingutils.TestingAggregatorCommitteeDutyForValidators([]int{1, 2}, []int{}, version)
 
 	concluded, err := env.startAndFeedThroughConsensus(t, ctx, duty, version)
 	require.NoError(t, err)
@@ -470,7 +472,7 @@ func TestAggregatorCommitteeRunnerProcessPostConsensus_DrainsBufferedErrCh(t *te
 		ctx := t.Context()
 		base := protocoltesting.NewTestingBeaconNodeWrapped().(*protocoltesting.BeaconNodeWrapped)
 		env := newAggregatorCommitteeRunnerEnv(t, aggValidators, base)
-		duty := spectestingutils.TestingAggregatorCommitteeDutyForValidators(aggValidators, []int{}, version)
+		duty := ssvtestingutils.TestingAggregatorCommitteeDutyForValidators(aggValidators, []int{}, version)
 
 		_, err := env.startAndFeedThroughConsensus(t, ctx, duty, version)
 		require.NoError(t, err)
@@ -499,7 +501,7 @@ func TestAggregatorCommitteeRunnerProcessPostConsensus_DrainsBufferedErrCh(t *te
 // second AssignedAggregator entry to consensusData.Aggregators for the repeat committee, while
 // AggregatorsCommitteeIndexes and AggregatedAttestations keep exactly one entry per unique committee
 // (fetched/marshaled once, not once per aggregator). This shape is otherwise only enforced by
-// consensusData.Validate() at runtime and by ssv-spec tests, not by anything in this repo.
+// ValidateAggregatorCommitteeConsensusData at runtime and by ssv-spec tests, not by anything in this repo.
 func TestAggregatorCommitteeRunnerPreConsensus_DuplicateCommitteeAggregators(t *testing.T) {
 	ctx := t.Context()
 	const version = spec.DataVersionElectra
@@ -507,13 +509,13 @@ func TestAggregatorCommitteeRunnerPreConsensus_DuplicateCommitteeAggregators(t *
 	base := protocoltesting.NewTestingBeaconNodeWrapped()
 	env := newAggregatorCommitteeRunnerEnv(t, []int{1, 2}, base)
 	// Validators 1 and 2 both selected as aggregators for the same beacon committee (TestingCommitteeIndex).
-	duty := spectestingutils.TestingAggregatorCommitteeDutyMultipleAggregators(version)
+	duty := ssvtestingutils.TestingAggregatorCommitteeDutyMultipleAggregators(version)
 
 	require.NoError(t, env.runner.StartNewDuty(ctx, env.logger, duty, env.sampleKey.Threshold))
 
 	// Feed only pre-consensus messages (skip consensus and post-consensus) so we can inspect exactly
 	// what the selectionLoop handed to decide, before any QBFT round-change activity can happen.
-	for _, msg := range spectestingutils.AggregatorCommitteeInputForDuty(duty, env.keySetMap, version) {
+	for _, msg := range ssvtestingutils.AggregatorCommitteeInputForDuty(duty, env.keySetMap, version) {
 		if msg.SSVMessage.MsgType != spectypes.SSVPartialSignatureMsgType {
 			continue
 		}
@@ -530,7 +532,7 @@ func TestAggregatorCommitteeRunnerPreConsensus_DuplicateCommitteeAggregators(t *
 	consensusData := &spectypes.AggregatorCommitteeConsensusData{}
 	require.NoError(t, consensusData.Decode(env.runner.State.RunningInstance.StartValue))
 
-	require.NoError(t, consensusData.Validate(), "the proposed consensus data must satisfy the spec-mandated shape")
+	require.NoError(t, ssvtypes.ValidateAggregatorCommitteeConsensusData(consensusData), "the proposed consensus data must satisfy the spec-mandated shape")
 
 	require.Len(t, consensusData.Aggregators, 2, "both same-committee aggregators must appear in Aggregators")
 	require.Len(t, consensusData.AggregatorsCommitteeIndexes, 1,
@@ -546,7 +548,7 @@ func TestAggregatorCommitteeRunnerPreConsensus_DuplicateCommitteeAggregators(t *
 	}
 	require.ElementsMatch(t, []phase0.ValidatorIndex{1, 2}, gotValidatorIndexes)
 
-	proofs, err := consensusData.GetAggregateAndProofs()
+	proofs, err := ssvtypes.GetAggregateAndProofs(consensusData)
 	require.NoError(t, err)
 	require.Len(t, proofs, 2, "GetAggregateAndProofs must return one proof per aggregator, even when they share a committee")
 	require.Equal(t, consensusData.Version, proofs[0].Version)

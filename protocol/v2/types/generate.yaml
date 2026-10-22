@@ -1,0 +1,6 @@
+package: .
+legacy: true
+without-dynamic-expressions: true
+types:
+  - name: PreGloasBeaconVote
+    output: pregloasbeaconvote_ssz.go

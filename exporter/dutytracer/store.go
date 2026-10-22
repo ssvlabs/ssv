@@ -124,7 +124,7 @@ func (c *Collector) GetValidatorDuty(role spectypes.BeaconRole, slot phase0.Slot
 func (c *Collector) getValidatorDutyFromDiskIndex(role spectypes.BeaconRole, slot phase0.Slot, index phase0.ValidatorIndex) (*traces.ValidatorDutyTrace, error) {
 	trace, err := c.store.GetValidatorDuty(slot, role, index)
 	if err != nil {
-		return nil, fmt.Errorf("get validator duty from disk (role=%s slot=%d index=%d): %w", role, slot, index, err)
+		return nil, fmt.Errorf("get validator duty from disk (role=%s slot=%d index=%d): %w", ssvtypes.BeaconRoleToString(role), slot, index, err)
 	}
 
 	return trace, nil

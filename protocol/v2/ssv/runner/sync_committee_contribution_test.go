@@ -17,6 +17,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/protocol/v2/types/ssvtestingutils"
 )
 
 // TestSortBySubnet pins the deterministic, cross-node canonical ordering that
@@ -102,7 +103,7 @@ func decideSyncCommitteeContributions(t *testing.T, runner *SyncCommitteeAggrega
 		DataSSZ: spectestingutils.TestingContributionsDataBytes,
 	}
 	require.NoError(t, runner.decide(ctx, logger, duty.Slot, consensusData, runner.ValCheck))
-	for _, msg := range spectestingutils.SSVDecidingMsgsV(consensusData, keySet, ssvtypes.RoleSyncCommitteeContribution) {
+	for _, msg := range ssvtestingutils.SSVDecidingMsgsV(consensusData, keySet, ssvtypes.RoleSyncCommitteeContribution) {
 		if err := runner.ProcessConsensus(ctx, logger, msg); err != nil {
 			return concluded, err
 		}

@@ -9,6 +9,7 @@ import (
 	"github.com/ssvlabs/ssv/api"
 	exportercore "github.com/ssvlabs/ssv/exporter"
 	"github.com/ssvlabs/ssv/ibft/storage"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 type PubKeyLengthError struct {
@@ -28,7 +29,7 @@ type DecidedParticipant struct {
 
 func toParticipantResponse(role spectypes.BeaconRole, entry storage.ParticipantsRangeEntry) *DecidedParticipant {
 	response := &DecidedParticipant{
-		Role:      role.String(),
+		Role:      ssvtypes.BeaconRoleToString(role),
 		Slot:      uint64(entry.Slot),
 		PublicKey: hex.EncodeToString(entry.PubKey[:]),
 	}

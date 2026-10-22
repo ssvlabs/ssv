@@ -14,6 +14,7 @@ import (
 
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/operator/slotticker"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
@@ -37,7 +38,7 @@ func New(logger *zap.Logger, db basedb.Database, prefix spectypes.BeaconRole) *P
 	return &ParticipantStorage{
 		logger:    logger,
 		prefix:    []byte{role},
-		oldPrefix: prefix.String(),
+		oldPrefix: ssvtypes.BeaconRoleToString(prefix),
 		db:        db,
 	}
 }
@@ -294,7 +295,7 @@ func (i *ParticipantStorage) get(txn basedb.ReadWriter, pk, slot []byte) ([]byte
 
 func (i *ParticipantStorage) ID() string {
 	bnr := spectypes.BeaconRole(uint64(i.prefix[0]))
-	return bnr.String()
+	return ssvtypes.BeaconRoleToString(bnr)
 }
 
 func (i *ParticipantStorage) makePrefix(slot []byte) []byte {
