@@ -15,7 +15,6 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
@@ -29,6 +28,7 @@ import (
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/protocol/v2/types/ssvtestingutils"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/utils/threshold"
@@ -917,7 +917,7 @@ func signDuties(t *testing.T, km *ekm.LocalKeyManager, sharePubKey phase0.BLSPub
 	_, _, err := km.SignBeaconObject(ctx, attestation, domainFor(spectypes.DomainAttester), sharePubKey, 0, spectypes.DomainAttester)
 	require.NoError(t, err)
 
-	block := *testingutils.TestingBlockContentsDeneb.Block
+	block := *ssvtestingutils.TestingBlockContentsDeneb.Block
 	block.Slot = slot
 	_, _, err = km.SignBeaconObject(ctx, &block, domainFor(spectypes.DomainProposer), sharePubKey, block.Slot, spectypes.DomainProposer)
 	require.NoError(t, err)

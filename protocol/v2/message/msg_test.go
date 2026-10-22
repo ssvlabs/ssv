@@ -22,7 +22,7 @@ func TestBeaconRoleFromString(t *testing.T) {
 		{name: "proposer", input: "PROPOSER", expected: spectypes.BNRoleProposer},
 		{name: "sync committee", input: "SYNC_COMMITTEE", expected: spectypes.BNRoleSyncCommittee},
 		{name: "sync committee contribution", input: "SYNC_COMMITTEE_CONTRIBUTION", expected: spectypes.BNRoleSyncCommitteeContribution},
-		{name: "validator registration", input: "VALIDATOR_REGISTRATION", expected: spectypes.BNRoleValidatorRegistration},
+		{name: "validator registration", input: "VALIDATOR_REGISTRATION", expected: ssvtypes.BNRoleValidatorRegistration},
 		{name: "voluntary exit", input: "VOLUNTARY_EXIT", expected: spectypes.BNRoleVoluntaryExit},
 		{name: "ptc attester", input: "PTC_ATTESTER", expected: spectypes.BNRolePTCAttester},
 		{name: "proposer preferences", input: "PROPOSER_PREFERENCES", expected: spectypes.BNRoleProposerPreferences},
@@ -43,10 +43,10 @@ func TestBeaconRoleFromString(t *testing.T) {
 	}
 }
 
-// The API writes a role as its spec name (api.Role), so each role it accepts parses back from that name.
-func TestBeaconRoles_ParseFromSpecName(t *testing.T) {
+// The API names a role by BeaconRoleToString (api.Role), so each role it accepts parses back from that name.
+func TestBeaconRoles_ParseFromAPIName(t *testing.T) {
 	for _, role := range BeaconRoles() {
-		parsed, err := BeaconRoleFromString(role.String())
+		parsed, err := BeaconRoleFromString(ssvtypes.BeaconRoleToString(role))
 		require.NoError(t, err)
 		assert.Equal(t, role, parsed)
 	}
@@ -55,23 +55,23 @@ func TestBeaconRoles_ParseFromSpecName(t *testing.T) {
 // Every partial-signature type the node handles has a name, so API consumers never see a number.
 func TestPartialSigMsgTypeToString(t *testing.T) {
 	names := map[spectypes.PartialSigMsgType]string{
-		spectypes.PostConsensusPartialSig:         PartialSigPostConsensus,
-		spectypes.RandaoPartialSig:                PartialSigRandao,
-		ssvtypes.SelectionProofPartialSig:         PartialSigSelectionProof,
-		ssvtypes.ContributionProofs:               PartialSigContributionProofs,
-		spectypes.ValidatorRegistrationPartialSig: PartialSigValidatorRegistration,
-		spectypes.VoluntaryExitPartialSig:         PartialSigVoluntaryExit,
-		spectypes.AggregatorCommitteePartialSig:   PartialSigAggregatorCommittee,
-		spectypes.PTCAttesterPartialSig:           PartialSigPTCAttester,
-		spectypes.ProposerPreferencesPartialSig:   PartialSigProposerPreferences,
-		spectypes.RequestAuthPartialSig:           PartialSigRequestAuth,
+		spectypes.PostConsensusPartialSig:        PartialSigPostConsensus,
+		spectypes.RandaoPartialSig:               PartialSigRandao,
+		ssvtypes.SelectionProofPartialSig:        PartialSigSelectionProof,
+		ssvtypes.ContributionProofs:              PartialSigContributionProofs,
+		ssvtypes.ValidatorRegistrationPartialSig: PartialSigValidatorRegistration,
+		spectypes.VoluntaryExitPartialSig:        PartialSigVoluntaryExit,
+		spectypes.AggregatorCommitteePartialSig:  PartialSigAggregatorCommittee,
+		spectypes.PTCAttesterPartialSig:          PartialSigPTCAttester,
+		spectypes.ProposerPreferencesPartialSig:  PartialSigProposerPreferences,
+		spectypes.RequestAuthPartialSig:          PartialSigRequestAuth,
 	}
 	// The duty-bound types are named after their duty's role as the API reports it: the beacon role for a
 	// validator duty, the runner role for a committee duty.
-	assert.Equal(t, spectypes.BNRoleValidatorRegistration.String(), PartialSigValidatorRegistration)
-	assert.Equal(t, spectypes.BNRoleVoluntaryExit.String(), PartialSigVoluntaryExit)
-	assert.Equal(t, spectypes.BNRolePTCAttester.String(), PartialSigPTCAttester)
-	assert.Equal(t, spectypes.BNRoleProposerPreferences.String(), PartialSigProposerPreferences)
+	assert.Equal(t, ssvtypes.BeaconRoleToString(ssvtypes.BNRoleValidatorRegistration), PartialSigValidatorRegistration)
+	assert.Equal(t, ssvtypes.BeaconRoleToString(spectypes.BNRoleVoluntaryExit), PartialSigVoluntaryExit)
+	assert.Equal(t, ssvtypes.BeaconRoleToString(spectypes.BNRolePTCAttester), PartialSigPTCAttester)
+	assert.Equal(t, ssvtypes.BeaconRoleToString(spectypes.BNRoleProposerPreferences), PartialSigProposerPreferences)
 	assert.Equal(t, RunnerRoleToString(spectypes.RoleAggregatorCommittee), PartialSigAggregatorCommittee)
 	for msgType, want := range names {
 		assert.Equal(t, want, PartialSigMsgTypeToString(msgType))
@@ -91,7 +91,7 @@ func TestRunnerRoleFromString(t *testing.T) {
 		{name: "aggregator", input: "AGGREGATOR", expected: ssvtypes.RoleAggregator},
 		{name: "proposer", input: "PROPOSER", expected: spectypes.RoleProposer},
 		{name: "sync committee contribution", input: "SYNC_COMMITTEE_CONTRIBUTION", expected: ssvtypes.RoleSyncCommitteeContribution},
-		{name: "validator registration", input: "VALIDATOR_REGISTRATION", expected: spectypes.RoleValidatorRegistration},
+		{name: "validator registration", input: "VALIDATOR_REGISTRATION", expected: ssvtypes.RoleValidatorRegistration},
 		{name: "voluntary exit", input: "VOLUNTARY_EXIT", expected: spectypes.RoleVoluntaryExit},
 		{name: "ptc attester", input: "PTC_ATTESTER", expected: spectypes.RolePTCAttester},
 		{name: "proposer preferences", input: "PROPOSER_PREFERENCES", expected: spectypes.RoleProposerPreferences},
@@ -124,7 +124,7 @@ func TestRunnerRoleToString(t *testing.T) {
 		{name: "aggregator", role: ssvtypes.RoleAggregator, expected: "AGGREGATOR"},
 		{name: "proposer", role: spectypes.RoleProposer, expected: "PROPOSER"},
 		{name: "sync committee contribution", role: ssvtypes.RoleSyncCommitteeContribution, expected: "SYNC_COMMITTEE_CONTRIBUTION"},
-		{name: "validator registration", role: spectypes.RoleValidatorRegistration, expected: "VALIDATOR_REGISTRATION"},
+		{name: "validator registration", role: ssvtypes.RoleValidatorRegistration, expected: "VALIDATOR_REGISTRATION"},
 		{name: "voluntary exit", role: spectypes.RoleVoluntaryExit, expected: "VOLUNTARY_EXIT"},
 		{name: "ptc attester", role: spectypes.RolePTCAttester, expected: "PTC_ATTESTER"},
 		{name: "proposer preferences", role: spectypes.RoleProposerPreferences, expected: "PROPOSER_PREFERENCES"},
@@ -147,7 +147,7 @@ func TestRunnerRoleFromString_ToString_RoundTrip(t *testing.T) {
 		ssvtypes.RoleAggregator,
 		spectypes.RoleProposer,
 		ssvtypes.RoleSyncCommitteeContribution,
-		spectypes.RoleValidatorRegistration,
+		ssvtypes.RoleValidatorRegistration,
 		spectypes.RoleVoluntaryExit,
 	}
 
@@ -174,6 +174,28 @@ func TestRunnerRoleFromString_ToString_RoundTrip(t *testing.T) {
 		s := RunnerRoleToString(role)
 		got, err := RunnerRoleFromString(s)
 		require.NoError(t, err, "spec-known role %d (%q) does not round-trip", role, s)
+		assert.Equal(t, role, got)
+	}
+}
+
+// TestBeaconRoleFromString_ToString_RoundTrip checks that ssvtypes.BeaconRoleToString, which logs, metrics
+// and the exporter API name beacon roles with, names each role so that BeaconRoleFromString parses it
+// back, including the validator-registration duty the spec no longer names.
+func TestBeaconRoleFromString_ToString_RoundTrip(t *testing.T) {
+	roles := []spectypes.BeaconRole{
+		spectypes.BNRoleAttester,
+		spectypes.BNRoleAggregator,
+		spectypes.BNRoleProposer,
+		spectypes.BNRoleSyncCommittee,
+		spectypes.BNRoleSyncCommitteeContribution,
+		ssvtypes.BNRoleValidatorRegistration,
+		spectypes.BNRoleVoluntaryExit,
+	}
+
+	for _, role := range roles {
+		s := ssvtypes.BeaconRoleToString(role)
+		got, err := BeaconRoleFromString(s)
+		require.NoError(t, err, "round-trip failed for role %d (string %q)", role, s)
 		assert.Equal(t, role, got)
 	}
 }

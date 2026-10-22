@@ -142,8 +142,8 @@ func TestProposerRunnerProcessPreConsensusCachesFullBlockAndFetchesWithReconstru
 	t.Parallel()
 
 	version := spec.DataVersionDeneb
-	duty := spectestingutils.TestingProposerDutyV(version)
-	fullBlock := spectestingutils.TestingBeaconBlockV(version)
+	duty := ssvtestingutils.TestingProposerDutyV(version)
+	fullBlock := ssvtestingutils.TestingBeaconBlockV(version)
 	beacon := newProposerTestBeacon(fullBlock)
 	runner, keySet, _ := newProposerRunnerForTest(t, beacon, &stubDoppelganger{canSign: true}, 0, nil)
 
@@ -154,7 +154,7 @@ func TestProposerRunnerProcessPreConsensusCachesFullBlockAndFetchesWithReconstru
 	ctx := context.Background()
 	logger := zap.NewNop()
 	for operatorID := spectypes.OperatorID(1); operatorID <= keySet.Threshold; operatorID++ {
-		msg := spectestingutils.PreConsensusRandaoMsgV(keySet.Shares[operatorID], operatorID, version)
+		msg := ssvtestingutils.PreConsensusRandaoMsgV(keySet.Shares[operatorID], operatorID, version)
 		if operatorID == 1 {
 			expectedRoot = msg.Messages[0].SigningRoot
 		} else {
@@ -190,8 +190,8 @@ func TestProposerRunnerProcessPreConsensusCachesOnlyBlindedBlockSSZ(t *testing.T
 	t.Parallel()
 
 	version := spec.DataVersionDeneb
-	duty := spectestingutils.TestingProposerDutyV(version)
-	blindedBlock := spectestingutils.TestingBlindedBeaconBlockV(version)
+	duty := ssvtestingutils.TestingProposerDutyV(version)
+	blindedBlock := ssvtestingutils.TestingBlindedBeaconBlockV(version)
 	beacon := newProposerTestBeacon(blindedBlock)
 	runner, keySet, _ := newProposerRunnerForTest(t, beacon, &stubDoppelganger{canSign: true}, 0, nil)
 
@@ -214,11 +214,11 @@ func TestProposerRunnerProcessPreConsensusReturnsContextCanceledDuringProposerDe
 	t.Parallel()
 
 	version := spec.DataVersionDeneb
-	duty := spectestingutils.TestingProposerDutyV(version)
+	duty := ssvtestingutils.TestingProposerDutyV(version)
 	cfg := cloneTestNetworkConfig()
 	cfg.GenesisTime = time.Now().Add(-time.Duration(duty.Slot)*cfg.SlotDuration + time.Second)
 
-	beacon := newProposerTestBeacon(spectestingutils.TestingBeaconBlockV(version))
+	beacon := newProposerTestBeacon(ssvtestingutils.TestingBeaconBlockV(version))
 	runner, keySet, _ := newProposerRunnerForTest(t, beacon, &stubDoppelganger{canSign: true}, 3*time.Second, cfg)
 
 	err := runner.StartNewDuty(context.Background(), zap.NewNop(), duty, keySet.Threshold)
@@ -226,14 +226,14 @@ func TestProposerRunnerProcessPreConsensusReturnsContextCanceledDuringProposerDe
 
 	logger := zap.NewNop()
 	for operatorID := spectypes.OperatorID(1); operatorID < keySet.Threshold; operatorID++ {
-		msg := spectestingutils.PreConsensusRandaoMsgV(keySet.Shares[operatorID], operatorID, version)
+		msg := ssvtestingutils.PreConsensusRandaoMsgV(keySet.Shares[operatorID], operatorID, version)
 		require.NoError(t, runner.ProcessPreConsensus(context.Background(), logger, msg))
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	finalMsg := spectestingutils.PreConsensusRandaoMsgV(keySet.Shares[keySet.Threshold], keySet.Threshold, version)
+	finalMsg := ssvtestingutils.PreConsensusRandaoMsgV(keySet.Shares[keySet.Threshold], keySet.Threshold, version)
 	err = runner.ProcessPreConsensus(ctx, logger, finalMsg)
 	require.ErrorIs(t, err, context.Canceled)
 	require.Equal(t, 0, beacon.getCalls)
@@ -314,9 +314,9 @@ func TestProposerRunnerStartNewDutySkipsRandaoSigningWhenDoppelgangerBlocks(t *t
 	t.Parallel()
 
 	version := spec.DataVersionDeneb
-	duty := spectestingutils.TestingProposerDutyV(version)
+	duty := ssvtestingutils.TestingProposerDutyV(version)
 	dg := &stubDoppelganger{canSign: false}
-	beacon := newProposerTestBeacon(spectestingutils.TestingBeaconBlockV(version))
+	beacon := newProposerTestBeacon(ssvtestingutils.TestingBeaconBlockV(version))
 	runner, _, network := newProposerRunnerForTest(t, beacon, dg, 0, nil)
 
 	err := runner.StartNewDuty(context.Background(), zap.NewNop(), duty, 3)
@@ -334,9 +334,9 @@ func TestProposerRunnerProcessConsensusSkipsPostConsensusSigningWhenDoppelganger
 	t.Parallel()
 
 	version := spec.DataVersionDeneb
-	duty := spectestingutils.TestingProposerDutyV(version)
+	duty := ssvtestingutils.TestingProposerDutyV(version)
 	dg := &stubDoppelganger{canSign: true}
-	beacon := newProposerTestBeacon(spectestingutils.TestingBeaconBlockV(version))
+	beacon := newProposerTestBeacon(ssvtestingutils.TestingBeaconBlockV(version))
 	runner, keySet, network := newProposerRunnerForTest(t, beacon, dg, 0, nil)
 
 	err := runner.StartNewDuty(context.Background(), zap.NewNop(), duty, keySet.Threshold)
@@ -345,7 +345,7 @@ func TestProposerRunnerProcessConsensusSkipsPostConsensusSigningWhenDoppelganger
 
 	dg.canSign = false
 
-	consensusData := spectestingutils.TestProposerBlindedBlockConsensusDataV(version)
+	consensusData := ssvtestingutils.TestProposerBlindedBlockConsensusDataV(version)
 	require.NoError(t, decideProposerDuty(t, runner, keySet, duty.Slot, consensusData))
 
 	require.NotNil(t, runner.State.DecidedValue)
@@ -359,13 +359,13 @@ func TestProposerRunnerProcessPostConsensusLeaderUsesCachedFullBlockWhenDecision
 	t.Parallel()
 
 	version := spec.DataVersionDeneb
-	fullBlock := spectestingutils.TestingBeaconBlockV(version)
-	consensusData := spectestingutils.TestProposerBlindedBlockConsensusDataV(version)
+	fullBlock := ssvtestingutils.TestingBeaconBlockV(version)
+	consensusData := ssvtestingutils.TestProposerBlindedBlockConsensusDataV(version)
 	beacon := newProposerTestBeacon(nil)
 	dg := &stubDoppelganger{canSign: true}
 	runner, keySet, _ := newProposerRunnerForTest(t, beacon, dg, 0, nil)
 
-	setupRunnerForPostConsensus(t, runner, keySet, spectestingutils.TestingProposerDutyV(version), consensusData, 1)
+	setupRunnerForPostConsensus(t, runner, keySet, ssvtestingutils.TestingProposerDutyV(version), consensusData, 1)
 	runner.cachedFullBlock = fullBlock
 	runner.cachedBlindedBlockSSZ = append([]byte(nil), consensusData.DataSSZ...)
 
@@ -383,13 +383,13 @@ func TestProposerRunnerProcessPostConsensusLeaderFallsBackToDecidedBlindedBlockO
 	t.Parallel()
 
 	version := spec.DataVersionDeneb
-	consensusData := spectestingutils.TestProposerBlindedBlockConsensusDataV(version)
+	consensusData := ssvtestingutils.TestProposerBlindedBlockConsensusDataV(version)
 	beacon := newProposerTestBeacon(nil)
 	dg := &stubDoppelganger{canSign: true}
 	runner, keySet, _ := newProposerRunnerForTest(t, beacon, dg, 0, nil)
 
-	setupRunnerForPostConsensus(t, runner, keySet, spectestingutils.TestingProposerDutyV(version), consensusData, 1)
-	runner.cachedFullBlock = spectestingutils.TestingBeaconBlockV(version)
+	setupRunnerForPostConsensus(t, runner, keySet, ssvtestingutils.TestingProposerDutyV(version), consensusData, 1)
+	runner.cachedFullBlock = ssvtestingutils.TestingBeaconBlockV(version)
 	runner.cachedBlindedBlockSSZ = []byte("different-blinded-block")
 
 	processPostConsensusQuorum(t, runner, keySet, version)
@@ -404,7 +404,7 @@ func TestProposerRunnerProcessPostConsensusLeaderFallsBackToDecidedBlindedBlockO
 func TestBlockRootField(t *testing.T) {
 	t.Parallel()
 
-	full := spectestingutils.TestingBeaconBlockV(spec.DataVersionDeneb)
+	full := ssvtestingutils.TestingBeaconBlockV(spec.DataVersionDeneb)
 	blinded, _, err := blindutil.EnsureBlinded(full)
 	require.NoError(t, err)
 	root, err := full.Root()
@@ -423,14 +423,14 @@ func TestProposerRunnerProcessPostConsensusNonLeaderKeepsDecidedBlindedBlock(t *
 	t.Parallel()
 
 	version := spec.DataVersionDeneb
-	consensusData := spectestingutils.TestProposerBlindedBlockConsensusDataV(version)
+	consensusData := ssvtestingutils.TestProposerBlindedBlockConsensusDataV(version)
 	beacon := newProposerTestBeacon(nil)
 	dg := &stubDoppelganger{canSign: true}
 	runner, keySet, _ := newProposerRunnerForTest(t, beacon, dg, 0, nil)
 
-	setupRunnerForPostConsensus(t, runner, keySet, spectestingutils.TestingProposerDutyV(version), consensusData, 1)
+	setupRunnerForPostConsensus(t, runner, keySet, ssvtestingutils.TestingProposerDutyV(version), consensusData, 1)
 	runner.operatorSigner = fixedOperatorSigner{id: 2}
-	runner.cachedFullBlock = spectestingutils.TestingBeaconBlockV(version)
+	runner.cachedFullBlock = ssvtestingutils.TestingBeaconBlockV(version)
 	runner.cachedBlindedBlockSSZ = append([]byte(nil), consensusData.DataSSZ...)
 
 	processPostConsensusQuorum(t, runner, keySet, version)
@@ -448,12 +448,12 @@ func TestProposerRunnerProcessPostConsensusSubmitFailureOfAnotherOperatorsBlockI
 	t.Parallel()
 
 	version := spec.DataVersionDeneb
-	consensusData := spectestingutils.TestProposerBlindedBlockConsensusDataV(version)
+	consensusData := ssvtestingutils.TestProposerBlindedBlockConsensusDataV(version)
 	beacon := newProposerTestBeacon(nil)
 	beacon.submitErr = errors.New("no successful relay response")
 	runner, keySet, _ := newProposerRunnerForTest(t, beacon, &stubDoppelganger{canSign: true}, 0, nil)
 
-	setupRunnerForPostConsensus(t, runner, keySet, spectestingutils.TestingProposerDutyV(version), consensusData, 1)
+	setupRunnerForPostConsensus(t, runner, keySet, ssvtestingutils.TestingProposerDutyV(version), consensusData, 1)
 	runner.operatorSigner = fixedOperatorSigner{id: 2}
 	runner.cachedBlindedBlockSSZ = []byte("this-operators-own-block")
 	concluded := observeDutyConclusion(runner.BaseRunner)
@@ -476,24 +476,24 @@ func TestProposerRunnerProcessPostConsensusSubmitFailureOfOwnBlockFailsDuty(t *t
 			t.Parallel()
 
 			version := spec.DataVersionDeneb
-			consensusData := spectestingutils.TestProposerBlindedBlockConsensusDataV(version)
+			consensusData := ssvtestingutils.TestProposerBlindedBlockConsensusDataV(version)
 			beacon := newProposerTestBeacon(nil)
 			beacon.submitErr = errors.New("beacon node down")
 			runner, keySet, _ := newProposerRunnerForTest(t, beacon, &stubDoppelganger{canSign: true}, 0, nil)
 
-			setupRunnerForPostConsensus(t, runner, keySet, spectestingutils.TestingProposerDutyV(version), consensusData, 1)
+			setupRunnerForPostConsensus(t, runner, keySet, ssvtestingutils.TestingProposerDutyV(version), consensusData, 1)
 			runner.cachedBlindedBlockSSZ = append([]byte(nil), consensusData.DataSSZ...)
 			if full {
-				runner.cachedFullBlock = spectestingutils.TestingBeaconBlockV(version)
+				runner.cachedFullBlock = ssvtestingutils.TestingBeaconBlockV(version)
 			}
 			concluded := observeDutyConclusion(runner.BaseRunner)
 
 			ctx, logger := context.Background(), zap.NewNop()
 			for operatorID := spectypes.OperatorID(1); operatorID < keySet.Threshold; operatorID++ {
-				msg := spectestingutils.PostConsensusProposerMsgV(keySet.Shares[operatorID], operatorID, version)
+				msg := ssvtestingutils.PostConsensusProposerMsgV(keySet.Shares[operatorID], operatorID, version)
 				require.NoError(t, runner.ProcessPostConsensus(ctx, logger, msg))
 			}
-			msg := spectestingutils.PostConsensusProposerMsgV(keySet.Shares[keySet.Threshold], keySet.Threshold, version)
+			msg := ssvtestingutils.PostConsensusProposerMsgV(keySet.Shares[keySet.Threshold], keySet.Threshold, version)
 			require.ErrorContains(t, runner.ProcessPostConsensus(ctx, logger, msg), "could not submit beacon block")
 
 			require.Len(t, beacon.submittedBlocks, 1)
@@ -817,19 +817,19 @@ func TestProposerRunnerProcessPostConsensusRecoversFromBadShare(t *testing.T) {
 	version := spec.DataVersionDeneb
 	beacon := newProposerTestBeacon(nil)
 	runner, keySet, _ := newProposerRunnerForTest(t, beacon, &stubDoppelganger{canSign: true}, 0, nil)
-	setupRunnerForPostConsensus(t, runner, keySet, spectestingutils.TestingProposerDutyV(version),
-		spectestingutils.TestProposerBlindedBlockConsensusDataV(version), 1)
+	setupRunnerForPostConsensus(t, runner, keySet, ssvtestingutils.TestingProposerDutyV(version),
+		ssvtestingutils.TestProposerBlindedBlockConsensusDataV(version), 1)
 	concluded := observeDutyConclusion(runner.BaseRunner)
 
-	bad := spectestingutils.PostConsensusProposerMsgV(keySet.Shares[1], 1, version)
-	bad.Messages[0].PartialSignature = spectestingutils.PostConsensusProposerMsgV(keySet.Shares[2], 2, version).Messages[0].PartialSignature
+	bad := ssvtestingutils.PostConsensusProposerMsgV(keySet.Shares[1], 1, version)
+	bad.Messages[0].PartialSignature = ssvtestingutils.PostConsensusProposerMsgV(keySet.Shares[2], 2, version).Messages[0].PartialSignature
 	require.NoError(t, runner.ProcessPostConsensus(ctx, logger, bad))
-	require.NoError(t, runner.ProcessPostConsensus(ctx, logger, spectestingutils.PostConsensusProposerMsgV(keySet.Shares[2], 2, version)))
-	err := runner.ProcessPostConsensus(ctx, logger, spectestingutils.PostConsensusProposerMsgV(keySet.Shares[3], 3, version))
+	require.NoError(t, runner.ProcessPostConsensus(ctx, logger, ssvtestingutils.PostConsensusProposerMsgV(keySet.Shares[2], 2, version)))
+	err := runner.ProcessPostConsensus(ctx, logger, ssvtestingutils.PostConsensusProposerMsgV(keySet.Shares[3], 3, version))
 	require.ErrorContains(t, err, "invalid signatures")
 	require.Empty(t, concluded, "the failed reconstruct is recoverable, so the duty is not concluded failed")
 
-	require.NoError(t, runner.ProcessPostConsensus(ctx, logger, spectestingutils.PostConsensusProposerMsgV(keySet.Shares[4], 4, version)))
+	require.NoError(t, runner.ProcessPostConsensus(ctx, logger, ssvtestingutils.PostConsensusProposerMsgV(keySet.Shares[4], 4, version)))
 	require.Len(t, beacon.submittedBlocks, 1)
 	requireConcluded(t, concluded, dutyOutcomeSucceeded)
 }
@@ -1224,8 +1224,8 @@ func TestProposerRunnerExpectedPostConsensusRootsAndDomains(t *testing.T) {
 	require.False(t, roots[0].Optional)
 
 	version := spec.DataVersionDeneb
-	preGloas, keySet, _ := newProposerRunnerForTest(t, newProposerTestBeacon(spectestingutils.TestingBeaconBlockV(version)), &stubDoppelganger{canSign: true}, 0, nil)
-	setupRunnerForPostConsensus(t, preGloas, keySet, spectestingutils.TestingProposerDutyV(version), spectestingutils.TestProposerBlindedBlockConsensusDataV(version), 1)
+	preGloas, keySet, _ := newProposerRunnerForTest(t, newProposerTestBeacon(ssvtestingutils.TestingBeaconBlockV(version)), &stubDoppelganger{canSign: true}, 0, nil)
+	setupRunnerForPostConsensus(t, preGloas, keySet, ssvtestingutils.TestingProposerDutyV(version), ssvtestingutils.TestProposerBlindedBlockConsensusDataV(version), 1)
 	roots, err = preGloas.expectedPostConsensusRootsAndDomains(ctx)
 	require.NoError(t, err)
 	require.Len(t, roots, 1)
@@ -1321,7 +1321,7 @@ func TestProposerRunnerStartNewDutyResetsGloasDutyState(t *testing.T) {
 
 	for _, canSign := range []bool{true, false} {
 		version := spec.DataVersionDeneb
-		beacon := newProposerTestBeacon(spectestingutils.TestingBeaconBlockV(version))
+		beacon := newProposerTestBeacon(ssvtestingutils.TestingBeaconBlockV(version))
 		runner, _, _ := newProposerRunnerForTest(t, beacon, &stubDoppelganger{canSign: canSign}, 0, nil)
 		runner.cachedFullBlock, runner.cachedBlindedBlockSSZ = &api.VersionedProposal{}, []byte{0x01}
 		runner.gloasDuty = gloasDutyState{
@@ -1334,7 +1334,7 @@ func TestProposerRunnerStartNewDutyResetsGloasDutyState(t *testing.T) {
 			envelopeHandled:      true,
 		}
 
-		require.NoError(t, runner.StartNewDuty(context.Background(), zap.NewNop(), spectestingutils.TestingProposerDutyV(version), 3))
+		require.NoError(t, runner.StartNewDuty(context.Background(), zap.NewNop(), ssvtestingutils.TestingProposerDutyV(version), 3))
 
 		require.Zero(t, runner.gloasDuty, "can sign: %v", canSign)
 		require.Nil(t, runner.cachedFullBlock, "can sign: %v", canSign)
@@ -1479,7 +1479,7 @@ func processPreConsensusQuorum(t *testing.T, runner *ProposerRunner, keySet *spe
 	ctx := context.Background()
 	logger := zap.NewNop()
 	for operatorID := spectypes.OperatorID(1); operatorID <= keySet.Threshold; operatorID++ {
-		msg := spectestingutils.PreConsensusRandaoMsgV(keySet.Shares[operatorID], operatorID, version)
+		msg := ssvtestingutils.PreConsensusRandaoMsgV(keySet.Shares[operatorID], operatorID, version)
 		require.NoError(t, runner.ProcessPreConsensus(ctx, logger, msg))
 	}
 }
@@ -1490,7 +1490,7 @@ func processPostConsensusQuorum(t *testing.T, runner *ProposerRunner, keySet *sp
 	ctx := context.Background()
 	logger := zap.NewNop()
 	for operatorID := spectypes.OperatorID(1); operatorID <= keySet.Threshold; operatorID++ {
-		msg := spectestingutils.PostConsensusProposerMsgV(keySet.Shares[operatorID], operatorID, version)
+		msg := ssvtestingutils.PostConsensusProposerMsgV(keySet.Shares[operatorID], operatorID, version)
 		require.NoError(t, runner.ProcessPostConsensus(ctx, logger, msg))
 	}
 }

@@ -24,7 +24,7 @@ const (
 )
 
 func BeaconRoleAttribute(role spectypes.BeaconRole) attribute.KeyValue {
-	return attribute.String("ssv.beacon.role", role.String())
+	return attribute.String("ssv.beacon.role", protocolTypes.BeaconRoleToString(role))
 }
 
 func BeaconEpochAttribute(epoch phase0.Epoch) attribute.KeyValue {

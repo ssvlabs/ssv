@@ -16,6 +16,7 @@ import (
 	"github.com/ssvlabs/ssv/eth/executionclient"
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/observability/log/fields"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 const (
@@ -103,7 +104,7 @@ func NewValidatorRegistrationHandler(validatorRegistrationCh <-chan Registration
 }
 
 func (h *ValidatorRegistrationHandler) Name() string {
-	return spectypes.BNRoleValidatorRegistration.String()
+	return ssvtypes.BeaconRoleToString(ssvtypes.BNRoleValidatorRegistration)
 }
 
 func (h *ValidatorRegistrationHandler) WaitShutdown() {}
@@ -175,7 +176,7 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 			// operators and break partial-sig aggregation.
 			h.eventQueue = append(h.eventQueue, &queuedRegistration{
 				duty: &spectypes.ValidatorDuty{
-					Type:           spectypes.BNRoleValidatorRegistration,
+					Type:           ssvtypes.BNRoleValidatorRegistration,
 					ValidatorIndex: regDescriptor.ValidatorIndex,
 					PubKey:         regDescriptor.ValidatorPubkey,
 					Slot:           dutySlot,
@@ -242,7 +243,7 @@ func (h *ValidatorRegistrationHandler) processExecution(ctx context.Context, epo
 		pk := phase0.BLSPubKey(share.ValidatorPubKey)
 
 		duties = append(duties, &spectypes.ValidatorDuty{
-			Type:           spectypes.BNRoleValidatorRegistration,
+			Type:           ssvtypes.BNRoleValidatorRegistration,
 			ValidatorIndex: share.ValidatorIndex,
 			PubKey:         pk,
 			Slot:           slot,

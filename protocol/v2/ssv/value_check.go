@@ -24,14 +24,14 @@ type voteChecker struct {
 	signer          ekm.BeaconSigner
 	slot            phase0.Slot
 	sharePublicKeys []phase0.BLSPubKey
-	expectedVote    *spectypes.BeaconVote
+	expectedVote    *ssvtypes.PreGloasBeaconVote
 }
 
 func NewVoteChecker(
 	signer ekm.BeaconSigner,
 	slot phase0.Slot,
 	sharePublicKeys []phase0.BLSPubKey,
-	expectedVote *spectypes.BeaconVote,
+	expectedVote *ssvtypes.PreGloasBeaconVote,
 ) ValueChecker {
 	return &voteChecker{
 		signer:          signer,
@@ -42,7 +42,7 @@ func NewVoteChecker(
 }
 
 func (v *voteChecker) CheckValue(value []byte) error {
-	bv := spectypes.BeaconVote{}
+	bv := ssvtypes.PreGloasBeaconVote{}
 	if err := bv.Decode(value); err != nil {
 		return spectypes.WrapError(spectypes.DecodeBeaconVoteErrorCode, fmt.Errorf("failed decoding beacon vote: %w", err))
 	}
@@ -115,7 +115,7 @@ func NewGloasVoteChecker(
 func (v *gloasVoteChecker) CheckValue(value []byte) error {
 	bv := gloas.GloasBeaconVote{}
 	if err := bv.Decode(value); err != nil {
-		return spectypes.WrapError(spectypes.DecodeGloasBeaconVoteErrorCode, fmt.Errorf("failed decoding gloas beacon vote: %w", err))
+		return spectypes.WrapError(spectypes.DecodeBeaconVoteErrorCode, fmt.Errorf("failed decoding gloas beacon vote: %w", err))
 	}
 
 	if err := bv.Validate(); err != nil {
@@ -129,7 +129,7 @@ func (v *gloasVoteChecker) CheckValue(value []byte) error {
 	// re-runs this check on re-proposals and the decided value — and without one the check is skipped
 	// (SIP #94 §2, issue #3035).
 	if bv.AttestationDataIndex == 1 && v.sameSlotBlockRoot != nil && bv.BlockRoot == *v.sameSlotBlockRoot {
-		return spectypes.NewError(spectypes.GloasBeaconVoteInvalidIndexErrorCode, "gloas attestation data index 1 for a same-slot block")
+		return spectypes.NewError(spectypes.BeaconVoteInvalidIndexErrorCode, "gloas attestation data index 1 for a same-slot block")
 	}
 
 	attestationData := &phase0.AttestationData{
@@ -174,7 +174,7 @@ func (v *aggregatorCommitteeChecker) CheckValue(value []byte) error {
 			fmt.Errorf("failed decoding aggregator committee consensus data: %w", err),
 		)
 	}
-	if err := cd.Validate(); err != nil {
+	if err := ssvtypes.ValidateAggregatorCommitteeConsensusData(cd); err != nil {
 		return fmt.Errorf("invalid value: %w", err)
 	}
 
@@ -271,7 +271,7 @@ func (v *proposerChecker) CheckValue(value []byte) error {
 		// node-side value and verified block.Slot == duty slot, so reuse it rather than decode again.
 		slot = gloasProposal.Block.Slot
 	} else {
-		blockData, _, bdErr := cd.GetBlockData()
+		blockData, _, bdErr := ssvtypes.PreGloasBlockData(cd)
 		if bdErr != nil {
 			return fmt.Errorf("could not get block data: %w", bdErr)
 		}
@@ -358,15 +358,15 @@ func checkValidatorConsensusData(
 	var gloasProposal *gloas.GloasProposalData
 	if cd.Duty.Type == spectypes.BNRoleProposer && beaconConfig.IsGloasAtSlot(cd.Duty.Slot) {
 		// The leader-stamped Version must equal the slot's fork (SIP #94 §4). ssv-spec's ProposerValueCheckF
-		// branches to Gloas on cd.Version, whereas we branch on the slot; without this pin a value on a
+		// accepts only a Gloas Version, whereas we pick the fork from the slot; without this pin a value on a
 		// Gloas slot carrying another Version would be accepted here (slot-based) but rejected there
 		// (version-based), splitting the value check across a mixed cluster. Honest proposers always stamp
 		// Version == the slot's fork. (The reverse, a Gloas Version on a pre-Gloas slot, takes the else
-		// branch and is rejected by GetBlockData's unknown-version error.)
+		// branch and is rejected by PreGloasBlockData's unknown-version error.)
 		if cd.Version != networkconfig.DataVersionGloas {
 			return cd, nil, spectypes.NewError(spectypes.QBFTValueInvalidErrorCode, "value version does not match slot fork")
 		}
-		// Gloas values are opaque to ValidateConsensusData's GetBlockData path; decode the §4 wrapper here.
+		// Gloas values are opaque to ValidateConsensusData's pre-Gloas decoding; decode the §4 wrapper here.
 		proposal, err := gloas.DecodeGloasProposalData(cd.DataSSZ)
 		if err != nil {
 			return cd, nil, spectypes.WrapError(spectypes.UnmarshalSSZErrorCode, fmt.Errorf("failed decoding gloas proposal data: %w", err))

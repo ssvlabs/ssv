@@ -1254,7 +1254,7 @@ func SetupRunners(
 		spectypes.RoleProposer,
 		ssvtypes.RoleAggregator,
 		ssvtypes.RoleSyncCommitteeContribution,
-		spectypes.RoleValidatorRegistration,
+		ssvtypes.RoleValidatorRegistration,
 		spectypes.RoleVoluntaryExit,
 	}
 	// The Gloas roles get no duty or message until the fork is scheduled, and the node's fork schedule is fixed
@@ -1367,7 +1367,7 @@ func SetupRunners(
 					HighestDecidedSlot: 0,
 				})
 			}
-		case spectypes.RoleValidatorRegistration:
+		case ssvtypes.RoleValidatorRegistration:
 			runners[role], err = runner.NewValidatorRegistrationRunner(runner.ValidatorRegistrationRunnerOptions{
 				BaseRunnerOptions:              baseOpts,
 				ValidatorRegistrationSubmitter: validatorRegistrationSubmitter,

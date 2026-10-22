@@ -63,7 +63,7 @@ func NewValidatorRegistrationRunner(opts ValidatorRegistrationRunnerOptions) (Ru
 
 	return &ValidatorRegistrationRunner{
 		BaseRunner: &BaseRunner{
-			RunnerRoleType: spectypes.RoleValidatorRegistration,
+			RunnerRoleType: ssvtypes.RoleValidatorRegistration,
 			NetworkConfig:  opts.NetworkConfig,
 			Share:          opts.Share,
 		},
@@ -87,10 +87,10 @@ func (r *ValidatorRegistrationRunner) StartNewDuty(ctx context.Context, logger *
 
 	// From Gloas the validator registration duty is deprecated: fee recipient and gas limit travel in the §5
 	// proposer preferences instead (SIP #94 §5). The scheduler drains the duty and message validation rejects
-	// it on the wire; this runner-side guard is the belt matching ssv-spec's. It runs before the duty starts,
-	// so a rejected duty leaves no running state behind.
+	// it on the wire; this runner-side guard backs both up. It runs before the duty starts, so a rejected duty
+	// leaves no running state behind.
 	if r.NetworkConfig.IsGloasAtSlot(validatorDuty.DutySlot()) {
-		return spectypes.NewError(spectypes.ValidatorRegistrationDeprecatedErrorCode,
+		return spectypes.NewError(ssvtypes.ValidatorRegistrationDeprecatedErrorCode,
 			"validator registration is deprecated from Gloas; use proposer preferences")
 	}
 
@@ -167,11 +167,11 @@ func (r *ValidatorRegistrationRunner) ProcessPreConsensus(ctx context.Context, l
 }
 
 func (r *ValidatorRegistrationRunner) ProcessConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.SignedSSVMessage) error {
-	return spectypes.NewError(spectypes.ValidatorRegistrationNoConsensusPhaseErrorCode, "no consensus phase for validator registration")
+	return spectypes.NewError(ssvtypes.ValidatorRegistrationNoConsensusPhaseErrorCode, "no consensus phase for validator registration")
 }
 
 func (r *ValidatorRegistrationRunner) ProcessPostConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
-	return spectypes.NewError(spectypes.ValidatorRegistrationNoPostConsensusPhaseErrorCode, "no post consensus phase for validator registration")
+	return spectypes.NewError(ssvtypes.ValidatorRegistrationNoPostConsensusPhaseErrorCode, "no post consensus phase for validator registration")
 }
 
 func (r *ValidatorRegistrationRunner) expectedPreConsensusRootsAndDomain() ([]spectypes.HashRoot, phase0.DomainType, error) {
@@ -221,7 +221,7 @@ func (r *ValidatorRegistrationRunner) executeDuty(ctx context.Context, logger *z
 	}
 
 	msgs := &spectypes.PartialSignatureMessages{
-		Type:     spectypes.ValidatorRegistrationPartialSig,
+		Type:     ssvtypes.ValidatorRegistrationPartialSig,
 		Slot:     validatorDuty.DutySlot(),
 		Messages: []*spectypes.PartialSignatureMessage{msg},
 	}

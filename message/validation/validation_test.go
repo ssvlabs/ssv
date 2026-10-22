@@ -64,7 +64,7 @@ func PartialMsgTypeToString(mt spectypes.PartialSigMsgType) string {
 		return "SelectionProofPartialSig"
 	case ssvtypes.ContributionProofs:
 		return "ContributionProofs"
-	case spectypes.ValidatorRegistrationPartialSig:
+	case ssvtypes.ValidatorRegistrationPartialSig:
 		return "ValidatorRegistrationPartialSig"
 	case spectypes.VoluntaryExitPartialSig:
 		return "VoluntaryExitPartialSig"
@@ -284,7 +284,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	t.Run("aggregator committee partial signature message ID padding", func(t *testing.T) {
 		slot := phase0.Slot(spectestingutils.TestingDutySlot)
 		build := func(msgID spectypes.MessageID) *spectypes.SignedSSVMessage {
-			messages := spectestingutils.PostConsensusAggregatorMsg(ks.Shares[1], 1, spec.DataVersionPhase0)
+			messages := ssvtestingutils.PostConsensusAggregatorMsg(ks.Shares[1], 1, spec.DataVersionPhase0)
 			messages.Type = spectypes.AggregatorCommitteePartialSig
 			encodedMessages, err := messages.Encode()
 			require.NoError(t, err)
@@ -330,7 +330,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		_, err = validator.handleSignedSSVMessage(t.Context(), generateSignedMessage(ks, committeeIdentifier, slot), "wrong topic", peerID, receivedAt)
 		require.ErrorIs(t, err, ErrIncorrectTopic)
 
-		messages := spectestingutils.PostConsensusAttestationMsg(ks.Shares[1], 1, spec.DataVersionPhase0)
+		messages := ssvtestingutils.PostConsensusAttestationMsg(ks.Shares[1], 1, spec.DataVersionPhase0)
 		messages.Slot = slot
 		encodedMessages, err := messages.Encode()
 		require.NoError(t, err)
@@ -357,7 +357,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		receivedAt := netCfg.SlotStartTime(slot)
 		topic := commons.GetTopicFullName(commons.CommitteeTopicID(committeeID)[0])
 		partialSig := func(msgID spectypes.MessageID, sigType spectypes.PartialSigMsgType) *spectypes.SignedSSVMessage {
-			messages := spectestingutils.PostConsensusAttestationMsg(ks.Shares[1], 1, spec.DataVersionPhase0)
+			messages := ssvtestingutils.PostConsensusAttestationMsg(ks.Shares[1], 1, spec.DataVersionPhase0)
 			messages.Slot = slot
 			messages.Type = sigType
 			encodedMessages, err := messages.Encode()
@@ -395,7 +395,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		receivedAt := netCfg.SlotStartTime(slot)
 		topic := commons.GetTopicFullName(commons.CommitteeTopicID(committeeID)[0])
 
-		messages := spectestingutils.PostConsensusAttestationMsg(ks.Shares[1], 1, spec.DataVersionPhase0)
+		messages := ssvtestingutils.PostConsensusAttestationMsg(ks.Shares[1], 1, spec.DataVersionPhase0)
 		messages.Slot = slot
 		encodedMessages, err := messages.Encode()
 		require.NoError(t, err)
@@ -650,7 +650,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		validator := New(netCfg, validatorStore, operators, dutyStore, noCallSignatureVerifier).(*messageValidator)
 
 		slot := netCfg.FirstSlotAtEpoch(1)
-		ssvMessage := spectestingutils.SSVMsgAggregator(nil, spectestingutils.PostConsensusAggregatorMsg(ks.Shares[1], 1, spec.DataVersionPhase0))
+		ssvMessage := spectestingutils.SSVMsgAggregator(nil, ssvtestingutils.PostConsensusAggregatorMsg(ks.Shares[1], 1, spec.DataVersionPhase0))
 		ssvMessage.MsgID = committeeIdentifier
 		signedSSVMessage := spectestingutils.SignPartialSigSSVMessage(ks, ssvMessage)
 
@@ -1200,22 +1200,24 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		slot := netCfg.FirstSlotAtEpoch(1)
 
-		badIdentifier := ssvtestingutils.NewMsgID(netCfg.DomainType, shares.active.ValidatorPubKey[:], spectypes.RoleValidatorRegistration)
+		badIdentifier := ssvtestingutils.NewMsgID(netCfg.DomainType, shares.active.ValidatorPubKey[:], ssvtypes.RoleValidatorRegistration)
 		signedSSVMessage := generateSignedMessage(ks, badIdentifier, slot)
 
 		topicID := commons.GetTopicFullName(commons.CommitteeTopicID(committeeID)[0])
 		receivedAt := netCfg.SlotStartTime(slot)
 		_, err = validator.handleSignedSSVMessage(context.Background(), signedSSVMessage, topicID, peerID, receivedAt)
 		expectedErr := ErrUnexpectedConsensusMessage
-		expectedErr.got = spectypes.RoleValidatorRegistration
+		expectedErr.got = ssvtypes.RunnerRoleToString(ssvtypes.RoleValidatorRegistration)
 		require.ErrorIs(t, err, expectedErr)
+		require.ErrorContains(t, err, expectedErr.Error()) // names the role, which the spec calls UNDEFINED
 
 		badIdentifier = ssvtestingutils.NewMsgID(netCfg.DomainType, shares.active.ValidatorPubKey[:], spectypes.RoleVoluntaryExit)
 		signedSSVMessage = generateSignedMessage(ks, badIdentifier, slot)
 
 		_, err = validator.handleSignedSSVMessage(context.Background(), signedSSVMessage, topicID, peerID, receivedAt)
-		expectedErr.got = spectypes.RoleVoluntaryExit
+		expectedErr.got = ssvtypes.RunnerRoleToString(spectypes.RoleVoluntaryExit)
 		require.ErrorIs(t, err, expectedErr)
+		require.ErrorContains(t, err, expectedErr.Error())
 	})
 
 	// Ignore messages related to a validator that is liquidated
@@ -1578,7 +1580,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	//// Get error when receiving a message with more partial signatures than the SSZ max
 	t.Run("partial message too big", func(t *testing.T) {
 		// slot := netCfg.FirstSlotAtEpoch(1)
-		msg := spectestingutils.PostConsensusAttestationMsg(ks.Shares[1], 1, spec.DataVersionPhase0)
+		msg := ssvtestingutils.PostConsensusAttestationMsg(ks.Shares[1], 1, spec.DataVersionPhase0)
 		for i := 0; i < 5048; i++ {
 			msg.Messages = append(msg.Messages, msg.Messages[0])
 		}
@@ -1619,7 +1621,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		slot := netCfg.FirstSlotAtEpoch(1)
 
-		msg := spectestingutils.SignPartialSigSSVMessage(ks, spectestingutils.SSVMsgAggregator(nil, spectestingutils.PostConsensusAggregatorMsg(ks.Shares[1], 1, spec.DataVersionPhase0)))
+		msg := spectestingutils.SignPartialSigSSVMessage(ks, spectestingutils.SSVMsgAggregator(nil, ssvtestingutils.PostConsensusAggregatorMsg(ks.Shares[1], 1, spec.DataVersionPhase0)))
 		msg.OperatorIDs = []spectypes.OperatorID{0}
 
 		receivedAt := netCfg.SlotStartTime(slot)
@@ -1634,7 +1636,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		slot := netCfg.FirstSlotAtEpoch(1)
 
-		ssvMessage := spectestingutils.SSVMsgAggregator(nil, spectestingutils.PostConsensusAggregatorMsg(ks.Shares[1], 1, spec.DataVersionPhase0))
+		ssvMessage := spectestingutils.SSVMsgAggregator(nil, ssvtestingutils.PostConsensusAggregatorMsg(ks.Shares[1], 1, spec.DataVersionPhase0))
 		ssvMessage.MsgID = committeeIdentifier
 		partialSigSSVMessage := spectestingutils.SignPartialSigSSVMessage(ks, ssvMessage)
 		partialSigSSVMessage.OperatorIDs = []spectypes.OperatorID{2}
@@ -1654,7 +1656,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		slot := netCfg.FirstSlotAtEpoch(1)
 
-		messages := spectestingutils.PostConsensusAggregatorMsg(ks.Shares[1], 1, spec.DataVersionPhase0)
+		messages := ssvtestingutils.PostConsensusAggregatorMsg(ks.Shares[1], 1, spec.DataVersionPhase0)
 		messages.Messages = nil
 		ssvMessage := spectestingutils.SSVMsgAggregator(nil, messages)
 		ssvMessage.MsgID = committeeIdentifier
@@ -1672,7 +1674,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		slot := netCfg.FirstSlotAtEpoch(1)
 
-		partialSigSSVMessage := spectestingutils.SignPartialSigSSVMessage(ks, spectestingutils.SSVMsgAggregator(nil, spectestingutils.PostConsensusAggregatorMsg(ks.Shares[1], 1, spec.DataVersionPhase0)))
+		partialSigSSVMessage := spectestingutils.SignPartialSigSSVMessage(ks, spectestingutils.SSVMsgAggregator(nil, ssvtestingutils.PostConsensusAggregatorMsg(ks.Shares[1], 1, spec.DataVersionPhase0)))
 		partialSigSSVMessage.Signatures = [][]byte{{1}}
 
 		receivedAt := netCfg.SlotStartTime(slot)
@@ -1690,7 +1692,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 				ssvtypes.RoleAggregator:                {spectypes.PostConsensusPartialSig, ssvtypes.SelectionProofPartialSig},
 				spectypes.RoleProposer:                 {spectypes.PostConsensusPartialSig, spectypes.RandaoPartialSig},
 				ssvtypes.RoleSyncCommitteeContribution: {spectypes.PostConsensusPartialSig, ssvtypes.ContributionProofs},
-				spectypes.RoleValidatorRegistration:    {spectypes.ValidatorRegistrationPartialSig},
+				ssvtypes.RoleValidatorRegistration:     {ssvtypes.ValidatorRegistrationPartialSig},
 				spectypes.RoleVoluntaryExit:            {spectypes.VoluntaryExitPartialSig},
 			}
 
@@ -1709,7 +1711,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 						validator := New(netCfg, validatorStore, operators, ds, signatureVerifier).(*messageValidator)
 
-						messages := spectestingutils.PostConsensusAggregatorMsg(ks.Shares[1], 1, spec.DataVersionPhase0)
+						messages := ssvtestingutils.PostConsensusAggregatorMsg(ks.Shares[1], 1, spec.DataVersionPhase0)
 						messages.Type = msgType
 
 						encodedMessages, err := messages.Encode()
@@ -1742,7 +1744,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		t.Run("invalid message type", func(t *testing.T) {
 			validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
-			messages := spectestingutils.PostConsensusAggregatorMsg(ks.Shares[1], 1, spec.DataVersionPhase0)
+			messages := ssvtestingutils.PostConsensusAggregatorMsg(ks.Shares[1], 1, spec.DataVersionPhase0)
 			messages.Type = math.MaxUint64
 
 			encodedMessages, err := messages.Encode()
@@ -1765,11 +1767,11 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		// Get error when sending an unexpected message type for the required duty (sending randao for attestor duty)
 		t.Run("mismatch", func(t *testing.T) {
 			tests := map[spectypes.RunnerRole][]spectypes.PartialSigMsgType{
-				spectypes.RoleCommittee:                {spectypes.RandaoPartialSig, ssvtypes.SelectionProofPartialSig, ssvtypes.ContributionProofs, spectypes.ValidatorRegistrationPartialSig},
-				ssvtypes.RoleAggregator:                {spectypes.RandaoPartialSig, ssvtypes.ContributionProofs, spectypes.ValidatorRegistrationPartialSig},
-				spectypes.RoleProposer:                 {ssvtypes.SelectionProofPartialSig, ssvtypes.ContributionProofs, spectypes.ValidatorRegistrationPartialSig},
-				ssvtypes.RoleSyncCommitteeContribution: {spectypes.RandaoPartialSig, ssvtypes.SelectionProofPartialSig, spectypes.ValidatorRegistrationPartialSig},
-				spectypes.RoleValidatorRegistration:    {spectypes.PostConsensusPartialSig, spectypes.RandaoPartialSig, ssvtypes.SelectionProofPartialSig, ssvtypes.ContributionProofs},
+				spectypes.RoleCommittee:                {spectypes.RandaoPartialSig, ssvtypes.SelectionProofPartialSig, ssvtypes.ContributionProofs, ssvtypes.ValidatorRegistrationPartialSig},
+				ssvtypes.RoleAggregator:                {spectypes.RandaoPartialSig, ssvtypes.ContributionProofs, ssvtypes.ValidatorRegistrationPartialSig},
+				spectypes.RoleProposer:                 {ssvtypes.SelectionProofPartialSig, ssvtypes.ContributionProofs, ssvtypes.ValidatorRegistrationPartialSig},
+				ssvtypes.RoleSyncCommitteeContribution: {spectypes.RandaoPartialSig, ssvtypes.SelectionProofPartialSig, ssvtypes.ValidatorRegistrationPartialSig},
+				ssvtypes.RoleValidatorRegistration:     {spectypes.PostConsensusPartialSig, spectypes.RandaoPartialSig, ssvtypes.SelectionProofPartialSig, ssvtypes.ContributionProofs},
 				spectypes.RoleVoluntaryExit:            {spectypes.PostConsensusPartialSig, spectypes.RandaoPartialSig, ssvtypes.SelectionProofPartialSig, ssvtypes.ContributionProofs},
 			}
 
@@ -1787,7 +1789,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 						validator := New(netCfg, validatorStore, operators, ds, signatureVerifier).(*messageValidator)
 
-						messages := spectestingutils.PostConsensusAggregatorMsg(ks.Shares[1], 1, spec.DataVersionPhase0)
+						messages := ssvtestingutils.PostConsensusAggregatorMsg(ks.Shares[1], 1, spec.DataVersionPhase0)
 						messages.Type = msgType
 
 						encodedMessages, err := messages.Encode()
@@ -1822,7 +1824,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 				ssvtypes.RoleAggregator:                {spectypes.PostConsensusPartialSig, ssvtypes.SelectionProofPartialSig},
 				spectypes.RoleProposer:                 {spectypes.PostConsensusPartialSig, spectypes.RandaoPartialSig},
 				ssvtypes.RoleSyncCommitteeContribution: {spectypes.PostConsensusPartialSig, ssvtypes.ContributionProofs},
-				spectypes.RoleValidatorRegistration:    {spectypes.ValidatorRegistrationPartialSig},
+				ssvtypes.RoleValidatorRegistration:     {ssvtypes.ValidatorRegistrationPartialSig},
 				spectypes.RoleVoluntaryExit:            {spectypes.VoluntaryExitPartialSig},
 			}
 
@@ -1841,7 +1843,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 						validator := New(netCfg, validatorStore, operators, ds, signatureVerifier).(*messageValidator)
 
-						messages := spectestingutils.PostConsensusAggregatorMsg(ks.Shares[1], 1, spec.DataVersionPhase0)
+						messages := ssvtestingutils.PostConsensusAggregatorMsg(ks.Shares[1], 1, spec.DataVersionPhase0)
 						messages.Type = msgType
 
 						encodedMessages, err := messages.Encode()
@@ -1892,7 +1894,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 				validator := New(postBooleCfg, validatorStore, operators, dutystore.New(), signatureVerifier).(*messageValidator)
 
 				slot := phase0.Slot(spectestingutils.TestingDutySlot)
-				messages := spectestingutils.PostConsensusAggregatorMsg(ks.Shares[1], 1, spec.DataVersionPhase0)
+				messages := ssvtestingutils.PostConsensusAggregatorMsg(ks.Shares[1], 1, spec.DataVersionPhase0)
 				messages.Type = spectypes.AggregatorCommitteePartialSig
 
 				encodedMessages, err := messages.Encode()
@@ -3102,7 +3104,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		slot := netCfg.FirstSlotAtEpoch(1)
 
-		ssvMessage := spectestingutils.SSVMsgAggregator(nil, spectestingutils.PostConsensusAggregatorMsg(ks.Shares[1], 1, spec.DataVersionPhase0))
+		ssvMessage := spectestingutils.SSVMsgAggregator(nil, ssvtestingutils.PostConsensusAggregatorMsg(ks.Shares[1], 1, spec.DataVersionPhase0))
 		ssvMessage.MsgID = committeeIdentifier
 		signedSSVMessage := spectestingutils.SignPartialSigSSVMessage(ks, ssvMessage)
 		signedSSVMessage.FullData = []byte{1}
@@ -3119,7 +3121,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		slot := netCfg.FirstSlotAtEpoch(1)
 
-		ssvMessage := spectestingutils.SSVMsgAggregator(nil, spectestingutils.PostConsensusAggregatorMsg(ks.Shares[1], 1, spec.DataVersionPhase0))
+		ssvMessage := spectestingutils.SSVMsgAggregator(nil, ssvtestingutils.PostConsensusAggregatorMsg(ks.Shares[1], 1, spec.DataVersionPhase0))
 		ssvMessage.MsgID = committeeIdentifier
 		signedSSVMessage := spectestingutils.SignPartialSigSSVMessage(ks, ssvMessage)
 		signedSSVMessage.OperatorIDs = []spectypes.OperatorID{1, 2}
@@ -3137,7 +3139,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		slot := netCfg.FirstSlotAtEpoch(1)
 
-		messages := spectestingutils.PostConsensusAggregatorMsg(ks.Shares[1], 1, spec.DataVersionPhase0)
+		messages := ssvtestingutils.PostConsensusAggregatorMsg(ks.Shares[1], 1, spec.DataVersionPhase0)
 		for i := 0; i < 12; i++ {
 			messages.Messages = append(messages.Messages, messages.Messages[0])
 		}
@@ -3165,7 +3167,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		slot := netCfg.FirstSlotAtEpoch(1)
 
-		messages := spectestingutils.PostConsensusAggregatorMsg(ks.Shares[1], 1, spec.DataVersionPhase0)
+		messages := ssvtestingutils.PostConsensusAggregatorMsg(ks.Shares[1], 1, spec.DataVersionPhase0)
 		for i := 0; i < 3; i++ {
 			messages.Messages = append(messages.Messages, messages.Messages[0])
 		}
@@ -3193,7 +3195,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		slot := netCfg.FirstSlotAtEpoch(1)
 
-		messages := spectestingutils.PostConsensusAggregatorMsg(ks.Shares[1], 1, spec.DataVersionPhase0)
+		messages := ssvtestingutils.PostConsensusAggregatorMsg(ks.Shares[1], 1, spec.DataVersionPhase0)
 		messages.Messages[0].ValidatorIndex = math.MaxUint64
 
 		data, err := messages.Encode()

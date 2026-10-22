@@ -11,9 +11,9 @@ import (
 	"github.com/ssvlabs/eth2-key-manager/signer"
 	slashingprotection "github.com/ssvlabs/eth2-key-manager/slashing_protection"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ssvlabs/ssv/ssvsigner/internal/ssvtestingutils"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 )
 
@@ -40,12 +40,12 @@ func TestSlashing(t *testing.T) {
 	highestSource := highestTarget - 1
 	highestProposal := currentSlot + minSPProposalSlotGap + 1
 
-	attestationData := testingutils.TestingAttestationData(spec.DataVersionPhase0)
+	attestationData := ssvtestingutils.TestingAttestationData(spec.DataVersionPhase0)
 	attestationData.Slot = currentSlot
 	attestationData.Source.Epoch = highestSource
 	attestationData.Target.Epoch = highestTarget
 
-	beaconBlock := testingutils.TestingBeaconBlockCapella
+	beaconBlock := ssvtestingutils.TestingBeaconBlockCapella
 	beaconBlock.Slot = highestProposal
 
 	t.Run("sign once", func(t *testing.T) {
@@ -268,7 +268,7 @@ func TestConcurrentSlashingProtectionAttData(t *testing.T) {
 	highestTarget := currentEpoch + minSPAttestationEpochGap + 1
 	highestSource := highestTarget - 1
 
-	attestationData := testingutils.TestingAttestationData(spec.DataVersionPhase0)
+	attestationData := ssvtestingutils.TestingAttestationData(spec.DataVersionPhase0)
 	attestationData.Slot = currentSlot
 	attestationData.Source.Epoch = highestSource
 	attestationData.Target.Epoch = highestTarget
@@ -345,7 +345,7 @@ func TestConcurrentSlashingProtectionBeaconBlock(t *testing.T) {
 	currentSlot := testBeaconConfig().EstimatedCurrentSlot()
 	highestProposal := currentSlot + minSPProposalSlotGap + 1
 
-	blockContents := testingutils.TestingBlockContentsDeneb
+	blockContents := ssvtestingutils.TestingBlockContentsDeneb
 	blockContents.Block.Slot = highestProposal
 
 	signBeaconBlock := func(wg *sync.WaitGroup, errChan chan error) {
@@ -443,7 +443,7 @@ func TestConcurrentSlashingProtectionWithMultipleKeysAttData(t *testing.T) {
 	highestTarget := currentEpoch + minSPAttestationEpochGap + 1
 	highestSource := highestTarget - 1
 
-	attestationData := testingutils.TestingAttestationData(spec.DataVersionPhase0)
+	attestationData := ssvtestingutils.TestingAttestationData(spec.DataVersionPhase0)
 	attestationData.Slot = currentSlot
 	attestationData.Source.Epoch = highestSource
 	attestationData.Target.Epoch = highestTarget
@@ -545,7 +545,7 @@ func TestConcurrentSlashingProtectionWithMultipleKeysBeaconBlock(t *testing.T) {
 	currentSlot := testBeaconConfig().EstimatedCurrentSlot()
 	highestProposal := currentSlot + minSPProposalSlotGap + 1
 
-	blockContents := testingutils.TestingBlockContentsDeneb
+	blockContents := ssvtestingutils.TestingBlockContentsDeneb
 	blockContents.Block.Slot = highestProposal
 
 	type validatorResult struct {
@@ -634,7 +634,7 @@ func TestComprehensiveSlashingBlockProposal(t *testing.T) {
 	err = km.IsBeaconBlockSlashable(sharePubKey, slotToSign)
 	require.NoError(t, err, "First block should not be slashable")
 
-	block1 := testingutils.TestingBeaconBlockCapella
+	block1 := ssvtestingutils.TestingBeaconBlockCapella
 	block1.Slot = slotToSign
 
 	// Sign the block - should succeed
@@ -650,7 +650,7 @@ func TestComprehensiveSlashingBlockProposal(t *testing.T) {
 
 	// --- Second Block Proposal (Same Slot) ---
 	// Create a different block at same slot
-	block2 := testingutils.TestingBeaconBlockCapella
+	block2 := ssvtestingutils.TestingBeaconBlockCapella
 	block2.Slot = slotToSign
 	block2.ParentRoot = phase0.Root{0x02} // Different parent root
 
@@ -669,7 +669,7 @@ func TestComprehensiveSlashingBlockProposal(t *testing.T) {
 	// --- Third Block Proposal (Lower Slot) ---
 	// Create a block at a lower slot
 	slotToSignLower := slotToSign - 1
-	block3 := testingutils.TestingBeaconBlockCapella
+	block3 := ssvtestingutils.TestingBeaconBlockCapella
 	block3.Slot = slotToSignLower
 
 	// Attempt to sign - should fail
@@ -686,7 +686,7 @@ func TestComprehensiveSlashingBlockProposal(t *testing.T) {
 
 	// --- Fourth Block Proposal (Higher Slot) ---
 	slotToSignHigher := slotToSign + 1
-	block4 := testingutils.TestingBeaconBlockCapella
+	block4 := ssvtestingutils.TestingBeaconBlockCapella
 	block4.Slot = slotToSignHigher
 
 	// Attempt to sign - should succeed
@@ -782,7 +782,7 @@ func TestSlashableAttestationDoubleVote(t *testing.T) {
 	epochToSign := netCfg.EstimatedCurrentEpoch() + 2
 	slotToSign := netCfg.FirstSlotAtEpoch(epochToSign)
 
-	attData1 := testingutils.TestingAttestationData(spec.DataVersionPhase0)
+	attData1 := ssvtestingutils.TestingAttestationData(spec.DataVersionPhase0)
 	attData1.Slot = slotToSign
 	attData1.Source.Epoch = epochToSign - 1
 	attData1.Target.Epoch = epochToSign
@@ -799,7 +799,7 @@ func TestSlashableAttestationDoubleVote(t *testing.T) {
 	require.NoError(t, err, "Failed to update highest attestation")
 
 	// --- Second Attestation (Same Target Epoch, Different Data) ---
-	attData2 := testingutils.TestingAttestationData(spec.DataVersionPhase0)
+	attData2 := ssvtestingutils.TestingAttestationData(spec.DataVersionPhase0)
 	attData2.Slot = slotToSign
 	attData2.Source.Epoch = epochToSign - 1
 	attData2.Target.Epoch = epochToSign
@@ -816,7 +816,7 @@ func TestSlashableAttestationDoubleVote(t *testing.T) {
 	epochToSignHigher := epochToSign + 1
 	slotToSignHigher := netCfg.FirstSlotAtEpoch(epochToSignHigher)
 
-	attData3 := testingutils.TestingAttestationData(spec.DataVersionPhase0)
+	attData3 := ssvtestingutils.TestingAttestationData(spec.DataVersionPhase0)
 	attData3.Slot = slotToSignHigher
 	attData3.Source.Epoch = epochToSign
 	attData3.Target.Epoch = epochToSignHigher
@@ -859,7 +859,7 @@ func TestSlashableAttestationSurroundingVote(t *testing.T) {
 	innerTargetEpoch := innerSourceEpoch + 1
 	innerSlot := netCfg.FirstSlotAtEpoch(innerTargetEpoch) // Slot within the target epoch
 
-	attDataInner := testingutils.TestingAttestationData(spec.DataVersionPhase0)
+	attDataInner := ssvtestingutils.TestingAttestationData(spec.DataVersionPhase0)
 	attDataInner.Slot = innerSlot
 	attDataInner.BeaconBlockRoot = phase0.Root{0xAA} // Different root
 	attDataInner.Source = &phase0.Checkpoint{Epoch: innerSourceEpoch, Root: phase0.Root{0xBB}}
@@ -878,7 +878,7 @@ func TestSlashableAttestationSurroundingVote(t *testing.T) {
 	outerTargetEpoch := innerTargetEpoch + 1 // Higher target
 	outerSlot := netCfg.FirstSlotAtEpoch(outerTargetEpoch)
 
-	attDataOuter := testingutils.TestingAttestationData(spec.DataVersionPhase0)
+	attDataOuter := ssvtestingutils.TestingAttestationData(spec.DataVersionPhase0)
 	attDataOuter.Slot = outerSlot
 	attDataOuter.BeaconBlockRoot = phase0.Root{0xDD} // Different root
 	attDataOuter.Source = &phase0.Checkpoint{Epoch: outerSourceEpoch, Root: phase0.Root{0xEE}}
@@ -894,7 +894,7 @@ func TestSlashableAttestationSurroundingVote(t *testing.T) {
 	higherTargetEpoch := outerTargetEpoch // Same target as outer (but source is higher than outer's source)
 	higherSlot := netCfg.FirstSlotAtEpoch(higherTargetEpoch)
 
-	attDataHigher := testingutils.TestingAttestationData(spec.DataVersionPhase0)
+	attDataHigher := ssvtestingutils.TestingAttestationData(spec.DataVersionPhase0)
 	attDataHigher.Slot = higherSlot
 	attDataHigher.BeaconBlockRoot = phase0.Root{0x11} // Different root
 	attDataHigher.Source = &phase0.Checkpoint{Epoch: higherSourceEpoch, Root: phase0.Root{0x22}}

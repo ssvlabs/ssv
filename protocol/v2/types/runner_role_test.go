@@ -20,7 +20,7 @@ func TestCommitteeRunnerRoleForBeaconRole(t *testing.T) {
 		{name: "aggregator maps to aggregator committee", role: spectypes.BNRoleAggregator, wantRole: spectypes.RoleAggregatorCommittee, wantOK: true},
 		{name: "sync committee contribution maps to aggregator committee", role: spectypes.BNRoleSyncCommitteeContribution, wantRole: spectypes.RoleAggregatorCommittee, wantOK: true},
 		{name: "proposer is not committee-backed", role: spectypes.BNRoleProposer, wantOK: false},
-		{name: "validator registration is not committee-backed", role: spectypes.BNRoleValidatorRegistration, wantOK: false},
+		{name: "validator registration is not committee-backed", role: BNRoleValidatorRegistration, wantOK: false},
 		{name: "voluntary exit is not committee-backed", role: spectypes.BNRoleVoluntaryExit, wantOK: false},
 	}
 

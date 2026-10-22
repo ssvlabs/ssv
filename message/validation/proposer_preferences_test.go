@@ -37,7 +37,7 @@ func TestMonotonicSlotRole_ProposerPreferences(t *testing.T) {
 	mv := &messageValidator{}
 	require.False(t, mv.monotonicSlotRole(spectypes.RoleProposerPreferences))
 	require.True(t, mv.monotonicSlotRole(spectypes.RoleProposer))
-	require.True(t, mv.monotonicSlotRole(spectypes.RoleValidatorRegistration))
+	require.True(t, mv.monotonicSlotRole(ssvtypes.RoleValidatorRegistration))
 	require.False(t, mv.monotonicSlotRole(spectypes.RoleCommittee))
 }
 
@@ -208,8 +208,8 @@ func TestValidRoleAtSlot_ValidatorRegistrationDeprecatedAtGloas(t *testing.T) {
 	preGloasSlot := phase0.Slot(uint64(gloasEpoch-1) * netCfg.SlotsPerEpoch)
 	gloasSlot := phase0.Slot(uint64(gloasEpoch) * netCfg.SlotsPerEpoch)
 
-	require.True(t, mv.validRoleAtSlot(spectypes.RoleValidatorRegistration, preGloasSlot))
-	require.False(t, mv.validRoleAtSlot(spectypes.RoleValidatorRegistration, gloasSlot))
+	require.True(t, mv.validRoleAtSlot(ssvtypes.RoleValidatorRegistration, preGloasSlot))
+	require.False(t, mv.validRoleAtSlot(ssvtypes.RoleValidatorRegistration, gloasSlot))
 }
 
 // Registrations end at the Gloas fork (SIP #94 §5): from the epoch after it every registration message is
@@ -231,7 +231,7 @@ func TestRegistrationsRetiredAfterGloas(t *testing.T) {
 	// Through the duty-logic checks: a registration stamped with a pre-fork slot passes during the fork epoch
 	// and is ignored (not rejected: the condition comes from the local clock) from the epoch after.
 	msgs := &spectypes.PartialSignatureMessages{
-		Type:     spectypes.ValidatorRegistrationPartialSig,
+		Type:     ssvtypes.ValidatorRegistrationPartialSig,
 		Slot:     netCfg.FirstSlotAtEpoch(gloasEpoch - 1),
 		Messages: []*spectypes.PartialSignatureMessage{{Signer: 1, ValidatorIndex: 1}},
 	}
@@ -239,7 +239,7 @@ func TestRegistrationsRetiredAfterGloas(t *testing.T) {
 		OperatorIDs: []spectypes.OperatorID{1},
 		SSVMessage: &spectypes.SSVMessage{
 			MsgType: spectypes.SSVPartialSignatureMsgType,
-			MsgID:   ssvtestingutils.NewMsgID(netCfg.DomainType, make([]byte, 48), spectypes.RoleValidatorRegistration),
+			MsgID:   ssvtestingutils.NewMsgID(netCfg.DomainType, make([]byte, 48), ssvtypes.RoleValidatorRegistration),
 		},
 	}
 	ci := newCommitteeInfo(spectypes.CommitteeID{}, []spectypes.OperatorID{1, 2, 3, 4}, []phase0.ValidatorIndex{1}, 0, 0)

@@ -18,8 +18,8 @@ func BeaconRoleToRunnerRole(runnerRole spectypes.BeaconRole) spectypes.RunnerRol
 		return spectypes.RoleCommittee
 	case spectypes.BNRoleSyncCommitteeContribution:
 		return ssvtypes.RoleSyncCommitteeContribution
-	case spectypes.BNRoleValidatorRegistration:
-		return spectypes.RoleValidatorRegistration
+	case ssvtypes.BNRoleValidatorRegistration:
+		return ssvtypes.RoleValidatorRegistration
 	case spectypes.BNRoleVoluntaryExit:
 		return spectypes.RoleVoluntaryExit
 	default:

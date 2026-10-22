@@ -7,6 +7,8 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 // TestHexMarshalJSON tests hex marshaling to JSON.
@@ -339,6 +341,11 @@ func TestRoleMarshalJSON(t *testing.T) {
 			name:     "proposer role",
 			role:     Role(spectypes.BNRoleProposer),
 			expected: `"PROPOSER"`,
+		},
+		{
+			name:     "validator registration role",
+			role:     Role(ssvtypes.BNRoleValidatorRegistration),
+			expected: `"VALIDATOR_REGISTRATION"`,
 		},
 	}
 

@@ -26,9 +26,9 @@ import (
 	"go.uber.org/zap"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"github.com/ssvlabs/ssv-spec/types/testingutils"
 
 	"github.com/ssvlabs/ssv/ekmadapter"
+	"github.com/ssvlabs/ssv/protocol/v2/types/ssvtestingutils"
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	badgerdb "github.com/ssvlabs/ssv/storage/badger"
@@ -138,7 +138,7 @@ func (f *fixture) signAttestation(ctx context.Context, data *phase0.AttestationD
 }
 
 func (f *fixture) signBlock(ctx context.Context, slot phase0.Slot, parent byte) error {
-	block := *testingutils.TestingBlockContentsDeneb.Block // shallow copy; Body is shared and untouched
+	block := *ssvtestingutils.TestingBlockContentsDeneb.Block // shallow copy; Body is shared and untouched
 	block.Slot = slot
 	block.ParentRoot = phase0.Root{parent}
 	_, _, err := f.km.SignBeaconObject(ctx, &block, domainFor(spectypes.DomainProposer), f.pk, slot, spectypes.DomainProposer)

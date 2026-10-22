@@ -11,6 +11,7 @@ import (
 
 	dutytracer "github.com/ssvlabs/ssv/exporter/dutytracer"
 	"github.com/ssvlabs/ssv/ibft/storage"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 // TraceDecidedsCore contains the core logic for TraceDecideds without any HTTP concerns.
@@ -54,7 +55,7 @@ func (e *Exporter) TraceDecidedsCore(request *DecidedsQuery) (*TraceDecidedsResu
 					// we don't append an error here to prevent duty-syncer from getting stuck on error-500.
 					// still we should investigate how it is possible that we have an entry with no signers,
 					// we log it here for further investigation.
-					e.logger.Error("omitting entry with no signers", zap.String("index", fmt.Sprintf("%x", idxEntry.Index)), zap.Uint64("slot", uint64(slot)), zap.String("role", role.String()))
+					e.logger.Error("omitting entry with no signers", zap.String("index", fmt.Sprintf("%x", idxEntry.Index)), zap.Uint64("slot", uint64(slot)), zap.String("role", ssvtypes.BeaconRoleToString(role)))
 					continue
 				}
 
@@ -94,7 +95,7 @@ func (e *Exporter) DecidedsCore(request *DecidedsQuery) (*TraceDecidedsResult, e
 		if store == nil {
 			// Every role the API parses has a store (message.BeaconRoles); a miss is a wiring gap, not a
 			// bad request.
-			return nil, fmt.Errorf("no participant store for role %s", role)
+			return nil, fmt.Errorf("no participant store for role %s", ssvtypes.BeaconRoleToString(role))
 		}
 
 		var participantsRange []storage.ParticipantsRangeEntry

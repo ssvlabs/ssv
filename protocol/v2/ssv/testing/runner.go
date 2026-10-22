@@ -21,6 +21,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/protocol/v2/types/ssvtestingutils"
 )
 
 var TestingHighestDecidedSlot = phase0.Slot(0)
@@ -54,7 +55,7 @@ var SyncCommitteeContributionRunner = func(logger *zap.Logger, keySet *spectesti
 }
 
 var ValidatorRegistrationRunner = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet) runner.Runner {
-	ret := baseRunner(logger, spectypes.RoleValidatorRegistration, keySet)
+	ret := baseRunner(logger, ssvtypes.RoleValidatorRegistration, keySet)
 	return ret
 }
 
@@ -74,10 +75,10 @@ var baseRunner = func(logger *zap.Logger, role spectypes.RunnerRole, keySet *spe
 	return runner
 }
 
-var vote = &spectypes.BeaconVote{
-	BlockRoot: spectestingutils.TestingAttestationData(spec.DataVersionPhase0).BeaconBlockRoot,
-	Source:    spectestingutils.TestingAttestationData(spec.DataVersionPhase0).Source,
-	Target:    spectestingutils.TestingAttestationData(spec.DataVersionPhase0).Target,
+var vote = &ssvtypes.PreGloasBeaconVote{
+	BlockRoot: ssvtestingutils.TestingAttestationData(spec.DataVersionPhase0).BeaconBlockRoot,
+	Source:    ssvtestingutils.TestingAttestationData(spec.DataVersionPhase0).Source,
+	Target:    ssvtestingutils.TestingAttestationData(spec.DataVersionPhase0).Target,
 }
 
 var ConstructBaseRunner = func(
@@ -194,7 +195,7 @@ var ConstructBaseRunner = func(
 			ValCheck:           valCheck,
 			HighestDecidedSlot: TestingHighestDecidedSlot,
 		})
-	case spectypes.RoleValidatorRegistration:
+	case ssvtypes.RoleValidatorRegistration:
 		mockFeeProvider := &mocks.FeeRecipientProvider{}
 		r, err = runner.NewValidatorRegistrationRunner(runner.ValidatorRegistrationRunnerOptions{
 			BaseRunnerOptions:              baseOpts,
@@ -373,7 +374,7 @@ var ConstructBaseRunnerWithShareMap = func(
 			ValCheck:           valCheck,
 			HighestDecidedSlot: TestingHighestDecidedSlot,
 		})
-	case spectypes.RoleValidatorRegistration:
+	case ssvtypes.RoleValidatorRegistration:
 		mockFeeProvider := &mocks.FeeRecipientProvider{}
 		r, err = runner.NewValidatorRegistrationRunner(runner.ValidatorRegistrationRunnerOptions{
 			BaseRunnerOptions:              baseOpts,

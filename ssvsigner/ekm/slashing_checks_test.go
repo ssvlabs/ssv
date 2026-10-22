@@ -28,6 +28,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv-spec/types/testingutils"
 
+	"github.com/ssvlabs/ssv/ssvsigner/internal/ssvtestingutils"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
 )
@@ -91,7 +92,7 @@ func TestSignBeaconObject_RefusesMismatchedDomainType(t *testing.T) {
 	t.Run("block under the proposer domain", func(t *testing.T) {
 		proposerDomain := domainFor(spectypes.DomainProposer)
 		blockSlot := slot + 1
-		b1 := *testingutils.TestingBlockContentsDeneb.Block
+		b1 := *ssvtestingutils.TestingBlockContentsDeneb.Block
 		b1.Slot = blockSlot
 		b1.ParentRoot = phase0.Root{0xB1}
 		b2 := b1
@@ -114,7 +115,7 @@ func TestSignBeaconObject_RefusesMismatchedDomainType(t *testing.T) {
 	})
 
 	t.Run("matching pairs still sign", func(t *testing.T) {
-		agg := testingutils.TestingPhase0AggregateAndProof(testingutils.TestingValidatorIndex)
+		agg := ssvtestingutils.TestingPhase0AggregateAndProof(testingutils.TestingValidatorIndex)
 		_, _, err := lkm.SignBeaconObject(ctx, agg, domainFor(spectypes.DomainAggregateAndProof), pk, slot, spectypes.DomainAggregateAndProof)
 		require.NoError(t, err)
 	})
@@ -155,7 +156,7 @@ func TestRemoteKeyManager_RefusesMismatchedDomainType(t *testing.T) {
 		{spectypes.DomainAttester, spectypes.DomainSyncCommittee, spectypes.SSZBytes(attRoot[:])},
 		// DomainApplicationBuilder differs from DomainProposer only in its last byte, so this pins
 		// that all four bytes of the type are compared.
-		{spectypes.DomainProposer, spectypes.DomainApplicationBuilder, testingutils.TestingBlockContentsDeneb.Block},
+		{spectypes.DomainProposer, spectypes.DomainApplicationBuilder, ssvtestingutils.TestingBlockContentsDeneb.Block},
 	} {
 		_, _, err := rm.SignBeaconObject(t.Context(), tc.obj, domainFor(tc.domain), pk, slot, tc.label)
 		require.ErrorContains(t, err, "does not match signature domain", "domain %x, label %x", tc.domain, tc.label)
@@ -172,7 +173,7 @@ func TestSignBeaconObject_GloasAndPreGloasBlocksShareOneProposalLock(t *testing.
 	km, store, pk, _ := newGatedLocalKeyManager(t)
 
 	blockSlot := testBeaconConfig().EstimatedCurrentSlot() + 1
-	deneb := *testingutils.TestingBlockContentsDeneb.Block
+	deneb := *ssvtestingutils.TestingBlockContentsDeneb.Block
 	deneb.Slot = blockSlot
 	gloas := gloasTestBlock(blockSlot)
 	domain := domainFor(spectypes.DomainProposer)
@@ -256,7 +257,7 @@ func requireBumpExcludesSigning(t *testing.T, km KeyManager, store *gatedStorage
 	if proposal {
 		require.NoError(t, store.SaveHighestProposal(pk[:], cur-5))
 		sign = func(root byte) error {
-			block := *testingutils.TestingBlockContentsElectra.Block // shallow copy; Body is shared and untouched
+			block := *ssvtestingutils.TestingBlockContentsElectra.Block // shallow copy; Body is shared and untouched
 			block.Slot = blockSlot
 			block.ParentRoot = phase0.Root{root}
 			_, _, err := km.SignBeaconObject(ctx, &block, domainFor(spectypes.DomainProposer), pk, blockSlot, spectypes.DomainProposer)

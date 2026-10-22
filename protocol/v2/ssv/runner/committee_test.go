@@ -23,7 +23,9 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
+	"github.com/ssvlabs/ssv/protocol/v2/types/ssvtestingutils"
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
@@ -203,7 +205,7 @@ func (e *committeeRunnerEnv) startAndDecideCommitteeDuty(t *testing.T, duty *spe
 	require.NoError(t, e.runner.StartNewDuty(ctx, e.logger, duty, e.sampleKey.Threshold))
 	concluded := observeDutyConclusion(e.runner.BaseRunner)
 
-	for _, msg := range spectestingutils.CommitteeInputForDuty(duty, duty.Slot, e.keySetMap, false) {
+	for _, msg := range ssvtestingutils.CommitteeInputForDuty(duty, duty.Slot, e.keySetMap, false) {
 		if err := e.runner.ProcessConsensus(ctx, e.logger, msg); err != nil {
 			return concluded, err
 		}
@@ -251,12 +253,12 @@ func beaconRootsAsHex(roots []phase0.Root) []string {
 
 func TestConstructAttestationData(t *testing.T) {
 	vote := &spectypes.BeaconVote{
-		BlockRoot: spectestingutils.TestBeaconVote.BlockRoot,
-		Source:    spectestingutils.TestBeaconVote.Source,
-		Target:    spectestingutils.TestBeaconVote.Target,
+		BlockRoot: ssvtestingutils.TestBeaconVote.BlockRoot,
+		Source:    ssvtestingutils.TestBeaconVote.Source,
+		Target:    ssvtestingutils.TestBeaconVote.Target,
 	}
 	duty := &spectypes.ValidatorDuty{
-		Slot:           spectestingutils.TestingDutySlotV(spec.DataVersionDeneb),
+		Slot:           ssvtestingutils.TestingDutySlotV(spec.DataVersionDeneb),
 		CommitteeIndex: spectestingutils.TestingCommitteeIndex,
 	}
 
@@ -288,7 +290,7 @@ func TestCommitteeRunnerStartNewDuty_StartsGuardAndResetsSubmissions(t *testing.
 	guard := &committeeDutyGuardStub{}
 	env := newCommitteeRunnerEnv(t, []int{1, 2}, guard, &doppelgangerStub{})
 
-	duty := spectestingutils.TestingCommitteeDuty([]int{1}, []int{2}, spec.DataVersionPhase0)
+	duty := ssvtestingutils.TestingCommitteeDuty([]int{1}, []int{2}, spec.DataVersionPhase0)
 
 	env.runner.RecordSubmission(spectypes.BNRoleAttester, 1)
 	env.runner.RecordSubmission(spectypes.BNRoleSyncCommittee, 2)
@@ -313,7 +315,7 @@ func TestCommitteeRunnerStartNewDuty_StartsGuardAndResetsSubmissions(t *testing.
 
 func TestCommitteeRunnerExecuteDuty_FetchesAttestationDataAndStartsConsensus(t *testing.T) {
 	env := newCommitteeRunnerEnv(t, []int{1}, &committeeDutyGuardStub{}, &doppelgangerStub{})
-	duty := spectestingutils.TestingAttesterDuty(spec.DataVersionElectra)
+	duty := ssvtestingutils.TestingAttesterDuty(spec.DataVersionElectra)
 
 	env.runner.State = NewRunnerState(env.sampleKey.Threshold, duty)
 
@@ -322,10 +324,10 @@ func TestCommitteeRunnerExecuteDuty_FetchesAttestationDataAndStartsConsensus(t *
 	require.NotNil(t, env.runner.State.RunningInstance)
 	require.Equal(t, specqbft.Height(duty.Slot), env.runner.State.RunningInstance.GetHeight())
 
-	expectedVote := &spectypes.BeaconVote{
-		BlockRoot: spectestingutils.TestBeaconVote.BlockRoot,
-		Source:    spectestingutils.TestBeaconVote.Source,
-		Target:    spectestingutils.TestBeaconVote.Target,
+	expectedVote := &ssvtypes.PreGloasBeaconVote{
+		BlockRoot: ssvtestingutils.TestBeaconVote.BlockRoot,
+		Source:    ssvtestingutils.TestBeaconVote.Source,
+		Target:    ssvtestingutils.TestBeaconVote.Target,
 	}
 	expectedVoteBytes, err := expectedVote.Encode()
 	require.NoError(t, err)
@@ -354,7 +356,7 @@ func (b *sameSlotBeacon) GetAttestationData(ctx context.Context, slot phase0.Slo
 // present for that block is rejected so the round changes, and another block's payload status stays the
 // leader's call.
 func TestCommitteeRunnerExecuteDuty_GloasSameSlotIndexCheck(t *testing.T) {
-	duty := spectestingutils.TestingAttesterDuty(spec.DataVersionElectra)
+	duty := ssvtestingutils.TestingAttesterDuty(spec.DataVersionElectra)
 	root := phase0.Root{0xaa}
 	beacon := &sameSlotBeacon{BeaconNodeWrapped: protocoltesting.NewTestingBeaconNodeWrapped().(*protocoltesting.BeaconNodeWrapped), root: root}
 	beacon.HeadRoots = map[phase0.Slot]phase0.Root{duty.Slot: root}
@@ -383,7 +385,7 @@ func TestCommitteeRunnerProcessConsensus_UsesWorkerPoolForMoreThan30SyncDuties(t
 		validatorIndices[i] = i + 1
 	}
 	env := newCommitteeRunnerEnv(t, validatorIndices, &committeeDutyGuardStub{}, &doppelgangerStub{})
-	duty := spectestingutils.TestingCommitteeDuty(nil, validatorIndices, spec.DataVersionPhase0)
+	duty := ssvtestingutils.TestingCommitteeDuty(nil, validatorIndices, spec.DataVersionPhase0)
 
 	_, err := env.startAndDecideCommitteeDuty(t, duty)
 	require.NoError(t, err)
@@ -416,7 +418,7 @@ func TestCommitteeRunnerProcessConsensus_DoppelgangerAndDutyBranching(t *testing
 			},
 		}
 		env := newCommitteeRunnerEnv(t, []int{1, 2, 3}, &committeeDutyGuardStub{}, doppelganger)
-		duty := spectestingutils.TestingCommitteeDuty([]int{1, 2, 3}, nil, spec.DataVersionPhase0)
+		duty := ssvtestingutils.TestingCommitteeDuty([]int{1, 2, 3}, nil, spec.DataVersionPhase0)
 
 		_, err := env.startAndDecideCommitteeDuty(t, duty)
 		require.NoError(t, err)
@@ -431,7 +433,7 @@ func TestCommitteeRunnerProcessConsensus_DoppelgangerAndDutyBranching(t *testing
 			},
 		}
 		env := newCommitteeRunnerEnv(t, []int{1, 2}, &committeeDutyGuardStub{}, doppelganger)
-		duty := spectestingutils.TestingCommitteeDuty([]int{1}, []int{2}, spec.DataVersionPhase0)
+		duty := ssvtestingutils.TestingCommitteeDuty([]int{1}, []int{2}, spec.DataVersionPhase0)
 
 		_, err := env.startAndDecideCommitteeDuty(t, duty)
 		require.NoError(t, err)
@@ -447,15 +449,15 @@ func TestCommitteeRunnerProcessConsensus_DoppelgangerAndDutyBranching(t *testing
 func TestCommitteeRunnerProcessPostConsensus_SubmitsElectraObjectsAndDeduplicates(t *testing.T) {
 	doppelganger := &doppelgangerStub{}
 	env := newCommitteeRunnerEnv(t, []int{1, 2}, &committeeDutyGuardStub{}, doppelganger)
-	duty := spectestingutils.TestingCommitteeDuty([]int{1}, []int{2}, spec.DataVersionElectra)
+	duty := ssvtestingutils.TestingCommitteeDuty([]int{1}, []int{2}, spec.DataVersionElectra)
 
 	_, err := env.startAndDecideCommitteeDuty(t, duty)
 	require.NoError(t, err)
 
 	postConsensusMsgs := []*spectypes.PartialSignatureMessages{
-		spectestingutils.PostConsensusCommitteeMsgForDuty(duty, env.keySetMap, 1),
-		spectestingutils.PostConsensusCommitteeMsgForDuty(duty, env.keySetMap, 2),
-		spectestingutils.PostConsensusCommitteeMsgForDuty(duty, env.keySetMap, 3),
+		ssvtestingutils.PostConsensusCommitteeMsgForDuty(duty, env.keySetMap, 1),
+		ssvtestingutils.PostConsensusCommitteeMsgForDuty(duty, env.keySetMap, 2),
+		ssvtestingutils.PostConsensusCommitteeMsgForDuty(duty, env.keySetMap, 3),
 	}
 
 	for i, msg := range postConsensusMsgs {
@@ -471,9 +473,9 @@ func TestCommitteeRunnerProcessPostConsensus_SubmitsElectraObjectsAndDeduplicate
 	attesterDuty := duty.ValidatorDuties[0]
 	syncDuty := duty.ValidatorDuties[1]
 
-	expectedAttRoot, err := spectestingutils.TestingElectraSingleAttestationForDuty(env.keySetMap[attesterDuty.ValidatorIndex], attesterDuty).HashTreeRoot()
+	expectedAttRoot, err := ssvtestingutils.TestingElectraSingleAttestationForDuty(env.keySetMap[attesterDuty.ValidatorIndex], attesterDuty).HashTreeRoot()
 	require.NoError(t, err)
-	expectedSyncRoot, err := spectestingutils.TestingSignedSyncCommitteeBlockRootForValidatorIndex(
+	expectedSyncRoot, err := ssvtestingutils.TestingSignedSyncCommitteeBlockRootForValidatorIndex(
 		env.keySetMap[syncDuty.ValidatorIndex],
 		syncDuty.ValidatorIndex,
 		spec.DataVersionElectra,

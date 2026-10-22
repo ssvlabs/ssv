@@ -105,7 +105,7 @@ func (e *aggregatorRunnerEnv) startAndDecideAggregatorDuty(
 	require.NoError(t, e.runner.StartNewDuty(ctx, e.logger, duty, e.keySet.Threshold))
 	concluded := observeDutyConclusion(e.runner.BaseRunner)
 
-	aggData := spectestingutils.TestingAggregateAndProofV(version, duty.ValidatorIndex)
+	aggData := ssvtestingutils.TestingAggregateAndProofV(version, duty.ValidatorIndex)
 	dataSSZ, err := aggData.MarshalSSZ()
 	require.NoError(t, err)
 
@@ -116,7 +116,7 @@ func (e *aggregatorRunnerEnv) startAndDecideAggregatorDuty(
 	}
 	require.NoError(t, e.runner.decide(ctx, e.logger, duty.Slot, consensusData, dummyValueChecker{}))
 
-	for _, msg := range spectestingutils.SSVDecidingMsgsV(consensusData, e.keySet, ssvtypes.RoleAggregator) {
+	for _, msg := range ssvtestingutils.SSVDecidingMsgsV(consensusData, e.keySet, ssvtypes.RoleAggregator) {
 		if err := e.runner.ProcessConsensus(ctx, e.logger, msg); err != nil {
 			return concluded, err
 		}
@@ -129,7 +129,7 @@ func (e *aggregatorRunnerEnv) startAndDecideAggregatorDuty(
 func aggregatorPostConsensusMsgs(keySet *spectestingutils.TestKeySet, version spec.DataVersion) []*spectypes.PartialSignatureMessages {
 	msgs := make([]*spectypes.PartialSignatureMessages, 0, keySet.Threshold)
 	for i := uint64(1); i <= keySet.Threshold; i++ {
-		msgs = append(msgs, spectestingutils.PostConsensusAggregatorMsg(keySet.Shares[i], i, version))
+		msgs = append(msgs, ssvtestingutils.PostConsensusAggregatorMsg(keySet.Shares[i], i, version))
 	}
 	return msgs
 }
@@ -139,7 +139,7 @@ func testingAggregatorDuty(version spec.DataVersion) *spectypes.ValidatorDuty {
 	return &spectypes.ValidatorDuty{
 		Type:           spectypes.BNRoleAggregator,
 		PubKey:         spectestingutils.TestingValidatorPubKey,
-		Slot:           spectestingutils.TestingDutySlotV(version),
+		Slot:           ssvtestingutils.TestingDutySlotV(version),
 		ValidatorIndex: spectestingutils.TestingValidatorIndex,
 	}
 }
@@ -251,11 +251,11 @@ func TestAggregatorRunnerProcessPostConsensus_RecoverableInvalidSigsThenSucceeds
 	// the container and cross quorum optimistically — then ReconstructBeaconSig fails on the garbage
 	// sig, FallBackAndVerifyEachSignature drops only signer 3, and the root falls back below quorum.
 	for _, signer := range []spectypes.OperatorID{1, 2} {
-		msg := spectestingutils.PostConsensusAggregatorMsg(env.keySet.Shares[signer], signer, version)
+		msg := ssvtestingutils.PostConsensusAggregatorMsg(env.keySet.Shares[signer], signer, version)
 		require.NoError(t, env.runner.ProcessPostConsensus(ctx, env.logger, msg))
 	}
 
-	badMsg := spectestingutils.PostConsensusAggregatorMsg(env.keySet.Shares[3], 3, version)
+	badMsg := ssvtestingutils.PostConsensusAggregatorMsg(env.keySet.Shares[3], 3, version)
 	for _, m := range badMsg.Messages {
 		m.PartialSignature = bytes.Repeat([]byte{0xEE}, len(m.PartialSignature))
 	}
@@ -269,7 +269,7 @@ func TestAggregatorRunnerProcessPostConsensus_RecoverableInvalidSigsThenSucceeds
 
 	// A subsequent valid partial signature from signer 4 re-crosses quorum with three good sigs
 	// (1, 2, 4) → reconstruction succeeds → the duty submits and concludes succeeded.
-	msg4 := spectestingutils.PostConsensusAggregatorMsg(env.keySet.Shares[4], 4, version)
+	msg4 := ssvtestingutils.PostConsensusAggregatorMsg(env.keySet.Shares[4], 4, version)
 	require.NoError(t, env.runner.ProcessPostConsensus(ctx, env.logger, msg4))
 
 	require.True(t, env.runner.State.Succeeded, "a valid quorum after recovery must conclude succeeded")

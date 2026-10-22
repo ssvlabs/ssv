@@ -128,7 +128,7 @@ func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage)
 	role := ssvMessage.GetID().GetRoleType()
 	if !mv.validRoleUnion(role) {
 		e := ErrInvalidRole
-		e.got = fmt.Sprintf("%v (%d)", role, role)
+		e.got = fmt.Sprintf("%v (%d)", ssvtypes.RunnerRoleToString(role), role)
 		return e
 	}
 	if mv.committeeRole(role) && !bytes.Equal(ssvMessage.GetID().GetDutyExecutorID()[:16], zeroMsgIDPadding[:]) {
@@ -146,7 +146,7 @@ func (mv *messageValidator) validRoleUnion(roleType spectypes.RunnerRole) bool {
 	switch roleType {
 	case spectypes.RoleCommittee,
 		spectypes.RoleProposer,
-		spectypes.RoleValidatorRegistration,
+		ssvtypes.RoleValidatorRegistration,
 		spectypes.RoleVoluntaryExit,
 		spectypes.RoleAggregatorCommittee,
 		ssvtypes.RoleAggregator,
@@ -165,7 +165,7 @@ func (mv *messageValidator) validRoleAtSlot(roleType spectypes.RunnerRole, slot 
 	switch roleType {
 	case spectypes.RoleCommittee, spectypes.RoleProposer, spectypes.RoleVoluntaryExit:
 		return true
-	case spectypes.RoleValidatorRegistration:
+	case ssvtypes.RoleValidatorRegistration:
 		// Deprecated at the Gloas fork — superseded by proposer preferences (§5). Pre-Gloas unchanged.
 		return !isInGloas
 	case spectypes.RoleAggregatorCommittee:
