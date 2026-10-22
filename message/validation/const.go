@@ -3,6 +3,7 @@ package validation
 import (
 	"time"
 
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 )
 
@@ -40,11 +41,10 @@ const (
 const earlyMessageMargin = time.Second
 
 // proposerPreferencesEarlyEpochs is the proposer-lookahead span in epochs — the current epoch plus
-// MIN_SEED_LOOKAHEAD=1 — that preferences are broadcast across: a preference for a slot in epoch E is
-// expected from the start of epoch E-(proposerPreferencesEarlyEpochs-1) on. It bounds how early such a
-// message may arrive (messageEarliness) and how much per-signer state the role retains (storedSlotCount,
-// storedEpochCount).
-const proposerPreferencesEarlyEpochs = 2
+// MIN_SEED_LOOKAHEAD — that preferences are broadcast across: a preference for a slot in epoch E is
+// expected from the start of epoch E-MIN_SEED_LOOKAHEAD on. It bounds how early such a message may arrive
+// (messageEarliness) and how much per-signer state the role retains (storedSlotCount, storedEpochCount).
+const proposerPreferencesEarlyEpochs = 1 + networkconfig.MinSeedLookahead
 
 // maxProposerPreferencesDistinctRoots bounds the distinct ProposerPreferences signing roots one
 // (slot, signer) may contribute (SIP #94 §5): unlike other pre-consensus messages (capped at 1), a
