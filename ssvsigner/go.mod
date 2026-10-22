@@ -18,7 +18,7 @@ toolchain go1.26.10
 require (
 	github.com/OffchainLabs/go-bitfield v0.0.0-20260504143531-5cbb6d0f5f2e
 	github.com/alecthomas/kong v1.8.1
-	github.com/attestantio/go-eth2-client v0.27.0
+	github.com/attestantio/go-eth2-client v0.30.2
 	github.com/carlmjohnson/requests v0.24.3
 	github.com/ethereum/go-ethereum v1.17.8
 	github.com/fasthttp/router v1.5.4
@@ -49,7 +49,6 @@ require (
 	github.com/ProjectZKM/Ziren/crates/go-runtime/zkvm_runtime v0.0.0-20251001021608-1fe7b43fc4d6 // indirect
 	github.com/andybalholm/brotli v1.2.1 // indirect
 	github.com/btcsuite/btcd/btcec/v2 v2.3.4 // indirect
-	github.com/casbin/govaluate v1.10.0 // indirect
 	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/containerd/errdefs v1.0.0 // indirect
@@ -90,8 +89,8 @@ require (
 	github.com/moby/term v0.5.2 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect
-	github.com/pk910/dynamic-ssz v1.3.3 // indirect
-	github.com/pk910/hashtree-bindings v0.2.2 // indirect
+	github.com/pk910/dynamic-ssz v1.4.0 // indirect
+	github.com/pk910/hashtree-bindings v0.2.6 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55 // indirect
 	github.com/savsgio/gotils v0.0.0-20240704082632-aef3928b8a38 // indirect
@@ -120,4 +119,4 @@ require (
 )
 
 // Renovate is disabled for both module paths in ../.github/renovate.json; re-enable them there if this replace is removed.
-replace github.com/attestantio/go-eth2-client => github.com/ssvlabs/go-eth2-client v0.6.31-0.20260831132123-66dd18fc8288
+replace github.com/attestantio/go-eth2-client => github.com/ssvlabs/go-eth2-client v0.6.31-0.20261024112653-3b05b92b7bd2

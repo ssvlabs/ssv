@@ -8,7 +8,7 @@ require (
 	github.com/OffchainLabs/go-bitfield v0.0.0-20260504143531-5cbb6d0f5f2e
 	github.com/RoaringBitmap/roaring/v2 v2.10.0
 	github.com/aquasecurity/table v1.8.0
-	github.com/attestantio/go-eth2-client v0.27.0
+	github.com/attestantio/go-eth2-client v0.30.2
 	github.com/brianvoe/gofakeit/v7 v7.2.1
 	github.com/btcsuite/btcd/btcec/v2 v2.3.4
 	github.com/cespare/xxhash/v2 v2.3.0
@@ -70,7 +70,6 @@ require (
 	github.com/ProjectZKM/Ziren/crates/go-runtime/zkvm_runtime v0.0.0-20251001021608-1fe7b43fc4d6 // indirect
 	github.com/RaduBerinde/axisds v0.1.0 // indirect
 	github.com/RaduBerinde/btreemap v0.0.0-20250419174037-3d62b7205d54 // indirect
-	github.com/casbin/govaluate v1.10.0 // indirect
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/cockroachdb/crlib v0.0.0-20241112164430-1264a2edc35b // indirect
 	github.com/cockroachdb/pebble/v2 v2.1.4 // indirect
@@ -98,7 +97,7 @@ require (
 	github.com/pion/transport/v4 v4.1.0 // indirect
 	github.com/pion/turn/v4 v4.0.2 // indirect
 	github.com/pion/webrtc/v4 v4.1.2 // indirect
-	github.com/pk910/hashtree-bindings v0.2.2 // indirect
+	github.com/pk910/hashtree-bindings v0.2.6 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/prometheus/otlptranslator v1.0.0 // indirect
 	github.com/wealdtech/go-eth2-wallet-encryptor-keystorev4 v1.4.1 // indirect
@@ -230,7 +229,7 @@ require (
 	github.com/pion/rtp v1.8.19 // indirect
 	github.com/pion/sctp v1.8.39 // indirect
 	github.com/pion/sdp/v3 v3.0.18 // indirect
-	github.com/pk910/dynamic-ssz v1.3.3
+	github.com/pk910/dynamic-ssz v1.4.0
 	github.com/polydawn/refmt v0.89.1-0.20231129105047-37766d95467a // indirect
 	github.com/prometheus/client_model v0.6.2 // indirect
 	github.com/prometheus/common v0.70.1
@@ -292,9 +291,9 @@ replace github.com/google/flatbuffers => github.com/google/flatbuffers v1.11.0
 // Renovate is disabled for this module in .github/renovate.json; re-enable it there if this replace is removed.
 replace github.com/dgraph-io/ristretto => github.com/dgraph-io/ristretto v0.1.1-0.20211108053508-297c39e6640f
 
-// SSV fork of go-eth2-client based on upstream v0.27.0 (includes Fulu support) with SSV-specific changes.
+// SSV fork of go-eth2-client (its fork branch): upstream v0.30.2, which includes Gloas, plus SSV-specific changes.
 // Renovate is disabled for both module paths in .github/renovate.json; re-enable them there if this replace is removed.
-replace github.com/attestantio/go-eth2-client => github.com/ssvlabs/go-eth2-client v0.6.31-0.20260831132123-66dd18fc8288
+replace github.com/attestantio/go-eth2-client => github.com/ssvlabs/go-eth2-client v0.6.31-0.20261024112653-3b05b92b7bd2
 
 // Renovate is disabled for own modules in .github/renovate.json; re-enable it there if this replace is removed.
 replace github.com/ssvlabs/ssv/ssvsigner => ./ssvsigner

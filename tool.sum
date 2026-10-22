@@ -937,6 +937,10 @@ github.com/pion/transport/v3 v3.0.1 h1:gDTlPJwROfSfz6QfSi0ZmeCSkFcnWWiiR9ES0ouAN
 github.com/pion/transport/v3 v3.0.1/go.mod h1:UY7kiITrlMv7/IKgd5eTUcaahZx5oUN3l9SzK5f5xE0=
 github.com/pk910/dynamic-ssz v1.3.3 h1:b1Oj8+NGg5MAKldrtDajFISDAeX4oaOz/EWVwYi57Ow=
 github.com/pk910/dynamic-ssz v1.3.3/go.mod h1:lqmnou2bjr2UWQ3C/L3082TGW0SFl/SwT7ionwM0+FU=
+github.com/pk910/dynamic-ssz v1.4.0 h1:uwDOiBR/gmbC08gGo1TA/SLD17ArJyLKi0PHaQmuZEM=
+github.com/pk910/dynamic-ssz v1.4.0/go.mod h1:mnRbhjX+4YMyP4jYMncTUA3aDpMzBLqAbjcvfCyOyRI=
+github.com/pk910/hashtree-bindings v0.2.6 h1:BjRQho04nWzGrXwBCLVTyQRNV30O59iPcvQRcidFt2o=
+github.com/pk910/hashtree-bindings v0.2.6/go.mod h1:zrWt88783JmhBfcgni6kkIMYRdXTZi/FL//OyI5T/l4=
 github.com/pkg/diff v0.0.0-20210226163009-20ebb0f2a09e/go.mod h1:pJLUxLENpZxwdsKMEsNbx1VGcRFpLqf3715MtcvvzbA=
 github.com/pkg/errors v0.8.0/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINEl0=
 github.com/pkg/errors v0.8.1/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINEl0=
