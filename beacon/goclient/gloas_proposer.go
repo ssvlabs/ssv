@@ -63,8 +63,8 @@ func (gc *GoClient) SubmitGloasBeaconBlock(ctx context.Context, block *gloas.Sig
 }
 
 // requestGloasBeaconBlock produces one Gloas block from a single beacon node. It POSTs builderConfig as the
-// beacon-APIs#630 body (a neutral local-build config when nil), and retries as the legacy GET only on a
-// 404/405, from a node that predates the POST. Each request is recorded through record.
+// beacon-APIs#630 body (a neutral local-build config when nil), and retries as the legacy GET only on the
+// 404/405 of a node that predates the POST. Each request is recorded through record.
 func requestGloasBeaconBlock(ctx context.Context, addr unmaskedAddr, slot phase0.Slot, graffiti, randao []byte, builderConfig *gloas.ProduceBuilderConfig, record requestRecorder) (*gloas.ProducedBlock, error) {
 	if builderConfig == nil {
 		builderConfig = gloas.NeutralProduceBuilderConfig()

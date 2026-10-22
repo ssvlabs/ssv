@@ -13,9 +13,12 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/deneb"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
+	semconv "go.opentelemetry.io/otel/semconv/v1.43.0"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/beacon/goclient/mocks"
+	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 )
@@ -23,9 +26,11 @@ import (
 // GoClient must satisfy the Gloas proposer beacon-node surface.
 var _ beacon.GloasProposerCalls = (*GoClient)(nil)
 
-// recordedRequest is one request a route recorded: its HTTP method, and for a failed one the response
-// status (0 when the failure carries none).
+// recordedRequest is one request a route recorded: the beacon node it went to (empty in a requestLog, which
+// records a single node's requests), its HTTP method, and for a failed one the response status (0 when the
+// failure carries none).
 type recordedRequest struct {
+	server string
 	method string
 	failed bool
 	status int
@@ -41,8 +46,44 @@ func (l *requestLog) record(httpMethod string, _ time.Duration, err error) {
 // discardRequest is a requestRecorder for tests that don't assert on recording.
 func discardRequest(string, time.Duration, error) {}
 
+// recordedCLRequests counts, per series, the requests ssv.cl.request.duration has recorded for routeName
+// beyond those counted in since (nil for all of them).
+func recordedCLRequests(t *testing.T, routeName string, since map[recordedRequest]uint64) map[recordedRequest]uint64 {
+	t.Helper()
+	var rm metricdata.ResourceMetrics
+	require.NoError(t, pkgTestMetricReader.Collect(t.Context(), &rm))
+	name := observability.InstrumentName(observabilityNamespace, "request.duration")
+	counts := make(map[recordedRequest]uint64)
+	for _, sm := range rm.ScopeMetrics {
+		for _, m := range sm.Metrics {
+			if m.Name != name {
+				continue
+			}
+			hist, ok := m.Data.(metricdata.Histogram[float64])
+			require.True(t, ok, "%s is not a float64 histogram", name)
+			for _, dp := range hist.DataPoints {
+				if route, _ := dp.Attributes.Value("http.route_name"); route.AsString() != routeName {
+					continue
+				}
+				server, _ := dp.Attributes.Value(semconv.ServerAddressKey)
+				method, _ := dp.Attributes.Value(semconv.HTTPRequestMethodKey)
+				status, failed := dp.Attributes.Value("http.response.error_status_code")
+				series := recordedRequest{server: server.AsString(), method: method.AsString(), failed: failed, status: int(status.AsInt64())}
+				counts[series] += dp.Count
+			}
+		}
+	}
+	for series, n := range since {
+		counts[series] -= n
+		if counts[series] == 0 {
+			delete(counts, series)
+		}
+	}
+	return counts
+}
+
 // GetGloasBeaconBlock moves on from a beacon node that is down, and a pre-#630 node behind it still serves
-// the block through the GET fallback.
+// the block through the GET fallback. Each request is recorded against the beacon node it went to.
 func TestGetGloasBeaconBlock_NextClientFallsBackToGET(t *testing.T) {
 	blockSSZ, err := gloas.TestingBeaconBlock(7).MarshalSSZ()
 	require.NoError(t, err)
@@ -69,12 +110,20 @@ func TestGetGloasBeaconBlock_NextClientFallsBackToGET(t *testing.T) {
 	client, err := New(t.Context(), zap.NewNop(), Options{BeaconNodeAddr: down.URL + ";" + srv.URL, CommonTimeout: 400 * time.Millisecond, LongTimeout: 500 * time.Millisecond})
 	require.NoError(t, err)
 
+	recordedBefore := recordedCLRequests(t, "GetGloasBeaconBlock", nil)
 	got, err := client.GetGloasBeaconBlock(t.Context(), 7, []byte{0x02}, []byte{0x01}, nil)
 	require.NoError(t, err)
 	require.Equal(t, phase0.Slot(7), got.Block.Slot)
 	mu.Lock()
 	defer mu.Unlock()
 	require.Equal(t, []string{http.MethodPost, http.MethodGet}, methods, "the second node rejects the POST and serves the GET")
+
+	downAddr, srvAddr := client.clients[0].Address(), client.clients[1].Address()
+	require.Equal(t, map[recordedRequest]uint64{
+		{server: downAddr, method: http.MethodPost, failed: true}:                                     1, // refused: no status
+		{server: srvAddr, method: http.MethodPost, failed: true, status: http.StatusMethodNotAllowed}: 1,
+		{server: srvAddr, method: http.MethodGet}:                                                     1,
+	}, recordedCLRequests(t, "GetGloasBeaconBlock", recordedBefore))
 }
 
 // With no builder config, produce still POSTs (produceBlockV4 is POST-first per beacon-APIs#630), carrying

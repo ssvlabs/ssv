@@ -38,7 +38,8 @@ func (a unmaskedAddr) UnmaskedAddress() string { return a.addr }
 // String returns the address masked by RedactBeaconAddr.
 func (a unmaskedAddr) String() string { return RedactBeaconAddr(a.addr) }
 
-// requestRecorder records one HTTP request a route made to a beacon node.
+// requestRecorder records one HTTP request a route made to a beacon node. As on the go-eth2-client routes,
+// took includes decoding the response.
 type requestRecorder func(httpMethod string, took time.Duration, err error)
 
 // firstClientResult runs fn against each beacon client in turn, each under its own common-timeout
