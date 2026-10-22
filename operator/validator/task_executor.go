@@ -11,11 +11,11 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/observability/log"
-	"github.com/ssvlabs/ssv/observability/log/fields"
-	"github.com/ssvlabs/ssv/operator/duties"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
-	"github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/v2/observability/log"
+	"github.com/ssvlabs/ssv/v2/observability/log/fields"
+	"github.com/ssvlabs/ssv/v2/operator/duties"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/ssv/validator"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/types"
 )
 
 func (c *Controller) taskLogger(taskName string, fields ...zap.Field) *zap.Logger {

@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/types/gloas"
 )
 
 // Gloas §6 envelope publish endpoint (beacon-APIs#580, merged 2026-06-29). The body form is selected by the

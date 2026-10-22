@@ -15,12 +15,12 @@ import (
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap/zaptest"
 
-	"github.com/ssvlabs/ssv/eth/eventhandler/mocks"
-	"github.com/ssvlabs/ssv/eth/eventsyncer"
-	"github.com/ssvlabs/ssv/eth/executionclient"
-	"github.com/ssvlabs/ssv/eth/simulator"
-	"github.com/ssvlabs/ssv/eth/simulator/simcontract"
-	"github.com/ssvlabs/ssv/operator/storage"
+	"github.com/ssvlabs/ssv/v2/eth/eventhandler/mocks"
+	"github.com/ssvlabs/ssv/v2/eth/eventsyncer"
+	"github.com/ssvlabs/ssv/v2/eth/executionclient"
+	"github.com/ssvlabs/ssv/v2/eth/simulator"
+	"github.com/ssvlabs/ssv/v2/eth/simulator/simcontract"
+	"github.com/ssvlabs/ssv/v2/operator/storage"
 )
 
 type CommonTestInput struct {

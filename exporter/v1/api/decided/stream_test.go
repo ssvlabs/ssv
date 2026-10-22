@@ -13,11 +13,11 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	dutytracer "github.com/ssvlabs/ssv/exporter/dutytracer"
-	"github.com/ssvlabs/ssv/exporter/v1/api"
-	qbftstorage "github.com/ssvlabs/ssv/ibft/storage"
-	"github.com/ssvlabs/ssv/networkconfig"
-	mocks "github.com/ssvlabs/ssv/registry/storage/mocks"
+	dutytracer "github.com/ssvlabs/ssv/v2/exporter/dutytracer"
+	"github.com/ssvlabs/ssv/v2/exporter/v1/api"
+	qbftstorage "github.com/ssvlabs/ssv/v2/ibft/storage"
+	"github.com/ssvlabs/ssv/v2/networkconfig"
+	mocks "github.com/ssvlabs/ssv/v2/registry/storage/mocks"
 )
 
 // stubWebSocketServer is a minimal WebSocketServer implementation for testing:

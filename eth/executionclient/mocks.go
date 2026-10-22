@@ -16,7 +16,7 @@ import (
 
 	ethereum "github.com/ethereum/go-ethereum"
 	types "github.com/ethereum/go-ethereum/core/types"
-	contract "github.com/ssvlabs/ssv/eth/contract"
+	contract "github.com/ssvlabs/ssv/v2/eth/contract"
 	gomock "go.uber.org/mock/gomock"
 )
 

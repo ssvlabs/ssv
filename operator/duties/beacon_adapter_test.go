@@ -14,8 +14,8 @@ import (
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/networkconfig"
-	beaconmock "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	"github.com/ssvlabs/ssv/v2/networkconfig"
+	beaconmock "github.com/ssvlabs/ssv/v2/protocol/v2/blockchain/beacon"
 )
 
 // committeeAwareMock augments the generated BeaconNode mock with

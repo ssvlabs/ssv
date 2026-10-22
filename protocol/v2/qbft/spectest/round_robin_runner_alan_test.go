@@ -10,7 +10,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 
-	qbftimpl "github.com/ssvlabs/ssv/protocol/v2/qbft"
+	qbftimpl "github.com/ssvlabs/ssv/v2/protocol/v2/qbft"
 )
 
 // preBooleForkNetConfig routes Proposer to the pre-Boole round-robin selection, which is

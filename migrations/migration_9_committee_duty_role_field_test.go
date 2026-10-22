@@ -11,11 +11,11 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	estore "github.com/ssvlabs/ssv/exporter/store"
-	traces "github.com/ssvlabs/ssv/exporter/traces"
-	"github.com/ssvlabs/ssv/observability/log"
-	"github.com/ssvlabs/ssv/storage/basedb"
-	pebbledb "github.com/ssvlabs/ssv/storage/pebble"
+	estore "github.com/ssvlabs/ssv/v2/exporter/store"
+	traces "github.com/ssvlabs/ssv/v2/exporter/traces"
+	"github.com/ssvlabs/ssv/v2/observability/log"
+	"github.com/ssvlabs/ssv/v2/storage/basedb"
+	pebbledb "github.com/ssvlabs/ssv/v2/storage/pebble"
 )
 
 func TestMigration9CommitteeDutyRoleField(t *testing.T) {

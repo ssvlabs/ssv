@@ -7,8 +7,8 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	ssvmessage "github.com/ssvlabs/ssv/protocol/v2/message"
-	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	ssvmessage "github.com/ssvlabs/ssv/v2/protocol/v2/message"
+	ssvtypes "github.com/ssvlabs/ssv/v2/protocol/v2/types"
 )
 
 var (

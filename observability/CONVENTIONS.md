@@ -2,6 +2,10 @@
 
 The conventions described in this document are based on the [OpenTelemetry documentation](https://opentelemetry.io/docs/).
 
+## Instrumentation Scope Names
+
+- **Pre-/v2 Path**: The `observabilityName` (or `observabilityComponentName`) constants (the meter/tracer name) **MUST** use the module path without the `/v2` suffix, e.g. `github.com/ssvlabs/ssv/doppelganger`, also in new packages. Prometheus exports the scope name as the `otel_scope_name` label, so changing it breaks dashboards and queries.
+
 ## Metrics
 
 - **Unit Specification**: Units **MUST** be specified using the `.WithUnit()` method.

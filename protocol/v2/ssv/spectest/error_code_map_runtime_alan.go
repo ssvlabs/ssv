@@ -5,7 +5,7 @@ package spectest
 import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/ssv/runner"
 )
 
 // Identity shims for the alan_spec build — see error_code_map_alan.go. The DEFAULT

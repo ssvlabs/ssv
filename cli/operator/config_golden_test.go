@@ -8,7 +8,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	globalcfg "github.com/ssvlabs/ssv/cli/config"
+	globalcfg "github.com/ssvlabs/ssv/v2/cli/config"
 )
 
 // Test_config_defaults_golden is the project-wide backward-compatibility guard for moving config

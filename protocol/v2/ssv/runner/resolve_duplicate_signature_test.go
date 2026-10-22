@@ -7,7 +7,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 
-	"github.com/ssvlabs/ssv/protocol/v2/ssv"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/ssv"
 )
 
 // TestResolveDuplicateSignatureUnheldValidatorIndex is the regression guard for the nil-share

@@ -11,8 +11,8 @@ import (
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
 
-	"github.com/ssvlabs/ssv/beacon/goclient/mocks"
-	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/v2/beacon/goclient/mocks"
+	"github.com/ssvlabs/ssv/v2/networkconfig"
 )
 
 // gloasScheduledAt is the test network's beacon config with Gloas scheduled at the epoch, or left out of

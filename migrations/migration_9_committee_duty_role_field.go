@@ -10,9 +10,9 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	estore "github.com/ssvlabs/ssv/exporter/store"
-	traces "github.com/ssvlabs/ssv/exporter/traces"
-	"github.com/ssvlabs/ssv/storage/basedb"
+	estore "github.com/ssvlabs/ssv/v2/exporter/store"
+	traces "github.com/ssvlabs/ssv/v2/exporter/traces"
+	"github.com/ssvlabs/ssv/v2/storage/basedb"
 )
 
 // migrationBatchSize caps how many rewrites are held in memory before being flushed in a

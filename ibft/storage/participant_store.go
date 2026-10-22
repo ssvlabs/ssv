@@ -7,7 +7,7 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/operator/slotticker"
+	"github.com/ssvlabs/ssv/v2/operator/slotticker"
 )
 
 // Participation extends ParticipantsRangeEntry with role and pubkey.

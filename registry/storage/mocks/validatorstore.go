@@ -15,8 +15,8 @@ import (
 	bellatrix "github.com/attestantio/go-eth2-client/spec/bellatrix"
 	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
 	types "github.com/ssvlabs/ssv-spec/types"
-	types0 "github.com/ssvlabs/ssv/protocol/v2/types"
-	storage "github.com/ssvlabs/ssv/registry/storage"
+	types0 "github.com/ssvlabs/ssv/v2/protocol/v2/types"
+	storage "github.com/ssvlabs/ssv/v2/registry/storage"
 	gomock "go.uber.org/mock/gomock"
 )
 

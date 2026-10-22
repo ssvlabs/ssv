@@ -7,7 +7,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/observability/log/fields"
+	"github.com/ssvlabs/ssv/v2/observability/log/fields"
 )
 
 // ProposerPreferencesHandler schedules the Gloas (ePBS) proposer-preferences duty (SIP #94 §5): for

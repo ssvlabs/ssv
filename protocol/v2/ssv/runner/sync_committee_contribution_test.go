@@ -14,9 +14,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
-	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
-	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/blockchain/beacon"
+	protocoltesting "github.com/ssvlabs/ssv/v2/protocol/v2/testing"
+	ssvtypes "github.com/ssvlabs/ssv/v2/protocol/v2/types"
 )
 
 // TestSortBySubnet pins the deterministic, cross-node canonical ordering that
