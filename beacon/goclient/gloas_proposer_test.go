@@ -273,7 +273,7 @@ func TestRequestGloasBeaconBlock_POST(t *testing.T) {
 	require.Equal(t, http.MethodPost, gotMethod)
 	require.Equal(t, requestLog{{method: http.MethodPost}}, requests)
 	require.Equal(t, contentTypeJSON, gotContentType)
-	require.Equal(t, "gloas", gotConsensusVersion)
+	require.Equal(t, consensusVersionGloas, gotConsensusVersion)
 	require.Contains(t, string(gotBody), `"min_bid":"10"`)
 	require.Equal(t, "https://builder.example.com", got.BuilderURL)
 	require.Equal(t, phase0.Slot(7), got.Block.Slot)
