@@ -66,8 +66,7 @@ func (test *ValCheckSpecTest) Run(t *testing.T) {
 		err = spectypes.WrapError(adjustExpectedErrorCode(test.ExpectedErrorCode), err)
 	}
 
-	actualErr := adjustActualErrorForRole(adjustActualError(err), test.RunnerRole)
-	spectests.AssertErrorCode(t, adjustExpectedErrorCode(test.ExpectedErrorCode), actualErr)
+	spectests.AssertErrorCode(t, adjustExpectedErrorCode(test.ExpectedErrorCode), err)
 }
 
 // valCheckF creates value checker using our implementation
