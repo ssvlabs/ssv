@@ -30,7 +30,7 @@ require (
 	github.com/microsoft/go-crypto-openssl v0.2.9
 	github.com/moby/moby/api v1.55.0
 	github.com/sourcegraph/conc v0.3.0
-	github.com/ssvlabs/eth2-key-manager v1.5.7-0.20260901124029-39a18877e131
+	github.com/ssvlabs/eth2-key-manager v1.5.7-0.20261014094003-7212134d877f
 	github.com/ssvlabs/ssv-spec v1.2.3-0.20260924161701-0c82ee096544
 	github.com/stretchr/testify v1.12.1
 	github.com/testcontainers/testcontainers-go v0.44.0
