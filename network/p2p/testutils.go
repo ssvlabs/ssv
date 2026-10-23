@@ -220,6 +220,7 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex uint64, key
 	cfg.Subnets = testSubnets.StringHex()
 	cfg.NodeStorage = nodeStorage
 	cfg.NetworkConfig = networkconfig.TestNetwork
+	cfg.TrustedPeers = options.TrustedPeers
 	if options.TotalValidators > 0 {
 		cfg.GetValidatorStats = func() (uint64, uint64, uint64, error) {
 			return options.TotalValidators, options.ActiveValidators, options.MyValidators, nil
@@ -278,6 +279,8 @@ type LocalNetOptions struct {
 	PeerScoreInspector                              func(selfPeer peer.ID, peerMap map[peer.ID]*pubsub.PeerScoreSnapshot)
 	PeerScoreInspectorInterval                      time.Duration
 	Shares                                          []*ssvtypes.SSVShare
+	// TrustedPeers is every node's Config.TrustedPeers.
+	TrustedPeers []string
 }
 
 // NewLocalNet creates the nodes of a local network; CreateAndStartLocalNet starts them and wires the mesh.

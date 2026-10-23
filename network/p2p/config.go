@@ -36,8 +36,7 @@ const (
 	// DiscoveryMDNS finds peers on the local network over mDNS, for a local cluster.
 	DiscoveryMDNS DiscoveryMode = "mdns"
 	// DiscoveryNone runs no peer discovery: the node has only its TrustedPeers, the peers that dial it, and peers
-	// connected to it directly (as the test harness does). Trusted peers are dialed once, when the node starts,
-	// so a trusted peer that disconnects stays disconnected unless it dials back.
+	// connected to it directly (as the test harness does).
 	DiscoveryNone DiscoveryMode = "none"
 )
 
@@ -46,7 +45,7 @@ type Config struct {
 	Ctx          context.Context
 	Bootnodes    string        `yaml:"Bootnodes" env:"BOOTNODES" env-description:"Bootnodes to use for discovery (semicolon-separated ENRs, e.g. 'enr:-abc123;enr:-def456')" `
 	Discovery    DiscoveryMode `yaml:"Discovery" env:"P2P_DISCOVERY" env-description:"Discovery protocol to use (discv5, mdns, or none to run without discovery)" `
-	TrustedPeers []string      `yaml:"TrustedPeers" env:"TRUSTED_PEERS" env-description:"List of peer IDs to always connect to"`
+	TrustedPeers []string      `yaml:"TrustedPeers" env:"TRUSTED_PEERS" env-description:"Peers to keep connected, as multiaddrs ending in /p2p/<peer ID>: re-dialed whenever disconnected, and exempt from the peer limits, bad scores and trimming"`
 
 	TCPPort     uint16 `yaml:"TcpPort" env:"TCP_PORT" env-description:"TCP port for P2P transport"`
 	UDPPort     uint16 `yaml:"UdpPort" env:"UDP_PORT" env-description:"UDP port for discovery"`
