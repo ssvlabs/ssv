@@ -65,10 +65,36 @@ var (
 			observability.InstrumentName(observabilityNamespace, "unhandled_packets.dropped"),
 			metric.WithUnit("{packet}"),
 			metric.WithDescription("total number of packets forwarded to the pre-fork listener that were dropped because its buffer was full")))
+
+	discoveryReadStalenessGauge = metrics.New(
+		meter.Int64ObservableGauge(
+			observability.InstrumentName(observabilityNamespace, "socket.read_staleness"),
+			metric.WithUnit("s"),
+			metric.WithDescription("seconds since the discv5 socket was last read; -1 until the first read")))
 )
 
 func recordUnhandledPacketDropped(ctx context.Context) {
 	unhandledPacketsDroppedCounter.Add(ctx, 1)
+}
+
+// observeDiscoveryReadStaleness registers a callback reporting conn's read
+// staleness at scrape time, so the series keeps reporting even when the health
+// check short-circuits before reaching it. The caller unregisters it on close.
+func observeDiscoveryReadStaleness(conn *TimedConn) (metric.Registration, error) {
+	return meter.RegisterCallback(func(_ context.Context, observer metric.Observer) error {
+		observer.ObserveInt64(discoveryReadStalenessGauge, readStalenessSeconds(conn))
+		return nil
+	}, discoveryReadStalenessGauge)
+}
+
+// readStalenessSeconds flattens ReadStaleness for the gauge, reporting -1 before
+// the first read so never-read stays distinct from just-read (0).
+func readStalenessSeconds(conn *TimedConn) int64 {
+	age, everRead := conn.ReadStaleness()
+	if !everRead {
+		return -1
+	}
+	return int64(age.Seconds())
 }
 
 func recordPeerSkipped(ctx context.Context, reason skipReason) {

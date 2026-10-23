@@ -312,6 +312,32 @@ func TestInitDiscV5Listener_CleansUpOnError(t *testing.T) {
 	}
 }
 
+// TestInitDiscV5Listener_WrapsPostForkConn pins the wiring the wedge detector
+// rests on: the post-fork listener, the only one reading the socket, must get
+// the service's TimedConn, and the pre-fork one the SharedUDPConn. Other tests
+// build these conns by hand, so a wrong conn passed to ListenV5 would otherwise
+// leave the detector reporting healthy forever with the suite still green.
+//
+// Swaps the package-level listenV5, so the test must stay non-parallel.
+func TestInitDiscV5Listener_WrapsPostForkConn(t *testing.T) {
+	orig := listenV5
+	t.Cleanup(func() { listenV5 = orig })
+
+	var conns []discover.UDPConn
+	listenV5 = func(conn discover.UDPConn, ln *enode.LocalNode, cfg discover.Config) (Listener, error) {
+		conns = append(conns, conn)
+		return orig(conn, ln, cfg)
+	}
+
+	dvs := testingDiscovery(t)
+	t.Cleanup(func() { require.NoError(t, dvs.Close()) })
+
+	require.Len(t, conns, 2, "init builds the post-fork listener, then the pre-fork one")
+	require.IsType(t, &TimedConn{}, conns[0], "post-fork listener must read through the TimedConn")
+	require.Same(t, dvs.socketConn, conns[0].(*TimedConn), "and it must be the service's own socketConn")
+	require.IsType(t, &SharedUDPConn{}, conns[1], "pre-fork listener must read the SharedUDPConn buffer")
+}
+
 // TestSharedUDPConn_DrainsWhileClosing guards the shutdown ordering: the
 // producer keeps forwarding while the reader shuts down, and must not block or
 // panic. Previously Close() closed Unhandled, so an in-flight send panicked
