@@ -16,6 +16,7 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
+	p2pv1 "github.com/ssvlabs/ssv/network/p2p"
 	"github.com/ssvlabs/ssv/networkconfig"
 )
 
@@ -23,7 +24,7 @@ const (
 	defaultOutputPath     = "./config/config.local.yaml"
 	defaultLogLevel       = "info"
 	defaultDBPath         = "./data/db"
-	defaultDiscovery      = "mdns"
+	defaultDiscovery      = string(p2pv1.DiscoveryMDNS)
 	sliceSeparator        = ","
 	configFilePermissions = 0644
 )
@@ -79,6 +80,10 @@ var generateConfigCmd = &cobra.Command{
 	Use:   "generate-config",
 	Short: "generates ssv operator config",
 	Run: func(cmd *cobra.Command, args []string) {
+		if err := (&p2pv1.Config{Discovery: p2pv1.DiscoveryMode(discovery)}).ValidateDiscovery(); err != nil {
+			log.Fatalf("Invalid discovery: %v", err)
+		}
+
 		parsedDomain, err := hex.DecodeString(strings.TrimPrefix(ssvDomain, "0x"))
 		if err != nil {
 			log.Fatalf("Failed to decode network domain: %v", err)
@@ -149,7 +154,7 @@ func init() {
 	generateConfigCmd.Flags().StringVarP(&outputPath, "output-path", "o", defaultOutputPath, "Output path for generated config")
 	generateConfigCmd.Flags().StringVar(&logLevel, "log-level", defaultLogLevel, "Log level")
 	generateConfigCmd.Flags().StringVar(&dbPath, "db-path", defaultDBPath, "DB path")
-	generateConfigCmd.Flags().StringVar(&discovery, "discovery", defaultDiscovery, "Discovery")
+	generateConfigCmd.Flags().StringVar(&discovery, "discovery", defaultDiscovery, "Discovery mode (discv5, mdns, or none)")
 	generateConfigCmd.Flags().StringVar(&consensusClient, "consensus-client", "", "Consensus client (required)")
 	_ = generateConfigCmd.MarkFlagRequired("consensus-client")
 	generateConfigCmd.Flags().StringVar(&executionClient, "execution-client", "", "Execution client (required)")

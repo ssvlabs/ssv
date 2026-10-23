@@ -18,14 +18,14 @@ import (
 func TestSetupDiscovery(t *testing.T) {
 	tests := []struct {
 		name     string
-		mode     string
+		mode     DiscoveryMode
 		wantType string // %T of the installed service: mdns's type is unexported, so it can't be named directly
 		wantErr  string
 	}{
-		{name: "discv5", mode: discv5Discovery, wantType: "*discovery.DiscV5Service"},
+		{name: "discv5", mode: DiscoveryDiscv5, wantType: "*discovery.DiscV5Service"},
 		{name: "unset", mode: "", wantType: "*discovery.DiscV5Service"},
-		{name: "mdns", mode: mdnsDiscovery, wantType: "*discovery.localDiscovery"},
-		{name: "none", mode: noDiscovery, wantType: "discovery.Disabled"},
+		{name: "mdns", mode: DiscoveryMDNS, wantType: "*discovery.localDiscovery"},
+		{name: "none", mode: DiscoveryNone, wantType: "discovery.Disabled"},
 		{name: "unknown", mode: "nome", wantErr: `unknown discovery mode "nome"`},
 	}
 	for _, tt := range tests {
@@ -47,7 +47,7 @@ func TestSetupDiscovery(t *testing.T) {
 // newDiscoveryTestNetwork returns a network with what setupDiscovery needs for any mode: a host, a network key, a
 // free UDP port for discv5, and no bootnodes, so discv5 contacts nothing outside the test. Its cleanup closes the
 // network, and with it the host and the installed service.
-func newDiscoveryTestNetwork(t *testing.T, mode string) *p2pNetwork {
+func newDiscoveryTestNetwork(t *testing.T, mode DiscoveryMode) *p2pNetwork {
 	netKey, err := p2ptesting.GenNetworkKey()
 	require.NoError(t, err)
 

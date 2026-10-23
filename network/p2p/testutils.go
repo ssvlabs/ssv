@@ -28,7 +28,9 @@ import (
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
-// TODO: (Alan) might have to rename this file back to test_utils.go if non-test files require it.
+// meshTimeout bounds each phase of wiring a local net: dialing the mesh, then waiting for every node to see its
+// peers. The tests' context has no deadline, and libp2p's own dial timeout is 60s.
+const meshTimeout = 15 * time.Second
 
 // LocalNet holds the nodes in the local network
 type LocalNet struct {
@@ -36,9 +38,9 @@ type LocalNet struct {
 	Nodes    []network.P2PNetwork
 }
 
-// CreateAndStartLocalNet creates a LocalNet, starts its nodes and dials them into a full mesh (connectMesh). No
-// discovery is involved, so the mesh forms the same way on every machine; the setup is retried (up to maxAttempts)
-// should it still not settle in time on a loaded machine.
+// CreateAndStartLocalNet creates a LocalNet, starts its nodes and dials them into a full mesh. Without discovery the
+// mesh forms the same way on every machine; should it not settle in time on a loaded machine, the whole setup is
+// retried, up to maxAttempts times.
 func CreateAndStartLocalNet(pCtx context.Context, logger *zap.Logger, options LocalNetOptions) (*LocalNet, error) {
 	attempt := func(pCtx context.Context) (*LocalNet, error) {
 		ln, err := NewLocalNet(pCtx, logger, options)
@@ -54,11 +56,7 @@ func CreateAndStartLocalNet(pCtx context.Context, logger *zap.Logger, options Lo
 			// subnets with them. Stops when the node closes.
 			go node.UpdateSubnets()
 		}
-		// pCtx has no deadline, so bound the dials to the settle wait's 15s rather than libp2p's 60s dial timeout.
-		connectCtx, cancelConnect := context.WithTimeout(pCtx, 15*time.Second)
-		err = connectMesh(connectCtx, ln.Nodes)
-		cancelConnect()
-		if err != nil {
+		if err := connectMesh(pCtx, ln.Nodes); err != nil {
 			return ln, err
 		}
 
@@ -66,7 +64,7 @@ func CreateAndStartLocalNet(pCtx context.Context, logger *zap.Logger, options Lo
 		eg, ctx := errgroup.WithContext(pCtx)
 		for i, node := range ln.Nodes {
 			eg.Go(func() error {
-				ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+				ctx, cancel := context.WithTimeout(ctx, meshTimeout)
 				defer cancel()
 
 				var peers []peer.ID
@@ -125,26 +123,41 @@ func CreateAndStartLocalNet(pCtx context.Context, logger *zap.Logger, options Lo
 	}
 }
 
-// connectMesh dials the nodes into a full mesh by address. Node i dials the nodes up to half a ring ahead of it,
-// so every edge is dialed exactly once and inbound edges spread evenly.
+// connectMesh dials the nodes into a full mesh by address, in the order meshDials plans, within meshTimeout.
 func connectMesh(ctx context.Context, nodes []network.P2PNetwork) error {
+	ctx, cancel := context.WithTimeout(ctx, meshTimeout)
+	defer cancel()
+
 	hosts := make([]host.Host, len(nodes))
 	for i, node := range nodes {
 		hosts[i] = node.(HostProvider).Host()
 	}
-	n := len(hosts)
-	for i, h := range hosts {
+	for _, d := range meshDials(len(hosts)) {
+		to := hosts[d.to]
+		if err := hosts[d.from].Connect(ctx, peer.AddrInfo{ID: to.ID(), Addrs: to.Addrs()}); err != nil {
+			return fmt.Errorf("node %d could not connect to node %d: %w", d.from, d.to, err)
+		}
+	}
+	return nil
+}
+
+// meshDial is one dial of the mesh: node from dials node to.
+type meshDial struct{ from, to int }
+
+// meshDials plans the dials that wire n nodes into a full mesh. Node i dials the nodes up to half a ring ahead of
+// it, so every edge is dialed exactly once and inbound dials spread evenly: each node takes at most n/2 of them.
+func meshDials(n int) []meshDial {
+	dials := make([]meshDial, 0, n*(n-1)/2)
+	for i := range n {
 		for k := 1; k <= n/2; k++ {
 			j := (i + k) % n
 			if 2*k == n && i > j {
 				continue // the antipodal edge of an even ring is dialed from its lower end only
 			}
-			if err := h.Connect(ctx, peer.AddrInfo{ID: hosts[j].ID(), Addrs: hosts[j].Addrs()}); err != nil {
-				return fmt.Errorf("node %d could not connect to node %d: %w", i, j, err)
-			}
+			dials = append(dials, meshDial{from: i, to: j})
 		}
 	}
-	return nil
+	return dials
 }
 
 type mockSignatureVerifier struct{}
@@ -215,11 +228,11 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex uint64, key
 
 	pubKey, err := p2pcommons.ECDSAPrivToInterface(keys.NetKey)
 	if err != nil {
-		panic(err)
+		return nil, fmt.Errorf("could not convert network key: %w", err)
 	}
 	selfPeerID, err := peer.IDFromPublicKey(pubKey.GetPublic())
 	if err != nil {
-		panic(err)
+		return nil, fmt.Errorf("could not derive peer id: %w", err)
 	}
 
 	if options.MessageValidatorProvider != nil {
@@ -312,21 +325,16 @@ func fixedTestSubnets(shares []*ssvtypes.SSVShare) p2pcommons.Subnets {
 
 // NewNetConfig creates a new config for tests
 func NewNetConfig(keys testing.NodeKeys, tcpPort, udpPort uint16, maxPeers int) *Config {
-	ua := ""
 	return &Config{
 		TCPPort:           tcpPort,
 		UDPPort:           udpPort,
-		HostAddress:       "",
-		HostDNS:           "",
 		RequestTimeout:    10 * time.Second,
 		MaxBatchResponse:  25,
 		MaxPeers:          maxPeers,
-		PubSubTrace:       false,
 		PubSubScoring:     true,
 		NetworkPrivateKey: keys.NetKey,
-		UserAgent:         ua,
 		// connectMesh wires the nodes together, so they run no discovery.
-		Discovery: noDiscovery,
+		Discovery: DiscoveryNone,
 		// Every node dials from 127.0.0.1, so the connection gater's per-IP rate limit would refuse a large mesh
 		// and pubsub's IP-colocation penalty would punish every node.
 		DisableIPRateLimit: true,

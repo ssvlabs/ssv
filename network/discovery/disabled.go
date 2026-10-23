@@ -8,9 +8,8 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 )
 
-// Disabled is the Service of a node that runs no peer discovery: such a node has only the peers it dials itself
-// (its TrustedPeers, or a mesh a test harness wires) and the peers that dial it. Subnet registration and ENR
-// publishing have nothing to update, so they are no-ops.
+// Disabled is the Service of a node that runs no peer discovery: the node has only the peers it dials itself (its
+// TrustedPeers, or a mesh a test harness wires) and the peers that dial it. Its subnet and ENR hooks are no-ops.
 type Disabled struct{}
 
 var _ Service = Disabled{}
