@@ -18,6 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 
 	"github.com/ssvlabs/ssv/observability/log"
 )
@@ -179,8 +180,8 @@ func TestMultiClient_FetchHistoricalLogs(t *testing.T) {
 
 	mockClient.
 		EXPECT().
-		FetchHistoricalLogs(gomock.Any(), uint64(100)).
-		DoAndReturn(func(ctx context.Context, fromBlock uint64) (<-chan BlockLogs, <-chan error, error) {
+		FetchHistoricalLogs(gomock.Any(), uint64(100), gomock.Any()).
+		DoAndReturn(func(ctx context.Context, fromBlock uint64, verify bool) (<-chan BlockLogs, <-chan error, error) {
 			go func() {
 				logCh <- BlockLogs{BlockNumber: 100}
 				close(logCh)
@@ -200,7 +201,7 @@ func TestMultiClient_FetchHistoricalLogs(t *testing.T) {
 
 	mc := newTestMultiClient(t, mockClient)
 
-	logs, errs, err := mc.FetchHistoricalLogs(ctx, 100)
+	logs, errs, err := mc.FetchHistoricalLogs(ctx, 100, false)
 	require.NoError(t, err)
 	require.NotNil(t, logs)
 	require.NotNil(t, errs)
@@ -229,13 +230,13 @@ func TestMultiClient_FetchHistoricalLogs_AllClientsNothingToSync(t *testing.T) {
 
 	mockClient1.
 		EXPECT().
-		FetchHistoricalLogs(gomock.Any(), uint64(100)).
+		FetchHistoricalLogs(gomock.Any(), uint64(100), gomock.Any()).
 		Return((<-chan BlockLogs)(nil), (<-chan error)(nil), ErrNothingToSync).
 		Times(1)
 
 	mockClient2.
 		EXPECT().
-		FetchHistoricalLogs(gomock.Any(), uint64(100)).
+		FetchHistoricalLogs(gomock.Any(), uint64(100), gomock.Any()).
 		Return((<-chan BlockLogs)(nil), (<-chan error)(nil), ErrNothingToSync).
 		Times(1)
 
@@ -253,7 +254,7 @@ func TestMultiClient_FetchHistoricalLogs_AllClientsNothingToSync(t *testing.T) {
 
 	mc := newTestMultiClient(t, mockClient1, mockClient2)
 
-	logs, errs, err := mc.FetchHistoricalLogs(ctx, 100)
+	logs, errs, err := mc.FetchHistoricalLogs(ctx, 100, false)
 	require.Error(t, err)
 	require.ErrorContains(t, err, ErrNothingToSync.Error())
 	require.Nil(t, logs)
@@ -272,7 +273,7 @@ func TestMultiClient_FetchHistoricalLogs_MixedErrors(t *testing.T) {
 
 	mockClient1.
 		EXPECT().
-		FetchHistoricalLogs(gomock.Any(), uint64(100)).
+		FetchHistoricalLogs(gomock.Any(), uint64(100), gomock.Any()).
 		Return((<-chan BlockLogs)(nil), (<-chan error)(nil), fmt.Errorf("unexpected error")).
 		Times(1)
 
@@ -284,7 +285,7 @@ func TestMultiClient_FetchHistoricalLogs_MixedErrors(t *testing.T) {
 
 	mockClient2.
 		EXPECT().
-		FetchHistoricalLogs(gomock.Any(), uint64(100)).
+		FetchHistoricalLogs(gomock.Any(), uint64(100), gomock.Any()).
 		Return((<-chan BlockLogs)(nil), (<-chan error)(nil), ErrNothingToSync).
 		Times(1)
 
@@ -296,7 +297,7 @@ func TestMultiClient_FetchHistoricalLogs_MixedErrors(t *testing.T) {
 
 	mc := newTestMultiClient(t, mockClient1, mockClient2)
 
-	logs, errs, err := mc.FetchHistoricalLogs(ctx, 100)
+	logs, errs, err := mc.FetchHistoricalLogs(ctx, 100, false)
 	require.Error(t, err)
 	require.ErrorContains(t, err, "all clients failed")
 	require.Nil(t, logs)
@@ -1235,6 +1236,81 @@ func TestMultiClient_Call_NoClients(t *testing.T) {
 	_, err := mc.call(t.Context(), f)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "no clients configured")
+}
+
+func TestMultiClient_BlockContractLogs_ReceiptsFailover(t *testing.T) {
+	const block = uint64(2_746_590)
+	wantLogs := []ethtypes.Log{{BlockNumber: block, Index: 0}}
+
+	newClients := func(t *testing.T, ctrl *gomock.Controller) (*MockSingleClientProvider, *MockSingleClientProvider, *MultiClient) {
+		c1 := NewMockSingleClientProvider(ctrl)
+		c2 := NewMockSingleClientProvider(ctrl)
+		c1.EXPECT().Healthy(gomock.Any()).Return(nil).AnyTimes()
+		c2.EXPECT().Healthy(gomock.Any()).Return(nil).AnyTimes()
+		return c1, c2, newTestMultiClient(t, c1, c2)
+	}
+
+	t.Run("asks the next client when one lacks receipts, without moving routing", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		c1, c2, mc := newClients(t, ctrl)
+
+		// Client 1 lacks eth_getBlockReceipts; client 2 serves them.
+		c1.EXPECT().BlockContractLogs(gomock.Any(), block).Return(nil, false, nil).Times(1)
+		c2.EXPECT().BlockContractLogs(gomock.Any(), block).Return(wantLogs, true, nil).Times(1)
+
+		logs, available, err := mc.BlockContractLogs(t.Context(), block)
+		require.NoError(t, err)
+		require.True(t, available)
+		require.Equal(t, wantLogs, logs)
+		require.Equal(t, int64(0), mc.currentClientIndex.Load(), "a capability gap doesn't reroute other traffic")
+	})
+
+	t.Run("skips the asking client", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		_, c2, mc := newClients(t, ctrl)
+
+		// Client 0 is the one asking (receipts fallback), so only client 1 is consulted.
+		c2.EXPECT().BlockContractLogs(gomock.Any(), block).Return(wantLogs, true, nil).Times(1)
+
+		logs, available, err := mc.receiptsFromAny(t.Context(), block, mc.clientAddrs[0])
+		require.NoError(t, err)
+		require.True(t, available)
+		require.Equal(t, wantLogs, logs)
+	})
+
+	t.Run("reports unavailable (no error) only when every client lacks receipts", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		c1, c2, mc := newClients(t, ctrl)
+
+		c1.EXPECT().BlockContractLogs(gomock.Any(), block).Return(nil, false, nil).Times(1)
+		c2.EXPECT().BlockContractLogs(gomock.Any(), block).Return(nil, false, nil).Times(1)
+		errorLogs, recorded := observer.New(zap.ErrorLevel)
+		mc.logger = zap.New(errorLogs)
+
+		logs, available, err := mc.BlockContractLogs(t.Context(), block)
+		require.NoError(t, err)
+		require.False(t, available)
+		require.Nil(t, logs)
+		require.Zero(t, recorded.Len(), "a client that can't serve receipts is a routine failover, not an error")
+	})
+
+	t.Run("surfaces an error when a client fails while another lacks receipts", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		c1, c2, mc := newClients(t, ctrl)
+
+		// Client 1 errors (it may serve receipts once recovered); client 2 lacks receipts. The
+		// verifier must retry rather than settle for client 2's gap.
+		c1.EXPECT().BlockContractLogs(gomock.Any(), block).Return(nil, false, errors.New("boom")).Times(1)
+		c2.EXPECT().BlockContractLogs(gomock.Any(), block).Return(nil, false, nil).Times(1)
+
+		_, available, err := mc.BlockContractLogs(t.Context(), block)
+		require.Error(t, err)
+		require.False(t, available)
+	})
 }
 
 // dummySubscription is a stub implementing ethereum.Subscription.

@@ -25,7 +25,9 @@ import (
 //go:generate go tool -modfile=../../tool.mod mockgen -package=executionclient -destination=./mocks.go -source=./execution_client.go
 
 type Provider interface {
-	FetchHistoricalLogs(ctx context.Context, fromBlock uint64) (logsCh <-chan BlockLogs, errsCh <-chan error, err error)
+	FetchHistoricalLogs(ctx context.Context, fromBlock uint64, verify bool) (logsCh <-chan BlockLogs, errsCh <-chan error, err error)
+	VerifyLogs(ctx context.Context, fromBlock, toBlock uint64) ([]BlockLogs, error)
+	BlockContractLogs(ctx context.Context, block uint64) (logs []ethtypes.Log, receiptsAvailable bool, err error)
 	StreamLogs(ctx context.Context, fromBlock uint64) (logsCh chan BlockLogs)
 	Filterer() (*contract.ContractFilterer, error)
 	HeaderByNumber(ctx context.Context, blockNumber *big.Int) (*ethtypes.Header, error)
@@ -65,6 +67,15 @@ type ExecutionClient struct {
 	// healthInvalidationInterval ensures we don't spam EL with health-check type requests too much.
 	healthInvalidationInterval time.Duration
 	lastHealthyTime            atomic.Int64
+
+	// receiptsUnsupportedAt is when (unix seconds) the EL last rejected eth_getBlockReceipts, 0 if
+	// never. Log verification skips the method while that's recent, then probes it again, so an EL
+	// upgraded behind the same endpoint is picked up without a restart.
+	receiptsUnsupportedAt atomic.Int64
+
+	// receiptsFallback, set by MultiClient, serves a block's receipts-derived contract logs from the
+	// other clients when this one can't.
+	receiptsFallback func(ctx context.Context, block uint64) ([]ethtypes.Log, bool, error)
 }
 
 // New creates a new instance of ExecutionClient.
@@ -120,8 +131,11 @@ func (ec *ExecutionClient) Close() error {
 	return nil
 }
 
-// FetchHistoricalLogs retrieves historical logs emitted by the contract starting from fromBlock.
-func (ec *ExecutionClient) FetchHistoricalLogs(ctx context.Context, fromBlock uint64) (
+// FetchHistoricalLogs retrieves historical logs emitted by the contract starting from
+// fromBlock. When verify is false the logs are returned optimistically (plain getLogs, fast)
+// and their completeness is checked afterwards by the background verifier; when true, each
+// batch is verified for completeness inline (used by the resync-repair path).
+func (ec *ExecutionClient) FetchHistoricalLogs(ctx context.Context, fromBlock uint64, verify bool) (
 	logsCh <-chan BlockLogs,
 	errsCh <-chan error,
 	err error,
@@ -140,14 +154,18 @@ func (ec *ExecutionClient) FetchHistoricalLogs(ctx context.Context, fromBlock ui
 		return nil, nil, ErrNothingToSync
 	}
 
-	logsCh, errsCh = ec.fetchLogsInBatches(ctx, fromBlock, toBlock, false)
+	logsCh, errsCh = ec.fetchLogsInBatches(ctx, fromBlock, toBlock, verify)
 	return
 }
 
 // Calls FilterLogs multiple times (in batches) gradually sending the results on logCh to avoid fetching
 // an enormous number of events. If an error is encountered, the fetching terminates and the error is sent
 // on errCh. Both logCh and errCh are closed upon this function termination.
-func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, endBlock uint64, verifyBloom bool) (logCh chan BlockLogs, errCh chan error) {
+//
+// When verify is true, each batch's logs are cross-checked against block blooms (and receipts)
+// and any the EL omitted are recovered before the batch is emitted. When false, logs are
+// emitted as-is (optimistic); completeness is then established by the background verifier.
+func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, endBlock uint64, verify bool) (logCh chan BlockLogs, errCh chan error) {
 	// All errors are buffered so we don't block the execution of this func (waiting on the caller to
 	// handle the error before we can continue further) + it provides more flexibility for the caller
 	// allowing him to process logCh before continuing to checking the errCh channel.
@@ -189,11 +207,14 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, e
 				return
 			}
 
-			// Verify each block's logs against its bloom filter.
-			// Only enabled for streaming (near chain tip) where the Geth bug is most impactful.
-			// Skipped during historical sync to avoid ~200 extra header RPCs per batch.
-			if verifyBloom {
-				results, err = ec.verifyLogsWithBloom(ctx, results, fromBlock, toBlock)
+			// When verifying, cross-check each block's logs against its bloom filter and
+			// recover anything the EL silently dropped, before any BlockLogs is emitted
+			// (once emitted, a block's number becomes the marker and is never revisited).
+			// When optimistic, this is skipped for speed and the background verifier checks
+			// the range afterwards.
+			var unsettled []uint64
+			if verify {
+				results, unsettled, err = ec.verifyLogCompleteness(ctx, results, fromBlock, toBlock)
 				if err != nil {
 					errCh <- err
 					return
@@ -231,7 +252,7 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, e
 					validLogs = append(validLogs, log)
 				}
 				var highestBlock uint64
-				for _, blockLogs := range PackLogs(validLogs) {
+				for _, blockLogs := range packWithUnsettled(validLogs, unsettled) {
 					logCh <- blockLogs
 					if blockLogs.BlockNumber > highestBlock {
 						highestBlock = blockLogs.BlockNumber
@@ -266,7 +287,7 @@ func (ec *ExecutionClient) subdivideLogFetch(ctx context.Context, q ethereum.Fil
 	}
 	err = ec.errSingleClient(fmt.Errorf("get filtered logs: %w", err), "eth_getLogs")
 
-	if isRPCQueryLimitError(err) {
+	if isSubdividableLogFetchError(err) {
 		if q.FromBlock == nil || q.ToBlock == nil {
 			return nil, err
 		}
@@ -279,9 +300,10 @@ func (ec *ExecutionClient) subdivideLogFetch(ctx context.Context, q ethereum.Fil
 			return nil, fmt.Errorf("insufficient blocks to subdivide (fromBlock: %d, toBlock: %d): %w", fromBlock, toBlock, err)
 		}
 
-		// Query-limit subdivision is an expected, self-healing fallback that recurses,
-		// so log at debug; a genuine failure to fetch surfaces as an error upstream.
-		ec.logger.Debug("execution client query limit exceeded, subdividing query",
+		// Range-limit subdivision (query-limit code or a response-size cap) is an expected,
+		// self-healing fallback that recurses, so log at debug; a genuine failure to fetch
+		// surfaces as an error upstream.
+		ec.logger.Debug("execution client rejected a wide log query, subdividing",
 			zap.String("method", "eth_getLogs"),
 			fields.FromBlock(fromBlock),
 			fields.ToBlock(toBlock),
@@ -538,7 +560,7 @@ func (ec *ExecutionClient) connect(ctx context.Context) error {
 		return ec.errSingleClient(fmt.Errorf("ethclient dial: %w", err), "dial")
 	}
 
-	ec.client = newEthClient(c, ec.reqTimeout)
+	ec.client = newEthClient(c, ec.reqTimeout, ec.logger)
 
 	return nil
 }
