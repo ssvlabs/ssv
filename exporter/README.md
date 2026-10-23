@@ -163,6 +163,25 @@ Some examples:
   ```
 
 
+### Glamsterdam (Gloas) duties
+
+From the Gloas fork the exporter records two more validator duties, under their own roles in `/v1/exporter/traces/validator` and `/v1/exporter/decideds`:
+
+- `PTC_ATTESTER` — the payload-timeliness attestation (SIP #94 §3): one partial-signature round, no consensus.
+- `PROPOSER_PREFERENCES` — the proposer's preferences for an upcoming proposal (SIP #94 §5), recorded under the proposal slot even though operators broadcast them up to two epochs early. In archive mode the trace also holds the builder request-auth signatures (`type: REQUEST_AUTH`), which do not count as participation.
+
+Partial-signature entries carry a `type` (`POST_CONSENSUS`, `PTC_ATTESTER`, `PROPOSER_PREFERENCES`, `REQUEST_AUTH`, ...). A validator duty's trace holds one entry per root each signer signs, timed at its first sighting, so a packet with several roots yields several entries: the block and §6 envelope roots of a self-build proposer's post-consensus packet at a Gloas slot, one per subnet for a sync-committee contribution, one per builder for a request-auth packet. At Gloas slots a proposer trace's `proposalData` is the decided `GloasProposalData` (block plus `payload_root`) rather than a versioned block.
+
+In archive mode, `signers` in `/v1/exporter/decideds` lists the operators seen signing rather than a quorum, as it always has for post-consensus signers: the envelope root's signers count toward `PROPOSER`, request auth never counts, and a `PROPOSER_PREFERENCES` duty whose trace holds request auth alone reports no entry. Standard mode records a duty's participants only once a signing root reaches the committee's quorum, and for `PROPOSER` only the block root's quorum counts.
+
+The trace endpoints' schedules list the two roles like `PROPOSER`: `PTC_ATTESTER` for the slot's PTC members and, at Gloas slots, `PROPOSER_PREFERENCES` for its proposers. `/v1/exporter/traces/committee` reports every scheduled role of a committee's validators, these two included.
+
+In standard mode the `/stream` WebSocket pushes decided messages for the two roles as well. A `PROPOSER_PREFERENCES` message carries its proposal slot, so it can arrive up to two epochs before that slot.
+
+A `PROPOSER_PREFERENCES` trace is written to disk only when its proposal slot is evicted, up to two epochs after its messages, so an exporter restarted in between loses it; every other role loses at most four slots.
+
+Traces written by this version can hold more than 13 entries in a duty's `pre` or `post` (a self-build proposer's two roots signed by 7 or more operators already do), which an older exporter can't read. The store records its format version, and a store written by a newer version is refused at startup rather than read partially.
+
 ### Explore API
 
 Use a tool for WebSockets (such as [wscat](https://www.npmjs.com/package/wscat)) to interact with the API.

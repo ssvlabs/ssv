@@ -5,21 +5,26 @@ import (
 )
 
 // Mask is a compact bitfield used to record which Beacon roles
-// are scheduled for a validator at a given slot. It is intentionally
-// a tiny type (one byte) to keep on‑disk schedule encoding small.
+// are scheduled for a validator at a given slot. On disk a slot's schedule
+// is one bitmap of validator indices per role, keyed by the role's bit.
 //
 // Bits (LSB first):
 //
 //	0: ATTESTER, 1: AGGREGATOR, 2: PROPOSER, 3: SYNC_COMMITTEE,
-//	4: SYNC_COMMITTEE_CONTRIBUTION
+//	4: SYNC_COMMITTEE_CONTRIBUTION, 5: PTC_ATTESTER, 6: PROPOSER_PREFERENCES
+//
+// Bit 7 is the last free one. A ninth role needs a wider type and a new key byte for its schedule record
+// (store.makeScheduledRolePrefix keys each role by its bit); existing records keep their keys.
 type Mask = uint8
 
 const (
-	BitAttester         Mask = 1 << 0
-	BitAggregator       Mask = 1 << 1
-	BitProposer         Mask = 1 << 2
-	BitSyncCommittee    Mask = 1 << 3
-	BitSyncContribution Mask = 1 << 4
+	BitAttester            Mask = 1 << 0
+	BitAggregator          Mask = 1 << 1
+	BitProposer            Mask = 1 << 2
+	BitSyncCommittee       Mask = 1 << 3
+	BitSyncContribution    Mask = 1 << 4
+	BitPTCAttester         Mask = 1 << 5
+	BitProposerPreferences Mask = 1 << 6
 )
 
 // roleToBit maps supported beacon roles to their bit in the schedule mask.
@@ -29,6 +34,8 @@ var roleToBit = map[spectypes.BeaconRole]Mask{
 	spectypes.BNRoleProposer:                  BitProposer,
 	spectypes.BNRoleSyncCommittee:             BitSyncCommittee,
 	spectypes.BNRoleSyncCommitteeContribution: BitSyncContribution,
+	spectypes.BNRolePTCAttester:               BitPTCAttester,
+	spectypes.BNRoleProposerPreferences:       BitProposerPreferences,
 }
 
 // allRoles is the canonical collection of roles represented in the mask.
@@ -39,6 +46,8 @@ var allRoles = []spectypes.BeaconRole{
 	spectypes.BNRoleProposer,
 	spectypes.BNRoleSyncCommittee,
 	spectypes.BNRoleSyncCommitteeContribution,
+	spectypes.BNRolePTCAttester,
+	spectypes.BNRoleProposerPreferences,
 }
 
 // All returns the canonical list of roles represented in the mask.
