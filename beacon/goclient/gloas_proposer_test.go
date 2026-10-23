@@ -103,7 +103,7 @@ func TestGetGloasBeaconBlock_NextClientFallsBackToGET(t *testing.T) {
 		if r.Method == http.MethodPost {
 			return mocks.NewResponse(nil, mocks.WithStatusCode(http.StatusMethodNotAllowed)), nil // predates beacon-APIs#630
 		}
-		return mocks.NewResponse(blockSSZ, mocks.WithHeader("Content-Type", "application/octet-stream")), nil
+		return mocks.NewResponse(blockSSZ, mocks.WithHeader("Content-Type", contentTypeSSZ)), nil
 	})
 	defer srv.Close()
 
@@ -156,8 +156,8 @@ func TestRequestGloasBeaconBlock(t *testing.T) {
 	require.Equal(t, "0x01", gotRandao)         // randao is the 5th arg, graffiti the 4th
 	// graffiti is padded to a full 32-byte value before hex-encoding (lighthouse rejects a short one).
 	require.Equal(t, "0x02"+strings.Repeat("00", 31), gotGraffiti)
-	require.Equal(t, "application/octet-stream", gotAccept)
-	require.Equal(t, "application/json", gotContentType)
+	require.Equal(t, contentTypeSSZ, gotAccept)
+	require.Equal(t, contentTypeJSON, gotContentType)
 	// the neutral local-build body: no builders, p2p bids weighed at par with the local build (100).
 	require.Contains(t, string(gotBody), `"builders":[]`)
 	require.Contains(t, string(gotBody), `"builder_boost_factor":"100"`)
@@ -272,7 +272,7 @@ func TestRequestGloasBeaconBlock_POST(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, http.MethodPost, gotMethod)
 	require.Equal(t, requestLog{{method: http.MethodPost}}, requests)
-	require.Equal(t, "application/json", gotContentType)
+	require.Equal(t, contentTypeJSON, gotContentType)
 	require.Equal(t, "gloas", gotConsensusVersion)
 	require.Contains(t, string(gotBody), `"min_bid":"10"`)
 	require.Equal(t, "https://builder.example.com", got.BuilderURL)
@@ -307,7 +307,7 @@ func TestRequestGloasBeaconBlock_POSTFallbackToGET(t *testing.T) {
 	require.Equal(t, requestLog{{method: http.MethodPost, failed: true, status: http.StatusNotFound}, {method: http.MethodGet}}, requests,
 		"the rejected POST and the fallback GET are recorded as two requests")
 	require.Equal(t, "150", getBoost, "the fallback GET carries the configured builder_boost_factor")
-	require.Equal(t, "application/octet-stream", getAccept, "the fallback GET still asks for the SSZ block")
+	require.Equal(t, contentTypeSSZ, getAccept, "the fallback GET still asks for the SSZ block")
 	require.Equal(t, phase0.Slot(7), got.Block.Slot)
 	require.Empty(t, got.BuilderURL)
 }
@@ -385,8 +385,8 @@ func TestSubmitGloasBeaconBlock(t *testing.T) {
 	require.Equal(t, "/eth/v2/beacon/blocks", gotPath)
 	require.Equal(t, consensusVersionGloas, gotVersion)
 	// the route answers with no content and JSON errors; Prysm refuses an SSZ-only Accept with 406.
-	require.Equal(t, "application/json", gotAccept)
-	require.Equal(t, "application/octet-stream", gotContentType)
+	require.Equal(t, contentTypeJSON, gotAccept)
+	require.Equal(t, contentTypeSSZ, gotContentType)
 	require.Equal(t, []byte{0x01, 0x02}, gotBody)
 }
 
