@@ -184,6 +184,11 @@ func (c *config) resolveAndValidate(logger *zap.Logger) (resolved, error) {
 		return resolved{}, fmt.Errorf("invalid Builders configuration: %w", err)
 	}
 
+	// Reject an unknown discovery mode now, rather than when the network starts, after the node has synced.
+	if err := c.P2pNetworkConfig.ValidateDiscovery(); err != nil {
+		return resolved{}, fmt.Errorf("invalid p2p configuration: %w", err)
+	}
+
 	// Resolve the operating mode last so a doubly-misconfigured node still surfaces the signing
 	// or proposer-delay error first.
 	m, err := resolveMode(c.ExporterOptions)

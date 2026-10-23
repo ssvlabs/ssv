@@ -17,7 +17,7 @@ func TestConfig_ApplyDefaults(t *testing.T) {
 	require.True(t, c.DynamicMaxPeers)
 	require.True(t, c.PubSubScoring)
 	require.Equal(t, 60, c.MaxPeers)
-	require.Equal(t, "discv5", c.Discovery)
+	require.Equal(t, DiscoveryDiscv5, c.Discovery)
 }
 
 // TestConfig_AddrsFactory checks that with HostAddress or HostDNS set, the host advertises that
