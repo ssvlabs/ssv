@@ -102,7 +102,7 @@ func requestPTCDuties(ctx context.Context, httpClient *http.Client, addr unmaske
 // the beacon-APIs "no block seen" signal — returns (nil, nil) rather than a decode error on the
 // empty body.
 func requestPayloadAttestationData(ctx context.Context, httpClient *http.Client, addr unmaskedAddr, slot phase0.Slot) (*gloas.PayloadAttestationData, error) {
-	respBody, _, status, err := httpDo(ctx, httpClient, http.MethodGet, addr, fmt.Sprintf(payloadAttestationDataPath, slot), nil, "application/json", "", nil)
+	respBody, _, status, err := httpDo(ctx, httpClient, http.MethodGet, addr, fmt.Sprintf(payloadAttestationDataPath, slot), nil, contentTypeJSON, "", nil)
 	if err != nil {
 		return nil, err
 	}
