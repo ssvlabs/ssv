@@ -3,6 +3,7 @@ package connections
 import (
 	"context"
 	"errors"
+	"slices"
 	"sync"
 	"testing"
 
@@ -99,6 +100,14 @@ func (h *testHandshaker) CallCount() int {
 	defer h.mu.Unlock()
 
 	return len(h.calls)
+}
+
+// noTrustedPeers is the IsTrustedPeerF of a node without trusted peers.
+func noTrustedPeers(peer.ID) bool { return false }
+
+// trustedPeers returns the IsTrustedPeerF of a node trusting exactly pids.
+func trustedPeers(pids ...peer.ID) IsTrustedPeerF {
+	return func(pid peer.ID) bool { return slices.Contains(pids, pid) }
 }
 
 type testNetwork struct {
