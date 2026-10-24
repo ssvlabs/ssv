@@ -18,7 +18,9 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/testing/mocks"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
+	"github.com/ssvlabs/ssv/protocol/v2/types/ssvtestingutils"
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
@@ -183,7 +185,7 @@ func TestProcessPreConsensusRecoversFromBadShare(t *testing.T) {
 	}{
 		{
 			name:    "validator registration",
-			msgType: spectypes.ValidatorRegistrationPartialSig,
+			msgType: ssvtypes.ValidatorRegistrationPartialSig,
 			setup: func(t *testing.T) (Runner, *BaseRunner, func() int) {
 				bn := protocoltesting.NewTestingBeaconNodeWrapped().(*protocoltesting.BeaconNodeWrapped)
 				r, err := NewValidatorRegistrationRunner(ValidatorRegistrationRunnerOptions{
@@ -193,7 +195,7 @@ func TestProcessPreConsensusRecoversFromBadShare(t *testing.T) {
 					GasLimit:                       spectypes.DefaultGasLimit,
 				})
 				require.NoError(t, err)
-				duty := spectestingutils.TestingValidatorRegistrationDuty
+				duty := ssvtestingutils.TestingValidatorRegistrationDuty
 				start(t, r, &duty)
 				return r, r.(*ValidatorRegistrationRunner).BaseRunner, func() int { return len(bn.GetBroadcastedRoots()) }
 			},

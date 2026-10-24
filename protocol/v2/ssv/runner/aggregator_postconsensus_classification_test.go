@@ -105,7 +105,7 @@ func (e *aggregatorRunnerEnv) startAndDecideAggregatorDuty(
 	require.NoError(t, e.runner.StartNewDuty(ctx, e.logger, duty, e.keySet.Threshold))
 	concluded := observeDutyConclusion(e.runner.BaseRunner)
 
-	aggData := spectestingutils.TestingAggregateAndProofV(version, duty.ValidatorIndex)
+	aggData := ssvtestingutils.TestingAggregateAndProofV(version, duty.ValidatorIndex)
 	dataSSZ, err := aggData.MarshalSSZ()
 	require.NoError(t, err)
 
@@ -116,7 +116,7 @@ func (e *aggregatorRunnerEnv) startAndDecideAggregatorDuty(
 	}
 	require.NoError(t, e.runner.decide(ctx, e.logger, duty.Slot, consensusData, dummyValueChecker{}))
 
-	for _, msg := range spectestingutils.SSVDecidingMsgsV(consensusData, e.keySet, ssvtypes.RoleAggregator) {
+	for _, msg := range ssvtestingutils.SSVDecidingMsgsV(consensusData, e.keySet, ssvtypes.RoleAggregator) {
 		if err := e.runner.ProcessConsensus(ctx, e.logger, msg); err != nil {
 			return concluded, err
 		}
@@ -129,7 +129,7 @@ func (e *aggregatorRunnerEnv) startAndDecideAggregatorDuty(
 func aggregatorPostConsensusMsgs(keySet *spectestingutils.TestKeySet, version spec.DataVersion) []*spectypes.PartialSignatureMessages {
 	msgs := make([]*spectypes.PartialSignatureMessages, 0, keySet.Threshold)
 	for i := uint64(1); i <= keySet.Threshold; i++ {
-		msgs = append(msgs, spectestingutils.PostConsensusAggregatorMsg(keySet.Shares[i], i, version))
+		msgs = append(msgs, ssvtestingutils.PostConsensusAggregatorMsg(keySet.Shares[i], i, version))
 	}
 	return msgs
 }
@@ -149,7 +149,7 @@ func TestAggregatorRunnerProcessPostConsensus_MarksFailedOnSubmitError(t *testin
 	duty := &spectypes.ValidatorDuty{
 		Type:           spectypes.BNRoleAggregator,
 		PubKey:         spectestingutils.TestingValidatorPubKey,
-		Slot:           spectestingutils.TestingDutySlotV(version),
+		Slot:           ssvtestingutils.TestingDutySlotV(version),
 		ValidatorIndex: spectestingutils.TestingValidatorIndex,
 	}
 
@@ -185,7 +185,7 @@ func TestAggregatorRunnerProcessConsensus_NotesFailureAfterDecision(t *testing.T
 	duty := &spectypes.ValidatorDuty{
 		Type:           spectypes.BNRoleAggregator,
 		PubKey:         spectestingutils.TestingValidatorPubKey,
-		Slot:           spectestingutils.TestingDutySlotV(version),
+		Slot:           ssvtestingutils.TestingDutySlotV(version),
 		ValidatorIndex: spectestingutils.TestingValidatorIndex,
 	}
 
@@ -207,7 +207,7 @@ func TestAggregatorRunnerProcessPostConsensus_DoesNotMarkFailedOnInvalidSigs(t *
 	duty := &spectypes.ValidatorDuty{
 		Type:           spectypes.BNRoleAggregator,
 		PubKey:         spectestingutils.TestingValidatorPubKey,
-		Slot:           spectestingutils.TestingDutySlotV(version),
+		Slot:           ssvtestingutils.TestingDutySlotV(version),
 		ValidatorIndex: spectestingutils.TestingValidatorIndex,
 	}
 

@@ -123,7 +123,7 @@ func (v *Validator) StartDuty(ctx context.Context, logger *zap.Logger, duty spec
 
 	dutyRunner := v.DutyRunners[role]
 	if dutyRunner == nil {
-		return traces.Errorf(span, "no duty runner for role %s", vDuty.Type.String())
+		return traces.Errorf(span, "no duty runner for role %s", ssvtypes.BeaconRoleToString(vDuty.Type))
 	}
 
 	const eventMsg = "ℹ️ starting duty processing"

@@ -23,6 +23,7 @@ import (
 
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	mockslotticker "github.com/ssvlabs/ssv/operator/slotticker/mocks"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
@@ -233,6 +234,17 @@ func TestSlotCleanupJob(t *testing.T) {
 	assert.Equal(t, phase0.Slot(4), pp[1].Slot)
 	assert.Equal(t, phase0.Slot(9), pp[10].Slot)
 	assert.Equal(t, phase0.Slot(9), pp[11].Slot)
+}
+
+// The store's ID labels its metrics and logs, so it also names the validator-registration role, which the
+// spec no longer names.
+func TestParticipantStorageID(t *testing.T) {
+	for role, want := range map[spectypes.BeaconRole]string{
+		spectypes.BNRoleAttester:             "ATTESTER",
+		ssvtypes.BNRoleValidatorRegistration: "VALIDATOR_REGISTRATION",
+	} {
+		require.Equal(t, want, New(zap.NewNop(), nil, role).ID())
+	}
 }
 
 func TestEncodeDecodeOperators(t *testing.T) {

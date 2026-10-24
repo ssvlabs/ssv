@@ -8,6 +8,7 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 )
 
@@ -86,11 +87,13 @@ func TestCurrentDutySlot(t *testing.T) {
 }
 
 func TestDecidedAttestationVote(t *testing.T) {
-	beaconVote := &spectypes.BeaconVote{Source: &phase0.Checkpoint{}, Target: &phase0.Checkpoint{Epoch: 1}}
+	preGloasVote := &ssvtypes.PreGloasBeaconVote{BlockRoot: phase0.Root{0x02}, Source: &phase0.Checkpoint{}, Target: &phase0.Checkpoint{Epoch: 1}}
 
-	gotVote, gotIndex, err := decidedAttestationVote(beaconVote)
+	gotVote, gotIndex, err := decidedAttestationVote(preGloasVote)
 	require.NoError(t, err)
-	require.Same(t, beaconVote, gotVote)
+	require.Equal(t, preGloasVote.BlockRoot, gotVote.BlockRoot)
+	require.Same(t, preGloasVote.Source, gotVote.Source)
+	require.Same(t, preGloasVote.Target, gotVote.Target)
 	require.Nil(t, gotIndex) // no attestation index before Gloas
 
 	// Gloas: the BeaconVote half is extracted and the carried attestation index is returned (non-nil).
@@ -103,14 +106,15 @@ func TestDecidedAttestationVote(t *testing.T) {
 	gotVote, gotIndex, err = decidedAttestationVote(gloasVote)
 	require.NoError(t, err)
 	require.Equal(t, gloasVote.BlockRoot, gotVote.BlockRoot)
+	require.Zero(t, gotVote.AttestationDataIndex) // the index travels only in the second result
 	require.NotNil(t, gotIndex)
 	require.Equal(t, phase0.CommitteeIndex(1), *gotIndex)
 
 	_, _, err = decidedAttestationVote(nil)
 	require.ErrorContains(t, err, "decided value is nil")
 
-	var nilBeaconVote *spectypes.BeaconVote
-	_, _, err = decidedAttestationVote(nilBeaconVote)
+	var nilPreGloasVote *ssvtypes.PreGloasBeaconVote
+	_, _, err = decidedAttestationVote(nilPreGloasVote)
 	requireSpecCode(t, err, spectypes.BeaconVoteNilCheckpointErrorCode)
 
 	var nilGloasVote *gloas.GloasBeaconVote
@@ -121,11 +125,11 @@ func TestDecidedAttestationVote(t *testing.T) {
 	require.ErrorContains(t, err, "decided value is not a beacon vote")
 
 	// Both forms are validated, whichever path decoded them.
-	_, _, err = decidedAttestationVote(&spectypes.BeaconVote{Source: &phase0.Checkpoint{Epoch: 1}, Target: &phase0.Checkpoint{Epoch: 1}})
+	_, _, err = decidedAttestationVote(&ssvtypes.PreGloasBeaconVote{Source: &phase0.Checkpoint{Epoch: 1}, Target: &phase0.Checkpoint{Epoch: 1}})
 	requireSpecCode(t, err, spectypes.AttestationSourceNotLessThanTargetErrorCode)
 
 	outOfRange := *gloasVote
 	outOfRange.AttestationDataIndex = 2
 	_, _, err = decidedAttestationVote(&outOfRange)
-	requireSpecCode(t, err, spectypes.GloasBeaconVoteInvalidIndexErrorCode)
+	requireSpecCode(t, err, spectypes.BeaconVoteInvalidIndexErrorCode)
 }

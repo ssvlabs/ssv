@@ -12,6 +12,7 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 const (
@@ -91,7 +92,7 @@ func (h *Handler) HandleParticipantsQuery(store *storage.ParticipantStores, nm *
 	roleStorage := store.Get(role)
 	if roleStorage == nil {
 		h.logger.Warn("role storage doesn't exist", fields.BeaconRole(role))
-		res.Data = []string{"internal error - role storage doesn't exist", role.String()}
+		res.Data = []string{"internal error - role storage doesn't exist", ssvtypes.BeaconRoleToString(role)}
 		nm.Msg = res
 		return
 	}

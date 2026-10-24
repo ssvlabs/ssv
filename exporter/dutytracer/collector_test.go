@@ -867,12 +867,12 @@ func buildCommitteeProposalWithBeaconVote(identifier spectypes.MessageID, slot p
 	return msg
 }
 
-// buildRoleRoots encodes a BeaconVote for the given block root and asks the
+// buildRoleRoots encodes a pre-Gloas BeaconVote for the given block root and asks the
 // collector to derive sync-committee and attester signing roots for the slot.
 // It returns (syncRoot, attRoot, encodedVote).
 func buildRoleRoots(t *testing.T, c *Collector, slot phase0.Slot, blockRoot phase0.Root) (phase0.Root, phase0.Root, []byte) {
 	t.Helper()
-	bv := &spectypes.BeaconVote{BlockRoot: blockRoot}
+	bv := &ssvtypes.PreGloasBeaconVote{BlockRoot: blockRoot}
 	data, err := bv.Encode()
 	require.NoError(t, err)
 	syncRoot, attRoot, err := c.computeRoleRoots(t.Context(), slot, data)
@@ -940,7 +940,7 @@ func TestDutyTracer_SyncCommitteeRoots(t *testing.T) {
 func TestDutyTracer_DecodeCommitteeVote(t *testing.T) {
 	// Pre-Gloas: a BeaconVote decodes to the common vote with no attestation index.
 	preGloas := New(zap.NewNop(), nil, mockclient{}, nil, networkconfig.TestNetwork.Beacon, nil, nil)
-	bv := &spectypes.BeaconVote{BlockRoot: phase0.Root{1, 2, 3}, Source: &phase0.Checkpoint{}, Target: &phase0.Checkpoint{Epoch: 1}}
+	bv := &ssvtypes.PreGloasBeaconVote{BlockRoot: phase0.Root{1, 2, 3}, Source: &phase0.Checkpoint{}, Target: &phase0.Checkpoint{Epoch: 1}}
 	bvBytes, err := bv.Encode()
 	require.NoError(t, err)
 
@@ -959,6 +959,7 @@ func TestDutyTracer_DecodeCommitteeVote(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, gv.BlockRoot, gotVote.BlockRoot)
 	require.Equal(t, phase0.Epoch(1), gotVote.Target.Epoch) // Source/Target carried over, not just BlockRoot
+	require.Zero(t, gotVote.AttestationDataIndex)           // the index travels only in the second result
 	require.NotNil(t, gotIndex)
 	require.Equal(t, phase0.CommitteeIndex(1), *gotIndex)
 }
@@ -1381,7 +1382,7 @@ func TestValidatorDutyTrace_toBNRole(t *testing.T) {
 		{spectypes.RoleProposer, spectypes.BNRoleProposer, false},
 		{ssvtypes.RoleAggregator, spectypes.BNRoleAggregator, false},
 		{ssvtypes.RoleSyncCommitteeContribution, spectypes.BNRoleSyncCommitteeContribution, false},
-		{spectypes.RoleValidatorRegistration, spectypes.BNRoleValidatorRegistration, false},
+		{ssvtypes.RoleValidatorRegistration, ssvtypes.BNRoleValidatorRegistration, false},
 		{spectypes.RoleVoluntaryExit, spectypes.BNRoleVoluntaryExit, false},
 		{spectypes.RoleCommittee, spectypes.BNRoleUnknown, true},
 		// The Gloas duty types are intentionally unmapped: collect skips them before toBNRole

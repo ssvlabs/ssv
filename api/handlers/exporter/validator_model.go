@@ -12,6 +12,7 @@ import (
 	"github.com/ssvlabs/ssv/api"
 	exportercore "github.com/ssvlabs/ssv/exporter"
 	"github.com/ssvlabs/ssv/exporter/traces"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 // ValidatorTracesRequest represents the filter parameters accepted by the
@@ -106,7 +107,7 @@ type ValidatorTrace struct {
 func toValidatorTrace(t *traces.ValidatorDutyTrace) ValidatorTrace {
 	return ValidatorTrace{
 		Slot:      t.Slot,
-		Role:      t.Role.String(),
+		Role:      ssvtypes.BeaconRoleToString(t.Role),
 		Validator: t.Validator,
 		Pre:       toMessageTrace(t.Pre),
 		Post:      toMessageTrace(t.Post),
@@ -129,7 +130,7 @@ func toValidatorSchedule(entries []exportercore.ValidatorScheduleEntry) []Valida
 	for _, e := range entries {
 		roles := make([]string, 0, len(e.Roles))
 		for _, role := range e.Roles {
-			roles = append(roles, role.String())
+			roles = append(roles, ssvtypes.BeaconRoleToString(role))
 		}
 		out = append(out, ValidatorSchedule{
 			Slot:      uint64(e.Slot),

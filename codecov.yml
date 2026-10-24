@@ -32,6 +32,8 @@ ignore:
   - "**/*mock*/**"
   - "**/*mock*.go"
   - "**/*_test.go"
+  # Test fixtures kept from ssv-spec's testingutils.
+  - "**/ssvtestingutils/**"
   - "**/e2e/**"
   - "**/metrics.go"
   - "**/observability.go"

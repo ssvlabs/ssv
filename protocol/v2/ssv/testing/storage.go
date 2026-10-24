@@ -9,6 +9,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	qbftstorage "github.com/ssvlabs/ssv/ibft/storage"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
@@ -35,7 +36,7 @@ var allRoles = []spectypes.BeaconRole{
 	spectypes.BNRoleProposer,
 	spectypes.BNRoleSyncCommitteeContribution,
 	spectypes.BNRoleSyncCommittee,
-	spectypes.BNRoleValidatorRegistration,
+	ssvtypes.BNRoleValidatorRegistration,
 	spectypes.BNRoleVoluntaryExit,
 }
 

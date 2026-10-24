@@ -10,12 +10,13 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ssvlabs/ssv/networkconfig"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
-// TestVoteCheckerSourceTargetEpoch pins the behavior of the source/target epoch check at
-// value_check.go:47.
+// TestVoteCheckerSourceTargetEpoch pins the behavior of the source/target epoch check in
+// PreGloasBeaconVote.Validate, which the voteChecker applies.
 //
 // The current implementation uses `source.Epoch >= target.Epoch` to reject the BeaconVote,
 // which is stricter than the Ethereum consensus-specs validity rule for attestations. Per
@@ -44,7 +45,7 @@ import (
 // by the fix.
 func TestVoteCheckerSourceTargetEpoch(t *testing.T) {
 	t.Run("genesis: source.Epoch == target.Epoch == 0 currently rejected (B1 bug)", func(t *testing.T) {
-		checker := NewVoteChecker(nil, 0, []phase0.BLSPubKey{}, &spectypes.BeaconVote{})
+		checker := NewVoteChecker(nil, 0, []phase0.BLSPubKey{}, &ssvtypes.PreGloasBeaconVote{})
 		err := checker.CheckValue(encodeBeaconVote(t, 0, 0))
 		require.ErrorContains(t, err, "source >= target")
 		// TODO(B1 fix): once the fix lands, this assertion should flip — at minimum
@@ -52,19 +53,19 @@ func TestVoteCheckerSourceTargetEpoch(t *testing.T) {
 	})
 
 	t.Run("source.Epoch > target.Epoch is rejected (unchanged by the B1 fix)", func(t *testing.T) {
-		checker := NewVoteChecker(nil, 0, []phase0.BLSPubKey{}, &spectypes.BeaconVote{})
+		checker := NewVoteChecker(nil, 0, []phase0.BLSPubKey{}, &ssvtypes.PreGloasBeaconVote{})
 		err := checker.CheckValue(encodeBeaconVote(t, 1, 0))
 		require.ErrorContains(t, err, "source >= target")
 	})
 }
 
-// encodeBeaconVote returns SSZ bytes for a BeaconVote with the requested source/target epochs
+// encodeBeaconVote returns SSZ bytes for a pre-Gloas BeaconVote with the requested source/target epochs
 // and zero block root. Suitable for tests that exercise the source/target gate, which fires
 // before any downstream check (slashing or expected-vote) so a nil signer/expectedVote on the
 // voteChecker is fine.
 func encodeBeaconVote(t *testing.T, sourceEpoch, targetEpoch phase0.Epoch) []byte {
 	t.Helper()
-	bv := &spectypes.BeaconVote{
+	bv := &ssvtypes.PreGloasBeaconVote{
 		BlockRoot: phase0.Root{},
 		Source:    &phase0.Checkpoint{Epoch: sourceEpoch},
 		Target:    &phase0.Checkpoint{Epoch: targetEpoch},
@@ -183,7 +184,7 @@ func TestGloasVoteChecker_IndexOutOfRange(t *testing.T) {
 	checker := newGloasChecker(fakeSlashingSigner{}, expected)
 	var specErr *spectypes.Error
 	require.ErrorAs(t, checker.CheckValue(encodeGloasVote(t, gloasVote(1, 2, 2))), &specErr)
-	require.Equal(t, spectypes.GloasBeaconVoteInvalidIndexErrorCode, specErr.Code)
+	require.Equal(t, spectypes.BeaconVoteInvalidIndexErrorCode, specErr.Code)
 }
 
 func TestGloasVoteChecker_SourceNotBeforeTarget(t *testing.T) {

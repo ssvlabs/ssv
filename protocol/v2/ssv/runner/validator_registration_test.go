@@ -12,6 +12,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/networkconfig"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 // TestValidatorRegistrationRunner_StartNewDutyDeprecatedFromGloas pins the runner-side SIP #94 §5 guard
@@ -27,16 +28,16 @@ func TestValidatorRegistrationRunner_StartNewDutyDeprecatedFromGloas(t *testing.
 
 	r := &ValidatorRegistrationRunner{
 		BaseRunner: &BaseRunner{
-			RunnerRoleType: spectypes.RoleValidatorRegistration,
+			RunnerRoleType: ssvtypes.RoleValidatorRegistration,
 			NetworkConfig:  cfg,
 		},
 	}
-	duty := &spectypes.ValidatorDuty{Type: spectypes.BNRoleValidatorRegistration, Slot: gloasSlot}
+	duty := &spectypes.ValidatorDuty{Type: ssvtypes.BNRoleValidatorRegistration, Slot: gloasSlot}
 
 	err := r.StartNewDuty(context.Background(), zap.NewNop(), duty, 1)
 	var specErr *spectypes.Error
 	require.ErrorAs(t, err, &specErr)
-	require.Equal(t, spectypes.ValidatorRegistrationDeprecatedErrorCode, specErr.Code)
+	require.Equal(t, ssvtypes.ValidatorRegistrationDeprecatedErrorCode, specErr.Code)
 	require.Nil(t, r.State, "a rejected duty leaves no running state")
 }
 

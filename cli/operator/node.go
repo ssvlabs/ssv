@@ -362,7 +362,7 @@ func newNode(
 		spectypes.BNRoleSyncCommittee,
 		spectypes.BNRoleAggregator,
 		spectypes.BNRoleSyncCommitteeContribution,
-		spectypes.BNRoleValidatorRegistration,
+		ssvtypes.BNRoleValidatorRegistration,
 		spectypes.BNRoleVoluntaryExit,
 	}
 

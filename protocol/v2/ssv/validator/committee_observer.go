@@ -175,7 +175,7 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
 		for _, beaconRole := range beaconRoles {
 			roleStorage := ncv.Storage.Get(beaconRole)
 			if roleStorage == nil {
-				return fmt.Errorf("storage doesn't exist for beacon role: %v", beaconRole)
+				return fmt.Errorf("storage doesn't exist for beacon role: %v", ssvtypes.BeaconRoleToString(beaconRole))
 			}
 
 			updated, err := roleStorage.SaveParticipants(validator.ValidatorPubKey, slot, quorum)
@@ -249,8 +249,8 @@ func (ncv *CommitteeObserver) getBeaconRoles(msg *queue.SSVMessage, root phase0.
 		return []spectypes.BeaconRole{spectypes.BNRoleProposer}
 	case ssvtypes.RoleSyncCommitteeContribution:
 		return []spectypes.BeaconRole{spectypes.BNRoleSyncCommitteeContribution}
-	case spectypes.RoleValidatorRegistration:
-		return []spectypes.BeaconRole{spectypes.BNRoleValidatorRegistration}
+	case ssvtypes.RoleValidatorRegistration:
+		return []spectypes.BeaconRole{ssvtypes.BNRoleValidatorRegistration}
 	case spectypes.RoleVoluntaryExit:
 		return []spectypes.BeaconRole{spectypes.BNRoleVoluntaryExit}
 	default:
@@ -429,8 +429,9 @@ func (ncv *CommitteeObserver) SaveRoots(ctx context.Context, msg *queue.SSVMessa
 	switch msg.MsgID.GetRoleType() {
 	case spectypes.RoleCommittee:
 		// On Gloas slots the decided value is a GloasBeaconVote (120B) carrying the attestation index;
-		// before Gloas it is a plain BeaconVote (112B). Decode into the matching type.
-		beaconVote := &spectypes.BeaconVote{}
+		// before Gloas it is a PreGloasBeaconVote (112B). Decode into the matching type. beaconVote keeps
+		// only the fields both share, so its AttestationDataIndex is always zero: the index is gloasIndex.
+		var beaconVote *spectypes.BeaconVote
 		var gloasIndex *phase0.CommitteeIndex
 		if ncv.beaconConfig.IsGloas(epoch) {
 			gv := &gloas.GloasBeaconVote{}
@@ -441,9 +442,13 @@ func (ncv *CommitteeObserver) SaveRoots(ctx context.Context, msg *queue.SSVMessa
 			beaconVote = &spectypes.BeaconVote{BlockRoot: gv.BlockRoot, Source: gv.Source, Target: gv.Target}
 			index := gv.AttestationDataIndex
 			gloasIndex = &index
-		} else if err := beaconVote.Decode(msg.SignedSSVMessage.FullData); err != nil {
-			ncv.logger.Debug("❗ failed to decode beacon vote from proposal", zap.Error(err))
-			return err
+		} else {
+			pv := &ssvtypes.PreGloasBeaconVote{}
+			if err := pv.Decode(msg.SignedSSVMessage.FullData); err != nil {
+				ncv.logger.Debug("❗ failed to decode beacon vote from proposal", zap.Error(err))
+				return err
+			}
+			beaconVote = &spectypes.BeaconVote{BlockRoot: pv.BlockRoot, Source: pv.Source, Target: pv.Target}
 		}
 
 		bnCacheKey := BeaconVoteCacheKey{root: beaconVote.BlockRoot, height: qbftMsg.Height}
@@ -553,7 +558,7 @@ func (ncv *CommitteeObserver) saveAggregatorRoots(
 	epoch phase0.Epoch,
 	data *spectypes.AggregatorCommitteeConsensusData,
 ) error {
-	aggregateAndProofs, err := data.GetAggregateAndProofs()
+	aggregateAndProofs, err := ssvtypes.GetAggregateAndProofs(data)
 	if err != nil {
 		return err
 	}
@@ -563,7 +568,7 @@ func (ncv *CommitteeObserver) saveAggregatorRoots(
 		return err
 	}
 	for _, aggAndProof := range aggregateAndProofs {
-		hashRoot, err := spectypes.GetAggregateAndProofHashRoot(aggAndProof)
+		hashRoot, err := ssvtypes.GetAggregateAndProofHashRoot(aggAndProof)
 		if err != nil {
 			continue
 		}

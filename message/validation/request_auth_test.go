@@ -12,6 +12,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/networkconfig"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/protocol/v2/types/ssvtestingutils"
 )
 
@@ -21,7 +22,7 @@ func TestPartialSignatureTypeMatchesRole_RequestAuth(t *testing.T) {
 	mv := &messageValidator{}
 	require.True(t, mv.partialSignatureTypeMatchesRole(spectypes.RequestAuthPartialSig, spectypes.RoleProposerPreferences))
 	require.False(t, mv.partialSignatureTypeMatchesRole(spectypes.RequestAuthPartialSig, spectypes.RoleProposer))
-	require.False(t, mv.partialSignatureTypeMatchesRole(spectypes.RequestAuthPartialSig, spectypes.RoleValidatorRegistration))
+	require.False(t, mv.partialSignatureTypeMatchesRole(spectypes.RequestAuthPartialSig, ssvtypes.RoleValidatorRegistration))
 }
 
 func TestValidPartialSigMsgType_RequestAuth(t *testing.T) {

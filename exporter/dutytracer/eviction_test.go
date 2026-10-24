@@ -16,6 +16,7 @@ import (
 
 	"github.com/ssvlabs/ssv/exporter/store"
 	"github.com/ssvlabs/ssv/networkconfig"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/registry/storage"
 	kv "github.com/ssvlabs/ssv/storage/pebble"
 	"github.com/ssvlabs/ssv/utils/hashmap"
@@ -95,7 +96,7 @@ func TestEviction(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, duties, 652)
 
-		duties, err = dutyStore.GetValidatorDuties(spectypes.BNRoleValidatorRegistration, 3707881)
+		duties, err = dutyStore.GetValidatorDuties(ssvtypes.BNRoleValidatorRegistration, 3707881)
 		require.NoError(t, err)
 		require.Len(t, duties, 63)
 
@@ -107,7 +108,7 @@ func TestEviction(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, duties, 657)
 
-		duties, err = dutyStore.GetValidatorDuties(spectypes.BNRoleValidatorRegistration, 3707881)
+		duties, err = dutyStore.GetValidatorDuties(ssvtypes.BNRoleValidatorRegistration, 3707881)
 		require.NoError(t, err)
 		require.Len(t, duties, 63)
 

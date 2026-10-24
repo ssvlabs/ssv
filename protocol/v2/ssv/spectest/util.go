@@ -12,6 +12,7 @@ import (
 	blindutil "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon/blind"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 func runnerForTest(t *testing.T, runnerType runner.Runner, name string, testType string) runner.Runner {
@@ -119,7 +120,7 @@ func normalizeProposerConsensusValue(value []byte) []byte {
 	if err := cd.Decode(value); err != nil {
 		return value
 	}
-	vBlk, _, err := cd.GetBlockData()
+	vBlk, _, err := ssvtypes.PreGloasBlockData(cd)
 	if err != nil {
 		return value
 	}

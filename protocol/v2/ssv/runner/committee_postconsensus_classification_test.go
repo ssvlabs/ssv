@@ -11,10 +11,10 @@ import (
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
+	"github.com/ssvlabs/ssv/protocol/v2/types/ssvtestingutils"
 )
 
 // faultyAttestationSubmitBeacon wraps the testing beacon node and forces attestation submission to
@@ -39,14 +39,14 @@ func TestCommitteeRunnerProcessPostConsensus_MarksFailedOnSubmitError(t *testing
 	faulty := &faultyAttestationSubmitBeacon{BeaconNodeWrapped: base, submitErr: submitErr}
 
 	env := newCommitteeRunnerEnvWithBeacon(t, []int{1}, faulty)
-	duty := spectestingutils.TestingCommitteeDuty([]int{1}, nil, spec.DataVersionElectra)
+	duty := ssvtestingutils.TestingCommitteeDuty([]int{1}, nil, spec.DataVersionElectra)
 
 	concluded, err := env.startAndDecideCommitteeDuty(t, duty)
 	require.NoError(t, err)
 
 	var postConsensusErr error
 	for id := spectypes.OperatorID(1); id <= 3; id++ {
-		msg := spectestingutils.PostConsensusCommitteeMsgForDuty(duty, env.keySetMap, id)
+		msg := ssvtestingutils.PostConsensusCommitteeMsgForDuty(duty, env.keySetMap, id)
 		if err := env.runner.ProcessPostConsensus(context.Background(), env.logger, msg); err != nil {
 			postConsensusErr = err
 		}
@@ -72,7 +72,7 @@ func TestCommitteeRunnerProcessPostConsensus_MarksFailedOnSubmitError(t *testing
 // single flow.
 func TestCommitteeRunnerProcessPostConsensus_RecoverableInvalidSigsThenSucceeds(t *testing.T) {
 	env := newCommitteeRunnerEnv(t, []int{1}, &committeeDutyGuardStub{}, &doppelgangerStub{})
-	duty := spectestingutils.TestingCommitteeDuty([]int{1}, nil, spec.DataVersionElectra)
+	duty := ssvtestingutils.TestingCommitteeDuty([]int{1}, nil, spec.DataVersionElectra)
 
 	concluded, err := env.startAndDecideCommitteeDuty(t, duty)
 	require.NoError(t, err)
@@ -81,13 +81,13 @@ func TestCommitteeRunnerProcessPostConsensus_RecoverableInvalidSigsThenSucceeds(
 	// Post-consensus validation only checks message structure (not the beacon sig), so all three enter
 	// the container and cross quorum optimistically — then ReconstructBeaconSig fails on the garbage
 	// sig, FallBackAndVerifyEachSignature drops only signer 3, and the root falls back below quorum.
-	msg1 := spectestingutils.PostConsensusCommitteeMsgForDuty(duty, env.keySetMap, 1)
+	msg1 := ssvtestingutils.PostConsensusCommitteeMsgForDuty(duty, env.keySetMap, 1)
 	require.NoError(t, env.runner.ProcessPostConsensus(context.Background(), env.logger, msg1))
 
-	msg2 := spectestingutils.PostConsensusCommitteeMsgForDuty(duty, env.keySetMap, 2)
+	msg2 := ssvtestingutils.PostConsensusCommitteeMsgForDuty(duty, env.keySetMap, 2)
 	require.NoError(t, env.runner.ProcessPostConsensus(context.Background(), env.logger, msg2))
 
-	badMsg := spectestingutils.PostConsensusCommitteeMsgForDuty(duty, env.keySetMap, 3)
+	badMsg := ssvtestingutils.PostConsensusCommitteeMsgForDuty(duty, env.keySetMap, 3)
 	for _, m := range badMsg.Messages {
 		m.PartialSignature = bytes.Repeat([]byte{0xEE}, len(m.PartialSignature))
 	}
@@ -101,7 +101,7 @@ func TestCommitteeRunnerProcessPostConsensus_RecoverableInvalidSigsThenSucceeds(
 
 	// A subsequent valid partial signature from signer 4 re-crosses quorum with three good sigs
 	// (1, 2, 4) → reconstruction succeeds → the duty submits and concludes succeeded.
-	msg4 := spectestingutils.PostConsensusCommitteeMsgForDuty(duty, env.keySetMap, 4)
+	msg4 := ssvtestingutils.PostConsensusCommitteeMsgForDuty(duty, env.keySetMap, 4)
 	require.NoError(t, env.runner.ProcessPostConsensus(context.Background(), env.logger, msg4))
 
 	require.True(t, env.runner.State.Succeeded, "a valid quorum after recovery must conclude succeeded")
@@ -119,7 +119,7 @@ func TestCommitteeRunnerProcessPostConsensus_RecoverableInvalidSigsThenSucceeds(
 // failed with the reason, rather than leaving it to surface as stuck at the slot's end.
 func TestCommitteeRunnerProcessPostConsensus_MarksFailedWhenNoShareToDrop(t *testing.T) {
 	env := newCommitteeRunnerEnv(t, []int{1}, &committeeDutyGuardStub{}, &doppelgangerStub{})
-	duty := spectestingutils.TestingCommitteeDuty([]int{1}, nil, spec.DataVersionElectra)
+	duty := ssvtestingutils.TestingCommitteeDuty([]int{1}, nil, spec.DataVersionElectra)
 
 	concluded, err := env.startAndDecideCommitteeDuty(t, duty)
 	require.NoError(t, err)
@@ -127,7 +127,7 @@ func TestCommitteeRunnerProcessPostConsensus_MarksFailedWhenNoShareToDrop(t *tes
 
 	var postConsensusErr error
 	for id := spectypes.OperatorID(1); id <= 3; id++ {
-		msg := spectestingutils.PostConsensusCommitteeMsgForDuty(duty, env.keySetMap, id)
+		msg := ssvtestingutils.PostConsensusCommitteeMsgForDuty(duty, env.keySetMap, id)
 		if err := env.runner.ProcessPostConsensus(context.Background(), env.logger, msg); err != nil {
 			postConsensusErr = err
 		}
@@ -159,7 +159,7 @@ func invalidateDutiesInGuard(guard *committeeDutyGuardStub, duty *spectypes.Comm
 func TestCommitteeRunnerProcessPostConsensus_MarksNotRequiredOnNoBeaconObjects(t *testing.T) {
 	guard := &committeeDutyGuardStub{}
 	env := newCommitteeRunnerEnv(t, []int{1}, guard, &doppelgangerStub{})
-	duty := spectestingutils.TestingCommitteeDuty([]int{1}, nil, spec.DataVersionElectra)
+	duty := ssvtestingutils.TestingCommitteeDuty([]int{1}, nil, spec.DataVersionElectra)
 
 	concluded, err := env.startAndDecideCommitteeDuty(t, duty)
 	require.NoError(t, err)
@@ -168,7 +168,7 @@ func TestCommitteeRunnerProcessPostConsensus_MarksNotRequiredOnNoBeaconObjects(t
 
 	var postConsensusErr error
 	for id := spectypes.OperatorID(1); id <= 3; id++ {
-		msg := spectestingutils.PostConsensusCommitteeMsgForDuty(duty, env.keySetMap, id)
+		msg := ssvtestingutils.PostConsensusCommitteeMsgForDuty(duty, env.keySetMap, id)
 		if err := env.runner.ProcessPostConsensus(context.Background(), env.logger, msg); err != nil {
 			postConsensusErr = err
 		}
@@ -214,7 +214,7 @@ func TestCommitteeRunnerProcessPostConsensus_MarksFailedOnAllConstructionFailure
 	faulty := &faultyDomainDataBeacon{BeaconNodeWrapped: base, domainErr: domainErr}
 
 	env := newCommitteeRunnerEnvWithBeacon(t, []int{1}, faulty)
-	duty := spectestingutils.TestingCommitteeDuty([]int{1}, nil, spec.DataVersionElectra)
+	duty := ssvtestingutils.TestingCommitteeDuty([]int{1}, nil, spec.DataVersionElectra)
 
 	concluded, err := env.startAndDecideCommitteeDuty(t, duty)
 	require.NoError(t, err)
@@ -226,7 +226,7 @@ func TestCommitteeRunnerProcessPostConsensus_MarksFailedOnAllConstructionFailure
 
 	var postConsensusErr error
 	for id := spectypes.OperatorID(1); id <= 3; id++ {
-		msg := spectestingutils.PostConsensusCommitteeMsgForDuty(duty, env.keySetMap, id)
+		msg := ssvtestingutils.PostConsensusCommitteeMsgForDuty(duty, env.keySetMap, id)
 		if err := env.runner.ProcessPostConsensus(context.Background(), env.logger, msg); err != nil {
 			postConsensusErr = err
 		}
@@ -252,14 +252,14 @@ func TestCommitteeRunnerProcessConsensus_NotesFailureAfterDecision(t *testing.T)
 	base := protocoltesting.NewTestingBeaconNodeWrapped().(*protocoltesting.BeaconNodeWrapped)
 	env := newCommitteeRunnerEnvWithBeacon(t, []int{1}, base)
 	env.runner.signer = failingDomainSigner{BeaconSigner: env.runner.signer, domain: spectypes.DomainAttester}
-	duty := spectestingutils.TestingCommitteeDuty([]int{1}, nil, spec.DataVersionElectra)
+	duty := ssvtestingutils.TestingCommitteeDuty([]int{1}, nil, spec.DataVersionElectra)
 
 	concluded, err := env.startAndDecideCommitteeDuty(t, duty)
 	require.ErrorContains(t, err, "signing failed")
 	requireNotedFailure(t, env.runner.BaseRunner, concluded, "signing failed")
 
 	for id := spectypes.OperatorID(2); id <= 4; id++ {
-		msg := spectestingutils.PostConsensusCommitteeMsgForDuty(duty, env.keySetMap, id)
+		msg := ssvtestingutils.PostConsensusCommitteeMsgForDuty(duty, env.keySetMap, id)
 		require.NoError(t, env.runner.ProcessPostConsensus(context.Background(), env.logger, msg))
 	}
 	requireConcluded(t, concluded, dutyOutcomeSucceeded)
@@ -273,7 +273,7 @@ func TestCommitteeRunnerProcessConsensus_NotesFailureAfterDecision(t *testing.T)
 func TestCommitteeRunnerProcessConsensus_MarksNotRequiredOnNoValidDuties(t *testing.T) {
 	guard := &committeeDutyGuardStub{}
 	env := newCommitteeRunnerEnv(t, []int{1}, guard, &doppelgangerStub{})
-	duty := spectestingutils.TestingCommitteeDuty([]int{1}, nil, spec.DataVersionElectra)
+	duty := ssvtestingutils.TestingCommitteeDuty([]int{1}, nil, spec.DataVersionElectra)
 
 	ctx := t.Context()
 	require.NoError(t, env.runner.StartNewDuty(ctx, env.logger, duty, env.sampleKey.Threshold))
@@ -282,7 +282,7 @@ func TestCommitteeRunnerProcessConsensus_MarksNotRequiredOnNoValidDuties(t *test
 	invalidateDutiesInGuard(guard, duty)
 
 	var consensusErr error
-	for _, msg := range spectestingutils.CommitteeInputForDuty(duty, duty.Slot, env.keySetMap, false) {
+	for _, msg := range ssvtestingutils.CommitteeInputForDuty(duty, duty.Slot, env.keySetMap, false) {
 		if err := env.runner.ProcessConsensus(ctx, env.logger, msg); err != nil {
 			consensusErr = err
 		}
@@ -311,12 +311,12 @@ func TestCommitteeRunnerProcessConsensus_DoneContextDoesNotConcludeNotRequired(t
 	decideUnder := func(t *testing.T, ctx context.Context) (*BaseRunner, chan dutyConclusion, error) {
 		t.Helper()
 		env := newCommitteeRunnerEnv(t, []int{1}, &committeeDutyGuardStub{}, &doppelgangerStub{})
-		duty := spectestingutils.TestingCommitteeDuty([]int{1}, nil, spec.DataVersionElectra)
+		duty := ssvtestingutils.TestingCommitteeDuty([]int{1}, nil, spec.DataVersionElectra)
 		require.NoError(t, env.runner.StartNewDuty(t.Context(), env.logger, duty, env.sampleKey.Threshold))
 		concluded := observeDutyConclusion(env.runner.BaseRunner)
 
 		var consensusErr error
-		for _, msg := range spectestingutils.CommitteeInputForDuty(duty, duty.Slot, env.keySetMap, false) {
+		for _, msg := range ssvtestingutils.CommitteeInputForDuty(duty, duty.Slot, env.keySetMap, false) {
 			if err := env.runner.ProcessConsensus(ctx, env.logger, msg); err != nil {
 				consensusErr = err
 			}

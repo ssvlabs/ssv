@@ -15,6 +15,7 @@ import (
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/protocol/v2/types/ssvtestingutils"
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
@@ -30,23 +31,15 @@ type ValCheckSpecTest struct {
 }
 
 func (test *ValCheckSpecTest) Run(t *testing.T) {
+	// The spec's fixtures key the slashing-protection seeds by secret key hex, but our implementation
+	// uses public keys when calling IsAttestationSlashable.
+	slashableSlots := keyedByPublicKeyHex(t, test.SlashableSlots)
 	signer := ekm.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager())
-	if len(test.SlashableSlots) > 0 {
-		// Transform SlashableSlots keys from secret-key-hex to public-key-hex.
-		// The spec's test fixtures use secret key hex as map keys, but our implementation
-		// uses public keys when calling IsAttestationSlashable.
-		transformedSlots := make(map[string][]phase0.Slot)
-		for skHex, slots := range test.SlashableSlots {
-			skBytes, err := hex.DecodeString(skHex)
-			require.NoError(t, err, "failed to decode secret key hex")
-
-			sk := &bls.SecretKey{}
-			require.NoError(t, sk.Deserialize(skBytes), "failed to deserialize secret key")
-
-			pkHex := hex.EncodeToString(sk.GetPublicKey().Serialize())
-			transformedSlots[pkHex] = slots
-		}
-		signer = ekm.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManagerWithSlashableSlots(transformedSlots))
+	if len(test.SignedAttestations) > 0 {
+		signed := keyedByPublicKeyHex(t, test.SignedAttestations)
+		signer = ekm.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManagerWithSignedAttestations(slashableSlots, signed))
+	} else if len(test.SlashableSlots) > 0 {
+		signer = ekm.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManagerWithSlashableSlots(slashableSlots))
 	}
 
 	check := test.valCheckF(signer)
@@ -68,6 +61,21 @@ func (test *ValCheckSpecTest) Run(t *testing.T) {
 
 	actualErr := adjustActualErrorForRole(adjustActualError(err), test.RunnerRole)
 	spectests.AssertErrorCode(t, adjustExpectedErrorCode(test.ExpectedErrorCode), actualErr)
+}
+
+// keyedByPublicKeyHex re-keys a spec fixture map from secret key hex to public key hex.
+func keyedByPublicKeyHex[V any](t *testing.T, bySecretKeyHex map[string]V) map[string]V {
+	byPublicKeyHex := make(map[string]V, len(bySecretKeyHex))
+	for skHex, v := range bySecretKeyHex {
+		skBytes, err := hex.DecodeString(skHex)
+		require.NoError(t, err, "failed to decode secret key hex")
+
+		sk := &bls.SecretKey{}
+		require.NoError(t, sk.Deserialize(skBytes), "failed to deserialize secret key")
+
+		byPublicKeyHex[hex.EncodeToString(sk.GetPublicKey().Serialize())] = v
+	}
+	return byPublicKeyHex
 }
 
 // valCheckF creates value checker using our implementation
@@ -104,7 +112,8 @@ func (test *ValCheckSpecTest) valCheckF(signer ekm.BeaconSigner) func([]byte) er
 	switch test.RunnerRole {
 	case spectypes.RoleCommittee:
 		// From Gloas the committee value is a GloasBeaconVote with its own checker (SIP #94 §2);
-		// select by the duty slot's fork, exactly as the committee runner does in production.
+		// select by the duty slot's fork, exactly as the committee runner does in production
+		// (specGloasForkEpoch sets which vectors are Gloas-era).
 		if beaconConfig.IsGloasAtSlot(test.DutySlot) {
 			checker := ssv.NewGloasVoteChecker(
 				signer,
@@ -115,7 +124,7 @@ func (test *ValCheckSpecTest) valCheckF(signer ekm.BeaconSigner) func([]byte) er
 			)
 			return checker.CheckValue
 		}
-		expectedVote := &spectypes.BeaconVote{
+		expectedVote := &ssvtypes.PreGloasBeaconVote{
 			Source: &test.ExpectedSource,
 			Target: &test.ExpectedTarget,
 		}
@@ -255,9 +264,9 @@ func createValueChecker(r runner.Runner, signerSource ...runner.Runner) ssv.Valu
 			slot = typedRunner.State.CurrentDuty.DutySlot()
 		}
 
-		// Construct expected vote from TestingAttestationData (same pattern as testing/runner.go:69-73)
-		attData := spectestingutils.TestingAttestationData(spec.DataVersionPhase0)
-		expectedVote := &spectypes.BeaconVote{
+		// Construct expected vote from TestingAttestationData (as the vote in testing/runner.go is)
+		attData := ssvtestingutils.TestingAttestationData(spec.DataVersionPhase0)
+		expectedVote := &ssvtypes.PreGloasBeaconVote{
 			BlockRoot: attData.BeaconBlockRoot,
 			Source:    attData.Source,
 			Target:    attData.Target,

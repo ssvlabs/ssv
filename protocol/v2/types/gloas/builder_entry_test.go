@@ -50,8 +50,9 @@ func TestDefaultAuthData(t *testing.T) {
 	}
 
 	for _, url := range []string{
-		"https://exämple.com/",           // an internationalized hostname must be given in punycode
-		"https://[fe80::1%25eth0]:8443/", // a zoned IPv6 literal: Go and Python render the zone differently
+		"https://exämple.com/",            // an internationalized hostname must be given in punycode
+		"https://\u0130nfra.example.com/", // U+0130 (İ): Go lowercases it to ASCII "i", upstream's Python doesn't
+		"https://[fe80::1%25eth0]:8443/",  // a zoned IPv6 literal: Go and Python render the zone differently
 		"not a url at all",
 	} {
 		_, err := DefaultAuthData(url)

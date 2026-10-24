@@ -22,7 +22,7 @@ func TestBeaconRoleFromString(t *testing.T) {
 		{name: "proposer", input: "PROPOSER", expected: spectypes.BNRoleProposer},
 		{name: "sync committee", input: "SYNC_COMMITTEE", expected: spectypes.BNRoleSyncCommittee},
 		{name: "sync committee contribution", input: "SYNC_COMMITTEE_CONTRIBUTION", expected: spectypes.BNRoleSyncCommitteeContribution},
-		{name: "validator registration", input: "VALIDATOR_REGISTRATION", expected: spectypes.BNRoleValidatorRegistration},
+		{name: "validator registration", input: "VALIDATOR_REGISTRATION", expected: ssvtypes.BNRoleValidatorRegistration},
 		{name: "voluntary exit", input: "VOLUNTARY_EXIT", expected: spectypes.BNRoleVoluntaryExit},
 		{name: "unknown role errors", input: "COMMITTEE", hasError: true},
 		{name: "empty string errors", input: "", hasError: true},
@@ -53,7 +53,7 @@ func TestRunnerRoleFromString(t *testing.T) {
 		{name: "aggregator", input: "AGGREGATOR", expected: ssvtypes.RoleAggregator},
 		{name: "proposer", input: "PROPOSER", expected: spectypes.RoleProposer},
 		{name: "sync committee contribution", input: "SYNC_COMMITTEE_CONTRIBUTION", expected: ssvtypes.RoleSyncCommitteeContribution},
-		{name: "validator registration", input: "VALIDATOR_REGISTRATION", expected: spectypes.RoleValidatorRegistration},
+		{name: "validator registration", input: "VALIDATOR_REGISTRATION", expected: ssvtypes.RoleValidatorRegistration},
 		{name: "voluntary exit", input: "VOLUNTARY_EXIT", expected: spectypes.RoleVoluntaryExit},
 		{name: "ptc attester", input: "PTC_ATTESTER", expected: spectypes.RolePTCAttester},
 		{name: "proposer preferences", input: "PROPOSER_PREFERENCES", expected: spectypes.RoleProposerPreferences},
@@ -86,7 +86,7 @@ func TestRunnerRoleToString(t *testing.T) {
 		{name: "aggregator", role: ssvtypes.RoleAggregator, expected: "AGGREGATOR"},
 		{name: "proposer", role: spectypes.RoleProposer, expected: "PROPOSER"},
 		{name: "sync committee contribution", role: ssvtypes.RoleSyncCommitteeContribution, expected: "SYNC_COMMITTEE_CONTRIBUTION"},
-		{name: "validator registration", role: spectypes.RoleValidatorRegistration, expected: "VALIDATOR_REGISTRATION"},
+		{name: "validator registration", role: ssvtypes.RoleValidatorRegistration, expected: "VALIDATOR_REGISTRATION"},
 		{name: "voluntary exit", role: spectypes.RoleVoluntaryExit, expected: "VOLUNTARY_EXIT"},
 		{name: "ptc attester", role: spectypes.RolePTCAttester, expected: "PTC_ATTESTER"},
 		{name: "proposer preferences", role: spectypes.RoleProposerPreferences, expected: "PROPOSER_PREFERENCES"},
@@ -109,7 +109,7 @@ func TestRunnerRoleFromString_ToString_RoundTrip(t *testing.T) {
 		ssvtypes.RoleAggregator,
 		spectypes.RoleProposer,
 		ssvtypes.RoleSyncCommitteeContribution,
-		spectypes.RoleValidatorRegistration,
+		ssvtypes.RoleValidatorRegistration,
 		spectypes.RoleVoluntaryExit,
 	}
 
@@ -136,6 +136,28 @@ func TestRunnerRoleFromString_ToString_RoundTrip(t *testing.T) {
 		s := RunnerRoleToString(role)
 		got, err := RunnerRoleFromString(s)
 		require.NoError(t, err, "spec-known role %d (%q) does not round-trip", role, s)
+		assert.Equal(t, role, got)
+	}
+}
+
+// TestBeaconRoleFromString_ToString_RoundTrip checks that ssvtypes.BeaconRoleToString, which logs, metrics
+// and the exporter API name beacon roles with, names each role so that BeaconRoleFromString parses it
+// back, including the validator-registration duty the spec no longer names.
+func TestBeaconRoleFromString_ToString_RoundTrip(t *testing.T) {
+	roles := []spectypes.BeaconRole{
+		spectypes.BNRoleAttester,
+		spectypes.BNRoleAggregator,
+		spectypes.BNRoleProposer,
+		spectypes.BNRoleSyncCommittee,
+		spectypes.BNRoleSyncCommitteeContribution,
+		ssvtypes.BNRoleValidatorRegistration,
+		spectypes.BNRoleVoluntaryExit,
+	}
+
+	for _, role := range roles {
+		s := ssvtypes.BeaconRoleToString(role)
+		got, err := BeaconRoleFromString(s)
+		require.NoError(t, err, "round-trip failed for role %d (string %q)", role, s)
 		assert.Equal(t, role, got)
 	}
 }
