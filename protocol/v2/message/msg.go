@@ -81,6 +81,22 @@ func BeaconRoleFromString(s string) (spectypes.BeaconRole, error) {
 	}
 }
 
+// BeaconRoles returns the roles BeaconRoleFromString parses. The node creates a participant store for each
+// (cli/operator/node.go), so every role the API accepts has one.
+func BeaconRoles() []spectypes.BeaconRole {
+	return []spectypes.BeaconRole{
+		spectypes.BNRoleAttester,
+		spectypes.BNRoleAggregator,
+		spectypes.BNRoleProposer,
+		spectypes.BNRoleSyncCommittee,
+		spectypes.BNRoleSyncCommitteeContribution,
+		spectypes.BNRoleValidatorRegistration,
+		spectypes.BNRoleVoluntaryExit,
+		spectypes.BNRolePTCAttester,
+		spectypes.BNRoleProposerPreferences,
+	}
+}
+
 // Partial-signature message type names for the API's `type` field. A type that belongs to one duty is named
 // after that duty's role as the API reports it: the beacon role for a validator duty, the runner role
 // (AGGREGATOR_COMMITTEE) for a committee duty.

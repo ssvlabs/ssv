@@ -41,6 +41,15 @@ func TestBeaconRoleFromString(t *testing.T) {
 			assert.Equal(t, tc.expected, role)
 		})
 	}
+
+	// BeaconRoles lists exactly the roles parsed above.
+	var parsed []spectypes.BeaconRole
+	for _, tc := range testCases {
+		if !tc.hasError {
+			parsed = append(parsed, tc.expected)
+		}
+	}
+	assert.ElementsMatch(t, parsed, BeaconRoles())
 }
 
 // Every partial-signature type the node handles has a name, so API consumers never see a number.

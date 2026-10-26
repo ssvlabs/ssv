@@ -261,6 +261,10 @@ func ComputeF(committeeSize uint64) uint64 {
 	return (committeeSize - 1) / 3
 }
 
+// MaxCommitteeSize is the largest committee ValidCommitteeSize accepts (f = 4), hence the most signers a
+// message can carry.
+const MaxCommitteeSize = 13
+
 func ValidCommitteeSize(committeeSize uint64) bool {
 	f := ComputeF(committeeSize)
 	return (committeeSize-1)%3 == 0 && f >= 1 && f <= 4

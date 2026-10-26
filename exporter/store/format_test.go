@@ -15,14 +15,14 @@ import (
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
-func storedFormat(t *testing.T, db basedb.Database) (uint32, bool) {
+func storedFormat(t *testing.T, db basedb.Database) (FormatVersion, bool) {
 	t.Helper()
 	obj, found, err := db.Get([]byte(traceFormatKey), nil)
 	require.NoError(t, err)
 	if !found {
 		return 0, false
 	}
-	return binary.LittleEndian.Uint32(obj.Value), true
+	return FormatVersion(binary.LittleEndian.Uint32(obj.Value)), true
 }
 
 // A fresh or older store is stamped with this binary's format; a store stamped by a newer binary is
@@ -37,15 +37,15 @@ func TestEnsureFormat(t *testing.T) {
 	require.NoError(t, EnsureFormat(db))
 	version, found := storedFormat(t, db)
 	require.True(t, found)
-	require.Equal(t, FormatVersion, version)
+	require.Equal(t, CurrentFormatVersion, version)
 	require.NoError(t, EnsureFormat(db), "idempotent at the current format")
 
 	newer := make([]byte, 4)
-	binary.LittleEndian.PutUint32(newer, FormatVersion+1)
+	binary.LittleEndian.PutUint32(newer, uint32(CurrentFormatVersion+1))
 	require.NoError(t, db.Set([]byte(traceFormatKey), nil, newer))
 	require.ErrorContains(t, EnsureFormat(db), "written by a newer exporter")
 	version, _ = storedFormat(t, db)
-	require.Equal(t, FormatVersion+1, version, "a refused store is left untouched")
+	require.Equal(t, CurrentFormatVersion+1, version, "a refused store is left untouched")
 }
 
 // A duty that cannot be encoded is left out of the slot's batch and reported; the other duties are saved.

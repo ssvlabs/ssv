@@ -19,34 +19,36 @@ import (
 
 var ErrNotFound = errors.New("duty not found")
 
-// FormatVersion is the trace store's on-disk format, raised when a persisted shape changes in a way an older
-// binary can't read, so EnsureFormat fails a downgrade at startup rather than records failing one by one.
-// 1 is the original layout; 2 lets a validator duty's Pre and Post exceed 13 entries (traces within 13
-// still decode under 1).
-const FormatVersion uint32 = 2
+// FormatVersion identifies the trace store's on-disk format. 1 is the original layout; 2 lets a validator
+// duty's Pre and Post exceed 13 entries (traces within 13 still decode under 1).
+type FormatVersion uint32
 
-// EnsureFormat records this binary's FormatVersion in the store and refuses a store written by a newer
-// binary. A store without a recorded version is at version 1, which every binary reads.
+// CurrentFormatVersion is the format this binary writes. Raise it when a persisted shape changes in a way an
+// older binary can't read, so EnsureFormat fails a downgrade at startup rather than records failing one by one.
+const CurrentFormatVersion FormatVersion = 2
+
+// EnsureFormat records CurrentFormatVersion in the store and refuses a store written by a newer binary. A
+// store without a recorded version is at version 1, which every binary reads.
 func EnsureFormat(db basedb.Database) error {
 	obj, found, err := db.Get([]byte(traceFormatKey), nil)
 	if err != nil {
 		return fmt.Errorf("read trace store format: %w", err)
 	}
-	stored := uint32(1)
+	stored := FormatVersion(1)
 	if found {
 		if len(obj.Value) != 4 {
 			return fmt.Errorf("trace store format record has %d bytes, want 4", len(obj.Value))
 		}
-		stored = binary.LittleEndian.Uint32(obj.Value)
+		stored = FormatVersion(binary.LittleEndian.Uint32(obj.Value))
 	}
-	if stored > FormatVersion {
-		return fmt.Errorf("trace store format %d was written by a newer exporter than this binary's format %d; refusing to read it partially", stored, FormatVersion)
+	if stored > CurrentFormatVersion {
+		return fmt.Errorf("trace store format %d was written by a newer exporter than this binary's format %d; refusing to read it partially", stored, CurrentFormatVersion)
 	}
-	if stored == FormatVersion {
+	if stored == CurrentFormatVersion {
 		return nil
 	}
 	value := make([]byte, 4)
-	binary.LittleEndian.PutUint32(value, FormatVersion)
+	binary.LittleEndian.PutUint32(value, uint32(CurrentFormatVersion))
 	if err := db.Set([]byte(traceFormatKey), nil, value); err != nil {
 		return fmt.Errorf("record trace store format: %w", err)
 	}

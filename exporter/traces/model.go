@@ -6,26 +6,23 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 )
 
-const (
-	// MaxPartialSigEntries bounds ValidatorDutyTrace.Pre and .Post. The checks below fail the build when a
-	// worst case message validation admits on the largest committee exceeds it, rather than leaving traces
-	// that can't be encoded at eviction. The preferences budgets are validation's own constants; maxSigners
-	// and the contribution packet size mirror validation's maxSignatures by value.
-	MaxPartialSigEntries = 256
-	// maxSigners is the largest committee.
-	maxSigners = 13
-)
+// MaxPartialSigEntries bounds ValidatorDutyTrace.Pre and .Post. The checks below fail the build when a
+// worst case message validation admits exceeds it, rather than leaving traces that can't be encoded at
+// eviction. They share validation's constants, so a limit raised there is checked here.
+const MaxPartialSigEntries = 256
 
 var (
 	// Proposer preferences: the distinct preference and request-auth roots validation admits per signer,
 	// each recorded once by the collector. This holds per committee: a reshare inside the lookahead resets
 	// validation's budgets but not the trace, which could then exceed the bound and be skipped at eviction.
-	_ [MaxPartialSigEntries - maxSigners*(gloas.MaxProposerPreferencesDistinctRoots+gloas.MaxRequestAuthDistinctRoots)]struct{}
-	// Sync-committee contribution: one packet per signer and type, of up to maxSigners entries.
-	_ [MaxPartialSigEntries - maxSigners*maxSigners]struct{}
+	_ [MaxPartialSigEntries - ssvtypes.MaxCommitteeSize*(gloas.MaxProposerPreferencesDistinctRoots+gloas.MaxRequestAuthDistinctRoots)]struct{}
+	// Sync-committee contribution: per signer and type, one packet of up to MaxCommitteeSize entries
+	// (validation's maxSignatures).
+	_ [MaxPartialSigEntries - ssvtypes.MaxCommitteeSize*ssvtypes.MaxCommitteeSize]struct{}
 )
 
 // NOTE: model_encoding.go is HAND-MAINTAINED — `go generate` cannot regenerate it.
