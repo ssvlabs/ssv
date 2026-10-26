@@ -14,8 +14,8 @@ import (
 	ssz "github.com/ferranbt/fastssz"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/observability/log/fields"
+	"github.com/ssvlabs/ssv/v2/networkconfig"
+	"github.com/ssvlabs/ssv/v2/observability/log/fields"
 )
 
 // IsAggregator returns true if the validator is selected as an aggregator for the given

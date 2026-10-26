@@ -9,9 +9,9 @@ import (
 
 	"github.com/hashicorp/go-multierror"
 
-	"github.com/ssvlabs/ssv/api"
-	exportercore "github.com/ssvlabs/ssv/exporter"
-	"github.com/ssvlabs/ssv/exporter/traces"
+	"github.com/ssvlabs/ssv/v2/api"
+	exportercore "github.com/ssvlabs/ssv/v2/exporter"
+	"github.com/ssvlabs/ssv/v2/exporter/traces"
 )
 
 // ValidatorTracesRequest represents the filter parameters accepted by the

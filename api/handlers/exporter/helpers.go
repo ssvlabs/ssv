@@ -3,7 +3,7 @@ package exporter
 import (
 	"errors"
 
-	exportercore "github.com/ssvlabs/ssv/exporter"
+	exportercore "github.com/ssvlabs/ssv/v2/exporter"
 )
 
 func isValidationError(err error) bool {

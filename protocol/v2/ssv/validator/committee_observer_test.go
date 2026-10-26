@@ -16,9 +16,9 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 
-	"github.com/ssvlabs/ssv/protocol/v2/ssv"
-	"github.com/ssvlabs/ssv/protocol/v2/types/ssvtestingutils"
-	registrystoragemocks "github.com/ssvlabs/ssv/registry/storage/mocks"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/ssv"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/types/ssvtestingutils"
+	registrystoragemocks "github.com/ssvlabs/ssv/v2/registry/storage/mocks"
 )
 
 func TestCommitteeObserver_VerifySig_MissingValidatorLogsContext(t *testing.T) {

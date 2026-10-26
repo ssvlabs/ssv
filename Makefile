@@ -55,6 +55,11 @@ install-hooks:
 ssvsigner-boundary-lint:
 	./scripts/ssvsigner_boundary.sh
 
+# Not part of lint: the pin lags behind ssvsigner/ on stage until a follow-up re-pin.
+.PHONY: ssvsigner-pin-check
+ssvsigner-pin-check:
+	./scripts/ssvsigner_pin.sh
+
 .PHONY: unit-test
 unit-test:
 	@echo "Running unit tests"

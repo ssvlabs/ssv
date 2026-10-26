@@ -15,7 +15,7 @@
       "postUpdateOptions": ["gomodTidy", "gomodUpdateImportPaths"]
     },
     {
-      "description": "Own modules are wired via replace directives, so version bumps are no-ops",
+      "description": "Own modules are wired via replace directives, so version bumps are no-ops. Consumers of /v2 ignore the replace, so the ssvsigner pin is kept in sync by hand (scripts/ssvsigner_pin.sh)",
       "matchPackageNames": ["github.com/ssvlabs/ssv", "github.com/ssvlabs/ssv/**"],
       "enabled": false
     },

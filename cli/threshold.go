@@ -8,10 +8,10 @@ import (
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/cli/flags"
-	ssvlog "github.com/ssvlabs/ssv/observability/log"
-	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
-	"github.com/ssvlabs/ssv/utils/threshold"
+	"github.com/ssvlabs/ssv/v2/cli/flags"
+	ssvlog "github.com/ssvlabs/ssv/v2/observability/log"
+	ssvtypes "github.com/ssvlabs/ssv/v2/protocol/v2/types"
+	"github.com/ssvlabs/ssv/v2/utils/threshold"
 )
 
 // createThreshold is the command to create threshold based on the given private key

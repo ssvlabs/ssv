@@ -13,15 +13,15 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	exportercore "github.com/ssvlabs/ssv/exporter"
-	dutytracer "github.com/ssvlabs/ssv/exporter/dutytracer"
-	dutytracestore "github.com/ssvlabs/ssv/exporter/store"
-	"github.com/ssvlabs/ssv/exporter/traces"
-	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
-	"github.com/ssvlabs/ssv/networkconfig"
-	registrystoragemocks "github.com/ssvlabs/ssv/registry/storage/mocks"
-	kv "github.com/ssvlabs/ssv/storage/badger"
-	"github.com/ssvlabs/ssv/storage/basedb"
+	exportercore "github.com/ssvlabs/ssv/v2/exporter"
+	dutytracer "github.com/ssvlabs/ssv/v2/exporter/dutytracer"
+	dutytracestore "github.com/ssvlabs/ssv/v2/exporter/store"
+	"github.com/ssvlabs/ssv/v2/exporter/traces"
+	ibftstorage "github.com/ssvlabs/ssv/v2/ibft/storage"
+	"github.com/ssvlabs/ssv/v2/networkconfig"
+	registrystoragemocks "github.com/ssvlabs/ssv/v2/registry/storage/mocks"
+	kv "github.com/ssvlabs/ssv/v2/storage/badger"
+	"github.com/ssvlabs/ssv/v2/storage/basedb"
 )
 
 type validatorDutyKey struct {

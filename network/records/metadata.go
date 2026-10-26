@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/v2/network/commons"
 )
 
 const subnetsLength = int(commons.SubnetsCount) / 4 // each char in the string encodes status of 4 subnets

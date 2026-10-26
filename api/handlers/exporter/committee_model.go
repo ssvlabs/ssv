@@ -7,10 +7,10 @@ import (
 	"github.com/hashicorp/go-multierror"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/api"
-	exportercore "github.com/ssvlabs/ssv/exporter"
-	"github.com/ssvlabs/ssv/exporter/traces"
-	"github.com/ssvlabs/ssv/protocol/v2/message"
+	"github.com/ssvlabs/ssv/v2/api"
+	exportercore "github.com/ssvlabs/ssv/v2/exporter"
+	"github.com/ssvlabs/ssv/v2/exporter/traces"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/message"
 )
 
 type CommitteeIDLengthError struct {

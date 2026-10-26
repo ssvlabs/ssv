@@ -7,7 +7,7 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/hprobe"
+	"github.com/ssvlabs/ssv/v2/hprobe"
 )
 
 // List of health-prober components.

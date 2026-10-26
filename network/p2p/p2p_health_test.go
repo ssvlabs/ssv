@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/network/discovery"
+	"github.com/ssvlabs/ssv/v2/network/discovery"
 )
 
 func TestP2PNetwork_Healthy(t *testing.T) {

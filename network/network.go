@@ -6,8 +6,8 @@ import (
 
 	"github.com/libp2p/go-libp2p/core/peer"
 
-	"github.com/ssvlabs/ssv/network/commons"
-	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
+	"github.com/ssvlabs/ssv/v2/network/commons"
+	protocolp2p "github.com/ssvlabs/ssv/v2/protocol/v2/p2p"
 )
 
 // DecodedSSVMessage serves as a marker interface for any SSV message types.

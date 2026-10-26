@@ -12,10 +12,10 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	goclient "github.com/ssvlabs/ssv/beacon/goclient"
-	"github.com/ssvlabs/ssv/networkconfig"
-	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
-	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
+	goclient "github.com/ssvlabs/ssv/v2/beacon/goclient"
+	"github.com/ssvlabs/ssv/v2/networkconfig"
+	beaconprotocol "github.com/ssvlabs/ssv/v2/protocol/v2/blockchain/beacon"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/types/gloas"
 )
 
 type validatorPubkeyProvider interface {

@@ -7,11 +7,12 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
 
-	"github.com/ssvlabs/ssv/observability"
-	"github.com/ssvlabs/ssv/observability/metrics"
+	"github.com/ssvlabs/ssv/v2/observability"
+	"github.com/ssvlabs/ssv/v2/observability/metrics"
 )
 
 const (
+	// Pre-/v2 path on purpose: exported as the otel_scope_name metric label.
 	observabilityComponentName = "github.com/ssvlabs/ssv/network/peers/connections"
 	observabilityNamespace     = "ssv.p2p.connections"
 )

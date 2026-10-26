@@ -19,8 +19,8 @@ import (
 	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
 	types "github.com/ethereum/go-ethereum/core/types"
 	types0 "github.com/ssvlabs/ssv-spec/types"
-	types1 "github.com/ssvlabs/ssv/protocol/v2/types"
-	gloas "github.com/ssvlabs/ssv/protocol/v2/types/gloas"
+	types1 "github.com/ssvlabs/ssv/v2/protocol/v2/types"
+	gloas "github.com/ssvlabs/ssv/v2/protocol/v2/types/gloas"
 	gomock "go.uber.org/mock/gomock"
 	zap "go.uber.org/zap"
 )

@@ -19,7 +19,7 @@ import (
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/observability/log"
+	"github.com/ssvlabs/ssv/v2/observability/log"
 )
 
 // newTestMultiClient builds a MultiClient wired for tests: a test logger, an initialized

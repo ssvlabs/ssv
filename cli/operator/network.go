@@ -12,14 +12,14 @@ import (
 
 	"go.uber.org/zap"
 
-	ssv_identity "github.com/ssvlabs/ssv/identity"
-	"github.com/ssvlabs/ssv/network"
-	p2pv1 "github.com/ssvlabs/ssv/network/p2p"
-	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/ssvsigner"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
-	"github.com/ssvlabs/ssv/storage/basedb"
+	ssv_identity "github.com/ssvlabs/ssv/v2/identity"
+	"github.com/ssvlabs/ssv/v2/network"
+	p2pv1 "github.com/ssvlabs/ssv/v2/network/p2p"
+	"github.com/ssvlabs/ssv/v2/networkconfig"
+	"github.com/ssvlabs/ssv/v2/observability/log/fields"
+	"github.com/ssvlabs/ssv/v2/storage/basedb"
 )
 
 func setupSSVNetwork(logger *zap.Logger, cfg *config) (*networkconfig.SSV, error) {

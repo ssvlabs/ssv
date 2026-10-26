@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/ssvlabs/ssv/api"
+	"github.com/ssvlabs/ssv/v2/api"
 )
 
 // CommitteeTraces godoc

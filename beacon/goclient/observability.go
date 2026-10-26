@@ -13,14 +13,15 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.43.0"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/observability"
-	"github.com/ssvlabs/ssv/observability/log/fields"
-	"github.com/ssvlabs/ssv/observability/metrics"
+	"github.com/ssvlabs/ssv/v2/observability"
+	"github.com/ssvlabs/ssv/v2/observability/log/fields"
+	"github.com/ssvlabs/ssv/v2/observability/metrics"
 )
 
 type beaconNodeStatus string
 
 const (
+	// Pre-/v2 path on purpose: exported as the otel_scope_name metric label.
 	observabilityName      = "github.com/ssvlabs/ssv/beacon/goclient"
 	observabilityNamespace = "ssv.cl"
 

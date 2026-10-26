@@ -1,0 +1,29 @@
+name: SSV-Signer pin
+
+# Release PRs only: on stage the pin may lag behind ssvsigner/ until a follow-up re-pin.
+on:
+  pull_request:
+    branches:
+      - main
+    types: [opened, synchronize, reopened]
+
+  workflow_dispatch:
+
+jobs:
+  ssvsigner-pin:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6.0.2
+        with:
+          # The pinned commit must be in history.
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v6.3.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Check ssvsigner pin
+        run: make ssvsigner-pin-check
