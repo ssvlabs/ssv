@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"math"
 	"net/http"
-	"net/url"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -29,6 +28,7 @@ import (
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 	"github.com/ssvlabs/ssv/utils/async"
+	"github.com/ssvlabs/ssv/utils/format"
 	"github.com/ssvlabs/ssv/utils/hashmap"
 )
 
@@ -390,31 +390,11 @@ func normalizeBeaconAddr(addr string) string {
 }
 
 // RedactBeaconAddr masks what may be a credential in a BeaconNodeAddr value (one address, or several separated
-// by ";") for logging, as go-eth2-client masks Client.Address(): the password, the path and the query values.
-// An address that doesn't parse is replaced whole, since its parts can't be told apart.
+// by ";") for logging, each address normalized and then masked by format.RedactURL.
 func RedactBeaconAddr(addrs string) string {
-	const masked = "xxxxx"
 	redacted := strings.Split(addrs, ";")
 	for i, addr := range redacted {
-		u, err := url.Parse(normalizeBeaconAddr(addr))
-		if err != nil {
-			redacted[i] = "<malformed>"
-			continue
-		}
-		if _, ok := u.User.Password(); ok {
-			u.User = url.UserPassword(u.User.Username(), masked)
-		}
-		if u.Path != "" {
-			u.Path, u.RawPath = masked, ""
-		}
-		if u.RawQuery != "" {
-			query := u.Query()
-			for key := range query {
-				query[key] = []string{masked}
-			}
-			u.RawQuery = query.Encode()
-		}
-		redacted[i] = u.String()
+		redacted[i] = format.RedactURL(normalizeBeaconAddr(addr))
 	}
 	return strings.Join(redacted, ";")
 }

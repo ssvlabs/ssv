@@ -10,6 +10,8 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 
 	specssv "github.com/ssvlabs/ssv-spec/ssv"
+
+	"github.com/ssvlabs/ssv/utils/format"
 )
 
 // MaxBuilderEntries caps the configured direct-builder list (SIP #94 §5). It is SSV's own
@@ -51,11 +53,12 @@ func BuilderIdentity(url string, authData []byte) string {
 // apply to p2p (gossiped) bids and, per #88, double as the default for any Entry that omits its own;
 // each Entry names one builder to solicit a builder-API bid from.
 //
-// The whole config MUST be identical across ALL operators of every cluster sharing a validator:
-// AuthData is threshold-signed into BuilderRequestAuth, so any byte divergence splits the quorum and
-// silently disables that builder; the unsigned knobs steer bid selection per-operator, where
-// divergence is consensus-safe but leaves the effective policy to whoever leads the round. See
-// docs/EXTERNAL_BUILDERS.md.
+// The whole config MUST be identical across ALL operators of every cluster sharing a validator, except
+// each entry's URL: AuthData is threshold-signed into BuilderRequestAuth, so any byte divergence splits
+// the quorum and silently disables that builder; the unsigned knobs steer bid selection per-operator,
+// where divergence is consensus-safe but leaves the effective policy to whoever leads the round; the URL
+// isn't signed, so it may differ per operator (each can point at its own MEV-Boost or commit-boost
+// sidecar). See docs/EXTERNAL_BUILDERS.md.
 //
 // Entries' URL/AuthData drive the request-auth signing round (§5); the top-level knobs and the
 // per-entry resolution below drive the produceBlockV4 POST body (§4, beacon-APIs#630).
@@ -199,6 +202,7 @@ func (e *BuilderEntry) EffectiveBoostFactor(cfg *BuilderConfig) uint64 {
 type ResolvedBuilderEntry struct {
 	Identity            string             // BuilderIdentity(URL, AuthData)
 	URL                 string             // the builder URL, verbatim
+	RedactedURL         string             // URL masked by format.RedactURL: the form logs carry, never URL itself
 	AuthData            []byte             // exact bytes signed into BuilderRequestAuth.Data
 	BuilderPubKeys      []phase0.BLSPubKey // decoded bid-signing keys to pin; empty accepts any builder
 	MaxExecutionPayment uint64             // Gwei cap on trusted execution-layer payment
@@ -265,6 +269,7 @@ func ResolveBuilderConfig(cfg BuilderConfig) (ResolvedBuilderConfig, error) {
 		resolved.Entries = append(resolved.Entries, ResolvedBuilderEntry{
 			Identity:            identity,
 			URL:                 e.URL,
+			RedactedURL:         format.RedactURL(e.URL),
 			AuthData:            data,
 			BuilderPubKeys:      pubkeys,
 			MaxExecutionPayment: e.MaxExecutionPayment,

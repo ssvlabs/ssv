@@ -3,6 +3,7 @@ package runner
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
@@ -11,6 +12,8 @@ import (
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest/observer"
 
 	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
@@ -334,6 +337,82 @@ func TestProposerPreferencesRunner_requestAuthAfterPreferenceSuccess(t *testing.
 	}
 	require.Len(t, cache.Get(proposalSlot), 1,
 		"auth must reconstruct even after the §5 preference concluded the duty")
+}
+
+// A builder URL may carry credentials (a basic-auth password, an API key in the path): the round logs the
+// URL masked, while the builder-preferences submit still gets it verbatim.
+func TestProposerPreferencesRunner_requestAuthLogsRedactedURL(t *testing.T) {
+	const password, apiKey = "s3cret-password", "s3cret-api-key"
+	builderURL := "https://user:" + password + "@builder-a.example.com/rpc/" + apiKey
+
+	keySet := spectestingutils.Testing4SharesSet()
+	share := spectestingutils.TestingShare(keySet, spectestingutils.TestingValidatorIndex)
+	cfg := cloneTestNetworkConfig()
+	const quorum = 3
+
+	bn := &prefsTestBeacon{BeaconNode: protocoltesting.NewTestingBeaconNodeWrapped(), dependentRoot: phase0.Root{0xaa}}
+	cache := ssv.NewRequestAuthCache(cfg.EstimatedCurrentSlot)
+	runnerIface, err := NewProposerPreferencesRunner(ProposerPreferencesRunnerOptions{
+		BaseRunnerOptions: BaseRunnerOptions{
+			NetworkConfig:  cfg,
+			Share:          map[phase0.ValidatorIndex]*spectypes.Share{share.ValidatorIndex: share},
+			Beacon:         bn,
+			Network:        protocoltesting.NewTestingNetwork(1, keySet.OperatorKeys[1]),
+			Signer:         ekm.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager()),
+			OperatorSigner: spectestingutils.NewOperatorSigner(keySet, 1),
+		},
+		FeeRecipientProvider: fixedFeeRecipientProvider{addr: bellatrix.ExecutionAddress{0xfe}},
+		GasLimit:             36_000_000,
+		Builders:             gloas.BuilderConfig{Entries: []gloas.BuilderEntry{{URL: builderURL}}},
+		RequestAuthCache:     cache,
+	})
+	require.NoError(t, err)
+	disp := runnerIface.(*ProposerPreferencesRunner)
+
+	ctx := context.Background()
+	core, logs := observer.New(zapcore.DebugLevel)
+	logger := zap.New(core)
+	proposalSlot := cfg.EstimatedCurrentSlot() + 5
+	require.NoError(t, disp.StartNewDuty(ctx, logger, &spectypes.ValidatorDuty{
+		Type:           spectypes.BNRoleProposerPreferences,
+		PubKey:         spectestingutils.TestingValidatorPubKey,
+		Slot:           proposalSlot,
+		ValidatorIndex: share.ValidatorIndex,
+	}, quorum))
+
+	// The auth data defaults to the URL's hostname; the credentials aren't part of it.
+	auth := &gloas.BuilderRequestAuth{Data: []byte("builder-a.example.com"), Slot: proposalSlot}
+	domain, err := bn.DomainData(ctx, cfg.EstimatedEpochAtSlot(proposalSlot), phase0.DomainType(spectypes.DomainBuilderRequestAuth))
+	require.NoError(t, err)
+	root, err := spectypes.ComputeETHSigningRoot(auth, domain)
+	require.NoError(t, err)
+	for _, op := range []spectypes.OperatorID{2, 3, 4} {
+		sig := keySet.Shares[op].SignByte(root[:])
+		require.NoError(t, disp.ProcessPreConsensus(ctx, logger, &spectypes.PartialSignatureMessages{
+			Type: spectypes.RequestAuthPartialSig,
+			Slot: proposalSlot,
+			Messages: []*spectypes.PartialSignatureMessage{{
+				PartialSignature: sig.Serialize(),
+				SigningRoot:      root,
+				Signer:           op,
+				ValidatorIndex:   share.ValidatorIndex,
+			}},
+		}))
+	}
+	require.Len(t, cache.Get(proposalSlot), 1)
+
+	reconstructed := logs.FilterMessageSnippet("reconstructed builder request auth").All()
+	require.Len(t, reconstructed, 1)
+	require.Equal(t, []any{"https://user:xxxxx@builder-a.example.com/xxxxx"}, reconstructed[0].ContextMap()["builder_urls"])
+	for _, entry := range logs.All() {
+		logged := fmt.Sprint(entry.Message, entry.ContextMap())
+		require.NotContains(t, logged, password)
+		require.NotContains(t, logged, apiKey)
+	}
+
+	require.Len(t, bn.submittedBuilderPrefs, 1)
+	require.Len(t, bn.submittedBuilderPrefs[0], 1)
+	require.Equal(t, builderURL, bn.submittedBuilderPrefs[0][0].URL, "the builder-preferences submit gets the URL verbatim")
 }
 
 // A re-emission that concludes immediately (unchanged preference → not-required, e.g. an

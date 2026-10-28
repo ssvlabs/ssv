@@ -30,7 +30,8 @@ type frozenRequestAuth struct {
 // frozenBuilderRef names one configured builder relationship covered by a frozen auth.
 type frozenBuilderRef struct {
 	identity            string // gloas.BuilderIdentity — the RequestAuthCache key
-	url                 string // the builder URL, for logging and the builder-preferences submit
+	url                 string // the builder URL, for the builder-preferences submit
+	redactedURL         string // the builder URL masked for logging, since it may carry credentials
 	maxExecutionPayment uint64 // the configured cap, forwarded via submitBuilderPreferences
 }
 
@@ -65,10 +66,15 @@ func (r *proposerPreferencesSlotRunner) runRequestAuthRound(ctx context.Context,
 		root, err := spectypes.ComputeETHSigningRoot(auth, domain)
 		if err != nil {
 			logger.Warn("request auth skipped: could not compute signing root",
-				fields.Slot(proposalSlot), zap.String("builder_url", entry.URL), zap.Error(err))
+				fields.Slot(proposalSlot), zap.String("builder_url", entry.RedactedURL), zap.Error(err))
 			continue
 		}
-		ref := frozenBuilderRef{identity: entry.Identity, url: entry.URL, maxExecutionPayment: entry.MaxExecutionPayment}
+		ref := frozenBuilderRef{
+			identity:            entry.Identity,
+			url:                 entry.URL,
+			redactedURL:         entry.RedactedURL,
+			maxExecutionPayment: entry.MaxExecutionPayment,
+		}
 		if frozen, ok := r.requestAuths[root]; ok {
 			// Another entry froze these exact bytes; register the extra relationship on the shared root.
 			frozen.builders = append(frozen.builders, ref)
@@ -82,7 +88,7 @@ func (r *proposerPreferencesSlotRunner) runRequestAuthRound(ctx context.Context,
 		msg, err := signAsValidator(ctx, r, validatorDuty.ValidatorIndex, auth, proposalSlot, phase0.DomainType(spectypes.DomainBuilderRequestAuth), domain)
 		if err != nil {
 			logger.Warn("request auth skipped: could not sign",
-				fields.Slot(proposalSlot), zap.String("builder_url", entry.URL), zap.Error(err))
+				fields.Slot(proposalSlot), zap.String("builder_url", entry.RedactedURL), zap.Error(err))
 			continue
 		}
 		batch = append(batch, msg)
@@ -192,7 +198,7 @@ func (r *proposerPreferencesSlotRunner) reconstructRequestAuth(ctx context.Conte
 	signed := &gloas.SignedBuilderRequestAuth{Message: frozen.auth, Signature: signature}
 	urls := make([]string, 0, len(frozen.builders))
 	for _, ref := range frozen.builders {
-		urls = append(urls, ref.url)
+		urls = append(urls, ref.redactedURL)
 	}
 	if r.requestAuthCache != nil {
 		for _, ref := range frozen.builders {

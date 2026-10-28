@@ -137,21 +137,15 @@ way, each relay takes one of the at most 8 entries.
 
 #### Blinded beacon block proposals 
 
-If builder proposals are enabled, 
-the SSV node attempts to get/submit blinded beacon block proposals (`/eth/v1/beacon/blinded_blocks`) to beacon node
-instead of regular ones (`/eth/v1/beacon/blocks`). 
+The SSV node requests proposals with `produceBlockV3` (`/eth/v3/validator/blocks`), and the beacon node returns either a blinded block from its external builder or a full local block. The SSV node submits a blinded block to `/eth/v2/beacon/blinded_blocks` and a full one to `/eth/v2/beacon/blocks`.
 
 #### Validator registrations
 
-If builder proposals are enabled, the SSV node regularly submits validator registrations according to the following logic:
+The SSV node regularly submits validator registrations according to the following logic:
 
 - Registration for each validator is submitted to registrations collector every 10 epochs. To reduce beacon node load, slot for submission is chosen according to the validator index.
 - The first registration after the SSV node start is an exception to the rule above to avoid waiting up to 10 epochs: All validator registrations are submitted within 32 slots after the node start according to the validator index.
 - Registration collector submits queued validator registrations to beacon node once per epoch. The slot index within an epoch is different for each operator and is calculated based on operator ID to reduce beacon node load. The maximal amount of registrations in one request is 500. If the queue contains more than that, all queued registrations are submitted by chunks of 500 registrations without a delay. 
-
-### Known issues
-
-- Builder proposals don't work with Prysm as it returns `400 Unsupported block type` when requesting a blinded block.
 
 ### Edge cases outcomes
 
