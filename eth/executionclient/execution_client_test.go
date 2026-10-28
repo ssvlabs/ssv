@@ -10,7 +10,6 @@ import (
 	"math/big"
 	"net/http"
 	"net/http/httptest"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -21,9 +20,11 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	ethcommon "github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient/simulated"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
@@ -74,14 +75,14 @@ type testEnv struct {
 	client       *ExecutionClient
 }
 
-// setupTestEnvTimeout bounds each test environment's shared context. The wait
-// loops in these tests are condition-driven (short polls / channel receives),
-// so the fast path stays fast; the deadline is only a CI-safe upper bound to
-// absorb scheduling jitter on loaded runners.
-const setupTestEnvTimeout = 30 * time.Second
+// testTimeout bounds each test's context. Waits end as soon as their condition
+// holds, so this only caps how long a test may take on a loaded CI runner;
+// waits shouldn't add tighter timeouts of their own.
+const testTimeout = 30 * time.Second
 
-// setupTestEnv creates a new test environment with simulators, contracts, and clients' setup.
-func setupTestEnv(t *testing.T, testTimeout time.Duration) *testEnv {
+// setupTestEnv starts a simulated backend served over WebSocket RPC, with a
+// context that expires after testTimeout.
+func setupTestEnv(t *testing.T) *testEnv {
 	ctx, cancel := context.WithTimeout(t.Context(), testTimeout)
 	t.Cleanup(cancel)
 
@@ -136,9 +137,8 @@ func (env *testEnv) createClient(options ...Option) error {
 // createClientWithCleanup creates and initializes an execution client, optionally registering it for cleanup.
 // If registerCleanup is false, the caller is responsible for closing the client.
 func (env *testEnv) createClientWithCleanup(registerCleanup bool, options ...Option) error {
-	allOptions := append([]Option{}, options...)
 	var err error
-	env.client, err = New(env.ctx, env.wsURL, env.contractAddr, allOptions...)
+	env.client, err = New(env.ctx, env.wsURL, env.contractAddr, options...)
 	if err != nil {
 		return err
 	}
@@ -169,15 +169,12 @@ func TestFetchHistoricalLogs(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 
 	t.Run("successfully fetches historical logs within follow distance", func(t *testing.T) {
-		env := setupTestEnv(t, setupTestEnvTimeout)
+		env := setupTestEnv(t)
 		contract, err := env.deployCallableContract()
 		require.NoError(t, err)
 
 		// Create a client and connect to the simulator
-		err = env.createClient(
-			WithLogger(logger),
-			WithReqTimeout(2*time.Second),
-		)
+		err = env.createClient(WithLogger(logger))
 		require.NoError(t, err)
 
 		// Create blocks with transactions
@@ -192,31 +189,22 @@ func TestFetchHistoricalLogs(t *testing.T) {
 		for block := range logs {
 			fetchedLogs = append(fetchedLogs, block.Logs...)
 		}
-		require.NotEmpty(t, fetchedLogs)
+		// Check the error first: it explains a short read.
+		require.NoError(t, <-fetchErrCh)
 
 		expectedSeenLogs := blocksWithLogsLength - FollowDistance
 		require.Equal(t, expectedSeenLogs, len(fetchedLogs))
-
-		select {
-		case err := <-fetchErrCh:
-			require.NoError(t, err)
-		case <-env.ctx.Done():
-			require.Fail(t, "timeout")
-		}
 	})
 
 	t.Run("error when currentBlock < FollowDistance", func(t *testing.T) {
-		env := setupTestEnv(t, setupTestEnvTimeout)
+		env := setupTestEnv(t)
 		_, err := env.deployCallableContract()
 		require.NoError(t, err)
 
 		// Create a client. The simulator is at block 1 after deployCallableContract,
 		// which is below FollowDistance (=8) so FetchHistoricalLogs should bail out
 		// with ErrNothingToSync.
-		err = env.createClient(
-			WithLogger(logger),
-			WithReqTimeout(2*time.Second),
-		)
+		err = env.createClient(WithLogger(logger))
 		require.NoError(t, err)
 
 		logs, fetchErrCh, err := env.client.FetchHistoricalLogs(env.ctx, 0)
@@ -226,15 +214,12 @@ func TestFetchHistoricalLogs(t *testing.T) {
 	})
 
 	t.Run("error when toBlock < fromBlock", func(t *testing.T) {
-		env := setupTestEnv(t, setupTestEnvTimeout)
+		env := setupTestEnv(t)
 		contract, err := env.deployCallableContract()
 		require.NoError(t, err)
 
 		// Create a client
-		err = env.createClient(
-			WithLogger(logger),
-			WithReqTimeout(2*time.Second),
-		)
+		err = env.createClient(WithLogger(logger))
 		require.NoError(t, err)
 
 		// Create some blocks
@@ -255,16 +240,13 @@ func TestFetchHistoricalLogs(t *testing.T) {
 	})
 
 	t.Run("error when BlockNumber fails", func(t *testing.T) {
-		env := setupTestEnv(t, setupTestEnvTimeout)
+		env := setupTestEnv(t)
 		_, err := env.deployCallableContract()
 		require.NoError(t, err)
 
-		// Create a client - connection should succeed initially
-		err = env.createClient(
-			WithLogger(logger),
-			WithReqTimeout(200*time.Millisecond),
-		)
-		require.NoError(t, err) // Connection is established initially
+		// Create a client and connect to the simulator
+		err = env.createClient(WithLogger(logger))
+		require.NoError(t, err)
 
 		// Create a context with a very short timeout to ensure BlockNumber fails
 		blockNumCtx, blockNumCancel := context.WithTimeout(env.ctx, 1*time.Nanosecond)
@@ -328,7 +310,7 @@ func TestFetchHistoricalLogs_Subdivide(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			env := setupTestEnv(t, setupTestEnvTimeout)
+			env := setupTestEnv(t)
 			contract, err := env.deployCallableContract()
 			require.NoError(t, err)
 
@@ -349,7 +331,7 @@ func TestFetchHistoricalLogs_Subdivide(t *testing.T) {
 				var req map[string]any
 				_ = json.Unmarshal(raw, &req)
 
-				if req["method"] == "eth_getLogs" {
+				if req["method"] == ethGetLogsMethod {
 					callCount.Add(1)
 
 					if tc.httpError {
@@ -357,10 +339,8 @@ func TestFetchHistoricalLogs_Subdivide(t *testing.T) {
 						return
 					}
 
-					flt := req["params"].([]any)[0].(map[string]any)
-					from, _ := strconv.ParseInt(strings.TrimPrefix(flt["fromBlock"].(string), "0x"), 16, 64)
-					to, _ := strconv.ParseInt(strings.TrimPrefix(flt["toBlock"].(string), "0x"), 16, 64)
-					if uint64(to-from) > tc.threshold {
+					from, to := getLogsBlockRange(req)
+					if to-from > tc.threshold {
 						w.Header().Set("Content-Type", "application/json")
 						_ = json.NewEncoder(w).Encode(map[string]any{
 							"jsonrpc": "2.0",
@@ -379,7 +359,7 @@ func TestFetchHistoricalLogs_Subdivide(t *testing.T) {
 			srv := httptest.NewServer(wrapped)
 			t.Cleanup(srv.Close)
 
-			client, err := New(t.Context(),
+			client, err := New(env.ctx,
 				srv.URL,
 				env.contractAddr,
 			)
@@ -390,9 +370,9 @@ func TestFetchHistoricalLogs_Subdivide(t *testing.T) {
 			// Bypass the FetchHistoricalLogs follow-distance window so the
 			// subdivision algorithm operates on the full mined range and the
 			// per-case eth_getLogs call counts remain meaningful.
-			currentBlock, err := client.client.BlockNumber(t.Context())
+			currentBlock, err := client.client.BlockNumber(env.ctx)
 			require.NoError(t, err)
-			logsCh, errCh := client.fetchLogsInBatches(t.Context(), 0, currentBlock, false)
+			logsCh, errCh := client.fetchLogsInBatches(env.ctx, 0, currentBlock, false)
 
 			all := make([]ethtypes.Log, 0, tc.wantLogs)
 			for blk := range logsCh {
@@ -419,7 +399,7 @@ func TestStreamLogs(t *testing.T) {
 		logger, err := zap.NewDevelopment()
 		require.NoError(t, err)
 
-		env := setupTestEnv(t, setupTestEnvTimeout)
+		env := setupTestEnv(t)
 
 		// Deploy the contract
 		contract, err := env.deployCallableContract()
@@ -484,7 +464,7 @@ func TestStreamLogs(t *testing.T) {
 		logger, err := zap.NewDevelopment()
 		require.NoError(t, err)
 
-		env := setupTestEnv(t, setupTestEnvTimeout)
+		env := setupTestEnv(t)
 
 		// Deploy the contract
 		_, err = env.deployCallableContract()
@@ -518,7 +498,7 @@ func TestStreamLogs(t *testing.T) {
 		select {
 		case <-done:
 			// Success - the log channel was closed
-		case <-time.After(1 * time.Second):
+		case <-env.ctx.Done():
 			require.Fail(t, "StreamLogs did not return when context was canceled")
 		}
 	})
@@ -527,7 +507,7 @@ func TestStreamLogs(t *testing.T) {
 		logger, err := zap.NewDevelopment()
 		require.NoError(t, err)
 
-		env := setupTestEnv(t, setupTestEnvTimeout)
+		env := setupTestEnv(t)
 
 		// Deploy the contract
 		_, err = env.deployCallableContract()
@@ -558,7 +538,7 @@ func TestStreamLogs(t *testing.T) {
 		select {
 		case <-done:
 			// Success - the log channel was closed
-		case <-time.After(1 * time.Second):
+		case <-env.ctx.Done():
 			require.Fail(t, "StreamLogs did not return when client was closed")
 		}
 	})
@@ -567,7 +547,7 @@ func TestStreamLogs(t *testing.T) {
 // TestFetchLogsInBatches tests the fetchLogsInBatches function of the client.
 func TestFetchLogsInBatches(t *testing.T) {
 	logger := zaptest.NewLogger(t)
-	env := setupTestEnv(t, setupTestEnvTimeout)
+	env := setupTestEnv(t)
 
 	// Deploy the contract
 	contract, err := env.deployCallableContract()
@@ -619,13 +599,9 @@ func TestFetchLogsInBatches(t *testing.T) {
 		for block := range logChan {
 			blockNumbers = append(blockNumbers, block.BlockNumber)
 		}
+		// errChan is closed before logChan, so this never blocks.
+		require.NoError(t, <-errChan)
 		require.Equal(t, []uint64{fromBlock, 4, 5, 6, 7, 8, 9, 10, toBlock}, blockNumbers)
-
-		select {
-		case err := <-errChan:
-			require.NoError(t, err)
-		default:
-		}
 	})
 
 	t.Run("context is canceled", func(t *testing.T) {
@@ -649,7 +625,6 @@ func TestFetchLogsInBatches(t *testing.T) {
 // This isolates the reorg-handling branch in fetchLogsInBatches without the
 // timing fragility of driving a full simulated beacon fork.
 func TestChainReorganizationLogs(t *testing.T) {
-	const testTimeout = 5 * time.Second
 	ctx, cancel := context.WithTimeout(t.Context(), testTimeout)
 	defer cancel()
 
@@ -776,7 +751,7 @@ func TestSimSSV(t *testing.T) {
 	logger, err := zap.NewDevelopment()
 	require.NoError(t, err)
 
-	env := setupTestEnv(t, setupTestEnvTimeout)
+	env := setupTestEnv(t)
 
 	// Deploy the SSV contract
 	boundContract, err := env.deploySimContract()
@@ -801,16 +776,18 @@ func TestSimSSV(t *testing.T) {
 	}
 	// nextEventBlock drains empty progression markers and returns the next block
 	// carrying actual logs from the stream.
+	var lastStreamedBlock uint64
 	nextEventBlock := func(t *testing.T) BlockLogs {
 		for {
 			select {
 			case block, ok := <-logs:
 				require.True(t, ok, "logs channel closed unexpectedly")
+				lastStreamedBlock = block.BlockNumber
 				if len(block.Logs) > 0 {
 					return block
 				}
 			case <-env.ctx.Done():
-				t.Fatalf("timed out waiting for event: %v", env.ctx.Err())
+				t.Fatalf("timed out waiting for event: %v (last streamed block: %d)", env.ctx.Err(), lastStreamedBlock)
 			}
 		}
 	}
@@ -914,7 +891,7 @@ func TestFilterLogs(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 
 	t.Run("successfully filters logs", func(t *testing.T) {
-		env := setupTestEnv(t, setupTestEnvTimeout)
+		env := setupTestEnv(t)
 
 		// Deploy the contract
 		contract, err := env.deployCallableContract()
@@ -946,16 +923,13 @@ func TestFilterLogs(t *testing.T) {
 	})
 
 	t.Run("error when FilterLogs fails", func(t *testing.T) {
-		env := setupTestEnv(t, setupTestEnvTimeout)
+		env := setupTestEnv(t)
 		_, err := env.deployCallableContract()
 		require.NoError(t, err)
 
-		// Create a client - connection should succeed initially
-		err = env.createClient(
-			WithLogger(logger),
-			WithReqTimeout(200*time.Millisecond),
-		)
-		require.NoError(t, err) // Connection is established initially
+		// Create a client and connect to the simulator
+		err = env.createClient(WithLogger(logger))
+		require.NoError(t, err)
 
 		// Create a context with a very short timeout to ensure FilterLogs fails
 		timeoutCtx, cancel := context.WithTimeout(env.ctx, 1*time.Nanosecond)
@@ -977,7 +951,7 @@ func TestSubscribeFilterLogs(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 
 	t.Run("successfully subscribes to filter logs", func(t *testing.T) {
-		env := setupTestEnv(t, setupTestEnvTimeout)
+		env := setupTestEnv(t)
 
 		// Deploy the contract
 		contract, err := env.deployCallableContract()
@@ -1009,7 +983,8 @@ func TestSubscribeFilterLogs(t *testing.T) {
 				case log := <-logCh:
 					receivedLogs = append(receivedLogs, log)
 				case err := <-sub.Err():
-					require.NoError(t, err)
+					// assert, not require: FailNow must run on the test goroutine.
+					assert.NoError(t, err)
 					return
 				case <-env.ctx.Done():
 					return
@@ -1036,16 +1011,13 @@ func TestSubscribeFilterLogs(t *testing.T) {
 	})
 
 	t.Run("error when SubscribeFilterLogs fails", func(t *testing.T) {
-		env := setupTestEnv(t, setupTestEnvTimeout)
+		env := setupTestEnv(t)
 		_, err := env.deployCallableContract()
 		require.NoError(t, err)
 
-		// Create a client - connection should succeed initially
-		err = env.createClient(
-			WithLogger(logger),
-			WithReqTimeout(400*time.Millisecond),
-		)
-		require.NoError(t, err) // Connection is established initially
+		// Create a client and connect to the simulator
+		err = env.createClient(WithLogger(logger))
+		require.NoError(t, err)
 
 		// Create a context with a very short timeout to ensure SubscribeFilterLogs fails
 		timeoutCtx, cancel := context.WithTimeout(env.ctx, 1*time.Nanosecond)
@@ -1069,7 +1041,7 @@ func TestHeaderByNumber(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 
 	t.Run("successfully gets header by number", func(t *testing.T) {
-		env := setupTestEnv(t, setupTestEnvTimeout)
+		env := setupTestEnv(t)
 
 		// Deploy the contract
 		_, err := env.deployCallableContract()
@@ -1098,16 +1070,13 @@ func TestHeaderByNumber(t *testing.T) {
 	})
 
 	t.Run("error when HeaderByNumber fails", func(t *testing.T) {
-		env := setupTestEnv(t, setupTestEnvTimeout)
+		env := setupTestEnv(t)
 		_, err := env.deployCallableContract()
 		require.NoError(t, err)
 
-		// Create a client - connection should succeed initially
-		err = env.createClient(
-			WithLogger(logger),
-			WithReqTimeout(400*time.Millisecond),
-		)
-		require.NoError(t, err) // Connection is established initially
+		// Create a client and connect to the simulator
+		err = env.createClient(WithLogger(logger))
+		require.NoError(t, err)
 
 		// Create a context with a very short timeout to ensure HeaderByNumber fails
 		timeoutCtx, cancel := context.WithTimeout(env.ctx, 1*time.Nanosecond)
@@ -1123,7 +1092,7 @@ func TestHeaderByNumber(t *testing.T) {
 // TestFilterer tests the Filterer method of the client.
 func TestFilterer(t *testing.T) {
 	logger := zaptest.NewLogger(t)
-	env := setupTestEnv(t, setupTestEnvTimeout)
+	env := setupTestEnv(t)
 
 	// Deploy the contract
 	_, err := env.deployCallableContract()
@@ -1142,7 +1111,7 @@ func TestFilterer(t *testing.T) {
 // TestSyncProgress tests the sync progress of the client.
 func TestSyncProgress(t *testing.T) {
 	t.Run("out of sync", func(t *testing.T) {
-		env := setupTestEnv(t, setupTestEnvTimeout)
+		env := setupTestEnv(t)
 
 		// Deploy the contract
 		_, err := env.deploySimContract()
@@ -1168,7 +1137,7 @@ func TestSyncProgress(t *testing.T) {
 	})
 
 	t.Run("within tolerable limits", func(t *testing.T) {
-		env := setupTestEnv(t, setupTestEnvTimeout)
+		env := setupTestEnv(t)
 
 		// Deploy the contract
 		_, err := env.deploySimContract()
@@ -1196,7 +1165,7 @@ func TestSyncProgress(t *testing.T) {
 // TestHealthy tests the Healthy method of the client.
 func TestHealthy(t *testing.T) {
 	t.Run("returns ErrClosed when client is closed", func(t *testing.T) {
-		env := setupTestEnv(t, setupTestEnvTimeout)
+		env := setupTestEnv(t)
 		_, err := env.deploySimContract()
 		require.NoError(t, err)
 
@@ -1214,7 +1183,7 @@ func TestHealthy(t *testing.T) {
 	})
 
 	t.Run("returns nil when health check was recently performed", func(t *testing.T) {
-		env := setupTestEnv(t, setupTestEnvTimeout)
+		env := setupTestEnv(t)
 		_, err := env.deploySimContract()
 		require.NoError(t, err)
 
@@ -1240,4 +1209,12 @@ func TestHealthy(t *testing.T) {
 // httpToWebSocketURL converts an HTTP URL to a WebSocket URL.
 func httpToWebSocketURL(url string) string {
 	return "ws:" + strings.TrimPrefix(url, "http:")
+}
+
+// getLogsBlockRange returns the block bounds of a decoded eth_getLogs JSON-RPC request.
+func getLogsBlockRange(req map[string]any) (from, to uint64) {
+	flt := req["params"].([]any)[0].(map[string]any)
+	from, _ = hexutil.DecodeUint64(flt["fromBlock"].(string))
+	to, _ = hexutil.DecodeUint64(flt["toBlock"].(string))
+	return from, to
 }
