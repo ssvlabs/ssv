@@ -135,9 +135,11 @@ way, each relay takes one of the at most 8 entries.
 
 ### How it works
 
-#### Blinded beacon block proposals 
+#### Blinded beacon block proposals
 
-The SSV node requests proposals with `produceBlockV3` (`/eth/v3/validator/blocks`), and the beacon node returns either a blinded block from its external builder or a full local block. The SSV node submits a blinded block to `/eth/v2/beacon/blinded_blocks` and a full one to `/eth/v2/beacon/blocks`.
+The SSV node requests proposals with `produceBlockV3` (`/eth/v3/validator/blocks`), and the beacon node decides between a blinded block from its external builder and a full local block. The cluster always runs consensus on a blinded block: when the beacon node returns a full block, the SSV node swaps its execution payload for the payload header and keeps the full block for submission. A blinded block has the same root as its full block, so the operators' signature covers both.
+
+After consensus, every operator submits the signed block to its beacon nodes. The leader of the deciding round submits its full block to `/eth/v2/beacon/blocks` if the decided block is the one its beacon node built. Every other operator submits the blinded block to `/eth/v2/beacon/blinded_blocks`, and its beacon node has to get the block's payload (unblind it) before it can publish it.
 
 #### Validator registrations
 
@@ -147,51 +149,10 @@ The SSV node regularly submits validator registrations according to the followin
 - The first registration after the SSV node start is an exception to the rule above to avoid waiting up to 10 epochs: All validator registrations are submitted within 32 slots after the node start according to the validator index.
 - Registration collector submits queued validator registrations to beacon node once per epoch. The slot index within an epoch is different for each operator and is calculated based on operator ID to reduce beacon node load. The maximal amount of registrations in one request is 500. If the queue contains more than that, all queued registrations are submitted by chunks of 500 registrations without a delay. 
 
-### Edge cases outcomes
+### Clusters with mixed builder setups
 
-#### Scenario 1. 4 operators, 4 BNs, 4 MEVs, MEV1&2 use relay-1, MEV3&4 use relay-2
+The operators of a cluster don't need the same builder setup: some may run MEV-Boost or commit-boost and others not, and their sidecars may use different relays.
 
-- Blinded block header received from MEV, local block is more profitable
-
-Local block is successfully submitted and shown on beaconchain as regular, non-MEV block
-
-- Blinded block header received from MEV more than once in the same slot
-
-Successful receipt, no error, block hashes may be same, may be different
-
-- Nodes receive same MEV block hashes, round leader proposes its received block hash for consensus, any node submits it
-
-The first submitter using the same relay, whether or not it's the round reader, successfully submits the block, it's shown as MEV on beaconchain. Others fail to submit the block due to "no successful relay response"
-
-- Nodes receive different MEV block hashes, round leader proposes its received block hash for consensus, any node submits it
-
-The first submitter using the same relay, whether or not it's the round reader, successfully submits the block, it's shown as MEV on beaconchain. Others fail to submit the block due to "no successful relay response"
-
-
-#### Scenario 2. 4 operators, 4 BNs, 4 MEVs using 3 shared relays
-
-- Blinded block header received from MEV, local block is more profitable	
-
-Local block is successfully submitted and shown on beaconchain as regular, non-MEV block
-
-- Blinded block header received from MEV more than once in the same slot
-
-Successful receipt, no error, block hashes may be same, may be different
-
-- Nodes receive same MEV block hashes, round leader proposes its received block hash for consensus, any node submits it
-
-The first submitter, whether or not it's the round reader, successfully submits the block, it's shown as MEV on beaconchain, others fail to submit the block due to "no successful relay response"
-
-- Nodes receive different MEV block hashes, round leader proposes its received block hash for consensus, any node submits it
-
-The first submitter, whether or not it's the round reader, successfully submits the block, it's shown as MEV on beaconchain, others fail to submit the block due to "no successful relay response"
-
-#### Scenario 3. 4 operators, 2 have MEV on, 2 have MEV off
-
-- Round leader has MEV on
-
-Nodes having MEV off fail to validate the proposed MEV block as input data and return "blinded blocks are not supported", so the consensus in the round is not met. Nodes proceed to the next round and choose the next round leader
-
-- Round leader has MEV off
- 
-Nodes run consensus on a regular non-MEV block and submit it
+- Consensus isn't affected. The consensus value is always a blinded block, and its validation doesn't depend on where the block came from, so an operator whose beacon node has no builder accepts a builder block from the round leader.
+- The cluster decides on the block a round leader fetched: a builder block or a local block, whichever that leader's beacon node returned.
+- Some submissions are expected to fail, since a beacon node can publish a blinded block only if it can get the block's payload. A builder block fails on beacon nodes with no builder, or whose sidecar doesn't use the relay that served the bid. A local block can be published only by the operator whose beacon node built it. An operator whose submission fails logs `could not submit beacon block`; one successful submission is enough.
