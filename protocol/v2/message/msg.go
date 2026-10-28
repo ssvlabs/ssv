@@ -55,46 +55,40 @@ func QBFTMsgTypeToString(mt specqbft.MessageType) string {
 	}
 }
 
-// BeaconRoleFromString returns BeaconRole from string
+// beaconRoleNames names the beacon roles the API accepts. BeaconRoleFromString and BeaconRoles both read it.
+var beaconRoleNames = []struct {
+	name string
+	role spectypes.BeaconRole
+}{
+	{roleAttester, spectypes.BNRoleAttester},
+	{roleAggregator, spectypes.BNRoleAggregator},
+	{roleProposer, spectypes.BNRoleProposer},
+	{roleSyncCommittee, spectypes.BNRoleSyncCommittee},
+	{roleSyncCommitteeContribution, spectypes.BNRoleSyncCommitteeContribution},
+	{roleValidatorRegistration, spectypes.BNRoleValidatorRegistration},
+	{roleVoluntaryExit, spectypes.BNRoleVoluntaryExit},
+	{rolePTCAttester, spectypes.BNRolePTCAttester},
+	{roleProposerPreferences, spectypes.BNRoleProposerPreferences},
+}
+
+// BeaconRoleFromString parses a beacon role from its API name.
 func BeaconRoleFromString(s string) (spectypes.BeaconRole, error) {
-	switch s {
-	case roleAttester:
-		return spectypes.BNRoleAttester, nil
-	case roleAggregator:
-		return spectypes.BNRoleAggregator, nil
-	case roleProposer:
-		return spectypes.BNRoleProposer, nil
-	case roleSyncCommittee:
-		return spectypes.BNRoleSyncCommittee, nil
-	case roleSyncCommitteeContribution:
-		return spectypes.BNRoleSyncCommitteeContribution, nil
-	case roleValidatorRegistration:
-		return spectypes.BNRoleValidatorRegistration, nil
-	case roleVoluntaryExit:
-		return spectypes.BNRoleVoluntaryExit, nil
-	case rolePTCAttester:
-		return spectypes.BNRolePTCAttester, nil
-	case roleProposerPreferences:
-		return spectypes.BNRoleProposerPreferences, nil
-	default:
-		return 0, fmt.Errorf("unknown role: %s", s)
+	for _, r := range beaconRoleNames {
+		if r.name == s {
+			return r.role, nil
+		}
 	}
+	return 0, fmt.Errorf("unknown role: %s", s)
 }
 
 // BeaconRoles returns the roles BeaconRoleFromString parses. The node creates a participant store for each
 // (cli/operator/node.go), so every role the API accepts has one.
 func BeaconRoles() []spectypes.BeaconRole {
-	return []spectypes.BeaconRole{
-		spectypes.BNRoleAttester,
-		spectypes.BNRoleAggregator,
-		spectypes.BNRoleProposer,
-		spectypes.BNRoleSyncCommittee,
-		spectypes.BNRoleSyncCommitteeContribution,
-		spectypes.BNRoleValidatorRegistration,
-		spectypes.BNRoleVoluntaryExit,
-		spectypes.BNRolePTCAttester,
-		spectypes.BNRoleProposerPreferences,
+	roles := make([]spectypes.BeaconRole, len(beaconRoleNames))
+	for i, r := range beaconRoleNames {
+		roles[i] = r.role
 	}
+	return roles
 }
 
 // Partial-signature message type names for the API's `type` field. A type that belongs to one duty is named

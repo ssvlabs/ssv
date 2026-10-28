@@ -23,8 +23,8 @@ var ErrNotFound = errors.New("duty not found")
 // duty's Pre and Post exceed 13 entries (traces within 13 still decode under 1).
 type FormatVersion uint32
 
-// CurrentFormatVersion is the format this binary writes. Raise it when a persisted shape changes in a way an
-// older binary can't read, so EnsureFormat fails a downgrade at startup rather than records failing one by one.
+// CurrentFormatVersion is the format this binary writes. Raise it when a stored shape changes in a way older
+// binaries can't read, so EnsureFormat fails a downgrade at startup rather than records failing one by one.
 const CurrentFormatVersion FormatVersion = 2
 
 // EnsureFormat records CurrentFormatVersion in the store and refuses a store written by a newer binary. A

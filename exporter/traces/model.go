@@ -12,7 +12,7 @@ import (
 
 // MaxPartialSigEntries bounds ValidatorDutyTrace.Pre and .Post. The checks below fail the build when a
 // worst case message validation admits exceeds it, rather than leaving traces that can't be encoded at
-// eviction. They share validation's constants, so a limit raised there is checked here.
+// eviction. They use the constants validation enforces, so raising one is checked against this bound.
 const MaxPartialSigEntries = 256
 
 var (
@@ -44,7 +44,7 @@ type ValidatorDutyTrace struct {
 
 	// Pre and Post hold one entry per signing root per signer, up to MaxPartialSigEntries: a packet may
 	// carry several roots, and a signer may re-emit under new ones. Lists over 13 entries need store format
-	// 2 (store.FormatVersion).
+	// 2 or later (see store.FormatVersion).
 	Pre  []*PartialSigTrace `ssz-max:"256"`
 	Post []*PartialSigTrace `ssz-max:"256"`
 }
