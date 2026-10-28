@@ -51,7 +51,7 @@ type config struct {
 	ProposerDelay                time.Duration           `yaml:"ProposerDelay" env:"PROPOSER_DELAY" env-description:"Duration to wait out before requesting Ethereum block to propose if this Operator is proposer-duty Leader (eg. 300ms). See https://github.com/ssvlabs/ssv/blob/main/docs/MEV_CONSIDERATIONS.md#getting-started-with-mev-configuration for detailed instructions on how to use it."`
 	AllowDangerousProposerDelay  bool                    `yaml:"AllowDangerousProposerDelay" env:"ALLOW_DANGEROUS_PROPOSER_DELAY" env-description:"Allow ProposerDelay values higher than 1s (dangerous, may cause missed block proposals)"`
 	ProposerDelayEPBS            time.Duration           `yaml:"ProposerDelayEPBS" env:"PROPOSER_DELAY_EPBS" env-description:"Post-ePBS (Gloas) counterpart of ProposerDelay, applied from the Gloas fork on (ProposerDelay applies before it). Hard-capped at 1s with no dangerous override. Default 0 (opt-in)."`
-	Builders                     gloas.BuilderConfig     `yaml:"Builders" env-description:"Gloas (ePBS) direct-builder connections (opt-in overlay, YAML only). Entries must be configured identically across all operators of every shared committee; see docs/EXTERNAL_BUILDERS.md"`
+	Builders                     gloas.BuilderConfig     `yaml:"Builders" env-description:"Gloas (ePBS) direct-builder connections (opt-in overlay, YAML only). Entries must be configured identically across all operators of every shared committee, except URLs, whose hostnames may differ only if AuthData is set explicitly; see docs/EXTERNAL_BUILDERS.md"`
 	OperatorPrivateKey           string                  `yaml:"OperatorPrivateKey" env:"OPERATOR_KEY" env-description:"Operator private key for contract event decryption"`
 	MetricsAPIPort               int                     `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"Port for metrics API server"`
 	EnableTraces                 bool                    `yaml:"EnableTraces" env:"ENABLE_TRACES" env-description:"Enable Open Telemetry traces"`
@@ -182,6 +182,14 @@ func (c *config) resolveAndValidate(logger *zap.Logger) (resolved, error) {
 
 	if err := gloas.ValidateBuilderConfig(c.Builders); err != nil {
 		return resolved{}, fmt.Errorf("invalid Builders configuration: %w", err)
+	}
+	for i := range c.Builders.Entries {
+		// Log the hostname only: builder URLs may carry credentials.
+		if host, ok := c.Builders.Entries[i].LocalHostWithoutAuthData(); ok {
+			logger.Warn("builder entry omits AuthData but its URL host looks local: a MEV-Boost or commit-boost sidecar "+
+				"needs AuthData set to the relay's identity, or the entry gets no bids (see docs/EXTERNAL_BUILDERS.md)",
+				zap.Int("builder_entry_index", i), zap.String("builder_host", host))
+		}
 	}
 
 	// Resolve the operating mode last so a doubly-misconfigured node still surfaces the signing
