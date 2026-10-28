@@ -57,8 +57,9 @@ func BuilderIdentity(url string, authData []byte) string {
 // each entry's URL: AuthData is threshold-signed into BuilderRequestAuth, so any byte divergence splits
 // the quorum and silently disables that builder; the unsigned knobs steer bid selection per-operator,
 // where divergence is consensus-safe but leaves the effective policy to whoever leads the round; the URL
-// isn't signed, so it may differ per operator (each can point at its own MEV-Boost or commit-boost
-// sidecar). See docs/EXTERNAL_BUILDERS.md.
+// isn't signed, so it may differ per operator as long as the AuthData it resolves to doesn't — AuthData
+// defaults to the URL's hostname, so operators whose hostnames differ (each pointing at its own MEV-Boost
+// or commit-boost sidecar, say) set it explicitly. See docs/EXTERNAL_BUILDERS.md.
 //
 // Entries' URL/AuthData drive the request-auth signing round (§5); the top-level knobs and the
 // per-entry resolution below drive the produceBlockV4 POST body (§4, beacon-APIs#630).

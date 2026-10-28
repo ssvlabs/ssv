@@ -575,9 +575,12 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 	// fetched a full (non-blinded) block, prefer submitting the full locally
 	// cached block (including blobs for Deneb/Electra/Fulu) - but only if
 	// the root of the decided block matches our locally cached block root.
-	// Other operators will keep submitting the blinded variant.
-	// TODO: should we send the block at all if we're not the leader? It's probably not effective but
-	//		I left it for now to keep backwards compatibility.
+	// Other operators will keep submitting the blinded variant, as ssv-spec's submitDecidedBlock
+	// does. That adds redundancy: should the leader's submission fail, any operator whose beacon
+	// node's sidecar reaches the relay that served the bid can still publish a builder block.
+	// A beacon node that can't unblind the block (no builder, another relay, or another
+	// operator's local block) fails the submission, so on non-leaders that failure is expected
+	// and doesn't by itself mean the block was lost.
 	vBlk, _, err := validatorConsensusData.GetBlockData()
 	if err != nil {
 		return fmt.Errorf("could not get block data from consensus data: %w", err)

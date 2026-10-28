@@ -42,8 +42,9 @@ byte-identical `data`:
   be given in punycode, and a URL with an IPv6 zone needs an explicit `AuthData`. Entries whose URLs share a
   hostname share the default, and so one signed auth; builders that need distinct identities on one host
   agree an explicit `AuthData` instead.
-- The `URL` itself isn't signed, so it may differ per operator: each one can point at its own sidecar (see
-  [MEV-Boost and commit-boost after Gloas](#mev-boost-and-commit-boost-after-gloas)).
+- The `URL` itself isn't signed, so it may differ per operator as long as the `AuthData` it resolves to
+  doesn't: when operators' hostnames differ, as when each points at its own sidecar, set `AuthData`
+  explicitly (see [MEV-Boost and commit-boost after Gloas](#mev-boost-and-commit-boost-after-gloas)).
 - The unsigned knobs (`MinBid`, `BuilderBoostFactor`, `MaxExecutionPayment`) don't affect signing, but
   divergence makes the cluster's effective bid policy depend on which operator leads the round — keep them
   identical too. They are sent on the `produceBlockV4` POST and honored by beacon nodes that implement it
@@ -129,8 +130,8 @@ way, each relay takes one of the at most 8 entries.
 ### How to use
 
 1. Configure your beacon node to use an external builder
-   - Lighthouse: https://lighthouse-book.sigmaprime.io/builders.html
-   - Prysm: https://docs.prylabs.network/docs/prysm-usage/parameters
+   - Lighthouse: https://lighthouse-book.sigmaprime.io/advanced_builders.html
+   - Prysm: https://prysm.offchainlabs.com/docs/configure-prysm/builder/
 2. Beacon node will automatically provide blinded blocks to SSV node when it's possible
 
 ### How it works
