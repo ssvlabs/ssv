@@ -44,6 +44,22 @@ func (m *MockProvider) EXPECT() *MockProviderMockRecorder {
 	return m.recorder
 }
 
+// BlockContractLogs mocks base method.
+func (m *MockProvider) BlockContractLogs(ctx context.Context, block uint64) ([]types.Log, bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "BlockContractLogs", ctx, block)
+	ret0, _ := ret[0].([]types.Log)
+	ret1, _ := ret[1].(bool)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// BlockContractLogs indicates an expected call of BlockContractLogs.
+func (mr *MockProviderMockRecorder) BlockContractLogs(ctx, block any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BlockContractLogs", reflect.TypeOf((*MockProvider)(nil).BlockContractLogs), ctx, block)
+}
+
 // ChainID mocks base method.
 func (m *MockProvider) ChainID(ctx context.Context) (*big.Int, error) {
 	m.ctrl.T.Helper()
@@ -74,9 +90,9 @@ func (mr *MockProviderMockRecorder) Close() *gomock.Call {
 }
 
 // FetchHistoricalLogs mocks base method.
-func (m *MockProvider) FetchHistoricalLogs(ctx context.Context, fromBlock uint64) (<-chan BlockLogs, <-chan error, error) {
+func (m *MockProvider) FetchHistoricalLogs(ctx context.Context, fromBlock uint64, verify bool) (<-chan BlockLogs, <-chan error, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "FetchHistoricalLogs", ctx, fromBlock)
+	ret := m.ctrl.Call(m, "FetchHistoricalLogs", ctx, fromBlock, verify)
 	ret0, _ := ret[0].(<-chan BlockLogs)
 	ret1, _ := ret[1].(<-chan error)
 	ret2, _ := ret[2].(error)
@@ -84,9 +100,9 @@ func (m *MockProvider) FetchHistoricalLogs(ctx context.Context, fromBlock uint64
 }
 
 // FetchHistoricalLogs indicates an expected call of FetchHistoricalLogs.
-func (mr *MockProviderMockRecorder) FetchHistoricalLogs(ctx, fromBlock any) *gomock.Call {
+func (mr *MockProviderMockRecorder) FetchHistoricalLogs(ctx, fromBlock, verify any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchHistoricalLogs", reflect.TypeOf((*MockProvider)(nil).FetchHistoricalLogs), ctx, fromBlock)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchHistoricalLogs", reflect.TypeOf((*MockProvider)(nil).FetchHistoricalLogs), ctx, fromBlock, verify)
 }
 
 // FilterLogs mocks base method.
@@ -177,6 +193,21 @@ func (mr *MockProviderMockRecorder) SubscribeFilterLogs(ctx, q, ch any) *gomock.
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubscribeFilterLogs", reflect.TypeOf((*MockProvider)(nil).SubscribeFilterLogs), ctx, q, ch)
 }
 
+// VerifyLogs mocks base method.
+func (m *MockProvider) VerifyLogs(ctx context.Context, fromBlock, toBlock uint64) ([]BlockLogs, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "VerifyLogs", ctx, fromBlock, toBlock)
+	ret0, _ := ret[0].([]BlockLogs)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// VerifyLogs indicates an expected call of VerifyLogs.
+func (mr *MockProviderMockRecorder) VerifyLogs(ctx, fromBlock, toBlock any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "VerifyLogs", reflect.TypeOf((*MockProvider)(nil).VerifyLogs), ctx, fromBlock, toBlock)
+}
+
 // MockSingleClientProvider is a mock of SingleClientProvider interface.
 type MockSingleClientProvider struct {
 	ctrl     *gomock.Controller
@@ -199,6 +230,22 @@ func NewMockSingleClientProvider(ctrl *gomock.Controller) *MockSingleClientProvi
 // EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockSingleClientProvider) EXPECT() *MockSingleClientProviderMockRecorder {
 	return m.recorder
+}
+
+// BlockContractLogs mocks base method.
+func (m *MockSingleClientProvider) BlockContractLogs(ctx context.Context, block uint64) ([]types.Log, bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "BlockContractLogs", ctx, block)
+	ret0, _ := ret[0].([]types.Log)
+	ret1, _ := ret[1].(bool)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// BlockContractLogs indicates an expected call of BlockContractLogs.
+func (mr *MockSingleClientProviderMockRecorder) BlockContractLogs(ctx, block any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BlockContractLogs", reflect.TypeOf((*MockSingleClientProvider)(nil).BlockContractLogs), ctx, block)
 }
 
 // ChainID mocks base method.
@@ -231,9 +278,9 @@ func (mr *MockSingleClientProviderMockRecorder) Close() *gomock.Call {
 }
 
 // FetchHistoricalLogs mocks base method.
-func (m *MockSingleClientProvider) FetchHistoricalLogs(ctx context.Context, fromBlock uint64) (<-chan BlockLogs, <-chan error, error) {
+func (m *MockSingleClientProvider) FetchHistoricalLogs(ctx context.Context, fromBlock uint64, verify bool) (<-chan BlockLogs, <-chan error, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "FetchHistoricalLogs", ctx, fromBlock)
+	ret := m.ctrl.Call(m, "FetchHistoricalLogs", ctx, fromBlock, verify)
 	ret0, _ := ret[0].(<-chan BlockLogs)
 	ret1, _ := ret[1].(<-chan error)
 	ret2, _ := ret[2].(error)
@@ -241,9 +288,9 @@ func (m *MockSingleClientProvider) FetchHistoricalLogs(ctx context.Context, from
 }
 
 // FetchHistoricalLogs indicates an expected call of FetchHistoricalLogs.
-func (mr *MockSingleClientProviderMockRecorder) FetchHistoricalLogs(ctx, fromBlock any) *gomock.Call {
+func (mr *MockSingleClientProviderMockRecorder) FetchHistoricalLogs(ctx, fromBlock, verify any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchHistoricalLogs", reflect.TypeOf((*MockSingleClientProvider)(nil).FetchHistoricalLogs), ctx, fromBlock)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchHistoricalLogs", reflect.TypeOf((*MockSingleClientProvider)(nil).FetchHistoricalLogs), ctx, fromBlock, verify)
 }
 
 // FilterLogs mocks base method.
@@ -347,6 +394,21 @@ func (m *MockSingleClientProvider) SyncProgress(ctx context.Context) (*ethereum.
 func (mr *MockSingleClientProviderMockRecorder) SyncProgress(ctx any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncProgress", reflect.TypeOf((*MockSingleClientProvider)(nil).SyncProgress), ctx)
+}
+
+// VerifyLogs mocks base method.
+func (m *MockSingleClientProvider) VerifyLogs(ctx context.Context, fromBlock, toBlock uint64) ([]BlockLogs, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "VerifyLogs", ctx, fromBlock, toBlock)
+	ret0, _ := ret[0].([]BlockLogs)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// VerifyLogs indicates an expected call of VerifyLogs.
+func (mr *MockSingleClientProviderMockRecorder) VerifyLogs(ctx, fromBlock, toBlock any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "VerifyLogs", reflect.TypeOf((*MockSingleClientProvider)(nil).VerifyLogs), ctx, fromBlock, toBlock)
 }
 
 // streamLogsToChan mocks base method.
