@@ -3,6 +3,7 @@ package runner
 import (
 	"context"
 	"errors"
+	"fmt"
 	"maps"
 	"testing"
 	"time"
@@ -183,7 +184,8 @@ func TestProposerRunnerProcessPreConsensusCachesFullBlockAndFetchesWithReconstru
 	require.NotNil(t, runner.State.RunningInstance)
 }
 
-func TestProposerRunnerProcessPreConsensusDoesNotCacheBlindedBlock(t *testing.T) {
+// A fetched blinded block has no full block to keep, but its SSZ is kept to recognize it once decided.
+func TestProposerRunnerProcessPreConsensusCachesOnlyBlindedBlockSSZ(t *testing.T) {
 	t.Parallel()
 
 	version := spec.DataVersionDeneb
@@ -197,9 +199,14 @@ func TestProposerRunnerProcessPreConsensusDoesNotCacheBlindedBlock(t *testing.T)
 
 	processPreConsensusQuorum(t, runner, keySet, version)
 
+	_, blindedMarshaler, err := blindutil.EnsureBlinded(blindedBlock)
+	require.NoError(t, err)
+	expectedBlindedSSZ, err := blindedMarshaler.MarshalSSZ()
+	require.NoError(t, err)
+
 	require.Equal(t, 1, beacon.getCalls)
 	require.Nil(t, runner.cachedFullBlock)
-	require.Nil(t, runner.cachedBlindedBlockSSZ)
+	require.Equal(t, expectedBlindedSSZ, runner.cachedBlindedBlockSSZ)
 }
 
 func TestProposerRunnerProcessPreConsensusReturnsContextCanceledDuringProposerDelay(t *testing.T) {
@@ -412,6 +419,68 @@ func TestProposerRunnerProcessPostConsensusNonLeaderKeepsDecidedBlindedBlock(t *
 	require.True(t, beacon.submittedBlocks[0].Blinded)
 	require.Equal(t, []phase0.ValidatorIndex{runner.GetShare().ValidatorIndex}, dg.reportQuorum)
 	require.True(t, runner.State.Succeeded)
+}
+
+// Before Gloas, a beacon node can't unblind a block another operator's beacon node produced, so a failed submit of
+// one is expected: the duty concludes not_published rather than failed, and the message is handled without error.
+func TestProposerRunnerProcessPostConsensusSubmitFailureOfAnotherOperatorsBlockIsNotPublished(t *testing.T) {
+	t.Parallel()
+
+	version := spec.DataVersionDeneb
+	consensusData := spectestingutils.TestProposerBlindedBlockConsensusDataV(version)
+	beacon := newProposerTestBeacon(nil)
+	beacon.submitErr = errors.New("no successful relay response")
+	runner, keySet, _ := newProposerRunnerForTest(t, beacon, &stubDoppelganger{canSign: true}, 0, nil)
+
+	setupRunnerForPostConsensus(t, runner, keySet, spectestingutils.TestingProposerDutyV(version), consensusData, 1)
+	runner.operatorSigner = fixedOperatorSigner{id: 2}
+	runner.cachedBlindedBlockSSZ = []byte("this-operators-own-block")
+	concluded := observeDutyConclusion(runner.BaseRunner)
+
+	processPostConsensusQuorum(t, runner, keySet, version)
+
+	require.Len(t, beacon.submittedBlocks, 1)
+	require.True(t, beacon.submittedBlocks[0].Blinded)
+	require.False(t, runner.State.Succeeded)
+	requireConcluded(t, concluded, dutyOutcomeNotPublished)
+}
+
+// A failed submit of the decided block this operator's own beacon node produced stays a failure, whether that block
+// is full or blinded: this beacon node is one that can publish it.
+func TestProposerRunnerProcessPostConsensusSubmitFailureOfOwnBlockFailsDuty(t *testing.T) {
+	t.Parallel()
+
+	for _, full := range []bool{false, true} {
+		t.Run(fmt.Sprintf("full=%v", full), func(t *testing.T) {
+			t.Parallel()
+
+			version := spec.DataVersionDeneb
+			consensusData := spectestingutils.TestProposerBlindedBlockConsensusDataV(version)
+			beacon := newProposerTestBeacon(nil)
+			beacon.submitErr = errors.New("beacon node down")
+			runner, keySet, _ := newProposerRunnerForTest(t, beacon, &stubDoppelganger{canSign: true}, 0, nil)
+
+			setupRunnerForPostConsensus(t, runner, keySet, spectestingutils.TestingProposerDutyV(version), consensusData, 1)
+			runner.cachedBlindedBlockSSZ = append([]byte(nil), consensusData.DataSSZ...)
+			if full {
+				runner.cachedFullBlock = spectestingutils.TestingBeaconBlockV(version)
+			}
+			concluded := observeDutyConclusion(runner.BaseRunner)
+
+			ctx, logger := context.Background(), zap.NewNop()
+			for operatorID := spectypes.OperatorID(1); operatorID < keySet.Threshold; operatorID++ {
+				msg := spectestingutils.PostConsensusProposerMsgV(keySet.Shares[operatorID], operatorID, version)
+				require.NoError(t, runner.ProcessPostConsensus(ctx, logger, msg))
+			}
+			msg := spectestingutils.PostConsensusProposerMsgV(keySet.Shares[keySet.Threshold], keySet.Threshold, version)
+			require.ErrorContains(t, runner.ProcessPostConsensus(ctx, logger, msg), "could not submit beacon block")
+
+			require.Len(t, beacon.submittedBlocks, 1)
+			require.Equal(t, !full, beacon.submittedBlocks[0].Blinded)
+			require.False(t, runner.State.Succeeded)
+			requireConcluded(t, concluded, dutyOutcomeFailed)
+		})
+	}
 }
 
 func gloasProposerDuty(slot phase0.Slot) *spectypes.ValidatorDuty {

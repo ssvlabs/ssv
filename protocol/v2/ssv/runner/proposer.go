@@ -59,8 +59,9 @@ type ProposerRunner struct {
 	// decided QBFT round can submit the full block + blobs after signatures are
 	// collected, while still proposing a blinded value during QBFT.
 	cachedFullBlock *api.VersionedProposal
-	// cachedBlindedBlockSSZ is a fingerprint of the cachedFullBlock, it is stored here
-	// for efficient validation (so we re-use it instead of re-calculating).
+	// cachedBlindedBlockSSZ is the blinded SSZ of the block this operator fetched, full or
+	// blinded (so the cachedFullBlock's fingerprint when that is set). Post-consensus compares
+	// the decided value with it to tell whether this operator's beacon node produced the block.
 	cachedBlindedBlockSSZ []byte
 
 	// builders is the cluster's direct-builder config, resolved once at construction: the produceBlockV4
@@ -276,11 +277,11 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 			return fmt.Errorf("could not marshal blinded beacon block: %w", err)
 		}
 
-		// Store the original block (we are only interested in full blocks) for later re-use
-		// in the post-consensus phase.
+		// Remember the fetched block for the post-consensus phase: its blinded SSZ to recognize
+		// it once decided, and the original block if it is full, to submit it with its payload.
+		r.cachedBlindedBlockSSZ = byts
 		if !vBlk.Blinded {
 			r.cachedFullBlock = vBlk
-			r.cachedBlindedBlockSSZ = byts
 		}
 
 		input = &spectypes.ProposerConsensusData{
@@ -579,15 +580,17 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 	// does. That adds redundancy: should the leader's submission fail, any operator whose beacon
 	// node's sidecar reaches the relay that served the bid can still publish a builder block.
 	// A beacon node that can't unblind the block (no builder, another relay, or another
-	// operator's local block) fails the submission, so on non-leaders that failure is expected
-	// and doesn't by itself mean the block was lost.
+	// operator's local block) fails the submission. So when this operator's beacon node didn't
+	// produce the decided block, a failed submission is expected and doesn't by itself mean the
+	// block was lost: it concludes the duty not_published rather than failed.
 	vBlk, _, err := validatorConsensusData.GetBlockData()
 	if err != nil {
 		return fmt.Errorf("could not get block data from consensus data: %w", err)
 	}
+	ownBlock := bytes.Equal(validatorConsensusData.DataSSZ, r.cachedBlindedBlockSSZ)
 	leaderID := r.State.RunningInstance.Proposer()
 	if r.cachedFullBlock != nil && leaderID == r.operatorSigner.GetOperatorID() {
-		if bytes.Equal(validatorConsensusData.DataSSZ, r.cachedBlindedBlockSSZ) {
+		if ownBlock {
 			logger.Debug("leader will use the original full block for proposal submission")
 			vBlk = r.cachedFullBlock
 		} else {
@@ -604,6 +607,13 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 
 	start := time.Now()
 	if err := r.GetBeaconNode().SubmitBeaconBlock(ctx, vBlk, specSig); err != nil {
+		if !ownBlock {
+			const notPublishedEvent = "could not submit another operator's beacon block"
+			span.AddEvent(notPublishedEvent)
+			logger.Debug(notPublishedEvent, fields.Slot(validatorConsensusData.Duty.Slot), zap.Error(err))
+			r.markDutyNotPublished(err)
+			return nil
+		}
 		recordFailedSubmission(ctx, spectypes.BNRoleProposer)
 		const errMsg = "could not submit beacon block"
 		logger.Error(errMsg, fields.Slot(validatorConsensusData.Duty.Slot), zap.Error(err))

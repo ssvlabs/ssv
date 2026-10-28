@@ -362,18 +362,19 @@ func (b *BaseRunner) baseStartNewNonBeaconDuty(ctx context.Context, logger *zap.
 type dutyOutcome string
 
 const (
-	dutyOutcomeSucceeded   dutyOutcome = "succeeded"    // full successful cycle with quorum, submitted to the beacon node
-	dutyOutcomeNotRequired dutyOutcome = "not_required" // completed with nothing to submit (e.g. not selected as aggregator)
-	dutyOutcomeFailed      dutyOutcome = "failed"       // terminated by a non-recoverable error
-	dutyOutcomeStuck       dutyOutcome = "stuck"        // not concluded before the end of the current wall-clock slot
-	dutyOutcomeNoQuorum    dutyOutcome = "no_quorum"    // reached the deadline having executed, but the signature quorum never formed
+	dutyOutcomeSucceeded    dutyOutcome = "succeeded"     // full successful cycle with quorum, submitted to the beacon node
+	dutyOutcomeNotRequired  dutyOutcome = "not_required"  // completed with nothing to submit (e.g. not selected as aggregator)
+	dutyOutcomeFailed       dutyOutcome = "failed"        // terminated by a non-recoverable error
+	dutyOutcomeStuck        dutyOutcome = "stuck"         // not concluded before the end of the current wall-clock slot
+	dutyOutcomeNoQuorum     dutyOutcome = "no_quorum"     // reached the deadline having executed, but the signature quorum never formed
+	dutyOutcomeNotPublished dutyOutcome = "not_published" // pre-Gloas proposer: another operator's decided block, which this beacon node couldn't publish
 )
 
-// dutyConclusion is handed by a marker (markDutySucceeded / markDutyNotRequired / markDutyFailed) to
-// the duty's watcher (watchDutyOutcome), which reports it.
+// dutyConclusion is handed by a marker (markDutySucceeded / markDutyNotRequired / markDutyFailed /
+// markDutyNotPublished) to the duty's watcher (watchDutyOutcome), which reports it.
 type dutyConclusion struct {
 	outcome dutyOutcome
-	reason  error // populated for dutyOutcomeFailed
+	reason  error // populated for dutyOutcomeFailed and dutyOutcomeNotPublished
 }
 
 // watchDutyOutcome reports a duty's terminal outcome exactly once: it records the
@@ -413,6 +414,8 @@ func (b *BaseRunner) watchDutyOutcome(ctx context.Context, logger *zap.Logger) {
 			logger.Warn("⚠️ duty did not reach signature quorum in time (operators did not converge)")
 		case dutyOutcomeSucceeded, dutyOutcomeNotRequired:
 			logger.Debug("duty concluded", zap.String("outcome", string(c.outcome)))
+		case dutyOutcomeNotPublished:
+			logger.Debug("duty concluded", zap.String("outcome", string(c.outcome)), zap.Error(c.reason))
 		}
 	}
 
@@ -842,6 +845,18 @@ func (b *BaseRunner) markDutyFailed(reason error) {
 		return
 	}
 	b.concludeDuty(dutyOutcomeFailed, reason)
+}
+
+// markDutyNotPublished records that this operator couldn't submit a decided pre-Gloas block its own beacon node
+// didn't produce. That miss is expected: a beacon node can't unblind another operator's block, so publishing it is
+// left to the operators whose beacon nodes can. Like markDutyFailed it does NOT mark the duty succeeded, but it
+// reports its own outcome so that the expected miss stays out of "failed". A cancellation is dropped as in
+// markDutyFailed.
+func (b *BaseRunner) markDutyNotPublished(reason error) {
+	if errors.Is(reason, context.Canceled) {
+		return
+	}
+	b.concludeDuty(dutyOutcomeNotPublished, reason)
 }
 
 // noteDutyFailure records a failure that doesn't end the duty: an error after the decision, such as this

@@ -130,8 +130,12 @@ way, each relay takes one of the at most 8 entries.
 ### How to use
 
 1. Configure your beacon node to use an external builder
+   - Grandine: https://docs.grandine.io/builder_api_and_mev.html
    - Lighthouse: https://lighthouse-book.sigmaprime.io/advanced_builders.html
+   - Lodestar: https://chainsafe.github.io/lodestar/run/beacon-management/mev-and-builder-integration/
+   - Nimbus: https://nimbus.guide/external-block-builder.html
    - Prysm: https://prysm.offchainlabs.com/docs/configure-prysm/builder/
+   - Teku: https://docs.teku.consensys.com/how-to/configure/builder-network
 2. Beacon node will automatically provide blinded blocks to SSV node when it's possible
 
 ### How it works
@@ -156,4 +160,4 @@ The operators of a cluster don't need the same builder setup: some may run MEV-B
 
 - Consensus isn't affected. The consensus value is always a blinded block, and its validation doesn't depend on where the block came from, so an operator whose beacon node has no builder accepts a builder block from the round leader.
 - The cluster decides on the block a round leader fetched: a builder block or a local block, whichever that leader's beacon node returned.
-- Some submissions are expected to fail, since a beacon node can publish a blinded block only if it can get the block's payload. A builder block fails on beacon nodes with no builder, or whose sidecar doesn't use the relay that served the bid. A local block can be published only by the operator whose beacon node built it. An operator whose submission fails logs `could not submit beacon block`; one successful submission is enough.
+- Some submissions are expected to fail, since a beacon node can publish a blinded block only if it can get the block's payload. A builder block fails on beacon nodes with no builder, or whose sidecar doesn't use the relay that served the bid. A local block can be published only by the operator whose beacon node built it. One successful submission is enough, so when the decided block came from another operator's beacon node, a failed submission is logged at debug level and the duty is reported as `not_published` in the `ssv.runner.duty.outcome` metric rather than `failed`. A failed submission of the operator's own block is still an error.
