@@ -3,6 +3,7 @@ package executionclient
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -32,7 +33,8 @@ func TestBloomCrossCheck_RecoversMissingLogs(t *testing.T) {
 	require.NoError(t, err)
 
 	// Set up a proxy that drops logs for one specific block.
-	rpcSrv, _ := env.sim.Node().RPCHandler()
+	rpcSrv, err := env.sim.Node().RPCHandler()
+	require.NoError(t, err)
 	base := http.Handler(rpcSrv)
 
 	// The contract deploy is block 1, then transactions are blocks 2..6.
@@ -162,7 +164,8 @@ func TestBloomCrossCheck_RetryExhausted(t *testing.T) {
 	require.NoError(t, err)
 
 	// Proxy: drop logs for block 3 on wide queries, and return HTTP 500 for single-block retries of block 3.
-	rpcSrv, _ := env.sim.Node().RPCHandler()
+	rpcSrv, err := env.sim.Node().RPCHandler()
+	require.NoError(t, err)
 	base := http.Handler(rpcSrv)
 
 	const dropBlock uint64 = 3
@@ -210,12 +213,13 @@ func TestBloomCrossCheck_RetryExhausted(t *testing.T) {
 
 	logsCh, errCh := client.fetchLogsInBatches(env.ctx, 0, currentBlock, true)
 
-	// Drain logsCh — should close quickly because of error.
+	var emitted int
 	for range logsCh {
+		emitted++
 	}
-
-	err = <-errCh
-	require.Error(t, err, "should propagate retry failure as error")
+	// Match the retry error, so a context timeout can't pass for it.
+	require.ErrorContains(t, <-errCh, fmt.Sprintf("bloom retry: filter logs for block %d", dropBlock))
+	require.Zero(t, emitted, "no blocks should be emitted from a failed batch")
 }
 
 // TestVerifyLogsWithBloom_BlocksWithExistingLogs verifies that blocks
@@ -232,12 +236,14 @@ func TestVerifyLogsWithBloom_BlocksWithExistingLogs(t *testing.T) {
 	require.NoError(t, err)
 
 	// Track HeaderByNumber calls via proxy.
-	rpcSrv, _ := env.sim.Node().RPCHandler()
+	rpcSrv, err := env.sim.Node().RPCHandler()
+	require.NoError(t, err)
 	base := http.Handler(rpcSrv)
 	var headerCalls atomic.Int32
 
 	wrapped := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		raw, _ := io.ReadAll(r.Body)
+		r.Body = io.NopCloser(bytes.NewReader(raw))
 		var req map[string]any
 		_ = json.Unmarshal(raw, &req)
 
@@ -245,7 +251,6 @@ func TestVerifyLogsWithBloom_BlocksWithExistingLogs(t *testing.T) {
 			headerCalls.Add(1)
 		}
 
-		r.Body = io.NopCloser(bytes.NewReader(raw))
 		base.ServeHTTP(w, r)
 	})
 
@@ -274,8 +279,16 @@ func TestVerifyLogsWithBloom_BlocksWithExistingLogs(t *testing.T) {
 	require.Equal(t, int32(0), headerCalls.Load(), "should not fetch headers for blocks that already have logs")
 }
 
+// getLogsBlockRange returns the block bounds of a decoded eth_getLogs JSON-RPC request.
+func getLogsBlockRange(req map[string]any) (from, to uint64) {
+	flt := req["params"].([]any)[0].(map[string]any)
+	from, _ = hexutil.DecodeUint64(flt["fromBlock"].(string))
+	to, _ = hexutil.DecodeUint64(flt["toBlock"].(string))
+	return from, to
+}
+
 // serveGetLogsWithoutBlock forwards an eth_getLogs request to base and strips dropBlock's
-// logs from the response, simulating an EL that silently omits logs (the Geth bug).
+// logs from the response, simulating the known Geth bug where the EL silently omits logs.
 func serveGetLogsWithoutBlock(w http.ResponseWriter, r *http.Request, base http.Handler, dropBlock uint64) {
 	rec := httptest.NewRecorder()
 	base.ServeHTTP(rec, r)

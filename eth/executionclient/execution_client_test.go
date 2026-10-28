@@ -20,7 +20,6 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	ethcommon "github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/common/hexutil"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient/simulated"
@@ -91,7 +90,8 @@ func setupTestEnv(t *testing.T) *testEnv {
 	t.Cleanup(func() { require.NoError(t, sim.Close()) })
 
 	// Create JSON-RPC handler and setup WS server
-	rpcServer, _ := sim.Node().RPCHandler()
+	rpcServer, err := sim.Node().RPCHandler()
+	require.NoError(t, err)
 	httpsrv := httptest.NewServer(rpcServer.WebsocketHandler([]string{"*"}))
 	t.Cleanup(func() {
 		rpcServer.Stop()
@@ -322,12 +322,14 @@ func TestFetchHistoricalLogs_Subdivide(t *testing.T) {
 			}
 
 			// custom eth_getLogs with call count
-			rpcSrv, _ := env.sim.Node().RPCHandler()
+			rpcSrv, err := env.sim.Node().RPCHandler()
+			require.NoError(t, err)
 			base := http.Handler(rpcSrv)
 			var callCount atomic.Int32
 
 			wrapped := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				raw, _ := io.ReadAll(r.Body)
+				r.Body = io.NopCloser(bytes.NewReader(raw))
 				var req map[string]any
 				_ = json.Unmarshal(raw, &req)
 
@@ -353,7 +355,6 @@ func TestFetchHistoricalLogs_Subdivide(t *testing.T) {
 						return
 					}
 				}
-				r.Body = io.NopCloser(bytes.NewReader(raw))
 				base.ServeHTTP(w, r)
 			})
 			srv := httptest.NewServer(wrapped)
@@ -410,12 +411,10 @@ func TestStreamLogs(t *testing.T) {
 		require.NoError(t, err)
 
 		logs := env.client.StreamLogs(env.ctx, 0)
-		var streamedLogs []ethtypes.Log
 		var streamedLogsCount atomic.Int64
 		go func() {
-			// Receive emitted events, this func will exit when the test exits.
+			// Count streamed logs until StreamLogs closes the channel at test cleanup.
 			for block := range logs {
-				streamedLogs = append(streamedLogs, block.Logs...)
 				streamedLogsCount.Add(int64(len(block.Logs)))
 			}
 		}()
@@ -444,7 +443,7 @@ func TestStreamLogs(t *testing.T) {
 			env.sim.Commit()
 			time.Sleep(delay)
 		}
-		// Wait for streamed logs to advance accordingly.
+		// Wait for all blocksWithLogsLength logs to be streamed.
 	Wait2:
 		for {
 			select {
@@ -456,8 +455,6 @@ func TestStreamLogs(t *testing.T) {
 				}
 			}
 		}
-		require.NotEmpty(t, streamedLogs)
-		require.Equal(t, blocksWithLogsLength, len(streamedLogs))
 	})
 
 	t.Run("returns when context is canceled", func(t *testing.T) {
@@ -561,30 +558,22 @@ func TestFetchLogsInBatches(t *testing.T) {
 	require.NoError(t, err)
 
 	t.Run("startBlock is greater than endBlock", func(t *testing.T) {
+		// Both channels are ready on return; a select would check only one of them.
 		logChan, errChan := env.client.fetchLogsInBatches(env.ctx, 10, 5, false)
-		select {
-		case log, ok := <-logChan:
-			require.Falsef(t, ok, "should not receive log when startBlock > endBlock, received log with block number: %d", log.BlockNumber)
-		case err := <-errChan:
-			require.ErrorIs(t, err, ErrBadInput)
-		case <-env.ctx.Done():
-			require.Fail(t, "fetchLogsInBatches did not return in time when startBlock > endBlock")
-		}
+		require.ErrorIs(t, <-errChan, ErrBadInput)
+		log, ok := <-logChan
+		require.Falsef(t, ok, "should not receive log when startBlock > endBlock, received log with block number: %d", log.BlockNumber)
 	})
 
 	t.Run("startBlock is same as endBlock", func(t *testing.T) {
 		blockNumbers := make([]uint64, 0, 1)
 
 		logChan, errChan := env.client.fetchLogsInBatches(env.ctx, 5, 5, false)
-		select {
-		case block := <-logChan:
+		for block := range logChan {
 			blockNumbers = append(blockNumbers, block.BlockNumber)
-		case err := <-errChan:
-			t.Fatalf("fetchLogsInBatches failed: %v", err)
-		case <-env.ctx.Done():
-			require.Fail(t, "fetchLogsInBatches did not return in time when fromBlock == toBlock")
 		}
-
+		// errChan is closed before logChan, so this never blocks.
+		require.NoError(t, <-errChan)
 		require.Equal(t, []uint64{5}, blockNumbers)
 	})
 
@@ -599,7 +588,6 @@ func TestFetchLogsInBatches(t *testing.T) {
 		for block := range logChan {
 			blockNumbers = append(blockNumbers, block.BlockNumber)
 		}
-		// errChan is closed before logChan, so this never blocks.
 		require.NoError(t, <-errChan)
 		require.Equal(t, []uint64{fromBlock, 4, 5, 6, 7, 8, 9, 10, toBlock}, blockNumbers)
 	})
@@ -677,7 +665,7 @@ func TestChainReorganizationLogs(t *testing.T) {
 
 		var result any
 		switch req.Method {
-		case "eth_getLogs":
+		case ethGetLogsMethod:
 			result = cannedLogs
 		case "eth_chainId":
 			result = "0x1"
@@ -1209,12 +1197,4 @@ func TestHealthy(t *testing.T) {
 // httpToWebSocketURL converts an HTTP URL to a WebSocket URL.
 func httpToWebSocketURL(url string) string {
 	return "ws:" + strings.TrimPrefix(url, "http:")
-}
-
-// getLogsBlockRange returns the block bounds of a decoded eth_getLogs JSON-RPC request.
-func getLogsBlockRange(req map[string]any) (from, to uint64) {
-	flt := req["params"].([]any)[0].(map[string]any)
-	from, _ = hexutil.DecodeUint64(flt["fromBlock"].(string))
-	to, _ = hexutil.DecodeUint64(flt["toBlock"].(string))
-	return from, to
 }

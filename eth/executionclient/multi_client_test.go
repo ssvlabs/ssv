@@ -48,7 +48,8 @@ func TestNewMulti(t *testing.T) {
 
 		sim := simTestBackend(testAddr)
 
-		rpcServer, _ := sim.Node().RPCHandler()
+		rpcServer, err := sim.Node().RPCHandler()
+		require.NoError(t, err)
 		httpsrv := httptest.NewServer(rpcServer.WebsocketHandler([]string{"*"}))
 		defer rpcServer.Stop()
 		defer httpsrv.Close()
@@ -81,7 +82,8 @@ func TestNewMulti(t *testing.T) {
 
 		sim := simTestBackend(testAddr)
 
-		rpcServer, _ := sim.Node().RPCHandler()
+		rpcServer, err := sim.Node().RPCHandler()
+		require.NoError(t, err)
 		httpsrv := httptest.NewServer(rpcServer.WebsocketHandler([]string{"*"}))
 		defer rpcServer.Stop()
 		defer httpsrv.Close()
