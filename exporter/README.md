@@ -180,7 +180,7 @@ In standard mode the `/stream` WebSocket pushes decided messages for the two rol
 
 A `PROPOSER_PREFERENCES` trace is written to disk only when its proposal slot is evicted, up to two epochs after its messages, so an exporter restarted in between loses it; every other role loses at most four slots.
 
-Traces written by this version can hold more than 13 entries in a duty's `pre` or `post` (a self-build proposer's two roots signed by 7 or more operators already do), which an older exporter can't read. The store now records its format version, and from this version on an exporter refuses a store written by a newer version at startup rather than reading it partially. Earlier exporters don't read the record, so after a rollback to one the exporter starts normally but can't read those traces: rolling back past this version needs a database backup taken before the upgrade.
+Traces written by this version can hold more than 13 entries in a duty's `pre` or `post` (a self-build proposer's two roots signed by 7 or more operators already do), which an older exporter can't read. From this version on, the store records its format version and an exporter refuses a store written by a newer version at startup rather than reading it partially. Earlier exporters don't read the record: after a rollback to one, the exporter starts normally but can't read those traces, so rolling back past this version needs a database backup taken before the upgrade.
 
 ### Explore API
 

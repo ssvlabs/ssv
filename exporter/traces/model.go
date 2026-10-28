@@ -10,9 +10,9 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 )
 
-// MaxPartialSigEntries bounds ValidatorDutyTrace.Pre and .Post. The checks below fail the build when a
-// worst case message validation admits exceeds it, rather than leaving traces that can't be encoded at
-// eviction. They use the constants validation enforces, so raising one is checked against this bound.
+// MaxPartialSigEntries bounds ValidatorDutyTrace.Pre and .Post. The checks below fail the build if message
+// validation admits more entries than that, rather than leaving traces that can't be encoded at eviction.
+// They use the constants validation enforces, so raising one is checked against this bound.
 const MaxPartialSigEntries = 256
 
 var (
