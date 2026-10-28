@@ -89,7 +89,7 @@ func (ec *ExecutionClient) verifyLogsWithBloom(ctx context.Context, logs []ethty
 }
 
 // retryBlockLogs retries FilterLogs for a single block up to DefaultBloomRetryAttempts times
-// with DefaultBloomRetryDelay between attempts. Returns recovered logs, nil (false positive),
+// with ec.bloomRetryDelay between attempts. Returns recovered logs, nil (false positive),
 // or an error on RPC failure.
 func (ec *ExecutionClient) retryBlockLogs(ctx context.Context, blockNumber uint64) ([]ethtypes.Log, error) {
 	query := ethereum.FilterQuery{
@@ -105,7 +105,7 @@ func (ec *ExecutionClient) retryBlockLogs(ctx context.Context, blockNumber uint6
 				return nil, ctx.Err()
 			case <-ec.closed:
 				return nil, ErrClosed
-			case <-time.After(DefaultBloomRetryDelay):
+			case <-time.After(ec.bloomRetryDelay):
 			}
 		}
 

@@ -52,8 +52,9 @@ type ExecutionClient struct {
 
 	logger *zap.Logger
 
-	reqTimeout    time.Duration
-	reqRetryDelay time.Duration
+	reqTimeout      time.Duration
+	reqRetryDelay   time.Duration
+	bloomRetryDelay time.Duration
 
 	syncDistanceTolerance uint64
 	// syncProgressFn is a struct-field so it can be overwritten for testing
@@ -75,6 +76,7 @@ func New(ctx context.Context, nodeAddr string, contractAddr ethcommon.Address, o
 		logger:                     zap.NewNop(),
 		reqTimeout:                 DefaultReqTimeout,
 		reqRetryDelay:              DefaultReqRetryDelay,
+		bloomRetryDelay:            DefaultBloomRetryDelay,
 		healthInvalidationInterval: DefaultHealthInvalidationInterval,
 		syncDistanceTolerance:      DefaultSyncDistanceTolerance,
 		closed:                     make(chan struct{}),
