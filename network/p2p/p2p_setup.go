@@ -297,15 +297,29 @@ func (n *p2pNetwork) FixedSubnets() p2pcommons.Subnets {
 func (n *p2pNetwork) setupDiscovery() error {
 	logger := n.logger
 
+	// StartNodeCmd validates the mode at startup already; this covers any other caller, which would otherwise run
+	// without a discovery service.
+	if err := n.cfg.ValidateDiscovery(); err != nil {
+		return err
+	}
+
 	var disc discovery.Service
-	if n.cfg.Discovery == localDiscovery {
+	switch n.cfg.discoveryMode() {
+	case DiscoveryMDNS:
 		logger.Info("discovery: using mdns (local)")
 		var err error
-		disc, err = discovery.NewLocalDiscovery(n.ctx, logger, n.Host(), n.cfg.MdnsDiscoveryTag)
+		disc, err = discovery.NewLocalDiscovery(n.ctx, logger, n.Host())
 		if err != nil {
 			return err
 		}
-	} else {
+	case DiscoveryNone:
+		if len(n.cfg.TrustedPeers) == 0 {
+			logger.Warn("discovery: disabled and no trusted peers configured; this node will only keep peers that dial it")
+		} else {
+			logger.Info("discovery: disabled, keeping only trusted and inbound peers")
+		}
+		disc = discovery.Disabled{}
+	case DiscoveryDiscv5:
 		ipAddr, err := p2pcommons.IPAddr()
 		if err != nil {
 			return fmt.Errorf("could not get ip addr: %w", err)

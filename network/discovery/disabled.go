@@ -1,0 +1,45 @@
+package discovery
+
+import (
+	"context"
+	"time"
+
+	"github.com/libp2p/go-libp2p/core/discovery"
+	"github.com/libp2p/go-libp2p/core/peer"
+)
+
+// Disabled is the Service of a node that runs no peer discovery: the node has only the peers it dials itself (its
+// TrustedPeers, or a mesh a test harness wires) and the peers that dial it. Its subnet and ENR hooks are no-ops.
+type Disabled struct{}
+
+var _ Service = Disabled{}
+
+// Bootstrap implements Service; there is nothing to start, and no peer is ever handed to handler.
+func (Disabled) Bootstrap(HandleNewPeer) error { return nil }
+
+// Advertise implements discovery.Advertiser as a no-op.
+func (Disabled) Advertise(context.Context, string, ...discovery.Option) (time.Duration, error) {
+	return 0, nil
+}
+
+// FindPeers implements discovery.Discoverer: the channel is closed without a peer on it.
+func (Disabled) FindPeers(context.Context, string, ...discovery.Option) (<-chan peer.AddrInfo, error) {
+	peers := make(chan peer.AddrInfo)
+	close(peers)
+	return peers, nil
+}
+
+// RegisterSubnets implements Service as a no-op.
+func (Disabled) RegisterSubnets(...uint64) (updated bool, err error) { return false, nil }
+
+// DeregisterSubnets implements Service as a no-op.
+func (Disabled) DeregisterSubnets(...uint64) (updated bool, err error) { return false, nil }
+
+// PublishENR implements Service as a no-op.
+func (Disabled) PublishENR() {}
+
+// DiscoveryStale implements Service: there is no socket to wedge, so it's never stale.
+func (Disabled) DiscoveryStale(time.Duration) bool { return false }
+
+// Close implements io.Closer; there is nothing to release.
+func (Disabled) Close() error { return nil }

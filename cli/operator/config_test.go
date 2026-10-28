@@ -15,6 +15,7 @@ import (
 	"go.uber.org/zap/zaptest/observer"
 
 	exporterconfig "github.com/ssvlabs/ssv/exporter/config"
+	p2pv1 "github.com/ssvlabs/ssv/network/p2p"
 	"github.com/ssvlabs/ssv/networkconfig"
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
@@ -291,6 +292,37 @@ func Test_resolveAndValidate_mode(t *testing.T) {
 		_, err := c.resolveAndValidate(zap.NewNop())
 		require.Error(t, err)
 		require.Contains(t, err.Error(), msgInvalidExporterMode)
+	})
+}
+
+// Test_resolveAndValidate_discovery loads p2p.Discovery the way an operator sets it, and checks that a known mode
+// passes validation while an unknown one fails it up front, rather than when the network starts.
+func Test_resolveAndValidate_discovery(t *testing.T) {
+	validate := func(t *testing.T, c config) error {
+		c.OperatorPrivateKey = testOperatorKey
+		_, err := c.resolveAndValidate(zap.NewNop())
+		return err
+	}
+
+	t.Run("YAML mode", func(t *testing.T) {
+		var c config
+		require.NoError(t, c.load(writeConfig(t, "p2p:\n  Discovery: none\n"), ""))
+		require.Equal(t, p2pv1.DiscoveryNone, c.P2pNetworkConfig.Discovery)
+		require.NoError(t, validate(t, c))
+	})
+
+	t.Run("env mode", func(t *testing.T) {
+		t.Setenv("P2P_DISCOVERY", "mdns")
+		var c config
+		require.NoError(t, c.load(writeConfig(t, ""), ""))
+		require.Equal(t, p2pv1.DiscoveryMDNS, c.P2pNetworkConfig.Discovery)
+		require.NoError(t, validate(t, c))
+	})
+
+	t.Run("unknown mode -> error", func(t *testing.T) {
+		var c config
+		require.NoError(t, c.load(writeConfig(t, "p2p:\n  Discovery: nome\n"), ""))
+		require.ErrorContains(t, validate(t, c), `unknown discovery mode "nome"`)
 	})
 }
 
