@@ -54,12 +54,13 @@ func BuilderIdentity(url string, authData []byte) string {
 // each Entry names one builder to solicit a builder-API bid from.
 //
 // The whole config MUST be identical across ALL operators of every cluster sharing a validator, except
-// each entry's URL: AuthData is threshold-signed into BuilderRequestAuth, so any byte divergence splits
-// the quorum and silently disables that builder; the unsigned knobs steer bid selection per-operator,
-// where divergence is consensus-safe but leaves the effective policy to whoever leads the round; the URL
-// isn't signed, so it may differ per operator as long as the AuthData it resolves to doesn't — AuthData
-// defaults to the URL's hostname, so operators whose hostnames differ (each pointing at its own MEV-Boost
-// or commit-boost sidecar, say) set it explicitly. See docs/EXTERNAL_BUILDERS.md.
+// each entry's URL (see docs/EXTERNAL_BUILDERS.md):
+//   - AuthData is threshold-signed into BuilderRequestAuth, so any byte divergence splits the quorum and
+//     silently disables that builder.
+//   - The unsigned knobs steer bid selection per operator: divergence is consensus-safe, but leaves the
+//     effective policy to whoever leads the round.
+//   - The URL isn't signed, so it may differ per operator (each pointing at its own sidecar, say). AuthData
+//     defaults to the URL's hostname, though, so differing hostnames need AuthData set explicitly.
 //
 // Entries' URL/AuthData drive the request-auth signing round (§5); the top-level knobs and the
 // per-entry resolution below drive the produceBlockV4 POST body (§4, beacon-APIs#630).
@@ -146,12 +147,12 @@ func DefaultAuthData(rawURL string) ([]byte, error) {
 	return data, nil
 }
 
-// DefaultAuthDataOnLocalHost returns the URL's hostname and true when the entry omits AuthData and that
-// hostname looks local (see isLocalHost). Such a URL almost always points at a sidecar like MEV-Boost or
-// commit-boost, which routes each request to a relay by the auth data it carries: the hostname default
-// then signs the sidecar's own name, which matches no relay, so the entry gets no builder-API bids. It
-// can misfire on a builder genuinely reached over a private network, so the node only warns on it.
-func (e *BuilderEntry) DefaultAuthDataOnLocalHost() (string, bool) {
+// LocalHostWithoutAuthData returns the URL's hostname and true when the entry omits AuthData and the
+// hostname looks local (see isLocalHost). Such a URL most likely points at a MEV-Boost or commit-boost
+// sidecar, which routes each request to the relay its auth data names: the hostname default names the
+// sidecar itself, matches no relay, and so gets no bids. A builder reached over a private network matches
+// too, so callers only warn.
+func (e *BuilderEntry) LocalHostWithoutAuthData() (string, bool) {
 	if e.AuthData != "" {
 		return "", false
 	}
@@ -203,7 +204,7 @@ func (e *BuilderEntry) EffectiveBoostFactor(cfg *BuilderConfig) uint64 {
 type ResolvedBuilderEntry struct {
 	Identity            string             // BuilderIdentity(URL, AuthData)
 	URL                 string             // the builder URL, verbatim
-	RedactedURL         string             // URL masked by format.RedactURL: the form logs carry, never URL itself
+	RedactedURL         string             // URL masked by format.RedactURL; logs carry this, never URL
 	AuthData            []byte             // exact bytes signed into BuilderRequestAuth.Data
 	BuilderPubKeys      []phase0.BLSPubKey // decoded bid-signing keys to pin; empty accepts any builder
 	MaxExecutionPayment uint64             // Gwei cap on trusted execution-layer payment

@@ -23,16 +23,9 @@ import (
 // entries sharing one pre-agreed token converge on one root, one broadcast, and one reconstruction
 // serving them all.
 type frozenRequestAuth struct {
-	auth     *gloas.BuilderRequestAuth
-	builders []frozenBuilderRef
-}
-
-// frozenBuilderRef names one configured builder relationship covered by a frozen auth.
-type frozenBuilderRef struct {
-	identity            string // gloas.BuilderIdentity — the RequestAuthCache key
-	url                 string // the builder URL, for the builder-preferences submit
-	redactedURL         string // the builder URL masked for logging, since it may carry credentials
-	maxExecutionPayment uint64 // the configured cap, forwarded via submitBuilderPreferences
+	auth *gloas.BuilderRequestAuth
+	// builders point into the runner's builders, resolved once at construction and never mutated.
+	builders []*gloas.ResolvedBuilderEntry
 }
 
 // runRequestAuthRound freezes one BuilderRequestAuth{data, proposal_slot} per configured builder,
@@ -69,18 +62,12 @@ func (r *proposerPreferencesSlotRunner) runRequestAuthRound(ctx context.Context,
 				fields.Slot(proposalSlot), zap.String("builder_url", entry.RedactedURL), zap.Error(err))
 			continue
 		}
-		ref := frozenBuilderRef{
-			identity:            entry.Identity,
-			url:                 entry.URL,
-			redactedURL:         entry.RedactedURL,
-			maxExecutionPayment: entry.MaxExecutionPayment,
-		}
 		if frozen, ok := r.requestAuths[root]; ok {
 			// Another entry froze these exact bytes; register the extra relationship on the shared root.
-			frozen.builders = append(frozen.builders, ref)
+			frozen.builders = append(frozen.builders, entry)
 			continue
 		}
-		r.requestAuths[root] = &frozenRequestAuth{auth: auth, builders: []frozenBuilderRef{ref}}
+		r.requestAuths[root] = &frozenRequestAuth{auth: auth, builders: []*gloas.ResolvedBuilderEntry{entry}}
 
 		if _, done := r.broadcastAuthRoots[root]; done {
 			continue // broadcast by a prior incarnation; stash replay and live partials finish its quorum
@@ -197,12 +184,12 @@ func (r *proposerPreferencesSlotRunner) reconstructRequestAuth(ctx context.Conte
 	r.reconstructedAuthRoots[root] = struct{}{}
 	signed := &gloas.SignedBuilderRequestAuth{Message: frozen.auth, Signature: signature}
 	urls := make([]string, 0, len(frozen.builders))
-	for _, ref := range frozen.builders {
-		urls = append(urls, ref.redactedURL)
+	for _, entry := range frozen.builders {
+		urls = append(urls, entry.RedactedURL)
 	}
 	if r.requestAuthCache != nil {
-		for _, ref := range frozen.builders {
-			r.requestAuthCache.Store(frozen.auth.Slot, ref.identity, signed)
+		for _, entry := range frozen.builders {
+			r.requestAuthCache.Store(frozen.auth.Slot, entry.Identity, signed)
 		}
 	}
 	r.submitBuilderPreferences(ctx, logger, signed, frozen.builders)
@@ -219,15 +206,15 @@ func (r *proposerPreferencesSlotRunner) reconstructRequestAuth(ctx context.Conte
 // disturbs the §5/auth flow, only its metric and log. The submit runs inline on the §5 message-queue
 // path; the wait is bounded by commonTimeout, per-validator, and epoch-ahead of the proposal, so it
 // stays off the critical path.
-func (r *proposerPreferencesSlotRunner) submitBuilderPreferences(ctx context.Context, logger *zap.Logger, signed *gloas.SignedBuilderRequestAuth, builders []frozenBuilderRef) {
+func (r *proposerPreferencesSlotRunner) submitBuilderPreferences(ctx context.Context, logger *zap.Logger, signed *gloas.SignedBuilderRequestAuth, builders []*gloas.ResolvedBuilderEntry) {
 	pubkey := phase0.BLSPubKey(r.GetShare().ValidatorPubKey)
 	entries := make([]*gloas.BuilderPreferencesEntry, 0, len(builders))
-	for _, ref := range builders {
+	for _, builder := range builders {
 		entries = append(entries, &gloas.BuilderPreferencesEntry{
 			ProposerPubKey:      pubkey,
-			URL:                 ref.url,
+			URL:                 builder.URL,
 			Auth:                signed,
-			MaxExecutionPayment: ref.maxExecutionPayment,
+			MaxExecutionPayment: builder.MaxExecutionPayment,
 		})
 	}
 	if err := r.beacon.SubmitBuilderPreferences(ctx, entries); err != nil {

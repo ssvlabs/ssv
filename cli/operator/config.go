@@ -185,10 +185,10 @@ func (c *config) resolveAndValidate(logger *zap.Logger) (resolved, error) {
 	}
 	for i := range c.Builders.Entries {
 		// Log the hostname only: builder URLs may carry credentials.
-		if host, ok := c.Builders.Entries[i].DefaultAuthDataOnLocalHost(); ok {
-			logger.Warn("builder entry omits AuthData but its URL host looks local: if it is a MEV-Boost or commit-boost sidecar, "+
-				"the hostname default matches no relay and the entry gets no bids, so set AuthData to the relay's identity (see docs/EXTERNAL_BUILDERS.md)",
-				zap.Int("builder_entry", i), zap.String("builder_host", host))
+		if host, ok := c.Builders.Entries[i].LocalHostWithoutAuthData(); ok {
+			logger.Warn("builder entry omits AuthData but its URL host looks local: a MEV-Boost or commit-boost sidecar "+
+				"needs AuthData set to the relay's identity, or the entry gets no bids (see docs/EXTERNAL_BUILDERS.md)",
+				zap.Int("builder_entry_index", i), zap.String("builder_host", host))
 		}
 	}
 

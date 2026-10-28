@@ -214,10 +214,10 @@ func Test_resolveAndValidate_proposerDelayEPBS(t *testing.T) {
 	})
 }
 
-// Test_resolveAndValidate_builderAuthDataOnLocalHost covers the advisory warning for a builder entry that
-// points at a local host (likely a MEV-Boost/commit-boost sidecar) without an explicit AuthData; the
-// detection itself is covered by gloas.TestBuilderEntry_DefaultAuthDataOnLocalHost.
-func Test_resolveAndValidate_builderAuthDataOnLocalHost(t *testing.T) {
+// Test_resolveAndValidate_builderLocalHostWithoutAuthData checks the startup warning for a builder entry on a
+// local host without AuthData (likely a sidecar); gloas.TestBuilderEntry_LocalHostWithoutAuthData covers the
+// detection.
+func Test_resolveAndValidate_builderLocalHostWithoutAuthData(t *testing.T) {
 	core, recorded := observer.New(zapcore.WarnLevel)
 	c := config{}
 	c.OperatorPrivateKey = testOperatorKey
@@ -230,11 +230,10 @@ func Test_resolveAndValidate_builderAuthDataOnLocalHost(t *testing.T) {
 	_, err := c.resolveAndValidate(zap.New(core))
 	require.NoError(t, err)
 
-	logs := recorded.All()
+	logs := recorded.FilterMessageSnippet("omits AuthData").All()
 	require.Len(t, logs, 1, "only the local entry without AuthData warns")
-	require.Contains(t, logs[0].Message, "omits AuthData")
 	fields := logs[0].ContextMap()
-	require.Equal(t, int64(1), fields["builder_entry"])
+	require.Equal(t, int64(1), fields["builder_entry_index"])
 	require.Equal(t, "mev-boost", fields["builder_host"], "only the hostname is logged, never the URL's credentials")
 }
 

@@ -72,14 +72,14 @@ OperatorPrivateKey:
 # Post-ePBS (Gloas) direct-builder connections — an opt-in overlay on top of the enshrined builder flow
 # (which needs no configuration and stays the fallback). The whole block MUST be configured identically
 # across ALL operators of every committee sharing a validator, except the URLs: AuthData (defaulting to the
-# URL's hostname, lowercased) is threshold-signed, so any divergence silently disables that builder, but
-# the URL isn't, so its hostname may differ per operator (e.g. each operator's own MEV-Boost or
-# commit-boost sidecar) if AuthData is set explicitly. At most 8 entries. Monetary values are Gwei. The
-# top-level MinBid/BuilderBoostFactor apply to p2p (gossiped) bids and, per keymanager-APIs#88, are the
-# default for any entry that omits its own. The bid-selection knobs are sent on the produceBlockV4 POST
-# and honored by beacon nodes that implement it (beacon-APIs#630); against an older node the request falls
-# back to GET, where only BuilderBoostFactor still applies (MinBid and the per-entry knobs are POST-only).
-# See docs/EXTERNAL_BUILDERS.md.
+# URL's hostname, lowercased) is threshold-signed, so any divergence silently disables that builder; the
+# URL isn't, so it may differ per operator (each pointing at its own sidecar, say), though differing
+# hostnames need AuthData set explicitly. At most 8 entries. Monetary values are Gwei. The top-level
+# MinBid/BuilderBoostFactor apply to p2p (gossiped) bids and, per keymanager-APIs#88, are the default for
+# any entry that omits its own. The bid-selection knobs are sent on the produceBlockV4 POST and honored by
+# beacon nodes that implement it (beacon-APIs#630); against an older node the request falls back to GET,
+# where only BuilderBoostFactor still applies (MinBid and the per-entry knobs are POST-only). See
+# docs/EXTERNAL_BUILDERS.md.
 # Builders:
 #   MinBid: 0                        # p2p-bid floor + default for entries below; 0 = no floor
 #   BuilderBoostFactor: 100          # p2p-bid multiplier % + default; 0 = always local, 100 = neutral

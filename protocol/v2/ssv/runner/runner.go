@@ -367,7 +367,7 @@ const (
 	dutyOutcomeFailed       dutyOutcome = "failed"        // terminated by a non-recoverable error
 	dutyOutcomeStuck        dutyOutcome = "stuck"         // not concluded before the end of the current wall-clock slot
 	dutyOutcomeNoQuorum     dutyOutcome = "no_quorum"     // reached the deadline having executed, but the signature quorum never formed
-	dutyOutcomeNotPublished dutyOutcome = "not_published" // pre-Gloas proposer: another operator's decided block, which this beacon node couldn't publish
+	dutyOutcomeNotPublished dutyOutcome = "not_published" // couldn't submit a decided pre-Gloas block another operator's beacon node produced (expected)
 )
 
 // dutyConclusion is handed by a marker (markDutySucceeded / markDutyNotRequired / markDutyFailed /
@@ -847,11 +847,10 @@ func (b *BaseRunner) markDutyFailed(reason error) {
 	b.concludeDuty(dutyOutcomeFailed, reason)
 }
 
-// markDutyNotPublished records that this operator couldn't submit a decided pre-Gloas block its own beacon node
-// didn't produce. That miss is expected: a beacon node can't unblind another operator's block, so publishing it is
-// left to the operators whose beacon nodes can. Like markDutyFailed it does NOT mark the duty succeeded, but it
-// reports its own outcome so that the expected miss stays out of "failed". A cancellation is dropped as in
-// markDutyFailed.
+// markDutyNotPublished records that this operator couldn't submit a decided pre-Gloas block another operator's
+// beacon node produced. That's expected, since only beacon nodes holding the payload can publish it, so it gets
+// its own outcome rather than "failed"; like a failure, it doesn't mark the duty succeeded. A cancellation is
+// dropped as in markDutyFailed.
 func (b *BaseRunner) markDutyNotPublished(reason error) {
 	if errors.Is(reason, context.Canceled) {
 		return

@@ -2,6 +2,7 @@ package runner
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"maps"
@@ -399,6 +400,25 @@ func TestProposerRunnerProcessPostConsensusLeaderFallsBackToDecidedBlindedBlockO
 	require.True(t, runner.State.Succeeded)
 }
 
+// blockRootField logs the same root for a block and its blinded form, and a root it can't compute as an error.
+func TestBlockRootField(t *testing.T) {
+	t.Parallel()
+
+	full := spectestingutils.TestingBeaconBlockV(spec.DataVersionDeneb)
+	blinded, _, err := blindutil.EnsureBlinded(full)
+	require.NoError(t, err)
+	root, err := full.Root()
+	require.NoError(t, err)
+
+	want := zap.String("block_root", hex.EncodeToString(root[:]))
+	require.Equal(t, want, blockRootField("block_root", full))
+	require.Equal(t, want, blockRootField("block_root", blinded))
+
+	field := blockRootField("block_root", &api.VersionedProposal{})
+	require.Equal(t, "block_root_err", field.Key)
+	require.Error(t, field.Interface.(error))
+}
+
 func TestProposerRunnerProcessPostConsensusNonLeaderKeepsDecidedBlindedBlock(t *testing.T) {
 	t.Parallel()
 
@@ -421,8 +441,9 @@ func TestProposerRunnerProcessPostConsensusNonLeaderKeepsDecidedBlindedBlock(t *
 	require.True(t, runner.State.Succeeded)
 }
 
-// Before Gloas, a beacon node can't unblind a block another operator's beacon node produced, so a failed submit of
-// one is expected: the duty concludes not_published rather than failed, and the message is handled without error.
+// Before Gloas, a failed submit of a block another operator's beacon node produced is expected (this beacon node
+// may lack its payload): the duty concludes not_published rather than failed, and the message is handled without
+// error.
 func TestProposerRunnerProcessPostConsensusSubmitFailureOfAnotherOperatorsBlockIsNotPublished(t *testing.T) {
 	t.Parallel()
 
@@ -445,8 +466,8 @@ func TestProposerRunnerProcessPostConsensusSubmitFailureOfAnotherOperatorsBlockI
 	requireConcluded(t, concluded, dutyOutcomeNotPublished)
 }
 
-// A failed submit of the decided block this operator's own beacon node produced stays a failure, whether that block
-// is full or blinded: this beacon node is one that can publish it.
+// A failed submit of this operator's own decided block, full or blinded, is still a failure: its beacon node holds
+// the payload.
 func TestProposerRunnerProcessPostConsensusSubmitFailureOfOwnBlockFailsDuty(t *testing.T) {
 	t.Parallel()
 

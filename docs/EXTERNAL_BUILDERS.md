@@ -83,14 +83,16 @@ knobs are POST-only.
 
 ### MEV-Boost and commit-boost after Gloas
 
-A sidecar is no longer needed. The beacon node contacts each configured builder itself over the
+A sidecar is no longer needed. The beacon node itself contacts each builder listed on the
 `produceBlockV4` POST and picks the winning bid, which was MEV-Boost's job before the fork. There is no
 blinded block to unblind, since the builder reveals the payload, and validator registrations give way to
 proposer preferences, which SSV signs and gossips on its own. Pointing `Entries` straight at the relays is
 the simplest setup.
 
 An operator who keeps a sidecar anyway (for its bid-timing features, say) needs a version that serves the
-Gloas builder-API endpoints, and configures it as follows:
+Gloas builder-API endpoints, and configures it as follows. These endpoints are merged in commit-boost but
+still in review for MEV-Boost ([flashbots/mev-boost#914](https://github.com/flashbots/mev-boost/pull/914)),
+so MEV-Boost's routing described below may still change before it ships.
 
 - **One entry per relay, each with `URL` set to the sidecar.** The sidecar doesn't fan a bid request out to
   its relays: it forwards each request to the one relay whose auth data it carries.
@@ -160,4 +162,4 @@ The operators of a cluster don't need the same builder setup: some may run MEV-B
 
 - Consensus isn't affected. The consensus value is always a blinded block, and its validation doesn't depend on where the block came from, so an operator whose beacon node has no builder accepts a builder block from the round leader.
 - The cluster decides on the block a round leader fetched: a builder block or a local block, whichever that leader's beacon node returned.
-- Some submissions are expected to fail, since a beacon node can publish a blinded block only if it can get the block's payload. A builder block fails on beacon nodes with no builder, or whose sidecar doesn't use the relay that served the bid. A local block can be published only by the operator whose beacon node built it. One successful submission is enough, so when the decided block came from another operator's beacon node, a failed submission is logged at debug level and the duty is reported as `not_published` in the `ssv.runner.duty.outcome` metric rather than `failed`. A failed submission of the operator's own block is still an error.
+- Some submissions are expected to fail, since a beacon node can publish a blinded block only if it can get the block's payload. A builder block fails on beacon nodes with no builder, or whose sidecar doesn't use the relay that served the bid. A local block can be published only by the operator whose beacon node built it. One successful submission is enough, so when the decided block came from another operator's beacon node, a failed submission is logged at info level and the duty is reported as `not_published` in the `ssv.runner.duty.outcome` metric rather than `failed`. A failed submission of the operator's own block is still an error.

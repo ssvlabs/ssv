@@ -61,7 +61,7 @@ func TestDefaultAuthData(t *testing.T) {
 
 // A URL on a local host with no AuthData is most likely a MEV-Boost/commit-boost sidecar, where the hostname
 // default matches no relay; the node warns on it at startup.
-func TestBuilderEntry_DefaultAuthDataOnLocalHost(t *testing.T) {
+func TestBuilderEntry_LocalHostWithoutAuthData(t *testing.T) {
 	for url, wantHost := range map[string]string{
 		"http://localhost:18550":            "localhost",
 		"http://LocalHost.:18550/":          "localhost",
@@ -80,7 +80,7 @@ func TestBuilderEntry_DefaultAuthDataOnLocalHost(t *testing.T) {
 		"http://[fe80::1]:18550":            "fe80::1",
 		"http://[::ffff:127.0.0.1]:18550":   "::ffff:127.0.0.1",
 	} {
-		host, ok := (&BuilderEntry{URL: url}).DefaultAuthDataOnLocalHost()
+		host, ok := (&BuilderEntry{URL: url}).LocalHostWithoutAuthData()
 		require.True(t, ok, url)
 		require.Equal(t, wantHost, host, url)
 	}
@@ -94,7 +94,7 @@ func TestBuilderEntry_DefaultAuthDataOnLocalHost(t *testing.T) {
 		{URL: "http://localhost:18550", AuthData: "0x" + hex.EncodeToString([]byte("relay.example.com"))},
 		{URL: "not a url at all"},
 	} {
-		host, ok := e.DefaultAuthDataOnLocalHost()
+		host, ok := e.LocalHostWithoutAuthData()
 		require.False(t, ok, e.URL)
 		require.Empty(t, host, e.URL)
 	}
