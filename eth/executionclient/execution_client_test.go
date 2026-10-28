@@ -986,6 +986,7 @@ func TestSubscribeFilterLogs(t *testing.T) {
 
 		// Wait for logs to be received
 		wg.Wait()
+		require.NoError(t, env.ctx.Err(), "timed out after receiving %d logs", len(receivedLogs))
 
 		// Verify logs were received
 		require.Equal(t, 3, len(receivedLogs))
