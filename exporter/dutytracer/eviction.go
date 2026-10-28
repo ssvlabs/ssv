@@ -87,11 +87,13 @@ func (c *Collector) dumpCommitteeToDBPeriodically(slot phase0.Slot) (totalSaved 
 		if len(duties) == 0 {
 			continue
 		}
-		if err := c.store.SaveCommitteeDuties(slot, role, duties); err != nil {
-			c.logger.Error("save committee duties to disk", zap.Error(err), fields.RunnerRole(role))
-			continue
+		// The traces are already out of memory, so count only what the store saved.
+		saved, err := c.store.SaveCommitteeDuties(slot, role, duties)
+		if err != nil {
+			c.logger.Error("couldn't save every committee duty to disk", zap.Error(err), fields.RunnerRole(role),
+				zap.Int("saved", saved), zap.Int("lost", len(duties)-saved))
 		}
-		totalSaved += len(duties)
+		totalSaved += saved
 	}
 
 	return totalSaved
@@ -122,12 +124,14 @@ func (c *Collector) dumpValidatorToDBPeriodically(slot phase0.Slot) (totalSaved 
 		return true
 	})
 
-	if err := c.store.SaveValidatorDuties(duties); err != nil {
-		c.logger.Error("couldn't save validator duties to disk", zap.Error(err))
-		return 0
+	// The traces are already out of memory, so count only what the store saved.
+	saved, err := c.store.SaveValidatorDuties(duties)
+	if err != nil {
+		c.logger.Error("couldn't save every validator duty to disk", zap.Error(err),
+			zap.Int("saved", saved), zap.Int("lost", len(duties)-saved))
 	}
 
-	return len(duties)
+	return saved
 }
 
 // pendingDetails constructs a single zap field named "pending_signers_by_root"

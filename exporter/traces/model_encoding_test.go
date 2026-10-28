@@ -48,6 +48,46 @@ func TestValidatorDutyTrace_MarshallSSZ(t *testing.T) {
 	require.NotNil(t, root)
 }
 
+// Pre and Post may exceed 13 entries: worst-case lists round-trip, and MaxPartialSigEntries is enforced on
+// encode.
+func TestValidatorDutyTrace_MarshallSSZ_WideLists(t *testing.T) {
+	wide := func(n int) []*PartialSigTrace {
+		out := make([]*PartialSigTrace, 0, n)
+		for i := 0; i < n; i++ {
+			ps := makePartialSigTrace()
+			ps.Signer = spectypes.OperatorID(i%13 + 1)
+			ps.BeaconRoot[0] = byte(i)
+			out = append(out, ps)
+		}
+		return out
+	}
+
+	trace := &ValidatorDutyTrace{
+		ConsensusTrace: ConsensusTrace{
+			Rounds:   []*RoundTrace{makeRoundTrace()},
+			Decideds: []*DecidedTrace{makeDecidedTrace()},
+		},
+		Slot:         123,
+		Role:         spectypes.BNRoleProposerPreferences,
+		Validator:    456,
+		ProposalData: []byte{1, 2, 3},
+		Pre:          wide(156),
+		Post:         wide(26),
+	}
+	encoded, err := trace.MarshalSSZ()
+	require.NoError(t, err)
+	decoded := &ValidatorDutyTrace{}
+	require.NoError(t, decoded.UnmarshalSSZ(encoded))
+	require.Equal(t, trace, decoded)
+	require.Equal(t, len(encoded), trace.SizeSSZ())
+	_, err = trace.HashTreeRoot()
+	require.NoError(t, err)
+
+	trace.Pre = wide(MaxPartialSigEntries + 1)
+	_, err = trace.MarshalSSZ()
+	require.Error(t, err)
+}
+
 func TestCommitteeDutyTrace_MarshallSSZ(t *testing.T) {
 	trace := &CommitteeDutyTrace{
 		ConsensusTrace: ConsensusTrace{

@@ -22,7 +22,7 @@ type ValidatorTracesRequest struct {
 	// To is the ending slot (inclusive).
 	To uint64 `json:"to" example:"123460" format:"int64" minimum:"0"`
 	// Roles is a comma-separated list of beacon roles to include.
-	Roles api.RoleSlice `json:"roles" swaggertype:"array,string" enums:"ATTESTER,AGGREGATOR,PROPOSER,SYNC_COMMITTEE,SYNC_COMMITTEE_CONTRIBUTION" binding:"required"`
+	Roles api.RoleSlice `json:"roles" swaggertype:"array,string" enums:"ATTESTER,AGGREGATOR,PROPOSER,SYNC_COMMITTEE,SYNC_COMMITTEE_CONTRIBUTION,PTC_ATTESTER,PROPOSER_PREFERENCES" binding:"required"`
 	// PubKeys is a comma-separated list of validator public keys (hex, 96 chars per key).
 	PubKeys api.HexSlice `json:"pubkeys" swaggertype:"array,string" format:"hex" minLength:"96" maxLength:"96" pattern:"^[0-9a-f]{96}$"`
 	// Indices is a comma-separated list of validator indices.
