@@ -63,7 +63,8 @@ func (i *ParticipantStorage) PruneContinuously(ctx context.Context, slotTickerPr
 			threshold := ticker.Slot() - retain - 1
 			count, err := i.removeSlotAt(threshold)
 			if err != nil {
-				i.logger.Error("remove slot at", zap.String("store", i.ID()), fields.Slot(threshold))
+				i.logger.Error("remove stale slot", zap.String("store", i.ID()), fields.Slot(threshold), zap.Error(err))
+				continue
 			}
 
 			i.logger.Debug("removed stale slots", zap.String("store", i.ID()), fields.Slot(threshold), zap.Int("count", count))
@@ -247,11 +248,7 @@ func (i *ParticipantStorage) getParticipants(txn basedb.ReadWriter, pk spectypes
 }
 
 func (i *ParticipantStorage) saveParticipants(txn basedb.ReadWriter, pk spectypes.ValidatorPK, slot phase0.Slot, operators []spectypes.OperatorID) error {
-	bytes, err := encodeOperators(operators)
-	if err != nil {
-		return fmt.Errorf("encode operators: %w", err)
-	}
-	if err := i.save(txn, bytes, pk[:], slotToByteSlice(slot)); err != nil {
+	if err := i.save(txn, encodeOperators(operators), pk[:], slotToByteSlice(slot)); err != nil {
 		return fmt.Errorf("save to DB: %w", err)
 	}
 
@@ -304,13 +301,13 @@ func slotToByteSlice(v phase0.Slot) []byte {
 	return b
 }
 
-func encodeOperators(operators []spectypes.OperatorID) ([]byte, error) {
+func encodeOperators(operators []spectypes.OperatorID) []byte {
 	encoded := make([]byte, len(operators)*8)
 	for i, v := range operators {
 		binary.BigEndian.PutUint64(encoded[i*8:], v)
 	}
 
-	return encoded, nil
+	return encoded
 }
 
 func decodeOperators(encoded []byte) []spectypes.OperatorID {
