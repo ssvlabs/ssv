@@ -42,6 +42,8 @@ byte-identical `data`:
   be given in punycode, and a URL with an IPv6 zone needs an explicit `AuthData`. Entries whose URLs share a
   hostname share the default, and so one signed auth; builders that need distinct identities on one host
   agree an explicit `AuthData` instead.
+- The `URL` itself isn't signed, so it may differ per operator: each one can point at its own sidecar (see
+  [MEV-Boost and commit-boost after Gloas](#mev-boost-and-commit-boost-after-gloas)).
 - The unsigned knobs (`MinBid`, `BuilderBoostFactor`, `MaxExecutionPayment`) don't affect signing, but
   divergence makes the cluster's effective bid policy depend on which operator leads the round — keep them
   identical too. They are sent on the `produceBlockV4` POST and honored by beacon nodes that implement it
@@ -78,22 +80,68 @@ beacon node that predates the #630 POST answers it with 404/405; the node falls 
 that node, still carrying `BuilderBoostFactor` (the one knob that GET honors) — `MinBid` and the per-entry
 knobs are POST-only.
 
-## How to use
+### MEV-Boost and commit-boost after Gloas
+
+A sidecar is no longer needed. The beacon node contacts each configured builder itself over the
+`produceBlockV4` POST and picks the winning bid, which was MEV-Boost's job before the fork. There is no
+blinded block to unblind, since the builder reveals the payload, and validator registrations give way to
+proposer preferences, which SSV signs and gossips on its own. Pointing `Entries` straight at the relays is
+the simplest setup.
+
+An operator who keeps a sidecar anyway (for its bid-timing features, say) needs a version that serves the
+Gloas builder-API endpoints, and configures it as follows:
+
+- **One entry per relay, each with `URL` set to the sidecar.** The sidecar doesn't fan a bid request out to
+  its relays: it forwards each request to the one relay whose auth data it carries.
+- **`AuthData` set explicitly on every entry**, to the relay's identity: the 0x-hex of the relay's
+  hostname, unless the relay agreed a different value. Omitted, it defaults to the sidecar's own hostname
+  (`localhost`, `mev-boost`), which matches no relay, so the sidecar rejects every request and the entry
+  silently gets no bids. The node warns at startup about any entry that omits `AuthData` while its URL host
+  looks local: a loopback, private or link-local IP, `localhost`, a single-label name such as a Docker
+  service name, or a `.localhost`, `.local` or `.internal` name.
+
+```yaml
+Builders:
+  Entries:
+    - URL: "http://mev-boost:18550"
+      AuthData: "0x72656c61792d612e6578616d706c652e636f6d" # hex of "relay-a.example.com"
+    - URL: "http://mev-boost:18550"
+      AuthData: "0x72656c61792d622e6578616d706c652e636f6d" # hex of "relay-b.example.com"
+```
+
+To get the hex of a relay's hostname:
+
+```bash
+printf '0x%s\n' "$(printf '%s' relay-a.example.com | od -An -tx1 | tr -d ' \n')"
+```
+
+Clusters can mix the two setups. Only `AuthData` and the slot are signed, not the URL, so an operator
+pointing at `https://relay-a.example.com` directly and another pointing at its own sidecar with `AuthData`
+set to the hex of `relay-a.example.com` sign the same bytes, and their partial signatures combine. Either
+way, each relay takes one of the at most 8 entries.
+
+## Before Gloas: MEV-Boost/commit-boost and relays
+
+> Everything below applies only until the Gloas fork. From the fork on, SSV proposes over `produceBlockV4`
+> instead of blinded blocks, stops submitting validator registrations, and needs no MEV-Boost or
+> commit-boost sidecar (see [MEV-Boost and commit-boost after Gloas](#mev-boost-and-commit-boost-after-gloas)).
+
+### How to use
 
 1. Configure your beacon node to use an external builder
    - Lighthouse: https://lighthouse-book.sigmaprime.io/builders.html
    - Prysm: https://docs.prylabs.network/docs/prysm-usage/parameters
 2. Beacon node will automatically provide blinded blocks to SSV node when it's possible
 
-## How it works
+### How it works
 
-### Blinded beacon block proposals 
+#### Blinded beacon block proposals 
 
 If builder proposals are enabled, 
 the SSV node attempts to get/submit blinded beacon block proposals (`/eth/v1/beacon/blinded_blocks`) to beacon node
 instead of regular ones (`/eth/v1/beacon/blocks`). 
 
-### Validator registrations
+#### Validator registrations
 
 If builder proposals are enabled, the SSV node regularly submits validator registrations according to the following logic:
 
@@ -101,13 +149,13 @@ If builder proposals are enabled, the SSV node regularly submits validator regis
 - The first registration after the SSV node start is an exception to the rule above to avoid waiting up to 10 epochs: All validator registrations are submitted within 32 slots after the node start according to the validator index.
 - Registration collector submits queued validator registrations to beacon node once per epoch. The slot index within an epoch is different for each operator and is calculated based on operator ID to reduce beacon node load. The maximal amount of registrations in one request is 500. If the queue contains more than that, all queued registrations are submitted by chunks of 500 registrations without a delay. 
 
-## Known issues
+### Known issues
 
 - Builder proposals don't work with Prysm as it returns `400 Unsupported block type` when requesting a blinded block.
 
-## Edge cases outcomes
+### Edge cases outcomes
 
-### Scenario 1. 4 operators, 4 BNs, 4 MEVs, MEV1&2 use relay-1, MEV3&4 use relay-2
+#### Scenario 1. 4 operators, 4 BNs, 4 MEVs, MEV1&2 use relay-1, MEV3&4 use relay-2
 
 - Blinded block header received from MEV, local block is more profitable
 
@@ -126,7 +174,7 @@ The first submitter using the same relay, whether or not it's the round reader, 
 The first submitter using the same relay, whether or not it's the round reader, successfully submits the block, it's shown as MEV on beaconchain. Others fail to submit the block due to "no successful relay response"
 
 
-### Scenario 2. 4 operators, 4 BNs, 4 MEVs using 3 shared relays
+#### Scenario 2. 4 operators, 4 BNs, 4 MEVs using 3 shared relays
 
 - Blinded block header received from MEV, local block is more profitable	
 
@@ -144,7 +192,7 @@ The first submitter, whether or not it's the round reader, successfully submits 
 
 The first submitter, whether or not it's the round reader, successfully submits the block, it's shown as MEV on beaconchain, others fail to submit the block due to "no successful relay response"
 
-### Scenario 3. 4 operators, 2 have MEV on, 2 have MEV off
+#### Scenario 3. 4 operators, 2 have MEV on, 2 have MEV off
 
 - Round leader has MEV on
 

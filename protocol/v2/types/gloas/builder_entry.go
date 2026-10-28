@@ -3,6 +3,7 @@ package gloas
 import (
 	"encoding/hex"
 	"fmt"
+	"net/netip"
 	"net/url"
 	"strings"
 
@@ -139,6 +140,38 @@ func DefaultAuthData(rawURL string) ([]byte, error) {
 		return nil, fmt.Errorf("no default auth data for URL %q: use an ASCII hostname (punycode for an internationalized one) without an IPv6 zone, or set AuthData", rawURL)
 	}
 	return data, nil
+}
+
+// DefaultAuthDataOnLocalHost returns the URL's hostname and true when the entry omits AuthData and that
+// hostname looks local (see isLocalHost). Such a URL almost always points at a sidecar like MEV-Boost or
+// commit-boost, which routes each request to a relay by the auth data it carries: the hostname default
+// then signs the sidecar's own name, which matches no relay, so the entry gets no builder-API bids. It
+// can misfire on a builder genuinely reached over a private network, so the node only warns on it.
+func (e *BuilderEntry) DefaultAuthDataOnLocalHost() (string, bool) {
+	if e.AuthData != "" {
+		return "", false
+	}
+	u, err := url.Parse(e.URL)
+	if err != nil {
+		return "", false
+	}
+	host := strings.TrimSuffix(strings.ToLower(u.Hostname()), ".")
+	if host == "" || !isLocalHost(host) {
+		return "", false
+	}
+	return host, true
+}
+
+// isLocalHost reports whether host (lowercased, without a trailing dot) is a loopback, private (IPv6
+// unique-local included), link-local or unspecified IP, or a name that only resolves locally: a
+// single-label name (localhost, or a Docker service name such as mev-boost) or a .localhost, .local or
+// .internal name.
+func isLocalHost(host string) bool {
+	if addr, err := netip.ParseAddr(host); err == nil {
+		return addr.IsLoopback() || addr.IsPrivate() || addr.IsLinkLocalUnicast() || addr.IsUnspecified()
+	}
+	return !strings.Contains(host, ".") ||
+		strings.HasSuffix(host, ".localhost") || strings.HasSuffix(host, ".local") || strings.HasSuffix(host, ".internal")
 }
 
 // EffectiveMinBid resolves this entry's MinBid, inheriting the config default (keymanager-APIs#88)

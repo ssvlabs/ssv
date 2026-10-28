@@ -183,6 +183,14 @@ func (c *config) resolveAndValidate(logger *zap.Logger) (resolved, error) {
 	if err := gloas.ValidateBuilderConfig(c.Builders); err != nil {
 		return resolved{}, fmt.Errorf("invalid Builders configuration: %w", err)
 	}
+	for i := range c.Builders.Entries {
+		// Log the hostname only: builder URLs may carry credentials.
+		if host, ok := c.Builders.Entries[i].DefaultAuthDataOnLocalHost(); ok {
+			logger.Warn("builder entry omits AuthData but its URL host looks local: if it is a MEV-Boost or commit-boost sidecar, "+
+				"the hostname default matches no relay and the entry gets no bids, so set AuthData to the relay's identity (see docs/EXTERNAL_BUILDERS.md)",
+				zap.Int("builder_entry", i), zap.String("builder_host", host))
+		}
+	}
 
 	// Resolve the operating mode last so a doubly-misconfigured node still surfaces the signing
 	// or proposer-delay error first.

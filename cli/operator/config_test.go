@@ -18,6 +18,7 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
+	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
@@ -211,6 +212,30 @@ func Test_resolveAndValidate_proposerDelayEPBS(t *testing.T) {
 		_, err := c.resolveAndValidate(zap.NewNop())
 		require.NoError(t, err)
 	})
+}
+
+// Test_resolveAndValidate_builderAuthDataOnLocalHost covers the advisory warning for a builder entry that
+// points at a local host (likely a MEV-Boost/commit-boost sidecar) without an explicit AuthData; the
+// detection itself is covered by gloas.TestBuilderEntry_DefaultAuthDataOnLocalHost.
+func Test_resolveAndValidate_builderAuthDataOnLocalHost(t *testing.T) {
+	core, recorded := observer.New(zapcore.WarnLevel)
+	c := config{}
+	c.OperatorPrivateKey = testOperatorKey
+	c.Builders.Entries = []gloas.BuilderEntry{
+		{URL: "https://relay.example.com"},
+		{URL: "http://user:secret@mev-boost:18550"},
+		{URL: "http://localhost:18550", AuthData: "0x72656c61792e6578616d706c652e636f6d"}, // hex("relay.example.com")
+	}
+
+	_, err := c.resolveAndValidate(zap.New(core))
+	require.NoError(t, err)
+
+	logs := recorded.All()
+	require.Len(t, logs, 1, "only the local entry without AuthData warns")
+	require.Contains(t, logs[0].Message, "omits AuthData")
+	fields := logs[0].ContextMap()
+	require.Equal(t, int64(1), fields["builder_entry"])
+	require.Equal(t, "mev-boost", fields["builder_host"], "only the hostname is logged, never the URL's credentials")
 }
 
 // Test_resolveAndValidate_signingErrorContext verifies resolveAndValidate enriches a signing
