@@ -6,26 +6,23 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 )
 
-const (
-	// MaxPartialSigEntries bounds ValidatorDutyTrace.Pre and .Post. The checks below fail the build when a
-	// worst case message validation admits on the largest committee exceeds it, rather than leaving traces
-	// that can't be encoded at eviction. The preferences budgets are validation's own constants; maxSigners
-	// and the contribution packet size mirror validation's maxSignatures by value.
-	MaxPartialSigEntries = 256
-	// maxSigners is the largest committee.
-	maxSigners = 13
-)
+// MaxPartialSigEntries bounds ValidatorDutyTrace.Pre and .Post. The checks below fail the build if message
+// validation admits more entries than that, rather than leaving traces that can't be encoded at eviction.
+// They use the constants validation enforces, so raising one is checked against this bound.
+const MaxPartialSigEntries = 256
 
 var (
 	// Proposer preferences: the distinct preference and request-auth roots validation admits per signer,
 	// each recorded once by the collector. This holds per committee: a reshare inside the lookahead resets
 	// validation's budgets but not the trace, which could then exceed the bound and be skipped at eviction.
-	_ [MaxPartialSigEntries - maxSigners*(gloas.MaxProposerPreferencesDistinctRoots+gloas.MaxRequestAuthDistinctRoots)]struct{}
-	// Sync-committee contribution: one packet per signer and type, of up to maxSigners entries.
-	_ [MaxPartialSigEntries - maxSigners*maxSigners]struct{}
+	_ [MaxPartialSigEntries - ssvtypes.MaxCommitteeSize*(gloas.MaxProposerPreferencesDistinctRoots+gloas.MaxRequestAuthDistinctRoots)]struct{}
+	// Sync-committee contribution: per signer and type, one packet of up to MaxCommitteeSize entries
+	// (validation's maxSignatures).
+	_ [MaxPartialSigEntries - ssvtypes.MaxCommitteeSize*ssvtypes.MaxCommitteeSize]struct{}
 )
 
 // NOTE: model_encoding.go is HAND-MAINTAINED — `go generate` cannot regenerate it.
@@ -47,7 +44,7 @@ type ValidatorDutyTrace struct {
 
 	// Pre and Post hold one entry per signing root per signer, up to MaxPartialSigEntries: a packet may
 	// carry several roots, and a signer may re-emit under new ones. Lists over 13 entries need store format
-	// 2 (store.FormatVersion).
+	// 2 or later (see store.FormatVersion).
 	Pre  []*PartialSigTrace `ssz-max:"256"`
 	Post []*PartialSigTrace `ssz-max:"256"`
 }

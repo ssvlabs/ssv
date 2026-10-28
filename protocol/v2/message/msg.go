@@ -2,6 +2,8 @@ package message
 
 import (
 	"fmt"
+	"maps"
+	"slices"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -55,30 +57,33 @@ func QBFTMsgTypeToString(mt specqbft.MessageType) string {
 	}
 }
 
-// BeaconRoleFromString returns BeaconRole from string
+// beaconRoleByName holds the beacon roles the API accepts, keyed by API name. BeaconRoleFromString and
+// BeaconRoles both read it.
+var beaconRoleByName = map[string]spectypes.BeaconRole{
+	roleAttester:                  spectypes.BNRoleAttester,
+	roleAggregator:                spectypes.BNRoleAggregator,
+	roleProposer:                  spectypes.BNRoleProposer,
+	roleSyncCommittee:             spectypes.BNRoleSyncCommittee,
+	roleSyncCommitteeContribution: spectypes.BNRoleSyncCommitteeContribution,
+	roleValidatorRegistration:     spectypes.BNRoleValidatorRegistration,
+	roleVoluntaryExit:             spectypes.BNRoleVoluntaryExit,
+	rolePTCAttester:               spectypes.BNRolePTCAttester,
+	roleProposerPreferences:       spectypes.BNRoleProposerPreferences,
+}
+
+// BeaconRoleFromString parses a beacon role from its API name.
 func BeaconRoleFromString(s string) (spectypes.BeaconRole, error) {
-	switch s {
-	case roleAttester:
-		return spectypes.BNRoleAttester, nil
-	case roleAggregator:
-		return spectypes.BNRoleAggregator, nil
-	case roleProposer:
-		return spectypes.BNRoleProposer, nil
-	case roleSyncCommittee:
-		return spectypes.BNRoleSyncCommittee, nil
-	case roleSyncCommitteeContribution:
-		return spectypes.BNRoleSyncCommitteeContribution, nil
-	case roleValidatorRegistration:
-		return spectypes.BNRoleValidatorRegistration, nil
-	case roleVoluntaryExit:
-		return spectypes.BNRoleVoluntaryExit, nil
-	case rolePTCAttester:
-		return spectypes.BNRolePTCAttester, nil
-	case roleProposerPreferences:
-		return spectypes.BNRoleProposerPreferences, nil
-	default:
+	role, ok := beaconRoleByName[s]
+	if !ok {
 		return 0, fmt.Errorf("unknown role: %s", s)
 	}
+	return role, nil
+}
+
+// BeaconRoles returns the roles BeaconRoleFromString parses, sorted. The node creates a participant store for
+// each (cli/operator/node.go), so every role the API accepts has one.
+func BeaconRoles() []spectypes.BeaconRole {
+	return slices.Sorted(maps.Values(beaconRoleByName))
 }
 
 // Partial-signature message type names for the API's `type` field. A type that belongs to one duty is named

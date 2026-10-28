@@ -46,6 +46,7 @@ import (
 	"github.com/ssvlabs/ssv/operator/validator/metadata"
 	"github.com/ssvlabs/ssv/operator/validators"
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	"github.com/ssvlabs/ssv/protocol/v2/message"
 	qbftcontroller "github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
@@ -356,21 +357,9 @@ func newNode(
 		decidedStreamPublisherFn = decided.NewDecidedListener(logger, networkConfig, ws, nodeStorage.ValidatorStore())
 	}
 
-	storageRoles := []spectypes.BeaconRole{
-		spectypes.BNRoleAttester,
-		spectypes.BNRoleProposer,
-		spectypes.BNRoleSyncCommittee,
-		spectypes.BNRoleAggregator,
-		spectypes.BNRoleSyncCommitteeContribution,
-		spectypes.BNRoleValidatorRegistration,
-		spectypes.BNRoleVoluntaryExit,
-		spectypes.BNRolePTCAttester,
-		spectypes.BNRoleProposerPreferences,
-	}
-
 	storageMap := ibftstorage.NewStores()
 
-	for _, storageRole := range storageRoles {
+	for _, storageRole := range message.BeaconRoles() {
 		s := ibftstorage.New(logger, db, storageRole)
 		storageMap.Add(storageRole, s)
 	}

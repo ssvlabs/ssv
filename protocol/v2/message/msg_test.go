@@ -43,6 +43,15 @@ func TestBeaconRoleFromString(t *testing.T) {
 	}
 }
 
+// The API writes a role as its spec name (api.Role), so each role it accepts parses back from that name.
+func TestBeaconRoles_ParseFromSpecName(t *testing.T) {
+	for _, role := range BeaconRoles() {
+		parsed, err := BeaconRoleFromString(role.String())
+		require.NoError(t, err)
+		assert.Equal(t, role, parsed)
+	}
+}
+
 // Every partial-signature type the node handles has a name, so API consumers never see a number.
 func TestPartialSigMsgTypeToString(t *testing.T) {
 	names := map[spectypes.PartialSigMsgType]string{

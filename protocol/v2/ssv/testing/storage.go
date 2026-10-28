@@ -9,6 +9,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	qbftstorage "github.com/ssvlabs/ssv/ibft/storage"
+	"github.com/ssvlabs/ssv/protocol/v2/message"
 	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
@@ -29,16 +30,6 @@ func getDB(logger *zap.Logger) basedb.Database {
 	return db
 }
 
-var allRoles = []spectypes.BeaconRole{
-	spectypes.BNRoleAttester,
-	spectypes.BNRoleAggregator,
-	spectypes.BNRoleProposer,
-	spectypes.BNRoleSyncCommitteeContribution,
-	spectypes.BNRoleSyncCommittee,
-	spectypes.BNRoleValidatorRegistration,
-	spectypes.BNRoleVoluntaryExit,
-}
-
 func newStoresFromRoles(logger *zap.Logger, db basedb.Database, roles ...spectypes.BeaconRole) *qbftstorage.ParticipantStores {
 	stores := qbftstorage.NewStores()
 	for _, role := range roles {
@@ -48,5 +39,5 @@ func newStoresFromRoles(logger *zap.Logger, db basedb.Database, roles ...spectyp
 }
 
 func testingStores(logger *zap.Logger) *qbftstorage.ParticipantStores {
-	return newStoresFromRoles(logger, getDB(logger), allRoles...)
+	return newStoresFromRoles(logger, getDB(logger), message.BeaconRoles()...)
 }
