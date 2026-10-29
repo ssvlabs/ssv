@@ -306,7 +306,7 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 // registrationsRetired reports whether receivedAt is past the Gloas fork epoch, from which no validator
 // registration is accepted. The fork epoch itself still admits those in flight from the last pre-fork slots.
 func (mv *messageValidator) registrationsRetired(receivedAt time.Time) bool {
-	epoch := mv.netCfg.EstimatedEpochAtSlot(mv.netCfg.EstimatedSlotAtTime(receivedAt))
+	epoch := mv.netCfg.EstimatedEpochAtTime(receivedAt)
 	return epoch > 0 && mv.netCfg.IsGloas(epoch-1)
 }
 
