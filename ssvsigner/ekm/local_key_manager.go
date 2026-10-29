@@ -58,9 +58,11 @@ type LocalKeyManager struct {
 	slashingProtector slashingProtector
 	beaconConfig      BeaconNetwork
 
-	// blockProposalLock serializes the manual slashing check→record→sign for Gloas blocks, which can't go
-	// through the lib's atomic SignBeaconBlock (see signBeaconObject's Gloas case). walletLock is only
-	// RLocked during signing, so without this two concurrent same-validator block signs could both pass.
+	// blockProposalLock is held for the whole DomainProposer case of signBeaconObject, across every block
+	// type. The pre-Gloas arms serialize check→record→sign inside eth2-key-manager's per-account lock and
+	// the Gloas arm does it by hand (the lib's SignBeaconBlock has no Gloas arm); those two locks don't
+	// exclude each other, and walletLock is only RLocked during signing, so without one common lock a
+	// Gloas-typed and a pre-Gloas-typed block for the same share and slot could both pass the check.
 	blockProposalLock sync.Mutex
 }
 
@@ -144,6 +146,10 @@ func (km *LocalKeyManager) signBeaconObject(
 	pubKey phase0.BLSPubKey,
 	signatureDomain phase0.DomainType,
 ) (spectypes.Signature, []byte, error) {
+	if err := checkDomainType(domain, signatureDomain); err != nil {
+		return nil, nil, err
+	}
+
 	km.walletLock.RLock()
 	defer km.walletLock.RUnlock()
 
@@ -155,6 +161,12 @@ func (km *LocalKeyManager) signBeaconObject(
 		}
 		return km.signer.SignBeaconAttestation(data, domain, pubKey[:])
 	case spectypes.DomainProposer:
+		// One lock for every block type: the pre-Gloas arms serialize check→record→sign inside
+		// eth2-key-manager's own per-account lock, the Gloas arm does it here, and without a common lock
+		// a Gloas-typed and a pre-Gloas-typed block for the same share and slot could both pass the check.
+		km.blockProposalLock.Lock()
+		defer km.blockProposalLock.Unlock()
+
 		switch v := obj.(type) {
 		case *capella.BeaconBlock:
 			vBlock := &spec.VersionedBeaconBlock{
@@ -203,14 +215,13 @@ func (km *LocalKeyManager) signBeaconObject(
 			// replicate it here. A block proposal is slashable but signSSZRoot doesn't protect it, so check +
 			// record the highest proposal, then sign. Key it to the block's own slot (what we sign), not the
 			// plumbed duty slot, so the slashing DB reflects the signed content — and guard the far-future
-			// bound here, since the plumbed slot no longer does. blockProposalLock makes check→record→sign
-			// atomic (walletLock is only RLocked). Mirrors the remote handleDomainProposer.
+			// bound here, since the plumbed slot no longer does. blockProposalLock (held for the whole
+			// proposer case) makes check→record→sign atomic (walletLock is only RLocked). Mirrors the
+			// remote handleDomainProposer.
 			blockSlot := v.Slot
 			if !signer.IsValidFarFutureSlot(km.beaconConfig, blockSlot) {
 				return nil, nil, fmt.Errorf("proposed block slot too far into the future")
 			}
-			km.blockProposalLock.Lock()
-			defer km.blockProposalLock.Unlock()
 			if err := km.slashingProtector.IsBeaconBlockSlashable(pubKey, blockSlot); err != nil {
 				return nil, nil, err
 			}
@@ -302,7 +313,13 @@ func (km *LocalKeyManager) IsBeaconBlockSlashable(pubKey phase0.BLSPubKey, slot 
 	return km.slashingProtector.IsBeaconBlockSlashable(pubKey, slot)
 }
 
+// BumpSlashingProtection raises the share's slashing records to the current slot/epoch. It takes
+// walletLock exclusively so the read-compare-write cannot interleave with a signing of the same
+// share (signing holds walletLock shared for its whole check→record→sign).
 func (km *LocalKeyManager) BumpSlashingProtection(txn ReadWriteTxn, pubKey phase0.BLSPubKey) error {
+	km.walletLock.Lock()
+	defer km.walletLock.Unlock()
+
 	return km.slashingProtector.BumpSlashingProtectionTxn(txn, pubKey)
 }
 
@@ -370,19 +387,11 @@ func (km *LocalKeyManager) AddShare(
 	return nil
 }
 
-// RemoveShare removes the share from the local wallet, clears the associated
-// slashing-protection records (highest attestation/proposal) for the given
-// public key, and returns an error on any storage issue.
-func (km *LocalKeyManager) RemoveShare(_ context.Context, txn ReadWriteTxn, pubKey phase0.BLSPubKey) error {
+// RemoveShare removes the share from the local wallet and returns an error on any storage issue.
+// The share's slashing-protection records are kept on purpose (see KeyManager.RemoveShare).
+func (km *LocalKeyManager) RemoveShare(_ context.Context, _ ReadWriteTxn, pubKey phase0.BLSPubKey) error {
 	km.walletLock.Lock()
 	defer km.walletLock.Unlock()
-
-	if err := km.slashingProtector.RemoveHighestAttestationTxn(txn, pubKey); err != nil {
-		return fmt.Errorf("could not remove highest attestation: %w", err)
-	}
-	if err := km.slashingProtector.RemoveHighestProposalTxn(txn, pubKey); err != nil {
-		return fmt.Errorf("could not remove highest proposal: %w", err)
-	}
 
 	pubKeyHex := hex.EncodeToString(pubKey[:]) // pubKey.String() would add the "0x" prefix so we cannot use it
 	acc, err := km.wallet.AccountByPublicKey(pubKeyHex)

@@ -149,13 +149,3 @@ func (m *MockSlashingProtector) BumpSlashingProtectionTxn(txn ReadWriteTxn, pubK
 	args := m.Called(txn, pubKey)
 	return args.Error(0)
 }
-
-func (m *MockSlashingProtector) RemoveHighestAttestationTxn(txn ReadWriteTxn, pubKey phase0.BLSPubKey) error {
-	args := m.Called(txn, pubKey)
-	return args.Error(0)
-}
-
-func (m *MockSlashingProtector) RemoveHighestProposalTxn(txn ReadWriteTxn, pubKey phase0.BLSPubKey) error {
-	args := m.Called(txn, pubKey)
-	return args.Error(0)
-}

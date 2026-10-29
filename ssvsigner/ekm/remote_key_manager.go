@@ -137,10 +137,10 @@ func (km *RemoteKeyManager) AddShare(
 	return nil
 }
 
-// RemoveShare unregisters a validator share with the remote service and removes
-// its highest attestation/proposal data locally. If the remote or local operations
-// fail, returns an error.
-func (km *RemoteKeyManager) RemoveShare(ctx context.Context, txn ReadWriteTxn, pubKey phase0.BLSPubKey) error {
+// RemoveShare unregisters a validator share with the remote service. If the remote operation
+// fails, returns an error. The share's local slashing-protection records are kept on purpose
+// (see KeyManager.RemoveShare).
+func (km *RemoteKeyManager) RemoveShare(ctx context.Context, _ ReadWriteTxn, pubKey phase0.BLSPubKey) error {
 	// Similarly to addition, if txn gets rolled back after share is removed,
 	// there will be some inconsistency between syncer state and remote signer.
 	// After restart, it will attempt to delete the same share again, which won't be an issue
@@ -167,14 +167,6 @@ func (km *RemoteKeyManager) RemoveShare(ctx context.Context, txn ReadWriteTxn, p
 		default:
 			return fmt.Errorf("unexpected status %s", status)
 		}
-	}
-
-	if err := km.removeHighestAttestation(txn, pubKey); err != nil {
-		return fmt.Errorf("could not remove highest attestation: %w", err)
-	}
-
-	if err := km.removeHighestProposal(txn, pubKey); err != nil {
-		return fmt.Errorf("could not remove highest proposal: %w", err)
 	}
 
 	return nil
@@ -208,22 +200,6 @@ func (km *RemoteKeyManager) BumpSlashingProtection(txn ReadWriteTxn, pubKey phas
 	return km.slashingProtector.BumpSlashingProtectionTxn(txn, pubKey)
 }
 
-func (km *RemoteKeyManager) removeHighestAttestation(txn ReadWriteTxn, pubKey phase0.BLSPubKey) error {
-	attLock := km.lock(pubKey, lockAttestation)
-	attLock.Lock()
-	defer attLock.Unlock()
-
-	return km.slashingProtector.RemoveHighestAttestationTxn(txn, pubKey)
-}
-
-func (km *RemoteKeyManager) removeHighestProposal(txn ReadWriteTxn, pubKey phase0.BLSPubKey) error {
-	propLock := km.lock(pubKey, lockProposal)
-	propLock.Lock()
-	defer propLock.Unlock()
-
-	return km.slashingProtector.RemoveHighestProposalTxn(txn, pubKey)
-}
-
 // SignBeaconObject checks slashing conditions locally for attestation and beacon block,
 // then constructs a SignRequest for the remote signerClient. If slashable, returns an error immediately.
 // Otherwise, forwards to the remote service. It returns signature as well as the computed signing root.
@@ -255,6 +231,12 @@ func (km *RemoteKeyManager) prepareSignRequest(
 	slot phase0.Slot,
 	signatureDomain phase0.DomainType,
 ) (web3signer.SignRequest, phase0.Root, error) {
+	// The request type (and so the remote slashing check) is picked by signatureDomain while the
+	// signing root is computed under domain; refuse a pair that disagrees.
+	if err := checkDomainType(domain, signatureDomain); err != nil {
+		return web3signer.SignRequest{}, phase0.Root{}, err
+	}
+
 	epoch := km.beaconConfig.EstimatedEpochAtSlot(slot)
 
 	req := web3signer.SignRequest{

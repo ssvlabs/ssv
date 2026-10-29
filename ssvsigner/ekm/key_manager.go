@@ -1,7 +1,9 @@
 package ekm
 
 import (
+	"bytes"
 	"context"
+	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -12,6 +14,12 @@ import (
 // and slashingProtector (for slashing checks and updates).
 type KeyManager interface {
 	BeaconSigner
+
+	// BumpSlashingProtection raises the share's slashing protection records (attestation and
+	// proposal) to the minimal safe values for the current slot/epoch, if they are missing or below
+	// them. The records are written immediately, under the key manager's signing lock, and never
+	// through txn, whose commit lands after the lock is released.
+	// A rolled-back txn is harmless because a bump only ever raises a record.
 	BumpSlashingProtection(txn ReadWriteTxn, pubKey phase0.BLSPubKey) error
 
 	// AddShare registers a validator share (public and encrypted private key) with the key manager.
@@ -26,10 +34,10 @@ type KeyManager interface {
 	// as a skippable malformed event; otherwise the failure is fatal and crash-loops registry sync.
 	AddShare(ctx context.Context, txn ReadWriteTxn, encryptedPrivKey []byte, pubKey phase0.BLSPubKey) error
 
-	// RemoveShare unregisters a validator share from the key manager and deletes its associated
-	// slashing protection records (attestation and proposal) from the store.
-	// Implementations are expected to perform this cleanup to prevent stale protection data
-	// from persisting after the validator is no longer active, and to support safe re-adding later.
+	// RemoveShare unregisters a validator share from the key manager. The share's slashing
+	// protection records are kept: they are tiny, and keeping them means a later re-add of the same
+	// share (the same keyshares re-registered, e.g. after a DKG resign) can never start below what
+	// this node already signed.
 	RemoveShare(ctx context.Context, txn ReadWriteTxn, pubKey phase0.BLSPubKey) error
 }
 
@@ -53,4 +61,16 @@ type BeaconSigner interface {
 	IsAttestationSlashable(pubKey phase0.BLSPubKey, attData *phase0.AttestationData) error
 	// IsBeaconBlockSlashable returns error if the given block is slashable
 	IsBeaconBlockSlashable(pubKey phase0.BLSPubKey, slot phase0.Slot) error
+}
+
+// checkDomainType refuses a (domain, signatureDomain) pair that disagrees. Slashing protection is
+// dispatched on signatureDomain, but the signature is made under domain, whose first four bytes are
+// its DomainType (compute_domain = domain_type ‖ fork_data_root[:28]), so the two must agree.
+// A beacon node always derives the domain from
+// the requested type, so a mismatch is a caller bug, never a legitimate request.
+func checkDomainType(domain phase0.Domain, signatureDomain phase0.DomainType) error {
+	if !bytes.Equal(domain[:4], signatureDomain[:]) {
+		return fmt.Errorf("domain type %x does not match signature domain %x", domain[:4], signatureDomain[:])
+	}
+	return nil
 }

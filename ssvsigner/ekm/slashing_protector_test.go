@@ -55,7 +55,7 @@ func TestSlashing(t *testing.T) {
 		_, sig, err := km.(*LocalKeyManager).SignBeaconObject(
 			ctx,
 			attestationData,
-			phase0.Domain{},
+			domainFor(spectypes.DomainAttester),
 			phase0.BLSPubKey(sk1.GetPublicKey().Serialize()),
 			currentSlot,
 			spectypes.DomainAttester)
@@ -67,7 +67,7 @@ func TestSlashing(t *testing.T) {
 		_, sig, err := km.(*LocalKeyManager).SignBeaconObject(
 			ctx,
 			attestationData,
-			phase0.Domain{},
+			domainFor(spectypes.DomainAttester),
 			phase0.BLSPubKey(sk1.GetPublicKey().Serialize()),
 			currentSlot,
 			spectypes.DomainAttester)
@@ -84,7 +84,7 @@ func TestSlashing(t *testing.T) {
 		_, sig, err := km.(*LocalKeyManager).SignBeaconObject(
 			ctx,
 			beaconBlock,
-			phase0.Domain{},
+			domainFor(spectypes.DomainProposer),
 			phase0.BLSPubKey(sk1.GetPublicKey().Serialize()),
 			currentSlot,
 			spectypes.DomainProposer,
@@ -97,7 +97,7 @@ func TestSlashing(t *testing.T) {
 		_, sig, err := km.(*LocalKeyManager).SignBeaconObject(
 			ctx,
 			beaconBlock,
-			phase0.Domain{},
+			domainFor(spectypes.DomainProposer),
 			phase0.BLSPubKey(sk1.GetPublicKey().Serialize()),
 			currentSlot,
 			spectypes.DomainProposer)
@@ -112,7 +112,7 @@ func TestSlashing(t *testing.T) {
 		_, sig, err := km.(*LocalKeyManager).SignBeaconObject(
 			ctx,
 			beaconBlock,
-			phase0.Domain{},
+			domainFor(spectypes.DomainProposer),
 			phase0.BLSPubKey(sk1.GetPublicKey().Serialize()),
 			currentSlot,
 			spectypes.DomainProposer)
@@ -170,7 +170,7 @@ func TestSlashing_Attestation(t *testing.T) {
 		sig, root, err := km.(*LocalKeyManager).SignBeaconObject(
 			ctx,
 			attestation,
-			phase0.Domain{},
+			domainFor(spectypes.DomainAttester),
 			phase0.BLSPubKey(sk.GetPublicKey().Serialize()),
 			slot,
 			spectypes.DomainAttester)
@@ -279,7 +279,7 @@ func TestConcurrentSlashingProtectionAttData(t *testing.T) {
 		sigBytes, root, err := km.(*LocalKeyManager).SignBeaconObject(
 			ctx,
 			attestationData,
-			phase0.Domain{},
+			domainFor(spectypes.DomainAttester),
 			phase0.BLSPubKey(sk1.GetPublicKey().Serialize()),
 			currentSlot,
 			spectypes.DomainAttester,
@@ -354,7 +354,7 @@ func TestConcurrentSlashingProtectionBeaconBlock(t *testing.T) {
 		sigBytes, root, err := km.(*LocalKeyManager).SignBeaconObject(
 			ctx,
 			blockContents.Block,
-			phase0.Domain{},
+			domainFor(spectypes.DomainProposer),
 			phase0.BLSPubKey(sk1.GetPublicKey().Serialize()),
 			currentSlot,
 			spectypes.DomainProposer,
@@ -474,7 +474,7 @@ func TestConcurrentSlashingProtectionWithMultipleKeysAttData(t *testing.T) {
 				sigBytes, root, err := km.(*LocalKeyManager).SignBeaconObject(
 					ctx,
 					attestationData,
-					phase0.Domain{},
+					domainFor(spectypes.DomainAttester),
 					phase0.BLSPubKey(validator.pk.Serialize()),
 					currentSlot,
 					spectypes.DomainAttester,
@@ -574,7 +574,7 @@ func TestConcurrentSlashingProtectionWithMultipleKeysBeaconBlock(t *testing.T) {
 				sigBytes, root, err := km.(*LocalKeyManager).SignBeaconObject(
 					ctx,
 					blockContents.Block,
-					phase0.Domain{},
+					domainFor(spectypes.DomainProposer),
 					phase0.BLSPubKey(validator.pk.Serialize()),
 					currentSlot,
 					spectypes.DomainProposer,
@@ -641,7 +641,7 @@ func TestComprehensiveSlashingBlockProposal(t *testing.T) {
 	_, _, err = km.SignBeaconObject(
 		t.Context(),
 		block1,
-		phase0.Domain{},
+		domainFor(spectypes.DomainProposer),
 		sharePubKey,
 		slotToSign,
 		spectypes.DomainProposer,
@@ -658,7 +658,7 @@ func TestComprehensiveSlashingBlockProposal(t *testing.T) {
 	_, _, err = km.SignBeaconObject(
 		t.Context(),
 		block2,
-		phase0.Domain{},
+		domainFor(spectypes.DomainProposer),
 		sharePubKey,
 		slotToSign,
 		spectypes.DomainProposer,
@@ -676,7 +676,7 @@ func TestComprehensiveSlashingBlockProposal(t *testing.T) {
 	_, _, err = km.SignBeaconObject(
 		t.Context(),
 		block3,
-		phase0.Domain{},
+		domainFor(spectypes.DomainProposer),
 		sharePubKey,
 		slotToSignLower,
 		spectypes.DomainProposer,
@@ -693,7 +693,7 @@ func TestComprehensiveSlashingBlockProposal(t *testing.T) {
 	_, _, err = km.SignBeaconObject(
 		t.Context(),
 		block4,
-		phase0.Domain{},
+		domainFor(spectypes.DomainProposer),
 		sharePubKey,
 		slotToSignHigher,
 		spectypes.DomainProposer,

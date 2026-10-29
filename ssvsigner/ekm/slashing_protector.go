@@ -26,12 +26,13 @@ const (
 
 var _ slashingProtector = &SlashingProtector{}
 
+// slashingProtector is the key managers' view of the slashing store. Records are only ever raised
+// (Update*, Bump*) and never deleted: a removed share keeps its records so that a later re-add of the
+// same share can never start below what was already signed.
 type slashingProtector interface {
 	ListAccounts() ([]core.ValidatorAccount, error)
 	RetrieveHighestAttestation(pubKey phase0.BLSPubKey) (*phase0.AttestationData, bool, error)
 	RetrieveHighestProposal(pubKey phase0.BLSPubKey) (phase0.Slot, bool, error)
-	RemoveHighestAttestationTxn(txn ReadWriteTxn, pubKey phase0.BLSPubKey) error
-	RemoveHighestProposalTxn(txn ReadWriteTxn, pubKey phase0.BLSPubKey) error
 	UpdateHighestAttestation(pubKey phase0.BLSPubKey, attData *phase0.AttestationData) error
 	UpdateHighestProposal(pubKey phase0.BLSPubKey, slot phase0.Slot) error
 	IsAttestationSlashable(pubKey phase0.BLSPubKey, attData *phase0.AttestationData) error
@@ -75,14 +76,6 @@ func (sp *SlashingProtector) RetrieveHighestProposal(pubKey phase0.BLSPubKey) (p
 	return sp.signerStore.RetrieveHighestProposal(pubKey[:])
 }
 
-func (sp *SlashingProtector) RemoveHighestAttestationTxn(txn ReadWriteTxn, pubKey phase0.BLSPubKey) error {
-	return sp.signerStore.RemoveHighestAttestationTxn(txn, pubKey[:])
-}
-
-func (sp *SlashingProtector) RemoveHighestProposalTxn(txn ReadWriteTxn, pubKey phase0.BLSPubKey) error {
-	return sp.signerStore.RemoveHighestProposalTxn(txn, pubKey[:])
-}
-
 func (sp *SlashingProtector) IsAttestationSlashable(pubKey phase0.BLSPubKey, attData *phase0.AttestationData) error {
 	if val, err := sp.protection.IsSlashableAttestation(pubKey[:], attData); err != nil || val != nil {
 		if err != nil {
@@ -113,16 +106,25 @@ func (sp *SlashingProtector) UpdateHighestProposal(pubKey phase0.BLSPubKey, slot
 	return sp.protection.UpdateHighestProposal(pubKey[:], slot)
 }
 
-func (sp *SlashingProtector) BumpSlashingProtectionTxn(txn ReadWriteTxn, pubKey phase0.BLSPubKey) error {
+// BumpSlashingProtectionTxn raises the share's slashing records to the minimal safe values for the
+// current slot/epoch, if they are missing or below them.
+//
+// The caller's txn is deliberately NOT used for the records. They are read and written immediately
+// (committed before this returns), like the signing path writes them, and the caller is expected to
+// hold the same lock that excludes signing for this share (LocalKeyManager.walletLock,
+// RemoteKeyManager's per-share locks). Writing them through a long-lived transaction instead would
+// break that exclusion: the write only lands at commit, after the lock is released. A rolled-back caller txn
+// is harmless here because a bump only ever raises a record.
+func (sp *SlashingProtector) BumpSlashingProtectionTxn(_ ReadWriteTxn, pubKey phase0.BLSPubKey) error {
 	currentSlot := sp.beaconCfg.EstimatedCurrentSlot()
 
 	// Update highest attestation data for slashing protection.
-	if err := sp.updateHighestAttestation(txn, pubKey, currentSlot); err != nil {
+	if err := sp.updateHighestAttestation(nil, pubKey, currentSlot); err != nil {
 		return err
 	}
 
 	// Update highest proposal data for slashing protection.
-	if err := sp.updateHighestProposal(txn, pubKey, currentSlot); err != nil {
+	if err := sp.updateHighestProposal(nil, pubKey, currentSlot); err != nil {
 		return err
 	}
 
