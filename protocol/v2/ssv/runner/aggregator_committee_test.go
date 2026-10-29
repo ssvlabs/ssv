@@ -142,6 +142,32 @@ func TestAggregatorCommitteeRunnerProcessConsensus_NotesFailureAfterDecision(t *
 	requireNotedFailure(t, env.runner.BaseRunner, concluded, "signing failed")
 }
 
+// A signing failure skips only its own entry: when every aggregate fails to sign, as with the remote signer on
+// Gloas, the contributions are still broadcast, and the failure is still returned and noted for the watcher.
+func TestAggregatorCommitteeRunnerProcessConsensus_SigningFailureKeepsOtherPartials(t *testing.T) {
+	const version = spec.DataVersionElectra
+
+	env := newAggregatorCommitteeRunnerEnv(t, []int{1, 2}, protocoltesting.NewTestingBeaconNodeWrapped())
+	env.runner.signer = failingDomainSigner{BeaconSigner: env.runner.signer, domain: spectypes.DomainAggregateAndProof}
+	duty := spectestingutils.TestingAggregatorCommitteeDutyForValidators([]int{1}, []int{2}, version)
+
+	concluded, err := env.startAndFeedThroughConsensus(t, t.Context(), duty, version)
+	require.ErrorContains(t, err, "failed to sign aggregate and proof for validator 1")
+	requireNotedFailure(t, env.runner.BaseRunner, concluded, "signing failed")
+
+	var postConsensus []*spectypes.PartialSignatureMessages
+	for _, msg := range partialSigBroadcasts(env.network.BroadcastedMsgs) {
+		if psig := decodeBroadcastedPartialSig(t, msg); psig.Type == spectypes.PostConsensusPartialSig {
+			postConsensus = append(postConsensus, psig)
+		}
+	}
+	require.Len(t, postConsensus, 1)
+	require.NotEmpty(t, postConsensus[0].Messages)
+	for _, partial := range postConsensus[0].Messages {
+		require.Equal(t, phase0.ValidatorIndex(2), partial.ValidatorIndex, "only the contributor's partials are signed")
+	}
+}
+
 // postConsensusMsgsFromFixture returns the (valid) post-consensus PartialSignatureMessages from signers
 // 1..3 for the duty — the same messages AggregatorCommitteeInputForDuty carries.
 func postConsensusMsgsFromFixture(duty *spectypes.AggregatorCommitteeDuty, ksMap map[phase0.ValidatorIndex]*spectestingutils.TestKeySet, version spec.DataVersion) []*spectypes.PartialSignatureMessages {
