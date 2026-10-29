@@ -123,7 +123,7 @@ func (h *CommitteeHandler) HandleDuties(ctx context.Context) {
 				tickCtx, cancel := context.WithDeadline(ctx, h.netCfg.SlotStartTime(currentSlot+1))
 				defer cancel()
 
-				h.processExecution(tickCtx, currentPeriod, currentEpoch, currentSlot)
+				h.processExecution(tickCtx, currentEpoch, currentSlot)
 			}()
 
 		case <-h.reorgEventsCh:
@@ -135,7 +135,10 @@ func (h *CommitteeHandler) HandleDuties(ctx context.Context) {
 	}
 }
 
-func (h *CommitteeHandler) processExecution(ctx context.Context, period uint64, epoch phase0.Epoch, slot phase0.Slot) {
+func (h *CommitteeHandler) processExecution(ctx context.Context, epoch phase0.Epoch, slot phase0.Slot) {
+	// Already the next period in a period's last slot (see SyncCommitteeDutyPeriodAtSlot).
+	syncPeriod := h.netCfg.SyncCommitteeDutyPeriodAtSlot(slot)
+
 	spanName := "committee.execute"
 	if h.isAggregator {
 		spanName = "aggregator_committee.execute"
@@ -145,12 +148,12 @@ func (h *CommitteeHandler) processExecution(ctx context.Context, period uint64, 
 		trace.WithAttributes(
 			observability.BeaconSlotAttribute(slot),
 			observability.BeaconEpochAttribute(epoch),
-			observability.BeaconPeriodAttribute(period),
+			observability.BeaconPeriodAttribute(syncPeriod),
 		))
 	defer span.End()
 
 	attDuties := h.attDuties.CommitteeSlotDuties(epoch, slot)
-	syncDuties := h.syncDuties.CommitteePeriodDuties(period)
+	syncDuties := h.syncDuties.CommitteePeriodDuties(syncPeriod)
 	if attDuties == nil && syncDuties == nil {
 		const eventMsg = "no attester or sync-committee duties to execute"
 		h.logger.Debug(eventMsg, fields.Epoch(epoch), fields.Slot(slot))

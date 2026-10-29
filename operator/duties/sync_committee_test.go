@@ -184,8 +184,8 @@ func TestScheduler_SyncCommittee_Same_Period(t *testing.T) {
 		// This deadline needs to be large enough to not prevent tests from executing their intended flow.
 		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 		firstSlotOfNextPeriod := phase0.Slot(testEpochsPerSCPeriod * testSlotsPerEpoch)
-		lastSlotOfPeriod := firstSlotOfNextPeriod - 2
-		startSlot := lastSlotOfPeriod - 2
+		lastActionableSlot := firstSlotOfNextPeriod - 2
+		startSlot := lastActionableSlot - 2
 		scheduler, ticker := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{handler}, startSlot)
 		waitForSlotN(scheduler.netCfg.Beacon, startSlot)
 		fetchDutiesCall, executeDutiesCall := setupSyncCommitteeDutiesMock(scheduler, activeShares, dutiesMap, &SafeValue[bool]{})
@@ -208,19 +208,21 @@ func TestScheduler_SyncCommittee_Same_Period(t *testing.T) {
 		ticker.Send(startSlot + 1)
 		waitForDutiesExecution(t, fetchDutiesCall, executeDutiesCall, timeout, expected)
 
-		// STEP 3: expect sync committee duties to be executed at the last slot of the period
-		waitForSlotN(scheduler.netCfg.Beacon, lastSlotOfPeriod)
+		// STEP 3: expect sync committee duties to be executed at the last actionable slot of the period
+		waitForSlotN(scheduler.netCfg.Beacon, lastActionableSlot)
 		duties, _ = dutiesMap.Get(0)
-		expected = expectedExecutedSyncCommitteeDuties(handler, duties, lastSlotOfPeriod)
+		expected = expectedExecutedSyncCommitteeDuties(handler, duties, lastActionableSlot)
 		setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
 
-		ticker.Send(lastSlotOfPeriod)
+		ticker.Send(lastActionableSlot)
 		waitForDutiesExecution(t, fetchDutiesCall, executeDutiesCall, timeout, expected)
 
-		// STEP 4: expect no action to be taken as we are in the next period
-		waitForSlotN(scheduler.netCfg.Beacon, firstSlotOfNextPeriod)
-		ticker.Send(firstSlotOfNextPeriod)
-		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
+		// STEP 4: expect no action from the period's last slot on, as the next period's committee is on duty
+		for _, slot := range []phase0.Slot{firstSlotOfNextPeriod - 1, firstSlotOfNextPeriod} {
+			waitForSlotN(scheduler.netCfg.Beacon, slot)
+			ticker.Send(slot)
+			waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
+		}
 
 		// Stop scheduler & wait for graceful exit.
 		cancel()
@@ -237,16 +239,27 @@ func TestScheduler_SyncCommittee_Current_Next_Periods(t *testing.T) {
 			dutiesMap      = hashmap.New[uint64, []*v1.SyncCommitteeDuty]()
 			eligibleShares = eligibleShares()
 		)
+		// Validator 3 is in both committees, at different positions.
 		dutiesMap.Set(0, []*v1.SyncCommitteeDuty{
 			{
 				PubKey:         phase0.BLSPubKey{1, 2, 3},
 				ValidatorIndex: phase0.ValidatorIndex(1),
+			},
+			{
+				PubKey:                        phase0.BLSPubKey{1, 2, 5},
+				ValidatorIndex:                phase0.ValidatorIndex(3),
+				ValidatorSyncCommitteeIndices: []phase0.CommitteeIndex{10},
 			},
 		})
 		dutiesMap.Set(1, []*v1.SyncCommitteeDuty{
 			{
 				PubKey:         phase0.BLSPubKey{1, 2, 4},
 				ValidatorIndex: phase0.ValidatorIndex(2),
+			},
+			{
+				PubKey:                        phase0.BLSPubKey{1, 2, 5},
+				ValidatorIndex:                phase0.ValidatorIndex(3),
+				ValidatorSyncCommitteeIndices: []phase0.CommitteeIndex{20},
 			},
 		})
 
@@ -255,8 +268,9 @@ func TestScheduler_SyncCommittee_Current_Next_Periods(t *testing.T) {
 		// This deadline needs to be large enough to not prevent tests from executing their intended flow.
 		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 		firstSlotOfNextPeriod := phase0.Slot(testEpochsPerSCPeriod * testSlotsPerEpoch)
-		lastSlotOfPeriod := firstSlotOfNextPeriod - 2
-		startSlot := lastSlotOfPeriod - 2
+		lastSlotOfPeriod := firstSlotOfNextPeriod - 1
+		lastActionableSlot := firstSlotOfNextPeriod - 2
+		startSlot := lastActionableSlot - 2
 		scheduler, ticker := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{handler}, startSlot)
 		waitForSlotN(scheduler.netCfg.Beacon, startSlot)
 		fetchDutiesCall, executeDutiesCall := setupSyncCommitteeDutiesMock(scheduler, eligibleShares, dutiesMap, waitForDuties)
@@ -278,18 +292,26 @@ func TestScheduler_SyncCommittee_Current_Next_Periods(t *testing.T) {
 		ticker.Send(startSlot + 1)
 		waitForDutiesExecution(t, fetchDutiesCall, executeDutiesCall, timeout, expected)
 
-		// STEP 3: wait for sync committee duties to be executed
-		waitForSlotN(scheduler.netCfg.Beacon, lastSlotOfPeriod)
+		// STEP 3: wait for sync committee duties to be executed at the last actionable slot of the period
+		waitForSlotN(scheduler.netCfg.Beacon, lastActionableSlot)
 		duties, _ = dutiesMap.Get(0)
+		expected = expectedExecutedSyncCommitteeDuties(handler, duties, lastActionableSlot)
+		setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
+
+		ticker.Send(lastActionableSlot)
+		waitForDutiesExecution(t, fetchDutiesCall, executeDutiesCall, timeout, expected)
+
+		// STEP 4: at the last slot of the period, the next period's committee is on duty: validator 3 with its
+		// next-period position, validator 1 no longer
+		waitForSlotN(scheduler.netCfg.Beacon, lastSlotOfPeriod)
+		duties, _ = dutiesMap.Get(1)
 		expected = expectedExecutedSyncCommitteeDuties(handler, duties, lastSlotOfPeriod)
 		setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
 
 		ticker.Send(lastSlotOfPeriod)
 		waitForDutiesExecution(t, fetchDutiesCall, executeDutiesCall, timeout, expected)
 
-		// ...
-
-		// STEP 4: new period, wait for sync committee duties to be executed
+		// STEP 5: new period, wait for sync committee duties to be executed
 		waitForSlotN(scheduler.netCfg.Beacon, firstSlotOfNextPeriod)
 		duties, _ = dutiesMap.Get(1)
 		expected = expectedExecutedSyncCommitteeDuties(handler, duties, firstSlotOfNextPeriod)
@@ -349,15 +371,19 @@ func TestScheduler_SyncCommittee_Indices_Changed(t *testing.T) {
 		waitForDutiesFetch(t, fetchDutiesCall, timeout)
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
-		// STEP 4: no action should be taken
+		// STEP 4: execute the next period's duties, its committee is on duty from the period's last slot on
 		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch-1))
+		duties, _ = dutiesMap.Get(1)
+		expected := expectedExecutedSyncCommitteeDuties(handler, duties, testEpochsPerSCPeriod*testSlotsPerEpoch-1)
+		setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
+
 		ticker.Send(phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch - 1))
-		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
+		waitForDutiesExecution(t, fetchDutiesCall, executeDutiesCall, timeout, expected)
 
 		// STEP 5: execute duties
 		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch))
 		duties, _ = dutiesMap.Get(1)
-		expected := expectedExecutedSyncCommitteeDuties(handler, duties, testEpochsPerSCPeriod*testSlotsPerEpoch)
+		expected = expectedExecutedSyncCommitteeDuties(handler, duties, testEpochsPerSCPeriod*testSlotsPerEpoch)
 		setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
 
 		ticker.Send(phase0.Slot(testEpochsPerSCPeriod * testSlotsPerEpoch))
@@ -416,15 +442,19 @@ func TestScheduler_SyncCommittee_Multiple_Indices_Changed_Same_Slot(t *testing.T
 		waitForDutiesFetch(t, fetchDutiesCall, timeout)
 		waitForDutiesFetch(t, fetchDutiesCall, timeout)
 
-		// STEP 5: no action should be taken
+		// STEP 5: execute the next period's duties, its committee is on duty from the period's last slot on
 		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch-1))
+		duties, _ = dutiesMap.Get(1)
+		expected := expectedExecutedSyncCommitteeDuties(handler, duties, testEpochsPerSCPeriod*testSlotsPerEpoch-1)
+		setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
+
 		ticker.Send(phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch - 1))
-		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
+		waitForDutiesExecution(t, fetchDutiesCall, executeDutiesCall, timeout, expected)
 
 		// STEP 6: The first assigned duty should not be executed, but the second one should
 		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch))
 		duties, _ = dutiesMap.Get(1)
-		expected := expectedExecutedSyncCommitteeDuties(handler, duties, testEpochsPerSCPeriod*testSlotsPerEpoch)
+		expected = expectedExecutedSyncCommitteeDuties(handler, duties, testEpochsPerSCPeriod*testSlotsPerEpoch)
 		setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
 
 		ticker.Send(phase0.Slot(testEpochsPerSCPeriod * testSlotsPerEpoch))
@@ -498,15 +528,18 @@ func TestScheduler_SyncCommittee_Reorg_Current(t *testing.T) {
 		waitForDutiesFetch(t, fetchDutiesCall, timeout)
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
-		// STEP 5: wait for no action to be taken
+		// STEP 5: execute the re-fetched next period's duties, its committee is on duty from the period's last slot on
 		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch-1))
+		duties, _ := dutiesMap.Get(1)
+		expected := expectedExecutedSyncCommitteeDuties(handler, duties, testEpochsPerSCPeriod*testSlotsPerEpoch-1)
+		setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
+
 		ticker.Send(phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch - 1))
-		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
+		waitForDutiesExecution(t, fetchDutiesCall, executeDutiesCall, timeout, expected)
 
 		// STEP 6: The first assigned duty should not be executed, but the second one should
 		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch))
-		duties, _ := dutiesMap.Get(1)
-		expected := expectedExecutedSyncCommitteeDuties(handler, duties, testEpochsPerSCPeriod*testSlotsPerEpoch)
+		expected = expectedExecutedSyncCommitteeDuties(handler, duties, testEpochsPerSCPeriod*testSlotsPerEpoch)
 		setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
 
 		ticker.Send(phase0.Slot(testEpochsPerSCPeriod * testSlotsPerEpoch))
@@ -589,18 +622,23 @@ func TestScheduler_SyncCommittee_Reorg_Current_Indices_Changed(t *testing.T) {
 		}))
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
-		// STEP 6: the boundary tick re-fetches duties for the next period due to the indices change.
+		// STEP 6: the period's last slot executes the next period's duties as fetched before the indices change, then
+		// re-fetches them. Wait for the fetch first: the execution signal stays buffered meanwhile.
 		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch-1))
+		duties, _ = dutiesMap.Get(1)
+		expected := expectedExecutedSyncCommitteeDuties(handler, duties[:1], testEpochsPerSCPeriod*testSlotsPerEpoch-1)
+		setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
+
 		ticker.Send(phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch - 1))
 		waitForDutiesFetch(t, fetchDutiesCall, timeout)
+		waitForDutiesExecution(t, fetchDutiesCall, executeDutiesCall, timeout, expected)
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 7: The first assigned duty should not be executed, but the second and the new from indices change should.
 		// With the period-boundary check applying on slot 46+, the indices change at slot 47 already refreshed p1,
 		// so entering the new period executes without an additional fetch.
 		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch))
-		duties, _ = dutiesMap.Get(1)
-		expected := expectedExecutedSyncCommitteeDuties(handler, duties, testEpochsPerSCPeriod*testSlotsPerEpoch)
+		expected = expectedExecutedSyncCommitteeDuties(handler, duties, testEpochsPerSCPeriod*testSlotsPerEpoch)
 		setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
 
 		ticker.Send(phase0.Slot(testEpochsPerSCPeriod * testSlotsPerEpoch))
@@ -788,10 +826,13 @@ func TestScheduler_SyncCommittee_Reorg_Previous_Epoch_Transition(t *testing.T) {
 		scheduler.HandleHeadEvent()(t.Context(), e.Data.(*v1.HeadEvent))
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
-		// STEP 3: slot 47 has no action because the period duties were already prefetched.
+		// STEP 3: the period's last slot (47) executes the prefetched next-period duties without fetching them again.
 		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch-1))
+		expected := expectedExecutedSyncCommitteeDuties(handler, initialPeriod1Duties, phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch-1))
+		setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
+
 		ticker.Send(phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch - 1))
-		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
+		waitForDutiesExecution(t, fetchDutiesCall, executeDutiesCall, timeout, expected)
 
 		// STEP 4: previous-duty-dependent-root changes on the period transition.
 		// Sync committee duties should ignore it and keep using the already fetched current-period duties.
@@ -812,7 +853,7 @@ func TestScheduler_SyncCommittee_Reorg_Previous_Epoch_Transition(t *testing.T) {
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 5: enter the new period. The originally fetched duties still execute, proving there was no refetch.
-		expected := expectedExecutedSyncCommitteeDuties(handler, initialPeriod1Duties, phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch))
+		expected = expectedExecutedSyncCommitteeDuties(handler, initialPeriod1Duties, phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch))
 		setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
 
 		ticker.Send(phase0.Slot(testEpochsPerSCPeriod * testSlotsPerEpoch))
@@ -1235,17 +1276,22 @@ func TestScheduler_SyncCommittee_Reorg_Retry_Next_Period_Fetch_On_Next_Tick(t *t
 		require.Len(t, keptDuties, 1, "next-period duties must survive a failed reorg re-fetch")
 		require.Equal(t, phase0.ValidatorIndex(1), keptDuties[0].ValidatorIndex)
 
-		// STEP 5: the next tick retries the failed next-period fetch and succeeds.
+		// STEP 5: the next tick, the period's last slot, executes the kept next-period duties, then retries the failed
+		// next-period fetch and succeeds. Wait for the fetch first: the execution signal stays buffered meanwhile.
 		failNextPeriodFetch.Store(false)
 		waitForSlotN(scheduler.netCfg.Beacon, startSlot+2)
+		duties, _ := dutiesMap.Get(1)
+		expected := expectedExecutedSyncCommitteeDuties(handler, duties, startSlot+2)
+		setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
+
 		ticker.Send(startSlot + 2)
 		waitForFetchedSyncCommitteePeriod(t, fetchDutiesCall, fetchedPeriods, timeout, 1)
+		waitForDutiesExecution(t, fetchDutiesCall, executeDutiesCall, timeout, expected)
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 6: on the period-transition tick the duties for the (now current) period are executed.
 		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch))
-		duties, _ := dutiesMap.Get(1)
-		expected := expectedExecutedSyncCommitteeDuties(handler, duties, testEpochsPerSCPeriod*testSlotsPerEpoch)
+		expected = expectedExecutedSyncCommitteeDuties(handler, duties, testEpochsPerSCPeriod*testSlotsPerEpoch)
 		setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
 
 		ticker.Send(phase0.Slot(testEpochsPerSCPeriod * testSlotsPerEpoch))

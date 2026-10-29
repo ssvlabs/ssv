@@ -152,9 +152,8 @@ func (mv *messageValidator) dutyLimit(msgID spectypes.MessageID, slot phase0.Slo
 		if validatorIndexCount < slotsPerEpoch/2 {
 			// Check if there is at least one validator in the sync committee.
 			// If so, the duty limit is equal to the number of slots per epoch.
-			period := mv.netCfg.EstimatedSyncCommitteePeriodAtEpoch(mv.netCfg.EstimatedEpochAtSlot(slot))
 			for _, i := range validatorIndices {
-				if mv.dutyStore.SyncCommittee.Duty(period, i) != nil {
+				if mv.hasSyncCommitteeDuty(slot, i) {
 					return slotsPerEpoch, true
 				}
 			}
@@ -169,6 +168,19 @@ func (mv *messageValidator) dutyLimit(msgID spectypes.MessageID, slot phase0.Slo
 	default:
 		return 0, false
 	}
+}
+
+// hasSyncCommitteeDuty reports whether the validator has a sync committee duty for a message at the given slot.
+// In a period's last slot both the incoming committee (on duty, see SyncCommitteeDutyPeriodAtSlot) and the outgoing
+// one qualify: the per-epoch duty limit must cover the outgoing one's duties earlier in that epoch, and peers on
+// older versions still run it in that slot.
+func (mv *messageValidator) hasSyncCommitteeDuty(slot phase0.Slot, validatorIndex phase0.ValidatorIndex) bool {
+	slotPeriod := mv.netCfg.EstimatedSyncCommitteePeriodAtEpoch(mv.netCfg.EstimatedEpochAtSlot(slot))
+	if mv.dutyStore.SyncCommittee.Duty(slotPeriod, validatorIndex) != nil {
+		return true
+	}
+	dutyPeriod := mv.netCfg.SyncCommitteeDutyPeriodAtSlot(slot)
+	return dutyPeriod != slotPeriod && mv.dutyStore.SyncCommittee.Duty(dutyPeriod, validatorIndex) != nil
 }
 
 func (mv *messageValidator) validateBeaconDuty(
@@ -220,10 +232,9 @@ func (mv *messageValidator) validateBeaconDuty(
 
 	// Rule: For a sync committee aggregation duty message, we check if the validator is assigned to it
 	if role == ssvtypes.RoleSyncCommitteeContribution {
-		period := mv.netCfg.EstimatedSyncCommitteePeriodAtEpoch(epoch)
 		// Non-committee roles always have one validator index.
 		validatorIndex := indices[0]
-		if mv.dutyStore.SyncCommittee.Duty(period, validatorIndex) == nil {
+		if !mv.hasSyncCommitteeDuty(slot, validatorIndex) {
 			return ErrNoDuty
 		}
 	}

@@ -106,19 +106,23 @@ func (b *Beacon) EstimatedSyncCommitteePeriodAtEpoch(epoch phase0.Epoch) uint64 
 	return uint64(epoch) / b.EpochsPerSyncCommitteePeriod
 }
 
+// SyncCommitteeDutyPeriodAtSlot returns the period whose sync committee is on duty (messages and contributions)
+// during the given slot. A message for slot s is included in block s+1 and checked against that slot's committee,
+// so in a period's last slot the next period's committee is on duty (Altair validator spec, "Sync committee").
+func (b *Beacon) SyncCommitteeDutyPeriodAtSlot(slot phase0.Slot) uint64 {
+	return b.EstimatedSyncCommitteePeriodAtEpoch(b.EstimatedEpochAtSlot(slot + 1))
+}
+
 // FirstEpochOfSyncPeriod calculates the first epoch of the given sync period.
 func (b *Beacon) FirstEpochOfSyncPeriod(period uint64) phase0.Epoch {
 	return phase0.Epoch(period * b.EpochsPerSyncCommitteePeriod)
 }
 
-// LastActionableSlotOfSyncPeriod calculates the last slot of the given sync period for which
-// producing a sync committee message still makes sense. Note this is one slot before the period's
-// literal last slot (a message produced during that final slot would never be included).
+// LastActionableSlotOfSyncPeriod returns the last slot in which the given period's sync committee is on duty: the
+// period's second-to-last slot, as the next period's committee takes over in its last one (see
+// SyncCommitteeDutyPeriodAtSlot).
 func (b *Beacon) LastActionableSlotOfSyncPeriod(period uint64) phase0.Slot {
-	lastEpoch := b.FirstEpochOfSyncPeriod(period+1) - 1
-	// If we are in the sync committee that ends at slot x we do not generate a message during slot x-1
-	// as it will never be included, hence -1.
-	return b.FirstSlotAtEpoch(lastEpoch+1) - 2
+	return b.FirstSlotAtEpoch(b.FirstEpochOfSyncPeriod(period+1)) - 2
 }
 
 func (b *Beacon) FirstSlotAtEpoch(epoch phase0.Epoch) phase0.Slot {

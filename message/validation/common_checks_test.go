@@ -4,13 +4,16 @@ import (
 	"testing"
 	"time"
 
+	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/protocol/v2/types/ssvtestingutils"
 )
 
 // validateSlotTime's early bound is clockErrorTolerance plus earlyMessageMargin before the moment a message
@@ -65,4 +68,66 @@ func TestCommitteeRole(t *testing.T) {
 
 	require.False(t, mv.committeeRole(spectypes.RoleProposer))
 	require.False(t, mv.committeeRole(ssvtypes.RoleAggregator))
+}
+
+// syncPeriodBoundaryValidator returns a validator whose duty store holds one outgoing-only sync committee member
+// in period 1 and one incoming-only member in period 2, along with period 1's last slot.
+func syncPeriodBoundaryValidator() (mv *messageValidator, lastSlot phase0.Slot, outgoing, incoming phase0.ValidatorIndex) {
+	netCfg := networkconfig.TestNetwork
+	const period = uint64(1)
+	outgoing, incoming = 1, 2
+
+	ds := dutystore.New()
+	ds.SyncCommittee.Set(period, []dutystore.StoreSyncCommitteeDuty{
+		{ValidatorIndex: outgoing, Duty: &eth2apiv1.SyncCommitteeDuty{ValidatorIndex: outgoing}},
+	})
+	ds.SyncCommittee.Set(period+1, []dutystore.StoreSyncCommitteeDuty{
+		{ValidatorIndex: incoming, Duty: &eth2apiv1.SyncCommitteeDuty{ValidatorIndex: incoming}},
+	})
+
+	lastSlot = netCfg.FirstSlotAtEpoch(netCfg.FirstEpochOfSyncPeriod(period+1)) - 1
+	return &messageValidator{netCfg: netCfg, dutyStore: ds}, lastSlot, outgoing, incoming
+}
+
+// In a period's last slot, contributions from both the incoming committee (on duty) and the outgoing one (still run
+// there by peers on older versions) are valid.
+func TestValidateBeaconDuty_SyncCommitteeContributionPeriodBoundary(t *testing.T) {
+	mv, lastSlot, outgoing, incoming := syncPeriodBoundaryValidator()
+
+	validate := func(slot phase0.Slot, validatorIndex phase0.ValidatorIndex) error {
+		return mv.validateBeaconDuty(ssvtypes.RoleSyncCommitteeContribution, slot, []phase0.ValidatorIndex{validatorIndex}, false)
+	}
+
+	require.NoError(t, validate(lastSlot-1, outgoing))
+	require.ErrorIs(t, validate(lastSlot-1, incoming), ErrNoDuty)
+
+	require.NoError(t, validate(lastSlot, incoming))
+	require.NoError(t, validate(lastSlot, outgoing))
+
+	require.NoError(t, validate(lastSlot+1, incoming))
+	require.ErrorIs(t, validate(lastSlot+1, outgoing), ErrNoDuty)
+}
+
+// A sync committee member lifts a small committee's per-epoch duty limit. In a period's last slot that holds for both
+// the outgoing committee (on duty earlier in that epoch) and the incoming one (on duty in that slot).
+func TestDutyLimit_CommitteeSyncPeriodBoundary(t *testing.T) {
+	mv, lastSlot, outgoing, incoming := syncPeriodBoundaryValidator()
+	msgID := ssvtestingutils.NewMsgID(spectypes.DomainType{}, make([]byte, 32), spectypes.RoleCommittee)
+
+	limit := func(slot phase0.Slot, validatorIndex phase0.ValidatorIndex) uint64 {
+		limit, ok := mv.dutyLimit(msgID, slot, []phase0.ValidatorIndex{validatorIndex})
+		require.True(t, ok)
+		return limit
+	}
+	allSlots := mv.netCfg.SlotsPerEpoch
+	const attestationOnly = uint64(2) // 2*V, for a single validator
+
+	require.Equal(t, allSlots, limit(lastSlot-1, outgoing))
+	require.Equal(t, attestationOnly, limit(lastSlot-1, incoming))
+
+	require.Equal(t, allSlots, limit(lastSlot, outgoing))
+	require.Equal(t, allSlots, limit(lastSlot, incoming))
+
+	require.Equal(t, attestationOnly, limit(lastSlot+1, outgoing))
+	require.Equal(t, allSlots, limit(lastSlot+1, incoming))
 }
