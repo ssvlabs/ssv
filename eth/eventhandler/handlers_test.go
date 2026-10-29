@@ -12,6 +12,8 @@ import (
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/herumi/bls-eth-go-binary/bls"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
@@ -22,8 +24,10 @@ import (
 
 	"github.com/ssvlabs/ssv/eth/contract"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/observability/log/fields"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/utils/threshold"
 )
 
@@ -271,14 +275,112 @@ func zeroRootSplit(tb testing.TB, ids []uint64, degree int, zeroAt ...uint64) (*
 	return eval(0), shares
 }
 
-// TestHandleValidatorRemovedKeepsShareKeyInUse registers two validators whose shares for this operator
-// are the same key, then removes both. The first removal must keep the key and its slashing protection
-// data, also when the other validator is liquidated, and the second removal must delete them.
+// TestHandleValidatorAddedReusedShareKeyIsMalformed registers two validators whose shares for one operator
+// use the same key. The second registration must be malformed, also when the key isn't this operator's, as
+// every node must skip it, and when the first validator is liquidated.
+func TestHandleValidatorAddedReusedShareKeyIsMalformed(t *testing.T) {
+	const reusedKeyMsg = "malformed event: share public key is already used by another validator"
+
+	tests := []struct {
+		name string
+		// reusedAt is the index in ops of the operator whose share key both validators use. The event
+		// handler runs as ops[0].
+		reusedAt int
+		// liquidateFirst liquidates the first validator before the second one is registered.
+		liquidateFirst bool
+		// sameTxn registers both validators in one transaction, as two events of one block.
+		sameTxn bool
+	}{
+		{name: "this operator's share key"},
+		{name: "another operator's share key", reusedAt: 1},
+		{name: "first validator liquidated", liquidateFirst: true},
+		{name: "both in one transaction", sameTxn: true},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			eh, ops, operatorIDs := setupValidatorAddedTest(t, ctx)
+
+			logCore, logs := observer.New(zap.WarnLevel)
+			eh.logger = zap.New(logCore)
+
+			first, second := newValidatorsSharingShareKey(t, ops, tc.reusedAt, tc.reusedAt)
+			secondOwner := ethcommon.Address{1}
+
+			txn := eh.nodeStorage.Begin()
+			defer txn.Discard()
+
+			_, err := eh.handleValidatorAdded(ctx, txn, validatorAddedEvent(t, first, ops, testAddr, 0))
+			require.NoError(t, err)
+			if !tc.sameTxn {
+				require.NoError(t, txn.Commit())
+				txn = eh.nodeStorage.Begin()
+				defer txn.Discard()
+			}
+
+			if tc.liquidateFirst {
+				_, err := eh.handleClusterLiquidated(txn, &contract.ContractClusterLiquidated{
+					Owner:       testAddr,
+					OperatorIds: operatorIDs,
+				})
+				require.NoError(t, err)
+			}
+
+			_, err = eh.handleValidatorAdded(ctx, txn, validatorAddedEvent(t, second, ops, secondOwner, 0))
+			var malformed *MalformedEventError
+			require.ErrorAs(t, err, &malformed, "a reused share key must be a malformed (skippable) event")
+			require.ErrorIs(t, err, ErrSharePubKeyInUse)
+			// The block is committed with the malformed event skipped.
+			require.NoError(t, txn.Commit())
+
+			entries := logs.FilterMessage(reusedKeyMsg).All()
+			require.Len(t, entries, 1)
+			logFields := entries[0].ContextMap()
+			require.EqualValues(t, ops[tc.reusedAt].id, logFields[fields.FieldOperatorId])
+			require.Equal(t, hex.EncodeToString(first.operatorsShares[tc.reusedAt].pub.Serialize()), logFields["share_pubkey"])
+			require.Equal(t, hex.EncodeToString(first.masterPubKey.Serialize()), logFields["other_validator_pubkey"])
+
+			_, exists := eh.nodeStorage.Shares().Get(nil, second.masterPubKey.Serialize())
+			require.False(t, exists, "share must not be saved")
+
+			nextNonce, err := eh.nodeStorage.GetNextNonce(nil, secondOwner)
+			require.NoError(t, err)
+			require.EqualValues(t, 1, nextNonce, "nonce must advance even though the event is malformed")
+
+			accounts, err := eh.keyManager.(*ekm.LocalKeyManager).ListAccounts()
+			require.NoError(t, err)
+			require.Len(t, accounts, 1, "only the first validator's share key must be imported")
+			require.True(t, shareExist(accounts, first.operatorsShares[0].pub.Serialize()))
+		})
+	}
+}
+
+// TestHandleValidatorAddedShareKeyOfAnotherOperatorIsAccepted registers two validators where the first's
+// share key for one operator is the second's for another. Share keys are per operator, so both
+// registrations must be accepted.
+func TestHandleValidatorAddedShareKeyOfAnotherOperatorIsAccepted(t *testing.T) {
+	ctx := context.Background()
+	eh, ops, _ := setupValidatorAddedTest(t, ctx)
+
+	first, second := newValidatorsSharingShareKey(t, ops, 1, 2)
+	require.Equal(t, first.operatorsShares[1].pub.Serialize(), second.operatorsShares[2].pub.Serialize())
+
+	txn := eh.nodeStorage.Begin()
+	defer txn.Discard()
+
+	_, err := eh.handleValidatorAdded(ctx, txn, validatorAddedEvent(t, first, ops, testAddr, 0))
+	require.NoError(t, err)
+	_, err = eh.handleValidatorAdded(ctx, txn, validatorAddedEvent(t, second, ops, ethcommon.Address{1}, 0))
+	require.NoError(t, err)
+}
+
+// TestHandleValidatorRemovedKeepsShareKeyInUse stores two validators whose shares for this operator use the
+// same key, as earlier versions could, then removes both. The first removal must leave the key and its
+// slashing protection data as they were, also when the remaining validator is liquidated. The second
+// removal must remove the key and keep its slashing protection data.
 func TestHandleValidatorRemovedKeepsShareKeyInUse(t *testing.T) {
-	const (
-		reusedKeyMsg = "share public key is already used by another validator"
-		keptKeyMsg   = "share public key is still used by another validator, keeping it in ekm storage"
-	)
+	const keptKeyMsg = "share public key is still used by another validator, keeping it in ekm storage"
 
 	tests := []struct {
 		name string
@@ -304,19 +406,8 @@ func TestHandleValidatorRemovedKeepsShareKeyInUse(t *testing.T) {
 			logCore, logs := observer.New(zap.WarnLevel)
 			eh.logger = zap.New(logCore)
 
-			first, second := newValidatorsSharingShareKey(t, ops)
-			sharePubKey := first.operatorsShares[0].pub.Serialize()
-			require.Equal(t, sharePubKey, second.operatorsShares[0].pub.Serialize())
-
-			// requireWarning checks that msg was logged once, naming the shared key and the other validator.
-			requireWarning := func(msg string, other *testValidatorData) {
-				t.Helper()
-				entries := logs.FilterMessage(msg).All()
-				require.Len(t, entries, 1, msg)
-				logFields := entries[0].ContextMap()
-				require.Equal(t, hex.EncodeToString(sharePubKey), logFields["share_pubkey"])
-				require.Equal(t, hex.EncodeToString(other.masterPubKey.Serialize()), logFields["other_validator_pubkey"])
-			}
+			first, second := newValidatorsSharingShareKey(t, ops, 0, 0)
+			sharePubKey := phase0.BLSPubKey(first.operatorsShares[0].pub.Serialize())
 
 			type registration struct {
 				validator *testValidatorData
@@ -328,22 +419,13 @@ func TestHandleValidatorRemovedKeepsShareKeyInUse(t *testing.T) {
 			}
 
 			txn := eh.nodeStorage.Begin()
-			for _, r := range registrations {
-				sharesData, err := generateSharesData(r.validator, ops, r.owner, 0)
-				require.NoError(t, err)
-				ownShare, err := eh.handleValidatorAdded(ctx, txn, &contract.ContractValidatorAdded{
-					Owner:       r.owner,
-					OperatorIds: operatorIDs,
-					PublicKey:   r.validator.masterPubKey.Serialize(),
-					Shares:      sharesData,
-				})
-				require.NoError(t, err)
-				require.NotNil(t, ownShare)
-			}
+			_, err := eh.handleValidatorAdded(ctx, txn, validatorAddedEvent(t, first, ops, testAddr, 0))
+			require.NoError(t, err)
+			// handleValidatorAdded rejects the second registration, so store its share as earlier versions did.
+			storeShare(t, eh, txn, second, ops, registrations[1].owner)
 			require.NoError(t, txn.Commit())
 
-			requireWarning(reusedKeyMsg, first)
-			requireShareKeyStored(t, km, sharePubKey, true)
+			seeded := seedSlashingProtection(t, eh, km, sharePubKey)
 
 			removed, remaining := registrations[1], registrations[0]
 			if tc.removeFirstRegistered {
@@ -374,26 +456,72 @@ func TestHandleValidatorRemovedKeepsShareKeyInUse(t *testing.T) {
 			}
 
 			remove(removed)
-			requireWarning(keptKeyMsg, remaining.validator)
-			if tc.sameTxn {
-				// Only the key can be checked before the commit: slashing protection data is written in txn.
-				accounts, err := km.ListAccounts()
-				require.NoError(t, err)
-				require.True(t, shareExist(accounts, sharePubKey), "share key")
-			} else {
+
+			entries := logs.FilterMessage(keptKeyMsg).All()
+			require.Len(t, entries, 1)
+			logFields := entries[0].ContextMap()
+			require.Equal(t, hex.EncodeToString(sharePubKey[:]), logFields["share_pubkey"])
+			require.Equal(t, hex.EncodeToString(remaining.validator.masterPubKey.Serialize()), logFields["other_validator_pubkey"])
+
+			if !tc.sameTxn {
 				require.NoError(t, txn.Commit())
-				requireShareKeyStored(t, km, sharePubKey, true)
 				txn = eh.nodeStorage.Begin()
 				defer txn.Discard()
 			}
+			requireShareKeyImported(t, km, sharePubKey, true)
+			requireSlashingProtection(t, km, sharePubKey, seeded)
 
 			remove(remaining)
 			require.NoError(t, txn.Commit())
 
-			requireWarning(keptKeyMsg, remaining.validator) // the last removal doesn't warn again
-			requireShareKeyStored(t, km, sharePubKey, false)
+			require.Len(t, logs.FilterMessage(keptKeyMsg).All(), 1, "the last removal must not warn")
+			requireShareKeyImported(t, km, sharePubKey, false)
+			requireSlashingProtection(t, km, sharePubKey, seeded)
 		})
 	}
+}
+
+// TestHandleValidatorRemovedKeepsSlashingProtection removes a validator and registers it again with the
+// same shares. The removal must remove the share key and keep its slashing protection data, and the new
+// registration must import the key again without lowering that data.
+func TestHandleValidatorRemovedKeepsSlashingProtection(t *testing.T) {
+	ctx := context.Background()
+	eh, ops, operatorIDs := setupValidatorAddedTest(t, ctx)
+	km := eh.keyManager.(*ekm.LocalKeyManager)
+
+	validatorData, err := createNewValidator(ops)
+	require.NoError(t, err)
+	sharePubKey := phase0.BLSPubKey(validatorData.operatorsShares[0].pub.Serialize())
+
+	txn := eh.nodeStorage.Begin()
+	defer txn.Discard()
+	_, err = eh.handleValidatorAdded(ctx, txn, validatorAddedEvent(t, validatorData, ops, testAddr, 0))
+	require.NoError(t, err)
+	require.NoError(t, txn.Commit())
+
+	seeded := seedSlashingProtection(t, eh, km, sharePubKey)
+
+	txn = eh.nodeStorage.Begin()
+	defer txn.Discard()
+	_, err = eh.handleValidatorRemoved(ctx, txn, &contract.ContractValidatorRemoved{
+		Owner:       testAddr,
+		OperatorIds: operatorIDs,
+		PublicKey:   validatorData.masterPubKey.Serialize(),
+	})
+	require.NoError(t, err)
+	require.NoError(t, txn.Commit())
+
+	requireShareKeyImported(t, km, sharePubKey, false)
+	requireSlashingProtection(t, km, sharePubKey, seeded)
+
+	txn = eh.nodeStorage.Begin()
+	defer txn.Discard()
+	_, err = eh.handleValidatorAdded(ctx, txn, validatorAddedEvent(t, validatorData, ops, testAddr, 1))
+	require.NoError(t, err)
+	require.NoError(t, txn.Commit())
+
+	requireShareKeyImported(t, km, sharePubKey, true)
+	requireSlashingProtection(t, km, sharePubKey, seeded)
 }
 
 // setupValidatorAddedTest returns an event handler running as ops[0] of four new operators, all four
@@ -428,27 +556,46 @@ func setupValidatorAddedTest(t *testing.T, ctx context.Context) (*EventHandler, 
 	return eh, ops, operatorIDs
 }
 
-// newValidatorsSharingShareKey returns two validators split over ops, each with share public keys that
-// pass ValidateSharePublicKeys, whose shares for ops[0] are the same key.
-func newValidatorsSharingShareKey(t *testing.T, ops []*testOperator) (first, second *testValidatorData) {
+// validatorAddedEvent returns the ValidatorAdded event of owner's registration of vd on ops at nonce.
+func validatorAddedEvent(t *testing.T, vd *testValidatorData, ops []*testOperator, owner ethcommon.Address, nonce int) *contract.ContractValidatorAdded {
 	t.Helper()
-	threshold.Init()
 
-	quorum, _ := ssvtypes.ComputeQuorumAndPartialQuorum(uint64(len(ops)))
-	firstPoly := make([]bls.SecretKey, quorum)
-	for i := range firstPoly {
-		firstPoly[i].SetByCSPRNG()
+	sharesData, err := generateSharesData(vd, ops, owner, nonce)
+	require.NoError(t, err)
+
+	operatorIDs := make([]uint64, len(ops))
+	for i, op := range ops {
+		operatorIDs[i] = op.id
 	}
 
-	// The second polynomial is the first plus c*(x - id), with id the ID of ops[0]: same degree, same
-	// value at id, and a different free coefficient, i.e. validator key.
-	var c, id, cid bls.Fr
-	c.SetByCSPRNG()
-	require.NoError(t, id.SetString(strconv.FormatUint(ops[0].id, 10), 10))
-	bls.FrMul(&cid, &c, &id)
-	secondPoly := slices.Clone(firstPoly)
-	bls.FrSub(bls.CastFromSecretKey(&secondPoly[0]), bls.CastFromSecretKey(&firstPoly[0]), &cid)
-	bls.FrAdd(bls.CastFromSecretKey(&secondPoly[1]), bls.CastFromSecretKey(&firstPoly[1]), &c)
+	return &contract.ContractValidatorAdded{
+		Owner:       owner,
+		OperatorIds: operatorIDs,
+		PublicKey:   vd.masterPubKey.Serialize(),
+		Shares:      sharesData,
+	}
+}
+
+// storeShare saves the share that owner's registration of vd on ops creates, without handleValidatorAdded's
+// checks and key import.
+func storeShare(t *testing.T, eh *EventHandler, txn basedb.Txn, vd *testValidatorData, ops []*testOperator, owner ethcommon.Address) {
+	t.Helper()
+
+	event := validatorAddedEvent(t, vd, ops, owner, 0)
+	pubKeysOffset := phase0.SignatureLength + phase0.PublicKeyLength*len(ops)
+	share, _, err := eh.validatorAddedEventToShare(txn, event,
+		splitBytes(event.Shares[phase0.SignatureLength:pubKeysOffset], phase0.PublicKeyLength),
+		splitBytes(event.Shares[pubKeysOffset:], encryptedKeyLength))
+	require.NoError(t, err)
+	require.NoError(t, eh.nodeStorage.Shares().Save(txn, share))
+}
+
+// newValidatorsSharingShareKey returns two validators split over ops, each with share public keys that
+// pass ValidateSharePublicKeys, where the first's share for ops[firstAt] and the second's for
+// ops[secondAt] are the same key.
+func newValidatorsSharingShareKey(t *testing.T, ops []*testOperator, firstAt, secondAt int) (first, second *testValidatorData) {
+	t.Helper()
+	threshold.Init()
 
 	split := func(poly []bls.SecretKey) *testValidatorData {
 		vd := &testValidatorData{masterKey: &poly[0], masterPubKey: poly[0].GetPublicKey()}
@@ -461,22 +608,91 @@ func newValidatorsSharingShareKey(t *testing.T, ops []*testOperator) (first, sec
 		}
 		return vd
 	}
-	return split(firstPoly), split(secondPoly)
+
+	quorum, _ := ssvtypes.ComputeQuorumAndPartialQuorum(uint64(len(ops)))
+	firstPoly := make([]bls.SecretKey, quorum)
+	for i := range firstPoly {
+		firstPoly[i].SetByCSPRNG()
+	}
+	first = split(firstPoly)
+
+	// The second polynomial is the first plus first(a) - first(b) + c*(x - b), with a and b the IDs of
+	// ops[firstAt] and ops[secondAt]: same degree, the first's value at a as its value at b, and a
+	// different free coefficient, i.e. validator key.
+	var c, b, cb, delta, shift bls.Fr
+	c.SetByCSPRNG()
+	require.NoError(t, b.SetString(strconv.FormatUint(ops[secondAt].id, 10), 10))
+	bls.FrMul(&cb, &c, &b)
+	bls.FrSub(&delta, bls.CastFromSecretKey(first.operatorsShares[firstAt].sec), bls.CastFromSecretKey(first.operatorsShares[secondAt].sec))
+	bls.FrSub(&shift, &delta, &cb)
+	secondPoly := slices.Clone(firstPoly)
+	bls.FrAdd(bls.CastFromSecretKey(&secondPoly[0]), bls.CastFromSecretKey(&firstPoly[0]), &shift)
+	bls.FrAdd(bls.CastFromSecretKey(&secondPoly[1]), bls.CastFromSecretKey(&firstPoly[1]), &c)
+
+	return first, split(secondPoly)
 }
 
-// requireShareKeyStored checks whether the key manager holds the share key and its slashing protection data.
-func requireShareKeyStored(t *testing.T, km *ekm.LocalKeyManager, sharePubKey []byte, stored bool) {
+// slashingProtection is the highest attestation and proposal that the key manager holds for a share key.
+type slashingProtection struct {
+	attestation *phase0.AttestationData
+	proposal    phase0.Slot
+}
+
+// seedSlashingProtection signs an attestation and a block with the share key above the slashing protection
+// that importing the key sets, so that resetting the data would change it.
+func seedSlashingProtection(t *testing.T, eh *EventHandler, km *ekm.LocalKeyManager, sharePubKey phase0.BLSPubKey) slashingProtection {
+	t.Helper()
+	ctx := context.Background()
+
+	currentEpoch := eh.networkConfig.EstimatedCurrentEpoch()
+	attestation := &phase0.AttestationData{
+		Source: &phase0.Checkpoint{Epoch: currentEpoch + 1},
+		Target: &phase0.Checkpoint{Epoch: currentEpoch + 2},
+	}
+	_, _, err := km.SignBeaconObject(ctx, attestation, domainFor(spectypes.DomainAttester), sharePubKey, 0, spectypes.DomainAttester)
+	require.NoError(t, err)
+
+	block := *testingutils.TestingBlockContentsDeneb.Block
+	block.Slot = eh.networkConfig.EstimatedCurrentSlot() + 10
+	_, _, err = km.SignBeaconObject(ctx, &block, domainFor(spectypes.DomainProposer), sharePubKey, block.Slot, spectypes.DomainProposer)
+	require.NoError(t, err)
+
+	return slashingProtection{attestation: attestation, proposal: block.Slot}
+}
+
+// domainFor returns a signing domain whose type prefix is dt, as the key manager requires.
+func domainFor(dt phase0.DomainType) phase0.Domain {
+	var domain phase0.Domain
+	copy(domain[:4], dt[:])
+	return domain
+}
+
+// requireSlashingProtection checks that the key manager holds sp for the share key, and that an
+// attestation and a block that conflict with it are slashable.
+func requireSlashingProtection(t *testing.T, km *ekm.LocalKeyManager, sharePubKey phase0.BLSPubKey, sp slashingProtection) {
+	t.Helper()
+
+	attestation, found, err := km.RetrieveHighestAttestation(sharePubKey)
+	require.NoError(t, err)
+	require.True(t, found, "highest attestation")
+	require.Equal(t, sp.attestation, attestation, "highest attestation")
+
+	proposal, found, err := km.RetrieveHighestProposal(sharePubKey)
+	require.NoError(t, err)
+	require.True(t, found, "highest proposal")
+	require.Equal(t, sp.proposal, proposal, "highest proposal")
+
+	conflicting := *sp.attestation
+	conflicting.BeaconBlockRoot = phase0.Root{1}
+	require.Error(t, km.IsAttestationSlashable(sharePubKey, &conflicting), "attestation with the same target")
+	require.Error(t, km.IsBeaconBlockSlashable(sharePubKey, sp.proposal), "block at the same slot")
+}
+
+// requireShareKeyImported checks whether the key manager holds the share key.
+func requireShareKeyImported(t *testing.T, km *ekm.LocalKeyManager, sharePubKey phase0.BLSPubKey, imported bool) {
 	t.Helper()
 
 	accounts, err := km.ListAccounts()
 	require.NoError(t, err)
-	require.Equal(t, stored, shareExist(accounts, sharePubKey), "share key")
-
-	_, found, err := km.RetrieveHighestAttestation(phase0.BLSPubKey(sharePubKey))
-	require.NoError(t, err)
-	require.Equal(t, stored, found, "highest attestation")
-
-	_, found, err = km.RetrieveHighestProposal(phase0.BLSPubKey(sharePubKey))
-	require.NoError(t, err)
-	require.Equal(t, stored, found, "highest proposal")
+	require.Equal(t, imported, shareExist(accounts, sharePubKey[:]), "share key")
 }
