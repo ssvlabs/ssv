@@ -10,6 +10,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/host"
+	p2pnet "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -20,6 +21,7 @@ import (
 	"github.com/ssvlabs/ssv/network/topics"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/utils/hashmap"
+	"github.com/ssvlabs/ssv/utils/ttl"
 )
 
 type testTopicsController struct {
@@ -215,6 +217,76 @@ func TestChoosePeersToTrim_TrimInboundOnlySkipsOutboundPeers(t *testing.T) {
 
 	trimmed := network.choosePeersToTrim(1, true)
 	assert.Equal(t, map[peer.ID]struct{}{inboundPeer.ID(): {}}, trimmed)
+}
+
+func TestChoosePeersToTrim_SkipsTrustedPeers(t *testing.T) {
+	ctx := t.Context()
+	localHost := newTestHost(t)
+	valuablePeer := newTestHost(t)
+	trustedPeer := newTestHost(t)
+
+	connectHosts(t, ctx, localHost, valuablePeer)
+	connectHosts(t, ctx, localHost, trustedPeer)
+
+	network := newTrimTestNetwork(
+		localHost,
+		&testTopicsController{
+			topics: []string{"1", "3"},
+			peersByTopic: map[string][]peer.ID{
+				"1": {valuablePeer.ID()},
+				"3": {trustedPeer.ID()},
+			},
+			allPeers: []peer.ID{valuablePeer.ID(), trustedPeer.ID()},
+		},
+		nil,
+		subnetsFor(0, 1),
+	)
+	network.trustedPeers = map[peer.ID]peer.AddrInfo{trustedPeer.ID(): {ID: trustedPeer.ID()}}
+
+	// The trusted peer shares no subnet with the node, so it would be the first to go.
+	trimmed := network.choosePeersToTrim(1, false)
+	assert.Equal(t, map[peer.ID]struct{}{valuablePeer.ID(): {}}, trimmed)
+}
+
+// TestPeersTrimming_KeepsTrustedPeers puts a trusted and an untrusted peer in the same position for each way a
+// trimming round drops a peer before choosing any to trim, and requires the round to drop only the untrusted one.
+func TestPeersTrimming_KeepsTrustedPeers(t *testing.T) {
+	ctx := t.Context()
+	localHost := newTestHost(t)
+	trustedPeer := newTestHost(t)
+	untrustedPeer := newTestHost(t)
+
+	network := newTrimTestNetwork(localHost, &testTopicsController{}, nil, subnetsFor(0))
+	network.ctx = ctx
+	network.currentSubnets = subnetsFor(0)
+	network.trimmedRecently = ttl.New[peer.ID, struct{}](ctx, time.Minute, time.Minute)
+	network.trustedPeers = map[peer.ID]peer.AddrInfo{trustedPeer.ID(): {ID: trustedPeer.ID()}}
+
+	tests := []struct {
+		name        string
+		peerSubnets commons.Subnets
+		gossipScore float64
+	}{
+		{name: "bad gossip score", peerSubnets: subnetsFor(0), gossipScore: badGossipScore},
+		{name: "no shared subnet", peerSubnets: subnetsFor(1)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			scores := map[peer.ID]float64{}
+			for _, p := range []host.Host{trustedPeer, untrustedPeer} {
+				connectHosts(t, ctx, localHost, p)
+				network.idx.UpdatePeerSubnets(p.ID(), tt.peerSubnets)
+				scores[p.ID()] = tt.gossipScore
+			}
+			network.idx.SetScores(scores)
+
+			network.peersTrimming()()
+
+			hostNetwork := localHost.Network()
+			require.NotEqual(t, p2pnet.Connected, hostNetwork.Connectedness(untrustedPeer.ID()), "the untrusted peer wasn't dropped")
+			require.Equal(t, p2pnet.Connected, hostNetwork.Connectedness(trustedPeer.ID()), "the trusted peer was dropped")
+		})
+	}
 }
 
 func TestBuildPeerTrimScores_ComputesScoresForAllCandidates(t *testing.T) {

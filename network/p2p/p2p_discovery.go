@@ -38,13 +38,10 @@ func (s *peerSelectionPoolStats) AsLogFields() []zap.Field {
 	}
 }
 
-func (n *p2pNetwork) startDiscovery() error {
+func (n *p2pNetwork) startDiscovery() {
 	startTime := time.Now()
 
-	connector, err := n.getConnector()
-	if err != nil {
-		return err
-	}
+	connector := n.getConnector()
 
 	// Spawn a goroutine to deduplicate discovered peers by peer ID.
 	connectorProposals := make(chan peer.AddrInfo, connectorQueueSize)
@@ -197,8 +194,6 @@ func (n *p2pNetwork) startDiscovery() error {
 			zap.Int("count", len(peersToConnect)),
 		}, poolStats.AsLogFields()...)...)
 	})
-
-	return nil
 }
 
 // peerSelectionScore scores a discovered peer for outbound-connection selection. The peer's
