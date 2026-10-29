@@ -6,6 +6,7 @@ import (
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 
@@ -108,8 +109,8 @@ func TestValidateBeaconDuty_SyncCommitteeContributionPeriodBoundary(t *testing.T
 	require.ErrorIs(t, validate(lastSlot+1, outgoing), ErrNoDuty)
 }
 
-// A sync committee member lifts a small committee's per-epoch duty limit. In a period's last slot that holds for both
-// the outgoing committee (on duty earlier in that epoch) and the incoming one (on duty in that slot).
+// A sync committee member lifts a small committee's per-epoch duty limit for the whole epoch. Throughout a period's
+// last epoch that holds for both the outgoing committee and the incoming one (on duty in that epoch's last slot).
 func TestDutyLimit_CommitteeSyncPeriodBoundary(t *testing.T) {
 	mv, lastSlot, outgoing, incoming := syncPeriodBoundaryValidator()
 	msgID := ssvtestingutils.NewMsgID(spectypes.DomainType{}, make([]byte, 32), spectypes.RoleCommittee)
@@ -122,12 +123,40 @@ func TestDutyLimit_CommitteeSyncPeriodBoundary(t *testing.T) {
 	allSlots := mv.netCfg.SlotsPerEpoch
 	const attestationOnly = uint64(2) // 2*V, for a single validator
 
-	require.Equal(t, allSlots, limit(lastSlot-1, outgoing))
-	require.Equal(t, attestationOnly, limit(lastSlot-1, incoming))
+	lastEpochStart := mv.netCfg.FirstSlotAtEpoch(mv.netCfg.EstimatedEpochAtSlot(lastSlot))
 
-	require.Equal(t, allSlots, limit(lastSlot, outgoing))
-	require.Equal(t, allSlots, limit(lastSlot, incoming))
+	// The epoch before the period's last one.
+	require.Equal(t, allSlots, limit(lastEpochStart-1, outgoing))
+	require.Equal(t, attestationOnly, limit(lastEpochStart-1, incoming))
 
+	// The period's last epoch.
+	for slot := lastEpochStart; slot <= lastSlot; slot++ {
+		require.Equal(t, allSlots, limit(slot, outgoing), "slot %d", slot)
+		require.Equal(t, allSlots, limit(slot, incoming), "slot %d", slot)
+	}
+
+	// The next period's first epoch.
 	require.Equal(t, attestationOnly, limit(lastSlot+1, outgoing))
 	require.Equal(t, allSlots, limit(lastSlot+1, incoming))
+}
+
+// A single-validator committee in the incoming sync committee can count three duties in a period's last epoch: two
+// attestation slots (the reorg margin) and the last slot's sync duty. Later messages for its earlier slots must still
+// pass, as the limit holds for the whole epoch.
+func TestValidateDutyCount_CommitteeIncomingSyncMemberLastEpoch(t *testing.T) {
+	mv, lastSlot, _, incoming := syncPeriodBoundaryValidator()
+	role := spectypes.RoleCommittee
+	msgID := ssvtestingutils.NewMsgID(spectypes.DomainType{}, make([]byte, 32), role)
+	indices := []phase0.ValidatorIndex{incoming}
+	os := newOperatorState(mv.storedSlotCount(role), mv.storedEpochCount(role))
+
+	lastEpoch := mv.netCfg.EstimatedEpochAtSlot(lastSlot)
+	attestationSlot := mv.netCfg.FirstSlotAtEpoch(lastEpoch)
+	for _, slot := range []phase0.Slot{attestationSlot, attestationSlot + 1, lastSlot} {
+		require.NoError(t, mv.validateDutyCount(msgID, slot, indices, os))
+		os.SetSignerStateForSlot(slot, lastEpoch, newSignerState(slot, specqbft.FirstRound))
+	}
+	require.Equal(t, uint64(3), os.DutyCount(lastEpoch))
+
+	require.NoError(t, mv.validateDutyCount(msgID, attestationSlot, indices, os))
 }
