@@ -307,7 +307,7 @@ func TestValidatorPubkeysToIndicesMapping_IgnoresPersistedZeroIndex(t *testing.T
 	require.NoError(t, storage.Shares.Save(nil, pendingShare, genesisShare))
 
 	// Write the pending share's row the way older versions did.
-	zeroIndex := make([]byte, 8)
+	zeroIndex := make([]byte, validatorIndexLength)
 	require.NoError(t, storage.db.Set(storage.pubkeyToIndexPrefix(), pendingShare.ValidatorPubKey[:], zeroIndex))
 	require.NoError(t, storage.Reopen(logger))
 

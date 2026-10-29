@@ -31,9 +31,12 @@ import (
 // which is why the version evolves over time.
 var sharesPrefix = []byte("shares_v2/")
 
-// pubkeyIndexMapping is a prefix for the validator pubkey -> index mapping. It's append-only,
-// since validator churn is low and the mapping never changes.
+// pubkeyIndexMapping is a prefix for the validator pubkey -> index mapping. Entries are never
+// deleted: a validator's index is permanent, and churn is low enough to keep them all.
 var pubkeyIndexMapping = []byte("val_pki")
+
+// validatorIndexLength is the size of a pubkey -> index mapping value: a little-endian uint64.
+const validatorIndexLength = 8
 
 // GetFeeRecipientFunc is a function type for getting fee recipients by owner.
 type GetFeeRecipientFunc func(owner common.Address) (bellatrix.ExecutionAddress, error)
@@ -147,7 +150,7 @@ func NewSharesStorage(beaconCfg *networkconfig.Beacon, db basedb.Database, getFe
 		return nil, nil, err
 	}
 
-	pubkeyIndexMapping, err := storage.loadPubkeyToIndexMappings()
+	pubkeyToIndex, err := storage.loadPubkeyToIndexMappings()
 	if err != nil {
 		return nil, nil, fmt.Errorf("load validator pubkey index mapping: %w", err)
 	}
@@ -156,7 +159,7 @@ func NewSharesStorage(beaconCfg *networkconfig.Beacon, db basedb.Database, getFe
 		func() []*types.SSVShare { return storage.List(nil) },
 		func(pk []byte) (*types.SSVShare, bool) { return storage.Get(nil, pk) },
 		getFeeRecipient,
-		pubkeyIndexMapping,
+		pubkeyToIndex,
 		beaconCfg,
 	)
 	if err := storage.validatorStore.handleSharesAdded(slices.Collect(maps.Values(storage.shares))...); err != nil {
@@ -176,7 +179,7 @@ func (s *sharesStorage) loadPubkeyToIndexMappings() (map[spectypes.ValidatorPK]p
 			return fmt.Errorf("invalid validator PK: bad length: %d", len(obj.Key))
 		}
 		copy(key[:], obj.Key)
-		if len(obj.Value) != 8 {
+		if len(obj.Value) != validatorIndexLength {
 			return fmt.Errorf("invalid validator index: bad length: %d", len(obj.Value))
 		}
 		index := phase0.ValidatorIndex(binary.LittleEndian.Uint64(obj.Value))
@@ -324,7 +327,7 @@ func (s *sharesStorage) saveToDB(rw basedb.ReadWriter, shares ...*types.SSVShare
 		vindex := indexed[i].ValidatorIndex
 		pubkey := indexed[i].ValidatorPubKey
 
-		b := make([]byte, 8)
+		b := make([]byte, validatorIndexLength)
 		binary.LittleEndian.PutUint64(b, uint64(vindex))
 
 		return basedb.Obj{Key: pubkey[:], Value: b}, nil
