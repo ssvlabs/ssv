@@ -198,6 +198,37 @@ func TestSyncer_Sync(t *testing.T) {
 		require.Nil(t, result)
 	})
 
+	// Subtest: Fetch partial response from beacon
+	t.Run("FetchPartialResponse", func(t *testing.T) {
+		validatorPK1 := spectypes.ValidatorPK{0x1}
+		validatorPK2 := spectypes.ValidatorPK{0x2}
+
+		mockShareStorage := NewMockshareStorage(ctrl)
+		mockShareStorage.EXPECT().UpdateValidatorsMetadata(beacon.ValidatorMetadataMap{
+			validatorPK1: &beacon.ValidatorMetadata{Status: eth2apiv1.ValidatorStateActiveOngoing, Index: 1},
+			validatorPK2: &beacon.ValidatorMetadata{},
+		}).Times(1)
+
+		mockBeaconNode := beacon.NewMockBeaconNode(ctrl)
+		mockBeaconNode.EXPECT().GetValidatorData(gomock.Any(), gomock.Any()).Return(map[phase0.ValidatorIndex]*eth2apiv1.Validator{
+			1: {
+				Index:     1,
+				Status:    eth2apiv1.ValidatorStateActiveOngoing,
+				Validator: &phase0.Validator{PublicKey: phase0.BLSPubKey(validatorPK1)},
+			},
+		}, nil)
+
+		syncer := &Syncer{
+			logger:       logger,
+			shareStorage: mockShareStorage,
+			beaconNode:   mockBeaconNode,
+		}
+
+		pubKeys := []spectypes.ValidatorPK{validatorPK1, validatorPK2}
+		_, err := syncer.Sync(t.Context(), pubKeys)
+		require.NoError(t, err)
+	})
+
 	// Subtest: UpdateValidatorsMetadata error
 	t.Run("UpdateValidatorsMetadataError", func(t *testing.T) {
 		mockShareStorage := NewMockshareStorage(ctrl)

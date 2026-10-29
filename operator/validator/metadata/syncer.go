@@ -139,12 +139,21 @@ func (s *Syncer) Sync(ctx context.Context, pubKeys []spectypes.ValidatorPK) (bea
 	if err != nil {
 		return nil, fmt.Errorf("fetch metadata: %w", err)
 	}
+	receivedCount := len(metadata)
 
 	s.logger.Debug("🆕 fetched validators metadata",
 		fields.Took(time.Since(fetchStart)),
 		zap.Int("requested_count", len(pubKeys)),
-		zap.Int("received_count", len(metadata)),
+		zap.Int("received_count", receivedCount),
 	)
+
+	// Validators the beacon node omitted (e.g. not deposited yet) get empty metadata: it refreshes
+	// their BeaconMetadataLastUpdated, and never replaces known metadata.
+	for _, pk := range pubKeys {
+		if _, ok := metadata[pk]; !ok {
+			metadata[pk] = &beacon.ValidatorMetadata{}
+		}
+	}
 
 	updateStart := time.Now()
 	// TODO: Refactor share storage to support passing context.
@@ -155,16 +164,15 @@ func (s *Syncer) Sync(ctx context.Context, pubKeys []spectypes.ValidatorPK) (bea
 
 	s.logger.Debug("🆕 saved validators metadata",
 		fields.Took(time.Since(updateStart)),
-		zap.Int("received_count", len(metadata)),
+		zap.Int("received_count", receivedCount),
 		zap.Int("updated_count", len(updatedValidators)),
 	)
 
 	return updatedValidators, nil
 }
 
-// fetchMetadata is responsible for fetching validator metadata from the beacon node for the provided public keys.
-// The beacon node response is sometimes empty for certain public keys — for such validators,
-// the ValidatorMetadataMap will contain empty metadata objects.
+// fetchMetadata fetches validator metadata from the beacon node for the provided public keys.
+// Validators the beacon node doesn't return are missing from the result.
 func (s *Syncer) fetchMetadata(ctx context.Context, pubKeys []spectypes.ValidatorPK) (beacon.ValidatorMetadataMap, error) {
 	blsPubKeys := make([]phase0.BLSPubKey, len(pubKeys))
 	for i, pk := range pubKeys {
@@ -177,11 +185,6 @@ func (s *Syncer) fetchMetadata(ctx context.Context, pubKeys []spectypes.Validato
 	}
 
 	results := make(beacon.ValidatorMetadataMap, len(pubKeys))
-
-	for _, key := range pubKeys {
-		results[key] = &beacon.ValidatorMetadata{}
-	}
-
 	for _, v := range validatorsIndexMap {
 		meta := &beacon.ValidatorMetadata{
 			Status:          v.Status,
