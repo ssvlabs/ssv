@@ -264,7 +264,9 @@ func TestAggregatorCommitteeRunnerProcessPostConsensus_DoesNotMarkFailedOnInvali
 	var specErr *spectypes.Error
 	require.ErrorAs(t, postConsensusErr, &specErr)
 	require.Equal(t, spectypes.PostConsensusQuorumWithInvalidSignatures, specErr.Code,
-		"invalid-sigs must carry the recoverable spec code")
+		"invalid-sigs must carry the spec code")
+	require.True(t, isRecoverableReconstructError(postConsensusErr),
+		"the spec code must not hide the recoverableReconstructError tag")
 
 	require.Empty(t, concluded, "a recoverable invalid-sigs error must NOT conclude the duty")
 	require.False(t, env.runner.State.Succeeded)
@@ -313,7 +315,9 @@ func TestAggregatorCommitteeRunnerProcessPostConsensus_RecoverableInvalidSigsThe
 	var specErr *spectypes.Error
 	require.ErrorAs(t, recoverableErr, &specErr)
 	require.Equal(t, spectypes.PostConsensusQuorumWithInvalidSignatures, specErr.Code,
-		"invalid-sigs must carry the recoverable spec code")
+		"invalid-sigs must carry the spec code")
+	require.True(t, isRecoverableReconstructError(recoverableErr),
+		"the spec code must not hide the recoverableReconstructError tag")
 
 	// The recoverable case must NOT conclude the duty: nothing has been sent on the conclusion channel.
 	require.Empty(t, concluded, "a recoverable invalid-sigs error must NOT conclude the duty")
@@ -335,7 +339,8 @@ func TestAggregatorCommitteeRunnerProcessPostConsensus_RecoverableInvalidSigsThe
 }
 
 // A reconstruction that fails with no bad share to drop can't be fixed by more shares, so it goes without the
-// recoverable spec code and concludes the duty failed with the reason, rather than leaving it to surface as stuck.
+// recoverable tag and concludes the duty failed with the reason, rather than leaving it to surface as stuck. It
+// still reports the spec code, which the spec attaches to every post-consensus reconstruct failure.
 func TestAggregatorCommitteeRunnerProcessPostConsensus_MarksFailedWhenNoShareToDrop(t *testing.T) {
 	ctx := t.Context()
 	const version = spec.DataVersionElectra
@@ -357,8 +362,9 @@ func TestAggregatorCommitteeRunnerProcessPostConsensus_MarksFailedWhenNoShareToD
 
 	require.ErrorContains(t, postConsensusErr, "invalid signatures")
 	var specErr *spectypes.Error
-	require.False(t, errors.As(postConsensusErr, &specErr) && specErr.Code == spectypes.PostConsensusQuorumWithInvalidSignatures,
-		"a terminal failure must not carry the recoverable spec code")
+	require.ErrorAs(t, postConsensusErr, &specErr)
+	require.Equal(t, spectypes.PostConsensusQuorumWithInvalidSignatures, specErr.Code)
+	require.False(t, isRecoverableReconstructError(postConsensusErr))
 	requireConcluded(t, concluded, dutyOutcomeFailed)
 	require.Empty(t, base.GetBroadcastedRoots())
 }
@@ -396,15 +402,14 @@ func TestAggregatorCommitteeRunnerProcessPreConsensus_NoShareToDropSkipsValidato
 }
 
 // TestAggregatorCommitteeRunnerProcessPostConsensus_TerminalWinsOverConcurrentRecoverable is the
-// regression test for the terminalErr/recoverableErr split: within a single ProcessPostConsensus
+// regression test for the terminal/recoverable split (batchErrs): within a single ProcessPostConsensus
 // call, one validator's post-consensus signatures reconstruct fine but then fail to submit (terminal,
 // set from the submit loop after the roots loop), while a second validator's signatures are corrupted
-// and reconstruct-fails with the recoverable PostConsensusQuorumWithInvalidSignatures code (set from
-// the errCh receive site during the roots loop). Both land in the same call, so which one is observed
-// first by the listener select is not controlled by the test. Before the split, a single
-// last-write-wins `executionErr` made the final classification depend on that arrival order; the
-// fixed code always classifies the duty failed here because terminalErr is checked first,
-// independent of goroutine/channel scheduling. We assert on the conclusion outcome, not on which
+// and reconstruct-fails recoverably (set from the errCh receive site during the roots loop). Both land
+// in the same call, so which one is observed first by the listener select is not controlled by the
+// test. Before the split, a single last-write-wins `executionErr` made the final classification depend
+// on that arrival order; the fixed code always classifies the duty failed here because a terminal
+// failure wins, independent of goroutine/channel scheduling. We assert on the conclusion outcome, not on which
 // error message ends up attached (that part is still last-write-wins by design for same-class
 // errors).
 func TestAggregatorCommitteeRunnerProcessPostConsensus_TerminalWinsOverConcurrentRecoverable(t *testing.T) {
