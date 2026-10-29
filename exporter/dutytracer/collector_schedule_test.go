@@ -135,6 +135,44 @@ func TestCollectorComputeAndPersistScheduleForSlot(t *testing.T) {
 	assert.Equal(t, rolemask.BitSyncCommittee, saved[7]&rolemask.BitSyncCommittee)
 }
 
+// A period's last slot schedules the next period's sync committee, the slot before it the current one.
+func TestCollectorComputeAndPersistScheduleSyncPeriodBoundary(t *testing.T) {
+	t.Parallel()
+
+	cfg := *networkconfig.TestNetwork.Beacon
+	const period = uint64(1)
+	lastSlot := cfg.FirstSlotAtEpoch(cfg.FirstEpochOfSyncPeriod(period+1)) - 1
+
+	const (
+		outgoing = phase0.ValidatorIndex(1)
+		incoming = phase0.ValidatorIndex(2)
+		both     = phase0.ValidatorIndex(3)
+	)
+	syncDuty := func(idx phase0.ValidatorIndex) dutystore.StoreSyncCommitteeDuty {
+		return dutystore.StoreSyncCommitteeDuty{
+			ValidatorIndex: idx,
+			Duty:           &eth2apiv1.SyncCommitteeDuty{ValidatorIndex: idx},
+			InCommittee:    true,
+		}
+	}
+	duties := dutystore.New()
+	duties.SyncCommittee.Set(period, []dutystore.StoreSyncCommitteeDuty{syncDuty(outgoing), syncDuty(both)})
+	duties.SyncCommittee.Set(period+1, []dutystore.StoreSyncCommitteeDuty{syncDuty(incoming), syncDuty(both)})
+
+	store := &mockDutyTraceStore{}
+	collector := New(zap.NewNop(), &mockValidatorStore{}, nil, store, &cfg, nil, duties)
+
+	for _, slot := range []phase0.Slot{lastSlot - 1, lastSlot, lastSlot + 1} {
+		require.NoError(t, collector.computeAndPersistScheduleForSlot(slot))
+	}
+
+	outgoingCommittee := map[phase0.ValidatorIndex]rolemask.Mask{outgoing: rolemask.BitSyncCommittee, both: rolemask.BitSyncCommittee}
+	incomingCommittee := map[phase0.ValidatorIndex]rolemask.Mask{incoming: rolemask.BitSyncCommittee, both: rolemask.BitSyncCommittee}
+	assert.Equal(t, outgoingCommittee, store.scheduled[lastSlot-1])
+	assert.Equal(t, incomingCommittee, store.scheduled[lastSlot])
+	assert.Equal(t, incomingCommittee, store.scheduled[lastSlot+1])
+}
+
 // At a Gloas slot the schedule carries the two new duties: PTC membership from the PTC duty store, and
 // proposer preferences for every proposer of the slot (SIP #94 §3, §5).
 func TestCollectorComputeAndPersistScheduleGloas(t *testing.T) {

@@ -234,6 +234,14 @@ func TestSyncCommitteePeriodHelpers(t *testing.T) {
 			require.Equal(t, tc.firstNextSlot, config.FirstSlotAtEpoch(config.FirstEpochOfSyncPeriod(tc.period+1)))
 			require.Equal(t, tc.lastActionableSlot, config.LastActionableSlotOfSyncPeriod(tc.period))
 			require.Equal(t, tc.firstNextSlot-2, config.LastActionableSlotOfSyncPeriod(tc.period))
+
+			// On duty: the period's committee through its last actionable slot, the next one after it.
+			require.Equal(t, tc.period, config.SyncCommitteeDutyPeriodAtSlot(tc.lastActionableSlot))
+			require.Equal(t, tc.period+1, config.SyncCommitteeDutyPeriodAtSlot(tc.lastActionableSlot+1))
+			require.Equal(t, tc.period+1, config.SyncCommitteeDutyPeriodAtSlot(tc.firstNextSlot))
 		})
 	}
+
+	// Period 0's committee is on duty from genesis.
+	require.Equal(t, uint64(0), config.SyncCommitteeDutyPeriodAtSlot(0))
 }

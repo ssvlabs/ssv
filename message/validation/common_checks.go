@@ -150,11 +150,15 @@ func (mv *messageValidator) dutyLimit(msgID spectypes.MessageID, slot phase0.Slo
 		// as the maximum duties per epoch is capped at the number of slots.
 		// This avoids unnecessary checks.
 		if validatorIndexCount < slotsPerEpoch/2 {
-			// Check if there is at least one validator in the sync committee.
+			// Check if there is at least one validator in the sync committee during this epoch.
 			// If so, the duty limit is equal to the number of slots per epoch.
-			period := mv.netCfg.EstimatedSyncCommitteePeriodAtEpoch(mv.netCfg.EstimatedEpochAtSlot(slot))
+			// The limit caps the whole epoch, so it must not vary by slot: in a period's last epoch, the incoming
+			// committee (on duty in its last slot, see SyncCommitteeDutyPeriodAtSlot) counts too.
+			epoch := mv.netCfg.EstimatedEpochAtSlot(slot)
+			period := mv.netCfg.EstimatedSyncCommitteePeriodAtEpoch(epoch)
+			nextEpochPeriod := mv.netCfg.EstimatedSyncCommitteePeriodAtEpoch(epoch + 1)
 			for _, i := range validatorIndices {
-				if mv.dutyStore.SyncCommittee.Duty(period, i) != nil {
+				if mv.inSyncCommittee(i, period, nextEpochPeriod) {
 					return slotsPerEpoch, true
 				}
 			}
@@ -169,6 +173,12 @@ func (mv *messageValidator) dutyLimit(msgID spectypes.MessageID, slot phase0.Slo
 	default:
 		return 0, false
 	}
+}
+
+// inSyncCommittee reports whether the validator is in the sync committee of period or otherPeriod.
+func (mv *messageValidator) inSyncCommittee(validatorIndex phase0.ValidatorIndex, period, otherPeriod uint64) bool {
+	return mv.dutyStore.SyncCommittee.Duty(period, validatorIndex) != nil ||
+		otherPeriod != period && mv.dutyStore.SyncCommittee.Duty(otherPeriod, validatorIndex) != nil
 }
 
 func (mv *messageValidator) validateBeaconDuty(
@@ -220,10 +230,13 @@ func (mv *messageValidator) validateBeaconDuty(
 
 	// Rule: For a sync committee aggregation duty message, we check if the validator is assigned to it
 	if role == ssvtypes.RoleSyncCommitteeContribution {
+		// In a period's last slot both committees qualify: the incoming one is on duty (see
+		// SyncCommitteeDutyPeriodAtSlot), and peers on older versions still run the outgoing one.
 		period := mv.netCfg.EstimatedSyncCommitteePeriodAtEpoch(epoch)
+		dutyPeriod := mv.netCfg.SyncCommitteeDutyPeriodAtSlot(slot)
 		// Non-committee roles always have one validator index.
 		validatorIndex := indices[0]
-		if mv.dutyStore.SyncCommittee.Duty(period, validatorIndex) == nil {
+		if !mv.inSyncCommittee(validatorIndex, period, dutyPeriod) {
 			return ErrNoDuty
 		}
 	}
