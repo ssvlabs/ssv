@@ -60,7 +60,7 @@ func TestHTTPDoErrorsOmitBeaconAddr(t *testing.T) {
 		"malformed address": "http://user:" + password + "@host:port/rpc/" + apiKey,
 	} {
 		t.Run(name, func(t *testing.T) {
-			_, _, _, err := httpDo(t.Context(), http.DefaultClient, http.MethodPost, unmaskedAddr{addr}, payloadAttestationsPath, nil, "application/json", "", nil)
+			_, _, _, err := httpDo(t.Context(), http.DefaultClient, http.MethodPost, unmaskedAddr{addr}, payloadAttestationsPath, nil, contentTypeJSON, "", nil)
 			require.ErrorContains(t, err, http.MethodPost+" "+payloadAttestationsPath)
 			require.NotContains(t, err.Error(), password)
 			require.NotContains(t, err.Error(), apiKey)

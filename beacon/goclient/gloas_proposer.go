@@ -101,7 +101,7 @@ func requestGloasBeaconBlockPOST(ctx context.Context, addr unmaskedAddr, path st
 	if err != nil {
 		return nil, fmt.Errorf("marshal builder config: %w", err)
 	}
-	respBody, header, err := gloasHTTPDo(ctx, http.MethodPost, addr, path, jsonBody, "application/octet-stream", "application/json", nil)
+	respBody, header, err := gloasHTTPDo(ctx, http.MethodPost, addr, path, jsonBody, contentTypeSSZ, contentTypeJSON, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -110,7 +110,7 @@ func requestGloasBeaconBlockPOST(ctx context.Context, addr unmaskedAddr, path st
 
 // requestGloasBeaconBlockGET sends the legacy produceBlockV4 GET and decodes the SSZ response.
 func requestGloasBeaconBlockGET(ctx context.Context, addr unmaskedAddr, path string) (*gloas.ProducedBlock, error) {
-	respBody, header, err := gloasHTTPDo(ctx, http.MethodGet, addr, path, nil, "application/octet-stream", "", nil)
+	respBody, header, err := gloasHTTPDo(ctx, http.MethodGet, addr, path, nil, contentTypeSSZ, "", nil)
 	if err != nil {
 		return nil, err
 	}

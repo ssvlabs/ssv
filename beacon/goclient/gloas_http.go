@@ -20,6 +20,13 @@ const (
 	consensusVersionGloas  = "gloas"
 )
 
+// contentTypeJSON and contentTypeSSZ are the beacon-APIs media types of JSON and SSZ bodies, for the
+// Accept and Content-Type headers of the hand-rolled requests.
+const (
+	contentTypeJSON = "application/json"
+	contentTypeSSZ  = "application/octet-stream"
+)
+
 // gloasHTTPClient issues the hand-rolled Gloas requests; per-call deadlines come from the request context.
 // Like the main eth2clienthttp path, it applies basic-auth from the (unmasked) beacon address and uses no
 // custom TLS or client certificate. Interim: retired once these requests move onto the fork's typed calls
@@ -147,7 +154,7 @@ func withoutRequestURL(err error) error {
 // nil to ignore the body). A nil body sends no request payload; extraHeaders are applied last. Non-2xx
 // responses surface as *httpStatusError.
 func jsonDo(ctx context.Context, httpClient *http.Client, method string, addr unmaskedAddr, path string, body []byte, extraHeaders map[string]string, out any) error {
-	respBody, _, _, err := httpDo(ctx, httpClient, method, addr, path, body, "application/json", "application/json", extraHeaders)
+	respBody, _, _, err := httpDo(ctx, httpClient, method, addr, path, body, contentTypeJSON, contentTypeJSON, extraHeaders)
 	if err != nil {
 		return err
 	}
@@ -179,7 +186,7 @@ func gloasHTTPDo(ctx context.Context, method string, addr unmaskedAddr, path str
 // gloasHTTPDo. It accepts JSON: a publish route answers a 2xx with no content and errors as JSON, so a
 // beacon node that enforces Accept (Prysm) refuses an SSZ-only one with 406.
 func gloasPublishSSZ(ctx context.Context, addr unmaskedAddr, path string, body []byte, extraHeaders map[string]string) error {
-	_, _, err := gloasHTTPDo(ctx, http.MethodPost, addr, path, body, "application/json", "application/octet-stream", extraHeaders)
+	_, _, err := gloasHTTPDo(ctx, http.MethodPost, addr, path, body, contentTypeJSON, contentTypeSSZ, extraHeaders)
 	if isAlreadyKnown(err) {
 		return nil
 	}
