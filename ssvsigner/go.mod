@@ -16,7 +16,7 @@ go 1.26.0
 toolchain go1.26.10
 
 require (
-	github.com/OffchainLabs/go-bitfield v0.0.0-20260504143531-5cbb6d0f5f2e
+	github.com/OffchainLabs/go-bitfield v0.0.0-20261020212435-260d98aec40c
 	github.com/alecthomas/kong v1.8.1
 	github.com/attestantio/go-eth2-client v0.27.0
 	github.com/carlmjohnson/requests v0.24.3
