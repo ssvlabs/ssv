@@ -21,7 +21,6 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/herumi/bls-eth-go-binary/bls"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
@@ -250,14 +249,117 @@ func TestValidatorPubkeysToIndicesMapping(t *testing.T) {
 	require.Equal(t, 2, len(m))
 	require.Equal(t, validatorShare.ValidatorIndex, m[validatorShare.ValidatorPubKey])
 	require.Equal(t, validatorShare2.ValidatorIndex, m[validatorShare2.ValidatorPubKey])
+}
 
-	pubkeys := []spectypes.ValidatorPK{validatorShare.ValidatorPubKey, validatorShare2.ValidatorPubKey}
-	indices, err := storage.Shares.(*sharesStorage).GetValidatorIndicesByPubkeys(pubkeys)
+// A share without beacon metadata must not resolve via the pubkey <-> index mapping, before or
+// after a restart.
+func TestValidatorPubkeysToIndicesMapping_WithoutMetadata(t *testing.T) {
+	testWithStorageReopen(t, func(t *testing.T, storage *testStorage, reopen func(t *testing.T)) {
+		share1 := fakeShareWithoutMetadata()
+		share2 := fakeShareWithoutMetadata()
+		require.NoError(t, storage.Shares.Save(nil, share1, share2))
+		reopen(t)
+
+		_, found := storage.ValidatorStore.ValidatorIndex(share1.ValidatorPubKey)
+		require.False(t, found)
+		_, found = storage.ValidatorStore.ValidatorIndex(share2.ValidatorPubKey)
+		require.False(t, found)
+		_, found = storage.ValidatorStore.ValidatorPubkey(0)
+		require.False(t, found)
+
+		// Beacon metadata arrives for share1 only.
+		const index = phase0.ValidatorIndex(42)
+		_, err := storage.Shares.UpdateValidatorsMetadata(beaconprotocol.ValidatorMetadataMap{
+			share1.ValidatorPubKey: {
+				Status:          v1.ValidatorStateActiveOngoing,
+				Index:           index,
+				ActivationEpoch: 4,
+				ExitEpoch:       goclient.FarFutureEpoch,
+			},
+		})
+		require.NoError(t, err)
+		reopen(t)
+
+		idx, found := storage.ValidatorStore.ValidatorIndex(share1.ValidatorPubKey)
+		require.True(t, found)
+		require.Equal(t, index, idx)
+		pk, found := storage.ValidatorStore.ValidatorPubkey(index)
+		require.True(t, found)
+		require.Equal(t, share1.ValidatorPubKey, pk)
+
+		_, found = storage.ValidatorStore.ValidatorIndex(share2.ValidatorPubKey)
+		require.False(t, found)
+		_, found = storage.ValidatorStore.ValidatorPubkey(0)
+		require.False(t, found)
+	})
+}
+
+// pubkey -> 0 rows persisted by older versions are ignored on load, while a genuine index-0
+// validator still resolves from its share.
+func TestValidatorPubkeysToIndicesMapping_IgnoresPersistedZeroIndex(t *testing.T) {
+	logger := log.TestLogger(t)
+	storage, err := newTestStorage(logger)
 	require.NoError(t, err)
-	require.Equal(t, 2, len(indices))
-	// should maintain order
-	assert.Equal(t, validatorShare.ValidatorIndex, indices[0])
-	assert.Equal(t, validatorShare2.ValidatorIndex, indices[1])
+	defer storage.Close()
+
+	pendingShare := fakeShareWithoutMetadata()
+	genesisShare := fakeParticipatingShare(0, generateRandomPubKey(), []uint64{1, 2, 3, 4})
+	require.NoError(t, storage.Shares.Save(nil, pendingShare, genesisShare))
+
+	// Write the pending share's row the way older versions did.
+	zeroIndex := make([]byte, 8)
+	require.NoError(t, storage.db.Set(storage.pubkeyToIndexPrefix(), pendingShare.ValidatorPubKey[:], zeroIndex))
+	require.NoError(t, storage.Reopen(logger))
+
+	_, found := storage.ValidatorStore.ValidatorIndex(pendingShare.ValidatorPubKey)
+	require.False(t, found)
+
+	idx, found := storage.ValidatorStore.ValidatorIndex(genesisShare.ValidatorPubKey)
+	require.True(t, found)
+	require.Equal(t, phase0.ValidatorIndex(0), idx)
+	pk, found := storage.ValidatorStore.ValidatorPubkey(0)
+	require.True(t, found)
+	require.Equal(t, genesisShare.ValidatorPubKey, pk)
+}
+
+func TestValidatorPubkeysToIndicesMapping_RejectsMalformedIndex(t *testing.T) {
+	logger := log.TestLogger(t)
+	storage, err := newTestStorage(logger)
+	require.NoError(t, err)
+	defer storage.Close()
+
+	pk := generateRandomPubKey()
+	require.NoError(t, storage.db.Set(storage.pubkeyToIndexPrefix(), pk[:], []byte{1, 2, 3}))
+	require.ErrorContains(t, storage.Reopen(logger), "invalid validator index: bad length: 3")
+}
+
+// A metadata refresh that drops a share's metadata (e.g. the beacon node omits the validator)
+// zeroes its index, but the persisted mapping must keep the real one.
+func TestValidatorPubkeysToIndicesMapping_KeepsIndexWhenMetadataIsLost(t *testing.T) {
+	testWithStorageReopen(t, func(t *testing.T, storage *testStorage, reopen func(t *testing.T)) {
+		const index = phase0.ValidatorIndex(42)
+		share := fakeParticipatingShare(index, generateRandomPubKey(), []uint64{1, 2, 3, 4})
+		require.NoError(t, storage.Shares.Save(nil, share))
+
+		_, err := storage.Shares.UpdateValidatorsMetadata(beaconprotocol.ValidatorMetadataMap{
+			share.ValidatorPubKey: {},
+		})
+		require.NoError(t, err)
+		reopen(t)
+
+		storedShare, found := storage.Shares.Get(nil, share.ValidatorPubKey[:])
+		require.True(t, found)
+		require.False(t, storedShare.HasBeaconMetadata())
+
+		idx, found := storage.ValidatorStore.ValidatorIndex(share.ValidatorPubKey)
+		require.True(t, found)
+		require.Equal(t, index, idx)
+		pk, found := storage.ValidatorStore.ValidatorPubkey(index)
+		require.True(t, found)
+		require.Equal(t, share.ValidatorPubKey, pk)
+		_, found = storage.ValidatorStore.ValidatorPubkey(0)
+		require.False(t, found)
+	})
 }
 
 func TestShareDeletionHandlesValidatorStoreCorrectly(t *testing.T) {
@@ -684,6 +786,16 @@ func fakeParticipatingShare(index phase0.ValidatorIndex, pk spectypes.ValidatorP
 	}
 }
 
+// fakeShareWithoutMetadata returns a share as ValidatorAdded creates it, before beacon metadata
+// is synced.
+func fakeShareWithoutMetadata() *ssvtypes.SSVShare {
+	share := fakeParticipatingShare(0, generateRandomPubKey(), []uint64{1, 2, 3, 4})
+	share.Status = v1.ValidatorStateUnknown
+	share.ActivationEpoch = 0
+	share.ExitEpoch = 0
+	return share
+}
+
 func generateMaxPossibleShare() (*Share, error) {
 	sk := &bls.SecretKey{}
 	sk.SetByCSPRNG()
@@ -739,6 +851,10 @@ func (t *testStorage) open(logger *zap.Logger) error {
 
 func (t *testStorage) Reopen(logger *zap.Logger) error {
 	return t.open(logger)
+}
+
+func (t *testStorage) pubkeyToIndexPrefix() []byte {
+	return PubkeyToIndexMappingDBKey(t.Shares.(*sharesStorage).storagePrefix)
 }
 
 func (t *testStorage) Recreate(logger *zap.Logger) error {
