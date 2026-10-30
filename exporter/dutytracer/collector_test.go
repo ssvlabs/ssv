@@ -1222,6 +1222,91 @@ func TestCollector_LateEarlierRoundProposalKeepsDecidedRoots(t *testing.T) {
 	assert.Equal(t, voteRound2, duty.ProposalData, "proposal data must come from the highest round")
 }
 
+func TestCollector_LateCommitteeSignaturesAreClassified(t *testing.T) {
+	const (
+		slot = phase0.Slot(40)
+		vIdx = phase0.ValidatorIndex(42)
+	)
+
+	tests := []struct {
+		name string
+		role spectypes.RunnerRole
+		// proposal returns the proposal's data and a post-consensus root derived from it.
+		proposal func(t *testing.T, tracer *Collector) ([]byte, phase0.Root)
+		bucket   func(duty *traces.CommitteeDutyTrace) []*traces.SignerData
+	}{
+		{
+			name: "committee",
+			role: spectypes.RoleCommittee,
+			proposal: func(t *testing.T, tracer *Collector) ([]byte, phase0.Root) {
+				_, attRoot, vote := buildRoleRoots(t, tracer, slot, phase0.Root{1})
+				return vote, attRoot
+			},
+			bucket: func(duty *traces.CommitteeDutyTrace) []*traces.SignerData { return duty.Attester },
+		},
+		{
+			name: "aggregator committee",
+			role: spectypes.RoleAggregatorCommittee,
+			proposal: func(t *testing.T, tracer *Collector) ([]byte, phase0.Root) {
+				data := buildAggregatorCommitteeConsensusData(t)
+				rolesByRoot, err := tracer.computeAggregatorCommitteePostConsensusRoles(t.Context(), slot, data)
+				require.NoError(t, err)
+				var contributionRoot phase0.Root
+				for root, role := range rolesByRoot {
+					if role == spectypes.BNRoleSyncCommitteeContribution {
+						contributionRoot = root
+					}
+				}
+				require.NotZero(t, contributionRoot)
+				return data, contributionRoot
+			},
+			bucket: func(duty *traces.CommitteeDutyTrace) []*traces.SignerData { return duty.SyncCommittee },
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			db, err := kv.NewInMemory(zap.NewNop(), basedb.Options{})
+			require.NoError(t, err)
+			dutyStore := store.New(db)
+
+			identifier := ssvtestingutils.NewMsgID([4]byte{}, []byte("pk"), tt.role)
+			var committeeID spectypes.CommitteeID
+			copy(committeeID[:], identifier.GetDutyExecutorID()[16:])
+			validators := registrystoragemocks.NewMockValidatorStore(gomock.NewController(t))
+			committee := &storage.Committee{ID: committeeID, Operators: []spectypes.OperatorID{1, 2, 3, 4}}
+			validators.EXPECT().Committee(committeeID).Return(committee, true).AnyTimes()
+			tracer := New(zap.NewNop(), validators, mockclient{}, dutyStore, networkconfig.TestNetwork.Beacon, nil, nil)
+
+			data, root := tt.proposal(t, tracer)
+			signPostConsensus := func(signer spectypes.OperatorID) {
+				msg := buildPartialSigMessage(identifier, encodePartialSigMessages(slot, vIdx, signer, root))
+				require.NoError(t, tracer.Collect(t.Context(), msg, dummyVerify))
+			}
+
+			proposal := buildConsensusMsg(identifier, specqbft.ProposalMsgType, slot, nil)
+			proposal.SignedSSVMessage.FullData = data
+			require.NoError(t, tracer.Collect(t.Context(), proposal, dummyVerify))
+			signPostConsensus(1)
+
+			// Evict the duty, so the next signature reloads it from disk.
+			tracer.lastEvictedSlot.Store(uint64(slot))
+			tracer.dumpCommitteeToDBPeriodically(slot)
+			signPostConsensus(2)
+
+			duty, err := dutyStore.GetCommitteeDuty(slot, tt.role, committeeID)
+			require.NoError(t, err)
+			var signers []spectypes.OperatorID
+			for _, sd := range tt.bucket(duty) {
+				if slices.Contains(sd.ValidatorIdx, vIdx) {
+					signers = append(signers, sd.Signer)
+				}
+			}
+			assert.Equal(t, []spectypes.OperatorID{1, 2}, signers)
+		})
+	}
+}
+
 func TestCollector_FlushPending_Timestamps(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()

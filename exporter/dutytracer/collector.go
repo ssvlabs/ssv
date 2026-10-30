@@ -708,6 +708,31 @@ func (c *Collector) computeRoleRoots(ctx context.Context, slot phase0.Slot, in [
 	return syncRoot, attRoot, nil
 }
 
+// addProposalRoles records the post-consensus signing roots derived from a committee proposal's data.
+// Caller must hold trace.Lock().
+func (c *Collector) addProposalRoles(ctx context.Context, trace *committeeDutyTrace, slot phase0.Slot, role spectypes.RunnerRole, data []byte) error {
+	switch role {
+	case spectypes.RoleCommittee:
+		syncRoot, attRoot, err := c.computeRoleRoots(ctx, slot, data)
+		if err != nil {
+			return err
+		}
+		trace.addPostConsensusRole(syncRoot, spectypes.BNRoleSyncCommittee)
+		trace.addPostConsensusRole(attRoot, spectypes.BNRoleAttester)
+	case spectypes.RoleAggregatorCommittee:
+		rolesByRoot, err := c.computeAggregatorCommitteePostConsensusRoles(ctx, slot, data)
+		if err != nil {
+			return err
+		}
+		for root, beaconRole := range rolesByRoot {
+			trace.addPostConsensusRole(root, beaconRole)
+		}
+	default:
+		return fmt.Errorf("unexpected committee role: %v", role)
+	}
+	return nil
+}
+
 func (c *Collector) Collect(ctx context.Context, msg *queue.SSVMessage, verifySig func(*spectypes.PartialSignatureMessages) error) error {
 	err := c.collect(ctx, msg, verifySig)
 	if errors.Is(err, errInFlight) {
@@ -914,48 +939,18 @@ func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 					trace.ProposalData = msg.SignedSSVMessage.FullData
 				}
 
-				switch role {
-				case spectypes.RoleCommittee:
-					if syncRoot, attRoot, err := c.computeRoleRoots(ctx, slot, msg.SignedSSVMessage.FullData); err == nil {
-						trace.addPostConsensusRole(syncRoot, spectypes.BNRoleSyncCommittee)
-						trace.addPostConsensusRole(attRoot, spectypes.BNRoleAttester)
-						trace.flushPending()
-						// Check quorum for all validators after flushing pending signatures.
-						// This ensures quorum detection happens immediately when signatures that
-						// arrived before the proposal are reclassified into role buckets.
-						c.checkQuorumAfterFlush(c.logger, committeeID, slot, trace)
-					} else {
-						// CRITICAL: If we fail to compute role roots, pending signatures will be dropped.
-						pendingCount := countPending(trace.pendingByRoot)
-						c.logger.Error("CRITICAL: failed to compute role roots from proposal - pending signatures will be dropped",
-							zap.Error(err),
-							fields.Slot(slot),
-							fields.CommitteeID(committeeID),
-							zap.Int("pending_signature_count", pendingCount),
-							pendingDetails(trace.pendingByRoot))
-					}
-				case spectypes.RoleAggregatorCommittee:
-					if rolesByRoot, err := c.computeAggregatorCommitteePostConsensusRoles(ctx, slot, msg.SignedSSVMessage.FullData); err == nil {
-						for root, beaconRole := range rolesByRoot {
-							trace.addPostConsensusRole(root, beaconRole)
-						}
-						trace.flushPending()
-						// Check quorum for all validators after flushing pending signatures.
-						// This ensures quorum detection happens immediately when signatures that
-						// arrived before the proposal are reclassified into role buckets.
-						c.checkQuorumAfterFlush(c.logger, committeeID, slot, trace)
-					} else {
-						// CRITICAL: If we fail to compute role roots, pending signatures will be dropped.
-						pendingCount := countPending(trace.pendingByRoot)
-						c.logger.Error("CRITICAL: failed to compute aggregator committee roots from proposal - pending signatures will be dropped",
-							zap.Error(err),
-							fields.Slot(slot),
-							fields.CommitteeID(committeeID),
-							zap.Int("pending_signature_count", pendingCount),
-							pendingDetails(trace.pendingByRoot))
-					}
-				default:
-					c.logger.Warn("unexpected committee role on committee trace path", zap.Int32("role", int32(role)))
+				if err := c.addProposalRoles(ctx, trace, slot, role, msg.SignedSSVMessage.FullData); err != nil {
+					c.logger.Error("CRITICAL: failed to compute role roots from proposal - pending signatures will be dropped",
+						zap.Error(err),
+						fields.Slot(slot),
+						fields.CommitteeID(committeeID),
+						fields.RunnerRole(role),
+						zap.Int("pending_signature_count", countPending(trace.pendingByRoot)),
+						pendingDetails(trace.pendingByRoot))
+				} else {
+					trace.flushPending()
+					// Signatures that arrived before the proposal are now classified, so check their quorum.
+					c.checkQuorumAfterFlush(c.logger, committeeID, slot, trace)
 				}
 			}
 
@@ -1087,12 +1082,18 @@ func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 			trace.Lock()
 			defer trace.Unlock()
 
+			// A trace reloaded from disk has no role roots: derive them from its stored proposal.
+			if late && pSigMessages.Type == spectypes.PostConsensusPartialSig && len(trace.ProposalData) > 0 {
+				if err := c.addProposalRoles(ctx, trace, verifyCtx.slot, verifyCtx.runnerRole, trace.ProposalData); err != nil {
+					verifyCtx.logger.Warn("failed to compute role roots for late post-consensus signatures", zap.Error(err))
+				}
+			}
+
 			c.processPartialSigCommittee(startTime, pSigMessages, trace, aggSelectionRoot, aggSelectionRootReady)
 			c.checkAndPublishQuorum(verifyCtx.logger, pSigMessages, verifyCtx.committeeID, trace)
 
 			if late {
-				// A trace reloaded from disk has no role roots and pending signatures aren't persisted,
-				// so signatures left unclassified here are lost.
+				// Pending signatures aren't persisted, so signatures left unclassified here are lost.
 				if pending := countPending(trace.pendingByRoot); pending > 0 {
 					recordDroppedPendingSignatures(pending, verifyCtx.runnerRole)
 				}

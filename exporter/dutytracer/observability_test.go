@@ -77,7 +77,7 @@ func TestCollector_RecordsLateUnclassifiedSignatures(t *testing.T) {
 	roleAttr := observability.RunnerRoleAttribute(spectypes.RoleCommittee)
 	before := counterValue(t, "ssv.dutytracer.pending_signatures.dropped", roleAttr)
 
-	// The trace is reloaded from disk without role roots, so the signature can't be classified.
+	// The stored trace has no proposal to derive role roots from, so the signature can't be classified.
 	data := encodePartialSigMessages(slot, 42, 1, phase0.Root{7})
 	require.NoError(t, tracer.Collect(t.Context(), buildPartialSigMessage(identifier, data), dummyVerify))
 
