@@ -51,7 +51,7 @@ func TestCollector_RecordsDroppedPendingSignatures(t *testing.T) {
 	roleAttr := observability.RunnerRoleAttribute(spectypes.RoleCommittee)
 	before := counterValue(t, "ssv.dutytracer.pending_signatures.dropped", roleAttr)
 
-	// Post-consensus signatures arrive, but no proposal ever does, so their root stays unknown.
+	// Post-consensus signatures arrive, but no proposal or decided ever does, so their root stays unknown.
 	for _, signer := range []spectypes.OperatorID{1, 2} {
 		data := encodePartialSigMessages(slot, 42, signer, phase0.Root{7})
 		require.NoError(t, tracer.Collect(t.Context(), buildPartialSigMessage(identifier, data), dummyVerify))

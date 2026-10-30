@@ -60,9 +60,9 @@ func (c *Collector) dumpCommitteeToDBPeriodically(slot phase0.Slot) (totalSaved 
 
 		pendingCount := countPending(trace.pendingByRoot)
 		if pendingCount > 0 {
-			// known_roots is 0 when no proposal was processed; otherwise the signatures
-			// match none of the roots derived from the proposals seen.
-			c.logger.Error("dropping buffered pending signatures during eviction (proposal never arrived or failed to establish role roots)",
+			// known_roots is 0 when no proposal or decided was processed; otherwise the signatures
+			// match none of the roots derived from those seen.
+			c.logger.Error("dropping buffered pending signatures during eviction (no proposal or decided arrived, or role roots failed)",
 				fields.Slot(slot), fields.CommitteeID(key.id),
 				zap.Int("pending_entries", pendingCount),
 				zap.Int("known_roots", len(trace.postConsensusRoles)),

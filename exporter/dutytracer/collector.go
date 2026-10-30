@@ -178,35 +178,51 @@ func (c *Collector) Start(ctx context.Context, tickerProvider slotticker.Provide
 
 const slotTTL = 4
 
-// evict flushes the slot slotTTL behind currentSlot to disk. A proposer-preferences trace is keyed by its
-// proposal slot, up to two epochs ahead of its messages, so a restart before then loses it (other roles
-// lose at most slotTTL slots); flushing it earlier would need eviction to merge with the disk copy.
+// evict flushes the slot slotTTL behind currentSlot to disk, along with any slots skipped since the last
+// eviction. A proposer-preferences trace is keyed by its proposal slot, up to two epochs ahead of its
+// messages, so a restart before then loses it (other roles lose at most slotTTL slots); flushing it
+// earlier would need eviction to merge with the disk copy.
 func (c *Collector) evict(currentSlot phase0.Slot) {
-	// evict committee traces
-	start := time.Now()
 	threshold := currentSlot - slotTTL
 
 	// CRITICAL: Update lastEvictedSlot BEFORE dumping to ensure messages arriving
 	// during eviction take the late path and fetch from disk instead of creating
 	// new incomplete in-memory traces
-	c.lastEvictedSlot.Store(uint64(threshold))
+	lastEvicted := phase0.Slot(c.lastEvictedSlot.Swap(uint64(threshold)))
 
-	evicted := c.dumpCommitteeToDBPeriodically(threshold)
-	c.logger.Info("evicted committee duty traces to disk", fields.Slot(threshold), zap.Int("count", evicted), fields.Took(time.Since(start)))
-
-	// evict validator traces
-	start = time.Now()
-	evicted = c.dumpValidatorToDBPeriodically(threshold)
-	c.logger.Info("evicted validator duty traces to disk", fields.Slot(threshold), zap.Int("count", evicted), fields.Took(time.Since(start)))
-
-	// evict validator committee links
-	start = time.Now()
-	evicted = c.dumpLinkToDBPeriodically(threshold)
-	c.logger.Info("evicted validator mappings to disk", fields.Slot(threshold), zap.Int("count", evicted), fields.Took(time.Since(start)))
+	// The ticker skips a slot when an eviction runs past its start. The first eviction doesn't catch up:
+	// older traces in memory then were created after a restart, and saving them would overwrite the disk copy.
+	from := threshold
+	if lastEvicted != 0 && lastEvicted+1 < threshold {
+		from = lastEvicted + 1
+		c.logger.Warn("evicting slots skipped since the last eviction",
+			zap.Uint64("from_slot", uint64(from)), zap.Uint64("to_slot", uint64(threshold)))
+	}
+	for slot := from; slot <= threshold; slot++ {
+		c.evictSlot(slot)
+	}
 
 	// remove expired signing-root caches
 	c.syncCommitteeRootsCache.DeleteExpired()
 	c.aggregatorSelectionRootsCache.DeleteExpired()
+}
+
+// evictSlot flushes a slot's committee and validator traces and validator committee links to disk.
+func (c *Collector) evictSlot(slot phase0.Slot) {
+	// evict committee traces
+	start := time.Now()
+	evicted := c.dumpCommitteeToDBPeriodically(slot)
+	c.logger.Info("evicted committee duty traces to disk", fields.Slot(slot), zap.Int("count", evicted), fields.Took(time.Since(start)))
+
+	// evict validator traces
+	start = time.Now()
+	evicted = c.dumpValidatorToDBPeriodically(slot)
+	c.logger.Info("evicted validator duty traces to disk", fields.Slot(slot), zap.Int("count", evicted), fields.Took(time.Since(start)))
+
+	// evict validator committee links
+	start = time.Now()
+	evicted = c.dumpLinkToDBPeriodically(slot)
+	c.logger.Info("evicted validator mappings to disk", fields.Slot(slot), zap.Int("count", evicted), fields.Took(time.Since(start)))
 }
 
 func (c *Collector) getOrCreateValidatorTrace(slot phase0.Slot, role spectypes.BeaconRole, index phase0.ValidatorIndex) (*validatorDutyTrace, bool, error) {
@@ -708,19 +724,19 @@ func (c *Collector) computeRoleRoots(ctx context.Context, slot phase0.Slot, in [
 	return syncRoot, attRoot, nil
 }
 
-// addProposalRoles records the post-consensus signing roots derived from a committee proposal's data.
-// Caller must hold trace.Lock().
-func (c *Collector) addProposalRoles(ctx context.Context, trace *committeeDutyTrace, slot phase0.Slot, role spectypes.RunnerRole, data []byte) error {
+// addRoleRoots records the post-consensus signing roots derived from a committee duty's consensus value
+// (a proposal's or decided's full data). Caller must hold trace.Lock().
+func (c *Collector) addRoleRoots(ctx context.Context, trace *committeeDutyTrace, slot phase0.Slot, role spectypes.RunnerRole, value []byte) error {
 	switch role {
 	case spectypes.RoleCommittee:
-		syncRoot, attRoot, err := c.computeRoleRoots(ctx, slot, data)
+		syncRoot, attRoot, err := c.computeRoleRoots(ctx, slot, value)
 		if err != nil {
 			return err
 		}
 		trace.addPostConsensusRole(syncRoot, spectypes.BNRoleSyncCommittee)
 		trace.addPostConsensusRole(attRoot, spectypes.BNRoleAttester)
 	case spectypes.RoleAggregatorCommittee:
-		rolesByRoot, err := c.computeAggregatorCommitteePostConsensusRoles(ctx, slot, data)
+		rolesByRoot, err := c.computeAggregatorCommitteePostConsensusRoles(ctx, slot, value)
 		if err != nil {
 			return err
 		}
@@ -933,14 +949,17 @@ func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 			trace.Lock()
 			defer trace.Unlock()
 
-			if len(msg.SignedSSVMessage.FullData) > 0 && subMsg.MsgType == specqbft.ProposalMsgType {
-				// keep the highest round's proposal data and compute role roots
-				if uint64(subMsg.Round) >= highestProposalRound(&trace.ConsensusTrace) {
+			// Proposals and decideds (the only commits with full data) carry the duty's value, from which the
+			// post-consensus role roots are derived, so a decided also covers a missed proposal.
+			carriesValue := subMsg.MsgType == specqbft.ProposalMsgType || subMsg.MsgType == specqbft.CommitMsgType
+			if len(msg.SignedSSVMessage.FullData) > 0 && carriesValue {
+				// keep the highest round's proposal data
+				if subMsg.MsgType == specqbft.ProposalMsgType && uint64(subMsg.Round) >= highestProposalRound(&trace.ConsensusTrace) {
 					trace.ProposalData = msg.SignedSSVMessage.FullData
 				}
 
-				if err := c.addProposalRoles(ctx, trace, slot, role, msg.SignedSSVMessage.FullData); err != nil {
-					c.logger.Error("CRITICAL: failed to compute role roots from proposal - pending signatures will be dropped",
+				if err := c.addRoleRoots(ctx, trace, slot, role, msg.SignedSSVMessage.FullData); err != nil {
+					c.logger.Error("CRITICAL: failed to compute role roots - pending signatures will be dropped",
 						zap.Error(err),
 						fields.Slot(slot),
 						fields.CommitteeID(committeeID),
@@ -1084,7 +1103,7 @@ func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 
 			// A trace reloaded from disk has no role roots: derive them from its stored proposal.
 			if late && pSigMessages.Type == spectypes.PostConsensusPartialSig && len(trace.ProposalData) > 0 {
-				if err := c.addProposalRoles(ctx, trace, verifyCtx.slot, verifyCtx.runnerRole, trace.ProposalData); err != nil {
+				if err := c.addRoleRoots(ctx, trace, verifyCtx.slot, verifyCtx.runnerRole, trace.ProposalData); err != nil {
 					verifyCtx.logger.Warn("failed to compute role roots for late post-consensus signatures", zap.Error(err))
 				}
 			}
@@ -1229,7 +1248,7 @@ func (dt *validatorDutyTrace) roleTraces() (roles []*traces.ValidatorDutyTrace) 
 
 type committeeDutyTrace struct {
 	sync.Mutex
-	// Post-consensus signing roots derived from the duty's proposals, mapped to their beacon role.
+	// Post-consensus signing roots derived from the duty's proposals and decideds, mapped to their beacon role.
 	// Every proposal's roots are kept, since an earlier round's proposal can be processed after the decided one.
 	postConsensusRoles map[phase0.Root]spectypes.BeaconRole
 	// Aggregator committee root metadata
@@ -1331,9 +1350,7 @@ func (dt *committeeDutyTrace) flushPending() bool {
 	return flushed
 }
 
-// addPostConsensusRole records a signing root derived from one of the duty's proposals:
-// RoleCommittee proposals yield sync committee / attestation roots, AggregatorCommittee
-// proposals yield aggregator / sync committee contribution roots. Caller must hold dt.Lock().
+// addPostConsensusRole records the beacon role of a post-consensus signing root. Caller must hold dt.Lock().
 func (dt *committeeDutyTrace) addPostConsensusRole(root phase0.Root, role spectypes.BeaconRole) {
 	if dt.postConsensusRoles == nil {
 		dt.postConsensusRoles = make(map[phase0.Root]spectypes.BeaconRole)
@@ -1342,7 +1359,7 @@ func (dt *committeeDutyTrace) addPostConsensusRole(root phase0.Root, role specty
 }
 
 // classifyRootForPending resolves the beacon role a given signing root belongs to,
-// using the roots derived from every proposal seen for the duty.
+// using the roots derived from every proposal and decided seen for the duty.
 func (dt *committeeDutyTrace) classifyRootForPending(root phase0.Root) (spectypes.BeaconRole, bool) {
 	if role, ok := dt.postConsensusRoles[root]; ok {
 		return role, true
@@ -1418,7 +1435,7 @@ func (c *Collector) checkAndPublishQuorum(logger *zap.Logger, msg *spectypes.Par
 			continue
 		}
 		// If roots are not ready yet, signatures are in pending buffer.
-		// Quorum will be checked after flushPending() is called when proposal arrives.
+		// Quorum will be checked after flushPending() is called when a proposal or decided arrives.
 	}
 }
 
@@ -1520,7 +1537,7 @@ func (c *Collector) signersToKey(signers []spectypes.OperatorID) string {
 }
 
 // checkQuorumAfterFlush checks quorum for all validators after flushing pending signatures.
-// This handles the case where signatures arrived before the proposal and were buffered.
+// This handles the case where signatures arrived before the proposal or decided and were buffered.
 // IMPORTANT: trace must be locked by the caller before calling this function.
 func (c *Collector) checkQuorumAfterFlush(logger *zap.Logger, committeeID spectypes.CommitteeID, slot phase0.Slot, trace *committeeDutyTrace) {
 	if c.decidedListenerFunc == nil {

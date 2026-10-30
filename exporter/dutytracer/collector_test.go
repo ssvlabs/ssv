@@ -1222,6 +1222,43 @@ func TestCollector_LateEarlierRoundProposalKeepsDecidedRoots(t *testing.T) {
 	assert.Equal(t, voteRound2, duty.ProposalData, "proposal data must come from the highest round")
 }
 
+func TestCollector_DecidedGivesRoleRootsWhenProposalIsMissed(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	validators := registrystoragemocks.NewMockValidatorStore(ctrl)
+	tracer := New(zap.NewNop(), validators, mockclient{}, new(mockDutyTraceStore), networkconfig.TestNetwork.Beacon, nil, nil)
+
+	const (
+		slot = phase0.Slot(21)
+		vIdx = phase0.ValidatorIndex(42)
+	)
+	identifier := ssvtestingutils.NewMsgID([4]byte{}, []byte("pk"), spectypes.RoleCommittee)
+	var committeeID spectypes.CommitteeID
+	copy(committeeID[:], identifier.GetDutyExecutorID()[16:])
+	committee := &storage.Committee{ID: committeeID, Operators: []spectypes.OperatorID{1, 2, 3, 4}}
+	validators.EXPECT().Committee(committeeID).Return(committee, true).AnyTimes()
+
+	_, attRoot, vote := buildRoleRoots(t, tracer, slot, phase0.Root{1})
+	for _, signer := range []spectypes.OperatorID{1, 2, 3} {
+		data := encodePartialSigMessages(slot, vIdx, signer, attRoot)
+		require.NoError(t, tracer.Collect(t.Context(), buildPartialSigMessage(identifier, data), dummyVerify))
+	}
+
+	// The proposal never arrives, but a decided carries the same value.
+	decided := buildConsensusMsg(identifier, specqbft.CommitMsgType, slot, nil)
+	decided.SignedSSVMessage.FullData = vote
+	require.NoError(t, tracer.Collect(t.Context(), decided, dummyVerify))
+
+	duty, err := tracer.GetCommitteeDuty(slot, committeeID, spectypes.RoleCommittee)
+	require.NoError(t, err)
+	var signers []spectypes.OperatorID
+	for _, sd := range duty.Attester {
+		if slices.Contains(sd.ValidatorIdx, vIdx) {
+			signers = append(signers, sd.Signer)
+		}
+	}
+	assert.ElementsMatch(t, []spectypes.OperatorID{1, 2, 3}, signers)
+}
+
 func TestCollector_LateCommitteeSignaturesAreClassified(t *testing.T) {
 	const (
 		slot = phase0.Slot(40)
@@ -2147,6 +2184,28 @@ func TestEvict(t *testing.T) {
 
 		threshold := slot - slotTTL
 		require.Equal(t, uint64(threshold), collector.lastEvictedSlot.Load())
+	})
+
+	t.Run("evict flushes the slots of skipped ticks", func(t *testing.T) {
+		db, err := kv.NewInMemory(zap.NewNop(), basedb.Options{})
+		require.NoError(t, err)
+		dutyStore := store.New(db)
+		collector := New(zap.NewNop(), registrystoragemocks.NewMockValidatorStore(gomock.NewController(t)), nil, dutyStore, networkconfig.TestNetwork.Beacon, nil, nil)
+
+		committeeID := spectypes.CommitteeID{1}
+		slots := []phase0.Slot{10, 11, 12}
+		for _, slot := range slots {
+			_, _, err := collector.getOrCreateCommitteeTrace(slot, committeeID, spectypes.RoleCommittee)
+			require.NoError(t, err)
+		}
+
+		collector.evict(10 + slotTTL)
+		collector.evict(12 + slotTTL) // the tick for slot 11 was skipped
+
+		for _, slot := range slots {
+			_, err := dutyStore.GetCommitteeDuty(slot, spectypes.RoleCommittee, committeeID)
+			require.NoError(t, err, "slot %d", slot)
+		}
 	})
 }
 
