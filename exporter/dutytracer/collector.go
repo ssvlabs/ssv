@@ -35,6 +35,8 @@ import (
 	"github.com/ssvlabs/ssv/utils/hashmap"
 )
 
+// DecidedInfo reports the first post-consensus quorum for a validator's beacon role, not a QBFT decided
+// message (those are recorded in a trace's Decideds).
 type DecidedInfo struct {
 	Index   phase0.ValidatorIndex
 	Slot    phase0.Slot
