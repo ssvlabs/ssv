@@ -947,9 +947,9 @@ func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 						fields.RunnerRole(role),
 						zap.Int("pending_signature_count", countPending(trace.pendingByRoot)),
 						pendingDetails(trace.pendingByRoot))
-				} else {
-					trace.flushPending()
-					// Signatures that arrived before the proposal are now classified, so check their quorum.
+				} else if trace.flushPending() {
+					// Only signatures classified by the flush can complete a new quorum. A trace reloaded from disk
+					// doesn't know which quorums it already published, so checking without them would repeat them.
 					c.checkQuorumAfterFlush(c.logger, committeeID, slot, trace)
 				}
 			}
@@ -1297,11 +1297,9 @@ func (dt *committeeDutyTrace) addRootSigner(root phase0.Root, idx phase0.Validat
 }
 
 // flushPending routes buffered entries into Attester/SyncCommittee buckets
-// according to derived role roots. Caller must hold dt.Lock().
-func (dt *committeeDutyTrace) flushPending() {
-	if len(dt.pendingByRoot) == 0 {
-		return
-	}
+// according to derived role roots, and reports whether it routed any. Caller must hold dt.Lock().
+func (dt *committeeDutyTrace) flushPending() bool {
+	flushed := false
 	for root, perSigner := range dt.pendingByRoot {
 		role, ok := dt.classifyRootForPending(root)
 		if !ok {
@@ -1328,7 +1326,9 @@ func (dt *committeeDutyTrace) flushPending() {
 			}
 		}
 		delete(dt.pendingByRoot, root)
+		flushed = true
 	}
+	return flushed
 }
 
 // addPostConsensusRole records a signing root derived from one of the duty's proposals:

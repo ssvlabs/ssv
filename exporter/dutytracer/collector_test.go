@@ -1307,6 +1307,48 @@ func TestCollector_LateCommitteeSignaturesAreClassified(t *testing.T) {
 	}
 }
 
+func TestCollector_LateProposalDoesNotRepublishQuorum(t *testing.T) {
+	const (
+		slot = phase0.Slot(50)
+		vIdx = phase0.ValidatorIndex(42)
+	)
+
+	db, err := kv.NewInMemory(zap.NewNop(), basedb.Options{})
+	require.NoError(t, err)
+	dutyStore := store.New(db)
+
+	identifier := ssvtestingutils.NewMsgID([4]byte{}, []byte("pk"), spectypes.RoleCommittee)
+	var committeeID spectypes.CommitteeID
+	copy(committeeID[:], identifier.GetDutyExecutorID()[16:])
+	validators := registrystoragemocks.NewMockValidatorStore(gomock.NewController(t))
+	committee := &storage.Committee{ID: committeeID, Operators: []spectypes.OperatorID{1, 2, 3, 4}}
+	validators.EXPECT().Committee(committeeID).Return(committee, true).AnyTimes()
+	validators.EXPECT().ValidatorByIndex(vIdx).Return(&ssvtypes.SSVShare{}, true).AnyTimes()
+	listener := &mockDecidedListener{}
+	tracer := New(zap.NewNop(), validators, mockclient{}, dutyStore, networkconfig.TestNetwork.Beacon, listener.OnDecided, nil)
+
+	_, attRoot, vote := buildRoleRoots(t, tracer, slot, phase0.Root{1})
+	propose := func(round specqbft.Round) {
+		msg := buildCommitteeProposalWithBeaconVote(identifier, slot, vote)
+		msg.Body.(*specqbft.Message).Round = round
+		require.NoError(t, tracer.Collect(t.Context(), msg, dummyVerify))
+	}
+
+	propose(1)
+	for _, signer := range []spectypes.OperatorID{1, 2, 3} {
+		data := encodePartialSigMessages(slot, vIdx, signer, attRoot)
+		require.NoError(t, tracer.Collect(t.Context(), buildPartialSigMessage(identifier, data), dummyVerify))
+	}
+	require.Len(t, listener.GetCalls(), 1)
+
+	// Evict the duty, so the next proposal reloads it from disk.
+	tracer.lastEvictedSlot.Store(uint64(slot))
+	tracer.dumpCommitteeToDBPeriodically(slot)
+	propose(2)
+
+	assert.Len(t, listener.GetCalls(), 1, "a late proposal must not publish the quorum again")
+}
+
 func TestCollector_FlushPending_Timestamps(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
