@@ -9,6 +9,8 @@ import (
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
+	ma "github.com/multiformats/go-multiaddr"
+	manet "github.com/multiformats/go-multiaddr/net"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 
@@ -123,7 +125,7 @@ func CreateAndStartLocalNet(pCtx context.Context, logger *zap.Logger, options Lo
 	}
 }
 
-// connectMesh dials the nodes into a full mesh by address, in the order meshDials plans, within meshTimeout.
+// connectMesh dials the nodes into a full mesh over loopback, in the order meshDials plans, within meshTimeout.
 func connectMesh(ctx context.Context, nodes []network.P2PNetwork) error {
 	ctx, cancel := context.WithTimeout(ctx, meshTimeout)
 	defer cancel()
@@ -134,11 +136,27 @@ func connectMesh(ctx context.Context, nodes []network.P2PNetwork) error {
 	}
 	for _, d := range meshDials(len(hosts)) {
 		to := hosts[d.to]
-		if err := hosts[d.from].Connect(ctx, peer.AddrInfo{ID: to.ID(), Addrs: to.Addrs()}); err != nil {
+		addr, err := loopbackAddr(to)
+		if err != nil {
+			return fmt.Errorf("node %d: %w", d.to, err)
+		}
+		if err := hosts[d.from].Connect(ctx, peer.AddrInfo{ID: to.ID(), Addrs: []ma.Multiaddr{addr}}); err != nil {
 			return fmt.Errorf("node %d could not connect to node %d: %w", d.from, d.to, err)
 		}
 	}
 	return nil
+}
+
+// loopbackAddr returns the host's loopback address. A node listens on every interface, and dialing all of its
+// addresses can leave several connections to it: libp2p staggers private-address dials by only 30ms and keeps every
+// one that succeeds.
+func loopbackAddr(h host.Host) (ma.Multiaddr, error) {
+	for _, addr := range h.Addrs() {
+		if manet.IsIPLoopback(addr) {
+			return addr, nil
+		}
+	}
+	return nil, fmt.Errorf("no loopback address among %v", h.Addrs())
 }
 
 // meshDial is one dial of the mesh: node from dials node to.
