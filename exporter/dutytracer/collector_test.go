@@ -1126,9 +1126,8 @@ func TestCollector_processPartialSigCommittee_UnknownRootBuffers(t *testing.T) {
 	trace, _, err := tracer.getOrCreateCommitteeTrace(slot, committeeID, spectypes.RoleCommittee)
 	require.NoError(t, err)
 	trace.Lock()
-	trace.roleRootsReady = true
-	trace.syncCommitteeRoot = phase0.Root{1}
-	trace.attestationRoot = phase0.Root{2}
+	trace.addPostConsensusRole(phase0.Root{1}, spectypes.BNRoleSyncCommittee)
+	trace.addPostConsensusRole(phase0.Root{2}, spectypes.BNRoleAttester)
 	trace.Unlock()
 
 	// Build a partial signature message with an unknown root
@@ -1169,6 +1168,58 @@ func TestCollector_processPartialSigCommittee_UnknownRootBuffers(t *testing.T) {
 		}
 	}
 	require.True(t, found, "expected buffered index for unknown root")
+}
+
+// TestCollector_LateEarlierRoundProposalKeepsDecidedRoots covers a slow round-1 leader whose proposal is
+// processed after the round-2 proposal that decided, with a different vote: post-consensus signatures for
+// the decided vote must still be classified, and the trace must keep the decided round's proposal data.
+func TestCollector_LateEarlierRoundProposalKeepsDecidedRoots(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	validators := registrystoragemocks.NewMockValidatorStore(ctrl)
+	tracer := New(zap.NewNop(), validators, mockclient{}, new(mockDutyTraceStore), networkconfig.TestNetwork.Beacon, nil, nil)
+
+	const (
+		slot = phase0.Slot(20)
+		vIdx = phase0.ValidatorIndex(42)
+	)
+	identifier := ssvtestingutils.NewMsgID([4]byte{}, []byte("pk"), spectypes.RoleCommittee)
+	var committeeID spectypes.CommitteeID
+	copy(committeeID[:], identifier.GetDutyExecutorID()[16:])
+	committee := &storage.Committee{ID: committeeID, Operators: []spectypes.OperatorID{1, 2, 3, 4}}
+	validators.EXPECT().Committee(committeeID).Return(committee, true).AnyTimes()
+
+	// The two leaders voted for different head blocks.
+	_, _, voteRound1 := buildRoleRoots(t, tracer, slot, phase0.Root{0xB1})
+	_, decidedAttRoot, voteRound2 := buildRoleRoots(t, tracer, slot, phase0.Root{0xB2})
+
+	propose := func(round specqbft.Round, vote []byte) {
+		msg := buildCommitteeProposalWithBeaconVote(identifier, slot, vote)
+		msg.Body.(*specqbft.Message).Round = round
+		require.NoError(t, tracer.Collect(t.Context(), msg, dummyVerify))
+	}
+	signPostConsensus := func(signer spectypes.OperatorID) {
+		data := encodePartialSigMessages(slot, vIdx, signer, decidedAttRoot)
+		require.NoError(t, tracer.Collect(t.Context(), buildPartialSigMessage(identifier, data), dummyVerify))
+	}
+
+	propose(2, voteRound2)
+	signPostConsensus(1)
+	signPostConsensus(2)
+	propose(1, voteRound1) // processed late
+	signPostConsensus(3)
+	signPostConsensus(4)
+
+	duty, err := tracer.GetCommitteeDuty(slot, committeeID, spectypes.RoleCommittee)
+	require.NoError(t, err)
+
+	var signers []spectypes.OperatorID
+	for _, sd := range duty.Attester {
+		if slices.Contains(sd.ValidatorIdx, vIdx) {
+			signers = append(signers, sd.Signer)
+		}
+	}
+	assert.ElementsMatch(t, []spectypes.OperatorID{1, 2, 3, 4}, signers)
+	assert.Equal(t, voteRound2, duty.ProposalData, "proposal data must come from the highest round")
 }
 
 func TestCollector_FlushPending_Timestamps(t *testing.T) {
@@ -2042,8 +2093,7 @@ func TestCollector_PublishDecidedsToListener(t *testing.T) {
 		// Pre-derive attester root so classification is active
 		trace, _, err := collector.getOrCreateCommitteeTrace(slot, committeeID, spectypes.RoleCommittee)
 		require.NoError(t, err)
-		trace.attestationRoot = signingRoot
-		trace.roleRootsReady = true
+		trace.addPostConsensusRole(signingRoot, spectypes.BNRoleAttester)
 
 		// Send partial signatures from 3 operators for validator1 (reaches quorum)
 		// Send each operator's signature separately
@@ -2105,8 +2155,7 @@ func TestCollector_PublishDecidedsToListener(t *testing.T) {
 		// Prepare roots for the same committee at the slot
 		trace, _, err := collector.getOrCreateCommitteeTrace(slot, committeeID, spectypes.RoleCommittee)
 		require.NoError(t, err)
-		trace.attestationRoot = signingRoot
-		trace.roleRootsReady = true
+		trace.addPostConsensusRole(signingRoot, spectypes.BNRoleAttester)
 
 		// Send partial signatures from 3 operators for validator2 (reaches quorum)
 		operators := []spectypes.OperatorID{operator1, operator2, operator3}
@@ -2144,8 +2193,7 @@ func TestCollector_PublishDecidedsToListener(t *testing.T) {
 		// Prepare roots for slot+1 as well
 		trace, _, err := collector.getOrCreateCommitteeTrace(slot+1, committeeID, spectypes.RoleCommittee)
 		require.NoError(t, err)
-		trace.attestationRoot = signingRoot
-		trace.roleRootsReady = true
+		trace.addPostConsensusRole(signingRoot, spectypes.BNRoleAttester)
 
 		// Send partial signatures from only 2 operators for a new validator (below quorum)
 		operators := []spectypes.OperatorID{operator1, operator2}

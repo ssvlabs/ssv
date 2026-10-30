@@ -20,6 +20,7 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/attribute"
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -33,6 +34,7 @@ import (
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/observability/log"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/duties"
@@ -2021,4 +2023,31 @@ func TestHandleRouterMessages_LogsOwnValidatorDrop(t *testing.T) {
 	fieldsByKey := entries[0].ContextMap()
 	require.EqualValues(t, 42, fieldsByKey["slot"], "partial-sig drops carry the slot")
 	require.EqualValues(t, 2, fieldsByKey["signer"])
+}
+
+func TestController_EnqueueExporterMessage_CountsDropsWhenQueueIsFull(t *testing.T) {
+	logger := log.TestLogger(t)
+	// No workers drain the queue, so its single slot stays occupied after the first message.
+	c := &Controller{
+		ctx:           t.Context(),
+		logger:        logger,
+		messageWorker: worker.NewWorker(logger, &worker.Config{Ctx: t.Context(), WorkersCount: 0, Buffer: 1}),
+	}
+	msg := &queue.SSVMessage{
+		SSVMessage: &spectypes.SSVMessage{
+			MsgType: spectypes.SSVConsensusMsgType,
+			MsgID:   ssvtestingutils.NewMsgID(networkconfig.TestNetwork.DomainType, []byte{1, 1, 1, 1, 1}, spectypes.RoleCommittee),
+		},
+	}
+	attrs := []attribute.KeyValue{
+		observability.ValidatorMsgTypeAttribute(spectypes.SSVConsensusMsgType),
+		observability.RunnerRoleAttribute(spectypes.RoleCommittee),
+	}
+	before := counterValue(t, "ssv.validator.exporter.queue.messages.dropped", attrs...)
+
+	c.enqueueExporterMessage(msg)
+	c.enqueueExporterMessage(msg)
+
+	require.Equal(t, 1, c.messageWorker.Size())
+	require.Equal(t, before+1, counterValue(t, "ssv.validator.exporter.queue.messages.dropped", attrs...))
 }

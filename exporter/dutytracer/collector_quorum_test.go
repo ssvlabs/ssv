@@ -94,9 +94,8 @@ func TestCollector_QuorumAfterFlush(t *testing.T) {
 		require.NoError(t, err)
 
 		trace.Lock()
-		trace.attestationRoot = attestationRoot
-		trace.syncCommitteeRoot = syncCommitteeRoot
-		trace.roleRootsReady = true
+		trace.addPostConsensusRole(attestationRoot, spectypes.BNRoleAttester)
+		trace.addPostConsensusRole(syncCommitteeRoot, spectypes.BNRoleSyncCommittee)
 		trace.flushPending()
 		// This is the critical call that our fix added!
 		collector.checkQuorumAfterFlush(logger, committeeID, slot, trace)
@@ -168,9 +167,8 @@ func TestCollector_RoleSpecificQuorum(t *testing.T) {
 		// Set up roots
 		trace, _, err := collector.getOrCreateCommitteeTrace(slot, committeeID, spectypes.RoleCommittee)
 		require.NoError(t, err)
-		trace.attestationRoot = attestationRoot
-		trace.syncCommitteeRoot = syncCommitteeRoot
-		trace.roleRootsReady = true
+		trace.addPostConsensusRole(attestationRoot, spectypes.BNRoleAttester)
+		trace.addPostConsensusRole(syncCommitteeRoot, spectypes.BNRoleSyncCommittee)
 
 		// Send attestation signatures from 3 operators for V1 (reaches quorum)
 		operators := []spectypes.OperatorID{operator1, operator2, operator3}
@@ -290,9 +288,8 @@ func TestCollector_MixedTimingQuorum(t *testing.T) {
 		require.NoError(t, err)
 
 		trace.Lock()
-		trace.attestationRoot = attestationRoot
-		trace.syncCommitteeRoot = syncCommitteeRoot
-		trace.roleRootsReady = true
+		trace.addPostConsensusRole(attestationRoot, spectypes.BNRoleAttester)
+		trace.addPostConsensusRole(syncCommitteeRoot, spectypes.BNRoleSyncCommittee)
 		trace.flushPending()
 		collector.checkQuorumAfterFlush(logger, committeeID, slot, trace)
 		trace.Unlock()
@@ -377,9 +374,8 @@ func TestCollector_UnknownRootQuorum(t *testing.T) {
 		// Set up roots
 		trace, _, err := collector.getOrCreateCommitteeTrace(slot, committeeID, spectypes.RoleCommittee)
 		require.NoError(t, err)
-		trace.attestationRoot = attestationRoot
-		trace.syncCommitteeRoot = syncCommitteeRoot
-		trace.roleRootsReady = true
+		trace.addPostConsensusRole(attestationRoot, spectypes.BNRoleAttester)
+		trace.addPostConsensusRole(syncCommitteeRoot, spectypes.BNRoleSyncCommittee)
 
 		// Send 2 signatures with correct attestation root
 		for _, op := range []spectypes.OperatorID{operator1, operator2} {
@@ -480,9 +476,8 @@ func TestCollector_MultipleValidatorsAndRoles(t *testing.T) {
 		// Set up roots
 		trace, _, err := collector.getOrCreateCommitteeTrace(slot, committeeID, spectypes.RoleCommittee)
 		require.NoError(t, err)
-		trace.attestationRoot = attestationRoot
-		trace.syncCommitteeRoot = syncCommitteeRoot
-		trace.roleRootsReady = true
+		trace.addPostConsensusRole(attestationRoot, spectypes.BNRoleAttester)
+		trace.addPostConsensusRole(syncCommitteeRoot, spectypes.BNRoleSyncCommittee)
 
 		// Send combined messages: each operator signs both V1 attestation and V2 sync committee
 		operators := []spectypes.OperatorID{operator1, operator2, operator3}

@@ -714,6 +714,9 @@ func (c *Collector) Collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 		c.collectLateAsync(ctx, msg, verifySig)
 		return nil
 	}
+	if err != nil {
+		recordFailedMessage(ctx, msg)
+	}
 	return err
 }
 
@@ -752,6 +755,7 @@ func (c *Collector) collectLateMessage(ctx context.Context, msg *queue.SSVMessag
 	defer func() {
 		if err != nil {
 			c.logger.Error("collect late message", zap.Error(err), fields.MessageID(msg.MsgID))
+			recordFailedMessage(ctx, msg)
 		}
 	}()
 
@@ -875,7 +879,7 @@ func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 	//nolint:gosec
 	startTime := uint64(start.UnixMilli())
 
-	tracerInFlightMessageCounter.Add(ctx, 1)
+	tracerInFlightMessageCounter.Add(ctx, 1, messageAttributes(msg))
 	defer func() {
 		tracerInFlightMessageHist.Record(ctx, time.Since(start).Seconds())
 	}()
@@ -905,15 +909,16 @@ func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 			defer trace.Unlock()
 
 			if len(msg.SignedSSVMessage.FullData) > 0 && subMsg.MsgType == specqbft.ProposalMsgType {
-				// save proposal data and compute role roots
-				trace.ProposalData = msg.SignedSSVMessage.FullData
+				// keep the highest round's proposal data and compute role roots
+				if uint64(subMsg.Round) >= highestProposalRound(&trace.ConsensusTrace) {
+					trace.ProposalData = msg.SignedSSVMessage.FullData
+				}
 
 				switch role {
 				case spectypes.RoleCommittee:
 					if syncRoot, attRoot, err := c.computeRoleRoots(ctx, slot, msg.SignedSSVMessage.FullData); err == nil {
-						trace.syncCommitteeRoot = syncRoot
-						trace.attestationRoot = attRoot
-						trace.roleRootsReady = true
+						trace.addPostConsensusRole(syncRoot, spectypes.BNRoleSyncCommittee)
+						trace.addPostConsensusRole(attRoot, spectypes.BNRoleAttester)
 						trace.flushPending()
 						// Check quorum for all validators after flushing pending signatures.
 						// This ensures quorum detection happens immediately when signatures that
@@ -931,7 +936,9 @@ func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 					}
 				case spectypes.RoleAggregatorCommittee:
 					if rolesByRoot, err := c.computeAggregatorCommitteePostConsensusRoles(ctx, slot, msg.SignedSSVMessage.FullData); err == nil {
-						trace.aggPostConsensusRoles = rolesByRoot
+						for root, beaconRole := range rolesByRoot {
+							trace.addPostConsensusRole(root, beaconRole)
+						}
 						trace.flushPending()
 						// Check quorum for all validators after flushing pending signatures.
 						// This ensures quorum detection happens immediately when signatures that
@@ -1003,7 +1010,9 @@ func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 							roleDutyTrace.Validator = data.Duty.ValidatorIndex
 						}
 						// non-committee duty will contain the proposal data
-						roleDutyTrace.ProposalData = data.DataSSZ
+						if uint64(qbftMsg.Round) >= highestProposalRound(&roleDutyTrace.ConsensusTrace) {
+							roleDutyTrace.ProposalData = data.DataSSZ
+						}
 					}()
 				}
 			}
@@ -1082,6 +1091,11 @@ func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 			c.checkAndPublishQuorum(verifyCtx.logger, pSigMessages, verifyCtx.committeeID, trace)
 
 			if late {
+				// A trace reloaded from disk has no role roots and pending signatures aren't persisted,
+				// so signatures left unclassified here are lost.
+				if pending := countPending(trace.pendingByRoot); pending > 0 {
+					recordDroppedPendingSignatures(pending, verifyCtx.runnerRole)
+				}
 				err := c.store.SaveCommitteeDuty(verifyCtx.runnerRole, &trace.CommitteeDutyTrace)
 				_ = c.inFlightCommittee.Delete(committeeTraceKey{id: verifyCtx.committeeID, role: verifyCtx.runnerRole})
 				return err
@@ -1214,14 +1228,12 @@ func (dt *validatorDutyTrace) roleTraces() (roles []*traces.ValidatorDutyTrace) 
 
 type committeeDutyTrace struct {
 	sync.Mutex
-	// Derived roots for classifying committee partial signatures
-	syncCommitteeRoot phase0.Root
-	attestationRoot   phase0.Root
-	roleRootsReady    bool
+	// Post-consensus signing roots derived from the duty's proposals, mapped to their beacon role.
+	// Every proposal's roots are kept, since an earlier round's proposal can be processed after the decided one.
+	postConsensusRoles map[phase0.Root]spectypes.BeaconRole
 	// Aggregator committee root metadata
 	aggSelectionRoot      phase0.Root
 	aggSelectionRootReady bool
-	aggPostConsensusRoles map[phase0.Root]spectypes.BeaconRole
 	traces.CommitteeDutyTrace
 
 	// Track published quorums to avoid duplicates (validator -> role -> signers hash)
@@ -1318,25 +1330,22 @@ func (dt *committeeDutyTrace) flushPending() {
 	}
 }
 
+// addPostConsensusRole records a signing root derived from one of the duty's proposals:
+// RoleCommittee proposals yield sync committee / attestation roots, AggregatorCommittee
+// proposals yield aggregator / sync committee contribution roots. Caller must hold dt.Lock().
+func (dt *committeeDutyTrace) addPostConsensusRole(root phase0.Root, role spectypes.BeaconRole) {
+	if dt.postConsensusRoles == nil {
+		dt.postConsensusRoles = make(map[phase0.Root]spectypes.BeaconRole)
+	}
+	dt.postConsensusRoles[root] = role
+}
+
 // classifyRootForPending resolves the beacon role a given signing root belongs to,
-// using either the RoleCommittee-derived roots (sync committee / attestation) or the
-// AggregatorCommittee-derived post-consensus roles (aggregator / sync committee contribution).
+// using the roots derived from every proposal seen for the duty.
 func (dt *committeeDutyTrace) classifyRootForPending(root phase0.Root) (spectypes.BeaconRole, bool) {
-	if dt.roleRootsReady {
-		if root == dt.syncCommitteeRoot {
-			return spectypes.BNRoleSyncCommittee, true
-		}
-		if root == dt.attestationRoot {
-			return spectypes.BNRoleAttester, true
-		}
+	if role, ok := dt.postConsensusRoles[root]; ok {
+		return role, true
 	}
-
-	if dt.aggPostConsensusRoles != nil {
-		if role, ok := dt.aggPostConsensusRoles[root]; ok {
-			return role, true
-		}
-	}
-
 	return spectypes.BNRoleUnknown, false
 }
 
@@ -1348,6 +1357,18 @@ func getOrCreateRound(trace *traces.ConsensusTrace, rnd uint64) *traces.RoundTra
 	}
 
 	return trace.Rounds[rnd-1]
+}
+
+// highestProposalRound returns the highest round with a recorded proposal, or 0 if there is none.
+// A duty decides on its highest round's proposal, so an earlier round's proposal that is processed
+// late must not replace the trace's proposal data.
+func highestProposalRound(trace *traces.ConsensusTrace) uint64 {
+	for i := len(trace.Rounds) - 1; i >= 0; i-- {
+		if r := trace.Rounds[i]; r != nil && r.ProposalTrace != nil && r.ProposalTrace.Round > 0 {
+			return r.ProposalTrace.Round
+		}
+	}
+	return 0
 }
 
 // checkAndPublishQuorum detects when quorum is reached and publishes decisions to websocket.
