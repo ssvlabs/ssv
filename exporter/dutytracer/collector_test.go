@@ -1328,7 +1328,7 @@ func TestCollector_LateCommitteeSignaturesAreClassified(t *testing.T) {
 
 			// Evict the duty, so the next signature reloads it from disk.
 			tracer.lastEvictedSlot.Store(uint64(slot))
-			tracer.dumpCommitteeToDBPeriodically(slot)
+			tracer.evictCommitteeTraces(slot)
 			signPostConsensus(2)
 
 			duty, err := dutyStore.GetCommitteeDuty(slot, tt.role, committeeID)
@@ -1380,7 +1380,7 @@ func TestCollector_LateProposalDoesNotRepublishQuorum(t *testing.T) {
 
 	// Evict the duty, so the next proposal reloads it from disk.
 	tracer.lastEvictedSlot.Store(uint64(slot))
-	tracer.dumpCommitteeToDBPeriodically(slot)
+	tracer.evictCommitteeTraces(slot)
 	propose(2)
 
 	assert.Len(t, listener.GetCalls(), 1, "a late proposal must not publish the quorum again")
@@ -1564,7 +1564,7 @@ func TestCollector_getOrCreateValidatorTrace(t *testing.T) {
 			_, _, err := collector.getOrCreateValidatorTrace(slot, role, vIdx)
 			require.NoError(t, err)
 
-			collector.dumpValidatorToDBPeriodically(slot)
+			collector.evictValidatorTraces(slot)
 
 			collector.inFlightValidator.Delete(vIdx)
 

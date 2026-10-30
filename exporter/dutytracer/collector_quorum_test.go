@@ -519,8 +519,7 @@ func TestCollector_MultipleValidatorsAndRoles(t *testing.T) {
 	})
 }
 
-// TestCollector_checkAndPublishQuorumForRoleByIndex specifically tests the new
-// helper method added for quorum detection after flush.
+// TestCollector_checkAndPublishQuorumForRoleByIndex tests the per-validator quorum check run after a flush.
 func TestCollector_checkAndPublishQuorumForRoleByIndex(t *testing.T) {
 	logger := zap.NewNop()
 	ctrl := gomock.NewController(t)
@@ -578,7 +577,7 @@ func TestCollector_checkAndPublishQuorumForRoleByIndex(t *testing.T) {
 		threshold := uint64(3) // 4 operators, need 3 for quorum
 
 		// Call the method directly
-		collector.checkAndPublishQuorumForRoleByIndex(logger, trace, spectypes.BNRoleAttester, slot, vIndex1, threshold)
+		collector.checkAndPublishQuorumForRoleByIndex(logger, trace, spectypes.BNRoleAttester, slot, vIndex1, phase0.Root{}, threshold)
 
 		// Verify quorum was published
 		calls := listener.GetCalls()
@@ -603,8 +602,8 @@ func TestCollector_checkAndPublishQuorumForRoleByIndex(t *testing.T) {
 		threshold := uint64(3)
 
 		// Call twice - second call should not publish
-		collector.checkAndPublishQuorumForRoleByIndex(logger, trace, spectypes.BNRoleAttester, slot, vIndex1, threshold)
-		collector.checkAndPublishQuorumForRoleByIndex(logger, trace, spectypes.BNRoleAttester, slot, vIndex1, threshold)
+		collector.checkAndPublishQuorumForRoleByIndex(logger, trace, spectypes.BNRoleAttester, slot, vIndex1, phase0.Root{}, threshold)
+		collector.checkAndPublishQuorumForRoleByIndex(logger, trace, spectypes.BNRoleAttester, slot, vIndex1, phase0.Root{}, threshold)
 
 		// Verify only ONE publication
 		calls := listener.GetCalls()

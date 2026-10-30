@@ -56,7 +56,7 @@ func TestCollector_RecordsDroppedPendingSignatures(t *testing.T) {
 		data := encodePartialSigMessages(slot, 42, signer, phase0.Root{7})
 		require.NoError(t, tracer.Collect(t.Context(), buildPartialSigMessage(identifier, data), dummyVerify))
 	}
-	tracer.dumpCommitteeToDBPeriodically(slot)
+	tracer.evictCommitteeTraces(slot)
 
 	assert.Equal(t, before+2, counterValue(t, "ssv.dutytracer.pending_signatures.dropped", roleAttr))
 }
@@ -94,7 +94,7 @@ func TestCollector_RecordsLostTraces(t *testing.T) {
 	kindAttr := attribute.String("ssv.dutytracer.trace.kind", traceKindCommittee)
 	before := counterValue(t, "ssv.dutytracer.traces.lost", kindAttr)
 
-	tracer.dumpCommitteeToDBPeriodically(slot)
+	tracer.evictCommitteeTraces(slot)
 
 	assert.Equal(t, before+1, counterValue(t, "ssv.dutytracer.traces.lost", kindAttr))
 }

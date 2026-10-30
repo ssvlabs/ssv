@@ -15,7 +15,7 @@ import (
 	"github.com/ssvlabs/ssv/utils/hashmap"
 )
 
-func (c *Collector) dumpLinkToDBPeriodically(slot phase0.Slot) (totalSaved int) {
+func (c *Collector) evictCommitteeLinks(slot phase0.Slot) (totalSaved int) {
 	var links = make(map[phase0.ValidatorIndex]spectypes.CommitteeID)
 
 	c.validatorIndexToCommitteeLinks.Range(func(index phase0.ValidatorIndex, slotToCommittee *hashmap.Map[phase0.Slot, spectypes.CommitteeID]) bool {
@@ -42,7 +42,7 @@ func (c *Collector) dumpLinkToDBPeriodically(slot phase0.Slot) (totalSaved int) 
 	return
 }
 
-func (c *Collector) dumpCommitteeToDBPeriodically(slot phase0.Slot) (totalSaved int) {
+func (c *Collector) evictCommitteeTraces(slot phase0.Slot) (totalSaved int) {
 	dutiesByRole := make(map[spectypes.RunnerRole][]*traces.CommitteeDutyTrace)
 
 	c.committeeTraces.Range(func(key committeeTraceKey, slotToTraceMap *hashmap.Map[phase0.Slot, *committeeDutyTrace]) bool {
@@ -97,7 +97,7 @@ func (c *Collector) dumpCommitteeToDBPeriodically(slot phase0.Slot) (totalSaved 
 	return totalSaved
 }
 
-func (c *Collector) dumpValidatorToDBPeriodically(slot phase0.Slot) (totalSaved int) {
+func (c *Collector) evictValidatorTraces(slot phase0.Slot) (totalSaved int) {
 	var duties []*traces.ValidatorDutyTrace
 
 	c.validatorTraces.Range(func(idx phase0.ValidatorIndex, slotToTraceMap *hashmap.Map[phase0.Slot, *validatorDutyTrace]) bool {

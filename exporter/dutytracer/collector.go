@@ -209,19 +209,16 @@ func (c *Collector) evict(currentSlot phase0.Slot) {
 
 // evictSlot flushes a slot's committee and validator traces and validator committee links to disk.
 func (c *Collector) evictSlot(slot phase0.Slot) {
-	// evict committee traces
 	start := time.Now()
-	evicted := c.dumpCommitteeToDBPeriodically(slot)
+	evicted := c.evictCommitteeTraces(slot)
 	c.logger.Info("evicted committee duty traces to disk", fields.Slot(slot), zap.Int("count", evicted), fields.Took(time.Since(start)))
 
-	// evict validator traces
 	start = time.Now()
-	evicted = c.dumpValidatorToDBPeriodically(slot)
+	evicted = c.evictValidatorTraces(slot)
 	c.logger.Info("evicted validator duty traces to disk", fields.Slot(slot), zap.Int("count", evicted), fields.Took(time.Since(start)))
 
-	// evict validator committee links
 	start = time.Now()
-	evicted = c.dumpLinkToDBPeriodically(slot)
+	evicted = c.evictCommitteeLinks(slot)
 	c.logger.Info("evicted validator mappings to disk", fields.Slot(slot), zap.Int("count", evicted), fields.Took(time.Since(start)))
 }
 
@@ -1596,7 +1593,7 @@ func (c *Collector) checkRoleQuorumForValidators(
 		if trace.publishedQuorums[validatorIndex] == nil {
 			trace.publishedQuorums[validatorIndex] = make(map[spectypes.BeaconRole]string)
 		}
-		c.checkAndPublishQuorumForRoleByIndex(logger, trace, role, slot, validatorIndex, threshold)
+		c.checkAndPublishQuorumForRoleByIndex(logger, trace, role, slot, validatorIndex, phase0.Root{}, threshold)
 	}
 }
 
@@ -1627,41 +1624,16 @@ func (c *Collector) checkRoleQuorumForValidatorsByRoot(
 			if trace.publishedQuorums[validatorIndex] == nil {
 				trace.publishedQuorums[validatorIndex] = make(map[spectypes.BeaconRole]string)
 			}
-			c.checkAndPublishQuorumForRoleByIndexAndRoot(logger, trace, role, slot, validatorIndex, root, threshold)
+			c.checkAndPublishQuorumForRoleByIndex(logger, trace, role, slot, validatorIndex, root, threshold)
 		}
 	}
 }
 
-// checkAndPublishQuorumForRoleByIndex checks quorum for a specific validator and role after flush.
-// Similar to checkAndPublishQuorumForRole but works with validator index directly.
+// checkAndPublishQuorumForRoleByIndex checks quorum for a validator and role after a flush, publishing it
+// the first time it's reached. A non-zero root scopes the count to that signing root; the zero root counts
+// the role's whole bucket.
 // IMPORTANT: trace must be locked by the caller before calling this function.
 func (c *Collector) checkAndPublishQuorumForRoleByIndex(
-	logger *zap.Logger,
-	trace *committeeDutyTrace,
-	role spectypes.BeaconRole,
-	slot phase0.Slot,
-	validatorIndex phase0.ValidatorIndex,
-	threshold uint64,
-) {
-	c.checkAndPublishQuorumForRoleByIndexCommon(logger, trace, role, slot, validatorIndex, phase0.Root{}, threshold)
-}
-
-// checkAndPublishQuorumForRoleByIndexAndRoot checks quorum for a specific validator and role after
-// flush, scoped to a specific signing root.
-// IMPORTANT: trace must be locked by the caller before calling this function.
-func (c *Collector) checkAndPublishQuorumForRoleByIndexAndRoot(
-	logger *zap.Logger,
-	trace *committeeDutyTrace,
-	role spectypes.BeaconRole,
-	slot phase0.Slot,
-	validatorIndex phase0.ValidatorIndex,
-	root phase0.Root,
-	threshold uint64,
-) {
-	c.checkAndPublishQuorumForRoleByIndexCommon(logger, trace, role, slot, validatorIndex, root, threshold)
-}
-
-func (c *Collector) checkAndPublishQuorumForRoleByIndexCommon(
 	logger *zap.Logger,
 	trace *committeeDutyTrace,
 	role spectypes.BeaconRole,
