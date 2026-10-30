@@ -23,6 +23,8 @@ import (
 	"github.com/ssvlabs/ssv/exporter/store"
 	"github.com/ssvlabs/ssv/exporter/traces"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/operator/slotticker"
+	mockslotticker "github.com/ssvlabs/ssv/operator/slotticker/mocks"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
@@ -1342,6 +1344,50 @@ func TestCollector_LateCommitteeSignaturesAreClassified(t *testing.T) {
 			assert.Equal(t, []spectypes.OperatorID{1, 2}, signers)
 		})
 	}
+}
+
+// TestCollector_RestartMergesMessagesForFlushedSlots restarts the collector on the same store: a message for
+// a slot flushed before the restart must merge with the disk copy, not start a trace that is never evicted.
+func TestCollector_RestartMergesMessagesForFlushedSlots(t *testing.T) {
+	db, err := kv.NewInMemory(zap.NewNop(), basedb.Options{})
+	require.NoError(t, err)
+	dutyStore := store.New(db)
+	beacon := networkconfig.TestNetwork.Beacon
+	// Far enough behind the clock to stay past eviction while the test runs.
+	slot := beacon.EstimatedCurrentSlot() - 2*slotTTL
+
+	identifier := ssvtestingutils.NewMsgID([4]byte{}, []byte("pk"), spectypes.RoleCommittee)
+	var committeeID spectypes.CommitteeID
+	copy(committeeID[:], identifier.GetDutyExecutorID()[16:])
+	prepare := func(signer spectypes.OperatorID) *queue.SSVMessage {
+		msg := buildConsensusMsg(identifier, specqbft.PrepareMsgType, slot, nil)
+		msg.SignedSSVMessage.OperatorIDs = []spectypes.OperatorID{signer}
+		return msg
+	}
+
+	tracer := New(zap.NewNop(), registrystoragemocks.NewMockValidatorStore(gomock.NewController(t)), nil, dutyStore, beacon, nil, nil)
+	require.NoError(t, tracer.Collect(t.Context(), prepare(1), dummyVerify))
+	tracer.lastEvictedSlot.Store(uint64(slot))
+	tracer.evictCommitteeTraces(slot)
+
+	// Restart: Start sets the eviction threshold from the clock (its ctx is already canceled, so it returns
+	// at once), then the slot gets another prepare.
+	restarted := New(zap.NewNop(), registrystoragemocks.NewMockValidatorStore(gomock.NewController(t)), nil, dutyStore, beacon, nil, nil)
+	ticker := mockslotticker.NewMockSlotTicker(gomock.NewController(t))
+	ticker.EXPECT().Next().Return(nil).AnyTimes()
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	restarted.Start(ctx, func() slotticker.SlotTicker { return ticker })
+	require.NoError(t, restarted.Collect(t.Context(), prepare(2), dummyVerify))
+
+	duty, err := dutyStore.GetCommitteeDuty(slot, spectypes.RoleCommittee, committeeID)
+	require.NoError(t, err)
+	require.Len(t, duty.Rounds, 1)
+	signers := make([]spectypes.OperatorID, 0, len(duty.Rounds[0].Prepares))
+	for _, p := range duty.Rounds[0].Prepares {
+		signers = append(signers, p.Signer)
+	}
+	assert.Equal(t, []spectypes.OperatorID{1, 2}, signers)
 }
 
 func TestCollector_LateProposalDoesNotRepublishQuorum(t *testing.T) {

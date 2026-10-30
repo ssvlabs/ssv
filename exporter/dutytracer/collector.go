@@ -146,6 +146,14 @@ type scRootKey struct {
 // in-flight evict, schedule, or late-message write can run against a closed DB and panic.
 func (c *Collector) Start(ctx context.Context, tickerProvider slotticker.Provider) {
 	c.logger.Info("start duty tracer cache to disk evictor")
+
+	// Messages for slots slotTTL behind the clock take the late path, which merges with any disk copy from
+	// before a restart, instead of starting a trace that eviction never reaches. This relies on Start
+	// running before the first Collect.
+	if current := c.beacon.EstimatedCurrentSlot(); current > slotTTL {
+		c.lastEvictedSlot.Store(uint64(current - slotTTL))
+	}
+
 	ticker := tickerProvider()
 
 	// The filler and worker share Start's lifetime; join them on the way out so no
@@ -192,8 +200,8 @@ func (c *Collector) evict(currentSlot phase0.Slot) {
 	// new incomplete in-memory traces
 	lastEvicted := phase0.Slot(c.lastEvictedSlot.Swap(uint64(threshold)))
 
-	// The ticker skips a slot when an eviction runs past its start. The first eviction doesn't catch up:
-	// older traces in memory then were created after a restart, and saving them would overwrite the disk copy.
+	// The ticker skips a slot when an eviction runs past its start, so catch up on the slots since the last
+	// eviction (none before Start sets lastEvictedSlot).
 	from := threshold
 	if lastEvicted != 0 && lastEvicted+1 < threshold {
 		from = lastEvicted + 1
