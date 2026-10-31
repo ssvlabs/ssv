@@ -1248,6 +1248,48 @@ func TestCollector_DecidedGivesRoleRootsWhenProposalIsMissed(t *testing.T) {
 	assert.ElementsMatch(t, []spectypes.OperatorID{1, 2, 3}, validatorSigners(duty.Attester, vIdx))
 }
 
+// TestCollector_JustificationWithoutSignersIsSkipped covers justifications without signers, which message
+// validation lets through.
+func TestCollector_JustificationWithoutSignersIsSkipped(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	validators := registrystoragemocks.NewMockValidatorStore(ctrl)
+	tracer := New(zap.NewNop(), validators, mockclient{}, new(mockDutyTraceStore), networkconfig.TestNetwork.Beacon, nil, nil)
+
+	const slot = phase0.Slot(22)
+	identifier := ssvtestingutils.NewMsgID([4]byte{}, []byte("pk"), spectypes.RoleCommittee)
+	var committeeID spectypes.CommitteeID
+	copy(committeeID[:], identifier.GetDutyExecutorID()[16:])
+	committee := &storage.Committee{ID: committeeID, Operators: []spectypes.OperatorID{1, 2, 3, 4}}
+	validators.EXPECT().Committee(committeeID).Return(committee, true).AnyTimes()
+
+	unsigned := new(spectypes.SignedSSVMessage)
+	require.NoError(t, unsigned.Decode(justification(nil)))
+	unsigned.OperatorIDs = nil
+	unsignedData, err := unsigned.Encode()
+	require.NoError(t, err)
+
+	proposal := buildConsensusMsg(identifier, specqbft.ProposalMsgType, slot, nil)
+	proposalBody := proposal.Body.(*specqbft.Message)
+	proposalBody.RoundChangeJustification = [][]byte{justification([][]byte{unsignedData}), unsignedData}
+	proposalBody.PrepareJustification = [][]byte{unsignedData}
+	require.NoError(t, tracer.Collect(t.Context(), proposal, dummyVerify))
+
+	roundChange := buildConsensusMsg(identifier, specqbft.RoundChangeMsgType, slot, nil)
+	roundChange.Body.(*specqbft.Message).RoundChangeJustification = [][]byte{unsignedData}
+	require.NoError(t, tracer.Collect(t.Context(), roundChange, dummyVerify))
+
+	duty, err := tracer.GetCommitteeDuty(slot, committeeID, spectypes.RoleCommittee)
+	require.NoError(t, err)
+	require.Len(t, duty.Rounds, 1)
+	round := duty.Rounds[0]
+	require.NotNil(t, round.ProposalTrace)
+	require.Len(t, round.ProposalTrace.RoundChanges, 1, "only the signed round change is kept")
+	assert.Empty(t, round.ProposalTrace.RoundChanges[0].PrepareMessages)
+	assert.Empty(t, round.ProposalTrace.PrepareMessages)
+	require.Len(t, round.RoundChanges, 1)
+	assert.Empty(t, round.RoundChanges[0].PrepareMessages)
+}
+
 func TestCollector_LateCommitteeSignaturesAreClassified(t *testing.T) {
 	const (
 		slot = phase0.Slot(40)

@@ -1097,7 +1097,7 @@
                     ]
                 },
                 "roundChanges": {
-                    "description": "RoundChanges lists round change justifications that led to this round.",
+                    "description": "RoundChanges lists round-change messages that ask to move to this round.",
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/exporter.RoundChange"

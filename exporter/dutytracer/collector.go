@@ -341,28 +341,18 @@ func (c *Collector) getOrCreateCommitteeTrace(slot phase0.Slot, committeeID spec
 
 func (c *Collector) decodeJustificationWithPrepares(justifications [][]byte) []*traces.QBFTTrace {
 	out := make([]*traces.QBFTTrace, 0, len(justifications))
-	for _, rcj := range justifications {
-		var signedMsg = new(spectypes.SignedSSVMessage)
-		err := signedMsg.Decode(rcj)
+	for _, data := range justifications {
+		signedMsg, qbftMsg, err := decodeJustification(data)
 		if err != nil {
-			c.logger.Error("decode round change justification", zap.Error(err))
+			c.logger.Error("decode prepare justification", zap.Error(err))
 			continue
 		}
 
-		var qbftMsg = new(specqbft.Message)
-		err = qbftMsg.Decode(signedMsg.SSVMessage.GetData())
-		if err != nil {
-			c.logger.Error("decode signed message data", zap.Error(err))
-			continue
-		}
-
-		justificationTrace := traces.QBFTTrace{
+		out = append(out, &traces.QBFTTrace{
 			Round:      uint64(qbftMsg.Round),
 			BeaconRoot: qbftMsg.Root,
 			Signer:     signedMsg.OperatorIDs[0],
-		}
-
-		out = append(out, &justificationTrace)
+		})
 	}
 
 	return out
@@ -370,26 +360,36 @@ func (c *Collector) decodeJustificationWithPrepares(justifications [][]byte) []*
 
 func (c *Collector) decodeJustificationWithRoundChanges(justifications [][]byte) []*traces.RoundChangeTrace {
 	out := make([]*traces.RoundChangeTrace, 0, len(justifications))
-	for _, rcj := range justifications {
-		var signedMsg = new(spectypes.SignedSSVMessage)
-		err := signedMsg.Decode(rcj)
+	for _, data := range justifications {
+		signedMsg, qbftMsg, err := decodeJustification(data)
 		if err != nil {
 			c.logger.Error("decode round change justification", zap.Error(err))
 			continue
 		}
 
-		var qbftMsg = new(specqbft.Message)
-		err = qbftMsg.Decode(signedMsg.SSVMessage.GetData())
-		if err != nil {
-			c.logger.Error("decode round change justification", zap.Error(err))
-			continue
-		}
-
-		var roundChangeTrace = c.createRoundChangeTrace(0, qbftMsg, signedMsg) // zero time
-		out = append(out, roundChangeTrace)
+		out = append(out, c.createRoundChangeTrace(0, qbftMsg, signedMsg)) // justifications carry no receive time
 	}
 
 	return out
+}
+
+// decodeJustification decodes a justification into its signed message and the QBFT message it carries.
+func decodeJustification(data []byte) (*spectypes.SignedSSVMessage, *specqbft.Message, error) {
+	signedMsg := new(spectypes.SignedSSVMessage)
+	if err := signedMsg.Decode(data); err != nil {
+		return nil, nil, fmt.Errorf("decode signed message: %w", err)
+	}
+	// Message validation only checks that justifications decode, so one can arrive without signers.
+	if len(signedMsg.OperatorIDs) == 0 {
+		return nil, nil, errors.New("no signers")
+	}
+
+	qbftMsg := new(specqbft.Message)
+	if err := qbftMsg.Decode(signedMsg.SSVMessage.GetData()); err != nil {
+		return nil, nil, fmt.Errorf("decode qbft message: %w", err)
+	}
+
+	return signedMsg, qbftMsg, nil
 }
 
 func (c *Collector) createRoundChangeTrace(receivedAt uint64, msg *specqbft.Message, signedMsg *spectypes.SignedSSVMessage) *traces.RoundChangeTrace {
