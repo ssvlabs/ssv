@@ -519,8 +519,8 @@ func TestCollector_MultipleValidatorsAndRoles(t *testing.T) {
 	})
 }
 
-// TestCollector_checkAndPublishQuorumForRoleByIndex tests the per-validator quorum check run after a flush.
-func TestCollector_checkAndPublishQuorumForRoleByIndex(t *testing.T) {
+// TestCollector_checkAndPublishQuorumForRole tests the per-validator quorum check and its deduplication.
+func TestCollector_checkAndPublishQuorumForRole(t *testing.T) {
 	logger := zap.NewNop()
 	ctrl := gomock.NewController(t)
 	t.Cleanup(ctrl.Finish)
@@ -557,7 +557,7 @@ func TestCollector_checkAndPublishQuorumForRoleByIndex(t *testing.T) {
 	dutyStore := new(mockDutyTraceStore)
 	collector := New(logger, validators, nil, dutyStore, networkconfig.TestNetwork.Beacon, listener.OnDecided, nil)
 
-	t.Run("checkAndPublishQuorumForRoleByIndex works correctly", func(t *testing.T) {
+	t.Run("publishes once quorum is reached", func(t *testing.T) {
 		listener.Reset()
 
 		// Manually populate trace with signer data
@@ -576,10 +576,8 @@ func TestCollector_checkAndPublishQuorumForRoleByIndex(t *testing.T) {
 
 		threshold := uint64(3) // 4 operators, need 3 for quorum
 
-		// Call the method directly
-		collector.checkAndPublishQuorumForRoleByIndex(logger, trace, spectypes.BNRoleAttester, slot, vIndex1, phase0.Root{}, threshold)
+		require.True(t, collector.checkAndPublishQuorumForRole(trace, spectypes.BNRoleAttester, slot, vIndex1, phase0.Root{}, threshold))
 
-		// Verify quorum was published
 		calls := listener.GetCalls()
 		require.Len(t, calls, 1)
 
@@ -601,12 +599,8 @@ func TestCollector_checkAndPublishQuorumForRoleByIndex(t *testing.T) {
 
 		threshold := uint64(3)
 
-		// Call twice - second call should not publish
-		collector.checkAndPublishQuorumForRoleByIndex(logger, trace, spectypes.BNRoleAttester, slot, vIndex1, phase0.Root{}, threshold)
-		collector.checkAndPublishQuorumForRoleByIndex(logger, trace, spectypes.BNRoleAttester, slot, vIndex1, phase0.Root{}, threshold)
-
-		// Verify only ONE publication
-		calls := listener.GetCalls()
-		require.Len(t, calls, 0, "second call should not publish (already published)")
+		// The previous subtest already published this quorum.
+		require.False(t, collector.checkAndPublishQuorumForRole(trace, spectypes.BNRoleAttester, slot, vIndex1, phase0.Root{}, threshold))
+		require.Empty(t, listener.GetCalls())
 	})
 }

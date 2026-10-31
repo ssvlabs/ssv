@@ -1213,14 +1213,7 @@ func TestCollector_LateEarlierRoundProposalKeepsDecidedRoots(t *testing.T) {
 
 	duty, err := tracer.GetCommitteeDuty(slot, committeeID, spectypes.RoleCommittee)
 	require.NoError(t, err)
-
-	var signers []spectypes.OperatorID
-	for _, sd := range duty.Attester {
-		if slices.Contains(sd.ValidatorIdx, vIdx) {
-			signers = append(signers, sd.Signer)
-		}
-	}
-	assert.ElementsMatch(t, []spectypes.OperatorID{1, 2, 3, 4}, signers)
+	assert.ElementsMatch(t, []spectypes.OperatorID{1, 2, 3, 4}, validatorSigners(duty.Attester, vIdx))
 	assert.Equal(t, voteRound2, duty.ProposalData, "proposal data must come from the highest round")
 }
 
@@ -1252,13 +1245,7 @@ func TestCollector_DecidedGivesRoleRootsWhenProposalIsMissed(t *testing.T) {
 
 	duty, err := tracer.GetCommitteeDuty(slot, committeeID, spectypes.RoleCommittee)
 	require.NoError(t, err)
-	var signers []spectypes.OperatorID
-	for _, sd := range duty.Attester {
-		if slices.Contains(sd.ValidatorIdx, vIdx) {
-			signers = append(signers, sd.Signer)
-		}
-	}
-	assert.ElementsMatch(t, []spectypes.OperatorID{1, 2, 3}, signers)
+	assert.ElementsMatch(t, []spectypes.OperatorID{1, 2, 3}, validatorSigners(duty.Attester, vIdx))
 }
 
 func TestCollector_LateCommitteeSignaturesAreClassified(t *testing.T) {
@@ -1335,15 +1322,20 @@ func TestCollector_LateCommitteeSignaturesAreClassified(t *testing.T) {
 
 			duty, err := dutyStore.GetCommitteeDuty(slot, tt.role, committeeID)
 			require.NoError(t, err)
-			var signers []spectypes.OperatorID
-			for _, sd := range tt.bucket(duty) {
-				if slices.Contains(sd.ValidatorIdx, vIdx) {
-					signers = append(signers, sd.Signer)
-				}
-			}
-			assert.Equal(t, []spectypes.OperatorID{1, 2}, signers)
+			assert.Equal(t, []spectypes.OperatorID{1, 2}, validatorSigners(tt.bucket(duty), vIdx))
 		})
 	}
+}
+
+// validatorSigners returns the signers of a role bucket's entries that include the validator.
+func validatorSigners(bucket []*traces.SignerData, idx phase0.ValidatorIndex) []spectypes.OperatorID {
+	var signers []spectypes.OperatorID
+	for _, sd := range bucket {
+		if slices.Contains(sd.ValidatorIdx, idx) {
+			signers = append(signers, sd.Signer)
+		}
+	}
+	return signers
 }
 
 // TestCollector_RestartMergesMessagesForFlushedSlots restarts the collector on the same store: a message for
@@ -1353,7 +1345,7 @@ func TestCollector_RestartMergesMessagesForFlushedSlots(t *testing.T) {
 	require.NoError(t, err)
 	dutyStore := store.New(db)
 	beacon := networkconfig.TestNetwork.Beacon
-	// Far enough behind the clock to stay past eviction while the test runs.
+	// Far enough behind the clock to stay behind the eviction threshold while the test runs.
 	slot := beacon.EstimatedCurrentSlot() - 2*slotTTL
 
 	identifier := ssvtestingutils.NewMsgID([4]byte{}, []byte("pk"), spectypes.RoleCommittee)
@@ -2246,7 +2238,7 @@ func TestEvict(t *testing.T) {
 		}
 
 		collector.evict(10 + slotTTL)
-		collector.evict(12 + slotTTL) // the tick for slot 11 was skipped
+		collector.evict(12 + slotTTL) // the tick that would flush slot 11 was skipped
 
 		for _, slot := range slots {
 			_, err := dutyStore.GetCommitteeDuty(slot, spectypes.RoleCommittee, committeeID)

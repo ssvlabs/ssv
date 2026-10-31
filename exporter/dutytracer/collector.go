@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"slices"
 	"strconv"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -35,8 +34,9 @@ import (
 	"github.com/ssvlabs/ssv/utils/hashmap"
 )
 
-// DecidedInfo reports the first post-consensus quorum for a validator's beacon role, not a QBFT decided
-// message (those are recorded in a trace's Decideds).
+// DecidedInfo reports the first partial-signature quorum for a validator's beacon role: post-consensus,
+// or the selection proofs for an aggregator-committee duty's roles. It isn't a QBFT decided message
+// (those are recorded in a trace's Decideds).
 type DecidedInfo struct {
 	Index   phase0.ValidatorIndex
 	Slot    phase0.Slot
@@ -147,9 +147,9 @@ type scRootKey struct {
 func (c *Collector) Start(ctx context.Context, tickerProvider slotticker.Provider) {
 	c.logger.Info("start duty tracer cache to disk evictor")
 
-	// Messages for slots slotTTL behind the clock take the late path, which merges with any disk copy from
-	// before a restart, instead of starting a trace that eviction never reaches. This relies on Start
-	// running before the first Collect.
+	// Messages for slots at least slotTTL behind the clock take the late path and merge with the disk copy
+	// from before a restart, instead of starting a trace that eviction never reaches. Start must run before
+	// the first Collect.
 	if current := c.beacon.EstimatedCurrentSlot(); current > slotTTL {
 		c.lastEvictedSlot.Store(uint64(current - slotTTL))
 	}
@@ -200,8 +200,8 @@ func (c *Collector) evict(currentSlot phase0.Slot) {
 	// new incomplete in-memory traces
 	lastEvicted := phase0.Slot(c.lastEvictedSlot.Swap(uint64(threshold)))
 
-	// The ticker skips a slot when an eviction runs past its start, so catch up on the slots since the last
-	// eviction (none before Start sets lastEvictedSlot).
+	// The ticker skips a slot when an eviction runs past its start, so also flush the slots skipped since the
+	// last eviction, unless lastEvictedSlot is still unset.
 	from := threshold
 	if lastEvicted != 0 && lastEvicted+1 < threshold {
 		from = lastEvicted + 1
@@ -1263,9 +1263,9 @@ type committeeDutyTrace struct {
 	aggSelectionRootReady bool
 	traces.CommitteeDutyTrace
 
-	// Track published quorums to avoid duplicates (validator -> role -> signers hash)
-	// Not part of the model.CommitteeDutyTrace, because it's not persisted to disk
-	publishedQuorums map[phase0.ValidatorIndex]map[spectypes.BeaconRole]string
+	// Quorums already published, so each is published once. Not persisted: a trace reloaded from disk starts
+	// without them.
+	publishedQuorums map[publishedQuorum]struct{}
 
 	// Pending signatures grouped by SigningRoot and signer until role roots are known.
 	// Shape: pendingByRoot[root][signer][receivedAt] = []validatorIndices
@@ -1274,6 +1274,11 @@ type committeeDutyTrace struct {
 	// Root-specific signer sets used for quorum checks that must not mix multiple roots
 	// for the same role (e.g., sync committee contribution in aggregator-committee duties).
 	signersByRoot map[phase0.Root]map[phase0.ValidatorIndex]map[spectypes.OperatorID]struct{}
+}
+
+type publishedQuorum struct {
+	index phase0.ValidatorIndex
+	role  spectypes.BeaconRole
 }
 
 // safeDeepCopy returns a deep copy of the trace data with internal locking.
@@ -1410,10 +1415,6 @@ func (c *Collector) checkAndPublishQuorum(logger *zap.Logger, msg *spectypes.Par
 
 	threshold := uint64(len(committee.Operators))*2/3 + 1
 
-	if trace.publishedQuorums == nil {
-		trace.publishedQuorums = make(map[phase0.ValidatorIndex]map[spectypes.BeaconRole]string)
-	}
-
 	// Check each validator in the partial signature for quorum
 	for _, partialMsg := range msg.Messages {
 		_, exists := c.validators.ValidatorByIndex(partialMsg.ValidatorIndex)
@@ -1422,23 +1423,19 @@ func (c *Collector) checkAndPublishQuorum(logger *zap.Logger, msg *spectypes.Par
 				zap.Uint64("validator_index", uint64(partialMsg.ValidatorIndex)))
 			continue
 		}
-		// Initialize tracking for this validator if needed
-		if trace.publishedQuorums[partialMsg.ValidatorIndex] == nil {
-			trace.publishedQuorums[partialMsg.ValidatorIndex] = make(map[spectypes.BeaconRole]string)
-		}
 
 		// Determine role from the signing root and check quorum only for that role.
 		// This prevents false positives where signatures for one role are counted toward another.
 		if msg.Type == spectypes.AggregatorCommitteePartialSig && trace.aggSelectionRootReady {
+			role := spectypes.BNRoleSyncCommitteeContribution
 			if bytes.Equal(trace.aggSelectionRoot[:], partialMsg.SigningRoot[:]) {
-				c.checkAndPublishQuorumForRole(logger, trace, spectypes.BNRoleAggregator, msg, partialMsg, threshold)
-			} else {
-				c.checkAndPublishQuorumForRole(logger, trace, spectypes.BNRoleSyncCommitteeContribution, msg, partialMsg, threshold)
+				role = spectypes.BNRoleAggregator
 			}
+			c.checkAndPublishQuorumForRole(trace, role, msg.Slot, partialMsg.ValidatorIndex, partialMsg.SigningRoot, threshold)
 			continue
 		}
 		if role, ok := trace.classifyRootForPending(partialMsg.SigningRoot); ok {
-			c.checkAndPublishQuorumForRole(logger, trace, role, msg, partialMsg, threshold)
+			c.checkAndPublishQuorumForRole(trace, role, msg.Slot, partialMsg.ValidatorIndex, partialMsg.SigningRoot, threshold)
 			continue
 		}
 		// If roots are not ready yet, signatures are in pending buffer.
@@ -1446,15 +1443,18 @@ func (c *Collector) checkAndPublishQuorum(logger *zap.Logger, msg *spectypes.Par
 	}
 }
 
-// checkAndPublishQuorumForRole checks if quorum is reached for a specific role and publishes if it's the first time
+// checkAndPublishQuorumForRole publishes a validator's quorum for a role the first time it's reached, and
+// reports whether it did. A non-zero root scopes the count to that signing root; the zero root counts the
+// role's whole bucket.
+// IMPORTANT: trace must be locked by the caller before calling this function.
 func (c *Collector) checkAndPublishQuorumForRole(
-	logger *zap.Logger,
 	trace *committeeDutyTrace,
 	role spectypes.BeaconRole,
-	msg *spectypes.PartialSignatureMessages,
-	partialMsg *spectypes.PartialSignatureMessage,
+	slot phase0.Slot,
+	validatorIndex phase0.ValidatorIndex,
+	root phase0.Root,
 	threshold uint64,
-) {
+) bool {
 	var signerData []*traces.SignerData
 
 	switch role {
@@ -1463,29 +1463,29 @@ func (c *Collector) checkAndPublishQuorumForRole(
 	case spectypes.BNRoleSyncCommittee, spectypes.BNRoleSyncCommitteeContribution:
 		signerData = trace.SyncCommittee
 	default:
-		return
+		return false
 	}
 
-	signers := c.countUniqueSignersForValidatorAndRoot(trace, signerData, partialMsg.ValidatorIndex, partialMsg.SigningRoot)
+	key := publishedQuorum{index: validatorIndex, role: role}
+	if _, published := trace.publishedQuorums[key]; published {
+		return false
+	}
+	signers := c.countUniqueSignersForValidatorAndRoot(trace, signerData, validatorIndex, root)
 	if uint64(len(signers)) < threshold {
-		return
+		return false
 	}
 
-	signersKey := c.signersToKey(signers)
-	lastPublished := trace.publishedQuorums[partialMsg.ValidatorIndex][role]
-
-	// Only publish the FIRST time quorum is reached, not for every signer set change
-	if lastPublished == "" {
-		trace.publishedQuorums[partialMsg.ValidatorIndex][role] = signersKey
-
-		decidedInfo := DecidedInfo{
-			Index:   partialMsg.ValidatorIndex,
-			Slot:    msg.Slot,
-			Role:    role,
-			Signers: signers,
-		}
-		c.decidedListenerFunc(decidedInfo)
+	if trace.publishedQuorums == nil {
+		trace.publishedQuorums = make(map[publishedQuorum]struct{})
 	}
+	trace.publishedQuorums[key] = struct{}{}
+	c.decidedListenerFunc(DecidedInfo{
+		Index:   validatorIndex,
+		Slot:    slot,
+		Role:    role,
+		Signers: signers,
+	})
+	return true
 }
 
 // countUniqueSignersForValidator counts unique signers for a specific validator across the
@@ -1534,15 +1534,6 @@ func sortedSigners(signers map[spectypes.OperatorID]struct{}) []spectypes.Operat
 	return result
 }
 
-// signersToKey creates a string key from sorted signers for deduplication
-func (c *Collector) signersToKey(signers []spectypes.OperatorID) string {
-	parts := make([]string, 0, len(signers))
-	for _, signer := range signers {
-		parts = append(parts, fmt.Sprintf("%d", signer))
-	}
-	return strings.Join(parts, ",")
-}
-
 // checkQuorumAfterFlush checks quorum for all validators after flushing pending signatures.
 // This handles the case where signatures arrived before the proposal or decided and were buffered.
 // IMPORTANT: trace must be locked by the caller before calling this function.
@@ -1557,10 +1548,6 @@ func (c *Collector) checkQuorumAfterFlush(logger *zap.Logger, committeeID specty
 	}
 
 	threshold := uint64(len(committee.Operators))*2/3 + 1
-
-	if trace.publishedQuorums == nil {
-		trace.publishedQuorums = make(map[phase0.ValidatorIndex]map[spectypes.BeaconRole]string)
-	}
 
 	switch trace.Role {
 	case spectypes.RoleAggregatorCommittee:
@@ -1600,10 +1587,9 @@ func (c *Collector) checkRoleQuorumForValidators(
 				fields.Slot(slot))
 			continue
 		}
-		if trace.publishedQuorums[validatorIndex] == nil {
-			trace.publishedQuorums[validatorIndex] = make(map[spectypes.BeaconRole]string)
+		if c.checkAndPublishQuorumForRole(trace, role, slot, validatorIndex, phase0.Root{}, threshold) {
+			logger.Debug("quorum reached after flush", zap.Uint64("validator_index", uint64(validatorIndex)), fields.BeaconRole(role))
 		}
-		c.checkAndPublishQuorumForRoleByIndex(logger, trace, role, slot, validatorIndex, phase0.Root{}, threshold)
 	}
 }
 
@@ -1631,70 +1617,10 @@ func (c *Collector) checkRoleQuorumForValidatorsByRoot(
 					fields.Slot(slot))
 				continue
 			}
-			if trace.publishedQuorums[validatorIndex] == nil {
-				trace.publishedQuorums[validatorIndex] = make(map[spectypes.BeaconRole]string)
+			if c.checkAndPublishQuorumForRole(trace, role, slot, validatorIndex, root, threshold) {
+				logger.Debug("quorum reached after flush", zap.Uint64("validator_index", uint64(validatorIndex)), fields.BeaconRole(role))
 			}
-			c.checkAndPublishQuorumForRoleByIndex(logger, trace, role, slot, validatorIndex, root, threshold)
 		}
-	}
-}
-
-// checkAndPublishQuorumForRoleByIndex checks quorum for a validator and role after a flush, publishing it
-// the first time it's reached. A non-zero root scopes the count to that signing root; the zero root counts
-// the role's whole bucket.
-// IMPORTANT: trace must be locked by the caller before calling this function.
-func (c *Collector) checkAndPublishQuorumForRoleByIndex(
-	logger *zap.Logger,
-	trace *committeeDutyTrace,
-	role spectypes.BeaconRole,
-	slot phase0.Slot,
-	validatorIndex phase0.ValidatorIndex,
-	root phase0.Root,
-	threshold uint64,
-) {
-	var signerData []*traces.SignerData
-
-	switch role {
-	case spectypes.BNRoleAttester, spectypes.BNRoleAggregator:
-		signerData = trace.Attester
-	case spectypes.BNRoleSyncCommittee, spectypes.BNRoleSyncCommitteeContribution:
-		signerData = trace.SyncCommittee
-	default:
-		return
-	}
-
-	signers := c.countUniqueSignersForValidatorAndRoot(trace, signerData, validatorIndex, root)
-	if uint64(len(signers)) < threshold {
-		return
-	}
-
-	// Initialize the maps if needed
-	if trace.publishedQuorums == nil {
-		trace.publishedQuorums = make(map[phase0.ValidatorIndex]map[spectypes.BeaconRole]string)
-	}
-	if trace.publishedQuorums[validatorIndex] == nil {
-		trace.publishedQuorums[validatorIndex] = make(map[spectypes.BeaconRole]string)
-	}
-
-	signersKey := c.signersToKey(signers)
-	lastPublished := trace.publishedQuorums[validatorIndex][role]
-
-	// Only publish the FIRST time quorum is reached
-	if lastPublished == "" {
-		trace.publishedQuorums[validatorIndex][role] = signersKey
-
-		decidedInfo := DecidedInfo{
-			Index:   validatorIndex,
-			Slot:    slot,
-			Role:    role,
-			Signers: signers,
-		}
-		c.decidedListenerFunc(decidedInfo)
-
-		logger.Debug("quorum reached after flush",
-			zap.Uint64("validator_index", uint64(validatorIndex)),
-			fields.BeaconRole(role),
-			zap.Int("signers_count", len(signers)))
 	}
 }
 
