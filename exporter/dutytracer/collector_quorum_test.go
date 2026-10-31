@@ -94,9 +94,8 @@ func TestCollector_QuorumAfterFlush(t *testing.T) {
 		require.NoError(t, err)
 
 		trace.Lock()
-		trace.attestationRoot = attestationRoot
-		trace.syncCommitteeRoot = syncCommitteeRoot
-		trace.roleRootsReady = true
+		trace.addPostConsensusRole(attestationRoot, spectypes.BNRoleAttester)
+		trace.addPostConsensusRole(syncCommitteeRoot, spectypes.BNRoleSyncCommittee)
 		trace.flushPending()
 		// This is the critical call that our fix added!
 		collector.checkQuorumAfterFlush(logger, committeeID, slot, trace)
@@ -168,9 +167,8 @@ func TestCollector_RoleSpecificQuorum(t *testing.T) {
 		// Set up roots
 		trace, _, err := collector.getOrCreateCommitteeTrace(slot, committeeID, spectypes.RoleCommittee)
 		require.NoError(t, err)
-		trace.attestationRoot = attestationRoot
-		trace.syncCommitteeRoot = syncCommitteeRoot
-		trace.roleRootsReady = true
+		trace.addPostConsensusRole(attestationRoot, spectypes.BNRoleAttester)
+		trace.addPostConsensusRole(syncCommitteeRoot, spectypes.BNRoleSyncCommittee)
 
 		// Send attestation signatures from 3 operators for V1 (reaches quorum)
 		operators := []spectypes.OperatorID{operator1, operator2, operator3}
@@ -290,9 +288,8 @@ func TestCollector_MixedTimingQuorum(t *testing.T) {
 		require.NoError(t, err)
 
 		trace.Lock()
-		trace.attestationRoot = attestationRoot
-		trace.syncCommitteeRoot = syncCommitteeRoot
-		trace.roleRootsReady = true
+		trace.addPostConsensusRole(attestationRoot, spectypes.BNRoleAttester)
+		trace.addPostConsensusRole(syncCommitteeRoot, spectypes.BNRoleSyncCommittee)
 		trace.flushPending()
 		collector.checkQuorumAfterFlush(logger, committeeID, slot, trace)
 		trace.Unlock()
@@ -377,9 +374,8 @@ func TestCollector_UnknownRootQuorum(t *testing.T) {
 		// Set up roots
 		trace, _, err := collector.getOrCreateCommitteeTrace(slot, committeeID, spectypes.RoleCommittee)
 		require.NoError(t, err)
-		trace.attestationRoot = attestationRoot
-		trace.syncCommitteeRoot = syncCommitteeRoot
-		trace.roleRootsReady = true
+		trace.addPostConsensusRole(attestationRoot, spectypes.BNRoleAttester)
+		trace.addPostConsensusRole(syncCommitteeRoot, spectypes.BNRoleSyncCommittee)
 
 		// Send 2 signatures with correct attestation root
 		for _, op := range []spectypes.OperatorID{operator1, operator2} {
@@ -480,9 +476,8 @@ func TestCollector_MultipleValidatorsAndRoles(t *testing.T) {
 		// Set up roots
 		trace, _, err := collector.getOrCreateCommitteeTrace(slot, committeeID, spectypes.RoleCommittee)
 		require.NoError(t, err)
-		trace.attestationRoot = attestationRoot
-		trace.syncCommitteeRoot = syncCommitteeRoot
-		trace.roleRootsReady = true
+		trace.addPostConsensusRole(attestationRoot, spectypes.BNRoleAttester)
+		trace.addPostConsensusRole(syncCommitteeRoot, spectypes.BNRoleSyncCommittee)
 
 		// Send combined messages: each operator signs both V1 attestation and V2 sync committee
 		operators := []spectypes.OperatorID{operator1, operator2, operator3}
@@ -524,9 +519,8 @@ func TestCollector_MultipleValidatorsAndRoles(t *testing.T) {
 	})
 }
 
-// TestCollector_checkAndPublishQuorumForRoleByIndex specifically tests the new
-// helper method added for quorum detection after flush.
-func TestCollector_checkAndPublishQuorumForRoleByIndex(t *testing.T) {
+// TestCollector_checkAndPublishQuorumForRole tests the per-validator quorum check and its deduplication.
+func TestCollector_checkAndPublishQuorumForRole(t *testing.T) {
 	logger := zap.NewNop()
 	ctrl := gomock.NewController(t)
 	t.Cleanup(ctrl.Finish)
@@ -563,7 +557,7 @@ func TestCollector_checkAndPublishQuorumForRoleByIndex(t *testing.T) {
 	dutyStore := new(mockDutyTraceStore)
 	collector := New(logger, validators, nil, dutyStore, networkconfig.TestNetwork.Beacon, listener.OnDecided, nil)
 
-	t.Run("checkAndPublishQuorumForRoleByIndex works correctly", func(t *testing.T) {
+	t.Run("publishes once quorum is reached", func(t *testing.T) {
 		listener.Reset()
 
 		// Manually populate trace with signer data
@@ -582,10 +576,8 @@ func TestCollector_checkAndPublishQuorumForRoleByIndex(t *testing.T) {
 
 		threshold := uint64(3) // 4 operators, need 3 for quorum
 
-		// Call the method directly
-		collector.checkAndPublishQuorumForRoleByIndex(logger, trace, spectypes.BNRoleAttester, slot, vIndex1, threshold)
+		require.True(t, collector.checkAndPublishQuorumForRole(trace, spectypes.BNRoleAttester, slot, vIndex1, phase0.Root{}, threshold))
 
-		// Verify quorum was published
 		calls := listener.GetCalls()
 		require.Len(t, calls, 1)
 
@@ -607,12 +599,8 @@ func TestCollector_checkAndPublishQuorumForRoleByIndex(t *testing.T) {
 
 		threshold := uint64(3)
 
-		// Call twice - second call should not publish
-		collector.checkAndPublishQuorumForRoleByIndex(logger, trace, spectypes.BNRoleAttester, slot, vIndex1, threshold)
-		collector.checkAndPublishQuorumForRoleByIndex(logger, trace, spectypes.BNRoleAttester, slot, vIndex1, threshold)
-
-		// Verify only ONE publication
-		calls := listener.GetCalls()
-		require.Len(t, calls, 0, "second call should not publish (already published)")
+		// The previous subtest already published this quorum.
+		require.False(t, collector.checkAndPublishQuorumForRole(trace, spectypes.BNRoleAttester, slot, vIndex1, phase0.Root{}, threshold))
+		require.Empty(t, listener.GetCalls())
 	})
 }

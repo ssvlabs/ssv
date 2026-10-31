@@ -15,7 +15,7 @@ import (
 	"github.com/ssvlabs/ssv/utils/hashmap"
 )
 
-func (c *Collector) dumpLinkToDBPeriodically(slot phase0.Slot) (totalSaved int) {
+func (c *Collector) evictCommitteeLinks(slot phase0.Slot) (totalSaved int) {
 	var links = make(map[phase0.ValidatorIndex]spectypes.CommitteeID)
 
 	c.validatorIndexToCommitteeLinks.Range(func(index phase0.ValidatorIndex, slotToCommittee *hashmap.Map[phase0.Slot, spectypes.CommitteeID]) bool {
@@ -42,7 +42,7 @@ func (c *Collector) dumpLinkToDBPeriodically(slot phase0.Slot) (totalSaved int) 
 	return
 }
 
-func (c *Collector) dumpCommitteeToDBPeriodically(slot phase0.Slot) (totalSaved int) {
+func (c *Collector) evictCommitteeTraces(slot phase0.Slot) (totalSaved int) {
 	dutiesByRole := make(map[spectypes.RunnerRole][]*traces.CommitteeDutyTrace)
 
 	c.committeeTraces.Range(func(key committeeTraceKey, slotToTraceMap *hashmap.Map[phase0.Slot, *committeeDutyTrace]) bool {
@@ -58,19 +58,16 @@ func (c *Collector) dumpCommitteeToDBPeriodically(slot phase0.Slot) (totalSaved 
 		// Now safely read the trace data while locked
 		trace.Lock()
 
-		pendingCount := 0
-		for _, perSigner := range trace.pendingByRoot {
-			for _, byTs := range perSigner {
-				for _, idxs := range byTs {
-					pendingCount += len(idxs)
-				}
-			}
-		}
+		pendingCount := countPending(trace.pendingByRoot)
 		if pendingCount > 0 {
-			c.logger.Error("dropping buffered pending signatures during eviction (proposal never arrived or failed to establish role roots)",
+			// known_roots is 0 when no proposal or decided was processed; otherwise the signatures
+			// match none of the roots derived from those seen.
+			c.logger.Error("dropping buffered pending signatures during eviction (no proposal or decided arrived, or role roots failed)",
 				fields.Slot(slot), fields.CommitteeID(key.id),
 				zap.Int("pending_entries", pendingCount),
+				zap.Int("known_roots", len(trace.postConsensusRoles)),
 				pendingDetails(trace.pendingByRoot))
+			recordDroppedPendingSignatures(pendingCount, key.role)
 			// We intentionally drop pending entries here; they are not persisted.
 			trace.pendingByRoot = nil
 		}
@@ -92,6 +89,7 @@ func (c *Collector) dumpCommitteeToDBPeriodically(slot phase0.Slot) (totalSaved 
 		if err != nil {
 			c.logger.Error("couldn't save every committee duty to disk", zap.Error(err), fields.RunnerRole(role),
 				zap.Int("saved", saved), zap.Int("lost", len(duties)-saved))
+			recordLostTraces(len(duties)-saved, traceKindCommittee)
 		}
 		totalSaved += saved
 	}
@@ -99,7 +97,7 @@ func (c *Collector) dumpCommitteeToDBPeriodically(slot phase0.Slot) (totalSaved 
 	return totalSaved
 }
 
-func (c *Collector) dumpValidatorToDBPeriodically(slot phase0.Slot) (totalSaved int) {
+func (c *Collector) evictValidatorTraces(slot phase0.Slot) (totalSaved int) {
 	var duties []*traces.ValidatorDutyTrace
 
 	c.validatorTraces.Range(func(idx phase0.ValidatorIndex, slotToTraceMap *hashmap.Map[phase0.Slot, *validatorDutyTrace]) bool {
@@ -129,12 +127,12 @@ func (c *Collector) dumpValidatorToDBPeriodically(slot phase0.Slot) (totalSaved 
 	if err != nil {
 		c.logger.Error("couldn't save every validator duty to disk", zap.Error(err),
 			zap.Int("saved", saved), zap.Int("lost", len(duties)-saved))
+		recordLostTraces(len(duties)-saved, traceKindValidator)
 	}
 
 	return saved
 }
 
-// pendingDetails constructs a single zap field named "pending_signers_by_root"
 // countPending returns the total number of pending validator-index entries
 // held in a pendingByRoot map, across all roots, signers and timestamps.
 func countPending(data map[phase0.Root]map[spectypes.OperatorID]map[uint64][]phase0.ValidatorIndex) int {
@@ -149,6 +147,7 @@ func countPending(data map[phase0.Root]map[spectypes.OperatorID]map[uint64][]pha
 	return count
 }
 
+// pendingDetails constructs a single zap field named "pending_signers_by_root"
 // that logs the content of pendingByRoot in a JSON-friendly structure.
 func pendingDetails(data map[phase0.Root]map[spectypes.OperatorID]map[uint64][]phase0.ValidatorIndex) zap.Field {
 	out := make(map[string]map[string]any, len(data))

@@ -5,10 +5,13 @@ import (
 	"encoding/hex"
 	"testing"
 
+	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	ps_pb "github.com/libp2p/go-libp2p-pubsub/pb"
 	libp2pcrypto "github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/stretchr/testify/require"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
@@ -94,4 +97,38 @@ func TestPSTracer_RPCEvents(t *testing.T) {
 		require.NotContains(t, fields, "msgsCount")
 		require.Equal(t, int64(0), fields["subsCount"])
 	})
+}
+
+// TestValidationDropTracer_CountsOnlyPreValidationDrops checks that only messages gossipsub drops
+// before validation are counted; validation outcomes are reported by message validation itself.
+func TestValidationDropTracer_CountsOnlyPreValidationDrops(t *testing.T) {
+	reader := sdkmetric.NewManualReader()
+	counter, err := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test").Int64Counter("test_validation_dropped")
+	require.NoError(t, err)
+	tracer := newValidationDropTracer(counter)
+
+	tracer.RejectMessage(nil, pubsub.RejectValidationQueueFull)
+	tracer.RejectMessage(nil, pubsub.RejectValidationQueueFull)
+	tracer.RejectMessage(nil, pubsub.RejectValidationThrottled)
+	tracer.RejectMessage(nil, pubsub.RejectValidationFailed)
+	tracer.RejectMessage(nil, pubsub.RejectValidationIgnored)
+
+	var rm metricdata.ResourceMetrics
+	require.NoError(t, reader.Collect(t.Context(), &rm))
+
+	got := make(map[string]int64)
+	for _, sm := range rm.ScopeMetrics {
+		for _, m := range sm.Metrics {
+			sum, ok := m.Data.(metricdata.Sum[int64])
+			require.True(t, ok, "expected Sum[int64], got %T", m.Data)
+			for _, dp := range sum.DataPoints {
+				reason, _ := dp.Attributes.Value("ssv.p2p.message.drop_reason")
+				got[reason.AsString()] += dp.Value
+			}
+		}
+	}
+	require.Equal(t, map[string]int64{
+		pubsub.RejectValidationQueueFull: 2,
+		pubsub.RejectValidationThrottled: 1,
+	}, got)
 }

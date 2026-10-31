@@ -75,7 +75,7 @@ func TestValidatorCommitteeMapping(t *testing.T) {
 
 	// evict validator committee mapping in slot 4
 	thresholdSlot := phase0.Slot(4)
-	collector.dumpLinkToDBPeriodically(thresholdSlot)
+	collector.evictCommitteeLinks(thresholdSlot)
 
 	// check that slot 4 is evicted from cache
 	indexToSlotMap, found := collector.validatorIndexToCommitteeLinks.Get(1)
@@ -203,8 +203,8 @@ func TestCommitteeDutyStore(t *testing.T) {
 	// meaning that slot 4 should be evicted to disk
 	// but slot 7 should be in memory
 	slot8 := phase0.Slot(4)
-	collector.dumpCommitteeToDBPeriodically(slot8)
-	collector.dumpLinkToDBPeriodically(slot8)
+	collector.evictCommitteeTraces(slot8)
+	collector.evictCommitteeLinks(slot8)
 
 	// step 3: retrieve trace from disk (4) and memory (7)
 	{
@@ -339,7 +339,7 @@ func TestCommitteeDutyStore_RoleFilteringAndEvictionGrouping(t *testing.T) {
 	require.Equal(t, []uint64{4, 5, 6}, onlyAgg[0].OperatorIDs)
 
 	// Evict: both roles at this slot must be dumped, grouped independently per role.
-	saved := collector.dumpCommitteeToDBPeriodically(slot)
+	saved := collector.evictCommitteeTraces(slot)
 	require.Equal(t, 2, saved, "one duty per role should be saved")
 
 	diskCommittee, err := dutyStore.GetCommitteeDuty(slot, spectypes.RoleCommittee, committeeID)
@@ -494,8 +494,8 @@ func TestCommitteeDutyStore_GetAllCommitteeDecideds(t *testing.T) {
 	}
 
 	// Evict to disk
-	collector.dumpCommitteeToDBPeriodically(slot4)
-	collector.dumpLinkToDBPeriodically(slot4)
+	collector.evictCommitteeTraces(slot4)
+	collector.evictCommitteeLinks(slot4)
 
 	// Fetch trace from disk and check
 	{
@@ -609,7 +609,7 @@ func TestValidatorDutyStore(t *testing.T) {
 
 	// evict slot 4
 	threshold := phase0.Slot(4)
-	collector.dumpValidatorToDBPeriodically(threshold)
+	collector.evictValidatorTraces(threshold)
 
 	var inMem = make(map[phase0.Slot]struct{})
 	collector.validatorTraces.Range(func(key phase0.ValidatorIndex, slotToTraceMap *hashmap.Map[phase0.Slot, *validatorDutyTrace]) bool {
@@ -673,7 +673,7 @@ func encodeLittleEndian(i phase0.ValidatorIndex) []byte {
 
 // Eviction counts only the duties the store saved: an unencodable duty is left out, and a failed batch
 // write counts nothing.
-func TestDumpValidatorToDB_CountsOnlySavedDuties(t *testing.T) {
+func TestEvictValidatorTraces_CountsOnlySavedDuties(t *testing.T) {
 	const slot = phase0.Slot(30)
 	const role = spectypes.BNRoleProposerPreferences
 
@@ -694,7 +694,7 @@ func TestDumpValidatorToDB_CountsOnlySavedDuties(t *testing.T) {
 			roleTrace.Pre = append(roleTrace.Pre, &traces.PartialSigTrace{Signer: 1})
 		}
 
-		require.Equal(t, 1, collector.dumpValidatorToDBPeriodically(slot), "only the encodable duty is counted")
+		require.Equal(t, 1, collector.evictValidatorTraces(slot), "only the encodable duty is counted")
 		_, err = dutyStore.GetValidatorDuty(slot, role, 1)
 		require.NoError(t, err, "the encodable duty is on disk")
 		_, err = dutyStore.GetValidatorDuty(slot, role, 2)
@@ -713,6 +713,6 @@ func TestDumpValidatorToDB_CountsOnlySavedDuties(t *testing.T) {
 		_, _, err = collector.getOrCreateValidatorTrace(slot, role, 2)
 		require.NoError(t, err)
 
-		require.Zero(t, collector.dumpValidatorToDBPeriodically(slot), "nothing reached disk, nothing is counted")
+		require.Zero(t, collector.evictValidatorTraces(slot), "nothing reached disk, nothing is counted")
 	})
 }

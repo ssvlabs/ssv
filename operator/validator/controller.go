@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -13,6 +14,7 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
@@ -165,6 +167,9 @@ type Controller struct {
 	messageWorker        *worker.Worker
 	historySyncBatchSize int
 	messageValidator     validation.MessageValidator
+
+	// messageWorkerFillSampleTick samples the exporter queue fill gauge, like messageRouter does for its buffer.
+	messageWorkerFillSampleTick atomic.Uint64
 
 	// committeesObservers is a cache of initialized committeeObserver instances
 	committeesObservers      *ttlcache.Cache[spectypes.MessageID, *validator.CommitteeObserver]
@@ -356,6 +361,22 @@ func (c *Controller) GetValidatorStats() (uint64, uint64, uint64, error) {
 	return total, active, operatorShares, nil
 }
 
+// enqueueExporterMessage hands a consensus or partial-signature message to the exporter's message
+// worker, counting it as dropped when the worker queue is full.
+func (c *Controller) enqueueExporterMessage(m *queue.SSVMessage) {
+	if !c.messageWorker.TryEnqueue(m) {
+		exporterQueueDroppedMessagesCounter.Add(c.ctx, 1, metric.WithAttributes(
+			observability.ValidatorMsgTypeAttribute(m.MsgType),
+			observability.RunnerRoleAttribute(m.MsgID.GetRoleType()),
+		))
+		c.logger.Warn("exporter message queue is full, dropping message",
+			fields.MessageType(m.MsgType), fields.RunnerRole(m.MsgID.GetRoleType()))
+	}
+	if c.messageWorkerFillSampleTick.Add(1)%bufferFillSampleRate == 0 {
+		exporterQueueFillGauge.Record(c.ctx, int64(c.messageWorker.Size()))
+	}
+}
+
 func (c *Controller) handleRouterMessages() {
 	for {
 		msg, ok := c.messageRouter.Receive(c.ctx)
@@ -383,9 +404,7 @@ func (c *Controller) handleRouterMessages() {
 				if m.MsgType != spectypes.SSVConsensusMsgType && m.MsgType != spectypes.SSVPartialSignatureMsgType {
 					continue
 				}
-				if !c.messageWorker.TryEnqueue(m) {
-					c.logger.Warn("Failed to enqueue post consensus message: buffer is full")
-				}
+				c.enqueueExporterMessage(m)
 			} else {
 				c.logUndeliverableOwnValidatorMessage(m, dutyExecutorID)
 			}
