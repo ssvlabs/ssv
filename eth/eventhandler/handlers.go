@@ -390,14 +390,16 @@ func (eh *EventHandler) handleValidatorRemoved(ctx context.Context, txn basedb.T
 		logger = logger.With(zap.String("validator_pubkey", hex.EncodeToString(share.ValidatorPubKey[:])))
 	}
 	if isOperatorShare {
-		// Validators stored before handleValidatorAdded rejected reused share keys may share this key, so
-		// remove it only with the last of them. The removed share is already deleted, so it doesn't count.
+		if err := eh.keyManager.RemoveShare(ctx, phase0.BLSPubKey(share.SharePubKey)); err != nil {
+			return emptyPK, fmt.Errorf("could not remove share from ekm storage: %w", err)
+		}
+
+		// A validator stored before handleValidatorAdded rejected reused share keys may still use this key. It's
+		// removed anyway: which one registered it first isn't stored.
 		if other, found := eh.validatorUsingShareKey(eh.operatorDataStore.GetOperatorID(), share.SharePubKey); found {
-			logger.Warn("share public key is still used by another validator, keeping it in ekm storage",
+			logger.Warn("share public key is still used by another validator, which can no longer sign with it",
 				zap.String("share_pubkey", hex.EncodeToString(share.SharePubKey)),
 				zap.String("other_validator_pubkey", hex.EncodeToString(other.ValidatorPubKey[:])))
-		} else if err := eh.keyManager.RemoveShare(ctx, phase0.BLSPubKey(share.SharePubKey)); err != nil {
-			return emptyPK, fmt.Errorf("could not remove share from ekm storage: %w", err)
 		}
 
 		// Remove validator from doppelganger service
@@ -414,16 +416,28 @@ func (eh *EventHandler) handleValidatorRemoved(ctx context.Context, txn basedb.T
 	return emptyPK, nil
 }
 
-// validatorUsingShareKey returns a stored validator whose share public key for operatorID is sharePubKey.
-// Liquidated validators count, as they keep their key for reactivation. It reads the operator's committees,
-// which the store replaces rather than changes, so unlike OperatorValidators they need no lock.
-func (eh *EventHandler) validatorUsingShareKey(operatorID spectypes.OperatorID, sharePubKey []byte) (*ssvtypes.SSVShare, bool) {
+// validatorUsingShareKey returns a stored validator that passes all filters and whose share public key for
+// operatorID is sharePubKey. Liquidated validators count unless a filter excludes them, as they keep their
+// key for reactivation. It reads the operator's committees, which the store replaces rather than changes,
+// so unlike OperatorValidators they need no lock.
+func (eh *EventHandler) validatorUsingShareKey(
+	operatorID spectypes.OperatorID,
+	sharePubKey []byte,
+	filters ...registrystorage.SharesFilter,
+) (*ssvtypes.SSVShare, bool) {
 	for _, committee := range eh.nodeStorage.ValidatorStore().OperatorCommittees(operatorID) {
+	Shares:
 		for _, share := range committee.Shares {
 			for _, member := range share.Committee {
-				if member.Signer == operatorID && bytes.Equal(member.SharePubKey, sharePubKey) {
-					return share, true
+				if member.Signer != operatorID || !bytes.Equal(member.SharePubKey, sharePubKey) {
+					continue
 				}
+				for _, filter := range filters {
+					if !filter(share) {
+						continue Shares
+					}
+				}
+				return share, true
 			}
 		}
 	}
@@ -472,8 +486,19 @@ func (eh *EventHandler) handleClusterReactivated(txn basedb.Txn, event *contract
 	}
 
 	// bump slashing protection for operator reactivated validators
+	operatorID := eh.operatorDataStore.GetOperatorID()
+	inCluster := registrystorage.ByClusterIDHash(ssvtypes.ComputeClusterIDHash(event.Owner, event.OperatorIds))
+	otherCluster := func(share *ssvtypes.SSVShare) bool { return !inCluster(share) }
 	for _, share := range toReactivate {
-		if err := eh.keyManager.BumpSlashingProtection(phase0.BLSPubKey(share.SharePubKey)); err != nil {
+		// A validator stored before handleValidatorAdded rejected reused share keys may sign with this key. If
+		// one outside this cluster isn't liquidated, its signing keeps the key's slashing protection current,
+		// and a bump would make it skip the current epoch.
+		if other, found := eh.validatorUsingShareKey(operatorID, share.SharePubKey, registrystorage.ByNotLiquidated(), otherCluster); found {
+			logger.Warn("share public key is used by another active validator, not bumping its slashing protection",
+				fields.Validator(share.ValidatorPubKey[:]),
+				zap.String("share_pubkey", hex.EncodeToString(share.SharePubKey)),
+				zap.String("other_validator_pubkey", hex.EncodeToString(other.ValidatorPubKey[:])))
+		} else if err := eh.keyManager.BumpSlashingProtection(phase0.BLSPubKey(share.SharePubKey)); err != nil {
 			return nil, fmt.Errorf("could not bump slashing protection: %w", err)
 		}
 

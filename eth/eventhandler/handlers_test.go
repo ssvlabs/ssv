@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ethcommon "github.com/ethereum/go-ethereum/common"
@@ -277,7 +278,8 @@ func zeroRootSplit(tb testing.TB, ids []uint64, degree int, zeroAt ...uint64) (*
 
 // TestHandleValidatorAddedReusedShareKeyIsMalformed registers two validators whose shares for one operator
 // use the same key. The second registration must be malformed, also when the key isn't this operator's, as
-// every node must skip it, and when the first validator is liquidated.
+// every node must skip it, and when the first validator is liquidated. It must leave the slashing protection
+// of the first validator's key for this operator as the first registration set it.
 func TestHandleValidatorAddedReusedShareKeyIsMalformed(t *testing.T) {
 	const reusedKeyMsg = "malformed event: share public key is already used by another validator"
 
@@ -301,6 +303,7 @@ func TestHandleValidatorAddedReusedShareKeyIsMalformed(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := context.Background()
 			eh, ops, operatorIDs := setupValidatorAddedTest(t, ctx)
+			km := eh.keyManager.(*ekm.LocalKeyManager)
 
 			logCore, logs := observer.New(zap.WarnLevel)
 			eh.logger = zap.New(logCore)
@@ -311,8 +314,10 @@ func TestHandleValidatorAddedReusedShareKeyIsMalformed(t *testing.T) {
 			txn := eh.nodeStorage.Begin()
 			defer txn.Discard()
 
+			stampedFrom := eh.networkConfig.EstimatedCurrentSlot()
 			_, err := eh.handleValidatorAdded(ctx, txn, validatorAddedEvent(t, first, ops, testAddr, 0))
 			require.NoError(t, err)
+			stampedTo := eh.networkConfig.EstimatedCurrentSlot()
 			if !tc.sameTxn {
 				require.NoError(t, txn.Commit())
 				txn = eh.nodeStorage.Begin()
@@ -326,6 +331,9 @@ func TestHandleValidatorAddedReusedShareKeyIsMalformed(t *testing.T) {
 				})
 				require.NoError(t, err)
 			}
+
+			// Two epochs later, a bump of the first validator's share key would raise its slashing protection.
+			advanceEpochs(eh, 2)
 
 			_, err = eh.handleValidatorAdded(ctx, txn, validatorAddedEvent(t, second, ops, secondOwner, 0))
 			var malformed *MalformedEventError
@@ -348,10 +356,14 @@ func TestHandleValidatorAddedReusedShareKeyIsMalformed(t *testing.T) {
 			require.NoError(t, err)
 			require.EqualValues(t, 1, nextNonce, "nonce must advance even though the event is malformed")
 
-			accounts, err := eh.keyManager.(*ekm.LocalKeyManager).ListAccounts()
+			accounts, err := km.ListAccounts()
 			require.NoError(t, err)
 			require.Len(t, accounts, 1, "only the first validator's share key must be imported")
 			require.True(t, shareExist(accounts, first.operatorsShares[0].pub.Serialize()))
+
+			sharePubKey := phase0.BLSPubKey(first.operatorsShares[0].pub.Serialize())
+			requireSlashingProtectionBumpedBetween(t, eh, km, sharePubKey, stampedFrom, stampedTo)
+			requireCurrentDutiesSignable(t, eh, km, sharePubKey)
 		})
 	}
 }
@@ -375,12 +387,12 @@ func TestHandleValidatorAddedShareKeyOfAnotherOperatorIsAccepted(t *testing.T) {
 	require.NoError(t, err)
 }
 
-// TestHandleValidatorRemovedKeepsShareKeyInUse stores two validators whose shares for this operator use the
-// same key, as earlier versions could, then removes both. The first removal must leave the key and its
-// slashing protection data as they were, also when the remaining validator is liquidated. The second
-// removal must remove the key and keep its slashing protection data.
-func TestHandleValidatorRemovedKeepsShareKeyInUse(t *testing.T) {
-	const keptKeyMsg = "share public key is still used by another validator, keeping it in ekm storage"
+// TestHandleValidatorRemovedRemovesShareKeyInUse stores two validators whose shares for this operator use the
+// same key, as earlier versions could, then removes both. The first removal must remove the key, whichever
+// validator it removes, and warn that the other one still uses it, also when that one is liquidated. Both
+// removals must keep the key's slashing protection data.
+func TestHandleValidatorRemovedRemovesShareKeyInUse(t *testing.T) {
+	const keyInUseMsg = "share public key is still used by another validator, which can no longer sign with it"
 
 	tests := []struct {
 		name string
@@ -419,6 +431,7 @@ func TestHandleValidatorRemovedKeepsShareKeyInUse(t *testing.T) {
 			}
 
 			txn := eh.nodeStorage.Begin()
+			defer txn.Discard()
 			_, err := eh.handleValidatorAdded(ctx, txn, validatorAddedEvent(t, first, ops, testAddr, 0))
 			require.NoError(t, err)
 			// handleValidatorAdded rejects the second registration, so store its share as earlier versions did.
@@ -457,7 +470,7 @@ func TestHandleValidatorRemovedKeepsShareKeyInUse(t *testing.T) {
 
 			remove(removed)
 
-			entries := logs.FilterMessage(keptKeyMsg).All()
+			entries := logs.FilterMessage(keyInUseMsg).All()
 			require.Len(t, entries, 1)
 			logFields := entries[0].ContextMap()
 			require.Equal(t, hex.EncodeToString(sharePubKey[:]), logFields["share_pubkey"])
@@ -468,13 +481,13 @@ func TestHandleValidatorRemovedKeepsShareKeyInUse(t *testing.T) {
 				txn = eh.nodeStorage.Begin()
 				defer txn.Discard()
 			}
-			requireShareKeyImported(t, km, sharePubKey, true)
+			requireShareKeyImported(t, km, sharePubKey, false)
 			requireSlashingProtection(t, km, sharePubKey, seeded)
 
 			remove(remaining)
 			require.NoError(t, txn.Commit())
 
-			require.Len(t, logs.FilterMessage(keptKeyMsg).All(), 1, "the last removal must not warn")
+			require.Len(t, logs.FilterMessage(keyInUseMsg).All(), 1, "the last removal must not warn")
 			requireShareKeyImported(t, km, sharePubKey, false)
 			requireSlashingProtection(t, km, sharePubKey, seeded)
 		})
@@ -524,13 +537,108 @@ func TestHandleValidatorRemovedKeepsSlashingProtection(t *testing.T) {
 	requireSlashingProtection(t, km, sharePubKey, seeded)
 }
 
+// TestHandleClusterReactivatedShareKeyInUse stores two validators whose shares for this operator use the same
+// key, as earlier versions could, and reactivates the cluster of the second one. While the first validator is
+// active, the reactivation must leave the key's slashing protection as it was, so that the first validator
+// doesn't skip the current epoch. When the first validator is liquidated, or is in the reactivated cluster,
+// the reactivation must bump the data as usual.
+func TestHandleClusterReactivatedShareKeyInUse(t *testing.T) {
+	const notBumpedMsg = "share public key is used by another active validator, not bumping its slashing protection"
+
+	tests := []struct {
+		name string
+		// liquidateFirst liquidates the first validator before the second one is reactivated.
+		liquidateFirst bool
+		// sameCluster stores both validators in one cluster, so both are reactivated.
+		sameCluster bool
+		// bumped is whether the reactivation must bump the key's slashing protection.
+		bumped bool
+	}{
+		{name: "first validator active"},
+		{name: "first validator liquidated", liquidateFirst: true, bumped: true},
+		{name: "both validators reactivated", sameCluster: true, bumped: true},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			eh, ops, operatorIDs := setupValidatorAddedTest(t, ctx)
+			km := eh.keyManager.(*ekm.LocalKeyManager)
+
+			logCore, logs := observer.New(zap.WarnLevel)
+			eh.logger = zap.New(logCore)
+
+			first, second := newValidatorsSharingShareKey(t, ops, 0, 0)
+			sharePubKey := phase0.BLSPubKey(first.operatorsShares[0].pub.Serialize())
+			secondOwner := ethcommon.Address{1}
+			if tc.sameCluster {
+				secondOwner = testAddr
+			}
+
+			txn := eh.nodeStorage.Begin()
+			defer txn.Discard()
+			_, err := eh.handleValidatorAdded(ctx, txn, validatorAddedEvent(t, first, ops, testAddr, 0))
+			require.NoError(t, err)
+			// handleValidatorAdded rejects the second registration, so store its share as earlier versions did.
+			storeShare(t, eh, txn, second, ops, secondOwner)
+			_, err = eh.handleClusterLiquidated(txn, &contract.ContractClusterLiquidated{
+				Owner:       secondOwner,
+				OperatorIds: operatorIDs,
+			})
+			require.NoError(t, err)
+			require.NoError(t, txn.Commit())
+
+			// Two epochs later, the key has signed the duties of the previous epoch and slot, so a bump would
+			// make it skip the current ones.
+			advanceEpochs(eh, 2)
+			signed := signPreviousDuties(t, eh, km, sharePubKey)
+
+			txn = eh.nodeStorage.Begin()
+			defer txn.Discard()
+			if tc.liquidateFirst {
+				_, err := eh.handleClusterLiquidated(txn, &contract.ContractClusterLiquidated{
+					Owner:       testAddr,
+					OperatorIds: operatorIDs,
+				})
+				require.NoError(t, err)
+			}
+			stampedFrom := eh.networkConfig.EstimatedCurrentSlot()
+			_, err = eh.handleClusterReactivated(txn, &contract.ContractClusterReactivated{
+				Owner:       secondOwner,
+				OperatorIds: operatorIDs,
+			})
+			require.NoError(t, err)
+			stampedTo := eh.networkConfig.EstimatedCurrentSlot()
+			require.NoError(t, txn.Commit())
+
+			entries := logs.FilterMessage(notBumpedMsg).All()
+			if tc.bumped {
+				require.Empty(t, entries)
+				requireSlashingProtectionBumpedBetween(t, eh, km, sharePubKey, stampedFrom, stampedTo)
+				return
+			}
+
+			require.Len(t, entries, 1)
+			logFields := entries[0].ContextMap()
+			require.Equal(t, hex.EncodeToString(second.masterPubKey.Serialize()), logFields[fields.FieldValidator])
+			require.Equal(t, hex.EncodeToString(sharePubKey[:]), logFields["share_pubkey"])
+			require.Equal(t, hex.EncodeToString(first.masterPubKey.Serialize()), logFields["other_validator_pubkey"])
+
+			requireSlashingProtection(t, km, sharePubKey, signed)
+			requireCurrentDutiesSignable(t, eh, km, sharePubKey)
+		})
+	}
+}
+
 // setupValidatorAddedTest returns an event handler running as ops[0] of four new operators, all four
-// registered as validateOperators requires, and their IDs.
+// registered as validateOperators requires, and their IDs. The event handler has its own copy of the test
+// beacon config, so that advanceEpochs can move its clock.
 func setupValidatorAddedTest(t *testing.T, ctx context.Context) (*EventHandler, []*testOperator, []uint64) {
 	t.Helper()
 
+	beaconConfig := *networkconfig.TestNetwork.Beacon
 	netCfg := &networkconfig.Network{
-		Beacon: networkconfig.TestNetwork.Beacon,
+		Beacon: &beaconConfig,
 		SSV:    networkconfig.TestNetwork.SSV,
 	}
 
@@ -642,18 +750,32 @@ type slashingProtection struct {
 // that importing the key sets, so that resetting the data would change it.
 func seedSlashingProtection(t *testing.T, eh *EventHandler, km *ekm.LocalKeyManager, sharePubKey phase0.BLSPubKey) slashingProtection {
 	t.Helper()
+	return signDuties(t, km, sharePubKey, eh.networkConfig.EstimatedCurrentEpoch()+2, eh.networkConfig.EstimatedCurrentSlot()+10)
+}
+
+// signPreviousDuties signs an attestation for the previous epoch and a block for the previous slot with the
+// share key, as a validator that performs all its duties would have, so that a bump of the slashing
+// protection would make it skip the current ones.
+func signPreviousDuties(t *testing.T, eh *EventHandler, km *ekm.LocalKeyManager, sharePubKey phase0.BLSPubKey) slashingProtection {
+	t.Helper()
+	return signDuties(t, km, sharePubKey, eh.networkConfig.EstimatedCurrentEpoch()-1, eh.networkConfig.EstimatedCurrentSlot()-1)
+}
+
+// signDuties signs, with the share key, an attestation for the target epoch with the epoch before it as its
+// source, and a block at the slot.
+func signDuties(t *testing.T, km *ekm.LocalKeyManager, sharePubKey phase0.BLSPubKey, target phase0.Epoch, slot phase0.Slot) slashingProtection {
+	t.Helper()
 	ctx := context.Background()
 
-	currentEpoch := eh.networkConfig.EstimatedCurrentEpoch()
 	attestation := &phase0.AttestationData{
-		Source: &phase0.Checkpoint{Epoch: currentEpoch + 1},
-		Target: &phase0.Checkpoint{Epoch: currentEpoch + 2},
+		Source: &phase0.Checkpoint{Epoch: target - 1},
+		Target: &phase0.Checkpoint{Epoch: target},
 	}
 	_, _, err := km.SignBeaconObject(ctx, attestation, domainFor(spectypes.DomainAttester), sharePubKey, 0, spectypes.DomainAttester)
 	require.NoError(t, err)
 
 	block := *testingutils.TestingBlockContentsDeneb.Block
-	block.Slot = eh.networkConfig.EstimatedCurrentSlot() + 10
+	block.Slot = slot
 	_, _, err = km.SignBeaconObject(ctx, &block, domainFor(spectypes.DomainProposer), sharePubKey, block.Slot, spectypes.DomainProposer)
 	require.NoError(t, err)
 
@@ -665,6 +787,13 @@ func domainFor(dt phase0.DomainType) phase0.Domain {
 	var domain phase0.Domain
 	copy(domain[:4], dt[:])
 	return domain
+}
+
+// advanceEpochs moves the clock of the event handler and its key manager forward by epochs. The event handler
+// must come from setupValidatorAddedTest, whose beacon config is its own.
+func advanceEpochs(eh *EventHandler, epochs int) {
+	beaconConfig := eh.networkConfig.Beacon
+	beaconConfig.GenesisTime = beaconConfig.GenesisTime.Add(-time.Duration(epochs) * beaconConfig.EpochDuration())
 }
 
 // requireSlashingProtection checks that the key manager holds sp for the share key, and that an
@@ -686,6 +815,35 @@ func requireSlashingProtection(t *testing.T, km *ekm.LocalKeyManager, sharePubKe
 	conflicting.BeaconBlockRoot = phase0.Root{1}
 	require.Error(t, km.IsAttestationSlashable(sharePubKey, &conflicting), "attestation with the same target")
 	require.Error(t, km.IsBeaconBlockSlashable(sharePubKey, sp.proposal), "block at the same slot")
+}
+
+// requireSlashingProtectionBumpedBetween checks that the share key's slashing protection is what a bump
+// between the slots from and to sets.
+func requireSlashingProtectionBumpedBetween(t *testing.T, eh *EventHandler, km *ekm.LocalKeyManager, sharePubKey phase0.BLSPubKey, from, to phase0.Slot) {
+	t.Helper()
+
+	attestation, found, err := km.RetrieveHighestAttestation(sharePubKey)
+	require.NoError(t, err)
+	require.True(t, found, "highest attestation")
+
+	proposal, found, err := km.RetrieveHighestProposal(sharePubKey)
+	require.NoError(t, err)
+	require.True(t, found, "highest proposal")
+
+	requireSlashingProtectionStampInWindow(t, eh.networkConfig, attestation, proposal, from, to)
+}
+
+// requireCurrentDutiesSignable checks that the share key's slashing protection allows it to attest in the
+// current epoch and to propose in the current slot, which a bump in the current slot forbids.
+func requireCurrentDutiesSignable(t *testing.T, eh *EventHandler, km *ekm.LocalKeyManager, sharePubKey phase0.BLSPubKey) {
+	t.Helper()
+
+	currentEpoch := eh.networkConfig.EstimatedCurrentEpoch()
+	require.NoError(t, km.IsAttestationSlashable(sharePubKey, &phase0.AttestationData{
+		Source: &phase0.Checkpoint{Epoch: currentEpoch - 1},
+		Target: &phase0.Checkpoint{Epoch: currentEpoch},
+	}), "attestation in the current epoch")
+	require.NoError(t, km.IsBeaconBlockSlashable(sharePubKey, eh.networkConfig.EstimatedCurrentSlot()), "block in the current slot")
 }
 
 // requireShareKeyImported checks whether the key manager holds the share key.
