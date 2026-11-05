@@ -277,9 +277,9 @@ func zeroRootSplit(tb testing.TB, ids []uint64, degree int, zeroAt ...uint64) (*
 }
 
 // TestHandleValidatorAddedReusedShareKeyIsMalformed registers two validators whose shares for one operator
-// use the same key. The second registration must be malformed, also when the key isn't this operator's, as
-// every node must skip it, and when the first validator is liquidated. It must leave the slashing protection
-// of the first validator's key for this operator as the first registration set it.
+// use the same key. The second registration must be malformed, also when the key is another operator's, as
+// every node must skip it, when the first validator is liquidated, and when both are in one block. It must
+// leave the first validator's slashing protection on this operator as its registration set it.
 func TestHandleValidatorAddedReusedShareKeyIsMalformed(t *testing.T) {
 	const reusedKeyMsg = "malformed event: share public key is already used by another validator"
 
@@ -385,6 +385,75 @@ func TestHandleValidatorAddedShareKeyOfAnotherOperatorIsAccepted(t *testing.T) {
 	require.NoError(t, err)
 	_, err = eh.handleValidatorAdded(ctx, txn, validatorAddedEvent(t, second, ops, ethcommon.Address{1}, 0))
 	require.NoError(t, err)
+}
+
+// TestHandleValidatorAddedShareKeyOfUndecryptableRegistration registers a validator whose encrypted share for one
+// operator doesn't decrypt, then another validator with the same share key for that operator. Only that operator's
+// node decrypts the share, so the nodes disagree: that node must skip the first registration and store the
+// second, and the other nodes must store the first and skip the second.
+func TestHandleValidatorAddedShareKeyOfUndecryptableRegistration(t *testing.T) {
+	tests := []struct {
+		name string
+		// reusedAt is the index in ops of the operator whose share key both validators use, and whose encrypted
+		// share in the first registration doesn't decrypt. The event handler runs as ops[0].
+		reusedAt int
+	}{
+		{name: "this operator's share key"},
+		{name: "another operator's share key", reusedAt: 1},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			eh, ops, _ := setupValidatorAddedTest(t, ctx)
+			km := eh.keyManager.(*ekm.LocalKeyManager)
+
+			first, second := newValidatorsSharingShareKey(t, ops, tc.reusedAt, tc.reusedAt)
+
+			// In the first registration, encrypt an unrelated key for ops[reusedAt]: only that operator's node
+			// decrypts it and finds that it doesn't match the share public key.
+			firstEvent := validatorAddedEvent(t, first, ops, testAddr, 0)
+			otherSK := &bls.SecretKey{}
+			otherSK.SetByCSPRNG()
+			otherCipherText, err := ops[tc.reusedAt].privateKey.Public().Encrypt([]byte(otherSK.SerializeToHexStr()))
+			require.NoError(t, err)
+			require.Len(t, otherCipherText, encryptedKeyLength)
+			encStart := phase0.SignatureLength + phase0.PublicKeyLength*len(ops) + encryptedKeyLength*tc.reusedAt
+			copy(firstEvent.Shares[encStart:encStart+encryptedKeyLength], otherCipherText)
+
+			txn := eh.nodeStorage.Begin()
+			defer txn.Discard()
+
+			_, firstErr := eh.handleValidatorAdded(ctx, txn, firstEvent)
+			_, secondErr := eh.handleValidatorAdded(ctx, txn, validatorAddedEvent(t, second, ops, ethcommon.Address{1}, 0))
+			// The block is committed with the malformed event skipped.
+			require.NoError(t, txn.Commit())
+
+			_, firstStored := eh.nodeStorage.Shares().Get(nil, first.masterPubKey.Serialize())
+			_, secondStored := eh.nodeStorage.Shares().Get(nil, second.masterPubKey.Serialize())
+
+			var malformed *MalformedEventError
+			if tc.reusedAt == 0 {
+				// This node decrypts the share, so it skips the first registration and accepts the second.
+				var decErr ssvsigner.ShareDecryptionError
+				require.ErrorAs(t, firstErr, &malformed)
+				require.ErrorAs(t, firstErr, &decErr)
+				require.NoError(t, secondErr)
+				require.False(t, firstStored, "first share must not be saved")
+				require.True(t, secondStored, "second share must be saved")
+				requireShareKeyImported(t, km, phase0.BLSPubKey(second.operatorsShares[0].pub.Serialize()), true)
+				return
+			}
+
+			// Only ops[reusedAt]'s node decrypts the share, so this node, like every other one, stores the first
+			// registration and skips the second.
+			require.NoError(t, firstErr)
+			require.ErrorAs(t, secondErr, &malformed)
+			require.ErrorIs(t, secondErr, ErrSharePubKeyInUse)
+			require.True(t, firstStored, "first share must be saved")
+			require.False(t, secondStored, "second share must not be saved")
+		})
+	}
 }
 
 // TestHandleValidatorRemovedRemovesShareKeyInUse stores two validators whose shares for this operator use the
@@ -541,7 +610,8 @@ func TestHandleValidatorRemovedKeepsSlashingProtection(t *testing.T) {
 // key, as earlier versions could, and reactivates the cluster of the second one. While the first validator is
 // active, the reactivation must leave the key's slashing protection as it was, so that the first validator
 // doesn't skip the current epoch. When the first validator is liquidated, or is in the reactivated cluster,
-// the reactivation must bump the data as usual.
+// the reactivation must bump the data as usual. A third validator of the reactivated cluster, with a key of
+// its own, must get the bump in every case.
 func TestHandleClusterReactivatedShareKeyInUse(t *testing.T) {
 	const notBumpedMsg = "share public key is used by another active validator, not bumping its slashing protection"
 
@@ -570,6 +640,9 @@ func TestHandleClusterReactivatedShareKeyInUse(t *testing.T) {
 
 			first, second := newValidatorsSharingShareKey(t, ops, 0, 0)
 			sharePubKey := phase0.BLSPubKey(first.operatorsShares[0].pub.Serialize())
+			third, err := createNewValidator(ops)
+			require.NoError(t, err)
+			thirdSharePubKey := phase0.BLSPubKey(third.operatorsShares[0].pub.Serialize())
 			secondOwner := ethcommon.Address{1}
 			if tc.sameCluster {
 				secondOwner = testAddr
@@ -577,8 +650,9 @@ func TestHandleClusterReactivatedShareKeyInUse(t *testing.T) {
 
 			txn := eh.nodeStorage.Begin()
 			defer txn.Discard()
-			_, err := eh.handleValidatorAdded(ctx, txn, validatorAddedEvent(t, first, ops, testAddr, 0))
+			_, err = eh.handleValidatorAdded(ctx, txn, validatorAddedEvent(t, first, ops, testAddr, 0))
 			require.NoError(t, err)
+			storeShare(t, eh, txn, third, ops, secondOwner)
 			// handleValidatorAdded rejects the second registration, so store its share as earlier versions did.
 			storeShare(t, eh, txn, second, ops, secondOwner)
 			_, err = eh.handleClusterLiquidated(txn, &contract.ContractClusterLiquidated{
@@ -610,6 +684,8 @@ func TestHandleClusterReactivatedShareKeyInUse(t *testing.T) {
 			require.NoError(t, err)
 			stampedTo := eh.networkConfig.EstimatedCurrentSlot()
 			require.NoError(t, txn.Commit())
+
+			requireSlashingProtectionBumpedBetween(t, eh, km, thirdSharePubKey, stampedFrom, stampedTo)
 
 			entries := logs.FilterMessage(notBumpedMsg).All()
 			if tc.bumped {
