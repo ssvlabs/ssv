@@ -395,7 +395,7 @@ func (eh *EventHandler) handleValidatorRemoved(ctx context.Context, txn basedb.T
 		}
 
 		// A validator stored before handleValidatorAdded rejected reused share keys may still use this key. It's
-		// removed anyway: which one registered it first isn't stored.
+		// removed anyway, as which one registered it first isn't stored.
 		if other, found := eh.validatorUsingShareKey(eh.operatorDataStore.GetOperatorID(), share.SharePubKey); found {
 			logger.Warn("share public key is still used by another validator, which can no longer sign with it",
 				zap.String("share_pubkey", hex.EncodeToString(share.SharePubKey)),
