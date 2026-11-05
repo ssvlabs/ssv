@@ -14,8 +14,14 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/enr"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest/observer"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
+	"github.com/ssvlabs/ssv/observability"
 )
 
 // recordWithEntry returns a signed record whose key entry holds the given raw
@@ -263,4 +269,77 @@ func TestValidRecordScheme(t *testing.T) {
 	// A record with neither key is accepted.
 	_, err := enode.New(enode.ValidSchemes, recordWithEntry(t, "other", rlp.RawValue{0x80}))
 	require.NoError(t, err)
+}
+
+func TestValidRecordScheme_CountsAndLogsRejections(t *testing.T) {
+	core, logs := observer.New(zapcore.DebugLevel)
+	t.Cleanup(zap.ReplaceGlobals(zap.New(core)))
+	rejectLogMu.Lock()
+	lastRejectLog, rejectsNotLogged = time.Time{}, 0
+	rejectLogMu.Unlock()
+
+	valid, err := rlp.EncodeToBytes(bytes.Repeat([]byte{0x01}, 4))
+	require.NoError(t, err)
+	invalid, err := rlp.EncodeToBytes([]byte{0x01, 0x02})
+	require.NoError(t, err)
+
+	for _, key := range []ENRKey{KeyDomainType, KeyNextDomainType} {
+		before := recordsRejected(t, key)
+
+		_, err := enode.New(enode.ValidSchemes, recordWithEntry(t, key, valid))
+		require.NoError(t, err)
+		require.Equal(t, before, recordsRejected(t, key), "valid record counted, key=%s", key)
+
+		_, err = enode.New(enode.ValidSchemes, recordWithEntry(t, key, invalid))
+		require.ErrorIs(t, err, ErrInvalidDomainTypeEntry)
+		require.Equal(t, before+1, recordsRejected(t, key), "invalid record not counted, key=%s", key)
+	}
+
+	// Two rejections within rejectLogInterval: the first is logged, the second
+	// only counted as not logged.
+	require.Len(t, logs.All(), 1)
+	require.Equal(t, string(KeyDomainType), logs.All()[0].ContextMap()["enr_key"])
+	rejectLogMu.Lock()
+	require.EqualValues(t, 1, rejectsNotLogged)
+	lastRejectLog = time.Now().Add(-rejectLogInterval)
+	rejectLogMu.Unlock()
+
+	rec := recordWithEntry(t, KeyDomainType, invalid)
+	unchecked, err := enode.New(enode.V4ID{}, rec)
+	require.NoError(t, err)
+	_, err = enode.New(enode.ValidSchemes, rec)
+	require.ErrorIs(t, err, ErrInvalidDomainTypeEntry)
+	require.Len(t, logs.All(), 2)
+	require.Equal(t, zapcore.DebugLevel, logs.All()[1].Level)
+	require.Equal(t, unchecked.ID().String(), logs.All()[1].ContextMap()["node_id"])
+	require.EqualValues(t, 1, logs.All()[1].ContextMap()["rejects_not_logged"])
+	rejectLogMu.Lock()
+	require.Zero(t, rejectsNotLogged, "skipped count not reset after logging")
+	rejectLogMu.Unlock()
+}
+
+// recordsRejected returns the package-global rejected-records counter's total
+// for key, read via pkgTestMetricReader; 0 if no record was rejected for it yet.
+func recordsRejected(t *testing.T, key ENRKey) int64 {
+	t.Helper()
+
+	var rm metricdata.ResourceMetrics
+	require.NoError(t, pkgTestMetricReader.Collect(t.Context(), &rm))
+
+	keyAttr := rejectedKeyAttribute(key)
+	for _, sm := range rm.ScopeMetrics {
+		for _, m := range sm.Metrics {
+			if m.Name != observability.InstrumentName(observabilityNamespace, "rejected") {
+				continue
+			}
+			sum, ok := m.Data.(metricdata.Sum[int64])
+			require.True(t, ok, "expected Sum[int64], got %T", m.Data)
+			for _, dp := range sum.DataPoints {
+				if v, ok := dp.Attributes.Value(keyAttr.Key); ok && v == keyAttr.Value {
+					return dp.Value
+				}
+			}
+		}
+	}
+	return 0
 }

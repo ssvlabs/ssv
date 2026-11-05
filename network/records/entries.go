@@ -49,6 +49,11 @@ func (s validRecordScheme) Verify(r *enr.Record, sig []byte) error {
 	}
 	for _, key := range []ENRKey{KeyDomainType, KeyNextDomainType} {
 		if _, err := GetDomainTypeEntry(r, key); err != nil && !errors.Is(err, ErrEntryNotFound) {
+			// NodeAddr is what enode.New uses for the ID; the signature over that
+			// key was checked above, and it doesn't re-enter Verify.
+			var id enode.ID
+			copy(id[:], s.NodeAddr(r))
+			recordRejected(id, key, err)
 			return err
 		}
 	}
