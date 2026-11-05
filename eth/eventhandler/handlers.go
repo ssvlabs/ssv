@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"iter"
 	"slices"
 
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
@@ -364,6 +365,7 @@ func (eh *EventHandler) handleValidatorRemoved(ctx context.Context, txn basedb.T
 	)
 	logger.Debug("processing event")
 
+	// TODO: handle metrics
 	share, exists := eh.nodeStorage.Shares().Get(txn, event.PublicKey)
 	if !exists {
 		logger.Warn("malformed event: could not find validator share")
@@ -398,7 +400,7 @@ func (eh *EventHandler) handleValidatorRemoved(ctx context.Context, txn basedb.T
 		}
 
 		// A validator stored before handleValidatorAdded rejected reused share keys may still use this key. It's
-		// removed anyway, as the node doesn't store which of them registered it first.
+		// removed anyway: the node doesn't store which of them registered first.
 		if other, found := eh.validatorUsingShareKey(operatorID, share.SharePubKey); found {
 			logger.Warn("share public key is still used by another validator, which can no longer sign with it",
 				zap.String("share_pubkey", hex.EncodeToString(share.SharePubKey)),
@@ -421,27 +423,15 @@ func (eh *EventHandler) handleValidatorRemoved(ctx context.Context, txn basedb.T
 
 // validatorUsingShareKey returns a stored validator that passes all filters and whose share public key for
 // operatorID is sharePubKey. Liquidated validators count unless a filter excludes them, as they keep their
-// key for reactivation. It reads the operator's committees, which the store replaces rather than changes,
-// so unlike OperatorValidators they need no lock.
+// key for reactivation.
 func (eh *EventHandler) validatorUsingShareKey(
 	operatorID spectypes.OperatorID,
 	sharePubKey []byte,
 	filters ...registrystorage.SharesFilter,
 ) (*ssvtypes.SSVShare, bool) {
-	for _, committee := range eh.nodeStorage.ValidatorStore().OperatorCommittees(operatorID) {
-	Shares:
-		for _, share := range committee.Shares {
-			for _, member := range share.Committee {
-				if member.Signer != operatorID || !bytes.Equal(member.SharePubKey, sharePubKey) {
-					continue
-				}
-				for _, filter := range filters {
-					if !filter(share) {
-						continue Shares
-					}
-				}
-				return share, true
-			}
+	for share, key := range eh.operatorShareKeys(operatorID) {
+		if bytes.Equal(key, sharePubKey) && passesFilters(share, filters) {
+			return share, true
 		}
 	}
 	return nil, false
@@ -459,33 +449,49 @@ func (eh *EventHandler) validatorsUsingShareKeys(
 	if len(sharePubKeys) == 0 {
 		return using
 	}
-	for _, committee := range eh.nodeStorage.ValidatorStore().OperatorCommittees(operatorID) {
-	Shares:
-		for _, share := range committee.Shares {
-			for _, member := range share.Committee {
-				if member.Signer != operatorID {
-					continue
-				}
-				if _, wanted := sharePubKeys[string(member.SharePubKey)]; !wanted {
-					continue Shares
-				}
-				if _, found := using[string(member.SharePubKey)]; found {
-					continue Shares
-				}
-				for _, filter := range filters {
-					if !filter(share) {
-						continue Shares
-					}
-				}
-				using[string(member.SharePubKey)] = share
-				if len(using) == len(sharePubKeys) {
-					return using
-				}
-				continue Shares
-			}
+	for share, key := range eh.operatorShareKeys(operatorID) {
+		if _, wanted := sharePubKeys[string(key)]; !wanted {
+			continue
+		}
+		if _, found := using[string(key)]; found || !passesFilters(share, filters) {
+			continue
+		}
+		using[string(key)] = share
+		if len(using) == len(sharePubKeys) {
+			return using
 		}
 	}
 	return using
+}
+
+// operatorShareKeys yields every stored validator whose committee includes operatorID, with its share public key
+// for operatorID. It reads the operator's committees, which the store replaces rather than changes, so unlike
+// OperatorValidators they need no lock.
+func (eh *EventHandler) operatorShareKeys(operatorID spectypes.OperatorID) iter.Seq2[*ssvtypes.SSVShare, []byte] {
+	return func(yield func(*ssvtypes.SSVShare, []byte) bool) {
+		for _, committee := range eh.nodeStorage.ValidatorStore().OperatorCommittees(operatorID) {
+			for _, share := range committee.Shares {
+				for _, member := range share.Committee {
+					if member.Signer == operatorID {
+						if !yield(share, member.SharePubKey) {
+							return
+						}
+						break
+					}
+				}
+			}
+		}
+	}
+}
+
+// passesFilters reports whether share passes all filters.
+func passesFilters(share *ssvtypes.SSVShare, filters []registrystorage.SharesFilter) bool {
+	for _, filter := range filters {
+		if !filter(share) {
+			return false
+		}
+	}
+	return true
 }
 
 func (eh *EventHandler) handleClusterLiquidated(txn basedb.Txn, event *contract.ContractClusterLiquidated) ([]*ssvtypes.SSVShare, error) {
