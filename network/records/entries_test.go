@@ -2,10 +2,14 @@ package records
 
 import (
 	"bytes"
+	"crypto/ecdsa"
 	"net"
+	"slices"
 	"testing"
+	"time"
 
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/p2p/discover"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
 	"github.com/ethereum/go-ethereum/rlp"
@@ -104,4 +108,159 @@ func FuzzDomainTypeEntryDecode(f *testing.F) {
 		require.NoError(t, rlp.DecodeBytes(raw, &want))
 		require.Equal(t, want, got[:])
 	})
+}
+
+// oldNodeSchemes verifies signatures only, as SSV nodes did before
+// validRecordScheme: they admit, store and serve any well-signed record.
+var oldNodeSchemes = enr.SchemeMap{"v4": enode.V4ID{}}
+
+// v5Node is a localhost discv5 node record, signed, with a socket to listen on.
+type v5Node struct {
+	ln     *enode.LocalNode
+	socket *net.UDPConn
+	key    *ecdsa.PrivateKey
+}
+
+// newV5Node returns a node whose record has domainType as its raw domaintype
+// entry.
+func newV5Node(t *testing.T, domainType []byte) v5Node {
+	t.Helper()
+	key, err := crypto.GenerateKey()
+	require.NoError(t, err)
+	db, err := enode.OpenDB("")
+	require.NoError(t, err)
+	t.Cleanup(db.Close)
+	socket, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1)})
+	require.NoError(t, err)
+
+	ln := enode.NewLocalNode(db, key)
+	addr := socket.LocalAddr().(*net.UDPAddr)
+	ln.SetStaticIP(addr.IP)
+	ln.SetFallbackUDP(addr.Port)
+	ln.Set(enr.WithEntry(KeyDomainType, domainType))
+	if len(domainType) != len(spectypes.DomainType{}) {
+		// LocalNode verifies its record against enode.ValidSchemes when signing
+		// it, which an invalid domaintype fails, so sign it once here under the
+		// old scheme. Callers create such a node before starting any listener,
+		// which would read the map, and its endpoint is static, so it isn't
+		// signed again.
+		ssvScheme := enode.ValidSchemes["v4"]
+		enode.ValidSchemes["v4"] = enode.V4ID{}
+		ln.Node()
+		enode.ValidSchemes["v4"] = ssvScheme
+	}
+	return v5Node{ln: ln, socket: socket, key: key}
+}
+
+func (n v5Node) listen(t *testing.T, cfg discover.Config) *discover.UDPv5 {
+	t.Helper()
+	cfg.PrivateKey = n.key
+	listener, err := discover.ListenV5(n.socket, n.ln, cfg)
+	require.NoError(t, err)
+	t.Cleanup(listener.Close)
+	return listener
+}
+
+func startV5(t *testing.T, cfg discover.Config, domainType []byte) *discover.UDPv5 {
+	t.Helper()
+	return newV5Node(t, domainType).listen(t, cfg)
+}
+
+var validDomainType = []byte{0x00, 0x00, 0x05, 0x02}
+
+// findnode asks from for its table nodes at the distances of want, until
+// they include valid or the timeout passes.
+func findnode(t *testing.T, querier, from *discover.UDPv5, valid *enode.Node, want ...*enode.Node) []*enode.Node {
+	t.Helper()
+	distances := make([]uint, 0, len(want))
+	for _, n := range want {
+		distances = append(distances, uint(enode.LogDist(from.Self().ID(), n.ID())))
+	}
+	var got []*enode.Node
+	require.Eventually(t, func() bool {
+		got, _ = querier.Findnode(from.Self(), distances)
+		return slices.ContainsFunc(got, func(n *enode.Node) bool { return n.ID() == valid.ID() })
+	}, 5*time.Second, 50*time.Millisecond, "valid node not served")
+	return got
+}
+
+func containsID(nodes []*enode.Node, id enode.ID) bool {
+	return slices.ContainsFunc(nodes, func(n *enode.Node) bool { return n.ID() == id })
+}
+
+// A record with an invalid domaintype that contacts this node must not enter
+// its table, from where FINDNODE would serve it on.
+func TestDiscV5_DoesNotAdmitInvalidDomainTypeFromHandshake(t *testing.T) {
+	invalidNode := newV5Node(t, []byte{0x01, 0x02})
+	// The liveness check only delays serving a node that answers pings, which this
+	// node does.
+	node := startV5(t, discover.Config{NoFindnodeLivenessCheck: true}, validDomainType)
+
+	// The table drops inbound nodes until it is initialized, and a repeated ping
+	// reuses the session instead of handshaking again, so try fresh valid nodes
+	// until one is admitted.
+	// The loop runs on the test goroutine, not in require.Eventually, because
+	// startV5 calls require and t.Cleanup.
+	deadline := time.Now().Add(5 * time.Second)
+	var valid *discover.UDPv5
+	for {
+		valid = startV5(t, discover.Config{}, validDomainType)
+		if _, err := valid.Ping(node.Self()); err == nil && containsID(node.AllNodes(), valid.Self().ID()) {
+			break
+		}
+		require.True(t, time.Now().Before(deadline), "valid node never admitted")
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	invalid := invalidNode.listen(t, discover.Config{})
+	_, err := invalid.Ping(node.Self())
+	require.Error(t, err, "the handshake with the invalid record must be rejected")
+
+	oldNode := startV5(t, discover.Config{ValidSchemes: oldNodeSchemes}, validDomainType)
+	got := findnode(t, oldNode, node, valid.Self(), invalid.Self(), valid.Self())
+	require.False(t, containsID(got, invalid.Self().ID()), "node served the invalid record")
+	require.False(t, containsID(node.AllNodes(), invalid.Self().ID()), "invalid record in the table")
+}
+
+// A record with an invalid domaintype in a NODES response must be dropped, or
+// it enters the table and is served on.
+func TestDiscV5_DropsInvalidDomainTypeFromNodesResponse(t *testing.T) {
+	invalid := startV5(t, discover.Config{}, []byte{0x01, 0x02})
+	oldNode := startV5(t, discover.Config{ValidSchemes: oldNodeSchemes}, validDomainType)
+	valid := startV5(t, discover.Config{}, validDomainType)
+	oldNode.AddKnownNode(invalid.Self())
+	oldNode.AddKnownNode(valid.Self())
+	node := startV5(t, discover.Config{}, validDomainType)
+
+	got := findnode(t, node, oldNode, valid.Self(), invalid.Self(), valid.Self())
+	require.False(t, containsID(got, invalid.Self().ID()), "invalid record accepted from NODES")
+}
+
+// A scheme left unwrapped would admit a malformed domain type without error.
+func TestValidSchemes_AllWrapped(t *testing.T) {
+	require.NotEmpty(t, enode.ValidSchemes)
+	for name, scheme := range enode.ValidSchemes {
+		require.IsType(t, validRecordScheme{}, scheme, name)
+	}
+}
+
+func TestValidRecordScheme(t *testing.T) {
+	for _, key := range []ENRKey{KeyDomainType, KeyNextDomainType} {
+		for n := range 6 {
+			raw, err := rlp.EncodeToBytes(bytes.Repeat([]byte{0x01}, n))
+			require.NoError(t, err)
+
+			_, err = enode.New(enode.ValidSchemes, recordWithEntry(t, key, raw))
+
+			if n == len(spectypes.DomainType{}) {
+				require.NoError(t, err, "key=%s len=%d", key, n)
+				continue
+			}
+			require.ErrorIs(t, err, ErrInvalidDomainTypeEntry, "key=%s len=%d", key, n)
+		}
+	}
+
+	// A record with neither key is accepted.
+	_, err := enode.New(enode.ValidSchemes, recordWithEntry(t, "other", rlp.RawValue{0x80}))
+	require.NoError(t, err)
 }

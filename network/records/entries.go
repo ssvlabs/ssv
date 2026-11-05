@@ -27,6 +27,34 @@ var (
 	ErrInvalidDomainTypeEntry = errors.New("invalid domain type entry")
 )
 
+// init wraps every identity scheme in enode.ValidSchemes with validRecordScheme.
+// go-ethereum checks each record it admits to the discv5 table (handshakes,
+// NODES responses, revalidation) against that map, so a record with an invalid
+// domain type entry is neither stored nor served on. discover.Config's
+// ValidSchemes can't do this: the handshake ignores it. All schemes are wrapped,
+// not only "v4", since a record picks its scheme by its own "id" entry.
+func init() {
+	for name, scheme := range enode.ValidSchemes {
+		enode.ValidSchemes[name] = validRecordScheme{scheme}
+	}
+}
+
+// validRecordScheme wraps an identity scheme and also rejects a record whose
+// domaintype or next_domaintype entry is present and not exactly 4 bytes.
+type validRecordScheme struct{ enr.IdentityScheme }
+
+func (s validRecordScheme) Verify(r *enr.Record, sig []byte) error {
+	if err := s.IdentityScheme.Verify(r, sig); err != nil {
+		return err
+	}
+	for _, key := range []ENRKey{KeyDomainType, KeyNextDomainType} {
+		if _, err := GetDomainTypeEntry(r, key); err != nil && !errors.Is(err, ErrEntryNotFound) {
+			return err
+		}
+	}
+	return nil
+}
+
 // DomainTypeEntry holds the domain type of the node
 type DomainTypeEntry struct {
 	Key        ENRKey
