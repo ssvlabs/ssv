@@ -220,6 +220,34 @@ func TestChoosePeersToTrim_TrimInboundOnlySkipsOutboundPeers(t *testing.T) {
 	assert.Equal(t, map[peer.ID]struct{}{inboundPeer.ID(): {}}, trimmed)
 }
 
+func TestChoosePeersToTrim_TrimInboundOnlySkipsMixedDirectionPeers(t *testing.T) {
+	ctx := t.Context()
+	localHost := newTestHost(t)
+	lowValueMixedPeer := connectMixedDirectionPeer(t, ctx, localHost)
+	inboundPeer := newTestHost(t)
+
+	connectHosts(t, ctx, inboundPeer, localHost)
+
+	network := newTrimTestNetwork(
+		localHost,
+		&testTopicsController{
+			topics: []string{"0", "1", "3"},
+			peersByTopic: map[string][]peer.ID{
+				"0": {inboundPeer.ID()},
+				"1": {inboundPeer.ID()},
+				"3": {lowValueMixedPeer},
+			},
+			allPeers: []peer.ID{lowValueMixedPeer, inboundPeer.ID()},
+		},
+		nil,
+		subnetsFor(0, 1),
+	)
+
+	// lowValueMixedPeer counts as outbound, so its inbound connection doesn't make it eligible.
+	trimmed := network.choosePeersToTrim(1, true)
+	assert.Equal(t, map[peer.ID]struct{}{inboundPeer.ID(): {}}, trimmed)
+}
+
 func TestChoosePeersToTrim_DuplicateConnectionsTakeOneSlot(t *testing.T) {
 	ctx := t.Context()
 	localHost := newTestHost(t)
@@ -254,17 +282,9 @@ func TestPeerStats_CountsPeersNotConnections(t *testing.T) {
 	ctx := t.Context()
 	localHost := newTestHost(t)
 
-	// An inbound peer with two connections.
 	connectDuplicateInboundPeer(t, ctx, localHost, 2)
-
-	// A peer with a connection in each direction.
-	mixedPeer := newTwinTestHosts(t, 2)
-	connectHosts(t, ctx, localHost, mixedPeer[0])
-	connectHosts(t, ctx, mixedPeer[1], localHost)
-	requireConnsToPeer(t, localHost, mixedPeer[0].ID(), 2)
-
-	// An outbound peer.
-	connectHosts(t, ctx, localHost, newTestHost(t))
+	connectMixedDirectionPeer(t, ctx, localHost)
+	connectHosts(t, ctx, localHost, newTestHost(t)) // outbound peer
 
 	in, out := connectionStats(localHost)
 	assert.Equal(t, 3, in, "inbound connections")
@@ -291,9 +311,6 @@ func TestAtInboundLimit_CountsPeersNotConnections(t *testing.T) {
 	for range 2 {
 		connectHosts(t, ctx, newTestHost(t), localHost)
 	}
-	require.Eventually(t, func() bool {
-		return len(localHost.Network().Peers()) == 4
-	}, 5*time.Second, 10*time.Millisecond)
 	require.True(t, network.atInboundLimit())
 }
 
@@ -555,17 +572,30 @@ func connectDuplicateInboundPeer(t *testing.T, ctx context.Context, h host.Host,
 	return twins[0].ID()
 }
 
+// connectMixedDirectionPeer connects a new peer to h with a connection in each direction and
+// returns its ID.
+func connectMixedDirectionPeer(t *testing.T, ctx context.Context, h host.Host) peer.ID {
+	t.Helper()
+
+	twins := newTwinTestHosts(t, 2)
+	connectHosts(t, ctx, h, twins[0])
+	connectHosts(t, ctx, twins[1], h)
+	requireConnsToPeer(t, h, twins[0].ID(), 2)
+	return twins[0].ID()
+}
+
+// connectHosts has from dial to and waits until both register the connection; the dialed side
+// does so shortly after the dialer.
 func connectHosts(t *testing.T, ctx context.Context, from host.Host, to host.Host) {
 	t.Helper()
 
 	require.NoError(t, from.Connect(ctx, peer.AddrInfo{ID: to.ID(), Addrs: to.Addrs()}))
 	require.Eventually(t, func() bool {
-		return len(from.Network().ConnsToPeer(to.ID())) > 0
+		return len(from.Network().ConnsToPeer(to.ID())) > 0 && len(to.Network().ConnsToPeer(from.ID())) > 0
 	}, 5*time.Second, 10*time.Millisecond)
 }
 
-// requireConnsToPeer waits until h has want connections to p; the dialed side registers a
-// connection shortly after the dialer.
+// requireConnsToPeer waits until h has want connections to p.
 func requireConnsToPeer(t *testing.T, h host.Host, p peer.ID, want int) {
 	t.Helper()
 
