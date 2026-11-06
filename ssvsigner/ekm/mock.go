@@ -145,7 +145,7 @@ func (m *MockSlashingProtector) UpdateHighestProposal(pubKey phase0.BLSPubKey, s
 	return args.Error(0)
 }
 
-func (m *MockSlashingProtector) BumpSlashingProtectionTxn(txn ReadWriteTxn, pubKey phase0.BLSPubKey) error {
-	args := m.Called(txn, pubKey)
+func (m *MockSlashingProtector) BumpSlashingProtection(pubKey phase0.BLSPubKey) error {
+	args := m.Called(pubKey)
 	return args.Error(0)
 }

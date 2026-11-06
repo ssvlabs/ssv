@@ -54,8 +54,8 @@ func testKeyManager(t *testing.T, operatorPrivateKey keys.OperatorPrivateKey) Ke
 	encryptedSK2, err := operatorPrivateKey.Public().Encrypt([]byte(sk2.SerializeToHexStr()))
 	require.NoError(t, err)
 
-	require.NoError(t, km.AddShare(t.Context(), nil, encryptedSK1, phase0.BLSPubKey(sk1.GetPublicKey().Serialize())))
-	require.NoError(t, km.AddShare(t.Context(), nil, encryptedSK2, phase0.BLSPubKey(sk2.GetPublicKey().Serialize())))
+	require.NoError(t, km.AddShare(t.Context(), encryptedSK1, phase0.BLSPubKey(sk1.GetPublicKey().Serialize())))
+	require.NoError(t, km.AddShare(t.Context(), encryptedSK2, phase0.BLSPubKey(sk2.GetPublicKey().Serialize())))
 
 	return km
 }
@@ -142,7 +142,7 @@ func TestSignBeaconObject(t *testing.T) {
 	encryptedSK1, err := operatorPrivateKey.Public().Encrypt([]byte(sk1.SerializeToHexStr()))
 	require.NoError(t, err)
 
-	require.NoError(t, km.AddShare(t.Context(), nil, encryptedSK1, phase0.BLSPubKey(sk1.GetPublicKey().Serialize())))
+	require.NoError(t, km.AddShare(t.Context(), encryptedSK1, phase0.BLSPubKey(sk1.GetPublicKey().Serialize())))
 
 	currentSlot := testBeaconConfig().EstimatedCurrentSlot()
 	highestProposal := currentSlot + minSPProposalSlotGap + 1
@@ -367,7 +367,7 @@ func newLocalKeyManagerWithShare(t *testing.T) (*LocalKeyManager, phase0.BLSPubK
 	encryptedSK1, err := operatorPrivateKey.Public().Encrypt([]byte(sk1.SerializeToHexStr()))
 	require.NoError(t, err)
 	pk := phase0.BLSPubKey(sk1.GetPublicKey().Serialize())
-	require.NoError(t, km.AddShare(t.Context(), nil, encryptedSK1, pk))
+	require.NoError(t, km.AddShare(t.Context(), encryptedSK1, pk))
 
 	return km.(*LocalKeyManager), pk
 }
@@ -438,8 +438,8 @@ func TestRemoveShare(t *testing.T) {
 		encryptedPrivKey, err := operatorPrivateKey.Public().Encrypt([]byte(pk.SerializeToHexStr()))
 		require.NoError(t, err)
 
-		require.NoError(t, km.AddShare(t.Context(), nil, encryptedPrivKey, phase0.BLSPubKey(pk.GetPublicKey().Serialize())))
-		require.NoError(t, km.RemoveShare(t.Context(), nil, phase0.BLSPubKey(pk.GetPublicKey().Serialize())))
+		require.NoError(t, km.AddShare(t.Context(), encryptedPrivKey, phase0.BLSPubKey(pk.GetPublicKey().Serialize())))
+		require.NoError(t, km.RemoveShare(t.Context(), phase0.BLSPubKey(pk.GetPublicKey().Serialize())))
 
 		// The slashing records outlive the share so a re-add can never start below what was signed.
 		_, found, err := km.(*LocalKeyManager).RetrieveHighestAttestation(phase0.BLSPubKey(pk.GetPublicKey().Serialize()))
@@ -456,7 +456,7 @@ func TestRemoveShare(t *testing.T) {
 		pk := &bls.SecretKey{}
 		pk.SetByCSPRNG()
 
-		err := km.RemoveShare(t.Context(), nil, phase0.BLSPubKey(pk.GetPublicKey().Serialize()))
+		err := km.RemoveShare(t.Context(), phase0.BLSPubKey(pk.GetPublicKey().Serialize()))
 		require.NoError(t, err)
 	})
 }
@@ -498,7 +498,7 @@ func TestAddShareRejectsMismatchedPublicKey(t *testing.T) {
 	encryptedSK1, err := operatorPrivateKey.Public().Encrypt([]byte(sk1.SerializeToHexStr()))
 	require.NoError(t, err)
 
-	err = km.AddShare(t.Context(), nil, encryptedSK1, phase0.BLSPubKey(sk2.GetPublicKey().Serialize()))
+	err = km.AddShare(t.Context(), encryptedSK1, phase0.BLSPubKey(sk2.GetPublicKey().Serialize()))
 	require.Error(t, err)
 	var decErr ssvsigner.ShareDecryptionError
 	require.ErrorAs(t, err, &decErr, "a public key mismatch must be a ShareDecryptionError so the event is skipped")
@@ -530,7 +530,7 @@ func TestAddShareRejectsZeroPrivateKey(t *testing.T) {
 	require.NoError(t, err)
 	pubKey := phase0.BLSPubKey(zero.GetPublicKey().Serialize())
 
-	err = km.AddShare(t.Context(), nil, encryptedZero, pubKey)
+	err = km.AddShare(t.Context(), encryptedZero, pubKey)
 	require.Error(t, err)
 	var decErr ssvsigner.ShareDecryptionError
 	require.ErrorAs(t, err, &decErr, "a zero share must be a ShareDecryptionError so the event is skipped")

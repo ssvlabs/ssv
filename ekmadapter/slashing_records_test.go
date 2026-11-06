@@ -108,11 +108,8 @@ func newFixture(t *testing.T, startSlot phase0.Slot) *fixture {
 	require.NoError(t, err)
 	pk := phase0.BLSPubKey(sk.GetPublicKey().Serialize())
 
-	// Initial registration (its own block / txn), as the event handler would do it.
-	txn := db.Begin()
-	defer txn.Discard()
-	require.NoError(t, km.AddShare(t.Context(), txn, enc, pk))
-	require.NoError(t, txn.Commit())
+	// Initial registration, in an earlier block.
+	require.NoError(t, km.AddShare(t.Context(), enc, pk))
 
 	return &fixture{db: db, km: km, beacon: beacon, pk: pk, enc: enc}
 }
@@ -166,8 +163,8 @@ func TestRemoveAndReAddInSameTxn_KeepsHigherAttestationRecord(t *testing.T) {
 	f.beacon.set(slotOf(E))
 	txn := f.db.Begin()
 	defer txn.Discard()
-	require.NoError(t, f.km.RemoveShare(ctx, txn, f.pk))
-	require.NoError(t, f.km.AddShare(ctx, txn, f.enc, f.pk)) // bump → (E-1, E), written immediately
+	require.NoError(t, f.km.RemoveShare(ctx, f.pk))
+	require.NoError(t, f.km.AddShare(ctx, f.enc, f.pk)) // bump → (E-1, E), written immediately
 
 	// The rest of the block takes a while to process (e.g. many slow remote-signer imports); the
 	// validator is still running and attests in epoch E+1.
@@ -203,8 +200,8 @@ func TestRemoveAndReAddInSameTxn_KeepsHigherProposalRecord(t *testing.T) {
 	f.beacon.set(S)
 	txn := f.db.Begin()
 	defer txn.Discard()
-	require.NoError(t, f.km.RemoveShare(ctx, txn, f.pk))
-	require.NoError(t, f.km.AddShare(ctx, txn, f.enc, f.pk)) // bump → S, written immediately
+	require.NoError(t, f.km.RemoveShare(ctx, f.pk))
+	require.NoError(t, f.km.AddShare(ctx, f.enc, f.pk)) // bump → S, written immediately
 
 	// Next slot arrives before the txn commits; validator proposes at S+1.
 	f.beacon.set(S + 1)
@@ -235,7 +232,7 @@ func TestBumpOnExistingRecord_KeepsHigherRecord(t *testing.T) {
 	f.beacon.set(slotOf(E))
 	txn := f.db.Begin()
 	defer txn.Discard()
-	require.NoError(t, f.km.BumpSlashingProtection(txn, f.pk)) // reads (E-2, E-1), writes (E-1, E)
+	require.NoError(t, f.km.BumpSlashingProtection(f.pk)) // reads (E-2, E-1), writes (E-1, E)
 
 	f.beacon.set(slotOf(E + 1))
 	require.NoError(t, f.signAttestation(ctx, attData(slotOf(E+1), E, E+1, 0xB1)))

@@ -135,7 +135,7 @@ func TestController_StopValidator(t *testing.T) {
 	encryptedSharePrivKey, err := operatorPrivateKey.Public().Encrypt([]byte(secretKey.SerializeToHexStr()))
 	require.NoError(t, err)
 
-	require.NoError(t, signer.AddShare(t.Context(), nil, encryptedSharePrivKey, phase0.BLSPubKey(secretKey.GetPublicKey().Serialize())))
+	require.NoError(t, signer.AddShare(t.Context(), encryptedSharePrivKey, phase0.BLSPubKey(secretKey.GetPublicKey().Serialize())))
 
 	testingBC := testingutils.NewTestingBeaconNode()
 	d, err := testingBC.DomainData(1, spectypes.DomainSyncCommittee)
@@ -244,7 +244,7 @@ func TestController_ReactivateCluster(t *testing.T) {
 	encryptedPrivKey, err := operatorPrivKey.Public().Encrypt([]byte(secretKeys[0].SerializeToHexStr()))
 	require.NoError(t, err)
 
-	require.NoError(t, signer.AddShare(testCtx, nil, encryptedPrivKey, phase0.BLSPubKey(secretKeys[0].GetPublicKey().Serialize())))
+	require.NoError(t, signer.AddShare(testCtx, encryptedPrivKey, phase0.BLSPubKey(secretKeys[0].GetPublicKey().Serialize())))
 
 	testingBC := testingutils.NewTestingBeaconNode()
 	domain, err := testingBC.DomainData(1, spectypes.DomainSyncCommittee)

@@ -53,17 +53,17 @@ type LocalKeyManager struct {
 	logger            *zap.Logger
 	wallet            core.Wallet
 	walletLock        *sync.RWMutex
-	signer            signer.ValidatorSigner
+	signer            blockSigner
 	operatorDecrypter keys.OperatorDecrypter
 	slashingProtector slashingProtector
 	beaconConfig      BeaconNetwork
+}
 
-	// blockProposalLock is held for the whole DomainProposer case of signBeaconObject, across every block
-	// type. The pre-Gloas arms serialize check→record→sign inside eth2-key-manager's per-account lock and
-	// the Gloas arm does it by hand (the lib's SignBeaconBlock has no Gloas arm); those two locks don't
-	// exclude each other, and walletLock is only RLocked during signing, so without one common lock a
-	// Gloas-typed and a pre-Gloas-typed block for the same share and slot could both pass the check.
-	blockProposalLock sync.Mutex
+// blockSigner is signer.ValidatorSigner plus SimpleSigner's generic, slashing-protected SignBlock,
+// which signs the Gloas block that the typed SignBeaconBlock has no arm for.
+type blockSigner interface {
+	signer.ValidatorSigner
+	SignBlock(block signer.HashRoot, slot phase0.Slot, domain phase0.Domain, pubKey []byte) ([]byte, []byte, error)
 }
 
 // NewLocalKeyManager returns a new LocalKeyManager.
@@ -81,6 +81,17 @@ func NewLocalKeyManager(
 	signerStore := NewSignerStorage(db, beacon.NetworkName(), logger)
 	signerStore.SetEncryptionKey(encryptionKey)
 
+	return newLocalKeyManager(logger, signerStore, beacon, operatorPrivKey)
+}
+
+// newLocalKeyManager returns a LocalKeyManager whose wallet and slashing protection are both backed
+// by signerStore, so that tests can wrap the store.
+func newLocalKeyManager(
+	logger *zap.Logger,
+	signerStore Storage,
+	beacon BeaconNetwork,
+	operatorPrivKey keys.OperatorPrivateKey,
+) (*LocalKeyManager, error) {
 	protection := slashingprotection.NewNormalProtection(signerStore)
 
 	options := &eth2keymanager.KeyVaultOptions{}
@@ -161,12 +172,10 @@ func (km *LocalKeyManager) signBeaconObject(
 		}
 		return km.signer.SignBeaconAttestation(data, domain, pubKey[:])
 	case spectypes.DomainProposer:
-		// One lock for every block type: the pre-Gloas arms serialize check→record→sign inside
-		// eth2-key-manager's own per-account lock, the Gloas arm does it here, and without a common lock
-		// a Gloas-typed and a pre-Gloas-typed block for the same share and slot could both pass the check.
-		km.blockProposalLock.Lock()
-		defer km.blockProposalLock.Unlock()
-
+		// Every arm signs through eth2-key-manager's SignBlock (the typed ones via SignBeaconBlock /
+		// SignBlindedBeaconBlock), which runs far-future check → slashing check → record → sign under
+		// one per-account proposal lock, so two blocks of different types for the same share and slot
+		// can't both pass the check.
 		switch v := obj.(type) {
 		case *capella.BeaconBlock:
 			vBlock := &spec.VersionedBeaconBlock{
@@ -211,24 +220,10 @@ func (km *LocalKeyManager) signBeaconObject(
 			}
 			return km.signer.SignBlindedBeaconBlock(vBlindedBlock, domain, pubKey[:])
 		case *eth2gloas.BeaconBlock:
-			// Gloas (ePBS) block: eth2-key-manager's slashing-protected SignBeaconBlock has no Gloas arm, so
-			// replicate it here. A block proposal is slashable but signSSZRoot doesn't protect it, so check +
-			// record the highest proposal, then sign. Key it to the block's own slot (what we sign), not the
-			// plumbed duty slot, so the slashing DB reflects the signed content — and guard the far-future
-			// bound here, since the plumbed slot no longer does. blockProposalLock (held for the whole
-			// proposer case) makes check→record→sign atomic (walletLock is only RLocked). Mirrors the
-			// remote handleDomainProposer.
-			blockSlot := v.Slot
-			if !signer.IsValidFarFutureSlot(km.beaconConfig, blockSlot) {
-				return nil, nil, fmt.Errorf("proposed block slot too far into the future")
-			}
-			if err := km.slashingProtector.IsBeaconBlockSlashable(pubKey, blockSlot); err != nil {
-				return nil, nil, err
-			}
-			if err := km.slashingProtector.UpdateHighestProposal(pubKey, blockSlot); err != nil {
-				return nil, nil, err
-			}
-			return signSSZRoot(km.signer, obj, domain, pubKey[:])
+			// Gloas (ePBS) block: SignBeaconBlock has no Gloas arm, so call the generic SignBlock it
+			// wraps. Key it to the block's own slot (what we sign), not the plumbed duty slot, so the
+			// slashing DB reflects the signed content and the far-future bound applies to it.
+			return km.signer.SignBlock(v, v.Slot, domain, pubKey[:])
 		default:
 			return nil, nil, fmt.Errorf("unexpected object type for proposer domain: %T", obj)
 		}
@@ -316,11 +311,11 @@ func (km *LocalKeyManager) IsBeaconBlockSlashable(pubKey phase0.BLSPubKey, slot 
 // BumpSlashingProtection raises the share's slashing records to the current slot/epoch. It takes
 // walletLock exclusively so the read-compare-write cannot interleave with a signing of the same
 // share (signing holds walletLock shared for its whole check→record→sign).
-func (km *LocalKeyManager) BumpSlashingProtection(txn ReadWriteTxn, pubKey phase0.BLSPubKey) error {
+func (km *LocalKeyManager) BumpSlashingProtection(pubKey phase0.BLSPubKey) error {
 	km.walletLock.Lock()
 	defer km.walletLock.Unlock()
 
-	return km.slashingProtector.BumpSlashingProtectionTxn(txn, pubKey)
+	return km.slashingProtector.BumpSlashingProtection(pubKey)
 }
 
 func (km *LocalKeyManager) RetrieveHighestAttestation(pubKey phase0.BLSPubKey) (*phase0.AttestationData, bool, error) {
@@ -341,7 +336,6 @@ func (km *LocalKeyManager) ListAccounts() ([]core.ValidatorAccount, error) {
 // ensure slashing records for this share are up to date.
 func (km *LocalKeyManager) AddShare(
 	_ context.Context,
-	txn ReadWriteTxn,
 	encryptedPrivKey []byte,
 	pubKey phase0.BLSPubKey,
 ) error {
@@ -366,7 +360,9 @@ func (km *LocalKeyManager) AddShare(
 		return ssvsigner.ShareDecryptionError{Err: errors.New("share private key does not match public key")}
 	}
 
-	if err := km.slashingProtector.BumpSlashingProtectionTxn(txn, phase0.BLSPubKey(sharePrivKey.GetPublicKey().Serialize())); err != nil {
+	// walletLock is already held, so bump through the protector: km.BumpSlashingProtection would
+	// take walletLock again and deadlock.
+	if err := km.slashingProtector.BumpSlashingProtection(phase0.BLSPubKey(sharePrivKey.GetPublicKey().Serialize())); err != nil {
 		return fmt.Errorf("could not bump slashing protection: %w", err)
 	}
 
@@ -376,8 +372,8 @@ func (km *LocalKeyManager) AddShare(
 	}
 
 	if acc == nil {
-		// We don't pass txn because wallet doesn't support transactions (eth2-key-manager doesn't depend on DB entities).
-		// However, a rolled back transaction should not be an issue,
+		// The wallet doesn't support transactions (eth2-key-manager doesn't depend on DB entities), so
+		// the account is saved right away. A rolled back event-handler transaction should not be an issue,
 		// because the node will crash in this case and then attempt to process the event again but acc won't be nil.
 		if err := km.saveAccount(sharePrivKey); err != nil {
 			return fmt.Errorf("save account: %w", err)
@@ -389,7 +385,7 @@ func (km *LocalKeyManager) AddShare(
 
 // RemoveShare removes the share from the local wallet and returns an error on any storage issue.
 // The share's slashing-protection records are kept on purpose (see KeyManager.RemoveShare).
-func (km *LocalKeyManager) RemoveShare(_ context.Context, _ ReadWriteTxn, pubKey phase0.BLSPubKey) error {
+func (km *LocalKeyManager) RemoveShare(_ context.Context, pubKey phase0.BLSPubKey) error {
 	km.walletLock.Lock()
 	defer km.walletLock.Unlock()
 
@@ -399,8 +395,8 @@ func (km *LocalKeyManager) RemoveShare(_ context.Context, _ ReadWriteTxn, pubKey
 		return fmt.Errorf("could not check share existence: %w", err)
 	}
 	if acc != nil {
-		// We don't pass txn because wallet doesn't support transactions (eth2-key-manager doesn't depend on DB entities).
-		// However, a rolled back transaction should not be an issue,
+		// The wallet doesn't support transactions (eth2-key-manager doesn't depend on DB entities), so
+		// the account is deleted right away. A rolled back event-handler transaction should not be an issue,
 		// because the node will crash in this case and then attempt to process the event again but acc will be nil.
 		if err := km.wallet.DeleteAccountByPublicKey(pubKeyHex); err != nil {
 			return fmt.Errorf("could not delete share: %w", err)

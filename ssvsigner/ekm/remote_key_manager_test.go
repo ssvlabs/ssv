@@ -66,14 +66,14 @@ func (s *RemoteKeyManagerTestSuite) TestRemoteKeyManagerWithMockedOperatorKey() 
 	pubKey := phase0.BLSPubKey{1, 2, 3}
 	encShare := []byte("encrypted_share_data")
 
-	mockSlashingProtector.On("BumpSlashingProtectionTxn", nil, pubKey).Return(nil)
+	mockSlashingProtector.On("BumpSlashingProtection", pubKey).Return(nil)
 
 	s.client.On("AddValidators", mock.Anything, ssvsigner.ShareKeys{
 		PubKey:           pubKey,
 		EncryptedPrivKey: encShare,
 	}).Return([]web3signer.Status{web3signer.StatusImported}, nil)
 
-	err := rm.AddShare(s.T().Context(), nil, encShare, pubKey)
+	err := rm.AddShare(s.T().Context(), encShare, pubKey)
 
 	s.NoError(err)
 	s.client.AssertExpectations(s.T())
@@ -98,7 +98,7 @@ func (s *RemoteKeyManagerTestSuite) TestRemoveShareWithMockedOperatorKey() {
 
 	s.client.On("RemoveValidators", mock.Anything, []phase0.BLSPubKey{pubKey}).Return([]web3signer.Status{web3signer.StatusDeleted}, nil)
 
-	err := rm.RemoveShare(s.T().Context(), nil, pubKey)
+	err := rm.RemoveShare(s.T().Context(), pubKey)
 
 	s.NoError(err)
 	s.client.AssertExpectations(s.T())
@@ -1155,7 +1155,7 @@ func (s *RemoteKeyManagerTestSuite) TestAddShareErrorCases() {
 			EncryptedPrivKey: encShare,
 		}).Return([]web3signer.Status{web3signer.StatusImported}, errors.New("add validators error")).Once()
 
-		err := rmTest.AddShare(s.T().Context(), nil, encShare, pubKey)
+		err := rmTest.AddShare(s.T().Context(), encShare, pubKey)
 
 		s.ErrorContains(err, "add validator")
 		clientMock.AssertExpectations(s.T())
@@ -1189,7 +1189,7 @@ func (s *RemoteKeyManagerTestSuite) TestAddShareErrorCases() {
 			Err: errors.New("decrypt: crypto/rsa: decryption error"),
 		}).Once()
 
-		err := rmTest.AddShare(s.T().Context(), nil, encShare, pubKey)
+		err := rmTest.AddShare(s.T().Context(), encShare, pubKey)
 
 		// AddShare must surface this as a ShareDecryptionError (through its fmt.Errorf wrap)
 		// so the event handler classifies it as a malformed (skippable) event.
@@ -1220,7 +1220,7 @@ func (s *RemoteKeyManagerTestSuite) TestAddShareErrorCases() {
 			signLocks:         map[signKey]*sync.RWMutex{},
 		}
 
-		err := rmTest.AddShare(s.T().Context(), nil, []byte("enc"), phase0.BLSPubKey{1, 2, 3})
+		err := rmTest.AddShare(s.T().Context(), []byte("enc"), phase0.BLSPubKey{1, 2, 3})
 
 		// AddShare must preserve the ShareDecryptionError and, per the validate-first order, never bump.
 		var decErr ssvsigner.ShareDecryptionError
@@ -1253,9 +1253,9 @@ func (s *RemoteKeyManagerTestSuite) TestAddShareErrorCases() {
 			EncryptedPrivKey: encShare,
 		}).Return([]web3signer.Status{web3signer.StatusImported}, nil).Once()
 
-		slashingMock.On("BumpSlashingProtectionTxn", nil, pubKey).Return(errors.New("bump slashing protection error")).Once()
+		slashingMock.On("BumpSlashingProtection", pubKey).Return(errors.New("bump slashing protection error")).Once()
 
-		err := rmTest.AddShare(context.Background(), nil, encShare, pubKey)
+		err := rmTest.AddShare(context.Background(), encShare, pubKey)
 
 		s.ErrorContains(err, "could not bump slashing protection")
 		clientMock.AssertExpectations(s.T())
@@ -1287,7 +1287,7 @@ func (s *RemoteKeyManagerTestSuite) TestAddShareErrorCases() {
 			EncryptedPrivKey: encShare,
 		}).Return([]web3signer.Status{web3signer.StatusError}, nil).Once()
 
-		err := rmTest.AddShare(s.T().Context(), nil, encShare, pubKey)
+		err := rmTest.AddShare(s.T().Context(), encShare, pubKey)
 		s.ErrorContains(err, "unexpected status")
 
 		clientMock.AssertExpectations(s.T())
@@ -1314,7 +1314,7 @@ func (s *RemoteKeyManagerTestSuite) TestRemoveShareErrorCases() {
 		s.client.On("RemoveValidators", mock.Anything, []phase0.BLSPubKey{pubKey}).
 			Return([]web3signer.Status{web3signer.StatusDeleted}, errors.New("remove validators error"))
 
-		s.ErrorContains(rm.RemoveShare(s.T().Context(), nil, pubKey), "remove validator")
+		s.ErrorContains(rm.RemoveShare(s.T().Context(), pubKey), "remove validator")
 		s.client.AssertExpectations(s.T())
 	})
 
@@ -1338,7 +1338,7 @@ func (s *RemoteKeyManagerTestSuite) TestRemoveShareErrorCases() {
 		clientMock.On("RemoveValidators", mock.Anything, []phase0.BLSPubKey{pubKey}).
 			Return([]web3signer.Status{web3signer.StatusError}, nil).Once()
 
-		s.ErrorContains(rmTest.RemoveShare(s.T().Context(), nil, pubKey), "unexpected status")
+		s.ErrorContains(rmTest.RemoveShare(s.T().Context(), pubKey), "unexpected status")
 		clientMock.AssertExpectations(s.T())
 		slashingMock.AssertExpectations(s.T())
 	})

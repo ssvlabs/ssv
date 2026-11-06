@@ -46,19 +46,17 @@ type Storage interface {
 	core.SlashingStore
 	SlashingStoreTxn
 
-	RemoveHighestAttestation(pubKey []byte) error
-	RemoveHighestProposal(pubKey []byte) error
 	SetEncryptionKey(hexKey []byte)
 }
 
-// SlashingStoreTxn represents the behavior of the slashing store with transaction support
+// SlashingStoreTxn represents the behavior of the slashing store with transaction support.
+// There is deliberately no way to delete a slashing record: records are only ever raised, and a
+// removed share keeps them (see KeyManager.RemoveShare).
 type SlashingStoreTxn interface {
 	SaveHighestAttestationTxn(txn ReadWriteTxn, pubKey []byte, attestation *phase0.AttestationData) error
 	RetrieveHighestAttestationTxn(txn ReadTxn, pubKey []byte) (*phase0.AttestationData, bool, error)
 	SaveHighestProposalTxn(txn ReadWriteTxn, pubKey []byte, slot phase0.Slot) error
 	RetrieveHighestProposalTxn(txn ReadTxn, pubKey []byte) (phase0.Slot, bool, error)
-	RemoveHighestAttestationTxn(txn ReadWriteTxn, pubKey []byte) error
-	RemoveHighestProposalTxn(txn ReadWriteTxn, pubKey []byte) error
 	ListAccountsTxn(txn ReadTxn) ([]core.ValidatorAccount, error)
 	SaveAccountTxn(txn ReadWriteTxn, account core.ValidatorAccount) error
 }
@@ -314,17 +312,6 @@ func (s *storage) RetrieveHighestAttestationTxn(txn ReadTxn, pubKey []byte) (*ph
 	return ret, found, nil
 }
 
-func (s *storage) RemoveHighestAttestation(pubKey []byte) error {
-	return s.RemoveHighestAttestationTxn(nil, pubKey)
-}
-
-func (s *storage) RemoveHighestAttestationTxn(txn ReadWriteTxn, pubKey []byte) error {
-	s.lock.Lock()
-	defer s.lock.Unlock()
-
-	return s.db.Delete(txn, s.objPrefix(highestAttPrefix), pubKey)
-}
-
 // SaveHighestProposal stores the highest known proposal slot for the given
 // public key to prevent slashable block proposals.
 func (s *storage) SaveHighestProposal(pubKey []byte, slot phase0.Slot) error {
@@ -378,17 +365,6 @@ func (s *storage) RetrieveHighestProposalTxn(txn ReadTxn, pubKey []byte) (phase0
 	// decode
 	slot := phase0.Slot(ssz.UnmarshallUint64(obj.Value))
 	return slot, found, nil
-}
-
-func (s *storage) RemoveHighestProposal(pubKey []byte) error {
-	return s.RemoveHighestProposalTxn(nil, pubKey)
-}
-
-func (s *storage) RemoveHighestProposalTxn(txn ReadWriteTxn, pubKey []byte) error {
-	s.lock.Lock()
-	defer s.lock.Unlock()
-
-	return s.db.Delete(txn, s.objPrefix(highestProposalPrefix), pubKey)
 }
 
 func (s *storage) decryptData(objectValue []byte) ([]byte, error) {

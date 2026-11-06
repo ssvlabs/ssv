@@ -37,7 +37,7 @@ type slashingProtector interface {
 	UpdateHighestProposal(pubKey phase0.BLSPubKey, slot phase0.Slot) error
 	IsAttestationSlashable(pubKey phase0.BLSPubKey, attData *phase0.AttestationData) error
 	IsBeaconBlockSlashable(pubKey phase0.BLSPubKey, slot phase0.Slot) error
-	BumpSlashingProtectionTxn(txn ReadWriteTxn, pubKey phase0.BLSPubKey) error
+	BumpSlashingProtection(pubKey phase0.BLSPubKey) error
 }
 
 // SlashingProtector manages both the local store for highest attestation/proposal
@@ -106,25 +106,24 @@ func (sp *SlashingProtector) UpdateHighestProposal(pubKey phase0.BLSPubKey, slot
 	return sp.protection.UpdateHighestProposal(pubKey[:], slot)
 }
 
-// BumpSlashingProtectionTxn raises the share's slashing records to the minimal safe values for the
+// BumpSlashingProtection raises the share's slashing records to the minimal safe values for the
 // current slot/epoch, if they are missing or below them.
 //
-// The caller's txn is deliberately NOT used for the records. They are read and written immediately
-// (committed before this returns), like the signing path writes them, and the caller is expected to
-// hold the same lock that excludes signing for this share (LocalKeyManager.walletLock,
-// RemoteKeyManager's per-share locks). Writing them through a long-lived transaction instead would
-// break that exclusion: the write only lands at commit, after the lock is released. A rolled-back caller txn
-// is harmless here because a bump only ever raises a record.
-func (sp *SlashingProtector) BumpSlashingProtectionTxn(_ ReadWriteTxn, pubKey phase0.BLSPubKey) error {
+// The records are read and written immediately (committed before this returns), like the signing
+// path writes them, and the caller is expected to hold the same lock that excludes signing for this
+// share (LocalKeyManager.walletLock, RemoteKeyManager's per-share locks) across the read and the write.
+// Writing them through a long-lived transaction instead would break that exclusion: the write would
+// only land at commit, after the lock is released.
+func (sp *SlashingProtector) BumpSlashingProtection(pubKey phase0.BLSPubKey) error {
 	currentSlot := sp.beaconCfg.EstimatedCurrentSlot()
 
 	// Update highest attestation data for slashing protection.
-	if err := sp.updateHighestAttestation(nil, pubKey, currentSlot); err != nil {
+	if err := sp.updateHighestAttestation(pubKey, currentSlot); err != nil {
 		return err
 	}
 
 	// Update highest proposal data for slashing protection.
-	if err := sp.updateHighestProposal(nil, pubKey, currentSlot); err != nil {
+	if err := sp.updateHighestProposal(pubKey, currentSlot); err != nil {
 		return err
 	}
 
@@ -132,9 +131,9 @@ func (sp *SlashingProtector) BumpSlashingProtectionTxn(_ ReadWriteTxn, pubKey ph
 }
 
 // updateHighestAttestation updates the highest attestation data for slashing protection.
-func (sp *SlashingProtector) updateHighestAttestation(txn ReadWriteTxn, pubKey phase0.BLSPubKey, slot phase0.Slot) error {
+func (sp *SlashingProtector) updateHighestAttestation(pubKey phase0.BLSPubKey, slot phase0.Slot) error {
 	// Retrieve the highest attestation data stored for the given public key.
-	retrievedHighAtt, found, err := sp.signerStore.RetrieveHighestAttestationTxn(txn, pubKey[:])
+	retrievedHighAtt, found, err := sp.signerStore.RetrieveHighestAttestation(pubKey[:])
 	if err != nil {
 		return fmt.Errorf("could not retrieve highest attestation: %w", err)
 	}
@@ -151,7 +150,7 @@ func (sp *SlashingProtector) updateHighestAttestation(txn ReadWriteTxn, pubKey p
 
 	// At this point, either the retrieved attestation data was not found, or it was outdated.
 	// In either case, we update it to the minimal slashing protection data.
-	if err := sp.signerStore.SaveHighestAttestationTxn(txn, pubKey[:], minimalSP); err != nil {
+	if err := sp.signerStore.SaveHighestAttestation(pubKey[:], minimalSP); err != nil {
 		return fmt.Errorf("could not save highest attestation: %w", err)
 	}
 
@@ -159,9 +158,9 @@ func (sp *SlashingProtector) updateHighestAttestation(txn ReadWriteTxn, pubKey p
 }
 
 // updateHighestProposal updates the highest proposal slot for slashing protection.
-func (sp *SlashingProtector) updateHighestProposal(txn ReadWriteTxn, pubKey phase0.BLSPubKey, slot phase0.Slot) error {
+func (sp *SlashingProtector) updateHighestProposal(pubKey phase0.BLSPubKey, slot phase0.Slot) error {
 	// Retrieve the highest proposal slot stored for the given public key.
-	retrievedHighProp, found, err := sp.signerStore.RetrieveHighestProposalTxn(txn, pubKey[:])
+	retrievedHighProp, found, err := sp.signerStore.RetrieveHighestProposal(pubKey[:])
 	if err != nil {
 		return fmt.Errorf("could not retrieve highest proposal: %w", err)
 	}
@@ -177,7 +176,7 @@ func (sp *SlashingProtector) updateHighestProposal(txn ReadWriteTxn, pubKey phas
 
 	// At this point, either the retrieved proposal slot was not found, or it was outdated.
 	// In either case, we update it to the minimal slashing protection slot.
-	if err := sp.signerStore.SaveHighestProposalTxn(txn, pubKey[:], minimalSPSlot); err != nil {
+	if err := sp.signerStore.SaveHighestProposal(pubKey[:], minimalSPSlot); err != nil {
 		return fmt.Errorf("could not save highest proposal: %w", err)
 	}
 

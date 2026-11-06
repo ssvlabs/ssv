@@ -21,17 +21,21 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/herumi/bls-eth-go-binary/bls"
-	eth2keymanager "github.com/ssvlabs/eth2-key-manager"
-	"github.com/ssvlabs/eth2-key-manager/core"
-	"github.com/ssvlabs/eth2-key-manager/signer"
 	slashingprotection "github.com/ssvlabs/eth2-key-manager/slashing_protection"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv-spec/types/testingutils"
 
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
+	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
 )
+
+// raceWindow is how long a test waits for a goroutine that a lock may be holding back. With the lock
+// in place the test always waits this long; without it, the goroutine gets through well within it.
+// Too short a window can only make a test miss a missing lock, never fail a correct implementation.
+const raceWindow = 250 * time.Millisecond
 
 func TestSignBeaconObject_RefusesMismatchedDomainType(t *testing.T) {
 	ctx := t.Context()
@@ -68,6 +72,12 @@ func TestSignBeaconObject_RefusesMismatchedDomainType(t *testing.T) {
 			_, _, err := lkm.SignBeaconObject(ctx, &att2, attesterDomain, pk, slot, label)
 			require.ErrorContains(t, err, "does not match signature domain", "label %x", label)
 		}
+
+		// So must the attestation's root, as the 32-byte root the sync-committee arm takes.
+		att2Root, err := att2.HashTreeRoot()
+		require.NoError(t, err)
+		_, _, err = lkm.SignBeaconObject(ctx, spectypes.SSZBytes(att2Root[:]), attesterDomain, pk, slot, spectypes.DomainSyncCommittee)
+		require.ErrorContains(t, err, "does not match signature domain")
 	})
 
 	t.Run("block under the proposer domain", func(t *testing.T) {
@@ -88,6 +98,11 @@ func TestSignBeaconObject_RefusesMismatchedDomainType(t *testing.T) {
 			_, _, err := lkm.SignBeaconObject(ctx, &b2, proposerDomain, pk, blockSlot, label)
 			require.ErrorContains(t, err, "does not match signature domain", "label %x", label)
 		}
+
+		b2Root, err := b2.HashTreeRoot()
+		require.NoError(t, err)
+		_, _, err = lkm.SignBeaconObject(ctx, spectypes.SSZBytes(b2Root[:]), proposerDomain, pk, blockSlot, spectypes.DomainSyncCommittee)
+		require.ErrorContains(t, err, "does not match signature domain")
 	})
 
 	t.Run("matching pairs still sign", func(t *testing.T) {
@@ -97,104 +112,76 @@ func TestSignBeaconObject_RefusesMismatchedDomainType(t *testing.T) {
 	})
 }
 
-// gate makes the first `want` callers of RetrieveHighestProposal rendezvous after their read, so two
-// concurrent signers hold the same (stale) highest proposal before either can update it. If a lock
-// serializes the signers, the second caller never arrives and the first proceeds after a timeout.
-type gate struct {
-	mu    sync.Mutex
-	n     int
-	want  int
-	ready chan struct{}
-}
-
-func (g *gate) wait() {
-	g.mu.Lock()
-	g.n++
-	n := g.n
-	if n == g.want {
-		close(g.ready)
+func TestRemoteKeyManager_RefusesMismatchedDomainType(t *testing.T) {
+	cfg := testBeaconConfig()
+	client := &MockRemoteSigner{}
+	// Only so that a missing check fails on the assertions below instead of panicking in the mock.
+	client.On("Sign", mock.Anything, mock.Anything, mock.Anything).Return(phase0.BLSSignature{}, nil).Maybe()
+	protector := &MockSlashingProtector{}
+	rm := &RemoteKeyManager{
+		logger:            testLogger(t),
+		beaconConfig:      cfg,
+		genesisRoot:       cfg.GenesisValidatorsRoot,
+		signerClient:      client,
+		getOperatorId:     func() spectypes.OperatorID { return 1 },
+		operatorPubKey:    &MockOperatorPublicKey{},
+		slashingProtector: protector,
+		signLocks:         map[signKey]*sync.RWMutex{},
 	}
-	g.mu.Unlock()
-	if n <= g.want {
-		select {
-		case <-g.ready:
-		case <-time.After(2 * time.Second):
-		}
+
+	pk := phase0.BLSPubKey{1, 2, 3}
+	slot := cfg.EstimatedCurrentSlot()
+	epoch := cfg.EstimatedEpochAtSlot(slot)
+	att := &phase0.AttestationData{
+		Slot: slot, BeaconBlockRoot: phase0.Root{0xA1},
+		Source: &phase0.Checkpoint{Epoch: epoch}, Target: &phase0.Checkpoint{Epoch: epoch + 1},
 	}
-}
+	attRoot, err := att.HashTreeRoot()
+	require.NoError(t, err)
+	attesterDomain := domainFor(spectypes.DomainAttester)
 
-type gatedStorage struct {
-	Storage
-	g *gate
-}
+	for label, obj := range map[phase0.DomainType]spectypes.HashRoot{
+		spectypes.DomainAggregateAndProof: att,
+		spectypes.DomainSyncCommittee:     spectypes.SSZBytes(attRoot[:]),
+	} {
+		_, _, err := rm.SignBeaconObject(t.Context(), obj, attesterDomain, pk, slot, label)
+		require.ErrorContains(t, err, "does not match signature domain", "label %x", label)
+	}
 
-func (s *gatedStorage) RetrieveHighestProposal(pubKey []byte) (phase0.Slot, bool, error) {
-	slot, found, err := s.Storage.RetrieveHighestProposal(pubKey)
-	s.g.wait()
-	return slot, found, err
+	// Refused before any slashing check, record update or remote call.
+	client.AssertNotCalled(t, "Sign", mock.Anything, mock.Anything, mock.Anything)
+	protector.AssertNotCalled(t, "IsAttestationSlashable", mock.Anything, mock.Anything)
+	protector.AssertNotCalled(t, "UpdateHighestAttestation", mock.Anything, mock.Anything)
 }
 
 func TestSignBeaconObject_GloasAndPreGloasBlocksShareOneProposalLock(t *testing.T) {
-	initBLSTest()
 	ctx := t.Context()
-	logger := testLogger(t)
-	cfg := testBeaconConfig()
+	km, store, pk := newGatedLocalKeyManager(t)
 
-	opKey, err := keys.GeneratePrivateKey()
-	require.NoError(t, err)
-	encKey, err := opKey.EKMEncryptionKey()
-	require.NoError(t, err)
-
-	// Replicate NewLocalKeyManager, but route both slashing-protection consumers (the lib signer and the
-	// SlashingProtector) through a gated store.
-	db := newTestMemoryDB()
-	store := NewSignerStorage(db, cfg.Name, logger)
-	store.SetEncryptionKey(encKey)
-	gated := &gatedStorage{Storage: store, g: &gate{want: 2, ready: make(chan struct{})}}
-	protection := slashingprotection.NewNormalProtection(gated)
-
-	options := &eth2keymanager.KeyVaultOptions{}
-	options.SetStorage(store)
-	options.SetWalletType(core.NDWallet)
-	vault, err := eth2keymanager.NewKeyVault(options)
-	require.NoError(t, err)
-	wallet, err := vault.Wallet()
-	require.NoError(t, err)
-
-	km := &LocalKeyManager{
-		logger:            logger,
-		wallet:            wallet,
-		walletLock:        &sync.RWMutex{},
-		signer:            signer.NewSimpleSigner(wallet, protection, cfg),
-		slashingProtector: NewSlashingProtector(logger, cfg, gated, protection),
-		operatorDecrypter: opKey,
-		beaconConfig:      cfg,
-	}
-
-	sk := &bls.SecretKey{}
-	require.NoError(t, sk.SetHexString(sk1Str))
-	enc, err := opKey.Public().Encrypt([]byte(sk.SerializeToHexStr()))
-	require.NoError(t, err)
-	pk := phase0.BLSPubKey(sk.GetPublicKey().Serialize())
-	require.NoError(t, km.AddShare(ctx, nil, enc, pk))
-
-	blockSlot := cfg.EstimatedCurrentSlot() + 1
+	blockSlot := testBeaconConfig().EstimatedCurrentSlot() + 1
 	deneb := *testingutils.TestingBlockContentsDeneb.Block
 	deneb.Slot = blockSlot
 	gloas := gloasTestBlock(blockSlot)
 	domain := domainFor(spectypes.DomainProposer)
 
+	// Hold each signer after its first read of the highest proposal until the other one has read it
+	// too, unless a common lock keeps the other one out until the first has recorded its block.
+	r := newRendezvous(2)
+	store.arm(func(proposal bool) {
+		if proposal {
+			r.wait()
+		}
+	})
+
 	var wg sync.WaitGroup
 	errs := make([]error, 2)
-	wg.Add(2)
-	go func() {
-		defer wg.Done()
-		_, _, errs[0] = km.SignBeaconObject(ctx, gloas, domain, pk, blockSlot, spectypes.DomainProposer)
-	}()
-	go func() {
-		defer wg.Done()
-		_, _, errs[1] = km.SignBeaconObject(ctx, &deneb, domain, pk, blockSlot, spectypes.DomainProposer)
-	}()
+	for i, block := range []spectypes.HashRoot{gloas, &deneb} {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, _, errs[i] = km.SignBeaconObject(ctx, block, domain, pk, blockSlot, spectypes.DomainProposer)
+		}()
+	}
 	wg.Wait()
 
 	signed := 0
@@ -205,4 +192,260 @@ func TestSignBeaconObject_GloasAndPreGloasBlocksShareOneProposalLock(t *testing.
 	}
 	t.Logf("gloas err=%v, deneb err=%v", errs[0], errs[1])
 	require.Equal(t, 1, signed, "exactly one of two different blocks for slot %d may be signed", blockSlot)
+}
+
+func TestBumpSlashingProtection_ExcludesSigning(t *testing.T) {
+	newKeyManagers := map[string]func(*testing.T) (KeyManager, *gatedStorage, phase0.BLSPubKey){
+		"local": func(t *testing.T) (KeyManager, *gatedStorage, phase0.BLSPubKey) {
+			return newGatedLocalKeyManager(t)
+		},
+		"remote": func(t *testing.T) (KeyManager, *gatedStorage, phase0.BLSPubKey) {
+			return newGatedRemoteKeyManager(t)
+		},
+	}
+	for name, newKeyManager := range newKeyManagers {
+		for _, record := range []string{"attestation", "proposal"} {
+			t.Run(name+"/"+record, func(t *testing.T) {
+				km, store, pk := newKeyManager(t)
+				requireBumpExcludesSigning(t, km, store, pk, record == "proposal")
+			})
+		}
+	}
+}
+
+// requireBumpExcludesSigning parks km's bump right after it reads a stale record, signs in that
+// window, and releases the bump. Then the record must hold what was signed, and a second, different
+// object for the same target epoch or slot must be refused.
+func requireBumpExcludesSigning(t *testing.T, km KeyManager, store *gatedStorage, pk phase0.BLSPubKey, proposal bool) {
+	t.Helper()
+	ctx := t.Context()
+	cfg := testBeaconConfig()
+	cur := cfg.EstimatedCurrentSlot()
+	epoch := cfg.EstimatedEpochAtSlot(cur)
+
+	// The signed objects sit a few slots / epochs above the current ones, so that a slot or epoch
+	// boundary passing mid-test can't lift the bump's write up to them.
+	blockSlot := cur + 3
+	target := epoch + 2
+
+	var sign func(root byte) error
+	if proposal {
+		require.NoError(t, store.SaveHighestProposal(pk[:], cur-5))
+		sign = func(root byte) error {
+			block := *testingutils.TestingBlockContentsElectra.Block // shallow copy; Body is shared and untouched
+			block.Slot = blockSlot
+			block.ParentRoot = phase0.Root{root}
+			_, _, err := km.SignBeaconObject(ctx, &block, domainFor(spectypes.DomainProposer), pk, blockSlot, spectypes.DomainProposer)
+			return err
+		}
+	} else {
+		require.NoError(t, store.SaveHighestAttestation(pk[:], &phase0.AttestationData{
+			Source: &phase0.Checkpoint{Epoch: epoch - 6},
+			Target: &phase0.Checkpoint{Epoch: epoch - 5},
+		}))
+		sign = func(root byte) error {
+			att := &phase0.AttestationData{
+				Slot:            cur,
+				BeaconBlockRoot: phase0.Root{root},
+				Source:          &phase0.Checkpoint{Epoch: target - 1},
+				Target:          &phase0.Checkpoint{Epoch: target},
+			}
+			_, _, err := km.SignBeaconObject(ctx, att, domainFor(spectypes.DomainAttester), pk, cur, spectypes.DomainAttester)
+			return err
+		}
+	}
+
+	// Park the bump between its read of the stale record and its write.
+	p := newParker()
+	t.Cleanup(p.release)
+	store.arm(func(isProposal bool) {
+		if isProposal == proposal {
+			p.wait()
+		}
+	})
+	bumpErr := make(chan error, 1)
+	go func() { bumpErr <- km.BumpSlashingProtection(pk) }()
+	<-p.parked
+
+	// Sign while the bump is parked. With the bump's lock in place, the signing waits for the bump.
+	var signErr error
+	signed := make(chan struct{})
+	go func() {
+		defer close(signed)
+		signErr = sign(0x01)
+	}()
+	select {
+	case <-signed:
+	case <-time.After(raceWindow):
+	}
+	p.release()
+
+	require.NoError(t, <-bumpErr)
+	<-signed
+	require.NoError(t, signErr, "the first signature must go through")
+	store.arm(nil)
+
+	if proposal {
+		highest, found, err := store.Storage.RetrieveHighestProposal(pk[:])
+		require.NoError(t, err)
+		require.True(t, found)
+		require.Equal(t, blockSlot, highest, "record must stay at the signed slot")
+	} else {
+		highest, found, err := store.Storage.RetrieveHighestAttestation(pk[:])
+		require.NoError(t, err)
+		require.True(t, found)
+		require.Equal(t, target, highest.Target.Epoch, "record must stay at the signed target")
+	}
+	require.ErrorContains(t, sign(0x02), "slashable", "a second signature for the same target must be refused")
+}
+
+// newGatedLocalKeyManager returns a LocalKeyManager over a gatedStorage, with sk1 added as a share.
+func newGatedLocalKeyManager(t *testing.T) (*LocalKeyManager, *gatedStorage, phase0.BLSPubKey) {
+	t.Helper()
+	initBLSTest()
+	logger := testLogger(t)
+	cfg := testBeaconConfig()
+
+	opKey, err := keys.GeneratePrivateKey()
+	require.NoError(t, err)
+	encKey, err := opKey.EKMEncryptionKey()
+	require.NoError(t, err)
+
+	signerStore := NewSignerStorage(newTestMemoryDB(), cfg.NetworkName(), logger)
+	signerStore.SetEncryptionKey(encKey)
+	store := &gatedStorage{Storage: signerStore}
+
+	km, err := newLocalKeyManager(logger, store, cfg, opKey)
+	require.NoError(t, err)
+
+	sk := &bls.SecretKey{}
+	require.NoError(t, sk.SetHexString(sk1Str))
+	enc, err := opKey.Public().Encrypt([]byte(sk.SerializeToHexStr()))
+	require.NoError(t, err)
+	pk := phase0.BLSPubKey(sk.GetPublicKey().Serialize())
+	require.NoError(t, km.AddShare(t.Context(), enc, pk))
+
+	return km, store, pk
+}
+
+// newGatedRemoteKeyManager returns a RemoteKeyManager whose slashing protection runs over a
+// gatedStorage and whose remote signer accepts every share and signs everything, with one share added.
+func newGatedRemoteKeyManager(t *testing.T) (*RemoteKeyManager, *gatedStorage, phase0.BLSPubKey) {
+	t.Helper()
+	logger := testLogger(t)
+	cfg := testBeaconConfig()
+	store := &gatedStorage{Storage: NewSignerStorage(newTestMemoryDB(), cfg.NetworkName(), logger)}
+
+	client := &MockRemoteSigner{}
+	client.On("AddValidators", mock.Anything, mock.Anything).Return([]web3signer.Status{web3signer.StatusImported}, nil)
+	client.On("Sign", mock.Anything, mock.Anything, mock.Anything).Return(phase0.BLSSignature{1}, nil)
+
+	km := &RemoteKeyManager{
+		logger:            logger,
+		beaconConfig:      cfg,
+		genesisRoot:       cfg.GenesisValidatorsRoot,
+		signerClient:      client,
+		getOperatorId:     func() spectypes.OperatorID { return 1 },
+		operatorPubKey:    &MockOperatorPublicKey{},
+		slashingProtector: NewSlashingProtector(logger, cfg, store, slashingprotection.NewNormalProtection(store)),
+		signLocks:         map[signKey]*sync.RWMutex{},
+	}
+
+	pk := phase0.BLSPubKey{1, 2, 3}
+	require.NoError(t, km.AddShare(t.Context(), []byte("encrypted share"), pk))
+
+	return km, store, pk
+}
+
+// gatedStorage wraps a Storage and, once armed, calls afterRead right after each highest-attestation
+// or highest-proposal read: the point between a read-compare-write's read and its write.
+type gatedStorage struct {
+	Storage
+
+	mu        sync.Mutex
+	afterRead func(proposal bool)
+}
+
+func (s *gatedStorage) arm(afterRead func(proposal bool)) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.afterRead = afterRead
+}
+
+func (s *gatedStorage) read(proposal bool) {
+	s.mu.Lock()
+	afterRead := s.afterRead
+	s.mu.Unlock()
+	if afterRead != nil {
+		afterRead(proposal)
+	}
+}
+
+func (s *gatedStorage) RetrieveHighestAttestation(pubKey []byte) (*phase0.AttestationData, bool, error) {
+	att, found, err := s.Storage.RetrieveHighestAttestation(pubKey)
+	s.read(false)
+	return att, found, err
+}
+
+func (s *gatedStorage) RetrieveHighestProposal(pubKey []byte) (phase0.Slot, bool, error) {
+	slot, found, err := s.Storage.RetrieveHighestProposal(pubKey)
+	s.read(true)
+	return slot, found, err
+}
+
+// rendezvous holds each of the first n callers of wait until all n have arrived, or until raceWindow
+// passes, so n concurrent signers all read the same record before any of them can update it. When a
+// lock serializes the signers, the later ones can't arrive while the first one waits.
+type rendezvous struct {
+	mu      sync.Mutex
+	n       int
+	arrived int
+	all     chan struct{}
+}
+
+func newRendezvous(n int) *rendezvous {
+	return &rendezvous{n: n, all: make(chan struct{})}
+}
+
+func (r *rendezvous) wait() {
+	r.mu.Lock()
+	r.arrived++
+	arrived := r.arrived
+	if arrived == r.n {
+		close(r.all)
+	}
+	r.mu.Unlock()
+	if arrived > r.n {
+		return
+	}
+	select {
+	case <-r.all:
+	case <-time.After(raceWindow):
+	}
+}
+
+// parker holds the first caller of wait until release, and lets every later caller through.
+type parker struct {
+	first       sync.Once
+	parked      chan struct{}
+	releaseOnce sync.Once
+	released    chan struct{}
+}
+
+func newParker() *parker {
+	return &parker{parked: make(chan struct{}), released: make(chan struct{})}
+}
+
+func (p *parker) wait() {
+	first := false
+	p.first.Do(func() { first = true })
+	if !first {
+		return
+	}
+	close(p.parked)
+	<-p.released
+}
+
+func (p *parker) release() {
+	p.releaseOnce.Do(func() { close(p.released) })
 }

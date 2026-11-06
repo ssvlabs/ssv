@@ -10,17 +10,16 @@ import (
 )
 
 // KeyManager is the main interface for managing validator shares and performing slashing protection.
-// It embeds BeaconSigner (for signing beacon messages and checking whether attestation or beacon block are slashable)
-// and slashingProtector (for slashing checks and updates).
+// It embeds BeaconSigner (for signing beacon messages and checking whether attestation or beacon block are slashable).
 type KeyManager interface {
 	BeaconSigner
 
 	// BumpSlashingProtection raises the share's slashing protection records (attestation and
 	// proposal) to the minimal safe values for the current slot/epoch, if they are missing or below
-	// them. The records are written immediately, under the key manager's signing lock, and never
-	// through txn, whose commit lands after the lock is released.
-	// A rolled-back txn is harmless because a bump only ever raises a record.
-	BumpSlashingProtection(txn ReadWriteTxn, pubKey phase0.BLSPubKey) error
+	// them. The records are written immediately, under the key manager's signing lock, never through
+	// a caller's transaction, whose commit lands after the lock is released.
+	// A bump only ever raises a record, so a caller's transaction that is later rolled back is harmless.
+	BumpSlashingProtection(pubKey phase0.BLSPubKey) error
 
 	// AddShare registers a validator share (public and encrypted private key) with the key manager.
 	// Implementations should always call BumpSlashingProtection during this process.
@@ -32,13 +31,13 @@ type KeyManager interface {
 	// If the share cannot be decrypted or validated, implementations MUST return an error that
 	// unwraps to a by-value ssvsigner.ShareDecryptionError. Callers use it to classify the failure
 	// as a skippable malformed event; otherwise the failure is fatal and crash-loops registry sync.
-	AddShare(ctx context.Context, txn ReadWriteTxn, encryptedPrivKey []byte, pubKey phase0.BLSPubKey) error
+	AddShare(ctx context.Context, encryptedPrivKey []byte, pubKey phase0.BLSPubKey) error
 
 	// RemoveShare unregisters a validator share from the key manager. The share's slashing
 	// protection records are kept: they are tiny, and keeping them means a later re-add of the same
 	// share (the same keyshares re-registered, e.g. after a DKG resign) can never start below what
 	// this node already signed.
-	RemoveShare(ctx context.Context, txn ReadWriteTxn, pubKey phase0.BLSPubKey) error
+	RemoveShare(ctx context.Context, pubKey phase0.BLSPubKey) error
 }
 
 // BeaconSigner provides methods for signing beacon-chain objects.
