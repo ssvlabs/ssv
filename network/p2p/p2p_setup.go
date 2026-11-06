@@ -48,8 +48,7 @@ const (
 	connectTimeout = time.Minute
 	// connectorQueueSize is the buffer size of the channel used by the connector
 	connectorQueueSize = 2048
-	// inboundLimitRatio is the ratio of inbound connections to the total connections
-	// we allow (both inbound and outbound).
+	// inboundLimitRatio is the share of MaxPeers that inbound peers may take.
 	inboundLimitRatio = float64(0.5)
 )
 
@@ -417,12 +416,12 @@ func (n *p2pNetwork) connectionsAtLimit() bool {
 }
 
 func (n *p2pNetwork) atInboundLimit() bool {
-	in, _ := n.connectionStats()
+	in, _ := n.peerStats()
 	inboundLimit := n.inboundLimit()
 	if in >= inboundLimit {
 		n.logger.Debug(
 			"Preventing inbound connections due to reaching inbound limit",
-			zap.Int("inbound", in),
+			zap.Int("inbound_peers", in),
 			zap.Int("inbound_limit", inboundLimit),
 			zap.Int("max_peers", n.cfg.MaxPeers),
 		)
@@ -436,21 +435,56 @@ func (n *p2pNetwork) inboundLimit() int {
 	return int(float64(n.cfg.MaxPeers) * inboundLimitRatio)
 }
 
-// connectionStats returns the number of inbound and outbound connections.
+// peerStats returns the number of inbound and outbound peers.
 //
 // The Host() nil check matters here: the connection gater can fire
 // InterceptAccept from libp2p listener goroutines while SetupHost is still
 // inside libp2p.New(), i.e. before the host has been stored. Host() reads
 // the pointer atomically, so the check is race-free (see #2448). Pre-setup
 // there are no connections, so (0, 0) is the correct answer.
-func (n *p2pNetwork) connectionStats() (inbound, outbound int) {
+func (n *p2pNetwork) peerStats() (inbound, outbound int) {
 	h := n.Host()
 	if h == nil {
 		return 0, 0
 	}
-	return connectionStats(h)
+	return peerStats(h)
 }
 
+// peerStats returns the number of inbound and outbound peers. libp2p can keep several connections
+// to a peer (e.g. when both sides dial at once); the peer still counts once, in the direction
+// peerDirection gives it.
+func peerStats(host host.Host) (inbound, outbound int) {
+	hostNetwork := host.Network()
+	for _, p := range hostNetwork.Peers() {
+		switch peerDirection(hostNetwork.ConnsToPeer(p)) {
+		case network.DirInbound:
+			inbound++
+		case network.DirOutbound:
+			outbound++
+		default:
+		}
+	}
+	return inbound, outbound
+}
+
+// peerDirection returns the direction a peer with the given connections counts in: outbound if any
+// connection is outbound (we chose to dial the peer), else inbound if any is inbound, else
+// DirUnknown.
+func peerDirection(conns []network.Conn) network.Direction {
+	dir := network.DirUnknown
+	for _, conn := range conns {
+		switch conn.Stat().Direction {
+		case network.DirOutbound:
+			return network.DirOutbound
+		case network.DirInbound:
+			dir = network.DirInbound
+		default:
+		}
+	}
+	return dir
+}
+
+// connectionStats returns the number of inbound and outbound connections; peer limits use peerStats.
 func connectionStats(host host.Host) (inbound, outbound int) {
 	for _, cn := range host.Network().Conns() {
 		dir := cn.Stat().Direction

@@ -2,6 +2,7 @@ package p2pv1
 
 import (
 	"context"
+	"crypto/rand"
 	"math"
 	"strings"
 	"testing"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/libp2p/go-libp2p"
+	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/stretchr/testify/assert"
@@ -20,6 +22,7 @@ import (
 	"github.com/ssvlabs/ssv/network/topics"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/utils/hashmap"
+	"github.com/ssvlabs/ssv/utils/ttl"
 )
 
 type testTopicsController struct {
@@ -217,6 +220,116 @@ func TestChoosePeersToTrim_TrimInboundOnlySkipsOutboundPeers(t *testing.T) {
 	assert.Equal(t, map[peer.ID]struct{}{inboundPeer.ID(): {}}, trimmed)
 }
 
+func TestChoosePeersToTrim_DuplicateConnectionsTakeOneSlot(t *testing.T) {
+	ctx := t.Context()
+	localHost := newTestHost(t)
+	lowValuePeer := connectDuplicateInboundPeer(t, ctx, localHost, 2)
+	mediumValuePeer := newTestHost(t)
+	highValuePeer := newTestHost(t)
+
+	connectHosts(t, ctx, localHost, mediumValuePeer)
+	connectHosts(t, ctx, localHost, highValuePeer)
+
+	network := newTrimTestNetwork(
+		localHost,
+		&testTopicsController{
+			topics: []string{"0", "1", "3"},
+			peersByTopic: map[string][]peer.ID{
+				"0": {highValuePeer.ID()},
+				"1": {highValuePeer.ID(), mediumValuePeer.ID()},
+				"3": {lowValuePeer},
+			},
+			allPeers: []peer.ID{highValuePeer.ID(), mediumValuePeer.ID(), lowValuePeer},
+		},
+		nil,
+		subnetsFor(0, 1),
+	)
+
+	// lowValuePeer's two connections take one slot, so the other one goes to mediumValuePeer.
+	trimmed := network.choosePeersToTrim(2, false)
+	assert.Equal(t, map[peer.ID]struct{}{lowValuePeer: {}, mediumValuePeer.ID(): {}}, trimmed)
+}
+
+func TestPeerStats_CountsPeersNotConnections(t *testing.T) {
+	ctx := t.Context()
+	localHost := newTestHost(t)
+
+	// An inbound peer with two connections.
+	connectDuplicateInboundPeer(t, ctx, localHost, 2)
+
+	// A peer with a connection in each direction.
+	mixedPeer := newTwinTestHosts(t, 2)
+	connectHosts(t, ctx, localHost, mixedPeer[0])
+	connectHosts(t, ctx, mixedPeer[1], localHost)
+	requireConnsToPeer(t, localHost, mixedPeer[0].ID(), 2)
+
+	// An outbound peer.
+	connectHosts(t, ctx, localHost, newTestHost(t))
+
+	in, out := connectionStats(localHost)
+	assert.Equal(t, 3, in, "inbound connections")
+	assert.Equal(t, 2, out, "outbound connections")
+
+	in, out = peerStats(localHost)
+	assert.Equal(t, 1, in, "inbound peers")
+	assert.Equal(t, 2, out, "outbound peers, including the one with connections both ways")
+}
+
+func TestAtInboundLimit_CountsPeersNotConnections(t *testing.T) {
+	ctx := t.Context()
+	localHost := newTestHost(t)
+	network := newTrimTestNetwork(localHost, nil, nil, commons.ZeroSubnets)
+	network.cfg.MaxPeers = 8 // inbound limit 4
+
+	// 4 inbound connections, from 2 peers.
+	for range 2 {
+		connectDuplicateInboundPeer(t, ctx, localHost, 2)
+	}
+	require.False(t, network.atInboundLimit())
+
+	// 2 more inbound peers reach the limit.
+	for range 2 {
+		connectHosts(t, ctx, newTestHost(t), localHost)
+	}
+	require.Eventually(t, func() bool {
+		return len(localHost.Network().Peers()) == 4
+	}, 5*time.Second, 10*time.Millisecond)
+	require.True(t, network.atInboundLimit())
+}
+
+func TestPeersTrimming_DuplicateConnectionsDoNotTriggerInboundTrim(t *testing.T) {
+	ctx := t.Context()
+	localHost := newTestHost(t)
+
+	// 4 inbound connections, from 2 peers: the inbound limit of MaxPeers 8 if connections counted.
+	inboundPeers := []peer.ID{
+		connectDuplicateInboundPeer(t, ctx, localHost, 2),
+		connectDuplicateInboundPeer(t, ctx, localHost, 2),
+	}
+
+	network := newTrimTestNetwork(
+		localHost,
+		&testTopicsController{
+			topics:       []string{"0"},
+			peersByTopic: map[string][]peer.ID{"0": inboundPeers},
+			allPeers:     inboundPeers,
+		},
+		nil,
+		subnetsFor(0),
+	)
+	network.ctx = ctx
+	network.cfg.MaxPeers = 8
+	network.setCurrentSubnets(subnetsFor(0))
+	network.trimmedRecently = ttl.New[peer.ID, struct{}](ctx, time.Minute, time.Minute)
+
+	// If connections counted, each round would trim inbound peers with a 1-in-5 chance; all 50
+	// rounds skip that with probability 0.8^50 ≈ 1e-5.
+	for range 50 {
+		network.peersTrimming()()
+	}
+	require.ElementsMatch(t, inboundPeers, localHost.Network().Peers())
+}
+
 func TestBuildPeerTrimScores_ComputesScoresForAllCandidates(t *testing.T) {
 	highValuePeer := peer.ID("high-value")
 	mediumValuePeer := peer.ID("medium-value")
@@ -411,12 +524,53 @@ func newTestHost(t *testing.T) host.Host {
 	return h
 }
 
+// newTwinTestHosts returns n hosts sharing one identity, so a connection from each of them is a
+// connection to the same peer.
+func newTwinTestHosts(t *testing.T, n int) []host.Host {
+	t.Helper()
+
+	key, _, err := crypto.GenerateEd25519Key(rand.Reader)
+	require.NoError(t, err)
+	hosts := make([]host.Host, n)
+	for i := range hosts {
+		h, err := libp2p.New(libp2p.Identity(key), libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))
+		require.NoError(t, err)
+		t.Cleanup(func() {
+			_ = h.Close()
+		})
+		hosts[i] = h
+	}
+	return hosts
+}
+
+// connectDuplicateInboundPeer connects a new peer to h over conns connections and returns its ID.
+func connectDuplicateInboundPeer(t *testing.T, ctx context.Context, h host.Host, conns int) peer.ID {
+	t.Helper()
+
+	twins := newTwinTestHosts(t, conns)
+	for _, twin := range twins {
+		connectHosts(t, ctx, twin, h)
+	}
+	requireConnsToPeer(t, h, twins[0].ID(), conns)
+	return twins[0].ID()
+}
+
 func connectHosts(t *testing.T, ctx context.Context, from host.Host, to host.Host) {
 	t.Helper()
 
 	require.NoError(t, from.Connect(ctx, peer.AddrInfo{ID: to.ID(), Addrs: to.Addrs()}))
 	require.Eventually(t, func() bool {
 		return len(from.Network().ConnsToPeer(to.ID())) > 0
+	}, 5*time.Second, 10*time.Millisecond)
+}
+
+// requireConnsToPeer waits until h has want connections to p; the dialed side registers a
+// connection shortly after the dialer.
+func requireConnsToPeer(t *testing.T, h host.Host, p peer.ID, want int) {
+	t.Helper()
+
+	require.Eventually(t, func() bool {
+		return len(h.Network().ConnsToPeer(p)) == want
 	}, 5*time.Second, 10*time.Millisecond)
 }
 
