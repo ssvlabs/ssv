@@ -168,8 +168,8 @@ github.com/sourcegraph/conc v0.3.0 h1:OQTbbt6P72L20UqAkXXuLOj79LfEanQ+YQFNpLA9yS
 github.com/sourcegraph/conc v0.3.0/go.mod h1:Sdozi7LEKbFPqYX2/J+iBAM6HpqSLTASQIKqDmF7Mt0=
 github.com/ssvlabs/eth2-key-manager v1.5.7-0.20260901124029-39a18877e131 h1:qafgob3ZWLi/m0ABHKYW+E3UCWaNF0NIwujUxb0fufs=
 github.com/ssvlabs/eth2-key-manager v1.5.7-0.20260901124029-39a18877e131/go.mod h1:tjzhmMzrc0Lzc/OMW1h9Mz8AhmKH7FQC/nFiMNJ0bd8=
-github.com/ssvlabs/go-eth2-client v0.6.31-0.20260831132123-66dd18fc8288 h1:OTiNcXOCVXpTNTR0x5IVnzYgXNUZzAQ8oC94KOMFkOg=
-github.com/ssvlabs/go-eth2-client v0.6.31-0.20260831132123-66dd18fc8288/go.mod h1:yhVnKAzIsFhtawbq6k/rA/Dy4vsPpu2Z2cGdQVrIjd0=
+github.com/ssvlabs/go-eth2-client v0.6.31-0.20261106202017-412c852ce393 h1:ROOTwWQQmkHYV9HCMX6tlAPRAU8Jb2OSqJiALk8E7Fg=
+github.com/ssvlabs/go-eth2-client v0.6.31-0.20261106202017-412c852ce393/go.mod h1:yhVnKAzIsFhtawbq6k/rA/Dy4vsPpu2Z2cGdQVrIjd0=
 github.com/ssvlabs/ssv-spec v1.2.3-0.20260924161701-0c82ee096544 h1:R3IaYBAWnuyImBScok23hqUaofQAwoTiErm0jXMH+RQ=
 github.com/ssvlabs/ssv-spec v1.2.3-0.20260924161701-0c82ee096544/go.mod h1:/fb7Okhw5vhldMlMhcXePMSgyBn6uCICqp5L3RtLcLw=
 github.com/stretchr/objx v0.5.3 h1:jmXUvGomnU1o3W/V5h2VEradbpJDwGrzugQQvL0POH4=

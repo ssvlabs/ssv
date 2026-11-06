@@ -174,9 +174,9 @@ func (gc *GoClient) computeAttestationDataRoot(
 // with a 404 (no matching aggregate).
 //
 // A cache hit only guarantees that *some* beacon node accepted the attestation. The
-// AggregateAttestation request below is routed to the single highest-scored client and does
-// not fail over on 4xx, so it can still 404 if that node hasn't ingested the attestation yet
-// (gossip backfill before the aggregation deadline makes this rare).
+// AggregateAttestation request below tries the highest-scored client first and moves on to the
+// others if it answers 404, so it only 404s if no node that answers has ingested the attestation
+// yet (gossip backfill before the aggregation deadline makes this rare).
 func (gc *GoClient) fetchVersionedAggregate(
 	ctx context.Context,
 	slot phase0.Slot,
