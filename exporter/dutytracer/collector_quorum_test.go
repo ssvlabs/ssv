@@ -12,7 +12,6 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/exporter/traces"
 	"github.com/ssvlabs/ssv/networkconfig"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/protocol/v2/types/ssvtestingutils"
@@ -97,8 +96,7 @@ func TestCollector_QuorumAfterFlush(t *testing.T) {
 		trace.addPostConsensusRole(attestationRoot, spectypes.BNRoleAttester)
 		trace.addPostConsensusRole(syncCommitteeRoot, spectypes.BNRoleSyncCommittee)
 		trace.flushPending()
-		// This is the critical call that our fix added!
-		collector.checkQuorumAfterFlush(logger, committeeID, slot, trace)
+		collector.checkQuorumAfterFlush(logger, trace)
 		trace.Unlock()
 
 		// Verify quorum detected IMMEDIATELY after flush
@@ -291,7 +289,7 @@ func TestCollector_MixedTimingQuorum(t *testing.T) {
 		trace.addPostConsensusRole(attestationRoot, spectypes.BNRoleAttester)
 		trace.addPostConsensusRole(syncCommitteeRoot, spectypes.BNRoleSyncCommittee)
 		trace.flushPending()
-		collector.checkQuorumAfterFlush(logger, committeeID, slot, trace)
+		collector.checkQuorumAfterFlush(logger, trace)
 		trace.Unlock()
 
 		// Still no quorum (only 2/3)
@@ -556,8 +554,9 @@ func TestCollector_checkAndPublishQuorumForRole(t *testing.T) {
 	listener := &mockDecidedListener{}
 	dutyStore := new(mockDutyTraceStore)
 	collector := New(logger, validators, nil, dutyStore, networkconfig.TestNetwork.Beacon, listener.OnDecided, nil)
+	root := phase0.Root{1}
 
-	t.Run("publishes once quorum is reached", func(t *testing.T) {
+	t.Run("publishes once quorum is reached for one root", func(t *testing.T) {
 		listener.Reset()
 
 		// Manually populate trace with signer data
@@ -567,16 +566,16 @@ func TestCollector_checkAndPublishQuorumForRole(t *testing.T) {
 		trace.Lock()
 		defer trace.Unlock()
 
-		// Add 3 signers to Attester bucket (simulating what flushPending does)
-		trace.Attester = []*traces.SignerData{
-			{Signer: operator1, ValidatorIdx: []phase0.ValidatorIndex{vIndex1}, ReceivedTime: 1000},
-			{Signer: operator2, ValidatorIdx: []phase0.ValidatorIndex{vIndex1}, ReceivedTime: 1001},
-			{Signer: operator3, ValidatorIdx: []phase0.ValidatorIndex{vIndex1}, ReceivedTime: 1002},
+		// 3 signers for one root, and one for another, which doesn't count toward it
+		for _, signer := range []spectypes.OperatorID{operator1, operator2, operator3} {
+			trace.addRootSigner(root, vIndex1, signer)
 		}
+		trace.addRootSigner(phase0.Root{0xff}, vIndex1, operator4)
 
 		threshold := uint64(3) // 4 operators, need 3 for quorum
 
-		require.True(t, collector.checkAndPublishQuorumForRole(trace, spectypes.BNRoleAttester, slot, vIndex1, phase0.Root{}, threshold))
+		require.False(t, collector.checkAndPublishQuorumForRole(trace, spectypes.BNRoleAttester, vIndex1, phase0.Root{0xff}, threshold))
+		require.True(t, collector.checkAndPublishQuorumForRole(trace, spectypes.BNRoleAttester, vIndex1, root, threshold))
 
 		calls := listener.GetCalls()
 		require.Len(t, calls, 1)
@@ -600,7 +599,7 @@ func TestCollector_checkAndPublishQuorumForRole(t *testing.T) {
 		threshold := uint64(3)
 
 		// The previous subtest already published this quorum.
-		require.False(t, collector.checkAndPublishQuorumForRole(trace, spectypes.BNRoleAttester, slot, vIndex1, phase0.Root{}, threshold))
+		require.False(t, collector.checkAndPublishQuorumForRole(trace, spectypes.BNRoleAttester, vIndex1, root, threshold))
 		require.Empty(t, listener.GetCalls())
 	})
 }

@@ -8,6 +8,7 @@ import (
 	ps_pb "github.com/libp2p/go-libp2p-pubsub/pb"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
 
@@ -186,18 +187,25 @@ func appendIWant(fields []zap.Field, iwant []*ps_pb.TraceEvent_ControlIWantMeta)
 // validation queue is full or too many validations are in flight. Nothing else reports these drops.
 type validationDropTracer struct {
 	dropped metric.Int64Counter
+	// addOptsByReason holds the counted reasons' attributes, built once so counting a drop allocates none.
+	addOptsByReason map[string][]metric.AddOption
 }
 
 var _ pubsub.RawTracer = (*validationDropTracer)(nil)
 
 func newValidationDropTracer(dropped metric.Int64Counter) *validationDropTracer {
-	return &validationDropTracer{dropped: dropped}
+	addOptsByReason := make(map[string][]metric.AddOption)
+	for _, reason := range []string{pubsub.RejectValidationQueueFull, pubsub.RejectValidationThrottled} {
+		addOptsByReason[reason] = []metric.AddOption{
+			metric.WithAttributeSet(attribute.NewSet(messageDropReasonAttribute(reason))),
+		}
+	}
+	return &validationDropTracer{dropped: dropped, addOptsByReason: addOptsByReason}
 }
 
 func (t *validationDropTracer) RejectMessage(_ *pubsub.Message, reason string) {
-	switch reason {
-	case pubsub.RejectValidationQueueFull, pubsub.RejectValidationThrottled:
-		t.dropped.Add(context.Background(), 1, metric.WithAttributes(messageDropReasonAttribute(reason)))
+	if opts, counted := t.addOptsByReason[reason]; counted {
+		t.dropped.Add(context.Background(), 1, opts...)
 	}
 }
 

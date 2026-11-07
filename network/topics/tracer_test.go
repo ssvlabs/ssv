@@ -10,11 +10,13 @@ import (
 	libp2pcrypto "github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/attribute"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
-	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
+
+	"github.com/ssvlabs/ssv/observability/metrics/metricstest"
 )
 
 // TestPSTracer_RPCEvents locks the trace format of RPC events — in particular the payload message
@@ -113,22 +115,10 @@ func TestValidationDropTracer_CountsOnlyPreValidationDrops(t *testing.T) {
 	tracer.RejectMessage(nil, pubsub.RejectValidationFailed)
 	tracer.RejectMessage(nil, pubsub.RejectValidationIgnored)
 
-	var rm metricdata.ResourceMetrics
-	require.NoError(t, reader.Collect(t.Context(), &rm))
-
-	got := make(map[string]int64)
-	for _, sm := range rm.ScopeMetrics {
-		for _, m := range sm.Metrics {
-			sum, ok := m.Data.(metricdata.Sum[int64])
-			require.True(t, ok, "expected Sum[int64], got %T", m.Data)
-			for _, dp := range sum.DataPoints {
-				reason, _ := dp.Attributes.Value("ssv.p2p.message.drop_reason")
-				got[reason.AsString()] += dp.Value
-			}
-		}
+	dropped := func(attrs ...attribute.KeyValue) int64 {
+		return metricstest.CounterValue(t, reader, "test_validation_dropped", attrs...)
 	}
-	require.Equal(t, map[string]int64{
-		pubsub.RejectValidationQueueFull: 2,
-		pubsub.RejectValidationThrottled: 1,
-	}, got)
+	require.Equal(t, int64(2), dropped(messageDropReasonAttribute(pubsub.RejectValidationQueueFull)))
+	require.Equal(t, int64(1), dropped(messageDropReasonAttribute(pubsub.RejectValidationThrottled)))
+	require.Equal(t, int64(3), dropped(), "other reasons aren't counted")
 }

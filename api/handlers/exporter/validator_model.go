@@ -99,7 +99,7 @@ type ValidatorTrace struct {
 	Pre []Message `json:"pre"`
 	// Post lists post-consensus partial signature messages.
 	Post []Message `json:"post"`
-	// Proposal is the hex-encoded proposal payload for this duty, if available.
+	// Proposal is the hex-encoded value of the duty's highest-round proposal or decided message, if any.
 	Proposal string `json:"proposalData,omitempty" format:"hex"`
 }
 

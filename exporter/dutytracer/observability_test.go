@@ -15,6 +15,7 @@ import (
 	"github.com/ssvlabs/ssv/exporter/traces"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability"
+	"github.com/ssvlabs/ssv/observability/metrics/metricstest"
 	"github.com/ssvlabs/ssv/protocol/v2/types/ssvtestingutils"
 	"github.com/ssvlabs/ssv/registry/storage"
 	registrystoragemocks "github.com/ssvlabs/ssv/registry/storage/mocks"
@@ -27,14 +28,14 @@ func TestCollector_RecordsFailedMessages(t *testing.T) {
 		observability.ValidatorMsgTypeAttribute(spectypes.SSVPartialSignatureMsgType),
 		observability.RunnerRoleAttribute(spectypes.RoleCommittee),
 	}
-	before := counterValue(t, "ssv.dutytracer.messages.failed", attrs...)
+	before := metricstest.CounterValue(t, pkgTestMetricReader, "ssv.dutytracer.messages.failed", attrs...)
 
 	// A partial-signature message without any signatures can't be traced.
 	data, err := (&spectypes.PartialSignatureMessages{Slot: 1}).Encode()
 	require.NoError(t, err)
 	require.Error(t, tracer.Collect(t.Context(), buildPartialSigMessage(identifier, data), dummyVerify))
 
-	assert.Equal(t, before+1, counterValue(t, "ssv.dutytracer.messages.failed", attrs...))
+	assert.Equal(t, before+1, metricstest.CounterValue(t, pkgTestMetricReader, "ssv.dutytracer.messages.failed", attrs...))
 }
 
 func TestCollector_RecordsDroppedPendingSignatures(t *testing.T) {
@@ -49,7 +50,7 @@ func TestCollector_RecordsDroppedPendingSignatures(t *testing.T) {
 	validators.EXPECT().Committee(committeeID).Return(committee, true).AnyTimes()
 
 	roleAttr := observability.RunnerRoleAttribute(spectypes.RoleCommittee)
-	before := counterValue(t, "ssv.dutytracer.pending_signatures.dropped", roleAttr)
+	before := metricstest.CounterValue(t, pkgTestMetricReader, "ssv.dutytracer.pending_signatures.dropped", roleAttr)
 
 	// Post-consensus signatures arrive, but no proposal or decided ever does, so their root stays unknown.
 	for _, signer := range []spectypes.OperatorID{1, 2} {
@@ -58,7 +59,7 @@ func TestCollector_RecordsDroppedPendingSignatures(t *testing.T) {
 	}
 	tracer.evictCommitteeTraces(slot)
 
-	assert.Equal(t, before+2, counterValue(t, "ssv.dutytracer.pending_signatures.dropped", roleAttr))
+	assert.Equal(t, before+2, metricstest.CounterValue(t, pkgTestMetricReader, "ssv.dutytracer.pending_signatures.dropped", roleAttr))
 }
 
 func TestCollector_RecordsLateUnclassifiedSignatures(t *testing.T) {
@@ -75,13 +76,13 @@ func TestCollector_RecordsLateUnclassifiedSignatures(t *testing.T) {
 	tracer.lastEvictedSlot.Store(uint64(slot))
 
 	roleAttr := observability.RunnerRoleAttribute(spectypes.RoleCommittee)
-	before := counterValue(t, "ssv.dutytracer.pending_signatures.dropped", roleAttr)
+	before := metricstest.CounterValue(t, pkgTestMetricReader, "ssv.dutytracer.pending_signatures.dropped", roleAttr)
 
 	// The stored trace has no proposal to derive role roots from, so the signature can't be classified.
 	data := encodePartialSigMessages(slot, 42, 1, phase0.Root{7})
 	require.NoError(t, tracer.Collect(t.Context(), buildPartialSigMessage(identifier, data), dummyVerify))
 
-	assert.Equal(t, before+1, counterValue(t, "ssv.dutytracer.pending_signatures.dropped", roleAttr))
+	assert.Equal(t, before+1, metricstest.CounterValue(t, pkgTestMetricReader, "ssv.dutytracer.pending_signatures.dropped", roleAttr))
 }
 
 func TestCollector_RecordsLostTraces(t *testing.T) {
@@ -92,9 +93,9 @@ func TestCollector_RecordsLostTraces(t *testing.T) {
 	require.NoError(t, err)
 
 	kindAttr := attribute.String("ssv.dutytracer.trace.kind", traceKindCommittee)
-	before := counterValue(t, "ssv.dutytracer.traces.lost", kindAttr)
+	before := metricstest.CounterValue(t, pkgTestMetricReader, "ssv.dutytracer.traces.lost", kindAttr)
 
 	tracer.evictCommitteeTraces(slot)
 
-	assert.Equal(t, before+1, counterValue(t, "ssv.dutytracer.traces.lost", kindAttr))
+	assert.Equal(t, before+1, metricstest.CounterValue(t, pkgTestMetricReader, "ssv.dutytracer.traces.lost", kindAttr))
 }

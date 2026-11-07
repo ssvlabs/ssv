@@ -10,6 +10,7 @@ import (
 
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/observability/metrics"
+	"github.com/ssvlabs/ssv/protocol/v2/queue/worker"
 )
 
 const (
@@ -77,11 +78,20 @@ var (
 			metric.WithDescription("total number of messages dropped because the exporter message queue was full")))
 
 	exporterQueueFillGauge = metrics.New(
-		meter.Int64Gauge(
+		meter.Int64ObservableGauge(
 			observability.InstrumentName(observabilityNamespace, "exporter.queue.fill"),
 			metric.WithUnit("{message}"),
 			metric.WithDescription("current number of messages buffered in the exporter message queue")))
 )
+
+// observeExporterQueueFill registers a callback reporting the exporter message queue's size at collection time,
+// so the gauge also shows the queue draining. The caller unregisters it.
+func observeExporterQueueFill(queue *worker.Worker) (metric.Registration, error) {
+	return meter.RegisterCallback(func(_ context.Context, observer metric.Observer) error {
+		observer.ObserveInt64(exporterQueueFillGauge, int64(queue.Size()))
+		return nil
+	}, exporterQueueFillGauge)
+}
 
 func validatorStatusAttribute(value validatorStatus) attribute.KeyValue {
 	attrName := fmt.Sprintf("%s.status", observabilityNamespace)

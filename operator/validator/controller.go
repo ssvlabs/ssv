@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -168,8 +167,8 @@ type Controller struct {
 	historySyncBatchSize int
 	messageValidator     validation.MessageValidator
 
-	// messageWorkerFillSampleTick samples the exporter queue fill gauge, like messageRouter does for its buffer.
-	messageWorkerFillSampleTick atomic.Uint64
+	// messageWorkerFillReg reports the exporter queue fill gauge in exporter mode; Stop unregisters it.
+	messageWorkerFillReg metric.Registration
 
 	// committeesObservers is a cache of initialized committeeObserver instances
 	committeesObservers      *ttlcache.Cache[spectypes.MessageID, *validator.CommitteeObserver]
@@ -310,8 +309,8 @@ func NewController(logger *zap.Logger, options ControllerOptions) *Controller {
 	return ctrl
 }
 
-// Stop releases the controller's background goroutines that are not tied to its context — the
-// ttlcache cleanup loops started in NewController, which otherwise run until the process exits.
+// Stop releases what isn't tied to the controller's context: the ttlcache cleanup loops started in
+// NewController, which otherwise run until the process exits, and the exporter queue fill gauge's callback.
 // Context-bound goroutines (e.g. the message worker) stop via the controller's ctx instead.
 func (c *Controller) Stop() {
 	c.committeesObservers.Stop()
@@ -323,6 +322,9 @@ func (c *Controller) Stop() {
 	c.domainCache.Stop()
 	c.beaconVoteRoots.Stop()
 	c.aggregatorCommRoots.Stop()
+	if c.messageWorkerFillReg != nil {
+		_ = c.messageWorkerFillReg.Unregister()
+	}
 }
 
 func (c *Controller) IndicesChangeChan() chan struct{} {
@@ -371,9 +373,6 @@ func (c *Controller) enqueueExporterMessage(m *queue.SSVMessage) {
 		))
 		c.logger.Warn("exporter message queue is full, dropping message",
 			fields.MessageType(m.MsgType), fields.RunnerRole(m.MsgID.GetRoleType()))
-	}
-	if c.messageWorkerFillSampleTick.Add(1)%bufferFillSampleRate == 0 {
-		exporterQueueFillGauge.Record(c.ctx, int64(c.messageWorker.Size()))
 	}
 }
 
@@ -645,6 +644,14 @@ func (c *Controller) StartNetworkHandlers() {
 		go c.handleRouterMessages()
 	}
 	c.messageWorker.UseHandler(c.handleWorkerMessages)
+	if c.validatorCommonOpts.ExporterMode {
+		// It fails only on instrument misuse, and the gauge is optional: log rather than fail.
+		if reg, err := observeExporterQueueFill(c.messageWorker); err != nil {
+			c.logger.Warn("could not register exporter queue fill gauge", zap.Error(err))
+		} else {
+			c.messageWorkerFillReg = reg
+		}
+	}
 }
 
 // startEligibleValidators starts validators that transitioned to eligible to start due to a metadata update.
