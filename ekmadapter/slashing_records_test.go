@@ -37,6 +37,8 @@ import (
 
 const slotsPerEpoch = 32
 
+func slotOf(e phase0.Epoch) phase0.Slot { return phase0.Slot(e) * slotsPerEpoch }
+
 // fakeBeacon is an ekm.BeaconNetwork whose wall clock the test controls.
 type fakeBeacon struct {
 	mu   sync.Mutex
@@ -76,7 +78,6 @@ func (f *fakeBeacon) ForkAtVersion(spec.DataVersion) (phase0.Fork, bool) { retur
 var initBLSOnce sync.Once
 
 type fixture struct {
-	db     *badgerdb.DB
 	km     *ekm.LocalKeyManager
 	beacon *fakeBeacon
 	pk     phase0.BLSPubKey
@@ -111,7 +112,7 @@ func newFixture(t *testing.T, startSlot phase0.Slot) *fixture {
 	// Initial registration, in an earlier block.
 	require.NoError(t, km.AddShare(t.Context(), enc, pk))
 
-	return &fixture{db: db, km: km, beacon: beacon, pk: pk, enc: enc}
+	return &fixture{km: km, beacon: beacon, pk: pk, enc: enc}
 }
 
 func attData(slot phase0.Slot, source, target phase0.Epoch, root byte) *phase0.AttestationData {
@@ -144,13 +145,12 @@ func (f *fixture) signBlock(ctx context.Context, slot phase0.Slot, parent byte) 
 	return err
 }
 
-// TestRemoveAndReAddInSameTxn_KeepsHigherAttestationRecord: a block carrying ValidatorRemoved +
-// ValidatorAdded for the same share, processed in one txn across an epoch boundary while the
-// validator attests, leaves the record at the signed target and refuses the double vote.
-func TestRemoveAndReAddInSameTxn_KeepsHigherAttestationRecord(t *testing.T) {
+// TestRemoveAndReAdd_KeepsHigherAttestationRecord: a block carrying ValidatorRemoved +
+// ValidatorAdded for the same share, processed across an epoch boundary while the validator
+// attests, leaves the record at the signed target and refuses the double vote.
+func TestRemoveAndReAdd_KeepsHigherAttestationRecord(t *testing.T) {
 	ctx := t.Context()
 	const E = phase0.Epoch(1000)
-	slotOf := func(e phase0.Epoch) phase0.Slot { return phase0.Slot(e) * slotsPerEpoch }
 
 	f := newFixture(t, slotOf(E-2)) // registered at epoch E-2 → minimal record (E-3, E-2)
 
@@ -159,12 +159,10 @@ func TestRemoveAndReAddInSameTxn_KeepsHigherAttestationRecord(t *testing.T) {
 	require.NoError(t, f.signAttestation(ctx, attData(slotOf(E-1), E-2, E-1, 0xA1)))
 
 	// Epoch E: an EL block carries ValidatorRemoved + ValidatorAdded for this share (same keyshares
-	// re-registered). The event handler processes the whole block inside one txn.
+	// re-registered).
 	f.beacon.set(slotOf(E))
-	txn := f.db.Begin()
-	defer txn.Discard()
 	require.NoError(t, f.km.RemoveShare(ctx, f.pk))
-	require.NoError(t, f.km.AddShare(ctx, f.enc, f.pk)) // bump → (E-1, E), written immediately
+	require.NoError(t, f.km.AddShare(ctx, f.enc, f.pk)) // bump → (E-1, E)
 
 	// The rest of the block takes a while to process (e.g. many slow remote-signer imports); the
 	// validator is still running and attests in epoch E+1.
@@ -172,21 +170,18 @@ func TestRemoveAndReAddInSameTxn_KeepsHigherAttestationRecord(t *testing.T) {
 	require.NoError(t, f.signAttestation(ctx, attData(slotOf(E+1), E, E+1, 0xB1)),
 		"first attestation for target E+1 must sign")
 
-	// The block txn never touched the record, so it commits cleanly and leaves it alone.
-	require.NoError(t, txn.Commit())
-
 	highest, found, err := f.km.RetrieveHighestAttestation(f.pk)
 	require.NoError(t, err)
 	require.True(t, found)
 	require.Equal(t, E+1, highest.Target.Epoch, "record must stay at the signed target")
 
 	// Second attestation for the SAME target epoch with a different root: a slashable double vote.
-	require.Error(t, f.signAttestation(ctx, attData(slotOf(E+1), E, E+1, 0xB2)), "double vote must be refused")
+	require.ErrorContains(t, f.signAttestation(ctx, attData(slotOf(E+1), E, E+1, 0xB2)), "slashable", "double vote must be refused")
 }
 
-// TestRemoveAndReAddInSameTxn_KeepsHigherProposalRecord: same shape on the proposal side, where a
-// single slot boundary (12s) can pass inside the block's processing.
-func TestRemoveAndReAddInSameTxn_KeepsHigherProposalRecord(t *testing.T) {
+// TestRemoveAndReAdd_KeepsHigherProposalRecord: same shape on the proposal side, across a single
+// slot boundary.
+func TestRemoveAndReAdd_KeepsHigherProposalRecord(t *testing.T) {
 	ctx := t.Context()
 	const S = phase0.Slot(32_000)
 
@@ -196,18 +191,14 @@ func TestRemoveAndReAddInSameTxn_KeepsHigherProposalRecord(t *testing.T) {
 	f.beacon.set(S - 1)
 	require.NoError(t, f.signBlock(ctx, S-1, 0x01))
 
-	// Slot S: block with ValidatorRemoved + ValidatorAdded in one txn.
+	// Slot S: block with ValidatorRemoved + ValidatorAdded.
 	f.beacon.set(S)
-	txn := f.db.Begin()
-	defer txn.Discard()
 	require.NoError(t, f.km.RemoveShare(ctx, f.pk))
-	require.NoError(t, f.km.AddShare(ctx, f.enc, f.pk)) // bump → S, written immediately
+	require.NoError(t, f.km.AddShare(ctx, f.enc, f.pk)) // bump → S
 
-	// Next slot arrives before the txn commits; validator proposes at S+1.
+	// Next slot arrives while the block is still being processed; validator proposes at S+1.
 	f.beacon.set(S + 1)
 	require.NoError(t, f.signBlock(ctx, S+1, 0x02), "first block for S+1 must sign")
-
-	require.NoError(t, txn.Commit())
 
 	highest, found, err := f.km.RetrieveHighestProposal(f.pk)
 	require.NoError(t, err)
@@ -215,32 +206,76 @@ func TestRemoveAndReAddInSameTxn_KeepsHigherProposalRecord(t *testing.T) {
 	require.Equal(t, S+1, highest, "record must stay at the signed slot")
 
 	// A second, different block for S+1: a slashable double proposal.
-	require.Error(t, f.signBlock(ctx, S+1, 0x03), "double proposal must be refused")
+	require.ErrorContains(t, f.signBlock(ctx, S+1, 0x03), "slashable", "double proposal must be refused")
 }
 
-// TestBumpOnExistingRecord_KeepsHigherRecord covers the ClusterReactivated-style bump on an existing
-// record: the bump neither lowers the record nor conflicts.
+// TestRemoveAndReAdd_ClockSteppedBack_RefusesDoubleVote: the wall clock steps back an epoch after the
+// validator attests, and then the share is removed and re-added. The re-add's bump alone would only
+// cover the earlier epoch, so the double vote is refused only if RemoveShare kept the record.
+func TestRemoveAndReAdd_ClockSteppedBack_RefusesDoubleVote(t *testing.T) {
+	ctx := t.Context()
+	const E = phase0.Epoch(1000)
+
+	f := newFixture(t, slotOf(E-1))
+	f.beacon.set(slotOf(E))
+	require.NoError(t, f.signAttestation(ctx, attData(slotOf(E), E-1, E, 0xA1)))
+
+	f.beacon.set(slotOf(E - 1))
+	require.NoError(t, f.km.RemoveShare(ctx, f.pk))
+	require.NoError(t, f.km.AddShare(ctx, f.enc, f.pk)) // bump's minimal record: (E-2, E-1)
+
+	highest, found, err := f.km.RetrieveHighestAttestation(f.pk)
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Equal(t, E, highest.Target.Epoch, "record must stay at the signed target")
+	require.ErrorContains(t, f.signAttestation(ctx, attData(slotOf(E), E-1, E, 0xA2)), "slashable", "double vote must be refused")
+}
+
+// TestRemoveAndReAdd_ClockSteppedBack_RefusesDoubleProposal: the proposal-side counterpart, with the
+// wall clock stepping back a slot.
+func TestRemoveAndReAdd_ClockSteppedBack_RefusesDoubleProposal(t *testing.T) {
+	ctx := t.Context()
+	const S = phase0.Slot(32_000)
+
+	f := newFixture(t, S-1)
+	f.beacon.set(S)
+	require.NoError(t, f.signBlock(ctx, S, 0x01))
+
+	f.beacon.set(S - 1)
+	require.NoError(t, f.km.RemoveShare(ctx, f.pk))
+	require.NoError(t, f.km.AddShare(ctx, f.enc, f.pk)) // bump's minimal record: S-1
+
+	highest, found, err := f.km.RetrieveHighestProposal(f.pk)
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Equal(t, S, highest, "record must stay at the signed slot")
+	require.ErrorContains(t, f.signBlock(ctx, S, 0x02), "slashable", "double proposal must be refused")
+}
+
+// TestBumpOnExistingRecord_KeepsHigherRecord covers the ClusterReactivated-style bump on existing
+// records above the bump's minimal ones: the wall clock steps back an epoch after the validator
+// attests and proposes. The bump must leave both records as they are.
 func TestBumpOnExistingRecord_KeepsHigherRecord(t *testing.T) {
 	ctx := t.Context()
 	const E = phase0.Epoch(1000)
-	slotOf := func(e phase0.Epoch) phase0.Slot { return phase0.Slot(e) * slotsPerEpoch }
 
-	f := newFixture(t, slotOf(E-2))
-	f.beacon.set(slotOf(E - 1))
-	require.NoError(t, f.signAttestation(ctx, attData(slotOf(E-1), E-2, E-1, 0xA1)))
-
+	f := newFixture(t, slotOf(E-1))
 	f.beacon.set(slotOf(E))
-	txn := f.db.Begin()
-	defer txn.Discard()
-	require.NoError(t, f.km.BumpSlashingProtection(f.pk)) // reads (E-2, E-1), writes (E-1, E)
+	require.NoError(t, f.signAttestation(ctx, attData(slotOf(E), E-1, E, 0xA1)))
+	require.NoError(t, f.signBlock(ctx, slotOf(E), 0x01))
 
-	f.beacon.set(slotOf(E + 1))
-	require.NoError(t, f.signAttestation(ctx, attData(slotOf(E+1), E, E+1, 0xB1)))
+	f.beacon.set(slotOf(E - 1))
+	require.NoError(t, f.km.BumpSlashingProtection(f.pk)) // minimal records: (E-2, E-1) and slotOf(E-1)
 
-	require.NoError(t, txn.Commit(), "the bump must not make the block txn conflict")
-
-	highest, _, err := f.km.RetrieveHighestAttestation(f.pk)
+	highestAtt, found, err := f.km.RetrieveHighestAttestation(f.pk)
 	require.NoError(t, err)
-	require.Equal(t, E+1, highest.Target.Epoch)
-	require.Error(t, f.signAttestation(ctx, attData(slotOf(E+1), E, E+1, 0xB2)), "double vote must be refused")
+	require.True(t, found)
+	require.Equal(t, E, highestAtt.Target.Epoch, "attestation record must stay at the signed target")
+	highestProp, found, err := f.km.RetrieveHighestProposal(f.pk)
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Equal(t, slotOf(E), highestProp, "proposal record must stay at the signed slot")
+
+	require.ErrorContains(t, f.signAttestation(ctx, attData(slotOf(E), E-1, E, 0xA2)), "slashable", "double vote must be refused")
+	require.ErrorContains(t, f.signBlock(ctx, slotOf(E), 0x02), "slashable", "double proposal must be refused")
 }

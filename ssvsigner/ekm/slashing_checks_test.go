@@ -37,6 +37,10 @@ import (
 // Too short a window can only make a test miss a missing lock, never fail a correct implementation.
 const raceWindow = 250 * time.Millisecond
 
+// hangTimeout bounds a wait that only a broken implementation can make endless, so that the test
+// fails instead of hanging until go test's -timeout.
+const hangTimeout = 5 * time.Second
+
 func TestSignBeaconObject_RefusesMismatchedDomainType(t *testing.T) {
 	ctx := t.Context()
 	lkm, pk := newLocalKeyManagerWithShare(t)
@@ -265,7 +269,13 @@ func requireBumpExcludesSigning(t *testing.T, km KeyManager, store *gatedStorage
 	})
 	bumpErr := make(chan error, 1)
 	go func() { bumpErr <- km.BumpSlashingProtection(pk) }()
-	<-p.parked
+	select {
+	case <-p.parked:
+	case err := <-bumpErr:
+		require.FailNow(t, "the bump returned without reading the record through the gated store", "bump error: %v", err)
+	case <-time.After(hangTimeout):
+		require.FailNow(t, "the bump didn't read the record through the gated store within "+hangTimeout.String())
+	}
 
 	// Sign while the bump is parked. With the bump's lock in place, the signing waits for the bump.
 	var signErr error
@@ -280,8 +290,8 @@ func requireBumpExcludesSigning(t *testing.T, km KeyManager, store *gatedStorage
 	}
 	p.release()
 
-	require.NoError(t, <-bumpErr)
-	<-signed
+	require.NoError(t, recvWithin(t, bumpErr, "the bump"))
+	recvWithin(t, signed, "the signing")
 	require.NoError(t, signErr, "the first signature must go through")
 	store.arm(nil)
 
@@ -448,4 +458,17 @@ func (p *parker) wait() {
 
 func (p *parker) release() {
 	p.releaseOnce.Do(func() { close(p.released) })
+}
+
+// recvWithin receives from ch, failing the test if nothing arrives within hangTimeout.
+func recvWithin[T any](t *testing.T, ch <-chan T, what string) T {
+	t.Helper()
+	select {
+	case v := <-ch:
+		return v
+	case <-time.After(hangTimeout):
+		require.FailNow(t, what+" didn't finish within "+hangTimeout.String())
+	}
+	var zero T
+	return zero
 }

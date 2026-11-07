@@ -362,11 +362,11 @@ func (km *LocalKeyManager) AddShare(
 
 	// walletLock is already held, so bump through the protector: km.BumpSlashingProtection would
 	// take walletLock again and deadlock.
-	if err := km.slashingProtector.BumpSlashingProtection(phase0.BLSPubKey(sharePrivKey.GetPublicKey().Serialize())); err != nil {
+	if err := km.slashingProtector.BumpSlashingProtection(pubKey); err != nil {
 		return fmt.Errorf("could not bump slashing protection: %w", err)
 	}
 
-	acc, err := km.wallet.AccountByPublicKey(sharePrivKey.GetPublicKey().SerializeToHexStr())
+	acc, err := km.wallet.AccountByPublicKey(hex.EncodeToString(pubKey[:]))
 	if err != nil && err.Error() != "account not found" {
 		return fmt.Errorf("could not check share existence: %w", err)
 	}
