@@ -143,6 +143,7 @@ func NewPubSub(
 		pubsub.WithGossipSubParams(params.GossipSubParams()),
 		pubsub.WithMessageSignaturePolicy(pubsub.StrictNoSign),
 		pubsub.WithMaxMessageSize(validation.MaxEncodedMsgSize),
+		pubsub.WithRawTracer(newValidationDropTracer(validationDroppedCounter)),
 		// pubsub.WithPeerFilter(func(pid peer.ID, topic string) bool {
 		//	logger.Debug("pubsubTrace: filtering peer", zap.String("id", pid.String()), zap.String("topic", topic))
 		//	return true

@@ -34,7 +34,17 @@ var (
 			observability.InstrumentName(observabilityNamespace, "msg_id_buffer_fallback"),
 			metric.WithUnit("{event}"),
 			metric.WithDescription("total number of msg_id add operations processed synchronously because the async buffer was full")))
+
+	validationDroppedCounter = metrics.New(
+		meter.Int64Counter(
+			observability.InstrumentName(observabilityNamespace, "validation.dropped"),
+			metric.WithUnit("{message}"),
+			metric.WithDescription("total number of messages gossipsub dropped before validation because its validation queue was full or throttled")))
 )
+
+func messageDropReasonAttribute(reason string) attribute.KeyValue {
+	return attribute.String("ssv.p2p.message.drop_reason", reason)
+}
 
 func messageTopicAttribute(value string) attribute.KeyValue {
 	return attribute.String("ssv.p2p.message.topic", value)

@@ -20,6 +20,7 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/attribute"
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -33,7 +34,9 @@ import (
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/observability/log"
+	"github.com/ssvlabs/ssv/observability/metrics/metricstest"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/duties"
 	"github.com/ssvlabs/ssv/operator/storage"
@@ -2021,4 +2024,48 @@ func TestHandleRouterMessages_LogsOwnValidatorDrop(t *testing.T) {
 	fieldsByKey := entries[0].ContextMap()
 	require.EqualValues(t, 42, fieldsByKey["slot"], "partial-sig drops carry the slot")
 	require.EqualValues(t, 2, fieldsByKey["signer"])
+}
+
+func TestController_ExporterQueueFillGaugeReadsQueueSize(t *testing.T) {
+	logger := log.TestLogger(t)
+	exporterQueue := worker.NewWorker(logger, &worker.Config{Ctx: t.Context(), WorkersCount: 0, Buffer: 2})
+	reg, err := observeExporterQueueFill(exporterQueue)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, reg.Unregister()) })
+
+	fill := func() int64 {
+		value, ok := metricstest.GaugeValue(t, pkgTestMetricReader, "ssv.validator.exporter.queue.fill")
+		require.True(t, ok)
+		return value
+	}
+	require.Zero(t, fill())
+	require.True(t, exporterQueue.TryEnqueue(&queue.SSVMessage{}))
+	require.Equal(t, int64(1), fill())
+}
+
+func TestController_EnqueueExporterMessage_CountsDropsWhenQueueIsFull(t *testing.T) {
+	logger := log.TestLogger(t)
+	// No workers drain the queue, so its single slot stays occupied after the first message.
+	c := &Controller{
+		ctx:           t.Context(),
+		logger:        logger,
+		messageWorker: worker.NewWorker(logger, &worker.Config{Ctx: t.Context(), WorkersCount: 0, Buffer: 1}),
+	}
+	msg := &queue.SSVMessage{
+		SSVMessage: &spectypes.SSVMessage{
+			MsgType: spectypes.SSVConsensusMsgType,
+			MsgID:   ssvtestingutils.NewMsgID(networkconfig.TestNetwork.DomainType, []byte{1, 1, 1, 1, 1}, spectypes.RoleCommittee),
+		},
+	}
+	attrs := []attribute.KeyValue{
+		observability.ValidatorMsgTypeAttribute(spectypes.SSVConsensusMsgType),
+		observability.RunnerRoleAttribute(spectypes.RoleCommittee),
+	}
+	before := metricstest.CounterValue(t, pkgTestMetricReader, "ssv.validator.exporter.queue.messages.dropped", attrs...)
+
+	c.enqueueExporterMessage(msg)
+	c.enqueueExporterMessage(msg)
+
+	require.Equal(t, 1, c.messageWorker.Size())
+	require.Equal(t, before+1, metricstest.CounterValue(t, pkgTestMetricReader, "ssv.validator.exporter.queue.messages.dropped", attrs...))
 }

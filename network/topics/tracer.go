@@ -1,11 +1,15 @@
 package topics
 
 import (
+	"context"
 	"encoding/hex"
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	ps_pb "github.com/libp2p/go-libp2p-pubsub/pb"
 	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/libp2p/go-libp2p/core/protocol"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/observability/log"
@@ -178,3 +182,45 @@ func appendIWant(fields []zap.Field, iwant []*ps_pb.TraceEvent_ControlIWantMeta)
 	}
 	return fields
 }
+
+// validationDropTracer counts messages gossipsub drops before message validation runs, because its
+// validation queue is full or too many validations are in flight. Nothing else reports these drops.
+type validationDropTracer struct {
+	dropped metric.Int64Counter
+	// addOptsByReason holds the counted reasons' attributes, built once so counting a drop allocates none.
+	addOptsByReason map[string][]metric.AddOption
+}
+
+var _ pubsub.RawTracer = (*validationDropTracer)(nil)
+
+func newValidationDropTracer(dropped metric.Int64Counter) *validationDropTracer {
+	addOptsByReason := make(map[string][]metric.AddOption)
+	for _, reason := range []string{pubsub.RejectValidationQueueFull, pubsub.RejectValidationThrottled} {
+		addOptsByReason[reason] = []metric.AddOption{
+			metric.WithAttributeSet(attribute.NewSet(messageDropReasonAttribute(reason))),
+		}
+	}
+	return &validationDropTracer{dropped: dropped, addOptsByReason: addOptsByReason}
+}
+
+func (t *validationDropTracer) RejectMessage(_ *pubsub.Message, reason string) {
+	if opts, counted := t.addOptsByReason[reason]; counted {
+		t.dropped.Add(context.Background(), 1, opts...)
+	}
+}
+
+// The other RawTracer events aren't needed.
+func (t *validationDropTracer) AddPeer(peer.ID, protocol.ID)         {}
+func (t *validationDropTracer) RemovePeer(peer.ID)                   {}
+func (t *validationDropTracer) Join(string)                          {}
+func (t *validationDropTracer) Leave(string)                         {}
+func (t *validationDropTracer) Graft(peer.ID, string)                {}
+func (t *validationDropTracer) Prune(peer.ID, string)                {}
+func (t *validationDropTracer) ValidateMessage(*pubsub.Message)      {}
+func (t *validationDropTracer) DeliverMessage(*pubsub.Message)       {}
+func (t *validationDropTracer) DuplicateMessage(*pubsub.Message)     {}
+func (t *validationDropTracer) ThrottlePeer(peer.ID)                 {}
+func (t *validationDropTracer) RecvRPC(*pubsub.RPC)                  {}
+func (t *validationDropTracer) SendRPC(*pubsub.RPC, peer.ID)         {}
+func (t *validationDropTracer) DropRPC(*pubsub.RPC, peer.ID)         {}
+func (t *validationDropTracer) UndeliverableMessage(*pubsub.Message) {}

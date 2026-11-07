@@ -13,6 +13,7 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
@@ -166,6 +167,9 @@ type Controller struct {
 	historySyncBatchSize int
 	messageValidator     validation.MessageValidator
 
+	// messageWorkerFillReg reports the exporter queue fill gauge in exporter mode; Stop unregisters it.
+	messageWorkerFillReg metric.Registration
+
 	// committeesObservers is a cache of initialized committeeObserver instances
 	committeesObservers      *ttlcache.Cache[spectypes.MessageID, *validator.CommitteeObserver]
 	committeesObserversMutex sync.Mutex
@@ -305,8 +309,8 @@ func NewController(logger *zap.Logger, options ControllerOptions) *Controller {
 	return ctrl
 }
 
-// Stop releases the controller's background goroutines that are not tied to its context — the
-// ttlcache cleanup loops started in NewController, which otherwise run until the process exits.
+// Stop releases what isn't tied to the controller's context: the ttlcache cleanup loops started in
+// NewController, which otherwise run until the process exits, and the exporter queue fill gauge's callback.
 // Context-bound goroutines (e.g. the message worker) stop via the controller's ctx instead.
 func (c *Controller) Stop() {
 	c.committeesObservers.Stop()
@@ -318,6 +322,9 @@ func (c *Controller) Stop() {
 	c.domainCache.Stop()
 	c.beaconVoteRoots.Stop()
 	c.aggregatorCommRoots.Stop()
+	if c.messageWorkerFillReg != nil {
+		_ = c.messageWorkerFillReg.Unregister()
+	}
 }
 
 func (c *Controller) IndicesChangeChan() chan struct{} {
@@ -356,6 +363,19 @@ func (c *Controller) GetValidatorStats() (uint64, uint64, uint64, error) {
 	return total, active, operatorShares, nil
 }
 
+// enqueueExporterMessage hands a consensus or partial-signature message to the exporter's message
+// worker, counting it as dropped when the worker queue is full.
+func (c *Controller) enqueueExporterMessage(m *queue.SSVMessage) {
+	if !c.messageWorker.TryEnqueue(m) {
+		exporterQueueDroppedMessagesCounter.Add(c.ctx, 1, metric.WithAttributes(
+			observability.ValidatorMsgTypeAttribute(m.MsgType),
+			observability.RunnerRoleAttribute(m.MsgID.GetRoleType()),
+		))
+		c.logger.Warn("exporter message queue is full, dropping message",
+			fields.MessageType(m.MsgType), fields.RunnerRole(m.MsgID.GetRoleType()))
+	}
+}
+
 func (c *Controller) handleRouterMessages() {
 	for {
 		msg, ok := c.messageRouter.Receive(c.ctx)
@@ -383,9 +403,7 @@ func (c *Controller) handleRouterMessages() {
 				if m.MsgType != spectypes.SSVConsensusMsgType && m.MsgType != spectypes.SSVPartialSignatureMsgType {
 					continue
 				}
-				if !c.messageWorker.TryEnqueue(m) {
-					c.logger.Warn("Failed to enqueue post consensus message: buffer is full")
-				}
+				c.enqueueExporterMessage(m)
 			} else {
 				c.logUndeliverableOwnValidatorMessage(m, dutyExecutorID)
 			}
@@ -626,6 +644,14 @@ func (c *Controller) StartNetworkHandlers() {
 		go c.handleRouterMessages()
 	}
 	c.messageWorker.UseHandler(c.handleWorkerMessages)
+	if c.validatorCommonOpts.ExporterMode {
+		// It fails only on instrument misuse, and the gauge is optional: log rather than fail.
+		if reg, err := observeExporterQueueFill(c.messageWorker); err != nil {
+			c.logger.Warn("could not register exporter queue fill gauge", zap.Error(err))
+		} else {
+			c.messageWorkerFillReg = reg
+		}
+	}
 }
 
 // startEligibleValidators starts validators that transitioned to eligible to start due to a metadata update.

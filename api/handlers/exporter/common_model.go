@@ -33,7 +33,7 @@ type Round struct {
 	Prepares []Message `json:"prepares"`
 	// Commits lists commit messages received in this round.
 	Commits []Message `json:"commits"`
-	// RoundChanges lists round change justifications that led to this round.
+	// RoundChanges lists round-change messages that ask to move to this round.
 	RoundChanges []RoundChange `json:"roundChanges"`
 }
 
