@@ -311,6 +311,10 @@ func (km *LocalKeyManager) IsBeaconBlockSlashable(pubKey phase0.BLSPubKey, slot 
 // BumpSlashingProtection raises the share's slashing records to the current slot/epoch. It takes
 // walletLock exclusively so the read-compare-write cannot interleave with a signing of the same
 // share (signing holds walletLock shared for its whole check→record→sign).
+//
+// walletLock is node-wide, so while the bump reads and writes the records, signing waits for every
+// share on the node, not just this one. That is accepted because a bump is short and rare (a cluster
+// reactivation bumps each of its shares once), and AddShare holds walletLock the same way.
 func (km *LocalKeyManager) BumpSlashingProtection(pubKey phase0.BLSPubKey) error {
 	km.walletLock.Lock()
 	defer km.walletLock.Unlock()

@@ -22,9 +22,11 @@ type KeyManager interface {
 	BumpSlashingProtection(pubKey phase0.BLSPubKey) error
 
 	// AddShare registers a validator share (public and encrypted private key) with the key manager.
-	// Implementations should always call BumpSlashingProtection during this process.
-	// It ensures slashing protection records (attestation and proposal) are present and up to date,
-	// updating them only if they are missing or fall below a minimal safe threshold.
+	// Implementations must bump the slashing protection records during this process, directly or
+	// with BumpSlashingProtection (LocalKeyManager bumps directly: AddShare already holds the lock
+	// that BumpSlashingProtection takes).
+	// The bump ensures slashing protection records (attestation and proposal) are present and up to
+	// date, updating them only if they are missing or fall below a minimal safe threshold.
 	// This prevents the validator from signing messages that could be considered slashable
 	// due to absent or outdated protection data.
 	//
@@ -37,6 +39,12 @@ type KeyManager interface {
 	// protection records are kept: they are tiny, and keeping them means a later re-add of the same
 	// share (the same keyshares re-registered, e.g. after a DKG resign) can never start below what
 	// this node already signed.
+	//
+	// The flip side: removing and re-adding the share no longer clears a record that is too high
+	// (e.g. one raised under a wrong clock), which refuses signatures until the real clock passes it.
+	// Nothing clears it early short of deleting its two keys from the node's database by hand
+	// (signing then fails until the next bump, such as a re-add of the share) or wiping the database
+	// and resyncing.
 	RemoveShare(ctx context.Context, pubKey phase0.BLSPubKey) error
 }
 
