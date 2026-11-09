@@ -3,6 +3,7 @@ package networkconfig
 import (
 	"math"
 	"testing"
+	"time"
 
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -235,5 +236,31 @@ func TestSyncCommitteePeriodHelpers(t *testing.T) {
 			require.Equal(t, tc.lastActionableSlot, config.LastActionableSlotOfSyncPeriod(tc.period))
 			require.Equal(t, tc.firstNextSlot-2, config.LastActionableSlotOfSyncPeriod(tc.period))
 		})
+	}
+}
+
+// SlotStartTime panics, rather than wrap around, on a slot whose offset from genesis overflows time.Duration:
+// at 12s slots, slot 2^62 would wrap to exactly the genesis time.
+func TestSlotStartTime_Range(t *testing.T) {
+	config := &Beacon{SlotDuration: 12 * time.Second, GenesisTime: time.Unix(1606824023, 0)}
+	lastSlot := phase0.Slot(math.MaxInt64 / int64(config.SlotDuration))
+
+	require.Equal(t, config.GenesisTime.Add(time.Duration(lastSlot)*config.SlotDuration), config.SlotStartTime(lastSlot))
+
+	for _, slot := range []phase0.Slot{lastSlot + 1, 1 << 62, math.MaxInt64, 1 << 63, math.MaxUint64} {
+		require.Panics(t, func() { config.SlotStartTime(slot) }, "slot %d", slot)
+	}
+}
+
+// EpochDuration panics, rather than wrap around, where an epoch's length overflows time.Duration.
+func TestEpochDuration_Range(t *testing.T) {
+	maxSlotsPerEpoch := uint64(math.MaxInt64 / int64(12*time.Second))
+	config := &Beacon{SlotDuration: 12 * time.Second, SlotsPerEpoch: maxSlotsPerEpoch}
+
+	require.Equal(t, time.Duration(maxSlotsPerEpoch)*config.SlotDuration, config.EpochDuration())
+
+	for _, slotsPerEpoch := range []uint64{maxSlotsPerEpoch + 1, math.MaxInt64, 1 << 63, math.MaxUint64} {
+		config.SlotsPerEpoch = slotsPerEpoch
+		require.Panics(t, func() { config.EpochDuration() }, "%d slots per epoch", slotsPerEpoch)
 	}
 }
