@@ -60,7 +60,7 @@ func TestConfig_AddrsFactory(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := Config{TCPPort: 13001, HostAddress: tt.hostAddress, HostDNS: tt.hostDNS}
-			opts, err := c.configureAddrs(nil)
+			opts, err := c.configureAddrs(nil, nil)
 			require.NoError(t, err)
 
 			var hostCfg libp2p.Config
@@ -84,10 +84,10 @@ func TestConfig_AddrsFactory(t *testing.T) {
 // multiaddr fails the libp2p setup, rather than leaving the host to advertise no external address.
 func TestConfig_InvalidExternalAddress(t *testing.T) {
 	c := Config{TCPPort: 13001, HostAddress: "not-an-ip"}
-	_, err := c.configureAddrs(nil)
+	_, err := c.configureAddrs(nil, nil)
 	require.ErrorContains(t, err, "could not build external multi address")
 
 	c = Config{TCPPort: 13001, HostDNS: "not/a/name"}
-	_, err = c.configureAddrs(nil)
+	_, err = c.configureAddrs(nil, nil)
 	require.ErrorContains(t, err, "could not build external multi address")
 }

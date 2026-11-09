@@ -45,8 +45,8 @@ func TestSetupDiscovery(t *testing.T) {
 }
 
 // newDiscoveryTestNetwork returns a network with what setupDiscovery needs for any mode: a host, a network key, a
-// free UDP port for discv5, and no bootnodes, so discv5 contacts nothing outside the test. Its cleanup closes the
-// network, and with it the host and the installed service.
+// local IP and a free UDP port for discv5, and no bootnodes, so discv5 contacts nothing outside the test. Its
+// cleanup closes the network, and with it the host and the installed service.
 func newDiscoveryTestNetwork(t *testing.T, mode DiscoveryMode) *p2pNetwork {
 	netKey, err := p2ptesting.GenNetworkKey()
 	require.NoError(t, err)
@@ -67,6 +67,7 @@ func newDiscoveryTestNetwork(t *testing.T, mode DiscoveryMode) *p2pNetwork {
 	h, err := libp2p.New(libp2p.NoListenAddrs)
 	require.NoError(t, err)
 	n.host.Store(&h)
+	n.localIP = net.IPv4(127, 0, 0, 1) // set by SetupHost, which this test skips
 
 	return n
 }

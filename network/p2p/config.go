@@ -5,6 +5,7 @@ import (
 	"crypto/ecdsa"
 	"errors"
 	"fmt"
+	"net"
 	"strings"
 	"time"
 
@@ -142,8 +143,9 @@ func (c *Config) ValidateDiscovery() error {
 
 // Libp2pOptions creates options list for the libp2p host
 // these are the most basic options required to start a network instance,
-// other options and libp2p components can be configured on top
-func (c *Config) Libp2pOptions() ([]libp2p.Option, error) {
+// other options and libp2p components can be configured on top.
+// localIP (nil without discv5) is listened on and, without HostAddress/HostDNS, is our ENR IP.
+func (c *Config) Libp2pOptions(localIP net.IP) ([]libp2p.Option, error) {
 	if c.NetworkPrivateKey == nil {
 		return nil, errors.New("could not create options w/o network key")
 	}
@@ -159,7 +161,7 @@ func (c *Config) Libp2pOptions() ([]libp2p.Option, error) {
 		libp2p.UserAgent(c.UserAgent),
 	)
 
-	opts, err = c.configureAddrs(opts)
+	opts, err = c.configureAddrs(opts, localIP)
 	if err != nil {
 		return opts, fmt.Errorf("could not setup addresses: %w", err)
 	}
@@ -172,7 +174,7 @@ func (c *Config) Libp2pOptions() ([]libp2p.Option, error) {
 	return opts, nil
 }
 
-func (c *Config) configureAddrs(opts []libp2p.Option) ([]libp2p.Option, error) {
+func (c *Config) configureAddrs(opts []libp2p.Option, localIP net.IP) ([]libp2p.Option, error) {
 	addrs := make([]ma.Multiaddr, 0)
 	maZero, err := commons.BuildMultiAddress("0.0.0.0", "tcp", uint(c.TCPPort), "")
 	if err != nil {
@@ -180,14 +182,8 @@ func (c *Config) configureAddrs(opts []libp2p.Option) ([]libp2p.Option, error) {
 	}
 	addrs = append(addrs, maZero)
 
-	// discv5 advertises the node's IP, so only it keeps a listener on that IP; the other modes need no external
-	// IP at all.
-	if c.discoveryMode() == DiscoveryDiscv5 {
-		ipAddr, err := commons.IPAddr()
-		if err != nil {
-			return opts, fmt.Errorf("could not get ip addr: %w", err)
-		}
-		maIP, err := commons.BuildMultiAddress(ipAddr.String(), "tcp", uint(c.TCPPort), "")
+	if localIP != nil {
+		maIP, err := commons.BuildMultiAddress(localIP.String(), "tcp", uint(c.TCPPort), "")
 		if err != nil {
 			return opts, fmt.Errorf("could not build multi address for ip address: %w", err)
 		}

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"maps"
 	"math/rand"
+	"net"
 	"slices"
 	"strings"
 	"sync"
@@ -88,6 +89,9 @@ type p2pNetwork struct {
 
 	logger *zap.Logger
 	cfg    *Config
+
+	// localIP is listened on and, without HostAddress/HostDNS, is our ENR IP; nil without discv5.
+	localIP net.IP
 
 	host            atomic.Pointer[host.Host]
 	streamCtrl      streams.StreamController

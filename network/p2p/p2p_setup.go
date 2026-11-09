@@ -134,7 +134,17 @@ func (n *p2pNetwork) IsBadPeer(peerID peer.ID) bool {
 
 // SetupHost configures a libp2p host and backoff connector utility
 func (n *p2pNetwork) SetupHost() error {
-	opts, err := n.cfg.Libp2pOptions()
+	// discv5 advertises the node's IP, so only it keeps a listener on that IP; the other modes need no external
+	// IP at all.
+	if n.cfg.discoveryMode() == DiscoveryDiscv5 {
+		ip, err := p2pcommons.IPAddr()
+		if err != nil {
+			return fmt.Errorf("could not get ip addr: %w", err)
+		}
+		n.localIP = ip
+	}
+
+	opts, err := n.cfg.Libp2pOptions(n.localIP)
 	if err != nil {
 		return fmt.Errorf("could not create libp2p options: %w", err)
 	}
@@ -304,10 +314,10 @@ func (n *p2pNetwork) setupDiscovery() error {
 	}
 
 	var disc discovery.Service
+	var err error
 	switch n.cfg.discoveryMode() {
 	case DiscoveryMDNS:
 		logger.Info("discovery: using mdns (local)")
-		var err error
 		disc, err = discovery.NewLocalDiscovery(n.ctx, logger, n.Host())
 		if err != nil {
 			return err
@@ -320,13 +330,8 @@ func (n *p2pNetwork) setupDiscovery() error {
 		}
 		disc = discovery.Disabled{}
 	case DiscoveryDiscv5:
-		ipAddr, err := p2pcommons.IPAddr()
-		if err != nil {
-			return fmt.Errorf("could not get ip addr: %w", err)
-		}
-
 		discV5Opts := &discovery.DiscV5Options{
-			IP:            ipAddr.String(),
+			IP:            n.localIP.String(),
 			BindIP:        net.IPv4zero.String(),
 			Port:          n.cfg.UDPPort,
 			TCPPort:       n.cfg.TCPPort,
