@@ -283,9 +283,8 @@ func (r *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Logg
 	defer cancel()
 	var (
 		wg sync.WaitGroup
-		// errCh is buffered because the receiver is only interested in the very 1st error sent to this channel
-		// and will not read any subsequent errors. Buffering ensures that senders can send their errors and terminate without being blocked,
-		// regardless of whether the receiver is still actively reading from the channel.
+		// errCh is buffered so a failing worker can send its error and return without blocking: the listener
+		// reads only the first one.
 		errCh        = make(chan error, len(committeeDuty.ValidatorDuties))
 		signaturesCh = make(chan *spectypes.PartialSignatureMessage)
 		dutiesCh     = make(chan *spectypes.ValidatorDuty)
@@ -393,6 +392,14 @@ listener:
 			}
 			postConsensusMsg.Messages = append(postConsensusMsg.Messages, signature)
 		}
+	}
+
+	// signaturesCh closes only once every worker has returned (wg.Wait), so any worker error is already buffered
+	// on errCh, but the select above may have taken the close branch over it.
+	select {
+	case err := <-errCh:
+		return err
+	default:
 	}
 
 	var (
