@@ -31,6 +31,11 @@ const (
 	skipReasonBadPeer            skipReason = "badPeer"
 	skipReasonNotSSV             skipReason = "notSSV"
 	skipReasonRecentlyTrimmed    skipReason = "recentlyTrimmed"
+	// handlerPanic and filterPanic count panics discover() recovered, for any
+	// caller. handlerPanic also covers PublishENR's ping handler, and can count a
+	// peer already counted as accepted (a panic after checkPeer passed).
+	skipReasonHandlerPanic skipReason = "handlerPanic"
+	skipReasonFilterPanic  skipReason = "filterPanic"
 )
 
 var (

@@ -86,12 +86,12 @@ func testingDiscovery(t *testing.T) *DiscV5Service {
 
 // Testing LocalNode
 func NewLocalNode(t *testing.T) *enode.LocalNode {
-	// Generate key
-	nodeKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	// Generate a secp256k1 key, so the node record can be signed (LocalNode.Node)
+	nodeKey, err := crypto.GenerateKey()
 	require.NoError(t, err)
 
 	// Create local node
-	localNode, err := records.CreateLocalNode(nodeKey, t.TempDir(), net.IP(testIP), testPort, testTCPPort)
+	localNode, err := records.CreateLocalNode(nodeKey, t.TempDir(), net.ParseIP(testIP), testPort, testTCPPort)
 	require.NoError(t, err)
 
 	// Set entries
