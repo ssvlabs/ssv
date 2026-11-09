@@ -21,12 +21,12 @@ func TestConfig_ApplyDefaults(t *testing.T) {
 	require.Equal(t, DiscoveryDiscv5, c.Discovery)
 }
 
-// TestConfig_AddrsFactory checks that the host advertises what discovery hands out for it
-// (HostAddress, HostDNS, or else the ENR IP) plus the public ones among the addresses go-libp2p
-// resolves 0.0.0.0 to, and no other private ones. Without discv5 and neither of the other two,
-// no factory is set.
+// TestConfig_AddrsFactory checks that the host listens on 0.0.0.0 and the local IP, and advertises
+// what discovery hands out for it (HostAddress, HostDNS, or else the IP our ENR starts with) plus the
+// public ones among the addresses go-libp2p resolves 0.0.0.0 to, and no other private ones. Without
+// discv5 and neither of the other two, no factory is set.
 func TestConfig_AddrsFactory(t *testing.T) {
-	localIP := net.ParseIP("10.0.1.5") // the ENR IP
+	localIP := net.ParseIP("10.0.1.5") // the IP our ENR starts with
 	resolved := []ma.Multiaddr{
 		ma.StringCast("/ip4/127.0.0.1/tcp/13001"),
 		ma.StringCast("/ip4/10.0.1.5/tcp/13001"),
@@ -82,6 +82,17 @@ func TestConfig_AddrsFactory(t *testing.T) {
 
 			var hostCfg libp2p.Config
 			require.NoError(t, hostCfg.Apply(opts...))
+
+			wantListen := []string{"/ip4/0.0.0.0/tcp/13001"}
+			if tt.localIP != nil {
+				wantListen = append(wantListen, "/ip4/"+tt.localIP.String()+"/tcp/13001")
+			}
+			listen := make([]string, 0, len(hostCfg.ListenAddrs))
+			for _, addr := range hostCfg.ListenAddrs {
+				listen = append(listen, addr.String())
+			}
+			require.Equal(t, wantListen, listen)
+
 			if tt.want == nil {
 				require.Nil(t, hostCfg.AddrsFactory)
 				return

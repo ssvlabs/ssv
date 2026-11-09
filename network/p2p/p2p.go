@@ -90,7 +90,7 @@ type p2pNetwork struct {
 	logger *zap.Logger
 	cfg    *Config
 
-	// localIP is listened on and, without HostAddress/HostDNS, is our ENR IP; nil without discv5.
+	// localIP is listened on and, without HostAddress/HostDNS, is the IP our ENR starts with; nil without discv5.
 	localIP net.IP
 
 	host            atomic.Pointer[host.Host]

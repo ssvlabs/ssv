@@ -144,8 +144,8 @@ func (c *Config) ValidateDiscovery() error {
 // Libp2pOptions creates options list for the libp2p host
 // these are the most basic options required to start a network instance,
 // other options and libp2p components can be configured on top.
-// localIP (nil without discv5) is listened on and, without HostAddress/HostDNS, is both our ENR IP and
-// the address we advertise.
+// localIP (nil without discv5) is listened on and, without HostAddress/HostDNS, is both the IP our ENR
+// starts with and the address we advertise.
 func (c *Config) Libp2pOptions(localIP net.IP) ([]libp2p.Option, error) {
 	if c.NetworkPrivateKey == nil {
 		return nil, errors.New("could not create options w/o network key")
@@ -194,7 +194,7 @@ func (c *Config) configureAddrs(opts []libp2p.Option, localIP net.IP) ([]libp2p.
 	opts = append(opts, libp2p.ListenAddrs(addrs...))
 
 	// announced is what discovery hands out for us: HostDNS or HostAddress (mutually exclusive),
-	// else the ENR IP.
+	// else the IP our ENR starts with (discv5 may later switch the ENR to the public IP peers report).
 	var announced ma.Multiaddr
 	switch {
 	case c.HostDNS != "":
