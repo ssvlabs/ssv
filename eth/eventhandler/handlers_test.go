@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -26,6 +27,7 @@ import (
 	"github.com/ssvlabs/ssv/eth/contract"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability/log/fields"
+	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
@@ -277,9 +279,9 @@ func zeroRootSplit(tb testing.TB, ids []uint64, degree int, zeroAt ...uint64) (*
 }
 
 // TestHandleValidatorAddedReusedShareKeyIsMalformed registers two validators whose shares for one operator
-// use the same key. The second registration must be malformed, also when the key is another operator's, as
-// every node must skip it, and when the first validator is liquidated or both are in one block. It must leave
-// the first validator's slashing protection on this operator as its registration set it.
+// use the same key. The second registration must be skipped as malformed, also when the key is another
+// operator's (every node must skip it), when the first validator is liquidated, and when both are in one
+// block. It must leave the first validator's slashing protection as the first registration set it.
 func TestHandleValidatorAddedReusedShareKeyIsMalformed(t *testing.T) {
 	const reusedKeyMsg = "malformed event: share public key is already used by another validator"
 
@@ -388,9 +390,9 @@ func TestHandleValidatorAddedShareKeyOfAnotherOperatorIsAccepted(t *testing.T) {
 }
 
 // TestHandleValidatorAddedShareKeyOfUndecryptableRegistration registers a validator whose encrypted share for one
-// operator doesn't decrypt, then another validator with the same share key for that operator. Only that operator's
-// node decrypts the share, so the nodes disagree: that node must skip the first registration and store the
-// second, and the other nodes must store the first and skip the second.
+// operator is invalid, then another validator with the same share key for that operator. Only that operator's
+// node can tell, so the nodes disagree: that node must skip the first registration and store the second, and
+// the other nodes must store the first and skip the second.
 func TestHandleValidatorAddedShareKeyOfUndecryptableRegistration(t *testing.T) {
 	tests := []struct {
 		name string
@@ -607,17 +609,20 @@ func TestHandleValidatorRemovedKeepsSlashingProtection(t *testing.T) {
 }
 
 // TestHandleClusterReactivatedShareKeyInUse stores two validators whose shares for this operator use the same
-// key, as earlier versions could, and reactivates the cluster of the second one. While the first validator is
-// active, the reactivation must leave the key's slashing protection as it was, so that the first validator
-// doesn't skip the current epoch. When the first validator is liquidated, or is in the reactivated cluster,
-// the reactivation must bump the data as usual. The reactivated cluster has a third validator too, whose key
-// the reactivation must bump, unless a fourth validator, active in the first one's cluster, uses it as well, so
-// that every reactivated key is in use.
+// key, as earlier versions could, and reactivates the cluster of the second one. While the first validator
+// attests, the reactivation must leave the key's slashing protection as it was, so that the first validator
+// doesn't skip the current epoch. When the first validator doesn't attest (liquidated, pending, exited or without
+// beacon metadata) or is in the reactivated cluster, the reactivation must bump the data as usual. The reactivated
+// cluster also has a third validator, whose key must be bumped, unless a fourth validator, attesting in the first
+// one's cluster, uses it too, so that every reactivated key is in use.
 func TestHandleClusterReactivatedShareKeyInUse(t *testing.T) {
-	const notBumpedMsg = "share public key is used by another active validator, not bumping its slashing protection"
+	const notBumpedMsg = "share public key is used by another attesting validator, not bumping its slashing protection"
+	const active = eth2apiv1.ValidatorStateActiveOngoing
 
 	tests := []struct {
 		name string
+		// firstStatus is the first validator's beacon status. With ValidatorStateUnknown, it has no beacon metadata.
+		firstStatus eth2apiv1.ValidatorState
 		// liquidateFirst liquidates the first validator before the second one is reactivated.
 		liquidateFirst bool
 		// sameCluster stores both validators in one cluster, so both are reactivated.
@@ -627,10 +632,13 @@ func TestHandleClusterReactivatedShareKeyInUse(t *testing.T) {
 		// bumped is whether the reactivation must bump the slashing protection of the first and second validators' key.
 		bumped bool
 	}{
-		{name: "first validator active"},
-		{name: "first validator liquidated", liquidateFirst: true, bumped: true},
-		{name: "both validators reactivated", sameCluster: true, bumped: true},
-		{name: "every reactivated key in use", thirdKeyInUse: true},
+		{name: "first validator attesting", firstStatus: active},
+		{name: "first validator liquidated", firstStatus: active, liquidateFirst: true, bumped: true},
+		{name: "first validator pending", firstStatus: eth2apiv1.ValidatorStatePendingQueued, bumped: true},
+		{name: "first validator exited", firstStatus: eth2apiv1.ValidatorStateExitedUnslashed, bumped: true},
+		{name: "first validator without beacon metadata", firstStatus: eth2apiv1.ValidatorStateUnknown, bumped: true},
+		{name: "both validators reactivated", firstStatus: active, sameCluster: true, bumped: true},
+		{name: "every reactivated key in use", firstStatus: active, thirdKeyInUse: true},
 	}
 
 	for _, tc := range tests {
@@ -680,6 +688,22 @@ func TestHandleClusterReactivatedShareKeyInUse(t *testing.T) {
 			// Two epochs later, the shared keys have signed the duties of the previous epoch and slot, so a bump
 			// would make them skip the current ones.
 			advanceEpochs(eh, 2)
+			currentEpoch := eh.networkConfig.EstimatedCurrentEpoch()
+			// The first validator has the case's beacon status, and the fourth attests.
+			metadata := beacon.ValidatorMetadataMap{
+				spectypes.ValidatorPK(first.masterPubKey.Serialize()): beaconMetadata(tc.firstStatus, 1, currentEpoch),
+			}
+			if fourth != nil {
+				metadata[spectypes.ValidatorPK(fourth.masterPubKey.Serialize())] = beaconMetadata(active, 4, currentEpoch)
+			}
+			_, err = eh.nodeStorage.Shares().UpdateValidatorsMetadata(metadata)
+			require.NoError(t, err)
+			if tc.firstStatus == eth2apiv1.ValidatorStateExitedUnslashed {
+				// The exited validator may still be in a sync committee, so it participates, but it doesn't attest.
+				firstShare, found := eh.nodeStorage.Shares().Get(nil, first.masterPubKey.Serialize())
+				require.True(t, found)
+				require.True(t, firstShare.IsParticipating(eh.networkConfig.Beacon, currentEpoch))
+			}
 			signed := signPreviousDuties(t, eh, km, sharePubKey)
 			var thirdSigned slashingProtection
 			if tc.thirdKeyInUse {
@@ -880,6 +904,23 @@ func domainFor(dt phase0.DomainType) phase0.Domain {
 	var domain phase0.Domain
 	copy(domain[:4], dt[:])
 	return domain
+}
+
+// beaconMetadata returns beacon metadata with status, or nil for ValidatorStateUnknown (no metadata). A pending
+// validator activates in the far future, an exited one exited at epoch, and any other activated at genesis.
+func beaconMetadata(status eth2apiv1.ValidatorState, index phase0.ValidatorIndex, epoch phase0.Epoch) *beacon.ValidatorMetadata {
+	metadata := &beacon.ValidatorMetadata{Status: status, Index: index, ExitEpoch: networkconfig.FarFutureEpoch}
+	switch status {
+	case eth2apiv1.ValidatorStateUnknown:
+		return nil
+	case eth2apiv1.ValidatorStatePendingQueued:
+		metadata.ActivationEpoch = networkconfig.FarFutureEpoch
+	case eth2apiv1.ValidatorStateExitedUnslashed:
+		metadata.ExitEpoch = epoch
+	default:
+		// Activated at genesis and not exiting.
+	}
+	return metadata
 }
 
 // advanceEpochs moves the clock of the event handler and its key manager forward by epochs. The event handler
