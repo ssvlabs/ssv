@@ -73,7 +73,8 @@ var (
 	ErrValidatorLiquidated              = Error{text: "validator is liquidated"}
 	ErrValidatorNotAttesting            = Error{text: "validator is not attesting"}
 	ErrEarlySlotMessage                 = Error{text: "message was sent before slot starts"}
-	ErrLateSlotMessage                  = Error{text: "current time is above duty's start +34(committee, aggregator, and aggregator committee) or +3(proposer, sync committee contribution) slots"}
+	ErrSlotTooFarAhead                  = Error{text: "slot is too far in the future"}
+	ErrLateSlotMessage                  = Error{text: "current time is above duty's start +34 (committee, aggregator, aggregator committee), +3 (proposer, sync committee contribution, PTC attestation) or +2 (proposer preferences) slots"}
 	ErrSlotAlreadyAdvanced              = Error{text: "signer has already advanced to a later slot"}
 	ErrRoundAlreadyAdvanced             = Error{text: "signer has already advanced to a later round"}
 	ErrPubSubDataTooBig                 = Error{text: "pub-sub message data too big"}

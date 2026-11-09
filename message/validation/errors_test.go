@@ -68,6 +68,15 @@ func TestHandleValidationError_SelfDiscardLeveling(t *testing.T) {
 			wantMsg:    "own outbound message ignored by local validation (unexpected)",
 		},
 		{
+			name:       "own message past the slot bound is surfaced (warn)",
+			selfPID:    self,
+			peerID:     self,
+			err:        ErrSlotTooFarAhead, // no clock race puts our own message that far ahead -> ignore/warn
+			wantResult: pubsub.ValidationIgnore,
+			wantLevel:  zapcore.WarnLevel,
+			wantMsg:    "own outbound message ignored by local validation (unexpected)",
+		},
+		{
 			name:       "own rejected message is surfaced (warn) with topic",
 			selfPID:    self,
 			peerID:     self,

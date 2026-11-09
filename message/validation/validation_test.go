@@ -65,6 +65,12 @@ func PartialMsgTypeToString(mt spectypes.PartialSigMsgType) string {
 		return "VoluntaryExitPartialSig"
 	case spectypes.AggregatorCommitteePartialSig:
 		return "AggregatorCommitteePartialSig"
+	case spectypes.PTCAttesterPartialSig:
+		return "PTCAttesterPartialSig"
+	case spectypes.ProposerPreferencesPartialSig:
+		return "ProposerPreferencesPartialSig"
+	case spectypes.RequestAuthPartialSig:
+		return "RequestAuthPartialSig"
 	default:
 		return fmt.Sprintf("unknown(%d)", mt)
 	}
