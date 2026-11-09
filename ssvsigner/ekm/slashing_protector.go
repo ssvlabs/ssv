@@ -27,8 +27,7 @@ const (
 var _ slashingProtector = &SlashingProtector{}
 
 // slashingProtector is the key managers' view of the slashing store. Records are only ever raised
-// (Update*, Bump*) and never deleted: a removed share keeps its records so that a later re-add of the
-// same share can never start below what was already signed.
+// (Update*, Bump*), never deleted (see KeyManager.RemoveShare).
 type slashingProtector interface {
 	ListAccounts() ([]core.ValidatorAccount, error)
 	RetrieveHighestAttestation(pubKey phase0.BLSPubKey) (*phase0.AttestationData, bool, error)
@@ -107,13 +106,9 @@ func (sp *SlashingProtector) UpdateHighestProposal(pubKey phase0.BLSPubKey, slot
 }
 
 // BumpSlashingProtection raises the share's slashing records to the minimal safe values for the
-// current slot/epoch, if they are missing or below them.
-//
-// The records are read and written immediately (committed before this returns), like the signing
-// path writes them, and the caller is expected to hold the same lock that excludes signing for this
-// share (LocalKeyManager.walletLock, RemoteKeyManager's per-share locks) across the read and the write.
-// Writing them through a long-lived transaction instead would break that exclusion: the write would
-// only land at commit, after the lock is released.
+// current slot/epoch, if they are missing or lower. Each record is a read-compare-write committed
+// before this returns, so the caller must hold the lock that excludes signing the share
+// (LocalKeyManager.walletLock, RemoteKeyManager's per-share locks) across the read and the write.
 func (sp *SlashingProtector) BumpSlashingProtection(pubKey phase0.BLSPubKey) error {
 	currentSlot := sp.beaconCfg.EstimatedCurrentSlot()
 

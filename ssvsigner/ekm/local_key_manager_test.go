@@ -441,7 +441,7 @@ func TestRemoveShare(t *testing.T) {
 		require.NoError(t, km.AddShare(t.Context(), encryptedPrivKey, phase0.BLSPubKey(pk.GetPublicKey().Serialize())))
 		require.NoError(t, km.RemoveShare(t.Context(), phase0.BLSPubKey(pk.GetPublicKey().Serialize())))
 
-		// The slashing records outlive the share so a re-add can never start below what was signed.
+		// RemoveShare keeps the slashing records (see KeyManager.RemoveShare).
 		_, found, err := km.(*LocalKeyManager).RetrieveHighestAttestation(phase0.BLSPubKey(pk.GetPublicKey().Serialize()))
 		require.NoError(t, err)
 		require.True(t, found, "highest attestation record must survive RemoveShare")

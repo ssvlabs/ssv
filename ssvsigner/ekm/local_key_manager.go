@@ -126,10 +126,10 @@ func newLocalKeyManager(
 	}, nil
 }
 
-// SignBeaconObject implements BeaconSigner. It locks the wallet, checks
-// domain type, converts the input object to the correct versioned data,
-// runs, then delegates slashing protection checks for attestations and blocks
-// as well as signing to eth2-key-manager's signer.
+// SignBeaconObject implements BeaconSigner. It checks the domain type, locks
+// the wallet, casts obj to the type signatureDomain expects, and signs it with
+// eth2-key-manager's signer, which checks and records attestations and blocks
+// against slashing protection first.
 //
 // It returns the signature and the computed root on success.
 func (km *LocalKeyManager) SignBeaconObject(
@@ -308,13 +308,10 @@ func (km *LocalKeyManager) IsBeaconBlockSlashable(pubKey phase0.BLSPubKey, slot 
 	return km.slashingProtector.IsBeaconBlockSlashable(pubKey, slot)
 }
 
-// BumpSlashingProtection raises the share's slashing records to the current slot/epoch. It takes
-// walletLock exclusively so the read-compare-write cannot interleave with a signing of the same
-// share (signing holds walletLock shared for its whole check→record→sign).
-//
-// walletLock is node-wide, so while the bump reads and writes the records, signing waits for every
-// share on the node, not just this one. That is accepted because a bump is short and rare (a cluster
-// reactivation bumps each of its shares once), and AddShare holds walletLock the same way.
+// BumpSlashingProtection implements KeyManager. It holds walletLock exclusively, since signing holds
+// it shared for its whole check→record→sign. walletLock is node-wide, so a bump briefly blocks
+// signing for every share, as AddShare already does; bumps are short and rare (a cluster
+// reactivation bumps each of its shares once).
 func (km *LocalKeyManager) BumpSlashingProtection(pubKey phase0.BLSPubKey) error {
 	km.walletLock.Lock()
 	defer km.walletLock.Unlock()
@@ -334,10 +331,9 @@ func (km *LocalKeyManager) ListAccounts() ([]core.ValidatorAccount, error) {
 	return km.slashingProtector.ListAccounts()
 }
 
-// AddShare decrypts the provided share private key (encryptedSharePrivKey)
-// using the operatorDecrypter, verifies that it matches sharePubKey, and
-// saves it to the local wallet. It also bumps slashing protection to
-// ensure slashing records for this share are up to date.
+// AddShare decrypts encryptedPrivKey with the operatorDecrypter, verifies that
+// it matches pubKey, bumps the share's slashing records, and saves the share to
+// the local wallet.
 func (km *LocalKeyManager) AddShare(
 	_ context.Context,
 	encryptedPrivKey []byte,
@@ -376,9 +372,9 @@ func (km *LocalKeyManager) AddShare(
 	}
 
 	if acc == nil {
-		// The wallet doesn't support transactions (eth2-key-manager doesn't depend on DB entities), so
-		// the account is saved right away. A rolled back event-handler transaction should not be an issue,
-		// because the node will crash in this case and then attempt to process the event again but acc won't be nil.
+		// The wallet can't join the event handler's transaction, so the account is saved right
+		// away. If that transaction rolls back, the node crashes and reprocesses the event, finding
+		// the account already saved.
 		if err := km.saveAccount(sharePrivKey); err != nil {
 			return fmt.Errorf("save account: %w", err)
 		}
@@ -388,7 +384,7 @@ func (km *LocalKeyManager) AddShare(
 }
 
 // RemoveShare removes the share from the local wallet and returns an error on any storage issue.
-// The share's slashing-protection records are kept on purpose (see KeyManager.RemoveShare).
+// The share's slashing records are kept on purpose (see KeyManager.RemoveShare).
 func (km *LocalKeyManager) RemoveShare(_ context.Context, pubKey phase0.BLSPubKey) error {
 	km.walletLock.Lock()
 	defer km.walletLock.Unlock()
@@ -399,9 +395,9 @@ func (km *LocalKeyManager) RemoveShare(_ context.Context, pubKey phase0.BLSPubKe
 		return fmt.Errorf("could not check share existence: %w", err)
 	}
 	if acc != nil {
-		// The wallet doesn't support transactions (eth2-key-manager doesn't depend on DB entities), so
-		// the account is deleted right away. A rolled back event-handler transaction should not be an issue,
-		// because the node will crash in this case and then attempt to process the event again but acc will be nil.
+		// The wallet can't join the event handler's transaction, so the account is deleted right
+		// away. If that transaction rolls back, the node crashes and reprocesses the event, finding
+		// the account already gone.
 		if err := km.wallet.DeleteAccountByPublicKey(pubKeyHex); err != nil {
 			return fmt.Errorf("could not delete share: %w", err)
 		}

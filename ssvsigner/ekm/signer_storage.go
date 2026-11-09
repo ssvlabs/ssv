@@ -37,13 +37,12 @@ var (
 	errWalletNotFound = errors.New("could not find wallet")
 )
 
-// Storage represents the interface for ssv node storage
-// TODO: review if we need all of them
+// Storage is the key manager's store: the eth2-key-manager wallet and accounts (core.Storage), the
+// slashing records (core.SlashingStore), and the account operations the migrations run in their own
+// transaction (AccountStoreTxn).
 //
-// The slashing-protection records (core.SlashingStore) are read and written immediately, never
-// through a caller's transaction, and there is deliberately no way to delete one: records are only
-// ever raised, and a removed share keeps them (see KeyManager.BumpSlashingProtection and
-// KeyManager.RemoveShare).
+// Slashing records are read and written immediately, never through a caller's transaction, and can't
+// be deleted: they are only ever raised, and a removed share keeps them (see KeyManager.RemoveShare).
 type Storage interface {
 	DropRegistryData() error
 
@@ -54,8 +53,7 @@ type Storage interface {
 	SetEncryptionKey(hexKey []byte)
 }
 
-// AccountStoreTxn represents the account operations of the store that can run in a caller's
-// transaction.
+// AccountStoreTxn holds the account operations that can run in a caller's transaction.
 type AccountStoreTxn interface {
 	ListAccountsTxn(txn ReadTxn) ([]core.ValidatorAccount, error)
 	SaveAccountTxn(txn ReadWriteTxn, account core.ValidatorAccount) error
@@ -284,7 +282,6 @@ func (s *storage) RetrieveHighestAttestation(pubKey []byte) (*phase0.Attestation
 		return nil, false, errors.New("public key could not be nil")
 	}
 
-	// get wallet bytes
 	obj, found, err := s.db.Get(nil, s.objPrefix(highestAttPrefix), pubKey)
 	if err != nil {
 		return nil, found, fmt.Errorf("could not get highest attestation from db: %w", err)
@@ -293,7 +290,7 @@ func (s *storage) RetrieveHighestAttestation(pubKey []byte) (*phase0.Attestation
 		return nil, false, nil
 	}
 	if len(obj.Value) == 0 {
-		return nil, found, fmt.Errorf("highest attestation value is empty: %w", err)
+		return nil, found, errors.New("highest attestation value is empty")
 	}
 
 	// decode
@@ -325,7 +322,7 @@ func (s *storage) SaveHighestProposal(pubKey []byte, slot phase0.Slot) error {
 }
 
 // RetrieveHighestProposal loads the highest proposal slot from storage.
-// Returns attestation data, whether it was found, and error.
+// Returns the slot, whether it was found, and error.
 func (s *storage) RetrieveHighestProposal(pubKey []byte) (phase0.Slot, bool, error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
@@ -334,7 +331,6 @@ func (s *storage) RetrieveHighestProposal(pubKey []byte) (phase0.Slot, bool, err
 		return 0, false, errors.New("public key could not be nil")
 	}
 
-	// get wallet bytes
 	obj, found, err := s.db.Get(nil, s.objPrefix(highestProposalPrefix), pubKey)
 	if err != nil {
 		return 0, found, fmt.Errorf("could not get highest proposal from db: %w", err)
@@ -343,7 +339,7 @@ func (s *storage) RetrieveHighestProposal(pubKey []byte) (phase0.Slot, bool, err
 		return 0, found, nil
 	}
 	if len(obj.Value) == 0 {
-		return 0, found, fmt.Errorf("highest proposal value is empty: %w", err)
+		return 0, found, errors.New("highest proposal value is empty")
 	}
 
 	// decode

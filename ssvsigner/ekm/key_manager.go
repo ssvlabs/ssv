@@ -14,37 +14,32 @@ import (
 type KeyManager interface {
 	BeaconSigner
 
-	// BumpSlashingProtection raises the share's slashing protection records (attestation and
-	// proposal) to the minimal safe values for the current slot/epoch, if they are missing or below
-	// them. The records are written immediately, under the key manager's signing lock, never through
-	// a caller's transaction, whose commit lands after the lock is released.
-	// A bump only ever raises a record, so a caller's transaction that is later rolled back is harmless.
+	// BumpSlashingProtection raises the share's attestation and proposal records to the minimal safe
+	// values for the current slot/epoch, if they are missing or lower. It writes them immediately,
+	// under the lock that excludes signing the share, never through a caller's transaction, whose
+	// commit lands after the lock is released. A bump only raises records, so rolling back the
+	// caller's transaction afterwards is harmless.
 	BumpSlashingProtection(pubKey phase0.BLSPubKey) error
 
 	// AddShare registers a validator share (public and encrypted private key) with the key manager.
-	// Implementations must bump the slashing protection records during this process, directly or
-	// with BumpSlashingProtection (LocalKeyManager bumps directly: AddShare already holds the lock
-	// that BumpSlashingProtection takes).
-	// The bump ensures slashing protection records (attestation and proposal) are present and up to
-	// date, updating them only if they are missing or fall below a minimal safe threshold.
-	// This prevents the validator from signing messages that could be considered slashable
-	// due to absent or outdated protection data.
+	// Implementations must also bump the share's slashing records, directly or with
+	// BumpSlashingProtection, so the validator never signs from missing or outdated records.
 	//
 	// If the share cannot be decrypted or validated, implementations MUST return an error that
 	// unwraps to a by-value ssvsigner.ShareDecryptionError. Callers use it to classify the failure
 	// as a skippable malformed event; otherwise the failure is fatal and crash-loops registry sync.
 	AddShare(ctx context.Context, encryptedPrivKey []byte, pubKey phase0.BLSPubKey) error
 
-	// RemoveShare unregisters a validator share from the key manager. The share's slashing
-	// protection records are kept: they are tiny, and keeping them means a later re-add of the same
-	// share (the same keyshares re-registered, e.g. after a DKG resign) can never start below what
-	// this node already signed.
+	// RemoveShare unregisters a validator share from the key manager. It keeps the share's slashing
+	// records, so a later re-add of the same share (the same keyshares re-registered, e.g. after a
+	// DKG resign) can never start below what this node already signed.
 	//
-	// The flip side: removing and re-adding the share no longer clears a record that is too high
-	// (e.g. one raised under a wrong clock), which refuses signatures until the real clock passes it.
-	// Nothing clears it early short of deleting its two keys from the node's database by hand
-	// (signing then fails until the next bump, such as a re-add of the share) or wiping the database
-	// and resyncing.
+	// The flip side: a re-add no longer clears a record that is too high (e.g. raised under a wrong
+	// clock), which refuses signatures until the real clock passes it. To clear it early, delete the
+	// record by hand (signing then fails until the next bump, e.g. a re-add) or wipe the node's
+	// database and resync. The records' keys are <network>signer_data-highest_att-<share> and
+	// <network>signer_data-highest_prop-<share>, where <network> is the beacon network's name and
+	// <share> is the share's raw 48-byte public key (see highestAttPrefix and highestProposalPrefix).
 	RemoveShare(ctx context.Context, pubKey phase0.BLSPubKey) error
 }
 
@@ -70,11 +65,10 @@ type BeaconSigner interface {
 	IsBeaconBlockSlashable(pubKey phase0.BLSPubKey, slot phase0.Slot) error
 }
 
-// checkDomainType refuses a (domain, signatureDomain) pair that disagrees. Slashing protection is
-// dispatched on signatureDomain, but the signature is made under domain, whose first four bytes are
-// its DomainType (compute_domain = domain_type ‖ fork_data_root[:28]), so the two must agree.
-// A beacon node always derives the domain from
-// the requested type, so a mismatch is a caller bug, never a legitimate request.
+// checkDomainType refuses a domain whose DomainType (its first four bytes: compute_domain =
+// domain_type ‖ fork_data_root[:28]) differs from signatureDomain. Slashing protection is picked by
+// signatureDomain but the signature is made under domain, so the two must agree.
+// Callers derive domain from signatureDomain, so a mismatch is always a caller bug.
 func checkDomainType(domain phase0.Domain, signatureDomain phase0.DomainType) error {
 	if !bytes.Equal(domain[:4], signatureDomain[:]) {
 		return fmt.Errorf("domain type %x does not match signature domain %x", domain[:4], signatureDomain[:])

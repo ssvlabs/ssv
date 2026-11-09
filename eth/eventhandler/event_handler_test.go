@@ -1712,7 +1712,7 @@ func requireSlashingProtectionStampInWindow(t *testing.T, netCfg *networkconfig.
 }
 
 // requireKeyManagerData checks the key manager's view of one share: whether its account is present
-// (among expectedAccounts in total) and whether its slashing-protection records are present.
+// (among expectedAccounts in total) and whether its slashing records are present.
 func requireKeyManagerData(t *testing.T, eh *EventHandler, expectedAccounts int, validatorData *testValidatorData, accountPresent, recordsPresent bool) {
 	t.Helper()
 	sharePubKey := validatorData.operatorsShares[0].sec.GetPublicKey().Serialize()
@@ -1731,21 +1731,21 @@ func requireKeyManagerData(t *testing.T, eh *EventHandler, expectedAccounts int,
 	require.Equal(t, recordsPresent, found)
 }
 
-// requireKeyManagerDataToExist: an added share has its account and its records.
+// requireKeyManagerDataToExist requires the share's account and records, as after it was added.
 func requireKeyManagerDataToExist(t *testing.T, eh *EventHandler, expectedAccounts int, validatorData *testValidatorData) {
 	t.Helper()
 	requireKeyManagerData(t, eh, expectedAccounts, validatorData, true, true)
 }
 
-// requireKeyManagerDataToNotExist: a share that was never added (malformed event) has neither.
+// requireKeyManagerDataToNotExist requires neither, as for a share that was never added (malformed
+// event).
 func requireKeyManagerDataToNotExist(t *testing.T, eh *EventHandler, expectedAccounts int, validatorData *testValidatorData) {
 	t.Helper()
 	requireKeyManagerData(t, eh, expectedAccounts, validatorData, false, false)
 }
 
-// requireShareRemovedButSlashingDataKept: a removed share's account is gone, but its
-// slashing-protection records outlive it so a later re-add of the same share can never start below
-// what this node already signed (see ekm.KeyManager.RemoveShare).
+// requireShareRemovedButSlashingDataKept requires the records but not the account, as after the share
+// was removed (see ekm.KeyManager.RemoveShare).
 func requireShareRemovedButSlashingDataKept(t *testing.T, eh *EventHandler, expectedAccounts int, validatorData *testValidatorData) {
 	t.Helper()
 	requireKeyManagerData(t, eh, expectedAccounts, validatorData, false, true)

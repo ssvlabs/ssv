@@ -32,9 +32,10 @@ import (
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
 )
 
-// raceWindow is how long a test waits for a goroutine that a lock may be holding back. With the lock
-// in place the test always waits this long; without it, the goroutine gets through well within it.
-// Too short a window can only make a test miss a missing lock, never fail a correct implementation.
+// raceWindow is how long a test waits for a goroutine that a lock may be holding back. A correct
+// implementation always waits it out; without the lock, the goroutine gets through well within it.
+// Don't shrink it to speed up the suite: a shorter window can't fail correct code, but on a loaded
+// runner it can let a missing lock go unnoticed.
 const raceWindow = 250 * time.Millisecond
 
 // hangTimeout bounds a wait that only a broken implementation can make endless, so that the test
