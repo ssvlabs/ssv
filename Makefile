@@ -25,6 +25,28 @@ ifeq ($(COVERAGE),true)
 	COV_CMD=-coverpkg=./... -covermode="atomic" -coverprofile="coverage.out"
 endif
 
+# go test concurrency and timeouts. -p caps the packages built and tested at once, -parallel the
+# t.Parallel tests run at once within a package; an empty value leaves the flag at Go's default
+# (GOMAXPROCS). Each variable below can be overridden on the command line or in the environment.
+# In CI (GitHub sets CI=true), 16/256 oversubscribes the 2-4 vCPU hosted runners until
+# timing-sensitive -race tests miss their deadlines, so CI leaves -p to Go (GOMAXPROCS follows a
+# container's CPU quota) and lowers -parallel to 32.
+ifeq ($(CI),true)
+TEST_P ?=
+TEST_PARALLEL ?= 32
+endif
+TEST_P ?= 16
+TEST_PARALLEL ?= 256
+TEST_TIMEOUT ?= 10m
+TEST_CONCURRENCY = $(if $(TEST_P),-p $(TEST_P)) $(if $(TEST_PARALLEL),-parallel $(TEST_PARALLEL))
+
+# Spec tests keep -parallel 256 even in CI: ssv/spectest runs each vector as a t.Parallel
+# subtest, and at 32 a long one can start late and push the package past its timeout. The
+# package takes up to 5-6 min on a 2-vCPU runner, hence 20m.
+SPEC_TEST_PARALLEL ?= 256
+SPEC_TEST_TIMEOUT ?= 20m
+SPEC_TEST_CONCURRENCY = $(if $(TEST_P),-p $(TEST_P)) $(if $(SPEC_TEST_PARALLEL),-parallel $(SPEC_TEST_PARALLEL))
+
 RUN_TOOL=go tool -modfile=tool.mod
 SSVSIGNER_RUN_TOOL=go tool -modfile=../tool.mod
 
@@ -58,7 +80,7 @@ ssvsigner-boundary-lint:
 .PHONY: unit-test
 unit-test:
 	@echo "Running unit tests"
-	@go test -tags "blst_enabled lfs" -timeout 10m -race -covermode=atomic -coverprofile=coverage.out -p 16 -parallel 256 `go list ./... | grep -ve "spectest\|ssv/scripts/"`
+	@go test -tags "blst_enabled lfs" -timeout $(TEST_TIMEOUT) -race -covermode=atomic -coverprofile=coverage.out $(TEST_CONCURRENCY) `go list ./... | grep -ve "spectest\|ssv/scripts/"`
 
 .PHONY: unit-test-all
 unit-test-all:
@@ -68,20 +90,20 @@ unit-test-all:
 .PHONY: ssvsigner-test
 ssvsigner-test:
 	@echo "Running ssv-signer unit tests"
-	@cd ssvsigner && go test -tags blst_enabled -timeout 10m -race -covermode=atomic -coverprofile=coverage.out -p 16 -parallel 256 `go list ./... | grep -ve "ssvsigner/e2e"`
+	@cd ssvsigner && go test -tags blst_enabled -timeout $(TEST_TIMEOUT) -race -covermode=atomic -coverprofile=coverage.out $(TEST_CONCURRENCY) `go list ./... | grep -ve "ssvsigner/e2e"`
 
 .PHONY: spec-test
 spec-test:
 	@echo "Running spec tests"
-	@go test -tags blst_enabled -timeout 10m ${COV_CMD} -race -p 16 -parallel 256 ./protocol/v2/qbft/spectest
-	@go test -tags blst_enabled -timeout 10m ${COV_CMD} -race -p 16 -parallel 256 ./protocol/v2/ssv/spectest
+	@go test -tags blst_enabled -timeout $(SPEC_TEST_TIMEOUT) ${COV_CMD} -race $(SPEC_TEST_CONCURRENCY) ./protocol/v2/qbft/spectest
+	@go test -tags blst_enabled -timeout $(SPEC_TEST_TIMEOUT) ${COV_CMD} -race $(SPEC_TEST_CONCURRENCY) ./protocol/v2/ssv/spectest
 
 .PHONY: spec-test-alan
 spec-test-alan:
 	@echo "Running spec tests against ssv-spec Alan"
 	@$(MAKE) spec-test-alan-deps
-	@go test -tags "blst_enabled alan_spec" -timeout 10m ${COV_CMD} -race -p 16 -parallel 256 ./protocol/v2/qbft/spectest
-	@go test -tags "blst_enabled alan_spec" -timeout 10m ${COV_CMD} -race -p 16 -parallel 256 ./protocol/v2/ssv/spectest
+	@go test -tags "blst_enabled alan_spec" -timeout $(SPEC_TEST_TIMEOUT) ${COV_CMD} -race $(SPEC_TEST_CONCURRENCY) ./protocol/v2/qbft/spectest
+	@go test -tags "blst_enabled alan_spec" -timeout $(SPEC_TEST_TIMEOUT) ${COV_CMD} -race $(SPEC_TEST_CONCURRENCY) ./protocol/v2/ssv/spectest
 
 .PHONY: spec-test-alan-deps
 spec-test-alan-deps:
