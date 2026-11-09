@@ -174,6 +174,13 @@ func startV5(t *testing.T, cfg discover.Config, domainType []byte) *discover.UDP
 
 var validDomainType = []byte{0x00, 0x00, 0x05, 0x02}
 
+// discv5Timeout and discv5RetryInterval bound how long the discv5 tests wait
+// for a round trip to succeed, and how often they retry it.
+const (
+	discv5Timeout       = 5 * time.Second
+	discv5RetryInterval = 50 * time.Millisecond
+)
+
 // findnode asks from for its table nodes at the distances of want, until
 // they include valid or the timeout passes.
 func findnode(t *testing.T, querier, from *discover.UDPv5, valid *enode.Node, want ...*enode.Node) []*enode.Node {
@@ -186,7 +193,7 @@ func findnode(t *testing.T, querier, from *discover.UDPv5, valid *enode.Node, wa
 	require.Eventually(t, func() bool {
 		got, _ = querier.Findnode(from.Self(), distances)
 		return slices.ContainsFunc(got, func(n *enode.Node) bool { return n.ID() == valid.ID() })
-	}, 5*time.Second, 50*time.Millisecond, "valid node not served")
+	}, discv5Timeout, discv5RetryInterval, "valid node not served")
 	return got
 }
 
@@ -207,15 +214,23 @@ func TestDiscV5_DoesNotAdmitInvalidDomainTypeFromHandshake(t *testing.T) {
 	// until one is admitted.
 	// The loop runs on the test goroutine, not in require.Eventually, because
 	// startV5 calls require and t.Cleanup.
-	deadline := time.Now().Add(5 * time.Second)
+	ctx := t.Context()
+	timeout := time.After(discv5Timeout)
+	retry := time.NewTicker(discv5RetryInterval)
+	defer retry.Stop()
 	var valid *discover.UDPv5
 	for {
 		valid = startV5(t, discover.Config{}, validDomainType)
 		if _, err := valid.Ping(node.Self()); err == nil && containsID(node.AllNodes(), valid.Self().ID()) {
 			break
 		}
-		require.True(t, time.Now().Before(deadline), "valid node never admitted")
-		time.Sleep(50 * time.Millisecond)
+		select {
+		case <-retry.C:
+		case <-timeout:
+			require.FailNow(t, "valid node never admitted")
+		case <-ctx.Done():
+			require.FailNow(t, "test context done", ctx.Err())
+		}
 	}
 
 	invalid := invalidNode.listen(t, discover.Config{})
