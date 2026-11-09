@@ -26,7 +26,10 @@ import (
 	"github.com/stretchr/testify/require"
 	eth2types "github.com/wealdtech/go-eth2-types/v2"
 	"go.uber.org/mock/gomock"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest"
+	"go.uber.org/zap/zaptest/observer"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -3044,4 +3047,130 @@ func buildProposalWithRealLeader(
 	signedSSVMessage := spectestingutils.SignQBFTMsg(ks.OperatorKeys[leader], leader, qbftMessage)
 	signedSSVMessage.FullData = spectestingutils.TestingQBFTFullData
 	return signedSSVMessage
+}
+
+// A panic in validation is recovered, dropping the message as IGNORE. It is logged at error with its stack, at
+// most once per panicLogInterval; the next log counts the panics left unlogged in between.
+func TestValidate_RecoversFromPanic(t *testing.T) {
+	ctrl := gomock.NewController(t)
+
+	validatorStore := mocks.NewMockValidatorStore(ctrl)
+	validatorStore.EXPECT().Committee(gomock.Any()).DoAndReturn(func(spectypes.CommitteeID) (*registrystorage.Committee, bool) {
+		panic("boom")
+	}).Times(3)
+	operators := mocks.NewMockOperators(ctrl)
+	operators.EXPECT().OperatorsExist(gomock.Any(), gomock.Any()).Return(true, nil).AnyTimes()
+
+	core, logs := observer.New(zapcore.DebugLevel)
+	netCfg := networkconfig.TestNetwork
+	validator := New(netCfg, validatorStore, operators, dutystore.New(), signatureverifier.NewMockSignatureVerifier(ctrl), WithLogger(zap.New(core))).(*messageValidator)
+
+	ks := spectestingutils.Testing4SharesSet()
+	msgID := ssvtestingutils.NewMsgID(netCfg.DomainType, make([]byte, 48), spectypes.RoleCommittee)
+	encoded, err := generateSignedMessage(ks, msgID, netCfg.EstimatedCurrentSlot()).Encode()
+	require.NoError(t, err)
+	topic := "ssv.v2.0"
+	pmsg := &pubsub.Message{Message: &pspb.Message{Data: encoded, Topic: &topic}}
+
+	peerID, err := libp2ptest.RandPeerID()
+	require.NoError(t, err)
+
+	validate := func() {
+		require.NotPanics(t, func() {
+			require.Equal(t, pubsub.ValidationIgnore, validator.Validate(context.Background(), peerID, pmsg))
+		})
+	}
+	panicLogs := func() []observer.LoggedEntry {
+		return logs.FilterMessage("recovered from panic in message validation").All()
+	}
+
+	validate()
+	require.Len(t, panicLogs(), 1)
+	entry := panicLogs()[0]
+	require.Equal(t, zapcore.ErrorLevel, entry.Level)
+	require.Equal(t, "boom", entry.ContextMap()["panic"])
+	require.Contains(t, entry.ContextMap()["stack"], "getCommitteeAndValidatorIndices", "stack must lead to the panic site")
+	require.Equal(t, uint64(0), entry.ContextMap()["panics_not_logged"])
+
+	validate()
+	require.Len(t, panicLogs(), 1, "a panic within panicLogInterval of the last log is not logged")
+
+	validator.lastPanicLog = validator.lastPanicLog.Add(-panicLogInterval)
+	validate()
+	require.Len(t, panicLogs(), 2)
+	require.Equal(t, uint64(1), panicLogs()[1].ContextMap()["panics_not_logged"])
+}
+
+// A panic while the per-message lock is held, here from signature verification, leaves the lock released: the
+// next message with the same ID is validated, not blocked. The panic comes before any state is recorded, so the
+// same message is still new to validation and is accepted.
+func TestValidate_RecoversFromPanicUnderMessageLock(t *testing.T) {
+	ctrl := gomock.NewController(t)
+
+	committee := []spectypes.OperatorID{1, 2, 3, 4}
+	validatorStore := mocks.NewMockValidatorStore(ctrl)
+	validatorStore.EXPECT().Committee(gomock.Any()).DoAndReturn(func(id spectypes.CommitteeID) (*registrystorage.Committee, bool) {
+		return &registrystorage.Committee{ID: id, Operators: committee, Indices: []phase0.ValidatorIndex{spectestingutils.TestingValidatorIndex}}, true
+	}).AnyTimes()
+	operators := mocks.NewMockOperators(ctrl)
+	operators.EXPECT().OperatorsExist(gomock.Any(), gomock.Any()).Return(true, nil).AnyTimes()
+	verifier := signatureverifier.NewMockSignatureVerifier(ctrl)
+
+	netCfg := networkconfig.TestNetwork
+	validator := New(netCfg, validatorStore, operators, dutystore.New(), verifier).(*messageValidator)
+
+	// A committee post-consensus partial signature for the current slot passes every check up to signature
+	// verification at any point in the slot, as Validate reads the wall clock.
+	slot := netCfg.EstimatedCurrentSlot()
+	msgID := ssvtestingutils.NewMsgID(netCfg.DomainTypeAtSlot(slot), make([]byte, 48), spectypes.RoleCommittee)
+	data, err := (&spectypes.PartialSignatureMessages{
+		Type: spectypes.PostConsensusPartialSig,
+		Slot: slot,
+		Messages: []*spectypes.PartialSignatureMessage{{
+			PartialSignature: bytes.Repeat([]byte{0xBB}, 96),
+			SigningRoot:      [32]byte{1},
+			Signer:           committee[0],
+			ValidatorIndex:   spectestingutils.TestingValidatorIndex,
+		}},
+	}).Encode()
+	require.NoError(t, err)
+	encoded, err := (&spectypes.SignedSSVMessage{
+		OperatorIDs: []spectypes.OperatorID{committee[0]},
+		Signatures:  [][]byte{bytes.Repeat([]byte{0xAA}, rsaSignatureSize)},
+		SSVMessage:  &spectypes.SSVMessage{MsgType: spectypes.SSVPartialSignatureMsgType, MsgID: msgID, Data: data},
+	}).Encode()
+	require.NoError(t, err)
+	committeeInfo, err := validator.getCommitteeAndValidatorIndices(msgID)
+	require.NoError(t, err)
+	topic := expectedCommitteeTopic(netCfg, committeeInfo, slot)
+	pmsg := &pubsub.Message{Message: &pspb.Message{Data: encoded, Topic: &topic}}
+
+	peerID, err := libp2ptest.RandPeerID()
+	require.NoError(t, err)
+
+	var lockHeld bool
+	gomock.InOrder(
+		verifier.EXPECT().VerifySignature(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+			func(spectypes.OperatorID, *spectypes.SSVMessage, []byte) error {
+				if lock := validator.getValidationLock(msgID); lock.TryLock() {
+					lock.Unlock()
+				} else {
+					lockHeld = true
+				}
+				panic("boom")
+			}),
+		verifier.EXPECT().VerifySignature(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil),
+	)
+
+	require.Equal(t, pubsub.ValidationIgnore, validator.Validate(context.Background(), peerID, pmsg))
+	require.True(t, lockHeld, "the panic must come while the per-message lock is held")
+
+	result := make(chan pubsub.ValidationResult, 1)
+	go func() { result <- validator.Validate(context.Background(), peerID, pmsg) }()
+	select {
+	case r := <-result:
+		require.Equal(t, pubsub.ValidationAccept, r)
+	case <-time.After(5 * time.Second):
+		t.Fatal("the next message with the same ID blocked on the per-message lock")
+	}
 }

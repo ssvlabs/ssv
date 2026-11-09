@@ -42,6 +42,7 @@ func (e Error) Error() string {
 const (
 	validationTimeoutReason  = "validation_timeout"
 	validationCanceledReason = "validation_canceled"
+	validationPanicReason    = "validation_panic"
 )
 
 func (e Error) Reject() bool {

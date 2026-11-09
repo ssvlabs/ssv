@@ -23,6 +23,7 @@ import (
 	"github.com/ssvlabs/ssv/message/signatureverifier"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
@@ -75,6 +76,11 @@ type messageValidator struct {
 
 	selfPID    peer.ID
 	selfAccept bool
+
+	// panicLogMu guards lastPanicLog and panicsNotLogged, which rate-limit logRecoveredPanic.
+	panicLogMu      sync.Mutex
+	lastPanicLog    time.Time
+	panicsNotLogged uint64
 }
 
 // New returns a new MessageValidator with the given network configuration and options.
@@ -132,7 +138,17 @@ func (mv *messageValidator) ValidatorForTopic(_ string) func(ctx context.Context
 
 // Validate validates the given pubsub message.
 // Depending on the outcome, it will return one of the pubsub validation results (Accept, Ignore, or Reject).
-func (mv *messageValidator) Validate(ctx context.Context, peerID peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
+func (mv *messageValidator) Validate(ctx context.Context, peerID peer.ID, pmsg *pubsub.Message) (result pubsub.ValidationResult) {
+	// Pubsub calls validators without a recover. A message whose validation panics is dropped as IGNORE: the
+	// panic is our bug, not evidence against the peer.
+	defer func() {
+		if r := recover(); r != nil {
+			mv.logRecoveredPanic(r, peerID, pmsg.GetTopic())
+			recordIgnoredMessage(ctx, spectypes.RoleUnknown, validationPanicReason)
+			result = pubsub.ValidationIgnore
+		}
+	}()
+
 	if mv.selfAccept && peerID == mv.selfPID {
 		return mv.validateSelf(pmsg)
 	}
@@ -143,12 +159,13 @@ func (mv *messageValidator) Validate(ctx context.Context, peerID peer.ID, pmsg *
 
 	validationStart := time.Now()
 
-	decodedMessage, err := mv.handlePubsubMessage(ctx, pmsg, time.Now())
-
+	// Deferred before handlePubsubMessage runs, so a message whose validation panics is timed too.
+	var decodedMessage *queue.SSVMessage
 	defer func() {
 		recordMessageDuration(ctx, messageRole(decodedMessage), time.Since(validationStart))
 	}()
 
+	decodedMessage, err := mv.handlePubsubMessage(ctx, pmsg, time.Now())
 	if err != nil {
 		return mv.handleValidationError(ctx, peerID, pmsg.GetTopic(), decodedMessage, err)
 	}
@@ -156,6 +173,32 @@ func (mv *messageValidator) Validate(ctx context.Context, peerID peer.ID, pmsg *
 	pmsg.ValidatorData = decodedMessage
 
 	return mv.handleValidationSuccess(ctx, decodedMessage)
+}
+
+// panicLogInterval is the minimum time between recovered-panic logs.
+const panicLogInterval = time.Minute
+
+// logRecoveredPanic logs a panic recovered in Validate with the stack it was raised on, at most once per
+// panicLogInterval; each log counts the panics skipped since the previous one.
+func (mv *messageValidator) logRecoveredPanic(r any, peerID peer.ID, topic string) {
+	mv.panicLogMu.Lock()
+	if time.Since(mv.lastPanicLog) < panicLogInterval {
+		mv.panicsNotLogged++
+		mv.panicLogMu.Unlock()
+		return
+	}
+	mv.lastPanicLog = time.Now()
+	notLogged := mv.panicsNotLogged
+	mv.panicsNotLogged = 0
+	mv.panicLogMu.Unlock()
+
+	mv.logger.Error("recovered from panic in message validation",
+		zap.Any("panic", r),
+		zap.Stack("stack"),
+		zap.Uint64("panics_not_logged", notLogged),
+		fields.PeerID(peerID),
+		fields.Topic(topic),
+	)
 }
 
 func messageRole(decodedMessage *queue.SSVMessage) spectypes.RunnerRole {
