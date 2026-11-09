@@ -3,19 +3,49 @@ package discovery
 import (
 	"context"
 	"errors"
+	"net"
 	"testing"
 	"time"
 
+	"github.com/OffchainLabs/go-bitfield"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/p2p/enode"
+	"github.com/ethereum/go-ethereum/p2p/enr"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
 
+	"github.com/ssvlabs/ssv/network/records"
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 )
+
+// nodeWithRawDomainType returns a signed SSV node record whose domaintype
+// entry holds the given bytes. CustomNode can't build it: it only takes a
+// well-formed DomainType.
+func nodeWithRawDomainType(t *testing.T, domainType []byte) *enode.Node {
+	t.Helper()
+	sk, err := crypto.GenerateKey()
+	require.NoError(t, err)
+
+	var record enr.Record
+	record.Set(enr.WithEntry("ssv", true))
+	record.Set(enr.IP(net.IPv4(127, 0, 0, 1)))
+	record.Set(enr.UDP(12000))
+	record.Set(enr.TCP(13000))
+	record.Set(enr.WithEntry(records.KeyDomainType, domainType))
+	subnetsVec := bitfield.NewBitvector128()
+	subnetsVec.SetBitAt(1, true)
+	record.Set(enr.WithEntry("subnets", &subnetsVec))
+	require.NoError(t, enode.SignV4(&record, sk))
+
+	node, err := enode.New(enode.V4ID{}, &record)
+	require.NoError(t, err)
+	return node
+}
 
 // newDiscoverTestService returns a service wired as NewDiscV5Service wires it,
 // logging to logger and discovering through listener, but without a real
@@ -27,6 +57,21 @@ func newDiscoverTestService(t *testing.T, logger *zap.Logger, listener Listener)
 	t.Cleanup(dvs.cancel)
 	dvs.dv5Listener = listener
 	return dvs
+}
+
+func TestCheckPeer_DomainTypeLength(t *testing.T) {
+	dvs := newDiscoverTestService(t, zap.NewNop(), nil)
+
+	for _, domainType := range [][]byte{nil, {0x01}, {0x01, 0x02}, {0x01, 0x02, 0x03}, {0x01, 0x02, 0x03, 0x04, 0x05}} {
+		node := nodeWithRawDomainType(t, domainType)
+
+		err := dvs.checkPeer(t.Context(), ToPeerEvent(node))
+
+		var skipErr *peerSkipError
+		require.ErrorAs(t, err, &skipErr, "len=%d", len(domainType))
+		require.Equal(t, skipReasonInvalidDomainType, skipErr.reason, "len=%d", len(domainType))
+		require.ErrorIs(t, err, records.ErrInvalidDomainTypeEntry, "len=%d", len(domainType))
+	}
 }
 
 func TestDiscover_HandlerPanic(t *testing.T) {
@@ -84,6 +129,36 @@ func TestDiscover_FilterPanic(t *testing.T) {
 	logged := entries[0].ContextMap()
 	require.Equal(t, nodes[0].String(), logged[fields.FieldTargetNodeENR])
 	require.Contains(t, logged["panic"], "filter panic")
+}
+
+func TestBootstrap_SkipsInvalidDomainType(t *testing.T) {
+	invalid := nodeWithRawDomainType(t, []byte{0x01, 0x02})
+	valid := NewTestingNode(t)
+	dvs := newDiscoverTestService(t, zap.NewNop(), NewMockListener(NewLocalNode(t), []*enode.Node{invalid, valid}))
+
+	handled := make(chan *enode.Node, 2)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		assert.NoError(t, dvs.Bootstrap(func(e PeerEvent) { handled <- e.Node }))
+	}()
+
+	select {
+	case n := <-handled:
+		require.Equal(t, valid, n)
+	case <-done:
+		t.Fatal("Bootstrap returned before handling the valid node")
+	case <-time.After(5 * time.Second):
+		t.Fatal("valid node was not handled")
+	}
+
+	dvs.cancel()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Bootstrap did not return after context cancellation")
+	}
+	require.Empty(t, dvs.panicLogs, "the invalid record must be rejected by the decoder, not recovered by discover()")
 }
 
 func TestReportRecoveredPanic_RateLimited(t *testing.T) {

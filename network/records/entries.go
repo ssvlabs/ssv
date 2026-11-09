@@ -2,6 +2,7 @@ package records
 
 import (
 	"errors"
+	"fmt"
 	"io"
 
 	"github.com/OffchainLabs/go-bitfield"
@@ -21,7 +22,10 @@ const (
 	KeyNextDomainType = "next_domaintype"
 )
 
-var ErrEntryNotFound = errors.New("not found")
+var (
+	ErrEntryNotFound          = errors.New("not found")
+	ErrInvalidDomainTypeEntry = errors.New("invalid domain type entry")
+)
 
 // DomainTypeEntry holds the domain type of the node
 type DomainTypeEntry struct {
@@ -37,13 +41,12 @@ func (dt DomainTypeEntry) EncodeRLP(w io.Writer) error {
 	return rlp.Encode(w, dt.DomainType[:])
 }
 
-// DecodeRLP implements rlp.Decoder, decodes domain type from bytes
+// DecodeRLP implements rlp.Decoder. It decodes exactly 4 bytes into DomainType
+// and returns ErrInvalidDomainTypeEntry for any other value.
 func (dt *DomainTypeEntry) DecodeRLP(s *rlp.Stream) error {
-	var buf []byte
-	if err := s.Decode(&buf); err != nil {
-		return err
+	if err := s.ReadBytes(dt.DomainType[:]); err != nil {
+		return fmt.Errorf("%w: %w", ErrInvalidDomainTypeEntry, err)
 	}
-	dt.DomainType = spectypes.DomainType(buf)
 	return nil
 }
 
