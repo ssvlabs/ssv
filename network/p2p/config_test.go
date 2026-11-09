@@ -1,6 +1,7 @@
 package p2pv1
 
 import (
+	"net"
 	"testing"
 
 	"github.com/libp2p/go-libp2p"
@@ -20,10 +21,12 @@ func TestConfig_ApplyDefaults(t *testing.T) {
 	require.Equal(t, DiscoveryDiscv5, c.Discovery)
 }
 
-// TestConfig_AddrsFactory checks that with HostAddress or HostDNS set, the host advertises that
-// address plus the public ones among the addresses go-libp2p resolves 0.0.0.0 to, and none of the
-// private ones. Without either, no factory is set and libp2p advertises everything as before.
+// TestConfig_AddrsFactory checks that the host advertises what discovery hands out for it
+// (HostAddress, HostDNS, or else the ENR IP) plus the public ones among the addresses go-libp2p
+// resolves 0.0.0.0 to, and no other private ones. Without discv5 and neither of the other two,
+// no factory is set.
 func TestConfig_AddrsFactory(t *testing.T) {
+	localIP := net.ParseIP("10.0.1.5") // the ENR IP
 	resolved := []ma.Multiaddr{
 		ma.StringCast("/ip4/127.0.0.1/tcp/13001"),
 		ma.StringCast("/ip4/10.0.1.5/tcp/13001"),
@@ -34,33 +37,47 @@ func TestConfig_AddrsFactory(t *testing.T) {
 
 	tests := []struct {
 		name        string
+		localIP     net.IP // nil without discv5
 		hostAddress string
 		hostDNS     string
 		want        []string // nil when no factory is expected
 	}{
 		{
-			name: "no external address",
+			name:    "no external address",
+			localIP: localIP,
+			want:    []string{"/ip4/1.2.3.4/tcp/13001", "/ip4/10.0.1.5/tcp/13001"},
 		},
 		{
 			name:        "host address",
+			localIP:     localIP,
 			hostAddress: "5.6.7.8",
 			want:        []string{"/ip4/1.2.3.4/tcp/13001", "/ip4/5.6.7.8/tcp/13001"},
 		},
 		{
 			name:        "private host address",
-			hostAddress: "10.0.1.5",
-			want:        []string{"/ip4/1.2.3.4/tcp/13001", "/ip4/10.0.1.5/tcp/13001"},
+			localIP:     localIP,
+			hostAddress: "192.168.1.2",
+			want:        []string{"/ip4/1.2.3.4/tcp/13001", "/ip4/192.168.1.2/tcp/13001"},
 		},
 		{
 			name:    "host DNS",
+			localIP: localIP,
 			hostDNS: "ssv.example.com",
 			want:    []string{"/ip4/1.2.3.4/tcp/13001", "/dns4/ssv.example.com/tcp/13001"},
+		},
+		{
+			name:        "host address without discv5",
+			hostAddress: "5.6.7.8",
+			want:        []string{"/ip4/1.2.3.4/tcp/13001", "/ip4/5.6.7.8/tcp/13001"},
+		},
+		{
+			name: "no external address without discv5",
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := Config{TCPPort: 13001, HostAddress: tt.hostAddress, HostDNS: tt.hostDNS}
-			opts, err := c.configureAddrs(nil, nil)
+			opts, err := c.configureAddrs(nil, tt.localIP)
 			require.NoError(t, err)
 
 			var hostCfg libp2p.Config
