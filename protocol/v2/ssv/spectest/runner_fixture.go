@@ -23,24 +23,35 @@ import (
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
-// fixRunnerForRun, and the helpers it depends on, live in this non-test file (rather than
-// ssv_mapping_test.go) because committee_msg_processing_type.go (a non-test file) also calls
-// fixRunnerForRun when fixing up AggregatorCommitteeRunners read out of state-comparison JSON;
-// a non-test file cannot reference symbols defined only in a _test.go file under `go build`.
+// fixRunnerForRun is fixBaseRunnerForRun for a runner given as a generic JSON map, the form
+// ssv_mapping_test.go decodes spec tests into.
 func fixRunnerForRun(
 	t *testing.T,
 	runnerMap map[string]any,
 	ks *spectestingutils.TestKeySet,
 	netCfg *networkconfig.Network,
 ) runner.Runner {
-	logger := log.TestLogger(t)
-
 	baseRunnerMap := runnerMap["BaseRunner"].(map[string]any)
 
 	baseRunner := &runner.BaseRunner{}
 	byts, err := json.Marshal(baseRunnerMap)
 	require.NoError(t, err)
 	require.NoError(t, json.Unmarshal(byts, &baseRunner))
+
+	return fixBaseRunnerForRun(t, baseRunner, ks, netCfg)
+}
+
+// fixBaseRunnerForRun and its helpers live in this non-test file, not ssv_mapping_test.go, because
+// committee_msg_processing_type.go (also a non-test file) calls it for committee runners read out of
+// state-comparison JSON.
+func fixBaseRunnerForRun(
+	t *testing.T,
+	baseRunner *runner.BaseRunner,
+	ks *spectestingutils.TestKeySet,
+	netCfg *networkconfig.Network,
+) runner.Runner {
+	logger := log.TestLogger(t)
+
 	if netCfg == nil {
 		netCfg = networkconfig.TestNetwork
 	}
