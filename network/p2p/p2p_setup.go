@@ -124,9 +124,9 @@ func (n *p2pNetwork) initCfg() error {
 	return nil
 }
 
-// IsBadPeer returns whether a peer is bad
+// IsBadPeer returns whether a peer is bad. A trusted peer never is, so the node keeps it whatever its score.
 func (n *p2pNetwork) IsBadPeer(peerID peer.ID) bool {
-	if !n.isIdxSet.Load() {
+	if n.isTrustedPeer(peerID) || !n.isIdxSet.Load() {
 		return false
 	}
 	return n.idx.IsBad(peerID)
@@ -257,7 +257,7 @@ func (n *p2pNetwork) setupPeerServices() error {
 		networkFilter := connections.NetworkIDFilter(allowedDomains...)
 		return []connections.HandshakeFilter{
 			networkFilter,
-			connections.BadPeerFilter(n.idx),
+			connections.BadPeerFilter(n.IsBadPeer),
 		}
 	}
 
@@ -279,7 +279,7 @@ func (n *p2pNetwork) setupPeerServices() error {
 	h.SetStreamHandler(peers.NodeInfoProtocol, handshaker.Handler())
 	n.logger.Debug("handshaker is ready")
 
-	n.connHandler = connections.NewConnHandler(n.ctx, n.logger, handshaker, n.ActiveSubnets, n.idx, n.idx, n.idx, n.discoveredPeersPool)
+	n.connHandler = connections.NewConnHandler(n.ctx, n.logger, handshaker, n.ActiveSubnets, n.idx, n.idx, n.idx, n.discoveredPeersPool, n.isTrustedPeer)
 	h.Network().Notify(n.connHandler.Handle())
 	n.logger.Debug("connection handler is ready")
 

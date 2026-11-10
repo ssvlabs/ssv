@@ -142,7 +142,7 @@ MetricsAPIPort: 8080
     - `ETH1Addr`: Address of the execution client (ETH1 Node).
 
 - **p2p**
-    - `Discovery`: Peer-to-peer discovery method: `discv5` (default), `mdns`, or `none`. A `none` node runs no discovery: it has only its `TrustedPeers` and the peers that dial it. Trusted peers are dialed once, at startup, so one that disconnects stays disconnected unless it dials back. Any other value stops the node at startup.
+    - `Discovery`: Peer-to-peer discovery method: `discv5` (default), `mdns`, or `none`. A `none` node runs no discovery: it has only its `TrustedPeers` and the peers that dial it. The node re-dials a trusted peer whenever it disconnects. Any other value stops the node at startup.
 
 - **ssv**
     - `Network`: Name of the network.
