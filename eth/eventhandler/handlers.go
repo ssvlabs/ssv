@@ -394,7 +394,8 @@ func (eh *EventHandler) handleValidatorRemoved(ctx context.Context, txn basedb.T
 		logger = logger.With(zap.String("validator_pubkey", hex.EncodeToString(share.ValidatorPubKey[:])))
 	}
 	if isOperatorShare {
-		if err := eh.keyManager.RemoveShare(ctx, phase0.BLSPubKey(share.SharePubKey)); err != nil {
+		err := eh.keyManager.RemoveShare(ctx, phase0.BLSPubKey(share.SharePubKey))
+		if err != nil {
 			return emptyPK, fmt.Errorf("could not remove share from ekm storage: %w", err)
 		}
 

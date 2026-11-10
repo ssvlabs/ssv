@@ -281,7 +281,8 @@ func zeroRootSplit(tb testing.TB, ids []uint64, degree int, zeroAt ...uint64) (*
 // TestHandleValidatorAddedReusedShareKeyIsMalformed registers two validators whose shares for one operator
 // use the same key. The second registration must be skipped as malformed, also when the key is another
 // operator's (every node must skip it), when the first validator is liquidated, and when both are in one
-// block. It must leave the first validator's slashing protection as the first registration set it.
+// block. The second validator's removal must then be skipped too, and the first validator must keep its key,
+// with the slashing protection that its registration set.
 func TestHandleValidatorAddedReusedShareKeyIsMalformed(t *testing.T) {
 	const reusedKeyMsg = "malformed event: share public key is already used by another validator"
 
@@ -357,6 +358,18 @@ func TestHandleValidatorAddedReusedShareKeyIsMalformed(t *testing.T) {
 			nextNonce, err := eh.nodeStorage.GetNextNonce(nil, secondOwner)
 			require.NoError(t, err)
 			require.EqualValues(t, 1, nextNonce, "nonce must advance even though the event is malformed")
+
+			// The second validator isn't stored, so its removal is skipped, and the first validator keeps its key.
+			txn = eh.nodeStorage.Begin()
+			defer txn.Discard()
+			_, err = eh.handleValidatorRemoved(ctx, txn, &contract.ContractValidatorRemoved{
+				Owner:       secondOwner,
+				OperatorIds: operatorIDs,
+				PublicKey:   second.masterPubKey.Serialize(),
+			})
+			require.ErrorAs(t, err, &malformed, "the removal of a skipped registration must be a malformed (skippable) event")
+			require.ErrorIs(t, err, ErrValidatorShareNotFound)
+			require.NoError(t, txn.Commit())
 
 			accounts, err := km.ListAccounts()
 			require.NoError(t, err)
