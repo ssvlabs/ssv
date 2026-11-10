@@ -566,55 +566,68 @@ func TestHandleValidatorRemovedRemovesShareKeyInUse(t *testing.T) {
 }
 
 // TestHandleValidatorRemovedKeepsSlashingProtection removes a validator and registers it again with the
-// same shares. The removal must remove the share key and keep its slashing protection data, and the new
-// registration must import the key again without lowering that data.
+// same shares, in two blocks or in one. The removal must remove the share key and keep its slashing protection
+// data, and the new registration must import the key again without lowering that data.
 func TestHandleValidatorRemovedKeepsSlashingProtection(t *testing.T) {
-	ctx := context.Background()
-	eh, ops, operatorIDs := setupValidatorAddedTest(t, ctx)
-	km := eh.keyManager.(*ekm.LocalKeyManager)
+	tests := []struct {
+		name string
+		// sameTxn removes and registers the validator in one transaction, as two events of one block.
+		sameTxn bool
+	}{
+		{name: "removed and registered in two transactions"},
+		{name: "removed and registered in one transaction", sameTxn: true},
+	}
 
-	validatorData, err := createNewValidator(ops)
-	require.NoError(t, err)
-	sharePubKey := phase0.BLSPubKey(validatorData.operatorsShares[0].pub.Serialize())
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			eh, ops, operatorIDs := setupValidatorAddedTest(t, ctx)
+			km := eh.keyManager.(*ekm.LocalKeyManager)
 
-	txn := eh.nodeStorage.Begin()
-	defer txn.Discard()
-	_, err = eh.handleValidatorAdded(ctx, txn, validatorAddedEvent(t, validatorData, ops, testAddr, 0))
-	require.NoError(t, err)
-	require.NoError(t, txn.Commit())
+			validatorData, err := createNewValidator(ops)
+			require.NoError(t, err)
+			sharePubKey := phase0.BLSPubKey(validatorData.operatorsShares[0].pub.Serialize())
 
-	seeded := seedSlashingProtection(t, eh, km, sharePubKey)
+			txn := eh.nodeStorage.Begin()
+			defer txn.Discard()
+			_, err = eh.handleValidatorAdded(ctx, txn, validatorAddedEvent(t, validatorData, ops, testAddr, 0))
+			require.NoError(t, err)
+			require.NoError(t, txn.Commit())
 
-	txn = eh.nodeStorage.Begin()
-	defer txn.Discard()
-	_, err = eh.handleValidatorRemoved(ctx, txn, &contract.ContractValidatorRemoved{
-		Owner:       testAddr,
-		OperatorIds: operatorIDs,
-		PublicKey:   validatorData.masterPubKey.Serialize(),
-	})
-	require.NoError(t, err)
-	require.NoError(t, txn.Commit())
+			seeded := seedSlashingProtection(t, eh, km, sharePubKey)
 
-	requireShareKeyImported(t, km, sharePubKey, false)
-	requireSlashingProtection(t, km, sharePubKey, seeded)
+			txn = eh.nodeStorage.Begin()
+			defer txn.Discard()
+			_, err = eh.handleValidatorRemoved(ctx, txn, &contract.ContractValidatorRemoved{
+				Owner:       testAddr,
+				OperatorIds: operatorIDs,
+				PublicKey:   validatorData.masterPubKey.Serialize(),
+			})
+			require.NoError(t, err)
+			if !tc.sameTxn {
+				require.NoError(t, txn.Commit())
+				txn = eh.nodeStorage.Begin()
+				defer txn.Discard()
+			}
 
-	txn = eh.nodeStorage.Begin()
-	defer txn.Discard()
-	_, err = eh.handleValidatorAdded(ctx, txn, validatorAddedEvent(t, validatorData, ops, testAddr, 1))
-	require.NoError(t, err)
-	require.NoError(t, txn.Commit())
+			requireShareKeyImported(t, km, sharePubKey, false)
+			requireSlashingProtection(t, km, sharePubKey, seeded)
 
-	requireShareKeyImported(t, km, sharePubKey, true)
-	requireSlashingProtection(t, km, sharePubKey, seeded)
+			_, err = eh.handleValidatorAdded(ctx, txn, validatorAddedEvent(t, validatorData, ops, testAddr, 1))
+			require.NoError(t, err)
+			require.NoError(t, txn.Commit())
+
+			requireShareKeyImported(t, km, sharePubKey, true)
+			requireSlashingProtection(t, km, sharePubKey, seeded)
+		})
+	}
 }
 
 // TestHandleClusterReactivatedShareKeyInUse stores two validators whose shares for this operator use the same
-// key, as earlier versions could, and reactivates the cluster of the second one. While the first validator
-// attests, the reactivation must leave the key's slashing protection as it was, so that the first validator
-// doesn't skip the current epoch. When the first validator doesn't attest (liquidated, pending, exited or without
-// beacon metadata) or is in the reactivated cluster, the reactivation must bump the data as usual. The reactivated
-// cluster also has a third validator, whose key must be bumped, unless a fourth validator, attesting in the first
-// one's cluster, uses it too, so that every reactivated key is in use.
+// key, as earlier versions could, and reactivates the second one's cluster. The reactivation must leave the key's
+// slashing protection as it was while the first validator attests outside that cluster, so that it doesn't skip
+// the current epoch, and bump the key as usual otherwise. The key of a third validator in the reactivated cluster
+// must be bumped too, unless a fourth one, attesting in the first one's cluster, uses it.
 func TestHandleClusterReactivatedShareKeyInUse(t *testing.T) {
 	const notBumpedMsg = "share public key is used by another attesting validator, not bumping its slashing protection"
 	const active = eth2apiv1.ValidatorStateActiveOngoing
@@ -629,7 +642,7 @@ func TestHandleClusterReactivatedShareKeyInUse(t *testing.T) {
 		sameCluster bool
 		// thirdKeyInUse stores a fourth validator in the first one's cluster that uses the third's key.
 		thirdKeyInUse bool
-		// bumped is whether the reactivation must bump the slashing protection of the first and second validators' key.
+		// bumped is whether the reactivation must bump the key that the first and second validators share.
 		bumped bool
 	}{
 		{name: "first validator attesting", firstStatus: active},

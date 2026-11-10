@@ -201,10 +201,9 @@ func (eh *EventHandler) handleValidatorAdded(
 	validatorShare, exists := eh.nodeStorage.Shares().Get(txn, event.PublicKey)
 	if !exists {
 		// The key manager and its slashing protection data are keyed by share public key, so an operator's share
-		// key can belong to one stored validator only. All of the event's keys are checked, not only this
-		// operator's, so nodes with the same registry skip the same events. The exception is a registration whose
-		// encrypted share for an operator is invalid: only that operator's node can tell, so it alone skips the
-		// registration, and can then accept a later one with the same key.
+		// key may belong to one stored validator only. Every operator's key is checked, so that nodes with the
+		// same registry skip the same events. The exception is an undecryptable share: only its operator's node
+		// skips that registration, and may then accept a later one with the same key.
 		for i, operatorID := range event.OperatorIds {
 			if other, found := eh.validatorUsingShareKey(operatorID, sharePublicKeys[i]); found {
 				logger.Warn("malformed event: share public key is already used by another validator",
@@ -421,29 +420,26 @@ func (eh *EventHandler) handleValidatorRemoved(ctx context.Context, txn basedb.T
 	return emptyPK, nil
 }
 
-// validatorUsingShareKey returns a stored validator that passes all filters and whose share public key for
-// operatorID is sharePubKey. Liquidated validators count unless a filter excludes them, as they keep their
-// key for reactivation.
+// validatorUsingShareKey returns a stored validator whose share public key for operatorID is sharePubKey.
+// Liquidated validators count, as they keep their key for reactivation.
 func (eh *EventHandler) validatorUsingShareKey(
 	operatorID spectypes.OperatorID,
 	sharePubKey []byte,
-	filters ...registrystorage.SharesFilter,
 ) (*ssvtypes.SSVShare, bool) {
 	for share, key := range eh.operatorShareKeys(operatorID) {
-		if bytes.Equal(key, sharePubKey) && passesFilters(share, filters) {
+		if bytes.Equal(key, sharePubKey) {
 			return share, true
 		}
 	}
 	return nil, false
 }
 
-// validatorsUsingShareKeys is validatorUsingShareKey for several keys, in one pass over the operator's committees.
-// It maps each key to a stored validator that uses it and passes all filters, and leaves out keys that no such
-// validator uses. For a single key, validatorUsingShareKey is faster, as it compares keys instead of hashing them.
+// validatorsUsingShareKeys maps each of sharePubKeys to a stored validator that uses it for operatorID and passes
+// filter, in one pass over the operator's committees. Keys that no such validator uses are left out.
 func (eh *EventHandler) validatorsUsingShareKeys(
 	operatorID spectypes.OperatorID,
 	sharePubKeys map[string]struct{},
-	filters ...registrystorage.SharesFilter,
+	filter registrystorage.SharesFilter,
 ) map[string]*ssvtypes.SSVShare {
 	using := make(map[string]*ssvtypes.SSVShare)
 	if len(sharePubKeys) == 0 {
@@ -453,7 +449,7 @@ func (eh *EventHandler) validatorsUsingShareKeys(
 		if _, wanted := sharePubKeys[string(key)]; !wanted {
 			continue
 		}
-		if _, found := using[string(key)]; found || !passesFilters(share, filters) {
+		if _, found := using[string(key)]; found || !filter(share) {
 			continue
 		}
 		using[string(key)] = share
@@ -464,9 +460,8 @@ func (eh *EventHandler) validatorsUsingShareKeys(
 	return using
 }
 
-// operatorShareKeys yields every stored validator whose committee includes operatorID, with its share public key
-// for operatorID. It reads the operator's committees, which the store replaces rather than changes, so unlike
-// OperatorValidators they need no lock.
+// operatorShareKeys yields each stored validator in operatorID's committees, with its share public key for
+// operatorID. The store replaces committees instead of changing them, so reading them needs no lock.
 func (eh *EventHandler) operatorShareKeys(operatorID spectypes.OperatorID) iter.Seq2[*ssvtypes.SSVShare, []byte] {
 	return func(yield func(*ssvtypes.SSVShare, []byte) bool) {
 		for _, committee := range eh.nodeStorage.ValidatorStore().OperatorCommittees(operatorID) {
@@ -482,16 +477,6 @@ func (eh *EventHandler) operatorShareKeys(operatorID spectypes.OperatorID) iter.
 			}
 		}
 	}
-}
-
-// passesFilters reports whether share passes all filters.
-func passesFilters(share *ssvtypes.SSVShare, filters []registrystorage.SharesFilter) bool {
-	for _, filter := range filters {
-		if !filter(share) {
-			return false
-		}
-	}
-	return true
 }
 
 func (eh *EventHandler) handleClusterLiquidated(txn basedb.Txn, event *contract.ContractClusterLiquidated) ([]*ssvtypes.SSVShare, error) {
@@ -535,21 +520,22 @@ func (eh *EventHandler) handleClusterReactivated(txn basedb.Txn, event *contract
 		return nil, fmt.Errorf("could not process cluster event: %w", err)
 	}
 
-	// bump slashing protection for operator reactivated validators
-	operatorID := eh.operatorDataStore.GetOperatorID()
+	// A validator stored before handleValidatorAdded rejected reused share keys may sign with one of these keys. If
+	// one outside this cluster attests, its signing keeps the key's slashing protection current, and a bump would
+	// make it skip the current epoch. One that doesn't attest signs nothing that slashing protection covers, so a
+	// bump costs it nothing.
 	inCluster := registrystorage.ByClusterIDHash(ssvtypes.ComputeClusterIDHash(event.Owner, event.OperatorIds))
-	otherCluster := func(share *ssvtypes.SSVShare) bool { return !inCluster(share) }
+	currentEpoch := eh.networkConfig.EstimatedCurrentEpoch()
+	attestingElsewhere := func(share *ssvtypes.SSVShare) bool {
+		return share.IsAttesting(currentEpoch) && !inCluster(share)
+	}
 	sharePubKeys := make(map[string]struct{}, len(toReactivate))
 	for _, share := range toReactivate {
 		sharePubKeys[string(share.SharePubKey)] = struct{}{}
 	}
-	// A validator stored before handleValidatorAdded rejected reused share keys may sign with one of these keys. If
-	// one outside this cluster attests, its signing keeps the key's slashing protection current, and a bump would
-	// make it skip the current epoch. One that doesn't attest (liquidated, pending, exited or without beacon
-	// metadata) signs nothing that slashing protection covers, so the data may be stale, and a bump costs it nothing.
-	currentEpoch := eh.networkConfig.EstimatedCurrentEpoch()
-	attesting := func(share *ssvtypes.SSVShare) bool { return share.IsAttesting(currentEpoch) }
-	inUse := eh.validatorsUsingShareKeys(operatorID, sharePubKeys, attesting, otherCluster)
+	inUse := eh.validatorsUsingShareKeys(eh.operatorDataStore.GetOperatorID(), sharePubKeys, attestingElsewhere)
+
+	// bump slashing protection for operator reactivated validators
 	for _, share := range toReactivate {
 		if other, found := inUse[string(share.SharePubKey)]; found {
 			logger.Warn("share public key is used by another attesting validator, not bumping its slashing protection",
