@@ -21,10 +21,9 @@ func TestConfig_ApplyDefaults(t *testing.T) {
 	require.Equal(t, DiscoveryDiscv5, c.Discovery)
 }
 
-// TestConfig_AddrsFactory checks that the host listens on 0.0.0.0 and the local IP, and advertises
-// what discovery hands out for it (HostAddress, HostDNS, or else the IP our ENR starts with) plus the
-// public ones among the addresses go-libp2p resolves 0.0.0.0 to, and no other private ones. Without
-// discv5 and neither of the other two, no factory is set.
+// TestConfig_AddrsFactory checks that the host listens on 0.0.0.0, plus the local IP with discv5, and advertises
+// its public addresses plus HostAddress, HostDNS or else the local IP, and no other private ones. Without discv5,
+// HostAddress or HostDNS, no factory is set.
 func TestConfig_AddrsFactory(t *testing.T) {
 	localIP := net.ParseIP("10.0.1.5") // the IP our ENR starts with
 	resolved := []ma.Multiaddr{

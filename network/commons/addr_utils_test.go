@@ -33,8 +33,7 @@ func Test_BuildMultiAddress(t *testing.T) {
 	})
 }
 
-// TestIPAddr checks that IPAddr returns one of this machine's own addresses, and the default route's when there is
-// one.
+// TestIPAddr checks that IPAddr returns one of this machine's addresses, preferring the default route's.
 func TestIPAddr(t *testing.T) {
 	ip, err := IPAddr()
 	require.NoError(t, err)

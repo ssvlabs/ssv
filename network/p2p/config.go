@@ -141,11 +141,9 @@ func (c *Config) ValidateDiscovery() error {
 	}
 }
 
-// Libp2pOptions creates options list for the libp2p host
-// these are the most basic options required to start a network instance,
-// other options and libp2p components can be configured on top.
-// localIP (nil without discv5) is listened on and, without HostAddress/HostDNS, is both the IP our ENR
-// starts with and the address we advertise.
+// Libp2pOptions returns the basic libp2p host options; other options and components are configured on top.
+// localIP (nil without discv5) is listened on and, without HostAddress/HostDNS, is the IP our ENR starts with and
+// is advertised alongside our public addresses.
 func (c *Config) Libp2pOptions(localIP net.IP) ([]libp2p.Option, error) {
 	if c.NetworkPrivateKey == nil {
 		return nil, errors.New("could not create options w/o network key")
@@ -193,8 +191,8 @@ func (c *Config) configureAddrs(opts []libp2p.Option, localIP net.IP) ([]libp2p.
 	}
 	opts = append(opts, libp2p.ListenAddrs(addrs...))
 
-	// announced is what discovery hands out for us: HostDNS or HostAddress (mutually exclusive),
-	// else the IP our ENR starts with (discv5 may later switch the ENR to the public IP peers report).
+	// announced is what we advertise besides our public addresses: HostDNS or HostAddress (mutually exclusive), else
+	// the IP our ENR starts with (discv5 may later switch the ENR to the public IP peers report).
 	var announced ma.Multiaddr
 	switch {
 	case c.HostDNS != "":
@@ -204,18 +202,17 @@ func (c *Config) configureAddrs(opts []libp2p.Option, localIP net.IP) ([]libp2p.
 	case maIP != nil:
 		announced = maIP
 	default:
-		// Without discv5 there's no ENR: peers learn our addresses only from what we advertise
-		// (through mdns's DHT, or identify without discovery), so keep go-libp2p's default.
+		// Without discv5 there's no ENR: peers learn our addresses only from what we advertise,
+		// so keep go-libp2p's default.
 		return opts, nil
 	}
 	if err != nil {
 		return opts, fmt.Errorf("could not build external multi address: %w", err)
 	}
 
-	// go-libp2p resolves the 0.0.0.0 listener to interface addresses (docker bridges, VPNs,
-	// loopback, ...), and identify and the signed peer record advertise what this factory
-	// returns. Peers reach us through the announced address, so the other private ones would
-	// only leak our internal network.
+	// go-libp2p resolves the 0.0.0.0 listener to interface addresses (docker bridges, VPNs, loopback, ...), and
+	// identify and the signed peer record advertise what this factory returns. Peers reach us through the public
+	// and announced addresses, so the other private ones would only leak our internal network.
 	opts = append(opts, libp2p.AddrsFactory(func(addrs []ma.Multiaddr) []ma.Multiaddr {
 		return append(publicAddrs(addrs), announced)
 	}))

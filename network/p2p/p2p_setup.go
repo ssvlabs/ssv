@@ -134,8 +134,7 @@ func (n *p2pNetwork) IsBadPeer(peerID peer.ID) bool {
 
 // SetupHost configures a libp2p host and backoff connector utility
 func (n *p2pNetwork) SetupHost() error {
-	// discv5 advertises the node's IP, so only it keeps a listener on that IP; the other modes need no external
-	// IP at all.
+	// Only discv5 needs the local IP: it goes into our ENR, and the host listens on it.
 	if n.cfg.discoveryMode() == DiscoveryDiscv5 {
 		ip, err := p2pcommons.IPAddr()
 		if err != nil {

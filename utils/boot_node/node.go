@@ -13,9 +13,9 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/discover"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
-	"github.com/prysmaticlabs/prysm/v4/network"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/discovery"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability/log"
@@ -118,12 +118,12 @@ func (n *bootNode) Start(ctx context.Context) error {
 		n.logger.Fatal("failed to get p2p private key", zap.Error(err))
 	}
 
-	ipAddr, err := network.ExternalIP()
+	ip, err := commons.IPAddr()
 	if err != nil {
 		n.logger.Fatal("failed to get external IP", zap.Error(err))
 	}
 
-	listener, socketConn := n.createListener(ipAddr, n.discv5port, privKey)
+	listener, socketConn := n.createListener(ip, n.discv5port, privKey)
 	node := listener.LocalNode().Node()
 	n.logger.Info("running",
 		zap.Stringer("node", node),
@@ -157,29 +157,12 @@ func (n *bootNode) Start(ctx context.Context) error {
 	return nil
 }
 
-func (n *bootNode) createListener(ipAddr string, port uint16, privateKey *ecdsa.PrivateKey) (discovery.Listener, *discovery.TimedConn) {
+func (n *bootNode) createListener(ip net.IP, port uint16, privateKey *ecdsa.PrivateKey) (discovery.Listener, *discovery.TimedConn) {
 	// Create the UDP listener and the LocalNode record.
-	ip := net.ParseIP(ipAddr)
 	if ip.To4() == nil {
-		n.logger.Fatal("IPv4 address not provided", fields.Address(ipAddr))
+		n.logger.Fatal("IPv4 address not provided", fields.Address(ip.String()))
 	}
-	var bindIP net.IP
-	var networkVersion string
-	switch {
-	case ip.To16() != nil && ip.To4() == nil:
-		bindIP = net.IPv6zero
-		networkVersion = "udp6"
-	case ip.To4() != nil:
-		bindIP = net.IPv4zero
-		networkVersion = "udp4"
-	default:
-		n.logger.Fatal("valid IP address not provided", fields.Address(ipAddr))
-	}
-	udpAddr := &net.UDPAddr{
-		IP:   bindIP,
-		Port: int(port),
-	}
-	conn, err := net.ListenUDP(networkVersion, udpAddr)
+	conn, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.IPv4zero, Port: int(port)})
 	if err != nil {
 		n.logger.Fatal("failed to create UDP server", zap.Error(err))
 	}
