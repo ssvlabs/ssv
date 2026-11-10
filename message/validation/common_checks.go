@@ -29,6 +29,16 @@ func (mv *messageValidator) monotonicSlotRole(role spectypes.RunnerRole) bool {
 // earlyMessageMargin before the moment a message for the slot is expected (see messageEarliness), and no
 // later than the role's TTL plus lateMessageMargin (see messageLateness).
 func (mv *messageValidator) validateSlotTime(messageSlot phase0.Slot, role spectypes.RunnerRole, receivedAt time.Time) error {
+	// Rule: the slot must not be past the furthest slot any role accepts. This compares slots only, as converting
+	// an unbounded slot to a time overflows; no check before this one may convert it either (enforced by
+	// TestExtremeSlotsReachSlotBound).
+	if furthestSlot := mv.furthestAcceptableSlot(receivedAt); messageSlot > furthestSlot {
+		e := ErrSlotTooFarAhead
+		e.got = fmt.Sprintf("slot %d", messageSlot)
+		e.want = fmt.Sprintf("slot <= %d", furthestSlot)
+		return e
+	}
+
 	if earliness := mv.messageEarliness(messageSlot, role, receivedAt); earliness > clockErrorTolerance+earlyMessageMargin {
 		e := ErrEarlySlotMessage
 		e.got = fmt.Sprintf("early by %v", earliness)
@@ -44,7 +54,20 @@ func (mv *messageValidator) validateSlotTime(messageSlot phase0.Slot, role spect
 	return nil
 }
 
-// messageEarliness returns how early the message is, or 0 if it is not: the time from its arrival to the
+// furthestAcceptableSlot returns a slot past which no role accepts a message received at receivedAt, computed
+// without converting any slot to a time. Proposer preferences reach furthest (see messageEarliness): to the end of
+// the next epoch, or of the one after within the early-arrival margin (clockErrorTolerance+earlyMessageMargin) of
+// the next epoch's start. Three epochs past the current slot cover that as long as an epoch lasts at least that
+// margin. The bound is loose on purpose; messageEarliness applies each role's exact one.
+func (mv *messageValidator) furthestAcceptableSlot(receivedAt time.Time) phase0.Slot {
+	var currentSlot phase0.Slot // stays 0 before genesis, where EstimatedSlotAtTime panics
+	if !receivedAt.Before(mv.netCfg.GenesisTime) {
+		currentSlot = mv.netCfg.EstimatedSlotAtTime(receivedAt)
+	}
+	return currentSlot + phase0.Slot((proposerPreferencesEarlyEpochs+1)*mv.netCfg.SlotsPerEpoch)
+}
+
+// messageEarliness returns how early the message is, negative if it is not: the time from its arrival to the
 // earliest moment a message for its slot is expected. That is the slot's own start for every role that acts
 // at or after its slot. Proposer preferences are broadcast across the proposer lookahead — the current epoch
 // and the next (MIN_SEED_LOOKAHEAD) — so one for a slot in epoch E is expected from the start of epoch E-1;
@@ -65,7 +88,8 @@ func (mv *messageValidator) messageEarliness(slot phase0.Slot, role spectypes.Ru
 	return expectedFrom.Sub(receivedAt)
 }
 
-// messageLateness returns how late message is or 0 if it's not
+// messageLateness returns how late the message is, negative if it is not: its arrival minus its deadline, which is
+// its slot's start plus the role's TTL in slots plus lateMessageMargin. A role without a lateness bound gets 0.
 func (mv *messageValidator) messageLateness(slot phase0.Slot, role spectypes.RunnerRole, receivedAt time.Time) time.Duration {
 	var ttl uint64
 	switch role {

@@ -50,14 +50,23 @@ func (b *Beacon) GenesisRoot() phase0.Root {
 	return b.GenesisValidatorsRoot
 }
 
-// SlotStartTime returns the start time for the given slot
+// SlotStartTime returns the start time of the given slot. It panics, rather than wrap around, on a slot whose
+// offset from genesis overflows time.Duration (~292 years), so callers must bound the slot first.
 func (b *Beacon) SlotStartTime(slot phase0.Slot) time.Time {
-	if slot > math.MaxInt64 {
+	sinceGenesis, ok := b.slotsDuration(uint64(slot))
+	if !ok {
 		panic(fmt.Sprintf("slot %d out of range", slot))
 	}
-	durationSinceGenesisStart := time.Duration(slot) * b.SlotDuration // #nosec G115: slot cannot exceed math.MaxInt64
-	start := b.GenesisTime.Add(durationSinceGenesisStart)
-	return start
+	return b.GenesisTime.Add(sinceGenesis)
+}
+
+// slotsDuration returns how long n slots last, and false where that overflows time.Duration.
+func (b *Beacon) slotsDuration(n uint64) (time.Duration, bool) {
+	// #nosec G115 -- converted only once n <= math.MaxInt64
+	if n > math.MaxInt64 || (b.SlotDuration > 0 && time.Duration(n) > math.MaxInt64/b.SlotDuration) {
+		return 0, false
+	}
+	return time.Duration(n) * b.SlotDuration, true // #nosec G115 -- checked above
 }
 
 // PayloadAttestationCutoff is the point 75% into the slot (PAYLOAD_ATTESTATION_DUE) at which a
@@ -77,12 +86,12 @@ func (b *Beacon) EstimatedSlotAtTime(time time.Time) phase0.Slot {
 		panic(fmt.Sprintf("time %v is before genesis time %v", time, b.GenesisTime))
 	}
 	timeAfterGenesis := time.Sub(b.GenesisTime)
-	return phase0.Slot(timeAfterGenesis / b.SlotDuration) // #nosec G115: genesis can't be negative
+	return phase0.Slot(timeAfterGenesis / b.SlotDuration) // #nosec G115 -- time is not before genesis, checked above
 }
 
 // EstimatedTimeIntoSlot returns the duration passed since EstimatedCurrentSlot.
 func (b *Beacon) EstimatedTimeIntoSlot() time.Duration {
-	return time.Since(b.TimeAtSlot(b.EstimatedCurrentSlot()))
+	return time.Since(b.SlotStartTime(b.EstimatedCurrentSlot()))
 }
 
 // EstimatedCurrentEpoch estimates the current epoch
@@ -126,17 +135,7 @@ func (b *Beacon) FirstSlotAtEpoch(epoch phase0.Epoch) phase0.Slot {
 }
 
 func (b *Beacon) EpochStartTime(epoch phase0.Epoch) time.Time {
-	firstSlot := b.FirstSlotAtEpoch(epoch)
-	t := b.TimeAtSlot(firstSlot)
-	return t
-}
-
-func (b *Beacon) TimeAtSlot(slot phase0.Slot) time.Time {
-	if slot > math.MaxInt64 {
-		panic(fmt.Sprintf("slot %d out of range", slot))
-	}
-	d := time.Duration(slot) * b.SlotDuration // #nosec G115: slot cannot exceed math.MaxInt64
-	return b.GenesisTime.Add(d)
+	return b.SlotStartTime(b.FirstSlotAtEpoch(epoch))
 }
 
 // IntervalDuration is the slot fraction that duty deadlines are multiples of: 1/3 of the slot before
@@ -150,11 +149,13 @@ func (b *Beacon) IntervalDuration(slot phase0.Slot) time.Duration {
 	return b.SlotDuration / time.Duration(intervalsPerSlot)
 }
 
+// EpochDuration returns an epoch's length. It panics, rather than wrap around, where it overflows time.Duration.
 func (b *Beacon) EpochDuration() time.Duration {
-	if b.SlotsPerEpoch > math.MaxInt64 {
+	epochDuration, ok := b.slotsDuration(b.SlotsPerEpoch)
+	if !ok {
 		panic("slots per epoch out of range")
 	}
-	return b.SlotDuration * time.Duration(b.SlotsPerEpoch) // #nosec G115: slot cannot exceed math.MaxInt64
+	return epochDuration
 }
 
 // ForkAtEpoch returns the beacon fork active at the epoch, Gloas included, so fork-versioned values —

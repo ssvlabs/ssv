@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"path/filepath"
 	"reflect"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -16,7 +15,6 @@ import (
 	"go.uber.org/zap"
 
 	spectests "github.com/ssvlabs/ssv-spec/qbft/spectest/tests"
-	spec "github.com/ssvlabs/ssv-spec/ssv"
 	stests "github.com/ssvlabs/ssv-spec/ssv/spectest/tests"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
@@ -61,7 +59,7 @@ func (test *CommitteeSpecTest) RunAsPartOfMultiTest(t *testing.T) {
 	// test output message (in asynchronous order)
 	spectestingutils.ComparePartialSignatureOutputMessagesInAsynchronousOrder(t, test.OutputMessages, broadcastedMsgs, test.Committee.CommitteeMember.Committee)
 
-	spectestingutils.CompareBroadcastedBeaconMsgs(t, test.BeaconBroadcastedRoots, broadcastedRoots)
+	compareBroadcastedBeaconRoots(t, test.BeaconBroadcastedRoots, broadcastedRoots)
 
 	// post root
 	postRoot, err := test.Committee.GetRoot()
@@ -133,25 +131,25 @@ func (tests *MultiCommitteeSpecTest) TestName() string {
 }
 
 func (tests *MultiCommitteeSpecTest) Run(t *testing.T) {
-	tests.overrideStateComparison(t)
-
 	for _, test := range tests.Tests {
 		t.Run(test.TestName(), func(t *testing.T) {
+			// Each test runs its own committee, so they can run in parallel, which matters for heavy
+			// multi tests such as max-validators.
+			t.Parallel()
+			tests.overrideStateComparison(t, test)
 			test.ParentName = tests.Name
 			test.RunAsPartOfMultiTest(t)
 		})
 	}
 }
 
-// overrideStateComparison overrides the post state comparison for all tests in the multi test
-func (tests *MultiCommitteeSpecTest) overrideStateComparison(t *testing.T) {
+// overrideStateComparison overrides the post state comparison for a test in the multi test
+func (tests *MultiCommitteeSpecTest) overrideStateComparison(t *testing.T, test *CommitteeSpecTest) {
 	testsName := strings.ReplaceAll(tests.TestName(), " ", "_")
-	for _, test := range tests.Tests {
-		path := filepath.Join(testsName, test.TestName())
-		strType := reflect.TypeFor[*MultiCommitteeSpecTest]().String()
-		strType = strings.Replace(strType, "spectest.", "committee.", 1)
-		overrideStateComparisonCommitteeSpecTest(t, test, path, strType)
-	}
+	path := filepath.Join(testsName, test.TestName())
+	strType := reflect.TypeFor[*MultiCommitteeSpecTest]().String()
+	strType = strings.Replace(strType, "spectest.", "committee.", 1)
+	overrideStateComparisonCommitteeSpecTest(t, test, path, strType)
 }
 
 func (tests *MultiCommitteeSpecTest) GetPostState(logger *zap.Logger) (any, error) {
@@ -171,60 +169,66 @@ func (tests *MultiCommitteeSpecTest) GetPostState(logger *zap.Logger) (any, erro
 	return ret, nil
 }
 
-func overrideStateComparisonCommitteeSpecTest(t *testing.T, test *CommitteeSpecTest, name string, testType string) {
-	specCommittee := &spec.Committee{}
-	specCommittee, err := storage.UnmarshalStateComparison("ssv", name, testType, specCommittee)
-	require.NoError(t, err)
-	committee := &validator.Committee{}
-	committee, err = storage.UnmarshalStateComparison("ssv", name, testType, committee)
-	require.NoError(t, err)
+// committeeStateComparison is the spec's committee state-comparison JSON (see the spec's
+// Committee.MarshalJSON), decoded only as far as overrideStateComparisonCommitteeSpecTest uses it.
+type committeeStateComparison struct {
+	// The current spec keys its runners by role, in a layout rebuilt through fixBaseRunnerForRun.
+	CommitteeRunners           map[phase0.Slot]*stateComparisonRunner
+	AggregatorCommitteeRunners map[phase0.Slot]*stateComparisonRunner
+	// The Alan spec has committee runners only, under Runners, in a layout the node's runner decodes as is.
+	Runners         map[phase0.Slot]*runner.CommitteeRunner
+	CommitteeMember spectypes.CommitteeMember
+	Share           map[phase0.ValidatorIndex]*spectypes.Share
+}
 
-	committee.Shares = specCommittee.Share
-	committee.CommitteeMember = &specCommittee.CommitteeMember
+// stateComparisonRunner is a runner in the spec's committee state-comparison JSON; only its BaseRunner
+// carries over to the node's runner (see fixBaseRunnerForRun).
+type stateComparisonRunner struct {
+	BaseRunner *runner.BaseRunner
+}
+
+func overrideStateComparisonCommitteeSpecTest(t *testing.T, test *CommitteeSpecTest, name string, testType string) {
+	// Decode the state-comparison JSON once, straight into the types used below: for the max-validators
+	// vectors it runs to ~17MB, and each extra pass over it takes seconds under -race.
+	byteValue, err := storage.ReadStateComparisonFile("ssv", name, testType)
+	require.NoError(t, err)
+	state := &committeeStateComparison{}
+	require.NoError(t, json.Unmarshal(byteValue, state))
+
+	committee := &validator.Committee{
+		Runners:         state.Runners,
+		Shares:          state.Share,
+		CommitteeMember: &state.CommitteeMember,
+	}
 
 	netCfg := testNetworkConfig(test.NeedsAggRunners)
 
-	stateMap, err := readStateComparisonMap(name, testType)
-	require.NoError(t, err)
-
-	committeeRunnersMap, _ := stateMap["CommitteeRunners"].(map[string]any)
-	aggregatorRunnersMap, _ := stateMap["AggregatorCommitteeRunners"].(map[string]any)
-	if committeeRunnersMap != nil || aggregatorRunnersMap != nil {
+	if state.CommitteeRunners != nil || state.AggregatorCommitteeRunners != nil {
 		ks := keySetFromShares(committee.Shares)
 		require.NotNil(t, ks, "no shares for runner keyset")
 
-		if committeeRunnersMap != nil {
+		if state.CommitteeRunners != nil {
 			if committee.Runners == nil {
-				committee.Runners = make(map[phase0.Slot]*runner.CommitteeRunner, len(committeeRunnersMap))
+				committee.Runners = make(map[phase0.Slot]*runner.CommitteeRunner, len(state.CommitteeRunners))
 			}
-			for slotStr, rawRunner := range committeeRunnersMap {
-				runnerMap, ok := rawRunner.(map[string]any)
-				require.True(t, ok, "committee runner entry is not a map")
+			for slot, r := range state.CommitteeRunners {
+				require.True(t, r != nil && r.BaseRunner != nil, "committee runner entry has no BaseRunner")
 
-				slot, err := strconv.ParseUint(slotStr, 10, 64)
-				require.NoError(t, err)
-
-				fixedRunner := fixRunnerForRun(t, runnerMap, ks, netCfg)
+				fixedRunner := fixBaseRunnerForRun(t, r.BaseRunner, ks, netCfg)
 				if cr, ok := fixedRunner.(*runner.CommitteeRunner); ok {
-					committee.Runners[phase0.Slot(slot)] = cr
+					committee.Runners[slot] = cr
 				}
 			}
 		}
 
-		if aggregatorRunnersMap != nil {
-			if committee.AggregatorRunners == nil {
-				committee.AggregatorRunners = make(map[phase0.Slot]*runner.AggregatorCommitteeRunner, len(aggregatorRunnersMap))
-			}
-			for slotStr, rawRunner := range aggregatorRunnersMap {
-				runnerMap, ok := rawRunner.(map[string]any)
-				require.True(t, ok, "aggregator committee runner entry is not a map")
+		if state.AggregatorCommitteeRunners != nil {
+			committee.AggregatorRunners = make(map[phase0.Slot]*runner.AggregatorCommitteeRunner, len(state.AggregatorCommitteeRunners))
+			for slot, r := range state.AggregatorCommitteeRunners {
+				require.True(t, r != nil && r.BaseRunner != nil, "aggregator committee runner entry has no BaseRunner")
 
-				slot, err := strconv.ParseUint(slotStr, 10, 64)
-				require.NoError(t, err)
-
-				fixedRunner := fixRunnerForRun(t, runnerMap, ks, netCfg)
+				fixedRunner := fixBaseRunnerForRun(t, r.BaseRunner, ks, netCfg)
 				if acr, ok := fixedRunner.(*runner.AggregatorCommitteeRunner); ok {
-					committee.AggregatorRunners[phase0.Slot(slot)] = acr
+					committee.AggregatorRunners[slot] = acr
 				}
 			}
 		}
@@ -271,16 +275,20 @@ func overrideStateComparisonCommitteeSpecTest(t *testing.T, test *CommitteeSpecT
 	test.PostDutyCommittee = committee
 }
 
-func readStateComparisonMap(testName, testType string) (map[string]any, error) {
-	byteValue, err := storage.ReadStateComparisonFile("ssv", testName, testType)
-	if err != nil {
-		return nil, err
+// compareBroadcastedBeaconRoots asserts, in linear time, what spectestingutils.CompareBroadcastedBeaconMsgs
+// does: the broadcasted roots match the expected ones one-to-one, in any order. The spec helper is quadratic,
+// which takes seconds under -race for vectors that broadcast thousands of roots.
+func compareBroadcastedBeaconRoots(t *testing.T, expectedRoots []string, broadcastedRoots []phase0.Root) {
+	require.Len(t, broadcastedRoots, len(expectedRoots))
+
+	unmatched := make(map[string]int, len(broadcastedRoots))
+	for _, r := range broadcastedRoots {
+		unmatched[hex.EncodeToString(r[:])]++
 	}
-	var result map[string]any
-	if err := json.Unmarshal(byteValue, &result); err != nil {
-		return nil, err
+	for _, r := range expectedRoots {
+		require.Positivef(t, unmatched[r], "broadcasted beacon root not found")
+		unmatched[r]--
 	}
-	return result, nil
 }
 
 func collectCommitteeBroadcasts(committee *validator.Committee) ([]*spectypes.SignedSSVMessage, []phase0.Root) {

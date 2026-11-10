@@ -93,15 +93,48 @@ type DiscV5Service struct {
 
 	closeOnce sync.Once
 	closeErr  error
+
+	// panicLogMu guards panicLogs, which rate-limits reportRecoveredPanic per skip reason.
+	panicLogMu sync.Mutex
+	panicLogs  map[skipReason]*panicLogState
+}
+
+// panicLogState tracks, for one skip reason, when reportRecoveredPanic last
+// logged a panic and how many it has left unlogged since.
+type panicLogState struct {
+	lastLog   time.Time
+	notLogged uint64
 }
 
 func NewDiscV5Service(pctx context.Context, logger *zap.Logger, opts *Options) (*DiscV5Service, error) {
 	if err := opts.Validate(); err != nil {
 		return nil, err
 	}
+	dvs := newDiscV5Service(pctx, logger.Named(log.NameDiscoveryService), opts)
+
+	logger.Debug(
+		"configuring discv5 discovery",
+		zap.Any("discV5Opts", opts.DiscV5Opts),
+		zap.Any("hostAddress", opts.HostAddress),
+		zap.Any("hostDNS", opts.HostDNS),
+	)
+	if err := dvs.initDiscV5Listener(opts); err != nil {
+		// initDiscV5Listener unwinds its own resources, but the context
+		// newDiscV5Service derived is ours to release on this failure path — the
+		// discarded service's Close (which would cancel it) never runs.
+		dvs.cancel()
+		return nil, err
+	}
+	return dvs, nil
+}
+
+// newDiscV5Service returns a service wired from opts, with its own context
+// derived from pctx, but without a discv5 listener: NewDiscV5Service starts
+// one, and tests that don't need the network set their own.
+func newDiscV5Service(pctx context.Context, logger *zap.Logger, opts *Options) *DiscV5Service {
 	ctx, cancel := context.WithCancel(pctx)
-	dvs := DiscV5Service{
-		logger:              logger.Named(log.NameDiscoveryService),
+	return &DiscV5Service{
+		logger:              logger,
 		ctx:                 ctx,
 		cancel:              cancel,
 		conns:               opts.ConnIndex,
@@ -112,21 +145,6 @@ func NewDiscV5Service(pctx context.Context, logger *zap.Logger, opts *Options) (
 		discoveredPeersPool: opts.DiscoveredPeersPool,
 		trimmedRecently:     opts.TrimmedRecently,
 	}
-
-	logger.Debug(
-		"configuring discv5 discovery",
-		zap.Any("discV5Opts", opts.DiscV5Opts),
-		zap.Any("hostAddress", opts.HostAddress),
-		zap.Any("hostDNS", opts.HostDNS),
-	)
-	if err := dvs.initDiscV5Listener(opts); err != nil {
-		// initDiscV5Listener unwinds its own resources, but the context we
-		// derived above is ours to release on this failure path — the discarded
-		// service's Close (which would cancel it) never runs.
-		cancel()
-		return nil, err
-	}
-	return &dvs, nil
 }
 
 // Close implements io.Closer and is idempotent: a repeat call would panic
@@ -211,8 +229,9 @@ func (dvs *DiscV5Service) Node(logger *zap.Logger, info peer.AddrInfo) (*enode.N
 // if we reached peers limit, make sure to accept peers with more than 1 shared subnet,
 // which lets other components to determine whether we'll want to connect to this node or not.
 //
-// All peer filtering is done inside checkPeer (not as discover() filters) so that
-// every skip reason is tracked with structured metrics and windowed summary logs.
+// All of Bootstrap's peer filtering is done in checkPeer (not as discover() filters) so that
+// every skip reason is tracked with structured metrics and windowed summary logs; a recovered
+// handler panic is only counted and logged by reportRecoveredPanic.
 func (dvs *DiscV5Service) Bootstrap(handler HandleNewPeer) error {
 	const logWindowSize = 50
 
@@ -537,7 +556,7 @@ func (dvs *DiscV5Service) initDiscV5Listener(discOpts *Options) (err error) {
 func (dvs *DiscV5Service) discover(ctx context.Context, handler HandleNewPeer, interval time.Duration, filters ...NodeFilter) {
 	iterator := dvs.dv5Listener.RandomNodes()
 	for _, f := range filters {
-		iterator = enode.Filter(iterator, f)
+		iterator = enode.Filter(iterator, dvs.recoveringFilter(ctx, f))
 	}
 	// selfID is used to exclude current node
 	selfID := dvs.dv5Listener.LocalNode().Node().ID().TerminalString()
@@ -560,16 +579,83 @@ func (dvs *DiscV5Service) discover(ctx context.Context, handler HandleNewPeer, i
 			if n.ID().TerminalString() == selfID {
 				continue
 			}
-			ai, err := ToPeer(n)
-			if err != nil {
-				continue
-			}
-			handler(PeerEvent{
-				AddrInfo: *ai,
-				Node:     n,
-			})
+			dvs.handleDiscoveredNode(ctx, n, handler)
 		}
 	}
+}
+
+// handleDiscoveredNode passes a discovered node to handler, and recovers, logs
+// and counts a panic while handling it.
+func (dvs *DiscV5Service) handleDiscoveredNode(ctx context.Context, n *enode.Node, handler HandleNewPeer) {
+	defer func() {
+		if r := recover(); r != nil {
+			dvs.reportRecoveredPanic(ctx, skipReasonHandlerPanic, "recovered from panic while handling discovered node", n, r)
+		}
+	}()
+
+	ai, err := ToPeer(n)
+	if err != nil {
+		return
+	}
+	handler(PeerEvent{
+		AddrInfo: *ai,
+		Node:     n,
+	})
+}
+
+// recoveringFilter wraps a node filter so that a panic in it rejects that node
+// and discovery moves on. Filters run inside the iterator's Next, outside
+// handleDiscoveredNode's recover.
+func (dvs *DiscV5Service) recoveringFilter(ctx context.Context, f NodeFilter) NodeFilter {
+	return func(n *enode.Node) (accept bool) {
+		defer func() {
+			if r := recover(); r != nil {
+				accept = false
+				dvs.reportRecoveredPanic(ctx, skipReasonFilterPanic, "recovered from panic while filtering discovered node", n, r)
+			}
+		}()
+		return f(n)
+	}
+}
+
+// panicLogInterval is the minimum time between two logs of recovered panics
+// with the same skip reason.
+const panicLogInterval = time.Minute
+
+// reportRecoveredPanic counts a panic recovered while processing a discovered
+// node and logs it with its stack, at most once per panicLogInterval per skip
+// reason; each log counts the panics of its reason left unlogged since the
+// previous one.
+func (dvs *DiscV5Service) reportRecoveredPanic(ctx context.Context, reason skipReason, msg string, n *enode.Node, r any) {
+	recordPeerSkipped(ctx, reason)
+
+	dvs.panicLogMu.Lock()
+	// Created on first use, so a DiscV5Service built as a struct literal can't
+	// panic here, in the recover path.
+	if dvs.panicLogs == nil {
+		dvs.panicLogs = make(map[skipReason]*panicLogState)
+	}
+	state, ok := dvs.panicLogs[reason]
+	if !ok {
+		state = &panicLogState{}
+		dvs.panicLogs[reason] = state
+	}
+	if time.Since(state.lastLog) < panicLogInterval {
+		state.notLogged++
+		dvs.panicLogMu.Unlock()
+		return
+	}
+	state.lastLog = time.Now()
+	notLogged := state.notLogged
+	state.notLogged = 0
+	dvs.panicLogMu.Unlock()
+
+	dvs.logger.Error(msg,
+		zap.Any("panic", r),
+		zap.Stack("stack"),
+		zap.Uint64("panics_not_logged", notLogged),
+		fields.TargetNodeENR(n),
+	)
 }
 
 // RegisterSubnets adds the given subnets and publish the updated node record

@@ -243,7 +243,9 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 
 	// Rule: current slot must be between duty's starting slot and:
 	// - duty's starting slot + 34 (committee, aggregator, and aggregator committee)
-	// - duty's starting slot + 3 (other duties)
+	// - duty's starting slot + 3 (proposer, sync committee contribution, and PTC attestation)
+	// - duty's starting slot + 2 (proposer preferences, which may also arrive from the epoch before the slot's)
+	// - no upper bound (validator registration and voluntary exit)
 	if err := mv.validateSlotTime(messageSlot, role, receivedAt); err != nil {
 		return err
 	}

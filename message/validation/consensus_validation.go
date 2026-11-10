@@ -310,7 +310,7 @@ func (mv *messageValidator) validateQBFTMessageByDutyLogic(
 
 	// Rule: current slot(height) must be between duty's starting slot and:
 	// - duty's starting slot + 34 (committee, aggregator, and aggregator committee)
-	// - duty's starting slot + 3 (other types)
+	// - duty's starting slot + 3 (proposer and sync committee contribution)
 	if err := mv.validateSlotTime(msgSlot, role, receivedAt); err != nil {
 		return err
 	}
@@ -319,7 +319,7 @@ func (mv *messageValidator) validateQBFTMessageByDutyLogic(
 		// Rule: Round must be between `estimated round msg received at` - allowedRoundsInPast and
 		// `estimated round msg received at` + allowedRoundsInFuture. Only for non-decided messages.
 		// Keep this after slot-time and slot-advance validation so late/old-slot messages preserve
-		// their original errors.
+		// their original errors and the height it converts to a time is already bounded.
 		if err := mv.roundBelongsToAllowedSpread(signedSSVMessage, consensusMessage, receivedAt); err != nil {
 			return err
 		}
