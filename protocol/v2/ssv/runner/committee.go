@@ -307,9 +307,8 @@ func (r *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Logg
 		return fmt.Errorf("beacon vote: %w", err)
 	}
 
-	// The worker pool will throttle the parallel processing of validator duties.
-	// This is mainly needed because the processing involves several outgoing HTTP calls to the Consensus Client.
-	// These calls should be limited to a certain degree to reduce the pressure on the Consensus Node.
+	// The worker pool bounds how many validator duties are signed at once: with a remote signer, each signature
+	// is an HTTP call.
 	const workerCount = 30
 
 	for _, duty := range committeeDuty.ValidatorDuties {
