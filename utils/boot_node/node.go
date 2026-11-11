@@ -26,7 +26,7 @@ import (
 // Options contains options to create the node
 type Options struct {
 	PrivateKey string `yaml:"PrivateKey" env:"BOOT_NODE_PRIVATE_KEY" env-description:"Private key for bootnode identity (generated if empty)"`
-	ExternalIP string `yaml:"ExternalIP" env:"BOOT_NODE_EXTERNAL_IP" env-description:"Override bootnode's external IP address"`
+	ExternalIP string `yaml:"ExternalIP" env:"BOOT_NODE_EXTERNAL_IP" env-description:"Override bootnode's external IPv4 address"`
 	TCPPort    uint16 `yaml:"TcpPort" env:"TCP_PORT" env-description:"TCP port for P2P transport"`
 	UDPPort    uint16 `yaml:"UdpPort" env:"UDP_PORT" env-description:"UDP port for discovery"`
 	DbPath     string `yaml:"DbPath" env:"BOOT_NODE_DB_PATH" env-description:"Path to bootnode database directory"`
@@ -190,8 +190,9 @@ func (n *bootNode) createLocalNode(privKey *ecdsa.PrivateKey, ipAddr net.IP, por
 		n.logger.Info("running with IP", zap.String("ip", ipAddr.String()))
 	} else {
 		external = net.ParseIP(n.externalIP)
-		if external == nil {
-			return nil, fmt.Errorf("invalid external IP %q", n.externalIP)
+		// The bootnode listens on IPv4 only.
+		if external.To4() == nil {
+			return nil, fmt.Errorf("external IP %q is not an IPv4 address", n.externalIP)
 		}
 		n.logger.Info("running with external IP", zap.String("external_ip", n.externalIP))
 	}
