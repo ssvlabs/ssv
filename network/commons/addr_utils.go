@@ -10,10 +10,16 @@ import (
 )
 
 // IPAddr returns the node's local IP: the source address of its IPv4 default route, the one it reaches other
-// networks from. Failing that, it's the first address of an up interface (IPv4 first, in OS order), skipping
-// loopback and link-local ones, or 127.0.0.1 if there's none.
+// networks from. Failing that, it's the first address of an up interface (IPv4 first), skipping loopback and
+// link-local ones, or 127.0.0.1 if there's none.
 func IPAddr() (net.IP, error) {
-	if ip := defaultRouteIPv4(); ip != nil {
+	return pickIP(defaultRouteSource())
+}
+
+// pickIP returns routeSource if it's an IPv4 address peers could reach us at: a private one qualifies, but a
+// loopback, link-local, multicast or unspecified one doesn't. Failing that, it falls back as IPAddr describes.
+func pickIP(routeSource net.IP) (net.IP, error) {
+	if ip := routeSource.To4(); ip.IsGlobalUnicast() {
 		return ip, nil
 	}
 	ip, err := network.ExternalIP()
@@ -23,9 +29,10 @@ func IPAddr() (net.IP, error) {
 	return net.ParseIP(ip), nil
 }
 
-// defaultRouteIPv4 returns the source address of the IPv4 default route, or nil if there's no usable one. It looks
-// up the route to a documentation address (RFC 5737), which no local network covers. Dialing UDP sends nothing.
-func defaultRouteIPv4() net.IP {
+// defaultRouteSource returns the source address the OS picks for 192.0.2.1, or nil if it has no route there. That's
+// a documentation address (RFC 5737): unless some other route covers it, the default route decides. Dialing UDP
+// sends nothing.
+func defaultRouteSource() net.IP {
 	conn, err := net.Dial("udp4", "192.0.2.1:9")
 	if err != nil {
 		return nil
@@ -36,12 +43,7 @@ func defaultRouteIPv4() net.IP {
 	if !ok {
 		return nil
 	}
-	// Rule out an unusable source: loopback, link-local or unspecified. Private addresses pass IsGlobalUnicast.
-	ip := addr.IP.To4()
-	if !ip.IsGlobalUnicast() {
-		return nil
-	}
-	return ip
+	return addr.IP
 }
 
 // BuildMultiAddress creates a multiaddr from the given params
