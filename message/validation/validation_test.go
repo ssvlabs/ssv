@@ -1989,7 +1989,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			return err
 		}
 
-		require.ErrorContains(t, validate(specqbft.NoRound), ErrUnexpectedRoundChangeJustifications.Error())
+		require.ErrorContains(t, validate(specqbft.NoRound), ErrUnexpectedRoundChangeJustifications.Error()+", got round change without a prepared round")
 
 		require.NoError(t, validate(specqbft.FirstRound))
 	})
@@ -2020,12 +2020,12 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		err := validate(func(message *specqbft.Message) {
 			message.PrepareJustification = withFullData(specqbft.PrepareMsgType)
 		})
-		require.ErrorContains(t, err, ErrMalformedPrepareJustifications.Error())
+		require.ErrorContains(t, err, ErrMalformedPrepareJustifications.Error()+", got justification with full data")
 
 		err = validate(func(message *specqbft.Message) {
 			message.RoundChangeJustification = withFullData(specqbft.RoundChangeMsgType)
 		})
-		require.ErrorContains(t, err, ErrMalformedRoundChangeJustifications.Error())
+		require.ErrorContains(t, err, ErrMalformedRoundChangeJustifications.Error()+", got justification with full data")
 	})
 
 	// Send message root hash that doesn't match the expected root hash should receive an error

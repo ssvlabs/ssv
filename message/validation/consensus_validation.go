@@ -422,18 +422,25 @@ func (mv *messageValidator) validateJustifications(message *specqbft.Message) er
 		(message.MsgType != specqbft.RoundChangeMsgType || !message.RoundChangePrepared()) {
 		e := ErrUnexpectedRoundChangeJustifications
 		e.got = message.MsgType
+		if message.MsgType == specqbft.RoundChangeMsgType {
+			e.got = "round change without a prepared round"
+		}
 		return e
 	}
 
 	// Rule: Justifications are embedded without full data
 	for _, j := range pj {
 		if len(j.FullData) != 0 {
-			return ErrMalformedPrepareJustifications
+			e := ErrMalformedPrepareJustifications
+			e.got = "justification with full data"
+			return e
 		}
 	}
 	for _, j := range rcj {
 		if len(j.FullData) != 0 {
-			return ErrMalformedRoundChangeJustifications
+			e := ErrMalformedRoundChangeJustifications
+			e.got = "justification with full data"
+			return e
 		}
 	}
 
