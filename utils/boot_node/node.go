@@ -120,7 +120,7 @@ func (n *bootNode) Start(ctx context.Context) error {
 
 	ip, err := commons.IPAddr()
 	if err != nil {
-		n.logger.Fatal("failed to get external IP", zap.Error(err))
+		n.logger.Fatal("failed to get local IP", zap.Error(err))
 	}
 
 	listener, socketConn := n.createListener(ip, n.discv5port, privKey)
@@ -185,18 +185,21 @@ func (n *bootNode) createListener(ip net.IP, port uint16, privateKey *ecdsa.Priv
 }
 
 func (n *bootNode) createLocalNode(privKey *ecdsa.PrivateKey, ipAddr net.IP, port uint16) (*enode.LocalNode, error) {
+	external := ipAddr
+	if n.externalIP == "" {
+		n.logger.Info("running with IP", zap.String("ip", ipAddr.String()))
+	} else {
+		external = net.ParseIP(n.externalIP)
+		if external == nil {
+			return nil, fmt.Errorf("invalid external IP %q", n.externalIP)
+		}
+		n.logger.Info("running with external IP", zap.String("external_ip", n.externalIP))
+	}
+
 	db, err := enode.OpenDB(filepath.Join(n.dbPath, "enode"))
 	if err != nil {
 		return nil, fmt.Errorf("could not open node's peer database: %w", err)
 	}
-	external := net.ParseIP(n.externalIP)
-	if n.externalIP == "" {
-		external = ipAddr
-		n.logger.Info("running with IP", zap.String("ip", ipAddr.String()))
-	} else {
-		n.logger.Info("running with external IP", zap.String("external_ip", n.externalIP))
-	}
-
 	localNode := enode.NewLocalNode(db, privKey)
 	localNode.Set(enr.WithEntry("ssv", true))
 	localNode.SetFallbackIP(external)
