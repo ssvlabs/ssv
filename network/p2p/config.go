@@ -51,8 +51,8 @@ type Config struct {
 
 	TCPPort     uint16 `yaml:"TcpPort" env:"TCP_PORT" env-description:"TCP port for P2P transport"`
 	UDPPort     uint16 `yaml:"UdpPort" env:"UDP_PORT" env-description:"UDP port for discovery"`
-	HostAddress string `yaml:"HostAddress" env:"HOST_ADDRESS" env-description:"External IP address for discovery (mutually exclusive with HostDNS)"`
-	HostDNS     string `yaml:"HostDNS" env:"HOST_DNS" env-description:"External DNS name for discovery (mutually exclusive with HostAddress)"`
+	HostAddress string `yaml:"HostAddress" env:"HOST_ADDRESS" env-description:"External IP address to advertise to peers (mutually exclusive with HostDNS)"`
+	HostDNS     string `yaml:"HostDNS" env:"HOST_DNS" env-description:"External DNS name to advertise to peers (mutually exclusive with HostAddress)"`
 
 	RequestTimeout   time.Duration `yaml:"RequestTimeout" env:"P2P_REQUEST_TIMEOUT" env-description:"Timeout for P2P requests"`
 	MaxBatchResponse uint64        `yaml:"MaxBatchResponse" env:"P2P_MAX_BATCH_RESPONSE" env-description:"Maximum number of objects returned in a batch response"`
@@ -142,8 +142,8 @@ func (c *Config) ValidateDiscovery() error {
 }
 
 // Libp2pOptions returns the basic libp2p host options; other options and components are configured on top.
-// localIP (nil without discv5) is listened on and, without HostAddress/HostDNS, is the IP our ENR starts with and
-// is advertised alongside our public addresses.
+// localIP is the node's local IP (nil without discv5): the host listens on it and, without HostAddress/HostDNS,
+// our ENR starts with it and the host advertises it alongside its public addresses.
 func (c *Config) Libp2pOptions(localIP net.IP) ([]libp2p.Option, error) {
 	if c.NetworkPrivateKey == nil {
 		return nil, errors.New("could not create options w/o network key")
@@ -173,6 +173,7 @@ func (c *Config) Libp2pOptions(localIP net.IP) ([]libp2p.Option, error) {
 	return opts, nil
 }
 
+// configureAddrs sets the addresses the host listens on and the ones it advertises to peers.
 func (c *Config) configureAddrs(opts []libp2p.Option, localIP net.IP) ([]libp2p.Option, error) {
 	addrs := make([]ma.Multiaddr, 0)
 	maZero, err := commons.BuildMultiAddress("0.0.0.0", "tcp", uint(c.TCPPort), "")
@@ -192,7 +193,7 @@ func (c *Config) configureAddrs(opts []libp2p.Option, localIP net.IP) ([]libp2p.
 	opts = append(opts, libp2p.ListenAddrs(addrs...))
 
 	// announced is what we advertise besides our public addresses: HostDNS or HostAddress (mutually exclusive), else
-	// the IP our ENR starts with (discv5 may later switch the ENR to the public IP peers report).
+	// localIP, the IP our ENR starts with (discv5 may later switch the ENR to the public IP peers report).
 	var announced ma.Multiaddr
 	switch {
 	case c.HostDNS != "":
@@ -202,15 +203,15 @@ func (c *Config) configureAddrs(opts []libp2p.Option, localIP net.IP) ([]libp2p.
 	case maIP != nil:
 		announced = maIP
 	default:
-		// Without discv5 there's no ENR: peers learn our addresses only from what we advertise,
-		// so keep go-libp2p's default.
+		// Without discv5 there's no ENR to name the one private address peers reach us through, so keep
+		// go-libp2p's default: every interface address.
 		return opts, nil
 	}
 	if err != nil {
 		return opts, fmt.Errorf("could not build external multi address: %w", err)
 	}
 
-	// go-libp2p resolves the 0.0.0.0 listener to interface addresses (docker bridges, VPNs, loopback, ...), and
+	// go-libp2p resolves the 0.0.0.0 listener to every interface address (docker bridges, VPNs, loopback, ...), and
 	// identify and the signed peer record advertise what this factory returns. Peers reach us through the public
 	// and announced addresses, so the other private ones would only leak our internal network.
 	opts = append(opts, libp2p.AddrsFactory(func(addrs []ma.Multiaddr) []ma.Multiaddr {

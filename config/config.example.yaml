@@ -27,8 +27,8 @@ eth1:
 
 p2p:
   # Optionally specify the external IP address of the node, if it cannot be determined automatically.
-  # Without it, the node advertises its default route's source IP: on a host with several networks,
-  # set it if peers reach the node through another one.
+  # Without it, the node advertises the local address its default route uses. On a host with several networks,
+  # set it if peers reach the node through a different one.
   # HostAddress: 192.168.1.1
 
   # Optionally override the default TCP & UDP ports of the node.

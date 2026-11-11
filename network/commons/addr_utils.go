@@ -9,9 +9,9 @@ import (
 	"github.com/prysmaticlabs/prysm/v4/network"
 )
 
-// IPAddr returns the node's IP address: the source address of the IPv4 default route, which on a host with several
-// interfaces is the one it reaches other networks from. Without one, it's the first address of an up interface
-// (IPv4 first, in OS order), skipping loopback and link-local ones, or 127.0.0.1 if there's none.
+// IPAddr returns the node's local IP: the source address of its IPv4 default route, the one it reaches other
+// networks from. Failing that, it's the first address of an up interface (IPv4 first, in OS order), skipping
+// loopback and link-local ones, or 127.0.0.1 if there's none.
 func IPAddr() (net.IP, error) {
 	if ip := defaultRouteIPv4(); ip != nil {
 		return ip, nil
@@ -23,8 +23,8 @@ func IPAddr() (net.IP, error) {
 	return net.ParseIP(ip), nil
 }
 
-// defaultRouteIPv4 returns the source address of the IPv4 default route, or nil without one. It looks up the route
-// to a documentation address (RFC 5737), which no local network covers. Dialing UDP sends nothing.
+// defaultRouteIPv4 returns the source address of the IPv4 default route, or nil if there's no usable one. It looks
+// up the route to a documentation address (RFC 5737), which no local network covers. Dialing UDP sends nothing.
 func defaultRouteIPv4() net.IP {
 	conn, err := net.Dial("udp4", "192.0.2.1:9")
 	if err != nil {
@@ -36,6 +36,7 @@ func defaultRouteIPv4() net.IP {
 	if !ok {
 		return nil
 	}
+	// Rule out an unusable source: loopback, link-local or unspecified. Private addresses pass IsGlobalUnicast.
 	ip := addr.IP.To4()
 	if !ip.IsGlobalUnicast() {
 		return nil
