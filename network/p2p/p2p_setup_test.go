@@ -6,15 +6,69 @@ import (
 	"testing"
 
 	"github.com/libp2p/go-libp2p"
+	manet "github.com/multiformats/go-multiaddr/net"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
+	p2pcommons "github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/network/discovery"
 	p2ptesting "github.com/ssvlabs/ssv/network/testing"
 	"github.com/ssvlabs/ssv/networkconfig"
 )
 
+// TestSetupHost_LocalIP checks that with discv5 SetupHost keeps the node's local IP and, without HostAddress/HostDNS,
+// the host advertises only that IP besides public addresses: no loopback, and none of the machine's other private
+// addresses. Without discv5 it looks up no local IP.
+func TestSetupHost_LocalIP(t *testing.T) {
+	tests := []struct {
+		name        string
+		mode        DiscoveryMode
+		wantLocalIP bool
+	}{
+		{name: "discv5", mode: DiscoveryDiscv5, wantLocalIP: true},
+		{name: "unset", mode: "", wantLocalIP: true},
+		{name: "mdns", mode: DiscoveryMDNS},
+		{name: "none", mode: DiscoveryNone},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			netKey, err := p2ptesting.GenNetworkKey()
+			require.NoError(t, err)
+
+			n, err := New(zap.NewNop(), &Config{
+				Ctx:               t.Context(),
+				Discovery:         tt.mode,
+				NetworkPrivateKey: netKey,
+				TCPPort:           freeTCPPort(t),
+			})
+			require.NoError(t, err)
+			t.Cleanup(func() { require.NoError(t, n.Close()) })
+
+			require.NoError(t, n.SetupHost())
+			if !tt.wantLocalIP {
+				require.Nil(t, n.localIP)
+				return
+			}
+			require.NotNil(t, n.localIP)
+
+			local, err := p2pcommons.BuildMultiAddress(n.localIP.String(), "tcp", uint(n.cfg.TCPPort), "")
+			require.NoError(t, err)
+
+			var advertisesLocal bool
+			for _, addr := range n.Host().Addrs() {
+				if addr.Equal(local) {
+					advertisesLocal = true
+					continue
+				}
+				require.True(t, manet.IsPublicAddr(addr), "%s is neither the local IP nor public", addr)
+			}
+			require.True(t, advertisesLocal, "%s isn't advertised", local)
+		})
+	}
+}
+
 // TestSetupDiscovery checks that setupDiscovery installs the service the discovery mode names, runs discv5 for an
-// unset mode, and rejects an unknown mode instead of falling back to discv5.
+// unset mode and starts its ENR with the local IP, and rejects an unknown mode instead of falling back to discv5.
 func TestSetupDiscovery(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -40,6 +94,9 @@ func TestSetupDiscovery(t *testing.T) {
 			}
 			require.NoError(t, err)
 			require.Equal(t, tt.wantType, fmt.Sprintf("%T", n.disc))
+			if dv5, ok := n.disc.(*discovery.DiscV5Service); ok {
+				require.Equal(t, n.localIP.String(), dv5.Self().Node().IP().String())
+			}
 		})
 	}
 }
@@ -70,6 +127,15 @@ func newDiscoveryTestNetwork(t *testing.T, mode DiscoveryMode) *p2pNetwork {
 	n.localIP = net.IPv4(127, 0, 0, 1) // set by SetupHost, which this test skips
 
 	return n
+}
+
+// freeTCPPort returns a TCP port free at the time of the call: the host advertises the port it's configured with, so
+// the kernel can't pick one at bind time.
+func freeTCPPort(t *testing.T) uint16 {
+	l, err := net.Listen("tcp4", "0.0.0.0:0")
+	require.NoError(t, err)
+	defer func() { _ = l.Close() }()
+	return uint16(l.Addr().(*net.TCPAddr).Port)
 }
 
 // freeUDPPort returns a UDP port free at the time of the call: discv5 rejects port 0, so the kernel can't pick one
