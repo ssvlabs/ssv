@@ -118,3 +118,11 @@ func TestConfig_InvalidExternalAddress(t *testing.T) {
 	_, err = c.configureAddrs(nil, nil)
 	require.ErrorContains(t, err, "could not build external multi address")
 }
+
+// TestConfig_MissingTCPPort checks that port 0 is rejected with discv5: the port goes into our ENR and the address
+// we advertise, so the kernel can't pick it.
+func TestConfig_MissingTCPPort(t *testing.T) {
+	c := Config{}
+	_, err := c.configureAddrs(nil, net.ParseIP("10.0.1.5"))
+	require.ErrorContains(t, err, "missing tcp port")
+}

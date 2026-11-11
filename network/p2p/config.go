@@ -184,6 +184,10 @@ func (c *Config) configureAddrs(opts []libp2p.Option, localIP net.IP) ([]libp2p.
 
 	var maIP ma.Multiaddr
 	if localIP != nil {
+		// With discv5 the port goes into our ENR and the address we advertise, so the kernel can't pick it.
+		if c.TCPPort == 0 {
+			return opts, errors.New("missing tcp port")
+		}
 		maIP, err = commons.BuildMultiAddress(localIP.String(), "tcp", uint(c.TCPPort), "")
 		if err != nil {
 			return opts, fmt.Errorf("could not build multi address for ip address: %w", err)
