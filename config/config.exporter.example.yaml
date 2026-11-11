@@ -13,7 +13,7 @@ eth1:
   ETH1Addr: example.url
 
 p2p:
-  # replace with your ip
+  # replace with an address every peer can reach, usually your public IP
 #  HostAddress: example.ip
 #  TcpPort:
 #  UdpPort:

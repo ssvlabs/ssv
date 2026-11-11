@@ -22,8 +22,8 @@ func TestConfig_ApplyDefaults(t *testing.T) {
 }
 
 // TestConfig_AddrsFactory checks that the host listens on 0.0.0.0, plus the local IP with discv5, and advertises
-// its public addresses plus HostAddress, HostDNS or else the local IP, and no other private ones. Without discv5,
-// HostAddress or HostDNS, no factory is set.
+// its public addresses plus HostAddress, HostDNS or else the local IP, and no other private ones. With none of
+// discv5, HostAddress and HostDNS, no factory is set.
 func TestConfig_AddrsFactory(t *testing.T) {
 	localIP := net.ParseIP("10.0.1.5") // the IP our ENR starts with
 	resolved := []ma.Multiaddr{

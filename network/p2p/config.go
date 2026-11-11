@@ -222,7 +222,6 @@ func (c *Config) configureAddrs(opts []libp2p.Option, localIP net.IP) ([]libp2p.
 	return opts, nil
 }
 
-// publicAddrs returns the public addresses in addrs.
 func publicAddrs(addrs []ma.Multiaddr) []ma.Multiaddr {
 	public := make([]ma.Multiaddr, 0, len(addrs))
 	for _, addr := range addrs {

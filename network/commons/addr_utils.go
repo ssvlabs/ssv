@@ -18,7 +18,7 @@ func IPAddr() (net.IP, error) {
 	}
 	ip, err := network.ExternalIP()
 	if err != nil {
-		return nil, fmt.Errorf("could not get IPv4 address: %w", err)
+		return nil, fmt.Errorf("could not read interface addresses: %w", err)
 	}
 	return net.ParseIP(ip), nil
 }
