@@ -49,9 +49,9 @@ type reconstructedSig struct {
 }
 
 // reconstructPostConsensusSigs reconstructs the validators' signatures over root, a goroutine per validator, and
-// returns the signatures and the reconstruction failures once every goroutine has returned. It leaves out the
-// validators without a post-consensus quorum for root and those submitted reports as already submitted.
-// rootsAhead are the roots the caller is yet to pass as root.
+// returns the signatures and the reconstruction failures once every goroutine has returned. It skips a validator
+// that has no post-consensus quorum for root, or that submitted reports as already submitted. rootsAhead are the
+// roots the caller is yet to pass as root.
 func (b *BaseRunner) reconstructPostConsensusSigs(
 	logger *zap.Logger,
 	span trace.Span,

@@ -453,9 +453,8 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(
 		for _, metadata := range metadataList {
 			validatorIndex := metadata.ValidatorIndex
 			share := r.Share[validatorIndex]
-			// Operators might have diverging views on which validators they have in a committee
-			// (e.g., an operator might have not yet seen an ValidatorAdded event,
-			// or failed to process it and moved on). Hence, we need to check for this explicitly every time.
+			// Operators' views of a committee's validators may diverge (a ValidatorAdded event not seen yet, or
+			// one that failed to process), so the share can be missing.
 			if share == nil {
 				continue
 			}
@@ -723,9 +722,8 @@ func (r *AggregatorCommitteeRunner) ProcessConsensus(
 		validatorIndex := consensusData.Aggregators[i].ValidatorIndex
 
 		_, exists := r.Share[validatorIndex]
-		// Operators might have diverging views on which validators they have in a committee
-		// (e.g., an operator might have not yet seen an ValidatorAdded event,
-		// or failed to process it and moved on). Hence, we need to check for this explicitly every time.
+		// Operators' views of a committee's validators may diverge (a ValidatorAdded event not seen yet, or one
+		// that failed to process), so the share can be missing.
 		if !exists {
 			continue
 		}
@@ -763,9 +761,8 @@ func (r *AggregatorCommitteeRunner) ProcessConsensus(
 		validatorIndex := consensusData.Contributors[i].ValidatorIndex
 
 		_, exists := r.Share[validatorIndex]
-		// Operators might have diverging views on which validators they have in a committee
-		// (e.g., an operator might have not yet seen an ValidatorAdded event,
-		// or failed to process it and moved on). Hence, we need to check for this explicitly every time.
+		// Operators' views of a committee's validators may diverge (a ValidatorAdded event not seen yet, or one
+		// that failed to process), so the share can be missing.
 		if !exists {
 			continue
 		}
