@@ -31,9 +31,12 @@ import (
 // which is why the version evolves over time.
 var sharesPrefix = []byte("shares_v2/")
 
-// pubkeyIndexMapping is a prefix for the pubkey to index mapping.
-// since the churn of validators is low, we can use an append only mapping
+// pubkeyIndexMapping is a prefix for the validator pubkey -> index mapping. Entries are never
+// deleted: a validator's index is permanent, and churn is low enough to keep them all.
 var pubkeyIndexMapping = []byte("val_pki")
+
+// validatorIndexLength is the size of a pubkey -> index mapping value: a little-endian uint64.
+const validatorIndexLength = 8
 
 // GetFeeRecipientFunc is a function type for getting fee recipients by owner.
 type GetFeeRecipientFunc func(owner common.Address) (bellatrix.ExecutionAddress, error)
@@ -147,7 +150,7 @@ func NewSharesStorage(beaconCfg *networkconfig.Beacon, db basedb.Database, getFe
 		return nil, nil, err
 	}
 
-	pubkeyIndexMapping, err := storage.loadPubkeyToIndexMappings()
+	pubkeyToIndex, err := storage.loadPubkeyToIndexMappings()
 	if err != nil {
 		return nil, nil, fmt.Errorf("load validator pubkey index mapping: %w", err)
 	}
@@ -156,7 +159,7 @@ func NewSharesStorage(beaconCfg *networkconfig.Beacon, db basedb.Database, getFe
 		func() []*types.SSVShare { return storage.List(nil) },
 		func(pk []byte) (*types.SSVShare, bool) { return storage.Get(nil, pk) },
 		getFeeRecipient,
-		pubkeyIndexMapping,
+		pubkeyToIndex,
 		beaconCfg,
 	)
 	if err := storage.validatorStore.handleSharesAdded(slices.Collect(maps.Values(storage.shares))...); err != nil {
@@ -176,7 +179,16 @@ func (s *sharesStorage) loadPubkeyToIndexMappings() (map[spectypes.ValidatorPK]p
 			return fmt.Errorf("invalid validator PK: bad length: %d", len(obj.Key))
 		}
 		copy(key[:], obj.Key)
-		m[key] = phase0.ValidatorIndex(binary.LittleEndian.Uint64(obj.Value))
+		if len(obj.Value) != validatorIndexLength {
+			return fmt.Errorf("invalid validator index: bad length: %d", len(obj.Value))
+		}
+		index := phase0.ValidatorIndex(binary.LittleEndian.Uint64(obj.Value))
+		if index == 0 {
+			// 0 is the placeholder index of a share without beacon metadata, persisted by older
+			// versions. A genuine index-0 validator is re-added from its share.
+			return nil
+		}
+		m[key] = index
 		return nil
 	})
 
@@ -299,38 +311,23 @@ func (s *sharesStorage) Save(rw basedb.ReadWriter, shares ...*types.SSVShare) er
 	return s.saveToDB(rw, shares...)
 }
 
-func (s *sharesStorage) GetValidatorIndicesByPubkeys(vkeys []spectypes.ValidatorPK) (out []phase0.ValidatorIndex, err error) {
-	var pubkeys = make([][]byte, 0, len(vkeys))
-
-	for _, pk := range vkeys {
-		pubkeys = append(pubkeys, pk[:])
-	}
-
-	prefix := PubkeyToIndexMappingDBKey(s.storagePrefix)
-
-	err = s.db.GetMany(prefix, pubkeys, func(obj basedb.Obj) error {
-		index := binary.LittleEndian.Uint64(obj.Value)
-		out = append(out, phase0.ValidatorIndex(index))
-		return nil
-	})
-	if err != nil {
-		return nil, fmt.Errorf("get validator index by pubkey: %w", err)
-	}
-
-	return out, nil
-}
-
 func (s *sharesStorage) saveToDB(rw basedb.ReadWriter, shares ...*types.SSVShare) error {
-	// Fee recipients are no longer stored in shares - ValidatorStore manages them
+	// save validator pubkey -> index mapping, only for shares with beacon metadata:
+	// without it, a share's index is a 0 placeholder
+	indexed := make([]*types.SSVShare, 0, len(shares))
+	for _, share := range shares {
+		if share.HasBeaconMetadata() {
+			indexed = append(indexed, share)
+		}
+	}
 
-	// save validator pubkey -> index mapping
 	prefix := PubkeyToIndexMappingDBKey(s.storagePrefix)
 
-	err := s.db.Using(rw).SetMany(prefix, len(shares), func(i int) (basedb.Obj, error) {
-		vindex := shares[i].ValidatorIndex
-		pubkey := shares[i].ValidatorPubKey
+	err := s.db.Using(rw).SetMany(prefix, len(indexed), func(i int) (basedb.Obj, error) {
+		vindex := indexed[i].ValidatorIndex
+		pubkey := indexed[i].ValidatorPubKey
 
-		b := make([]byte, 8)
+		b := make([]byte, validatorIndexLength)
 		binary.LittleEndian.PutUint64(b, uint64(vindex))
 
 		return basedb.Obj{Key: pubkey[:], Value: b}, nil
