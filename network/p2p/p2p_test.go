@@ -248,6 +248,14 @@ func TestLocalNet_MeshSurvivesPeerTrimming(t *testing.T) {
 		return true
 	}, 10*time.Second, 50*time.Millisecond, "the nodes' own or their peers' subnets were never set")
 
+	// One connection per peer: trimming counts connections, not peers, against the inbound limit, so a duplicate could
+	// push a node over it.
+	for i, node := range nodes {
+		for _, pid := range node.Host().Network().Peers() {
+			require.Len(t, node.Host().Network().ConnsToPeer(pid), 1, "node %d has several connections to %s", i, pid)
+		}
+	}
+
 	// Run the trimming rounds directly instead of waiting peersTrimmingInterval for each.
 	for range 3 {
 		for _, node := range nodes {
