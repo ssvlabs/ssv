@@ -41,8 +41,9 @@ var (
 // slashing records (core.SlashingStore), and the account operations the migrations run in their own
 // transaction (AccountStoreTxn).
 //
-// Slashing records are read and written immediately, never through a caller's transaction, and can't
-// be deleted: they are only ever raised, and a removed share keeps them (see KeyManager.RemoveShare).
+// Slashing records are read and written immediately, never through a caller's transaction, and
+// can't be deleted: callers only ever raise them, and a removed share keeps them (see
+// KeyManager.RemoveShare).
 type Storage interface {
 	DropRegistryData() error
 

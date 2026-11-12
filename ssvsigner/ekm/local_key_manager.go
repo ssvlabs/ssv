@@ -310,7 +310,7 @@ func (km *LocalKeyManager) IsBeaconBlockSlashable(pubKey phase0.BLSPubKey, slot 
 
 // BumpSlashingProtection implements KeyManager. It holds walletLock exclusively, since signing holds
 // it shared for its whole check→record→sign. walletLock is node-wide, so a bump briefly blocks
-// signing for every share, as AddShare already does; bumps are short and rare (a cluster
+// signing for every share, as AddShare does; bumps are short and rare (a cluster
 // reactivation bumps each of its shares once).
 func (km *LocalKeyManager) BumpSlashingProtection(pubKey phase0.BLSPubKey) error {
 	km.walletLock.Lock()
@@ -360,8 +360,8 @@ func (km *LocalKeyManager) AddShare(
 		return ssvsigner.ShareDecryptionError{Err: errors.New("share private key does not match public key")}
 	}
 
-	// walletLock is already held, so bump through the protector: km.BumpSlashingProtection would
-	// take walletLock again and deadlock.
+	// Bump through the protector: the walletLock held here already excludes signing, and
+	// km.BumpSlashingProtection would take it again and deadlock.
 	if err := km.slashingProtector.BumpSlashingProtection(pubKey); err != nil {
 		return fmt.Errorf("could not bump slashing protection: %w", err)
 	}

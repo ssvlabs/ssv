@@ -55,6 +55,9 @@ func TestSignBeaconObject_RefusesMismatchedDomainType(t *testing.T) {
 		spectypes.DomainProposerPreferences,
 		spectypes.DomainBeaconBuilder,
 		spectypes.DomainBuilderRequestAuth,
+		// Differs from DomainProposer only in its last byte, so the block subtest also pins that all
+		// four bytes of the type are compared.
+		spectypes.DomainApplicationBuilder,
 	}
 
 	t.Run("attestation under the attester domain", func(t *testing.T) {
@@ -143,14 +146,19 @@ func TestRemoteKeyManager_RefusesMismatchedDomainType(t *testing.T) {
 	}
 	attRoot, err := att.HashTreeRoot()
 	require.NoError(t, err)
-	attesterDomain := domainFor(spectypes.DomainAttester)
 
-	for label, obj := range map[phase0.DomainType]spectypes.HashRoot{
-		spectypes.DomainAggregateAndProof: att,
-		spectypes.DomainSyncCommittee:     spectypes.SSZBytes(attRoot[:]),
+	for _, tc := range []struct {
+		domain, label phase0.DomainType
+		obj           spectypes.HashRoot
+	}{
+		{spectypes.DomainAttester, spectypes.DomainAggregateAndProof, att},
+		{spectypes.DomainAttester, spectypes.DomainSyncCommittee, spectypes.SSZBytes(attRoot[:])},
+		// DomainApplicationBuilder differs from DomainProposer only in its last byte, so this pins
+		// that all four bytes of the type are compared.
+		{spectypes.DomainProposer, spectypes.DomainApplicationBuilder, testingutils.TestingBlockContentsDeneb.Block},
 	} {
-		_, _, err := rm.SignBeaconObject(t.Context(), obj, attesterDomain, pk, slot, label)
-		require.ErrorContains(t, err, "does not match signature domain", "label %x", label)
+		_, _, err := rm.SignBeaconObject(t.Context(), tc.obj, domainFor(tc.domain), pk, slot, tc.label)
+		require.ErrorContains(t, err, "does not match signature domain", "domain %x, label %x", tc.domain, tc.label)
 	}
 
 	// Refused before any slashing check, record update or remote call.
@@ -161,7 +169,7 @@ func TestRemoteKeyManager_RefusesMismatchedDomainType(t *testing.T) {
 
 func TestSignBeaconObject_GloasAndPreGloasBlocksShareOneProposalLock(t *testing.T) {
 	ctx := t.Context()
-	km, store, pk := newGatedLocalKeyManager(t)
+	km, store, pk, _ := newGatedLocalKeyManager(t)
 
 	blockSlot := testBeaconConfig().EstimatedCurrentSlot() + 1
 	deneb := *testingutils.TestingBlockContentsDeneb.Block
@@ -200,28 +208,39 @@ func TestSignBeaconObject_GloasAndPreGloasBlocksShareOneProposalLock(t *testing.
 }
 
 func TestBumpSlashingProtection_ExcludesSigning(t *testing.T) {
-	newKeyManagers := map[string]func(*testing.T) (KeyManager, *gatedStorage, phase0.BLSPubKey){
-		"local": func(t *testing.T) (KeyManager, *gatedStorage, phase0.BLSPubKey) {
+	newKeyManagers := map[string]func(*testing.T) (KeyManager, *gatedStorage, phase0.BLSPubKey, []byte){
+		"local": func(t *testing.T) (KeyManager, *gatedStorage, phase0.BLSPubKey, []byte) {
 			return newGatedLocalKeyManager(t)
 		},
-		"remote": func(t *testing.T) (KeyManager, *gatedStorage, phase0.BLSPubKey) {
+		"remote": func(t *testing.T) (KeyManager, *gatedStorage, phase0.BLSPubKey, []byte) {
 			return newGatedRemoteKeyManager(t)
 		},
 	}
 	for name, newKeyManager := range newKeyManagers {
 		for _, record := range []string{"attestation", "proposal"} {
-			t.Run(name+"/"+record, func(t *testing.T) {
-				km, store, pk := newKeyManager(t)
-				requireBumpExcludesSigning(t, km, store, pk, record == "proposal")
+			t.Run(name+"/BumpSlashingProtection/"+record, func(t *testing.T) {
+				km, store, pk, _ := newKeyManager(t)
+				requireBumpExcludesSigning(t, km, store, pk, record == "proposal", func() error {
+					return km.BumpSlashingProtection(pk)
+				})
+			})
+			// Re-adding the share (e.g. in the block that removed it) bumps under AddShare's own
+			// locking, which the subtest above doesn't exercise.
+			t.Run(name+"/AddShare/"+record, func(t *testing.T) {
+				km, store, pk, encShare := newKeyManager(t)
+				requireBumpExcludesSigning(t, km, store, pk, record == "proposal", func() error {
+					return km.AddShare(t.Context(), encShare, pk)
+				})
 			})
 		}
 	}
 }
 
-// requireBumpExcludesSigning parks km's bump right after it reads a stale record, signs in that
-// window, and releases the bump. Then the record must hold what was signed, and a second, different
-// object for the same target epoch or slot must be refused.
-func requireBumpExcludesSigning(t *testing.T, km KeyManager, store *gatedStorage, pk phase0.BLSPubKey, proposal bool) {
+// requireBumpExcludesSigning runs bump, which must bump km's records for pk, and parks it right
+// after it reads a stale record. It signs in that window and releases the bump. Then the record
+// must hold what was signed, and a second, different object for the same target epoch or slot
+// must be refused.
+func requireBumpExcludesSigning(t *testing.T, km KeyManager, store *gatedStorage, pk phase0.BLSPubKey, proposal bool, bump func() error) {
 	t.Helper()
 	ctx := t.Context()
 	cfg := testBeaconConfig()
@@ -269,7 +288,7 @@ func requireBumpExcludesSigning(t *testing.T, km KeyManager, store *gatedStorage
 		}
 	})
 	bumpErr := make(chan error, 1)
-	go func() { bumpErr <- km.BumpSlashingProtection(pk) }()
+	go func() { bumpErr <- bump() }()
 	select {
 	case <-p.parked:
 	case err := <-bumpErr:
@@ -310,8 +329,9 @@ func requireBumpExcludesSigning(t *testing.T, km KeyManager, store *gatedStorage
 	require.ErrorContains(t, sign(0x02), "slashable", "a second signature for the same target must be refused")
 }
 
-// newGatedLocalKeyManager returns a LocalKeyManager over a gatedStorage, with sk1 added as a share.
-func newGatedLocalKeyManager(t *testing.T) (*LocalKeyManager, *gatedStorage, phase0.BLSPubKey) {
+// newGatedLocalKeyManager returns a LocalKeyManager over a gatedStorage, with sk1 added as a share,
+// and the encrypted share it was added with.
+func newGatedLocalKeyManager(t *testing.T) (*LocalKeyManager, *gatedStorage, phase0.BLSPubKey, []byte) {
 	t.Helper()
 	initBLSTest()
 	logger := testLogger(t)
@@ -331,17 +351,17 @@ func newGatedLocalKeyManager(t *testing.T) (*LocalKeyManager, *gatedStorage, pha
 
 	sk := &bls.SecretKey{}
 	require.NoError(t, sk.SetHexString(sk1Str))
-	enc, err := opKey.Public().Encrypt([]byte(sk.SerializeToHexStr()))
+	encShare, err := opKey.Public().Encrypt([]byte(sk.SerializeToHexStr()))
 	require.NoError(t, err)
 	pk := phase0.BLSPubKey(sk.GetPublicKey().Serialize())
-	require.NoError(t, km.AddShare(t.Context(), enc, pk))
+	require.NoError(t, km.AddShare(t.Context(), encShare, pk))
 
-	return km, store, pk
+	return km, store, pk, encShare
 }
 
-// newGatedRemoteKeyManager returns a RemoteKeyManager whose slashing protection runs over a
-// gatedStorage and whose remote signer accepts every share and signs everything, with one share added.
-func newGatedRemoteKeyManager(t *testing.T) (*RemoteKeyManager, *gatedStorage, phase0.BLSPubKey) {
+// newGatedRemoteKeyManager is newGatedLocalKeyManager's remote counterpart: its slashing protection
+// runs over a gatedStorage, and its remote signer accepts every share and signs everything.
+func newGatedRemoteKeyManager(t *testing.T) (*RemoteKeyManager, *gatedStorage, phase0.BLSPubKey, []byte) {
 	t.Helper()
 	logger := testLogger(t)
 	cfg := testBeaconConfig()
@@ -363,9 +383,10 @@ func newGatedRemoteKeyManager(t *testing.T) (*RemoteKeyManager, *gatedStorage, p
 	}
 
 	pk := phase0.BLSPubKey{1, 2, 3}
-	require.NoError(t, km.AddShare(t.Context(), []byte("encrypted share"), pk))
+	encShare := []byte("encrypted share")
+	require.NoError(t, km.AddShare(t.Context(), encShare, pk))
 
-	return km, store, pk
+	return km, store, pk, encShare
 }
 
 // gatedStorage wraps a Storage and, once armed, calls afterRead right after each highest-attestation

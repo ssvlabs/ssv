@@ -10,7 +10,8 @@ import (
 )
 
 // KeyManager is the main interface for managing validator shares and performing slashing protection.
-// It embeds BeaconSigner (for signing beacon messages and checking whether attestation or beacon block are slashable).
+// It embeds BeaconSigner, for signing beacon objects and checking whether an attestation or block
+// is slashable.
 type KeyManager interface {
 	BeaconSigner
 
@@ -22,8 +23,8 @@ type KeyManager interface {
 	BumpSlashingProtection(pubKey phase0.BLSPubKey) error
 
 	// AddShare registers a validator share (public and encrypted private key) with the key manager.
-	// Implementations must also bump the share's slashing records, directly or with
-	// BumpSlashingProtection, so the validator never signs from missing or outdated records.
+	// Implementations must also bump the share's slashing records, with BumpSlashingProtection or
+	// directly under the same lock, so the validator never signs from missing or outdated records.
 	//
 	// If the share cannot be decrypted or validated, implementations MUST return an error that
 	// unwraps to a by-value ssvsigner.ShareDecryptionError. Callers use it to classify the failure
@@ -34,12 +35,15 @@ type KeyManager interface {
 	// records, so a later re-add of the same share (the same keyshares re-registered, e.g. after a
 	// DKG resign) can never start below what this node already signed.
 	//
-	// The flip side: a re-add no longer clears a record that is too high (e.g. raised under a wrong
+	// The flip side: a re-add doesn't clear a record that is too high (e.g. raised under a wrong
 	// clock), which refuses signatures until the real clock passes it. To clear it early, delete the
 	// record by hand (signing then fails until the next bump, e.g. a re-add) or wipe the node's
-	// database and resync. The records' keys are <network>signer_data-highest_att-<share> and
-	// <network>signer_data-highest_prop-<share>, where <network> is the beacon network's name and
-	// <share> is the share's raw 48-byte public key (see highestAttPrefix and highestProposalPrefix).
+	// database and resync, but only if the node signed nothing above the real clock: the next bump
+	// puts the record back at the real clock, below any such signature, and a conflicting one for the
+	// same slot or target epoch would then pass. The records' keys are
+	// <network>signer_data-highest_att-<share> and <network>signer_data-highest_prop-<share>, where
+	// <network> is the beacon network's name and <share> is the share's raw 48-byte public key (see
+	// highestAttPrefix and highestProposalPrefix).
 	RemoveShare(ctx context.Context, pubKey phase0.BLSPubKey) error
 }
 
