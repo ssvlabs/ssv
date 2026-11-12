@@ -75,7 +75,7 @@ func (n *p2pNetwork) startDiscovery() error {
 		}
 
 		// Avoid connecting to more peers if we're already at the limit.
-		inbound, outbound := n.connectionStats()
+		inbound, outbound := n.peerStats()
 		vacantOutboundSlots := n.cfg.MaxPeers - (inbound + outbound)
 		if vacantOutboundSlots <= 0 {
 			n.logger.Debug("no vacant outbound slots, skipping peer selection",
