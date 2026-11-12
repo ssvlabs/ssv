@@ -98,7 +98,7 @@ type CommitteeTrace struct {
 
 	// CommitteeID is the 32-byte committee identifier (hex).
 	CommitteeID string `json:"committeeID" format:"hex"`
-	// Proposal is the hex-encoded proposal payload for this duty, if available.
+	// Proposal is the hex-encoded value of the duty's highest-round proposal or decided message, if any.
 	Proposal string `json:"proposalData,omitempty" format:"hex"`
 }
 

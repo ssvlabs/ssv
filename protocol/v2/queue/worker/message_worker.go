@@ -27,18 +27,16 @@ type Config struct {
 	Ctx          context.Context
 	WorkersCount int
 	Buffer       int
-	MetrixPrefix string
 }
 
 // Worker listen to queue and process the messages
 type Worker struct {
-	ctx           context.Context
-	cancel        context.CancelFunc
-	workersCount  int
-	queue         chan *queue.SSVMessage
-	handler       MsgHandler
-	errHandler    ErrorHandler
-	metricsPrefix string
+	ctx          context.Context
+	cancel       context.CancelFunc
+	workersCount int
+	queue        chan *queue.SSVMessage
+	handler      MsgHandler
+	errHandler   ErrorHandler
 }
 
 // NewWorker return new Worker
@@ -46,12 +44,11 @@ func NewWorker(logger *zap.Logger, cfg *Config) *Worker {
 	ctx, cancel := context.WithCancel(cfg.Ctx)
 
 	w := &Worker{
-		ctx:           ctx,
-		cancel:        cancel,
-		workersCount:  cfg.WorkersCount,
-		queue:         make(chan *queue.SSVMessage, cfg.Buffer),
-		errHandler:    defaultErrHandler,
-		metricsPrefix: cfg.MetrixPrefix,
+		ctx:          ctx,
+		cancel:       cancel,
+		workersCount: cfg.WorkersCount,
+		queue:        make(chan *queue.SSVMessage, cfg.Buffer),
+		errHandler:   defaultErrHandler,
 	}
 
 	w.init(logger)

@@ -122,30 +122,36 @@ func TestCollector_getAggregatorSelectionRoot_DomainDataError(t *testing.T) {
 func TestCommitteeDutyTrace_classifyRootForPending(t *testing.T) {
 	rootA := phase0.Root{1}
 	rootB := phase0.Root{2}
+	rootC := phase0.Root{3}
+	rootD := phase0.Root{4}
 	rootUnknown := phase0.Root{9, 9, 9}
 
-	t.Run("roleRootsReady takes precedence for sync/attestation roots", func(t *testing.T) {
-		dt := &committeeDutyTrace{
-			roleRootsReady:    true,
-			syncCommitteeRoot: rootA,
-			attestationRoot:   rootB,
-		}
-		role, ok := dt.classifyRootForPending(rootA)
-		require.True(t, ok)
-		assert.Equal(t, spectypes.BNRoleSyncCommittee, role)
+	t.Run("committee roots from every proposal stay classified", func(t *testing.T) {
+		dt := &committeeDutyTrace{}
+		// first proposal
+		dt.addPostConsensusRole(rootA, spectypes.BNRoleSyncCommittee)
+		dt.addPostConsensusRole(rootB, spectypes.BNRoleAttester)
+		// a later-processed proposal with a different vote
+		dt.addPostConsensusRole(rootC, spectypes.BNRoleSyncCommittee)
+		dt.addPostConsensusRole(rootD, spectypes.BNRoleAttester)
 
-		role, ok = dt.classifyRootForPending(rootB)
-		require.True(t, ok)
-		assert.Equal(t, spectypes.BNRoleAttester, role)
+		for root, want := range map[phase0.Root]spectypes.BeaconRole{
+			rootA: spectypes.BNRoleSyncCommittee,
+			rootB: spectypes.BNRoleAttester,
+			rootC: spectypes.BNRoleSyncCommittee,
+			rootD: spectypes.BNRoleAttester,
+		} {
+			role, ok := dt.classifyRootForPending(root)
+			require.True(t, ok)
+			assert.Equal(t, want, role)
+		}
 	})
 
-	t.Run("falls back to aggPostConsensusRoles when roleRootsReady is false", func(t *testing.T) {
-		dt := &committeeDutyTrace{
-			aggPostConsensusRoles: map[phase0.Root]spectypes.BeaconRole{
-				rootA: spectypes.BNRoleAggregator,
-				rootB: spectypes.BNRoleSyncCommitteeContribution,
-			},
-		}
+	t.Run("aggregator committee roots", func(t *testing.T) {
+		dt := &committeeDutyTrace{}
+		dt.addPostConsensusRole(rootA, spectypes.BNRoleAggregator)
+		dt.addPostConsensusRole(rootB, spectypes.BNRoleSyncCommitteeContribution)
+
 		role, ok := dt.classifyRootForPending(rootA)
 		require.True(t, ok)
 		assert.Equal(t, spectypes.BNRoleAggregator, role)
@@ -156,11 +162,8 @@ func TestCommitteeDutyTrace_classifyRootForPending(t *testing.T) {
 	})
 
 	t.Run("unknown root is not classified", func(t *testing.T) {
-		dt := &committeeDutyTrace{
-			aggPostConsensusRoles: map[phase0.Root]spectypes.BeaconRole{
-				rootA: spectypes.BNRoleAggregator,
-			},
-		}
+		dt := &committeeDutyTrace{}
+		dt.addPostConsensusRole(rootA, spectypes.BNRoleAggregator)
 		_, ok := dt.classifyRootForPending(rootUnknown)
 		require.False(t, ok)
 	})

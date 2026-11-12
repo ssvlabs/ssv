@@ -5,13 +5,18 @@ import (
 	"encoding/hex"
 	"testing"
 
+	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	ps_pb "github.com/libp2p/go-libp2p-pubsub/pb"
 	libp2pcrypto "github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/attribute"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
+
+	"github.com/ssvlabs/ssv/observability/metrics/metricstest"
 )
 
 // TestPSTracer_RPCEvents locks the trace format of RPC events — in particular the payload message
@@ -94,4 +99,26 @@ func TestPSTracer_RPCEvents(t *testing.T) {
 		require.NotContains(t, fields, "msgsCount")
 		require.Equal(t, int64(0), fields["subsCount"])
 	})
+}
+
+// TestValidationDropTracer_CountsOnlyPreValidationDrops checks that only messages gossipsub drops
+// before validation are counted; validation outcomes are reported by message validation itself.
+func TestValidationDropTracer_CountsOnlyPreValidationDrops(t *testing.T) {
+	reader := sdkmetric.NewManualReader()
+	counter, err := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test").Int64Counter("test_validation_dropped")
+	require.NoError(t, err)
+	tracer := newValidationDropTracer(counter)
+
+	tracer.RejectMessage(nil, pubsub.RejectValidationQueueFull)
+	tracer.RejectMessage(nil, pubsub.RejectValidationQueueFull)
+	tracer.RejectMessage(nil, pubsub.RejectValidationThrottled)
+	tracer.RejectMessage(nil, pubsub.RejectValidationFailed)
+	tracer.RejectMessage(nil, pubsub.RejectValidationIgnored)
+
+	dropped := func(attrs ...attribute.KeyValue) int64 {
+		return metricstest.CounterValue(t, reader, "test_validation_dropped", attrs...)
+	}
+	require.Equal(t, int64(2), dropped(messageDropReasonAttribute(pubsub.RejectValidationQueueFull)))
+	require.Equal(t, int64(1), dropped(messageDropReasonAttribute(pubsub.RejectValidationThrottled)))
+	require.Equal(t, int64(3), dropped(), "other reasons aren't counted")
 }

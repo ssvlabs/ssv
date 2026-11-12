@@ -795,7 +795,7 @@
                     }
                 },
                 "proposalData": {
-                    "description": "Proposal is the hex-encoded proposal payload for this duty, if available.",
+                    "description": "Proposal is the hex-encoded value of the duty's highest-round proposal or decided message, if any.",
                     "type": "string",
                     "format": "hex"
                 },
@@ -1097,7 +1097,7 @@
                     ]
                 },
                 "roundChanges": {
-                    "description": "RoundChanges lists round change justifications that led to this round.",
+                    "description": "RoundChanges lists round-change messages that ask to move to this round.",
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/exporter.RoundChange"
@@ -1227,7 +1227,7 @@
                     }
                 },
                 "proposalData": {
-                    "description": "Proposal is the hex-encoded proposal payload for this duty, if available.",
+                    "description": "Proposal is the hex-encoded value of the duty's highest-round proposal or decided message, if any.",
                     "type": "string",
                     "format": "hex"
                 },
