@@ -1974,6 +1974,69 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.ErrorContains(t, err, ErrMalformedRoundChangeJustifications.Error())
 	})
 
+	// Round change justifications belong to a round change only when it reports a prepared value
+	t.Run("round change justification requires a prepared round", func(t *testing.T) {
+		slot := netCfg.FirstSlotAtEpoch(1)
+		receivedAt := netCfg.SlotStartTime(slot)
+
+		validate := func(dataRound specqbft.Round) error {
+			validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
+
+			signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot, func(message *specqbft.Message) {
+				message.MsgType = specqbft.RoundChangeMsgType
+				message.Round = 2
+				message.DataRound = dataRound
+				message.RoundChangeJustification = spectestingutils.MarshalJustifications([]*spectypes.SignedSSVMessage{
+					generateSignedMessage(ks, committeeIdentifier, slot, func(justMsg *specqbft.Message) {
+						justMsg.MsgType = specqbft.PrepareMsgType
+					}),
+				})
+			})
+
+			topicID := commons.GetTopicFullName(commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0])
+			_, err := validator.handleSignedSSVMessage(context.Background(), signedSSVMessage, topicID, peerID, receivedAt)
+			return err
+		}
+
+		require.ErrorContains(t, validate(specqbft.NoRound), ErrUnexpectedRoundChangeJustifications.Error()+", got round change without a prepared round")
+
+		require.NoError(t, validate(specqbft.FirstRound))
+	})
+
+	// Justifications are embedded without full data, in both justification lists
+	t.Run("justification with full data", func(t *testing.T) {
+		slot := netCfg.FirstSlotAtEpoch(1)
+		receivedAt := netCfg.SlotStartTime(slot)
+
+		withFullData := func(msgType specqbft.MessageType) [][]byte {
+			justification := generateSignedMessage(ks, committeeIdentifier, slot, func(justMsg *specqbft.Message) {
+				justMsg.MsgType = msgType
+			})
+			require.NotEmpty(t, justification.FullData)
+			encoded, err := justification.MarshalSSZ()
+			require.NoError(t, err)
+			return [][]byte{encoded}
+		}
+
+		validate := func(opt func(message *specqbft.Message)) error {
+			validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
+			signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot, opt)
+			topicID := commons.GetTopicFullName(commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0])
+			_, err := validator.handleSignedSSVMessage(context.Background(), signedSSVMessage, topicID, peerID, receivedAt)
+			return err
+		}
+
+		err := validate(func(message *specqbft.Message) {
+			message.PrepareJustification = withFullData(specqbft.PrepareMsgType)
+		})
+		require.ErrorContains(t, err, ErrMalformedPrepareJustifications.Error()+", got justification with full data")
+
+		err = validate(func(message *specqbft.Message) {
+			message.RoundChangeJustification = withFullData(specqbft.RoundChangeMsgType)
+		})
+		require.ErrorContains(t, err, ErrMalformedRoundChangeJustifications.Error()+", got justification with full data")
+	})
+
 	// Send message root hash that doesn't match the expected root hash should receive an error
 	t.Run("wrong root hash", func(t *testing.T) {
 		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)

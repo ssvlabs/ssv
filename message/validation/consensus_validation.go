@@ -417,11 +417,31 @@ func (mv *messageValidator) validateJustifications(message *specqbft.Message) er
 		return e
 	}
 
-	// Rule: Can only exist for Proposal or Round-Change messages
-	if len(rcj) != 0 && message.MsgType != specqbft.ProposalMsgType && message.MsgType != specqbft.RoundChangeMsgType {
+	// Rule: Can only exist for Proposal or prepared Round-Change messages
+	if len(rcj) != 0 && message.MsgType != specqbft.ProposalMsgType &&
+		(message.MsgType != specqbft.RoundChangeMsgType || !message.RoundChangePrepared()) {
 		e := ErrUnexpectedRoundChangeJustifications
 		e.got = message.MsgType
+		if message.MsgType == specqbft.RoundChangeMsgType {
+			e.got = "round change without a prepared round"
+		}
 		return e
+	}
+
+	// Rule: Justifications are embedded without full data
+	for _, j := range pj {
+		if len(j.FullData) != 0 {
+			e := ErrMalformedPrepareJustifications
+			e.got = "justification with full data"
+			return e
+		}
+	}
+	for _, j := range rcj {
+		if len(j.FullData) != 0 {
+			e := ErrMalformedRoundChangeJustifications
+			e.got = "justification with full data"
+			return e
+		}
 	}
 
 	return nil
