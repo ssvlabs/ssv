@@ -719,6 +719,16 @@ func (r *AggregatorCommitteeRunner) ProcessConsensus(
 		return fmt.Errorf("failed to get aggregate and proofs: %w", err)
 	}
 
+	// A failure to sign one entry skips only that entry: the others are still broadcast, and the deferred join
+	// returns the failures alongside the outcome. Before Boole, aggregation and sync contributions ran in separate
+	// runners, and one role must not cost the other its partials here either: the decided value is processed
+	// once, so nothing signs it again. On Gloas the remote signer refuses every aggregate-and-proof (Web3Signer
+	// has no Gloas type for it) yet still signs contributions.
+	var signErrs error
+	defer func() {
+		err = errors.Join(signErrs, err)
+	}()
+
 	messages := make([]*spectypes.PartialSignatureMessage, 0)
 	for i, aggProof := range aggProofs {
 		validatorIndex := consensusData.Aggregators[i].ValidatorIndex
@@ -749,7 +759,8 @@ func (r *AggregatorCommitteeRunner) ProcessConsensus(
 			spectypes.DomainAggregateAndProof,
 		)
 		if err != nil {
-			return fmt.Errorf("failed to sign aggregate and proof: %w", err)
+			signErrs = errors.Join(signErrs, fmt.Errorf("failed to sign aggregate and proof for validator %d: %w", validatorIndex, err))
+			continue
 		}
 
 		messages = append(messages, msg)
@@ -790,7 +801,8 @@ func (r *AggregatorCommitteeRunner) ProcessConsensus(
 			spectypes.DomainContributionAndProof,
 		)
 		if err != nil {
-			return fmt.Errorf("failed to sign contribution and proof: %w", err)
+			signErrs = errors.Join(signErrs, fmt.Errorf("failed to sign contribution and proof for validator %d: %w", validatorIndex, err))
+			continue
 		}
 
 		messages = append(messages, msg)
