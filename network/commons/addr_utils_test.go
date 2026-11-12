@@ -9,6 +9,7 @@ import (
 
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/prysmaticlabs/prysm/v4/network"
 	"github.com/stretchr/testify/require"
 )
 
@@ -41,13 +42,17 @@ func TestIPAddr(t *testing.T) {
 }
 
 // Test_pickIP checks that pickIP returns a route source peers could reach us at, private or public, and falls back
-// to one of this machine's addresses for any other.
+// to the first interface address for any other.
 func Test_pickIP(t *testing.T) {
 	for _, routeSource := range []string{"10.0.1.5", "203.0.113.7"} {
 		ip, err := pickIP(net.ParseIP(routeSource))
 		require.NoError(t, err)
 		require.Equal(t, routeSource, ip.String())
 	}
+
+	// The fallback skips loopback addresses, so comparing with it also catches a loopback route source let through.
+	fallback, err := network.ExternalIP()
+	require.NoError(t, err)
 
 	unusable := map[string]net.IP{
 		"none":        nil,
@@ -61,7 +66,7 @@ func Test_pickIP(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			ip, err := pickIP(routeSource)
 			require.NoError(t, err)
-			requireMachineAddr(t, ip)
+			require.Equal(t, fallback, ip.String())
 		})
 	}
 }
