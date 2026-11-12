@@ -406,6 +406,18 @@ func TestCommitteeRunnerProcessConsensus_UsesWorkerPoolForMoreThan30SyncDuties(t
 	require.ElementsMatch(t, expectedValidatorIndices, gotValidatorIndices)
 }
 
+// One signing error is enough for the committee to broadcast no post-consensus message, although its other duties
+// could be signed.
+func TestCommitteeRunnerProcessConsensus_SigningErrorBroadcastsNothing(t *testing.T) {
+	env := newCommitteeRunnerEnv(t, []int{1, 2}, &committeeDutyGuardStub{}, &doppelgangerStub{})
+	env.runner.signer = failingDomainSigner{BeaconSigner: env.runner.signer, domain: spectypes.DomainAttester}
+	duty := spectestingutils.TestingCommitteeDuty([]int{1}, []int{2}, spec.DataVersionElectra)
+
+	_, err := env.startAndDecideCommitteeDuty(t, duty)
+	require.ErrorContains(t, err, "signing failed")
+	require.Empty(t, partialSigBroadcasts(env.network.BroadcastedMsgs))
+}
+
 func TestCommitteeRunnerProcessConsensus_DoppelgangerAndDutyBranching(t *testing.T) {
 	t.Run("all attesters blocked with no sync duties skips broadcast", func(t *testing.T) {
 		doppelganger := &doppelgangerStub{
