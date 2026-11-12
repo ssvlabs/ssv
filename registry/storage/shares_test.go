@@ -333,31 +333,74 @@ func TestValidatorPubkeysToIndicesMapping_RejectsMalformedIndex(t *testing.T) {
 	require.ErrorContains(t, storage.Reopen(logger), "invalid validator index: bad length: 3")
 }
 
-// A metadata refresh that drops a share's metadata (e.g. the beacon node omits the validator)
-// zeroes its index, but the persisted mapping must keep the real one.
-func TestValidatorPubkeysToIndicesMapping_KeepsIndexWhenMetadataIsLost(t *testing.T) {
+// Unknown metadata (e.g. the beacon node omitted the validator) leaves a share's known metadata,
+// index and participation intact, before and after a restart.
+func TestUpdateValidatorsMetadata_KeepsKnownMetadataOnUnknown(t *testing.T) {
 	testWithStorageReopen(t, func(t *testing.T, storage *testStorage, reopen func(t *testing.T)) {
 		const index = phase0.ValidatorIndex(42)
 		share := fakeParticipatingShare(index, generateRandomPubKey(), []uint64{1, 2, 3, 4})
+		metadata := share.BeaconMetadata()
 		require.NoError(t, storage.Shares.Save(nil, share))
+		reopen(t)
 
-		_, err := storage.Shares.UpdateValidatorsMetadata(beaconprotocol.ValidatorMetadataMap{
+		updated, err := storage.Shares.UpdateValidatorsMetadata(beaconprotocol.ValidatorMetadataMap{
 			share.ValidatorPubKey: {},
 		})
 		require.NoError(t, err)
-		reopen(t)
+		require.Nil(t, updated)
 
+		// Refreshed, so the share isn't re-fetched before the next regular sync.
 		storedShare, found := storage.Shares.Get(nil, share.ValidatorPubKey[:])
 		require.True(t, found)
-		require.False(t, storedShare.HasBeaconMetadata())
+		require.WithinDuration(t, time.Now(), storedShare.BeaconMetadataLastUpdated, time.Second)
+		reopen(t)
 
+		storedShare, found = storage.Shares.Get(nil, share.ValidatorPubKey[:])
+		require.True(t, found)
+		require.Equal(t, metadata, storedShare.BeaconMetadata())
+
+		byIndex, found := storage.ValidatorStore.ValidatorByIndex(index)
+		require.True(t, found)
+		require.Equal(t, share.ValidatorPubKey, byIndex.ValidatorPubKey)
 		idx, found := storage.ValidatorStore.ValidatorIndex(share.ValidatorPubKey)
 		require.True(t, found)
 		require.Equal(t, index, idx)
 		pk, found := storage.ValidatorStore.ValidatorPubkey(index)
 		require.True(t, found)
 		require.Equal(t, share.ValidatorPubKey, pk)
-		_, found = storage.ValidatorStore.ValidatorPubkey(0)
+
+		participating := storage.ValidatorStore.ParticipatingValidators(metadata.ActivationEpoch)
+		require.Len(t, participating, 1)
+		require.Equal(t, share.ValidatorPubKey, participating[0].ValidatorPubKey)
+	})
+}
+
+// A validator the beacon chain doesn't know (e.g. not deposited yet) stays without metadata, and its
+// refreshed timestamp keeps the syncer from re-fetching it as a new share.
+func TestUpdateValidatorsMetadata_UnknownValidatorStaysUnknown(t *testing.T) {
+	testWithStorageReopen(t, func(t *testing.T, storage *testStorage, reopen func(t *testing.T)) {
+		share := fakeShareWithoutMetadata()
+		require.NoError(t, storage.Shares.Save(nil, share))
+		reopen(t)
+
+		updated, err := storage.Shares.UpdateValidatorsMetadata(beaconprotocol.ValidatorMetadataMap{
+			share.ValidatorPubKey: {},
+		})
+		require.NoError(t, err)
+		require.Nil(t, updated)
+
+		storedShare, found := storage.Shares.Get(nil, share.ValidatorPubKey[:])
+		require.True(t, found)
+		require.WithinDuration(t, time.Now(), storedShare.BeaconMetadataLastUpdated, time.Second)
+		reopen(t)
+
+		storedShare, found = storage.Shares.Get(nil, share.ValidatorPubKey[:])
+		require.True(t, found)
+		require.False(t, storedShare.HasBeaconMetadata())
+
+		_, found = storage.ValidatorStore.ValidatorIndex(share.ValidatorPubKey)
+		require.False(t, found)
+		_, found = storage.ValidatorStore.ValidatorByIndex(0)
 		require.False(t, found)
 	})
 }
