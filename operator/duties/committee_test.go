@@ -359,8 +359,8 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only(t *testing.T) {
 				ValidatorIndex: phase0.ValidatorIndex(3),
 			},
 		})
-		scheduler.indicesChgCh <- struct{}{}
 		waitForDuties.Set(true)
+		scheduler.indicesChgCh <- struct{}{}
 		// Two fetches happen here: one for the attester handler and one for the sync-committee handler.
 		// The sync-committee handler's indicesChangeCh is now consumed inside the slot-tick closure
 		// (not the outer select), so it also triggers a re-fetch on the same tick as the attester.
@@ -438,8 +438,8 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only_2(t *testing.T) {
 				ValidatorIndex: phase0.ValidatorIndex(3),
 			},
 		})
-		scheduler.indicesChgCh <- struct{}{}
 		waitForDuties.Set(true)
+		scheduler.indicesChgCh <- struct{}{}
 		// wait for attester and sync committee duties to be fetched in slot 0
 		waitForDutiesFetchCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
 		waitForDutiesFetchCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
@@ -511,8 +511,8 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only_3(t *testing.T) {
 				ValidatorIndex: phase0.ValidatorIndex(2),
 			},
 		})
-		scheduler.indicesChgCh <- struct{}{}
 		waitForDuties.Set(true)
+		scheduler.indicesChgCh <- struct{}{}
 		// wait for attester and sync committee duties to be fetched in slot 0
 		waitForDutiesFetchCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
 		waitForDutiesFetchCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)

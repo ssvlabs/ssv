@@ -333,12 +333,12 @@ func TestScheduler_SyncCommittee_Indices_Changed(t *testing.T) {
 		waitForDutiesFetch(t, fetchDutiesCall, timeout)
 
 		// STEP 2: trigger a change in active indices
-		scheduler.indicesChgCh <- struct{}{}
 		duties, _ := dutiesMap.Get(1)
 		dutiesMap.Set(1, append(duties, &v1.SyncCommitteeDuty{
 			PubKey:         phase0.BLSPubKey{1, 2, 4},
 			ValidatorIndex: phase0.ValidatorIndex(2),
 		}))
+		scheduler.indicesChgCh <- struct{}{}
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 3: wait for sync committee duties to be re-fetched twice:
@@ -391,22 +391,22 @@ func TestScheduler_SyncCommittee_Multiple_Indices_Changed_Same_Slot(t *testing.T
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 2: trigger a change in active indices
-		scheduler.indicesChgCh <- struct{}{}
 		dutiesMap.Set(1, []*v1.SyncCommitteeDuty{
 			{
 				PubKey:         phase0.BLSPubKey{1, 2, 3},
 				ValidatorIndex: phase0.ValidatorIndex(1),
 			},
 		})
+		scheduler.indicesChgCh <- struct{}{}
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 3: trigger a change in active indices
-		scheduler.indicesChgCh <- struct{}{}
 		duties, _ := dutiesMap.Get(1)
 		dutiesMap.Set(1, append(duties, &v1.SyncCommitteeDuty{
 			PubKey:         phase0.BLSPubKey{1, 2, 4},
 			ValidatorIndex: phase0.ValidatorIndex(2),
 		}))
+		scheduler.indicesChgCh <- struct{}{}
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 4: wait for sync committee duties to be re-fetched
@@ -581,12 +581,12 @@ func TestScheduler_SyncCommittee_Reorg_Current_Indices_Changed(t *testing.T) {
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 5: trigger a change in active indices in the same slot
-		scheduler.indicesChgCh <- struct{}{}
 		duties, _ := dutiesMap.Get(1)
 		dutiesMap.Set(1, append(duties, &v1.SyncCommitteeDuty{
 			PubKey:         phase0.BLSPubKey{1, 2, 5},
 			ValidatorIndex: phase0.ValidatorIndex(3),
 		}))
+		scheduler.indicesChgCh <- struct{}{}
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 6: the boundary tick re-fetches duties for the next period due to the indices change.
