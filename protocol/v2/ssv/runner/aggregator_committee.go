@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"sort"
-	"sync"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec"
@@ -454,9 +453,8 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(
 		for _, metadata := range metadataList {
 			validatorIndex := metadata.ValidatorIndex
 			share := r.Share[validatorIndex]
-			// Operators might have diverging views on which validators they have in a committee
-			// (e.g., an operator might have not yet seen an ValidatorAdded event,
-			// or failed to process it and moved on). Hence, we need to check for this explicitly every time.
+			// Operators' views of a committee's validators may diverge (a ValidatorAdded event not seen yet, or
+			// one that failed to process), so the share can be missing.
 			if share == nil {
 				continue
 			}
@@ -724,9 +722,8 @@ func (r *AggregatorCommitteeRunner) ProcessConsensus(
 		validatorIndex := consensusData.Aggregators[i].ValidatorIndex
 
 		_, exists := r.Share[validatorIndex]
-		// Operators might have diverging views on which validators they have in a committee
-		// (e.g., an operator might have not yet seen an ValidatorAdded event,
-		// or failed to process it and moved on). Hence, we need to check for this explicitly every time.
+		// Operators' views of a committee's validators may diverge (a ValidatorAdded event not seen yet, or one
+		// that failed to process), so the share can be missing.
 		if !exists {
 			continue
 		}
@@ -764,9 +761,8 @@ func (r *AggregatorCommitteeRunner) ProcessConsensus(
 		validatorIndex := consensusData.Contributors[i].ValidatorIndex
 
 		_, exists := r.Share[validatorIndex]
-		// Operators might have diverging views on which validators they have in a committee
-		// (e.g., an operator might have not yet seen an ValidatorAdded event,
-		// or failed to process it and moved on). Hence, we need to check for this explicitly every time.
+		// Operators' views of a committee's validators may diverge (a ValidatorAdded event not seen yet, or one
+		// that failed to process), so the share can be missing.
 		if !exists {
 			continue
 		}
@@ -899,8 +895,8 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 		return bytes.Compare(roots[i][:], roots[j][:]) < 0
 	})
 
-	// The listener and the post-listener drain both add errCh's reconstruct failures to errs, which tells
-	// recoverable ones apart by their recoverableReconstructError tag (see batchErrs).
+	// errs tells the recoverable reconstruct failures apart by their recoverableReconstructError tag
+	// (see batchErrs).
 	var errs batchErrs
 	aggregatesToSubmit := make(map[phase0.ValidatorIndex]map[[32]byte]*spec.VersionedSignedAggregateAndProof)
 	contributionsToSubmit := make(map[phase0.ValidatorIndex]map[[32]byte]*altair.SignedContributionAndProof)
@@ -929,167 +925,64 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 			zap.Any("validators", validators),
 		)
 
-		type signatureResult struct {
-			signature      phase0.BLSSignature
-			validatorIndex phase0.ValidatorIndex
-		}
-		var (
-			wg          sync.WaitGroup
-			errCh       = make(chan error, len(validators))
-			signatureCh = make(chan signatureResult, len(validators))
-		)
-
 		span.AddEvent("constructing sync committee contribution and aggregations signature messages",
 			trace.WithAttributes(observability.BeaconBlockRootAttribute(root)))
-		for _, validator := range validators {
-			// Re-check the quorum: the drops after a failed reconstruction (below) may have taken this root+validator
-			// pair below quorum since basePostConsensusMsgProcessing reported it.
-			gotQuorum, quorumSigners := r.State.PostConsensusContainer.HasQuorum(validator, root)
-			if !gotQuorum {
+		sigs, reconstructErrs := r.reconstructPostConsensusSigs(logger, span, root, roots[i+1:], validators,
+			func(validator phase0.ValidatorIndex) bool { return r.HasSubmitted(role, validator, root) })
+		// Shutdown: markDutyFailed (via the defer) drops context.Canceled, so it isn't recorded as a failure.
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		for _, err := range reconstructErrs {
+			// The spec reports every post-consensus reconstruct failure with this code; withCode keeps a
+			// recoverable one's tag reachable for errs.
+			errs.add(withCode(spectypes.PostConsensusQuorumWithInvalidSignatures, err))
+		}
+
+		for _, sig := range sigs {
+			validatorObjects, exists := beaconObjects[sig.validatorIndex]
+			if !exists {
+				errs.terminal = fmt.Errorf("could not find beacon object for validator index: %d",
+					sig.validatorIndex)
 				continue
 			}
-			// Skip if already submitted
-			if r.HasSubmitted(role, validator, root) {
+			sszObject, exists := validatorObjects[root]
+			if !exists {
+				errs.terminal = fmt.Errorf("could not find ssz object for root: %s", root)
 				continue
 			}
 
-			wg.Add(1)
-			go func(validatorIndex phase0.ValidatorIndex, root [32]byte) {
-				defer wg.Done()
-
-				share := r.Share[validatorIndex]
-				// Operators might have diverging views on which validators they have in a committee
-				// (e.g., an operator might have not yet seen an ValidatorAdded event,
-				// or failed to process it and moved on). Hence, we need to check for this explicitly every time.
-				if share == nil {
-					return
-				}
-				pubKey := share.ValidatorPubKey
-
-				vlogger := logger.With(
-					zap.Uint64("validator_index", uint64(validatorIndex)),
-					zap.String("pubkey", hex.EncodeToString(pubKey[:])),
-					fields.BlockRoot(root),
-					zap.Uint64s("quorum_signers", quorumSigners),
-				)
-
-				// On failure the root's partial signatures have been verified and the invalid ones dropped; the
-				// error is recoverable only if that left the root below quorum (see reconstructQuorumSig).
-				sig, err := r.reconstructQuorumSig(r.State.PostConsensusContainer, root, share, "post-consensus")
+			switch role {
+			case spectypes.BNRoleAggregator:
+				aggregateAndProof := sszObject.(*spec.VersionedAggregateAndProof)
+				signedAgg, err := constructVersionedSignedAggregateAndProof(aggregateAndProof, sig.signature)
 				if err != nil {
-					// Verify the validator's partial signatures for the roots still ahead too, dropping a bad
-					// signer's shares before they cost a failed reconstruction each. No pair is verified by two
-					// goroutines at once: the work is split by validator, and the roots are taken in turn.
-					for _, root := range roots[i+1:] {
-						r.FallBackAndVerifyEachSignature(
-							r.State.PostConsensusContainer,
-							root,
-							share.Committee,
-							validatorIndex,
-						)
-					}
-					const eventMsg = "got post-consensus quorum but it has invalid signatures"
-					span.AddEvent(eventMsg)
-					vlogger.Error(eventMsg, zap.Bool("recoverable", isRecoverableReconstructError(err)), zap.Error(err))
-
-					// The spec reports every post-consensus reconstruct failure with this code; withCode keeps a
-					// recoverable one's tag reachable for errs.
-					errCh <- withCode(spectypes.PostConsensusQuorumWithInvalidSignatures, err)
-					return
-				}
-
-				vlogger.Debug("🧩 reconstructed partial signature")
-
-				signatureCh <- signatureResult{
-					validatorIndex: validatorIndex,
-					signature:      sig,
-				}
-			}(validator, root)
-		}
-
-		go func() {
-			wg.Wait()
-			close(signatureCh)
-		}()
-
-	listener:
-		for {
-			select {
-			case <-ctx.Done():
-				// Only reachable on shutdown (ctx canceled) — the listener completes in ms and the
-				// duty deadline is ~1 epoch out — and markDutyFailed (via the defer) drops
-				// context.Canceled, so shutdown isn't recorded as a failure.
-				return ctx.Err()
-			case err := <-errCh:
-				errs.add(err)
-			case signatureResult, ok := <-signatureCh:
-				if !ok {
-					break listener
-				}
-
-				validatorObjects, exists := beaconObjects[signatureResult.validatorIndex]
-				if !exists {
-					errs.terminal = fmt.Errorf("could not find beacon object for validator index: %d",
-						signatureResult.validatorIndex)
-					continue
-				}
-				sszObject, exists := validatorObjects[root]
-				if !exists {
-					errs.terminal = fmt.Errorf("could not find ssz object for root: %s", root)
+					errs.terminal = fmt.Errorf("failed to construct signed aggregate and proof: %w", err)
 					continue
 				}
 
-				switch role {
-				case spectypes.BNRoleAggregator:
-					aggregateAndProof := sszObject.(*spec.VersionedAggregateAndProof)
-					signedAgg, err := constructVersionedSignedAggregateAndProof(aggregateAndProof, signatureResult.signature)
-					if err != nil {
-						errs.terminal = fmt.Errorf("failed to construct signed aggregate and proof: %w", err)
-						continue
-					}
-
-					if aggregatesToSubmit[signatureResult.validatorIndex] == nil {
-						aggregatesToSubmit[signatureResult.validatorIndex] = make(map[[32]byte]*spec.VersionedSignedAggregateAndProof)
-					}
-					aggregatesToSubmit[signatureResult.validatorIndex][root] = signedAgg
-
-				case spectypes.BNRoleSyncCommitteeContribution:
-					contribAndProof := sszObject.(*altair.ContributionAndProof)
-					signedContrib := &altair.SignedContributionAndProof{
-						Message:   contribAndProof,
-						Signature: signatureResult.signature,
-					}
-
-					if contributionsToSubmit[signatureResult.validatorIndex] == nil {
-						contributionsToSubmit[signatureResult.validatorIndex] = make(map[[32]byte]*altair.SignedContributionAndProof)
-					}
-					contributionsToSubmit[signatureResult.validatorIndex][root] = signedContrib
-
-				default:
-					// deterministic terminal invariant violation → classified failed by the defer, not stuck
-					return fmt.Errorf("unexpected role type in post-consensus: %v", role)
+				if aggregatesToSubmit[sig.validatorIndex] == nil {
+					aggregatesToSubmit[sig.validatorIndex] = make(map[[32]byte]*spec.VersionedSignedAggregateAndProof)
 				}
-			}
-		}
+				aggregatesToSubmit[sig.validatorIndex][root] = signedAgg
 
-		// When signatureCh closes in the same iteration the select may take the close branch and skip an
-		// error still buffered on errCh. All workers have finished (signatureCh is closed only after
-		// wg.Wait), so no further sends occur and this non-blocking drain is complete. errCh carries the
-		// reconstruct errors, recoverable or terminal, and a skipped terminal one would leave the failed
-		// duty unrecorded.
-	drainErrCh:
-		for {
-			select {
-			case err := <-errCh:
-				errs.add(err)
+			case spectypes.BNRoleSyncCommitteeContribution:
+				contribAndProof := sszObject.(*altair.ContributionAndProof)
+				signedContrib := &altair.SignedContributionAndProof{
+					Message:   contribAndProof,
+					Signature: sig.signature,
+				}
+
+				if contributionsToSubmit[sig.validatorIndex] == nil {
+					contributionsToSubmit[sig.validatorIndex] = make(map[[32]byte]*altair.SignedContributionAndProof)
+				}
+				contributionsToSubmit[sig.validatorIndex][root] = signedContrib
+
 			default:
-				break drainErrCh
+				// deterministic terminal invariant violation → classified failed by the defer, not stuck
+				return fmt.Errorf("unexpected role type in post-consensus: %v", role)
 			}
 		}
-
-		logger.Debug("🧩 reconstructed partial signatures for root",
-			fields.BlockRoot(root),
-		)
 	}
 
 	for validatorIndex, signedByRoot := range aggregatesToSubmit {
