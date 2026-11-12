@@ -124,7 +124,9 @@ func newDiscoveryTestNetwork(t *testing.T, mode DiscoveryMode) *p2pNetwork {
 	h, err := libp2p.New(libp2p.NoListenAddrs)
 	require.NoError(t, err)
 	n.host.Store(&h)
-	n.localIP = net.IPv4(127, 0, 0, 1) // set by SetupHost, which this test skips
+	// Set by SetupHost, which this test skips. Not 127.0.0.1: discv5 falls back to that IP when it gets none, so the
+	// ENR check couldn't tell whether setupDiscovery passed it.
+	n.localIP = net.IPv4(192, 0, 2, 5)
 
 	return n
 }
