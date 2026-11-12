@@ -27,7 +27,10 @@ eth1:
 
 p2p:
   # Optionally specify the external IP address of the node, if it cannot be determined automatically.
-  # HostAddress: 192.168.1.1
+  # Without it, the node advertises the local address its default route uses, and its discovery record switches
+  # to the public IP that peers report. HostAddress replaces both, so it must be an address every peer can reach:
+  # usually the public IP, or on a private network with several interfaces, the one peers connect through.
+  # HostAddress: 203.0.113.7
 
   # Optionally override the default TCP & UDP ports of the node.
   # TcpPort: 13001

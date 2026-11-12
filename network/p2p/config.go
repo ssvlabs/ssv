@@ -5,6 +5,7 @@ import (
 	"crypto/ecdsa"
 	"errors"
 	"fmt"
+	"net"
 	"strings"
 	"time"
 
@@ -50,8 +51,8 @@ type Config struct {
 
 	TCPPort     uint16 `yaml:"TcpPort" env:"TCP_PORT" env-description:"TCP port for P2P transport"`
 	UDPPort     uint16 `yaml:"UdpPort" env:"UDP_PORT" env-description:"UDP port for discovery"`
-	HostAddress string `yaml:"HostAddress" env:"HOST_ADDRESS" env-description:"External IP address for discovery (mutually exclusive with HostDNS)"`
-	HostDNS     string `yaml:"HostDNS" env:"HOST_DNS" env-description:"External DNS name for discovery (mutually exclusive with HostAddress)"`
+	HostAddress string `yaml:"HostAddress" env:"HOST_ADDRESS" env-description:"External IP address to advertise to peers (mutually exclusive with HostDNS)"`
+	HostDNS     string `yaml:"HostDNS" env:"HOST_DNS" env-description:"External DNS name to advertise to peers (mutually exclusive with HostAddress)"`
 
 	RequestTimeout   time.Duration `yaml:"RequestTimeout" env:"P2P_REQUEST_TIMEOUT" env-description:"Timeout for P2P requests"`
 	MaxBatchResponse uint64        `yaml:"MaxBatchResponse" env:"P2P_MAX_BATCH_RESPONSE" env-description:"Maximum number of objects returned in a batch response"`
@@ -140,10 +141,10 @@ func (c *Config) ValidateDiscovery() error {
 	}
 }
 
-// Libp2pOptions creates options list for the libp2p host
-// these are the most basic options required to start a network instance,
-// other options and libp2p components can be configured on top
-func (c *Config) Libp2pOptions() ([]libp2p.Option, error) {
+// Libp2pOptions returns the basic libp2p host options; other options and components are configured on top.
+// localIP is the node's local IP (nil without discv5): the host listens on it and, without HostAddress/HostDNS,
+// our ENR starts with it and the host advertises it alongside its public addresses.
+func (c *Config) Libp2pOptions(localIP net.IP) ([]libp2p.Option, error) {
 	if c.NetworkPrivateKey == nil {
 		return nil, errors.New("could not create options w/o network key")
 	}
@@ -159,7 +160,7 @@ func (c *Config) Libp2pOptions() ([]libp2p.Option, error) {
 		libp2p.UserAgent(c.UserAgent),
 	)
 
-	opts, err = c.configureAddrs(opts)
+	opts, err = c.configureAddrs(opts, localIP)
 	if err != nil {
 		return opts, fmt.Errorf("could not setup addresses: %w", err)
 	}
@@ -172,7 +173,8 @@ func (c *Config) Libp2pOptions() ([]libp2p.Option, error) {
 	return opts, nil
 }
 
-func (c *Config) configureAddrs(opts []libp2p.Option) ([]libp2p.Option, error) {
+// configureAddrs sets the addresses the host listens on and the ones it advertises to peers.
+func (c *Config) configureAddrs(opts []libp2p.Option, localIP net.IP) ([]libp2p.Option, error) {
 	addrs := make([]ma.Multiaddr, 0)
 	maZero, err := commons.BuildMultiAddress("0.0.0.0", "tcp", uint(c.TCPPort), "")
 	if err != nil {
@@ -180,14 +182,13 @@ func (c *Config) configureAddrs(opts []libp2p.Option) ([]libp2p.Option, error) {
 	}
 	addrs = append(addrs, maZero)
 
-	// discv5 advertises the node's IP, so only it keeps a listener on that IP; the other modes need no external
-	// IP at all.
-	if c.discoveryMode() == DiscoveryDiscv5 {
-		ipAddr, err := commons.IPAddr()
-		if err != nil {
-			return opts, fmt.Errorf("could not get ip addr: %w", err)
+	var maIP ma.Multiaddr
+	if localIP != nil {
+		// With discv5 the port goes into our ENR and the address we advertise, so the kernel can't pick it.
+		if c.TCPPort == 0 {
+			return opts, errors.New("missing tcp port")
 		}
-		maIP, err := commons.BuildMultiAddress(ipAddr.String(), "tcp", uint(c.TCPPort), "")
+		maIP, err = commons.BuildMultiAddress(localIP.String(), "tcp", uint(c.TCPPort), "")
 		if err != nil {
 			return opts, fmt.Errorf("could not build multi address for ip address: %w", err)
 		}
@@ -195,30 +196,36 @@ func (c *Config) configureAddrs(opts []libp2p.Option) ([]libp2p.Option, error) {
 	}
 	opts = append(opts, libp2p.ListenAddrs(addrs...))
 
-	// NOTE: only one of (HostDNS, HostAddress) can be used with libp2p
-	var external ma.Multiaddr
+	// announced is what we advertise besides our public addresses: HostDNS or HostAddress (mutually exclusive), else
+	// localIP, the IP our ENR starts with (discv5 may later switch the ENR to the public IP peers report). It's set
+	// once, at startup: unlike the public addresses, it doesn't follow a later change of the host's addresses.
+	var announced ma.Multiaddr
 	switch {
 	case c.HostDNS != "":
-		external, err = ma.NewMultiaddr(fmt.Sprintf("/dns4/%s/tcp/%d", c.HostDNS, c.TCPPort))
+		announced, err = ma.NewMultiaddr(fmt.Sprintf("/dns4/%s/tcp/%d", c.HostDNS, c.TCPPort))
 	case c.HostAddress != "":
-		external, err = commons.BuildMultiAddress(c.HostAddress, "tcp", uint(c.TCPPort), "")
+		announced, err = commons.BuildMultiAddress(c.HostAddress, "tcp", uint(c.TCPPort), "")
+	case maIP != nil:
+		announced = maIP
 	default:
+		// Without discv5 there's no ENR to name the one private address peers reach us through, so keep
+		// go-libp2p's default: every interface address.
 		return opts, nil
 	}
 	if err != nil {
 		return opts, fmt.Errorf("could not build external multi address: %w", err)
 	}
+
+	// go-libp2p resolves the 0.0.0.0 listener to every interface address (docker bridges, VPNs, loopback, ...), and
+	// identify and the signed peer record advertise what this factory returns. Peers reach us through the public
+	// and announced addresses, so the other private ones would only leak our internal network.
 	opts = append(opts, libp2p.AddrsFactory(func(addrs []ma.Multiaddr) []ma.Multiaddr {
-		return append(publicAddrs(addrs), external)
+		return append(publicAddrs(addrs), announced)
 	}))
 
 	return opts, nil
 }
 
-// publicAddrs returns the public addresses in addrs. go-libp2p resolves the 0.0.0.0 listen address
-// to every interface address (docker bridges, VPNs, ...), and identify and the signed peer record
-// advertise what the AddrsFactory returns. With an external address configured, peers reach us
-// through it, so announcing the private ones would only leak our internal addresses.
 func publicAddrs(addrs []ma.Multiaddr) []ma.Multiaddr {
 	public := make([]ma.Multiaddr, 0, len(addrs))
 	for _, addr := range addrs {

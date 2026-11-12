@@ -13,9 +13,9 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/discover"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
-	"github.com/prysmaticlabs/prysm/v4/network"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/discovery"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability/log"
@@ -26,7 +26,7 @@ import (
 // Options contains options to create the node
 type Options struct {
 	PrivateKey string `yaml:"PrivateKey" env:"BOOT_NODE_PRIVATE_KEY" env-description:"Private key for bootnode identity (generated if empty)"`
-	ExternalIP string `yaml:"ExternalIP" env:"BOOT_NODE_EXTERNAL_IP" env-description:"Override bootnode's external IP address"`
+	ExternalIP string `yaml:"ExternalIP" env:"BOOT_NODE_EXTERNAL_IP" env-description:"Override bootnode's external IPv4 address"`
 	TCPPort    uint16 `yaml:"TcpPort" env:"TCP_PORT" env-description:"TCP port for P2P transport"`
 	UDPPort    uint16 `yaml:"UdpPort" env:"UDP_PORT" env-description:"UDP port for discovery"`
 	DbPath     string `yaml:"DbPath" env:"BOOT_NODE_DB_PATH" env-description:"Path to bootnode database directory"`
@@ -118,12 +118,12 @@ func (n *bootNode) Start(ctx context.Context) error {
 		n.logger.Fatal("failed to get p2p private key", zap.Error(err))
 	}
 
-	ipAddr, err := network.ExternalIP()
+	ip, err := commons.IPAddr()
 	if err != nil {
-		n.logger.Fatal("failed to get external IP", zap.Error(err))
+		n.logger.Fatal("failed to get local IP", zap.Error(err))
 	}
 
-	listener, socketConn := n.createListener(ipAddr, n.discv5port, privKey)
+	listener, socketConn := n.createListener(ip, n.discv5port, privKey)
 	node := listener.LocalNode().Node()
 	n.logger.Info("running",
 		zap.Stringer("node", node),
@@ -157,29 +157,12 @@ func (n *bootNode) Start(ctx context.Context) error {
 	return nil
 }
 
-func (n *bootNode) createListener(ipAddr string, port uint16, privateKey *ecdsa.PrivateKey) (discovery.Listener, *discovery.TimedConn) {
+func (n *bootNode) createListener(ip net.IP, port uint16, privateKey *ecdsa.PrivateKey) (discovery.Listener, *discovery.TimedConn) {
 	// Create the UDP listener and the LocalNode record.
-	ip := net.ParseIP(ipAddr)
 	if ip.To4() == nil {
-		n.logger.Fatal("IPv4 address not provided", fields.Address(ipAddr))
+		n.logger.Fatal("IPv4 address not provided", fields.Address(ip.String()))
 	}
-	var bindIP net.IP
-	var networkVersion string
-	switch {
-	case ip.To16() != nil && ip.To4() == nil:
-		bindIP = net.IPv6zero
-		networkVersion = "udp6"
-	case ip.To4() != nil:
-		bindIP = net.IPv4zero
-		networkVersion = "udp4"
-	default:
-		n.logger.Fatal("valid IP address not provided", fields.Address(ipAddr))
-	}
-	udpAddr := &net.UDPAddr{
-		IP:   bindIP,
-		Port: int(port),
-	}
-	conn, err := net.ListenUDP(networkVersion, udpAddr)
+	conn, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.IPv4zero, Port: int(port)})
 	if err != nil {
 		n.logger.Fatal("failed to create UDP server", zap.Error(err))
 	}
@@ -202,18 +185,22 @@ func (n *bootNode) createListener(ipAddr string, port uint16, privateKey *ecdsa.
 }
 
 func (n *bootNode) createLocalNode(privKey *ecdsa.PrivateKey, ipAddr net.IP, port uint16) (*enode.LocalNode, error) {
+	external := ipAddr
+	if n.externalIP == "" {
+		n.logger.Info("running with IP", zap.String("ip", ipAddr.String()))
+	} else {
+		external = net.ParseIP(n.externalIP)
+		// The bootnode listens on IPv4 only.
+		if external.To4() == nil {
+			return nil, fmt.Errorf("external IP %q is not an IPv4 address", n.externalIP)
+		}
+		n.logger.Info("running with external IP", zap.String("external_ip", n.externalIP))
+	}
+
 	db, err := enode.OpenDB(filepath.Join(n.dbPath, "enode"))
 	if err != nil {
 		return nil, fmt.Errorf("could not open node's peer database: %w", err)
 	}
-	external := net.ParseIP(n.externalIP)
-	if n.externalIP == "" {
-		external = ipAddr
-		n.logger.Info("running with IP", zap.String("ip", ipAddr.String()))
-	} else {
-		n.logger.Info("running with external IP", zap.String("external_ip", n.externalIP))
-	}
-
 	localNode := enode.NewLocalNode(db, privKey)
 	localNode.Set(enr.WithEntry("ssv", true))
 	localNode.SetFallbackIP(external)
