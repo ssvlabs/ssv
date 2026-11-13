@@ -1,0 +1,249 @@
+<title>Round-1 Duration by Duty</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..48,600;12..48,700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+:root{
+  --bg:#eaeef2;--surface:#ffffff;--surface-2:#f4f7f9;--inset:#eef2f5;
+  --ink:#0f151c;--ink-2:#33404f;--muted:#5c6a7c;--faint:#8a97a7;--line:#dbe2ea;--grid:#e7edf2;
+  --r1:#0090a3;--r2:#b8621b;--sync:#b8621b;--crit:#b3182a;--good:#1c7a4d;--accent:#0090a3;--accent-ink:#046374;
+  --r2-wash:#b8621b1a;--crit-wash:#b3182a12;--good-wash:#1c7a4d14;--teal-wash:#0090a312;
+  --shadow:0 1px 2px rgba(15,21,28,.05),0 4px 16px rgba(15,21,28,.05);
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0b1118;--surface:#131b24;--surface-2:#182230;--inset:#0f1720;
+  --ink:#e8eef4;--ink-2:#bcc9d6;--muted:#93a2b4;--faint:#67788b;--line:#243141;--grid:#1d2836;
+  --r1:#2ba4b2;--r2:#cc8033;--sync:#cc8033;--crit:#e5636f;--good:#4bbb83;--accent:#2ba4b2;--accent-ink:#7fd3dd;
+  --r2-wash:#cc80331f;--crit-wash:#e5636f18;--good-wash:#4bbb8318;--teal-wash:#2ba4b21f;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 6px 22px rgba(0,0,0,.35);
+}}
+:root[data-theme="dark"]{
+  --bg:#0b1118;--surface:#131b24;--surface-2:#182230;--inset:#0f1720;
+  --ink:#e8eef4;--ink-2:#bcc9d6;--muted:#93a2b4;--faint:#67788b;--line:#243141;--grid:#1d2836;
+  --r1:#2ba4b2;--r2:#cc8033;--sync:#cc8033;--crit:#e5636f;--good:#4bbb83;--accent:#2ba4b2;--accent-ink:#7fd3dd;
+  --r2-wash:#cc80331f;--crit-wash:#e5636f18;--good-wash:#4bbb8318;--teal-wash:#2ba4b21f;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 6px 22px rgba(0,0,0,.35);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"IBM Plex Sans",system-ui,sans-serif;font-size:16px;line-height:1.55;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1000px;margin:0 auto;padding:0 20px}
+h1,h2,h3{font-family:"Bricolage Grotesque","IBM Plex Sans",sans-serif;font-weight:700;letter-spacing:-.01em;text-wrap:balance;margin:0;line-height:1.13}
+.mono{font-family:"IBM Plex Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;font-weight:500;letter-spacing:.16em;text-transform:uppercase;color:var(--accent-ink)}
+header{padding:52px 0 26px;border-bottom:1px solid var(--line)}
+.kicker{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:18px}
+.chip{font-family:"IBM Plex Mono",monospace;font-size:11.5px;letter-spacing:.04em;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:3px 10px;background:var(--surface)}
+h1{font-size:clamp(28px,5vw,48px)}
+.sub{margin:20px 0 0;font-size:clamp(16px,2.3vw,20px);color:var(--ink-2);max-width:70ch;line-height:1.5}
+.sub b{color:var(--ink);font-weight:600}
+.tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:30px 0 4px}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px 15px 14px;box-shadow:var(--shadow)}
+.tile .n{font-family:"IBM Plex Mono",monospace;font-weight:600;font-size:26px;letter-spacing:-.02em;line-height:1.05}
+.tile .n.crit{color:var(--crit)}.tile .n.warn{color:var(--r2)}.tile .n.good{color:var(--good)}.tile .n.teal{color:var(--accent-ink)}
+.tile .l{margin-top:8px;font-size:12px;color:var(--muted);line-height:1.35}
+section{padding:44px 0;border-bottom:1px solid var(--line)}
+.sec-head{max-width:74ch}
+h2{font-size:clamp(21px,3vw,27px)}
+.sec-head p{color:var(--ink-2);margin:12px 0 0;font-size:16px}.lede b{color:var(--ink);font-weight:600}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:22px 22px 18px;box-shadow:var(--shadow);margin-top:22px}
+.panel h3{font-size:15px;font-weight:600;margin:0}.panel .cap{font-size:13px;color:var(--muted);margin:5px 0 12px;max-width:82ch}
+.chart-scroll{overflow-x:auto}
+svg text{font-family:"IBM Plex Mono",monospace;fill:var(--muted);font-size:11px}
+svg .grid{stroke:var(--grid);stroke-width:1}svg .axis{stroke:var(--line);stroke-width:1}
+.legend{display:flex;gap:8px 18px;flex-wrap:wrap;margin-top:12px;font-size:12.5px;color:var(--ink-2)}
+.legend button{font:inherit;color:var(--ink-2);display:inline-flex;gap:7px;align-items:center;background:none;border:0;padding:2px 0;cursor:pointer;border-radius:5px}
+.legend button[aria-pressed="false"]{opacity:.38;text-decoration:line-through}
+.sw{width:12px;height:12px;border-radius:3px;flex:none}.sw.dash{background:transparent!important;border:2px dashed var(--r1)}
+.tbl-scroll{overflow-x:auto;margin-top:22px}
+table{border-collapse:collapse;width:100%;font-size:13.5px;min-width:620px}
+th,td{text-align:right;padding:10px 12px;border-bottom:1px solid var(--line)}
+th:first-child,td:first-child{text-align:left}
+thead th{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--ink-2)}
+tbody td{font-family:"IBM Plex Mono",monospace;color:var(--ink-2)}tbody tr td:first-child{color:var(--ink);font-family:"IBM Plex Sans",sans-serif;font-weight:500}
+tbody tr.hl td{background:var(--teal-wash)}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:7px;vertical-align:baseline}
+.note{border-radius:14px;padding:18px 20px;margin-top:24px;font-size:14.5px;line-height:1.55}
+.note.good{background:var(--good-wash)}.note.warn{background:var(--r2-wash)}.note.flat{background:var(--surface-2);border:1px solid var(--line)}
+.note h4{margin:0 0 7px;font-family:"IBM Plex Sans";font-size:13px;font-weight:600;letter-spacing:.02em;text-transform:uppercase;color:var(--ink)}
+.note.good h4{color:var(--good)}.note.warn h4{color:var(--r2)}
+.note ul{margin:8px 0 0;padding-left:18px}.note li{margin:6px 0;color:var(--ink-2)}.note b{color:var(--ink);font-weight:600}
+code{font-family:"IBM Plex Mono",monospace;font-size:.88em;background:var(--inset);padding:1px 5px;border-radius:5px;color:var(--ink-2)}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:22px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px 20px;box-shadow:var(--shadow)}
+.card h4{margin:0 0 6px;font-size:14.5px;font-weight:700;font-family:"Bricolage Grotesque",sans-serif}
+.card.settled{border-top:3px solid var(--good)}.card.arriving{border-top:3px solid var(--crit)}
+.card p{margin:0;font-size:13.5px;color:var(--ink-2);line-height:1.5}
+.flow{display:flex;align-items:stretch;gap:0;margin-top:16px;font-family:"IBM Plex Mono",monospace;font-size:12px}
+.flow .step{flex:1;background:var(--surface-2);border:1px solid var(--line);padding:9px 10px;text-align:center;color:var(--ink-2)}
+.flow .step:first-child{border-radius:8px 0 0 8px}.flow .step:last-child{border-radius:0 8px 8px 0}
+.flow .step b{display:block;color:var(--ink);font-size:11px;font-weight:600}
+.flow .arw{display:flex;align-items:center;padding:0 2px;color:var(--faint)}
+.gap-badge{background:var(--crit-wash);color:var(--crit);border-radius:6px;padding:1px 7px;font-weight:600}
+footer{padding:32px 0 64px;color:var(--muted);font-size:12.5px}
+.themebtn{position:fixed;top:14px;right:14px;z-index:40;font-family:"IBM Plex Mono",monospace;font-size:11px;background:var(--surface);color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:6px 12px;cursor:pointer}
+.themebtn:hover{color:var(--ink)}:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+#tip{position:absolute;pointer-events:none;opacity:0;transition:opacity .08s;background:var(--surface);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);padding:9px 11px;font-family:"IBM Plex Mono",monospace;font-size:11.5px;color:var(--ink);z-index:20;min-width:150px}
+#tip .th{color:var(--muted);margin-bottom:5px;font-size:10.5px;letter-spacing:.04em;text-transform:uppercase}
+#tip .row{display:flex;justify-content:space-between;gap:14px;margin:2px 0}#tip .row .v{font-weight:600}
+@media(max-width:680px){.tiles{grid-template-columns:repeat(2,1fr)}.two{grid-template-columns:1fr}.flow{flex-wrap:wrap}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+<button class="themebtn" id="themebtn" aria-label="Toggle theme">&#9680; theme</button>
+<div class="wrap">
+<header>
+  <div class="kicker">
+    <span class="eyebrow">SSV &middot; Exporter forensics</span>
+    <span class="chip">prod-mainnet</span><span class="chip">30 epochs sampled</span><span class="chip">4 duty types</span>
+  </div>
+  <h1>Round&#8209;1 QBFT takes the same time for every duty &mdash; except one</h1>
+  <p class="sub">Once a leader proposes, how long does round&#8209;1 consensus take to decide? Across proposer, aggregator, sync&#8209;committee&#8209;contribution and attester duties the <b>median is ~50ms</b> &mdash; the same intrinsic ~2&#8209;hop latency. Only the <b>attester</b> is fat&#8209;tailed. And the proposer's heavier tail turns out to be pure <b>intra&#8209;cluster drift</b>: strip it out and it lands on the aggregator/sync band too.</p>
+  <div class="tiles" id="tiles"></div>
+</header>
+
+<section id="chart-sec">
+  <div class="sec-head">
+    <span class="eyebrow">The tail</span>
+    <h2 style="margin-top:10px">Three of four collapse by ~0.7s; the attester runs to ~3.3s</h2>
+    <p class="lede">Share of successful round&#8209;1s <b>still not decided</b> X ms after the proposal (log scale). Lower and further left is tighter. Hover for values; click the legend to isolate a curve.</p>
+  </div>
+  <div class="panel">
+    <h3>Round&#8209;1 duration survival by duty type</h3>
+    <p class="cap">Mainnet, 30 sampled epochs. The dashed curve is the proposer with intra&#8209;cluster drift removed (see below).</p>
+    <div style="position:relative">
+      <div class="chart-scroll"><svg id="chart" viewBox="0 0 900 400" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Log-scale survival curves of round-1 duration for four duty types; only the attester is fat-tailed"></svg></div>
+      <div id="tip"></div>
+    </div>
+    <div class="legend" id="legend"></div>
+  </div>
+</section>
+
+<section id="table-sec">
+  <div class="sec-head">
+    <span class="eyebrow">The numbers</span>
+    <h2 style="margin-top:10px">Same median everywhere; the tail is the whole story</h2>
+    <p class="lede">A healthy round&#8209;1 is a couple of gossip hops for every duty type. The percentiles diverge only in the tail &mdash; and the drift&#8209;removed proposer is tighter than aggregator/sync through p99.9.</p>
+  </div>
+  <div class="tbl-scroll"><table id="tbl">
+    <thead><tr><th>Duty type</th><th>n</th><th>p50</th><th>p90</th><th>p99</th><th>p99.9</th><th>max</th><th>decides at</th><th>round&#8209;2</th></tr></thead>
+    <tbody id="tbody"></tbody>
+  </table></div>
+  <p style="font-size:12px;color:var(--muted);margin-top:10px">&ldquo;decides at&rdquo; = median decision time into the slot (a start&#8209;timing property, separate from duration). Attester max is the genuine ~3,293ms; the raw 4,010ms is an epoch&#8209;boundary Exporter artifact.</p>
+</section>
+
+<section id="why-sec">
+  <div class="sec-head">
+    <span class="eyebrow">Mechanism</span>
+    <h2 style="margin-top:10px">Why three of four are tight &mdash; and the attester isn't</h2>
+    <p class="lede">Same QBFT, same operators, same network &mdash; so the intrinsic latency is shared. What differs is <b>what a non&#8209;leader has to do to prepare</b>, and that splits the attester off from the rest.</p>
+  </div>
+  <div class="two">
+    <div class="card settled"><h4>Proposer, aggregator, sync &mdash; settled data, structural check</h4><p>A non&#8209;leader validates a <b>self&#8209;contained value</b> (a block, or an aggregate of messages that arrived earlier in the slot) with a structural&#8209;only check, and accepts it the moment it arrives. Nothing waits on its own node re&#8209;deriving the value. Tight, low&#8209;variance timing.</p></div>
+    <div class="card arriving"><h4>Attester (committee) &mdash; arriving head, own&#8209;vote check</h4><p>The committee runner validates the proposed vote against <b>its own node&#8209;derived head</b> for the <b>current, still&#8209;propagating</b> block. An operator can only participate once its beacon node has settled that head &mdash; node&#8209;to&#8209;node import timing spreads the quorum out. Fat tail.</p></div>
+  </div>
+  <div class="note flat">
+    <h4>A note on when they decide</h4>
+    <p>Tight duration is separate from <i>when</i> consensus starts. Aggregator and sync&#8209;contribution decide <b>~8s into the slot</b> (they wait two&#8209;thirds of the slot for messages to aggregate) &mdash; far later than the proposer's ~1.4s or the attester's ~2.4s. But once they propose, round&#8209;1 finishes just as fast. Round changes track the same split: aggregator <b>0.18%</b>, sync <b>0.82%</b>, proposer <b>0.17%</b> &mdash; all far below the attester's <b>1.09%</b>.</p>
+  </div>
+</section>
+
+<section id="drift-sec">
+  <div class="sec-head">
+    <span class="eyebrow">Isolating the drift</span>
+    <h2 style="margin-top:10px">The proposer's extra tail is drift &mdash; and it separates cleanly</h2>
+    <p class="lede">The proposer's tail lives in the <b>prepare phase</b>: in its slowest round&#8209;1s the prepare spread is ~1,145ms while the commit spread is ~18ms. The quorum waits on its marginal operator, then commits fire fast. That wait carries two forms of drift &mdash; both measured from the leader's proposal.</p>
+  </div>
+  <div class="panel">
+    <h3>Fast leader, slow pack &mdash; the dominant tail driver</h3>
+    <p class="cap">In the extreme tail the leader got its block early and proposed while the rest of the cluster was still block&#8209;fetching. A proposer non&#8209;leader can only prepare once its own fetch completes &mdash; even though it doesn't need that block to validate the proposal.</p>
+    <div class="flow">
+      <div class="step"><b>proposal</b>632ms into slot<br><span style="color:var(--faint)">(early &mdash; fast block)</span></div>
+      <div class="arw">&mdash;<span class="gap-badge">~426ms gap</span>&mdash;&rarr;</div>
+      <div class="step"><b>fastest non&#8209;leader prepare</b>vs ~9ms normally<br><span style="color:var(--faint)">(pack still fetching)</span></div>
+      <div class="arw">&rarr;</div>
+      <div class="step"><b>decided</b>commits bunch fast<br><span style="color:var(--faint)">(spread ~18ms)</span></div>
+    </div>
+  </div>
+  <div class="note good">
+    <h4>Cap the wait &rarr; the proposer collapses onto the band</h4>
+    <p>Capping the whole prepare&#8209;quorum wait (proposal &rarr; 2f+1&#8209;th prepare) at its typical drift&#8209;free value (Q &asymp; <b>19ms</b>) removes both drift components: <code>drift-removed = observed &minus; max(wait &minus; Q, 0)</code>. Well&#8209;synced duties are untouched; drift duties shed only the excess wait. The proposer drops to <b>p99 92ms, p99.9 212ms</b> (dashed curve) &mdash; at or below aggregator/sync, which still carry a little drift of their own. All four converge on the intrinsic ~2&#8209;hop QBFT latency.</p>
+  </div>
+</section>
+
+<section id="caveat-sec" style="border-bottom:none">
+  <div class="note flat">
+    <h4>Reading the tail honestly</h4>
+    <ul>
+      <li><b>The drift&#8209;removed proposer's extreme max (1,095ms) is sample size, not a real cost.</b> At fixed percentiles it is already tighter than aggregator/sync (p99.9 <b>212ms</b> vs 335/344ms). The longer visible max is only because the proposer has ~9&times; more duties (24,984 vs 2,746 / 6,897), so on a log&#8209;survival plot its curve resolves farther down before its last sample. Subsampled to the aggregator's <i>n</i>, its max is ~<b>493ms</b> median [239&ndash;1,053] &mdash; below the aggregator's 626ms.</li>
+      <li><b>The 13 duties past 300ms are Exporter receive&#8209;time noise, not latency.</b> Each shows the prepare quorum forming instantly yet the <i>decided</i> stamped 0.3&ndash;1.1s later with commits bunched at a single instant (spread &asymp; 0) &mdash; the signature of a late&#8209;received decided message, sporadic across 13 different epochs.</li>
+      <li><b>Method.</b> Duration is the Exporter's receive&#8209;time of the round&#8209;1 proposal and the aggregated decided message; the decided is gated by the marginal (2f+1&#8209;th) operator. Aggregator is sampled across the validator population; sync&#8209;contribution is targeted at each epoch's sync&#8209;committee validators. Drift removal uses per&#8209;operator prepare times from the raw proposer traces.</li>
+    </ul>
+  </div>
+</section>
+
+<footer><div class="wrap" style="padding:0">
+  <div class="mono" style="color:var(--faint)">SSV Scout &middot; Exporter + E2M &middot; prod-mainnet &middot; 30 epochs sampled from the 465250&ndash;472000 window</div>
+  <div style="margin-top:6px">Companion to the proposer and attester QBFT decision-timing analyses. The intrinsic consensus latency is shared across all four duty types; the observed differences are drift and data&#8209;agreement, not the protocol.</div>
+</div></footer>
+</div>
+<script>
+const D={"step":20,"xmax":3600,"series":[{"key":"attester","name":"attester (committee)","color":"crit","dash":0,"n":110244,"p50":44,"p90":267,"p99":712,"p999":2231,"max":4010,"surv":[99.9202,79.0438,53.7426,40.3668,34.7375,30.5187,26.7824,23.7881,21.2347,18.6305,16.2059,14.0579,12.1449,10.4985,9.1506,8.0267,6.9646,6.0339,5.2475,4.6179,4.0637,3.5911,3.2365,2.8727,2.577,2.3067,2.1017,1.9076,1.7498,1.5702,1.425,1.318,1.2273,1.1538,1.0885,1.0332,0.9887,0.9524,0.9143,0.8917,0.8626,0.8336,0.7982,0.7783,0.7638,0.7365,0.7229,0.7121,0.7012,0.683,0.6685,0.6531,0.6386,0.6232,0.6132,0.6032,0.5851,0.5742,0.5633,0.5542,0.5334,0.5207,0.5098,0.5007,0.4907,0.478,0.4708,0.4671,0.4617,0.4526,0.4454,0.4336,0.4254,0.4173,0.4009,0.3955,0.3801,0.3692,0.361,0.3547,0.3483,0.342,0.3329,0.3293,0.3193,0.3102,0.2975,0.2894,0.2812,0.2739,0.2631,0.2576,0.2504,0.2413,0.2313,0.2231,0.2168,0.2041,0.1968,0.1878,0.1769,0.1678,0.1624,0.1533,0.146,0.1406,0.1333,0.1306,0.1225,0.1152,0.1098,0.1052,0.0971,0.0916,0.0898,0.0871,0.0862,0.0835,0.078,0.0762,0.0753,0.0726,0.0717,0.0698,0.0689,0.0689,0.068,0.068,0.0671,0.0662,0.0662,0.0662,0.0653,0.0653,0.0653,0.0653,0.0644,0.0644,0.0644,0.0635,0.0635,0.0635,0.0635,0.0635,0.0626,0.0626,0.0626,0.0626,0.0626,0.0626,0.0617,0.0617,0.0608,0.0608,0.0608,0.0608,0.0599,0.059,0.059,0.059,0.0571,0.0571,0.0571,0.0571,0.0571,0.0562,0.0562,0.0562,0.0562,0.0562,0.0562,0.0562,0.0553,0.0553,0.0553,0.0553,0.0553,0.0553,0.0553,0.0553,0.0553]},{"key":"prop_obs","name":"proposer &mdash; observed","color":"r1","dash":0,"n":24984,"p50":59,"p90":102,"p99":191,"p999":796,"max":1148,"surv":[99.952,82.0845,58.8817,49.2996,22.7105,10.8389,5.4835,2.7057,1.497,1.1127,0.9326,0.8606,0.8165,0.7805,0.7605,0.7245,0.6764,0.6324,0.5844,0.5443,0.5203,0.4803,0.4443,0.4123,0.3602,0.3322,0.3082,0.2922,0.2842,0.2642,0.2321,0.2201,0.2081,0.1921,0.1761,0.1721,0.1601,0.1481,0.1321,0.1241,0.1001,0.0921,0.0801,0.068,0.06,0.044,0.04,0.032,0.02,0.02,0.02,0.02,0.016,0.012,0.012,0.008,0.008,0.004,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0]},{"key":"prop_dr","name":"proposer &mdash; drift-removed","color":"r1","dash":1,"n":24984,"p50":34,"p90":67,"p99":92,"p999":212,"max":1095,"surv":[99.952,81.8764,30.5195,13.3125,2.2735,0.6684,0.3642,0.2962,0.2241,0.1681,0.1241,0.0921,0.0841,0.072,0.068,0.052,0.052,0.044,0.044,0.036,0.036,0.036,0.032,0.032,0.032,0.028,0.028,0.028,0.028,0.028,0.028,0.028,0.024,0.024,0.024,0.024,0.024,0.024,0.024,0.024,0.024,0.024,0.024,0.024,0.024,0.016,0.016,0.016,0.008,0.008,0.008,0.008,0.008,0.004,0.004,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0]},{"key":"sync","name":"sync-committee-contribution","color":"sync","dash":0,"n":6897,"p50":55,"p90":86,"p99":127,"p999":344,"max":701,"surv":[99.971,94.1569,69.0445,44.6571,16.2969,3.2913,1.2759,0.7105,0.5365,0.4205,0.203,0.1595,0.1595,0.1305,0.116,0.116,0.116,0.1015,0.1015,0.1015,0.087,0.087,0.058,0.058,0.029,0.029,0.0145,0.0145,0.0145,0.0145,0.0145,0.0145,0.0145,0.0145,0.0145,0.0145,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0]},{"key":"agg","name":"aggregator","color":"good","dash":0,"n":2746,"p50":47,"p90":89,"p99":128,"p999":335,"max":626,"surv":[99.9636,91.0779,60.3059,32.6657,15.3678,5.244,1.7116,0.8012,0.4734,0.3277,0.2913,0.1821,0.1821,0.1457,0.1457,0.1457,0.1457,0.1092,0.1092,0.0728,0.0728,0.0728,0.0728,0.0728,0.0728,0.0728,0.0728,0.0364,0.0364,0.0364,0.0364,0.0364,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0]}],"ctx":{"prop":{"decide":1437,"rc":0.17},"agg":{"decide":8083,"rc":0.18},"sync":{"decide":8096,"rc":0.82},"att":{"decide":2430,"rc":1.09}}}, NS="http://www.w3.org/2000/svg";
+function el(n,a){var e=document.createElementNS(NS,n);for(var k in a)e.setAttribute(k,a[k]);return e;}
+const $=s=>document.querySelector(s);
+const COL={crit:"var(--crit)",r1:"var(--r1)",sync:"var(--sync)",good:"var(--good)"};
+
+// tiles
+const tiles=[
+ ["teal","~50ms","median round-1 for all four duty types &mdash; the shared intrinsic 2-hop latency"],
+ ["crit","3.3s","the attester's tail &mdash; the only fat-tailed duty (p99 712ms); the rest collapse by ~0.7s"],
+ ["good","191&#8202;&rarr;&#8202;92ms","proposer round-1 p99 once intra-cluster drift is removed"],
+ ["warn","~8s","aggregator &amp; sync decide this late into the slot, yet round-1 itself stays sub-second"]];
+$("#tiles").innerHTML=tiles.map(t=>`<div class="tile"><div class="n ${t[0]} mono">${t[1]}</div><div class="l">${t[2]}</div></div>`).join("");
+
+// table
+const rowsOrder=["prop_obs","prop_dr","agg","sync","attester"];
+const ctxKey={prop_obs:"prop",prop_dr:"prop",agg:"agg",sync:"sync",attester:"att"};
+const byKey=Object.fromEntries(D.series.map(s=>[s.key,s]));
+$("#tbody").innerHTML=rowsOrder.map(k=>{const s=byKey[k],c=D.ctx[ctxKey[k]];
+  const mx=k==="attester"?"3,293*":s.max.toLocaleString();
+  return `<tr class="${k==='prop_dr'?'hl':''}"><td><span class="dot" style="background:${COL[s.color]}"></span>${s.name.replace(/&mdash;/,'&mdash;')}</td>`+
+   `<td>${s.n.toLocaleString()}</td><td>${s.p50}</td><td>${s.p90}</td><td>${s.p99}</td><td>${s.p999}</td><td>${mx}</td>`+
+   `<td>${(c.decide/1000).toFixed(c.decide<1000?2:1)}s</td><td>${c.rc}%</td></tr>`;}).join("");
+
+// ---- survival chart ----
+const S=$("#chart"),W=900,H=400,L=58,R=20,T=18,B=46,iw=W-L-R,ih=H-T-B,XMAX=D.xmax,STEP=D.step;
+const YLO=-2,YHI=2, hidden=new Set();
+const sx=x=>L+iw*Math.min(x,XMAX)/XMAX;
+const sy=s=>T+ih*(1-(Math.max(Math.log10(Math.max(s,0.01)),YLO)-YLO)/(YHI-YLO));
+function draw(){
+  S.textContent="";
+  [2,1,0,-1,-2].forEach(e=>{const y=sy(10**e);S.appendChild(el("line",{class:"grid",x1:L,y1:y,x2:W-R,y2:y}));
+    const t=el("text",{x:L-8,y:y+3,"text-anchor":"end"});t.textContent={2:"100%",1:"10%",0:"1%","-1":"0.1%","-2":"0.01%"}[e];S.appendChild(t);});
+  for(let ms=0;ms<=XMAX;ms+=500){const t=el("text",{x:sx(ms),y:H-B+18,"text-anchor":"middle"});t.textContent=(ms/1000).toFixed(1)+"s";S.appendChild(t);}
+  S.appendChild(el("line",{class:"axis",x1:L,y1:T+ih,x2:W-R,y2:T+ih}));
+  S.appendChild(el("line",{id:"guide",x1:L,y1:T,x2:L,y2:T+ih,stroke:"var(--faint)","stroke-width":1,"stroke-dasharray":"3 3",opacity:0}));
+  D.series.forEach(s=>{if(hidden.has(s.key))return;let d="",started=false;
+    s.surv.forEach((v,i)=>{if(v<=0){return;} const x=sx(i*STEP),y=sy(v);d+=(started?"L":"M")+x.toFixed(1)+" "+y.toFixed(2)+" ";started=true;});
+    S.appendChild(el("path",{d:d,fill:"none",stroke:COL[s.color],"stroke-width":s.key==="attester"?2.6:2.2,"stroke-dasharray":s.dash?"7 5":"",opacity:.95}));});
+}
+draw();
+// legend
+$("#legend").innerHTML=D.series.map(s=>`<button data-k="${s.key}" aria-pressed="true"><i class="sw ${s.dash?'dash':''}" style="${s.dash?'':'background:'+COL[s.color]}"></i>${s.name} <span class="mono" style="color:var(--muted)">&middot; max ${s.key==='attester'?'3293':s.max}ms</span></button>`).join("");
+$("#legend").addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;const k=b.dataset.k;
+  if(hidden.has(k)){hidden.delete(k);b.setAttribute("aria-pressed","true");}else{hidden.add(k);b.setAttribute("aria-pressed","false");}draw();});
+// hover tooltip
+const tip=$("#tip");
+function survAt(s,x){const f=x/STEP,i=Math.floor(f);if(i>=s.surv.length-1)return s.surv[s.surv.length-1];const a=s.surv[i],b=s.surv[i+1];return a+(b-a)*(f-i);}
+S.addEventListener("mousemove",ev=>{const r=S.getBoundingClientRect(),px=(ev.clientX-r.left)/r.width*W;
+  if(px<L||px>W-R){tip.style.opacity=0;const g=$("#guide");if(g)g.setAttribute("opacity",0);return;}
+  const x=(px-L)/iw*XMAX,g=$("#guide");if(g){g.setAttribute("x1",px);g.setAttribute("x2",px);g.setAttribute("opacity",.7);}
+  let rows="";D.series.forEach(s=>{if(hidden.has(s.key))return;const v=survAt(s,x);
+    rows+=`<div class="row"><span><span class="dot" style="background:${COL[s.color]};width:8px;height:8px"></span>${s.name.split(" &mdash;")[0]}${s.dash?" (dr)":""}</span><span class="v">${v>=0.01?v.toFixed(v<1?2:1)+"%":"&mdash;"}</span></div>`;});
+  tip.innerHTML=`<div class="th">${Math.round(x)}ms after proposal</div>${rows}`;
+  tip.style.opacity=1;const tw=tip.offsetWidth,cx=ev.clientX-r.left;
+  tip.style.left=Math.min(Math.max(cx-tw/2,0),r.width-tw)+"px";tip.style.top=(ev.clientY-r.top+18)+"px";});
+S.addEventListener("mouseleave",()=>{tip.style.opacity=0;const g=$("#guide");if(g)g.setAttribute("opacity",0);});
+(function(){var b=$("#themebtn"),root=document.documentElement;b.addEventListener("click",function(){
+  var cur=root.getAttribute("data-theme"),sd=matchMedia("(prefers-color-scheme:dark)").matches;
+  root.setAttribute("data-theme",cur?(cur==="dark"?"light":"dark"):(sd?"light":"dark"));draw();});})();
+</script>
