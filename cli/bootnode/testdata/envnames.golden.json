@@ -1,0 +1,14 @@
+{
+  "bootnode.DbPath": "BOOT_NODE_DB_PATH",
+  "bootnode.ExternalIP": "BOOT_NODE_EXTERNAL_IP",
+  "bootnode.Network": "NETWORK",
+  "bootnode.PrivateKey": "BOOT_NODE_PRIVATE_KEY",
+  "bootnode.TcpPort": "TCP_PORT",
+  "bootnode.UdpPort": "UDP_PORT",
+  "global.LogFileBackups": "LOG_FILE_BACKUPS",
+  "global.LogFilePath": "LOG_FILE_PATH",
+  "global.LogFileSize": "LOG_FILE_SIZE",
+  "global.LogFormat": "LOG_FORMAT",
+  "global.LogLevel": "LOG_LEVEL",
+  "global.LogLevelFormat": "LOG_LEVEL_FORMAT"
+}
