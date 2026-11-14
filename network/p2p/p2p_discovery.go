@@ -47,15 +47,13 @@ func (n *p2pNetwork) startDiscovery() error {
 	}
 
 	// Spawn a goroutine to deduplicate discovered peers by peer ID.
-	connectorProposals := make(chan peer.AddrInfo, connectorQueueSize)
+	connectorProposals := make(chan discovery.DiscoveredPeer, connectorQueueSize)
 	go n.bootstrapDiscovery(connectorProposals)
 	go func() {
 		for proposal := range connectorProposals {
-			discoveredPeer := discovery.DiscoveredPeer{
-				AddrInfo: proposal,
-				Tries:    0,
-			}
-			n.discoveredPeersPool.Set(proposal.ID, discoveredPeer)
+			n.discoveredPeersMu.Lock()
+			n.discoveredPeersPool.Set(proposal.ID, proposal)
+			n.discoveredPeersMu.Unlock()
 		}
 	}()
 
@@ -177,14 +175,14 @@ func (n *p2pNetwork) startDiscovery() error {
 			)
 		}
 
-		// Forward the selected peers for connection, incrementing the retry counter.
+		// Forward the selected peers for connection, incrementing their retry counters; markTried skips any
+		// whose pool entry changed after selection.
+		proposed := 0
 		for _, p := range peersToConnect {
-			n.discoveredPeersPool.Set(p.ID, discovery.DiscoveredPeer{
-				AddrInfo: p.AddrInfo,
-				Tries:    p.Tries + 1,
-				LastTry:  time.Now(),
-			})
-			connector <- p.AddrInfo
+			if n.markTried(p) {
+				connector <- p.AddrInfo
+				proposed++
+			}
 		}
 
 		if len(peersToConnect) == 0 {
@@ -194,11 +192,26 @@ func (n *p2pNetwork) startDiscovery() error {
 			return
 		}
 		n.logger.Info("proposed discovered peers", append([]zap.Field{
-			zap.Int("count", len(peersToConnect)),
+			zap.Int("count", proposed),
 		}, poolStats.AsLogFields()...)...)
 	})
 
 	return nil
+}
+
+// markTried counts a connection attempt to p, a pool entry copied during selection. It returns false and
+// changes nothing if the entry has since been removed or replaced by a newer record: writing p back would undo that.
+func (n *p2pNetwork) markTried(p discovery.DiscoveredPeer) bool {
+	n.discoveredPeersMu.Lock()
+	defer n.discoveredPeersMu.Unlock()
+
+	if current, ok := n.discoveredPeersPool.Get(p.ID); !ok || current.Seq != p.Seq {
+		return false
+	}
+	p.Tries++
+	p.LastTry = time.Now()
+	n.discoveredPeersPool.Set(p.ID, p)
+	return true
 }
 
 // peerSelectionScore scores a discovered peer for outbound-connection selection. The peer's

@@ -12,6 +12,7 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/enr"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
+	ma "github.com/multiformats/go-multiaddr"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
@@ -102,6 +103,32 @@ func TestCheckPeer(t *testing.T) {
 				expectedError:     errors.New("peer already discovered recently"),
 			},
 			{
+				name:              "already discovered from an older record at the same address",
+				domainType:        &myDomainType,
+				subnets:           mySubnets,
+				alreadyDiscovered: true,
+				pooledFromOlder:   true,
+				expectedError:     errors.New("peer already discovered recently"),
+			},
+			{
+				name:              "already discovered from an older record at another address",
+				domainType:        &myDomainType,
+				subnets:           mySubnets,
+				alreadyDiscovered: true,
+				pooledFromOlder:   true,
+				pooledAtOtherAddr: true,
+				expectedError:     nil,
+			},
+			{
+				name:              "already discovered from a newer record at another address",
+				domainType:        &myDomainType,
+				subnets:           mySubnets,
+				alreadyDiscovered: true,
+				pooledFromNewer:   true,
+				pooledAtOtherAddr: true,
+				expectedError:     errors.New("peer already discovered recently"),
+			},
+			{
 				name:            "recently trimmed",
 				domainType:      &myDomainType,
 				subnets:         mySubnets,
@@ -172,6 +199,7 @@ func TestCheckPeer(t *testing.T) {
 	subnetIndex := peers.NewSubnetsIndex()
 	dvs := &DiscV5Service{
 		ctx:                 ctx,
+		logger:              logger,
 		conns:               &mock.MockConnectionIndex{LimitValue: false},
 		subnetsIdx:          subnetIndex,
 		ssvConfig:           checkPeerTestSSVConfig,
@@ -200,7 +228,17 @@ func TestCheckPeer(t *testing.T) {
 				delete(connIndex.BadPeers, peerEvent.AddrInfo.ID)
 			}
 			if test.alreadyDiscovered {
-				dvs.discoveredPeersPool.Set(peerEvent.AddrInfo.ID, DiscoveredPeer{AddrInfo: peerEvent.AddrInfo})
+				known := DiscoveredPeer{AddrInfo: peerEvent.AddrInfo, Seq: peerEvent.Node.Seq()}
+				switch {
+				case test.pooledFromOlder:
+					known.Seq--
+				case test.pooledFromNewer:
+					known.Seq++
+				}
+				if test.pooledAtOtherAddr {
+					known.Addrs = []ma.Multiaddr{ma.StringCast("/ip4/10.0.0.1/tcp/13000")}
+				}
+				dvs.discoveredPeersPool.Set(known.ID, known)
 			} else {
 				dvs.discoveredPeersPool.Delete(peerEvent.AddrInfo.ID)
 			}
@@ -343,6 +381,9 @@ type checkPeerTest struct {
 	localNode         *enode.LocalNode
 	expectedError     error
 	alreadyDiscovered bool
+	pooledFromOlder   bool
+	pooledFromNewer   bool
+	pooledAtOtherAddr bool
 	recentlyTrimmed   bool
 	connectedness     network.Connectedness
 	isBad             bool

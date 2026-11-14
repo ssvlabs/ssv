@@ -69,6 +69,8 @@ type Service interface {
 
 type DiscoveredPeer struct {
 	peer.AddrInfo
+	// Seq is the sequence number of the peer's record (ENR) that AddrInfo comes from, or 0 without one.
+	Seq uint64
 
 	// Tries keeps track of how many times we tried to connect to this peer.
 	Tries int

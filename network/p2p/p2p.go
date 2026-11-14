@@ -138,6 +138,8 @@ type p2pNetwork struct {
 	// discoveredPeersPool keeps track of recently discovered peers so we can rank them and choose
 	// the best candidates to connect to.
 	discoveredPeersPool *ttl.Map[peer.ID, discovery.DiscoveredPeer]
+	// discoveredPeersMu keeps discovery from adding a newer record between markTried's check and write.
+	discoveredPeersMu sync.Mutex
 	// trimmedRecently keeps track of recently trimmed peers so we don't try to connect to these
 	// shortly after we've trimmed these (we still might consider connecting to these once they
 	// are removed from this map after some time passes)
@@ -521,10 +523,10 @@ func (n *p2pNetwork) choosePeersToTrim(trimCnt int, trimInboundOnly bool) map[pe
 	return result
 }
 
-// bootstrapDiscovery starts the required services
-// it will try to bootstrap discovery service, and inject a connect function.
-// the connect function checks if we can connect to the given peer and if so passing it to the backoff connector.
-func (n *p2pNetwork) bootstrapDiscovery(connector chan peer.AddrInfo) {
+// bootstrapDiscovery runs discovery, making up to 3 attempts while Bootstrap fails, and sends each peer it finds to
+// connector, which feeds discoveredPeersPool, unless the peers index rules out connecting to it. It closes connector
+// on return.
+func (n *p2pNetwork) bootstrapDiscovery(connector chan discovery.DiscoveredPeer) {
 	defer close(connector)
 	err := tasks.Retry(func() error {
 		return n.disc.Bootstrap(func(e discovery.PeerEvent) {
@@ -532,8 +534,12 @@ func (n *p2pNetwork) bootstrapDiscovery(connector chan peer.AddrInfo) {
 				n.logger.Debug("skipping new peer", fields.PeerID(e.AddrInfo.ID), zap.Error(err))
 				return
 			}
+			p := discovery.DiscoveredPeer{AddrInfo: e.AddrInfo}
+			if e.Node != nil { // nil for peers found via mDNS
+				p.Seq = e.Node.Seq()
+			}
 			select {
-			case connector <- e.AddrInfo:
+			case connector <- p:
 			default:
 				n.logger.Warn("connector queue is full, skipping new peer", fields.PeerID(e.AddrInfo.ID))
 			}
