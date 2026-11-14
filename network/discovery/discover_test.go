@@ -2,7 +2,9 @@ package discovery
 
 import (
 	"context"
+	"crypto/ecdsa"
 	"errors"
+	"fmt"
 	"net"
 	"testing"
 	"time"
@@ -41,6 +43,27 @@ func nodeWithRawDomainType(t *testing.T, domainType []byte) *enode.Node {
 	subnetsVec.SetBitAt(1, true)
 	record.Set(enr.WithEntry("subnets", &subnetsVec))
 	require.NoError(t, enode.SignV4(&record, sk))
+
+	node, err := enode.New(enode.V4ID{}, &record)
+	require.NoError(t, err)
+	return node
+}
+
+// nodeAt returns a signed SSV node record for key at ip, with sequence number seq.
+func nodeAt(t *testing.T, key *ecdsa.PrivateKey, ip net.IP, seq uint64) *enode.Node {
+	t.Helper()
+
+	var record enr.Record
+	record.SetSeq(seq)
+	record.Set(enr.WithEntry("ssv", true))
+	record.Set(enr.IP(ip))
+	record.Set(enr.UDP(testPort))
+	record.Set(enr.TCP(testTCPPort))
+	record.Set(records.DomainTypeEntry{Key: records.KeyDomainType, DomainType: testNetConfig.DomainType})
+	subnetsVec := bitfield.NewBitvector128()
+	subnetsVec.SetBitAt(1, true)
+	record.Set(enr.WithEntry("subnets", &subnetsVec))
+	require.NoError(t, enode.SignV4(&record, key))
 
 	node, err := enode.New(enode.V4ID{}, &record)
 	require.NoError(t, err)
@@ -159,6 +182,56 @@ func TestBootstrap_SkipsInvalidDomainType(t *testing.T) {
 		t.Fatal("Bootstrap did not return after context cancellation")
 	}
 	require.Empty(t, dvs.panicLogs, "the invalid record must be rejected by the decoder, not recovered by discover()")
+}
+
+// TestBootstrap_MovedPeerReplacesStaleAddress covers a peer that keeps its key but changes IP: once its new
+// record is discovered, the pool must hold the new address, not the unreachable old one.
+func TestBootstrap_MovedPeerReplacesStaleAddress(t *testing.T) {
+	key, err := crypto.GenerateKey()
+	require.NoError(t, err)
+	oldRecord := nodeAt(t, key, net.IPv4(10, 0, 0, 1), 1)
+	movedRecord := nodeAt(t, key, net.IPv4(10, 0, 0, 2), 2)
+	// Records are handled in order, so once the sentinel is handled, movedRecord has been too.
+	sentinel := NewTestingNode(t)
+
+	movedPeer, err := ToPeer(movedRecord)
+	require.NoError(t, err)
+	sentinelPeer, err := ToPeer(sentinel)
+	require.NoError(t, err)
+
+	dvs := newDiscoverTestService(t, zap.NewNop(), NewMockListener(NewLocalNode(t), []*enode.Node{oldRecord, movedRecord, sentinel}))
+
+	sentinelHandled := make(chan struct{})
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		// Adds every peer it's handed to the pool, as p2p's startDiscovery does.
+		assert.NoError(t, dvs.Bootstrap(func(e PeerEvent) {
+			dvs.discoveredPeersPool.Set(e.AddrInfo.ID, DiscoveredPeer{AddrInfo: e.AddrInfo})
+			if e.AddrInfo.ID == sentinelPeer.ID {
+				close(sentinelHandled)
+			}
+		}))
+	}()
+
+	select {
+	case <-sentinelHandled:
+	case <-done:
+		t.Fatal("Bootstrap returned before handling the sentinel")
+	case <-time.After(5 * time.Second):
+		t.Fatal("sentinel was not handled")
+	}
+
+	dvs.cancel()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Bootstrap did not return after context cancellation")
+	}
+
+	pooled, ok := dvs.discoveredPeersPool.Get(movedPeer.ID)
+	require.True(t, ok)
+	require.Equal(t, fmt.Sprint(movedPeer.Addrs), fmt.Sprint(pooled.Addrs), "the pool must hold the peer's new address")
 }
 
 func TestReportRecoveredPanic_RateLimited(t *testing.T) {

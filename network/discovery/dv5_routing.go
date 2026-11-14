@@ -55,8 +55,8 @@ func (dvs *DiscV5Service) Advertise(ctx context.Context, ns string, opt ...disco
 //     for subnet X", not "peers sharing any subnet with me".
 //   - ssvNodeFilter, badNodeFilter, alreadyConnectedFilter, recentlyTrimmedFilter:
 //     same as Bootstrap — basic validity and connection-state checks still apply.
-//   - No alreadyDiscoveredFilter: pubsub may call FindPeers repeatedly for the same
-//     subnet and expects fresh candidate lists; there is no candidate pool to dedup against.
+//   - No discoveredPeersPool check (Bootstrap's checkPeer has one): pubsub may call
+//     FindPeers repeatedly for the same subnet and expects fresh candidate lists.
 //   - No domainTypeFilter: pubsub operates within a pre-established topic namespace that
 //     already implies domain alignment; a separate domain-type check is not required here.
 func (dvs *DiscV5Service) FindPeers(ctx context.Context, ns string, opt ...discovery.Option) (<-chan peer.AddrInfo, error) {
