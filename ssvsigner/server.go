@@ -259,10 +259,10 @@ func (s *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 }
 
 // errMalformedShare tags the keystoreJSONFromEncryptedShare failures caused by a bad share
-// (undecryptable, bad hex, invalid BLS key, or pubkey mismatch). handleAddValidator replies 422
-// for these — which the node skips as a malformed event — and 500 for everything else. Making 422
-// opt-in keeps the "silently skip" path explicit: an untagged internal failure crash-retries
-// instead of dropping a valid validator.
+// (undecryptable, bad hex, invalid BLS key, zero key, or pubkey mismatch). handleAddValidator
+// replies 422 for these — which the node skips as a malformed event — and 500 for everything
+// else. Making 422 opt-in keeps the "silently skip" path explicit: an untagged internal failure
+// crash-retries instead of dropping a valid validator.
 var errMalformedShare = errors.New("malformed share")
 
 // keystoreJSONFromEncryptedShare withholds the cause of share-data failures (tagged
@@ -286,6 +286,10 @@ func (s *Server) keystoreJSONFromEncryptedShare(
 	sharePrivBLS := &bls.SecretKey{}
 	if err = sharePrivBLS.Deserialize(sharePrivKey); err != nil {
 		return "", fmt.Errorf("%w: deserialize share private key", errMalformedShare)
+	}
+
+	if sharePrivBLS.IsZero() {
+		return "", fmt.Errorf("%w: share private key is zero", errMalformedShare)
 	}
 
 	if !bytes.Equal(sharePrivBLS.GetPublicKey().Serialize(), sharePubKey[:]) {

@@ -18,6 +18,7 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/utils/threshold"
 )
 
 // TestHandleValidatorAddedUndecryptableShareIsMalformed drives the real handleValidatorAdded ->
@@ -168,6 +169,100 @@ func TestHandleValidatorAddedInconsistentSharesIsMalformed(t *testing.T) {
 	nextNonce, err := eh.nodeStorage.GetNextNonce(txn, testAddr)
 	require.NoError(t, err)
 	require.EqualValues(t, nonce+1, nextNonce, "nonce must advance even though the event is malformed")
+}
+
+// TestHandleValidatorAddedZeroShareIsMalformed checks an event whose shares form a valid split of its
+// validator key, except that the polynomial has roots at some operator IDs, giving those operators a
+// zero secret share (identity share public key). The whole event must be skipped as malformed on every
+// node, whether or not the zero share is this node's own, and the owner's nonce must still advance.
+func TestHandleValidatorAddedZeroShareIsMalformed(t *testing.T) {
+	threshold.Init()
+
+	tests := []struct {
+		name   string
+		zeroAt []uint64
+	}{
+		{name: "other operators' shares", zeroAt: []uint64{2, 3}},
+		{name: "own share", zeroAt: []uint64{1}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+			eh, ops, operatorIDs := setupValidatorAddedTest(t, ctx)
+			require.EqualValues(t, 1, ops[0].id, "the handler must run as operator 1")
+
+			masterKey, shareKeys := zeroRootSplit(t, operatorIDs, 2, tt.zeroAt...)
+			validatorData := &testValidatorData{
+				masterKey:       masterKey,
+				masterPubKey:    masterKey.GetPublicKey(),
+				operatorsShares: make([]*testShare, len(ops)),
+			}
+			for i, sk := range shareKeys {
+				validatorData.operatorsShares[i] = &testShare{opId: operatorIDs[i], sec: sk, pub: sk.GetPublicKey()}
+			}
+			const nonce = 0
+			sharesData, err := generateSharesData(validatorData, ops, testAddr, nonce)
+			require.NoError(t, err)
+
+			event := &contract.ContractValidatorAdded{
+				Owner:       testAddr,
+				OperatorIds: operatorIDs,
+				PublicKey:   validatorData.masterPubKey.Serialize(),
+				Shares:      sharesData,
+			}
+
+			txn := eh.nodeStorage.Begin()
+			defer txn.Discard()
+
+			_, err = eh.handleValidatorAdded(ctx, txn, event)
+			require.Error(t, err)
+
+			var malformed *MalformedEventError
+			require.ErrorAs(t, err, &malformed, "a zero share must be a malformed (skippable) event")
+			require.ErrorIs(t, err, ssvtypes.ErrInvalidSharePublicKeys)
+			require.ErrorContains(t, err, "identity point")
+
+			_, exists := eh.nodeStorage.Shares().Get(txn, event.PublicKey)
+			require.False(t, exists, "share must not be saved")
+
+			accounts, err := eh.keyManager.(*ekm.LocalKeyManager).ListAccounts()
+			require.NoError(t, err)
+			require.Empty(t, accounts, "share key must not be imported")
+
+			nextNonce, err := eh.nodeStorage.GetNextNonce(txn, testAddr)
+			require.NoError(t, err)
+			require.EqualValues(t, nonce+1, nextNonce, "nonce must advance even though the event is malformed")
+		})
+	}
+}
+
+// zeroRootSplit evaluates f = g * prod(x - z) over zeroAt, with g random of degree
+// degree-len(zeroAt): f has degree exactly `degree` and f(z) = 0. Returns f(0) and f(id) per id.
+func zeroRootSplit(tb testing.TB, ids []uint64, degree int, zeroAt ...uint64) (*bls.SecretKey, []*bls.SecretKey) {
+	g := make([]bls.Fr, degree-len(zeroAt)+1)
+	for i := range g {
+		g[i].SetByCSPRNG()
+	}
+	eval := func(x uint64) *bls.SecretKey {
+		var fx, acc bls.Fr
+		fx.SetInt64(int64(x))
+		for i := len(g) - 1; i >= 0; i-- { // Horner
+			bls.FrMul(&acc, &acc, &fx)
+			bls.FrAdd(&acc, &acc, &g[i])
+		}
+		for _, z := range zeroAt {
+			var fz, d bls.Fr
+			fz.SetInt64(int64(z))
+			bls.FrSub(&d, &fx, &fz)
+			bls.FrMul(&acc, &acc, &d)
+		}
+		return bls.CastToSecretKey(&acc)
+	}
+	shares := make([]*bls.SecretKey, len(ids))
+	for i, id := range ids {
+		shares[i] = eval(id)
+	}
+	return eval(0), shares
 }
 
 // setupValidatorAddedTest returns an event handler running as ops[0] of four new operators, all four

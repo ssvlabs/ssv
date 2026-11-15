@@ -500,3 +500,39 @@ func TestAddShareRejectsMismatchedPublicKey(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, accounts, "mismatched share must not be saved")
 }
+
+// TestAddShareRejectsZeroPrivateKey verifies that a zero share private key (whose public key is the
+// identity point) is rejected as a malformed share before
+// any slashing-protection record or wallet account is written.
+func TestAddShareRejectsZeroPrivateKey(t *testing.T) {
+	initBLSTest()
+
+	logger := testLogger(t)
+	db, err := getBaseStorage(logger)
+	require.NoError(t, err)
+
+	operatorPrivateKey, err := keys.GeneratePrivateKey()
+	require.NoError(t, err)
+
+	km, err := NewLocalKeyManager(logger, db, testBeaconConfig(), operatorPrivateKey)
+	require.NoError(t, err)
+
+	zero := &bls.SecretKey{}
+	encryptedZero, err := operatorPrivateKey.Public().Encrypt([]byte(zero.SerializeToHexStr()))
+	require.NoError(t, err)
+	pubKey := phase0.BLSPubKey(zero.GetPublicKey().Serialize())
+
+	err = km.AddShare(t.Context(), nil, encryptedZero, pubKey)
+	require.Error(t, err)
+	var decErr ssvsigner.ShareDecryptionError
+	require.ErrorAs(t, err, &decErr, "a zero share must be a ShareDecryptionError so the event is skipped")
+	require.ErrorContains(t, err, "share private key is zero")
+
+	accounts, err := km.ListAccounts()
+	require.NoError(t, err)
+	require.Empty(t, accounts, "zero share must not be saved")
+
+	_, found, err := km.RetrieveHighestAttestation(pubKey)
+	require.NoError(t, err)
+	require.False(t, found, "zero share must not get slashing-protection records")
+}

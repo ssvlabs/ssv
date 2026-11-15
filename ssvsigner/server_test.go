@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 	"testing"
 	"unicode"
 
@@ -259,6 +260,28 @@ func (s *ServerTestSuite) TestAddValidator() {
 		resp, err := s.ServeHTTP("POST", PathValidators, reqBody)
 		require.NoError(t, err)
 		assert.Equal(t, fasthttp.StatusUnprocessableEntity, resp.StatusCode())
+
+		s.operatorPrivKey.DecryptResult = []byte(validBlsKey)
+	})
+
+	t.Run("zero private key", func(t *testing.T) {
+		// A zero share derives the identity public key.
+		s.operatorPrivKey.DecryptResult = []byte("0x" + strings.Repeat("00", 32))
+
+		zeroKeyRequest := AddValidatorRequest{
+			ShareKeys: []ShareKeys{
+				{
+					EncryptedPrivKey: []byte("encrypted_key"),
+					PubKey:           phase0.BLSPubKey((&bls.SecretKey{}).GetPublicKey().Serialize()),
+				},
+			},
+		}
+		zeroKeyReqBody, err := json.Marshal(zeroKeyRequest)
+		require.NoError(t, err)
+		resp, err := s.ServeHTTP("POST", PathValidators, zeroKeyReqBody)
+		require.NoError(t, err)
+		assert.Equal(t, fasthttp.StatusUnprocessableEntity, resp.StatusCode())
+		assert.Contains(t, string(resp.Body()), "share private key is zero")
 
 		s.operatorPrivKey.DecryptResult = []byte(validBlsKey)
 	})

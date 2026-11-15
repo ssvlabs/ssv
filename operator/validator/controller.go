@@ -827,8 +827,9 @@ func (c *Controller) onShareStop(pubKey spectypes.ValidatorPK) {
 }
 
 func (c *Controller) onShareInit(share *ssvtypes.SSVShare) (v *validator.Validator, hasMetadata bool, err error) {
-	// Don't start validators whose share public keys don't reconstruct the validator public key.
-	// ValidatorAdded handling rejects such shares too, but stored shares may predate that check.
+	// Don't start validators whose share public keys are invalid: an identity validator or share
+	// public key, or shares that don't reconstruct the validator public key. ValidatorAdded handling
+	// rejects such shares too, but stored shares may predate those checks.
 	// The check doesn't need metadata, so it runs first: a share without metadata is reported as
 	// invalid rather than skipped until it becomes active.
 	//

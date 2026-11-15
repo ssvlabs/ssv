@@ -55,6 +55,9 @@ var ErrInvalidSharePublicKeys = errors.New("invalid share public keys")
 // The first quorum-1 shares form a base that, with (0, validatorPubKey), uniquely defines a polynomial
 // of degree at most quorum-1. Base + each remaining share must recover the validator public key, which
 // puts every share on that polynomial. The base alone must not, or the degree is below quorum-1.
+//
+// Neither the validator public key nor any share public key may be the identity point: an identity
+// share public key means that operator's secret share is zero.
 func ValidateSharePublicKeys(validatorPubKey []byte, operatorIDs []uint64, sharePubKeys [][]byte) error {
 	if err := validateSharePublicKeys(validatorPubKey, operatorIDs, sharePubKeys); err != nil {
 		return fmt.Errorf("%w: %w", ErrInvalidSharePublicKeys, err)
@@ -74,6 +77,9 @@ func validateSharePublicKeys(validatorPubKey []byte, operatorIDs []uint64, share
 	if err != nil {
 		return fmt.Errorf("failed to deserialize validator public key: %w", err)
 	}
+	if expected.IsZero() {
+		return errors.New("validator public key is the identity point")
+	}
 
 	ids := make([]bls.ID, len(operatorIDs))
 	pubKeys := make([]bls.PublicKey, len(sharePubKeys))
@@ -85,6 +91,9 @@ func validateSharePublicKeys(validatorPubKey []byte, operatorIDs []uint64, share
 		// input points into a struct holding Go pointers (e.g. SSVShare).
 		if err := pubKeys[i].Deserialize(slices.Clone(sharePubKeys[i])); err != nil {
 			return fmt.Errorf("failed to deserialize share public key of operator %d: %w", operatorIDs[i], err)
+		}
+		if pubKeys[i].IsZero() {
+			return fmt.Errorf("share public key of operator %d is the identity point", operatorIDs[i])
 		}
 	}
 

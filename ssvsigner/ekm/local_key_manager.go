@@ -341,6 +341,10 @@ func (km *LocalKeyManager) AddShare(
 		return ssvsigner.ShareDecryptionError{Err: fmt.Errorf("decode hex: %w", err)}
 	}
 
+	if sharePrivKey.IsZero() {
+		return ssvsigner.ShareDecryptionError{Err: errors.New("share private key is zero")}
+	}
+
 	if !bytes.Equal(sharePrivKey.GetPublicKey().Serialize(), pubKey[:]) {
 		return ssvsigner.ShareDecryptionError{Err: errors.New("share private key does not match public key")}
 	}
