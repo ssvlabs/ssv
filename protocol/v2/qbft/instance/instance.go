@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -258,7 +259,20 @@ func (i *Instance) BaseMsgValidation(msg *specqbft.ProcessingMessage) error {
 		}
 		return i.validateCommit(msg)
 	case specqbft.RoundChangeMsgType:
-		return i.validRoundChangeForDataIgnoreSignature(msg, msg.QBFTMessage.Round, msg.SignedMessage.FullData)
+		if err := i.validRoundChangeForDataIgnoreSignature(msg, msg.QBFTMessage.Round, msg.SignedMessage.FullData); err != nil {
+			return err
+		}
+
+		// Addition to formal spec
+		// An unprepared round change proposes nothing, so it has no use for full data, yet the whole
+		// message is kept in the round-change container. This applies only to a round change received
+		// on its own: round changes embedded in a proposal never enter the container, and refusing
+		// them there would refuse proposals that older nodes accept.
+		if !msg.QBFTMessage.RoundChangePrepared() && len(msg.SignedMessage.FullData) != 0 {
+			return errors.New("unprepared round change with full data")
+		}
+
+		return nil
 	default:
 		return fmt.Errorf("signed message type not supported")
 	}

@@ -93,6 +93,8 @@ var (
 	ErrDifferentProposalData            = Error{text: "got different proposal data"}
 	ErrDecidedMessageWithTooFewSigners  = Error{text: "got decided message with too few signers (same number or less)"}
 	ErrValidatorRegistrationRetired     = Error{text: "validator registrations ended with the Gloas fork"}
+	// Ignored for now; see the rule in validateConsensusMessageSemantics.
+	ErrUnpreparedRoundChangeWithFullData = Error{text: "unprepared round change with full data"}
 )
 
 // Messages with these errors are rejected (regardless of what peer they come from).

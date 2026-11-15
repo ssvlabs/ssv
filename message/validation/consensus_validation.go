@@ -194,6 +194,18 @@ func (mv *messageValidator) validateConsensusMessageSemantics(
 		return err
 	}
 
+	// Rule: A round change that reports no prepared round must not have full data.
+	// An unprepared round change proposes nothing, so nothing reads its full data, and nodes do not
+	// attach any. This runs last so that every rejecting semantic rule above still applies to
+	// this shape (including H(FullData) == Root). It runs before signature verification and the
+	// duplicate and different-proposal-data checks, so those rejects become ignores for this shape.
+	// It is ignored rather than rejected until all nodes enforce this rule, since older nodes still
+	// relay such messages. Flip to reject once all nodes enforce this rule.
+	if msgType == specqbft.RoundChangeMsgType && consensusMessage.DataRound == specqbft.NoRound &&
+		len(signedSSVMessage.FullData) != 0 {
+		return ErrUnpreparedRoundChangeWithFullData
+	}
+
 	return nil
 }
 

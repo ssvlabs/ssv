@@ -2468,6 +2468,95 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.ErrorContains(t, err, ErrPrepareOrCommitWithFullData.Error())
 	})
 
+	// Receive an unprepared round change with FullData
+	t.Run("unprepared round change with full data", func(t *testing.T) {
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
+
+		slot := netCfg.FirstSlotAtEpoch(1)
+
+		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot, func(message *specqbft.Message) {
+			message.MsgType = specqbft.RoundChangeMsgType
+		})
+
+		receivedAt := netCfg.SlotStartTime(slot)
+		topicID := commons.GetTopicFullName(commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0])
+		_, err = validator.handleSignedSSVMessage(context.Background(), signedSSVMessage, topicID, peerID, receivedAt)
+		require.ErrorIs(t, err, ErrUnpreparedRoundChangeWithFullData)
+
+		var valErr Error
+		require.True(t, errors.As(err, &valErr))
+		require.False(t, valErr.Reject())
+	})
+
+	// An unprepared round change with FullData is still subject to the rejecting rules that run
+	// before the full-data rule.
+	t.Run("unprepared round change with full data and mismatched root", func(t *testing.T) {
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
+
+		slot := netCfg.FirstSlotAtEpoch(1)
+
+		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot, func(message *specqbft.Message) {
+			message.MsgType = specqbft.RoundChangeMsgType
+			message.Root = [32]byte{0xAA}
+		})
+
+		receivedAt := netCfg.SlotStartTime(slot)
+		topicID := commons.GetTopicFullName(commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0])
+		_, err := validator.handleSignedSSVMessage(context.Background(), signedSSVMessage, topicID, peerID, receivedAt)
+		require.ErrorIs(t, err, ErrInvalidHash)
+	})
+
+	t.Run("unprepared round change with full data and zero round", func(t *testing.T) {
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
+
+		slot := netCfg.FirstSlotAtEpoch(1)
+
+		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot, func(message *specqbft.Message) {
+			message.MsgType = specqbft.RoundChangeMsgType
+			message.Round = specqbft.NoRound
+		})
+
+		receivedAt := netCfg.SlotStartTime(slot)
+		topicID := commons.GetTopicFullName(commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0])
+		_, err := validator.handleSignedSSVMessage(context.Background(), signedSSVMessage, topicID, peerID, receivedAt)
+		require.ErrorIs(t, err, ErrZeroRound)
+	})
+
+	// Receive round changes that are allowed to have, or not have, FullData
+	t.Run("round change full data allowed cases", func(t *testing.T) {
+		slot := netCfg.FirstSlotAtEpoch(1)
+		receivedAt := netCfg.SlotStartTime(slot)
+
+		t.Run("unprepared without full data", func(t *testing.T) {
+			validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
+
+			signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot, func(message *specqbft.Message) {
+				message.MsgType = specqbft.RoundChangeMsgType
+			})
+			signedSSVMessage.FullData = nil
+
+			topicID := commons.GetTopicFullName(commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0])
+			_, err := validator.handleSignedSSVMessage(context.Background(), signedSSVMessage, topicID, peerID, receivedAt)
+			require.NoError(t, err)
+		})
+
+		// This passes only because gossip does not yet require prepare justifications on a prepared
+		// round change (DataRound=1 with none here); give it a prepare quorum once that rule exists.
+		t.Run("prepared with full data", func(t *testing.T) {
+			validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
+
+			signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot, func(message *specqbft.Message) {
+				message.MsgType = specqbft.RoundChangeMsgType
+				message.DataRound = specqbft.FirstRound
+				message.Round = 2
+			})
+
+			topicID := commons.GetTopicFullName(commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0])
+			_, err := validator.handleSignedSSVMessage(context.Background(), signedSSVMessage, topicID, peerID, receivedAt)
+			require.NoError(t, err)
+		})
+	})
+
 	// Receive a non-consensus message with FullData
 	t.Run("non-consensus with FullData", func(t *testing.T) {
 		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
