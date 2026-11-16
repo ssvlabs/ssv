@@ -11,7 +11,8 @@ import (
 // TestJustificationPlacement mirrors the placement cases of ssv-spec#673: only a proposal carries prepare
 // justifications, only a proposal or a prepared round change carries round change justifications, justifications
 // carry no full data, and the same holds for prepares and round changes embedded in justifications.
-// Every case checks that the message is accepted without the defect and rejected with it.
+// Every case checks that the message is accepted without the defect and rejected with it, also before a proposal
+// is accepted.
 func TestJustificationPlacement(t *testing.T) {
 	fullData := []byte("value")
 
@@ -144,6 +145,12 @@ func TestJustificationPlacement(t *testing.T) {
 			good, bad := tt.build(env)
 			require.NoError(t, env.inst.BaseMsgValidation(good))
 			require.Error(t, env.inst.BaseMsgValidation(bad))
+
+			// rejected outright, not deferred until a proposal arrives
+			env.inst.State.ProposalAcceptedForCurrentRound = nil
+			err := env.inst.BaseMsgValidation(bad)
+			require.Error(t, err)
+			require.False(t, IsRetryable(err))
 		})
 	}
 }
@@ -163,4 +170,19 @@ func (e *instanceTestEnv) nestedPrepares(prepares []*specqbft.ProcessingMessage)
 		m.PrepareJustification = e.marshalJustifications(prepares[:1])
 	})
 	return ret
+}
+
+// TestDecidedCommitJustificationPlacement covers the commit validation the controller runs on decided messages
+func TestDecidedCommitJustificationPlacement(t *testing.T) {
+	env := newInstanceTestEnv(t, 1)
+	root := env.hash([]byte("value"))
+	committee := env.inst.State.CommitteeMember.Committee
+
+	good := env.commit(1, 2, root)
+	require.NoError(t, BaseCommitValidationVerifySignature(good, env.inst.State.Height, committee))
+
+	bad := env.resign(good, func(m *specqbft.Message) {
+		m.PrepareJustification = env.marshalJustifications([]*specqbft.ProcessingMessage{env.prepare(1, 3, root)})
+	})
+	require.Error(t, BaseCommitValidationVerifySignature(bad, env.inst.State.Height, committee))
 }

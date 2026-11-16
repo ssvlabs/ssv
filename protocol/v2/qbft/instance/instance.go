@@ -253,7 +253,7 @@ func validateMsg(msg *specqbft.ProcessingMessage) error {
 }
 
 func (i *Instance) BaseMsgValidation(msg *specqbft.ProcessingMessage) error {
-	if err := msg.Validate(); err != nil {
+	if err := validateMsg(msg); err != nil {
 		return err
 	}
 
