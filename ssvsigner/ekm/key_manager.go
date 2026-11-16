@@ -20,11 +20,23 @@ type KeyManager interface {
 	// under the lock that excludes signing the share, never through a caller's transaction, whose
 	// commit lands after the lock is released. A bump only raises records, so rolling back the
 	// caller's transaction afterwards is harmless.
+	//
+	// The minimal values refuse an attestation whose target isn't after the current epoch or whose
+	// source is before the previous one, and a block that isn't after the current slot. A validator
+	// that already signs with the share key then can't attest on this operator for the current
+	// epoch, unless it already has, nor for later
+	// ones until the previous epoch, or a later one, is justified. Callers must not bump a key that
+	// another validator signs with: the event handler skips the bump on cluster reactivation for
+	// such a key.
 	BumpSlashingProtection(pubKey phase0.BLSPubKey) error
 
 	// AddShare registers a validator share (public and encrypted private key) with the key manager.
 	// Implementations must also bump the share's slashing records, with BumpSlashingProtection or
 	// directly under the same lock, so the validator never signs from missing or outdated records.
+	// They bump even when they already hold the share, as its records may still be missing, e.g.
+	// when a remote signer kept the key across a crash or a wipe of the node's database. Callers
+	// must therefore not add a share key that another validator signs with (see
+	// BumpSlashingProtection): the event handler rejects such a registration before AddShare.
 	//
 	// If the share cannot be decrypted or validated, implementations MUST return an error that
 	// unwraps to a by-value ssvsigner.ShareDecryptionError. Callers use it to classify the failure
