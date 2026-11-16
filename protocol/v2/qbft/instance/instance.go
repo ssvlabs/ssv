@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -222,6 +223,33 @@ func (i *Instance) ProcessMsg(ctx context.Context, logger *zap.Logger, msg *spec
 		return false, nil, nil, res.(error)
 	}
 	return decided, decidedValue, aggregatedCommit, nil
+}
+
+// validateMsg runs msg.Validate() plus the justification placement rules of ssv-spec#673: only a proposal carries
+// prepare justifications, only a proposal or a prepared round change carries round change justifications, and
+// justifications are embedded without full data. It is called wherever msg.Validate() is, so embedded prepares and
+// round changes get the same checks as the messages carrying them.
+func validateMsg(msg *specqbft.ProcessingMessage) error {
+	m := msg.QBFTMessage
+	if m.MsgType != specqbft.ProposalMsgType {
+		if len(m.PrepareJustification) > 0 {
+			return errors.New("unexpected prepare justification")
+		}
+		if len(m.RoundChangeJustification) > 0 && !m.RoundChangePrepared() {
+			return errors.New("unexpected round change justification")
+		}
+	}
+	if err := msg.Validate(); err != nil {
+		return err
+	}
+	rcj, _ := m.GetRoundChangeJustifications() // no need to check error, checked on msg.Validate()
+	pj, _ := m.GetPrepareJustifications()      // no need to check error, checked on msg.Validate()
+	for _, j := range append(rcj, pj...) {
+		if len(j.FullData) > 0 {
+			return errors.New("justification with full data")
+		}
+	}
+	return nil
 }
 
 func (i *Instance) BaseMsgValidation(msg *specqbft.ProcessingMessage) error {

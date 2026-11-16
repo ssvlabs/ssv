@@ -80,7 +80,7 @@ func (i *Instance) isValidProposal(msg *specqbft.ProcessingMessage) error {
 		return spectypes.NewError(spectypes.ProposalLeaderInvalidErrorCode, "proposal leader invalid")
 	}
 
-	if err := msg.Validate(); err != nil {
+	if err := validateMsg(msg); err != nil {
 		return spectypes.WrapError(spectypes.ProposalInvalidErrorCode, fmt.Errorf("proposal invalid: %w", err))
 	}
 

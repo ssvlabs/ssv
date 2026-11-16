@@ -141,7 +141,7 @@ func baseCommitValidationIgnoreSignature(
 	height specqbft.Height,
 	operators []*spectypes.Operator,
 ) error {
-	if err := msg.Validate(); err != nil {
+	if err := validateMsg(msg); err != nil {
 		return spectypes.WrapError(spectypes.CommitMessageInvalidErrorCode, fmt.Errorf("signed commit invalid: %w", err))
 	}
 

@@ -288,7 +288,7 @@ func (i *Instance) validRoundChangeForDataIgnoreSignature(
 		return spectypes.NewError(spectypes.MessageAllowsOneSignerOnlyErrorCode, "msg allows 1 signer")
 	}
 
-	if err := msg.Validate(); err != nil {
+	if err := validateMsg(msg); err != nil {
 		return fmt.Errorf("roundChange invalid: %w", err)
 	}
 
