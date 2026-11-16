@@ -6,16 +6,16 @@ import (
 	"testing"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
 	"github.com/ssvlabs/ssv/observability/log"
-	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
@@ -44,9 +44,6 @@ func (n *testingNetwork) Unsubscribe(_ spectypes.ValidatorPK) error {
 
 func (n *testingNetwork) BroadcastAtSlot(message *spectypes.SignedSSVMessage, _ phase0.Slot) error {
 	return n.Broadcast(message.SSVMessage.GetID(), message)
-}
-
-func (n *testingNetwork) ReportValidation(_ *spectypes.SSVMessage, _ protocolp2p.MsgValidationResult) {
 }
 
 func TestController_Marshaling(t *testing.T) {

@@ -7,11 +7,12 @@ import (
 	"testing"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 
 	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
 	qbftconfig "github.com/ssvlabs/ssv/protocol/v2/qbft"
@@ -52,9 +53,6 @@ func (n *testingNetwork) BroadcastAtSlot(message *spectypes.SignedSSVMessage, _ 
 	return n.Broadcast(message.SSVMessage.GetID(), message)
 }
 
-func (n *testingNetwork) ReportValidation(_ *spectypes.SSVMessage, _ protocolp2p.MsgValidationResult) {
-}
-
 type recordingNetwork struct {
 	broadcasted []*spectypes.SignedSSVMessage
 	onBroadcast func(*spectypes.SignedSSVMessage) error
@@ -78,9 +76,6 @@ func (n *recordingNetwork) Unsubscribe(_ spectypes.ValidatorPK) error {
 
 func (n *recordingNetwork) BroadcastAtSlot(message *spectypes.SignedSSVMessage, _ phase0.Slot) error {
 	return n.Broadcast(message.SSVMessage.GetID(), message)
-}
-
-func (n *recordingNetwork) ReportValidation(_ *spectypes.SSVMessage, _ protocolp2p.MsgValidationResult) {
 }
 
 type testValueChecker struct{}

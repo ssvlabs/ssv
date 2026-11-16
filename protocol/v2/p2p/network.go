@@ -29,31 +29,8 @@ type Broadcaster interface {
 	BroadcastAtSlot(message *spectypes.SignedSSVMessage, slot phase0.Slot) error
 }
 
-// MsgValidationResult helps other components to report message validation with a generic results scheme
-type MsgValidationResult int32
-
-const (
-	// ValidationAccept is the result of a valid message
-	ValidationAccept MsgValidationResult = iota
-	// ValidationIgnore is the result in case we want to ignore the validation
-	ValidationIgnore
-	// ValidationRejectLow is the result for invalid message, with low severity (e.g. late message)
-	ValidationRejectLow
-	// ValidationRejectMedium is the result for invalid message, with medium severity (e.g. wrong height)
-	ValidationRejectMedium
-	// ValidationRejectHigh is the result for invalid message, with high severity (e.g. invalid signature)
-	ValidationRejectHigh
-)
-
-// ValidationReporting is the interface for reporting on message validation results
-type ValidationReporting interface {
-	// ReportValidation reports the result for the given message
-	ReportValidation(message *spectypes.SSVMessage, res MsgValidationResult)
-}
-
 // Network holds the networking layer used to complement the underlying protocols
 type Network interface {
 	Subscriber
 	Broadcaster
-	ValidationReporting
 }

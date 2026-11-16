@@ -19,7 +19,6 @@ import (
 	basichost "github.com/libp2p/go-libp2p/p2p/host/basic"
 	rcmgr "github.com/libp2p/go-libp2p/p2p/host/resource-manager"
 	"github.com/libp2p/go-libp2p/p2p/protocol/identify"
-	"github.com/prysmaticlabs/prysm/v4/async"
 	"go.uber.org/zap"
 
 	p2pcommons "github.com/ssvlabs/ssv/network/commons"
@@ -395,13 +394,6 @@ func (n *p2pNetwork) setupPubsub() (topics.Controller, error) {
 	if !n.cfg.PubSubScoring {
 		cfg.ScoreIndex = nil
 	}
-
-	midHandler := topics.NewMsgIDHandler(n.ctx, time.Minute*2)
-	n.msgResolver = midHandler
-	cfg.MsgIDHandler = midHandler
-	go cfg.MsgIDHandler.Start()
-	// run GC every 3 minutes to clear old messages
-	async.RunEvery(n.ctx, time.Minute*3, midHandler.GC)
 
 	_, tc, err := topics.NewPubSub(n.ctx, n.logger, cfg, n.nodeStorage.ValidatorStore(), n.idx)
 	if err != nil {
