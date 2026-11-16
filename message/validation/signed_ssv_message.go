@@ -1,6 +1,7 @@
 package validation
 
 import (
+	"bytes"
 	"fmt"
 	"slices"
 
@@ -11,6 +12,8 @@ import (
 	ssvmessage "github.com/ssvlabs/ssv/protocol/v2/message"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
+
+var zeroMsgIDPadding [16]byte
 
 func (mv *messageValidator) decodeSignedSSVMessage(pMsg *pubsub.Message) (*spectypes.SignedSSVMessage, error) {
 	// Rule: Pubsub.Message.Message.Data decoding
@@ -127,6 +130,9 @@ func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage)
 		e := ErrInvalidRole
 		e.got = fmt.Sprintf("%v (%d)", role, role)
 		return e
+	}
+	if mv.committeeRole(role) && !bytes.Equal(ssvMessage.GetID().GetDutyExecutorID()[:16], zeroMsgIDPadding[:]) {
+		return ErrMsgIDPadding
 	}
 
 	return nil

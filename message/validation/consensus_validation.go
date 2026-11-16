@@ -57,7 +57,16 @@ func (mv *messageValidator) validateConsensusMessage(
 		return consensusMessage, err
 	}
 
-	state := mv.validatorState(ssvMessage.GetID(), committeeInfo)
+	// The stateless checks above (size, decode, topic, domain, semantics) run without the per-message
+	// validation mutex, so a message that fails them creates no lock entry.
+	if err := ctx.Err(); err != nil {
+		return consensusMessage, err
+	}
+	validationMu := mv.getValidationLock(ssvMessage.GetID())
+	validationMu.Lock()
+	defer validationMu.Unlock()
+
+	state, cached := mv.peekValidatorState(ssvMessage.GetID(), committeeInfo)
 
 	if err := mv.validateQBFTLogic(signedSSVMessage, consensusMessage, committeeInfo, receivedFrom, receivedAt, state); err != nil {
 		return consensusMessage, err
@@ -86,6 +95,9 @@ func (mv *messageValidator) validateConsensusMessage(
 		}
 	}
 
+	if !cached {
+		mv.storeValidatorState(ssvMessage.GetID(), state)
+	}
 	if err := mv.updateConsensusState(signedSSVMessage, consensusMessage, committeeInfo, receivedFrom, state); err != nil {
 		return consensusMessage, err
 	}

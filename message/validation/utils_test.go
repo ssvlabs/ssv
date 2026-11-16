@@ -280,3 +280,13 @@ func TestValidateConsensusMessage(t *testing.T) {
 		})
 	}
 }
+
+// validatorState returns the cached state for key, storing a fresh one if there is none.
+// Test-only: production code peeks and stores only after the signature verifies.
+func (mv *messageValidator) validatorState(key spectypes.MessageID, committeeInfo CommitteeInfo) *ValidatorState {
+	state, cached := mv.peekValidatorState(key, committeeInfo)
+	if !cached {
+		mv.storeValidatorState(key, state)
+	}
+	return state
+}

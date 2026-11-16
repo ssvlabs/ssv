@@ -72,6 +72,11 @@ type messageValidator struct {
 	// update some state).
 	validationLocksInflight singleflight.Group[spectypes.MessageID, *sync.Mutex]
 	// states keeps track of signers(individual runners, of which every operator has multiple) per validator.
+	// It has no capacity limit: entries are cached only after a verified operator signature for a known
+	// validator or committee, so its key space is bounded by (validator or committee, role, domain) on
+	// subscribed subnets. The TTL is sliding: every lookup or store of an entry restarts it (a message
+	// that reaches the lookup refreshes it even if its signature then fails), so an entry expires after
+	// a full TTL without one. An LRU cap could evict live dedup state.
 	states *ttlcache.Cache[spectypes.MessageID, *ValidatorState]
 
 	selfPID    peer.ID
@@ -262,14 +267,9 @@ func (mv *messageValidator) handleSignedSSVMessage(
 		return decodedMessage, err
 	}
 
-	// Bail out before we potentially wait on the per-message validation mutex.
 	if err := ctx.Err(); err != nil {
 		return decodedMessage, err
 	}
-
-	validationMu := mv.getValidationLock(signedSSVMessage.SSVMessage.GetID())
-	validationMu.Lock()
-	defer validationMu.Unlock()
 
 	switch signedSSVMessage.SSVMessage.MsgType {
 	case spectypes.SSVConsensusMsgType:
@@ -430,14 +430,14 @@ func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.Mess
 	return newCommitteeInfo(share.CommitteeID(), operators, indices, share.BooleCommitteeSubnet(), share.AlanCommitteeSubnet()), nil
 }
 
-func (mv *messageValidator) validatorState(key spectypes.MessageID, committeeInfo CommitteeInfo) *ValidatorState {
+func (mv *messageValidator) peekValidatorState(key spectypes.MessageID, committeeInfo CommitteeInfo) (*ValidatorState, bool) {
 	if v := mv.states.Get(key); v != nil {
 		// Since mv.states keeps track of validator-state per operator-runner, it is possible that validator
 		// has changed the committee/operator-cluster that manages this validator such that the state stored
 		// in mv.states under this key is no longer relevant ... and so we need re-initialize the cached-state
 		// entry in mv.states map from scratch whenever we spot the committee ID change.
 		if v.Value().committeeID == committeeInfo.committeeID {
-			return v.Value()
+			return v.Value(), true
 		}
 	}
 
@@ -447,8 +447,13 @@ func (mv *messageValidator) validatorState(key spectypes.MessageID, committeeInf
 		storedSlotCount:  mv.storedSlotCount(key.GetRoleType()),
 		storedEpochCount: mv.storedEpochCount(key.GetRoleType()),
 	}
-	mv.states.Set(key, cs, mv.stateTTL(key.GetRoleType()))
-	return cs
+	return cs, false
+}
+
+// storeValidatorState caches state under key for the role's TTL. Call it only after the message's signature
+// verifies, with the validation lock for key held.
+func (mv *messageValidator) storeValidatorState(key spectypes.MessageID, state *ValidatorState) {
+	mv.states.Set(key, state, mv.stateTTL(key.GetRoleType()))
 }
 
 // stateTTL is how long a role's validation state outlives the last message that touched it: every read or
