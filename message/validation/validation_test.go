@@ -2775,6 +2775,29 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.ErrorContains(t, err, ErrZeroRound.Error())
 	})
 
+	// Receive a commit with a non-zero data round: it can't be aggregated with other commits
+	t.Run("commit with data round", func(t *testing.T) {
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
+
+		slot := netCfg.FirstSlotAtEpoch(1)
+
+		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot, func(message *specqbft.Message) {
+			message.MsgType = specqbft.CommitMsgType
+			message.DataRound = 1
+		})
+		signedSSVMessage.FullData = nil
+
+		receivedAt := netCfg.SlotStartTime(slot)
+		topicID := commons.GetTopicFullName(commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0])
+		_, err = validator.handleSignedSSVMessage(context.Background(), signedSSVMessage, topicID, peerID, receivedAt)
+		require.ErrorContains(t, err, ErrUnexpectedDataRound.Error())
+
+		// Ignored, not rejected, while older nodes still relay such commits.
+		var valErr Error
+		require.ErrorAs(t, err, &valErr)
+		require.False(t, valErr.Reject())
+	})
+
 	// Receive a message with no signatures
 	t.Run("no signatures", func(t *testing.T) {
 		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)

@@ -206,6 +206,13 @@ func (mv *messageValidator) validateConsensusMessageSemantics(
 		return err
 	}
 
+	// Rule: commit must not carry a data round (a commit that does can't be aggregated)
+	if msgType == specqbft.CommitMsgType && consensusMessage.DataRound != specqbft.NoRound {
+		e := ErrUnexpectedDataRound
+		e.got = consensusMessage.DataRound
+		return e
+	}
+
 	// Rule: A round change that reports no prepared round must not have full data.
 	// An unprepared round change proposes nothing, so nothing reads its full data, and nodes do not
 	// attach any. This runs last so that every rejecting semantic rule above still applies to
