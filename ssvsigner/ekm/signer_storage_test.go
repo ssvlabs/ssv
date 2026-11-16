@@ -545,43 +545,6 @@ func TestSlashingProtection(t *testing.T) {
 			require.Contains(t, err.Error(), "highest attestation value is empty")
 			require.Nil(t, att)
 		})
-
-		t.Run("remove_attestation", func(t *testing.T) {
-			account := &mockAccount{
-				id:            uuid.New(),
-				validationKey: _bigInt("5467048590701165350380985526996487573957450279098876378395441669247373404218"),
-			}
-
-			att := &phase0.AttestationData{
-				Slot:            30,
-				Index:           1,
-				BeaconBlockRoot: [32]byte{},
-				Source: &phase0.Checkpoint{
-					Epoch: 1,
-					Root:  [32]byte{},
-				},
-				Target: &phase0.Checkpoint{
-					Epoch: 4,
-					Root:  [32]byte{},
-				},
-			}
-
-			err := signerStorage.SaveHighestAttestation(account.ValidatorPublicKey(), att)
-			require.NoError(t, err)
-
-			retrieved, found, err := signerStorage.RetrieveHighestAttestation(account.ValidatorPublicKey())
-			require.NoError(t, err)
-			require.True(t, found)
-			require.NotNil(t, retrieved)
-
-			err = signerStorage.RemoveHighestAttestation(account.ValidatorPublicKey())
-			require.NoError(t, err)
-
-			retrieved, found, err = signerStorage.RetrieveHighestAttestation(account.ValidatorPublicKey())
-			require.NoError(t, err)
-			require.False(t, found)
-			require.Nil(t, retrieved)
-		})
 	})
 
 	t.Run("ProposalData", func(t *testing.T) {
@@ -656,31 +619,6 @@ func TestSlashingProtection(t *testing.T) {
 			require.True(t, found)
 			require.Contains(t, err.Error(), "highest proposal value is empty")
 			require.Equal(t, phase0.Slot(0), slot)
-		})
-
-		t.Run("remove_proposal", func(t *testing.T) {
-			account := &mockAccount{
-				id:            uuid.New(),
-				validationKey: _bigInt("5467048590701165350380985526996487573957450279098876378395441669247373404218"),
-			}
-
-			proposal := phase0.Slot(42)
-
-			err := signerStorage.SaveHighestProposal(account.ValidatorPublicKey(), proposal)
-			require.NoError(t, err)
-
-			retrieved, found, err := signerStorage.RetrieveHighestProposal(account.ValidatorPublicKey())
-			require.NoError(t, err)
-			require.True(t, found)
-			require.Equal(t, proposal, retrieved)
-
-			err = signerStorage.RemoveHighestProposal(account.ValidatorPublicKey())
-			require.NoError(t, err)
-
-			retrieved, found, err = signerStorage.RetrieveHighestProposal(account.ValidatorPublicKey())
-			require.NoError(t, err)
-			require.False(t, found)
-			require.Equal(t, phase0.Slot(0), retrieved)
 		})
 	})
 }

@@ -816,7 +816,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			valShare, exists = eh.nodeStorage.Shares().Get(nil, valPubKey)
 			require.False(t, exists)
 			require.Nil(t, valShare)
-			requireKeyManagerDataToNotExist(t, eh, 3, validatorData1)
+			requireShareRemovedButSlashingDataKept(t, eh, 3, validatorData1)
 		})
 	})
 
@@ -1711,36 +1711,42 @@ func requireSlashingProtectionStampInWindow(t *testing.T, netCfg *networkconfig.
 	require.LessOrEqual(t, highestProposal, to)
 }
 
-func requireKeyManagerDataToExist(t *testing.T, eh *EventHandler, expectedAccounts int, validatorData *testValidatorData) {
+// requireKeyManagerData checks the key manager's view of one share: whether its account is present
+// (among expectedAccounts in total) and whether its slashing records are present.
+func requireKeyManagerData(t *testing.T, eh *EventHandler, expectedAccounts int, validatorData *testValidatorData, accountPresent, recordsPresent bool) {
+	t.Helper()
 	sharePubKey := validatorData.operatorsShares[0].sec.GetPublicKey().Serialize()
 	accounts, err := eh.keyManager.(*ekm.LocalKeyManager).ListAccounts()
 	require.NoError(t, err)
 	require.Equal(t, expectedAccounts, len(accounts))
-	require.True(t, shareExist(accounts, sharePubKey))
+	require.Equal(t, accountPresent, shareExist(accounts, sharePubKey))
 
 	highestAttestation, found, err := eh.keyManager.(*ekm.LocalKeyManager).RetrieveHighestAttestation(phase0.BLSPubKey(sharePubKey))
 	require.NoError(t, err)
-	require.True(t, found)
-	require.NotNil(t, highestAttestation)
+	require.Equal(t, recordsPresent, found)
+	require.Equal(t, recordsPresent, highestAttestation != nil)
 
 	_, found, err = eh.keyManager.(*ekm.LocalKeyManager).RetrieveHighestProposal(phase0.BLSPubKey(sharePubKey))
 	require.NoError(t, err)
-	require.True(t, found)
+	require.Equal(t, recordsPresent, found)
 }
 
+// requireKeyManagerDataToExist requires the share's account and records, as after it was added.
+func requireKeyManagerDataToExist(t *testing.T, eh *EventHandler, expectedAccounts int, validatorData *testValidatorData) {
+	t.Helper()
+	requireKeyManagerData(t, eh, expectedAccounts, validatorData, true, true)
+}
+
+// requireKeyManagerDataToNotExist requires neither, as for a share that was never added (malformed
+// event).
 func requireKeyManagerDataToNotExist(t *testing.T, eh *EventHandler, expectedAccounts int, validatorData *testValidatorData) {
-	sharePubKey := validatorData.operatorsShares[0].sec.GetPublicKey().Serialize()
-	accounts, err := eh.keyManager.(*ekm.LocalKeyManager).ListAccounts()
-	require.NoError(t, err)
-	require.Equal(t, expectedAccounts, len(accounts))
-	require.False(t, shareExist(accounts, sharePubKey))
+	t.Helper()
+	requireKeyManagerData(t, eh, expectedAccounts, validatorData, false, false)
+}
 
-	highestAttestation, found, err := eh.keyManager.(*ekm.LocalKeyManager).RetrieveHighestAttestation(phase0.BLSPubKey(sharePubKey))
-	require.NoError(t, err)
-	require.False(t, found)
-	require.Nil(t, highestAttestation)
-
-	_, found, err = eh.keyManager.(*ekm.LocalKeyManager).RetrieveHighestProposal(phase0.BLSPubKey(sharePubKey))
-	require.NoError(t, err)
-	require.False(t, found)
+// requireShareRemovedButSlashingDataKept requires the records but not the account, as after the share
+// was removed (see ekm.KeyManager.RemoveShare).
+func requireShareRemovedButSlashingDataKept(t *testing.T, eh *EventHandler, expectedAccounts int, validatorData *testValidatorData) {
+	t.Helper()
+	requireKeyManagerData(t, eh, expectedAccounts, validatorData, false, true)
 }

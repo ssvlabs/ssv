@@ -1,10 +1,12 @@
 package eventhandler
 
 import (
+	"bytes"
 	"context"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"iter"
 	"slices"
 
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
@@ -38,6 +40,7 @@ var (
 	ErrSignatureVerification        = fmt.Errorf("signature verification failed")
 	ErrShareBelongsToDifferentOwner = fmt.Errorf("share already exists and belongs to different owner")
 	ErrValidatorShareNotFound       = fmt.Errorf("validator share not found")
+	ErrSharePubKeyInUse             = fmt.Errorf("share public key is already used by another validator")
 )
 
 // TODO: make sure all handlers are tested properly:
@@ -197,6 +200,20 @@ func (eh *EventHandler) handleValidatorAdded(
 
 	validatorShare, exists := eh.nodeStorage.Shares().Get(txn, event.PublicKey)
 	if !exists {
+		// The key manager and its slashing protection data are keyed by share public key, so an operator's share
+		// key may belong to one stored validator only. Every operator's key is checked, so that nodes with the
+		// same registry skip the same events. The exception is an undecryptable share: only its operator's node
+		// skips that registration, and may then accept a later one with the same key.
+		for i, operatorID := range event.OperatorIds {
+			if other, found := eh.validatorUsingShareKey(operatorID, sharePublicKeys[i]); found {
+				logger.Warn("malformed event: share public key is already used by another validator",
+					fields.OperatorID(operatorID),
+					zap.String("share_pubkey", hex.EncodeToString(sharePublicKeys[i])),
+					zap.String("other_validator_pubkey", hex.EncodeToString(other.ValidatorPubKey[:])))
+				return nil, &MalformedEventError{Err: ErrSharePubKeyInUse}
+			}
+		}
+
 		shareCreated, err := eh.handleShareCreation(ctx, txn, event, sharePublicKeys, encryptedKeys)
 		if err != nil {
 			var malformedEventError *MalformedEventError
@@ -248,7 +265,7 @@ func (eh *EventHandler) handleShareCreation(
 	}
 
 	if share.BelongsToOperator(eh.operatorDataStore.GetOperatorID()) {
-		if err := eh.keyManager.AddShare(ctx, txn, encryptedKey, phase0.BLSPubKey(share.SharePubKey)); err != nil {
+		if err := eh.keyManager.AddShare(ctx, encryptedKey, phase0.BLSPubKey(share.SharePubKey)); err != nil {
 			var shareDecryptionError ssvsigner.ShareDecryptionError
 			if errors.As(err, &shareDecryptionError) {
 				return nil, &MalformedEventError{Err: err}
@@ -371,14 +388,23 @@ func (eh *EventHandler) handleValidatorRemoved(ctx context.Context, txn basedb.T
 		return emptyPK, fmt.Errorf("could not remove validator share: %w", err)
 	}
 
-	isOperatorShare := share.BelongsToOperator(eh.operatorDataStore.GetOperatorID())
+	operatorID := eh.operatorDataStore.GetOperatorID()
+	isOperatorShare := share.BelongsToOperator(operatorID)
 	if isOperatorShare || eh.fullNode {
 		logger = logger.With(zap.String("validator_pubkey", hex.EncodeToString(share.ValidatorPubKey[:])))
 	}
 	if isOperatorShare {
-		err := eh.keyManager.RemoveShare(ctx, txn, phase0.BLSPubKey(share.SharePubKey))
+		err := eh.keyManager.RemoveShare(ctx, phase0.BLSPubKey(share.SharePubKey))
 		if err != nil {
 			return emptyPK, fmt.Errorf("could not remove share from ekm storage: %w", err)
+		}
+
+		// A validator stored before handleValidatorAdded rejected reused share keys may still use this key. It's
+		// removed anyway: the node doesn't store which of them registered first.
+		if other, found := eh.validatorUsingShareKey(operatorID, share.SharePubKey); found {
+			logger.Warn("share public key is still used by another validator, which can no longer sign with it",
+				zap.String("share_pubkey", hex.EncodeToString(share.SharePubKey)),
+				zap.String("other_validator_pubkey", hex.EncodeToString(other.ValidatorPubKey[:])))
 		}
 
 		// Remove validator from doppelganger service
@@ -393,6 +419,65 @@ func (eh *EventHandler) handleValidatorRemoved(ctx context.Context, txn basedb.T
 
 	logger.Debug("processed event")
 	return emptyPK, nil
+}
+
+// validatorUsingShareKey returns a stored validator whose share public key for operatorID is sharePubKey.
+// Liquidated validators count, as they keep their key for reactivation.
+func (eh *EventHandler) validatorUsingShareKey(
+	operatorID spectypes.OperatorID,
+	sharePubKey []byte,
+) (*ssvtypes.SSVShare, bool) {
+	for share, key := range eh.operatorShareKeys(operatorID) {
+		if bytes.Equal(key, sharePubKey) {
+			return share, true
+		}
+	}
+	return nil, false
+}
+
+// validatorsUsingShareKeys maps each of sharePubKeys to a stored validator that uses it for operatorID and passes
+// filter, in one pass over the operator's committees. Keys that no such validator uses are left out.
+func (eh *EventHandler) validatorsUsingShareKeys(
+	operatorID spectypes.OperatorID,
+	sharePubKeys map[string]struct{},
+	filter registrystorage.SharesFilter,
+) map[string]*ssvtypes.SSVShare {
+	using := make(map[string]*ssvtypes.SSVShare)
+	if len(sharePubKeys) == 0 {
+		return using
+	}
+	for share, key := range eh.operatorShareKeys(operatorID) {
+		if _, wanted := sharePubKeys[string(key)]; !wanted {
+			continue
+		}
+		if _, found := using[string(key)]; found || !filter(share) {
+			continue
+		}
+		using[string(key)] = share
+		if len(using) == len(sharePubKeys) {
+			return using
+		}
+	}
+	return using
+}
+
+// operatorShareKeys yields each stored validator in operatorID's committees, with its share public key for
+// operatorID. The store replaces committees instead of changing them, so reading them needs no lock.
+func (eh *EventHandler) operatorShareKeys(operatorID spectypes.OperatorID) iter.Seq2[*ssvtypes.SSVShare, []byte] {
+	return func(yield func(*ssvtypes.SSVShare, []byte) bool) {
+		for _, committee := range eh.nodeStorage.ValidatorStore().OperatorCommittees(operatorID) {
+			for _, share := range committee.Shares {
+				for _, member := range share.Committee {
+					if member.Signer == operatorID {
+						if !yield(share, member.SharePubKey) {
+							return
+						}
+						break
+					}
+				}
+			}
+		}
+	}
 }
 
 func (eh *EventHandler) handleClusterLiquidated(txn basedb.Txn, event *contract.ContractClusterLiquidated) ([]*ssvtypes.SSVShare, error) {
@@ -436,9 +521,29 @@ func (eh *EventHandler) handleClusterReactivated(txn basedb.Txn, event *contract
 		return nil, fmt.Errorf("could not process cluster event: %w", err)
 	}
 
+	// A validator stored before handleValidatorAdded rejected reused share keys may sign with one of these keys. If
+	// one outside this cluster attests, its signing keeps the key's slashing protection current, and a bump would
+	// make it skip the current epoch. One that doesn't attest signs nothing that slashing protection covers, so a
+	// bump costs it nothing.
+	inCluster := registrystorage.ByClusterIDHash(ssvtypes.ComputeClusterIDHash(event.Owner, event.OperatorIds))
+	currentEpoch := eh.networkConfig.EstimatedCurrentEpoch()
+	attestingElsewhere := func(share *ssvtypes.SSVShare) bool {
+		return share.IsAttesting(currentEpoch) && !inCluster(share)
+	}
+	sharePubKeys := make(map[string]struct{}, len(toReactivate))
+	for _, share := range toReactivate {
+		sharePubKeys[string(share.SharePubKey)] = struct{}{}
+	}
+	inUse := eh.validatorsUsingShareKeys(eh.operatorDataStore.GetOperatorID(), sharePubKeys, attestingElsewhere)
+
 	// bump slashing protection for operator reactivated validators
 	for _, share := range toReactivate {
-		if err := eh.keyManager.BumpSlashingProtection(txn, phase0.BLSPubKey(share.SharePubKey)); err != nil {
+		if other, found := inUse[string(share.SharePubKey)]; found {
+			logger.Warn("share public key is used by another attesting validator, not bumping its slashing protection",
+				fields.Validator(share.ValidatorPubKey[:]),
+				zap.String("share_pubkey", hex.EncodeToString(share.SharePubKey)),
+				zap.String("other_validator_pubkey", hex.EncodeToString(other.ValidatorPubKey[:])))
+		} else if err := eh.keyManager.BumpSlashingProtection(phase0.BLSPubKey(share.SharePubKey)); err != nil {
 			return nil, fmt.Errorf("could not bump slashing protection: %w", err)
 		}
 
