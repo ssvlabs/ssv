@@ -316,6 +316,18 @@ func (c *Collector) getOrCreateCommitteeTrace(slot phase0.Slot, committeeID spec
 	return committeeTrace, false, nil
 }
 
+// proposalDataFits reports whether data is within the SSZ limit of a trace's ProposalData. A proposal's FullData
+// can be larger than that limit, and a trace that doesn't encode is skipped at eviction.
+// Data that doesn't fit is logged and must be left out of the trace.
+func (c *Collector) proposalDataFits(slot phase0.Slot, data []byte) bool {
+	if len(data) <= traces.MaxProposalDataSize {
+		return true
+	}
+	c.logger.Warn("proposal data exceeds the trace limit, leaving it out of the archived duty",
+		fields.Slot(slot), zap.Int("size", len(data)), zap.Int("max", traces.MaxProposalDataSize))
+	return false
+}
+
 func (c *Collector) decodeJustificationWithPrepares(justifications [][]byte) []*traces.QBFTTrace {
 	out := make([]*traces.QBFTTrace, 0, len(justifications))
 	for _, rcj := range justifications {
@@ -906,7 +918,10 @@ func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 
 			if len(msg.SignedSSVMessage.FullData) > 0 && subMsg.MsgType == specqbft.ProposalMsgType {
 				// save proposal data and compute role roots
-				trace.ProposalData = msg.SignedSSVMessage.FullData
+				// Data that doesn't fit is left out; whatever an earlier proposal stored stays.
+				if c.proposalDataFits(slot, msg.SignedSSVMessage.FullData) {
+					trace.ProposalData = msg.SignedSSVMessage.FullData
+				}
 
 				switch role {
 				case spectypes.RoleCommittee:
@@ -1002,8 +1017,11 @@ func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 						if roleDutyTrace.Validator == 0 {
 							roleDutyTrace.Validator = data.Duty.ValidatorIndex
 						}
-						// non-committee duty will contain the proposal data
-						roleDutyTrace.ProposalData = data.DataSSZ
+						// non-committee duty will contain the proposal data, unless it doesn't fit: then whatever an
+						// earlier proposal stored stays.
+						if c.proposalDataFits(slot, data.DataSSZ) {
+							roleDutyTrace.ProposalData = data.DataSSZ
+						}
 					}()
 				}
 			}

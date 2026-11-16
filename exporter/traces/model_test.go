@@ -45,3 +45,23 @@ func TestDeepCopy(t *testing.T) {
 		})
 	}
 }
+
+// TestMaxProposalDataSize checks that MaxProposalDataSize is the limit the encoders enforce: a trace with exactly
+// that much ProposalData encodes, and one byte more doesn't. The collector's guard relies on the two agreeing.
+func TestMaxProposalDataSize(t *testing.T) {
+	atLimit := make([]byte, MaxProposalDataSize)
+	over := make([]byte, MaxProposalDataSize+1)
+
+	if _, err := (&ValidatorDutyTrace{ProposalData: atLimit}).MarshalSSZ(); err != nil {
+		t.Fatalf("validator trace at the limit: %v", err)
+	}
+	if _, err := (&ValidatorDutyTrace{ProposalData: over}).MarshalSSZ(); err == nil {
+		t.Fatal("validator trace one byte over the limit encoded")
+	}
+	if _, err := (&CommitteeDutyTrace{ProposalData: atLimit}).MarshalSSZ(); err != nil {
+		t.Fatalf("committee trace at the limit: %v", err)
+	}
+	if _, err := (&CommitteeDutyTrace{ProposalData: over}).MarshalSSZ(); err == nil {
+		t.Fatal("committee trace one byte over the limit encoded")
+	}
+}

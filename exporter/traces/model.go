@@ -10,6 +10,11 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 )
 
+// MaxProposalDataSize is the SSZ maximum of ProposalData in both trace types (the ssz-max tags below). A proposer's
+// consensus data may carry about twice that (spec DataSSZ), and a committee proposal's FullData can be larger too,
+// so the collector bounds what it copies in: a trace over the limit can't be encoded at eviction.
+const MaxProposalDataSize = 4194532
+
 // MaxPartialSigEntries bounds ValidatorDutyTrace.Pre and .Post. The checks below fail the build if message
 // validation admits more entries than that, rather than leaving traces that can't be encoded at eviction.
 // They use the constants validation enforces, so raising one is checked against this bound.
