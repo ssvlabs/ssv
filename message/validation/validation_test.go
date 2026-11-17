@@ -22,6 +22,7 @@ import (
 	"github.com/herumi/bls-eth-go-binary/bls"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	pspb "github.com/libp2p/go-libp2p-pubsub/pb"
+	"github.com/libp2p/go-libp2p/core/peer"
 	libp2ptest "github.com/libp2p/go-libp2p/core/test"
 	"github.com/stretchr/testify/require"
 	eth2types "github.com/wealdtech/go-eth2-types/v2"
@@ -48,6 +49,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/types/ssvtestingutils"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/registry/storage/mocks"
+	"github.com/ssvlabs/ssv/ssvsigner/keys/rsaencryption"
 	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
@@ -164,6 +166,15 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	wrongSignatureVerifier := signatureverifier.NewMockSignatureVerifier(ctrl)
 	wrongSignatureVerifier.EXPECT().VerifySignature(gomock.Any(), gomock.Any(), gomock.Any()).Return(fmt.Errorf("test")).AnyTimes()
+
+	// realSignatureVerifier verifies RSA signatures against the operators' public keys in ns.
+	realSignatureVerifier := signatureverifier.NewSignatureVerifier(ns)
+	for id, sk := range ks.OperatorKeys {
+		pubKey, err := rsaencryption.PublicKeyToBase64PEM(&sk.PublicKey)
+		require.NoError(t, err)
+		_, err = ns.SaveOperatorData(nil, &registrystorage.OperatorData{ID: id, PublicKey: pubKey})
+		require.NoError(t, err)
+	}
 
 	committeeRole := spectypes.RoleCommittee
 	nonCommitteeRole := ssvtypes.RoleAggregator
@@ -2507,10 +2518,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		slot := netCfg.FirstSlotAtEpoch(1)
 
-		signedSSVMessage := generateMultiSignedMessage(ks, committeeIdentifier, slot, func(message *specqbft.Message) {
-			message.MsgType = specqbft.CommitMsgType
-		})
-		signedSSVMessage.FullData = nil
+		signedSSVMessage := generateMultiSignedMessage(ks, committeeIdentifier, slot)
 
 		receivedAt := netCfg.SlotStartTime(slot)
 		topicID := commons.GetTopicFullName(commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0])
@@ -2984,6 +2992,108 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			_, err := validator.handleSignedSSVMessage(context.Background(), signedSSVMessage, topicID, peerID, receivedAt)
 			require.NoError(t, err)
 		})
+	})
+
+	// A proposal, a prepared round change, or a decided message received without FullData is ignored
+	// and not recorded, so the copy with FullData is then accepted whether it comes from the same peer
+	// or from another one. Signatures are verified for real: they don't cover FullData.
+	t.Run("proposal, prepared round change or decided without full data", func(t *testing.T) {
+		forks := []struct {
+			name string
+			cfg  *networkconfig.Network
+		}{
+			{name: "pre-fork", cfg: netCfg},
+			{name: "post-fork", cfg: postBooleCfg},
+		}
+
+		for _, fork := range forks {
+			t.Run(fork.name, func(t *testing.T) {
+				newValidator := func() *messageValidator {
+					return New(fork.cfg, validatorStore, operators, dutyStore, realSignatureVerifier).(*messageValidator)
+				}
+
+				slot := fork.cfg.FirstSlotAtEpoch(1)
+				receivedAt := fork.cfg.SlotStartTime(slot)
+				msgID := ssvtestingutils.NewMsgID(fork.cfg.DomainTypeAtSlot(slot), encodedCommitteeID, committeeRole)
+
+				committeeInfo, err := newValidator().getCommitteeAndValidatorIndices(msgID)
+				require.NoError(t, err)
+				topic := expectedCommitteeTopic(fork.cfg, committeeInfo, slot)
+
+				tests := []struct {
+					name    string
+					genuine *spectypes.SignedSSVMessage
+				}{
+					{
+						name:    "proposal",
+						genuine: buildProposalWithRealLeader(fork.cfg, ks, committee, msgID, slot),
+					},
+					{
+						name: "prepared round change",
+						genuine: generateSignedMessage(ks, msgID, slot, func(message *specqbft.Message) {
+							message.MsgType = specqbft.RoundChangeMsgType
+							message.DataRound = specqbft.FirstRound
+							message.Round = 2
+						}),
+					},
+					{
+						name:    "decided",
+						genuine: generateMultiSignedMessage(ks, msgID, slot),
+					},
+				}
+
+				for _, tc := range tests {
+					t.Run(tc.name, func(t *testing.T) {
+						anotherPeerID, err := libp2ptest.RandPeerID()
+						require.NoError(t, err)
+
+						// Both forms of stripped FullData: nil, and the empty non-nil slice a wire message decodes to.
+						stripped := *tc.genuine
+						stripped.FullData = nil
+						encoded, err := stripped.Encode()
+						require.NoError(t, err)
+						decoded := &spectypes.SignedSSVMessage{}
+						require.NoError(t, decoded.Decode(encoded))
+
+						for _, strippedCopy := range []*spectypes.SignedSSVMessage{&stripped, decoded} {
+							for _, genuineFrom := range []peer.ID{peerID, anotherPeerID} {
+								desc := fmt.Sprintf("decoded: %v, genuine copy from the stripped copy's relay: %v", strippedCopy == decoded, genuineFrom == peerID)
+
+								// A fresh validator per case: a second accepted genuine copy would be a duplicate.
+								validator := newValidator()
+
+								_, err = validator.handleSignedSSVMessage(context.Background(), strippedCopy, topic, peerID, receivedAt)
+								require.ErrorIs(t, err, ErrMissingFullData, desc)
+
+								var valErr Error
+								require.True(t, errors.As(err, &valErr), desc)
+								require.False(t, valErr.Reject(), desc)
+
+								_, err = validator.handleSignedSSVMessage(context.Background(), tc.genuine, topic, genuineFrom, receivedAt)
+								require.NoError(t, err, desc)
+							}
+						}
+					})
+				}
+			})
+		}
+	})
+
+	// A copy without full data is still subject to the rejecting rules that run before the full-data rule.
+	t.Run("proposal without full data and zero round", func(t *testing.T) {
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
+
+		slot := netCfg.FirstSlotAtEpoch(1)
+
+		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot, func(message *specqbft.Message) {
+			message.Round = specqbft.NoRound
+		})
+		signedSSVMessage.FullData = nil
+
+		receivedAt := netCfg.SlotStartTime(slot)
+		topicID := commons.GetTopicFullName(commons.CommitteeTopicID(committeeID)[0])
+		_, err := validator.handleSignedSSVMessage(context.Background(), signedSSVMessage, topicID, peerID, receivedAt)
+		require.ErrorIs(t, err, ErrZeroRound)
 	})
 
 	// Receive a non-consensus message with FullData

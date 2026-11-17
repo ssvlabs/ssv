@@ -101,6 +101,8 @@ var (
 	ErrMsgIDPadding = Error{text: "non-zero message ID padding"}
 	// Ignored for now; see the rule in validateConsensusMessageSemantics.
 	ErrUnpreparedRoundChangeWithFullData = Error{text: "unprepared round change with full data"}
+	// Ignored for now; see the rule in validateConsensusMessageSemantics.
+	ErrMissingFullData = Error{text: "proposal, prepared round change or decided message without full data"}
 )
 
 // Messages with these errors are rejected (regardless of what peer they come from).

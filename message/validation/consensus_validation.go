@@ -215,7 +215,7 @@ func (mv *messageValidator) validateConsensusMessageSemantics(
 
 	// Rule: A round change that reports no prepared round must not have full data.
 	// An unprepared round change proposes nothing, so nothing reads its full data, and nodes do not
-	// attach any. This runs last so that every rejecting semantic rule above still applies to
+	// attach any. This runs after every rejecting semantic rule above, so they all still apply to
 	// this shape (including H(FullData) == Root). It runs before signature verification and the
 	// duplicate and different-proposal-data checks, so those rejects become ignores for this shape.
 	// It is ignored rather than rejected until all nodes enforce this rule, since older nodes still
@@ -223,6 +223,18 @@ func (mv *messageValidator) validateConsensusMessageSemantics(
 	if msgType == specqbft.RoundChangeMsgType && consensusMessage.DataRound == specqbft.NoRound &&
 		len(signedSSVMessage.FullData) != 0 {
 		return ErrUnpreparedRoundChangeWithFullData
+	}
+
+	// Rule: A proposal, a prepared round change, and a decided message must have full data.
+	// Signatures don't cover FullData, and the QBFT instance drops a copy without it
+	// (H(FullData) != Root), so such a copy is not recorded in the signer's state. Nodes always attach
+	// full data. Placed and ignored like the rule above, so the leader, duplicate and signature
+	// rejects become ignores for these shapes. Flip to reject once all nodes enforce it.
+	needsFullData := msgType == specqbft.ProposalMsgType ||
+		(msgType == specqbft.RoundChangeMsgType && consensusMessage.DataRound != specqbft.NoRound) ||
+		(msgType == specqbft.CommitMsgType && len(signers) > 1)
+	if needsFullData && len(signedSSVMessage.FullData) == 0 {
+		return ErrMissingFullData
 	}
 
 	return nil
