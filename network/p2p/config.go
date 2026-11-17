@@ -197,7 +197,7 @@ func (c *Config) configureAddrs(opts []libp2p.Option, localIP net.IP) ([]libp2p.
 	opts = append(opts, libp2p.ListenAddrs(addrs...))
 
 	// announced is what we advertise besides our public addresses: HostDNS or HostAddress (mutually exclusive), else
-	// localIP, the IP our ENR starts with (discv5 may later switch the ENR to the public IP peers report). It's set
+	// localIP, the IP our ENR starts with (discv5 may later switch the ENR to the IP that peers report). It's set
 	// once, at startup: unlike the public addresses, it doesn't follow a later change of the host's addresses.
 	var announced ma.Multiaddr
 	switch {

@@ -22,7 +22,7 @@ type DiscV5Options struct {
 	// StoragePath is the path used to store the DB (DHT)
 	// if an empty path was given, the DB will be created in memory
 	StoragePath string
-	// IP of the node
+	// IP is the IP the ENR starts with, 127.0.0.1 if empty
 	IP string
 	// BindIP is the IP to bind to the UDP listener
 	BindIP string
@@ -47,6 +47,10 @@ func (opts *DiscV5Options) Validate() error {
 	}
 	if opts.Port == 0 {
 		return errors.New("missing udp port")
+	}
+	// A malformed IP would otherwise silently become 127.0.0.1 in the ENR.
+	if opts.IP != "" && net.ParseIP(opts.IP) == nil {
+		return fmt.Errorf("invalid ip %q", opts.IP)
 	}
 	return nil
 }

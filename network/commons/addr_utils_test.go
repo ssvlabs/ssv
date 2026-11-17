@@ -9,6 +9,7 @@ import (
 
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/prysmaticlabs/prysm/v4/network"
 	"github.com/stretchr/testify/require"
 )
 
@@ -37,11 +38,17 @@ func Test_BuildMultiAddress(t *testing.T) {
 func TestIPAddr(t *testing.T) {
 	ip, err := IPAddr()
 	require.NoError(t, err)
-	requireMachineAddr(t, ip)
+
+	addrs, err := net.InterfaceAddrs()
+	require.NoError(t, err)
+	require.True(t, slices.ContainsFunc(addrs, func(addr net.Addr) bool {
+		ipNet, ok := addr.(*net.IPNet)
+		return ok && ipNet.IP.Equal(ip)
+	}), "%s isn't one of this machine's addresses", ip)
 }
 
 // Test_pickIP checks that pickIP returns a route source peers could reach us at, private or public, and falls back
-// to one of this machine's addresses for any other.
+// to network.ExternalIP for any other.
 func Test_pickIP(t *testing.T) {
 	for _, routeSource := range []string{"10.0.1.5", "203.0.113.7"} {
 		ip, err := pickIP(net.ParseIP(routeSource))
@@ -49,10 +56,15 @@ func Test_pickIP(t *testing.T) {
 		require.Equal(t, routeSource, ip.String())
 	}
 
+	// The fallback skips loopback addresses but defaults to 127.0.0.1, so comparing with it also catches a loopback
+	// route source let through, as long as that source isn't 127.0.0.1.
+	fallback, err := network.ExternalIP()
+	require.NoError(t, err)
+
 	unusable := map[string]net.IP{
 		"none":        nil,
 		"unspecified": net.IPv4zero,
-		"loopback":    net.IPv4(127, 0, 0, 1),
+		"loopback":    net.IPv4(127, 0, 0, 2),
 		"link-local":  net.IPv4(169, 254, 1, 1),
 		"multicast":   net.IPv4(224, 0, 0, 1),
 		"IPv6":        net.ParseIP("2001:db8::1"),
@@ -61,18 +73,7 @@ func Test_pickIP(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			ip, err := pickIP(routeSource)
 			require.NoError(t, err)
-			requireMachineAddr(t, ip)
+			require.Equal(t, fallback, ip.String())
 		})
 	}
-}
-
-// requireMachineAddr fails the test unless ip is one of this machine's addresses.
-func requireMachineAddr(t *testing.T, ip net.IP) {
-	t.Helper()
-	addrs, err := net.InterfaceAddrs()
-	require.NoError(t, err)
-	require.True(t, slices.ContainsFunc(addrs, func(addr net.Addr) bool {
-		ipNet, ok := addr.(*net.IPNet)
-		return ok && ipNet.IP.Equal(ip)
-	}), "%s isn't one of this machine's addresses", ip)
 }

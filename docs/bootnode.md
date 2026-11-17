@@ -40,9 +40,9 @@ _Note: This is an example. Replace the placeholders as explained below._
 
 **ExternalIP**
 
-- Determine your server's external IP by executing the following command:
+- Determine your server's external IPv4 address (the bootnode listens on IPv4 only) by executing the following command:
   ```bash
-  curl ifconfig.me
+  curl -4 ifconfig.me
   ```
   Copy the IP address and paste it into `config.yaml` as the value for `ExternalIP`.
 
