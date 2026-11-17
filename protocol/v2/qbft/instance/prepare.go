@@ -109,7 +109,7 @@ func (i *Instance) validSignedPrepareForHeightRoundAndRootIgnoreSignature(
 		return NewRetryableError(spectypes.WrapError(spectypes.WrongMessageRoundErrorCode, ErrWrongMsgRound))
 	}
 
-	if err := validateMsg(msg); err != nil {
+	if err := msg.Validate(); err != nil {
 		return fmt.Errorf("prepareData invalid: %w", err)
 	}
 

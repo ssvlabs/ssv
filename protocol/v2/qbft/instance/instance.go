@@ -225,10 +225,14 @@ func (i *Instance) ProcessMsg(ctx context.Context, logger *zap.Logger, msg *spec
 	return decided, decidedValue, aggregatedCommit, nil
 }
 
-// validateMsg runs msg.Validate() plus the justification placement rules of ssv-spec#673: only a proposal carries
-// prepare justifications, only a proposal or a prepared round change carries round change justifications, and
-// justifications are embedded without full data. It is called wherever msg.Validate() is, so embedded prepares and
-// round changes get the same checks as the messages carrying them.
+// validateMsg checks the justification placement rules of ssv-spec#673 and runs msg.Validate(): only a proposal
+// carries prepare justifications, only a proposal or a prepared round change carries round change justifications,
+// and justifications are embedded without full data.
+//
+// It runs only where a message enters the instance: in BaseMsgValidation on every message, on the prepares a round
+// change carries, and in commit validation, which decided messages also go through. Round changes and prepares
+// embedded in a received proposal are not checked again: they were already checked when they entered, and
+// re-checking them here would refuse proposals that nodes without this check accept.
 func validateMsg(msg *specqbft.ProcessingMessage) error {
 	m := msg.QBFTMessage
 	if m.MsgType != specqbft.ProposalMsgType {
@@ -286,7 +290,22 @@ func (i *Instance) BaseMsgValidation(msg *specqbft.ProcessingMessage) error {
 		}
 		return i.validateCommit(msg)
 	case specqbft.RoundChangeMsgType:
-		return i.validRoundChangeForDataIgnoreSignature(msg, msg.QBFTMessage.Round, msg.SignedMessage.FullData)
+		if err := i.validRoundChangeForDataIgnoreSignature(msg, msg.QBFTMessage.Round, msg.SignedMessage.FullData); err != nil {
+			return err
+		}
+
+		// The prepares a round change carries enter the instance with it, so they get the placement checks too.
+		prepares, _ := msg.QBFTMessage.GetRoundChangeJustifications() // no need to check error, checked on msg.Validate()
+		for _, p := range prepares {
+			pm, err := specqbft.NewProcessingMessage(p)
+			if err != nil {
+				return fmt.Errorf("could not create ProcessingMessage from prepare message in round change justification: %w", err)
+			}
+			if err := validateMsg(pm); err != nil {
+				return fmt.Errorf("round change justification invalid: %w", err)
+			}
+		}
+		return nil
 	default:
 		return fmt.Errorf("signed message type not supported")
 	}
