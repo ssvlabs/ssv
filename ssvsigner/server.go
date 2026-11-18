@@ -479,7 +479,7 @@ func (s *Server) handleOperatorEncrypt(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	encryptionKey, err := s.operatorPrivKey.EKMEncryptionKey()
+	encryptionKey, err := s.operatorPrivKey.DataProtectionKey()
 	if err != nil {
 		logger.Error("request failed", zap.Error(err))
 		s.writeJSONErr(ctx, logger, fasthttp.StatusInternalServerError, err)
@@ -514,7 +514,7 @@ func (s *Server) handleOperatorDecrypt(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	encryptionKey, err := s.operatorPrivKey.EKMEncryptionKey()
+	encryptionKey, err := s.operatorPrivKey.DataProtectionKey()
 	if err != nil {
 		logger.Error("request failed", zap.Error(err))
 		s.writeJSONErr(ctx, logger, fasthttp.StatusInternalServerError, err)

@@ -247,9 +247,9 @@ func newNode(
 		return nil, err
 	}
 	operatorPrivKey := identity.privKey
-	operatorPrivKeyPEM := identity.privKeyPEM
+	operatorPrivKeyBase64 := identity.privKeyBase64
 	ssvSignerClient := identity.ssvSigner
-	operatorPubKeyBase64 := identity.pubKeyB64
+	operatorPubKeyBase64 := identity.pubKeyBase64
 
 	cfg.DBOptions.Ctx = ctx
 	db, err := openNodeDB(logger, cfg, res, networkConfig.Beacon, operatorPrivKey)
@@ -275,8 +275,8 @@ func newNode(
 				return nil, fmt.Errorf("could not save base64-encoded operator public key: %w", err)
 			}
 		} else {
-			if err := ensureOperatorPrivateKey(nodeStorage, operatorPrivKey, operatorPrivKeyPEM); err != nil {
-				return nil, fmt.Errorf("could not save operator private key: %w", err)
+			if err := ensureOperatorPrivateKey(logger, nodeStorage, operatorPrivKey, operatorPrivKeyBase64); err != nil {
+				return nil, fmt.Errorf("could not check operator private key: %w", err)
 			}
 		}
 

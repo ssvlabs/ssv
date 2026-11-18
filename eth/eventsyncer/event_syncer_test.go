@@ -258,16 +258,7 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.Database, privKey keys.O
 		logger.Fatal("failed to encode operator public key", zap.Error(err))
 	}
 
-	if err := nodeStorage.SavePrivateKeyHash(privKey.StorageHash()); err != nil {
-		logger.Fatal("could not setup operator private key", zap.Error(err))
-	}
-
-	_, found, err := nodeStorage.GetPrivateKeyHash()
-	if err != nil || !found {
-		logger.Fatal("failed to get operator private key", zap.Error(err))
-	}
-	var operatorData *registrystorage.OperatorData
-	operatorData, found, err = nodeStorage.GetOperatorDataByPubKey(nil, encodedPubKey)
+	operatorData, found, err := nodeStorage.GetOperatorDataByPubKey(nil, encodedPubKey)
 	if err != nil {
 		logger.Fatal("could not get operator data by public key", zap.Error(err))
 	}

@@ -64,6 +64,41 @@ func Test_decideNetworkKeyProtectors(t *testing.T) {
 		decryptedValue, err := unprotectFn(context.Background(), protectedValue)
 		require.NoError(t, err)
 		require.Equal(t, plaintext, decryptedValue)
+
+		// Same key as ssv-signer's /v1/operator/encrypt, but not the one encrypting the share keys.
+		dataProtectionKey, err := operatorPrivKey.DataProtectionKey()
+		require.NoError(t, err)
+		decryptedValue, err = keys.DecryptPayload(dataProtectionKey, protectedValue)
+		require.NoError(t, err)
+		require.Equal(t, plaintext, decryptedValue)
+
+		ekmEncryptionKey, err := operatorPrivKey.EKMEncryptionKey()
+		require.NoError(t, err)
+		_, err = keys.DecryptPayload(ekmEncryptionKey, protectedValue)
+		require.Error(t, err)
+	})
+
+	t.Run("non-exporter decrypts legacy network keys with local operator key", func(t *testing.T) {
+		operatorPrivKey, err := keys.GeneratePrivateKey()
+		require.NoError(t, err)
+
+		_, unprotectFn, err := decideNetworkKeyProtectors(context.Background(), zap.NewNop(), nil, false, operatorPrivKey, nil)
+		require.NoError(t, err)
+
+		plaintext := []byte("legacy-protected-payload")
+		ekmEncryptionKey, err := operatorPrivKey.EKMEncryptionKey()
+		require.NoError(t, err)
+		protectedValue, err := keys.EncryptPayload(ekmEncryptionKey, plaintext)
+		require.NoError(t, err)
+		decryptedValue, err := unprotectFn(context.Background(), protectedValue)
+		require.NoError(t, err)
+		require.Equal(t, plaintext, decryptedValue)
+
+		// But not ones encrypted with another key.
+		protectedValue, err = keys.EncryptPayload(make([]byte, 32), plaintext)
+		require.NoError(t, err)
+		_, err = unprotectFn(context.Background(), protectedValue)
+		require.Error(t, err)
 	})
 
 	t.Run("non-exporter keeps ssv-signer client", func(t *testing.T) {
@@ -77,7 +112,12 @@ func Test_decideNetworkKeyProtectors(t *testing.T) {
 			mux.HandleFunc(ssvsigner.PathOperatorDecrypt, func(w http.ResponseWriter, r *http.Request) {
 				payload, err := io.ReadAll(r.Body)
 				require.NoError(t, err)
-				_, err = w.Write(bytes.TrimPrefix(payload, []byte("encrypted:")))
+				decrypted, ok := bytes.CutPrefix(payload, []byte("encrypted:"))
+				if !ok {
+					http.Error(w, "message authentication failed", http.StatusInternalServerError)
+					return
+				}
+				_, err = w.Write(decrypted)
 				require.NoError(t, err)
 			})
 		})
@@ -95,6 +135,10 @@ func Test_decideNetworkKeyProtectors(t *testing.T) {
 		decryptedValue, err := unprotectFn(context.Background(), protectedValue)
 		require.NoError(t, err)
 		require.Equal(t, plaintext, decryptedValue)
+
+		// A value it didn't encrypt, as from an ssv-signer version with another key.
+		_, err = unprotectFn(context.Background(), plaintext)
+		require.ErrorContains(t, err, "set NetworkPrivateKey to replace it")
 	})
 }
 

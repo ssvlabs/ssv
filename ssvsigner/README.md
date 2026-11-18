@@ -370,14 +370,21 @@ SSV-Signer exposes the following API endpoints:
 | `/v1/validators/sign/{identifier}` | POST   | Sign a payload with a specific validator share          |
 | `/v1/operator/identity`            | GET    | Get the operator's public key                           |
 | `/v1/operator/sign`                | POST   | Sign data with the operator's key                       |
-| `/v1/operator/encrypt`             | POST   | Encrypt data with the operator-derived storage key using the same encrypted format as local mode |
+| `/v1/operator/encrypt`             | POST   | Encrypt data with the operator-derived data protection key using the same encrypted format as local mode (not the key that encrypts local share keys) |
 | `/v1/operator/decrypt`             | POST   | Decrypt data from that same encrypted format |
 
 The SSV node probes `/v1/operator/encrypt` and `/v1/operator/decrypt` on startup. Older `ssv-signer` versions that
-explicitly do not expose these endpoints remain supported for legacy plaintext network-key storage, but a database
-that already contains an encrypted P2P network key requires an `ssv-signer` version that supports these endpoints
-or the original local operator key that encrypted that database. Other fetch failures are treated as startup
-errors rather than downgrading protection silently.
+explicitly do not expose these endpoints remain supported for legacy plaintext network-key storage. Other fetch
+failures are treated as startup errors rather than downgrading protection silently.
+
+When upgrading from an `ssv-signer` version without the data protection key, upgrade every replica behind one endpoint
+before restarting nodes: the probe encrypts and decrypts in separate requests, so a node can fail to start against old
+and new replicas.
+
+Only unreleased builds wrote an encrypted P2P network key, and every later release rewrites it in plaintext on start.
+A database that still contains one requires the original local operator key or the `ssv-signer` version that encrypted
+it, since these endpoints now use a different key. With an `ssv-signer` that has them, set `NetworkPrivateKey` to
+replace the stored key instead, which changes the peer ID.
 
 ## Common Issues and Troubleshooting
 

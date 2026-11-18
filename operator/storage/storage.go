@@ -3,6 +3,7 @@ package storage
 import (
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/big"
 
@@ -22,6 +23,7 @@ var (
 	OperatorStoragePrefix = []byte("operator/")
 	lastProcessedBlockKey = []byte("syncOffset") // TODO: temporarily left as syncOffset for compatibility, consider renaming and adding a migration for that
 	configKey             = []byte("config")
+	operatorKeyCheckDBKey = "key-check"
 	hashedPrivkeyDBKey    = "hashed-private-key"
 	pubkeyDBKey           = "public-key"
 )
@@ -47,8 +49,10 @@ type Storage interface {
 	Shares() registrystorage.Shares
 	ValidatorStore() registrystorage.ValidatorStore
 
+	GetOperatorKeyCheckValue() ([]byte, bool, error)
+	SaveOperatorKeyCheckValue(value []byte) error
 	GetPrivateKeyHash() ([]byte, bool, error)
-	SavePrivateKeyHash(privKeyHash []byte) error
+	DropPrivateKeyHash() error
 
 	GetPublicKey() (string, bool, error)
 	SavePublicKey(pubKey string) error
@@ -216,7 +220,21 @@ func (s *storage) GetLastProcessedBlock(r basedb.Reader) (*big.Int, bool, error)
 	return offset, found, nil
 }
 
-// GetPrivateKeyHash return sha256 hashed private key
+// GetOperatorKeyCheckValue returns the value that identifies the operator key.
+func (s *storage) GetOperatorKeyCheckValue() ([]byte, bool, error) {
+	obj, found, err := s.db.Get(OperatorStoragePrefix, []byte(operatorKeyCheckDBKey))
+	if err != nil || !found {
+		return nil, found, err
+	}
+	return obj.Value, true, nil
+}
+
+// SaveOperatorKeyCheckValue saves the value that identifies the operator key.
+func (s *storage) SaveOperatorKeyCheckValue(value []byte) error {
+	return s.db.Set(OperatorStoragePrefix, []byte(operatorKeyCheckDBKey), value)
+}
+
+// GetPrivateKeyHash returns the private key hash older versions store.
 func (s *storage) GetPrivateKeyHash() ([]byte, bool, error) {
 	obj, found, err := s.db.Get(OperatorStoragePrefix, []byte(hashedPrivkeyDBKey))
 	if !found {
@@ -236,10 +254,23 @@ func (s *storage) GetPrivateKeyHash() ([]byte, bool, error) {
 	return privateKeyBytes, found, nil
 }
 
-// SavePrivateKeyHash saves operator private key hash
-func (s *storage) SavePrivateKeyHash(hashedKey []byte) error {
-	hashedKeyHex := hex.EncodeToString(hashedKey) // key is stored hex-encoded
-	return s.db.Set(OperatorStoragePrefix, []byte(hashedPrivkeyDBKey), []byte(hashedKeyHex))
+// DropPrivateKeyHash drops every stored version of the private key hash, rather than deleting it:
+// a delete would leave older versions on disk until compaction. Badger rewrites the
+// tables holding it; pebble's DropPrefix only writes tombstones (local signing always uses badger).
+func (s *storage) DropPrivateKeyHash() error {
+	if err := s.db.DropPrefix([]byte(string(OperatorStoragePrefix) + hashedPrivkeyDBKey)); err != nil {
+		return err
+	}
+
+	// Badger's DropPrefix returns nil even if compacting level 0 fails, which leaves the hash there.
+	_, found, err := s.db.Get(OperatorStoragePrefix, []byte(hashedPrivkeyDBKey))
+	if err != nil {
+		return err
+	}
+	if found {
+		return errors.New("private key hash still stored: badger could not compact level 0 (out of disk space?); the next start retries")
+	}
+	return nil
 }
 
 // GetPublicKey returns public key.

@@ -508,10 +508,10 @@ func (s *ServerTestSuite) TestOperatorDataProtection() {
 	encryptedPayload, err := keys.EncryptPayload(encryptionKey, payload)
 	require.NoError(t, err)
 
-	s.operatorPrivKey.EKMEncryptionKeyFunc = func() ([]byte, error) {
+	s.operatorPrivKey.DataProtectionKeyFunc = func() ([]byte, error) {
 		return encryptionKey, nil
 	}
-	t.Cleanup(func() { s.operatorPrivKey.EKMEncryptionKeyFunc = nil })
+	t.Cleanup(func() { s.operatorPrivKey.DataProtectionKeyFunc = nil })
 
 	t.Run("encrypt success", func(t *testing.T) {
 		resp, err := s.ServeHTTP("POST", PathOperatorEncrypt, payload)
@@ -529,11 +529,22 @@ func (s *ServerTestSuite) TestOperatorDataProtection() {
 		assert.Equal(t, payload, resp.Body())
 	})
 
+	t.Run("doesn't decrypt with the share keys' encryption key", func(t *testing.T) {
+		ekmEncryptionKey := []byte("fedcba9876543210fedcba9876543210")
+		s.operatorPrivKey.EkmEncryptionKeyValue = ekmEncryptionKey
+		ekmEncryptedPayload, err := keys.EncryptPayload(ekmEncryptionKey, payload)
+		require.NoError(t, err)
+
+		resp, err := s.ServeHTTP("POST", PathOperatorDecrypt, ekmEncryptedPayload)
+		require.NoError(t, err)
+		assert.Equal(t, fasthttp.StatusInternalServerError, resp.StatusCode())
+	})
+
 	t.Run("returns internal error when operator key derivation fails on decrypt", func(t *testing.T) {
-		s.operatorPrivKey.EKMEncryptionKeyFunc = func() ([]byte, error) {
+		s.operatorPrivKey.DataProtectionKeyFunc = func() ([]byte, error) {
 			return nil, errors.New("derive failed")
 		}
-		defer func() { s.operatorPrivKey.EKMEncryptionKeyFunc = func() ([]byte, error) { return encryptionKey, nil } }()
+		defer func() { s.operatorPrivKey.DataProtectionKeyFunc = func() ([]byte, error) { return encryptionKey, nil } }()
 
 		resp, err := s.ServeHTTP("POST", PathOperatorDecrypt, encryptedPayload)
 		require.NoError(t, err)
@@ -541,10 +552,10 @@ func (s *ServerTestSuite) TestOperatorDataProtection() {
 	})
 
 	t.Run("returns internal error when operator key derivation fails", func(t *testing.T) {
-		s.operatorPrivKey.EKMEncryptionKeyFunc = func() ([]byte, error) {
+		s.operatorPrivKey.DataProtectionKeyFunc = func() ([]byte, error) {
 			return nil, errors.New("derive failed")
 		}
-		defer func() { s.operatorPrivKey.EKMEncryptionKeyFunc = func() ([]byte, error) { return encryptionKey, nil } }()
+		defer func() { s.operatorPrivKey.DataProtectionKeyFunc = func() ([]byte, error) { return encryptionKey, nil } }()
 
 		resp, err := s.ServeHTTP("POST", PathOperatorEncrypt, payload)
 		require.NoError(t, err)

@@ -374,19 +374,6 @@ func TestSetupPrivateKey(t *testing.T) {
 	})
 }
 
-func TestEKMEncryptionKey(t *testing.T) {
-	operatorPrivKey, err := keys.GeneratePrivateKey()
-	require.NoError(t, err)
-
-	encryptionKey, err := operatorPrivKey.EKMEncryptionKey()
-	require.NoError(t, err)
-	require.Len(t, encryptionKey, 32)
-
-	encryptionKey2, err := operatorPrivKey.EKMEncryptionKey()
-	require.NoError(t, err)
-	require.Equal(t, encryptionKey, encryptionKey2)
-}
-
 func TestEncryptedNetworkKey(t *testing.T) {
 	logger := log.TestLogger(t)
 	ctx := context.Background()
