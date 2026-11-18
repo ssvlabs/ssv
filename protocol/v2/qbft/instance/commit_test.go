@@ -189,29 +189,30 @@ func TestValidateCommit(t *testing.T) {
 // byte-identical SSVMessages. The instance still decides on the quorum of canonical commits.
 func TestNonCanonicalCommitIsRejected(t *testing.T) {
 	tests := []struct {
-		name   string
-		mutate func(env *instanceTestEnv, qbftMsg *specqbft.Message, ssvMsg *spectypes.SSVMessage)
+		name    string
+		mutate  func(env *instanceTestEnv, qbftMsg *specqbft.Message, ssvMsg *spectypes.SSVMessage)
+		wantErr string
 	}{
 		{"non-zero data round", func(_ *instanceTestEnv, m *specqbft.Message, _ *spectypes.SSVMessage) {
 			m.DataRound = 1
-		}},
+		}, "commit is not canonical"},
 		{"prepare justification", func(env *instanceTestEnv, m *specqbft.Message, _ *spectypes.SSVMessage) {
 			m.PrepareJustification = env.marshalJustifications([]*specqbft.ProcessingMessage{env.prepare(1, 2, m.Root)})
-		}},
+		}, "unexpected prepare justification"},
 		{"round-change justification", func(env *instanceTestEnv, m *specqbft.Message, _ *spectypes.SSVMessage) {
 			m.RoundChangeJustification = env.marshalJustifications([]*specqbft.ProcessingMessage{env.prepare(1, 2, m.Root)})
-		}},
+		}, "unexpected round change justification"},
 		{"outer msg id domain byte", func(_ *instanceTestEnv, _ *specqbft.Message, s *spectypes.SSVMessage) {
 			s.MsgID[0] ^= 0xff
-		}},
+		}, "commit is not canonical"},
 		{"outer msg id padding byte", func(_ *instanceTestEnv, _ *specqbft.Message, s *spectypes.SSVMessage) {
 			s.MsgID[20] = 0xff
-		}},
+		}, "commit is not canonical"},
 		// Defense in depth: routing never hands a non-consensus message to the QBFT instance, so this
 		// shape cannot arrive in practice.
 		{"outer msg type", func(_ *instanceTestEnv, _ *specqbft.Message, s *spectypes.SSVMessage) {
 			s.MsgType = spectypes.SSVPartialSignatureMsgType
-		}},
+		}, "commit is not canonical"},
 	}
 
 	for _, tt := range tests {
@@ -257,7 +258,7 @@ func TestNonCanonicalCommitIsRejected(t *testing.T) {
 			decided, value := env.inst.IsDecided()
 			require.True(t, decided, "the quorum of canonical commits must still decide")
 			require.Equal(t, fullData, value)
-			require.ErrorContains(t, nonCanonicalErr, "commit is not canonical")
+			require.ErrorContains(t, nonCanonicalErr, tt.wantErr)
 		})
 	}
 }
