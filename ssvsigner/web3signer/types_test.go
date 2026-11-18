@@ -6,7 +6,9 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/electra"
+	"github.com/attestantio/go-eth2-client/spec/gloas"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 )
 
@@ -24,6 +26,8 @@ func TestDataVersion_MarshalJSON(t *testing.T) {
 		{"Capella", DataVersion(spec.DataVersionCapella), `"CAPELLA"`},
 		{"Deneb", DataVersion(spec.DataVersionDeneb), `"DENEB"`},
 		{"Electra", DataVersion(spec.DataVersionElectra), `"ELECTRA"`},
+		{"Fulu", DataVersion(spec.DataVersionFulu), `"FULU"`},
+		{"Gloas", DataVersion(spec.DataVersionGloas), `"GLOAS"`},
 	}
 
 	for _, tt := range tests {
@@ -36,6 +40,17 @@ func TestDataVersion_MarshalJSON(t *testing.T) {
 			require.Equal(t, tt.expected, string(output))
 		})
 	}
+}
+
+// TestDataVersion_MarshalJSONByValue checks that a DataVersion field encodes as its name in a struct
+// marshaled by value, where it isn't addressable.
+func TestDataVersion_MarshalJSONByValue(t *testing.T) {
+	t.Parallel()
+
+	output, err := json.Marshal(VersionedRequest[string]{Version: DataVersion(spec.DataVersionGloas), Data: "x"})
+
+	require.NoError(t, err)
+	require.JSONEq(t, `{"version":"GLOAS","data":"x"}`, string(output))
 }
 
 func TestDataVersion_UnmarshalJSON(t *testing.T) {
@@ -124,6 +139,16 @@ func TestAggregateAndProof_MarshalJSON(t *testing.T) {
 			expectError: false,
 		},
 		{
+			name: "Gloas AggregateAndProof",
+			input: &AggregateAndProof{
+				Gloas: &gloas.AggregateAndProof{
+					AggregatorIndex: 789,
+					SelectionProof:  phase0.BLSSignature{0x03},
+				},
+			},
+			expectError: false,
+		},
+		{
 			name: "Both Phase0 and Electra set (error case)",
 			input: &AggregateAndProof{
 				Phase0: &phase0.AggregateAndProof{
@@ -131,6 +156,18 @@ func TestAggregateAndProof_MarshalJSON(t *testing.T) {
 				},
 				Electra: &electra.AggregateAndProof{
 					AggregatorIndex: 456,
+				},
+			},
+			expectError: true,
+		},
+		{
+			name: "Both Electra and Gloas set (error case)",
+			input: &AggregateAndProof{
+				Electra: &electra.AggregateAndProof{
+					AggregatorIndex: 456,
+				},
+				Gloas: &gloas.AggregateAndProof{
+					AggregatorIndex: 789,
 				},
 			},
 			expectError: true,
@@ -145,10 +182,171 @@ func TestAggregateAndProof_MarshalJSON(t *testing.T) {
 
 			if tt.expectError {
 				require.Error(t, err)
-				require.Contains(t, err.Error(), "both phase0 and electra cannot be set")
+				require.Contains(t, err.Error(), "only one of phase0, electra and gloas can be set")
 			} else {
 				require.NoError(t, err)
 			}
+		})
+	}
+}
+
+func TestAggregateAndProof_RequestType(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, TypeAggregateAndProof, (&AggregateAndProof{Phase0: &phase0.AggregateAndProof{}}).RequestType())
+	require.Equal(t, TypeAggregateAndProof, (&AggregateAndProof{Electra: &electra.AggregateAndProof{}}).RequestType())
+	require.Equal(t, TypeAggregateAndProofV2, (&AggregateAndProof{Gloas: &gloas.AggregateAndProof{}}).RequestType())
+}
+
+// TestAggregateAndProof_Gloas checks that a Gloas aggregate round-trips through the AGGREGATE_AND_PROOF_V2
+// body, {version: GLOAS, data}, and that another version or missing data is refused.
+func TestAggregateAndProof_Gloas(t *testing.T) {
+	t.Parallel()
+
+	aggregate := testingutils.TestingGloasAggregateAndProofV(5, spec.DataVersionGloas)
+
+	encoded, err := json.Marshal(&AggregateAndProof{Gloas: aggregate})
+	require.NoError(t, err)
+
+	var shape struct {
+		Version string          `json:"version"`
+		Data    json.RawMessage `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(encoded, &shape))
+	require.Equal(t, "GLOAS", shape.Version)
+	bare, err := json.Marshal(aggregate)
+	require.NoError(t, err)
+	require.JSONEq(t, string(bare), string(shape.Data))
+
+	var decoded AggregateAndProof
+	require.NoError(t, json.Unmarshal(encoded, &decoded))
+	require.Nil(t, decoded.Phase0)
+	require.Nil(t, decoded.Electra)
+	require.Equal(t, aggregate, decoded.Gloas)
+
+	t.Run("other version", func(t *testing.T) {
+		t.Parallel()
+
+		var ap AggregateAndProof
+		err := json.Unmarshal([]byte(`{"version":"ELECTRA","data":`+string(bare)+`}`), &ap)
+		require.ErrorContains(t, err, "unsupported versioned aggregate and proof")
+	})
+
+	t.Run("no data", func(t *testing.T) {
+		t.Parallel()
+
+		var ap AggregateAndProof
+		err := json.Unmarshal([]byte(`{"version":"GLOAS"}`), &ap)
+		require.ErrorContains(t, err, "versioned aggregate and proof has no data")
+	})
+}
+
+// TestSignRequest_GloasRoundTrip checks that the Gloas requests carry {version: GLOAS, data} bodies and
+// survive a decode and re-encode unchanged, as when ssv-signer forwards the node's request to Web3Signer.
+func TestSignRequest_GloasRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	gloasVersion := DataVersion(spec.DataVersionGloas)
+	forkInfo := ForkInfo{
+		Fork: &phase0.Fork{
+			PreviousVersion: phase0.Version{6, 0, 0, 0},
+			CurrentVersion:  phase0.Version{7, 0, 0, 0},
+			Epoch:           7,
+		},
+		GenesisValidatorsRoot: phase0.Root{0x04},
+	}
+
+	tests := []struct {
+		name  string
+		req   SignRequest
+		field string
+	}{
+		{
+			name: "payload attestation",
+			req: SignRequest{
+				Type: TypePayloadAttestationMessage,
+				PayloadAttestationMessage: &VersionedRequest[*gloas.PayloadAttestationData]{
+					Version: gloasVersion,
+					Data: &gloas.PayloadAttestationData{
+						BeaconBlockRoot:   phase0.Root{0x01},
+						Slot:              224,
+						PayloadPresent:    true,
+						BlobDataAvailable: false,
+					},
+				},
+			},
+			field: "payload_attestation_message",
+		},
+		{
+			name: "proposer preferences",
+			req: SignRequest{
+				Type: TypeProposerPreferences,
+				ProposerPreferences: &VersionedRequest[*gloas.ProposerPreferences]{
+					Version: gloasVersion,
+					Data: &gloas.ProposerPreferences{
+						DependentRoot:  phase0.Root{0x02},
+						ProposalSlot:   230,
+						ValidatorIndex: 9,
+						FeeRecipient:   [20]byte{0x03},
+						TargetGasLimit: 60_000_000,
+					},
+				},
+			},
+			field: "proposer_preferences",
+		},
+		{
+			name: "builder request auth",
+			req: SignRequest{
+				Type: TypeBuilderRequestAuth,
+				BuilderRequestAuth: &VersionedRequest[*gloas.BuilderRequestAuth]{
+					Version: gloasVersion,
+					Data: &gloas.BuilderRequestAuth{
+						Data: []byte("builder.example"),
+						Slot: 230,
+					},
+				},
+			},
+			field: "builder_request_auth",
+		},
+		{
+			name: "gloas aggregate and proof",
+			req: SignRequest{
+				Type: TypeAggregateAndProofV2,
+				AggregateAndProof: &AggregateAndProof{
+					Gloas: testingutils.TestingGloasAggregateAndProofV(5, spec.DataVersionGloas),
+				},
+			},
+			field: "aggregate_and_proof",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			req := tt.req
+			req.ForkInfo = forkInfo
+			req.SigningRoot = phase0.Root{0x0a}
+
+			encoded, err := json.Marshal(req)
+			require.NoError(t, err)
+
+			var fields map[string]json.RawMessage
+			require.NoError(t, json.Unmarshal(encoded, &fields))
+			require.JSONEq(t, `"`+string(tt.req.Type)+`"`, string(fields["type"]))
+			var body struct {
+				Version string          `json:"version"`
+				Data    json.RawMessage `json:"data"`
+			}
+			require.NoError(t, json.Unmarshal(fields[tt.field], &body))
+			require.Equal(t, "GLOAS", body.Version)
+			require.NotEmpty(t, body.Data)
+
+			var decoded SignRequest
+			require.NoError(t, json.Unmarshal(encoded, &decoded))
+			reencoded, err := json.Marshal(decoded)
+			require.NoError(t, err)
+			require.JSONEq(t, string(encoded), string(reencoded))
 		})
 	}
 }

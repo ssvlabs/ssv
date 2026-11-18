@@ -100,6 +100,8 @@ type gloasDutyState struct {
 	// envelopeHandled is set once the reveal is settled: its signature reconstructed, or failed in a way no
 	// later share can fix. The reveal runs at most once.
 	envelopeHandled bool
+	// envelopeSettled tells watchEnvelopeReveal that envelopeHandled is set; nil unless it's watching.
+	envelopeSettled chan struct{}
 }
 
 var _ PostConsensusAwaiter = (*ProposerRunner)(nil)
@@ -504,9 +506,20 @@ func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logge
 			phase0.DomainType(spectypes.DomainBeaconBuilder),
 		)
 		if err != nil {
-			return fmt.Errorf("failed signing blinded envelope: %w", err)
+			// The envelope entry is optional, so a signing failure mustn't cost the block entry: send the block
+			// alone and leave the envelope to the other operators. A remote signer always refuses it, so that
+			// expected refusal is logged at debug.
+			if errors.Is(err, ekm.ErrEnvelopeSigningUnsupported) {
+				logger.Debug("remote signer can't sign the blinded envelope, sending the block partial alone",
+					fields.Slot(cd.Duty.Slot))
+			} else {
+				logger.Warn("could not sign the blinded envelope, sending the block partial alone",
+					fields.Slot(cd.Duty.Slot), zap.Error(err))
+			}
+			span.AddEvent("blinded envelope not signed")
+		} else {
+			entries = append(entries, envelopeMsg)
 		}
-		entries = append(entries, envelopeMsg)
 	}
 
 	postConsensusMsg := &spectypes.PartialSignatureMessages{
@@ -748,6 +761,9 @@ func (r *ProposerRunner) submitGloasBlock(ctx context.Context, logger *zap.Logge
 	recordPostConsensusDuration(ctx, r.measurements.PostConsensusTime(), spectypes.RoleProposer)
 	r.doppelgangerHandler.ReportQuorum(r.GetShare().ValidatorIndex)
 	r.gloasDuty.blockSubmitAttempted = true
+	if r.gloasDuty.envelopeSigningRoot != [32]byte{} && r.matchProducedEnvelope(logger, proposalData) == envelopeMatchBuilder {
+		r.watchEnvelopeReveal(ctx, logger, cd.Duty.Slot, r.NetworkConfig.SlotStartTime(cd.Duty.Slot+1))
+	}
 
 	const submittingBlockProposalEvent = "submitting block proposal"
 	span.AddEvent(submittingBlockProposalEvent)
@@ -780,12 +796,12 @@ func (r *ProposerRunner) publishEnvelope(ctx context.Context, logger *zap.Logger
 	if err != nil {
 		if !isRecoverableReconstructError(err) {
 			// No bad share to drop, so no later share can fix it: the reveal is lost.
-			r.gloasDuty.envelopeHandled = true
+			r.settleEnvelope()
 			r.releaseProducedEnvelope()
 		}
 		return err
 	}
-	r.gloasDuty.envelopeHandled = true
+	r.settleEnvelope()
 
 	switch r.matchProducedEnvelope(logger, proposalData) {
 	case envelopeMatchBuilder:
@@ -819,6 +835,41 @@ func (r *ProposerRunner) publishEnvelope(ctx context.Context, logger *zap.Logger
 	recordEnvelopePublish(ctx, true)
 	logger.Info("✅ published execution payload envelope", fields.Slot(cd.Duty.Slot))
 	return nil
+}
+
+// settleEnvelope marks the reveal settled (envelopeHandled) and tells watchEnvelopeReveal.
+func (r *ProposerRunner) settleEnvelope() {
+	r.gloasDuty.envelopeHandled = true
+	if r.gloasDuty.envelopeSettled != nil {
+		select {
+		case r.gloasDuty.envelopeSettled <- struct{}{}:
+		default:
+		}
+	}
+}
+
+// watchEnvelopeReveal warns and counts a reveal miss if the envelope hasn't settled by deadline, the end
+// of the reveal window (see awaitingEnvelope): its signature reached no quorum, so the self-built block
+// lands without its payload, as when more than f operators sign remotely. It runs on the builder
+// operator, the one that would publish the reveal, once the block is submitted.
+func (r *ProposerRunner) watchEnvelopeReveal(ctx context.Context, logger *zap.Logger, slot phase0.Slot, deadline time.Time) {
+	settled := make(chan struct{}, 1)
+	r.gloasDuty.envelopeSettled = settled
+
+	go func() {
+		select {
+		case <-settled:
+		case <-ctx.Done():
+		case <-time.After(time.Until(deadline)):
+			select {
+			case <-settled:
+			default:
+				recordEnvelopeRevealMiss(ctx)
+				logger.Warn("self-built payload not revealed: the envelope signature reached no quorum before the slot ended",
+					fields.Slot(slot))
+			}
+		}
+	}()
 }
 
 // envelopeMatch is the outcome of matching this operator's produced envelope to the decided value.

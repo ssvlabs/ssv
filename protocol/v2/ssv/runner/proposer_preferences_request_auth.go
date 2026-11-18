@@ -134,8 +134,8 @@ func (r *proposerPreferencesSlotRunner) processRequestAuthPartial(ctx context.Co
 
 	if r.requestAuths == nil {
 		if len(r.builders) == 0 {
-			// No overlay here (never configured, or disabled for a remote signer): no root will
-			// ever be frozen for this slot, so retrying cannot help.
+			// No overlay configured here: no root will ever be frozen for this slot, so retrying
+			// cannot help.
 			return errors.New("no builders configured")
 		}
 		// Duty assigned but not executed here yet: retryable, so a partial racing the duty start

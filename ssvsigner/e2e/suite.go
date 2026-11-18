@@ -60,22 +60,7 @@ func (s *E2ETestSuite) GetContext() context.Context {
 // CalculateDomain computes the signing domain for a given domain type and epoch
 func (s *E2ETestSuite) CalculateDomain(domainType phase0.DomainType, epoch phase0.Epoch) (phase0.Domain, error) {
 	_, fork := s.env.GetBeaconConfig().ForkAtEpoch(epoch)
-
-	forkData := &phase0.ForkData{
-		CurrentVersion:        fork.CurrentVersion,
-		GenesisValidatorsRoot: s.env.GetBeaconConfig().GenesisValidatorsRoot,
-	}
-
-	forkDataRoot, err := forkData.HashTreeRoot()
-	if err != nil {
-		return phase0.Domain{}, err
-	}
-
-	domain := phase0.Domain{}
-	copy(domain[:4], domainType[:])
-	copy(domain[4:], forkDataRoot[:28])
-
-	return domain, nil
+	return computeDomain(domainType, fork.CurrentVersion, s.env.GetBeaconConfig().GenesisValidatorsRoot)
 }
 
 // CalculateVoluntaryExitDomain computes the voluntary-exit signing domain, which per
@@ -87,22 +72,7 @@ func (s *E2ETestSuite) CalculateVoluntaryExitDomain() (phase0.Domain, error) {
 	if !ok {
 		return phase0.Domain{}, errors.New("capella fork not configured")
 	}
-
-	forkData := &phase0.ForkData{
-		CurrentVersion:        capellaFork.CurrentVersion,
-		GenesisValidatorsRoot: s.env.GetBeaconConfig().GenesisValidatorsRoot,
-	}
-
-	forkDataRoot, err := forkData.HashTreeRoot()
-	if err != nil {
-		return phase0.Domain{}, err
-	}
-
-	domain := phase0.Domain{}
-	copy(domain[:4], spectypes.DomainVoluntaryExit[:])
-	copy(domain[4:], forkDataRoot[:28])
-
-	return domain, nil
+	return computeDomain(spectypes.DomainVoluntaryExit, capellaFork.CurrentVersion, s.env.GetBeaconConfig().GenesisValidatorsRoot)
 }
 
 // CalculateValidatorRegistrationDomain computes the validator-registration (application
@@ -110,14 +80,26 @@ func (s *E2ETestSuite) CalculateVoluntaryExitDomain() (phase0.Domain, error) {
 // validators root - independent of the current fork. Like the voluntary-exit domain it
 // is fixed, so it mirrors what the SSV node's beacon client computes for registrations.
 func (s *E2ETestSuite) CalculateValidatorRegistrationDomain() (phase0.Domain, error) {
+	return s.CalculateGenesisDomain(spectypes.DomainApplicationBuilder)
+}
+
+// CalculateGenesisDomain computes a genesis-style signing domain (genesis fork version, empty
+// genesis validators root), as the builder domains use: application builder and builder
+// request auth.
+func (s *E2ETestSuite) CalculateGenesisDomain(domainType phase0.DomainType) (phase0.Domain, error) {
 	genesisFork, ok := s.env.GetBeaconConfig().ForkAtVersion(spec.DataVersionPhase0)
 	if !ok {
 		return phase0.Domain{}, errors.New("genesis (phase0) fork not configured")
 	}
+	return computeDomain(domainType, genesisFork.CurrentVersion, phase0.Root{})
+}
 
+// computeDomain is the consensus spec's compute_domain: the domain type followed by the first 28
+// bytes of the fork data root.
+func computeDomain(domainType phase0.DomainType, forkVersion phase0.Version, genesisValidatorsRoot phase0.Root) (phase0.Domain, error) {
 	forkData := &phase0.ForkData{
-		CurrentVersion:        genesisFork.CurrentVersion,
-		GenesisValidatorsRoot: phase0.Root{},
+		CurrentVersion:        forkVersion,
+		GenesisValidatorsRoot: genesisValidatorsRoot,
 	}
 
 	forkDataRoot, err := forkData.HashTreeRoot()
@@ -126,7 +108,7 @@ func (s *E2ETestSuite) CalculateValidatorRegistrationDomain() (phase0.Domain, er
 	}
 
 	domain := phase0.Domain{}
-	copy(domain[:4], spectypes.DomainApplicationBuilder[:])
+	copy(domain[:4], domainType[:])
 	copy(domain[4:], forkDataRoot[:28])
 
 	return domain, nil

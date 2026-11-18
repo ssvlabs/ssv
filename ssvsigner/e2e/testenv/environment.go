@@ -6,9 +6,11 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"fmt"
+	"maps"
 	"os"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/testcontainers/testcontainers-go"
 
@@ -18,6 +20,27 @@ import (
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
 )
+
+// GloasForkEpoch schedules Gloas, unscheduled on mainnet, in both the test beacon config and Web3Signer
+// (--Xnetwork-gloas-fork-epoch). It's far past the real clock, so only suites that move the clock beyond
+// it run on Gloas.
+const GloasForkEpoch = phase0.Epoch(1_000_000)
+
+// gloasForkVersion is mainnet's GLOAS_FORK_VERSION, which Web3Signer's mainnet network carries.
+var gloasForkVersion = phase0.Version{0x07, 0x00, 0x00, 0x00}
+
+// withGloasFork returns a copy of cfg with Gloas scheduled at GloasForkEpoch. Each environment gets its own
+// copy, since SetTestCurrentEpoch moves its clock.
+func withGloasFork(cfg *common.BeaconConfig) *common.BeaconConfig {
+	withGloas := *cfg
+	withGloas.Forks = maps.Clone(cfg.Forks)
+	withGloas.Forks[spec.DataVersionGloas] = phase0.Fork{
+		Epoch:           GloasForkEpoch,
+		PreviousVersion: cfg.Forks[spec.DataVersionFulu].CurrentVersion,
+		CurrentVersion:  gloasForkVersion,
+	}
+	return &withGloas
+}
 
 // TestEnvironment manages the complete E2E test infrastructure
 type TestEnvironment struct {
@@ -93,7 +116,7 @@ func NewTestEnvironment(ctx context.Context) (*TestEnvironment, error) {
 		return nil, fmt.Errorf("failed to setup TLS certificates: %w", err)
 	}
 
-	env.beaconConfig = common.MainnetBeaconConfig
+	env.beaconConfig = withGloasFork(common.MainnetBeaconConfig)
 
 	return env, nil
 }

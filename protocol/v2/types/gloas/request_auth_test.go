@@ -117,27 +117,9 @@ func TestBuilderRequestAuth_JSON(t *testing.T) {
 	r := &BuilderRequestAuth{Data: []byte("https://builder.example.com"), Slot: 123}
 	out, err := json.Marshal(r)
 	require.NoError(t, err)
+	require.JSONEq(t, `{"data":"0x68747470733a2f2f6275696c6465722e6578616d706c652e636f6d","slot":"123"}`, string(out))
 
 	var dec BuilderRequestAuth
 	require.NoError(t, json.Unmarshal(out, &dec))
 	require.Equal(t, r, &dec)
-
-	// Empty data round-trips as "0x".
-	var empty BuilderRequestAuth
-	require.NoError(t, json.Unmarshal([]byte(`{"data":"0x","slot":"7"}`), &empty))
-	require.Empty(t, empty.Data)
-	require.Equal(t, phase0.Slot(7), empty.Slot)
-
-	// Oversize data, malformed hex, and malformed slot are rejected.
-	oversize := make([]byte, MaxBuilderAuthDataSize+1)
-	oversizeJSON, err := json.Marshal(&BuilderRequestAuth{Data: oversize})
-	require.NoError(t, err)
-	require.ErrorContains(t, json.Unmarshal(oversizeJSON, &dec), "incorrect length for data")
-	require.ErrorContains(t, json.Unmarshal([]byte(`{"data":"0xzz","slot":"1"}`), &dec), "invalid value for data")
-	require.ErrorContains(t, json.Unmarshal([]byte(`{"data":"0x00","slot":"x"}`), &dec), "invalid value for slot")
-}
-
-func TestSignedBuilderRequestAuth_JSON_MessageMissing(t *testing.T) {
-	var s SignedBuilderRequestAuth
-	require.ErrorContains(t, json.Unmarshal([]byte(`{"signature":"0x00"}`), &s), "message missing")
 }

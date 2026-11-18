@@ -333,11 +333,13 @@ func requireNotedFailure(t *testing.T, b *BaseRunner, concluded chan dutyConclus
 	}
 }
 
-// failingDomainSigner fails every signature under domain and passes the others to the embedded signer, so a test
-// can fail one step of a duty, such as its post-consensus signature, and leave the rest intact.
+// failingDomainSigner fails every signature under domain, with err or else a generic error, and passes the others
+// to the embedded signer, so a test can fail one step of a duty, such as its post-consensus signature, and leave
+// the rest intact.
 type failingDomainSigner struct {
 	ekm.BeaconSigner
 	domain phase0.DomainType
+	err    error
 }
 
 func (s failingDomainSigner) SignBeaconObject(
@@ -349,6 +351,9 @@ func (s failingDomainSigner) SignBeaconObject(
 	signatureDomain phase0.DomainType,
 ) (spectypes.Signature, phase0.Root, error) {
 	if signatureDomain == s.domain {
+		if s.err != nil {
+			return nil, phase0.Root{}, s.err
+		}
 		return nil, phase0.Root{}, errors.New("signing failed")
 	}
 	return s.BeaconSigner.SignBeaconObject(ctx, obj, domain, pubKey, slot, signatureDomain)

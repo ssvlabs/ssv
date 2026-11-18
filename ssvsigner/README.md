@@ -62,6 +62,11 @@ Consensys tutorial: https://docs.web3signer.consensys.io/get-started/start-web3s
   address
     - Either download and unpack `web3signer` from https://github.com/Consensys/web3signer/releases
     - Or use `web3signer` Docker image
+- From the Gloas fork on, use Web3Signer 26.9.0 or later, with your network's Gloas fork in its schedule, and an
+  SSV-Signer release with Gloas support: older versions lack the request types for payload attestations, proposer
+  preferences and builder request auths, and Gloas support in the block and aggregate requests. The self-built
+  execution-payload envelope can't be signed remotely (Web3Signer needs the full execution payload, which operators
+  don't share); a cluster still reveals a self-built payload while at most `f` of its operators sign remotely.
 
 Docker example:
 

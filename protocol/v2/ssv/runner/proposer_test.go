@@ -18,6 +18,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest/observer"
 
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
@@ -618,6 +620,7 @@ func TestProposerRunnerGloasPostConsensusLateEnvelope(t *testing.T) {
 	require.True(t, awaiting)
 	require.Equal(t, phase0.Slot(8), awaitingSlot)
 	require.NotNil(t, runner.gloasDuty.producedEnvelope, "the reveal data is kept while its quorum is pending")
+	require.NotNil(t, runner.gloasDuty.envelopeSettled, "the builder operator watches for the reveal")
 
 	require.NoError(t, runner.ProcessPostConsensus(ctx, logger, gloasPostConsensusMsg(t, keySet, 4, proposal, true)))
 
@@ -626,6 +629,7 @@ func TestProposerRunnerGloasPostConsensusLateEnvelope(t *testing.T) {
 	require.Equal(t, produced.Envelope, beacon.submittedEnvelopes[0].SignedExecutionPayloadEnvelope.Message)
 	requireNotAwaitingPostConsensus(t, runner)
 	require.Nil(t, runner.gloasDuty.producedEnvelope)
+	require.True(t, runner.gloasDuty.envelopeHandled, "the reveal settled, which stops the watch")
 }
 
 // A bad block share next to a good envelope share makes the block's reconstruction fail in a packet where the
@@ -865,6 +869,91 @@ func TestProposerRunnerProcessConsensusGloasSignsBlockAndEnvelope(t *testing.T) 
 	require.Equal(t, blockRoot, packet.Messages[0].SigningRoot)
 	require.Equal(t, envelopeRoot, packet.Messages[1].SigningRoot)
 	require.NotEqual(t, blockRoot, envelopeRoot)
+}
+
+// The builder operator warns if the reveal window closes with the envelope unsettled, its signature having
+// reached no quorum, and stays quiet once it settles.
+func TestProposerRunnerWatchEnvelopeReveal(t *testing.T) {
+	t.Parallel()
+
+	const slot = phase0.Slot(8)
+	unrevealed := func(logs *observer.ObservedLogs) func() bool {
+		return func() bool { return logs.FilterMessageSnippet("self-built payload not revealed").Len() > 0 }
+	}
+
+	t.Run("unsettled", func(t *testing.T) {
+		t.Parallel()
+
+		runner, _, _ := newProposerRunnerForTest(t, newProposerTestBeacon(nil), &stubDoppelganger{canSign: true}, 0, gloasTestConfig(slot))
+		core, logs := observer.New(zapcore.WarnLevel)
+		runner.watchEnvelopeReveal(t.Context(), zap.New(core), slot, time.Now().Add(10*time.Millisecond))
+
+		require.Eventually(t, unrevealed(logs), time.Second, 5*time.Millisecond)
+	})
+
+	t.Run("settled", func(t *testing.T) {
+		t.Parallel()
+
+		runner, _, _ := newProposerRunnerForTest(t, newProposerTestBeacon(nil), &stubDoppelganger{canSign: true}, 0, gloasTestConfig(slot))
+		core, logs := observer.New(zapcore.WarnLevel)
+		runner.watchEnvelopeReveal(t.Context(), zap.New(core), slot, time.Now().Add(10*time.Millisecond))
+		runner.settleEnvelope()
+
+		require.Never(t, unrevealed(logs), 100*time.Millisecond, 5*time.Millisecond)
+		require.True(t, runner.gloasDuty.envelopeHandled)
+	})
+}
+
+// An operator whose signer can't sign the §6 envelope still broadcasts its block partial: the envelope entry is
+// optional, so its failure must not cost the block's (SIP #94 §4/§6). The remote signer's refusal is expected
+// and logged at debug, any other failure at warn.
+func TestProposerRunnerProcessConsensusGloasEnvelopeSigningFailureKeepsBlockPartial(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		err   error
+		level zapcore.Level
+	}{
+		{name: "remote signer refusal", err: ekm.ErrEnvelopeSigningUnsupported, level: zapcore.DebugLevel},
+		{name: "other failure", err: errors.New("signing failed"), level: zapcore.WarnLevel},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			const slot = phase0.Slot(8)
+			ctx := context.Background()
+			runner, keySet, network := newProposerRunnerForTest(t, newProposerTestBeacon(nil), &stubDoppelganger{canSign: true}, 0, gloasTestConfig(slot))
+			runner.signer = failingDomainSigner{BeaconSigner: runner.signer, domain: phase0.DomainType(spectypes.DomainBeaconBuilder), err: tt.err}
+			require.NoError(t, runner.StartNewDuty(ctx, zap.NewNop(), gloasProposerDuty(slot), keySet.Threshold))
+
+			core, logs := observer.New(zapcore.DebugLevel)
+			proposal, _ := gloasSelfBuildProposal(t, slot)
+			require.NoError(t, decideProposerDutyLogging(t, zap.New(core), runner, keySet, slot, gloasConsensusData(t, proposal)))
+
+			var packets []*spectypes.PartialSignatureMessages
+			for _, msg := range network.BroadcastedMsgs {
+				if msg.SSVMessage == nil || msg.SSVMessage.MsgType != spectypes.SSVPartialSignatureMsgType {
+					continue
+				}
+				decoded := &spectypes.PartialSignatureMessages{}
+				require.NoError(t, decoded.Decode(msg.SSVMessage.Data))
+				if decoded.Type == spectypes.PostConsensusPartialSig {
+					packets = append(packets, decoded)
+				}
+			}
+			require.Len(t, packets, 1)
+			require.Len(t, packets[0].Messages, 1, "the block partial alone")
+			blockRoot, _, err := runner.gloasPostConsensusSigningRoots(ctx, proposal)
+			require.NoError(t, err)
+			require.Equal(t, blockRoot, packets[0].Messages[0].SigningRoot)
+
+			logged := logs.FilterMessageSnippet("sending the block partial alone").All()
+			require.Len(t, logged, 1)
+			require.Equal(t, tt.level, logged[0].Level)
+		})
+	}
 }
 
 // Post-consensus partials are validated against the running duty's slot, not the decided value's own
@@ -1257,8 +1346,14 @@ func TestProposerRunnerStartNewDutyResetsGloasDutyState(t *testing.T) {
 // the decided value then goes through the runner's ValCheck, as every decided value does.
 func decideProposerDuty(t *testing.T, runner *ProposerRunner, keySet *spectestingutils.TestKeySet, height phase0.Slot, consensusData *spectypes.ProposerConsensusData) error {
 	t.Helper()
+	return decideProposerDutyLogging(t, zap.NewNop(), runner, keySet, height, consensusData)
+}
 
-	ctx, logger := t.Context(), zap.NewNop()
+// decideProposerDutyLogging is decideProposerDuty, logging to logger.
+func decideProposerDutyLogging(t *testing.T, logger *zap.Logger, runner *ProposerRunner, keySet *spectestingutils.TestKeySet, height phase0.Slot, consensusData *spectypes.ProposerConsensusData) error {
+	t.Helper()
+
+	ctx := t.Context()
 	runner.measurements.StartConsensus()
 	require.NoError(t, runner.decide(ctx, logger, height, consensusData, dummyValueChecker{}))
 	for _, msg := range spectestingutils.SSVDecidingMsgsForHeight(consensusData, runner.QBFTController.GetIdentifier(), specqbft.Height(height), keySet) {
