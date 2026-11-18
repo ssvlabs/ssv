@@ -125,6 +125,22 @@ func (i *Instance) validSignedPrepareForHeightRoundAndRootIgnoreSignature(
 		return spectypes.NewError(spectypes.SignerIsNotInCommitteeErrorCode, "signer not in committee")
 	}
 
+	if err := i.validIdentifier(msg); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// Addition to formal spec
+// validIdentifier refuses a message signed for another instance. Prepares and round changes are
+// also accepted nested as justifications, which the controller's identifier check never sees, and a
+// sibling instance at the same height (another role or validator of the same committee) shares this
+// instance's leader. Nodes sign with Identifier and MsgID both set to State.ID.
+func (i *Instance) validIdentifier(msg *specqbft.ProcessingMessage) error {
+	if !bytes.Equal(msg.QBFTMessage.Identifier, i.State.ID) || !bytes.Equal(msg.SignedMessage.SSVMessage.MsgID[:], i.State.ID) {
+		return spectypes.NewError(spectypes.MessageIdentifierInvalidErrorCode, "message doesn't belong to instance")
+	}
 	return nil
 }
 
