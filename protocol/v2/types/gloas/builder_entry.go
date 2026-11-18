@@ -16,6 +16,9 @@ import (
 // MaxRequestAuthDistinctRoots, the wire budget that config implies.
 const MaxBuilderEntries = 8
 
+// MaxBuilderAuthDataSize is builder-specs' MAX_BUILDER_AUTH_DATA_SIZE: the ByteList limit of BuilderRequestAuth.Data.
+const MaxBuilderAuthDataSize = 4096
+
 // MaxRequestAuthDistinctRoots bounds the distinct BuilderRequestAuth signing roots one signer may put
 // on the wire per proposal slot: at most one per configured entry (entries sharing auth_data share a
 // root), so the budget equals the entry cap. No headroom is provisioned — auth roots don't move with
@@ -107,7 +110,7 @@ func (c *BuilderConfig) EffectiveBoostFactor() uint64 {
 // Configured reports whether the operator set any direct-builder configuration — entries or the top-level
 // p2p knobs (MinBid / BuilderBoostFactor); the zero value is false. Either way §4 produces over the
 // produceBlockV4 POST — this resolved config when true, a neutral local-build config when false — so a
-// knobs-only config is honored, and clearing entries for a remote signer keeps the p2p knobs.
+// knobs-only config is honored.
 func (c *BuilderConfig) Configured() bool {
 	return len(c.Entries) > 0 || c.MinBid != 0 || c.BuilderBoostFactor != nil
 }

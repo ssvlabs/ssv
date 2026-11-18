@@ -9,11 +9,11 @@ import (
 	specgloas "github.com/ssvlabs/ssv-spec/types/gloas"
 )
 
-// The Gloas beacon-chain types are sourced from go-eth2-client's spec/gloas — the canonical,
-// fork-maintained Ethereum types (progressive-SSZ correct) — rather than hand-rolled here, and the
-// SSV wire types shared with other implementations (the §2 consensus value and the §6 blinded
+// The Gloas beacon-chain and builder-API types are sourced from go-eth2-client's spec/gloas — the
+// canonical, fork-maintained Ethereum types (progressive-SSZ correct) — rather than hand-rolled here, and
+// the SSV wire types shared with other implementations (the §2 consensus value and the §6 blinded
 // envelope) from ssv-spec. Only the §4 consensus value (GloasProposalData) and the SSV-node types
-// (BuilderConfig, PTCDuty, BuilderRequestAuth, ...) live in this package.
+// (BuilderConfig, PTCDuty, ...) live in this package.
 type (
 	BeaconBlock                    = eth2gloas.BeaconBlock
 	BeaconBlockBody                = eth2gloas.BeaconBlockBody
@@ -32,6 +32,15 @@ type (
 	ProposerPreferences            = eth2gloas.ProposerPreferences
 	SignedProposerPreferences      = eth2gloas.SignedProposerPreferences
 	BuilderIndex                   = eth2gloas.BuilderIndex
+
+	// BuilderRequestAuth is builder-specs' request-authentication message: Data is the opaque per-builder
+	// token agreed out of band (see DefaultAuthData), and Slot the proposal slot the request is authorized
+	// for. One signed auth covers both builder channels (getExecutionPayloadBid and
+	// submitBuilderPreferences). It's signed under DomainBuilderRequestAuth, a genesis-style domain.
+	BuilderRequestAuth = eth2gloas.BuilderRequestAuth
+	// SignedBuilderRequestAuth is a BuilderRequestAuth with the validator's signature, carried in
+	// builder-API request bodies and forwarded unchanged by every hop.
+	SignedBuilderRequestAuth = eth2gloas.SignedBuilderRequestAuth
 
 	// GloasBeaconVote is the committee runner's consensus value on Gloas slots (SIP #94 §2): the
 	// Gloas-only spec's BeaconVote, which carries the BN-supplied payload-status AttestationData.Index in

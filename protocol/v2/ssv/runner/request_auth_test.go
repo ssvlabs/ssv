@@ -184,9 +184,8 @@ func TestProposerPreferencesRunner_requestAuthConvergence(t *testing.T) {
 	require.False(t, IsRetryable(err))
 }
 
-// A node without builders (never configured, or disabled for a remote signer) never freezes auth
-// roots, so peer auth partials for a started duty must fail hard — retrying cannot help. Only a
-// partial racing the duty start stays retryable.
+// A node without builders never freezes auth roots, so peer auth partials for a started duty must
+// fail hard — retrying cannot help. Only a partial racing the duty start stays retryable.
 func TestProposerPreferencesRunner_requestAuthWithoutBuilders(t *testing.T) {
 	keySet := spectestingutils.Testing4SharesSet()
 	share := spectestingutils.TestingShare(keySet, spectestingutils.TestingValidatorIndex)

@@ -16,7 +16,8 @@ The tests validate that each database correctly prevents slashable operations in
 
 ## Test Environment
 
-- **Web3Signer 25.11.0** with PostgreSQL slashing protection database
+- **Web3Signer 26.10.2** with PostgreSQL slashing protection database
+- **Gloas fork** scheduled at `testenv.GloasForkEpoch` in both the test beacon config and Web3Signer (`--Xnetwork-gloas-fork-epoch`), since mainnet hasn't scheduled it; only suites that move the clock past it run on Gloas
 - **TLS Security**: Mandatory HTTPS with self-signed certificates
 - **Docker containers** managed via testcontainers-go
 
@@ -27,7 +28,7 @@ The E2E tests use **mandatory TLS** for all connections:
 - **SSV-Signer**: TLS client with certificate fingerprint verification
 - **Certificates**: Auto-generated for each test run
 
-> **Note**: Database migrations in `testdata/migrations/` are copied from Web3Signer. When upgrading Web3Signer versions, check for new migrations at: https://github.com/Consensys/web3signer/tree/25.11.0/slashing-protection/src/main/resources/migrations/postgresql
+> **Note**: Database migrations in `testdata/migrations/` are copied from Web3Signer. When upgrading Web3Signer versions, check for new migrations at: https://github.com/Consensys/web3signer/tree/26.10.2/slashing-protection/src/main/resources/migrations/postgresql
 
 ## Test Structure
 
@@ -38,6 +39,7 @@ e2e/
 ├── signing/                    # Test implementations
 │   ├── attestation_test.go     # Attestation slashing tests
 │   ├── proposer_test.go        # Block proposal slashing tests
+│   ├── gloas_test.go           # Gloas (ePBS) signing consistency tests
 │   └── ...                     # More tests to be implemented
 ├── testenv/                    # Container & environment management
 └── testdata/migrations/        # Web3Signer DB migrations
@@ -58,6 +60,12 @@ e2e/
 - Valid progression testing
 - Concurrent signing safety
 - Container restart persistence
+
+### Gloas Signing (`TestGloasSigning`)
+- Local and remote signers agree at a Gloas slot on the block, aggregate, payload attestation, proposer preferences and builder request auth, and on the older requests the node still sends there: attestation (with a payload-status index), randao reveal, aggregation slot, sync committee message, selection proof and contribution
+- They also agree on a pre-Gloas aggregate, which stays on the legacy request type
+- Web3Signer refuses a signing root that doesn't match the request's data, which is what makes those matches meaningful
+- The remote signer refuses the self-built execution-payload envelope
 
 ## Running Tests
 
@@ -88,6 +96,7 @@ docker build -f ssvsigner/Dockerfile -t ssv-signer:latest .
 go test ./signing/                                   # All tests
 go test ./signing/ -run TestAttestationSlashing      # Attestation tests only
 go test ./signing/ -run TestBlockSlashing            # Proposer tests only
+go test ./signing/ -run TestGloasSigning             # Gloas tests only
 ```
 
 ## Key Features

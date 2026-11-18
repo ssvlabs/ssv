@@ -7,8 +7,11 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/capella"
 	"github.com/attestantio/go-eth2-client/spec/deneb"
 	"github.com/attestantio/go-eth2-client/spec/electra"
+	"github.com/attestantio/go-eth2-client/spec/gloas"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/holiman/uint256"
+
+	"github.com/ssvlabs/ssv/ssvsigner/internal/beacontest"
 )
 
 // NewTestAttestationData creates a standard test attestation with the given epochs and slot
@@ -62,5 +65,61 @@ func NewTestBlock(slot phase0.Slot, proposerIndex phase0.ValidatorIndex) *electr
 			BlobKZGCommitments:    []deneb.KZGCommitment{},
 			ExecutionRequests:     &electra.ExecutionRequests{},
 		},
+	}
+}
+
+// NewTestElectraAggregateAndProof creates an Electra aggregate of one attester in committee 0
+func NewTestElectraAggregateAndProof(data *phase0.AttestationData, aggregatorIndex phase0.ValidatorIndex) *electra.AggregateAndProof {
+	aggregationBits := bitfield.NewBitlist(8)
+	aggregationBits.SetBitAt(0, true)
+	committeeBits := bitfield.NewBitvector64()
+	committeeBits.SetBitAt(0, true)
+
+	return &electra.AggregateAndProof{
+		AggregatorIndex: aggregatorIndex,
+		Aggregate: &electra.Attestation{
+			AggregationBits: aggregationBits,
+			Data:            data,
+			Signature:       beacontest.InfinitySignature,
+			CommitteeBits:   committeeBits,
+		},
+		SelectionProof: beacontest.InfinitySignature,
+	}
+}
+
+// NewTestGloasAggregateAndProof creates a Gloas aggregate of one attester in committee 0
+func NewTestGloasAggregateAndProof(data *phase0.AttestationData, aggregatorIndex phase0.ValidatorIndex) *gloas.AggregateAndProof {
+	aggregationBits := bitfield.NewBitlist(8)
+	aggregationBits.SetBitAt(0, true)
+	committeeBits := bitfield.NewBitvector64()
+	committeeBits.SetBitAt(0, true)
+
+	return &gloas.AggregateAndProof{
+		AggregatorIndex: aggregatorIndex,
+		Aggregate: &gloas.Attestation{
+			AggregationBits: aggregationBits,
+			Data:            data,
+			Signature:       beacontest.InfinitySignature,
+			CommitteeBits:   committeeBits,
+		},
+		SelectionProof: beacontest.InfinitySignature,
+	}
+}
+
+// NewTestContributionAndProof creates a sync committee contribution of one member of the subcommittee
+func NewTestContributionAndProof(slot phase0.Slot, subcommitteeIndex uint64, aggregatorIndex phase0.ValidatorIndex) *altair.ContributionAndProof {
+	aggregationBits := bitfield.NewBitvector128()
+	aggregationBits.SetBitAt(0, true)
+
+	return &altair.ContributionAndProof{
+		AggregatorIndex: aggregatorIndex,
+		Contribution: &altair.SyncCommitteeContribution{
+			Slot:              slot,
+			BeaconBlockRoot:   phase0.Root{0x01},
+			SubcommitteeIndex: subcommitteeIndex,
+			AggregationBits:   aggregationBits,
+			Signature:         beacontest.InfinitySignature,
+		},
+		SelectionProof: beacontest.InfinitySignature,
 	}
 }

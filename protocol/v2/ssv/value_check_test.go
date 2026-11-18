@@ -366,10 +366,3 @@ func TestProposerChecker_GloasVersionMismatch(t *testing.T) {
 		require.ErrorContains(t, checker.CheckValue(value), "does not match slot fork", "version %d", version)
 	}
 }
-
-// ekm.GloasDataVersion is a hand-kept mirror of networkconfig.DataVersionGloas (the ssvsigner module has
-// its own go.mod and can't import networkconfig). If they drift, the remote signer resolves the wrong
-// fork/domain on Gloas slots, so guard the mirror here on the node side, where both are importable.
-func TestGloasDataVersionMirror(t *testing.T) {
-	require.Equal(t, networkconfig.DataVersionGloas, ekm.GloasDataVersion)
-}

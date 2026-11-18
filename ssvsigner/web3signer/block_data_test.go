@@ -1,12 +1,14 @@
 package web3signer
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ssvlabs/ssv/ssvsigner/internal/beacontest"
 	"github.com/ssvlabs/ssv/ssvsigner/internal/ssvtestingutils"
 )
 
@@ -169,6 +171,37 @@ func TestConvertBlockToBeaconBlockData(t *testing.T) {
 		expectedBodyRoot, err := block.Body.HashTreeRoot()
 		require.NoError(t, err)
 		require.Equal(t, expectedBodyRoot, [32]byte(result.BlockHeader.BodyRoot))
+	})
+
+	t.Run("Gloas BeaconBlock", func(t *testing.T) {
+		dataVersion := spec.DataVersionGloas
+		block := beacontest.GloasBlock(123, 1)
+		result, err := ConvertBlockToBeaconBlockData(block, dataVersion)
+
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		require.Equal(t, DataVersion(dataVersion), result.Version)
+
+		// Compare header fields
+		require.Equal(t, block.Slot, result.BlockHeader.Slot)
+		require.Equal(t, block.ProposerIndex, result.BlockHeader.ProposerIndex)
+		require.Equal(t, block.ParentRoot, result.BlockHeader.ParentRoot)
+		require.Equal(t, block.StateRoot, result.BlockHeader.StateRoot)
+
+		expectedBodyRoot, err := block.Body.HashTreeRoot()
+		require.NoError(t, err)
+		require.Equal(t, expectedBodyRoot, [32]byte(result.BlockHeader.BodyRoot))
+
+		// BLOCK_V2 sends only the header, so signing it is sound only if its root is the block's.
+		blockRoot, err := block.HashTreeRoot()
+		require.NoError(t, err)
+		headerRoot, err := result.BlockHeader.HashTreeRoot()
+		require.NoError(t, err)
+		require.Equal(t, blockRoot, headerRoot)
+
+		encoded, err := json.Marshal(result)
+		require.NoError(t, err)
+		require.Contains(t, string(encoded), `"version":"GLOAS"`)
 	})
 
 	t.Run("Unknown block type", func(t *testing.T) {

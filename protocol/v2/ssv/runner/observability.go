@@ -143,6 +143,12 @@ var (
 			metric.WithUnit("{publish}"),
 			metric.WithDescription("Gloas execution-payload envelope publishes by the builder operator (SIP #94 §6), by outcome")))
 
+	envelopeRevealMissCounter = metrics.New(
+		meter.Int64Counter(
+			observability.InstrumentName(observabilityNamespace, "envelope.reveal_misses"),
+			metric.WithUnit("{envelope}"),
+			metric.WithDescription("self-built Gloas payloads the builder operator couldn't reveal: the envelope signature reached no quorum before the slot ended")))
+
 	requestAuthReconstructionCounter = metrics.New(
 		meter.Int64Counter(
 			observability.InstrumentName(observabilityNamespace, "request_auth.reconstructions"),
@@ -220,6 +226,12 @@ func recordEnvelopeBuildMatch(ctx context.Context, self bool) {
 // reveal that fails after the block landed is its own signal.
 func recordEnvelopePublish(ctx context.Context, success bool) {
 	envelopePublishCounter.Add(ctx, 1, metric.WithAttributes(observability.SubmitOutcomeAttribute(success)))
+}
+
+// recordEnvelopeRevealMiss counts a self-built payload the builder operator couldn't reveal, its envelope
+// signature having reached no quorum before the slot ended (watchEnvelopeReveal).
+func recordEnvelopeRevealMiss(ctx context.Context) {
+	envelopeRevealMissCounter.Add(ctx, 1)
 }
 
 // recordRequestAuthReconstruction counts a threshold-reconstructed request-auth signing root

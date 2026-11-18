@@ -139,7 +139,7 @@ func (env *TestEnvironment) startWeb3Signer() error {
 
 	web3SignerReq := testcontainers.GenericContainerRequest{
 		ContainerRequest: testcontainers.ContainerRequest{
-			Image:        "consensys/web3signer:25.11.0",
+			Image:        "consensys/web3signer:26.10.2",
 			ExposedPorts: []string{"9000/tcp"},
 			Networks:     []string{env.networkName},
 			NetworkAliases: map[string][]string{
@@ -161,6 +161,7 @@ func (env *TestEnvironment) startWeb3Signer() error {
 				"--tls-known-clients-file=/certs/web3signer_known_clients.txt",
 				"eth2",
 				"--network=mainnet",
+				fmt.Sprintf("--Xnetwork-gloas-fork-epoch=%d", GloasForkEpoch),
 				"--slashing-protection-enabled=true",
 				fmt.Sprintf("--slashing-protection-db-url=jdbc:postgresql://postgres:5432/%s", postgresDB),
 				fmt.Sprintf("--slashing-protection-db-username=%s", postgresUser),

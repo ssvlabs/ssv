@@ -24,6 +24,10 @@ import (
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
 )
 
+// ErrEnvelopeSigningUnsupported is the remote signer's refusal to sign a self-built execution-payload
+// envelope, which it never can (see prepareSignRequest).
+var ErrEnvelopeSigningUnsupported = errors.New("execution payload envelope signing is not supported by the remote signer: operators sign the blinded envelope, while Web3Signer needs the full execution payload, which only the operator that built it holds")
+
 // RemoteKeyManager implements KeyManager by delegating signing operations to
 // a remote signing service (via signerClient). Validator shares are
 // registered or removed on the remote side, while minimal slashing protection
@@ -256,9 +260,15 @@ func (km *RemoteKeyManager) prepareSignRequest(
 	signatureDomain phase0.DomainType,
 ) (web3signer.SignRequest, phase0.Root, error) {
 	epoch := km.beaconConfig.EstimatedEpochAtSlot(slot)
+	// fork_info and the fork-versioned request bodies (BLOCK_V2 and the Gloas ones) carry the fork at the
+	// slot (see GetForkInfo).
+	version, fork := km.beaconConfig.ForkAtEpoch(epoch)
 
 	req := web3signer.SignRequest{
-		ForkInfo: km.GetForkInfo(epoch),
+		ForkInfo: web3signer.ForkInfo{
+			Fork:                  fork,
+			GenesisValidatorsRoot: km.genesisRoot,
+		},
 	}
 
 	switch signatureDomain {
@@ -280,7 +290,7 @@ func (km *RemoteKeyManager) prepareSignRequest(
 		val.Lock()
 		defer val.Unlock()
 
-		block, err := km.handleDomainProposer(obj, slot, sharePubkey)
+		block, err := km.handleDomainProposer(obj, version, sharePubkey)
 		if err != nil {
 			return web3signer.SignRequest{}, phase0.Root{}, err
 		}
@@ -307,8 +317,6 @@ func (km *RemoteKeyManager) prepareSignRequest(
 		req.VoluntaryExit = data
 
 	case spectypes.DomainAggregateAndProof:
-		req.Type = web3signer.TypeAggregateAndProof
-
 		switch v := obj.(type) {
 		case *phase0.AggregateAndProof:
 			req.AggregateAndProof = &web3signer.AggregateAndProof{
@@ -319,14 +327,13 @@ func (km *RemoteKeyManager) prepareSignRequest(
 				Electra: v,
 			}
 		case *eth2gloas.AggregateAndProof:
-			// Web3Signer has no Gloas aggregate type, and its Electra-shaped request would sign the Electra
-			// root, which differs from the Gloas one. Bounded like the other Gloas domains: the cluster
-			// reconstructs while ≤ f operators are remote-signing, but those must sign this duty locally.
-			// TODO(gloas): route Gloas aggregate signing through Web3Signer once it adds the type (#3000).
-			return web3signer.SignRequest{}, phase0.Root{}, errors.New("gloas aggregate and proof signing is not supported by the remote signer: Web3Signer has no Gloas aggregate-and-proof type, use local signing for aggregator duties on Gloas")
+			req.AggregateAndProof = &web3signer.AggregateAndProof{
+				Gloas: v,
+			}
 		default:
 			return web3signer.SignRequest{}, phase0.Root{}, fmt.Errorf("obj type is unknown: %T", obj)
 		}
+		req.Type = req.AggregateAndProof.RequestType()
 
 	case spectypes.DomainSelectionProof:
 		data, ok := obj.(spectypes.SSZUint64)
@@ -400,7 +407,7 @@ func (km *RemoteKeyManager) prepareSignRequest(
 		// The application-builder domain is fixed to the genesis fork, independent of the
 		// current fork. Pin it to match the signing_root computed below, mirroring the
 		// voluntary-exit case (a no-op for a correct signer, which derives the domain itself).
-		forkInfo, err := km.validatorRegistrationForkInfo()
+		forkInfo, err := km.genesisDomainForkInfo()
 		if err != nil {
 			return web3signer.SignRequest{}, phase0.Root{}, err
 		}
@@ -408,32 +415,58 @@ func (km *RemoteKeyManager) prepareSignRequest(
 
 		req.Type = web3signer.TypeValidatorRegistration
 		req.ValidatorRegistration = data
+
 	case spectypes.DomainPTCAttester:
-		// Gloas (ePBS) PTC payload attestations have no Web3Signer request type, so a remote-signing
-		// operator can't participate in PTC. Bounded — the cluster reconstructs while ≤ f operators
-		// are remote-signing — but those operators must sign PTC-assigned validators locally.
-		// TODO(gloas): route PTC signing through Web3Signer once it adds a payload-attestation type (#3000).
-		return web3signer.SignRequest{}, phase0.Root{}, errors.New("payload attestation signing is not supported by the remote signer: Web3Signer has no payload-attestation type, use local signing for PTC-assigned validators")
+		data, ok := obj.(*eth2gloas.PayloadAttestationData)
+		if !ok {
+			return web3signer.SignRequest{}, phase0.Root{}, errors.New("could not cast obj to PayloadAttestationData")
+		}
+
+		req.Type = web3signer.TypePayloadAttestationMessage
+		req.PayloadAttestationMessage = &web3signer.VersionedRequest[*eth2gloas.PayloadAttestationData]{
+			Version: web3signer.DataVersion(version),
+			Data:    data,
+		}
+
 	case spectypes.DomainProposerPreferences:
-		// Gloas (ePBS) proposer preferences have no Web3Signer request type, so a remote-signing
-		// operator can't sign them — note this replaces the Web3Signer-supported ValidatorRegistration
-		// at the Gloas fork. Bounded (cluster reconstructs while ≤ f operators are remote-signing), but
-		// those operators must sign locally.
-		// TODO(gloas): route proposer-preferences signing through Web3Signer once it adds the type (#3000).
-		return web3signer.SignRequest{}, phase0.Root{}, errors.New("proposer preferences signing is not supported by the remote signer: Web3Signer has no proposer-preferences type, use local signing")
+		data, ok := obj.(*eth2gloas.ProposerPreferences)
+		if !ok {
+			return web3signer.SignRequest{}, phase0.Root{}, errors.New("could not cast obj to ProposerPreferences")
+		}
+
+		req.Type = web3signer.TypeProposerPreferences
+		req.ProposerPreferences = &web3signer.VersionedRequest[*eth2gloas.ProposerPreferences]{
+			Version: web3signer.DataVersion(version),
+			Data:    data,
+		}
+
 	case spectypes.DomainBeaconBuilder:
-		// Gloas (ePBS) §6 execution-payload envelopes have no Web3Signer request type, so a remote-signing
-		// operator can't sign them. Bounded (the cluster reconstructs while ≤ f operators are remote-signing),
-		// but those operators must sign self-build envelopes locally.
-		// TODO(gloas): route envelope signing through Web3Signer once it adds an envelope type (#3000).
-		return web3signer.SignRequest{}, phase0.Root{}, errors.New("execution payload envelope signing is not supported by the remote signer: Web3Signer has no envelope type, use local signing for self-build envelopes")
+		// Web3Signer's EXECUTION_PAYLOAD_ENVELOPE request takes the full execution payload, but operators sign
+		// the blinded envelope, and only the one that built the payload holds it (SIP #94 §6). The cluster
+		// still reveals a self-built payload while at most f of its operators sign remotely.
+		// TODO(gloas): sign it once the remote-signing API takes the blinded envelope (#3000).
+		return web3signer.SignRequest{}, phase0.Root{}, ErrEnvelopeSigningUnsupported
+
 	case spectypes.DomainBuilderRequestAuth:
-		// The Gloas (ePBS) direct-builder request auth (builder-specs BuilderRequestAuth, SIP #94 §5) has no
-		// Web3Signer request type, so a remote-signing operator can't contribute auth partials. Bounded
-		// (the cluster reconstructs while ≤ f operators are remote-signing), but those operators must
-		// sign locally for the direct-builder overlay to keep its full fault tolerance.
-		// TODO(gloas): route request-auth signing through Web3Signer once it adds the type (#3000).
-		return web3signer.SignRequest{}, phase0.Root{}, errors.New("request auth signing is not supported by the remote signer: Web3Signer has no request-auth type, use local signing for the direct-builder overlay")
+		data, ok := obj.(*eth2gloas.BuilderRequestAuth)
+		if !ok {
+			return web3signer.SignRequest{}, phase0.Root{}, errors.New("could not cast obj to BuilderRequestAuth")
+		}
+
+		// Genesis-style like the application-builder domain (genesis fork version, zero genesis validators
+		// root), so Web3Signer needs no fork_info; pin it anyway to match the signing_root computed below.
+		forkInfo, err := km.genesisDomainForkInfo()
+		if err != nil {
+			return web3signer.SignRequest{}, phase0.Root{}, err
+		}
+		req.ForkInfo = forkInfo
+
+		req.Type = web3signer.TypeBuilderRequestAuth
+		req.BuilderRequestAuth = &web3signer.VersionedRequest[*eth2gloas.BuilderRequestAuth]{
+			Version: web3signer.DataVersion(version),
+			Data:    data,
+		}
+
 	default:
 		return web3signer.SignRequest{}, phase0.Root{}, errors.New("domain unknown")
 	}
@@ -476,11 +509,9 @@ func (km *RemoteKeyManager) handleDomainAttester(
 
 func (km *RemoteKeyManager) handleDomainProposer(
 	obj spectypes.HashRoot,
-	slot phase0.Slot,
+	version spec.DataVersion,
 	sharePubkey phase0.BLSPubKey,
 ) (*web3signer.BeaconBlockData, error) {
-	epoch := km.beaconConfig.EstimatedEpochAtSlot(slot)
-	version, _ := km.beaconConfig.ForkAtEpoch(epoch)
 	ret, err := web3signer.ConvertBlockToBeaconBlockData(obj, version)
 	if err != nil {
 		return nil, err
@@ -503,21 +534,13 @@ func (km *RemoteKeyManager) handleDomainProposer(
 	return ret, nil
 }
 
-// GloasDataVersion mirrors networkconfig.DataVersionGloas — the ssvsigner module has its own go.mod and
-// can't import the node-side name, so a node-side test asserts the two stay equal. Both are
-// go-eth2-client's spec.DataVersionGloas.
-const GloasDataVersion = spec.DataVersionGloas
-
 // GetForkInfo returns the ForkInfo for the epoch's active fork, Gloas included. Web3Signer derives the
 // signing domain from it, so a Gloas epoch must carry the Gloas fork.
 //
-// That suffices even against a Web3Signer without Gloas support: its domain derivation is generic over
-// the version bytes (BeaconStateAccessors.getDomain hands fork.current_version to
-// MiscHelpers.computeDomain, which only hashes it into a ForkData root; no milestone enum is consulted),
-// and its AttestationData schema has no post-Electra index == 0 check, so the §2 payload-status index
-// survives into the signing root. Established from the Web3Signer/Teku sources rather than a live
-// instance. What stays unsupported on Gloas are the duties Web3Signer has no request type for (the new
-// domains, the Gloas aggregate) and the Gloas block, which its BLOCK_V2 milestone enum rejects.
+// The Gloas requests (block, aggregate, PTC, proposer preferences, request auth) need Web3Signer 26.9.0+
+// with the network's Gloas fork in its schedule. Per the Web3Signer and Teku sources, the older request
+// types keep working on Gloas even with an older Web3Signer: it only hashes the fork version into the
+// domain, and its AttestationData schema keeps the §2 payload-status index.
 func (km *RemoteKeyManager) GetForkInfo(epoch phase0.Epoch) web3signer.ForkInfo {
 	_, currentFork := km.beaconConfig.ForkAtEpoch(epoch)
 
@@ -541,10 +564,9 @@ func (km *RemoteKeyManager) voluntaryExitForkInfo() (web3signer.ForkInfo, error)
 	}, nil
 }
 
-// validatorRegistrationForkInfo returns ForkInfo pinned to the genesis fork and an empty
-// genesis validators root, matching the fixed application-builder domain. See the
-// DomainApplicationBuilder case in prepareSignRequest.
-func (km *RemoteKeyManager) validatorRegistrationForkInfo() (web3signer.ForkInfo, error) {
+// genesisDomainForkInfo returns ForkInfo pinned to the genesis fork and an empty genesis validators root,
+// matching the genesis-style builder domains (application builder, builder request auth).
+func (km *RemoteKeyManager) genesisDomainForkInfo() (web3signer.ForkInfo, error) {
 	genesisFork, ok := km.beaconConfig.ForkAtVersion(spec.DataVersionPhase0)
 	if !ok {
 		return web3signer.ForkInfo{}, errors.New("genesis fork not configured")

@@ -11,6 +11,7 @@ import (
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/altair"
+	"github.com/attestantio/go-eth2-client/spec/gloas"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/carlmjohnson/requests"
 )
@@ -119,7 +120,7 @@ func (w3s *Web3Signer) DeleteKeystore(ctx context.Context, req DeleteKeystoreReq
 
 type SignRequest struct {
 	ForkInfo                    ForkInfo                          `json:"fork_info"`
-	SigningRoot                 phase0.Root                       `json:"signing_root,omitempty"`
+	SigningRoot                 phase0.Root                       `json:"signing_root"`
 	Type                        SignedObjectType                  `json:"type"`
 	Attestation                 *phase0.AttestationData           `json:"attestation,omitempty"`
 	BeaconBlock                 *BeaconBlockData                  `json:"beacon_block,omitempty"`
@@ -131,6 +132,10 @@ type SignRequest struct {
 	SyncAggregatorSelectionData *SyncCommitteeAggregatorSelection `json:"sync_aggregator_selection_data,omitempty"`
 	ContributionAndProof        *altair.ContributionAndProof      `json:"contribution_and_proof,omitempty"`
 	ValidatorRegistration       *v1.ValidatorRegistration         `json:"validator_registration,omitempty"`
+
+	PayloadAttestationMessage *VersionedRequest[*gloas.PayloadAttestationData] `json:"payload_attestation_message,omitempty"`
+	ProposerPreferences       *VersionedRequest[*gloas.ProposerPreferences]    `json:"proposer_preferences,omitempty"`
+	BuilderRequestAuth        *VersionedRequest[*gloas.BuilderRequestAuth]     `json:"builder_request_auth,omitempty"`
 }
 
 type SignResponse struct {

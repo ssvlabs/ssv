@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	bitfield "github.com/OffchainLabs/go-bitfield"
 	eth2api "github.com/attestantio/go-eth2-client/api/v1"
 	apiv1capella "github.com/attestantio/go-eth2-client/api/v1/capella"
 	apiv1deneb "github.com/attestantio/go-eth2-client/api/v1/deneb"
@@ -21,14 +22,17 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/capella"
 	"github.com/attestantio/go-eth2-client/spec/deneb"
 	"github.com/attestantio/go-eth2-client/spec/electra"
+	eth2gloas "github.com/attestantio/go-eth2-client/spec/gloas"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/holiman/uint256"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/ssvsigner"
+	"github.com/ssvlabs/ssv/ssvsigner/internal/beacontest"
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
 )
 
@@ -1656,7 +1660,7 @@ func (s *RemoteKeyManagerTestSuite) TestGetForkInfoUsesGloasForkOnGloasEpoch() {
 	cfg := testBeaconConfig()
 	const gloasEpoch = phase0.Epoch(7)
 	gloasVersion := phase0.Version{7, 0, 0, 0}
-	cfg.Forks[GloasDataVersion] = phase0.Fork{
+	cfg.Forks[spec.DataVersionGloas] = phase0.Fork{
 		Epoch:           gloasEpoch,
 		PreviousVersion: phase0.Version{6, 0, 0, 0},
 		CurrentVersion:  gloasVersion,
@@ -1667,7 +1671,7 @@ func (s *RemoteKeyManagerTestSuite) TestGetForkInfoUsesGloasForkOnGloasEpoch() {
 	s.Require().NotNil(gloasFI.Fork)
 	s.Equal(gloasVersion, gloasFI.Fork.CurrentVersion)
 	version, gloasFork := cfg.ForkAtEpoch(gloasEpoch) // ForkAtEpoch resolves the scheduled Gloas fork itself
-	s.Equal(GloasDataVersion, version)
+	s.Equal(spec.DataVersionGloas, version)
 	s.Equal(*gloasFork, *gloasFI.Fork)
 	s.Equal(cfg.GenesisValidatorsRoot, gloasFI.GenesisValidatorsRoot)
 
@@ -1675,6 +1679,194 @@ func (s *RemoteKeyManagerTestSuite) TestGetForkInfoUsesGloasForkOnGloasEpoch() {
 	fuluFI := rm.GetForkInfo(6)
 	s.Require().NotNil(fuluFI.Fork)
 	s.Equal(phase0.Version{6, 0, 0, 0}, fuluFI.Fork.CurrentVersion)
+}
+
+func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectGloasDomains() {
+	ctx := s.T().Context()
+
+	// testBeaconConfig tops out at Fulu (epoch 6); schedule Gloas after it.
+	cfg := testBeaconConfig()
+	const gloasEpoch = phase0.Epoch(7)
+	gloasFork := phase0.Fork{
+		Epoch:           gloasEpoch,
+		PreviousVersion: phase0.Version{6, 0, 0, 0},
+		CurrentVersion:  phase0.Version{7, 0, 0, 0},
+	}
+	cfg.Forks[spec.DataVersionGloas] = gloasFork
+	gloasSlot := phase0.Slot(uint64(gloasEpoch) * cfg.SlotsPerEpoch)
+
+	mockSlashingProtector := &MockSlashingProtector{}
+	rm := &RemoteKeyManager{
+		logger:            s.logger,
+		beaconConfig:      cfg,
+		genesisRoot:       cfg.GenesisValidatorsRoot,
+		signerClient:      s.client,
+		getOperatorId:     func() spectypes.OperatorID { return 1 },
+		operatorPubKey:    &MockOperatorPublicKey{},
+		slashingProtector: mockSlashingProtector,
+		signLocks:         map[signKey]*sync.RWMutex{},
+	}
+
+	pubKey := phase0.BLSPubKey{1, 2, 3}
+	domain := phase0.Domain{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32}
+	expectedSignature := phase0.BLSSignature{5, 6, 7}
+	gloasVersion := web3signer.DataVersion(spec.DataVersionGloas)
+
+	// sign signs obj and returns the request the remote signer got, after checking that the returned and
+	// sent signing roots are obj's under its domain.
+	sign := func(obj spectypes.HashRoot, signatureDomain phase0.DomainType, slot phase0.Slot) web3signer.SignRequest {
+		var captured web3signer.SignRequest
+		s.client.On("Sign", mock.Anything, pubKey, mock.Anything).
+			Run(func(args mock.Arguments) {
+				captured = args.Get(2).(web3signer.SignRequest)
+			}).
+			Return(expectedSignature, nil).Once()
+
+		signature, root, err := rm.SignBeaconObject(ctx, obj, domain, pubKey, slot, signatureDomain)
+		s.Require().NoError(err)
+		s.EqualValues(expectedSignature[:], signature)
+
+		wantRoot, err := spectypes.ComputeETHSigningRoot(obj, domain)
+		s.Require().NoError(err)
+		s.Equal(wantRoot, root)
+		s.Equal(wantRoot, captured.SigningRoot)
+		s.client.AssertExpectations(s.T())
+		return captured
+	}
+
+	requireGloasForkInfo := func(req web3signer.SignRequest) {
+		s.Require().NotNil(req.ForkInfo.Fork)
+		s.Equal(gloasFork, *req.ForkInfo.Fork)
+		s.Equal(cfg.GenesisValidatorsRoot, req.ForkInfo.GenesisValidatorsRoot)
+	}
+
+	s.Run("BeaconBlock", func() {
+		block := beacontest.GloasBlock(gloasSlot, 1)
+		mockSlashingProtector.On("IsBeaconBlockSlashable", pubKey, gloasSlot).Return(nil).Once()
+		mockSlashingProtector.On("UpdateHighestProposal", pubKey, gloasSlot).Return(nil).Once()
+
+		req := sign(block, spectypes.DomainProposer, gloasSlot)
+
+		s.Equal(web3signer.TypeBlockV2, req.Type)
+		s.Require().NotNil(req.BeaconBlock)
+		s.Equal(gloasVersion, req.BeaconBlock.Version)
+		blockRoot, err := block.HashTreeRoot()
+		s.Require().NoError(err)
+		headerRoot, err := req.BeaconBlock.BlockHeader.HashTreeRoot()
+		s.Require().NoError(err)
+		s.Equal(blockRoot, headerRoot)
+		requireGloasForkInfo(req)
+		mockSlashingProtector.AssertExpectations(s.T())
+	})
+
+	s.Run("AggregateAndProof", func() {
+		aggregate := testingutils.TestingGloasAggregateAndProofV(5, spec.DataVersionGloas)
+
+		req := sign(aggregate, spectypes.DomainAggregateAndProof, gloasSlot)
+
+		s.Equal(web3signer.TypeAggregateAndProofV2, req.Type)
+		s.Require().NotNil(req.AggregateAndProof)
+		s.Same(aggregate, req.AggregateAndProof.Gloas)
+		s.Nil(req.AggregateAndProof.Phase0)
+		s.Nil(req.AggregateAndProof.Electra)
+		requireGloasForkInfo(req)
+	})
+
+	s.Run("ElectraAggregateAndProofStaysLegacy", func() {
+		aggregate := &electra.AggregateAndProof{
+			AggregatorIndex: 5,
+			Aggregate: &electra.Attestation{
+				AggregationBits: bitfield.NewBitlist(8),
+				Data: &phase0.AttestationData{
+					Source: &phase0.Checkpoint{},
+					Target: &phase0.Checkpoint{},
+				},
+				CommitteeBits: bitfield.NewBitvector64(),
+			},
+		}
+
+		req := sign(aggregate, spectypes.DomainAggregateAndProof, gloasSlot-1)
+
+		s.Equal(web3signer.TypeAggregateAndProof, req.Type)
+		s.Require().NotNil(req.AggregateAndProof)
+		s.Same(aggregate, req.AggregateAndProof.Electra)
+	})
+
+	s.Run("PayloadAttestation", func() {
+		data := &eth2gloas.PayloadAttestationData{
+			BeaconBlockRoot: phase0.Root{0x01},
+			Slot:            gloasSlot,
+			PayloadPresent:  true,
+		}
+
+		req := sign(data, spectypes.DomainPTCAttester, gloasSlot)
+
+		s.Equal(web3signer.TypePayloadAttestationMessage, req.Type)
+		s.Require().NotNil(req.PayloadAttestationMessage)
+		s.Equal(gloasVersion, req.PayloadAttestationMessage.Version)
+		s.Same(data, req.PayloadAttestationMessage.Data)
+		requireGloasForkInfo(req)
+	})
+
+	s.Run("ProposerPreferences", func() {
+		proposalSlot := gloasSlot + 3
+		data := &eth2gloas.ProposerPreferences{
+			DependentRoot:  phase0.Root{0x02},
+			ProposalSlot:   proposalSlot,
+			ValidatorIndex: 9,
+			FeeRecipient:   bellatrix.ExecutionAddress{0x03},
+			TargetGasLimit: 60_000_000,
+		}
+
+		req := sign(data, spectypes.DomainProposerPreferences, proposalSlot)
+
+		s.Equal(web3signer.TypeProposerPreferences, req.Type)
+		s.Require().NotNil(req.ProposerPreferences)
+		s.Equal(gloasVersion, req.ProposerPreferences.Version)
+		s.Same(data, req.ProposerPreferences.Data)
+		requireGloasForkInfo(req)
+	})
+
+	s.Run("BuilderRequestAuth", func() {
+		auth := &eth2gloas.BuilderRequestAuth{Data: []byte("builder.example"), Slot: gloasSlot + 1}
+
+		req := sign(auth, spectypes.DomainBuilderRequestAuth, gloasSlot+1)
+
+		s.Equal(web3signer.TypeBuilderRequestAuth, req.Type)
+		s.Require().NotNil(req.BuilderRequestAuth)
+		s.Equal(gloasVersion, req.BuilderRequestAuth.Version)
+		s.Same(auth, req.BuilderRequestAuth.Data)
+
+		// The request-auth domain is genesis-style, so fork_info is pinned to the genesis fork and a zero
+		// genesis validators root, like a validator registration's.
+		genesisFork, ok := cfg.ForkAtVersion(spec.DataVersionPhase0)
+		s.Require().True(ok)
+		s.Require().NotNil(req.ForkInfo.Fork)
+		s.Equal(genesisFork, *req.ForkInfo.Fork)
+		s.Equal(phase0.Root{}, req.ForkInfo.GenesisValidatorsRoot)
+	})
+
+	s.Run("ExecutionPayloadEnvelope", func() {
+		// Never reaches the remote signer: it can't sign the blinded envelope.
+		_, _, err := rm.SignBeaconObject(ctx, spectypes.SSZ32Bytes{0xee}, domain, pubKey, gloasSlot, spectypes.DomainBeaconBuilder)
+
+		s.ErrorIs(err, ErrEnvelopeSigningUnsupported)
+	})
+
+	s.Run("TypeCastErrors", func() {
+		tests := []struct {
+			domain phase0.DomainType
+			err    string
+		}{
+			{spectypes.DomainPTCAttester, "could not cast obj to PayloadAttestationData"},
+			{spectypes.DomainProposerPreferences, "could not cast obj to ProposerPreferences"},
+			{spectypes.DomainBuilderRequestAuth, "could not cast obj to BuilderRequestAuth"},
+		}
+		for _, tt := range tests {
+			_, _, err := rm.SignBeaconObject(ctx, &phase0.VoluntaryExit{}, domain, pubKey, gloasSlot, tt.domain)
+			s.ErrorContains(err, tt.err)
+		}
+	})
 }
 
 func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectMoreDomains() {

@@ -47,10 +47,9 @@ byte-identical `data`:
   identical too. They are sent on the `produceBlockV4` POST and honored by beacon nodes that implement it
   (beacon-APIs#630); against an older node the request falls back to GET, where only `BuilderBoostFactor`
   still applies (the GET's long-standing knob) — `MinBid` and the per-entry knobs are POST-only.
-- Remote-signing operators (Web3Signer) cannot produce request-auth partials — there is no request-auth
-  signing type there yet. A node with `Builders` entries set and a remote signer warns at startup and drops
-  its direct-builder **entries** (keeping the top-level p2p knobs); the cluster still reconstructs auths
-  while at most `f` operators are remote-signing.
+- Remote-signing operators sign request auths through Web3Signer's `BUILDER_REQUEST_AUTH` request, which
+  needs Web3Signer 26.9.0+ and an ssv-signer release with Gloas support. With older versions their auth
+  partials fail, and the cluster still reconstructs auths while at most `f` of its operators can't sign them.
 
 ### How it works
 

@@ -13,8 +13,7 @@ import (
 )
 
 // DataVersionGloas is the Gloas (ePBS) beacon data version — go-eth2-client's spec.DataVersionGloas,
-// re-exported under the node's name for its call sites and for the ssvsigner mirror (ekm.GloasDataVersion,
-// a separate module; a node-side test pins the two equal).
+// re-exported under the node's name for its call sites.
 const DataVersionGloas = spec.DataVersionGloas
 
 // Beacon defines beacon network configuration. It is fetched from the consensus client during the node runtime.
