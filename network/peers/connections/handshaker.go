@@ -49,13 +49,14 @@ type handshaker struct {
 
 	filters func() []HandshakeFilter
 
-	streams    streams.StreamController
-	nodeInfos  peers.NodeInfoIndex
-	peerInfos  peers.PeerInfoIndex
-	connIdx    peers.ConnectionIndex
-	subnetsIdx peers.SubnetsIndex
-	ids        identify.IDService
-	net        libp2pnetwork.Network
+	streams      streams.StreamController
+	nodeInfos    peers.NodeInfoIndex
+	peerInfos    peers.PeerInfoIndex
+	connIdx      peers.ConnectionIndex
+	subnetsIdx   peers.SubnetsIndex
+	peerStateIdx peers.PeerStateIndex
+	ids          identify.IDService
+	net          libp2pnetwork.Network
 
 	domainTypeProvider func() spectypes.DomainType
 	subnetsProvider    SubnetsProvider
@@ -69,6 +70,7 @@ type HandshakerCfg struct {
 	PeerInfos       peers.PeerInfoIndex
 	ConnIdx         peers.ConnectionIndex
 	SubnetsIdx      peers.SubnetsIndex
+	PeerStateIdx    peers.PeerStateIndex
 	IDService       identify.IDService
 	DomainTypeFn    func() spectypes.DomainType
 	SubnetsProvider SubnetsProvider
@@ -83,6 +85,7 @@ func NewHandshaker(ctx context.Context, logger *zap.Logger, cfg *HandshakerCfg, 
 		nodeInfos:          cfg.NodeInfos,
 		connIdx:            cfg.ConnIdx,
 		subnetsIdx:         cfg.SubnetsIdx,
+		peerStateIdx:       cfg.PeerStateIdx,
 		ids:                cfg.IDService,
 		filters:            filters,
 		peerInfos:          cfg.PeerInfos,
@@ -239,6 +242,9 @@ func (h *handshaker) updatePeerInfo(pid peer.ID, handshakeErr error) {
 		info.LastHandshake = time.Now()
 		info.LastHandshakeError = handshakeErr
 	})
+	if !h.connected(pid) {
+		h.peerStateIdx.RemovePeerState(pid)
+	}
 }
 
 // updateNodeSubnets tries to update the subnets of the given peer
@@ -257,6 +263,10 @@ func (h *handshaker) updateNodeSubnets(logger *zap.Logger, pid peer.ID, ni *reco
 			}
 		}
 	}
+}
+
+func (h *handshaker) connected(pid peer.ID) bool {
+	return h.net.Connectedness(pid) == libp2pnetwork.Connected
 }
 
 func (h *handshaker) requestNodeInfo(logger *zap.Logger, conn libp2pnetwork.Conn) (*records.NodeInfo, error) {

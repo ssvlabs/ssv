@@ -34,6 +34,7 @@ type connHandler struct {
 	subnetsIndex        peers.SubnetsIndex
 	connIdx             peers.ConnectionIndex
 	peerInfos           peers.PeerInfoIndex
+	peerStateIdx        peers.PeerStateIndex
 	discoveredPeersPool *ttl.Map[peer.ID, discovery.DiscoveredPeer]
 }
 
@@ -46,6 +47,7 @@ func NewConnHandler(
 	subnetsIndex peers.SubnetsIndex,
 	connIdx peers.ConnectionIndex,
 	peerInfos peers.PeerInfoIndex,
+	peerStateIdx peers.PeerStateIndex,
 	discoveredPeersPool *ttl.Map[peer.ID, discovery.DiscoveredPeer],
 ) ConnHandler {
 	return &connHandler{
@@ -56,6 +58,7 @@ func NewConnHandler(
 		subnetsIndex:        subnetsIndex,
 		connIdx:             connIdx,
 		peerInfos:           peerInfos,
+		peerStateIdx:        peerStateIdx,
 		discoveredPeersPool: discoveredPeersPool,
 	}
 }
@@ -181,6 +184,15 @@ func (ch *connHandler) Handle() *libp2pnetwork.NotifyBundle {
 
 			// Handle the connection (could be either incoming or outgoing) without blocking.
 			go func() {
+				pid := conn.RemotePeer()
+				defer func() {
+					// All goroutine writes precede this check. If connectedness changes later,
+					// DisconnectedF performs the same cleanup.
+					if net.Connectedness(pid) != libp2pnetwork.Connected {
+						ch.peerStateIdx.RemovePeerState(pid)
+					}
+				}()
+
 				logger := connLogger(conn)
 				err := acceptConnection(logger, net, conn)
 				if err == nil {
@@ -224,7 +236,8 @@ func (ch *connHandler) Handle() *libp2pnetwork.NotifyBundle {
 
 			recordDisconnected(ch.ctx, conn.Stat().Direction)
 
-			ch.peerInfos.SetState(conn.RemotePeer(), peers.StateDisconnected)
+			pid := conn.RemotePeer()
+			ch.peerStateIdx.RemovePeerState(pid)
 
 			logger := connLogger(conn)
 			logger.Debug("peer disconnected")

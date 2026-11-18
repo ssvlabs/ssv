@@ -3,6 +3,7 @@ package streams
 import (
 	"bytes"
 	"context"
+	crand "crypto/rand"
 	"errors"
 	"io"
 	"sync"
@@ -11,10 +12,13 @@ import (
 
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core"
+	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/stretchr/testify/require"
+
+	"github.com/ssvlabs/ssv/network/records"
 )
 
 type stubStream struct {
@@ -95,7 +99,7 @@ func TestStreamRejectsOversizedPayload(t *testing.T) {
 
 	timeout := time.Second
 	prot := protocol.ID("/protocol/oversized")
-	oversized := bytes.Repeat([]byte("x"), maxStreamMessageSize+1)
+	oversized := bytes.Repeat([]byte("x"), (8<<10)+1)
 
 	hosts[1].SetStreamHandler(prot, func(stream core.Stream) {
 		s := NewStream(stream)
@@ -122,7 +126,7 @@ func TestStreamAcceptsPayloadAtLimit(t *testing.T) {
 
 	timeout := time.Second
 	prot := protocol.ID("/protocol/limit")
-	atLimit := bytes.Repeat([]byte("x"), maxStreamMessageSize)
+	atLimit := bytes.Repeat([]byte("x"), 8<<10)
 
 	hosts[1].SetStreamHandler(prot, func(stream core.Stream) {
 		s := NewStream(stream)
@@ -141,8 +145,26 @@ func TestStreamAcceptsPayloadAtLimit(t *testing.T) {
 
 	byts, err := strm.ReadWithTimeout(timeout)
 	require.NoError(t, err)
-	require.Len(t, byts, maxStreamMessageSize)
+	require.Len(t, byts, 8<<10)
 	require.Equal(t, atLimit, byts)
+}
+
+func TestSealedNodeInfoFitsStreamLimit(t *testing.T) {
+	privateKey, _, err := crypto.GenerateSecp256k1Key(crand.Reader)
+	require.NoError(t, err)
+	nodeInfo := &records.NodeInfo{
+		NetworkID: "mainnet",
+		Metadata: &records.NodeMetadata{
+			NodeVersion:   "ssv-node/v2.4.2 linux/amd64",
+			ExecutionNode: "Geth/v1.14.11-stable/linux-amd64/go1.23.2",
+			ConsensusNode: "Lighthouse/v5.3.0-x86_64-unknown-linux-gnu",
+			Subnets:       "00000000000000000000000000000000",
+		},
+	}
+
+	sealed, err := nodeInfo.Seal(privateKey)
+	require.NoError(t, err)
+	require.Less(t, len(sealed), maxStreamMessageSize/2)
 }
 
 func TestWriteWithTimeout_ErrorPaths(t *testing.T) {

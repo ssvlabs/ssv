@@ -1,6 +1,7 @@
 package peers
 
 import (
+	"slices"
 	"sync"
 
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -60,7 +61,7 @@ func (si *subnetsIndex) UpdatePeerSubnets(id peer.ID, s commons.Subnets) bool {
 			for i, p := range peers {
 				if p == id {
 					// Remove peer from slice
-					si.subnets[subnet] = append(peers[:i], peers[i+1:]...)
+					si.subnets[subnet] = slices.Delete(peers, i, i+1)
 					break
 				}
 			}
@@ -105,4 +106,27 @@ func (si *subnetsIndex) GetPeerSubnets(id peer.ID) (commons.Subnets, bool) {
 	}
 
 	return subnets, true
+}
+
+func (si *subnetsIndex) RemovePeer(id peer.ID) {
+	si.lock.Lock()
+	defer si.lock.Unlock()
+
+	s, ok := si.peerSubnets[id]
+	if !ok {
+		return
+	}
+	delete(si.peerSubnets, id)
+	for subnet := uint64(0); subnet < commons.SubnetsCount; subnet++ {
+		if !s.IsSet(subnet) {
+			continue
+		}
+		peers := si.subnets[subnet]
+		for i, p := range peers {
+			if p == id {
+				si.subnets[subnet] = slices.Delete(peers, i, i+1)
+				break
+			}
+		}
+	}
 }

@@ -12,7 +12,9 @@ import (
 var _ libp2pnetwork.Network = Net{}
 
 type Net struct {
-	MockPeerstore peerstore.Peerstore
+	MockPeerstore     peerstore.Peerstore
+	MockConnectedness libp2pnetwork.Connectedness
+	ConnectednessFunc func(peer.ID) libp2pnetwork.Connectedness
 }
 
 func (m Net) Peerstore() peerstore.Peerstore {
@@ -34,8 +36,10 @@ func (m Net) ClosePeer(id peer.ID) error {
 }
 
 func (m Net) Connectedness(id peer.ID) libp2pnetwork.Connectedness {
-	//TODO implement me
-	panic("implement me")
+	if m.ConnectednessFunc != nil {
+		return m.ConnectednessFunc(id)
+	}
+	return m.MockConnectedness
 }
 
 func (m Net) Peers() []peer.ID {

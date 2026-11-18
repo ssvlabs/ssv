@@ -278,6 +278,7 @@ func (n *p2pNetwork) setupPeerServices() error {
 			PeerInfos:       n.idx,
 			ConnIdx:         n.idx,
 			SubnetsIdx:      n.idx,
+			PeerStateIdx:    n.idx,
 			IDService:       ids,
 			Network:         h.Network(),
 			DomainTypeFn:    n.cfg.NetworkConfig.CurrentDomainType,
@@ -287,7 +288,7 @@ func (n *p2pNetwork) setupPeerServices() error {
 	h.SetStreamHandler(peers.NodeInfoProtocol, handshaker.Handler())
 	n.logger.Debug("handshaker is ready")
 
-	n.connHandler = connections.NewConnHandler(n.ctx, n.logger, handshaker, n.ActiveSubnets, n.idx, n.idx, n.idx, n.discoveredPeersPool)
+	n.connHandler = connections.NewConnHandler(n.ctx, n.logger, handshaker, n.ActiveSubnets, n.idx, n.idx, n.idx, n.idx, n.discoveredPeersPool)
 	h.Network().Notify(n.connHandler.Handle())
 	n.logger.Debug("connection handler is ready")
 
