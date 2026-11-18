@@ -1,7 +1,10 @@
 package ekm
 
 import (
+	"bytes"
 	"encoding/hex"
+	"errors"
+	"fmt"
 	"math"
 	"testing"
 	"time"
@@ -116,7 +119,7 @@ func TestEncryptedKeyManager(t *testing.T) {
 	signerStorage.SetEncryptionKey(encryptionKey2)
 
 	_, err = wallet2.AccountByPublicKey(hex.EncodeToString(a.ValidatorPublicKey()))
-	require.ErrorContains(t, err, "decrypt stored wallet")
+	require.ErrorContains(t, err, "decrypt stored account")
 
 	// Retry with key 1 (should succeed).
 	wallet3, err := signerStorage.OpenWallet()
@@ -459,6 +462,84 @@ func TestRemoveShare(t *testing.T) {
 		err := km.RemoveShare(t.Context(), phase0.BLSPubKey(pk.GetPublicKey().Serialize()))
 		require.NoError(t, err)
 	})
+}
+
+// TestShareAccountLookup checks how AddShare and RemoveShare handle the wallet's account lookup.
+// Whichever way the wallet reports a missing account (see isAccountNotFound), RemoveShare must
+// succeed and AddShare must save the share. Any other lookup failure must fail both.
+func TestShareAccountLookup(t *testing.T) {
+	initBLSTest()
+	logger := testLogger(t)
+	cfg := testBeaconConfig()
+
+	operatorPrivateKey, err := keys.GeneratePrivateKey()
+	require.NoError(t, err)
+	encryptionKey, err := operatorPrivateKey.EKMEncryptionKey()
+	require.NoError(t, err)
+
+	// newKeyManager returns a key manager and the store backing its wallet.
+	newKeyManager := func(t *testing.T) (*LocalKeyManager, Storage) {
+		store := NewSignerStorage(newTestMemoryDB(), cfg.NetworkName(), logger)
+		store.SetEncryptionKey(encryptionKey)
+		km, err := newLocalKeyManager(logger, store, cfg, operatorPrivateKey)
+		require.NoError(t, err)
+		return km, store
+	}
+	newShare := func(t *testing.T) ([]byte, phase0.BLSPubKey) {
+		sk := &bls.SecretKey{}
+		sk.SetByCSPRNG()
+		encShare, err := operatorPrivateKey.Public().Encrypt([]byte(sk.SerializeToHexStr()))
+		require.NoError(t, err)
+		return encShare, phase0.BLSPubKey(sk.GetPublicKey().Serialize())
+	}
+	requireHandlesMissingAccount := func(t *testing.T, km *LocalKeyManager, encShare []byte, pk phase0.BLSPubKey, wantErr error) {
+		t.Helper()
+		pkHex := hex.EncodeToString(pk[:])
+		_, err := km.wallet.AccountByPublicKey(pkHex)
+		require.ErrorIs(t, err, wantErr)
+
+		require.NoError(t, km.RemoveShare(t.Context(), pk))
+		require.NoError(t, km.AddShare(t.Context(), encShare, pk))
+		_, err = km.wallet.AccountByPublicKey(pkHex)
+		require.NoError(t, err, "AddShare must save the share")
+	}
+
+	t.Run("key not in the wallet's index", func(t *testing.T) {
+		km, _ := newKeyManager(t)
+		encShare, pk := newShare(t)
+		requireHandlesMissingAccount(t, km, encShare, pk, hd.ErrAccountNotFound)
+	})
+
+	t.Run("key in the index, account gone", func(t *testing.T) {
+		km, store := newKeyManager(t)
+		encShare, pk := newShare(t)
+		require.NoError(t, km.AddShare(t.Context(), encShare, pk))
+		acc, err := km.wallet.AccountByPublicKey(hex.EncodeToString(pk[:]))
+		require.NoError(t, err)
+		// Deletes the account but not its index entry, as DeleteAccountByPublicKey does if it
+		// doesn't get to save the wallet.
+		require.NoError(t, store.DeleteAccount(acc.ID()))
+		requireHandlesMissingAccount(t, km, encShare, pk, errAccountNotFound)
+	})
+
+	t.Run("lookup fails", func(t *testing.T) {
+		km, store := newKeyManager(t)
+		encShare, pk := newShare(t)
+		require.NoError(t, km.AddShare(t.Context(), encShare, pk))
+		// The account doesn't decrypt with another key.
+		store.SetEncryptionKey(bytes.Repeat([]byte{1}, 32))
+
+		require.ErrorContains(t, km.RemoveShare(t.Context(), pk), "could not check share existence")
+		require.ErrorContains(t, km.AddShare(t.Context(), encShare, pk), "could not check share existence")
+	})
+}
+
+// TestIsAccountNotFound checks that isAccountNotFound matches the sentinels, even wrapped, and not
+// another error with their message.
+func TestIsAccountNotFound(t *testing.T) {
+	require.True(t, isAccountNotFound(fmt.Errorf("wrapped: %w", hd.ErrAccountNotFound)))
+	require.True(t, isAccountNotFound(fmt.Errorf("wrapped: %w", errAccountNotFound)))
+	require.False(t, isAccountNotFound(errors.New("account not found")))
 }
 
 func TestEkmListAccounts(t *testing.T) {

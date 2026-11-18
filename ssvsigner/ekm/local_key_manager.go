@@ -26,6 +26,7 @@ import (
 	"github.com/ssvlabs/eth2-key-manager/signer"
 	slashingprotection "github.com/ssvlabs/eth2-key-manager/slashing_protection"
 	"github.com/ssvlabs/eth2-key-manager/wallets"
+	"github.com/ssvlabs/eth2-key-manager/wallets/hd"
 	"go.uber.org/zap"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -367,7 +368,7 @@ func (km *LocalKeyManager) AddShare(
 	}
 
 	acc, err := km.wallet.AccountByPublicKey(hex.EncodeToString(pubKey[:]))
-	if err != nil && err.Error() != "account not found" {
+	if err != nil && !isAccountNotFound(err) {
 		return fmt.Errorf("could not check share existence: %w", err)
 	}
 
@@ -391,7 +392,7 @@ func (km *LocalKeyManager) RemoveShare(_ context.Context, pubKey phase0.BLSPubKe
 
 	pubKeyHex := hex.EncodeToString(pubKey[:]) // pubKey.String() would add the "0x" prefix so we cannot use it
 	acc, err := km.wallet.AccountByPublicKey(pubKeyHex)
-	if err != nil && err.Error() != "account not found" {
+	if err != nil && !isAccountNotFound(err) {
 		return fmt.Errorf("could not check share existence: %w", err)
 	}
 	if acc != nil {
@@ -403,6 +404,15 @@ func (km *LocalKeyManager) RemoveShare(_ context.Context, pubKey phase0.BLSPubKe
 		}
 	}
 	return nil
+}
+
+// isAccountNotFound reports whether an AccountByPublicKey error means a missing account rather than
+// a failed lookup: hd.ErrAccountNotFound if the wallet's index lacks the key, or errAccountNotFound
+// if the index has it but the account is gone (e.g. DeleteAccountByPublicKey deleted the account
+// but didn't get to save the wallet). The wallet is always an hd.Wallet: OpenWallet decodes any
+// stored wallet as one, even the ND wallet that the key vault creates.
+func isAccountNotFound(err error) bool {
+	return errors.Is(err, hd.ErrAccountNotFound) || errors.Is(err, errAccountNotFound)
 }
 
 func (km *LocalKeyManager) saveAccount(privKey *bls.SecretKey) error {
