@@ -43,6 +43,21 @@ func (m *MockshareStorage) EXPECT() *MockshareStorageMockRecorder {
 	return m.recorder
 }
 
+// Get mocks base method.
+func (m *MockshareStorage) Get(txn basedb.Reader, pubKey []byte) (*types.SSVShare, bool) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Get", txn, pubKey)
+	ret0, _ := ret[0].(*types.SSVShare)
+	ret1, _ := ret[1].(bool)
+	return ret0, ret1
+}
+
+// Get indicates an expected call of Get.
+func (mr *MockshareStorageMockRecorder) Get(txn, pubKey any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*MockshareStorage)(nil).Get), txn, pubKey)
+}
+
 // List mocks base method.
 func (m *MockshareStorage) List(txn basedb.Reader, filters ...storage.SharesFilter) []*types.SSVShare {
 	m.ctrl.T.Helper()

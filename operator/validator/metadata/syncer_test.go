@@ -3,6 +3,7 @@ package metadata
 import (
 	"context"
 	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"math"
 	"testing"
@@ -13,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
@@ -71,6 +73,7 @@ func TestUpdateValidatorMetadata(t *testing.T) {
 			sharesStorage := NewMockshareStorage(ctrl)
 			sharesStorage.EXPECT().UpdateValidatorsMetadata(gomock.Any()).Return(nil, tc.sharesStorageErr).AnyTimes()
 			sharesStorage.EXPECT().List(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+			sharesStorage.EXPECT().Get(gomock.Any(), gomock.Any()).Return(nil, false).AnyTimes()
 
 			validatorStore := NewMockselfValidatorStore(ctrl)
 
@@ -178,6 +181,8 @@ func TestSyncer_Sync(t *testing.T) {
 		validatorPK2 := spectypes.ValidatorPK{0x2}
 
 		mockShareStorage := NewMockshareStorage(ctrl)
+		mockShareStorage.EXPECT().Get(nil, validatorPK1[:]).Return(nil, false)
+		mockShareStorage.EXPECT().Get(nil, validatorPK2[:]).Return(nil, false)
 		mockShareStorage.EXPECT().UpdateValidatorsMetadata(beacon.ValidatorMetadataMap{
 			validatorPK1: &beacon.ValidatorMetadata{},
 			validatorPK2: &beacon.ValidatorMetadata{},
@@ -204,6 +209,7 @@ func TestSyncer_Sync(t *testing.T) {
 		validatorPK2 := spectypes.ValidatorPK{0x2}
 
 		mockShareStorage := NewMockshareStorage(ctrl)
+		mockShareStorage.EXPECT().Get(nil, validatorPK2[:]).Return(nil, false)
 		mockShareStorage.EXPECT().UpdateValidatorsMetadata(beacon.ValidatorMetadataMap{
 			validatorPK1: &beacon.ValidatorMetadata{Status: eth2apiv1.ValidatorStateActiveOngoing, Index: 1},
 			validatorPK2: &beacon.ValidatorMetadata{},
@@ -227,6 +233,47 @@ func TestSyncer_Sync(t *testing.T) {
 		pubKeys := []spectypes.ValidatorPK{validatorPK1, validatorPK2}
 		_, err := syncer.Sync(t.Context(), pubKeys)
 		require.NoError(t, err)
+	})
+
+	// Subtest: the beacon node omits validators, one of which has known metadata
+	t.Run("FetchOmitsValidatorWithKnownMetadata", func(t *testing.T) {
+		knownPK := spectypes.ValidatorPK{0x1}
+		pendingPK := spectypes.ValidatorPK{0x2}
+		unsavedPK := spectypes.ValidatorPK{0x3}
+
+		mockShareStorage := NewMockshareStorage(ctrl)
+		mockShareStorage.EXPECT().Get(nil, knownPK[:]).Return(&ssvtypes.SSVShare{
+			Share:  spectypes.Share{ValidatorPubKey: knownPK, ValidatorIndex: 1},
+			Status: eth2apiv1.ValidatorStateActiveOngoing,
+		}, true)
+		mockShareStorage.EXPECT().Get(nil, pendingPK[:]).Return(&ssvtypes.SSVShare{
+			Share: spectypes.Share{ValidatorPubKey: pendingPK},
+		}, true)
+		mockShareStorage.EXPECT().Get(nil, unsavedPK[:]).Return(nil, false)
+		mockShareStorage.EXPECT().UpdateValidatorsMetadata(beacon.ValidatorMetadataMap{
+			knownPK:   &beacon.ValidatorMetadata{},
+			pendingPK: &beacon.ValidatorMetadata{},
+			unsavedPK: &beacon.ValidatorMetadata{},
+		}).Times(1)
+
+		mockBeaconNode := beacon.NewMockBeaconNode(ctrl)
+		mockBeaconNode.EXPECT().GetValidatorData(gomock.Any(), gomock.Any()).Return(map[phase0.ValidatorIndex]*eth2apiv1.Validator{}, nil)
+
+		core, logs := observer.New(zap.WarnLevel)
+		syncer := &Syncer{
+			logger:       zap.New(core),
+			shareStorage: mockShareStorage,
+			beaconNode:   mockBeaconNode,
+		}
+
+		_, err := syncer.Sync(t.Context(), []spectypes.ValidatorPK{knownPK, pendingPK, unsavedPK})
+		require.NoError(t, err)
+
+		warnings := logs.All()
+		require.Len(t, warnings, 1)
+		fields := warnings[0].ContextMap()
+		require.EqualValues(t, 1, fields["count"])
+		require.Equal(t, []any{hex.EncodeToString(knownPK[:])}, fields["pubkeys"])
 	})
 
 	// Subtest: UpdateValidatorsMetadata error
@@ -958,6 +1005,7 @@ func TestSyncer_SyncAll_ExporterUnaffectedByForkPhase(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			mockShareStorage := NewMockshareStorage(ctrl)
+			mockShareStorage.EXPECT().Get(gomock.Any(), gomock.Any()).Return(nil, false).AnyTimes()
 			mockValidatorStore := NewMockselfValidatorStore(ctrl)
 			mockBeaconNode := beacon.NewMockBeaconNode(ctrl)
 			mockBeaconNode.EXPECT().GetValidatorData(gomock.Any(), gomock.Any()).Return(map[phase0.ValidatorIndex]*eth2apiv1.Validator{}, nil).AnyTimes()
