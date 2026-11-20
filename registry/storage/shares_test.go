@@ -362,6 +362,33 @@ func TestValidatorPubkeysToIndicesMapping_KeepsIndexWhenMetadataIsLost(t *testin
 	})
 }
 
+// A removed validator keeps its persisted mapping, for exporter lookups. Registering it again creates a share
+// without beacon metadata, whose 0 placeholder index must not overwrite the stored real one.
+func TestValidatorPubkeysToIndicesMapping_KeepsIndexWhenRemovedValidatorIsReAdded(t *testing.T) {
+	testWithStorageReopen(t, func(t *testing.T, storage *testStorage, reopen func(t *testing.T)) {
+		const index = phase0.ValidatorIndex(42)
+		share := fakeParticipatingShare(index, generateRandomPubKey(), []uint64{1, 2, 3, 4})
+		require.NoError(t, storage.Shares.Save(nil, share))
+		require.NoError(t, storage.Shares.Delete(nil, share.ValidatorPubKey[:]))
+		reopen(t)
+
+		// The re-added share, as handleValidatorAdded builds it.
+		reAdded := fakeShareWithoutMetadata()
+		reAdded.ValidatorPubKey = share.ValidatorPubKey
+		require.NoError(t, storage.Shares.Save(nil, reAdded))
+		reopen(t)
+
+		idx, found := storage.ValidatorStore.ValidatorIndex(share.ValidatorPubKey)
+		require.True(t, found)
+		require.Equal(t, index, idx)
+		pk, found := storage.ValidatorStore.ValidatorPubkey(index)
+		require.True(t, found)
+		require.Equal(t, share.ValidatorPubKey, pk)
+		_, found = storage.ValidatorStore.ValidatorPubkey(0)
+		require.False(t, found)
+	})
+}
+
 func TestShareDeletionHandlesValidatorStoreCorrectly(t *testing.T) {
 	logger := log.TestLogger(t)
 
