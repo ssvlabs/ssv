@@ -20,6 +20,7 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	ethcommon "github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient/simulated"
@@ -1242,4 +1243,12 @@ func TestHealthy(t *testing.T) {
 // httpToWebSocketURL converts an HTTP URL to a WebSocket URL.
 func httpToWebSocketURL(url string) string {
 	return "ws:" + strings.TrimPrefix(url, "http:")
+}
+
+// getLogsBlockRange returns the block range of an eth_getLogs request.
+func getLogsBlockRange(req map[string]any) (from, to uint64) {
+	flt := req["params"].([]any)[0].(map[string]any)
+	from, _ = hexutil.DecodeUint64(flt["fromBlock"].(string))
+	to, _ = hexutil.DecodeUint64(flt["toBlock"].(string))
+	return from, to
 }

@@ -143,7 +143,7 @@ func requestedBlock(t *testing.T, params json.RawMessage) uint64 {
 func TestBloomCrossCheck_RecoversMissingLogs(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 
-	env := setupTestEnv(t, 10*time.Second)
+	env := setupTestEnv(t)
 	contract, err := env.deployCallableContract()
 	require.NoError(t, err)
 
@@ -205,7 +205,7 @@ func TestBloomCrossCheck_RecoversMissingLogs(t *testing.T) {
 func TestFetchHistoricalLogs_RecoversDroppedLogs(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 
-	env := setupTestEnv(t, 10*time.Second)
+	env := setupTestEnv(t)
 	contract, err := env.deployCallableContract()
 	require.NoError(t, err)
 
@@ -264,7 +264,7 @@ func TestFetchHistoricalLogs_RecoversDroppedLogs(t *testing.T) {
 func TestReceiptsCrossCheck_RecoversPersistentlyDroppedLogs(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 
-	env := setupTestEnv(t, 10*time.Second)
+	env := setupTestEnv(t)
 	contract, err := env.deployCallableContract()
 	require.NoError(t, err)
 
@@ -327,7 +327,7 @@ func TestReceiptsCrossCheck_RecoversPersistentlyDroppedLogs(t *testing.T) {
 func TestReceiptsUnsupported_FallsBackToTimedRetry(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 
-	env := setupTestEnv(t, 15*time.Second)
+	env := setupTestEnv(t)
 	contract, err := env.deployCallableContract()
 	require.NoError(t, err)
 
@@ -397,7 +397,7 @@ func TestVerifyLogs_UnsettledWithoutUsableReceipts(t *testing.T) {
 	}
 	for name, receiptsResponse := range receiptsResponses {
 		t.Run(name, func(t *testing.T) {
-			env := setupTestEnv(t, 15*time.Second)
+			env := setupTestEnv(t)
 			contract, err := env.deployCallableContract()
 			require.NoError(t, err)
 			// Contract deploy is block 1; these create event blocks 2..4, one contract log each.
@@ -443,7 +443,7 @@ func TestVerifyLogs_UnsettledWithoutUsableReceipts(t *testing.T) {
 // serve receipts settles a suspect through the fallback (other clients' receipts, wired by
 // MultiClient) before resorting to timed re-requests, recovering a persistently dropped block.
 func TestVerifyLogCompleteness_SettlesSuspectViaReceiptsFallback(t *testing.T) {
-	env := setupTestEnv(t, 10*time.Second)
+	env := setupTestEnv(t)
 	contract, err := env.deployCallableContract()
 	require.NoError(t, err)
 	require.NoError(t, env.createBlocksWithLogs(contract, 3, 0)) // event blocks 2..4
@@ -493,7 +493,7 @@ func TestVerifyLogCompleteness_SettlesSuspectViaReceiptsFallback(t *testing.T) {
 // isn't re-attempted while remembered, but is probed again once the memo ages out, so an EL
 // upgraded behind the same endpoint becomes an authoritative source without a restart.
 func TestBlockContractLogs_ReprobesUnsupportedReceipts(t *testing.T) {
-	env := setupTestEnv(t, 10*time.Second)
+	env := setupTestEnv(t)
 	contract, err := env.deployCallableContract()
 	require.NoError(t, err)
 	// Contract deploy is block 1; this creates event block 2 with one contract log.
@@ -547,7 +547,7 @@ func TestBlockContractLogs_ReprobesUnsupportedReceipts(t *testing.T) {
 func TestBloomFalsePositive_ConfirmedByReceipts(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 
-	env := setupTestEnv(t, 10*time.Second)
+	env := setupTestEnv(t)
 	contract, err := env.deployCallableContract()
 	require.NoError(t, err)
 
@@ -611,7 +611,7 @@ func TestBloomFalsePositive_ConfirmedByReceipts(t *testing.T) {
 func TestBloomCrossCheck_NoFalseRecovery(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 
-	env := setupTestEnv(t, 5*time.Second)
+	env := setupTestEnv(t)
 	contract, err := env.deployCallableContract()
 	require.NoError(t, err)
 
@@ -644,7 +644,7 @@ func TestBloomCrossCheck_NoFalseRecovery(t *testing.T) {
 func TestVerifyLogCompleteness_EmptyRange(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 
-	env := setupTestEnv(t, 5*time.Second)
+	env := setupTestEnv(t)
 	_, err := env.deployCallableContract()
 	require.NoError(t, err)
 
@@ -671,7 +671,7 @@ func TestVerifyLogCompleteness_EmptyRange(t *testing.T) {
 func TestBloomCrossCheck_ResolutionErrorPropagates(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 
-	env := setupTestEnv(t, 10*time.Second)
+	env := setupTestEnv(t)
 
 	// Deploy contract and create blocks.
 	parsed, _ := abi.JSON(strings.NewReader(callableAbi))
@@ -737,7 +737,7 @@ func TestBloomCrossCheck_ResolutionErrorPropagates(t *testing.T) {
 func TestVerifyLogCompleteness_BlocksWithExistingLogs(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 
-	env := setupTestEnv(t, 5*time.Second)
+	env := setupTestEnv(t)
 	contract, err := env.deployCallableContract()
 	require.NoError(t, err)
 
@@ -785,7 +785,7 @@ func TestVerifyLogCompleteness_BlocksWithExistingLogs(t *testing.T) {
 func TestVerifyLogs_RecoversViaReceipts(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 
-	env := setupTestEnv(t, 10*time.Second)
+	env := setupTestEnv(t)
 	contract, err := env.deployCallableContract()
 	require.NoError(t, err)
 
@@ -856,7 +856,7 @@ func newBatchRejectingProxy(t *testing.T, base http.Handler) *httptest.Server {
 }
 
 func TestHeadersByNumbers_FallsBackWhenBatchRejected(t *testing.T) {
-	env := setupTestEnv(t, 10*time.Second)
+	env := setupTestEnv(t)
 	for i := 0; i < 5; i++ {
 		env.sim.Commit()
 	}
@@ -880,7 +880,7 @@ func TestHeadersByNumbers_FallsBackWhenBatchRejected(t *testing.T) {
 }
 
 func TestSingleBlockLogs_FallsBackWhenBatchRejected(t *testing.T) {
-	env := setupTestEnv(t, 10*time.Second)
+	env := setupTestEnv(t)
 	contract, err := env.deployCallableContract()
 	require.NoError(t, err)
 	// Contract deploy is block 1; these create event blocks 2..4, one contract log each.
@@ -910,7 +910,7 @@ func TestSingleBlockLogs_FallsBackWhenBatchRejected(t *testing.T) {
 }
 
 func TestBatchingUnsupportedIsRemembered(t *testing.T) {
-	env := setupTestEnv(t, 10*time.Second)
+	env := setupTestEnv(t)
 	for i := 0; i < 5; i++ {
 		env.sim.Commit()
 	}
