@@ -122,10 +122,9 @@ type validatorStore struct {
 	byCommitteeID       map[spectypes.CommitteeID]*Committee
 	byOperatorID        map[spectypes.OperatorID]*sharesAndCommittees
 
-	// pubkeyToIndex is a permanent (no deletion) mapping of validator pubkey -> index
+	// pubkeyToIndex and indexToPubkey map validator pubkey <-> index, as set by beacon metadata.
+	// Entries are never deleted, so validators whose shares are gone still resolve.
 	pubkeyToIndex map[spectypes.ValidatorPK]phase0.ValidatorIndex
-
-	// indexToPubkey is a (no deletion) mapping of validator index -> pubkey
 	indexToPubkey map[phase0.ValidatorIndex]spectypes.ValidatorPK
 
 	beaconCfg *networkconfig.Beacon
@@ -168,11 +167,7 @@ func (c *validatorStore) ValidatorIndex(pubkey spectypes.ValidatorPK) (phase0.Va
 	defer c.mu.RUnlock()
 
 	index, found := c.pubkeyToIndex[pubkey]
-	if !found {
-		return 0, false
-	}
-
-	return index, true
+	return index, found
 }
 
 func (c *validatorStore) ValidatorPubkey(index phase0.ValidatorIndex) (spectypes.ValidatorPK, bool) {
@@ -180,10 +175,7 @@ func (c *validatorStore) ValidatorPubkey(index phase0.ValidatorIndex) (spectypes
 	defer c.mu.RUnlock()
 
 	pk, found := c.indexToPubkey[index]
-	if !found {
-		return spectypes.ValidatorPK{}, false
-	}
-	return pk, true
+	return pk, found
 }
 
 func (c *validatorStore) ValidatorByIndex(index phase0.ValidatorIndex) (*types.SSVShare, bool) {
