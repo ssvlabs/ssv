@@ -108,6 +108,14 @@ func TestCheckPeer(t *testing.T) {
 				subnets:           mySubnets,
 				alreadyDiscovered: true,
 				pooledFromOlder:   true,
+				expectedError:     nil,
+			},
+			{
+				name:              "already discovered from the same record at another address",
+				domainType:        &myDomainType,
+				subnets:           mySubnets,
+				alreadyDiscovered: true,
+				pooledAtOtherAddr: true,
 				expectedError:     errors.New("peer already discovered recently"),
 			},
 			{

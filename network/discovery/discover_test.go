@@ -184,16 +184,15 @@ func TestBootstrap_SkipsInvalidDomainType(t *testing.T) {
 	require.Empty(t, dvs.panicLogs, "the invalid record must be rejected by the decoder, not recovered by discover()")
 }
 
-// TestBootstrap_MovedPeerReplacesStaleAddress covers a peer that keeps its key but changes IP: whichever of its
-// records is discovered first, the pool must end up with the new address, not the unreachable old one.
+// TestBootstrap_MovedPeerReplacesStaleAddress covers a peer that keeps its key but changes IP: whatever order its
+// records are discovered in, the pool must end up with its newest record's address, not an unreachable older one.
 func TestBootstrap_MovedPeerReplacesStaleAddress(t *testing.T) {
 	key, err := crypto.GenerateKey()
 	require.NoError(t, err)
 	oldRecord := nodeAt(t, key, net.IPv4(10, 0, 0, 1), 1)
 	movedRecord := nodeAt(t, key, net.IPv4(10, 0, 0, 2), 2)
-	movedPeer, err := ToPeer(movedRecord)
-	require.NoError(t, err)
-	// Records are handled in order, so once the sentinel is handled, both records have been too.
+	movedBackRecord := nodeAt(t, key, net.IPv4(10, 0, 0, 1), 3)
+	// Records are handled in order, so once the sentinel is handled, all the others have been too.
 	sentinel := NewTestingNode(t)
 	sentinelPeer, err := ToPeer(sentinel)
 	require.NoError(t, err)
@@ -201,9 +200,17 @@ func TestBootstrap_MovedPeerReplacesStaleAddress(t *testing.T) {
 	tests := []struct {
 		name    string
 		records []*enode.Node
+		newest  *enode.Node
 	}{
-		{name: "old record first", records: []*enode.Node{oldRecord, movedRecord, sentinel}},
-		{name: "new record first", records: []*enode.Node{movedRecord, oldRecord, sentinel}},
+		{name: "old record first", records: []*enode.Node{oldRecord, movedRecord, sentinel}, newest: movedRecord},
+		{name: "new record first", records: []*enode.Node{movedRecord, oldRecord, sentinel}, newest: movedRecord},
+		{
+			// The newer record at the pooled address must update the entry's sequence number, or the older record
+			// at the other address replaces the entry.
+			name:    "moved back, then an older record at the address it left",
+			records: []*enode.Node{oldRecord, movedBackRecord, movedRecord, sentinel},
+			newest:  movedBackRecord,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -213,7 +220,8 @@ func TestBootstrap_MovedPeerReplacesStaleAddress(t *testing.T) {
 			done := make(chan struct{})
 			go func() {
 				defer close(done)
-				// Adds every peer it's handed to the pool, as p2p's startDiscovery does.
+				// Adds every peer it's handed to the pool. p2p's startDiscovery also compares the records it stores,
+				// which doesn't change the outcome here, as each record is stored before the next one is checked.
 				assert.NoError(t, dvs.Bootstrap(func(e PeerEvent) {
 					dvs.discoveredPeersPool.Set(e.AddrInfo.ID, DiscoveredPeer{AddrInfo: e.AddrInfo, Seq: e.Node.Seq()})
 					if e.AddrInfo.ID == sentinelPeer.ID {
@@ -237,9 +245,12 @@ func TestBootstrap_MovedPeerReplacesStaleAddress(t *testing.T) {
 				t.Fatal("Bootstrap did not return after context cancellation")
 			}
 
-			pooled, ok := dvs.discoveredPeersPool.Get(movedPeer.ID)
+			newest, err := ToPeer(tt.newest)
+			require.NoError(t, err)
+			pooled, ok := dvs.discoveredPeersPool.Get(newest.ID)
 			require.True(t, ok)
-			require.Equal(t, fmt.Sprint(movedPeer.Addrs), fmt.Sprint(pooled.Addrs), "the pool must hold the peer's new address")
+			require.Equal(t, fmt.Sprint(newest.Addrs), fmt.Sprint(pooled.Addrs), "the pool must hold the newest record's address")
+			require.Equal(t, tt.newest.Seq(), pooled.Seq)
 		})
 	}
 }

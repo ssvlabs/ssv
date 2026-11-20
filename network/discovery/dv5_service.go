@@ -398,11 +398,13 @@ func (dvs *DiscV5Service) checkPeer(ctx context.Context, e PeerEvent) error {
 		return newPeerSkipError(skipReasonNoSharedSubnets, fmt.Errorf("no shared subnets: own=%s peer=%s", dvs.subnets.StringHumanReadable(), peerSubnets.StringHumanReadable()))
 	}
 
-	// Skip a peer already in the pool unless a newer record (lookups can still return older ones) moved it to
-	// another address: an entry that keeps failing never expires, as each retry refreshes its TTL, so the node
-	// would keep dialing the old address until restarted. Passing the peer on replaces the entry.
+	// Skip a peer already in the pool unless its record is newer (lookups can still return older ones). A newer
+	// record at another address replaces the entry: an entry that keeps failing never expires, as each retry
+	// refreshes its TTL, so the node would keep dialing the old address until restarted. At the same address, the
+	// pool only takes the newer sequence number, so that a lookup's older record at another address can't replace
+	// the entry later.
 	known, alreadyDiscovered := dvs.discoveredPeersPool.Get(pid)
-	if alreadyDiscovered && (e.Node.Seq() <= known.Seq || slices.EqualFunc(known.Addrs, e.AddrInfo.Addrs, ma.Multiaddr.Equal)) {
+	if alreadyDiscovered && e.Node.Seq() <= known.Seq {
 		recordPeerSkipped(ctx, skipReasonAlreadyDiscovered)
 		return newPeerSkipError(skipReasonAlreadyDiscovered, errors.New("peer already discovered recently"))
 	}
@@ -413,7 +415,7 @@ func (dvs *DiscV5Service) checkPeer(ctx context.Context, e PeerEvent) error {
 		return newPeerSkipError(skipReasonReachedLimit, errors.New("reached limit"))
 	}
 
-	if alreadyDiscovered {
+	if alreadyDiscovered && !slices.EqualFunc(known.Addrs, e.AddrInfo.Addrs, ma.Multiaddr.Equal) {
 		dvs.logger.Debug("discovered peer at a new address",
 			fields.PeerID(pid),
 			zap.Stringers("known_addrs", known.Addrs),

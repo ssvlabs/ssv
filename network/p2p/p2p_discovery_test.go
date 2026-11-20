@@ -1,6 +1,7 @@
 package p2pv1
 
 import (
+	"sync"
 	"testing"
 	"time"
 
@@ -464,10 +465,117 @@ func TestMarkTried(t *testing.T) {
 
 	t.Run("doesn't restore a removed entry", func(t *testing.T) {
 		n := newNetwork(t)
+		// Sequence number 0, as an mDNS peer has, is also what Get returns for a missing entry.
+		mdnsPeer := selected
+		mdnsPeer.Seq = 0
 
-		require.False(t, n.markTried(selected))
-		require.False(t, n.discoveredPeersPool.Has(selected.ID))
+		require.False(t, n.markTried(mdnsPeer))
+		require.False(t, n.discoveredPeersPool.Has(mdnsPeer.ID))
 	})
+
+	t.Run("doesn't overwrite a newer record stored concurrently", func(t *testing.T) {
+		n := newNetwork(t)
+
+		// Without discoveredPeersMu, markTried can write its copy back after addDiscoveredPeer stored the newer
+		// record, which happens in a fraction of a percent of the rounds.
+		const rounds = 20_000
+		for i := range uint64(rounds) {
+			selected := selected
+			selected.Seq = 2 * i
+			n.discoveredPeersPool.Set(selected.ID, selected)
+			moved := discovery.DiscoveredPeer{
+				AddrInfo: peer.AddrInfo{ID: selected.ID, Addrs: []ma.Multiaddr{ma.StringCast("/ip4/10.0.0.2/tcp/13001")}},
+				Seq:      2*i + 1,
+			}
+
+			var wg sync.WaitGroup
+			start := make(chan struct{})
+			wg.Go(func() {
+				<-start
+				n.markTried(selected)
+			})
+			wg.Go(func() {
+				<-start
+				n.addDiscoveredPeer(moved)
+			})
+			close(start)
+			wg.Wait()
+
+			pooled, ok := n.discoveredPeersPool.Get(selected.ID)
+			require.True(t, ok)
+			require.Equal(t, moved, pooled, "round %d", i)
+		}
+	})
+}
+
+func TestAddDiscoveredPeer(t *testing.T) {
+	addrA := []ma.Multiaddr{ma.StringCast("/ip4/10.0.0.1/tcp/13001")}
+	addrB := []ma.Multiaddr{ma.StringCast("/ip4/10.0.0.2/tcp/13001")}
+	lastTry := time.Now().Add(-time.Minute)
+	discovered := func(addrs []ma.Multiaddr, seq uint64, tries int) discovery.DiscoveredPeer {
+		p := discovery.DiscoveredPeer{AddrInfo: peer.AddrInfo{ID: "peer", Addrs: addrs}, Seq: seq, Tries: tries}
+		if tries > 0 {
+			p.LastTry = lastTry
+		}
+		return p
+	}
+
+	tests := []struct {
+		name     string
+		pooled   *discovery.DiscoveredPeer
+		proposal discovery.DiscoveredPeer
+		want     discovery.DiscoveredPeer
+	}{
+		{
+			name:     "new peer",
+			proposal: discovered(addrA, 1, 0),
+			want:     discovered(addrA, 1, 0),
+		},
+		{
+			name:     "older record at another address",
+			pooled:   new(discovered(addrB, 2, 3)),
+			proposal: discovered(addrA, 1, 0),
+			want:     discovered(addrB, 2, 3),
+		},
+		{
+			name:     "older record at the same address",
+			pooled:   new(discovered(addrA, 2, 3)),
+			proposal: discovered(addrA, 1, 0),
+			want:     discovered(addrA, 2, 3),
+		},
+		{
+			name:     "newer record at the same address keeps the retry count",
+			pooled:   new(discovered(addrA, 1, 3)),
+			proposal: discovered(addrA, 2, 0),
+			want:     discovered(addrA, 2, 3),
+		},
+		{
+			name:     "newer record at another address resets the retry count",
+			pooled:   new(discovered(addrA, 1, 3)),
+			proposal: discovered(addrB, 2, 0),
+			want:     discovered(addrB, 2, 0),
+		},
+		{
+			name:     "mDNS peer at another address",
+			pooled:   new(discovered(addrA, 0, 3)),
+			proposal: discovered(addrB, 0, 0),
+			want:     discovered(addrB, 0, 0),
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			n := &p2pNetwork{discoveredPeersPool: ttl.New[peer.ID, discovery.DiscoveredPeer](t.Context(), time.Hour, time.Hour)}
+			if tt.pooled != nil {
+				n.discoveredPeersPool.Set(tt.pooled.ID, *tt.pooled)
+			}
+
+			n.addDiscoveredPeer(tt.proposal)
+
+			pooled, ok := n.discoveredPeersPool.Get(tt.proposal.ID)
+			require.True(t, ok)
+			require.Equal(t, tt.want, pooled)
+		})
+	}
 }
 
 // TestBootstrapDiscovery_RecordSeq checks that bootstrapDiscovery passes each peer on with its record's sequence

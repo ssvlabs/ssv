@@ -138,7 +138,8 @@ type p2pNetwork struct {
 	// discoveredPeersPool keeps track of recently discovered peers so we can rank them and choose
 	// the best candidates to connect to.
 	discoveredPeersPool *ttl.Map[peer.ID, discovery.DiscoveredPeer]
-	// discoveredPeersMu keeps discovery from adding a newer record between markTried's check and write.
+	// discoveredPeersMu serializes addDiscoveredPeer and markTried, which each check a pool entry before writing it,
+	// so that neither overwrites a newer record the other stored in between.
 	discoveredPeersMu sync.Mutex
 	// trimmedRecently keeps track of recently trimmed peers so we don't try to connect to these
 	// shortly after we've trimmed these (we still might consider connecting to these once they
