@@ -489,6 +489,68 @@ func TestVerifyLogCompleteness_SettlesSuspectViaReceiptsFallback(t *testing.T) {
 	require.Equal(t, int32(1), singleBlockRequests.Load(), "settled before any timed re-request")
 }
 
+// TestBlockContractLogs_NullReceiptElementsAreUnavailable verifies that a receipts response with a
+// null receipt or log, which the client decodes as nil, doesn't count as the block's complete logs:
+// the block is reported unavailable rather than settled on the partial (or empty) logs left over.
+func TestBlockContractLogs_NullReceiptElementsAreUnavailable(t *testing.T) {
+	env := setupTestEnv(t)
+	contract, err := env.deployCallableContract()
+	require.NoError(t, err)
+	// Contract deploy is block 1; this creates event block 2 with one contract log.
+	require.NoError(t, env.createBlocksWithLogs(contract, 1, 0))
+	const eventBlock uint64 = 2
+
+	rpcSrv, err := env.sim.Node().RPCHandler()
+	require.NoError(t, err)
+
+	tests := map[string]func(t *testing.T, receipts []map[string]any) []any{
+		"only null receipts": func(t *testing.T, receipts []map[string]any) []any {
+			return []any{nil}
+		},
+		"valid and null receipts": func(t *testing.T, receipts []map[string]any) []any {
+			result := make([]any, 0, 1+len(receipts))
+			result = append(result, nil)
+			for _, receipt := range receipts {
+				result = append(result, receipt)
+			}
+			return result
+		},
+		"null log": func(t *testing.T, receipts []map[string]any) []any {
+			result := make([]any, 0, len(receipts))
+			for _, receipt := range receipts {
+				receipt["logs"] = append(receipt["logs"].([]any), nil)
+				result = append(result, receipt)
+			}
+			return result
+		},
+	}
+	for name, tamper := range tests {
+		t.Run(name, func(t *testing.T) {
+			srv := newRPCProxy(t, rpcSrv, func(req jsonrpcMessage, forward forwardFunc) *jsonrpcMessage {
+				if req.Method != ethGetBlockReceiptsMethod {
+					return nil
+				}
+				resp := forward(req)
+				var receipts []map[string]any
+				require.NoError(t, json.Unmarshal(resp.Result, &receipts))
+				require.NotEmpty(t, receipts)
+				result, err := json.Marshal(tamper(t, receipts))
+				require.NoError(t, err)
+				return &jsonrpcMessage{Result: result}
+			})
+
+			client, err := New(env.ctx, srv.URL, env.contractAddr, WithLogger(zaptest.NewLogger(t)))
+			require.NoError(t, err)
+			t.Cleanup(func() { require.NoError(t, client.Close()) })
+
+			logs, available, err := client.BlockContractLogs(env.ctx, eventBlock)
+			require.NoError(t, err)
+			require.False(t, available, "a receipts response with null elements must not be authoritative")
+			require.Empty(t, logs)
+		})
+	}
+}
+
 // TestBlockContractLogs_ReprobesUnsupportedReceipts verifies that a rejected eth_getBlockReceipts
 // isn't re-attempted while remembered, but is probed again once the memo ages out, so an EL
 // upgraded behind the same endpoint becomes an authoritative source without a restart.

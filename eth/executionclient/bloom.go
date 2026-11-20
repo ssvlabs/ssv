@@ -307,8 +307,14 @@ func (ec *ExecutionClient) rememberReceiptsUnsupported() {
 // self-inconsistent response — a broken receipt store, not an authoritatively-empty block.
 var errInconsistentEmptyReceipts = errors.New("block returned zero receipts but is known to have transactions")
 
+// errNullReceiptElement reports a receipts response with a null receipt or log, which the client
+// decodes as nil without an error. The logs left over can't be read as the block's complete set, so
+// like zero receipts it's a broken response, not an authoritative one.
+var errNullReceiptElement = errors.New("block receipts include a null receipt or log")
+
 // blockLogsFromReceipts fetches the given block's transaction receipts and extracts the logs
-// emitted by the contract. A block with no receipts at all yields errInconsistentEmptyReceipts.
+// emitted by the contract. A block with no receipts at all yields errInconsistentEmptyReceipts, and
+// one with a null receipt or log errNullReceiptElement.
 func (ec *ExecutionClient) blockLogsFromReceipts(ctx context.Context, blockNum uint64) ([]ethtypes.Log, error) {
 	start := time.Now()
 	receipts, err := ec.client.BlockReceipts(ctx, blockNum)
@@ -323,10 +329,13 @@ func (ec *ExecutionClient) blockLogsFromReceipts(ctx context.Context, blockNum u
 	var logs []ethtypes.Log
 	for _, receipt := range receipts {
 		if receipt == nil {
-			continue
+			return nil, errNullReceiptElement
 		}
 		for _, log := range receipt.Logs {
-			if log != nil && log.Address == ec.contractAddress {
+			if log == nil {
+				return nil, errNullReceiptElement
+			}
+			if log.Address == ec.contractAddress {
 				logs = append(logs, *log)
 			}
 		}
@@ -338,7 +347,7 @@ func (ec *ExecutionClient) blockLogsFromReceipts(ctx context.Context, blockNum u
 // the index-independent source of truth, so it's authoritative regardless of the EL's log index.
 // receiptsAvailable is false when the EL can't authoritatively serve the block: it doesn't
 // support eth_getBlockReceipts (remembered for receiptsUnsupportedRecheckInterval), or it has no
-// usable receipts for the block (none at all, or not found).
+// usable receipts for the block (none at all, some null, or not found).
 func (ec *ExecutionClient) BlockContractLogs(ctx context.Context, block uint64) ([]ethtypes.Log, bool, error) {
 	if ec.receiptsKnownUnsupported() {
 		return nil, false, nil
@@ -352,7 +361,7 @@ func (ec *ExecutionClient) BlockContractLogs(ctx context.Context, block uint64) 
 		ec.logger.Info("execution client does not support eth_getBlockReceipts, so it can't authoritatively verify blocks whose bloom matches the contract",
 			zap.Duration("recheck_in", receiptsUnsupportedRecheckInterval))
 		return nil, false, nil
-	case errors.Is(err, errInconsistentEmptyReceipts), errors.Is(err, ethereum.NotFound):
+	case errors.Is(err, errInconsistentEmptyReceipts), errors.Is(err, errNullReceiptElement), errors.Is(err, ethereum.NotFound):
 		// No authoritative source: report unavailable rather than read a broken receipt store as
 		// an empty block. Callers report what stays unsettled, so the detail is debug.
 		ec.logger.Debug("no usable receipts for a block expected to hold transactions",
