@@ -16,7 +16,7 @@ import (
 // exposing an abstract interface so we can have the flexibility of doing some stuff manually
 // rather than relaying on libp2p's connection manager.
 type ConnManager interface {
-	// TrimPeers will trim unprotected peers.
+	// TrimPeers disconnects from peersToTrim.
 	TrimPeers(ctx context.Context, net libp2pnetwork.Network, peersToTrim map[peer.ID]struct{})
 	// DisconnectFromBadPeers will disconnect from bad peers according to their Gossip scores. It returns the number of disconnected peers.
 	DisconnectFromBadPeers(net libp2pnetwork.Network, allPeers []peer.ID) int

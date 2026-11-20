@@ -24,6 +24,9 @@ type ConnHandler interface {
 	Handle() *libp2pnetwork.NotifyBundle
 }
 
+// IsTrustedPeerF reports whether a peer is one of the node's trusted peers.
+type IsTrustedPeerF func(peerID peer.ID) bool
+
 // connHandler implements ConnHandler
 type connHandler struct {
 	ctx    context.Context
@@ -35,9 +38,11 @@ type connHandler struct {
 	connIdx             peers.ConnectionIndex
 	peerInfos           peers.PeerInfoIndex
 	discoveredPeersPool *ttl.Map[peer.ID, discovery.DiscoveredPeer]
+	isTrustedPeer       IsTrustedPeerF
 }
 
-// NewConnHandler creates a new connection handler
+// NewConnHandler creates a new connection handler. It keeps the peers isTrustedPeer reports even past the peers
+// limit or sharing no subnet with the node.
 func NewConnHandler(
 	ctx context.Context,
 	logger *zap.Logger,
@@ -47,6 +52,7 @@ func NewConnHandler(
 	connIdx peers.ConnectionIndex,
 	peerInfos peers.PeerInfoIndex,
 	discoveredPeersPool *ttl.Map[peer.ID, discovery.DiscoveredPeer],
+	isTrustedPeer IsTrustedPeerF,
 ) ConnHandler {
 	return &connHandler{
 		ctx:                 ctx,
@@ -57,6 +63,7 @@ func NewConnHandler(
 		connIdx:             connIdx,
 		peerInfos:           peerInfos,
 		discoveredPeersPool: discoveredPeersPool,
+		isTrustedPeer:       isTrustedPeer,
 	}
 }
 
@@ -145,7 +152,7 @@ func (ch *connHandler) Handle() *libp2pnetwork.NotifyBundle {
 				}
 			}
 
-			if !ch.sharesEnoughSubnets(conn) {
+			if !ch.isTrustedPeer(pid) && !ch.sharesEnoughSubnets(conn) {
 				return errors.New("peer doesn't share enough subnets")
 			}
 
@@ -183,7 +190,7 @@ func (ch *connHandler) Handle() *libp2pnetwork.NotifyBundle {
 			go func() {
 				logger := connLogger(conn)
 				err := acceptConnection(logger, net, conn)
-				if err == nil {
+				if err == nil && !ch.isTrustedPeer(conn.RemotePeer()) {
 					if ch.connIdx.AtLimit(conn.Stat().Direction) {
 						err = errors.New("reached total connected peers limit")
 					}

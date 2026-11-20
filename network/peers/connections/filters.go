@@ -6,7 +6,6 @@ import (
 
 	"github.com/libp2p/go-libp2p/core/peer"
 
-	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/records"
 )
 
@@ -26,10 +25,10 @@ func NetworkIDFilter(networkIDs ...string) HandshakeFilter {
 	}
 }
 
-// BadPeerFilter avoids connecting to a bad peer
-func BadPeerFilter(n peers.Index) HandshakeFilter {
+// BadPeerFilter avoids connecting to a peer isBadPeer reports as bad
+func BadPeerFilter(isBadPeer IsBadPeerF) HandshakeFilter {
 	return func(senderID peer.ID, sni *records.NodeInfo) error {
-		if n.IsBad(senderID) {
+		if isBadPeer(senderID) {
 			return errors.New("bad peer")
 		}
 		return nil
