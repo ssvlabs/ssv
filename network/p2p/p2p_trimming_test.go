@@ -278,7 +278,7 @@ func TestChoosePeersToTrim_DuplicateConnectionsTakeOneSlot(t *testing.T) {
 	assert.Equal(t, map[peer.ID]struct{}{lowValuePeer: {}, mediumValuePeer.ID(): {}}, trimmed)
 }
 
-func TestPeerStats_CountsPeersNotConnections(t *testing.T) {
+func TestHostConnStats_CountsPeersNotConnections(t *testing.T) {
 	ctx := t.Context()
 	localHost := newTestHost(t)
 
@@ -286,13 +286,11 @@ func TestPeerStats_CountsPeersNotConnections(t *testing.T) {
 	connectMixedDirectionPeer(t, ctx, localHost)
 	connectHosts(t, ctx, localHost, newTestHost(t)) // outbound peer
 
-	in, out := connectionStats(localHost)
-	assert.Equal(t, 3, in, "inbound connections")
-	assert.Equal(t, 2, out, "outbound connections")
-
-	in, out = peerStats(localHost)
-	assert.Equal(t, 1, in, "inbound peers")
-	assert.Equal(t, 2, out, "outbound peers, including the one with connections both ways")
+	stats := hostConnStats(localHost)
+	assert.Equal(t, 3, stats.inboundConns, "inbound connections")
+	assert.Equal(t, 2, stats.outboundConns, "outbound connections")
+	assert.Equal(t, 1, stats.inboundPeers, "inbound peers")
+	assert.Equal(t, 2, stats.outboundPeers, "outbound peers, including the one with connections both ways")
 }
 
 func TestAtInboundLimit_CountsPeersNotConnections(t *testing.T) {

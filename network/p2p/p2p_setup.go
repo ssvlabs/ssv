@@ -140,6 +140,9 @@ func (n *p2pNetwork) SetupHost() error {
 
 	limitsCfg := rcmgr.DefaultLimits.AutoScale()
 	// TODO: enable and extract resource manager params as config
+	// Its per-peer connection limit (8 by default) is the only bound on connections per peer: SSV's own limits
+	// count peers, and the connection handler leaves a connected peer's extra connections open. Raising it raises
+	// the number of inbound connections the node may hold.
 	rmgr, err := rcmgr.NewResourceManager(rcmgr.NewFixedLimiter(limitsCfg))
 	if err != nil {
 		return fmt.Errorf("could not create resource manager: %w", err)
@@ -447,24 +450,44 @@ func (n *p2pNetwork) peerStats() (inbound, outbound int) {
 	if h == nil {
 		return 0, 0
 	}
-	return peerStats(h)
+	stats := hostConnStats(h)
+	return stats.inboundPeers, stats.outboundPeers
 }
 
-// peerStats returns the number of inbound and outbound peers. libp2p can keep several connections
-// to a peer (e.g. when both sides dial at once); the peer still counts once, in the direction
-// peerDirection gives it.
-func peerStats(host host.Host) (inbound, outbound int) {
-	hostNetwork := host.Network()
-	for _, p := range hostNetwork.Peers() {
-		switch peerDirection(hostNetwork.ConnsToPeer(p)) {
+// connStats counts a host's connected peers and its connections, by direction.
+type connStats struct {
+	inboundPeers, outboundPeers int
+	inboundConns, outboundConns int
+}
+
+// hostConnStats counts host's peers and connections from a single snapshot of its connections, which takes the
+// swarm's lock once (the connection gater calls it on every incoming connection) and keeps the counts consistent:
+// a peer that disconnects meanwhile can't drop out of them. libp2p can keep several connections to a peer (e.g.
+// when both sides dial at once); the peer still counts once, in the direction peerDirection gives it.
+func hostConnStats(host host.Host) connStats {
+	conns := host.Network().Conns()
+	connsByPeer := make(map[peer.ID][]network.Conn, len(conns))
+	var stats connStats
+	for _, conn := range conns {
+		switch conn.Stat().Direction {
 		case network.DirInbound:
-			inbound++
+			stats.inboundConns++
 		case network.DirOutbound:
-			outbound++
+			stats.outboundConns++
+		default:
+		}
+		connsByPeer[conn.RemotePeer()] = append(connsByPeer[conn.RemotePeer()], conn)
+	}
+	for _, peerConns := range connsByPeer {
+		switch peerDirection(peerConns) {
+		case network.DirInbound:
+			stats.inboundPeers++
+		case network.DirOutbound:
+			stats.outboundPeers++
 		default:
 		}
 	}
-	return inbound, outbound
+	return stats
 }
 
 // peerDirection returns the direction a peer with the given connections counts in: outbound if any
@@ -482,20 +505,4 @@ func peerDirection(conns []network.Conn) network.Direction {
 		}
 	}
 	return dir
-}
-
-// connectionStats returns the number of inbound and outbound connections; peer limits use peerStats.
-func connectionStats(host host.Host) (inbound, outbound int) {
-	for _, cn := range host.Network().Conns() {
-		dir := cn.Stat().Direction
-		if dir == network.DirUnknown {
-			continue
-		}
-		if dir == network.DirOutbound {
-			outbound++
-		} else {
-			inbound++
-		}
-	}
-	return inbound, outbound
 }
