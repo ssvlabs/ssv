@@ -3,9 +3,11 @@ package p2pv1
 import (
 	"fmt"
 	"math"
+	"slices"
 	"time"
 
 	"github.com/libp2p/go-libp2p/core/peer"
+	ma "github.com/multiformats/go-multiaddr"
 	"github.com/oleiade/lane/v2"
 	"go.uber.org/zap"
 
@@ -47,15 +49,11 @@ func (n *p2pNetwork) startDiscovery() error {
 	}
 
 	// Spawn a goroutine to deduplicate discovered peers by peer ID.
-	connectorProposals := make(chan peer.AddrInfo, connectorQueueSize)
+	connectorProposals := make(chan discovery.DiscoveredPeer, connectorQueueSize)
 	go n.bootstrapDiscovery(connectorProposals)
 	go func() {
 		for proposal := range connectorProposals {
-			discoveredPeer := discovery.DiscoveredPeer{
-				AddrInfo: proposal,
-				Tries:    0,
-			}
-			n.discoveredPeersPool.Set(proposal.ID, discoveredPeer)
+			n.addDiscoveredPeer(proposal)
 		}
 	}()
 
@@ -177,14 +175,14 @@ func (n *p2pNetwork) startDiscovery() error {
 			)
 		}
 
-		// Forward the selected peers for connection, incrementing the retry counter.
+		// Forward the selected peers for connection, incrementing their retry counters; markTried skips any
+		// whose pool entry changed after selection.
+		proposed := 0
 		for _, p := range peersToConnect {
-			n.discoveredPeersPool.Set(p.ID, discovery.DiscoveredPeer{
-				AddrInfo: p.AddrInfo,
-				Tries:    p.Tries + 1,
-				LastTry:  time.Now(),
-			})
-			connector <- p.AddrInfo
+			if n.markTried(p) {
+				connector <- p.AddrInfo
+				proposed++
+			}
 		}
 
 		if len(peersToConnect) == 0 {
@@ -194,11 +192,49 @@ func (n *p2pNetwork) startDiscovery() error {
 			return
 		}
 		n.logger.Info("proposed discovered peers", append([]zap.Field{
-			zap.Int("count", len(peersToConnect)),
+			zap.Int("count", proposed),
 		}, poolStats.AsLogFields()...)...)
 	})
 
 	return nil
+}
+
+// addDiscoveredPeer stores p, a peer discovery passed on, in the pool. checkPeer passes on only records newer than
+// the pooled one, but it checks the pool before this goroutine, which may be behind, has stored the earlier records,
+// so the comparison is repeated here: an older record than the pooled one is dropped. A newer record at the same
+// address only updates the entry's sequence number, keeping its retry count; one at another address replaces it.
+// An mDNS peer has no record, so its sequence number is always 0 and never older than the pooled one.
+func (n *p2pNetwork) addDiscoveredPeer(p discovery.DiscoveredPeer) {
+	n.discoveredPeersMu.Lock()
+	defer n.discoveredPeersMu.Unlock()
+
+	current, ok := n.discoveredPeersPool.Get(p.ID)
+	switch {
+	case !ok:
+		n.discoveredPeersPool.Set(p.ID, p)
+	case p.Seq < current.Seq:
+		// Keep the newer record.
+	case slices.EqualFunc(current.Addrs, p.Addrs, ma.Multiaddr.Equal):
+		current.Seq = p.Seq
+		n.discoveredPeersPool.Set(p.ID, current)
+	default:
+		n.discoveredPeersPool.Set(p.ID, p)
+	}
+}
+
+// markTried counts a connection attempt to p, a pool entry copied during selection. It returns false and
+// changes nothing if the entry has since been removed or updated from a newer record: writing p back would undo that.
+func (n *p2pNetwork) markTried(p discovery.DiscoveredPeer) bool {
+	n.discoveredPeersMu.Lock()
+	defer n.discoveredPeersMu.Unlock()
+
+	if current, ok := n.discoveredPeersPool.Get(p.ID); !ok || current.Seq != p.Seq {
+		return false
+	}
+	p.Tries++
+	p.LastTry = time.Now()
+	n.discoveredPeersPool.Set(p.ID, p)
+	return true
 }
 
 // peerSelectionScore scores a discovered peer for outbound-connection selection. The peer's
