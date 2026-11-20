@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
+	"sync/atomic"
 	"testing"
 
 	"github.com/attestantio/go-eth2-client/spec"
@@ -166,6 +168,49 @@ func TestAggregatorCommitteeRunnerProcessConsensus_SigningFailureKeepsOtherParti
 	for _, partial := range postConsensus[0].Messages {
 		require.Equal(t, phase0.ValidatorIndex(2), partial.ValidatorIndex, "only the contributor's partials are signed")
 	}
+}
+
+// A signing timeout means the signer isn't answering, so ProcessConsensus stops signing rather than waiting out a
+// timeout for each remaining aggregate and contribution. The failure is still returned and noted for the watcher.
+func TestAggregatorCommitteeRunnerProcessConsensus_SigningTimeoutStopsSigning(t *testing.T) {
+	const version = spec.DataVersionElectra
+
+	env := newAggregatorCommitteeRunnerEnv(t, []int{1, 2}, protocoltesting.NewTestingBeaconNodeWrapped())
+	signer := &timingOutSigner{BeaconSigner: env.runner.signer, domain: spectypes.DomainAggregateAndProof}
+	env.runner.signer = signer
+	duty := spectestingutils.TestingAggregatorCommitteeDutyForValidators([]int{1, 2}, []int{1, 2}, version)
+
+	concluded, err := env.startAndFeedThroughConsensus(t, t.Context(), duty, version)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	require.ErrorContains(t, err, "failed to sign aggregate and proof for validator 1")
+	requireNotedFailure(t, env.runner.BaseRunner, concluded, "deadline exceeded")
+
+	require.EqualValues(t, 1, signer.timedOut.Load(), "signing must stop after the first timeout")
+	for _, msg := range partialSigBroadcasts(env.network.BroadcastedMsgs) {
+		require.NotEqual(t, spectypes.PostConsensusPartialSig, decodeBroadcastedPartialSig(t, msg).Type, "nothing was signed")
+	}
+}
+
+// timingOutSigner fails signing for domain the way a remote signer that doesn't answer does: with a timeout.
+type timingOutSigner struct {
+	ekm.BeaconSigner
+	domain   phase0.DomainType
+	timedOut atomic.Int32
+}
+
+func (s *timingOutSigner) SignBeaconObject(
+	ctx context.Context,
+	obj spectypes.HashRoot,
+	domain phase0.Domain,
+	pubKey phase0.BLSPubKey,
+	slot phase0.Slot,
+	signatureDomain phase0.DomainType,
+) (spectypes.Signature, phase0.Root, error) {
+	if signatureDomain == s.domain {
+		s.timedOut.Add(1)
+		return nil, phase0.Root{}, fmt.Errorf("remote signer: request failed: %w", context.DeadlineExceeded)
+	}
+	return s.BeaconSigner.SignBeaconObject(ctx, obj, domain, pubKey, slot, signatureDomain)
 }
 
 // postConsensusMsgsFromFixture returns the (valid) post-consensus PartialSignatureMessages from signers

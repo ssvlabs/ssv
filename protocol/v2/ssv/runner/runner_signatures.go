@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -200,4 +201,11 @@ func (b *BaseRunner) resolveDuplicateSignature(container *ssv.PartialSigContaine
 	if err == nil {
 		container.AddSignature(msg)
 	}
+}
+
+// isSignerTimeout reports whether err, returned by signing, means the signer didn't answer in time (e.g. a remote
+// signer that's down or overloaded) rather than refusing the object.
+func isSignerTimeout(err error) bool {
+	var netErr net.Error
+	return errors.Is(err, context.DeadlineExceeded) || (errors.As(err, &netErr) && netErr.Timeout())
 }

@@ -724,13 +724,20 @@ func (r *AggregatorCommitteeRunner) ProcessConsensus(
 	// runners, and one role must not cost the other its partials here either: the decided value is processed
 	// once, so nothing signs it again. On Gloas the remote signer refuses every aggregate-and-proof (Web3Signer
 	// has no Gloas type for it) yet still signs contributions.
+	// A timeout, or the duty's context ending, stops signing instead (stopSigning): the signer isn't answering, so
+	// each remaining entry would only wait out its own timeout, holding up this slot's queue meanwhile. The
+	// entries signed before it are still broadcast.
 	var signErrs error
 	defer func() {
 		err = errors.Join(signErrs, err)
 	}()
+	stopSigning := false
 
 	messages := make([]*spectypes.PartialSignatureMessage, 0)
 	for i, aggProof := range aggProofs {
+		if stopSigning {
+			break
+		}
 		validatorIndex := consensusData.Aggregators[i].ValidatorIndex
 
 		_, exists := r.Share[validatorIndex]
@@ -760,6 +767,7 @@ func (r *AggregatorCommitteeRunner) ProcessConsensus(
 		)
 		if err != nil {
 			signErrs = errors.Join(signErrs, fmt.Errorf("failed to sign aggregate and proof for validator %d: %w", validatorIndex, err))
+			stopSigning = isSignerTimeout(err) || ctx.Err() != nil
 			continue
 		}
 
@@ -772,6 +780,9 @@ func (r *AggregatorCommitteeRunner) ProcessConsensus(
 	}
 
 	for i, contribution := range contributions {
+		if stopSigning {
+			break
+		}
 		validatorIndex := consensusData.Contributors[i].ValidatorIndex
 
 		_, exists := r.Share[validatorIndex]
@@ -802,6 +813,7 @@ func (r *AggregatorCommitteeRunner) ProcessConsensus(
 		)
 		if err != nil {
 			signErrs = errors.Join(signErrs, fmt.Errorf("failed to sign contribution and proof for validator %d: %w", validatorIndex, err))
+			stopSigning = isSignerTimeout(err) || ctx.Err() != nil
 			continue
 		}
 
