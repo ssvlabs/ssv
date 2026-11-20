@@ -406,3 +406,58 @@ func TestCommitteeRunnerProcessConsensus_DoneContextDoesNotConcludeNotRequired(t
 		requireNotedFailure(t, b, concluded, context.DeadlineExceeded.Error())
 	})
 }
+
+// doneContextCases are contexts already done when the quorum-reaching post-consensus message arrives. A
+// cancellation (shutdown) must leave the duty unconcluded, as markDutyFailed drops context.Canceled; a passed
+// deadline concludes it failed.
+func doneContextCases(t *testing.T) []struct {
+	name        string
+	ctx         context.Context
+	wantErr     error
+	wantOutcome dutyOutcome // empty: the duty stays unconcluded
+} {
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	expired, cancelExpired := context.WithDeadline(context.Background(), time.Now())
+	t.Cleanup(cancelExpired)
+
+	return []struct {
+		name        string
+		ctx         context.Context
+		wantErr     error
+		wantOutcome dutyOutcome
+	}{
+		{name: "canceled", ctx: canceled, wantErr: context.Canceled},
+		{name: "deadline exceeded", ctx: expired, wantErr: context.DeadlineExceeded, wantOutcome: dutyOutcomeFailed},
+	}
+}
+
+// A done context stops ProcessPostConsensus once a root's signatures are reconstructed, before anything is
+// submitted.
+func TestCommitteeRunnerProcessPostConsensus_DoneContext(t *testing.T) {
+	for _, tt := range doneContextCases(t) {
+		t.Run(tt.name, func(t *testing.T) {
+			env := newCommitteeRunnerEnv(t, []int{1}, &committeeDutyGuardStub{}, &doppelgangerStub{})
+			duty := spectestingutils.TestingCommitteeDuty([]int{1}, nil, spec.DataVersionElectra)
+
+			concluded, err := env.startAndDecideCommitteeDuty(t, duty)
+			require.NoError(t, err)
+			for id := spectypes.OperatorID(1); id <= 2; id++ {
+				msg := spectestingutils.PostConsensusCommitteeMsgForDuty(duty, env.keySetMap, id)
+				require.NoError(t, env.runner.ProcessPostConsensus(context.Background(), env.logger, msg))
+			}
+
+			msg := spectestingutils.PostConsensusCommitteeMsgForDuty(duty, env.keySetMap, 3)
+			err = env.runner.ProcessPostConsensus(tt.ctx, env.logger, msg)
+
+			require.ErrorIs(t, err, tt.wantErr)
+			require.Empty(t, env.beacon.GetBroadcastedRoots(), "nothing may be submitted once the context is done")
+			require.False(t, env.runner.State.Succeeded)
+			if tt.wantOutcome == "" {
+				require.Empty(t, concluded, "a canceled duty must not be concluded")
+			} else {
+				requireConcluded(t, concluded, tt.wantOutcome)
+			}
+		})
+	}
+}

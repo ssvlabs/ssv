@@ -657,6 +657,8 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 				attestationsToSubmit[sig.validatorIndex] = att
 			}
 		}
+
+		logger.Debug("🧩 reconstructed partial signatures for root", fields.BlockRoot(root))
 	}
 
 	attestations := make([]*spec.VersionedAttestation, 0, len(attestationsToSubmit))

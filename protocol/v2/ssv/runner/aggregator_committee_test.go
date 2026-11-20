@@ -578,3 +578,35 @@ func TestAggregatorCommitteeRunnerPreConsensus_DuplicateCommitteeAggregators(t *
 	require.NotEqual(t, wholeRoot0, wholeRoot1,
 		"whole-proof roots must differ via per-validator AggregatorIndex/SelectionProof; identical roots would mean both entries collapsed into the same proof")
 }
+
+// A done context stops ProcessPostConsensus once a root's signatures are reconstructed, before anything is
+// submitted.
+func TestAggregatorCommitteeRunnerProcessPostConsensus_DoneContext(t *testing.T) {
+	const version = spec.DataVersionElectra
+
+	for _, tt := range doneContextCases(t) {
+		t.Run(tt.name, func(t *testing.T) {
+			base := protocoltesting.NewTestingBeaconNodeWrapped().(*protocoltesting.BeaconNodeWrapped)
+			env := newAggregatorCommitteeRunnerEnv(t, []int{1}, base)
+			duty := spectestingutils.TestingAggregatorCommitteeDutyForValidators([]int{1}, []int{1}, version)
+
+			concluded, err := env.startAndFeedThroughConsensus(t, t.Context(), duty, version)
+			require.NoError(t, err)
+			msgs := postConsensusMsgsFromFixture(duty, env.keySetMap, version)
+			for _, psig := range msgs[:2] {
+				require.NoError(t, env.runner.ProcessPostConsensus(t.Context(), env.logger, psig))
+			}
+
+			err = env.runner.ProcessPostConsensus(tt.ctx, env.logger, msgs[2])
+
+			require.ErrorIs(t, err, tt.wantErr)
+			require.Empty(t, base.GetBroadcastedRoots(), "nothing may be submitted once the context is done")
+			require.False(t, env.runner.State.Succeeded)
+			if tt.wantOutcome == "" {
+				require.Empty(t, concluded, "a canceled duty must not be concluded")
+			} else {
+				requireConcluded(t, concluded, tt.wantOutcome)
+			}
+		})
+	}
+}

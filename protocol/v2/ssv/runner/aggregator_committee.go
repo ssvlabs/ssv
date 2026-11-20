@@ -983,6 +983,8 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 				return fmt.Errorf("unexpected role type in post-consensus: %v", role)
 			}
 		}
+
+		logger.Debug("🧩 reconstructed partial signatures for root", fields.BlockRoot(root))
 	}
 
 	for validatorIndex, signedByRoot := range aggregatesToSubmit {

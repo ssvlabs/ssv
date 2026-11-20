@@ -119,6 +119,5 @@ func (b *BaseRunner) reconstructPostConsensusSigs(
 	}
 	wg.Wait()
 
-	logger.Debug("🧩 reconstructed partial signatures for root", fields.BlockRoot(root))
 	return sigs, errs
 }
