@@ -366,8 +366,8 @@ const maxPeersToDrop = 4 // targeting MaxPeers in 60-90 range
 //   - dropping irrelevant peers that don't have any subnet in common with us
 //   - (when we are close to MaxPeers limit) dropping several peers with the worst score
 //     which is based on how many valuable (dead/solo/duo) subnets a peer contributes
-//   - (when Inbound peers are close to its limit) dropping several Inbound peers with
-//     the worst score
+//   - (otherwise, when inbound peers reach their limit) occasionally dropping several inbound
+//     peers with the worst score
 func (n *p2pNetwork) peersTrimming() func() {
 	return func() {
 		ctx, cancel := context.WithTimeout(n.ctx, 60*time.Second)
@@ -402,19 +402,14 @@ func (n *p2pNetwork) peersTrimming() func() {
 
 		trimInboundOnly := false
 
-		// see if we can accept more peer connections already (no need to trim), note we trim not
-		// only when our current connections reach MaxPeers limit exactly but even if we get close
-		// enough to it - this ensures we don't skip trim iteration because of "random fluctuations"
-		// in currently connected peer count at that limit boundary
+		// Trim once the peer count is within maxPeersToDrop of MaxPeers, not only at MaxPeers
+		// exactly, so fluctuations at that boundary don't skip a trim round.
 		connectedPeers = hostNetwork.Peers()
 		if len(connectedPeers) <= n.cfg.MaxPeers-maxPeersToDrop {
-			// We probably don't want to trim outgoing connections then, but from time-to-time we want to
-			// trim (and rotate) some incoming connections when inbound limit is hit just to make sure
-			// inbound connections are rotated occasionally in reliable manner.
-			// Note, we don't want to trim incoming connections as often as outgoing connections (since
-			// trimming outgoing connections often helps us discover valuable peers, while it's not really
-			// the case with incoming connections - only slightly so) hence sometimes we randomly skip this
-			in, _ := n.connectionStats()
+			// There is room for more peers, so only rotate inbound peers, and only once they reach the
+			// inbound limit. Rotating them helps find valuable peers less than rotating outbound ones
+			// does, so do it in 1 of 5 rounds.
+			in, _ := n.peerStats()
 			if in < n.inboundLimit() {
 				return // skip trim iteration
 			}
@@ -424,7 +419,7 @@ func (n *p2pNetwork) peersTrimming() func() {
 			trimInboundOnly = true
 		}
 
-		inboundBefore, outboundBefore := n.connectionStats()
+		inboundBefore, outboundBefore := n.peerStats()
 		peersToTrim := n.choosePeersToTrim(maxPeersToDrop, trimInboundOnly)
 		if len(peersToTrim) == 0 {
 			n.logger.Debug(
@@ -440,7 +435,7 @@ func (n *p2pNetwork) peersTrimming() func() {
 		for pid := range peersToTrim {
 			n.trimmedRecently.Set(pid, struct{}{})
 		}
-		inboundAfter, outboundAfter := n.connectionStats()
+		inboundAfter, outboundAfter := n.peerStats()
 		n.logger.Debug(
 			"trimmed peers",
 			zap.Int("inbound_peers_before_trim", inboundBefore),
@@ -454,8 +449,9 @@ func (n *p2pNetwork) peersTrimming() func() {
 	}
 }
 
-// choosePeersToTrim returns a map of peers that are least-valuable to us based on how much
-// (dead/solo/duo) they contribute to us.
+// choosePeersToTrim returns up to trimCnt peers that are least-valuable to us based on how much
+// (dead/solo/duo) they contribute to us. With trimInboundOnly, it only picks peers peerDirection
+// counts as inbound.
 func (n *p2pNetwork) choosePeersToTrim(trimCnt int, trimInboundOnly bool) map[peer.ID]struct{} {
 	myPeers, err := n.topicsCtrl.Peers("")
 	if err != nil {
@@ -485,38 +481,38 @@ func (n *p2pNetwork) choosePeersToTrim(trimCnt int, trimInboundOnly bool) map[pe
 			break
 		}
 		pConns := hostNetwork.ConnsToPeer(p)
-		// we shouldn't have more than 1 connection per peer, but if we do we'd want a
-		// warning about it logged, and we'd want to handle it to the best of our ability
+		if len(pConns) == 0 {
+			continue // disconnected since topicsCtrl listed it
+		}
+		// a peer with several connections still takes a single trim slot
 		if len(pConns) > 1 {
-			n.logger.Error(
-				"choosePeersToTrim: encountered peer we have multiple open connections with (expected 1 at most)",
+			n.logger.Debug(
+				"choosePeersToTrim: encountered peer we have multiple open connections with",
 				zap.String("peer_id", p.String()),
 				zap.Int("connections_count", len(pConns)),
 			)
 		}
-		for _, pConn := range pConns {
-			connDir := pConn.Stat().Direction
-			if connDir == p2pnet.DirUnknown {
-				n.logger.Error(
-					"choosePeersToTrim: encountered peer connection with direction Unknown",
-					zap.String("peer_id", p.String()),
-				)
-			}
-			if connDir == p2pnet.DirOutbound && trimInboundOnly {
-				continue
-			}
-			peerSubnets, _ := n.idx.GetPeerSubnets(p)
-			sharedSubnets := ownSubnets.SharedSubnets(peerSubnets)
-			n.logger.Debug("selected peer for trimming",
-				fields.PeerID(p),
-				zap.Float64("peer_score", peerScores[p]),
-				zap.String("conn_direction", connDir.String()),
-				zap.String("peer_subnets", peerSubnets.StringHumanReadable()),
-				zap.Int("shared_subnets_count", len(sharedSubnets)),
+		connDir := peerDirection(pConns)
+		if connDir == p2pnet.DirUnknown {
+			n.logger.Error(
+				"choosePeersToTrim: encountered peer with direction Unknown",
+				zap.String("peer_id", p.String()),
 			)
-			result[p] = struct{}{}
-			trimCnt--
 		}
+		if connDir == p2pnet.DirOutbound && trimInboundOnly {
+			continue
+		}
+		peerSubnets, _ := n.idx.GetPeerSubnets(p)
+		sharedSubnets := ownSubnets.SharedSubnets(peerSubnets)
+		n.logger.Debug("selected peer for trimming",
+			fields.PeerID(p),
+			zap.Float64("peer_score", peerScores[p]),
+			zap.String("conn_direction", connDir.String()),
+			zap.String("peer_subnets", peerSubnets.StringHumanReadable()),
+			zap.Int("shared_subnets_count", len(sharedSubnets)),
+		)
+		result[p] = struct{}{}
+		trimCnt--
 	}
 	return result
 }

@@ -53,23 +53,24 @@ var (
 
 func recordPeerCount(ctx context.Context, logger *zap.Logger, h host.Host) func() {
 	return func() {
-		numOfInbound, numOfOutbound := connectionStats(h)
-		numTotal := numOfInbound + numOfOutbound
+		stats := hostConnStats(h)
+		peersTotal := stats.inboundPeers + stats.outboundPeers
 
 		logger.Debug(
 			"connected peers status",
-			zap.Int("peers_inbound", numOfInbound),
-			zap.Int("peers_outbound", numOfOutbound),
-			zap.Int("peers_total", numTotal),
+			zap.Int("peers_inbound", stats.inboundPeers),
+			zap.Int("peers_outbound", stats.outboundPeers),
+			zap.Int("peers_total", peersTotal),
+			zap.Int("connections_total", stats.inboundConns+stats.outboundConns),
 		)
 
-		connectionsGauge.Record(ctx, int64(numOfInbound), metric.WithAttributes(
+		connectionsGauge.Record(ctx, int64(stats.inboundConns), metric.WithAttributes(
 			observability.NetworkDirectionAttribute(network.DirInbound),
 		))
-		connectionsGauge.Record(ctx, int64(numOfOutbound), metric.WithAttributes(
+		connectionsGauge.Record(ctx, int64(stats.outboundConns), metric.WithAttributes(
 			observability.NetworkDirectionAttribute(network.DirOutbound),
 		))
-		peersConnectedGauge.Record(ctx, int64(numTotal))
+		peersConnectedGauge.Record(ctx, int64(peersTotal))
 	}
 }
 
