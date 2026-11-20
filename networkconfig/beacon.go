@@ -81,12 +81,12 @@ func (b *Beacon) EstimatedCurrentSlot() phase0.Slot {
 }
 
 // EstimatedSlotAtTime estimates slot at the given time
-func (b *Beacon) EstimatedSlotAtTime(time time.Time) phase0.Slot {
-	if time.Before(b.GenesisTime) {
-		panic(fmt.Sprintf("time %v is before genesis time %v", time, b.GenesisTime))
+func (b *Beacon) EstimatedSlotAtTime(t time.Time) phase0.Slot {
+	if t.Before(b.GenesisTime) {
+		panic(fmt.Sprintf("time %v is before genesis time %v", t, b.GenesisTime))
 	}
-	timeAfterGenesis := time.Sub(b.GenesisTime)
-	return phase0.Slot(timeAfterGenesis / b.SlotDuration) // #nosec G115 -- time is not before genesis, checked above
+	timeAfterGenesis := t.Sub(b.GenesisTime)
+	return phase0.Slot(timeAfterGenesis / b.SlotDuration) // #nosec G115 -- t is not before genesis, checked above
 }
 
 // EstimatedTimeIntoSlot returns the duration passed since EstimatedCurrentSlot.
@@ -105,7 +105,12 @@ func (b *Beacon) EstimatedEpochAtSlot(slot phase0.Slot) phase0.Epoch {
 	return phase0.Epoch(uint64(slot) / b.SlotsPerEpoch)
 }
 
-// IsFirstSlotOfEpoch estimates epoch at the given slot
+// EstimatedEpochAtTime estimates epoch at the given time
+func (b *Beacon) EstimatedEpochAtTime(t time.Time) phase0.Epoch {
+	return b.EstimatedEpochAtSlot(b.EstimatedSlotAtTime(t))
+}
+
+// IsFirstSlotOfEpoch reports whether the slot is the first of its epoch
 func (b *Beacon) IsFirstSlotOfEpoch(slot phase0.Slot) bool {
 	return uint64(slot)%b.SlotsPerEpoch == 0
 }

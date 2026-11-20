@@ -90,9 +90,11 @@ func TestApplyBeaconConfig_ForkScheduleLag(t *testing.T) {
 		require.Equal(t, 1, stops.Len())
 		require.Contains(t, stops.All()[0].Message, "stopping, as the fork is too close")
 
+		// The next recheck is less than an epoch away: in the next epoch at the latest.
+		nextRecheck := now + 1
 		gc, logs = newLagTestClient(gloasScheduledAt(networkconfig.FarFutureEpoch))
-		_, err := gc.applyBeaconConfig("http://upgraded:5052", gloasScheduledAt(now+forkScheduleLagStopEpochs+1))
-		require.NoError(t, err, "an epoch further out, it's an error only")
+		_, err := gc.applyBeaconConfig("http://upgraded:5052", gloasScheduledAt(nextRecheck+forkScheduleLagStopEpochs+1))
+		require.NoError(t, err, "an epoch further out than the next recheck's margin, it's an error only")
 		require.Equal(t, 1, logs.FilterLevelExact(zapcore.ErrorLevel).Len())
 		require.Zero(t, logs.FilterLevelExact(zapcore.FatalLevel).Len())
 	})
@@ -114,6 +116,27 @@ func TestApplyBeaconConfig_ForkScheduleLag(t *testing.T) {
 		_, err := gc.applyBeaconConfig("http://other:5052", gloasScheduledAt(now))
 		require.ErrorContains(t, err, "beacon config misalign")
 	})
+}
+
+// Whatever the phase of the recheck cadence, the node stops at the last recheck before the fork comes within
+// forkScheduleLagStopEpochs: before that margin opens, so the restarted node has a whole epoch ahead of the
+// pre-fork window, and no more than a recheck interval earlier.
+func TestForkScheduleLagStopDue(t *testing.T) {
+	beacon := networkconfig.TestNetwork.Beacon
+	const fork = phase0.Epoch(1000)
+	marginStart := beacon.EpochStartTime(fork - forkScheduleLagStopEpochs)
+
+	require.True(t, forkScheduleLagStopDue(beacon, marginStart.Add(-forkScheduleRecheckInterval), fork), "the next recheck falls inside the margin")
+	require.False(t, forkScheduleLagStopDue(beacon, marginStart.Add(-forkScheduleRecheckInterval-time.Nanosecond), fork), "the next recheck still falls before it")
+
+	for phase := time.Duration(0); phase < forkScheduleRecheckInterval; phase += beacon.SlotDuration / 4 {
+		recheck := beacon.EpochStartTime(fork - 10).Add(phase)
+		for !forkScheduleLagStopDue(beacon, recheck, fork) {
+			recheck = recheck.Add(forkScheduleRecheckInterval)
+		}
+		require.True(t, recheck.Before(marginStart), "phase %v: stopped at %v, inside the margin opening at %v", phase, recheck, marginStart)
+		require.False(t, recheck.Before(marginStart.Add(-forkScheduleRecheckInterval)), "phase %v: stopped at %v, more than a recheck interval before the margin opening at %v", phase, recheck, marginStart)
+	}
 }
 
 // The periodic recheck reports through the same path as the activation hook, and stays quiet for a client
