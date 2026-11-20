@@ -3,6 +3,7 @@ package duties
 import (
 	"context"
 	"math"
+	"slices"
 	"sync"
 	"testing"
 	"testing/synctest"
@@ -319,7 +320,8 @@ func waitForDutiesExecution(
 		for _, e := range expectedDuties {
 			found := false
 			for _, d := range duties {
-				if e.Type == d.Type && e.PubKey == d.PubKey && e.ValidatorIndex == d.ValidatorIndex && e.Slot == d.Slot {
+				if e.Type == d.Type && e.PubKey == d.PubKey && e.ValidatorIndex == d.ValidatorIndex && e.Slot == d.Slot &&
+					slices.Equal(e.ValidatorSyncCommitteeIndices, d.ValidatorSyncCommitteeIndices) {
 					found = true
 					break
 				}
@@ -388,7 +390,8 @@ func waitForDutiesExecutionCommittee(
 			for _, e := range eCommDuty.validatorDuties() {
 				found := false
 				for _, d := range aCommDuty.validatorDuties() {
-					if e.Type == d.Type && e.PubKey == d.PubKey && e.ValidatorIndex == d.ValidatorIndex && e.Slot == d.Slot {
+					if e.Type == d.Type && e.PubKey == d.PubKey && e.ValidatorIndex == d.ValidatorIndex && e.Slot == d.Slot &&
+						slices.Equal(e.ValidatorSyncCommitteeIndices, d.ValidatorSyncCommitteeIndices) {
 						found = true
 						break
 					}

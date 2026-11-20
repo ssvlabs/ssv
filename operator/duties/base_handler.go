@@ -88,8 +88,8 @@ func (h *baseHandler) atLastSlotOfCurrentEpoch(currentSlot phase0.Slot) bool {
 	return uint64(currentSlot+1)%slotsPerEpoch == 0
 }
 
-// atLastSlotOrPastCurrentPeriod returns true if the currentSlot is at or past the last actionable slot of the currentPeriod.
-func (h *baseHandler) atLastSlotOrPastCurrentPeriod(currentSlot phase0.Slot, currentPeriod uint64) bool {
+// atOrPastLastActionableSlot returns true if currentSlot is at or past the last actionable slot of currentPeriod.
+func (h *baseHandler) atOrPastLastActionableSlot(currentSlot phase0.Slot, currentPeriod uint64) bool {
 	return currentSlot >= h.netCfg.LastActionableSlotOfSyncPeriod(currentPeriod)
 }
 

@@ -1759,9 +1759,9 @@ func (c *Collector) computeAndPersistScheduleForSlot(slot phase0.Slot) error {
 		}
 	}
 
-	// Sync-committee membership for this slot (period members are scheduled every slot)
+	// Sync-committee members on duty in this slot (see SyncCommitteeDutyPeriodAtSlot)
 	if c.duties.SyncCommittee != nil {
-		period := c.beacon.EstimatedSyncCommitteePeriodAtEpoch(epoch)
+		period := c.beacon.SyncCommitteeDutyPeriodAtSlot(slot)
 		for _, sc := range c.duties.SyncCommittee.CommitteePeriodDuties(period) {
 			if sc == nil {
 				continue

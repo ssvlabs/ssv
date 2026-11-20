@@ -1223,6 +1223,98 @@ func TestCommitteeHandlerHandleDuties_AggregatorExecutesTicksPostBooleFork(t *te
 	})
 }
 
+// Both handler flavors (sync committee messages, and post-Boole contributions) run the next period's sync committee
+// in a period's last slot, with its members' next-period positions.
+func TestCommitteeHandlerProcessExecution_LastSlotOfSyncPeriodUsesNextPeriod(t *testing.T) {
+	tests := []struct {
+		name         string
+		isAggregator bool
+		syncRole     spectypes.BeaconRole
+	}{
+		{name: "committee", isAggregator: false, syncRole: spectypes.BNRoleSyncCommittee},
+		{name: "aggregator committee", isAggregator: true, syncRole: spectypes.BNRoleSyncCommitteeContribution},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				ctrl := gomock.NewController(t)
+
+				outgoing, incoming, both := activeShare(1), activeShare(2), activeShare(3)
+				shares := []*ssvtypes.SSVShare{outgoing, incoming, both}
+
+				validatorProvider := NewMockValidatorProvider(ctrl)
+				validatorProvider.EXPECT().SelfParticipatingValidators(gomock.Any()).Return(shares).AnyTimes()
+				for _, share := range shares {
+					share.ValidatorPubKey = spectypes.ValidatorPK{byte(share.ValidatorIndex)}
+					validatorProvider.EXPECT().Validator(share.ValidatorPubKey[:]).Return(share, true).AnyTimes()
+				}
+
+				// executed records, per slot, the sync committee positions of each validator whose sync duty ran.
+				executed := make(map[phase0.Slot]map[phase0.ValidatorIndex][]uint64)
+				dutiesExecutor := NewMockDutiesExecutor(ctrl)
+				dutiesExecutor.EXPECT().ExecuteCommitteeDuties(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+					func(_ context.Context, committeeMap committeeDutiesMap, _ time.Time) {
+						for _, cd := range committeeMap {
+							for _, vd := range cd.validatorDuties() {
+								if vd.Type != tc.syncRole {
+									continue
+								}
+								if executed[vd.Slot] == nil {
+									executed[vd.Slot] = make(map[phase0.ValidatorIndex][]uint64)
+								}
+								executed[vd.Slot][vd.ValidatorIndex] = vd.ValidatorSyncCommitteeIndices
+							}
+						}
+					}).AnyTimes()
+
+				beaconCfg := *networkconfig.TestNetwork.Beacon
+				beaconCfg.EpochsPerSyncCommitteePeriod = testEpochsPerSCPeriod
+				beaconCfg.SlotsPerEpoch = testSlotsPerEpoch
+				firstSlotOfNextPeriod := beaconCfg.FirstSlotAtEpoch(beaconCfg.FirstEpochOfSyncPeriod(1))
+				lastSlotOfPeriod := firstSlotOfNextPeriod - 1
+				beaconCfg.GenesisTime = time.Now().Add(-beaconCfg.SlotDuration * time.Duration(lastSlotOfPeriod-1))
+				netCfg := *networkconfig.TestNetwork
+				netCfg.Beacon = &beaconCfg
+
+				syncDuty := func(share *ssvtypes.SSVShare, position phase0.CommitteeIndex) dutystore.StoreSyncCommitteeDuty {
+					return dutystore.StoreSyncCommitteeDuty{
+						ValidatorIndex: share.ValidatorIndex,
+						Duty: &eth2apiv1.SyncCommitteeDuty{
+							PubKey:                        phase0.BLSPubKey(share.ValidatorPubKey),
+							ValidatorIndex:                share.ValidatorIndex,
+							ValidatorSyncCommitteeIndices: []phase0.CommitteeIndex{position},
+						},
+						InCommittee: true,
+					}
+				}
+				dutyStore := dutystore.New()
+				dutyStore.SyncCommittee.Set(0, []dutystore.StoreSyncCommitteeDuty{syncDuty(outgoing, 1), syncDuty(both, 10)})
+				dutyStore.SyncCommittee.Set(1, []dutystore.StoreSyncCommitteeDuty{syncDuty(incoming, 2), syncDuty(both, 20)})
+
+				handler := NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee, tc.isAggregator)
+				handler.logger = zap.NewNop()
+				handler.netCfg = &netCfg
+				handler.validatorProvider = validatorProvider
+				handler.dutiesExecutor = dutiesExecutor
+
+				for _, slot := range []phase0.Slot{lastSlotOfPeriod - 1, lastSlotOfPeriod, firstSlotOfNextPeriod} {
+					waitForSlotN(&beaconCfg, slot)
+					handler.processExecution(t.Context(), beaconCfg.EstimatedEpochAtSlot(slot), slot)
+				}
+
+				outgoingCommittee := map[phase0.ValidatorIndex][]uint64{outgoing.ValidatorIndex: {1}, both.ValidatorIndex: {10}}
+				incomingCommittee := map[phase0.ValidatorIndex][]uint64{incoming.ValidatorIndex: {2}, both.ValidatorIndex: {20}}
+				require.Equal(t, map[phase0.Slot]map[phase0.ValidatorIndex][]uint64{
+					lastSlotOfPeriod - 1:  outgoingCommittee,
+					lastSlotOfPeriod:      incomingCommittee,
+					firstSlotOfNextPeriod: incomingCommittee,
+				}, executed)
+			})
+		})
+	}
+}
+
 // The purpose of the test is to ensure that the scheduler can handle the case where the indices change
 // at the last slot of the epoch, and it does not affect the execution of the duties for the next epoch first slot.
 func TestScheduler_Committee_Indices_Changed_At_The_Last_Slot_Of_The_Epoch(t *testing.T) {
