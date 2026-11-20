@@ -106,3 +106,44 @@ func TestPackLogsOrdersByLogIndexWithinTransaction(t *testing.T) {
 	}
 	assert.Equal(t, []uint{3, 9, 10, 11}, gotIndexes)
 }
+
+func TestBlockLogIDs(t *testing.T) {
+	logs := []types.Log{
+		{TxIndex: 2, Index: 5},
+		{TxIndex: 0, Index: 1},
+		{TxIndex: 0, Index: 0, BlockNumber: 99, Removed: true}, // only (TxIndex, Index) identifies a log
+		{TxIndex: 0, Index: 1},                                 // a duplicate counts once
+	}
+	want := []LogID{{TxIndex: 0, Index: 0}, {TxIndex: 0, Index: 1}, {TxIndex: 2, Index: 5}}
+
+	// Sorted and deduplicated, so responses compare as sets regardless of order.
+	ids := BlockLogIDs(logs)
+	assert.Equal(t, want, ids)
+	assert.Empty(t, BlockLogIDs(nil))
+
+	// The journal encoding round-trips, including the empty set.
+	decoded, err := DecodeLogIDs(EncodeLogIDs(ids))
+	assert.NoError(t, err)
+	assert.Equal(t, want, decoded)
+	decoded, err = DecodeLogIDs(EncodeLogIDs(nil))
+	assert.NoError(t, err)
+	assert.Empty(t, decoded)
+
+	// A truncated encoding is rejected rather than misread.
+	encoded := EncodeLogIDs([]LogID{{TxIndex: 1 << 20, Index: 1 << 20}})
+	_, err = DecodeLogIDs(encoded[:len(encoded)-1])
+	assert.ErrorIs(t, err, errMalformedLogIDs)
+}
+
+func TestPackWithUnsettled(t *testing.T) {
+	logs := []types.Log{{BlockNumber: 7, TxIndex: 0, Index: 0}, {BlockNumber: 3, TxIndex: 1, Index: 2}}
+
+	packed := packWithUnsettled(logs, []uint64{5, 1})
+
+	got := make([]uint64, 0, len(packed))
+	for _, bl := range packed {
+		got = append(got, bl.BlockNumber)
+		assert.Equal(t, bl.Unsettled, len(bl.Logs) == 0, "only unsettled entries are log-less")
+	}
+	assert.Equal(t, []uint64{1, 3, 5, 7}, got, "unsettled entries are merged in block order")
+}
