@@ -17,6 +17,7 @@ import (
 	exporterHandlers "github.com/ssvlabs/ssv/api/handlers/exporter"
 	nodeHandlers "github.com/ssvlabs/ssv/api/handlers/node"
 	validatorsHandlers "github.com/ssvlabs/ssv/api/handlers/validators"
+	"github.com/ssvlabs/ssv/exporter/peersigners"
 	"github.com/ssvlabs/ssv/utils/commons"
 )
 
@@ -84,6 +85,9 @@ func New(
 	// @Success 200 {object} handlers.ValidatorsResponse
 	// @Router /v1/validators [get]
 	router.Get("/v1/validators", api.Handler(validators.List))
+
+	// EXPERIMENT: first-delivering peer per signer, see exporter/peersigners.
+	router.Get("/v1/exporter/peer-signers", peersigners.Handler)
 
 	// We kept both GET and POST methods to ensure compatibility and avoid breaking changes for clients that may rely on either method
 	if fullExporter {

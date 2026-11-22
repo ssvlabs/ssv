@@ -20,6 +20,7 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
+	"github.com/ssvlabs/ssv/exporter/peersigners"
 	"github.com/ssvlabs/ssv/message/signatureverifier"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -222,7 +223,11 @@ func (mv *messageValidator) handlePubsubMessage(ctx context.Context, pMsg *pubsu
 		return nil, err
 	}
 
-	return mv.handleSignedSSVMessage(ctx, signedSSVMessage, pMsg.GetTopic(), pMsg.ReceivedFrom, receivedAt)
+	decoded, err := mv.handleSignedSSVMessage(ctx, signedSSVMessage, pMsg.GetTopic(), pMsg.ReceivedFrom, receivedAt)
+	if err == nil && len(signedSSVMessage.OperatorIDs) == 1 {
+		peersigners.Record(signedSSVMessage.OperatorIDs[0], pMsg.ReceivedFrom)
+	}
+	return decoded, err
 }
 
 func (mv *messageValidator) handleSignedSSVMessage(
