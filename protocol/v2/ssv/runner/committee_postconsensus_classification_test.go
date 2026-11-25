@@ -13,6 +13,9 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest/observer"
 
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 )
@@ -137,6 +140,65 @@ func TestCommitteeRunnerProcessPostConsensus_MarksFailedWhenNoShareToDrop(t *tes
 	require.False(t, isRecoverableReconstructError(postConsensusErr))
 	requireConcluded(t, concluded, dutyOutcomeFailed)
 	require.Empty(t, env.beacon.GetBroadcastedRoots())
+}
+
+// Validators that share a root can reach its quorum at different times. Once the later one gets there, the
+// earlier one, already submitted, must not be reconstructed and submitted again.
+func TestCommitteeRunnerProcessPostConsensus_SkipsSubmittedValidators(t *testing.T) {
+	doppelganger := &doppelgangerStub{}
+	env := newCommitteeRunnerEnv(t, []int{1, 2}, &committeeDutyGuardStub{}, doppelganger)
+	duty := spectestingutils.TestingCommitteeDuty([]int{1, 2}, nil, spec.DataVersionElectra)
+
+	_, err := env.startAndDecideCommitteeDuty(t, duty)
+	require.NoError(t, err)
+
+	// Signer 3's partial signature for validator 2 is corrupted: validator 1 is submitted, while validator 2
+	// drops back below quorum.
+	for id := spectypes.OperatorID(1); id <= 3; id++ {
+		msg := spectestingutils.PostConsensusCommitteeMsgForDuty(duty, env.keySetMap, id)
+		if id == 3 {
+			for _, m := range msg.Messages {
+				if m.ValidatorIndex == 2 {
+					m.PartialSignature = bytes.Repeat([]byte{0xEE}, len(m.PartialSignature))
+				}
+			}
+		}
+		err = env.runner.ProcessPostConsensus(context.Background(), env.logger, msg)
+	}
+	require.True(t, isRecoverableReconstructError(err))
+	require.Equal(t, []phase0.ValidatorIndex{1}, doppelganger.reports)
+
+	// Signer 4 brings validator 2 back to quorum.
+	msg := spectestingutils.PostConsensusCommitteeMsgForDuty(duty, env.keySetMap, 4)
+	require.NoError(t, env.runner.ProcessPostConsensus(context.Background(), env.logger, msg))
+	require.Equal(t, []phase0.ValidatorIndex{1, 2}, doppelganger.reports)
+	require.Len(t, env.beacon.GetBroadcastedRoots(), 2)
+	require.True(t, env.runner.State.Succeeded)
+}
+
+// A failed reconstruction also verifies the validator's partial signatures for the roots still ahead, so a bad
+// signer costs one failed reconstruction rather than one per root.
+func TestCommitteeRunnerProcessPostConsensus_VerifiesRootsAheadOnFailure(t *testing.T) {
+	env := newCommitteeRunnerEnv(t, []int{1}, &committeeDutyGuardStub{}, &doppelgangerStub{})
+	// Validator 1 has an attester and a sync committee duty, hence two roots.
+	duty := spectestingutils.TestingCommitteeDuty([]int{1}, []int{1}, spec.DataVersionElectra)
+
+	_, err := env.startAndDecideCommitteeDuty(t, duty)
+	require.NoError(t, err)
+
+	core, logs := observer.New(zapcore.ErrorLevel)
+	for id := spectypes.OperatorID(1); id <= 3; id++ {
+		msg := spectestingutils.PostConsensusCommitteeMsgForDuty(duty, env.keySetMap, id)
+		if id == 3 {
+			for _, m := range msg.Messages {
+				m.PartialSignature = bytes.Repeat([]byte{0xEE}, len(m.PartialSignature))
+			}
+		}
+		err = env.runner.ProcessPostConsensus(context.Background(), zap.New(core), msg)
+	}
+
+	require.True(t, isRecoverableReconstructError(err))
+	require.Len(t, logs.FilterMessage("got post-consensus quorum but it has invalid signatures").All(), 1)
 }
 
 // invalidateDutiesInGuard marks every validator duty of the committee duty invalid in the guard
@@ -343,4 +405,59 @@ func TestCommitteeRunnerProcessConsensus_DoneContextDoesNotConcludeNotRequired(t
 		require.ErrorIs(t, err, context.DeadlineExceeded)
 		requireNotedFailure(t, b, concluded, context.DeadlineExceeded.Error())
 	})
+}
+
+// doneContextCases are contexts already done when the quorum-reaching post-consensus message arrives. A
+// cancellation (shutdown) must leave the duty unconcluded, as markDutyFailed drops context.Canceled; a passed
+// deadline concludes it failed.
+func doneContextCases(t *testing.T) []struct {
+	name        string
+	ctx         context.Context
+	wantErr     error
+	wantOutcome dutyOutcome // empty: the duty stays unconcluded
+} {
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	expired, cancelExpired := context.WithDeadline(context.Background(), time.Now())
+	t.Cleanup(cancelExpired)
+
+	return []struct {
+		name        string
+		ctx         context.Context
+		wantErr     error
+		wantOutcome dutyOutcome
+	}{
+		{name: "canceled", ctx: canceled, wantErr: context.Canceled},
+		{name: "deadline exceeded", ctx: expired, wantErr: context.DeadlineExceeded, wantOutcome: dutyOutcomeFailed},
+	}
+}
+
+// A done context stops ProcessPostConsensus once a root's signatures are reconstructed, before anything is
+// submitted.
+func TestCommitteeRunnerProcessPostConsensus_DoneContext(t *testing.T) {
+	for _, tt := range doneContextCases(t) {
+		t.Run(tt.name, func(t *testing.T) {
+			env := newCommitteeRunnerEnv(t, []int{1}, &committeeDutyGuardStub{}, &doppelgangerStub{})
+			duty := spectestingutils.TestingCommitteeDuty([]int{1}, nil, spec.DataVersionElectra)
+
+			concluded, err := env.startAndDecideCommitteeDuty(t, duty)
+			require.NoError(t, err)
+			for id := spectypes.OperatorID(1); id <= 2; id++ {
+				msg := spectestingutils.PostConsensusCommitteeMsgForDuty(duty, env.keySetMap, id)
+				require.NoError(t, env.runner.ProcessPostConsensus(context.Background(), env.logger, msg))
+			}
+
+			msg := spectestingutils.PostConsensusCommitteeMsgForDuty(duty, env.keySetMap, 3)
+			err = env.runner.ProcessPostConsensus(tt.ctx, env.logger, msg)
+
+			require.ErrorIs(t, err, tt.wantErr)
+			require.Empty(t, env.beacon.GetBroadcastedRoots(), "nothing may be submitted once the context is done")
+			require.False(t, env.runner.State.Succeeded)
+			if tt.wantOutcome == "" {
+				require.Empty(t, concluded, "a canceled duty must not be concluded")
+			} else {
+				requireConcluded(t, concluded, tt.wantOutcome)
+			}
+		})
+	}
 }
