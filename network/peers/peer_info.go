@@ -97,6 +97,13 @@ func (pi *peerInfoIndex) SetState(id peer.ID, state PeerState) {
 	})
 }
 
+func (pi *peerInfoIndex) Remove(id peer.ID) {
+	pi.mutex.Lock()
+	defer pi.mutex.Unlock()
+
+	delete(pi.store, id)
+}
+
 func (pi *peerInfoIndex) UpdatePeerInfo(id peer.ID, update func(*PeerInfo)) {
 	pi.mutex.Lock()
 	defer pi.mutex.Unlock()

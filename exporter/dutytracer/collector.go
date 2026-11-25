@@ -316,20 +316,37 @@ func (c *Collector) getOrCreateCommitteeTrace(slot phase0.Slot, committeeID spec
 	return committeeTrace, false, nil
 }
 
+// proposalDataFits reports whether data is within the SSZ limit of a trace's ProposalData. A proposal's FullData
+// can be larger than that limit, and a trace that doesn't encode is skipped at eviction.
+// Data that doesn't fit is logged and must be left out of the trace.
+func (c *Collector) proposalDataFits(slot phase0.Slot, data []byte) bool {
+	if len(data) <= traces.MaxProposalDataSize {
+		return true
+	}
+	c.logger.Warn("proposal data exceeds the trace limit, leaving it out of the archived duty",
+		fields.Slot(slot), zap.Int("size", len(data)), zap.Int("max", traces.MaxProposalDataSize))
+	return false
+}
+
 func (c *Collector) decodeJustificationWithPrepares(justifications [][]byte) []*traces.QBFTTrace {
 	out := make([]*traces.QBFTTrace, 0, len(justifications))
 	for _, rcj := range justifications {
 		var signedMsg = new(spectypes.SignedSSVMessage)
 		err := signedMsg.Decode(rcj)
 		if err != nil {
-			c.logger.Error("decode round change justification", zap.Error(err))
+			c.logger.Debug("decode round change justification", zap.Error(err))
+			continue
+		}
+		// A nested justification can have an empty signer list.
+		if len(signedMsg.OperatorIDs) == 0 {
+			c.logger.Debug("justification has no signers")
 			continue
 		}
 
 		var qbftMsg = new(specqbft.Message)
 		err = qbftMsg.Decode(signedMsg.SSVMessage.GetData())
 		if err != nil {
-			c.logger.Error("decode signed message data", zap.Error(err))
+			c.logger.Debug("decode signed message data", zap.Error(err))
 			continue
 		}
 
@@ -351,14 +368,19 @@ func (c *Collector) decodeJustificationWithRoundChanges(justifications [][]byte)
 		var signedMsg = new(spectypes.SignedSSVMessage)
 		err := signedMsg.Decode(rcj)
 		if err != nil {
-			c.logger.Error("decode round change justification", zap.Error(err))
+			c.logger.Debug("decode round change justification", zap.Error(err))
+			continue
+		}
+		// A nested justification can have an empty signer list.
+		if len(signedMsg.OperatorIDs) == 0 {
+			c.logger.Debug("justification has no signers")
 			continue
 		}
 
 		var qbftMsg = new(specqbft.Message)
 		err = qbftMsg.Decode(signedMsg.SSVMessage.GetData())
 		if err != nil {
-			c.logger.Error("decode round change justification", zap.Error(err))
+			c.logger.Debug("decode round change justification", zap.Error(err))
 			continue
 		}
 
@@ -870,7 +892,16 @@ func (c *Collector) wrapVerifyPartialSigErr(ctx partialSigVerifyCtx, pSigMessage
 	)
 }
 
-func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySig func(*spectypes.PartialSignatureMessages) error) error {
+func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySig func(*spectypes.PartialSignatureMessages) error) (err error) {
+	// A message shape the decoding below does not handle costs this message, not the exporter.
+	// Deferred unlocks and in-flight deletes run before this, so no lock or late key is left held.
+	defer func() {
+		if r := recover(); r != nil {
+			c.logger.Error("collect panicked", fields.MessageID(msg.MsgID), zap.Any("panic", r), zap.Stack("stack"))
+			err = fmt.Errorf("collect panicked: %v", r)
+		}
+	}()
+
 	start := time.Now()
 	//nolint:gosec
 	startTime := uint64(start.UnixMilli())
@@ -900,13 +931,19 @@ func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 			if err != nil {
 				return err
 			}
+			if late {
+				defer c.inFlightCommittee.Delete(committeeTraceKey{id: committeeID, role: role})
+			}
 
 			trace.Lock()
 			defer trace.Unlock()
 
 			if len(msg.SignedSSVMessage.FullData) > 0 && subMsg.MsgType == specqbft.ProposalMsgType {
 				// save proposal data and compute role roots
-				trace.ProposalData = msg.SignedSSVMessage.FullData
+				// Data that doesn't fit is left out; whatever an earlier proposal stored stays.
+				if c.proposalDataFits(slot, msg.SignedSSVMessage.FullData) {
+					trace.ProposalData = msg.SignedSSVMessage.FullData
+				}
 
 				switch role {
 				case spectypes.RoleCommittee:
@@ -960,9 +997,7 @@ func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 			}
 
 			if late {
-				err := c.store.SaveCommitteeDuty(role, &trace.CommitteeDutyTrace)
-				_ = c.inFlightCommittee.Delete(committeeTraceKey{id: committeeID, role: role})
-				return err
+				return c.store.SaveCommitteeDuty(role, &trace.CommitteeDutyTrace)
 			}
 
 			return nil
@@ -987,6 +1022,9 @@ func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 		if err != nil {
 			return err
 		}
+		if late {
+			defer c.inFlightValidator.Delete(index)
+		}
 
 		var qbftMsg = new(specqbft.Message)
 		if err = qbftMsg.Decode(msg.Data); err == nil {
@@ -1002,8 +1040,11 @@ func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 						if roleDutyTrace.Validator == 0 {
 							roleDutyTrace.Validator = data.Duty.ValidatorIndex
 						}
-						// non-committee duty will contain the proposal data
-						roleDutyTrace.ProposalData = data.DataSSZ
+						// non-committee duty will contain the proposal data, unless it doesn't fit: then whatever an
+						// earlier proposal stored stays.
+						if c.proposalDataFits(slot, data.DataSSZ) {
+							roleDutyTrace.ProposalData = data.DataSSZ
+						}
 					}()
 				}
 			}
@@ -1022,9 +1063,7 @@ func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 		}
 
 		if late {
-			err := c.store.SaveValidatorDuty(roleDutyTrace)
-			_ = c.inFlightValidator.Delete(index)
-			return err
+			return c.store.SaveValidatorDuty(roleDutyTrace)
 		}
 
 		return nil
@@ -1074,6 +1113,9 @@ func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 			if err != nil {
 				return err
 			}
+			if late {
+				defer c.inFlightCommittee.Delete(committeeTraceKey{id: verifyCtx.committeeID, role: verifyCtx.runnerRole})
+			}
 
 			trace.Lock()
 			defer trace.Unlock()
@@ -1082,9 +1124,7 @@ func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 			c.checkAndPublishQuorum(verifyCtx.logger, pSigMessages, verifyCtx.committeeID, trace)
 
 			if late {
-				err := c.store.SaveCommitteeDuty(verifyCtx.runnerRole, &trace.CommitteeDutyTrace)
-				_ = c.inFlightCommittee.Delete(committeeTraceKey{id: verifyCtx.committeeID, role: verifyCtx.runnerRole})
-				return err
+				return c.store.SaveCommitteeDuty(verifyCtx.runnerRole, &trace.CommitteeDutyTrace)
 			}
 
 			return nil
@@ -1099,6 +1139,9 @@ func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 		trace, late, err := c.getOrCreateValidatorTrace(pSigMessages.Slot, bnRole, pSigMessages.Messages[0].ValidatorIndex)
 		if err != nil {
 			return err
+		}
+		if late {
+			defer c.inFlightValidator.Delete(pSigMessages.Messages[0].ValidatorIndex)
 		}
 
 		trace.Lock()
@@ -1134,9 +1177,7 @@ func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 		}
 
 		if late {
-			err := c.store.SaveValidatorDuty(roleDutyTrace)
-			_ = c.inFlightValidator.Delete(pSigMessages.Messages[0].ValidatorIndex)
-			return err
+			return c.store.SaveValidatorDuty(roleDutyTrace)
 		}
 
 		return nil

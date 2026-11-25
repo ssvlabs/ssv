@@ -1,7 +1,10 @@
 package ekm
 
 import (
+	"bytes"
 	"encoding/hex"
+	"errors"
+	"fmt"
 	"math"
 	"testing"
 	"time"
@@ -54,8 +57,8 @@ func testKeyManager(t *testing.T, operatorPrivateKey keys.OperatorPrivateKey) Ke
 	encryptedSK2, err := operatorPrivateKey.Public().Encrypt([]byte(sk2.SerializeToHexStr()))
 	require.NoError(t, err)
 
-	require.NoError(t, km.AddShare(t.Context(), nil, encryptedSK1, phase0.BLSPubKey(sk1.GetPublicKey().Serialize())))
-	require.NoError(t, km.AddShare(t.Context(), nil, encryptedSK2, phase0.BLSPubKey(sk2.GetPublicKey().Serialize())))
+	require.NoError(t, km.AddShare(t.Context(), encryptedSK1, phase0.BLSPubKey(sk1.GetPublicKey().Serialize())))
+	require.NoError(t, km.AddShare(t.Context(), encryptedSK2, phase0.BLSPubKey(sk2.GetPublicKey().Serialize())))
 
 	return km
 }
@@ -116,7 +119,7 @@ func TestEncryptedKeyManager(t *testing.T) {
 	signerStorage.SetEncryptionKey(encryptionKey2)
 
 	_, err = wallet2.AccountByPublicKey(hex.EncodeToString(a.ValidatorPublicKey()))
-	require.ErrorContains(t, err, "decrypt stored wallet")
+	require.ErrorContains(t, err, "decrypt stored account")
 
 	// Retry with key 1 (should succeed).
 	wallet3, err := signerStorage.OpenWallet()
@@ -142,7 +145,7 @@ func TestSignBeaconObject(t *testing.T) {
 	encryptedSK1, err := operatorPrivateKey.Public().Encrypt([]byte(sk1.SerializeToHexStr()))
 	require.NoError(t, err)
 
-	require.NoError(t, km.AddShare(t.Context(), nil, encryptedSK1, phase0.BLSPubKey(sk1.GetPublicKey().Serialize())))
+	require.NoError(t, km.AddShare(t.Context(), encryptedSK1, phase0.BLSPubKey(sk1.GetPublicKey().Serialize())))
 
 	currentSlot := testBeaconConfig().EstimatedCurrentSlot()
 	highestProposal := currentSlot + minSPProposalSlotGap + 1
@@ -154,7 +157,7 @@ func TestSignBeaconObject(t *testing.T) {
 		_, sig, err := km.(*LocalKeyManager).SignBeaconObject(
 			ctx,
 			beaconBlock,
-			phase0.Domain{},
+			domainFor(spectypes.DomainProposer),
 			phase0.BLSPubKey(sk1.GetPublicKey().Serialize()),
 			currentSlot,
 			spectypes.DomainProposer,
@@ -169,7 +172,7 @@ func TestSignBeaconObject(t *testing.T) {
 		_, sig, err := km.(*LocalKeyManager).SignBeaconObject(
 			ctx,
 			voluntaryExit,
-			phase0.Domain{},
+			domainFor(spectypes.DomainVoluntaryExit),
 			phase0.BLSPubKey(sk1.GetPublicKey().Serialize()),
 			currentSlot,
 			spectypes.DomainVoluntaryExit,
@@ -184,7 +187,7 @@ func TestSignBeaconObject(t *testing.T) {
 		_, sig, err := km.(*LocalKeyManager).SignBeaconObject(
 			ctx,
 			aggregateAndProof,
-			phase0.Domain{},
+			domainFor(spectypes.DomainAggregateAndProof),
 			phase0.BLSPubKey(sk1.GetPublicKey().Serialize()),
 			currentSlot,
 			spectypes.DomainAggregateAndProof,
@@ -197,7 +200,7 @@ func TestSignBeaconObject(t *testing.T) {
 		_, sig, err := km.(*LocalKeyManager).SignBeaconObject(
 			ctx,
 			spectypes.SSZUint64(1),
-			phase0.Domain{},
+			domainFor(spectypes.DomainSelectionProof),
 			phase0.BLSPubKey(sk1.GetPublicKey().Serialize()),
 			currentSlot,
 			spectypes.DomainSelectionProof,
@@ -210,7 +213,7 @@ func TestSignBeaconObject(t *testing.T) {
 		_, sig, err := km.(*LocalKeyManager).SignBeaconObject(
 			ctx,
 			spectypes.SSZUint64(1),
-			phase0.Domain{},
+			domainFor(spectypes.DomainRandao),
 			phase0.BLSPubKey(sk1.GetPublicKey().Serialize()),
 			currentSlot,
 			spectypes.DomainRandao,
@@ -227,7 +230,7 @@ func TestSignBeaconObject(t *testing.T) {
 		_, sig, err := km.(*LocalKeyManager).SignBeaconObject(
 			ctx,
 			data,
-			phase0.Domain{},
+			domainFor(spectypes.DomainSyncCommittee),
 			phase0.BLSPubKey(sk1.GetPublicKey().Serialize()),
 			currentSlot,
 			spectypes.DomainSyncCommittee,
@@ -244,7 +247,7 @@ func TestSignBeaconObject(t *testing.T) {
 		_, sig, err := km.(*LocalKeyManager).SignBeaconObject(
 			ctx,
 			data,
-			phase0.Domain{},
+			domainFor(spectypes.DomainSyncCommitteeSelectionProof),
 			phase0.BLSPubKey(sk1.GetPublicKey().Serialize()),
 			currentSlot,
 			spectypes.DomainSyncCommitteeSelectionProof)
@@ -281,7 +284,7 @@ func TestSignBeaconObject(t *testing.T) {
 		_, sig, err := km.(*LocalKeyManager).SignBeaconObject(
 			ctx,
 			data,
-			phase0.Domain{},
+			domainFor(spectypes.DomainContributionAndProof),
 			phase0.BLSPubKey(sk1.GetPublicKey().Serialize()),
 			currentSlot,
 			spectypes.DomainContributionAndProof)
@@ -306,7 +309,7 @@ func TestSignBeaconObject(t *testing.T) {
 		_, sig, err := km.(*LocalKeyManager).SignBeaconObject(
 			ctx,
 			data,
-			phase0.Domain{},
+			domainFor(spectypes.DomainApplicationBuilder),
 			phase0.BLSPubKey(sk1.GetPublicKey().Serialize()),
 			currentSlot,
 			spectypes.DomainApplicationBuilder)
@@ -329,7 +332,7 @@ func TestSignBeaconObject(t *testing.T) {
 			_, sig, err := km.(*LocalKeyManager).SignBeaconObject(
 				ctx,
 				spectypes.SSZUint64(1),
-				phase0.Domain{},
+				domainFor(tc.domain),
 				phase0.BLSPubKey(sk1.GetPublicKey().Serialize()),
 				currentSlot,
 				tc.domain,
@@ -367,7 +370,7 @@ func newLocalKeyManagerWithShare(t *testing.T) (*LocalKeyManager, phase0.BLSPubK
 	encryptedSK1, err := operatorPrivateKey.Public().Encrypt([]byte(sk1.SerializeToHexStr()))
 	require.NoError(t, err)
 	pk := phase0.BLSPubKey(sk1.GetPublicKey().Serialize())
-	require.NoError(t, km.AddShare(t.Context(), nil, encryptedSK1, pk))
+	require.NoError(t, km.AddShare(t.Context(), encryptedSK1, pk))
 
 	return km.(*LocalKeyManager), pk
 }
@@ -384,7 +387,7 @@ func TestSignBeaconObjectGloasBlockSlashingProtection(t *testing.T) {
 	plumbedSlot := blockSlot - 5 // deliberately different; the Gloas arm must ignore it
 
 	// First proposal signs and records the highest proposal keyed to the block's own slot.
-	_, root, err := lkm.SignBeaconObject(ctx, block, phase0.Domain{}, pk, plumbedSlot, spectypes.DomainProposer)
+	_, root, err := lkm.SignBeaconObject(ctx, block, domainFor(spectypes.DomainProposer), pk, plumbedSlot, spectypes.DomainProposer)
 	require.NoError(t, err)
 	require.NotEqual(t, phase0.Root{}, root)
 
@@ -395,7 +398,7 @@ func TestSignBeaconObjectGloasBlockSlashingProtection(t *testing.T) {
 
 	// Re-proposing the same block slot is slashable → rejected (proves the highest-proposal record + the
 	// IsBeaconBlockSlashable guard that the direct signSSZRoot path used to skip).
-	_, _, err = lkm.SignBeaconObject(ctx, block, phase0.Domain{}, pk, plumbedSlot, spectypes.DomainProposer)
+	_, _, err = lkm.SignBeaconObject(ctx, block, domainFor(spectypes.DomainProposer), pk, plumbedSlot, spectypes.DomainProposer)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "slashable")
 }
@@ -408,7 +411,7 @@ func TestSignBeaconObjectGloasRejectsUnknownProposerObject(t *testing.T) {
 	// bug: the signer must fail loud rather than sign an unrecognized object without slashing protection.
 	// A bare header is not *eth2gloas.BeaconBlock, so it falls through to the default arm.
 	slot := testBeaconConfig().EstimatedCurrentSlot() + minSPProposalSlotGap + 10
-	_, _, err := lkm.SignBeaconObject(ctx, &phase0.BeaconBlockHeader{Slot: slot}, phase0.Domain{}, pk, slot, spectypes.DomainProposer)
+	_, _, err := lkm.SignBeaconObject(ctx, &phase0.BeaconBlockHeader{Slot: slot}, domainFor(spectypes.DomainProposer), pk, slot, spectypes.DomainProposer)
 	require.ErrorContains(t, err, "unexpected object type")
 }
 
@@ -419,7 +422,7 @@ func TestSignBeaconObjectGloasRejectsFarFutureSlot(t *testing.T) {
 	// Keying slashing protection to the block's own slot means the Gloas arm must guard the far-future
 	// bound itself (the plumbed slot is no longer the bound). An absurd block slot is rejected before signing.
 	block := gloasTestBlock(math.MaxUint64 / 2)
-	_, _, err := lkm.SignBeaconObject(ctx, block, phase0.Domain{}, pk, testBeaconConfig().EstimatedCurrentSlot(), spectypes.DomainProposer)
+	_, _, err := lkm.SignBeaconObject(ctx, block, domainFor(spectypes.DomainProposer), pk, testBeaconConfig().EstimatedCurrentSlot(), spectypes.DomainProposer)
 	require.ErrorContains(t, err, "too far into the future")
 }
 
@@ -438,8 +441,16 @@ func TestRemoveShare(t *testing.T) {
 		encryptedPrivKey, err := operatorPrivateKey.Public().Encrypt([]byte(pk.SerializeToHexStr()))
 		require.NoError(t, err)
 
-		require.NoError(t, km.AddShare(t.Context(), nil, encryptedPrivKey, phase0.BLSPubKey(pk.GetPublicKey().Serialize())))
-		require.NoError(t, km.RemoveShare(t.Context(), nil, phase0.BLSPubKey(pk.GetPublicKey().Serialize())))
+		require.NoError(t, km.AddShare(t.Context(), encryptedPrivKey, phase0.BLSPubKey(pk.GetPublicKey().Serialize())))
+		require.NoError(t, km.RemoveShare(t.Context(), phase0.BLSPubKey(pk.GetPublicKey().Serialize())))
+
+		// RemoveShare keeps the slashing records (see KeyManager.RemoveShare).
+		_, found, err := km.(*LocalKeyManager).RetrieveHighestAttestation(phase0.BLSPubKey(pk.GetPublicKey().Serialize()))
+		require.NoError(t, err)
+		require.True(t, found, "highest attestation record must survive RemoveShare")
+		_, found, err = km.(*LocalKeyManager).RetrieveHighestProposal(phase0.BLSPubKey(pk.GetPublicKey().Serialize()))
+		require.NoError(t, err)
+		require.True(t, found, "highest proposal record must survive RemoveShare")
 	})
 
 	t.Run("key doesn't exist", func(t *testing.T) {
@@ -448,9 +459,87 @@ func TestRemoveShare(t *testing.T) {
 		pk := &bls.SecretKey{}
 		pk.SetByCSPRNG()
 
-		err := km.RemoveShare(t.Context(), nil, phase0.BLSPubKey(pk.GetPublicKey().Serialize()))
+		err := km.RemoveShare(t.Context(), phase0.BLSPubKey(pk.GetPublicKey().Serialize()))
 		require.NoError(t, err)
 	})
+}
+
+// TestShareAccountLookup checks how AddShare and RemoveShare handle the wallet's account lookup.
+// Whichever way the wallet reports a missing account (see isAccountNotFound), RemoveShare must
+// succeed and AddShare must save the share. Any other lookup failure must fail both.
+func TestShareAccountLookup(t *testing.T) {
+	initBLSTest()
+	logger := testLogger(t)
+	cfg := testBeaconConfig()
+
+	operatorPrivateKey, err := keys.GeneratePrivateKey()
+	require.NoError(t, err)
+	encryptionKey, err := operatorPrivateKey.EKMEncryptionKey()
+	require.NoError(t, err)
+
+	// newKeyManager returns a key manager and the store backing its wallet.
+	newKeyManager := func(t *testing.T) (*LocalKeyManager, Storage) {
+		store := NewSignerStorage(newTestMemoryDB(), cfg.NetworkName(), logger)
+		store.SetEncryptionKey(encryptionKey)
+		km, err := newLocalKeyManager(logger, store, cfg, operatorPrivateKey)
+		require.NoError(t, err)
+		return km, store
+	}
+	newShare := func(t *testing.T) ([]byte, phase0.BLSPubKey) {
+		sk := &bls.SecretKey{}
+		sk.SetByCSPRNG()
+		encShare, err := operatorPrivateKey.Public().Encrypt([]byte(sk.SerializeToHexStr()))
+		require.NoError(t, err)
+		return encShare, phase0.BLSPubKey(sk.GetPublicKey().Serialize())
+	}
+	requireHandlesMissingAccount := func(t *testing.T, km *LocalKeyManager, encShare []byte, pk phase0.BLSPubKey, wantErr error) {
+		t.Helper()
+		pkHex := hex.EncodeToString(pk[:])
+		_, err := km.wallet.AccountByPublicKey(pkHex)
+		require.ErrorIs(t, err, wantErr)
+
+		require.NoError(t, km.RemoveShare(t.Context(), pk))
+		require.NoError(t, km.AddShare(t.Context(), encShare, pk))
+		_, err = km.wallet.AccountByPublicKey(pkHex)
+		require.NoError(t, err, "AddShare must save the share")
+	}
+
+	t.Run("key not in the wallet's index", func(t *testing.T) {
+		km, _ := newKeyManager(t)
+		encShare, pk := newShare(t)
+		requireHandlesMissingAccount(t, km, encShare, pk, hd.ErrAccountNotFound)
+	})
+
+	t.Run("key in the index, account gone", func(t *testing.T) {
+		km, store := newKeyManager(t)
+		encShare, pk := newShare(t)
+		require.NoError(t, km.AddShare(t.Context(), encShare, pk))
+		acc, err := km.wallet.AccountByPublicKey(hex.EncodeToString(pk[:]))
+		require.NoError(t, err)
+		// Deletes the account but not its index entry, as DeleteAccountByPublicKey does if it
+		// doesn't get to save the wallet.
+		require.NoError(t, store.DeleteAccount(acc.ID()))
+		requireHandlesMissingAccount(t, km, encShare, pk, errAccountNotFound)
+	})
+
+	t.Run("lookup fails", func(t *testing.T) {
+		km, store := newKeyManager(t)
+		encShare, pk := newShare(t)
+		require.NoError(t, km.AddShare(t.Context(), encShare, pk))
+		// The account doesn't decrypt with another key.
+		store.SetEncryptionKey(bytes.Repeat([]byte{1}, 32))
+
+		require.ErrorContains(t, km.RemoveShare(t.Context(), pk), "could not check share existence")
+		require.ErrorContains(t, km.AddShare(t.Context(), encShare, pk), "could not check share existence")
+	})
+}
+
+// TestIsAccountNotFound checks that isAccountNotFound matches the sentinels, even wrapped, and not
+// another error with their message.
+func TestIsAccountNotFound(t *testing.T) {
+	require.True(t, isAccountNotFound(fmt.Errorf("wrapped: %w", hd.ErrAccountNotFound)))
+	require.True(t, isAccountNotFound(fmt.Errorf("wrapped: %w", errAccountNotFound)))
+	require.False(t, isAccountNotFound(errors.New("account not found")))
 }
 
 func TestEkmListAccounts(t *testing.T) {
@@ -490,7 +579,7 @@ func TestAddShareRejectsMismatchedPublicKey(t *testing.T) {
 	encryptedSK1, err := operatorPrivateKey.Public().Encrypt([]byte(sk1.SerializeToHexStr()))
 	require.NoError(t, err)
 
-	err = km.AddShare(t.Context(), nil, encryptedSK1, phase0.BLSPubKey(sk2.GetPublicKey().Serialize()))
+	err = km.AddShare(t.Context(), encryptedSK1, phase0.BLSPubKey(sk2.GetPublicKey().Serialize()))
 	require.Error(t, err)
 	var decErr ssvsigner.ShareDecryptionError
 	require.ErrorAs(t, err, &decErr, "a public key mismatch must be a ShareDecryptionError so the event is skipped")
@@ -499,4 +588,40 @@ func TestAddShareRejectsMismatchedPublicKey(t *testing.T) {
 	accounts, err := km.ListAccounts()
 	require.NoError(t, err)
 	require.Empty(t, accounts, "mismatched share must not be saved")
+}
+
+// TestAddShareRejectsZeroPrivateKey verifies that a zero share private key (whose public key is the
+// identity point) is rejected as a malformed share before
+// any slashing-protection record or wallet account is written.
+func TestAddShareRejectsZeroPrivateKey(t *testing.T) {
+	initBLSTest()
+
+	logger := testLogger(t)
+	db, err := getBaseStorage(logger)
+	require.NoError(t, err)
+
+	operatorPrivateKey, err := keys.GeneratePrivateKey()
+	require.NoError(t, err)
+
+	km, err := NewLocalKeyManager(logger, db, testBeaconConfig(), operatorPrivateKey)
+	require.NoError(t, err)
+
+	zero := &bls.SecretKey{}
+	encryptedZero, err := operatorPrivateKey.Public().Encrypt([]byte(zero.SerializeToHexStr()))
+	require.NoError(t, err)
+	pubKey := phase0.BLSPubKey(zero.GetPublicKey().Serialize())
+
+	err = km.AddShare(t.Context(), encryptedZero, pubKey)
+	require.Error(t, err)
+	var decErr ssvsigner.ShareDecryptionError
+	require.ErrorAs(t, err, &decErr, "a zero share must be a ShareDecryptionError so the event is skipped")
+	require.ErrorContains(t, err, "share private key is zero")
+
+	accounts, err := km.ListAccounts()
+	require.NoError(t, err)
+	require.Empty(t, accounts, "zero share must not be saved")
+
+	_, found, err := km.RetrieveHighestAttestation(pubKey)
+	require.NoError(t, err)
+	require.False(t, found, "zero share must not get slashing-protection records")
 }

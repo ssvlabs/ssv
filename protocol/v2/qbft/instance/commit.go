@@ -141,7 +141,7 @@ func baseCommitValidationIgnoreSignature(
 	height specqbft.Height,
 	operators []*spectypes.Operator,
 ) error {
-	if err := msg.Validate(); err != nil {
+	if err := validateMsg(msg); err != nil {
 		return spectypes.WrapError(spectypes.CommitMessageInvalidErrorCode, fmt.Errorf("signed commit invalid: %w", err))
 	}
 
@@ -191,6 +191,25 @@ func (i *Instance) validateCommit(msg *specqbft.ProcessingMessage) error {
 
 	if !bytes.Equal(i.State.ProposalAcceptedForCurrentRound.QBFTMessage.Root[:], msg.QBFTMessage.Root[:]) {
 		return spectypes.NewError(spectypes.ProposedDataMismatchErrorCode, "proposed data mismatch")
+	}
+
+	// Aggregate needs byte-identical SSVMessages, so a commit must match what CreateCommit
+	// produces (DataRound, justifications, outer MsgID/MsgType).
+	canonical, err := (&specqbft.Message{
+		MsgType:    specqbft.CommitMsgType,
+		Height:     i.State.Height,
+		Round:      i.State.Round,
+		Identifier: i.State.ID,
+		Root:       msg.QBFTMessage.Root,
+	}).Encode()
+	if err != nil {
+		return fmt.Errorf("could not encode canonical commit: %w", err)
+	}
+	var msgID spectypes.MessageID
+	copy(msgID[:], i.State.ID)
+	ssvMsg := msg.SignedMessage.SSVMessage
+	if ssvMsg.MsgType != spectypes.SSVConsensusMsgType || ssvMsg.MsgID != msgID || !bytes.Equal(ssvMsg.Data, canonical) {
+		return spectypes.NewError(spectypes.CommitMessageInvalidErrorCode, "commit is not canonical")
 	}
 
 	return nil

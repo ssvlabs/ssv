@@ -55,8 +55,7 @@ type TestOperatorPrivateKey struct {
 	StorageHashValue      []byte
 	EkmHashValue          []byte
 	EkmEncryptionKeyValue []byte
-	EKMEncryptionKeyFunc  func() ([]byte, error)
-	EKMEncryptionKeyError error
+	DataProtectionKeyFunc func() ([]byte, error)
 	DecryptResult         []byte
 	DecryptError          error
 	DecryptFunc           func([]byte) ([]byte, error)
@@ -103,13 +102,15 @@ func (t *TestOperatorPrivateKey) EKMHash() []byte {
 
 // EKMEncryptionKey returns a mock EKM encryption key.
 func (t *TestOperatorPrivateKey) EKMEncryptionKey() ([]byte, error) {
-	if t.EKMEncryptionKeyFunc != nil {
-		return t.EKMEncryptionKeyFunc()
-	}
-	if t.EKMEncryptionKeyError != nil {
-		return nil, t.EKMEncryptionKeyError
-	}
 	return t.EkmEncryptionKeyValue, nil
+}
+
+// DataProtectionKey returns a mock data protection key.
+func (t *TestOperatorPrivateKey) DataProtectionKey() ([]byte, error) {
+	if t.DataProtectionKeyFunc != nil {
+		return t.DataProtectionKeyFunc()
+	}
+	return nil, nil
 }
 
 // Bytes returns the private key bytes.

@@ -592,6 +592,11 @@ func TestSetupValidators(t *testing.T) {
 	// A valid validator public key that the committee's shares don't reconstruct.
 	otherValidatorPK, _ := buildValidCommittee(t, operatorIds)
 
+	// A committee that reconstructs its validator public key, but whose operator 3 has a zero secret
+	// share, so its share public key is the identity point.
+	zeroShareValidatorPK, zeroShareOperators := buildCommitteeWithZeroShare(t, operatorIds, 3)
+	require.Equal(t, append([]byte{0xc0}, make([]byte, 47)...), []byte(zeroShareOperators[2].SharePubKey))
+
 	shareWithMetaData := &types.SSVShare{
 		Share: spectypes.Share{
 			ValidatorIndex:  1,
@@ -757,6 +762,33 @@ func TestSetupValidators(t *testing.T) {
 						Committee:       operators[:],
 						ValidatorPubKey: otherValidatorPK,
 						SharePubKey:     shareKey,
+					},
+					Status:                    v1.ValidatorStateActiveOngoing,
+					ActivationEpoch:           activationEpoch,
+					ExitEpoch:                 exitEpoch,
+					BeaconMetadataLastUpdated: time.Now(),
+				},
+			},
+			recipientFound:    false,
+			initedValidators:  0,
+			initErr:           "",
+			startedValidators: 0,
+			startErrs:         0,
+			bcMockTimes:       0,
+			validatorStartFunc: func(validator *validator.Validator) (bool, error) {
+				return true, nil
+			},
+			operatorData: allOperatorData,
+		},
+		{
+			name: "committee has an identity share public key",
+			shares: []*types.SSVShare{
+				{
+					Share: spectypes.Share{
+						ValidatorIndex:  1,
+						Committee:       zeroShareOperators,
+						ValidatorPubKey: zeroShareValidatorPK,
+						SharePubKey:     zeroShareOperators[0].SharePubKey,
 					},
 					Status:                    v1.ValidatorStateActiveOngoing,
 					ActivationEpoch:           activationEpoch,
@@ -1433,6 +1465,35 @@ func buildValidCommittee(t *testing.T, operatorIDs []uint64) (spectypes.Validato
 		committee[i] = &spectypes.ShareMember{Signer: id, SharePubKey: share.GetPublicKey().Serialize()}
 	}
 	return spectypes.ValidatorPK(poly[0].GetPublicKey().Serialize()), committee
+}
+
+// buildCommitteeWithZeroShare is buildValidCommittee with the polynomial f = (x - zeroAt) * g, g random
+// of degree quorum-2: f still has degree quorum-1, but operator zeroAt's secret share is zero.
+func buildCommitteeWithZeroShare(t *testing.T, operatorIDs []uint64, zeroAt uint64) (spectypes.ValidatorPK, []*spectypes.ShareMember) {
+	threshold.Init()
+	quorum, _ := types.ComputeQuorumAndPartialQuorum(uint64(len(operatorIDs)))
+	g := make([]bls.Fr, quorum-1)
+	for i := range g {
+		g[i].SetByCSPRNG()
+	}
+	eval := func(x uint64) *bls.PublicKey {
+		var fx, acc, z, d bls.Fr
+		fx.SetInt64(int64(x))
+		for i := len(g) - 1; i >= 0; i-- { // Horner
+			bls.FrMul(&acc, &acc, &fx)
+			bls.FrAdd(&acc, &acc, &g[i])
+		}
+		z.SetInt64(int64(zeroAt))
+		bls.FrSub(&d, &fx, &z)
+		bls.FrMul(&acc, &acc, &d)
+		return bls.CastToSecretKey(&acc).GetPublicKey()
+	}
+
+	committee := make([]*spectypes.ShareMember, len(operatorIDs))
+	for i, id := range operatorIDs {
+		committee[i] = &spectypes.ShareMember{Signer: id, SharePubKey: eval(id).Serialize()}
+	}
+	return spectypes.ValidatorPK(eval(0).Serialize()), committee
 }
 
 func createPubKey(input byte) spectypes.ValidatorPK {

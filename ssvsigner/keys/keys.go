@@ -22,15 +22,24 @@ type OperatorPublicKey interface {
 type OperatorPrivateKey interface {
 	OperatorSigner
 	OperatorDecrypter
+	// StorageHash returns the SHA-256 of the PEM-encoded key, which EKMEncryptionKey derives from:
+	// never store it.
 	StorageHash() []byte
 	// EKMHash calculates a hash as an encryption key for storage.
 	// DEPRECATED, use StorageHash with EKMEncryptionKey instead.
 	EKMHash() []byte
 	// EKMEncryptionKey calculates an encryption key for storage using HKDF with StorageHash as input.
 	EKMEncryptionKey() ([]byte, error)
+	// DataProtectionKey derives the key that protects other operator data at rest (the P2P network
+	// key), locally and through ssv-signer's /v1/operator/encrypt and /v1/operator/decrypt.
+	// It is a separate key from EKMEncryptionKey, which only encrypts the EKM wallet.
+	DataProtectionKey() ([]byte, error)
 	Bytes() []byte
 	Base64() string
 }
+
+// dataProtectionKeyInfo is DataProtectionKey's HKDF info label.
+const dataProtectionKeyInfo = "ssv/operator-data-protection-key/v1"
 
 type OperatorSigner interface {
 	Sign(data []byte) ([]byte, error)
@@ -105,9 +114,16 @@ func (p *privateKey) EKMHash() []byte {
 }
 
 func (p *privateKey) EKMEncryptionKey() ([]byte, error) {
-	storageHash := p.StorageHash()
+	return deriveKey(p.StorageHash(), nil)
+}
 
-	kdf := hkdf.New(sha256.New, storageHash, nil, nil)
+func (p *privateKey) DataProtectionKey() ([]byte, error) {
+	return deriveKey(rsaencryption.PrivateKeyToBytes(p.privKey), []byte(dataProtectionKeyInfo))
+}
+
+// deriveKey derives a 256-bit key from secret with HKDF-SHA256, bound to info.
+func deriveKey(secret, info []byte) ([]byte, error) {
+	kdf := hkdf.New(sha256.New, secret, nil, info)
 	derivedKey := make([]byte, 32)
 	if _, err := io.ReadFull(kdf, derivedKey); err != nil {
 		return nil, fmt.Errorf("failed to derive encryption key: %w", err)

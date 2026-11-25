@@ -16,7 +16,6 @@ import (
 	types "github.com/ssvlabs/ssv-spec/types"
 	network "github.com/ssvlabs/ssv/network"
 	commons "github.com/ssvlabs/ssv/network/commons"
-	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
 	types0 "github.com/ssvlabs/ssv/protocol/v2/types"
 	storage "github.com/ssvlabs/ssv/registry/storage"
 	basedb "github.com/ssvlabs/ssv/storage/basedb"
@@ -171,18 +170,6 @@ func (m *MockP2PNetwork) FixedSubnets() commons.Subnets {
 func (mr *MockP2PNetworkMockRecorder) FixedSubnets() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FixedSubnets", reflect.TypeOf((*MockP2PNetwork)(nil).FixedSubnets))
-}
-
-// ReportValidation mocks base method.
-func (m *MockP2PNetwork) ReportValidation(message *types.SSVMessage, res protocolp2p.MsgValidationResult) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "ReportValidation", message, res)
-}
-
-// ReportValidation indicates an expected call of ReportValidation.
-func (mr *MockP2PNetworkMockRecorder) ReportValidation(message, res any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReportValidation", reflect.TypeOf((*MockP2PNetwork)(nil).ReportValidation), message, res)
 }
 
 // Subscribe mocks base method.

@@ -175,6 +175,23 @@ func TestHashing(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, encryptionKey, encryptionKey2)
 	})
+
+	t.Run("DataProtectionKey", func(t *testing.T) {
+		t.Parallel()
+
+		privKey := getTestPrivateKeyFromPEM(t)
+		dataProtectionKey, err := privKey.DataProtectionKey()
+		require.NoError(t, err)
+		// Pinned: a change would leave nodes unable to decrypt the data it protects.
+		require.Equal(t, "76b27bed4702af9240c7295cf53ed24a6f73693a96272ec6a1d8ea4f3e86c8cc", hex.EncodeToString(dataProtectionKey))
+
+		// Differs from EKMEncryptionKey, and from StorageHash under the same label.
+		for _, info := range []string{"", dataProtectionKeyInfo} {
+			fromStorageHash, err := deriveKey(privKey.StorageHash(), []byte(info))
+			require.NoError(t, err)
+			require.NotEqual(t, fromStorageHash, dataProtectionKey)
+		}
+	})
 }
 
 func TestPublicKeyFromString(t *testing.T) {

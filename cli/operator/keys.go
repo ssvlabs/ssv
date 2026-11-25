@@ -3,7 +3,9 @@ package operator
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -157,46 +159,72 @@ func privateKeyFromKeystore(privKeyFile, passwordFile string) (keys.OperatorPriv
 	return operatorPrivKey, operatorPrivKeyBytes, nil
 }
 
-// ensureOperatorPrivateKey makes sure the operator private key hash is saved exactly once and
-// never changes thereafter. On first run it saves the current hash; on subsequent runs it errors
-// if the stored hash matches neither the current nor the legacy hash.
+// operatorKeyCheckValue identifies the operator key in the database. It's derived from the public
+// key.
+func operatorKeyCheckValue(operatorPubKeyBase64 string) []byte {
+	checkValue := sha256.Sum256([]byte("ssv/operator-key-check/v1" + operatorPubKeyBase64))
+	return checkValue[:]
+}
+
+// errOperatorKeyMismatch refuses a database that belongs to a different operator key.
+var errOperatorKeyMismatch = errors.New("operator private key does not match the one that encrypted the storage")
+
+// ensureOperatorPrivateKey makes sure the node always runs with the same operator private key: it
+// saves the key's check value on first run and errors if the key doesn't match it later.
+//
+// Older versions store a private key hash instead, which this version replaces with the check value:
+// once the key is verified that hash is dropped. The check value is saved first, so an interrupted
+// drop never skips the key check. Older versions still start on the database, as on a first run: they
+// accept any key and store its hash again, for the next start of this version to drop.
 func ensureOperatorPrivateKey(
+	logger *zap.Logger,
 	nodeStorage operatorstorage.Storage,
 	operatorPrivKey keys.OperatorPrivateKey,
-	operatorPrivKeyPEM string,
+	operatorPrivKeyBase64 string,
 ) error {
-	storedHash, found, err := nodeStorage.GetPrivateKeyHash()
+	operatorPubKeyBase64, err := operatorPrivKey.Public().Base64()
+	if err != nil {
+		return fmt.Errorf("could not get operator public key base64: %w", err)
+	}
+	checkValue := operatorKeyCheckValue(operatorPubKeyBase64)
+
+	storedCheckValue, checkValueFound, err := nodeStorage.GetOperatorKeyCheckValue()
+	if err != nil {
+		return fmt.Errorf("could not get operator key check value: %w", err)
+	}
+	privKeyHash, hashFound, err := nodeStorage.GetPrivateKeyHash()
 	if err != nil {
 		return fmt.Errorf("could not get hashed private key: %w", err)
 	}
 
-	// Current hashing method (PEM-encoded → StorageHash)
-	currentHash := operatorPrivKey.StorageHash()
-
-	// Backwards compatibility for the old hashing method,
-	// which was hashing the text from the configuration directly,
-	// whereas StorageHash re-encodes with PEM format.
-	cliPrivKeyDecoded, err := base64.StdEncoding.DecodeString(operatorPrivKeyPEM)
-	if err != nil {
-		return fmt.Errorf("could not decode private key: %w", err)
-	}
-
-	// Legacy hashing method (base64-decoded bytes → HashKeyBytes)
-	legacyHash := rsaencryption.HashKeyBytes(cliPrivKeyDecoded)
-
-	if !found {
-		// First run: persist the hash.
-		if err := nodeStorage.SavePrivateKeyHash(currentHash); err != nil {
-			return fmt.Errorf("could not save hashed private key: %w", err)
+	switch {
+	case checkValueFound:
+		if !bytes.Equal(storedCheckValue, checkValue) {
+			return errOperatorKeyMismatch
 		}
-		return nil
+	case hashFound:
+		// StorageHash or, in databases from before it, the hash of the configured key text.
+		cliPrivKeyDecoded, err := base64.StdEncoding.DecodeString(operatorPrivKeyBase64)
+		if err != nil {
+			return fmt.Errorf("could not decode private key: %w", err)
+		}
+		if !bytes.Equal(privKeyHash, operatorPrivKey.StorageHash()) &&
+			!bytes.Equal(privKeyHash, rsaencryption.HashKeyBytes(cliPrivKeyDecoded)) {
+			return errOperatorKeyMismatch
+		}
 	}
 
-	// Subsequent runs: enforce immutability.
-	if !bytes.Equal(currentHash, storedHash) &&
-		!bytes.Equal(legacyHash, storedHash) {
-		// Prevent the node from running with a different key.
-		return fmt.Errorf("operator private key does not match the one that encrypted the storage")
+	if !checkValueFound {
+		if err := nodeStorage.SaveOperatorKeyCheckValue(checkValue); err != nil {
+			return fmt.Errorf("could not save operator key check value: %w", err)
+		}
+	}
+
+	if hashFound {
+		if err := nodeStorage.DropPrivateKeyHash(); err != nil {
+			return fmt.Errorf("could not drop hashed private key: %w", err)
+		}
+		logger.Info("dropped the stored private key hash")
 	}
 
 	return nil
@@ -232,10 +260,10 @@ func ensureOperatorPubKey(nodeStorage operatorstorage.Storage, operatorPubKeyBas
 // empty (no signing); otherwise it carries either the private key (keystore / arg modes) or the
 // ssv-signer client (remote mode), plus the base64 public key persisted on first run.
 type operatorIdentity struct {
-	privKey    keys.OperatorPrivateKey
-	privKeyPEM string
-	ssvSigner  *ssvsigner.Client
-	pubKeyB64  string
+	privKey       keys.OperatorPrivateKey
+	privKeyBase64 string
+	ssvSigner     *ssvsigner.Client
+	pubKeyBase64  string
 }
 
 // resolveOperatorIdentity loads the operator signing material for the node's mode: exporter nodes
@@ -300,11 +328,11 @@ func resolveOperatorIdentity(ctx context.Context, logger *zap.Logger, cfg *confi
 			return operatorIdentity{}, startupError{err: fmt.Errorf("could not get operator public key base64: %w", err), fields: []zap.Field{endpointField, pubKeyField}}
 		}
 
-		return operatorIdentity{ssvSigner: ssvSignerClient, pubKeyB64: operatorPubKeyBase64}, nil
+		return operatorIdentity{ssvSigner: ssvSignerClient, pubKeyBase64: operatorPubKeyBase64}, nil
 	}
 
 	var operatorPrivKey keys.OperatorPrivateKey
-	var operatorPrivKeyPEM string
+	var operatorPrivKeyBase64 string
 	if res.usingKeystore {
 		logger.Info("getting operator private key from keystore")
 
@@ -314,7 +342,7 @@ func resolveOperatorIdentity(ctx context.Context, logger *zap.Logger, cfg *confi
 		}
 
 		operatorPrivKey = privKey
-		operatorPrivKeyPEM = base64.StdEncoding.EncodeToString(decryptedKeystore)
+		operatorPrivKeyBase64 = base64.StdEncoding.EncodeToString(decryptedKeystore)
 	} else if res.usingPrivKey {
 		logger.Info("getting operator private key from args")
 
@@ -324,7 +352,7 @@ func resolveOperatorIdentity(ctx context.Context, logger *zap.Logger, cfg *confi
 		}
 
 		operatorPrivKey = privKey
-		operatorPrivKeyPEM = cfg.OperatorPrivateKey
+		operatorPrivKeyBase64 = cfg.OperatorPrivateKey
 	}
 
 	operatorPubKeyBase64, err := operatorPrivKey.Public().Base64()
@@ -332,7 +360,7 @@ func resolveOperatorIdentity(ctx context.Context, logger *zap.Logger, cfg *confi
 		return operatorIdentity{}, fmt.Errorf("could not get operator public key base64: %w", err)
 	}
 
-	return operatorIdentity{privKey: operatorPrivKey, privKeyPEM: operatorPrivKeyPEM, pubKeyB64: operatorPubKeyBase64}, nil
+	return operatorIdentity{privKey: operatorPrivKey, privKeyBase64: operatorPrivKeyBase64, pubKeyBase64: operatorPubKeyBase64}, nil
 }
 
 // buildKeyManager constructs the operator's key manager and signer. Exporter nodes don't sign, so

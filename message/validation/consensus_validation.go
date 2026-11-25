@@ -57,7 +57,16 @@ func (mv *messageValidator) validateConsensusMessage(
 		return consensusMessage, err
 	}
 
-	state := mv.validatorState(ssvMessage.GetID(), committeeInfo)
+	// The stateless checks above (size, decode, topic, domain, semantics) run without the per-message
+	// validation mutex, so a message that fails them creates no lock entry.
+	if err := ctx.Err(); err != nil {
+		return consensusMessage, err
+	}
+	validationMu := mv.getValidationLock(ssvMessage.GetID())
+	validationMu.Lock()
+	defer validationMu.Unlock()
+
+	state, cached := mv.peekValidatorState(ssvMessage.GetID(), committeeInfo)
 
 	if err := mv.validateQBFTLogic(signedSSVMessage, consensusMessage, committeeInfo, receivedFrom, receivedAt, state); err != nil {
 		return consensusMessage, err
@@ -86,6 +95,9 @@ func (mv *messageValidator) validateConsensusMessage(
 		}
 	}
 
+	if !cached {
+		mv.storeValidatorState(ssvMessage.GetID(), state)
+	}
 	if err := mv.updateConsensusState(signedSSVMessage, consensusMessage, committeeInfo, receivedFrom, state); err != nil {
 		return consensusMessage, err
 	}
@@ -192,6 +204,37 @@ func (mv *messageValidator) validateConsensusMessageSemantics(
 
 	if err := mv.validateJustifications(consensusMessage); err != nil {
 		return err
+	}
+
+	// Rule: commit must not carry a data round (a commit that does can't be aggregated)
+	if msgType == specqbft.CommitMsgType && consensusMessage.DataRound != specqbft.NoRound {
+		e := ErrUnexpectedDataRound
+		e.got = consensusMessage.DataRound
+		return e
+	}
+
+	// Rule: A round change that reports no prepared round must not have full data.
+	// An unprepared round change proposes nothing, so nothing reads its full data, and nodes do not
+	// attach any. This runs after every rejecting semantic rule above, so they all still apply to
+	// this shape (including H(FullData) == Root). It runs before signature verification and the
+	// duplicate and different-proposal-data checks, so those rejects become ignores for this shape.
+	// It is ignored rather than rejected until all nodes enforce this rule, since older nodes still
+	// relay such messages. Flip to reject once all nodes enforce this rule.
+	if msgType == specqbft.RoundChangeMsgType && consensusMessage.DataRound == specqbft.NoRound &&
+		len(signedSSVMessage.FullData) != 0 {
+		return ErrUnpreparedRoundChangeWithFullData
+	}
+
+	// Rule: A proposal, a prepared round change, and a decided message must have full data.
+	// Signatures don't cover FullData, and the QBFT instance drops a copy without it
+	// (H(FullData) != Root), so such a copy is not recorded in the signer's state. Nodes always attach
+	// full data. Placed and ignored like the rule above, so the leader, duplicate and signature
+	// rejects become ignores for these shapes. Flip to reject once all nodes enforce it.
+	needsFullData := msgType == specqbft.ProposalMsgType ||
+		(msgType == specqbft.RoundChangeMsgType && consensusMessage.DataRound != specqbft.NoRound) ||
+		(msgType == specqbft.CommitMsgType && len(signers) > 1)
+	if needsFullData && len(signedSSVMessage.FullData) == 0 {
+		return ErrMissingFullData
 	}
 
 	return nil

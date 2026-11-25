@@ -93,6 +93,16 @@ var (
 	ErrDifferentProposalData            = Error{text: "got different proposal data"}
 	ErrDecidedMessageWithTooFewSigners  = Error{text: "got decided message with too few signers (same number or less)"}
 	ErrValidatorRegistrationRetired     = Error{text: "validator registrations ended with the Gloas fork"}
+	// Ignored rather than rejected until all nodes enforce this rule, since older nodes still relay such
+	// commits. Switch to reject once everyone has upgraded.
+	ErrUnexpectedDataRound = Error{text: "data round unexpected for commit message"}
+	// Ignored for now rather than rejected, since older nodes still relay padded messages.
+	// Move to the rejected block once all nodes enforce it.
+	ErrMsgIDPadding = Error{text: "non-zero message ID padding"}
+	// Ignored for now; see the rule in validateConsensusMessageSemantics.
+	ErrUnpreparedRoundChangeWithFullData = Error{text: "unprepared round change with full data"}
+	// Ignored for now; see the rule in validateConsensusMessageSemantics.
+	ErrMissingFullData = Error{text: "proposal, prepared round change or decided message without full data"}
 )
 
 // Messages with these errors are rejected (regardless of what peer they come from).

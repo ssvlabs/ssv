@@ -899,6 +899,12 @@ func encodePartialSigMessages(slot phase0.Slot, vIdx phase0.ValidatorIndex, sign
 }
 
 func justification(rcj [][]byte) []byte {
+	return justificationSignedBy([]spectypes.OperatorID{1, 2, 3, 4}, rcj)
+}
+
+// justificationSignedBy is justification with an explicit signer list; SSZ
+// accepts an empty one.
+func justificationSignedBy(signers []spectypes.OperatorID, rcj [][]byte) []byte {
 	qmsg := &specqbft.Message{
 		MsgType:                  specqbft.ProposalMsgType,
 		Round:                    1,
@@ -911,7 +917,7 @@ func justification(rcj [][]byte) []byte {
 	qmsgData, _ := qmsg.Encode()
 
 	m := &spectypes.SignedSSVMessage{
-		OperatorIDs: []spectypes.OperatorID{1, 2, 3, 4},
+		OperatorIDs: signers,
 		SSVMessage: &spectypes.SSVMessage{
 			MsgType: spectypes.SSVConsensusMsgType,
 			Data:    qmsgData,
@@ -2283,4 +2289,89 @@ func (m *mockDutyTraceStore) GetScheduled(slot phase0.Slot) (map[phase0.Validato
 	copyMap := make(map[phase0.ValidatorIndex]rolemask.Mask, len(sched))
 	maps.Copy(copyMap, sched)
 	return copyMap, m.err
+}
+
+// A justification with no signers must be skipped, not indexed.
+func TestCollector_JustificationWithoutSigners(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	validators := registrystoragemocks.NewMockValidatorStore(ctrl)
+	validators.EXPECT().Committee(gomock.Any()).Return(&storage.Committee{Operators: []spectypes.OperatorID{1, 2, 3, 4}}, true).AnyTimes()
+	validators.EXPECT().ValidatorIndex(gomock.Any()).Return(phase0.ValidatorIndex(1), true).AnyTimes()
+
+	db, err := kv.NewInMemory(zap.NewNop(), basedb.Options{})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+	collector := New(zap.NewNop(), validators, mockclient{}, store.New(db), networkconfig.TestNetwork.Beacon, func(DecidedInfo) {}, nil)
+
+	id := ssvtestingutils.NewMsgID([4]byte{}, []byte("pk"), spectypes.RoleCommittee)
+	signerless := justificationSignedBy(nil, nil)
+
+	for _, msgType := range []specqbft.MessageType{specqbft.ProposalMsgType, specqbft.RoundChangeMsgType} {
+		msg := buildConsensusMsg(id, msgType, 10, nil)
+		body := msg.Body.(*specqbft.Message)
+		body.RoundChangeJustification = [][]byte{signerless}
+		body.PrepareJustification = [][]byte{signerless}
+		require.NoError(t, collector.Collect(t.Context(), msg, nil), "msgType=%d", msgType)
+	}
+
+	// Depth 2: a signed round change justification that itself carries a
+	// signerless prepare.
+	// createProposalTrace -> decodeJustificationWithRoundChanges ->
+	// createRoundChangeTrace -> decodeJustificationWithPrepares.
+	const nestedSlot = 11
+	msg := buildConsensusMsg(id, specqbft.ProposalMsgType, nestedSlot, nil)
+	body := msg.Body.(*specqbft.Message)
+	body.RoundChangeJustification = [][]byte{justificationSignedBy([]spectypes.OperatorID{1}, [][]byte{signerless})}
+	body.PrepareJustification = nil
+	require.NotPanics(t, func() { require.NoError(t, collector.Collect(t.Context(), msg, nil)) })
+
+	var committeeID spectypes.CommitteeID
+	copy(committeeID[:], id.GetDutyExecutorID()[16:])
+	duty, err := collector.GetCommitteeDuty(nestedSlot, committeeID, spectypes.RoleCommittee)
+	require.NoError(t, err)
+	require.Len(t, duty.Rounds, 1)
+	require.NotNil(t, duty.Rounds[0].ProposalTrace)
+	rcs := duty.Rounds[0].ProposalTrace.RoundChanges
+	require.Len(t, rcs, 1)
+	require.Equal(t, spectypes.OperatorID(1), rcs[0].Signer)
+	require.Empty(t, rcs[0].PrepareMessages)
+}
+
+// A message that panics mid-processing must cost only itself: Collect returns an error, the trace lock and
+// any late in-flight key are released, and the next message for the same duty is collected.
+func TestCollector_RecoversFromPanickingMessage(t *testing.T) {
+	const slot = phase0.Slot(10)
+	id := ssvtestingutils.NewMsgID([4]byte{}, []byte("pk"), spectypes.RoleCommittee)
+	var committeeID spectypes.CommitteeID
+	copy(committeeID[:], id.GetDutyExecutorID()[16:])
+	key := committeeTraceKey{id: committeeID, role: spectypes.RoleCommittee}
+
+	for _, late := range []bool{false, true} {
+		t.Run(fmt.Sprintf("late=%v", late), func(t *testing.T) {
+			db, err := kv.NewInMemory(zap.NewNop(), basedb.Options{})
+			require.NoError(t, err)
+			t.Cleanup(func() { _ = db.Close() })
+			collector := New(zap.NewNop(), nil, mockclient{}, store.New(db), networkconfig.TestNetwork.Beacon, func(DecidedInfo) {}, nil)
+			if late {
+				collector.lastEvictedSlot.Store(uint64(slot))
+			}
+
+			// No SignedSSVMessage: the committee path dereferences it while holding the trace lock.
+			bad := buildConsensusMsg(id, specqbft.PrepareMsgType, slot, nil)
+			bad.SignedSSVMessage = nil
+			require.NotPanics(t, func() {
+				require.ErrorContains(t, collector.collect(t.Context(), bad, nil), "collect panicked")
+			})
+			_, inFlight := collector.inFlightCommittee.Get(key)
+			require.False(t, inFlight)
+
+			require.NoError(t, collector.collect(t.Context(), buildConsensusMsg(id, specqbft.PrepareMsgType, slot, nil), nil))
+			if !late {
+				trace, _, err := collector.getOrCreateCommitteeTrace(slot, committeeID, spectypes.RoleCommittee)
+				require.NoError(t, err)
+				require.Len(t, trace.Rounds, 1)
+				require.Len(t, trace.Rounds[0].Prepares, 1)
+			}
+		})
+	}
 }

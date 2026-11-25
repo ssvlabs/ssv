@@ -20,9 +20,11 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	ethcommon "github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient/simulated"
+	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -261,49 +263,28 @@ func TestFetchHistoricalLogs(t *testing.T) {
 	})
 }
 
-// TestFetchHistoricalLogs_Subdivide tests handling of EIP-1474 query limits.
-// When receiving error code -32005 ("Limit exceeded") from eth_getLogs requests,
-// the client recursively subdivides the block range until successful or until
-// hitting a non-recoverable error.
+// TestFetchHistoricalLogs_Subdivide checks that a failed eth_getLogs is retried on the halves of its block
+// range. The server answers ranges wider than threshold with EIP-1474's -32005 "limit exceeded", or every
+// range with an HTTP 500. The chain has blocks 0 to totalBlocks+1: the contract is deployed in block 1.
 func TestFetchHistoricalLogs_Subdivide(t *testing.T) {
 	testCases := []struct {
 		name        string
 		totalBlocks int
-		threshold   uint64 // block range that won't be subdivided
+		threshold   uint64 // widest range (to-from) that is answered
 		wantLogs    int
 		wantCalls   int32
-		httpError   bool // if true, simulate an HTTP error
+		httpError   bool // answer every eth_getLogs with an HTTP 500
 	}{
-		// 1. Call for blocks 0-1 (succeeds) [count: 1]
-		// eth_getLogs calls: 1
+		// [0-2] ok.
 		{"single log", 1, 5, 1, 1, false},
-
-		// 1. Call for blocks 0-2 (succeeds) [count: 1]
-		// eth_getLogs calls: 1
+		// [0-3] ok.
 		{"multiple logs", 2, 5, 2, 1, false},
-
-		// 1. Call for blocks 0-4 (query limited) [count: 1]
-		// 2. Subdivide into 0-2 and 3-4
-		// 3. Call for blocks 3-4 (succeeds) [count: 2]
-		// 4. Call for blocks 0-2 (succeeds) [count: 3]
-		// eth_getLogs calls: 3
+		// [0-5] fails, [0-2] [3-5] ok.
 		{"full subdivision", 4, 2, 4, 3, false},
-
-		// 1. Call for blocks 0-9 (query limited) [count: 1]
-		// 2. Subdivide into 0-4 and 5-9
-		// 3. Call for blocks 5-9 (succeeds) [count: 2] - Range of 5 blocks, threshold is 4
-		// 4. Call for blocks 0-4 (query limited) [count: 3] - Range of 5 blocks, threshold is 3
-		// 5. Subdivide 0-4 into 0-2 and 3-4
-		// 6. Call for blocks 0-2 (succeeds) [count: 4] - Range of 3 blocks
-		// 7. Call for blocks 3-4 (succeeds) [count: 5] - Range of 2 blocks
-		// eth_getLogs calls: 5
+		// [0-10] fails, [0-5] fails, [0-2] [3-5] ok, [6-10] ok.
 		{"partial subdivision", 9, 4, 9, 5, false},
-
-		// Test for non-RPC error (HTTP 500)
-		// 1. Call for blocks 0-4 (returns HTTP 500) [count: 1]
-		// function should exit with the error, not try to subdivide
-		// eth_getLogs calls: 1
-		{"http error", 4, 1, 0, 1, true},
+		// [0-5] [0-2] [0-1] [0] fail: the error on a single block is returned.
+		{"http error", 4, 1, 0, 4, true},
 	}
 
 	for _, tc := range testCases {
@@ -1198,4 +1179,147 @@ func TestHealthy(t *testing.T) {
 // httpToWebSocketURL converts an HTTP URL to a WebSocket URL.
 func httpToWebSocketURL(url string) string {
 	return "ws:" + strings.TrimPrefix(url, "http:")
+}
+
+// TestFetchLogsInBatches_SubdivideOnLargeResponse serves eth_getLogs for blocks 0-3 over a websocket, answering
+// the ranges tc.fails picks the way an EL refuses a range that is too large: with a response over go-ethereum's
+// 32 MiB websocket read limit, a reply slower than the request timeout, or the -32602 error reth returns for too
+// many results. Other ranges get one log per block.
+func TestFetchLogsInBatches_SubdivideOnLargeResponse(t *testing.T) {
+	const slowTimeout = 300 * time.Millisecond
+
+	type failure int
+	const (
+		readLimit failure = iota
+		timeout
+		rpcError
+	)
+	wide := func(from, to uint64) bool { return to > from }
+	all := func(from, to uint64) bool { return true }
+	wideOrLast := func(from, to uint64) bool { return to > from || from == 3 }
+
+	testCases := []struct {
+		name      string
+		failure   failure
+		fails     func(from, to uint64) bool
+		wantErr   error // nil: all four blocks are fetched
+		wantCalls int32
+	}{
+		// [0-3] fails, [0-1] fails, [0] [1] ok, [2-3] fails, [2] [3] ok.
+		{name: "read limit", failure: readLimit, fails: wide, wantCalls: 7},
+		{name: "timeout", failure: timeout, fails: wide, wantCalls: 7},
+		{name: "rpc error", failure: rpcError, fails: wide, wantCalls: 7},
+		// [0-3] fails, [0-1] fails, [0] fails: a single block is not split further.
+		{name: "read limit on single block", failure: readLimit, fails: all, wantErr: websocket.ErrReadLimit, wantCalls: 3},
+		{name: "timeout on single block", failure: timeout, fails: all, wantErr: context.DeadlineExceeded, wantCalls: 3},
+		// As "read limit", but [3] fails too: blocks 0-2 were fetched, yet the batch emits nothing.
+		{name: "read limit mid-split", failure: readLimit, fails: wideOrLast, wantErr: websocket.ErrReadLimit, wantCalls: 7},
+	}
+
+	contractAddr := ethcommon.HexToAddress("0x1234")
+	oversized := bytes.Repeat([]byte("0"), 33<<20)
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(t.Context(), testTimeout)
+			defer cancel()
+
+			var calls, conns atomic.Int32
+
+			upgrader := websocket.Upgrader{}
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				conn, err := upgrader.Upgrade(w, r, nil)
+				if err != nil {
+					return
+				}
+				defer conn.Close()
+				conns.Add(1)
+
+				var writeMu sync.Mutex
+				write := func(msg map[string]any) {
+					writeMu.Lock()
+					defer writeMu.Unlock()
+					msg["jsonrpc"] = "2.0"
+					_ = conn.WriteJSON(msg)
+				}
+				for {
+					var req struct {
+						ID     json.RawMessage `json:"id"`
+						Method string          `json:"method"`
+						Params []struct {
+							FromBlock hexutil.Uint64 `json:"fromBlock"`
+							ToBlock   hexutil.Uint64 `json:"toBlock"`
+						} `json:"params"`
+					}
+					if err := conn.ReadJSON(&req); err != nil {
+						return
+					}
+					if req.Method != ethGetLogsMethod {
+						write(map[string]any{"id": req.ID, "result": nil})
+						continue
+					}
+					calls.Add(1)
+					from, to := uint64(req.Params[0].FromBlock), uint64(req.Params[0].ToBlock)
+					if !tc.fails(from, to) {
+						logs := make([]ethtypes.Log, 0, to-from+1)
+						for b := from; b <= to; b++ {
+							logs = append(logs, ethtypes.Log{Address: contractAddr, BlockNumber: b, Topics: []ethcommon.Hash{}})
+						}
+						write(map[string]any{"id": req.ID, "result": logs})
+						continue
+					}
+					switch tc.failure {
+					case readLimit:
+						writeMu.Lock()
+						_ = conn.WriteMessage(websocket.TextMessage, oversized)
+						writeMu.Unlock()
+					case timeout:
+						go func() {
+							time.Sleep(3 * slowTimeout)
+							write(map[string]any{"id": req.ID, "result": []any{}})
+						}()
+					case rpcError:
+						write(map[string]any{"id": req.ID, "error": map[string]any{"code": -32602, "message": "query exceeds max results 20000"}})
+					}
+				}
+			}))
+			defer srv.Close()
+
+			// The other cases get a generous timeout so a slow CI machine can't turn them into timeout cases.
+			reqTimeout := 10 * time.Second
+			if tc.failure == timeout {
+				reqTimeout = slowTimeout
+			}
+			client, err := New(ctx, httpToWebSocketURL(srv.URL), contractAddr,
+				WithLogger(zaptest.NewLogger(t)), WithReqTimeout(reqTimeout))
+			require.NoError(t, err)
+			defer func() { require.NoError(t, client.Close()) }()
+
+			logCh, errCh := client.fetchLogsInBatches(ctx, 0, 3, false)
+			emitted := make([]BlockLogs, 0, 4)
+			for blockLogs := range logCh {
+				emitted = append(emitted, blockLogs)
+			}
+			err = <-errCh
+
+			require.Equal(t, tc.wantCalls, calls.Load())
+			if tc.failure == readLimit {
+				// The read limit closes the socket, so the later requests went over a new connection.
+				require.Greater(t, conns.Load(), int32(1))
+			}
+			if tc.wantErr != nil {
+				require.ErrorIs(t, err, tc.wantErr)
+				require.Empty(t, emitted, "a failed batch must emit nothing")
+				return
+			}
+			require.NoError(t, err)
+			blocks := make([]uint64, 0, 4)
+			for _, blockLogs := range emitted {
+				for _, log := range blockLogs.Logs {
+					blocks = append(blocks, log.BlockNumber)
+				}
+			}
+			require.Equal(t, []uint64{0, 1, 2, 3}, blocks)
+		})
+	}
 }

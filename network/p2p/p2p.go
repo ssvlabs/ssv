@@ -102,7 +102,6 @@ type p2pNetwork struct {
 	disc            discovery.Service
 	topicsCtrl      topics.Controller
 	msgRouter       network.MessageRouter
-	msgResolver     topics.MsgPeersResolver
 	msgValidator    validation.MessageValidator
 	connHandler     connections.ConnHandler
 	connGater       connmgrcore.ConnectionGater

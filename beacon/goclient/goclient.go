@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -116,11 +117,19 @@ type GoClient struct {
 
 	beaconConfigMu   sync.RWMutex
 	beaconConfig     *networkconfig.Beacon
-	beaconConfigInit chan struct{}
+	beaconConfigInit chan struct{} // closed once chooseBeaconConfig has set beaconConfig
 	// beaconConfigSource is the address of the client beaconConfig was taken from, named when another
-	// client's fork schedule lags or leads it. It is written once, with beaconConfig and under
-	// beaconConfigMu, so a reader that has seen a non-nil beaconConfig reads it without the lock.
-	beaconConfigSource string
+	// client's fork schedule lags or leads it, and beaconConfigSourceAlone tells whether it was the only
+	// client to report beaconConfig at startup. Both are written once, with beaconConfig and under
+	// beaconConfigMu, so a reader that has seen a non-nil beaconConfig reads them without the lock.
+	beaconConfigSource      string
+	beaconConfigSourceAlone bool
+	// beaconConfigCandidates are the configs the clients reported at startup, one per client in the order they first
+	// reported, for chooseBeaconConfig to choose from; nil once it has. Guarded by beaconConfigMu.
+	beaconConfigCandidates []beaconConfigCandidate
+	// beaconConfigCandidateAdded wakes chooseBeaconConfig when a client reports. Sends never block, so one
+	// wake-up can stand for several reports.
+	beaconConfigCandidateAdded chan struct{}
 	// proposerDutiesDependentRoots remembers the dependent root each epoch's last successful
 	// ProposerDutiesDependentRoot call returned, for LastProposerDutiesDependentRoot.
 	proposerDutiesDependentRoots *ttlcache.Cache[phase0.Epoch, phase0.Root]
@@ -229,6 +238,7 @@ func New(ctx context.Context, logger *zap.Logger, opt Options) (*GoClient, error
 	client := &GoClient{
 		log:                                logger.Named(log.NameConsensusClient),
 		beaconConfigInit:                   make(chan struct{}),
+		beaconConfigCandidateAdded:         make(chan struct{}, 1),
 		syncDistanceTolerance:              phase0.Slot(opt.SyncDistanceTolerance),
 		commonTimeout:                      opt.CommonTimeout,
 		longTimeout:                        opt.LongTimeout,
@@ -266,12 +276,8 @@ func New(ctx context.Context, logger *zap.Logger, opt Options) (*GoClient, error
 
 	client.log.Debug("connected successfully, fetching beacon config")
 
-	initCtx, initCtxCancel := context.WithTimeout(ctx, client.longTimeout)
-	defer initCtxCancel()
-	select {
-	case <-initCtx.Done():
-		return nil, fmt.Errorf("timed out awaiting Beacon config initialization, timeout=%s: %w", client.longTimeout, initCtx.Err())
-	case <-client.beaconConfigInit:
+	if err := client.chooseBeaconConfig(ctx, client.longTimeout, beaconConfigChoiceWaitTimeouts*client.commonTimeout); err != nil {
+		return nil, fmt.Errorf("timed out awaiting Beacon config initialization, timeout=%s: %w", client.longTimeout, err)
 	}
 
 	config := client.getBeaconConfig()
@@ -453,8 +459,11 @@ func (gc *GoClient) singleClientHooks() *eth2clienthttp.Hooks {
 				return
 			}
 
-			currentConfig, err := gc.applyBeaconConfig(s.Address(), beaconConfig)
+			currentConfig, err := gc.applyBeaconConfig(ctx, s, beaconConfig)
 			if err != nil {
+				if ctx.Err() != nil {
+					return // shutting down
+				}
 				logger.Fatal("client returned unexpected beacon config, make sure all clients use the same Ethereum network",
 					zap.Error(err),
 					zap.Any("current_forks", currentConfig.Forks),
@@ -498,21 +507,150 @@ func (gc *GoClient) singleClientHooks() *eth2clienthttp.Hooks {
 	}
 }
 
-func (gc *GoClient) applyBeaconConfig(nodeAddress string, beaconConfig *networkconfig.Beacon) (*networkconfig.Beacon, error) {
+// beaconConfigChoiceWaitTimeouts is how many request timeouts (Options.CommonTimeout) the node waits at startup for
+// the other clients to report their configs, once all are dialed and one has reported.
+const beaconConfigChoiceWaitTimeouts = 2
+
+// beaconConfigCandidate is a config a client reported at startup, for chooseBeaconConfig to choose from.
+type beaconConfigCandidate struct {
+	client Client
+	config *networkconfig.Beacon
+}
+
+// chooseBeaconConfig fixes the node's beacon config at startup. It waits up to firstTimeout for a client to report its
+// config, then up to wait for the rest to report theirs, and takes the newest compatible config: going through the
+// reports in order, one replaces the chosen config if it extends its fork schedule
+// (networkconfig.Beacon.ExtendsForkSchedule). A restart thus adopts a fork as long as a client that schedules it
+// reports in time, whichever reports first, while of two clients that schedule a fork differently, the earlier
+// report wins. Each client is then checked against the choice (applyBeaconConfig). It fails, choosing nothing, if no
+// client reports within firstTimeout or ctx is done first.
+func (gc *GoClient) chooseBeaconConfig(ctx context.Context, firstTimeout, wait time.Duration) error {
+	firstCtx, cancel := context.WithTimeout(ctx, firstTimeout)
+	defer cancel()
+	for gc.reportedBeaconConfigs() == 0 {
+		select {
+		case <-firstCtx.Done():
+			if gc.reportedBeaconConfigs() == 0 {
+				return firstCtx.Err()
+			}
+		case <-gc.beaconConfigCandidateAdded:
+		}
+	}
+
+	// Timed from here rather than from the first report: New dials the clients one by one first, an unresponsive one
+	// taking a full request timeout, which could use up the wait before the last client is even dialed.
+	deadline := time.NewTimer(wait)
+	defer deadline.Stop()
+waitForOthers:
+	for gc.reportedBeaconConfigs() < len(gc.clients) {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-deadline.C:
+			break waitForOthers
+		case <-gc.beaconConfigCandidateAdded:
+		}
+	}
+
+	gc.fixBeaconConfig()
+	return nil
+}
+
+// reportedBeaconConfigs is how many clients have reported a candidate config.
+func (gc *GoClient) reportedBeaconConfigs() int {
+	gc.beaconConfigMu.RLock()
+	defer gc.beaconConfigMu.RUnlock()
+	return len(gc.beaconConfigCandidates)
+}
+
+// fixBeaconConfig makes the newest compatible candidate the node's config for as long as the node runs, and
+// releases the clients waiting to be checked against it. A config most of the reporting clients don't share is
+// still taken, since starting without a genuine fork fails every duty past it, but with an error: it may name a fork
+// the network doesn't schedule.
+func (gc *GoClient) fixBeaconConfig() {
 	gc.beaconConfigMu.Lock()
 	defer gc.beaconConfigMu.Unlock()
 
-	if gc.beaconConfig == nil {
-		gc.beaconConfig = beaconConfig
-		gc.beaconConfigSource = nodeAddress
-		close(gc.beaconConfigInit)
-
-		gc.log.Info("beacon config has been initialized",
-			zap.Stringer("beacon_config", beaconConfig),
-			fields.Address(nodeAddress),
-		)
-		return beaconConfig, nil
+	candidates := gc.beaconConfigCandidates
+	chosen := candidates[0]
+	for _, candidate := range candidates[1:] {
+		if candidate.config.ExtendsForkSchedule(chosen.config) {
+			chosen = candidate
+		}
 	}
+	// How each client's report compares with the chosen config.
+	sharing, reports := 0, make([]string, 0, len(candidates))
+	for _, candidate := range candidates {
+		err := chosen.config.AssertSame(candidate.config)
+		var lag *networkconfig.ForkScheduleLagError
+		report := "the node's config"
+		switch {
+		case err == nil:
+			sharing++
+		case errors.As(err, &lag):
+			report = lag.Version.String() + " " + networkconfig.DescribeForkSchedule(lag.Theirs)
+		default:
+			report = err.Error()
+		}
+		reports = append(reports, candidate.client.Address()+": "+report)
+	}
+	source := chosen.client.Address()
+	gc.beaconConfig = chosen.config
+	gc.beaconConfigSource = source
+	gc.beaconConfigSourceAlone = sharing == 1
+	gc.beaconConfigCandidates = nil
+	close(gc.beaconConfigInit)
+
+	gc.log.Info("beacon config has been initialized",
+		zap.Stringer("beacon_config", chosen.config),
+		fields.Address(source),
+		zap.Int("clients_reported", len(candidates)),
+		zap.Int("clients", len(gc.clients)),
+	)
+	if 2*sharing < len(candidates) {
+		gc.log.Error("beacon config: most clients that reported at startup don't share the config the node took; "+
+			"if it schedules a fork the network doesn't, fix the node's config source and restart the node",
+			zap.String("node_config_source", source),
+			zap.Strings("reports", reports),
+		)
+	}
+}
+
+// offerBeaconConfig records a client's config as a candidate, replacing the client's earlier one, and reports
+// whether it did: not once the node's config is chosen. Candidates are keyed by client rather than Address(), which
+// masks paths and query values, so two beacon nodes can share one.
+func (gc *GoClient) offerBeaconConfig(client Client, config *networkconfig.Beacon) bool {
+	gc.beaconConfigMu.Lock()
+	defer gc.beaconConfigMu.Unlock()
+
+	if gc.beaconConfig != nil {
+		return false
+	}
+	if i := slices.IndexFunc(gc.beaconConfigCandidates, func(c beaconConfigCandidate) bool { return c.client == client }); i >= 0 {
+		gc.beaconConfigCandidates[i].config = config
+	} else {
+		gc.beaconConfigCandidates = append(gc.beaconConfigCandidates, beaconConfigCandidate{client: client, config: config})
+	}
+	select {
+	case gc.beaconConfigCandidateAdded <- struct{}{}:
+	default:
+	}
+	return true
+}
+
+// applyBeaconConfig checks a client's config against the node's and returns the node's. At startup, before the
+// node's config is chosen, it first offers the client's config for the choice (chooseBeaconConfig) and waits for it.
+func (gc *GoClient) applyBeaconConfig(ctx context.Context, client Client, beaconConfig *networkconfig.Beacon) (*networkconfig.Beacon, error) {
+	if gc.offerBeaconConfig(client, beaconConfig) {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-gc.beaconConfigInit:
+		}
+	}
+
+	gc.beaconConfigMu.RLock()
+	defer gc.beaconConfigMu.RUnlock()
 
 	if err := gc.beaconConfig.AssertSame(beaconConfig); err != nil {
 		var lag *networkconfig.ForkScheduleLagError
@@ -522,7 +660,7 @@ func (gc *GoClient) applyBeaconConfig(nodeAddress string, beaconConfig *networkc
 			// upgrade. The node keeps the schedule it started with and keeps serving from the client, until
 			// it gets close to a fork its schedule lacks (see reportForkScheduleLag).
 			// A single client can't tell whether the node's schedule is still shared: leave that to the recheck.
-			gc.reportForkScheduleLag(nodeAddress, gc.beaconConfig, lag, true)
+			gc.reportForkScheduleLag(client.Address(), gc.beaconConfig, lag, true)
 			return gc.beaconConfig, nil
 		}
 		return gc.beaconConfig, fmt.Errorf("beacon config misalign: %w", err)
@@ -536,7 +674,7 @@ func (gc *GoClient) applyBeaconConfig(nodeAddress string, beaconConfig *networkc
 const forkScheduleRecheckInterval = 5 * time.Minute
 
 // recheckForkSchedules re-reads every active client's config and reports any fork-schedule drift from the
-// node's. The node's schedule is fixed when its config is first taken and cannot change while it runs, so a
+// node's. The node's schedule is fixed when its config is chosen at startup and cannot change while it runs, so a
 // client that learns of a fork later — the only client upgraded, or every client, while the connection came
 // back within one probe so the activation hook never re-read it — would otherwise carry the node across
 // that fork on the old schedule, failing every duty from then on with nothing in the logs naming the fork.
@@ -591,21 +729,23 @@ func (gc *GoClient) checkForkSchedule(clientAddr string, cfg *networkconfig.Beac
 const forkScheduleLagStopEpochs = 2
 
 // reportForkScheduleLag says which side of a fork-schedule disagreement has to move. Ours is the node's
-// schedule, taken at start from the first client to connect (node_config_source) and fixed since.
+// schedule, chosen at startup (chooseBeaconConfig; node_config_source names the client it came from) and
+// fixed since.
 //
 // When it lacks a fork the client schedules, the node is the stale side: it adopts the fork only on a
-// restart, which reads the schedule from whichever client connects first, so every client has to schedule
-// the fork by then, the config source included. Crossing the fork on the old schedule fails every duty, so
-// this is an error, and within forkScheduleLagStopEpochs of the fork the node stops; restarted, it stops
-// again for as long as the client it reads from still lacks the fork.
+// restart, as long as a client that schedules the fork reports in time. Crossing the fork on the old
+// schedule fails every duty, so this is an error, and within forkScheduleLagStopEpochs of the fork the
+// node stops.
 //
 // When the node schedules the fork and the client doesn't, or both schedule it differently, the node is the
 // stale side if no active client still shares its schedule (nodeBacked is false): the fork moved or was
 // dropped after the node started. Crossing the earlier of the two epochs on that schedule fails every duty, so
 // this is an error, and within forkScheduleLagStopEpochs of that epoch the node stops. Otherwise the client is
 // the likely stale side. When it lacks the fork it needs upgrading before the fork: a warning, as the node
-// keeps serving from it until then. Two schedules that both name the fork but differ (epoch or version) can't
-// be told apart from here, so that is an error, with the restart advice conditional on the client being right.
+// keeps serving from it until then; if only the config source reported the node's config at startup, the
+// warning says so, as the fork may then be one the network doesn't schedule. Two schedules that both name the
+// fork but differ (epoch or version) can't be told apart from here, so that is an error, with the restart
+// advice conditional on the client being right.
 func (gc *GoClient) reportForkScheduleLag(clientAddr string, node *networkconfig.Beacon, lag *networkconfig.ForkScheduleLagError, nodeBacked bool) {
 	logFields := []zap.Field{
 		zap.String("fork", lag.Version.String()),
@@ -619,7 +759,7 @@ func (gc *GoClient) reportForkScheduleLag(clientAddr string, node *networkconfig
 	switch {
 	case clientScheduled && !nodeScheduled:
 		const nodeLags = "beacon config: a client schedules a fork the node started without, which the node cannot adopt while running; " +
-			"upgrade every client that lacks it, the node's config source included, then restart the node before that fork"
+			"upgrade every client that lacks it, then restart the node before that fork"
 		logFields = append(logFields, fields.Epoch(lag.Theirs.Epoch))
 		if node.EstimatedCurrentEpoch()+forkScheduleLagStopEpochs >= lag.Theirs.Epoch {
 			gc.log.Fatal(nodeLags+"; stopping, as the fork is too close to cross on the old schedule", logFields...)
@@ -637,8 +777,14 @@ func (gc *GoClient) reportForkScheduleLag(clientAddr string, node *networkconfig
 		}
 		gc.log.Error(nodeStale, logFields...)
 	case nodeScheduled && !clientScheduled:
-		gc.log.Warn("beacon config: a client has not scheduled a fork the node's config schedules; upgrade the client before that fork",
-			append(logFields, fields.Epoch(lag.Ours.Epoch))...)
+		const clientLags = "beacon config: a client has not scheduled a fork the node's config schedules"
+		logFields = append(logFields, fields.Epoch(lag.Ours.Epoch))
+		if gc.beaconConfigSourceAlone {
+			gc.log.Warn(clientLags+", a config only its source reported at startup; if the network schedules the fork, "+
+				"upgrade the client before that fork, otherwise fix the node's config source and restart the node", logFields...)
+		} else {
+			gc.log.Warn(clientLags+"; upgrade the client before that fork", logFields...)
+		}
 	default:
 		gc.log.Error("beacon config: a client and the node's config schedule a fork differently; "+
 			"if the client is right, fix every client that disagrees with it, the node's config source included, then restart the node before that fork",

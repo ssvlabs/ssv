@@ -52,6 +52,12 @@ type ScoreIndex interface {
 	GetScore(id peer.ID, names ...string) ([]NodeScore, error)
 }
 
+// PeerStateIndex removes all per-peer state.
+type PeerStateIndex interface {
+	// RemovePeerState removes the peer's info, subnets and scores. Call it only for a peer that is not connected.
+	RemovePeerState(id peer.ID)
+}
+
 // NodeInfoIndex is an interface for managing records.NodeInfo of network peers
 type NodeInfoIndex interface {
 	// SelfSealed returns a sealed, encoded of self node info
@@ -86,6 +92,9 @@ type PeerInfoIndex interface {
 
 	// SetState sets the state of the peer.
 	SetState(id peer.ID, state PeerState)
+
+	// Remove removes the given peer.
+	Remove(id peer.ID)
 }
 
 // SubnetsStats holds a snapshot of subnets stats
@@ -110,6 +119,9 @@ type SubnetsIndex interface {
 
 	// GetSubnetsStats collects and returns subnets stats
 	GetSubnetsStats() *SubnetsStats
+
+	// RemovePeer removes the given peer's subnets from the index.
+	RemovePeer(id peer.ID)
 }
 
 // GossipScoreIndex serves as an interface to get a peer's Gossip score
@@ -128,6 +140,7 @@ type Index interface {
 	NodeInfoIndex
 	PeerInfoIndex
 	ScoreIndex
+	PeerStateIndex
 	SubnetsIndex
 	io.Closer
 	GossipScoreIndex

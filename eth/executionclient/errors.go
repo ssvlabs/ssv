@@ -20,22 +20,6 @@ func (ec *ExecutionClient) errSingleClient(err error, routeName string) error {
 	return fmt.Errorf("single-client request %s -> %s: %w", ec.nodeAddr, routeName, err)
 }
 
-const (
-	// errCodeQueryLimit refers to request exceeding the defined limit
-	// https://github.com/ethereum/EIPs/blob/master/EIPS/eip-1474.md
-	errCodeQueryLimit = -32005
-)
-
-// isRPCQueryLimitError checks if the provided error is a query limit error.
-func isRPCQueryLimitError(err error) bool {
-	var rpcErr rpc.Error
-	if errors.As(err, &rpcErr) {
-		return rpcErr.ErrorCode() == errCodeQueryLimit
-	}
-
-	return false
-}
-
 // isSingleClientInterruptedError checks if the provided error represents some sort of interruption
 // an ExecutionClient experienced.
 func isSingleClientInterruptedError(err error) bool {

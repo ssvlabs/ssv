@@ -32,4 +32,33 @@ func TestScoresIndex(t *testing.T) {
 	scores, err := si.GetScore(pid, "decided", "relays", "dummy")
 	require.NoError(t, err)
 	require.Len(t, scores, 2)
+
+	si.RemovePeer(pid)
+	scores, err = si.GetScore(pid, "decided", "relays")
+	require.NoError(t, err)
+	require.Empty(t, scores)
+}
+
+func TestPeersIndexScoreRequiresKnownPeer(t *testing.T) {
+	pid := peer.ID("peer")
+	peerInfos := NewPeerInfoIndex()
+	scores := newScoreIndex()
+	index := &peersIndex{PeerInfoIndex: peerInfos, SubnetsIndex: NewSubnetsIndex(), scoreIdx: scores}
+
+	require.NoError(t, index.Score(pid, &NodeScore{Name: "validation", Value: 1}))
+	stored, err := scores.GetScore(pid, "validation")
+	require.NoError(t, err)
+	require.Empty(t, stored)
+
+	peerInfos.SetState(pid, StateConnected)
+	require.NoError(t, index.Score(pid, &NodeScore{Name: "validation", Value: 1}))
+	stored, err = scores.GetScore(pid, "validation")
+	require.NoError(t, err)
+	require.Equal(t, []NodeScore{{Name: "validation", Value: 1}}, stored)
+
+	index.RemovePeerState(pid)
+	require.NoError(t, index.Score(pid, &NodeScore{Name: "validation", Value: 2}))
+	stored, err = scores.GetScore(pid, "validation")
+	require.NoError(t, err)
+	require.Empty(t, stored)
 }

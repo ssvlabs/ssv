@@ -19,7 +19,6 @@ import (
 	basichost "github.com/libp2p/go-libp2p/p2p/host/basic"
 	rcmgr "github.com/libp2p/go-libp2p/p2p/host/resource-manager"
 	"github.com/libp2p/go-libp2p/p2p/protocol/identify"
-	"github.com/prysmaticlabs/prysm/v4/async"
 	"go.uber.org/zap"
 
 	p2pcommons "github.com/ssvlabs/ssv/network/commons"
@@ -279,6 +278,7 @@ func (n *p2pNetwork) setupPeerServices() error {
 			PeerInfos:       n.idx,
 			ConnIdx:         n.idx,
 			SubnetsIdx:      n.idx,
+			PeerStateIdx:    n.idx,
 			IDService:       ids,
 			Network:         h.Network(),
 			DomainTypeFn:    n.cfg.NetworkConfig.CurrentDomainType,
@@ -288,7 +288,7 @@ func (n *p2pNetwork) setupPeerServices() error {
 	h.SetStreamHandler(peers.NodeInfoProtocol, handshaker.Handler())
 	n.logger.Debug("handshaker is ready")
 
-	n.connHandler = connections.NewConnHandler(n.ctx, n.logger, handshaker, n.ActiveSubnets, n.idx, n.idx, n.idx, n.discoveredPeersPool)
+	n.connHandler = connections.NewConnHandler(n.ctx, n.logger, handshaker, n.ActiveSubnets, n.idx, n.idx, n.idx, n.idx, n.discoveredPeersPool)
 	h.Network().Notify(n.connHandler.Handle())
 	n.logger.Debug("connection handler is ready")
 
@@ -395,13 +395,6 @@ func (n *p2pNetwork) setupPubsub() (topics.Controller, error) {
 	if !n.cfg.PubSubScoring {
 		cfg.ScoreIndex = nil
 	}
-
-	midHandler := topics.NewMsgIDHandler(n.ctx, time.Minute*2)
-	n.msgResolver = midHandler
-	cfg.MsgIDHandler = midHandler
-	go cfg.MsgIDHandler.Start()
-	// run GC every 3 minutes to clear old messages
-	async.RunEvery(n.ctx, time.Minute*3, midHandler.GC)
 
 	_, tc, err := topics.NewPubSub(n.ctx, n.logger, cfg, n.nodeStorage.ValidatorStore(), n.idx)
 	if err != nil {

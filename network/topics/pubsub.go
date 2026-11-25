@@ -59,7 +59,6 @@ type PubSubConfig struct {
 	MsgValidator messageValidator
 	ScoreIndex   peers.ScoreIndex
 	Scoring      *ScoringConfig
-	MsgIDHandler MsgIDHandler
 	Discovery    discovery.Discovery
 
 	ValidateThrottle    int
@@ -77,13 +76,6 @@ type PubSubConfig struct {
 type ScoringConfig struct {
 	IPWhitelist        []*net.IPNet
 	IPColocationWeight float64
-}
-
-// PubsubBundle includes the pubsub router, plus involved components
-type PubsubBundle struct {
-	PS         *pubsub.PubSub
-	TopicsCtrl Controller
-	Resolver   MsgPeersResolver
 }
 
 func (cfg *PubSubConfig) init() error {
@@ -191,9 +183,7 @@ func NewPubSub(
 			pubsub.WithPeerScoreInspect(inspector, inspectInterval))
 	}
 
-	if cfg.MsgIDHandler != nil {
-		psOpts = append(psOpts, pubsub.WithMessageIdFn(cfg.MsgIDHandler.MsgID(logger)))
-	}
+	psOpts = append(psOpts, pubsub.WithMessageIdFn(PubsubMsgID))
 
 	if len(cfg.StaticPeers) > 0 {
 		psOpts = append(psOpts, pubsub.WithDirectPeers(cfg.StaticPeers))

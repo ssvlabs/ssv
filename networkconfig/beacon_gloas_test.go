@@ -3,6 +3,7 @@ package networkconfig
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"math"
 	"testing"
 
@@ -126,5 +127,50 @@ func TestBeacon_AssertSame_Forks(t *testing.T) {
 	} {
 		require.ErrorContains(t, err, "different Forks", name)
 		require.False(t, errors.As(err, &lag), "%s is not a lag", name)
+	}
+}
+
+// A config extends another's fork schedule when it is that schedule plus forks, as a client's config becomes when the
+// client is upgraded to a release that schedules a fork. The same schedule, a fork scheduled two ways, a fork active
+// on one side only, and another network don't count.
+func TestBeacon_ExtendsForkSchedule(t *testing.T) {
+	now := TestNetwork.EstimatedCurrentEpoch()
+	nextFork := DataVersionGloas + 1
+	config := func(forks map[spec.DataVersion]phase0.Fork) *Beacon {
+		b := *TestNetwork.Beacon
+		b.Forks = map[spec.DataVersion]phase0.Fork{spec.DataVersionPhase0: {}, spec.DataVersionAltair: {Epoch: 1}}
+		maps.Copy(b.Forks, forks)
+		return &b
+	}
+	gloasAt := func(epoch phase0.Epoch) phase0.Fork {
+		return phase0.Fork{Epoch: epoch, CurrentVersion: phase0.Version{0x80}}
+	}
+
+	omitted := config(nil)
+	unscheduled := config(map[spec.DataVersion]phase0.Fork{DataVersionGloas: gloasAt(FarFutureEpoch)})
+	ahead := config(map[spec.DataVersion]phase0.Fork{DataVersionGloas: gloasAt(now + 100)})
+	aheadLater := config(map[spec.DataVersion]phase0.Fork{DataVersionGloas: gloasAt(now + 200)})
+	aheadThenNext := config(map[spec.DataVersion]phase0.Fork{DataVersionGloas: gloasAt(now + 100), nextFork: {Epoch: now + 300, CurrentVersion: phase0.Version{0x90}}})
+	aheadLaterThenNext := config(map[spec.DataVersion]phase0.Fork{DataVersionGloas: gloasAt(now + 200), nextFork: {Epoch: now + 300, CurrentVersion: phase0.Version{0x90}}})
+	active := config(map[spec.DataVersion]phase0.Fork{DataVersionGloas: gloasAt(now)})
+	otherNetwork := config(map[spec.DataVersion]phase0.Fork{DataVersionGloas: gloasAt(now + 100)})
+	otherNetwork.Name = "another network"
+
+	require.True(t, ahead.ExtendsForkSchedule(omitted))
+	require.True(t, ahead.ExtendsForkSchedule(unscheduled), "a fork named far-future is unscheduled")
+	require.True(t, aheadThenNext.ExtendsForkSchedule(ahead))
+	require.True(t, aheadThenNext.ExtendsForkSchedule(omitted))
+
+	for name, extends := range map[string]bool{
+		"less":                      omitted.ExtendsForkSchedule(ahead),
+		"the same":                  ahead.ExtendsForkSchedule(ahead),
+		"unscheduled either way":    unscheduled.ExtendsForkSchedule(omitted),
+		"scheduled later":           aheadLater.ExtendsForkSchedule(ahead),
+		"scheduled earlier":         ahead.ExtendsForkSchedule(aheadLater),
+		"more, one fork moved":      aheadLaterThenNext.ExtendsForkSchedule(ahead),
+		"a fork active on one side": active.ExtendsForkSchedule(omitted),
+		"another network":           otherNetwork.ExtendsForkSchedule(omitted),
+	} {
+		require.False(t, extends, name)
 	}
 }
