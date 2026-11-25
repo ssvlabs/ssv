@@ -99,6 +99,13 @@ func TestValidCommitteeSize(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("MaxCommitteeSize is the largest valid size", func(t *testing.T) {
+		require.True(t, ValidCommitteeSize(MaxCommitteeSize))
+		for size := uint64(MaxCommitteeSize + 1); size <= 2*MaxCommitteeSize; size++ {
+			require.False(t, ValidCommitteeSize(size), "size %d", size)
+		}
+	})
 }
 
 func TestSSVShare_IsAttesting(t *testing.T) {

@@ -57,14 +57,10 @@ func (i *Instance) uponRoundChange(
 		i.metrics.EndStage(ctx, i.State.Round)
 		i.metrics.StartStage(stageProposal)
 
-		// hasReceivedProposalJustificationForLeadingRound accepts future-round quorums, but CreateProposal
-		// uses i.State.Round as the proposal round and MessagesForRound(i.State.Round) selects the
-		// round-change justifications - so bump to the justified round here before building the proposal.
-		//
-		// In practice this branch never observes a future-round quorum: on natural message flow, the
-		// partial-quorum branch (f+1 < 2f+1) fires on an earlier uponRoundChange call and advances
-		// State.Round before this branch can see a full quorum, so bumpToRound here is always a no-op.
-		// Kept as defense-in-depth in case the message-processing flow changes.
+		// a stray round change for a lower future round moves this node only to that lower round
+		// (partial-quorum minRound), so the quorum for the round it leads can complete while
+		// State.Round is still behind. bump to the justified round before CreateProposal, which
+		// proposes for State.Round and justifies with MessagesForRound(State.Round).
 		i.bumpToRound(justifiedRoundChangeMsg.QBFTMessage.Round)
 
 		// If that bump ever reaches the cutoff round, give up rather than broadcast a proposal no node accepts.
@@ -294,6 +290,10 @@ func (i *Instance) validRoundChangeForDataIgnoreSignature(
 
 	if !msg.SignedMessage.CheckSignersInCommittee(i.State.CommitteeMember.Committee) {
 		return spectypes.NewError(spectypes.SignerIsNotInCommitteeErrorCode, "signer not in committee")
+	}
+
+	if err := i.validIdentifier(msg); err != nil {
+		return err
 	}
 
 	// Addition to formal spec

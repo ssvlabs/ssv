@@ -101,7 +101,7 @@ func (gc *GoClient) startEventListener(ctx context.Context) error {
 	}
 
 	// By default, we subscribe to CL events via multiClient that only propagates events from a single client
-	// (the 1st active client). If we have weighted attestations enabled, we need to process events from all
+	// (the best-scored one). If we have weighted attestations enabled, we need to process events from all
 	// clients GoClient is configured with to get the most up-to-date data to score attestations correctly
 	// (and if some clients are unavailable at the moment - it's not a big deal, `go-eth2-client` automatically
 	// periodically resubscribes to Events).

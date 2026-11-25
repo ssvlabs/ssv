@@ -59,8 +59,9 @@ type ProposerRunner struct {
 	// decided QBFT round can submit the full block + blobs after signatures are
 	// collected, while still proposing a blinded value during QBFT.
 	cachedFullBlock *api.VersionedProposal
-	// cachedBlindedBlockSSZ is a fingerprint of the cachedFullBlock, it is stored here
-	// for efficient validation (so we re-use it instead of re-calculating).
+	// cachedBlindedBlockSSZ is the blinded SSZ of the block this operator fetched, full or blinded.
+	// Post-consensus compares the decided value with it to tell whether this operator's beacon node
+	// produced the decided block.
 	cachedBlindedBlockSSZ []byte
 
 	// builders is the cluster's direct-builder config, resolved once at construction: the produceBlockV4
@@ -276,11 +277,11 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 			return fmt.Errorf("could not marshal blinded beacon block: %w", err)
 		}
 
-		// Store the original block (we are only interested in full blocks) for later re-use
-		// in the post-consensus phase.
+		// Keep the fetched block for post-consensus: its blinded SSZ to recognize it once decided,
+		// and, if full, the block itself to submit with its payload.
+		r.cachedBlindedBlockSSZ = byts
 		if !vBlk.Blinded {
 			r.cachedFullBlock = vBlk
-			r.cachedBlindedBlockSSZ = byts
 		}
 
 		input = &spectypes.ProposerConsensusData{
@@ -571,28 +572,27 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 	span.AddEvent(submittingBlockProposalEvent)
 	logger.Info(submittingBlockProposalEvent)
 
-	// If this operator is the leader of the decided round and it originally
-	// fetched a full (non-blinded) block, prefer submitting the full locally
-	// cached block (including blobs for Deneb/Electra/Fulu) - but only if
-	// the root of the decided block matches our locally cached block root.
-	// Other operators will keep submitting the blinded variant.
-	// TODO: should we send the block at all if we're not the leader? It's probably not effective but
-	//		I left it for now to keep backwards compatibility.
+	// The leader of the decided round submits its cached full block (with blobs) if the decided block
+	// is the one it fetched; every other submit uses the decided blinded block. All operators submit, as
+	// in ssv-spec's submitDecidedBlock, which keeps a builder block publishable if the leader's fails.
+	// A beacon node lacking the payload (no builder, another relay, or another operator's local block)
+	// can't publish it, so a failed submit of a block this operator's beacon node didn't produce is
+	// expected: it concludes the duty not_published rather than failed.
 	vBlk, _, err := validatorConsensusData.GetBlockData()
 	if err != nil {
 		return fmt.Errorf("could not get block data from consensus data: %w", err)
 	}
+	ownBlock := bytes.Equal(validatorConsensusData.DataSSZ, r.cachedBlindedBlockSSZ)
 	leaderID := r.State.RunningInstance.Proposer()
 	if r.cachedFullBlock != nil && leaderID == r.operatorSigner.GetOperatorID() {
-		if bytes.Equal(validatorConsensusData.DataSSZ, r.cachedBlindedBlockSSZ) {
+		if ownBlock {
 			logger.Debug("leader will use the original full block for proposal submission")
 			vBlk = r.cachedFullBlock
-		} else {
-			logger.Debug(
-				"leader will use the decided block for proposal submission because decided block root hash doesn't match cached block root hash",
-				zap.String("decided_block_ssz", hex.EncodeToString(validatorConsensusData.DataSSZ)),
-				zap.String("cached_block_ssz", hex.EncodeToString(r.cachedBlindedBlockSSZ)),
-			)
+		} else if ce := logger.Check(zap.DebugLevel,
+			"leader will use the decided block for proposal submission because decided block root hash doesn't match cached block root hash",
+		); ce != nil {
+			// Hashing both blocks for their roots delays the submit, so it's done only when this is logged.
+			ce.Write(blockRootField("decided_block_root", vBlk), blockRootField("cached_block_root", r.cachedFullBlock))
 		}
 	}
 
@@ -601,6 +601,13 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 
 	start := time.Now()
 	if err := r.GetBeaconNode().SubmitBeaconBlock(ctx, vBlk, specSig); err != nil {
+		if !ownBlock {
+			const notPublishedEvent = "could not submit another operator's beacon block"
+			span.AddEvent(notPublishedEvent)
+			logger.Info(notPublishedEvent, fields.Slot(validatorConsensusData.Duty.Slot), zap.Error(err))
+			r.markDutyNotPublished(err)
+			return nil
+		}
 		recordFailedSubmission(ctx, spectypes.BNRoleProposer)
 		const errMsg = "could not submit beacon block"
 		logger.Error(errMsg, fields.Slot(validatorConsensusData.Duty.Slot), zap.Error(err))
@@ -1221,6 +1228,16 @@ func extractExecutionInfo(vBlk *api.VersionedProposal) (executionInfo, error) {
 	default:
 		return executionInfo{}, fmt.Errorf("unsupported block version %d", vBlk.Version)
 	}
+}
+
+// blockRootField logs vBlk's root under key (a blinded block shares its full block's root), or the error
+// computing it.
+func blockRootField(key string, vBlk *api.VersionedProposal) zap.Field {
+	root, err := vBlk.Root()
+	if err != nil {
+		return zap.NamedError(key+"_err", err)
+	}
+	return zap.String(key, hex.EncodeToString(root[:]))
 }
 
 func proposalCommonFields(vBlk *api.VersionedProposal) ([]zap.Field, []attribute.KeyValue) {

@@ -59,6 +59,47 @@ func TestDefaultAuthData(t *testing.T) {
 	}
 }
 
+// A URL on a local host with no AuthData is most likely a MEV-Boost/commit-boost sidecar, where the hostname
+// default matches no relay; the node warns on it at startup.
+func TestBuilderEntry_LocalHostWithoutAuthData(t *testing.T) {
+	for url, wantHost := range map[string]string{
+		"http://localhost:18550":            "localhost",
+		"http://LocalHost.:18550/":          "localhost",
+		"http://mev-boost:18550":            "mev-boost", // a Docker service name
+		"http://cb.localhost:18550":         "cb.localhost",
+		"http://boost.local:18550":          "boost.local",
+		"http://host.docker.internal:18550": "host.docker.internal",
+		"http://127.0.0.1:18550":            "127.0.0.1",
+		"http://0.0.0.0:18550":              "0.0.0.0",
+		"http://10.0.0.5:18550":             "10.0.0.5",
+		"http://172.16.3.4:18550":           "172.16.3.4",
+		"http://192.168.1.10:18550":         "192.168.1.10",
+		"http://169.254.1.1:18550":          "169.254.1.1",
+		"http://[::1]:18550":                "::1",
+		"http://[fd00::1]:18550":            "fd00::1",
+		"http://[fe80::1]:18550":            "fe80::1",
+		"http://[::ffff:127.0.0.1]:18550":   "::ffff:127.0.0.1",
+	} {
+		host, ok := (&BuilderEntry{URL: url}).LocalHostWithoutAuthData()
+		require.True(t, ok, url)
+		require.Equal(t, wantHost, host, url)
+	}
+
+	for _, e := range []BuilderEntry{
+		{URL: "https://builder.example.com"},
+		{URL: "https://8.8.8.8:18550"},
+		{URL: "https://[2001:db8::1]/"},
+		{URL: "https://172.32.0.1/"}, // just past 172.16.0.0/12
+		// An explicit AuthData is the sidecar setup done right.
+		{URL: "http://localhost:18550", AuthData: "0x" + hex.EncodeToString([]byte("relay.example.com"))},
+		{URL: "not a url at all"},
+	} {
+		host, ok := e.LocalHostWithoutAuthData()
+		require.False(t, ok, e.URL)
+		require.Empty(t, host, e.URL)
+	}
+}
+
 func TestBuilderEntry_Effective(t *testing.T) {
 	// Config-level boost factor defaults to the neutral 100; an entry inherits it when unset.
 	empty := &BuilderConfig{}

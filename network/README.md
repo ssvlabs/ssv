@@ -48,10 +48,6 @@ type Network interface {
 	Subscriber
 	// Broadcaster enables to broadcast messages
 	Broadcaster
-	// Syncer holds the interface for syncing data from other peerz
-	Syncer
-	// ValidationReporting is the interface for reporting on message validation results
-	ValidationReporting
 }
 ```
 

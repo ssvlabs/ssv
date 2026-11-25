@@ -2,6 +2,8 @@ package message
 
 import (
 	"fmt"
+	"maps"
+	"slices"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -55,25 +57,76 @@ func QBFTMsgTypeToString(mt specqbft.MessageType) string {
 	}
 }
 
-// BeaconRoleFromString returns BeaconRole from string
+// beaconRoleByName holds the beacon roles the API accepts, keyed by API name. BeaconRoleFromString and
+// BeaconRoles both read it.
+var beaconRoleByName = map[string]spectypes.BeaconRole{
+	roleAttester:                  spectypes.BNRoleAttester,
+	roleAggregator:                spectypes.BNRoleAggregator,
+	roleProposer:                  spectypes.BNRoleProposer,
+	roleSyncCommittee:             spectypes.BNRoleSyncCommittee,
+	roleSyncCommitteeContribution: spectypes.BNRoleSyncCommitteeContribution,
+	roleValidatorRegistration:     spectypes.BNRoleValidatorRegistration,
+	roleVoluntaryExit:             spectypes.BNRoleVoluntaryExit,
+	rolePTCAttester:               spectypes.BNRolePTCAttester,
+	roleProposerPreferences:       spectypes.BNRoleProposerPreferences,
+}
+
+// BeaconRoleFromString parses a beacon role from its API name.
 func BeaconRoleFromString(s string) (spectypes.BeaconRole, error) {
-	switch s {
-	case roleAttester:
-		return spectypes.BNRoleAttester, nil
-	case roleAggregator:
-		return spectypes.BNRoleAggregator, nil
-	case roleProposer:
-		return spectypes.BNRoleProposer, nil
-	case roleSyncCommittee:
-		return spectypes.BNRoleSyncCommittee, nil
-	case roleSyncCommitteeContribution:
-		return spectypes.BNRoleSyncCommitteeContribution, nil
-	case roleValidatorRegistration:
-		return spectypes.BNRoleValidatorRegistration, nil
-	case roleVoluntaryExit:
-		return spectypes.BNRoleVoluntaryExit, nil
-	default:
+	role, ok := beaconRoleByName[s]
+	if !ok {
 		return 0, fmt.Errorf("unknown role: %s", s)
+	}
+	return role, nil
+}
+
+// BeaconRoles returns the roles BeaconRoleFromString parses, sorted. The node creates a participant store for
+// each (cli/operator/node.go), so every role the API accepts has one.
+func BeaconRoles() []spectypes.BeaconRole {
+	return slices.Sorted(maps.Values(beaconRoleByName))
+}
+
+// Partial-signature message type names for the API's `type` field. A type that belongs to one duty is named
+// after that duty's role as the API reports it: the beacon role for a validator duty, the runner role
+// (AGGREGATOR_COMMITTEE) for a committee duty.
+const (
+	PartialSigPostConsensus         = "POST_CONSENSUS"
+	PartialSigRandao                = "RANDAO"
+	PartialSigSelectionProof        = "SELECTION_PROOF"
+	PartialSigContributionProofs    = "CONTRIBUTION_PROOFS"
+	PartialSigValidatorRegistration = "VALIDATOR_REGISTRATION"
+	PartialSigVoluntaryExit         = "VOLUNTARY_EXIT"
+	PartialSigAggregatorCommittee   = "AGGREGATOR_COMMITTEE"
+	PartialSigPTCAttester           = "PTC_ATTESTER"
+	PartialSigProposerPreferences   = "PROPOSER_PREFERENCES"
+	PartialSigRequestAuth           = "REQUEST_AUTH"
+)
+
+// PartialSigMsgTypeToString names a partial-signature message type for API responses.
+func PartialSigMsgTypeToString(t spectypes.PartialSigMsgType) string {
+	switch t {
+	case spectypes.PostConsensusPartialSig:
+		return PartialSigPostConsensus
+	case spectypes.RandaoPartialSig:
+		return PartialSigRandao
+	case ssvtypes.SelectionProofPartialSig:
+		return PartialSigSelectionProof
+	case ssvtypes.ContributionProofs:
+		return PartialSigContributionProofs
+	case spectypes.ValidatorRegistrationPartialSig:
+		return PartialSigValidatorRegistration
+	case spectypes.VoluntaryExitPartialSig:
+		return PartialSigVoluntaryExit
+	case spectypes.AggregatorCommitteePartialSig:
+		return PartialSigAggregatorCommittee
+	case spectypes.PTCAttesterPartialSig:
+		return PartialSigPTCAttester
+	case spectypes.ProposerPreferencesPartialSig:
+		return PartialSigProposerPreferences
+	case spectypes.RequestAuthPartialSig:
+		return PartialSigRequestAuth
+	default:
+		return fmt.Sprintf("unknown(%d)", t)
 	}
 }
 

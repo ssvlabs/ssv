@@ -9,7 +9,6 @@ import (
 	"net/http/httptest"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/ethereum/go-ethereum"
 	ethcommon "github.com/ethereum/go-ethereum/common"
@@ -47,8 +46,10 @@ func TestNewMulti(t *testing.T) {
 		ctx := t.Context()
 
 		sim := simTestBackend(testAddr)
+		defer func() { require.NoError(t, sim.Close()) }()
 
-		rpcServer, _ := sim.Node().RPCHandler()
+		rpcServer, err := sim.Node().RPCHandler()
+		require.NoError(t, err)
 		httpsrv := httptest.NewServer(rpcServer.WebsocketHandler([]string{"*"}))
 		defer rpcServer.Stop()
 		defer httpsrv.Close()
@@ -80,8 +81,10 @@ func TestNewMulti(t *testing.T) {
 		ctx := t.Context()
 
 		sim := simTestBackend(testAddr)
+		defer func() { require.NoError(t, sim.Close()) }()
 
-		rpcServer, _ := sim.Node().RPCHandler()
+		rpcServer, err := sim.Node().RPCHandler()
+		require.NoError(t, err)
 		httpsrv := httptest.NewServer(rpcServer.WebsocketHandler([]string{"*"}))
 		defer rpcServer.Stop()
 		defer httpsrv.Close()
@@ -91,7 +94,8 @@ func TestNewMulti(t *testing.T) {
 		contractAddr := ethcommon.HexToAddress("0x1234")
 
 		customLogger := zap.NewExample()
-		const customTimeout = 400 * time.Millisecond
+		// Longer than the default, so the override shows without shortening the dial.
+		const customTimeout = 2 * DefaultReqTimeout
 		const customSyncDistanceTolerance = 12
 
 		mc, err := NewMulti(

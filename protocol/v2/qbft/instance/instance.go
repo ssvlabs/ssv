@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -224,8 +225,39 @@ func (i *Instance) ProcessMsg(ctx context.Context, logger *zap.Logger, msg *spec
 	return decided, decidedValue, aggregatedCommit, nil
 }
 
-func (i *Instance) BaseMsgValidation(msg *specqbft.ProcessingMessage) error {
+// validateMsg checks the justification placement rules of ssv-spec#673 and runs msg.Validate(): only a proposal
+// carries prepare justifications, only a proposal or a prepared round change carries round change justifications,
+// and justifications are embedded without full data.
+//
+// It runs only where a message enters the instance: in BaseMsgValidation on every message, on the prepares a round
+// change carries, and in commit validation, which decided messages also go through. Round changes and prepares
+// embedded in a received proposal are not checked again: they were already checked when they entered, and
+// re-checking them here would refuse proposals that nodes without this check accept.
+func validateMsg(msg *specqbft.ProcessingMessage) error {
+	m := msg.QBFTMessage
+	if m.MsgType != specqbft.ProposalMsgType {
+		if len(m.PrepareJustification) > 0 {
+			return errors.New("unexpected prepare justification")
+		}
+		if len(m.RoundChangeJustification) > 0 && !m.RoundChangePrepared() {
+			return errors.New("unexpected round change justification")
+		}
+	}
 	if err := msg.Validate(); err != nil {
+		return err
+	}
+	rcj, _ := m.GetRoundChangeJustifications() // no need to check error, checked on msg.Validate()
+	pj, _ := m.GetPrepareJustifications()      // no need to check error, checked on msg.Validate()
+	for _, j := range append(rcj, pj...) {
+		if len(j.FullData) > 0 {
+			return errors.New("justification with full data")
+		}
+	}
+	return nil
+}
+
+func (i *Instance) BaseMsgValidation(msg *specqbft.ProcessingMessage) error {
+	if err := validateMsg(msg); err != nil {
 		return err
 	}
 
@@ -258,7 +290,31 @@ func (i *Instance) BaseMsgValidation(msg *specqbft.ProcessingMessage) error {
 		}
 		return i.validateCommit(msg)
 	case specqbft.RoundChangeMsgType:
-		return i.validRoundChangeForDataIgnoreSignature(msg, msg.QBFTMessage.Round, msg.SignedMessage.FullData)
+		if err := i.validRoundChangeForDataIgnoreSignature(msg, msg.QBFTMessage.Round, msg.SignedMessage.FullData); err != nil {
+			return err
+		}
+
+		// Addition to formal spec
+		// An unprepared round change proposes nothing, so it has no use for full data, yet the whole
+		// message is kept in the round-change container. This applies only to a round change received
+		// on its own: round changes embedded in a proposal never enter the container, and validateMsg
+		// already refuses a proposal whose justifications carry full data.
+		if !msg.QBFTMessage.RoundChangePrepared() && len(msg.SignedMessage.FullData) != 0 {
+			return errors.New("unprepared round change with full data")
+		}
+
+		// The prepares a round change carries enter the instance with it, so they get the placement checks too.
+		prepares, _ := msg.QBFTMessage.GetRoundChangeJustifications() // no need to check error, checked on msg.Validate()
+		for _, p := range prepares {
+			pm, err := specqbft.NewProcessingMessage(p)
+			if err != nil {
+				return fmt.Errorf("could not create ProcessingMessage from prepare message in round change justification: %w", err)
+			}
+			if err := validateMsg(pm); err != nil {
+				return fmt.Errorf("round change justification invalid: %w", err)
+			}
+		}
+		return nil
 	default:
 		return fmt.Errorf("signed message type not supported")
 	}

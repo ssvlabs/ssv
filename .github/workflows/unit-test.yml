@@ -44,7 +44,7 @@ jobs:
         run: make unit-test
 
       - name: Upload coverage reports to Codecov
-        uses: codecov/codecov-action@v5.5.3
+        uses: codecov/codecov-action@0fb7174895f61a3b6b78fc075e0cd60383518dac # v5.5.5
         with:
           files: ./coverage.out
           flags: core
@@ -118,7 +118,7 @@ jobs:
         run: make ssvsigner-test
 
       - name: Upload ssvsigner coverage report to Codecov
-        uses: codecov/codecov-action@v5.5.3
+        uses: codecov/codecov-action@0fb7174895f61a3b6b78fc075e0cd60383518dac # v5.5.5
         with:
           files: ./ssvsigner/coverage.out
           flags: ssvsigner

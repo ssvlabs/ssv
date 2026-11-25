@@ -5,6 +5,7 @@ import (
 	"crypto/ecdsa"
 	"errors"
 	"fmt"
+	"net"
 	"strings"
 	"time"
 
@@ -14,7 +15,7 @@ import (
 	"github.com/libp2p/go-libp2p/p2p/security/noise"
 	libp2ptcp "github.com/libp2p/go-libp2p/p2p/transport/tcp"
 	ma "github.com/multiformats/go-multiaddr"
-	"go.uber.org/zap"
+	manet "github.com/multiformats/go-multiaddr/net"
 
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/network"
@@ -25,22 +26,33 @@ import (
 	uc "github.com/ssvlabs/ssv/utils/commons"
 )
 
+const minPeersBuffer = 10
+
+// DiscoveryMode is the peer discovery a node runs, set by Config.Discovery.
+type DiscoveryMode string
+
 const (
-	localDiscvery  = "mdns"
-	minPeersBuffer = 10
+	// DiscoveryDiscv5 finds peers over discv5, starting from the bootnodes. It is the default.
+	DiscoveryDiscv5 DiscoveryMode = "discv5"
+	// DiscoveryMDNS finds peers on the local network over mDNS, for a local cluster.
+	DiscoveryMDNS DiscoveryMode = "mdns"
+	// DiscoveryNone runs no peer discovery: the node has only its TrustedPeers, the peers that dial it, and peers
+	// connected to it directly (as the test harness does). Trusted peers are dialed once, when the node starts,
+	// so a trusted peer that disconnects stays disconnected unless it dials back.
+	DiscoveryNone DiscoveryMode = "none"
 )
 
 // Config holds the configuration options for p2p network
 type Config struct {
 	Ctx          context.Context
-	Bootnodes    string   `yaml:"Bootnodes" env:"BOOTNODES" env-description:"Bootnodes to use for discovery (semicolon-separated ENRs, e.g. 'enr:-abc123;enr:-def456')" `
-	Discovery    string   `yaml:"Discovery" env:"P2P_DISCOVERY" env-description:"Discovery protocol to use (discv5, mdns)" `
-	TrustedPeers []string `yaml:"TrustedPeers" env:"TRUSTED_PEERS" env-description:"List of peer IDs to always connect to"`
+	Bootnodes    string        `yaml:"Bootnodes" env:"BOOTNODES" env-description:"Bootnodes to use for discovery (semicolon-separated ENRs, e.g. 'enr:-abc123;enr:-def456')" `
+	Discovery    DiscoveryMode `yaml:"Discovery" env:"P2P_DISCOVERY" env-description:"Discovery protocol to use (discv5, mdns, or none to run without discovery)" `
+	TrustedPeers []string      `yaml:"TrustedPeers" env:"TRUSTED_PEERS" env-description:"List of peer IDs to always connect to"`
 
 	TCPPort     uint16 `yaml:"TcpPort" env:"TCP_PORT" env-description:"TCP port for P2P transport"`
 	UDPPort     uint16 `yaml:"UdpPort" env:"UDP_PORT" env-description:"UDP port for discovery"`
-	HostAddress string `yaml:"HostAddress" env:"HOST_ADDRESS" env-description:"External IP address for discovery (mutually exclusive with HostDNS)"`
-	HostDNS     string `yaml:"HostDNS" env:"HOST_DNS" env-description:"External DNS name for discovery (mutually exclusive with HostAddress)"`
+	HostAddress string `yaml:"HostAddress" env:"HOST_ADDRESS" env-description:"External IP address to advertise to peers (mutually exclusive with HostDNS)"`
+	HostDNS     string `yaml:"HostDNS" env:"HOST_DNS" env-description:"External DNS name to advertise to peers (mutually exclusive with HostAddress)"`
 
 	RequestTimeout   time.Duration `yaml:"RequestTimeout" env:"P2P_REQUEST_TIMEOUT" env-description:"Timeout for P2P requests"`
 	MaxBatchResponse uint64        `yaml:"MaxBatchResponse" env:"P2P_MAX_BATCH_RESPONSE" env-description:"Maximum number of objects returned in a batch response"`
@@ -95,15 +107,10 @@ type Config struct {
 
 	// PeerScoreInspectorInterval is the interval at which the PeerScoreInspector is called.
 	PeerScoreInspectorInterval time.Duration
-
-	// MdnsDiscoveryTag overrides the mDNS service tag used by local discovery.
-	// Empty falls back to discovery.LocalDiscoveryServiceTag. Tests set this to
-	// a unique value so concurrent test processes don't cross-discover peers.
-	MdnsDiscoveryTag string
 }
 
 func (c *Config) ApplyDefaults() {
-	c.Discovery = "discv5"
+	c.Discovery = DiscoveryDiscv5
 	c.TCPPort = 13001
 	c.UDPPort = 12001
 	c.RequestTimeout = 10 * time.Second
@@ -115,10 +122,29 @@ func (c *Config) ApplyDefaults() {
 	c.PubSubScoring = true
 }
 
-// Libp2pOptions creates options list for the libp2p host
-// these are the most basic options required to start a network instance,
-// other options and libp2p components can be configured on top
-func (c *Config) Libp2pOptions(logger *zap.Logger) ([]libp2p.Option, error) {
+// discoveryMode returns the discovery mode to run: Discovery, or discv5 when it is unset. Read the mode only
+// through it, so an unset Discovery means discv5 everywhere.
+func (c *Config) discoveryMode() DiscoveryMode {
+	if c.Discovery == "" {
+		return DiscoveryDiscv5
+	}
+	return c.Discovery
+}
+
+// ValidateDiscovery rejects a Discovery that names no known mode.
+func (c *Config) ValidateDiscovery() error {
+	switch mode := c.discoveryMode(); mode {
+	case DiscoveryDiscv5, DiscoveryMDNS, DiscoveryNone:
+		return nil
+	default:
+		return fmt.Errorf("unknown discovery mode %q (use discv5, mdns, or none)", mode)
+	}
+}
+
+// Libp2pOptions returns the basic libp2p host options; other options and components are configured on top.
+// localIP is the node's local IP (nil without discv5): the host listens on it and, without HostAddress/HostDNS,
+// our ENR starts with it and the host advertises it alongside its public addresses.
+func (c *Config) Libp2pOptions(localIP net.IP) ([]libp2p.Option, error) {
 	if c.NetworkPrivateKey == nil {
 		return nil, errors.New("could not create options w/o network key")
 	}
@@ -134,7 +160,7 @@ func (c *Config) Libp2pOptions(logger *zap.Logger) ([]libp2p.Option, error) {
 		libp2p.UserAgent(c.UserAgent),
 	)
 
-	opts, err = c.configureAddrs(logger, opts)
+	opts, err = c.configureAddrs(opts, localIP)
 	if err != nil {
 		return opts, fmt.Errorf("could not setup addresses: %w", err)
 	}
@@ -147,53 +173,67 @@ func (c *Config) Libp2pOptions(logger *zap.Logger) ([]libp2p.Option, error) {
 	return opts, nil
 }
 
-func (c *Config) configureAddrs(logger *zap.Logger, opts []libp2p.Option) ([]libp2p.Option, error) {
+// configureAddrs sets the addresses the host listens on and the ones it advertises to peers.
+func (c *Config) configureAddrs(opts []libp2p.Option, localIP net.IP) ([]libp2p.Option, error) {
 	addrs := make([]ma.Multiaddr, 0)
 	maZero, err := commons.BuildMultiAddress("0.0.0.0", "tcp", uint(c.TCPPort), "")
 	if err != nil {
 		return opts, fmt.Errorf("could not build multi address for zero address: %w", err)
 	}
 	addrs = append(addrs, maZero)
-	ipAddr, err := commons.IPAddr()
-	if err != nil {
-		return opts, fmt.Errorf("could not get ip addr: %w", err)
-	}
 
-	if c.Discovery != localDiscvery {
-		maIP, err := commons.BuildMultiAddress(ipAddr.String(), "tcp", uint(c.TCPPort), "")
+	var maIP ma.Multiaddr
+	if localIP != nil {
+		// With discv5 the port goes into our ENR and the address we advertise, so the kernel can't pick it.
+		if c.TCPPort == 0 {
+			return opts, errors.New("missing tcp port")
+		}
+		maIP, err = commons.BuildMultiAddress(localIP.String(), "tcp", uint(c.TCPPort), "")
 		if err != nil {
-			return opts, fmt.Errorf("could not build multi address for zero address: %w", err)
+			return opts, fmt.Errorf("could not build multi address for ip address: %w", err)
 		}
 		addrs = append(addrs, maIP)
 	}
 	opts = append(opts, libp2p.ListenAddrs(addrs...))
 
-	// NOTE: only one of (HostDNS, HostAddress) can be used with libp2p
-	if c.HostDNS != "" {
-		// AddrFactory for DNS address if provided
-		opts = append(opts, libp2p.AddrsFactory(func(addrs []ma.Multiaddr) []ma.Multiaddr {
-			external, err := ma.NewMultiaddr(fmt.Sprintf("/dns4/%s/tcp/%d", c.HostDNS, c.TCPPort))
-			if err != nil {
-				logger.Error("unable to create external multiaddress", zap.Error(err))
-			} else {
-				addrs = append(addrs, external)
-			}
-			return addrs
-		}))
-	} else if c.HostAddress != "" {
-		// AddrFactory for host address if provided
-		opts = append(opts, libp2p.AddrsFactory(func(addrs []ma.Multiaddr) []ma.Multiaddr {
-			external, err := commons.BuildMultiAddress(c.HostAddress, "tcp", uint(c.TCPPort), "")
-			if err != nil {
-				logger.Error("unable to create external multiaddress", zap.Error(err))
-			} else {
-				addrs = append(addrs, external)
-			}
-			return addrs
-		}))
+	// announced is what we advertise besides our public addresses: HostDNS or HostAddress (mutually exclusive), else
+	// localIP, the IP our ENR starts with (discv5 may later switch the ENR to the public IP peers report). It's set
+	// once, at startup: unlike the public addresses, it doesn't follow a later change of the host's addresses.
+	var announced ma.Multiaddr
+	switch {
+	case c.HostDNS != "":
+		announced, err = ma.NewMultiaddr(fmt.Sprintf("/dns4/%s/tcp/%d", c.HostDNS, c.TCPPort))
+	case c.HostAddress != "":
+		announced, err = commons.BuildMultiAddress(c.HostAddress, "tcp", uint(c.TCPPort), "")
+	case maIP != nil:
+		announced = maIP
+	default:
+		// Without discv5 there's no ENR to name the one private address peers reach us through, so keep
+		// go-libp2p's default: every interface address.
+		return opts, nil
+	}
+	if err != nil {
+		return opts, fmt.Errorf("could not build external multi address: %w", err)
 	}
 
+	// go-libp2p resolves the 0.0.0.0 listener to every interface address (docker bridges, VPNs, loopback, ...), and
+	// identify and the signed peer record advertise what this factory returns. Peers reach us through the public
+	// and announced addresses, so the other private ones would only leak our internal network.
+	opts = append(opts, libp2p.AddrsFactory(func(addrs []ma.Multiaddr) []ma.Multiaddr {
+		return append(publicAddrs(addrs), announced)
+	}))
+
 	return opts, nil
+}
+
+func publicAddrs(addrs []ma.Multiaddr) []ma.Multiaddr {
+	public := make([]ma.Multiaddr, 0, len(addrs))
+	for _, addr := range addrs {
+		if manet.IsPublicAddr(addr) {
+			public = append(public, addr)
+		}
+	}
+	return public
 }
 
 // TransformBootnodes converts bootnodes string and convert it to slice

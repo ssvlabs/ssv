@@ -31,9 +31,11 @@ type DutyTraceStore interface {
 	SaveCommitteeDutyLink(slot phase0.Slot, index phase0.ValidatorIndex, id spectypes.CommitteeID) error
 	SaveCommitteeDutyLinks(slot phase0.Slot, linkMap map[phase0.ValidatorIndex]spectypes.CommitteeID) error
 	SaveCommitteeDuty(role spectypes.RunnerRole, duty *traces.CommitteeDutyTrace) error
-	SaveCommitteeDuties(slot phase0.Slot, role spectypes.RunnerRole, duties []*traces.CommitteeDutyTrace) error
+	// SaveCommitteeDuties and SaveValidatorDuties report how many duties they saved: a duty that can't be
+	// encoded is left out and named in the error, and a failed batch write saves nothing.
+	SaveCommitteeDuties(slot phase0.Slot, role spectypes.RunnerRole, duties []*traces.CommitteeDutyTrace) (saved int, err error)
 	SaveValidatorDuty(duty *traces.ValidatorDutyTrace) error
-	SaveValidatorDuties(duties []*traces.ValidatorDutyTrace) error
+	SaveValidatorDuties(duties []*traces.ValidatorDutyTrace) (saved int, err error)
 	GetCommitteeDuty(slot phase0.Slot, role spectypes.RunnerRole, committeeID spectypes.CommitteeID) (*traces.CommitteeDutyTrace, error)
 	GetCommitteeDuties(slot phase0.Slot, roles ...spectypes.RunnerRole) ([]*traces.CommitteeDutyTrace, error)
 	GetCommitteeDutyLink(slot phase0.Slot, index phase0.ValidatorIndex) (spectypes.CommitteeID, error)
@@ -395,18 +397,12 @@ func (c *Collector) GetValidatorDecideds(role spectypes.BeaconRole, slot phase0.
 			continue
 		}
 
-		signers := make([]spectypes.OperatorID, 0, len(duty.Decideds)+len(duty.Post))
-
-		for _, d := range duty.Decideds {
-			signers = append(signers, d.Signers...)
+		signers := validatorDutySigners(duty)
+		if len(signers) == 0 && preConsensusIsTheDuty(duty.Role) {
+			// Request auth alone (its round runs first and outlives a failed preferences build): no
+			// participation to report.
+			continue
 		}
-
-		for _, post := range duty.Post {
-			signers = append(signers, post.Signer)
-		}
-
-		slices.Sort(signers)
-		signers = slices.Compact(signers)
 
 		out = append(out, ParticipantsRangeIndexEntry{
 			Slot:    slot,
@@ -427,18 +423,10 @@ func (c *Collector) GetAllValidatorDecideds(role spectypes.BeaconRole, slot phas
 	out := make([]ParticipantsRangeIndexEntry, 0, len(duties))
 
 	for _, duty := range duties {
-		signers := make([]spectypes.OperatorID, 0, len(duty.Decideds)+len(duty.Post))
-
-		for _, d := range duty.Decideds {
-			signers = append(signers, d.Signers...)
+		signers := validatorDutySigners(duty)
+		if len(signers) == 0 && preConsensusIsTheDuty(duty.Role) {
+			continue // request auth alone, as in GetValidatorDecideds
 		}
-
-		for _, post := range duty.Post {
-			signers = append(signers, post.Signer)
-		}
-
-		slices.Sort(signers)
-		signers = slices.Compact(signers)
 
 		out = append(out, ParticipantsRangeIndexEntry{
 			Slot:    slot,
@@ -448,6 +436,40 @@ func (c *Collector) GetAllValidatorDecideds(role spectypes.BeaconRole, slot phas
 	}
 
 	return out, errs.ErrorOrNil()
+}
+
+// validatorDutySigners lists the operators seen taking part in a validator duty, with no quorum test: the
+// decideds' and post-consensus signers, plus the signers of a duty that is a single pre-consensus round
+// (preConsensusIsTheDuty), request auth aside since signing a builder token isn't the duty.
+func validatorDutySigners(duty *traces.ValidatorDutyTrace) []spectypes.OperatorID {
+	signers := make([]spectypes.OperatorID, 0, len(duty.Decideds)+len(duty.Post)+len(duty.Pre))
+	for _, d := range duty.Decideds {
+		signers = append(signers, d.Signers...)
+	}
+	for _, post := range duty.Post {
+		signers = append(signers, post.Signer)
+	}
+	if preConsensusIsTheDuty(duty.Role) {
+		for _, pre := range duty.Pre {
+			if pre.Type != spectypes.RequestAuthPartialSig {
+				signers = append(signers, pre.Signer)
+			}
+		}
+	}
+	slices.Sort(signers)
+	return slices.Compact(signers)
+}
+
+// preConsensusIsTheDuty reports the Gloas roles whose duty is a single partial-signature round. Validator
+// registration and voluntary exit share that shape but are left out: their messages are exempt from the
+// lateness bound, so a stale partial would show as participation at an arbitrary slot.
+func preConsensusIsTheDuty(role spectypes.BeaconRole) bool {
+	switch role {
+	case spectypes.BNRolePTCAttester, spectypes.BNRoleProposerPreferences:
+		return true
+	default:
+		return false
+	}
 }
 
 func (c *Collector) getCommitteeIDBySlotAndIndex(slot phase0.Slot, index phase0.ValidatorIndex) (spectypes.CommitteeID, error) {

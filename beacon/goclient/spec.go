@@ -63,8 +63,8 @@ func (gc *GoClient) specForClient(ctx context.Context, provider client.Service) 
 	return specResponse.Data, nil
 }
 
-// fetchBeaconConfig reads a client's beacon config: when the client activates, to take the node's config or
-// check the client against it (applyBeaconConfig), and on the periodic fork-schedule recheck
+// fetchBeaconConfig reads a client's beacon config: when the client activates, to offer it for the node's config at
+// startup and check the client against the node's (applyBeaconConfig), and on the periodic fork-schedule recheck
 // (recheckForkSchedules).
 func (gc *GoClient) fetchBeaconConfig(ctx context.Context, provider client.Service) (*networkconfig.Beacon, error) {
 	specResponse, err := gc.specForClient(ctx, provider)

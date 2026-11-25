@@ -46,6 +46,7 @@ import (
 	"github.com/ssvlabs/ssv/operator/validator/metadata"
 	"github.com/ssvlabs/ssv/operator/validators"
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	"github.com/ssvlabs/ssv/protocol/v2/message"
 	qbftcontroller "github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
@@ -80,8 +81,10 @@ func buildNode(ctx context.Context, cfg *config, logger *zap.Logger) (*node, err
 		return nil, fmt.Errorf("could not setup network: %w", err)
 	}
 
+	// The configured addresses may carry credentials, so they are only ever logged redacted.
+	clAddrs := goclient.RedactBeaconAddr(cfg.ConsensusClient.BeaconNodeAddr)
 	logger.Info("connecting CL(s)",
-		fields.Address(cfg.ConsensusClient.BeaconNodeAddr),
+		fields.Address(clAddrs),
 		zap.Bool("with_weighted_attestation_data", cfg.ConsensusClient.WithWeightedAttestationData),
 		zap.Bool("with_parallel_submissions", cfg.ConsensusClient.WithParallelSubmissions),
 	)
@@ -90,14 +93,14 @@ func buildNode(ctx context.Context, cfg *config, logger *zap.Logger) (*node, err
 	if err != nil {
 		return nil, startupError{
 			err:    fmt.Errorf("failed to create beacon client options: %w", err),
-			fields: []zap.Field{fields.Address(cfg.ConsensusClient.BeaconNodeAddr)},
+			fields: []zap.Field{fields.Address(clAddrs)},
 		}
 	}
 	consensusClient, err := goclient.New(ctx, logger, cliopt)
 	if err != nil {
 		return nil, startupError{
 			err:    fmt.Errorf("failed to create beacon go-client: %w", err),
-			fields: []zap.Field{fields.Address(cfg.ConsensusClient.BeaconNodeAddr)},
+			fields: []zap.Field{fields.Address(clAddrs)},
 		}
 	}
 
@@ -244,9 +247,9 @@ func newNode(
 		return nil, err
 	}
 	operatorPrivKey := identity.privKey
-	operatorPrivKeyPEM := identity.privKeyPEM
+	operatorPrivKeyBase64 := identity.privKeyBase64
 	ssvSignerClient := identity.ssvSigner
-	operatorPubKeyBase64 := identity.pubKeyB64
+	operatorPubKeyBase64 := identity.pubKeyBase64
 
 	cfg.DBOptions.Ctx = ctx
 	db, err := openNodeDB(logger, cfg, res, networkConfig.Beacon, operatorPrivKey)
@@ -272,8 +275,8 @@ func newNode(
 				return nil, fmt.Errorf("could not save base64-encoded operator public key: %w", err)
 			}
 		} else {
-			if err := ensureOperatorPrivateKey(nodeStorage, operatorPrivKey, operatorPrivKeyPEM); err != nil {
-				return nil, fmt.Errorf("could not save operator private key: %w", err)
+			if err := ensureOperatorPrivateKey(logger, nodeStorage, operatorPrivKey, operatorPrivKeyBase64); err != nil {
+				return nil, fmt.Errorf("could not check operator private key: %w", err)
 			}
 		}
 
@@ -354,19 +357,9 @@ func newNode(
 		decidedStreamPublisherFn = decided.NewDecidedListener(logger, networkConfig, ws, nodeStorage.ValidatorStore())
 	}
 
-	storageRoles := []spectypes.BeaconRole{
-		spectypes.BNRoleAttester,
-		spectypes.BNRoleProposer,
-		spectypes.BNRoleSyncCommittee,
-		spectypes.BNRoleAggregator,
-		spectypes.BNRoleSyncCommitteeContribution,
-		spectypes.BNRoleValidatorRegistration,
-		spectypes.BNRoleVoluntaryExit,
-	}
-
 	storageMap := ibftstorage.NewStores()
 
-	for _, storageRole := range storageRoles {
+	for _, storageRole := range message.BeaconRoles() {
 		s := ibftstorage.New(logger, db, storageRole)
 		storageMap.Add(storageRole, s)
 	}
@@ -405,6 +398,9 @@ func newNode(
 	switch res.mode {
 	case modeExporterArchive:
 		logger.Info("exporter mode: archive")
+		if err := dutytracestore.EnsureFormat(db); err != nil {
+			return nil, fmt.Errorf("exporter trace store: %w", err)
+		}
 		dstore := &dutytracer.DutyTraceStoreMetrics{
 			Store: dutytracestore.New(db),
 		}

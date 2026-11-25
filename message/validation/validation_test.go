@@ -22,6 +22,7 @@ import (
 	"github.com/herumi/bls-eth-go-binary/bls"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	pspb "github.com/libp2p/go-libp2p-pubsub/pb"
+	"github.com/libp2p/go-libp2p/core/peer"
 	libp2ptest "github.com/libp2p/go-libp2p/core/test"
 	"github.com/stretchr/testify/require"
 	eth2types "github.com/wealdtech/go-eth2-types/v2"
@@ -48,6 +49,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/types/ssvtestingutils"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/registry/storage/mocks"
+	"github.com/ssvlabs/ssv/ssvsigner/keys/rsaencryption"
 	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
@@ -165,6 +167,15 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	wrongSignatureVerifier := signatureverifier.NewMockSignatureVerifier(ctrl)
 	wrongSignatureVerifier.EXPECT().VerifySignature(gomock.Any(), gomock.Any(), gomock.Any()).Return(fmt.Errorf("test")).AnyTimes()
 
+	// realSignatureVerifier verifies RSA signatures against the operators' public keys in ns.
+	realSignatureVerifier := signatureverifier.NewSignatureVerifier(ns)
+	for id, sk := range ks.OperatorKeys {
+		pubKey, err := rsaencryption.PublicKeyToBase64PEM(&sk.PublicKey)
+		require.NoError(t, err)
+		_, err = ns.SaveOperatorData(nil, &registrystorage.OperatorData{ID: id, PublicKey: pubKey})
+		require.NoError(t, err)
+	}
+
 	committeeRole := spectypes.RoleCommittee
 	nonCommitteeRole := ssvtypes.RoleAggregator
 
@@ -175,11 +186,328 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	peerID, err := libp2ptest.RandPeerID()
 	require.NoError(t, err)
 
+	t.Run("committee message ID padding", func(t *testing.T) {
+		for _, paddingByte := range []int{0, 15} {
+			t.Run(fmt.Sprintf("byte %d", paddingByte), func(t *testing.T) {
+				validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
+				slot := netCfg.FirstSlotAtEpoch(1)
+				paddedID := committeeIdentifier
+				paddedID[8+paddingByte] = 1
+				msg := generateSignedMessage(ks, paddedID, slot)
+
+				encoded, err := msg.Encode()
+				require.NoError(t, err)
+				topic := commons.GetTopicFullName(commons.CommitteeTopicID(committeeID)[0])
+				result := validator.Validate(t.Context(), peerID, &pubsub.Message{Message: &pspb.Message{Data: encoded, Topic: &topic}})
+				// Ignored, not rejected, while older nodes still relay padded messages.
+				require.Equal(t, pubsub.ValidationIgnore, result)
+				require.Zero(t, validator.states.Len())
+				require.Zero(t, validator.validationLockCache.Len())
+
+				_, err = validator.handleSignedSSVMessage(t.Context(), msg, topic, peerID, netCfg.SlotStartTime(slot))
+				require.ErrorIs(t, err, ErrMsgIDPadding)
+			})
+		}
+
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
+		slot := netCfg.FirstSlotAtEpoch(1)
+		msg := generateSignedMessage(ks, committeeIdentifier, slot)
+		committeeInfo, err := validator.getCommitteeAndValidatorIndices(committeeIdentifier)
+		require.NoError(t, err)
+		_, err = validator.handleSignedSSVMessage(t.Context(), msg, expectedCommitteeTopic(netCfg, committeeInfo, slot), peerID, netCfg.SlotStartTime(slot))
+		require.NoError(t, err)
+	})
+
+	t.Run("padding variants do not grow caches", func(t *testing.T) {
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
+		slot := netCfg.FirstSlotAtEpoch(1)
+		for i := byte(1); i <= 100; i++ {
+			msg := generateSignedMessage(ks, committeeIdentifier, slot)
+			msg.SSVMessage.MsgID[8] = i
+			_, err := validator.handleSignedSSVMessage(t.Context(), msg, "", peerID, netCfg.SlotStartTime(slot))
+			require.ErrorIs(t, err, ErrMsgIDPadding)
+		}
+		require.Zero(t, validator.states.Len())
+		require.Zero(t, validator.validationLockCache.Len())
+	})
+
+	t.Run("padded prepare is ignored and leaves prepare dedup unchanged", func(t *testing.T) {
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
+		slot := netCfg.FirstSlotAtEpoch(1)
+		topic := commons.GetTopicFullName(commons.CommitteeTopicID(committeeID)[0])
+		prepare := func(id spectypes.MessageID) *spectypes.SignedSSVMessage {
+			msg := generateSignedMessage(ks, id, slot, func(message *specqbft.Message) { message.MsgType = specqbft.PrepareMsgType })
+			msg.FullData = nil
+			return msg
+		}
+
+		first := prepare(committeeIdentifier)
+		_, err := validator.handleSignedSSVMessage(t.Context(), first, topic, peerID, netCfg.SlotStartTime(slot))
+		require.NoError(t, err)
+		paddedID := committeeIdentifier
+		paddedID[8] = 1
+		_, err = validator.handleSignedSSVMessage(t.Context(), prepare(paddedID), topic, peerID, netCfg.SlotStartTime(slot))
+		require.ErrorIs(t, err, ErrMsgIDPadding)
+		_, err = validator.handleSignedSSVMessage(t.Context(), prepare(committeeIdentifier), topic, peerID, netCfg.SlotStartTime(slot))
+		require.ErrorIs(t, err, ErrDuplicatedMessage)
+	})
+
+	t.Run("state allocated only after signature verification", func(t *testing.T) {
+		calls := 0
+		verifier := signatureverifier.NewMockSignatureVerifier(ctrl)
+		verifier.EXPECT().VerifySignature(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(spectypes.OperatorID, *spectypes.SSVMessage, []byte) error {
+			calls++
+			if calls == 1 {
+				return errors.New("garbage signature")
+			}
+			return nil
+		}).Times(2)
+		validator := New(netCfg, validatorStore, operators, dutyStore, verifier).(*messageValidator)
+		slot := netCfg.FirstSlotAtEpoch(1)
+		topic := commons.GetTopicFullName(commons.CommitteeTopicID(committeeID)[0])
+		msg := generateSignedMessage(ks, committeeIdentifier, slot)
+
+		_, err := validator.handleSignedSSVMessage(t.Context(), msg, topic, peerID, netCfg.SlotStartTime(slot))
+		require.ErrorIs(t, err, ErrSignatureVerification)
+		require.Zero(t, validator.states.Len())
+		_, err = validator.handleSignedSSVMessage(t.Context(), msg, topic, peerID, netCfg.SlotStartTime(slot))
+		require.NoError(t, err)
+		require.Equal(t, 1, validator.states.Len())
+	})
+
 	// Post-fork (Boole) receive-side acceptance: a copy of TestNetwork with the Boole fork
 	// active from genesis. Exercises validateTopicAtSlot/validateDomainAtSlot on the Boole path.
 	postBooleSSV := *netCfg.SSV
 	postBooleSSV.Forks = networkconfig.SSVForks{Boole: 0}
 	postBooleCfg := &networkconfig.Network{Beacon: netCfg.Beacon, SSV: &postBooleSSV}
+
+	t.Run("aggregator committee partial signature message ID padding", func(t *testing.T) {
+		slot := phase0.Slot(spectestingutils.TestingDutySlot)
+		build := func(msgID spectypes.MessageID) *spectypes.SignedSSVMessage {
+			messages := spectestingutils.PostConsensusAggregatorMsg(ks.Shares[1], 1, spec.DataVersionPhase0)
+			messages.Type = spectypes.AggregatorCommitteePartialSig
+			encodedMessages, err := messages.Encode()
+			require.NoError(t, err)
+			return spectestingutils.SignedSSVMessageWithSigner(1, ks.OperatorKeys[1], &spectypes.SSVMessage{
+				MsgType: spectypes.SSVPartialSignatureMsgType,
+				MsgID:   msgID,
+				Data:    encodedMessages,
+			})
+		}
+		msgID := ssvtestingutils.NewMsgID(postBooleCfg.DomainTypeAtSlot(slot), encodedCommitteeID, spectypes.RoleAggregatorCommittee)
+
+		validator := New(postBooleCfg, validatorStore, operators, dutystore.New(), signatureVerifier).(*messageValidator)
+		committeeInfo, err := validator.getCommitteeAndValidatorIndices(msgID)
+		require.NoError(t, err)
+		topic := expectedCommitteeTopic(postBooleCfg, committeeInfo, slot)
+		receivedAt := postBooleCfg.SlotStartTime(slot)
+
+		for _, paddingByte := range []int{0, 15} {
+			paddedID := msgID
+			paddedID[8+paddingByte] = 1
+			_, err := validator.handleSignedSSVMessage(t.Context(), build(paddedID), topic, peerID, receivedAt)
+			require.ErrorIs(t, err, ErrMsgIDPadding)
+
+			encoded, err := build(paddedID).Encode()
+			require.NoError(t, err)
+			result := validator.Validate(t.Context(), peerID, &pubsub.Message{Message: &pspb.Message{Data: encoded, Topic: &topic}})
+			require.Equal(t, pubsub.ValidationIgnore, result)
+		}
+		require.Zero(t, validator.states.Len())
+		require.Zero(t, validator.validationLockCache.Len())
+
+		_, err = validator.handleSignedSSVMessage(t.Context(), build(msgID), topic, peerID, receivedAt)
+		require.NoError(t, err)
+	})
+
+	t.Run("message on the wrong topic creates no validation lock", func(t *testing.T) {
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
+		slot := netCfg.FirstSlotAtEpoch(1)
+		receivedAt := netCfg.SlotStartTime(slot)
+		committeeInfo, err := validator.getCommitteeAndValidatorIndices(committeeIdentifier)
+		require.NoError(t, err)
+
+		_, err = validator.handleSignedSSVMessage(t.Context(), generateSignedMessage(ks, committeeIdentifier, slot), "wrong topic", peerID, receivedAt)
+		require.ErrorIs(t, err, ErrIncorrectTopic)
+
+		messages := spectestingutils.PostConsensusAttestationMsg(ks.Shares[1], 1, spec.DataVersionPhase0)
+		messages.Slot = slot
+		encodedMessages, err := messages.Encode()
+		require.NoError(t, err)
+		partialSig := spectestingutils.SignedSSVMessageWithSigner(1, ks.OperatorKeys[1], &spectypes.SSVMessage{
+			MsgType: spectypes.SSVPartialSignatureMsgType,
+			MsgID:   committeeIdentifier,
+			Data:    encodedMessages,
+		})
+		_, err = validator.handleSignedSSVMessage(t.Context(), partialSig, "wrong topic", peerID, receivedAt)
+		require.ErrorIs(t, err, ErrIncorrectTopic)
+
+		require.Zero(t, validator.validationLockCache.Len())
+
+		// The same message on its own topic takes the lock.
+		topic := expectedCommitteeTopic(netCfg, committeeInfo, slot)
+		_, err = validator.handleSignedSSVMessage(t.Context(), generateSignedMessage(ks, committeeIdentifier, slot), topic, peerID, receivedAt)
+		require.NoError(t, err)
+		require.Equal(t, 1, validator.validationLockCache.Len())
+	})
+
+	t.Run("message failing a domain, role or semantic check creates no validation lock", func(t *testing.T) {
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
+		slot := netCfg.FirstSlotAtEpoch(1) // pre-fork
+		receivedAt := netCfg.SlotStartTime(slot)
+		topic := commons.GetTopicFullName(commons.CommitteeTopicID(committeeID)[0])
+		partialSig := func(msgID spectypes.MessageID, sigType spectypes.PartialSigMsgType) *spectypes.SignedSSVMessage {
+			messages := spectestingutils.PostConsensusAttestationMsg(ks.Shares[1], 1, spec.DataVersionPhase0)
+			messages.Slot = slot
+			messages.Type = sigType
+			encodedMessages, err := messages.Encode()
+			require.NoError(t, err)
+			return spectestingutils.SignedSSVMessageWithSigner(1, ks.OperatorKeys[1], &spectypes.SSVMessage{
+				MsgType: spectypes.SSVPartialSignatureMsgType,
+				MsgID:   msgID,
+				Data:    encodedMessages,
+			})
+		}
+		booleDomainID := ssvtestingutils.NewMsgID(netCfg.NextDomainType, encodedCommitteeID, committeeRole)
+		aggregatorCommitteeID := ssvtestingutils.NewMsgID(netCfg.DomainType, encodedCommitteeID, spectypes.RoleAggregatorCommittee)
+
+		for name, tc := range map[string]struct {
+			msg  *spectypes.SignedSSVMessage
+			want error
+		}{
+			"consensus, wrong domain for the slot":  {generateSignedMessage(ks, booleDomainID, slot), ErrWrongDomain},
+			"partial, wrong domain for the slot":    {partialSig(booleDomainID, spectypes.PostConsensusPartialSig), ErrWrongDomain},
+			"consensus, role not valid at the slot": {generateSignedMessage(ks, aggregatorCommitteeID, slot), ErrInvalidRole},
+			"partial, role not valid at the slot":   {partialSig(aggregatorCommitteeID, spectypes.PostConsensusPartialSig), ErrInvalidRole},
+			"consensus, zero round": {generateSignedMessage(ks, committeeIdentifier, slot, func(m *specqbft.Message) {
+				m.Round = specqbft.NoRound
+			}), ErrZeroRound},
+			"partial, type does not match the role": {partialSig(committeeIdentifier, spectypes.RandaoPartialSig), ErrPartialSignatureTypeRoleMismatch},
+		} {
+			_, err := validator.handleSignedSSVMessage(t.Context(), tc.msg, topic, peerID, receivedAt)
+			require.ErrorIs(t, err, tc.want, name)
+			require.Zero(t, validator.validationLockCache.Len(), name)
+		}
+	})
+
+	t.Run("validation holds the lock of its message ID", func(t *testing.T) {
+		slot := netCfg.FirstSlotAtEpoch(1)
+		receivedAt := netCfg.SlotStartTime(slot)
+		topic := commons.GetTopicFullName(commons.CommitteeTopicID(committeeID)[0])
+
+		messages := spectestingutils.PostConsensusAttestationMsg(ks.Shares[1], 1, spec.DataVersionPhase0)
+		messages.Slot = slot
+		encodedMessages, err := messages.Encode()
+		require.NoError(t, err)
+		partialSig := spectestingutils.SignedSSVMessageWithSigner(1, ks.OperatorKeys[1], &spectypes.SSVMessage{
+			MsgType: spectypes.SSVPartialSignatureMsgType,
+			MsgID:   committeeIdentifier,
+			Data:    encodedMessages,
+		})
+
+		for name, msg := range map[string]*spectypes.SignedSSVMessage{
+			"consensus": generateSignedMessage(ks, committeeIdentifier, slot),
+			"partial":   partialSig,
+		} {
+			t.Run(name, func(t *testing.T) {
+				var validator *messageValidator
+				// Signature verification runs with the lock held.
+				verifier := signatureverifier.NewMockSignatureVerifier(ctrl)
+				verifier.EXPECT().VerifySignature(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(spectypes.OperatorID, *spectypes.SSVMessage, []byte) error {
+					if mu := validator.getValidationLock(committeeIdentifier); mu.TryLock() {
+						mu.Unlock()
+						return errors.New("validation lock is not held during signature verification")
+					}
+					return nil
+				}).MinTimes(1)
+				validator = New(netCfg, validatorStore, operators, dutyStore, verifier).(*messageValidator)
+				validationMu := validator.getValidationLock(committeeIdentifier)
+				validationMu.Lock()
+				done := make(chan error, 1)
+				go func() {
+					_, err := validator.handleSignedSSVMessage(t.Context(), msg, topic, peerID, receivedAt)
+					done <- err
+				}()
+				select {
+				case err := <-done:
+					validationMu.Unlock()
+					t.Fatalf("validation finished while the lock was held: %v", err)
+				case <-time.After(150 * time.Millisecond):
+				}
+				validationMu.Unlock()
+				select {
+				case err := <-done:
+					require.NoError(t, err)
+				case <-time.After(2 * time.Second):
+					t.Fatal("validation did not finish after the lock was released")
+				}
+			})
+
+			t.Run(name+", canceled ctx does not wait for the lock", func(t *testing.T) {
+				validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
+				committeeInfo, err := validator.getCommitteeAndValidatorIndices(committeeIdentifier)
+				require.NoError(t, err)
+				validationMu := validator.getValidationLock(committeeIdentifier)
+				validationMu.Lock()
+				defer validationMu.Unlock()
+				ctx, cancel := context.WithCancel(t.Context())
+				cancel()
+				done := make(chan error, 1)
+				go func() {
+					var err error
+					if msg.SSVMessage.MsgType == spectypes.SSVConsensusMsgType {
+						_, err = validator.validateConsensusMessage(ctx, msg, committeeInfo, topic, peerID, receivedAt)
+					} else {
+						_, err = validator.validatePartialSignatureMessage(ctx, msg, committeeInfo, topic, peerID, receivedAt)
+					}
+					done <- err
+				}()
+				select {
+				case err := <-done:
+					require.ErrorIs(t, err, context.Canceled)
+				case <-time.After(2 * time.Second):
+					t.Fatal("validation waited on the lock with a canceled ctx")
+				}
+			})
+		}
+	})
+
+	// A cached state belongs to one committee. When the committee behind the message ID changes, the old
+	// state is replaced, but only by a message whose signature verifies. (Seeded under a committee key
+	// for brevity; in production only validator-role keys can see their committee change.)
+	t.Run("committee change replaces the cached state only after signature verification", func(t *testing.T) {
+		calls := 0
+		verifier := signatureverifier.NewMockSignatureVerifier(ctrl)
+		verifier.EXPECT().VerifySignature(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(spectypes.OperatorID, *spectypes.SSVMessage, []byte) error {
+			calls++
+			if calls == 1 {
+				return errors.New("garbage signature")
+			}
+			return nil
+		}).Times(2)
+		validator := New(netCfg, validatorStore, operators, dutyStore, verifier).(*messageValidator)
+		slot := netCfg.FirstSlotAtEpoch(1)
+		receivedAt := netCfg.SlotStartTime(slot)
+		topic := commons.GetTopicFullName(commons.CommitteeTopicID(committeeID)[0])
+		msg := generateSignedMessage(ks, committeeIdentifier, slot)
+
+		stale := validator.validatorState(committeeIdentifier, CommitteeInfo{
+			committeeID: spectypes.CommitteeID{0xff},
+			committee:   []spectypes.OperatorID{5, 6, 7, 8},
+		})
+
+		_, err := validator.handleSignedSSVMessage(t.Context(), msg, topic, peerID, receivedAt)
+		require.ErrorIs(t, err, ErrSignatureVerification)
+		require.Same(t, stale, validator.states.Get(committeeIdentifier).Value(), "a failed signature keeps the old state")
+
+		_, err = validator.handleSignedSSVMessage(t.Context(), msg, topic, peerID, receivedAt)
+		require.NoError(t, err)
+		fresh := validator.states.Get(committeeIdentifier).Value()
+		require.NotSame(t, stale, fresh, "a verified message replaces the old state")
+		require.Equal(t, committeeID, fresh.committeeID)
+		require.Nil(t, stale.operators[0], "the verified message is recorded in the new state, not the old one")
+		require.NotNil(t, fresh.operators[0])
+	})
 
 	t.Run("committee consensus accepted on boole topic post-fork", func(t *testing.T) {
 		validator := New(postBooleCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
@@ -662,7 +990,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		slot := netCfg.FirstSlotAtEpoch(1)
 
-		unknownCommitteeID := bytes.Repeat([]byte{1}, 48)
+		unknownCommitteeID := append(bytes.Repeat([]byte{0}, 16), bytes.Repeat([]byte{1}, 32)...)
 		unknownIdentifier := ssvtestingutils.NewMsgID(netCfg.DomainType, unknownCommitteeID, committeeRole)
 		signedSSVMessage := generateSignedMessage(ks, unknownIdentifier, slot)
 
@@ -1101,16 +1429,37 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		rejecting := New(netCfgEpoch1, validatorStore, operators, ds, wrongSignatureVerifier).(*messageValidator)
 		_, err = rejecting.handleSignedSSVMessage(context.Background(), signedSSVMessage, topicID, peerID, receivedAt)
 		require.ErrorContains(t, err, ErrSignatureVerification.Error())
-		state := rejecting.states.Get(ssvMessage.MsgID)
-		require.NotNil(t, state, "the validator's own entry is small and precedes verification")
-		for i, operatorState := range state.Value().operators {
-			require.Nil(t, operatorState, "operator %d: no per-operator state before a verified message", i)
-		}
+		require.Nil(t, rejecting.states.Get(ssvMessage.MsgID), "no validator state before a verified message")
 
 		accepting := New(netCfgEpoch1, validatorStore, operators, ds, signatureVerifier).(*messageValidator)
 		_, err = accepting.handleSignedSSVMessage(context.Background(), signedSSVMessage, topicID, peerID, receivedAt)
 		require.NoError(t, err)
 		require.NotNil(t, accepting.states.Get(ssvMessage.MsgID).Value().operators[0], "the verified signer's state is allocated")
+
+		cachedVerifier := signatureverifier.NewMockSignatureVerifier(ctrl)
+		cachedVerifier.EXPECT().VerifySignature(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+			func(operatorID spectypes.OperatorID, _ *spectypes.SSVMessage, _ []byte) error {
+				if operatorID == 2 {
+					return errors.New("garbage signature")
+				}
+				return nil
+			},
+		).Times(2)
+		cached := New(netCfgEpoch1, validatorStore, operators, ds, cachedVerifier).(*messageValidator)
+		_, err = cached.handleSignedSSVMessage(context.Background(), signedSSVMessage, topicID, peerID, receivedAt)
+		require.NoError(t, err)
+
+		messagesB := generateRandaoMsg(ks.Shares[2], 2, netCfgEpoch1.EstimatedCurrentEpoch(), netCfgEpoch1.EstimatedCurrentSlot())
+		encodedMessagesB, err := messagesB.Encode()
+		require.NoError(t, err)
+		ssvMessageB := &spectypes.SSVMessage{MsgType: spectypes.SSVPartialSignatureMsgType, MsgID: ssvMessage.MsgID, Data: encodedMessagesB}
+		signedSSVMessageB := spectestingutils.SignedSSVMessageWithSigner(2, ks.OperatorKeys[2], ssvMessageB)
+		_, err = cached.handleSignedSSVMessage(context.Background(), signedSSVMessageB, topicID, peerID, receivedAt)
+		require.ErrorIs(t, err, ErrSignatureVerification)
+
+		committeeInfo, err := cached.getCommitteeAndValidatorIndices(ssvMessage.MsgID)
+		require.NoError(t, err)
+		require.Nil(t, cached.states.Get(ssvMessage.MsgID).Value().operators[committeeInfo.signerIndex(2)])
 	})
 
 	// The same holds for a consensus message: the QBFT checks before verification read the signer's state
@@ -1124,16 +1473,40 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		rejecting := New(netCfg, validatorStore, operators, dutyStore, wrongSignatureVerifier).(*messageValidator)
 		_, err := rejecting.handleSignedSSVMessage(context.Background(), signedSSVMessage, topicID, peerID, receivedAt)
 		require.ErrorContains(t, err, ErrSignatureVerification.Error())
-		state := rejecting.states.Get(committeeIdentifier)
-		require.NotNil(t, state, "the committee's own entry is small and precedes verification")
-		for i, operatorState := range state.Value().operators {
-			require.Nil(t, operatorState, "operator %d: no per-operator state before a verified message", i)
-		}
+		require.Nil(t, rejecting.states.Get(committeeIdentifier), "no committee state before a verified message")
 
 		accepting := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 		_, err = accepting.handleSignedSSVMessage(context.Background(), signedSSVMessage, topicID, peerID, receivedAt)
 		require.NoError(t, err)
 		require.NotNil(t, accepting.states.Get(committeeIdentifier).Value().operators[0], "the verified signer's state is allocated")
+
+		cachedVerifier := signatureverifier.NewMockSignatureVerifier(ctrl)
+		cachedVerifier.EXPECT().VerifySignature(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+			func(operatorID spectypes.OperatorID, _ *spectypes.SSVMessage, _ []byte) error {
+				if operatorID == 2 {
+					return errors.New("garbage signature")
+				}
+				return nil
+			},
+		).Times(2)
+		cached := New(netCfg, validatorStore, operators, dutyStore, cachedVerifier).(*messageValidator)
+		prepareA := generateSignedMessage(ks, committeeIdentifier, slot, func(message *specqbft.Message) {
+			message.MsgType = specqbft.PrepareMsgType
+		})
+		prepareA.FullData = nil
+		_, err = cached.handleSignedSSVMessage(context.Background(), prepareA, topicID, peerID, receivedAt)
+		require.NoError(t, err)
+
+		prepareB := generateSignedMessage(ks, committeeIdentifier, slot, func(message *specqbft.Message) {
+			message.MsgType = specqbft.PrepareMsgType
+		})
+		prepareB = spectestingutils.SignedSSVMessageWithSigner(2, ks.OperatorKeys[2], prepareB.SSVMessage)
+		_, err = cached.handleSignedSSVMessage(context.Background(), prepareB, topicID, peerID, receivedAt)
+		require.ErrorIs(t, err, ErrSignatureVerification)
+
+		committeeInfo, err := cached.getCommitteeAndValidatorIndices(committeeIdentifier)
+		require.NoError(t, err)
+		require.Nil(t, cached.states.Get(committeeIdentifier).Value().operators[committeeInfo.signerIndex(2)])
 	})
 
 	t.Run("reject pre-consensus randao message when epoch duties are set", func(t *testing.T) {
@@ -2145,10 +2518,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		slot := netCfg.FirstSlotAtEpoch(1)
 
-		signedSSVMessage := generateMultiSignedMessage(ks, committeeIdentifier, slot, func(message *specqbft.Message) {
-			message.MsgType = specqbft.CommitMsgType
-		})
-		signedSSVMessage.FullData = nil
+		signedSSVMessage := generateMultiSignedMessage(ks, committeeIdentifier, slot)
 
 		receivedAt := netCfg.SlotStartTime(slot)
 		topicID := commons.GetTopicFullName(commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0])
@@ -2413,6 +2783,29 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.ErrorContains(t, err, ErrZeroRound.Error())
 	})
 
+	// Receive a commit with a non-zero data round: it can't be aggregated with other commits
+	t.Run("commit with data round", func(t *testing.T) {
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
+
+		slot := netCfg.FirstSlotAtEpoch(1)
+
+		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot, func(message *specqbft.Message) {
+			message.MsgType = specqbft.CommitMsgType
+			message.DataRound = 1
+		})
+		signedSSVMessage.FullData = nil
+
+		receivedAt := netCfg.SlotStartTime(slot)
+		topicID := commons.GetTopicFullName(commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0])
+		_, err = validator.handleSignedSSVMessage(context.Background(), signedSSVMessage, topicID, peerID, receivedAt)
+		require.ErrorContains(t, err, ErrUnexpectedDataRound.Error())
+
+		// Ignored, not rejected, while older nodes still relay such commits.
+		var valErr Error
+		require.ErrorAs(t, err, &valErr)
+		require.False(t, valErr.Reject())
+	})
+
 	// Receive a message with no signatures
 	t.Run("no signatures", func(t *testing.T) {
 		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
@@ -2466,6 +2859,241 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		})
 		_, err = validator.handleSignedSSVMessage(context.Background(), signedSSVMessage, topicID, peerID, receivedAt)
 		require.ErrorContains(t, err, ErrPrepareOrCommitWithFullData.Error())
+	})
+
+	// Receive an unprepared round change with FullData
+	t.Run("unprepared round change with full data", func(t *testing.T) {
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
+
+		slot := netCfg.FirstSlotAtEpoch(1)
+
+		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot, func(message *specqbft.Message) {
+			message.MsgType = specqbft.RoundChangeMsgType
+		})
+
+		receivedAt := netCfg.SlotStartTime(slot)
+		topicID := commons.GetTopicFullName(commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0])
+		_, err = validator.handleSignedSSVMessage(context.Background(), signedSSVMessage, topicID, peerID, receivedAt)
+		require.ErrorIs(t, err, ErrUnpreparedRoundChangeWithFullData)
+
+		var valErr Error
+		require.True(t, errors.As(err, &valErr))
+		require.False(t, valErr.Reject())
+	})
+
+	// The same shape through the pubsub entry point: ignored, and neither the validation lock cache nor
+	// the state cache changes, whether or not the message ID already has an entry.
+	t.Run("unprepared round change with full data is ignored and leaves the caches unchanged", func(t *testing.T) {
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
+
+		slot := netCfg.FirstSlotAtEpoch(1)
+		receivedAt := netCfg.SlotStartTime(slot)
+		roundChange := func(fullData bool) *spectypes.SignedSSVMessage {
+			msg := generateSignedMessage(ks, committeeIdentifier, slot, func(message *specqbft.Message) {
+				message.MsgType = specqbft.RoundChangeMsgType
+			})
+			if !fullData {
+				msg.FullData = nil
+			}
+			return msg
+		}
+		topic := commons.GetTopicFullName(commons.CommitteeTopicID(spectypes.CommitteeID(committeeIdentifier.GetDutyExecutorID()[16:]))[0])
+		validate := func() {
+			encoded, err := roundChange(true).Encode()
+			require.NoError(t, err)
+			result := validator.Validate(t.Context(), peerID, &pubsub.Message{Message: &pspb.Message{Data: encoded, Topic: &topic}})
+			require.Equal(t, pubsub.ValidationIgnore, result)
+
+			_, err = validator.handleSignedSSVMessage(t.Context(), roundChange(true), topic, peerID, receivedAt)
+			require.ErrorIs(t, err, ErrUnpreparedRoundChangeWithFullData)
+		}
+
+		validate()
+		require.Zero(t, validator.states.Len())
+		require.Zero(t, validator.validationLockCache.Len())
+
+		// The same round change without full data is valid and does allocate both entries.
+		_, err := validator.handleSignedSSVMessage(t.Context(), roundChange(false), topic, peerID, receivedAt)
+		require.NoError(t, err)
+		require.Equal(t, 1, validator.states.Len())
+		require.Equal(t, 1, validator.validationLockCache.Len())
+		stored := validator.states.Get(committeeIdentifier).Value()
+
+		validate()
+		require.Equal(t, 1, validator.states.Len())
+		require.Equal(t, 1, validator.validationLockCache.Len())
+		require.Same(t, stored, validator.states.Get(committeeIdentifier).Value())
+	})
+
+	// An unprepared round change with FullData is still subject to the rejecting rules that run
+	// before the full-data rule.
+	t.Run("unprepared round change with full data and mismatched root", func(t *testing.T) {
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
+
+		slot := netCfg.FirstSlotAtEpoch(1)
+
+		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot, func(message *specqbft.Message) {
+			message.MsgType = specqbft.RoundChangeMsgType
+			message.Root = [32]byte{0xAA}
+		})
+
+		receivedAt := netCfg.SlotStartTime(slot)
+		topicID := commons.GetTopicFullName(commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0])
+		_, err := validator.handleSignedSSVMessage(context.Background(), signedSSVMessage, topicID, peerID, receivedAt)
+		require.ErrorIs(t, err, ErrInvalidHash)
+	})
+
+	t.Run("unprepared round change with full data and zero round", func(t *testing.T) {
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
+
+		slot := netCfg.FirstSlotAtEpoch(1)
+
+		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot, func(message *specqbft.Message) {
+			message.MsgType = specqbft.RoundChangeMsgType
+			message.Round = specqbft.NoRound
+		})
+
+		receivedAt := netCfg.SlotStartTime(slot)
+		topicID := commons.GetTopicFullName(commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0])
+		_, err := validator.handleSignedSSVMessage(context.Background(), signedSSVMessage, topicID, peerID, receivedAt)
+		require.ErrorIs(t, err, ErrZeroRound)
+	})
+
+	// Receive round changes that are allowed to have, or not have, FullData
+	t.Run("round change full data allowed cases", func(t *testing.T) {
+		slot := netCfg.FirstSlotAtEpoch(1)
+		receivedAt := netCfg.SlotStartTime(slot)
+
+		t.Run("unprepared without full data", func(t *testing.T) {
+			validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
+
+			signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot, func(message *specqbft.Message) {
+				message.MsgType = specqbft.RoundChangeMsgType
+			})
+			signedSSVMessage.FullData = nil
+
+			topicID := commons.GetTopicFullName(commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0])
+			_, err := validator.handleSignedSSVMessage(context.Background(), signedSSVMessage, topicID, peerID, receivedAt)
+			require.NoError(t, err)
+		})
+
+		// This passes only because gossip does not yet require prepare justifications on a prepared
+		// round change (DataRound=1 with none here); give it a prepare quorum once that rule exists.
+		t.Run("prepared with full data", func(t *testing.T) {
+			validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
+
+			signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot, func(message *specqbft.Message) {
+				message.MsgType = specqbft.RoundChangeMsgType
+				message.DataRound = specqbft.FirstRound
+				message.Round = 2
+			})
+
+			topicID := commons.GetTopicFullName(commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0])
+			_, err := validator.handleSignedSSVMessage(context.Background(), signedSSVMessage, topicID, peerID, receivedAt)
+			require.NoError(t, err)
+		})
+	})
+
+	// A proposal, a prepared round change, or a decided message received without FullData is ignored
+	// and not recorded, so the copy with FullData is then accepted whether it comes from the same peer
+	// or from another one. Signatures are verified for real: they don't cover FullData.
+	t.Run("proposal, prepared round change or decided without full data", func(t *testing.T) {
+		forks := []struct {
+			name string
+			cfg  *networkconfig.Network
+		}{
+			{name: "pre-fork", cfg: netCfg},
+			{name: "post-fork", cfg: postBooleCfg},
+		}
+
+		for _, fork := range forks {
+			t.Run(fork.name, func(t *testing.T) {
+				newValidator := func() *messageValidator {
+					return New(fork.cfg, validatorStore, operators, dutyStore, realSignatureVerifier).(*messageValidator)
+				}
+
+				slot := fork.cfg.FirstSlotAtEpoch(1)
+				receivedAt := fork.cfg.SlotStartTime(slot)
+				msgID := ssvtestingutils.NewMsgID(fork.cfg.DomainTypeAtSlot(slot), encodedCommitteeID, committeeRole)
+
+				committeeInfo, err := newValidator().getCommitteeAndValidatorIndices(msgID)
+				require.NoError(t, err)
+				topic := expectedCommitteeTopic(fork.cfg, committeeInfo, slot)
+
+				tests := []struct {
+					name    string
+					genuine *spectypes.SignedSSVMessage
+				}{
+					{
+						name:    "proposal",
+						genuine: buildProposalWithRealLeader(fork.cfg, ks, committee, msgID, slot),
+					},
+					{
+						name: "prepared round change",
+						genuine: generateSignedMessage(ks, msgID, slot, func(message *specqbft.Message) {
+							message.MsgType = specqbft.RoundChangeMsgType
+							message.DataRound = specqbft.FirstRound
+							message.Round = 2
+						}),
+					},
+					{
+						name:    "decided",
+						genuine: generateMultiSignedMessage(ks, msgID, slot),
+					},
+				}
+
+				for _, tc := range tests {
+					t.Run(tc.name, func(t *testing.T) {
+						anotherPeerID, err := libp2ptest.RandPeerID()
+						require.NoError(t, err)
+
+						// Both forms of stripped FullData: nil, and the empty non-nil slice a wire message decodes to.
+						stripped := *tc.genuine
+						stripped.FullData = nil
+						encoded, err := stripped.Encode()
+						require.NoError(t, err)
+						decoded := &spectypes.SignedSSVMessage{}
+						require.NoError(t, decoded.Decode(encoded))
+
+						for _, strippedCopy := range []*spectypes.SignedSSVMessage{&stripped, decoded} {
+							for _, genuineFrom := range []peer.ID{peerID, anotherPeerID} {
+								desc := fmt.Sprintf("decoded: %v, genuine copy from the stripped copy's relay: %v", strippedCopy == decoded, genuineFrom == peerID)
+
+								// A fresh validator per case: a second accepted genuine copy would be a duplicate.
+								validator := newValidator()
+
+								_, err = validator.handleSignedSSVMessage(context.Background(), strippedCopy, topic, peerID, receivedAt)
+								require.ErrorIs(t, err, ErrMissingFullData, desc)
+
+								var valErr Error
+								require.True(t, errors.As(err, &valErr), desc)
+								require.False(t, valErr.Reject(), desc)
+
+								_, err = validator.handleSignedSSVMessage(context.Background(), tc.genuine, topic, genuineFrom, receivedAt)
+								require.NoError(t, err, desc)
+							}
+						}
+					})
+				}
+			})
+		}
+	})
+
+	// A copy without full data is still subject to the rejecting rules that run before the full-data rule.
+	t.Run("proposal without full data and zero round", func(t *testing.T) {
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
+
+		slot := netCfg.FirstSlotAtEpoch(1)
+
+		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot, func(message *specqbft.Message) {
+			message.Round = specqbft.NoRound
+		})
+		signedSSVMessage.FullData = nil
+
+		receivedAt := netCfg.SlotStartTime(slot)
+		topicID := commons.GetTopicFullName(commons.CommitteeTopicID(committeeID)[0])
+		_, err := validator.handleSignedSSVMessage(context.Background(), signedSSVMessage, topicID, peerID, receivedAt)
+		require.ErrorIs(t, err, ErrZeroRound)
 	})
 
 	// Receive a non-consensus message with FullData

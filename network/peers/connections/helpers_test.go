@@ -65,11 +65,12 @@ func (c *testConn) CloseWithError(libp2pnetwork.ConnErrorCode) error { return ni
 func (c *testConn) As(any) bool { return false }
 
 type testHandshaker struct {
-	mu      sync.Mutex
-	calls   []peer.ID
-	started chan struct{}
-	release chan struct{}
-	err     error
+	mu          sync.Mutex
+	calls       []peer.ID
+	started     chan struct{}
+	release     chan struct{}
+	err         error
+	onHandshake func()
 }
 
 func (h *testHandshaker) Handshake(_ *zap.Logger, conn libp2pnetwork.Conn) error {
@@ -89,6 +90,9 @@ func (h *testHandshaker) Handshake(_ *zap.Logger, conn libp2pnetwork.Conn) error
 	if release != nil {
 		<-release
 	}
+	if h.onHandshake != nil {
+		h.onHandshake()
+	}
 	return err
 }
 
@@ -106,6 +110,55 @@ type testNetwork struct {
 	connectedness map[peer.ID]libp2pnetwork.Connectedness
 	closedPeers   []peer.ID
 	peers         []peer.ID
+}
+
+type testScoreIndex struct {
+	mu     sync.Mutex
+	scores map[peer.ID][]*peers.NodeScore
+}
+
+type testPeerStateIndex struct {
+	peerInfos  peers.PeerInfoIndex
+	subnets    peers.SubnetsIndex
+	scoreIndex *testScoreIndex
+}
+
+// newTestPeerStateIndex wipes the same indexes the handler under test reads, as the production index does.
+func newTestPeerStateIndex(peerInfos peers.PeerInfoIndex, subnets peers.SubnetsIndex) *testPeerStateIndex {
+	return &testPeerStateIndex{peerInfos: peerInfos, subnets: subnets, scoreIndex: &testScoreIndex{}}
+}
+
+func (i *testPeerStateIndex) RemovePeerState(id peer.ID) {
+	i.peerInfos.Remove(id)
+	i.subnets.RemovePeer(id)
+	i.scoreIndex.RemovePeer(id)
+}
+
+func (s *testScoreIndex) Score(id peer.ID, scores ...*peers.NodeScore) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.scores == nil {
+		s.scores = make(map[peer.ID][]*peers.NodeScore)
+	}
+	s.scores[id] = scores
+	return nil
+}
+
+func (s *testScoreIndex) GetScore(id peer.ID, _ ...string) ([]peers.NodeScore, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	stored := s.scores[id]
+	result := make([]peers.NodeScore, len(stored))
+	for i, score := range stored {
+		result[i] = *score
+	}
+	return result, nil
+}
+
+func (s *testScoreIndex) RemovePeer(id peer.ID) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.scores, id)
 }
 
 func newTestNetwork() *testNetwork {
@@ -134,6 +187,13 @@ func (n *testNetwork) Connectedness(id peer.ID) libp2pnetwork.Connectedness {
 	defer n.mu.Unlock()
 
 	return n.connectedness[id]
+}
+
+func (n *testNetwork) SetConnectedness(id peer.ID, connectedness libp2pnetwork.Connectedness) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+
+	n.connectedness[id] = connectedness
 }
 
 func (n *testNetwork) Peers() []peer.ID {
@@ -234,6 +294,8 @@ func getTestingData(t *testing.T) TestData {
 		MockSelfSealed: []byte("something"),
 	}
 	ns := peers.NewPeerInfoIndex()
+	subnetsIdx := peers.NewSubnetsIndex()
+	scoreIdx := &testScoreIndex{}
 	ch := make(chan struct{})
 	close(ch)
 	ids := mock.IDService{
@@ -244,7 +306,8 @@ func getTestingData(t *testing.T) TestData {
 		MockFirstSupportedProtocol: "I support handshake protocol",
 	}
 	net := mock.Net{
-		MockPeerstore: ps,
+		MockPeerstore:     ps,
+		MockConnectedness: libp2pnetwork.Connected,
 	}
 
 	networkPrivateKey, _, err := libp2pcrypto.GenerateKeyPair(libp2pcrypto.ECDSA, 0)
@@ -261,7 +324,8 @@ func getTestingData(t *testing.T) TestData {
 		ctx:                t.Context(),
 		nodeInfos:          nii,
 		peerInfos:          ns,
-		subnetsIdx:         peers.NewSubnetsIndex(),
+		subnetsIdx:         subnetsIdx,
+		peerStateIdx:       &testPeerStateIndex{peerInfos: ns, subnets: subnetsIdx, scoreIndex: scoreIdx},
 		ids:                ids,
 		net:                net,
 		streams:            sc,

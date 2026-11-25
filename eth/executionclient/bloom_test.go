@@ -3,18 +3,14 @@ package executionclient
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"strconv"
-	"strings"
 	"sync/atomic"
 	"testing"
-	"time"
 
-	"github.com/ethereum/go-ethereum/accounts/abi"
-	"github.com/ethereum/go-ethereum/accounts/abi/bind"
-	ethcommon "github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
@@ -27,7 +23,7 @@ const ethGetLogsMethod = "eth_getLogs"
 func TestBloomCrossCheck_RecoversMissingLogs(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 
-	env := setupTestEnv(t, 10*time.Second)
+	env := setupTestEnv(t)
 	contract, err := env.deployCallableContract()
 	require.NoError(t, err)
 
@@ -37,7 +33,8 @@ func TestBloomCrossCheck_RecoversMissingLogs(t *testing.T) {
 	require.NoError(t, err)
 
 	// Set up a proxy that drops logs for one specific block.
-	rpcSrv, _ := env.sim.Node().RPCHandler()
+	rpcSrv, err := env.sim.Node().RPCHandler()
+	require.NoError(t, err)
 	base := http.Handler(rpcSrv)
 
 	// The contract deploy is block 1, then transactions are blocks 2..6.
@@ -47,65 +44,37 @@ func TestBloomCrossCheck_RecoversMissingLogs(t *testing.T) {
 
 	wrapped := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		raw, _ := io.ReadAll(r.Body)
+		r.Body = io.NopCloser(bytes.NewReader(raw))
 		var req map[string]any
 		_ = json.Unmarshal(raw, &req)
 
 		if req["method"] == ethGetLogsMethod {
 			filterCallCount.Add(1)
 
-			flt := req["params"].([]any)[0].(map[string]any)
-			from, _ := strconv.ParseInt(strings.TrimPrefix(flt["fromBlock"].(string), "0x"), 16, 64)
-			to, _ := strconv.ParseInt(strings.TrimPrefix(flt["toBlock"].(string), "0x"), 16, 64)
-
-			// If this is a wide query (not a single-block retry), intercept and filter out the dropped block.
-			if uint64(to-from) > 0 {
-				// Forward to real backend
-				r.Body = io.NopCloser(bytes.NewReader(raw))
-				rec := httptest.NewRecorder()
-				base.ServeHTTP(rec, r)
-
-				// Parse the response and remove logs from dropBlock.
-				var resp map[string]any
-				_ = json.Unmarshal(rec.Body.Bytes(), &resp)
-
-				if result, ok := resp["result"].([]any); ok {
-					filtered := make([]any, 0, len(result))
-					for _, entry := range result {
-						logEntry := entry.(map[string]any)
-						blockHex := logEntry["blockNumber"].(string)
-						blockNum, _ := strconv.ParseInt(strings.TrimPrefix(blockHex, "0x"), 16, 64)
-						if uint64(blockNum) != dropBlock {
-							filtered = append(filtered, entry)
-						}
-					}
-					resp["result"] = filtered
-				}
-
-				w.Header().Set("Content-Type", "application/json")
-				_ = json.NewEncoder(w).Encode(resp)
+			if from, to := getLogsBlockRange(req); to > from {
+				// Wide query — drop logs for dropBlock. Single-block retries pass through.
+				serveGetLogsWithoutBlock(w, r, base, dropBlock)
 				return
 			}
-			// Single-block retry queries pass through to real backend.
 		}
 
-		r.Body = io.NopCloser(bytes.NewReader(raw))
 		base.ServeHTTP(w, r)
 	})
 
 	srv := httptest.NewServer(wrapped)
 	t.Cleanup(srv.Close)
 
-	client, err := New(t.Context(), srv.URL, env.contractAddr,
+	client, err := New(env.ctx, srv.URL, env.contractAddr,
 		WithLogger(logger),
 	)
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, client.Close()) })
 
 	// Use fetchLogsInBatches directly with verifyBloom=true (FetchHistoricalLogs skips bloom checks).
-	currentBlock, err := client.client.BlockNumber(t.Context())
+	currentBlock, err := client.client.BlockNumber(env.ctx)
 	require.NoError(t, err)
 
-	logsCh, errCh := client.fetchLogsInBatches(t.Context(), 0, currentBlock, true)
+	logsCh, errCh := client.fetchLogsInBatches(env.ctx, 0, currentBlock, true)
 
 	allLogs := make([]ethtypes.Log, 0, totalBlocks)
 	for block := range logsCh {
@@ -127,7 +96,7 @@ func TestBloomCrossCheck_RecoversMissingLogs(t *testing.T) {
 func TestBloomCrossCheck_NoFalseRecovery(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 
-	env := setupTestEnv(t, 5*time.Second)
+	env := setupTestEnv(t)
 	contract, err := env.deployCallableContract()
 	require.NoError(t, err)
 
@@ -142,10 +111,10 @@ func TestBloomCrossCheck_NoFalseRecovery(t *testing.T) {
 	require.NoError(t, err)
 
 	// Use fetchLogsInBatches directly with verifyBloom=true to actually exercise bloom checks.
-	currentBlock, err := env.client.client.BlockNumber(t.Context())
+	currentBlock, err := env.client.client.BlockNumber(env.ctx)
 	require.NoError(t, err)
 
-	logsCh, errCh := env.client.fetchLogsInBatches(t.Context(), 0, currentBlock, true)
+	logsCh, errCh := env.client.fetchLogsInBatches(env.ctx, 0, currentBlock, true)
 
 	allLogs := make([]ethtypes.Log, 0, totalBlocks)
 	for block := range logsCh {
@@ -161,7 +130,7 @@ func TestBloomCrossCheck_NoFalseRecovery(t *testing.T) {
 func TestVerifyLogsWithBloom_EmptyRange(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 
-	env := setupTestEnv(t, 5*time.Second)
+	env := setupTestEnv(t)
 	_, err := env.deployCallableContract()
 	require.NoError(t, err)
 
@@ -186,102 +155,71 @@ func TestVerifyLogsWithBloom_EmptyRange(t *testing.T) {
 func TestBloomCrossCheck_RetryExhausted(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 
-	env := setupTestEnv(t, 10*time.Second)
+	env := setupTestEnv(t)
 
-	// Deploy contract and create blocks.
-	parsed, _ := abi.JSON(strings.NewReader(callableAbi))
-	contractAddr, _, contract, err := bind.DeployContract(
-		env.auth,
-		parsed,
-		ethcommon.FromHex(callableBin),
-		env.sim.Client(),
-	)
+	// Deploy contract and create 3 blocks with events.
+	contract, err := env.deployCallableContract()
 	require.NoError(t, err)
-	env.contractAddr = contractAddr
-	env.sim.Commit()
-
-	// Create 3 blocks with events.
-	for i := 0; i < 3; i++ {
-		_, err := contract.Transact(env.auth, "Call")
-		require.NoError(t, err)
-		env.sim.Commit()
-	}
+	err = env.createBlocksWithLogs(contract, 3, 0)
+	require.NoError(t, err)
 
 	// Proxy: drop logs for block 3 on wide queries, and return HTTP 500 for single-block retries of block 3.
-	rpcSrv, _ := env.sim.Node().RPCHandler()
+	rpcSrv, err := env.sim.Node().RPCHandler()
+	require.NoError(t, err)
 	base := http.Handler(rpcSrv)
 
 	const dropBlock uint64 = 3
 
 	wrapped := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		raw, _ := io.ReadAll(r.Body)
+		r.Body = io.NopCloser(bytes.NewReader(raw))
 		var req map[string]any
 		_ = json.Unmarshal(raw, &req)
 
 		if req["method"] == ethGetLogsMethod {
-			flt := req["params"].([]any)[0].(map[string]any)
-			from, _ := strconv.ParseInt(strings.TrimPrefix(flt["fromBlock"].(string), "0x"), 16, 64)
-			to, _ := strconv.ParseInt(strings.TrimPrefix(flt["toBlock"].(string), "0x"), 16, 64)
+			from, to := getLogsBlockRange(req)
 
-			if uint64(from) == dropBlock && uint64(to) == dropBlock {
+			if from == dropBlock && to == dropBlock {
 				// Single-block retry — return error.
 				http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 				return
 			}
 
-			if uint64(to-from) > 0 {
+			if to > from {
 				// Wide query — drop logs for dropBlock.
-				r.Body = io.NopCloser(bytes.NewReader(raw))
-				rec := httptest.NewRecorder()
-				base.ServeHTTP(rec, r)
-
-				var resp map[string]any
-				_ = json.Unmarshal(rec.Body.Bytes(), &resp)
-
-				if result, ok := resp["result"].([]any); ok {
-					filtered := make([]any, 0, len(result))
-					for _, entry := range result {
-						logEntry := entry.(map[string]any)
-						blockHex := logEntry["blockNumber"].(string)
-						blockNum, _ := strconv.ParseInt(strings.TrimPrefix(blockHex, "0x"), 16, 64)
-						if uint64(blockNum) != dropBlock {
-							filtered = append(filtered, entry)
-						}
-					}
-					resp["result"] = filtered
-				}
-
-				w.Header().Set("Content-Type", "application/json")
-				_ = json.NewEncoder(w).Encode(resp)
+				serveGetLogsWithoutBlock(w, r, base, dropBlock)
 				return
 			}
 		}
 
-		r.Body = io.NopCloser(bytes.NewReader(raw))
 		base.ServeHTTP(w, r)
 	})
 
 	srv := httptest.NewServer(wrapped)
 	t.Cleanup(srv.Close)
 
-	client, err := New(t.Context(), srv.URL, contractAddr,
+	client, err := New(env.ctx, srv.URL, env.contractAddr,
 		WithLogger(logger),
 	)
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, client.Close()) })
 
+	// Every retry fails the same way, so don't wait between them.
+	client.bloomRetryDelay = 0
+
 	// Use fetchLogsInBatches directly with verifyBloom=true (FetchHistoricalLogs skips bloom checks).
-	currentBlock, err := client.client.BlockNumber(t.Context())
+	currentBlock, err := client.client.BlockNumber(env.ctx)
 	require.NoError(t, err)
 
-	logsCh, errCh := client.fetchLogsInBatches(t.Context(), 0, currentBlock, true)
+	logsCh, errCh := client.fetchLogsInBatches(env.ctx, 0, currentBlock, true)
 
-	// Drain logsCh — should close quickly because of error.
+	var emitted int
 	for range logsCh {
+		emitted++
 	}
-
-	err = <-errCh
-	require.Error(t, err, "should propagate retry failure as error")
+	// Match the retry error, so a context timeout can't pass for it.
+	require.ErrorContains(t, <-errCh, fmt.Sprintf("bloom retry: filter logs for block %d", dropBlock))
+	require.Zero(t, emitted, "no blocks should be emitted from a failed batch")
 }
 
 // TestVerifyLogsWithBloom_BlocksWithExistingLogs verifies that blocks
@@ -289,7 +227,7 @@ func TestBloomCrossCheck_RetryExhausted(t *testing.T) {
 func TestVerifyLogsWithBloom_BlocksWithExistingLogs(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 
-	env := setupTestEnv(t, 5*time.Second)
+	env := setupTestEnv(t)
 	contract, err := env.deployCallableContract()
 	require.NoError(t, err)
 
@@ -298,12 +236,14 @@ func TestVerifyLogsWithBloom_BlocksWithExistingLogs(t *testing.T) {
 	require.NoError(t, err)
 
 	// Track HeaderByNumber calls via proxy.
-	rpcSrv, _ := env.sim.Node().RPCHandler()
+	rpcSrv, err := env.sim.Node().RPCHandler()
+	require.NoError(t, err)
 	base := http.Handler(rpcSrv)
 	var headerCalls atomic.Int32
 
 	wrapped := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		raw, _ := io.ReadAll(r.Body)
+		r.Body = io.NopCloser(bytes.NewReader(raw))
 		var req map[string]any
 		_ = json.Unmarshal(raw, &req)
 
@@ -311,14 +251,13 @@ func TestVerifyLogsWithBloom_BlocksWithExistingLogs(t *testing.T) {
 			headerCalls.Add(1)
 		}
 
-		r.Body = io.NopCloser(bytes.NewReader(raw))
 		base.ServeHTTP(w, r)
 	})
 
 	srv := httptest.NewServer(wrapped)
 	t.Cleanup(srv.Close)
 
-	client, err := New(t.Context(), srv.URL, env.contractAddr,
+	client, err := New(env.ctx, srv.URL, env.contractAddr,
 		WithLogger(logger),
 	)
 	require.NoError(t, err)
@@ -332,10 +271,42 @@ func TestVerifyLogsWithBloom_BlocksWithExistingLogs(t *testing.T) {
 	}
 
 	headerCalls.Store(0)
-	result, err := client.verifyLogsWithBloom(t.Context(), fakeLogs, 2, 4)
+	result, err := client.verifyLogsWithBloom(env.ctx, fakeLogs, 2, 4)
 	require.NoError(t, err)
 	require.Equal(t, 3, len(result))
 
 	// No headers should have been fetched since all blocks already had logs.
 	require.Equal(t, int32(0), headerCalls.Load(), "should not fetch headers for blocks that already have logs")
+}
+
+// getLogsBlockRange returns the block bounds of a decoded eth_getLogs JSON-RPC request.
+func getLogsBlockRange(req map[string]any) (from, to uint64) {
+	flt := req["params"].([]any)[0].(map[string]any)
+	from, _ = hexutil.DecodeUint64(flt["fromBlock"].(string))
+	to, _ = hexutil.DecodeUint64(flt["toBlock"].(string))
+	return from, to
+}
+
+// serveGetLogsWithoutBlock forwards an eth_getLogs request to base and strips dropBlock's
+// logs from the response, simulating the known Geth bug where the EL silently omits logs.
+func serveGetLogsWithoutBlock(w http.ResponseWriter, r *http.Request, base http.Handler, dropBlock uint64) {
+	rec := httptest.NewRecorder()
+	base.ServeHTTP(rec, r)
+
+	var resp map[string]any
+	_ = json.Unmarshal(rec.Body.Bytes(), &resp)
+
+	if result, ok := resp["result"].([]any); ok {
+		filtered := make([]any, 0, len(result))
+		for _, entry := range result {
+			blockNum, _ := hexutil.DecodeUint64(entry.(map[string]any)["blockNumber"].(string))
+			if blockNum != dropBlock {
+				filtered = append(filtered, entry)
+			}
+		}
+		resp["result"] = filtered
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(resp)
 }

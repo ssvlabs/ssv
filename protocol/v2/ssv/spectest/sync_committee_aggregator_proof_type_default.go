@@ -3,7 +3,6 @@
 package spectest
 
 import (
-	"encoding/hex"
 	"fmt"
 	"testing"
 
@@ -11,20 +10,15 @@ import (
 	"github.com/ssvlabs/ssv-spec/ssv/spectest/tests/runner/duties/synccommitteeaggregator"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv-spec/types/testingutils"
-	"github.com/stretchr/testify/require"
 
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability/log"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	ssvtesting "github.com/ssvlabs/ssv/protocol/v2/ssv/testing"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
-	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 )
 
 func RunSyncCommitteeAggProof(t *testing.T, test *synccommitteeaggregator.SyncCommitteeAggregatorProofSpecTest) {
-	overrideStateComparisonForSyncCommitteeAggregatorProofSpecTest(t, test, test.Name)
-
 	ks := testingutils.Testing4SharesSet()
 	share := testingutils.TestingShare(ks, testingutils.TestingValidatorIndex)
 	logger := log.TestLogger(t)
@@ -54,31 +48,6 @@ func RunSyncCommitteeAggProof(t *testing.T, test *synccommitteeaggregator.SyncCo
 		validator.NewCommitteeDutyGuard(),
 	)
 
-	r, _, lastErr := committee.StartDuty(t.Context(), logger, testingutils.TestingSyncCommitteeContributionDuty)
-	if r != nil {
-		r.GetBeaconNode().(*protocoltesting.BeaconNodeWrapped).SetSyncCommitteeAggregatorRootHexes(test.ProofRootsMap)
-	}
-	for _, msg := range test.Messages {
-		dmsg, err := queue.DecodeSignedSSVMessage(msg)
-		if err != nil {
-			lastErr = err
-			continue
-		}
-		err = committee.ProcessMessage(t.Context(), logger, dmsg)
-		if err != nil {
-			lastErr = err
-		}
-	}
-	if test.ExpectedError != "" {
-		require.EqualError(t, lastErr, test.ExpectedError)
-	} else {
-		require.NoError(t, lastErr)
-	}
-
-	// StartDuty may have returned a nil runner (e.g. it errored); guard so the
-	// post-root assertion fails legibly instead of panicking on a nil deref.
-	require.NotNil(t, r)
-	postRoot, err := r.GetStateRoot()
-	require.NoError(t, err)
-	require.EqualValues(t, test.PostDutyRunnerStateRoot, hex.EncodeToString(postRoot[:]))
+	r, _, err := committee.StartDuty(t.Context(), logger, testingutils.TestingSyncCommitteeContributionDuty)
+	runSyncCommitteeAggProofMessages(t, logger, test, r, err, committee.ProcessMessage)
 }

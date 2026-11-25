@@ -3,8 +3,6 @@
 package spectest
 
 import (
-	"errors"
-
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
@@ -159,23 +157,6 @@ var AlanExpectedErrorCodeMap = map[int]int{
 	AlanInstanceAlreadyRunningErrorCode:                     spectypes.InstanceAlreadyRunningErrorCode,
 	AlanStartInstanceErrorCode:                              spectypes.StartInstanceErrorCode,
 	AlanTimeoutInstanceErrorCode:                            spectypes.TimeoutInstanceErrorCode,
-}
-
-func adjustActualError(err error) error {
-	if err == nil {
-		return nil
-	}
-
-	var specErr *spectypes.Error
-	if !errors.As(err, &specErr) {
-		return err
-	}
-
-	if specErr.Code == spectypes.PostConsensusQuorumWithInvalidSignatures {
-		return spectypes.WrapError(spectypes.ReconstructSignatureErrorCode, err)
-	}
-
-	return err
 }
 
 func adjustExpectedErrorCode(code int) int {

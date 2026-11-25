@@ -18,7 +18,6 @@ import (
 
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability/log"
-	"github.com/ssvlabs/ssv/operator/storage"
 	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
@@ -31,10 +30,6 @@ func TestMigration7DeriveSignerKeyWithHKDF(t *testing.T) {
 
 		operatorPrivKey, err := keys.GeneratePrivateKey()
 		require.NoError(t, err)
-
-		nodeStorage, err := storage.NewNodeStorage(networkconfig.TestNetwork.Beacon, logger, db)
-		require.NoError(t, err)
-		require.NoError(t, nodeStorage.SavePrivateKeyHash(operatorPrivKey.StorageHash()))
 
 		signerStorage := ekm.NewSignerStorage(ekmadapter.NewDatabaseAdapter(db), networkconfig.TestNetwork.Beacon.Name, logger)
 		signerStorage.SetEncryptionKey(operatorPrivKey.EKMHash())
@@ -99,10 +94,6 @@ func TestMigration7DeriveSignerKeyWithHKDF(t *testing.T) {
 		operatorPrivKey, err := keys.GeneratePrivateKey()
 		require.NoError(t, err)
 
-		nodeStorage, err := storage.NewNodeStorage(networkconfig.TestNetwork.Beacon, logger, db)
-		require.NoError(t, err)
-		require.NoError(t, nodeStorage.SavePrivateKeyHash(operatorPrivKey.StorageHash()))
-
 		signerStorage := ekm.NewSignerStorage(ekmadapter.NewDatabaseAdapter(db), networkconfig.TestNetwork.Beacon.Name, logger)
 		wallet := hd.NewWallet(&core.WalletContext{Storage: signerStorage})
 		require.NoError(t, signerStorage.SaveWallet(wallet))
@@ -130,10 +121,6 @@ func TestMigration7DeriveSignerKeyWithHKDF(t *testing.T) {
 
 		operatorPrivKey, err := keys.GeneratePrivateKey()
 		require.NoError(t, err)
-
-		nodeStorage, err := storage.NewNodeStorage(networkconfig.TestNetwork.Beacon, logger, db)
-		require.NoError(t, err)
-		require.NoError(t, nodeStorage.SavePrivateKeyHash(operatorPrivKey.StorageHash()))
 
 		signerStorage := ekm.NewSignerStorage(ekmadapter.NewDatabaseAdapter(db), networkconfig.TestNetwork.Beacon.Name, logger)
 		signerStorage.SetEncryptionKey(operatorPrivKey.EKMHash())

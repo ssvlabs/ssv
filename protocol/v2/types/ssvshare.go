@@ -261,9 +261,15 @@ func ComputeF(committeeSize uint64) uint64 {
 	return (committeeSize - 1) / 3
 }
 
+// maxFaultyOperators is the largest f a committee may tolerate.
+const maxFaultyOperators = 4
+
+// MaxCommitteeSize is the largest valid committee, hence the most signers a message can carry.
+const MaxCommitteeSize = 3*maxFaultyOperators + 1
+
 func ValidCommitteeSize(committeeSize uint64) bool {
 	f := ComputeF(committeeSize)
-	return (committeeSize-1)%3 == 0 && f >= 1 && f <= 4
+	return (committeeSize-1)%3 == 0 && f >= 1 && f <= maxFaultyOperators
 }
 
 // Return a 32 bytes ID for the committee of operators

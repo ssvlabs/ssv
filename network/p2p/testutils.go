@@ -3,11 +3,11 @@ package p2pv1
 import (
 	"context"
 	"fmt"
-	"math/rand"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
+	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -17,7 +17,6 @@ import (
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/network"
 	p2pcommons "github.com/ssvlabs/ssv/network/commons"
-	"github.com/ssvlabs/ssv/network/discovery"
 	"github.com/ssvlabs/ssv/network/testing"
 	"github.com/ssvlabs/ssv/networkconfig"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
@@ -29,28 +28,19 @@ import (
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
-// TODO: (Alan) might have to rename this file back to test_utils.go if non-test files require it.
+// meshTimeout bounds each phase of wiring a local net: dialing the mesh, then waiting for every node to see its
+// peers. The tests' context has no deadline, and libp2p's own dial timeout is 60s.
+const meshTimeout = 15 * time.Second
 
 // LocalNet holds the nodes in the local network
 type LocalNet struct {
 	NodeKeys []testing.NodeKeys
-	Bootnode *discovery.Bootnode
 	Nodes    []network.P2PNetwork
-
-	// mdnsTag is a per-LocalNet mDNS service tag so concurrently-running
-	// test processes don't discover each other's peers.
-	mdnsTag string
 }
 
-// randomMdnsTag returns a unique mDNS service tag for a test LocalNet.
-func randomMdnsTag() string {
-	return fmt.Sprintf("ssv.test.%016x", rand.Uint64()) //nolint: gosec // G404 is acceptable here
-}
-
-// CreateAndStartLocalNet creates a LocalNet and starts its nodes, retrying the whole setup
-// (up to maxAttempts) when the mesh doesn't form in time — discovery can be slow on a loaded
-// machine. Bounding the retries makes an environment where the nodes can never connect (mDNS
-// discovery needs multicast) fail fast instead of hanging until the go-test timeout.
+// CreateAndStartLocalNet creates a LocalNet, starts its nodes and dials them into a full mesh. Without discovery the
+// mesh forms the same way on every machine; should it not settle in time on a loaded machine, the whole setup is
+// retried, up to maxAttempts times.
 func CreateAndStartLocalNet(pCtx context.Context, logger *zap.Logger, options LocalNetOptions) (*LocalNet, error) {
 	attempt := func(pCtx context.Context) (*LocalNet, error) {
 		ln, err := NewLocalNet(pCtx, logger, options)
@@ -58,31 +48,37 @@ func CreateAndStartLocalNet(pCtx context.Context, logger *zap.Logger, options Lo
 			return nil, err
 		}
 
+		for i, node := range ln.Nodes {
+			if err := node.Start(); err != nil {
+				return ln, fmt.Errorf("could not start node %d: %w", i, err)
+			}
+			// As an operator node does, keep the node's current subnets set: peer trimming compares each peer's
+			// subnets with them. Stops when the node closes.
+			go node.UpdateSubnets()
+		}
+		if err := connectMesh(pCtx, ln.Nodes); err != nil {
+			return ln, err
+		}
+
+		// Connect returns once the dialer is connected; this waits for the dialed side to register it too.
 		eg, ctx := errgroup.WithContext(pCtx)
-		// errgroup, not bare goroutines: eg.Wait() aggregates node failures so
-		// a failed attempt returns an error and the loop below retries, and the
-		// shared ctx cancels the siblings on the first failure so they don't
-		// each block the full 15s peer-wait first.
 		for i, node := range ln.Nodes {
 			eg.Go(func() error {
-				if err := node.Start(); err != nil {
-					return fmt.Errorf("could not start node %d: %w", i, err)
-				}
-
-				ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+				ctx, cancel := context.WithTimeout(ctx, meshTimeout)
 				defer cancel()
 
 				var peers []peer.ID
-				for len(peers) < options.MinConnected {
+				for {
 					peers = node.(HostProvider).Host().Network().Peers()
+					// Check before the select, so a sibling canceling ctx can't fail a node that has enough peers.
+					if len(peers) >= options.MinConnected {
+						break
+					}
 					select {
 					case <-ctx.Done():
-						return ctx.Err()
+						return fmt.Errorf("could not find enough peers for node %d, nodes quantity = %d, found = %d: %w", i, options.Nodes, len(peers), ctx.Err())
 					case <-time.After(100 * time.Millisecond):
 					}
-				}
-				if ctx.Err() != nil {
-					return fmt.Errorf("could not find enough peers for node %d, nodes quantity = %d, found = %d", i, options.Nodes, len(peers))
 				}
 				logger.Debug("found enough peers", zap.Int("for node", i), zap.Int("nodesQuantity", options.Nodes), zap.String("found", fmt.Sprintf("%+v", peers)))
 				return nil
@@ -105,16 +101,14 @@ func CreateAndStartLocalNet(pCtx context.Context, logger *zap.Logger, options Lo
 			ln, err := attempt(pCtx)
 			if err != nil {
 				lastErr = err
-				// attempt returns a nil ln when NewLocalNet itself fails
-				// (e.g. CreateKeys or a node factory error), so guard before
-				// ranging to avoid a nil-pointer panic that would mask err.
+				// ln is nil when NewLocalNet itself failed. Only a failed attempt closes its nodes; a successful
+				// one returns them open.
 				if ln != nil {
-					// Close the failed attempt's nodes with a timeout so a wedged
-					// Close can't stall the retry loop: zeroconf's mDNS
-					// Server.Shutdown can block indefinitely on a multicast socket
-					// write. Only this failure path closes nodes; a successful
-					// start returns them open.
-					closeNodesWithTimeout(logger, ln.Nodes, 10*time.Second)
+					for _, node := range ln.Nodes {
+						if closeErr := node.Close(); closeErr != nil {
+							logger.Debug("could not close a node of the failed attempt", zap.Error(closeErr))
+						}
+					}
 				}
 
 				if attemptNum == maxAttempts {
@@ -129,28 +123,41 @@ func CreateAndStartLocalNet(pCtx context.Context, logger *zap.Logger, options Lo
 	}
 }
 
-// closeNodesWithTimeout closes every node concurrently and waits up to timeout
-// for them to finish. A node whose Close() wedges must not stall the retry loop
-// in CreateAndStartLocalNet — zeroconf's mDNS Server.Shutdown can block
-// indefinitely on a multicast socket write — so once the timeout elapses we stop
-// waiting and let the next attempt proceed with fresh hosts and ports; an
-// abandoned Close is reclaimed when the test process exits.
-func closeNodesWithTimeout(logger *zap.Logger, nodes []network.P2PNetwork, timeout time.Duration) {
-	var eg errgroup.Group
-	for _, node := range nodes {
-		eg.Go(func() error { return node.Close() })
+// connectMesh dials the nodes into a full mesh by address, in the order meshDials plans, within meshTimeout.
+func connectMesh(ctx context.Context, nodes []network.P2PNetwork) error {
+	ctx, cancel := context.WithTimeout(ctx, meshTimeout)
+	defer cancel()
+
+	hosts := make([]host.Host, len(nodes))
+	for i, node := range nodes {
+		hosts[i] = node.(HostProvider).Host()
 	}
-	done := make(chan struct{})
-	go func() {
-		_ = eg.Wait()
-		close(done)
-	}()
-	select {
-	case <-done:
-	case <-time.After(timeout):
-		logger.Debug("timed out closing nodes on retry; abandoning a wedged Close (likely mDNS shutdown)",
-			zap.Duration("timeout", timeout))
+	for _, d := range meshDials(len(hosts)) {
+		to := hosts[d.to]
+		if err := hosts[d.from].Connect(ctx, peer.AddrInfo{ID: to.ID(), Addrs: to.Addrs()}); err != nil {
+			return fmt.Errorf("node %d could not connect to node %d: %w", d.from, d.to, err)
+		}
 	}
+	return nil
+}
+
+// meshDial is one dial of the mesh: node from dials node to.
+type meshDial struct{ from, to int }
+
+// meshDials plans the dials that wire n nodes into a full mesh. Node i dials the nodes up to half a ring ahead of
+// it, so every edge is dialed exactly once and inbound dials spread evenly: each node takes at most n/2 of them.
+func meshDials(n int) []meshDial {
+	dials := make([]meshDial, 0, n*(n-1)/2)
+	for i := range n {
+		for k := 1; k <= n/2; k++ {
+			j := (i + k) % n
+			if 2*k == n && i > j {
+				continue // the antipodal edge of an even ring is dialed from its lower end only
+			}
+			dials = append(dials, meshDial{from: i, to: j})
+		}
+	}
+	return dials
 }
 
 type mockSignatureVerifier struct{}
@@ -205,23 +212,13 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex uint64, key
 	dutyStore := dutystore.New()
 	signatureVerifier := &mockSignatureVerifier{}
 
-	// Use TCP/UDP port 0 so the kernel picks free ports atomically at bind time.
-	cfg := NewNetConfig(keys, ln.Bootnode, 0, 0, options.Nodes)
+	// Use TCP/UDP port 0 so the kernel picks free ports atomically at bind time. Peer trimming kicks in within
+	// maxPeersToDrop of MaxPeers, so MaxPeers keeps that much room above the full mesh.
+	cfg := NewNetConfig(keys, 0, 0, options.Nodes+maxPeersToDrop)
 	cfg.Ctx = ctx
-	cfg.MdnsDiscoveryTag = ln.mdnsTag
 	testSubnets := fixedTestSubnets(options.Shares)
 	cfg.Subnets = testSubnets.StringHex()
 	cfg.NodeStorage = nodeStorage
-	cfg.MessageValidator = validation.New(
-		networkconfig.TestNetwork,
-		nodeStorage.ValidatorStore(),
-		nodeStorage,
-		dutyStore,
-		signatureVerifier,
-		// Surface verdicts (rejecting/ignoring invalid message) in test output — validation
-		// defaults to a nop logger, which makes CI failures undiagnosable from logs.
-		validation.WithLogger(logger),
-	)
 	cfg.NetworkConfig = networkconfig.TestNetwork
 	if options.TotalValidators > 0 {
 		cfg.GetValidatorStats = func() (uint64, uint64, uint64, error) {
@@ -231,11 +228,11 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex uint64, key
 
 	pubKey, err := p2pcommons.ECDSAPrivToInterface(keys.NetKey)
 	if err != nil {
-		panic(err)
+		return nil, fmt.Errorf("could not convert network key: %w", err)
 	}
 	selfPeerID, err := peer.IDFromPublicKey(pubKey.GetPublic())
 	if err != nil {
-		panic(err)
+		return nil, fmt.Errorf("could not derive peer id: %w", err)
 	}
 
 	if options.MessageValidatorProvider != nil {
@@ -248,6 +245,7 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex uint64, key
 			dutyStore,
 			signatureVerifier,
 			validation.WithSelfAccept(selfPeerID, true),
+			// Validation logs nothing by default; surface its verdicts in the test output.
 			validation.WithLogger(logger),
 		)
 	}
@@ -282,10 +280,9 @@ type LocalNetOptions struct {
 	Shares                                          []*ssvtypes.SSVShare
 }
 
-// NewLocalNet creates a new mdns network
+// NewLocalNet creates the nodes of a local network; CreateAndStartLocalNet starts them and wires the mesh.
 func NewLocalNet(ctx context.Context, logger *zap.Logger, options LocalNetOptions) (*LocalNet, error) {
 	ln := &LocalNet{}
-	ln.mdnsTag = randomMdnsTag()
 	nodes, keys, err := testing.NewLocalTestnet(ctx, options.Nodes, func(pctx context.Context, nodeIndex uint64, keys testing.NodeKeys) (network.P2PNetwork, error) {
 		logger := logger.Named(fmt.Sprintf("node-%d", nodeIndex))
 		// The error propagates: NewLocalTestnet wraps it with the node index
@@ -327,28 +324,19 @@ func fixedTestSubnets(shares []*ssvtypes.SSVShare) p2pcommons.Subnets {
 }
 
 // NewNetConfig creates a new config for tests
-func NewNetConfig(keys testing.NodeKeys, bn *discovery.Bootnode, tcpPort, udpPort uint16, maxPeers int) *Config {
-	bns := ""
-	discT := "discv5"
-	if bn != nil {
-		bns = bn.ENR
-	} else {
-		discT = "mdns"
-	}
-	ua := ""
+func NewNetConfig(keys testing.NodeKeys, tcpPort, udpPort uint16, maxPeers int) *Config {
 	return &Config{
-		Bootnodes:         bns,
 		TCPPort:           tcpPort,
 		UDPPort:           udpPort,
-		HostAddress:       "",
-		HostDNS:           "",
 		RequestTimeout:    10 * time.Second,
 		MaxBatchResponse:  25,
 		MaxPeers:          maxPeers,
-		PubSubTrace:       false,
 		PubSubScoring:     true,
 		NetworkPrivateKey: keys.NetKey,
-		UserAgent:         ua,
-		Discovery:         discT,
+		// connectMesh wires the nodes together, so they run no discovery.
+		Discovery: DiscoveryNone,
+		// Every node dials from 127.0.0.1, so the connection gater's per-IP rate limit would refuse a large mesh
+		// and pubsub's IP-colocation penalty would punish every node.
+		DisableIPRateLimit: true,
 	}
 }

@@ -3,6 +3,7 @@ package ekm
 import (
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/big"
 	"testing"
@@ -14,6 +15,7 @@ import (
 	"github.com/ssvlabs/eth2-key-manager/encryptor"
 	"github.com/ssvlabs/eth2-key-manager/encryptor/keystorev4"
 	"github.com/ssvlabs/eth2-key-manager/wallets/hd"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 )
@@ -38,6 +40,15 @@ func newStorageForTest(t *testing.T) (Storage, func()) {
 	return s, func() {
 		db.Close()
 	}
+}
+
+// newFailingStorageForTest returns a storage whose reads fail with the returned error and report the
+// key as not found, so checking found before the error would hide it.
+func newFailingStorageForTest(t *testing.T) (Storage, error) {
+	dbErr := errors.New("read failed")
+	db := &MockDatabase{}
+	db.On("Get", mock.Anything, mock.Anything, mock.Anything).Return(nil, false, dbErr)
+	return NewSignerStorage(db, testBeaconConfig().Name, testLogger(t)), dbErr
 }
 
 func testWallet(t *testing.T) (core.Wallet, Storage, func()) {
@@ -113,8 +124,15 @@ func TestWalletAndAccountManagement(t *testing.T) {
 			defer done()
 
 			w, err := signerStorage.OpenWallet()
-			require.Error(t, err)
-			require.EqualError(t, err, "could not find wallet")
+			require.ErrorIs(t, err, errWalletNotFound)
+			require.Nil(t, w)
+		})
+
+		t.Run("ReadError", func(t *testing.T) {
+			signerStorage, dbErr := newFailingStorageForTest(t)
+
+			w, err := signerStorage.OpenWallet()
+			require.ErrorIs(t, err, dbErr)
 			require.Nil(t, w)
 		})
 
@@ -171,7 +189,15 @@ func TestWalletAndAccountManagement(t *testing.T) {
 			defer done()
 
 			account, err := wallet.AccountByID(uuid.New())
-			require.EqualError(t, err, "account not found")
+			require.ErrorIs(t, err, errAccountNotFound)
+			require.Nil(t, account)
+		})
+
+		t.Run("ReadError", func(t *testing.T) {
+			signerStorage, dbErr := newFailingStorageForTest(t)
+
+			account, err := signerStorage.OpenAccount(uuid.New())
+			require.ErrorIs(t, err, dbErr)
 			require.Nil(t, account)
 		})
 	})
@@ -319,7 +345,7 @@ func TestWalletAndAccountManagement(t *testing.T) {
 
 		require.NoError(t, signerStorage.DeleteAccount(accts[0].ID()))
 		acc, err := signerStorage.OpenAccount(accts[0].ID())
-		require.EqualError(t, err, "account not found")
+		require.ErrorIs(t, err, errAccountNotFound)
 		require.Nil(t, acc)
 	})
 }
@@ -545,43 +571,6 @@ func TestSlashingProtection(t *testing.T) {
 			require.Contains(t, err.Error(), "highest attestation value is empty")
 			require.Nil(t, att)
 		})
-
-		t.Run("remove_attestation", func(t *testing.T) {
-			account := &mockAccount{
-				id:            uuid.New(),
-				validationKey: _bigInt("5467048590701165350380985526996487573957450279098876378395441669247373404218"),
-			}
-
-			att := &phase0.AttestationData{
-				Slot:            30,
-				Index:           1,
-				BeaconBlockRoot: [32]byte{},
-				Source: &phase0.Checkpoint{
-					Epoch: 1,
-					Root:  [32]byte{},
-				},
-				Target: &phase0.Checkpoint{
-					Epoch: 4,
-					Root:  [32]byte{},
-				},
-			}
-
-			err := signerStorage.SaveHighestAttestation(account.ValidatorPublicKey(), att)
-			require.NoError(t, err)
-
-			retrieved, found, err := signerStorage.RetrieveHighestAttestation(account.ValidatorPublicKey())
-			require.NoError(t, err)
-			require.True(t, found)
-			require.NotNil(t, retrieved)
-
-			err = signerStorage.RemoveHighestAttestation(account.ValidatorPublicKey())
-			require.NoError(t, err)
-
-			retrieved, found, err = signerStorage.RetrieveHighestAttestation(account.ValidatorPublicKey())
-			require.NoError(t, err)
-			require.False(t, found)
-			require.Nil(t, retrieved)
-		})
 	})
 
 	t.Run("ProposalData", func(t *testing.T) {
@@ -656,31 +645,6 @@ func TestSlashingProtection(t *testing.T) {
 			require.True(t, found)
 			require.Contains(t, err.Error(), "highest proposal value is empty")
 			require.Equal(t, phase0.Slot(0), slot)
-		})
-
-		t.Run("remove_proposal", func(t *testing.T) {
-			account := &mockAccount{
-				id:            uuid.New(),
-				validationKey: _bigInt("5467048590701165350380985526996487573957450279098876378395441669247373404218"),
-			}
-
-			proposal := phase0.Slot(42)
-
-			err := signerStorage.SaveHighestProposal(account.ValidatorPublicKey(), proposal)
-			require.NoError(t, err)
-
-			retrieved, found, err := signerStorage.RetrieveHighestProposal(account.ValidatorPublicKey())
-			require.NoError(t, err)
-			require.True(t, found)
-			require.Equal(t, proposal, retrieved)
-
-			err = signerStorage.RemoveHighestProposal(account.ValidatorPublicKey())
-			require.NoError(t, err)
-
-			retrieved, found, err = signerStorage.RetrieveHighestProposal(account.ValidatorPublicKey())
-			require.NoError(t, err)
-			require.False(t, found)
-			require.Equal(t, phase0.Slot(0), retrieved)
 		})
 	})
 }

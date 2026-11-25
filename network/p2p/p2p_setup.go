@@ -19,7 +19,6 @@ import (
 	basichost "github.com/libp2p/go-libp2p/p2p/host/basic"
 	rcmgr "github.com/libp2p/go-libp2p/p2p/host/resource-manager"
 	"github.com/libp2p/go-libp2p/p2p/protocol/identify"
-	"github.com/prysmaticlabs/prysm/v4/async"
 	"go.uber.org/zap"
 
 	p2pcommons "github.com/ssvlabs/ssv/network/commons"
@@ -134,7 +133,16 @@ func (n *p2pNetwork) IsBadPeer(peerID peer.ID) bool {
 
 // SetupHost configures a libp2p host and backoff connector utility
 func (n *p2pNetwork) SetupHost() error {
-	opts, err := n.cfg.Libp2pOptions(n.logger)
+	// Only discv5 needs the local IP: it goes into our ENR, and the host listens on it.
+	if n.cfg.discoveryMode() == DiscoveryDiscv5 {
+		ip, err := p2pcommons.IPAddr()
+		if err != nil {
+			return fmt.Errorf("could not get ip addr: %w", err)
+		}
+		n.localIP = ip
+	}
+
+	opts, err := n.cfg.Libp2pOptions(n.localIP)
 	if err != nil {
 		return fmt.Errorf("could not create libp2p options: %w", err)
 	}
@@ -270,6 +278,7 @@ func (n *p2pNetwork) setupPeerServices() error {
 			PeerInfos:       n.idx,
 			ConnIdx:         n.idx,
 			SubnetsIdx:      n.idx,
+			PeerStateIdx:    n.idx,
 			IDService:       ids,
 			Network:         h.Network(),
 			DomainTypeFn:    n.cfg.NetworkConfig.CurrentDomainType,
@@ -279,7 +288,7 @@ func (n *p2pNetwork) setupPeerServices() error {
 	h.SetStreamHandler(peers.NodeInfoProtocol, handshaker.Handler())
 	n.logger.Debug("handshaker is ready")
 
-	n.connHandler = connections.NewConnHandler(n.ctx, n.logger, handshaker, n.ActiveSubnets, n.idx, n.idx, n.idx, n.discoveredPeersPool)
+	n.connHandler = connections.NewConnHandler(n.ctx, n.logger, handshaker, n.ActiveSubnets, n.idx, n.idx, n.idx, n.idx, n.discoveredPeersPool)
 	h.Network().Notify(n.connHandler.Handle())
 	n.logger.Debug("connection handler is ready")
 
@@ -297,22 +306,31 @@ func (n *p2pNetwork) FixedSubnets() p2pcommons.Subnets {
 func (n *p2pNetwork) setupDiscovery() error {
 	logger := n.logger
 
+	// StartNodeCmd validates the mode at startup already; this covers any other caller, which would otherwise run
+	// without a discovery service.
+	if err := n.cfg.ValidateDiscovery(); err != nil {
+		return err
+	}
+
 	var disc discovery.Service
-	if n.cfg.Discovery == localDiscvery {
+	var err error
+	switch n.cfg.discoveryMode() {
+	case DiscoveryMDNS:
 		logger.Info("discovery: using mdns (local)")
-		var err error
-		disc, err = discovery.NewLocalDiscovery(n.ctx, logger, n.Host(), n.cfg.MdnsDiscoveryTag)
+		disc, err = discovery.NewLocalDiscovery(n.ctx, logger, n.Host())
 		if err != nil {
 			return err
 		}
-	} else {
-		ipAddr, err := p2pcommons.IPAddr()
-		if err != nil {
-			return fmt.Errorf("could not get ip addr: %w", err)
+	case DiscoveryNone:
+		if len(n.cfg.TrustedPeers) == 0 {
+			logger.Warn("discovery: disabled and no trusted peers configured; this node will only keep peers that dial it")
+		} else {
+			logger.Info("discovery: disabled, keeping only trusted and inbound peers")
 		}
-
+		disc = discovery.Disabled{}
+	case DiscoveryDiscv5:
 		discV5Opts := &discovery.DiscV5Options{
-			IP:            ipAddr.String(),
+			IP:            n.localIP.String(),
 			BindIP:        net.IPv4zero.String(),
 			Port:          n.cfg.UDPPort,
 			TCPPort:       n.cfg.TCPPort,
@@ -377,13 +395,6 @@ func (n *p2pNetwork) setupPubsub() (topics.Controller, error) {
 	if !n.cfg.PubSubScoring {
 		cfg.ScoreIndex = nil
 	}
-
-	midHandler := topics.NewMsgIDHandler(n.ctx, time.Minute*2)
-	n.msgResolver = midHandler
-	cfg.MsgIDHandler = midHandler
-	go cfg.MsgIDHandler.Start()
-	// run GC every 3 minutes to clear old messages
-	async.RunEvery(n.ctx, time.Minute*3, midHandler.GC)
 
 	_, tc, err := topics.NewPubSub(n.ctx, n.logger, cfg, n.nodeStorage.ValidatorStore(), n.idx)
 	if err != nil {

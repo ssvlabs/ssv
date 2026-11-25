@@ -5,6 +5,29 @@ import (
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
+)
+
+// MaxProposalDataSize is the SSZ maximum of ProposalData in both trace types (the ssz-max tags below). A proposer's
+// consensus data may carry about twice that (spec DataSSZ), and a committee proposal's FullData can be larger too,
+// so the collector bounds what it copies in: a trace over the limit can't be encoded at eviction.
+const MaxProposalDataSize = 4194532
+
+// MaxPartialSigEntries bounds ValidatorDutyTrace.Pre and .Post. The checks below fail the build if message
+// validation admits more entries than that, rather than leaving traces that can't be encoded at eviction.
+// They use the constants validation enforces, so raising one is checked against this bound.
+const MaxPartialSigEntries = 256
+
+var (
+	// Proposer preferences: the distinct preference and request-auth roots validation admits per signer,
+	// each recorded once by the collector. This holds per committee: a reshare inside the lookahead resets
+	// validation's budgets but not the trace, which could then exceed the bound and be skipped at eviction.
+	_ [MaxPartialSigEntries - ssvtypes.MaxCommitteeSize*(gloas.MaxProposerPreferencesDistinctRoots+gloas.MaxRequestAuthDistinctRoots)]struct{}
+	// Sync-committee contribution: per signer and type, one packet of up to MaxCommitteeSize entries
+	// (validation's maxSignatures).
+	_ [MaxPartialSigEntries - ssvtypes.MaxCommitteeSize*ssvtypes.MaxCommitteeSize]struct{}
 )
 
 // NOTE: model_encoding.go is HAND-MAINTAINED — `go generate` cannot regenerate it.
@@ -24,8 +47,11 @@ type ValidatorDutyTrace struct {
 
 	ProposalData []byte `ssz-max:"4194532"`
 
-	Pre  []*PartialSigTrace `ssz-max:"13"`
-	Post []*PartialSigTrace `ssz-max:"13"`
+	// Pre and Post hold one entry per signing root per signer, up to MaxPartialSigEntries: a packet may
+	// carry several roots, and a signer may re-emit under new ones. Lists over 13 entries need store format
+	// 2 or later (see store.FormatVersion).
+	Pre  []*PartialSigTrace `ssz-max:"256"`
+	Post []*PartialSigTrace `ssz-max:"256"`
 }
 
 type ConsensusTrace struct {

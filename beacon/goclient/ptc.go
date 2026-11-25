@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
-	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/jellydator/ttlcache/v3"
@@ -17,7 +16,8 @@ import (
 
 // Gloas (ePBS) Payload Timeliness Committee endpoints. These hand-rolled HTTP requests predate the
 // go-eth2-client fork's typed PTC calls (PTCDuties, PayloadAttestationData,
-// SubmitPayloadAttestationMessages); moving onto those, like the rest of GoClient, is a follow-up.
+// SubmitPayloadAttestationMessages); moving onto those, like the rest of GoClient, is a follow-up
+// (issue #3014).
 const (
 	ptcDutiesPath              = "/eth/v1/validator/duties/ptc/%d"                    // epoch
 	payloadAttestationDataPath = "/eth/v1/validator/payload_attestation_data?slot=%d" // slot
@@ -27,7 +27,7 @@ const (
 // PayloadAttestationDuties returns the PTC duties for the given validators at the epoch, with the
 // dependent_root they were derived from, from the first beacon client that responds.
 func (gc *GoClient) PayloadAttestationDuties(ctx context.Context, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) (*gloas.PTCDuties, error) {
-	return firstClientResult(ctx, gc, "PayloadAttestationDuties", http.MethodPost, func(ctx context.Context, addr string) (*gloas.PTCDuties, error) {
+	return firstClientResult(ctx, gc, "PayloadAttestationDuties", http.MethodPost, func(ctx context.Context, addr unmaskedAddr) (*gloas.PTCDuties, error) {
 		return requestPTCDuties(ctx, gloasHTTPClient, addr, epoch, validatorIndices)
 	})
 }
@@ -60,7 +60,7 @@ func (gc *GoClient) PayloadAttestationData(ctx context.Context, slot phase0.Slot
 // that responds. A 204 is an answer, not an error, so it stops the client fallback — the operator abstains
 // on its own node's view rather than polling the rest for a block.
 func (gc *GoClient) fetchPayloadAttestationData(ctx context.Context, slot phase0.Slot) (*gloas.PayloadAttestationData, error) {
-	return firstClientResult(ctx, gc, "PayloadAttestationData", http.MethodGet, func(ctx context.Context, addr string) (*gloas.PayloadAttestationData, error) {
+	return firstClientResult(ctx, gc, "PayloadAttestationData", http.MethodGet, func(ctx context.Context, addr unmaskedAddr) (*gloas.PayloadAttestationData, error) {
 		return requestPayloadAttestationData(ctx, gloasHTTPClient, addr, slot)
 	})
 }
@@ -76,30 +76,9 @@ func (gc *GoClient) SubmitPayloadAttestationMessages(ctx context.Context, messag
 	})
 }
 
-// firstClientResult runs fn against each beacon client in turn, each under its own common-timeout
-// budget, returning the first success; on all failures it joins the per-client errors.
-func firstClientResult[T any](ctx context.Context, gc *GoClient, routeName, httpMethod string, fn func(ctx context.Context, addr string) (T, error)) (T, error) {
-	var zero T
-	var errs error
-	for _, client := range gc.clients {
-		// Per-client timeout so a hung primary doesn't starve the fallbacks.
-		clientCtx, cancel := context.WithTimeout(ctx, gc.commonTimeout)
-		start := time.Now()
-		res, err := fn(clientCtx, gc.clientAddresses[client])
-		recordRequest(clientCtx, gc.log, routeName, client, httpMethod, false, time.Since(start), err)
-		cancel()
-		if err != nil {
-			errs = errors.Join(errs, errSingleClient(err, client.Address(), routeName))
-			continue
-		}
-		return res, nil
-	}
-	return zero, errs
-}
-
 // requestPTCDuties POSTs the validator indices and returns their PTC duties for the epoch, with the
 // dependent_root the beacon node derived them from.
-func requestPTCDuties(ctx context.Context, httpClient *http.Client, addr string, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) (*gloas.PTCDuties, error) {
+func requestPTCDuties(ctx context.Context, httpClient *http.Client, addr unmaskedAddr, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) (*gloas.PTCDuties, error) {
 	indices := make([]string, len(validatorIndices))
 	for i, idx := range validatorIndices {
 		indices[i] = strconv.FormatUint(uint64(idx), 10)
@@ -113,7 +92,7 @@ func requestPTCDuties(ctx context.Context, httpClient *http.Client, addr string,
 		DependentRoot phase0.Root      `json:"dependent_root"`
 		Data          []*gloas.PTCDuty `json:"data"`
 	}
-	if err := jsonDo(ctx, httpClient, http.MethodPost, addr+fmt.Sprintf(ptcDutiesPath, epoch), body, nil, &resp); err != nil {
+	if err := jsonDo(ctx, httpClient, http.MethodPost, addr, fmt.Sprintf(ptcDutiesPath, epoch), body, nil, &resp); err != nil {
 		return nil, err
 	}
 	return &gloas.PTCDuties{DependentRoot: resp.DependentRoot, Duties: resp.Data}, nil
@@ -122,8 +101,8 @@ func requestPTCDuties(ctx context.Context, httpClient *http.Client, addr string,
 // requestPayloadAttestationData GETs the PayloadAttestationData for the slot. A 204 No Content —
 // the beacon-APIs "no block seen" signal — returns (nil, nil) rather than a decode error on the
 // empty body.
-func requestPayloadAttestationData(ctx context.Context, httpClient *http.Client, addr string, slot phase0.Slot) (*gloas.PayloadAttestationData, error) {
-	respBody, _, status, err := httpDo(ctx, httpClient, http.MethodGet, addr+fmt.Sprintf(payloadAttestationDataPath, slot), nil, "application/json", "", nil)
+func requestPayloadAttestationData(ctx context.Context, httpClient *http.Client, addr unmaskedAddr, slot phase0.Slot) (*gloas.PayloadAttestationData, error) {
+	respBody, _, status, err := httpDo(ctx, httpClient, http.MethodGet, addr, fmt.Sprintf(payloadAttestationDataPath, slot), nil, contentTypeJSON, "", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -148,11 +127,11 @@ func requestPayloadAttestationData(ctx context.Context, httpClient *http.Client,
 }
 
 // submitPayloadAttestationMessages POSTs signed PTC messages to the beacon node's pool.
-func submitPayloadAttestationMessages(ctx context.Context, httpClient *http.Client, addr string, messages []*gloas.PayloadAttestationMessage) error {
+func submitPayloadAttestationMessages(ctx context.Context, httpClient *http.Client, addr unmaskedAddr, messages []*gloas.PayloadAttestationMessage) error {
 	body, err := json.Marshal(messages)
 	if err != nil {
 		return fmt.Errorf("marshal payload attestation messages: %w", err)
 	}
 	headers := map[string]string{consensusVersionHeader: consensusVersionGloas}
-	return jsonDo(ctx, httpClient, http.MethodPost, addr+payloadAttestationsPath, body, headers, nil)
+	return jsonDo(ctx, httpClient, http.MethodPost, addr, payloadAttestationsPath, body, headers, nil)
 }

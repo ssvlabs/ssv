@@ -6,18 +6,125 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/deneb"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
+	semconv "go.opentelemetry.io/otel/semconv/v1.43.0"
+	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/beacon/goclient/mocks"
+	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 )
 
 // GoClient must satisfy the Gloas proposer beacon-node surface.
 var _ beacon.GloasProposerCalls = (*GoClient)(nil)
+
+// recordedRequest is one request a route recorded: the beacon node it went to (empty in a requestLog, which
+// records a single node's requests), its HTTP method, and for a failed one the response status (0 when the
+// failure carries none).
+type recordedRequest struct {
+	server string
+	method string
+	failed bool
+	status int
+}
+
+// requestLog collects what a route records through its requestRecorder.
+type requestLog []recordedRequest
+
+func (l *requestLog) record(httpMethod string, _ time.Duration, err error) {
+	*l = append(*l, recordedRequest{method: httpMethod, failed: err != nil, status: responseStatusCode(err)})
+}
+
+// discardRequest is a requestRecorder for tests that don't assert on recording.
+func discardRequest(string, time.Duration, error) {}
+
+// recordedCLRequests counts, per series, the requests ssv.cl.request.duration has recorded for routeName
+// beyond those counted in since (nil for all of them).
+func recordedCLRequests(t *testing.T, routeName string, since map[recordedRequest]uint64) map[recordedRequest]uint64 {
+	t.Helper()
+	var rm metricdata.ResourceMetrics
+	require.NoError(t, pkgTestMetricReader.Collect(t.Context(), &rm))
+	name := observability.InstrumentName(observabilityNamespace, "request.duration")
+	counts := make(map[recordedRequest]uint64)
+	for _, sm := range rm.ScopeMetrics {
+		for _, m := range sm.Metrics {
+			if m.Name != name {
+				continue
+			}
+			hist, ok := m.Data.(metricdata.Histogram[float64])
+			require.True(t, ok, "%s is not a float64 histogram", name)
+			for _, dp := range hist.DataPoints {
+				if route, _ := dp.Attributes.Value("http.route_name"); route.AsString() != routeName {
+					continue
+				}
+				server, _ := dp.Attributes.Value(semconv.ServerAddressKey)
+				method, _ := dp.Attributes.Value(semconv.HTTPRequestMethodKey)
+				status, failed := dp.Attributes.Value("http.response.error_status_code")
+				series := recordedRequest{server: server.AsString(), method: method.AsString(), failed: failed, status: int(status.AsInt64())}
+				counts[series] += dp.Count
+			}
+		}
+	}
+	for series, n := range since {
+		counts[series] -= n
+		if counts[series] == 0 {
+			delete(counts, series)
+		}
+	}
+	return counts
+}
+
+// GetGloasBeaconBlock moves on from a beacon node that is down, and a pre-#630 node behind it still serves
+// the block through the GET fallback. Each request is recorded against the beacon node it went to.
+func TestGetGloasBeaconBlock_NextClientFallsBackToGET(t *testing.T) {
+	blockSSZ, err := gloas.TestingBeaconBlock(7).MarshalSSZ()
+	require.NoError(t, err)
+
+	down := httptest.NewServer(http.NotFoundHandler())
+	down.Close() // refuses connections: the first beacon node is down
+
+	var mu sync.Mutex
+	var methods []string
+	srv := mocks.NewServerWithHandler(func(r *http.Request, resp mocks.Response) (mocks.Response, error) {
+		if r.URL.Path != "/eth/v4/validator/blocks/7" {
+			return resp, nil
+		}
+		mu.Lock()
+		methods = append(methods, r.Method)
+		mu.Unlock()
+		if r.Method == http.MethodPost {
+			return mocks.NewResponse(nil, mocks.WithStatusCode(http.StatusMethodNotAllowed)), nil // predates beacon-APIs#630
+		}
+		return mocks.NewResponse(blockSSZ, mocks.WithHeader("Content-Type", contentTypeSSZ)), nil
+	})
+	defer srv.Close()
+
+	client, err := New(t.Context(), zap.NewNop(), Options{BeaconNodeAddr: down.URL + ";" + srv.URL, CommonTimeout: 400 * time.Millisecond, LongTimeout: 500 * time.Millisecond})
+	require.NoError(t, err)
+
+	recordedBefore := recordedCLRequests(t, "GetGloasBeaconBlock", nil)
+	got, err := client.GetGloasBeaconBlock(t.Context(), 7, []byte{0x02}, []byte{0x01}, nil)
+	require.NoError(t, err)
+	require.Equal(t, phase0.Slot(7), got.Block.Slot)
+	mu.Lock()
+	defer mu.Unlock()
+	require.Equal(t, []string{http.MethodPost, http.MethodGet}, methods, "the second node rejects the POST and serves the GET")
+
+	downAddr, srvAddr := client.clients[0].Address(), client.clients[1].Address()
+	require.Equal(t, map[recordedRequest]uint64{
+		{server: downAddr, method: http.MethodPost, failed: true}:                                     1, // refused: no status
+		{server: srvAddr, method: http.MethodPost, failed: true, status: http.StatusMethodNotAllowed}: 1,
+		{server: srvAddr, method: http.MethodGet}:                                                     1,
+	}, recordedCLRequests(t, "GetGloasBeaconBlock", recordedBefore))
+}
 
 // With no builder config, produce still POSTs (produceBlockV4 is POST-first per beacon-APIs#630), carrying
 // a neutral local-build body: empty builders with the neutral boost factor (100).
@@ -39,16 +146,18 @@ func TestRequestGloasBeaconBlock(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	got, err := requestGloasBeaconBlock(context.Background(), srv.URL, 7, []byte{0x02}, []byte{0x01}, nil)
+	var requests requestLog
+	got, err := requestGloasBeaconBlock(context.Background(), unmaskedAddr{srv.URL}, 7, []byte{0x02}, []byte{0x01}, nil, requests.record)
 	require.NoError(t, err)
 	require.Equal(t, http.MethodPost, gotMethod)
+	require.Equal(t, requestLog{{method: http.MethodPost}}, requests)
 	require.Equal(t, "/eth/v4/validator/blocks/7", gotPath)
 	require.Equal(t, "true", gotIncludePayload) // a self-build answers with BlockContents (SIP #94 §6)
 	require.Equal(t, "0x01", gotRandao)         // randao is the 5th arg, graffiti the 4th
 	// graffiti is padded to a full 32-byte value before hex-encoding (lighthouse rejects a short one).
 	require.Equal(t, "0x02"+strings.Repeat("00", 31), gotGraffiti)
-	require.Equal(t, "application/octet-stream", gotAccept)
-	require.Equal(t, "application/json", gotContentType)
+	require.Equal(t, contentTypeSSZ, gotAccept)
+	require.Equal(t, contentTypeJSON, gotContentType)
 	// the neutral local-build body: no builders, p2p bids weighed at par with the local build (100).
 	require.Contains(t, string(gotBody), `"builders":[]`)
 	require.Contains(t, string(gotBody), `"builder_boost_factor":"100"`)
@@ -74,7 +183,7 @@ func TestRequestGloasBeaconBlock_SelfBuildContents(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	got, err := requestGloasBeaconBlock(context.Background(), srv.URL, 7, []byte{0x02}, []byte{0x01}, nil)
+	got, err := requestGloasBeaconBlock(context.Background(), unmaskedAddr{srv.URL}, 7, []byte{0x02}, []byte{0x01}, nil, discardRequest)
 	require.NoError(t, err)
 	require.Equal(t, phase0.Slot(7), got.Block.Slot)
 	require.Empty(t, got.BuilderURL)
@@ -99,7 +208,7 @@ func TestRequestGloasBeaconBlock_ContentsWithoutHeaderFails(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, err = requestGloasBeaconBlock(context.Background(), srv.URL, 7, []byte{0x02}, []byte{0x01}, nil)
+	_, err = requestGloasBeaconBlock(context.Background(), unmaskedAddr{srv.URL}, 7, []byte{0x02}, []byte{0x01}, nil, discardRequest)
 	require.ErrorContains(t, err, "Eth-Execution-Payload-Included")
 }
 
@@ -122,9 +231,12 @@ func TestRequestGloasBeaconBlock_UnconfiguredFallbackToGET(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	got, err := requestGloasBeaconBlock(context.Background(), srv.URL, 7, []byte{0x02}, []byte{0x01}, nil)
+	var requests requestLog
+	got, err := requestGloasBeaconBlock(context.Background(), unmaskedAddr{srv.URL}, 7, []byte{0x02}, []byte{0x01}, nil, requests.record)
 	require.NoError(t, err)
 	require.Equal(t, []string{http.MethodPost, http.MethodGet}, methods, "unconfigured POST 405 falls back to GET")
+	require.Equal(t, requestLog{{method: http.MethodPost, failed: true, status: http.StatusMethodNotAllowed}, {method: http.MethodGet}}, requests,
+		"the rejected POST and the fallback GET are recorded as two requests")
 	require.Equal(t, "100", getBoost, "the fallback GET carries the neutral builder_boost_factor")
 	require.Equal(t, phase0.Slot(7), got.Block.Slot)
 }
@@ -155,11 +267,13 @@ func TestRequestGloasBeaconBlock_POST(t *testing.T) {
 			Auth: &gloas.SignedBuilderRequestAuth{Message: &gloas.BuilderRequestAuth{Data: []byte{0x01}, Slot: 7}},
 		}},
 	}
-	got, err := requestGloasBeaconBlock(context.Background(), srv.URL, 7, []byte{0x02}, []byte{0x01}, cfg)
+	var requests requestLog
+	got, err := requestGloasBeaconBlock(context.Background(), unmaskedAddr{srv.URL}, 7, []byte{0x02}, []byte{0x01}, cfg, requests.record)
 	require.NoError(t, err)
 	require.Equal(t, http.MethodPost, gotMethod)
-	require.Equal(t, "application/json", gotContentType)
-	require.Equal(t, "gloas", gotConsensusVersion)
+	require.Equal(t, requestLog{{method: http.MethodPost}}, requests)
+	require.Equal(t, contentTypeJSON, gotContentType)
+	require.Equal(t, consensusVersionGloas, gotConsensusVersion)
 	require.Contains(t, string(gotBody), `"min_bid":"10"`)
 	require.Equal(t, "https://builder.example.com", got.BuilderURL)
 	require.Equal(t, phase0.Slot(7), got.Block.Slot)
@@ -186,11 +300,14 @@ func TestRequestGloasBeaconBlock_POSTFallbackToGET(t *testing.T) {
 	defer srv.Close()
 
 	cfg := &gloas.ProduceBuilderConfig{BuilderBoostFactor: 150}
-	got, err := requestGloasBeaconBlock(context.Background(), srv.URL, 7, []byte{0x02}, []byte{0x01}, cfg)
+	var requests requestLog
+	got, err := requestGloasBeaconBlock(context.Background(), unmaskedAddr{srv.URL}, 7, []byte{0x02}, []byte{0x01}, cfg, requests.record)
 	require.NoError(t, err)
 	require.Equal(t, []string{http.MethodPost, http.MethodGet}, methods, "POST 404 falls back to GET")
+	require.Equal(t, requestLog{{method: http.MethodPost, failed: true, status: http.StatusNotFound}, {method: http.MethodGet}}, requests,
+		"the rejected POST and the fallback GET are recorded as two requests")
 	require.Equal(t, "150", getBoost, "the fallback GET carries the configured builder_boost_factor")
-	require.Equal(t, "application/octet-stream", getAccept, "the fallback GET still asks for the SSZ block")
+	require.Equal(t, contentTypeSSZ, getAccept, "the fallback GET still asks for the SSZ block")
 	require.Equal(t, phase0.Slot(7), got.Block.Slot)
 	require.Empty(t, got.BuilderURL)
 }
@@ -205,9 +322,48 @@ func TestRequestGloasBeaconBlock_WrongConsensusVersion(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, err = requestGloasBeaconBlock(context.Background(), srv.URL, 7, []byte{0x02}, []byte{0x01}, nil)
+	var requests requestLog
+	_, err = requestGloasBeaconBlock(context.Background(), unmaskedAddr{srv.URL}, 7, []byte{0x02}, []byte{0x01}, nil, requests.record)
 	require.ErrorContains(t, err, "Eth-Consensus-Version")
 	require.ErrorContains(t, err, "fulu")
+	require.Equal(t, requestLog{{method: http.MethodPost, failed: true}}, requests,
+		"a wrong-fork response is recorded as a failed POST and does not fall back to GET")
+}
+
+// Only a missing route or method (404/405) falls back: a POST the beacon node fails is returned as is.
+func TestRequestGloasBeaconBlock_POSTServerErrorDoesNotFallBack(t *testing.T) {
+	var methods []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		methods = append(methods, r.Method)
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	var requests requestLog
+	_, err := requestGloasBeaconBlock(context.Background(), unmaskedAddr{srv.URL}, 7, []byte{0x02}, []byte{0x01}, nil, requests.record)
+	require.Equal(t, http.StatusInternalServerError, responseStatusCode(err))
+	require.Equal(t, []string{http.MethodPost}, methods, "a 500 is no reason to retry as GET")
+	require.Equal(t, requestLog{{method: http.MethodPost, failed: true, status: http.StatusInternalServerError}}, requests)
+}
+
+// A fallback GET that fails too is recorded as a second, failed request, and its error is returned.
+func TestRequestGloasBeaconBlock_FallbackGETFailure(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			w.WriteHeader(http.StatusNotFound) // node predates beacon-APIs#630
+			return
+		}
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer srv.Close()
+
+	var requests requestLog
+	_, err := requestGloasBeaconBlock(context.Background(), unmaskedAddr{srv.URL}, 7, []byte{0x02}, []byte{0x01}, nil, requests.record)
+	require.Equal(t, http.StatusServiceUnavailable, responseStatusCode(err), "the GET's failure is the one returned")
+	require.Equal(t, requestLog{
+		{method: http.MethodPost, failed: true, status: http.StatusNotFound},
+		{method: http.MethodGet, failed: true, status: http.StatusServiceUnavailable},
+	}, requests)
 }
 
 func TestSubmitGloasBeaconBlock(t *testing.T) {
@@ -223,14 +379,14 @@ func TestSubmitGloasBeaconBlock(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	err := submitGloasBeaconBlock(context.Background(), srv.URL, []byte{0x01, 0x02}, nil)
+	err := submitGloasBeaconBlock(context.Background(), unmaskedAddr{srv.URL}, []byte{0x01, 0x02}, nil)
 	require.NoError(t, err)
 	require.Equal(t, http.MethodPost, gotMethod)
 	require.Equal(t, "/eth/v2/beacon/blocks", gotPath)
 	require.Equal(t, consensusVersionGloas, gotVersion)
 	// the route answers with no content and JSON errors; Prysm refuses an SSZ-only Accept with 406.
-	require.Equal(t, "application/json", gotAccept)
-	require.Equal(t, "application/octet-stream", gotContentType)
+	require.Equal(t, contentTypeJSON, gotAccept)
+	require.Equal(t, contentTypeSSZ, gotContentType)
 	require.Equal(t, []byte{0x01, 0x02}, gotBody)
 }
 
@@ -244,7 +400,7 @@ func TestSubmitGloasBeaconBlock_EchoesBuilderURL(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	err := submitGloasBeaconBlock(context.Background(), srv.URL, []byte{0x01, 0x02},
+	err := submitGloasBeaconBlock(context.Background(), unmaskedAddr{srv.URL}, []byte{0x01, 0x02},
 		map[string]string{"Eth-Builder-Url": "https://builder.example.com"})
 	require.NoError(t, err)
 	require.Equal(t, "https://builder.example.com", gotBuilderURL)
@@ -259,7 +415,7 @@ func TestSubmitGloasBeaconBlock_AlreadyKnownIsSuccess(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	require.NoError(t, submitGloasBeaconBlock(context.Background(), srv.URL, []byte{0x01, 0x02}, nil))
+	require.NoError(t, submitGloasBeaconBlock(context.Background(), unmaskedAddr{srv.URL}, []byte{0x01, 0x02}, nil))
 }
 
 // A genuine rejection (not "already known") still propagates as an error.
@@ -270,5 +426,5 @@ func TestSubmitGloasBeaconBlock_RealErrorPropagates(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	require.Error(t, submitGloasBeaconBlock(context.Background(), srv.URL, []byte{0x01, 0x02}, nil))
+	require.Error(t, submitGloasBeaconBlock(context.Background(), unmaskedAddr{srv.URL}, []byte{0x01, 0x02}, nil))
 }

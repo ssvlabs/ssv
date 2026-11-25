@@ -116,15 +116,25 @@ func decideNetworkKeyProtectors(
 	}
 
 	if operatorPrivKey != nil {
-		encryptionKey, err := operatorPrivKey.EKMEncryptionKey()
+		// The same key ssv-signer's /v1/operator/encrypt and /decrypt use, so both modes share one format.
+		encryptionKey, err := operatorPrivKey.DataProtectionKey()
 		if err != nil {
 			return nil, nil, fmt.Errorf("derive operator-based network key protection secret: %w", err)
+		}
+		// Network keys encrypted before DataProtectionKey existed used EKMEncryptionKey, which the node
+		// derives for the share keys anyway. ssv-signer's decrypt endpoint must never fall back to it.
+		legacyEncryptionKey, err := operatorPrivKey.EKMEncryptionKey()
+		if err != nil {
+			return nil, nil, fmt.Errorf("derive legacy network key protection secret: %w", err)
 		}
 		protectFn := func(_ context.Context, plaintext []byte) ([]byte, error) {
 			return keys.EncryptPayload(encryptionKey, plaintext)
 		}
 		unprotectFn := func(_ context.Context, protectedValue []byte) ([]byte, error) {
-			return keys.DecryptPayload(encryptionKey, protectedValue)
+			if plaintext, err := keys.DecryptPayload(encryptionKey, protectedValue); err == nil {
+				return plaintext, nil
+			}
+			return keys.DecryptPayload(legacyEncryptionKey, protectedValue)
 		}
 		return protectFn, unprotectFn, nil
 	}
@@ -132,7 +142,14 @@ func decideNetworkKeyProtectors(
 	if signerClient != nil {
 		err := probeRemoteNetworkKeyProtector(ctx, signerClient)
 		if err == nil {
-			return signerClient.OperatorEncrypt, signerClient.OperatorDecrypt, nil
+			unprotectFn := func(ctx context.Context, protectedValue []byte) ([]byte, error) {
+				plaintext, err := signerClient.OperatorDecrypt(ctx, protectedValue)
+				if err != nil {
+					return nil, fmt.Errorf("ssv-signer could not decrypt the stored p2p network private key. If another ssv-signer version encrypted it, start once with that version, or set NetworkPrivateKey to replace it, which changes the peer ID: %w", err)
+				}
+				return plaintext, nil
+			}
+			return signerClient.OperatorEncrypt, unprotectFn, nil
 		}
 		if !errors.Is(err, ssvsigner.ErrOperatorDataProtectionUnsupported) {
 			return nil, nil, fmt.Errorf("probe ssv-signer p2p network key protection: %w", err)
@@ -143,7 +160,7 @@ func decideNetworkKeyProtectors(
 			return nil, nil, fmt.Errorf("inspect stored p2p network private key format: %w", hasEncryptedKeyErr)
 		}
 		if hasEncryptedKey {
-			return nil, nil, fmt.Errorf("existing database contains an encrypted p2p network private key, but the configured ssv-signer cannot encrypt or decrypt it. Upgrade ssv-signer to a version that supports /v1/operator/encrypt and /v1/operator/decrypt, or restore the operator key and signing mode that originally encrypted this database: %w", err)
+			return nil, nil, fmt.Errorf("existing database contains an encrypted p2p network private key, but the configured ssv-signer cannot encrypt or decrypt it. Restore the ssv-signer version, or the operator key and signing mode, that originally encrypted this database: %w", err)
 		}
 
 		logger.Warn("ssv-signer does not support remote p2p network key protection, falling back to local compatibility mode",

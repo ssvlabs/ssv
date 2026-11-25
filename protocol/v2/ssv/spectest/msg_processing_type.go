@@ -184,8 +184,7 @@ func (test *MsgProcessingSpecTest) BeaconAggregatorsMap() map[phase0.CommitteeIn
 func (test *MsgProcessingSpecTest) RunAsPartOfMultiTest(t *testing.T, logger *zap.Logger) {
 	ctx := context.Background()
 	v, c, lastErr := test.runPreTesting(ctx, logger)
-	actualErr := adjustActualErrorForRunner(adjustActualError(lastErr), test.Runner)
-	spectests.AssertErrorCode(t, adjustExpectedErrorCode(test.ExpectedErrorCode), actualErr)
+	spectests.AssertErrorCode(t, adjustExpectedErrorCode(test.ExpectedErrorCode), lastErr)
 
 	var network *protocoltesting.TestingNetwork
 	var beaconNetwork *protocoltesting.BeaconNodeWrapped

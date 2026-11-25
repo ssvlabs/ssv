@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"maps"
 	"math/rand"
+	"net"
 	"slices"
 	"strings"
 	"sync"
@@ -89,6 +90,10 @@ type p2pNetwork struct {
 	logger *zap.Logger
 	cfg    *Config
 
+	// localIP is the node's local IP (nil without discv5): the host listens on it and, without HostAddress/HostDNS,
+	// our ENR starts with it.
+	localIP net.IP
+
 	host            atomic.Pointer[host.Host]
 	streamCtrl      streams.StreamController
 	idx             peers.Index
@@ -97,7 +102,6 @@ type p2pNetwork struct {
 	disc            discovery.Service
 	topicsCtrl      topics.Controller
 	msgRouter       network.MessageRouter
-	msgResolver     topics.MsgPeersResolver
 	msgValidator    validation.MessageValidator
 	connHandler     connections.ConnHandler
 	connGater       connmgrcore.ConnectionGater
@@ -350,6 +354,12 @@ func (n *p2pNetwork) Start() (err error) {
 	return nil
 }
 
+// maxPeersToDrop value should be in the range of 3-5% of MaxPeers for trimming to work
+// fast enough so that our node finds good set of peers within 10-20 minutes after node
+// start; it shouldn't be too large because that would negatively affect Ethereum duty
+// execution quality
+const maxPeersToDrop = 4 // targeting MaxPeers in 60-90 range
+
 // Returns a function that trims currently connected peers if necessary, namely:
 //   - dropping peers with bad gossip score
 //   - dropping irrelevant peers that don't have any subnet in common with us
@@ -388,12 +398,6 @@ func (n *p2pNetwork) peersTrimming() func() {
 			// we can accept more peer connections now, no need to trim
 			return
 		}
-
-		// maxPeersToDrop value should be in the range of 3-5% of MaxPeers for trimming to work
-		// fast enough so that our node finds good set of peers within 10-20 minutes after node
-		// start; it shouldn't be too large because that would negatively affect Ethereum duty
-		// execution quality
-		const maxPeersToDrop = 4 // targeting MaxPeers in 60-90 range
 
 		trimInboundOnly := false
 
@@ -545,6 +549,20 @@ func (n *p2pNetwork) isReady() bool {
 	return atomic.LoadInt32(&n.state) == stateReady
 }
 
+// discoveryStaleGrace is how long the discv5 socket may go unread before Healthy
+// treats discovery as wedged — comfortably above normal quiet on a live network,
+// where inbound traffic and query responses keep the socket busy.
+const discoveryStaleGrace = 3 * time.Minute
+
+// discoveryStalePeerFloor gates the restart on a stale discv5 socket: below it
+// the node is effectively isolated and a restart is worth attempting; at or
+// above it the node keeps serving duties over its established connections.
+// Staleness alone can't tell a wedged read loop from inbound UDP lost upstream
+// (firewall/NAT), which a restart can't fix — and since any stray packet
+// re-arms the check after boot, restarting unconditionally would turn an
+// external UDP fault into a restart loop.
+const discoveryStalePeerFloor = 10
+
 // Healthy reports whether the p2p network is operating normally.
 // It satisfies the health-check interface from hprobe package.
 func (n *p2pNetwork) Healthy(ctx context.Context) error {
@@ -556,6 +574,25 @@ func (n *p2pNetwork) Healthy(ctx context.Context) error {
 	}
 	if n.discoveryFailed.Load() {
 		return fmt.Errorf("discovery bootstrap failed")
+	}
+	// A wedged discv5 socket leaves discovery silently dead while bootstrap keeps
+	// looping. Failing here makes the hprobe watchdog restart the node, so do it
+	// only once the wedge bites: the peer set has degraded (see
+	// discoveryStalePeerFloor). n.disc is nil only in tests.
+	if n.disc != nil && n.disc.DiscoveryStale(discoveryStaleGrace) {
+		peers := 0
+		if h := n.Host(); h != nil {
+			peers = len(h.Network().Peers())
+		}
+		if peers < discoveryStalePeerFloor {
+			n.logger.Warn("discv5 socket wedged and peer set degraded, failing health check",
+				zap.Duration("grace", discoveryStaleGrace), zap.Int("peers", peers))
+			return fmt.Errorf("discv5 socket not drained for >%s with %d peers (discovery wedged)", discoveryStaleGrace, peers)
+		}
+		// Not fatal while the peer set holds: logged on every probe; the probe
+		// fails only once the peers erode.
+		n.logger.Error("discv5 socket wedged but peer set healthy, holding restart",
+			zap.Duration("grace", discoveryStaleGrace), zap.Int("peers", peers))
 	}
 	return nil
 }

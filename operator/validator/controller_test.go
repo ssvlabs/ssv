@@ -48,6 +48,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 	"github.com/ssvlabs/ssv/protocol/v2/types/ssvtestingutils"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	storagemocks "github.com/ssvlabs/ssv/registry/storage/mocks"
@@ -282,12 +283,56 @@ func TestHandleNonCommitteeMessages_RoleGuard(t *testing.T) {
 		}
 	}
 
-	t.Run("non-committee, non-aggregator-committee roles are ignored", func(t *testing.T) {
+	t.Run("roles without proposal-derived roots are ignored", func(t *testing.T) {
 		msg := newConsensusMsg(types.RoleAggregator, &specqbft.Message{MsgType: specqbft.ProposalMsgType})
 
 		// ncv is nil: if the role guard didn't short-circuit before touching ncv, this would panic.
 		err := ctr.handleNonCommitteeMessages(t.Context(), msg, nil)
 		require.NoError(t, err)
+	})
+
+	t.Run("proposer role with non-proposal consensus message is ignored", func(t *testing.T) {
+		msg := newConsensusMsg(spectypes.RoleProposer, &specqbft.Message{MsgType: specqbft.CommitMsgType})
+
+		err := ctr.handleNonCommitteeMessages(t.Context(), msg, nil)
+		require.NoError(t, err)
+	})
+
+	t.Run("gloas proposer proposal teaches the observer its envelope root", func(t *testing.T) {
+		// The envelope quorum riding the proposer's post-consensus packet is told apart from the block's
+		// only if the proposal reached SaveRoots first.
+		const slot = phase0.Slot(40)
+		builderDomain := phase0.Domain{0x0b}
+		beaconNode := beacon.NewMockBeaconNode(gomock.NewController(t))
+		beaconNode.EXPECT().DomainData(gomock.Any(), gomock.Any(), phase0.DomainType(spectypes.DomainBeaconBuilder)).Return(builderDomain, nil)
+
+		envelopeRoots := ttlcache.New(ttlcache.WithTTL[phase0.Root, struct{}](time.Hour))
+		msg := newConsensusMsg(spectypes.RoleProposer, &specqbft.Message{MsgType: specqbft.ProposalMsgType, Height: specqbft.Height(slot)})
+		ncv := validator.NewCommitteeObserver(msg.MsgID, validator.CommitteeObserverOptions{
+			Logger:        logger,
+			BeaconConfig:  networkconfig.TestNetworkWithGloas(0).Beacon,
+			EnvelopeRoots: envelopeRoots,
+			DomainCache:   validator.NewDomainCache(beaconNode, time.Hour),
+		})
+
+		proposal := &gloas.GloasProposalData{Block: gloas.TestingBeaconBlock(slot), PayloadRoot: phase0.Root{0x99}}
+		dataSSZ, err := proposal.Encode()
+		require.NoError(t, err)
+		fullData, err := (&spectypes.ProposerConsensusData{
+			Duty:    spectypes.ValidatorDuty{Type: spectypes.BNRoleProposer, Slot: slot, ValidatorIndex: 1},
+			Version: networkconfig.DataVersionGloas,
+			DataSSZ: dataSSZ,
+		}).Encode()
+		require.NoError(t, err)
+		msg.SignedSSVMessage = &spectypes.SignedSSVMessage{FullData: fullData}
+
+		require.NoError(t, ctr.handleNonCommitteeMessages(t.Context(), msg, ncv))
+
+		envelope, err := proposal.DeriveBlindedEnvelope()
+		require.NoError(t, err)
+		envelopeRoot, err := spectypes.ComputeETHSigningRoot(envelope, builderDomain)
+		require.NoError(t, err)
+		require.True(t, envelopeRoots.Has(envelopeRoot))
 	})
 
 	t.Run("aggregator-committee role with non-proposal consensus message is ignored", func(t *testing.T) {
@@ -547,6 +592,11 @@ func TestSetupValidators(t *testing.T) {
 	// A valid validator public key that the committee's shares don't reconstruct.
 	otherValidatorPK, _ := buildValidCommittee(t, operatorIds)
 
+	// A committee that reconstructs its validator public key, but whose operator 3 has a zero secret
+	// share, so its share public key is the identity point.
+	zeroShareValidatorPK, zeroShareOperators := buildCommitteeWithZeroShare(t, operatorIds, 3)
+	require.Equal(t, append([]byte{0xc0}, make([]byte, 47)...), []byte(zeroShareOperators[2].SharePubKey))
+
 	shareWithMetaData := &types.SSVShare{
 		Share: spectypes.Share{
 			ValidatorIndex:  1,
@@ -712,6 +762,33 @@ func TestSetupValidators(t *testing.T) {
 						Committee:       operators[:],
 						ValidatorPubKey: otherValidatorPK,
 						SharePubKey:     shareKey,
+					},
+					Status:                    v1.ValidatorStateActiveOngoing,
+					ActivationEpoch:           activationEpoch,
+					ExitEpoch:                 exitEpoch,
+					BeaconMetadataLastUpdated: time.Now(),
+				},
+			},
+			recipientFound:    false,
+			initedValidators:  0,
+			initErr:           "",
+			startedValidators: 0,
+			startErrs:         0,
+			bcMockTimes:       0,
+			validatorStartFunc: func(validator *validator.Validator) (bool, error) {
+				return true, nil
+			},
+			operatorData: allOperatorData,
+		},
+		{
+			name: "committee has an identity share public key",
+			shares: []*types.SSVShare{
+				{
+					Share: spectypes.Share{
+						ValidatorIndex:  1,
+						Committee:       zeroShareOperators,
+						ValidatorPubKey: zeroShareValidatorPK,
+						SharePubKey:     zeroShareOperators[0].SharePubKey,
 					},
 					Status:                    v1.ValidatorStateActiveOngoing,
 					ActivationEpoch:           activationEpoch,
@@ -1388,6 +1465,35 @@ func buildValidCommittee(t *testing.T, operatorIDs []uint64) (spectypes.Validato
 		committee[i] = &spectypes.ShareMember{Signer: id, SharePubKey: share.GetPublicKey().Serialize()}
 	}
 	return spectypes.ValidatorPK(poly[0].GetPublicKey().Serialize()), committee
+}
+
+// buildCommitteeWithZeroShare is buildValidCommittee with the polynomial f = (x - zeroAt) * g, g random
+// of degree quorum-2: f still has degree quorum-1, but operator zeroAt's secret share is zero.
+func buildCommitteeWithZeroShare(t *testing.T, operatorIDs []uint64, zeroAt uint64) (spectypes.ValidatorPK, []*spectypes.ShareMember) {
+	threshold.Init()
+	quorum, _ := types.ComputeQuorumAndPartialQuorum(uint64(len(operatorIDs)))
+	g := make([]bls.Fr, quorum-1)
+	for i := range g {
+		g[i].SetByCSPRNG()
+	}
+	eval := func(x uint64) *bls.PublicKey {
+		var fx, acc, z, d bls.Fr
+		fx.SetInt64(int64(x))
+		for i := len(g) - 1; i >= 0; i-- { // Horner
+			bls.FrMul(&acc, &acc, &fx)
+			bls.FrAdd(&acc, &acc, &g[i])
+		}
+		z.SetInt64(int64(zeroAt))
+		bls.FrSub(&d, &fx, &z)
+		bls.FrMul(&acc, &acc, &d)
+		return bls.CastToSecretKey(&acc).GetPublicKey()
+	}
+
+	committee := make([]*spectypes.ShareMember, len(operatorIDs))
+	for i, id := range operatorIDs {
+		committee[i] = &spectypes.ShareMember{Signer: id, SharePubKey: eval(id).Serialize()}
+	}
+	return spectypes.ValidatorPK(eval(0).Serialize()), committee
 }
 
 func createPubKey(input byte) spectypes.ValidatorPK {

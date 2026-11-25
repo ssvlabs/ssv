@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
-	"math/rand"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -17,12 +17,15 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/libp2p/go-libp2p"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
+	ps_pb "github.com/libp2p/go-libp2p-pubsub/pb"
 	"github.com/libp2p/go-libp2p/core/host"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest/observer"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -30,7 +33,6 @@ import (
 	"github.com/ssvlabs/ssv/message/signatureverifier"
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/network/commons"
-	"github.com/ssvlabs/ssv/network/discovery"
 	"github.com/ssvlabs/ssv/network/topics"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability/log"
@@ -65,7 +67,7 @@ func TestTopicManager(t *testing.T) {
 
 		validator := &DummyMessageValidator{}
 
-		peers := newPeers(ctx, logger, t, nPeers, validator, true, nil)
+		peers := newPeers(ctx, logger, t, nPeers, validator, nil)
 		baseTest(t, ctx, logger, peers, cids, 1)
 	})
 
@@ -109,9 +111,72 @@ func TestTopicManager(t *testing.T) {
 		}
 
 		const nPeers = 4
-		peers := newPeers(ctx, logger, t, nPeers, validator, true, scoreInspector)
+		peers := newPeers(ctx, logger, t, nPeers, validator, scoreInspector)
 		banningTest(t, logger, peers, cids, scoreMap, &scoreMapMu)
 	})
+}
+
+// pubsub dedups by content. Two publishers of equal Data produce
+// pubsub messages with different From and Seqno; only the content-based
+// msg_id makes the receiver treat the second copy as a duplicate.
+//
+// The receiver's pubsub tracer is the sync point: it waits for a
+// DUPLICATE_MESSAGE event carrying the content msg_id. With gossipsub's
+// default ids (From+Seqno) that event can never occur, so the test
+// cannot pass on timing.
+func TestPubSubDedupsByContent(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	core, logs := observer.New(zapcore.DebugLevel)
+	receiver := newPeer(t, ctx, zap.New(core), &DummyMessageValidator{}, nil, func(cfg *topics.PubSubConfig) {
+		cfg.TraceLog = true
+	})
+	logger := log.TestLogger(t)
+	publishers := []*P{
+		newPeer(t, ctx, logger, &DummyMessageValidator{}, nil),
+		newPeer(t, ctx, logger, &DummyMessageValidator{}, nil),
+	}
+	// Connect the hosts directly: newPeers relies on local mDNS discovery.
+	for _, p := range publishers {
+		require.NoError(t, p.host.Connect(ctx, peer.AddrInfo{ID: receiver.host.ID(), Addrs: receiver.host.Addrs()}))
+	}
+
+	cid := "b768cdc2b2e0a859052bf04d1cd66383c96d95096a5287d08151494ce709556ba39c1300fbb902a0e2ebb7c31dc4e400"
+	// Take the topic from the live whitelist: publishers can only Join whitelisted topics,
+	// and under SSV_TEST_BOOLE_FORK=post that list holds only Boole topics.
+	all := commons.Topics(networkconfig.TestNetwork, networkconfig.TestNetwork.EstimatedCurrentSlot())
+	topic := all[len(all)-1]
+	require.NoError(t, receiver.tm.Subscribe(topic))
+
+	msg, err := dummyMsg(cid, 0, false)
+	require.NoError(t, err)
+	shared, err := msg.Encode()
+	require.NoError(t, err)
+
+	// The publishers join without subscribing, so each sends only to the receiver.
+	for i, p := range publishers {
+		pt, err := p.ps.Join(topic)
+		require.NoError(t, err)
+		require.Eventually(t, func() bool {
+			return slices.Contains(pt.ListPeers(), receiver.host.ID())
+		}, 10*time.Second, 50*time.Millisecond, "publisher %d does not see the receiver on the topic", i)
+		require.NoError(t, pt.Publish(ctx, shared))
+	}
+
+	contentID := hex.EncodeToString([]byte(topics.MsgID(shared)))
+	require.Eventually(t, func() bool {
+		for _, e := range logs.FilterField(zap.String("type", ps_pb.TraceEvent_DUPLICATE_MESSAGE.String())).All() {
+			if e.ContextMap()["msgID"] == contentID {
+				return true
+			}
+		}
+		return false
+	}, 10*time.Second, 50*time.Millisecond, "receiver never dropped the second copy as a duplicate of the content msg_id")
+
+	// Both copies have passed the seen-check; only the first can be delivered.
+	require.Eventually(t, func() bool { return receiver.getCount(topic) > 0 }, 10*time.Second, 50*time.Millisecond)
+	require.Equal(t, 1, receiver.getCount(topic))
 }
 
 func baseTest(t *testing.T, ctx context.Context, logger *zap.Logger, peers []*P, cids []string, minMsgCount int) {
@@ -357,15 +422,18 @@ func (p *P) saveMsg(t string, msg *pubsub.Message) {
 }
 
 // TODO: use p2p/testing
-func newPeers(ctx context.Context, logger *zap.Logger, t *testing.T, n int, msgValidator validation.MessageValidator, msgID bool, scoreInspector pubsub.ExtendedPeerScoreInspectFn) []*P {
-	// Per-call random mDNS tag so concurrent test processes running the same
-	// test don't cross-discover each other's peers.
-	mdnsTag := fmt.Sprintf("ssv.test.%016x", rand.Uint64()) //nolint: gosec // G404 is acceptable here
+func newPeers(ctx context.Context, logger *zap.Logger, t *testing.T, n int, msgValidator validation.MessageValidator, scoreInspector pubsub.ExtendedPeerScoreInspectFn) []*P {
 	peers := make([]*P, n)
 	for i := 0; i < n; i++ {
-		peers[i] = newPeer(t, ctx, logger, mdnsTag, msgValidator, msgID, scoreInspector)
+		peers[i] = newPeer(t, ctx, logger, msgValidator, scoreInspector)
 	}
 	t.Logf("%d peers were created", n)
+	// Wire a full mesh by address: with no discovery involved, it forms the same way on every machine.
+	for i, p := range peers {
+		for _, other := range peers[i+1:] {
+			require.NoError(t, p.host.Connect(ctx, peer.AddrInfo{ID: other.host.ID(), Addrs: other.host.Addrs()}))
+		}
+	}
 	th := uint64(n/2) + uint64(n/4)
 	require.Eventually(t, func() bool {
 		for _, p := range peers {
@@ -379,40 +447,16 @@ func newPeers(ctx context.Context, logger *zap.Logger, t *testing.T, n int, msgV
 	return peers
 }
 
-func newPeer(t *testing.T, ctx context.Context, logger *zap.Logger, mdnsTag string, msgValidator validation.MessageValidator, msgID bool, scoreInspector pubsub.ExtendedPeerScoreInspectFn) *P {
+func newPeer(t *testing.T, ctx context.Context, logger *zap.Logger, msgValidator validation.MessageValidator, scoreInspector pubsub.ExtendedPeerScoreInspectFn, cfgOpts ...func(*topics.PubSubConfig)) *P {
 	h, err := libp2p.New(libp2p.ListenAddrStrings("/ip4/0.0.0.0/tcp/0"))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = h.Close() })
 
-	ds, err := discovery.NewLocalDiscovery(ctx, logger, h, mdnsTag)
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		// ds.Close → mdnsService.Close → zeroconf.Server.Shutdown blocks
-		// waiting to multicast an unregister, which on a broken mDNS
-		// environment doesn't return — and that's exactly the timeout
-		// case this cleanup is meant to keep diagnosable. Cap it so the
-		// real failure (e.g. the newPeers connection wait) surfaces
-		// cleanly instead of the test hitting -timeout.
-		done := make(chan struct{})
-		go func() { _ = ds.Close(); close(done) }()
-		select {
-		case <-done:
-		case <-time.After(2 * time.Second):
-			t.Log("ds.Close timed out; leaking mdns goroutines")
-		}
-	})
-
 	var p *P
-	var midHandler topics.MsgIDHandler
-	if msgID {
-		midHandler = topics.NewMsgIDHandler(ctx, 2*time.Minute)
-		go midHandler.Start()
-	}
 	cfg := &topics.PubSubConfig{
 		NetworkConfig: networkconfig.TestNetwork,
 		Host:          h,
 		TraceLog:      false,
-		MsgIDHandler:  midHandler,
 		MsgHandler: func(_ context.Context, topic string, msg *pubsub.Message) error {
 			p.saveMsg(topic, msg)
 			return nil
@@ -425,6 +469,9 @@ func newPeer(t *testing.T, ctx context.Context, logger *zap.Logger, mdnsTag stri
 		ScoreInspector:         scoreInspector,
 		ScoreInspectorInterval: 100 * time.Millisecond,
 		// TODO: add mock for peers.ScoreIndex
+	}
+	for _, opt := range cfgOpts {
+		opt(cfg)
 	}
 
 	db, err := kv.NewInMemory(logger, basedb.Options{})
@@ -450,9 +497,6 @@ func newPeer(t *testing.T, ctx context.Context, logger *zap.Logger, mdnsTag stri
 			atomic.AddUint64(&p.connsCount, 1)
 		},
 	})
-	require.NoError(t, ds.Bootstrap(func(e discovery.PeerEvent) {
-		_ = h.Connect(ctx, e.AddrInfo)
-	}))
 
 	return p
 }

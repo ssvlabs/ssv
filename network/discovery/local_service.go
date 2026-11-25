@@ -35,15 +35,9 @@ type localDiscovery struct {
 
 // NewLocalDiscovery creates an mDNS discovery service and attaches it to the libp2p Host.
 // This lets us automatically discover peers on the same LAN and connect to them.
-// An empty serviceTag falls back to LocalDiscoveryServiceTag; tests use a unique tag
-// to isolate concurrently-running mDNS groups.
-func NewLocalDiscovery(ctx context.Context, logger *zap.Logger, host host.Host, serviceTag string) (Service, error) {
+func NewLocalDiscovery(ctx context.Context, logger *zap.Logger, host host.Host) (Service, error) {
 	logger = logger.Named(log.NameDiscoveryService)
 	logger.Debug("configuring mdns")
-
-	if serviceTag == "" {
-		serviceTag = LocalDiscoveryServiceTag
-	}
 
 	routingDHT, disc, err := NewKadDHT(ctx, host, dht.ModeServer)
 	if err != nil {
@@ -55,7 +49,7 @@ func NewLocalDiscovery(ctx context.Context, logger *zap.Logger, host host.Host, 
 		host:       host,
 		routingTbl: routingDHT,
 		disc:       disc,
-		svc: mdnsDiscover.NewMdnsService(host, serviceTag, &discoveryNotifee{
+		svc: mdnsDiscover.NewMdnsService(host, LocalDiscoveryServiceTag, &discoveryNotifee{
 			handler: handle(host, func(e PeerEvent) {
 				err := host.Connect(ctx, e.AddrInfo)
 				if err != nil {
@@ -112,6 +106,12 @@ func (md *localDiscovery) DeregisterSubnets(subnets ...uint64) (updated bool, er
 
 func (md *localDiscovery) PublishENR() {
 	// TODO
+}
+
+// DiscoveryStale implements Service. Local discovery has no discv5 socket to
+// wedge, so it's never stale.
+func (md *localDiscovery) DiscoveryStale(time.Duration) bool {
+	return false
 }
 
 // discoveryNotifee gets notified when we find a new peer via mDNS discovery

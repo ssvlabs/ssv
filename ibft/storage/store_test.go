@@ -253,8 +253,7 @@ func TestEncodeDecodeOperators(t *testing.T) {
 
 	for i, tc := range testCases {
 		t.Run(fmt.Sprintf("Case %d", i+1), func(t *testing.T) {
-			encoded, err := encodeOperators(tc.input)
-			require.Equal(t, err, nil)
+			encoded := encodeOperators(tc.input)
 			require.Equal(t, tc.encoded, encoded)
 
 			decoded := decodeOperators(encoded)

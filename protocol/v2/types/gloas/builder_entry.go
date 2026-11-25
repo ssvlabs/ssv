@@ -3,12 +3,15 @@ package gloas
 import (
 	"encoding/hex"
 	"fmt"
+	"net/netip"
 	"net/url"
 	"strings"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 
 	specssv "github.com/ssvlabs/ssv-spec/ssv"
+
+	"github.com/ssvlabs/ssv/utils/format"
 )
 
 // MaxBuilderEntries caps the configured direct-builder list (SIP #94 §5). It is SSV's own
@@ -50,11 +53,14 @@ func BuilderIdentity(url string, authData []byte) string {
 // apply to p2p (gossiped) bids and, per #88, double as the default for any Entry that omits its own;
 // each Entry names one builder to solicit a builder-API bid from.
 //
-// The whole config MUST be identical across ALL operators of every cluster sharing a validator:
-// AuthData is threshold-signed into BuilderRequestAuth, so any byte divergence splits the quorum and
-// silently disables that builder; the unsigned knobs steer bid selection per-operator, where
-// divergence is consensus-safe but leaves the effective policy to whoever leads the round. See
-// docs/EXTERNAL_BUILDERS.md.
+// The whole config MUST be identical across ALL operators of every cluster sharing a validator, except
+// each entry's URL (see docs/EXTERNAL_BUILDERS.md):
+//   - AuthData is threshold-signed into BuilderRequestAuth, so any byte divergence splits the quorum and
+//     silently disables that builder.
+//   - The unsigned knobs steer bid selection per operator: divergence is consensus-safe, but leaves the
+//     effective policy to whoever leads the round.
+//   - The URL isn't signed, so it may differ per operator (each pointing at its own sidecar, say). AuthData
+//     defaults to the URL's hostname, though, so differing hostnames need AuthData set explicitly.
 //
 // Entries' URL/AuthData drive the request-auth signing round (§5); the top-level knobs and the
 // per-entry resolution below drive the produceBlockV4 POST body (§4, beacon-APIs#630).
@@ -141,6 +147,38 @@ func DefaultAuthData(rawURL string) ([]byte, error) {
 	return data, nil
 }
 
+// LocalHostWithoutAuthData returns the URL's hostname and true when the entry omits AuthData and the
+// hostname looks local (see isLocalHost). Such a URL most likely points at a MEV-Boost or commit-boost
+// sidecar, which routes each request to the relay its auth data names: the hostname default names the
+// sidecar itself, matches no relay, and so gets no bids. A builder reached over a private network matches
+// too, so callers only warn.
+func (e *BuilderEntry) LocalHostWithoutAuthData() (string, bool) {
+	if e.AuthData != "" {
+		return "", false
+	}
+	u, err := url.Parse(e.URL)
+	if err != nil {
+		return "", false
+	}
+	host := strings.TrimSuffix(strings.ToLower(u.Hostname()), ".")
+	if host == "" || !isLocalHost(host) {
+		return "", false
+	}
+	return host, true
+}
+
+// isLocalHost reports whether host (lowercased, without a trailing dot) is a loopback, private (IPv6
+// unique-local included), link-local or unspecified IP, or a name that only resolves locally: a
+// single-label name (localhost, or a Docker service name such as mev-boost) or a .localhost, .local or
+// .internal name.
+func isLocalHost(host string) bool {
+	if addr, err := netip.ParseAddr(host); err == nil {
+		return addr.IsLoopback() || addr.IsPrivate() || addr.IsLinkLocalUnicast() || addr.IsUnspecified()
+	}
+	return !strings.Contains(host, ".") ||
+		strings.HasSuffix(host, ".localhost") || strings.HasSuffix(host, ".local") || strings.HasSuffix(host, ".internal")
+}
+
 // EffectiveMinBid resolves this entry's MinBid, inheriting the config default (keymanager-APIs#88)
 // when unset.
 func (e *BuilderEntry) EffectiveMinBid(cfg *BuilderConfig) uint64 {
@@ -166,6 +204,7 @@ func (e *BuilderEntry) EffectiveBoostFactor(cfg *BuilderConfig) uint64 {
 type ResolvedBuilderEntry struct {
 	Identity            string             // BuilderIdentity(URL, AuthData)
 	URL                 string             // the builder URL, verbatim
+	RedactedURL         string             // URL masked by format.RedactURL; logs carry this, never URL
 	AuthData            []byte             // exact bytes signed into BuilderRequestAuth.Data
 	BuilderPubKeys      []phase0.BLSPubKey // decoded bid-signing keys to pin; empty accepts any builder
 	MaxExecutionPayment uint64             // Gwei cap on trusted execution-layer payment
@@ -232,6 +271,7 @@ func ResolveBuilderConfig(cfg BuilderConfig) (ResolvedBuilderConfig, error) {
 		resolved.Entries = append(resolved.Entries, ResolvedBuilderEntry{
 			Identity:            identity,
 			URL:                 e.URL,
+			RedactedURL:         format.RedactURL(e.URL),
 			AuthData:            data,
 			BuilderPubKeys:      pubkeys,
 			MaxExecutionPayment: e.MaxExecutionPayment,

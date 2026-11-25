@@ -2,6 +2,7 @@ package types
 
 import (
 	"fmt"
+	"slices"
 	"testing"
 
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -133,6 +134,86 @@ func TestValidateSharePublicKeys(t *testing.T) {
 	})
 }
 
+func TestValidateSharePublicKeysRejectsIdentityKeys(t *testing.T) {
+	initBLS(t)
+
+	identity := append([]byte{0xc0}, make([]byte, 47)...)
+	ids4 := []uint64{1, 2, 3, 4}
+	ids7 := []uint64{1, 2, 3, 4, 5, 6, 7}
+
+	pubKeys := func(validatorSK *bls.SecretKey, shareSKs []*bls.SecretKey) ([]byte, [][]byte) {
+		sharePKs := make([][]byte, len(shareSKs))
+		for i, sk := range shareSKs {
+			sharePKs[i] = sk.GetPublicKey().Serialize()
+		}
+		return validatorSK.GetPublicKey().Serialize(), sharePKs
+	}
+
+	t.Run("control: no zero share", func(t *testing.T) {
+		validatorPK, sharePKs := pubKeys(zeroRootSplit(t, ids4, 2))
+		require.NoError(t, ValidateSharePublicKeys(validatorPK, ids4, sharePKs))
+	})
+
+	tests := []struct {
+		name   string
+		ids    []uint64
+		degree int
+		zeroAt []uint64
+	}{
+		{name: "one zero share", ids: ids4, degree: 2, zeroAt: []uint64{3}},
+		{name: "two zero shares", ids: ids4, degree: 2, zeroAt: []uint64{2, 3}},
+		{name: "zero share in base", ids: ids4, degree: 2, zeroAt: []uint64{1}},
+		{name: "identity validator key", ids: ids4, degree: 2, zeroAt: []uint64{0}},
+		{name: "7 operators, two zero shares", ids: ids7, degree: 4, zeroAt: []uint64{5, 7}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			validatorPK, sharePKs := pubKeys(zeroRootSplit(t, tt.ids, tt.degree, tt.zeroAt...))
+			for _, z := range tt.zeroAt {
+				if z == 0 {
+					require.Equal(t, identity, validatorPK)
+					continue
+				}
+				require.Equal(t, identity, sharePKs[slices.Index(tt.ids, z)], "share of operator %d", z)
+			}
+
+			err := ValidateSharePublicKeys(validatorPK, tt.ids, sharePKs)
+			require.ErrorIs(t, err, ErrInvalidSharePublicKeys)
+			require.ErrorContains(t, err, "identity point")
+		})
+	}
+
+	// The check must run on the decoded point, not on the bytes: the BLS library also decodes
+	// non-canonical infinity encodings (infinity flag set, non-zero trailing bytes) to the identity.
+	t.Run("non-canonical identity encoding", func(t *testing.T) {
+		nonCanonical := slices.Clone(identity)
+		nonCanonical[len(nonCanonical)-1] = 0x01
+		var pk bls.PublicKey
+		require.NoError(t, pk.Deserialize(nonCanonical))
+		require.True(t, pk.IsZero())
+
+		validatorPK, sharePKs := pubKeys(zeroRootSplit(t, ids4, 2, 3))
+		sharePKs[slices.Index(ids4, 3)] = nonCanonical
+
+		err := ValidateSharePublicKeys(validatorPK, ids4, sharePKs)
+		require.ErrorIs(t, err, ErrInvalidSharePublicKeys)
+		require.ErrorContains(t, err, "identity point")
+	})
+
+	t.Run("non-canonical identity validator key", func(t *testing.T) {
+		nonCanonical := slices.Clone(identity)
+		nonCanonical[len(nonCanonical)-1] = 0x01
+
+		// Shares of a polynomial with f(0) = 0 reconstruct the identity, so only the identity
+		// check on the decoded validator key can catch this.
+		_, sharePKs := pubKeys(zeroRootSplit(t, ids4, 2, 0))
+
+		err := ValidateSharePublicKeys(nonCanonical, ids4, sharePKs)
+		require.ErrorIs(t, err, ErrInvalidSharePublicKeys)
+		require.ErrorContains(t, err, "validator public key is the identity point")
+	})
+}
+
 // quorumSize returns the quorum of a committee of n operators.
 func quorumSize(n int) int {
 	quorum, _ := ComputeQuorumAndPartialQuorum(uint64(n))
@@ -163,6 +244,35 @@ func splitKey(tb testing.TB, ids []uint64, polyDegree int) ([]byte, [][]byte) {
 	}
 
 	return msk[0].GetPublicKey().Serialize(), sharePubKeys
+}
+
+// zeroRootSplit evaluates f = g * prod(x - z) over zeroAt, with g random of degree
+// degree-len(zeroAt): f has degree exactly `degree` and f(z) = 0. Returns f(0) and f(id) per id.
+func zeroRootSplit(tb testing.TB, ids []uint64, degree int, zeroAt ...uint64) (*bls.SecretKey, []*bls.SecretKey) {
+	g := make([]bls.Fr, degree-len(zeroAt)+1)
+	for i := range g {
+		g[i].SetByCSPRNG()
+	}
+	eval := func(x uint64) *bls.SecretKey {
+		var fx, acc bls.Fr
+		fx.SetInt64(int64(x))
+		for i := len(g) - 1; i >= 0; i-- { // Horner
+			bls.FrMul(&acc, &acc, &fx)
+			bls.FrAdd(&acc, &acc, &g[i])
+		}
+		for _, z := range zeroAt {
+			var fz, d bls.Fr
+			fz.SetInt64(int64(z))
+			bls.FrSub(&d, &fx, &fz)
+			bls.FrMul(&acc, &acc, &d)
+		}
+		return bls.CastToSecretKey(&acc)
+	}
+	shares := make([]*bls.SecretKey, len(ids))
+	for i, id := range ids {
+		shares[i] = eval(id)
+	}
+	return eval(0), shares
 }
 
 func BenchmarkValidateSharePublicKeys(b *testing.B) {

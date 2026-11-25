@@ -15,9 +15,11 @@ import (
 	"go.uber.org/zap/zaptest/observer"
 
 	exporterconfig "github.com/ssvlabs/ssv/exporter/config"
+	p2pv1 "github.com/ssvlabs/ssv/network/p2p"
 	"github.com/ssvlabs/ssv/networkconfig"
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
+	"github.com/ssvlabs/ssv/protocol/v2/types/gloas"
 	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
@@ -213,6 +215,29 @@ func Test_resolveAndValidate_proposerDelayEPBS(t *testing.T) {
 	})
 }
 
+// Test_resolveAndValidate_builderLocalHostWithoutAuthData checks the startup warning for a builder entry on a
+// local host without AuthData (likely a sidecar); gloas.TestBuilderEntry_LocalHostWithoutAuthData covers the
+// detection.
+func Test_resolveAndValidate_builderLocalHostWithoutAuthData(t *testing.T) {
+	core, recorded := observer.New(zapcore.WarnLevel)
+	c := config{}
+	c.OperatorPrivateKey = testOperatorKey
+	c.Builders.Entries = []gloas.BuilderEntry{
+		{URL: "https://relay.example.com"},
+		{URL: "http://user:secret@mev-boost:18550"},
+		{URL: "http://localhost:18550", AuthData: "0x72656c61792e6578616d706c652e636f6d"}, // hex("relay.example.com")
+	}
+
+	_, err := c.resolveAndValidate(zap.New(core))
+	require.NoError(t, err)
+
+	logs := recorded.FilterMessageSnippet("omits AuthData").All()
+	require.Len(t, logs, 1, "only the local entry without AuthData warns")
+	fields := logs[0].ContextMap()
+	require.Equal(t, int64(1), fields["builder_entry_index"])
+	require.Equal(t, "mev-boost", fields["builder_host"], "only the hostname is logged, never the URL's credentials")
+}
+
 // Test_resolveAndValidate_signingErrorContext verifies resolveAndValidate enriches a signing
 // error with the configured-source context, without exposing the private key value.
 func Test_resolveAndValidate_signingErrorContext(t *testing.T) {
@@ -267,6 +292,37 @@ func Test_resolveAndValidate_mode(t *testing.T) {
 		_, err := c.resolveAndValidate(zap.NewNop())
 		require.Error(t, err)
 		require.Contains(t, err.Error(), msgInvalidExporterMode)
+	})
+}
+
+// Test_resolveAndValidate_discovery loads p2p.Discovery the way an operator sets it, and checks that a known mode
+// passes validation while an unknown one fails it up front, rather than when the network starts.
+func Test_resolveAndValidate_discovery(t *testing.T) {
+	validate := func(t *testing.T, c config) error {
+		c.OperatorPrivateKey = testOperatorKey
+		_, err := c.resolveAndValidate(zap.NewNop())
+		return err
+	}
+
+	t.Run("YAML mode", func(t *testing.T) {
+		var c config
+		require.NoError(t, c.load(writeConfig(t, "p2p:\n  Discovery: none\n"), ""))
+		require.Equal(t, p2pv1.DiscoveryNone, c.P2pNetworkConfig.Discovery)
+		require.NoError(t, validate(t, c))
+	})
+
+	t.Run("env mode", func(t *testing.T) {
+		t.Setenv("P2P_DISCOVERY", "mdns")
+		var c config
+		require.NoError(t, c.load(writeConfig(t, ""), ""))
+		require.Equal(t, p2pv1.DiscoveryMDNS, c.P2pNetworkConfig.Discovery)
+		require.NoError(t, validate(t, c))
+	})
+
+	t.Run("unknown mode -> error", func(t *testing.T) {
+		var c config
+		require.NoError(t, c.load(writeConfig(t, "p2p:\n  Discovery: nome\n"), ""))
+		require.ErrorContains(t, validate(t, c), `unknown discovery mode "nome"`)
 	})
 }
 

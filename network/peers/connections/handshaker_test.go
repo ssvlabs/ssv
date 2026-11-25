@@ -5,6 +5,7 @@ import (
 	"time"
 
 	libp2pcrypto "github.com/libp2p/go-libp2p/core/crypto"
+	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/stretchr/testify/require"
 
@@ -20,10 +21,33 @@ import (
 type recordingNodeInfoIndex struct {
 	mock.NodeInfoIndex
 	setCalls []peer.ID
+	onSet    func()
 }
 
 func (r *recordingNodeInfoIndex) SetNodeInfo(id peer.ID, _ *records.NodeInfo) {
 	r.setCalls = append(r.setCalls, id)
+	if r.onSet != nil {
+		r.onSet()
+	}
+}
+
+func (r *recordingNodeInfoIndex) RemovePeer(id peer.ID) {
+	for i, setID := range r.setCalls {
+		if setID == id {
+			r.setCalls = append(r.setCalls[:i], r.setCalls[i+1:]...)
+			return
+		}
+	}
+}
+
+type recordingPeerStateIndex struct {
+	peers.PeerStateIndex
+	nodeInfos *recordingNodeInfoIndex
+}
+
+func (i *recordingPeerStateIndex) RemovePeerState(id peer.ID) {
+	i.PeerStateIndex.RemovePeerState(id)
+	i.nodeInfos.RemovePeer(id)
 }
 
 var _ peers.NodeInfoIndex = (*recordingNodeInfoIndex)(nil)
@@ -62,6 +86,57 @@ func TestHandshakeTestData(t *testing.T) {
 		td.Handshaker.streams = mock.StreamController{}
 		require.Error(t, td.Handshaker.Handshake(testLogger, td.Conn))
 	})
+}
+
+func TestHandshakeDoesNotStoreDisconnectedPeer(t *testing.T) {
+	td := getTestingData(t)
+	net := td.Handshaker.net.(mock.Net)
+	net.MockConnectedness = libp2pnetwork.NotConnected
+	td.Handshaker.net = net
+	recorder := &recordingNodeInfoIndex{NodeInfoIndex: td.Handshaker.nodeInfos.(mock.NodeInfoIndex)}
+	td.Handshaker.nodeInfos = recorder
+	td.Handshaker.peerStateIdx = &recordingPeerStateIndex{
+		PeerStateIndex: td.Handshaker.peerStateIdx,
+		nodeInfos:      recorder,
+	}
+
+	require.NoError(t, td.Handshaker.Handshake(log.TestLogger(t), td.Conn))
+
+	require.Nil(t, td.Handshaker.peerInfos.PeerInfo(td.SenderPeerID))
+	_, ok := td.Handshaker.subnetsIdx.GetPeerSubnets(td.SenderPeerID)
+	require.False(t, ok)
+	require.Empty(t, recorder.setCalls)
+}
+
+func TestHandshakeCleansStateWhenPeerDisconnectsBeforePostCheck(t *testing.T) {
+	td := getTestingData(t)
+	connected := true
+	net := td.Handshaker.net.(mock.Net)
+	net.ConnectednessFunc = func(peer.ID) libp2pnetwork.Connectedness {
+		if connected {
+			return libp2pnetwork.Connected
+		}
+		return libp2pnetwork.NotConnected
+	}
+	td.Handshaker.net = net
+	recorder := &recordingNodeInfoIndex{
+		NodeInfoIndex: td.Handshaker.nodeInfos.(mock.NodeInfoIndex),
+		onSet: func() {
+			connected = false
+		},
+	}
+	td.Handshaker.nodeInfos = recorder
+	td.Handshaker.peerStateIdx = &recordingPeerStateIndex{
+		PeerStateIndex: td.Handshaker.peerStateIdx,
+		nodeInfos:      recorder,
+	}
+
+	require.NoError(t, td.Handshaker.Handshake(log.TestLogger(t), td.Conn))
+
+	require.Nil(t, td.Handshaker.peerInfos.PeerInfo(td.SenderPeerID))
+	_, ok := td.Handshaker.subnetsIdx.GetPeerSubnets(td.SenderPeerID)
+	require.False(t, ok)
+	require.Empty(t, recorder.setCalls)
 }
 
 // TestVerifyTheirNodeInfo_RejectsNilMetadata covers the case where a peer sends

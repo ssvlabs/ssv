@@ -347,6 +347,141 @@ func TestValidRoundChangeForDataIgnoreSignatureValidationBranches(t *testing.T) 
 		err := env.inst.validRoundChangeForDataIgnoreSignature(msg, 2, fullData)
 		require.ErrorContains(t, err, "round change justification invalid")
 	})
+
+	t.Run("unprepared with full data", func(t *testing.T) {
+		// The shared check follows the spec (it also validates round changes embedded in a
+		// proposal); only a round change received on its own refuses full data.
+		msg := env.roundChange(2, 1, specqbft.NoRound, root, fullData, nil)
+		require.NoError(t, env.inst.validRoundChangeForDataIgnoreSignature(msg, 2, nil))
+		require.ErrorContains(t, env.inst.BaseMsgValidation(msg), "unprepared round change with full data")
+	})
+}
+
+func TestUnpreparedRoundChangeWithFullDataIsNotStored(t *testing.T) {
+	t.Run("root matches full data", func(t *testing.T) {
+		env := newInstanceTestEnv(t, 1)
+		env.inst.Start(t.Context(), []byte("start-value"), testValueChecker{})
+
+		fullData := make([]byte, 1<<20)
+		root := env.hash(fullData)
+
+		for _, round := range []specqbft.Round{1, 2} {
+			_, _, _, err := env.inst.ProcessMsg(t.Context(), zap.NewNop(), env.roundChange(round, 2, specqbft.NoRound, root, fullData, nil))
+			require.ErrorContains(t, err, "unprepared round change with full data")
+		}
+		require.Empty(t, env.inst.State.RoundChangeContainer.AllMessages())
+	})
+
+	t.Run("root unrelated to full data", func(t *testing.T) {
+		env := newInstanceTestEnv(t, 1)
+		env.inst.Start(t.Context(), []byte("start-value"), testValueChecker{})
+
+		_, _, _, err := env.inst.ProcessMsg(t.Context(), zap.NewNop(), env.roundChange(2, 2, specqbft.NoRound, [32]byte{0xAA}, []byte("x"), nil))
+		require.ErrorContains(t, err, "unprepared round change with full data")
+		require.Empty(t, env.inst.State.RoundChangeContainer.AllMessages())
+	})
+}
+
+func TestWellFormedRoundChangesAccepted(t *testing.T) {
+	newEnv := func(t *testing.T) *instanceTestEnv {
+		env := newInstanceTestEnv(t, 1)
+		env.inst.Start(t.Context(), []byte("start-value"), testValueChecker{})
+		require.Equal(t, specqbft.FirstRound, env.inst.State.Round)
+		return env
+	}
+
+	t.Run("unprepared with zero root", func(t *testing.T) {
+		env := newEnv(t)
+		_, _, _, err := env.inst.ProcessMsg(t.Context(), zap.NewNop(), env.roundChange(2, 2, specqbft.NoRound, [32]byte{}, nil, nil))
+		require.NoError(t, err)
+		require.Len(t, env.inst.State.RoundChangeContainer.MessagesForRound(2), 1)
+	})
+
+	t.Run("unprepared with non-zero root", func(t *testing.T) {
+		// No rule on Root: it is signed, and with no full data there is nothing to bind it to.
+		env := newEnv(t)
+		_, _, _, err := env.inst.ProcessMsg(t.Context(), zap.NewNop(), env.roundChange(2, 2, specqbft.NoRound, [32]byte{1}, nil, nil))
+		require.NoError(t, err)
+		require.Len(t, env.inst.State.RoundChangeContainer.MessagesForRound(2), 1)
+	})
+
+	t.Run("prepared with full data", func(t *testing.T) {
+		env := newEnv(t)
+		value := []byte("prepared-value")
+		root := env.hash(value)
+		msg := env.roundChange(2, 2, 1, root, value, []*specqbft.ProcessingMessage{
+			env.prepare(1, 1, root),
+			env.prepare(1, 2, root),
+			env.prepare(1, 3, root),
+		})
+
+		_, _, _, err := env.inst.ProcessMsg(t.Context(), zap.NewNop(), msg)
+		require.NoError(t, err)
+
+		stored := env.inst.State.RoundChangeContainer.MessagesForRound(2)
+		require.Len(t, stored, 1)
+		require.Equal(t, value, stored[0].SignedMessage.FullData)
+	})
+}
+
+func TestProposalWithUnpreparedRoundChangeJustificationsStillValid(t *testing.T) {
+	env := newInstanceTestEnv(t, 2)
+	env.setLeader(1)
+	env.inst.State.Round = 2
+
+	value := []byte("proposal-value")
+	roundChanges := []*specqbft.ProcessingMessage{
+		env.roundChange(2, 1, specqbft.NoRound, [32]byte{}, nil, nil),
+		env.roundChange(2, 2, specqbft.NoRound, [32]byte{}, nil, nil),
+		env.roundChange(2, 3, specqbft.NoRound, [32]byte{}, nil, nil),
+	}
+	proposal := env.proposal(2, 1, value, env.hash(value), roundChanges, nil)
+
+	require.NoError(t, env.inst.BaseMsgValidation(proposal))
+}
+
+// The full-data rule applies only to round changes received on their own, so a proposal embedding an
+// unprepared round change that carries FullData stays valid. When the spec pin
+// includes ssv-spec#673, Message.Validate refuses such an embedded justification with the spec's
+// JustificationWithFullDataErrorCode, so the GetRoundChangeJustifications pre-check below fails first
+// and this test should expect that error instead.
+// The unprepared round change full-data check runs only on round changes received on their own,
+// but a proposal that embeds one with full data is still refused: validateMsg refuses full data in
+// any justification. Leaders never build one, since MarshalJustifications strips full data.
+func TestProposalWithUnpreparedRoundChangeJustificationWithFullDataRejected(t *testing.T) {
+	env := newInstanceTestEnv(t, 2)
+	env.setLeader(1)
+	env.inst.State.Round = 2
+
+	value := []byte("proposal-value")
+	roundChanges := []*specqbft.ProcessingMessage{
+		env.roundChange(2, 1, specqbft.NoRound, [32]byte{}, []byte("junk"), nil),
+		env.roundChange(2, 2, specqbft.NoRound, [32]byte{}, nil, nil),
+		env.roundChange(2, 3, specqbft.NoRound, [32]byte{}, nil, nil),
+	}
+
+	// Marshal the round changes directly: MarshalJustifications would strip their FullData.
+	justifications := make([][]byte, 0, len(roundChanges))
+	for _, rc := range roundChanges {
+		b, err := rc.SignedMessage.MarshalSSZ()
+		require.NoError(t, err)
+		justifications = append(justifications, b)
+	}
+
+	proposal := env.processingMessage(&specqbft.Message{
+		MsgType:                  specqbft.ProposalMsgType,
+		Height:                   env.inst.State.Height,
+		Round:                    2,
+		Identifier:               env.inst.State.ID,
+		Root:                     env.hash(value),
+		RoundChangeJustification: justifications,
+	}, 1, value)
+
+	embedded, err := proposal.QBFTMessage.GetRoundChangeJustifications()
+	require.NoError(t, err)
+	require.Equal(t, []byte("junk"), embedded[0].FullData)
+
+	require.ErrorContains(t, env.inst.BaseMsgValidation(proposal), "justification with full data")
 }
 
 func TestValidRoundChangeForDataIgnoreSignatureRejectsInvalidPreparedJustification(t *testing.T) {

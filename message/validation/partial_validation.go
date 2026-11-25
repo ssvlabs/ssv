@@ -55,7 +55,16 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 		return partialSignatureMessages, err
 	}
 
-	state := mv.validatorState(ssvMessage.GetID(), committeeInfo)
+	// The stateless checks above (size, decode, topic, domain, semantics) run without the per-message
+	// validation mutex, so a message that fails them creates no lock entry.
+	if err := ctx.Err(); err != nil {
+		return partialSignatureMessages, err
+	}
+	validationMu := mv.getValidationLock(ssvMessage.GetID())
+	validationMu.Lock()
+	defer validationMu.Unlock()
+
+	state, cached := mv.peekValidatorState(ssvMessage.GetID(), committeeInfo)
 	if err := mv.validatePartialSigMessagesByDutyLogic(signedSSVMessage, partialSignatureMessages, committeeInfo, receivedFrom, receivedAt, state); err != nil {
 		return partialSignatureMessages, err
 	}
@@ -72,6 +81,9 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 		return partialSignatureMessages, e
 	}
 
+	if !cached {
+		mv.storeValidatorState(ssvMessage.GetID(), state)
+	}
 	if err := mv.updatePartialSignatureState(partialSignatureMessages, receivedFrom, state, signer, committeeInfo); err != nil {
 		return partialSignatureMessages, err
 	}

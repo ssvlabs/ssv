@@ -121,7 +121,10 @@ func (es *EventSyncer) syncHistory(ctx context.Context, fromBlock uint64) (
 	// Process all the logs fetched until there are no more.
 	lastProcessedBlock, progressed, err = es.eventHandler.HandleBlockEventsStream(ctx, fetchLogsCh, false)
 	if err != nil {
-		return lastProcessedBlock, progressed, fmt.Errorf("handle block events stream (last processed block = %d): %w", lastProcessedBlock, err), true
+		// Not retryable: the failed block's transaction is discarded, but its earlier share changes stay in memory,
+		// where a retry would find them and skip a registration as already stored, or a removal as not found. Only
+		// a restart reloads memory from the database.
+		return lastProcessedBlock, progressed, fmt.Errorf("handle block events stream (last processed block = %d): %w", lastProcessedBlock, err), false
 	}
 
 	// Check there were no fetch-related errors.
@@ -130,7 +133,7 @@ func (es *EventSyncer) syncHistory(ctx context.Context, fromBlock uint64) (
 		errs = errors.Join(errs, err)
 	}
 	if errs != nil {
-		return lastProcessedBlock, progressed, fmt.Errorf("handle block events stream (last processed block = %d): %w", lastProcessedBlock, errs), true
+		return lastProcessedBlock, progressed, fmt.Errorf("fetch historical events (last processed block = %d): %w", lastProcessedBlock, errs), true
 	}
 
 	// Sanity-check we are not replaying events - this should never happen!
@@ -146,7 +149,9 @@ func (es *EventSyncer) syncHistory(ctx context.Context, fromBlock uint64) (
 	return lastProcessedBlock, progressed, nil, false
 }
 
-// SyncHistory reads and processes historical events since the given fromBlock.
+// SyncHistory reads and processes historical events since the given fromBlock. It retries fetch errors and a stale
+// last block, but not an event handler error: after one, memory may be ahead of the database, so the caller must
+// exit instead of syncing again.
 func (es *EventSyncer) SyncHistory(ctx context.Context, fromBlock uint64) (lastProcessedBlock uint64, errs error) {
 	const maxTries = 3
 	for i := 0; i < maxTries; i++ {

@@ -25,7 +25,7 @@ type peersIndex struct {
 	netKeyProvider NetworkKeyProvider
 	network        libp2pnetwork.Network
 
-	scoreIdx ScoreIndex
+	scoreIdx *scoresIndex
 	SubnetsIndex
 	PeerInfoIndex
 
@@ -146,7 +146,13 @@ func (pi *peersIndex) NodeInfo(id peer.ID) *records.NodeInfo {
 
 // Score adds score to the given peer
 func (pi *peersIndex) Score(id peer.ID, scores ...*NodeScore) error {
-	return pi.scoreIdx.Score(id, scores...)
+	if err := pi.scoreIdx.Score(id, scores...); err != nil {
+		return err
+	}
+	if pi.State(id) == StateUnknown {
+		pi.scoreIdx.RemovePeer(id)
+	}
+	return nil
 }
 
 // GetScore returns the desired score for the given peer
@@ -157,6 +163,13 @@ func (pi *peersIndex) GetScore(id peer.ID, names ...string) ([]NodeScore, error)
 	}
 
 	return pi.scoreIdx.GetScore(id, names...)
+}
+
+// RemovePeerState implements PeerStateIndex. RemovePeer, promoted from SubnetsIndex, removes subnets only.
+func (pi *peersIndex) RemovePeerState(id peer.ID) {
+	pi.Remove(id)
+	pi.RemovePeer(id)
+	pi.scoreIdx.RemovePeer(id)
 }
 
 func (pi *peersIndex) GetSubnetsStats() *SubnetsStats {

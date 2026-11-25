@@ -20,7 +20,7 @@ const (
 // SubmitExecutionPayloadEnvelope publishes the §6 reveal as SSZ to all configured beacon nodes concurrently,
 // succeeding if at least one accepts it. Carrying the blob data lets every node broadcast it, so the reveal
 // has the same all-node redundancy as the §4 block publish. Re-publishing is safe — nodes dedupe by block
-// root. Hand-rolled: it predates the go-eth2-client fork's typed envelope calls.
+// root. Hand-rolled: it predates the go-eth2-client fork's typed envelope calls (issue #3014).
 func (gc *GoClient) SubmitExecutionPayloadEnvelope(ctx context.Context, contents *gloas.SignedExecutionPayloadEnvelopeContents) error {
 	body, err := contents.MarshalSSZ()
 	if err != nil {
@@ -39,7 +39,7 @@ func (gc *GoClient) SubmitExecutionPayloadEnvelope(ctx context.Context, contents
 // already-known answer counts as success (see gloasPublishSSZ): the builder operator publishes to each of
 // its beacon nodes, and operators sharing a beacon node both publish the identical reveal, so a node can
 // receive it twice.
-func submitExecutionPayloadEnvelope(ctx context.Context, addr string, contentsSSZ []byte) error {
+func submitExecutionPayloadEnvelope(ctx context.Context, addr unmaskedAddr, contentsSSZ []byte) error {
 	headers := map[string]string{blobDataIncludedHeader: "true"}
-	return gloasPublishSSZ(ctx, addr+gloasPublishEnvelopePath, contentsSSZ, headers)
+	return gloasPublishSSZ(ctx, addr, gloasPublishEnvelopePath, contentsSSZ, headers)
 }

@@ -174,3 +174,27 @@ func TestUpdatePeerSubnets_Removal(t *testing.T) {
 		})
 	}
 }
+
+func TestSubnetsIndexRemovePeer(t *testing.T) {
+	index := NewSubnetsIndex()
+	removed := peer.ID("removed")
+	remaining := peer.ID("remaining")
+	removedSubnets := commons.ZeroSubnets
+	removedSubnets.Set(1)
+	removedSubnets.Set(2)
+	remainingSubnets := commons.ZeroSubnets
+	remainingSubnets.Set(1)
+
+	index.UpdatePeerSubnets(removed, removedSubnets)
+	index.UpdatePeerSubnets(remaining, remainingSubnets)
+	index.RemovePeer(peer.ID("never-indexed"))
+	index.RemovePeer(removed)
+
+	_, ok := index.GetPeerSubnets(removed)
+	require.False(t, ok)
+	require.Equal(t, []peer.ID{remaining}, index.GetSubnetPeers(1))
+	require.Empty(t, index.GetSubnetPeers(2))
+	stats := index.GetSubnetsStats()
+	require.Equal(t, 1, stats.PeersCount[1])
+	require.Equal(t, 0, stats.PeersCount[2])
+}

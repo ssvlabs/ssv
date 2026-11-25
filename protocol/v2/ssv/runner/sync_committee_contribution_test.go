@@ -146,7 +146,7 @@ func TestSyncCommitteeAggregatorProcessPostConsensusSubmitsEachRoot(t *testing.T
 	err = runner.ProcessPostConsensus(ctx, logger, msg(3))
 	require.ErrorContains(t, err, "invalid signatures")
 	require.True(t, isRecoverableReconstructError(err))
-	requireSpecCode(t, err, spectypes.PostConsensusQuorumWithInvalidSignatures)
+	requireSpecCode(t, err, spectypes.ReconstructSignatureErrorCode)
 	require.ElementsMatch(t, []uint64{0, 1}, testBeacon.submittedSubnets, "subnet 2 doesn't hold back the others")
 	require.Empty(t, concluded, "the failed reconstruct is recoverable, so the duty is not concluded failed")
 

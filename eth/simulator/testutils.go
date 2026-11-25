@@ -14,10 +14,16 @@
 // You should have received a copy of the GNU Lesser General Public License
 // along with the go-ethereum library. If not, see <http://www.gnu.org/licenses/>.
 
+// Copy of go-ethereum's ethclient/simulated/backend.go, last synced with v1.17.8.
+// On each go-ethereum bump, sync it with upstream, keeping these deliberate differences:
+//   - Node() is added, so tests can reach the node (e.g. its RPC handler).
+//   - Rollback, Fork and AdjustTime are dropped as unused.
+
 package simulator
 
 import (
 	"errors"
+	"maps"
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
@@ -66,9 +72,9 @@ type Backend struct {
 	client simClient
 }
 
-// Node returns the internal *node.Node to be used by tests.
-func (b *Backend) Node() *node.Node {
-	return b.node
+// Node returns the underlying node.
+func (n *Backend) Node() *node.Node {
+	return n.node
 }
 
 // NewBackend creates a new simulated blockchain that can be used as a backend for
@@ -82,14 +88,22 @@ func NewBackend(alloc types.GenesisAlloc, options ...func(nodeConf *node.Config,
 	nodeConf.DataDir = ""
 	nodeConf.P2P = p2p.Config{NoDiscovery: true}
 
+	// The dev chain starts out on every fork, so the system contracts those forks
+	// call into have to be present from genesis. The caller's alloc wins on
+	// conflict, and is copied rather than mutated in place.
+	genesisAlloc := core.SystemContractAllocs()
+	maps.Copy(genesisAlloc, alloc)
+
 	ethConf := ethconfig.Defaults
 	ethConf.Genesis = &core.Genesis{
 		Config:   params.AllDevChainProtocolChanges,
 		GasLimit: ethconfig.Defaults.Miner.GasCeil,
-		Alloc:    alloc,
+		Alloc:    genesisAlloc,
 	}
 	ethConf.SyncMode = ethconfig.FullSync
 	ethConf.TxPool.NoLocals = true
+	// Disable log indexing to force unindexed log search
+	ethConf.LogNoHistory = true
 
 	for _, option := range options {
 		option(&nodeConf, &ethConf)

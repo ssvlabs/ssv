@@ -52,8 +52,9 @@ type ExecutionClient struct {
 
 	logger *zap.Logger
 
-	reqTimeout    time.Duration
-	reqRetryDelay time.Duration
+	reqTimeout      time.Duration
+	reqRetryDelay   time.Duration
+	bloomRetryDelay time.Duration
 
 	syncDistanceTolerance uint64
 	// syncProgressFn is a struct-field so it can be overwritten for testing
@@ -75,6 +76,7 @@ func New(ctx context.Context, nodeAddr string, contractAddr ethcommon.Address, o
 		logger:                     zap.NewNop(),
 		reqTimeout:                 DefaultReqTimeout,
 		reqRetryDelay:              DefaultReqRetryDelay,
+		bloomRetryDelay:            DefaultBloomRetryDelay,
 		healthInvalidationInterval: DefaultHealthInvalidationInterval,
 		syncDistanceTolerance:      DefaultSyncDistanceTolerance,
 		closed:                     make(chan struct{}),
@@ -169,18 +171,13 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, e
 		defer close(logCh)
 		defer close(errCh)
 
-		const logBatchSize = 200 // TODO Make batch of logs adaptive depending on "websocket: read limit"
+		const logBatchSize = 200 // subdivideLogFetch splits a batch the EL fails to serve
 
 		for fromBlock := startBlock; fromBlock <= endBlock; fromBlock += logBatchSize {
 			toBlock := min(fromBlock+logBatchSize-1, endBlock)
 
 			start := time.Now()
-			query := ethereum.FilterQuery{
-				Addresses: []ethcommon.Address{ec.contractAddress},
-				FromBlock: new(big.Int).SetUint64(fromBlock),
-				ToBlock:   new(big.Int).SetUint64(toBlock),
-			}
-			results, err := ec.subdivideLogFetch(ctx, query)
+			results, err := ec.subdivideLogFetch(ctx, fromBlock, toBlock, 0)
 			if errors.Is(err, context.Canceled) {
 				return
 			}
@@ -248,10 +245,12 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, e
 	return logCh, errCh
 }
 
-// subdivideLogFetch handles log fetching with automatic subdivision on query limit errors.
-// It first attempts a direct fetch, and if that fails with a query limit error, it subdivides
-// the block range and tries again with smaller chunks.
-func (ec *ExecutionClient) subdivideLogFetch(ctx context.Context, q ethereum.FilterQuery) ([]ethtypes.Log, error) {
+// subdivideLogFetch fetches the contract's logs in [fromBlock, toBlock]. If eth_getLogs fails while ctx is alive and
+// the client is open, it fetches each half of the range the same way, since ELs refuse a range that is too large in
+// their own ways: custom error codes, a reply slower than reqTimeout, or one over the websocket read limit, which
+// drops the connection until go-ethereum redials on the next request. A failure on a single block fails the whole
+// range, so an EL that fails every request costs 9 of them per 200-block batch. depth is 0 for a batch.
+func (ec *ExecutionClient) subdivideLogFetch(ctx context.Context, fromBlock, toBlock uint64, depth int) ([]ethtypes.Log, error) {
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
@@ -260,67 +259,38 @@ func (ec *ExecutionClient) subdivideLogFetch(ctx context.Context, q ethereum.Fil
 	default:
 	}
 
-	logs, err := ec.FilterLogs(ctx, q)
+	logs, err := ec.FilterLogs(ctx, ethereum.FilterQuery{
+		Addresses: []ethcommon.Address{ec.contractAddress},
+		FromBlock: new(big.Int).SetUint64(fromBlock),
+		ToBlock:   new(big.Int).SetUint64(toBlock),
+	})
 	if err == nil {
 		return logs, nil
 	}
-	err = ec.errSingleClient(fmt.Errorf("get filtered logs: %w", err), "eth_getLogs")
-
-	if isRPCQueryLimitError(err) {
-		if q.FromBlock == nil || q.ToBlock == nil {
-			return nil, err
-		}
-
-		fromBlock := q.FromBlock.Uint64()
-		toBlock := q.ToBlock.Uint64()
-
-		// require at least 2 blocks to subdivide (fromBlock must be less than toBlock)
-		if fromBlock >= toBlock {
-			return nil, fmt.Errorf("insufficient blocks to subdivide (fromBlock: %d, toBlock: %d): %w", fromBlock, toBlock, err)
-		}
-
-		// Query-limit subdivision is an expected, self-healing fallback that recurses,
-		// so log at debug; a genuine failure to fetch surfaces as an error upstream.
-		ec.logger.Debug("execution client query limit exceeded, subdividing query",
-			zap.String("method", "eth_getLogs"),
-			fields.FromBlock(fromBlock),
-			fields.ToBlock(toBlock),
-			zap.Error(err))
-
-		midBlock := fromBlock + (toBlock-fromBlock)/2
-
-		leftQuery := q
-		leftQuery.FromBlock = new(big.Int).SetUint64(fromBlock)
-		leftQuery.ToBlock = new(big.Int).SetUint64(midBlock)
-
-		rightQuery := q
-		rightQuery.FromBlock = new(big.Int).SetUint64(midBlock + 1)
-		rightQuery.ToBlock = new(big.Int).SetUint64(toBlock)
-
-		leftLogs, leftErr := ec.subdivideLogFetch(ctx, leftQuery)
-		if leftErr != nil {
-			return nil, leftErr
-		}
-
-		rightLogs, rightErr := ec.subdivideLogFetch(ctx, rightQuery)
-		if rightErr != nil {
-			return nil, rightErr
-		}
-
-		totalLogs := len(leftLogs) + len(rightLogs)
-		combinedLogs := make([]ethtypes.Log, 0, totalLogs)
-		combinedLogs = append(combinedLogs, leftLogs...)
-		combinedLogs = append(combinedLogs, rightLogs...)
-
-		ec.logger.Debug("successfully fetched logs after subdivision",
-			fields.FromBlock(fromBlock),
-			fields.ToBlock(toBlock),
-			zap.Int("total_logs", totalLogs))
-
-		return combinedLogs, nil
+	if fromBlock >= toBlock || ctx.Err() != nil || isSingleClientInterruptedError(err) {
+		return nil, err
 	}
 
-	return nil, err
+	// Info for a batch's first split so operators see it, Debug for the possibly many deeper ones.
+	logSplit := ec.logger.Debug
+	if depth == 0 {
+		logSplit = ec.logger.Info
+	}
+	logSplit("eth_getLogs failed, splitting the block range",
+		fields.FromBlock(fromBlock),
+		fields.ToBlock(toBlock),
+		zap.Error(err))
+
+	midBlock := fromBlock + (toBlock-fromBlock)/2
+	leftLogs, err := ec.subdivideLogFetch(ctx, fromBlock, midBlock, depth+1)
+	if err != nil {
+		return nil, err
+	}
+	rightLogs, err := ec.subdivideLogFetch(ctx, midBlock+1, toBlock, depth+1)
+	if err != nil {
+		return nil, err
+	}
+	return append(leftLogs, rightLogs...), nil
 }
 
 // StreamLogs subscribes to events emitted by the Ethereum SSV contract(s) starting at fromBlock.
@@ -450,8 +420,6 @@ func (ec *ExecutionClient) isClosed() bool {
 // streamLogsToChan streams ongoing logs from the given block to the given channel. This func blocks forever until
 // it returns an error along with the progressed-flag indicating whether or not it was able to stream at least 1 block,
 // and, when progressed=true, the last block number that streamed to logCh.
-//
-// TODO: consider handling "websocket: read limit exceeded" error and reducing batch size (syncSmartContractsEvents has code for this)
 func (ec *ExecutionClient) streamLogsToChan(
 	ctx context.Context,
 	logCh chan<- BlockLogs,

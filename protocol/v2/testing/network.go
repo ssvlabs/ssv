@@ -4,6 +4,7 @@ import (
 	"crypto/rsa"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 
@@ -32,7 +33,4 @@ func (n *TestingNetwork) Unsubscribe(_ spectypes.ValidatorPK) error {
 
 func (n *TestingNetwork) BroadcastAtSlot(message *spectypes.SignedSSVMessage, _ phase0.Slot) error {
 	return n.Broadcast(message.SSVMessage.GetID(), message)
-}
-
-func (n *TestingNetwork) ReportValidation(_ *spectypes.SSVMessage, _ protocolp2p.MsgValidationResult) {
 }

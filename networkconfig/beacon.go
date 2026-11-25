@@ -2,6 +2,7 @@ package networkconfig
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"math"
@@ -305,13 +306,6 @@ func DescribeForkSchedule(fork phase0.Fork) string {
 // scheduled identically on both: they are on different chains otherwise. A disagreement confined to forks
 // still ahead of both is a *ForkScheduleLagError.
 func assertSameForks(ours, theirs map[spec.DataVersion]phase0.Fork, currentEpoch phase0.Epoch) error {
-	schedule := func(forks map[spec.DataVersion]phase0.Fork, version spec.DataVersion) (phase0.Fork, bool) {
-		fork, ok := forks[version]
-		if !ok || fork.Epoch == FarFutureEpoch {
-			return phase0.Fork{Epoch: FarFutureEpoch}, false
-		}
-		return fork, true
-	}
 	versions := make(map[spec.DataVersion]struct{}, len(ours)+len(theirs))
 	for version := range ours {
 		versions[version] = struct{}{}
@@ -321,8 +315,8 @@ func assertSameForks(ours, theirs map[spec.DataVersion]phase0.Fork, currentEpoch
 	}
 	var lag *ForkScheduleLagError
 	for _, version := range slices.Sorted(maps.Keys(versions)) {
-		mine, mineScheduled := schedule(ours, version)
-		other, otherScheduled := schedule(theirs, version)
+		mine, mineScheduled := scheduledFork(ours, version)
+		other, otherScheduled := scheduledFork(theirs, version)
 		if (!mineScheduled && !otherScheduled) || mine == other {
 			continue
 		}
@@ -339,4 +333,36 @@ func assertSameForks(ours, theirs map[spec.DataVersion]phase0.Fork, currentEpoch
 		return lag
 	}
 	return nil
+}
+
+// scheduledFork returns a fork's schedule and whether it is scheduled: a fork left out of forks, or named at
+// FarFutureEpoch, is unscheduled and comes back at FarFutureEpoch with no version.
+func scheduledFork(forks map[spec.DataVersion]phase0.Fork, version spec.DataVersion) (phase0.Fork, bool) {
+	fork, ok := forks[version]
+	if !ok || fork.Epoch == FarFutureEpoch {
+		return phase0.Fork{Epoch: FarFutureEpoch}, false
+	}
+	return fork, true
+}
+
+// ExtendsForkSchedule reports whether b is other plus forks: the two differ only by a fork-schedule lag
+// (AssertSame), and b schedules each fork other schedules the same way, plus at least one more. Such a b is usually
+// the more up-to-date config, as a client gains a fork by being upgraded, but not always: a client left on a release
+// whose fork was later dropped or postponed still names it.
+func (b *Beacon) ExtendsForkSchedule(other *Beacon) bool {
+	var lag *ForkScheduleLagError
+	if !errors.As(other.AssertSame(b), &lag) {
+		return false
+	}
+	for version := range other.Forks {
+		theirs, scheduled := scheduledFork(other.Forks, version)
+		if !scheduled {
+			continue
+		}
+		if mine, _ := scheduledFork(b.Forks, version); mine != theirs {
+			return false
+		}
+	}
+	// The schedules differ, yet not in a fork other schedules: b schedules one more.
+	return true
 }

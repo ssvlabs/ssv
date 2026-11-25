@@ -30,13 +30,13 @@ func (gc *GoClient) SubmitBuilderPreferences(ctx context.Context, preferences []
 // submitBuilderPreferences POSTs the preferences as a JSON array to the validator endpoint. A 404 is
 // flagged as a missing route — a beacon node predating the merged beacon-APIs#630 endpoint — rather than
 // a transient failure.
-func submitBuilderPreferences(ctx context.Context, httpClient *http.Client, addr string, preferences []*gloas.BuilderPreferencesEntry) error {
+func submitBuilderPreferences(ctx context.Context, httpClient *http.Client, addr unmaskedAddr, preferences []*gloas.BuilderPreferencesEntry) error {
 	body, err := json.Marshal(preferences)
 	if err != nil {
 		return fmt.Errorf("marshal builder preferences: %w", err)
 	}
 	headers := map[string]string{consensusVersionHeader: consensusVersionGloas}
-	err = jsonDo(ctx, httpClient, http.MethodPost, addr+builderPreferencesPath, body, headers, nil)
+	err = jsonDo(ctx, httpClient, http.MethodPost, addr, builderPreferencesPath, body, headers, nil)
 	if isNotFound(err) {
 		return fmt.Errorf("beacon node lacks the gloas builder_preferences endpoint (beacon-APIs#630): %w", err)
 	}

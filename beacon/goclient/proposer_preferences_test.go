@@ -46,7 +46,7 @@ func TestSubmitProposerPreferences(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	require.NoError(t, submitProposerPreferences(context.Background(), srv.Client(), srv.URL, prefs))
+	require.NoError(t, submitProposerPreferences(context.Background(), srv.Client(), unmaskedAddr{srv.URL}, prefs))
 	require.Equal(t, http.MethodPost, gotMethod)
 	require.Equal(t, "/eth/v1/validator/proposer_preferences", gotPath)
 	require.Equal(t, consensusVersionGloas, gotVersion)
@@ -63,7 +63,7 @@ func TestSubmitProposerPreferencesMissingRoute(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	err := submitProposerPreferences(context.Background(), srv.Client(), srv.URL, nil)
+	err := submitProposerPreferences(context.Background(), srv.Client(), unmaskedAddr{srv.URL}, nil)
 	require.ErrorContains(t, err, "beacon node lacks the gloas proposer_preferences endpoint")
 	require.ErrorContains(t, err, "status 404")
 }
@@ -75,7 +75,7 @@ func TestSubmitProposerPreferencesOtherStatusUnflagged(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	err := submitProposerPreferences(context.Background(), srv.Client(), srv.URL, nil)
+	err := submitProposerPreferences(context.Background(), srv.Client(), unmaskedAddr{srv.URL}, nil)
 	require.ErrorContains(t, err, "status 500")
 	require.NotContains(t, err.Error(), "beacon node lacks")
 }
@@ -91,7 +91,7 @@ func TestRequestProposerDutiesDependentRoot(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	got, err := requestProposerDutiesDependentRoot(context.Background(), srv.Client(), srv.URL, 3)
+	got, err := requestProposerDutiesDependentRoot(context.Background(), srv.Client(), unmaskedAddr{srv.URL}, 3)
 	require.NoError(t, err)
 	require.Equal(t, http.MethodGet, gotMethod)
 	require.Equal(t, "/eth/v2/validator/duties/proposer/3", gotPath)
@@ -105,7 +105,7 @@ func TestRequestProposerDutiesDependentRootRejectsMalformed(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, err := requestProposerDutiesDependentRoot(context.Background(), srv.Client(), srv.URL, 3)
+	_, err := requestProposerDutiesDependentRoot(context.Background(), srv.Client(), unmaskedAddr{srv.URL}, 3)
 	require.Error(t, err)
 }
 

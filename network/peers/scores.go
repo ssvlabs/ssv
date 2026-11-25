@@ -14,7 +14,7 @@ type scoresIndex struct {
 	lock   *sync.RWMutex
 }
 
-func newScoreIndex() ScoreIndex {
+func newScoreIndex() *scoresIndex {
 	return &scoresIndex{
 		scores: map[peer.ID][]*NodeScore{},
 		lock:   &sync.RWMutex{},
@@ -63,4 +63,11 @@ wantedScoresLoop:
 		}
 	}
 	return scores, nil
+}
+
+func (s *scoresIndex) RemovePeer(id peer.ID) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	delete(s.scores, id)
 }

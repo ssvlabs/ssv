@@ -28,6 +28,17 @@ func testLogger(t testing.TB) *zap.Logger {
 	return zaptest.NewLogger(t)
 }
 
+// domainFor returns a signing domain whose type prefix matches dt, as a beacon node would derive
+// it, over an arbitrary fork-data root.
+func domainFor(dt phase0.DomainType) phase0.Domain {
+	var d phase0.Domain
+	copy(d[:4], dt[:])
+	for i := 4; i < len(d); i++ {
+		d[i] = 0x5a
+	}
+	return d
+}
+
 func testBeaconConfig() *beaconcfg.Config {
 	return &beaconcfg.Config{
 		Name:                  "testnet",

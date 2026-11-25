@@ -233,7 +233,7 @@ func prepareTest(t *testing.T, logger *zap.Logger, name string, test any) *runna
 				typedTest.Run(t)
 			},
 		}
-	case reflect.TypeFor[*synccommitteeaggregator.SyncCommitteeAggregatorProofSpecTest]().String(): // no use of internal structs so can run as spec test runs TODO: need to use internal signer
+	case reflect.TypeFor[*synccommitteeaggregator.SyncCommitteeAggregatorProofSpecTest]().String():
 		byts, err := json.Marshal(test)
 		require.NoError(t, err)
 		typedTest := &synccommitteeaggregator.SyncCommitteeAggregatorProofSpecTest{}
