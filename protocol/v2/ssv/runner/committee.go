@@ -283,39 +283,40 @@ func (r *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Logg
 	defer cancel()
 	var (
 		wg sync.WaitGroup
-		// errCh is buffered because the receiver is only interested in the very 1st error sent to this channel
-		// and will not read any subsequent errors. Buffering ensures that senders can send their errors and terminate without being blocked,
-		// regardless of whether the receiver is still actively reading from the channel.
-		errCh        = make(chan error, len(committeeDuty.ValidatorDuties))
-		signaturesCh = make(chan *spectypes.PartialSignatureMessage)
-		dutiesCh     = make(chan *spectypes.ValidatorDuty)
+		// Every channel has room for all the validator duties, so no send blocks: the workers' results are
+		// read only once they have all returned.
+		dutyCount    = len(committeeDuty.ValidatorDuties)
+		errCh        = make(chan error, dutyCount)
+		signaturesCh = make(chan *spectypes.PartialSignatureMessage, dutyCount)
+		dutiesCh     = make(chan *spectypes.ValidatorDuty, dutyCount)
 
 		totalAttesterDuties,
 		totalSyncCommitteeDuties,
 		blockedAttesterDuties atomic.Uint32
 	)
 
+	// fail records a worker's error, then cancels the other workers. In that order, errCh leads with the error
+	// rather than with the cancellations that follow from it.
+	fail := func(err error) {
+		errCh <- err
+		cancel()
+	}
+
 	beaconVote, gloasAttestationIndex, err := decidedAttestationVote(decidedValue)
 	if err != nil {
 		return fmt.Errorf("beacon vote: %w", err)
 	}
 
-	// The worker pool will throttle the parallel processing of validator duties.
-	// This is mainly needed because the processing involves several outgoing HTTP calls to the Consensus Client.
-	// These calls should be limited to a certain degree to reduce the pressure on the Consensus Node.
+	// The worker pool bounds how many validator duties are signed at once: with a remote signer, each signature
+	// is an HTTP call.
 	const workerCount = 30
 
-	go func() {
-		defer close(dutiesCh)
-		for _, duty := range committeeDuty.ValidatorDuties {
-			if ctx.Err() != nil {
-				break
-			}
-			dutiesCh <- duty
-		}
-	}()
+	for _, duty := range committeeDuty.ValidatorDuties {
+		dutiesCh <- duty
+	}
+	close(dutiesCh)
 
-	for range workerCount {
+	for range min(workerCount, dutyCount) {
 		wg.Add(1)
 
 		go func() {
@@ -339,9 +340,9 @@ func (r *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Logg
 				switch validatorDuty.Type {
 				case spectypes.BNRoleAttester:
 					totalAttesterDuties.Add(1)
-					isAttesterDutyBlocked, partialSigMsg, err := r.signAttesterDuty(ctx, validatorDuty, beaconVote, version, gloasAttestationIndex, logger)
+					isAttesterDutyBlocked, partialSigMsg, err := r.signAttesterDuty(ctx, logger, validatorDuty, beaconVote, version, gloasAttestationIndex)
 					if err != nil {
-						errCh <- fmt.Errorf("failed signing attestation data: %w", err)
+						fail(err)
 						return
 					}
 					if isAttesterDutyBlocked {
@@ -363,36 +364,29 @@ func (r *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Logg
 						spectypes.DomainSyncCommittee,
 					)
 					if err != nil {
-						errCh <- fmt.Errorf("failed signing sync committee message: %w", err)
+						fail(fmt.Errorf("failed signing sync committee message: %w", err))
 						return
 					}
 
 					signaturesCh <- partialSigMsg
 				default:
-					errCh <- fmt.Errorf("invalid duty type: %s", validatorDuty.Type)
+					fail(fmt.Errorf("invalid duty type: %s", validatorDuty.Type))
 					return
 				}
 			}
 		}()
 	}
 
-	go func() {
-		wg.Wait()
-		close(signaturesCh)
-	}()
+	wg.Wait()
+	close(errCh)
+	close(signaturesCh)
 
-listener:
-	for {
-		select {
-		case err := <-errCh:
-			cancel()
-			return err
-		case signature, ok := <-signaturesCh:
-			if !ok {
-				break listener
-			}
-			postConsensusMsg.Messages = append(postConsensusMsg.Messages, signature)
-		}
+	// A closed errCh yields nil unless a worker has failed.
+	if err := <-errCh; err != nil {
+		return err
+	}
+	for signature := range signaturesCh {
+		postConsensusMsg.Messages = append(postConsensusMsg.Messages, signature)
 	}
 
 	var (
@@ -402,10 +396,10 @@ listener:
 	)
 
 	if totalAttestations == 0 && totalSyncCommittee == 0 {
-		// A done context also lands here with zero counts: the duty feeder and the workers bail out on
-		// ctx.Err() before incrementing any counter. The duty was abandoned, not left with nothing to do,
-		// so return the context's error rather than conclude not_required: the defer above drops a
-		// cancellation (shutdown is never an outcome) and notes an expired duty deadline as the failure.
+		// A done context also lands here with zero counts: the workers bail out on ctx.Err() before
+		// incrementing any counter. The duty was abandoned, not left with nothing to do, so return the
+		// context's error rather than conclude not_required: the defer above drops a cancellation
+		// (shutdown is never an outcome) and notes an expired duty deadline as the failure.
 		if err := ctx.Err(); err != nil {
 			return err
 		}
@@ -472,11 +466,12 @@ listener:
 
 func (r *CommitteeRunner) signAttesterDuty(
 	ctx context.Context,
+	logger *zap.Logger,
 	validatorDuty *spectypes.ValidatorDuty,
 	beaconVote *spectypes.BeaconVote,
 	version spec.DataVersion,
 	gloasAttestationIndex *phase0.CommitteeIndex,
-	logger *zap.Logger) (isBlocked bool, partialSig *spectypes.PartialSignatureMessage, err error) {
+) (isBlocked bool, partialSig *spectypes.PartialSignatureMessage, err error) {
 	// Reuse the existing span instead of generating new one to keep tracing-data lightweight.
 	span := trace.SpanFromContext(ctx)
 

@@ -301,10 +301,10 @@ func TestCommitteeRunnerProcessConsensus_MarksNotRequiredOnNoValidDuties(t *test
 }
 
 // TestCommitteeRunnerProcessConsensus_DoneContextDoesNotConcludeNotRequired guards the consensus-phase
-// zero-duties branch against a done context, which also reaches it with zero counts (the duty feeder and
-// workers bail out before counting). An abandoned duty must not be recorded as a not_required completion: a
-// cancellation (shutdown) leaves no outcome at all, and an expired duty deadline is noted as the failure for the
-// watcher to report.
+// zero-duties branch against a done context, which also reaches it with zero counts (the workers bail out
+// before counting). An abandoned duty must not be recorded as a not_required completion: a cancellation
+// (shutdown) leaves no outcome at all, and an expired duty deadline is noted as the failure for the watcher
+// to report.
 func TestCommitteeRunnerProcessConsensus_DoneContextDoesNotConcludeNotRequired(t *testing.T) {
 	// decideUnder starts a duty and feeds it the messages that decide it under ctx, returning the runner, the
 	// conclusion channel and the last error ProcessConsensus returned.
