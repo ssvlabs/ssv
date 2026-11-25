@@ -230,8 +230,8 @@ func TestScheduler_Proposer_Indices_Changed(t *testing.T) {
 				ValidatorIndex: phase0.ValidatorIndex(3),
 			},
 		})
-		scheduler.indicesChgCh <- struct{}{}
 		waitForDuties.Set(true)
+		scheduler.indicesChgCh <- struct{}{}
 		waitForDutiesFetch(t, fetchDutiesCall, timeout)
 		// no other fetching or execution should happen on slot 0
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
@@ -277,23 +277,23 @@ func TestScheduler_Proposer_Multiple_Indices_Changed_Same_Slot(t *testing.T) {
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 3: trigger a change in active indices
-		scheduler.indicesChgCh <- struct{}{}
 		duties, _ := dutiesMap.Get(phase0.Epoch(0))
 		dutiesMap.Set(phase0.Epoch(0), append(duties, &eth2apiv1.ProposerDuty{
 			PubKey:         phase0.BLSPubKey{1, 2, 3},
 			Slot:           phase0.Slot(3),
 			ValidatorIndex: phase0.ValidatorIndex(1),
 		}))
+		scheduler.indicesChgCh <- struct{}{}
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 4: trigger a change in active indices in the same slot
-		scheduler.indicesChgCh <- struct{}{}
 		duties, _ = dutiesMap.Get(phase0.Epoch(0))
 		dutiesMap.Set(phase0.Epoch(0), append(duties, &eth2apiv1.ProposerDuty{
 			PubKey:         phase0.BLSPubKey{1, 2, 4},
 			Slot:           phase0.Slot(4),
 			ValidatorIndex: phase0.ValidatorIndex(2),
 		}))
+		scheduler.indicesChgCh <- struct{}{}
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 5: wait for proposer duties to be fetched
@@ -468,13 +468,13 @@ func TestScheduler_Proposer_Reorg_Previous_Indices_Changed(t *testing.T) {
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 5: trigger indices change
-		scheduler.indicesChgCh <- struct{}{}
 		duties, _ := dutiesMap.Get(phase0.Epoch(1))
 		dutiesMap.Set(phase0.Epoch(1), append(duties, &eth2apiv1.ProposerDuty{
 			PubKey:         phase0.BLSPubKey{1, 2, 4},
 			Slot:           phase0.Slot(testSlotsPerEpoch + 4),
 			ValidatorIndex: phase0.ValidatorIndex(2),
 		}))
+		scheduler.indicesChgCh <- struct{}{}
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 6: wait for proposer duties to be re-fetched for the current epoch
@@ -668,13 +668,13 @@ func TestScheduler_Proposer_Reorg_Epoch_Transition_Indices_Changed(t *testing.T)
 		waitForDutiesFetch(t, fetchDutiesCall, timeout)
 
 		// STEP 5: trigger indices change
-		scheduler.indicesChgCh <- struct{}{}
 		duties, _ := dutiesMap.Get(phase0.Epoch(2))
 		dutiesMap.Set(phase0.Epoch(2), append(duties, &eth2apiv1.ProposerDuty{
 			PubKey:         phase0.BLSPubKey{1, 2, 4},
 			Slot:           phase0.Slot(testSlotsPerEpoch*2 + 3),
 			ValidatorIndex: phase0.ValidatorIndex(2),
 		}))
+		scheduler.indicesChgCh <- struct{}{}
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 6: wait for proposer duties to be re-fetched for the current epoch
